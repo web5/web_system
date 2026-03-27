@@ -1,0 +1,29 @@
+<view class="draw-container">
+  <canvas 
+    type="2d" 
+    id="drawCanvas" 
+    class="draw-canvas"
+    bindtouchstart="onTouchStart"
+    bindtouchmove="onTouchMove"
+    bindtouchend="onTouchEnd"
+  ></canvas>
+  
+  <view class="toolbar">
+    <view class="color-bar">
+      <view 
+        class="color-item {{currentColor === item ? 'active' : ''}}" 
+        wx:for="{{colors}}" 
+        wx:key="*this"
+        style="background-color: {{item}}"
+        bindtap="selectColor"
+        data-color="{{item}}"
+      ></view>
+    </view>
+    
+    <view class="tools">
+      <button class="tool-btn" bindtap="clearCanvas">清空</button>
+      <button class="tool-btn" bindtap="saveCanvas">保存</button>
+      <button class="tool-btn" bindtap="goBack">返回</button>
+    </view>
+  </view>
+</view>

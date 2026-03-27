@@ -21,6 +21,25 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Dashboard.vue'),
         meta: { title: '工作台' },
       },
+      {
+        path: 'users',
+        name: 'Users',
+        meta: { title: '用户管理' },
+        children: [
+          {
+            path: '',
+            name: 'UserList',
+            component: () => import('@/views/UserList.vue'),
+            meta: { title: '用户列表' },
+          },
+          {
+            path: ':id',
+            name: 'UserDetail',
+            component: () => import('@/views/UserDetail.vue'),
+            meta: { title: '用户详情' },
+          },
+        ],
+      },
     ],
   },
 ];

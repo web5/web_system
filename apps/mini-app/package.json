@@ -1,0 +1,11 @@
+{
+  "name": "@web-system/mini-app",
+  "version": "1.0.0",
+  "description": "WeChat Mini Program",
+  "main": "app.js",
+  "scripts": {
+    "dev": "echo 'Mini app development'",
+    "build": "echo 'Mini app build'"
+  },
+  "dependencies": {}
+}
