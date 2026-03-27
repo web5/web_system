@@ -1,20 +1,23 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: web_system_mysql
+  # PostgreSQL 数据库（用户服务）
+  postgres:
+    image: postgres:15-alpine
+    container_name: web_system_postgres
     environment:
-      MYSQL_ROOT_PASSWORD: root123456
-      MYSQL_DATABASE: web_system
-      MYSQL_USER: web_system
-      MYSQL_PASSWORD: web_system123
+      POSTGRES_USER: web_system
+      POSTGRES_PASSWORD: web_system123
+      POSTGRES_DB: web_system
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - web_network
+    restart: unless-stopped
 
+  # Redis 缓存
   redis:
     image: redis:7-alpine
     container_name: web_system_redis
@@ -22,7 +25,67 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # API 网关
+  gateway:
+    build:
+      context: .
+      dockerfile: servers/gateway/Dockerfile
+    container_name: web_system_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
+    depends_on:
+      - redis
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # 认证服务
+  auth-service:
+    build:
+      context: .
+      dockerfile: servers/auth-service/Dockerfile
+    container_name: web_system_auth_service
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=your-secret-key-change-in-production
+      - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # 用户服务
+  user-service:
+    build:
+      context: .
+      dockerfile: servers/user-service/Dockerfile
+    container_name: web_system_user_service
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
+    depends_on:
+      - postgres
+    networks:
+      - web_network
+    restart: unless-stopped
+
+networks:
+  web_network:
+    driver: bridge
 
 volumes:
-  mysql_data:
+  postgres_data:
   redis_data:
