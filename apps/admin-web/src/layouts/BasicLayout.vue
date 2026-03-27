@@ -33,13 +33,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
 const selectedKeys = ref(['dashboard']);
+
+watch(
+  () => route.path,
+  (path) => {
+    if (path.includes('/users')) {
+      selectedKeys.value = ['users'];
+    } else if (path.includes('/dashboard')) {
+      selectedKeys.value = ['dashboard'];
+    } else if (path.includes('/settings')) {
+      selectedKeys.value = ['settings'];
+    }
+  },
+  { immediate: true }
+);
 
 const handleLogout = () => {
   userStore.logout();

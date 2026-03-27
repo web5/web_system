@@ -20,7 +20,7 @@
   "projects": [
     {
       "packageName": "@web-system/gateway",
-      "projectFolder": "apps/gateway",
+      "projectFolder": "servers/gateway",
       "shouldPublish": false,
       "reviewCategory": "production"
     },
@@ -32,7 +32,25 @@
     },
     {
       "packageName": "@web-system/auth-service",
-      "projectFolder": "apps/auth-service",
+      "projectFolder": "servers/auth-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/user-service",
+      "projectFolder": "servers/user-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/portal",
+      "projectFolder": "apps/portal",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/mini-app",
+      "projectFolder": "apps/mini-app",
       "shouldPublish": false,
       "reviewCategory": "production"
     },

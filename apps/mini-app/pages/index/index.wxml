@@ -1,0 +1,15 @@
+<view class="container">
+  <view class="hero">
+    <text class="title">开启孩子的 AI 学习之旅</text>
+    <text class="subtitle">趣味课程 · 智能互动 · 快乐成长</text>
+  </view>
+  
+  <view class="courses">
+    <view class="course-item" wx:for="{{courses}}" wx:key="id">
+      <text class="course-title">{{item.title}}</text>
+      <text class="course-desc">{{item.description}}</text>
+    </view>
+  </view>
+  
+  <button class="nav-btn" bindtap="goToDraw">🎨 开始画画</button>
+</view>

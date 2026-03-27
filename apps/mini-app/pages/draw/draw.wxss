@@ -1,0 +1,47 @@
+.draw-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.draw-canvas {
+  flex: 1;
+  background: white;
+}
+
+.toolbar {
+  background: white;
+  padding: 20rpx;
+}
+
+.color-bar {
+  display: flex;
+  gap: 15rpx;
+  margin-bottom: 20rpx;
+  flex-wrap: wrap;
+}
+
+.color-item {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  border: 3rpx solid #ddd;
+}
+
+.color-item.active {
+  border-color: #667eea;
+  box-shadow: 0 0 10rpx rgba(102, 126, 234, 0.5);
+}
+
+.tools {
+  display: flex;
+  gap: 20rpx;
+}
+
+.tool-btn {
+  flex: 1;
+  background: #667eea;
+  color: white;
+  border-radius: 10rpx;
+  font-size: 28rpx;
+}
