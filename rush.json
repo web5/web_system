@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/rush/v5/rush.schema.json",
+  "rushVersion": "5.133.0",
+  "pnpmVersion": "9.15.0",
+  "nodeSupportedVersionRange": ">=18.0.0",
+  "suppressNodeLtsWarning": true,
+  "ensureConsistentVersions": true,
+  "projectFolderMinDepth": 1,
+  "projectFolderMaxDepth": 2,
+  "allowMostlyStandardPackageNames": true,
+  "gitPolicy": {
+    "versionBumpCommitMessage": "Bump versions [skip ci]",
+    "changeLogUpdateCommitMessage": "Update changelogs [skip ci]"
+  },
+  "repository": {
+    "url": "",
+    "defaultBranch": "main",
+    "defaultRemote": "origin"
+  },
+  "projects": [
+    {
+      "packageName": "@web-system/gateway",
+      "projectFolder": "apps/gateway",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/admin-web",
+      "projectFolder": "apps/admin-web",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/auth-service",
+      "projectFolder": "apps/auth-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/shared",
+      "projectFolder": "packages/shared",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/types",
+      "projectFolder": "packages/types",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    }
+  ]
+}
