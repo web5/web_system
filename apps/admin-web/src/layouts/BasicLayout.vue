@@ -10,7 +10,7 @@
       <div class="user-info">
         <a-dropdown>
           <span class="user-name">
-            <a-avatar :size="24">{{ userStore.userInfo?.username?.charAt(0).toUpperCase() }}</a-avatar>
+            <a-avatar :size="24" :src="userAvatar" />
             {{ userStore.userInfo?.username }}
           </span>
           <template #overlay>
@@ -33,14 +33,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { logout as logoutApi } from '@/api/auth';
+import { message } from 'ant-design-vue';
 
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const selectedKeys = ref(['dashboard']);
+
+// 默认头像
+const DEFAULT_AVATAR = '/avatars/default-avatar.png';
+
+const userAvatar = computed(() => {
+  return userStore.userInfo?.avatar || DEFAULT_AVATAR;
+});
 
 watch(
   () => route.path,
@@ -56,9 +65,17 @@ watch(
   { immediate: true }
 );
 
-const handleLogout = () => {
-  userStore.logout();
-  router.push('/login');
+const handleLogout = async () => {
+  try {
+    await logoutApi();
+    message.success('已退出登录');
+  } catch (error) {
+    // 即使接口失败也要退出
+    console.error('Logout API error:', error);
+  } finally {
+    userStore.logout();
+    router.push('/login');
+  }
 };
 </script>
 

@@ -98,9 +98,11 @@ import { ref, reactive, onMounted } from 'vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { message } from 'ant-design-vue';
+import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
+import type { UserInfo } from '@web-system/types';
 
 interface User {
-  id: string;
+  id: number | string;
   username: string;
   email?: string;
   phone?: string;
@@ -116,9 +118,9 @@ const userList = ref<User[]>([]);
 const searchText = ref('');
 const modalVisible = ref(false);
 const modalTitle = ref('新增用户');
-const editingId = ref<string | null>(null);
+const editingId = ref<string | number | null>(null);
 
-const formData = reactive<Partial<User>>({
+const formData = reactive<any>({
   username: '',
   email: '',
   phone: '',
@@ -151,42 +153,30 @@ onMounted(() => {
   fetchUsers();
 });
 
+const DEFAULT_AVATAR = '/avatars/default-avatar.png';
+
 async function fetchUsers() {
   loading.value = true;
   try {
-    // TODO: 调用实际 API
-    // const res = await userApi.getList({ page: pagination.current, limit: pagination.pageSize });
-    // userList.value = res.list;
-    // pagination.total = res.total;
-    
-    // 模拟数据
-    userList.value = [
-      {
-        id: '1',
-        username: 'admin',
-        email: 'admin@kedouai.com',
-        phone: '13800138000',
-        nickname: '管理员',
-        avatar: '',
-        role: 'admin',
-        enabled: true,
-        createdAt: '2024-01-01 10:00:00',
-      },
-      {
-        id: '2',
-        username: 'user1',
-        email: 'user1@example.com',
-        phone: '13900139000',
-        nickname: '用户 1',
-        avatar: '',
-        role: 'user',
-        enabled: true,
-        createdAt: '2024-01-02 11:00:00',
-      },
-    ];
-    pagination.total = 2;
+    const res = await getUserList({ 
+      page: pagination.current, 
+      limit: pagination.pageSize,
+      keyword: searchText.value || undefined
+    });
+    // 为没有头像的用户设置默认头像
+    userList.value = (res.list || []).map((user: any) => ({
+      ...user,
+      avatar: user.avatar || DEFAULT_AVATAR,
+      role: user.role || 'user',
+      enabled: user.enabled !== undefined ? user.enabled : true,
+      createdAt: user.createdAt || ''
+    }));
+    pagination.total = res.total || 0;
   } catch (error) {
+    console.error('Fetch users error:', error);
     message.error('获取用户列表失败');
+    userList.value = [];
+    pagination.total = 0;
   } finally {
     loading.value = false;
   }
@@ -231,37 +221,39 @@ function editUser(record: User) {
 
 async function handleModalOk() {
   try {
-    // TODO: 调用实际 API
-    // if (editingId.value) {
-    //   await userApi.update(editingId.value, formData);
-    // } else {
-    //   await userApi.create(formData);
-    // }
-    message.success(editingId.value ? '更新成功' : '创建成功');
+    const userData = { ...formData } as any;
+    if (editingId.value) {
+      await updateUser(String(editingId.value), userData);
+      message.success('更新成功');
+    } else {
+      await createUser(userData);
+      message.success('创建成功');
+    }
     modalVisible.value = false;
     fetchUsers();
   } catch (error) {
+    console.error('User operation error:', error);
     message.error('操作失败');
   }
 }
 
 async function handleDelete(record: User) {
   try {
-    // TODO: 调用实际 API
-    // await userApi.delete(record.id);
+    await deleteUser(String(record.id));
     message.success('删除成功');
     fetchUsers();
   } catch (error) {
+    console.error('Delete user error:', error);
     message.error('删除失败');
   }
 }
 
 async function handleToggleStatus(record: User) {
   try {
-    // TODO: 调用实际 API
-    // await userApi.update(record.id, { enabled: record.enabled });
+    await toggleUserStatusApi(String(record.id), record.enabled);
     message.success(record.enabled ? '已启用' : '已禁用');
   } catch (error) {
+    console.error('Toggle status error:', error);
     record.enabled = !record.enabled;
     message.error('操作失败');
   }
