@@ -2,7 +2,7 @@
   <a-layout class="layout">
     <a-layout-header class="header">
       <div class="logo">管理后台</div>
-      <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="horizontal" :style="{ lineHeight: '64px' }">
+      <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="horizontal" :style="{ lineHeight: '64px' }" @click="handleMenuClick">
         <a-menu-item key="dashboard">工作台</a-menu-item>
         <a-menu-item key="users">用户管理</a-menu-item>
         <a-menu-item key="settings">系统设置</a-menu-item>
@@ -75,6 +75,16 @@ const handleLogout = async () => {
   } finally {
     userStore.logout();
     router.push('/login');
+  }
+};
+
+const handleMenuClick = ({ key }: { key: string }) => {
+  if (key === 'dashboard') {
+    router.push('/dashboard');
+  } else if (key === 'users') {
+    router.push('/users');
+  } else if (key === 'settings') {
+    router.push('/settings');
   }
 };
 </script>
