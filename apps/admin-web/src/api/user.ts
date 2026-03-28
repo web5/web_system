@@ -16,7 +16,7 @@ export interface UserListResponse {
  * 获取用户列表
  */
 export function getUserList(params: UserListParams): Promise<UserListResponse> {
-  return request.get('/user/list', { params });
+  return request.get('/users', { params });
 }
 
 /**
