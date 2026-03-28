@@ -13,7 +13,28 @@
           <a href="#" class="nav-link">关于我们</a>
         </div>
         <div class="nav-actions">
-          <a-button type="primary">登录</a-button>
+          <template v-if="isLoggedIn">
+            <a-dropdown>
+              <span class="user-menu">
+                <a-avatar :size="24" :src="userAvatar" style="margin-right: 8px" />
+                {{ username }}
+              </span>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item key="profile">
+                    <router-link to="/profile">个人中心</router-link>
+                  </a-menu-item>
+                  <a-menu-divider />
+                  <a-menu-item key="logout" @click="handleLogout">退出登录</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </template>
+          <template v-else>
+            <router-link to="/login">
+              <a-button type="primary">登录</a-button>
+            </router-link>
+          </template>
         </div>
       </div>
     </nav>
@@ -80,7 +101,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/user';
+import { logout as logoutApi } from '@/api/auth';
+import { message } from 'ant-design-vue';
+
+const router = useRouter();
+const userStore = useUserStore();
+
+const DEFAULT_AVATAR = '/avatars/default-avatar.png';
+
+const isLoggedIn = computed(() => !!userStore.token);
+const username = computed(() => userStore.userInfo?.username || '');
+const userAvatar = computed(() => userStore.userInfo?.avatar || DEFAULT_AVATAR);
+
+onMounted(() => {
+  userStore.initFromStorage();
+});
+
+async function handleLogout() {
+  try {
+    await logoutApi();
+    message.success('已退出登录');
+  } catch (error) {
+    console.error('Logout error:', error);
+  } finally {
+    userStore.logout();
+    router.push('/login');
+  }
+}
 
 const courses = ref([
   {
