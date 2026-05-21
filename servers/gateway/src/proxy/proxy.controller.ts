@@ -14,6 +14,30 @@ export class ProxyController {
     });
   }
 
+  @All('users/*')
+  proxyUsers(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createUserProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
+  @All('users')
+  proxyUsersRoot(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createUserProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
+  @All('ai/*')
+  proxyAi(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createAiProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
   @All('*')
   proxyApi(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createApiProxy();

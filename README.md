@@ -45,36 +45,70 @@ web_system/
 pnpm install
 ```
 
-### 开发模式
+### Rush 命令
 
-#### 管理后台
+由于是 Rush monorepo 项目，请在各项目目录下使用 `rushx` 命令代替 `pnpm`：
+
+| 原有命令 | Rush 命令 |
+|---------|-----------|
+| `pnpm dev` | `rushx dev` |
+| `pnpm build` | `rushx build` |
+
+### 启动命令
+
+> **推荐方式**：使用一键启动脚本
+
 ```bash
-cd apps/admin-web
-pnpm dev
+# 一键启动所有服务
+./start-dev.sh
 ```
 
-#### 少儿教育门户
+#### 手动启动（按顺序）
+
+##### 1. 后端服务
+
 ```bash
-cd apps/portal
-pnpm dev
+# 认证服务 (端口 3001)
+cd servers/auth-service && rushx dev
+
+# 用户服务 (端口 3002)
+cd servers/user-service && rushx dev
+
+# API 网关 (端口 3000)
+cd servers/gateway && rushx dev
 ```
 
-#### 用户服务
+##### 2. 前端应用
+
 ```bash
-cd servers/user-service
-pnpm start:dev
+# 管理后台 (端口 5173)
+cd apps/admin-web && rushx dev
+
+# 少儿教育门户 (端口 3003)
+cd apps/portal && rushx dev
+```
+
+#### 一键停止
+
+```bash
+# 停止所有端口
+lsof -ti:3000 -ti:3001 -ti:3002 -ti:3003 -ti:5173 | xargs kill -9 2>/dev/null || true
 ```
 
 ### 构建
 ```bash
+# 构建所有项目
 pnpm build
+
+# 或在单个项目中
+cd servers/gateway && rushx build
 ```
 
 ## 端口分配
 
 | 应用/服务 | 端口 | 说明 |
 |----------|------|------|
-| admin-web | 3001 | 管理后台 |
+| admin-web | 5173 | 管理后台 |
 | portal | 3003 | 少儿教育门户 |
 | gateway | 3000 | API 网关 |
 | auth-service | 3001 | 认证服务 |
@@ -129,6 +163,34 @@ docker-compose up -d
 - 使用 TypeScript
 - 遵循 ESLint 规则
 - 提交前运行测试
+
+## 已知问题与修复
+
+### 1. Portal request.ts 变量命名冲突
+**问题**：`apps/portal/src/api/request.ts` 中导入的 axios 与创建的实例变量命名冲突，导致 `request.create is not a function` 错误。
+
+**修复**：将导入的 axios 重命名为 `axiosInstance`：
+```typescript
+// 修改前
+import request from 'axios';
+const request = request.create({...});
+
+// 修改后
+import axiosInstance from 'axios';
+const request = axiosInstance.create({...});
+```
+
+### 2. Gateway 用户路由配置缺失
+**问题**：`/api/users` 请求返回 404，请求被错误路由到 auth-service（端口 3001）而不是 user-service（端口 3002）。
+
+**修复**：在 `servers/gateway/src/proxy/` 中添加 user-service 路由：
+- `proxy.service.ts`：添加 `userServiceUrl` 配置和 `createUserProxy()` 方法
+- `proxy.controller.ts`：添加 `/users/*` 和 `/users` 路由处理
+
+### 3. 端口分配表错误
+**问题**：README 中 admin-web 端口错误标记为 3001。
+
+**修复**：已更正为 5173。
 
 ## License
 

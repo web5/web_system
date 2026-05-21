@@ -17,7 +17,20 @@ import { UserModule } from './user/user.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const dbType = configService.get('DB_TYPE', 'better-sqlite3');
+        const dbType = configService.get('DB_TYPE', 'postgres');
+        if (dbType === 'postgres') {
+          return {
+            type: 'postgres',
+            host: configService.get('DB_HOST', 'localhost'),
+            port: configService.get<number>('DB_PORT', 5432),
+            username: configService.get('DB_USERNAME', 'web_system'),
+            password: configService.get('DB_PASSWORD', 'web_system123'),
+            database: configService.get('DB_DATABASE', 'web_system'),
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            synchronize: true,
+            logging: configService.get('NODE_ENV') === 'development',
+          };
+        }
         if (dbType === 'better-sqlite3') {
           return {
             type: 'better-sqlite3',

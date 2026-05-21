@@ -1,17 +1,27 @@
+page {
+  background: #fff;
+}
+
 .draw-container {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: #fff;
 }
 
 .draw-canvas {
-  flex: 1;
+  width: 100%;
+  height: calc(100vh - 120rpx);
+  display: block;
   background: white;
 }
 
 .toolbar {
   background: white;
   padding: 20rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  flex-shrink: 0;
 }
 
 .color-bar {
