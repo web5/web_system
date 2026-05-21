@@ -1,8 +1,8 @@
-import request from 'axios';
+import axiosInstance from 'axios';
 import { message } from 'ant-design-vue';
 import router from '@/router';
 
-const request = request.create({
+const request = axiosInstance.create({
   baseURL: '/api',
   timeout: 10000,
 });

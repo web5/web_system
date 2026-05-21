@@ -1,7 +1,7 @@
 <view class="draw-container">
   <canvas 
-    type="2d" 
-    id="drawCanvas" 
+    type="2d"
+    id="drawCanvas"
     class="draw-canvas"
     bindtouchstart="onTouchStart"
     bindtouchmove="onTouchMove"

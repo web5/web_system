@@ -65,6 +65,12 @@
       "projectFolder": "packages/types",
       "shouldPublish": false,
       "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/ai-service",
+      "projectFolder": "servers/ai-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
     }
   ]
 }

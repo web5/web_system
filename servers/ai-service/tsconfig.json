@@ -17,15 +17,9 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
     "paths": {
       "@web-system/types": ["../../packages/types/src"],
-      "@web-system/types/*": ["../../packages/types/src/*"],
-      "@web-system/shared": ["../../packages/shared/src"],
-      "@web-system/shared/*": ["../../packages/shared/src/*"]
+      "@web-system/shared": ["../../packages/shared/src"]
     }
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  }
 }

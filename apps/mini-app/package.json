@@ -2,10 +2,15 @@
   "name": "@web-system/mini-app",
   "version": "1.0.0",
   "description": "WeChat Mini Program",
-  "main": "app.js",
+  "main": "app.ts",
   "scripts": {
     "dev": "echo 'Mini app development'",
-    "build": "echo 'Mini app build'"
+    "build": "echo 'Mini app build'",
+    "preview": "node scripts/preview.js",
+    "upload": "node scripts/upload.js"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "@types/wechat-miniprogram": "^3.4.10",
+    "miniprogram-ci": "^2.1.6"
+  }
 }
