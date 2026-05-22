@@ -8,10 +8,9 @@ Page({
 
   ctx: null as any,
   canvas: null as any,
-  currentPoints: [] as { x: number; y: number }[],
-  rectInfo: null as { left: number; top: number } | null,
-  lastDrawTime: 0,
-  hasDrawnThisStroke: false, // 当前笔触是否已在主canvas绘制过
+  dpr: 1,
+  lastX: 0,
+  lastY: 0,
 
   onLoad() {
     wx.setNavigationBarTitle({ title: '画板' });
@@ -19,45 +18,42 @@ Page({
 
   onReady() {
     const query = wx.createSelectorQuery();
-    query.select('#drawCanvas').node().exec((res) => {
-      if (res && res[0]) {
-        const canvas = res[0].node;
-        const ctx = canvas.getContext('2d');
+    query.select('#drawCanvas').fields({ node: true, size: true }).exec((res) => {
+      if (res && res[0] && res[0].node) {
+        const canvas = res[0].node as any;
+        const ctx = canvas.getContext('2d', { webkitRerender: true });
         
         const sysInfo = wx.getSystemInfoSync();
-        const screenWidth = sysInfo.screenWidth;
-        const toolbarHeight = 120;
-        const canvasHeight = sysInfo.screenHeight - toolbarHeight - 44;
+        this.dpr = sysInfo.pixelRatio || wx.getSystemInfoSync().windowWidth / sysInfo.screenWidth;
         
-        canvas.width = screenWidth;
-        canvas.height = canvasHeight;
+        const canvasWidth = res[0].width;
+        const canvasHeight = res[0].height;
+        
+        // 设置高清屏适配 - 关键步骤！
+        canvas.width = canvasWidth * this.dpr;
+        canvas.height = canvasHeight * this.dpr;
+        
+        // 缩放上下文
+        ctx.scale(this.dpr, this.dpr);
+        
+        // 开启抗锯齿
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         
         this.canvas = canvas;
         this.ctx = ctx;
         
+        // 填充白色背景
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-    });
-    
-    wx.createSelectorQuery().select('#drawCanvas').boundingClientRect().exec((res) => {
-      if (res && res[0]) {
-        this.rectInfo = res[0] as { left: number; top: number };
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        
+        console.log('Canvas initialized:', { canvasWidth, canvasHeight, dpr: this.dpr });
       }
     });
   },
 
   getCanvasPos(e: any) {
     return new Promise<{ x: number; y: number }>((resolve) => {
-      if (this.rectInfo) {
-        const touch = e.touches?.[0] || e.changedTouches?.[0] || e.detail;
-        resolve({
-          x: touch.clientX - this.rectInfo.left,
-          y: touch.clientY - this.rectInfo.top,
-        });
-        return;
-      }
-      
       wx.createSelectorQuery().select('#drawCanvas').boundingClientRect().exec((res) => {
         if (res && res[0]) {
           const rect = res[0] as { left: number; top: number };
@@ -73,66 +69,21 @@ Page({
     });
   },
 
-  // 绘制曲线
-  drawCurve(ctx: any, points: { x: number; y: number }[], color: string) {
-    if (points.length < 2) return;
-    
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 10;
-    
-    const tension = 0.25;
-    
-    ctx.moveTo(points[0].x, points[0].y);
-    
-    if (points.length === 2) {
-      ctx.lineTo(points[1].x, points[1].y);
-    } else {
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i === 0 ? i : i - 1];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = points[i + 2 >= points.length ? i + 1 : i + 2];
-        
-        const cp1x = p1.x + (p2.x - p0.x) * tension;
-        const cp1y = p1.y + (p2.y - p0.y) * tension;
-        const cp2x = p2.x - (p3.x - p1.x) * tension;
-        const cp2y = p2.y - (p3.y - p1.y) * tension;
-        
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-      }
-    }
-    
-    ctx.stroke();
-    ctx.restore();
-  },
-
-  // 节流绘制到主canvas
-  scheduleDraw() {
-    const now = Date.now();
-    if (now - this.lastDrawTime < 16) return; // ~60fps 节流
-    
-    if (this.currentPoints.length >= 2) {
-      this.drawCurve(this.ctx, this.currentPoints, this.data.currentColor);
-      this.ctx.draw(true);
-      this.lastDrawTime = now;
-    }
-  },
-
   async onTouchStart(e: any) {
     if (!this.ctx) return;
     
     const pos = await this.getCanvasPos(e);
-    this.currentPoints = [pos];
-    this.hasDrawnThisStroke = false;
-    this.lastDrawTime = 0;
+    
+    this.lastX = pos.x;
+    this.lastY = pos.y;
+    
+    this.ctx.beginPath();
+    this.ctx.moveTo(pos.x, pos.y);
+    this.ctx.lineWidth = 4;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.strokeStyle = this.data.currentColor;
+    
     this.setData({ isDrawing: true });
   },
 
@@ -140,20 +91,24 @@ Page({
     if (!this.ctx || !this.data.isDrawing) return;
     
     const pos = await this.getCanvasPos(e);
-    this.currentPoints.push(pos);
     
-    // 节流绘制
-    this.scheduleDraw();
+    // 使用贝塞尔曲线使线条更平滑
+    const midX = (this.lastX + pos.x) / 2;
+    const midY = (this.lastY + pos.y) / 2;
+    
+    this.ctx.quadraticCurveTo(this.lastX, this.lastY, midX, midY);
+    this.ctx.stroke();
+    
+    this.lastX = pos.x;
+    this.lastY = pos.y;
   },
 
   onTouchEnd() {
-    if (this.ctx && this.currentPoints.length > 0) {
-      // 最终绘制（确保完整）
-      this.drawCurve(this.ctx, this.currentPoints, this.data.currentColor);
-      this.ctx.draw(true);
+    if (this.ctx) {
+      // 绘制到终点
+      this.ctx.lineTo(this.lastX, this.lastY);
+      this.ctx.stroke();
     }
-    
-    this.currentPoints = [];
     this.setData({ isDrawing: false });
   },
 
@@ -164,9 +119,9 @@ Page({
   clearCanvas() {
     if (!this.ctx || !this.canvas) return;
     
+    const rect = this.canvas.getBoundingClientRect();
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.draw();
+    this.ctx.fillRect(0, 0, rect.width, rect.height);
   },
 
   saveCanvas() {
