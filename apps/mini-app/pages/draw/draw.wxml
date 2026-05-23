@@ -1,30 +1,203 @@
-<view class="draw-container">
-  <canvas 
+<view class="container">
+  <!-- 遮罩层 -->
+  <view
+    class="overlay"
+    wx:if="{{showBrushPanel || showColorPanel || showActionPanel || showLayers || showBrushMenu || showSettings}}"
+    bindtap="closeAllPanels"
+  ></view>
+
+  <!-- 画布 -->
+  <canvas
     type="2d"
     id="drawCanvas"
-    class="draw-canvas"
-    style="width: 100%; height: 100%;"
+    class="canvas"
     bindtouchstart="onTouchStart"
     bindtouchmove="onTouchMove"
     bindtouchend="onTouchEnd"
+    bindtap="onCanvasTapForPick"
   ></canvas>
-  
-  <view class="toolbar">
-    <view class="color-bar">
-      <view 
-        class="color-item {{currentColor === item ? 'active' : ''}}" 
-        wx:for="{{colors}}" 
-        wx:key="*this"
-        style="background-color: {{item}}"
-        bindtap="selectColor"
-        data-color="{{item}}"
-      ></view>
+
+  <!-- 图层面板 -->
+  <view class="layer-panel {{showLayers ? 'show' : ''}}">
+    <view class="lp-header">
+      <text class="lp-title">图层</text>
+      <view class="tb-btn sm" bindtap="toggleLayers">
+        <image class="tb-icon sm" src="{{icons.close}}" mode="aspectFit" />
+      </view>
     </view>
-    
-    <view class="tools">
-      <button class="tool-btn" bindtap="clearCanvas">清空</button>
-      <button class="tool-btn" bindtap="saveCanvas">保存</button>
-      <button class="tool-btn" bindtap="goBack">返回</button>
+    <scroll-view class="lp-list" scroll-y>
+      <view
+        class="lp-item {{item.active ? 'active' : ''}}"
+        wx:for="{{layers}}"
+        wx:key="id"
+        data-index="{{index}}"
+        bindtap="selectLayer"
+      >
+        <view class="lp-vis" catchtap="toggleLayerVisible" data-index="{{index}}">
+          <image class="tb-icon xs" src="{{item.visible ? icons.eye : icons.eyeOff}}" mode="aspectFit" />
+        </view>
+        <text class="lp-name">{{item.name}}</text>
+        <text class="lp-badge" wx:if="{{item.active}}">·</text>
+      </view>
+    </scroll-view>
+    <view class="lp-footer">
+      <view class="lp-fbtn" bindtap="addLayer">
+        <image class="tb-icon xs" src="{{icons.plus}}" mode="aspectFit" />
+        <text>新建</text>
+      </view>
+      <view class="lp-fbtn" bindtap="deleteLayer">
+        <image class="tb-icon xs" src="{{icons.trash}}" mode="aspectFit" />
+        <text>删除</text>
+      </view>
+      <view class="lp-fbtn" bindtap="mergeDown">
+        <image class="tb-icon xs" src="{{icons.merge}}" mode="aspectFit" />
+        <text>合并</text>
+      </view>
+    </view>
+  </view>
+
+
+
+  <!-- 设置面板 -->
+  <view class="slide-panel {{showSettings ? 'show' : ''}}">
+    <view class="sp-handle"></view>
+    <view class="sp-title">设置</view>
+    <view class="st-row" bindtap="toggleLayerButton">
+      <view class="st-left">
+        <image class="st-icon" src="{{icons.layers}}" mode="aspectFit" />
+        <text class="st-label">显示图层按钮</text>
+        <text class="st-hint">适合高阶用户</text>
+      </view>
+      <switch class="st-switch" checked="{{showLayerButton}}" color="#4f46e5" bindchange="toggleLayerButton" />
+    </view>
+    <view class="st-row" bindtap="onResetView">
+      <view class="st-left">
+        <image class="st-icon" src="{{icons.size}}" mode="aspectFit" />
+        <text class="st-label">重置视角</text>
+        <text class="st-hint">居中画布</text>
+      </view>
+      <text class="st-arrow">→</text>
+    </view>
+  </view>
+
+  <!-- 笔刷弹出菜单（长按颜色触发） -->
+  <view class="brush-menu {{showBrushMenu ? 'show' : ''}}" wx:if="{{showBrushMenu}}">
+    <!-- 笔刷类型 -->
+    <view class="bm-row">
+      <view
+        class="bm-brush {{currentBrush === item.type ? 'active' : ''}}"
+        wx:for="{{brushes}}"
+        wx:key="type"
+        data-type="{{item.type}}"
+        bindtap="selectBrush"
+      >
+        <image class="bm-icon" src="{{item.type === 'pencil' ? iconsWhite.pencil : item.type === 'marker' ? iconsWhite.marker : item.type === 'highlighter' ? iconsWhite.highlighter : iconsWhite.eraser}}" mode="aspectFit" />
+        <text class="bm-label">{{item.name}}</text>
+      </view>
+    </view>
+    <!-- 粗细滑块 -->
+    <view class="bm-slider-row">
+      <view class="bm-size-dot" style="width:{{brushSize*2}}rpx; height:{{brushSize*2}}rpx"></view>
+      <slider
+        class="bm-slider"
+        min="1"
+        max="40"
+        value="{{brushSize}}"
+        bindchange="onBrushSizeChange"
+        block-size="18"
+        activeColor="#4f46e5"
+        backgroundColor="rgba(255,255,255,0.2)"
+      />
+    </view>
+    <!-- 高级功能 -->
+    <view class="bm-row bm-tools">
+      <view class="bm-brush" bindtap="onAdvancedImage">
+        <image class="bm-icon" src="{{iconsWhite.image}}" mode="aspectFit" />
+        <text class="bm-label">图片</text>
+      </view>
+      <view class="bm-brush" bindtap="onAdvancedPickColor">
+        <image class="bm-icon" src="{{iconsWhite.eyedropper}}" mode="aspectFit" />
+        <text class="bm-label">取色</text>
+      </view>
+      <view class="bm-brush" bindtap="onAdvancedBackground">
+        <image class="bm-icon" src="{{iconsWhite.palette}}" mode="aspectFit" />
+        <text class="bm-label">背景</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部缩放工具栏 -->
+  <view class="fab-zoom-bar">
+    <view class="fab-zoom-group">
+      <view class="fab-zbtn {{isZoomMode ? 'active' : ''}}" bindtap="toggleZoomMode">
+        <text class="fab-zsign">{{isZoomMode ? '🔒' : '✋'}}</text>
+      </view>
+      <view class="fab-zbtn" bindtap="onZoomOut">
+        <text class="fab-zsign">−</text>
+      </view>
+      <text class="fab-zlevel {{zoomLevel === 100 ? '' : 'fab-zreset'}}" bindtap="onZoomReset">{{zoomLevel}}%</text>
+      <view class="fab-zbtn" bindtap="onZoomIn">
+        <text class="fab-zsign">+</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部功能工具栏 -->
+  <view class="fab-action-bar">
+    <view class="fab-btn" bindtap="openColorPanel" bindlongpress="onColorLongPress">
+      <view class="fab-color-dot" style="background:{{currentColor}}"></view>
+    </view>
+
+    <view class="fab-btn" bindtap="onSave">
+      <image class="fab-icon" src="{{iconsWhite.download}}" mode="aspectFit" />
+    </view>
+
+    <view class="fab-btn" bindtap="onUndo">
+      <image class="fab-icon" src="{{iconsWhite.undo}}" mode="aspectFit" />
+    </view>
+
+    <view class="fab-btn" bindtap="onClear">
+      <image class="fab-icon" src="{{iconsWhite.trash}}" mode="aspectFit" />
+    </view>
+
+    <view class="fab-btn" bindtap="toggleSettings">
+      <image class="fab-icon" src="{{iconsWhite.gear}}" mode="aspectFit" />
+    </view>
+  </view>
+
+  <!-- 笔刷面板 -->
+  <view class="slide-panel {{showBrushPanel ? 'show' : ''}}">
+    <view class="sp-handle"></view>
+    <view class="sp-title">选择笔刷</view>
+    <view class="sp-grid">
+      <view
+        class="sp-item {{currentBrush === item.type ? 'active' : ''}}"
+        wx:for="{{brushes}}"
+        wx:key="type"
+        data-type="{{item.type}}"
+        bindtap="selectBrush"
+      >
+        <image class="sp-icon" src="{{item.icon}}" mode="aspectFit" />
+        <text class="sp-label">{{item.name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 颜色面板 -->
+  <view class="slide-panel {{showColorPanel ? 'show' : ''}}">
+    <view class="sp-handle"></view>
+    <view class="sp-title">{{showBgColors ? '选择背景色' : isPickingBackground ? '选择背景色' : '选择颜色'}}</view>
+    <view class="color-grid">
+      <view
+        class="color-dot {{(showBgColors ? (item === 'transparent' ? backgroundColor === '' : backgroundColor === item) : currentColor === item) ? 'active' : ''}} {{item === 'transparent' ? 'color-dot-transparent' : ''}}"
+        wx:for="{{showBgColors ? bgColors : colors}}"
+        wx:key="*this"
+        style="{{item === 'transparent' ? '' : 'background:' + item}}"
+        data-color="{{item}}"
+        bindtap="selectColor"
+      >
+        <view wx:if="{{item === '#ffffff'}}" class="color-dot-ring"></view>
+      </view>
     </view>
   </view>
 </view>
