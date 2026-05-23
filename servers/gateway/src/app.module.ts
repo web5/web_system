@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ProxyModule } from './proxy/proxy.module';
 import { AuthModule } from './auth/auth.module';
 import { StaticModule } from './static/static.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -11,6 +12,8 @@ import { StaticModule } from './static/static.module';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+    // 心跳检测
+    HealthModule,
     // 代理模块 - 转发请求到后台服务
     ProxyModule,
     // 认证模块 - JWT 验证

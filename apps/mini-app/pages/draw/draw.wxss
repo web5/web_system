@@ -477,6 +477,43 @@ page {
   color: #9ca3af;
 }
 
+/* ===== 取色中提示条 ===== */
+.pick-color-bar {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 28rpx;
+  background: rgba(79, 70, 229, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 48rpx;
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.35);
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+.pick-color-bar.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.pik-sign {
+  font-size: 32rpx;
+}
+
+.pik-text {
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* ===== 底部缩放控件组 ===== */
 .fab-zoom-group {
   display: flex;
@@ -527,4 +564,12 @@ page {
 }
 .fab-zlevel:active {
   background: rgba(255,255,255,0.12);
+}
+
+.fab-zdivider {
+  width: 1rpx;
+  height: 32rpx;
+  background: rgba(255,255,255,0.18);
+  margin: 0 2rpx;
+  flex-shrink: 0;
 }

@@ -14,16 +14,8 @@ export class ProxyController {
     });
   }
 
-  @All('users/*')
+  @All('users*')
   proxyUsers(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUserProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
-  @All('users')
-  proxyUsersRoot(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createUserProxy();
     return proxy(req, res, () => {
       res.status(500).json({ code: 500, message: 'Proxy error' });
@@ -40,9 +32,6 @@ export class ProxyController {
 
   @All('*')
   proxyApi(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createApiProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    res.status(404).json({ code: 404, message: `Unknown API route: ${req.method} ${req.path}` });
   }
 }
