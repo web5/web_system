@@ -25,15 +25,16 @@ async function bootstrap() {
   // Swagger 文档
   const config = new DocumentBuilder()
     .setTitle('AI Service API')
-    .setDescription('AI 对话服务接口文档')
+    .setDescription('AI 对话服务 - 聊天 & 对话管理')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.setup('api-docs', app, config);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document);
 
   const port = process.env.PORT || 3003;
   await app.listen(port);
-  console.log(`AI Service is running on: http://localhost:${port}`);
-  console.log(`Swagger docs: http://localhost:${port}/api-docs`);
+  console.log(`🤖 AI Service is running on: http://localhost:${port}`);
+  console.log(`📚 Swagger docs: http://localhost:${port}/api-docs`);
 }
 bootstrap();

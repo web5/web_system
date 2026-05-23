@@ -17,7 +17,7 @@ export class ConversationService {
    */
   async saveConversation(
     userId: string,
-    messages: Array<{ role: string; content: string; timestamp?: string }>,
+    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp?: string }>,
     conversationId?: string,
   ): Promise<Conversation> {
     // 生成对话标题（取第一条用户消息的前20个字符）
@@ -45,9 +45,9 @@ export class ConversationService {
       userId,
       title,
       messages,
-    });
+    } as Conversation);
 
-    return this.conversationRepository.save(newConversation);
+    return this.conversationRepository.save(newConversation as Conversation);
   }
 
   /**

@@ -20,7 +20,7 @@ import { ConversationModule } from './conversation/conversation.module';
         type: 'postgres',
         url: configService.get('DATABASE_URL'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get('NODE_ENV') === 'development',
+        synchronize: false, // 暂时关闭自动同步，避免已有数据冲突
         logging: configService.get('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

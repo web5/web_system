@@ -19,7 +19,7 @@ import { User } from './user/user.entity';
         password: configService.get('DB_PASSWORD', 'web_system123'),
         database: configService.get('DB_DATABASE', 'web_system'),
         entities: [User],
-        synchronize: true,
+        synchronize: false, // 暂时关闭自动同步，避免已有数据冲突
         logging: configService.get('NODE_ENV') === 'development',
       }),
     }),

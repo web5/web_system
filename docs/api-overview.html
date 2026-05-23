@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>接口实现情况 - 科豆 AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 32px 24px;
+    text-align: center;
+  }
+  .header h1 { font-size: 24px; margin-bottom: 6px; }
+  .header p { font-size: 14px; opacity: 0.8; }
+
+  /* 统计条 */
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 20px 24px;
+    background: #fff;
+    margin: 0 0 16px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .stat-item { text-align: center; }
+  .stat-num { font-size: 28px; font-weight: bold; color: #667eea; }
+  .stat-label { font-size: 12px; color: #999; margin-top: 2px; }
+
+  .container { max-width: 800px; margin: 0 auto 40px; padding: 0 16px; }
+
+  /* 卡片 */
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px;
+    color: #fff;
+  }
+  .card-icon { font-size: 28px; }
+  .card-title h3 { font-size: 17px; margin-bottom: 2px; }
+  .card-title span { font-size: 12px; opacity: 0.75; }
+  .card-badge {
+    margin-left: auto;
+    font-size: 12px;
+    background: rgba(255,255,255,0.25);
+    padding: 4px 12px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+  .badge-partial { background: rgba(255,255,255,0.3); }
+
+  /* API 列表 */
+  .api-list { padding: 8px 0; }
+  .api-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .api-row:last-child { border-bottom: none; }
+
+  .method {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 6px;
+    color: #fff;
+    min-width: 72px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .m-get  { background: #10b981; }
+  .m-post { background: #3b82f6; }
+  .m-put  { background: #f59e0b; }
+  .m-del  { background: #ef4444; }
+  .m-all  { background: #8b5cf6; }
+  .m-ui   { background: #ec4899; }
+  .m-svc  { background: #6366f1; }
+
+  .api-info { flex: 1; min-width: 0; }
+  .api-path {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    color: #1a1a2e;
+    word-break: break-all;
+  }
+  .api-desc {
+    font-size: 12px;
+    color: #999;
+    margin-top: 2px;
+  }
+
+  .auth-tag {
+    font-size: 11px;
+    color: #d97706;
+    background: #fef3c7;
+    padding: 2px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .auth-none { color: #9ca3af; background: #f3f4f6; }
+
+  .card-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #f3f4f6;
+    font-size: 12px;
+    color: #bbb;
+  }
+
+  .tip {
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    padding: 16px;
+  }
+
+  /* 响应式 */
+  @media (max-width: 600px) {
+    .stats { gap: 16px; padding: 14px 12px; }
+    .stat-num { font-size: 22px; }
+    .api-row { padding: 10px 14px; gap: 8px; }
+    .method { font-size: 10px; min-width: 56px; padding: 2px 8px; }
+    .api-path { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 接口实现情况</h1>
+  <p>科豆 AI 后端服务 API 全景</p>
+</div>
+
+<div class="stats">
+  <div class="stat-item">
+    <div class="stat-num">4</div>
+    <div class="stat-label">后端服务</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">22</div>
+    <div class="stat-label">API 端点</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">6</div>
+    <div class="stat-label">Controller</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">✅</div>
+    <div class="stat-label">全部已实现</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 模块 1: Gateway -->
+  <div class="card">
+    <div class="card-header" style="background:#667eea;">
+      <span class="card-icon">🚪</span>
+      <div class="card-title"><h3>Gateway 网关</h3><span>端口 3000</span></div>
+      <span class="card-badge">✅ 已完成</span>
+    </div>
+    <div class="api-list">
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/health</div><div class="api-desc">健康检查</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-all">ALL</span>
+        <div class="api-info"><div class="api-path">/api/auth/*</div><div class="api-desc">代理 → Auth Service (3001)</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-all">ALL</span>
+        <div class="api-info"><div class="api-path">/api/users*</div><div class="api-desc">代理 → User Service (3002)</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-all">ALL</span>
+        <div class="api-info"><div class="api-path">/api/ai/*</div><div class="api-desc">代理 → AI Service (3003)</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-all">ALL</span>
+        <div class="api-info"><div class="api-path">/api/*</div><div class="api-desc">兜底 404（未匹配路由）</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/static/*</div><div class="api-desc">前端静态资源托管</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+    </div>
+    <div class="card-footer">6 个路由规则</div>
+  </div>
+
+  <!-- 模块 2: 认证服务 -->
+  <div class="card">
+    <div class="card-header" style="background:#f59e0b;">
+      <span class="card-icon">🔐</span>
+      <div class="card-title"><h3>认证服务</h3><span>端口 3001 · 对外路径 /api/auth/*</span></div>
+      <span class="card-badge">✅ 已完成</span>
+    </div>
+    <div class="api-list">
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/login</div><div class="api-desc">用户名密码登录</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/register</div><div class="api-desc">用户注册</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/wechat-login</div><div class="api-desc">微信扫码登录</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/miniprogram-login</div><div class="api-desc">小程序静默登录（code2Session）</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/refresh</div><div class="api-desc">刷新 JWT Token</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/auth/logout</div><div class="api-desc">登出</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+    </div>
+    <div class="card-footer">6 个端点 · User 实体含 wechatOpenid 索引</div>
+  </div>
+
+  <!-- 模块 3: 用户服务 -->
+  <div class="card">
+    <div class="card-header" style="background:#10b981;">
+      <span class="card-icon">👤</span>
+      <div class="card-title"><h3>用户服务</h3><span>端口 3002 · 对外路径 /api/users/*</span></div>
+      <span class="card-badge">✅ 已完成</span>
+    </div>
+    <div class="api-list">
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/api/users</div><div class="api-desc">用户列表（支持 page / limit 分页）</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/api/users/:id</div><div class="api-desc">根据 ID 获取用户</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/users</div><div class="api-desc">创建用户</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-put">PUT</span>
+        <div class="api-info"><div class="api-path">/api/users/:id</div><div class="api-desc">更新用户信息</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-del">DELETE</span>
+        <div class="api-info"><div class="api-path">/api/users/:id</div><div class="api-desc">删除用户</div></div>
+        <span class="auth-tag auth-none">公开</span>
+      </div>
+    </div>
+    <div class="card-footer">5 个端点 · 标准 CRUD</div>
+  </div>
+
+  <!-- 模块 4: AI 服务 -->
+  <div class="card">
+    <div class="card-header" style="background:#8b5cf6;">
+      <span class="card-icon">🤖</span>
+      <div class="card-title"><h3>AI 服务</h3><span>端口 3003 · 对外路径 /api/ai/*</span></div>
+      <span class="card-badge">✅ 已完成</span>
+    </div>
+    <div class="api-list">
+      <div class="api-row">
+        <span class="method m-post">POST</span>
+        <div class="api-info"><div class="api-path">/api/ai/chat</div><div class="api-desc">发送消息获取 AI 回复</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/api/ai/conversations</div><div class="api-desc">获取对话列表</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-get">GET</span>
+        <div class="api-info"><div class="api-path">/api/ai/conversations/:id</div><div class="api-desc">获取对话详情</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-del">DELETE</span>
+        <div class="api-info"><div class="api-path">/api/ai/conversations/:id</div><div class="api-desc">删除指定对话</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-del">DELETE</span>
+        <div class="api-info"><div class="api-path">/api/ai/conversations</div><div class="api-desc">清空所有对话</div></div>
+        <span class="auth-tag">Bearer Token</span>
+      </div>
+    </div>
+    <div class="card-footer">5 个端点 · 全部需认证</div>
+  </div>
+
+  <!-- 模块 5: 小程序 -->
+  <div class="card">
+    <div class="card-header" style="background:#ec4899;">
+      <span class="card-icon">📱</span>
+      <div class="card-title"><h3>微信小程序 · 前端</h3><span>已 Mock 登录，待后台部署后切换</span></div>
+      <span class="card-badge badge-partial">🚧 进行中</span>
+    </div>
+    <div class="api-list">
+      <div class="api-row">
+        <span class="method m-ui">UI</span>
+        <div class="api-info"><div class="api-path">pages/index</div><div class="api-desc">首页 · 创意画板入口</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-ui">UI</span>
+        <div class="api-info"><div class="api-path">pages/draw</div><div class="api-desc">创意画板 · Canvas 绘图</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-svc">SVC</span>
+        <div class="api-info"><div class="api-path">services/auth.ts</div><div class="api-desc">登录服务（当前 Mock，TODO 恢复）</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+      <div class="api-row">
+        <span class="method m-svc">SVC</span>
+        <div class="api-info"><div class="api-path">utils/request.ts</div><div class="api-desc">HTTP 请求封装 · 自动 Token · 401 处理</div></div>
+        <span class="auth-tag auth-none">-</span>
+      </div>
+    </div>
+    <div class="card-footer">2 个页面 · 2 个服务模块</div>
+  </div>
+
+</div>
+
+<div class="tip">科豆 AI 项目 · 接口体系全景图</div>
+
+</body>
+</html>

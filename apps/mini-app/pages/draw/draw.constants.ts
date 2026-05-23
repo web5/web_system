@@ -22,6 +22,9 @@ const RAW_ICONS: Record<string, string> = {
   merge:    '%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round"%3E%3Cpath d="M8 6h10"/%3E%3Cpath d="M6 12h12"/%3E%3Cpath d="M8 18h8"/%3E%3C/svg%3E',
   size:     '%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round"%3E%3Ccircle cx="12" cy="12" r="2"/%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E',
   gear:     '%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Ccircle cx="12" cy="12" r="3"/%3E%3Cpath d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/%3E%3C/svg%3E',
+  tool:     '%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/%3E%3C/svg%3E',
+  // 预设图形
+  shape:    '%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="7" height="7"/%3E%3Ccircle cx="17.5" cy="6.5" r="3.5"/%3E%3Cpolygon points="12 21 5 8 19 8"/%3E%3C/svg%3E',
 };
 
 /** 生成带颜色的 data URI */
@@ -77,4 +80,209 @@ export const BRUSH_WHITE_ICONS: Record<BrushType, string> = {
   marker:      ICONS_WHITE.marker,
   highlighter: ICONS_WHITE.highlighter,
   eraser:      ICONS_WHITE.eraser,
+};
+
+// ===================== 预设图形 =====================
+export type ShapeType = 'circle' | 'rect' | 'triangle' | 'star5' | 'heart';
+
+export interface ShapeItem {
+  type: ShapeType;
+  name: string;
+  icon: string;
+}
+
+export const SHAPES: ShapeItem[] = [
+  { type: 'circle',   name: '圆形',   icon: '●' },
+  { type: 'rect',     name: '矩形',   icon: '■' },
+  { type: 'triangle', name: '三角形', icon: '▲' },
+  { type: 'star5',    name: '五角星', icon: '★' },
+  { type: 'heart',    name: '心形',   icon: '♥' },
+];
+
+// ===================== 素材库 =====================
+
+/** 素材分类 */
+export type MaterialCategory = 'all' | 'shape' | 'sticker' | 'background';
+
+/** 素材项 */
+export interface MaterialItem {
+  id: string;
+  category: MaterialCategory;
+  name: string;
+  icon: string;
+  type: 'svg_path' | 'emoji' | 'image_url';
+  data: {
+    paths?: string[];
+    text?: string;
+    url?: string;
+  };
+  defaultScale?: number;
+  defaultColor?: string;
+}
+
+/** 素材库 */
+export const MATERIAL_LIBRARY: MaterialItem[] = [
+  // === 形状类 ===
+  { id: 'shape_circle',    category: 'shape', name: '圆',    icon: '⭕', type: 'svg_path', data: { paths: ['circle'] },    defaultScale: 0.5 },
+  { id: 'shape_rect',      category: 'shape', name: '矩形',  icon: '▬',  type: 'svg_path', data: { paths: ['rect'] },      defaultScale: 0.5 },
+  { id: 'shape_triangle',  category: 'shape', name: '三角',  icon: '△',  type: 'svg_path', data: { paths: ['triangle'] },  defaultScale: 0.5 },
+  { id: 'shape_star',      category: 'shape', name: '五角星',icon: '⭐', type: 'svg_path', data: { paths: ['star5'] },    defaultScale: 0.5 },
+  { id: 'shape_heart',     category: 'shape', name: '心形',  icon: '❤️', type: 'svg_path', data: { paths: ['heart'] },     defaultScale: 0.5 },
+
+  // === 贴纸类（emoji） ===
+  { id: 'sticker_smile',   category: 'sticker', name: '笑脸',  icon: '😊', type: 'emoji', data: { text: '😊' },   defaultScale: 0.4 },
+  { id: 'sticker_flower',  category: 'sticker', name: '花',    icon: '🌸', type: 'emoji', data: { text: '🌸' },   defaultScale: 0.4 },
+  { id: 'sticker_star2',   category: 'sticker', name: '星星',  icon: '🌟', type: 'emoji', data: { text: '🌟' },   defaultScale: 0.4 },
+  { id: 'sticker_fire',    category: 'sticker', name: '火焰',  icon: '🔥', type: 'emoji', data: { text: '🔥' },   defaultScale: 0.4 },
+  { id: 'sticker_rainbow', category: 'sticker', name: '彩虹',  icon: '🌈', type: 'emoji', data: { text: '🌈' },   defaultScale: 0.45 },
+  { id: 'sticker_moon',    category: 'sticker', name: '月亮',  icon: '🌙', type: 'emoji', data: { text: '🌙' },   defaultScale: 0.4 },
+
+  // === 动物 & 植物（SVG 路径） ===
+  { id: 'sticker_cat',     category: 'sticker', name: '猫',    icon: '🐱', type: 'svg_path', data: { paths: ['cat'] },     defaultScale: 0.45, defaultColor: '#FF8C00' },
+  { id: 'sticker_dog',     category: 'sticker', name: '狗',    icon: '🐶', type: 'svg_path', data: { paths: ['dog'] },     defaultScale: 0.45, defaultColor: '#8B5E3C' },
+  { id: 'sticker_fish',    category: 'sticker', name: '鱼',    icon: '🐟', type: 'svg_path', data: { paths: ['fish'] },    defaultScale: 0.4,  defaultColor: '#4A90D9' },
+  { id: 'sticker_tree',    category: 'sticker', name: '树',    icon: '🌳', type: 'svg_path', data: { paths: ['tree'] },    defaultScale: 0.5,  defaultColor: '#2D8B4E' },
+
+  // === 背景类 ===
+  { id: 'bg_grid',         category: 'background', name: '网格', icon: '📐', type: 'image_url', data: { url: '/assets/bg_grid.png' }, defaultScale: 1.0 },
+];
+
+export const MATERIAL_CATEGORIES = [
+  { key: 'all', name: '全部' },
+  { key: 'shape', name: '形状' },
+  { key: 'sticker', name: '贴纸' },
+  { key: 'background', name: '背景' },
+];
+
+/** 预设形状的 Canvas 2D 绘制函数 */
+export const SHAPE_DRAWERS: Record<string, (ctx: any, size: number) => void> = {
+  circle(ctx, size) {
+    ctx.beginPath();
+    ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  rect(ctx, size) {
+    ctx.fillRect(-size / 2, -size / 2, size, size);
+  },
+  triangle(ctx, size) {
+    const r = size / 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r * 0.866, r * 0.5);
+    ctx.lineTo(-r * 0.866, r * 0.5);
+    ctx.closePath();
+    ctx.fill();
+  },
+  star5(ctx, size) {
+    const r = size / 2;
+    const innerR = r * 0.38;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const outerAngle = (Math.PI / 2 * -1) + (2 * Math.PI * i / 5);
+      const innerAngle = outerAngle + (Math.PI / 5);
+      if (i === 0) ctx.moveTo(r * Math.cos(outerAngle), r * Math.sin(outerAngle));
+      else ctx.lineTo(r * Math.cos(outerAngle), r * Math.sin(outerAngle));
+      ctx.lineTo(innerR * Math.cos(innerAngle), innerR * Math.sin(innerAngle));
+    }
+    ctx.closePath();
+    ctx.fill();
+  },
+  heart(ctx, size) {
+    const s = size * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(0, s * 1.5);
+    ctx.bezierCurveTo(-s * 2, -s * 0.5, -s * 1.5, -s * 2.5, 0, -s * 1.5);
+    ctx.bezierCurveTo(s * 1.5, -s * 2.5, s * 2, -s * 0.5, 0, s * 1.5);
+    ctx.fill();
+  },
+
+  // ===== 动物 & 植物 =====
+  cat(ctx, size) {
+    const s = size * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(-s * 1.6, -s * 0.5);
+    ctx.lineTo(-s * 1.1, -s * 3.2);
+    ctx.lineTo(-s * 0.3, -s * 0.8);
+    ctx.quadraticCurveTo(0, -s * 3.5, s * 0.3, -s * 0.8);
+    ctx.lineTo(s * 1.1, -s * 3.2);
+    ctx.lineTo(s * 1.6, -s * 0.5);
+    ctx.quadraticCurveTo(s * 2.2, s * 0.2, s * 1.8, s * 1.2);
+    ctx.quadraticCurveTo(s * 2.4, s * 2.0, s * 2.0, s * 3.5);
+    ctx.quadraticCurveTo(s * 1.0, s * 4.0, 0, s * 4.0);
+    ctx.quadraticCurveTo(-s * 1.0, s * 4.0, -s * 2.0, s * 3.5);
+    ctx.quadraticCurveTo(-s * 2.4, s * 2.0, -s * 1.8, s * 1.2);
+    ctx.quadraticCurveTo(-s * 2.2, s * 0.2, -s * 1.6, -s * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    // 尾巴
+    ctx.beginPath();
+    ctx.moveTo(s * 1.8, s * 2.5);
+    ctx.quadraticCurveTo(s * 3.5, s * 1.5, s * 3.0, -s * 0.5);
+    ctx.lineWidth = s * 0.6;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  },
+
+  dog(ctx, size) {
+    const s = size * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(-s * 1.5, -s * 1.0);
+    ctx.quadraticCurveTo(-s * 3.0, -s * 0.2, -s * 2.8, s * 1.5);
+    ctx.quadraticCurveTo(-s * 2.5, s * 2.0, -s * 1.6, s * 0.8);
+    ctx.quadraticCurveTo(-s * 1.8, -s * 3.0, 0, -s * 3.2);
+    ctx.quadraticCurveTo(s * 1.8, -s * 3.0, s * 1.6, s * 0.8);
+    ctx.quadraticCurveTo(s * 2.5, s * 2.0, s * 2.8, s * 1.5);
+    ctx.quadraticCurveTo(s * 3.0, -s * 0.2, s * 1.5, -s * 1.0);
+    ctx.quadraticCurveTo(s * 2.2, s * 0.2, s * 1.8, s * 1.5);
+    ctx.quadraticCurveTo(s * 2.2, s * 2.5, s * 1.8, s * 3.8);
+    ctx.quadraticCurveTo(s * 0.8, s * 4.3, 0, s * 4.3);
+    ctx.quadraticCurveTo(-s * 0.8, s * 4.3, -s * 1.8, s * 3.8);
+    ctx.quadraticCurveTo(-s * 2.2, s * 2.5, -s * 1.8, s * 1.5);
+    ctx.quadraticCurveTo(-s * 2.2, s * 0.2, -s * 1.5, -s * 1.0);
+    ctx.closePath();
+    ctx.fill();
+  },
+
+  fish(ctx, size) {
+    const s = size * 0.12;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 2.5, s * 1.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(s * 2.0, s * 0.4);
+    ctx.lineTo(s * 4.0, s * 2.0);
+    ctx.lineTo(s * 4.0, -s * 2.0);
+    ctx.lineTo(s * 2.0, -s * 0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.5, -s * 1.2);
+    ctx.lineTo(s * 0.5, -s * 2.5);
+    ctx.lineTo(s * 1.2, -s * 1.2);
+    ctx.closePath();
+    ctx.fill();
+  },
+
+  tree(ctx, size) {
+    const s = size * 0.1;
+    ctx.fillRect(-s * 1.0, s * 1.5, s * 2.0, s * 3.0);
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 2.0);
+    ctx.lineTo(s * 3.5, s * 2.0);
+    ctx.lineTo(-s * 3.5, s * 2.0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 3.5);
+    ctx.lineTo(s * 2.8, s * 0.5);
+    ctx.lineTo(-s * 2.8, s * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 5.5);
+    ctx.lineTo(s * 2.0, -s * 1.0);
+    ctx.lineTo(-s * 2.0, -s * 1.0);
+    ctx.closePath();
+    ctx.fill();
+  },
 };

@@ -1,6 +1,7 @@
 /* ===== 全局 ===== */
 page {
   background: #1a1a2e;
+  overflow: hidden;
   --primary: #4f46e5;
   --primary-light: #818cf8;
   --danger: #ef4444;
@@ -13,6 +14,7 @@ page {
 
 .container {
   height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: #fafafa;
@@ -70,7 +72,7 @@ page {
   bottom: 0;
   width: 380rpx;
   background: #fff;
-  z-index: 100;
+  z-index: 105;
   box-shadow: -4px 0 32px rgba(0,0,0,0.15);
   display: flex;
   flex-direction: column;
@@ -167,7 +169,7 @@ page {
   -webkit-backdrop-filter: blur(24px);
   border-radius: 48rpx;
   box-shadow: 0 8px 30px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.12);
-  z-index: 50;
+  z-index: 95;
   border: 1rpx solid rgba(255,255,255,0.15);
 }
 
@@ -186,7 +188,7 @@ page {
   -webkit-backdrop-filter: blur(24px);
   border-radius: 64rpx;
   box-shadow: 0 12px 40px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.12);
-  z-index: 50;
+  z-index: 95;
   border: 1rpx solid rgba(255,255,255,0.15);
 }
 
@@ -205,6 +207,7 @@ page {
   background: rgba(255,255,255,0.28);
   transform: scale(0.92);
 }
+
 
 .fab-icon {
   width: 48rpx;
@@ -281,6 +284,20 @@ page {
 }
 .bm-brush.active .bm-label {
   color: #a5b4fc;
+}
+
+/* 预设图形图标 */
+.bm-shape-icon {
+  font-size: 36rpx;
+  line-height: 1;
+  display: block;
+}
+
+/* 图形行分隔 */
+.bm-shapes {
+  padding-top: 12rpx;
+  margin-top: 12rpx;
+  border-top: 1rpx solid rgba(255,255,255,0.1);
 }
 
 .bm-slider-row {
@@ -572,4 +589,351 @@ page {
   background: rgba(255,255,255,0.18);
   margin: 0 2rpx;
   flex-shrink: 0;
+}
+
+/* ===== 工具栏自动显隐（iOS 绘制兼容） ===== */
+.toolbar-fading {
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.toolbar-hidden {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ===== 顶部素材选择栏 ===== */
+.material-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  padding: 12rpx 16rpx;
+  padding-top: calc(12rpx + env(safe-area-inset-top));
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  z-index: 45;
+  gap: 8rpx;
+  transform: translateY(-120%);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+
+.material-bar.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.mb-categories {
+  flex-shrink: 0;
+  max-width: 320rpx;
+  height: 68rpx;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.mb-cat {
+  display: inline-flex;
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 22rpx;
+  color: #6b7280;
+  background: #f3f4f6;
+  margin-right: 8rpx;
+  transition: all 0.2s ease;
+}
+.mb-cat.active {
+  background: #4f46e5;
+  color: #fff;
+}
+.mb-cat:active {
+  opacity: 0.7;
+}
+
+.mb-list {
+  flex: 1;
+  min-width: 0;
+  height: 68rpx;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.mb-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  padding: 10rpx 14rpx;
+  border-radius: 16rpx;
+  margin-right: 4rpx;
+  transition: background 0.15s;
+}
+.mb-item:active {
+  background: #f3f4f6;
+  transform: scale(0.95);
+}
+
+.mb-item-icon {
+  font-size: 36rpx;
+  line-height: 1;
+}
+
+.mb-item-name {
+  font-size: 18rpx;
+  color: #9ca3af;
+}
+
+.mb-close {
+  flex-shrink: 0;
+  padding: 8rpx;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.mb-close:active {
+  opacity: 0.7;
+}
+
+/* ===== iPad 适配 ===== */
+
+/* ---- 横屏画布：右侧留空间给侧边栏 ---- */
+.ipad.landscape .canvas {
+  padding-right: 180rpx;
+}
+
+/* ---- 工具栏区域 ---- */
+.toolbar-area {
+  /* 竖屏：无额外样式，子元素按原 fixed 定位 */
+}
+
+/* iPad 横屏：工具栏改为右侧固定边栏 */
+.toolbar-area.toolbar-sidebar {
+  position: fixed;
+  right: 24rpx;
+  right: calc(24rpx + env(safe-area-inset-right));
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+  z-index: 95;
+  width: auto;
+}
+
+/* 横屏侧边栏：缩放栏重设为垂直圆角容器 */
+.toolbar-area.toolbar-sidebar .fab-zoom-bar {
+  position: static;
+  transform: none;
+  left: auto;
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16rpx 12rpx;
+  border-radius: 40rpx;
+}
+
+/* 横屏侧边栏：功能按钮栏重设为垂直圆角容器 */
+.toolbar-area.toolbar-sidebar .fab-action-bar {
+  position: static;
+  transform: none;
+  left: auto;
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  padding: 16rpx 12rpx;
+  border-radius: 48rpx;
+}
+
+/* 横屏侧边栏：缩放控件组竖排 */
+.toolbar-area.toolbar-sidebar .fab-zoom-group {
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+/* 横屏侧边栏：缩放数字横排显示 */
+.toolbar-area.toolbar-sidebar .fab-zlevel {
+  min-width: auto;
+  text-align: center;
+  padding: 4rpx 0;
+  writing-mode: horizontal-tb;
+}
+
+/* 横屏侧边栏：分隔线改为横向短横线 */
+.toolbar-area.toolbar-sidebar .fab-zdivider {
+  width: 32rpx;
+  height: 1rpx;
+  margin: 6rpx 0;
+  flex-shrink: 0;
+}
+
+/* ---- iPad 通用：触控元素适当放大 ---- */
+.ipad .fab-btn {
+  width: 108rpx;
+  height: 108rpx;
+}
+
+.ipad .fab-icon {
+  width: 56rpx;
+  height: 56rpx;
+}
+
+.ipad .fab-color-dot {
+  width: 56rpx;
+  height: 56rpx;
+}
+
+.ipad .fab-zbtn {
+  width: 64rpx;
+  height: 64rpx;
+}
+
+.ipad .fab-zsign {
+  font-size: 28rpx;
+}
+
+.ipad .fab-zlevel {
+  font-size: 22rpx;
+  min-width: 72rpx;
+}
+
+/* ---- iPad 面板内边距 & 文字放大 ---- */
+.ipad .slide-panel {
+  padding: 24rpx 40rpx 48rpx;
+  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+}
+
+.ipad .sp-handle {
+  width: 56rpx;
+  height: 8rpx;
+  margin-bottom: 24rpx;
+}
+
+.ipad .sp-title {
+  font-size: 32rpx;
+  margin-bottom: 24rpx;
+}
+
+.ipad .sp-icon {
+  width: 52rpx;
+  height: 52rpx;
+}
+
+.ipad .sp-label {
+  font-size: 26rpx;
+}
+
+.ipad .sp-item {
+  padding: 28rpx 8rpx;
+}
+
+.ipad .color-dot {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.ipad .color-grid {
+  gap: 20rpx;
+}
+
+/* ---- iPad 图层 ---- */
+.ipad .layer-panel {
+  width: 420rpx;
+}
+
+.ipad .lp-title {
+  font-size: 34rpx;
+}
+
+.ipad .lp-header {
+  padding: 28rpx 24rpx;
+}
+
+.ipad .lp-name {
+  font-size: 28rpx;
+}
+
+.ipad .lp-item {
+  padding: 20rpx 24rpx;
+}
+
+.ipad .lp-fbtn {
+  font-size: 24rpx;
+  padding: 18rpx 0;
+}
+
+/* ---- iPad 笔刷菜单 ---- */
+.ipad .brush-menu {
+  padding: 24rpx 20rpx 16rpx;
+  border-radius: 28rpx;
+}
+
+.ipad .bm-icon {
+  width: 38rpx;
+  height: 38rpx;
+}
+
+.ipad .bm-label {
+  font-size: 22rpx;
+}
+
+.ipad .bm-brush {
+  padding: 18rpx 20rpx;
+}
+
+.ipad .bm-shape-icon {
+  font-size: 42rpx;
+}
+
+/* ---- iPad 设置面板 ---- */
+.ipad .st-label {
+  font-size: 30rpx;
+}
+
+.ipad .st-hint {
+  font-size: 24rpx;
+}
+
+.ipad .st-row {
+  padding: 28rpx 8rpx;
+}
+
+/* ---- iPad 横屏：笔刷菜单贴右侧边栏 ---- */
+.ipad.landscape .brush-menu {
+  left: auto;
+  right: 200rpx;
+  bottom: 50%;
+  transform: translateY(50%) translateY(12rpx) scale(0.95);
+}
+
+.ipad.landscape .brush-menu.show {
+  transform: translateY(50%) translateY(0) scale(1);
+}
+
+/* ---- iPad 素材栏 ---- */
+.ipad .material-bar {
+  padding: 16rpx 24rpx;
+  padding-top: calc(16rpx + env(safe-area-inset-top));
+}
+
+.ipad .mb-cat {
+  font-size: 24rpx;
+  padding: 10rpx 24rpx;
+}
+
+.ipad .mb-item-icon {
+  font-size: 42rpx;
+}
+
+.ipad .mb-item-name {
+  font-size: 20rpx;
 }

@@ -1,9 +1,10 @@
-<view class="container">
+<view class="container {{isIPad ? 'ipad' : ''}} {{isIPad && isLandscape ? 'landscape' : ''}}">
   <view class="hero">
     <text class="title">🎨 创意画板</text>
     <text class="subtitle">让孩子自由创作，激发想象力</text>
+    <text class="status">{{loggedIn ? '✅ 已登录' : '⏳ 登录中...'}}</text>
   </view>
-  
+
   <view class="features">
     <button class="feature-btn draw-btn" bindtap="goToDraw">
       <text class="feature-icon">🎨</text>
