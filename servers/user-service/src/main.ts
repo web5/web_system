@@ -1,10 +1,25 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // CORS
   app.enableCors();
-  await app.listen(3002);
-  console.log('User Service is running on: http://localhost:3002');
+
+  // Swagger 文档
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('User Service API')
+    .setDescription('用户服务 - 用户 CRUD 管理')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document);
+
+  const port = process.env.PORT || 3002;
+  await app.listen(port);
+  console.log(`👤 User Service is running on: http://localhost:${port}`);
+  console.log(`📚 Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();

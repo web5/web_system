@@ -9,6 +9,7 @@
     "navigationBarTitleText": "科豆 AI",
     "navigationBarTextStyle": "white"
   },
+  "resizable": true,
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

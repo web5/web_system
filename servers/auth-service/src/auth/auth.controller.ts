@@ -1,7 +1,13 @@
 import { Controller, Post, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginRequest, WechatLoginRequest, LoginResponse } from '@web-system/types';
+import {
+  LoginRequest,
+  WechatLoginRequest,
+  MiniprogramLoginRequest,
+  LoginResponse,
+  MiniprogramLoginResponse,
+} from '@web-system/types';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -27,6 +33,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async wechatLogin(@Body() wechatDto: WechatLoginRequest): Promise<LoginResponse> {
     return this.authService.wechatLogin(wechatDto);
+  }
+
+  @Post('miniprogram-login')
+  @ApiOperation({ summary: '微信小程序登录' })
+  @HttpCode(HttpStatus.OK)
+  async miniprogramLogin(@Body() mpDto: MiniprogramLoginRequest): Promise<MiniprogramLoginResponse> {
+    return this.authService.miniprogramLogin(mpDto);
   }
 
   @Post('refresh')

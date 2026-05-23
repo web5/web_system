@@ -75,3 +75,24 @@ export interface WechatTokenResponse {
   openid: string;
   scope: string;
 }
+
+// 小程序 code2Session 响应
+export interface MiniprogramSessionResponse {
+  openid: string;
+  session_key: string;
+  unionid?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
+// 小程序登录请求
+export interface MiniprogramLoginRequest {
+  code: string;
+  nickname?: string;
+  avatar?: string;
+}
+
+// 小程序登录响应（复用 LoginResponse，增加 isNewUser）
+export interface MiniprogramLoginResponse extends LoginResponse {
+  isNewUser: boolean;
+}

@@ -1,6 +1,7 @@
 import { BrushType, BrushConfig, getBrushConfig } from './Brush';
 import { LayerData, createLayer, compositeLayers } from './Layer';
 import { HistoryManager } from './History';
+import type { ShapeType } from '../pages/draw/draw.constants';
 
 export interface EngineOptions {
   width: number;
@@ -66,6 +67,8 @@ export class CanvasEngine {
   private pointBuffer: Point[] = [];
   // 上次实际绘制到的点（避免重复绘制路径累积）
   private lastDrawnPoint: Point | null = null;
+  // 是否有绘制内容（用于素材栏显示判断）
+  private _hasContent = false;
 
   constructor(options: EngineOptions) {
     this.width = options.width;
@@ -177,6 +180,35 @@ export class CanvasEngine {
   getActiveCtx() {
     if (this.layers.length === 0) return null;
     return this.layers[this.activeLayerIndex].ctx;
+  }
+
+  /** 是否有绘制内容 */
+  get hasContent(): boolean { return this._hasContent; }
+
+  /** 标记画布有内容（素材插入等场景） */
+  markContent() {
+    this._hasContent = true;
+  }
+
+  /** 采样检测画布是否为空（undo/redo 后回退使用，仅检测 alpha 通道） */
+  isCanvasBlank(): boolean {
+    const sampleStep = 8; // 每8px采样一次
+    for (const layer of this.layers) {
+      try {
+        const w = this.width * this.dpr;
+        const h = this.height * this.dpr;
+        const imageData = layer.ctx.getImageData(0, 0, w, h);
+        const pixels = imageData.data;
+        for (let y = 0; y < h; y += sampleStep) {
+          for (let x = 0; x < w; x += sampleStep) {
+            if (pixels[(y * w + x) * 4 + 3] !== 0) {
+              return false;
+            }
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+    return true;
   }
 
   /** 开始绘制 */
@@ -316,6 +348,9 @@ export class CanvasEngine {
     // 清理
     this.pointBuffer = [];
     this.lastDrawnPoint = null;
+
+    // 标记有内容
+    if (!this._hasContent) this._hasContent = true;
   }
 
   /** 合成所有图层到主 canvas */
@@ -334,6 +369,9 @@ export class CanvasEngine {
     if (!snapshot) return;
     const bg = this.history.restore(this.mainCtx);
     if (bg !== undefined) this.backgroundColor = bg;
+    this.clearAllLayerCanvases();
+    // 撤回后重新检测是否为空
+    this._hasContent = !this.isCanvasBlank();
   }
 
   /** 重做 */
@@ -342,6 +380,97 @@ export class CanvasEngine {
     if (!snapshot) return;
     const bg = this.history.restore(this.mainCtx);
     if (bg !== undefined) this.backgroundColor = bg;
+    this.clearAllLayerCanvases();
+    this._hasContent = !this.isCanvasBlank();
+  }
+
+  /** 清空所有图层 canvas（撤销/重做后调用，避免旧图层数据覆盖恢复后的主画布）*/
+  private clearAllLayerCanvases() {
+    for (const layer of this.layers) {
+      const ctx = layer.ctx;
+      ctx.clearRect(0, 0, this.width * this.dpr, this.height * this.dpr);
+    }
+  }
+
+  // ========== 预设图形 ==========
+
+  /** 在指定位置绘制预设图形 */
+  drawShape(type: ShapeType, cx: number, cy: number, size: number) {
+    const ctx = this.getActiveCtx();
+    if (!ctx) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.currentColor;
+    ctx.fillStyle = this.currentColor;
+    ctx.lineWidth = this.currentSize * 0.8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.translate(cx, cy);
+
+    const r = size / 2;
+
+    switch (type) {
+      case 'circle':
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+
+      case 'rect':
+        ctx.beginPath();
+        ctx.rect(-r, -r, size, size);
+        ctx.stroke();
+        break;
+
+      case 'triangle':
+        ctx.beginPath();
+        ctx.moveTo(0, -r);
+        ctx.lineTo(r * 1.2, r * 0.7);
+        ctx.lineTo(-r * 1.2, r * 0.7);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+
+      case 'star5': {
+        const outerR = r;
+        const innerR = r * 0.38;
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const outerAngle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+          const innerAngle = outerAngle + Math.PI / 5;
+          if (i === 0) {
+            ctx.moveTo(outerR * Math.cos(outerAngle), outerR * Math.sin(outerAngle));
+          } else {
+            ctx.lineTo(outerR * Math.cos(outerAngle), outerR * Math.sin(outerAngle));
+          }
+          ctx.lineTo(innerR * Math.cos(innerAngle), innerR * Math.sin(innerAngle));
+        }
+        ctx.closePath();
+        ctx.stroke();
+        break;
+      }
+
+      case 'heart': {
+        const s = r * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, s * 0.6);
+        // 左半心
+        ctx.bezierCurveTo(-s, -s * 0.3, -s * 0.5, -s * 1.1, 0, -s * 1.1);
+        // 右半心
+        ctx.bezierCurveTo(s * 0.5, -s * 1.1, s, -s * 0.3, 0, s * 0.6);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+      }
+    }
+
+    ctx.restore();
+
+    this.compositeToMain();
+    this.saveSnapshot();
+    if (!this._hasContent) this._hasContent = true;
   }
 
   canUndo(): boolean { return this.history.canUndo(); }
@@ -404,6 +533,7 @@ export class CanvasEngine {
     this.mainCtx.clearRect(0, 0, this.width * this.dpr, this.height * this.dpr);
     this.mainCtx.fillStyle = this.backgroundColor;
     this.mainCtx.fillRect(0, 0, this.width, this.height);
+    this._hasContent = false;
     this.saveSnapshot();
   }
 
@@ -430,6 +560,7 @@ export class CanvasEngine {
     const y = (this.height - h) / 2;
 
     ctx.drawImage(img, x, y, w, h);
+    if (!this._hasContent) this._hasContent = true;
     this.compositeToMain();
     this.saveSnapshot();
   }

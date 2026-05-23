@@ -23,6 +23,13 @@
   display: block;
 }
 
+.status {
+  font-size: 24rpx;
+  color: #999;
+  display: block;
+  margin-top: 16rpx;
+}
+
 /* 功能按钮区域 */
 .features {
   display: flex;
@@ -60,4 +67,57 @@
 .feature-text {
   font-size: 32rpx;
   font-weight: bold;
+}
+
+/* ===== iPad 横屏适配 ===== */
+
+/* 横屏：容器改为 flex 横向排列，居中 */
+.ipad.landscape .container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 80rpx;
+  padding: 60rpx;
+}
+
+/* 横屏：hero 区左对齐 */
+.ipad.landscape .hero {
+  text-align: left;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* 横屏：feature 区 margin 归零 */
+.ipad.landscape .features {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* iPad 通用放大 */
+.ipad .title {
+  font-size: 56rpx;
+}
+
+.ipad .subtitle {
+  font-size: 32rpx;
+}
+
+.ipad .status {
+  font-size: 26rpx;
+}
+
+.ipad .feature-btn {
+  width: 340rpx;
+  height: 340rpx;
+  border-radius: 36rpx;
+}
+
+.ipad .feature-icon {
+  font-size: 100rpx;
+  margin-bottom: 24rpx;
+}
+
+.ipad .feature-text {
+  font-size: 36rpx;
 }

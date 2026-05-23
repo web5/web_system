@@ -1,10 +1,36 @@
-<view class="container">
+<view class="container {{isIPad ? 'ipad' : ''}} {{isIPad && isLandscape ? 'landscape' : ''}}">
   <!-- 遮罩层（取色模式下不显示，避免阻挡画布点击） -->
   <view
     class="overlay"
     wx:if="{{!isPickingColor && (showBrushPanel || showColorPanel || showActionPanel || showLayers || showBrushMenu || showSettings)}}"
     bindtap="closeAllPanels"
   ></view>
+
+  <!-- 顶部素材选择栏（空白画布自动显示 / 工具栏按钮手动打开） -->
+  <view class="material-bar {{showMaterialBar && !isPickingColor ? 'show' : ''}}"
+        wx:if="{{showMaterialBar}}">
+    <!-- 分类标签 -->
+    <view class="mb-categories">
+      <view class="mb-cat {{activeMaterialCategory === item.key ? 'active' : ''}}"
+            wx:for="{{materialCategories}}" wx:key="key"
+            data-category="{{item.key}}"
+            bindtap="onMaterialCategoryChange">{{item.name}}</view>
+    </view>
+
+    <!-- 素材列表 -->
+    <view class="mb-list">
+      <view class="mb-item" wx:for="{{filteredMaterials}}" wx:key="id" wx:for-item="material"
+            data-material="{{material}}" bindtap="onSelectMaterial">
+        <text class="mb-item-icon">{{material.icon}}</text>
+        <text class="mb-item-name">{{material.name}}</text>
+      </view>
+    </view>
+
+    <!-- 关闭按钮 -->
+    <view class="mb-close" bindtap="toggleMaterialBar">
+      <image class="tb-icon xs" src="{{icons.close}}" mode="aspectFit" />
+    </view>
+  </view>
 
   <!-- 画布 -->
   <canvas
@@ -61,8 +87,8 @@
   <view class="slide-panel {{showSettings ? 'show' : ''}}">
     <view class="sp-handle"></view>
     <view class="sp-title">设置</view>
-    <view class="st-row" bindtap="toggleLayerButton">
-      <view class="st-left">
+    <view class="st-row">
+      <view class="st-left" bindtap="toggleLayerButton">
         <image class="st-icon" src="{{icons.layers}}" mode="aspectFit" />
         <text class="st-label">显示图层按钮</text>
         <text class="st-hint">适合高阶用户</text>
@@ -100,6 +126,19 @@
         backgroundColor="rgba(255,255,255,0.2)"
       />
     </view>
+    <!-- 预设图形 -->
+    <view class="bm-row bm-shapes">
+      <view
+        class="bm-brush {{addingShape === item.type ? 'active' : ''}}"
+        wx:for="{{shapes}}"
+        wx:key="type"
+        data-shape="{{item.type}}"
+        bindtap="selectShape"
+      >
+        <text class="bm-shape-icon">{{item.icon}}</text>
+        <text class="bm-label">{{item.name}}</text>
+      </view>
+    </view>
     <!-- 高级功能 -->
     <view class="bm-row bm-tools">
       <view class="bm-brush" bindtap="onAdvancedImage">
@@ -114,6 +153,14 @@
         <image class="bm-icon" src="{{iconsWhite.palette}}" mode="aspectFit" />
         <text class="bm-label">背景</text>
       </view>
+      <view class="bm-brush" bindtap="onAdvancedSettings">
+        <image class="bm-icon" src="{{iconsWhite.gear}}" mode="aspectFit" />
+        <text class="bm-label">设置</text>
+      </view>
+      <view class="bm-brush" bindtap="toggleMaterialBar">
+        <image class="bm-icon" src="{{iconsWhite.shape}}" mode="aspectFit" />
+        <text class="bm-label">素材</text>
+      </view>
     </view>
   </view>
 
@@ -123,8 +170,17 @@
     <text class="pik-text">点击画布取色 · 点此取消</text>
   </view>
 
+  <!-- 放置图形提示条 -->
+  <view class="pick-color-bar {{addingShape ? 'show' : ''}}" bindtap="cancelAddShape">
+    <text class="pik-sign">{{currentShapeIcon}}</text>
+    <text class="pik-text">点击画布放置图形 · 点此取消</text>
+  </view>
+
+  <!-- 工具栏区域（竖屏底部 / iPad 横屏右侧边栏） -->
+  <view class="toolbar-area {{isIPad && isLandscape ? 'toolbar-sidebar' : ''}}">
+
   <!-- 底部缩放工具栏 -->
-  <view class="fab-zoom-bar">
+  <view class="fab-zoom-bar toolbar-fading {{toolbarHidden ? 'toolbar-hidden' : ''}}">
     <view class="fab-zoom-group">
       <view class="fab-zbtn {{isZoomMode ? 'active' : ''}}" bindtap="toggleZoomMode">
         <text class="fab-zsign">{{isZoomMode ? '🔒' : '✋'}}</text>
@@ -144,8 +200,8 @@
   </view>
 
   <!-- 底部功能工具栏 -->
-  <view class="fab-action-bar">
-    <view class="fab-btn" bindtap="openColorPanel" bindlongpress="onColorLongPress">
+  <view class="fab-action-bar toolbar-fading {{toolbarHidden ? 'toolbar-hidden' : ''}}">
+    <view class="fab-btn" bindtap="openColorPanel">
       <view class="fab-color-dot" style="background:{{currentColor}}"></view>
     </view>
 
@@ -157,14 +213,21 @@
       <image class="fab-icon" src="{{iconsWhite.undo}}" mode="aspectFit" />
     </view>
 
+    <view class="fab-btn" wx:if="{{showLayerButton}}" bindtap="toggleLayers">
+      <image class="fab-icon" src="{{iconsWhite.layers}}" mode="aspectFit" />
+    </view>
+
     <view class="fab-btn" bindtap="onClear">
       <image class="fab-icon" src="{{iconsWhite.trash}}" mode="aspectFit" />
     </view>
 
-    <view class="fab-btn" bindtap="toggleSettings">
-      <image class="fab-icon" src="{{iconsWhite.gear}}" mode="aspectFit" />
+    <view class="fab-btn" bindtap="onToolTap" bindlongpress="onToolLongPress">
+      <image class="fab-icon" src="{{iconsWhite.tool}}" mode="aspectFit" />
     </view>
   </view>
+
+  </view>
+  <!-- /工具栏区域 -->
 
   <!-- 笔刷面板 -->
   <view class="slide-panel {{showBrushPanel ? 'show' : ''}}">

@@ -93,6 +93,8 @@ export class HealthController {
 | 路由规则 | 匹配请求示例 | 转发目标 | pathRewrite |
 |----------|-------------|----------|-------------|
 | `/api/auth/*` | `POST /api/auth/login` | Auth Service (:3001) | `/api/auth` → `/auth` |
+| | `POST /api/auth/register` | Auth Service (:3001) | `/api/auth` → `/auth` |
+| | `POST /api/auth/miniprogram-login` | Auth Service (:3001) | `/api/auth` → `/auth` |
 | `/api/users*` | `GET /api/users` | User Service (:3002) | `/api/users` → `/users` |
 | | `GET /api/users/123` | User Service (:3002) | `/api/users` → `/users` |
 | `/api/ai/*` | `POST /api/ai/chat` | AI Service (:3003) | `/api/ai` → `/ai` |

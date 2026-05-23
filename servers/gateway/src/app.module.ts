@@ -4,6 +4,7 @@ import { ProxyModule } from './proxy/proxy.module';
 import { AuthModule } from './auth/auth.module';
 import { StaticModule } from './static/static.module';
 import { HealthModule } from './health/health.module';
+import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
 
 @Module({
   imports: [
@@ -20,6 +21,8 @@ import { HealthModule } from './health/health.module';
     AuthModule,
     // 静态资源模块
     StaticModule,
+    // Swagger 文档聚合
+    SwaggerDocsModule,
   ],
 })
 export class AppModule {}

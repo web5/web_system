@@ -27,6 +27,7 @@ export class User {
   @Column({ nullable: true, length: 500 })
   avatar: string;
 
+  @Index()
   @Column({ nullable: true, length: 100 })
   wechatOpenid: string;
 
