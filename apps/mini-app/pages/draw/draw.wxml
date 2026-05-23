@@ -1,8 +1,8 @@
 <view class="container">
-  <!-- 遮罩层 -->
+  <!-- 遮罩层（取色模式下不显示，避免阻挡画布点击） -->
   <view
     class="overlay"
-    wx:if="{{showBrushPanel || showColorPanel || showActionPanel || showLayers || showBrushMenu || showSettings}}"
+    wx:if="{{!isPickingColor && (showBrushPanel || showColorPanel || showActionPanel || showLayers || showBrushMenu || showSettings)}}"
     bindtap="closeAllPanels"
   ></view>
 
@@ -14,7 +14,6 @@
     bindtouchstart="onTouchStart"
     bindtouchmove="onTouchMove"
     bindtouchend="onTouchEnd"
-    bindtap="onCanvasTapForPick"
   ></canvas>
 
   <!-- 图层面板 -->
@@ -70,14 +69,6 @@
       </view>
       <switch class="st-switch" checked="{{showLayerButton}}" color="#4f46e5" bindchange="toggleLayerButton" />
     </view>
-    <view class="st-row" bindtap="onResetView">
-      <view class="st-left">
-        <image class="st-icon" src="{{icons.size}}" mode="aspectFit" />
-        <text class="st-label">重置视角</text>
-        <text class="st-hint">居中画布</text>
-      </view>
-      <text class="st-arrow">→</text>
-    </view>
   </view>
 
   <!-- 笔刷弹出菜单（长按颜色触发） -->
@@ -126,6 +117,12 @@
     </view>
   </view>
 
+  <!-- 取色中提示条 -->
+  <view class="pick-color-bar {{isPickingColor ? 'show' : ''}}" bindtap="cancelPickColor">
+    <text class="pik-sign">💉</text>
+    <text class="pik-text">点击画布取色 · 点此取消</text>
+  </view>
+
   <!-- 底部缩放工具栏 -->
   <view class="fab-zoom-bar">
     <view class="fab-zoom-group">
@@ -138,6 +135,10 @@
       <text class="fab-zlevel {{zoomLevel === 100 ? '' : 'fab-zreset'}}" bindtap="onZoomReset">{{zoomLevel}}%</text>
       <view class="fab-zbtn" bindtap="onZoomIn">
         <text class="fab-zsign">+</text>
+      </view>
+      <view class="fab-zdivider"></view>
+      <view class="fab-zbtn" bindtap="onResetView">
+        <text class="fab-zsign">⟲</text>
       </view>
     </view>
   </view>

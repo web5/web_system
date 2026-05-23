@@ -1,81 +1,52 @@
 // pages/draw/draw.ts
+
+// TODO: iPad 适配 — 支持竖屏 (portrait) 和横屏 (landscape) 两种模式
+// 1. 布局响应式：工具栏、画布、颜色面板需根据屏幕尺寸和方向自适应排列
+// 2. 横屏模式下考虑将工具栏移至侧边栏布局，充分利用横向空间
+// 3. 画布尺寸使用动态计算（systemInfo.screenWidth/Height），避免硬编码
+// 4. 弹窗/设置面板在 iPad 上适当放大，避免按钮过小难以点击
+// 5. 适配 iPad 特有的分屏 / Slide Over 场景下的窗口尺寸变化
+
+// TODO: iOS 端绘制异常修复 — 工具栏自动显隐方案
+// 问题：iOS 端目前仍无法正常绘制
+// 方案：用户开始绘制（touchstart）时工具栏自动隐藏，停止绘制 1s 后自动出现
+// 1. touchstart 时隐藏顶部工具栏、底部颜色栏等浮层 UI，释放触摸区域
+// 2. touchend 时启动 1s 延时定时器，超时后恢复显示工具栏
+// 3. 若在 1s 内再次 touchstart，取消定时器并保持隐藏
+// 4. 注意兼容 CanvasEngine 的触摸事件处理，避免工具栏显隐干扰绘制逻辑
 import { CanvasEngine } from '../../utils/CanvasEngine';
 import { BrushType } from '../../utils/Brush';
+import {
+  ICONS, ICONS_WHITE,
+  COLORS, BG_COLORS,
+  BRUSHES,
+  BrushItem,
+} from './draw.constants';
 
-/** SVG 图标集合（data URI） */
-const ICONS = {
-  back: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M19 12H5M12 19l-7-7 7-7"/%3E%3C/svg%3E',
-  undo: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpolyline points="1 4 1 10 7 10"/%3E%3Cpath d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/%3E%3C/svg%3E',
-  redo: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpolyline points="23 4 23 10 17 10"/%3E%3Cpath d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/%3E%3C/svg%3E',
-  layers: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpolygon points="12 2 22 8.5 12 15 2 8.5 12 2"/%3E%3Cpolyline points="2 15.5 12 22 22 15.5"/%3E%3C/svg%3E',
-  close: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23666" stroke-width="2" stroke-linecap="round"%3E%3Cline x1="18" y1="6" x2="6" y2="18"/%3E%3Cline x1="6" y1="6" x2="18" y2="18"/%3E%3C/svg%3E',
-  pencil: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/%3E%3C/svg%3E',
-  marker: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="m12 19 7-7 3 3-7 7-3-3z"/%3E%3Cpath d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/%3E%3Cpath d="m2 2 7.586 7.586"/%3E%3Ccircle cx="11" cy="11" r="2"/%3E%3C/svg%3E',
-  highlighter: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="m9 11-6 6v3h9l3-3"/%3E%3Cpath d="m22 12-4-4-4 4 4 4 4-4z"/%3E%3Cpath d="M14 10V3l-4 4h1"/%3E%3C/svg%3E',
-  eraser: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10.4-10.4a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 19"/%3E%3Cpath d="M7 21h8"/%3E%3Cpath d="M17 13.8V21"/%3E%3C/svg%3E',
-  palette: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Ccircle cx="13.5" cy="6.5" r="2"/%3E%3Ccircle cx="17.5" cy="10.5" r="2"/%3E%3Ccircle cx="8.5" cy="7.5" r="2"/%3E%3Ccircle cx="6.5" cy="12.5" r="2"/%3E%3Cpath d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-1 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.5-4.5-10-10-10z"/%3E%3C/svg%3E',
-  image: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"/%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"/%3E%3Cpolyline points="21 15 16 10 5 21"/%3E%3C/svg%3E',
-  trash: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpolyline points="3 6 5 6 21 6"/%3E%3Cpath d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/%3E%3Cpath d="M10 11v6"/%3E%3Cpath d="M14 11v6"/%3E%3Cpath d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/%3E%3C/svg%3E',
-  download: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/%3E%3Cpolyline points="7 10 12 15 17 10"/%3E%3Cline x1="12" y1="15" x2="12" y2="3"/%3E%3C/svg%3E',
-  eyedropper: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="m2 22 1-1h3l9-9"/%3E%3Cpath d="M3 21 12 12"/%3E%3Cpath d="M13.5 3.5a2.12 2.12 0 0 1 3 3L11 13l-4 1 1-4 5.5-5.5z"/%3E%3C/svg%3E',
-  plus: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round"%3E%3Cline x1="12" y1="5" x2="12" y2="19"/%3E%3Cline x1="5" y1="12" x2="19" y2="12"/%3E%3C/svg%3E',
-  eye: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/%3E%3Ccircle cx="12" cy="12" r="3"/%3E%3C/svg%3E',
-  eyeOff: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/%3E%3Cpath d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/%3E%3Cpath d="m14.12 14.12a3 3 0 1 1-4.24-4.24"/%3E%3Cline x1="1" y1="1" x2="23" y2="23"/%3E%3C/svg%3E',
-  merge: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M8 6h10"/%3E%3Cpath d="M6 12h12"/%3E%3Cpath d="M8 18h8"/%3E%3C/svg%3E',
-  size: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round"%3E%3Ccircle cx="12" cy="12" r="2"/%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E',
-  gear: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Ccircle cx="12" cy="12" r="3"/%3E%3Cpath d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/%3E%3C/svg%3E',
-};
-
-// 暗色版图标（用于顶部栏和浮动工具栏）
-const ICONS_WHITE = {
-  back: ICONS.back.replace(/%23333/g, '%23fff'),
-  undo: ICONS.undo.replace(/%23333/g, '%23fff'),
-  redo: ICONS.redo.replace(/%23333/g, '%23fff'),
-  layers: ICONS.layers.replace(/%23333/g, '%23fff'),
-  pencil: ICONS.pencil.replace(/%23333/g, '%23fff'),
-  marker: ICONS.marker.replace(/%23333/g, '%23fff'),
-  highlighter: ICONS.highlighter.replace(/%23333/g, '%23fff'),
-  eraser: ICONS.eraser.replace(/%23333/g, '%23fff'),
-  plus: ICONS.plus.replace(/%23333/g, '%23fff'),
-  trash: ICONS.trash.replace(/%23333/g, '%23fff'),
-  download: ICONS.download.replace(/%23333/g, '%23fff'),
-  image: ICONS.image.replace(/%23333/g, '%23fff'),
-  eyedropper: ICONS.eyedropper.replace(/%23333/g, '%23fff'),
-  palette: ICONS.palette.replace(/%23333/g, '%23fff'),
-  gear: ICONS.gear.replace(/%23333/g, '%23fff'),
-};
+interface PanState {
+  midX: number;
+  midY: number;
+  dist: number;
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+}
 
 Page({
+  // ==================== data 数据 ====================
   data: {
     icons: ICONS,
     iconsWhite: ICONS_WHITE,
+    colors: COLORS,
+    bgColors: BG_COLORS,
 
     // 颜色
-    colors: [
-      '#000000', '#595959', '#8c8c8c', '#bfbfbf',
-      '#f5222d', '#fa541c', '#fa8c16', '#fadb14',
-      '#52c41a', '#13c2c2', '#1677ff', '#2f54eb',
-      '#722ed1', '#eb2f96', '#ffffff',
-    ],
-    bgColors: [
-      '#ffffff', '#f5f5f5', '#e8e8e8', '#d9d9d9',
-      '#000000', '#595959', '#f5222d', '#fa8c16',
-      '#fadb14', '#52c41a', '#1677ff', '#722ed1',
-      '#eb2f96', 'transparent',
-    ],
-    showBgColors: false, // 是否正在选择背景色（独立色板）
-    currentColor: '#000000',
+    showBgColors: false,
+    currentColor: '#FF8C00',
 
     // 笔刷
-    brushes: [
-      { type: 'pencil' as BrushType, name: '铅笔', icon: ICONS.pencil },
-      { type: 'marker' as BrushType, name: '马克笔', icon: ICONS.marker },
-      { type: 'highlighter' as BrushType, name: '荧光笔', icon: ICONS.highlighter },
-      { type: 'eraser' as BrushType, name: '橡皮', icon: ICONS.eraser },
-    ] as { type: BrushType; name: string; icon: string }[],
+    brushes: BRUSHES as BrushItem[],
     currentBrush: 'pencil' as BrushType,
-    currentBrushName: '铅笔',
-    currentBrushIcon: ICONS_WHITE.pencil,
     brushSize: 3,
 
     // 绘制状态
@@ -84,108 +55,110 @@ Page({
     // 图层
     layers: [] as { id: string; name: string; visible: boolean; active: boolean }[],
     showLayers: false,
-    showLayerButton: false,  // 默认不显示，在设置中开启
+    showLayerButton: false,
 
     // 撤销/重做
     canUndo: false,
     canRedo: false,
 
-    // 面板
+    // 面板开关
     showBrushPanel: false,
     showColorPanel: false,
     showActionPanel: false,
     showBrushMenu: false,
     showSettings: false,
+
+    // 背景
     isPickingBackground: false,
     backgroundColor: '#ffffff',
 
+    // 取色器
+    isPickingColor: false,
+
     // 缩放
     zoomLevel: 100,
-    isZoomMode: false,  // 缩放模式锁定：开启后单指拖动画布，不绘制
+    isZoomMode: false,
 
     // 画布
     canvasWidth: 0,
     canvasHeight: 0,
   },
 
+  // ==================== 实例属性 ====================
   engine: null as CanvasEngine | null,
   rectInfo: null as { left: number; top: number } | null,
   lastX: 0,
   lastY: 0,
   isTouching: false,
   isPanning: false,
-  // 双指拖动初始状态
-  panStartMid: { x: 0, y: 0 },
-  panStartDist: 0,
-  panStartOffset: { x: 0, y: 0 },
-  panStartScale: 1,
+  pan: { midX: 0, midY: 0, dist: 0, offsetX: 0, offsetY: 0, scale: 1 } as PanState,
+
+  // ==================== 生命周期 ====================
 
   onLoad() {
     wx.setNavigationBarTitle({ title: '画板' });
-    // 读取持久化设置
     try {
       const setting = wx.getStorageSync('drawShowLayerButton');
-      if (setting === true) {
-        this.setData({ showLayerButton: true });
-      }
-    } catch (e) { /* ignore */ }
+      if (setting === true) this.setData({ showLayerButton: true });
+    } catch (_) { /* ignore */ }
   },
 
   onReady() {
+    this.initCanvas();
+    this.queryCanvasRect();
+  },
+
+  /** 初始化画布 & 引擎 */
+  initCanvas() {
     const query = wx.createSelectorQuery();
     query.select('#drawCanvas').fields({ node: true, size: true }).exec((res) => {
-      if (res && res[0] && res[0].node) {
-        const canvas = res[0].node as any;
-        const ctx = canvas.getContext('2d', { webkitRerender: true });
+      if (!res?.[0]?.node) return;
 
-        const sysInfo = wx.getSystemInfoSync();
-        const dpr = sysInfo.pixelRatio || 1;
+      const canvas = res[0].node as any;
+      const ctx = canvas.getContext('2d', { webkitRerender: true });
+      const sysInfo = wx.getSystemInfoSync();
+      const dpr = sysInfo.pixelRatio || 1;
+      const w = res[0].width;
+      const h = res[0].height;
 
-        const canvasWidth = res[0].width;
-        const canvasHeight = res[0].height;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
-        canvas.width = canvasWidth * dpr;
-        canvas.height = canvasHeight * dpr;
-        ctx.scale(dpr, dpr);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+      const engine = new CanvasEngine({
+        width: w, height: h, dpr, mainCtx: ctx, mainCanvas: canvas,
+      });
+      engine.init();
 
-        const engine = new CanvasEngine({
-          width: canvasWidth,
-          height: canvasHeight,
-          dpr,
-          mainCtx: ctx,
-          mainCanvas: canvas,
-        });
-        engine.init();
-
-        this.engine = engine;
-        this.setData({ canvasWidth, canvasHeight });
-        this.updateLayers();
-      }
-    });
-
-    wx.createSelectorQuery().select('#drawCanvas').boundingClientRect().exec((res) => {
-      if (res && res[0]) {
-        this.rectInfo = res[0] as { left: number; top: number };
-      }
+      this.engine = engine;
+      this.setData({ canvasWidth: w, canvasHeight: h });
+      this.updateLayers();
     });
   },
 
-  // ===== 坐标转换 =====
+  /** 查询 canvas 屏幕位置 */
+  queryCanvasRect() {
+    wx.createSelectorQuery().select('#drawCanvas').boundingClientRect().exec((res) => {
+      if (res?.[0]) this.rectInfo = res[0] as { left: number; top: number };
+    });
+  },
 
-  getCanvasPos(e: any) {
-    return new Promise<{ x: number; y: number }>((resolve) => {
+  // ==================== 坐标转换 ====================
+
+  /** 获取触摸点相对 canvas 的坐标 */
+  getCanvasPos(e: any): Promise<{ x: number; y: number }> {
+    return new Promise((resolve) => {
       if (this.rectInfo) {
         const touch = e.touches?.[0] || e.changedTouches?.[0] || e.detail;
         resolve({ x: touch.clientX - this.rectInfo.left, y: touch.clientY - this.rectInfo.top });
         return;
       }
       wx.createSelectorQuery().select('#drawCanvas').boundingClientRect().exec((res) => {
-        if (res && res[0]) {
-          const rect = res[0] as { left: number; top: number };
+        if (res?.[0]) {
           const touch = e.touches?.[0] || e.changedTouches?.[0] || e.detail;
-          resolve({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+          resolve({ x: touch.clientX - (res[0] as any).left, y: touch.clientY - (res[0] as any).top });
         } else {
           resolve({ x: 0, y: 0 });
         }
@@ -193,107 +166,132 @@ Page({
     });
   },
 
-  // ===== 触摸事件 =====
+  // ==================== 触摸事件 ====================
 
   async onTouchStart(e: any) {
     if (!this.engine) return;
-
     const touches = e.touches;
 
     // 双指 → 拖动/缩放
     if (touches.length >= 2) {
-      this.isPanning = true;
-      this.isTouching = false;
-
-      const rect = this.rectInfo || { left: 0, top: 0 };
-      const t0 = touches[0];
-      const t1 = touches[1];
-      const mx = (t0.clientX + t1.clientX) / 2 - rect.left;
-      const my = (t0.clientY + t1.clientY) / 2 - rect.top;
-      const dx = t0.clientX - t1.clientX;
-      const dy = t0.clientY - t1.clientY;
-      this.panStartMid = { x: mx, y: my };
-      this.panStartDist = Math.sqrt(dx * dx + dy * dy);
-      this.panStartOffset = { x: this.engine.panX, y: this.engine.panY };
-      this.panStartScale = this.engine.scale;
+      this.beginTwoFingerPan(touches);
       return;
     }
 
-    // 单指 → 缩放模式下拖动，否则绘制
-    if (this.data.showColorPanel || this.data.showActionPanel) return;
-    this.isPanning = false;
+    // 面板打开时忽略单指操作
+    if (this.data.showColorPanel || this.data.showActionPanel || this.data.showBrushPanel) return;
 
-    // 缩放锁定模式：单指拖动画布
+    // 缩放模式 → 单指拖动
     if (this.data.isZoomMode) {
-      this.isPanning = true;
-      this.isTouching = false;
-      const pos = await this.getCanvasPos(e);
-      this.panStartMid = { x: pos.x, y: pos.y };
-      this.panStartOffset = { x: this.engine.panX, y: this.engine.panY };
-      this.panStartScale = this.engine.scale;
+      this.beginZoomPan(e);
       return;
     }
 
-    const pos = await this.getCanvasPos(e);
-    const worldPos = this.engine.screenToWorld(pos.x, pos.y);
+    // 取色模式 → 不绘制
+    if (this.data.isPickingColor) return;
 
+    // 普通绘制
+    await this.beginDraw(e);
+  },
+
+  /** 双指拖动/缩放开始 */
+  beginTwoFingerPan(touches: any[]) {
+    this.isPanning = true;
+    this.isTouching = false;
+    const rect = this.rectInfo || { left: 0, top: 0 };
+    const t0 = touches[0], t1 = touches[1];
+    const mx = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const my = (t0.clientY + t1.clientY) / 2 - rect.top;
+    const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
+    this.pan = {
+      midX: mx, midY: my,
+      dist: Math.sqrt(dx * dx + dy * dy),
+      offsetX: this.engine!.panX, offsetY: this.engine!.panY,
+      scale: this.engine!.scale,
+    };
+  },
+
+  /** 缩放模式单指拖动开始 */
+  async beginZoomPan(e: any) {
+    this.isPanning = true;
+    this.isTouching = false;
+    const pos = await this.getCanvasPos(e);
+    this.pan = {
+      midX: pos.x, midY: pos.y,
+      dist: 0, offsetX: this.engine!.panX, offsetY: this.engine!.panY,
+      scale: this.engine!.scale,
+    };
+  },
+
+  /** 普通绘制开始 */
+  async beginDraw(e: any) {
+    const pos = await this.getCanvasPos(e);
+    const worldPos = this.engine!.screenToWorld(pos.x, pos.y);
     this.isTouching = true;
     this.lastX = worldPos.x;
     this.lastY = worldPos.y;
-
-    this.engine.beginPath(worldPos.x, worldPos.y);
+    this.engine!.beginPath(worldPos.x, worldPos.y);
     this.setData({ isDrawing: true });
   },
 
   async onTouchMove(e: any) {
     if (!this.engine) return;
-
     const touches = e.touches;
 
     // 双指拖动/缩放
     if (this.isPanning && touches.length >= 2) {
-      const rect = this.rectInfo || { left: 0, top: 0 };
-      const t0 = touches[0];
-      const t1 = touches[1];
-      const mx = (t0.clientX + t1.clientX) / 2 - rect.left;
-      const my = (t0.clientY + t1.clientY) / 2 - rect.top;
-      const dx = t0.clientX - t1.clientX;
-      const dy = t0.clientY - t1.clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      // 基于初始状态计算目标缩放
-      const scaleFactor = this.panStartDist > 0 ? dist / this.panStartDist : 1;
-      const newScale = Math.max(0.3, Math.min(5, this.panStartScale * scaleFactor));
-
-      // 以初始双指中点为中心缩放
-      this.engine.panX = this.panStartMid.x - (this.panStartMid.x - this.panStartOffset.x) * (newScale / this.panStartScale);
-      this.engine.panY = this.panStartMid.y - (this.panStartMid.y - this.panStartOffset.y) * (newScale / this.panStartScale);
-      this.engine.scale = newScale;
-
-      // 叠加中点平移
-      this.engine.panX += mx - this.panStartMid.x;
-      this.engine.panY += my - this.panStartMid.y;
-      this.engine.compositeToMain();
+      this.updateTwoFingerPan(touches);
       return;
     }
 
-    // 单指拖动（缩放锁定模式）
+    // 单指拖动（缩放模式）
     if (this.isPanning && this.data.isZoomMode) {
-      const pos = await this.getCanvasPos(e);
-      const dx = pos.x - this.panStartMid.x;
-      const dy = pos.y - this.panStartMid.y;
-      this.engine.panX = this.panStartOffset.x + dx;
-      this.engine.panY = this.panStartOffset.y + dy;
-      this.engine.compositeToMain();
+      await this.updateZoomPan(e);
       return;
     }
 
-    // 单指绘制
-    if (this.data.showColorPanel || this.data.showActionPanel || !this.isTouching) return;
-    const pos = await this.getCanvasPos(e);
-    const worldPos = this.engine.screenToWorld(pos.x, pos.y);
+    // 面板打开时忽略移动
+    if (this.data.showBrushPanel || this.data.showColorPanel || this.data.showActionPanel || !this.isTouching) return;
+    if (this.data.isPickingColor) return;
+    await this.updateDraw(e);
+  },
 
-    this.engine.drawSegment(worldPos.x, worldPos.y, this.lastX, this.lastY);
+  /** 双指拖动/缩放更新 */
+  updateTwoFingerPan(touches: any[]) {
+    const rect = this.rectInfo || { left: 0, top: 0 };
+    const t0 = touches[0], t1 = touches[1];
+    const mx = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const my = (t0.clientY + t1.clientY) / 2 - rect.top;
+    const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    const factor = this.pan.dist > 0 ? dist / this.pan.dist : 1;
+    const newScale = Math.max(0.3, Math.min(5, this.pan.scale * factor));
+
+    // 以双指中点为中心缩放
+    this.engine!.panX = this.pan.midX - (this.pan.midX - this.pan.offsetX) * (newScale / this.pan.scale);
+    this.engine!.panY = this.pan.midY - (this.pan.midY - this.pan.offsetY) * (newScale / this.pan.scale);
+    this.engine!.scale = newScale;
+
+    // 叠加中点平移
+    this.engine!.panX += mx - this.pan.midX;
+    this.engine!.panY += my - this.pan.midY;
+    this.engine!.compositeToMain();
+  },
+
+  /** 缩放模式单指拖动更新 */
+  async updateZoomPan(e: any) {
+    const pos = await this.getCanvasPos(e);
+    this.engine!.panX = this.pan.offsetX + pos.x - this.pan.midX;
+    this.engine!.panY = this.pan.offsetY + pos.y - this.pan.midY;
+    this.engine!.compositeToMain();
+  },
+
+  /** 绘制更新 */
+  async updateDraw(e: any) {
+    const pos = await this.getCanvasPos(e);
+    const worldPos = this.engine!.screenToWorld(pos.x, pos.y);
+    this.engine!.drawSegment(worldPos.x, worldPos.y, this.lastX, this.lastY);
     this.lastX = worldPos.x;
     this.lastY = worldPos.y;
   },
@@ -301,24 +299,31 @@ Page({
   async onTouchEnd(e: any) {
     if (!this.engine) return;
 
-    // 双指结束
+    // 拖动结束
     if (this.isPanning) {
       this.isPanning = false;
       this.setData({ zoomLevel: Math.round(this.engine.scale * 100) });
-      // 保存快照（拖动不改变内容，但缩放后需要记录当前状态）
       this.engine.saveSnapshot();
       return;
     }
 
-    // 单指绘制结束
+    // 取色模式 → 点击取色（兼容 changedTouches 为空的情况）
+    if (this.data.isPickingColor) {
+      const touch = e.changedTouches?.[0];
+      const pos = touch
+        ? await this.getCanvasPos(e)
+        : (e.detail ? { x: e.detail.x - (this.rectInfo?.left || 0), y: e.detail.y - (this.rectInfo?.top || 0) } : null);
+      if (pos) this.doPickColor(pos.x, pos.y);
+      return;
+    }
+
+    // 绘制结束
     if (!this.isTouching) return;
     this.isTouching = false;
-
     const pos = e.changedTouches?.[0]
       ? await this.getCanvasPos(e)
       : { x: this.lastX, y: this.lastY };
     const worldPos = this.engine.screenToWorld(pos.x, pos.y);
-
     this.engine.endPath(worldPos.x, worldPos.y);
     this.setData({
       isDrawing: false,
@@ -327,17 +332,13 @@ Page({
     });
   },
 
-  // ===== 笔刷 =====
+  // ==================== 笔刷 ====================
 
   selectBrush(e: any) {
     const type = e.currentTarget.dataset.type as BrushType;
     this.engine?.setBrush(type);
-    const brushInfo = this.data.brushes.find(b => b.type === type);
-    const whiteIcon = (ICONS_WHITE as any)[type] || ICONS_WHITE.pencil;
     this.setData({
       currentBrush: type,
-      currentBrushName: brushInfo?.name || '铅笔',
-      currentBrushIcon: whiteIcon,
       brushSize: this.engine?.currentBrush.size || 3,
       showBrushPanel: false,
       showBrushMenu: false,
@@ -350,28 +351,27 @@ Page({
     this.setData({ brushSize: size });
   },
 
-  // ===== 颜色 =====
+  // ==================== 颜色 ====================
 
   selectColor(e: any) {
     const color = e.currentTarget.dataset.color;
     if (this.data.isPickingBackground || this.data.showBgColors) {
-      // 设为背景色：transparent 传空字符串
-      const bgColor = color === 'transparent' ? '' : color;
-      this.engine?.setBackgroundColor(bgColor);
+      const bg = color === 'transparent' ? '' : color;
+      this.engine?.setBackgroundColor(bg);
       this.setData({
-        backgroundColor: color === 'transparent' ? '' : color,
+        backgroundColor: bg,
         showColorPanel: false,
         isPickingBackground: false,
         showBgColors: false,
       });
-      wx.showToast({ title: color === 'transparent' ? '背景已设为透明' : '背景色已更新', icon: 'success', duration: 1000 });
+      wx.showToast({ title: bg === '' ? '背景已设为透明' : '背景色已更新', icon: 'success', duration: 1000 });
       return;
     }
     this.engine?.setColor(color);
     this.setData({ currentColor: color, showColorPanel: false });
   },
 
-  // ===== 撤销/重做 =====
+  // ==================== 撤销 / 重做 ====================
 
   onUndo() {
     if (!this.engine?.canUndo()) {
@@ -394,7 +394,7 @@ Page({
     });
   },
 
-  // ===== 清空 =====
+  // ==================== 清空 ====================
 
   onClear() {
     wx.showModal({
@@ -410,7 +410,7 @@ Page({
     });
   },
 
-  // ===== 保存 =====
+  // ==================== 保存 ====================
 
   onSave() {
     wx.canvasToTempFilePath({
@@ -426,7 +426,7 @@ Page({
     });
   },
 
-  // ===== 图片导入 =====
+  // ==================== 图片导入 ====================
 
   onImportImage() {
     wx.chooseImage({
@@ -440,37 +440,40 @@ Page({
             canRedo: this.engine?.canRedo() || false,
           });
           wx.showToast({ title: '导入成功', icon: 'success' });
-        }).catch(() => {
-          wx.showToast({ title: '导入失败', icon: 'none' });
-        });
+        }).catch(() => wx.showToast({ title: '导入失败', icon: 'none' }));
       },
     });
   },
 
-  // ===== 取色器 =====
+  // ==================== 取色器 ====================
 
+  /** 进入取色模式 */
   onPickColor() {
-    wx.showToast({ title: '点击画布取色', icon: 'none', duration: 1500 });
-    this.setData({ showColorPanel: true });
+    this.closeAllPanels();
+    this.setData({ isPickingColor: true });
+    wx.showToast({ title: '点击画布取色·再次点击取消', icon: 'none', duration: 1500 });
   },
 
-  async onCanvasTapForPick(e: any) {
-    if (!this.engine || !this.data.showColorPanel) return;
-    const pos = await this.getCanvasPos(e);
-    const color = this.engine.pickColor(pos.x, pos.y);
+  /** 执行取色 */
+  doPickColor(sx: number, sy: number) {
+    const color = this.engine?.pickColor(sx, sy);
     if (color) {
-      this.engine.setColor(color);
-      this.setData({ currentColor: color, showColorPanel: false });
+      this.engine?.setColor(color);
+      this.setData({ currentColor: color, isPickingColor: false });
       wx.showToast({ title: '已取色', icon: 'success' });
     }
   },
 
-  // ===== 图层 =====
+  /** 取消取色 */
+  cancelPickColor() {
+    this.setData({ isPickingColor: false });
+  },
+
+  // ==================== 图层 ====================
 
   toggleLayers() {
     this.setData({ showLayers: !this.data.showLayers, showActionPanel: false });
-    if (!this.data.showLayers) return;
-    this.updateLayers();
+    if (this.data.showLayers) this.updateLayers();
   },
 
   addLayer() {
@@ -491,16 +494,15 @@ Page({
   },
 
   selectLayer(e: any) {
-    const index = e.currentTarget.dataset.index;
-    this.engine?.setActiveLayer(index);
+    this.engine?.setActiveLayer(e.currentTarget.dataset.index);
     this.updateLayers();
   },
 
   toggleLayerVisible(e: any) {
-    const index = e.currentTarget.dataset.index;
-    const layer = this.engine?.layers[index];
+    const idx = e.currentTarget.dataset.index;
+    const layer = this.engine?.layers[idx];
     if (layer) {
-      this.engine?.setLayerVisible(index, !layer.visible);
+      this.engine?.setLayerVisible(idx, !layer.visible);
       this.updateLayers();
     }
   },
@@ -516,58 +518,44 @@ Page({
     const activeIdx = this.engine.activeLayerIndex;
     this.setData({
       layers: this.engine.layers.map((l, i) => ({
-        id: l.id,
-        name: l.name,
-        visible: l.visible,
-        active: i === activeIdx,
+        id: l.id, name: l.name, visible: l.visible, active: i === activeIdx,
       })),
     });
   },
 
-  // ===== 面板切换 =====
+  // ==================== 面板切换 ====================
 
   toggleBrushPanel() {
     this.setData({
       showBrushPanel: !this.data.showBrushPanel,
-      showColorPanel: false,
-      showActionPanel: false,
+      showColorPanel: false, showActionPanel: false,
     });
   },
 
   toggleActionPanel() {
     this.setData({
       showActionPanel: !this.data.showActionPanel,
-      showBrushPanel: false,
-      showColorPanel: false,
+      showBrushPanel: false, showColorPanel: false,
     });
   },
 
   openColorPanel() {
     this.setData({
       showColorPanel: true,
-      showBrushPanel: false,
-      showActionPanel: false,
+      showBrushPanel: false, showActionPanel: false,
     });
-  },
-
-  closeColorPanel() {
-    this.setData({ showColorPanel: false });
   },
 
   closeAllPanels() {
     this.setData({
-      showBrushPanel: false,
-      showColorPanel: false,
-      showActionPanel: false,
-      showLayers: false,
-      showBrushMenu: false,
-      showSettings: false,
-      isPickingBackground: false,
-      showBgColors: false,
+      showBrushPanel: false, showColorPanel: false, showActionPanel: false,
+      showLayers: false, showBrushMenu: false, showSettings: false,
+      isPickingBackground: false, showBgColors: false,
+      isPickingColor: false,
     });
   },
 
-  // ===== 设置 =====
+  // ==================== 设置 ====================
 
   toggleSettings() {
     this.setData({ showSettings: !this.data.showSettings });
@@ -576,12 +564,8 @@ Page({
   toggleLayerButton() {
     const next = !this.data.showLayerButton;
     this.setData({ showLayerButton: next });
-    try {
-      wx.setStorageSync('drawShowLayerButton', next);
-    } catch (e) { /* ignore */ }
-    if (next) {
-      wx.showToast({ title: '图层按钮已显示', icon: 'success', duration: 1200 });
-    }
+    try { wx.setStorageSync('drawShowLayerButton', next); } catch (_) { /* ignore */ }
+    if (next) wx.showToast({ title: '图层按钮已显示', icon: 'success', duration: 1200 });
   },
 
   onResetView() {
@@ -589,6 +573,8 @@ Page({
     this.setData({ showSettings: false, zoomLevel: 100 });
     wx.showToast({ title: '视角已重置', icon: 'success', duration: 1000 });
   },
+
+  // ==================== 缩放 ====================
 
   onZoomIn() {
     if (!this.engine) return;
@@ -602,14 +588,12 @@ Page({
     this.setData({ zoomLevel: Math.round(this.engine.scale * 100) });
   },
 
-  /** 缩放模式锁定/解锁：锁定后单指拖动不绘制 */
   toggleZoomMode() {
     const next = !this.data.isZoomMode;
     this.setData({ isZoomMode: next });
     wx.showToast({ title: next ? '缩放模式：可拖动/缩放' : '绘制模式', icon: 'none', duration: 1000 });
   },
 
-  /** 快速回到 100% */
   onZoomReset() {
     if (!this.engine) return;
     this.engine.resetTransform();
@@ -617,13 +601,13 @@ Page({
     wx.vibrateShort({ type: 'light' });
   },
 
-  // ===== 长按颜色 → 笔刷+粗细 =====
+  // ==================== 笔刷菜单 ====================
 
   onColorLongPress() {
     this.setData({ showBrushMenu: !this.data.showBrushMenu });
   },
 
-  // ===== 高级功能（图片/取色/背景） =====
+  // ==================== 高级功能（笔刷菜单内） ====================
 
   onAdvancedImage() {
     this.setData({ showBrushMenu: false });

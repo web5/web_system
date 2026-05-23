@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createProxyMiddleware, fixRequestBody, fixRequestBody } from 'http-proxy-middleware';
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 
 @Injectable()
 export class ProxyService {
@@ -53,16 +53,4 @@ export class ProxyService {
     });
   }
 
-  createApiProxy() {
-    return createProxyMiddleware({
-      target: this.authServiceUrl,
-      changeOrigin: true,
-      pathRewrite: {
-        '^/api': '',
-      },
-      on: {
-        proxyReq: fixRequestBody,
-      },
-    });
-  }
 }
