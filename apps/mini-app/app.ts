@@ -2,7 +2,6 @@ import { login } from './services/auth';
 
 App<IAppOption>({
   onLaunch() {
-    console.log('[App] Mini app launched');
     this.autoLogin();
   },
 
@@ -10,9 +9,8 @@ App<IAppOption>({
   async autoLogin() {
     try {
       await login();
-      console.log('[App] 自动登录成功（模拟）');
     } catch (err) {
-      console.warn('[App] 自动登录失败', err);
+      // 登录失败静默处理，用户可重试
     }
   },
 

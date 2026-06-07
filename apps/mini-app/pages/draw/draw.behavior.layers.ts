@@ -39,6 +39,20 @@ export const LayersBehavior = Behavior({
       }
     },
 
+    moveLayerUp(e: any) {
+      const idx = e.currentTarget.dataset.index;
+      if (idx <= 0) return;
+      this.engine?.reorderLayer(idx, idx - 1);
+      this.updateLayers();
+    },
+
+    moveLayerDown(e: any) {
+      const idx = e.currentTarget.dataset.index;
+      if (idx >= (this.engine?.layers.length || 1) - 1) return;
+      this.engine?.reorderLayer(idx, idx + 1);
+      this.updateLayers();
+    },
+
     mergeDown() {
       this.engine?.mergeDown();
       this.updateLayers();

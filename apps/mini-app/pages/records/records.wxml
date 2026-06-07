@@ -1,0 +1,73 @@
+<view class="container {{isIPad ? 'ipad' : ''}} {{isIPad && isLandscape ? 'landscape' : ''}}">
+  <!-- 顶栏 -->
+  <view class="header">
+    <text class="header-title">我的画作</text>
+    <text class="header-count">共 {{records.length}} 幅</text>
+  </view>
+
+  <!-- 记录列表 -->
+  <scroll-view class="record-list" scroll-y wx:if="{{records.length > 0}}">
+    <view
+      class="record-item"
+      wx:for="{{records}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      data-name="{{item.name}}"
+      bindtap="onTapRecord"
+      bindlongpress="onLongPressRecord"
+    >
+      <!-- 缩略图 -->
+      <view class="record-thumb">
+        <image
+          wx:if="{{item.thumbnail}}"
+          class="thumb-img"
+          src="{{item.thumbnail}}"
+          mode="aspectFill"
+        />
+        <view wx:else class="thumb-placeholder">
+          <text class="thumb-icon">🎨</text>
+        </view>
+      </view>
+
+      <!-- 信息区 -->
+      <view class="record-info">
+        <!-- 名称编辑或显示 -->
+        <view wx:if="{{editingId === item.id}}" class="edit-row">
+          <input
+            class="edit-input"
+            value="{{editName}}"
+            focus="{{true}}"
+            bindinput="onEditInput"
+            bindconfirm="onEditConfirm"
+            bindblur="onEditConfirm"
+            maxlength="20"
+          />
+          <view class="edit-actions">
+            <text class="edit-btn confirm" bindtap="onEditConfirm">✓</text>
+            <text class="edit-btn cancel" bindtap="onEditCancel">✕</text>
+          </view>
+        </view>
+        <text wx:else class="record-name">{{item.name}}</text>
+
+        <text class="record-time">更新于 {{item.timeText}}</text>
+      </view>
+
+      <!-- 删除按钮 -->
+      <view class="record-delete" catchtap="onDeleteRecord" data-id="{{item.id}}">
+        <text class="delete-icon">🗑</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 空状态 -->
+  <view class="empty" wx:else>
+    <text class="empty-icon">📭</text>
+    <text class="empty-text">还没有画作记录</text>
+    <button class="empty-btn" bindtap="goToDraw">开始画画</button>
+  </view>
+
+  <!-- 底部新画板按钮 -->
+  <view class="footer-bar" wx:if="{{records.length > 0}}">
+    <button class="new-btn" bindtap="goToDraw">＋ 新建画板</button>
+  </view>
+</view>

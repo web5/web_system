@@ -1,5 +1,6 @@
 // pages/index/index.ts
 import { isLoggedIn } from '../../services/auth';
+import { detectDevice } from '../../utils/device';
 
 Page({
   data: {
@@ -9,30 +10,33 @@ Page({
   },
 
   onLoad() {
-    this.detectDevice();
+    this.updateDeviceInfo();
   },
 
   onShow() {
     this.setData({ loggedIn: isLoggedIn() });
-    this.detectDevice();
+    this.updateDeviceInfo();
   },
 
   onResize() {
-    this.detectDevice();
+    this.updateDeviceInfo();
   },
 
-  detectDevice() {
-    try {
-      const info = wx.getSystemInfoSync();
-      const isIPad = info.model?.indexOf('iPad') >= 0 || info.windowWidth >= 768;
-      const isLandscape = info.windowWidth > info.windowHeight;
-      this.setData({ isIPad, isLandscape });
-    } catch (_) { /* ignore */ }
+  /** 更新设备信息（委托纯函数） */
+  updateDeviceInfo() {
+    const { isIPad, isLandscape } = detectDevice();
+    this.setData({ isIPad, isLandscape });
   },
 
   goToDraw() {
     wx.navigateTo({
       url: '/pages/draw/draw',
+    });
+  },
+
+  goToRecords() {
+    wx.navigateTo({
+      url: '/pages/records/records',
     });
   },
 });

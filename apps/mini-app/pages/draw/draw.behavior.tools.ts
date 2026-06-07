@@ -53,20 +53,24 @@ export const ToolsBehavior = Behavior({
 
     selectColor(e: any) {
       const color = e.currentTarget.dataset.color;
-      if (this.data.isPickingBackground || this.data.showBgColors) {
+      const self = this as any;
+      if (self.data.isPickingBackground || self.data.showBgColors) {
         const bg = color === 'transparent' ? '' : color;
-        this.engine?.setBackgroundColor(bg);
-        this.setData({
+        self.engine?.setBackgroundColor(bg);
+        // 张小龙：快速标记面板正在关闭，避免 setData 异步延迟
+        self._colorPanelClosing = true;
+        self.setData({
           backgroundColor: bg,
           showColorPanel: false,
           isPickingBackground: false,
           showBgColors: false,
         });
-        wx.showToast({ title: bg === '' ? '背景已设为透明' : '背景色已更新', icon: 'success', duration: 1000 });
         return;
       }
-      this.engine?.setColor(color);
-      this.setData({ currentColor: color, showColorPanel: false });
+      self.engine?.setColor(color);
+      // 张小龙：快速标记面板正在关闭，避免 setData 异步延迟
+      self._colorPanelClosing = true;
+      self.setData({ currentColor: color, showColorPanel: false });
     },
 
     // ==================== 撤销 / 重做 ====================
@@ -76,6 +80,7 @@ export const ToolsBehavior = Behavior({
         wx.showToast({ title: '没有可撤销的内容', icon: 'none', duration: 1000 });
         return;
       }
+      this._undoCount = (this._undoCount || 0) + 1;
       this.engine?.undo();
       wx.vibrateShort({ type: 'light' });
       this.setData({
@@ -83,10 +88,32 @@ export const ToolsBehavior = Behavior({
         canRedo: this.engine?.canRedo() || false,
       });
       this.checkCanvasBlank();
+
+      // 张小龙：智能触发图层功能（连续撤销 5 次时提示）
+      if (this._undoCount >= 5 && !this._layerHintShown) {
+        this._layerHintShown = true;
+        wx.showModal({
+          title: '是否需要图层功能？',
+          content: '检测到您频繁撤销，使用图层可以更灵活地编辑哦',
+          confirmText: '开启',
+          cancelText: '不用',
+          success: (res: any) => {
+            if (res.confirm) {
+              this.setData({ showLayerButton: true });
+              wx.showToast({ title: '图层按钮已显示', icon: 'success' });
+            }
+          },
+        });
+      }
     },
 
     onRedo() {
+      if (!this.engine?.canRedo()) {
+        wx.showToast({ title: '没有可重做的内容', icon: 'none', duration: 1000 });
+        return;
+      }
       this.engine?.redo();
+      wx.vibrateShort({ type: 'light' });
       this.setData({
         canUndo: this.engine?.canUndo() || false,
         canRedo: this.engine?.canRedo() || false,
@@ -103,7 +130,7 @@ export const ToolsBehavior = Behavior({
         success: (res: any) => {
           if (res.confirm) {
             this.engine?.clear();
-            this.setData({ canUndo: false, canRedo: false, showMaterialBar: false });
+            this.setData({ canUndo: false, canRedo: false });
             wx.showToast({ title: '已清空', icon: 'success' });
             setTimeout(() => this.checkCanvasBlank(), 400);
           }
@@ -195,12 +222,17 @@ export const ToolsBehavior = Behavior({
     },
 
     closeAllPanels() {
+      // 张小龙：快速标记面板正在关闭，避免 setData 异步延迟
+      (this as any)._colorPanelClosing = true;
       this.setData({
         showBrushPanel: false, showColorPanel: false, showActionPanel: false,
         showLayers: false, showBrushMenu: false, showSettings: false,
         isPickingBackground: false, showBgColors: false,
         isPickingColor: false,
+        isCanvasMode: false,
       });
+      // 张小龙：面板关闭后布局可能变化，刷新 canvas 位置缓存
+      this.queryCanvasRect?.();
     },
 
     // ==================== 设置 ====================
@@ -239,11 +271,17 @@ export const ToolsBehavior = Behavior({
       this.setData({ zoomLevel: Math.round(this.engine.scale * 100) });
     },
 
-    toggleZoomMode() {
-      const next = !this.data.isZoomMode;
+    toggleCanvasMode() {
+      const next = !this.data.isCanvasMode;
       (this as any)._ignoreCanvasTouch = true;
-      this.setData({ isZoomMode: next });
-      wx.showToast({ title: next ? '缩放模式：可拖动/缩放' : '绘制模式', icon: 'none', duration: 1000 });
+      this.setData({ isCanvasMode: next });
+      // 张小龙：模式切换后刷新 canvas 位置缓存，避免坐标偏移
+      this.queryCanvasRect?.();
+      wx.showToast({
+        title: next ? '画布操作模式：可拖动/缩放' : '绘制模式',
+        icon: 'none',
+        duration: 1000,
+      });
     },
 
     onZoomReset() {
@@ -267,15 +305,15 @@ export const ToolsBehavior = Behavior({
     },
 
     onColorLongPress() {
-      this.setData({ showBrushMenu: !this.data.showBrushMenu });
+      // 长按颜色按钮 → 直接进入取色模式（张小龙：让功能像真实世界一样自然）
+      (this as any)._ignoreCanvasTouch = true;
+      this.closeAllPanels();
+      this.setData({ isPickingColor: true });
+      wx.vibrateShort({ type: 'medium' });
+      wx.showToast({ title: '取色模式：点击画布取色', icon: 'none', duration: 1500 });
     },
 
     // ==================== 高级功能（笔刷菜单内） ====================
-
-    onAdvancedImage() {
-      this.setData({ showBrushMenu: false });
-      this.onImportImage();
-    },
 
     onAdvancedPickColor() {
       this.setData({ showBrushMenu: false });
@@ -290,6 +328,29 @@ export const ToolsBehavior = Behavior({
     onAdvancedSettings() {
       this.setData({ showBrushMenu: false });
       setTimeout(() => this.toggleSettings(), 200);
+    },
+
+    onAIPlay() {
+      this.setData({ showBrushMenu: false });
+      wx.showToast({ title: '敬请期待', icon: 'none', duration: 2000 });
+    },
+
+    toggleShapePanel() {
+      (this as any)._ignoreCanvasTouch = true;
+      this.setData({ showShapePanel: !this.data.showShapePanel, showBrushMenu: false });
+    },
+
+    onOpenRecords() {
+      this.setData({ showBrushMenu: false });
+      // 先保存当前画布内容，再跳转记录页
+      wx.showLoading({ title: '保存中...' });
+      (this as any).saveCurrentRecord().then(() => {
+        wx.hideLoading();
+        wx.navigateTo({ url: '/pages/records/records' });
+      }).catch(() => {
+        wx.hideLoading();
+        wx.navigateTo({ url: '/pages/records/records' });
+      });
     },
   },
 });

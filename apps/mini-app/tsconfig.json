@@ -1,17 +1,19 @@
 {
   "compilerOptions": {
-    "target": "ES6",
+    "target": "ES2019",
     "module": "ES6",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "lib": ["ES6"],
+    "lib": ["ES2019", "DOM"],
     "allowJs": true,
     "noEmit": true,
     "types": [
-      "miniprogram-api-typings"
+      "miniprogram-api-typings",
+      "weixin-miniprogram",
+      "jest"
     ]
   },
   "include": [
