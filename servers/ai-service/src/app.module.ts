@@ -13,16 +13,32 @@ import { ConversationModule } from './conversation/conversation.module';
       envFilePath: '.env',
     }),
 
-    // 数据库模块
+    // 数据库模块（支持 MySQL 和 PostgreSQL）
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get('DATABASE_URL'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false, // 暂时关闭自动同步，避免已有数据冲突
-        logging: configService.get('NODE_ENV') === 'development',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbType = configService.get('DB_TYPE', 'postgres');
+        if (dbType === 'mysql') {
+          return {
+            type: 'mysql',
+            host: configService.get('DB_HOST', 'localhost'),
+            port: configService.get<number>('DB_PORT', 3306),
+            username: configService.get('DB_USERNAME', 'root'),
+            password: configService.get('DB_PASSWORD', ''),
+            database: configService.get('DB_DATABASE', 'web_system'),
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            synchronize: configService.get('NODE_ENV') !== 'production',
+            logging: configService.get('NODE_ENV') === 'development',
+          };
+        }
+        return {
+          type: 'postgres',
+          url: configService.get('DATABASE_URL'),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: false,
+          logging: configService.get('NODE_ENV') === 'development',
+        };
+      },
       inject: [ConfigService],
     }),
 

@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: web_system_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # API 网关
+  gateway:
+    build:
+      context: .
+      dockerfile: servers/gateway/Dockerfile
+    container_name: web_system_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
+      - AI_SERVICE_URL=http://ai-service:3003
+      - PUBLIC_URL=http://106.52.176.246:3000
+      - CORS_ORIGINS=*
+    depends_on:
+      - redis
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # 认证服务
+  auth-service:
+    build:
+      context: .
+      dockerfile: servers/auth-service/Dockerfile
+    container_name: web_system_auth_service
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_TYPE=mysql
+      - DB_HOST=172.16.16.10
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_DATABASE=web_system
+      - JWT_SECRET=kedouai-prod-jwt-secret-2026
+      - JWT_EXPIRES_IN=7d
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # 用户服务
+  user-service:
+    build:
+      context: .
+      dockerfile: servers/user-service/Dockerfile
+    container_name: web_system_user_service
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DB_TYPE=mysql
+      - DB_HOST=172.16.16.10
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_DATABASE=web_system
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # AI 对话服务
+  ai-service:
+    build:
+      context: ./servers/ai-service
+      dockerfile: Dockerfile
+    container_name: web_system_ai_service
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - DB_TYPE=mysql
+      - DB_HOST=172.16.16.10
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_DATABASE=web_system
+    networks:
+      - web_network
+    restart: unless-stopped
+
+networks:
+  web_network:
+    driver: bridge
+
+volumes:
+  redis_data:
