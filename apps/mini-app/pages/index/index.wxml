@@ -1,4 +1,5 @@
-<view class="container {{isIPad ? 'ipad' : ''}} {{isIPad && isLandscape ? 'landscape' : ''}}">
+<view class="container {{isLandscape ? 'landscape' : ''}} {{isIPad ? 'ipad' : ''}}">
+  <!-- 横屏时 hero + features 左右分栏 -->
   <view class="hero">
     <text class="title">🎨 创意画板</text>
     <text class="subtitle">让孩子自由创作，激发想象力</text>
@@ -9,6 +10,10 @@
     <button class="feature-btn draw-btn" bindtap="goToDraw">
       <text class="feature-icon">🎨</text>
       <text class="feature-text">开始画画</text>
+    </button>
+    <button class="feature-btn records-btn" bindtap="goToRecords">
+      <text class="feature-icon">📋</text>
+      <text class="feature-text">我的画作</text>
     </button>
   </view>
 </view>

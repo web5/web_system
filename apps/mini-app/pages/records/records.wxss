@@ -1,0 +1,310 @@
+.container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== 顶栏 ===== */
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 32rpx 40rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.header-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.header-count {
+  font-size: 26rpx;
+  color: #999;
+}
+
+/* ===== 列表 ===== */
+.record-list {
+  flex: 1;
+  padding: 20rpx 30rpx;
+}
+
+.record-item {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  position: relative;
+}
+
+/* 缩略图 */
+.record-thumb {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 14rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-right: 24rpx;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+}
+
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #e8ecf1 0%, #d5dce6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb-icon {
+  font-size: 48rpx;
+}
+
+/* 信息区 */
+.record-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10rpx;
+}
+
+.record-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 编辑区 */
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.edit-input {
+  flex: 1;
+  height: 56rpx;
+  background: #f5f5f5;
+  border-radius: 8rpx;
+  padding: 0 16rpx;
+  font-size: 28rpx;
+  color: #333;
+  border: 2rpx solid #667eea;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.edit-btn {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  font-weight: bold;
+}
+
+.edit-btn.confirm {
+  background: #667eea;
+  color: #fff;
+}
+
+.edit-btn.cancel {
+  background: #f0f0f0;
+  color: #999;
+}
+
+/* 删除按钮 */
+.record-delete {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 10rpx;
+}
+
+.delete-icon {
+  font-size: 32rpx;
+  opacity: 0.4;
+}
+
+/* ===== 空状态 ===== */
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx;
+}
+
+.empty-icon {
+  font-size: 100rpx;
+  margin-bottom: 24rpx;
+}
+
+.empty-text {
+  font-size: 30rpx;
+  color: #999;
+  margin-bottom: 40rpx;
+}
+
+.empty-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 30rpx;
+  border-radius: 40rpx;
+  padding: 16rpx 60rpx;
+  border: none;
+}
+
+.empty-btn::after {
+  border: none;
+}
+
+/* ===== 底部新建按钮 ===== */
+.footer-bar {
+  padding: 20rpx 30rpx 40rpx;
+  background: #f5f5f5;
+}
+
+.new-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+  padding: 20rpx;
+  border: none;
+}
+
+.new-btn::after {
+  border: none;
+}
+
+/* ===== iPad 竖屏适配（张小龙：符合握持习惯）===== */
+.ipad:not(.landscape) .header {
+  padding: 48rpx 60rpx 28rpx;
+}
+
+.ipad:not(.landscape) .header-title {
+  font-size: 42rpx;
+}
+
+.ipad:not(.landscape) .record-list {
+  padding: 28rpx 60rpx;
+}
+
+.ipad:not(.landscape) .record-thumb {
+  width: 160rpx;
+  height: 160rpx;
+}
+
+.ipad:not(.landscape) .record-name {
+  font-size: 34rpx;
+}
+
+.ipad:not(.landscape) .record-time {
+  font-size: 26rpx;
+}
+
+/* ===== iPad 横屏适配（张小龙：充分利用大屏幕）===== */
+/* 横屏：列表改为网格布局 */
+.ipad.landscape .record-list {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 40rpx;
+  gap: 30rpx;
+}
+
+.ipad.landscape .record-item {
+  width: calc(50% - 15rpx); /* 2列网格 */
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 32rpx;
+  margin-bottom: 0;
+}
+
+.ipad.landscape .record-thumb {
+  width: 100%;
+  height: 280rpx;
+  margin-right: 0;
+  margin-bottom: 20rpx;
+}
+
+.ipad.landscape .record-info {
+  width: 100%;
+  min-width: auto;
+}
+
+.ipad.landscape .record-name {
+  font-size: 32rpx;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ipad.landscape .record-time {
+  font-size: 24rpx;
+}
+
+.ipad.landscape .record-delete {
+  position: absolute;
+  top: 20rpx;
+  right: 20rpx;
+  margin-left: 0;
+}
+
+/* 横屏：顶栏优化 */
+.ipad.landscape .header {
+  padding: 40rpx 60rpx 24rpx;
+}
+
+.ipad.landscape .header-title {
+  font-size: 48rpx;
+}
+
+.ipad.landscape .header-count {
+  font-size: 28rpx;
+}
+
+/* 横屏：底部按钮优化 */
+.ipad.landscape .footer-bar {
+  padding: 30rpx 60rpx 48rpx;
+}
+
+.ipad.landscape .new-btn {
+  font-size: 34rpx;
+  padding: 24rpx;
+}

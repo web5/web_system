@@ -25,9 +25,7 @@ const MOCK_TOKEN = 'mock_token_placeholder';
  * 暂时写死，直接模拟登录成功
  */
 export async function login(): Promise<void> {
-  console.log('[Auth] 模拟登录（后台未部署，写死为已登录）');
-
-  // mock 数据
+  // mock 数据（等待后台部署后替换为真实登录流程）
   setToken(MOCK_TOKEN, MOCK_TOKEN);
   const app = getApp<IAppOption>();
   app.globalData.userInfo = {
@@ -35,8 +33,6 @@ export async function login(): Promise<void> {
     nickname: '测试用户',
     avatarUrl: '',
   };
-
-  console.log('[Auth] 模拟登录成功');
 }
 
 /**
