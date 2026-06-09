@@ -27,7 +27,6 @@
     "@nestjs/typeorm": "^10.0.0",
     "mysql2": "^3.11.0",
     "typeorm": "^0.3.17",
-    "pg": "^8.11.0",
     "axios": "^1.6.0",
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",
