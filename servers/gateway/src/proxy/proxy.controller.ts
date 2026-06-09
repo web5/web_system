@@ -1,12 +1,14 @@
 import { Controller, All, Req, Res } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 
+@ApiExcludeController()
 @Controller('api')
 export class ProxyController {
   constructor(private proxyService: ProxyService) {}
 
-  @All('auth/*')
+  @All('auth/:path(*)')
   proxyAuth(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createAuthProxy();
     return proxy(req, res, () => {
@@ -14,7 +16,8 @@ export class ProxyController {
     });
   }
 
-  @All('users*')
+  @All('users/:path(*)')
+  @All('users')
   proxyUsers(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createUserProxy();
     return proxy(req, res, () => {
@@ -22,7 +25,8 @@ export class ProxyController {
     });
   }
 
-  @All('ai/*')
+  @All('ai/:path(*)')
+  @All('ai')
   proxyAi(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createAiProxy();
     return proxy(req, res, () => {
@@ -30,7 +34,7 @@ export class ProxyController {
     });
   }
 
-  @All('*')
+  @All(':path(*)')
   proxyApi(@Req() req: Request, @Res() res: Response) {
     res.status(404).json({ code: 404, message: `Unknown API route: ${req.method} ${req.path}` });
   }

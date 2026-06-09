@@ -12,7 +12,7 @@ export class Conversation {
   @Column({ type: 'varchar', length: 255, nullable: true })
   title: string;
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: 'json' })
   messages: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;
