@@ -30,7 +30,7 @@ export class AuthService {
       throw new UnauthorizedException('用户名或密码错误');
     }
 
-    const isPasswordValid = user.password
+    const isPasswordValid = user.password && loginDto.password
       ? await bcrypt.compare(loginDto.password, user.password)
       : false;
     if (!isPasswordValid) {
