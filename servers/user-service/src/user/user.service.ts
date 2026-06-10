@@ -19,8 +19,10 @@ export class UserService {
       take: limitNum,
       order: { createdAt: 'DESC' },
     });
-    // 脱敏：移除密码字段
-    const safeUsers = users.map(({ password, ...rest }) => rest);
+    const safeUsers = users.map((u) => {
+      const { password: _pwd, ...rest } = JSON.parse(JSON.stringify(u));
+      return rest;
+    });
     return {
       list: safeUsers,
       total,
@@ -29,12 +31,17 @@ export class UserService {
     };
   }
 
-  async findOne(id: string): Promise<Omit<User, 'password'>> {
+  private async findById(id: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id: Number(id) } });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    const { password, ...safeUser } = user;
+    return user;
+  }
+
+  async findOne(id: string): Promise<Omit<User, 'password'>> {
+    const user = await this.findById(id);
+    const { password: _pwd, ...safeUser } = JSON.parse(JSON.stringify(user));
     return safeUser;
   }
 
@@ -48,13 +55,13 @@ export class UserService {
   }
 
   async update(id: string, userData: Partial<User>): Promise<User> {
-    const user = await this.findOne(id);
+    const user = await this.findById(id);
     Object.assign(user, userData);
     return this.userRepository.save(user);
   }
 
   async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
+    const user = await this.findById(id);
     await this.userRepository.remove(user);
   }
 }
