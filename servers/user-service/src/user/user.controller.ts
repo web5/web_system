@@ -14,6 +14,14 @@ export class UserController {
     return this.userService.findAll(page, limit);
   }
 
+  @Get('profile')
+  async profile(@Query('id') id: string) {
+    if (id) {
+      return this.userService.findOne(id);
+    }
+    return { message: '请提供用户 ID' };
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.userService.findOne(id);

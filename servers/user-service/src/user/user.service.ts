@@ -19,20 +19,23 @@ export class UserService {
       take: limitNum,
       order: { createdAt: 'DESC' },
     });
+    // 脱敏：移除密码字段
+    const safeUsers = users.map(({ password, ...rest }) => rest);
     return {
-      list: users,
+      list: safeUsers,
       total,
       page: pageNum,
       pageSize: limitNum,
     };
   }
 
-  async findOne(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id } });
+  async findOne(id: string): Promise<Omit<User, 'password'>> {
+    const user = await this.userRepository.findOne({ where: { id: Number(id) } });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    return user;
+    const { password, ...safeUser } = user;
+    return safeUser;
   }
 
   async findByUsername(username: string): Promise<User | null> {
