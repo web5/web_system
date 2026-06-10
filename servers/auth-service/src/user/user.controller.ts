@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from './user.service';
@@ -20,10 +21,17 @@ export class UserController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '获取当前用户信息' })
-  async getProfile() {
-    // 从 request 中获取用户信息（由 JwtAuthGuard 注入）
-    // 实际使用时需要从 context 获取
-    return { message: 'Use gateway auth to get profile' };
+  async getProfile(@Request() req: any) {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return { code: 401, message: '未登录' };
+    }
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      return { code: 404, message: '用户不存在' };
+    }
+    const { password, ...result } = user;
+    return { code: 200, data: result };
   }
 
   @Get(':id')
