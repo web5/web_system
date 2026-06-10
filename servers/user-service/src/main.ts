@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -8,6 +9,13 @@ async function bootstrap() {
 
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // 全局验证管道
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
 
   // CORS
   app.enableCors();
