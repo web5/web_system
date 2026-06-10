@@ -3,10 +3,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  // 全局异常过滤器（捕获所有未处理异常，返回友好错误信息）
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const port = configService.get('PORT', 3001);
   const corsOrigins = configService.get('CORS_ORIGINS', '*');
