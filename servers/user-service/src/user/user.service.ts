@@ -11,16 +11,19 @@ export class UserService {
   ) {}
 
   async findAll(page: number = 1, limit: number = 10) {
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+
     const [users, total] = await this.userRepository.findAndCount({
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
       order: { createdAt: 'DESC' },
     });
     return {
       list: users,
       total,
-      page,
-      pageSize: limit,
+      page: pageNum,
+      pageSize: limitNum,
     };
   }
 
