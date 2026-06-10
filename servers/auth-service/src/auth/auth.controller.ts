@@ -2,12 +2,13 @@ import { Controller, Post, Body, Headers, HttpCode, HttpStatus } from '@nestjs/c
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import {
-  LoginRequest,
   WechatLoginRequest,
   MiniprogramLoginRequest,
   LoginResponse,
   MiniprogramLoginResponse,
 } from '@web-system/types';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -17,14 +18,14 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: '用户名密码登录' })
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginRequest): Promise<LoginResponse> {
+  async login(@Body() loginDto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(loginDto);
   }
 
   @Post('register')
   @ApiOperation({ summary: '用户注册' })
   @HttpCode(HttpStatus.OK)
-  async register(@Body() registerDto: { username: string; password: string; email?: string }): Promise<LoginResponse> {
+  async register(@Body() registerDto: RegisterDto): Promise<LoginResponse> {
     return this.authService.register(registerDto);
   }
 
