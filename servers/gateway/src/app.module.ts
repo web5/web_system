@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { StaticModule } from './static/static.module';
 import { HealthModule } from './health/health.module';
 import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
+import { ApiDocsModule } from './api-docs/api-docs.module';
 
 @Module({
   imports: [
@@ -23,6 +24,8 @@ import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
     StaticModule,
     // Swagger 文档聚合
     SwaggerDocsModule,
+    // 统一 API 文档（展示所有业务接口 + 代理转发）
+    ApiDocsModule,
   ],
 })
 export class AppModule {}
