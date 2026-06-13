@@ -1,11 +1,17 @@
 <template>
-  <router-view />
+  <a-config-provider :theme="theme">
+    <router-view />
+  </a-config-provider>
 </template>
 
 <script setup lang="ts">
-// App 根组件
-</script>
+import { ConfigProvider as AConfigProvider } from 'ant-design-vue';
 
-<style>
-/* 全局样式已在 global.css 中定义 */
-</style>
+const theme = {
+  token: {
+    colorPrimary: '#f97316',
+    colorLink: '#f97316',
+    borderRadius: 8,
+  },
+};
+</script>

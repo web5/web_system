@@ -4,7 +4,8 @@
     <nav class="navbar">
       <div class="nav-content">
         <div class="logo">
-          <h1>🎨 科豆 AI</h1>
+          <img src="/logo.svg" alt="科豆 AI" class="nav-logo" width="32" height="32" />
+          <h1>科豆 AI</h1>
         </div>
         <div class="nav-links">
           <router-link to="/" class="nav-link">首页</router-link>
@@ -31,9 +32,7 @@
             </a-dropdown>
           </template>
           <template v-else>
-            <router-link to="/login">
-              <a-button type="primary">登录</a-button>
-            </router-link>
+            <a-button type="primary" @click="showLogin = true">登录</a-button>
           </template>
         </div>
       </div>
@@ -97,27 +96,47 @@
         <p>&copy; 2024 科豆 AI. All rights reserved.</p>
       </div>
     </footer>
+
+    <!-- 登录弹窗 -->
+    <a-modal
+      v-model:open="showLogin"
+      :footer="null"
+      :closable="false"
+      width="460px"
+      centered
+      destroyOnClose
+      wrap-class-name="login-modal"
+    >
+      <LoginPanel closable @close="showLogin = false" @login-success="showLogin = false" />
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { logout as logoutApi } from '@/api/auth';
 import { message } from 'ant-design-vue';
+import LoginPanel from '@/components/LoginPanel.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png';
 
+const showLogin = ref(false);
 const isLoggedIn = computed(() => !!userStore.token);
 const username = computed(() => userStore.userInfo?.username || '');
 const userAvatar = computed(() => userStore.userInfo?.avatar || DEFAULT_AVATAR);
 
 onMounted(() => {
   userStore.initFromStorage();
+});
+
+// 登录成功后自动关闭弹窗
+watch(isLoggedIn, (val) => {
+  if (val) showLogin.value = false;
 });
 
 async function handleLogout() {
@@ -222,9 +241,18 @@ const features = ref([
   align-items: center;
 }
 
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nav-logo {
+  flex-shrink: 0;
+  border-radius: 8px;
+}
 .logo h1 {
-  font-size: 24px;
-  color: #667eea;
+  font-size: 22px;
+  color: #f97316;
   margin: 0;
 }
 
@@ -241,12 +269,13 @@ const features = ref([
 }
 
 .nav-link:hover {
-  color: #667eea;
+  color: #f97316;
 }
 
 .hero-section {
   padding: 120px 0 80px;
   text-align: center;
+  background: linear-gradient(180deg, #0A0A0D 0%, rgba(249,115,22,0.05) 50%, #0A0A0D 100%);
 }
 
 .hero-content {
@@ -259,12 +288,13 @@ const features = ref([
   font-size: 48px;
   margin-bottom: 20px;
   font-weight: 700;
+  color: #F8FAFC;
 }
 
 .hero-subtitle {
   font-size: 20px;
   margin-bottom: 40px;
-  opacity: 0.9;
+  color: #CBD5E1;
 }
 
 .hero-actions {
@@ -274,22 +304,29 @@ const features = ref([
 }
 
 .hero-btn {
-  background: white;
-  color: #667eea;
+  background: #F97316;
+  color: #fff;
   border: none;
   font-weight: 600;
+}
+.hero-btn:hover {
+  background: #EA580C !important;
 }
 
 .hero-btn-outline {
   background: transparent;
-  color: white;
-  border: 2px solid white;
+  color: #F8FAFC;
+  border: 2px solid rgba(249,115,22,0.4);
   font-weight: 600;
+}
+.hero-btn-outline:hover {
+  border-color: #F97316 !important;
+  color: #F97316 !important;
 }
 
 .courses-section {
   padding: 80px 0;
-  background: #f8f9ff;
+  background: #0A0A0D;
 }
 
 .container {
@@ -302,7 +339,7 @@ const features = ref([
   text-align: center;
   font-size: 36px;
   margin-bottom: 50px;
-  color: #333;
+  color: #F8FAFC;
 }
 
 .courses-grid {
@@ -312,16 +349,18 @@ const features = ref([
 }
 
 .course-card {
-  background: white;
+  background: #0C0C0D;
+  border: 1px solid rgba(249,115,22,0.12);
   border-radius: 12px;
   overflow: hidden;
-  transition: transform 0.3s, box-shadow 0.3s;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .course-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  border-color: rgba(249,115,22,0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(249,115,22,0.08);
 }
 
 .course-image img {
@@ -337,12 +376,12 @@ const features = ref([
 .course-title {
   font-size: 18px;
   margin-bottom: 10px;
-  color: #333;
+  color: #F8FAFC;
 }
 
 .course-desc {
   font-size: 14px;
-  color: #666;
+  color: #CBD5E1;
   margin-bottom: 15px;
   line-height: 1.5;
 }
@@ -351,7 +390,7 @@ const features = ref([
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #999;
+  color: #94A3B8;
   margin-bottom: 15px;
 }
 
@@ -363,13 +402,13 @@ const features = ref([
 
 .course-price {
   font-size: 20px;
-  color: #667eea;
+  color: #f97316;
   font-weight: 700;
 }
 
 .features-section {
   padding: 80px 0;
-  background: white;
+  background: #0A0A0D;
 }
 
 .features-grid {
@@ -391,19 +430,48 @@ const features = ref([
 .feature-title {
   font-size: 20px;
   margin-bottom: 15px;
-  color: #333;
+  color: #F8FAFC;
 }
 
 .feature-desc {
   font-size: 14px;
-  color: #666;
+  color: #CBD5E1;
   line-height: 1.6;
 }
 
 .footer {
-  background: #2d3748;
-  color: white;
+  background: #0C0C0D;
+  color: #94A3B8;
   padding: 30px 0;
   text-align: center;
+  border-top: 1px solid rgba(249,115,22,0.1);
 }
+</style>
+
+<!-- 全局样式：Modal 遮罩层 -->
+<style>
+/* 登录弹窗 - 精致毛玻璃遮罩 */
+.ant-modal-mask {
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* 登录弹窗 - 去掉 antd 默认壳，让 LoginPanel 白卡片直接呈现 */
+.login-modal .ant-modal-content {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+.login-modal .ant-modal-header {
+  display: none !important;
+}
+
+.login-modal .ant-modal-body {
+  padding: 0 !important;
+  position: relative;
+}
+
 </style>

@@ -34,6 +34,15 @@ export class ProxyController {
     });
   }
 
+  @All('admin/:path(*)')
+  @All('admin')
+  proxySystem(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createSystemProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
   @All(':path(*)')
   proxyApi(@Req() req: Request, @Res() res: Response) {
     res.status(404).json({ code: 404, message: `Unknown API route: ${req.method} ${req.path}` });

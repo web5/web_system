@@ -1,15 +1,15 @@
-/* ===== 全局 ===== */
+/* ===== 科豆 AI — Dark Cinema Orange 画板 ===== */
 page {
-  background: #1a1a2e;
+  background: #000000;
   overflow: hidden;
-  --primary: #4f46e5;
-  --primary-light: #818cf8;
-  --danger: #ef4444;
-  --text: #1e1b4b;
-  --text-dim: #6b7280;
-  --surface: #ffffff;
-  --surface2: #f3f4f6;
-  --shadow: 0 4px 24px rgba(0,0,0,0.12);
+  --primary: #F97316;
+  --primary-light: #FB923C;
+  --danger: #EF4444;
+  --text: #F8FAFC;
+  --text-dim: #94A3B8;
+  --surface: #0C0C0D;
+  --surface2: #111115;
+  --shadow: 0 4px 24px rgba(0,0,0,0.5);
 }
 
 .container {
@@ -17,7 +17,7 @@ page {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: #0A0A0D;
   position: relative;
 }
 
@@ -60,7 +60,7 @@ page {
   width: 100%;
   flex: 1;
   display: block;
-  background: #fff;
+  background: #1a1a1a;
   touch-action: none;
   box-sizing: border-box;
 }
@@ -127,7 +127,7 @@ page {
 }
 
 .lp-badge {
-  color: #4f46e5;
+  color: #f97316;
   font-size: 32rpx;
   font-weight: 700;
   width: 16rpx;
@@ -300,8 +300,8 @@ page {
   flex-shrink: 0;
 }
 .bm-brush.active {
-  background: rgba(79,70,229,0.25);
-  border-color: rgba(129,140,248,0.6);
+  background: rgba(249,115,22,0.2);
+  border-color: rgba(249,115,22,0.5);
 }
 .bm-brush:active {
   background: rgba(255,255,255,0.12);
@@ -319,7 +319,7 @@ page {
   white-space: nowrap;
 }
 .bm-brush.active .bm-label {
-  color: #a5b4fc;
+  color: #FB923C;
 }
 
 /* 预设图形图标 */
@@ -366,15 +366,14 @@ page {
 /* ===== 滑出面板 ===== */
 .slide-panel {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #fff;
+  bottom: 0; left: 0; right: 0;
+  background: #0C0C0D;
+  border-top: 1rpx solid rgba(249,115,22,0.15);
   border-radius: 32rpx 32rpx 0 0;
   padding: 16rpx 24rpx 40rpx;
   padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
   z-index: 100;
-  box-shadow: 0 -8px 40px rgba(0,0,0,0.12);
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
   transform: translateY(100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -385,7 +384,7 @@ page {
 .sp-handle {
   width: 48rpx;
   height: 6rpx;
-  background: #d1d5db;
+  background: rgba(249,115,22,0.3);
   border-radius: 3rpx;
   margin: 0 auto 20rpx;
 }
@@ -393,7 +392,7 @@ page {
 .sp-title {
   font-size: 28rpx;
   font-weight: 700;
-  color: #1e1b4b;
+  color: #F8FAFC;
   margin-bottom: 20rpx;
 }
 
@@ -420,7 +419,7 @@ page {
 }
 .sp-item.active {
   background: #eef2ff;
-  border-color: #4f46e5;
+  border-color: #f97316;
 }
 .sp-item:active {
   background: #e5e7eb;
@@ -440,7 +439,7 @@ page {
   font-weight: 500;
   white-space: nowrap;
 }
-.sp-item.active .sp-label { color: #4f46e5; }
+.sp-item.active .sp-label { color: #f97316; }
 .sp-item.danger .sp-label { color: #ef4444; }
 
 /* ===== 颜色网格 ===== */
@@ -460,7 +459,7 @@ page {
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 .color-dot.active {
-  border-color: #4f46e5;
+  border-color: #f97316;
   box-shadow: 0 0 0 6rpx rgba(79,70,229,0.2);
   transform: scale(1.1);
 }
@@ -510,7 +509,7 @@ page {
 
 .st-label {
   font-size: 28rpx;
-  color: #1e1b4b;
+  color: #F8FAFC;
   font-weight: 600;
 }
 
@@ -536,15 +535,13 @@ page {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0.9);
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
+  display: flex; align-items: center; gap: 12rpx;
   padding: 16rpx 28rpx;
-  background: rgba(79, 70, 229, 0.92);
+  background: rgba(249,115,22,0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 48rpx;
-  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 8px 32px rgba(249,115,22,0.35);
   z-index: 60;
   opacity: 0;
   pointer-events: none;
@@ -645,16 +642,16 @@ page {
   right: calc(24rpx + env(safe-area-inset-right));
   z-index: 100;
   padding: 14rpx 36rpx;
-  background: rgba(79, 70, 229, 0.92);
+  background: rgba(249,115,22,0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: 40rpx;
-  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 4px 20px rgba(249,115,22,0.35);
   transition: all 0.2s;
 }
 .done-btn:active {
   transform: scale(0.92);
-  background: rgba(79, 70, 229, 1);
+  background: rgba(249,115,22,1);
 }
 .done-text {
   font-size: 28rpx;
@@ -710,7 +707,7 @@ page {
   transition: all 0.2s ease;
 }
 .mb-cat.active {
-  background: #4f46e5;
+  background: #f97316;
   color: #fff;
 }
 .mb-cat:active {
@@ -1174,7 +1171,7 @@ page {
 }
 
 .ms-cat.active {
-  background: #4f46e5;
+  background: #f97316;
   color: #fff;
 }
 

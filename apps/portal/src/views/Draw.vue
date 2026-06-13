@@ -5,7 +5,8 @@
       <div class="nav-content">
         <div class="logo">
           <router-link to="/" class="logo-link">
-            <h1>🎨 科豆 AI</h1>
+            <img src="/logo.svg" alt="科豆 AI" class="nav-logo" width="32" height="32" />
+            <h1>科豆 AI</h1>
           </router-link>
         </div>
         <div class="nav-links">
@@ -76,12 +77,12 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 const ctx = ref<CanvasRenderingContext2D | null>(null);
 const isDrawing = ref(false);
 const tool = ref('brush');
-const color = ref('#667eea');
+const color = ref('#f97316');
 const brushSize = ref(5);
 const history = ref<ImageData[]>([]);
 const historyIndex = ref(-1);
 
-const colorPresets = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#000000', '#ffffff'];
+const colorPresets = ['#f97316', '#ea580c', '#f093fb', '#f5576c', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#000000', '#ffffff'];
 
 let lastX = 0;
 let lastY = 0;
@@ -205,7 +206,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .draw-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
 }
 
 .navbar {
@@ -226,11 +227,18 @@ onBeforeUnmount(() => {
 
 .logo-link {
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nav-logo {
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(249,115,22,0.2));
 }
 
 .logo h1 {
-  font-size: 24px;
-  color: #667eea;
+  font-size: 22px;
+  color: #f97316;
   margin: 0;
 }
 
@@ -248,7 +256,7 @@ onBeforeUnmount(() => {
 
 .nav-link:hover,
 .nav-link.active {
-  color: #667eea;
+  color: #f97316;
 }
 
 .canvas-wrapper {
@@ -307,7 +315,7 @@ onBeforeUnmount(() => {
 }
 
 .color-btn.active {
-  border-color: #667eea;
+  border-color: #f97316;
   box-shadow: 0 0 5px rgba(102, 126, 234, 0.5);
 }
 

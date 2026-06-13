@@ -1,4 +1,26 @@
+/* ===== 科豆 AI — Dark Cinema Orange Theme (Mini-App) ===== */
+
 page {
-  background: #f0f0f0;
+  --brand-50:  #FFF7ED;
+  --brand-100: #FFEDD5;
+  --brand-400: #FB923C;
+  --brand-500: #F97316;
+  --brand-600: #EA580C;
+  --brand-700: #C2410C;
+
+  --surface-0: #000000;
+  --surface-1: #0A0A0D;
+  --surface-2: #0C0C0D;
+  --surface-3: #111115;
+
+  --text-primary:   #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-tertiary:  #94A3B8;
+
+  --border-subtle: rgba(249,115,22,0.15);
+
+  background: var(--surface-0);
   min-height: 100vh;
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }

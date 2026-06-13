@@ -1,0 +1,50 @@
+<view class="container">
+  <!-- Logo -->
+  <view class="app-logo">
+    <image class="logo-img" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjRkRCQTc0Ii8+PHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiNGOTczMTYiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNFQTU4MEMiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48ZWxsaXBzZSBjeD0iMjAiIGN5PSIyMiIgcng9IjE0IiByeT0iMTUiIGZpbGw9InVybCgjZykiLz48cGF0aCBkPSJNOSwyMCBRMjAsMzEgMzEsMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0MyNDEwQyIgc3Ryb2tlLXdpZHRoPSIwLjgiIG9wYWNpdHk9IjAuMjUiLz48ZWxsaXBzZSBjeD0iMjAiIGN5PSIyOCIgcng9IjEwIiByeT0iOCIgZmlsbD0iI0ZGRURENSIgb3BhY2l0eT0iMC41Ii8+PGVsbGlwc2UgY3g9IjE0IiBjeT0iMTgiIHJ4PSIzIiByeT0iMy41IiBmaWxsPSIjRkZGIi8+PGVsbGlwc2UgY3g9IjI2IiBjeT0iMTgiIHJ4PSIzIiByeT0iMy41IiBmaWxsPSIjRkZGIi8+PGNpcmNsZSBjeD0iMTUiIGN5PSIxOC41IiByPSIxLjUiIGZpbGw9IiM3QzJEMTIiLz48Y2lyY2xlIGN4PSIyNyIgY3k9IjE4LjUiIHI9IjEuNSIgZmlsbD0iIzdDMkQxMiIvPjxjaXJjbGUgY3g9IjE1LjYiIGN5PSIxNy41IiByPSIwLjYiIGZpbGw9IiNGRkYiLz48Y2lyY2xlIGN4PSIyNy42IiBjeT0iMTcuNSIgcj0iMC42IiBmaWxsPSIjRkZGIi8+PHBhdGggZD0iTTE3LDI1IEMxOCwyNyAyMiwyNyAyMywyNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjN0MyRDEyIiBzdHJva2Utd2lkdGg9IjAuOSIvPjxlbGxpcHNlIGN4PSIxMSIgY3k9IjIzIiByeD0iMyIgcnk9IjIiIGZpbGw9IiNGREJBNzQiIG9wYWNpdHk9IjAuMzUiLz48ZWxsaXBzZSBjeD0iMjkiIGN5PSIyMyIgcng9IjMiIHJ5PSIyIiBmaWxsPSIjRkRCQTc0IiBvcGFjaXR5PSIwLjM1Ii8+PHBhdGggZD0iTTMwLDUgUTMxLDEgMjksMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkI5MjNDIiBzdHJva2Utd2lkdGg9IjEuMiIvPjxlbGxpcHNlIGN4PSIyOCIgY3k9Ii0xIiByeD0iMS4zIiByeT0iMi41IiBmaWxsPSIjRkI5MjNDIiB0cmFuc2Zvcm09InJvdGF0ZSgtMjAsMjgsLTEpIi8+PGVsbGlwc2UgY3g9IjMxIiBjeT0iMCIgcng9IjEuMSIgcnk9IjIuMiIgZmlsbD0iI0Y5NzMxNiIgdHJhbnNmb3JtPSJyb3RhdGUoMTUsMzEsMCkiLz48L3N2Zz4K" mode="aspectFit" />
+    <text class="logo-text">科豆 AI</text>
+  </view>
+  <view class="status-area">
+    <block wx:if="{{status === 'idle'}}">
+      <view class="icon-area">
+        <text class="icon-scan">📷</text>
+      </view>
+      <text class="title">网页扫码登录</text>
+      <text class="desc">扫描网页上的二维码，确认登录</text>
+      <button class="scan-btn" bindtap="startScan">开始扫码</button>
+    </block>
+
+    <block wx:elif="{{status === 'scanning'}}">
+      <view class="icon-area">
+        <text class="icon-loading">⏳</text>
+      </view>
+      <text class="title">正在扫码...</text>
+      <text class="desc">请将摄像头对准网页上的二维码</text>
+    </block>
+
+    <block wx:elif="{{status === 'confirming'}}">
+      <view class="icon-area">
+        <text class="icon-loading">🔄</text>
+      </view>
+      <text class="title">正在确认登录...</text>
+      <text class="desc">请稍候</text>
+    </block>
+
+    <block wx:elif="{{status === 'success'}}">
+      <view class="icon-area">
+        <text class="icon-success">✅</text>
+      </view>
+      <text class="title success-text">登录确认成功</text>
+      <text class="desc">请返回网页查看</text>
+    </block>
+
+    <block wx:elif="{{status === 'fail'}}">
+      <view class="icon-area">
+        <text class="icon-fail">❌</text>
+      </view>
+      <text class="title fail-text">登录失败</text>
+      <text class="desc">{{message}}</text>
+      <button class="scan-btn" bindtap="retry">重新扫码</button>
+    </block>
+  </view>
+</view>

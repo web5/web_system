@@ -96,3 +96,29 @@ export interface MiniprogramLoginRequest {
 export interface MiniprogramLoginResponse extends LoginResponse {
   isNewUser: boolean;
 }
+
+// 权限系统
+export type Role = 'admin' | 'editor' | 'viewer';
+
+export interface PermissionDef {
+  code: string;
+  name: string;
+  group: 'dashboard' | 'users' | 'settings' | 'logs';
+}
+
+export const PERMISSIONS: Record<string, PermissionDef> = {
+  'dashboard:view': { code: 'dashboard:view', name: '查看工作台', group: 'dashboard' },
+  'users:view':     { code: 'users:view',     name: '查看用户',   group: 'users' },
+  'users:create':   { code: 'users:create',   name: '创建用户',    group: 'users' },
+  'users:edit':     { code: 'users:edit',     name: '编辑用户',    group: 'users' },
+  'users:delete':   { code: 'users:delete',   name: '删除用户',    group: 'users' },
+  'settings:view':  { code: 'settings:view',  name: '查看设置',    group: 'settings' },
+  'settings:edit':  { code: 'settings:edit',  name: '修改设置',    group: 'settings' },
+  'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs' },
+};
+
+export const ROLE_PERMISSIONS: Record<Role, string[]> = {
+  admin:  Object.keys(PERMISSIONS),
+  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view'],
+  viewer: ['dashboard:view', 'logs:view'],
+};

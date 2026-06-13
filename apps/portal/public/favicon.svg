@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <!-- 橙色豆子身体渐变 — 温暖橙 -->
+    <linearGradient id="beanBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FDBA74"/>
+      <stop offset="35%" style="stop-color:#F97316"/>
+      <stop offset="100%" style="stop-color:#EA580C"/>
+    </linearGradient>
+    <!-- 豆子腹部高光 -->
+    <linearGradient id="beanBelly" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFEDD5"/>
+      <stop offset="100%" style="stop-color:#FFF7ED"/>
+    </linearGradient>
+    <!-- 学位帽渐变 -->
+    <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F97316"/>
+      <stop offset="100%" style="stop-color:#C2410C"/>
+    </linearGradient>
+    <!-- 橙色光晕 -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#F97316;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#F97316;stop-opacity:0"/>
+    </radialGradient>
+    <!-- 投影 -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3.5" flood-color="#7C2D12" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- 橙色光晕 -->
+  <circle cx="60" cy="58" r="55" fill="url(#glow)"/>
+
+  <!-- 地面阴影 -->
+  <ellipse cx="60" cy="100" rx="28" ry="6" fill="#7C2D12" opacity="0.12"/>
+
+  <!-- 豆子身体（腰豆形椭圆） -->
+  <path d="M60,18 C82,18 102,34 102,56 C102,78 82,98 60,98 C38,98 18,78 18,56 C18,34 38,18 60,18 Z"
+        fill="url(#beanBody)" filter="url(#shadow)"/>
+
+  <!-- 豆子缝线 — 腰豆特征弧线 -->
+  <path d="M22,50 Q60,80 98,50" fill="none" stroke="#C2410C" stroke-width="1.5" opacity="0.25" stroke-linecap="round"/>
+
+  <!-- 腹部高光区域 -->
+  <ellipse cx="60" cy="72" rx="28" ry="20" fill="url(#beanBelly)" opacity="0.75"/>
+
+  <!-- 左眼 -->
+  <ellipse cx="46" cy="46" rx="6.5" ry="7.5" fill="#FFFFFF"/>
+  <circle cx="48" cy="47" r="3.5" fill="#7C2D12"/>
+  <circle cx="49.5" cy="45.5" r="1.5" fill="#FFFFFF"/>
+
+  <!-- 右眼 -->
+  <ellipse cx="74" cy="46" rx="6.5" ry="7.5" fill="#FFFFFF"/>
+  <circle cx="76" cy="47" r="3.5" fill="#7C2D12"/>
+  <circle cx="77.5" cy="45.5" r="1.5" fill="#FFFFFF"/>
+
+  <!-- 微笑 -->
+  <path d="M52,62 C56,69 64,69 68,62" fill="none" stroke="#7C2D12" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- 腮红 -->
+  <ellipse cx="36" cy="56" rx="7" ry="4.5" fill="#FDBA74" opacity="0.5"/>
+  <ellipse cx="84" cy="56" rx="7" ry="4.5" fill="#FDBA74" opacity="0.5"/>
+
+  <!-- 豆芽 — 头顶小芽（豆子标志特征） -->
+  <g transform="translate(84,8)">
+    <path d="M0,4 Q-2,-8 0,-16" fill="none" stroke="#FB923C" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-3" cy="-14" rx="3" ry="5.5" fill="#FB923C" transform="rotate(-22,-3,-14)"/>
+    <ellipse cx="3.5" cy="-13" rx="2.5" ry="5" fill="#F97316" transform="rotate(18,3.5,-13)"/>
+  </g>
+
+  <!-- 学位帽 — 斜戴在左上方 -->
+  <g transform="translate(40,5) rotate(-8)">
+    <!-- 帽体 -->
+    <path d="M-6,4 L16,-12 L38,4 L30,7 L14,-7 L-2,7Z" fill="url(#capGrad)"/>
+    <!-- 帽檐固定带 -->
+    <rect x="-6" y="4" width="4" height="10" rx="1.5" fill="#9A3412"/>
+    <!-- 流苏线 -->
+    <line x1="-6" y1="12" x2="-16" y2="18" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- 流苏球 -->
+    <circle cx="-17" cy="19" r="2.5" fill="#F97316"/>
+  </g>
+</svg>

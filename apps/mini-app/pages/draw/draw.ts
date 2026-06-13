@@ -358,7 +358,7 @@ Page({
         title: '作品已保存',
         content: '是否保存到相册并分享给朋友？',
         confirmText: '分享',
-        confirmColor: '#4f46e5',
+        confirmColor: '#f97316',
         success: (res: any) => {
           if (res.confirm) {
             // 先保存到相册

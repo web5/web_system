@@ -1,3 +1,38 @@
+/* ===== 科豆 AI — Dark Cinema Orange Theme (Admin) ===== */
+
+:root {
+  --color-brand-50:  #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-400: #FB923C;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-700: #C2410C;
+
+  --ant-color-primary: var(--color-brand-500);
+  --ant-color-primary-hover: var(--color-brand-600);
+  --ant-color-primary-active: var(--color-brand-700);
+  --ant-color-primary-bg: rgba(249,115,22,0.12);
+  --ant-color-primary-bg-hover: rgba(249,115,22,0.18);
+  --ant-color-primary-border: var(--color-brand-500);
+  --ant-color-primary-text: var(--color-brand-500);
+
+  /* Dark surfaces */
+  --surface-0: #000000;
+  --surface-1: #0A0A0D;
+  --surface-2: #0C0C0D;
+  --surface-3: #111115;
+  --surface-4: #18181B;
+
+  --text-primary:   #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-tertiary:  #94A3B8;
+  --text-disabled:  #64748B;
+
+  --border-subtle:  rgba(249,115,22,0.12);
+  --border-default: rgba(249,115,22,0.2);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,10 +42,74 @@
 html, body {
   width: 100%;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--surface-0);
+  color: var(--text-primary);
 }
 
 #app {
   width: 100%;
   height: 100%;
+}
+
+/* ===== Ant Design Layout Overrides ===== */
+.ant-layout {
+  background: var(--surface-0) !important;
+}
+.ant-layout-header {
+  background: var(--surface-1) !important;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ant-layout-sider {
+  background: var(--surface-1) !important;
+  border-right: 1px solid var(--border-subtle);
+}
+.ant-menu {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+}
+.ant-menu-item-selected {
+  background: rgba(249,115,22,0.12) !important;
+  color: var(--color-brand-500) !important;
+}
+.ant-table {
+  background: var(--surface-2) !important;
+  color: var(--text-primary) !important;
+}
+.ant-table-thead > tr > th {
+  background: var(--surface-3) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-subtle) !important;
+}
+.ant-table-tbody > tr > td {
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+.ant-card {
+  background: var(--surface-2) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+.ant-card-head {
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+.ant-statistic-title {
+  color: var(--text-tertiary) !important;
+}
+.ant-statistic-content {
+  color: var(--text-primary) !important;
+}
+
+/* ===== Login page ===== */
+.login-container {
+  background: var(--surface-0) !important;
+}
+.login-box {
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+.login-title {
+  color: var(--text-primary) !important;
 }

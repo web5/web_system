@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
+import { ROLE_PERMISSIONS } from '@web-system/types';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -19,24 +20,30 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),
-        meta: { title: '工作台' },
+        meta: { title: '工作台', permission: 'dashboard:view' },
+      },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/Settings.vue'),
+        meta: { title: '系统设置', permission: 'settings:view' },
       },
       {
         path: 'users',
         name: 'Users',
-        meta: { title: '用户管理' },
+        meta: { title: '用户管理', permission: 'users:view' },
         children: [
           {
             path: '',
             name: 'UserList',
             component: () => import('@/views/UserList.vue'),
-            meta: { title: '用户列表' },
+            meta: { title: '用户列表', permission: 'users:view' },
           },
           {
             path: ':id',
             name: 'UserDetail',
             component: () => import('@/views/UserDetail.vue'),
-            meta: { title: '用户详情' },
+            meta: { title: '用户详情', permission: 'users:view' },
           },
         ],
       },
@@ -51,14 +58,27 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('access_token');
+  const userRoles = (() => { try { const raw = localStorage.getItem('user-store'); return raw ? JSON.parse(raw)?.userInfo?.roles || [] : []; } catch { return []; } })();
   
   if (to.meta.requiresAuth && !token) {
     next('/login');
-  } else if (to.path === '/login' && token) {
-    next('/');
-  } else {
-    next();
+    return;
   }
+  if (to.path === '/login' && token) {
+    next('/');
+    return;
+  }
+
+  // 权限检查
+  const perm = to.meta.permission as string | undefined;
+  if (perm) {
+    const allowedPerms = userRoles.flatMap((r: string) => (ROLE_PERMISSIONS as Record<string, string[]>)[r] || []);
+    if (!allowedPerms.includes(perm)) {
+      next('/dashboard');
+      return;
+    }
+  }
+  next();
 });
 
 export default router;

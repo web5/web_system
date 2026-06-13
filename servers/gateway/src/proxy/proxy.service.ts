@@ -7,11 +7,13 @@ export class ProxyService {
   private authServiceUrl: string;
   private userServiceUrl: string;
   private aiServiceUrl: string;
+  private systemServiceUrl: string;
 
   constructor(private configService: ConfigService) {
     this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:3001');
     this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
     this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:3003');
+    this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:3004');
   }
 
   createAuthProxy() {
@@ -46,6 +48,19 @@ export class ProxyService {
       changeOrigin: true,
       pathRewrite: {
         '^/api/ai': '/ai',
+      },
+      on: {
+        proxyReq: fixRequestBody,
+      },
+    });
+  }
+
+  createSystemProxy() {
+    return createProxyMiddleware({
+      target: this.systemServiceUrl,
+      changeOrigin: true,
+      pathRewrite: {
+        '^/api/admin': '/admin',
       },
       on: {
         proxyReq: fixRequestBody,
