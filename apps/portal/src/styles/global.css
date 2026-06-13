@@ -1,3 +1,46 @@
+/* ===== 科豆 AI — Dark Cinema Orange Theme ===== */
+
+:root {
+  /* Brand orange */
+  --color-brand-50:  #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-400: #FB923C;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-700: #C2410C;
+
+  /* Ant Design overrides */
+  --ant-color-primary: var(--color-brand-500);
+  --ant-color-primary-hover: var(--color-brand-600);
+  --ant-color-primary-active: var(--color-brand-700);
+  --ant-color-primary-bg: rgba(249,115,22,0.12);
+  --ant-color-primary-bg-hover: rgba(249,115,22,0.18);
+  --ant-color-primary-border: var(--color-brand-500);
+  --ant-color-primary-text: var(--color-brand-500);
+
+  /* Surface layers — cinema dark */
+  --surface-0: #000000;
+  --surface-1: #0A0A0D;
+  --surface-2: #0C0C0D;
+  --surface-3: #111115;
+  --surface-4: #18181B;
+
+  /* Text */
+  --text-primary:   #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-tertiary:  #94A3B8;
+  --text-disabled:  #64748B;
+
+  /* Border */
+  --border-subtle:  rgba(249,115,22,0.15);
+  --border-default: rgba(249,115,22,0.25);
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 24px rgba(249,115,22,0.1);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -5,8 +48,9 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--surface-0);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
@@ -14,43 +58,50 @@ body {
   min-height: 100vh;
 }
 
-/* 紫色渐变背景 */
-.purple-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-/* 导航栏样式 */
+/* ===== Navigation ===== */
 .navbar {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: rgba(10,10,13,0.85) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-/* Hero 区域 */
-.hero-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 80px 0;
-}
-
-/* 课程卡片 */
-.course-card {
-  background: white;
+/* ===== Cards ===== */
+.course-card,
+.feature-item,
+.setting-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  overflow: hidden;
-  transition: transform 0.3s, box-shadow 0.3s;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-card);
+  transition: all .3s ease;
+}
+.course-card:hover,
+.feature-item:hover {
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-card), var(--shadow-glow);
+  transform: translateY(-2px);
 }
 
-.course-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
-
-/* 画板容器 */
+/* ===== Canvas ===== */
 .canvas-container {
-  background: white;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-card);
+}
+
+/* ===== Buttons ===== */
+.btn-orange {
+  background: var(--color-brand-500) !important;
+  border-color: var(--color-brand-500) !important;
+  color: #fff !important;
+}
+.btn-orange:hover {
+  background: var(--color-brand-600) !important;
+}
+
+/* Orange badge */
+.orange-bg {
+  background: var(--color-brand-500);
 }

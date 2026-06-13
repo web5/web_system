@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { QrcodeModule } from './qrcode/qrcode.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { UserModule } from './user/user.module';
     // 功能模块
     AuthModule,
     UserModule,
+    QrcodeModule,
   ],
 })
 export class AppModule {}

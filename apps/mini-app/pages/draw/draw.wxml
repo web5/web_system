@@ -180,7 +180,7 @@
         value="{{brushSize}}"
         bindchange="onBrushSizeChange"
         block-size="18"
-        activeColor="#4f46e5"
+        activeColor="#f97316"
         backgroundColor="rgba(255,255,255,0.2)"
       />
     </view>

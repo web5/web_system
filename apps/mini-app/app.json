@@ -2,11 +2,12 @@
   "pages": [
     "pages/index/index",
     "pages/draw/draw",
-    "pages/records/records"
+    "pages/records/records",
+    "pages/scan/scan"
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#667eea",
+    "navigationBarBackgroundColor": "#f97316",
     "navigationBarTitleText": "科豆 AI",
     "navigationBarTextStyle": "white"
   },

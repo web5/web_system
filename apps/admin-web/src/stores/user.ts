@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import type { UserInfo } from '@web-system/types';
+import { ref, computed } from 'vue';
+import type { UserInfo, Role } from '@web-system/types';
+import { ROLE_PERMISSIONS } from '@web-system/types';
 
 export const useUserStore = defineStore(
   'user',
@@ -8,6 +9,22 @@ export const useUserStore = defineStore(
     const token = ref<string>('');
     const refreshToken = ref<string>('');
     const userInfo = ref<UserInfo | null>(null);
+
+    const roles = computed<Role[]>(() => {
+      return (userInfo.value?.roles as Role[]) || ['viewer'];
+    });
+
+    const permissions = computed<string[]>(() => {
+      return roles.value.flatMap((r) => ROLE_PERMISSIONS[r] || []);
+    });
+
+    function hasPermission(code: string): boolean {
+      return permissions.value.includes(code);
+    }
+
+    function hasAnyPermission(codes: string[]): boolean {
+      return codes.some((c) => permissions.value.includes(c));
+    }
 
     function setToken(newToken: string, newRefreshToken: string) {
       token.value = newToken;
@@ -40,13 +57,9 @@ export const useUserStore = defineStore(
     }
 
     return {
-      token,
-      refreshToken,
-      userInfo,
-      setToken,
-      setUserInfo,
-      logout,
-      initFromStorage,
+      token, refreshToken, userInfo, roles, permissions,
+      hasPermission, hasAnyPermission,
+      setToken, setUserInfo, logout, initFromStorage,
     };
   },
   {

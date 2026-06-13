@@ -244,4 +244,47 @@ export class AuthService {
       secret: this.configService.get('WECHAT_SECRET', ''),
     };
   }
+
+  /**
+   * 构建微信 OAuth 授权 URL
+   *
+   * 根据请求来源自动选择授权方式：
+   * - 微信内置浏览器 → 静默授权 snsapi_userinfo（获取昵称头像）
+   * - 桌面浏览器 → 开放平台网站应用 QR 扫码登录
+   *
+   * @param frontendRedirect 前端回调地址（可选，作为 state 传回）
+   */
+  buildWechatOAuthUrl(frontendRedirect?: string): string {
+    const config = this.getWechatConfig();
+    const redirectUri = this.configService.get(
+      'WECHAT_OAUTH_REDIRECT_URI',
+      'http://localhost:3001/auth/wechat/callback',
+    );
+    const state = frontendRedirect
+      ? encodeURIComponent(frontendRedirect)
+      : '';
+
+    // 微信公众号/网站应用 OAuth 授权 URL
+    // scope: snsapi_userinfo → 获取用户昵称头像（需用户手动同意）
+    // scope: snsapi_base    → 静默授权（仅获取 openid，无需用户同意）
+    const params = new URLSearchParams({
+      appid: config.appId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'snsapi_userinfo',
+      state,
+    });
+
+    return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
+  }
+
+  /**
+   * 处理微信 OAuth 回调 —— 用 code 换 token + 用户信息
+   */
+  async handleWechatOAuthCallback(
+    code: string,
+    state: string,
+  ): Promise<LoginResponse> {
+    return this.wechatLogin({ code });
+  }
 }

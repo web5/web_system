@@ -1,7 +1,10 @@
 <template>
   <div class="login-container">
     <div class="login-box">
-      <h1 class="login-title">管理后台</h1>
+      <div class="login-brand">
+        <img src="/logo.svg" alt="科豆 AI" class="brand-svg" width="48" height="48" />
+        <h1 class="login-title">管理后台</h1>
+      </div>
       <a-tabs v-model:activeKey="activeTab">
         <a-tab-pane key="login" tab="登录">
           <a-form :model="loginForm" @finish="handleLogin" layout="vertical">
@@ -176,22 +179,34 @@ const handleRegister = async () => {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #000000 0%, #0A0A0D 50%, rgba(249,115,22,0.05) 100%);
 }
 
 .login-box {
-  width: 400px;
-  padding: 40px;
+  width: 420px;
+  padding: 40px 36px 36px;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 18px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.brand-svg {
+  filter: drop-shadow(0 2px 8px rgba(249,115,22,0.2));
+  margin-bottom: 12px;
 }
 
 .login-title {
   text-align: center;
-  margin-bottom: 30px;
-  color: #333;
-  font-size: 28px;
+  color: #1a1a2e;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
 }
 
 .wechat-login {

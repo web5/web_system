@@ -18,6 +18,6 @@ App<IAppOption>({
     userInfo: null,
     token: '',
     refreshToken: '',
-    apiBase: 'https://api.kedouai.com',
+    apiBase: 'https://kedouai.com/api',
   },
 });
