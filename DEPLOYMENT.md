@@ -1,256 +1,246 @@
 # Web System 部署指南
 
+## 架构总览
+
+```
+dev.kedouai.com
+      ↓ DNS
+42.194.200.69 (Nginx 网关服务器, CentOS)
+      ↓ HTTPS 代理
+175.27.189.123:3000 / 10.206.16.5:3000 (内网)
+      │
+      ├── /assets/*    → ServeStaticModule (public/)
+      ├── /admin/*     → ServeStaticModule (public/admin/)
+      ├── /            → SPA 回退中间件 → index.html
+      ├── /create      → SPA 回退中间件 → index.html (SPA 路由)
+      ├── /api/auth/*  → ProxyModule → Auth Service (:3001)
+      ├── /api/users*  → ProxyModule → User Service (:3002)
+      ├── /api/ai/*    → ProxyModule → AI Service (:3003)
+      ├── /api/*       → 404
+      ├── /docs        → Swagger 文档
+      └── /swagger     → Swagger 聚合文档
+```
+
 ## 服务器信息
 
-- **新服务器**: 106.52.176.246 (部署应用服务)
-- **代理服务器**: 42.194.200.69 (Nginx 转发 portal.kedouai.com)
+| 角色 | IP | 用户 | 系统 |
+|------|-----|------|------|
+| Nginx 网关 | 42.194.200.69 | root | CentOS 5.4 |
+| 后端服务器 | 175.27.189.123 (公网) / 10.206.16.5 (内网) | ubuntu | Ubuntu 24.04 |
 
-## 一、新服务器部署 (106.52.176.246)
+## 端口分配
 
-### 1. 准备环境
+| 端口 | 服务 | 说明 |
+|------|------|------|
+| 3000 | NestJS Gateway | 统一入口，托管前端 + API 代理 |
+| 3001 | Auth Service | 认证/登录 |
+| 3002 | User Service | 用户管理 |
+| 3003 | AI Service | AI 对话/图片生成 |
+| 3004 | System Service | 系统设置/操作日志 |
+| 3306 | MySQL | 本地数据库 |
+| 6379 | Redis | 系统原生运行 |
 
-```bash
-# 安装 Node.js (v20+)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
+## 一、后端服务器部署 (175.27.189.123)
 
-# 安装 pnpm
-npm install -g pnpm
+### 1. 项目目录
 
-# 安装 Docker
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER
-
-# 安装 Nginx
-sudo apt-get install -y nginx
+```
+/data/web_system/
+├── servers/           # NestJS 后端微服务
+│   ├── gateway/       # API 网关 (端口 3000)
+│   ├── auth-service/  # 认证服务 (端口 3001)
+│   ├── user-service/  # 用户服务 (端口 3002)
+│   ├── ai-service/    # AI 服务 (端口 3003)
+│   └── system-service/# 系统服务 (端口 3004)
+├── apps/              # 前端应用
+│   ├── portal/        # 门户 SPA
+│   └── admin-web/     # 管理后台 SPA (base: /admin/)
+├── .env.production    # 生产环境变量
+└── ecosystem.config.js # PM2 配置
 ```
 
-### 2. 克隆项目
+### 2. 环境变量 (.env.production)
 
 ```bash
-cd /home/ubuntu
-git clone git@github.com:web5/web_system.git
-cd web_system
+PORT=3000
+HOST=0.0.0.0
+AUTH_SERVICE_URL=http://127.0.0.1:3001
+USER_SERVICE_URL=http://127.0.0.1:3002
+AI_SERVICE_URL=http://127.0.0.1:3003
+SYSTEM_SERVICE_URL=http://127.0.0.1:3004
+PUBLIC_URL=http://dev.kedouai.com
+CORS_ORIGINS=*
+JWT_SECRET=kedouai-prod-jwt-secret-2026
+JWT_EXPIRES_IN=7d
+REDIS_URL=redis://127.0.0.1:6379
+DB_TYPE=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USERNAME=root
+DB_PASSWORD=web_system_root_2026
+DB_DATABASE=web_system
 ```
 
-### 3. 安装依赖并构建
+### 3. 启动/重启服务
 
 ```bash
-# 安装依赖
+cd /data/web_system
+
+# 加载环境变量并重启所有微服务
+export $(cat .env.production | grep -v "^#" | xargs)
+pm2 restart all --update-env
+
+# 查看状态
+pm2 status
+pm2 logs
+```
+
+### 4. 更新部署
+
+```bash
+cd /data/web_system
+
+# 拉取最新代码
+git pull
+
+# 安装依赖（如需）
 pnpm install
 
-# 构建前端
-cd apps/portal && pnpm build
-cd ../admin-web && pnpm build
-cd ../..
-
 # 构建后端
-cd servers/gateway && pnpm build
-cd ../auth-service && pnpm build
-cd ../user-service && pnpm build
+cd servers/gateway && npx nest build
+cd ../auth-service && npx nest build
+cd ../user-service && npx nest build
+cd ../ai-service && npx nest build
+cd ../system-service && npx nest build
 cd ../..
+
+# 构建前端（注意跳过 vue-tsc 类型检查）
+cd apps/portal && npx vite build && cp -r dist/* /data/web_system/servers/gateway/public/
+cd ../admin-web && npx vite build && cp -r dist/* /data/web_system/servers/gateway/public/admin/
+cd ../..
+
+# 重启服务
+export $(cat .env.production | grep -v "^#" | xargs)
+pm2 restart all --update-env
 ```
 
-### 4. 启动数据库和缓存
+## 二、Nginx 网关服务器 (42.194.200.69)
+
+### 1. 配置 HTTPS 代理
+
+配置文件：`/etc/nginx/conf.d/dev.kedouai.com.conf`
+
+```nginx
+server {
+    listen 80;
+    server_name dev.kedouai.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name dev.kedouai.com;
+
+    ssl_certificate /etc/nginx/ssl/dev.kedouai.com/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/dev.kedouai.com/privkey.pem;
+
+    location / {
+        proxy_pass http://175.27.189.123:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### 2. 修改后重载
 
 ```bash
-docker-compose up -d postgres redis
+nginx -t && nginx -s reload
 ```
 
-### 5. 启动后端服务
+## 三、Gateway 路由说明
 
-使用 PM2:
+### 静态资源
 
-```bash
-npm install -g pm2
+使用 `@nestjs/serve-static` 托管 `servers/gateway/public/` 目录：
 
-pm2 start servers/gateway/dist/main.js --name gateway
-pm2 start servers/auth-service/dist/main.js --name auth-service
-pm2 start servers/user-service/dist/main.js --name user-service
+| 请求路径 | 物理文件 |
+|----------|----------|
+| `/assets/*` | `public/assets/*` |
+| `/admin/*` | `public/admin/*` |
+| `/favicon.svg` | `public/favicon.svg` |
 
-pm2 save
-pm2 startup
+### SPA 回退
+
+Express 中间件处理前端路由，非 API/文档/管理后台路径统一返回 `index.html`：
+
+```typescript
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  if (path.startsWith('/api') || path.startsWith('/docs') || ...) return next();
+  if (extname(path)) return next(); // 跳过静态资源
+  res.sendFile('public/index.html');
+});
 ```
 
-或使用 Docker:
+### API 代理
 
-```bash
-docker-compose up -d
-```
-
-### 6. 配置 Nginx
-
-```bash
-# 复制配置文件
-sudo cp nginx-server.conf /etc/nginx/sites-available/web-system
-sudo ln -s /etc/nginx/sites-available/web-system /etc/nginx/sites-enabled/
-
-# 测试配置
-sudo nginx -t
-
-# 重启 Nginx
-sudo systemctl restart nginx
-```
-
-### 7. 验证部署
-
-访问以下地址验证:
-- 门户首页：http://106.52.176.246:3003
-- 管理后台：http://106.52.176.246:3001
-- API 网关：http://106.52.176.246:3000
-
-## 二、代理服务器配置 (42.194.200.69)
-
-### 1. 配置 Nginx 转发
-
-```bash
-# 复制配置文件
-sudo cp nginx-proxy.conf /etc/nginx/sites-available/portal-proxy
-sudo ln -s /etc/nginx/sites-available/portal-proxy /etc/nginx/sites-enabled/
-
-# 测试配置
-sudo nginx -t
-
-# 重启 Nginx
-sudo systemctl restart nginx
-```
-
-### 2. 验证域名解析
-
-确保 `portal.kedouai.com` DNS 解析到 42.194.200.69
-
-```bash
-ping portal.kedouai.com
-# 应该显示 42.194.200.69
-```
-
-### 3. 访问测试
-
-访问 https://portal.kedouai.com 应该能够看到少儿教育门户首页
-
-## 三、环境变量配置
-
-### 生产环境变量
-
-创建 `.env.production` 文件:
-
-```bash
-# 网关服务
-PORT=3000
-AUTH_SERVICE_URL=http://localhost:3001
-USER_SERVICE_URL=http://localhost:3002
-
-# 认证服务
-JWT_SECRET=your-super-secret-jwt-key-change-this
-JWT_EXPIRES_IN=7d
-
-# 数据库
-DATABASE_URL=postgresql://web_system:web_system123@localhost:5432/web_system
-
-# Redis
-REDIS_URL=redis://localhost:6379
-```
+| 前缀 | 目标 |
+|------|------|
+| `/api/auth/*` | Auth Service (:3001) |
+| `/api/users*` | User Service (:3002) |
+| `/api/ai/*` | AI Service (:3003) |
+| `/api/*` | 404 |
 
 ## 四、常见问题
 
-### 1. 端口被占用
+### 1. 数据库连接超时
+
+检查 MySQL 是否在运行：
+```bash
+sudo systemctl status mysql
+mysql -h 127.0.0.1 -u root -pweb_system_root_2026 -e "SELECT 1;"
+```
+
+### 2. 前端构建失败（vue-tsc 错误）
+
+vue-tsc 与高版本 TypeScript 不兼容，使用 `npx vite build` 跳过类型检查：
+```bash
+cd apps/portal && rm -rf dist && npx vite build
+```
+
+### 3. PM2 服务启动失败
 
 ```bash
-# 查看端口占用
+cd /data/web_system
+export $(cat .env.production | grep -v "^#" | xargs)
+pm2 restart all --update-env
+pm2 logs --lines 50
+```
+
+### 4. 端口被占用
+
+```bash
 sudo lsof -i :3000
-sudo lsof -i :3001
-sudo lsof -i :3002
-sudo lsof -i :3003
-
-# 杀死占用进程
-sudo kill -9 <PID>
+sudo systemctl status caddy  # 检查是否使用了 Caddy
 ```
 
-### 2. 数据库连接失败
+## 五、Git 工作流
 
 ```bash
-# 检查 PostgreSQL 状态
-docker ps | grep postgres
+# 本地修改后
+git add .
+git commit -m "feat: xxx"
+git push
 
-# 查看日志
-docker logs web_system_postgres
-```
-
-### 3. Nginx 配置错误
-
-```bash
-# 测试配置
-sudo nginx -t
-
-# 查看错误日志
-sudo tail -f /var/log/nginx/error.log
-```
-
-## 五、持续部署
-
-### 使用 GitHub Actions (可选)
-
-创建 `.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Deploy to server
-        uses: appleboy/ssh-action@master
-        with:
-          host: 106.52.176.246
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /home/ubuntu/web_system
-            git pull
-            pnpm install
-            pnpm build
-            pm2 restart all
-```
-
-## 六、监控和维护
-
-### 查看服务状态
-
-```bash
-# PM2 服务
-pm2 status
-pm2 logs
-
-# Docker 容器
-docker-compose ps
-docker-compose logs
-```
-
-### 备份数据库
-
-```bash
-docker exec web_system_postgres pg_dump -U web_system web_system > backup.sql
-```
-
-### 更新部署
-
-```bash
-cd /home/ubuntu/web_system
+# 服务器更新
+ssh ubuntu@175.27.189.123
+cd /data/web_system
 git pull
-pnpm install
-pnpm build
-pm2 restart all
+# 按"三、更新部署"步骤执行
 ```
-
----
-
-**部署完成后，访问:**
-- 🎨 少儿教育门户：https://portal.kedouai.com
-- 🔧 管理后台：http://admin.kedouai.com (或 http://106.52.176.246:3001)

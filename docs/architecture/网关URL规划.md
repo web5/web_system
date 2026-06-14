@@ -1,269 +1,190 @@
 # 网关 URL 规划
 
-> Gateway 路由设计 — URL 分类、代理规则、模块实现与路径重写
+> Gateway 路由设计 — 单端口统一处理前端 SPA、静态资源和 API 代理
 
 ---
 
 ## 目录
 
 - [1. URL 分类总览](#1-url-分类总览)
-- [2. 健康检查 `/health`](#2-健康检查-health)
-- [3. API 代理 `/api/*`](#3-api-代理-api)
-  - [3.1 路由映射表](#31-路由映射表)
-  - [3.2 路径重写规则](#32-路径重写规则)
-  - [3.3 兜底策略](#33-兜底策略)
-  - [3.4 Controller 实现](#34-controller-实现)
-- [4. 静态资源 `/static/*`](#4-静态资源-static)
-- [5. ProxyService 配置](#5-proxyservice-配置)
-- [6. 模块注册](#6-模块注册)
+- [2. 静态资源 `/assets/*`](#2-静态资源-assets)
+- [3. SPA 回退中间件](#3-spa-回退中间件)
+- [4. API 代理 `/api/*`](#4-api-代理-api)
+- [5. 管理后台 `/admin/*`](#5-管理后台-admin)
+- [6. 模块注册顺序](#6-模块注册顺序)
 
 ---
 
 ## 1. URL 分类总览
 
-Gateway 统一处理三类请求，三类 URL 前缀互不冲突，职责清晰：
+Gateway（端口 3000）是唯一入口，统一处理全部请求：
 
-| 分类 | 前缀 | 职责 | 模块 |
-|------|------|------|------|
-| 🔍 健康检查 | `/health` | 服务存活性检测 | `HealthModule` |
-| 🔄 API 代理 | `/api/*` | 转发到后端微服务 | `ProxyModule` |
-| 📦 静态资源 | `/static/*` | SPA 前端文件服务 | `StaticModule` |
+| 分类 | 路径特征 | 处理方式 | 模块 |
+|------|----------|----------|------|
+| 📦 静态资源 | 带文件扩展名 (.js/.css/.svg) | `ServeStaticModule` | `StaticModule` |
+| 🔄 API 代理 | `/api/*` | `ProxyModule` | `ProxyModule` |
+| 🌐 SPA 路由 | 无后缀 GET 请求 | Express 中间件 → `index.html` | main.ts |
+| 🔧 管理后台 | `/admin/*` | `ServeStaticModule` | `StaticModule` |
+| 📚 接口文档 | `/docs`, `/swagger` | SwaggerModule | `SwaggerDocsModule` |
 
 **路由决策流程：**
 
 ```
-请求进入 Gateway
+请求进入 Gateway (:3000)
     │
-    ├── /health ───→ HealthController.heartbeat()
-    │                     └→ { status: "ok", timestamp, uptime }
+    ├── /api/* ──────→ ProxyModule → 后端微服务
     │
-    ├── /api/auth/* ──→ Proxy → Auth Service  (:3001)
-    ├── /api/users* ──→ Proxy → User Service  (:3002)
-    ├── /api/ai/*   ──→ Proxy → AI Service    (:3003)
-    ├── /api/*      ──→ 404 { code: 404, message: "Unknown API route..." }
+    ├── /docs        → SwaggerModule
+    ├── /swagger     → SwaggerModule
     │
-    └── /static/* ────→ ServeStatic → public/index.html 或 assets/*
+    ├── /admin/*     → ServeStaticModule → public/admin/*
+    ├── /assets/*    → ServeStaticModule → public/assets/*
+    ├── /favicon.ico → ServeStaticModule
+    │
+    ├── / (GET, 无后缀) → SPA 中间件 → public/index.html
+    ├── /create       → SPA 中间件 → public/index.html
+    ├── /transform    → SPA 中间件 → public/index.html
+    │
+    └── 其他          → NestJS 默认 404
 ```
 
 ---
 
-## 2. 健康检查 `/health`
+## 2. 静态资源 `/assets/*`
 
-用于调试和监控，快速确认 Gateway 是否在线。
-
-**端点：** `GET /health`
-
-**响应：**
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-05-23T04:02:00.000Z",
-  "uptime": 1234.56
-}
-```
-
-**实现：** `src/health/health.controller.ts`
-
-```typescript
-@Controller()
-export class HealthController {
-  @Get('health')
-  heartbeat() {
-    return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    };
-  }
-}
-```
-
-- `status`：固定返回 `"ok"`，表示服务正常
-- `timestamp`：当前 ISO 时间戳
-- `uptime`：Node.js 进程已运行秒数
-
----
-
-## 3. API 代理 `/api/*`
-
-使用 `http-proxy-middleware` 将前端请求透明转发到后端微服务，同时重写路径去除 `/api` 前缀。
-
-### 3.1 路由映射表
-
-| 路由规则 | 匹配请求示例 | 转发目标 | pathRewrite |
-|----------|-------------|----------|-------------|
-| `/api/auth/*` | `POST /api/auth/login` | Auth Service (:3001) | `/api/auth` → `/auth` |
-| | `POST /api/auth/register` | Auth Service (:3001) | `/api/auth` → `/auth` |
-| | `POST /api/auth/miniprogram-login` | Auth Service (:3001) | `/api/auth` → `/auth` |
-| `/api/users*` | `GET /api/users` | User Service (:3002) | `/api/users` → `/users` |
-| | `GET /api/users/123` | User Service (:3002) | `/api/users` → `/users` |
-| `/api/ai/*` | `POST /api/ai/chat` | AI Service (:3003) | `/api/ai` → `/ai` |
-| `/api/*` (兜底) | `GET /api/unknown` | — | 返回 404 |
-
-### 3.2 路径重写规则
-
-网关统一使用 `/api/{服务名}` 前缀，转发前剥离该前缀，保证后端服务路由简洁：
-
-| 用户请求 | 经过 Gateway | 转发到后端 |
-|----------|-------------|-----------|
-| `POST /api/auth/login` | pathRewrite → `/auth` | `POST /auth/login` → Auth Service |
-| `GET /api/users/profile` | pathRewrite → `/users` | `GET /users/profile` → User Service |
-| `POST /api/ai/chat` | pathRewrite → `/ai` | `POST /ai/chat` → AI Service |
-| `GET /api/unknown` | — | 404 响应 |
-
-### 3.3 兜底策略
-
-未匹配的 `/api/*` 路径不再静默转发到后端，而是明确返回 404：
-
-```json
-{
-  "code": 404,
-  "message": "Unknown API route: GET /api/unknown"
-}
-```
-
-这样做的优势：
-- **调试友好**：客户端能立刻知道路由不存在，而非得到一个后端误响应
-- **安全性**：避免意外将请求泄露到错误的服务
-- **可观测性**：通过 HTTP 状态码即可判断路由是否正确
-
-### 3.4 Controller 实现
-
-`src/proxy/proxy.controller.ts`：
-
-```typescript
-@Controller('api')
-export class ProxyController {
-  constructor(private proxyService: ProxyService) {}
-
-  @All('auth/*')
-  proxyAuth(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createAuthProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
-  @All('users*')
-  proxyUsers(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUserProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
-  @All('ai/*')
-  proxyAi(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createAiProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
-  @All('*')
-  notFound(@Req() req: Request, @Res() res: Response) {
-    res.status(404).json({
-      code: 404,
-      message: `Unknown API route: ${req.method} ${req.path}`,
-    });
-  }
-}
-```
-
-> **注意**：`/api/users*` 使用 `*`（不含 `/`）同时匹配 `/api/users` 和 `/api/users/xxx`，避免为精确匹配和通配匹配各写一条路由。
-
----
-
-## 4. 静态资源 `/static/*`
-
-使用 `@nestjs/serve-static` 模块，以 `/static` 为前缀提供 SPA 构建产物。
+使用 `@nestjs/serve-static` 模块，从 `servers/gateway/public/` 目录托管文件。
 
 `src/static/static.module.ts`：
 
 ```typescript
-@Module({
-  imports: [
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'public'),
-      serveRoot: '/static',
-      serveStaticOptions: {
-        index: ['index.html'],
-        maxAge: 3600000,   // 静态资源浏览器缓存 1 小时
-      },
-    }),
-  ],
+ServeStaticModule.forRoot({
+  rootPath: join(__dirname, '..', '..', 'public'),
+  serveStaticOptions: {
+    index: ['index.html'],
+    maxAge: 3600000,  // 浏览器缓存 1 小时
+  },
 })
-export class StaticModule {}
 ```
+
+> **注意**：没有设置 `serveRoot`，静态文件从根路径 `/` 提供服务。
 
 | 请求 | 返回 |
 |------|------|
-| `/static/` | `public/index.html` |
-| `/static/assets/index-xxx.js` | `public/assets/index-xxx.js` |
-| `/static/assets/index-xxx.css` | `public/assets/index-xxx.css` |
+| `/assets/index-xxx.js` | `public/assets/index-xxx.js` |
+| `/assets/index-xxx.css` | `public/assets/index-xxx.css` |
+| `/favicon.svg` | `public/favicon.svg` |
 
-**设计考量：**
+**public 目录结构：**
 
-- 使用独立前缀 `/static` 而非根路径 `/`，避免与 API 路由和健康检查冲突
-- 不再需要 `exclude: ['/api*']` 排除规则
-- 如需多应用（admin/portal）共用 Gateway，可扩展为 `serveRoot: '/static/admin'` 和 `serveRoot: '/static/portal'`
+```
+public/
+├── index.html          # Portal SPA 入口
+├── assets/             # Portal 构建产物
+├── admin/              # Admin-web 构建产物
+│   ├── index.html
+│   └── assets/
+└── favicon.svg
+```
 
 ---
 
-## 5. ProxyService 配置
+## 3. SPA 回退中间件
+
+Portal 是单页应用（SPA），`/create`、`/transform`、`/result` 等路由需要返回 `index.html`。
+
+在 `main.ts` 中注册 Express 中间件：
+
+```typescript
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const path: string = req.path;
+
+  // 跳过后端路由
+  if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/admin')) {
+    return next();
+  }
+
+  // 跳过有扩展名的静态资源（由 ServeStaticModule 处理）
+  if (extname(path)) return next();
+
+  // SPA 回退
+  res.sendFile(join(__dirname, '..', 'public', 'index.html'));
+});
+```
+
+**中间件执行顺序（Express 层面）：**
+
+1. `ServeStaticModule` 中间件 — 尝试匹配并返回静态文件
+2. SPA 回退中间件 — 非后端/非文件路径返回 `index.html`
+3. NestJS 控制器路由 — API 代理、Swagger 等
+
+---
+
+## 4. API 代理 `/api/*`
+
+使用 `http-proxy-middleware` 转发到后端微服务，路径重写剥离 `/api` 前缀。
+
+### 4.1 路由映射表
+
+| 路由规则 | 匹配请求示例 | 转发目标 | pathRewrite |
+|----------|-------------|----------|-------------|
+| `/api/auth/*` | `POST /api/auth/login` | Auth Service (:3001) | `/api/auth` → `/auth` |
+| `/api/users*` | `GET /api/users` | User Service (:3002) | `/api/users` → `/users` |
+| `/api/ai/*` | `POST /api/ai/chat` | AI Service (:3003) | `/api/ai` → `/ai` |
+| `/api/*` (兜底) | — | — | 返回 404 |
+
+### 4.2 ProxyService 配置
 
 `src/proxy/proxy.service.ts` 通过环境变量读取各后端服务地址：
 
 ```typescript
-@Injectable()
-export class ProxyService {
-  private authServiceUrl: string;
-  private userServiceUrl: string;
-  private aiServiceUrl: string;
-
-  constructor(private configService: ConfigService) {
-    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:3001');
-    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
-    this.aiServiceUrl    = this.configService.get('AI_SERVICE_URL',    'http://localhost:3003');
-  }
-  // ... createAuthProxy / createUserProxy / createAiProxy
-}
-```
-
-每个 `createXxxProxy()` 方法的代理配置模式一致：
-
-```typescript
-createXxxProxy() {
-  return createProxyMiddleware({
-    target: this.xxxServiceUrl,
-    changeOrigin: true,
-    pathRewrite: { '^/api/xxx': '/xxx' },
-    on: { proxyReq: fixRequestBody },
-  });
+constructor(private configService: ConfigService) {
+  this.authServiceUrl = configService.get('AUTH_SERVICE_URL', 'http://localhost:3001');
+  this.userServiceUrl = configService.get('USER_SERVICE_URL', 'http://localhost:3002');
+  this.aiServiceUrl   = configService.get('AI_SERVICE_URL',   'http://localhost:3003');
 }
 ```
 
 ---
 
-## 6. 模块注册
+## 5. 管理后台 `/admin/*`
 
-`src/app.module.ts` 按以下顺序导入模块：
+Admin-web 构建产物存放在 `public/admin/` 目录，由 `ServeStaticModule` 统一托管。
+
+> admin-web 的 Vite 构建配置了 `base: '/admin/'`，确保资源路径正确：`/admin/assets/xxx.js`。
+
+| 请求 | 返回 |
+|------|------|
+| `/admin/` | `public/admin/index.html` |
+| `/admin/assets/xxx.js` | `public/admin/assets/xxx.js` |
+| `/admin/assets/xxx.css` | `public/admin/assets/xxx.css` |
+
+---
+
+## 6. 模块注册顺序
+
+`src/app.module.ts` 按以下顺序导入模块，路由优先级由导入顺序决定：
 
 ```typescript
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env.local', '.env'] }),
-    HealthModule,        // /health — 心跳检测
-    ProxyModule,         // /api/*  — API 代理
-    AuthModule,          // JWT 认证守卫
-    StaticModule,        // /static — 静态资源
+    HealthModule,          // /health — 心跳检测
+    ProxyModule,           // /api/*  — API 代理
+    AuthModule,            // JWT 认证守卫
+    StaticModule,          // /assets/* /admin/* — 静态资源
+    SwaggerDocsModule,     // /swagger — Swagger 文档聚合
+    ApiDocsModule,         // /docs — 统一 API 文档
   ],
 })
 export class AppModule {}
 ```
 
+> **注意**：SPA 回退中间件在 `main.ts` 中注册，位于所有模块之后，确保优先经过 NestJS 路由和 ServeStaticModule。
+
 ---
 
-> 文档版本：v1.0  
-> 更新时间：2026-05-23  
-> 关联文档：[技术架构](./技术架构.md)
+> 文档版本：v2.0
+> 更新时间：2026-06-15
+> 变更说明：从 `/static` 前缀改为根路径 `/` 托管，新增 SPA 回退中间件，新增 admin-web 子路径支持
+> 关联文档：[技术架构](./技术架构.md) · [部署指南](../../DEPLOYMENT.md)
