@@ -52,4 +52,7 @@ common/temp/
 # Test
 artifacts/
 
+# Playwright CLI snapshots
+.playwright-cli/
+
 apps/mini-app/private.key

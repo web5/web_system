@@ -39,4 +39,10 @@ Page({
       url: '/pages/records/records',
     });
   },
+
+  goToBianbian() {
+    wx.navigateTo({
+      url: '/pages/bianbian/index/index',
+    });
+  },
 });

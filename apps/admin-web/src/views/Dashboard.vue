@@ -3,68 +3,83 @@
     <!-- 统计卡片 -->
     <a-row :gutter="16" class="stats-row">
       <a-col :xs="24" :sm="12" :lg="6">
-        <a-card class="stat-card" :bordered="false">
-          <a-statistic title="用户总数" :value="stats.totalUsers" :value-style="{ color: '#f97316' }">
-            <template #prefix><UserOutlined /></template>
-          </a-statistic>
+        <div class="dash-card card-orange">
+          <div class="dash-card-row">
+            <a-statistic title="用户总数" :value="stats.totalUsers" :value-style="{ color: '#FF8C42' }">
+              <template #prefix><UserOutlined /></template>
+            </a-statistic>
+            <div class="dash-card-icon"><UserOutlined /></div>
+          </div>
           <div class="stat-trend">较上周 <span class="up">+12%</span></div>
-        </a-card>
+        </div>
       </a-col>
       <a-col :xs="24" :sm="12" :lg="6">
-        <a-card class="stat-card" :bordered="false">
-          <a-statistic title="今日活跃" :value="stats.activeToday" suffix="人" :value-style="{ color: '#52c41a' }">
-            <template #prefix><RiseOutlined /></template>
-          </a-statistic>
+        <div class="dash-card card-green">
+          <div class="dash-card-row">
+            <a-statistic title="今日活跃" :value="stats.activeToday" suffix="人" :value-style="{ color: '#22C55E' }">
+              <template #prefix><RiseOutlined /></template>
+            </a-statistic>
+            <div class="dash-card-icon green"><RiseOutlined /></div>
+          </div>
           <div class="stat-trend">较昨日 <span class="up">+5</span></div>
-        </a-card>
+        </div>
       </a-col>
       <a-col :xs="24" :sm="12" :lg="6">
-        <a-card class="stat-card" :bordered="false">
-          <a-statistic title="课程总数" :value="stats.courses" suffix="门" :value-style="{ color: '#1890ff' }">
-            <template #prefix><BookOutlined /></template>
-          </a-statistic>
+        <div class="dash-card card-blue">
+          <div class="dash-card-row">
+            <a-statistic title="课程总数" :value="stats.courses" suffix="门" :value-style="{ color: '#3B82F6' }">
+              <template #prefix><BookOutlined /></template>
+            </a-statistic>
+            <div class="dash-card-icon blue"><BookOutlined /></div>
+          </div>
           <div class="stat-trend">已发布 <span>{{ stats.coursesPublished }} 门</span></div>
-        </a-card>
+        </div>
       </a-col>
       <a-col :xs="24" :sm="12" :lg="6">
-        <a-card class="stat-card" :bordered="false">
-          <a-statistic title="系统日志" :value="stats.logs" suffix="条" :value-style="{ color: '#722ed1' }">
-            <template #prefix><FileTextOutlined /></template>
-          </a-statistic>
+        <div class="dash-card card-purple">
+          <div class="dash-card-row">
+            <a-statistic title="系统日志" :value="stats.logs" suffix="条" :value-style="{ color: '#A855F7' }">
+              <template #prefix><FileTextOutlined /></template>
+            </a-statistic>
+            <div class="dash-card-icon purple"><FileTextOutlined /></div>
+          </div>
           <div class="stat-trend">今日新增 <span>{{ stats.logsToday }}</span></div>
-        </a-card>
+        </div>
       </a-col>
     </a-row>
 
     <!-- 图表区 -->
     <a-row :gutter="16" style="margin-top: 16px">
       <a-col :span="24">
-        <a-card title="用户增长趋势" :bordered="false">
+        <div class="section-card">
+          <div class="section-card-header">用户增长趋势</div>
           <v-chart :option="userChartOption" style="height: 360px" autoresize />
-        </a-card>
+        </div>
       </a-col>
     </a-row>
 
     <a-row :gutter="16" style="margin-top: 16px">
       <a-col :span="14">
-        <a-card title="最近操作日志" :bordered="false">
-          <a-table :columns="logColumns" :data-source="recentLogs" :pagination="false" size="small" />
-        </a-card>
+        <div class="section-card">
+          <div class="section-card-header">最近操作日志</div>
+          <a-table :columns="logColumns" :data-source="recentLogs" :pagination="false" size="small" class="dark-table" />
+        </div>
       </a-col>
       <a-col :span="10">
-        <a-card title="快捷操作" :bordered="false">
+        <div class="section-card">
+          <div class="section-card-header">快捷操作</div>
           <a-space direction="vertical" style="width: 100%" :size="12">
-            <a-button type="primary" block @click="router.push('/users')">
+            <a-button type="primary" size="large" block @click="router.push('/users')">
               <TeamOutlined /> 用户管理
             </a-button>
-            <a-button block @click="router.push('/settings')">
+            <a-button size="large" block @click="router.push('/settings')">
               <SettingOutlined /> 系统设置
             </a-button>
-            <a-button block @click="router.push('/settings?tab=logs')">
+            <a-button size="large" block @click="router.push('/settings?tab=logs')">
               <FileTextOutlined /> 查看操作日志
             </a-button>
           </a-space>
-        </a-card>
+        </div>
       </a-col>
     </a-row>
   </div>
@@ -102,7 +117,7 @@ const userChartOption = ref({
   xAxis: { type: 'category', boundaryGap: false, data: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] },
   yAxis: { type: 'value' },
   series: [
-    { name: '新增用户', type: 'line', smooth: true, data: [12, 18, 15, 25, 22, 30, 28], color: '#f97316', areaStyle: { color: 'rgba(249,115,22,0.1)' } },
+    { name: '新增用户', type: 'line', smooth: true, data: [12, 18, 15, 25, 22, 30, 28], color: '#FF8C42', areaStyle: { color: 'rgba(255,140,66,0.1)' } },
     { name: '活跃用户', type: 'line', smooth: true, data: [30, 42, 38, 55, 48, 65, 60], color: '#1890ff', areaStyle: { color: 'rgba(24,144,255,0.1)' } },
   ],
 });
@@ -128,10 +143,50 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard { padding: 0; }
+.dashboard { padding: 8px 0; }
 .stats-row { margin-bottom: 0; }
-.stat-card { border-radius: 12px; }
-.stat-card :deep(.ant-card-body) { padding: 20px 24px; }
-.stat-trend { margin-top: 8px; font-size: 13px; color: #999; }
-.stat-trend .up { color: #52c41a; font-weight: 500; }
+
+/* 统计卡片 */
+.dash-card {
+  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
+  border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
+  padding: 20px 24px; transition: all .25s;
+}
+.dash-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.1); }
+.dash-card-row { display: flex; justify-content: space-between; align-items: flex-start; }
+.dash-card-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.dash-card-icon { color: #FF8C42; background: rgba(255,140,66,.1); }
+.dash-card-icon.green { color: #22C55E; background: rgba(34,197,94,.1); }
+.dash-card-icon.blue { color: #3B82F6; background: rgba(59,130,246,.1); }
+.dash-card-icon.purple { color: #A855F7; background: rgba(168,85,247,.1); }
+
+.stat-trend { margin-top: 10px; font-size: 13px; color: #64748B; }
+.stat-trend .up { color: #22C55E; font-weight: 500; }
+
+/* 区块卡片 */
+.section-card {
+  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
+  border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
+  padding: 24px;
+}
+.section-card-header {
+  font-size: 15px; font-weight: 600; color: #F1F5F9;
+  margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+
+/* 暗色表格 */
+.dark-table :deep(.ant-table) { background: transparent; color: #E2E8F0; }
+.dark-table :deep(.ant-table-thead > tr > th) {
+  background: rgba(255,255,255,.03) !important; color: #94A3B8;
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.dark-table :deep(.ant-table-tbody > tr > td) { border-bottom: 1px solid rgba(255,255,255,.03); color: #CBD5E1; }
+.dark-table :deep(.ant-table-tbody > tr:hover > td) { background: rgba(255,140,66,.04) !important; }
+.dark-table :deep(.ant-table-tbody > tr:last-child > td) { border-bottom: none; }
 </style>

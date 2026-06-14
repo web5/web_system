@@ -1,0 +1,31 @@
+<!-- 变变首页 -->
+<view class="page">
+  <!-- 品牌区 -->
+  <view class="brand">
+    <view class="brand-row">
+      <text class="brand-star">✦</text>
+      <text class="brand-name">变变</text>
+    </view>
+    <text class="brand-slogan">把想象，变出来</text>
+  </view>
+
+  <!-- 开始创作卡片 -->
+  <view class="card card-create" bindtap="goCreate">
+    <text class="card-icon">🎨</text>
+    <text class="card-title">开始创作</text>
+    <text class="card-desc">拼一拼，变一变</text>
+  </view>
+
+  <!-- 我的变变卡片 -->
+  <view class="card card-history" bindtap="goHistory">
+    <text class="card-icon">📁</text>
+    <text class="card-title">我的变变</text>
+    <text class="card-desc">看我变过的角色</text>
+  </view>
+
+  <!-- 上次创作提示 -->
+  <view wx:if="{{hasDraft}}" class="draft-hint" bindtap="resumeDraft">
+    <text class="draft-icon">💡</text>
+    <text class="draft-text">上次创作 {{draftTime}} · 点击继续</text>
+  </view>
+</view>

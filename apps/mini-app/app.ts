@@ -19,5 +19,8 @@ App<IAppOption>({
     token: '',
     refreshToken: '',
     apiBase: 'https://kedouai.com/api',
+    bianbianOrigin: undefined,
+    bianbianDesc: undefined,
+    bianbianResult: undefined,
   },
 });

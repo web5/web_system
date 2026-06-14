@@ -1,0 +1,70 @@
+<!-- 变变历史页 v2 -->
+<view class="page">
+  <!-- 空态 -->
+  <view wx:if="{{list.length === 0}}" class="empty-state">
+    <text class="empty-emoji">📭</text>
+    <text class="empty-title">还没有变过角色～</text>
+    <text class="empty-desc">快去创作第一个角色吧！</text>
+    <button class="btn-go" bindtap="goCreate">🎨 开始创作</button>
+  </view>
+
+  <!-- 正常态 -->
+  <view wx:else>
+    <!-- 管理栏 -->
+    <view class="manage-bar">
+      <view class="manage-left">
+        <text class="manage-back" bindtap="goBack">← 返回</text>
+        <text class="manage-title">我的变变</text>
+      </view>
+      <view class="manage-right">
+        <text wx:if="{{!multiSelectMode}}" class="manage-btn" bindtap="enterMultiSelect">管理</text>
+        <block wx:else>
+          <text class="manage-btn manage-cancel" bindtap="cancelMultiSelect">取消</text>
+          <text wx:if="{{selectedIds.length > 0}}" class="manage-btn manage-delete" bindtap="batchDelete">删除({{selectedIds.length}})</text>
+        </block>
+      </view>
+    </view>
+
+    <!-- 数量统计 -->
+    <view class="count-bar">
+      <text>已保存 {{list.length}}/20 张</text>
+    </view>
+
+    <!-- 3列网格 -->
+    <view class="grid">
+      <view
+        wx:for="{{list}}"
+        wx:key="id"
+        class="grid-item"
+        data-index="{{index}}"
+        bindtap="onItemTap"
+        bindlongpress="onItemLongPress"
+      >
+        <image class="grid-img" src="{{item.aiImage}}" mode="aspectFill" lazy-load />
+        <text class="grid-time">{{item.timeLabel}}</text>
+
+        <!-- 多选勾选 -->
+        <view wx:if="{{multiSelectMode}}" class="check-mark {{item.checked ? 'checked' : ''}}">
+          <text wx:if="{{item.checked}}">✓</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部提示 -->
+    <view class="grid-footer" wx:if="{{list.length >= 15}}">
+      <text>最多保留 20 张，满了会替换最早的～</text>
+    </view>
+  </view>
+
+  <!-- 大图预览 Sheet -->
+  <view wx:if="{{previewVisible}}" class="preview-mask" bindtap="closePreview">
+    <view class="preview-sheet" catchtap="">
+      <image class="preview-img" src="{{previewImage}}" mode="aspectFit" />
+      <view class="preview-actions">
+        <button class="preview-btn" bindtap="savePreview">保存到相册</button>
+        <button class="preview-btn preview-btn-delete" bindtap="deletePreview">删除</button>
+      </view>
+      <button class="preview-close" bindtap="closePreview">关闭</button>
+    </view>
+  </view>
+</view>

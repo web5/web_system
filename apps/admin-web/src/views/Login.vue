@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-brand">
-        <img src="/logo.svg" alt="科豆 AI" class="brand-svg" width="48" height="48" />
+        <img src="/logo.svg" alt="科豆 AI" class="brand-svg" width="48" height="25" />
         <h1 class="login-title">管理后台</h1>
       </div>
       <a-tabs v-model:activeKey="activeTab">
@@ -179,7 +179,7 @@ const handleRegister = async () => {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #000000 0%, #0A0A0D 50%, rgba(249,115,22,0.05) 100%);
+  background: linear-gradient(135deg, #000000 0%, #0A0A0D 50%, rgba(255,140,66,0.05) 100%);
 }
 
 .login-box {
@@ -197,7 +197,7 @@ const handleRegister = async () => {
   margin-bottom: 24px;
 }
 .brand-svg {
-  filter: drop-shadow(0 2px 8px rgba(249,115,22,0.2));
+  filter: drop-shadow(0 2px 8px rgba(255,140,66,0.2));
   margin-bottom: 12px;
 }
 

@@ -17,6 +17,13 @@ export class ProxyController {
   }
 
   @All('users/:path(*)')
+  proxyUsersSubpath(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createUserProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
   @All('users')
   proxyUsers(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createUserProxy();
@@ -38,6 +45,15 @@ export class ProxyController {
   @All('admin')
   proxySystem(@Req() req: Request, @Res() res: Response) {
     const proxy = this.proxyService.createSystemProxy();
+    return proxy(req, res, () => {
+      res.status(500).json({ code: 500, message: 'Proxy error' });
+    });
+  }
+
+  @All('bianbian/:path(*)')
+  @All('bianbian')
+  proxyBianbian(@Req() req: Request, @Res() res: Response) {
+    const proxy = this.proxyService.createBianbianProxy();
     return proxy(req, res, () => {
       res.status(500).json({ code: 500, message: 'Proxy error' });
     });

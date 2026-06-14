@@ -115,6 +115,7 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'settings:view':  { code: 'settings:view',  name: '查看设置',    group: 'settings' },
   'settings:edit':  { code: 'settings:edit',  name: '修改设置',    group: 'settings' },
   'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs' },
+  'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {

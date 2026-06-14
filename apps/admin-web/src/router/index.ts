@@ -29,6 +29,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统设置', permission: 'settings:view' },
       },
       {
+        path: 'bianbian',
+        name: 'BianbianManage',
+        component: () => import('@/views/BianbianManage.vue'),
+        meta: { title: '变变管理', permission: 'bianbian:view' },
+      },
+      {
         path: 'users',
         name: 'Users',
         meta: { title: '用户管理', permission: 'users:view' },

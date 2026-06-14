@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import { AiModule } from './ai/ai.module';
 import { ConversationModule } from './conversation/conversation.module';
+import { BianbianModule } from './bianbian/bianbian.module';
 
 @Module({
   imports: [
@@ -35,7 +36,7 @@ import { ConversationModule } from './conversation/conversation.module';
           type: 'postgres',
           url: configService.get('DATABASE_URL'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
-          synchronize: false,
+          synchronize: configService.get('NODE_ENV') !== 'production',
           logging: configService.get('NODE_ENV') === 'development',
         };
       },
@@ -48,6 +49,7 @@ import { ConversationModule } from './conversation/conversation.module';
     // 业务模块
     AiModule,
     ConversationModule,
+    BianbianModule,
   ],
 })
 export class AppModule {}

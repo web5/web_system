@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Hy3Client, ChatMessage } from '../common/http/hy3.client';
+import { ImageGenClient } from '../common/http/image-gen.client';
 import { ConversationService } from '../conversation/conversation.service';
 
 export interface ChatResponse {
@@ -14,12 +15,28 @@ export class AiService {
 
   constructor(
     private readonly hy3Client: Hy3Client,
+    private readonly imageGenClient: ImageGenClient,
     private readonly conversationService: ConversationService,
   ) {}
 
   /**
    * 处理用户对话
    */
+  // 少儿教育系统提示词
+  private readonly SYSTEM_PROMPT: ChatMessage = {
+    role: 'system',
+    content: `你是科豆 AI 学习助手，专为 6-15 岁少儿提供教育辅导。
+你的特点：
+- 用简单易懂、生动有趣的语言回答问题
+- 回答要耐心、鼓励性，多用比喻和例子
+- 对于数学/科学问题，分步骤讲解
+- 回答控制在 500 字以内，简洁明了
+- 避免涉及暴力、政治、成人等不适合少儿的内容
+- 如果问题涉及不适当内容，温和地引导到学习话题
+- 适当使用 emoji 让对话更有趣
+你的目标：激发孩子的学习兴趣，帮助他们爱上探索知识。`,
+  };
+
   async chat(chatDto: {
     message: string;
     conversationId?: string;
@@ -32,12 +49,23 @@ export class AiService {
     let messageList: ChatMessage[] = [];
     
     if (messages && messages.length > 0) {
-      // 使用客户端提供的历史消息
+      // 使用客户端提供的历史消息（但不重复添加 system prompt）
       messageList = messages;
+      // 如果历史消息中没有 system prompt，在前面添加
+      if (!messageList.some((m) => m.role === 'system')) {
+        messageList = [this.SYSTEM_PROMPT, ...messageList];
+      }
     } else if (conversationId) {
       // 从数据库加载历史对话
       const conversation = await this.conversationService.getConversation(conversationId);
       messageList = conversation.messages;
+      // 如果历史消息中没有 system prompt，在前面添加
+      if (!messageList.some((m) => m.role === 'system')) {
+        messageList = [this.SYSTEM_PROMPT, ...messageList];
+      }
+    } else {
+      // 新对话：添加 system prompt
+      messageList = [this.SYSTEM_PROMPT];
     }
 
     // 添加当前用户消息
@@ -101,5 +129,19 @@ export class AiService {
    */
   async clearConversations() {
     return this.conversationService.clearConversations();
+  }
+
+  /**
+   * 提交图片生成任务
+   */
+  async submitImageGeneration(prompt: string) {
+    return this.imageGenClient.submit(prompt);
+  }
+
+  /**
+   * 查询图片生成结果
+   */
+  async queryImageGeneration(id: string) {
+    return this.imageGenClient.query(id);
   }
 }

@@ -3,12 +3,17 @@
     "pages/index/index",
     "pages/draw/draw",
     "pages/records/records",
-    "pages/scan/scan"
+    "pages/scan/scan",
+    "pages/bianbian/index/index",
+    "pages/bianbian/create/create",
+    "pages/bianbian/transform/transform",
+    "pages/bianbian/result/result",
+    "pages/bianbian/history/history"
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#f97316",
-    "navigationBarTitleText": "科豆 AI",
+    "navigationBarBackgroundColor": "#FF8C42",
+    "navigationBarTitleText": "变变",
     "navigationBarTextStyle": "white"
   },
   "resizable": true,

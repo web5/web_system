@@ -129,7 +129,7 @@ export class ApiUsersController {
   }
 }
 
-@ApiTags('AI 对话')
+@ApiTags('AI 能力')
 @Controller('api/ai')
 export class ApiAiController {
   constructor(private proxyService: ProxyService) {}
@@ -146,6 +146,26 @@ export class ApiAiController {
   @ApiOperation({ summary: '获取对话列表' })
   @ApiBearerAuth()
   getConversations(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.createAiProxy()(req, res, () => {
+      res.status(500).json({ message: 'AI service unavailable' });
+    });
+  }
+
+  @Post('image/submit')
+  @ApiOperation({ summary: '提交图片生成任务' })
+  @ApiBody({ description: 'prompt - 图片描述文本' })
+  @ApiBearerAuth()
+  submitImage(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.createAiProxy()(req, res, () => {
+      res.status(500).json({ message: 'AI service unavailable' });
+    });
+  }
+
+  @Post('image/query')
+  @ApiOperation({ summary: '查询图片生成结果' })
+  @ApiBody({ description: 'id - 任务 ID' })
+  @ApiBearerAuth()
+  queryImage(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.createAiProxy()(req, res, () => {
       res.status(500).json({ message: 'AI service unavailable' });
     });

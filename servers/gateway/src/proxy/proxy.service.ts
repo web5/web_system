@@ -68,4 +68,17 @@ export class ProxyService {
     });
   }
 
+  createBianbianProxy() {
+    return createProxyMiddleware({
+      target: this.aiServiceUrl,
+      changeOrigin: true,
+      pathRewrite: {
+        '^/api/bianbian': '/bianbian',
+      },
+      on: {
+        proxyReq: fixRequestBody,
+      },
+    });
+  }
+
 }
