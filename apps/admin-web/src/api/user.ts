@@ -53,3 +53,13 @@ export function deleteUser(id: string): Promise<void> {
 export function toggleUserStatus(id: string, enabled: boolean): Promise<UserInfo> {
   return request.patch(`/user/${id}/status`, { enabled });
 }
+
+/** 用户API对象（兼容组件中的默认导入） */
+export const userApi = {
+  getDetail: getUserDetail,
+  getList: getUserList,
+  create: createUser,
+  update: updateUser,
+  delete: deleteUser,
+  toggleStatus: toggleUserStatus,
+};
