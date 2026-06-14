@@ -111,10 +111,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import request from '@/api/request';
 
 const router = useRouter();
 
-// ====== 素材库 ======
+// ====== 素材库（从后端获取） ======
 interface MaterialItem {
   id: string;
   category: string;
@@ -123,34 +124,46 @@ interface MaterialItem {
   fontSize?: number;
 }
 
-const materials: MaterialItem[] = [
-  // 贴纸
-  { id: 's1', category: 'sticker', name: '笑脸', icon: '😊', fontSize: 48 },
-  { id: 's2', category: 'sticker', name: '小猫', icon: '🐱', fontSize: 48 },
-  { id: 's3', category: 'sticker', name: '小狗', icon: '🐶', fontSize: 48 },
-  { id: 's4', category: 'sticker', name: '兔子', icon: '🐰', fontSize: 48 },
-  { id: 's5', category: 'sticker', name: '小熊', icon: '🐻', fontSize: 48 },
-  { id: 's6', category: 'sticker', name: '熊猫', icon: '🐼', fontSize: 48 },
-  { id: 's7', category: 'sticker', name: '小鸡', icon: '🐤', fontSize: 44 },
-  { id: 's8', category: 'sticker', name: '小鱼', icon: '🐟', fontSize: 44 },
-  { id: 's9', category: 'sticker', name: '花花', icon: '🌸', fontSize: 44 },
-  { id: 's10', category: 'sticker', name: '彩虹', icon: '🌈', fontSize: 48 },
-  { id: 's11', category: 'sticker', name: '星星', icon: '⭐', fontSize: 44 },
-  { id: 's12', category: 'sticker', name: '月亮', icon: '🌙', fontSize: 44 },
-  { id: 's13', category: 'sticker', name: '太阳', icon: '☀️', fontSize: 48 },
-  { id: 's14', category: 'sticker', name: '云朵', icon: '☁️', fontSize: 44 },
-  { id: 's15', category: 'sticker', name: '大树', icon: '🌳', fontSize: 52 },
-  // 形状
-  { id: 'sh1', category: 'shape', name: '圆形', icon: '🟠', fontSize: 44 },
-  { id: 'sh2', category: 'shape', name: '方形', icon: '🟧', fontSize: 44 },
-  { id: 'sh3', category: 'shape', name: '三角', icon: '🔺', fontSize: 44 },
-  { id: 'sh4', category: 'shape', name: '爱心', icon: '❤️', fontSize: 44 },
-  { id: 'sh5', category: 'shape', name: '钻石', icon: '💎', fontSize: 44 },
-  // 背景
-  { id: 'bg1', category: 'background', name: '草地', icon: '🟢', fontSize: 200 },
-  { id: 'bg2', category: 'background', name: '天空', icon: '🔵', fontSize: 200 },
-  { id: 'bg3', category: 'background', name: '粉色', icon: '🩷', fontSize: 200 },
-];
+const materials = ref<MaterialItem[]>([]);
+
+async function loadMaterials() {
+  try {
+    const res = await request.get('/bianbian/materials');
+    if (res.code === 0 && Array.isArray(res.data)) {
+      materials.value = res.data.map((m: any) => ({
+        ...m,
+        fontSize: m.category === 'background' ? 200 : 48,
+      }));
+      return;
+    }
+  } catch { /* fallback below */ }
+  // 接口不可用时使用内置后备素材
+  materials.value = getFallbackMaterials();
+}
+
+function getFallbackMaterials(): MaterialItem[] {
+  return [
+    { id: 's1', category: 'sticker', name: '笑脸', icon: '😊', fontSize: 48 },
+    { id: 's2', category: 'sticker', name: '小猫', icon: '🐱', fontSize: 48 },
+    { id: 's3', category: 'sticker', name: '小狗', icon: '🐶', fontSize: 48 },
+    { id: 's4', category: 'sticker', name: '兔子', icon: '🐰', fontSize: 48 },
+    { id: 's5', category: 'sticker', name: '小熊', icon: '🐻', fontSize: 48 },
+    { id: 's6', category: 'sticker', name: '熊猫', icon: '🐼', fontSize: 48 },
+    { id: 's7', category: 'sticker', name: '星星', icon: '⭐', fontSize: 44 },
+    { id: 's8', category: 'sticker', name: '彩虹', icon: '🌈', fontSize: 48 },
+    { id: 's9', category: 'sticker', name: '月亮', icon: '🌙', fontSize: 44 },
+    { id: 's10', category: 'sticker', name: '太阳', icon: '☀️', fontSize: 48 },
+    { id: 's11', category: 'sticker', name: '云朵', icon: '☁️', fontSize: 44 },
+    { id: 's12', category: 'sticker', name: '花花', icon: '🌸', fontSize: 44 },
+    { id: 'sh1', category: 'shape', name: '爱心', icon: '❤️', fontSize: 44 },
+    { id: 'sh2', category: 'shape', name: '圆形', icon: '🟠', fontSize: 44 },
+    { id: 'sh3', category: 'shape', name: '钻石', icon: '💎', fontSize: 44 },
+    { id: 'sh4', category: 'shape', name: '三角', icon: '🔺', fontSize: 44 },
+    { id: 'bg1', category: 'background', name: '草地', icon: '🟢', fontSize: 200 },
+    { id: 'bg2', category: 'background', name: '天空', icon: '🔵', fontSize: 200 },
+    { id: 'bg3', category: 'background', name: '粉色', icon: '🩷', fontSize: 200 },
+  ];
+}
 
 const tabs = [
   { key: 'all', label: '全部' },
@@ -160,9 +173,10 @@ const tabs = [
 ];
 
 const activeTab = ref('all');
-const filteredMaterials = computed(() =>
-  activeTab.value === 'all' ? materials : materials.filter((m) => m.category === activeTab.value)
-);
+const filteredMaterials = computed(() => {
+  const list = materials.value;
+  return activeTab.value === 'all' ? list : list.filter((m) => m.category === activeTab.value);
+});
 
 // ====== 画布元素 ======
 interface CanvasElement {
@@ -204,7 +218,9 @@ function addMaterial(item: MaterialItem) {
 }
 
 function addRandomMaterial() {
-  const random = materials[Math.floor(Math.random() * materials.length)];
+  const list = materials.value;
+  if (list.length === 0) return;
+  const random = list[Math.floor(Math.random() * list.length)];
   addMaterial(random);
 }
 
@@ -265,13 +281,18 @@ function handleCanvasMouseMove(e: MouseEvent) {
   if (dragging) {
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    dragging.x = elemStartX + dx;
-    dragging.y = elemStartY + dy;
+    const rect = canvasAreaRef.value?.getBoundingClientRect();
+    const maxW = rect ? rect.width - 30 : 400;
+    const maxH = rect ? rect.height - 30 : 400;
+    dragging.x = Math.max(0, Math.min(maxW, elemStartX + dx));
+    dragging.y = Math.max(0, Math.min(maxH, elemStartY + dy));
     return;
   }
   if (resizing) {
+    const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    const delta = dy * 0.005;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const delta = (dy >= 0 ? dist : -dist) * 0.003;
     resizing.scale = Math.max(0.3, Math.min(3, elemStartScale + delta));
   }
 }
@@ -296,13 +317,19 @@ function handleCanvasTouchMove(e: TouchEvent) {
   if (dragging && e.touches.length === 1) {
     const dx = e.touches[0].clientX - dragStartX;
     const dy = e.touches[0].clientY - dragStartY;
-    dragging.x = elemStartX + dx;
-    dragging.y = elemStartY + dy;
+    const rect = canvasAreaRef.value?.getBoundingClientRect();
+    const maxW = rect ? rect.width - 30 : 400;
+    const maxH = rect ? rect.height - 30 : 400;
+    dragging.x = Math.max(0, Math.min(maxW, elemStartX + dx));
+    dragging.y = Math.max(0, Math.min(maxH, elemStartY + dy));
     return;
   }
   if (resizing && e.touches.length === 1) {
+    const dx = e.touches[0].clientX - dragStartX;
     const dy = e.touches[0].clientY - dragStartY;
-    resizing.scale = Math.max(0.3, Math.min(3, elemStartScale + dy * 0.005));
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const delta = (dy >= 0 ? dist : -dist) * 0.003;
+    resizing.scale = Math.max(0.3, Math.min(3, elemStartScale + delta));
   }
 }
 
@@ -353,10 +380,11 @@ function handleTransform() {
     description: description.value,
   };
   localStorage.setItem('bb_transform_data', JSON.stringify(data));
-  router.push('/transform');
+  router.push('/bianbian/transform');
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadMaterials();
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('resume') === '1') {
     loadDraft();

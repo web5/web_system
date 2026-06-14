@@ -97,6 +97,9 @@ services:
       - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
       - HY3_API_KEY=${HY3_API_KEY}
       - HY3_BASE_URL=https://wcode.net/api/gpt/v1
+      - IMAGE_GEN_API_URL=${IMAGE_GEN_API_URL:-https://tokenhub.tencentmaas.com}
+      - IMAGE_GEN_API_KEY=${IMAGE_GEN_API_KEY}
+      - IMAGE_GEN_MODEL=${IMAGE_GEN_MODEL:-stable-diffusion-xl}
     depends_on:
       - postgres
       - redis

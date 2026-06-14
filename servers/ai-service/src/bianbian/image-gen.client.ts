@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
@@ -61,16 +61,13 @@ function buildPrompt(description?: string): string {
 }
 
 /**
- * 可插拔的 AI 图生图客户端
- * 默认使用开发模式 mock，生产环境接入真实 API（通义万相 / 即梦 / DALL-E 等）
+ * AI 图生图客户端
+ * 支持 OpenAI 兼容格式（DALL-E / Stability AI / 通义万相等）
  */
 @Injectable()
-export class ImageGenClient {
+export class ImageGenClient implements OnModuleInit {
   private readonly logger = new Logger(ImageGenClient.name);
-
-  /** 是否开发模式（mock） */
-  private readonly isMockMode: boolean;
-  /** AI 图生图 API URL（用于生产环境） */
+  /** AI 图生图 API URL */
   private readonly apiUrl: string;
   /** API Key */
   private readonly apiKey: string;
@@ -78,10 +75,19 @@ export class ImageGenClient {
   private readonly model: string;
 
   constructor(private readonly httpService: HttpService) {
-    this.isMockMode = process.env.IMAGE_GEN_MODE !== 'production';
     this.apiUrl = process.env.IMAGE_GEN_API_URL || '';
     this.apiKey = process.env.IMAGE_GEN_API_KEY || '';
     this.model = process.env.IMAGE_GEN_MODEL || 'stable-diffusion-xl';
+  }
+
+  onModuleInit() {
+    if (!this.apiKey) {
+      this.logger.warn('IMAGE_GEN_API_KEY 未配置，AI 图生图功能将在运行时失败');
+    }
+    if (!this.apiUrl) {
+      this.logger.warn('IMAGE_GEN_API_URL 未配置，AI 图生图功能将在运行时失败');
+    }
+    this.logger.log(`ImageGenClient initialized: model=${this.model}, url=${this.apiUrl || '(not set)'}`);
   }
 
   /**
@@ -90,48 +96,6 @@ export class ImageGenClient {
   async generate(options: ImageGenOptions): Promise<ImageGenResult> {
     const startTime = Date.now();
 
-    if (this.isMockMode) {
-      return this.mockGenerate(options, startTime);
-    }
-
-    return this.remoteGenerate(options, startTime);
-  }
-
-  /**
-   * 开发模式：返回带处理的输入图（模拟 AI 处理延迟）
-   */
-  private async mockGenerate(
-    options: ImageGenOptions,
-    startTime: number,
-  ): Promise<ImageGenResult> {
-    this.logger.log('[Mock] Starting image generation...');
-
-    // 模拟 AI 处理时间 1.5~4 秒（随机波动，更真实）
-    const delay = 1500 + Math.random() * 2500;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-
-    const processingTimeMs = Date.now() - startTime;
-
-    this.logger.log(
-      `[Mock] Generation complete in ${processingTimeMs}ms, prompt: ${buildPrompt(options.description).substring(0, 80)}...`,
-    );
-
-    // 开发模式：直接返回输入图（实际生产环境会替换为真实 AI 结果）
-    return {
-      image: options.image,
-      requestId: `mock_${Date.now()}`,
-      processingTimeMs,
-    };
-  }
-
-  /**
-   * 生产模式：调用远程 AI 图生图 API
-   * 支持 OpenAI 兼容格式（DALL-E / Stability AI / 通义万相等）
-   */
-  private async remoteGenerate(
-    options: ImageGenOptions,
-    startTime: number,
-  ): Promise<ImageGenResult> {
     if (!this.apiKey) {
       throw new Error('IMAGE_GEN_API_KEY is not configured');
     }
@@ -139,11 +103,10 @@ export class ImageGenClient {
     const prompt = buildPrompt(options.description);
 
     try {
-      // 尝试 OpenAI DALL-E 兼容格式
       const payload = {
         model: this.model,
         prompt,
-        image: options.image, // base64 input image
+        image: options.image,
         n: 1,
         size: options.outputSize,
         response_format: 'b64_json',
@@ -157,7 +120,7 @@ export class ImageGenClient {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 60000, // 图生图可能需要更长时间
+          timeout: 60000,
         }),
       );
 
@@ -173,7 +136,6 @@ export class ImageGenClient {
       const processingTimeMs = Date.now() - startTime;
       this.logger.log(`Remote image gen complete in ${processingTimeMs}ms, requestId: ${requestId}`);
 
-      // 如果返回的是 URL，需要进一步处理（或直接返回 URL）
       const image =
         typeof resultImage === 'string' && resultImage.startsWith('data:')
           ? resultImage

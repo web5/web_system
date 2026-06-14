@@ -5,7 +5,7 @@ App<IAppOption>({
     this.autoLogin();
   },
 
-  /** 启动时自动登录 — 暂时写死为已登录 */
+  /** 启动时自动登录 */
   async autoLogin() {
     try {
       await login();

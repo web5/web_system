@@ -14,7 +14,7 @@
       </div>
       <h2 class="empty-title">还没有变过角色～</h2>
       <p class="empty-desc">快去创作第一个角色吧！</p>
-      <button class="empty-btn" @click="router.push('/create')">🎨 开始创作</button>
+      <button class="empty-btn" @click="router.push('/bianbian')">🎨 开始创作</button>
     </div>
 
     <!-- 网格画廊 -->
@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -80,7 +80,23 @@ let longPressTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   loadHistory();
+  document.addEventListener('touchend', handleTouchEnd);
+  document.addEventListener('touchmove', handleTouchMove);
 });
+
+onBeforeUnmount(() => {
+  document.removeEventListener('touchend', handleTouchEnd);
+  document.removeEventListener('touchmove', handleTouchMove);
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+});
+
+function handleTouchEnd() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
+
+function handleTouchMove() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
 
 function loadHistory() {
   try {
@@ -130,13 +146,7 @@ function startLongPress(idx: number) {
   }, 500);
 }
 
-// 清理长按
-document.addEventListener('touchend', () => {
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-});
-document.addEventListener('touchmove', () => {
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-});
+
 
 function enterDeleteMode(idx: number) {
   deleteMode.value = true;

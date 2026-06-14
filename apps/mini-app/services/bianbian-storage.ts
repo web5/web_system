@@ -12,7 +12,9 @@ function now(): number {
 
 function todayKey(): string {
   const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 // ========== 草稿 ==========
@@ -75,6 +77,7 @@ export function saveHistoryItem(item: TransformResult): void {
     wx.setStorageSync(STORAGE_KEYS.history, history);
   } catch {
     console.warn('[变变] 保存历史记录失败');
+    wx.showToast({ title: '存储空间不足，请清理后重试', icon: 'none' });
   }
 }
 

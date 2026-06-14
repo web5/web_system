@@ -60,9 +60,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import { submitImage, queryImage } from '@/api/ai';
+import { transformImage } from '@/api/bianbian';
+import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
+const userStore = useUserStore();
 
 const description = ref('');
 const isFailed = ref(false);
@@ -72,8 +74,8 @@ const elapsedTime = ref(0);
 const progressPercent = ref(0);
 const progressText = ref('准备中...');
 let timer: ReturnType<typeof setInterval> | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let taskId = '';
+let mounted = false;
+let imageData = '';
 
 const hints = [
   '魔法正在施展中，请耐心等待～',
@@ -95,16 +97,21 @@ const statusHint = ref(hints[0]);
 const currentFunFact = ref(funFacts[0]);
 
 onMounted(() => {
+  mounted = true;
   startTransform();
 });
 
 onBeforeUnmount(() => {
+  mounted = false;
   cleanup();
 });
 
 function cleanup() {
   if (timer) clearInterval(timer);
-  if (pollTimer) clearInterval(pollTimer);
+}
+
+function isActive(): boolean {
+  return mounted && !isDone.value;
 }
 
 async function startTransform() {
@@ -113,86 +120,87 @@ async function startTransform() {
     const raw = localStorage.getItem('bb_transform_data');
     if (raw) {
       const data = JSON.parse(raw);
+      imageData = data.image || '';
       description.value = data.description || '';
     }
   } catch { /* ignore */ }
 
-  // 开始计时
+  if (!imageData) {
+    isFailed.value = true;
+    failMessage.value = '没有找到待变身的作品，回去画一张吧～';
+    return;
+  }
+
+  // 开始进度动画
   let hintIdx = 0;
   let factIdx = 0;
   timer = setInterval(() => {
     elapsedTime.value++;
-    // 模拟进度
     if (elapsedTime.value <= 10) {
       progressPercent.value = Math.min(90, elapsedTime.value * 4 + Math.random() * 5);
     } else {
       progressPercent.value = Math.min(95, 90 + (elapsedTime.value - 10) * 0.3);
     }
-    // 更新提示
     if (elapsedTime.value % 5 === 0) {
       hintIdx = (hintIdx + 1) % hints.length;
       statusHint.value = hints[hintIdx];
     }
-    // 更新进度文案
     if (elapsedTime.value < 3) progressText.value = '正在分析你的作品...';
     else if (elapsedTime.value < 8) progressText.value = 'AI 正在创作角色...';
     else if (elapsedTime.value < 15) progressText.value = '还在努力中，请耐心等待～';
     else progressText.value = `已经${elapsedTime.value}秒了，还在加油中...`;
-    // 趣味知识轮播
     if (elapsedTime.value >= 15 && elapsedTime.value % 3 === 0) {
       factIdx = (factIdx + 1) % funFacts.length;
       currentFunFact.value = funFacts[factIdx];
     }
-    // 30秒超时
-    if (elapsedTime.value >= 30) {
+    // 60秒超时
+    if (elapsedTime.value >= 60) {
       cleanup();
       isFailed.value = true;
       failMessage.value = '变身超时了～可能是网络不太稳定，再试一次？';
     }
   }, 1000);
 
-  // 实际调用 AI API
+  // 调用变变专用 API
   try {
-    const prompt = description.value || '这是一幅儿童拼贴画作品，请把它变成可爱的3D角色';
-    const res = await submitImage(prompt);
-    taskId = res.data.id;
+    const userId = userStore.userInfo?.id?.toString() || '';
+    const res = await transformImage({
+      image: imageData,
+      description: description.value,
+      userId,
+    });
 
-    // 开始轮询
-    startPolling();
-  } catch (error: any) {
-    cleanup();
-    isFailed.value = true;
-    const msg = error?.response?.data?.message || '';
-    if (msg.includes('不清晰')) failMessage.value = '这张画不太清楚～可以再画一张试试吗？';
-    else if (msg.includes('不适宜')) failMessage.value = '换一张画试试吧，变变最喜欢可爱的画了！';
-    else failMessage.value = '出了点小问题，再试一次？';
-  }
-}
+    if (!isActive()) return;
 
-function startPolling() {
-  pollTimer = setInterval(async () => {
-    try {
-      const res = await queryImage(taskId);
-      if (res.data?.done) {
-        cleanup();
-        if (res.data.status === 'succeeded' && res.data.results?.[0]?.url) {
-          // 保存结果
-          localStorage.setItem('bb_result_data', JSON.stringify({
-            originalDescription: description.value,
-            aiImageUrl: res.data.results[0].url,
-            timestamp: new Date().toISOString(),
-          }));
-          isDone.value = true;
-          setTimeout(() => router.replace('/result'), 1200);
-        } else {
-          isFailed.value = true;
-          failMessage.value = '变身出了点小问题，再试一次？';
-        }
-      }
-    } catch {
-      // 继续轮询
+    if (res.code === 0 && res.data?.aiImage) {
+      // 保存结果
+      localStorage.setItem('bb_result_data', JSON.stringify({
+        originalDescription: description.value,
+        aiImageUrl: res.data.aiImage,
+        processingTimeMs: res.data.processingTimeMs,
+        remainingToday: res.data.remainingToday,
+        timestamp: new Date().toISOString(),
+      }));
+      isDone.value = true;
+      setTimeout(() => router.replace('/bianbian/result'), 1200);
+    } else {
+      isFailed.value = true;
+      failMessage.value = res.message || '变身出了点小问题，再试一次？';
     }
-  }, 2000);
+  } catch (error: any) {
+    if (!isActive()) return;
+    isFailed.value = true;
+    const msg = error?.response?.data?.message || error.message || '';
+    if (msg.includes('次数已用完')) {
+      failMessage.value = '今日变身次数已用完，明天再来吧～';
+    } else if (msg.includes('不清晰')) {
+      failMessage.value = '这张画不太清楚～可以再画一张试试吗？';
+    } else if (msg.includes('不适宜')) {
+      failMessage.value = '换一张画试试吧，变变最喜欢可爱的画了！';
+    } else {
+      failMessage.value = msg || '出了点小问题，再试一次？';
+    }
+  }
 }
 
 function handleRetry() {
@@ -205,7 +213,7 @@ function handleRetry() {
 
 function handleCancel() {
   cleanup();
-  router.push('/create');
+  router.push('/bianbian');
 }
 </script>
 

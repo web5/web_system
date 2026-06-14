@@ -7,22 +7,22 @@ const routes = [
     component: () => import('../views/Home.vue'),
   },
   {
-    path: '/create',
+    path: '/bianbian',
     name: 'Create',
     component: () => import('../views/Create.vue'),
   },
   {
-    path: '/transform',
+    path: '/bianbian/transform',
     name: 'Transform',
     component: () => import('../views/Transform.vue'),
   },
   {
-    path: '/result',
+    path: '/bianbian/result',
     name: 'Result',
     component: () => import('../views/Result.vue'),
   },
   {
-    path: '/history',
+    path: '/bianbian/history',
     name: 'History',
     component: () => import('../views/History.vue'),
   },

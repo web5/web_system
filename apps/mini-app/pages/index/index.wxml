@@ -5,35 +5,35 @@
     <text class="logo-text">科豆 AI</text>
   </view>
 
-  <!-- Hero -->
-  <view class="hero">
-    <text class="title">创意画板</text>
-    <text class="subtitle">释放你的想象力</text>
-    <text wx:if="{{!isLandscape}}" class="status">AI 赋能 · 随心创作</text>
-  </view>
-
-  <!-- Features -->
-  <view class="features">
-    <button class="feature-btn draw-btn" bindtap="goToDraw">
-      <text class="feature-icon">🎨</text>
-      <text class="feature-text">开始画画</text>
-    </button>
-    <button class="feature-btn records-btn" bindtap="goToRecords">
-      <text class="feature-icon">🖼️</text>
-      <text class="feature-text">我的画作</text>
+  <!-- ===== 变变 — 主打产品 ===== -->
+  <view class="product-section">
+    <view class="section-header">
+      <text class="product-badge primary">✨ 主打</text>
+      <text class="product-title primary">变变</text>
+    </view>
+    <text class="product-desc">把孩子的拼贴画 / 涂鸦，<br/>AI 魔法变成可爱的 3D 角色</text>
+    <button class="primary-btn" bindtap="goToBianbian">
+      <text class="primary-btn-icon">✨</text>
+      <text class="primary-btn-text">开始变变</text>
     </button>
   </view>
 
-  <!-- 变变入口 -->
-  <view class="bianbian-entry" bindtap="goToBianbian">
-    <view class="bianbian-glow"></view>
-    <view class="bianbian-content">
-      <text class="bianbian-emoji">✨</text>
-      <view class="bianbian-info">
-        <text class="bianbian-name">变变</text>
-        <text class="bianbian-desc">把想象，变出来</text>
-      </view>
-      <text class="bianbian-arrow">→</text>
+  <!-- ===== 画板 — 次要产品 ===== -->
+  <view class="product-section secondary">
+    <view class="section-header">
+      <text class="product-badge">🎨 画板</text>
+      <text class="product-title secondary">创意画板</text>
+    </view>
+    <text class="product-desc secondary">自由绘画，AI 文生图，释放想象力</text>
+    <view class="secondary-actions">
+      <button class="secondary-btn draw-btn" bindtap="goToDraw">
+        <text class="secondary-btn-icon">✏️</text>
+        <text>开始画画</text>
+      </button>
+      <button class="secondary-btn records-btn" bindtap="goToRecords">
+        <text class="secondary-btn-icon">🖼️</text>
+        <text>我的画作</text>
+      </button>
     </view>
   </view>
 </view>

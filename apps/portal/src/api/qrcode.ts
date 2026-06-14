@@ -21,7 +21,4 @@ export function checkQrcodeTicket(ticket: string): Promise<QrcodeCheckResponse> 
   return request.get('/auth/qrcode/check', { params: { ticket } });
 }
 
-/** 本地开发：模拟扫码确认 */
-export function mockConfirmScan(ticket: string): Promise<{ success: boolean }> {
-  return request.post('/auth/qrcode/confirm', { ticket, code: 'mock_dev_scan' });
-}
+
