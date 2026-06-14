@@ -24,6 +24,7 @@ scp -r ./apps/admin-web/dist ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/admin-w
 scp -r ./servers ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/servers
 scp -r ./packages ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/packages
 scp docker-compose.yml ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/
+scp nginx-server.conf ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_DIR}/
 
 # 3. 在服务器上执行部署
 echo "🔧 在服务器上执行部署..."
@@ -41,6 +42,10 @@ ssh ${SERVER_USER}@${SERVER_HOST} << 'EOF'
   pm2 start servers/gateway/dist/main.js --name gateway
   pm2 start servers/auth-service/dist/main.js --name auth-service
   pm2 start servers/user-service/dist/main.js --name user-service
+  
+  # 应用 Nginx gzip 配置
+  sudo cp /home/ubuntu/web_system/nginx-server.conf /etc/nginx/sites-enabled/kedouai-web.conf
+  sudo nginx -t && sudo systemctl reload nginx
 EOF
 
 echo "✅ 部署完成!"
