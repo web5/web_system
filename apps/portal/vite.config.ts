@@ -18,4 +18,24 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    sourcemap: false,
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue')) {
+            return 'vendor-vue';
+          }
+          if (id.includes('node_modules/ant-design-vue') || id.includes('node_modules/@ant-design/icons-vue')) {
+            return 'vendor-antd';
+          }
+          if (id.includes('node_modules')) {
+            return 'vendor-other';
+          }
+        },
+      },
+    },
+  },
 });
