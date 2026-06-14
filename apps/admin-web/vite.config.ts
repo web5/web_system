@@ -4,6 +4,7 @@ import vueJsx from '@vitejs/plugin-vue-jsx';
 import { resolve } from 'path';
 
 export default defineConfig({
+  base: '/admin/',
   plugins: [vue(), vueJsx()],
   resolve: {
     alias: {

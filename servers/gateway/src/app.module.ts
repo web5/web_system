@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ProxyModule } from './proxy/proxy.module';
 import { AuthModule } from './auth/auth.module';
 import { StaticModule } from './static/static.module';
+import { SpaModule } from './spa/spa.module';
 import { HealthModule } from './health/health.module';
 import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
 import { ApiDocsModule } from './api-docs/api-docs.module';
@@ -22,6 +23,8 @@ import { ApiDocsModule } from './api-docs/api-docs.module';
     AuthModule,
     // 静态资源模块
     StaticModule,
+    // SPA 回退 - 必须在 StaticModule 之后
+    SpaModule,
     // Swagger 文档聚合
     SwaggerDocsModule,
     // 统一 API 文档（展示所有业务接口 + 代理转发）
