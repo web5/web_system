@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { join, extname } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,22 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  });
+
+  // SPA 回退中间件 - 只处理非 API/文档/管理后台的前端路由
+  app.use((req: any, res: any, next: () => void) => {
+    if (req.method !== 'GET') return next();
+    const path: string = req.path;
+    // 后端路由跳过
+    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/admin')) {
+      return next();
+    }
+    // 有扩展名的静态资源跳过（由 ServeStaticModule 处理）
+    if (extname(path)) {
+      return next();
+    }
+    // SPA 回退 - 未匹配到文件的前端路由返回 index.html
+    res.sendFile(join(__dirname, '..', 'public', 'index.html'));
   });
 
   // 网关自身 Swagger 文档

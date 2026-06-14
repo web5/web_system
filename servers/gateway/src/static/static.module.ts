@@ -7,7 +7,7 @@ import { join } from 'path';
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'public'),
       serveStaticOptions: {
-        index: false, // SPA 回退由 SpaController 处理
+        index: ['index.html'],
         maxAge: 3600000, // 1 hour cache
       },
     }),
