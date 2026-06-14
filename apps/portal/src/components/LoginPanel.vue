@@ -6,7 +6,7 @@
     <!-- 品牌区 -->
     <div class="brand-section">
       <div class="brand-icon">
-        <img src="/logo.svg" alt="科豆 AI" class="brand-logo" width="52" height="52" />
+        <img src="/logo.svg" alt="科豆 AI" class="brand-logo" width="52" height="27" />
       </div>
       <h1 class="brand-name">科豆 AI</h1>
       <p class="brand-desc">开启智能学习之旅</p>

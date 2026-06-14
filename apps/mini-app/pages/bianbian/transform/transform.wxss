@@ -1,0 +1,217 @@
+/* ===== 变变 AI 变身页 v2 ===== */
+
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #FFF8F0 0%, #FFF0E0 60%, #FFE8D6 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10vh 44rpx;
+  box-sizing: border-box;
+}
+
+/* ===== Loading 态 ===== */
+.loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* 原画缩略图 */
+.thumbnail-pulse {
+  position: relative;
+  width: 240rpx;
+  height: 240rpx;
+  margin-bottom: 16rpx;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 24rpx;
+  box-shadow: 0 12rpx 40rpx rgba(255, 140, 66, 0.15);
+  animation: breathe 2s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 0.85; }
+}
+
+.pulse-ring {
+  position: absolute;
+  inset: -20rpx;
+  border: 4rpx solid rgba(255, 140, 66, 0.3);
+  border-radius: 36rpx;
+  animation: pulse 2s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* 向下箭头 */
+.arrow-down {
+  font-size: 40rpx;
+  color: #FF8C42;
+  margin: 8rpx 0 24rpx;
+  animation: bounceArrow 1s ease-in-out infinite;
+}
+
+@keyframes bounceArrow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8rpx); }
+}
+
+.loading-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 36rpx;
+}
+
+/* 进度条 */
+.progress-bar {
+  width: 100%;
+  height: 8rpx;
+  background: #F0E8E0;
+  border-radius: 4rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FF8C42, #FF6B35);
+  border-radius: 4rpx;
+  width: 0;
+}
+
+.progress-text {
+  font-size: 24rpx;
+  color: #BBB;
+  margin-top: 16rpx;
+}
+
+/* 趣味知识 */
+.fun-fact {
+  margin-top: 48rpx;
+  padding: 28rpx 36rpx;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(255, 140, 66, 0.1);
+  text-align: center;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fact-star {
+  display: block;
+  font-size: 36rpx;
+  margin-bottom: 8rpx;
+}
+
+.fact-label {
+  display: block;
+  font-size: 22rpx;
+  color: #FF8C42;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.fact-text {
+  font-size: 26rpx;
+  color: #888;
+  line-height: 1.6;
+}
+
+/* ===== 成功态 ===== */
+.success-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.success-emoji {
+  font-size: 96rpx;
+  animation: float 1.5s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16rpx); }
+}
+
+.success-text {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #7ED957;
+  margin-top: 20rpx;
+  margin-bottom: 48rpx;
+}
+
+.btn-view {
+  padding: 24rpx 64rpx;
+  background: linear-gradient(135deg, #FF8C42, #FF6B35);
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  color: #FFF;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 8rpx 24rpx rgba(255, 140, 66, 0.3);
+}
+
+/* ===== 失败态 ===== */
+.fail-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fail-emoji {
+  font-size: 80rpx;
+  margin-bottom: 16rpx;
+}
+
+.fail-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+
+.fail-reason {
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 48rpx;
+}
+
+.fail-btns {
+  display: flex;
+  gap: 24rpx;
+}
+
+.btn-retry {
+  padding: 24rpx 48rpx;
+  background: linear-gradient(135deg, #FF8C42, #FF6B35);
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  color: #FFF;
+  font-weight: 600;
+  border: none;
+}
+
+.btn-back {
+  padding: 24rpx 48rpx;
+  background: #FFF8F0;
+  border-radius: 48rpx;
+  border: 2rpx solid rgba(255, 140, 66, 0.2);
+  font-size: 28rpx;
+  color: #FF8C42;
+}

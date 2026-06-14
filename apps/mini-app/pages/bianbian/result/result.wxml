@@ -1,0 +1,64 @@
+<!-- 变变结果页 v2 -->
+<view class="page">
+  <!-- 标题 -->
+  <view class="header">
+    <text class="header-emoji">🎉</text>
+    <text class="header-title">变变成功！</text>
+  </view>
+
+  <!-- 对比展示 -->
+  <view class="comparison">
+    <!-- 原画 -->
+    <view class="side side-original">
+      <text class="side-label">原画</text>
+      <view class="side-img-wrap">
+        <image class="side-img" src="{{originImage}}" mode="aspectFit" />
+      </view>
+    </view>
+
+    <!-- AI 箭头 -->
+    <view class="arrow-area">
+      <text class="arrow-icon">→</text>
+      <text class="arrow-text">AI</text>
+    </view>
+
+    <!-- AI 3D -->
+    <view class="side side-ai">
+      <text class="side-label">3D 角色</text>
+      <view class="side-img-wrap ai-glow">
+        <image class="side-img" src="{{aiImage}}" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="actions">
+    <button class="action-btn btn-save" bindtap="saveToAlbum">
+      <text class="btn-icon">❤️</text>
+      <text class="btn-label">保存到相册</text>
+    </button>
+
+    <view class="action-row">
+      <button class="action-btn btn-retry" bindtap="retry" wx:if="{{canRetry}}">
+        <text class="btn-icon">🎲</text>
+        <text class="btn-label">重新变（还余{{retryLeft}}次）</text>
+      </button>
+      <button class="action-btn btn-retry" wx:else disabled style="opacity:0.4;">
+        <text class="btn-icon">🎲</text>
+        <text class="btn-label">今天变够啦</text>
+      </button>
+      <button class="action-btn btn-recreate" bindtap="recreate">
+        <text class="btn-icon">✨</text>
+        <text class="btn-label">再创一个</text>
+      </button>
+    </view>
+  </view>
+
+  <!-- 提示 -->
+  <view class="tip">
+    <text>💡 不满意？点「重新变」让变变用同一张画再试一次</text>
+  </view>
+
+  <!-- 隐藏合成 Canvas -->
+  <canvas type="2d" id="composeCanvas" style="position:fixed;left:-9999rpx;top:-9999rpx;width:750rpx;height:1200rpx;" />
+</view>

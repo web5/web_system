@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SettingsModule } from './settings/settings.module';
 import { OperationLogsModule } from './operation-logs/operation-logs.module';
+import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { OperationLogsModule } from './operation-logs/operation-logs.module';
     }),
     SettingsModule,
     OperationLogsModule,
+    BianbianAdminModule,
   ],
 })
 export class AppModule {}

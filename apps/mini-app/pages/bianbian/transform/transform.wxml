@@ -1,0 +1,47 @@
+<!-- 变变 AI 变身页 v2 -->
+<view class="page">
+  <!-- 状态：Loading -->
+  <view wx:if="{{status === 'loading'}}" class="loading-wrap">
+    <!-- 原画缩略图 -->
+    <view class="thumbnail-pulse">
+      <image class="thumb-img" src="{{originImage}}" mode="aspectFit" />
+      <view class="pulse-ring"></view>
+    </view>
+
+    <!-- 向下箭头 -->
+    <text class="arrow-down">↓</text>
+
+    <text class="loading-title">正在变身...</text>
+
+    <!-- 进度条 -->
+    <view class="progress-bar">
+      <view class="progress-fill" style="width: {{progress}}%; transition: width {{transitionSpeed}}ms ease-out;"></view>
+    </view>
+    <text class="progress-text">{{progressText}}</text>
+
+    <!-- 趣味小知识 -->
+    <view wx:if="{{showFact}}" class="fun-fact">
+      <text class="fact-star">✨</text>
+      <text class="fact-label">趣味小知识</text>
+      <text class="fact-text">{{funFact}}</text>
+    </view>
+  </view>
+
+  <!-- 状态：成功 -->
+  <view wx:if="{{status === 'success'}}" class="success-wrap">
+    <text class="success-emoji">✨</text>
+    <text class="success-text">变身成功！</text>
+    <button class="btn-view" bindtap="goResult">查看结果</button>
+  </view>
+
+  <!-- 状态：失败 -->
+  <view wx:if="{{status === 'failed'}}" class="fail-wrap">
+    <text class="fail-emoji">😢</text>
+    <text class="fail-title">变身失败了</text>
+    <text class="fail-reason">{{errorMsg}}</text>
+    <view class="fail-btns">
+      <button class="btn-retry" bindtap="retry">重新变</button>
+      <button class="btn-back" bindtap="goBack">返回创作</button>
+    </view>
+  </view>
+</view>

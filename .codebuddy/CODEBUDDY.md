@@ -2,7 +2,14 @@
 
 ## 是什么
 
-科豆 AI 少儿教育平台 — 全栈 monorepo（Vue3 + NestJS + PostgreSQL + 微信小程序）。
+科豆 AI 儿童创造力平台 — 全栈 monorepo（Vue3 + NestJS + PostgreSQL + 微信小程序）。
+
+**平台产品矩阵**：
+| 产品 | 定位 | 路由 |
+|------|------|------|
+| 变变 | AI 拼贴变身 3D 角色 | /create → /transform → /result |
+| 画板 | 自由绘画 + AI 文生图 | /draw |
+| AI 学习助手 | 少儿 AI 对话 | /chat |
 
 ## 技术栈速查
 
@@ -24,10 +31,12 @@
 | system-service | 3004 |
 | portal (dev) | 5173 |
 | admin-web (dev) | 5174 |
+| docs (static) | 4173 |
 
 ## 设计常量
 
-主色 `#f97316` 暖橙 / 暗底 `#111` / 禁用渐变 / Logo 线框豆子+AI 节点。
+**平台（暗色）**：主色 `#f97316` 暖橙 / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
+**变变产品（暖色）**：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` 暖白 / 文字 `#333333`
 
 ## 开发规则
 

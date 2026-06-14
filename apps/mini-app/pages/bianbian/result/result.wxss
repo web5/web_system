@@ -1,0 +1,171 @@
+/* ===== 变变结果页 v2 ===== */
+
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #FFF8F0 0%, #FFF0E0 50%, #FFE8D6 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6vh 32rpx 8vh;
+  box-sizing: border-box;
+}
+
+/* 标题 */
+.header {
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.header-emoji {
+  font-size: 64rpx;
+  display: block;
+  animation: float 2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10rpx); }
+}
+
+.header-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #333;
+  margin-top: 12rpx;
+}
+
+/* 对比 */
+.comparison {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 16rpx;
+  margin-bottom: 36rpx;
+}
+
+.side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.side-label {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 12rpx;
+  font-weight: 600;
+}
+
+.side-img-wrap {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 20rpx;
+  overflow: hidden;
+  background: #FFF;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
+}
+
+.ai-glow {
+  box-shadow: 0 8rpx 32rpx rgba(78, 205, 196, 0.25);
+  border: 3rpx solid rgba(78, 205, 196, 0.3);
+}
+
+.side-img {
+  width: 100%;
+  height: 100%;
+}
+
+.arrow-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.arrow-icon {
+  font-size: 36rpx;
+  color: #FF8C42;
+}
+
+.arrow-text {
+  font-size: 20rpx;
+  color: #FF8C42;
+  font-weight: 600;
+}
+
+/* 操作按钮 */
+.actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  border-radius: 24rpx;
+  border: none;
+  font-size: 28rpx;
+  gap: 10rpx;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #FF8C42, #FF6B35);
+  color: #FFF;
+  box-shadow: 0 8rpx 24rpx rgba(255, 140, 66, 0.3);
+}
+
+.action-row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.action-row .action-btn {
+  flex: 1;
+  height: 80rpx;
+  font-size: 24rpx;
+}
+
+.btn-retry {
+  background: #FFFFFF;
+  color: #FF8C42;
+  border: 2rpx solid rgba(255, 140, 66, 0.2);
+}
+
+.btn-recreate {
+  background: #FFF8F0;
+  color: #888;
+  border: 2rpx solid #F0E8E0;
+}
+
+.btn-icon {
+  font-size: 32rpx;
+}
+
+.btn-label {
+  font-weight: 600;
+}
+
+/* 提示 */
+.tip {
+  margin-top: 28rpx;
+}
+
+.tip text {
+  font-size: 22rpx;
+  color: #CCC;
+}
+
+/* 隐藏合成 canvas */
+#composeCanvas {
+  position: fixed;
+  left: -9999rpx;
+  top: -9999rpx;
+  width: 750rpx;
+  height: 1200rpx;
+}

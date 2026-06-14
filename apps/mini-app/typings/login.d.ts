@@ -25,5 +25,11 @@ interface IAppOption {
     token: string;
     refreshToken: string;
     apiBase: string;
+    /** 变变：原画 base64 */
+    bianbianOrigin?: string;
+    /** 变变：原画描述 */
+    bianbianDesc?: string;
+    /** 变变：AI 生成结果 base64 */
+    bianbianResult?: string;
   };
 }
