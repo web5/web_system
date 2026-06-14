@@ -21,19 +21,23 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
-  // SPA 回退中间件 - 只处理非 API/文档/管理后台的前端路由
+  // SPA 回退中间件 - 处理前端路由回退
   app.use((req: any, res: any, next: () => void) => {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
-    // 后端路由跳过
-    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/admin')) {
+    // API/文档路由跳过
+    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger')) {
       return next();
     }
     // 有扩展名的静态资源跳过（由 ServeStaticModule 处理）
     if (extname(path)) {
       return next();
     }
-    // SPA 回退 - 未匹配到文件的前端路由返回 index.html
+    // 管理后台 SPA 回退
+    if (path.startsWith('/admin') || path === '') {
+      return res.sendFile(join(__dirname, '..', 'public', 'admin', 'index.html'));
+    }
+    // Portal SPA 回退
     res.sendFile(join(__dirname, '..', 'public', 'index.html'));
   });
 
