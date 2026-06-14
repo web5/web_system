@@ -50,7 +50,6 @@
           <p class="qrcode-tip">请使用微信扫一扫登录</p>
           <p class="qrcode-expire">二维码 5 分钟有效，请尽快扫码</p>
         </div>
-        <a-button class="mock-btn" size="small" @click="mockConfirm">模拟扫码</a-button>
       </template>
       <template v-else-if="qrcodeStatus === 'confirmed'">
         <div class="status-card">
@@ -126,7 +125,7 @@ import { message } from 'ant-design-vue';
 import type { Rule } from 'ant-design-vue/es/form';
 import QRCode from 'qrcode';
 import { login, register } from '@/api/auth';
-import { createQrcodeTicket, checkQrcodeTicket, mockConfirmScan } from '@/api/qrcode';
+import { createQrcodeTicket, checkQrcodeTicket } from '@/api/qrcode';
 import { useUserStore } from '@/stores/user';
 import { isWechatBrowser, getWechatOAuthUrl, handleOAuthCallback } from '@/utils/wechat';
 
@@ -202,11 +201,6 @@ function startPolling() {
 
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
-
-async function mockConfirm() {
-  if (!currentTicket) return;
-  try { await mockConfirmScan(currentTicket); } catch { /* poll will pick up */ }
 }
 
 function handleWechatOAuth() {
@@ -364,13 +358,6 @@ const handleRegister = async () => {
   box-shadow: 0 6px 20px rgba(7,193,96,0.5) !important;
 }
 .oauth-btn :deep(.anticon) { color: #fff !important; }
-
-/* ====== 模拟按钮 ====== */
-.mock-btn {
-  margin-top: 18px; font-size: 12px; color: #ccc;
-  border-color: #f0f0f0; background: transparent; transition: all 0.2s;
-}
-.mock-btn:hover { color: #999 !important; border-color: #ddd !important; }
 
 /* ====== 账号登录面板 ====== */
 .account-panel { padding: 0 2px; }

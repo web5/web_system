@@ -55,33 +55,27 @@ export class QrcodeService {
     const wechatAppId = this.configService.get('WECHAT_APPID', '');
     let openid: string;
 
-    // 2. 本地开发模式：code 以 mock_ 开头则创建模拟用户
-    if (code.startsWith('mock_') || !wechatAppId) {
-      openid = `mock_openid_${ticketId.substring(0, 8)}`;
-      this.logger.warn(`[DEV] Mock QR confirm: openid=${openid}, ticket=${ticketId}`);
-    } else {
-      // 3. 生产模式：用 code 换取 openid
-      const secret = this.configService.get('WECHAT_SECRET', '');
-      try {
-        const resp = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
-          params: {
-            appid: wechatAppId,
-            secret,
-            js_code: code,
-            grant_type: 'authorization_code',
-          },
-        });
-        if (resp.data.errcode) {
-          throw new Error(resp.data.errmsg);
-        }
-        openid = resp.data.openid;
-      } catch (err) {
-        this.logger.error('jscode2session failed', err.message);
-        throw new BadRequestException('微信登录验证失败');
+    // 2. 用 code 换取 openid
+    const secret = this.configService.get('WECHAT_SECRET', '');
+    try {
+      const resp = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
+        params: {
+          appid: wechatAppId,
+          secret,
+          js_code: code,
+          grant_type: 'authorization_code',
+        },
+      });
+      if (resp.data.errcode) {
+        throw new Error(resp.data.errmsg);
       }
+      openid = resp.data.openid;
+    } catch (err) {
+      this.logger.error('jscode2session failed', err.message);
+      throw new BadRequestException('微信登录验证失败');
     }
 
-    // 4. 查找或创建用户
+    // 3. 查找或创建用户
     let user = await this.userService.findByWechatOpenid(openid);
     if (!user) {
       user = await this.userService.createWechatUser({

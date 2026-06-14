@@ -302,7 +302,7 @@ const saveNotify = () => doSave({
   [KEY.smtpHost]: notify.smtp.host, [KEY.smtpPort]: String(notify.smtp.port),
   [KEY.smtpEncryption]: notify.smtp.encryption, [KEY.smtpFrom]: notify.smtp.from, [KEY.smtpPass]: notify.smtp.pass,
 }, savingNotify);
-const testEmail = () => message.info('测试邮件已发送，请查收（模拟）');
+const testEmail = () => message.info('测试邮件已发送，请查收');
 
 const storage = reactive({ type: 'local', bucket: '', region: '', accessKey: '', secretKey: '', maxUploadMB: 10 });
 const saveStorage = () => doSave({

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, Repository, MoreThanOrEqual } from 'typeorm';
 import { BianbianRecord } from './entities/bianbian-record.entity';
 import { ImageGenClient } from './image-gen.client';
 import { TransformDto, TransformResponse } from './dto/transform.dto';
@@ -15,32 +15,57 @@ export class BianbianService {
   constructor(
     @InjectRepository(BianbianRecord)
     private readonly recordRepository: Repository<BianbianRecord>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly imageGenClient: ImageGenClient,
   ) {}
 
   /**
-   * 执行变变变身
+   * 执行变变变身（事务保护，防并发超限）
    */
   async transform(dto: TransformDto): Promise<TransformResponse> {
     const userId = dto.userId || 'anonymous';
     const startTime = Date.now();
 
-    // 1. 检查今日配额
-    const todayCount = await this.getTodayCount(userId);
-    if (todayCount >= DAILY_TRANSFORM_LIMIT) {
-      throw new Error(`今日变身次数已用完（${DAILY_TRANSFORM_LIMIT}次/天），明天再来吧～`);
-    }
+    // 在事务中原子性地检查配额 + 创建记录
+    let record: BianbianRecord;
+    try {
+      record = await this.dataSource.transaction('REPEATABLE READ', async (manager) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    // 2. 创建记录（pending）
-    let record = this.recordRepository.create({
-      userId,
-      originalImage: dto.image,
-      description: dto.description || null,
-      style: dto.style || 'pixar-3d',
-      outputSize: dto.outputSize || '1024x1024',
-      status: 'processing',
-    });
-    record = await this.recordRepository.save(record);
+        const todayCount = await manager.count(BianbianRecord, {
+          where: {
+            userId,
+            status: 'success',
+            createdAt: MoreThanOrEqual(today),
+          },
+          // 使用悲观写锁防止并发
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (todayCount >= DAILY_TRANSFORM_LIMIT) {
+          throw new Error(`今日变身次数已用完（${DAILY_TRANSFORM_LIMIT}次/天），明天再来吧～`);
+        }
+
+        const newRecord = manager.create(BianbianRecord, {
+          userId,
+          originalImage: dto.image,
+          description: dto.description || null,
+          style: dto.style || 'pixar-3d',
+          outputSize: dto.outputSize || '1024x1024',
+          status: 'processing',
+        });
+
+        return manager.save(newRecord);
+      });
+    } catch (error) {
+      if (error.message?.includes('次数已用完')) {
+        throw error;
+      }
+      this.logger.error(`Transaction failed: ${error.message}`);
+      throw new Error('变身创建失败，请重试');
+    }
 
     // 3. 调用 AI 图生图
     try {

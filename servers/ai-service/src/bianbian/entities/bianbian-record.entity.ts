@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   Index,
 } from 'typeorm';
 
@@ -58,4 +59,7 @@ export class BianbianRecord {
   @CreateDateColumn()
   @Index()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

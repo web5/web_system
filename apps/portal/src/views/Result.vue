@@ -64,16 +64,20 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { getQuota } from '@/api/bianbian';
+import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
+const userStore = useUserStore();
 
 const aiImageUrl = ref('');
 const description = ref('');
-const retryCount = ref(2);
+const retryCount = ref(0);
 const showPreview = ref(false);
 
 onMounted(() => {
   loadResult();
+  fetchQuota();
 });
 
 function loadResult() {
@@ -83,19 +87,21 @@ function loadResult() {
       const data = JSON.parse(raw);
       aiImageUrl.value = data.aiImageUrl || '';
       description.value = data.originalDescription || '';
+      // 优先使用后端返回的剩余次数
+      retryCount.value = data.remainingToday ?? 0;
     }
   } catch { /* ignore */ }
+}
 
-  // 读取重试次数
-  const today = new Date().toDateString();
-  const stored = localStorage.getItem('bb_retry_date');
-  if (stored === today) {
-    retryCount.value = parseInt(localStorage.getItem('bb_retry_count') || '2', 10);
-  } else {
-    localStorage.setItem('bb_retry_date', today);
-    localStorage.setItem('bb_retry_count', '2');
-    retryCount.value = 2;
-  }
+async function fetchQuota() {
+  try {
+    const userId = userStore.userInfo?.id?.toString() || '';
+    if (!userId) return;
+    const res = await getQuota(userId);
+    if (res.code === 0 && res.data) {
+      retryCount.value = res.data.remaining;
+    }
+  } catch { /* 静默，使用已有次数 */ }
 }
 
 function handleSave() {
@@ -127,14 +133,14 @@ function handleRetry() {
   if (retryCount.value <= 0) return;
   retryCount.value--;
   localStorage.setItem('bb_retry_count', String(retryCount.value));
-  router.push('/transform');
+  router.push('/bianbian/transform');
 }
 
 function handleNew() {
   // 清除画布数据
   localStorage.removeItem('bb_draft');
   localStorage.removeItem('bb_transform_data');
-  router.push('/create');
+  router.push('/bianbian');
 }
 
 function previewFull() {

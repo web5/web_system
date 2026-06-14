@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 import { BianbianMaterial } from './entities/bianbian-material.entity';
 
 export interface MaterialListQuery {
@@ -56,44 +56,50 @@ export class BianbianAdminService {
 
   // ========== 分类管理 ==========
 
-  /** 获取所有分类 （含各分类下的素材数量） */
+  /** 获取所有分类（含各分类下的素材数量，单次 SQL） */
   async getCategories() {
-    const categories = Object.entries(this.CATEGORY_META).map(([id, meta]) => ({
-      id,
-      ...meta,
-    }));
+    // 一次性统计所有分类的素材数量
+    const counts = await this.materialRepository
+      .createQueryBuilder('m')
+      .select('m.category', 'category')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.enabled = :enabled', { enabled: true })
+      .groupBy('m.category')
+      .getRawMany();
 
-    // 统计每个分类下的素材数
     const countMap: Record<string, number> = {};
-    for (const cat of categories) {
-      countMap[cat.id] = await this.materialRepository.count({
-        where: { category: cat.id, enabled: true },
-      });
+    for (const row of counts) {
+      countMap[row.category] = parseInt(row.count, 10);
     }
 
-    return categories.map((cat) => ({
-      ...cat,
-      count: countMap[cat.id] || 0,
+    return Object.entries(this.CATEGORY_META).map(([id, meta]) => ({
+      id,
+      ...meta,
+      count: countMap[id] || 0,
     }));
   }
 
   // ========== 素材管理 ==========
 
-  /** 素材列表 */
+  /** 素材列表（支持关键词跨字段搜索） */
   async getMaterials(query: MaterialListQuery = {}) {
     const { category, keyword, page = 1, pageSize = 200, enabled } = query;
-    const where: any = {};
 
-    if (category && category !== 'all') {
-      where.category = category;
-    }
     if (keyword) {
-      // 搜索名称、标签、描述
-      where.name = Like(`%${keyword}%`);
+      // 跨字段 OR 搜索：名称、标签、描述
+      const qb = this.materialRepository.createQueryBuilder('m');
+      qb.where('(m.name LIKE :kw OR m.tags LIKE :kw OR m.description LIKE :kw)', { kw: `%${keyword}%` });
+      if (category && category !== 'all') qb.andWhere('m.category = :cat', { cat: category });
+      if (enabled !== undefined) qb.andWhere('m.enabled = :enabled', { enabled });
+      qb.orderBy('m.sortOrder', 'ASC').addOrderBy('m.name', 'ASC');
+      qb.skip((page - 1) * pageSize).take(pageSize);
+      const [list, total] = await qb.getManyAndCount();
+      return { list, total, page, pageSize };
     }
-    if (enabled !== undefined) {
-      where.enabled = enabled;
-    }
+
+    const where: any = {};
+    if (category && category !== 'all') where.category = category;
+    if (enabled !== undefined) where.enabled = enabled;
 
     const [list, total] = await this.materialRepository.findAndCount({
       where,
@@ -143,11 +149,13 @@ export class BianbianAdminService {
     if (result.affected === 0) throw new Error('素材不存在');
   }
 
-  /** 批量更新排序 */
+  /** 批量更新排序（事务保护） */
   async batchSort(items: Array<{ id: string; sortOrder: number }>): Promise<void> {
-    for (const item of items) {
-      await this.materialRepository.update(item.id, { sortOrder: item.sortOrder });
-    }
+    await this.materialRepository.manager.transaction(async (manager) => {
+      for (const item of items) {
+        await manager.update(BianbianMaterial, item.id, { sortOrder: item.sortOrder });
+      }
+    });
   }
 
   /** 批量启用/禁用 */

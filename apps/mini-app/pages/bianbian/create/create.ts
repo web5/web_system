@@ -96,17 +96,17 @@ Page({
     // 计算画布偏移
     this.calcCanvasOffset();
 
-    // 初始化 canvas
-    setTimeout(() => {
+    // 初始化 canvas（在 calcCanvasOffset 回调完成后执行）
+    this.calcCanvasOffset(() => {
       this.initCanvas();
       if (elements.length > 0) {
         this.renderCanvas();
       }
-    }, 200);
+    });
   },
 
-  /** 计算画布页面偏移 */
-  calcCanvasOffset() {
+  /** 计算画布页面偏移，支持回调 */
+  calcCanvasOffset(callback?: () => void) {
     const query = wx.createSelectorQuery();
     query.select('.canvas-area').boundingClientRect();
     query.exec((res) => {
@@ -116,6 +116,7 @@ Page({
           canvasTop: res[0].top,
         });
       }
+      if (callback) callback();
     });
   },
 
@@ -474,20 +475,70 @@ Page({
     });
   },
 
-  /** 导出画布为图片 base64 */
+  /** 导出画布为图片 base64（确保最小 1024x1024） */
   exportCanvas(): Promise<string> {
     return new Promise((resolve) => {
-      const canvasNode = (this as Record<string, unknown>).canvasNode as { toDataURL: (opts: Record<string, unknown>) => Promise<{ data: string }> };
-      if (!canvasNode) {
+      if (!(this as any).canvasCtx || !(this as any).canvasNode) {
         resolve('');
         return;
       }
-      canvasNode
-        .toDataURL({ type: 'image/jpeg', quality: 0.9 })
+
+      const { canvasWidth, canvasHeight, canvasBg, elements } = this.data;
+      const minSize = 1024;
+      const scale = Math.max(1, minSize / Math.max(canvasWidth, canvasHeight));
+      const exportW = Math.round(canvasWidth * scale);
+      const exportH = Math.round(canvasHeight * scale);
+
+      // 使用主画布调整尺寸后导出
+      const canvas = (this as any).canvasNode;
+      const dpr = wx.getWindowInfo().pixelRatio;
+      const origW = canvas.width;
+      const origH = canvas.height;
+
+      // 临时调整画布大小
+      canvas.width = exportW;
+      canvas.height = exportH;
+      const ctx = (this as any).canvasCtx;
+      ctx.scale(1 / dpr * scale, 1 / dpr * scale);
+
+      // 绘制背景
+      ctx.fillStyle = canvasBg;
+      ctx.fillRect(0, 0, exportW, exportH);
+
+      // 按 zIndex 排序绘制元素
+      const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+      sorted.forEach((el) => {
+        ctx.save();
+        ctx.translate(el.x * scale, el.y * scale);
+        ctx.rotate((el.rotation * Math.PI) / 180);
+        ctx.scale(el.scale * scale, el.scale * scale);
+
+        if (el.type === 'emoji') {
+          const fontSize = 60;
+          ctx.font = `${fontSize}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(el.content, 0, 0);
+        } else {
+          ctx.fillStyle = el.content;
+          ctx.fillRect(-30, -30, 60, 60);
+        }
+        ctx.restore();
+      });
+
+      // 导出为 base64
+      canvas.toDataURL({ type: 'image/jpeg', quality: 0.9 })
         .then((res: { data: string }) => {
+          // 恢复原始尺寸
+          canvas.width = origW;
+          canvas.height = origH;
+          ctx.scale(dpr, dpr);
           resolve(res.data);
         })
         .catch(() => {
+          canvas.width = origW;
+          canvas.height = origH;
+          ctx.scale(dpr, dpr);
           resolve('');
         });
     });

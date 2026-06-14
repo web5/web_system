@@ -1,199 +1,210 @@
-/* ===== 科豆 AI — Dark Cinema Orange 首页 ===== */
+/* ===== 科豆 AI — 暖色首页 ===== */
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 10vh 5% 8vh;
-  background: linear-gradient(180deg, #000000 0%, #0A0A0D 40%, rgba(249,115,22,0.06) 100%);
+  padding: 8vh 6% 6vh;
+  background: linear-gradient(180deg, #FFFBF5 0%, #FFF8F0 100%);
 }
 
+/* ===== Logo ===== */
 .app-logo {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 4vh;
+  margin-bottom: 5vh;
 }
 .logo-img {
-  width: 24vw;
-  height: 26vw;
-  max-width: 120rpx;
-  max-height: 130rpx;
+  width: 22vw;
+  height: 24vw;
+  max-width: 110rpx;
+  max-height: 120rpx;
 }
 .logo-text {
   margin-top: 2vw;
-  font-size: 3.6vw;
+  font-size: 3.4vw;
   font-weight: 700;
   color: #F97316;
   letter-spacing: 4rpx;
 }
 
-.hero {
-  text-align: center;
-  margin-bottom: 6vh;
-}
-
-.title {
-  display: block;
-  font-size: 6.4vw;
-  font-weight: bold;
-  color: #F8FAFC;
-  margin-bottom: 2.6vw;
-}
-
-.subtitle {
-  display: block;
-  font-size: 3.8vw;
-  color: #CBD5E1;
-}
-
-.status {
-  display: block;
-  font-size: 3.2vw;
-  color: #94A3B8;
-  margin-top: 2vw;
-}
-
-.features {
-  display: flex;
-  justify-content: center;
+/* ===== 产品分区 ===== */
+.product-section {
   width: 100%;
-  gap: 5%;
-}
-
-.feature-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* 变变 — 主打 */
+.product-section.primary { margin-bottom: 0; }
+
+/* 画板 — 次要 */
+.product-section.secondary {
+  margin-top: 5vh;
+  padding-top: 5vh;
+  border-top: 1rpx solid rgba(255, 140, 66, 0.08);
+}
+
+/* ===== 分区头部 ===== */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 2vh;
+}
+
+.product-badge {
+  font-size: 3vw;
+  font-weight: 600;
+  color: #FF8C42;
+  letter-spacing: 2rpx;
+}
+.product-badge.primary {
+  padding: 4rpx 14rpx;
+  background: linear-gradient(135deg, #FF8C42, #FFB347);
+  color: #fff;
+  border-radius: 20rpx;
+  font-size: 2.6vw;
+}
+
+.product-title {
+  font-size: 5.6vw;
+  font-weight: 800;
+  color: #333;
+  letter-spacing: 2rpx;
+}
+.product-title.secondary {
+  font-size: 4.4vw;
+  color: #666;
+}
+
+/* ===== 产品描述 ===== */
+.product-desc {
+  font-size: 3.4vw;
+  color: #888;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 3.5vh;
+}
+.product-desc.secondary {
+  font-size: 3vw;
+  color: #aaa;
+  margin-bottom: 2.5vh;
+}
+
+/* ===== 变变 — 主按钮 ===== */
+.primary-btn {
+  width: 80%;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  flex: 1;
-  max-width: 48%;
-  aspect-ratio: 4 / 3;
-  border-radius: 6%;
-  color: white;
-  font-size: 4vw;
+  gap: 10rpx;
+  padding: 28rpx 0;
+  background: linear-gradient(135deg, #FF8C42 0%, #FFB347 100%);
+  color: #fff;
+  font-size: 4.4vw;
+  font-weight: 700;
   border: none;
-  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.3);
+  border-radius: 40rpx;
+  box-shadow: 0 8rpx 32rpx rgba(255, 140, 66, 0.35);
   transition: transform 0.15s;
 }
-.feature-btn:active {
+.primary-btn:active {
+  transform: scale(0.96);
+}
+.primary-btn::after {
+  border: none;
+}
+.primary-btn-icon {
+  font-size: 5vw;
+}
+
+/* ===== 画板 — 次要按钮组 ===== */
+.secondary-actions {
+  display: flex;
+  width: 100%;
+  gap: 4%;
+}
+
+.secondary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  flex: 1;
+  padding: 22rpx 0;
+  font-size: 3.4vw;
+  font-weight: 600;
+  border: none;
+  border-radius: 28rpx;
+  transition: transform 0.15s;
+}
+.secondary-btn:active {
   transform: scale(0.95);
 }
-.feature-btn::after {
+.secondary-btn::after {
   border: none;
 }
 
-/* 开始画画 — 橙色渐变 */
 .draw-btn {
   background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  color: #fff;
+  box-shadow: 0 4rpx 16rpx rgba(249, 115, 22, 0.25);
 }
 
-/* 我的画作 — 深色玻璃 */
 .records-btn {
-  background: linear-gradient(135deg, #1E1B4B 0%, #111827 100%);
-  border: 1rpx solid rgba(249,115,22,0.2);
+  background: #fff;
+  color: #666;
+  border: 1rpx solid rgba(255, 140, 66, 0.12);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
-.feature-icon {
-  font-size: 10vw;
-  margin-bottom: 1.5vh;
-}
-
-.feature-text {
+.secondary-btn-icon {
   font-size: 4vw;
-  font-weight: bold;
 }
 
-/* ===== 横屏 + iPad ===== */
+/* ===== 横屏 ===== */
 .container.landscape {
-  padding: 6vh 5% 4vh;
+  padding: 5vh 8% 4vh;
 }
-.container.landscape .hero { margin-bottom: 3vh; }
-.container.landscape .title { font-size: 4.2vw; margin-bottom: 1.2vw; }
-.container.landscape .subtitle { font-size: 2.8vw; }
-.container.landscape .status { font-size: 2.4vw; margin-top: 1vw; }
-.container.landscape .features { gap: 4%; }
-.container.landscape .feature-btn { max-width: 46%; border-radius: 5%; }
-.container.landscape .feature-icon { font-size: 7vw; margin-bottom: 1vh; }
-.container.landscape .feature-text { font-size: 3vw; }
+.container.landscape .app-logo { margin-bottom: 3vh; }
+.container.landscape .logo-img { width: 14vw; height: 15vw; }
+.container.landscape .logo-text { font-size: 2.6vw; }
+.container.landscape .product-title { font-size: 4vw; }
+.container.landscape .product-title.secondary { font-size: 3.4vw; }
+.container.landscape .product-desc { font-size: 2.6vw; margin-bottom: 2vh; }
+.container.landscape .product-desc.secondary { font-size: 2.4vw; }
+.container.landscape .primary-btn { width: 60%; padding: 20rpx 0; font-size: 3.4vw; }
+.container.landscape .secondary-btn { padding: 16rpx 0; font-size: 2.8vw; }
+.container.landscape .product-section.secondary { margin-top: 3vh; padding-top: 3vh; }
+.container.landscape .primary-btn-icon { font-size: 4vw; }
+.container.landscape .secondary-btn-icon { font-size: 3.2vw; }
+.container.landscape .product-badge { font-size: 2.4vw; }
+.container.landscape .product-badge.primary { font-size: 2vw; padding: 2rpx 12rpx; }
 
-.ipad:not(.landscape) { padding: 8vh 8% 6vh; }
-.ipad:not(.landscape) .hero { margin-bottom: 8vh; }
-.ipad:not(.landscape) .title { font-size: 7vw; margin-bottom: 3vw; }
-.ipad:not(.landscape) .subtitle { font-size: 4.5vw; }
-.ipad:not(.landscape) .features { gap: 6%; }
-.ipad:not(.landscape) .feature-btn { max-width: 46%; border-radius: 5%; }
-.ipad:not(.landscape) .feature-icon { font-size: 14vw; margin-bottom: 2vh; }
-.ipad:not(.landscape) .feature-text { font-size: 4.5vw; }
-
-.landscape.ipad { padding: 5vh 8% 4vh; }
-.landscape.ipad .hero { margin-bottom: 4vh; }
-.landscape.ipad .title { font-size: 5.5vw; margin-bottom: 2vw; }
-.landscape.ipad .subtitle { font-size: 3.8vw; }
-.landscape.ipad .status { font-size: 3vw; margin-top: 2vw; }
-.landscape.ipad .features { width: 80%; gap: 6%; }
-.landscape.ipad .feature-btn { max-width: 44%; border-radius: 5%; }
-.landscape.ipad .feature-icon { font-size: 10vw; margin-bottom: 1.5vh; }
-.landscape.ipad .feature-text { font-size: 4vw; }
-
-/* ===== 变变入口卡片 ===== */
-.bianbian-entry {
-  position: relative;
-  width: 100%;
-  margin-top: 6vh;
-  border-radius: 20rpx;
-  background: linear-gradient(135deg, rgba(255,140,66,0.08) 0%, rgba(78,205,196,0.06) 100%);
-  border: 1rpx solid rgba(255,140,66,0.2);
-  overflow: hidden;
-  transition: transform 0.15s;
+/* ===== iPad 竖屏 ===== */
+.ipad:not(.landscape) {
+  padding: 6vh 10% 5vh;
 }
+.ipad:not(.landscape) .app-logo { margin-bottom: 6vh; }
+.ipad:not(.landscape) .logo-img { width: 18vw; height: 20vw; }
+.ipad:not(.landscape) .logo-text { font-size: 3vw; }
+.ipad:not(.landscape) .product-title { font-size: 5vw; }
+.ipad:not(.landscape) .product-title.secondary { font-size: 4vw; }
+.ipad:not(.landscape) .product-desc { font-size: 3vw; }
+.ipad:not(.landscape) .primary-btn { width: 70%; padding: 32rpx 0; }
+.ipad:not(.landscape) .secondary-actions { gap: 6%; }
+.ipad:not(.landscape) .secondary-btn { padding: 28rpx 0; }
+.ipad:not(.landscape) .product-section.secondary { margin-top: 6vh; padding-top: 6vh; }
 
-.bianbian-entry:active {
-  transform: scale(0.97);
+/* ===== iPad 横屏 ===== */
+.landscape.ipad {
+  padding: 4vh 12% 3vh;
 }
-
-.bianbian-glow {
-  position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 200rpx;
-  height: 200rpx;
-  background: radial-gradient(circle, rgba(255,140,66,0.15) 0%, transparent 70%);
-}
-
-.bianbian-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  padding: 28rpx 32rpx;
-  gap: 20rpx;
-}
-
-.bianbian-emoji {
-  font-size: 48rpx;
-}
-
-.bianbian-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.bianbian-name {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #FF8C42;
-}
-
-.bianbian-desc {
-  font-size: 24rpx;
-  color: #94A3B8;
-}
-
-.bianbian-arrow {
-  font-size: 28rpx;
-  color: rgba(255,140,66,0.5);
-}
+.landscape.ipad .app-logo { margin-bottom: 4vh; }
+.landscape.ipad .product-section.secondary { margin-top: 4vh; padding-top: 4vh; }
+.landscape.ipad .primary-btn { width: 55%; }
+.landscape.ipad .secondary-actions { width: 80%; }

@@ -49,7 +49,7 @@
             每个孩子，都是造物主力。
           </p>
           <div class="hero-actions">
-            <router-link to="/create" class="hero-btn btn-primary">体验变变</router-link>
+            <router-link to="/bianbian" class="hero-btn btn-primary">体验变变</router-link>
             <router-link to="/draw" class="hero-btn btn-secondary">创意画板</router-link>
           </div>
           <p class="hero-hint">PC端体验更好哦，扫码在手机上使用 ↗</p>

@@ -69,10 +69,10 @@ Page({
       stageIdx++;
     }, 1200);
 
-    // 30 秒超时
+    // 60 秒超时（大于 wx.request timeout，避免双重触发）
     timeoutHandle = setTimeout(() => {
       this.onFailed('生成超时，请检查网络后重试');
-    }, 30000);
+    }, 60000);
   },
 
   /** 趣味小知识轮播 */
@@ -104,7 +104,7 @@ Page({
           outputSize: '1024x1024',
         },
         header: { 'Content-Type': 'application/json' },
-        timeout: 25000,
+        timeout: 55000,
       });
 
       if ((res.statusCode === 200 || res.statusCode === 201) && res.data) {
@@ -117,23 +117,10 @@ Page({
         }
       }
 
-      // API 不可用时使用模拟数据
-      console.warn('[变变] AI API 未就绪，使用模拟结果');
-      this.mockSuccess(originImage);
+      this.onFailed('AI 服务暂时不可用，请稍后重试');
     } catch {
-      // 网络错误时的回退
-      console.warn('[变变] 网络请求失败，使用模拟结果');
-      this.mockSuccess(originImage);
+      this.onFailed('网络请求失败，请检查网络后重试');
     }
-  },
-
-  /** 模拟 AI 结果（后端 API 未就绪时的回退） */
-  mockSuccess(originImage: string) {
-    const delay = 2000 + Math.random() * 2000;
-    setTimeout(() => {
-      // 返回原图，实际项目中应返回 AI 生成的图片
-      this.onSuccess(originImage);
-    }, delay);
   },
 
   onSuccess(aiImage: string) {

@@ -44,6 +44,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { userApi } from '@/api/user';
 
 interface User {
   id: string;
@@ -70,23 +71,8 @@ async function fetchUserDetail() {
   loading.value = true;
   try {
     const userId = route.params.id as string;
-    // TODO: 调用实际 API
-    // const res = await userApi.getDetail(userId);
-    // user.value = res;
-    
-    // 模拟数据
-    user.value = {
-      id: userId,
-      username: 'testuser',
-      email: 'test@example.com',
-      phone: '13800138000',
-      nickname: '测试用户',
-      avatar: '',
-      role: 'user',
-      enabled: true,
-      createdAt: '2024-01-01 10:00:00',
-      updatedAt: '2024-01-01 10:00:00',
-    };
+    const res = await userApi.getDetail(userId);
+    user.value = res;
   } catch (error) {
     message.error('获取用户详情失败');
   } finally {
