@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>父亲节快乐 · 变变</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #0a0a1a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 16px;
+            overflow-x: hidden;
+            color: #e0e8ff;
+        }
+
+        /* ===== Starfield ===== */
+        #starfield {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 0;
+        }
+        .scan-line {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.25), transparent);
+            z-index: 2;
+            pointer-events: none;
+            animation: scanMove 4s linear infinite;
+        }
+        @keyframes scanMove {
+            0% { top: -2px; }
+            100% { top: 100vh; }
+        }
+
+        /* ===== Container ===== */
+        .container {
+            max-width: 460px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* ===== Hero ===== */
+        .hero-section {
+            padding: 60px 0 24px;
+            position: relative;
+        }
+        .hero-ring {
+            width: 140px; height: 140px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+        .hero-ring-inner {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 1.5px solid rgba(0, 220, 255, 0.2);
+            animation: spin 6s linear infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 64px;
+            box-shadow: 0 0 40px rgba(0, 220, 255, 0.08), inset 0 0 30px rgba(0,220,255,0.03);
+        }
+        .hero-ring-inner::before {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 1px dashed rgba(255, 140, 66, 0.12);
+            animation: spin 8s linear reverse infinite;
+        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .hero-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 40px;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+        .hero-title .gradient {
+            background: linear-gradient(135deg, #FF8C42, #FF6B35, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-sub {
+            font-size: 14px;
+            color: rgba(150, 180, 255, 0.5);
+            font-weight: 400;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-top: 6px;
+        }
+
+        /* ===== Dad Stats Dashboard ===== */
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: rgba(0, 220, 255, 0.4);
+            margin: 36px 0 14px;
+            text-transform: uppercase;
+        }
+        .section-label::before,
+        .section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,220,255,0.1), transparent);
+        }
+        .section-label::before { margin-right: 8px; }
+        .section-label::after { margin-left: 8px; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+        .stat-card {
+            background: rgba(10, 15, 40, 0.6);
+            border: 1px solid rgba(0, 200, 255, 0.08);
+            border-radius: 14px;
+            padding: 20px 16px;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+        .stat-card:active { transform: scale(0.96); }
+        .stat-emoji { font-size: 28px; display: block; margin-bottom: 8px; }
+        .stat-label {
+            font-size: 11px;
+            color: rgba(150, 180, 255, 0.5);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .stat-bar-wrap {
+            height: 4px;
+            background: rgba(0, 200, 255, 0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            width: 0%;
+            transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .stat-bar-fill.animated { /* widths set in JS */ }
+        .stat-val {
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            color: rgba(0, 220, 255, 0.6);
+            letter-spacing: 1px;
+        }
+
+        /* ===== Memory Timeline ===== */
+        .timeline {
+            position: relative;
+            padding: 0;
+            margin-bottom: 4px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 18px;
+            top: 20px;
+            bottom: 20px;
+            width: 1px;
+            background: linear-gradient(180deg, rgba(0,220,255,0.2), transparent);
+        }
+        .memory-item {
+            display: flex;
+            gap: 14px;
+            padding: 14px 0;
+            cursor: pointer;
+            transition: opacity 0.3s;
+            text-align: left;
+            position: relative;
+        }
+        .memory-item:hover { opacity: 0.8; }
+        .memory-dot {
+            flex-shrink: 0;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-top: 6px;
+            position: relative;
+            left: 14px;
+        }
+        .memory-content {
+            flex: 1;
+            background: rgba(10, 15, 40, 0.4);
+            border: 1px solid rgba(0, 200, 255, 0.06);
+            border-radius: 12px;
+            padding: 14px 16px;
+            transition: all 0.3s;
+        }
+        .memory-content:active { transform: scale(0.97); }
+        .memory-time {
+            font-size: 10px;
+            color: rgba(150, 180, 255, 0.35);
+            letter-spacing: 1px;
+            font-family: 'Orbitron', monospace;
+        }
+        .memory-text {
+            font-size: 14px;
+            color: rgba(200, 220, 255, 0.85);
+            line-height: 1.6;
+            margin-top: 4px;
+            font-weight: 400;
+        }
+        .memory-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            margin-top: 6px;
+            letter-spacing: 1px;
+        }
+
+        /* ===== Power Gauge ===== */
+        .power-section {
+            background: rgba(10, 15, 40, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.08);
+            border-radius: 16px;
+            padding: 28px 24px;
+            margin-bottom: 4px;
+        }
+        .power-title {
+            font-size: 12px;
+            color: rgba(150, 180, 255, 0.4);
+            letter-spacing: 3px;
+            margin-bottom: 16px;
+        }
+        .power-circles {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+        }
+        .power-circle {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .power-ring {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .power-ring svg {
+            position: absolute;
+            width: 100%; height: 100%;
+            transform: rotate(-90deg);
+        }
+        .power-ring svg circle {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+        .power-ring .bg-circle {
+            stroke: rgba(0, 200, 255, 0.06);
+        }
+        .power-ring .progress-circle {
+            stroke-dasharray: 176;
+            stroke-dashoffset: 176;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .power-ring .progress-circle.animated {
+            /* offset set via JS */
+        }
+        .power-ring-inner { font-size: 20px; }
+        .power-label { font-size: 10px; color: rgba(150, 180, 255, 0.4); letter-spacing: 1px; }
+
+        /* ===== Message ===== */
+        .message-card {
+            background: rgba(10, 15, 40, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.08);
+            border-radius: 16px;
+            padding: 28px 24px;
+            margin-bottom: 4px;
+        }
+        .message-card .quote-mark {
+            font-size: 36px;
+            color: rgba(255, 140, 66, 0.2);
+            line-height: 0;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .message-card p {
+            font-size: 15px;
+            line-height: 1.8;
+            color: rgba(200, 220, 255, 0.8);
+            font-weight: 300;
+        }
+        .message-card .author {
+            font-size: 12px;
+            color: rgba(150, 180, 255, 0.3);
+            margin-top: 12px;
+            letter-spacing: 2px;
+            font-family: 'Orbitron', monospace;
+        }
+
+        /* ===== Love Meter ===== */
+        .love-meter {
+            background: rgba(10, 15, 40, 0.5);
+            border: 1px solid rgba(0, 200, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px 20px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.3s;
+        }
+        .love-meter:active { transform: scale(0.97); }
+        .love-meter-title {
+            font-size: 11px;
+            color: rgba(150, 180, 255, 0.4);
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+        .love-meter-bar {
+            height: 6px;
+            background: rgba(0, 200, 255, 0.06);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .love-meter-fill {
+            height: 100%;
+            border-radius: 3px;
+            width: 0%;
+            background: linear-gradient(90deg, #FF8C42, #FF6B35, #c084fc);
+            transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .love-meter-count {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            color: rgba(255, 140, 66, 0.6);
+            letter-spacing: 2px;
+        }
+
+        /* ===== CTA Button ===== */
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            background: linear-gradient(135deg, rgba(255,140,66,0.1), rgba(255,107,53,0.05));
+            border: 1px solid rgba(255, 140, 66, 0.2);
+            color: rgba(255, 140, 66, 0.9);
+            padding: 18px 24px;
+            border-radius: 50px;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            margin-bottom: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cta-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+            transform: translateX(-100%);
+        }
+        .cta-btn:hover {
+            border-color: rgba(255, 140, 66, 0.4);
+            box-shadow: 0 0 30px rgba(255, 140, 66, 0.06);
+            transform: translateY(-1px);
+            color: #fff;
+        }
+        .cta-btn:hover::after { animation: shine 0.8s ease; }
+        @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+        /* ===== Share Toast ===== */
+        .toast {
+            position: fixed;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 15, 40, 0.95);
+            border: 1px solid rgba(0, 200, 255, 0.15);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: rgba(200, 220, 255, 0.8);
+            z-index: 9999;
+            backdrop-filter: blur(12px);
+            transition: bottom 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .toast.show { bottom: 40px; }
+
+        /* ===== Footer ===== */
+        .footer { margin-top: 28px; padding-bottom: 48px; }
+        .footer p {
+            font-size: 11px;
+            color: rgba(100, 140, 200, 0.3);
+            letter-spacing: 2px;
+        }
+        .footer .brand { color: rgba(0, 220, 255, 0.4); }
+
+        /* ===== Scroll reveal ===== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                        transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .reveal.in { opacity: 1; transform: translateY(0); }
+        .reveal.d1 { transition-delay: 0.05s; }
+        .reveal.d2 { transition-delay: 0.12s; }
+        .reveal.d3 { transition-delay: 0.2s; }
+        .reveal.d4 { transition-delay: 0.3s; }
+
+        /* ===== Particles ===== */
+        .px { position: absolute; width: 3px; height: 3px; border-radius: 1px; pointer-events: none; }
+        #pburst { position: fixed; top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:999; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 400px) {
+            .hero-title { font-size: 32px; }
+            .hero-ring { width: 120px; height: 120px; }
+            .hero-ring-inner { font-size: 52px; }
+            .stats-grid { gap: 8px; }
+            .stat-card { padding: 16px 12px; }
+            .power-circles { gap: 16px; }
+            .power-ring { width: 56px; height: 56px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="starfield"></canvas>
+    <div class="scan-line"></div>
+    <div id="pburst"></div>
+
+    <div class="container">
+
+        <!-- ===== Hero ===== -->
+        <div class="hero-section reveal in">
+            <div class="hero-ring">
+                <div class="hero-ring-inner">👨‍👧‍👦</div>
+            </div>
+            <h1 class="hero-title">
+                爸爸<br>
+                <span class="gradient">父亲节快乐</span>
+            </h1>
+            <p class="hero-sub">· 2026 · 永远爱你 ·</p>
+        </div>
+
+        <!-- ===== Dad Stats ===== -->
+        <div class="section-label reveal d1">📊 老爸数据面板</div>
+
+        <div class="stats-grid">
+            <div class="stat-card reveal d1">
+                <span class="stat-emoji">🦸</span>
+                <div class="stat-label">超级英雄指数</div>
+                <div class="stat-bar-wrap"><div class="stat-bar-fill" data-w="100" style="background:linear-gradient(90deg,#FF8C42,#FF6B35);"></div></div>
+                <div class="stat-val">MAX</div>
+            </div>
+            <div class="stat-card reveal d1">
+                <span class="stat-emoji">😄</span>
+                <div class="stat-label">幽默值</div>
+                <div class="stat-bar-wrap"><div class="stat-bar-fill" data-w="92" style="background:linear-gradient(90deg,#4ECDC4,#7ED957);"></div></div>
+                <div class="stat-val">92%</div>
+            </div>
+            <div class="stat-card reveal d2">
+                <span class="stat-emoji">🧠</span>
+                <div class="stat-label">人生智慧</div>
+                <div class="stat-bar-wrap"><div class="stat-bar-fill" data-w="96" style="background:linear-gradient(90deg,#c084fc,#F472B6);"></div></div>
+                <div class="stat-val">96%</div>
+            </div>
+            <div class="stat-card reveal d2">
+                <span class="stat-emoji">🍳</span>
+                <div class="stat-label">厨艺等级</div>
+                <div class="stat-bar-wrap"><div class="stat-bar-fill" data-w="78" style="background:linear-gradient(90deg,#FFD93D,#FF8C42);"></div></div>
+                <div class="stat-val">Lv.78</div>
+            </div>
+        </div>
+
+        <!-- ===== Timeline ===== -->
+        <div class="section-label reveal d2">📸 和爸爸的回忆</div>
+
+        <div class="timeline">
+            <div class="memory-item reveal d2" onclick="showToast('小时候，您的肩膀就是我的全世界 🌍')">
+                <div class="memory-dot" style="background:#FF8C42;box-shadow:0 0 8px rgba(255,140,66,0.4);"></div>
+                <div class="memory-content">
+                    <div class="memory-time">// 小时候</div>
+                    <div class="memory-text">「骑在肩膀上看世界，好像全世界都在脚下」</div>
+                    <span class="memory-tag" style="color:rgba(255,140,66,0.5);border:1px solid rgba(255,140,66,0.15);">👼 童年</span>
+                </div>
+            </div>
+            <div class="memory-item reveal d3" onclick="showToast('教会我的，远不止骑车这件事 🚲')">
+                <div class="memory-dot" style="background:#4ECDC4;box-shadow:0 0 8px rgba(78,205,196,0.4);"></div>
+                <div class="memory-content">
+                    <div class="memory-time">// 少年</div>
+                    <div class="memory-text">「摔倒了别怕，老爸在后面扶着你」</div>
+                    <span class="memory-tag" style="color:rgba(78,205,196,0.5);border:1px solid rgba(78,205,196,0.15);">🚲 成长</span>
+                </div>
+            </div>
+            <div class="memory-item reveal d3" onclick="showToast('您的沉默里，藏着最深的爱 💪')">
+                <div class="memory-dot" style="background:#c084fc;box-shadow:0 0 8px rgba(192,132,252,0.4);"></div>
+                <div class="memory-content">
+                    <div class="memory-time">// 现在</div>
+                    <div class="memory-text">「从不轻易说爱，却把最好的都留给了我」</div>
+                    <span class="memory-tag" style="color:rgba(192,132,252,0.5);border:1px solid rgba(192,132,252,0.15);">💜 珍惜</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Power Gauge ===== -->
+        <div class="section-label reveal d3">⚡ 老爸超能力场</div>
+
+        <div class="power-section reveal d3">
+            <div class="power-title">ENERGY GRID</div>
+            <div class="power-circles">
+                <div class="power-circle">
+                    <div class="power-ring"><svg><circle class="bg-circle" cx="32" cy="32" r="28"/><circle class="progress-circle" data-pct="95" cx="32" cy="32" r="28" stroke="#FF8C42"/></svg><span class="power-ring-inner">❤️</span></div>
+                    <span class="power-label">爱心</span>
+                </div>
+                <div class="power-circle">
+                    <div class="power-ring"><svg><circle class="bg-circle" cx="32" cy="32" r="28"/><circle class="progress-circle" data-pct="88" cx="32" cy="32" r="28" stroke="#4ECDC4"/></svg><span class="power-ring-inner">💪</span></div>
+                    <span class="power-label">力量</span>
+                </div>
+                <div class="power-circle">
+                    <div class="power-ring"><svg><circle class="bg-circle" cx="32" cy="32" r="28"/><circle class="progress-circle" data-pct="92" cx="32" cy="32" r="28" stroke="#c084fc"/></svg><span class="power-ring-inner">🧭</span></div>
+                    <span class="power-label">智慧</span>
+                </div>
+                <div class="power-circle">
+                    <div class="power-ring"><svg><circle class="bg-circle" cx="32" cy="32" r="28"/><circle class="progress-circle" data-pct="80" cx="32" cy="32" r="28" stroke="#FFD93D"/></svg><span class="power-ring-inner">🍳</span></div>
+                    <span class="power-label">厨艺</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Message ===== -->
+        <div class="section-label reveal d4">💌 写给爸爸的话</div>
+
+        <div class="message-card reveal d4">
+            <span class="quote-mark">"</span>
+            <p>小时候觉得你无所不能，<br>长大后才发现，<br>你只是把所有的柔软都藏了起来，<br>把坚强都给了我。</p>
+            <p style="margin-top:12px;">谢谢你，爸爸。<br>你永远是那个最酷的少年。</p>
+            <div class="author">— 你的孩子</div>
+        </div>
+
+        <!-- ===== Love Meter ===== -->
+        <div class="love-meter reveal d4" id="loveMeter" onclick="tapLove()">
+            <div class="love-meter-title">💗 双击屏幕为老爸充值爱意</div>
+            <div class="love-meter-bar"><div class="love-meter-fill" id="loveFill"></div></div>
+            <div class="love-meter-count" id="loveCount">❤️ 0 次</div>
+        </div>
+
+        <!-- ===== CTA ===== -->
+        <a href="tel:" class="cta-btn reveal d4" onclick="return callDad(event)">
+            📞 给老爸打个电话
+        </a>
+
+        <!-- ===== Footer ===== -->
+        <div class="footer reveal d4">
+            <p>crafted with ❤️ by <span class="brand">变变</span></p>
+            <p style="margin-top:4px;">06.21.2026 · 永远爱您</p>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        /* ===== Starfield ===== */
+        const c = document.getElementById('starfield'), cx = c.getContext('2d');
+        let w, h;
+        function rs() { w = c.width = innerWidth; h = c.height = innerHeight; }
+        rs(); addEventListener('resize', rs);
+        const st = Array.from({length:250},()=>({x:Math.random()*w,y:Math.random()*h,s:0.5+Math.random()*2,a:0.3+Math.random()*0.7,p:Math.random()*6.28,t:0.005+Math.random()*0.02}));
+        let lt = 0;
+        const SH = {a:!1,x:0,y:0,l:0,s:0,ang:0,al:1};
+        function fSH(){SH.a=!0;SH.x=Math.random()*w*1.5-w*0.3;SH.y=Math.random()*h*0.25;SH.al=0.9;SH.l=60+Math.random()*100;SH.s=8+Math.random()*10;SH.ang=Math.PI/4+(Math.random()-0.5)*0.3;}
+        function loop(t){
+            cx.clearRect(0,0,w,h);
+            st.forEach(s=>{s.a=(0.3+0.4*Math.sin(t*s.t+s.p))*0.7;cx.beginPath();cx.arc(s.x,s.y,s.s,0,7);cx.fillStyle=`rgba(200,220,255,${s.a})`;cx.fill();});
+            if(SH.a){
+                SH.x+=Math.cos(SH.ang)*SH.s;SH.y+=Math.sin(SH.ang)*SH.s;SH.al-=0.006;
+                cx.beginPath();cx.moveTo(SH.x,SH.y);cx.lineTo(SH.x-Math.cos(SH.ang)*SH.l,SH.y-Math.sin(SH.ang)*SH.l);
+                cx.strokeStyle=`rgba(200,230,255,${Math.max(0,SH.al)})`;cx.lineWidth=2;cx.stroke();
+                cx.shadowBlur=20;cx.shadowColor='rgba(0,200,255,0.3)';cx.stroke();cx.shadowBlur=0;
+                if(SH.x>w+100||SH.y>h+100||SH.al<=0)SH.a=!1;
+            }
+            if(t-lt>3000+Math.random()*2000){fSH();lt=t;}
+            requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        /* ===== Animate bars on scroll ===== */
+        let barsAnimated = false;
+        const barObserver = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+                if (e.isIntersecting && !barsAnimated) {
+                    barsAnimated = true;
+                    document.querySelectorAll('.stat-bar-fill').forEach(b => {
+                        b.style.width = b.dataset.w + '%';
+                    });
+                    // Power circles
+                    document.querySelectorAll('.progress-circle').forEach(c => {
+                        const pct = parseFloat(c.dataset.pct) / 100;
+                        c.style.strokeDashoffset = (176 - 176 * pct) + '';
+                    });
+                }
+            });
+        }, { threshold: 0.2 });
+        const statGrid = document.querySelector('.stats-grid');
+        if (statGrid) barObserver.observe(statGrid);
+
+        /* ===== Scroll reveal ===== */
+        const ro = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal:not(.in)').forEach(el => ro.observe(el));
+
+        /* ===== Love Meter ===== */
+        let loveCount = 0;
+        let loveTimeout = null;
+        function tapLove() {
+            loveCount++;
+            const fill = document.getElementById('loveFill');
+            const countEl = document.getElementById('loveCount');
+            const pct = Math.min(100, loveCount * 8);
+            fill.style.width = pct + '%';
+            countEl.textContent = `❤️ ${loveCount} 次`;
+            if (pct >= 100) {
+                countEl.textContent = '❤️ ❤️ ❤️ 爱意爆表！';
+                burstEffect(innerWidth/2, innerHeight/2, 60);
+                loveCount = 0;
+                setTimeout(() => { fill.style.width = '0%'; countEl.textContent = '❤️ 0 次'; }, 1500);
+            }
+            clearTimeout(loveTimeout);
+            loveTimeout = setTimeout(() => {
+                if (loveCount > 0) showToast(`已充值 ${loveCount} 份爱意 ❤️`);
+            }, 800);
+        }
+
+        /* ===== Toast ===== */
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(el._t);
+            el._t = setTimeout(() => el.classList.remove('show'), 2200);
+        }
+
+        /* ===== Particles ===== */
+        const burstContainer = document.getElementById('pburst');
+        const PXC = ['#FF8C42','#FF6B35','#4ECDC4','#7ED957','#c084fc','#FFD93D','#00d4ff'];
+        function burstEffect(x, y, n) {
+            n = n || 30;
+            for (let i = 0; i < n; i++) {
+                const el = document.createElement('div');
+                el.className = 'px';
+                const c = PXC[Math.floor(Math.random()*PXC.length)];
+                const s = 2 + Math.random() * 5;
+                const a = Math.random() * 6.28;
+                const sp = 30 + Math.random() * 100;
+                el.style.cssText = `width:${s}px;height:${s}px;background:${c};left:${x}px;top:${y}px;box-shadow:0 0 ${s*4}px ${c};transition:all ${0.4+Math.random()*0.5}s cubic-bezier(.25,.46,.45,.94)`;
+                burstContainer.appendChild(el);
+                requestAnimationFrame(() => {
+                    el.style.transform = `translate(${Math.cos(a)*sp}px,${Math.sin(a)*sp}px) rotate(${Math.random()*360}deg)`;
+                    el.style.opacity = '0';
+                });
+                setTimeout(() => el.remove(), 1200);
+            }
+        }
+        document.addEventListener('dblclick', (e) => { if (!e.target.closest('.love-meter')) burstEffect(e.clientX, e.clientY, 45); });
+        document.querySelectorAll('.memory-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                const rect = this.getBoundingClientRect();
+                burstEffect(rect.left+rect.width/2, rect.top+rect.height/2, 20);
+            });
+        });
+
+        /* ===== Call Dad ===== */
+        function callDad(e) {
+            e.preventDefault();
+            burstEffect(innerWidth/2, innerHeight/2, 80);
+            setTimeout(() => {
+                if (confirm('📞 现在就给老爸打个电话吧！\n\n他在等你说：父亲节快乐 ❤️')) {
+                    alert('🎉 老爸一定超开心！\n别忘了再说一句：\n「爸，我爱你」💪❤️');
+                }
+            }, 500);
+        }
+    </script>
+</body>
+</html>
