@@ -104,4 +104,28 @@ export class QrcodeService {
 
     return { success: true };
   }
+
+  /**
+   * 微信 OAuth 扫码确认 —— 用于微信原生扫码器扫描 QR 码后的 OAuth 登录
+   * 用户通过 WeChat OAuth 授权后，用此方法确认 ticket，
+   * 让 PC 端轮询时能获取到 token
+   */
+  async confirmOAuthTicket(
+    ticketId: string,
+    userId: number,
+    accessToken: string,
+    refreshToken: string,
+  ): Promise<{ success: boolean }> {
+    const ticket = this.store.get(ticketId);
+    if (!ticket || ticket.status !== 'pending') {
+      this.logger.warn(`OAuth confirm skipped: ticket=${ticketId} not found or not pending`);
+      return { success: false };
+    }
+
+    const confirmed = this.store.confirm(ticketId, userId, accessToken, refreshToken);
+    if (confirmed) {
+      this.logger.log(`QR code ticket confirmed via OAuth: ticket=${ticketId}, user=${userId}`);
+    }
+    return { success: confirmed };
+  }
 }

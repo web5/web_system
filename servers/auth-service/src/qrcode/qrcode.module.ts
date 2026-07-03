@@ -19,5 +19,6 @@ import { UserModule } from '../user/user.module';
   ],
   controllers: [QrcodeController],
   providers: [QrcodeService, QrcodeStore],
+  exports: [QrcodeService],
 })
 export class QrcodeModule {}
