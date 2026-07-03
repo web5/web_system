@@ -1,6 +1,7 @@
 import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { QrcodeService } from '../qrcode/qrcode.service';
 import {
   WechatLoginRequest,
   MiniprogramLoginRequest,
@@ -14,7 +15,10 @@ import { Response } from 'express';
 @ApiTags('认证')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private qrcodeService: QrcodeService,
+  ) {}
 
   @Post('login')
   @ApiOperation({ summary: '用户名密码登录' })
@@ -82,6 +86,9 @@ export class AuthController {
 
   /**
    * 微信 OAuth 回调 —— 微信授权后带 code 回调到这里
+   * 支持两种来源：
+   * 1. 普通微信登录 (state = 前端回调 URL)
+   * 2. 扫码登录 mini-scan (state 含 mini_scan_ticket=xxx)
    * GET /auth/wechat/callback?code=xxx&state=xxx
    */
   @Get('wechat/callback')
@@ -93,13 +100,27 @@ export class AuthController {
   ) {
     try {
       const result = await this.authService.handleWechatOAuthCallback(code, state);
-      // 将 token 通过 URL 参数传回前端（生产环境建议用 cookie）
       const frontendUrl = state
         ? decodeURIComponent(state)
         : '/';
-      const separator = frontendUrl.includes('?') ? '&' : '?';
+
+      // 检查是否是 mini-scan 扫码登录（从 QR 码进入）
+      const ticketMatch = frontendUrl.match(/mini_scan_ticket=([^&]+)/);
+      if (ticketMatch) {
+        const ticketId = ticketMatch[1];
+        await this.qrcodeService.confirmOAuthTicket(
+          ticketId,
+          result.user.id,
+          result.accessToken,
+          result.refreshToken,
+        );
+      }
+
+      // 将 token 通过 URL 参数传回前端
+      const cleanUrl = frontendUrl.split('?')[0] || '/';
+      const separator = cleanUrl.includes('?') ? '&' : '?';
       res.redirect(
-        `${frontendUrl}${separator}token=${result.accessToken}&refreshToken=${result.refreshToken}`,
+        `${cleanUrl}${separator}token=${result.accessToken}&refreshToken=${result.refreshToken}`,
       );
     } catch (error) {
       res.redirect('/login?error=wechat_auth_failed');

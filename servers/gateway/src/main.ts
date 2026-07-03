@@ -21,10 +21,22 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
-  // SPA 回退中间件 - 处理前端路由回退
+  // /mini-scan — 微信原生扫码器扫描 QR 码后的处理
+  // 用户用微信"扫一扫"扫描登录二维码时，此 URL 会在微信内置浏览器中打开
+  // 此处重定向到微信 OAuth 授权，完成登录后确认 ticket，PC 端轮询获取 token
   app.use((req: any, res: any, next: () => void) => {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
+
+    if (path.startsWith('/mini-scan')) {
+      const ticket = typeof req.query.ticket === 'string' ? req.query.ticket : '';
+      if (!ticket) return res.redirect('/');
+      // 重定向到微信 OAuth，将 ticket 编码到 redirect URL 中
+      const redirectUrl = `/api/auth/wechat/authorize?redirect=${encodeURIComponent('/?mini_scan_ticket=' + ticket)}`;
+      return res.redirect(redirectUrl);
+    }
+
+    // SPA 回退中间件 - 处理前端路由回退
     // API/文档路由跳过
     if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger')) {
       return next();
