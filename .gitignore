@@ -56,3 +56,7 @@ artifacts/
 .playwright-cli/
 
 apps/mini-app/private.key
+
+# 本地脚本（含敏感信息）
+scripts/
+*.sh
