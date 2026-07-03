@@ -6,9 +6,10 @@
 
 set -e
 
-# 加载 .env
-if [ -f "$(dirname "$0")/scripts/.env" ]; then
-    source "$(dirname "$0")/scripts/.env"
+# 加载 .env（与脚本同目录）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/.env" ]; then
+    source "${SCRIPT_DIR}/.env"
 fi
 
 SERVER_HOST="${DEPLOY_HOST:-ubuntu@106.52.176.246}"

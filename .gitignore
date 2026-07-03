@@ -60,3 +60,4 @@ apps/mini-app/private.key
 # 环境变量（含敏感信息）
 .env
 scripts/.env
+scripts/.env.local
