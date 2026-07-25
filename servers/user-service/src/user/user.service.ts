@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { User } from './user.entity';
 
 @Injectable()
@@ -10,14 +10,22 @@ export class UserService {
     private userRepository: Repository<User>,
   ) {}
 
-  async findAll(page: number = 1, limit: number = 10) {
+  async findAll(page: number = 1, limit: number = 10, keyword?: string) {
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 10;
+    const trimmedKeyword = keyword?.trim();
 
     const [users, total] = await this.userRepository.findAndCount({
       skip: (pageNum - 1) * limitNum,
       take: limitNum,
       order: { createdAt: 'DESC' },
+      where: trimmedKeyword
+        ? [
+            { username: ILike(`%${trimmedKeyword}%`) },
+            { email: ILike(`%${trimmedKeyword}%`) },
+            { phone: ILike(`%${trimmedKeyword}%`) },
+          ]
+        : undefined,
     });
     const safeUsers = users.map((u) => {
       const { password: _pwd, ...rest } = JSON.parse(JSON.stringify(u));

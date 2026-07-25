@@ -19,8 +19,9 @@ export class UserController {
   async findAll(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
+    @Query('keyword') keyword?: string,
   ) {
-    return this.userService.findAll(page, limit);
+    return this.userService.findAll(page, limit, keyword);
   }
 
   @Get('me')
