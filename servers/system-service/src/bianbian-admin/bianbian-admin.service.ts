@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { BianbianMaterial } from './entities/bianbian-material.entity';
 
 export interface MaterialListQuery {
@@ -41,12 +41,15 @@ export class BianbianAdminService {
 
   // 分类元数据（id → { name, icon }）
   private readonly CATEGORY_META: Record<string, { name: string; icon: string }> = {
-    sticker: { name: '贴纸', icon: '⭐' },
-    shape: { name: '形状', icon: '🔷' },
-    animal: { name: '动物', icon: '🐱' },
-    nature: { name: '自然', icon: '🌿' },
-    face: { name: '表情', icon: '😊' },
-    bg: { name: '背景', icon: '🖼️' },
+    sticker: { name: '贴纸', icon: 'star' },
+    shape: { name: '形状', icon: 'shape' },
+    animal: { name: '动物', icon: 'animal' },
+    nature: { name: '自然', icon: 'nature' },
+    food: { name: '食物', icon: 'food' },
+    transport: { name: '交通', icon: 'transport' },
+    face: { name: '表情', icon: 'face' },
+    bg: { name: '背景', icon: 'image' },
+    background: { name: '背景', icon: 'image' },
   };
 
   constructor(
@@ -97,7 +100,7 @@ export class BianbianAdminService {
       return { list, total, page, pageSize };
     }
 
-    const where: any = {};
+    const where: FindOptionsWhere<BianbianMaterial> = {};
     if (category && category !== 'all') where.category = category;
     if (enabled !== undefined) where.enabled = enabled;
 
@@ -125,7 +128,7 @@ export class BianbianAdminService {
       category: dto.category,
       content: dto.content,
       tags: dto.tags || '',
-      icon: dto.icon || this.CATEGORY_META[dto.category]?.icon || '📦',
+      icon: dto.icon || this.CATEGORY_META[dto.category]?.icon || 'default',
       type: dto.type || 'emoji',
       description: dto.description || '',
       source: 'custom',
@@ -165,43 +168,88 @@ export class BianbianAdminService {
   }
 
   /** 初始化系统默认素材（首次运行时使用） */
-  async seedDefaultMaterials(): Promise<number> {
-    const existing = await this.materialRepository.count();
-    if (existing > 0) return 0;
+  async seedDefaultMaterials(force = false): Promise<number> {
+    if (!force) {
+      const existing = await this.materialRepository.count();
+      if (existing > 0) return 0;
+    }
+
+    // 强制模式：删除已有素材，用系统默认素材全覆盖
+    if (force) {
+      await this.materialRepository.delete({ source: 'system' });
+    }
+
+    // SVG 素材目录（由 Portal 静态服务提供）
+    const svgBase = '/materials/svg';
 
     const defaults = [
-      // 贴纸
-      ...this.makeMaterials('sticker', [
-        ['星星', '⭐'], ['爱心', '❤️'], ['彩虹', '🌈'],
-        ['闪光', '✨'], ['皇冠', '👑'], ['礼物', '🎁'],
-        ['火箭', '🚀'], ['音符', '🎵'],
+      // ===== 动物 =====
+      ...this.makeSvgMaterials('animal', [
+        ['小猫', 'material-animal-1.svg'], ['小狗', 'material-animal-2.svg'],
+        ['小鱼', 'material-animal-11.svg'], ['蝴蝶', 'material-animal-12.svg'],
+        ['毛毛虫', 'material-animal-16.svg'], ['蚂蚁', 'material-animal-17.svg'],
+        ['马', 'material-animal-18.svg'],
       ]),
-      // 形状
-      ...this.makeMaterials('shape', [
-        ['圆形', '🔴'], ['方形', '🟧'], ['三角', '🔺'],
-        ['钻石', '💎'], ['星形', '⭐'],
+      // ===== 自然 =====
+      ...this.makeSvgMaterials('nature', [
+        ['太阳', 'material-nature-1.svg'], ['月亮', 'material-nature-2.svg'],
+        ['星星', 'material-nature-3.svg'], ['云朵', 'material-nature-4.svg'],
+        ['彩虹', 'material-nature-5.svg'], ['花朵', 'material-nature-6.svg'],
+        ['大树', 'material-nature-7.svg'], ['蘑菇', 'material-nature-8.svg'],
+        ['叶子', 'material-nature-9.svg'], ['雪花', 'material-nature-10.svg'],
+        ['火焰', 'material-nature-11.svg'], ['水滴', 'material-nature-12.svg'],
+        ['闪电', 'material-nature-13.svg'], ['旋风', 'material-nature-14.svg'],
       ]),
-      // 动物
-      ...this.makeMaterials('animal', [
-        ['小猫', '🐱'], ['小狗', '🐶'], ['兔子', '🐰'],
-        ['小熊', '🐻'], ['熊猫', '🐼'], ['狐狸', '🦊'],
-        ['独角兽', '🦄'], ['恐龙', '🦖'],
+      // ===== 食物 =====
+      ...this.makeSvgMaterials('food', [
+        ['蛋糕', 'material-food-1.svg'], ['冰淇淋', 'material-food-2.svg'],
+        ['棒棒糖', 'material-food-3.svg'], ['苹果', 'material-food-4.svg'],
+        ['饼干', 'material-food-6.svg'], ['披萨', 'material-food-7.svg'],
+        ['葡萄', 'material-food-9.svg'], ['柠檬', 'material-food-10.svg'],
+        ['樱桃', 'material-food-11.svg'], ['咖啡', 'material-food-12.svg'],
+        ['牛奶', 'material-food-13.svg'], ['鸡蛋', 'material-food-14.svg'],
       ]),
-      // 自然
-      ...this.makeMaterials('nature', [
-        ['太阳', '☀️'], ['月亮', '🌙'], ['云朵', '☁️'],
-        ['花朵', '🌸'], ['大树', '🌳'], ['蘑菇', '🍄'],
+      // ===== 交通 =====
+      ...this.makeSvgMaterials('transport', [
+        ['火箭', 'material-trans-1.svg'], ['飞机', 'material-trans-2.svg'],
+        ['汽车', 'material-trans-3.svg'], ['火车', 'material-trans-4.svg'],
+        ['轮船', 'material-trans-5.svg'], ['直升机', 'material-trans-7.svg'],
+        ['热气球', 'material-trans-8.svg'], ['帆船', 'material-trans-9.svg'],
+        ['巴士', 'material-trans-11.svg'],
       ]),
-      // 表情
-      ...this.makeMaterials('face', [
-        ['开心', '😊'], ['酷', '😎'], ['眨眼', '😉'],
-        ['喜欢', '🥰'], ['大笑', '😂'], ['惊讶', '😲'],
+      // ===== 贴纸 =====
+      ...this.makeSvgMaterials('sticker', [
+        ['礼物', 'material-sticker-1.svg'], ['皇冠', 'material-sticker-2.svg'],
+        ['气球', 'material-sticker-3.svg'], ['音符', 'material-sticker-4.svg'],
+        ['星星魔法', 'material-sticker-5.svg'], ['奖杯', 'material-sticker-6.svg'],
+        ['钻石', 'material-sticker-7.svg'], ['旗帜', 'material-sticker-8.svg'],
+        ['星星', 'material-sticker-9.svg'], ['爱心', 'material-sticker-10.svg'],
+        ['相机', 'material-sticker-11.svg'], ['书本', 'material-sticker-12.svg'],
+        ['钥匙', 'material-sticker-13.svg'], ['放大镜', 'material-sticker-14.svg'],
+        ['房屋', 'material-sticker-15.svg'], ['钟表', 'material-sticker-16.svg'],
+        ['地球', 'material-sticker-17.svg'], ['魔法', 'material-sticker-19.svg'],
+        ['笑脸', 'material-sticker-20.svg'], ['哭脸', 'material-sticker-21.svg'],
+        ['惊讶', 'material-sticker-22.svg'], ['开心', 'material-sticker-23.svg'],
+        ['眨眼', 'material-sticker-25.svg'], ['帅气', 'material-sticker-27.svg'],
+        ['可爱', 'material-sticker-28.svg'], ['电话', 'material-sticker-29.svg'],
+        ['邮件', 'material-sticker-30.svg'],
       ]),
-      // 背景
-      ...this.makeColorMaterials('bg', [
-        ['白色', '#FFFFFF'], ['天空蓝', '#87CEEB'],
-        ['草地绿', '#7ED957'], ['粉色', '#FFB6C1'],
-        ['暖黄', '#FFE4B5'], ['淡紫', '#DDA0DD'],
+      // ===== 形状 =====
+      ...this.makeSvgMaterials('shape', [
+        ['圆形', 'material-shape-1.svg'], ['方形', 'material-shape-2.svg'],
+        ['三角', 'material-shape-3.svg'], ['爱心', 'material-shape-4.svg'],
+        ['星形', 'material-shape-5.svg'], ['菱形', 'material-shape-6.svg'],
+        ['六边形', 'material-shape-7.svg'], ['五边形', 'material-shape-8.svg'],
+        ['箭头上', 'material-shape-9.svg'], ['箭头下', 'material-shape-10.svg'],
+        ['箭头左', 'material-shape-11.svg'], ['箭头右', 'material-shape-12.svg'],
+        ['十字', 'material-shape-14.svg'],
+      ]),
+      // ===== 背景 =====
+      ...this.makeColorMaterials('background', [
+        ['晴天', '#87CEEB'], ['日落', '#FF8C42'],
+        ['森林', '#7ED957'], ['粉色', '#FFB6C1'],
+        ['紫色', '#DDA0DD'], ['暖白', '#FFF8F0'],
+        ['海洋', '#4ECDC4'],
       ]),
     ];
 
@@ -209,11 +257,16 @@ export class BianbianAdminService {
     return defaults.length;
   }
 
-  private makeMaterials(cat: string, items: Array<[string, string]>, icon?: string) {
-    return items.map(([name, emoji], idx) => ({
-      name, category: cat, content: emoji, type: 'emoji' as const,
-      icon: icon || this.CATEGORY_META[cat]?.icon || '📦',
-      sortOrder: idx + 1, source: 'system', tags: `${name},${cat}`,
+  private makeSvgMaterials(cat: string, items: Array<[string, string]>, icon?: string) {
+    return items.map(([name, fileName], idx) => ({
+      name,
+      category: cat,
+      content: `/materials/svg/${fileName}`,
+      type: 'svg' as const,
+      icon: icon || this.CATEGORY_META[cat]?.icon || 'default',
+      sortOrder: idx + 1,
+      source: 'system',
+      tags: `${name},${cat}`,
       description: '',
     }));
   }
@@ -221,7 +274,7 @@ export class BianbianAdminService {
   private makeColorMaterials(cat: string, items: Array<[string, string]>) {
     return items.map(([name, color], idx) => ({
       name, category: cat, content: color, type: 'color' as const,
-      icon: this.CATEGORY_META[cat]?.icon || '🖼️',
+      icon: this.CATEGORY_META[cat]?.icon || 'image',
       sortOrder: idx + 1, source: 'system', tags: `${name},颜色,${cat}`,
       description: '',
     }));

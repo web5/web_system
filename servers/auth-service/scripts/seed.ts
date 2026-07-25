@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const dataSource = new DataSource({
-  type: (process.env.DB_TYPE || 'postgres') as any,
+  type: (process.env.DB_TYPE || 'postgres') as 'postgres',
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   username: process.env.DB_USERNAME || 'web_system',
@@ -16,10 +16,10 @@ const dataSource = new DataSource({
 });
 
 async function seed() {
-  console.log('🌱 开始初始化数据库...');
+  console.log('[Seed] 开始初始化数据库...');
 
   await dataSource.initialize();
-  console.log('✅ 数据库连接成功');
+  console.log('[Seed] 数据库连接成功');
 
   const userRepository = dataSource.getRepository('users');
 
@@ -29,12 +29,13 @@ async function seed() {
   });
 
   if (existingAdmin) {
-    console.log('⚠️  管理员用户已存在，跳过创建');
+    console.log('[Seed] 管理员用户已存在，跳过创建');
     console.log('   用户名: admin');
     console.log('   请尝试使用现有密码登录，或手动更新密码');
   } else {
     // 创建默认管理员用户
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const adminPassword = process.env.ADMIN_INIT_PASSWORD || 'admin123';
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const adminUser = userRepository.create({
       username: 'admin',
@@ -47,10 +48,10 @@ async function seed() {
     });
 
     await userRepository.save(adminUser);
-    console.log('✅ 默认管理员用户创建成功！');
+    console.log('[Seed] 默认管理员用户创建成功！');
     console.log('   用户名: admin');
-    console.log('   密码: admin123');
-    console.log('   ⚠️  请在生产环境中立即修改默认密码！');
+    console.log('   密码: (由 ADMIN_INIT_PASSWORD 环境变量指定，默认 admin123)');
+    console.log('   [Seed] 请在生产环境中立即修改默认密码！');
   }
 
   // 创建测试用户
@@ -59,7 +60,8 @@ async function seed() {
   });
 
   if (!existingTestUser) {
-    const hashedPassword = await bcrypt.hash('test123', 10);
+    const testPassword = process.env.TEST_INIT_PASSWORD || 'test123';
+    const hashedPassword = await bcrypt.hash(testPassword, 10);
 
     const testUser = userRepository.create({
       username: 'test',
@@ -72,16 +74,16 @@ async function seed() {
     });
 
     await userRepository.save(testUser);
-    console.log('✅ 测试用户创建成功！');
+    console.log('[Seed] 测试用户创建成功！');
     console.log('   用户名: test');
-    console.log('   密码: test123');
+    console.log('   密码: (由 TEST_INIT_PASSWORD 环境变量指定，默认 test123)');
   }
 
   await dataSource.destroy();
-  console.log('🎉 数据库初始化完成！');
+  console.log('[Seed] 数据库初始化完成！');
 }
 
 seed().catch((error) => {
-  console.error('❌ 初始化失败:', error);
+  console.error('[Seed] 初始化失败:', error);
   process.exit(1);
 });

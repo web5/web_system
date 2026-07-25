@@ -1,93 +1,145 @@
 #!/bin/bash
-# ==========================================
+# ===========================================================
 # Web System - 生产环境一键部署脚本
-# 目标服务器: 106.52.176.246 (root)
-# ==========================================
+# 服务器配置见 scripts/.env.prod
+#
+# 用法:
+#   ./scripts/deploy-prod.sh              # 部署全部
+#   ./scripts/deploy-prod.sh auth         # 只部署 auth-service
+#   ./scripts/deploy-prod.sh portal       # 只部署 portal 前端
+#   ./scripts/deploy-prod.sh gateway      # 只部署 gateway
+# ===========================================================
 set -e
 
-echo "========================================="
-echo "  Web System 生产环境部署"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$SCRIPT_DIR/scripts/.env.prod"
+COMPONENT="${1:-all}"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo -e "\033[0;31m[ERROR]\033[0m 未找到配置文件 $ENV_FILE"
+  exit 1
+fi
+source "$ENV_FILE"
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log()   { echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} [prod] $1"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} [prod] $1"; }
+err()   { echo -e "${RED}[ERROR]${NC} [prod] $1"; exit 1; }
+
+# SSH 命令（支持密码或密钥）
+SSH_CMD="ssh -o ConnectTimeout=5 -o BatchMode=yes"
+SCP_CMD="scp"
+if [ -n "$SERVER_PASSWORD" ]; then
+  export SSHPASS="$SERVER_PASSWORD"
+  SSH_CMD="sshpass -e ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no"
+  SCP_CMD="sshpass -e scp -o StrictHostKeyChecking=no"
+fi
+
+check_ssh() {
+  log "检查 SSH 连接..."
+  $SSH_CMD "$SERVER" "echo ok" 2>/dev/null || err "SSH 连接失败: $SERVER"
+  log "SSH 连接正常"
+}
+
+deploy_portal() {
+  log "===== 部署 Portal 前端 ====="
+  cd "$SCRIPT_DIR/apps/portal"
+  log "构建 portal..."
+  npx vite build 2>&1 || err "Portal 构建失败"
+  log "同步到远程服务器..."
+  tar czf - dist | $SSH_CMD "$SERVER" "cd $REMOTE_DIR/servers/gateway && rm -rf public/* && tar xzf - && mv dist/* public/ && rm -rf dist"
+  log "Portal 同步完成"
+  deploy_gateway_restart
+}
+
+deploy_auth() {
+  log "===== 部署 auth-service ====="
+  cd "$SCRIPT_DIR/servers/auth-service"
+  log "构建 auth-service..."
+  npx nest build 2>&1 || err "auth-service 构建失败"
+  log "同步 dist + 源码到远程..."
+  tar czf - dist src package.json | $SSH_CMD "$SERVER" "cd $REMOTE_DIR && tar xzf -"
+  log "重启 auth-service..."
+  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 delete auth-service 2>/dev/null; pm2 start servers/auth-service/dist/main.js --name auth-service"
+  log "auth-service 重启完成"
+}
+
+deploy_gateway() {
+  log "===== 部署 Gateway ====="
+  cd "$SCRIPT_DIR/servers/gateway"
+  log "构建 gateway..."
+  npx nest build 2>&1 || err "gateway 构建失败"
+  log "同步 dist 到远程..."
+  tar czf - dist | $SSH_CMD "$SERVER" "cd $REMOTE_DIR && tar xzf -"
+  deploy_gateway_restart
+}
+
+deploy_gateway_restart() {
+  log "重启 gateway..."
+  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 delete gateway 2>/dev/null; pm2 start servers/gateway/dist/main.js --name gateway"
+  log "gateway 重启完成"
+}
+
+deploy_config() {
+  log "===== 同步配置文件 ====="
+  $SCP_CMD "$SCRIPT_DIR/ecosystem.config.js" "$SERVER:$REMOTE_DIR/ecosystem.config.js"
+  log "ecosystem.config.js 已同步"
+}
+
+deploy_all() {
+  log "===== 全量部署 (prod) ====="
+  deploy_portal
+  deploy_auth
+  deploy_gateway
+  deploy_config
+  $SSH_CMD "$SERVER" "pm2 save"
+  log "===== 全部部署完成 ====="
+}
+
+health_check() {
+  log "===== 健康检查 ====="
+  sleep 5
+  for svc in "Gateway:3000" "Auth:3001"; do
+    name="${svc%%:*}"
+    port="${svc##*:}"
+    code=$($SSH_CMD "$SERVER" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$port/" 2>/dev/null || echo "000")
+    if [ "$code" = "000" ]; then warn "$name (:$port) → 无法连接"; else log "$name (:$port) → $code"; fi
+  done
+  log "公网验证:"
+  for url in "$PUBLIC_URL/" "$PUBLIC_URL/login"; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || echo "000")
+    log "  $url → $code"
+  done
+}
+
+echo ""
+echo "=========================================="
+echo "  Web System 生产环境部署脚本"
+echo "  服务器: $SERVER"
 echo "  时间: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "========================================="
-
-PROJECT_DIR="/root/web_system"
-
-cd "$PROJECT_DIR"
-
-# Step 1: 确保 Docker 运行
+echo "=========================================="
 echo ""
-echo "[1/5] 检查 Docker 状态..."
-if ! systemctl is-active docker &>/dev/null; then
-    echo "  启动 Docker..."
-    systemctl start docker
-    systemctl enable docker
-fi
-echo "  Docker: $(docker --version)"
 
-# Step 2: 确保 docker-compose 可用
-echo ""
-echo "[2/5] 检查 docker-compose..."
-if ! command -v docker-compose &>/dev/null; then
-    echo "  安装 docker-compose..."
-    curl -fsSL https://get.daocloud.io/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 \
-        -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-fi
-echo "  docker-compose: $(docker-compose --version)"
+check_ssh
 
-# Step 3: 停止旧服务（如果有）
-echo ""
-echo "[3/5] 停止旧容器..."
-docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-docker-compose -f docker-compose.yml down --remove-orphans 2>/dev/null || true
-
-# Step 4: 构建镜像
-echo ""
-echo "[4/5] 构建 Docker 镜像（可能需要几分钟）..."
-docker-compose -f docker-compose.prod.yml build --no-cache
-
-# Step 5: 启动服务
-echo ""
-echo "[5/5] 启动所有服务..."
-docker-compose -f docker-compose.prod.yml up -d
+case "$COMPONENT" in
+  all)    deploy_all; health_check ;;
+  portal) deploy_portal; health_check ;;
+  auth)   deploy_auth; health_check ;;
+  gateway) deploy_gateway; health_check ;;
+  config) deploy_config ;;
+  *)
+    echo "用法: $0 [all|portal|auth|gateway|config]"
+    exit 1
+    ;;
+esac
 
 echo ""
-echo "========================================="
-echo "  等待服务启动..."
-echo "========================================="
-sleep 5
-
-# 健康检查
-echo ""
-echo "检查服务状态:"
-docker-compose -f docker-compose.prod.yml ps
-
-echo ""
-echo "测试端口连通性:"
-for port in 3000 3001 3002 3003 6379; do
-    if nc -z localhost $port 2>/dev/null; then
-        echo "  ✅ Port $port - OK"
-    else
-        echo "  ⚠️  Port $port - 等待中..."
-    fi
-done
-
-echo ""
-echo "========================================="
-echo "  🚀 部署完成！"
-echo "  Gateway:   http://106.52.176.246:3000"
-echo "  Swagger:   http://106.52.176.246:3000/docs"
-echo "  Auth:      http://106.52.176.246:3001 (内部)"
-echo "  User:      http://106.52.176.246:3002 (内部)"
-echo "  AI:        http://106.52.176.246:3003 (内部)"
-echo ""
-echo "  ⚠️  小程序 API 地址: https://kedouai.com/api"
-echo "  ⚠️  请确保 kedouai.com Nginx 配置:"
-echo "     location /api {"
-echo "         proxy_pass http://106.52.176.246:3000;"
-echo "         proxy_set_header Host \$host;"
-echo "     }"
-echo "========================================="
-echo ""
-echo "查看日志: docker-compose -f docker-compose.prod.yml logs -f"
-echo "查看状态: docker-compose -f docker-compose.prod.yml ps"
+echo "=========================================="
+echo "  🎉 部署完成！"
+echo "  访问地址: $PUBLIC_URL"
+echo "=========================================="

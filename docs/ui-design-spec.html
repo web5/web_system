@@ -1,0 +1,1530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>科豆 AI · UI 设计规范</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-50:  #FFF8F0;
+    --brand-100: #FFEDD5;
+    --brand-200: #FED7AA;
+    --brand-400: #FFB347;
+    --brand-500: #FF8C42;
+    --brand-600: #E67E2A;
+    --brand-700: #C2691A;
+    --dark-brand-500: #F97316;
+    --dark-brand-600: #EA580C;
+    --dark-brand-700: #C2410C;
+
+    --surface-0: #FFFBF5;
+    --surface-1: #FFF8F0;
+    --surface-2: #FFFFFF;
+    --surface-3: #FFEDE0;
+    --text-1: #333333;
+    --text-2: #666666;
+    --text-3: #888888;
+    --border: #E5E5E5;
+    --border-soft: rgba(255,140,66,0.08);
+    --shadow-card: 0 4px 24px rgba(255,140,66,0.06);
+    --shadow-glow: 0 0 24px rgba(255,140,66,0.08);
+
+    --dark-surface-0: #000000;
+    --dark-surface-1: #0A0A0D;
+    --dark-surface-2: #0C0C0D;
+    --dark-surface-3: #111115;
+    --dark-text-1: #F8FAFC;
+    --dark-text-2: #CBD5E1;
+    --dark-text-3: #94A3B8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, sans-serif;
+    background: var(--surface-0);
+    color: var(--text-1);
+    line-height: 1.6;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 240px; height: 100vh;
+    background: var(--surface-2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0;
+    z-index: 100;
+  }
+  .sidebar-brand {
+    padding: 0 24px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 12px;
+  }
+  .sidebar-brand h1 {
+    font-size: 18px; font-weight: 700;
+    color: var(--brand-500);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sidebar-brand p {
+    font-size: 12px; color: var(--text-3);
+    margin-top: 4px;
+  }
+  .sidebar nav { padding: 0 12px; }
+  .nav-group-title {
+    font-size: 11px; font-weight: 600;
+    color: var(--text-3); text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 16px 12px 6px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px; color: var(--text-2);
+    text-decoration: none;
+    transition: all 0.2s;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: var(--brand-50); color: var(--brand-500); }
+  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: #ddd; flex-shrink: 0; }
+  .nav-item:hover .dot { background: var(--brand-500); }
+
+  /* ===== MAIN ===== */
+  .main {
+    margin-left: 240px;
+    padding: 40px 48px 80px;
+    max-width: 1100px;
+  }
+
+  .doc-header {
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 2px solid var(--brand-100);
+  }
+  .doc-header h1 {
+    font-size: 36px; font-weight: 800;
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .doc-header .meta {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    font-size: 13px; color: var(--text-3);
+  }
+  .doc-header .meta span { display: flex; align-items: center; gap: 6px; }
+  .doc-header .meta strong { color: var(--text-2); font-weight: 600; }
+
+  /* ===== SECTION ===== */
+  section { margin-bottom: 56px; scroll-margin-top: 20px; }
+  .section-title {
+    font-size: 22px; font-weight: 700; color: var(--text-1);
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px; height: 22px;
+    background: var(--brand-500);
+    border-radius: 2px;
+  }
+  .section-desc {
+    font-size: 14px; color: var(--text-2);
+    margin-bottom: 24px;
+    margin-left: 14px;
+  }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--shadow-card);
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 15px; font-weight: 600; color: var(--text-1);
+    margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title .tag {
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .tag-light { background: var(--brand-100); color: var(--brand-600); }
+  .tag-dark { background: #1a1a2e; color: #F97316; }
+
+  /* ===== COLOR SWATCHES ===== */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .swatch {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.06);
+    transition: all 0.2s;
+  }
+  .swatch:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .swatch-color {
+    height: 72px;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 6px 8px;
+  }
+  .swatch-color .hex {
+    font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,0.85);
+    padding: 1px 6px; border-radius: 4px;
+    color: #333;
+  }
+  .swatch-info {
+    padding: 8px 10px;
+    background: #fff;
+  }
+  .swatch-info .name { font-size: 11px; font-weight: 600; color: var(--text-1); }
+  .swatch-info .var { font-size: 10px; color: var(--text-3); font-family: 'SF Mono', Monaco, monospace; }
+
+  /* ===== TYPOGRAPHY SAMPLES ===== */
+  .type-row {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .type-row:last-child { border-bottom: none; }
+  .type-sample { flex: 1; }
+  .type-meta {
+    font-size: 12px; color: var(--text-3);
+    font-family: 'SF Mono', Monaco, monospace;
+    min-width: 160px; text-align: right;
+    white-space: nowrap;
+  }
+  .type-meta .px { font-weight: 600; color: var(--brand-500); }
+
+  /* ===== SPACING SCALE ===== */
+  .spacing-scale { display: flex; flex-direction: column; gap: 8px; }
+  .spacing-row {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px;
+  }
+  .spacing-bar {
+    background: var(--brand-500);
+    height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .spacing-label {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 12px; color: var(--text-2);
+    min-width: 80px;
+  }
+  .spacing-use { color: var(--text-3); font-size: 12px; }
+
+  /* ===== RADIUS ===== */
+  .radius-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 16px;
+  }
+  .radius-item { text-align: center; }
+  .radius-box {
+    width: 100%; height: 72px;
+    background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
+    margin-bottom: 8px;
+  }
+  .radius-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  .radius-value { font-size: 11px; color: var(--text-3); font-family: monospace; }
+
+  /* ===== SHADOW ===== */
+  .shadow-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 24px;
+  }
+  .shadow-item { text-align: center; }
+  .shadow-box {
+    width: 100%; height: 80px;
+    background: #fff;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  .shadow-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  .shadow-value { font-size: 10px; color: var(--text-3); font-family: monospace; word-break: break-all; }
+
+  /* ===== BUTTON PREVIEW ===== */
+  .btn-preview { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 0 20px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+    border: none; cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: #FF8C42; color: #fff;
+    box-shadow: 0 4px 16px rgba(255,140,66,0.3);
+  }
+  .btn-primary:hover { background: #E67E2A; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,140,66,0.4); }
+  .btn-secondary {
+    background: #fff; color: #666;
+    border: 1px solid #e0e0e0;
+  }
+  .btn-secondary:hover { border-color: #FF8C42; color: #FF8C42; }
+  .btn-wechat {
+    background: #07c160; color: #fff;
+    box-shadow: 0 4px 16px rgba(7,193,96,0.35);
+  }
+  .btn-large { height: 44px; font-size: 16px; border-radius: 12px; }
+  .btn-disabled {
+    background: #f0e8e0; color: #ccc;
+    cursor: not-allowed;
+  }
+
+  /* ===== INPUT PREVIEW ===== */
+  .input-preview { display: flex; flex-direction: column; gap: 16px; max-width: 400px; }
+  .input-group label { font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; display: block; }
+  .input-field {
+    width: 100%; height: 44px;
+    padding: 0 12px;
+    border: 1px solid #E5E5E5;
+    border-radius: 12px;
+    font-size: 14px; color: #333;
+    background: #fff;
+    transition: all 0.2s;
+    outline: none;
+  }
+  .input-field:focus { border-color: #FF8C42; box-shadow: 0 0 0 2px rgba(255,140,66,0.12); }
+  .input-field::placeholder { color: #bbb; }
+
+  /* ===== CARD PREVIEW ===== */
+  .card-preview {
+    background: #fff;
+    border: 1px solid rgba(255,140,66,0.08);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 24px rgba(255,140,66,0.06);
+    transition: all 0.3s ease;
+    max-width: 300px;
+  }
+  .card-preview:hover {
+    border-color: #FF8C42;
+    box-shadow: 0 4px 24px rgba(255,140,66,0.06), 0 0 24px rgba(255,140,66,0.08);
+    transform: translateY(-2px);
+  }
+  .card-preview h4 { font-size: 16px; margin-bottom: 8px; }
+  .card-preview p { font-size: 13px; color: #666; }
+
+  /* ===== DARK PREVIEW ===== */
+  .dark-preview {
+    background: #0A0A0D;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .dark-preview .dp-card {
+    background: #0C0C0D;
+    border: 1px solid rgba(249,115,22,0.12);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .dark-preview .dp-title { color: #F8FAFC; font-size: 14px; font-weight: 600; }
+  .dark-preview .dp-text { color: #94A3B8; font-size: 12px; }
+  .dark-preview .dp-btn {
+    display: inline-block;
+    background: #F97316; color: #fff;
+    padding: 6px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+  }
+
+  /* ===== TABLE ===== */
+  .spec-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  .spec-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--brand-50);
+    color: var(--text-2);
+    font-weight: 600;
+    font-size: 12px;
+    border-bottom: 2px solid var(--brand-100);
+  }
+  .spec-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    color: var(--text-1);
+  }
+  .spec-table tr:hover td { background: var(--brand-50); }
+  .spec-table code {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 12px;
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--brand-600);
+  }
+
+  /* ===== ANIMATION ===== */
+  .anim-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .anim-item {
+    background: #fff;
+    border: 1px solid #f0f0f0;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+  .anim-demo {
+    height: 40px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .anim-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  .anim-value { font-size: 10px; color: var(--text-3); font-family: monospace; }
+
+  @keyframes pulseDemo {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .demo-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--brand-500);
+    animation: pulseDemo 1.5s ease-in-out infinite;
+  }
+
+  @keyframes liftDemo {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  .demo-lift {
+    width: 40px; height: 40px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
+    animation: liftDemo 2s ease-in-out infinite;
+  }
+
+  @keyframes slideDemo {
+    0% { transform: translateX(-20px); opacity: 0; }
+    40%, 100% { transform: translateX(0); opacity: 1; }
+  }
+  .demo-slide {
+    width: 40px; height: 24px; border-radius: 6px;
+    background: var(--brand-500);
+    animation: slideDemo 2s ease infinite;
+  }
+
+  /* ===== THEME SWITCH ===== */
+  .theme-tabs {
+    display: flex; gap: 8px; margin-bottom: 20px;
+  }
+  .theme-tab {
+    padding: 6px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    border: 1px solid var(--border);
+    background: #fff; color: var(--text-2);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .theme-tab.active { background: var(--brand-500); color: #fff; border-color: var(--brand-500); }
+
+  /* ===== BREAKPOINT ===== */
+  .bp-bar {
+    display: flex; height: 60px; border-radius: 8px; overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .bp-segment {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #fff;
+    flex-direction: column; gap: 2px;
+  }
+  .bp-segment .bp-px { font-size: 13px; font-weight: 700; }
+  .bp-labels {
+    display: flex; font-size: 11px; color: var(--text-3);
+  }
+
+  /* ===== CODE BLOCK ===== */
+  .code-block {
+    background: #1a1a2e;
+    border-radius: 10px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin-top: 12px;
+  }
+  .code-block code {
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    font-size: 12px; line-height: 1.7;
+    color: #e2e8f0;
+  }
+  .code-block .kw { color: #c792ea; }
+  .code-block .str { color: #c3e88d; }
+  .code-block .num { color: #f78c6c; }
+  .code-block .com { color: #546e7a; font-style: italic; }
+  .code-block .var-name { color: #82aaff; }
+  .code-block .prop { color: #ffcb6b; }
+
+  /* ===== ARCHITECTURE ===== */
+  .arch-layer {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .arch-layer .arch-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    background: var(--brand-500); color: #fff;
+    flex-shrink: 0;
+  }
+
+  .footer {
+    margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    text-align: center; font-size: 12px; color: var(--text-3);
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h1>科豆 AI</h1>
+    <p>UI 设计规范 v1.0</p>
+  </div>
+  <nav>
+    <div class="nav-group-title">设计基础</div>
+    <a class="nav-item" href="#overview"><span class="dot"></span> 概述</a>
+    <a class="nav-item" href="#colors"><span class="dot"></span> 颜色体系</a>
+    <a class="nav-item" href="#typography"><span class="dot"></span> 字体体系</a>
+    <a class="nav-item" href="#spacing"><span class="dot"></span> 间距系统</a>
+    <a class="nav-item" href="#radius"><span class="dot"></span> 圆角规范</a>
+    <a class="nav-item" href="#shadows"><span class="dot"></span> 阴影规范</a>
+    <a class="nav-item" href="#breakpoints"><span class="dot"></span> 响应式断点</a>
+
+    <div class="nav-group-title">组件规范</div>
+    <a class="nav-item" href="#buttons"><span class="dot"></span> 按钮 Button</a>
+    <a class="nav-item" href="#inputs"><span class="dot"></span> 输入框 Input</a>
+    <a class="nav-item" href="#cards"><span class="dot"></span> 卡片 Card</a>
+    <a class="nav-item" href="#navigation"><span class="dot"></span> 导航 Navbar</a>
+    <a class="nav-item" href="#modal"><span class="dot"></span> 模态框 Modal</a>
+
+    <div class="nav-group-title">交互与主题</div>
+    <a class="nav-item" href="#states"><span class="dot"></span> 交互状态</a>
+    <a class="nav-item" href="#animations"><span class="dot"></span> 动画规范</a>
+    <a class="nav-item" href="#antd"><span class="dot"></span> Ant Design 定制</a>
+    <a class="nav-item" href="#architecture"><span class="dot"></span> 样式架构</a>
+  </nav>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<main class="main">
+
+<!-- HEADER -->
+<div class="doc-header">
+  <h1>科豆 AI · UI 设计规范</h1>
+  <div class="meta">
+    <span><strong>平台：</strong>儿童创造力平台</span>
+    <span><strong>技术栈：</strong>Vue 3 + Ant Design Vue 4 + CSS Variables</span>
+    <span><strong>多主题：</strong>Portal 暖色亮色 / Admin 亮色+暗色（可切换）</span>
+    <span><strong>版本：</strong>v1.1</span>
+  </div>
+</div>
+
+<!-- ===== OVERVIEW ===== -->
+<section id="overview">
+  <div class="section-title">概述</div>
+  <p class="section-desc">科豆 AI 平台采用「暖橙」品牌色系，基于 Ant Design Vue 4.x + CSS Variables 实现多主题方案。Portal 端为暖色亮色主题，面向 C 端用户；Admin 后台支持亮色/暗色双主题切换（默认亮色），面向管理运营。</p>
+
+  <div class="card">
+    <div class="card-title">多主题策略一览</div>
+    <div class="theme-tabs">
+      <div class="theme-tab active">Portal — 暖色亮色</div>
+      <div class="theme-tab">Admin — 亮色（默认）</div>
+      <div class="theme-tab">Admin — 暗色</div>
+    </div>
+    <table class="spec-table">
+      <thead>
+        <tr><th>维度</th><th>Portal（暖色亮色）</th><th>Admin 亮色（默认）</th><th>Admin 暗色</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>品牌主色</td><td><code>#FF8C42</code> 魔法橙</td><td><code>#FF8C42</code></td><td><code>#FF8C42</code></td></tr>
+        <tr><td>背景基调</td><td><code>#FFFBF5</code> 暖白</td><td><code>#F5F5F8</code> 浅灰白</td><td><code>#000000</code> 纯黑</td></tr>
+        <tr><td>文字色</td><td><code>#333333</code> 深灰</td><td><code>#0F172A</code> 深色</td><td><code>#F8FAFC</code> 雪白</td></tr>
+        <tr><td>卡片背景</td><td>暖白渐变</td><td><code>#FFFFFF → #FAFAFC</code></td><td><code>#141419 → #16161C</code></td></tr>
+        <tr><td>全局圆角</td><td>8px / 12px（登录页）</td><td>12px</td><td>12px</td></tr>
+        <tr><td>字体族</td><td>Inter + PingFang SC</td><td colspan="2">Inter</td></tr>
+        <tr><td>Ant Design 算法</td><td>defaultAlgorithm</td><td>defaultAlgorithm</td><td>darkAlgorithm</td></tr>
+        <tr><td>阴影基调</td><td>橙色微光阴影</td><td><code>0 4px 16px rgba(0,0,0,.08)</code></td><td>无阴影，用 border 替代</td></tr>
+        <tr><td>主题切换</td><td>—</td><td colspan="2">Pinia store + <code>data-theme</code> 属性 + algorithm 动态切换</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== COLORS ===== -->
+<section id="colors">
+  <div class="section-title">颜色体系</div>
+  <p class="section-desc">品牌色为「科豆橙」，在 Portal 和 Admin 中有细微色差。颜色系统通过 CSS Variables 定义在 <code>:root</code> 中，Ant Design 的 <code>--ant-color-*</code> 变量挂载到品牌色变量上。</p>
+
+  <!-- Portal Brand Colors -->
+  <div class="card">
+    <div class="card-title">品牌色彩阶 — Portal（暖色）<span class="tag tag-light">LIGHT</span></div>
+    <div class="color-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFF8F0"><span class="hex">#FFF8F0</span></div>
+        <div class="swatch-info"><div class="name">Brand 50</div><div class="var">--color-brand-50</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFEDD5"><span class="hex">#FFEDD5</span></div>
+        <div class="swatch-info"><div class="name">Brand 100</div><div class="var">--color-brand-100</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FED7AA"><span class="hex">#FED7AA</span></div>
+        <div class="swatch-info"><div class="name">Brand 200</div><div class="var">--color-brand-200</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFB347"><span class="hex">#FFB347</span></div>
+        <div class="swatch-info"><div class="name">Brand 400</div><div class="var">--color-brand-400</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FF8C42"><span class="hex">#FF8C42</span></div>
+        <div class="swatch-info"><div class="name">Brand 500 ★</div><div class="var">--color-brand-500</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#E67E2A"><span class="hex">#E67E2A</span></div>
+        <div class="swatch-info"><div class="name">Brand 600</div><div class="var">--color-brand-600</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#C2691A"><span class="hex">#C2691A</span></div>
+        <div class="swatch-info"><div class="name">Brand 700</div><div class="var">--color-brand-700</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Brand Colors -->
+  <div class="card">
+    <div class="card-title">品牌色彩阶 — Admin（暗色）<span class="tag tag-dark">DARK</span></div>
+    <div class="color-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFF7ED"><span class="hex">#FFF7ED</span></div>
+        <div class="swatch-info"><div class="name">Brand 50</div><div class="var">--color-brand-50</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFEDD5"><span class="hex">#FFEDD5</span></div>
+        <div class="swatch-info"><div class="name">Brand 100</div><div class="var">--color-brand-100</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FED7AA"><span class="hex">#FED7AA</span></div>
+        <div class="swatch-info"><div class="name">Brand 200</div><div class="var">--color-brand-200</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FB923C"><span class="hex">#FB923C</span></div>
+        <div class="swatch-info"><div class="name">Brand 400</div><div class="var">--color-brand-400</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#F97316"><span class="hex">#F97316</span></div>
+        <div class="swatch-info"><div class="name">Brand 500 ★</div><div class="var">--color-brand-500</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#EA580C"><span class="hex">#EA580C</span></div>
+        <div class="swatch-info"><div class="name">Brand 600</div><div class="var">--color-brand-600</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#C2410C"><span class="hex">#C2410C</span></div>
+        <div class="swatch-info"><div class="name">Brand 700</div><div class="var">--color-brand-700</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Surface Colors -->
+  <div class="card">
+    <div class="card-title">表面层级色（Surface）</div>
+    <table class="spec-table">
+      <thead><tr><th>变量</th><th>Portal 值</th><th>Admin 值</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>--surface-0</code></td><td><code>#FFFBF5</code></td><td><code>#000000</code></td><td>最底层背景</td></tr>
+        <tr><td><code>--surface-1</code></td><td><code>#FFF8F0</code></td><td><code>#0A0A0D</code></td><td>顶栏 / 侧栏</td></tr>
+        <tr><td><code>--surface-2</code></td><td><code>#FFFFFF</code></td><td><code>#0C0C0D</code></td><td>卡片 / 表格</td></tr>
+        <tr><td><code>--surface-3</code></td><td><code>#FFEDE0</code></td><td><code>#111115</code></td><td>表头 / 激活态</td></tr>
+        <tr><td><code>--surface-4</code></td><td><code>#FFF3E8</code></td><td><code>#18181B</code></td><td>悬浮态</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Text Colors -->
+  <div class="card">
+    <div class="card-title">文字色阶（Text）</div>
+    <table class="spec-table">
+      <thead><tr><th>变量</th><th>Portal 值</th><th>Admin 值</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>--text-primary</code></td><td><code>#333333</code></td><td><code>#F8FAFC</code></td><td>主文字</td></tr>
+        <tr><td><code>--text-secondary</code></td><td><code>#666666</code></td><td><code>#CBD5E1</code></td><td>次要文字</td></tr>
+        <tr><td><code>--text-tertiary</code></td><td><code>#888888</code></td><td><code>#94A3B8</code></td><td>辅助说明</td></tr>
+        <tr><td><code>--text-disabled</code></td><td><code>#BBBBBB</code></td><td><code>#64748B</code></td><td>禁用文字</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Functional Colors -->
+  <div class="card">
+    <div class="card-title">功能色（Functional）</div>
+    <div class="color-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#7ED957"><span class="hex">#7ED957</span></div>
+        <div class="swatch-info"><div class="name">Success</div><div class="var">colorSuccess</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#07c160"><span class="hex">#07c160</span></div>
+        <div class="swatch-info"><div class="name">WeChat Green</div><div class="var">OAuth 按钮</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#3B82F6"><span class="hex">#3B82F6</span></div>
+        <div class="swatch-info"><div class="name">Info Blue</div><div class="var">Dashboard</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#A855F7"><span class="hex">#A855F7</span></div>
+        <div class="swatch-info"><div class="name">Purple</div><div class="var">Dashboard</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#E5E5E5"><span class="hex">#E5E5E5</span></div>
+        <div class="swatch-info"><div class="name">Border</div><div class="var">输入框边框</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:rgba(255,140,66,0.08)"><span class="hex">rgba(...0.08)</span></div>
+        <div class="swatch-info"><div class="name">Border Subtle</div><div class="var">--border-subtle</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Border Colors -->
+  <div class="card">
+    <div class="card-title">边框色（Border）</div>
+    <table class="spec-table">
+      <thead><tr><th>变量</th><th>Portal 值</th><th>Admin 值</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>--border-subtle</code></td><td><code>rgba(255,140,66,0.08)</code></td><td><code>rgba(249,115,22,0.12)</code></td><td>细微边框（卡片默认）</td></tr>
+        <tr><td><code>--border-default</code></td><td><code>rgba(255,140,66,0.15)</code></td><td><code>rgba(249,115,22,0.2)</code></td><td>默认边框</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== TYPOGRAPHY ===== -->
+<section id="typography">
+  <div class="section-title">字体体系</div>
+  <p class="section-desc">两个应用均使用 Inter 作为西文字体，Portal 额外引入 PingFang SC 作为中文字体回退。</p>
+
+  <div class="card">
+    <div class="card-title">字体族（Font Family）</div>
+    <table class="spec-table">
+      <thead><tr><th>应用</th><th>字体族</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Portal</td>
+          <td><code>'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, sans-serif</code></td>
+          <td>含 PingFang SC 中文回退</td>
+        </tr>
+        <tr>
+          <td>Admin</td>
+          <td><code>'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif</code></td>
+          <td>纯西文优先</td>
+        </tr>
+        <tr>
+          <td>Ant 组件（Portal）</td>
+          <td><code>-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif</code></td>
+          <td>ConfigProvider 覆盖</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">字号层级（Font Size）</div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:42px;font-weight:800;">Hero 大标题</div>
+      <div class="type-meta"><span class="px">42px</span> · weight 800</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:32px;font-weight:700;">区块标题</div>
+      <div class="type-meta"><span class="px">32px</span> · weight 700</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:24px;font-weight:700;">品牌名</div>
+      <div class="type-meta"><span class="px">24px</span> · weight 700</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:18px;font-weight:700;">卡片标题</div>
+      <div class="type-meta"><span class="px">18px</span> · weight 700</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:16px;font-weight:600;">提交按钮 / Logo</div>
+      <div class="type-meta"><span class="px">16px</span> · weight 600</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:14px;font-weight:500;">正文 / 导航链接</div>
+      <div class="type-meta"><span class="px">14px</span> · weight 500</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:13px;font-weight:400;">辅助文字 / 页脚</div>
+      <div class="type-meta"><span class="px">13px</span> · weight 400</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:12px;font-weight:400;color:#888;">次要说明 / 标签</div>
+      <div class="type-meta"><span class="px">12px</span> · weight 400</div>
+    </div>
+    <div class="type-row">
+      <div class="type-sample" style="font-size:11px;font-weight:400;color:#aaa;">小标签</div>
+      <div class="type-meta"><span class="px">11px</span> · weight 400</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">字重规范（Font Weight）</div>
+    <table class="spec-table">
+      <thead><tr><th>字重</th><th>值</th><th>使用场景</th></tr></thead>
+      <tbody>
+        <tr><td>Extra Bold</td><td><code>800</code></td><td>Hero 大标题</td></tr>
+        <tr><td>Bold</td><td><code>700</code></td><td>区块标题、卡片标题、Logo</td></tr>
+        <tr><td>Semi Bold</td><td><code>600</code></td><td>按钮文字、导航激活态</td></tr>
+        <tr><td>Medium</td><td><code>500</code></td><td>导航链接、表单标签</td></tr>
+        <tr><td>Regular</td><td><code>400</code></td><td>正文、辅助文字（body 默认）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== SPACING ===== -->
+<section id="spacing">
+  <div class="section-title">间距系统</div>
+  <p class="section-desc">项目未使用显式的 spacing scale 变量，但在组件样式中存在一致的 4px 基准间距模式。</p>
+
+  <div class="card">
+    <div class="card-title">间距阶（Spacing Scale）</div>
+    <div class="spacing-scale">
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:4px"></div>
+        <div class="spacing-label">4px</div>
+        <div class="spacing-use">极小间距 — gap、icon 间距</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:8px"></div>
+        <div class="spacing-label">8px</div>
+        <div class="spacing-use">小间距 — 卡片 padding、紧凑 gap</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:12px"></div>
+        <div class="spacing-label">12px</div>
+        <div class="spacing-use">标准小间距 — 按钮间距、菜单项</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:16px"></div>
+        <div class="spacing-label">16px</div>
+        <div class="spacing-use">标准间距 — 区块 margin、表单项</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:20px"></div>
+        <div class="spacing-label">20px</div>
+        <div class="spacing-use">卡片 padding</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:24px"></div>
+        <div class="spacing-label">24px</div>
+        <div class="spacing-use">大间距 — 区块 padding、卡片 padding</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:32px"></div>
+        <div class="spacing-label">32px</div>
+        <div class="spacing-use">卡片 padding（步骤卡片）</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:60px"></div>
+        <div class="spacing-label">60px</div>
+        <div class="spacing-use">区块间距</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:80px"></div>
+        <div class="spacing-label">80px</div>
+        <div class="spacing-use">大区块 padding</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-bar" style="width:120px"></div>
+        <div class="spacing-label">120px</div>
+        <div class="spacing-use">Hero 区域 top padding</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">布局宽度</div>
+    <table class="spec-table">
+      <thead><tr><th>用途</th><th>值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>内容最大宽度</td><td><code>1200px</code></td><td>Portal 导航栏、首页内容区</td></tr>
+        <tr><td>表单最大宽度</td><td><code>520px</code></td><td>设置页表单</td></tr>
+        <tr><td>设置项最大宽度</td><td><code>680px</code></td><td>设置页 tab 内容</td></tr>
+        <tr><td>登录卡片</td><td><code>420px</code></td><td>Portal 登录面板</td></tr>
+        <tr><td>Hero 文本</td><td><code>520px</code></td><td>首页 Hero 区文字</td></tr>
+        <tr><td>导航栏高度</td><td><code>64px</code></td><td>Portal 顶部导航</td></tr>
+        <tr><td>Admin 顶栏高度</td><td><code>56px</code></td><td>Admin 顶部栏</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== RADIUS ===== -->
+<section id="radius">
+  <div class="section-title">圆角规范</div>
+  <p class="section-desc">全局圆角通过 ConfigProvider <code>borderRadius</code> 统一设置：Portal 默认 8px（登录页 12px），Admin 统一 12px。组件级别有更细粒度的圆角。</p>
+
+  <div class="card">
+    <div class="card-title">圆角层级</div>
+    <div class="radius-grid">
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:4px"></div>
+        <div class="radius-label">小圆角</div>
+        <div class="radius-value">4px — 小按钮</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:8px"></div>
+        <div class="radius-label">标准圆角</div>
+        <div class="radius-value">8px — 导航、输入框</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:12px"></div>
+        <div class="radius-label">卡片圆角</div>
+        <div class="radius-value">12px — 全局卡片</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:20px"></div>
+        <div class="radius-label">大圆角</div>
+        <div class="radius-value">20px — Hero、步骤卡</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:24px"></div>
+        <div class="radius-label">超大圆角</div>
+        <div class="radius-value">24px — Hero 按钮</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:50%"></div>
+        <div class="radius-label">全圆角</div>
+        <div class="radius-value">50% — 头像、关闭</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SHADOWS ===== -->
+<section id="shadows">
+  <div class="section-title">阴影规范</div>
+  <p class="section-desc">Portal 使用橙色微光阴影体系，通过 CSS 变量定义；Admin 亮色使用轻阴影，暗色不使用阴影改用 border 替代。</p>
+
+  <div class="card">
+    <div class="card-title">阴影定义（Portal）<span class="tag tag-light">LIGHT</span></div>
+    <div class="shadow-grid">
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 4px 24px rgba(255,140,66,0.06)"></div>
+        <div class="shadow-label">Card Shadow</div>
+        <div class="shadow-value">--shadow-card<br>0 4px 24px<br>rgba(255,140,66,0.06)</div>
+      </div>
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 0 24px rgba(255,140,66,0.08)"></div>
+        <div class="shadow-label">Glow Shadow</div>
+        <div class="shadow-value">--shadow-glow<br>0 0 24px<br>rgba(255,140,66,0.08)</div>
+      </div>
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 4px 16px rgba(255,140,66,0.3)"></div>
+        <div class="shadow-label">Button Shadow</div>
+        <div class="shadow-value">0 4px 16px<br>rgba(255,140,66,0.3)</div>
+      </div>
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 6px 20px rgba(255,140,66,0.4)"></div>
+        <div class="shadow-label">Button Hover</div>
+        <div class="shadow-value">0 6px 20px<br>rgba(255,140,66,0.4)</div>
+      </div>
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 8px 32px rgba(255,140,66,0.1)"></div>
+        <div class="shadow-label">Card Hover</div>
+        <div class="shadow-value">0 8px 32px<br>rgba(255,140,66,0.1)</div>
+      </div>
+      <div class="shadow-item">
+        <div class="shadow-box" style="box-shadow:0 4px 14px rgba(255,140,66,0.25)"></div>
+        <div class="shadow-label">Tab Active</div>
+        <div class="shadow-value">0 4px 14px<br>rgba(255,140,66,0.25)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">阴影规则</div>
+    <table class="spec-table">
+      <thead><tr><th>规则</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>阴影色基</td><td>所有阴影颜色基于品牌橙 <code>rgba(255,140,66,...)</code></td></tr>
+        <tr><td>透明度范围</td><td>0.06（细微）→ 0.45（强发光）</td></tr>
+        <tr><td>默认态</td><td>使用 <code>--shadow-card</code>（低透明度）</td></tr>
+        <tr><td>Hover 态</td><td>叠加 <code>--shadow-glow</code>，增强发光效果</td></tr>
+        <tr><td>Admin 亮色</td><td><code>0 4px 16px rgba(0,0,0,.08)</code></td></tr>
+        <tr><td>Admin 暗色</td><td>不使用阴影，用 <code>border: 1px solid rgba(255,255,255,.06)</code> 替代</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== BREAKPOINTS ===== -->
+<section id="breakpoints">
+  <div class="section-title">响应式断点</div>
+  <p class="section-desc">项目使用原生 CSS 媒体查询，共 4 个自定义断点 + Ant Design 栅格系统。</p>
+
+  <div class="card">
+    <div class="card-title">断点定义</div>
+    <div class="bp-bar">
+      <div class="bp-segment" style="background:#FFB347;flex:480">
+        <span class="bp-px">≤480px</span>
+        <span>小屏手机</span>
+      </div>
+      <div class="bp-segment" style="background:#FF8C42;flex:160">
+        <span class="bp-px">≤640px</span>
+        <span>手机</span>
+      </div>
+      <div class="bp-segment" style="background:#E67E2A;flex:128">
+        <span class="bp-px">≤768px</span>
+        <span>平板</span>
+      </div>
+      <div class="bp-segment" style="background:#C2691A;flex:200">
+        <span class="bp-px">≤968px</span>
+        <span>小屏桌面</span>
+      </div>
+    </div>
+    <table class="spec-table">
+      <thead><tr><th>断点</th><th>类型</th><th>触发行为</th></tr></thead>
+      <tbody>
+        <tr><td><code>max-width: 480px</code></td><td>小屏手机</td><td>隐藏品牌文字，仅显示 Logo 图标</td></tr>
+        <tr><td><code>max-width: 640px</code></td><td>手机</td><td>Hero 标题缩小至 28px，二维码卡片缩窄</td></tr>
+        <tr><td><code>max-width: 768px</code></td><td>平板</td><td>隐藏桌面导航，显示汉堡菜单；隐藏用户区</td></tr>
+        <tr><td><code>max-width: 968px</code></td><td>小屏桌面</td><td>Hero 布局从横排变竖排，步骤网格变单列</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Ant Design 栅格（Admin）</div>
+    <table class="spec-table">
+      <thead><tr><th>断点</th><th>宽度</th><th>典型用法</th></tr></thead>
+      <tbody>
+        <tr><td>xs</td><td>≥576px</td><td><code>:xs="24"</code> — 单列</td></tr>
+        <tr><td>sm</td><td>≥768px</td><td><code>:sm="12"</code> — 两列</td></tr>
+        <tr><td>md / lg</td><td>≥992px / ≥1200px</td><td><code>:lg="6"</code> — 四列</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== BUTTONS ===== -->
+<section id="buttons">
+  <div class="section-title">按钮 Button</div>
+  <p class="section-desc">按钮基于 Ant Design Vue Button 组件，通过 <code>colorPrimary</code> 主题统一品牌色。Portal 额外定义了 <code>.btn-orange</code> 全局类和自定义按钮样式。</p>
+
+  <div class="card">
+    <div class="card-title">按钮类型</div>
+    <div style="display:flex;flex-direction:column;gap:20px;">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">主按钮（Primary）</div>
+        <div class="btn-preview">
+          <button class="btn btn-primary">开始创作</button>
+          <button class="btn btn-primary btn-large">登录 / 注册</button>
+          <button class="btn btn-primary btn-disabled" style="cursor:not-allowed;">禁用态</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">次按钮（Secondary）</div>
+        <div class="btn-preview">
+          <button class="btn btn-secondary">了解更多</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">微信 OAuth 按钮</div>
+        <div class="btn-preview">
+          <button class="btn btn-wechat btn-large">微信一键登录</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">按钮规范</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>标准按钮</th><th>大按钮</th></tr></thead>
+      <tbody>
+        <tr><td>高度</td><td><code>40px</code></td><td><code>44-46px</code></td></tr>
+        <tr><td>圆角</td><td><code>8px</code></td><td><code>12px</code></td></tr>
+        <tr><td>字号</td><td><code>14px</code></td><td><code>16px</code></td></tr>
+        <tr><td>字重</td><td><code>600</code></td><td><code>600</code></td></tr>
+        <tr><td>主色背景</td><td colspan="2"><code>#FF8C42</code></td></tr>
+        <tr><td>Hover 背景</td><td colspan="2"><code>#E67E2A</code> + <code>translateY(-2px)</code></td></tr>
+        <tr><td>主色阴影</td><td><code>0 4px 16px rgba(255,140,66,0.3)</code></td><td>同左</td></tr>
+        <tr><td>Hover 阴影</td><td colspan="2"><code>0 6px 20px rgba(255,140,66,0.4)</code></td></tr>
+        <tr><td>过渡</td><td colspan="2"><code>transition: all 0.2s</code></td></tr>
+        <tr><td>禁用态</td><td colspan="2"><code>background: #f0e8e0; color: #ccc; cursor: not-allowed</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== INPUTS ===== -->
+<section id="inputs">
+  <div class="section-title">输入框 Input</div>
+  <p class="section-desc">基于 Ant Design Vue Input，通过 <code>:deep()</code> 覆盖样式。Portal 登录页强制亮色覆盖，Admin 使用半透明白色背景。</p>
+
+  <div class="card">
+    <div class="card-title">输入框预览（Portal 亮色）</div>
+    <div class="input-preview">
+      <div class="input-group">
+        <label>用户名</label>
+        <input class="input-field" type="text" placeholder="请输入用户名">
+      </div>
+      <div class="input-group">
+        <label>密码</label>
+        <input class="input-field" type="password" placeholder="请输入密码" value="••••••">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">输入框规范</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>Portal（亮色）</th><th>Admin 亮色</th><th>Admin 暗色</th></tr></thead>
+      <tbody>
+        <tr><td>高度</td><td><code>44px</code></td><td colspan="2">Ant 默认</td></tr>
+        <tr><td>圆角</td><td><code>12px</code></td><td colspan="2"><code>8px</code></td></tr>
+        <tr><td>背景色</td><td><code>#FFFFFF</code></td><td><code>#F8FAFC</code></td><td><code>rgba(255,255,255,0.04)</code></td></tr>
+        <tr><td>边框色</td><td><code>#E5E5E5</code></td><td><code>rgba(0,0,0,0.1)</code></td><td><code>rgba(255,255,255,0.08)</code></td></tr>
+        <tr><td>文字色</td><td><code>#333333</code></td><td><code>#1E293B</code></td><td><code>#E2E8F0</code></td></tr>
+        <tr><td>Focus 边框</td><td><code>#FF8C42</code></td><td colspan="2"><code>#FF8C42</code></td></tr>
+        <tr><td>Focus 阴影</td><td>—</td><td colspan="2"><code>0 0 0 2px rgba(255,140,66,0.12)</code></td></tr>
+        <tr><td>Hover 边框</td><td>—</td><td colspan="2"><code>rgba(255,140,66,0.4)</code></td></tr>
+        <tr><td>Prefix 图标色</td><td><code>#FF8C42</code></td><td colspan="2">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== CARDS ===== -->
+<section id="cards">
+  <div class="section-title">卡片 Card</div>
+  <p class="section-desc">Portal 卡片使用暖色微光阴影 + hover 上浮效果；Admin 亮色卡片使用轻阴影 + 白底渐变，暗色卡片使用暗色渐变背景 + border 替代阴影。</p>
+
+  <div class="card">
+    <div class="card-title">Portal 卡片预览</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div class="card-preview">
+        <h4>AI 拼贴变身</h4>
+        <p>上传一张照片，AI 帮你变身 3D 角色</p>
+      </div>
+      <div class="card-preview" style="background:#0C0C0D;border-color:rgba(249,115,22,0.12);">
+        <h4 style="color:#F8FAFC;">Admin 暗色卡片</h4>
+        <p style="color:#94A3B8;">渐变背景 + 细边框</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">卡片规范</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>Portal</th><th>Admin</th></tr></thead>
+      <tbody>
+        <tr><td>背景</td><td><code>#FFFFFF</code></td><td><code>linear-gradient(135deg, #141419, #16161C)</code></td></tr>
+        <tr><td>边框</td><td><code>1px solid rgba(255,140,66,0.08)</code></td><td><code>1px solid rgba(255,255,255,0.06)</code></td></tr>
+        <tr><td>圆角</td><td><code>12px</code></td><td><code>12px</code></td></tr>
+        <tr><td>阴影</td><td><code>--shadow-card</code></td><td>无</td></tr>
+        <tr><td>Padding</td><td><code>20-24px</code></td><td><code>20-24px</code></td></tr>
+        <tr><td>Hover 效果</td><td><code>translateY(-2px)</code> + 边框变橙 + 叠加 glow</td><td><code>translateY(-2px)</code> + border 透明度增加</td></tr>
+        <tr><td>过渡</td><td><code>all 0.3s ease</code></td><td><code>all 0.25s</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== NAVIGATION ===== -->
+<section id="navigation">
+  <div class="section-title">导航 Navbar</div>
+  <p class="section-desc">Portal 使用 sticky 顶部导航栏（64px），Admin 使用侧边栏 + 顶栏（56px）布局。</p>
+
+  <div class="card">
+    <div class="card-title">Portal 顶部导航</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>高度</td><td><code>64px</code></td></tr>
+        <tr><td>背景</td><td><code>#FFFFFF</code></td></tr>
+        <tr><td>底部边框</td><td><code>1px solid #EEEEEE</code></td></tr>
+        <tr><td>定位</td><td><code>position: sticky; top: 0; z-index: 100</code></td></tr>
+        <tr><td>内容最大宽度</td><td><code>1200px</code></td></tr>
+        <tr><td>导航链接字号</td><td><code>14px</code></td></tr>
+        <tr><td>链接默认色</td><td><code>#666666</code></td></tr>
+        <tr><td>链接 Hover</td><td><code>color: #FF8C42; background: #FFF8F0</code></td></tr>
+        <tr><td>链接 Active</td><td><code>color: #FF8C42; background: #FFF8F0; font-weight: 600</code></td></tr>
+        <tr><td>头像背景</td><td><code>#FF8C42</code> + <code>border-radius: 50%</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Admin 侧边栏 + 顶栏</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>顶栏高度</td><td><code>56px</code></td></tr>
+        <tr><td>顶栏背景</td><td><code>rgba(10,10,13,0.95)</code> + <code>backdrop-filter: blur(12px)</code></td></tr>
+        <tr><td>顶栏底边框</td><td><code>1px solid rgba(255,140,66,0.1)</code></td></tr>
+        <tr><td>菜单选中态</td><td><code>background: linear-gradient(90deg, rgba(255,140,66,0.15), rgba(255,140,66,0.04))</code></td></tr>
+        <tr><td>菜单 Hover</td><td><code>background: rgba(255,140,66,0.06)</code></td></tr>
+        <tr><td>Logo 文字色</td><td><code>#FF8C42</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">移动端导航</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>触发断点</td><td><code>max-width: 768px</code></td></tr>
+        <tr><td>侧边抽屉宽度</td><td><code>280px</code>（<code>max-width: 80vw</code>）</td></tr>
+        <tr><td>抽屉背景</td><td><code>#FFFFFF</code></td></tr>
+        <tr><td>遮罩背景</td><td><code>rgba(0,0,0,0.4)</code></td></tr>
+        <tr><td>滑入动画</td><td><code>transform: translateX(-100%) → 0; transition: 0.3s ease</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== MODAL ===== -->
+<section id="modal">
+  <div class="section-title">模态框 Modal</div>
+  <p class="section-desc">Admin 使用 Ant Design Modal 组件覆盖暗色样式；Portal Todo 表单使用自定义底部滑出 overlay。</p>
+
+  <div class="card">
+    <div class="card-title">Modal 规范</div>
+    <table class="spec-table">
+      <thead><tr><th>属性</th><th>Admin（Ant Modal）</th><th>Portal（自定义）</th></tr></thead>
+      <tbody>
+        <tr><td>内容背景</td><td><code>#141419</code></td><td><code>#FFFFFF</code></td></tr>
+        <tr><td>边框</td><td><code>1px solid rgba(255,255,255,0.08)</code></td><td>—</td></tr>
+        <tr><td>标题色</td><td><code>#F1F5F9</code></td><td>—</td></tr>
+        <tr><td>遮罩</td><td>Ant 默认</td><td><code>rgba(0,0,0,0.5)</code></td></tr>
+        <tr><td>出现方式</td><td>Ant 默认缩放</td><td>底部滑出 <code>slideUp 0.3s</code></td></tr>
+        <tr><td>圆角</td><td>Ant 默认</td><td><code>4px 4px 0 0</code>（顶部圆角）</td></tr>
+        <tr><td>最大宽度</td><td>Ant 默认</td><td><code>500px</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== INTERACTION STATES ===== -->
+<section id="states">
+  <div class="section-title">交互状态</div>
+  <p class="section-desc">统一的交互状态规范，覆盖 hover / active / focus / disabled 等场景。</p>
+
+  <div class="card">
+    <div class="card-title">交互状态规范</div>
+    <table class="spec-table">
+      <thead><tr><th>组件</th><th>状态</th><th>效果</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="3">按钮</td><td>Hover</td><td>背景加深 + <code>translateY(-2px)</code> + 阴影增强</td></tr>
+        <tr><td>Active</td><td>背景再深一级</td></tr>
+        <tr><td>Disabled</td><td><code>background: #f0e8e0; color: #ccc; cursor: not-allowed</code></td></tr>
+        <tr><td rowspan="3">输入框</td><td>Hover</td><td>边框色变为 <code>rgba(255,140,66,0.4)</code></td></tr>
+        <tr><td>Focus</td><td>边框 <code>#FF8C42</code> + <code>box-shadow: 0 0 0 2px rgba(255,140,66,0.12)</code></td></tr>
+        <tr><td>Disabled</td><td>Ant 默认灰化</td></tr>
+        <tr><td rowspan="2">卡片</td><td>Hover</td><td><code>translateY(-2px)</code> + 边框变橙 + 阴影增强</td></tr>
+        <tr><td>—</td><td>过渡 <code>all 0.3s ease</code></td></tr>
+        <tr><td rowspan="2">导航链接</td><td>Hover</td><td>文字 <code>#FF8C42</code> + 背景 <code>#FFF8F0</code></td></tr>
+        <tr><td>Active</td><td>同 Hover + <code>font-weight: 600</code></td></tr>
+        <tr><td rowspan="2">菜单项</td><td>Hover</td><td><code>background: rgba(255,140,66,0.06)</code></td></tr>
+        <tr><td>Selected</td><td>渐变背景 + 右侧橙色指示条</td></tr>
+        <tr><td rowspan="2">表格行</td><td>Hover</td><td><code>background: rgba(255,140,66,0.04)</code></td></tr>
+        <tr><td>Active（分页）</td><td><code>#FF8C42</code> 边框 + 文字</td></tr>
+        <tr><td>链接</td><td>Hover</td><td><code>color: #FF8C42</code></td></tr>
+        <tr><td>Tab</td><td>Active</td><td>ink-bar <code>#FF8C42</code> + 文字 <code>#FF8C42</code></td></tr>
+        <tr><td>Switch / Pagination</td><td>Active</td><td><code>#FF8C42</code> 主题色</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== ANIMATIONS ===== -->
+<section id="animations">
+  <div class="section-title">动画规范</div>
+  <p class="section-desc">过渡时长统一在 0.2s ~ 0.3s 范围，使用 ease 缓动函数。关键帧动画包括呼吸脉冲、上浮、滑入等。</p>
+
+  <div class="card">
+    <div class="card-title">过渡时长</div>
+    <table class="spec-table">
+      <thead><tr><th>时长</th><th>缓动</th><th>使用场景</th></tr></thead>
+      <tbody>
+        <tr><td><code>0.2s</code></td><td>默认</td><td>按钮 hover、导航链接、颜色变化（最常用）</td></tr>
+        <tr><td><code>0.25s</code></td><td>ease</td><td>Tab 切换、Dashboard 卡片</td></tr>
+        <tr><td><code>0.3s</code></td><td>ease</td><td>移动端侧边栏、遮罩、表单提交、卡片 hover</td></tr>
+        <tr><td><code>0.5s</code></td><td>ease</td><td>进度条宽度变化</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">关键帧动画</div>
+    <div class="anim-grid">
+      <div class="anim-item">
+        <div class="anim-demo"><div class="demo-dot"></div></div>
+        <div class="anim-label">呼吸脉冲</div>
+        <div class="anim-value">@keyframes pulse<br>1.5s ease-in-out infinite</div>
+      </div>
+      <div class="anim-item">
+        <div class="anim-demo"><div class="demo-lift"></div></div>
+        <div class="anim-label">卡片上浮</div>
+        <div class="anim-value">@keyframes lift<br>2s ease-in-out infinite</div>
+      </div>
+      <div class="anim-item">
+        <div class="anim-demo"><div class="demo-slide"></div></div>
+        <div class="anim-label">消息滑入</div>
+        <div class="anim-value">@keyframes msgSlide<br>0.3s ease</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">动画清单</div>
+    <table class="spec-table">
+      <thead><tr><th>动画名称</th><th>场景</th><th>实现</th></tr></thead>
+      <tbody>
+        <tr><td>pulse</td><td>Badge 圆点脉冲</td><td>opacity 1 → 0.5，1.5s ease-in-out</td></tr>
+        <tr><td>slideUp</td><td>Todo 表单从底部滑入</td><td>translateY(100%) → 0，0.3s ease</td></tr>
+        <tr><td>msgSlide</td><td>AI 聊天消息出现</td><td>translateY(10px) + opacity，0.3s ease</td></tr>
+        <tr><td>typingBounce</td><td>AI 打字动画（三个点）</td><td>translateY 弹跳，1.4s</td></tr>
+        <tr><td>dotPulse</td><td>对话加载点</td><td>scale 缩放脉冲，1.4s</td></tr>
+        <tr><td>thumbPulse</td><td>变变缩略图呼吸</td><td>scale + shadow，1.5s</td></tr>
+        <tr><td>arrowBounce</td><td>变变箭头弹跳</td><td>translateY 上下，1s</td></tr>
+        <tr><td>flash</td><td>变变成功白屏闪现</td><td>opacity 闪现</td></tr>
+        <tr><td>successPop</td><td>变变成功图标弹出</td><td>scale 弹出</td></tr>
+        <tr><td>侧边栏滑入</td><td>移动端菜单</td><td><code>transform: translateX(-100%) → 0; 0.3s ease</code></td></tr>
+        <tr><td>遮罩淡入</td><td>移动端遮罩</td><td><code>opacity: 0 → 1; 0.3s ease</code></td></tr>
+        <tr><td>模型下拉</td><td>AI 模型选择器</td><td><code>Transition 0.2s ease</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== ANT DESIGN ===== -->
+<section id="antd">
+  <div class="section-title">Ant Design Vue 主题定制</div>
+  <p class="section-desc">三层覆盖方案：CSS Variables → ConfigProvider Theme Token → 组件 scoped <code>:deep()</code> 覆盖。</p>
+
+  <div class="card">
+    <div class="card-title">ConfigProvider Token（Portal 暗色）</div>
+    <div class="code-block">
+<pre><code><span class="kw">const</span> theme = {
+  <span class="prop">token</span>: {
+    <span class="prop">colorPrimary</span>: <span class="str">'#f97316'</span>,
+    <span class="prop">colorLink</span>: <span class="str">'#f97316'</span>,
+    <span class="prop">colorSuccess</span>: <span class="str">'#7ED957'</span>,
+    <span class="prop">borderRadius</span>: <span class="num">8</span>,
+    <span class="prop">colorBgContainer</span>: <span class="str">'#0C0C0D'</span>,
+    <span class="prop">colorText</span>: <span class="str">'#F8FAFC'</span>,
+    <span class="prop">colorTextSecondary</span>: <span class="str">'#94A3B8'</span>,
+    <span class="prop">fontFamily</span>: <span class="str">"-apple-system, BlinkMacSystemFont, 'PingFang SC', ..."</span>,
+  },
+};</code></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ConfigProvider Token（Portal 登录页 — 强制亮色）</div>
+    <div class="code-block">
+<pre><code><span class="kw">const</span> lightTheme = {
+  <span class="prop">algorithm</span>: antdTheme.<span class="var-name">defaultAlgorithm</span>,  <span class="com">// 强制亮色算法</span>
+  <span class="prop">token</span>: {
+    <span class="prop">colorPrimary</span>: <span class="str">'#FF8C42'</span>,
+    <span class="prop">colorSuccess</span>: <span class="str">'#7ED957'</span>,
+    <span class="prop">colorBgContainer</span>: <span class="str">'#FFFFFF'</span>,
+    <span class="prop">colorBgElevated</span>: <span class="str">'#FFFFFF'</span>,
+    <span class="prop">colorText</span>: <span class="str">'#333333'</span>,
+    <span class="prop">colorTextSecondary</span>: <span class="str">'#666666'</span>,
+    <span class="prop">colorTextTertiary</span>: <span class="str">'#999999'</span>,
+    <span class="prop">colorBorder</span>: <span class="str">'#E5E5E5'</span>,
+    <span class="prop">borderRadius</span>: <span class="num">12</span>,
+  },
+};</code></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ConfigProvider Token（Admin）</div>
+    <div class="code-block">
+<pre><code><span class="kw">const</span> themeConfig: ThemeConfig = {
+  <span class="prop">token</span>: {
+    <span class="prop">colorPrimary</span>: <span class="str">'#FF8C42'</span>,
+    <span class="prop">colorLink</span>: <span class="str">'#FF8C42'</span>,
+    <span class="prop">colorSuccess</span>: <span class="str">'#7ED957'</span>,
+    <span class="prop">borderRadius</span>: <span class="num">12</span>,
+  },
+};</code></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">CSS 变量桥接 Ant Design</div>
+    <p style="font-size:13px;color:#666;margin-bottom:12px;">在 <code>:root</code> 中将 Ant Design 的 CSS 变量挂载到品牌色变量上：</p>
+    <div class="code-block">
+<pre><code><span class="prop">:root</span> {
+  <span class="com">/* 品牌色 → Ant Design 变量桥接 */</span>
+  <span class="prop">--ant-color-primary</span>: <span class="kw">var</span>(<span class="var-name">--color-brand-500</span>);
+  <span class="prop">--ant-color-primary-hover</span>: <span class="kw">var</span>(<span class="var-name">--color-brand-600</span>);
+  <span class="prop">--ant-color-primary-active</span>: <span class="kw">var</span>(<span class="var-name">--color-brand-700</span>);
+  <span class="prop">--ant-color-primary-border</span>: <span class="kw">var</span>(<span class="var-name">--color-brand-500</span>);
+  <span class="prop">--ant-color-primary-text</span>: <span class="kw">var</span>(<span class="var-name">--color-brand-500</span>);
+}</code></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Ant Design 组件注册</div>
+    <table class="spec-table">
+      <thead><tr><th>应用</th><th>注册组件数</th><th>主要组件</th></tr></thead>
+      <tbody>
+        <tr><td>Admin</td><td>39 个</td><td>Button, Card, Table, Form, Modal, Menu, Layout, Tabs, Upload, Select, DatePicker, Dropdown, Breadcrumb, Pagination 等</td></tr>
+        <tr><td>Portal</td><td>14 个</td><td>Button, Card, Avatar, Upload, Form, Input, InputPassword, RadioGroup, RadioButton, Slider, Tabs, ConfigProvider</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">:deep() 覆盖的 Ant Design 组件</div>
+    <p style="font-size:13px;color:#666;">项目中通过 <code>:deep()</code> 精细化覆盖的 Ant Design 组件清单：</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-input</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-input-affix-wrapper</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-select-selector</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-tabs-nav</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-tabs-ink-bar</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-form-item-label</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-pagination-item-active</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-modal-content</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-btn</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-table-thead</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-menu-item-selected</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-statistic-content</code>
+      <code style="background:#f5f5f5;padding:4px 10px;border-radius:6px;font-size:12px;color:#FF8C42;">.ant-breadcrumb</code>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ARCHITECTURE ===== -->
+<section id="architecture">
+  <div class="section-title">样式架构</div>
+  <p class="section-desc">项目不使用 Tailwind / SCSS / Less，纯 CSS + CSS Variables + Ant Design ConfigProvider 实现主题系统。</p>
+
+  <div class="card">
+    <div class="card-title">七层样式架构</div>
+    <div class="arch-layer" style="background:var(--brand-50);">
+      <span class="arch-num">1</span>
+      <div><strong>CSS Reset</strong> — <code>* { margin:0; padding:0; box-sizing: border-box; }</code></div>
+    </div>
+    <div class="arch-layer" style="background:#fff;border:1px solid var(--brand-100);">
+      <span class="arch-num">2</span>
+      <div><strong>CSS Variables</strong>（<code>:root</code>）— 品牌色、表面色、文字色、边框色、阴影</div>
+    </div>
+    <div class="arch-layer" style="background:#fff;border:1px solid var(--brand-100);">
+      <span class="arch-num">3</span>
+      <div><strong>Ant Design CSS 变量覆盖</strong> — <code>--ant-color-primary</code> 等挂载到品牌色变量</div>
+    </div>
+    <div class="arch-layer" style="background:#fff;border:1px solid var(--brand-100);">
+      <span class="arch-num">4</span>
+      <div><strong>ConfigProvider Theme Token</strong> — colorPrimary, borderRadius, fontFamily 等组件级配置</div>
+    </div>
+    <div class="arch-layer" style="background:#fff;border:1px solid var(--brand-100);">
+      <span class="arch-num">5</span>
+      <div><strong>全局组件样式覆盖</strong> — <code>.ant-layout</code>, <code>.ant-table</code>, <code>.ant-card</code> 等</div>
+    </div>
+    <div class="arch-layer" style="background:#fff;border:1px solid var(--brand-100);">
+      <span class="arch-num">6</span>
+      <div><strong>全局工具类</strong> — <code>.btn-orange</code>, <code>.course-card</code>, <code>.login-container</code> 等</div>
+    </div>
+    <div class="arch-layer" style="background:var(--brand-50);">
+      <span class="arch-num">7</span>
+      <div><strong>组件级 Scoped 样式</strong> — 每个 <code>.vue</code> 文件的 <code>&lt;style scoped&gt;</code> + <code>:deep()</code></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">关键样式文件索引</div>
+    <table class="spec-table">
+      <thead><tr><th>文件</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>apps/admin-web/src/style.css</code></td><td>Admin 全局样式 + 双套 CSS 变量（:root 暗色默认 + [data-theme="light"] 亮色覆盖）</td></tr>
+        <tr><td><code>apps/admin-web/src/App.vue</code></td><td>Admin ConfigProvider 主题配置</td></tr>
+        <tr><td><code>apps/admin-web/src/plugins/antd.ts</code></td><td>Admin Ant Design 组件注册</td></tr>
+        <tr><td><code>apps/portal/src/styles/global.css</code></td><td>Portal 全局样式 + 暖色 CSS 变量</td></tr>
+        <tr><td><code>apps/portal/src/App.vue</code></td><td>Portal ConfigProvider 暗色主题配置</td></tr>
+        <tr><td><code>apps/portal/src/views/Login.vue</code></td><td>登录页亮色主题覆盖</td></tr>
+        <tr><td><code>apps/portal/src/plugins/antd.ts</code></td><td>Portal Ant Design 组件注册</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">技术选型</div>
+    <table class="spec-table">
+      <thead><tr><th>维度</th><th>选型</th></tr></thead>
+      <tbody>
+        <tr><td>CSS 预处理器</td><td>❌ 无（纯 CSS）</td></tr>
+        <tr><td>原子化 CSS</td><td>❌ 无 Tailwind / UnoCSS / Windi CSS</td></tr>
+        <tr><td>CSS-in-JS</td><td>❌ 无 Styled Components</td></tr>
+        <tr><td>主题方案</td><td>✅ CSS Variables + Ant Design ConfigProvider</td></tr>
+        <tr><td>组件库</td><td>Ant Design Vue 4.x（Admin: 4.2, Portal: 4.0）</td></tr>
+        <tr><td>共享组件库</td><td>❌ 无（直接使用 Ant Design）</td></tr>
+        <tr><td>Reset</td><td><code>ant-design-vue/dist/reset.css</code> + 手动 reset</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="footer">
+  科豆 AI · UI 设计规范 · 基于项目源码自动生成 · v1.0
+</div>
+
+</main>
+
+<script>
+  // 主题 tab 切换（仅展示用）
+  document.querySelectorAll('.theme-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      tab.parentElement.querySelectorAll('.theme-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+
+  // 侧边栏导航高亮
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      navItems.forEach(i => i.style.color = '');
+      item.style.color = 'var(--brand-500)';
+    });
+  });
+</script>
+
+</body>
+</html>

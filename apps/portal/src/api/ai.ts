@@ -7,10 +7,23 @@ export interface ChatMessage {
 }
 
 export interface ChatRequest {
-  message: string;
   conversationId?: string;
-  messages?: ChatMessage[];
+  messages: ChatMessage[];
   userId?: string;
+  model?: string;
+}
+
+/** 可用模型信息 */
+export interface ModelInfo {
+  id: string;
+  displayName: string;
+  description: string;
+  available: boolean;
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[];
+  defaultModel: string | null;
 }
 
 export interface ChatResponse {
@@ -52,9 +65,97 @@ export interface ConversationDetailResponse {
   data: ConversationDetail;
 }
 
+/** 获取可用模型列表 */
+export function fetchModels(): Promise<ModelsResponse> {
+  return request.get('/ai/models');
+}
+
 /** 发送消息并获取 AI 回复 */
 export function sendChatMessage(data: ChatRequest): Promise<ChatResponse> {
   return request.post('/ai/chat', data);
+}
+
+/**
+ * 流式对话 - 使用 fetch 读取 SSE 流
+ * @param data 对话请求参数
+ * @param onChunk 每收到一个文本块的回调
+ * @param onDone 流结束的回调
+ * @param onError 出错回调
+ */
+export function sendChatMessageStream(
+  data: ChatRequest,
+  onChunk: (text: string) => void,
+  onDone: (conversationId?: string) => void,
+  onError: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController();
+  const token = localStorage.getItem('access_token');
+
+  fetch('/api/ai/chat/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (trimmed === 'data: [DONE]') {
+            onDone();
+            return;
+          }
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const json = JSON.parse(trimmed.slice(6));
+              if (json.done) {
+                onDone(json.conversationId);
+                return;
+              }
+              if (json.error) {
+                onError(new Error(json.error));
+                return;
+              }
+              if (json.content) {
+                onChunk(json.content);
+              }
+            } catch {
+              // 跳过解析失败的行
+            }
+          }
+        }
+      }
+      onDone();
+    })
+    .catch((err) => {
+      if (err.name === 'AbortError') return;
+      onError(err);
+    });
+
+  return controller;
 }
 
 /** 获取对话列表 */

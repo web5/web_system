@@ -1,4 +1,4 @@
-/* ===== 科豆 AI — Dark Cinema Orange Theme (Admin) ===== */
+/* ===== 科豆 AI — Admin Theme (Dark default + Light) ===== */
 
 :root {
   --color-brand-50:  #FFF7ED;
@@ -8,6 +8,7 @@
   --color-brand-500: #F97316;
   --color-brand-600: #EA580C;
   --color-brand-700: #C2410C;
+  --color-accent:    #FF8C42;
 
   --ant-color-primary: var(--color-brand-500);
   --ant-color-primary-hover: var(--color-brand-600);
@@ -17,20 +18,150 @@
   --ant-color-primary-border: var(--color-brand-500);
   --ant-color-primary-text: var(--color-brand-500);
 
-  /* Dark surfaces */
+  /* ===== Dark surfaces (default) ===== */
   --surface-0: #000000;
   --surface-1: #0A0A0D;
   --surface-2: #0C0C0D;
   --surface-3: #111115;
   --surface-4: #18181B;
 
-  --text-primary:   #F8FAFC;
-  --text-secondary: #CBD5E1;
-  --text-tertiary:  #94A3B8;
-  --text-disabled:  #64748B;
+  /* ===== Card backgrounds ===== */
+  --card-bg-start: #141419;
+  --card-bg-end: #16161C;
+  --card-border: rgba(255,255,255,.06);
+  --card-border-hover: rgba(255,255,255,.1);
 
-  --border-subtle:  rgba(249,115,22,0.12);
+  /* ===== Header ===== */
+  --header-bg: rgba(10,10,13,.95);
+  --header-border: rgba(255,140,66,.1);
+
+  /* ===== Text ===== */
+  --text-heading: #F1F5F9;
+  --text-primary: #F8FAFC;
+  --text-body: #E2E8F0;
+  --text-secondary: #CBD5E1;
+  --text-tertiary: #94A3B8;
+  --text-muted: #64748B;
+  --text-faint: #475569;
+  --text-disabled: #64748B;
+
+  /* ===== Borders ===== */
+  --border-subtle: rgba(249,115,22,0.12);
   --border-default: rgba(249,115,22,0.2);
+  --border-light: rgba(255,255,255,.06);
+  --border-lighter: rgba(255,255,255,.03);
+  --border-divider: rgba(255,255,255,.05);
+
+  /* ===== Input ===== */
+  --input-bg: rgba(255,255,255,.04);
+  --input-border: rgba(255,255,255,.08);
+  --input-text: #E2E8F0;
+  --input-placeholder: #475569;
+
+  /* ===== Table ===== */
+  --table-header-bg: rgba(255,255,255,.03);
+  --table-header-text: #94A3B8;
+  --table-row-border: rgba(255,255,255,.03);
+  --table-hover-bg: rgba(255,140,66,.04);
+
+  /* ===== Modal ===== */
+  --modal-bg: #141419;
+  --modal-title: #F1F5F9;
+  --modal-border: rgba(255,255,255,.08);
+
+  /* ===== Overlay ===== */
+  --overlay-bg: rgba(0,0,0,.4);
+  --overlay-action-bg: rgba(20,20,25,.9);
+
+  /* ===== Shadow ===== */
+  --shadow-card: 0 8px 24px rgba(0,0,0,.3);
+  --shadow-login: 0 8px 40px rgba(0,0,0,0.5);
+
+  /* ===== Tab / Category ===== */
+  --tab-bg: rgba(255,255,255,.03);
+  --tab-border: rgba(255,255,255,.06);
+  --tab-count-bg: rgba(255,255,255,.06);
+
+  /* ===== Tag ===== */
+  --tag-bg: rgba(255,255,255,.04);
+
+  /* ===== Login page ===== */
+  --login-gradient: linear-gradient(135deg, #000000 0%, #0A0A0D 50%, rgba(255,140,66,0.05) 100%);
+  --login-box-bg: var(--surface-2);
+  --login-title: var(--text-primary);
+
+  /* ===== ECharts ===== */
+  --chart-axis-line: rgba(255,255,255,.08);
+  --chart-axis-label: #94A3B8;
+  --chart-split-line: rgba(255,255,255,.04);
+  --chart-legend-text: #CBD5E1;
+}
+
+/* ===== Light theme overrides ===== */
+[data-theme="light"] {
+  --surface-0: #F5F5F8;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --surface-3: #F1F5F9;
+  --surface-4: #E2E8F0;
+
+  --card-bg-start: #FFFFFF;
+  --card-bg-end: #FAFAFC;
+  --card-border: rgba(0,0,0,.08);
+  --card-border-hover: rgba(255,140,66,.3);
+
+  --header-bg: rgba(255,255,255,.95);
+  --header-border: rgba(0,0,0,.06);
+
+  --text-heading: #1E293B;
+  --text-primary: #0F172A;
+  --text-body: #334155;
+  --text-secondary: #475569;
+  --text-tertiary: #64748B;
+  --text-muted: #94A3B8;
+  --text-faint: #CBD5E1;
+  --text-disabled: #94A3B8;
+
+  --border-subtle: rgba(255,140,66,.12);
+  --border-default: rgba(255,140,22,.2);
+  --border-light: rgba(0,0,0,.08);
+  --border-lighter: rgba(0,0,0,.04);
+  --border-divider: rgba(0,0,0,.06);
+
+  --input-bg: #F8FAFC;
+  --input-border: rgba(0,0,0,.1);
+  --input-text: #1E293B;
+  --input-placeholder: #94A3B8;
+
+  --table-header-bg: #F8FAFC;
+  --table-header-text: #64748B;
+  --table-row-border: rgba(0,0,0,.04);
+  --table-hover-bg: rgba(255,140,66,.04);
+
+  --modal-bg: #FFFFFF;
+  --modal-title: #0F172A;
+  --modal-border: rgba(0,0,0,.08);
+
+  --overlay-bg: rgba(255,255,255,.6);
+  --overlay-action-bg: rgba(255,255,255,.92);
+
+  --shadow-card: 0 4px 16px rgba(0,0,0,.08);
+  --shadow-login: 0 8px 40px rgba(0,0,0,0.1);
+
+  --tab-bg: #F1F5F9;
+  --tab-border: rgba(0,0,0,.06);
+  --tab-count-bg: rgba(0,0,0,.06);
+
+  --tag-bg: #F1F5F9;
+
+  --login-gradient: linear-gradient(135deg, #F5F5F8 0%, #FFFFFF 50%, rgba(255,140,66,0.04) 100%);
+  --login-box-bg: #FFFFFF;
+  --login-title: #0F172A;
+
+  --chart-axis-line: rgba(0,0,0,.08);
+  --chart-axis-label: #64748B;
+  --chart-split-line: rgba(0,0,0,.04);
+  --chart-legend-text: #475569;
 }
 
 * {
@@ -45,6 +176,7 @@ html, body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--surface-0);
   color: var(--text-primary);
+  transition: background .3s ease, color .3s ease;
 }
 
 #app {
@@ -103,13 +235,13 @@ html, body {
 
 /* ===== Login page ===== */
 .login-container {
-  background: var(--surface-0) !important;
+  background: var(--login-gradient) !important;
 }
 .login-box {
-  background: var(--surface-2) !important;
+  background: var(--login-box-bg) !important;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-login);
 }
 .login-title {
-  color: var(--text-primary) !important;
+  color: var(--login-title) !important;
 }

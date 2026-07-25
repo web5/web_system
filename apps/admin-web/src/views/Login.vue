@@ -179,15 +179,15 @@ const handleRegister = async () => {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #000000 0%, #0A0A0D 50%, rgba(255,140,66,0.05) 100%);
+  background: var(--login-gradient);
 }
 
 .login-box {
   width: 420px;
   padding: 40px 36px 36px;
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+  background: var(--login-box-bg);
+  border-radius: 4px;
+  box-shadow: var(--shadow-login);
 }
 
 .login-brand {
@@ -203,7 +203,7 @@ const handleRegister = async () => {
 
 .login-title {
   text-align: center;
-  color: #1a1a2e;
+  color: var(--login-title);
   font-size: 22px;
   font-weight: 700;
   margin: 0;
@@ -227,7 +227,7 @@ const handleRegister = async () => {
 }
 
 .qrcode-tip {
-  color: #666;
+  color: var(--text-muted);
   font-size: 14px;
 }
 </style>

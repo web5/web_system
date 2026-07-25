@@ -27,10 +27,13 @@ version: 3.0.0
   │                                         ↓
   │                                      .skills/rd-review
   │
-  └─ 架构 / 选型 / 安全 / 数据库设计 ──→ .skills/tech-review（辅助审查）
+  ├─ 架构 / 选型 / 安全 / 数据库设计 ──→ .skills/tech-review（辅助审查）
+  │
+  └─ 编码任务（所有）─────────────────→ 加载 Karpathy 编程准则
+       （在 rd-execute 执行时自动参考）
 ```
 
-## 四个 Agent
+## 六个 Agent（Superpowers + Karpathy）
 
 | Agent | Skill 文件 | 职责 |
 |-------|-----------|------|
@@ -38,6 +41,66 @@ version: 3.0.0
 | 📋 Plan | `rd-plan/SKILL.md` | 细化为任务列表 |
 | ⚡ Execute | `rd-execute/SKILL.md` | TDD 逐项实现 |
 | 🔍 Review | `rd-review/SKILL.md` | 自检代码质量 |
+| 🧭 Karpathy 准则 | `~/.codebuddy/skills/karpathy-coding-guidelines/SKILL.md` | 编码纪律（Think First / Simplicity / Surgical / Goal-Driven） |
+| 📚 Karpathy Wiki | `~/.codebuddy/skills/karpathy-llm-wiki/SKILL.md` | 持久化知识库管理 |
+
+## TDD 多 Agents 协作团队模式（Context 隔离）
+
+### 为什么需要子 Agent
+
+| 方式 | 问题 |
+|------|------|
+| 单 Agent 顺序执行 | 所有历史留在一个上下文，token 越积越多，回答质量下降 |
+| 子 Agent 并行/接力 | 每个 Agent 独立上下文，完成任务后释放，主 Agent 只保留摘要 |
+
+### 架构
+
+```
+用户请求
+  │
+  ├─ 主 Agent（rd-digital-agent）← 只维护"当前阶段 + 结果摘要"
+  │     │                         上下文不会被子 Agent 的细节撑爆
+  │     │
+  │     ├── task(name="brainstorm-agent", team_name="superpowers-tdd")  ← 独立上下文
+  │     │     返回: 方案摘要（2-3 句话）
+  │     │
+  │     ├── task(name="plan-agent", team_name="superpowers-tdd")        ← 独立上下文
+  │     │     返回: TODO 列表摘要
+  │     │
+  │     ├── task(name="execute-agent", team_name="superpowers-tdd")     ← 独立上下文
+  │     │     └─ 内部加载 Karpathy 准则（Think / Simplicity / Surgical / Goal-Driven）
+  │     │     返回: 变更摘要 + 测试结果
+  │     │
+  │     └── task(name="review-agent", team_name="superpowers-tdd")      ← 独立上下文
+  │           返回: 审查报告摘要
+  │
+  └─ 主 Agent 汇总 → 输出给用户
+```
+
+### 启动方式
+
+团队 `superpowers-tdd` 已创建，只需用 `task(name="xxx", team_name="superpowers-tdd")` 启动子 Agent。
+
+```javascript
+// 示例：完整流水线
+// 1. 主 Agent 收到需求后，spawn 子 Agent（每个独立上下文）
+task(name="brainstorm-agent", team_name="superpowers-tdd", mode="plan",
+  prompt="需求: xxx。请输出 2-3 个方案并推荐")
+
+// 2. 用户选方案后，spawn plan-agent
+task(name="plan-agent", team_name="superpowers-tdd", mode="plan",
+  prompt="选定方案: xxx。请拆分为可执行的 TODO 列表")
+
+// 3. 用户确认后，spawn execute-agent（加载 Karpathy 准则）
+task(name="execute-agent", team_name="superpowers-tdd", mode="acceptEdits",
+  prompt="TDD 实现: xxx。遵循 Karpathy 编程四原则。")
+
+// 4. 执行完成后，spawn review-agent
+task(name="review-agent", team_name="superpowers-tdd", mode="plan",
+  prompt="审查代码变更: xxx")
+```
+
+**关键**：子 Agent 完成后上下文即释放，主 Agent 只保存结果摘要。这比单 Agent 积累全部历史要轻量得多。
 
 ## 项目上下文
 
@@ -48,7 +111,7 @@ web_system/
 └── packages/      types, shared
 ```
 
-主色 `#f97316` 暖橙 / 暗底 `#111` / 线框豆子 Logo / 禁用渐变。
+主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` 暖白 / 文字 `#333333` — 「变变」品牌设计系统。
 
 ## 共享参考文档
 
@@ -60,3 +123,4 @@ web_system/
 | `coding-standards.md` | 需要确认命名/格式约定 |
 | `tdd-workflow.md` | 需要 TDD 详细指南 |
 | `spec-workflow.md` | 需要 spec 文档模板 |
+| `karpathy-coding-guidelines` | 编码前自动加载（Think Before Coding / Simplicity / Surgical Changes / Goal-Driven） |

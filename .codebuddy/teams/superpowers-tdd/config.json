@@ -1,0 +1,38 @@
+{
+  "name": "superpowers-tdd",
+  "leadAgentId": "35fbff7efeca4a308559ccc19e1971f5",
+  "workspacePath": "/Users/geekwen/workspace/web_system",
+  "createdAt": "2026-07-18T14:20:32.307Z",
+  "options": {
+    "workspacePath": "/Users/geekwen/workspace/web_system",
+    "isAutoTeam": false
+  },
+  "members": [
+    {
+      "memberId": "team-lead@superpowers-tdd",
+      "name": "team-lead",
+      "role": "Team Lead - coordinates the team and interacts with the user"
+    },
+    {
+      "memberId": "brainstorm-agent@superpowers-tdd",
+      "name": "brainstorm-agent",
+      "role": "spawn brainstorm-agent"
+    },
+    {
+      "memberId": "plan-agent@superpowers-tdd",
+      "name": "plan-agent",
+      "role": "spawn plan-agent"
+    },
+    {
+      "memberId": "execute-agent@superpowers-tdd",
+      "name": "execute-agent",
+      "role": "spawn execute-agent"
+    },
+    {
+      "memberId": "review-agent@superpowers-tdd",
+      "name": "review-agent",
+      "role": "spawn review-agent"
+    }
+  ],
+  "isAutoTeam": false
+}

@@ -6,6 +6,7 @@ export interface TransformRequest {
   style?: string;
   outputSize?: string;
   userId?: string;
+  roles?: string[];
 }
 
 export interface TransformData {
@@ -22,17 +23,19 @@ export interface TransformResponse {
   message: string;
 }
 
-/** 变变 AI 变身 — 上传拼接作品，生成 3D 角色 */
+/** 变变 AI 变身 — 上传拼接作品，生成 3D 角色（任务式生成，耗时较长，单独放宽超时） */
 export function transformImage(data: TransformRequest): Promise<TransformResponse> {
-  return request.post('/bianbian/transform', data);
+  return request.post('/bianbian/transform', data, { timeout: 120000 });
 }
 
 /** 查询用户当日剩余变身次数 */
-export function getQuota(userId: string): Promise<{
+export function getQuota(userId: string, roles?: string[]): Promise<{
   code: number;
   data: { used: number; limit: number; remaining: number };
 }> {
-  return request.get(`/bianbian/quota/${userId}`);
+  return request.get(`/bianbian/quota/${userId}`, {
+    params: roles && roles.length > 0 ? { roles: roles.join(',') } : undefined,
+  });
 }
 
 /** 获取用户的变身记录列表 */

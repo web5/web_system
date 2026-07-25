@@ -1,21 +1,12 @@
 <template>
   <div class="draw-page">
-    <!-- 导航栏 -->
-    <nav class="navbar">
-      <div class="nav-content">
-        <div class="logo">
-          <router-link to="/" class="logo-link">
-            <img src="/logo.svg" alt="科豆 AI" class="nav-logo" width="32" height="17" />
-            <h1>科豆 AI</h1>
-          </router-link>
-        </div>
-        <div class="nav-links">
-          <router-link to="/" class="nav-link">首页</router-link>
-          <router-link to="/chat" class="nav-link">AI 助手</router-link>
-          <router-link to="/draw" class="nav-link active">画笔</router-link>
-        </div>
+    <!-- 顶部品牌已迁移到全局 App.vue。这里保留二级子导航（返回 + 页面标题） -->
+    <div class="sub-header">
+      <div class="sub-header-inner">
+        <button class="back-btn back-btn--mobile-only" @click="$router.push('/')">← 返回首页</button>
+        <span class="page-title">创意画板</span>
       </div>
-    </nav>
+    </div>
 
     <!-- 模式切换 -->
     <div class="mode-tabs">
@@ -24,7 +15,7 @@
         :class="{ active: activeMode === 'draw' }"
         @click="activeMode = 'draw'"
       >
-        <span class="mode-icon">✏️</span>
+        <svg class="mode-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         <span>自由绘画</span>
       </button>
       <button
@@ -32,7 +23,7 @@
         :class="{ active: activeMode === 'ai' }"
         @click="activeMode = 'ai'"
       >
-        <span class="mode-icon">✨</span>
+        <svg class="mode-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span>AI 生成</span>
       </button>
     </div>
@@ -43,8 +34,12 @@
         <div class="tool-group">
           <label>工具：</label>
           <a-radio-group v-model:value="tool" button-style="solid">
-            <a-radio-button value="brush">🖌️ 画笔</a-radio-button>
-            <a-radio-button value="eraser">🧹 橡皮</a-radio-button>
+            <a-radio-button value="brush">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M11.08 13.98a2.5 2.5 0 0 1-3.53 3.54L3 14l6.06-6.06"/></svg>画笔
+            </a-radio-button>
+            <a-radio-button value="eraser">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><line x1="5" y1="11" x2="19" y2="11"/></svg>橡皮
+            </a-radio-button>
           </a-radio-group>
         </div>
 
@@ -69,9 +64,15 @@
         </div>
 
         <div class="tool-group">
-          <a-button @click="clearCanvas">🗑️ 清空</a-button>
-          <a-button @click="undo">↩️ 撤销</a-button>
-          <a-button @click="saveCanvas" type="primary">💾 保存</a-button>
+          <a-button @click="clearCanvas">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>清空
+          </a-button>
+          <a-button @click="undo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>撤销
+          </a-button>
+          <a-button @click="saveCanvas" type="primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存
+          </a-button>
         </div>
       </div>
 
@@ -128,7 +129,9 @@
             :key="item.prompt"
             class="suggest-tag"
             @click="genPrompt = item.prompt; handleGenerate()"
-          >{{ item.emoji }} {{ item.prompt }}</button>
+          >
+            <span v-html="item.icon" style="vertical-align:-3px;margin-right:2px;display:inline-block;width:14px;height:14px"></span>{{ item.prompt }}
+          </button>
         </div>
       </div>
 
@@ -136,7 +139,9 @@
       <div class="gen-result-area">
         <!-- 状态：空闲 -->
         <div v-if="genStatus === 'idle' && !genImageUrl" class="gen-placeholder">
-          <div class="placeholder-icon">🎨</div>
+          <div class="placeholder-icon">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none"/></svg>
+          </div>
           <h3>AI 画布</h3>
           <p>输入描述文字，让 AI 为你创作</p>
         </div>
@@ -158,9 +163,20 @@
           <div class="result-image-wrapper">
             <img :src="genImageUrl" :alt="genPrompt" class="result-image" @load="genStatus = 'done'" />
             <div class="result-overlay">
-              <button class="overlay-btn" @click="downloadGenImage" title="下载图片">💾 下载</button>
-              <button class="overlay-btn" @click="copyGenImage" title="复制图片">📋 复制</button>
-              <button class="overlay-btn" @click="regenerate" title="重新生成">🔄 重试</button>
+              <button class="overlay-btn primary" @click="saveToAlbum" :disabled="savingToAlbum" title="保存到相册">
+                <svg v-if="!savingToAlbum" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <span>{{ savingToAlbum ? '保存中' : '保存到相册' }}</span>
+              </button>
+              <button class="overlay-btn" @click="downloadGenImage" title="下载图片">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>下载
+              </button>
+              <button class="overlay-btn" @click="copyGenImage" title="复制图片">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制
+              </button>
+              <button class="overlay-btn" @click="regenerate" title="重新生成">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>重试
+              </button>
             </div>
           </div>
           <p class="result-prompt">「{{ genPrompt }}」</p>
@@ -168,7 +184,9 @@
 
         <!-- 状态：失败 -->
         <div v-if="genStatus === 'failed'" class="gen-error">
-          <div class="error-icon">😢</div>
+          <div class="error-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 15s1.5-2 4-2 4 2 4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </div>
           <h3>生成失败</h3>
           <p>{{ genErrorMsg }}</p>
           <a-button type="primary" @click="resetGen">重新开始</a-button>
@@ -197,9 +215,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import { submitImage, queryImage } from '@/api/ai';
+import { saveArtwork } from '@/api/artworks';
+import { useUserStore } from '@/stores/user';
 
 // ====== 手动绘画 ======
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -223,15 +243,18 @@ const genStatus = ref<'idle' | 'generating' | 'done' | 'failed'>('idle');
 const genImageUrl = ref('');
 const genErrorMsg = ref('');
 const genHistory = ref<Array<{ url: string; prompt: string }>>([]);
+const savingToAlbum = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+const userStore = useUserStore();
+
 const genSuggestions = [
-  { emoji: '🌧️', prompt: '雨中, 竹林, 小路' },
-  { emoji: '🐱', prompt: '阳光下的小猫在花园里玩耍' },
-  { emoji: '🚀', prompt: '太空探险, 火箭, 星球' },
-  { emoji: '🌊', prompt: '海底世界, 珊瑚, 鱼群' },
-  { emoji: '🏰', prompt: '童话城堡, 彩虹, 独角兽' },
-  { emoji: '🌸', prompt: '春天樱花树下的小朋友' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7 16.2c2.2-1.2 4.8-1.2 6 0"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/></svg>', prompt: '卡通小恐龙, 彩虹森林, 可爱动物们' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><circle cx="8.5" cy="10" r="1" fill="currentColor" stroke="none"/></svg>', prompt: '可爱小猫, 在糖果花园里玩耍, 儿童插画' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7 16.2c2.2-1.2 4.8-1.2 6 0"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/></svg>', prompt: '卡通火箭, 飞向星星, 太空探险, 儿童绘本风格' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>', prompt: '可爱小鱼, 海底珊瑚, 彩色泡泡, 儿童插画' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>', prompt: '童话城堡, 彩虹独角兽, 棉花糖云朵, 卡通风格' },
+  { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><circle cx="8.5" cy="10" r="1.5"/><circle cx="15.5" cy="10" r="1.5"/></svg>', prompt: '春天樱花树下, 小朋友一起玩耍, 绘本故事风格' },
 ];
 
 // ====== 手动绘画逻辑 ======
@@ -244,6 +267,7 @@ function initCanvas() {
   const canvas = canvasRef.value;
   const container = canvas.parentElement;
   if (!container) return;
+  if (ctx.value && canvas.width > 0 && canvas.height > 0) return;
   canvas.width = container.clientWidth - 40;
   canvas.height = container.clientHeight - 40;
   ctx.value = canvas.getContext('2d');
@@ -255,20 +279,39 @@ function initCanvas() {
   saveState();
 }
 
+watch(activeMode, (mode) => {
+  if (mode === 'draw') {
+    nextTick(() => initCanvas());
+  }
+});
+
+function getCanvasCoordinates(e: MouseEvent | Touch) {
+  const canvas = canvasRef.value;
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+  const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+  return { x, y };
+}
+
 function startDrawing(e: MouseEvent) {
+  const coords = getCanvasCoordinates(e);
+  if (!coords) return;
   isDrawing.value = true;
-  [lastX, lastY] = [e.offsetX, e.offsetY];
+  [lastX, lastY] = [coords.x, coords.y];
 }
 
 function draw(e: MouseEvent) {
   if (!isDrawing.value || !ctx.value) return;
+  const coords = getCanvasCoordinates(e);
+  if (!coords) return;
   ctx.value.beginPath();
   ctx.value.moveTo(lastX, lastY);
-  ctx.value.lineTo(e.offsetX, e.offsetY);
+  ctx.value.lineTo(coords.x, coords.y);
   ctx.value.strokeStyle = tool.value === 'eraser' ? '#ffffff' : color.value;
   ctx.value.lineWidth = brushSize.value;
   ctx.value.stroke();
-  [lastX, lastY] = [e.offsetX, e.offsetY];
+  [lastX, lastY] = [coords.x, coords.y];
 }
 
 function stopDrawing() {
@@ -281,10 +324,10 @@ function stopDrawing() {
 function handleTouchStart(e: TouchEvent) {
   e.preventDefault();
   const touch = e.touches[0];
-  const rect = canvasRef.value?.getBoundingClientRect();
-  if (rect) {
+  const coords = getCanvasCoordinates(touch);
+  if (coords) {
     isDrawing.value = true;
-    [lastX, lastY] = [touch.clientX - rect.left, touch.clientY - rect.top];
+    [lastX, lastY] = [coords.x, coords.y];
   }
 }
 
@@ -292,18 +335,15 @@ function handleTouchMove(e: TouchEvent) {
   e.preventDefault();
   if (!isDrawing.value || !ctx.value) return;
   const touch = e.touches[0];
-  const rect = canvasRef.value?.getBoundingClientRect();
-  if (rect) {
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    ctx.value.beginPath();
-    ctx.value.moveTo(lastX, lastY);
-    ctx.value.lineTo(x, y);
-    ctx.value.strokeStyle = tool.value === 'eraser' ? '#ffffff' : color.value;
-    ctx.value.lineWidth = brushSize.value;
-    ctx.value.stroke();
-    [lastX, lastY] = [x, y];
-  }
+  const coords = getCanvasCoordinates(touch);
+  if (!coords) return;
+  ctx.value.beginPath();
+  ctx.value.moveTo(lastX, lastY);
+  ctx.value.lineTo(coords.x, coords.y);
+  ctx.value.strokeStyle = tool.value === 'eraser' ? '#ffffff' : color.value;
+  ctx.value.lineWidth = brushSize.value;
+  ctx.value.stroke();
+  [lastX, lastY] = [coords.x, coords.y];
 }
 
 function clearCanvas() {
@@ -330,16 +370,37 @@ function undo() {
 
 function saveCanvas() {
   if (!canvasRef.value) return;
+  const dataUrl = canvasRef.value.toDataURL();
+  // 下载到本地
   const link = document.createElement('a');
   link.download = `drawing-${Date.now()}.png`;
-  link.href = canvasRef.value.toDataURL();
+  link.href = dataUrl;
   link.click();
+  // 登录用户同步到设计相册
+  saveDesignToAlbum(dataUrl);
+}
+
+async function saveDesignToAlbum(dataUrl: string) {
+  const userId = userStore.userInfo?.id;
+  if (!userId) return;
+  try {
+    await saveArtwork({
+      userId,
+      title: '自由绘画作品',
+      imageUrl: dataUrl,
+      sourceType: 'design',
+    });
+    message.success('已保存到设计相册');
+  } catch { /* 静默，下载已触发 */ }
 }
 
 // ====== AI 生成逻辑 ======
 async function handleGenerate() {
-  const prompt = genPrompt.value.trim();
-  if (!prompt || genStatus.value === 'generating') return;
+  const rawPrompt = genPrompt.value.trim();
+  if (!rawPrompt || genStatus.value === 'generating') return;
+
+  // 为孩子生成卡通童趣风格的画面
+  const prompt = `儿童插画风格，可爱卡通，明亮温暖色彩，童趣十足，${rawPrompt}`;
 
   genStatus.value = 'generating';
   genImageUrl.value = '';
@@ -452,6 +513,38 @@ async function copyGenImage() {
   }
 }
 
+async function saveToAlbum() {
+  if (!genImageUrl.value || savingToAlbum.value) return;
+
+  savingToAlbum.value = true;
+  const userId = userStore.userInfo?.id;
+
+  if (!userId) {
+    message.info('登录后可将作品保存到相册');
+    savingToAlbum.value = false;
+    return;
+  }
+
+  try {
+    const res = await saveArtwork({
+      userId,
+      title: genPrompt.value || '我的画板作品',
+      imageUrl: genImageUrl.value,
+      sourceType: 'ai-art',
+      prompt: genPrompt.value,
+    });
+    if (res.code === 0) {
+      message.success('已保存到相册');
+    } else {
+      message.error(res.message || '保存失败，请稍后重试');
+    }
+  } catch {
+    message.error('保存失败，请稍后重试');
+  } finally {
+    savingToAlbum.value = false;
+  }
+}
+
 onBeforeUnmount(() => {
   stopPolling();
 });
@@ -460,53 +553,50 @@ onBeforeUnmount(() => {
 <style scoped>
 .draw-page {
   min-height: 100vh;
-  background: #0a0a0d;
+  background: linear-gradient(180deg, #FFFBF5 0%, #FFF8F0 100%);
+  color: #333;
 }
 
-/* 导航栏 */
-.navbar {
-  background: rgba(12, 12, 13, 0.85);
+/* 子导航（顶部品牌已迁移到全局 App.vue） */
+.sub-header {
+  background: rgba(255, 248, 240, 0.85);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(249, 115, 22, 0.08);
+  border-bottom: 1px solid rgba(255, 140, 66, 0.08);
   padding: 12px 0;
 }
-.nav-content {
+.sub-header-inner {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
-.logo-link {
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.nav-logo {
-  flex-shrink: 0;
-  border-radius: 6px;
-}
-.logo h1 {
-  font-size: 20px;
-  color: #f97316;
-  margin: 0;
-}
-.nav-links {
-  display: flex;
-  gap: 24px;
-}
-.nav-link {
-  text-decoration: none;
-  color: #94a3b8;
-  font-weight: 500;
+.back-btn {
+  background: none;
+  border: none;
+  color: #666;
   font-size: 14px;
-  transition: color 0.2s;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: all 0.2s;
 }
-.nav-link:hover,
-.nav-link.active {
-  color: #f97316;
+.back-btn:hover {
+  background: rgba(255, 140, 66, 0.08);
+  color: #FF8C42;
+}
+
+/* 移动端专属：PC 端全局菜单可见时不需要返回按钮 */
+@media (min-width: 769px) {
+  .back-btn--mobile-only {
+    display: none;
+  }
+}
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
 }
 
 /* 模式切换 */
@@ -523,24 +613,24 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 140, 66, 0.12);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  color: #94a3b8;
+  background: #fff;
+  color: #888;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
 }
 .mode-tab:hover {
-  border-color: rgba(249, 115, 22, 0.25);
-  color: #f97316;
+  border-color: rgba(255, 140, 66, 0.3);
+  color: #FF8C42;
 }
 .mode-tab.active {
-  background: rgba(249, 115, 22, 0.12);
-  border-color: rgba(249, 115, 22, 0.35);
-  color: #f97316;
-  box-shadow: 0 0 20px rgba(249, 115, 22, 0.08);
+  background: rgba(255, 140, 66, 0.1);
+  border-color: rgba(255, 140, 66, 0.35);
+  color: #FF8C42;
+  box-shadow: 0 0 20px rgba(255, 140, 66, 0.08);
 }
 .mode-icon {
   font-size: 18px;
@@ -553,8 +643,8 @@ onBeforeUnmount(() => {
   padding: 0 20px;
 }
 .toolbar {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #fff;
+  border: 1px solid rgba(255, 140, 66, 0.1);
   border-radius: 14px;
   padding: 16px 20px;
   margin-bottom: 16px;
@@ -562,6 +652,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 16px;
   align-items: center;
+  box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
 }
 .tool-group {
   display: flex;
@@ -570,16 +661,16 @@ onBeforeUnmount(() => {
 }
 .tool-group label {
   font-weight: 500;
-  color: #94a3b8;
+  color: #888;
   font-size: 13px;
 }
 .color-picker {
   width: 40px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 140, 66, 0.15);
   border-radius: 6px;
   cursor: pointer;
-  background: transparent;
+  background: #fff;
 }
 .color-presets {
   display: flex;
@@ -588,28 +679,29 @@ onBeforeUnmount(() => {
 .color-btn {
   width: 22px;
   height: 22px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 140, 66, 0.12);
   border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s;
 }
 .color-btn:hover { transform: scale(1.15); }
 .color-btn.active {
-  border-color: #f97316;
-  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+  border-color: #FF8C42;
+  box-shadow: 0 0 8px rgba(255, 140, 66, 0.4);
 }
 .canvas-container {
   background: #fff;
   border-radius: 14px;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 140, 66, 0.08);
+  box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
   height: calc(100vh - 250px);
   min-height: 450px;
 }
 canvas {
   width: 100%;
   height: 100%;
-  border: 1px solid #eee;
+  border: 1px solid #f0e8e0;
   border-radius: 8px;
   cursor: crosshair;
 }
@@ -623,22 +715,23 @@ canvas {
 
 /* 生成面板 */
 .gen-panel {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #fff;
+  border: 1px solid rgba(255, 140, 66, 0.1);
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
 }
 .gen-header { text-align: center; margin-bottom: 20px; }
 .gen-title {
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: #333;
   margin: 0 0 8px;
 }
 .gen-desc {
   font-size: 14px;
-  color: #64748b;
+  color: #888;
   margin: 0;
 }
 
@@ -650,11 +743,11 @@ canvas {
 }
 .gen-input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #FFFBF5;
+  border: 1px solid rgba(255, 140, 66, 0.12);
   border-radius: 14px;
   padding: 14px 18px;
-  color: #f8fafc;
+  color: #333;
   font-size: 15px;
   font-family: inherit;
   resize: none;
@@ -663,10 +756,10 @@ canvas {
   line-height: 1.5;
 }
 .gen-input:focus {
-  border-color: rgba(249, 115, 22, 0.4);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.06);
+  border-color: rgba(255, 140, 66, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 140, 66, 0.08);
 }
-.gen-input::placeholder { color: #475569; }
+.gen-input::placeholder { color: #bbb; }
 .gen-input:disabled { opacity: 0.5; }
 
 .gen-btn {
@@ -674,7 +767,7 @@ canvas {
   height: 48px;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(135deg, #f97316, #ea580c);
+  background: linear-gradient(135deg, #FF8C42, #FFB347);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
@@ -684,16 +777,17 @@ canvas {
   justify-content: center;
   transition: all 0.3s;
   flex-shrink: 0;
-  box-shadow: 0 4px 18px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 4px 18px rgba(255, 140, 66, 0.3);
 }
 .gen-btn:hover:not(.disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(249, 115, 22, 0.45);
+  box-shadow: 0 6px 24px rgba(255, 140, 66, 0.45);
 }
 .gen-btn.disabled {
-  background: rgba(255, 255, 255, 0.06);
+  background: #f0e8e0;
   box-shadow: none;
   cursor: not-allowed;
+  color: #ccc;
 }
 
 .spinner {
@@ -714,29 +808,29 @@ canvas {
 }
 .suggest-label {
   font-size: 13px;
-  color: #64748b;
+  color: #888;
   margin-right: 4px;
 }
 .suggest-tag {
   padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #FFFBF5;
+  border: 1px solid rgba(255, 140, 66, 0.08);
   border-radius: 20px;
   font-size: 13px;
-  color: #94a3b8;
+  color: #888;
   cursor: pointer;
   transition: all 0.2s;
 }
 .suggest-tag:hover {
-  border-color: rgba(249, 115, 22, 0.3);
-  color: #f97316;
-  background: rgba(249, 115, 22, 0.06);
+  border-color: rgba(255, 140, 66, 0.3);
+  color: #FF8C42;
+  background: rgba(255, 140, 66, 0.06);
 }
 
 /* 结果区域 */
 .gen-result-area {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #fff;
+  border: 1px solid rgba(255, 140, 66, 0.1);
   border-radius: 16px;
   min-height: 300px;
   display: flex;
@@ -744,21 +838,22 @@ canvas {
   justify-content: center;
   margin-bottom: 24px;
   overflow: hidden;
+  box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
 }
 
 .gen-placeholder {
   text-align: center;
   padding: 48px 20px;
 }
-.placeholder-icon { font-size: 56px; margin-bottom: 16px; }
+.placeholder-icon { font-size: 56px; margin-bottom: 16px; color: #ddd; }
 .gen-placeholder h3 {
   font-size: 18px;
-  color: #94a3b8;
+  color: #888;
   margin: 0 0 8px;
 }
 .gen-placeholder p {
   font-size: 14px;
-  color: #64748b;
+  color: #aaa;
   margin: 0;
 }
 
@@ -772,8 +867,8 @@ canvas {
   height: 64px;
   margin: 0 auto 20px;
   border-radius: 50%;
-  background: rgba(249, 115, 22, 0.10);
-  border: 2px solid rgba(249, 115, 22, 0.2);
+  background: rgba(255, 140, 66, 0.10);
+  border: 2px solid rgba(255, 140, 66, 0.2);
   animation: pulse 2s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -782,12 +877,12 @@ canvas {
 }
 .gen-loading h3 {
   font-size: 18px;
-  color: #f8fafc;
+  color: #333;
   margin: 0 0 8px;
 }
 .loading-hint {
   font-size: 14px;
-  color: #64748b;
+  color: #888;
   margin: 0 0 16px;
 }
 .loading-dots {
@@ -799,7 +894,7 @@ canvas {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #f97316;
+  background: #FF8C42;
   animation: dotBounce 1.4s infinite ease-in-out both;
 }
 .ldot:nth-child(1) { animation-delay: -0.32s; }
@@ -820,13 +915,13 @@ canvas {
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 140, 66, 0.1);
 }
 .result-image {
   width: 100%;
   max-height: 500px;
   object-fit: contain;
-  background: #0a0a0d;
+  background: #FFFBF5;
   display: block;
 }
 .result-overlay {
@@ -864,9 +959,27 @@ canvas {
 }
 .result-prompt {
   font-size: 14px;
-  color: #94a3b8;
+  color: #888;
   margin: 0;
   font-style: italic;
+}
+
+.overlay-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.overlay-btn.primary {
+  background: linear-gradient(135deg, #FF8C42, #FFB347);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(255, 140, 66, 0.35);
+}
+.overlay-btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(255, 140, 66, 0.5);
+}
+.spin {
+  animation: spin 1s linear infinite;
 }
 
 /* 失败 */
@@ -874,15 +987,15 @@ canvas {
   text-align: center;
   padding: 48px 20px;
 }
-.error-icon { font-size: 48px; margin-bottom: 12px; }
+.error-icon { font-size: 48px; margin-bottom: 12px; color: #ddd; }
 .gen-error h3 {
   font-size: 18px;
-  color: #f8fafc;
+  color: #333;
   margin: 0 0 8px;
 }
 .gen-error p {
   font-size: 14px;
-  color: #64748b;
+  color: #888;
   margin: 0 0 20px;
 }
 
@@ -891,7 +1004,7 @@ canvas {
 .history-title {
   font-size: 16px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #666;
   margin: 0 0 12px;
 }
 .history-grid {
@@ -902,15 +1015,16 @@ canvas {
 .history-item {
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 140, 66, 0.08);
   cursor: pointer;
   transition: all 0.3s;
   position: relative;
+  background: #fff;
 }
 .history-item:hover {
-  border-color: rgba(249, 115, 22, 0.3);
+  border-color: rgba(255, 140, 66, 0.3);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(255, 140, 66, 0.08);
 }
 .history-thumb {
   width: 100%;
@@ -920,11 +1034,11 @@ canvas {
 }
 .history-info {
   padding: 8px 10px;
-  background: rgba(12, 12, 13, 0.9);
+  background: #FFFBF5;
 }
 .history-prompt {
   font-size: 12px;
-  color: #94a3b8;
+  color: #888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

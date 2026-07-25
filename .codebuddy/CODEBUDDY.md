@@ -46,6 +46,7 @@
 4. TypeScript 严格模式，禁止 `any`
 5. 每个微服务独立数据库
 6. 所有 API 通过 gateway 代理
+7. **Icon 规范**：禁止使用 emoji 作为图标，统一使用 SVG icon；如果没有合适的 SVG icon，宁可不用 icon
 
 ## Skills
 

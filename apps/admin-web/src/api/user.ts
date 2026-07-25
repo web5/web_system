@@ -23,35 +23,35 @@ export function getUserList(params: UserListParams): Promise<UserListResponse> {
  * 获取用户详情
  */
 export function getUserDetail(id: string): Promise<UserInfo> {
-  return request.get(`/user/${id}`);
+  return request.get(`/users/${id}`);
 }
 
 /**
  * 创建用户
  */
 export function createUser(data: Partial<UserInfo>): Promise<UserInfo> {
-  return request.post('/user', data);
+  return request.post('/users', data);
 }
 
 /**
  * 更新用户
  */
 export function updateUser(id: string, data: Partial<UserInfo>): Promise<UserInfo> {
-  return request.put(`/user/${id}`, data);
+  return request.put(`/users/${id}`, data);
 }
 
 /**
  * 删除用户
  */
 export function deleteUser(id: string): Promise<void> {
-  return request.delete(`/user/${id}`);
+  return request.delete(`/users/${id}`);
 }
 
 /**
  * 切换用户状态
  */
 export function toggleUserStatus(id: string, enabled: boolean): Promise<UserInfo> {
-  return request.patch(`/user/${id}/status`, { enabled });
+  return request.patch(`/users/${id}/status`, { enabled });
 }
 
 /** 用户API对象（兼容组件中的默认导入） */

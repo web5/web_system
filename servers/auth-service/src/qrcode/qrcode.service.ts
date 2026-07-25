@@ -23,6 +23,11 @@ export class QrcodeService {
     return { ticketId: ticket.ticketId };
   }
 
+  /** 获取 ticket 原始数据（用于扫描端点验证） */
+  getTicket(ticketId: string) {
+    return this.store.get(ticketId) || null;
+  }
+
   /** 轮询检查 ticket 状态 */
   checkTicket(ticketId: string) {
     const ticket = this.store.get(ticketId);
@@ -41,6 +46,50 @@ export class QrcodeService {
   }
 
   /**
+   * 构建扫码跳转 OAuth 的 URL
+   *
+   * 用户用微信扫二维码后，会被定向到这个 URL，
+   * 该 URL 引导用户进入公众号 OAuth 授权页，
+   * 授权完成后回调中会提取 ticketId 确认登录。
+   *
+   * 注：个人开放平台无法创建网站应用，所以扫码后走公众号 OAuth 流程。
+   * 用户微信扫 PC 端二维码 → 打开公众号授权页 → 授权后回调 → 确认 ticket
+   */
+  buildScanOAuthUrl(ticketId: string, frontendRedirect: string): string {
+    const config = this.getOaConfig();
+    const oauthRedirectUri = this.configService.get(
+      'WECHAT_OAUTH_REDIRECT_URI',
+      'http://localhost:3001/auth/wechat/callback',
+    );
+    // 将 ticketId 编码到 state 中，回调时能解析出来
+    const state = `${frontendRedirect}?mini_scan_ticket=${ticketId}`;
+    const params = new URLSearchParams({
+      appid: config.appId,
+      redirect_uri: oauthRedirectUri,
+      response_type: 'code',
+      scope: 'snsapi_userinfo',
+      state: encodeURIComponent(state),
+    });
+    return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
+  }
+
+  /** 获取公众号配置（扫码 OAuth 使用） */
+  private getOaConfig() {
+    return {
+      appId: this.configService.get('OFFICIAL_ACCOUNT_APP_ID', ''),
+      secret: this.configService.get('OFFICIAL_ACCOUNT_SECRET', ''),
+    };
+  }
+
+  /** 获取小程序配置（扫码确认使用） */
+  private getMpConfig() {
+    return {
+      appId: this.configService.get('MINI_PROGRAM_APP_ID', ''),
+      secret: this.configService.get('MINI_PROGRAM_SECRET', ''),
+    };
+  }
+
+  /**
    * 小程序扫码确认
    * @param ticketId 二维码中的 ticket
    * @param code 小程序 wx.login() 获取的 code
@@ -52,16 +101,15 @@ export class QrcodeService {
       throw new BadRequestException('二维码已过期或无效');
     }
 
-    const wechatAppId = this.configService.get('WECHAT_APPID', '');
-    let openid: string;
+    const mpConfig = this.getMpConfig();
 
-    // 2. 用 code 换取 openid
-    const secret = this.configService.get('WECHAT_SECRET', '');
+    // 2. 用 code 换取 openid（使用小程序 AppID）
+    let openid: string;
     try {
       const resp = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
         params: {
-          appid: wechatAppId,
-          secret,
+          appid: mpConfig.appId,
+          secret: mpConfig.secret,
           js_code: code,
           grant_type: 'authorization_code',
         },
@@ -75,20 +123,21 @@ export class QrcodeService {
       throw new BadRequestException('微信登录验证失败');
     }
 
-    // 3. 查找或创建用户
-    let user = await this.userService.findByWechatOpenid(openid);
+    // 3. 按 mpOpenid 查找已有用户，没有则创建
+    let user = await this.userService.findByMpOpenid(openid);
     if (!user) {
-      user = await this.userService.createWechatUser({
-        openid,
+      user = await this.userService.createMpUser({
+        mpOpenid: openid,
         nickname: `wx_${openid.substring(0, 10)}`,
         avatar: '',
       });
     }
+
     if (user.status !== 'active') {
       throw new BadRequestException('账号已被禁用');
     }
 
-    // 5. 生成 JWT
+    // 4. 生成 JWT
     const payload = {
       sub: user.id,
       username: user.username,
@@ -97,7 +146,7 @@ export class QrcodeService {
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '30d' });
 
-    // 6. 标记 ticket 为已确认
+    // 5. 标记 ticket 为已确认
     this.store.confirm(ticketId, user.id, accessToken, refreshToken);
 
     this.logger.log(`QR code scan confirmed: ticket=${ticketId}, user=${user.id}`);

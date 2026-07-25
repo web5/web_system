@@ -1,5 +1,6 @@
-import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { QrcodeService } from '../qrcode/qrcode.service';
 import {
@@ -18,6 +19,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private qrcodeService: QrcodeService,
+    private jwtService: JwtService,
   ) {}
 
   @Post('login')
@@ -64,6 +66,18 @@ export class AuthController {
     if (token) {
       await this.authService.logout(token);
     }
+  }
+
+  @Get('verify')
+  @ApiOperation({ summary: '验证 Token 并返回用户信息' })
+  @HttpCode(HttpStatus.OK)
+  async verify(@Headers('authorization') auth: string) {
+    if (!auth) {
+      throw new UnauthorizedException('Authorization header missing');
+    }
+    const token = auth.replace('Bearer ', '');
+    const user = await this.authService.verifyToken(token);
+    return { code: 200, data: user };
   }
 
   /**
@@ -125,5 +139,45 @@ export class AuthController {
     } catch (error) {
       res.redirect('/login?error=wechat_auth_failed');
     }
+  }
+
+  /**
+   * 绑定小程序 openid 到当前用户（个人中心）
+   * POST /auth/bind-miniprogram
+   * Body: { code: string } — wx.login() 获取的 code
+   */
+  @Post('bind-miniprogram')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '绑定小程序 openid 到当前用户' })
+  @HttpCode(HttpStatus.OK)
+  async bindMiniprogram(
+    @Body('code') code: string,
+    @Headers('authorization') auth: string,
+  ) {
+    if (!auth) throw new UnauthorizedException('请先登录');
+    const token = auth.replace('Bearer ', '');
+    const payload = this.jwtService.verify(token);
+    await this.authService.bindMpOpenid(payload.sub, code);
+    return { success: true, message: '小程序绑定成功' };
+  }
+
+  /**
+   * 绑定公众号 openid 到当前用户（个人中心）
+   * POST /auth/bind-official-account
+   * Body: { code: string } — 公众号 OAuth 回调的 code
+   */
+  @Post('bind-official-account')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '绑定公众号 openid 到当前用户' })
+  @HttpCode(HttpStatus.OK)
+  async bindOfficialAccount(
+    @Body('code') code: string,
+    @Headers('authorization') auth: string,
+  ) {
+    if (!auth) throw new UnauthorizedException('请先登录');
+    const token = auth.replace('Bearer ', '');
+    const payload = this.jwtService.verify(token);
+    await this.authService.bindOaOpenid(payload.sub, code);
+    return { success: true, message: '公众号绑定成功' };
   }
 }

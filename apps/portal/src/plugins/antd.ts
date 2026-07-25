@@ -14,7 +14,9 @@ import {
   Tabs,
   TabPane,
   ConfigProvider,
+  App,
 } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import 'ant-design-vue/dist/reset.css';
 import type { Rule } from 'ant-design-vue/es/form';
 
@@ -28,8 +30,11 @@ const components = [
   RadioGroup, RadioButton, Slider,
   Tabs, TabPane,
   ConfigProvider,
+  App,
 ];
 
 export function setupAntd(app: App) {
   components.forEach(comp => app.use(comp));
+  app.use(message);
+  message.config({ maxCount: 3 });
 }

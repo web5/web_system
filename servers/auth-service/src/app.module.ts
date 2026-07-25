@@ -8,13 +8,11 @@ import { QrcodeModule } from './qrcode/qrcode.module';
 
 @Module({
   imports: [
-    // 配置模块
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
 
-    // 数据库模块
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
@@ -25,10 +23,10 @@ import { QrcodeModule } from './qrcode/qrcode.module';
             host: configService.get('DB_HOST', 'localhost'),
             port: configService.get<number>('DB_PORT', 5432),
             username: configService.get('DB_USERNAME', 'web_system'),
-            password: configService.get('DB_PASSWORD', 'web_system123'),
+            password: configService.get('DB_PASSWORD', ''),
             database: configService.get('DB_DATABASE', 'web_system'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
-            synchronize: true,
+            synchronize: configService.get('NODE_ENV') !== 'production',
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -55,17 +53,15 @@ import { QrcodeModule } from './qrcode/qrcode.module';
       },
     }),
 
-    // JWT 模块
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET', 'your-secret-key-change-in-production'),
+        secret: configService.get('JWT_SECRET', ''),
         signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN', '7d') },
       }),
       global: true,
     }),
 
-    // 功能模块
     AuthModule,
     UserModule,
     QrcodeModule,

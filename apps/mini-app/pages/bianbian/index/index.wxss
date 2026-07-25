@@ -63,7 +63,8 @@
 }
 
 .card-icon {
-  font-size: 56rpx;
+  width: 56rpx;
+  height: 56rpx;
   margin-bottom: 16rpx;
 }
 
@@ -92,8 +93,10 @@
 }
 
 .draft-icon {
-  font-size: 32rpx;
+  width: 32rpx;
+  height: 32rpx;
   margin-right: 12rpx;
+  flex-shrink: 0;
 }
 
 .draft-text {

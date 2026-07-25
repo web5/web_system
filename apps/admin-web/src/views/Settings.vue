@@ -212,6 +212,27 @@
           </div>
         </a-tab-pane>
 
+        <a-tab-pane key="quota" tab="使用配额">
+          <div class="tab-content">
+            <div class="section-card">
+              <div class="section-title">
+                <ThunderboltOutlined class="section-icon" />
+                <span>变变每日次数</span>
+              </div>
+              <a-form :model="quota" layout="vertical" class="settings-form">
+                <a-form-item label="普通用户每日变身次数">
+                  <a-input-number v-model:value="quota.dailyTransformLimit" :min="0" :max="999" size="large" style="width: 120px" />
+                  <span class="unit-text">次/天</span>
+                  <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">设为 0 表示不限制普通用户；admin 用户始终不限制</div>
+                </a-form-item>
+                <div class="form-actions">
+                  <a-button type="primary" size="large" :loading="savingQuota" @click="saveQuota">保存修改</a-button>
+                </div>
+              </a-form>
+            </div>
+          </div>
+        </a-tab-pane>
+
         <a-tab-pane key="logs" tab="操作日志">
           <div class="tab-content">
             <div class="section-card">
@@ -239,7 +260,7 @@
                 :pagination="logPagination"
                 :loading="logLoading"
                 size="small"
-                class="dark-table"
+                class="themed-table"
                 @change="onLogPageChange"
               />
             </div>
@@ -254,9 +275,10 @@
 import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import type { Dayjs } from 'dayjs';
+import type { Ref } from 'vue';
 import {
   AppstoreOutlined, ControlOutlined, SafetyCertificateOutlined,
-  MailOutlined, CloudOutlined, FileSearchOutlined,
+  MailOutlined, CloudOutlined, FileSearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import { getSettings, updateSettings, getLogs } from '@/api/settings';
 
@@ -266,6 +288,7 @@ const savingFeatures = ref(false);
 const savingSecurity = ref(false);
 const savingNotify = ref(false);
 const savingStorage = ref(false);
+const savingQuota = ref(false);
 
 const KEY = {
   siteName: 'site_name', siteDesc: 'site_description', contactEmail: 'contact_email',
@@ -277,6 +300,7 @@ const KEY = {
   smtpHost: 'notify_smtp_host', smtpPort: 'notify_smtp_port', smtpEncryption: 'notify_smtp_encryption',
   smtpFrom: 'notify_smtp_from', smtpPass: 'notify_smtp_pass',
   storageType: 'storage_type', storageBucket: 'storage_bucket', storageRegion: 'storage_region', maxUploadMB: 'storage_max_upload_mb',
+  dailyTransformLimit: 'bianbian_daily_transform_limit',
 };
 
 const basicForm = reactive({ siteName: '科豆 AI', siteDesc: '科豆 AI 少儿教育平台', contactEmail: 'admin@kedouai.com' });
@@ -310,6 +334,11 @@ const saveStorage = () => doSave({
   [KEY.storageRegion]: storage.region, [KEY.maxUploadMB]: String(storage.maxUploadMB),
 }, savingStorage);
 
+const quota = reactive({ dailyTransformLimit: 3 });
+const saveQuota = () => doSave({
+  [KEY.dailyTransformLimit]: String(quota.dailyTransformLimit || 0),
+}, savingQuota);
+
 async function doSave(data: Record<string, string>, loadingRef: Ref<boolean>) {
   loadingRef.value = true;
   try {
@@ -321,8 +350,6 @@ async function doSave(data: Record<string, string>, loadingRef: Ref<boolean>) {
     loadingRef.value = false;
   }
 }
-
-import type { Ref } from 'vue';
 
 const logLoading = ref(false);
 const logFilter = reactive({
@@ -360,7 +387,8 @@ const onLogPageChange = (pag: any) => { logPagination.current = pag.current; log
 
 onMounted(async () => {
   try {
-    const cfg = await getSettings();
+    const res = await getSettings();
+    const cfg = res?.data || res;
     if (cfg[KEY.siteName]) basicForm.siteName = cfg[KEY.siteName];
     if (cfg[KEY.siteDesc]) basicForm.siteDesc = cfg[KEY.siteDesc];
     if (cfg[KEY.contactEmail]) basicForm.contactEmail = cfg[KEY.contactEmail];
@@ -385,6 +413,7 @@ onMounted(async () => {
     if (cfg[KEY.storageBucket]) storage.bucket = cfg[KEY.storageBucket];
     if (cfg[KEY.storageRegion]) storage.region = cfg[KEY.storageRegion];
     if (cfg[KEY.maxUploadMB]) storage.maxUploadMB = parseInt(cfg[KEY.maxUploadMB]);
+    if (cfg[KEY.dailyTransformLimit]) quota.dailyTransformLimit = parseInt(cfg[KEY.dailyTransformLimit]);
   } catch { /* server may not be ready */ }
   searchLogs();
 });
@@ -398,8 +427,8 @@ onMounted(async () => {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 0;
 }
-.settings-title { margin: 0; font-size: 22px; font-weight: 700; color: #F1F5F9; }
-.settings-subtitle { margin: 4px 0 0; font-size: 13px; color: #64748B; }
+.settings-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text-heading); }
+.settings-subtitle { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
 
 /* 主体 */
 .settings-body { margin-top: 20px; }
@@ -407,7 +436,7 @@ onMounted(async () => {
 /* 标签页 */
 .settings-tabs :deep(.ant-tabs-nav) { margin-bottom: 0; }
 .settings-tabs :deep(.ant-tabs-tab) {
-  color: #94A3B8 !important; font-size: 14px; padding: 12px 20px;
+  color: var(--text-tertiary) !important; font-size: 14px; padding: 12px 20px;
   transition: color .2s;
 }
 .settings-tabs :deep(.ant-tabs-tab:hover) { color: #FF8C42 !important; }
@@ -418,66 +447,66 @@ onMounted(async () => {
 /* 内容区 */
 .tab-content { max-width: 680px; }
 .section-card {
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 28px 32px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border); border-radius: 4px; padding: 28px 32px;
 }
 .section-title {
   display: flex; align-items: center; gap: 10px;
-  font-size: 15px; font-weight: 600; color: #F1F5F9;
+  font-size: 15px; font-weight: 600; color: var(--text-heading);
   margin-bottom: 24px; padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255,255,255,.05);
+  border-bottom: 1px solid var(--border-divider);
 }
 .section-icon { font-size: 18px; color: #FF8C42; }
 
 /* 表单 */
 .settings-form { max-width: 520px; }
-.settings-form :deep(.ant-form-item-label > label) { color: #94A3B8; font-size: 13px; }
+.settings-form :deep(.ant-form-item-label > label) { color: var(--text-tertiary); font-size: 13px; }
 .settings-form :deep(.ant-input), .settings-form :deep(.ant-input-affix-wrapper), .settings-form :deep(.ant-input-number), .settings-form :deep(.ant-select-selector) {
-  background: rgba(255,255,255,.04) !important; border-color: rgba(255,255,255,.08) !important; color: #E2E8F0;
-  border-radius: 8px;
+  background: var(--input-bg) !important; border-color: var(--input-border) !important; color: var(--input-text);
+  border-radius: 4px;
 }
-.settings-form :deep(.ant-input::placeholder), .settings-form :deep(.ant-select-selection-placeholder) { color: #475569; }
+.settings-form :deep(.ant-input::placeholder), .settings-form :deep(.ant-select-selection-placeholder) { color: var(--input-placeholder); }
 .settings-form :deep(.ant-input:hover), .settings-form :deep(.ant-input-affix-wrapper:hover), .settings-form :deep(.ant-input-number:hover), .settings-form :deep(.ant-select:hover .ant-select-selector) {
   border-color: rgba(255,140,66,.4) !important;
 }
 .settings-form :deep(.ant-input:focus), .settings-form :deep(.ant-input-affix-wrapper-focused), .settings-form :deep(.ant-input-number-focused), .settings-form :deep(.ant-select-focused .ant-select-selector) {
   border-color: #FF8C42 !important; box-shadow: 0 0 0 2px rgba(255,140,66,.12);
 }
-.settings-form :deep(.ant-checkbox-wrapper) { color: #CBD5E1; font-size: 13px; }
-.settings-form :deep(.ant-radio-wrapper) { color: #CBD5E1; }
-.settings-form :deep(.ant-divider) { border-color: rgba(255,255,255,.06); }
-.unit-text { margin-left: 8px; color: #64748B; font-size: 13px; }
-.inline-label { color: #CBD5E1; font-size: 13px; }
+.settings-form :deep(.ant-checkbox-wrapper) { color: var(--text-secondary); font-size: 13px; }
+.settings-form :deep(.ant-radio-wrapper) { color: var(--text-secondary); }
+.settings-form :deep(.ant-divider) { border-color: var(--border-light); }
+.unit-text { margin-left: 8px; color: var(--text-muted); font-size: 13px; }
+.inline-label { color: var(--text-secondary); font-size: 13px; }
 .section-divider { margin: 24px 0 !important; }
 
 .form-actions {
   display: flex; gap: 12px; margin-top: 16px;
-  padding-top: 20px; border-top: 1px solid rgba(255,255,255,.05);
+  padding-top: 20px; border-top: 1px solid var(--border-divider);
 }
 
 /* 开关列表 */
 .switch-list { display: flex; flex-direction: column; gap: 0; }
 .switch-item {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+  padding: 16px 0; border-bottom: 1px solid var(--border-lighter);
 }
 .switch-item:last-child { border-bottom: none; }
 .switch-item-info { display: flex; flex-direction: column; gap: 2px; }
-.switch-item-label { font-size: 14px; color: #E2E8F0; font-weight: 500; }
-.switch-item-desc { font-size: 12px; color: #64748B; }
+.switch-item-label { font-size: 14px; color: var(--text-body); font-weight: 500; }
+.switch-item-desc { font-size: 12px; color: var(--text-muted); }
 
 /* 日志 */
 .log-filters { margin-bottom: 16px; }
 
 /* 暗色表格 */
-.dark-table :deep(.ant-table) { background: transparent; color: #E2E8F0; }
-.dark-table :deep(.ant-table-thead > tr > th) {
-  background: rgba(255,255,255,.03) !important; color: #94A3B8;
+.themed-table :deep(.ant-table) { background: transparent; color: var(--text-body); }
+.themed-table :deep(.ant-table-thead > tr > th) {
+  background: var(--table-header-bg) !important; color: var(--table-header-text);
   font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid var(--border-light);
 }
-.dark-table :deep(.ant-table-tbody > tr > td) { border-bottom: 1px solid rgba(255,255,255,.03); }
-.dark-table :deep(.ant-table-tbody > tr:hover > td) { background: rgba(255,140,66,.04) !important; }
-.dark-table :deep(.ant-pagination-item-active) { border-color: #FF8C42; }
-.dark-table :deep(.ant-pagination-item-active a) { color: #FF8C42; }
+.themed-table :deep(.ant-table-tbody > tr > td) { border-bottom: 1px solid var(--border-lighter); }
+.themed-table :deep(.ant-table-tbody > tr:hover > td) { background: var(--table-hover-bg) !important; }
+.themed-table :deep(.ant-pagination-item-active) { border-color: #FF8C42; }
+.themed-table :deep(.ant-pagination-item-active a) { color: #FF8C42; }
 </style>

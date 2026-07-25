@@ -48,11 +48,62 @@ const routes = [
     component: () => import('../views/Profile.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/album',
+    name: 'Album',
+    component: () => import('../views/Album.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/todo',
+    name: 'Todo',
+    component: () => import('../views/Todo.vue'),
+    meta: { requiresAuth: true },
+  },
+  // ========== 在线工具 ==========
+  {
+    path: '/tools',
+    name: 'Tools',
+    component: () => import('../views/tools/ToolsHome.vue'),
+  },
+  {
+    path: '/tools/json',
+    name: 'ToolJson',
+    component: () => import('../views/tools/JsonFormatter.vue'),
+  },
+  {
+    path: '/tools/sql',
+    name: 'ToolSql',
+    component: () => import('../views/tools/SqlFormatter.vue'),
+  },
+  {
+    path: '/tools/uglify',
+    name: 'ToolUglify',
+    component: () => import('../views/tools/Uglify.vue'),
+  },
+  {
+    path: '/tools/diff',
+    name: 'ToolDiff',
+    component: () => import('../views/tools/CodeDiff.vue'),
+  },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+// 路由守卫：需要认证的页面跳转到登录页
+router.beforeEach((to, from, next) => {
+  if (to.meta?.requiresAuth) {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      // 带 redirect 参数跳转到登录页
+      next({ path: '/login', query: { redirect: to.fullPath } });
+      return;
+    }
+  }
+  next();
 });
 
 export default router;

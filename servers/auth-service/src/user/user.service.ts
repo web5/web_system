@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -26,10 +26,17 @@ export class UserService {
   }
 
   /**
-   * 根据微信 OpenID 查找用户
+   * 根据小程序 openid 查找用户
    */
-  async findByWechatOpenid(openid: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { wechatOpenid: openid } });
+  async findByMpOpenid(openid: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { mpOpenid: openid } });
+  }
+
+  /**
+   * 根据公众号 openid 查找用户
+   */
+  async findByOaOpenid(openid: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { oaOpenid: openid } });
   }
 
   /**
@@ -74,26 +81,65 @@ export class UserService {
   }
 
   /**
-   * 创建微信用户
+   * 创建小程序用户（独立创建，不尝试合并）
    */
-  async createWechatUser(data: {
-    openid: string;
-    unionid?: string;
+  async createMpUser(data: {
+    mpOpenid: string;
     nickname: string;
     avatar: string;
   }): Promise<User> {
-    // 使用 openid 或 nickname 生成唯一用户名
-    const username = `wx_${data.openid.substring(0, 10)}`;
-
+    const username = `wx_${data.mpOpenid.substring(0, 10)}`;
     const user = this.userRepository.create({
       username,
-      wechatOpenid: data.openid,
-      wechatUnionid: data.unionid,
+      mpOpenid: data.mpOpenid,
+      nickname: data.nickname,
       avatar: data.avatar,
       roles: ['user'],
     });
-
     return this.userRepository.save(user);
+  }
+
+  /**
+   * 创建公众号用户（独立创建，不尝试合并）
+   */
+  async createOaUser(data: {
+    oaOpenid: string;
+    nickname: string;
+    avatar: string;
+  }): Promise<User> {
+    const username = `wx_${data.oaOpenid.substring(0, 10)}`;
+    const user = this.userRepository.create({
+      username,
+      oaOpenid: data.oaOpenid,
+      nickname: data.nickname,
+      avatar: data.avatar,
+      roles: ['user'],
+    });
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * 绑定小程序 openid 到已有用户（个人中心）
+   * @throws 如果该 openid 已被其他用户绑定
+   */
+  async bindMpOpenid(userId: number, mpOpenid: string): Promise<User> {
+    const existing = await this.findByMpOpenid(mpOpenid);
+    if (existing && existing.id !== userId) {
+      throw new BadRequestException('该微信小程序账号已被其他用户绑定');
+    }
+    return this.update(userId, { mpOpenid });
+  }
+
+  /**
+   * 绑定公众号 openid 到已有用户（个人中心）
+   * @throws 如果该 openid 已被其他用户绑定
+   */
+  async bindOaOpenid(userId: number, oaOpenid: string): Promise<User> {
+    const existing = await this.findByOaOpenid(oaOpenid);
+    if (existing && existing.id !== userId) {
+      throw new BadRequestException('该微信公众号账号已被其他用户绑定');
+    }
+    return this.update(userId, { oaOpenid });
   }
 
   /**

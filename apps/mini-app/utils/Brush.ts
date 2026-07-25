@@ -23,7 +23,7 @@ export const BRUSH_PRESETS: Record<BrushType, BrushConfig> = {
   pencil: {
     type: 'pencil',
     name: '铅笔',
-    icon: '✏️',
+    icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE3IDNhMi44MyAyLjgzIDAgMSAxIDQgNEw3LjUgMjAuNSAyIDIybDEuNS01LjVaIi8+PHBhdGggZD0ibTE1IDUgNCA0Ii8+PC9zdmc+',
     size: 3,
     minSize: 1,
     maxSize: 10,
@@ -35,7 +35,7 @@ export const BRUSH_PRESETS: Record<BrushType, BrushConfig> = {
   marker: {
     type: 'marker',
     name: '马克笔',
-    icon: '🖊️',
+    icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTEyIDE5IDctNyAzIDMtNyA3LTMtM3oiLz48cGF0aCBkPSJtMTggMTMtMS41LTcuNUwyIDJsMy41IDE0LjVMMTMgMThsNS01eiIvPjxwYXRoIGQ9Im0yIDIgNy41ODYgNy41ODYiLz48Y2lyY2xlIGN4PSIxMSIgY3k9IjExIiByPSIyIi8+PC9zdmc+',
     size: 6,
     minSize: 2,
     maxSize: 20,
@@ -47,7 +47,7 @@ export const BRUSH_PRESETS: Record<BrushType, BrushConfig> = {
   highlighter: {
     type: 'highlighter',
     name: '荧光笔',
-    icon: '🖍️',
+    icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTkgMTEtNiA2djNoOWwzLTMiLz48cGF0aCBkPSJtMjIgMTItNC00LTQgNCA0IDQgNC00eiIvPjxwYXRoIGQ9Ik0xNCAxMFYzbC00IDRoMSIvPjwvc3ZnPg==',
     size: 20,
     minSize: 10,
     maxSize: 40,
@@ -59,7 +59,7 @@ export const BRUSH_PRESETS: Record<BrushType, BrushConfig> = {
   eraser: {
     type: 'eraser',
     name: '橡皮擦',
-    icon: '🧹',
+    icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTcgMjEtNC4zLTQuM2ExIDEgMCAwIDEgMC0xLjRsMTAuNC0xMC40YTEgMSAwIDAgMSAxLjQgMGw1LjYgNS42YTEgMSAwIDAgMSAwIDEuNEwxMyAxOSIvPjxwYXRoIGQ9Ik03IDIxaDgiLz48cGF0aCBkPSJNMTcgMTMuOFYyMSIvPjwvc3ZnPg==',
     size: 15,
     minSize: 5,
     maxSize: 40,

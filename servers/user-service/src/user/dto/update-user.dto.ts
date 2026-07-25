@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, MinLength, MaxLength, IsEmail, IsOptional } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsEmail, IsOptional, IsNumber } from 'class-validator';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ description: '用户名', example: 'newname' })
@@ -35,6 +35,11 @@ export class UpdateUserDto {
   @IsString()
   avatar?: string;
 
+  @ApiPropertyOptional({ description: '性别', example: 'male', enum: ['male', 'female', 'unknown'] })
+  @IsOptional()
+  @IsString()
+  gender?: 'male' | 'female' | 'unknown';
+
   @ApiPropertyOptional({ description: '状态', example: 'active', enum: ['active', 'inactive', 'banned'] })
   @IsOptional()
   @IsString()
@@ -43,4 +48,9 @@ export class UpdateUserDto {
   @ApiPropertyOptional({ description: '角色', example: ['admin'], type: [String] })
   @IsOptional()
   roles?: string[];
+
+  @ApiPropertyOptional({ description: '个人每日变身次数限制（null=不限制）', example: 5 })
+  @IsOptional()
+  @IsNumber()
+  dailyTransformLimit?: number | null;
 }

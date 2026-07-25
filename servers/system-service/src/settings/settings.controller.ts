@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { OperationLogsService } from '../operation-logs/operation-logs.service';
 
@@ -11,7 +11,15 @@ export class SettingsController {
 
   @Get()
   async getAll() {
-    return this.settingsService.getAll();
+    return { code: 0, data: await this.settingsService.getAll() };
+  }
+
+  @Get('public/:key')
+  async getPublic(@Param('key') key: string) {
+    return {
+      code: 0,
+      data: await this.settingsService.get(key),
+    };
   }
 
   @Put()
@@ -23,6 +31,6 @@ export class SettingsController {
       target: `批量更新 ${Object.keys(data).length} 项配置`,
       ip: '0.0.0.0',
     });
-    return { success: true };
+    return { code: 0, message: '保存成功' };
   }
 }

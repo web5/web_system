@@ -2,7 +2,7 @@
 <view class="page">
   <!-- 标题 -->
   <view class="header">
-    <text class="header-emoji">🎉</text>
+    <image class="header-emoji" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgMjFoMTYiLz48cGF0aCBkPSJNMTIgMnYzIi8+PHBhdGggZD0iTTggNWwtMyA0IDQtMSAyIDMtMSA0IDUtMiAxIDUgMy02IDUgMi0yLTYgNC0yLTgtNC00LTFaIi8+PC9zdmc+" mode="aspectFit" />
     <text class="header-title">变变成功！</text>
   </view>
 
@@ -34,21 +34,21 @@
   <!-- 操作按钮 -->
   <view class="actions">
     <button class="action-btn btn-save" bindtap="saveToAlbum">
-      <text class="btn-icon">❤️</text>
+      <image class="btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDE0YzEuNDktMS40NiAzLTMuMjEgMy01LjVBNS41IDUuNSAwIDAgMCAxNi41IDNjLTEuNzYgMC0zIC41LTQuNSAyLTEuNS0xLjUtMi43NC0yLTQuNS0yQTUuNSA1LjUgMCAwIDAgMiA4LjVjMCAyLjMgMS41IDQuMDUgMyA1LjVsNyA3WiIvPjwvc3ZnPg==" mode="aspectFit" />
       <text class="btn-label">保存到相册</text>
     </button>
 
     <view class="action-row">
       <button class="action-btn btn-retry" bindtap="retry" wx:if="{{canRetry}}">
-        <text class="btn-icon">🎲</text>
+        <image class="btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iOC41IiBjeT0iMTUuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjE1LjUiIHI9IjEuNSIvPjwvc3ZnPg==" mode="aspectFit" />
         <text class="btn-label">重新变（还余{{retryLeft}}次）</text>
       </button>
       <button class="action-btn btn-retry" wx:else disabled style="opacity:0.4;">
-        <text class="btn-icon">🎲</text>
+        <image class="btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iOC41IiBjeT0iMTUuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjE1LjUiIHI9IjEuNSIvPjwvc3ZnPg==" mode="aspectFit" />
         <text class="btn-label">今天变够啦</text>
       </button>
       <button class="action-btn btn-recreate" bindtap="recreate">
-        <text class="btn-icon">✨</text>
+        <image class="btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODg4ODg4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkuOTM3IDE1LjVBMiAyIDAgMCAwIDguNSAxNC4wNjNsLTYuMTM1LTEuNTgyYS41LjUgMCAwIDEgMC0uOTYyTDguNSA5LjkzNkEyIDIgMCAwIDAgOS45MzcgOC41bDEuNTgyLTYuMTM1YS41LjUgMCAwIDEgLjk2MiAwTDE0LjA2MyA4LjVBMiAyIDAgMCAwIDE1LjUgOS45MzdsNi4xMzUgMS41ODFhLjUuNSAwIDAgMSAwIC45NjRMMTUuNSAxNC4wNjNhMiAyIDAgMCAwLTEuNDM3IDEuNDM3bC0xLjU4MiA2LjEzNWEuNS41IDAgMCAxLS45NjIgMHoiLz48L3N2Zz4=" mode="aspectFit" />
         <text class="btn-label">再创一个</text>
       </button>
     </view>
@@ -56,7 +56,8 @@
 
   <!-- 提示 -->
   <view class="tip">
-    <text>💡 不满意？点「重新变」让变变用同一张画再试一次</text>
+    <image class="tip-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQ0NDQ0NDIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE1IDE0Yy4yLTEgLjctMS43IDEuNS0yLjUgMS0uOSAxLjUtMi4yIDEuNS0zLjVBNiA2IDAgMCAwIDYgOGMwIDEgLjIgMi4yIDEuNSAzLjVDNy45IDEyLjEgOC43IDEyLjggOSAxNE05IDE4aDZNMTAgMjJoNCIvPjwvc3ZnPg==" mode="aspectFit" />
+    <text>不满意？点「重新变」让变变用同一张画再试一次</text>
   </view>
 
   <!-- 隐藏合成 Canvas -->

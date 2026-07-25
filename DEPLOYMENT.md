@@ -97,6 +97,23 @@ pm2 logs
 
 ### 4. 更新部署
 
+**推荐使用一键部署脚本（本地执行）：**
+
+```bash
+cd /data/web_system   # 项目根目录
+
+# 部署全部（构建 + 同步 + 重启 + 健康检查）
+./scripts/deploy-dev.sh
+
+# 只部署某个组件
+./scripts/deploy-dev.sh portal    # 只更新 Portal 前端
+./scripts/deploy-dev.sh auth      # 只更新 auth-service
+./scripts/deploy-dev.sh gateway   # 只更新 gateway
+./scripts/deploy-dev.sh config    # 只同步 ecosystem.config.js
+```
+
+**手动部署（逐步骤执行）：**
+
 ```bash
 cd /data/web_system
 
@@ -123,6 +140,14 @@ cd ../..
 export $(cat .env.production | grep -v "^#" | xargs)
 pm2 restart all --update-env
 ```
+
+### 5. 部署注意事项
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| gateway 端口冲突 | `.env` 中 PORT=3001 被 gateway 读取 | 检查根目录 `.env` 的 PORT=3000 |
+| auth-service 连不上 5432 | 缺少 DB_TYPE 环境变量 | 确保 `.env` 中有 `DB_TYPE=mysql` |
+| PM2 找不到 dist | gateway dist 被误删 | 重新 `npx nest build` 并同步 |
 
 ## 二、Nginx 网关服务器 (42.194.200.69)
 

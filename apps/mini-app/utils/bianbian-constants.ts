@@ -37,14 +37,25 @@ export interface MaterialCategory {
   icon: string;
 }
 
+/** 白色图标用于深色背景（橙色 tab 激活态） */
+const WHITE_ICONS = {
+  palette: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTMuNSIgY3k9IjYuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTcuNSIgY3k9IjEwLjUiIHI9IjEuNSIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjcuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iNi41IiBjeT0iMTIuNSIgcj0iMS41Ii8+PHBhdGggZD0iTTEyIDJDNi41IDIgMiA2LjUgMiAxMnM0LjUgMTAgMTAgMTBjLjkzIDAgMS41LS42NyAxLjUtMS41IDAtLjM5LS4xNS0uNzQtLjM5LTEuMDEtLjIzLS4yNi0uMzgtLjYxLS4zOC0xIDAtLjgzLjY3LTEuNSAxLjUtMS41SDE2YzMuMzEgMCA2LTIuNjkgNi02IDAtNS41LTQuNS0xMC0xMC0xMHoiLz48L3N2Zz4=',
+  star: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDE1LjA5IDguMjYgMjIgOS4yNyAxNyAxNC4xNCAxOC4xOCAyMS4wMiAxMiAxNy43NyA1LjgyIDIxLjAyIDcgMTQuMTQgMiA5LjI3IDguOTEgOC4yNiAxMiAyIi8+PC9zdmc+',
+  diamond: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNU0yIDEybDEwIDUgMTAtNSIvPjwvc3ZnPg==',
+  animal: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDVjLjY3IDAgMS4zNS4wOSAyIC4yNiAxLjc4LTIgNS4wMy0yLjg0IDYuNDItMi4yNi41NC4yMy44NS42MyAxIDEuMTYiLz48cGF0aCBkPSJNMjAuODEgOS4wOEE0LjUgNC41IDAgMDAxOC41IDUuNSIvPjxwYXRoIGQ9Ik0zLjUgNS41YTQuNSA0LjUgMCAwMC0yLjMxIDMuNTgiLz48cGF0aCBkPSJNOCAxNHMxLjUgMiA0IDIgNC0yIDQtMiIvPjxsaW5lIHgxPSI5IiB5MT0iOSIgeDI9IjkuMDEiIHkyPSI5Ii8+PGxpbmUgeDE9IjE1IiB5MT0iOSIgeDI9IjE1LjAxIiB5Mj0iOSIvPjxwYXRoIGQ9Ik0xMiAxN3YtMiIvPjwvc3ZnPg==',
+  leaf: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTExIDIwQTcgNyAwIDAgMSA5LjggNi45QzE1LjUgNC45IDE3IDMuNSAxOSAyYzEgMiAyIDQuNSAyIDggMCA1LjUtNC43OCAxMC0xMCAxMFoiLz48cGF0aCBkPSJNMiAyMWMwLTMgMS44NS01LjM2IDUuMDgtNkM5LjUgMTQuNTIgMTIgMTMgMTMgMTIiLz48L3N2Zz4=',
+  smile: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiLz48cGF0aCBkPSJNOCAxNHMxLjUgMiA0IDIgNC0yIDQtMiIvPjxsaW5lIHgxPSI5IiB5MT0iOSIgeDI9IjkuMDEiIHkyPSI5Ii8+PGxpbmUgeDE9IjE1IiB5MT0iOSIgeDI9IjE1LjAxIiB5Mj0iOSIvPjwvc3ZnPg==',
+  image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGOEYwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIgcnk9IjIiLz48Y2lyY2xlIGN4PSI4LjUiIGN5PSI4LjUiIHI9IjEuNSIvPjxwb2x5bGluZSBwb2ludHM9IjIxIDE1IDE2IDEwIDUgMjEiLz48L3N2Zz4=',
+};
+
 export const MATERIAL_CATEGORIES: MaterialCategory[] = [
-  { id: 'all', name: '全部', icon: '🎨' },
-  { id: 'sticker', name: '贴纸', icon: '⭐' },
-  { id: 'shape', name: '形状', icon: '🔷' },
-  { id: 'animal', name: '动物', icon: '🐱' },
-  { id: 'nature', name: '自然', icon: '🌿' },
-  { id: 'face', name: '表情', icon: '😊' },
-  { id: 'bg', name: '背景', icon: '🖼️' },
+  { id: 'all', name: '全部', icon: WHITE_ICONS.palette },
+  { id: 'sticker', name: '贴纸', icon: WHITE_ICONS.star },
+  { id: 'shape', name: '形状', icon: WHITE_ICONS.diamond },
+  { id: 'animal', name: '动物', icon: WHITE_ICONS.animal },
+  { id: 'nature', name: '自然', icon: WHITE_ICONS.leaf },
+  { id: 'face', name: '表情', icon: WHITE_ICONS.smile },
+  { id: 'bg', name: '背景', icon: WHITE_ICONS.image },
 ];
 
 // ========== 素材项 ==========

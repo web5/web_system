@@ -7,7 +7,7 @@
     </view>
     <text class="top-title">变变</text>
     <view class="btn-transform-wrap {{elements.length === 0 ? 'disabled' : ''}}" bindtap="doTransform">
-      <text>变变！✨</text>
+      <text>变变！</text>
     </view>
   </view>
 
@@ -25,23 +25,23 @@
 
     <!-- 空状态引导 -->
     <view wx:if="{{elements.length === 0}}" class="canvas-empty">
-      <text class="empty-icon">🎨</text>
+      <image class="empty-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQ0NDQ0NDIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMy41IiBjeT0iNi41IiByPSIxLjUiLz48Y2lyY2xlIGN4PSIxNy41IiBjeT0iMTAuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iOC41IiBjeT0iNy41IiByPSIxLjUiLz48Y2lyY2xlIGN4PSI2LjUiIGN5PSIxMi41IiByPSIxLjUiLz48cGF0aCBkPSJNMTIgMkM2LjUgMiAyIDYuNSAyIDEyczQuNSAxMCAxMCAxMGMuOTMgMCAxLjUtLjY3IDEuNS0xLjUgMC0uMzktLjE1LS43NC0uMzktMS4wMS0uMjMtLjI2LS4zOC0uNjEtLjM4LTEgMC0uODMuNjctMS41IDEuNS0xLjVIMTZjMy4zMSAwIDYtMi42OSA2LTYgMC01LjUtNC41LTEwLTEwLTEweiIvPjwvc3ZnPg==" mode="aspectFit" />
       <text class="empty-text">点击下方素材开始创作吧</text>
     </view>
 
     <!-- 选中元素的工具栏 -->
     <view wx:if="{{selectedIdx >= 0 && elements.length > 0}}" class="element-tools">
-      <view class="tool-btn" bindtap="scaleUp"><text>🔍+</text></view>
-      <view class="tool-btn" bindtap="scaleDown"><text>🔍-</text></view>
-      <view class="tool-btn" bindtap="rotateLeft"><text>↩️</text></view>
-      <view class="tool-btn" bindtap="rotateRight"><text>↪️</text></view>
-      <view class="tool-btn tool-delete" bindtap="deleteElement"><text>🗑️</text></view>
+      <view class="tool-btn" bindtap="scaleUp"><image class="tool-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMSIgY3k9IjExIiByPSI4Ii8+PGxpbmUgeDE9IjIxIiB5MT0iMjEiIHgyPSIxNi42NSIgeTI9IjE2LjY1Ii8+PGxpbmUgeDE9IjExIiB5MT0iOCIgeDI9IjExIiB5Mj0iMTQiLz48bGluZSB4MT0iOCIgeTE9IjExIiB4Mj0iMTQiIHkyPSIxMSIvPjwvc3ZnPg==" mode="aspectFit" /></view>
+      <view class="tool-btn" bindtap="scaleDown"><image class="tool-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMSIgY3k9IjExIiByPSI4Ii8+PGxpbmUgeDE9IjIxIiB5MT0iMjEiIHgyPSIxNi42NSIgeTI9IjE2LjY1Ii8+PGxpbmUgeDE9IjgiIHkxPSIxMSIgeDI9IjE0IiB5Mj0iMTEiLz48L3N2Zz4=" mode="aspectFit" /></view>
+      <view class="tool-btn" bindtap="rotateLeft"><image class="tool-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMyAydjZoNiIvPjxwYXRoIGQ9Ik0zIDhhOSA5IDAgMSAwIDMtNi4zNiIvPjwvc3ZnPg==" mode="aspectFit" /></view>
+      <view class="tool-btn" bindtap="rotateRight"><image class="tool-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjEgMnY2aC02Ii8+PHBhdGggZD0iTTIxIDhhOSA5IDAgMSAxLTMtNi4zNiIvPjwvc3ZnPg==" mode="aspectFit" /></view>
+      <view class="tool-btn tool-delete" bindtap="deleteElement"><image class="tool-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkYzQjMwIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSIzIDYgNSA2IDIxIDYiLz48cGF0aCBkPSJNMTkgNmwtMSAxNGEyIDIgMCAwIDEtMiAySDhhMiAyIDAgMCAxLTItMkw1IDYiLz48cGF0aCBkPSJNMTAgMTF2NiIvPjxwYXRoIGQ9Ik0xNCAxMXY2Ii8+PHBhdGggZD0iTTkgNlY0YTEgMSAwIDAgMSAxLTFoNGExIDEgMCAwIDEgMSAxdjIiLz48L3N2Zz4=" mode="aspectFit" /></view>
     </view>
   </view>
 
   <!-- 描述输入框 -->
   <view class="desc-bar">
-    <text class="desc-icon">💬</text>
+    <image class="desc-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODg4ODg4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDE1YTIgMiAwIDAgMS0yIDJIN2wtNCA0VjVhMiAyIDAgMCAxIDItMmgxNGEyIDIgMCAwIDEgMiAyeiIvPjwvc3ZnPg==" mode="aspectFit" />
     <input
       class="desc-input"
       placeholder="描述一下你的作品（选填）"
@@ -65,7 +65,7 @@
         data-id="{{item.id}}"
         bindtap="switchCategory"
       >
-        <text class="tab-icon">{{item.icon}}</text>
+        <image class="tab-icon" src="{{item.icon}}" mode="aspectFit" />
         <text class="tab-name">{{item.name}}</text>
       </view>
     </scroll-view>
@@ -90,10 +90,10 @@
     <!-- 底部操作栏 -->
     <view class="bottom-bar">
       <view class="btn-random" bindtap="randomMaterial">
-        <text>🎲 随机素材</text>
+        <image class="btn-inline-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjguNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iOC41IiBjeT0iMTUuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTUuNSIgY3k9IjE1LjUiIHI9IjEuNSIvPjwvc3ZnPg==" mode="aspectFit" /><text> 随机素材</text>
       </view>
       <view class="btn-submit {{elements.length === 0 ? 'disabled' : ''}}" bindtap="doTransform">
-        <text class="btn-submit-text">变变！✨</text>
+        <text class="btn-submit-text">变变！</text>
       </view>
     </view>
   </view>

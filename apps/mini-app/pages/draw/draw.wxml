@@ -65,7 +65,7 @@
 
   <!-- 空白画布引导（张小龙：降低小白用户的空白恐惧） -->
   <view class="guide-hint" wx:if="{{showGuide}}">
-    <text class="guide-text">点击这里开始画 ✏️</text>
+    <text class="guide-text">点击这里开始画</text>
     <text class="guide-subtext">试试画一条线</text>
   </view>
 
@@ -188,7 +188,7 @@
     <!-- 核心功能（3 个） -->
     <view class="bm-row bm-core">
       <view class="bm-brush {{addingShape ? 'active' : ''}}" bindtap="toggleShapePanel">
-        <text class="bm-shape-icon">◆</text>
+        <image class="bm-shape-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNU0yIDEybDEwIDUgMTAtNSIvPjwvc3ZnPg==" mode="aspectFit" />
         <text class="bm-label">图形</text>
       </view>
       <!-- 素材库不再通过工具栏控制，自动根据画布状态显示 -->
@@ -223,7 +223,7 @@
 
   <!-- 取色中提示条 -->
   <view class="pick-color-bar {{isPickingColor ? 'show' : ''}}" bindtap="cancelPickColor">
-    <text class="pik-sign">💉</text>
+    <image class="pik-sign" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTIgMjIgMS0xaDNsOS05Ii8+PHBhdGggZD0iTTMgMjEgMTIgMTIiLz48cGF0aCBkPSJNMTMuNSAzLjVhMi4xMiAyLjEyIDAgMCAxIDMgM0wxMSAxM2wtNCAxIDEtNCA1LjUtNS41eiIvPjwvc3ZnPg==" mode="aspectFit" />
     <text class="pik-text">点击画布取色 · 点此取消</text>
   </view>
 
@@ -240,7 +240,7 @@
   <view class="fab-zoom-bar {{isDrawing ? 'toolbar-hidden' : ''}}">
     <view class="fab-zoom-group">
       <view class="fab-zbtn {{isCanvasMode ? 'active' : ''}}" bindtap="toggleCanvasMode">
-        <text class="fab-zsign">✋</text>
+        <image class="fab-zicon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE4IDExdi0yYTIgMiAwIDAgMC0yLTJINmEyIDIgMCAwIDAtMiAydjRhMiAyIDAgMCAwIDIgMmg0Ii8+PHBhdGggZD0iTTEwIDZ2NCIvPjxwYXRoIGQ9Ik0xNCA4di0yYTIgMiAwIDAgMC0yLTJINiIvPjwvc3ZnPg==" mode="aspectFit" />
       </view>
       <view class="fab-zdivider"></view>
       <view class="fab-zbtn" bindtap="onZoomOut">

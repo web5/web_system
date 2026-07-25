@@ -1,20 +1,24 @@
 <template>
   <div class="history-page">
-    <!-- 顶部 -->
+    <!-- 子页面顶部栏（顶部品牌由全局 AppNavbar 提供） -->
     <header class="hs-header">
-      <button class="hs-back" @click="router.push('/')">← 返回</button>
-      <h1 class="hs-title">我的变变</h1>
+      <button class="hs-back back-btn--mobile-only" @click="router.push('/bianbian')">← 返回</button>
+      <h1 class="hs-title">我的作品</h1>
       <span class="hs-count" v-if="!isEmpty">{{ items.length }}/20</span>
     </header>
 
     <!-- 空状态 -->
     <div v-if="isEmpty" class="hs-empty">
       <div class="empty-illustration">
-        <span class="empty-emoji">📭</span>
+        <div class="empty-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        </div>
       </div>
-      <h2 class="empty-title">还没有变过角色～</h2>
+      <h2 class="empty-title">还没有创作过作品～</h2>
       <p class="empty-desc">快去创作第一个角色吧！</p>
-      <button class="empty-btn" @click="router.push('/bianbian')">🎨 开始创作</button>
+      <button class="empty-btn" @click="router.push('/bianbian')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" opacity="0.3"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none" opacity="0.3"/></svg>开始创作
+      </button>
     </div>
 
     <!-- 网格画廊 -->
@@ -28,7 +32,7 @@
       >
         <div class="card-img-wrapper">
           <img v-if="item.imageUrl" :src="item.imageUrl" alt="变变角色" class="card-img" />
-          <span v-else class="card-placeholder">✨</span>
+          <svg v-else class="card-placeholder" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
         </div>
         <div class="card-meta">
           <span class="card-desc" v-if="item.description">{{ item.description }}</span>
@@ -49,11 +53,17 @@
 
     <!-- 查看大图弹窗 -->
     <div v-if="viewingItem" class="view-overlay" @click.self="viewingItem = null">
-      <button class="view-close" @click="viewingItem = null">✕</button>
+      <button class="view-close" @click="viewingItem = null">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
       <img :src="viewingItem.imageUrl" alt="变变角色" class="view-img" />
       <div class="view-actions">
-        <button class="va-btn" @click="saveItem(viewingItem)">💾 保存</button>
-        <button class="va-btn danger" @click="deleteSingle(viewingItem)">🗑 删除</button>
+        <button class="va-btn" @click="saveItem(viewingItem)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>保存
+        </button>
+        <button class="va-btn danger" @click="deleteSingle(viewingItem)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除
+        </button>
       </div>
     </div>
   </div>
@@ -206,6 +216,13 @@ function saveHistory() {
   transition: color 0.2s;
 }
 
+/* PC 端全局菜单可见时不需要返回按钮 */
+@media (min-width: 769px) {
+  .back-btn--mobile-only {
+    display: none;
+  }
+}
+
 .hs-title {
   flex: 1;
   text-align: center;
@@ -242,7 +259,12 @@ function saveHistory() {
   margin-bottom: 24px;
 }
 
-.empty-emoji { font-size: 56px; }
+.empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+}
 
 .empty-title {
   font-size: 20px;
@@ -311,7 +333,9 @@ function saveHistory() {
 }
 
 .card-placeholder {
-  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.4;
 }
 
@@ -415,7 +439,6 @@ function saveHistory() {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
-  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -451,13 +474,53 @@ function saveHistory() {
   background: rgba(255, 71, 87, 0.5);
 }
 
+/* ===== 响应式 - PC ===== */
 @media (min-width: 768px) {
   .history-page {
-    max-width: 480px;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0 32px 40px;
+  }
+
+  .hs-header {
+    padding: 24px 0;
+    max-width: 1000px;
     margin: 0 auto;
   }
+
+  .hs-title {
+    font-size: 22px;
+  }
+
   .hs-grid {
     grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 16px 0 80px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .hs-card {
+    border-radius: 16px;
+  }
+
+  .card-meta {
+    padding: 10px 12px;
+  }
+
+  .card-desc {
+    font-size: 13px;
+  }
+
+  .card-time {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hs-grid {
+    grid-template-columns: repeat(5, 1fr);
+    max-width: 1200px;
   }
 }
 </style>

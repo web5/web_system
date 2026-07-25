@@ -62,7 +62,7 @@
       <a-col :span="14">
         <div class="section-card">
           <div class="section-card-header">最近操作日志</div>
-          <a-table :columns="logColumns" :data-source="recentLogs" :pagination="false" size="small" class="dark-table" />
+          <a-table :columns="logColumns" :data-source="recentLogs" :pagination="false" size="small" class="themed-table" />
         </div>
       </a-col>
       <a-col :span="10">
@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { UserOutlined, RiseOutlined, BookOutlined, FileTextOutlined, TeamOutlined, SettingOutlined } from '@ant-design/icons-vue';
 import VChart from 'vue-echarts';
@@ -94,10 +94,12 @@ import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { useThemeStore } from '@/stores/theme';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
 const router = useRouter();
+const themeStore = useThemeStore();
 
 const stats = ref({
   totalUsers: 0, activeToday: 0, courses: 12, coursesPublished: 8,
@@ -110,16 +112,30 @@ const logColumns = [
 ];
 const recentLogs = ref<any[]>([]);
 
-const userChartOption = ref({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['新增用户', '活跃用户'] },
-  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-  xAxis: { type: 'category', boundaryGap: false, data: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] },
-  yAxis: { type: 'value' },
-  series: [
-    { name: '新增用户', type: 'line', smooth: true, data: [12, 18, 15, 25, 22, 30, 28], color: '#FF8C42', areaStyle: { color: 'rgba(255,140,66,0.1)' } },
-    { name: '活跃用户', type: 'line', smooth: true, data: [30, 42, 38, 55, 48, 65, 60], color: '#1890ff', areaStyle: { color: 'rgba(24,144,255,0.1)' } },
-  ],
+const userChartOption = computed(() => {
+  const c = themeStore.isDark
+    ? { axisLine: 'rgba(255,255,255,.08)', axisLabel: '#94A3B8', splitLine: 'rgba(255,255,255,.04)', legend: '#CBD5E1' }
+    : { axisLine: 'rgba(0,0,0,.08)', axisLabel: '#64748B', splitLine: 'rgba(0,0,0,.04)', legend: '#475569' };
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['新增用户', '活跃用户'], textStyle: { color: c.legend } },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'category', boundaryGap: false, data: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+      axisLine: { lineStyle: { color: c.axisLine } },
+      axisLabel: { color: c.axisLabel },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { lineStyle: { color: c.axisLine } },
+      axisLabel: { color: c.axisLabel },
+      splitLine: { lineStyle: { color: c.splitLine } },
+    },
+    series: [
+      { name: '新增用户', type: 'line', smooth: true, data: [12, 18, 15, 25, 22, 30, 28], color: '#FF8C42', areaStyle: { color: 'rgba(255,140,66,0.1)' } },
+      { name: '活跃用户', type: 'line', smooth: true, data: [30, 42, 38, 55, 48, 65, 60], color: '#3B82F6', areaStyle: { color: 'rgba(59,130,246,0.1)' } },
+    ],
+  };
 });
 
 onMounted(async () => {
@@ -148,14 +164,14 @@ onMounted(async () => {
 
 /* 统计卡片 */
 .dash-card {
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border); border-radius: 4px;
   padding: 20px 24px; transition: all .25s;
 }
-.dash-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.1); }
+.dash-card:hover { transform: translateY(-2px); border-color: var(--card-border-hover); }
 .dash-card-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .dash-card-icon {
-  width: 40px; height: 40px; border-radius: 10px;
+  width: 40px; height: 40px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
 }
@@ -164,29 +180,29 @@ onMounted(async () => {
 .dash-card-icon.blue { color: #3B82F6; background: rgba(59,130,246,.1); }
 .dash-card-icon.purple { color: #A855F7; background: rgba(168,85,247,.1); }
 
-.stat-trend { margin-top: 10px; font-size: 13px; color: #64748B; }
+.stat-trend { margin-top: 10px; font-size: 13px; color: var(--text-muted); }
 .stat-trend .up { color: #22C55E; font-weight: 500; }
 
 /* 区块卡片 */
 .section-card {
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border); border-radius: 4px;
   padding: 24px;
 }
 .section-card-header {
-  font-size: 15px; font-weight: 600; color: #F1F5F9;
+  font-size: 15px; font-weight: 600; color: var(--text-heading);
   margin-bottom: 16px; padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,.05);
+  border-bottom: 1px solid var(--border-divider);
 }
 
-/* 暗色表格 */
-.dark-table :deep(.ant-table) { background: transparent; color: #E2E8F0; }
-.dark-table :deep(.ant-table-thead > tr > th) {
-  background: rgba(255,255,255,.03) !important; color: #94A3B8;
+/* 主题化表格 */
+.themed-table :deep(.ant-table) { background: transparent; color: var(--text-body); }
+.themed-table :deep(.ant-table-thead > tr > th) {
+  background: var(--table-header-bg) !important; color: var(--table-header-text);
   font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid var(--border-light);
 }
-.dark-table :deep(.ant-table-tbody > tr > td) { border-bottom: 1px solid rgba(255,255,255,.03); color: #CBD5E1; }
-.dark-table :deep(.ant-table-tbody > tr:hover > td) { background: rgba(255,140,66,.04) !important; }
-.dark-table :deep(.ant-table-tbody > tr:last-child > td) { border-bottom: none; }
+.themed-table :deep(.ant-table-tbody > tr > td) { border-bottom: 1px solid var(--border-lighter); color: var(--text-secondary); }
+.themed-table :deep(.ant-table-tbody > tr:hover > td) { background: var(--table-hover-bg) !important; }
+.themed-table :deep(.ant-table-tbody > tr:last-child > td) { border-bottom: none; }
 </style>

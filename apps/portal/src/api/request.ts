@@ -29,19 +29,22 @@ request.interceptors.response.use(
   (error) => {
     if (error.response) {
       const { status, data } = error.response;
-      
+
       if (status === 401) {
         message.error('登录已过期，请重新登录');
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        router.push('/login');
+        // 带上当前路径作为 redirect，登录后跳回
+        const currentPath = router.currentRoute.value.fullPath;
+        const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
+        router.push(`/login${redirectPath}`);
       } else {
         message.error(data?.message || '请求失败');
       }
     } else {
       message.error('网络错误，请检查网络连接');
     }
-    
+
     return Promise.reject(error);
   }
 );

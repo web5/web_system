@@ -73,7 +73,8 @@
 }
 
 .empty-icon {
-  font-size: 64rpx;
+  width: 80rpx;
+  height: 80rpx;
   margin-bottom: 16rpx;
 }
 
@@ -107,8 +108,9 @@
   justify-content: center;
 }
 
-.tool-btn text {
-  font-size: 28rpx;
+.tool-icon {
+  width: 28rpx;
+  height: 28rpx;
 }
 
 .tool-delete {
@@ -126,8 +128,10 @@
 }
 
 .desc-icon {
-  font-size: 28rpx;
+  width: 28rpx;
+  height: 28rpx;
   margin-right: 12rpx;
+  flex-shrink: 0;
 }
 
 .desc-input {
@@ -183,7 +187,8 @@
 }
 
 .tab-icon {
-  font-size: 28rpx;
+  width: 28rpx;
+  height: 28rpx;
   margin-bottom: 4rpx;
 }
 
@@ -264,6 +269,12 @@
   background: #FFF8F0;
   border-radius: 24rpx;
   border: 2rpx solid rgba(255, 140, 66, 0.2);
+}
+
+.btn-inline-icon {
+  width: 28rpx;
+  height: 28rpx;
+  flex-shrink: 0;
 }
 
 .btn-random text {

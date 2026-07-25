@@ -1,110 +1,92 @@
-import { Controller, Post, Body, Get, Param, Delete, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Delete, Param, Res, Query } from '@nestjs/common';
+import { Response } from 'express';
 import { AiService } from './ai.service';
 import { ChatDto } from './dto/chat.dto';
-import { ImageSubmitDto, ImageQueryDto } from './dto/image-gen.dto';
+import { ImageSubmitDto } from './dto/image-gen.dto';
+import { ImageQueryDto } from './dto/image-gen.dto';
 
-@ApiTags('AI 能力')
 @Controller('ai')
-@ApiBearerAuth()
 export class AiController {
-  private readonly logger = new Logger(AiController.name);
-
   constructor(private readonly aiService: AiService) {}
 
-  // ====== 对话 ======
+  /** 获取可用模型列表 */
+  @Get('models')
+  getModels() {
+    const models = this.aiService.getAvailableModels();
+    const defaultModel = this.aiService.getDefaultModel();
+    return { models, defaultModel };
+  }
 
+  /** 非流式对话 */
   @Post('chat')
-  @ApiOperation({ summary: '发送消息并获取 AI 回复' })
-  @ApiResponse({ status: 200, description: '成功获取 AI 回复' })
   async chat(@Body() chatDto: ChatDto) {
-    this.logger.log(`Received chat request: ${chatDto.message?.substring(0, 50)}...`);
-    
-    const result = await this.aiService.chat(chatDto);
-    
-    return {
-      code: 0,
-      message: 'success',
-      data: result,
-    };
+    return this.aiService.chat(chatDto);
   }
 
+  /** 流式对话（SSE） */
+  @Post('chat/stream')
+  async chatStream(@Body() chatDto: ChatDto, @Res() res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    try {
+      const { stream, conversationId } = await this.aiService.chatStream(chatDto);
+
+      for await (const chunk of stream) {
+        const payload = JSON.stringify({
+          content: chunk.content || '',
+          done: chunk.done,
+          model: (chunk as any).model,
+          conversationId: chunk.conversationId || conversationId,
+        });
+        res.write(`data: ${payload}\n\n`);
+      }
+    } catch (error) {
+      const errPayload = JSON.stringify({
+        content: '',
+        done: true,
+        error: error.message || '流式对话失败',
+      });
+      res.write(`data: ${errPayload}\n\n`);
+    }
+
+    res.end();
+  }
+
+  /** 获取对话列表 */
   @Get('conversations')
-  @ApiOperation({ summary: '获取对话列表' })
-  async getConversations() {
-    const result = await this.aiService.getConversations();
-    return {
-      code: 0,
-      data: result,
-    };
+  async getConversations(@Query('userId') userId?: string) {
+    const result = await this.aiService.getConversations(userId);
+    return { code: 0, data: result };
   }
 
+  /** 获取对话详情 */
   @Get('conversations/:id')
-  @ApiOperation({ summary: '获取对话详情' })
   async getConversation(@Param('id') id: string) {
     const result = await this.aiService.getConversation(id);
-    return {
-      code: 0,
-      data: result,
-    };
+    return { code: 0, data: result };
   }
 
+  /** 删除对话 */
   @Delete('conversations/:id')
-  @ApiOperation({ summary: '删除对话' })
   async deleteConversation(@Param('id') id: string) {
     await this.aiService.deleteConversation(id);
-    return {
-      code: 0,
-      message: '删除成功',
-    };
+    return { code: 0, message: '删除成功' };
   }
 
-  @Delete('conversations')
-  @ApiOperation({ summary: '清空所有对话' })
-  async clearConversations() {
-    await this.aiService.clearConversations();
-    return {
-      code: 0,
-      message: '清空成功',
-    };
-  }
-
-  // ====== 图片生成 ======
-
+  /** 提交图片生成任务 */
   @Post('image/submit')
-  @ApiOperation({ summary: '提交图片生成任务' })
-  @ApiResponse({ status: 200, description: '返回任务 ID' })
-  async submitImage(@Body() dto: ImageSubmitDto) {
-    this.logger.log(`Image submit: "${dto.prompt.substring(0, 50)}..."`);
-
-    const result = await this.aiService.submitImageGeneration(dto.prompt);
-
-    return {
-      code: 0,
-      message: '任务已提交',
-      data: {
-        id: result.id,
-        created: result.created,
-      },
-    };
+  async submitImage(@Body() submitDto: ImageSubmitDto) {
+    const data = await this.aiService.submitImage(submitDto);
+    return { code: 0, message: '提交成功', data };
   }
 
+  /** 查询图片生成结果 */
   @Post('image/query')
-  @ApiOperation({ summary: '查询图片生成结果' })
-  @ApiResponse({ status: 200, description: '返回生成状态和图片 URL' })
-  async queryImage(@Body() dto: ImageQueryDto) {
-    const result = await this.aiService.queryImageGeneration(dto.id);
-
-    const isDone = result.status === 'succeeded' || result.status === 'failed';
-
-    return {
-      code: 0,
-      data: {
-        id: result.id,
-        status: result.status,
-        results: result.results,
-        done: isDone,
-      },
-    };
+  async queryImage(@Body() queryDto: ImageQueryDto) {
+    const data = await this.aiService.queryImage(queryDto);
+    return { code: 0, data };
   }
 }

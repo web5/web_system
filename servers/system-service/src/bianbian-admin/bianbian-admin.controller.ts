@@ -84,9 +84,10 @@ export class BianbianAdminController {
   // ========== 初始化 ==========
 
   @Post('seed')
-  @ApiOperation({ summary: '初始化默认素材库（首次运行时调用）' })
-  async seed() {
-    const count = await this.adminService.seedDefaultMaterials();
+  @ApiOperation({ summary: '初始化默认素材库（force=1 时强制覆盖重建）' })
+  @ApiQuery({ name: 'force', required: false, description: '传 1 则清空已有素材后重新播种' })
+  async seed(@Query('force') force: string) {
+    const count = await this.adminService.seedDefaultMaterials(force === '1');
     return { code: 0, data: { count }, message: count > 0 ? `已初始化 ${count} 个默认素材` : '素材库已存在，跳过初始化' };
   }
 }

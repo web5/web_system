@@ -30,7 +30,7 @@
           mode="aspectFill"
         />
         <view wx:else class="thumb-placeholder">
-          <text class="thumb-icon">🎨</text>
+          <image class="thumb-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMy41IiBjeT0iNi41IiByPSIxLjUiLz48Y2lyY2xlIGN4PSIxNy41IiBjeT0iMTAuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iOC41IiBjeT0iNy41IiByPSIxLjUiLz48Y2lyY2xlIGN4PSI2LjUiIGN5PSIxMi41IiByPSIxLjUiLz48cGF0aCBkPSJNMTIgMkM2LjUgMiAyIDYuNSAyIDEyczQuNSAxMCAxMCAxMGMuOTMgMCAxLjUtLjY3IDEuNS0xLjUgMC0uMzktLjE1LS43NC0uMzktMS4wMS0uMjMtLjI2LS4zOC0uNjEtLjM4LTEgMC0uODMuNjctMS41IDEuNS0xLjVIMTZjMy4zMSAwIDYtMi42OSA2LTYgMC01LjUtNC41LTEwLTEwLTEweiIvPjwvc3ZnPg==" mode="aspectFit" />
         </view>
       </view>
 
@@ -59,14 +59,14 @@
 
       <!-- 删除按钮 -->
       <view class="record-delete" catchtap="onDeleteRecord" data-id="{{item.id}}">
-        <text class="delete-icon">🗑</text>
+        <image class="delete-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMyA2IDUgNiAyMSA2Ii8+PHBhdGggZD0iTTE5IDZsLTEgMTRhMiAyIDAgMCAxLTIgMkg4YTIgMiAwIDAgMS0yLTJMNSA2Ii8+PHBhdGggZD0iTTEwIDExdjYiLz48cGF0aCBkPSJNMTQgMTF2NiIvPjxwYXRoIGQ9Ik05IDZWNGEyIDIgMCAwIDEgMi0yaDJhMiAyIDAgMCAxIDIgMnYyIi8+PC9zdmc+" mode="aspectFit" />
       </view>
     </view>
   </scroll-view>
 
   <!-- 空状态 -->
   <view class="empty" wx:else>
-    <text class="empty-icon">📭</text>
+    <image class="empty-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOTRBM0I4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjIgMTIgMTYgMTIgMTQgMTUgMTAgMTUgOCAxMiAyIDEyIi8+PHBhdGggZD0iTTUuNDUgNS4xMUwyIDEydjZhMiAyIDAgMCAwIDIgMmgxNmEyIDIgMCAwIDAgMi0ydi02bC0zLjQ1LTYuODlBMiAyIDAgMCAwIDE2Ljc2IDRINy4yNGEyIDIgMCAwIDAtMS43OSAxLjExeiIvPjwvc3ZnPg==" mode="aspectFit" />
     <text class="empty-text">还没有画作记录</text>
     <button class="empty-btn" bindtap="goToDraw">开始画画</button>
   </view>

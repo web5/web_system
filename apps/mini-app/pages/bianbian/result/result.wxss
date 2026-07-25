@@ -17,7 +17,8 @@
 }
 
 .header-emoji {
-  font-size: 64rpx;
+  width: 64rpx;
+  height: 64rpx;
   display: block;
   animation: float 2s ease-in-out infinite;
 }
@@ -144,7 +145,9 @@
 }
 
 .btn-icon {
-  font-size: 32rpx;
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
 }
 
 .btn-label {
@@ -154,6 +157,15 @@
 /* 提示 */
 .tip {
   margin-top: 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.tip-icon {
+  width: 22rpx;
+  height: 22rpx;
+  flex-shrink: 0;
 }
 
 .tip text {

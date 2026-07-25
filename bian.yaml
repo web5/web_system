@@ -1,0 +1,12 @@
+- contentinfo [ref=e5]:
+  - generic [ref=e6]:
+    - paragraph [ref=e7]: Copyright © 2023 - 2026 kedouai.com. All Rights Reserved. 一个橙子 版权所有
+    - paragraph [ref=e8]:
+      - text: 备案号：
+      - link "粤ICP备2021031984号" [ref=e9] [cursor=pointer]:
+        - /url: https://beian.miit.gov.cn/
+      - text: "|"
+      - link "公安备案号：44030902002737号" [ref=e10] [cursor=pointer]:
+        - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44030902002737
+        - img [ref=e11]
+        - text: 公安备案号：44030902002737号

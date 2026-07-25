@@ -1,0 +1,43 @@
+import { Controller, Post, Body, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { Response } from 'express';
+import { TtsService } from './tts.service';
+
+interface SpeakDto {
+  text: string;
+  voiceType?: number;
+  speed?: number;
+}
+
+@Controller('ai/tts')
+export class TtsController {
+  constructor(private readonly ttsService: TtsService) {}
+
+  @Post('speak')
+  @HttpCode(HttpStatus.OK)
+  async speak(@Body() body: SpeakDto, @Res() res: Response): Promise<void> {
+    const { text, voiceType, speed } = body;
+
+    if (!text || text.trim().length === 0) {
+      res.status(400).json({ code: 400, message: 'text 参数不能为空' });
+      return;
+    }
+
+    try {
+      const audioBuffer = await this.ttsService.textToSpeech(text, {
+        voiceType,
+        speed,
+      });
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audioBuffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(audioBuffer);
+    } catch (error: any) {
+      const statusCode = error.message?.includes('未配置') ? 503 : 500;
+      res.status(statusCode).json({
+        code: statusCode,
+        message: error.message || '语音合成失败',
+      });
+    }
+  }
+}

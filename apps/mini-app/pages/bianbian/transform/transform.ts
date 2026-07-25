@@ -69,10 +69,10 @@ Page({
       stageIdx++;
     }, 1200);
 
-    // 60 秒超时（大于 wx.request timeout，避免双重触发）
+    // 超时需大于 wx.request 的 110s，避免双重触发
     timeoutHandle = setTimeout(() => {
       this.onFailed('生成超时，请检查网络后重试');
-    }, 60000);
+    }, 115000);
   },
 
   /** 趣味小知识轮播 */
@@ -104,20 +104,27 @@ Page({
           outputSize: '1024x1024',
         },
         header: { 'Content-Type': 'application/json' },
-        timeout: 55000,
+        // 后端为任务式生成（轮询），耗时较长，给足超时
+        timeout: 110000,
       });
 
-      if ((res.statusCode === 200 || res.statusCode === 201) && res.data) {
-        const data = res.data as { image?: string; url?: string; data?: string };
-        const aiImage = data.image || data.url || data.data || '';
+      // 后端统一返回 { code, message, data: { aiImage, status, ... } }
+      const body = res.data as {
+        code?: number;
+        data?: { aiImage?: string; status?: string };
+      };
 
-        if (aiImage) {
-          this.onSuccess(aiImage);
-          return;
-        }
+      if (
+        (res.statusCode === 200 || res.statusCode === 201) &&
+        body?.code === 0 &&
+        body?.data?.aiImage
+      ) {
+        this.onSuccess(body.data.aiImage);
+        return;
       }
 
-      this.onFailed('AI 服务暂时不可用，请稍后重试');
+      const errMsg = body?.data ? '变身生成失败，请重试' : 'AI 服务暂时不可用，请稍后重试';
+      this.onFailed(errMsg);
     } catch {
       this.onFailed('网络请求失败，请检查网络后重试');
     }

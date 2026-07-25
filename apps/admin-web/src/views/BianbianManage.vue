@@ -34,7 +34,8 @@
         :class="{ active: activeCategory === cat.id }"
         @click="switchCategory(cat.id)"
       >
-        <span class="cat-icon">{{ cat.icon }}</span>
+        <img v-if="cat.icon?.startsWith('data:image')" :src="cat.icon" class="cat-icon-img" />
+        <span v-else class="cat-icon">{{ cat.icon }}</span>
         <span class="cat-name">{{ cat.name }}</span>
         <span class="cat-count">{{ cat.count }}</span>
       </div>
@@ -66,7 +67,10 @@
       >
         <!-- 素材预览 -->
         <div class="card-preview" :class="item.type">
-          <template v-if="item.type === 'color'">
+          <template v-if="item.type === 'svg'">
+            <img :src="item.content" :alt="item.name" class="svg-preview" />
+          </template>
+          <template v-else-if="item.type === 'color'">
             <div class="color-swatch" :style="{ backgroundColor: item.content }"></div>
           </template>
           <template v-else>
@@ -131,7 +135,7 @@
         <ThunderboltOutlined style="font-size: 48px; color: rgba(255,140,66,.3);" />
       </template>
       <template #description>
-        <span style="color: #64748B;">还没有素材哦～</span>
+        <span style="color: var(--text-muted);">还没有素材哦～</span>
       </template>
       <a-button type="primary" @click="handleSeed" :loading="seeding" v-if="!loading">
         初始化默认素材
@@ -168,7 +172,7 @@
           </a-col>
         </a-row>
         <a-form-item label="内容" required>
-          <a-input v-model:value="form.content" placeholder="Emoji 字符（如 ⭐）或颜色值（如 #FF8C42）" />
+          <a-input v-model:value="form.content" placeholder="内容值（如 SVG 或颜色值 #FF8C42）" />
           <div class="preview-hint" v-if="form.content">
             预览：<span class="inline-preview">{{ form.content }}</span>
           </div>
@@ -190,6 +194,7 @@
           <a-col :span="12">
             <a-form-item label="类型">
               <a-select v-model:value="form.type">
+                <a-select-option value="svg">SVG 图标</a-select-option>
                 <a-select-option value="emoji">Emoji</a-select-option>
                 <a-select-option value="color">颜色</a-select-option>
               </a-select>
@@ -209,7 +214,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import {
   ThunderboltOutlined,
   PlusOutlined,
@@ -256,11 +261,11 @@ async function loadCategories() {
   try {
     const res: any = await getMaterialCategories();
     categories.value = [
-      { id: 'all', name: '全部', icon: '🎨', count: 0 },
+      { id: 'all', name: '全部', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMi42OWw1LjY2IDUuNjZhOCA4IDAgMSAxLTExLjMxIDB6Ii8+PGNpcmNsZSBjeD0iOSIgY3k9IjEwIiByPSIxLjUiIGZpbGw9IiNGRjhDNDIiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iMTAiIHI9IjEuNSIgZmlsbD0iI0ZGOEM0MiIgc3Ryb2tlPSJub25lIi8+PC9zdmc+', count: 0 },
       ...(res.data || []),
     ];
   } catch {
-    categories.value = [{ id: 'all', name: '全部', icon: '🎨', count: 0 }];
+    categories.value = [{ id: 'all', name: '全部', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMi42OWw1LjY2IDUuNjZhOCA4IDAgMSAxLTExLjMxIDB6Ii8+PGNpcmNsZSBjeD0iOSIgY3k9IjEwIiByPSIxLjUiIGZpbGw9IiNGRjhDNDIiIHN0cm9rZT0ibm9uZSIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iMTAiIHI9IjEuNSIgZmlsbD0iI0ZGOEM0MiIgc3Ryb2tlPSJub25lIi8+PC9zdmc+', count: 0 }];
   }
 }
 
@@ -374,9 +379,27 @@ async function handleDelete(item: MaterialItem) {
 }
 
 async function handleSeed() {
+  // 如果已有素材，询问是否强制重置
+  const existingCount = materials.value.length;
+  if (existingCount > 0) {
+    Modal.confirm({
+      title: '确认重置素材库？',
+      content: `当前已有 ${existingCount} 个素材，强制重置将删除所有系统素材并重建为 SVG 素材。确定继续？`,
+      okText: '确认重置',
+      cancelText: '取消',
+      onOk: async () => {
+        await doSeed(true);
+      },
+    });
+    return;
+  }
+  await doSeed(false);
+}
+
+async function doSeed(force: boolean) {
   seeding.value = true;
   try {
-    const res: any = await seedMaterials();
+    const res: any = await seedMaterials(force);
     message.success(res.message || '素材库初始化完成');
     loadMaterials();
     loadCategories();
@@ -414,7 +437,7 @@ onMounted(async () => {
 .page-header-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 4px;
   background: linear-gradient(135deg, rgba(255,140,66,.15), rgba(255,140,66,.05));
   display: flex;
   align-items: center;
@@ -426,13 +449,13 @@ onMounted(async () => {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #F1F5F9;
+  color: var(--text-heading);
   line-height: 1.3;
 }
 .page-subtitle {
   margin: 2px 0 0;
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-muted);
 }
 .page-header-actions {
   display: flex;
@@ -452,10 +475,10 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 10px;
+  border-radius: 4px;
   cursor: pointer;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.06);
+  background: var(--tab-bg);
+  border: 1px solid var(--tab-border);
   transition: all .2s;
   user-select: none;
 }
@@ -471,9 +494,14 @@ onMounted(async () => {
   font-size: 16px;
   line-height: 1;
 }
+.category-tab .cat-icon-img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 .category-tab .cat-name {
   font-size: 13px;
-  color: #CBD5E1;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 .category-tab.active .cat-name {
@@ -481,10 +509,10 @@ onMounted(async () => {
 }
 .category-tab .cat-count {
   font-size: 11px;
-  color: #64748B;
-  background: rgba(255,255,255,.06);
+  color: var(--text-muted);
+  background: var(--tab-count-bg);
   padding: 1px 7px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 500;
 }
 .category-tab.active .cat-count {
@@ -503,18 +531,18 @@ onMounted(async () => {
   max-width: 320px;
 }
 .search-input :deep(.ant-input) {
-  background: rgba(255,255,255,.04) !important;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 8px;
-  color: #E2E8F0;
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  color: var(--text-body);
 }
 .search-input :deep(.ant-input:focus) {
   border-color: #FF8C42;
   box-shadow: 0 0 0 2px rgba(255,140,66,.1);
 }
 .search-input :deep(.ant-btn) {
-  border-color: rgba(255,255,255,.08);
-  color: #94A3B8;
+  border-color: var(--border-light);
+  color: var(--text-tertiary);
 }
 .search-input :deep(.ant-btn:hover) {
   color: #FF8C42;
@@ -522,13 +550,13 @@ onMounted(async () => {
 }
 .search-info {
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .search-info strong {
-  color: #CBD5E1;
+  color: var(--text-secondary);
 }
 
 /* ========== 素材网格 ========== */
@@ -538,9 +566,9 @@ onMounted(async () => {
   gap: 12px;
 }
 .material-card {
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06);
-  border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
   overflow: hidden;
   transition: all .25s;
   position: relative;
@@ -549,7 +577,7 @@ onMounted(async () => {
 .material-card:hover {
   transform: translateY(-2px);
   border-color: rgba(255,140,66,.25);
-  box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  box-shadow: var(--shadow-card);
 }
 .material-card.is-disabled {
   opacity: .5;
@@ -561,8 +589,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,.02);
-  border-bottom: 1px solid rgba(255,255,255,.04);
+  background: var(--border-lighter);
+  border-bottom: 1px solid var(--border-light);
   transition: background .2s;
 }
 .material-card:hover .card-preview {
@@ -573,14 +601,20 @@ onMounted(async () => {
   line-height: 1;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
 }
+.card-preview .svg-preview {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
+}
 .card-preview.color {
   padding: 16px;
 }
 .color-swatch {
   width: 64px;
   height: 64px;
-  border-radius: 12px;
-  border: 2px solid rgba(255,255,255,.1);
+  border-radius: 4px;
+  border: 2px solid var(--border-light);
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
 
@@ -591,7 +625,7 @@ onMounted(async () => {
 .card-name {
   font-size: 14px;
   font-weight: 600;
-  color: #E2E8F0;
+  color: var(--text-body);
   margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -620,7 +654,7 @@ onMounted(async () => {
 .disabled-tag {
   font-size: 11px;
   line-height: 1.4;
-  color: #64748B;
+  color: var(--text-muted);
 }
 .card-tags {
   display: flex;
@@ -629,8 +663,8 @@ onMounted(async () => {
 }
 .card-tag {
   font-size: 11px;
-  color: #64748B;
-  background: rgba(255,255,255,.04);
+  color: var(--text-muted);
+  background: var(--tag-bg);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -648,8 +682,8 @@ onMounted(async () => {
   padding-top: 8px;
   opacity: 0;
   transition: opacity .2s;
-  background: rgba(0,0,0,.4);
-  border-radius: 12px;
+  background: var(--overlay-bg);
+  border-radius: 4px;
 }
 .material-card:hover .card-overlay {
   opacity: 1;
@@ -657,20 +691,20 @@ onMounted(async () => {
 .overlay-actions {
   display: flex;
   gap: 4px;
-  background: rgba(20,20,25,.9);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 8px;
+  background: var(--overlay-action-bg);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
   padding: 4px;
 }
 .action-btn {
   width: 32px;
   height: 32px;
-  color: #94A3B8;
-  border-radius: 6px;
+  color: var(--text-tertiary);
+  border-radius: 4px;
   transition: all .15s;
 }
 .action-btn:hover {
-  color: #E2E8F0;
+  color: var(--text-body);
   background: rgba(255,140,66,.15);
 }
 .action-btn.danger:hover {
@@ -685,7 +719,7 @@ onMounted(async () => {
 .loading-state {
   text-align: center;
   padding: 80px 0;
-  color: #64748B;
+  color: var(--text-muted);
 }
 .loading-state p {
   margin-top: 12px;
@@ -694,54 +728,54 @@ onMounted(async () => {
 
 /* ========== 弹窗 ========== */
 .material-modal :deep(.ant-modal-content) {
-  background: #141419;
-  border: 1px solid rgba(255,255,255,.08);
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
 }
 .material-modal :deep(.ant-modal-header) {
   background: transparent;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid var(--border-light);
 }
 .material-modal :deep(.ant-modal-title) {
-  color: #F1F5F9;
+  color: var(--text-heading);
 }
 .material-modal :deep(.ant-modal-footer) {
-  border-top: 1px solid rgba(255,255,255,.06);
+  border-top: 1px solid var(--border-light);
 }
 .material-modal :deep(.ant-form-item-label label) {
-  color: #94A3B8;
+  color: var(--text-tertiary);
 }
 .material-modal :deep(.ant-input) {
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  color: #E2E8F0;
-  border-radius: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-body);
+  border-radius: 4px;
 }
 .material-modal :deep(.ant-input:focus) {
   border-color: #FF8C42;
   box-shadow: 0 0 0 2px rgba(255,140,66,.1);
 }
 .material-modal :deep(.ant-select-selector) {
-  background: rgba(255,255,255,.04) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
-  border-radius: 8px !important;
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  border-radius: 4px !important;
 }
 .material-modal :deep(.ant-select-focused .ant-select-selector) {
   border-color: #FF8C42 !important;
   box-shadow: 0 0 0 2px rgba(255,140,66,.1) !important;
 }
 .material-modal :deep(.ant-select-selection-item) {
-  color: #E2E8F0;
+  color: var(--text-body);
 }
 .material-modal :deep(.ant-input-number) {
   width: 100%;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
 }
 .preview-hint {
   margin-top: 6px;
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-muted);
 }
 .inline-preview {
   font-size: 20px;

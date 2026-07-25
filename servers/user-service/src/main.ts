@@ -3,9 +3,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -20,6 +22,11 @@ async function bootstrap() {
   // CORS
   app.enableCors();
 
+  // 静态文件服务（头像上传目录）
+  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
+    prefix: '/uploads',
+  });
+
   // Swagger 文档
   const swaggerConfig = new DocumentBuilder()
     .setTitle('User Service API')
@@ -31,7 +38,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3002;
   await app.listen(port);
-  console.log(`👤 User Service is running on: http://localhost:${port}`);
-  console.log(`📚 Swagger docs: http://localhost:${port}/docs`);
+  console.log(`[User Service] User Service is running on: http://localhost:${port}`);
+  console.log(`[User Service] Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();

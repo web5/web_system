@@ -34,18 +34,29 @@ export class User {
   @Column({ nullable: true, length: 500 })
   avatar: string;
 
-  @Index()
-  @Column({ nullable: true, length: 100 })
-  wechatOpenid: string;
+  /** 性别：male 男性 / female 女性 / unknown 未知 */
+  @Column({ default: 'unknown', length: 10 })
+  gender: 'male' | 'female' | 'unknown';
 
-  @Column({ nullable: true, length: 100 })
-  wechatUnionid: string;
+  /** 小程序 openid */
+  @Index()
+  @Column({ nullable: true, length: 100, name: 'mp_openid' })
+  mpOpenid: string;
+
+  /** 公众号 openid */
+  @Index()
+  @Column({ nullable: true, length: 100, name: 'oa_openid' })
+  oaOpenid: string;
 
   @Column({ default: 'active', length: 20 })
   status: 'active' | 'inactive' | 'banned';
 
   @Column('simple-json', { nullable: true })
   roles: string[];
+
+  /** 个人每日变身次数限制，null 表示使用全局默认 */
+  @Column({ nullable: true, type: 'int', name: 'daily_transform_limit' })
+  dailyTransformLimit: number | null;
 
   @CreateDateColumn()
   createdAt: Date;
