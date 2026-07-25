@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
+import * as crypto from 'crypto';
 
 dotenv.config();
 
@@ -33,8 +34,13 @@ async function seed() {
     console.log('   用户名: admin');
     console.log('   请尝试使用现有密码登录，或手动更新密码');
   } else {
-    // 创建默认管理员用户
-    const adminPassword = process.env.ADMIN_INIT_PASSWORD || 'admin123';
+    // 创建默认管理员用户 — 密码必须通过环境变量 ADMIN_INIT_PASSWORD 指定
+    const adminPassword = process.env.ADMIN_INIT_PASSWORD;
+    if (!adminPassword) {
+      console.error('[Seed] 错误: 未设置 ADMIN_INIT_PASSWORD 环境变量');
+      console.error('[Seed] 请设置: export ADMIN_INIT_PASSWORD=<你的安全密码>');
+      process.exit(1);
+    }
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const adminUser = userRepository.create({
@@ -60,8 +66,12 @@ async function seed() {
   });
 
   if (!existingTestUser) {
-    const testPassword = process.env.TEST_INIT_PASSWORD || 'test123';
-    const hashedPassword = await bcrypt.hash(testPassword, 10);
+    const testPassword = process.env.TEST_INIT_PASSWORD;
+    if (!testPassword) {
+      console.warn('[Seed] 未设置 TEST_INIT_PASSWORD，将生成随机密码');
+    }
+    const finalTestPassword = testPassword || crypto.randomUUID().slice(0, 12);
+    const hashedPassword = await bcrypt.hash(finalTestPassword, 10);
 
     const testUser = userRepository.create({
       username: 'test',
@@ -76,7 +86,8 @@ async function seed() {
     await userRepository.save(testUser);
     console.log('[Seed] 测试用户创建成功！');
     console.log('   用户名: test');
-    console.log('   密码: (由 TEST_INIT_PASSWORD 环境变量指定，默认 test123)');
+    console.log(`   密码: ${finalTestPassword}`);
+    console.log('   [Seed] 请妥善保存密码，或通过 TEST_INIT_PASSWORD 环境变量重新指定');
   }
 
   await dataSource.destroy();

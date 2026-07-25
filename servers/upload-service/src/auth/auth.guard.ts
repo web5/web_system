@@ -46,7 +46,10 @@ export class AuthGuard implements CanActivate {
       throw new Error('Invalid JWT structure');
     }
 
-    const secret = process.env.JWT_SECRET || 'web-system-jwt-secret';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET 环境变量未设置，无法验证令牌');
+    }
 
     // 验证签名
     const signaturePart = parts[2];

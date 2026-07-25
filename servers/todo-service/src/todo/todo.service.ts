@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Todo } from './todo.entity';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { QueryTodoDto } from './dto/query-todo.dto';
+
+/** 允许的排序字段白名单 — 防止 SQL 注入 */
+const ALLOWED_SORT_FIELDS = new Set([
+  'id', 'title', 'status', 'priority', 'category',
+  'due_date', 'created_at', 'updated_at', 'completed_at',
+]);
 
 @Injectable()
 export class TodoService {
@@ -21,6 +27,11 @@ export class TodoService {
       .createQueryBuilder('todo')
       .where('todo.user_id = :userId', { userId })
       .andWhere('todo.deleted_at IS NULL');
+
+    // 排序字段白名单校验 — 防止 SQL 注入
+    if (!ALLOWED_SORT_FIELDS.has(sortBy)) {
+      throw new BadRequestException(`不允许的排序字段: ${sortBy}`);
+    }
 
     if (status) {
       qb.andWhere('todo.status = :status', { status });
