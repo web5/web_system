@@ -7,7 +7,7 @@ services:
     container_name: web_system_postgres
     environment:
       POSTGRES_USER: web_system
-      POSTGRES_PASSWORD: web_system123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_dev}
       POSTGRES_DB: web_system
     ports:
       - "5432:5432"
@@ -58,8 +58,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=your-secret-key-change-in-production
-      - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_dev}
+      - DATABASE_URL=postgresql://web_system:${POSTGRES_PASSWORD:-change_me_in_dev}@postgres:5432/web_system
     depends_on:
       - postgres
       - redis
@@ -76,7 +76,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3002
-      - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
+      - DATABASE_URL=postgresql://web_system:${POSTGRES_PASSWORD:-change_me_in_dev}@postgres:5432/web_system
     depends_on:
       - postgres
     networks:
@@ -94,7 +94,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3003
-      - DATABASE_URL=postgresql://web_system:web_system123@postgres:5432/web_system
+      - DATABASE_URL=postgresql://web_system:${POSTGRES_PASSWORD:-change_me_in_dev}@postgres:5432/web_system
       - HY3_API_KEY=${HY3_API_KEY}
       - HY3_BASE_URL=https://wcode.net/api/gpt/v1
       - IMAGE_GEN_API_URL=${IMAGE_GEN_API_URL:-https://tokenhub.tencentmaas.com}

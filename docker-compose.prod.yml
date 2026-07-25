@@ -49,9 +49,9 @@ services:
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
       - DB_USERNAME=root
-      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system
-      - JWT_SECRET=kedouai-prod-jwt-secret-2026
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=7d
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -73,7 +73,7 @@ services:
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
       - DB_USERNAME=root
-      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system
     networks:
       - web_network
@@ -92,7 +92,7 @@ services:
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
       - DB_USERNAME=root
-      - DB_PASSWORD=gn%!CTvZNP0e4%Lc
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system
       - IMAGE_GEN_API_URL=${IMAGE_GEN_API_URL:-https://tokenhub.tencentmaas.com}
       - IMAGE_GEN_API_KEY=${IMAGE_GEN_API_KEY}
