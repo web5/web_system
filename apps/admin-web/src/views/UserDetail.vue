@@ -38,7 +38,7 @@
 
       <a-divider />
 
-      <div class="quota-section">
+      <div class="section">
         <h3>变变使用配额</h3>
         <a-form layout="inline" @finish="saveQuota">
           <a-form-item label="每日变身次数">
@@ -56,9 +56,57 @@
             </a-space>
           </a-form-item>
         </a-form>
-        <p class="quota-hint">
+        <p class="hint-text">
           {{ quotaValue === null ? '当前使用全局默认限制' : `当前个人限额：每天 ${quotaValue} 次` }}
         </p>
+      </div>
+
+      <a-divider />
+
+      <div class="section">
+        <h3>
+          用户作品
+          <a-tag v-if="artworks.length > 0" style="margin-left: 8px;">{{ artworks.length }}</a-tag>
+        </h3>
+        <a-spin :spinning="artworksLoading">
+          <a-empty v-if="!artworksLoading && artworks.length === 0" description="暂无作品" />
+          <div v-else class="artworks-grid">
+            <a-card
+              v-for="item in artworks"
+              :key="item.id"
+              hoverable
+              class="artwork-card"
+            >
+              <template #cover>
+                <div class="artwork-image-wrapper">
+                  <img
+                    v-if="item.imageUrl"
+                    :src="item.imageUrl"
+                    :alt="item.title"
+                    class="artwork-image"
+                    @error="onImageError"
+                  />
+                  <div v-else class="artwork-image-placeholder">
+                    <span>暂无图片</span>
+                  </div>
+                </div>
+              </template>
+              <a-card-meta>
+                <template #title>
+                  <span class="artwork-title">{{ item.title || '未命名作品' }}</span>
+                </template>
+                <template #description>
+                  <div class="artwork-meta">
+                    <a-tag :color="sourceColorMap[item.sourceType] || 'default'" size="small">
+                      {{ sourceLabelMap[item.sourceType] || item.sourceType }}
+                    </a-tag>
+                    <span class="artwork-date">{{ formatDate(item.createdAt) }}</span>
+                  </div>
+                </template>
+              </a-card-meta>
+            </a-card>
+          </div>
+        </a-spin>
       </div>
     </a-card>
   </div>
@@ -69,6 +117,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { userApi } from '@/api/user';
+import { artworksApi, type ArtworkItem, type ArtworkSourceType } from '@/api/artworks';
 
 type User = {
   id: string | number;
@@ -85,11 +134,28 @@ type User = {
   updatedAt?: string;
 };
 
+const sourceLabelMap: Record<ArtworkSourceType, string> = {
+  bianbian: '变变变身',
+  'draw-ai': 'AI 画板',
+  design: '设计作品',
+  'ai-art': 'AI 艺术',
+};
+
+const sourceColorMap: Record<ArtworkSourceType, string> = {
+  bianbian: 'orange',
+  'draw-ai': 'blue',
+  design: 'purple',
+  'ai-art': 'green',
+};
+
 const route = useRoute();
 const loading = ref(false);
 const user = ref<User | null>(null);
 const quotaValue = ref<number | null>(null);
 const quotaSaving = ref(false);
+
+const artworks = ref<ArtworkItem[]>([]);
+const artworksLoading = ref(false);
 
 const avatarSrc = computed(() => {
   const u = user.value;
@@ -113,11 +179,42 @@ async function fetchUserDetail() {
     const userId = route.params.id as string;
     const res = await userApi.getDetail(userId);
     user.value = res;
+    // 用户信息加载成功后，加载作品列表
+    if (res?.id) {
+      fetchArtworks(Number(res.id));
+    }
   } catch (error) {
     message.error('获取用户详情失败');
   } finally {
     loading.value = false;
   }
+}
+
+async function fetchArtworks(userId: number) {
+  artworksLoading.value = true;
+  try {
+    const res = await artworksApi.getByUser(userId);
+    artworks.value = res?.data ?? [];
+  } catch {
+    // 静默失败，不影响其他信息展示
+    artworks.value = [];
+  } finally {
+    artworksLoading.value = false;
+  }
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function onImageError(e: Event) {
+  const target = e.target as HTMLImageElement;
+  target.style.display = 'none';
 }
 
 async function saveQuota() {
@@ -160,18 +257,83 @@ function goBack() {
   display: inline;
 }
 
-.quota-section {
+.section {
   margin-top: 8px;
 }
 
-.quota-section h3 {
+.section h3 {
   margin-bottom: 16px;
   font-size: 16px;
 }
 
-.quota-hint {
+.hint-text {
   margin-top: 12px;
   color: #888;
   font-size: 13px;
+}
+
+.artworks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.artwork-card {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.artwork-card :deep(.ant-card-cover) {
+  overflow: hidden;
+}
+
+.artwork-image-wrapper {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.artwork-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.artwork-card:hover .artwork-image {
+  transform: scale(1.05);
+}
+
+.artwork-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  font-size: 14px;
+  background: #fafafa;
+}
+
+.artwork-title {
+  font-size: 14px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artwork-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.artwork-date {
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
 }
 </style>
