@@ -37,8 +37,8 @@ export class BianbianMaterial {
   @Column({ type: 'varchar', length: 20, default: 'emoji' })
   type: string;
 
-  /** 分类展示图标（用于管理后台分类 tab 显示，如 ⭐ 🐱 🌿 😊 🖼️） */
-  @Column({ type: 'varchar', length: 10, default: '📦' })
+  /** 分类展示图标（用于管理后台分类 tab 显示） */
+  @Column({ type: 'varchar', length: 10, default: 'default' })
   icon: string;
 
   /** 素材来源：system（系统内置）/ custom（管理员自定义） */

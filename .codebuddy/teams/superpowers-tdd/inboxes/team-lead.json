@@ -1,0 +1,29 @@
+[
+  {
+    "id": "msg-1784385011382-4uq3es",
+    "from": "brainstorm-agent",
+    "to": "team-lead",
+    "type": "message",
+    "content": "brainstorm-agent 已就绪，等待方案探索任务。",
+    "timestamp": "2026-07-18T14:30:11.382Z",
+    "read": true
+  },
+  {
+    "id": "msg-1784385015082-r1hxy1",
+    "from": "plan-agent",
+    "to": "team-lead",
+    "type": "message",
+    "content": "plan-agent 已就绪，等待方案细化任务",
+    "timestamp": "2026-07-18T14:30:15.082Z",
+    "read": true
+  },
+  {
+    "id": "msg-1784385018706-3ndwrw",
+    "from": "review-agent",
+    "to": "team-lead",
+    "type": "message",
+    "content": "review-agent 已就绪，等待代码审查任务",
+    "timestamp": "2026-07-18T14:30:18.706Z",
+    "read": true
+  }
+]

@@ -28,6 +28,11 @@ export class CreateUserDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ description: '性别', example: 'male', enum: ['male', 'female', 'unknown'] })
+  @IsOptional()
+  @IsString()
+  gender?: 'male' | 'female' | 'unknown';
+
   @ApiPropertyOptional({ description: '角色', example: ['user'], type: [String] })
   @IsOptional()
   roles?: string[];

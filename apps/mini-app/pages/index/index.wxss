@@ -9,6 +9,37 @@
   background: linear-gradient(180deg, #FFFBF5 0%, #FFF8F0 100%);
 }
 
+/* 扫码登录入口 */
+.scan-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  width: 100%;
+  height: 72rpx;
+  background: #FF8C42;
+  color: #FFFFFF;
+  border-radius: 36rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 32rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 140, 66, 0.3);
+}
+.scan-entry-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.badge-icon {
+  width: 28rpx;
+  height: 28rpx;
+  vertical-align: -6rpx;
+  margin-right: 4rpx;
+}
+.scan-entry-text {
+  color: #FFFFFF;
+}
+
 /* ===== Logo ===== */
 .app-logo {
   display: flex;
@@ -119,7 +150,8 @@
   border: none;
 }
 .primary-btn-icon {
-  font-size: 5vw;
+  width: 36rpx;
+  height: 36rpx;
 }
 
 /* ===== 画板 — 次要按钮组 ===== */
@@ -163,7 +195,8 @@
 }
 
 .secondary-btn-icon {
-  font-size: 4vw;
+  width: 32rpx;
+  height: 32rpx;
 }
 
 /* ===== 横屏 ===== */
@@ -180,8 +213,8 @@
 .container.landscape .primary-btn { width: 60%; padding: 20rpx 0; font-size: 3.4vw; }
 .container.landscape .secondary-btn { padding: 16rpx 0; font-size: 2.8vw; }
 .container.landscape .product-section.secondary { margin-top: 3vh; padding-top: 3vh; }
-.container.landscape .primary-btn-icon { font-size: 4vw; }
-.container.landscape .secondary-btn-icon { font-size: 3.2vw; }
+.container.landscape .primary-btn-icon { width: 28rpx; height: 28rpx; }
+.container.landscape .secondary-btn-icon { width: 28rpx; height: 28rpx; }
 .container.landscape .product-badge { font-size: 2.4vw; }
 .container.landscape .product-badge.primary { font-size: 2vw; padding: 2rpx 12rpx; }
 

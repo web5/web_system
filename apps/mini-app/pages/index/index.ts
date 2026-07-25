@@ -45,4 +45,11 @@ Page({
       url: '/pages/bianbian/index/index',
     });
   },
+
+  goToScan() {
+    // 跳转扫码登录页 - 扫 PC 端登录二维码
+    wx.navigateTo({
+      url: '/pages/scan/scan?from=index',
+    });
+  },
 });

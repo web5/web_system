@@ -49,6 +49,13 @@ export class TransformDto {
   @IsOptional()
   @IsString()
   userId?: string;
+
+  @ApiPropertyOptional({
+    description: '用户角色（admin 免次数限制）',
+    type: [String],
+  })
+  @IsOptional()
+  roles?: string[];
 }
 
 /**
@@ -60,6 +67,9 @@ export class TransformResponse {
 
   @ApiProperty({ description: 'AI 生成的结果图（base64 data URL 或 CDN URL）' })
   aiImage: string;
+
+  @ApiProperty({ description: '原画临时图片公开 URL（可直接用于 img src）' })
+  originalImageUrl?: string;
 
   @ApiProperty({ description: '处理状态' })
   status: string;

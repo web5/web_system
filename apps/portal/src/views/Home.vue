@@ -1,35 +1,6 @@
 <template>
   <div class="kedo-portal">
-    <!-- 顶部导航 -->
-    <nav class="portal-nav">
-      <div class="nav-inner">
-        <!-- Logo -->
-        <div class="nav-brand">
-          <div class="brand-logo">
-            <svg viewBox="0 0 210 110" xmlns="http://www.w3.org/2000/svg">
-              <rect x="0" y="0" width="210" height="110" rx="55" fill="#f97316"/>
-              <path d="M 105 18 C 127 18, 139 34, 139 60 C 139 90, 121 102, 105 102 C 87 102, 71 88, 71 60 C 71 32, 87 18, 105 18 Z" fill="white"/>
-              <circle cx="105" cy="60" r="9" fill="#f97316"/>
-              <circle cx="105" cy="58" r="3.5" fill="#FDE68A"/>
-              <path d="M 105 18 Q 105 10, 105 7" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-              <circle cx="105" cy="6" r="3.5" fill="white"/>
-            </svg>
-          </div>
-          <span class="brand-name">科豆 AI</span>
-        </div>
-
-        <!-- 导航链接 -->
-        <div class="nav-links">
-          <a href="#" class="nav-link active">首页</a>
-          <a href="#howto" class="nav-link">变变</a>
-          <a href="#draw" class="nav-link">画板</a>
-          <a href="#" class="nav-link">关于我们</a>
-        </div>
-
-        <!-- 登录按钮 -->
-        <button class="nav-login" @click="router.push('/login')">登录</button>
-      </div>
-    </nav>
+    <!-- 顶部导航已迁移到全局 App.vue -->
 
     <!-- Hero 区域 -->
     <section class="hero-section">
@@ -60,17 +31,16 @@
           <div class="scan-card">
             <div class="scan-header">微信扫码体验</div>
             <div class="scan-qr">
-              <div class="qr-placeholder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <rect x="3" y="3" width="7" height="7" rx="1"/>
-                  <rect x="14" y="3" width="7" height="7" rx="1"/>
-                  <rect x="14" y="14" width="7" height="7" rx="1"/>
-                  <rect x="3" y="14" width="7" height="7" rx="1"/>
-                </svg>
-              </div>
+              <img
+                class="qr-image"
+                src="/bianbian-qrcode.png"
+                alt="变变小程序码"
+                width="160"
+                height="160"
+              />
             </div>
             <div class="scan-info">
-              <p class="scan-app">微信小程序「科豆 AI」</p>
+              <p class="scan-app">微信小程序「变变」</p>
               <p class="scan-slogan">把孩子的涂鸦变成可爱3D角色</p>
             </div>
             <div class="scan-features">
@@ -131,9 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
-
-const router = useRouter();
+// AppNavbar 已迁移到全局 App.vue
 </script>
 
 <style scoped>
@@ -141,86 +109,6 @@ const router = useRouter();
   background: linear-gradient(180deg, #FFFBF5 0%, #FFF8F0 100%);
   color: #333;
 }
-
-/* ===== 导航栏 ===== */
-.portal-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  background: rgba(255, 251, 245, 0.95);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 140, 66, 0.08);
-}
-
-.nav-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand-logo {
-  width: 32px;
-  height: 32px;
-}
-
-.brand-logo svg {
-  width: 100%;
-  height: 100%;
-}
-
-.brand-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #333;
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-}
-
-.nav-link {
-  font-size: 15px;
-  color: #666;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-.nav-link:hover,
-.nav-link.active {
-  color: #FF8C42;
-}
-
-.nav-login {
-  padding: 8px 20px;
-  background: #FF8C42;
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.nav-login:hover {
-  background: #e67e2a;
-  transform: translateY(-1px);
-}
-
 /* ===== Hero 区域 ===== */
 .hero-section {
   padding: 120px 24px 80px;
@@ -362,15 +250,11 @@ const router = useRouter();
   justify-content: center;
 }
 
-.qr-placeholder {
-  width: 80px;
-  height: 80px;
-  color: #ccc;
-}
-
-.qr-placeholder svg {
-  width: 100%;
-  height: 100%;
+.qr-image {
+  width: 160px;
+  height: 160px;
+  display: block;
+  border-radius: 8px;
 }
 
 .scan-info {

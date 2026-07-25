@@ -1,9 +1,11 @@
 <template>
   <div class="create-page">
-    <!-- 顶部栏 -->
+    <!-- 子页面顶部栏（顶部品牌由全局 AppNavbar 提供） -->
     <header class="top-bar">
-      <button class="back-btn" @click="goBack">← 返回</button>
-      <span class="top-title">变变！ ✨</span>
+      <button class="back-btn back-btn--mobile-only" @click="goBack">← 返回</button>
+      <span class="top-title">开始创作
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-left:2px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </span>
       <button class="top-action" @click="handleTransform" :disabled="canvasElements.length === 0">
         变变
       </button>
@@ -27,9 +29,19 @@
           v-for="item in filteredMaterials"
           :key="item.id"
           class="material-item"
+          :class="{ 'is-dragging': dragItemId === item.id }"
+          draggable="true"
           @click="addMaterial(item)"
+          @dragstart="onMaterialDragStart($event, item)"
+          @dragend="onMaterialDragEnd"
+          @touchstart="onMaterialTouchStart($event, item)"
         >
-          <span class="material-emoji">{{ item.icon }}</span>
+          <!-- SVG 素材 -->
+          <img v-if="item.type === 'svg'" :src="item.content" :alt="item.name" class="material-svg-img" />
+          <!-- emoji 素材（后备） -->
+          <span v-else-if="item.type === 'emoji'" class="material-emoji">{{ item.content }}</span>
+          <!-- 颜色背景素材 -->
+          <span v-else-if="item.type === 'color'" class="material-color-swatch" :style="{ background: item.content }"></span>
           <span class="material-label">{{ item.name }}</span>
         </button>
       </div>
@@ -39,12 +51,17 @@
     <div
       class="canvas-area"
       ref="canvasAreaRef"
+      :class="{ 'drag-over': isCanvasDragOver }"
       @touchstart="handleCanvasTouchStart"
       @touchmove="handleCanvasTouchMove"
       @touchend="handleCanvasTouchEnd"
       @mousedown="handleCanvasMouseDown"
       @mousemove="handleCanvasMouseMove"
       @mouseup="handleCanvasMouseUp"
+      @dragover.prevent="onCanvasDragOver"
+      @dragenter.prevent="onCanvasDragEnter"
+      @dragleave="onCanvasDragLeave"
+      @drop="onCanvasDrop"
     >
       <div class="canvas-inner" ref="canvasInnerRef">
         <!-- 素材元素 -->
@@ -58,7 +75,12 @@
           @touchstart.stop="startDragElement($event, el)"
           @dblclick.stop="removeElement(el.id)"
         >
-          <span class="element-content" :style="{ fontSize: el.fontSize + 'px' }">
+          <!-- SVG 素材（<img> 加载） -->
+          <img v-if="el.type === 'svg'" :src="el.content" :alt="''" class="element-svg" :style="{ width: el.fontSize + 'px', height: el.fontSize + 'px' }" />
+          <!-- 颜色背景 -->
+          <div v-else-if="el.type === 'color'" class="element-bg" :style="{ background: el.content }"></div>
+          <!-- emoji 素材（后备） -->
+          <span v-else class="element-content" :style="{ fontSize: el.fontSize + 'px' }">
             {{ el.content }}
           </span>
           <!-- 选中态 -->
@@ -73,7 +95,9 @@
 
         <!-- 空画布提示 -->
         <div v-if="canvasElements.length === 0" class="canvas-empty">
-          <span class="empty-icon">🎨</span>
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          </div>
           <p class="empty-text">拖拽素材或画一画～</p>
         </div>
       </div>
@@ -92,7 +116,7 @@
     <!-- 底部操作栏 -->
     <div class="bottom-bar">
       <button class="bottom-btn btn-random" @click="addRandomMaterial">
-        <span>🎲</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="7" height="7" rx="1"/><rect x="15" y="1" width="7" height="7" rx="1"/><rect x="2" y="16" width="7" height="7" rx="1"/><rect x="15" y="16" width="7" height="7" rx="1"/></svg>
         <span>随机素材</span>
       </button>
       <button
@@ -102,7 +126,7 @@
         @click="handleTransform"
       >
         <span>变变！</span>
-        <span>✨</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       </button>
     </div>
   </div>
@@ -111,84 +135,45 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import { message } from 'ant-design-vue';
 import request from '@/api/request';
+import type { MaterialItem, CanvasElement } from '@/types/material';
+import { ALL_MATERIALS, MATERIAL_TABS } from '@/config/materials';
 
 const router = useRouter();
 
-// ====== 素材库（从后端获取） ======
-interface MaterialItem {
-  id: string;
-  category: string;
-  name: string;
-  icon: string;
-  fontSize?: number;
-}
-
+// ====== 素材库 ======
 const materials = ref<MaterialItem[]>([]);
 
 async function loadMaterials() {
   try {
     const res = await request.get('/bianbian/materials');
     if (res.code === 0 && Array.isArray(res.data)) {
+      // 将后端素材映射为前端统一格式（支持 emoji 和 color 类型）
       materials.value = res.data.map((m: any) => ({
-        ...m,
-        fontSize: m.category === 'background' ? 200 : 48,
+        id: m.id,
+        name: m.name,
+        category: m.category,
+        type: (m.type === 'svg' || m.type === 'color') ? m.type : 'emoji',
+        content: m.type === 'color' ? m.content : (m.icon || m.content),
       }));
       return;
     }
   } catch { /* fallback below */ }
-  // 接口不可用时使用内置后备素材
-  materials.value = getFallbackMaterials();
+  // 接口不可用时使用内置 SVG 素材
+  materials.value = ALL_MATERIALS;
 }
 
-function getFallbackMaterials(): MaterialItem[] {
-  return [
-    { id: 's1', category: 'sticker', name: '笑脸', icon: '😊', fontSize: 48 },
-    { id: 's2', category: 'sticker', name: '小猫', icon: '🐱', fontSize: 48 },
-    { id: 's3', category: 'sticker', name: '小狗', icon: '🐶', fontSize: 48 },
-    { id: 's4', category: 'sticker', name: '兔子', icon: '🐰', fontSize: 48 },
-    { id: 's5', category: 'sticker', name: '小熊', icon: '🐻', fontSize: 48 },
-    { id: 's6', category: 'sticker', name: '熊猫', icon: '🐼', fontSize: 48 },
-    { id: 's7', category: 'sticker', name: '星星', icon: '⭐', fontSize: 44 },
-    { id: 's8', category: 'sticker', name: '彩虹', icon: '🌈', fontSize: 48 },
-    { id: 's9', category: 'sticker', name: '月亮', icon: '🌙', fontSize: 44 },
-    { id: 's10', category: 'sticker', name: '太阳', icon: '☀️', fontSize: 48 },
-    { id: 's11', category: 'sticker', name: '云朵', icon: '☁️', fontSize: 44 },
-    { id: 's12', category: 'sticker', name: '花花', icon: '🌸', fontSize: 44 },
-    { id: 'sh1', category: 'shape', name: '爱心', icon: '❤️', fontSize: 44 },
-    { id: 'sh2', category: 'shape', name: '圆形', icon: '🟠', fontSize: 44 },
-    { id: 'sh3', category: 'shape', name: '钻石', icon: '💎', fontSize: 44 },
-    { id: 'sh4', category: 'shape', name: '三角', icon: '🔺', fontSize: 44 },
-    { id: 'bg1', category: 'background', name: '草地', icon: '🟢', fontSize: 200 },
-    { id: 'bg2', category: 'background', name: '天空', icon: '🔵', fontSize: 200 },
-    { id: 'bg3', category: 'background', name: '粉色', icon: '🩷', fontSize: 200 },
-  ];
-}
-
-const tabs = [
-  { key: 'all', label: '全部' },
-  { key: 'sticker', label: '贴纸' },
-  { key: 'shape', label: '形状' },
-  { key: 'background', label: '背景' },
-];
-
+// ====== 分类 Tab ======
+const tabs = MATERIAL_TABS;
 const activeTab = ref('all');
 const filteredMaterials = computed(() => {
   const list = materials.value;
-  return activeTab.value === 'all' ? list : list.filter((m) => m.category === activeTab.value);
+  if (activeTab.value === 'all') return list;
+  return list.filter((m) => m.category === activeTab.value);
 });
 
 // ====== 画布元素 ======
-interface CanvasElement {
-  id: string;
-  content: string;
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-  fontSize: number;
-}
-
 const canvasElements = ref<CanvasElement[]>([]);
 const selectedId = ref<string>('');
 const description = ref('');
@@ -203,16 +188,31 @@ function elementStyle(el: CanvasElement) {
 }
 
 function addMaterial(item: MaterialItem) {
+  const isBg = item.type === 'color';
   const el: CanvasElement = {
     id: `el_${++elemCounter}_${Date.now()}`,
-    content: item.icon,
-    x: 180 + Math.random() * 80 - 40,
-    y: 220 + Math.random() * 60 - 30,
+    content: item.content,
+    type: item.type,
+    x: isBg ? 0 : 180 + Math.random() * 80 - 40,
+    y: isBg ? 0 : 220 + Math.random() * 60 - 30,
     scale: 1,
     rotation: 0,
-    fontSize: item.fontSize || 48,
+    fontSize: isBg ? 400 : 64,
   };
-  canvasElements.value.push(el);
+
+  // 背景素材：替换已有背景或添加到底层
+  if (isBg) {
+    const existingBg = canvasElements.value.find(e => e.type === 'color');
+    if (existingBg) {
+      existingBg.content = el.content;
+      saveDraft();
+      return;
+    }
+    // 插入到最底层
+    canvasElements.value.unshift(el);
+  } else {
+    canvasElements.value.push(el);
+  }
   selectedId.value = el.id;
   saveDraft();
 }
@@ -222,6 +222,213 @@ function addRandomMaterial() {
   if (list.length === 0) return;
   const random = list[Math.floor(Math.random() * list.length)];
   addMaterial(random);
+}
+
+// ====== 素材拖拽到画布 ======
+
+// --- 状态 ---
+const isCanvasDragOver = ref(false);
+const dragItemId = ref<string | null>(null);
+
+// --- HTML5 拖拽（桌面端） ---
+function onMaterialDragStart(e: DragEvent, item: MaterialItem) {
+  if (!e.dataTransfer) return;
+  dragItemId.value = item.id;
+  e.dataTransfer.effectAllowed = 'copy';
+  e.dataTransfer.setData('application/json', JSON.stringify({
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    content: item.content,
+    category: item.category,
+  }));
+  // 设置拖拽预览图为素材缩略图
+  const el = e.target as HTMLElement;
+  const img = el.querySelector('img');
+  if (img && e.dataTransfer.setDragImage) {
+    e.dataTransfer.setDragImage(img, 18, 18);
+  }
+}
+
+function onMaterialDragEnd() {
+  dragItemId.value = null;
+}
+
+function onCanvasDragOver(e: DragEvent) {
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+function onCanvasDragEnter(_e: DragEvent) {
+  isCanvasDragOver.value = true;
+}
+
+function onCanvasDragLeave(e: DragEvent) {
+  // 只在真正离开画布时取消高亮（避免子元素触发）
+  const rect = canvasAreaRef.value?.getBoundingClientRect();
+  if (rect) {
+    const { clientX, clientY } = e;
+    if (
+      clientX <= rect.left ||
+      clientX >= rect.right ||
+      clientY <= rect.top ||
+      clientY >= rect.bottom
+    ) {
+      isCanvasDragOver.value = false;
+    }
+  }
+}
+
+function onCanvasDrop(e: DragEvent) {
+  isCanvasDragOver.value = false;
+  if (!e.dataTransfer) return;
+  const json = e.dataTransfer.getData('application/json');
+  if (!json) return;
+  try {
+    const item: MaterialItem = JSON.parse(json);
+    dropMaterialAtPosition(item, e.clientX, e.clientY);
+  } catch { /* ignore malformed data */ }
+}
+
+// --- 触摸拖拽（移动端） ---
+let touchDragItem: MaterialItem | null = null;
+let touchGhostEl: HTMLElement | null = null;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchMoved = false;
+
+function onMaterialTouchStart(e: TouchEvent, item: MaterialItem) {
+  const touch = e.touches[0];
+  touchDragItem = item;
+  touchMoved = false;
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+
+  // 创建跟随手指的"幽灵"元素
+  const ghost = document.createElement('div');
+  ghost.className = 'drag-ghost';
+  ghost.style.left = touch.clientX + 'px';
+  ghost.style.top = touch.clientY + 'px';
+
+  if (item.type === 'svg') {
+    const img = document.createElement('img');
+    img.src = item.content;
+    img.style.width = '48px';
+    img.style.height = '48px';
+    img.style.objectFit = 'contain';
+    ghost.appendChild(img);
+  } else if (item.type === 'color') {
+    const swatch = document.createElement('span');
+    swatch.style.cssText = `display:block;width:48px;height:48px;border-radius:10px;background:${item.content};border:2px solid rgba(0,0,0,0.08);`;
+    ghost.appendChild(swatch);
+  } else {
+    ghost.textContent = item.content;
+    ghost.style.fontSize = '40px';
+    ghost.style.lineHeight = '1';
+  }
+
+  document.body.appendChild(ghost);
+  touchGhostEl = ghost;
+
+  document.addEventListener('touchmove', onTouchDragMove, { passive: false });
+  document.addEventListener('touchend', onTouchDragEnd);
+  document.addEventListener('touchcancel', onTouchDragEnd);
+
+  e.preventDefault();
+}
+
+function onTouchDragMove(e: TouchEvent) {
+  e.preventDefault();
+  if (!touchGhostEl) return;
+  const touch = e.touches[0];
+  touchGhostEl.style.left = touch.clientX + 'px';
+  touchGhostEl.style.top = touch.clientY + 'px';
+
+  // 判断移动是否超过阈值，用于区分拖拽和点击
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+    touchMoved = true;
+    dragItemId.value = touchDragItem?.id || null;
+  }
+
+  // 高亮画布
+  const canvasRect = canvasAreaRef.value?.getBoundingClientRect();
+  if (canvasRect) {
+    isCanvasDragOver.value = isPointInRect(touch.clientX, touch.clientY, canvasRect);
+  }
+}
+
+function onTouchDragEnd(e: TouchEvent) {
+  document.removeEventListener('touchmove', onTouchDragMove);
+  document.removeEventListener('touchend', onTouchDragEnd);
+  document.removeEventListener('touchcancel', onTouchDragEnd);
+
+  const touch = e.changedTouches[0];
+
+  // 如果手指在画布区域内，放下素材
+  const canvasRect = canvasAreaRef.value?.getBoundingClientRect();
+  if (canvasRect && touchDragItem && isPointInRect(touch.clientX, touch.clientY, canvasRect)) {
+    dropMaterialAtPosition(touchDragItem, touch.clientX, touch.clientY);
+  }
+
+  // 清理
+  cleanupTouchDrag();
+}
+
+function cleanupTouchDrag() {
+  if (touchGhostEl) {
+    touchGhostEl.remove();
+    touchGhostEl = null;
+  }
+  touchDragItem = null;
+  isCanvasDragOver.value = false;
+  dragItemId.value = null;
+}
+
+// --- 通用：在指定屏幕坐标放置素材 ---
+function dropMaterialAtPosition(item: MaterialItem, screenX: number, screenY: number) {
+  const canvasRect = canvasAreaRef.value?.getBoundingClientRect();
+  if (!canvasRect) return;
+
+  const isBg = item.type === 'color';
+  const x = screenX - canvasRect.left;
+  const y = screenY - canvasRect.top;
+
+  // 限制在画布范围内
+  const clampedX = Math.max(10, Math.min(canvasRect.width - 10, x));
+  const clampedY = Math.max(10, Math.min(canvasRect.height - 10, y));
+
+  const el: CanvasElement = {
+    id: `el_${++elemCounter}_${Date.now()}`,
+    content: item.content,
+    type: item.type,
+    x: clampedX,
+    y: clampedY,
+    scale: 1,
+    rotation: 0,
+    fontSize: isBg ? 400 : 64,
+  };
+
+  if (isBg) {
+    const existingBg = canvasElements.value.find(e => e.type === 'color');
+    if (existingBg) {
+      existingBg.content = el.content;
+      saveDraft();
+      return;
+    }
+    canvasElements.value.unshift(el);
+  } else {
+    canvasElements.value.push(el);
+  }
+  selectedId.value = el.id;
+  saveDraft();
+}
+
+/** 判断点是否在矩形内 */
+function isPointInRect(px: number, py: number, rect: DOMRect): boolean {
+  return px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom;
 }
 
 function removeElement(id: string) {
@@ -370,16 +577,98 @@ function goBack() {
   router.push('/');
 }
 
-function handleTransform() {
+// ====== 画布导出 ======
+/** 将画布元素合成为 768x768 图片（dataURL），供变身接口使用。
+ *  限制分辨率可减少 localStorage / 接口传输压力，同时保留足够参考细节。 */
+async function exportCanvasImage(): Promise<string> {
+  const W = 768;
+  const H = 768;
+  const rect = canvasAreaRef.value?.getBoundingClientRect();
+  const srcW = rect?.width || W;
+  const srcH = rect?.height || H;
+  const kx = W / srcW;
+  const ky = H / srcH;
+  const kAvg = (kx + ky) / 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // 白底
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, W, H);
+
+  const els = canvasElements.value;
+
+  // 背景色元素：铺满整个画布
+  const bg = els.find((e) => e.type === 'color');
+  if (bg) {
+    ctx.fillStyle = bg.content;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const loadImage = (src: string) =>
+    new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+
+  for (const el of els) {
+    if (el.type === 'color') continue;
+    const cx = el.x * kx;
+    const cy = el.y * ky;
+    const size = el.fontSize * el.scale * kAvg;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((el.rotation * Math.PI) / 180);
+
+    if (el.type === 'svg') {
+      const img = await loadImage(el.content);
+      if (img) {
+        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+      }
+    } else {
+      ctx.font = `${size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(el.content, 0, 0);
+    }
+    ctx.restore();
+  }
+
+  try {
+    return canvas.toDataURL('image/jpeg', 0.85);
+  } catch {
+    return '';
+  }
+}
+
+async function handleTransform() {
   if (canvasElements.value.length === 0) return;
   saveDraft();
 
-  // 传递画布数据到变身页
+  // 导出画布为图片，传递画布数据到变身页
+  const image = await exportCanvasImage();
+  if (!image || image.length < 100) {
+    message.warning('画布导出失败，请重试～');
+    return;
+  }
+
   const data = {
-    elements: canvasElements.value,
+    image,
     description: description.value,
   };
-  localStorage.setItem('bb_transform_data', JSON.stringify(data));
+  try {
+    localStorage.setItem('bb_transform_data', JSON.stringify(data));
+  } catch {
+    message.warning('图片过大，请减少素材后重试～');
+    return;
+  }
   router.push('/bianbian/transform');
 }
 
@@ -395,6 +684,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   saveDraft();
+  cleanupTouchDrag();
   window.removeEventListener('beforeunload', saveDraft);
 });
 </script>
@@ -430,6 +720,13 @@ onBeforeUnmount(() => {
   font-weight: 600;
   cursor: pointer;
   padding: 8px 4px;
+}
+
+/* PC 端全局菜单可见时不需要返回按钮 */
+@media (min-width: 769px) {
+  .back-btn--mobile-only {
+    display: none;
+  }
 }
 
 .top-title {
@@ -516,21 +813,43 @@ onBeforeUnmount(() => {
   border: 1.5px solid rgba(255, 140, 66, 0.08);
   border-radius: 16px;
   background: #fff;
-  cursor: pointer;
+  cursor: grab;
   transition: all 0.2s;
   flex-shrink: 0;
   min-width: 56px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .material-item:active {
+  cursor: grabbing;
   background: #FFF3E8;
   border-color: rgba(255, 140, 66, 0.3);
   transform: scale(0.95);
 }
 
+.material-item.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.9);
+}
+
 .material-emoji {
   font-size: 32px;
   line-height: 1;
+}
+
+.material-svg-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.material-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.06);
 }
 
 .material-label {
@@ -548,6 +867,14 @@ onBeforeUnmount(() => {
   position: relative;
   overflow: hidden;
   touch-action: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.canvas-area.drag-over {
+  border-color: #4ECDC4;
+  border-style: solid;
+  background: rgba(78, 205, 196, 0.04);
+  box-shadow: inset 0 0 0 3px rgba(78, 205, 196, 0.1);
 }
 
 .canvas-inner {
@@ -573,6 +900,23 @@ onBeforeUnmount(() => {
   line-height: 1;
   pointer-events: none;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.element-svg {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+}
+
+.element-bg {
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  border-radius: 0;
+  pointer-events: none;
 }
 
 /* 选中手柄 */
@@ -643,10 +987,11 @@ onBeforeUnmount(() => {
 }
 
 .empty-icon {
-  font-size: 48px;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 8px;
-  opacity: 0.6;
+  color: #bbb;
 }
 
 .empty-text {
@@ -680,6 +1025,24 @@ onBeforeUnmount(() => {
 
 .desc-input::placeholder {
   color: #ccc;
+}
+
+/* 触摸拖拽幽灵元素 */
+.drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(78, 205, 196, 0.3);
+  transition: none;
+  will-change: left, top;
 }
 
 /* 底部操作栏 */
@@ -744,13 +1107,127 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-/* 响应式 */
+/* ===== 响应式 - PC：两栏工作室布局 ===== */
 @media (min-width: 768px) {
   .create-page {
-    max-width: 480px;
-    margin: 0 auto;
-    border-left: 1px solid rgba(255, 140, 66, 0.08);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "top      top"
+      "tabs     tabs"
+      "mats     canvas"
+      "desc     desc";
+    min-height: 100vh;
+  }
+
+  /* 顶部栏：横跨两列 */
+  .top-bar {
+    grid-area: top;
+    padding: 14px 24px;
+  }
+
+  /* Tab：横跨两列，左对齐（贴在左侧栏顶部） */
+  .material-tabs {
+    grid-area: tabs;
+    padding: 8px 16px 12px 16px;
+    border-bottom: 1px solid rgba(255, 140, 66, 0.08);
+    background: #fff;
+  }
+
+  /* 素材区：左侧栏，与画布在同一弹性行，内部滚动 */
+  .material-strip {
+    grid-area: mats;
+    padding: 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #fff;
     border-right: 1px solid rgba(255, 140, 66, 0.08);
+  }
+
+  .material-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    justify-content: initial;
+    flex-wrap: initial;
+  }
+
+  .material-item {
+    padding: 12px 8px;
+    min-width: 0;
+  }
+
+  .material-svg-img {
+    width: 40px;
+    height: 40px;
+  }
+
+  .material-emoji {
+    font-size: 34px;
+  }
+
+  .material-color-swatch {
+    width: 40px;
+    height: 40px;
+  }
+
+  .material-label {
+    font-size: 11px;
+  }
+
+  /* 画布区：右侧主舞台 */
+  .canvas-area {
+    grid-area: canvas;
+    margin: 12px 20px;
+    border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(255, 140, 66, 0.06);
+    min-height: 0;
+  }
+
+  /* 描述 + 操作栏：横跨两列 */
+  .desc-area {
+    grid-area: desc;
+    padding: 0 20px 4px;
+  }
+
+  .desc-input {
+    background: #fff;
+  }
+
+  /* PC 端顶部栏已有「变变」按钮，底部操作栏隐藏避免与内容抢空间 */
+  .bottom-bar {
+    display: none;
+  }
+
+  .bottom-btn {
+    padding: 14px 28px;
+    font-size: 16px;
+  }
+
+  .btn-random {
+    flex: initial;
+    min-width: 140px;
+  }
+
+  .btn-transform {
+    flex: initial;
+    min-width: 200px;
+  }
+}
+
+/* 更大屏：素材栏更宽，画布更宽 */
+@media (min-width: 1200px) {
+  .create-page {
+    grid-template-columns: 320px 1fr;
+  }
+
+  .material-list {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .canvas-area {
+    margin: 16px 28px;
   }
 }
 </style>

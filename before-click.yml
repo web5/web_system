@@ -1,0 +1,343 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - link "科豆 AI 变变 · AI 拼贴变身" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img [ref=e8]
+        - generic [ref=e14]:
+          - generic [ref=e15]: 科豆 AI
+          - generic [ref=e16]: 变变 · AI 拼贴变身
+      - generic [ref=e17]:
+        - link "首页" [ref=e18] [cursor=pointer]:
+          - /url: /
+        - link "变变" [ref=e19] [cursor=pointer]:
+          - /url: /bianbian
+        - link "画板" [ref=e20] [cursor=pointer]:
+          - /url: /draw
+        - link "AI 助手" [ref=e21] [cursor=pointer]:
+          - /url: /chat
+        - link "Todo" [ref=e22] [cursor=pointer]:
+          - /url: /todo
+      - link "登录" [ref=e24] [cursor=pointer]:
+        - /url: /login?redirect=/bianbian
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - link "科豆 AI 变变 · AI 拼贴变身" [ref=e27] [cursor=pointer]:
+          - /url: /
+          - img [ref=e28]
+          - generic [ref=e34]:
+            - generic [ref=e35]: 科豆 AI
+            - generic [ref=e36]: 变变 · AI 拼贴变身
+        - button [ref=e37] [cursor=pointer]:
+          - img [ref=e38]
+      - generic [ref=e41]:
+        - link "首页" [ref=e42] [cursor=pointer]:
+          - /url: /
+        - link "变变" [ref=e43] [cursor=pointer]:
+          - /url: /bianbian
+        - link "画板" [ref=e44] [cursor=pointer]:
+          - /url: /draw
+        - link "AI 助手" [ref=e45] [cursor=pointer]:
+          - /url: /chat
+        - link "Todo" [ref=e46] [cursor=pointer]:
+          - /url: /todo
+      - link "登录" [ref=e48] [cursor=pointer]:
+        - /url: /login?redirect=/bianbian
+  - generic [ref=e50]:
+    - banner [ref=e51]:
+      - generic [ref=e52]:
+        - text: 开始创作
+        - img [ref=e53]
+      - button "变变" [disabled] [ref=e55] [cursor=pointer]
+    - generic [ref=e56]:
+      - button "动物" [ref=e57] [cursor=pointer]
+      - button "自然" [ref=e58] [cursor=pointer]
+      - button "食物" [ref=e59] [cursor=pointer]
+      - button "交通" [ref=e60] [cursor=pointer]
+      - button "贴纸" [ref=e61] [cursor=pointer]
+      - button "形状" [ref=e62] [cursor=pointer]
+      - button "背景" [ref=e63] [cursor=pointer]
+    - generic [ref=e77]:
+      - button "小猫 小猫" [ref=e78] [cursor=pointer]:
+        - img "小猫"
+        - generic [ref=e79]: 小猫
+      - button "小狗 小狗" [ref=e80] [cursor=pointer]:
+        - img "小狗"
+        - generic [ref=e81]: 小狗
+      - button "小鱼 小鱼" [ref=e82] [cursor=pointer]:
+        - img "小鱼"
+        - generic [ref=e83]: 小鱼
+      - button "蝴蝶 蝴蝶" [ref=e84] [cursor=pointer]:
+        - img "蝴蝶"
+        - generic [ref=e85]: 蝴蝶
+      - button "毛毛虫 毛毛虫" [ref=e86] [cursor=pointer]:
+        - img "毛毛虫"
+        - generic [ref=e87]: 毛毛虫
+      - button "蚂蚁 蚂蚁" [ref=e88] [cursor=pointer]:
+        - img "蚂蚁"
+        - generic [ref=e89]: 蚂蚁
+      - button "马 马" [ref=e90] [cursor=pointer]:
+        - img "马"
+        - generic [ref=e91]: 马
+      - button "太阳 太阳" [ref=e92] [cursor=pointer]:
+        - img "太阳"
+        - generic [ref=e93]: 太阳
+      - button "月亮 月亮" [ref=e94] [cursor=pointer]:
+        - img "月亮"
+        - generic [ref=e95]: 月亮
+      - button "星星 星星" [ref=e96] [cursor=pointer]:
+        - img "星星"
+        - generic [ref=e97]: 星星
+      - button "云朵 云朵" [ref=e98] [cursor=pointer]:
+        - img "云朵"
+        - generic [ref=e99]: 云朵
+      - button "彩虹 彩虹" [ref=e100] [cursor=pointer]:
+        - img "彩虹"
+        - generic [ref=e101]: 彩虹
+      - button "花朵 花朵" [ref=e102] [cursor=pointer]:
+        - img "花朵"
+        - generic [ref=e103]: 花朵
+      - button "大树 大树" [ref=e104] [cursor=pointer]:
+        - img "大树"
+        - generic [ref=e105]: 大树
+      - button "蘑菇 蘑菇" [ref=e106] [cursor=pointer]:
+        - img "蘑菇"
+        - generic [ref=e107]: 蘑菇
+      - button "叶子 叶子" [ref=e108] [cursor=pointer]:
+        - img "叶子"
+        - generic [ref=e109]: 叶子
+      - button "雪花 雪花" [ref=e110] [cursor=pointer]:
+        - img "雪花"
+        - generic [ref=e111]: 雪花
+      - button "火焰 火焰" [ref=e112] [cursor=pointer]:
+        - img "火焰"
+        - generic [ref=e113]: 火焰
+      - button "水滴 水滴" [ref=e114] [cursor=pointer]:
+        - img "水滴"
+        - generic [ref=e115]: 水滴
+      - button "闪电 闪电" [ref=e116] [cursor=pointer]:
+        - img "闪电"
+        - generic [ref=e117]: 闪电
+      - button "旋风 旋风" [ref=e118] [cursor=pointer]:
+        - img "旋风"
+        - generic [ref=e119]: 旋风
+      - button "蛋糕 蛋糕" [ref=e120] [cursor=pointer]:
+        - img "蛋糕"
+        - generic [ref=e121]: 蛋糕
+      - button "冰淇淋 冰淇淋" [ref=e122] [cursor=pointer]:
+        - img "冰淇淋"
+        - generic [ref=e123]: 冰淇淋
+      - button "棒棒糖 棒棒糖" [ref=e124] [cursor=pointer]:
+        - img "棒棒糖"
+        - generic [ref=e125]: 棒棒糖
+      - button "苹果 苹果" [ref=e126] [cursor=pointer]:
+        - img "苹果"
+        - generic [ref=e127]: 苹果
+      - button "饼干 饼干" [ref=e128] [cursor=pointer]:
+        - img "饼干"
+        - generic [ref=e129]: 饼干
+      - button "披萨 披萨" [ref=e130] [cursor=pointer]:
+        - img "披萨"
+        - generic [ref=e131]: 披萨
+      - button "葡萄 葡萄" [ref=e132] [cursor=pointer]:
+        - img "葡萄"
+        - generic [ref=e133]: 葡萄
+      - button "柠檬 柠檬" [ref=e134] [cursor=pointer]:
+        - img "柠檬"
+        - generic [ref=e135]: 柠檬
+      - button "樱桃 樱桃" [ref=e136] [cursor=pointer]:
+        - img "樱桃"
+        - generic [ref=e137]: 樱桃
+      - button "咖啡 咖啡" [ref=e138] [cursor=pointer]:
+        - img "咖啡"
+        - generic [ref=e139]: 咖啡
+      - button "牛奶 牛奶" [ref=e140] [cursor=pointer]:
+        - img "牛奶"
+        - generic [ref=e141]: 牛奶
+      - button "鸡蛋 鸡蛋" [ref=e142] [cursor=pointer]:
+        - img "鸡蛋"
+        - generic [ref=e143]: 鸡蛋
+      - button "火箭 火箭" [ref=e144] [cursor=pointer]:
+        - img "火箭"
+        - generic [ref=e145]: 火箭
+      - button "飞机 飞机" [ref=e146] [cursor=pointer]:
+        - img "飞机"
+        - generic [ref=e147]: 飞机
+      - button "汽车 汽车" [ref=e148] [cursor=pointer]:
+        - img "汽车"
+        - generic [ref=e149]: 汽车
+      - button "火车 火车" [ref=e150] [cursor=pointer]:
+        - img "火车"
+        - generic [ref=e151]: 火车
+      - button "轮船 轮船" [ref=e152] [cursor=pointer]:
+        - img "轮船"
+        - generic [ref=e153]: 轮船
+      - button "直升机 直升机" [ref=e154] [cursor=pointer]:
+        - img "直升机"
+        - generic [ref=e155]: 直升机
+      - button "热气球 热气球" [ref=e156] [cursor=pointer]:
+        - img "热气球"
+        - generic [ref=e157]: 热气球
+      - button "帆船 帆船" [ref=e158] [cursor=pointer]:
+        - img "帆船"
+        - generic [ref=e159]: 帆船
+      - button "巴士 巴士" [ref=e160] [cursor=pointer]:
+        - img "巴士"
+        - generic [ref=e161]: 巴士
+      - button "礼物 礼物" [ref=e162] [cursor=pointer]:
+        - img "礼物"
+        - generic [ref=e163]: 礼物
+      - button "皇冠 皇冠" [ref=e164] [cursor=pointer]:
+        - img "皇冠"
+        - generic [ref=e165]: 皇冠
+      - button "气球 气球" [ref=e166] [cursor=pointer]:
+        - img "气球"
+        - generic [ref=e167]: 气球
+      - button "音符 音符" [ref=e168] [cursor=pointer]:
+        - img "音符"
+        - generic [ref=e169]: 音符
+      - button "星星魔法 星星魔法" [ref=e170] [cursor=pointer]:
+        - img "星星魔法"
+        - generic [ref=e171]: 星星魔法
+      - button "奖杯 奖杯" [ref=e172] [cursor=pointer]:
+        - img "奖杯"
+        - generic [ref=e173]: 奖杯
+      - button "钻石 钻石" [ref=e174] [cursor=pointer]:
+        - img "钻石"
+        - generic [ref=e175]: 钻石
+      - button "旗帜 旗帜" [ref=e176] [cursor=pointer]:
+        - img "旗帜"
+        - generic [ref=e177]: 旗帜
+      - button "星星 星星" [ref=e178] [cursor=pointer]:
+        - img "星星"
+        - generic [ref=e179]: 星星
+      - button "爱心 爱心" [ref=e180] [cursor=pointer]:
+        - img "爱心"
+        - generic [ref=e181]: 爱心
+      - button "相机 相机" [ref=e182] [cursor=pointer]:
+        - img "相机"
+        - generic [ref=e183]: 相机
+      - button "书本 书本" [ref=e184] [cursor=pointer]:
+        - img "书本"
+        - generic [ref=e185]: 书本
+      - button "钥匙 钥匙" [ref=e186] [cursor=pointer]:
+        - img "钥匙"
+        - generic [ref=e187]: 钥匙
+      - button "放大镜 放大镜" [ref=e188] [cursor=pointer]:
+        - img "放大镜"
+        - generic [ref=e189]: 放大镜
+      - button "房屋 房屋" [ref=e190] [cursor=pointer]:
+        - img "房屋"
+        - generic [ref=e191]: 房屋
+      - button "钟表 钟表" [ref=e192] [cursor=pointer]:
+        - img "钟表"
+        - generic [ref=e193]: 钟表
+      - button "地球 地球" [ref=e194] [cursor=pointer]:
+        - img "地球"
+        - generic [ref=e195]: 地球
+      - button "王冠 王冠" [ref=e196] [cursor=pointer]:
+        - img "王冠"
+        - generic [ref=e197]: 王冠
+      - button "魔法 魔法" [ref=e198] [cursor=pointer]:
+        - img "魔法"
+        - generic [ref=e199]: 魔法
+      - button "笑脸 笑脸" [ref=e200] [cursor=pointer]:
+        - img "笑脸"
+        - generic [ref=e201]: 笑脸
+      - button "哭脸 哭脸" [ref=e202] [cursor=pointer]:
+        - img "哭脸"
+        - generic [ref=e203]: 哭脸
+      - button "惊讶 惊讶" [ref=e204] [cursor=pointer]:
+        - img "惊讶"
+        - generic [ref=e205]: 惊讶
+      - button "开心 开心" [ref=e206] [cursor=pointer]:
+        - img "开心"
+        - generic [ref=e207]: 开心
+      - button "眨眼 眨眼" [ref=e208] [cursor=pointer]:
+        - img "眨眼"
+        - generic [ref=e209]: 眨眼
+      - button "帅气 帅气" [ref=e210] [cursor=pointer]:
+        - img "帅气"
+        - generic [ref=e211]: 帅气
+      - button "可爱 可爱" [ref=e212] [cursor=pointer]:
+        - img "可爱"
+        - generic [ref=e213]: 可爱
+      - button "电话 电话" [ref=e214] [cursor=pointer]:
+        - img "电话"
+        - generic [ref=e215]: 电话
+      - button "邮件 邮件" [ref=e216] [cursor=pointer]:
+        - img "邮件"
+        - generic [ref=e217]: 邮件
+      - button "圆形 圆形" [ref=e218] [cursor=pointer]:
+        - img "圆形"
+        - generic [ref=e219]: 圆形
+      - button "方形 方形" [ref=e220] [cursor=pointer]:
+        - img "方形"
+        - generic [ref=e221]: 方形
+      - button "三角 三角" [ref=e222] [cursor=pointer]:
+        - img "三角"
+        - generic [ref=e223]: 三角
+      - button "爱心 爱心" [ref=e224] [cursor=pointer]:
+        - img "爱心"
+        - generic [ref=e225]: 爱心
+      - button "星形 星形" [ref=e226] [cursor=pointer]:
+        - img "星形"
+        - generic [ref=e227]: 星形
+      - button "菱形 菱形" [ref=e228] [cursor=pointer]:
+        - img "菱形"
+        - generic [ref=e229]: 菱形
+      - button "六边形 六边形" [ref=e230] [cursor=pointer]:
+        - img "六边形"
+        - generic [ref=e231]: 六边形
+      - button "五边形 五边形" [ref=e232] [cursor=pointer]:
+        - img "五边形"
+        - generic [ref=e233]: 五边形
+      - button "箭头上 箭头上" [ref=e234] [cursor=pointer]:
+        - img "箭头上"
+        - generic [ref=e235]: 箭头上
+      - button "箭头下 箭头下" [ref=e236] [cursor=pointer]:
+        - img "箭头下"
+        - generic [ref=e237]: 箭头下
+      - button "箭头左 箭头左" [ref=e238] [cursor=pointer]:
+        - img "箭头左"
+        - generic [ref=e239]: 箭头左
+      - button "箭头右 箭头右" [ref=e240] [cursor=pointer]:
+        - img "箭头右"
+        - generic [ref=e241]: 箭头右
+      - button "十字 十字" [ref=e242] [cursor=pointer]:
+        - img "十字"
+        - generic [ref=e243]: 十字
+      - button "晴天" [ref=e244] [cursor=pointer]:
+        - generic [ref=e246]: 晴天
+      - button "日落" [ref=e247] [cursor=pointer]:
+        - generic [ref=e249]: 日落
+      - button "星空" [ref=e250] [cursor=pointer]:
+        - generic [ref=e252]: 星空
+      - button "森林" [ref=e253] [cursor=pointer]:
+        - generic [ref=e255]: 森林
+      - button "粉色" [ref=e256] [cursor=pointer]:
+        - generic [ref=e258]: 粉色
+      - button "紫色" [ref=e259] [cursor=pointer]:
+        - generic [ref=e261]: 紫色
+      - button "暖白" [ref=e262] [cursor=pointer]:
+        - generic [ref=e264]: 暖白
+      - button "海洋" [ref=e265] [cursor=pointer]:
+        - generic [ref=e267]: 海洋
+    - generic [ref=e66]:
+      - generic:
+        - generic:
+          - img
+        - paragraph: 拖拽素材或画一画～
+    - textbox "描述一下你的作品？（选填）比如：我画了一只会飞的小鱼" [ref=e68]
+  - contentinfo [ref=e69]:
+    - generic [ref=e70]:
+      - paragraph [ref=e71]: Copyright © 2023 - 2026 kedouai.com. All Rights Reserved. 一个橙子 版权所有
+      - paragraph [ref=e72]:
+        - text: 备案号：
+        - link "粤ICP备2021031984号" [ref=e73] [cursor=pointer]:
+          - /url: https://beian.miit.gov.cn/
+        - text: "|"
+        - link "公安备案号：44030902002737号" [ref=e74] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44030902002737
+          - img [ref=e75]
+          - text: 公安备案号：44030902002737号

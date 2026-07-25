@@ -1,20 +1,39 @@
 <view class="container">
   <!-- Logo -->
   <view class="app-logo">
-    <image class="logo-img" src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjEwIDExMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjEwIiBoZWlnaHQ9IjExMCIgcng9IjU1IiBmaWxsPSIjRjk3MzE2Ii8+PHBhdGggZD0iTSAxMDUgMTggQyAxMjcgMTgsIDEzOSAzNCwgMTM5IDYwIEMgMTM5IDkwLCAxMjEgMTAyLCAxMDUgMTAyIEMgODcgMTAyLCA3MSA4OCwgNzEgNjAgQyA3MSAzMiwgODcgMTgsIDEwNSAxOCBaIiBmaWxsPSJ3aGl0ZSIvPjxjaXJjbGUgY3g9IjEwNSIgY3k9IjYwIiByPSI5IiBmaWxsPSIjRjk3MzE2Ii8+PGNpcmNsZSBjeD0iMTA1IiBjeT0iNTgiIHI9IjMuNSIgZmlsbD0iI0ZERTY4QSIvPjxwYXRoIGQ9Ik0gMTA1IDE4IFEgMTA1IDEwLCAxMDUgNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEwNSIgY3k9IjYiIHI9IjMuNSIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" mode="aspectFit" />
     <text class="logo-text">科豆 AI</text>
   </view>
 
   <view class="scan-area">
-    <text class="scan-title">扫码登录</text>
-    <text class="scan-tip">请使用微信扫描二维码</text>
-    <view class="qrcode-box">
-      <canvas class="qrcode" canvas-id="qrcode" type="2d" wx:if="{{!token}}"/>
-      <view class="qrcode-placeholder" wx:else>
-        <text class="qr-icon">✅</text>
-        <text class="qr-text">已扫码</text>
-        <text class="qr-sub">请在手机上确认登录</text>
-      </view>
+    <text class="scan-title">扫码登录 PC 网页</text>
+    <text class="scan-tip">{{statusTip}}</text>
+
+    <view class="action-box" wx:if="{{status === 'idle'}}">
+      <image class="scan-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjMgMTlhMiAyIDAgMCAxLTIgMkgzYTIgMiAwIDAgMS0yLTJWOGEyIDIgMCAwIDEgMi0yaDRsMi0zaDZsMiAzaDRhMiAyIDAgMCAxIDIgMnoiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEzIiByPSI0Ii8+PC9zdmc+" mode="aspectFit" />
+      <text class="action-hint">点击下方按钮，扫描 PC 网页上的二维码</text>
+      <button class="scan-btn" bindtap="startScan">扫一扫</button>
+    </view>
+
+    <view class="action-box" wx:elif="{{status === 'scanning'}}">
+      <image class="scan-icon loading" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjEgMTJhOSA5IDAgMSAxLTYuMjE5LTguNTYiLz48L3N2Zz4=" mode="aspectFit" />
+      <text class="action-hint">正在扫描...</text>
+    </view>
+
+    <view class="action-box" wx:elif="{{status === 'confirming'}}">
+      <image class="scan-icon loading" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjEgMTJhOSA5IDAgMSAxLTYuMjE5LTguNTYiLz48L3N2Zz4=" mode="aspectFit" />
+      <text class="action-hint">登录确认中...</text>
+    </view>
+
+    <view class="action-box" wx:elif="{{status === 'success'}}">
+      <image class="scan-icon success" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM3RUQ5NTciIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIi8+PC9zdmc+" mode="aspectFit" />
+      <text class="action-hint success-text">登录成功</text>
+      <text class="action-sub">PC 网页将自动登录</text>
+    </view>
+
+    <view class="action-box" wx:elif="{{status === 'fail'}}">
+      <image class="scan-icon fail" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjUyNTIiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PGxpbmUgeDE9IjE1IiB5MT0iOSIgeDI9IjkiIHkyPSIxNSIvPjxsaW5lIHgxPSI5IiB5MT0iOSIgeDI9IjE1IiB5Mj0iMTUiLz48L3N2Zz4=" mode="aspectFit" />
+      <text class="action-hint fail-text">{{errorMsg || '登录失败'}}</text>
+      <button class="scan-btn" bindtap="startScan">重新扫码</button>
     </view>
   </view>
 </view>

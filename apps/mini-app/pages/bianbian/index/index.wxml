@@ -11,21 +11,21 @@
 
   <!-- 开始创作卡片 -->
   <view class="card card-create" bindtap="goCreate">
-    <text class="card-icon">🎨</text>
+    <image class="card-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTMuNSIgY3k9IjYuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTcuNSIgY3k9IjEwLjUiIHI9IjEuNSIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjcuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iNi41IiBjeT0iMTIuNSIgcj0iMS41Ii8+PHBhdGggZD0iTTEyIDJDNi41IDIgMiA2LjUgMiAxMnM0LjUgMTAgMTAgMTBjLjkzIDAgMS41LS42NyAxLjUtMS41IDAtLjM5LS4xNS0uNzQtLjM5LTEuMDEtLjIzLS4yNi0uMzgtLjYxLS4zOC0xIDAtLjgzLjY3LTEuNSAxLjUtMS41SDE2YzMuMzEgMCA2LTIuNjkgNi02IDAtNS41LTQuNS0xMC0xMC0xMHoiLz48L3N2Zz4=" mode="aspectFit" />
     <text class="card-title">开始创作</text>
     <text class="card-desc">拼一拼，变一变</text>
   </view>
 
   <!-- 我的变变卡片 -->
   <view class="card card-history" bindtap="goHistory">
-    <text class="card-icon">📁</text>
+    <image class="card-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyIDE5YTIgMiAwIDAgMS0yIDJINGEyIDIgMCAwIDEtMi0yVjVhMiAyIDAgMCAxIDItMmg1bDIgM2g5YTIgMiAwIDAgMSAyIDJ6Ii8+PC9zdmc+" mode="aspectFit" />
     <text class="card-title">我的变变</text>
     <text class="card-desc">看我变过的角色</text>
   </view>
 
   <!-- 上次创作提示 -->
   <view wx:if="{{hasDraft}}" class="draft-hint" bindtap="resumeDraft">
-    <text class="draft-icon">💡</text>
+    <image class="draft-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE1IDE0Yy4yLTEgLjctMS43IDEuNS0yLjUgMS0uOSAxLjUtMi4yIDEuNS0zLjVBNiA2IDAgMCAwIDYgOGMwIDEgLjIgMi4yIDEuNSAzLjVDNy45IDEyLjEgOC43IDEyLjggOSAxNE05IDE4aDZNMTAgMjJoNCIvPjwvc3ZnPg==" mode="aspectFit" />
     <text class="draft-text">上次创作 {{draftTime}} · 点击继续</text>
   </view>
 </view>

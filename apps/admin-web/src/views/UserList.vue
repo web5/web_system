@@ -99,31 +99,35 @@
             <span class="time-text">{{ formatDate(record.createdAt) }}</span>
           </template>
           <template v-if="column.key === 'action'">
-            <a-space :size="4">
-              <a-button type="link" size="small" @click="viewUser(record)">
-                <template #icon><EyeOutlined /></template>
-              </a-button>
-              <a-button type="link" size="small" @click="editUser(record)">
-                <template #icon><EditOutlined /></template>
-              </a-button>
-              <a-button type="link" size="small" :disabled="record.role === 'admin'" @click="toggleStat(record)">
-                <template #icon>
-                  <PauseCircleOutlined v-if="record.enabled" />
-                  <PlayCircleOutlined v-else />
-                </template>
-              </a-button>
-              <a-popconfirm
-                title="确定要删除该用户吗？"
-                description="删除后数据将不可恢复"
-                ok-text="确定删除"
-                cancel-text="取消"
-                :ok-button-props="{ danger: true }"
-                @confirm="handleDelete(record)"
-              >
-                <a-button type="link" size="small" danger :disabled="record.role === 'admin'">
-                  <template #icon><DeleteOutlined /></template>
+            <a-space :size="2">
+              <a-button type="link" size="small" @click="viewUser(record)">查看</a-button>
+              <a-button type="link" size="small" @click="editUser(record)">编辑</a-button>
+              <a-dropdown placement="bottomRight" :trigger="['click']">
+                <a-button type="link" size="small">
+                  <template #icon><MoreOutlined /></template>
                 </a-button>
-              </a-popconfirm>
+                <template #overlay>
+                  <a-menu @click="({ key }: { key: string }) => handleMenuAction(key, record)">
+                    <a-menu-item key="quota">
+                      <SettingOutlined />
+                      <span class="menu-item-text">配额设置</span>
+                    </a-menu-item>
+                    <a-menu-item
+                      key="toggle"
+                      :disabled="record.role === 'admin'"
+                    >
+                      <PauseCircleOutlined v-if="record.enabled" />
+                      <PlayCircleOutlined v-else />
+                      <span class="menu-item-text">{{ record.enabled ? '禁用' : '启用' }}</span>
+                    </a-menu-item>
+                    <a-menu-divider />
+                    <a-menu-item key="delete" danger :disabled="record.role === 'admin'">
+                      <DeleteOutlined />
+                      <span class="menu-item-text">删除</span>
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
             </a-space>
           </template>
         </template>
@@ -188,21 +192,51 @@
         </div>
       </a-form>
     </a-modal>
+
+    <!-- 设置配额弹窗 -->
+    <a-modal
+      v-model:open="quotaVisible"
+      title="设置变变使用配额"
+      width="420px"
+      :confirm-loading="quotaLoading"
+      @ok="saveQuota"
+      @cancel="quotaVisible = false"
+    >
+      <p>用户：{{ quotaRecord?.username }}</p>
+      <a-form layout="vertical">
+        <a-form-item label="每日变身次数限制">
+          <a-input-number
+            v-model:value="quotaValue"
+            :min="0"
+            style="width: 100%"
+            placeholder="留空表示使用全局默认"
+          />
+        </a-form-item>
+      </a-form>
+      <template #footer>
+        <a-button @click="quotaVisible = false">取消</a-button>
+        <a-button type="primary" :loading="quotaLoading" @click="saveQuota">保存</a-button>
+      </template>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   PlusOutlined, TeamOutlined, SafetyOutlined, CheckCircleOutlined,
-  SearchOutlined, ReloadOutlined, UserOutlined, EyeOutlined,
+  SearchOutlined, ReloadOutlined, UserOutlined,
   EditOutlined, PauseCircleOutlined, PlayCircleOutlined,
-  DeleteOutlined, CloseOutlined, UserAddOutlined,
+  DeleteOutlined, CloseOutlined, UserAddOutlined, SettingOutlined,
+  MoreOutlined,
 } from '@ant-design/icons-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
 import dayjs from 'dayjs';
+
+const router = useRouter();
 
 interface User {
   id: number | string;
@@ -211,8 +245,10 @@ interface User {
   phone?: string;
   nickname?: string;
   avatar?: string;
+  gender?: 'male' | 'female' | 'unknown';
   role: string;
   enabled: boolean;
+  dailyTransformLimit?: number | null;
   createdAt: string;
 }
 
@@ -223,8 +259,14 @@ const searchText = ref('');
 const modalVisible = ref(false);
 const modalTitle = ref('新增用户');
 const editingId = ref<string | number | null>(null);
+const quotaVisible = ref(false);
+const quotaLoading = ref(false);
+const quotaRecord = ref<User | null>(null);
+const quotaValue = ref<number | null>(null);
 
-const DEFAULT_AVATAR = '/avatars/default-avatar.png';
+function defaultAvatar(gender?: string) {
+  return gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+}
 
 const formData = reactive<any>({
   username: '',
@@ -284,7 +326,7 @@ async function fetchUsers() {
     });
     userList.value = (res.list || []).map((user: any) => ({
       ...user,
-      avatar: user.avatar || DEFAULT_AVATAR,
+      avatar: user.avatar || defaultAvatar(user.gender),
       role: user.role || 'user',
       enabled: user.enabled !== undefined ? user.enabled : true,
       createdAt: user.createdAt || '',
@@ -319,7 +361,28 @@ function showAddModal() {
 }
 
 function viewUser(record: User) {
-  window.location.hash = `/users/${record.id}`;
+  router.push(`/users/${record.id}`);
+}
+
+function openQuotaModal(record: User) {
+  quotaRecord.value = record;
+  quotaValue.value = (record as any).dailyTransformLimit ?? null;
+  quotaVisible.value = true;
+}
+
+async function saveQuota() {
+  if (!quotaRecord.value) return;
+  quotaLoading.value = true;
+  try {
+    await updateUser(String(quotaRecord.value.id), { dailyTransformLimit: quotaValue.value });
+    message.success('配额设置成功');
+    quotaVisible.value = false;
+    fetchUsers();
+  } catch {
+    message.error('配额设置失败');
+  } finally {
+    quotaLoading.value = false;
+  }
 }
 
 function editUser(record: User) {
@@ -369,6 +432,27 @@ async function toggleStat(record: User) {
     message.error('操作失败');
   }
 }
+
+function handleMenuAction(key: string, record: User) {
+  switch (key) {
+    case 'quota':
+      openQuotaModal(record);
+      break;
+    case 'toggle':
+      toggleStat(record);
+      break;
+    case 'delete':
+      Modal.confirm({
+        title: '确定要删除该用户吗？',
+        content: '删除后数据将不可恢复',
+        okText: '确定删除',
+        cancelText: '取消',
+        okButtonProps: { danger: true },
+        onOk: () => handleDelete(record),
+      });
+      break;
+  }
+}
 </script>
 
 <style scoped>
@@ -385,10 +469,10 @@ async function toggleStat(record: User) {
 }
 .page-header-left { flex: 1; }
 .page-title {
-  margin: 0; font-size: 22px; font-weight: 700; color: #F1F5F9; letter-spacing: -.3px;
+  margin: 0; font-size: 22px; font-weight: 700; color: var(--text-heading); letter-spacing: -.3px;
 }
 .page-subtitle {
-  margin: 4px 0 0; font-size: 13px; color: #64748B;
+  margin: 4px 0 0; font-size: 13px; color: var(--text-muted);
 }
 
 /* 统计卡片 */
@@ -397,7 +481,7 @@ async function toggleStat(record: User) {
 }
 .mini-stat {
   display: flex; align-items: center; gap: 14px;
-  padding: 16px 20px; border-radius: 12px;
+  padding: 16px 20px; border-radius: 4px;
   background: linear-gradient(135deg, rgba(255,140,66,.06) 0%, rgba(255,140,66,.02) 100%);
   border: 1px solid rgba(255,140,66,.08);
   transition: all .25s;
@@ -408,7 +492,7 @@ async function toggleStat(record: User) {
   transform: translateY(-1px);
 }
 .mini-stat-icon {
-  width: 42px; height: 42px; border-radius: 10px;
+  width: 42px; height: 42px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; color: #FF8C42; background: rgba(255,140,66,.12);
   flex-shrink: 0;
@@ -419,10 +503,10 @@ async function toggleStat(record: User) {
   display: flex; flex-direction: column;
 }
 .mini-stat-value {
-  font-size: 22px; font-weight: 700; color: #F1F5F9; line-height: 1.2;
+  font-size: 22px; font-weight: 700; color: var(--text-heading); line-height: 1.2;
 }
 .mini-stat-label {
-  font-size: 12px; color: #64748B; margin-top: 2px;
+  font-size: 12px; color: var(--text-muted); margin-top: 2px;
 }
 
 /* 工具栏 */
@@ -430,49 +514,49 @@ async function toggleStat(record: User) {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 16px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06);
-  border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
 }
 .search-input {
   max-width: 360px;
 }
 .search-input :deep(.ant-input) {
-  background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08);
-  color: #E2E8F0;
+  background: var(--input-bg); border-color: var(--input-border);
+  color: var(--input-text);
 }
-.search-input :deep(.ant-input::placeholder) { color: #475569; }
+.search-input :deep(.ant-input::placeholder) { color: var(--input-placeholder); }
 .search-input :deep(.ant-input-affix-wrapper) {
-  background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08); border-radius: 8px;
+  background: var(--input-bg); border-color: var(--input-border); border-radius: 4px;
 }
 .search-input :deep(.ant-input-affix-wrapper:hover),
 .search-input :deep(.ant-input-affix-wrapper:focus),
 .search-input :deep(.ant-input-affix-wrapper-focused) {
   border-color: rgba(255,140,66,.4); box-shadow: 0 0 0 2px rgba(255,140,66,.12);
 }
-.search-icon { color: #64748B; }
+.search-icon { color: var(--text-muted); }
 .toolbar-actions { margin-left: auto; }
 
 /* 表格区域 */
 .table-card {
-  background: linear-gradient(135deg, #141419 0%, #16161C 100%);
-  border: 1px solid rgba(255,255,255,.06); border-radius: 12px;
+  background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
+  border: 1px solid var(--card-border); border-radius: 4px;
   padding: 8px;
   overflow: hidden;
 }
 .table-card :deep(.ant-table) {
-  background: transparent; color: #E2E8F0;
+  background: transparent; color: var(--text-body);
 }
 .table-card :deep(.ant-table-thead > tr > th) {
-  background: rgba(255,255,255,.03); color: #94A3B8;
+  background: var(--table-header-bg); color: var(--table-header-text);
   font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
-  border-bottom: 1px solid rgba(255,255,255,.06); padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light); padding: 12px 16px;
 }
 .table-card :deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid rgba(255,255,255,.03); padding: 10px 16px;
+  border-bottom: 1px solid var(--border-lighter); padding: 10px 16px;
 }
 .table-card :deep(.ant-table-tbody > tr:hover > td) {
-  background: rgba(255,140,66,.04) !important;
+  background: var(--table-hover-bg) !important;
 }
 .table-card :deep(.ant-table-tbody > tr:last-child > td) {
   border-bottom: none;
@@ -489,34 +573,36 @@ async function toggleStat(record: User) {
 .user-cell {
   display: flex; flex-direction: column;
 }
-.user-name { font-weight: 600; color: #F1F5F9; font-size: 14px; }
-.user-nickname { font-size: 12px; color: #64748B; margin-top: 1px; }
+.user-name { font-weight: 600; color: var(--text-heading); font-size: 14px; }
+.user-nickname { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
 
-.status-text { margin-left: 6px; font-size: 13px; color: #94A3B8; }
-.time-text { font-size: 13px; color: #94A3B8; white-space: nowrap; }
+.status-text { margin-left: 6px; font-size: 13px; color: var(--text-tertiary); }
+.time-text { font-size: 13px; color: var(--text-tertiary); white-space: nowrap; }
 
 /* 弹窗 */
 .modal-header {
   text-align: center; margin-bottom: 28px; padding-top: 8px;
 }
 .modal-icon-wrap {
-  width: 56px; height: 56px; border-radius: 14px;
+  width: 56px; height: 56px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
   font-size: 24px; color: #FF8C42;
   background: linear-gradient(135deg, rgba(255,140,66,.15), rgba(255,140,66,.06));
   margin: 0 auto 14px;
 }
 .modal-title {
-  margin: 0; font-size: 18px; font-weight: 700; color: #0F172A;
+  margin: 0; font-size: 18px; font-weight: 700; color: var(--modal-title);
 }
 .user-form { padding: 0 8px; }
 
 .form-switch-label {
-  margin-left: 10px; font-size: 13px; color: #64748B;
+  margin-left: 10px; font-size: 13px; color: var(--text-muted);
 }
 .modal-footer {
   display: flex; justify-content: flex-end; gap: 12px;
   margin-top: 8px; padding-top: 16px;
-  border-top: 1px solid #F1F5F9;
+  border-top: 1px solid var(--border-divider);
 }
+
+.menu-item-text { margin-left: 6px; }
 </style>

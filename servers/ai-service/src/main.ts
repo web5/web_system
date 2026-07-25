@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +15,9 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  // 全局异常过滤器：统一响应格式 { code, message, data }
+  app.useGlobalFilters(new UnifiedExceptionFilter());
 
   // 启用 CORS
   app.enableCors({
@@ -34,7 +38,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3003;
   await app.listen(port);
-  console.log(`🤖 AI Service is running on: http://localhost:${port}`);
-  console.log(`📚 Swagger docs: http://localhost:${port}/api-docs`);
+  console.log(`[AI Service] AI Service is running on: http://localhost:${port}`);
+  console.log(`[AI Service] Swagger docs: http://localhost:${port}/api-docs`);
 }
 bootstrap();

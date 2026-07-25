@@ -62,7 +62,7 @@ export class ImageGenClient {
    * 提交图片生成任务
    */
   async submit(prompt: string): Promise<ImageSubmitResponse> {
-    const baseUrl = process.env.IMAGE_GEN_BASE_URL || 'https://tokenhub.tencentmaas.com';
+    const baseUrl = process.env.IMAGE_GEN_API_URL || process.env.IMAGE_GEN_BASE_URL || 'https://tokenhub.tencentmaas.com';
     const apiKey = process.env.IMAGE_GEN_API_KEY;
 
     if (!apiKey) {
@@ -101,7 +101,7 @@ export class ImageGenClient {
    * 查询图片生成结果
    */
   async query(taskId: string): Promise<ImageQueryResult> {
-    const baseUrl = process.env.IMAGE_GEN_BASE_URL || 'https://tokenhub.tencentmaas.com';
+    const baseUrl = process.env.IMAGE_GEN_API_URL || process.env.IMAGE_GEN_BASE_URL || 'https://tokenhub.tencentmaas.com';
     const apiKey = process.env.IMAGE_GEN_API_KEY;
 
     if (!apiKey) {
@@ -144,7 +144,7 @@ export class ImageGenClient {
         results: raw.data?.map((item) => ({
           url: item.url,
           revised_prompt: item.revised_prompt,
-        })),
+        })) ?? [],
         done: raw.status === 'completed' || raw.status === 'failed',
       };
     } catch (error) {

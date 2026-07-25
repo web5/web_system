@@ -5,6 +5,8 @@ import { HttpModule } from '@nestjs/axios';
 import { AiModule } from './ai/ai.module';
 import { ConversationModule } from './conversation/conversation.module';
 import { BianbianModule } from './bianbian/bianbian.module';
+import { ArtworksModule } from './artworks/artworks.module';
+import { TtsModule } from './tts/tts.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { BianbianModule } from './bianbian/bianbian.module';
     AiModule,
     ConversationModule,
     BianbianModule,
+    ArtworksModule,
+    TtsModule,
   ],
 })
 export class AppModule {}

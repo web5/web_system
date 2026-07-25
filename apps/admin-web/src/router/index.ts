@@ -57,8 +57,10 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
+// 注意：base 必须与 vite.config.ts 的 `base` 配置一致（'/admin/'），
+// 否则路由解析的路径前缀会与 URL 实际前缀错位，导致页面白屏、菜单点击无反应。
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/admin/'),
   routes,
 });
 
@@ -80,7 +82,13 @@ router.beforeEach((to, from, next) => {
   if (perm) {
     const allowedPerms = userRoles.flatMap((r: string) => (ROLE_PERMISSIONS as Record<string, string[]>)[r] || []);
     if (!allowedPerms.includes(perm)) {
-      next('/dashboard');
+      // 没有目标权限时跳到 /dashboard —— 但要避免和 /dashboard 自身形成死循环
+      // 如果当前目标已经是 /dashboard（或其子路由），改为重定向到登录页
+      if (to.path.startsWith('/dashboard')) {
+        next('/login');
+      } else {
+        next('/dashboard');
+      }
       return;
     }
   }

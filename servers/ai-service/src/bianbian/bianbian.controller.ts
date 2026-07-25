@@ -1,7 +1,11 @@
-import { Controller, Post, Get, Delete, Body, Param, Query, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, Query, Res, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
+import * as path from 'path';
+import * as fs from 'fs';
 import { BianbianService } from './bianbian.service';
 import { TransformDto } from './dto/transform.dto';
+import { BusinessException } from '../common/exceptions/business.exception';
 
 @ApiTags('变变 AI 变身')
 @Controller('bianbian')
@@ -14,25 +18,37 @@ export class BianbianController {
   @Post('transform')
   @ApiOperation({ summary: '变变 AI 变身 - 上传拼接作品，生成 3D 角色' })
   @ApiResponse({ status: 200, description: '成功生成 3D 角色' })
-  @ApiResponse({ status: 400, description: '参数错误或次数用完' })
+  @ApiResponse({ status: 200, description: '业务错误：code 非 0' })
   async transform(@Body() dto: TransformDto) {
     this.logger.log(
       `Transform request: userId=${dto.userId || 'anonymous'}, style=${dto.style}, size=${dto.outputSize}`,
     );
 
-    const result = await this.bianbianService.transform(dto);
-
-    return {
-      code: 0,
-      message: 'success',
-      data: result,
-    };
+    try {
+      const result = await this.bianbianService.transform(dto);
+      return {
+        code: 0,
+        message: 'success',
+        data: result,
+      };
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        return { code: error.code, message: error.message, data: null };
+      }
+      this.logger.error(`Transform failed: ${error.message}`);
+      return { code: 5000, message: '变身失败，请稍后重试', data: null };
+    }
   }
 
   @Get('quota/:userId')
   @ApiOperation({ summary: '查询用户当日剩余变身次数' })
-  async getQuota(@Param('userId') userId: string) {
-    const quota = await this.bianbianService.getRemainingToday(userId);
+  @ApiQuery({ name: 'roles', required: false, description: '用户角色，逗号分隔' })
+  async getQuota(
+    @Param('userId') userId: string,
+    @Query('roles') roles?: string,
+  ) {
+    const roleList = roles ? roles.split(',').filter(Boolean) : [];
+    const quota = await this.bianbianService.getRemainingToday(userId, roleList);
     return {
       code: 0,
       data: quota,
@@ -76,33 +92,28 @@ export class BianbianController {
 
   @Get('materials')
   @ApiOperation({ summary: '获取公开素材列表（供 Portal/小程序使用）' })
-  getMaterials() {
-    // 与小程序 bianbian-constants.ts 保持一致的默认素材
-    const materials = [
-      // 贴纸
-      { id: 's1', category: 'sticker', name: '笑脸', icon: '😊' },
-      { id: 's2', category: 'sticker', name: '小猫', icon: '🐱' },
-      { id: 's3', category: 'sticker', name: '小狗', icon: '🐶' },
-      { id: 's4', category: 'sticker', name: '兔子', icon: '🐰' },
-      { id: 's5', category: 'sticker', name: '小熊', icon: '🐻' },
-      { id: 's6', category: 'sticker', name: '熊猫', icon: '🐼' },
-      { id: 's7', category: 'sticker', name: '星星', icon: '⭐' },
-      { id: 's8', category: 'sticker', name: '彩虹', icon: '🌈' },
-      { id: 's9', category: 'sticker', name: '月亮', icon: '🌙' },
-      { id: 's10', category: 'sticker', name: '太阳', icon: '☀️' },
-      { id: 's11', category: 'sticker', name: '云朵', icon: '☁️' },
-      { id: 's12', category: 'sticker', name: '花花', icon: '🌸' },
-      // 形状
-      { id: 'sh1', category: 'shape', name: '爱心', icon: '❤️' },
-      { id: 'sh2', category: 'shape', name: '圆形', icon: '🟠' },
-      { id: 'sh3', category: 'shape', name: '钻石', icon: '💎' },
-      { id: 'sh4', category: 'shape', name: '三角', icon: '🔺' },
-      // 背景
-      { id: 'bg1', category: 'background', name: '草地', icon: '🟢' },
-      { id: 'bg2', category: 'background', name: '天空', icon: '🔵' },
-      { id: 'bg3', category: 'background', name: '粉色', icon: '🩷' },
-    ];
-    return { code: 0, data: materials };
+  async getMaterials() {
+    try {
+      const materials = await this.bianbianService.getMaterials();
+      return { code: 0, data: materials };
+    } catch (err) {
+      this.logger.warn(`获取素材失败，前端将使用内置 SVG 素材: ${err.message}`);
+      return { code: 5001, data: null, message: '素材服务暂不可用' };
+    }
+  }
+
+  // ========== 管理员接口（内部调用） ==========
+
+  /** 供 MaaS 服务器读取的临时参考图片（内部 URL，无需鉴权） */
+  @Get('temp-image/:filename')
+  @ApiOperation({ summary: '获取临时参考图片（内部使用）' })
+  async serveTempImage(@Param('filename') filename: string, @Res() res: Response) {
+    const safeName = path.basename(filename);
+    const filePath = path.join(process.cwd(), 'temp-images', safeName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ code: 404, message: '图片不存在或已过期' });
+    }
+    return res.sendFile(filePath);
   }
 
   // ========== 管理员接口（内部调用） ==========

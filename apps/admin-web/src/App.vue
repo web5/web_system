@@ -5,17 +5,26 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from 'vue';
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
-import type { ThemeConfig } from 'ant-design-vue/es/config-provider/context';
+import { theme } from 'ant-design-vue';
+import { useThemeStore } from '@/stores/theme';
 
-const themeConfig: ThemeConfig = {
+const themeStore = useThemeStore();
+
+onMounted(() => {
+  themeStore.initTheme();
+});
+
+const themeConfig = computed(() => ({
+  algorithm: themeStore.isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
   token: {
     colorPrimary: '#FF8C42',
     colorLink: '#FF8C42',
     colorSuccess: '#7ED957',
-    borderRadius: 12,
+    borderRadius: 4,
   },
-};
+}));
 </script>
 
 <style>

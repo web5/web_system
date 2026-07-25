@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual } from 'typeorm';
+import { Repository, Between, LessThanOrEqual, FindOptionsWhere } from 'typeorm';
 import { OperationLog } from '../config/operation-log.entity';
 
 interface LogInput {
@@ -34,7 +34,7 @@ export class OperationLogsService {
   async query(params: LogQuery) {
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 20));
-    const where: any = {};
+    const where: FindOptionsWhere<OperationLog> = {};
 
     if (params.operator) where.operator = params.operator;
     if (params.type) where.type = params.type;
@@ -62,7 +62,7 @@ export class OperationLogsService {
   /** 清理超过 days 天的旧日志 */
   async cleanOld(days = 90): Promise<number> {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const result = await this.repo.delete({ createdAt: LessThanOrEqual(cutoff) } as any);
+    const result = await this.repo.delete({ createdAt: LessThanOrEqual(cutoff) });
     return result.affected || 0;
   }
 }

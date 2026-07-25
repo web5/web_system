@@ -22,7 +22,7 @@ async function uploadApp() {
   const projectPath = path.join(__dirname, '..');
   
   if (!privateKey) {
-    console.error('❌ 缺少私钥文件，请将私钥保存为 private.key');
+    console.error('[Upload] 缺少私钥文件，请将私钥保存为 private.key');
     process.exit(1);
   }
 
@@ -40,8 +40,8 @@ async function uploadApp() {
   };
 
   try {
-    console.log('🚀 开始上传...');
-    console.log(`📦 版本号: ${version}`);
+    console.log('[Upload] 开始上传...');
+    console.log(`[Upload] 版本号: ${version}`);
     
     const uploadResult = await upload({
       ...config,
@@ -56,13 +56,13 @@ async function uploadApp() {
       },
     });
 
-    console.log('✅ 上传成功!');
-    console.log(`🔢 上传后版本: ${uploadResult.version}`);
-    console.log('💡 请到微信公众平台提交审核');
+    console.log('[Upload] 上传成功!');
+    console.log(`[Upload] 上传后版本: ${uploadResult.version}`);
+    console.log('[Upload] 请到微信公众平台提交审核');
   } catch (error) {
-    console.error('❌ 上传失败:', error.message);
+    console.error('[Upload] 上传失败:', error.message);
     if (error.message.includes('private key')) {
-      console.log('\n💡 请确保:');
+      console.log('[Upload] 请确保:');
       console.log('   1. 已在项目根目录创建 private.key 文件');
       console.log('   2. 私钥文件内容正确');
       console.log('   3. 已在微信公众平台配置项目成员');

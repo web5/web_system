@@ -35,13 +35,13 @@ export async function login(): Promise<void> {
       timeout: 10000,
     });
 
-    if (res.statusCode === 200 && res.data) {
+    if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
       const data = res.data as { accessToken: string; refreshToken: string; user: { id: number; nickname: string; avatarUrl: string } };
       setToken(data.accessToken, data.refreshToken);
       const app = getApp<IAppOption>();
       app.globalData.userInfo = data.user;
     } else {
-      throw new Error('登录接口返回异常');
+      throw new Error(`登录接口返回异常: ${res.statusCode}`);
     }
   } catch (err) {
     console.error('[auth] 登录失败:', err);

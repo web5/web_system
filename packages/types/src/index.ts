@@ -29,12 +29,24 @@ export interface LoginResponse {
   user: UserInfo;
 }
 
+export type Gender = 'male' | 'female' | 'unknown';
+
 export interface UserInfo {
   id: number;
   username: string;
   email?: string;
   avatar?: string;
+  nickname?: string;
+  phone?: string;
+  gender?: Gender;
   roles: string[];
+  /** 管理员后台用字段 */
+  role?: string;
+  enabled?: boolean;
+  /** 个人每日变身次数限制，null=使用全局默认 */
+  dailyTransformLimit?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Token 相关类型
@@ -120,6 +132,6 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   admin:  Object.keys(PERMISSIONS),
-  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view'],
-  viewer: ['dashboard:view', 'logs:view'],
+  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view'],
+  viewer: ['dashboard:view', 'logs:view', 'bianbian:view'],
 };

@@ -21,4 +21,10 @@ export function checkQrcodeTicket(ticket: string): Promise<QrcodeCheckResponse> 
   return request.get('/auth/qrcode/check', { params: { ticket } });
 }
 
-
+/** 获取微信 OAuth 授权 URL（用于二维码内容） */
+export interface OAuthUrlResponse {
+  oauthUrl: string;
+}
+export function getQrcodeOAuthUrl(ticket: string, redirect?: string): Promise<OAuthUrlResponse> {
+  return request.get('/auth/qrcode/oauth-url', { params: { ticket, redirect } });
+}

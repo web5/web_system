@@ -104,6 +104,6 @@ export function batchToggleMaterials(
 
 // ========== 初始化 ==========
 
-export function seedMaterials(): Promise<ApiResponse<{ count: number }>> {
-  return request.post('/admin/bianbian/seed');
+export function seedMaterials(force = false): Promise<ApiResponse<{ count: number }>> {
+  return request.post('/admin/bianbian/seed', {}, { params: { force: force ? '1' : '0' } });
 }

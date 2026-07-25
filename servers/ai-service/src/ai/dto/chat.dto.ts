@@ -1,29 +1,39 @@
-import { IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNumber, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class MessageDto {
+class ChatMessageDto {
   @IsString()
-  role: 'user' | 'assistant' | 'system';
+  role: string;
 
   @IsString()
   content: string;
 }
 
 export class ChatDto {
-  @IsString()
-  message: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChatMessageDto)
+  messages: ChatMessageDto[];
 
+  /** 对话 ID，续传已有对话时传入 */
   @IsOptional()
   @IsString()
   conversationId?: string;
 
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => MessageDto)
-  messages?: MessageDto[];
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  temperature?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(128000)
+  maxTokens?: number;
+
+  /** 模型 ID，不传则使用默认模型 */
+  @IsOptional()
   @IsString()
-  userId?: string;
+  model?: string;
 }

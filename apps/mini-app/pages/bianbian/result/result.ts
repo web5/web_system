@@ -128,7 +128,7 @@ Page({
             ctx.fillStyle = '#FF8C42';
             ctx.font = 'bold 36px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('✨ 变变 · 把想象变出来', w / 2, 460);
+            ctx.fillText('变变 · 把想象变出来', w / 2, 460);
 
             // 底部水印
             ctx.fillStyle = '#DDD';

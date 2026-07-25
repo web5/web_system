@@ -71,6 +71,24 @@
       "projectFolder": "servers/ai-service",
       "shouldPublish": false,
       "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/todo-service",
+      "projectFolder": "servers/todo-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/system-service",
+      "projectFolder": "servers/system-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
+    },
+    {
+      "packageName": "@web-system/upload-service",
+      "projectFolder": "servers/upload-service",
+      "shouldPublish": false,
+      "reviewCategory": "production"
     }
   ]
 }

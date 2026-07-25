@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { Conversation } from './entities/conversation.entity';
 
 @Injectable()
@@ -54,7 +54,7 @@ export class ConversationService {
    * 获取对话列表
    */
   async getConversations(userId?: string) {
-    const where: any = {};
+    const where: FindOptionsWhere<Conversation> = {};
     if (userId) {
       where.userId = userId;
     }
@@ -106,11 +106,10 @@ export class ConversationService {
    * 清空所有对话
    */
   async clearConversations(userId?: string): Promise<void> {
-    const where: any = {};
+    const where: FindOptionsWhere<Conversation> = {};
     if (userId) {
       where.userId = userId;
     }
-
     await this.conversationRepository.delete(where);
   }
 }

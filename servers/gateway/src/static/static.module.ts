@@ -8,7 +8,15 @@ import { join } from 'path';
       rootPath: join(__dirname, '..', '..', 'public'),
       serveStaticOptions: {
         index: ['index.html'],
-        maxAge: 3600000, // 1 hour cache
+        // /assets/* 带 hash 的文件已经在上层中间件设了 immutable 缓存
+        // index.html 不做强缓存，保证部署后能获取最新资源路径
+        setHeaders: (res, path) => {
+          if (!path.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+        etag: true,
+        lastModified: true,
       },
     }),
   ],

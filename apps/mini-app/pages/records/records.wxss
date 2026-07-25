@@ -38,7 +38,7 @@
   background: linear-gradient(135deg, #111115 0%, #1E1B4B 100%);
   display: flex; align-items: center; justify-content: center;
 }
-.thumb-icon { font-size: 48rpx; }
+.thumb-icon { width: 48rpx; height: 48rpx; }
 .record-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 10rpx; }
 .record-name { font-size: 30rpx; font-weight: 600; color: #F8FAFC; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .record-time { font-size: 24rpx; color: #94A3B8; }
@@ -51,10 +51,10 @@
 .edit-btn.cancel { background: #18181B; color: #94A3B8; }
 
 .record-delete { width: 60rpx; height: 60rpx; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: 10rpx; }
-.delete-icon { font-size: 32rpx; opacity: 0.4; }
+.delete-icon { width: 32rpx; height: 32rpx; opacity: 0.4; }
 
 .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80rpx; }
-.empty-icon { font-size: 100rpx; margin-bottom: 24rpx; }
+.empty-icon { width: 100rpx; height: 100rpx; margin-bottom: 24rpx; }
 .empty-text { font-size: 30rpx; color: #94A3B8; margin-bottom: 40rpx; }
 .empty-btn { background: #F97316; color: #fff; font-size: 30rpx; border-radius: 40rpx; padding: 16rpx 60rpx; border: none; }
 .empty-btn::after { border: none; }

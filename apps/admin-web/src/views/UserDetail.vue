@@ -32,36 +32,76 @@
 
       <a-descriptions title="头像信息" :column="1" bordered>
         <a-descriptions-item label="头像">
-          <a-avatar :size="100" :src="user.avatar" v-if="user.avatar" />
-          <span v-else>未设置头像</span>
+          <a-avatar :size="100" :src="avatarSrc" />
         </a-descriptions-item>
       </a-descriptions>
+
+      <a-divider />
+
+      <div class="quota-section">
+        <h3>变变使用配额</h3>
+        <a-form layout="inline" @finish="saveQuota">
+          <a-form-item label="每日变身次数">
+            <a-input-number
+              v-model:value="quotaValue"
+              :min="0"
+              placeholder="留空=使用全局默认"
+              style="width: 220px"
+            />
+          </a-form-item>
+          <a-form-item>
+            <a-space>
+              <a-button type="primary" html-type="submit" :loading="quotaSaving">保存</a-button>
+              <a-button @click="resetQuota">重置为全局默认</a-button>
+            </a-space>
+          </a-form-item>
+        </a-form>
+        <p class="quota-hint">
+          {{ quotaValue === null ? '当前使用全局默认限制' : `当前个人限额：每天 ${quotaValue} 次` }}
+        </p>
+      </div>
     </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { userApi } from '@/api/user';
 
-interface User {
-  id: string;
+type User = {
+  id: string | number;
   username: string;
   email?: string;
   phone?: string;
   nickname?: string;
   avatar?: string;
-  role: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+  gender?: 'male' | 'female' | 'unknown';
+  role?: string;
+  enabled?: boolean;
+  dailyTransformLimit?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 const route = useRoute();
 const loading = ref(false);
 const user = ref<User | null>(null);
+const quotaValue = ref<number | null>(null);
+const quotaSaving = ref(false);
+
+const avatarSrc = computed(() => {
+  const u = user.value;
+  if (u?.avatar) return u.avatar;
+  return u?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+});
+
+watch(user, (val) => {
+  if (val) {
+    quotaValue.value = val.dailyTransformLimit ?? null;
+  }
+});
 
 onMounted(() => {
   fetchUserDetail();
@@ -78,6 +118,26 @@ async function fetchUserDetail() {
   } finally {
     loading.value = false;
   }
+}
+
+async function saveQuota() {
+  quotaSaving.value = true;
+  try {
+    const userId = route.params.id as string;
+    await userApi.update(userId, { dailyTransformLimit: quotaValue.value });
+    if (user.value) {
+      user.value.dailyTransformLimit = quotaValue.value;
+    }
+    message.success('配额保存成功');
+  } catch (error) {
+    message.error('保存失败');
+  } finally {
+    quotaSaving.value = false;
+  }
+}
+
+function resetQuota() {
+  quotaValue.value = null;
 }
 
 function goBack() {
@@ -98,5 +158,20 @@ function goBack() {
   margin: 0;
   font-size: 24px;
   display: inline;
+}
+
+.quota-section {
+  margin-top: 8px;
+}
+
+.quota-section h3 {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.quota-hint {
+  margin-top: 12px;
+  color: #888;
+  font-size: 13px;
 }
 </style>

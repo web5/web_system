@@ -18,7 +18,7 @@ App<IAppOption>({
     userInfo: null,
     token: '',
     refreshToken: '',
-    apiBase: 'https://kedouai.com/api',
+    apiBase: 'https://dev.kedouai.com/api',
     bianbianOrigin: undefined,
     bianbianDesc: undefined,
     bianbianResult: undefined,

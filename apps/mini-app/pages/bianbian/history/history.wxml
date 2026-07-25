@@ -2,10 +2,10 @@
 <view class="page">
   <!-- 空态 -->
   <view wx:if="{{list.length === 0}}" class="empty-state">
-    <text class="empty-emoji">📭</text>
+    <image class="empty-emoji" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODg4ODg4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjIgMTIgMTYgMTIgMTQgMTUgMTAgMTUgOCAxMiAyIDEyIi8+PHBhdGggZD0iTTUuNDUgNS4xMUwyIDEydjZhMiAyIDAgMCAwIDIgMmgxNmEyIDIgMCAwIDAgMi0ydi02bC0zLjQ1LTYuODlBMiAyIDAgMCAwIDE2Ljc2IDRINy4yNGEyIDIgMCAwIDAtMS43OSAxLjExeiIvPjwvc3ZnPg==" mode="aspectFit" />
     <text class="empty-title">还没有变过角色～</text>
     <text class="empty-desc">快去创作第一个角色吧！</text>
-    <button class="btn-go" bindtap="goCreate">🎨 开始创作</button>
+    <image class="btn-go-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTMuNSIgY3k9IjYuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iMTcuNSIgY3k9IjEwLjUiIHI9IjEuNSIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjcuNSIgcj0iMS41Ii8+PGNpcmNsZSBjeD0iNi41IiBjeT0iMTIuNSIgcj0iMS41Ii8+PHBhdGggZD0iTTEyIDJDNi41IDIgMiA2LjUgMiAxMnM0LjUgMTAgMTAgMTBjLjkzIDAgMS41LS42NyAxLjUtMS41IDAtLjM5LS4xNS0uNzQtLjM5LTEuMDEtLjIzLS4yNi0uMzgtLjYxLS4zOC0xIDAtLjgzLjY3LTEuNSAxLjUtMS41SDE2YzMuMzEgMCA2LTIuNjkgNi02IDAtNS41LTQuNS0xMC0xMC0xMHoiLz48L3N2Zz4=" mode="aspectFit" /><text> 开始创作</text>
   </view>
 
   <!-- 正常态 -->

@@ -1,4 +1,10 @@
 <view class="container {{isLandscape ? 'landscape' : ''}} {{isIPad ? 'ipad' : ''}}">
+  <!-- 扫码登录入口 -->
+  <view class="scan-entry" bindtap="goToScan">
+    <image class="scan-entry-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjMgMTlhMiAyIDAgMCAxLTIgMkgzYTIgMiAwIDAgMS0yLTJWOGEyIDIgMCAwIDEgMi0yaDRsMi0zaDZsMiAzaDRhMiAyIDAgMCAxIDIgMnoiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEzIiByPSI0Ii8+PC9zdmc+" mode="aspectFit" />
+    <text class="scan-entry-text">扫码登录 PC 网页</text>
+  </view>
+
   <!-- Logo -->
   <view class="app-logo">
     <image class="logo-img" src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjEwIDExMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjEwIiBoZWlnaHQ9IjExMCIgcng9IjU1IiBmaWxsPSIjRjk3MzE2Ii8+PHBhdGggZD0iTSAxMDUgMTggQyAxMjcgMTgsIDEzOSAzNCwgMTM5IDYwIEMgMTM5IDkwLCAxMjEgMTAyLCAxMDUgMTAyIEMgODcgMTAyLCA3MSA4OCwgNzEgNjAgQyA3MSAzMiwgODcgMTgsIDEwNSAxOCBaIiBmaWxsPSJ3aGl0ZSIvPjxjaXJjbGUgY3g9IjEwNSIgY3k9IjYwIiByPSI5IiBmaWxsPSIjRjk3MzE2Ii8+PGNpcmNsZSBjeD0iMTA1IiBjeT0iNTgiIHI9IjMuNSIgZmlsbD0iI0ZERTY4QSIvPjxwYXRoIGQ9Ik0gMTA1IDE4IFEgMTA1IDEwLCAxMDUgNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEwNSIgY3k9IjYiIHI9IjMuNSIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" mode="aspectFit" />
@@ -8,12 +14,13 @@
   <!-- ===== 变变 — 主打产品 ===== -->
   <view class="product-section">
     <view class="section-header">
-      <text class="product-badge primary">✨ 主打</text>
+      <text class="product-badge primary">
+        <image class="badge-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWdvbiBwb2ludHM9IjEzIDIgMyAxNCAxMiAxNCAxMSAyMiAyMSAxMCAxMiAxMCAxMyAyIi8+PC9zdmc+" mode="aspectFit" />主打</text>
       <text class="product-title primary">变变</text>
     </view>
     <text class="product-desc">把孩子的拼贴画 / 涂鸦，<br/>AI 魔法变成可爱的 3D 角色</text>
     <button class="primary-btn" bindtap="goToBianbian">
-      <text class="primary-btn-icon">✨</text>
+      <image class="primary-btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWdvbiBwb2ludHM9IjEzIDIgMyAxNCAxMiAxNCAxMSAyMiAyMSAxMCAxMiAxMCAxMyAyIi8+PC9zdmc+" mode="aspectFit" />
       <text class="primary-btn-text">开始变变</text>
     </button>
   </view>
@@ -21,17 +28,18 @@
   <!-- ===== 画板 — 次要产品 ===== -->
   <view class="product-section secondary">
     <view class="section-header">
-      <text class="product-badge">🎨 画板</text>
+      <text class="product-badge">
+        <image class="badge-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMi42OWw1LjY2IDUuNjZhOCA4IDAgMSAxLTExLjMxIDB6Ii8+PGNpcmNsZSBjeD0iOSIgY3k9IjEwIiByPSIxLjUiIGZpbGw9ImN1cnJlbnRDb2xvciIgc3Ryb2tlPSJub25lIi8+PGNpcmNsZSBjeD0iMTUiIGN5PSIxMCIgcj0iMS41IiBmaWxsPSJjdXJyZW50Q29sb3IiIHN0cm9rZT0ibm9uZSIvPjwvc3ZnPg==" mode="aspectFit" />画板</text>
       <text class="product-title secondary">创意画板</text>
     </view>
     <text class="product-desc secondary">自由绘画，AI 文生图，释放想象力</text>
     <view class="secondary-actions">
       <button class="secondary-btn draw-btn" bindtap="goToDraw">
-        <text class="secondary-btn-icon">✏️</text>
+        <image class="secondary-btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjBoOSIvPjxwYXRoIGQ9Ik0xNi41IDMuNWEyLjEyMSAyLjEyMSAwIDAgMSAzIDNMNyAxOWwtNCAxIDEtNEwxNi41IDMuNXoiLz48L3N2Zz4=" mode="aspectFit" />
         <text>开始画画</text>
       </button>
       <button class="secondary-btn records-btn" bindtap="goToRecords">
-        <text class="secondary-btn-icon">🖼️</text>
+        <image class="secondary-btn-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NjY2NjYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBhdGggZD0ibTIxIDE1LTUtNUw1IDIxIi8+PC9zdmc+" mode="aspectFit" />
         <text>我的画作</text>
       </button>
     </view>

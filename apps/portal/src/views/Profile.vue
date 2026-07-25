@@ -1,61 +1,85 @@
 <template>
   <div class="profile-page">
+    <!-- 顶部导航已迁移到全局 App.vue -->
+
     <div class="profile-container">
-      <div class="profile-header">
-        <h1>个人中心</h1>
+      <div class="profile-card avatar-card">
+        <div class="card-title">头像设置</div>
+        <div class="avatar-section">
+          <div class="avatar-preview">
+            <img :src="avatarSrc" class="avatar-img" />
+          </div>
+          <div class="avatar-actions">
+            <label class="upload-btn" :class="{ uploading: uploading }">
+              <input type="file" accept="image/*" @change="handleFileChange" />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              {{ uploading ? '上传中...' : '上传头像' }}
+            </label>
+            <p class="avatar-tip">支持 JPG、PNG 格式，大小不超过 2MB</p>
+          </div>
+        </div>
       </div>
 
-      <div class="profile-content">
-        <a-card title="头像设置" class="profile-card">
-          <div class="avatar-section">
-            <div class="avatar-preview">
-              <a-avatar :size="120" :src="userAvatar" />
+      <div class="profile-card info-card">
+        <div class="card-title">快捷入口</div>
+        <div class="quick-actions">
+          <div class="quick-action-item" @click="$router.push('/album')">
+            <div class="qa-icon album">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             </div>
-            <div class="avatar-actions">
-              <a-upload
-                name="avatar"
-                :show-upload-list="false"
-                :before-upload="beforeAvatarUpload"
-                :custom-request="handleAvatarUpload"
-                accept="image/*"
-              >
-                <a-button type="primary" icon="upload">
-                  {{ uploading ? '上传中...' : '上传头像' }}
-                </a-button>
-              </a-upload>
-              <p class="avatar-tip">支持 JPG、PNG 格式，大小不超过 2MB</p>
+            <div class="qa-info">
+              <p class="qa-name">我的相册</p>
+              <p class="qa-desc">查看已保存的作品</p>
             </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
-        </a-card>
+        </div>
+      </div>
 
-        <a-card title="基本信息" class="profile-card">
-          <a-form :model="formData" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="用户名">
-              <a-input v-model:value="formData.username" disabled />
-            </a-form-item>
-            <a-form-item label="邮箱">
-              <a-input v-model:value="formData.email" placeholder="请输入邮箱" />
-            </a-form-item>
-            <a-form-item label="昵称">
-              <a-input v-model:value="formData.nickname" placeholder="请输入昵称" />
-            </a-form-item>
-            <a-form-item label="手机号">
-              <a-input v-model:value="formData.phone" placeholder="请输入手机号" />
-            </a-form-item>
-            <a-form-item :wrapper-col="{ offset: 6, span: 16 }">
-              <a-button type="primary" @click="handleSave" :loading="saving">
-                保存修改
-              </a-button>
-            </a-form-item>
-          </a-form>
-        </a-card>
+      <div class="profile-card info-card">
+        <div class="card-title">基本信息</div>
+        <div class="form-section">
+          <div class="form-row">
+            <label>用户名</label>
+            <input v-model="formData.username" disabled class="form-input disabled" />
+          </div>
+          <div class="form-row">
+            <label>邮箱</label>
+            <input v-model="formData.email" placeholder="请输入邮箱" class="form-input" />
+          </div>
+          <div class="form-row">
+            <label>昵称</label>
+            <input v-model="formData.nickname" placeholder="请输入昵称" class="form-input" />
+          </div>
+          <div class="form-row">
+            <label>手机号</label>
+            <input v-model="formData.phone" placeholder="请输入手机号" class="form-input" />
+          </div>
+          <div class="form-row">
+            <label>性别</label>
+            <a-radio-group v-model:value="formData.gender" button-style="solid">
+              <a-radio-button value="male">男</a-radio-button>
+              <a-radio-button value="female">女</a-radio-button>
+              <a-radio-button value="unknown">保密</a-radio-button>
+            </a-radio-group>
+          </div>
+          <div class="form-actions">
+            <button class="btn-save" @click="handleSave" :disabled="saving">
+              {{ saving ? '保存中...' : '保存修改' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile, uploadAvatar } from '@/api/user';
@@ -64,10 +88,10 @@ const userStore = useUserStore();
 const uploading = ref(false);
 const saving = ref(false);
 
-const DEFAULT_AVATAR = '/avatars/default-avatar.png';
-
-const userAvatar = computed(() => {
-  return userStore.userInfo?.avatar || DEFAULT_AVATAR;
+const avatarSrc = computed(() => {
+  const info = userStore.userInfo;
+  if (info?.avatar) return info.avatar;
+  return info?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
 });
 
 const formData = reactive({
@@ -75,6 +99,7 @@ const formData = reactive({
   email: '',
   nickname: '',
   phone: '',
+  gender: 'unknown' as 'male' | 'female' | 'unknown',
 });
 
 onMounted(() => {
@@ -82,50 +107,52 @@ onMounted(() => {
 });
 
 function loadUserInfo() {
-  const userInfo = userStore.userInfo;
-  if (userInfo) {
-    formData.username = userInfo.username || '';
-    formData.email = userInfo.email || '';
-    formData.nickname = userInfo.nickname || '';
-    formData.phone = userInfo.phone || '';
+  const info = userStore.userInfo;
+  if (info) {
+    formData.username = info.username || '';
+    formData.email = info.email || '';
+    formData.nickname = info.nickname || '';
+    formData.phone = info.phone || '';
+    formData.gender = (info.gender as 'male' | 'female' | 'unknown') || 'unknown';
   }
 }
 
-function beforeAvatarUpload(file: File) {
+function handleFileChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+
   const isImage = file.type.startsWith('image/');
   const isLt2M = file.size / 1024 / 1024 < 2;
-
   if (!isImage) {
     message.error('只能上传图片文件！');
-    return false;
+    return;
   }
   if (!isLt2M) {
     message.error('图片大小不能超过 2MB！');
-    return false;
+    return;
   }
-  return true;
+
+  handleAvatarUpload(file);
 }
 
-async function handleAvatarUpload({ file, onSuccess, onError }: any) {
+async function handleAvatarUpload(file: File) {
   uploading.value = true;
   try {
-    const formDataUpload = new FormData();
-    formDataUpload.append('avatar', file);
-
-    const result = await uploadAvatar(formDataUpload);
-    
-    // 更新本地用户信息
+    const fd = new FormData();
+    fd.append('avatar', file);
+    const result = await uploadAvatar(fd);
+    // 兼容两种返回格式：{ avatarUrl } 或 { code, data: { avatarUrl } }
+    const avatarUrl = (result as any).avatarUrl || (result as any).data?.avatarUrl;
+    if (!avatarUrl) {
+      throw new Error('上传响应缺少头像 URL');
+    }
     userStore.setUserInfo({
       ...userStore.userInfo,
-      avatar: result.avatarUrl,
+      avatar: avatarUrl,
     });
-
     message.success('头像上传成功');
-    onSuccess(result);
-  } catch (error) {
-    console.error('Upload error:', error);
+  } catch {
     message.error('头像上传失败');
-    onError(error);
   } finally {
     uploading.value = false;
   }
@@ -138,19 +165,17 @@ async function handleSave() {
       email: formData.email,
       nickname: formData.nickname,
       phone: formData.phone,
+      gender: formData.gender,
     });
-
-    // 更新本地用户信息
     userStore.setUserInfo({
       ...userStore.userInfo,
       email: formData.email,
       nickname: formData.nickname,
       phone: formData.phone,
+      gender: formData.gender,
     });
-
     message.success('保存成功');
-  } catch (error) {
-    console.error('Save error:', error);
+  } catch {
     message.error('保存失败');
   } finally {
     saving.value = false;
@@ -161,54 +186,235 @@ async function handleSave() {
 <style scoped>
 .profile-page {
   min-height: 100vh;
-  background: #f0f2f5;
-  padding: 24px;
+  background: #FFF8F0;
 }
 
 .profile-container {
-  max-width: 800px;
+  max-width: 640px;
   margin: 0 auto;
-}
-
-.profile-header {
-  margin-bottom: 24px;
-}
-
-.profile-header h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #333;
-}
-
-.profile-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  padding: 24px 16px;
 }
 
 .profile-card {
-  border-radius: 8px;
+  background: white;
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* ===== 头像区域 ===== */
 .avatar-section {
   display: flex;
   align-items: center;
-  gap: 40px;
+  gap: 24px;
 }
 
 .avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
   flex-shrink: 0;
+  background: #FFF8F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #eee;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #FF8C42;
+  color: white;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+  width: fit-content;
+}
+
+.upload-btn:hover {
+  background: #e67e3a;
+}
+
+.upload-btn.uploading {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.upload-btn input[type="file"] {
+  display: none;
 }
 
 .avatar-tip {
   margin: 0;
-  color: #999;
   font-size: 12px;
+  color: #999;
+}
+
+/* ===== 快捷入口 ===== */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-action-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background 0.15s;
+}
+
+.quick-action-item:last-child {
+  border-bottom: none;
+}
+
+.quick-action-item:hover {
+  background: #fff8f2;
+  margin: 0 -20px;
+  padding: 14px 20px;
+  border-radius: 8px;
+}
+
+.qa-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.qa-icon.album {
+  background: linear-gradient(135deg, #FFE0CC, #FFD4B8);
+  color: #FF8C42;
+}
+
+.qa-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.qa-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.qa-desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* ===== 表单区域 ===== */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-row label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #eee;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #333;
+  background: white;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #FF8C42;
+}
+
+.form-input.disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-input::placeholder {
+  color: #ccc;
+}
+
+.form-actions {
+  margin-top: 8px;
+}
+
+.btn-save {
+  padding: 10px 24px;
+  background: #FF8C42;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-save:hover {
+  background: #e67e3a;
+}
+
+.btn-save:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 </style>

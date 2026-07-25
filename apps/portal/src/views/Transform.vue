@@ -1,6 +1,6 @@
 <template>
   <div class="transform-page">
-    <!-- 顶部 -->
+    <!-- 顶部（返回按钮） -->
     <header class="tf-header">
       <button class="tf-back" @click="handleCancel">← 返回</button>
     </header>
@@ -8,7 +8,9 @@
     <!-- 原画缩略图 -->
     <div class="tf-preview">
       <div class="preview-thumb" :class="{ pulsing: !isFailed }">
-        <span class="preview-icon">🎨</span>
+        <div class="preview-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" opacity="0.3"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none" opacity="0.3"/></svg>
+        </div>
       </div>
       <p class="preview-label" v-if="description">{{ description }}</p>
     </div>
@@ -29,7 +31,9 @@
 
         <!-- 趣味小知识（15秒后出现） -->
         <div v-if="elapsedTime > 15" class="fun-fact">
-          <div class="fact-icon">💡</div>
+          <div class="fact-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+          </div>
           <p class="fact-text">{{ currentFunFact }}</p>
         </div>
       </div>
@@ -37,18 +41,24 @@
       <!-- 成功 -->
       <div v-if="isDone" class="status-success">
         <div class="success-flash"></div>
-        <div class="success-icon">✨</div>
+        <div class="success-icon">
+          <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
         <h2 class="tf-title">变身成功！</h2>
         <p class="tf-hint">正在跳转到结果页...</p>
       </div>
 
       <!-- 失败 -->
       <div v-if="isFailed" class="status-failed">
-        <div class="fail-icon">😢</div>
+        <div class="fail-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 15s1.5-2 4-2 4 2 4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </div>
         <h2 class="tf-title">变身失败了</h2>
         <p class="tf-hint">{{ failMessage }}</p>
         <div class="fail-actions">
-          <button class="fail-btn retry-btn" @click="handleRetry">🔄 再变一次</button>
+          <button class="fail-btn retry-btn" @click="handleRetry">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>再变一次
+          </button>
           <button class="fail-btn back-btn" @click="handleCancel">← 回去再改改</button>
         </div>
       </div>
@@ -153,8 +163,8 @@ async function startTransform() {
       factIdx = (factIdx + 1) % funFacts.length;
       currentFunFact.value = funFacts[factIdx];
     }
-    // 60秒超时
-    if (elapsedTime.value >= 60) {
+    // 前端兜底超时（略大于接口 120s 超时，避免误杀正常请求）
+    if (elapsedTime.value >= 120) {
       cleanup();
       isFailed.value = true;
       failMessage.value = '变身超时了～可能是网络不太稳定，再试一次？';
@@ -168,19 +178,28 @@ async function startTransform() {
       image: imageData,
       description: description.value,
       userId,
+      roles: userStore.userInfo?.roles,
     });
 
     if (!isActive()) return;
 
     if (res.code === 0 && res.data?.aiImage) {
-      // 保存结果
-      localStorage.setItem('bb_result_data', JSON.stringify({
-        originalDescription: description.value,
-        aiImageUrl: res.data.aiImage,
-        processingTimeMs: res.data.processingTimeMs,
-        remainingToday: res.data.remainingToday,
-        timestamp: new Date().toISOString(),
-      }));
+      // 保存结果；原画 base64 可能较大，localStorage 溢出时仍继续跳转，
+      // Result 页会 fallback 从 bb_transform_data 读取原画。
+      // 优先使用后端返回的临时图片 URL（短链接，避免 localStorage 溢出）
+      const originalImage = res.data.originalImageUrl || imageData;
+      try {
+        localStorage.setItem('bb_result_data', JSON.stringify({
+          originalDescription: description.value,
+          originalImage,
+          aiImageUrl: res.data.aiImage,
+          processingTimeMs: res.data.processingTimeMs,
+          remainingToday: res.data.remainingToday,
+          timestamp: new Date().toISOString(),
+        }));
+      } catch (e) {
+        console.warn('结果数据本地存储失败，将尝试回退读取', e);
+      }
       isDone.value = true;
       setTimeout(() => router.replace('/bianbian/result'), 1200);
     } else {
@@ -276,7 +295,9 @@ function handleCancel() {
 }
 
 .preview-icon {
-  font-size: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview-label {
@@ -367,8 +388,11 @@ function handleCancel() {
 }
 
 .fact-icon {
-  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 6px;
+  color: #888;
 }
 
 .fact-text {
@@ -402,7 +426,10 @@ function handleCancel() {
 }
 
 .success-icon {
-  font-size: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7ED957;
   animation: successPop 0.5s ease;
 }
 
@@ -420,8 +447,11 @@ function handleCancel() {
 }
 
 .fail-icon {
-  font-size: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 12px;
+  color: #888;
 }
 
 .fail-actions {
@@ -455,10 +485,45 @@ function handleCancel() {
 }
 
 
+/* ===== 响应式 - PC ===== */
 @media (min-width: 768px) {
   .transform-page {
-    max-width: 480px;
+    max-width: 100%;
+    min-height: 100vh;
     margin: 0 auto;
+    padding: 0 48px;
+  }
+
+  .tf-header {
+    padding: 24px 0;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .tf-preview {
+    margin: 60px 0 40px;
+  }
+
+  .preview-thumb {
+    width: 160px;
+    height: 160px;
+    border-radius: 28px;
+  }
+
+  .tf-status-area {
+    max-width: 500px;
+  }
+
+  .tf-title {
+    font-size: 28px;
+  }
+
+  .progress-bar {
+    height: 10px;
+  }
+
+  .fun-fact {
+    max-width: 420px;
   }
 }
 </style>

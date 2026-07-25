@@ -7,7 +7,7 @@ const projectConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../projec
 const privateKeyPath = path.join(__dirname, '../private.key');
 
 if (!fs.existsSync(privateKeyPath)) {
-  console.error('❌ 缺少私钥文件 private.key，请从微信公众平台下载并保存到项目根目录');
+  console.error('[Preview] 缺少私钥文件 private.key，请从微信公众平台下载并保存到项目根目录');
   process.exit(1);
 }
 const privateKey = fs.readFileSync(privateKeyPath);
@@ -26,7 +26,7 @@ async function previewApp() {
       ignores: ['node_modules/**/*'],
     });
 
-    console.log(`🚀 开始预览... appid: ${projectConfig.appid}`);
+    console.log(`[Preview] 开始预览... appid: ${projectConfig.appid}`);
     
     const previewResult = await preview({
       project,
@@ -42,10 +42,10 @@ async function previewApp() {
       qrcodeFormat: 'terminal',
     });
 
-    console.log('✅ 预览成功!');
-    console.log('📱 请在微信开发者工具中确认');
+    console.log('[Preview] 预览成功!');
+    console.log('[Preview] 请在微信开发者工具中确认');
   } catch (error) {
-    console.error('❌ 预览失败:', error.message);
+    console.error('[Preview] 预览失败:', error.message);
     process.exit(1);
   }
 }
