@@ -1,8 +1,10 @@
 import { Controller, Post, Get, Delete, Body, Query, Param, ParseIntPipe, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ArtworksService } from './artworks.service';
 import { SaveArtworkDto } from './dto/save-artwork.dto';
 import { BusinessException } from '../common/exceptions/business.exception';
 
+@ApiTags('作品相册')
 @Controller('ai/artworks')
 export class ArtworksController {
   private readonly logger = new Logger(ArtworksController.name);
@@ -11,6 +13,7 @@ export class ArtworksController {
 
   /** 保存作品到相册 */
   @Post()
+  @ApiOperation({ summary: '保存作品到相册' })
   async save(@Body() dto: SaveArtworkDto) {
     try {
       const data = await this.artworksService.save(dto);
@@ -26,6 +29,7 @@ export class ArtworksController {
 
   /** 获取用户相册列表 */
   @Get()
+  @ApiOperation({ summary: '获取用户相册作品列表' })
   async findByUser(@Query('userId', ParseIntPipe) userId: number) {
     try {
       const data = await this.artworksService.findByUser(userId);
@@ -41,6 +45,7 @@ export class ArtworksController {
 
   /** 删除相册中的作品 */
   @Delete(':id')
+  @ApiOperation({ summary: '删除相册作品' })
   async delete(
     @Param('id') id: string,
     @Query('userId', ParseIntPipe) userId: number,

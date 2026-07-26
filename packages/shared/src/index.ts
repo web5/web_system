@@ -1,3 +1,5 @@
+export { API_TIMEOUT } from './api';
+
 import dayjs from 'dayjs';
 
 /**
@@ -9,6 +11,8 @@ export function formatDateTime(date: Date | string | number, format = 'YYYY-MM-D
 
 /**
  * 生成随机字符串
+ * 注意：使用 Math.random()，非密码学安全，仅适用于非安全场景（如临时 ID）
+ * 安全场景（token、密钥等）请使用 crypto.randomBytes
  */
 export function randomString(length = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -47,7 +51,7 @@ export function throttle<T extends (...args: any[]) => any>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
-  let inThrottle: boolean;
+  let inThrottle: boolean = false;
   return function (this: any, ...args: Parameters<T>) {
     if (!inThrottle) {
       func.apply(this, args);

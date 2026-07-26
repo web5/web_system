@@ -123,7 +123,7 @@ deploy_auth() {
   log "auth-service 同步完成"
 
   log "重启 auth-service..."
-  ssh "$SERVER" "cd $REMOTE_DIR && pm2 delete auth-service 2>/dev/null; pm2 start servers/auth-service/dist/main.js --name auth-service"
+  ssh "$SERVER" "cd $REMOTE_DIR && pm2 restart auth-service 2>/dev/null || pm2 start servers/auth-service/dist/main.js --name auth-service"
   log "auth-service 重启完成"
 }
 
@@ -144,7 +144,7 @@ deploy_system() {
   log "system-service 同步完成"
 
   log "重启 system-service..."
-  ssh "$SERVER" "cd $REMOTE_DIR && pm2 delete system-service 2>/dev/null; pm2 start servers/system-service/dist/main.js --name system-service"
+  ssh "$SERVER" "cd $REMOTE_DIR && pm2 restart system-service 2>/dev/null || pm2 start servers/system-service/dist/main.js --name system-service"
   log "system-service 重启完成"
 }
 
@@ -169,7 +169,7 @@ deploy_gateway() {
 
 deploy_gateway_restart() {
   log "重启 gateway..."
-  ssh "$SERVER" "cd $REMOTE_DIR && pm2 delete gateway 2>/dev/null; pm2 start servers/gateway/dist/main.js --name gateway"
+  ssh "$SERVER" "cd $REMOTE_DIR && pm2 restart gateway 2>/dev/null || pm2 start servers/gateway/dist/main.js --name gateway"
   log "gateway 重启完成"
 }
 

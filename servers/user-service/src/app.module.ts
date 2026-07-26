@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as path from 'path';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { User } from './user/user.entity';
@@ -9,6 +10,9 @@ import { User } from './user/user.entity';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        path.resolve(__dirname, '../.env'),   // servers/user-service/.env（兼容 dist/src 运行）
+      ],
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -24,6 +28,11 @@ import { User } from './user/user.entity';
             password: configService.get('DB_PASSWORD', ''),
             database: configService.get('DB_DATABASE', 'web_system'),
             entities,
+            extra: {
+              connectionLimit: 20,
+              connectTimeout: 10000,
+              waitForConnections: true,
+            },
             synchronize: configService.get('NODE_ENV') !== 'production',
             logging: configService.get('NODE_ENV') === 'development',
           };
@@ -36,6 +45,11 @@ import { User } from './user/user.entity';
           password: configService.get('DB_PASSWORD', ''),
           database: configService.get('DB_DATABASE', 'web_system'),
           entities,
+          extra: {
+            max: 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
+          },
           synchronize: configService.get('NODE_ENV') !== 'production',
           logging: configService.get('NODE_ENV') === 'development',
         };

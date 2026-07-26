@@ -17,6 +17,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // 直接指向 shared 源码（绕过 dist 预构建缓存，shared 改动实时生效）
+      '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
     },
   },
   server: {
@@ -34,11 +36,7 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
-      // 上传文件静态资源 — 代理到 Gateway（再由 Gateway 转发到 user-service）
-      '/uploads': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
+
     },
   },
   build: {
@@ -52,7 +50,7 @@ export default defineConfig({
         drop_debugger: true,
       },
     },
-    target: 'es2015',
+    target: 'es2020',
     chunkSizeWarningLimit: 500,
     rollupOptions: {
       output: {

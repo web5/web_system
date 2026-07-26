@@ -2,11 +2,13 @@ import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import * as path from 'path';
 import { ProxyModule } from './proxy/proxy.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard } from './auth/auth.guard';
 import { StaticModule } from './static/static.module';
 import { HealthModule } from './health/health.module';
+import { MiniScanModule } from './mini-scan/mini-scan.module';
 import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
 import { ApiDocsModule } from './api-docs/api-docs.module';
 
@@ -14,7 +16,9 @@ import { ApiDocsModule } from './api-docs/api-docs.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        path.resolve(__dirname, '../.env'),   // servers/gateway/.env（兼容 dist/src 运行）
+      ],
     }),
     // 全局限流：每 IP 每分钟最多 100 次请求
     ThrottlerModule.forRoot([{
@@ -22,6 +26,7 @@ import { ApiDocsModule } from './api-docs/api-docs.module';
       limit: 100,        // 窗口内最多 100 次请求
     }]),
     HealthModule,
+    MiniScanModule,
     ProxyModule,
     AuthModule,
     StaticModule,

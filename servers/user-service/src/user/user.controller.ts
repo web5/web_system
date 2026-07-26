@@ -18,10 +18,10 @@ export class UserController {
   @ApiOperation({ summary: '获取用户列表' })
   async findAll(
     @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('pageSize') pageSize: number = 10,
     @Query('keyword') keyword?: string,
   ) {
-    return this.userService.findAll(page, limit, keyword);
+    return this.userService.findAll(page, pageSize, keyword);
   }
 
   @Get('me')
@@ -79,7 +79,7 @@ export class UserController {
       throw new BadRequestException('请上传图片文件');
     }
 
-    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    const avatarUrl = `/api/uploads/avatars/${file.filename}`;
     await this.userService.update(req.user.id, { avatar: avatarUrl });
 
     return { code: 200, data: { avatarUrl } };

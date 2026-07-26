@@ -13,6 +13,7 @@ import { ProxyService } from './proxy.service';
 import { Public } from '../auth/public.decorator';
 import * as http from 'http';
 import * as url from 'url';
+import { API_TIMEOUT } from '@web-system/shared';
 
 @ApiExcludeController()
 @Public() // API 路由的认证由各后端微服务自行处理，Gateway 仅做代理转发
@@ -54,7 +55,7 @@ export class ProxyController {
         'Content-Length': Buffer.byteLength(body),
         'Connection': 'keep-alive',
       },
-      timeout: 120_000,
+      timeout: API_TIMEOUT.GATEWAY.AI_TASK,
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
@@ -100,7 +101,7 @@ export class ProxyController {
         'Content-Length': Buffer.byteLength(body),
         ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
       },
-      timeout: 15_000,
+      timeout: API_TIMEOUT.GATEWAY.TTS,
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
@@ -166,9 +167,15 @@ export class ProxyController {
     return this.proxyService.getBianbianProxy()(req, res);
   }
 
-  @All('todos/:path(*)')
+  // 精确匹配 /api/todos（无尾斜杠）
   @All('todos')
-  proxyTodos(@Req() req: Request, @Res() res: Response) {
+  proxyTodosExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getTodoProxy()(req, res);
+  }
+
+  // 通配 /api/todos/:path(*)
+  @All('todos/:path(*)')
+  proxyTodosWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getTodoProxy()(req, res);
   }
 

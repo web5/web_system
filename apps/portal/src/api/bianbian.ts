@@ -1,4 +1,5 @@
 import request from './request';
+import { API_TIMEOUT } from '@web-system/shared';
 
 export interface TransformRequest {
   image: string;
@@ -25,7 +26,7 @@ export interface TransformResponse {
 
 /** 变变 AI 变身 — 上传拼接作品，生成 3D 角色（任务式生成，耗时较长，单独放宽超时） */
 export function transformImage(data: TransformRequest): Promise<TransformResponse> {
-  return request.post('/bianbian/transform', data, { timeout: 120000 });
+  return request.post('/bianbian/transform', data, { timeout: API_TIMEOUT.AI_TASK });
 }
 
 /** 查询用户当日剩余变身次数 */

@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as path from 'path';
 import { TodoModule } from './todo/todo.module';
 import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    // 配置模块
+    // 配置模块（统一模式：先服务自己的 .env，再回退项目根 .env）
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        path.resolve(__dirname, '../.env'),   // servers/todo-service/.env（兼容 dist/src 运行）
+      ],
     }),
 
     // 认证模块
@@ -29,6 +32,11 @@ import { AuthModule } from './auth/auth.module';
             password: configService.get('DB_PASSWORD', ''),
             database: configService.get('DB_DATABASE', 'web_system'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            extra: {
+              max: 20,
+              idleTimeoutMillis: 30000,
+              connectionTimeoutMillis: 5000,
+            },
             synchronize: configService.get('NODE_ENV') !== 'production',
             logging: configService.get('NODE_ENV') === 'development',
           };
@@ -42,6 +50,11 @@ import { AuthModule } from './auth/auth.module';
             password: configService.get('DB_PASSWORD', ''),
             database: configService.get('DB_DATABASE', 'web_system'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            extra: {
+              connectionLimit: 20,
+              connectTimeout: 10000,
+              waitForConnections: true,
+            },
             synchronize: configService.get('NODE_ENV') !== 'production',
             logging: configService.get('NODE_ENV') === 'development',
           };

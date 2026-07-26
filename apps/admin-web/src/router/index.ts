@@ -3,6 +3,19 @@ import type { RouteRecordRaw } from 'vue-router';
 import { ROLE_PERMISSIONS } from '@web-system/types';
 import { useUserStore } from '@/stores/user';
 
+/**
+ * 解析 JWT token，检查是否过期
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (!payload.exp) return false;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -56,11 +69,18 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
+  // 403 无权限页面
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/Forbidden.vue'),
+    meta: { requiresAuth: false },
+  },
   // 404 兜底路由
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    redirect: '/dashboard',
+    component: () => import('@/views/NotFound.vue'),
   },
 ];
 
@@ -75,7 +95,7 @@ router.beforeEach((to, _from, next) => {
   const token = userStore.token;
   const userRoles = userStore.userInfo?.roles || [];
 
-  if (to.meta.requiresAuth && !token) {
+  if (to.meta.requiresAuth && (!token || isTokenExpired(token))) {
     next('/login');
     return;
   }
@@ -89,11 +109,7 @@ router.beforeEach((to, _from, next) => {
   if (perm) {
     const allowedPerms = userRoles.flatMap((r: string) => (ROLE_PERMISSIONS as Record<string, string[]>)[r] || []);
     if (!allowedPerms.includes(perm)) {
-      if (to.path.startsWith('/dashboard')) {
-        next('/login');
-      } else {
-        next('/dashboard');
-      }
+      next('/403');
       return;
     }
   }

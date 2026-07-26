@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosResponse } from 'axios';
 import { message } from 'ant-design-vue';
 import router from '@/router';
+import { API_TIMEOUT } from '@web-system/shared';
 
 // 401 跳转防重入锁
 let isRedirecting = false;
@@ -22,7 +23,7 @@ function getStoredToken(): string | null {
 
 const request: AxiosInstance = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: API_TIMEOUT.DEFAULT,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -54,6 +55,8 @@ request.interceptors.response.use(
       if (status === 401) {
         if (!isRedirecting) {
           isRedirecting = true;
+          // 60 秒后自动解锁，防止永久锁死
+          setTimeout(() => { isRedirecting = false; }, 60000);
           // 清除 pinia persist 存储
           localStorage.removeItem('user-store');
           message.error('登录已过期，请重新登录');

@@ -137,6 +137,10 @@ export class AuthController {
         `${cleanUrl}${separator}token=${result.accessToken}&refreshToken=${result.refreshToken}`,
       );
     } catch (error) {
+      this.logger.error(
+        `OAuth callback failed: ${(error as Error)?.message || error}`,
+        (error as Error)?.stack,
+      );
       res.redirect('/login?error=wechat_auth_failed');
     }
   }

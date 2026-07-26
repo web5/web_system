@@ -2,12 +2,17 @@ const mysql = require('mysql2/promise');
 
 async function migrate() {
   const connection = await mysql.createConnection({
-    host: '127.0.0.1',
-    port: 3306,
-    user: 'root',
-    password: 'web_system_root_2026',
-    database: 'web_system',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    user: process.env.DB_USERNAME || 'root',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE || 'web_system',
   });
+
+  if (!process.env.DB_PASSWORD) {
+    console.error('[Migrate] 错误：DB_PASSWORD 环境变量未设置，请先 export DB_PASSWORD=xxx');
+    process.exit(1);
+  }
 
   console.log('[Migrate] 数据库连接成功');
 

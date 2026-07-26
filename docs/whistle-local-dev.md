@@ -20,7 +20,7 @@
 | upload-service | 3006 | 文件上传 |
 
 **痛点：**
-- 后端返回的静态资源 URL（如 `/uploads/avatars/xxx.png`）通过 Vite proxy 代理链路长（5173 → 3000 → 3002），调试困难
+- 后端返回的静态资源 URL（如 `/api/uploads/avatars/xxx.png`）通过 Gateway 统一代理，架构一致
 - 后端若返回绝对 URL 含端口号（如 `http://localhost:3002/xxx`），浏览器直接跨端口访问失败
 - 微信 OAuth 回调、第三方登录等场景要求统一域名
 
@@ -92,52 +92,71 @@ macOS：**系统偏好设置 → 网络 → 高级 → 代理**
 # ============================================================
 # 科豆 AI · 本地开发 Whistle 规则
 # 统一域名: local.kedouai.com
+# 原则：精确路径优先，无需 excludeFilter
 # ============================================================
 
-# ----- 前端页面 -----
+# ----- Admin 后台（注意：不带斜杠，同时匹配 /admin 和 /admin/*）-----
+local.kedouai.com/admin    127.0.0.1:5174
 
-# Portal → Vite Dev Server
-local.kedouai.com 127.0.0.1:5173  excludeFilter:///(api|uploads|admin|assets|docs|swagger)/
+# ----- API → Gateway -----
+local.kedouai.com/api/     127.0.0.1:3000
 
-# Admin 后台（Vite base: /admin/）
-local.kedouai.com/admin/ 127.0.0.1:5174
-
-# ----- API（全部到 Gateway）-----
-
-local.kedouai.com/api/ 127.0.0.1:3000
-
-# ----- 静态资源 -----
-
-# 上传文件 → user-service（Gateway 实际也转到这里，直连少一跳）
-local.kedouai.com/uploads/ 127.0.0.1:3002
-
-# Vite 构建产出 assets（开发时由 Vite server 提供，这里做兜底）
-local.kedouai.com/assets/ 127.0.0.1:5173
+# ----- 构建产物 assets -----
+local.kedouai.com/assets/  127.0.0.1:5173
 
 # ----- 文档 / Swagger -----
-
-local.kedouai.com/docs/ 127.0.0.1:3000
+local.kedouai.com/docs/    127.0.0.1:3000
 local.kedouai.com/swagger/ 127.0.0.1:3000
 
-# ----- 兜底：SPA 回退 -----
-
-# 未匹配的路径 → Gateway（处理 SPA 路由回退）
-local.kedouai.com 127.0.0.1:3000
+# ----- Portal 兜底（Vite dev server 自带 SPA 回退）-----
+local.kedouai.com          127.0.0.1:5173
 ```
 
 ### 规则说明
 
 | 规则 | 作用 |
 |------|------|
-| `excludeFilter` | Portal 页面请求到 Vite，但 API/静态资源/管理后台路径排除在外 |
-| `/admin/` → `:5174` | Admin 的 Vite base 是 `/admin/`，所以按路径前缀匹配 |
+| `/admin` → `:5174` | 匹配 `/admin` 和 `/admin/*`，统一走 Admin Vite |
 | `/api/` → `:3000` | 所有 API 走 Gateway 统一鉴权、路由 |
-| `/uploads/` → `:3002` | 直连 user-service，比走 Gateway 少一跳代理 |
-| 末尾兜底规则 | 其余请求（如 SPA 路由）走 Gateway 的 SPA 回退逻辑 |
+| `/assets/` → `:5173` | 构建产物由 Vite dev server 提供 |
+| `/docs/` `/swagger/` → `:3000` | API 文档走 Gateway |
+| 末尾兜底 → `:5173` | 其余所有请求走 Portal（含 SPA 路由回退） |
+
+### 为什么不使用 excludeFilter？
+
+旧方案用 `excludeFilter:///(api|uploads|admin|assets|docs|swagger)/` 排除特定路径，但这个正则会误杀包含这些**子串**的模块请求（如 ant-design-vue 内部路径含 `assets`），导致 Vite 模块被错误转发到 Gateway，Gateway 返回 `text/html` 触发浏览器 MIME 类型报错。
+
+新方案利用 **Whistle 规则优先级**：更精确的路径（`/admin`、`/api/`）自动覆盖模糊的兜底规则，完全不需要 `excludeFilter`。
 
 ---
 
-## 6. 最终访问方式
+## 6. Vite 配置要求
+
+两个前端项目需要确保 Vite dev server 正确监听 IPv4（Whistle 通过 `127.0.0.1` 连接）：
+
+```ts
+// apps/portal/vite.config.ts 和 apps/admin-web/vite.config.ts
+export default defineConfig({
+  server: {
+    host: true,   // 同时监听 IPv4/IPv6
+    allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
+  },
+});
+```
+
+### 为什么需要 `host: true`？
+
+Vite 默认只监听 IPv6 `localhost`（`[::1]`）。Whistle 通过 IPv4 `127.0.0.1` 连接后端，两者不匹配 → `ECONNREFUSED`。`host: true` 让 Vite 同时监听 IPv4 和 IPv6。
+
+## 7. 域名解析：为什么不需要 /etc/hosts？
+
+`local.kedouai.com` 是 `.com` 真 TLD，公网 DNS 解析不到。但 **不需要手动加 `/etc/hosts`**：
+
+- 浏览器配置代理后，**直接向代理服务器（Whistle）发送原始主机名**，不走本地 DNS
+- Whistle 收到后按规则匹配主机名并转发到正确的本地端口
+- **加 `/etc/hosts` 反而有害**：Chrome 的代理绕过列表默认包含 `127.x.x.x`，当 `/etc/hosts` 将域名解析到 `127.0.0.1` 时，Chrome 会绕过代理直连 → `ERR_CONNECTION_REFUSED`
+
+## 8. 最终访问方式
 
 | 页面 | 地址 |
 |------|------|
@@ -150,7 +169,7 @@ local.kedouai.com 127.0.0.1:3000
 
 ---
 
-## 7. 开发流程
+## 9. 开发流程
 
 ```bash
 # 1. 启动 Whistle
@@ -172,9 +191,10 @@ cd apps/admin-web && npm run dev &
 
 ---
 
-## 8. 故障排查
+## 10. 故障排查
 
 ### 页面打不开
+
 ```bash
 # 检查 Whistle 是否在运行
 w2 status
@@ -183,18 +203,36 @@ w2 status
 w2 run    # 前台运行，实时看日志
 ```
 
+### `ERR_CONNECTION_REFUSED` 或 `ERR_PROXY_CONNECTION_FAILED`
+
+1. 确认系统代理已开启（**系统偏好设置 → 网络 → 高级 → 代理**，勾选 HTTP 和 HTTPS 代理）
+2. 或确认 SwitchyOmega 已切换到 Whistle 情景模式
+3. 确认 Vite dev server 使用了 `host: true` 配置
+4. **不要加 `/etc/hosts`**：Chrome 默认绕过 `127.x.x.x` 代理，加了反而直连失败
+
+### 模块加载报 MIME type "text/html" 错误
+
+这是 `excludeFilter` 误杀导致的。旧规则中的正则 `(api|uploads|admin|assets|docs|swagger)` 会匹配任意包含这些子串的路径。升级到本文档第 5 节的新规则（去掉 excludeFilter）即可。
+
+### `/admin`（不带斜杠）不工作
+
+Whistle 规则写 `/admin`（不带斜杠）即可匹配 `/admin` 和 `/admin/*`。同时 Portal 路由内置了 `/admin` → `/admin/` 重定向作为兜底。
+
 ### 某类请求 404
+
 在 Whistle 管理界面 **Network** 页签查看请求详情，确认被哪条规则匹配、转发到了哪里。
 
 ### Vite HMR 不生效
+
 Vite 的 WebSocket 热更新走的是 `ws://` 协议。Whistle 默认透传 WebSocket，无需额外配置。
 
 ### Admin 页面样式丢失
-Admin 的 `base: '/admin/'` 可能导致静态资源路径错误。确认 Vite dev server 直接访问 `http://localhost:5174/admin/` 正常后，Whistle 规则 `/admin/ → :5174` 即可。
+
+Admin 的 `base: '/admin/'` 可能导致静态资源路径错误。确认 Vite dev server 直接访问 `http://localhost:5174/admin/` 正常后，Whistle 规则 `/admin → :5174` 即可。
 
 ---
 
-## 9. 可选增强
+## 11. 可选增强
 
 ### 9.1 手机端调试
 
@@ -226,7 +264,7 @@ local.kedouai.com/api/users/me file://{mockGetUser.json}
 
 ---
 
-## 10. 相关链接
+## 12. 相关链接
 
 - [Whistle 官方文档](https://wproxy.org/docs/)
 - [Whistle 规则配置参考](https://wproxy.org/docs/rules/)

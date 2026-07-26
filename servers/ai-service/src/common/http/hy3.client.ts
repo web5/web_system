@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import * as rawAxios from 'axios';
+import { API_TIMEOUT } from '@web-system/shared';
 import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk } from './base-ai.client';
 
 @Injectable()
@@ -51,7 +52,7 @@ export class Hy3Client extends BaseAiClient {
             Authorization: `Bearer ${this.getApiKey()}`,
             'Content-Type': 'application/json',
           },
-          timeout: 60000,
+          timeout: API_TIMEOUT.UPSTREAM.CHAT,
         }),
       );
 
@@ -89,7 +90,7 @@ export class Hy3Client extends BaseAiClient {
         Authorization: `Bearer ${this.getApiKey()}`,
         'Content-Type': 'application/json',
       },
-      timeout: 120000,
+      timeout: API_TIMEOUT.UPSTREAM.CHAT_STREAM,
       responseType: 'stream',
     });
 

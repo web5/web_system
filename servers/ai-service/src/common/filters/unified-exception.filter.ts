@@ -16,6 +16,7 @@ import { BusinessException } from '../exceptions/business.exception';
 @Catch()
 export class UnifiedExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(UnifiedExceptionFilter.name);
+  private readonly isProduction = process.env.NODE_ENV === 'production';
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -44,8 +45,9 @@ export class UnifiedExceptionFilter implements ExceptionFilter {
       else if (status === HttpStatus.NOT_FOUND) code = 4040;
       else code = 5000;
     } else if (exception instanceof Error) {
-      message = exception.message;
-      this.logger.error(`Unhandled exception: ${message}`, exception.stack);
+      this.logger.error(`Unhandled exception: ${exception.message}`, exception.stack);
+      // 生产环境不泄露内部错误信息
+      message = this.isProduction ? '服务器开小差了，请稍后重试' : exception.message;
     } else {
       this.logger.error('Unknown exception', exception);
     }

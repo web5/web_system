@@ -13,11 +13,15 @@ web_system/
 ├── servers/                 # 后端服务
 │   ├── gateway/            # API 网关 (NestJS)
 │   ├── auth-service/       # 认证服务 (NestJS)
-│   └── user-service/       # 用户服务 (NestJS)
+│   ├── user-service/       # 用户服务 (NestJS)
+│   ├── ai-service/         # AI 服务 (NestJS)
+│   ├── system-service/     # 系统管理 (NestJS)
+│   └── upload-service/     # 文件上传 (NestJS)
 ├── packages/                # 共享包
 │   ├── types/              # TypeScript 类型定义
-│   └── shared/             # 共享工具函数
-└── common/                  # 公共配置
+│   └── shared/             # 公共工具 + API 超时等配置常量
+├── docs/                    # 文档（含 Whistle 配置等）
+└── scripts/                 # 运维脚本
 ```
 
 ## 技术栈
@@ -36,83 +40,145 @@ web_system/
 
 ### 工具
 - pnpm (包管理)
-- Rush (monorepo 管理)
+- Whistle (本地开发代理)
 
 ## 快速开始
 
-### 安装依赖
+### 1. 安装依赖
+
 ```bash
 pnpm install
 ```
 
-### Rush 命令
+### 2. 配置 Whistle 代理（推荐 · 统一域名开发）
 
-由于是 Rush monorepo 项目，请在各项目目录下使用 `rushx` 命令代替 `pnpm`：
+没有 Whistle 时每个服务独立端口（5173/5174/3000/3001...），Cookie、OAuth 回调、跨域调试都很痛苦。Whistle 将所有服务映射到统一域名 `local.kedouai.com`。
 
-| 原有命令 | Rush 命令 |
-|---------|-----------|
-| `pnpm dev` | `rushx dev` |
-| `pnpm build` | `rushx build` |
-
-### 启动命令
-
-> **推荐方式**：使用一键启动脚本
+#### 安装与启动
 
 ```bash
-# 一键启动所有服务
-./start-dev.sh
+# 全局安装
+npm i -g whistle
+
+# 启动（默认代理端口 8899）
+w2 start
 ```
 
-#### 手动启动（按顺序）
+#### 配置规则
 
-##### 1. 后端服务
+打开 `http://127.0.0.1:8899` → **Rules** 页签，创建规则组 `kedouai-local`：
+
+```
+# ============================================================
+# 科豆 AI · 本地开发 Whistle 规则
+# 统一域名: local.kedouai.com
+# ============================================================
+
+# Admin 后台
+local.kedouai.com/admin    127.0.0.1:5174
+
+# API → Gateway
+local.kedouai.com/api/     127.0.0.1:3000
+
+# 上传文件
+local.kedouai.com/uploads/ 127.0.0.1:3002
+
+# 构建产物
+local.kedouai.com/assets/  127.0.0.1:5173
+
+# 文档 / Swagger
+local.kedouai.com/docs/    127.0.0.1:3000
+local.kedouai.com/swagger/ 127.0.0.1:3000
+
+# Portal 兜底
+local.kedouai.com          127.0.0.1:5173
+```
+
+#### 开启系统代理
+
+macOS：**系统偏好设置 → 网络 → 高级 → 代理**，勾选 HTTP/HTTPS 代理，服务器 `127.0.0.1`，端口 `8899`。
+
+或使用 Chrome 插件 [SwitchyOmega](https://chrome.google.com/webstore/detail/proxy-switchyomega/padekgcemlokbadohgkifijomclgjgif) 按需切换。
+
+> 详细配置参考 [docs/whistle-local-dev.md](./docs/whistle-local-dev.md)
+
+### 3. 启动服务
 
 ```bash
-# 认证服务 (端口 3001)
-cd servers/auth-service && rushx dev
-
-# 用户服务 (端口 3002)
-cd servers/user-service && rushx dev
-
-# API 网关 (端口 3000)
-cd servers/gateway && rushx dev
+# 一键全栈启动（后端 6 个 + 前端 3 个，nohup 后台运行）
+bash scripts/start-dev.sh
 ```
 
-##### 2. 前端应用
+或按场景启动：
 
 ```bash
-# 管理后台 (端口 5173)
-cd apps/admin-web && rushx dev
+# 只启动前端（后端已运行）
+bash scripts/start-frontend.sh
 
-# 少儿教育门户 (端口 3003)
-cd apps/portal && rushx dev
+# 只启动后端
+bash scripts/start-dev.sh    # 含前端，但后端已起来就跳过
+
+# 改完代码后，快速编译 + 重启 gateway / ai-service
+bash scripts/build-all.sh
+bash scripts/restart-servers.sh
 ```
 
-#### 一键停止
+手动按需启动（调试用）：
 
 ```bash
-# 停止所有端口
-lsof -ti:3000 -ti:3001 -ti:3002 -ti:3003 -ti:5173 | xargs kill -9 2>/dev/null || true
+# ===== 后端 =====
+cd servers/gateway && pnpm dev &        # :3000
+cd servers/auth-service && pnpm dev &   # :3001
+cd servers/user-service && pnpm dev &   # :3002
+cd servers/ai-service && pnpm dev &     # :3003
+cd servers/system-service && pnpm dev & # :3004
+cd servers/todo-service && pnpm dev &   # :3005
+
+# ===== 前端 =====
+cd apps/portal && pnpm dev &    # :5173
+cd apps/admin-web && pnpm dev & # :5174
+
+# ===== 文档 =====
+npx serve docs -p 4173 &        # :4173
 ```
 
-### 构建
-```bash
-# 构建所有项目
-pnpm build
+### 4. 访问
 
-# 或在单个项目中
-cd servers/gateway && rushx build
-```
+Whistle 代理开启后，浏览器访问统一域名：
+
+| 页面 | 地址 |
+|------|------|
+| Portal | http://local.kedouai.com |
+| Admin | http://local.kedouai.com/admin |
+| API | http://local.kedouai.com/api/xxx |
+| Swagger | http://local.kedouai.com/docs |
+
+> 💡 **不开启 Whistle 代理**时可直接访问各端口：Portal → localhost:5173，Admin → localhost:5174
 
 ## 端口分配
 
 | 应用/服务 | 端口 | 说明 |
 |----------|------|------|
-| admin-web | 5173 | 管理后台 |
-| portal | 3003 | 少儿教育门户 |
+| portal | 5173 | 用户门户 |
+| admin-web | 5174 | 管理后台 |
+| docs | 4173 | 文档站点 |
 | gateway | 3000 | API 网关 |
 | auth-service | 3001 | 认证服务 |
-| user-service | 3002 | 用户服务 |
+| user-service | 3002 | 用户服务 + 文件上传 |
+| ai-service | 3003 | AI 对话 + 图片生成 + 变变 |
+| system-service | 3004 | 系统管理 |
+| todo-service | 3005 | 待办 / 任务管理 |
+
+## 共享配置
+
+`@web-system/shared`（`packages/shared/src/api.ts`）集中管理前后端公用的超时配置，portal / admin-web / mini-app / gateway / ai-service 均引用同一份常量。新增或调整超时只需改这一个文件：
+
+```
+packages/shared/src/api.ts
+├── API_TIMEOUT.DEFAULT / AI_TASK / AI_QUERY      ← 前端用
+├── API_TIMEOUT.GATEWAY.{DEFAULT, AI_TASK, TTS}   ← Gateway proxy 用
+└── API_TIMEOUT.UPSTREAM.{DEFAULT, CHAT, ...}     ← 后端调第三方用
+```
 
 ## 功能模块
 
@@ -156,7 +222,11 @@ docker-compose up -d
 
 ## 域名配置
 
-- portal.kedouai.com → 106.52.176.246 (通过 42.194.200.69 Nginx 转发)
+| 环境 | 域名 |
+|------|------|
+| 生产 | kedouai.com |
+| 测试 | dev.kedouai.com |
+| 本地开发 | local.kedouai.com (通过 Whistle 代理统一) |
 
 ## 开发规范
 
@@ -164,33 +234,23 @@ docker-compose up -d
 - 遵循 ESLint 规则
 - 提交前运行测试
 
-## 已知问题与修复
 
-### 1. Portal request.ts 变量命名冲突
-**问题**：`apps/portal/src/api/request.ts` 中导入的 axios 与创建的实例变量命名冲突，导致 `request.create is not a function` 错误。
+## 常见问题
 
-**修复**：将导入的 axios 重命名为 `axiosInstance`：
-```typescript
-// 修改前
-import request from 'axios';
-const request = request.create({...});
+### Whistle 代理没生效
 
-// 修改后
-import axiosInstance from 'axios';
-const request = axiosInstance.create({...});
-```
+1. 确认 Whistle 在运行：`w2 status`
+2. 确认系统代理已开启：系统偏好设置 → 网络 → 高级 → 代理
+3. 确认 Vite 使用了 `host: true` 配置
+4. **不要加 `/etc/hosts`** —— Chrome 默认绕过 127.x.x.x 代理，加了反而通不了
 
-### 2. Gateway 用户路由配置缺失
-**问题**：`/api/users` 请求返回 404，请求被错误路由到 auth-service（端口 3001）而不是 user-service（端口 3002）。
+### 模块报错 "Expected JavaScript module but got text/html"
 
-**修复**：在 `servers/gateway/src/proxy/` 中添加 user-service 路由：
-- `proxy.service.ts`：添加 `userServiceUrl` 配置和 `createUserProxy()` 方法
-- `proxy.controller.ts`：添加 `/users/*` 和 `/users` 路由处理
+Whistle 规则中的 `excludeFilter` 误杀了模块请求。使用本文档推荐的新规则（不包含 excludeFilter）即可。
 
-### 3. 端口分配表错误
-**问题**：README 中 admin-web 端口错误标记为 3001。
+### 详细排查
 
-**修复**：已更正为 5173。
+参见 [docs/whistle-local-dev.md](./docs/whistle-local-dev.md) 第 10 节故障排查。
 
 ## License
 

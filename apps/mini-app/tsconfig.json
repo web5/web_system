@@ -10,6 +10,10 @@
     "lib": ["ES2019", "DOM"],
     "allowJs": true,
     "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@web-system/shared": ["../../packages/shared/src/index.ts"]
+    },
     "types": [
       "miniprogram-api-typings",
       "weixin-miniprogram",

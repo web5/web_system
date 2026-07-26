@@ -3,6 +3,8 @@
  * 自动携带 JWT Token，401 时触发重新登录
  */
 
+import { API_TIMEOUT } from '@web-system/shared';
+
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
@@ -46,6 +48,8 @@ interface RequestOptions {
   header?: Record<string, string>;
   /** 是否静默处理 401（不触发重新登录） */
   silent?: boolean;
+  /** 超时时间（毫秒），默认 API_TIMEOUT.DEFAULT */
+  timeout?: number;
 }
 
 /** 通用请求方法 */
@@ -59,6 +63,7 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
       url: `${baseUrl}${options.url}`,
       method: options.method || 'GET',
       data: options.data,
+      timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
       header: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),

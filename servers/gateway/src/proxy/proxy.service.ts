@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import { API_TIMEOUT } from '@web-system/shared';
 
 @Injectable()
 export class ProxyService implements OnModuleInit {
@@ -46,27 +47,34 @@ export class ProxyService implements OnModuleInit {
   onModuleInit() {
     this.logger.log('初始化所有 Proxy 实例...');
 
-    // 预创建所有 proxy 中间件（带 pathRewrite 去掉 /api/ 前缀）
-    this.authProxy = this.createProxy(this.authServiceUrl, '^/api/auth');
-    this.userProxy = this.createProxy(this.userServiceUrl, '^/api/users');
-    // ai 路径有特殊 SSE/TTS 处理，不对通用路由做 pathRewrite
-    this.aiProxy = this.createProxy(this.aiServiceUrl);
-    this.systemProxy = this.createProxy(this.systemServiceUrl, '^/api/admin');
+    // 预创建所有 proxy 中间件（去掉 /api 前缀，转给对应服务自己的路由）
+    // 注意：后端服务 controller 是 @Controller('auth' | 'users' | 'ai' | 'admin/...')，
+    //       不是 @Controller('api/auth')，所以只剥 /api 这一层，保留 /auth /users /ai 等
+    this.authProxy = this.createProxy(this.authServiceUrl, '^/api');
+    this.userProxy = this.createProxy(this.userServiceUrl, '^/api');
+    // AI 任务（对话 / 生图）链路较长，给 120s
+    this.aiProxy = this.createProxy(this.aiServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
+    this.systemProxy = this.createProxy(this.systemServiceUrl, '^/api');
 
-    // 变变产品代理到 user 服务
-    this.bianbianProxy = this.createProxy(this.userServiceUrl, '^/api/bianbian');
+    // 变变产品实际上属于 ai-service（servers/ai-service/src/bianbian/）
+    // 不要指到 user-service，那边没有 bianbian controller
+    this.bianbianProxy = this.createProxy(this.aiServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
 
-    // TODO 服务
-    this.todoProxy = this.createProxy(this.todoServiceUrl, '^/api/todos');
+    // TODO 服务（统一 pathRewrite 模式，只剥 /api）
+    this.todoProxy = this.createProxy(this.todoServiceUrl, '^/api');
 
-    // 上传（API 操作，非文件访问）
-    this.uploadProxy = this.createProxy(this.userServiceUrl, '^/api/upload');
+    // 上传（API 操作，非文件访问）— 统一 pathRewrite 模式
+    this.uploadProxy = this.createProxy(this.userServiceUrl, '^/api');
 
-    // 上传文件静态访问（/api/uploads/* → user-service）
+    // 上传文件静态访问（/api/uploads/* → user-service / upload-service）
+    // 需要剥掉 /api 前缀，因为后端静态文件挂载在 /uploads 而非 /api/uploads
+    // 指向 user-service：用户头像通过 user-service 上传并保存到 user-service 的 uploads/ 目录
+    // 即使 upload-service 未运行，单个微服务也可托管所有 /api/uploads/* 静态文件
     this.uploadStaticProxy = createProxyMiddleware({
-      target: this.uploadServiceUrl,
+      target: this.userServiceUrl,
       changeOrigin: true,
       timeout: 10_000,
+      pathRewrite: { '^/api': '' },
       on: { error: this.boundErrorHandler },
     });
 
@@ -85,14 +93,19 @@ export class ProxyService implements OnModuleInit {
 
   /**
    * 创建通用代理中间件
+   * @param timeoutMs 代理超时（毫秒），默认 PROXY_TIMEOUT.DEFAULT (30s)
    */
-  private createProxy(target: string, pathRewritePattern?: string): ReturnType<typeof createProxyMiddleware> {
+  private createProxy(
+    target: string,
+    pathRewritePattern?: string,
+    timeoutMs: number = API_TIMEOUT.GATEWAY.DEFAULT,
+  ): ReturnType<typeof createProxyMiddleware> {
     const options: Options = {
       target,
       changeOrigin: true,
       on: { error: this.boundErrorHandler },
-      timeout: 30_000,
-      proxyTimeout: 30_000,
+      timeout: timeoutMs,
+      proxyTimeout: timeoutMs,
     };
 
     if (pathRewritePattern) {

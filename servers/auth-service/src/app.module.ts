@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { RedisModule } from '@liaoliaots/nestjs-redis';
+import * as path from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
@@ -11,7 +12,9 @@ import { QrcodeModule } from './qrcode/qrcode.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        path.resolve(__dirname, '../.env'),   // servers/auth-service/.env（兼容 dist/src 运行）
+      ],
     }),
 
     RedisModule.forRootAsync({
@@ -39,6 +42,11 @@ import { QrcodeModule } from './qrcode/qrcode.module';
             password: configService.get('DB_PASSWORD', ''),
             database: configService.get('DB_DATABASE', 'web_system'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            extra: {
+              max: 20,
+              idleTimeoutMillis: 30000,
+              connectionTimeoutMillis: 5000,
+            },
             synchronize: configService.get('NODE_ENV') !== 'production',
             logging: configService.get('NODE_ENV') === 'development',
           };
@@ -60,6 +68,11 @@ import { QrcodeModule } from './qrcode/qrcode.module';
           password: configService.get('DB_PASSWORD', ''),
           database: configService.get('DB_DATABASE', 'web_system'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          extra: {
+            connectionLimit: 20,
+            connectTimeout: 10000,
+            waitForConnections: true,
+          },
           synchronize: configService.get('NODE_ENV') !== 'production',
           logging: configService.get('NODE_ENV') === 'development',
         };
