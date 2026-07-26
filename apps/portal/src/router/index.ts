@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { getStoredToken } from '@/stores/user';
 
 const routes = [
   {
@@ -96,9 +97,8 @@ const router = createRouter({
 // 路由守卫：需要认证的页面跳转到登录页
 router.beforeEach((to, from, next) => {
   if (to.meta?.requiresAuth) {
-    const token = localStorage.getItem('access_token');
+    const token = getStoredToken();
     if (!token) {
-      // 带 redirect 参数跳转到登录页
       next({ path: '/login', query: { redirect: to.fullPath } });
       return;
     }

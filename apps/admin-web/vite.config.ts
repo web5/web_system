@@ -13,6 +13,8 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
+    allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

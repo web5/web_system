@@ -5,25 +5,31 @@
  *   pm2 start ecosystem.config.js
  *   pm2 save
  *
- * 注意：敏感信息（DB_PASSWORD、JWT_SECRET 等）不要硬编码在此文件中！
- * 生产环境请使用 .env.production 文件或环境变量覆盖。
+ * 重要：所有敏感信息（DB_PASSWORD、JWT_SECRET 等）必须通过 .env.production 设置！
+ * 请勿修改此文件中的空字符串默认值，它们会在缺少环境变量时导致启动失败。
  */
-/** 尝试加载 .env.production，失败则使用 process.env 中的值 */
+/** 尝试加载 .env.production，失败则从 process.env 读取 */
 try { require('dotenv').config({ path: '/data/web_system/.env.production' }); } catch (_) {}
 
 const DB_TYPE = process.env.DB_TYPE || 'mysql';
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_PORT = process.env.DB_PORT || '3306';
 const DB_USERNAME = process.env.DB_USERNAME || 'root';
-const DB_PASSWORD = process.env.DB_PASSWORD || 'web_system_root_2026';
+const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_DATABASE = process.env.DB_DATABASE || 'web_system';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || '';
 const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
 const MINI_PROGRAM_SECRET = process.env.MINI_PROGRAM_SECRET || '';
 const OFFICIAL_ACCOUNT_APP_ID = process.env.OFFICIAL_ACCOUNT_APP_ID || '';
 const OFFICIAL_ACCOUNT_SECRET = process.env.OFFICIAL_ACCOUNT_SECRET || '';
 const WECHAT_OAUTH_REDIRECT_URI = process.env.WECHAT_OAUTH_REDIRECT_URI || '';
+
+// 启动前校验 JWT_SECRET 非空
+if (!JWT_SECRET) {
+  console.error('错误：未设置 JWT_SECRET！请在 .env.production 中配置安全的密钥。');
+  process.exit(1);
+}
 
 const baseDbConfig = {
   DB_TYPE,
@@ -37,14 +43,25 @@ const baseDbConfig = {
 
 const logBase = process.env.LOG_BASE || '/data/web_system/logs';
 
+const commonConfig = {
+  instances: 1,
+  exec_mode: 'fork',
+  cwd: '/data/web_system',
+  time: true,
+  merge_logs: true,
+  autorestart: true,
+  watch: false,
+  max_memory_restart: '500M',
+  max_restarts: 10,      // 防止无限重启循环
+  min_uptime: '10s',      // 10s 内频繁重启则触发 max_restarts
+};
+
 module.exports = {
   apps: [
     {
+      ...commonConfig,
       name: 'gateway',
       script: './servers/gateway/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
@@ -55,24 +72,17 @@ module.exports = {
         SYSTEM_SERVICE_URL: 'http://127.0.0.1:3004',
         TODO_SERVICE_URL: 'http://127.0.0.1:3005',
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:3000',
-        CORS_ORIGINS: '*',
+        CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://portal.kedouai.com,https://admin.kedouai.com',
         JWT_SECRET,
       },
       error_file: `${logBase}/gateway-error.log`,
       out_file: `${logBase}/gateway-out.log`,
       log_file: `${logBase}/gateway-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
     },
     {
+      ...commonConfig,
       name: 'auth-service',
       script: './servers/auth-service/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
@@ -88,18 +98,11 @@ module.exports = {
       error_file: `${logBase}/auth-error.log`,
       out_file: `${logBase}/auth-out.log`,
       log_file: `${logBase}/auth-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
     },
     {
+      ...commonConfig,
       name: 'user-service',
       script: './servers/user-service/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3002,
@@ -108,18 +111,11 @@ module.exports = {
       error_file: `${logBase}/user-error.log`,
       out_file: `${logBase}/user-out.log`,
       log_file: `${logBase}/user-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
     },
     {
+      ...commonConfig,
       name: 'ai-service',
       script: './servers/ai-service/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3003,
@@ -132,38 +128,24 @@ module.exports = {
       error_file: `${logBase}/ai-error.log`,
       out_file: `${logBase}/ai-out.log`,
       log_file: `${logBase}/ai-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
     },
     {
+      ...commonConfig,
       name: 'system-service',
       script: './servers/system-service/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3004,
         ...baseDbConfig,
       },
-      error_file: `${logBase}/crawler-error.log`,
-      out_file: `${logBase}/crawler-out.log`,
-      log_file: `${logBase}/crawler-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
+      error_file: `${logBase}/system-error.log`,
+      out_file: `${logBase}/system-out.log`,
+      log_file: `${logBase}/system-combined.log`,
     },
     {
+      ...commonConfig,
       name: 'todo-service',
       script: './servers/todo-service/dist/main.js',
-      cwd: '/data/web_system',
-      instances: 1,
-      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3005,
@@ -173,11 +155,6 @@ module.exports = {
       error_file: `${logBase}/todo-error.log`,
       out_file: `${logBase}/todo-out.log`,
       log_file: `${logBase}/todo-combined.log`,
-      time: true,
-      merge_logs: true,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
     },
   ],
 };

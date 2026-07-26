@@ -21,6 +21,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
+    allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
     proxy: {
       // TTS 语音合成 — 直接代理到 AI 服务，绕过 Gateway 避免二进制被 JSON 包装
       '/api/ai/tts': {
@@ -42,32 +44,28 @@ export default defineConfig({
   build: {
     sourcemap: false,
     cssCodeSplit: true,
-    // 移除 console 和 debugger（生产环境）
-    minify: 'esbuild',
+    // 使用 terser 压缩，可正确移除生产环境的 console 和 debugger
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
     target: 'es2015',
     chunkSizeWarningLimit: 500,
     rollupOptions: {
       output: {
-        // 优化 chunk 拆分 - 细粒度拆分，便于浏览器并行下载
+        // 合并过细的 vendor chunks，避免请求数过多
         manualChunks(id) {
-          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue')) {
-            return 'vendor-vue';
+          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue') || id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) {
+            return 'vendor-core';
           }
           if (id.includes('node_modules/ant-design-vue') || id.includes('node_modules/@ant-design/icons-vue')) {
             return 'vendor-antd';
           }
-          // 进一步拆分大型第三方库，提升并行加载
-          if (id.includes('node_modules/vue-router')) {
-            return 'vendor-router';
-          }
-          if (id.includes('node_modules/pinia')) {
-            return 'vendor-pinia';
-          }
-          if (id.includes('node_modules/axios')) {
-            return 'vendor-axios';
-          }
-          if (id.includes('node_modules/dayjs') || id.includes('node_modules/moment')) {
-            return 'vendor-dayjs';
+          if (id.includes('node_modules/axios') || id.includes('node_modules/dayjs') || id.includes('node_modules/moment')) {
+            return 'vendor-utils';
           }
           if (id.includes('node_modules')) {
             return 'vendor-other';

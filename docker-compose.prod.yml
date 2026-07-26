@@ -29,7 +29,8 @@ services:
       - USER_SERVICE_URL=http://user-service:3002
       - AI_SERVICE_URL=http://ai-service:3003
       - PUBLIC_URL=http://106.52.176.246:3000
-      - CORS_ORIGINS=*
+      # 生产环境务必改为具体域名列表，禁止使用通配符 *
+      - CORS_ORIGINS=https://portal.kedouai.com,https://admin.kedouai.com,https://dev.kedouai.com
     depends_on:
       - redis
     networks:
@@ -48,6 +49,7 @@ services:
       - DB_TYPE=mysql
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
+      # 生产环境建议使用专用低权限数据库用户，而非 root
       - DB_USERNAME=root
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system
@@ -72,6 +74,7 @@ services:
       - DB_TYPE=mysql
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
+      # 生产环境建议使用专用低权限数据库用户，而非 root
       - DB_USERNAME=root
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system
@@ -91,6 +94,7 @@ services:
       - DB_TYPE=mysql
       - DB_HOST=172.16.16.10
       - DB_PORT=3306
+      # 生产环境建议使用专用低权限数据库用户，而非 root
       - DB_USERNAME=root
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=web_system

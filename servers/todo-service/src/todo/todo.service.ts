@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Todo } from './todo.entity';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
@@ -56,7 +56,7 @@ export class TodoService {
 
   async findOne(id: number, userId: number): Promise<Todo> {
     const todo = await this.todoRepository.findOne({
-      where: { id, user_id: userId, deleted_at: null },
+      where: { id, user_id: userId, deleted_at: IsNull() },
     });
     if (!todo) throw new NotFoundException('Task not found');
     return todo;
@@ -106,9 +106,9 @@ export class TodoService {
     }
 
     const [total, completed, overdue] = await Promise.all([
-      this.todoRepository.count({ where: { user_id: userId, deleted_at: null } }),
-      this.todoRepository.count({ where: { user_id: userId, status: 'completed', deleted_at: null } }),
-      this.todoRepository.count({ where: { user_id: userId, status: 'overdue', deleted_at: null } }),
+      this.todoRepository.count({ where: { user_id: userId, deleted_at: IsNull() } }),
+      this.todoRepository.count({ where: { user_id: userId, status: 'completed', deleted_at: IsNull() } }),
+      this.todoRepository.count({ where: { user_id: userId, status: 'overdue', deleted_at: IsNull() } }),
     ]);
 
     const pending = total - completed - overdue;

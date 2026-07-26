@@ -15,4 +15,9 @@ app.use(pinia);
 app.use(router);
 setupAntd(app);
 
+// 全局错误兜底
+app.config.errorHandler = (err, _instance, info) => {
+  console.error('[Admin 全局错误]', err, info);
+};
+
 app.mount('#app');

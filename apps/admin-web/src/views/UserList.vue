@@ -107,7 +107,7 @@
                   <template #icon><MoreOutlined /></template>
                 </a-button>
                 <template #overlay>
-                  <a-menu @click="({ key }: { key: string }) => handleMenuAction(key, record)">
+                  <a-menu @click="({ key }: any) => handleMenuAction(key, record)">
                     <a-menu-item key="quota">
                       <SettingOutlined />
                       <span class="menu-item-text">配额设置</span>

@@ -5,40 +5,32 @@ import {
   Res,
   Post,
   Header,
+  Logger,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
+import { Public } from '../auth/public.decorator';
 import * as http from 'http';
 import * as url from 'url';
 
 @ApiExcludeController()
+@Public() // API 路由的认证由各后端微服务自行处理，Gateway 仅做代理转发
 @Controller('api')
 export class ProxyController {
+  private readonly logger = new Logger(ProxyController.name);
+
   constructor(private proxyService: ProxyService) {}
 
   @All('auth/:path(*)')
   proxyAuth(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createAuthProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getAuthProxy()(req, res);
   }
 
   @All('users/:path(*)')
-  proxyUsersSubpath(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUserProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
   @All('users')
   proxyUsers(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUserProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getUserProxy()(req, res);
   }
 
   // SSE 流式对话 — 用原生 http 转发，避免 http-proxy-middleware 缓冲问题
@@ -62,25 +54,21 @@ export class ProxyController {
         'Content-Length': Buffer.byteLength(body),
         'Connection': 'keep-alive',
       },
-      timeout: 120000,
+      timeout: 120_000,
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
-      // 透传所有 SSE 数据到客户端
-      proxyRes.on('data', (chunk: Buffer) => {
-        res.write(chunk);
-      });
-      proxyRes.on('end', () => {
-        res.end();
-      });
+      proxyRes.on('data', (chunk: Buffer) => res.write(chunk));
+      proxyRes.on('end', () => res.end());
     });
 
+    // 客户端断开时取消上游请求
+    req.on('close', () => { proxyReq.destroy(); });
+
     proxyReq.on('error', (err) => {
-      console.error('SSE proxy error:', err.message);
+      this.logger.error(`SSE proxy error: ${err.message}`);
       if (!res.headersSent) {
         res.status(502).json({ code: 502, message: 'AI service unavailable' });
-      } else {
-        res.end();
       }
     });
 
@@ -112,7 +100,7 @@ export class ProxyController {
         'Content-Length': Buffer.byteLength(body),
         ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
       },
-      timeout: 15000,
+      timeout: 15_000,
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
@@ -120,7 +108,6 @@ export class ProxyController {
       const contentType = proxyRes.headers['content-type'] || '';
 
       if (contentType.startsWith('audio/')) {
-        // 成功：透传音频二进制数据
         res.writeHead(statusCode, {
           'Content-Type': contentType,
           'Content-Length': proxyRes.headers['content-length'] || '',
@@ -129,15 +116,11 @@ export class ProxyController {
         proxyRes.on('data', (chunk: Buffer) => res.write(chunk));
         proxyRes.on('end', () => res.end());
       } else {
-        // 失败：读取 JSON 错误信息透传
         let errorBody = '';
-        proxyRes.on('data', (chunk: Buffer) => {
-          errorBody += chunk.toString();
-        });
+        proxyRes.on('data', (chunk: Buffer) => { errorBody += chunk.toString(); });
         proxyRes.on('end', () => {
           try {
-            const parsed = JSON.parse(errorBody);
-            res.status(statusCode).json(parsed);
+            res.status(statusCode).json(JSON.parse(errorBody));
           } catch {
             res.status(502).json({ code: 502, message: 'TTS service error' });
           }
@@ -145,8 +128,10 @@ export class ProxyController {
       }
     });
 
+    req.on('close', () => { proxyReq.destroy(); });
+
     proxyReq.on('error', (err) => {
-      console.error('TTS proxy error:', err.message);
+      this.logger.error(`TTS proxy error: ${err.message}`);
       if (!res.headersSent) {
         res.status(502).json({ code: 502, message: 'TTS service unavailable' });
       }
@@ -166,61 +151,41 @@ export class ProxyController {
   @All('ai/:path(*)')
   @All('ai')
   proxyAi(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createAiProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getAiProxy()(req, res);
   }
 
   @All('admin/:path(*)')
   @All('admin')
   proxySystem(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createSystemProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getSystemProxy()(req, res);
   }
 
   @All('bianbian/:path(*)')
   @All('bianbian')
   proxyBianbian(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createBianbianProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getBianbianProxy()(req, res);
   }
 
   @All('todos/:path(*)')
-  proxyTodosSubpath(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createTodoProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
-  }
-
   @All('todos')
   proxyTodos(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createTodoProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getTodoProxy()(req, res);
   }
 
   @All('upload/:path(*)')
   @All('upload')
   proxyUpload(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUploadProxy();
-    return proxy(req, res, () => {
-      res.status(500).json({ code: 500, message: 'Proxy error' });
-    });
+    return this.proxyService.getUploadProxy()(req, res);
   }
 
-  /** 上传文件的静态资源访问（/uploads/* → upload-service） */
+  /** 上传文件的静态资源访问（/api/uploads/* → user-service） */
   @All('uploads/:path(*)')
   @All('uploads')
   proxyUploadStatic(@Req() req: Request, @Res() res: Response) {
-    const proxy = this.proxyService.createUploadStaticProxy();
-    return proxy(req, res, () => {
+    return this.proxyService.getUploadStaticProxy()(req, res, (e?: Error) => {
+      if (e) {
+        this.logger.error(`静态资源代理错误: ${e.message}`);
+      }
       res.status(404).json({ code: 404, message: 'File not found' });
     });
   }
