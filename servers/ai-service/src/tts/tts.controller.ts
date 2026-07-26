@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TtsService } from './tts.service';
 
@@ -8,12 +9,14 @@ interface SpeakDto {
   speed?: number;
 }
 
+@ApiTags('语音合成')
 @Controller('ai/tts')
 export class TtsController {
   constructor(private readonly ttsService: TtsService) {}
 
   @Post('speak')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '文字转语音（TTS）' })
   async speak(@Body() body: SpeakDto, @Res() res: Response): Promise<void> {
     const { text, voiceType, speed } = body;
 

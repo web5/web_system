@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
+import { API_TIMEOUT } from '@web-system/shared';
 
 export interface ImageSubmitRequest {
   model: string;
@@ -85,7 +86,7 @@ export class ImageGenClient {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 30000,
+          timeout: API_TIMEOUT.UPSTREAM.DEFAULT,
         }),
       );
 
@@ -122,7 +123,7 @@ export class ImageGenClient {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 30000,
+          timeout: API_TIMEOUT.UPSTREAM.DEFAULT,
         }),
       );
 

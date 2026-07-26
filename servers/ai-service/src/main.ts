@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   // 全局验证管道
   app.useGlobalPipes(
@@ -19,9 +21,10 @@ async function bootstrap() {
   // 全局异常过滤器：统一响应格式 { code, message, data }
   app.useGlobalFilters(new UnifiedExceptionFilter());
 
-  // 启用 CORS
+  // CORS — 从环境变量读取，禁止硬编码 *
+  const corsOrigins = configService.get('CORS_ORIGINS', '');
   app.enableCors({
-    origin: '*',
+    origin: corsOrigins || false,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -38,7 +41,8 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3003;
   await app.listen(port);
-  console.log(`[AI Service] AI Service is running on: http://localhost:${port}`);
-  console.log(`[AI Service] Swagger docs: http://localhost:${port}/api-docs`);
+  const logger = new Logger('AIService');
+  logger.log(`AI Service is running on: http://localhost:${port}`);
+  logger.log(`Swagger docs: http://localhost:${port}/api-docs`);
 }
 bootstrap();

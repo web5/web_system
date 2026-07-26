@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { DataSource, Repository, MoreThanOrEqual, FindOptionsWhere } from 'typeorm';
+import { API_TIMEOUT } from '@web-system/shared';
 import { firstValueFrom } from 'rxjs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -178,7 +179,7 @@ export class BianbianService {
     try {
       const res = await firstValueFrom(
         this.httpService.get(`http://localhost:3004/admin/settings/public/${cacheKey}`, {
-          timeout: 3000,
+          timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
       );
       const value = res.data?.data;
@@ -208,7 +209,7 @@ export class BianbianService {
     try {
       const res = await firstValueFrom(
         this.httpService.get(`http://localhost:3002/users/${userId}`, {
-          timeout: 3000,
+          timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
       );
       const user = res.data;
@@ -326,7 +327,7 @@ export class BianbianService {
       const res = await firstValueFrom(
         this.httpService.get('http://system-service:3004/admin/bianbian/materials', {
           params: { pageSize: 200 },
-          timeout: 3000,
+          timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
       );
       if (res.data?.code === 0 && Array.isArray(res.data.data?.list)) {

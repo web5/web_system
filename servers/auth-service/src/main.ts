@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
@@ -15,7 +15,7 @@ async function bootstrap() {
   // 优先使用 process.env.PORT，但如果被 gateway 的 PORT=3000 污染则用 3001
   const envPort: string = process.env.PORT || configService.get<string>('PORT', '3001') || '3001';
   const port = envPort === '3000' ? 3001 : parseInt(envPort, 10);
-  const corsOrigins = configService.get('CORS_ORIGINS', '*');
+  const corsOrigins = configService.get('CORS_ORIGINS', '');
 
   // CORS 配置
   app.enableCors({
@@ -47,8 +47,9 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   await app.listen(port);
-  console.log(`[Auth Service] Auth Service is running on: http://localhost:${port}`);
-  console.log(`[Auth Service] Swagger docs: http://localhost:${port}/docs`);
+  const logger = new Logger('AuthService');
+  logger.log(`Auth Service is running on: http://localhost:${port}`);
+  logger.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 
 bootstrap();

@@ -1,20 +1,38 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join, extname } from 'path';
 import compression from 'compression';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import helmet from 'helmet';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+  const logger = new Logger('Gateway');
 
   const port = configService.get('PORT', 3000);
   const host = configService.get('HOST', '0.0.0.0');
-  const corsOrigins = configService.get('CORS_ORIGINS', '*');
+  const corsOrigins = configService.get('CORS_ORIGINS', '');
   const publicUrl = configService.get('PUBLIC_URL', '');
+
+  // 安全头（X-Frame-Options, X-Content-Type-Options, HSTS 等）
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        connectSrc: ["'self'", 'https://api.kedouai.com'],
+      },
+    },
+  }));
 
   // CORS 配置
   app.enableCors({
@@ -55,36 +73,23 @@ async function bootstrap() {
     next();
   });
 
-  // 上传文件静态资源代理（/uploads/* → user-service）
-  // 注意：必须在 SPA 回退中间件之前注册
-  const userServiceUrl = configService.get('USER_SERVICE_URL', 'http://localhost:3002');
-  app.use(
-    '/uploads',
-    createProxyMiddleware({
-      target: userServiceUrl,
-      changeOrigin: true,
-      timeout: 10000,
-    }),
-  );
+  // 请求日志中间件 — 记录每个请求的方法、路径、状态码和耗时
+  app.use((req: any, res: any, next: () => void) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      logger.log(`${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`);
+    });
+    next();
+  });
 
-  // /mini-scan — 微信原生扫码器扫描 QR 码后的处理
-  // 用户用微信"扫一扫"扫描登录二维码时，此 URL 会在微信内置浏览器中打开
-  // 此处重定向到微信 OAuth 授权，完成登录后确认 ticket，PC 端轮询获取 token
+  // SPA 回退中间件 - 处理前端路由回退
+  // API/文档路由跳过
   app.use((req: any, res: any, next: () => void) => {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
 
-    if (path.startsWith('/mini-scan')) {
-      const ticket = typeof req.query.ticket === 'string' ? req.query.ticket : '';
-      if (!ticket) return res.redirect('/');
-      // 重定向到微信 OAuth，将 ticket 编码到 redirect URL 中
-      const redirectUrl = `/api/auth/wechat/authorize?redirect=${encodeURIComponent('/?mini_scan_ticket=' + ticket)}`;
-      return res.redirect(redirectUrl);
-    }
-
-    // SPA 回退中间件 - 处理前端路由回退
-    // API/文档路由跳过
-    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger')) {
+    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/mini-scan') || path.startsWith('/health')) {
       return next();
     }
     // 有扩展名的静态资源跳过（由 ServeStaticModule 处理）
@@ -99,6 +104,12 @@ async function bootstrap() {
     res.sendFile(join(__dirname, '..', 'public', 'index.html'));
   });
 
+  // 全局异常过滤器 — 生产环境掩码内部错误信息
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // 统一响应格式 { code, data, message }
+  app.useGlobalInterceptors(new TransformInterceptor());
+
   // 网关自身 Swagger 文档
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Gateway API')
@@ -109,11 +120,11 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   await app.listen(port, host);
-  console.log(`[Gateway] Gateway is running on: http://${host === '0.0.0.0' ? '0.0.0.0' : 'localhost'}:${port}`);
-  console.log(`[Gateway] Swagger docs: http://localhost:${port}/docs`);
-  console.log(`[Gateway] 全部服务文档: http://localhost:${port}/swagger`);
+  logger.log(`Gateway is running on: http://${host === '0.0.0.0' ? '0.0.0.0' : 'localhost'}:${port}`);
+  logger.log(`Swagger docs: http://localhost:${port}/docs`);
+  logger.log(`全部服务文档: http://localhost:${port}/swagger`);
   if (publicUrl) {
-    console.log(`[Gateway] Public access: ${publicUrl}`);
+    logger.log(`Public access: ${publicUrl}`);
   }
 }
 

@@ -1,6 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getStoredToken } from '@/stores/user';
 
+/**
+ * 解析 JWT token，检查是否过期
+ * 不做签名验证（那是后端的事），只检查 exp 字段
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (!payload.exp) return false;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
 const routes = [
   {
     path: '/',
@@ -87,6 +101,17 @@ const routes = [
     name: 'ToolDiff',
     component: () => import('../views/tools/CodeDiff.vue'),
   },
+  // ========== Admin 重定向（/admin → /admin/）==========
+  {
+    path: '/admin',
+    redirect: '/admin/',
+  },
+  // ========== 404 兜底 ==========
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('../views/NotFound.vue'),
+  },
 ];
 
 const router = createRouter({
@@ -98,7 +123,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   if (to.meta?.requiresAuth) {
     const token = getStoredToken();
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
       next({ path: '/login', query: { redirect: to.fullPath } });
       return;
     }

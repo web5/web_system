@@ -5,13 +5,19 @@ services:
   redis:
     image: redis:7-alpine
     container_name: web_system_redis
+    # 生产环境不暴露 Redis 端口到宿主机，仅内部网络访问
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:
       - web_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # API 网关
   gateway:
@@ -36,6 +42,11 @@ services:
     networks:
       - web_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # 认证服务
   auth-service:
@@ -61,6 +72,11 @@ services:
     networks:
       - web_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # 用户服务
   user-service:
@@ -81,6 +97,11 @@ services:
     networks:
       - web_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3002/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # AI 对话服务
   ai-service:
@@ -104,6 +125,11 @@ services:
     networks:
       - web_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   web_network:

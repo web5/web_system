@@ -10,14 +10,14 @@ export class UserService {
     private userRepository: Repository<User>,
   ) {}
 
-  async findAll(page: number = 1, limit: number = 10, keyword?: string) {
+  async findAll(page: number = 1, pageSize: number = 10, keyword?: string) {
     const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
+    const pageSizeNum = Number(pageSize) || 10;
     const trimmedKeyword = keyword?.trim();
 
     const [users, total] = await this.userRepository.findAndCount({
-      skip: (pageNum - 1) * limitNum,
-      take: limitNum,
+      skip: (pageNum - 1) * pageSizeNum,
+      take: pageSizeNum,
       order: { createdAt: 'DESC' },
       where: trimmedKeyword
         ? [
@@ -35,7 +35,7 @@ export class UserService {
       list: safeUsers,
       total,
       page: pageNum,
-      pageSize: limitNum,
+      pageSize: pageSizeNum,
     };
   }
 

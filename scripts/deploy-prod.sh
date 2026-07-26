@@ -2,6 +2,7 @@
 # ===========================================================
 # Web System - 生产环境一键部署脚本
 # 服务器配置见 scripts/.env.prod
+# TODO: 与 deploy.sh / deploy-dev.sh 代码重复率高，后续应统一为 deploy.sh + 环境变量
 #
 # 用法:
 #   ./scripts/deploy-prod.sh              # 部署全部
@@ -64,7 +65,7 @@ deploy_auth() {
   log "同步 dist + 源码到远程..."
   tar czf - dist src package.json | $SSH_CMD "$SERVER" "cd $REMOTE_DIR && tar xzf -"
   log "重启 auth-service..."
-  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 delete auth-service 2>/dev/null; pm2 start servers/auth-service/dist/main.js --name auth-service"
+  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 restart auth-service 2>/dev/null || pm2 start servers/auth-service/dist/main.js --name auth-service"
   log "auth-service 重启完成"
 }
 
@@ -80,7 +81,7 @@ deploy_gateway() {
 
 deploy_gateway_restart() {
   log "重启 gateway..."
-  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 delete gateway 2>/dev/null; pm2 start servers/gateway/dist/main.js --name gateway"
+  $SSH_CMD "$SERVER" "cd $REMOTE_DIR && pm2 restart gateway 2>/dev/null || pm2 start servers/gateway/dist/main.js --name gateway"
   log "gateway 重启完成"
 }
 

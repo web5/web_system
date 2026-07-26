@@ -153,6 +153,9 @@ export class AuthService {
 
       return this.generateToken(user);
     } catch (error) {
+      this.logger.warn(
+        `Refresh token 验证失败: ${(error as Error)?.message || error}`,
+      );
       throw new UnauthorizedException('Refresh token 无效');
     }
   }

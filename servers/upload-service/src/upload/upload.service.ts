@@ -108,7 +108,7 @@ export class UploadService {
 
   /** 构建文件访问 URL */
   buildUrl(filename: string, category: string): string {
-    return `/uploads/${category}/${filename}`;
+    return `/api/uploads/${category}/${filename}`;
   }
 
   /** 获取所有支持的上传分类 */

@@ -145,7 +145,10 @@ function getSwaggerIndexHtml(): string {
           style.textContent = '.topbar { display: none !important; }';
           doc.head.appendChild(style);
         }
-      } catch(e) { /* 跨域限制，跳过 */ }
+      } catch(e) {
+        this.logger.warn('Swagger 外部文档获取失败（跨域限制或网络问题）');
+      }
+      }
     });
   });
 })();

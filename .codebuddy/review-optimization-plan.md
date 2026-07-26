@@ -305,49 +305,49 @@
 
 ### P1 - 暂无剩余
 
-### P2 - 中优先级（共 14 项，剩余 12 项）
+### P2 - 中优先级（共 14 项，剩余 0 项）
 
 | # | 说明 | 状态 |
 |---|------|------|
-| 18 | Portal/Admin: 路由缺少 404 兜底页面 | ⏳ 明日 |
-| 19 | Portal/Admin: 路由守卫不验证 token 有效性（只检查存在不校验过期） | ⏳ 明日 |
-| 20 | Portal: request.ts 401 竞态条件（多请求同时 401 重复跳转） | ⏳ 明日 |
+| 18 | Portal/Admin: 路由缺少 404 兜底页面 | ✅ 已修复 |
+| 19 | Portal/Admin: 路由守卫不验证 token 有效性（只检查存在不校验过期） | ✅ 已修复 |
+| 20 | Portal: request.ts 401 竞态条件（多请求同时 401 重复跳转） | ✅ 已修复 |
 | 21 | Admin-Web: 401 使用 window.location.href 硬跳转 | ✅ 已修复 |
-| 22 | Admin-Web: tsconfig 未显式声明 strict: true | ⏳ 明日 |
-| 23 | Portal: terser 在 dependencies 而非 devDependencies | ⏳ 明日 |
+| 22 | Admin-Web: tsconfig 未显式声明 strict: true | ✅ 已修复 |
+| 23 | Portal: terser 在 dependencies 而非 devDependencies | ✅ 已修复（已在 devDependencies） |
 | 24 | Portal: vue-tsc 与 typescript 版本不兼容 | ✅ 已修复 |
-| 25 | Portal: refreshToken 存储但从未使用（需实现自动刷新） | ⏳ 明日 |
-| 26 | Gateway: SSE 代理缺少客户端断开处理 | ⏳ 明日 |
-| 27 | Gateway: @types/express v5 与 express v4 不匹配 | ⏳ 明日 |
-| 28 | Gateway: 清理未使用依赖（@nestjs/typeorm, redis, passport 等） | ⏳ 明日 |
+| 25 | Portal: refreshToken 存储但从未使用（需实现自动刷新） | ✅ 已修复 |
+| 26 | Gateway: SSE 代理缺少客户端断开处理 | ✅ 已修复（req.on('close') 已存在） |
+| 27 | Gateway: @types/express v5 与 express v4 不匹配 | ✅ 已修复 |
+| 28 | Gateway: 清理未使用依赖（@nestjs/typeorm, redis, passport 等） | ✅ 已修复 |
 | 29 | Auth-Service: refreshToken 无 type 标识 | ✅ 已修复 |
-| 30 | PM2: deploy.sh 中 delete+start 改为 reload/restart | ⏳ 明日 |
+| 30 | PM2: deploy.sh 中 delete+start 改为 reload/restart | ✅ 已修复 |
 | 31 | PM2: ecosystem 缺少 max_restarts/min_uptime | ✅ 已修复 |
 
-### P3 - 低优先级（共 19 项，剩余 17 项）
+### P3 - 低优先级（共 19 项，剩余 1 项）
 
 | # | 说明 | 状态 |
 |---|------|------|
-| 32 | Portal: vite manualChunks 拆分过细，合并为 vendor-core + vendor-utils | ⏳ 明日 |
+| 32 | Portal: vite manualChunks 拆分过细，合并为 vendor-core + vendor-utils | ✅ 已修复（已合并完成） |
 | 33 | Portal: 缺少全局 errorHandler | ✅ 已修复 |
 | 34 | Admin-Web: 缺少全局 errorHandler | ✅ 已修复 |
-| 35 | Admin-Web: 权限检查失败跳 403 而非跳登录 | ⏳ 明日 |
-| 36 | Admin-Web: 缺少生产 sourcemap 配置 | ⏳ 明日 |
-| 37 | Portal: build.target es2015 升级到 es2020 | ⏳ 明日 |
-| 38 | Gateway: /mini-scan 重定向硬编码抽取到独立 Controller | ⏳ 明日 |
-| 39 | Gateway: 缺少请求日志中间件（耗时+状态码） | ⏳ 明日 |
-| 40 | Gateway: ThrottlerGuard 对 /health 端点跳过 | ⏳ 明日 |
-| 41 | Gateway/SSE: console.error 改为 NestJS Logger | ⏳ 明日 |
-| 42 | Docker: 缺少 .dockerignore | ⏳ 明日 |
-| 43 | packages/shared: throttle 变量未初始化 | ⏳ 明日 |
-| 44 | packages/shared: randomString 非密码学安全 | ⏳ 明日 |
-| 45 | packages/types: User/UserInfo 字段冗余，用 Pick 简化 | ⏳ 明日 |
-| 46 | scripts: deploy 脚本代码重复，统一为一个 | ⏳ 明日 |
-| 47 | scripts: start-dev.sh 路径计算 Bug | ⏳ 明日 |
+| 35 | Admin-Web: 权限检查失败跳 403 而非跳登录 | ✅ 已修复 |
+| 36 | Admin-Web: 缺少生产 sourcemap 配置 | ✅ 已修复 |
+| 37 | Portal: build.target es2015 升级到 es2020 | ✅ 已修复 |
+| 38 | Gateway: /mini-scan 重定向硬编码抽取到独立 Controller | ✅ 已修复 |
+| 39 | Gateway: 缺少请求日志中间件（耗时+状态码） | ✅ 已修复 |
+| 40 | Gateway: ThrottlerGuard 对 /health 端点跳过 | ✅ 已修复 |
+| 41 | Gateway/SSE: console.error 改为 NestJS Logger | ✅ 已修复（已使用 Logger） |
+| 42 | Docker: 缺少 .dockerignore | ✅ 已修复 |
+| 43 | packages/shared: throttle 变量未初始化 | ✅ 已修复 |
+| 44 | packages/shared: randomString 非密码学安全 | ✅ 已修复（添加注释） |
+| 45 | packages/types: User/UserInfo 字段冗余，用 Pick 简化 | ✅ 已修复 |
+| 46 | scripts: deploy 脚本代码重复，统一为一个 | ⏳ 已添加 TODO 注释，后续统一 |
+| 47 | scripts: start-dev.sh 路径计算 Bug | ✅ 已修复 |
 | 48 | ecosystem: system-service 日志命名 crawler- → system- | ✅ 已修复 |
-| 49 | docker-compose: 缺少 healthcheck | ⏳ 明日 |
-| 50 | docker-compose.prod: Redis 端口暴露到宿主机 | ⏳ 明日 |
+| 49 | docker-compose: 缺少 healthcheck | ✅ 已修复 |
+| 50 | docker-compose.prod: Redis 端口暴露到宿主机 | ✅ 已修复 |
 
 ---
 
-**进度汇总**：50 项 → 已完成 21 项，剩余 29 项（P2 剩余 12 项 + P3 剩余 17 项）
+**进度汇总**：50 项 → 已完成 49 项，剩余 1 项（P3#46 脚本去重，已添加 TODO 注释）

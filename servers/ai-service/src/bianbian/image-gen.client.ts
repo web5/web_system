@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
+import { API_TIMEOUT } from '@web-system/shared';
 
 export interface ImageGenOptions {
   /** 原始画作图片的公开访问 URL（非 base64），作为 hy-image-v3.0 图生图参考图 */
@@ -83,7 +84,7 @@ export class ImageGenClient {
               Authorization: `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
-            timeout: 30_000,
+            timeout: API_TIMEOUT.UPSTREAM.DEFAULT,
           },
         ),
       );
@@ -140,7 +141,7 @@ export class ImageGenClient {
                 Authorization: `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
               },
-              timeout: 30_000,
+              timeout: API_TIMEOUT.UPSTREAM.DEFAULT,
             },
           ),
         );

@@ -1,16 +1,22 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const configService = app.get(ConfigService);
 
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // 统一响应格式 { code, data, message }
+  app.useGlobalInterceptors(new TransformInterceptor());
 
   // 全局验证管道
   app.useGlobalPipes(new ValidationPipe({
@@ -19,8 +25,14 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // CORS
-  app.enableCors();
+  // CORS — 从环境变量读取，禁止硬编码 * 或无参 enableCors
+  const corsOrigins = configService.get('CORS_ORIGINS', '');
+  app.enableCors({
+    origin: corsOrigins || false,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  });
 
   // 静态文件服务（头像上传目录）
   app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
@@ -38,7 +50,8 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3002;
   await app.listen(port);
-  console.log(`[User Service] User Service is running on: http://localhost:${port}`);
-  console.log(`[User Service] Swagger docs: http://localhost:${port}/docs`);
+  const logger = new Logger('UserService');
+  logger.log(`User Service is running on: http://localhost:${port}`);
+  logger.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();

@@ -31,9 +31,10 @@ export interface LoginResponse {
 
 export type Gender = 'male' | 'female' | 'unknown';
 
-export interface UserInfo {
-  id: number;
-  username: string;
+/**
+ * 前端使用的用户信息（API 返回格式，精简敏感字段）
+ */
+export interface UserInfo extends Pick<User, 'id' | 'username'> {
   email?: string;
   avatar?: string;
   nickname?: string;

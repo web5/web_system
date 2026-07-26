@@ -9,21 +9,31 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // 直接指向 shared 源码（绕过 dist 预构建缓存，shared 改动实时生效）
+      '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
     },
   },
   server: {
     port: 5174,
     host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
+    // 访问 /admin（不带斜杠）时重定向到 /admin/
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/admin') {
+          res.writeHead(301, { Location: '/admin/' });
+          res.end();
+          return;
+        }
+        next();
+      });
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
-      '/uploads': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
+
       '/materials': {
         target: 'http://localhost:5173',
         changeOrigin: true,
@@ -32,7 +42,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    sourcemap: 'hidden',
     cssCodeSplit: true,
     chunkSizeWarningLimit: 600,
     rollupOptions: {

@@ -1,4 +1,5 @@
 import request from './request';
+import { API_TIMEOUT } from '@web-system/shared';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -70,9 +71,9 @@ export function fetchModels(): Promise<ModelsResponse> {
   return request.get('/ai/models');
 }
 
-/** 发送消息并获取 AI 回复 */
+/** 发送消息并获取 AI 回复（非流式，需等模型生成完整回复） */
 export function sendChatMessage(data: ChatRequest): Promise<ChatResponse> {
-  return request.post('/ai/chat', data);
+  return request.post('/ai/chat', data, { timeout: API_TIMEOUT.AI_TASK });
 }
 
 /**
@@ -206,10 +207,10 @@ export interface ImageQueryResponse {
 
 /** 提交图片生成任务 */
 export function submitImage(prompt: string): Promise<ImageSubmitResponse> {
-  return request.post('/ai/image/submit', { prompt });
+  return request.post('/ai/image/submit', { prompt }, { timeout: API_TIMEOUT.AI_TASK });
 }
 
 /** 查询图片生成结果 */
 export function queryImage(id: string): Promise<ImageQueryResponse> {
-  return request.post('/ai/image/query', { id });
+  return request.post('/ai/image/query', { id }, { timeout: API_TIMEOUT.AI_QUERY });
 }
