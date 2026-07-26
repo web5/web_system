@@ -1,11 +1,13 @@
-import { Controller, Post, Get, Delete, Body, Query, Param, ParseIntPipe, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Query, Param, ParseIntPipe, Logger, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ArtworksService } from './artworks.service';
 import { SaveArtworkDto } from './dto/save-artwork.dto';
 import { BusinessException } from '../common/exceptions/business.exception';
+import { AuthGuard } from '../auth/auth.guard';
 
 @ApiTags('作品相册')
 @Controller('ai/artworks')
+@UseGuards(AuthGuard)
 export class ArtworksController {
   private readonly logger = new Logger(ArtworksController.name);
 

@@ -62,7 +62,9 @@
           </button>
           <a-dropdown>
             <span class="user-name">
-              <a-avatar :size="30" :src="userAvatar" class="user-avatar" />
+              <a-avatar :size="30" :src="userAvatar" class="user-avatar">
+                <template #icon><UserOutlined /></template>
+              </a-avatar>
               <span class="username-text">{{ userStore.userInfo?.username }}</span>
               <DownOutlined class="user-arrow" />
             </span>

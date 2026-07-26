@@ -5,14 +5,9 @@ import {
   Avatar,
   Upload,
   Form,
-  FormItem,
   Input,
-  InputPassword,
-  InputSearch,
   InputNumber,
-  Textarea,
   Select,
-  SelectOption,
   Switch,
   Tag,
   Badge,
@@ -21,27 +16,17 @@ import {
   Popconfirm,
   Modal,
   Tabs,
-  TabPane,
   Descriptions,
-  DescriptionsItem,
   Divider,
   Statistic,
   Checkbox,
-  RadioGroup,
   Radio,
   DatePicker,
   Empty,
   Spin,
   Layout,
-  LayoutSider,
-  LayoutHeader,
-  LayoutContent,
-  LayoutFooter,
   Menu,
-  MenuItem,
-  MenuDivider,
   Breadcrumb,
-  BreadcrumbItem,
   Dropdown,
   Row,
   Col,
@@ -52,24 +37,21 @@ import 'ant-design-vue/dist/reset.css';
 
 export { message } from 'ant-design-vue';
 
+/**
+ * Ant Design Vue 4.x: 仅注册顶层组件（有 install 方法）。
+ * 子组件（FormItem / SelectOption / TabPane / MenuItem / RadioGroup / DescriptionsItem /
+ * InputPassword / InputSearch / Textarea / LayoutSider / MenuDivider / BreadcrumbItem 等）
+ * 由父组件 install 时自动注册，无需重复注册，否则触发 "A plugin must either be a function" 警告。
+ */
 const components = [
   Button, Card, Avatar, Upload,
-  Form, FormItem,
-  Input, InputPassword, InputSearch, InputNumber, Textarea,
-  Select, SelectOption,
+  Form, Input, InputNumber, Select,
   Switch, Tag, Badge, Space,
-  Tooltip, Popconfirm, Modal,
-  Tabs, TabPane,
-  Descriptions, DescriptionsItem,
-  Divider, Statistic,
-  Checkbox, RadioGroup, Radio,
-  DatePicker, Empty, Spin,
-  Layout, LayoutSider, LayoutHeader, LayoutContent, LayoutFooter,
-  Menu, MenuItem, MenuDivider,
-  Breadcrumb, BreadcrumbItem,
-  Dropdown,
-  Row, Col, Table,
-  ConfigProvider,
+  Tooltip, Popconfirm, Modal, Tabs,
+  Descriptions, Divider, Statistic,
+  Checkbox, Radio, DatePicker, Empty, Spin,
+  Layout, Menu, Breadcrumb, Dropdown,
+  Row, Col, Table, ConfigProvider,
 ];
 
 export function setupAntd(app: App) {

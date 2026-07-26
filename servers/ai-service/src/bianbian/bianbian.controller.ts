@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Param, Query, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, Query, Res, Logger, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import * as path from 'path';
@@ -6,10 +6,13 @@ import * as fs from 'fs';
 import { BianbianService } from './bianbian.service';
 import { TransformDto } from './dto/transform.dto';
 import { BusinessException } from '../common/exceptions/business.exception';
+import { AuthGuard } from '../auth/auth.guard';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('变变 AI 变身')
 @Controller('bianbian')
 @ApiBearerAuth()
+@UseGuards(AuthGuard)
 export class BianbianController {
   private readonly logger = new Logger(BianbianController.name);
 
@@ -90,6 +93,7 @@ export class BianbianController {
     };
   }
 
+  @Public()
   @Get('materials')
   @ApiOperation({ summary: '获取公开素材列表（供 Portal/小程序使用）' })
   async getMaterials() {
@@ -105,6 +109,7 @@ export class BianbianController {
   // ========== 管理员接口（内部调用） ==========
 
   /** 供 MaaS 服务器读取的临时参考图片（内部 URL，无需鉴权） */
+  @Public()
   @Get('temp-image/:filename')
   @ApiOperation({ summary: '获取临时参考图片（内部使用）' })
   async serveTempImage(@Param('filename') filename: string, @Res() res: Response) {

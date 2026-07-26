@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Res, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TtsService } from './tts.service';
+import { AuthGuard } from '../auth/auth.guard';
 
 interface SpeakDto {
   text: string;
@@ -11,6 +12,7 @@ interface SpeakDto {
 
 @ApiTags('语音合成')
 @Controller('ai/tts')
+@UseGuards(AuthGuard)
 export class TtsController {
   constructor(private readonly ttsService: TtsService) {}
 

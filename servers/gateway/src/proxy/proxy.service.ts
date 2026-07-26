@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import { createProxyMiddleware, Options, fixRequestBody } from 'http-proxy-middleware';
 import { API_TIMEOUT } from '@web-system/shared';
 
 @Injectable()
@@ -103,7 +103,10 @@ export class ProxyService implements OnModuleInit {
     const options: Options = {
       target,
       changeOrigin: true,
-      on: { error: this.boundErrorHandler },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
       timeout: timeoutMs,
       proxyTimeout: timeoutMs,
     };

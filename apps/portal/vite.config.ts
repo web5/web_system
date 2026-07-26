@@ -23,7 +23,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
+    host: '0.0.0.0', // 仅 IPv4，避免 IPv6 localhost JS 执行异常
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
     proxy: {
       // TTS 语音合成 — 直接代理到 AI 服务，绕过 Gateway 避免二进制被 JSON 包装

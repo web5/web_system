@@ -8,6 +8,7 @@ import { ConversationModule } from './conversation/conversation.module';
 import { BianbianModule } from './bianbian/bianbian.module';
 import { ArtworksModule } from './artworks/artworks.module';
 import { TtsModule } from './tts/tts.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -78,6 +79,9 @@ import { TtsModule } from './tts/tts.module';
       },
       inject: [ConfigService],
     }),
+
+    // 认证模块
+    AuthModule,
 
     // HTTP 模块（用于调用 Hy3 API）
     HttpModule,
