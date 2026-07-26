@@ -78,9 +78,9 @@ export class BianbianService {
         }
 
         const newRecord = manager.create(BianbianRecord, {
-          userId,
+          userId: userId ?? 'anonymous',
           originalImage: dto.image,
-          description: dto.description || null,
+          description: dto.description || undefined,
           style: dto.style || 'pixar-3d',
           outputSize: dto.outputSize || '1024x1024',
           status: 'processing',
@@ -113,7 +113,7 @@ export class BianbianService {
       this.logger.log(`开始调用 MaaS 图生图, imageUrl=${imageUrl || '无'}, desc=${dto.description?.slice(0, 30)}`);
       const genResult = await this.imageGenClient.generate({
         imageUrl,
-        description: dto.description,
+        description: dto.description || '',
         style: dto.style || 'pixar-3d',
         outputSize: dto.outputSize || '1024x1024',
       });

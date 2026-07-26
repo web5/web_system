@@ -37,13 +37,26 @@
       <!-- 用户信息（桌面端） -->
       <div class="nav-right">
         <template v-if="userStore.isLoggedIn">
-          <span class="nav-user" @click="$router.push('/profile')">
-            <span class="user-avatar">
-              <img :src="avatarSrc" class="avatar-img" />
+          <a-dropdown>
+            <span class="nav-user">
+              <span class="user-avatar">
+                <img :src="avatarSrc" class="avatar-img" />
+              </span>
+              <span class="user-name">{{ userStore.userInfo?.username }}</span>
+              <DownOutlined class="user-arrow" />
             </span>
-            <span class="user-name">{{ userStore.userInfo?.username }}</span>
-          </span>
-          <button class="btn-logout" @click="handleLogout">退出</button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item key="profile" @click="goToProfile">
+                  <UserOutlined /> 个人中心
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="logout" @click="handleLogout">
+                  <LogoutOutlined /> 退出登录
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </template>
         <router-link v-else :to="`/login?redirect=${$route.path}`" class="btn-login">登录</router-link>
       </div>
@@ -87,13 +100,26 @@
 
       <div class="mobile-user">
         <template v-if="userStore.isLoggedIn">
-          <span class="nav-user" @click="$router.push('/profile'); menuOpen = false">
-            <span class="user-avatar">
-              <img :src="avatarSrc" class="avatar-img" />
+          <a-dropdown :trigger="['click']">
+            <span class="nav-user">
+              <span class="user-avatar">
+                <img :src="avatarSrc" class="avatar-img" />
+              </span>
+              <span class="user-name">{{ userStore.userInfo?.username }}</span>
+              <DownOutlined class="user-arrow" />
             </span>
-            <span class="user-name">{{ userStore.userInfo?.username }}</span>
-          </span>
-          <button class="btn-logout" @click="handleLogout">退出</button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item key="profile" @click="goToProfileAndCloseDrawer">
+                  <UserOutlined /> 个人中心
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="logout" @click="handleLogout">
+                  <LogoutOutlined /> 退出登录
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </template>
         <router-link v-else :to="`/login?redirect=${$route.path}`" class="btn-login" @click="menuOpen = false">登录</router-link>
       </div>
@@ -105,6 +131,7 @@
 import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { UserOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
@@ -117,6 +144,15 @@ const avatarSrc = computed(() => {
   if (info?.avatar) return info.avatar;
   return info?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
 });
+
+function goToProfile() {
+  router.push('/profile');
+}
+
+function goToProfileAndCloseDrawer() {
+  menuOpen.value = false;
+  router.push('/profile');
+}
 
 function handleLogout() {
   userStore.logout();
@@ -268,6 +304,15 @@ function handleLogout() {
   font-weight: 500;
 }
 
+.user-arrow {
+  font-size: 10px;
+  color: #999;
+  margin-left: -2px;
+  transition: transform 0.2s;
+}
+
+.nav-user:hover .user-arrow { color: #FF8C42; }
+
 .btn-login {
   padding: 6px 16px;
   background: #FF8C42;
@@ -280,22 +325,6 @@ function handleLogout() {
 }
 
 .btn-login:hover { background: #e67e3a; }
-
-.btn-logout {
-  padding: 4px 8px;
-  background: none;
-  color: #999;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.btn-logout:hover {
-  color: #FF4444;
-  background: none;
-}
 
 /* ===== 汉堡按钮 ===== */
 .hamburger {

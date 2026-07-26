@@ -1,11 +1,14 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { RedisService, DEFAULT_REDIS } from '@liaoliaots/nestjs-redis';
+import Redis from 'ioredis';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import axios from 'axios';
 import { UserService } from '../user/user.service';
-import { User } from '../user/user.entity';
-import {
+import type { User } from '../user/user.entity';
+import type {
   LoginRequest,
   WechatLoginRequest,
   MiniprogramLoginRequest,
@@ -15,11 +18,19 @@ import {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
+
+  /** 便捷获取默认 Redis 客户端 */
+  private get redis(): Redis {
+    return this.redisService.getOrThrow(DEFAULT_REDIS);
+  }
 
   /**
    * 用户名密码登录
@@ -54,32 +65,26 @@ export class AuthService {
   }
 
   /**
-   * 公众号 OAuth 登录（网站扫码 + 公众号内一键授权）
+   * 公众号 OAuth 登录
    */
   async wechatLogin(wechatDto: WechatLoginRequest): Promise<LoginResponse> {
     try {
       const oaConfig = this.getOaConfig();
 
-      // 1. 使用 code 换取 access_token
-      const tokenResponse = await axios.get('https://api.weixin.qq.com/sns/oauth2/access_token', {
-        params: {
-          appid: oaConfig.appId,
-          secret: oaConfig.secret,
-          code: wechatDto.code,
-          grant_type: 'authorization_code',
-        },
-      });
+      const tokenResponse = await axios.get(
+        'https://api.weixin.qq.com/sns/oauth2/access_token',
+        { params: { appid: oaConfig.appId, secret: oaConfig.secret, code: wechatDto.code, grant_type: 'authorization_code' } },
+      );
 
       const { access_token, openid } = tokenResponse.data;
 
-      // 2. 获取微信用户信息
-      const userInfoResponse = await axios.get('https://api.weixin.qq.com/sns/userinfo', {
-        params: { access_token, openid },
-      });
+      const userInfoResponse = await axios.get(
+        'https://api.weixin.qq.com/sns/userinfo',
+        { params: { access_token, openid } },
+      );
 
       const wechatUser = userInfoResponse.data;
 
-      // 3. 按 oaOpenid 查找已有用户，没有则创建
       let user = await this.userService.findByOaOpenid(openid);
       if (!user) {
         user = await this.userService.createOaUser({
@@ -96,35 +101,24 @@ export class AuthService {
   }
 
   /**
-   * 微信小程序登录（code2Session 流程）
-   *
-   * 使用小程序独立的 AppID，与公众号 AppID 分开。
-   * 小程序和公众号无法通过 UnionID 合并（个人开放平台未认证），
-   * 各自独立创建/查找用户。用户可在个人中心手动绑定。
+   * 微信小程序登录
    */
   async miniprogramLogin(mpDto: MiniprogramLoginRequest): Promise<MiniprogramLoginResponse> {
     try {
       const mpConfig = this.getMpConfig();
 
-      // 1. 调用 jscode2session 换取 openid
-      const sessionResponse = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
-        params: {
-          appid: mpConfig.appId,
-          secret: mpConfig.secret,
-          js_code: mpDto.code,
-          grant_type: 'authorization_code',
-        },
-      });
+      const sessionResponse = await axios.get(
+        'https://api.weixin.qq.com/sns/jscode2session',
+        { params: { appid: mpConfig.appId, secret: mpConfig.secret, js_code: mpDto.code, grant_type: 'authorization_code' } },
+      );
 
       const sessionData = sessionResponse.data;
-
       if (sessionData.errcode) {
         throw new BadRequestException(`微信登录失败：${sessionData.errmsg}`);
       }
 
       const { openid } = sessionData;
 
-      // 2. 按 mpOpenid 查找已有用户，没有则创建
       let user = await this.userService.findByMpOpenid(openid);
       let isNewUser = false;
 
@@ -137,9 +131,7 @@ export class AuthService {
         isNewUser = true;
       }
 
-      // 3. 生成 token
       const loginResponse = await this.generateToken(user);
-
       return { ...loginResponse, isNewUser };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -166,11 +158,19 @@ export class AuthService {
   }
 
   /**
-   * 验证 Token 并返回用户信息
-   * 供其他微服务调用以验证 JWT 令牌
+   * 验证 Token 并返回用户信息，同时检查黑名单
    */
-  async verifyToken(token: string): Promise<{ id: number; username: string; email?: string; avatar?: string; nickname?: string; phone?: string; gender?: 'male' | 'female' | 'unknown'; roles: string[] }> {
+  async verifyToken(token: string): Promise<{
+    id: number; username: string; email?: string; avatar?: string;
+    nickname?: string; phone?: string; gender?: 'male' | 'female' | 'unknown';
+    roles: string[];
+  }> {
     try {
+      // 检查是否在黑名单中
+      if (await this.isTokenBlacklisted(token)) {
+        throw new UnauthorizedException('令牌已失效（已登出）');
+      }
+
       const payload = await this.jwtService.verifyAsync(token);
       const user = await this.userService.findById(payload.sub);
 
@@ -189,36 +189,61 @@ export class AuthService {
         roles: user.roles || ['user'],
       };
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('令牌无效或已过期');
     }
   }
 
   /**
-   * 登出（暂为 noop，后续接入 Redis 黑名单）
+   * 登出 — 将 access token 加入 Redis 黑名单，在 token 剩余有效期内阻止复用
    */
   async logout(token: string): Promise<void> {
-    // TODO: 使用 Redis 时实现 token 黑名单
+    try {
+      const payload = this.jwtService.decode(token) as { exp?: number } | null;
+      if (!payload?.exp) return;
+
+      const ttl = payload.exp - Math.floor(Date.now() / 1000);
+      if (ttl <= 0) return;
+
+      const hash = this.hashToken(token);
+      await this.redis.set(`bl:${hash}`, '1', 'EX', ttl);
+      this.logger.debug(`Token 已加入黑名单，TTL=${ttl}s`);
+    } catch (err: any) {
+      this.logger.warn(`登出黑名单写入失败: ${err.message}`);
+    }
   }
 
   /**
-   * 验证 token 是否在黑名单中 (暂未实现)
+   * 检查 token 是否在黑名单中（Redis 不可用时放行）
    */
   async isTokenBlacklisted(token: string): Promise<boolean> {
-    return false;
+    try {
+      const hash = this.hashToken(token);
+      const exists = await this.redis.exists(`bl:${hash}`);
+      return exists === 1;
+    } catch (err: any) {
+      this.logger.warn(`黑名单查询失败: ${err.message}`);
+      return false;
+    }
   }
 
   /**
-   * 生成 Token
+   * 生成 Token，access 和 refresh 通过 type 字段区分
    */
   private async generateToken(user: User): Promise<LoginResponse> {
-    const payload = {
+    const basePayload = {
       sub: user.id,
       username: user.username,
       roles: user.roles || ['user'],
     };
 
-    const accessToken = await this.jwtService.signAsync(payload);
-    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '30d' });
+    const accessToken = await this.jwtService.signAsync(
+      { ...basePayload, type: 'access' },
+    );
+    const refreshToken = await this.jwtService.signAsync(
+      { ...basePayload, type: 'refresh' },
+      { expiresIn: '30d' },
+    );
 
     const expiresInStr = this.configService.get('JWT_EXPIRES_IN', '7d');
     const expiresIn = this.parseExpiresIn(expiresInStr);
@@ -240,12 +265,14 @@ export class AuthService {
     };
   }
 
-  /**
-   * 解析过期时间为秒数
-   */
+  /** 计算 token 的 SHA256 前 32 位作为 Redis key */
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex').slice(0, 32);
+  }
+
   private parseExpiresIn(expiresIn: string): number {
     const match = expiresIn.match(/^(\d+)(s|m|h|d)$/);
-    if (!match) return 7 * 24 * 60 * 60; // 默认 7 天
+    if (!match) return 7 * 24 * 60 * 60;
     const value = parseInt(match[1], 10);
     const unit = match[2];
     switch (unit) {
@@ -257,7 +284,6 @@ export class AuthService {
     }
   }
 
-  /** 获取小程序配置 */
   private getMpConfig() {
     return {
       appId: this.configService.get('MINI_PROGRAM_APP_ID', ''),
@@ -265,7 +291,6 @@ export class AuthService {
     };
   }
 
-  /** 获取公众号配置 */
   private getOaConfig() {
     return {
       appId: this.configService.get('OFFICIAL_ACCOUNT_APP_ID', ''),
@@ -273,31 +298,13 @@ export class AuthService {
     };
   }
 
-  /**
-   * 构建微信 OAuth 授权 URL
-   *
-   * 根据请求来源自动选择授权方式：
-   * - 微信内置浏览器 → 公众号 OAuth（静默 snsapi_userinfo）
-   * - 桌面浏览器 → 公众号 OAuth 跳转（微信扫码后自动打开）
-   *
-   * 注：个人开放平台无法创建网站应用，所以统一使用公众号 OAuth 流程。
-   * 桌面浏览器扫码时，微信会先在公众号内完成 OAuth，再回调。
-   *
-   * @param frontendRedirect 前端回调地址（可选，作为 state 传回）
-   */
   buildWechatOAuthUrl(frontendRedirect?: string): string {
     const config = this.getOaConfig();
     const redirectUri = this.configService.get(
       'WECHAT_OAUTH_REDIRECT_URI',
       'http://localhost:3001/auth/wechat/callback',
     );
-    const state = frontendRedirect
-      ? encodeURIComponent(frontendRedirect)
-      : '';
-
-    // 公众号 OAuth 授权 URL
-    // scope: snsapi_userinfo → 获取用户昵称头像（需用户手动同意）
-    // scope: snsapi_base    → 静默授权（仅获取 openid，无需用户同意）
+    const state = frontendRedirect ? encodeURIComponent(frontendRedirect) : '';
     const params = new URLSearchParams({
       appid: config.appId,
       redirect_uri: redirectUri,
@@ -305,35 +312,18 @@ export class AuthService {
       scope: 'snsapi_userinfo',
       state,
     });
-
     return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
   }
 
-  /**
-   * 处理微信 OAuth 回调 —— 用 code 换 token + 用户信息
-   */
-  async handleWechatOAuthCallback(
-    code: string,
-    state: string,
-  ): Promise<LoginResponse> {
+  async handleWechatOAuthCallback(code: string, _state: string): Promise<LoginResponse> {
     return this.wechatLogin({ code });
   }
 
-  /**
-   * 绑定小程序 openid 到已有用户（个人中心 → 设置 → 绑定微信）
-   *
-   * 流程：前端 wx.login() 获取 code → 传 code 到后端 → 后端 jscode2session 获取 openid → 绑定到当前用户
-   */
   async bindMpOpenid(userId: number, code: string): Promise<void> {
     const mpConfig = this.getMpConfig();
     try {
       const resp = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
-        params: {
-          appid: mpConfig.appId,
-          secret: mpConfig.secret,
-          js_code: code,
-          grant_type: 'authorization_code',
-        },
+        params: { appid: mpConfig.appId, secret: mpConfig.secret, js_code: code, grant_type: 'authorization_code' },
       });
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);
@@ -345,21 +335,11 @@ export class AuthService {
     }
   }
 
-  /**
-   * 绑定公众号 openid 到已有用户（个人中心 → 设置 → 绑定微信）
-   *
-   * 流程：前端跳转公众号 OAuth 授权 → 回调到后端 → 后端用 code 获取 openid → 绑定到当前用户
-   */
   async bindOaOpenid(userId: number, code: string): Promise<void> {
     const oaConfig = this.getOaConfig();
     try {
       const resp = await axios.get('https://api.weixin.qq.com/sns/oauth2/access_token', {
-        params: {
-          appid: oaConfig.appId,
-          secret: oaConfig.secret,
-          code,
-          grant_type: 'authorization_code',
-        },
+        params: { appid: oaConfig.appId, secret: oaConfig.secret, code, grant_type: 'authorization_code' },
       });
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);

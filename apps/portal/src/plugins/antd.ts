@@ -13,6 +13,10 @@ import {
   Slider,
   Tabs,
   TabPane,
+  Dropdown,
+  Menu,
+  MenuItem,
+  MenuDivider,
   ConfigProvider,
   App,
 } from 'ant-design-vue';
@@ -29,6 +33,7 @@ const components = [
   Input, InputPassword,
   RadioGroup, RadioButton, Slider,
   Tabs, TabPane,
+  Dropdown, Menu, MenuItem, MenuDivider,
   ConfigProvider,
   App,
 ];

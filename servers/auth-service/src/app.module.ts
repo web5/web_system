@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import { RedisModule } from '@liaoliaots/nestjs-redis';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
@@ -11,6 +12,18 @@ import { QrcodeModule } from './qrcode/qrcode.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
+    }),
+
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        config: {
+          url: configService.get('REDIS_URL', 'redis://localhost:6379'),
+          retryStrategy(times: number) {
+            return Math.min(times * 100, 3000);
+          },
+        },
+      }),
     }),
 
     TypeOrmModule.forRootAsync({
@@ -67,4 +80,19 @@ import { QrcodeModule } from './qrcode/qrcode.module';
     QrcodeModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  private readonly logger = new Logger(AppModule.name);
+
+  constructor(private configService: ConfigService) {}
+
+  onModuleInit() {
+    const jwtSecret = this.configService.get('JWT_SECRET', '');
+    if (!jwtSecret || jwtSecret === 'change_me_in_dev') {
+      this.logger.error(
+        'AUTH-SERVICE: JWT_SECRET 未设置或为默认值，将拒绝启动！',
+      );
+      process.exit(1);
+    }
+    this.logger.log('AUTH-SERVICE: JWT_SECRET 校验通过');
+  }
+}

@@ -1,16 +1,20 @@
-import axiosInstance from 'axios';
+import axiosInstance, { type AxiosResponse } from 'axios';
 import { message } from 'ant-design-vue';
 import router from '@/router';
+import { getStoredToken } from '@/stores/user';
 
 const request = axiosInstance.create({
   baseURL: '/api',
   timeout: 10000,
 });
 
+// 401 跳转防重入锁
+let isRedirecting = false;
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -18,12 +22,12 @@ request.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // 响应拦截器
 request.interceptors.response.use(
-  (response) => {
+  (response: AxiosResponse) => {
     return response.data;
   },
   (error) => {
@@ -31,13 +35,13 @@ request.interceptors.response.use(
       const { status, data } = error.response;
 
       if (status === 401) {
-        message.error('登录已过期，请重新登录');
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        // 带上当前路径作为 redirect，登录后跳回
-        const currentPath = router.currentRoute.value.fullPath;
-        const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
-        router.push(`/login${redirectPath}`);
+        if (!isRedirecting) {
+          isRedirecting = true;
+          message.error('登录已过期，请重新登录');
+          const currentPath = router.currentRoute.value.fullPath;
+          const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
+          router.push(`/login${redirectPath}`);
+        }
       } else {
         message.error(data?.message || '请求失败');
       }
@@ -46,7 +50,7 @@ request.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default request;

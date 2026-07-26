@@ -29,8 +29,7 @@ export const useUserStore = defineStore(
     function setToken(newToken: string, newRefreshToken: string) {
       token.value = newToken;
       refreshToken.value = newRefreshToken;
-      localStorage.setItem('access_token', newToken);
-      localStorage.setItem('refresh_token', newRefreshToken);
+      // pinia persist 插件自动序列化到 localStorage，无需手动操作
     }
 
     function setUserInfo(info: UserInfo) {
@@ -41,25 +40,13 @@ export const useUserStore = defineStore(
       token.value = '';
       refreshToken.value = '';
       userInfo.value = null;
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-    }
-
-    function initFromStorage() {
-      const storedToken = localStorage.getItem('access_token');
-      const storedRefreshToken = localStorage.getItem('refresh_token');
-      if (storedToken) {
-        token.value = storedToken;
-      }
-      if (storedRefreshToken) {
-        refreshToken.value = storedRefreshToken;
-      }
+      // pinia persist 插件自动同步 localStorage
     }
 
     return {
       token, refreshToken, userInfo, roles, permissions,
       hasPermission, hasAnyPermission,
-      setToken, setUserInfo, logout, initFromStorage,
+      setToken, setUserInfo, logout,
     };
   },
   {
@@ -67,5 +54,5 @@ export const useUserStore = defineStore(
       key: 'user-store',
       storage: localStorage,
     },
-  }
+  },
 );

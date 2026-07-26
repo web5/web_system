@@ -96,12 +96,12 @@ export class UploadController {
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传头像（2MB，支持 JPG/PNG/GIF/WEBP）' })
-  @UseInterceptors(createMulterInterceptor('avatar'))
+  @UseInterceptors(createMulterInterceptor('avatars'))
   async uploadAvatar(@UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('请选择要上传的图片文件');
     }
-    const url = this.uploadService.buildUrl(file.filename, 'avatar');
+    const url = this.uploadService.buildUrl(file.filename, 'avatars');
     return {
       code: 200,
       data: { url, filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'avatar' },
