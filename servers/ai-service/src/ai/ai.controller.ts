@@ -1,13 +1,15 @@
-import { Controller, Post, Body, Get, Delete, Param, Res, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Delete, Param, Res, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AiService } from './ai.service';
 import { ChatDto } from './dto/chat.dto';
 import { ImageSubmitDto } from './dto/image-gen.dto';
 import { ImageQueryDto } from './dto/image-gen.dto';
+import { AuthGuard } from '../auth/auth.guard';
 
 @ApiTags('AI对话')
 @Controller('ai')
+@UseGuards(AuthGuard)
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 

@@ -282,7 +282,8 @@ const handleLogin = async () => {
     message.success('登录成功');
     emit('login-success');
   } catch (error: any) {
-    message.error(error?.message || error?.response?.data?.message || '登录失败');
+    // 优先展示后端 message（如「用户名或密码错误」），其次才是 axios 默认文案
+    message.error(error?.response?.data?.message || error?.message || '登录失败');
   } finally { loading.value = false; }
 };
 
@@ -295,7 +296,7 @@ const handleRegister = async () => {
     message.success('注册成功');
     emit('login-success');
   } catch (error: any) {
-    message.error(error?.message || error?.response?.data?.message || '注册失败');
+    message.error(error?.response?.data?.message || error?.message || '注册失败');
   } finally { loading.value = false; }
 };
 </script>

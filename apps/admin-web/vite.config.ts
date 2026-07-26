@@ -17,13 +17,25 @@ export default defineConfig({
     port: 5174,
     host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
-    // 访问 /admin（不带斜杠）时重定向到 /admin/
+    // SPA 回退 + 访问根路径时重定向到 /admin/
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (req.url === '/admin') {
+        const url = req.url || '';
+        // 根路径 → 重定向到 /admin/
+        if (url === '/') {
           res.writeHead(301, { Location: '/admin/' });
           res.end();
           return;
+        }
+        // /admin 不带斜杠 → 补斜杠重定向
+        if (url === '/admin') {
+          res.writeHead(301, { Location: '/admin/' });
+          res.end();
+          return;
+        }
+        // SPA 回退：/admin 开头的路径如果没有文件后缀（非静态资源），返回 index.html
+        if (url.startsWith('/admin') && !url.includes('.')) {
+          req.url = '/';
         }
         next();
       });

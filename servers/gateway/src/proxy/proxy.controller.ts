@@ -23,14 +23,27 @@ export class ProxyController {
 
   constructor(private proxyService: ProxyService) {}
 
-  @All('auth/:path(*)')
-  proxyAuth(@Req() req: Request, @Res() res: Response) {
+  // 精确匹配 /api/auth（无尾斜杠）
+  @All('auth')
+  proxyAuthExact(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getAuthProxy()(req, res);
   }
 
-  @All('users/:path(*)')
+  // 通配 /api/auth/:path(*)
+  @All('auth/:path(*)')
+  proxyAuthWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAuthProxy()(req, res);
+  }
+
+  // 精确匹配 /api/users（无尾斜杠）
   @All('users')
-  proxyUsers(@Req() req: Request, @Res() res: Response) {
+  proxyUsersExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 通配 /api/users/:path(*)
+  @All('users/:path(*)')
+  proxyUsersWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getUserProxy()(req, res);
   }
 
@@ -149,21 +162,39 @@ export class ProxyController {
     proxyReq.end();
   }
 
-  @All('ai/:path(*)')
+  // 精确匹配 /api/ai（无尾斜杠）
   @All('ai')
-  proxyAi(@Req() req: Request, @Res() res: Response) {
+  proxyAiExact(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getAiProxy()(req, res);
   }
 
-  @All('admin/:path(*)')
+  // 通配 /api/ai/:path(*)
+  @All('ai/:path(*)')
+  proxyAiWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAiProxy()(req, res);
+  }
+
+  // 精确匹配 /api/admin（无尾斜杠）
   @All('admin')
-  proxySystem(@Req() req: Request, @Res() res: Response) {
+  proxySystemExact(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getSystemProxy()(req, res);
   }
 
-  @All('bianbian/:path(*)')
+  // 通配 /api/admin/:path(*)
+  @All('admin/:path(*)')
+  proxySystemWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getSystemProxy()(req, res);
+  }
+
+  // 精确匹配 /api/bianbian（无尾斜杠）
   @All('bianbian')
-  proxyBianbian(@Req() req: Request, @Res() res: Response) {
+  proxyBianbianExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getBianbianProxy()(req, res);
+  }
+
+  // 通配 /api/bianbian/:path(*)
+  @All('bianbian/:path(*)')
+  proxyBianbianWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getBianbianProxy()(req, res);
   }
 
@@ -179,16 +210,33 @@ export class ProxyController {
     return this.proxyService.getTodoProxy()(req, res);
   }
 
-  @All('upload/:path(*)')
+  // 精确匹配 /api/upload（无尾斜杠）
   @All('upload')
-  proxyUpload(@Req() req: Request, @Res() res: Response) {
+  proxyUploadExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUploadProxy()(req, res);
+  }
+
+  // 通配 /api/upload/:path(*)
+  @All('upload/:path(*)')
+  proxyUploadWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getUploadProxy()(req, res);
   }
 
   /** 上传文件的静态资源访问（/api/uploads/* → user-service） */
-  @All('uploads/:path(*)')
+  // 精确匹配 /api/uploads（无尾斜杠）
   @All('uploads')
-  proxyUploadStatic(@Req() req: Request, @Res() res: Response) {
+  proxyUploadStaticExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUploadStaticProxy()(req, res, (e?: Error) => {
+      if (e) {
+        this.logger.error(`静态资源代理错误: ${e.message}`);
+      }
+      res.status(404).json({ code: 404, message: 'File not found' });
+    });
+  }
+
+  // 通配 /api/uploads/:path(*)
+  @All('uploads/:path(*)')
+  proxyUploadStaticWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getUploadStaticProxy()(req, res, (e?: Error) => {
       if (e) {
         this.logger.error(`静态资源代理错误: ${e.message}`);

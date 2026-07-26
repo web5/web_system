@@ -1,5 +1,8 @@
-import request from './request';
+import request, { tryRefreshToken } from './request';
+import { getStoredToken } from '@/stores/user';
 import { API_TIMEOUT } from '@web-system/shared';
+import { message } from 'ant-design-vue';
+import router from '@/router';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -78,6 +81,12 @@ export function sendChatMessage(data: ChatRequest): Promise<ChatResponse> {
 
 /**
  * 流式对话 - 使用 fetch 读取 SSE 流
+ *
+ * 自带 401 自动刷新+重试机制（与 axios 拦截器行为一致）：
+ * - 收到 401 时，用 refreshToken 尝试刷新 accessToken
+ * - 刷新成功 → 用新 token 重试请求
+ * - 刷新失败 → 弹出提示并跳转登录页
+ *
  * @param data 对话请求参数
  * @param onChunk 每收到一个文本块的回调
  * @param onDone 流结束的回调
@@ -90,71 +99,115 @@ export function sendChatMessageStream(
   onError: (err: Error) => void,
 ): AbortController {
   const controller = new AbortController();
-  const token = localStorage.getItem('access_token');
 
-  fetch('/api/ai/chat/stream', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(data),
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+  async function doFetch(token: string): Promise<Response> {
+    return fetch('/api/ai/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+  }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('Response body is not readable');
-      }
+  async function processStream(response: Response): Promise<void> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          if (trimmed === 'data: [DONE]') {
-            onDone();
-            return;
-          }
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const json = JSON.parse(trimmed.slice(6));
-              if (json.done) {
-                onDone(json.conversationId);
-                return;
-              }
-              if (json.error) {
-                onError(new Error(json.error));
-                return;
-              }
-              if (json.content) {
-                onChunk(json.content);
-              }
-            } catch {
-              // 跳过解析失败的行
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed === 'data: [DONE]') {
+          onDone();
+          return;
+        }
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            if (json.done) {
+              onDone(json.conversationId);
+              return;
             }
+            if (json.error) {
+              onError(new Error(json.error));
+              return;
+            }
+            if (json.content) {
+              onChunk(json.content);
+            }
+          } catch {
+            // 跳过解析失败的行
           }
         }
       }
-      onDone();
-    })
-    .catch((err) => {
-      if (err.name === 'AbortError') return;
-      onError(err);
-    });
+    }
+    onDone();
+  }
+
+  async function startStream(retry = false): Promise<void> {
+    let token = getStoredToken();
+    if (!token) {
+      onError(new Error('请先登录'));
+      return;
+    }
+
+    // 如果是重试，再次确认 token 有效性（refresh 后可能已更新）
+    if (retry) {
+      const refreshed = getStoredToken();
+      if (!refreshed) {
+        onError(new Error('请先登录'));
+        return;
+      }
+      token = refreshed;
+    }
+
+    let response = await doFetch(token);
+
+    // 401 自动刷新 + 重试（只尝试一次）
+    if (response.status === 401 && !retry) {
+      const newTokens = await tryRefreshToken();
+      if (newTokens) {
+        await startStream(true);
+        return;
+      }
+      // 刷新失败，跳转登录
+      message.error('登录已过期，请重新登录');
+      const currentPath = router.currentRoute.value.fullPath;
+      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+      onError(new Error('登录已过期'));
+      return;
+    }
+
+    if (!response.ok) {
+      const errMsg = response.status === 401
+        ? '登录已过期，请重新登录'
+        : `请求失败 (${response.status})`;
+      onError(new Error(errMsg));
+      return;
+    }
+
+    await processStream(response);
+  }
+
+  startStream().catch((err: Error) => {
+    if (err.name === 'AbortError') return;
+    onError(err);
+  });
 
   return controller;
 }
