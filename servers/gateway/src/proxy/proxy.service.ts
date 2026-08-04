@@ -23,6 +23,7 @@ export class ProxyService implements OnModuleInit {
   private todoProxy!: ReturnType<typeof createProxyMiddleware>;
   private uploadProxy!: ReturnType<typeof createProxyMiddleware>;
   private uploadStaticProxy!: ReturnType<typeof createProxyMiddleware>;
+  private bianbianStaticProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
@@ -78,6 +79,16 @@ export class ProxyService implements OnModuleInit {
       on: { error: this.boundErrorHandler },
     });
 
+    // AI 生成图片静态访问（/api/uploads/bianbian/* → ai-service）
+    // 先于通用 /api/uploads/* 匹配，将变变图片请求路由到 ai-service
+    this.bianbianStaticProxy = createProxyMiddleware({
+      target: this.aiServiceUrl,
+      changeOrigin: true,
+      timeout: 10_000,
+      pathRewrite: { '^/api': '' },
+      on: { error: this.boundErrorHandler },
+    });
+
     this.logger.log('所有 Proxy 实例初始化完成');
   }
 
@@ -89,6 +100,7 @@ export class ProxyService implements OnModuleInit {
   getTodoProxy() { return this.todoProxy; }
   getUploadProxy() { return this.uploadProxy; }
   getUploadStaticProxy() { return this.uploadStaticProxy; }
+  getBianbianStaticProxy() { return this.bianbianStaticProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }
 
   /**

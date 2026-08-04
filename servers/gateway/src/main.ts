@@ -89,7 +89,7 @@ async function bootstrap() {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
 
-    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/mini-scan') || path.startsWith('/health')) {
+    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/mini-scan') || path.startsWith('/health') || path.startsWith('/materials')) {
       return next();
     }
     // 有扩展名的静态资源跳过（由 ServeStaticModule 处理）
@@ -97,11 +97,20 @@ async function bootstrap() {
       return next();
     }
     // 管理后台 SPA 回退
-    if (path.startsWith('/admin') || path === '') {
+    if (path.startsWith('/admin')) {
       return res.sendFile(join(__dirname, '..', 'public', 'admin', 'index.html'));
     }
-    // Portal SPA 回退
-    res.sendFile(join(__dirname, '..', 'public', 'index.html'));
+    // 根路径 → 重定向到 /portal/
+    if (path === '/') {
+      return res.redirect(301, '/portal/');
+    }
+    // Portal SPA 回退：仅 /portal/ 开头的路径（或 /portal 不带斜杠）
+    // 不在 /portal/ 下的路径不返回 Portal HTML，由 NestJS 自行 404
+    if (path === '/portal' || path.startsWith('/portal/')) {
+      return res.sendFile(join(__dirname, '..', 'public', 'portal', 'index.html'));
+    }
+    // 其他未匹配路径交给 NestJS 处理（404 或后续路由）
+    next();
   });
 
   // 全局异常过滤器 — 生产环境掩码内部错误信息

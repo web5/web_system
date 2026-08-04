@@ -67,6 +67,7 @@ export class ProxyController {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
         'Connection': 'keep-alive',
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
       },
       timeout: API_TIMEOUT.GATEWAY.AI_TASK,
     };
@@ -220,6 +221,30 @@ export class ProxyController {
   @All('upload/:path(*)')
   proxyUploadWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getUploadProxy()(req, res);
+  }
+
+  /** AI 生成的变变图片静态资源（/api/uploads/bianbian/* → ai-service）
+   *  必须在通用 /api/uploads/* 之前注册，确保优先级高于 user-service 代理 */
+  // 精确匹配 /api/uploads/bianbian（无尾斜杠）
+  @All('uploads/bianbian')
+  proxyUploadsBianbianExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getBianbianStaticProxy()(req, res, (e?: Error) => {
+      if (e) {
+        this.logger.error(`Bianbian 图片代理错误: ${e.message}`);
+      }
+      res.status(404).json({ code: 404, message: 'File not found' });
+    });
+  }
+
+  // 通配 /api/uploads/bianbian/:path(*)
+  @All('uploads/bianbian/:path(*)')
+  proxyUploadsBianbianWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getBianbianStaticProxy()(req, res, (e?: Error) => {
+      if (e) {
+        this.logger.error(`Bianbian 图片代理错误: ${e.message}`);
+      }
+      res.status(404).json({ code: 404, message: 'File not found' });
+    });
   }
 
   /** 上传文件的静态资源访问（/api/uploads/* → user-service） */

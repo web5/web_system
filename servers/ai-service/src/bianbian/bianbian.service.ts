@@ -37,6 +37,14 @@ export class BianbianService {
     private readonly configService: ConfigService,
   ) {}
 
+  /** 微服务地址（统一从 ConfigService 读取，兼容 localhost/Docker/生产环境） */
+  private get systemServiceUrl(): string {
+    return this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:3004');
+  }
+  private get userServiceUrl(): string {
+    return this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
+  }
+
   /**
    * 执行变变变身（事务保护，防并发超限）
    */
@@ -100,9 +108,12 @@ export class BianbianService {
 
     // 3. 将 base64 原画保存为临时文件，生成公开 URL 供 MaaS 读取
     let imageUrl: string | undefined;
+    let tempFilename: string | undefined;
     if (dto.image && dto.image.startsWith('data:image/')) {
       try {
-        imageUrl = await this.saveTempImage(dto.image);
+        const result = await this.saveTempImage(dto.image);
+        imageUrl = result.url;
+        tempFilename = result.filename;
         this.logger.log(`参考图已保存为公开URL: ${imageUrl}`);
       } catch (saveError) {
         this.logger.warn(`参考图保存失败，将回退到纯文本生图: ${saveError.message}`);
@@ -119,8 +130,23 @@ export class BianbianService {
         outputSize: dto.outputSize || '1024x1024',
       });
 
-      // 5. 更新记录为成功
-      record.aiImage = genResult.image;
+      // MaaS 已下载参考图，清理临时文件
+      if (tempFilename) {
+        this.cleanupTempImage(tempFilename).catch(() => {});
+      }
+
+      // 5. 下载 AI 生成图片到本地 /uploads/bianbian/，存本地路径到数据库
+      let localImagePath: string;
+      try {
+        localImagePath = await this.downloadAndSaveImage(genResult.image, record.id);
+        this.logger.log(`AI 生成图片已落盘: ${localImagePath}`);
+      } catch (downloadError) {
+        this.logger.warn(`AI 图片下载失败，回退存远程 URL: ${downloadError.message}`);
+        localImagePath = genResult.image;
+      }
+
+      // 6. 更新记录为成功
+      record.aiImage = localImagePath;
       record.aiRequestId = genResult.requestId;
       record.processingTimeMs = genResult.processingTimeMs;
       record.status = 'success';
@@ -143,13 +169,22 @@ export class BianbianService {
         remainingToday,
       };
     } catch (error) {
-      // 6. 记录失败
+      // 清理临时文件
+      if (tempFilename) {
+        this.cleanupTempImage(tempFilename).catch(() => {});
+      }
+
+      // 7. 记录失败；持久化异常不能掩盖原始图片生成错误
       record.status = 'failed';
-      record.errorMsg = error.message;
-      await this.recordRepository.save(record);
+      record.errorMsg = (error?.message || String(error)).slice(0, 500);
+      try {
+        await this.recordRepository.save(record);
+      } catch (saveError) {
+        this.logger.error(`保存变身失败记录出错: ${saveError?.message || String(saveError)}`);
+      }
 
       this.logger.error(
-        `Bianbian transform failed: userId=${userId}, recordId=${record.id}, error=${error.message}`,
+        `Bianbian transform failed: userId=${userId}, recordId=${record.id}, error=${error?.message || String(error)}`,
       );
 
       throw error;
@@ -178,7 +213,7 @@ export class BianbianService {
 
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`http://localhost:3004/admin/settings/public/${cacheKey}`, {
+        this.httpService.get(`${this.systemServiceUrl}/admin/settings/public/${cacheKey}`, {
           timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
       );
@@ -208,7 +243,7 @@ export class BianbianService {
   private async fetchUserDailyLimit(userId: string): Promise<number | null> {
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`http://localhost:3002/users/${userId}`, {
+        this.httpService.get(`${this.userServiceUrl}/users/${userId}`, {
           timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
       );
@@ -325,7 +360,7 @@ export class BianbianService {
   async getMaterials(): Promise<Array<{ id: string; category: string; name: string; icon: string; type?: string; content?: string }>> {
     try {
       const res = await firstValueFrom(
-        this.httpService.get('http://system-service:3004/admin/bianbian/materials', {
+        this.httpService.get(`${this.systemServiceUrl}/admin/bianbian/materials`, {
           params: { pageSize: 200 },
           timeout: API_TIMEOUT.UPSTREAM.INTERNAL,
         }),
@@ -433,8 +468,8 @@ export class BianbianService {
 
   // ========== 临时图片管理 ==========
 
-  /** 将 base64 原画保存为临时文件，返回公开 URL */
-  private async saveTempImage(base64DataUrl: string): Promise<string> {
+  /** 将 base64 原画保存为临时文件，返回公开 URL 及文件名（用于后续清理） */
+  private async saveTempImage(base64DataUrl: string): Promise<{ url: string; filename: string }> {
     const matches = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
     if (!matches) throw new Error('非法的 base64 图片格式');
 
@@ -445,7 +480,18 @@ export class BianbianService {
     await this.ensureTempDir();
     await fs.promises.writeFile(path.join(this.tempImagesDir!, filename), buffer);
 
-    return this.getPublicUrl(filename);
+    return { url: this.getPublicUrl(filename), filename };
+  }
+
+  /** 删除临时图片文件（MaaS 下载完成后调用） */
+  private async cleanupTempImage(filename: string): Promise<void> {
+    await this.ensureTempDir();
+    const filePath = path.join(this.tempImagesDir!, filename);
+    try {
+      await fs.promises.unlink(filePath);
+    } catch {
+      // 文件可能已被删除或不存在，忽略
+    }
   }
 
   /** 确保临时图片目录存在 */
@@ -462,8 +508,51 @@ export class BianbianService {
   private getPublicUrl(filename: string): string {
     const publicBase =
       this.configService.get('BIANBIAN_PUBLIC_BASE_URL') ||
-      this.configService.get('PUBLIC_URL')?.replace('http://', 'https://') ||
-      'https://dev.kedouai.com';
+      this.configService.get('PUBLIC_URL');
+    if (!publicBase) {
+      throw new Error('BIANBIAN_PUBLIC_BASE_URL 或 PUBLIC_URL 未配置，无法生成临时图片公网 URL');
+    }
     return `${publicBase.replace(/\/$/, '')}/api/bianbian/temp-image/${filename}`;
+  }
+
+  // ========== AI 生成图片落盘 ==========
+
+  /**
+   * 下载 AI 生成的图片并保存到本地 /uploads/bianbian/ 目录
+   * 遵循最佳实践：AI 生成图片落盘到 /api/uploads/ 静态资源目录
+   */
+  private async downloadAndSaveImage(imageUrl: string, _recordId: string): Promise<string> {
+    // 如果已经是本地路径，直接返回
+    if (imageUrl.startsWith('/api/uploads/')) {
+      return imageUrl;
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'bianbian');
+    if (!fs.existsSync(uploadsDir)) {
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+    }
+
+    // 从 URL 推断扩展名
+    const urlExt = imageUrl.split('?')[0].split('.').pop()?.toLowerCase();
+    const ext = urlExt && ['jpg', 'jpeg', 'png', 'webp'].includes(urlExt) ? urlExt : 'jpg';
+    const normalizedExt = ext === 'jpeg' ? 'jpg' : ext;
+    const filename = `bianbian-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${normalizedExt}`;
+    const filePath = path.join(uploadsDir, filename);
+
+    // 下载图片
+    const response = await firstValueFrom(
+      this.httpService.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: API_TIMEOUT.GATEWAY.AI_TASK,
+      }),
+    );
+
+    if (response.status !== 200) {
+      throw new Error(`下载图片失败: HTTP ${response.status}`);
+    }
+
+    await fs.promises.writeFile(filePath, Buffer.from(response.data));
+
+    return `/api/uploads/bianbian/${filename}`;
   }
 }

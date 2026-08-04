@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig({
+  base: '/portal/',
   plugins: [
     vue(),
     // 生成 .gz 文件，Nginx 配合 gzip_static on 使用（避免每次请求都压缩）
@@ -26,6 +27,11 @@ export default defineConfig({
     host: '0.0.0.0', // 仅 IPv4，避免 IPv6 localhost JS 执行异常
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
     proxy: {
+      // 素材 SVG 静态资源 — 通过 Gateway 直接提供，与页面路由分离
+      '/materials': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       // TTS 语音合成 — 直接代理到 AI 服务，绕过 Gateway 避免二进制被 JSON 包装
       '/api/ai/tts': {
         target: 'http://localhost:3003',

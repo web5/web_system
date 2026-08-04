@@ -65,6 +65,13 @@ async function generate() {
   // 确保目录存在
   fs.mkdirSync(svgDir, { recursive: true });
 
+  // 同时输出到 Gateway 的 public 目录，供 Gateway 以 /materials/svg/ 路径服务
+  // 注意：这里是双写，Portal public/ 用于本地开发（Vite 直接 serve），
+  // Gateway public/ 用于生产环境。两者必须保持同步。
+  // TODO: 理想方案是本地开发也通过 Vite proxy 从 Gateway 拉取，只维护一份。
+  const gatewayPublicDir = path.resolve(PORTAL_ROOT, '../../servers/gateway/public/materials/svg');
+  fs.mkdirSync(gatewayPublicDir, { recursive: true });
+
   // 逐个渲染图标
   for (const item of SELECTED_ICONS) {
     const color = CATEGORY_COLORS[item.category] || COLORS.orange;
@@ -90,9 +97,10 @@ async function generate() {
 
       const svgHtml = await renderToString(app);
 
-      // 保存为 SVG 文件
+      // 保存为 SVG 文件（Portal public 目录 + Gateway public 目录）
       const fileName = `material-${item.id}.svg`;
       fs.writeFileSync(path.join(svgDir, fileName), svgHtml, 'utf-8');
+      fs.writeFileSync(path.join(gatewayPublicDir, fileName), svgHtml, 'utf-8');
 
       materialDefs.push({
         id: item.id,

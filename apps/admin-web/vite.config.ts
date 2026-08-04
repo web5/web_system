@@ -5,7 +5,37 @@ import { resolve } from 'path';
 
 export default defineConfig({
   base: '/admin/',
-  plugins: [vue(), vueJsx()],
+  plugins: [
+    vue(),
+    vueJsx(),
+    // SPA 回退 + 访问根路径时重定向到 /admin/
+    // ⚠️ configureServer 必须是 plugin 钩子，写在 server.* 下不会被 vite 调用
+    {
+      name: 'admin-base-redirect',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = req.url || '';
+          // 根路径 → 重定向到 /admin/
+          if (url === '/') {
+            res.writeHead(301, { Location: '/admin/' });
+            res.end();
+            return;
+          }
+          // /admin 不带斜杠 → 补斜杠重定向
+          if (url === '/admin') {
+            res.writeHead(301, { Location: '/admin/' });
+            res.end();
+            return;
+          }
+          // SPA 回退：/admin 开头的路径如果没有文件后缀（非静态资源），返回 index.html
+          if (url.startsWith('/admin') && !url.includes('.')) {
+            req.url = '/';
+          }
+          next();
+        });
+      },
+    },
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -15,31 +45,8 @@ export default defineConfig({
   },
   server: {
     port: 5174,
-    host: true, // 同时监听 IPv4/IPv6，兼容 Whistle 代理
+    host: '0.0.0.0', // 仅 IPv4，避免 IPv6 localhost JS 执行异常
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
-    // SPA 回退 + 访问根路径时重定向到 /admin/
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const url = req.url || '';
-        // 根路径 → 重定向到 /admin/
-        if (url === '/') {
-          res.writeHead(301, { Location: '/admin/' });
-          res.end();
-          return;
-        }
-        // /admin 不带斜杠 → 补斜杠重定向
-        if (url === '/admin') {
-          res.writeHead(301, { Location: '/admin/' });
-          res.end();
-          return;
-        }
-        // SPA 回退：/admin 开头的路径如果没有文件后缀（非静态资源），返回 index.html
-        if (url.startsWith('/admin') && !url.includes('.')) {
-          req.url = '/';
-        }
-        next();
-      });
-    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
@@ -47,7 +54,7 @@ export default defineConfig({
       },
 
       '/materials': {
-        target: 'http://localhost:5173',
+        target: 'http://localhost:3000',
         changeOrigin: true,
       },
     },

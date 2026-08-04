@@ -47,6 +47,10 @@
 5. 每个微服务独立数据库
 6. 所有 API 通过 gateway 代理
 7. **Icon 规范**：禁止使用 emoji 作为图标，统一使用 SVG icon；如果没有合适的 SVG icon，宁可不用 icon
+8. **静态资源路径**：
+   - `/api/uploads/*` — 用户上传文件和 AI 生成图片的统一路径（头像、变变图、画板等）
+   - `/materials/svg/*` — 系统素材 SVG，独立于页面路由，由 Gateway 直接提供
+   - AI 生成图片必须落盘到 `/api/uploads/` 目录 + 数据库存相对路径，不能只存远程 URL
 
 ## AI 编程规范
 

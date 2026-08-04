@@ -179,8 +179,7 @@ export class BianbianAdminService {
       await this.materialRepository.delete({ source: 'system' });
     }
 
-    // SVG 素材目录（由 Portal 静态服务提供）
-    const svgBase = '/materials/svg';
+    // SVG 素材目录（独立静态资源路径，与页面路由分离）
 
     const defaults = [
       // ===== 动物 =====
