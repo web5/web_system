@@ -67,6 +67,7 @@ apps/mini-app/private.key
 
 # 运行时上传文件
 servers/user-service/uploads/
+servers/ai-service/uploads/
 
 # 本地测试脚本（含密钥风险）
 servers/ai-service/test-tts.js

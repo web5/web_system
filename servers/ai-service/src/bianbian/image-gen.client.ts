@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
 import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { API_TIMEOUT } from '@web-system/shared';
+import { API_TIMEOUT, sleep } from '@web-system/shared';
 
 export interface ImageGenOptions {
   /** 原始画作图片的公开访问 URL（非 base64），作为 hy-image-v3.0 图生图参考图 */
@@ -45,16 +46,18 @@ export class ImageGenClient {
   /** 轮询间隔（毫秒） */
   private readonly pollIntervalMs = 2_500;
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async generate(opts: ImageGenOptions): Promise<ImageGenResult> {
-    const apiKey = process.env.IMAGE_GEN_API_KEY;
+    const apiKey = this.configService.get<string>('IMAGE_GEN_API_KEY');
     if (!apiKey) {
       throw new Error('图片生成服务未配置 (IMAGE_GEN_API_KEY)');
     }
     const baseUrl =
-      process.env.IMAGE_GEN_API_URL?.replace(/\/$/, '') ||
-      'https://tokenhub.tencentmaas.com';
+      this.configService.get('IMAGE_GEN_API_URL', 'https://tokenhub.tencentmaas.com').replace(/\/$/, '');
 
     const hasImage = !!opts.imageUrl;
     const prompt = this.buildPrompt(opts.description, opts.style, hasImage);
@@ -96,10 +99,31 @@ export class ImageGenClient {
     for (let attempt = 0; attempt < 2 && !submitRes?.data?.id; attempt++) {
       if (attempt > 0) {
         this.logger.warn(`图片生成任务提交重试第 ${attempt} 次...`);
-        await this.sleep(1500);
+        await sleep(1500);
       }
       try {
-        submitRes = await submitOnce(usedImages);
+        const response = await submitOnce(usedImages);
+        const submittedTaskId = response.data?.id;
+        if (submittedTaskId) {
+          submitRes = response;
+          continue;
+        }
+
+        const responseError =
+          response.data?.error?.message ||
+          response.data?.message ||
+          '未返回任务 ID';
+        lastSubmitError = responseError;
+        this.logger.error(
+          `图片生成任务提交失败(第${attempt + 1}次): ${responseError}`,
+        );
+
+        // MaaS 可能以 HTTP 200 + status=failed 返回参考图下载失败。
+        // 这种响应同样需要触发无图回退，不能当作成功响应退出重试。
+        if (usedImages && attempt === 0) {
+          usedImages = false;
+          this.logger.warn('参考图提交失败，将回退到纯文本生图');
+        }
       } catch (error) {
         lastSubmitError = error?.response?.data?.message || error?.message || '未知错误';
         this.logger.error(`图片生成任务提交失败(第${attempt + 1}次): ${lastSubmitError}`);
@@ -113,9 +137,6 @@ export class ImageGenClient {
 
     const taskId = submitRes?.data?.id;
     if (!taskId) {
-      if (submitRes) {
-        this.logger.error(`图片生成未返回任务 ID: ${JSON.stringify(submitRes.data)}`);
-      }
       throw new Error(
         lastSubmitError
           ? `图片生成任务提交失败: ${lastSubmitError}`
@@ -128,7 +149,7 @@ export class ImageGenClient {
     const queryUrl = `${baseUrl}/v1/api/image/query`;
     const deadline = Date.now() + this.maxPollMs;
     while (Date.now() < deadline) {
-      await this.sleep(this.pollIntervalMs);
+      await sleep(this.pollIntervalMs);
 
       let queryRes: AxiosResponse;
       try {
@@ -216,7 +237,4 @@ export class ImageGenClient {
     );
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
 }

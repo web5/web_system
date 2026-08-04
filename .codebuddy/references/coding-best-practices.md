@@ -195,9 +195,55 @@ build: {
 
 ---
 
-## 四、部署与运维
+## 四、静态资源管理
 
-### 4.1 PM2 部署使用 restart，不用 delete+start
+### 4.1 统一通过 /api/uploads/ 上传和访问
+
+所有用户上传文件和 AI 生成图片统一走 `/api/uploads/` 路径，**不零散存放在各服务本地**。
+
+```
+/api/uploads/avatars/     — 用户头像
+/api/uploads/bianbian/    — 变变 AI 生成图片
+/api/uploads/drawing/     — 画板图片
+/api/uploads/general/     — 通用上传
+```
+
+**规则**：
+- 上传接口（`POST /api/upload/{category}`）和访问路径（`GET /api/uploads/{category}/xxx`）统一走 Gateway 代理
+- 后端服务通过 `@Controller('api')` 或静态文件挂载提供服务，Gateway 负责代理转发
+- 禁止各服务自行暴露非标准端口或路径的静态文件
+
+### 4.2 AI 生成图片必须落盘并记录数据库
+
+AI 生成的图片（如变变角色图、文生图结果）不是临时数据，必须：
+
+1. **落盘到 `/api/uploads/` 对应的静态资源目录**（调用 upload-service 或直接写入 user-service 的 uploads 目录）
+2. **将资源路径存入对应数据库字段**（如 `bianbian.avatarUrl`、`drawing.imageUrl`），不能只依赖内存缓存或临时 URL
+3. **数据库存相对路径**，如 `/api/uploads/bianbian/bianbian-xxx.jpg`，不存绝对 URL
+
+```typescript
+// ✅ 正确：落盘 + 入库
+const filename = `bianbian-${Date.now()}-${random}.jpg`;
+await fs.writeFile(path.join(uploadsDir, 'bianbian', filename), imageBuffer);
+const resourceUrl = `/api/uploads/bianbian/${filename}`;
+await this.bianbianRepo.update(id, { avatarUrl: resourceUrl });
+
+// ❌ 错误：只存临时 URL，重启后丢失
+await this.bianbianRepo.update(id, { avatarUrl: tempSignedUrl });
+```
+
+### 4.3 素材（Materials）使用独立静态路径
+
+与用户上传不同，系统素材（SVG 图标、预设背景等）不通过 `/api/uploads/`，而是通过独立的 `/materials/svg/` 路径提供，由 Gateway 的 ServeStaticModule 直接从 `public/materials/` 目录服务。
+
+这样区分：
+- `/api/uploads/*` → 用户态数据，走数据库 + 后端微服务
+- `/materials/*` → 系统级静态素材，构建时生成，Gateway 直接提供
+
+---
+## 五、部署与运维
+
+### 5.1 PM2 部署使用 restart，不用 delete+start
 
 ```bash
 # ❌ 有停机时间
@@ -207,7 +253,7 @@ pm2 delete gateway; pm2 start ...
 pm2 restart gateway 2>/dev/null || pm2 start ...
 ```
 
-### 4.2 Docker 规范
+### 5.2 Docker 规范
 
 ```yaml
 # 生产环境
@@ -222,15 +268,15 @@ postgres:
     interval: 10s
 ```
 
-### 4.3 必须有 .dockerignore
+### 5.3 必须有 .dockerignore
 
 至少排除：`node_modules`, `.git`, `dist`, `.env*`, `*.log`
 
 ---
 
-## 五、代码质量（shared 包）
+## 六、代码质量（shared 包）
 
-### 5.1 变量初始化
+### 6.1 变量初始化
 
 ```typescript
 // ❌ 可能 undefined
@@ -240,7 +286,7 @@ let inThrottle: boolean;
 let inThrottle: boolean = false;
 ```
 
-### 5.2 非安全函数加注释
+### 6.2 非安全函数加注释
 
 ```typescript
 // ✅ 明确标注安全性
@@ -252,7 +298,7 @@ let inThrottle: boolean = false;
 export function randomString(length = 32): string { ... }
 ```
 
-### 5.3 类型定义避免冗余
+### 6.3 类型定义避免冗余
 
 ```typescript
 // ❌ 重复字段
@@ -270,7 +316,7 @@ interface UserInfo extends Pick<User, 'id' | 'username'> {
 }
 ```
 
-### 5.4 Shell 脚本路径
+### 6.4 Shell 脚本路径
 
 ```bash
 # ❌ 从其他目录执行会找不到文件
@@ -283,7 +329,7 @@ cd "$SCRIPT_DIR/../servers/auth-service"
 
 ---
 
-## 六、自检清单（PR 前）
+## 七、自检清单（PR 前）
 
 | 检查项 | 说明 |
 |--------|------|

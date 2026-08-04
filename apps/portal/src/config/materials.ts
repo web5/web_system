@@ -1,19 +1,19 @@
 /**
  * 变变素材配置 — 自动生成，请勿手动修改
  * 生成命令：node scripts/generate-materials.mjs
- * 生成时间：2026-07-19T05:03:10.718Z
+ * 生成时间：2026-07-26T14:35:29.860Z
  */
 import type { MaterialItem, MaterialTab } from '@/types/material';
 
 /** 素材分类定义 */
 export const MATERIAL_TABS: MaterialTab[] = [
-  { key: 'animal', label: '动物', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xMiAyLjY5bDUuNjYgNS42NmE4IDggMCAxIDEtMTEuMzEgMHoiLz48Y2lyY2xlIGN4PSI4LjUiIGN5PSIxMCIgcj0iMS41IiBmaWxsPSIjRkY4QzQyIiBzdHJva2U9Im5vbmUiLz48Y2lyY2xlIGN4PSIxNS41IiBjeT0iMTAiIHI9IjEuNSIgZmlsbD0iI0ZGOEM0MiIgc3Ryb2tlPSJub25lIi8+PC9zdmc+', order: 1, count: 7 },
-  { key: 'nature', label: '自然', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM3RUQ5NTciIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik03IDE4Yy00LjUtMi01LTctNS03IDAgMCA1LTAuNSA3IDMiLz48cGF0aCBkPSJNMTIgMmMwIDAgMSA5IDkgOSIvPjxwYXRoIGQ9Ik0xNyAxOGM0LjUtMiA1LTcgNS03IDAgMC01LTAuNS03IDMiLz48cGF0aCBkPSJNMTIgMjJ2LTgiLz48L3N2Zz4=', order: 2, count: 14 },
-  { key: 'food', label: '食物', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjZCOUQiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PHBhdGggZD0iTTEyIDZ2Nmw0IDIiLz48L3N2Zz4=', order: 3, count: 12 },
-  { key: 'transport', label: '交通', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0RUNEQzQiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNS41OSAxNC4zN2E2IDYgMCAwIDEtNS44NCA3LjM4di00LjhtNS44NC0yLjU4YTE0Ljk4IDE0Ljk4IDAgMCAwIDYuMTYtMTIuMTJBMTQuOTggMTQuOTggMCAwIDAgOS42MzEgOC40MW01Ljk2IDUuOTZhMTQuOTI2IDE0LjkyNiAwIDAgMS01Ljg0MSAyLjU4bS0uMTE5LTguNTRhNiA2IDAgMCAwLTcuMzgxIDUuODRoNC44bTIuNTgxLTUuODRhMTQuOTI3IDE0LjkyNyAwIDAgMC0yLjU4IDUuODRtMi42OTkgMi43Yy0uMTAzLjAyMS0uMjA3LjA0MS0uMzExLjA2YTE1LjA5IDE1LjA5IDAgMCAxLTIuNDQ4LTIuNDQ4IDE0LjkgMTQuOSAwIDAgMSAuMDYtLjMxMm0tMi4yNCAyLjM5YTQuNDkzIDQuNDkzIDAgMCAwLTEuNzU3IDQuMzA2IDQuNDkzIDQuNDkzIDAgMCAwIDQuMzA2LTEuNzU4TTE0LjUgMy41YTE0Ljk4IDE0Ljk4IDAgMCAxLTQuMzc2IDEyLjExNyIvPjwvc3ZnPg==', order: 4, count: 9 },
-  { key: 'sticker', label: '贴纸', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNBNzhCRkEiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=', order: 5, count: 28 },
-  { key: 'shape', label: '形状', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNGRjhDNDIiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSI3IiBoZWlnaHQ9IjciIHJ4PSIxIi8+PHJlY3QgeD0iMTQiIHk9IjMiIHdpZHRoPSI3IiBoZWlnaHQ9IjciIHJ4PSIxIi8+PHJlY3QgeD0iMyIgeT0iMTQiIHdpZHRoPSI3IiBoZWlnaHQ9IjciIHJ4PSIxIi8+PHJlY3QgeD0iMTQiIHk9IjE0IiB3aWR0aD0iNyIgaGVpZ2h0PSI3IiByeD0iMSIvPjwvc3ZnPg==', order: 6, count: 13 },
-  { key: 'background', label: '背景', icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0RUNEQzQiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgcng9IjIiIHJ5PSIyIi8+PGNpcmNsZSBjeD0iOC41IiBjeT0iOC41IiByPSIxLjUiLz48cGF0aCBkPSJtMjEgMTUtNS01TDUgMjEiLz48L3N2Zz4=', order: 7, count: 8 },
+  { key: 'animal', label: '动物', icon: 'animal', order: 1, count: 7 },
+  { key: 'nature', label: '自然', icon: 'nature', order: 2, count: 14 },
+  { key: 'food', label: '食物', icon: 'food', order: 3, count: 12 },
+  { key: 'transport', label: '交通', icon: 'transport', order: 4, count: 9 },
+  { key: 'sticker', label: '贴纸', icon: 'sticker', order: 5, count: 28 },
+  { key: 'shape', label: '形状', icon: 'shape', order: 6, count: 13 },
+  { key: 'background', label: '背景', icon: 'background', order: 7, count: 8 },
 ];
 
 /** SVG/图片素材 */

@@ -1,12 +1,14 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
+import * as path from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
   // 全局验证管道
@@ -27,6 +29,11 @@ async function bootstrap() {
     origin: corsOrigins || false,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
+  });
+
+  // 静态资源服务 — AI 生成的图片通过 /uploads/ 访问
+  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
+    prefix: '/uploads',
   });
 
   // Swagger 文档

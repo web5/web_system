@@ -9,16 +9,20 @@ dev.kedouai.com
       ↓ HTTPS 代理
 175.27.189.123:3000 / 10.206.16.5:3000 (内网)
       │
-      ├── /assets/*    → ServeStaticModule (public/)
-      ├── /admin/*     → ServeStaticModule (public/admin/)
-      ├── /            → SPA 回退中间件 → index.html
-      ├── /create      → SPA 回退中间件 → index.html (SPA 路由)
-      ├── /api/auth/*  → ProxyModule → Auth Service (:3001)
-      ├── /api/users*  → ProxyModule → User Service (:3002)
-      ├── /api/ai/*    → ProxyModule → AI Service (:3003)
-      ├── /api/*       → 404
-      ├── /docs        → Swagger 文档
-      └── /swagger     → Swagger 聚合文档
+      ├── /                 → 301 重定向 → /portal/
+      ├── /portal/*         → Portal SPA 回退 → public/portal/index.html
+      │   (内部路由: /portal/create, /portal/transform, /portal/login 等)
+      ├── /admin/*          → Admin SPA 回退 → public/admin/index.html
+      ├── /assets/*         → ServeStaticModule (public/，带 hash 强缓存)
+      ├── /materials/*      → ServeStaticModule (public/materials/，系统素材)
+      ├── /api/auth/*       → ProxyModule → Auth Service (:3001)
+      ├── /api/users*       → ProxyModule → User Service (:3002)
+      ├── /api/ai/*         → ProxyModule → AI Service (:3003)
+      ├── /api/bianbian/*   → ProxyModule → AI Service (:3003，变身产品)
+      ├── /api/upload/*     → ProxyModule → User Service (:3002)
+      ├── /api/uploads/*    → ProxyModule → 静态资源代理（头像/AI图片等）
+      ├── /docs             → Swagger 文档
+      └── /swagger          → Swagger 聚合文档
 ```
 
 ## 服务器信息
@@ -132,7 +136,7 @@ cd ../system-service && npx nest build
 cd ../..
 
 # 构建前端（注意跳过 vue-tsc 类型检查）
-cd apps/portal && npx vite build && cp -r dist/* /data/web_system/servers/gateway/public/
+cd apps/portal && npx vite build && cp -r dist/* /data/web_system/servers/gateway/public/portal/
 cd ../admin-web && npx vite build && cp -r dist/* /data/web_system/servers/gateway/public/admin/
 cd ../..
 
@@ -198,20 +202,16 @@ nginx -t && nginx -s reload
 |----------|----------|
 | `/assets/*` | `public/assets/*` |
 | `/admin/*` | `public/admin/*` |
+| `/materials/*` | `public/materials/*` |
 | `/favicon.svg` | `public/favicon.svg` |
 
 ### SPA 回退
 
-Express 中间件处理前端路由，非 API/文档/管理后台路径统一返回 `index.html`：
-
-```typescript
-app.use((req, res, next) => {
-  if (req.method !== 'GET') return next();
-  if (path.startsWith('/api') || path.startsWith('/docs') || ...) return next();
-  if (extname(path)) return next(); // 跳过静态资源
-  res.sendFile('public/index.html');
-});
-```
+Express 中间件处理前端路由：
+- `/admin` 或 `/admin/*` → `public/admin/index.html`
+- `/portal` 或 `/portal/*` → `public/portal/index.html`
+- `/` → 301 重定向到 `/portal/`
+- 其他路径 → 跳过（NestJS 自行处理，通常 404）
 
 ### API 代理
 

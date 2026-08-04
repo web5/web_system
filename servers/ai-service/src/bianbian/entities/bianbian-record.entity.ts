@@ -24,7 +24,7 @@ export class BianbianRecord {
   @Column({ type: 'text' })
   originalImage: string;
 
-  /** AI 生成的结果图（base64 data URL 或 CDN URL） */
+  /** AI 生成的结果图（本地路径 /api/uploads/bianbian/xxx.jpg，优先；回退到远程 CDN URL） */
   @Column({ type: 'text', nullable: true })
   aiImage: string | null;
 

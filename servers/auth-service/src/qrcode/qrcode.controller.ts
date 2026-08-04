@@ -51,7 +51,7 @@ export class QrcodeController {
     }
 
     // 确定前端回调地址（优先使用 redirect 参数，否则默认登录页）
-    const frontendUrl = redirect || 'http://localhost:5173/login';
+    const frontendUrl = redirect || 'http://localhost:5173/portal/login';
 
     // 构建 OAuth 授权 URL（ticket 编码在 state 中）
     const oauthUrl = this.qrcodeService.buildScanOAuthUrl(ticket, frontendUrl);
@@ -68,7 +68,7 @@ export class QrcodeController {
   ) {
     // 个人订阅号不支持网页授权，直接使用应用内链接
     // 微信扫码后打开此链接 → 前端检测到 ticket → 轮询等待小程序扫码确认
-    const frontendUrl = redirect || 'http://localhost:5173/login';
+    const frontendUrl = redirect || 'http://localhost:5173/portal/login';
     const scanUrl = `${frontendUrl}?qrcode_ticket=${ticket}`;
     return { oauthUrl: scanUrl };
   }

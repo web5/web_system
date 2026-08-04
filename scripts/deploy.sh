@@ -77,10 +77,13 @@ deploy_portal() {
   npx vite build 2>&1 || err "Portal 构建失败"
   log "Portal 构建完成"
 
-  log "同步到远程服务器（保留已有 admin/ 等目录）..."
-  # 先清理旧 portal 文件，但不删 admin/ 等子目录
-  ssh "$SERVER" "cd $REMOTE_DIR/servers/gateway/public && find . -maxdepth 1 -not -name '.' -not -name 'admin' -exec rm -rf {} + 2>/dev/null; true"
-  tar czf - dist | ssh "$SERVER" "cd $REMOTE_DIR/servers/gateway && tar xzf - && cp -r dist/* public/ && rm -rf dist"
+  log "同步到远程服务器（public/portal/）..."
+  ssh "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/portal"
+  tar czf - dist | ssh "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/portal && rm -rf ./* && tar xzf - --strip-components=1"
+  # 素材 SVG 同步到独立路径 public/materials/，与页面路由分离
+  ssh "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/materials && cp -r $REMOTE_DIR/servers/gateway/public/portal/materials/* $REMOTE_DIR/servers/gateway/public/materials/"
+  # 清理旧的 portal 根路径文件（迁移到 /portal/ 后不再需要）
+  ssh "$SERVER" "cd $REMOTE_DIR/servers/gateway/public && find . -maxdepth 1 -not -name '.' -not -name 'admin' -not -name 'portal' -not -name 'materials' -exec rm -rf {} + 2>/dev/null; true"
   log "Portal 同步完成"
 
   deploy_gateway_restart
