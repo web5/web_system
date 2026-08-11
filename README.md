@@ -36,7 +36,7 @@ web_system/
 ### 后端
 - NestJS
 - TypeORM
-- PostgreSQL
+- MySQL（本地）/ PostgreSQL（生产，见部署配置）
 
 ### 工具
 - pnpm (包管理)
@@ -44,10 +44,28 @@ web_system/
 
 ## 快速开始
 
+> 换机器从零跑起，请先看 **[docs/local-dev-setup.md](./docs/local-dev-setup.md)** —— 覆盖无 brew/sudo 安装 MySQL+Redis、`.env` 配置、种子用户等完整步骤。下面仅列要点。
+
+### 0. 本地基础设施（无 brew / 无 sudo，仅首次）
+
+后端依赖 MySQL 与 Redis。若本机无 brew 或不想 `sudo`，用内置脚本把官方二进制装到 `~/local`：
+
+```bash
+# 启用 pnpm（若未启用）
+corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+# 一键初始化并启动 MySQL(3306) + Redis(6379)，创建库 web_system
+bash scripts/local-db.sh
+```
+
+> 有 brew 也可直接 `brew install mysql redis`，但脚本默认读 `~/local` 下的二进制。
+
 ### 1. 安装依赖
 
 ```bash
 pnpm install
+pnpm --filter @web-system/shared build
+pnpm --filter @web-system/types build
 ```
 
 ### 2. 配置 Whistle 代理（推荐 · 统一域名开发）
@@ -105,7 +123,13 @@ macOS：**系统偏好设置 → 网络 → 高级 → 代理**，勾选 HTTP/HT
 ### 3. 启动服务
 
 ```bash
-# 一键全栈启动（后端 6 个 + 前端 3 个，nohup 后台运行）
+# 推荐：一键全栈启动（先启 DB → 后端 6 个 → 前端 3 个，nohup 后台运行）
+bash scripts/start-local.sh
+
+# 额外初始化种子用户 admin / test
+bash scripts/start-local.sh --seed
+
+# 仅启动已配置好的服务（不含 DB 初始化、不含 seed）
 bash scripts/start-dev.sh
 ```
 
@@ -130,7 +154,7 @@ bash scripts/restart-servers.sh
 cd servers/gateway && pnpm dev &        # :3000
 cd servers/auth-service && pnpm dev &   # :3001
 cd servers/user-service && pnpm dev &   # :3002
-cd servers/ai-service && pnpm dev &     # :3003
+cd servers/ai-service && pnpm start:dev & # :3003 （注意：脚本名是 start:dev，不是 dev）
 cd servers/system-service && pnpm dev & # :3004
 cd servers/todo-service && pnpm dev &   # :3005
 
@@ -154,6 +178,36 @@ Whistle 代理开启后，浏览器访问统一域名：
 | Swagger | http://local.kedouai.com/docs |
 
 > 💡 **不开启 Whistle 代理**时可直接访问各端口：Portal → localhost:5173，Admin → localhost:5174
+
+### 5. 环境变量与初始账号
+
+每个后端服务在 `servers/<service>/.env` 读取配置，**这些文件已被 `.gitignore` 忽略，不会入库**，需自行创建。需 DB 的服务（auth / user / ai / system / todo）至少包含：
+
+```dotenv
+DB_TYPE=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USERNAME=root
+DB_PASSWORD=            # 与 §0 设置的 MySQL 密码一致，无密码则留空
+DB_DATABASE=web_system
+REDIS_URL=redis://127.0.0.1:6379
+JWT_SECRET=<随机 48 字节 hex>
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
+```
+
+工程**不内置任何用户数据**，初始账号由 `servers/auth-service/scripts/seed.ts` 生成：
+
+```bash
+cd servers/auth-service
+ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm seed
+```
+
+| 用户名 | 角色 | 密码 |
+|--------|------|------|
+| `admin` | admin | 由 `ADMIN_INIT_PASSWORD` 指定（缺失则脚本报错退出） |
+| `test`  | user  | 由 `TEST_INIT_PASSWORD` 指定（缺失则随机生成） |
+
+> seed 脚本的 DB 密码只从 `.env` 注入，源码无硬编码。详细排错见 [docs/local-dev-setup.md](./docs/local-dev-setup.md)。
 
 ## 端口分配
 
