@@ -2,7 +2,7 @@ import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
-import { RedisModule } from '@liaoliaots/nestjs-redis';
+import { RedisModule, RedisModuleOptions } from '@liaoliaots/nestjs-redis';
 import * as path from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
@@ -19,14 +19,17 @@ import { QrcodeModule } from './qrcode/qrcode.module';
 
     RedisModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        config: {
-          url: configService.get('REDIS_URL', 'redis://localhost:6379'),
-          retryStrategy(times: number) {
-            return Math.min(times * 100, 3000);
+      useFactory: (...args: unknown[]): RedisModuleOptions => {
+        const configService = args[0] as ConfigService;
+        return {
+          config: {
+            url: configService.get('REDIS_URL', 'redis://localhost:6379'),
+            retryStrategy(times: number) {
+              return Math.min(times * 100, 3000);
+            },
           },
-        },
-      }),
+        };
+      },
     }),
 
     TypeOrmModule.forRootAsync({
