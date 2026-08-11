@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus, UnauthorizedException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
@@ -16,6 +16,8 @@ import { Response } from 'express';
 @ApiTags('认证')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private authService: AuthService,
     private qrcodeService: QrcodeService,

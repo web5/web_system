@@ -6,11 +6,13 @@ import * as crypto from 'crypto';
 dotenv.config();
 
 const dataSource = new DataSource({
-  type: (process.env.DB_TYPE || 'postgres') as 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  username: process.env.DB_USERNAME || 'web_system',
-  password: process.env.DB_PASSWORD || 'web_system123',
+  // 与 app.module.ts 的 ConfigService 读取保持一致。
+  // 注意：DB 密码只允许通过 .env / 环境变量注入，禁止在此硬编码。
+  type: (process.env.DB_TYPE || 'mysql') as 'mysql',
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  username: process.env.DB_USERNAME || 'root',
+  password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'web_system',
   entities: [__dirname + '/../src/**/*.entity{.ts,.js}'],
   synchronize: false,
