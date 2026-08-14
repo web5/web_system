@@ -42,13 +42,10 @@ export class FinnewsController {
     return { stock: stock_code ?? '', count: news.length, news };
   }
 
-  /** 某板块一周热门话题 */
+  /** 某板块一周热门话题（基于 entities.type==='板块' 过滤） */
   @Get('sector-hot')
   async sectorHot(@Query('sector') sector?: string, @Query('limit') limit?: string) {
-    const hot = await this.finnewsService.searchNews(sector ?? '', {
-      dateRange: '本周',
-      limit: Number(limit) || 10,
-    });
+    const hot = await this.finnewsService.getSectorHot(sector ?? '', Number(limit) || 10);
     return { sector: sector ?? '', count: hot.length, hot_topics: hot };
   }
 

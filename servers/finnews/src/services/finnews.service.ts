@@ -6,7 +6,8 @@ import { NewsEntity } from '../entities/news.entity';
 import { EntityEntity } from '../entities/entity.entity';
 import { collectAll, RawNews } from '../collectors/collector';
 import { simhash } from '../processors/dedup';
-import { generateSummary, analyzeSentiment } from '../processors/llm';
+import { generateSummary, analyzeSentiment, extractEntities } from '../processors/llm';
+import { detectSectors } from '../processors/sectors';
 
 @Injectable()
 export class FinnewsService implements OnModuleInit {
@@ -26,6 +27,12 @@ export class FinnewsService implements OnModuleInit {
     this.collectOnce()
       .then((r) => this.logger.log(`首次采集完成: ${JSON.stringify(r)}`))
       .catch((e) => this.logger.error(`首次采集失败: ${(e as Error).message}`));
+
+    if (process.env.RUN_BACKFILL === 'true') {
+      this.backfillEntities()
+        .then((r) => this.logger.log(`实体回填完成: ${JSON.stringify(r)}`))
+        .catch((e) => this.logger.error(`实体回填失败: ${(e as Error).message}`));
+    }
   }
 
   /** 采集一次并处理入库 */
@@ -63,6 +70,14 @@ export class FinnewsService implements OnModuleInit {
     const summary = await generateSummary(raw.title, raw.content);
     const sentiment = await analyzeSentiment(raw.title, raw.content);
 
+    // 实体标注：LLM 抽公司/人物/产品 + 关键词补板块（确定性兜底）
+    const llmEntities = await extractEntities(raw.title, raw.content);
+    const sectorEntities = detectSectors(raw.title, raw.content).map((name) => ({
+      type: '板块',
+      name,
+    }));
+    const entities = this.dedupeEntities([...llmEntities, ...sectorEntities]);
+
     // 建话题（简化：每条资讯一个话题）
     const topic = await this.topicRepo.save(
       this.topicRepo.create({
@@ -74,10 +89,13 @@ export class FinnewsService implements OnModuleInit {
         news_count: 1,
         source_names: [raw.source_name],
         source_urls: [{ name: raw.source_name, url: raw.source_url }],
-        entities: [],
+        entities,
         publish_date: raw.publish_date ?? new Date(),
       }),
     );
+
+    // 同步实体到 finnews_entities 表（实体库 / 热度统计）
+    await this.upsertEntities(entities);
 
     // 建资讯记录
     await this.newsRepo.save(
@@ -97,6 +115,103 @@ export class FinnewsService implements OnModuleInit {
     );
 
     return true;
+  }
+
+  /** 实体去重（按 type+name） */
+  private dedupeEntities(
+    list: Array<{ type: string; name: string; stock_code?: string; sector?: string }>,
+  ): Array<{ type: string; name: string; stock_code?: string; sector?: string }> {
+    const seen = new Set<string>();
+    const out: Array<{ type: string; name: string; stock_code?: string; sector?: string }> = [];
+    for (const e of list) {
+      const key = `${e.type}:${e.name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(e);
+      }
+    }
+    return out;
+  }
+
+  /** 将抽取到的实体 upsert 到 finnews_entities 表，并累加提及次数 */
+  private async upsertEntities(
+    entities: Array<{ type: string; name: string; stock_code?: string; sector?: string }>,
+  ): Promise<void> {
+    for (const e of entities) {
+      const existing = await this.entityRepo.findOne({ where: { name: e.name, type: e.type } });
+      if (existing) {
+        await this.entityRepo.increment({ id: existing.id }, 'mention_count_7d', 1);
+        await this.entityRepo.increment({ id: existing.id }, 'mention_count_30d', 1);
+      } else {
+        await this.entityRepo.save(
+          this.entityRepo.create({
+            name: e.name,
+            type: e.type,
+            ...(e.stock_code ? { stock_code: e.stock_code } : {}),
+            ...(e.type === '板块' ? { sector: e.name } : {}),
+            mention_count_7d: 1,
+            mention_count_30d: 1,
+          }),
+        );
+      }
+    }
+  }
+
+  /** 某板块一周内的热门话题（基于 entities.type==='板块' 过滤） */
+  async getSectorHot(sector: string, limit = 10): Promise<TopicEntity[]> {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const topics = await this.topicRepo.find({
+      where: { is_deleted: false, publish_date: MoreThanOrEqual(weekAgo) },
+      order: { publish_date: 'DESC' },
+    });
+    return topics
+      .filter(
+        (t) =>
+          (t.entities ?? []).some((e) => e.type === '板块' && e.name === sector) ||
+          t.title.includes(sector),
+      )
+      .slice(0, Math.min(limit, 50));
+  }
+
+  /** 一次性回填：对存量话题补「板块」实体（基于关键词映射，离线确定性） */
+  async backfillEntities(): Promise<{ total: number; updated: number; sectors: number }> {
+    const topics = await this.topicRepo.find({ where: { is_deleted: false } });
+    let updated = 0;
+    let sectorCount = 0;
+    for (const t of topics) {
+      const existing = (t.entities ?? []) as Array<{ type: string; name: string }>;
+      const haveSector = new Set(existing.filter((e) => e.type === '板块').map((e) => e.name));
+      const detected = detectSectors(t.title, t.summary ?? '');
+      const added = detected.filter((s) => !haveSector.has(s));
+      if (added.length) {
+        t.entities = [
+          ...existing,
+          ...added.map((name) => ({ type: '板块', name })),
+        ] as any;
+        await this.topicRepo.save(t);
+        updated++;
+        for (const name of added) {
+          const ex = await this.entityRepo.findOne({ where: { name, type: '板块' } });
+          if (!ex) {
+            await this.entityRepo.save(
+              this.entityRepo.create({
+                name,
+                type: '板块',
+                sector: name,
+                mention_count_7d: 1,
+                mention_count_30d: 1,
+              }),
+            );
+          } else {
+            await this.entityRepo.increment({ id: ex.id }, 'mention_count_7d', 1);
+            await this.entityRepo.increment({ id: ex.id }, 'mention_count_30d', 1);
+          }
+          sectorCount++;
+        }
+      }
+    }
+    return { total: topics.length, updated, sectors: sectorCount };
   }
 
   /** 最新话题列表 */
