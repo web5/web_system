@@ -39,7 +39,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  const port = configService.get('PORT', 3005);
+  const port = configService.get('PORT', 6005);
   await app.listen(port);
   const logger = new Logger('TodoService');
   logger.log(`Todo Service is running on: http://localhost:${port}`);

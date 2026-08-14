@@ -49,12 +49,12 @@ export default defineConfig({
     allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:6000',
         changeOrigin: true,
       },
 
       '/materials': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:6000',
         changeOrigin: true,
       },
     },

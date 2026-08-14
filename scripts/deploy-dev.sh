@@ -8,6 +8,7 @@
 #   ./scripts/deploy-dev.sh              # 部署全部
 #   ./scripts/deploy-dev.sh auth         # 只部署 auth-service
 #   ./scripts/deploy-dev.sh portal       # 只部署 portal 前端
+#   ./scripts/deploy-dev.sh mcp-admin    # 只部署 mcp-admin 管理界面
 #   ./scripts/deploy-dev.sh gateway      # 只部署 gateway
 # ===========================================================
 set -e
@@ -50,6 +51,18 @@ deploy_portal() {
   log "同步到远程服务器..."
   tar czf - dist | $SSH_CMD "$SERVER" "cd $REMOTE_DIR/servers/gateway && rm -rf public/* && tar xzf - && mv dist/* public/ && rm -rf dist"
   log "Portal 同步完成"
+  deploy_gateway_restart
+}
+
+deploy_mcp_admin() {
+  log "===== 部署 MCP 管理界面 ====="
+  cd "$SCRIPT_DIR/apps/mcp-admin"
+  log "构建 mcp-admin..."
+  npx vite build 2>&1 || err "mcp-admin 构建失败"
+  log "同步到远程服务器（public/mcp-admin/）..."
+  $SSH_CMD "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/mcp-admin"
+  tar czf - dist | $SSH_CMD "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/mcp-admin && rm -rf ./* && tar xzf - --strip-components=1"
+  log "MCP 管理界面同步完成"
   deploy_gateway_restart
 }
 
@@ -126,11 +139,12 @@ check_ssh
 case "$COMPONENT" in
   all)    deploy_all; health_check ;;
   portal) deploy_portal; health_check ;;
+  mcp-admin) deploy_mcp_admin; health_check ;;
   auth)   deploy_auth; health_check ;;
   gateway) deploy_gateway; health_check ;;
   config) deploy_config ;;
   *)
-    echo "用法: $0 [all|portal|auth|gateway|config]"
+    echo "用法: $0 [all|portal|mcp-admin|auth|gateway|config]"
     exit 1
     ;;
 esac

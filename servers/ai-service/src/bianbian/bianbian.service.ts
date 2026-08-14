@@ -39,10 +39,10 @@ export class BianbianService {
 
   /** 微服务地址（统一从 ConfigService 读取，兼容 localhost/Docker/生产环境） */
   private get systemServiceUrl(): string {
-    return this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:3004');
+    return this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:6004');
   }
   private get userServiceUrl(): string {
-    return this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
+    return this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
   }
 
   /**

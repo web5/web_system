@@ -46,7 +46,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  const port = process.env.PORT || 3003;
+  const port = process.env.PORT || 6003;
   await app.listen(port);
   const logger = new Logger('AIService');
   logger.log(`AI Service is running on: http://localhost:${port}`);

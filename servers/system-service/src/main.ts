@@ -30,8 +30,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT || 3004);
-  logger.log(`System Service running on port ${process.env.PORT || 3004}`);
-  logger.log(`Swagger docs: http://localhost:${process.env.PORT || 3004}/docs`);
+  await app.listen(process.env.PORT || 6004);
+  logger.log(`System Service running on port ${process.env.PORT || 6004}`);
+  logger.log(`Swagger docs: http://localhost:${process.env.PORT || 6004}/docs`);
 }
 bootstrap();

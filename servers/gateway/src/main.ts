@@ -15,7 +15,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Gateway');
 
-  const port = configService.get('PORT', 3000);
+  const port = configService.get('PORT', 6000);
   const host = configService.get('HOST', '0.0.0.0');
   const corsOrigins = configService.get('CORS_ORIGINS', '');
   const publicUrl = configService.get('PUBLIC_URL', '');
@@ -99,6 +99,10 @@ async function bootstrap() {
     // 管理后台 SPA 回退
     if (path.startsWith('/admin')) {
       return res.sendFile(join(__dirname, '..', 'public', 'admin', 'index.html'));
+    }
+    // MCP 管理界面 SPA 回退（和 admin 一致，走 gateway serve-static 托管）
+    if (path === '/mcp-admin' || path.startsWith('/mcp-admin/')) {
+      return res.sendFile(join(__dirname, '..', 'public', 'mcp-admin', 'index.html'));
     }
     // 根路径 → 重定向到 /portal/
     if (path === '/') {

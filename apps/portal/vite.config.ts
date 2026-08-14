@@ -29,17 +29,17 @@ export default defineConfig({
     proxy: {
       // 素材 SVG 静态资源 — 通过 Gateway 直接提供，与页面路由分离
       '/materials': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:6000',
         changeOrigin: true,
       },
       // TTS 语音合成 — 直接代理到 AI 服务，绕过 Gateway 避免二进制被 JSON 包装
       '/api/ai/tts': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:6003',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ai/, '/ai'),
       },
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:6000',
         changeOrigin: true,
       },
 

@@ -13,6 +13,8 @@ export class ProxyService implements OnModuleInit {
   private readonly systemServiceUrl: string;
   private readonly todoServiceUrl: string;
   private readonly uploadServiceUrl: string;
+  private readonly mcpGatewayUrl: string;
+  private readonly finnewsServiceUrl: string;
 
   // 缓存 proxy 实例，避免每个请求都创建新实例
   private userProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -24,17 +26,21 @@ export class ProxyService implements OnModuleInit {
   private uploadProxy!: ReturnType<typeof createProxyMiddleware>;
   private uploadStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private bianbianStaticProxy!: ReturnType<typeof createProxyMiddleware>;
+  private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
+  private finnewsProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
 
   constructor(private configService: ConfigService) {
-    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:3001');
-    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
-    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:3003');
-    this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:3004');
-    this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:3005');
+    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6001');
+    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
+    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:6003');
+    this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:6004');
+    this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:6005');
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
+    this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', 'http://localhost:6006');
+    this.finnewsServiceUrl = this.configService.get('FINNEWS_SERVICE_URL', 'http://localhost:6007');
 
     this.boundErrorHandler = (err, _req, res) => {
       this.logger.error(`代理请求失败: ${err.message}`);
@@ -89,6 +95,33 @@ export class ProxyService implements OnModuleInit {
       on: { error: this.boundErrorHandler },
     });
 
+    // MCP 网关（mcp-admin 管理接口 /api/mcp/* → mcp-gateway）
+    // pathRewrite：/api/mcp/modules → /api/modules（mcp-gateway 自身是 /api 前缀）
+    this.mcpProxy = createProxyMiddleware({
+      target: this.mcpGatewayUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/mcp': '/api' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
+    // 财经资讯微服务（/api/finnews/* → finnews:6007）
+    // pathRewrite：/api/finnews/api/market-pulse → /api/market-pulse（finnews controller 是 @Controller('api')）
+    // 鉴权在 proxy.controller.ts 的路由方法里手动验证 Bearer token
+    this.finnewsProxy = createProxyMiddleware({
+      target: this.finnewsServiceUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/finnews': '' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
     this.logger.log('所有 Proxy 实例初始化完成');
   }
 
@@ -101,6 +134,8 @@ export class ProxyService implements OnModuleInit {
   getUploadProxy() { return this.uploadProxy; }
   getUploadStaticProxy() { return this.uploadStaticProxy; }
   getBianbianStaticProxy() { return this.bianbianStaticProxy; }
+  getMcpProxy() { return this.mcpProxy; }
+  getFinnewsProxy() { return this.finnewsProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }
 
   /**
