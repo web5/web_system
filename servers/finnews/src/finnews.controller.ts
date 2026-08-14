@@ -54,4 +54,10 @@ export class FinnewsController {
   async marketPulse() {
     return this.finnewsService.getMarketPulse();
   }
+
+  /** 板块实体库（枚举当前可查板块及各板块热度） */
+  @Get('sectors')
+  async sectors() {
+    return this.finnewsService.getSectorLibrary();
+  }
 }

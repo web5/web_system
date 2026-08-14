@@ -64,6 +64,13 @@ const FINNEWS_HTTP_TOOLS: Array<{
     ],
   },
   {
+    name: 'get_sector_library',
+    description: '获取板块实体库：当前数据库所有「板块」类型实体及其 7日/30日 提及热度，用于枚举可查询的板块名称（配合 get_sector_hot 使用）',
+    method: 'GET',
+    path: '/api/sectors',
+    params: [],
+  },
+  {
     name: 'get_market_pulse',
     description: '获取市场情绪脉搏：情绪指数、热门板块、24小时资讯量',
     method: 'GET',
