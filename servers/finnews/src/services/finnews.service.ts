@@ -174,6 +174,33 @@ export class FinnewsService implements OnModuleInit {
       .slice(0, Math.min(limit, 50));
   }
 
+  /** 板块实体库：当前所有「板块」类型实体及热度（供连接器枚举可查板块） */
+  async getSectorLibrary(): Promise<{
+    total: number;
+    sectors: Array<{
+      name: string;
+      type: string;
+      sector: string | null;
+      mention_count_7d: number;
+      mention_count_30d: number;
+    }>;
+  }> {
+    const entities = await this.entityRepo.find({
+      where: { type: '板块' },
+      order: { mention_count_7d: 'DESC' },
+    });
+    return {
+      total: entities.length,
+      sectors: entities.map((e) => ({
+        name: e.name,
+        type: e.type,
+        sector: e.sector,
+        mention_count_7d: e.mention_count_7d,
+        mention_count_30d: e.mention_count_30d,
+      })),
+    };
+  }
+
   /** 一次性回填：对存量话题补「板块」实体（基于关键词映射，离线确定性） */
   async backfillEntities(): Promise<{ total: number; updated: number; sectors: number }> {
     const topics = await this.topicRepo.find({ where: { is_deleted: false } });
