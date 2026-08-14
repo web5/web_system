@@ -23,6 +23,11 @@ pids/
 *.seed
 *.pid.lock
 
+# Redis 持久化快照（运行时产物，非源码）
+dump.rdb
+*.rdb
+redis-data/
+
 # Coverage directory
 coverage/
 *.lcov
