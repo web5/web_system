@@ -91,3 +91,40 @@ export async function analyzeSentiment(
     return { sentiment: '中性', score: 0.5, reason: '解析失败' };
   }
 }
+
+/** 实体抽取：公司 / 人物 / 产品（用于补全 topic.entities 与 finnews_entities 表） */
+export async function extractEntities(
+  title: string,
+  content: string,
+): Promise<Array<{ type: string; name: string; stock_code?: string }>> {
+  try {
+    const result = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            '你是金融信息抽取器。从以下财经资讯中抽取涉及的实体，类型限定为：公司、人物、产品。' +
+            '只输出 JSON 数组，元素格式：{"type":"公司|人物|产品","name":"实体名","stock_code":"股票代码(若文中出现，如600519.SH或300750.SZ，否则省略)"}。' +
+            '若无任何实体，输出 []。不要输出数组以外的任何内容。',
+        },
+        { role: 'user', content: `标题：${title}\n\n内容：${content.slice(0, 800)}` },
+      ],
+      { maxTokens: 300 },
+    );
+    const parsed = JSON.parse(result);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (e: any) =>
+          e && typeof e.name === 'string' && ['公司', '人物', '产品'].includes(e.type),
+      )
+      .map((e: any) => ({
+        type: e.type,
+        name: String(e.name),
+        ...(typeof e.stock_code === 'string' && e.stock_code ? { stock_code: e.stock_code } : {}),
+      }));
+  } catch (e) {
+    logger.warn(`实体抽取失败: ${(e as Error).message}`);
+    return [];
+  }
+}
