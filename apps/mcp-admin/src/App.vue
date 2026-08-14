@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
+import { antdTheme } from '@web-system/ui';
 import {
   listModules,
   createModule,
@@ -204,11 +205,12 @@ const columns = [
 </script>
 
 <template>
-  <div class="page">
-    <div class="header">
-      <h2>MCP 网关管理</h2>
-      <a-button type="primary" @click="openCreate">添加模块</a-button>
-    </div>
+  <a-config-provider :theme="antdTheme">
+    <div class="page">
+      <div class="header">
+        <h2>MCP 网关管理</h2>
+        <a-button type="primary" @click="openCreate">添加模块</a-button>
+      </div>
 
     <a-table
       :columns="columns"
@@ -357,7 +359,8 @@ const columns = [
       <a-divider>返回结果</a-divider>
       <pre class="result">{{ debugResult || '（暂无结果）' }}</pre>
     </a-modal>
-  </div>
+    </div>
+  </a-config-provider>
 </template>
 
 <style scoped>
@@ -373,10 +376,11 @@ const columns = [
   margin-bottom: 16px;
 }
 .tool-card {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 12px;
+  background: var(--surface-2);
 }
 .param-list {
   margin-top: 8px;
@@ -390,7 +394,8 @@ const columns = [
   align-items: center;
 }
 .result {
-  background: #f6f6f6;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px;
   max-height: 300px;
@@ -398,5 +403,6 @@ const columns = [
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
+  color: var(--text-body);
 }
 </style>
