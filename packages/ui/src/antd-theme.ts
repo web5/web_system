@@ -9,6 +9,6 @@ export const antdTheme: ThemeConfig = {
     colorPrimary: '#F97316',
     colorInfo: '#F97316',
     colorLink: '#F97316',
-    borderRadius: 6,
+    borderRadius: 4,
   },
 };
