@@ -25,7 +25,9 @@
   --ant-color-primary-text: var(--color-brand-500);
 
   /* ===== 表面（深色默认） ===== */
-  --surface-0: #000000;
+  /* --surface-0 透明：任何未显式设置主题的页面首帧不会以纯黑绘制（避免闪黑），
+     由下层（浏览器画布/父容器）背景决定实际底色 */
+  --surface-0: transparent;
   --surface-1: #0A0A0D;
   --surface-2: #0C0C0D;
   --surface-3: #111115;
