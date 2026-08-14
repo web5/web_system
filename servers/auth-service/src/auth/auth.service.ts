@@ -305,7 +305,7 @@ export class AuthService {
     const config = this.getOaConfig();
     const redirectUri = this.configService.get(
       'WECHAT_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/auth/wechat/callback',
+      'http://localhost:6001/auth/wechat/callback',
     );
     const state = frontendRedirect ? encodeURIComponent(frontendRedirect) : '';
     const params = new URLSearchParams({

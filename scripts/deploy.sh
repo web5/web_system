@@ -109,6 +109,23 @@ deploy_admin() {
   deploy_gateway_restart
 }
 
+deploy_mcp_admin() {
+  log "===== 部署 MCP 管理界面 ====="
+
+  cd "$SCRIPT_DIR/apps/mcp-admin"
+
+  log "构建 mcp-admin..."
+  npx vite build 2>&1 || err "mcp-admin 构建失败"
+  log "mcp-admin 构建完成"
+
+  log "同步到远程服务器（public/mcp-admin/）..."
+  ssh "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/mcp-admin"
+  tar czf - dist | ssh "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/mcp-admin && rm -rf ./* && tar xzf - --strip-components=1"
+  log "MCP 管理界面同步完成"
+
+  deploy_gateway_restart
+}
+
 # ===========================================================
 # 构建 & 同步 auth-service
 # ===========================================================
@@ -287,6 +304,10 @@ case "$COMPONENT" in
     deploy_admin
     health_check
     ;;
+  mcp-admin)
+    deploy_mcp_admin
+    health_check
+    ;;
   auth)
     deploy_auth
     health_check
@@ -306,7 +327,7 @@ case "$COMPONENT" in
     seed_bianbian
     ;;
   *)
-    echo "用法: $0 [dev|prod] [all|portal|admin|auth|system|gateway|config|seed]"
+    echo "用法: $0 [dev|prod] [all|portal|admin|mcp-admin|auth|system|gateway|config|seed]"
     exit 1
     ;;
 esac

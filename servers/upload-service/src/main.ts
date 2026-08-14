@@ -54,7 +54,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  const port = process.env.PORT || 3006;
+  const port = process.env.PORT || 6008;
 
   // JWT_SECRET 启动时校验
   if (!process.env.JWT_SECRET) {

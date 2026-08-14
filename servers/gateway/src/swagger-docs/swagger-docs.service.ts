@@ -9,9 +9,9 @@ export class SwaggerDocsService {
   private aiServiceUrl: string;
 
   constructor(private configService: ConfigService) {
-    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:3001');
-    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:3002');
-    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:3003');
+    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6001');
+    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
+    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:6003');
   }
 
   /** 代理 Auth 服务的 Swagger (docs → /swagger/auth) */

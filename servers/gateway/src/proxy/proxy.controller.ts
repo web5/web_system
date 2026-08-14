@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { ProxyService } from './proxy.service';
 import { Public } from '../auth/public.decorator';
 import * as http from 'http';
@@ -21,7 +22,10 @@ import { API_TIMEOUT } from '@web-system/shared';
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
 
-  constructor(private proxyService: ProxyService) {}
+  constructor(
+    private proxyService: ProxyService,
+    private configService: ConfigService,
+  ) {}
 
   // 精确匹配 /api/auth（无尾斜杠）
   @All('auth')
@@ -221,6 +225,45 @@ export class ProxyController {
   @All('upload/:path(*)')
   proxyUploadWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getUploadProxy()(req, res);
+  }
+
+  // 精确匹配 /api/mcp（无尾斜杠）— MCP 网关管理接口
+  @All('mcp')
+  proxyMcpExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getMcpProxy()(req, res);
+  }
+
+  // 通配 /api/mcp/:path(*)
+  @All('mcp/:path(*)')
+  proxyMcpWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getMcpProxy()(req, res);
+  }
+
+  // 财经资讯微服务（/api/finnews/* → finnews:6007）
+  // 服务间鉴权：验证 Authorization: Bearer $FINNEWS_SERVICE_KEY
+  // 注意：必须放在 @All(':path(*)') 通配之前，否则被通配兜底 404
+  @All('finnews')
+  proxyFinnewsExact(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res);
+  }
+
+  @All('finnews/:path(*)')
+  proxyFinnewsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res);
+  }
+
+  /** 验证服务间 Bearer Token，通过后转发到 finnews 微服务 */
+  private checkServiceAuthAndProxy(req: Request, res: Response): Promise<void> | void {
+    const expected = this.configService.get<string>('FINNEWS_SERVICE_KEY');
+    if (expected) {
+      const auth = req.headers['authorization'];
+      if (auth !== `Bearer ${expected}`) {
+        this.logger.warn(`[finnews] 鉴权失败: ${req.ip} ${req.method} ${req.path}`);
+        res.status(401).json({ code: 401, message: 'Service API key required' });
+        return;
+      }
+    }
+    return this.proxyService.getFinnewsProxy()(req, res);
   }
 
   /** AI 生成的变变图片静态资源（/api/uploads/bianbian/* → ai-service）

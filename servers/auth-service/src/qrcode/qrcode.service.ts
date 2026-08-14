@@ -59,7 +59,7 @@ export class QrcodeService {
     const config = this.getOaConfig();
     const oauthRedirectUri = this.configService.get(
       'WECHAT_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/auth/wechat/callback',
+      'http://localhost:6001/auth/wechat/callback',
     );
     // 将 ticketId 编码到 state 中，回调时能解析出来
     const state = `${frontendRedirect}?mini_scan_ticket=${ticketId}`;

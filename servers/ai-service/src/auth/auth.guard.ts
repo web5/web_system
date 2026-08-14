@@ -27,7 +27,7 @@ export class AuthGuard implements CanActivate {
   ) {
     this.authServiceUrl = this.configService.get(
       'AUTH_SERVICE_URL',
-      'http://localhost:3001',
+      'http://localhost:6001',
     );
   }
 
