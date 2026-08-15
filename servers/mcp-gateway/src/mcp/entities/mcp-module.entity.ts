@@ -48,12 +48,12 @@ export class McpModuleEntity {
   })
   tools: McpToolEntity[];
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 6, comment: '创建时间' })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  @UpdateDateColumn({ type: 'datetime', precision: 6, comment: '更新时间' })
   updated_at: Date;
 
-  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true, comment: '软删除时间' })
+  @DeleteDateColumn({ type: 'datetime', precision: 6, nullable: true, comment: '软删除时间' })
   deleted_at: Date | null;
 }

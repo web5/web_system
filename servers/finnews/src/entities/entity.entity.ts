@@ -39,9 +39,9 @@ export class EntityEntity {
   @Column({ type: 'int', default: 0, comment: '近 30 日提及次数' })
   mention_count_30d: number;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 6, comment: '创建时间' })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  @UpdateDateColumn({ type: 'datetime', precision: 6, comment: '更新时间' })
   updated_at: Date;
 }

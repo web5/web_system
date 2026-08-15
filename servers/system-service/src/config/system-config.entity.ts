@@ -18,12 +18,12 @@ export class SystemConfig {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '说明' })
   description: string;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 6, comment: '创建时间' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  @UpdateDateColumn({ type: 'datetime', precision: 6, comment: '更新时间' })
   updatedAt: Date;
 
-  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true, comment: '软删除时间' })
+  @DeleteDateColumn({ type: 'datetime', precision: 6, nullable: true, comment: '软删除时间' })
   deletedAt: Date | null;
 }

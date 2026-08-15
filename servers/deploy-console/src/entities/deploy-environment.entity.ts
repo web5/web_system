@@ -50,14 +50,14 @@ export class DeployEnvironmentEntity {
   @Column({ type: 'boolean', default: false, comment: '是否内置环境' })
   builtin: boolean;
 
-  @Column({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
+  @Column({ type: 'datetime', precision: 6, default: () => 'CURRENT_TIMESTAMP(6)', comment: '创建时间' })
   createdAt: Date;
 
   @Column({
     type: 'datetime',
-    precision: 3,
-    default: () => 'CURRENT_TIMESTAMP(3)',
-    onUpdate: 'CURRENT_TIMESTAMP(3)',
+    precision: 6,
+    default: () => 'CURRENT_TIMESTAMP(6)',
+    onUpdate: 'CURRENT_TIMESTAMP(6)',
     comment: '更新时间',
   })
   updatedAt: Date;

@@ -80,6 +80,7 @@ import { QrcodeModule } from './qrcode/qrcode.module';
             waitForConnections: true,
           },
           synchronize: configService.get('NODE_ENV') !== 'production',
+          namingStrategy: new SnakeNamingStrategy(),
           logging: configService.get('NODE_ENV') === 'development',
         };
       },

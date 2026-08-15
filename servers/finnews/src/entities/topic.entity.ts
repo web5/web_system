@@ -64,9 +64,9 @@ export class TopicEntity {
   @Column({ type: 'boolean', default: false, comment: '是否删除' })
   is_deleted: boolean;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '首次出现时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 6, comment: '首次出现时间' })
   first_seen: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '最近更新时间' })
+  @UpdateDateColumn({ type: 'datetime', precision: 6, comment: '最近更新时间' })
   last_updated: Date;
 }

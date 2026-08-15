@@ -34,7 +34,7 @@ export class DeployDeploymentEntity {
   status: string;
 
   /** 最近部署时间 */
-  @Column({ type: 'datetime', precision: 3, nullable: true, comment: '最近部署时间' })
+  @Column({ type: 'datetime', precision: 6, nullable: true, comment: '最近部署时间' })
   deployedAt?: Date;
 
   /** 最近部署人 */
@@ -45,14 +45,14 @@ export class DeployDeploymentEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '最近任务 ID' })
   taskId?: string;
 
-  @Column({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
+  @Column({ type: 'datetime', precision: 6, default: () => 'CURRENT_TIMESTAMP(6)', comment: '创建时间' })
   createdAt: Date;
 
   @Column({
     type: 'datetime',
-    precision: 3,
-    default: () => 'CURRENT_TIMESTAMP(3)',
-    onUpdate: 'CURRENT_TIMESTAMP(3)',
+    precision: 6,
+    default: () => 'CURRENT_TIMESTAMP(6)',
+    onUpdate: 'CURRENT_TIMESTAMP(6)',
     comment: '更新时间',
   })
   updatedAt: Date;

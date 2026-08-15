@@ -218,7 +218,7 @@ deploy_module() {
   IFS=$'\t' read -r TYPE DIR PUB BUILDCMD PM2 <<< "$info"
   case "$TYPE" in
     backend)
-      deploy_backend_git "$DIR" "$PM2"
+      deploy_backend_git "$DIR" "${PM2:-$DIR}"
       ;;
     frontend)
       case "$key" in
