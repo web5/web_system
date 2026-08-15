@@ -44,7 +44,7 @@ web_system/
 
 ## 快速开始
 
-> 换机器从零跑起，请先看 **[docs/local-dev-setup.md](./docs/local-dev-setup.md)** —— 覆盖无 brew/sudo 安装 MySQL+Redis、`.env` 配置、种子用户等完整步骤。下面仅列要点。
+> 换机器从零跑起，请先看 **[docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md)** —— 覆盖无 brew/sudo 安装 MySQL+Redis、`.env` 配置、种子用户等完整步骤。下面仅列要点。
 
 ### 0. 本地基础设施（无 brew / 无 sudo，仅首次）
 
@@ -118,7 +118,7 @@ macOS：**系统偏好设置 → 网络 → 高级 → 代理**，勾选 HTTP/HT
 
 或使用 Chrome 插件 [SwitchyOmega](https://chrome.google.com/webstore/detail/proxy-switchyomega/padekgcemlokbadohgkifijomclgjgif) 按需切换。
 
-> 详细配置参考 [docs/whistle-local-dev.md](./docs/whistle-local-dev.md)
+> 详细配置参考 [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md)
 
 ### 3. 启动服务
 
@@ -207,7 +207,7 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 | `admin` | admin | 由 `ADMIN_INIT_PASSWORD` 指定（缺失则脚本报错退出） |
 | `test`  | user  | 由 `TEST_INIT_PASSWORD` 指定（缺失则随机生成） |
 
-> seed 脚本的 DB 密码只从 `.env` 注入，源码无硬编码。详细排错见 [docs/local-dev-setup.md](./docs/local-dev-setup.md)。
+> seed 脚本的 DB 密码只从 `.env` 注入，源码无硬编码。详细排错见 [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md)。
 
 ## 端口分配
 
@@ -304,7 +304,7 @@ Whistle 规则中的 `excludeFilter` 误杀了模块请求。使用本文档推�
 
 ### 详细排查
 
-参见 [docs/whistle-local-dev.md](./docs/whistle-local-dev.md) 第 10 节故障排查。
+参见 [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) 第 10 节故障排查。
 
 ## License
 

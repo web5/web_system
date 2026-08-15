@@ -91,7 +91,7 @@
 | 脚本路径 | `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` | `dirname "$0"` 相对路径 |
 
 > 完整版：`.codebuddy/references/coding-best-practices.md`  
-> 审计报告：`docs/todo-list/audit-report-2026-07-26.md`
+> 审计报告：`docs/archive/todo-list/audit-report-2026-07-26.md`
 
 ### 1. 同类修改必须扫全量（Monorepo 铁律）
 
