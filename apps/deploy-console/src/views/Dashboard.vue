@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import dayjs from 'dayjs'
-import { configApi, auditApi } from '@/api'
+import { environmentApi, auditApi } from '@/api'
 
 interface EnvInfo {
   env: string
@@ -29,7 +29,14 @@ const loading = ref(false)
 // 加载环境信息
 async function loadEnvs() {
   try {
-    envList.value = await configApi.environments()
+    const list = await environmentApi.list()
+    envList.value = list.map((e: any) => ({
+      env: e.id,
+      server: e.host,
+      services: Object.keys(e.ports || {}),
+      publicUrl: e.publicUrl || '',
+      deployDir: e.remoteDir,
+    }))
   } catch {
     // 静默处理
   }
@@ -40,7 +47,7 @@ async function loadRecentActions() {
   loading.value = true
   try {
     const res = await auditApi.list(1, 10)
-    recentActions.value = res.items
+    recentActions.value = res.data
   } catch {
     // 静默处理
   } finally {

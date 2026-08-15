@@ -52,34 +52,6 @@ export const authApi = {
     }>,
 }
 
-/* ========== Config ========== */
-export const configApi = {
-  files: () =>
-    http.get('/config/files') as Promise<
-      { name: string; env: string; path: string }[]
-    >,
-  file: (env: string, name: string) =>
-    http.get('/config/file', { params: { env, name } }) as Promise<{
-      name: string
-      content: string
-      env: string
-    }>,
-  save: (env: string, name: string, content: string) =>
-    http.put('/config/file', { env, name, content }) as Promise<{
-      success: boolean
-    }>,
-  environments: () =>
-    http.get('/config/environments') as Promise<
-      {
-        env: string
-        server: string
-        services: string[]
-        publicUrl: string
-        deployDir: string
-      }[]
-    >,
-}
-
 /* ========== Deploy ========== */
 export const deployApi = {
   build: (component: string) =>
@@ -213,7 +185,7 @@ export const auditApi = {
   list: (page: number, limit: number) =>
     http.get('/audit/list', { params: { page, limit } }) as Promise<{
       total: number
-      items: {
+      data: {
         id: number
         timestamp: string
         user: string
