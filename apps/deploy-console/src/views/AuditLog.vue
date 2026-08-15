@@ -31,7 +31,7 @@ async function loadData() {
   try {
     const res = await auditApi.list(currentPage.value, pageSize.value)
     total.value = res.total
-    dataList.value = res.items
+    dataList.value = res.data
   } catch {
     // 静默处理
   } finally {
