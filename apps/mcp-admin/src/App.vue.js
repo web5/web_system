@@ -179,6 +179,7 @@ const applyLoading = ref(false);
 const code = ref('');
 const keyName = ref('');
 const keyResult = ref('');
+const keyPrefix = ref('');
 const applyMsg = ref('');
 watch(applyEmail, (v) => localStorage.setItem('mcp_apply_email', v));
 async function onApply() {
@@ -212,7 +213,14 @@ async function onVerify() {
     try {
         const r = await verifyKey(applyEmail.value, code.value, keyName.value);
         keyResult.value = r.key;
-        message.success('Key 已生成，请复制保存');
+        keyPrefix.value = r.prefix || '';
+        try {
+            await navigator.clipboard?.writeText(r.key);
+            message.success('Key 已生成并复制到剪贴板（明文仅展示一次，请妥善保存）');
+        }
+        catch {
+            message.success('Key 已生成，请复制保存（明文仅展示一次）');
+        }
     }
     catch (e) {
         message.error(e?.response?.data?.message || e.message || '验证失败');
@@ -1489,12 +1497,12 @@ else if (__VLS_ctx.activeTab === 'keys') {
         /** @type {[typeof __VLS_components.AAlert, typeof __VLS_components.aAlert, typeof __VLS_components.AAlert, typeof __VLS_components.aAlert, ]} */ ;
         // @ts-ignore
         const __VLS_406 = __VLS_asFunctionalComponent(__VLS_405, new __VLS_405({
-            type: "info",
+            type: "success",
             showIcon: true,
             ...{ style: {} },
         }));
         const __VLS_407 = __VLS_406({
-            type: "info",
+            type: "success",
             showIcon: true,
             ...{ style: {} },
         }, ...__VLS_functionalComponentArgsRest(__VLS_406));
@@ -1507,18 +1515,26 @@ else if (__VLS_ctx.activeTab === 'keys') {
                 ...{ class: "key-box" },
             });
             (__VLS_ctx.keyResult);
+            if (__VLS_ctx.keyPrefix) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ style: {} },
+                });
+                (__VLS_ctx.keyPrefix);
+            }
             const __VLS_409 = {}.AButton;
             /** @type {[typeof __VLS_components.AButton, typeof __VLS_components.aButton, typeof __VLS_components.AButton, typeof __VLS_components.aButton, ]} */ ;
             // @ts-ignore
             const __VLS_410 = __VLS_asFunctionalComponent(__VLS_409, new __VLS_409({
                 ...{ 'onClick': {} },
                 size: "small",
-                type: "link",
+                type: "primary",
+                ...{ style: {} },
             }));
             const __VLS_411 = __VLS_410({
                 ...{ 'onClick': {} },
                 size: "small",
-                type: "link",
+                type: "primary",
+                ...{ style: {} },
             }, ...__VLS_functionalComponentArgsRest(__VLS_410));
             let __VLS_413;
             let __VLS_414;
@@ -1738,6 +1754,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             code: code,
             keyName: keyName,
             keyResult: keyResult,
+            keyPrefix: keyPrefix,
             applyMsg: applyMsg,
             onApply: onApply,
             onVerify: onVerify,

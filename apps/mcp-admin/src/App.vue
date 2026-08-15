@@ -207,6 +207,7 @@ const applyLoading = ref(false);
 const code = ref('');
 const keyName = ref('');
 const keyResult = ref('');
+const keyPrefix = ref('');
 const applyMsg = ref('');
 
 watch(applyEmail, (v) => localStorage.setItem('mcp_apply_email', v));
@@ -241,7 +242,13 @@ async function onVerify() {
   try {
     const r = await verifyKey(applyEmail.value, code.value, keyName.value);
     keyResult.value = r.key;
-    message.success('Key 已生成，请复制保存');
+    keyPrefix.value = r.prefix || '';
+    try {
+      await navigator.clipboard?.writeText(r.key);
+      message.success('Key 已生成并复制到剪贴板（明文仅展示一次，请妥善保存）');
+    } catch {
+      message.success('Key 已生成，请复制保存（明文仅展示一次）');
+    }
   } catch (e: any) {
     message.error(e?.response?.data?.message || e.message || '验证失败');
   }
@@ -487,15 +494,20 @@ const keyColumns = [
                 </a-button>
                 <a-alert
                   v-if="keyResult"
-                  type="info"
+                  type="success"
                   show-icon
                   style="margin-top: 12px"
                 >
                   <template #message>
                     <div>
-                      <div>Key 已生成（仅展示一次，请复制保存）：</div>
+                      <div>Key 已生成并自动复制到剪贴板（明文仅展示一次，请妥善保存）：</div>
                       <div class="key-box">{{ keyResult }}</div>
-                      <a-button size="small" type="link" @click="copyKey">复制</a-button>
+                      <div v-if="keyPrefix" style="color: var(--text-tertiary, #909399); font-size: 12px">
+                        前缀标识：{{ keyPrefix }}（用于在管理后台识别）
+                      </div>
+                      <a-button size="small" type="primary" style="margin-top: 8px" @click="copyKey">
+                        再次复制
+                      </a-button>
                     </div>
                   </template>
                 </a-alert>
