@@ -12,23 +12,26 @@ import {
  * 主键由各实体自行声明（核心表 BIGINT 自增 / 日志资讯类 uuid）。
  */
 export abstract class AbstractEntity {
+  // 注意：MySQL 8.4 严格模式下，@CreateDateColumn/@UpdateDateColumn 生成的默认值
+  // 固定为 CURRENT_TIMESTAMP(6)，必须与列精度一致，否则报
+  // "Invalid default value for 'created_at'"。故精度统一为 6。
   @CreateDateColumn({
     type: 'datetime',
-    precision: 3,
+    precision: 6,
     comment: '创建时间',
   })
   createdAt: Date;
 
   @UpdateDateColumn({
     type: 'datetime',
-    precision: 3,
+    precision: 6,
     comment: '更新时间',
   })
   updatedAt: Date;
 
   @DeleteDateColumn({
     type: 'datetime',
-    precision: 3,
+    precision: 6,
     nullable: true,
     comment: '软删除时间，NULL 表示未删除',
   })
