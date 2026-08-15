@@ -17,15 +17,7 @@
     "noImplicitAny": false,
     "useUnknownInCatchVariables": false,
     "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "paths": {
-      "@web-system/types": ["../../packages/types/src"],
-      "@web-system/types/*": ["../../packages/types/src/*"],
-      "@web-system/shared": ["../../packages/shared/src"],
-      "@web-system/shared/*": ["../../packages/shared/src/*"],
-      "@web-system/mcp-core": ["../../packages/mcp-core/dist"],
-      "@web-system/mcp-core/*": ["../../packages/mcp-core/dist/*"]
-    }
+    "resolveJsonModule": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
