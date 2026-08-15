@@ -5,6 +5,8 @@ import * as path from 'path';
 import { McpModule } from './mcp/mcp.module';
 import { McpModuleEntity } from './mcp/entities/mcp-module.entity';
 import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
+import { McpApiKeyEntity } from './mcp/entities/mcp-api-key.entity';
+import { McpKeyCodeEntity } from './mcp/entities/mcp-key-code.entity';
 
 @Module({
   imports: [
@@ -16,7 +18,7 @@ import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'mysql');
-        const entities = [McpModuleEntity, McpToolEntity];
+        const entities = [McpModuleEntity, McpToolEntity, McpApiKeyEntity, McpKeyCodeEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql' as const,

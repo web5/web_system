@@ -30,3 +30,18 @@ export async function debugCall(dto) {
     const { data } = await http.post('/api/mcp/debug', dto);
     return data;
 }
+// ── API Key 申请 / 管理（经 gateway 代理 /api/mcp → mcp-gateway:6006）──
+export async function applyKey(email) {
+    await http.post('/api/mcp/keys/apply', { email });
+}
+export async function verifyKey(email, code, name) {
+    const { data } = await http.post('/api/mcp/keys/verify', { email, code, name });
+    return data;
+}
+export async function listKeys(adminKey) {
+    const { data } = await http.get('/api/mcp/keys', { headers: { 'X-Admin-Key': adminKey } });
+    return data.keys;
+}
+export async function revokeKey(id, adminKey) {
+    await http.delete(`/api/mcp/keys/${id}`, { headers: { 'X-Admin-Key': adminKey } });
+}

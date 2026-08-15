@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "kedou-finnews": {
+      "type": "streamableHttp",
+      "url": "https://kedouai.com/mcp/finnews",
+      "timeout": 60000,
+      "headers": {
+        "Authorization": "Bearer 在此填入你申请的API Key"
+      }
+    }
+  }
+}

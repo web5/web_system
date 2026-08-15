@@ -8,6 +8,9 @@ dist/
 build/
 *.local
 
+# Vite 加载 TS 配置时生成的临时文件
+*.timestamp-*.mjs
+
 # Logs
 logs/
 *.log
