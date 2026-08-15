@@ -6,10 +6,6 @@
     "emitDecoratorMetadata": true,
     "outDir": "./dist",
     "baseUrl": "./",
-    "paths": {
-      "@web-system/shared": ["../../packages/shared/src"],
-      "@web-system/shared/*": ["../../packages/shared/src/*"]
-    },
     "skipLibCheck": true,
     "esModuleInterop": true,
     "strictNullChecks": true,

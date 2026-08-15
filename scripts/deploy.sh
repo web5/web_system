@@ -176,7 +176,7 @@ deploy_backend_git() {
     git reset --hard origin/$branch
     git clean -fd
     cd servers/$svc
-    npm install
+    npm install --ignore-scripts
     npm run build
     pm2 restart $pm2name 2>/dev/null || pm2 start dist/main.js --name $pm2name
   " || err "$svc 远端构建/重启失败"
