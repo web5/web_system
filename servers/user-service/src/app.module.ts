@@ -2,9 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
+import { ApiKeyModule } from './api-key/api-key.module';
 import { User } from './user/user.entity';
+import { McpApiKeyEntity } from './api-key/entities/mcp-api-key.entity';
+import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
 
 @Module({
   imports: [
@@ -18,7 +22,7 @@ import { User } from './user/user.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'postgres');
-        const entities = [User];
+        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql',
@@ -34,6 +38,7 @@ import { User } from './user/user.entity';
               waitForConnections: true,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -57,6 +62,7 @@ import { User } from './user/user.entity';
     }),
     UserModule,
     AuthModule,
+    ApiKeyModule,
   ],
 })
 export class AppModule {}

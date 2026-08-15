@@ -41,7 +41,7 @@ export class MailService {
     await this.transporter.sendMail({
       from,
       to: email,
-      subject: '科豆财经资讯 MCP — 你的 API Key 验证码',
+      subject: '科豆 AI — 你的 API Key 验证码',
       text: `你的验证码是 ${code}，10 分钟内有效。如非本人操作请忽略。`,
       html: `<p>你的验证码是 <b style="font-size:18px">${code}</b>，10 分钟内有效。</p>
              <p style="color:#999">如非本人操作，请忽略此邮件。</p>`,

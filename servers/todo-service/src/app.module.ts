@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { TodoModule } from './todo/todo.module';
 import { AuthModule } from './auth/auth.module';
 
@@ -38,6 +39,7 @@ import { AuthModule } from './auth/auth.module';
               connectionTimeoutMillis: 5000,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -56,6 +58,7 @@ import { AuthModule } from './auth/auth.module';
               waitForConnections: true,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -64,6 +67,7 @@ import { AuthModule } from './auth/auth.module';
           database: configService.get('DB_DATABASE', './data/todo.db'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: true,
+          namingStrategy: new SnakeNamingStrategy(),
           logging: configService.get('NODE_ENV') === 'development',
         };
       },

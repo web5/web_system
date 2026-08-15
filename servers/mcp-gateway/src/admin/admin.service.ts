@@ -40,7 +40,7 @@ export class AdminService {
       timeout: dto.timeout ?? 30,
       auth_type: dto.auth_type ?? '',
       auth_config: dto.auth_config ?? null,
-      enabled: 1,
+      enabled: true,
       tools: (dto.tools ?? []).map((t) =>
         this.toolRepo.create({
           name: t.name,
@@ -85,7 +85,7 @@ export class AdminService {
   }
 
   async toggle(id: number, enabled: boolean): Promise<void> {
-    await this.moduleRepo.update(id, { enabled: enabled ? 1 : 0 });
+    await this.moduleRepo.update(id, { enabled });
   }
 
   /** 调试验证：直接调用后台 HTTP API */

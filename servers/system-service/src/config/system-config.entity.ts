@@ -1,16 +1,29 @@
-import { Entity, Column, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
+} from 'typeorm';
 
 @Entity('system_configs')
 export class SystemConfig {
-  @PrimaryColumn({ length: 64 })
+  @PrimaryColumn({ type: 'varchar', length: 64, comment: '配置键' })
   key: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', comment: '配置值' })
   value: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '说明' })
   description: string;
 
-  @UpdateDateColumn()
+  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true, comment: '软删除时间' })
+  deletedAt: Date | null;
 }

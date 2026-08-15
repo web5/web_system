@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { AiModule } from './ai/ai.module';
 import { ConversationModule } from './conversation/conversation.module';
 import { BianbianModule } from './bianbian/bianbian.module';
@@ -42,6 +43,7 @@ import { AuthModule } from './auth/auth.module';
               waitForConnections: true,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -57,6 +59,7 @@ import { AuthModule } from './auth/auth.module';
               connectionTimeoutMillis: 5000,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }

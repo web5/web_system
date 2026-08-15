@@ -1,0 +1,16 @@
+[
+  { "key": "gateway",        "name": "网关 Gateway",        "type": "backend",  "dir": "gateway",        "pm2": "gateway" },
+  { "key": "auth-service",   "name": "认证服务 Auth",       "type": "backend",  "dir": "auth-service",   "pm2": "auth-service" },
+  { "key": "system-service", "name": "系统服务 System",     "type": "backend",  "dir": "system-service", "pm2": "system-service" },
+  { "key": "user-service",   "name": "用户服务 User",       "type": "backend",  "dir": "user-service",   "pm2": "user-service" },
+  { "key": "ai-service",     "name": "AI 服务",             "type": "backend",  "dir": "ai-service",     "pm2": "ai-service" },
+  { "key": "todo-service",   "name": "待办服务 Todo",       "type": "backend",  "dir": "todo-service",   "pm2": "todo-service" },
+  { "key": "upload-service", "name": "上传服务 Upload",     "type": "backend",  "dir": "upload-service", "pm2": "upload-service" },
+  { "key": "mcp-gateway",    "name": "MCP 网关",            "type": "backend",  "dir": "mcp-gateway",    "pm2": "mcp-gateway" },
+  { "key": "finnews",        "name": "财经资讯 FinNews",    "type": "backend",  "dir": "finnews",        "pm2": "finnews" },
+  { "key": "deploy-console", "name": "运维后台(后端)",      "type": "backend",  "dir": "deploy-console", "pm2": "deploy-console" },
+  { "key": "portal",         "name": "门户 Portal",         "type": "frontend", "dir": "portal",         "publicPath": "portal" },
+  { "key": "admin-web",      "name": "管理后台 Admin",      "type": "frontend", "dir": "admin-web",      "publicPath": "admin" },
+  { "key": "mcp-admin",      "name": "MCP 管理台",          "type": "frontend", "dir": "mcp-admin",      "publicPath": "mcp-admin" },
+  { "key": "mini-app",       "name": "小程序 MiniApp",      "type": "frontend", "dir": "mini-app",       "publicPath": "mini", "buildCmd": "node scripts/upload.js" }
+]

@@ -1,1 +1,1 @@
-{"root":["./src/api.ts","./src/main.ts","./src/app.vue"],"version":"5.9.3"}
+{"root":["./src/api.ts","./src/main.ts","./src/router.ts","./src/app.vue","./src/views/adminpanel.vue","./src/views/usercenter.vue"],"version":"5.9.3"}

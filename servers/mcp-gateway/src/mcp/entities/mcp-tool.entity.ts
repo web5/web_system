@@ -2,6 +2,9 @@ import {
   Entity,
   Column,
   PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
@@ -10,7 +13,7 @@ import { McpModuleEntity } from './mcp-module.entity';
 /** MCP 工具（模块下的一个 HTTP 接口声明） */
 @Entity('mcp_tools')
 export class McpToolEntity {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true, comment: '工具 ID' })
   id: number;
 
   @Column({ comment: '所属模块 ID' })
@@ -36,4 +39,13 @@ export class McpToolEntity {
 
   @Column({ type: 'json', nullable: true, comment: '参数定义数组' })
   params: any;
+
+  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  created_at: Date;
+
+  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  updated_at: Date;
+
+  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true, comment: '软删除时间' })
+  deleted_at: Date | null;
 }

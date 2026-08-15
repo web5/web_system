@@ -16,5 +16,6 @@ module.exports = {
     { name: 'web-mcp-gateway',   cwd: __dirname + '/servers/mcp-gateway',   script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-finnews',       cwd: __dirname + '/servers/finnews',       script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-upload',        cwd: __dirname + '/servers/upload-service', script: 'dist/main.js', max_memory_restart: '512M' },
+    { name: 'web-deploy-console', cwd: __dirname + '/servers/deploy-console', script: 'dist/main.js', max_memory_restart: '512M' },
   ],
 };
