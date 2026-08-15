@@ -5,7 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
 import { SnakeNamingStrategy } from '@web-system/shared';
 import { AuthModule } from './auth/auth.module';
-import { ConfigModule as AppConfigModule } from './config/config.module';
 import { DeployModule } from './deploy/deploy.module';
 import { MonitorModule } from './monitor/monitor.module';
 import { AuditModule } from './audit/audit.module';
@@ -43,7 +42,6 @@ import { EnvironmentModule } from './environment/environment.module';
     }),
     // 业务模块
     AuthModule,
-    AppConfigModule,
     DeployModule,
     MonitorModule,
     AuditModule,
