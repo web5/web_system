@@ -44,6 +44,6 @@ export class GatewayAccessLogEntity extends BigIntEntity {
   latencyMs: number;
 
   @Index()
-  @Column({ type: 'datetime', precision: 3, comment: '请求接收时间' })
+  @Column({ type: 'datetime', precision: 6, comment: '请求接收时间' })
   requestAt: Date;
 }

@@ -44,7 +44,7 @@ export class DeployVersionEntity extends UuidEntity {
   releasedBy?: string;
 
   /** 发布时间 */
-  @Column({ type: 'datetime', precision: 3, comment: '发布时间' })
+  @Column({ type: 'datetime', precision: 6, comment: '发布时间' })
   @Index()
   releasedAt: Date;
 

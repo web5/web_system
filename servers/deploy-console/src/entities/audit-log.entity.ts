@@ -16,7 +16,7 @@ export class AuditLogEntity extends AbstractEntity {
   id: string;
 
   /** 事件时间（业务时间，区别于本行 created_at） */
-  @Column({ type: 'datetime', precision: 3, comment: '事件时间' })
+  @Column({ type: 'datetime', precision: 6, comment: '事件时间' })
   @Index()
   timestamp: Date;
 

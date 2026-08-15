@@ -52,16 +52,16 @@ export class McpApiKeyEntity {
   @Column({ type: 'varchar', length: 16, default: 'apply', comment: '来源 apply/admin' })
   ownerType: 'apply' | 'admin';
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 6, comment: '创建时间' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  @UpdateDateColumn({ type: 'datetime', precision: 6, comment: '更新时间' })
   updatedAt: Date;
 
   /** 吊销时间，null 表示未吊销 */
   @Column({ type: 'timestamp', nullable: true, comment: '吊销时间' })
   revokedAt: Date | null;
 
-  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true, comment: '软删除时间' })
+  @DeleteDateColumn({ type: 'datetime', precision: 6, nullable: true, comment: '软删除时间' })
   deletedAt: Date | null;
 }
