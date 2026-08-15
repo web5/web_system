@@ -1,0 +1,23 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>科豆财经资讯 — 信号态 Signal（居中版）</title>
+  <desc>白色科豆居中，三道同心圆波纹以种子为中心向四周对称扩散</desc>
+
+  <!-- 背景：暖橙圆角矩形 -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#F97316"/>
+
+  <!-- 同心圆波纹：以画布中心为源点，向外对称扩散（透明度逐层递减） -->
+  <circle cx="64" cy="82" r="46" fill="none" stroke="white" stroke-width="2.6" opacity="0.6"/>
+  <circle cx="64" cy="82" r="58" fill="none" stroke="white" stroke-width="2.2" opacity="0.38"/>
+  <circle cx="64" cy="82" r="70" fill="none" stroke="white" stroke-width="1.8" opacity="0.2"/>
+
+  <!-- 白色种子（豆），严格居中于画布水平中线 -->
+  <g transform="translate(64, 82)">
+    <path d="M 0 -36
+             C 18.9 -36, 29.2 -22.4, 29.2 0
+             C 29.2 25.8, 13.7 36, 0 36
+             C -15.5 36, -29.2 24.1, -29.2 0
+             C -29.2 -24.1, -15.5 -36, 0 -36 Z" fill="white"/>
+    <circle cx="0" cy="0" r="7.8" fill="#F97316"/>
+    <circle cx="0" cy="-1.6" r="3" fill="#FDE68A"/>
+  </g>
+</svg>

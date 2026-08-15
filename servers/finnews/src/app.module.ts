@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { FinnewsModule } from './finnews.module';
 import { TopicEntity } from './entities/topic.entity';
 import { NewsEntity } from './entities/news.entity';
@@ -29,6 +30,7 @@ import { SubscriptionEntity } from './entities/subscription.entity';
             database: configService.get<string>('DB_DATABASE', 'web_system'),
             entities,
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             charset: 'utf8mb4',
           };
         }

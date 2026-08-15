@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 920" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="920" fill="#f8fafc"/>
+
+  <text x="40" y="64" font-size="26" font-weight="700" fill="#0f172a">web_system 网络架构 · dev 环境流量与运维链路</text>
+  <text x="40" y="92" font-size="13" fill="#64748b">GATEWAY 42.194.200.69 ｜ DEV 175.27.189.123 ｜ PROD 106.52.176.246 ｜ 更新 2026-08-15</text>
+
+  <!-- ===== Zone A 客户端 ===== -->
+  <rect x="40" y="150" width="220" height="240" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="150" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">客户端</text>
+  <rect x="70" y="215" width="160" height="110" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="150" y="247" text-anchor="middle" font-size="14" font-weight="700" fill="#1e40af">浏览器</text>
+  <text x="150" y="274" text-anchor="middle" font-size="11" fill="#1e40af">dev.kedouai.com</text>
+  <text x="150" y="294" text-anchor="middle" font-size="11" fill="#1e40af">local.kedouai.com</text>
+  <text x="150" y="348" text-anchor="middle" font-size="10" fill="#94a3b8">/etc/hosts：</text>
+  <text x="150" y="364" text-anchor="middle" font-size="10" fill="#94a3b8">local → 127.0.0.1</text>
+
+  <!-- ===== Zone B GATEWAY ===== -->
+  <rect x="320" y="150" width="300" height="430" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="470" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">GATEWAY 机 · 公网入口</text>
+  <text x="470" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">42.194.200.69 · root</text>
+
+  <rect x="350" y="212" width="240" height="30" rx="15" fill="#ede9fe" stroke="#c4b5fd"/>
+  <text x="470" y="232" text-anchor="middle" font-size="10.5" fill="#5b21b6">DNS：dev.kedouai.com → 42.194.200.69</text>
+
+  <rect x="350" y="255" width="240" height="80" rx="10" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.8"/>
+  <text x="470" y="287" text-anchor="middle" font-size="14" font-weight="700" fill="#1e3a8a">nginx · 反向代理</text>
+  <text x="470" y="312" text-anchor="middle" font-size="11" fill="#1e3a8a">:80 / :443（TLS 证书）</text>
+
+  <rect x="350" y="365" width="240" height="56" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="470" y="389" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">location /</text>
+  <text x="470" y="408" text-anchor="middle" font-size="10.5" fill="#1e40af">→ dev:6000 · web-system</text>
+
+  <rect x="350" y="440" width="240" height="56" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="470" y="464" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">location /console/</text>
+  <text x="470" y="483" text-anchor="middle" font-size="10.5" fill="#1e40af">→ dev:6200 · 剥前缀 · SSE</text>
+
+  <!-- nginx 内部连线 -->
+  <path d="M410,335 V363" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <path d="M350,290 H330 V468 H346" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowBlue)"/>
+
+  <!-- ===== Zone C DEV ===== -->
+  <rect x="680" y="150" width="380" height="430" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="870" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">DEV 服务器</text>
+  <text x="870" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">175.27.189.123 · ubuntu</text>
+
+  <rect x="710" y="212" width="330" height="30" rx="15" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="875" y="232" text-anchor="middle" font-size="10.5" fill="#9a3412">腾讯云安全组放行：22 / 6000 / 6006 / 6200</text>
+
+  <rect x="710" y="250" width="170" height="70" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="795" y="281" text-anchor="middle" font-size="13" font-weight="700" fill="#1e40af">web-system</text>
+  <text x="795" y="303" text-anchor="middle" font-size="11" fill="#1e40af">:6000 · pm2 · 主站</text>
+
+  <rect x="710" y="340" width="170" height="80" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/>
+  <text x="795" y="371" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">deploy-console</text>
+  <text x="795" y="392" text-anchor="middle" font-size="10.5" fill="#166534">:6200 · SPA + /api</text>
+  <text x="795" y="409" text-anchor="middle" font-size="10" fill="#15803d">（本次新增）</text>
+
+  <rect x="710" y="450" width="170" height="56" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="795" y="474" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">其他服务</text>
+  <text x="795" y="493" text-anchor="middle" font-size="10.5" fill="#1e40af">:6006</text>
+
+  <rect x="710" y="525" width="170" height="44" rx="10" fill="#f1f5f9" stroke="#cbd5e1" stroke-dasharray="5 3"/>
+  <text x="795" y="544" text-anchor="middle" font-size="11" fill="#64748b">Caddy :80</text>
+  <text x="795" y="560" text-anchor="middle" font-size="9.5" fill="#94a3b8">（遗留 · 未对外）</text>
+
+  <rect x="900" y="255" width="150" height="64" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="975" y="278" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">/data/web_system</text>
+  <text x="975" y="296" text-anchor="middle" font-size="11" fill="#334155">/data/env_config</text>
+  <text x="975" y="312" text-anchor="middle" font-size="9.5" fill="#94a3b8">（配置 + 审计日志）</text>
+
+  <rect x="900" y="470" width="150" height="50" rx="10" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="975" y="491" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">SSH 自连</text>
+  <text x="975" y="508" text-anchor="middle" font-size="9.5" fill="#6d28d9">监控本机 pm2（dev）</text>
+
+  <!-- ===== Zone D PROD ===== -->
+  <rect x="1100" y="330" width="260" height="170" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1230" y="360" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">PROD 服务器</text>
+  <text x="1230" y="378" text-anchor="middle" font-size="11.5" fill="#64748b">106.52.176.246 · root</text>
+  <rect x="1125" y="400" width="210" height="80" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="1230" y="432" text-anchor="middle" font-size="13" font-weight="700" fill="#1e40af">pm2 服务 × 6</text>
+  <text x="1230" y="454" text-anchor="middle" font-size="11" fill="#1e40af">（线上业务）</text>
+
+  <!-- ===== Zone E 本地开发 ===== -->
+  <rect x="40" y="620" width="360" height="260" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="220" y="650" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">本地开发环境（Mac）</text>
+
+  <rect x="70" y="690" width="150" height="100" rx="10" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.8"/>
+  <text x="145" y="722" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">本地 nginx</text>
+  <text x="145" y="744" text-anchor="middle" font-size="10.5" fill="#1e3a8a">local.nginx.conf</text>
+  <text x="145" y="762" text-anchor="middle" font-size="10.5" fill="#1e3a8a">local.kedouai.com</text>
+
+  <rect x="250" y="690" width="130" height="150" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="315" y="720" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">web_system</text>
+  <text x="315" y="744" text-anchor="middle" font-size="10.5" fill="#1e40af">:6000 主站</text>
+  <text x="315" y="762" text-anchor="middle" font-size="10.5" fill="#1e40af">:6200 console</text>
+  <text x="315" y="780" text-anchor="middle" font-size="10.5" fill="#1e40af">:6006 …</text>
+
+  <path d="M220,740 H246" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowBlue)"/>
+
+  <!-- ===== Zone F 图例 ===== -->
+  <rect x="1100" y="620" width="260" height="190" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1230" y="650" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">图例</text>
+  <line x1="1125" y1="682" x2="1165" y2="682" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="1175" y="686" font-size="11" fill="#334155">HTTPS 用户流量</text>
+  <line x1="1125" y1="714" x2="1165" y2="714" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arrowPurple)"/>
+  <text x="1175" y="718" font-size="11" fill="#334155">SSH 运维链路</text>
+  <rect x="1125" y="740" width="40" height="20" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="1175" y="754" font-size="11" fill="#334155">本次新增服务</text>
+  <rect x="1125" y="772" width="40" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-dasharray="5 3"/>
+  <text x="1175" y="786" font-size="11" fill="#334155">遗留 / 未对外</text>
+
+  <!-- ===== 主流量箭头（蓝） ===== -->
+  <path d="M230,268 L346,288" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="233" y="252" font-size="11" font-weight="600" fill="#2563eb">HTTPS :443</text>
+
+  <path d="M590,393 H650 V285 H706" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="658" y="345" font-size="10" fill="#2563eb">→ :6000</text>
+
+  <path d="M470,496 V520 H635 V385 H706" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="530" y="512" font-size="10" fill="#2563eb">→ :6200</text>
+
+  <!-- 浏览器 → 本地 nginx -->
+  <path d="M150,325 V686" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowBlue)"/>
+  <text x="160" y="505" font-size="10" fill="#2563eb">local.kedouai.com</text>
+
+  <!-- ===== SSH 运维链路（紫虚线） ===== -->
+  <path d="M880,378 H1092 V418 H1121" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arrowPurple)"/>
+  <text x="915" y="366" font-size="11" font-weight="600" fill="#7c3aed">SSH · 部署 / pm2 监控</text>
+
+  <path d="M880,405 H1085 V700 H470 V586" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arrowPurple)"/>
+  <text x="700" y="716" font-size="11" font-weight="600" fill="#7c3aed">SSH · gateway nginx 配置管理</text>
+
+  <path d="M855,420 L918,466" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowPurple)"/>
+
+  <!-- 底部安全提示 -->
+  <text x="700" y="878" text-anchor="middle" font-size="12" fill="#b45309">⚠ deploy-console 持有 dev / prod / gateway 三台机器的 SSH 权限，目前经 dev.kedouai.com/console/ 公网可达，建议 gateway 层加 IP 白名单</text>
+</svg>

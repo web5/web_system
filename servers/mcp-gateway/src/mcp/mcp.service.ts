@@ -149,7 +149,7 @@ export class McpService implements OnModuleInit {
         auth_config: authConfig,
         module_type: 'http',
         code_key: 'finnews',
-        enabled: 1,
+        enabled: true,
       }),
     );
     const tools = FINNEWS_HTTP_TOOLS.map((t) =>
@@ -161,7 +161,7 @@ export class McpService implements OnModuleInit {
 
   /** 从数据库构建 MCP Server（每个 session 独立实例，规避 SDK 单 transport 限制） */
   private async buildServerFromDb(moduleCode?: string): Promise<McpServer> {
-    const where: any = { enabled: 1 };
+    const where: any = { enabled: true };
     if (moduleCode) where.code_key = moduleCode;
     const modules = await this.moduleRepo.find({ where });
     if (moduleCode && modules.length === 0) {

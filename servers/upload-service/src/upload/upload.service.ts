@@ -1,9 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
+import { UploadFileEntity } from './upload-file.entity';
 
 /**
  * 上传分类配置：不同场景的文件限制
@@ -45,7 +48,11 @@ export class UploadService {
 
   private uploadDir: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(UploadFileEntity)
+    private uploadFileRepo: Repository<UploadFileEntity>,
+  ) {
     this.uploadDir = path.resolve(
       this.configService.get('UPLOAD_DIR', 'uploads'),
     );
@@ -121,5 +128,34 @@ export class UploadService {
         allowedTypes: config.allowedTypes,
       }),
     );
+  }
+
+  /**
+   * 记录一次成功上传到 upload_files 表（仅元数据，文件本体仍在磁盘）。
+   * @param dir 磁盘子目录（avatars/drawing/bianbian/general），与 storagePath 对应
+   */
+  async recordUpload(input: {
+    userId: string | null;
+    category: string;
+    originalName: string;
+    storageName: string;
+    dir: string;
+    url: string;
+    mimeType: string;
+    size: number;
+  }): Promise<void> {
+    const ext = path.extname(input.originalName);
+    await this.uploadFileRepo.save({
+      userId: input.userId,
+      category: input.category,
+      originalName: input.originalName,
+      storageName: input.storageName,
+      storagePath: `uploads/${input.dir}/${input.storageName}`,
+      url: input.url,
+      mimeType: input.mimeType,
+      sizeBytes: input.size,
+      extension: ext || null,
+      status: 'uploaded',
+    });
   }
 }

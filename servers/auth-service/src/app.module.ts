@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { RedisModule, RedisModuleOptions } from '@liaoliaots/nestjs-redis';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
@@ -51,6 +52,7 @@ import { QrcodeModule } from './qrcode/qrcode.module';
               connectionTimeoutMillis: 5000,
             },
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }
@@ -60,6 +62,7 @@ import { QrcodeModule } from './qrcode/qrcode.module';
             database: configService.get('DB_DATABASE', './data/auth.db'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             logging: configService.get('NODE_ENV') === 'development',
           };
         }

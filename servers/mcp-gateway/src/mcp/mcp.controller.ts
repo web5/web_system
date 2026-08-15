@@ -3,7 +3,6 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { McpService } from './mcp.service';
-import { ApiKeyService } from './api-key.service';
 
 /**
  * MCP streamable-http 端点
@@ -18,7 +17,6 @@ export class McpController {
   constructor(
     private readonly mcpService: McpService,
     private readonly configService: ConfigService,
-    private readonly apiKeyService: ApiKeyService,
   ) {}
 
   // ── /mcp 聚合入口 ──
@@ -72,7 +70,7 @@ export class McpController {
   /**
    * 验证客户端 Bearer token：
    *   1) 兼容遗留共享密钥 MCP_CLIENT_KEY（内部/WorkBuddy 集成）
-   *   2) 每用户 API Key（查 mcp_api_keys，支持吊销/过期，记录 last_used）
+   *   2) 每用户 API Key（调 user-service 内部 /internal/keys/verify，支持吊销/过期）
    */
   private async checkAuth(req: Request, res: Response): Promise<boolean> {
     const auth = req.headers['authorization'];
@@ -87,14 +85,37 @@ export class McpController {
     const token = auth.slice(7).trim();
     const legacy = this.configService.get<string>('MCP_CLIENT_KEY');
     if (legacy && token === legacy) return true;
-    const record = await this.apiKeyService.verifyKey(token);
-    if (record) return true;
+    const valid = await this.verifyViaUserService(token);
+    if (valid) return true;
     res.status(401).json({
       jsonrpc: '2.0',
       error: { code: -32000, message: 'Unauthorized: invalid or revoked API key' },
       id: null,
     });
     return false;
+  }
+
+  /** 调 user-service 内部接口校验 key（同机 127.0.0.1:6002，受 INTERNAL_API_KEY 保护） */
+  private async verifyViaUserService(token: string): Promise<boolean> {
+    const base = this.configService.get<string>('USER_SERVICE_URL', 'http://127.0.0.1:6002');
+    const internalKey = this.configService.get<string>('INTERNAL_API_KEY');
+    try {
+      const r = await fetch(`${base}/internal/keys/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-key': internalKey || '',
+        },
+        body: JSON.stringify({ key: token }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!r.ok) return false;
+      const data = (await r.json()) as { valid?: boolean };
+      return !!data.valid;
+    } catch (e) {
+      console.error('[mcp] verify via user-service failed:', e);
+      return false;
+    }
   }
 
   private async handlePost(req: Request, res: Response, moduleCode?: string): Promise<void> {

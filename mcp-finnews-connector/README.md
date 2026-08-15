@@ -56,6 +56,7 @@ kedou-finnews/
 - [x] 端点已切到正式域名 `https://kedouai.com/mcp/finnews`（不再用 dev 环境）
 - [x] 公网鉴权改为**每用户 API Key**（自助申请，mcp.json 不硬编码共享密钥，仅留占位）
 - [x] `SKILL.md` 工具名/描述与服务 `tools/list` 实际返回一致（6 个工具）
-- [ ] 服务端部署：nginx 加 `kedouai.com/mcp` → mcp-gateway:6006；建表 `mcp_api_keys` / `mcp_key_codes`（见 `servers/mcp-gateway/sql/mcp_keys_tables.sql`）
-- [ ] 配置生产环境变量 `MCP_ADMIN_KEY`、`SMTP_HOST/USER/PASS/FROM`
+- [x] 服务端部署：nginx `kedouai.com/mcp` → PROD mcp-gateway:6006；建表 `mcp_api_keys` / `mcp_key_codes`（DEV + PROD 均已完成）
+- [x] 配置生产环境变量 `MCP_ADMIN_KEY`、`SMTP_HOST/USER/PASS/FROM`（DEV + PROD 均已配置）
 - [ ] 图标（可选）：放入 `connectors-marketplace/icons/` 对应条目以在目录中显示
+- [ ] 提交 WorkBuddy 官方 Connector 收录申请

@@ -74,6 +74,56 @@
           </div>
         </div>
       </div>
+    <div class="profile-card info-card">
+      <div class="card-title">API Key 管理</div>
+      <div class="key-block">
+        <p class="key-tip">为你的 AI 助手（WorkBuddy、Claude 等）申请专属 API Key，接入科豆财经资讯 MCP 服务。</p>
+
+        <template v-if="!keyResult">
+          <!-- 已有 key：展示列表 -->
+          <div v-if="myKeys.length > 0 && keyStep === 1" class="key-list">
+            <div v-for="k in myKeys" :key="k.id" class="key-item">
+              <div class="key-item-info">
+                <div class="key-name">{{ k.name || '未命名' }}</div>
+                <div class="key-sub">
+                  {{ k.keyPrefix }}••••
+                  <span :class="['key-status', k.status]">{{ k.status === 'active' ? '有效' : '已吊销' }}</span>
+                </div>
+              </div>
+              <a-button v-if="k.status === 'active'" danger size="small" @click="onRevokeKey(k.id)">吊销</a-button>
+            </div>
+            <a-button block style="margin-top: 12px" @click="keyStep = 2">申请新 Key</a-button>
+          </div>
+
+          <!-- 申请 / 验证流程 -->
+          <div v-else class="key-apply">
+            <div v-if="keyStep === 1" class="key-apply-start">
+              <p class="key-mail">验证码将发送至账户邮箱：<b>{{ userStore.userInfo?.email || '未绑定邮箱' }}</b></p>
+              <a-button type="primary" block :loading="keyApplyLoading" @click="onApplyKey">获取验证码</a-button>
+            </div>
+            <div v-else class="key-verify">
+              <a-alert v-if="keyApplyMsg" type="success" :message="keyApplyMsg" show-icon style="margin-bottom: 12px" />
+              <a-input v-model:value="keyCode" size="large" placeholder="6 位验证码" style="margin-bottom: 12px" />
+              <a-input v-model:value="keyName" size="large" placeholder="名称（可选）" style="margin-bottom: 12px" />
+              <a-button type="primary" block @click="onVerifyKey">验证并获取 Key</a-button>
+              <a-button block style="margin-top: 8px" @click="keyStep = 1">重新获取验证码</a-button>
+            </div>
+          </div>
+        </template>
+
+        <!-- 签发成功 -->
+        <div v-else class="key-success">
+          <div class="check">✓</div>
+          <p class="success-tip">API Key 已生成并复制到剪贴板</p>
+          <div class="key-value">{{ keyResult }}</div>
+          <div class="key-success-actions">
+            <a-button type="primary" block @click="copyKey">复制 Key</a-button>
+            <a-button block style="margin-top: 8px" @click="resetKey">完成</a-button>
+          </div>
+          <p class="warn">明文仅展示一次，请妥善保存。</p>
+        </div>
+      </div>
+    </div>
     </div>
   </div>
 </template>
@@ -82,7 +132,8 @@
 import { ref, reactive, onMounted, computed } from 'vue';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
-import { updateUserProfile, uploadAvatar } from '@/api/user';
+import { updateUserProfile, uploadAvatar, applyApiKey, verifyApiKey, getMyApiKeys, revokeMyApiKey } from '@/api/user';
+import type { ApiKeyItem } from '@/api/user';
 
 const userStore = useUserStore();
 const uploading = ref(false);
@@ -104,6 +155,7 @@ const formData = reactive({
 
 onMounted(() => {
   loadUserInfo();
+  loadMyKeys();
 });
 
 function loadUserInfo() {
@@ -179,6 +231,90 @@ async function handleSave() {
     message.error('保存失败');
   } finally {
     saving.value = false;
+  }
+}
+
+// ── API Key 管理（迁至 user-service）──
+const keyStep = ref<1 | 2>(1);
+const keyApplyLoading = ref(false);
+const keyCode = ref('');
+const keyName = ref('');
+const keyResult = ref('');
+const keyPrefix = ref('');
+const keyApplyMsg = ref('');
+const myKeys = ref<ApiKeyItem[]>([]);
+const myKeysLoading = ref(false);
+
+const userId = computed(() => userStore.userInfo?.id);
+
+async function loadMyKeys() {
+  myKeysLoading.value = true;
+  try {
+    const r: any = await getMyApiKeys();
+    myKeys.value = r.keys || [];
+  } catch {
+    // 静默：未登录或非预期错误
+  } finally {
+    myKeysLoading.value = false;
+  }
+}
+
+async function onApplyKey() {
+  keyApplyLoading.value = true;
+  keyApplyMsg.value = '';
+  try {
+    const r: any = await applyApiKey({ ownerId: userId.value });
+    keyApplyMsg.value = r.message || '验证码已发送';
+    message.success('验证码已发送到你的账户邮箱');
+    keyStep.value = 2;
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e.message || '发送失败');
+  } finally {
+    keyApplyLoading.value = false;
+  }
+}
+
+async function onVerifyKey() {
+  if (!keyCode.value) {
+    message.warning('请填写验证码');
+    return;
+  }
+  try {
+    const r: any = await verifyApiKey({ ownerId: userId.value, code: keyCode.value, name: keyName.value });
+    keyResult.value = r.key;
+    keyPrefix.value = r.prefix || '';
+    try {
+      await navigator.clipboard?.writeText(r.key);
+      message.success('Key 已生成并复制到剪贴板');
+    } catch {
+      message.success('Key 已生成，请复制保存（明文仅展示一次）');
+    }
+    await loadMyKeys();
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e.message || '验证失败');
+  }
+}
+
+function copyKey() {
+  navigator.clipboard?.writeText(keyResult.value);
+  message.success('已复制');
+}
+
+function resetKey() {
+  keyResult.value = '';
+  keyCode.value = '';
+  keyName.value = '';
+  keyPrefix.value = '';
+  keyStep.value = 1;
+}
+
+async function onRevokeKey(id: number) {
+  try {
+    await revokeMyApiKey(id);
+    message.success('已吊销');
+    await loadMyKeys();
+  } catch {
+    message.error('吊销失败');
   }
 }
 </script>
@@ -416,5 +552,115 @@ async function handleSave() {
 .btn-save:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+/* ===== API Key 管理 ===== */
+.key-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.key-tip {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #999;
+  line-height: 1.6;
+}
+
+.key-mail {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #666;
+}
+
+.key-mail b {
+  color: #333;
+}
+
+.key-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.key-item:last-of-type {
+  border-bottom: none;
+}
+
+.key-item-info {
+  min-width: 0;
+}
+
+.key-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.key-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #aaa;
+  font-family: monospace;
+}
+
+.key-status {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.key-status.active {
+  background: #e8f8ee;
+  color: #18a058;
+}
+
+.key-status.revoked {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.key-success {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.key-success .check {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #18a058;
+  color: white;
+  font-size: 24px;
+  line-height: 48px;
+  margin: 0 auto 12px;
+}
+
+.success-tip {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.key-value {
+  background: #f8f8f8;
+  border: 1px dashed #e0e0e0;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #333;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.key-success .warn {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: #e67e3a;
 }
 </style>

@@ -1,24 +1,22 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index } from 'typeorm';
+import { BigIntEntity } from '@web-system/shared';
 
+/** 作品来源类型：bianbian 变身 / draw-ai 画图 / design 设计 / ai-art AI 艺术 */
 export type ArtworkSourceType = 'bianbian' | 'draw-ai' | 'design' | 'ai-art';
 
 /**
- * 用户作品（相册）实体
- * 保存变变、画板等 AI 生成结果到用户个人账户
+ * 用户作品（相册）表——保存变身、画板等 AI 生成结果到用户个人账户。
+ * 核心业务表，BIGINT 自增主键。
+ * 物理表名：artworks
  */
 @Entity('artworks')
-export class Artwork {
-  @PrimaryGeneratedColumn('uuid')
+export class Artwork extends BigIntEntity {
+  @PrimaryGeneratedColumn('uuid', { comment: '作品 ID' })
   id: string;
 
-  /** 用户 ID */
-  @Column({ type: 'int', comment: '用户ID' })
+  /** 用户 ID，关联 users.id */
+  @Index()
+  @Column({ type: 'bigint', unsigned: true, comment: '用户 ID，关联 users.id' })
   userId: number;
 
   /** 作品标题/描述 */
@@ -26,28 +24,22 @@ export class Artwork {
   title: string;
 
   /** 生成的图片地址 */
-  @Column({ type: 'text', comment: '生成图片地址', nullable: true })
-  imageUrl: string;
+  @Column({ type: 'text', nullable: true, comment: '生成图片地址' })
+  imageUrl: string | null;
 
   /** 原始图片地址（如变变的原画） */
-  @Column({ type: 'text', comment: '原始图片地址', nullable: true })
-  originalImageUrl?: string;
+  @Column({ type: 'text', nullable: true, comment: '原始图片地址' })
+  originalImageUrl: string | null;
 
-  /** 来源类型：bianbian / draw-ai */
-  @Column({ type: 'varchar', length: 50, comment: '来源类型' })
+  /** 来源类型 */
+  @Column({ type: 'varchar', length: 50, comment: '来源类型 bianbian/draw-ai/design/ai-art' })
   sourceType: ArtworkSourceType;
 
   /** 生成提示词 */
-  @Column({ type: 'text', comment: '生成提示词', nullable: true })
-  prompt?: string;
+  @Column({ type: 'text', nullable: true, comment: '生成提示词' })
+  prompt: string | null;
 
   /** 额外元数据 */
-  @Column({ type: 'json', comment: '额外元数据', nullable: true })
-  metadata?: Record<string, unknown>;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @Column({ type: 'json', nullable: true, comment: '额外元数据' })
+  metadata: Record<string, unknown> | null;
 }

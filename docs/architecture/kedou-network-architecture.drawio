@@ -1,0 +1,167 @@
+<mxfile host="app.diagrams.net" modified="2026-08-15T13:50:00.000Z" agent="CodeBuddy" version="24.0.0">
+  <diagram id="kedou-network-architecture" name="web_system 网络架构">
+    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="web_system 网络架构 · dev 环境流量与运维链路" style="text;html=1;fontSize=26;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="800" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="GATEWAY 42.194.200.69 ｜ DEV 175.27.189.123 ｜ PROD 106.52.176.246 ｜ 更新 2026-08-15" style="text;html=1;fontSize=13;fontColor=#64748B;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="800" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Zone A 客户端 -->
+        <mxCell id="zoneClient" value="客户端" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontStyle=1;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="220" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="browser" value="&lt;b&gt;浏览器&lt;/b&gt;&lt;br&gt;dev.kedouai.com&lt;br&gt;local.kedouai.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="70" y="215" width="160" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Zone B GATEWAY -->
+        <mxCell id="zoneGw" value="&lt;b&gt;GATEWAY 机 · 公网入口&lt;/b&gt;&lt;br&gt;42.194.200.69 · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="320" y="150" width="300" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="dns" value="DNS：dev.kedouai.com → 42.194.200.69" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#C4B5FD;fontColor=#5B21B6;fontSize=10.5;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="350" y="212" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="nginx" value="&lt;b&gt;nginx · 反向代理&lt;/b&gt;&lt;br&gt;:80 / :443（TLS 证书）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#60A5FA;fontColor=#1E3A8A;strokeWidth=1.8;" vertex="1" parent="1">
+          <mxGeometry x="350" y="255" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rule1" value="&lt;b&gt;location /&lt;/b&gt;&lt;br&gt;→ dev:6000 · web-system" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="350" y="365" width="240" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="rule2" value="&lt;b&gt;location /console/&lt;/b&gt;&lt;br&gt;→ dev:6200 · 剥前缀 · SSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="350" y="440" width="240" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="eNgRule1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="nginx" target="rule1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eNgRule2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2;endArrow=blockThin;endFill=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="nginx" target="rule2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Zone C DEV -->
+        <mxCell id="zoneDev" value="&lt;b&gt;DEV 服务器&lt;/b&gt;&lt;br&gt;175.27.189.123 · ubuntu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="680" y="150" width="380" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="sg" value="腾讯云安全组放行：22 / 6000 / 6006 / 6200" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#FDBA74;fontColor=#9A3412;fontSize=10.5;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="710" y="212" width="330" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="webSystem" value="&lt;b&gt;web-system&lt;/b&gt;&lt;br&gt;:6000 · pm2 · 主站" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="710" y="250" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="deployConsole" value="&lt;b&gt;deploy-console&lt;/b&gt;&lt;br&gt;:6200 · SPA + /api&lt;br&gt;（本次新增）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;strokeWidth=2.5;" vertex="1" parent="1">
+          <mxGeometry x="710" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svc6006" value="&lt;b&gt;其他服务&lt;/b&gt;&lt;br&gt;:6006" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="710" y="450" width="170" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="caddy" value="Caddy :80&lt;br&gt;（遗留 · 未对外）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#CBD5E1;dashed=1;fontColor=#64748B;" vertex="1" parent="1">
+          <mxGeometry x="710" y="525" width="170" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="data" value="&lt;b&gt;/data/web_system&lt;/b&gt;&lt;br&gt;/data/env_config&lt;br&gt;（配置 + 审计日志）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="900" y="255" width="150" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="sshSelf" value="&lt;b&gt;SSH 自连&lt;/b&gt;&lt;br&gt;监控本机 pm2（dev）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#A78BFA;fontColor=#5B21B6;" vertex="1" parent="1">
+          <mxGeometry x="900" y="470" width="150" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Zone D PROD -->
+        <mxCell id="zoneProd" value="&lt;b&gt;PROD 服务器&lt;/b&gt;&lt;br&gt;106.52.176.246 · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="330" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="prodSvc" value="&lt;b&gt;pm2 服务 × 6&lt;/b&gt;&lt;br&gt;（线上业务）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="1125" y="400" width="210" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Zone E 本地开发 -->
+        <mxCell id="zoneLocal" value="&lt;b&gt;本地开发环境（Mac）&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="360" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="localNginx" value="&lt;b&gt;本地 nginx&lt;/b&gt;&lt;br&gt;local.nginx.conf&lt;br&gt;local.kedouai.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#60A5FA;fontColor=#1E3A8A;strokeWidth=1.8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="690" width="150" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="localSvc" value="&lt;b&gt;web_system&lt;/b&gt;&lt;br&gt;:6000 主站&lt;br&gt;:6200 console&lt;br&gt;:6006 …" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="250" y="690" width="130" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="eLocalProxy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2;endArrow=blockThin;endFill=1;" edge="1" parent="1" source="localNginx" target="localSvc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Zone F 图例 -->
+        <mxCell id="zoneLegend" value="&lt;b&gt;图例&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="620" width="260" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="HTTPS 用户流量" style="text;html=1;fontSize=11;fontColor=#334155;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="672" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1line" style="endArrow=blockThin;endFill=1;html=1;strokeColor=#2563EB;strokeWidth=2.5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1125" y="682" as="sourcePoint" />
+            <mxPoint x="1168" y="682" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg2" value="SSH 运维链路" style="text;html=1;fontSize=11;fontColor=#334155;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="704" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2line" style="endArrow=blockThin;endFill=1;html=1;strokeColor=#7C3AED;strokeWidth=2.5;dashed=1;dashPattern=8 5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1125" y="714" as="sourcePoint" />
+            <mxPoint x="1168" y="714" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg3box" value="" style="rounded=1;fillColor=#DCFCE7;strokeColor=#22C55E;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1125" y="740" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="本次新增服务" style="text;html=1;fontSize=11;fontColor=#334155;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="740" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4box" value="" style="rounded=1;fillColor=#F1F5F9;strokeColor=#CBD5E1;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1125" y="772" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="遗留 / 未对外" style="text;html=1;fontSize=11;fontColor=#334155;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1175" y="772" width="160" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- 用户流量（蓝实线） -->
+        <mxCell id="eBrowserGw" value="HTTPS :443" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontColor=#2563EB;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="browser" target="nginx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eRule1Ws" value="→ :6000" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontColor=#2563EB;fontSize=10;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="rule1" target="webSystem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eRule2Dc" value="→ :6200" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontColor=#2563EB;fontSize=10;exitX=0.5;exitY=1;entryX=0;entryY=0.5;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="rule2" target="deployConsole">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eBrowserLocal" value="local.kedouai.com" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2563EB;strokeWidth=2;dashed=1;dashPattern=6 4;endArrow=blockThin;endFill=1;fontColor=#2563EB;fontSize=10;exitX=0.5;exitY=1;entryX=0.5;entryY=0;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="browser" target="localNginx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- SSH 运维链路（紫虚线） -->
+        <mxCell id="eDcProd" value="SSH · 部署 / pm2 监控" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7C3AED;strokeWidth=2.5;dashed=1;dashPattern=8 5;endArrow=blockThin;endFill=1;fontColor=#7C3AED;fontSize=11;exitX=1;exitY=0.35;entryX=0;entryY=0.5;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="deployConsole" target="prodSvc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eDcGw" value="SSH · gateway nginx 配置管理" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7C3AED;strokeWidth=2.5;dashed=1;dashPattern=8 5;endArrow=blockThin;endFill=1;fontColor=#7C3AED;fontSize=11;exitX=1;exitY=0.65;entryX=0.5;entryY=1;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="deployConsole" target="zoneGw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1085" y="405" />
+              <mxPoint x="1085" y="700" />
+              <mxPoint x="470" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eDcSelf" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7C3AED;strokeWidth=2;dashed=1;dashPattern=6 4;endArrow=blockThin;endFill=1;exitX=1;exitY=0.85;entryX=0;entryY=0.5;" edge="1" parent="1" source="deployConsole" target="sshSelf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 底部安全提示 -->
+        <mxCell id="warn" value="⚠ deploy-console 持有 dev / prod / gateway 三台机器的 SSH 权限，目前经 dev.kedouai.com/console/ 公网可达，建议 gateway 层加 IP 白名单" style="text;html=1;fontSize=12;fontColor=#B45309;align=center;" vertex="1" parent="1">
+          <mxGeometry x="200" y="866" width="1000" height="24" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

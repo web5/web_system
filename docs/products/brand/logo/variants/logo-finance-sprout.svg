@@ -1,0 +1,26 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>科豆财经资讯 — 生长态 Sprout</title>
+  <desc>白色科豆从顶部升起上升折线，象征资讯驱动的成长</desc>
+
+  <!-- 背景：暖橙圆角矩形 -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#F97316"/>
+
+  <!-- 白色种子（豆），重心略低于画布中心 -->
+  <g transform="translate(64, 86)">
+    <path d="M 0 -36
+             C 18.9 -36, 29.2 -22.4, 29.2 0
+             C 29.2 25.8, 13.7 36, 0 36
+             C -15.5 36, -29.2 24.1, -29.2 0
+             C -29.2 -24.1, -15.5 -36, 0 -36 Z" fill="white"/>
+    <circle cx="0" cy="0" r="7.8" fill="#F97316"/>
+    <circle cx="0" cy="-1.6" r="3" fill="#FDE68A"/>
+  </g>
+
+  <!-- 资讯趋势线：从种顶升起，向上向右折进，末端圆点 -->
+  <path d="M 64 50.5
+           L 73 40.5
+           L 83 44.5
+           L 93 29.5"
+        fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="93" cy="29.5" r="3.4" fill="white"/>
+</svg>

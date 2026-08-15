@@ -26,7 +26,7 @@ description: 科豆财经资讯 MCP——采集新浪/东财快讯，经 SimHash
 本服务为**每用户独立密钥**，不共享。申请方式（任选其一）：
 
 - **自助申请**：访问 `https://kedouai.com/mcp-admin`，填写邮箱 → 收验证码邮件 → 回填验证码 → 领取 `kedou_xxx` 前缀的 Key（明文仅展示一次，请妥善保存）
-- **接口申请**：`POST https://kedouai.com/mcp/keys/apply`（body: `{ "email": "you@example.com" }`）→ `POST https://kedouai.com/mcp/keys/verify`（body: `{ "email", "code", "name?" }`）返回 key
+- **接口申请**：`POST https://kedouai.com/api/mcp/keys/apply`（body: `{ "email": "you@example.com" }`）→ `POST https://kedouai.com/api/mcp/keys/verify`（body: `{ "email", "code", "name?" }`）返回 key
 - 把 Key 填入 WorkBuddy 的 MCP 配置 `headers.Authorization: Bearer <你的Key>`
 
 ### 1.3 不可协商门禁（5 条）

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { SettingsModule } from './settings/settings.module';
 import { OperationLogsModule } from './operation-logs/operation-logs.module';
 import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
@@ -32,6 +33,7 @@ import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
             connectionTimeoutMillis: 5000,
           },
           synchronize: config.get<string>('NODE_ENV', 'development') !== 'production',
+          namingStrategy: new SnakeNamingStrategy(),
         };
       },
     }),

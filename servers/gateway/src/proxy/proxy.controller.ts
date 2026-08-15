@@ -51,6 +51,19 @@ export class ProxyController {
     return this.proxyService.getUserProxy()(req, res);
   }
 
+  // API Key 管理（迁至 user-service：/api/keys → user-service /keys）
+  // 精确匹配 /api/keys（无尾斜杠）
+  @All('keys')
+  proxyKeysExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 通配 /api/keys/:path(*)
+  @All('keys/:path(*)')
+  proxyKeysWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
   // SSE 流式对话 — 用原生 http 转发，避免 http-proxy-middleware 缓冲问题
   @Post('ai/chat/stream')
   @Header('Content-Type', 'text/event-stream')

@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Param,
+  Req,
   UseInterceptors,
   UploadedFile,
   UseGuards,
@@ -10,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -97,15 +99,13 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传头像（2MB，支持 JPG/PNG/GIF/WEBP）' })
   @UseInterceptors(createMulterInterceptor('avatars'))
-  async uploadAvatar(@UploadedFile() file: any) {
+  async uploadAvatar(@Req() req: Request, @UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('请选择要上传的图片文件');
     }
-    const url = this.uploadService.buildUrl(file.filename, 'avatars');
-    return {
-      code: 200,
-      data: { url, filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'avatar' },
-    };
+    const data = { url: this.uploadService.buildUrl(file.filename, 'avatars'), filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'avatar' };
+    await this.persist(file, 'avatars', req);
+    return { code: 200, data };
   }
 
   /**
@@ -117,15 +117,13 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传画板照片（10MB，支持 JPG/PNG/GIF/WEBP）' })
   @UseInterceptors(createMulterInterceptor('drawing'))
-  async uploadDrawing(@UploadedFile() file: any) {
+  async uploadDrawing(@Req() req: Request, @UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('请选择要上传的图片文件');
     }
-    const url = this.uploadService.buildUrl(file.filename, 'drawing');
-    return {
-      code: 200,
-      data: { url, filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'drawing' },
-    };
+    const data = { url: this.uploadService.buildUrl(file.filename, 'drawing'), filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'drawing' };
+    await this.persist(file, 'drawing', req);
+    return { code: 200, data };
   }
 
   /**
@@ -137,15 +135,13 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传变变照片（10MB，支持 JPG/PNG/GIF/WEBP）' })
   @UseInterceptors(createMulterInterceptor('bianbian'))
-  async uploadBianbian(@UploadedFile() file: any) {
+  async uploadBianbian(@Req() req: Request, @UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('请选择要上传的图片文件');
     }
-    const url = this.uploadService.buildUrl(file.filename, 'bianbian');
-    return {
-      code: 200,
-      data: { url, filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'bianbian' },
-    };
+    const data = { url: this.uploadService.buildUrl(file.filename, 'bianbian'), filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'bianbian' };
+    await this.persist(file, 'bianbian', req);
+    return { code: 200, data };
   }
 
   /**
@@ -157,14 +153,31 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '通用文件上传（5MB，支持 JPG/PNG/GIF/WEBP）' })
   @UseInterceptors(createMulterInterceptor('general'))
-  async uploadGeneral(@UploadedFile() file: any) {
+  async uploadGeneral(@Req() req: Request, @UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('请选择要上传的图片文件');
     }
-    const url = this.uploadService.buildUrl(file.filename, 'general');
-    return {
-      code: 200,
-      data: { url, filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'general' },
-    };
+    const data = { url: this.uploadService.buildUrl(file.filename, 'general'), filename: file.filename, size: file.size, mimetype: file.mimetype, category: 'general' };
+    await this.persist(file, 'general', req);
+    return { code: 200, data };
+  }
+
+  /** 落库上传记录（失败仅告警，不影响上传结果） */
+  private async persist(file: any, dir: string, req: Request): Promise<void> {
+    const userId = (req as any).user?.sub ?? null;
+    try {
+      await this.uploadService.recordUpload({
+        userId,
+        category: dir === 'avatars' ? 'avatar' : dir,
+        originalName: file.originalname,
+        storageName: file.filename,
+        dir,
+        url: this.uploadService.buildUrl(file.filename, dir),
+        mimeType: file.mimetype,
+        size: file.size,
+      });
+    } catch (e) {
+      this.uploadService && console.warn(`[upload] 记录上传元数据失败: ${(e as Error).message}`);
+    }
   }
 }

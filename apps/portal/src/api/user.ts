@@ -78,3 +78,39 @@ export function deleteUser(id: string): Promise<void> {
 export function toggleUserStatus(id: string, enabled: boolean): Promise<UserInfo> {
   return request.patch(`/users/${id}/status`, { enabled });
 }
+
+/**
+ * API Key 管理（迁至 user-service）
+ * 申请验证码：已登录传 ownerId（用账户邮箱发码），自助传 email
+ */
+export function applyApiKey(data: { email?: string; ownerId?: number }): Promise<{ message: string }> {
+  return request.post('/keys/apply', data);
+}
+
+/** 验证验证码并签发 Key */
+export function verifyApiKey(
+  data: { email?: string; ownerId?: number; code: string; name?: string },
+): Promise<{ key: string; prefix: string; message: string }> {
+  return request.post('/keys/verify', data);
+}
+
+/** 我的 API Key 列表 */
+export function getMyApiKeys(): Promise<{ keys: ApiKeyItem[] }> {
+  return request.get('/keys/mine');
+}
+
+/** 吊销我的 API Key */
+export function revokeMyApiKey(id: number): Promise<void> {
+  return request.delete(`/keys/mine/${id}`);
+}
+
+export interface ApiKeyItem {
+  id: number;
+  name: string | null;
+  keyPrefix: string;
+  status: 'active' | 'revoked';
+  ownerType: 'apply' | 'admin';
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+}

@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "strict": true,
+    "noEmit": true,
     "baseUrl": ".",
     "target": "ES2020",
     "module": "ESNext",

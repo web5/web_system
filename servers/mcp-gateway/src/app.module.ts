@@ -2,11 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import { McpModule } from './mcp/mcp.module';
 import { McpModuleEntity } from './mcp/entities/mcp-module.entity';
 import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
-import { McpApiKeyEntity } from './mcp/entities/mcp-api-key.entity';
-import { McpKeyCodeEntity } from './mcp/entities/mcp-key-code.entity';
 
 @Module({
   imports: [
@@ -18,7 +17,7 @@ import { McpKeyCodeEntity } from './mcp/entities/mcp-key-code.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'mysql');
-        const entities = [McpModuleEntity, McpToolEntity, McpApiKeyEntity, McpKeyCodeEntity];
+        const entities = [McpModuleEntity, McpToolEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql' as const,
@@ -29,6 +28,7 @@ import { McpKeyCodeEntity } from './mcp/entities/mcp-key-code.entity';
             database: configService.get<string>('DB_DATABASE', 'web_system'),
             entities,
             synchronize: configService.get('NODE_ENV') !== 'production',
+            namingStrategy: new SnakeNamingStrategy(),
             charset: 'utf8mb4',
           };
         }
