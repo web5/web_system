@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { deployApi, environmentApi } from '@/api'
 import dayjs from 'dayjs'
@@ -35,21 +35,6 @@ const taskStatus = ref('')
 const taskLogs = ref<string[]>([])
 const logPanelRef = ref<HTMLElement | null>(null)
 let eventSource: EventSource | null = null
-
-// ===== 环境管理弹窗 =====
-const envModalVisible = ref(false)
-const envList = ref<any[]>([])
-const envForm = reactive({
-  id: '',
-  name: '',
-  host: '',
-  sshUser: '',
-  sshKeyPath: '~/.ssh/id_ed25519_servers',
-  remoteDir: '/data/web_system',
-  publicUrl: '',
-  portsText: '{}',
-})
-const editingEnvId = ref('')
 
 function statusTagClass(status: string) {
   const map: Record<string, string> = {
@@ -174,8 +159,7 @@ function connectSSE(taskId: string) {
 // ===== 数据加载 =====
 async function loadEnvironments() {
   try {
-    envList.value = await environmentApi.list()
-    environments.value = envList.value
+    environments.value = await environmentApi.list()
     if (!environments.value.find((e) => e.id === env.value)) {
       env.value = environments.value[0]?.id || 'dev'
     }

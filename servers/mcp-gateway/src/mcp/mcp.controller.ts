@@ -110,8 +110,10 @@ export class McpController {
         signal: AbortSignal.timeout(3000),
       });
       if (!r.ok) return false;
-      const data = (await r.json()) as { valid?: boolean };
-      return !!data.valid;
+      // 兼容两种响应：裸 {valid} 与全局拦截器包装的 {code, data:{valid}}
+      const json = (await r.json()) as { valid?: boolean; data?: { valid?: boolean } };
+      const valid = json?.data?.valid ?? json?.valid;
+      return !!valid;
     } catch (e) {
       console.error('[mcp] verify via user-service failed:', e);
       return false;
