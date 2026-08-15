@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { McpService } from './mcp.service';
+import { ApiKeyService } from './api-key.service';
 
 /**
  * MCP streamable-http 端点
@@ -17,6 +18,7 @@ export class McpController {
   constructor(
     private readonly mcpService: McpService,
     private readonly configService: ConfigService,
+    private readonly apiKeyService: ApiKeyService,
   ) {}
 
   // ── /mcp 聚合入口 ──
@@ -67,22 +69,36 @@ export class McpController {
 
   // ── 共享实现 ──
 
-  /** 验证客户端 Bearer token；未配置 MCP_CLIENT_KEY 时跳过（本地开发） */
-  private checkAuth(req: Request, res: Response): boolean {
-    const expected = this.configService.get<string>('MCP_CLIENT_KEY');
-    if (!expected) return true;
+  /**
+   * 验证客户端 Bearer token：
+   *   1) 兼容遗留共享密钥 MCP_CLIENT_KEY（内部/WorkBuddy 集成）
+   *   2) 每用户 API Key（查 mcp_api_keys，支持吊销/过期，记录 last_used）
+   */
+  private async checkAuth(req: Request, res: Response): Promise<boolean> {
     const auth = req.headers['authorization'];
-    if (auth === `Bearer ${expected}`) return true;
+    if (!auth || !auth.startsWith('Bearer ')) {
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Unauthorized: missing Bearer token' },
+        id: null,
+      });
+      return false;
+    }
+    const token = auth.slice(7).trim();
+    const legacy = this.configService.get<string>('MCP_CLIENT_KEY');
+    if (legacy && token === legacy) return true;
+    const record = await this.apiKeyService.verifyKey(token);
+    if (record) return true;
     res.status(401).json({
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'Unauthorized: invalid MCP client key' },
+      error: { code: -32000, message: 'Unauthorized: invalid or revoked API key' },
       id: null,
     });
     return false;
   }
 
   private async handlePost(req: Request, res: Response, moduleCode?: string): Promise<void> {
-    if (!this.checkAuth(req, res)) return;
+    if (!(await this.checkAuth(req, res))) return;
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     try {
       const existing = sessionId ? this.mcpService.getTransport(sessionId) : undefined;
@@ -123,7 +139,7 @@ export class McpController {
   }
 
   private async handleGet(req: Request, res: Response, _moduleCode?: string): Promise<void> {
-    if (!this.checkAuth(req, res)) return;
+    if (!(await this.checkAuth(req, res))) return;
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     const transport = sessionId ? this.mcpService.getTransport(sessionId) : undefined;
     if (!transport) {
@@ -134,7 +150,7 @@ export class McpController {
   }
 
   private async handleDelete(req: Request, res: Response, _moduleCode?: string): Promise<void> {
-    if (!this.checkAuth(req, res)) return;
+    if (!(await this.checkAuth(req, res))) return;
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     const transport = sessionId ? this.mcpService.getTransport(sessionId) : undefined;
     if (!transport) {

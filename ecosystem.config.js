@@ -181,14 +181,22 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6006,
         ...baseDbConfig,
-        // 财经资讯微服务地址：经 gateway 代理（带 Bearer 鉴权 → 6007）
-        FINNEWS_SERVICE_URL: 'https://dev.kedouai.com/api/finnews',
+        // 财经资讯微服务：同机内网经 gateway 代理（带 Bearer 鉴权 → 6007），不经公网
+        FINNEWS_SERVICE_URL: 'http://127.0.0.1:6000/api/finnews',
         FINNEWS_SERVICE_AUTH_TYPE: 'bearer',
         FINNEWS_SERVICE_AUTH_CONFIG: JSON.stringify({
           token: process.env.FINNEWS_SERVICE_KEY || '',
         }),
-        // MCP 客户端鉴权（WorkBuddy 连 /mcp 时带的 Bearer key）
+        // 兼容遗留共享密钥（内部/WorkBuddy 集成）；对外公网改为每用户 API Key
         MCP_CLIENT_KEY: process.env.MCP_CLIENT_KEY || '',
+        // 运营后台密钥：保护 /api/keys 的列表/吊销接口（X-Admin-Key）
+        MCP_ADMIN_KEY: process.env.MCP_ADMIN_KEY || '',
+        // 申请验证码邮件（SMTP）；留空则申请接口返回 503
+        SMTP_HOST: process.env.SMTP_HOST || '',
+        SMTP_PORT: process.env.SMTP_PORT || 465,
+        SMTP_USER: process.env.SMTP_USER || '',
+        SMTP_PASS: process.env.SMTP_PASS || '',
+        SMTP_FROM: process.env.SMTP_FROM || '',
       },
       error_file: `${logBase}/mcp-gateway-error.log`,
       out_file: `${logBase}/mcp-gateway-out.log`,

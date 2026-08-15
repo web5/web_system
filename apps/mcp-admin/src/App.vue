@@ -9,15 +9,21 @@ import {
   deleteModule,
   toggleModule,
   debugCall,
+  applyKey,
+  verifyKey,
+  listKeys,
+  revokeKey,
   type McpModule,
   type McpTool,
 } from './api';
 
-// ── 状态 ──
+// ── Tab ──
+const activeTab = ref<'modules' | 'keys'>('modules');
+
+// ── 模块管理 ──
 const modules = ref<McpModule[]>([]);
 const loading = ref(false);
 
-// 添加/编辑弹窗
 const editVisible = ref(false);
 const editingId = ref<number | null>(null);
 const editForm = reactive({
@@ -29,7 +35,6 @@ const editForm = reactive({
   tools: [] as McpTool[],
 });
 
-// 调试弹窗
 const debugVisible = ref(false);
 const debugModule = ref<McpModule | null>(null);
 const debugTool = ref<string>('');
@@ -37,7 +42,6 @@ const debugArgs = reactive<Record<string, unknown>>({});
 const debugResult = ref('');
 const debugLoading = ref(false);
 
-// ── 加载 ──
 async function load() {
   loading.value = true;
   try {
@@ -50,7 +54,6 @@ async function load() {
 }
 onMounted(load);
 
-// ── 添加/编辑 ──
 function openCreate() {
   editingId.value = null;
   Object.assign(editForm, {
@@ -128,14 +131,12 @@ async function submitEdit() {
   }
 }
 
-// ── 删除 ──
 async function onDelete(m: McpModule) {
   await deleteModule(m.id);
   message.success('已删除');
   load();
 }
 
-// ── 启停 ──
 async function onToggle(m: McpModule, checked: boolean) {
   try {
     await toggleModule(m.id, checked);
@@ -146,7 +147,6 @@ async function onToggle(m: McpModule, checked: boolean) {
   }
 }
 
-// ── 调试 ──
 function openDebug(m: McpModule) {
   debugModule.value = m;
   debugTool.value = m.tools?.[0]?.name ?? '';
@@ -160,7 +160,6 @@ const currentTool = () => debugModule.value?.tools?.find((t) => t.name === debug
 async function runDebug() {
   const tool = currentTool();
   if (!tool || !debugModule.value) return;
-  // 构造参数
   const args: Record<string, unknown> = {};
   for (const p of tool.params ?? []) {
     const v = debugArgs[p.name];
@@ -192,7 +191,6 @@ async function runDebug() {
   }
 }
 
-// ── 表格列 ──
 const columns = [
   { title: 'ID', dataIndex: 'id', width: 60 },
   { title: '模块名', dataIndex: 'name', width: 160 },
@@ -202,6 +200,92 @@ const columns = [
   { title: '状态', key: 'enabled', width: 80 },
   { title: '操作', key: 'action', width: 220 },
 ];
+
+// ── API Key 申请 ──
+const applyEmail = ref('');
+const applyLoading = ref(false);
+const code = ref('');
+const keyName = ref('');
+const keyResult = ref('');
+const applyMsg = ref('');
+
+async function onApply() {
+  if (!applyEmail.value) {
+    message.warning('请填写邮箱');
+    return;
+  }
+  applyLoading.value = true;
+  applyMsg.value = '';
+  try {
+    await applyKey(applyEmail.value);
+    applyMsg.value = '验证码已发送到邮箱，请查收（10 分钟内有效）';
+    message.success('验证码已发送');
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e.message || '发送失败');
+  } finally {
+    applyLoading.value = false;
+  }
+}
+
+async function onVerify() {
+  if (!code.value) {
+    message.warning('请填写验证码');
+    return;
+  }
+  try {
+    const r = await verifyKey(applyEmail.value, code.value, keyName.value);
+    keyResult.value = r.key;
+    message.success('Key 已生成，请复制保存');
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e.message || '验证失败');
+  }
+}
+
+function copyKey() {
+  navigator.clipboard?.writeText(keyResult.value);
+  message.success('已复制到剪贴板');
+}
+
+// ── API Key 管理（运营）──
+const adminKey = ref('');
+const keys = ref<any[]>([]);
+const adminLoading = ref(false);
+
+async function loadKeys() {
+  if (!adminKey.value) {
+    message.warning('请输入管理员密钥');
+    return;
+  }
+  adminLoading.value = true;
+  try {
+    keys.value = await listKeys(adminKey.value);
+  } catch (e: any) {
+    message.error(e?.response?.data?.error || e.message || '加载失败');
+  } finally {
+    adminLoading.value = false;
+  }
+}
+
+async function onRevoke(id: number) {
+  try {
+    await revokeKey(id, adminKey.value);
+    message.success('已吊销');
+    loadKeys();
+  } catch (e: any) {
+    message.error(e?.response?.data?.error || e.message || '吊销失败');
+  }
+}
+
+const keyColumns = [
+  { title: '前缀', dataIndex: 'keyPrefix', width: 120 },
+  { title: '邮箱', dataIndex: 'email', ellipsis: true },
+  { title: '名称', dataIndex: 'name', width: 120 },
+  { title: '状态', dataIndex: 'status', width: 80 },
+  { title: '来源', dataIndex: 'ownerType', width: 80 },
+  { title: '最近使用', dataIndex: 'lastUsedAt', width: 160 },
+  { title: '创建时间', dataIndex: 'createdAt', width: 160 },
+  { title: '操作', key: 'action', width: 80 },
+];
 </script>
 
 <template>
@@ -209,156 +293,244 @@ const columns = [
     <div class="page">
       <div class="header">
         <h2>MCP 网关管理</h2>
-        <a-button type="primary" @click="openCreate">添加模块</a-button>
+        <a-radio-group v-model:value="activeTab">
+          <a-radio-button value="modules">模块管理</a-radio-button>
+          <a-radio-button value="keys">API Key</a-radio-button>
+        </a-radio-group>
+        <a-button v-if="activeTab === 'modules'" type="primary" @click="openCreate">
+          添加模块
+        </a-button>
       </div>
 
-    <a-table
-      :columns="columns"
-      :data-source="modules"
-      :loading="loading"
-      row-key="id"
-      :pagination="false"
-      size="middle"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'toolCount'">
-          <a-tag color="blue">{{ record.tools?.length ?? 0 }}</a-tag>
-        </template>
-        <template v-else-if="column.key === 'enabled'">
-          <a-switch
-            :checked="record.enabled === 1"
-            @change="(checked: boolean) => onToggle(record, checked)"
-          />
-        </template>
-        <template v-else-if="column.key === 'action'">
-          <a-space>
-            <a-button size="small" @click="openDebug(record)">调试</a-button>
-            <a-button size="small" @click="openEdit(record)">编辑</a-button>
-            <a-popconfirm title="确定删除该模块？" @confirm="onDelete(record)">
-              <a-button size="small" danger>删除</a-button>
-            </a-popconfirm>
-          </a-space>
-        </template>
-      </template>
-    </a-table>
+      <!-- 模块管理 -->
+      <template v-if="activeTab === 'modules'">
+        <a-table
+          :columns="columns"
+          :data-source="modules"
+          :loading="loading"
+          row-key="id"
+          :pagination="false"
+          size="middle"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'toolCount'">
+              <a-tag color="blue">{{ record.tools?.length ?? 0 }}</a-tag>
+            </template>
+            <template v-else-if="column.key === 'enabled'">
+              <a-switch
+                :checked="record.enabled === 1"
+                @change="(checked: boolean) => onToggle(record, checked)"
+              />
+            </template>
+            <template v-else-if="column.key === 'action'">
+              <a-space>
+                <a-button size="small" @click="openDebug(record)">调试</a-button>
+                <a-button size="small" @click="openEdit(record)">编辑</a-button>
+                <a-popconfirm title="确定删除该模块？" @confirm="onDelete(record)">
+                  <a-button size="small" danger>删除</a-button>
+                </a-popconfirm>
+              </a-space>
+            </template>
+          </template>
+        </a-table>
 
-    <!-- 添加/编辑弹窗 -->
-    <a-modal
-      v-model:open="editVisible"
-      :title="editingId ? '编辑模块' : '添加模块'"
-      width="760px"
-      @ok="submitEdit"
-    >
-      <a-form layout="vertical">
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="模块名" required>
-              <a-input v-model:value="editForm.name" placeholder="如：用户服务" />
+        <a-modal
+          v-model:open="editVisible"
+          :title="editingId ? '编辑模块' : '添加模块'"
+          width="760px"
+          @ok="submitEdit"
+        >
+          <a-form layout="vertical">
+            <a-row :gutter="16">
+              <a-col :span="12">
+                <a-form-item label="模块名" required>
+                  <a-input v-model:value="editForm.name" placeholder="如：用户服务" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="描述">
+                  <a-input v-model:value="editForm.description" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-form-item label="服务地址 base_url" required>
+              <a-input v-model:value="editForm.base_url" placeholder="http://172.16.16.10:8080" />
             </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="描述">
-              <a-input v-model:value="editForm.description" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-form-item label="服务地址 base_url" required>
-          <a-input v-model:value="editForm.base_url" placeholder="http://172.16.16.10:8080" />
-        </a-form-item>
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="超时（秒）">
-              <a-input-number v-model:value="editForm.timeout" :min="1" style="width: 100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="鉴权类型">
-              <a-select v-model:value="editForm.auth_type" placeholder="无鉴权">
-                <a-select-option value="">无鉴权</a-select-option>
-                <a-select-option value="bearer">Bearer Token</a-select-option>
-                <a-select-option value="basic">Basic Auth</a-select-option>
-                <a-select-option value="header">自定义 Header</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-        </a-row>
+            <a-row :gutter="16">
+              <a-col :span="12">
+                <a-form-item label="超时（秒）">
+                  <a-input-number v-model:value="editForm.timeout" :min="1" style="width: 100%" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="鉴权类型">
+                  <a-select v-model:value="editForm.auth_type" placeholder="无鉴权">
+                    <a-select-option value="">无鉴权</a-select-option>
+                    <a-select-option value="bearer">Bearer Token</a-select-option>
+                    <a-select-option value="basic">Basic Auth</a-select-option>
+                    <a-select-option value="header">自定义 Header</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-        <a-divider>工具列表</a-divider>
-        <div v-for="(tool, ti) in editForm.tools" :key="ti" class="tool-card">
-          <a-row :gutter="8">
-            <a-col :span="6">
-              <a-input v-model:value="tool.name" placeholder="工具名" />
-            </a-col>
-            <a-col :span="5">
-              <a-input v-model:value="tool.description" placeholder="描述" />
-            </a-col>
-            <a-col :span="4">
-              <a-select v-model:value="tool.method">
-                <a-select-option value="GET">GET</a-select-option>
-                <a-select-option value="POST">POST</a-select-option>
-                <a-select-option value="PUT">PUT</a-select-option>
-                <a-select-option value="PATCH">PATCH</a-select-option>
-                <a-select-option value="DELETE">DELETE</a-select-option>
-              </a-select>
-            </a-col>
-            <a-col :span="6">
-              <a-input v-model:value="tool.path" placeholder="/api/xxx/{id}" />
-            </a-col>
-            <a-col :span="3">
-              <a-button size="small" danger @click="removeTool(ti)">删</a-button>
-            </a-col>
-          </a-row>
-          <div class="param-list">
-            <div v-for="(p, pi) in tool.params" :key="pi" class="param-row">
-              <a-input v-model:value="p.name" placeholder="参数名" size="small" style="width: 120px" />
-              <a-select v-model:value="p.type" size="small" style="width: 100px">
-                <a-select-option value="string">string</a-select-option>
-                <a-select-option value="integer">integer</a-select-option>
-                <a-select-option value="number">number</a-select-option>
-                <a-select-option value="boolean">boolean</a-select-option>
-              </a-select>
-              <a-checkbox v-model:checked="p.required">必填</a-checkbox>
-              <a-input v-model:value="p.description" placeholder="参数描述" size="small" style="flex: 1" />
-              <a-button size="small" type="link" danger @click="removeParam(tool, pi)">删</a-button>
+            <a-divider>工具列表</a-divider>
+            <div v-for="(tool, ti) in editForm.tools" :key="ti" class="tool-card">
+              <a-row :gutter="8">
+                <a-col :span="6">
+                  <a-input v-model:value="tool.name" placeholder="工具名" />
+                </a-col>
+                <a-col :span="5">
+                  <a-input v-model:value="tool.description" placeholder="描述" />
+                </a-col>
+                <a-col :span="4">
+                  <a-select v-model:value="tool.method">
+                    <a-select-option value="GET">GET</a-select-option>
+                    <a-select-option value="POST">POST</a-select-option>
+                    <a-select-option value="PUT">PUT</a-select-option>
+                    <a-select-option value="PATCH">PATCH</a-select-option>
+                    <a-select-option value="DELETE">DELETE</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col :span="6">
+                  <a-input v-model:value="tool.path" placeholder="/api/xxx/{id}" />
+                </a-col>
+                <a-col :span="3">
+                  <a-button size="small" danger @click="removeTool(ti)">删</a-button>
+                </a-col>
+              </a-row>
+              <div class="param-list">
+                <div v-for="(p, pi) in tool.params" :key="pi" class="param-row">
+                  <a-input v-model:value="p.name" placeholder="参数名" size="small" style="width: 120px" />
+                  <a-select v-model:value="p.type" size="small" style="width: 100px">
+                    <a-select-option value="string">string</a-select-option>
+                    <a-select-option value="integer">integer</a-select-option>
+                    <a-select-option value="number">number</a-select-option>
+                    <a-select-option value="boolean">boolean</a-select-option>
+                  </a-select>
+                  <a-checkbox v-model:checked="p.required">必填</a-checkbox>
+                  <a-input v-model:value="p.description" placeholder="参数描述" size="small" style="flex: 1" />
+                  <a-button size="small" type="link" danger @click="removeParam(tool, pi)">删</a-button>
+                </div>
+                <a-button size="small" type="dashed" block @click="addParam(tool)">+ 添加参数</a-button>
+              </div>
             </div>
-            <a-button size="small" type="dashed" block @click="addParam(tool)">+ 添加参数</a-button>
-          </div>
-        </div>
-        <a-button type="dashed" block @click="addTool">+ 添加工具</a-button>
-      </a-form>
-    </a-modal>
+            <a-button type="dashed" block @click="addTool">+ 添加工具</a-button>
+          </a-form>
+        </a-modal>
 
-    <!-- 调试弹窗 -->
-    <a-modal
-      v-model:open="debugVisible"
-      :title="`调试 ${debugModule?.name ?? ''}`"
-      width="640px"
-      :footer="null"
-    >
-      <a-form layout="vertical">
-        <a-form-item label="选择工具">
-          <a-select v-model:value="debugTool">
-            <a-select-option v-for="t in debugModule?.tools ?? []" :key="t.name" :value="t.name">
-              {{ t.name }}（{{ t.method }} {{ t.path }}）
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-        <template v-for="p in currentTool()?.params ?? []" :key="p.name">
-          <a-form-item :label="`${p.name}${p.required ? ' *' : ''}`">
-            <a-input-number
-              v-if="p.type === 'integer' || p.type === 'number'"
-              v-model:value="(debugArgs as any)[p.name]"
-              style="width: 100%"
-            />
-            <a-switch v-else-if="p.type === 'boolean'" v-model:checked="(debugArgs as any)[p.name]" />
-            <a-input v-else v-model:value="(debugArgs as any)[p.name]" :placeholder="p.description" />
-          </a-form-item>
-        </template>
-        <a-button type="primary" :loading="debugLoading" @click="runDebug">发起调用</a-button>
-      </a-form>
-      <a-divider>返回结果</a-divider>
-      <pre class="result">{{ debugResult || '（暂无结果）' }}</pre>
-    </a-modal>
+        <a-modal
+          v-model:open="debugVisible"
+          :title="`调试 ${debugModule?.name ?? ''}`"
+          width="640px"
+          :footer="null"
+        >
+          <a-form layout="vertical">
+            <a-form-item label="选择工具">
+              <a-select v-model:value="debugTool">
+                <a-select-option v-for="t in debugModule?.tools ?? []" :key="t.name" :value="t.name">
+                  {{ t.name }}（{{ t.method }} {{ t.path }}）
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <template v-for="p in currentTool()?.params ?? []" :key="p.name">
+              <a-form-item :label="`${p.name}${p.required ? ' *' : ''}`">
+                <a-input-number
+                  v-if="p.type === 'integer' || p.type === 'number'"
+                  v-model:value="(debugArgs as any)[p.name]"
+                  style="width: 100%"
+                />
+                <a-switch v-else-if="p.type === 'boolean'" v-model:checked="(debugArgs as any)[p.name]" />
+                <a-input v-else v-model:value="(debugArgs as any)[p.name]" :placeholder="p.description" />
+              </a-form-item>
+            </template>
+            <a-button type="primary" :loading="debugLoading" @click="runDebug">发起调用</a-button>
+          </a-form>
+          <a-divider>返回结果</a-divider>
+          <pre class="result">{{ debugResult || '（暂无结果）' }}</pre>
+        </a-modal>
+      </template>
+
+      <!-- API Key -->
+      <template v-else-if="activeTab === 'keys'">
+        <a-row :gutter="24">
+          <!-- 公开申请 -->
+          <a-col :span="12">
+            <a-card title="申请 API Key" size="small">
+              <a-form layout="vertical">
+                <a-form-item label="邮箱（接收验证码）" required>
+                  <a-input v-model:value="applyEmail" placeholder="you@example.com" />
+                </a-form-item>
+                <a-button :loading="applyLoading" block @click="onApply">获取验证码</a-button>
+                <a-alert
+                  v-if="applyMsg"
+                  type="success"
+                  :message="applyMsg"
+                  show-icon
+                  style="margin: 12px 0"
+                />
+                <a-divider />
+                <a-form-item label="验证码">
+                  <a-input v-model:value="code" placeholder="6 位验证码" />
+                </a-form-item>
+                <a-form-item label="名称（可选）">
+                  <a-input v-model:value="keyName" placeholder="如：我的 AI 助手" />
+                </a-form-item>
+                <a-button type="primary" block :disabled="!code" @click="onVerify">
+                  验证并获取 Key
+                </a-button>
+                <a-alert
+                  v-if="keyResult"
+                  type="info"
+                  show-icon
+                  style="margin-top: 12px"
+                >
+                  <template #message>
+                    <div>
+                      <div>Key 已生成（仅展示一次，请复制保存）：</div>
+                      <div class="key-box">{{ keyResult }}</div>
+                      <a-button size="small" type="link" @click="copyKey">复制</a-button>
+                    </div>
+                  </template>
+                </a-alert>
+              </a-form>
+            </a-card>
+          </a-col>
+
+          <!-- 运营管理 -->
+          <a-col :span="12">
+            <a-card title="Key 管理（运营）" size="small">
+              <a-form layout="vertical">
+                <a-form-item label="管理员密钥 (X-Admin-Key)">
+                  <a-input-password v-model:value="adminKey" placeholder="MCP_ADMIN_KEY" />
+                </a-form-item>
+                <a-button block @click="loadKeys">加载列表</a-button>
+              </a-form>
+              <a-table
+                :columns="keyColumns"
+                :data-source="keys"
+                :loading="adminLoading"
+                row-key="id"
+                size="small"
+                style="margin-top: 12px"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'action'">
+                    <a-popconfirm title="确定吊销该 Key？" @confirm="onRevoke(record.id)">
+                      <a-button size="small" danger :disabled="record.status === 'revoked'">吊销</a-button>
+                    </a-popconfirm>
+                  </template>
+                  <template v-else-if="column.dataIndex === 'status'">
+                    <a-tag :color="record.status === 'active' ? 'green' : 'default'">
+                      {{ record.status === 'active' ? '有效' : '已吊销' }}
+                    </a-tag>
+                  </template>
+                </template>
+              </a-table>
+            </a-card>
+          </a-col>
+        </a-row>
+      </template>
     </div>
   </a-config-provider>
 </template>
@@ -402,6 +574,16 @@ const columns = [
   overflow: auto;
   font-size: 12px;
   white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-body);
+}
+.key-box {
+  font-family: monospace;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 4px;
   word-break: break-all;
   color: var(--text-body);
 }
