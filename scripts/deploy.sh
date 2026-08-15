@@ -177,7 +177,7 @@ deploy_backend_git() {
     git clean -fd
     pnpm install --prefer-offline --ignore-scripts
     cd servers/$svc
-    npm run build
+    npx tsc -p tsconfig.json
     pm2 restart $pm2name 2>/dev/null || pm2 start dist/main.js --name $pm2name
   " || err "$svc 远端构建/重启失败"
   log "$svc 部署完成"
