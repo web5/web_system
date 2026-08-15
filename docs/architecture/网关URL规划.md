@@ -172,6 +172,28 @@ MCP 平台的路由分三层，职责清晰：
 
 ### 5.1 Nginx 层（SSL 层 42.194.200.69）
 
+两处域名入口（均在 42.194.200.69）：
+
+**① 正式域名 `kedouai.com/mcp`**（`/etc/nginx/conf.d/default.conf` 的 kedouai.com server 块，2026-08-15 起）：
+
+```nginx
+# MCP 正式对外端点：https://kedouai.com/mcp/finnews
+location ~ ^/mcp(/.*)?$ {
+    proxy_pass http://175.27.189.123:6006;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 300s;
+    proxy_buffering off;
+}
+```
+
+**② 开发域名 `dev.kedouai.com/mcp`**（`/etc/nginx/conf.d/dev.kedouai.com.conf`）：
+
 ```nginx
 # MCP 协议端点 → 直连 mcp-gateway（正则匹配 /mcp 和 /mcp/:module，不含 /mcp-admin）
 location ~ ^/mcp(/.*)?$ {
@@ -197,6 +219,14 @@ location / {
 | `/mcp/:module` | POST/GET/DELETE | MCP 单模块端点（按 `code_key`，如 `/mcp/finnews`） |
 | `/api/modules` | GET/POST/PUT/DELETE | 模块管理（供 mcp-admin 调用） |
 | `/api/debug` | POST | 工具调试验证 |
+| `/api/keys/apply` | POST | 公开申请 API Key（邮箱+验证码；SMTP 未配置时 403 降级） |
+| `/api/keys/verify` | POST | 校验验证码并签发 Key（明文仅返回一次） |
+| `/api/keys` | GET | Key 列表（需 `X-Admin-Key`） |
+| `/api/keys/:id` | DELETE | 吊销 Key（需 `X-Admin-Key`） |
+
+> **鉴权模型**（2026-08-15 起）：`/mcp` 的 Bearer 支持双路径——遗留共享 `MCP_CLIENT_KEY`（兼容）
+> 或每用户 API Key（`mcp_api_keys` 表，SHA-256 存储，可吊销/过期，记录 `last_used_at`）。
+> 生产建表 SQL 见 `servers/mcp-gateway/sql/mcp_keys_tables.sql`（生产 `synchronize:false` 需手动执行）。
 
 ### 5.3 Gateway 层（:6000）
 
