@@ -21,16 +21,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '仪表盘' },
       },
       {
-        path: 'config',
-        name: 'ConfigManager',
-        component: () => import('@/views/ConfigManager.vue'),
-        meta: { title: '配置管理' },
-      },
-      {
         path: 'deploy',
         name: 'DeployCenter',
         component: () => import('@/views/DeployCenter.vue'),
         meta: { title: '发布中心' },
+      },
+      {
+        path: 'environments',
+        name: 'EnvironmentManager',
+        component: () => import('@/views/EnvironmentManager.vue'),
+        meta: { title: '环境管理' },
       },
       {
         path: 'monitor',
