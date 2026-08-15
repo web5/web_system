@@ -1,4 +1,4 @@
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { antdTheme } from '@web-system/ui';
 import { listModules, createModule, updateModule, deleteModule, toggleModule, debugCall, applyKey, verifyKey, listKeys, revokeKey, } from './api';
@@ -174,12 +174,13 @@ const columns = [
     { title: '操作', key: 'action', width: 220 },
 ];
 // ── API Key 申请 ──
-const applyEmail = ref('');
+const applyEmail = ref(localStorage.getItem('mcp_apply_email') || '');
 const applyLoading = ref(false);
 const code = ref('');
 const keyName = ref('');
 const keyResult = ref('');
 const applyMsg = ref('');
+watch(applyEmail, (v) => localStorage.setItem('mcp_apply_email', v));
 async function onApply() {
     if (!applyEmail.value) {
         message.warning('请填写邮箱');
@@ -200,6 +201,10 @@ async function onApply() {
     }
 }
 async function onVerify() {
+    if (!applyEmail.value) {
+        message.warning('请填写邮箱');
+        return;
+    }
     if (!code.value) {
         message.warning('请填写验证码');
         return;
