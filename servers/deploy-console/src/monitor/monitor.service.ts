@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Client } from 'ssh2';
 import { EnvironmentService } from '../environment/environment.service';
+import { ServerService } from '../server/server.service';
 
 /**
  * SSH 连接配置
@@ -56,14 +57,18 @@ export class MonitorService {
   constructor(
     private readonly configService: ConfigService,
     private readonly environmentService: EnvironmentService,
+    private readonly serverService: ServerService,
   ) {}
 
   /**
-   * 获取 SSH 配置（从 DB 环境表读取，支持任意环境 ID）
+   * 获取 SSH 配置（读环境默认服务器 serverName = <env>-default）
    */
   private async getSshConfig(env: string): Promise<SshConfig> {
-    const envEntity = await this.environmentService.get(env);
-    let privateKeyPath = envEntity.sshKeyPath || '~/.ssh/id_ed25519_servers';
+    const srv = await this.serverService.resolveEnvDefaultServer(env);
+    if (!srv) {
+      throw new BadGatewayException(`环境 ${env} 无默认服务器，请先在「服务器管理」中配置`);
+    }
+    let privateKeyPath = srv.sshKeyPath || '~/.ssh/id_ed25519_servers';
     if (privateKeyPath.startsWith('~')) {
       privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
     }
@@ -72,9 +77,9 @@ export class MonitorService {
       privateKey = fs.readFileSync(privateKeyPath);
     }
     return {
-      host: envEntity.host,
+      host: srv.host,
       port: 22,
-      username: envEntity.sshUser,
+      username: srv.sshUser,
       privateKey,
     };
   }

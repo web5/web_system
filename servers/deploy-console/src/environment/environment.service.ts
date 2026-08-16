@@ -61,10 +61,6 @@ export class EnvironmentService {
     const e = new DeployEnvironmentEntity();
     e.id = 'dev';
     e.name = '开发环境';
-    e.host = this.configService.get('DEV_SERVER') || '175.27.189.123';
-    e.sshUser = this.configService.get('DEV_USER') || 'ubuntu';
-    e.sshKeyPath = this.configService.get('DEV_KEY') || '~/.ssh/id_ed25519_servers';
-    e.remoteDir = '/data/web_system';
     e.publicUrl = 'https://dev.kedouai.com';
     e.ports = this.defaultPortsDev();
     e.builtin = true;
@@ -75,10 +71,6 @@ export class EnvironmentService {
     const e = new DeployEnvironmentEntity();
     e.id = 'prod';
     e.name = '生产环境';
-    e.host = this.configService.get('PROD_SERVER') || '106.52.176.246';
-    e.sshUser = this.configService.get('PROD_USER') || 'root';
-    e.sshKeyPath = this.configService.get('PROD_KEY') || '~/.ssh/id_ed25519_servers';
-    e.remoteDir = '/data/web_system';
     e.publicUrl = 'https://portal.kedouai.com';
     e.ports = this.defaultPortsProd();
     e.builtin = true;
@@ -101,10 +93,6 @@ export class EnvironmentService {
     const e = new DeployEnvironmentEntity();
     e.id = dto.id;
     e.name = dto.name;
-    e.host = dto.host;
-    e.sshUser = dto.sshUser;
-    e.sshKeyPath = dto.sshKeyPath || '~/.ssh/id_ed25519_servers';
-    e.remoteDir = dto.remoteDir;
     e.publicUrl = dto.publicUrl;
     e.ports = dto.ports || {};
     e.builtin = false;
@@ -114,10 +102,6 @@ export class EnvironmentService {
   async update(id: string, dto: Partial<EnvironmentDto>): Promise<DeployEnvironmentEntity> {
     const e = await this.get(id);
     if (dto.name !== undefined) e.name = dto.name;
-    if (dto.host !== undefined) e.host = dto.host;
-    if (dto.sshUser !== undefined) e.sshUser = dto.sshUser;
-    if (dto.sshKeyPath !== undefined) e.sshKeyPath = dto.sshKeyPath;
-    if (dto.remoteDir !== undefined) e.remoteDir = dto.remoteDir;
     if (dto.publicUrl !== undefined) e.publicUrl = dto.publicUrl;
     if (dto.ports !== undefined) e.ports = dto.ports;
     // builtin 不可被改为 false（仍可被改端口等）
