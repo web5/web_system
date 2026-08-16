@@ -9,7 +9,6 @@ import {
   LogoutOutlined,
   UserOutlined,
   ApartmentOutlined,
-  ClusterOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -27,7 +26,6 @@ const menuItems = [
   { key: '/deploy', label: '发布中心', icon: CloudUploadOutlined },
   { key: '/services', label: '服务管理', icon: AppstoreOutlined },
   { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
-  { key: '/servers', label: '服务器管理', icon: ClusterOutlined },
   { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
 ]
