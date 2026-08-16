@@ -565,15 +565,11 @@ export class DeployService {
 
   /**
    * 从 DB 环境表构造连接环境变量，注入给 deploy.sh/rollback.sh
-   * 使任意环境（含自定义）都能被部署，无需手写 .env.deploy
+   * （服务器连接信息已下沉 deploy_servers，此处只传环境级 publicUrl）
    */
   private async buildEnvVars(env: string): Promise<Record<string, string>> {
     const e = await this.environmentService.get(env);
     return {
-      DEPLOY_HOST: e.host,
-      DEPLOY_USER: e.sshUser,
-      DEPLOY_KEY: e.sshKeyPath || '~/.ssh/id_ed25519_servers',
-      DEPLOY_REMOTE_DIR: e.remoteDir,
       DEPLOY_PUBLIC_URL: e.publicUrl || '',
     };
   }
@@ -581,7 +577,7 @@ export class DeployService {
   /**
    * 解析后端服务在目标环境的部署服务器列表。
    * 优先读「环境服务路由」→ serverName → 该组多台服务器；
-   * 无路由时回退环境默认 host（单台，兼容旧数据）。
+   * 无路由时回退该环境默认服务器（<env>-default）。
    */
   private async resolveDeployServers(
     env: string,
@@ -600,16 +596,19 @@ export class DeployService {
     } catch (e) {
       this.logger.warn(`解析服务器组失败(${env}:${serviceName}): ${e.message}`);
     }
-    // 回退：环境默认单台
-    const e = await this.environmentService.get(env);
-    return [
-      {
-        host: e.host,
-        sshUser: e.sshUser,
-        sshKeyPath: e.sshKeyPath || '~/.ssh/id_ed25519_servers',
-        remoteDir: e.remoteDir,
-      },
-    ];
+    // 回退：环境默认服务器（serverName = <env>-default 的第一台）
+    const dft = await this.serverService.resolveEnvDefaultServer(env);
+    if (dft) {
+      return [
+        {
+          host: dft.host,
+          sshUser: dft.sshUser,
+          sshKeyPath: dft.sshKeyPath || '~/.ssh/id_ed25519_servers',
+          remoteDir: dft.remoteDir,
+        },
+      ];
+    }
+    return [];
   }
 
   /**
@@ -725,11 +724,14 @@ export class DeployService {
   }
 
   /**
-   * 获取 SSH 配置（从 DB 环境表读取，支持任意环境 ID）
+   * 获取 SSH 配置（读环境默认服务器 serverName = <env>-default）
    */
   private async getSshConfig(env: string) {
-    const envEntity = await this.environmentService.get(env);
-    let privateKeyPath = envEntity.sshKeyPath || '~/.ssh/id_ed25519_servers';
+    const srv = await this.serverService.resolveEnvDefaultServer(env);
+    if (!srv) {
+      throw new BadGatewayException(`环境 ${env} 无默认服务器，请先在「服务器管理」中配置`);
+    }
+    let privateKeyPath = srv.sshKeyPath || '~/.ssh/id_ed25519_servers';
     if (privateKeyPath.startsWith('~')) {
       privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
     }
@@ -737,6 +739,6 @@ export class DeployService {
     if (fs.existsSync(privateKeyPath)) {
       privateKey = fs.readFileSync(privateKeyPath);
     }
-    return { host: envEntity.host, port: 22, username: envEntity.sshUser, privateKey };
+    return { host: srv.host, port: 22, username: srv.sshUser, privateKey };
   }
 }

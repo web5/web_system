@@ -46,7 +46,7 @@ export class EnvironmentController {
       action: 'env.create',
       env: dto.id,
       status: 'success',
-      detail: `创建环境 ${dto.id}(${dto.name}) host=${dto.host} ports=${JSON.stringify(dto.ports || {})}`,
+      detail: `创建环境 ${dto.id}(${dto.name}) ports=${JSON.stringify(dto.ports || {})}`,
     });
     return env;
   }

@@ -59,7 +59,7 @@ export class FileUpdateDto {
 }
 
 /**
- * 创建/更新环境 DTO
+ * 创建/更新环境 DTO（服务器连接信息已下沉到 servers，不再含 host/ssh）
  */
 export class EnvironmentDto {
   @IsString()
@@ -67,19 +67,6 @@ export class EnvironmentDto {
 
   @IsString()
   name: string;
-
-  @IsString()
-  host: string;
-
-  @IsString()
-  sshUser: string;
-
-  @IsString()
-  @IsOptional()
-  sshKeyPath?: string;
-
-  @IsString()
-  remoteDir: string;
 
   @IsString()
   @IsOptional()

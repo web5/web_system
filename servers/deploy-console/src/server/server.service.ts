@@ -86,4 +86,16 @@ export class ServerService {
   async resolveRoute(envId: string, serviceName: string): Promise<DeployEnvServiceRouteEntity | null> {
     return this.routeRepo.findOne({ where: { envId, serviceName } });
   }
+
+  /**
+   * 解析环境默认服务器（约定 serverName = <env>-default 的第一台）。
+   * 用于无显式路由时的回退，以及监控等「按环境取一台服务器」的场景。
+   */
+  async resolveEnvDefaultServer(envId: string): Promise<DeployServerEntity | null> {
+    const servers = await this.serverRepo.find({
+      where: { serverName: `${envId}-default` },
+      order: { host: 'ASC' },
+    });
+    return servers[0] || null;
+  }
 }
