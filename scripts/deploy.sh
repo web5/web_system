@@ -192,6 +192,33 @@ deploy_mini_app() {
 #       （这是 git 发布的预期行为：远端只是部署目标，以本地推送的提交为准）
 # 用法: deploy_backend_git <service目录名> <pm2名>
 # ===========================================================
+# 单台服务器远端部署（git fetch + reset --hard + pnpm install + tsc + pm2 restart）
+deploy_to_server() {
+  local svc="$1"
+  local pm2name="$2"
+  local host="$3"        # user@host
+  local key="$4"         # ssh 私钥路径（可为空，用默认密钥）
+  local remote_dir="$5"
+  local branch="$6"
+
+  local ssh_opts=""
+  if [ -n "$key" ] && [ "$key" != "~/.ssh/id_ed25519_servers" ] && [ -f "$key" ]; then
+    ssh_opts="-i $key"
+  fi
+
+  log "    → 部署到 $host (remote_dir=$remote_dir)"
+  ssh $ssh_opts "$host" "set -e
+    cd $remote_dir
+    git fetch origin
+    git reset --hard origin/$branch
+    git clean -fd
+    pnpm install --prefer-offline --ignore-scripts
+    cd servers/$svc
+    npx tsc -p tsconfig.json
+    pm2 restart $pm2name 2>/dev/null || pm2 start dist/main.js --name $pm2name
+  " || err "$svc 部署到 $host 失败"
+}
+
 deploy_backend_git() {
   local svc="$1"
   local pm2name="$2"
@@ -213,18 +240,27 @@ deploy_backend_git() {
     log "本地无变更，跳过 commit/push"
   fi
 
-  # 2) 远端拉取最新提交并构建重启
+  # 2) 远端拉取最新提交并构建重启（支持多服务器：DEPLOY_SERVERS 为 JSON 数组 [{host,sshUser,sshKeyPath,remoteDir}]）
   log "远端拉取 $branch 并构建 $svc ..."
-  ssh $SSH_OPTS "$SERVER" "set -e
-    cd $REMOTE_DIR
-    git fetch origin
-    git reset --hard origin/$branch
-    git clean -fd
-    pnpm install --prefer-offline --ignore-scripts
-    cd servers/$svc
-    npx tsc -p tsconfig.json
-    pm2 restart $pm2name 2>/dev/null || pm2 start dist/main.js --name $pm2name
-  " || err "$svc 远端构建/重启失败"
+  if [ -n "$DEPLOY_SERVERS" ]; then
+    log "多服务器分发（环境服务路由注入）..."
+    echo "$DEPLOY_SERVERS" | node -e "
+      let s='';
+      process.stdin.on('data', d => s += d);
+      process.stdin.on('end', () => {
+        const list = JSON.parse(s);
+        for (const srv of list) {
+          const key = srv.sshKeyPath || '~/.ssh/id_ed25519_servers';
+          console.log([srv.sshUser + '@' + srv.host, key, srv.remoteDir].join('\t'));
+        }
+      });
+    " | while IFS=$'\t' read -r host key remote_dir; do
+      [ -z "$host" ] && continue
+      deploy_to_server "$svc" "$pm2name" "$host" "$key" "$remote_dir" "$branch"
+    done
+  else
+    deploy_to_server "$svc" "$pm2name" "$SERVER" "${DEPLOY_KEY:-}" "$REMOTE_DIR" "$branch"
+  fi
   log "$svc 部署完成"
 }
 
