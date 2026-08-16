@@ -6,6 +6,7 @@ import { join, normalize, extname } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { DeployDeploymentEntity } from './deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-module.entity';
+import { DeployCanaryRuleEntity } from './deploy-canary-rule.entity';
 
 /** gateway 托管前端静态文件的根目录 */
 const PUBLIC_ROOT = join(__dirname, '..', '..', 'public');
@@ -51,6 +52,8 @@ export class IndexHtmlService {
     private deployRepo: Repository<DeployDeploymentEntity>,
     @InjectRepository(DeployModuleEntity, 'deploy')
     private moduleRepo: Repository<DeployModuleEntity>,
+    @InjectRepository(DeployCanaryRuleEntity, 'deploy')
+    private canaryRepo: Repository<DeployCanaryRuleEntity>,
   ) {}
 
   /** 当前环境 ID（来自配置 DEPLOY_ENV_ID，缺省 dev） */
@@ -139,18 +142,60 @@ export class IndexHtmlService {
   }
 
   /**
-   * 灰度扩展点：按 req 中的用户/header 查 deploy_canary_rules。
-   * 第一期固定返回 stable；canary 模块实现后在此查询。
+   * 灰度命中：按 req 中的用户/header 查 deploy_canary_rules。
+   * 命中返回 canaryVersion，未命中返回 stable。
    */
   private async resolveCanary(
-    _envId: string,
-    _moduleKey: string,
+    envId: string,
+    moduleKey: string,
     stable: string,
-    _req?: any,
+    req?: any,
   ): Promise<string> {
-    // TODO: const rules = await this.canaryRepo.find({ where: { envId, moduleKey, enabled: true } })
-    // for (const rule of rules) { if (matchUser(_req, rule.matchRule, rule.id)) return rule.canaryVersion }
+    try {
+      const rules = await this.canaryRepo.find({
+        where: { envId, moduleKey, enabled: true },
+        order: { createdAt: 'ASC' },
+      });
+      for (const rule of rules) {
+        if (this.matchRule(rule.matchRule, this.extractUserId(req), req, rule.id)) {
+          return rule.canaryVersion;
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`查询灰度规则失败(${envId}:${moduleKey}): ${e.message}`);
+    }
     return stable;
+  }
+
+  /** 从请求提取用户 ID：优先 req.user.id，其次 x-user-id 头 */
+  private extractUserId(req?: any): string {
+    return req?.user?.id || req?.headers?.['x-user-id'] || '';
+  }
+
+  /** 灰度规则匹配（与 deploy-console CanaryService 保持一致） */
+  private matchRule(matchRule: any, userId: string, req: any, ruleId: string): boolean {
+    if (!matchRule || typeof matchRule !== 'object') return false;
+    switch (matchRule.type) {
+      case 'user-list':
+        return Array.isArray(matchRule.userIds) && matchRule.userIds.includes(userId);
+      case 'percent':
+        if (!userId) return false;
+        return this.hashUserId(userId + ':' + ruleId) % 100 < Number(matchRule.value || 0);
+      case 'header':
+        return Array.isArray(matchRule.values) && matchRule.values.includes(req?.headers?.[matchRule.key?.toLowerCase()]);
+      default:
+        return false;
+    }
+  }
+
+  /** FNV-1a 稳定 hash（同一输入永远同一数值） */
+  private hashUserId(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return Math.abs(h >>> 0);
   }
 
   private injectHead(html: string, meta: string): string {
