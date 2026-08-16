@@ -10,8 +10,9 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false },
   },
   {
-    path: '/console',
+    path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
+    redirect: '/dashboard',
     meta: { requiresAuth: true },
     children: [
       {
@@ -52,10 +53,6 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  {
-    path: '/',
-    redirect: '/console/dashboard',
-  },
 ]
 
 const router = createRouter({
@@ -71,7 +68,7 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth === false) {
     // 已登录用户访问登录页，直接跳转控制台
     if (to.path === '/login' && isLogin) {
-      next('/console/dashboard')
+      next('/dashboard')
       return
     }
     next()
