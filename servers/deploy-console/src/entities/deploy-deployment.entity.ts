@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   Index,
+  Unique,
 } from 'typeorm';
 
 /**
@@ -11,6 +12,7 @@ import {
  * 部署成功时 upsert；回滚时改为指向历史版本。
  */
 @Entity('deploy_deployments')
+@Unique(['envId', 'moduleKey'])
 export class DeployDeploymentEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

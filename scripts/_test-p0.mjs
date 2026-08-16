@@ -34,7 +34,8 @@ const dup = q(
 );
 assert(`deploy_deployments 无重复组（实际重复组数=${dup}）`, dup === '0');
 
-// 2. 唯一约束生效
+// 2. 唯一约束生效（先清残留，保证断言准确）
+q(`DELETE FROM deploy_deployments WHERE id='test-dup-x'`);
 try {
   execSync(
     `${MYSQL} ${AUTH} ${DB} -e "INSERT INTO deploy_deployments (id, env_id, module_key, current_version, status) VALUES ('test-dup-x','dev','portal','x','deployed')" 2>&1`,
@@ -44,6 +45,7 @@ try {
   const msg = (e.stdout || '').toString() + (e.message || '');
   assert('唯一约束 uk_env_module 生效（重复插入被拒）', /Duplicate entry/.test(msg));
 }
+q(`DELETE FROM deploy_deployments WHERE id='test-dup-x'`);
 
 // 3. 无 mf: 前缀
 const mf = q(`SELECT COUNT(*) FROM deploy_versions WHERE component LIKE 'mf:%'`);
