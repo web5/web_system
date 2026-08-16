@@ -73,7 +73,7 @@ export class EnvironmentDto {
   publicUrl?: string;
 
   @IsOptional()
-  ports?: Record<string, number>;
+  ports?: Record<string, string>;
 
   @IsBoolean()
   @IsOptional()

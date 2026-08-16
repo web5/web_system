@@ -32,28 +32,31 @@ export class EnvironmentService {
     await this.seedProd();
   }
 
-  private defaultPortsDev(): Record<string, number> {
+  private defaultPortsDev(): Record<string, string> {
+    // dev 默认地址：所有服务本机运行，端口 6000 系
     return {
-      gateway: 6000,
-      'auth-service': 6001,
-      'user-service': 6002,
-      'ai-service': 6003,
-      'system-service': 6004,
-      'todo-service': 6005,
-      'mcp-gateway': 6006,
-      finnews: 6007,
-      'upload-service': 6008,
+      gateway: '127.0.0.1:6000',
+      'auth-service': '127.0.0.1:6001',
+      'user-service': '127.0.0.1:6002',
+      'ai-service': '127.0.0.1:6003',
+      'system-service': '127.0.0.1:6004',
+      'todo-service': '127.0.0.1:6005',
+      'mcp-gateway': '127.0.0.1:6006',
+      finnews: '127.0.0.1:6007',
+      'upload-service': '127.0.0.1:6008',
+      'deploy-console': '127.0.0.1:6200',
     };
   }
 
-  private defaultPortsProd(): Record<string, number> {
+  private defaultPortsProd(): Record<string, string> {
+    // prod 默认地址：生产域名（含 mcp-gateway 特例端口）
     return {
-      gateway: 3000,
-      'auth-service': 3001,
-      'user-service': 3002,
-      'ai-service': 3003,
-      'system-service': 3004,
-      'mcp-gateway': 6006,
+      gateway: 'portal.kedouai.com:3000',
+      'auth-service': 'portal.kedouai.com:3001',
+      'user-service': 'portal.kedouai.com:3002',
+      'ai-service': 'portal.kedouai.com:3003',
+      'system-service': 'portal.kedouai.com:3004',
+      'mcp-gateway': '127.0.0.1:6006',
     };
   }
 

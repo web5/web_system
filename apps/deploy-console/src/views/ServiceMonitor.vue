@@ -5,8 +5,9 @@ import { monitorApi } from '@/api'
 
 interface HealthItem {
   service: string
-  port: number
+  address: string
   status: 'up' | 'down'
+  response?: string
   responseTime: number
 }
 
@@ -177,8 +178,9 @@ onUnmounted(() => {
       <a-table
         :columns="[
           { title: '服务名', dataIndex: 'service', key: 'service' },
-          { title: '端口', dataIndex: 'port', key: 'port', width: 100 },
+          { title: '地址', dataIndex: 'address', key: 'address' },
           { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+          { title: '响应', dataIndex: 'response', key: 'response', width: 80 },
           { title: '响应时间', dataIndex: 'responseTime', key: 'responseTime', width: 120 },
           { title: '操作', key: 'action', width: 120 },
         ]"
