@@ -145,10 +145,6 @@ export const environmentApi = {
       {
         id: string
         name: string
-        host: string
-        sshUser: string
-        sshKeyPath?: string
-        remoteDir: string
         publicUrl?: string
         ports?: Record<string, number>
         builtin: boolean

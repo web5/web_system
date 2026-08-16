@@ -6,17 +6,21 @@ import dayjs from 'dayjs'
 
 // ===== 环境 =====
 const env = ref('dev')
-const environments = ref<{ id: string; name: string; host: string; builtin: boolean }[]>([])
+const environments = ref<{ id: string; name: string; builtin: boolean }[]>([])
 
 // 模块列表（来自后端 /deploy/modules，与 deploy.sh 共用 modules.json）
 interface DeployModule {
   key: string
   name: string
-  type: 'backend' | 'frontend'
+  type: 'backend' | 'frontend' | 'micro-frontend' | 'mini-app'
   dir: string
   pm2?: string
   publicPath?: string
   buildCmd?: string
+  entry?: string
+  description?: string
+  builtin?: boolean
+  enabled?: boolean
 }
 const modules = ref<DeployModule[]>([])
 const modulesLoading = ref(false)
