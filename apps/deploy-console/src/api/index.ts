@@ -110,6 +110,30 @@ export const deployApi = {
         enabled?: boolean
       }[]
     >,
+  moduleDeployments: (moduleKey: string) =>
+    http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
+      moduleKey: string
+      environments: {
+        envId: string
+        currentVersion: string
+        status: string
+        deployedAt: string | null
+        deployedBy: string | null
+      }[]
+      versionHistory: {
+        id: string
+        env: string
+        component: string
+        versionTag: string
+        gitCommit?: string
+        gitBranch?: string
+        releasedBy?: string
+        releasedAt: string
+        taskId?: string
+        status: string
+        note?: string
+      }[]
+    }>,
   currentVersions: (env: string) =>
     http.get('/deploy/current-versions', { params: { env } }) as Promise<
       {

@@ -249,6 +249,16 @@ export class DeployController {
   }
 
   /**
+   * 查询某模块在各环境的当前版本 + 版本历史
+   * 用于「模块详情」页面（前端/后台 tab）
+   */
+  @Get('module-deployments/:moduleKey')
+  @ApiOperation({ summary: '模块在各环境的当前版本与历史版本' })
+  async moduleDeployments(@Param('moduleKey') moduleKey: string) {
+    return this.deployService.getModuleDeployments(moduleKey);
+  }
+
+  /**
    * 查询某环境各模块当前版本（「不同环境指定不同版本」展示用）
    */
   @Get('current-versions')
