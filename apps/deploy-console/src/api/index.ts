@@ -24,15 +24,12 @@ http.interceptors.request.use(
 http.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    if (error.response?.status === 401) {
+    const isLoginRequest = error.config?.url?.endsWith('/auth/login')
+    if (error.response?.status === 401 && !isLoginRequest) {
       const authStore = useAuthStore()
       authStore.logout()
       message.error('登录已过期，请重新登录')
       router.push('/login')
-    } else {
-      const msg = error.response?.data?.message || error.message || '请求失败'
-      // 不在这里统一弹错，由调用方处理
-      console.error('[API Error]', msg, error)
     }
     return Promise.reject(error)
   },
@@ -63,6 +60,13 @@ export const deployApi = {
   rollback: (env: string, tag: string, confirm = false) =>
     http.post('/deploy/rollback', { env, tag, confirm }) as Promise<{
       taskId: string
+    }>,
+  publishVersion: (env: string, versionTag: string, confirm = false) =>
+    http.post('/deploy/publish-version', { env, versionTag, confirm }) as Promise<{
+      status: string
+      message: string
+      component: string
+      versionTag: string
     }>,
   tasks: () =>
     http.get('/deploy/tasks') as Promise<
@@ -95,11 +99,15 @@ export const deployApi = {
       {
         key: string
         name: string
-        type: 'backend' | 'frontend'
+        type: 'backend' | 'frontend' | 'micro-frontend' | 'mini-app'
         dir: string
         pm2?: string
         publicPath?: string
         buildCmd?: string
+        entry?: string
+        description?: string
+        builtin?: boolean
+        enabled?: boolean
       }[]
     >,
   currentVersions: (env: string) =>
@@ -150,6 +158,15 @@ export const environmentApi = {
   create: (dto: any) => http.post('/environments', dto) as Promise<any>,
   update: (id: string, dto: any) => http.put(`/environments/${id}`, dto) as Promise<any>,
   remove: (id: string) => http.delete(`/environments/${id}`) as Promise<any>,
+}
+
+/* ========== Modules（模块注册表） ========== */
+export const moduleApi = {
+  list: () => http.get('/modules') as Promise<any[]>,
+  get: (key: string) => http.get(`/modules/${key}`) as Promise<any>,
+  create: (dto: any) => http.post('/modules', dto) as Promise<any>,
+  update: (key: string, dto: any) => http.put(`/modules/${key}`, dto) as Promise<any>,
+  remove: (key: string) => http.delete(`/modules/${key}`) as Promise<any>,
 }
 
 /* ========== Monitor ========== */

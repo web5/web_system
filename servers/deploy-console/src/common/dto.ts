@@ -94,10 +94,85 @@ export class EnvironmentDto {
 }
 
 /**
+ * 创建/更新模块 DTO（模块注册表）
+ */
+export class ModuleDto {
+  @IsString()
+  key: string;
+
+  @IsString()
+  name: string;
+
+  /** backend | frontend | micro-frontend | mini-app */
+  @IsString()
+  type: string;
+
+  @IsString()
+  dir: string;
+
+  @IsString()
+  @IsOptional()
+  pm2?: string;
+
+  @IsString()
+  @IsOptional()
+  publicPath?: string;
+
+  @IsString()
+  @IsOptional()
+  buildCmd?: string;
+
+  @IsString()
+  @IsOptional()
+  entry?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
+}
+
+/**
+ * 发布指定版本 DTO（版本库任选，秒级切换）
+ */
+export class PublishVersionDto {
+  @IsString()
+  env: string;
+
+  @IsString()
+  versionTag: string;
+
+  @IsBoolean()
+  @IsOptional()
+  confirm?: boolean;
+}
+
+/**
+ * 微前端模块发布 DTO
+ */
+export class PublishModuleDto {
+  @IsString()
+  env: string;
+
+  @IsString()
+  moduleKey: string;
+
+  @IsString()
+  @IsOptional()
+  branch?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  confirm?: boolean;
+}
+
+/**
  * 登录请求 DTO
  */
-export class LoginDto {
-  @IsString()
+export class LoginDto {  @IsString()
   username: string;
 
   @IsString()
@@ -107,8 +182,7 @@ export class LoginDto {
 /**
  * 审计日志查询 DTO
  */
-export class AuditQueryDto {
-  @IsInt()
+export class AuditQueryDto {  @IsInt()
   @Min(1)
   @IsOptional()
   page?: number;

@@ -20,6 +20,9 @@ export const useAuthStore = defineStore('auth', {
     // 登录
     async login(username: string, password: string) {
       const res = await authApi.login(username, password)
+      if (!res?.token) {
+        throw new Error('登录响应缺少令牌')
+      }
       this.token = res.token
       this.user = res.user
     },

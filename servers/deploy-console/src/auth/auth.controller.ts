@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
@@ -25,7 +25,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     const isValid = this.authService.validateUser(body.username, body.password);
     if (!isValid) {
-      return { statusCode: 401, message: '用户名或密码错误', error: 'Unauthorized' };
+      throw new UnauthorizedException('用户名或密码错误');
     }
     return this.authService.login(body.username);
   }

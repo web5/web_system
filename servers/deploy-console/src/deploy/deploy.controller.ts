@@ -15,7 +15,7 @@ import { Observable } from 'rxjs';
 import { DeployService } from './deploy.service';
 import { CurrentUser } from '../common/decorators';
 import { AuditService } from '../audit/audit.service';
-import { BuildDto, DeployDto, RollbackDto } from '../common/dto';
+import { BuildDto, DeployDto, RollbackDto, PublishVersionDto, PublishModuleDto } from '../common/dto';
 
 /**
  * 部署管理控制器
@@ -94,6 +94,73 @@ export class DeployController {
       detail: `启动回滚: ${body.env} / ${body.tag}, 任务ID: ${taskId}`,
     });
     return { taskId, status: 'started', message: `回滚已启动: ${body.env} / ${body.tag}` };
+  }
+
+  /**
+   * 发布指定版本（版本库任选，前端/微前端模块秒级切换，不重新构建）
+   * prod 环境必须传 confirm=true，且仅允许 master 分支版本
+   */
+  @Post('publish-version')
+  @ApiOperation({ summary: '发布指定版本（秒级切换，不重新构建）' })
+  @ApiResponse({ status: 200, description: '切换完成' })
+  @ApiResponse({ status: 400, description: '版本不存在/类型不支持/prod 约束' })
+  async publishVersion(@Body() body: PublishVersionDto, @CurrentUser() user: any) {
+    if (body.env === 'prod' && body.confirm !== true) {
+      throw new BadRequestException('Prod operations require confirm=true');
+    }
+    const { component } = await this.deployService.startPublishVersion(
+      body.env,
+      body.versionTag,
+      user?.username,
+    );
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'deploy.publish_version',
+      env: body.env,
+      component,
+      status: 'success',
+      detail: `发布指定版本: ${body.env} / ${component} → ${body.versionTag}（未重新构建）`,
+    });
+    return {
+      status: 'success',
+      message: `已切换版本: ${body.env} / ${component} → ${body.versionTag}（约 10s 内生效）`,
+      component,
+      versionTag: body.versionTag,
+    };
+  }
+
+  /**
+   * 发布微前端模块（构建 + 上传 + 版本表 + deployments 指针）
+   * prod 环境必须传 confirm=true，且仅允许 master 分支
+   */
+  @Post('modules/publish')
+  @ApiOperation({ summary: '发布微前端模块（构建+上传+切指针）' })
+  @ApiResponse({ status: 200, description: '发布完成' })
+  @ApiResponse({ status: 400, description: '模块不存在/非微前端/prod 约束' })
+  async publishModule(@Body() body: PublishModuleDto, @CurrentUser() user: any) {
+    if (body.env === 'prod' && body.confirm !== true) {
+      throw new BadRequestException('Prod operations require confirm=true');
+    }
+    const result = await this.deployService.publishModule(
+      body.env,
+      body.moduleKey,
+      body.branch,
+      user?.username,
+    );
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'module.publish',
+      env: body.env,
+      component: `mf:${body.moduleKey}`,
+      status: 'success',
+      detail: `发布微前端模块: ${body.env} / ${body.moduleKey} → ${result.version}`,
+    });
+    return {
+      status: 'success',
+      message: `${body.moduleKey}@${result.version} 已发布到 ${body.env}（约 10s 内生效）`,
+      moduleKey: body.moduleKey,
+      version: result.version,
+    };
   }
 
   /**

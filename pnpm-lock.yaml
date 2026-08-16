@@ -19,7 +19,7 @@ importers:
         version: 7.0.1(vue@3.5.31(typescript@5.9.3))
       '@web-system/shared':
         specifier: file:../../packages/shared
-        version: link:../../packages/shared
+        version: file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))
       '@web-system/types':
         specifier: file:../../packages/types
         version: link:../../packages/types
@@ -265,6 +265,49 @@ importers:
         specifier: ^2.2.12
         version: 2.2.12(typescript@5.5.4)
 
+  apps/shell:
+    dependencies:
+      '@ant-design/icons-vue':
+        specifier: ^7.0.0
+        version: 7.0.1(vue@3.5.31(typescript@5.6.3))
+      '@web-system/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@web-system/shell-loader':
+        specifier: workspace:*
+        version: link:../../packages/shell-loader
+      ant-design-vue:
+        specifier: ^4.1.0
+        version: 4.2.6(vue@3.5.31(typescript@5.6.3))
+      axios:
+        specifier: ^1.6.0
+        version: 1.13.6
+      dayjs:
+        specifier: ^1.11.0
+        version: 1.11.21
+      pinia:
+        specifier: ^2.1.0
+        version: 2.3.1(typescript@5.6.3)(vue@3.5.31(typescript@5.6.3))
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.31(typescript@5.6.3)
+      vue-router:
+        specifier: ^4.3.0
+        version: 4.6.4(vue@3.5.31(typescript@5.6.3))
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@25.9.2)(less@4.5.1)(sass@1.98.0)(terser@5.49.0))(vue@3.5.31(typescript@5.6.3))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.6.3
+      vite:
+        specifier: ^5.2.0
+        version: 5.4.21(@types/node@25.9.2)(less@4.5.1)(sass@1.98.0)(terser@5.49.0)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.6.3)
+
   packages/mcp-core:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -302,6 +345,16 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+
+  packages/shell-loader:
+    dependencies:
+      '@web-system/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.6.3
 
   packages/types:
     devDependencies:
@@ -869,6 +922,9 @@ importers:
       '@web-system/mcp-core':
         specifier: workspace:*
         version: link:../../packages/mcp-core
+      '@web-system/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       class-transformer:
         specifier: ^0.5.0
         version: 0.5.1
@@ -1093,7 +1149,7 @@ importers:
         version: 10.0.2(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3)))
       '@web-system/shared':
         specifier: file:../../packages/shared
-        version: link:../../packages/shared
+        version: file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))
       class-transformer:
         specifier: ^0.5.0
         version: 0.5.1
@@ -1155,6 +1211,12 @@ importers:
       '@nestjs/typeorm':
         specifier: ^10.0.0
         version: 10.0.2(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3)))
+      '@web-system/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@web-system/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       class-transformer:
         specifier: ^0.5.0
         version: 0.5.1
@@ -13990,7 +14052,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.20.0(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.20.0(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))
     transitivePeerDependencies:
@@ -14015,7 +14077,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))
     transitivePeerDependencies:
@@ -14040,7 +14102,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.0(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.0(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))
     transitivePeerDependencies:
@@ -14065,7 +14127,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.5.4))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.5.4))
     transitivePeerDependencies:
@@ -14090,7 +14152,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))
     transitivePeerDependencies:
@@ -14115,7 +14177,7 @@ snapshots:
 
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.6.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@20.19.37))(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.6.3))
     transitivePeerDependencies:
@@ -14138,9 +14200,34 @@ snapshots:
       - ts-node
       - typeorm-aurora-data-api-driver
 
+  '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))':
+    dependencies:
+      dayjs: 1.11.21
+      lodash-es: 4.17.23
+      typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@22.19.15))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@22.19.15)(typescript@5.9.3))
+    transitivePeerDependencies:
+      - '@google-cloud/spanner'
+      - '@sap/hana-client'
+      - babel-plugin-macros
+      - better-sqlite3
+      - ioredis
+      - mongodb
+      - mssql
+      - mysql2
+      - oracledb
+      - pg
+      - pg-native
+      - pg-query-stream
+      - redis
+      - sql.js
+      - sqlite3
+      - supports-color
+      - ts-node
+      - typeorm-aurora-data-api-driver
+
   '@web-system/shared@file:packages/shared(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@25.9.2))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@25.9.2)(typescript@5.9.3))':
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       lodash-es: 4.17.23
       typeorm: 0.3.28(better-sqlite3@12.11.1)(ioredis@5.10.1)(mysql2@3.23.3(@types/node@25.9.2))(pg@8.21.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@25.9.2)(typescript@5.9.3))
     transitivePeerDependencies:
@@ -14384,7 +14471,7 @@ snapshots:
       array-tree-filter: 2.1.0
       async-validator: 4.2.5
       csstype: 3.2.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       dom-align: 1.12.4
       dom-scroll-into-view: 2.0.1
       lodash: 4.17.23
@@ -14410,7 +14497,7 @@ snapshots:
       array-tree-filter: 2.1.0
       async-validator: 4.2.5
       csstype: 3.2.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       dom-align: 1.12.4
       dom-scroll-into-view: 2.0.1
       lodash: 4.17.23
@@ -14436,7 +14523,7 @@ snapshots:
       array-tree-filter: 2.1.0
       async-validator: 4.2.5
       csstype: 3.2.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       dom-align: 1.12.4
       dom-scroll-into-view: 2.0.1
       lodash: 4.17.23
@@ -19421,6 +19508,16 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
 
+  pinia@2.3.1(typescript@5.6.3)(vue@3.5.31(typescript@5.6.3)):
+    dependencies:
+      '@vue/devtools-api': 6.6.4
+      vue: 3.5.31(typescript@5.6.3)
+      vue-demi: 0.14.10(vue@3.5.31(typescript@5.6.3))
+    optionalDependencies:
+      typescript: 5.6.3
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+
   pinia@2.3.1(typescript@5.9.3)(vue@3.5.31(typescript@5.9.3)):
     dependencies:
       '@vue/devtools-api': 6.6.4
@@ -21042,7 +21139,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21070,7 +21167,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21098,7 +21195,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21126,7 +21223,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21154,7 +21251,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21182,7 +21279,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21209,7 +21306,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21237,7 +21334,7 @@ snapshots:
       ansis: 4.2.0
       app-root-path: 3.1.0
       buffer: 6.0.3
-      dayjs: 1.11.20
+      dayjs: 1.11.21
       debug: 4.4.3
       dedent: 1.7.2
       dotenv: 16.6.1
@@ -21491,6 +21588,10 @@ snapshots:
   vue-demi@0.14.10(vue@3.5.31(typescript@5.5.4)):
     dependencies:
       vue: 3.5.31(typescript@5.5.4)
+
+  vue-demi@0.14.10(vue@3.5.31(typescript@5.6.3)):
+    dependencies:
+      vue: 3.5.31(typescript@5.6.3)
 
   vue-demi@0.14.10(vue@3.5.31(typescript@5.9.3)):
     dependencies:

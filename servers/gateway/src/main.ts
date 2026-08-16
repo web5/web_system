@@ -3,6 +3,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { IndexHtmlService } from './deploy-version/index-html.service';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join, extname } from 'path';
 import compression from 'compression';
@@ -14,6 +15,19 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Gateway');
+  const indexHtmlService = app.get(IndexHtmlService);
+
+  // 版本化 index.html：读取 public/<pub>/index.html，注入当前环境/版本元信息（供未来灰度扩展）
+  const sendIndex = async (pub: string, req: any, res: any) => {
+    try {
+      const html = await indexHtmlService.render(pub, req);
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.type('html').send(html);
+    } catch (e) {
+      logger.error(`注入 index.html 失败(${pub}): ${e.message}`);
+      return res.sendFile(join(__dirname, '..', 'public', pub, 'index.html'));
+    }
+  };
 
   const port = configService.get('PORT', 6000);
   const host = configService.get('HOST', '0.0.0.0');
@@ -61,13 +75,13 @@ async function bootstrap() {
   );
 
   // 静态资源强缓存中间件
-  // 注意：仅对 /assets/* 设强缓存（带 content hash，内容变了文件名就变）
+  // 注意：仅对带 content hash 的 /assets/* 设强缓存（内容变了文件名就变）
   // index.html 不设强缓存，依赖 etag 做条件请求，保证部署后能拿到最新 JS/CSS 路径
   app.use((req: any, res: any, next: () => void) => {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
-    // Vite 打包的 /assets/* 都是带 hash 的文件，强缓存 1 年
-    if (path.startsWith('/assets/')) {
+    // Vite 打包的 assets 都是带 hash 的文件，强缓存 1 年（覆盖根级与前缀级）
+    if (path.startsWith('/assets/') || /^\/(portal|admin|mcp-admin)\/assets\//.test(path)) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
     next();
@@ -83,38 +97,37 @@ async function bootstrap() {
     next();
   });
 
-  // SPA 回退中间件 - 处理前端路由回退
-  // API/文档路由跳过
-  app.use((req: any, res: any, next: () => void) => {
+  // SPA 回退中间件 - 微前端模式：
+  // / → shell（基座 index.html，注入模块清单）
+  // /console/* → deploy-console（独立 SPA，不微前端化）
+  // /admin/* /mcp-admin/* → 由基座路由处理（不再 gateway serve）
+  // 模块 js/css 走 nginx /static/modules/，不经 gateway
+  app.use(async (req: any, res: any, next: () => void) => {
     if (req.method !== 'GET') return next();
     const path: string = req.path;
 
-    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/mini-scan') || path.startsWith('/health') || path.startsWith('/materials')) {
+    if (path.startsWith('/api') || path.startsWith('/docs') || path.startsWith('/swagger') || path.startsWith('/mini-scan') || path.startsWith('/health') || path.startsWith('/materials') || path.startsWith('/__version__') || path.startsWith('/__manifest__')) {
       return next();
     }
-    // 有扩展名的静态资源跳过（由 ServeStaticModule 处理）
+
+    // 基座静态资源（带扩展名）走 ServeStatic（public/shell/assets/*）
     if (extname(path)) {
       return next();
     }
-    // 管理后台 SPA 回退
-    if (path.startsWith('/admin')) {
-      return res.sendFile(join(__dirname, '..', 'public', 'admin', 'index.html'));
+
+    // deploy-console 独立 SPA
+    if (path === '/console' || path.startsWith('/console/')) {
+      return sendIndex('console', req, res);
     }
-    // MCP 管理界面 SPA 回退（和 admin 一致，走 gateway serve-static 托管）
-    if (path === '/mcp-admin' || path.startsWith('/mcp-admin/')) {
-      return res.sendFile(join(__dirname, '..', 'public', 'mcp-admin', 'index.html'));
-    }
-    // 根路径 → 重定向到 /portal/
+
+    // 根路径 → 基座 shell
     if (path === '/') {
-      return res.redirect(301, '/portal/');
+      return sendIndex('shell', req, res);
     }
-    // Portal SPA 回退：仅 /portal/ 开头的路径（或 /portal 不带斜杠）
-    // 不在 /portal/ 下的路径不返回 Portal HTML，由 NestJS 自行 404
-    if (path === '/portal' || path.startsWith('/portal/')) {
-      return res.sendFile(join(__dirname, '..', 'public', 'portal', 'index.html'));
-    }
-    // 其他未匹配路径交给 NestJS 处理（404 或后续路由）
-    next();
+
+    // 其它路径（/login, /portal/*, /admin/*, /mcp-admin/* 等）→ 基座 shell 路由处理
+    // 基座 router 会按 /:module/* 匹配并挂载对应微前端模块
+    return sendIndex('shell', req, res);
   });
 
   // 全局异常过滤器 — 生产环境掩码内部错误信息

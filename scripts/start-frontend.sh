@@ -11,8 +11,8 @@ sleep 1
 echo ">>> 启动 portal (5173)..."
 cd "$ROOT/apps/portal" && nohup pnpm dev > /tmp/portal.log 2>&1 &
 
-echo ">>> 启动 admin-web (5174)..."
-cd "$ROOT/apps/admin-web" && nohup pnpm dev > /tmp/admin.log 2>&1 &
+echo ">>> 启动 admin (5174)..."
+cd "$ROOT/apps/admin" && nohup pnpm dev > /tmp/admin.log 2>&1 &
 
 echo ">>> 启动 docs (4173)..."
 cd "$ROOT" && nohup npx serve docs -p 4173 --no-clipboard > /tmp/docs.log 2>&1 &
