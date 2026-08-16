@@ -1,32 +1,15 @@
-import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
-import App from './App.vue';
-import router from './router';
-import { setupAntd } from '@/plugins/antd';
-import { useUserStore } from '@/stores/user';
-import './styles/global.css';
+/**
+ * Portal 微前端模块入口。
+ * UMD 打包时由 rollup 挂到 window.__modules_portal；
+ * 这里手动挂到 window.__MODULES__['portal'] 兜底（dev 直跑也生效）。
+ */
+import { bootstrap, mount, unmount } from './lifecycle';
 
-const app = createApp(App);
-const pinia = createPinia();
+const lifecycle = { bootstrap, mount, unmount };
 
-// 注册持久化插件，自动从 localStorage 恢复状态
-pinia.use(piniaPluginPersistedstate);
+if (typeof window !== 'undefined') {
+  (window as any).__MODULES__ = (window as any).__MODULES__ || {};
+  (window as any).__MODULES__['portal'] = lifecycle;
+}
 
-app.use(pinia);
-
-// pinia persist 插件已自动从 localStorage 恢复状态，无需手动 initFromStorage
-const userStore = useUserStore(pinia);
-
-app.use(router);
-setupAntd(app);
-
-// 全局错误兜底
-app.config.errorHandler = (err, _instance, info) => {
-  console.error('[全局错误]', err, info);
-};
-
-app.mount('#app');
-
-// 挂载后异步获取用户信息（非阻塞）
-userStore.fetchUserInfo();
+export default lifecycle;
