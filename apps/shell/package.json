@@ -1,0 +1,29 @@
+{
+  "name": "@web-system/shell",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build --mode mf",
+    "build:standalone": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@web-system/shared": "workspace:*",
+    "@web-system/shell-loader": "workspace:*",
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0",
+    "pinia": "^2.1.0",
+    "ant-design-vue": "^4.1.0",
+    "@ant-design/icons-vue": "^7.0.0",
+    "axios": "^1.6.0",
+    "dayjs": "^1.11.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

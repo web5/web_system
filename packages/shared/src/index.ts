@@ -3,6 +3,15 @@ export { API_TIMEOUT } from './api';
 // 统一数据模型基础件（规范业务表设计）
 export { AbstractEntity, BigIntEntity, UuidEntity } from './entities/abstract.entity';
 export { User } from './entities/user.entity';
+export type {
+  ModuleContext,
+  UserInfo,
+  ModuleManifestEntry,
+  ModulesManifest,
+  ModuleLifecycle,
+  ModuleInstance,
+  ModuleManifest,
+} from './micro-frontend';
 export { SnakeNamingStrategy } from './naming/snake-naming.strategy';
 
 import dayjs from 'dayjs';

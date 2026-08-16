@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 600" width="100%" role="img">
+<title>架构图</title>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="850" height="600" fill="#ffffff"/>
+<rect x="120" y="30" width="500" height="95" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="370" y="50" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">用户浏览器</text>
+<rect x="135" y="65" width="150" height="50" rx="8" fill="#ffffff" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="210" y="85" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">微前端基座 Shell</text>
+<text x="210" y="103" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">自研 loader</text>
+<rect x="295" y="65" width="155" height="50" rx="8" fill="#ffffff" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="372" y="85" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">业务模块</text>
+<text x="372" y="103" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">portal · admin · mcp-admin</text>
+<rect x="460" y="65" width="145" height="50" rx="8" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.5"/>
+<text x="532" y="85" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">公共依赖 externals</text>
+<text x="532" y="103" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">vue · vue-router · pinia</text>
+<rect x="120" y="160" width="500" height="80" rx="8" fill="#f8cecc" stroke="#b85450" stroke-width="1.5"/>
+<text x="370" y="180" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">nginx (80 / 443)</text>
+<text x="370" y="198" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="370" y="216" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">/、/api/* → 转发 gateway:6000</text>
+<text x="370" y="234" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">/static/modules/* → 模块资源目录（不经网关）</text>
+<rect x="40" y="290" width="190" height="110" rx="8" fill="#d5e8d4" stroke="#82b366" stroke-width="1.5"/>
+<text x="135" y="310" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">模块资源目录</text>
+<text x="135" y="328" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="135" y="346" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">/data/web_system/static/</text>
+<text x="135" y="364" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">modules/<模块>/<版本>/</text>
+<text x="135" y="382" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">未来迁移至 COS</text>
+<rect x="250" y="290" width="190" height="110" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="345" y="310" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">gateway :6000</text>
+<text x="345" y="328" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="345" y="346" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">基座 index.html 服务</text>
+<text x="345" y="364" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">注入模块版本清单</text>
+<text x="345" y="382" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">/api/* 鉴权与转发</text>
+<text x="345" y="400" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">灰度钩子（按用户）</text>
+<rect x="460" y="290" width="190" height="110" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="555" y="310" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">后端服务（按服务名）</text>
+<text x="555" y="328" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="555" y="346" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">auth-service / system</text>
+<text x="555" y="364" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">ai-service / upload …</text>
+<text x="555" y="382" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">pm2 进程管理</text>
+<rect x="120" y="445" width="310" height="95" rx="8" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.5"/>
+<text x="275" y="465" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">deploy-console 发布平台</text>
+<text x="275" y="483" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="275" y="501" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">前端：模块构建 → 上传版本目录 → 版本表 → 发布指针</text>
+<text x="275" y="519" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">后端：git 拉取 + 构建 + pm2 restart（按服务名，不分模块）</text>
+<text x="275" y="537" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">prod 仅允许发布 master 分支版本</text>
+<rect x="460" y="445" width="190" height="95" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.5"/>
+<text x="555" y="465" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">MySQL 部署库</text>
+<text x="555" y="483" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444"></text>
+<text x="555" y="501" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">modules · versions</text>
+<text x="555" y="519" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">deployments · tasks</text>
+<text x="555" y="537" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="12" fill="#444">audit_logs</text>
+<rect x="40" y="445" width="70" height="95" rx="8" fill="#f5f5f5" stroke="#cccccc" stroke-width="1.5"/>
+<text x="48" y="465" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">图例：</text>
+<text x="48" y="483" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">蓝色 = 数据面</text>
+<text x="48" y="501" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">橙色 = 管控面</text>
+<text x="48" y="519" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">绿色 = 静态资源</text>
+<text x="48" y="537" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">紫色 = 公共依赖</text>
+<text x="48" y="555" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">虚线 = 管控/查询流</text>
+<line x1="370" y1="77" x2="370" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="370" y1="200" x2="135" y2="345" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<rect x="230" y="256" width="58" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="252" y="267" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">/static/*</text>
+<line x1="370" y1="200" x2="345" y2="345" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<rect x="337" y="256" width="52" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="357" y="267" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">页面 / API</text>
+<line x1="345" y1="345" x2="555" y2="345" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<rect x="445" y="329" width="16" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="450" y="340" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">转发</text>
+<line x1="345" y1="345" x2="555" y2="492" stroke="#666" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+<rect x="433" y="402" width="46" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="450" y="413" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">查模块当前版本</text>
+<line x1="275" y1="492" x2="135" y2="345" stroke="#666" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+<rect x="190" y="402" width="40" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="205" y="413" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">上传模块产物</text>
+<line x1="275" y1="492" x2="555" y2="492" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="275" y1="492" x2="555" y2="345" stroke="#666" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+<rect x="393" y="402" width="58" height="14" fill="#ffffff" opacity="0.9"/>
+<text x="415" y="413" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555">git + pm2</text>
+</svg>
