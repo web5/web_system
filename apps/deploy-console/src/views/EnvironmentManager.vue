@@ -57,11 +57,69 @@ async function loadModules() {
   }
 }
 
+// ============ 后端模块默认端口（按环境） ============
+const BACKEND_DEFAULT_PORTS: Record<string, number> = {
+  gateway: 6000,
+  'auth-service': 6001,
+  'user-service': 6002,
+  'ai-service': 6003,
+  'system-service': 6004,
+  'todo-service': 6005,
+  'mcp-gateway': 6006,
+  finnews: 6007,
+  'upload-service': 6008,
+  'deploy-console': 6200,
+}
+const PROD_DEFAULT_PORTS: Record<string, number> = {
+  gateway: 3000,
+  'auth-service': 3001,
+  'user-service': 3002,
+  'ai-service': 3003,
+  'system-service': 3004,
+  'mcp-gateway': 6006,
+}
+const ENV_DEFAULT_HOST: Record<string, string> = {
+  dev: '127.0.0.1',
+  prod: 'portal.kedouai.com',
+  staging: 'stage.kedouai.com',
+}
+
+function hostForEnv(env: any): string {
+  if (env?.publicUrl) {
+    try {
+      return new URL(env.publicUrl).hostname
+    } catch {
+      /* fallthrough */
+    }
+  }
+  return ENV_DEFAULT_HOST[env?.id || ''] || '127.0.0.1'
+}
+
+function portForKey(envId: string, moduleKey: string): number | undefined {
+  if (envId === 'prod') return PROD_DEFAULT_PORTS[moduleKey]
+  return BACKEND_DEFAULT_PORTS[moduleKey]
+}
+
 // ============ 表单行为 ============
+// 从 env 构造各 backend 模块的服务地址：
+// 1) 已配值优先；2) 未配的 backend 模块按环境 ID + 默认端口表预填；
+// 3) frontend / micro-frontend / mini-app 类模块不预填（保留空）。
 function buildPortsFromEnv(env: any): Record<string, string> {
   const ports: Record<string, string> = {}
+  const envId = env?.id || ''
+  const host = hostForEnv(env)
   for (const m of backendModules.value) {
-    ports[m.key] = env?.ports?.[m.key] ?? ''
+    const existing = env?.ports?.[m.key]
+    if (existing) {
+      ports[m.key] = existing
+      continue
+    }
+    if (m.type === 'backend') {
+      const port = portForKey(envId, m.key)
+      ports[m.key] = port ? `${host}:${port}` : ''
+    } else {
+      ports[m.key] = ''
+    }
   }
   return ports
 }
