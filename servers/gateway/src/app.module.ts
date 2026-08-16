@@ -17,6 +17,7 @@ import { GatewayRouteEntity } from './entities/gateway-route.entity';
 import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
 import { DeployDeploymentEntity } from './deploy-version/deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-version/deploy-module.entity';
+import { DeployCanaryRuleEntity } from './deploy-version/deploy-canary-rule.entity';
 import { DeployVersionModule } from './deploy-version/deploy-version.module';
 
 @Module({
@@ -70,7 +71,7 @@ import { DeployVersionModule } from './deploy-version/deploy-version.module';
         username: cfg.get('DEPLOY_DB_USER', 'root'),
         password: cfg.get('DEPLOY_DB_PASSWORD', 'KedouLocal@2026'),
         database: cfg.get('DEPLOY_DB_NAME', 'web_system_deploy'),
-        entities: [DeployDeploymentEntity, DeployModuleEntity],
+        entities: [DeployDeploymentEntity, DeployModuleEntity, DeployCanaryRuleEntity],
         // gateway 是只读消费者，绝不自动建表
         synchronize: false,
         charset: 'utf8mb4',
