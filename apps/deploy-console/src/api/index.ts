@@ -274,6 +274,18 @@ export const serverApi = {
   createRoute: (dto: { envId: string; serviceName: string; serverName: string; port?: number }) =>
     http.post('/env-service-routes', dto) as Promise<any>,
   removeRoute: (id: string) => http.delete(`/env-service-routes/${id}`) as Promise<any>,
+
+  serviceOverview: () =>
+    http.get('/env-service-routes/overview') as Promise<
+      {
+        serviceName: string
+        serviceType: string
+        envId: string
+        address: string
+        serverName: string
+        port?: number
+      }[]
+    >,
 }
 
 export default http

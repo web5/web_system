@@ -32,6 +32,12 @@ export class ServerController {
 export class EnvServiceRouteController {
   constructor(private readonly serverService: ServerService) {}
 
+  @Get('overview')
+  @ApiOperation({ summary: '服务地址总览（服务 × 环境 大表格数据）' })
+  overview() {
+    return this.serverService.getServiceOverview();
+  }
+
   @Get()
   @ApiOperation({ summary: '列出环境服务路由（可按 env 过滤）' })
   list(@Query('env') env?: string) {

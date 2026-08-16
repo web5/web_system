@@ -34,7 +34,7 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '环境管理' },
       },
       {
-        path: 'services',
+        path: 'modules',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),
         meta: { title: '模块管理' },
@@ -44,6 +44,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ModuleDetail',
         component: () => import('@/views/ModuleDetail.vue'),
         meta: { title: '模块详情' },
+      },
+      {
+        path: 'services',
+        name: 'ServiceAddressManager',
+        component: () => import('@/views/ServiceAddressManager.vue'),
+        meta: { title: '服务管理' },
       },
       {
         path: 'monitor',

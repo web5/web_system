@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { DeployServerEntity } from '../entities/deploy-server.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
 import { ServerDto, EnvServiceRouteDto } from '../common/dto';
+import { EnvironmentService } from '../environment/environment.service';
+import { ModuleRegistryService } from '../module-registry/module-registry.service';
 
 /**
  * 服务器组 + 环境服务路由服务。
@@ -17,6 +19,8 @@ export class ServerService {
     private readonly serverRepo: Repository<DeployServerEntity>,
     @InjectRepository(DeployEnvServiceRouteEntity)
     private readonly routeRepo: Repository<DeployEnvServiceRouteEntity>,
+    private readonly environmentService: EnvironmentService,
+    private readonly moduleRegistry: ModuleRegistryService,
   ) {}
 
   // ---------- 服务器 ----------
@@ -97,5 +101,58 @@ export class ServerService {
       order: { host: 'ASC' },
     });
     return servers[0] || null;
+  }
+
+  // ---------- 服务地址总览（供「服务管理」大表格） ----------
+
+  /**
+   * 聚合「服务 × 环境」的完整视图，供服务管理大表格使用。
+   * 每行：服务名 + 环境 + 服务地址（environments.ports）+ 服务器组（env_service_routes）。
+   */
+  async getServiceOverview(): Promise<Array<{
+    serviceName: string;
+    serviceType: string;
+    envId: string;
+    address: string;
+    serverName: string;
+    port?: number;
+  }>> {
+    const [modules, environments, routes] = await Promise.all([
+      this.moduleRegistry.list(),
+      this.environmentService.list(),
+      this.routeRepo.find(),
+    ]);
+
+    const backendModules = modules.filter((m: any) => m.type === 'backend');
+    const routeMap = new Map<string, DeployEnvServiceRouteEntity>();
+    for (const r of routes) {
+      routeMap.set(`${r.envId}:${r.serviceName}`, r);
+    }
+
+    const rows: Array<{
+      serviceName: string;
+      serviceType: string;
+      envId: string;
+      address: string;
+      serverName: string;
+      port?: number;
+    }> = [];
+
+    for (const env of environments) {
+      const ports = (env.ports || {}) as Record<string, string>;
+      for (const m of backendModules) {
+        const route = routeMap.get(`${env.id}:${m.key}`);
+        rows.push({
+          serviceName: m.key,
+          serviceType: m.type,
+          envId: env.id,
+          address: ports[m.key] || '',
+          serverName: route?.serverName || '',
+          port: route?.port,
+        });
+      }
+    }
+
+    return rows;
   }
 }
