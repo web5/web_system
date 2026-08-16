@@ -15,6 +15,9 @@ import { ApiDocsModule } from './api-docs/api-docs.module';
 import { SnakeNamingStrategy } from '@web-system/shared';
 import { GatewayRouteEntity } from './entities/gateway-route.entity';
 import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
+import { DeployDeploymentEntity } from './deploy-version/deploy-deployment.entity';
+import { DeployModuleEntity } from './deploy-version/deploy-module.entity';
+import { DeployVersionModule } from './deploy-version/deploy-version.module';
 
 @Module({
   imports: [
@@ -34,7 +37,8 @@ import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
         username: cfg.get('MYSQL_USER'),
         password: cfg.get('MYSQL_PASSWORD'),
         database: cfg.get('MYSQL_DB'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        // 主库（web_system）只挂网关自身实体；deploy_* 镜像实体只属于下方 'deploy' 连接
+        entities: [GatewayRouteEntity, GatewayAccessLogEntity],
         // 生产环境务必置 false，改用 migrations/ 下的迁移脚本
         synchronize: cfg.get('NODE_ENV') !== 'production',
         charset: 'utf8mb4',
@@ -55,6 +59,26 @@ import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
     SwaggerDocsModule,
     ApiDocsModule,
     TypeOrmModule.forFeature([GatewayRouteEntity, GatewayAccessLogEntity]),
+    // 部署库（只读）：查询「某环境某模块」当前线上版本，供 index.html 版本注入/未来灰度使用
+    TypeOrmModule.forRootAsync({
+      name: 'deploy',
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService) => ({
+        type: 'mysql',
+        host: cfg.get('DEPLOY_DB_HOST', '127.0.0.1'),
+        port: Number(cfg.get('DEPLOY_DB_PORT') || 3306),
+        username: cfg.get('DEPLOY_DB_USER', 'root'),
+        password: cfg.get('DEPLOY_DB_PASSWORD', 'KedouLocal@2026'),
+        database: cfg.get('DEPLOY_DB_NAME', 'web_system_deploy'),
+        entities: [DeployDeploymentEntity, DeployModuleEntity],
+        // gateway 是只读消费者，绝不自动建表
+        synchronize: false,
+        charset: 'utf8mb4',
+        timezone: 'local',
+        namingStrategy: new SnakeNamingStrategy(),
+      }),
+    }),
+    DeployVersionModule,
   ],
   providers: [
     // 重要：Guard 顺序决定了执行顺序，先全局鉴权再限流

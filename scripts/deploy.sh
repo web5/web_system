@@ -7,7 +7,7 @@
 #   ./scripts/deploy.sh                    # 部署 dev 全部
 #   ./scripts/deploy.sh prod               # 部署 prod 全部
 #   ./scripts/deploy.sh dev portal         # 只部署 portal 前端到 dev
-#   ./scripts/deploy.sh prod admin         # 只部署 admin-web 到 prod
+#   ./scripts/deploy.sh prod admin         # 只部署 admin 到 prod
 #   ./scripts/deploy.sh dev system         # 只部署 system-service 到 dev
 #   ./scripts/deploy.sh dev seed           # 只执行变变素材种子初始化
 # ===========================================================
@@ -92,14 +92,18 @@ deploy_portal() {
   npx vite build 2>&1 || err "Portal 构建失败"
   log "Portal 构建完成"
 
-  log "同步到远程服务器（public/portal/）..."
-  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/portal"
-  tar czf - dist | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/portal && rm -rf ./* && tar xzf - --strip-components=1"
+  # 版本目录名：优先用后端传入的 RELEASE_TAG（与版本表 versionTag 一致）
+  local tag="${RELEASE_TAG:-manual-$(date +%Y%m%d-%H%M%S)}"
+  log "同步到远程服务器（public/versions/portal/$tag/ + public/portal/ 兜底）..."
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/versions/portal/$tag"
+  tar czf - dist | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/versions/portal/$tag && rm -rf ./* && tar xzf - --strip-components=1"
+  # 兜底目录（gateway 版本解析失败/未升级时的稳定版本）
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/portal && cd $REMOTE_DIR/servers/gateway/public/portal && rm -rf ./* && cp -r ../versions/portal/$tag/* ./"
   # 素材 SVG 同步到独立路径 public/materials/，与页面路由分离
-  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/materials && cp -r $REMOTE_DIR/servers/gateway/public/portal/materials/* $REMOTE_DIR/servers/gateway/public/materials/"
-  # 清理旧的 portal 根路径文件（迁移到 /portal/ 后不再需要）
-  ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public && find . -maxdepth 1 -not -name '.' -not -name 'admin' -not -name 'portal' -not -name 'materials' -exec rm -rf {} + 2>/dev/null; true"
-  log "Portal 同步完成"
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/materials && cp -r $REMOTE_DIR/servers/gateway/public/versions/portal/$tag/materials/* $REMOTE_DIR/servers/gateway/public/materials/"
+  # 清理旧的 portal 根路径文件（迁移到 /portal/ 后不再需要；保留 versions 目录）
+  ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public && find . -maxdepth 1 -not -name '.' -not -name 'admin' -not -name 'portal' -not -name 'materials' -not -name 'versions' -exec rm -rf {} + 2>/dev/null; true"
+  log "Portal 同步完成（版本目录: versions/portal/$tag）"
 
   deploy_gateway_restart
 }
@@ -120,12 +124,53 @@ deploy_frontend() {
   eval "$buildCmd" 2>&1 || err "$dir 构建失败"
   log "$dir 构建完成"
 
-  log "同步到远程服务器（public/$pub/）..."
-  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/$pub"
-  tar czf - dist | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/$pub && rm -rf ./* && tar xzf - --strip-components=1"
-  log "$dir 同步完成"
+  # 版本目录名：优先用后端传入的 RELEASE_TAG（与版本表 versionTag 一致）
+  local tag="${RELEASE_TAG:-manual-$(date +%Y%m%d-%H%M%S)}"
+  log "同步到远程服务器（public/versions/$pub/$tag/ + public/$pub/ 兜底）..."
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/versions/$pub/$tag"
+  tar czf - dist | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/servers/gateway/public/versions/$pub/$tag && rm -rf ./* && tar xzf - --strip-components=1"
+  # 兜底目录（gateway 版本解析失败/未升级时的稳定版本）
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/servers/gateway/public/$pub && cd $REMOTE_DIR/servers/gateway/public/$pub && rm -rf ./* && cp -r ../versions/$pub/$tag/* ./"
+  log "$dir 同步完成（版本目录: versions/$pub/$tag）"
 
   deploy_gateway_restart
+}
+
+# ===========================================================
+# 微前端模块发布：本地 vite build --mode mf → 上传到 nginx static/modules 目录
+# 替代 deploy_frontend（旧函数保留作过渡，新发布一律走本函数）
+# 用法: deploy_micro_frontend <module-key>
+# 环境变量: RELEASE_TAG（版本号=git commit）、DEPLOY_MODULE_KEY
+# 产物: $REMOTE_DIR/static/modules/<module-key>/<version>/{index.js,index.css,manifest.json}
+# 不重启 gateway/nginx（gateway versionCache TTL 10s 过期后自动生效）
+# ===========================================================
+deploy_micro_frontend() {
+  local key="$1"
+  if [ -z "$key" ]; then key="$DEPLOY_MODULE_KEY"; fi
+  [ -z "$key" ] && err "deploy_micro_frontend 需要模块 key 参数"
+
+  local moduleDef
+  moduleDef=$(resolve_module "$key") || err "模块未注册: $key"
+  local dir
+  dir=$(echo "$moduleDef" | jq -r '.dir')
+  local pub
+  pub=$(echo "$moduleDef" | jq -r '.publicPath')
+
+  log "===== 部署微前端模块 $key (dir=$dir) ====="
+  cd "$SCRIPT_DIR/apps/$dir"
+
+  local tag="${RELEASE_TAG:-$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)}"
+  log "构建 $dir (vite build --mode mf, version=$tag)..."
+  RELEASE_TAG=$tag npx vite build --mode mf 2>&1 || err "$dir 微前端构建失败"
+  log "$dir 构建完成 (index.js + index.css + manifest.json)"
+
+  # 上传到 nginx 静态目录（不走 gateway public）
+  log "同步到 nginx 静态目录 ($SERVER:$REMOTE_DIR/static/modules/$key/$tag/)..."
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/static/modules/$key/$tag"
+  tar czf - -C dist . | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/static/modules/$key/$tag && rm -rf ./* && tar xzf -"
+  log "$key 同步完成 (版本目录: static/modules/$key/$tag)"
+
+  # 不重启 gateway/nginx
 }
 
 # ===========================================================
@@ -202,29 +247,41 @@ deploy_gateway_restart() {
 }
 
 # ===========================================================
-# 模块分发（唯一真相源: scripts/modules.json）
-# 根据模块 key 解析类型/目录/pm2名/前端public路径，自动选择发布方式
+# 模块分发
+# 优先使用部署服务注入的模块定义（DEPLOY_MODULE_JSON，来自 DB 模块注册表 deploy_modules），
+# 未注入（手动执行脚本）时回退 scripts/modules.json
 # ===========================================================
 resolve_module() {
   local key="$1"
+  if [ -n "$DEPLOY_MODULE_JSON" ]; then
+    node -e "const m=JSON.parse(process.argv[1]); if(m.key!==process.argv[2]){process.exit(1)} console.log([m.type, m.dir, m.publicPath||'', m.buildCmd||'', m.pm2||''].join('\t'))" "$DEPLOY_MODULE_JSON" "$key" 2>/dev/null && return 0
+  fi
   node -e "const m=require('$SCRIPT_DIR/scripts/modules.json').find(x=>x.key==='$key'); if(!m){process.exit(1)} console.log([m.type, m.dir, m.publicPath||'', m.buildCmd||'', m.pm2||''].join('\t'))" 2>/dev/null
 }
 
 deploy_module() {
   local key="$1"
   local info
-  info="$(resolve_module "$key")" || err "未知模块: $key（请检查 scripts/modules.json）"
+  info="$(resolve_module "$key")" || err "未知模块: $key（请检查模块注册表/DB 或 scripts/modules.json）"
   local TYPE DIR PUB BUILDCMD PM2
   IFS=$'\t' read -r TYPE DIR PUB BUILDCMD PM2 <<< "$info"
   case "$TYPE" in
     backend)
       deploy_backend_git "$DIR" "${PM2:-$DIR}"
       ;;
-    frontend)
+    frontend | micro-frontend)
+      # shell 仍走旧 deploy_frontend（基座独立 SPA）；mini-app 走自有上传
       case "$key" in
-        portal)   deploy_portal ;;
+        shell)    deploy_frontend "$DIR" "$PUB" "$BUILDCMD" ;;
         mini-app) deploy_mini_app ;;
-        *)        deploy_frontend "$DIR" "$PUB" "$BUILDCMD" ;;
+        *)
+          # 其它 micro-frontend 模块统一走 deploy_micro_frontend（vite build --mode mf + nginx static/modules/）
+          if [ "$TYPE" = "micro-frontend" ]; then
+            deploy_micro_frontend "$key"
+          else
+            deploy_frontend "$DIR" "$PUB" "$BUILDCMD"
+          fi
+          ;;
       esac
       ;;
     *)
@@ -281,9 +338,9 @@ deploy_all() {
   deploy_backend_git upload-service upload-service
   deploy_backend_git mcp-gateway mcp-gateway
   deploy_backend_git finnews finnews
-  deploy_portal
-  deploy_frontend admin-web admin
-  deploy_frontend mcp-admin mcp-admin
+  deploy_micro_frontend portal
+  deploy_micro_frontend admin
+  deploy_frontend shell shell
   deploy_config
 
   # 保存 PM2 配置
@@ -365,6 +422,11 @@ case "$COMPONENT" in
     ;;
   seed)
     seed_bianbian
+    ;;
+  micro-frontend:*)
+    # deploy-console publishModule 调用：component=micro-frontend:<key>
+    key="${COMPONENT#micro-frontend:}"
+    deploy_micro_frontend "$key"
     ;;
   *)
     deploy_module "$COMPONENT"

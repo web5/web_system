@@ -17,6 +17,7 @@ import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
+import { ModuleRegistryService } from '../module-registry/module-registry.service';
 
 /**
  * 任务状态枚举
@@ -67,6 +68,7 @@ export class DeployService {
     @InjectRepository(DeployDeploymentEntity)
     private readonly deploymentRepo: Repository<DeployDeploymentEntity>,
     private readonly environmentService: EnvironmentService,
+    private readonly moduleRegistry: ModuleRegistryService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -288,14 +290,182 @@ export class DeployService {
 
   /**
    * 启动部署（生成版本标签，传给部署脚本做 releases 快照）
+   * 现网(prod)只允许发布 master 分支构建
    */
   async startDeploy(env: string, component: string, operator?: string): Promise<string> {
+    if (env === 'prod') {
+      await this.assertMasterBranch();
+    }
     const versionTag = this.generateVersionTag();
     const task = await this.createTask('deploy', component, env, versionTag, operator);
     const webSystemDir = this.getWebSystemDir();
     this.logger.log(`开始部署任务: ${task.id}, 环境: ${env}, 组件: ${component}, 版本: ${versionTag}`);
     this.executeDeployScript(task, webSystemDir, env, component, versionTag);
     return task.id;
+  }
+
+  /** 现网约束：当前本地分支必须为 master */
+  private async assertMasterBranch(): Promise<void> {
+    let branch = '';
+    try {
+      branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: this.getWebSystemDir(),
+        encoding: 'utf-8',
+      }).trim();
+    } catch {
+      throw new BadRequestException('无法读取当前 Git 分支，禁止发布现网');
+    }
+    if (branch !== 'master') {
+      throw new BadRequestException(`现网(prod)仅允许发布 master 分支的版本，当前分支: ${branch}`);
+    }
+  }
+
+  /**
+   * 发布指定版本（版本库任选，不重新构建）
+   * - 前端/微前端模块：产物已持久化在 gateway public/versions/<publicPath>/<versionTag>/，
+   *   仅更新该环境当前版本指针（deploy_deployments），gateway 10s 内生效 —— 秒级切换/回滚
+   * - 后端模块：暂不支持（走"部署"或"回滚"）
+   * - 现网(prod)仅允许发布 gitBranch=master 的版本
+   */
+  async startPublishVersion(env: string, versionTag: string, operator?: string): Promise<{ component: string }> {
+    const version = await this.versionRepo.findOne({ where: { versionTag } });
+    if (!version) {
+      throw new BadRequestException(`版本不存在: ${versionTag}`);
+    }
+    const component = version.component;
+    const moduleDef = await this.moduleRegistry.list().then((rows) => rows.find((m) => m.key === component));
+    const type = moduleDef?.type;
+    if (type && type !== 'frontend' && type !== 'micro-frontend') {
+      throw new BadRequestException(
+        `模块 ${component} 类型为 ${type}，指定版本发布仅支持前端/微前端模块（后端请使用部署或回滚）`,
+      );
+    }
+    if (env === 'prod') {
+      if (version.gitBranch && version.gitBranch !== 'master') {
+        throw new BadRequestException(
+          `现网(prod)仅允许发布 master 分支的版本，该版本来自分支: ${version.gitBranch}`,
+        );
+      }
+      if (!version.gitBranch) {
+        throw new BadRequestException('该版本未记录来源分支，禁止发布现网');
+      }
+    }
+
+    // 切换当前版本指针
+    const existing = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey: component } });
+    const row = existing ?? new DeployDeploymentEntity();
+    row.envId = env;
+    row.moduleKey = component;
+    row.currentVersion = versionTag;
+    row.status = 'deployed';
+    row.deployedAt = new Date();
+    row.deployedBy = operator;
+    await this.deploymentRepo.save(row);
+
+    // 版本库补一条该环境的发布记录
+    const v = new DeployVersionEntity();
+    v.env = env;
+    v.component = component;
+    v.versionTag = versionTag;
+    v.gitCommit = version.gitCommit;
+    v.gitBranch = version.gitBranch;
+    v.releasedBy = operator;
+    v.releasedAt = new Date();
+    v.status = 'active';
+    v.note = '指定版本发布（未重新构建，秒级切换）';
+    await this.versionRepo.save(v);
+
+    this.logger.log(`版本切换完成: ${env}/${component} → ${versionTag} (by ${operator})`);
+    return { component };
+  }
+
+  /**
+   * 发布微前端模块：本地构建 → 上传到 nginx static/modules/ → 写版本表 + deployments 指针。
+   * 不重启 gateway/nginx（gateway versionCache TTL 10s 过期后自动生效）。
+   * prod 环境仅允许 master 分支。
+   */
+  async publishModule(
+    env: string,
+    moduleKey: string,
+    branch: string | undefined,
+    operator: string,
+  ): Promise<{ version: string }> {
+    const mod = await this.moduleRegistry.get(moduleKey);
+    if (mod.type !== 'micro-frontend') {
+      throw new BadRequestException(`模块 ${moduleKey} 类型为 ${mod.type}，仅支持 micro-frontend`);
+    }
+
+    // 取当前 git 分支（未传则读仓库）
+    const webSystemDir = this.getWebSystemDir();
+    const gitBranch =
+      branch ||
+      execSync('git rev-parse --abbrev-ref HEAD', { cwd: webSystemDir, encoding: 'utf-8' }).trim();
+    const commit = execSync('git rev-parse --short HEAD', { cwd: webSystemDir, encoding: 'utf-8' }).trim();
+    const version = commit;
+
+    if (env === 'prod' && gitBranch !== 'master') {
+      throw new BadRequestException(`现网仅允许发布 master 分支版本，当前分支: ${gitBranch}`);
+    }
+
+    this.logger.log(`发布微前端模块: ${env}/${moduleKey} @ ${version} (branch=${gitBranch}, by ${operator})`);
+
+    // 1. 本地构建（调 build-module.mjs）
+    execSync(`node scripts/build-module.mjs ${moduleKey} --branch ${gitBranch}`, {
+      cwd: webSystemDir,
+      stdio: 'pipe',
+      env: { ...process.env, RELEASE_TAG: version },
+    });
+
+    // 2. 读 manifest 拿产物信息
+    const manifestPath = path.join(webSystemDir, 'apps', mod.dir, 'dist', 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+
+    // 3. 上传到远端 nginx 静态目录（通过 deploy.sh 的 deploy_micro_frontend 函数）
+    const envVars = await this.buildEnvVars(env);
+    const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
+    const child = spawn(
+      'bash',
+      [scriptPath, env, `micro-frontend:${moduleKey}`],
+      {
+        cwd: webSystemDir,
+        env: { ...process.env, ...envVars, RELEASE_TAG: version, DEPLOY_MODULE_KEY: moduleKey },
+      },
+    );
+    await new Promise<void>((resolve, reject) => {
+      let stderr = '';
+      child.stdout.on('data', (d) => this.logger.log(d.toString()));
+      child.stderr.on('data', (d) => { stderr += d.toString(); this.logger.warn(d.toString()); });
+      child.on('close', (code) =>
+        code === 0 ? resolve() : reject(new BadRequestException(`上传失败: ${stderr}`)),
+      );
+    });
+
+    // 4. 写版本表
+    const v = new DeployVersionEntity();
+    v.env = env;
+    v.component = `mf:${moduleKey}`;
+    v.versionTag = version;
+    v.gitCommit = commit;
+    v.gitBranch = gitBranch;
+    v.releasedBy = operator;
+    v.releasedAt = new Date();
+    v.status = 'active';
+    v.note = '微前端模块发布（vite build --mode mf + nginx static）';
+    await this.versionRepo.save(v);
+
+    // 5. 更新 deployments 指针
+    const existing = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey } });
+    const row = existing ?? new DeployDeploymentEntity();
+    row.envId = env;
+    row.moduleKey = moduleKey;
+    row.currentVersion = version;
+    row.status = 'deployed';
+    row.deployedAt = new Date();
+    row.deployedBy = operator;
+    await this.deploymentRepo.save(row);
+
+    this.logger.log(`微前端模块发布完成: ${env}/${moduleKey} @ ${version}`);
+    return { version };
   }
 
   /**
@@ -338,6 +508,20 @@ export class DeployService {
     const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
     void this.updateTask(task, 'running', `执行部署: bash scripts/deploy.sh ${env} ${component} ${versionTag}`);
     const envVars = await this.buildEnvVars(env);
+    // 注入模块注册表定义（DB 唯一真相源）；查不到时 deploy.sh 自行 fallback modules.json
+    try {
+      const m = await this.moduleRegistry.get(component);
+      envVars.DEPLOY_MODULE_JSON = JSON.stringify({
+        key: m.key,
+        type: m.type,
+        dir: m.dir,
+        publicPath: m.publicPath ?? '',
+        buildCmd: m.buildCmd ?? '',
+        pm2: m.pm2 ?? '',
+      });
+    } catch {
+      this.logger.warn(`模块注册表无 ${component}，deploy.sh 将回退 modules.json`);
+    }
     const child = spawn('bash', [scriptPath, env, component, versionTag], {
       cwd: webSystemDir,
       env: { ...process.env, ...envVars },
@@ -452,6 +636,13 @@ export class DeployService {
    * 列出可发布模块（读 scripts/modules.json，作为前端/脚本唯一真相源）
    */
   async listModules(): Promise<any[]> {
+    // 模块注册表以 DB 为唯一真相源；DB 为空/异常时回退 modules.json
+    try {
+      const rows = await this.moduleRegistry.list();
+      if (rows.length > 0) return rows;
+    } catch (e) {
+      this.logger.warn(`读取模块注册表(DB)失败，回退 modules.json: ${e.message}`);
+    }
     const file = path.join(this.getWebSystemDir(), 'scripts', 'modules.json');
     try {
       const raw = fs.readFileSync(file, 'utf-8');

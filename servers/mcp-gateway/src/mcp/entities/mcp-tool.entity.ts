@@ -16,7 +16,7 @@ export class McpToolEntity {
   @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true, comment: '工具 ID' })
   id: number;
 
-  @Column({ comment: '所属模块 ID' })
+  @Column({ type: 'bigint', unsigned: true, comment: '所属模块 ID' })
   module_id: number;
 
   @ManyToOne(() => McpModuleEntity, (module) => module.tools, {

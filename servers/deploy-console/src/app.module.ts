@@ -9,6 +9,8 @@ import { DeployModule } from './deploy/deploy.module';
 import { MonitorModule } from './monitor/monitor.module';
 import { AuditModule } from './audit/audit.module';
 import { EnvironmentModule } from './environment/environment.module';
+import { ModuleRegistryModule } from './module-registry/module-registry.module';
+import { CanaryModule } from './canary/canary.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { EnvironmentModule } from './environment/environment.module';
     MonitorModule,
     AuditModule,
     EnvironmentModule,
+    ModuleRegistryModule,
+    CanaryModule,
   ],
 })
 export class AppModule {}
