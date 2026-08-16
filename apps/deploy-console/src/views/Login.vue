@@ -26,7 +26,7 @@ async function handleLogin() {
   try {
     await authStore.login(formState.username, formState.password)
     message.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/console/dashboard'
+    const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
   } catch (err: any) {
     message.error(err.response?.data?.message || '登录失败，请检查用户名和密码')

@@ -14,10 +14,6 @@ const saving = ref(false)
 const envForm = reactive({
   id: '',
   name: '',
-  host: '',
-  sshUser: '',
-  sshKeyPath: '~/.ssh/id_ed25519_servers',
-  remoteDir: '/data/web_system',
   publicUrl: '',
   portsText: '{}',
 })
@@ -39,10 +35,6 @@ function openCreate() {
   Object.assign(envForm, {
     id: '',
     name: '',
-    host: '',
-    sshUser: '',
-    sshKeyPath: '~/.ssh/id_ed25519_servers',
-    remoteDir: '/data/web_system',
     publicUrl: '',
     portsText: '{}',
   })
@@ -53,10 +45,6 @@ function openEdit(e: any) {
   Object.assign(envForm, {
     id: e.id,
     name: e.name,
-    host: e.host,
-    sshUser: e.sshUser,
-    sshKeyPath: e.sshKeyPath || '~/.ssh/id_ed25519_servers',
-    remoteDir: e.remoteDir,
     publicUrl: e.publicUrl || '',
     portsText: JSON.stringify(e.ports || {}, null, 2),
   })
@@ -72,10 +60,6 @@ async function saveEnv() {
   const dto = {
     id: envForm.id,
     name: envForm.name,
-    host: envForm.host,
-    sshUser: envForm.sshUser,
-    sshKeyPath: envForm.sshKeyPath,
-    remoteDir: envForm.remoteDir,
     publicUrl: envForm.publicUrl,
     ports,
   }
@@ -126,7 +110,7 @@ onMounted(loadEnvironments)
   <div>
     <div class="page-header">
       <h2>环境管理</h2>
-      <p>环境为一等公民：SSH 与后端模块端口随环境配置，不同环境指向不同服务进程端口。dev / prod 为内置环境（不可删，端口可改），其余可任意增删。</p>
+      <p>环境为一等公民：后端模块端口随环境配置，不同环境指向不同服务进程端口。服务器连接信息在「服务器管理」中配置（serverName 服务器组）。dev / prod 为内置环境（不可删，端口可改），其余可任意增删。</p>
     </div>
 
     <a-card style="margin-bottom: 16px;">
@@ -138,8 +122,7 @@ onMounted(loadEnvironments)
         :columns="[
           { title: 'ID', dataIndex: 'id', key: 'id', width: 120 },
           { title: '名称', dataIndex: 'name', key: 'name' },
-          { title: '主机', dataIndex: 'host', key: 'host' },
-          { title: 'SSH 用户', dataIndex: 'sshUser', key: 'sshUser', width: 120 },
+          { title: '公网地址', dataIndex: 'publicUrl', key: 'publicUrl' },
           { title: '内置', dataIndex: 'builtin', key: 'builtin', width: 90 },
           { title: '操作', key: 'action', width: 160 },
         ]"
@@ -176,23 +159,6 @@ onMounted(loadEnvironments)
           </a-col>
         </a-row>
         <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="SSH 主机">
-              <a-input v-model:value="envForm.host" placeholder="如 1.2.3.4" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="SSH 用户">
-              <a-input v-model:value="envForm.sshUser" placeholder="如 ubuntu" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="远端目录">
-              <a-input v-model:value="envForm.remoteDir" placeholder="/data/web_system" />
-            </a-form-item>
-          </a-col>
           <a-col :span="12">
             <a-form-item label="公网地址">
               <a-input v-model:value="envForm.publicUrl" placeholder="https://..." />

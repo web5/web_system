@@ -234,7 +234,7 @@ onUnmounted(() => {
         </a-select-option>
       </a-select>
       <a-button style="margin-left: 16px;" :loading="modulesLoading" @click="loadModules">刷新模块</a-button>
-      <a-button style="margin-left: 8px;" type="link" @click="$router.push('/console/environments')">环境管理</a-button>
+      <a-button style="margin-left: 8px;" type="link" @click="$router.push('/environments')">环境管理</a-button>
     </a-card>
 
     <!-- 模块列表（含当前版本）-->
