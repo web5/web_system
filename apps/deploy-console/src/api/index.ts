@@ -280,10 +280,12 @@ export const serverApi = {
       {
         serviceName: string
         serviceType: string
-        envId: string
-        address: string
-        serverName: string
-        port?: number
+        environments: {
+          envId: string
+          address: string
+          serverName: string
+          port?: number
+        }[]
       }[]
     >,
 }

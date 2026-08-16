@@ -103,19 +103,22 @@ export class ServerService {
     return servers[0] || null;
   }
 
-  // ---------- 服务地址总览（供「服务管理」大表格） ----------
+  // ---------- 服务环境总览（供「服务管理」按服务 tab 维护） ----------
 
   /**
-   * 聚合「服务 × 环境」的完整视图，供服务管理大表格使用。
-   * 每行：服务名 + 环境 + 服务地址（environments.ports）+ 服务器组（env_service_routes）。
+   * 聚合「服务 → 多个服务环境」的视图。
+   * 每个服务挂多个「服务环境」：服务环境 = 环境 + 服务地址（environments.ports）+ 服务器组（env_service_routes）。
+   * 「服务地址」是服务环境自身的属性（用户直接维护），不是从 serverName 推导。
    */
   async getServiceOverview(): Promise<Array<{
     serviceName: string;
     serviceType: string;
-    envId: string;
-    address: string;
-    serverName: string;
-    port?: number;
+    environments: Array<{
+      envId: string;
+      address: string;
+      serverName: string;
+      port?: number;
+    }>;
   }>> {
     const [modules, environments, routes] = await Promise.all([
       this.moduleRegistry.list(),
@@ -129,30 +132,36 @@ export class ServerService {
       routeMap.set(`${r.envId}:${r.serviceName}`, r);
     }
 
-    const rows: Array<{
+    const result: Array<{
       serviceName: string;
       serviceType: string;
-      envId: string;
-      address: string;
-      serverName: string;
-      port?: number;
+      environments: Array<{
+        envId: string;
+        address: string;
+        serverName: string;
+        port?: number;
+      }>;
     }> = [];
 
-    for (const env of environments) {
-      const ports = (env.ports || {}) as Record<string, string>;
-      for (const m of backendModules) {
+    for (const m of backendModules) {
+      const envs: Array<{ envId: string; address: string; serverName: string; port?: number }> = [];
+      for (const env of environments) {
+        const ports = (env.ports || {}) as Record<string, string>;
         const route = routeMap.get(`${env.id}:${m.key}`);
-        rows.push({
-          serviceName: m.key,
-          serviceType: m.type,
+        envs.push({
           envId: env.id,
           address: ports[m.key] || '',
           serverName: route?.serverName || '',
           port: route?.port,
         });
       }
+      result.push({
+        serviceName: m.key,
+        serviceType: m.type,
+        environments: envs,
+      });
     }
 
-    return rows;
+    return result;
   }
 }
