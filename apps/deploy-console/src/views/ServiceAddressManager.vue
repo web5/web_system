@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { serverApi, environmentApi } from '@/api'
 
 // ============ 状态 ============
-const overview = ref<any[]>([])
+const services = ref<any[]>([]) // [{ serviceName, serviceType, environments: [...] }]
 const loading = ref(false)
 const envList = ref<any[]>([])
 const serverNameOptions = ref<string[]>([])
-const envFilter = ref<string | undefined>(undefined)
+const activeService = ref<string>('')
 
 async function loadOverview() {
   loading.value = true
@@ -18,37 +18,43 @@ async function loadOverview() {
       environmentApi.list(),
       serverApi.listServers(),
     ])
-    overview.value = rows
+    services.value = rows
     envList.value = envs
     serverNameOptions.value = Array.from(new Set(servers.map((s) => s.serverName)))
+    if (rows.length && !activeService.value) {
+      activeService.value = rows[0].serviceName
+    }
   } catch {
-    message.error('加载服务地址失败')
+    message.error('加载服务环境失败')
   } finally {
     loading.value = false
   }
 }
 
-const filteredRows = computed(() => {
-  if (!envFilter.value) return overview.value
-  return overview.value.filter((r) => r.envId === envFilter.value)
-})
+function currentService(): any {
+  return services.value.find((s) => s.serviceName === activeService.value)
+}
+
+function envName(envId: string): string {
+  const e = envList.value.find((x) => x.id === envId)
+  return e ? `${e.name}（${e.id}）` : envId
+}
 
 // ============ 编辑服务地址（写回 environments.ports） ============
-async function saveAddress(row: any, val: string) {
-  const env = envList.value.find((e) => e.id === row.envId)
+async function saveAddress(envRow: any, val: string) {
+  const env = envList.value.find((e) => e.id === envRow.envId)
   if (!env) return
   const ports = { ...(env.ports || {}) }
   const trimmed = (val || '').trim()
   if (trimmed) {
-    ports[row.serviceName] = trimmed
+    ports[activeService.value] = trimmed
   } else {
-    delete ports[row.serviceName]
+    delete ports[activeService.value]
   }
   try {
-    await environmentApi.update(row.envId, { ports })
-    message.success(`已更新 ${row.serviceName}@${row.envId} 地址`)
-    // 本地同步
-    row.address = trimmed
+    await environmentApi.update(envRow.envId, { ports })
+    message.success(`已更新 ${activeService.value}@${envRow.envId} 地址`)
+    envRow.address = trimmed
     env.ports = ports
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存地址失败')
@@ -56,15 +62,16 @@ async function saveAddress(row: any, val: string) {
 }
 
 // ============ 编辑服务器组（写回 env_service_routes） ============
-async function saveServerName(row: any, val: string) {
+async function saveServerName(envRow: any, val: string) {
   try {
     await serverApi.createRoute({
-      envId: row.envId,
-      serviceName: row.serviceName,
+      envId: envRow.envId,
+      serviceName: activeService.value,
       serverName: val || '',
+      port: envRow.port,
     })
-    message.success(`已更新 ${row.serviceName}@${row.envId} 服务器组`)
-    row.serverName = val || ''
+    message.success(`已更新 ${activeService.value}@${envRow.envId} 服务器组`)
+    envRow.serverName = val || ''
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存服务器组失败')
   }
@@ -77,70 +84,55 @@ onMounted(loadOverview)
   <div>
     <div class="page-header">
       <h2>服务管理</h2>
-      <p>维护后端服务在各环境的「服务地址（ip:端口 / 域名）」和「服务器组」映射。地址写入环境 ports，服务器组写入环境服务路由。</p>
+      <p>每个服务有多个「服务环境」（服务 × 环境）。服务环境 = 服务地址（ip:端口）+ 服务器组，逐服务用 tab 维护。</p>
     </div>
 
-    <a-card>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <a-space>
-          <span>共 {{ filteredRows.length }} 条（服务 × 环境）</span>
-          <a-select
-            v-model:value="envFilter"
-            placeholder="按环境筛选"
-            allow-clear
-            style="width: 200px;"
+    <a-card :loading="loading">
+      <a-tabs v-model:active-key="activeService" tab-position="left" type="editable-card" hide-add>
+        <a-tab-pane v-for="s in services" :key="s.serviceName" :tab="s.serviceName">
+          <a-table
+            :columns="[
+              { title: '环境', dataIndex: 'envId', key: 'envId', width: 160 },
+              { title: '服务地址（ip:端口）', key: 'address', width: 320 },
+              { title: '服务器组', key: 'serverName', width: 260 },
+            ]"
+            :data-source="s.environments"
+            :pagination="false"
+            :row-key="(r: any) => r.envId"
+            size="small"
           >
-            <a-select-option v-for="e in envList" :key="e.id" :value="e.id">
-              {{ e.name }}（{{ e.id }}）
-            </a-select-option>
-          </a-select>
-        </a-space>
-        <a-button @click="loadOverview">刷新</a-button>
-      </div>
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'envId'">
+                {{ envName(record.envId) }}
+              </template>
+              <template v-else-if="column.key === 'address'">
+                <a-input
+                  :value="record.address"
+                  placeholder="如 127.0.0.1:6000 或 dev.kedouai.com"
+                  style="width: 280px;"
+                  @press-enter="(e: any) => saveAddress(record, e.target.value)"
+                  @blur="(e: any) => { const v = e.target.value; if (v !== record.address) saveAddress(record, v) }"
+                />
+              </template>
+              <template v-else-if="column.key === 'serverName'">
+                <a-select
+                  :value="record.serverName || undefined"
+                  placeholder="选择服务器组"
+                  allow-clear
+                  style="width: 200px;"
+                  @change="(v: any) => saveServerName(record, v || '')"
+                >
+                  <a-select-option v-for="n in serverNameOptions" :key="n" :value="n">
+                    {{ n }}
+                  </a-select-option>
+                </a-select>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+      </a-tabs>
 
-      <a-table
-        :columns="[
-          { title: '服务名', dataIndex: 'serviceName', key: 'serviceName', width: 180, fixed: 'left' },
-          { title: '环境', dataIndex: 'envId', key: 'envId', width: 100 },
-          { title: '服务地址（ip:端口）', dataIndex: 'address', key: 'address', width: 300 },
-          { title: '服务器组', dataIndex: 'serverName', key: 'serverName', width: 220 },
-        ]"
-        :data-source="filteredRows"
-        :loading="loading"
-        :pagination="false"
-        :row-key="(r: any) => r.serviceName + ':' + r.envId"
-        size="small"
-        :scroll="{ x: 900 }"
-        :locale="{ emptyText: '暂无数据，请先在「模块管理」创建 backend 模块' }"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'serviceName'">
-            <strong>{{ record.serviceName }}</strong>
-          </template>
-          <template v-else-if="column.key === 'address'">
-            <a-input
-              :value="record.address"
-              placeholder="如 127.0.0.1:6000"
-              style="width: 260px;"
-              @press-enter="(e: any) => saveAddress(record, e.target.value)"
-              @blur="(e: any) => { const v = e.target.value; if (v !== record.address) saveAddress(record, v) }"
-            />
-          </template>
-          <template v-else-if="column.key === 'serverName'">
-            <a-select
-              :value="record.serverName || undefined"
-              placeholder="选择服务器组"
-              allow-clear
-              style="width: 180px;"
-              @change="(v: any) => saveServerName(record, v || '')"
-            >
-              <a-select-option v-for="n in serverNameOptions" :key="n" :value="n">
-                {{ n }}
-              </a-select-option>
-            </a-select>
-          </template>
-        </template>
-      </a-table>
+      <a-empty v-if="!services.length" description="暂无 backend 模块，请先在「模块管理」创建" style="margin: 40px 0;" />
     </a-card>
   </div>
 </template>
