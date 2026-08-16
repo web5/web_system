@@ -7,6 +7,11 @@ node_modules/
 dist/
 build/
 *.local
+*.tsbuildinfo
+
+# 微前端构建产物（由 build-module.mjs / build-externals.mjs / shell 构建生成，rsync 部署到 gateway public）
+servers/gateway/public/shell/
+servers/gateway/public/static/
 
 # Vite 加载 TS 配置时生成的临时文件
 *.timestamp-*.mjs
