@@ -25,7 +25,8 @@ const envForm = reactive({
   id: '',
   name: '',
   publicUrl: '',
-  ports: {} as Record<string, number>, // { moduleKey: port }
+  // { moduleKey: 服务地址（'host:port' 或域名，留空 = 不部署） }
+  ports: {} as Record<string, string>,
 })
 
 // ============ 数据加载 ============
@@ -57,11 +58,10 @@ async function loadModules() {
 }
 
 // ============ 表单行为 ============
-function buildPortsFromEnv(env: any): Record<string, number> {
-  // 优先用环境自己的 ports，否则按模块默认端口 0
-  const ports: Record<string, number> = {}
+function buildPortsFromEnv(env: any): Record<string, string> {
+  const ports: Record<string, string> = {}
   for (const m of backendModules.value) {
-    ports[m.key] = env?.ports?.[m.key] ?? 0
+    ports[m.key] = env?.ports?.[m.key] ?? ''
   }
   return ports
 }
@@ -76,6 +76,7 @@ function openCreate() {
     publicUrl: '',
     ports: buildPortsFromEnv(null),
   })
+  rebuildServiceRows()
 }
 
 function openEdit(e: any) {
@@ -88,9 +89,10 @@ function openEdit(e: any) {
     publicUrl: e.publicUrl || '',
     ports: buildPortsFromEnv(e),
   })
+  rebuildServiceRows()
 }
 
-// base 环境变化 → 把它的端口填到表单（仅新建且用户没编辑过 ports 时）
+// base 环境变化 → 把它的地址填到表单（仅新建模式）
 function onBaseEnvChange(val: string | undefined) {
   if (editingEnvId.value) return // 编辑模式不响应
   if (!val) return
@@ -100,9 +102,10 @@ function onBaseEnvChange(val: string | undefined) {
     ports: buildPortsFromEnv(base),
     name: base.name ? `${base.name}（副本）` : envForm.name,
   })
+  rebuildServiceRows()
 }
 
-function updatePort(key: string, val: number) {
+function updatePort(key: string, val: string) {
   envForm.ports[key] = val
 }
 
@@ -111,10 +114,11 @@ function clearServicePort(key: string) {
 }
 
 async function saveEnv() {
-  // 校验
-  const ports: Record<string, number> = {}
+  // 校验：过滤空地址（留空 = 不部署）
+  const ports: Record<string, string> = {}
   for (const [k, v] of Object.entries(envForm.ports)) {
-    if (v > 0) ports[k] = v
+    const trimmed = (v ?? '').trim()
+    if (trimmed) ports[k] = trimmed
   }
   const dto = {
     id: envForm.id.trim(),
@@ -176,7 +180,7 @@ function rebuildServiceRows() {
     name: m.name,
     dir: m.dir,
     builtin: m.builtin,
-    port: envForm.ports[m.key] ?? 0,
+    address: envForm.ports[m.key] ?? '',
   }))
 }
 
@@ -191,7 +195,7 @@ onMounted(async () => {
   <div>
     <div class="page-header">
       <h2>环境管理</h2>
-      <p>环境为一等公民：每个环境独立配置公网地址和后端服务端口。服务器连接信息在「服务器管理」中配置（serverName 服务器组）。dev / prod 为内置环境（不可删，端口可改），其余可任意增删。</p>
+      <p>环境为一等公民：每个环境独立配置公网地址和后端服务地址（host:port 或域名）。服务器连接信息在「服务器管理」中配置（serverName 服务器组）。dev / prod 为内置环境（不可删，地址可改），其余可任意增删。</p>
     </div>
 
     <a-card style="margin-bottom: 16px;">
@@ -204,7 +208,7 @@ onMounted(async () => {
           { title: 'ID', dataIndex: 'id', key: 'id', width: 160 },
           { title: '名称', dataIndex: 'name', key: 'name' },
           { title: '公网地址', dataIndex: 'publicUrl', key: 'publicUrl' },
-          { title: '已配置服务端口', dataIndex: 'ports', key: 'ports' },
+          { title: '已配置服务地址', dataIndex: 'ports', key: 'ports' },
           { title: '内置', dataIndex: 'builtin', key: 'builtin', width: 90 },
           { title: '操作', key: 'action', width: 160 },
         ]"
@@ -220,7 +224,7 @@ onMounted(async () => {
           </template>
           <template v-else-if="column.key === 'ports'">
             <span v-if="record.ports && Object.keys(record.ports).length">
-              <a-tag v-for="(port, k) in record.ports" :key="k" style="margin-bottom: 2px;">{{ k }}={{ port }}</a-tag>
+              <a-tag v-for="(addr, k) in record.ports" :key="k" style="margin-bottom: 2px;">{{ k }}={{ addr }}</a-tag>
             </span>
             <span v-else style="color: #999;">—</span>
           </template>
@@ -235,7 +239,7 @@ onMounted(async () => {
     <a-card title="环境配置" v-if="formVisible">
       <a-form layout="vertical">
         <!-- 基础环境（仅新建模式） -->
-        <a-form-item v-if="!editingEnvId" label="基础环境（可选：把已有环境的端口填进来作模板）">
+        <a-form-item v-if="!editingEnvId" label="基础环境（可选：把已有环境的地址填进来作模板）">
           <a-select
             v-model:value="baseEnvId"
             placeholder="不选则空白新建"
@@ -265,10 +269,10 @@ onMounted(async () => {
           <a-input v-model:value="envForm.publicUrl" placeholder="https://..." style="max-width: 480px;" />
         </a-form-item>
 
-        <!-- 服务端口列表（从模块注册表自动加载） -->
-        <a-divider>服务端口</a-divider>
+        <!-- 服务地址列表（从模块注册表自动加载） -->
+        <a-divider>服务地址</a-divider>
         <p style="color: #666; margin-bottom: 8px;">
-          服务清单来自「服务管理」注册的 backend 模块。端口 = 0 表示该服务不在本环境部署，保存时会被忽略。
+          服务清单来自「服务管理」注册的 backend 模块。填入完整的服务地址，如 <code>127.0.0.1:6000</code> / <code>dev.kedouai.com</code>。留空表示该服务不在本环境部署。
         </p>
         <a-table
           :columns="[
@@ -276,7 +280,7 @@ onMounted(async () => {
             { title: '名称', dataIndex: 'name', key: 'name' },
             { title: '目录', dataIndex: 'dir', key: 'dir' },
             { title: '内置', dataIndex: 'builtin', key: 'builtin', width: 90 },
-            { title: '端口', key: 'port', width: 240 },
+            { title: '服务地址', key: 'address', width: 360 },
           ]"
           :data-source="serviceRows"
           :loading="modulesLoading"
@@ -289,18 +293,15 @@ onMounted(async () => {
             <template v-if="column.key === 'builtin'">
               <a-tag :color="record.builtin ? 'gold' : 'default'">{{ record.builtin ? '内置' : '自定义' }}</a-tag>
             </template>
-            <template v-else-if="column.key === 'port'">
-              <a-input-number
-                :value="record.port"
-                :min="0"
-                :max="65535"
-                :step="100"
-                placeholder="0 表示未部署"
-                style="width: 160px;"
-                @change="(v: any) => updatePort(record.key, Number(v) || 0)"
+            <template v-else-if="column.key === 'address'">
+              <a-input
+                :value="record.address"
+                placeholder="如 127.0.0.1:6000 或 dev.kedouai.com"
+                style="width: 280px;"
+                @change="(e: any) => updatePort(record.key, e.target.value)"
               />
               <a-button
-                v-if="record.port > 0"
+                v-if="record.address"
                 type="link"
                 size="small"
                 style="margin-left: 8px;"

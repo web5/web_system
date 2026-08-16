@@ -40,7 +40,7 @@ export interface Pm2Process {
  */
 export interface HealthCheck {
   service: string;
-  port: number;
+  address: string;
   status: 'up' | 'down';
   response?: string;
   responseTime?: number;
@@ -187,26 +187,30 @@ export class MonitorService {
   async healthCheck(env: string): Promise<HealthCheck[]> {
     const sshConfig = await this.getSshConfig(env);
 
-    // 端口从 DB 环境表的 ports 映射读取（实现「不同环境指向不同端口」）
+    // 服务地址从 DB 环境表的 ports 映射读取（完整 host:port 或域名）
     const envEntity = await this.environmentService.get(env);
     const ports = envEntity.ports || {};
-    const services: Array<{ name: string; port: number }> = Object.entries(ports).map(
-      ([name, port]) => ({ name, port }),
-    );
+    const services: Array<{ name: string; address: string }> = Object.entries(ports)
+      .filter(([, addr]) => !!addr && addr.trim())
+      .map(([name, address]) => ({ name, address: address.trim() }));
 
     const results: HealthCheck[] = [];
 
     // 并行执行各服务健康检查
     const checks = services.map(async (service) => {
+      // 规范化 URL：含 // 视为已含协议；否则补 http://
+      const url = service.address.includes('://')
+        ? service.address.replace(/\/$/, '')
+        : `http://${service.address.replace(/\/$/, '')}`;
       // 请求根路径：能拿到任何 HTTP 状态码说明端口在监听、服务进程存活；"000" 表示连接失败
-      const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://localhost:${service.port}/ || echo "000:0"`;
+      const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 ${url}/ || echo "000:0"`;
       try {
         const output = await this.execSsh(sshConfig, command);
         const [httpCode, responseTime] = output.trim().split(':');
         const isUp = httpCode !== '000';
         results.push({
           service: service.name,
-          port: service.port,
+          address: service.address,
           status: isUp ? 'up' : 'down',
           response: httpCode,
           responseTime: parseFloat(responseTime) * 1000, // 转换为毫秒
@@ -214,7 +218,7 @@ export class MonitorService {
       } catch {
         results.push({
           service: service.name,
-          port: service.port,
+          address: service.address,
           status: 'down',
           response: 'timeout',
         });

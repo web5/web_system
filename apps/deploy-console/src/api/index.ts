@@ -146,7 +146,8 @@ export const environmentApi = {
         id: string
         name: string
         publicUrl?: string
-        ports?: Record<string, number>
+        /** 服务地址映射：{ moduleKey: 'host:port' 或域名 } */
+        addresses?: Record<string, string>
         builtin: boolean
       }[]
     >,
@@ -171,8 +172,9 @@ export const monitorApi = {
     http.get('/monitor/health', { params: { env } }) as Promise<
       {
         service: string
-        port: number
+        address: string
         status: 'up' | 'down'
+        response?: string
         responseTime: number
       }[]
     >,
