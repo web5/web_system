@@ -1,0 +1,1 @@
+export { MicroFrontendLoader } from './loader';

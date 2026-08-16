@@ -116,7 +116,7 @@ export type Role = 'admin' | 'editor' | 'viewer';
 export interface PermissionDef {
   code: string;
   name: string;
-  group: 'dashboard' | 'users' | 'settings' | 'logs';
+  group: 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp';
 }
 
 export const PERMISSIONS: Record<string, PermissionDef> = {
@@ -129,6 +129,7 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'settings:edit':  { code: 'settings:edit',  name: '修改设置',    group: 'settings' },
   'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs' },
   'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard' },
+  'mcp:view':       { code: 'mcp:view',       name: 'MCP 管理',     group: 'mcp' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {

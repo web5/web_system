@@ -1,0 +1,17 @@
+{
+  "name": "@web-system/shell-loader",
+  "version": "1.0.0",
+  "description": "自研微前端模块加载器（不依赖第三方库）",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@web-system/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

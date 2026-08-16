@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>蜚蛎平台</title>
+  <!-- vue/vue-router/pinia/antd/axios/dayjs 全部打包进 shell.js，
+       shell main.ts 启动时挂到 window.__SHARED__，模块从这里取。
+       不再需要预加载 /static/externals/*.js。 -->
+  <script>
+    window.__SHARED__ = window.__SHARED__ || {};
+    window.__MODULES__ = window.__MODULES__ || {};
+    // gateway 注入：window.__MODULES_MANIFEST__ = { env, modules: [...], canary }
+    // 若 gateway 未注入（本地 dev 直跑），用空清单占位
+    window.__MODULES_MANIFEST__ = window.__MODULES_MANIFEST__ || { env: 'dev', modules: [], canary: null };
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

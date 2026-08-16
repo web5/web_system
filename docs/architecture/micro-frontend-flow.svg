@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 600" width="100%" role="img">
+<title>请求流程图</title>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="850" height="600" fill="#ffffff"/>
+<rect x="140" y="30" width="520" height="55" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="166" y="52" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">1 · 请求页面</text>
+<text x="166" y="70" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">GET dev.kedouai.com/ → nginx → gateway:6000</text>
+<rect x="140" y="115" width="520" height="55" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="166" y="137" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">2 · 查版本、渲染基座</text>
+<text x="166" y="155" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">gateway 查部署库当前版本，向 index.html 注入模块清单（灰度可按用户换版本）</text>
+<rect x="140" y="200" width="520" height="55" rx="8" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.5"/>
+<text x="166" y="222" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">3 · 加载基座、自研 loader 与 externals</text>
+<text x="166" y="240" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">浏览器执行基座 js + externals（vue / vue-router），loader 解析模块清单</text>
+<rect x="140" y="285" width="520" height="55" rx="8" fill="#d5e8d4" stroke="#82b366" stroke-width="1.5"/>
+<text x="166" y="307" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">4 · 远程加载模块资源</text>
+<text x="166" y="325" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">GET /static/modules/<模块>/<版本>/*.js、*.css → nginx 直接返回，不经过 gateway</text>
+<rect x="140" y="370" width="520" height="55" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="166" y="392" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">5 · 挂载运行</text>
+<text x="166" y="410" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">模块注册路由与页面，基座按路由渲染；模块间样式与状态隔离</text>
+<rect x="140" y="455" width="520" height="55" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+<text x="166" y="477" text-anchor="start" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">6 · 业务 API 请求</text>
+<text x="166" y="495" text-anchor="start" font-family="-apple-system,sans-serif" font-size="12" fill="#444">/api/* → nginx → gateway:6000 鉴权后转发至对应后端服务</text>
+<line x1="400" y1="57" x2="400" y2="142" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="400" y1="142" x2="400" y2="227" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="400" y1="227" x2="400" y2="312" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="400" y1="312" x2="400" y2="397" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="400" y1="397" x2="400" y2="482" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+</svg>
