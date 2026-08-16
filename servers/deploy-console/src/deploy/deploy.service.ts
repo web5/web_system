@@ -247,6 +247,38 @@ export class DeployService {
   }
 
   /**
+   * 查询某模块在所有环境的当前版本 + 可回滚的版本历史
+   * 用于模块详情页：环境×版本的当前指针 + 历史版本列表
+   */
+  async getModuleDeployments(moduleKey: string): Promise<{
+    moduleKey: string;
+    environments: Array<{
+      envId: string;
+      currentVersion?: string;
+      status?: string;
+      deployedAt?: Date;
+      deployedBy?: string;
+    }>;
+    versionHistory: DeployVersionEntity[];
+  }> {
+    const [deployments, versions] = await Promise.all([
+      this.deploymentRepo.find({ where: { moduleKey }, order: { envId: 'ASC' } }),
+      this.versionRepo.find({ where: { component: moduleKey }, order: { releasedAt: 'DESC' }, take: 50 }),
+    ]);
+    return {
+      moduleKey,
+      environments: deployments.map((d) => ({
+        envId: d.envId,
+        currentVersion: d.currentVersion,
+        status: d.status,
+        deployedAt: d.deployedAt,
+        deployedBy: d.deployedBy,
+      })),
+      versionHistory: versions,
+    };
+  }
+
+  /**
    * 查询某环境各模块的当前版本（供前端按环境展示）
    */
   async getCurrentVersions(env: string): Promise<any[]> {

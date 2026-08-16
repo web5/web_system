@@ -43,7 +43,7 @@ async function loadModules() {
   try {
     moduleList.value = await moduleApi.list()
   } catch {
-    message.error('加载服务列表失败')
+    message.error('加载模块列表失败')
   } finally {
     moduleLoading.value = false
   }
@@ -324,16 +324,16 @@ onMounted(async () => {
 <template>
   <div>
     <div class="page-header">
-      <h2>服务管理</h2>
+      <h2>模块管理</h2>
       <p>服务注册表 + 环境路由 + 服务器组，统一管理服务在多环境的部署关系。一个 serverName 可指向多台服务器（多副本 / 负载均衡），每个环境独立配置「服务名 → serverName」路由。</p>
     </div>
 
     <a-tabs default-active-key="modules">
       <!-- ========== Tab 1: 服务列表 ========== -->
-      <a-tab-pane key="modules" tab="服务列表">
+      <a-tab-pane key="modules" tab="模块">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <a-space>
-            <span>共 {{ moduleList.length }} 个服务</span>
+            <span>共 {{ moduleList.length }} 个模块</span>
             <a-select
               v-model:value="typeFilter"
               placeholder="按类型筛选"
@@ -345,7 +345,7 @@ onMounted(async () => {
               </a-select-option>
             </a-select>
           </a-space>
-          <a-button type="primary" @click="openModuleCreate">新建服务</a-button>
+          <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
         </div>
 
         <a-table
@@ -379,6 +379,7 @@ onMounted(async () => {
               </a-tag>
             </template>
             <template v-else-if="column.key === 'action'">
+              <a-button type="link" size="small" @click="$router.push(`/modules/${record.key}`)">详情</a-button>
               <a-button type="link" size="small" @click="openModuleEdit(record)">编辑</a-button>
               <a-button type="link" size="small" danger :disabled="record.builtin" @click="removeModule(record)">删除</a-button>
             </template>

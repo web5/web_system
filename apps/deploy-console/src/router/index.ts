@@ -37,7 +37,13 @@ const routes: RouteRecordRaw[] = [
         path: 'services',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),
-        meta: { title: '服务管理' },
+        meta: { title: '模块管理' },
+      },
+      {
+        path: 'modules/:key',
+        name: 'ModuleDetail',
+        component: () => import('@/views/ModuleDetail.vue'),
+        meta: { title: '模块详情' },
       },
       {
         path: 'monitor',
