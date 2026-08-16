@@ -18,6 +18,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { ServerService } from '../server/server.service';
 
 /**
  * 任务状态枚举
@@ -69,6 +70,7 @@ export class DeployService {
     private readonly deploymentRepo: Repository<DeployDeploymentEntity>,
     private readonly environmentService: EnvironmentService,
     private readonly moduleRegistry: ModuleRegistryService,
+    private readonly serverService: ServerService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -96,24 +98,17 @@ export class DeployService {
   }
 
   /**
-   * 生成版本标签: YYYYMMDD-HHMMSS-<git短哈希>
+   * 生成版本标签: git commit 短哈希（与 publishModule 一致，产物与 commit 一一对应）
    */
   private generateVersionTag(): string {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(
-      d.getHours(),
-    )}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    let commit = '';
     try {
-      commit = execSync('git rev-parse --short HEAD', {
+      return execSync('git rev-parse --short HEAD', {
         cwd: this.getWebSystemDir(),
         encoding: 'utf-8',
       }).trim();
     } catch {
-      commit = '';
+      return Math.random().toString(36).slice(2, 9);
     }
-    return commit ? `${ts}-${commit}` : `${ts}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
   /**
@@ -232,27 +227,19 @@ export class DeployService {
   private async recordDeployment(task: DeployTask) {
     if (!task.env || !task.component) return;
     try {
-      const existing = await this.deploymentRepo.findOne({
-        where: { envId: task.env, moduleKey: task.component },
-      });
-      if (existing) {
-        existing.currentVersion = task.tag || existing.currentVersion;
-        existing.status = 'deployed';
-        existing.deployedAt = new Date();
-        existing.deployedBy = task.operator;
-        existing.taskId = task.id;
-        await this.deploymentRepo.save(existing);
-      } else {
-        const d = new DeployDeploymentEntity();
-        d.envId = task.env;
-        d.moduleKey = task.component;
-        d.currentVersion = task.tag;
-        d.status = 'deployed';
-        d.deployedAt = new Date();
-        d.deployedBy = task.operator;
-        d.taskId = task.id;
-        await this.deploymentRepo.save(d);
-      }
+      // 原子 upsert：依赖唯一约束 uk_env_module (env_id, module_key)
+      await this.deploymentRepo.upsert(
+        {
+          envId: task.env,
+          moduleKey: task.component,
+          currentVersion: task.tag!,
+          status: 'deployed',
+          deployedAt: new Date(),
+          deployedBy: task.operator,
+          taskId: task.id,
+        },
+        ['envId', 'moduleKey'],
+      );
       this.logger.log(`当前版本已更新: ${task.env}/${task.component} -> ${task.tag}`);
     } catch (e) {
       this.logger.error(`更新当前版本失败: ${e.message}`);
@@ -443,7 +430,7 @@ export class DeployService {
     // 4. 写版本表
     const v = new DeployVersionEntity();
     v.env = env;
-    v.component = `mf:${moduleKey}`;
+    v.component = moduleKey;
     v.versionTag = version;
     v.gitCommit = commit;
     v.gitBranch = gitBranch;
@@ -519,6 +506,16 @@ export class DeployService {
         buildCmd: m.buildCmd ?? '',
         pm2: m.pm2 ?? '',
       });
+      // 后端服务：按环境服务路由解析多服务器（serverName 组），注入 DEPLOY_SERVERS
+      if (m.type === 'backend') {
+        const servers = await this.resolveDeployServers(env, component);
+        envVars.DEPLOY_SERVERS = JSON.stringify(servers);
+        this.logger.log(
+          `后端服务 ${component} @ ${env} 目标服务器 ${servers.length} 台: ${servers
+            .map((s) => s.host)
+            .join(', ')}`,
+        );
+      }
     } catch {
       this.logger.warn(`模块注册表无 ${component}，deploy.sh 将回退 modules.json`);
     }
@@ -579,6 +576,40 @@ export class DeployService {
       DEPLOY_REMOTE_DIR: e.remoteDir,
       DEPLOY_PUBLIC_URL: e.publicUrl || '',
     };
+  }
+
+  /**
+   * 解析后端服务在目标环境的部署服务器列表。
+   * 优先读「环境服务路由」→ serverName → 该组多台服务器；
+   * 无路由时回退环境默认 host（单台，兼容旧数据）。
+   */
+  private async resolveDeployServers(
+    env: string,
+    serviceName: string,
+  ): Promise<Array<{ host: string; sshUser: string; sshKeyPath: string; remoteDir: string }>> {
+    try {
+      const servers = await this.serverService.resolveServers(env, serviceName);
+      if (servers.length > 0) {
+        return servers.map((s) => ({
+          host: s.host,
+          sshUser: s.sshUser,
+          sshKeyPath: s.sshKeyPath || '~/.ssh/id_ed25519_servers',
+          remoteDir: s.remoteDir,
+        }));
+      }
+    } catch (e) {
+      this.logger.warn(`解析服务器组失败(${env}:${serviceName}): ${e.message}`);
+    }
+    // 回退：环境默认单台
+    const e = await this.environmentService.get(env);
+    return [
+      {
+        host: e.host,
+        sshUser: e.sshUser,
+        sshKeyPath: e.sshKeyPath || '~/.ssh/id_ed25519_servers',
+        remoteDir: e.remoteDir,
+      },
+    ];
   }
 
   /**

@@ -151,7 +151,7 @@ export class DeployController {
       user: user?.username || 'unknown',
       action: 'module.publish',
       env: body.env,
-      component: `mf:${body.moduleKey}`,
+      component: body.moduleKey,
       status: 'success',
       detail: `发布微前端模块: ${body.env} / ${body.moduleKey} → ${result.version}`,
     });

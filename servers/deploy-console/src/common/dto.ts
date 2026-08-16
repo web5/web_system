@@ -192,3 +192,42 @@ export class AuditQueryDto {  @IsInt()
   @IsOptional()
   limit?: number;
 }
+
+/**
+ * 服务器 DTO（serverName 服务器组，多台服务器共享同名）
+ */
+export class ServerDto {
+  @IsString()
+  serverName: string;
+
+  @IsString()
+  host: string;
+
+  @IsString()
+  sshUser: string;
+
+  @IsString()
+  @IsOptional()
+  sshKeyPath?: string;
+
+  @IsString()
+  remoteDir: string;
+}
+
+/**
+ * 环境服务路由 DTO（每环境独立定义「服务名 → serverName」）
+ */
+export class EnvServiceRouteDto {
+  @IsString()
+  envId: string;
+
+  @IsString()
+  serviceName: string;
+
+  @IsString()
+  serverName: string;
+
+  @IsInt()
+  @IsOptional()
+  port?: number;
+}

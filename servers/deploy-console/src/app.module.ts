@@ -11,6 +11,7 @@ import { AuditModule } from './audit/audit.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { ModuleRegistryModule } from './module-registry/module-registry.module';
 import { CanaryModule } from './canary/canary.module';
+import { ServerModule } from './server/server.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { CanaryModule } from './canary/canary.module';
     EnvironmentModule,
     ModuleRegistryModule,
     CanaryModule,
+    ServerModule,
   ],
 })
 export class AppModule {}
