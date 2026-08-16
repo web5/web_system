@@ -215,4 +215,43 @@ export const auditApi = {
     }>,
 }
 
+/* ========== Servers（服务器组 + 环境服务路由） ========== */
+export const serverApi = {
+  listServers: (serverName?: string) =>
+    http.get('/servers', { params: serverName ? { serverName } : {} }) as Promise<
+      {
+        id: string
+        serverName: string
+        host: string
+        sshUser: string
+        sshKeyPath?: string
+        remoteDir: string
+        createdAt: string
+      }[]
+    >,
+  createServer: (dto: {
+    serverName: string
+    host: string
+    sshUser: string
+    sshKeyPath?: string
+    remoteDir: string
+  }) => http.post('/servers', dto) as Promise<any>,
+  removeServer: (id: string) => http.delete(`/servers/${id}`) as Promise<any>,
+
+  listRoutes: (env?: string) =>
+    http.get('/env-service-routes', { params: env ? { env } : {} }) as Promise<
+      {
+        id: string
+        envId: string
+        serviceName: string
+        serverName: string
+        port?: number
+        createdAt: string
+      }[]
+    >,
+  createRoute: (dto: { envId: string; serviceName: string; serverName: string; port?: number }) =>
+    http.post('/env-service-routes', dto) as Promise<any>,
+  removeRoute: (id: string) => http.delete(`/env-service-routes/${id}`) as Promise<any>,
+}
+
 export default http

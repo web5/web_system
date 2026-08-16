@@ -9,6 +9,7 @@ import {
   LogoutOutlined,
   UserOutlined,
   ApartmentOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -24,6 +25,7 @@ const menuItems = [
   { key: '/console/dashboard', label: '仪表盘', icon: DashboardOutlined },
   { key: '/console/deploy', label: '发布中心', icon: CloudUploadOutlined },
   { key: '/console/environments', label: '环境管理', icon: ApartmentOutlined },
+  { key: '/console/servers', label: '服务器管理', icon: ClusterOutlined },
   { key: '/console/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/console/audit', label: '审计日志', icon: AuditOutlined },
 ]

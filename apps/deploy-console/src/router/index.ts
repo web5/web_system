@@ -33,6 +33,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '环境管理' },
       },
       {
+        path: 'servers',
+        name: 'ServerManager',
+        component: () => import('@/views/ServerManager.vue'),
+        meta: { title: '服务器管理' },
+      },
+      {
         path: 'monitor',
         name: 'ServiceMonitor',
         component: () => import('@/views/ServiceMonitor.vue'),
