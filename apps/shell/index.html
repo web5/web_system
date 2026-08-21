@@ -4,9 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>科豆AI</title>
-  <!-- vue/vue-router/pinia/antd/axios/dayjs 全部打包进 shell.js，
-       shell main.ts 启动时挂到 window.__SHARED__，模块从这里取。
-       不再需要预加载 /static/externals/*.js。 -->
+  <!-- 外部依赖从公开 CDN 加载（挂全局），shell 不再打包这些库（减小包体积）。
+       顺序：vue → vue-router → pinia → axios → dayjs → antd（antd 依赖 vue）。
+       版本与本地 pnpm-lock 对齐（vite.config 的 viteExternalsPlugin 映射同名全局）。 -->
+  <script src="https://cdn.staticfile.org/vue/3.5.31/vue.global.prod.js"></script>
+  <script src="https://cdn.staticfile.org/vue-router/4.6.4/vue-router.global.prod.js"></script>
+  <script src="https://cdn.staticfile.org/pinia/2.3.1/pinia.iife.prod.js"></script>
+  <script src="https://cdn.staticfile.org/axios/1.13.6/axios.min.js"></script>
+  <script src="https://cdn.staticfile.org/dayjs/1.11.21/dayjs.min.js"></script>
+  <script src="https://cdn.staticfile.org/ant-design-vue/4.2.6/antd.min.js"></script>
   <script>
     window.__SHARED__ = window.__SHARED__ || {};
     window.__MODULES__ = window.__MODULES__ || {};
