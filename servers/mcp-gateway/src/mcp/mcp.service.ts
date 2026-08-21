@@ -171,7 +171,12 @@ export class McpService implements OnModuleInit {
         changed = true;
       }
       if (changed) {
-        await this.moduleRepo.save(existing);
+        // 用 update 而非 save(entity)：save 会级联 eager 加载的 tools 触发 module_id 置空报错
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+        });
         this.logger.log(
           `已同步财经资讯 base_url=${baseUrl} auth_type=${authType || '(无)'}`,
         );
@@ -233,7 +238,11 @@ export class McpService implements OnModuleInit {
         changed = true;
       }
       if (changed) {
-        await this.moduleRepo.save(existing);
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+        });
         this.logger.log(`已同步公众号发布 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
       }
       return;
