@@ -39,11 +39,27 @@ async function bootstrap() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        // 允许外部 CDN 加载 vue/antd 等共享依赖；unsafe-eval 给 SystemJS（用 Function 构造器）使用
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'https://cdn.staticfile.org',
+          'https://cdn.jsdelivr.net',
+          'https://unpkg.com',
+        ],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-        connectSrc: ["'self'", 'https://api.kedouai.com'],
+        // 允许 fetch 到 CDN 和 API；SystemJS 动态加载模块走 https
+        connectSrc: [
+          "'self'",
+          'https://api.kedouai.com',
+          'https://cdn.staticfile.org',
+          'https://cdn.jsdelivr.net',
+          'https://unpkg.com',
+        ],
+        mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
       },
     },
   }));
