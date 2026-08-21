@@ -41,7 +41,7 @@
 | system-service | servers/system-service | 6004 | web-system | 系统（配置/素材） |
 | todo-service | servers/todo-service | 6005 | web-todo | 待办 |
 | mcp-gateway | servers/mcp-gateway | 6006 | web-mcp-gateway | MCP 网关 |
-| finnews | servers/finnews | 6007 | web-finnews | 财经资讯 |
+| content-hub | servers/content-hub | 6007 | web-content-hub | 内容中枢（财经资讯 + 论文/AI 资讯） |
 | upload-service | servers/upload-service | 6008 | web-upload | 上传 |
 | deploy-console | servers/deploy-console | 6200 | web-deploy-console | 运维控制台（发布/环境/服务器/监控） |
 

@@ -1,7 +1,7 @@
 {
-  "name": "@web-system/finnews",
+  "name": "@web-system/content-hub",
   "version": "1.0.0",
-  "description": "财经资讯微服务：采集/去重/LLM 摘要/情感分析，暴露 REST API",
+  "description": "内容中枢微服务：财经资讯 + 每日论文 + AI 资讯的采集/去重/LLM 处理/多通道发布",
   "main": "dist/main.js",
   "scripts": {
     "dev": "nest start --watch",
@@ -15,7 +15,9 @@
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/schedule": "^4.1.2",
     "@nestjs/typeorm": "^10.0.0",
+    "cron": "^3.0.0",
     "mysql2": "^3.11.0",
     "pg": "^8.11.0",
     "reflect-metadata": "^0.2.0",

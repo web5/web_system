@@ -72,7 +72,7 @@ module.exports = {
         SYSTEM_SERVICE_URL: 'http://127.0.0.1:6004',
         TODO_SERVICE_URL: 'http://127.0.0.1:6005',
         MCP_GATEWAY_URL: 'http://127.0.0.1:6006',
-        FINNEWS_SERVICE_URL: 'http://127.0.0.1:6007',
+        CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6007',
         // 服务间鉴权（mcp-gateway → gateway 调 /api/finnews 时必须带此 Bearer）
         FINNEWS_SERVICE_KEY: process.env.FINNEWS_SERVICE_KEY || '',
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6000',
@@ -187,6 +187,12 @@ module.exports = {
         FINNEWS_SERVICE_AUTH_CONFIG: JSON.stringify({
           token: process.env.FINNEWS_SERVICE_KEY || '',
         }),
+        // 内容中枢（content-hub，含公众号发布接口）：与财经同机同 key
+        CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6000/api/content-hub',
+        CONTENT_HUB_SERVICE_AUTH_TYPE: 'bearer',
+        CONTENT_HUB_SERVICE_AUTH_CONFIG: JSON.stringify({
+          token: process.env.FINNEWS_SERVICE_KEY || '',
+        }),
         // 兼容遗留共享密钥（内部/WorkBuddy 集成）；对外公网改为每用户 API Key
         MCP_CLIENT_KEY: process.env.MCP_CLIENT_KEY || '',
         // 运营后台密钥：保护 /api/keys 的列表/吊销接口（X-Admin-Key）
@@ -204,8 +210,8 @@ module.exports = {
     },
     {
       ...commonConfig,
-      name: 'finnews',
-      script: './servers/finnews/dist/main.js',
+      name: 'content-hub',
+      script: './servers/content-hub/dist/main.js',
       env: {
         NODE_ENV: 'production',
         PORT: 6007,
@@ -213,10 +219,14 @@ module.exports = {
         LLM_API_KEY: process.env.IMAGE_GEN_API_KEY || '',
         LLM_BASE_URL: 'https://tokenhub.tencentmaas.com/v1',
         LLM_MODEL: 'hy3',
+        // 微信公众号发布凭据：优先显式 WECHAT_MP_APP_ID/SECRET（dev/prod 公众号不同），
+        // 未显式配置时回退登录 OAuth 的 OFFICIAL_ACCOUNT_*
+        WECHAT_MP_APP_ID: process.env.WECHAT_MP_APP_ID || OFFICIAL_ACCOUNT_APP_ID,
+        WECHAT_MP_APP_SECRET: process.env.WECHAT_MP_APP_SECRET || OFFICIAL_ACCOUNT_SECRET,
       },
-      error_file: `${logBase}/finnews-error.log`,
-      out_file: `${logBase}/finnews-out.log`,
-      log_file: `${logBase}/finnews-combined.log`,
+      error_file: `${logBase}/content-hub-error.log`,
+      out_file: `${logBase}/content-hub-out.log`,
+      log_file: `${logBase}/content-hub-combined.log`,
     },
   ],
 };
