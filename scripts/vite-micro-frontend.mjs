@@ -54,30 +54,55 @@ export function microFrontendConfig(opts) {
         '@web-system/shared': resolve(process.cwd(), '../../packages/shared/src/index.ts'),
       },
     },
-    build: {
-      outDir: 'dist',
-      sourcemap: false,
-      cssCodeSplit: false,
-      emptyOutDir: true,
-      // 用 terser 压缩并移除 console/debugger，减小产物体积
-      minify: 'terser',
-      terserOptions: {
-        compress: { drop_console: true, drop_debugger: true },
-      },
-      lib: {
-        entry,
-        formats: [format],
-        name: globalName,
-        fileName: () => 'index.js',
-      },
-      rollupOptions: {
-        external: Object.keys(externals),
-        output: {
-          globals: externals,
-          assetFileNames: 'index.[ext]',
-        },
-      },
-    },
+    // system 格式：普通 build + rollup format=system，支持 code-splitting（所有 chunk 均为 System.register）
+    // umd 格式：lib 模式单文件（旧产物兼容，不支持分包）
+    build:
+      format === 'system'
+        ? {
+            outDir: 'dist',
+            sourcemap: false,
+            cssCodeSplit: false,
+            emptyOutDir: true,
+            // 用 terser 压缩并移除 console/debugger，减小产物体积
+            minify: 'terser',
+            terserOptions: {
+              compress: { drop_console: true, drop_debugger: true },
+            },
+            rollupOptions: {
+              input: entry,
+              external: Object.keys(externals),
+              output: {
+                format: 'system',
+                entryFileNames: 'index.js',
+                chunkFileNames: '[name].[hash].js',
+                assetFileNames: 'index.[ext]',
+                globals: externals,
+              },
+            },
+          }
+        : {
+            outDir: 'dist',
+            sourcemap: false,
+            cssCodeSplit: false,
+            emptyOutDir: true,
+            minify: 'terser',
+            terserOptions: {
+              compress: { drop_console: true, drop_debugger: true },
+            },
+            lib: {
+              entry,
+              formats: ['umd'],
+              name: globalName,
+              fileName: () => 'index.js',
+            },
+            rollupOptions: {
+              external: Object.keys(externals),
+              output: {
+                globals: externals,
+                assetFileNames: 'index.[ext]',
+              },
+            },
+          },
   });
 }
 
