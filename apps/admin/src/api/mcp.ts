@@ -67,13 +67,14 @@ export async function debugCall(dto: {
   return data;
 }
 
-// ── API Key 运营 / 管理（经 gateway 代理 /api → user-service:6002）──
+// ── API Key 运营 / 管理（经 gateway 代理 /api → user-service:3002）──
 // 申请 / 签发流程已迁至 portal 用户中心（/profile），后台仅做 list / revoke
-export async function listKeys(adminKey: string): Promise<any[]> {
-  const { data } = await http.get('/api/keys', { headers: { 'X-Admin-Key': adminKey } });
+// 鉴权：登录态 JWT + admin 角色（不再使用 X-Admin-Key）
+export async function listKeys(): Promise<any[]> {
+  const { data } = await http.get('/api/keys');
   return data.keys;
 }
 
-export async function revokeKey(id: number, adminKey: string): Promise<void> {
-  await http.delete(`/api/keys/${id}`, { headers: { 'X-Admin-Key': adminKey } });
+export async function revokeKey(id: number): Promise<void> {
+  await http.delete(`/api/keys/${id}`);
 }

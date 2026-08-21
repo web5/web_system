@@ -5,27 +5,22 @@ import {
   Delete,
   Body,
   Param,
-  Headers,
   Req,
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiKeyService } from './api-key.service';
-import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '../auth/auth.guard';
 
 /**
  * API Key 管理
  * 公开：POST /api/keys/apply（发码）、POST /api/keys/verify（验码签发）
  * 用户中心：GET /api/keys/mine、DELETE /api/keys/mine/:id（需登录）
- * 运营：GET /api/keys、DELETE /api/keys/:id（需 X-Admin-Key）
+ * 运营：GET /api/keys、DELETE /api/keys/:id（需登录且角色含 admin）
  */
 @Controller('keys')
 export class ApiKeyController {
-  constructor(
-    private readonly svc: ApiKeyService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly svc: ApiKeyService) {}
 
   @Post('apply')
   async apply(@Body() dto: { email?: string; ownerId?: number }) {
@@ -52,23 +47,29 @@ export class ApiKeyController {
     return { id: Number(id), message: '已吊销' };
   }
 
-  private requireAdmin(headers: Record<string, any>): void {
-    const adminKey = this.config.get('MCP_ADMIN_KEY');
-    const provided = headers['x-admin-key'] || headers['X-Admin-Key'];
-    if (!adminKey || provided !== adminKey) {
-      throw new UnauthorizedException('需要管理员密钥 (X-Admin-Key)');
+  /** 校验当前登录用户是否具备 admin 角色 */
+  private requireAdminRole(user: any): void {
+    const roles: string[] = Array.isArray(user?.roles)
+      ? user.roles
+      : typeof user?.roles === 'string'
+        ? user.roles.split(',').map((r: string) => r.trim())
+        : [];
+    if (!roles.includes('admin')) {
+      throw new UnauthorizedException('需要管理员角色');
     }
   }
 
   @Get()
-  async list(@Headers() headers: Record<string, any>) {
-    this.requireAdmin(headers);
+  @UseGuards(AuthGuard)
+  async list(@Req() req: any) {
+    this.requireAdminRole(req.user);
     return { keys: await this.svc.list() };
   }
 
   @Delete(':id')
-  async revoke(@Headers() headers: Record<string, any>, @Param('id') id: string) {
-    this.requireAdmin(headers);
+  @UseGuards(AuthGuard)
+  async revoke(@Req() req: any, @Param('id') id: string) {
+    this.requireAdminRole(req.user);
     await this.svc.revoke(Number(id));
     return { id: Number(id), message: '已吊销' };
   }
