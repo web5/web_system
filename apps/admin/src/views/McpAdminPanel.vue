@@ -198,19 +198,14 @@ const columns = [
   { title: '操作', key: 'action', width: 220 },
 ];
 
-// ── API Key 管理 ──
-const adminKey = ref('');
+// ── API Key 管理（登录态 + admin 角色鉴权，无需手输密钥）──
 const keys = ref<any[]>([]);
 const adminLoading = ref(false);
 
 async function loadKeys() {
-  if (!adminKey.value) {
-    message.warning('请输入管理员密钥');
-    return;
-  }
   adminLoading.value = true;
   try {
-    keys.value = await listKeys(adminKey.value);
+    keys.value = await listKeys();
   } catch (e: any) {
     message.error(e?.response?.data?.error || e.message || '加载失败');
   } finally {
@@ -220,7 +215,7 @@ async function loadKeys() {
 
 async function onRevoke(id: number) {
   try {
-    await revokeKey(id, adminKey.value);
+    await revokeKey(id);
     message.success('已吊销');
     loadKeys();
   } catch (e: any) {
@@ -402,12 +397,9 @@ const keyColumns = [
 
       <template v-else-if="activeTab === 'keys'">
         <a-card title="Key 管理（运营）" size="small">
-          <a-form layout="vertical">
-            <a-form-item label="管理员密钥 (X-Admin-Key)">
-              <a-input-password v-model:value="adminKey" placeholder="MCP_ADMIN_KEY" />
-            </a-form-item>
-            <a-button block @click="loadKeys">加载列表</a-button>
-          </a-form>
+          <a-space style="margin-bottom: 12px">
+            <a-button type="primary" @click="loadKeys" :loading="adminLoading">刷新列表</a-button>
+          </a-space>
           <a-table
             :columns="keyColumns"
             :data-source="keys"
