@@ -1,47 +1,8 @@
-/** LLM 服务——摘要生成、情感分析（OpenAI 兼容接口，TokenHub hy3） */
+/** 财经域 LLM 处理——摘要、情感分析、实体抽取（复用 common/llm 的 chat 基座） */
 import { Logger } from '@nestjs/common';
+import { chat } from '../common/llm';
 
 const logger = new Logger('FinnewsLLM');
-
-interface ChatMessage {
-  role: 'system' | 'user';
-  content: string;
-}
-
-async function chat(
-  messages: ChatMessage[],
-  opts: { maxTokens?: number; temperature?: number } = {},
-): Promise<string> {
-  const apiKey = process.env.LLM_API_KEY ?? '';
-  const baseUrl = process.env.LLM_BASE_URL ?? 'https://tokenhub.tencentmaas.com/v1';
-  const model = process.env.LLM_MODEL ?? 'hy3';
-
-  if (!apiKey) {
-    throw new Error('LLM_API_KEY 未配置');
-  }
-
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: opts.temperature ?? 0.3,
-      max_tokens: opts.maxTokens ?? 500,
-    }),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`LLM 调用失败: HTTP ${resp.status} ${text.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content ?? '';
-}
 
 /** 生成话题摘要（2-3 句话） */
 export async function generateSummary(title: string, content: string): Promise<string> {

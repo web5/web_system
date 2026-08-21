@@ -20,8 +20,8 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 6007);
   await app.listen(port);
-  const logger = new Logger('Finnews');
-  logger.log(`Finnews service running on: http://localhost:${port}`);
-  logger.log(`API: http://localhost:${port}/api/topics`);
+  const logger = new Logger('ContentHub');
+  logger.log(`ContentHub service running on: http://localhost:${port}`);
+  logger.log(`财经 API: http://localhost:${port}/api/topics`);
 }
 bootstrap();

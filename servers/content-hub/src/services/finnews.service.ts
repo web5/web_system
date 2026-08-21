@@ -5,7 +5,7 @@ import { TopicEntity } from '../entities/topic.entity';
 import { NewsEntity } from '../entities/news.entity';
 import { EntityEntity } from '../entities/entity.entity';
 import { collectAll, RawNews } from '../collectors/collector';
-import { simhash } from '../processors/dedup';
+import { simhash } from '../common/dedup';
 import { generateSummary, analyzeSentiment, extractEntities } from '../processors/llm';
 import { detectSectors } from '../processors/sectors';
 

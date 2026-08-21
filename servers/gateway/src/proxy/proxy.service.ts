@@ -14,7 +14,7 @@ export class ProxyService implements OnModuleInit {
   private readonly todoServiceUrl: string;
   private readonly uploadServiceUrl: string;
   private readonly mcpGatewayUrl: string;
-  private readonly finnewsServiceUrl: string;
+  private readonly contentHubServiceUrl: string;
 
   // 缓存 proxy 实例，避免每个请求都创建新实例
   private userProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -28,6 +28,7 @@ export class ProxyService implements OnModuleInit {
   private bianbianStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
   private finnewsProxy!: ReturnType<typeof createProxyMiddleware>;
+  private contentProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
@@ -40,7 +41,7 @@ export class ProxyService implements OnModuleInit {
     this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:6005');
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
     this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', 'http://localhost:6006');
-    this.finnewsServiceUrl = this.configService.get('FINNEWS_SERVICE_URL', 'http://localhost:6007');
+    this.contentHubServiceUrl = this.configService.get('CONTENT_HUB_SERVICE_URL', 'http://localhost:6007');
 
     this.boundErrorHandler = (err, _req, res) => {
       this.logger.error(`代理请求失败: ${err.message}`);
@@ -108,14 +109,27 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
-    // 财经资讯微服务（/api/finnews/* → finnews:6007）
-    // pathRewrite：/api/finnews/api/market-pulse → /api/market-pulse（finnews controller 是 @Controller('api')）
+    // 财经通道（/api/finnews/* → content-hub:6007）
+    // pathRewrite：/api/finnews/api/market-pulse → /api/market-pulse（finnews 模块 controller 是 @Controller('api')）
     // 鉴权在 proxy.controller.ts 的路由方法里手动验证 Bearer token
     this.finnewsProxy = createProxyMiddleware({
-      target: this.finnewsServiceUrl,
+      target: this.contentHubServiceUrl,
       changeOrigin: true,
       timeout: 30_000,
       pathRewrite: { '^/api/finnews': '' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
+    // 内容管道通道（/api/content-hub/* → content-hub:6007）
+    // pathRewrite：/api/content-hub/api/content/sources → /api/content/sources（content controller 是 @Controller('api/content')）
+    this.contentProxy = createProxyMiddleware({
+      target: this.contentHubServiceUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/content-hub': '' },
       on: {
         proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
         error: this.boundErrorHandler,
@@ -136,6 +150,7 @@ export class ProxyService implements OnModuleInit {
   getBianbianStaticProxy() { return this.bianbianStaticProxy; }
   getMcpProxy() { return this.mcpProxy; }
   getFinnewsProxy() { return this.finnewsProxy; }
+  getContentProxy() { return this.contentProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }
 
   /**

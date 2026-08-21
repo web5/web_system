@@ -252,31 +252,42 @@ export class ProxyController {
     return this.proxyService.getMcpProxy()(req, res);
   }
 
-  // 财经资讯微服务（/api/finnews/* → finnews:6007）
+  // 财经通道（/api/finnews/* → content-hub:6007）
   // 服务间鉴权：验证 Authorization: Bearer $FINNEWS_SERVICE_KEY
   // 注意：必须放在 @All(':path(*)') 通配之前，否则被通配兜底 404
   @All('finnews')
   proxyFinnewsExact(@Req() req: Request, @Res() res: Response) {
-    return this.checkServiceAuthAndProxy(req, res);
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
   }
 
   @All('finnews/:path(*)')
   proxyFinnewsWildcard(@Req() req: Request, @Res() res: Response) {
-    return this.checkServiceAuthAndProxy(req, res);
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
   }
 
-  /** 验证服务间 Bearer Token，通过后转发到 finnews 微服务 */
-  private checkServiceAuthAndProxy(req: Request, res: Response): Promise<void> | void {
+  // 内容管道通道（/api/content-hub/* → content-hub:6007）
+  @All('content-hub')
+  proxyContentHubExact(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getContentProxy());
+  }
+
+  @All('content-hub/:path(*)')
+  proxyContentHubWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getContentProxy());
+  }
+
+  /** 验证服务间 Bearer Token，通过后转发到指定 proxy */
+  private checkServiceAuthAndProxy(req: Request, res: Response, proxy: any): Promise<void> | void {
     const expected = this.configService.get<string>('FINNEWS_SERVICE_KEY');
     if (expected) {
       const auth = req.headers['authorization'];
       if (auth !== `Bearer ${expected}`) {
-        this.logger.warn(`[finnews] 鉴权失败: ${req.ip} ${req.method} ${req.path}`);
+        this.logger.warn(`[content-hub] 鉴权失败: ${req.ip} ${req.method} ${req.path}`);
         res.status(401).json({ code: 401, message: 'Service API key required' });
         return;
       }
     }
-    return this.proxyService.getFinnewsProxy()(req, res);
+    return proxy(req, res);
   }
 
   /** AI 生成的变变图片静态资源（/api/uploads/bianbian/* → ai-service）
