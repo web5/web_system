@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { InternalAxiosRequestConfig } from 'axios';
+import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 const http = axios.create({
   baseURL: '/',
@@ -21,6 +21,18 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     /* 忽略解析错误 */
   }
   return config;
+});
+
+/**
+ * 响应拦截器：后端 TransformInterceptor 统一包成 {code, data, message}，
+ * 这里 unwrap data，调用方就能直接拿业务字段（如 data.keys）。
+ */
+http.interceptors.response.use((response: AxiosResponse) => {
+  const body = response.data;
+  if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+    response.data = body.data;
+  }
+  return response;
 });
 
 /** MCP 模块类型 */

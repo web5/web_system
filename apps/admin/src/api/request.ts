@@ -112,7 +112,12 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse) => {
-    return response.data;
+    // 后端 TransformInterceptor 统一包成 {code, data, message}，这里 unwrap data
+    const body = response.data;
+    if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+      return body.data;
+    }
+    return body;
   },
   async (error) => {
     if (error.response) {
