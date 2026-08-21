@@ -93,7 +93,14 @@ export async function tryRefreshToken(): Promise<{ accessToken: string; refreshT
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse) => {
-    return response.data;
+    // 后端全局 TransformInterceptor 会把响应包成 {code, data, message}；
+    // 这里把 data 字段拆出来，调用方就能直接拿到业务数据（如 r.keys）。
+    // 未包装的响应（如纯 {keys:[]}）保持原样。
+    const body = response.data;
+    if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+      return body.data;
+    }
+    return body;
   },
   async (error) => {
     const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
