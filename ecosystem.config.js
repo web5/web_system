@@ -181,18 +181,15 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6006,
         ...baseDbConfig,
-        // 财经资讯微服务：同机内网经 gateway 代理（带 Bearer 鉴权 → 6007），不经公网
-        FINNEWS_SERVICE_URL: 'http://127.0.0.1:6000/api/finnews',
-        FINNEWS_SERVICE_AUTH_TYPE: 'bearer',
-        FINNEWS_SERVICE_AUTH_CONFIG: JSON.stringify({
-          token: process.env.FINNEWS_SERVICE_KEY || '',
-        }),
-        // 内容中枢（content-hub，含公众号发布接口）：与财经同机同 key
-        CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6000/api/content-hub',
-        CONTENT_HUB_SERVICE_AUTH_TYPE: 'bearer',
-        CONTENT_HUB_SERVICE_AUTH_CONFIG: JSON.stringify({
-          token: process.env.FINNEWS_SERVICE_KEY || '',
-        }),
+        // 财经资讯微服务（content-hub 内模块）：默认同机直连 :6007（Node fetch 对 gateway 代理端口有 bad port 问题）
+        // 如需经 gateway 代理，可用环境变量覆盖 FINNEWS_SERVICE_URL=http://127.0.0.1:6000/api/finnews + AUTH_TYPE=bearer
+        FINNEWS_SERVICE_URL: process.env.FINNEWS_SERVICE_URL || 'http://127.0.0.1:6007',
+        FINNEWS_SERVICE_AUTH_TYPE: process.env.FINNEWS_SERVICE_AUTH_TYPE || '',
+        FINNEWS_SERVICE_AUTH_CONFIG: process.env.FINNEWS_SERVICE_AUTH_CONFIG || '',
+        // 内容中枢（content-hub，含公众号发布接口）：与财经同机直连
+        CONTENT_HUB_SERVICE_URL: process.env.CONTENT_HUB_SERVICE_URL || 'http://127.0.0.1:6007',
+        CONTENT_HUB_SERVICE_AUTH_TYPE: process.env.CONTENT_HUB_SERVICE_AUTH_TYPE || '',
+        CONTENT_HUB_SERVICE_AUTH_CONFIG: process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG || '',
         // 兼容遗留共享密钥（内部/WorkBuddy 集成）；对外公网改为每用户 API Key
         MCP_CLIENT_KEY: process.env.MCP_CLIENT_KEY || '',
         // 运营后台密钥：保护 /api/keys 的列表/吊销接口（X-Admin-Key）
