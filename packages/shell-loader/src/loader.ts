@@ -4,6 +4,7 @@ import type {
   ModuleContext,
   ModuleLifecycle,
 } from '@web-system/shared';
+import System from 'systemjs';
 
 /**
  * 自研微前端加载器。
@@ -16,8 +17,21 @@ import type {
  * - unmount(name)：卸载模块（保留 bootstrap 状态，便于快速重挂）
  * - unmountAll()：卸载所有模块（基座卸载用）
  *
- * 模块契约：UMD 打包后挂到 window.__MODULES__[name]，暴露 bootstrap/mount/unmount。
+ * 模块契约（两种格式，loader 自动适配）：
+ * - system：SystemJS 产物（rollup format=system），支持 code-splitting 分包，主路径
+ * - umd：UMD 产物挂到 window.__MODULES__[name]（旧产物兼容，加载失败自动回退）
  */
+
+/** 模块 external 的共享依赖 → window.__SHARED__ 的 key 映射 */
+const SHARED_MODULES: Record<string, string> = {
+  vue: 'vue',
+  'vue-router': 'vueRouter',
+  pinia: 'pinia',
+  axios: 'axios',
+  dayjs: 'dayjs',
+  'ant-design-vue': 'antDesignVue',
+  '@ant-design/icons-vue': 'antDesignIconsVue',
+};
 export class MicroFrontendLoader {
   /** 已注册的模块清单（name → manifest） */
   private manifests = new Map<string, ModuleManifest>();
@@ -112,12 +126,45 @@ export class MicroFrontendLoader {
     return promise;
   }
 
-  /** 动态注入 script + css，等模块挂到 window.__MODULES__[name] */
+  /**
+   * 加载模块：优先 SystemJS（支持分包），失败回退 UMD script（旧产物兼容）。
+   * 加载前把基座共享依赖（CDN 全局）注册为 System 模块，供 System.register 的依赖解析。
+   */
   private loadModule(manifest: ModuleManifest): Promise<ModuleLifecycle> {
+    // CSS（幂等：已注入则跳过）
+    this.ensureCss(manifest.name);
+    this.registerSharedModules();
+
+    return System.import(manifest.entry)
+      .then((mod: any) => {
+        const lifecycle = mod?.default ?? mod;
+        if (!lifecycle || typeof lifecycle.mount !== 'function') {
+          throw new Error(`模块 ${manifest.name}@${manifest.version} 未正确暴露 lifecycle（缺 mount）`);
+        }
+        return this.toLifecycle(lifecycle);
+      })
+      .catch((e: unknown) => {
+        // System 加载失败（可能为 UMD 旧产物）→ 回退 UMD script
+        console.warn(`[loader] System 加载 ${manifest.name} 失败，回退 UMD: ${(e as Error)?.message}`);
+        return this.loadUmdScript(manifest);
+      });
+  }
+
+  /** 把基座共享依赖（window.__SHARED__，来自 CDN 全局）注册为 System 模块 */
+  private registerSharedModules(): void {
+    const shared = (window as any).__SHARED__;
+    if (!shared) return;
+    for (const [modName, key] of Object.entries(SHARED_MODULES)) {
+      const value = shared[key];
+      if (value && !System.has(modName)) {
+        System.set(modName, System.newModule({ default: value, ...value }));
+      }
+    }
+  }
+
+  /** UMD script 加载（旧产物兼容）：执行后挂到 window.__MODULES__[name] */
+  private loadUmdScript(manifest: ModuleManifest): Promise<ModuleLifecycle> {
     return new Promise((resolve, reject) => {
-      // CSS（幂等：已注入则跳过）
-      this.ensureCss(manifest.name);
-      // JS（UMD，执行后挂到 window.__MODULES__[name]）
       const script = document.createElement('script');
       script.src = manifest.entry;
       script.dataset.module = manifest.name;
@@ -129,16 +176,21 @@ export class MicroFrontendLoader {
           reject(new Error(`模块 ${manifest.name}@${manifest.version} 未正确暴露 lifecycle（缺 mount）`));
           return;
         }
-        resolve({
-          bootstrap: mod.bootstrap || (async () => {}),
-          mount: mod.mount,
-          unmount: mod.unmount || (async () => {}),
-          update: mod.update,
-        });
+        resolve(this.toLifecycle(mod));
       };
       script.onerror = () => reject(new Error(`加载模块失败: ${manifest.entry}`));
       document.head.appendChild(script);
     });
+  }
+
+  /** 统一收敛为生命周期对象 */
+  private toLifecycle(mod: any): ModuleLifecycle {
+    return {
+      bootstrap: mod.bootstrap || (async () => {}),
+      mount: mod.mount,
+      unmount: mod.unmount || (async () => {}),
+      update: mod.update,
+    };
   }
 
   /** 幂等注入模块 CSS（已存在同 data-module 的 link 则跳过） */

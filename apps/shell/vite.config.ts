@@ -1,16 +1,30 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
+import { viteExternalsPlugin } from 'vite-plugin-externals';
 import { appVersionDefine, appVersionPlugin } from '../../scripts/vite-app-version.mjs';
 
 // 基座 Shell 的 vite 配置。
-// vue/vue-router/pinia/antd/axios/dayjs 全部打包进 shell.js（不 external），
-// shell main.ts 启动时挂到 window.__SHARED__，模块 external 后从这里取（同一份实例）。
-// 这样基座自包含，不依赖 externals 预加载顺序，也不需要 importmap。
+// vue/vue-router/pinia/antd/axios/dayjs 通过 CDN 加载（index.html script 标签，挂全局），
+// 由 viteExternalsPlugin 把 import 映射到全局变量，shell 不再打包这些库（体积大幅减小）。
+// @ant-design/icons-vue 无 UMD CDN 版，仍由 shell 打包。
+// shell main.ts 启动时把全局依赖挂到 window.__SHARED__，微前端模块 external 后从这里取（同一份实例）。
 export default defineConfig({
   base: '/shell/',
   define: appVersionDefine(),
-  plugins: [appVersionPlugin(), vue()],
+  plugins: [
+    appVersionPlugin(),
+    vue(),
+    // 外部依赖 → 全局变量（index.html 通过 CDN 加载对应 UMD）
+    viteExternalsPlugin({
+      vue: 'Vue',
+      'vue-router': 'VueRouter',
+      pinia: 'Pinia',
+      'ant-design-vue': 'antd',
+      axios: 'axios',
+      dayjs: 'dayjs',
+    }),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -39,8 +53,7 @@ export default defineConfig({
         chunkFileNames: 'assets/[name].[hash].js',
         assetFileNames: 'assets/[name].[hash].[ext]',
         manualChunks(id) {
-          if (id.includes('node_modules/ant-design-vue') || id.includes('node_modules/@ant-design/icons-vue')) return 'vendor-antd';
-          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue') || id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) return 'vendor-vue';
+          if (id.includes('node_modules/@ant-design/icons-vue')) return 'vendor-icons';
         },
       },
     },

@@ -30,6 +30,8 @@ const DEFAULT_EXTERNALS = {
  */
 export function microFrontendConfig(opts) {
   const { name, entry = 'src/main.ts' } = opts;
+  // 支持 MF_FORMAT 环境变量：umd（默认，兼容现状）| system（SystemJS，可分包）
+  const format = opts.format || process.env.MF_FORMAT || 'umd';
   const externals = { ...DEFAULT_EXTERNALS, ...(opts.externals || {}) };
   // 模块名中的连字符转下划线，作为 UMD 全局变量名后缀
   const globalName = `__modules_${name.replace(/[-/]/g, '_')}`;
@@ -57,9 +59,14 @@ export function microFrontendConfig(opts) {
       sourcemap: false,
       cssCodeSplit: false,
       emptyOutDir: true,
+      // 用 terser 压缩并移除 console/debugger，减小产物体积
+      minify: 'terser',
+      terserOptions: {
+        compress: { drop_console: true, drop_debugger: true },
+      },
       lib: {
         entry,
-        formats: ['umd'],
+        formats: [format],
         name: globalName,
         fileName: () => 'index.js',
       },
