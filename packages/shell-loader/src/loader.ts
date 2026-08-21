@@ -4,7 +4,18 @@ import type {
   ModuleContext,
   ModuleLifecycle,
 } from '@web-system/shared';
-import System from 'systemjs';
+
+// SystemJS 6.x 的 dist/system.min.js 是纯 IIFE（无 CJS/ESM 导出），Vite 打包后
+// `import System from 'systemjs'` 拿到的不是 System 实例。用副作用导入让 systemjs
+// 执行并挂到 globalThis.System，然后统一从全局取（避免打包 interop 问题）。
+import 'systemjs';
+
+declare global {
+  interface Window {
+    System: any;
+  }
+}
+const System = (globalThis as any).System;
 
 /**
  * 自研微前端加载器。
@@ -150,16 +161,28 @@ export class MicroFrontendLoader {
       });
   }
 
-  /** 把基座共享依赖（window.__SHARED__，来自 CDN 全局）注册为 System 模块 */
+  /** 把基座共享依赖（window.__SHARED__，来自 CDN 全局）注册为 System 模块。
+   *  SystemJS 解析 System.register 的裸依赖（如 "vue"）必须走 importmap，且
+   *  System.set 的模块名必须是合法 URL。故用 importmap 把裸名映射到虚拟 URL，
+   *  再把共享实例 set 到该 URL（幂等：已注册则跳过）。 */
+  private sharedRegistered = false;
   private registerSharedModules(): void {
+    if (this.sharedRegistered) return;
     const shared = (window as any).__SHARED__;
     if (!shared) return;
+    const imports: Record<string, string> = {};
     for (const [modName, key] of Object.entries(SHARED_MODULES)) {
       const value = shared[key];
-      if (value && !System.has(modName)) {
-        System.set(modName, System.newModule({ default: value, ...value }));
+      if (!value) continue;
+      // 虚拟 URL 模块名：必须用绝对 URL（resolve 返回 canonical URL，registry key 需一致）
+      const url = new URL(`/shell/shared/${modName}.js`, window.location.origin).href;
+      imports[modName] = url;
+      if (!System.has(url)) {
+        System.set(url, { default: value, ...value });
       }
     }
+    System.addImportMap({ imports });
+    this.sharedRegistered = true;
   }
 
   /** UMD script 加载（旧产物兼容）：执行后挂到 window.__MODULES__[name] */
