@@ -1,8 +1,26 @@
 import axios from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 
 const http = axios.create({
   baseURL: '/',
   timeout: 30000,
+});
+
+/**
+ * 自动从 localStorage 的 user-store 注入 Authorization 头。
+ * 避免与 admin/src/api/request.ts 的拦截器重复维护（两处 key 相同）。
+ */
+http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  try {
+    const raw = localStorage.getItem('user-store');
+    const token = raw ? (JSON.parse(raw)?.token as string | undefined) : null;
+    if (token) {
+      config.headers.set('Authorization', `Bearer ${token}`);
+    }
+  } catch {
+    /* 忽略解析错误 */
+  }
+  return config;
 });
 
 /** MCP 模块类型 */
