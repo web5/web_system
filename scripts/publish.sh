@@ -47,14 +47,18 @@ log "目标: $NORMALIZED"
 
 # ---------- 1. 预检 ----------
 if [ "$SKIP_CHECK" != "1" ]; then
-  log "预检环境配置..."
+  log "预检环境配置（空值/占位符）..."
   if [ "$DRY_RUN" != "1" ]; then
-    "$ROOT/scripts/check-env.sh" "$TARGET" 2>&1 | grep -E "\[缺失\]|\[空值\]|\[占位符\]" | head -10 || true
+    "$ROOT/scripts/check-env.sh" "$TARGET" 2>&1 | grep -E "\[空值\]|\[占位符\]" | head -10 || true
   fi
   log "预检服务状态..."
   if [ "$DRY_RUN" != "1" ]; then
-    "$ROOT/scripts/health-check.sh" "$TARGET" 2>&1 | grep -E "\[FAIL\]" | head -10 || true
-    [ $? -eq 0 ] && log "预检通过（无 FAIL）"
+    FAILS=$("$ROOT/scripts/health-check.sh" "$TARGET" 2>&1 | grep -E "\[FAIL\]" | head -10 || true)
+    if [ -n "$FAILS" ]; then
+      warn "存在 FAIL 服务："; echo "$FAILS"
+    else
+      log "预检通过（无 FAIL）"
+    fi
   fi
 fi
 

@@ -73,7 +73,7 @@ deploy_backend() { # $1=service_name
     scp_to "/tmp/${svc}-deploy.tar.gz"
     local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
     cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
-    cmd="$cmd && pm2 restart $svc 2>&1 | tail -1"
+    cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
     remote "$cmd"
     rm -f "/tmp/${svc}-deploy.tar.gz"
   fi
