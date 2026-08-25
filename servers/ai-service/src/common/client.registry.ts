@@ -51,4 +51,13 @@ export class ClientRegistry implements OnModuleInit {
     if (!first) throw new Error('无任何已注册模型客户端');
     return first;
   }
+
+  /** 列出所有已注册模型及其可用状态（供 CLI 展示配置情况） */
+  listModels(): Array<{ id: string; displayName: string; available: boolean }> {
+    return Array.from(this.clients.values()).map((c) => ({
+      id: c.modelId,
+      displayName: c.displayName,
+      available: c.isAvailable(),
+    }));
+  }
 }
