@@ -14,52 +14,35 @@
 | 筹码转移 | 筹码分布图 -> 对比底部和当前筹码峰变化 | 底部峰缩小+高位峰扩大=出货 |
 | 散户席位 | 龙虎榜 -> 席位明细 -> 非"机构专用"席位 | 散户净买入激增=接盘信号 |
 
-## 连接器获取路径
+## 数据获取路径（自动化主路径：curl 直调 kedouai MCP 端点）
 
-若已连接以下金融数据连接器，可直接通过对话获取数据：
+> ⚠️ **自动化任务里没有 WorkBuddy MCP 工具 / 金融连接器可用**（tdx/mx-ds 需授权加不了、westock 列表无），**唯一可用的取数方式是 curl 直调 kedouai 生产 MCP 端点**。所有数据调用一律通过 `//kedou-mcp-curl` 技能的 `mcp_call(module, tool, args)` 完成（curl + JSON-RPC + Mcp-Session-Id + SSE 解析，已封装），**禁止在技能/任务里写"直接调用 MCP 工具 tdx_screener / data_north_holding 等"**。
 
-> **可用性标注**：`✅可用` = 已连接/免授权，可在自动化任务中使用；`⚠️需授权` = 主会话可用但自动化任务无法授权（个人/项目授权），本自动化不依赖。
+### 方式一：kedouai MCP 端点 curl 直调（✅ 自动化唯一可用，本框架主路径）
+```bash
+# 前置：设置 KEDOU_TOKEN（从 ~/.workbuddy/mcp.json 的 Authorization 复制，格式 kedou_xxx）
+export KEDOU_TOKEN='kedou_xxx'
 
-### 腾讯自选股 (westock-mcp) ✅可用：本自动化主数据源
-> 真实能力远超旧表所列，基本覆盖机构行为四维全量硬数据：
-- 北向资金持股与净买卖：`data_north_holding`
-- 主力 / 机构资金流向：`data_fund_flow`
-- 龙虎榜席位明细（含"机构专用"）：`data_lhb`
-- 筹码分布（成本结构 / 单峰密集）：`data_chip`
-- 券商研报 / 评级：`data_report` / `data_rating`
-- 财务基本面（营收 / 净利同比，排雷用）：`data_finance`
-- 实时行情 / 技术指标 / 支撑压力：`data_quote` / `data_technical` / `data_kline`
-- 股东研究（机构 / 散户持仓代理）：`data_shareholder`
-- 个股评分：`data_score`
+# 加载 //kedou-mcp-curl 后即可用 mcp_call（内部自动 initialize 拿会话 → tools/call）
+mcp_call institution get_valuation '{"code":"600519"}'      # 估值 PE/PB/市值
+mcp_call institution get_north_holding '{"code":"600519"}'   # 北向持股
+mcp_call institution get_fund_flow '{"code":"600519","days":10}'  # 主力资金流
+mcp_call institution get_lhb '{"code":"600519","limit":5}'   # 龙虎榜机构席位
+mcp_call institution get_report '{"code":"600519","days":180,"limit":10}'  # 研报
+mcp_call institution get_rating '{"code":"600519"}'          # 机构评级/EPS预测
+mcp_call institution get_chip '{"code":"600519"}'            # 筹码（东财下架→ok:false 降级）
+mcp_call institution get_finance_yoy '{"code":"600519"}'     # 业绩同比（东财下架→ok:false 降级）
+mcp_call finnews get_sector_library '{}'                     # 候选发现：板块库
+mcp_call finnews get_market_pulse '{}'                       # 候选发现：市场情绪
+```
 
-### 东方财富妙想 (mx-ds-mcp) ⚠️需授权：自动化不可用
-- A股/港股/美股行情
-- 多条件资产筛选
-- 券商研报检索
-- 全市场公告解析
-- 金融资讯检索
-- 北向资金 / 沪深港通数据
+### 方式二：WorkBuddy 金融连接器（⚠️ 仅主会话人机对话可用，自动化任务不可用，仅作补充）
+> 以下连接器在**人机对话**中可作增强数据源；**自动化任务无法访问**（tdx/mx-ds 需个人/项目授权、westock 项目列表无），框架不依赖它们。
 
-### 进门投研 (finenter)
-- 券商/上市公司/资管机构路演内容
-- 内外资研报、券商点评
-- 实时行情、财务及量化因子
+- **腾讯自选股 (westock-mcp)**：北向 `data_north_holding`、资金流 `data_fund_flow`、龙虎榜 `data_lhb`、筹码 `data_chip`、研报 `data_report`/`data_rating`、财务 `data_finance`、股东 `data_shareholder`、评分 `data_score`
+- **东方财富妙想 (mx-ds-mcp)** ⚠️需授权：行情 / 多条件选股 / 研报 / 公告 / 资讯 / 北向资金
+- **通达信 (tdx-connector)** ⚠️需授权：行情 / 条件选股 / 研报 / 公告 / 基本面 / 宏观
+- **进门投研 (finenter)**：路演 / 研报 / 行情 / 财务 / 量化因子
+- **Wind 金融数据 (wind-finance)**：股票 / 基金 / 指数 / 债券 / 宏观 / 沪深港通
+- **PandaData 金融数据 (pandadata)**：A股 / 期货 / 期权 / 港美股 / 基金 / 宏观
 
-### 通达信 (tdx-connector) ⚠️需授权：自动化不可用
-- 全球股票行情数据
-- 条件选股
-- 研究报告、公告资讯
-- 宏观信息
-- 个股基本面分析
-- 同行业对比
-
-### Wind 金融数据 (wind-finance)
-- 股票、基金、指数、债券数据
-- 公告、财经新闻
-- 宏观经济数据
-- 沪深港通 / 北向资金数据
-
-### PandaData 金融数据 (pandadata)
-- A股、期货、期权、港美股、基金数据
-- 宏观经济及量化因子
-- 统计比较与趋势归纳

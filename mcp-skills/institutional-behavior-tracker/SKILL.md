@@ -96,6 +96,26 @@ agent_created: true
 
 详细矩阵与散户反向指标见 `references/framework_v2.md` 第四章。
 
+## 数据调用方式（硬性约定：一律 curl 直调 kedouai 端点）
+
+> ⚠️ **自动化任务里没有 WorkBuddy MCP 工具 / 金融连接器可用**（tdx/mx-ds 需授权加不了、westock 项目列表无）。**本技能在自动化中取数的唯一方式是 curl 直调 kedouai 生产 MCP 端点**，即通过 `//kedou-mcp-curl` 技能的 `mcp_call(module, tool, args)` 完成（curl + JSON-RPC，内部自动处理 Mcp-Session-Id 与 SSE 解析）。
+>
+> **禁止**在分析流程中写"调用 tdx_screener / data_north_holding / mx_stocks_screener 等 MCP 工具"，或假设任何金融连接器可用。所有数据一律：
+> ```bash
+> export KEDOU_TOKEN='kedou_xxx'          # 从 ~/.workbuddy/mcp.json 的 Authorization 复制
+> mcp_call institution get_valuation '{"code":"600519"}'      # 估值
+> mcp_call institution get_north_holding '{"code":"600519"}'   # 北向持股
+> mcp_call institution get_fund_flow '{"code":"600519","days":10}'
+> mcp_call institution get_lhb '{"code":"600519","limit":5}'
+> mcp_call institution get_report '{"code":"600519"}'
+> mcp_call institution get_rating '{"code":"600519"}'
+> mcp_call institution get_chip '{"code":"600519"}'            # 可能 ok:false（降级）
+> mcp_call institution get_finance_yoy '{"code":"600519"}'     # 可能 ok:false（降级）
+> mcp_call finnews get_sector_library '{}'                     # 候选发现
+> mcp_call finnews get_market_pulse '{}'
+> ```
+> 工具返回 `ok:false` 的维度，如实标注"数据暂不可用/置信度低"，禁止臆造。
+
 ## 在 web_system / MCP 环境的数据接入映射
 
 本框架在 web_system 体系中落地时，各维度按以下优先级取数（详见 `references/data_lookup.md`）：
