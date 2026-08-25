@@ -1,36 +1,80 @@
-import { Module, OnModuleInit, Logger } from '@nestjs/common';
-import { ClientRegistry } from '../common/client.registry';
+import { Module, OnModuleInit, Logger, Provider } from '@nestjs/common';
 import { ConversationModule } from '../conversation/conversation.module';
-import { ToolRegistry } from './registry/tool.registry';
-import { AgentRegistry } from './registry/agent.registry';
-import { AgentEngine } from './core/agent-engine';
-import { AgentRunner } from './core/agent-runner';
 import { ConversationMemory } from './memory/conversation-memory';
-import { Compaction } from './memory/compaction';
 import { ImageGenTool } from './tools/image-gen.tool';
-import { CalculatorTool } from './tools/calculator.tool';
-import { WebSearchTool } from './tools/web-search.tool';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { bianbianAgent } from './agents/bianbian.agent';
+import {
+  AgentEngine,
+  AgentRunner,
+  AgentRegistry,
+  ClientRegistry,
+  Compaction,
+  Hy3Client,
+  DeepseekClient,
+  ToolRegistry,
+} from '@kedou/agent-core';
 
 /**
- * Agent harness 统一注册入口。
- * 内置工具与 Agent 定义在此集中注册，禁止各 service 自行散落 new 工具。
+ * Agent harness 统一注册入口（收敛自 @kedou/agent-core）。
+ * 引擎/注册表/客户端/摘要压缩均复用 agent-core（纯 TS），
+ * 通过 useFactory 桥接进 Nest DI；ConversationMemory(DB 版) 与 ImageGenTool(生图) 为 ai-service 特有。
  */
+const clientRegistryProvider: Provider = {
+  provide: ClientRegistry,
+  useFactory: (): ClientRegistry => {
+    const registry = new ClientRegistry();
+    registry.register(new Hy3Client());
+    registry.register(new DeepseekClient());
+    return registry;
+  },
+};
+
+const toolRegistryProvider: Provider = {
+  provide: ToolRegistry,
+  useFactory: (): ToolRegistry => new ToolRegistry(),
+};
+
+const agentRegistryProvider: Provider = {
+  provide: AgentRegistry,
+  useFactory: (): AgentRegistry => new AgentRegistry(),
+};
+
+const compactionProvider: Provider = {
+  provide: Compaction,
+  useFactory: (clientRegistry: ClientRegistry): Compaction => new Compaction(clientRegistry),
+  inject: [ClientRegistry],
+};
+
+const engineProvider: Provider = {
+  provide: AgentEngine,
+  useFactory: (
+    clientRegistry: ClientRegistry,
+    toolRegistry: ToolRegistry,
+    agentRegistry: AgentRegistry,
+    memory: ConversationMemory,
+  ): AgentEngine => new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory),
+  inject: [ClientRegistry, ToolRegistry, AgentRegistry, ConversationMemory],
+};
+
+const runnerProvider: Provider = {
+  provide: AgentRunner,
+  useFactory: (engine: AgentEngine): AgentRunner => new AgentRunner(engine),
+  inject: [AgentEngine],
+};
+
 @Module({
   imports: [ConversationModule],
   providers: [
-    ClientRegistry,
-    ToolRegistry,
-    AgentRegistry,
-    Compaction,
-    AgentEngine,
-    AgentRunner,
+    clientRegistryProvider,
+    toolRegistryProvider,
+    agentRegistryProvider,
+    compactionProvider,
+    engineProvider,
+    runnerProvider,
+    // ai-service 特有
     ConversationMemory,
-    // 内置工具
     ImageGenTool,
-    CalculatorTool,
-    WebSearchTool,
   ],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry],
 })
@@ -41,20 +85,16 @@ export class AgentModule implements OnModuleInit {
     private readonly toolRegistry: ToolRegistry,
     private readonly agentRegistry: AgentRegistry,
     private readonly imageGenTool: ImageGenTool,
-    private readonly calculatorTool: CalculatorTool,
-    private readonly webSearchTool: WebSearchTool,
   ) {}
 
   onModuleInit(): void {
-    // 注册内置工具
+    // 注册 ai-service 特有工具（生图）
     this.toolRegistry.register(this.imageGenTool);
-    this.toolRegistry.register(this.calculatorTool);
-    this.toolRegistry.register(this.webSearchTool);
 
     // 注册内置 Agent 定义
     this.agentRegistry.register(studyAssistantAgent);
     this.agentRegistry.register(bianbianAgent);
 
-    this.logger.log('Agent harness 工具与 Agent 定义注册完成');
+    this.logger.log('Agent harness（agent-core）工具与 Agent 定义注册完成');
   }
 }

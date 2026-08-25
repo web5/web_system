@@ -15,8 +15,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "agent:cli": "node --env-file=.env -r ts-node/register src/agent/cli/agent-cli.ts"
+    "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.0",
@@ -27,6 +26,7 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.0",
     "@web-system/shared": "file:../../packages/shared",
+    "@kedou/agent-core": "file:../../packages/agent-core",
     "axios": "^1.6.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
