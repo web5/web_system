@@ -118,6 +118,27 @@ const WECHAT_MP_HTTP_TOOLS: Array<{
   },
 ];
 
+/** 论文学习数据通道的 REST 接口声明（seed 到 mcp_modules，code_key=paper） */
+const PAPER_HTTP_TOOLS: Array<{
+  name: string;
+  description: string;
+  method: string;
+  path: string;
+  params: Array<{ name: string; type: string; required: boolean; description?: string }>;
+}> = [
+  {
+    name: 'fetch_papers',
+    description:
+      '从 arXiv 拉取最新论文列表（仅查询不发布）。返回论文标题/摘要/arxiv id/链接/作者/分类，按提交时间倒序。用于论文学习、生成论文日报',
+    method: 'GET',
+    path: '/api/papers',
+    params: [
+      { name: 'categories', type: 'string', required: false, description: 'arXiv 分类（默认 cs.AI+OR+cs.CL+OR+cs.CV+OR+cs.LG）' },
+      { name: 'max_results', type: 'integer', required: false, description: '返回论文数（默认 10，最大 20）' },
+    ],
+  },
+];
+
 @Injectable()
 export class McpService implements OnModuleInit {
   private readonly logger = new Logger(McpService.name);
@@ -130,10 +151,68 @@ export class McpService implements OnModuleInit {
     private readonly toolRepo: Repository<McpToolEntity>,
   ) {}
 
-  /** 启动时 seed 财经资讯 + 公众号发布 HTTP 模块（自动注册后台微服务 REST 接口） */
+  /** 启动时 seed 财经资讯 + 公众号发布 + 论文学习 HTTP 模块（自动注册后台微服务 REST 接口） */
   async onModuleInit(): Promise<void> {
     await this.seedFinnewsHttpModule();
     await this.seedWechatMpModule();
+    await this.seedPaperModule();
+  }
+
+  /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
+  private async seedPaperModule(): Promise<void> {
+    // paper 数据源在 content-hub，与 finnews 同机部署；优先直连本机，避免跨机
+    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const authType = '';
+    const authConfig: Record<string, any> | null = null;
+
+    let existing = await this.moduleRepo.findOne({ where: { code_key: 'paper' } });
+    if (existing && existing.module_type !== 'http') {
+      await this.moduleRepo.delete({ id: existing.id });
+      existing = null;
+    }
+    if (existing) {
+      let changed = false;
+      if (existing.base_url !== baseUrl) {
+        existing.base_url = baseUrl;
+        changed = true;
+      }
+      if (existing.auth_type !== authType) {
+        existing.auth_type = authType;
+        changed = true;
+      }
+      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
+        existing.auth_config = authConfig;
+        changed = true;
+      }
+      if (changed) {
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+        });
+        this.logger.log(`已同步论文学习 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
+      }
+      return;
+    }
+
+    const mod = await this.moduleRepo.save(
+      this.moduleRepo.create({
+        name: '论文学习',
+        description: '论文学习微服务：arXiv 最新论文拉取（cs.AI/CL/CV/LG），按提交时间倒序',
+        base_url: baseUrl,
+        timeout: 30,
+        auth_type: authType,
+        auth_config: authConfig,
+        module_type: 'http',
+        code_key: 'paper',
+        enabled: true,
+      }),
+    );
+    const tools = PAPER_HTTP_TOOLS.map((t) =>
+      this.toolRepo.create({ module_id: mod.id, ...t }),
+    );
+    await this.toolRepo.save(tools);
+    this.logger.log(`已 seed 论文学习 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
   }
 
   private async seedFinnewsHttpModule(): Promise<void> {

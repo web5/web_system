@@ -26,6 +26,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKIP_CHECK="${SKIP_CHECK:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 
+# ---------- 0. SSH 免密前置检查 ----------
+SSH_ALIAS="kedou-$TARGET"
+if ! ssh -o BatchMode=yes -o ConnectTimeout=8 "$SSH_ALIAS" "echo ok" >/dev/null 2>&1; then
+  err "检测到 $SSH_ALIAS 尚未免密登录。\n  请先执行一次: ./scripts/setup-ssh-key.sh\n  （只需跑一次，之后发布全程不再弹密码）"
+fi
+
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[publish:$TARGET]${NC} $1"; }
 warn() { echo -e "${YELLOW}[publish:$TARGET][WARN]${NC} $1"; }
@@ -71,6 +77,16 @@ for tgt in $NORMALIZED; do
     "$ROOT/scripts/deploy.sh" "$TARGET" "$tgt" 2>&1 | grep -E "部署完成|\[FAIL\]|\[ERROR\]|error" | head -5
   fi
 done
+
+# ---------- 2.5 数据库 schema 自动同步（幂等，漏跑有风险）----------
+if [ "$SKIP_CHECK" != "1" ]; then
+  log "同步数据库 schema（幂等）..."
+  if [ "$DRY_RUN" = "1" ]; then
+    DRY_RUN=1 "$ROOT/scripts/sync-schema.sh" "$TARGET" web_system 2>&1 | head -5
+  else
+    "$ROOT/scripts/sync-schema.sh" "$TARGET" web_system 2>&1 | grep -E "ok|完成|ERROR" | head -10 || true
+  fi
+fi
 
 # ---------- 3. 复检 ----------
 if [ "$SKIP_CHECK" != "1" ]; then

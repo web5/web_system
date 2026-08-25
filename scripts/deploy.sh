@@ -19,9 +19,14 @@ DRY_RUN="${DRY_RUN:-0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 V="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo dev)"
 
+# 载入 DB 配置（统一从 .env.deploy 读取，禁止硬编码密码）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.deploy" ] && source "$SCRIPT_DIR/.env.deploy"
+
+# 统一走 ~/.ssh/config 别名（由 scripts/setup-ssh-key.sh 一次性打通免密）
 case "$TARGET" in
-  dev)  SSH_HOST="ubuntu@175.27.189.123"; PORT_BASE=6000 ;;
-  prod) SSH_HOST="root@106.52.176.246";     PORT_BASE=3000 ;;
+  dev)  SSH_HOST="kedou-dev";  PORT_BASE=6000 ;;
+  prod) SSH_HOST="kedou-prod"; PORT_BASE=3000 ;;
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
@@ -98,12 +103,22 @@ deploy_frontend() { # $1=module_name
       scp_to "/tmp/${mod}-deploy.tar.gz"
       remote "mkdir -p /data/web_system/servers/gateway/public/static/modules/$mod/$V && cd /data/web_system/servers/gateway/public/static/modules/$mod/$V && rm -rf ./* && tar xzf /tmp/${mod}-deploy.tar.gz && rm -f /tmp/${mod}-deploy.tar.gz"
       rm -f "/tmp/${mod}-deploy.tar.gz"
-      # 更新 deploy 表版本（需要目标库）
+      # 更新 deploy 表版本（密码经远程 cnf 注入，不暴露在命令行）
+      local db_host db_user db_pass
       if [ "$TARGET" = "dev" ]; then
-        remote "mysql -h127.0.0.1 -uroot -pweb_system_root_2026 web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='dev' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'"
+        db_host="${DEV_DB_HOST:-127.0.0.1}"; db_user="${DEV_DB_USER:-root}"; db_pass="${DEV_DB_PASS:-}"
       else
-        remote "mysql -h172.16.16.10 -uroot -p'gn%!CTvZNP0e4%Lc' web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='prod' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'"
+        db_host="${PROD_DB_HOST:-172.16.16.10}"; db_user="${PROD_DB_USER:-root}"; db_pass="${PROD_DB_PASS:-}"
       fi
+      local env_id="$TARGET"
+      remote "cat > /tmp/.deploy_cnf <<'CNF'
+[client]
+host=$db_host
+user=$db_user
+password=$db_pass
+CNF
+mysql --defaults-extra-file=/tmp/.deploy_cnf web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='$env_id' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'
+rm -f /tmp/.deploy_cnf"
     fi
   fi
   log "$mod 部署完成"
