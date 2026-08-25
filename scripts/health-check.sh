@@ -8,8 +8,8 @@ set -uo pipefail
 
 TARGET="${1:-dev}"
 case "$TARGET" in
-  dev)  SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes ubuntu@203.0.113.10"; PORT_BASE=6000 ;;
-  prod) SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes root@198.51.100.20";     PORT_BASE=3000 ;;
+  dev)  SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-dev";  PORT_BASE=6000 ;;
+  prod) SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-prod"; PORT_BASE=3000 ;;
   *) echo "用法: $0 <dev|prod>"; exit 1 ;;
 esac
 

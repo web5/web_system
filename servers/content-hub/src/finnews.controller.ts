@@ -1,10 +1,24 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { FinnewsService } from './services/finnews.service';
+import { ArxivCollector } from './content/collectors/arxiv.collector';
 
 /** 财经资讯 REST API（供 mcp-gateway 或其他系统调用） */
 @Controller('api')
 export class FinnewsController {
+  private readonly arxivCollector = new ArxivCollector();
+
   constructor(private readonly finnewsService: FinnewsService) {}
+
+  /** 拉取 arXiv 论文（论文学习 MCP 数据源） */
+  @Get('papers')
+  async papers(
+    @Query('categories') categories?: string,
+    @Query('max_results') maxResults?: string,
+  ) {
+    const config = categories ? { categories } : {};
+    const list = await this.arxivCollector.collect(config, Number(maxResults) || 10);
+    return { count: list.length, papers: list };
+  }
 
   /** 最新话题列表 */
   @Get('topics')
