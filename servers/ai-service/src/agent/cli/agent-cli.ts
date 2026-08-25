@@ -2,6 +2,7 @@
 import 'reflect-metadata';
 import { buildStandaloneHarness } from './harness-factory';
 import { AgentDefinition } from '../interfaces/agent.interface';
+import { ensureConfig, applyConfigToEnv } from './config-store';
 
 const COLORS: Record<string, string> = {
   reset: '\x1b[0m',
@@ -113,16 +114,14 @@ function ensureAgentModelReady(agent: AgentDefinition, harness: ReturnType<typeo
 async function main(): Promise<void> {
   printWelcome();
   const opts = parseArgs(process.argv.slice(2));
-  const harness = buildStandaloneHarness();
 
-  // --models：仅展示模型配置状态
-  if (opts.models) {
-    printModelStatus(harness);
-    return;
-  }
-
-  // --list：列出 Agent（不要求模型配置）
-  if (opts.list) {
+  // --models / --list：仅展示，不要求配置（不消耗 token）
+  if (opts.models || opts.list) {
+    const harness = buildStandaloneHarness();
+    if (opts.models) {
+      printModelStatus(harness);
+      return;
+    }
     console.log(c('\n可用 Agent:', 'bold'));
     for (const agent of harness.agentRegistry.list()) {
       const modelReady = harness.clientRegistry.get(agent.model).isAvailable();
@@ -130,15 +129,22 @@ async function main(): Promise<void> {
       console.log(`  ${c(agent.id, 'cyan')}  ${agent.name}  [tools: ${agent.tools.join(', ')}]  (${modelTag})`);
     }
     printModelStatus(harness);
+    if (!harness.clientRegistry.listModels().some((m) => m.available)) {
+      console.log(c('\n提示：首次对话前会引导你配置大模型（保存在本机，不会消耗他人 token）。', 'yellow'));
+    }
     return;
   }
 
-  // 运行 --message：必须先配置所选 Agent 的模型
+  // 运行 --message：必须先完成大模型配置（交互引导），否则无法对话
   if (!opts.message.trim()) {
     console.error(c('错误：请提供 --message 参数', 'red'));
     printHelp();
     process.exit(1);
   }
+
+  const cfg = await ensureConfig();
+  applyConfigToEnv(cfg);
+  const harness = buildStandaloneHarness();
 
   let agent: AgentDefinition;
   try {

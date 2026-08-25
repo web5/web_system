@@ -96,11 +96,11 @@ export class DeepseekClient extends BaseAiClient {
         finishReason: choice?.finish_reason,
       };
     } catch (error) {
-      this.logger.error(`DeepSeek API error: ${error.message}`, error.stack);
       if (error.response) {
-        this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(`DeepSeek API error: ${error.message} | ${JSON.stringify(error.response.data)}`);
         throw new Error(`AI 服务调用失败: ${error.response.data?.error?.message || error.message}`);
       }
+      this.logger.error(`DeepSeek API error: ${error.message}`, error.stack);
       throw new Error(`AI 服务调用失败: ${error.message}`);
     }
   }
