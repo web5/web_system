@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfaces/tool.interface';
+import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../interfaces/tool.interface';
 
 /**
  * 联网搜索工具（占位）。
@@ -10,7 +10,7 @@ import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfac
 export class WebSearchTool implements ToolDefinition {
   readonly name = 'web-search';
   readonly description = '联网搜索实时信息';
-  readonly parameters = {
+  readonly parameters: Record<string, ToolParameter> = {
     query: { type: 'string', description: '搜索关键词', required: true },
   };
 

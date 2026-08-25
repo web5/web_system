@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfaces/tool.interface';
+import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../interfaces/tool.interface';
 import { ImageGenClient } from '../../common/http/image-gen.client';
 
 /**
@@ -10,7 +10,7 @@ import { ImageGenClient } from '../../common/http/image-gen.client';
 export class ImageGenTool implements ToolDefinition {
   readonly name = 'image-gen';
   readonly description = '根据文本提示词生成图片，返回任务 ID';
-  readonly parameters = {
+  readonly parameters: Record<string, ToolParameter> = {
     prompt: { type: 'string', description: '图片生成的文本描述', required: true },
   };
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfaces/tool.interface';
+import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../interfaces/tool.interface';
 
 /**
  * 计算器工具：安全表达式求值（少儿学习场景示例）。
@@ -9,7 +9,7 @@ import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfac
 export class CalculatorTool implements ToolDefinition {
   readonly name = 'calculator';
   readonly description = '安全地计算数学算术表达式，如 "12 * (3 + 4)"';
-  readonly parameters = {
+  readonly parameters: Record<string, ToolParameter> = {
     expression: { type: 'string', description: '算术表达式', required: true },
   };
 
