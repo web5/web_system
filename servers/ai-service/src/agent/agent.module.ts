@@ -1,7 +1,9 @@
 import { Module, OnModuleInit, Logger, Provider } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { ConversationModule } from '../conversation/conversation.module';
 import { ConversationMemory } from './memory/conversation-memory';
 import { ImageGenTool } from './tools/image-gen.tool';
+import { ImageGenClient } from '../common/http/image-gen.client';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { bianbianAgent } from './agents/bianbian.agent';
 import {
@@ -64,7 +66,7 @@ const runnerProvider: Provider = {
 };
 
 @Module({
-  imports: [ConversationModule],
+  imports: [ConversationModule, HttpModule],
   providers: [
     clientRegistryProvider,
     toolRegistryProvider,
@@ -74,6 +76,7 @@ const runnerProvider: Provider = {
     runnerProvider,
     // ai-service 特有
     ConversationMemory,
+    ImageGenClient,
     ImageGenTool,
   ],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry],
