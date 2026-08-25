@@ -69,12 +69,16 @@ if [ "$SKIP_CHECK" != "1" ]; then
 fi
 
 # ---------- 2. 部署 ----------
+# 注意：deploy.sh 在 build 失败时会 exit 1。这里把输出捕获到变量后再判断真实退出码，
+#       避免管道 + head 引发的 SIGPIPE 误判（不用 pipefail 组合）。
 for tgt in $NORMALIZED; do
   log "部署 $tgt ..."
   if [ "$DRY_RUN" = "1" ]; then
     DRY_RUN=1 "$ROOT/scripts/deploy.sh" "$TARGET" "$tgt" 2>&1 | grep -E "部署完成|dry-run|error" | head -3
   else
-    "$ROOT/scripts/deploy.sh" "$TARGET" "$tgt" 2>&1 | grep -E "部署完成|\[FAIL\]|\[ERROR\]|error" | head -5
+    out=$("$ROOT/scripts/deploy.sh" "$TARGET" "$tgt" 2>&1); rc=$?
+    echo "$out" | grep -E "部署完成|\[FAIL\]|\[ERROR\]|error" | head -5
+    [ "$rc" = "0" ] || err "部署 $tgt 失败，已中断发布（旧代码保留）"
   fi
 done
 
