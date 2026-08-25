@@ -10,9 +10,11 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "node scripts/check-secrets.js"
   },
   "keywords": ["agent", "ai", "cli", "llm", "react", "tool-use"],
+  "private": false,
   "license": "MIT",
   "files": ["dist", "bin", "README.md"],
   "engines": {
