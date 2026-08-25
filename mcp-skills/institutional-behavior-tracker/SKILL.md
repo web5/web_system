@@ -1,6 +1,6 @@
 ---
 name: web-system-institutional-behavior-tracker
-description: 机构行为全周期追踪框架——中线投资决策SOP。用于分析A股个股的机构持仓、北向资金、资金流向、龙虎榜席位、筹码分布等数据，执行"选股→持股→离场"完整闭环决策。本技能为 web_system / MCP 环境适配版：数据维度映射到 kedouai MCP（finnews）与已连接金融连接器（tdx-connector / mx-ds-mcp / westock-mcp 等），分析严格遵循"双通道并行 + 候选池确定性锁定 + 决策面板三档"。当用户（或定时任务）需要分析个股机构行为、判断买卖时机、执行投资纪律检查时加载本技能。
+description: 机构行为全周期追踪框架——中线投资决策SOP。用于分析A股个股的机构持仓、北向资金、资金流向、龙虎榜席位、筹码分布等数据，执行"选股→持股→离场"完整闭环决策。本技能为 web_system / MCP 环境适配版：候选发现映射到 kedouai MCP `finnews`，四维硬数据映射到 kedouai 自托管 MCP `institution`（北向/资金流/龙虎榜/估值/研报/评级，免连接器授权），分析严格遵循"双通道并行 + 候选池确定性锁定 + 决策面板三档"。当用户（或定时任务）需要分析个股机构行为、判断买卖时机、执行投资纪律检查时加载本技能。
 version: 2.4.0
 agent_created: true
 ---
@@ -60,7 +60,7 @@ agent_created: true
 ### 第二步：选股（双通道）—— 候选池确定性锁定 ⭐ V2.4
 
 **四条铁律**：
-1. **禁止裸脑选股**：候选池必须来自数据工具扫描结果（`tdx_screener` / `mx_stocks_screener` / finnews 板块热度+个股资讯），禁止不调工具、仅凭记忆罗列股票。工具返回空 → 如实报"未找到符合条件的股票"，禁止编造代码/名称。
+1. **禁止裸脑选股**：候选池必须来自数据工具扫描结果（finnews 板块热度+个股资讯 / institution 四维硬数据），禁止不调工具、仅凭记忆罗列股票。工具返回空 → 如实报"未找到符合条件的股票"，禁止编造代码/名称。
 2. **固定扫描条件**：通道A/B 按固定条件扫描，不得临时改条件、改范围、改市场。
 3. **固定排序截断**：扫描结果按指定字段排序取前 N 只，锁定为候选池快照。
 4. **快照锁定**：候选池一经产出，本次分析全程以该名单为唯一输入；评级过程中禁止追加、替换、删除任何票。
@@ -69,15 +69,15 @@ agent_created: true
 
 | 通道 | 固定扫描条件 | 推荐工具 | 排序/截断 |
 |---|---|---|---|
-| A 正向四维 | 机构持仓>15% 或 社保/大基金/顶级外资新进 | tdx-connector / mx-ds-mcp | 按机构持仓比例降序，取前20 |
-| B 反向雷达 | 营收/净利增速>40% 且 距60日高点回撤>20% | tdx-connector / mx-ds-mcp | 按回撤幅度降序，取前20 |
+| A 正向四维 | 机构持仓>15% 或 社保/大基金/顶级外资新进 | kedouai MCP `institution`（北向/资金流/龙虎榜/估值/评级） | 按北向持仓或资金流强度降序，取前20 |
+| B 反向雷达 | 营收/净利增速>40% 且 距60日高点回撤>20% | kedouai MCP `institution` + `finnews` | 按回撤幅度降序，取前20 |
 
 - **通道A**：四维验证，抓"机构正在建仓/拉升初期"的票
 - **通道B**：反向雷达，抓"基本面强+机构温和加仓+股价回调"的潜力票
 
 **web_system / MCP 环境下的候选来源（二选一或叠加）**：
 - **kedouai MCP · finnews**（`//kedou-mcp-curl` 调 `finnews` 模块）：`get_sector_library` → `get_sector_hot` → `get_stock_news` → `get_market_pulse`，用"板块热度上升 + 个股实质利好资讯"作为候选公司的**初筛与催化面证据**（注意：finnews 提供的是资讯/情绪/热度，不提供机构持仓原始数据，仅作候选发现，不替代四维验证）。
-- **已连接金融连接器**：`tdx-connector`（`tdx_screener` 等）、`mx-ds-mcp`（`mx_stocks_screener`、北向/沪深港通、研报）用于拉取机构持仓、北向、资金流、龙虎榜、筹码等四维数据。
+- **kedouai MCP · institution**（`//kedou-mcp-curl` 调 `institution` 模块，自托管免授权）：`get_north_holding` / `get_fund_flow` / `get_lhb` / `get_valuation` / `get_report` / `get_rating` 覆盖北向、资金流、龙虎榜、估值、研报、评级等四维硬数据。
 
 > 若工具不支持某维度（如"机构持仓比例"），用等效数据源/条件替代，但**必须把实际使用的条件写进报告**，保证可复现。
 > 输出可追溯：扫描类报告开头必须注明「候选池来源：XX工具 + 条件 + N只 + 扫描时间」。
@@ -103,16 +103,16 @@ agent_created: true
 | 维度 | 优先数据源（web_system 环境） | 调用方式 |
 |---|---|---|
 | 候选发现 / 板块热度 / 个股资讯 / 市场情绪 | kedouai MCP `finnews`（`get_sector_library` / `get_sector_hot` / `get_stock_news` / `get_market_pulse`） | `//kedou-mcp-curl` → `mcp_call finnews ...` |
-| 北向资金 / 沪深港通 | 腾讯自选股 `westock-mcp`（`data_north_holding`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 资金流向 / 主力行为 | 腾讯自选股 `westock-mcp`（`data_fund_flow`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 龙虎榜 / 机构席位 | 腾讯自选股 `westock-mcp`（`data_lhb`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 筹码分布 / 成本结构 | 腾讯自选股 `westock-mcp`（`data_chip`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 财务基本面 / 排雷 | 腾讯自选股 `westock-mcp`（`data_finance`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 研报 / 评级催化 | 腾讯自选股 `westock-mcp`（`data_report` / `data_rating`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 静态机构持仓（代理） | 腾讯自选股 `westock-mcp`（`data_shareholder` / `data_score` / `data_north_holding`）✅ | 任务勾选 `westock-mcp` 后直接调用 |
-| 增强源（可选，需授权，自动化默认不挂） | `tdx-connector`、`mx-ds-mcp` | 个人/项目授权后调用，覆盖更细的机构持股比例 |
+| 北向资金 / 静态仓位（代理） | kedouai MCP `institution`（`get_north_holding`：北向机构数 / 总持股市值 / Top3 机构）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_north_holding '<code>'` |
+| 资金流向 / 主力行为 | kedouai MCP `institution`（`get_fund_flow`：主力净流入趋势 / 近5日合计）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_fund_flow '<code>'` |
+| 龙虎榜 / 机构席位 | kedouai MCP `institution`（`get_lhb`：上榜买卖额 / 机构说明）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_lhb '<code>'` |
+| 成本与估值 | kedouai MCP `institution`（`get_valuation`：PE_TTM / PB_MRQ / 总市值）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_valuation '<code>'` |
+| 筹码分布 / 成本结构 | kedouai MCP `institution`（`get_chip`；东财报表当前下架时返回 ok:false，标注"建议人工核对成本区"）⚠️降级 | `//kedou-mcp-curl` → `mcp_call institution get_chip '<code>'` |
+| 业绩同比 / 排雷 | kedouai MCP `institution`（`get_finance_yoy`；东财 F10 报表已下架时返回 ok:false，用 get_valuation + get_rating 作代理）⚠️降级 | `//kedou-mcp-curl` → `mcp_call institution get_finance_yoy '<code>'` |
+| 研报 / 评级催化 | kedouai MCP `institution`（`get_report` 研报列表 / `get_rating` 机构评级与 EPS 预测）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_report '<code>'` / `get_rating '<code>'` |
+| 增强源（可选，需授权，自动化默认不挂） | 腾讯自选股 `westock-mcp`、`tdx-connector`、`mx-ds-mcp` | 个人/项目授权后调用，覆盖更细的机构持股比例（如纯机构持股%） |
 
-> **主数据源说明**：`westock-mcp`（腾讯自选股）已连接、免个人授权，真实能力覆盖北向 / 资金流 / 龙虎榜 / 筹码 / 财务 / 研报 / 股东——**几乎就是四维验证全量硬数据**，是「未来一周关注公司」自动化的唯一硬数据依赖。无需 `tdx-connector` / `mx-ds-mcp` 即可产出完整四维报告。若某维度 westock 确无对应工具（如纯机构持股比例），须如实标注缺失、降低结论强度，禁止臆造。
+> **主数据源说明**：四维硬数据已通过 kedouai **自托管 `institution` 模块**（东方财富公开接口，content-hub :6007 实现）提供，**免任何 WorkBuddy 连接器授权**，`//kedou-mcp-curl` 即可调用——这是「未来一周关注公司」自动化的硬数据主源（2026-08-26 起生效）。其中 `get_chip`（筹码）与 `get_finance_yoy`（业绩同比）因东财对应报表接口下架而**返回 ok:false 降级**，须如实标注并改用估值/评级作代理，禁止臆造。若某维度确无数据，须如实标注缺失、降低结论强度。westock/tdx/mx-ds 仅为可选的增强授权源，不挂也不影响框架运行。
 
 ## 报告输出规范
 

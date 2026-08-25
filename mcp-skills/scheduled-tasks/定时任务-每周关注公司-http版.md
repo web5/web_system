@@ -8,7 +8,7 @@
 不一定是新的公司——如果前面推荐过的公司仍然值得关注，继续推荐即可；如果不值得关注了，给出放弃理由，再推荐新的公司。
 
 先加载技能：
-- //kedou-mcp-curl ：提供 mcp_call(module, tool, args)，用 curl 直接调用 kedouai 生产 MCP 端点（finnews / wechat_mp / paper），无需 mcp.json。
+- //kedou-mcp-curl ：提供 mcp_call(module, tool, args)，用 curl 直接调用 kedouai 生产 MCP 端点（finnews / institution / wechat_mp / paper），无需 mcp.json、无需任何 WorkBuddy 连接器授权。
 - //web-system-institutional-behavior-tracker ：机构行为全周期追踪框架（双通道选股 + 四维验证 + 决策面板三档）。本任务的"分析"环节必须用它，不得只用新闻面拍脑袋下结论。
 
 若技能内 KEDOU_TOKEN 未填真实值，先在沙箱执行：export KEDOU_TOKEN='kedou_你的真实Token'（从 ~/.workbuddy/mcp.json 的 Authorization 复制）
@@ -28,11 +28,13 @@
 二、机构行为分析（//web-system-institutional-behavior-tracker）—— 本任务核心
 对每家候选公司严格套用该框架，不得省略步骤：
 - 第〇步强制双通道并行：通道A（正向四维验证）+ 通道B（反向雷达回调强势票），缺一即分析作废。
-- 5分钟排雷：业绩（营收/净利同比>20%？）、估值（PE 行业历史中位合理？）、消息面（近1月重大利空？）。基本面严重不达标直接放弃。
-- 四维验证数据取数优先级：
-  · 机构持仓 / 条件选股 / 基本面：若任务已附加 tdx-connector / mx-ds-mcp 连接器，调用 tdx_screener / mx_stocks_screener 拉取；
-  · 北向资金 / 沪深港通 / 研报 / 龙虎榜 / 筹码分布：调用 mx-ds-mcp、westock-mcp；
-  · 若任务未附加上述连接器（仅 finnews 资讯面可用）：必须如实标注「机构持仓/北向/资金流/龙虎榜维度数据未接入，置信度低，仅作催化面参考」，禁止用新闻面替代硬数据给出"建仓/S级"结论。
+- 5分钟排雷：业绩（用 mcp_call institution get_valuation 取 PE_TTM 判断估值、get_rating 取 EPS 预测趋势；营收/净利同比 get_finance_yoy 若返回 ok:false 则用估值+评级作代理）、消息面（近1月重大利空？用 mcp_call finnews get_stock_news）。基本面严重不达标直接放弃。
+- 四维验证数据来源（kedouai 自托管 `institution` 模块，免连接器授权，直接 mcp_call 调用）：
+  · 静态仓位（机构持了多少）：mcp_call institution get_north_holding '<code>'（北向持股作代理，含机构数/总市值/Top3）
+  · 动态行为（机构正在做什么）：mcp_call institution get_fund_flow '<code>'（主力净流入趋势）、mcp_call institution get_lhb '<code>'（龙虎榜机构席位）
+  · 成本与估值：mcp_call institution get_valuation '<code>'（PE/PB/总市值）、mcp_call institution get_chip '<code>'（筹码；若 ok:false 注明"东财筹码接口暂不可用，建议人工核对成本区"）
+  · 研报/评级催化：mcp_call institution get_report '<code>'、mcp_call institution get_rating '<code>'
+  · 若某工具返回 ok:false：必须如实标注「该维度数据暂不可用，置信度低，仅作催化面参考」，禁止用新闻面替代硬数据给出"建仓/S级"结论。
 - 输出决策面板三档：档1值得跟（必带触发价+失效价）/ 档2观察等待（写明"等什么"）/ 档3回避（写明"为什么"）。每只票只给结论+动作+触发价。
 
 三、生成关注公司清单（由你 AI 汇总）
@@ -75,7 +77,7 @@
 | 工作空间 | 云端项目「个人开发工作台」（或本地 /Users/geekwen/workspace/web_system） |
 | 调度 | 每周一 09:00（FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0），给出未来一周关注清单 |
 | 勾选技能 | **kedou-mcp-curl**（必须，提供 mcp_call）+ **web-system-institutional-behavior-tracker**（必须，提供分析框架） |
-| 建议附加连接器 | `tdx-connector`、`mx-ds-mcp`（用于机构持仓/北向/资金流/龙虎榜/筹码四维硬数据；不附加则自动降级为资讯面分析并标注低置信度） |
+| 建议附加连接器 | **无需附加任何连接器**：四维硬数据由 kedouai 自托管 `institution` 模块提供（免授权）；westock/tdx/mx-ds 仅作可选增强源 |
 | 勾选连接器（原版） | 无需勾选 finnews / wechat_mp 连接器（已由 kedou-mcp-curl 技能 curl 完成） |
 
 ## MCP 调用方式（由 kedou-mcp-curl 技能统一提供）
