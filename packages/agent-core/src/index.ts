@@ -1,0 +1,44 @@
+/**
+ * @kedou/agent-core 统一导出。
+ */
+
+// 接口
+export * from './interfaces/tool.interface';
+export * from './interfaces/agent.interface';
+export * from './interfaces/runtime.interface';
+
+// 模型客户端
+export * from './clients/base-ai.client';
+export { Hy3Client } from './clients/hy3.client';
+export { DeepseekClient } from './clients/deepseek.client';
+
+// 注册表
+export { ToolRegistry } from './registry/tool.registry';
+export { AgentRegistry } from './registry/agent.registry';
+export { ClientRegistry } from './registry/client.registry';
+
+// 引擎
+export { AgentEngine } from './core/agent-engine';
+export { AgentRunner } from './core/agent-runner';
+
+// 记忆
+export * from './memory/stored-message';
+export * from './memory/memory-port';
+export { Compaction } from './memory/compaction';
+export { InMemoryConversationMemory } from './memory/in-memory-conversation-memory';
+
+// 搜索（插件式 Provider）
+export * from './search/provider.interface';
+export { SearchProviderRegistry } from './search/registry';
+export { WebSearchTool } from './search/web-search.tool';
+export { BingSearchProvider } from './search/providers/bing.provider';
+
+// 内置工具
+export { ListDirTool } from './tools/coding/list-dir.tool';
+export { ReadFileTool } from './tools/coding/read-file.tool';
+export { GrepSearchTool } from './tools/coding/grep-search.tool';
+export { ShellExecTool } from './tools/coding/shell-exec.tool';
+
+// 工具函数
+export { Logger } from './lib/logger';
+export { API_TIMEOUT } from './lib/timeout';
