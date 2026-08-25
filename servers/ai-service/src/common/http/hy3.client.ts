@@ -103,11 +103,11 @@ export class Hy3Client extends BaseAiClient {
         finishReason: choice?.finish_reason,
       };
     } catch (error) {
-      this.logger.error(`Hy3 API error: ${error.message}`, error.stack);
       if (error.response) {
-        this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(`Hy3 API error: ${error.message} | ${JSON.stringify(error.response.data)}`);
         throw new Error(`Hy3 服务调用失败: ${error.response.data?.error?.message || error.message}`);
       }
+      this.logger.error(`Hy3 API error: ${error.message}`, error.stack);
       throw new Error(`Hy3 服务调用失败: ${error.message}`);
     }
   }
