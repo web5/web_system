@@ -139,6 +139,82 @@ const PAPER_HTTP_TOOLS: Array<{
   },
 ];
 
+/** 机构行为数据通道的 REST 接口声明（seed 到 mcp_modules，code_key=institution） */
+const INSTITUTION_HTTP_TOOLS: Array<{
+  name: string;
+  description: string;
+  method: string;
+  path: string;
+  params: Array<{ name: string; type: string; required: boolean; description?: string }>;
+}> = [
+  {
+    name: 'get_north_holding',
+    description: '北向资金个股持股（沪深港通）：最新日期北向机构数、总持股市值(万)、Top3 机构持仓。用于机构行为「静态仓位」与「北向资金」维度',
+    method: 'GET',
+    path: '/api/institution/north-holding',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+  {
+    name: 'get_fund_flow',
+    description: '主力资金流（近 N 日净流入）：每日主力净流入(元)、收盘价、涨跌幅，及近5日合计与趋势。用于机构行为「动态行为」维度',
+    method: 'GET',
+    path: '/api/institution/fund-flow',
+    params: [
+      { name: 'code', type: 'string', required: true, description: '股票代码，如 600519' },
+      { name: 'days', type: 'integer', required: false, description: '回溯天数（默认 10）' },
+    ],
+  },
+  {
+    name: 'get_lhb',
+    description: '龙虎榜（机构席位买卖）：近期上榜日期、买卖额(万)、机构买卖说明。用于机构行为「动态行为/龙虎榜」维度',
+    method: 'GET',
+    path: '/api/institution/lhb',
+    params: [
+      { name: 'code', type: 'string', required: true, description: '股票代码，如 600519' },
+      { name: 'limit', type: 'integer', required: false, description: '返回条数（默认 5）' },
+    ],
+  },
+  {
+    name: 'get_rating',
+    description: '机构评级与盈利预测：评级机构数、买入/增持数、未来3年 EPS 预测。用于机构行为「研报/评级催化」维度',
+    method: 'GET',
+    path: '/api/institution/rating',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+  {
+    name: 'get_report',
+    description: '研报列表：近期研报标题、机构、日期、评级、次年 EPS/PE 预测。用于机构行为「研报催化」维度',
+    method: 'GET',
+    path: '/api/institution/report',
+    params: [
+      { name: 'code', type: 'string', required: true, description: '股票代码，如 600519' },
+      { name: 'days', type: 'integer', required: false, description: '回溯天数（默认 180）' },
+      { name: 'limit', type: 'integer', required: false, description: '返回条数（默认 10）' },
+    ],
+  },
+  {
+    name: 'get_valuation',
+    description: '估值（PE/PB/市值）：PE_TTM、PE_LYR、PB_MRQ、总市值(亿)、收盘价、所属板块。用于机构行为「成本与估值」维度',
+    method: 'GET',
+    path: '/api/institution/valuation',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+  {
+    name: 'get_chip',
+    description: '筹码分布：东财该报表可能不可用，失败时返回 ok:false 并标注「建议人工核对成本区」。用于机构行为「成本区」维度（降级使用）',
+    method: 'GET',
+    path: '/api/institution/chip',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+  {
+    name: 'get_finance_yoy',
+    description: '业绩同比（营收/净利）：东财 F10 报表已下架，失败时返回 ok:false 并建议用 get_valuation(PE) 与 get_rating(EPS预测) 作业绩代理。用于机构行为「5分钟排雷」维度（降级使用）',
+    method: 'GET',
+    path: '/api/institution/finance-yoy',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+];
+
 @Injectable()
 export class McpService implements OnModuleInit {
   private readonly logger = new Logger(McpService.name);
@@ -156,6 +232,7 @@ export class McpService implements OnModuleInit {
     await this.seedFinnewsHttpModule();
     await this.seedWechatMpModule();
     await this.seedPaperModule();
+    await this.seedInstitutionModule();
   }
 
   /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
@@ -213,6 +290,63 @@ export class McpService implements OnModuleInit {
     );
     await this.toolRepo.save(tools);
     this.logger.log(`已 seed 论文学习 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
+  }
+
+  /** seed 机构行为数据模块（code_key=institution，直连本机 content-hub 的 /api/institution/* 接口） */
+  private async seedInstitutionModule(): Promise<void> {
+    // institution 数据源在 content-hub，与 finnews 同机部署；优先直连本机
+    const baseUrl = process.env.INSTITUTION_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const authType = '';
+    const authConfig: Record<string, any> | null = null;
+
+    let existing = await this.moduleRepo.findOne({ where: { code_key: 'institution' } });
+    if (existing && existing.module_type !== 'http') {
+      await this.moduleRepo.delete({ id: existing.id });
+      existing = null;
+    }
+    if (existing) {
+      let changed = false;
+      if (existing.base_url !== baseUrl) {
+        existing.base_url = baseUrl;
+        changed = true;
+      }
+      if (existing.auth_type !== authType) {
+        existing.auth_type = authType;
+        changed = true;
+      }
+      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
+        existing.auth_config = authConfig;
+        changed = true;
+      }
+      if (changed) {
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+        });
+        this.logger.log(`已同步机构行为 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
+      }
+      return;
+    }
+
+    const mod = await this.moduleRepo.save(
+      this.moduleRepo.create({
+        name: '机构行为数据',
+        description: '机构行为全周期追踪框架数据源：北向持股/主力资金流/龙虎榜/机构评级/研报/估值/筹码/业绩同比（东方财富公开接口）',
+        base_url: baseUrl,
+        timeout: 30,
+        auth_type: authType,
+        auth_config: authConfig,
+        module_type: 'http',
+        code_key: 'institution',
+        enabled: true,
+      }),
+    );
+    const tools = INSTITUTION_HTTP_TOOLS.map((t) =>
+      this.toolRepo.create({ module_id: mod.id, ...t }),
+    );
+    await this.toolRepo.save(tools);
+    this.logger.log(`已 seed 机构行为 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
   }
 
   private async seedFinnewsHttpModule(): Promise<void> {
