@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '../interfaces/tool.interface';
+import { ToolDefinition, ToolContext, ToolResult, ToolSchema } from '@kedou/agent-core';
 import { ImageGenClient } from '../../common/http/image-gen.client';
 import { API_TIMEOUT } from '@web-system/shared';
 

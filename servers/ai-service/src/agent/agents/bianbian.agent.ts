@@ -1,4 +1,4 @@
-import { AgentDefinition } from '../interfaces/agent.interface';
+import { AgentDefinition } from '@kedou/agent-core';
 
 /**
  * 变变创作助手 Agent。
