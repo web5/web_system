@@ -14,13 +14,14 @@
 | `web-system-finnews.zip` | 财经资讯 6 工具调用规范 | 快讯 / 情绪 / 板块 / 个股 / 检索 |
 | `web-system-paper.zip` | 论文学习工具调用规范 | arXiv AI/ML 论文速览 / 中英双语日报 |
 | `web-system-wechat-mp.zip` | 公众号发布 2 工具调用规范 | 建草稿 / 一键发布 |
+| `web-system-institutional-behavior-tracker.zip` | 机构行为全周期追踪框架 | 双通道选股+四维验证+决策面板三档，供"未来一周关注公司"定时任务分析用 |
 
 ### 上传步骤
 
 1. 打开 WorkBuddy → **技能中心**（左侧菜单「专家-技能-连接器」→ 技能 Tab）
 2. 点击右上角 **+ / 导入技能** → 选择 **上传技能包（.zip）**
-3. 依次上传上面三个 zip
-4. 上传后技能出现在「我的技能」列表，名称分别为 `web-system-finnews`、`web-system-paper`、`web-system-wechat-mp`
+3. 依次上传上面四个 zip
+4. 上传后技能出现在「我的技能」列表，名称分别为 `web-system-finnews`、`web-system-paper`、`web-system-wechat-mp`、`web-system-institutional-behavior-tracker`
 
 ### 验证
 
