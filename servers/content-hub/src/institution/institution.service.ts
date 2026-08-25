@@ -173,7 +173,7 @@ export class InstitutionService {
       const end = new Date();
       const begin = new Date(Date.now() - days * 86400000);
       const fmt = (d: Date) => d.toISOString().slice(0, 10);
-      const url = `https://reportapi.eastmoney.com/report/list?industryCode=*&pageSize=${limit}&pageNo=1&sortType=1&stockCode=${code}&qType=0&beginTime=${fmt(begin)}&endTime=${fmt(end)}`;
+      const url = `https://reportapi.eastmoney.com/report/list?industryCode=*&pageSize=${limit}&pageNo=1&sortType=1&code=${code}&qType=0&beginTime=${fmt(begin)}&endTime=${fmt(end)}`;
       const json = await emGet(url);
       const list: any[] = json?.data ?? [];
       if (!list.length) return fail(code, '近期无研报');
