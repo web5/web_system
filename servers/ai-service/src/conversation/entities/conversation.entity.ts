@@ -19,11 +19,28 @@ export class Conversation extends UuidEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '对话标题' })
   title: string | null;
 
-  /** 消息列表 */
-  @Column({ type: 'json', comment: '消息列表' })
+  /** 消息列表（兼容旧式轻量对话：单轮 user/assistant/system） */
+  @Column({ type: 'json', comment: '消息列表（轻量对话）' })
   messages: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp?: string;
+  }>;
+
+  /** 已压缩的对话摘要（Agent 长期记忆，省 token） */
+  @Column({ type: 'text', nullable: true, comment: '对话历史摘要（Agent 摘要压缩）' })
+  summary: string | null;
+
+  /** 已被摘要覆盖的消息条数（避免重复压缩同批） */
+  @Column({ type: 'int', default: 0, comment: '已摘要覆盖的消息条数' })
+  summarizedCount: number;
+
+  /** 未压缩的近期原始消息（Agent 短列表，受 keepRecent 控制） */
+  @Column({ type: 'json', nullable: false, default: () => "'[]'", comment: 'Agent 近期原始消息' })
+  recentMessages: Array<{
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content: string;
+    toolCallId?: string;
+    name?: string;
   }>;
 }
