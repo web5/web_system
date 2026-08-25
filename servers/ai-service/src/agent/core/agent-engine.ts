@@ -4,7 +4,7 @@ import { StreamEvent, RunInput } from '../interfaces/runtime.interface';
 import { ToolRegistry } from '../registry/tool.registry';
 import { AgentRegistry } from '../registry/agent.registry';
 import { ClientRegistry } from '../../common/client.registry';
-import { ConversationMemory } from '../memory/conversation-memory';
+import { ConversationMemoryPort } from '../memory/conversation-memory';
 import { ChatMessage, ToolCall, ChatWithToolsResult } from '../../common/http/base-ai.client';
 
 /**
@@ -24,7 +24,7 @@ export class AgentEngine {
     private readonly clientRegistry: ClientRegistry,
     private readonly toolRegistry: ToolRegistry,
     private readonly agentRegistry: AgentRegistry,
-    private readonly memory: ConversationMemory,
+    private readonly memory: ConversationMemoryPort,
   ) {}
 
   async *run(input: RunInput, userId: string, runId: string): AsyncGenerator<StreamEvent> {

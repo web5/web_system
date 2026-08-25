@@ -15,7 +15,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "agent:cli": "node --env-file=.env -r ts-node/register src/agent/cli/agent-cli.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.0",

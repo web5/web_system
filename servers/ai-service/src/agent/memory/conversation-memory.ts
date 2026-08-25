@@ -6,11 +6,24 @@ import { StoredMessage } from './stored-message';
 import { ChatMessage } from '../../common/http/base-ai.client';
 
 /**
+ * 对话记忆端口：AgentEngine 仅依赖此接口，便于在 CLI / 测试场景替换为内存实现。
+ */
+export interface ConversationMemoryPort {
+  load(userId: string, conversationId: string): Promise<{ summary: string | null; messages: ChatMessage[] }>;
+  persist(
+    userId: string,
+    conversationId: string | undefined,
+    fullRunMessages: ChatMessage[],
+    config: AgentMemoryConfig,
+  ): Promise<string>;
+}
+
+/**
  * 对话记忆：基于 ConversationService 做持久记忆 + 摘要压缩。
  * 负责把引擎运行时的完整 messages 落库为（summary + recentMessages）分层结构。
  */
 @Injectable()
-export class ConversationMemory {
+export class ConversationMemory implements ConversationMemoryPort {
   private readonly logger = new Logger(ConversationMemory.name);
 
   constructor(
