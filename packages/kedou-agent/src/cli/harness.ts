@@ -22,6 +22,7 @@ import {
 } from '@kedou/agent-core';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { devAssistantAgent } from './agents/dev-assistant.agent';
+import { generalAssistantAgent } from './agents/general-assistant.agent';
 
 export interface Harness {
   clientRegistry: ClientRegistry;
@@ -60,6 +61,7 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   const agentRegistry = new AgentRegistry();
   agentRegistry.register(studyAssistantAgent);
   agentRegistry.register(devAssistantAgent);
+  agentRegistry.register(generalAssistantAgent);
 
   // 记忆 + 引擎（注入 confirm）
   const compaction = new Compaction(clientRegistry);
