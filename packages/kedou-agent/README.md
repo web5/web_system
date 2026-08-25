@@ -49,6 +49,7 @@ kedou-agent --version / --help
 | Agent | 工具 | 说明 |
 |-------|------|------|
 | `study-assistant` | web-search | 学习助手，可联网查询 |
+| `general-assistant` | web-search / list-dir / read-file / grep-search / write-file / shell-exec | 通用助手，全工具（写/执行走确认） |
 | `dev-assistant` | list-dir / read-file / grep-search / write-file / shell-exec | 开发助手，读写代码、受限执行命令 |
 
 ## 安全
