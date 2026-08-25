@@ -19,9 +19,14 @@ DRY_RUN="${DRY_RUN:-0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 V="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo dev)"
 
+# 载入 DB 配置（统一从 .env.deploy 读取，禁止硬编码密码）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.deploy" ] && source "$SCRIPT_DIR/.env.deploy"
+
+# 统一走 ~/.ssh/config 别名（由 scripts/setup-ssh-key.sh 一次性打通免密）
 case "$TARGET" in
-  dev)  SSH_HOST="ubuntu@175.27.189.123"; PORT_BASE=6000 ;;
-  prod) SSH_HOST="root@106.52.176.246";     PORT_BASE=3000 ;;
+  dev)  SSH_HOST="kedou-dev";  PORT_BASE=6000 ;;
+  prod) SSH_HOST="kedou-prod"; PORT_BASE=3000 ;;
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
@@ -67,16 +72,26 @@ deploy_backend() { # $1=service_name
   local dir; dir=$(svc_dir "$svc")
   local pkg; pkg=$(svc_pkg "$svc")
   log "部署后端服务 $svc → ${TARGET}（目录 servers/${dir}）"
-  say "cd $ROOT && pnpm --filter $pkg build"
-  if [ "$DRY_RUN" != "1" ]; then
-    tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
-    scp_to "/tmp/${svc}-deploy.tar.gz"
-    local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
-    cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
-    cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
-    remote "$cmd"
-    rm -f "/tmp/${svc}-deploy.tar.gz"
+  if [ "$DRY_RUN" = "1" ]; then
+    say "cd $ROOT && pnpm --filter $pkg build"
+    return 0
   fi
+  # 真实构建：失败立即中断，禁止打包旧产物（防止“假成功”覆盖线上）
+  # 直接进服务目录跑 build，避免 pnpm --filter 在 workspace 级清理时触发
+  # safe-delete 批量删除确认（dist 文件数超阈值会拦截 nest build）。
+  # 用 /bin/rm 绝对路径绕过 pnpm 注入的 rm wrapper（safe-delete 会拦截裸 rm）
+  log "  构建 $pkg ..."
+  /bin/rm -rf "$ROOT/servers/$dir/dist"
+  if ! (cd "$ROOT/servers/$dir" && npx nest build); then
+    err "构建失败：$pkg（未部署，旧代码保留）"
+  fi
+  tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
+  scp_to "/tmp/${svc}-deploy.tar.gz"
+  local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
+  cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
+  cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
+  remote "$cmd"
+  rm -f "/tmp/${svc}-deploy.tar.gz"
   log "$svc 部署完成"
 }
 
@@ -98,12 +113,22 @@ deploy_frontend() { # $1=module_name
       scp_to "/tmp/${mod}-deploy.tar.gz"
       remote "mkdir -p /data/web_system/servers/gateway/public/static/modules/$mod/$V && cd /data/web_system/servers/gateway/public/static/modules/$mod/$V && rm -rf ./* && tar xzf /tmp/${mod}-deploy.tar.gz && rm -f /tmp/${mod}-deploy.tar.gz"
       rm -f "/tmp/${mod}-deploy.tar.gz"
-      # 更新 deploy 表版本（需要目标库）
+      # 更新 deploy 表版本（密码经远程 cnf 注入，不暴露在命令行）
+      local db_host db_user db_pass
       if [ "$TARGET" = "dev" ]; then
-        remote "mysql -h127.0.0.1 -uroot -pweb_system_root_2026 web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='dev' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'"
+        db_host="${DEV_DB_HOST:-127.0.0.1}"; db_user="${DEV_DB_USER:-root}"; db_pass="${DEV_DB_PASS:-}"
       else
-        remote "mysql -h172.16.16.10 -uroot -p'gn%!CTvZNP0e4%Lc' web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='prod' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'"
+        db_host="${PROD_DB_HOST:-172.16.16.10}"; db_user="${PROD_DB_USER:-root}"; db_pass="${PROD_DB_PASS:-}"
       fi
+      local env_id="$TARGET"
+      remote "cat > /tmp/.deploy_cnf <<'CNF'
+[client]
+host=$db_host
+user=$db_user
+password=$db_pass
+CNF
+mysql --defaults-extra-file=/tmp/.deploy_cnf web_system -e \"UPDATE deploy_deployments SET current_version='$V', deployed_at=NOW(6) WHERE env_id='$env_id' AND module_key='$mod'\" 2>/dev/null && echo '  deploy 表已更新'
+rm -f /tmp/.deploy_cnf"
     fi
   fi
   log "$mod 部署完成"

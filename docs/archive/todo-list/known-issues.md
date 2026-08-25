@@ -1,6 +1,23 @@
 # 已知问题 & 待办
 
-> 最后更新：2026-07-26
+> 最后更新：2026-08-25
+
+---
+
+## 🐛 MCP 管理后台模块开关状态显示错误
+
+- **状态**：⏳ 待修复（计划下周）
+- **优先级**：中
+- **现象**：MCP 网关管理后台（`/admin/mcp`）列表中，所有模块的开关均为关闭状态（灰色），但服务实际已启用；顶部同时出现两个绿色的“已启用”状态标签
+- **根因**：`apps/admin/src/views/McpAdminPanel.vue` 中开关的 `checked` 绑定写成了 `record.enabled === 1`，而后端 `servers/mcp-gateway/src/mcp/entities/mcp-module.entity.ts` 的 `enabled` 字段类型为 `boolean`，返回的是 `true/false`，因此判断恒为 `false`，开关永远显示关闭。顶部“已启用”标签来源还需进一步确认，可能与同一判断逻辑有关
+- **涉及文件**：
+  - `apps/admin/src/views/McpAdminPanel.vue` 第 264-266 行
+  - `apps/admin/src/api/mcp.ts` 第 47 行 `enabled: number` 类型声明错误
+- **修复方向**：
+  - 前端 switch 绑定改为 `:checked="!!record.enabled"` 或 `:checked="record.enabled"`
+  - `apps/admin/src/api/mcp.ts` 中 `McpModule.enabled` 类型改为 `boolean`
+  - 检查顶部“已启用”标签的渲染逻辑，确保与实际启用状态一致
+- **验证方式**：在 MCP 管理后台创建/启用模块后，开关应正确显示为开启（橙色），刷新页面后状态保持一致
 
 ---
 
