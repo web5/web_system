@@ -4,7 +4,7 @@ import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import * as rawAxios from 'axios';
 import { API_TIMEOUT } from '@web-system/shared';
-import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk } from './base-ai.client';
+import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk, ToolCallSchema, ToolCall, ChatWithToolsResult } from './base-ai.client';
 
 @Injectable()
 export class Hy3Client extends BaseAiClient {
@@ -25,6 +25,13 @@ export class Hy3Client extends BaseAiClient {
     return process.env.HY3_BASE_URL || 'https://tokenhub.tencentmaas.com/v1';
   }
 
+  /** 归一化得到 chat/completions 完整端点（兼容 baseUrl 是否带末尾路径） */
+  private getChatEndpoint(): string {
+    const base = this.getBaseUrl().replace(/\/+$/, '');
+    if (base.endsWith('/chat/completions')) return base;
+    return `${base}/chat/completions`;
+  }
+
   private getApiKey(): string {
     const key = process.env.HY3_API_KEY;
     if (!key) throw new Error('HY3_API_KEY is not configured');
@@ -33,18 +40,31 @@ export class Hy3Client extends BaseAiClient {
 
   /** 非流式对话 */
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+    return (await this.chatWithTools(messages, [], options)).content;
+  }
+
+  /** 带工具调用的对话（Agent harness 核心） */
+  async chatWithTools(
+    messages: ChatMessage[],
+    tools: ToolCallSchema[],
+    options?: ChatOptions,
+  ): Promise<ChatWithToolsResult> {
     try {
-      const url = `${this.getBaseUrl()}/chat/completions`;
-      const payload = {
+      const url = this.getChatEndpoint();
+      const payload: Record<string, unknown> = {
         model: this.modelId,
-        messages: messages.map((msg) => ({ role: msg.role, content: msg.content })),
+        messages: messages.map((msg) => this.toApiMessage(msg)),
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 2000,
         top_p: options?.topP ?? 1.0,
         stream: false,
       };
+      if (tools.length > 0) {
+        payload.tools = tools;
+        payload.tool_choice = 'auto';
+      }
 
-      this.logger.debug(`Calling Hy3 API with ${messages.length} messages`);
+      this.logger.debug(`Calling Hy3 API with ${messages.length} messages, tools=${tools.length}`);
 
       const response: AxiosResponse = await firstValueFrom(
         this.httpService.post(url, payload, {
@@ -56,11 +76,32 @@ export class Hy3Client extends BaseAiClient {
         }),
       );
 
-      const replyContent = response.data.choices?.[0]?.message?.content;
-      if (!replyContent) throw new Error('Invalid response from Hy3 API');
+      const choice = response.data.choices?.[0];
+      const message = choice?.message ?? {};
+      if (!choice) throw new Error('Invalid response from Hy3 API');
 
-      this.logger.debug(`Hy3 API response received, length: ${replyContent.length}`);
-      return replyContent;
+      const rawToolCalls: any[] | undefined = message.tool_calls;
+      const toolCalls: ToolCall[] = Array.isArray(rawToolCalls)
+        ? rawToolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: tc.function?.arguments ?? '{}',
+          }))
+        : [];
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: message.content ?? '',
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      };
+
+      this.logger.debug(`Hy3 API response received, toolCalls=${toolCalls.length}`);
+      return {
+        content: assistantMessage.content,
+        toolCalls,
+        assistantMessage,
+        finishReason: choice?.finish_reason,
+      };
     } catch (error) {
       this.logger.error(`Hy3 API error: ${error.message}`, error.stack);
       if (error.response) {
@@ -71,9 +112,28 @@ export class Hy3Client extends BaseAiClient {
     }
   }
 
+  /** 将内部 ChatMessage 转为 API 需要的格式（含 tool / tool_calls） */
+  private toApiMessage(m: ChatMessage): Record<string, unknown> {
+    if (m.role === 'tool') {
+      return { role: 'tool', content: m.content, tool_call_id: m.toolCallId };
+    }
+    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+      return {
+        role: 'assistant',
+        content: m.content,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      };
+    }
+    return { role: m.role, content: m.content };
+  }
+
   /** 流式对话 */
   async *chatStream(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<StreamChunk, void, unknown> {
-    const url = `${this.getBaseUrl()}/chat/completions`;
+    const url = this.getChatEndpoint();
     const payload = {
       model: this.modelId,
       messages: messages.map((msg) => ({ role: msg.role, content: msg.content })),

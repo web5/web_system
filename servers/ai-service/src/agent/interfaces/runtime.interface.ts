@@ -15,6 +15,7 @@ export interface StreamEvent {
   name?: string;
   args?: unknown;
   step?: number;
+  conversationId?: string;
 }
 
 export interface RunInput {

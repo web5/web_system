@@ -10,6 +10,7 @@ import { BianbianModule } from './bianbian/bianbian.module';
 import { ArtworksModule } from './artworks/artworks.module';
 import { TtsModule } from './tts/tts.module';
 import { AuthModule } from './auth/auth.module';
+import { AgentModule } from './agent/agent.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { AuthModule } from './auth/auth.module';
     BianbianModule,
     ArtworksModule,
     TtsModule,
+    AgentModule,
   ],
 })
 export class AppModule {}

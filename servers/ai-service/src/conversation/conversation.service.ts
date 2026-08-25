@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { Conversation } from './entities/conversation.entity';
+import { ChatMessage } from '../common/http/base-ai.client';
 
 @Injectable()
 export class ConversationService {
@@ -17,7 +18,7 @@ export class ConversationService {
    */
   async saveConversation(
     userId: string,
-    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp?: string }>,
+    messages: ChatMessage[],
     conversationId?: string,
   ): Promise<Conversation> {
     // 生成对话标题（取第一条用户消息的前20个字符）
@@ -34,7 +35,7 @@ export class ConversationService {
       });
 
       if (conversation) {
-        conversation.messages = messages;
+        conversation.messages = messages as Conversation['messages'];
         conversation.updatedAt = new Date();
         return this.conversationRepository.save(conversation);
       }
@@ -44,7 +45,7 @@ export class ConversationService {
     const newConversation = this.conversationRepository.create({
       userId,
       title,
-      messages,
+      messages: messages as Conversation['messages'],
     } as Conversation);
 
     return this.conversationRepository.save(newConversation as Conversation);
@@ -111,5 +112,71 @@ export class ConversationService {
       where.userId = userId;
     }
     await this.conversationRepository.delete(where);
+  }
+
+  // ============ Agent 记忆专用（摘要压缩） ============
+
+  /** 读取 Agent 记忆：返回 summary 与近期原始消息 */
+  async loadAgentMemory(
+    userId: string,
+    conversationId: string,
+  ): Promise<{
+    summary: string | null;
+    recentMessages: Conversation['recentMessages'];
+    summarizedCount: number;
+  }> {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId, userId },
+    });
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+    return {
+      summary: conversation.summary ?? null,
+      recentMessages: (conversation.recentMessages ?? []) as Conversation['recentMessages'],
+      summarizedCount: conversation.summarizedCount ?? 0,
+    };
+  }
+
+  /**
+   * 保存一次 Agent run 的结果。
+   * @param recentMessages 压缩后保留的近期消息
+   * @param summary 压缩生成的新摘要（null 表示未触发压缩）
+   */
+  async saveAgentMemory(
+    userId: string,
+    conversationId: string | undefined,
+    recentMessages: Conversation['recentMessages'],
+    summary: string | null,
+    summarizedCount: number,
+    firstUserText: string,
+  ): Promise<string> {
+    // 新会话：标题取首条用户消息前 20 字
+    if (!conversationId) {
+      const newConv = this.conversationRepository.create({
+        userId,
+        title: firstUserText.substring(0, 20) || '新对话',
+        recentMessages,
+        summary,
+        summarizedCount,
+      } as Conversation);
+      const saved = await this.conversationRepository.save(newConv as Conversation);
+      return saved.id;
+    }
+
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId, userId },
+    });
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+    conversation.recentMessages = recentMessages;
+    if (summary !== null) {
+      conversation.summary = summary;
+      conversation.summarizedCount = summarizedCount;
+    }
+    conversation.updatedAt = new Date();
+    const saved = await this.conversationRepository.save(conversation);
+    return saved.id;
   }
 }
