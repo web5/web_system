@@ -148,6 +148,13 @@ const INSTITUTION_HTTP_TOOLS: Array<{
   params: Array<{ name: string; type: string; required: boolean; description?: string }>;
 }> = [
   {
+    name: 'get_quote',
+    description: '实时行情快照（腾讯行情 qt.gtimg.cn 直连）：现价/涨跌幅/最高最低/换手/PE/PB/总市值/量比/均价/涨停跌停。用于机构行为「成本与估值」与实时价格维度',
+    method: 'GET',
+    path: '/api/institution/quote',
+    params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
+  },
+  {
     name: 'get_north_holding',
     description: '北向资金个股持股（沪深港通）：最新日期北向机构数、总持股市值(万)、Top3 机构持仓。用于机构行为「静态仓位」与「北向资金」维度',
     method: 'GET',
@@ -156,7 +163,7 @@ const INSTITUTION_HTTP_TOOLS: Array<{
   },
   {
     name: 'get_fund_flow',
-    description: '主力资金流（近 N 日净流入）：每日主力净流入(元)、收盘价、涨跌幅，及近5日合计与趋势。用于机构行为「动态行为」维度',
+    description: '主力资金流（东财 push2delay 直连，当日主力净流入 + 近 N 日 + 腾讯实时价）：每日主力净流入(元)、收盘价、涨跌幅，近5日合计与趋势。用于机构行为「动态行为」维度',
     method: 'GET',
     path: '/api/institution/fund-flow',
     params: [
@@ -194,7 +201,7 @@ const INSTITUTION_HTTP_TOOLS: Array<{
   },
   {
     name: 'get_valuation',
-    description: '估值（PE/PB/市值）：PE_TTM、PE_LYR、PB_MRQ、总市值(亿)、收盘价、所属板块。用于机构行为「成本与估值」维度',
+    description: '估值（腾讯行情 qt.gtimg.cn 实时）：PE_TTM/PE动/PE静、PB、总市值(亿)、流通市值(亿)、现价/涨跌幅/最高最低/换手/量比。用于机构行为「成本与估值」维度',
     method: 'GET',
     path: '/api/institution/valuation',
     params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],

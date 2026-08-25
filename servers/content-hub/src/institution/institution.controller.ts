@@ -6,6 +6,13 @@ import { InstitutionService } from './institution.service';
 export class InstitutionController {
   constructor(private readonly institutionService: InstitutionService) {}
 
+  /** 实时行情快照（腾讯行情 qt.gtimg.cn 直连） */
+  @Get('quote')
+  async quote(@Query('code') code?: string) {
+    if (!code) return { ok: false, error: '缺少 code 参数' };
+    return this.institutionService.getQuote(code);
+  }
+
   /** 北向资金个股持股 */
   @Get('north-holding')
   async northHolding(@Query('code') code?: string) {

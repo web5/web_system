@@ -49,9 +49,72 @@ function fail(code: string, error: string, note?: string): InstResult {
   return { ok: false, code, error, note };
 }
 
+/** 腾讯行情 qt.gtimg.cn 实时快照（GBK 编码，~ 分隔）。返回解析后的字段或 null */
+async function tencentQuote(code: string): Promise<any | null> {
+  try {
+    const prefix = /^(6|9|5)/.test(code) ? 'sh' : 'sz';
+    const url = `https://qt.gtimg.cn/q=${prefix}${code}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': UA, Referer: 'https://gu.qq.com/' },
+      signal: ctrl.signal as any,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) return null;
+    const buf = Buffer.from(await resp.arrayBuffer());
+    let txt: string;
+    try {
+      txt = new TextDecoder('gbk').decode(buf);
+    } catch {
+      txt = buf.toString('latin1'); // 数值字段均为 ASCII，中文名可能乱码但可忽略
+    }
+    const inner = txt.split('"')[1] || '';
+    const f = inner.split('~');
+    if (f.length < 50 || !f[3]) return null;
+    return {
+      name: f[1],
+      code: f[2],
+      close: Number(f[3]),
+      prev_close: Number(f[4]),
+      open: Number(f[5]),
+      time: f[30],
+      change: Number(f[31]),
+      pct_change: Number(f[32]),
+      high: Number(f[33]),
+      low: Number(f[34]),
+      turnover: Number(f[38]), // 换手率 %
+      pe_ttm: Number(f[39]),
+      amplitude: Number(f[43]), // 振幅 %
+      float_market_cap_yi: Number(f[44]), // 流通市值 亿
+      total_market_cap_yi: Number(f[45]), // 总市值 亿
+      pb: Number(f[46]),
+      limit_up: Number(f[47]),
+      limit_down: Number(f[48]),
+      volume_ratio: Number(f[49]), // 量比
+      avg_price: Number(f[51]),
+      pe_dynamic: Number(f[52]),
+      pe_static: Number(f[53]),
+    };
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class InstitutionService {
   private readonly logger = new Logger(InstitutionService.name);
+
+  /** 实时行情快照（腾讯行情 qt.gtimg.cn 直连） */
+  async getQuote(code: string): Promise<InstResult> {
+    try {
+      const q = await tencentQuote(code);
+      if (!q) return fail(code, '腾讯行情接口无数据', 'qt.gtimg.cn 直连失败或无此标的');
+      return ok(code, q);
+    } catch (e) {
+      return fail(code, (e as Error).message, '腾讯行情接口异常');
+    }
+  }
 
   /** 北向资金个股持股（沪深港通） */
   async getNorthHolding(code: string): Promise<InstResult> {
@@ -84,12 +147,12 @@ export class InstitutionService {
     }
   }
 
-  /** 主力资金流（近 N 日净流入） */
+  /** 主力资金流（东财 push2delay 直连：当日主力净流入 + 近 N 日 + 腾讯实时价） */
   async getFundFlow(code: string, days = 10): Promise<InstResult> {
     try {
       const secid = toSecid(code);
       if (!secid) return fail(code, '代码解析失败');
-      const url = `https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=${days}&klt=101&secid=${secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65`;
+      const url = `https://push2delay.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=${days}&klt=101&secid=${secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65`;
       const json = await emGet(url);
       const klines: string[] = json?.data?.klines ?? [];
       if (!klines.length) return fail(code, '无资金流数据');
@@ -105,6 +168,8 @@ export class InstitutionService {
       const recent = rows.slice(-5);
       const sum5 = recent.reduce((s, r) => s + r.main_net_inflow, 0);
       const last = rows[rows.length - 1];
+      // 附带腾讯实时价
+      const q = await tencentQuote(code);
       return ok(code, {
         secid,
         days: rows.length,
@@ -114,6 +179,13 @@ export class InstitutionService {
         sum5_main_net_inflow: sum5,
         trend: sum5 > 0 ? '近5日主力净流入' : '近5日主力净流出',
         recent: rows,
+        quote: q
+          ? {
+              realtime_price: q.close,
+              realtime_pct_change: q.pct_change,
+              time: q.time,
+            }
+          : undefined,
       });
     } catch (e) {
       return fail(code, (e as Error).message, '资金流接口异常');
@@ -191,23 +263,29 @@ export class InstitutionService {
     }
   }
 
-  /** 估值（PE/PB/市值） */
+  /** 估值（腾讯行情实时：PE/PB/市值/现价） */
   async getValuation(code: string): Promise<InstResult> {
     try {
-      const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_VALUEANALYSIS_DET&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=1`;
-      const json = await emGet(url);
-      const list: any[] = json?.result?.data ?? [];
-      if (!list.length) return fail(code, '无估值数据');
-      const r = list[0];
+      const q = await tencentQuote(code);
+      if (!q) return fail(code, '腾讯行情接口无数据');
       return ok(code, {
-        pe_ttm: r.PE_TTM,
-        pe_lyr: r.PE_LAR,
-        pb_mrq: r.PB_MRQ,
-        pcf_ocf: r.PCF_OCF_LAR,
-        total_market_cap_yi: Math.round(Number(r.TOTAL_MARKET_CAP || 0) / 1e8),
-        close: r.CLOSE_PRICE,
-        change_rate: r.CHANGE_RATE,
-        board: r.BOARD_NAME,
+        pe_ttm: q.pe_ttm,
+        pe_dynamic: q.pe_dynamic,
+        pe_static: q.pe_static,
+        pb_mrq: q.pb,
+        total_market_cap_yi: q.total_market_cap_yi,
+        float_market_cap_yi: q.float_market_cap_yi,
+        close: q.close,
+        prev_close: q.prev_close,
+        change: q.change,
+        change_rate: q.pct_change,
+        high: q.high,
+        low: q.low,
+        turnover: q.turnover,
+        amplitude: q.amplitude,
+        volume_ratio: q.volume_ratio,
+        time: q.time,
+        source: 'qt.gtimg.cn 实时',
       });
     } catch (e) {
       return fail(code, (e as Error).message, '估值接口异常');
