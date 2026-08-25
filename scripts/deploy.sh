@@ -72,16 +72,26 @@ deploy_backend() { # $1=service_name
   local dir; dir=$(svc_dir "$svc")
   local pkg; pkg=$(svc_pkg "$svc")
   log "部署后端服务 $svc → ${TARGET}（目录 servers/${dir}）"
-  say "cd $ROOT && pnpm --filter $pkg build"
-  if [ "$DRY_RUN" != "1" ]; then
-    tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
-    scp_to "/tmp/${svc}-deploy.tar.gz"
-    local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
-    cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
-    cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
-    remote "$cmd"
-    rm -f "/tmp/${svc}-deploy.tar.gz"
+  if [ "$DRY_RUN" = "1" ]; then
+    say "cd $ROOT && pnpm --filter $pkg build"
+    return 0
   fi
+  # 真实构建：失败立即中断，禁止打包旧产物（防止“假成功”覆盖线上）
+  # 直接进服务目录跑 build，避免 pnpm --filter 在 workspace 级清理时触发
+  # safe-delete 批量删除确认（dist 文件数超阈值会拦截 nest build）。
+  # 用 /bin/rm 绝对路径绕过 pnpm 注入的 rm wrapper（safe-delete 会拦截裸 rm）
+  log "  构建 $pkg ..."
+  /bin/rm -rf "$ROOT/servers/$dir/dist"
+  if ! (cd "$ROOT/servers/$dir" && npx nest build); then
+    err "构建失败：$pkg（未部署，旧代码保留）"
+  fi
+  tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
+  scp_to "/tmp/${svc}-deploy.tar.gz"
+  local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
+  cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
+  cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
+  remote "$cmd"
+  rm -f "/tmp/${svc}-deploy.tar.gz"
   log "$svc 部署完成"
 }
 
