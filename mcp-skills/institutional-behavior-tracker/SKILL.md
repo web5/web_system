@@ -103,9 +103,10 @@ agent_created: true
 > **禁止**在分析流程中写"调用 tdx_screener / data_north_holding / mx_stocks_screener 等 MCP 工具"，或假设任何金融连接器可用。所有数据一律：
 > ```bash
 > export KEDOU_TOKEN='kedou_xxx'          # 从 ~/.workbuddy/mcp.json 的 Authorization 复制
-> mcp_call institution get_valuation '{"code":"600519"}'      # 估值
+> mcp_call institution get_quote '{"code":"600519"}'          # 实时行情（腾讯 qt.gtimg.cn：现价/涨跌/PE/PB/市值）
+> mcp_call institution get_valuation '{"code":"600519"}'      # 估值（腾讯实时 PE/PB/市值）
 > mcp_call institution get_north_holding '{"code":"600519"}'   # 北向持股
-> mcp_call institution get_fund_flow '{"code":"600519","days":10}'
+> mcp_call institution get_fund_flow '{"code":"600519","days":10}'   # 主力资金流（东财 push2delay：当日主力净流入+实时价）
 > mcp_call institution get_lhb '{"code":"600519","limit":5}'
 > mcp_call institution get_report '{"code":"600519"}'
 > mcp_call institution get_rating '{"code":"600519"}'
@@ -114,7 +115,7 @@ agent_created: true
 > mcp_call finnews get_sector_library '{}'                     # 候选发现
 > mcp_call finnews get_market_pulse '{}'
 > ```
-> 工具返回 `ok:false` 的维度，如实标注"数据暂不可用/置信度低"，禁止臆造。
+> **实时数据源**：行情/估值/主力资金流直连公开实时接口——腾讯行情 `qt.gtimg.cn`（实时价/涨跌幅/PE/PB/市值）+ 东财 `push2delay`（当日主力净流入）；北向/龙虎榜/评级/研报走东财 datacenter/reportapi。工具返回 `ok:false` 的维度，如实标注"数据暂不可用/置信度低"，禁止臆造。
 
 ## 在 web_system / MCP 环境的数据接入映射
 
@@ -124,9 +125,9 @@ agent_created: true
 |---|---|---|
 | 候选发现 / 板块热度 / 个股资讯 / 市场情绪 | kedouai MCP `finnews`（`get_sector_library` / `get_sector_hot` / `get_stock_news` / `get_market_pulse`） | `//kedou-mcp-curl` → `mcp_call finnews ...` |
 | 北向资金 / 静态仓位（代理） | kedouai MCP `institution`（`get_north_holding`：北向机构数 / 总持股市值 / Top3 机构）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_north_holding '<code>'` |
-| 资金流向 / 主力行为 | kedouai MCP `institution`（`get_fund_flow`：主力净流入趋势 / 近5日合计）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_fund_flow '<code>'` |
+| 资金流向 / 主力行为 | kedouai MCP `institution`（`get_fund_flow`：东财 `push2delay` 直连，当日主力净流入 / 近5日合计 / 实时价）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_fund_flow '<code>'` |
 | 龙虎榜 / 机构席位 | kedouai MCP `institution`（`get_lhb`：上榜买卖额 / 机构说明）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_lhb '<code>'` |
-| 成本与估值 | kedouai MCP `institution`（`get_valuation`：PE_TTM / PB_MRQ / 总市值）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_valuation '<code>'` |
+| 实时行情 / 成本与估值 | kedouai MCP `institution`（`get_quote` 腾讯 `qt.gtimg.cn` 实时：现价/涨跌/PE/PB/市值/量比；`get_valuation` 腾讯实时 PE/PB/市值）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_quote '<code>'` / `get_valuation '<code>'` |
 | 筹码分布 / 成本结构 | kedouai MCP `institution`（`get_chip`；东财报表当前下架时返回 ok:false，标注"建议人工核对成本区"）⚠️降级 | `//kedou-mcp-curl` → `mcp_call institution get_chip '<code>'` |
 | 业绩同比 / 排雷 | kedouai MCP `institution`（`get_finance_yoy`；东财 F10 报表已下架时返回 ok:false，用 get_valuation + get_rating 作代理）⚠️降级 | `//kedou-mcp-curl` → `mcp_call institution get_finance_yoy '<code>'` |
 | 研报 / 评级催化 | kedouai MCP `institution`（`get_report` 研报列表 / `get_rating` 机构评级与 EPS 预测）✅自托管 | `//kedou-mcp-curl` → `mcp_call institution get_report '<code>'` / `get_rating '<code>'` |

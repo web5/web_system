@@ -24,9 +24,10 @@
 export KEDOU_TOKEN='kedou_xxx'
 
 # 加载 //kedou-mcp-curl 后即可用 mcp_call（内部自动 initialize 拿会话 → tools/call）
-mcp_call institution get_valuation '{"code":"600519"}'      # 估值 PE/PB/市值
+mcp_call institution get_quote '{"code":"600519"}'           # 实时行情（腾讯 qt.gtimg.cn：现价/涨跌/PE/PB/市值）
+mcp_call institution get_valuation '{"code":"600519"}'      # 估值 PE/PB/市值（腾讯实时）
 mcp_call institution get_north_holding '{"code":"600519"}'   # 北向持股
-mcp_call institution get_fund_flow '{"code":"600519","days":10}'  # 主力资金流
+mcp_call institution get_fund_flow '{"code":"600519","days":10}'  # 主力资金流（东财 push2delay 当日净流入+实时价）
 mcp_call institution get_lhb '{"code":"600519","limit":5}'   # 龙虎榜机构席位
 mcp_call institution get_report '{"code":"600519","days":180,"limit":10}'  # 研报
 mcp_call institution get_rating '{"code":"600519"}'          # 机构评级/EPS预测

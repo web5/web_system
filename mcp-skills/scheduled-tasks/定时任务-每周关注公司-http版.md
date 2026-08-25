@@ -31,8 +31,8 @@
 - 5分钟排雷：用 mcp_call institution get_valuation 取 PE_TTM（估值行业历史中位合理？）；用 mcp_call institution get_rating 取 EPS 预测趋势（业绩在增长？）；近1月重大利空用 mcp_call finnews get_stock_news。基本面严重不达标直接放弃。
 - 四维验证数据来源（本任务已通过 kedou-mcp-curl 直连 kedouai 的 institution 模块，免连接器授权，覆盖以下硬数据）：
   · 静态仓位（机构持了多少）：mcp_call institution get_north_holding '<code>'（北向持股作代理，含机构数/总市值/Top3）
-  · 动态行为（机构正在做什么）：mcp_call institution get_fund_flow '<code>'（主力净流入趋势）、mcp_call institution get_lhb '<code>'（龙虎榜机构席位买卖）
-  · 成本与估值：mcp_call institution get_valuation '<code>'（PE/PB/总市值）、mcp_call institution get_chip '<code>'（筹码分布；若返回 ok:false 注明"东财筹码接口暂不可用，建议人工核对成本区"并降低结论强度）
+  · 动态行为（机构正在做什么）：mcp_call institution get_fund_flow '<code>'（东财 push2delay 当日主力净流入 + 近N日趋势 + 实时价）、mcp_call institution get_lhb '<code>'（龙虎榜机构席位买卖）
+  · 成本与估值（实时）：mcp_call institution get_quote '<code>'（腾讯实时行情：现价/涨跌幅/最高最低/PE/PB/市值/量比）、mcp_call institution get_valuation '<code>'（腾讯实时估值）、mcp_call institution get_chip '<code>'（筹码分布；若返回 ok:false 注明"东财筹码接口暂不可用，建议人工核对成本区"并降低结论强度）
   · 北向资金：mcp_call institution get_north_holding '<code>'
   · 研报/评级催化：mcp_call institution get_report '<code>'（指定公司的近期研报）、mcp_call institution get_rating '<code>'（机构评级与 EPS 预测）
   · 业绩同比：mcp_call institution get_finance_yoy '<code>'（东财 F10 已下架时返回 ok:false，改用 get_valuation 的 PE 与 get_rating 的 EPS 预测作业绩代理）
@@ -90,7 +90,7 @@
 
 - **分析由定时任务里的 AI 完成，并强制套用机构行为框架**：候选公司先用 finnews 发现，再经 `web-system-institutional-behavior-tracker` 的「双通道 + 四维验证 + 决策面板三档」分析，输出带触发价/失效价的行动结论。
 - **候选池确定性锁定**：候选名单来自 finnews 真实板块热度+个股资讯，分析过程不得漂移到其他票。
-- **四维硬数据 = institution 模块（curl 直调，免连接器）**：北向/资金流/龙虎榜/估值/研报/评级已覆盖；get_chip（筹码）与 get_finance_yoy（业绩同比）因东财报表下架返回 ok:false，须如实标注并用估值/评级作代理，禁止臆造。
+- **四维硬数据 = institution 模块（curl 直调，免连接器）**：行情/估值/主力资金流直连公开实时接口（腾讯 `qt.gtimg.cn` 实时价 + 东财 `push2delay` 当日主力净流入）；北向/龙虎榜/研报/评级走东财 datacenter/reportapi。get_chip（筹码）与 get_finance_yoy（业绩同比）因东财报表下架返回 ok:false，须如实标注并用估值/评级作代理，禁止臆造。
 - **板块名必须先用 get_sector_library 取真实值**，不得自造。
 - **只建草稿不发布**：公众号尚未开通「发布能力」接口权限（微信 48001），所有任务只创建草稿，等认证升级后再放开发布。
 - 本版彻底移除 SSH 依赖、mcp.json 依赖与 WorkBuddy 连接器依赖，沙箱只要有 curl + python3 + 公网即可跑通。
