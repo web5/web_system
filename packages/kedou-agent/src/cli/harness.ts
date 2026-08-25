@@ -15,6 +15,7 @@ import {
   ReadFileTool,
   SearchProviderRegistry,
   ShellExecTool,
+  WriteFileTool,
   BingSearchProvider,
   ToolRegistry,
   WebSearchTool,
@@ -52,6 +53,7 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   toolRegistry.register(new ListDirTool());
   toolRegistry.register(new ReadFileTool());
   toolRegistry.register(new GrepSearchTool());
+  toolRegistry.register(new WriteFileTool());
   toolRegistry.register(new ShellExecTool());
 
   // Agent

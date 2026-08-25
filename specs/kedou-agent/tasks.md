@@ -36,7 +36,7 @@
 ### T5. 工具集
 - [ ] 5.1 `search/`：`provider.interface.ts` + `registry.ts`（插件式 Provider 注册/选择）
 - [ ] 5.2 `search/providers/bing.provider.ts`（默认内置 Bing Web Search）+ `web-search.tool.ts`
-- [ ] 5.3 `tools/coding/`：`list-dir` / `read-file` / `grep-search` / `shell-exec`（受限白名单）
+- [ ] 5.3 `tools/coding/`：`list-dir` / `read-file` / `grep-search` / `write-file`（新建/覆盖/追加，全部需确认）/ `shell-exec`（受限白名单）
 - [ ] 5.4 `ToolContext` 增加可选 `confirm()` 确认器；`shell-exec` 检测删除/覆盖写命令时调用确认器，未注入/拒绝则不执行
 - **验收**：单测覆盖 web-search Provider 注册/优先级/无 key 提示、coding 工具边界（禁止危险命令）、shell-exec 删除命令的确认/拒绝路径
 

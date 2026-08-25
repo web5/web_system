@@ -37,6 +37,7 @@ export { BingSearchProvider } from './search/providers/bing.provider';
 export { ListDirTool } from './tools/coding/list-dir.tool';
 export { ReadFileTool } from './tools/coding/read-file.tool';
 export { GrepSearchTool } from './tools/coding/grep-search.tool';
+export { WriteFileTool } from './tools/coding/write-file.tool';
 export { ShellExecTool } from './tools/coding/shell-exec.tool';
 
 // 工具函数

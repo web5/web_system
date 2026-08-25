@@ -11,7 +11,7 @@
 - **注册表**：`ToolRegistry` / `AgentRegistry` / `ClientRegistry` 集中管理。
 - **记忆**：`InMemoryConversationMemory` + `Compaction` 增量摘要压缩。
 - **搜索插件**：`SearchProviderRegistry` + `SearchProvider` 接口，默认内置 `BingSearchProvider`。
-- **coding 工具**：`list-dir` / `read-file` / `grep-search` / `shell-exec`（白名单 + 危险命令确认）。
+- **coding 工具**：`list-dir` / `read-file` / `grep-search` / `write-file`（全部写操作需确认）/ `shell-exec`（白名单 + 危险命令确认）。
 
 ## 安装
 
@@ -80,7 +80,7 @@ for await (const ev of engine.run(
 | 客户端 | `BaseAiClient`、`Hy3Client`、`DeepseekClient` |
 | 记忆 | `InMemoryConversationMemory`、`Compaction` |
 | 搜索 | `SearchProviderRegistry`、`SearchProvider`、`WebSearchTool`、`BingSearchProvider` |
-| coding | `ListDirTool`、`ReadFileTool`、`GrepSearchTool`、`ShellExecTool` |
+| coding | `ListDirTool`、`ReadFileTool`、`GrepSearchTool`、`WriteFileTool`、`ShellExecTool` |
 | 工具 | `Logger`、`API_TIMEOUT` |
 
 ## 工具安全

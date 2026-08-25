@@ -41,7 +41,9 @@
 ### 3.3 工具能力
 - When Agent 需要联网检索，系统应能调用 `web-search` 工具（通用互联网搜索，插件式 Provider，**默认内置 Bing Web Search API**，其他 Provider 可注册扩展）。
 - When Agent 需要读取/搜索代码，系统应能调用 `read-file`、`list-dir`、`grep-search` 等 coding 工具。
-- While 使用 coding 工具，系统应限制危险操作（禁止写文件/执行破坏性 shell），并在工具描述中明确边界。
+- When Agent 需要写文件，系统应能调用 `write-file` 工具（支持新建/覆盖/追加）。
+- While 执行任何写文件操作（新建/覆盖/追加），系统应**弹出权限确认**，仅在用户明确确认后写入，否则拒绝并返回"已拒绝"。
+- While 使用 coding 工具，系统应限制危险操作，并在工具描述中明确边界。
 - When Agent 通过 `shell-exec` 发起删除/覆盖写等危险操作，系统应**弹出权限确认**，仅在用户明确确认后执行，否则拒绝并返回"已拒绝"。
 - While 处于非交互环境（无确认器注入），when Agent 发起删除类操作，系统应默认拒绝，不得静默执行。
 - When 用户未配置生图，系统不应提供生图工具（image-gen 不打包）。
