@@ -277,6 +277,28 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.6.3)
 
+  packages/agent-core:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.0
+        version: 5.6.3
+
+  packages/kedou-agent:
+    dependencies:
+      '@kedou/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.0
+        version: 5.6.3
+
   packages/mcp-core:
     dependencies:
       '@modelcontextprotocol/sdk':
