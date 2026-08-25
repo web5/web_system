@@ -12,17 +12,20 @@ import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } fr
 
 const execFileAsync = promisify(execFile);
 
-/** 白名单命令（首 token 必须在白名单内） */
+/** 普通白名单命令（无需确认的只读/开发命令） */
 const ALLOWED_COMMANDS = new Set([
   'git', 'node', 'npm', 'pnpm', 'npx', 'yarn', 'tsc', 'tsx', 'deno', 'bun',
   'cat', 'ls', 'grep', 'echo', 'pwd', 'head', 'tail', 'wc', 'diff', 'find', 'rg',
 ]);
 
-/** 危险模式：删除 / 覆盖写 / 移动 / 权限提升 / 递归删除 */
-const DANGEROUS_PATTERNS = [
-  /\brm\b/, /\brmdir\b/, /\brm -rf\b/, /\bmv\b/,
-  /\b(?:>|>>)\b/, /\bsudo\b/, /\bdd\b/, /\bchmod\b/, /\bchown\b/, /\bshutdown\b/,
-];
+/** 危险但允许的命令：需弹权限确认（confirm=true）才执行 */
+const REQUIRE_CONFIRM_COMMANDS = new Set(['rm', 'mv', 'rmdir', 'chmod', 'chown', 'mkdir']);
+
+/** 完全禁止的命令（即使 confirm 也拒绝） */
+const FORBIDDEN_COMMANDS = new Set(['sudo', 'dd', 'shutdown', 'reboot', 'kill', 'pkill']);
+
+/** 覆盖写重定向（危险） */
+const REDIRECT_PATTERN = />>?/;
 
 const MAX_OUTPUT = 8000;
 const DEFAULT_TIMEOUT = 30_000;
@@ -54,20 +57,33 @@ export class ShellExecTool implements ToolDefinition {
     const raw = String(args.command ?? '').trim();
     if (!raw) return { success: false, content: '', error: 'command 不能为空' };
 
-    // 拆分命令与参数（简单按空格；引号参数在此工具内不深度解析，足够白名单校验）
+    // 拆分命令与参数（简单按空格；引号参数在此工具内不深度解析，足够安全校验）
     const parts = raw.split(/\s+/).filter(Boolean);
     const cmd = parts[0];
 
-    if (!ALLOWED_COMMANDS.has(cmd)) {
+    // 1. 完全禁止的命令（sudo/dd 等，即使 confirm 也拒绝）
+    if (FORBIDDEN_COMMANDS.has(cmd)) {
       return {
         success: false,
         content: '',
-        error: `命令 "${cmd}" 不在白名单内。允许: ${Array.from(ALLOWED_COMMANDS).join(', ')}`,
+        error: `命令 "${cmd}" 被完全禁用，出于安全考虑不允许执行。`,
       };
     }
 
-    // 危险命令 → 弹权限确认
-    if (DANGEROUS_PATTERNS.some((re) => re.test(raw))) {
+    // 2. 是否危险操作（需确认的命令 或 覆盖写重定向）
+    const isDangerous = REQUIRE_CONFIRM_COMMANDS.has(cmd) || REDIRECT_PATTERN.test(raw);
+
+    // 3. 命令必须属于 普通白名单 或 需确认名单
+    if (!ALLOWED_COMMANDS.has(cmd) && !REQUIRE_CONFIRM_COMMANDS.has(cmd)) {
+      return {
+        success: false,
+        content: '',
+        error: `命令 "${cmd}" 不在允许范围内。允许: ${Array.from(ALLOWED_COMMANDS).join(', ')}, ${Array.from(REQUIRE_CONFIRM_COMMANDS).join(', ')}（需确认）`,
+      };
+    }
+
+    // 4. 危险操作 → 弹权限确认（无确认器默认拒绝）
+    if (isDangerous) {
       if (!ctx.confirm) {
         return {
           success: false,
