@@ -1,4 +1,4 @@
-import { AgentDefinition } from '@kedou/agent-core';
+import { AgentDefinition } from '@kedou-ai/agent-core';
 
 export const devAssistantAgent: AgentDefinition = {
   id: 'dev-assistant',

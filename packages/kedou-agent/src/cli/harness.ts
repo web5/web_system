@@ -1,5 +1,5 @@
 /**
- * 装配独立运行的 Agent harness（基于 @kedou/agent-core）。
+ * 装配独立运行的 Agent harness（基于 @kedou-ai/agent-core）。
  * 负责注册模型客户端、工具、搜索 provider、Agent，并提供可注入的 confirm 确认器。
  */
 import {
@@ -19,7 +19,7 @@ import {
   BingSearchProvider,
   ToolRegistry,
   WebSearchTool,
-} from '@kedou/agent-core';
+} from '@kedou-ai/agent-core';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { devAssistantAgent } from './agents/dev-assistant.agent';
 import { generalAssistantAgent } from './agents/general-assistant.agent';

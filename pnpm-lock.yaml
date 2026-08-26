@@ -288,7 +288,7 @@ importers:
 
   packages/kedou-agent:
     dependencies:
-      '@kedou/agent-core':
+      '@kedou-ai/agent-core':
         specifier: workspace:*
         version: link:../agent-core
     devDependencies:
@@ -374,7 +374,7 @@ importers:
 
   servers/ai-service:
     dependencies:
-      '@kedou/agent-core':
+      '@kedou-ai/agent-core':
         specifier: file:../../packages/agent-core
         version: link:../../packages/agent-core
       '@nestjs/axios':
