@@ -55,7 +55,8 @@ export class WebSearchTool implements ToolDefinition {
         .join('\n');
       return { success: true, content: `搜索 "${query}" 的结果：\n${text}` };
     } catch (error) {
-      return { success: false, content: '', error: (error as Error).message };
+      const msg = (error as Error).message;
+      return { success: false, content: `搜索失败: ${msg}`, error: msg };
     }
   }
 }
