@@ -289,8 +289,8 @@ importers:
   packages/kedou-agent:
     dependencies:
       '@kedouai/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
+        specifier: ^0.2.0
+        version: 0.2.0
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -3058,6 +3058,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@kedouai/agent-core@0.2.0':
+    resolution: {integrity: sha512-3q+hDQIElrx9n3+BxO94cd5Q4ipfrR6WV7d2mr/wsES7X2Zitailjo/Yq9yqUSdhF3O7ikVDNJI5Sn3L/0IDxw==}
+    engines: {node: '>=18'}
 
   '@leejim/wxml-parser@0.1.6':
     resolution: {integrity: sha512-1u4ULGK4GKkWhTlc3Hmac8PknrmpGd7qxZOTnT/Bm6EZ/wtonLgFhJ4vyuiUZpeCptnknOLkRpGx2Um9npwdZw==}
@@ -12649,6 +12653,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@kedouai/agent-core@0.2.0': {}
 
   '@leejim/wxml-parser@0.1.6': {}
 

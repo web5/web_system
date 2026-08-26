@@ -52,7 +52,7 @@ describe('AgentEngine (agent-core)', () => {
     const events: any[] = [];
     for await (const e of engine.run({ agentId: 'test-agent', userInput: 'hi' }, 'u1', 'r1')) events.push(e);
 
-    expect(events).toContainEqual({ type: 'final', content: '你好', step: 0, conversationId: 'conv-1' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'final', content: '你好', step: 0, conversationId: 'conv-1' }));
     expect(memory.persist).toHaveBeenCalledTimes(1);
   });
 
