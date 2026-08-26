@@ -10,6 +10,7 @@ export class ProxyService implements OnModuleInit {
   private readonly authServiceUrl: string;
   private readonly userServiceUrl: string;
   private readonly aiServiceUrl: string;
+  private readonly aiAgentServiceUrl: string;
   private readonly systemServiceUrl: string;
   private readonly todoServiceUrl: string;
   private readonly uploadServiceUrl: string;
@@ -20,6 +21,7 @@ export class ProxyService implements OnModuleInit {
   private userProxy!: ReturnType<typeof createProxyMiddleware>;
   private authProxy!: ReturnType<typeof createProxyMiddleware>;
   private aiProxy!: ReturnType<typeof createProxyMiddleware>;
+  private aiAgentProxy!: ReturnType<typeof createProxyMiddleware>;
   private systemProxy!: ReturnType<typeof createProxyMiddleware>;
   private bianbianProxy!: ReturnType<typeof createProxyMiddleware>;
   private todoProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -37,6 +39,7 @@ export class ProxyService implements OnModuleInit {
     this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6001');
     this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
     this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:6003');
+    this.aiAgentServiceUrl = this.configService.get('AI_AGENT_SERVICE_URL', 'http://localhost:6010');
     this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:6004');
     this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:6005');
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
@@ -63,6 +66,9 @@ export class ProxyService implements OnModuleInit {
     // AI 任务（对话 / 生图）链路较长，给 120s
     this.aiProxy = this.createProxy(this.aiServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
     this.systemProxy = this.createProxy(this.systemServiceUrl, '^/api');
+
+    // AI Agent 服务（agent 编排，SSE 长链路，AI_TASK 超时）
+    this.aiAgentProxy = this.createProxy(this.aiAgentServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
 
     // 变变产品实际上属于 ai-service（servers/ai-service/src/bianbian/）
     // 不要指到 user-service，那边没有 bianbian controller
@@ -142,6 +148,8 @@ export class ProxyService implements OnModuleInit {
   getUserProxy() { return this.userProxy; }
   getAuthProxy() { return this.authProxy; }
   getAiProxy() { return this.aiProxy; }
+  getAiAgentProxy() { return this.aiAgentProxy; }
+  getAiAgentServiceUrl() { return this.aiAgentServiceUrl; }
   getSystemProxy() { return this.systemProxy; }
   getBianbianProxy() { return this.bianbianProxy; }
   getTodoProxy() { return this.todoProxy; }

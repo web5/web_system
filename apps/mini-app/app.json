@@ -1,5 +1,11 @@
 {
   "pages": [
+    "pages/contract/index/index",
+    "pages/contract/upload/upload",
+    "pages/contract/analyzing/analyzing",
+    "pages/contract/result/result",
+    "pages/contract/history/history",
+    "pages/contract/mine/mine",
     "pages/index/index",
     "pages/draw/draw",
     "pages/records/records",
@@ -12,9 +18,29 @@
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#FF8C42",
-    "navigationBarTitleText": "变变",
+    "navigationBarBackgroundColor": "#1E6FFF",
+    "navigationBarTitleText": "合同翻译官",
     "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#9AA1AD",
+    "selectedColor": "#1E6FFF",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/contract/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/contract/history/history",
+        "text": "历史"
+      },
+      {
+        "pagePath": "pages/contract/mine/mine",
+        "text": "我的"
+      }
+    ]
   },
   "resizable": true,
   "style": "v2",
