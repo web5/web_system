@@ -17,6 +17,7 @@ import {
   ShellExecTool,
   WriteFileTool,
   BingSearchProvider,
+  WsaSearchProvider,
   ToolRegistry,
   WebSearchTool,
 } from '@kedouai/agent-core';
@@ -44,8 +45,9 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   clientRegistry.register(hy3);
   clientRegistry.register(deepseek);
 
-  // 搜索 Provider（默认内置 Bing）
+  // 搜索 Provider（优先腾讯云 WSA，未配置则回退 Bing）
   const searchRegistry = new SearchProviderRegistry();
+  searchRegistry.register(new WsaSearchProvider(), 5);
   searchRegistry.register(new BingSearchProvider(), 10);
 
   // 工具
