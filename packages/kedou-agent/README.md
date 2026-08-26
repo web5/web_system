@@ -1,6 +1,6 @@
 # kedou-agent
 
-科豆 AI Agent CLI —— 基于 `@kedou-ai/agent-core` 的交互式 AI Agent。
+科豆 AI Agent CLI —— 基于 `@kedouai/agent-core` 的交互式 AI Agent。
 
 - **自带模型**：你配置自己的大模型 API key（不消耗作者 token）。
 - **零运行时依赖**：纯 Node ≥18，原生 `fetch`。
@@ -73,7 +73,7 @@ kedou-agent --version / --help
 
 ```bash
 pnpm install
-pnpm --filter @kedou-ai/agent-core build
+pnpm --filter @kedouai/agent-core build
 pnpm --filter kedou-agent build
 pnpm --filter kedou-agent start   # node bin/kedou-agent.js
 ```

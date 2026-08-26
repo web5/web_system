@@ -55,6 +55,15 @@ export class AgentEngine {
     const toolSchemas = this.toolRegistry.toSchemas(agent.tools);
     let currentConversationId = conversationId;
 
+    // 累计本轮对话的 token 消耗（来自大模型返回的 usage）
+    let accPrompt = 0;
+    let accCompletion = 0;
+    const addUsage = (u: ChatWithToolsResult['usage']): void => {
+      if (!u) return;
+      accPrompt += u.promptTokens;
+      accCompletion += u.completionTokens;
+    };
+
     for (let step = 0; step < agent.maxSteps; step++) {
       let resp: ChatWithToolsResult;
       try {
@@ -63,9 +72,14 @@ export class AgentEngine {
         });
       } catch (error) {
         this.logger.error(`Agent ${agent.id} 模型调用失败: ${(error as Error).message}`);
-        yield { type: 'error', content: `模型调用失败: ${(error as Error).message}` };
+        yield {
+          type: 'error',
+          content: `模型调用失败: ${(error as Error).message}`,
+          usage: usageOf(accPrompt, accCompletion),
+        };
         return;
       }
+      addUsage(resp.usage);
 
       messages.push(resp.assistantMessage);
 
@@ -77,7 +91,13 @@ export class AgentEngine {
           messages,
           agent.memory,
         );
-        yield { type: 'final', content: resp.content, step, conversationId: currentConversationId };
+        yield {
+          type: 'final',
+          content: resp.content,
+          step,
+          conversationId: currentConversationId,
+          usage: usageOf(accPrompt, accCompletion),
+        };
         return;
       }
 
@@ -107,7 +127,11 @@ export class AgentEngine {
 
     // 超过 maxSteps：尽量保存已产生消息再报错
     await this.memory.persist(userId, currentConversationId, messages, agent.memory);
-    yield { type: 'error', content: `达到最大步数限制 (${agent.maxSteps})` };
+    yield {
+      type: 'error',
+      content: `达到最大步数限制 (${agent.maxSteps})`,
+      usage: usageOf(accPrompt, accCompletion),
+    };
   }
 
   private parseArgs(call: ToolCall): Record<string, unknown> {
@@ -117,4 +141,9 @@ export class AgentEngine {
       return {};
     }
   }
+}
+
+/** 根据累计的输入/输出 token 生成 usage 对象 */
+function usageOf(promptTokens: number, completionTokens: number): { promptTokens: number; completionTokens: number; totalTokens: number } {
+  return { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
 }

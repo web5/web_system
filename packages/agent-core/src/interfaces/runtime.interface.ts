@@ -17,6 +17,12 @@ export interface StreamEvent {
   args?: unknown;
   step?: number;
   conversationId?: string;
+  /** 本轮对话累计的 token 消耗（final/error 事件携带，来自大模型返回的 usage） */
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface RunInput {

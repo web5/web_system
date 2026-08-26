@@ -1,4 +1,4 @@
-# @kedou-ai/agent-core
+# @kedouai/agent-core
 
 科豆 AI Agent 核心库（纯 TypeScript，**零运行时依赖**，Node ≥18）。
 
@@ -16,7 +16,7 @@
 ## 安装
 
 ```bash
-npm install @kedou-ai/agent-core
+npm install @kedouai/agent-core
 ```
 
 ## 快速开始
@@ -27,7 +27,7 @@ import {
   Hy3Client, InMemoryConversationMemory, Compaction,
   SearchProviderRegistry, BingSearchProvider, WebSearchTool,
   ListDirTool, ReadFileTool, GrepSearchTool, ShellExecTool,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 
 // 模型客户端
 const clients = new ClientRegistry();

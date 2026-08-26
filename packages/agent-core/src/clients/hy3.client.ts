@@ -84,11 +84,21 @@ export class Hy3Client extends BaseAiClient {
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
       };
 
+      // OpenAI 标准 usage：{ prompt_tokens, completion_tokens, total_tokens }
+      const usage = data.usage;
       return {
         content: assistantMessage.content,
         toolCalls,
         assistantMessage,
         finishReason: choice?.finish_reason,
+        usage:
+          usage && typeof usage.prompt_tokens === 'number'
+            ? {
+                promptTokens: usage.prompt_tokens,
+                completionTokens: usage.completion_tokens ?? 0,
+                totalTokens: usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0),
+              }
+            : undefined,
       };
     } catch (error) {
       this.logger.error(`Hy3 API error: ${(error as Error).message}`);
