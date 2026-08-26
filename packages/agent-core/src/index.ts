@@ -1,5 +1,5 @@
 /**
- * @kedou/agent-core 统一导出。
+ * @kedou-ai/agent-core 统一导出。
  */
 
 // 接口

@@ -1,7 +1,7 @@
 {
   "name": "kedou-agent",
   "version": "0.1.0",
-  "description": "科豆 AI Agent CLI —— 基于 @kedou/agent-core 的交互式 AI Agent（自带大模型 API key，不消耗作者 token）",
+  "description": "科豆 AI Agent CLI —— 基于 @kedou-ai/agent-core 的交互式 AI Agent（自带大模型 API key，不消耗作者 token）",
   "main": "dist/cli/index.js",
   "types": "dist/cli/index.d.ts",
   "bin": {
@@ -21,7 +21,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@kedou/agent-core": "workspace:*"
+    "@kedou-ai/agent-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

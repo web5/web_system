@@ -15,10 +15,10 @@ import {
   Hy3Client,
   DeepseekClient,
   ToolRegistry,
-} from '@kedou/agent-core';
+} from '@kedou-ai/agent-core';
 
 /**
- * Agent harness 统一注册入口（收敛自 @kedou/agent-core）。
+ * Agent harness 统一注册入口（收敛自 @kedou-ai/agent-core）。
  * 引擎/注册表/客户端/摘要压缩均复用 agent-core（纯 TS），
  * 通过 useFactory 桥接进 Nest DI；ConversationMemory(DB 版) 与 ImageGenTool(生图) 为 ai-service 特有。
  */
