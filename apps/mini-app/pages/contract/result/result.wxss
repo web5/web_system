@@ -1,0 +1,292 @@
+/* ===== 合同翻译官 - 结果页 ===== */
+.page {
+  min-height: 100vh;
+  background: #F5F7FA;
+  padding-bottom: 60rpx;
+}
+
+.result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
+.result-tag {
+  font-size: 24rpx;
+  color: #1E6FFF;
+  background: #EAF2FF;
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
+  font-weight: 600;
+}
+.result-date {
+  font-size: 24rpx;
+  color: #9AA1AD;
+}
+
+/* 健康指数 */
+.score-box {
+  margin: 24rpx 32rpx;
+  background: linear-gradient(135deg, #E5484D, #F26A6E);
+  border-radius: 24rpx;
+  padding: 36rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #fff;
+}
+.score-big {
+  font-size: 72rpx;
+  font-weight: 800;
+}
+.score-label {
+  font-size: 28rpx;
+  margin-top: 8rpx;
+  opacity: 0.95;
+}
+.score-sub {
+  font-size: 24rpx;
+  margin-top: 8rpx;
+  opacity: 0.85;
+}
+
+/* 卡片 */
+.card {
+  background: #fff;
+  border-radius: 20rpx;
+  margin: 0 32rpx 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+.card-title {
+  font-size: 24rpx;
+  color: #9AA1AD;
+  display: block;
+  margin-bottom: 12rpx;
+  font-weight: 600;
+}
+.conclusion-text {
+  font-size: 30rpx;
+  color: #1A1F2E;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+/* 风险信号区 */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 24rpx 32rpx 20rpx;
+}
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1F2E;
+}
+.section-count {
+  font-size: 24rpx;
+  color: #9AA1AD;
+}
+
+.signal-list {
+  margin: 0 32rpx;
+}
+.signal {
+  background: #fff;
+  border-radius: 20rpx;
+  margin-bottom: 20rpx;
+  overflow: hidden;
+  border-left: 8rpx solid #E8EBF0;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+.signal.danger {
+  border-left-color: #E5484D;
+}
+.signal.warn {
+  border-left-color: #E8833A;
+}
+.signal.ok {
+  border-left-color: #2E9E5B;
+}
+
+.signal-head {
+  display: flex;
+  gap: 20rpx;
+  align-items: flex-start;
+  padding: 28rpx;
+}
+.signal-lvl {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.signal.danger .signal-lvl {
+  background: #FDEBEC;
+}
+.signal.warn .signal-lvl {
+  background: #FFF3E6;
+}
+.signal.ok .signal-lvl {
+  background: #E7F5EC;
+}
+.lvl-ic {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+.signal.danger .lvl-ic {
+  color: #E5484D;
+}
+.signal.warn .lvl-ic {
+  color: #E8833A;
+}
+.signal.ok .lvl-ic {
+  color: #2E9E5B;
+}
+
+.signal-info {
+  flex: 1;
+}
+.signal-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1F2E;
+  line-height: 1.5;
+  display: block;
+}
+.signal-desc {
+  font-size: 24rpx;
+  color: #5B6372;
+  margin-top: 8rpx;
+  line-height: 1.5;
+  display: block;
+}
+.chev {
+  font-size: 22rpx;
+  color: #1E6FFF;
+  flex-shrink: 0;
+  margin-top: 4rpx;
+}
+
+/* 展开明细 */
+.signal-body {
+  padding: 0 28rpx 28rpx;
+}
+.signal-sec {
+  margin-top: 20rpx;
+}
+.sec-title {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #5B6372;
+  display: block;
+  margin-bottom: 12rpx;
+}
+.legal-box {
+  background: #EAF2FF;
+  border-radius: 16rpx;
+  padding: 20rpx;
+}
+.law-name {
+  font-size: 24rpx;
+  color: #1656C8;
+  font-weight: 600;
+  display: block;
+}
+.law-article {
+  font-size: 22rpx;
+  color: #1656C8;
+  display: block;
+  margin-top: 4rpx;
+}
+.law-quote {
+  font-size: 22rpx;
+  color: #5B6372;
+  line-height: 1.6;
+  display: block;
+  margin-top: 8rpx;
+}
+
+.action-step {
+  display: flex;
+  gap: 16rpx;
+  align-items: flex-start;
+  margin-bottom: 12rpx;
+}
+.action-num {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: #1E6FFF;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2rpx;
+}
+.action-text {
+  font-size: 26rpx;
+  color: #1A1F2E;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.term-box {
+  background: #F7F8FA;
+  border-radius: 16rpx;
+  padding: 20rpx;
+}
+.term-text {
+  font-size: 24rpx;
+  color: #5B6372;
+  line-height: 1.6;
+}
+
+/* 免责声明 */
+.disclaimer {
+  margin: 24rpx 32rpx 0;
+  background: #FFF3E6;
+  border: 1rpx solid #FFD9B8;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+}
+.disclaimer-text {
+  font-size: 22rpx;
+  color: #B2592A;
+  line-height: 1.6;
+}
+
+/* 回到首页 */
+.home-btn {
+  margin: 32rpx 32rpx 0;
+  background: #1E6FFF;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: 40rpx;
+  padding: 24rpx 0;
+  border: none;
+}
+.home-btn::after {
+  border: none;
+}
+
+/* 空状态 */
+.empty {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F5F7FA;
+}
+.empty-text {
+  font-size: 28rpx;
+  color: #9AA1AD;
+}

@@ -1,0 +1,27 @@
+<!-- 合同翻译官 - 解读中 -->
+<view class="page">
+  <!-- 转圈 -->
+  <view class="ring-wrap">
+    <view class="ring"></view>
+    <view class="ring-center">
+      <text class="ring-ic">盾</text>
+    </view>
+  </view>
+
+  <text class="title">正在为你体检合同</text>
+  <text class="sub">大约需要 1 分钟，请稍候…</text>
+
+  <!-- 进度步骤 -->
+  <view class="step-list">
+    <view wx:for="{{steps}}" wx:key="index" class="step {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}">
+      <view class="dot">
+        <text wx:if="{{item.done}}">✓</text>
+        <text wx:else>{{index + 1}}</text>
+      </view>
+      <view class="step-info">
+        <text class="step-n">{{item.text}}</text>
+        <text class="step-d">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -53,6 +53,7 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3001
       - USER_SERVICE_URL=http://user-service:3002
       - AI_SERVICE_URL=http://ai-service:3003
+      - AI_AGENT_SERVICE_URL=http://ai-agent:6010
     depends_on:
       - redis
     networks:
@@ -112,6 +113,28 @@ services:
       - IMAGE_GEN_MODEL=${IMAGE_GEN_MODEL:-stable-diffusion-xl}
     depends_on:
       - postgres
+      - redis
+    networks:
+      - web_network
+    restart: unless-stopped
+
+  # AI Agent 编排服务（统一承载 agent 能力，如合同风险识别）
+  ai-agent:
+    build:
+      context: .
+      dockerfile: servers/ai-agent/Dockerfile
+    container_name: web_system_ai_agent
+    ports:
+      - "6010:6010"
+    environment:
+      - NODE_ENV=production
+      - PORT=6010
+      - HY3_API_KEY=${HY3_API_KEY}
+      - HY3_BASE_URL=https://wcode.net/api/gpt/v1
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+      - AUTH_SERVICE_URL=http://auth-service:3001
+    depends_on:
       - redis
     networks:
       - web_network

@@ -1,0 +1,21 @@
+<!-- 合同翻译官 - 历史记录 -->
+<view class="page">
+  <view class="hist-list">
+    <view wx:for="{{records}}" wx:key="index" class="hist-item" bindtap="goLatest">
+      <view class="hist-ic">
+        <text class="hist-ic-text">盾</text>
+      </view>
+      <view class="hist-info">
+        <text class="hist-n">合同体检 · {{item.scene}}</text>
+        <text class="hist-d">{{item.time}} · 完成</text>
+      </view>
+      <view class="hist-stat {{item.danger > 0 ? 'danger' : item.warn > 0 ? 'warn' : 'ok'}}">
+        {{item.danger > 0 ? item.danger + ' 高风险' : item.warn > 0 ? item.warn + ' 中风险' : '检查通过'}}
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{records.length === 0}}">
+    <text class="empty-text">暂无体检记录</text>
+  </view>
+</view>

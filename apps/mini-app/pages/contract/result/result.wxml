@@ -1,0 +1,86 @@
+<!-- 合同翻译官 - 结果页 -->
+<view class="page" wx:if="{{report}}">
+  <!-- 结论区 -->
+  <view class="result-head">
+    <text class="result-tag">{{report.scene}}</text>
+    <text class="result-date">体检完成</text>
+  </view>
+
+  <!-- 健康指数 -->
+  <view class="score-box">
+    <text class="score-big">{{summary.danger * 20 + summary.warn * 10}}</text>
+    <text class="score-label">健康指数</text>
+    <text class="score-sub">{{summary.danger > 0 ? '发现高风险点，建议签字前重点关注' : '整体较健康'}}</text>
+  </view>
+
+  <!-- 结论 -->
+  <view class="card">
+    <text class="card-title">一句话结论</text>
+    <text class="conclusion-text">{{report.conclusion}}</text>
+  </view>
+
+  <!-- 风险信号 -->
+  <view class="section-head">
+    <text class="section-title">风险信号</text>
+    <text class="section-count">{{summary.danger + summary.warn + summary.ok}} 项</text>
+  </view>
+
+  <view class="signal-list">
+    <view
+      wx:for="{{signals}}"
+      wx:key="id"
+      class="signal {{item.level}} {{item.open ? 'open' : ''}}"
+      data-index="{{index}}"
+      bindtap="toggleSignal"
+    >
+      <view class="signal-head">
+        <view class="signal-lvl">
+          <text class="lvl-ic">{{item.level === 'danger' ? '!' : item.level === 'warn' ? '?' : '✓'}}</text>
+        </view>
+        <view class="signal-info">
+          <text class="signal-title">{{item.signalTitle}}</text>
+          <text class="signal-desc">{{item.plainText}}</text>
+        </view>
+        <text class="chev">{{item.open ? '收起' : '展开'}}</text>
+      </view>
+
+      <view class="signal-body" wx:if="{{item.open}}">
+        <!-- 法律依据 -->
+        <view class="signal-sec">
+          <text class="sec-title">法律依据</text>
+          <view class="legal-box">
+            <text class="law-name">{{item.legalBasis.law}}</text>
+            <text class="law-article">{{item.legalBasis.article}}</text>
+            <text class="law-quote">{{item.legalBasis.quote}}</text>
+          </view>
+        </view>
+        <!-- 3 步操作 -->
+        <view class="signal-sec">
+          <text class="sec-title">你可以怎么做</text>
+          <view wx:for="{{item.actions}}" wx:for-item="action" wx:key="index" class="action-step">
+            <view class="action-num">{{index + 1}}</view>
+            <text class="action-text">{{action}}</text>
+          </view>
+        </view>
+        <!-- 术语解释 -->
+        <view class="signal-sec" wx:if="{{item.termExplain}}">
+          <text class="sec-title">这是什么意思</text>
+          <view class="term-box">
+            <text class="term-text">{{item.termExplain}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 免责声明 -->
+  <view class="disclaimer">
+    <text class="disclaimer-text">{{report.disclaimer}}</text>
+  </view>
+
+  <button class="home-btn" bindtap="goHome">回到首页</button>
+</view>
+
+<view class="empty" wx:else>
+  <text class="empty-text">暂无报告数据</text>
+</view>
