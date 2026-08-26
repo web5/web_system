@@ -3,7 +3,7 @@
 > 状态：方案（待确认）
 > 日期：2026-08-25
 > 分支：feature/ai-agent-harness
-> 决策：monorepo 内 `packages/kedou-agent`；抽公共核心包 `@kedou-ai/agent-core`；增加 web-search 与 coding 工具；生图工具不放入包；无 demo。
+> 决策：monorepo 内 `packages/kedou-agent`；抽公共核心包 `@kedouai/agent-core`；增加 web-search 与 coding 工具；生图工具不放入包；无 demo。
 
 ## 1. 背景与目标
 
@@ -54,14 +54,14 @@
 - While Agent 使用了摘要模型，摘要模型应跟随用户所选模型（不硬编码 hy3）。
 
 ### 3.5 代码共享
-- When 项目构建，ai-service 与 `kedou-agent` 应通过 `@kedou-ai/agent-core` 共用 harness 核心（引擎/注册表/接口/工具）。
+- When 项目构建，ai-service 与 `kedou-agent` 应通过 `@kedouai/agent-core` 共用 harness 核心（引擎/注册表/接口/工具）。
 - While 在 ai-service 中给 harness 新增工具，CLI 不应出现功能漂移（共用核心）。
 
 ## 4. 范围（In/Out）
 
 ### In
 - 独立包 `packages/kedou-agent`（CLI 层）
-- 公共核心包 `@kedou-ai/agent-core`（纯 TS，零 Nest，harness 核心）
+- 公共核心包 `@kedouai/agent-core`（纯 TS，零 Nest，harness 核心）
 - 内置工具：`web-search`（插件式 Provider，默认 Bing）、coding 工具（read-file/list-dir/grep-search/shell-exec 受限）
 - CLI 子命令：`chat` / `config` / `agents` / `models` / `--message` / `--version` / `--help`
 - 交互配置持久化（`~/.kedou`）+ 安全发布

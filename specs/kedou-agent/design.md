@@ -7,8 +7,8 @@
 
 ```
 packages/
-├── agent-core/            # 🆕 公共核心包 @kedou-ai/agent-core（纯 TS，零 Nest，可发布）
-│   ├── package.json       # name: @kedou-ai/agent-core
+├── agent-core/            # 🆕 公共核心包 @kedouai/agent-core（纯 TS，零 Nest，可发布）
+│   ├── package.json       # name: @kedouai/agent-core
 │   ├── tsup.config.ts
 │   └── src/
 │       ├── index.ts               # 统一导出（引擎/注册表/接口/工具）
@@ -40,7 +40,7 @@ packages/
         └── cli/agents/         # study-assistant / dev-assistant（含 coding 工具）
 ```
 
-**关键设计**：`@kedou-ai/agent-core` 是两端共享的核心（ai-service 通过它跑 Agent，CLI 也通过它跑 Agent）。ai-service 在其外层保持 Nest 装饰器 + DB `ConversationMemory` + controller，但**引擎/注册表/客户端/工具逻辑来自 agent-core**。
+**关键设计**：`@kedouai/agent-core` 是两端共享的核心（ai-service 通过它跑 Agent，CLI 也通过它跑 Agent）。ai-service 在其外层保持 Nest 装饰器 + DB `ConversationMemory` + controller，但**引擎/注册表/客户端/工具逻辑来自 agent-core**。
 
 ### ai-service 侧改造（收敛到 agent-core）
 - `servers/ai-service/src/agent/core/*`、`registry/*`、`interfaces/*`、`common/http/*`（hy3/deepseek）、`memory/compaction.ts`、`memory/stored-message.ts`、`tools/*`（web-search/coding）→ **移到 agent-core 后从 agent-core re-export / 复用**
@@ -175,7 +175,7 @@ kedou-agent --help / -h
 
 ## 8. 依赖关系（实现顺序）
 
-1. `@kedou-ai/agent-core` 骨架（interfaces + lib/logger + lib/timeout）
+1. `@kedouai/agent-core` 骨架（interfaces + lib/logger + lib/timeout）
 2. agent-core clients（hy3/deepseek 原生 fetch）
 3. agent-core engine + registries（ReAct）
 4. agent-core tools（web-search → coding）

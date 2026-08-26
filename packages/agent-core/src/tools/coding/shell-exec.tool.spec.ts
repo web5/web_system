@@ -53,4 +53,19 @@ describe('ShellExecTool', () => {
     expect(r.success).toBe(true);
     expect(r.content).toContain('hello');
   });
+
+  it('python3 命令在白名单内可直接执行', async () => {
+    // 注意：工具用 execFile（不经 shell），引号会原样传给参数，故 code 参数不带引号
+    const r = await tool.execute({ command: 'python3 -c print(1+1)' }, ctx());
+    expect(r.success).toBe(true);
+    expect(r.content).toContain('2');
+  });
+
+  it('python 命令在白名单内可直接执行', async () => {
+    const r = await tool.execute({ command: "python -c 'print(3)'" }, ctx());
+    // python 可能不存在，但至少不应被白名单拒绝
+    if (r.success === false) {
+      expect(r.error).not.toContain('不在允许范围');
+    }
+  });
 });

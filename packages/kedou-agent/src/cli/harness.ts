@@ -1,5 +1,5 @@
 /**
- * 装配独立运行的 Agent harness（基于 @kedou-ai/agent-core）。
+ * 装配独立运行的 Agent harness（基于 @kedouai/agent-core）。
  * 负责注册模型客户端、工具、搜索 provider、Agent，并提供可注入的 confirm 确认器。
  */
 import {
@@ -17,9 +17,10 @@ import {
   ShellExecTool,
   WriteFileTool,
   BingSearchProvider,
+  WsaSearchProvider,
   ToolRegistry,
   WebSearchTool,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { devAssistantAgent } from './agents/dev-assistant.agent';
 import { generalAssistantAgent } from './agents/general-assistant.agent';
@@ -44,8 +45,9 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   clientRegistry.register(hy3);
   clientRegistry.register(deepseek);
 
-  // 搜索 Provider（默认内置 Bing）
+  // 搜索 Provider（优先腾讯云 WSA，未配置则回退 Bing）
   const searchRegistry = new SearchProviderRegistry();
+  searchRegistry.register(new WsaSearchProvider(), 5);
   searchRegistry.register(new BingSearchProvider(), 10);
 
   // 工具

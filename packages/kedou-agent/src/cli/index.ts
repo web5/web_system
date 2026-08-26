@@ -10,7 +10,7 @@ import { runConfig } from './commands/config';
 import { runAgents } from './commands/agents';
 import { runModels } from './commands/models';
 
-const VERSION = '0.1.0';
+const VERSION: string = (require('../../package.json') as { version: string }).version;
 
 function printBanner(): void {
   console.log('╔════════════════════════════════════════════════════════╗');
