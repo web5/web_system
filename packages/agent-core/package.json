@@ -1,5 +1,5 @@
 {
-  "name": "@kedou-ai/agent-core",
+  "name": "@kedouai/agent-core",
   "version": "0.1.0",
   "description": "科豆 AI Agent 核心库（纯 TS，零运行时依赖）：ReAct 引擎、工具/Agent/Client 注册表、模型客户端、记忆与摘要压缩",
   "main": "dist/index.js",
