@@ -9,16 +9,16 @@ import { postJson, streamSse } from '../lib/fetch-http';
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1';
 
 export class DeepseekClient extends BaseAiClient {
-  readonly modelId = 'deepseek-v4-flash';
-  readonly displayName = 'DeepSeek V4 Flash';
-  readonly description = 'DeepSeek V4 Flash';
+  readonly modelId = 'deepseek-chat';
+  readonly displayName = 'DeepSeek Chat';
+  readonly description = 'DeepSeek Chat（支持稳定的 function calling）';
   private readonly logger = new Logger(DeepseekClient.name);
 
   private getApiKey(): string {
-    return process.env.DEPSEEK_API_KEY ?? '';
+    return process.env.DEEPSEEK_API_KEY ?? process.env.DEPSEEK_API_KEY ?? '';
   }
   private getBaseUrl(): string {
-    return process.env.DEPSEEK_BASE_URL || DEFAULT_BASE_URL;
+    return process.env.DEEPSEEK_BASE_URL || process.env.DEPSEEK_BASE_URL || DEFAULT_BASE_URL;
   }
   private getChatEndpoint(): string {
     const base = this.getBaseUrl().replace(/\/+$/, '');
@@ -62,7 +62,7 @@ export class DeepseekClient extends BaseAiClient {
       const data = await postJson<any>(
         this.getChatEndpoint(),
         payload,
-        { headers: { Authorization: `Bearer ${key}` }, timeoutMs: API_TIMEOUT.UPSTREAM.CHAT },
+        { headers: { Authorization: `Bearer ${key}` }, timeoutMs: API_TIMEOUT.AI_TASK },
       );
       const choice = data.choices?.[0];
       const message = choice?.message ?? {};

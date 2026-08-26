@@ -407,6 +407,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      tencentcloud-sdk-nodejs:
+        specifier: ^4.1.275
+        version: 4.1.275
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.0.0

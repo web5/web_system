@@ -9,10 +9,13 @@ import {
   DeepseekClient,
   ToolRegistry,
   InMemoryConversationMemory,
+  McpToolMeta,
 } from '@kedou-ai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
 import { contractRiskAgent } from '../contract/agents/contract-risk.agent';
+import { McpService } from '../mcp/mcp.service';
+import { McpModule } from '../mcp/mcp.module';
 
 /**
  * Agent harness 统一注册入口（复用 @kedou-ai/agent-core）。
@@ -73,6 +76,7 @@ const runnerProvider: Provider = {
 };
 
 @Module({
+  imports: [McpModule],
   providers: [
     clientRegistryProvider,
     toolRegistryProvider,
@@ -95,18 +99,46 @@ export class AgentModule implements OnModuleInit {
     private readonly agentRegistry: AgentRegistry,
     private readonly contractRuleTool: ContractRuleTool,
     private readonly contractIrrTool: ContractIrrTool,
+    private readonly mcpService: McpService,
   ) {}
 
   onModuleInit(): void {
-    // 注册合同风险场景工具
+    // 注册合同风险场景工具（确定性本地插件）
     this.toolRegistry.register(this.contractRuleTool);
     this.toolRegistry.register(this.contractIrrTool);
 
     // 注册 Agent 定义
     this.agentRegistry.register(contractRiskAgent);
 
+    // 演示"MCP 工具作为远程插件懒加载接入"（配置了 MCP_GATEWAY_URL 才生效）
+    this.registerMcpTools();
+
     this.logger.log(
       'Agent harness（agent-core）工具与 Agent 定义注册完成: contract-risk',
     );
+  }
+
+  /** 通过 MCP 接入远程工具（懒加载，作为"一切皆插件"的演示） */
+  private registerMcpTools(): void {
+    if (!this.mcpService.isAvailable()) {
+      this.logger.warn('MCP 网关未配置（MCP_GATEWAY_URL），跳过 MCP 工具注册');
+      return;
+    }
+
+    // 示例：接入一个 MCP 暴露的合同法规查询工具（懒加载）
+    const lawSearchMeta: McpToolMeta = {
+      name: 'law-search',
+      description: '查询合同相关法律法规条文（MCP 远程工具示例）',
+      module: 'contract_risk',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string', description: '要查询的法律关键词', required: true },
+        },
+        required: ['keyword'],
+      },
+    };
+    this.mcpService.registerMcpTool(this.toolRegistry, lawSearchMeta);
+    this.logger.log('MCP 远程工具已注册（懒加载）: law-search');
   }
 }

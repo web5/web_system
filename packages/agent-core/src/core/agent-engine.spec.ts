@@ -27,7 +27,7 @@ describe('AgentEngine (agent-core)', () => {
   let engine: AgentEngine;
 
   beforeEach(() => {
-    toolRegistry = { toSchemas: jest.fn().mockReturnValue([]), execute: jest.fn() } as any;
+    toolRegistry = { toSchemas: jest.fn().mockResolvedValue([]), execute: jest.fn() } as any;
     agentRegistry = { get: jest.fn() } as any;
     clientRegistry = { getOrFallback: jest.fn() } as any;
     memory = {
