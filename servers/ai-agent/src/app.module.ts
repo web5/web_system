@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import * as path from 'path';
 import { AuthModule } from './auth/auth.module';
 import { AgentModule } from './agent/agent.module';
+import { OcrModule } from './ocr/ocr.module';
+import { McpModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { AgentModule } from './agent/agent.module';
     }),
     AuthModule,
     AgentModule,
+    OcrModule,
+    McpModule,
   ],
 })
 export class AppModule {}

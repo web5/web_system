@@ -1,8 +1,9 @@
 /**
  * 合同翻译官 - 上传页
- * MVP：支持粘贴合同文本 + 示例样本，后续接入 OCR 拍照识别
+ * 支持拍照/相册 OCR 识别 + 文本粘贴 + 示例样本
  */
 import { analyzeContract } from '../../../services/contract-api';
+import { chooseAndRecognize } from '../../../services/ocr-api';
 
 // 示例样本（演示用）
 const SAMPLES = {
@@ -21,6 +22,7 @@ Page({
     contractText: '',
     analyzing: false,
     scene: '',
+    ocring: false,
   },
 
   onInput(e: any) {
@@ -40,10 +42,55 @@ Page({
     }
   },
 
+  /** 拍照识别 */
+  takePhoto() {
+    this.doOcr('camera');
+  },
+
+  /** 相册识别 */
+  chooseAlbum() {
+    this.doOcr('album');
+  },
+
+  /** 文件上传（MVP：暂用相册） */
+  chooseFile() {
+    wx.showToast({ title: '文件上传开发中，请先使用相册', icon: 'none' });
+  },
+
+  /** OCR 识别合同图片 */
+  doOcr(sourceType: 'camera' | 'album') {
+    this.setData({ ocring: true });
+    wx.showLoading({ title: '识别图片中...' });
+    chooseAndRecognize(sourceType)
+      .then((res) => {
+        wx.hideLoading();
+        this.setData({ ocring: false });
+        if (res.text) {
+          this.setData({ contractText: res.text });
+          wx.showToast({ title: `识别到 ${res.blockCount} 段文字`, icon: 'success' });
+        } else {
+          wx.showToast({ title: '未识别到文字', icon: 'none' });
+        }
+      })
+      .catch((err: any) => {
+        wx.hideLoading();
+        this.setData({ ocring: false });
+        // 用户取消选择不提示
+        if (err?.errMsg && String(err.errMsg).includes('cancel')) return;
+        const msg = err?.message || 'OCR 识别失败';
+        wx.showModal({
+          title: '识别失败',
+          content: `${msg}。可改用粘贴合同文本。`,
+          showCancel: false,
+          confirmText: '知道了',
+        });
+      });
+  },
+
   async startAnalyze() {
     const text = this.data.contractText.trim();
     if (!text) {
-      wx.showToast({ title: '请先粘贴合同内容或选择示例', icon: 'none' });
+      wx.showToast({ title: '请先粘贴合同内容、识别图片或选择示例', icon: 'none' });
       return;
     }
 
@@ -54,7 +101,6 @@ Page({
 
     try {
       const report = await analyzeContract(text, this.data.scene);
-      // 存储报告供结果页读取
       const storage = wx.getStorageSync('contract_report') || {};
       storage.latest = { ...report, createdAt: Date.now() };
       wx.setStorageSync('contract_report', storage);

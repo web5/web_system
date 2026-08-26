@@ -27,7 +27,7 @@ export const contractRiskAgent: AgentDefinition = {
     '- 每次输出风险结论时，必须附带声明："以上内容由 AI 生成，仅用于理解合同，不构成法律/理财/投资建议。"\n' +
     '- 涉及重大决策（贷款、保险等）时，引导用户："重大决策请咨询持牌专业人士。"\n' +
     '- 测算必须基于工具返回的真实数值，不得臆造。',
-  model: 'deepseek',
+  model: 'deepseek-chat',
   tools: ['contract-rule', 'contract-irr'],
   maxSteps: 8,
   temperature: 0.3,

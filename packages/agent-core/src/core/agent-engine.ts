@@ -52,7 +52,7 @@ export class AgentEngine {
       { role: 'user', content: input.userInput },
     ];
 
-    const toolSchemas = this.toolRegistry.toSchemas(agent.tools);
+    const toolSchemas = await this.toolRegistry.toSchemas(agent.tools);
     let currentConversationId = conversationId;
 
     for (let step = 0; step < agent.maxSteps; step++) {

@@ -10,17 +10,17 @@
 
   <!-- 上传区 -->
   <view class="upload-options">
-    <view class="upload-opt">
+    <view class="upload-opt" bindtap="takePhoto">
       <image class="opt-ic" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUU2RkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIzIDE5YTIgMiAwIDAgMS0yIDJIM2EyIDIgMCAwIDEtMi0yVjhhMiAyIDAgMCAxIDItMmg0bDItM2g2bDIgM2g0YTIgMiAwIDAgMSAyIDJ6Ii8+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMyIgcj0iNCIvPjwvc3ZnPg==" mode="aspectFit" />
       <text class="opt-n">拍照识别</text>
       <text class="opt-d">拍摄合同页面</text>
     </view>
-    <view class="upload-opt">
+    <view class="upload-opt" bindtap="chooseAlbum">
       <image class="opt-ic" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUU2RkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxjaXJjbGUgY3g9IjkiIGN5PSI5IiByPSIyIi8+PHBhdGggZD0ibTIxIDE1LTMuNS0zLjVMNyAyMiIvPjwvc3ZnPg==" mode="aspectFit" />
       <text class="opt-n">相册</text>
       <text class="opt-d">选择已有图片</text>
     </view>
-    <view class="upload-opt">
+    <view class="upload-opt" bindtap="chooseFile">
       <image class="opt-ic" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUU2RkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4eiIvPjxwYXRoIGQ9Ik0xNCAydjZoNiIvPjwvc3ZnPg==" mode="aspectFit" />
       <text class="opt-n">文件</text>
       <text class="opt-d">PDF / 图片</text>
@@ -31,7 +31,7 @@
   <view class="text-section">
     <view class="text-head">
       <text class="text-title">或粘贴合同文字</text>
-      <text class="text-tip">OCR 功能开发中</text>
+      <text class="text-tip">支持拍照 / 相册识别</text>
     </view>
     <textarea
       class="contract-textarea"
