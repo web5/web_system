@@ -4,7 +4,7 @@ import {
   ToolContext,
   ToolResult,
   ToolSchema,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { analyzeLoan } from '@web-system/shared';
 
 /**

@@ -8,7 +8,7 @@ import {
   AgentMemoryConfig,
   ChatMessage,
   StoredMessage,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { AgentConversation } from './agent-conversation.entity';
 
 /**

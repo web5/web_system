@@ -4,7 +4,7 @@ import {
   McpToolAdapter,
   McpToolMeta,
   ToolRegistry,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 
 /**
  * MCP 工具接入服务 — 让 Agent 能以"一切皆插件"的方式调用 MCP 暴露的远程工具。

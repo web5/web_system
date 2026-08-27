@@ -13,7 +13,7 @@
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.0",
     "@tabler/icons-vue": "^3.45.0",
-    "@web-system/shared": "file:../../packages/shared",
+    "@web-system/shared": "workspace:*",
     "ant-design-vue": "^4.0.0",
     "axios": "^1.6.0",
     "diff": "^9.0.0",

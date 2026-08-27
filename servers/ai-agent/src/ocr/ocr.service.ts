@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as tencentcloud from 'tencentcloud-sdk-nodejs';
-import { ClientRegistry } from '@kedou-ai/agent-core';
+import { ClientRegistry } from '@kedouai/agent-core';
 import { BusinessException } from '../common/exceptions/business.exception';
 
 const OcrClient = tencentcloud.ocr.v20181119.Client;

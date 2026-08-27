@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.0",
-    "@web-system/shared": "file:../../packages/shared",
-    "@web-system/types": "file:../../packages/types",
+    "@web-system/shared": "workspace:*",
+    "@web-system/types": "workspace:*",
     "ant-design-vue": "^4.2.0",
     "axios": "^1.7.0",
     "dayjs": "^1.11.0",

@@ -2,7 +2,7 @@
  * shell-exec 工具：受限执行 shell 命令。
  *
  * 安全设计：
- * - 仅允许白名单命令（git/node/npm/pnpm/tsc/cat/ls/grep/echo/pwd/head/tail/wc/diff 等）
+ * - 仅允许白名单命令（git/node/npm/pnpm/tsc/python/python3/cat/ls/grep/echo/pwd/head/tail/wc/diff 等）
  * - 删除/覆盖写等危险命令 → 调用 ctx.confirm() 弹确认框，用户确认后才执行；未注入则默认拒绝
  * - 用 execFile（不经 shell），避免注入；设超时与输出上限
  */
@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 /** 普通白名单命令（无需确认的只读/开发命令） */
 const ALLOWED_COMMANDS = new Set([
   'git', 'node', 'npm', 'pnpm', 'npx', 'yarn', 'tsc', 'tsx', 'deno', 'bun',
+  'python', 'python3', 'pip', 'pip3',
   'cat', 'ls', 'grep', 'echo', 'pwd', 'head', 'tail', 'wc', 'diff', 'find', 'rg',
 ]);
 
@@ -33,7 +34,7 @@ const DEFAULT_TIMEOUT = 30_000;
 export class ShellExecTool implements ToolDefinition {
   readonly name = 'shell-exec';
   readonly description =
-    '在受限制的环境中执行 shell 命令。仅允许开发/只读类命令（git/node/npm/pnpm/tsc/cat/ls/grep 等）。删除、覆盖写、sudo 等危险操作需要用户确认。';
+    '在受限制的环境中执行 shell 命令。仅允许开发/只读类命令（git/node/npm/pnpm/tsc/python/python3/cat/ls/grep 等）。删除、覆盖写、sudo 等危险操作需要用户确认。';
   readonly parameters: Record<string, ToolParameter> = {
     command: { type: 'string', description: '要执行的命令（如 git status）', required: true },
   };

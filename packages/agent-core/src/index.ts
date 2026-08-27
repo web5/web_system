@@ -1,5 +1,5 @@
 /**
- * @kedou-ai/agent-core 统一导出。
+ * @kedouai/agent-core 统一导出。
  */
 
 // 接口
@@ -36,6 +36,7 @@ export * from './search/provider.interface';
 export { SearchProviderRegistry } from './search/registry';
 export { WebSearchTool } from './search/web-search.tool';
 export { BingSearchProvider } from './search/providers/bing.provider';
+export { WsaSearchProvider } from './search/providers/wsa.provider';
 
 // 内置工具
 export { ListDirTool } from './tools/coding/list-dir.tool';

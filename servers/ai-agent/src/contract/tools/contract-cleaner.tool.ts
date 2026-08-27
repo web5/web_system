@@ -5,7 +5,7 @@ import {
   ToolResult,
   ToolSchema,
   ClientRegistry,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 
 /**
  * 合同文本清洗工具（方案 B：AI 清洗）。

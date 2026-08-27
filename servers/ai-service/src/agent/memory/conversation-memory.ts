@@ -6,11 +6,11 @@ import {
   AgentMemoryConfig,
   StoredMessage,
   ChatMessage,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 
 /**
  * 对话记忆（DB 版）：基于 ConversationService 做持久记忆 + 摘要压缩。
- * 实现 @kedou-ai/agent-core 的 ConversationMemoryPort，供 agent-core 引擎使用。
+ * 实现 @kedouai/agent-core 的 ConversationMemoryPort，供 agent-core 引擎使用。
  */
 @Injectable()
 export class ConversationMemory implements ConversationMemoryPort {
