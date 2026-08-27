@@ -25,7 +25,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^10.0.0",
     "@web-system/shared": "workspace:*",
-    "@web-system/types": "file:../../packages/types",
+    "@web-system/types": "workspace:*",
     "body-parser": "^1.20.4",
     "compression": "^1.7.5",
     "cors": "^2.8.5",

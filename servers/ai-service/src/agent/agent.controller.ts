@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response, Request } from 'express';
-import { AgentRunner, AgentRegistry, StreamEvent } from '@kedou-ai/agent-core';
+import { AgentRunner, AgentRegistry, StreamEvent } from '@kedouai/agent-core';
 import { AgentRunDto } from './dto/agent-run.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { AgentLogService } from '../agent-log/agent-log.service';

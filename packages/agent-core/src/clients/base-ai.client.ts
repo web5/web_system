@@ -42,12 +42,24 @@ export interface ChatMessage {
   name?: string;
 }
 
+/** 大模型返回的 token 消耗（OpenAI 标准 usage 字段） */
+export interface TokenUsage {
+  /** 输入 token 数 */
+  promptTokens: number;
+  /** 输出 token 数 */
+  completionTokens: number;
+  /** 总 token 数 */
+  totalTokens: number;
+}
+
 /** 一次带工具推理的响应 */
 export interface ChatWithToolsResult {
   content: string;
   toolCalls: ToolCall[];
   assistantMessage: ChatMessage;
   finishReason?: string;
+  /** 大模型返回的真实 token 消耗（若有） */
+  usage?: TokenUsage;
 }
 
 /**

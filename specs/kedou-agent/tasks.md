@@ -2,18 +2,18 @@
 
 > 状态：方案（待确认）
 > 日期：2026-08-25
-> 依赖：先 `@kedou-ai/agent-core`，后 `kedou-agent` CLI，最后 ai-service 收敛。
+> 依赖：先 `@kedouai/agent-core`，后 `kedou-agent` CLI，最后 ai-service 收敛。
 
 ---
 
-## 阶段一：`@kedou-ai/agent-core` 公共核心包（纯 TS，零 Nest）
+## 阶段一：`@kedouai/agent-core` 公共核心包（纯 TS，零 Nest）
 
 ### T1. 包骨架与基础
-- [ ] 1.1 建 `packages/agent-core/`（package.json name=`@kedou-ai/agent-core`、tsup.config.ts、tsconfig）
+- [ ] 1.1 建 `packages/agent-core/`（package.json name=`@kedouai/agent-core`、tsup.config.ts、tsconfig）
 - [ ] 1.2 `lib/logger.ts`：极简 logger（level + 前缀）
 - [ ] 1.3 `lib/timeout.ts`：内联 `API_TIMEOUT` 常量（剥离 `@web-system/shared`）
 - [ ] 1.4 `interfaces/`：tool / agent / runtime 接口（从 ai-service 平移，删 Nest 依赖）
-- **验收**：`tsc` 零错误；`@kedou-ai/agent-core` 可在 workspace 内被 import
+- **验收**：`tsc` 零错误；`@kedouai/agent-core` 可在 workspace 内被 import
 
 ### T2. 模型客户端（原生 fetch）
 - [ ] 2.1 `lib/fetch-http.ts`：封装 `POST` + 超时（AbortSignal）+ SSE 流式迭代
@@ -63,7 +63,7 @@
 ## 阶段三：ai-service 收敛到 agent-core
 
 ### T9. 迁移与收敛
-- [ ] 9.1 ai-service 依赖 `@kedou-ai/agent-core`，引擎/注册表/客户端/web-search 改为从 agent-core 复用
+- [ ] 9.1 ai-service 依赖 `@kedouai/agent-core`，引擎/注册表/客户端/web-search 改为从 agent-core 复用
 - [ ] 9.2 ai-service 保留：`ConversationMemory`（DB 版）、`ImageGenTool`（生图，不打包）、controller/module、Nest client 封装
 - [ ] 9.3 更新 `harness-factory.ts` 用 agent-core
 - **验收**：ai-service 编译通过；既有单测仍绿；CLI（现有 shell 测试）仍可用
@@ -90,6 +90,6 @@
 | T9 | 3.5 代码共享 |
 
 ## 发布顺序
-1. 发布 `@kedou-ai/agent-core`
+1. 发布 `@kedouai/agent-core`
 2. 发布 `kedou-agent`
 3. ai-service 依赖 agent-core（内部，非发布）

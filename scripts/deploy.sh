@@ -93,6 +93,8 @@ deploy_backend() { # $1=service_name
   scp_to "/tmp/${svc}-deploy.tar.gz"
   local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
   cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
+  # 补建 @kedouai/agent-core 软链（指向远端 packages/agent-core），防止新包名部署后解析失败
+  cmd="$cmd && { [ -e /data/web_system/packages/agent-core ] && { [ -e node_modules/@kedouai/agent-core ] || { mkdir -p node_modules/@kedouai && ln -sfn ../../../../packages/agent-core node_modules/@kedouai/agent-core && echo '  [fix] agent-core 已补'; }; }; }"
   cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
   remote "$cmd"
   rm -f "/tmp/${svc}-deploy.tar.gz"

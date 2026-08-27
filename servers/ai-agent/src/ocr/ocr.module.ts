@@ -4,7 +4,7 @@ import {
   ClientRegistry,
   DeepseekClient,
   Hy3Client,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { OcrService } from './ocr.service';
 import { OcrController } from './ocr.controller';
 

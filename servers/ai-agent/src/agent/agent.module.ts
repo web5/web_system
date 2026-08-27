@@ -10,7 +10,7 @@ import {
   DeepseekClient,
   ToolRegistry,
   McpToolMeta,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
 import { ContractCleanerTool } from '../contract/tools/contract-cleaner.tool';
@@ -24,7 +24,7 @@ import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 
 /**
- * Agent harness 统一注册入口（复用 @kedou-ai/agent-core）。
+ * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
  * 引擎/注册表/客户端/记忆均复用 agent-core，通过 useFactory 桥接进 Nest DI。
  * 合同风险识别为第一个落地场景：ContractRuleTool + ContractIrrTool + contractRiskAgent。
  */

@@ -4,7 +4,7 @@ import {
   ToolContext,
   ToolResult,
   ToolSchema,
-} from '@kedou-ai/agent-core';
+} from '@kedouai/agent-core';
 import { matchByText, getByScene, getStandards, type LegalStandard } from '@web-system/shared';
 
 /**

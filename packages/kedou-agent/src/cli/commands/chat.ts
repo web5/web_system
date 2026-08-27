@@ -28,6 +28,7 @@ export async function runChat(
   console.log('-'.repeat(50));
 
   let finalContent = '';
+  let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
   for await (const event of harness.engine.run(
     { agentId: id, userInput: message, conversationId },
     'cli-user',
@@ -40,11 +41,16 @@ export async function runChat(
       console.log(`  [工具] ${event.name}: ${String(event.content).slice(0, 200)}`);
     } else if (event.type === 'final') {
       finalContent = event.content ?? '';
+      lastUsage = event.usage;
     } else if (event.type === 'error') {
       console.error(`  [错误] ${event.content}`);
+      lastUsage = lastUsage ?? event.usage;
     }
   }
 
   console.log('-'.repeat(50));
   console.log(`[Agent] ${finalContent}`);
+  if (lastUsage) {
+    console.log(`[Token] 输入 ${lastUsage.promptTokens} · 输出 ${lastUsage.completionTokens} · 合计 ${lastUsage.totalTokens}`);
+  }
 }

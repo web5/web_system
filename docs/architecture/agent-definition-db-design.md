@@ -2,14 +2,14 @@
 
 ## 0. 分层约束（硬性）— agent-core / kedou-agent 绝不碰数据库
 
-`@kedou-ai/agent-core` 是**纯 TS、零运行时依赖**的通用库（`private: false`，可被 CLI 与服务共用）；`kedou-agent` 是独立 CLI，用户本地运行**没有 PostgreSQL/MySQL**。
+`@kedouai/agent-core` 是**纯 TS、零运行时依赖**的通用库（`private: false`，可被 CLI 与服务共用）；`kedou-agent` 是独立 CLI，用户本地运行**没有 PostgreSQL/MySQL**。
 
 因此 **数据库操作只能存在于 Nest 服务层（ai-service / ai-agent）**，绝不下沉到 agent-core 或 kedou-agent：
 
 | 层 | 数据库 | 职责 |
 |----|--------|------|
 | ai-service / ai-agent（Nest） | ✅ TypeORM 操作 `agent_definitions` 等表 | 建表、CRUD、发布、轮询拉取、把 DB 行 → `AgentDefinition` 对象 |
-| @kedou-ai/agent-core（纯 TS） | ❌ 无任何 DB/HTTP/框架依赖 | 仅内存 `AgentRegistry`（`register/upsert/get/list`），暴露"更新内存定义"能力 |
+| @kedouai/agent-core（纯 TS） | ❌ 无任何 DB/HTTP/框架依赖 | 仅内存 `AgentRegistry`（`register/upsert/get/list`），暴露"更新内存定义"能力 |
 | kedou-agent（CLI，零依赖） | ❌ 无 | 直接用本地代码里的 agent 定义，不依赖 DB |
 
 > **`AgentRegistry.upsert()` 放 agent-core 是合法且必要的**：它只操作内存 Map、不碰 DB，CLI 用不到也不受影响。**从 DB 拉取/写入**放在 Nest 服务层的"定义同步器"里，由服务把 DB 行转成 `AgentDefinition` 再调 `upsert()` 灌入注册表。
@@ -24,7 +24,7 @@
 | `study-assistant`（AI 学习助手） | `servers/ai-service/src/agent/agents/study-assistant.agent.ts` | ai-service (6003) |
 | `bianbian`（变变） | `servers/ai-service/src/agent/agents/bianbian.agent.ts` | ai-service (6003) |
 
-`AgentDefinition`（来自 `@kedou-ai/agent-core`）：
+`AgentDefinition`（来自 `@kedouai/agent-core`）：
 ```ts
 { id, name, systemPrompt, model, tools[], maxSteps, temperature?, memory }
 ```
