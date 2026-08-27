@@ -8,6 +8,19 @@ import { collectAll, RawNews } from '../collectors/collector';
 import { simhash } from '../common/dedup';
 import { generateSummary, analyzeSentiment, extractEntities } from '../processors/llm';
 import { detectSectors } from '../processors/sectors';
+import { ArxivCollector } from '../content/collectors/arxiv.collector';
+
+/** HTML 转义（生成公众号富文本摘要用） */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/'/g, '&#39;');
+}
 
 @Injectable()
 export class FinnewsService implements OnModuleInit {
@@ -239,6 +252,43 @@ export class FinnewsService implements OnModuleInit {
       }
     }
     return { total: topics.length, updated, sectors: sectorCount };
+  }
+
+  /** 拉取最新 arXiv 论文并渲染为公众号摘要 HTML（供网关 publish_paper_digest 工具 / 定时任务使用） */
+  async buildPaperDigest(
+    categories?: string,
+    maxResults = 10,
+    title?: string,
+  ): Promise<{ title: string; html: string; digest: string; count: number }> {
+    const collector = new ArxivCollector();
+    const config = categories ? { categories } : {};
+    const papers = await collector.collect(config, Number(maxResults) || 10);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const digestTitle = (title ?? '').trim() || `每日论文速览 ｜ ${dateStr}`;
+
+    const items = papers
+      .map((p, i) => {
+        const link = p.url ?? '';
+        const summary = (p.content ?? '').trim();
+        return (
+          `<section style="margin-bottom:18px">` +
+          `<h2 style="font-size:17px">${i + 1}. ${escapeHtml(p.title)}</h2>` +
+          `<p style="color:#888;font-size:13px"><a href="${escapeAttr(link)}">${escapeHtml(p.external_id ?? link)}</a></p>` +
+          `<p style="font-size:14px;line-height:1.7">${escapeHtml(summary).slice(0, 420)}${summary.length > 420 ? '…' : ''}</p>` +
+          `</section>`
+        );
+      })
+      .join('\n');
+
+    const html =
+      `<article>` +
+      `<h1 style="font-size:22px">${escapeHtml(digestTitle)}</h1>` +
+      `<p style="color:#888;font-size:13px">共 ${papers.length} 篇 · ${dateStr} 自动生成</p>` +
+      items +
+      `</article>`;
+
+    const digest = papers.map((p) => p.title).join('；').slice(0, 120);
+    return { title: digestTitle, html, digest, count: papers.length };
   }
 
   /** 最新话题列表 */

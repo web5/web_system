@@ -137,6 +137,19 @@ const PAPER_HTTP_TOOLS: Array<{
       { name: 'max_results', type: 'integer', required: false, description: '返回论文数（默认 10，最大 20）' },
     ],
   },
+  {
+    name: 'publish_paper_digest',
+    description:
+      '拉取最新 arXiv 论文并渲染为公众号摘要：默认创建图文草稿（不发布，可在后台确认排版），publish=true 时直接发布。供定时任务生成「每日论文速览」。返回 media_id / publish_id',
+    method: 'POST',
+    path: '/api/papers/digest',
+    params: [
+      { name: 'categories', type: 'string', required: false, description: 'arXiv 分类（默认 cs.AI+OR+cs.CL+OR+cs.CV+OR+cs.LG）' },
+      { name: 'max_results', type: 'integer', required: false, description: '论文数（默认 10，最大 20）' },
+      { name: 'title', type: 'string', required: false, description: '摘要标题（默认「每日论文速览 ｜ 日期」）' },
+      { name: 'publish', type: 'boolean', required: false, description: 'true=直接发布，false=仅建草稿（默认 false）' },
+    ],
+  },
 ];
 
 /** 机构行为数据通道的 REST 接口声明（seed 到 mcp_modules，code_key=institution） */
@@ -242,163 +255,68 @@ export class McpService implements OnModuleInit {
     await this.seedInstitutionModule();
   }
 
-  /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
-  private async seedPaperModule(): Promise<void> {
-    // paper 数据源在 content-hub，与 finnews 同机部署；优先直连本机，避免跨机
-    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
-    const authType = '';
-    const authConfig: Record<string, any> | null = null;
-
-    let existing = await this.moduleRepo.findOne({ where: { code_key: 'paper' } });
-    if (existing && existing.module_type !== 'http') {
-      await this.moduleRepo.delete({ id: existing.id });
-      existing = null;
-    }
-    if (existing) {
-      let changed = false;
-      if (existing.base_url !== baseUrl) {
-        existing.base_url = baseUrl;
-        changed = true;
-      }
-      if (existing.auth_type !== authType) {
-        existing.auth_type = authType;
-        changed = true;
-      }
-      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
-        existing.auth_config = authConfig;
-        changed = true;
-      }
-      if (changed) {
-        await this.moduleRepo.update(existing.id, {
-          base_url: baseUrl,
-          auth_type: authType,
-          auth_config: authConfig,
-        });
-        this.logger.log(`已同步论文学习 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
-      }
-      return;
-    }
-
-    const mod = await this.moduleRepo.save(
-      this.moduleRepo.create({
-        name: '论文学习',
-        description: '论文学习微服务：arXiv 最新论文拉取（cs.AI/CL/CV/LG），按提交时间倒序',
-        base_url: baseUrl,
-        timeout: 30,
-        auth_type: authType,
-        auth_config: authConfig,
-        module_type: 'http',
-        code_key: 'paper',
-        enabled: true,
-      }),
-    );
-    const tools = PAPER_HTTP_TOOLS.map((t) =>
-      this.toolRepo.create({ module_id: mod.id, ...t }),
-    );
-    await this.toolRepo.save(tools);
-    this.logger.log(`已 seed 论文学习 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
-  }
-
-  /** seed 机构行为数据模块（code_key=institution，直连本机 content-hub 的 /api/institution/* 接口） */
-  private async seedInstitutionModule(): Promise<void> {
-    // institution 数据源在 content-hub，与 finnews 同机部署；优先直连本机
-    const baseUrl = process.env.INSTITUTION_SERVICE_URL ?? 'http://127.0.0.1:6007';
-    const authType = '';
-    const authConfig: Record<string, any> | null = null;
-
-    let existing = await this.moduleRepo.findOne({ where: { code_key: 'institution' } });
-    if (existing && existing.module_type !== 'http') {
-      await this.moduleRepo.delete({ id: existing.id });
-      existing = null;
-    }
-    if (existing) {
-      let changed = false;
-      if (existing.base_url !== baseUrl) {
-        existing.base_url = baseUrl;
-        changed = true;
-      }
-      if (existing.auth_type !== authType) {
-        existing.auth_type = authType;
-        changed = true;
-      }
-      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
-        existing.auth_config = authConfig;
-        changed = true;
-      }
-      if (changed) {
-        await this.moduleRepo.update(existing.id, {
-          base_url: baseUrl,
-          auth_type: authType,
-          auth_config: authConfig,
-        });
-        this.logger.log(`已同步机构行为 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
-      }
-      return;
-    }
-
-    const mod = await this.moduleRepo.save(
-      this.moduleRepo.create({
-        name: '机构行为数据',
-        description: '机构行为全周期追踪框架数据源：北向持股/主力资金流/龙虎榜/机构评级/研报/估值/筹码/业绩同比（东方财富公开接口）',
-        base_url: baseUrl,
-        timeout: 30,
-        auth_type: authType,
-        auth_config: authConfig,
-        module_type: 'http',
-        code_key: 'institution',
-        enabled: true,
-      }),
-    );
-    const tools = INSTITUTION_HTTP_TOOLS.map((t) =>
-      this.toolRepo.create({ module_id: mod.id, ...t }),
-    );
-    await this.toolRepo.save(tools);
-    this.logger.log(`已 seed 机构行为 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
-  }
-
-  private async seedFinnewsHttpModule(): Promise<void> {
-    const baseUrl = process.env.FINNEWS_SERVICE_URL ?? 'http://localhost:6007';
-    const authType = process.env.FINNEWS_SERVICE_AUTH_TYPE ?? '';
-    const authConfigRaw = process.env.FINNEWS_SERVICE_AUTH_CONFIG ?? '';
+  /** 解析鉴权配置（环境变量 → {authType, authConfig}），各模块共用，避免重复样板 */
+  private resolveAuth(
+    authTypeEnv?: string,
+    authConfigEnv?: string,
+  ): { authType: string; authConfig: Record<string, any> | null } {
+    const authType = authTypeEnv ?? '';
     let authConfig: Record<string, any> | null = null;
-    if (authConfigRaw) {
+    if (authConfigEnv) {
       try {
-        authConfig = JSON.parse(authConfigRaw);
-      } catch (e) {
-        this.logger.warn(`FINNEWS_SERVICE_AUTH_CONFIG JSON 解析失败: ${authConfigRaw}`);
+        authConfig = JSON.parse(authConfigEnv);
+      } catch {
+        this.logger.warn(`AUTH_CONFIG JSON 解析失败: ${authConfigEnv}`);
       }
     }
+    return { authType, authConfig };
+  }
 
-    let existing = await this.moduleRepo.findOne({ where: { code_key: 'finnews' } });
-    // 旧 code 类型记录 → 迁移为 http（删除重建）
+  /** 通用 seed：已存在则同步 base_url/auth（环境变量可能变更），不存在则新建 + 写入工具 */
+  private async seedHttpModule(opts: {
+    codeKey: string;
+    name: string;
+    description: string;
+    tools: Array<{
+      name: string;
+      description: string;
+      method: string;
+      path: string;
+      params: Array<{ name: string; type: string; required: boolean; description?: string }>;
+    }>;
+    baseUrl: string;
+    timeout: number;
+    authType: string;
+    authConfig: Record<string, any> | null;
+  }): Promise<void> {
+    let existing = await this.moduleRepo.findOne({ where: { code_key: opts.codeKey } });
     if (existing && existing.module_type !== 'http') {
       await this.moduleRepo.delete({ id: existing.id });
       existing = null;
     }
     if (existing) {
-      // 已存在：同步 base_url / auth_type / auth_config（环境变量可能变更）
       let changed = false;
-      if (existing.base_url !== baseUrl) {
-        existing.base_url = baseUrl;
+      if (existing.base_url !== opts.baseUrl) {
+        existing.base_url = opts.baseUrl;
         changed = true;
       }
-      if (existing.auth_type !== authType) {
-        existing.auth_type = authType;
+      if (existing.auth_type !== opts.authType) {
+        existing.auth_type = opts.authType;
         changed = true;
       }
-      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
-        existing.auth_config = authConfig;
+      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(opts.authConfig)) {
+        existing.auth_config = opts.authConfig;
         changed = true;
       }
       if (changed) {
         // 用 update 而非 save(entity)：save 会级联 eager 加载的 tools 触发 module_id 置空报错
         await this.moduleRepo.update(existing.id, {
-          base_url: baseUrl,
-          auth_type: authType,
-          auth_config: authConfig,
+          base_url: opts.baseUrl,
+          auth_type: opts.authType,
+          auth_config: opts.authConfig,
         });
         this.logger.log(
-          `已同步财经资讯 base_url=${baseUrl} auth_type=${authType || '(无)'}`,
+          `已同步 ${opts.name} base_url=${opts.baseUrl} auth_type=${opts.authType || '(无)'}`,
         );
       }
       return;
@@ -406,86 +324,92 @@ export class McpService implements OnModuleInit {
 
     const mod = await this.moduleRepo.save(
       this.moduleRepo.create({
-        name: '财经资讯',
-        description: '财经资讯微服务：采集新浪/东财快讯，SimHash 去重 + LLM 摘要/情感分析',
-        base_url: baseUrl,
-        timeout: 30,
-        auth_type: authType,
-        auth_config: authConfig,
+        name: opts.name,
+        description: opts.description,
+        base_url: opts.baseUrl,
+        timeout: opts.timeout,
+        auth_type: opts.authType,
+        auth_config: opts.authConfig,
         module_type: 'http',
-        code_key: 'finnews',
+        code_key: opts.codeKey,
         enabled: true,
       }),
     );
-    const tools = FINNEWS_HTTP_TOOLS.map((t) =>
-      this.toolRepo.create({ module_id: mod.id, ...t }),
-    );
+    const tools = opts.tools.map((t) => this.toolRepo.create({ module_id: mod.id, ...t }));
     await this.toolRepo.save(tools);
-    this.logger.log(`已 seed 财经资讯 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
+    this.logger.log(`已 seed ${opts.name} HTTP 模块: ${opts.baseUrl}（${tools.length} 个工具）`);
+  }
+
+  /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
+  private async seedPaperModule(): Promise<void> {
+    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const { authType, authConfig } = this.resolveAuth();
+    await this.seedHttpModule({
+      codeKey: 'paper',
+      name: '论文学习',
+      description: '论文学习微服务：arXiv 最新论文拉取（cs.AI/CL/CV/LG），按提交时间倒序',
+      tools: PAPER_HTTP_TOOLS,
+      baseUrl,
+      timeout: 30,
+      authType,
+      authConfig,
+    });
+  }
+
+  /** seed 机构行为数据模块（code_key=institution，直连本机 content-hub 的 /api/institution/* 接口） */
+  private async seedInstitutionModule(): Promise<void> {
+    const baseUrl = process.env.INSTITUTION_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const { authType, authConfig } = this.resolveAuth();
+    await this.seedHttpModule({
+      codeKey: 'institution',
+      name: '机构行为数据',
+      description:
+        '机构行为全周期追踪框架数据源：北向持股/主力资金流/龙虎榜/机构评级/研报/估值/筹码/业绩同比（东方财富公开接口）',
+      tools: INSTITUTION_HTTP_TOOLS,
+      baseUrl,
+      timeout: 30,
+      authType,
+      authConfig,
+    });
+  }
+
+  private async seedFinnewsHttpModule(): Promise<void> {
+    // 统一默认地址为 127.0.0.1（与 paper/institution 一致），避免 localhost 解析不稳定
+    const baseUrl = process.env.FINNEWS_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const { authType, authConfig } = this.resolveAuth(
+      process.env.FINNEWS_SERVICE_AUTH_TYPE,
+      process.env.FINNEWS_SERVICE_AUTH_CONFIG,
+    );
+    await this.seedHttpModule({
+      codeKey: 'finnews',
+      name: '财经资讯',
+      description: '财经资讯微服务：采集新浪/东财快讯，SimHash 去重 + LLM 摘要/情感分析',
+      tools: FINNEWS_HTTP_TOOLS,
+      baseUrl,
+      timeout: 30,
+      authType,
+      authConfig,
+    });
   }
 
   /** seed 公众号发布模块（code_key=wechat_mp，指向 content-hub 的公众号发布接口） */
   private async seedWechatMpModule(): Promise<void> {
-    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://localhost:6007';
-    const authType = process.env.CONTENT_HUB_SERVICE_AUTH_TYPE ?? '';
-    const authConfigRaw = process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG ?? '';
-    let authConfig: Record<string, any> | null = null;
-    if (authConfigRaw) {
-      try {
-        authConfig = JSON.parse(authConfigRaw);
-      } catch (e) {
-        this.logger.warn(`CONTENT_HUB_SERVICE_AUTH_CONFIG JSON 解析失败: ${authConfigRaw}`);
-      }
-    }
-
-    let existing = await this.moduleRepo.findOne({ where: { code_key: 'wechat_mp' } });
-    if (existing && existing.module_type !== 'http') {
-      await this.moduleRepo.delete({ id: existing.id });
-      existing = null;
-    }
-    if (existing) {
-      let changed = false;
-      if (existing.base_url !== baseUrl) {
-        existing.base_url = baseUrl;
-        changed = true;
-      }
-      if (existing.auth_type !== authType) {
-        existing.auth_type = authType;
-        changed = true;
-      }
-      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
-        existing.auth_config = authConfig;
-        changed = true;
-      }
-      if (changed) {
-        await this.moduleRepo.update(existing.id, {
-          base_url: baseUrl,
-          auth_type: authType,
-          auth_config: authConfig,
-        });
-        this.logger.log(`已同步公众号发布 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
-      }
-      return;
-    }
-
-    const mod = await this.moduleRepo.save(
-      this.moduleRepo.create({
-        name: '公众号发布',
-        description: '微信公众号内容发布：创建图文草稿 / 一键发布（HTML 富文本，正文图片自动转微信 CDN）',
-        base_url: baseUrl,
-        timeout: 120,
-        auth_type: authType,
-        auth_config: authConfig,
-        module_type: 'http',
-        code_key: 'wechat_mp',
-        enabled: true,
-      }),
+    // 统一默认地址为 127.0.0.1（与 finnews/paper/institution 一致）
+    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
+    const { authType, authConfig } = this.resolveAuth(
+      process.env.CONTENT_HUB_SERVICE_AUTH_TYPE,
+      process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG,
     );
-    const tools = WECHAT_MP_HTTP_TOOLS.map((t) =>
-      this.toolRepo.create({ module_id: mod.id, ...t }),
-    );
-    await this.toolRepo.save(tools);
-    this.logger.log(`已 seed 公众号发布 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
+    await this.seedHttpModule({
+      codeKey: 'wechat_mp',
+      name: '公众号发布',
+      description: '微信公众号内容发布：创建图文草稿 / 一键发布（HTML 富文本，正文图片自动转微信 CDN）',
+      tools: WECHAT_MP_HTTP_TOOLS,
+      baseUrl,
+      timeout: 120,
+      authType,
+      authConfig,
+    });
   }
 
   /** 从数据库构建 MCP Server（每个 session 独立实例，规避 SDK 单 transport 限制） */

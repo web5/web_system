@@ -39,7 +39,35 @@ function extractPathParams(path: string): string[] {
   return [...matches].map((m) => m[1]);
 }
 
-/** 调用后台 HTTP API */
+/** 调用后台 HTTP API 的统一错误结构 */
+export interface CallApiError {
+  error: {
+    type: 'http' | 'network' | 'timeout' | 'parse';
+    status?: number;
+    message: string;
+    detail?: string;
+  };
+}
+
+/** 把参数值序列化为字符串（修复 array/object 被 String() 压成 [object Object] 的 bug） */
+function serializeParamValue(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return JSON.stringify(v);
+}
+
+/** 是否值得重试：网络异常 / 超时 / 5xx 才重试，4xx 不重试 */
+function isRetryable(status: number | undefined, err: unknown): boolean {
+  if (err) return true;
+  if (status !== undefined && status >= 500) return true;
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** 调用后台 HTTP API（带重试、退避与统一错误结构） */
 export async function callApi(
   moduleConfig: HttpModuleConfig,
   toolDef: HttpToolDef,
@@ -48,6 +76,8 @@ export async function callApi(
   const baseUrl = (moduleConfig.base_url ?? '').replace(/\/$/, '');
   const method = (toolDef.method ?? 'GET').toUpperCase();
   const timeout = Number(moduleConfig.timeout ?? 30) * 1000;
+  const maxRetries = Math.max(0, Number(moduleConfig.retries ?? 2));
+  const backoffBase = Number(moduleConfig.retryBackoffMs ?? 300);
   let path = toolDef.path ?? '/';
 
   // 替换 path 参数
@@ -57,7 +87,7 @@ export async function callApi(
   for (const [key, value] of Object.entries(args)) {
     if (value === undefined || value === null) continue;
     if (pathParams.includes(key)) {
-      path = path.replace(`{${key}}`, String(value));
+      path = path.replace(`{${key}}`, encodeURIComponent(serializeParamValue(value)));
     } else {
       queryOrBody[key] = value;
     }
@@ -74,36 +104,57 @@ export async function callApi(
     headers[auth.key ?? 'Authorization'] = auth.value ?? '';
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    let url = `${baseUrl}${path}`;
-    const init: RequestInit = { method, headers, signal: controller.signal };
-
-    if (['POST', 'PUT', 'PATCH'].includes(method)) {
-      init.body = JSON.stringify(queryOrBody);
-    } else {
-      const qs = new URLSearchParams(
-        Object.entries(queryOrBody).map(([k, v]) => [k, String(v)] as [string, string]),
-      );
-      if (qs.toString()) url += `?${qs.toString()}`;
-    }
-
-    const resp = await fetch(url, init);
-    if (!resp.ok) {
-      return { error: `HTTP ${resp.status}`, detail: (await resp.text()).slice(0, 500) };
-    }
+  let lastErr: CallApiError['error'] | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
-      return await resp.json();
-    } catch {
-      return { text: await resp.text() };
+      let url = `${baseUrl}${path}`;
+      const init: RequestInit = { method, headers, signal: controller.signal };
+
+      if (['POST', 'PUT', 'PATCH'].includes(method)) {
+        init.body = JSON.stringify(queryOrBody);
+      } else {
+        const qs = new URLSearchParams(
+          Object.entries(queryOrBody).map(
+            ([k, v]) => [k, serializeParamValue(v)] as [string, string],
+          ),
+        );
+        if (qs.toString()) url += `?${qs.toString()}`;
+      }
+
+      const resp = await fetch(url, init);
+      if (!resp.ok) {
+        const detail = (await resp.text()).slice(0, 500);
+        lastErr = { type: 'http', status: resp.status, message: `HTTP ${resp.status}`, detail };
+        // 5xx 进入重试；4xx 直接返回
+        if (isRetryable(resp.status, null) && attempt < maxRetries) {
+          await sleep(backoffBase * 2 ** attempt);
+          continue;
+        }
+        return { error: lastErr };
+      }
+      try {
+        return await resp.json();
+      } catch {
+        return { text: await resp.text() };
+      }
+    } catch (e) {
+      const isAbort = e instanceof Error && e.name === 'AbortError';
+      lastErr = isAbort
+        ? { type: 'timeout', message: `请求超时（>${timeout}ms）` }
+        : { type: 'network', message: e instanceof Error ? e.message : String(e) };
+      if (attempt < maxRetries) {
+        await sleep(backoffBase * 2 ** attempt);
+        continue;
+      }
+      return { error: lastErr };
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
-  } finally {
-    clearTimeout(timer);
   }
+  // 兜底（理论上循环至少执行一次并在末次 return）
+  return { error: lastErr ?? { type: 'network', message: '未知错误' } };
 }
 
 /** 注册单个 HTTP 工具到 server */

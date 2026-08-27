@@ -50,6 +50,12 @@ agent_created: true
 
 ## 2. 工具介绍
 
+### 2.0 调用路径与稳定性（重要）
+
+- **规范调用路径**：优先使用网关 Server `/mcp/wechat_mp` 提供的 `create_wechat_draft` / `publish_to_wechat`。
+- **等价传输**：`wechat-mp-publisher` 连接器指向同一后端（content-hub `/api/content/wechat/*`），效果一致；两者任选其一，**不要在同一次任务中混用**，避免重复建稿。
+- **已内置重试与统一错误**（2026-08 优化）：网关 `callApi` 对网络错误 / 超时 / 5xx 自动重试 2 次（4xx 不重试）；失败返回统一结构 `{ "error": { "type": "network"|"timeout"|"http", "status"?, "message": "..." } }`。AI 只需判断返回文本中是否含 `error.type` 即可判定失败，并按 `type` 区分处理，**无需在 skill 层手动重试**。
+
 ### 2.1 工具总表
 
 | 工具名              | 场景            | 关键入参            |
@@ -83,7 +89,7 @@ agent_created: true
 | 未配置公众号凭证        | content-hub 未配置 WECHAT_MP_APP_ID / WECHAT_MP_APP_SECRET 时如实告知用户去后台配置 |
 | 未认证订阅号无法发布     | 明确告知该公众号类型不支持发布，只能建草稿                            |
 | 返回为空 / 无数据        | 如实说明「发布失败 / 草稿创建失败」，不编造 media_id 或 publish_id          |
-| 工具调用超时            | 单次重试 1 次；仍失败则告知用户稍后重试                                  |
+| 工具调用超时 / 5xx / 网络错误 | 网关已自动重试 2 次；最终仍失败则如实告知用户稍后重试（不要再在 skill 层重复重试） |
 | MCP 调用失败（连接不通/超时/500） | **进入降级链路**：执行 `web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`（见下方「4. MCP 降级兜底」），完成后如实汇报降级结果 |
 | 跨场景诉求（群发/菜单/素材管理） | 明确告知本服务仅覆盖草稿与发布，其他公众号能力需走微信公众平台后台               |
 

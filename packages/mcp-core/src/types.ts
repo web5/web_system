@@ -28,7 +28,12 @@ export interface HttpParamDef {
 /** HTTP 模块配置（base_url + tools） */
 export interface HttpModuleConfig {
   base_url: string;
+  /** 单请求超时（秒），默认 30 */
   timeout?: number;
+  /** 失败重试次数（仅对网络错误 / 5xx 重试，4xx 不重试），默认 2 */
+  retries?: number;
+  /** 重试退避基数（毫秒），默认 300（实际退避 = base * 2^attempt） */
+  retryBackoffMs?: number;
   auth?: Record<string, string>;
   tools: HttpToolDef[];
 }
