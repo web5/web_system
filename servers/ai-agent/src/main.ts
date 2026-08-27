@@ -5,6 +5,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
+import { json, urlencoded } from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -21,6 +22,11 @@ async function bootstrap() {
 
   // 全局异常过滤器：统一响应格式 { code, message, data }
   app.useGlobalFilters(new UnifiedExceptionFilter());
+
+  // 请求体大小限制：默认 100kb 太小，OCR 图片 base64 几 MB 必超
+  // 提升到 20mb 以容纳 OCR 拍照识别（base64 图片 ~1.3x 原图大小）
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ limit: '20mb', extended: true }));
 
   // CORS — 从环境变量读取，禁止硬编码 *
   const corsOrigins = configService.get('CORS_ORIGINS', '');

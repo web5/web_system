@@ -62,7 +62,7 @@ export class DeepseekClient extends BaseAiClient {
       const data = await postJson<any>(
         this.getChatEndpoint(),
         payload,
-        { headers: { Authorization: `Bearer ${key}` }, timeoutMs: API_TIMEOUT.AI_TASK },
+        { headers: { Authorization: `Bearer ${key}` }, timeoutMs: 300_000 },
       );
       const choice = data.choices?.[0];
       const message = choice?.message ?? {};

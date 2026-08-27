@@ -24,4 +24,14 @@
       </view>
     </view>
   </view>
+
+  <!-- AI 思考中动态提示 -->
+  <view class="thinking" wx:if="{{thinkingText}}">
+    <view class="thinking-dots">
+      <view class="tdot"></view>
+      <view class="tdot"></view>
+      <view class="tdot"></view>
+    </view>
+    <text class="thinking-text">{{thinkingText}}</text>
+  </view>
 </view>

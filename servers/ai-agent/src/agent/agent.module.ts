@@ -13,9 +13,11 @@ import {
 } from '@kedou-ai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
+import { ContractCleanerTool } from '../contract/tools/contract-cleaner.tool';
 import { contractRiskAgent } from '../contract/agents/contract-risk.agent';
 import { McpService } from '../mcp/mcp.service';
 import { McpModule } from '../mcp/mcp.module';
+import { AgentController } from './agent.controller';
 
 /**
  * Agent harness 统一注册入口（复用 @kedou-ai/agent-core）。
@@ -88,8 +90,10 @@ const runnerProvider: Provider = {
     // 合同风险场景特有
     ContractRuleTool,
     ContractIrrTool,
+    ContractCleanerTool,
   ],
-  exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry],
+  controllers: [AgentController],
+  exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, InMemoryConversationMemory, Compaction],
 })
 export class AgentModule implements OnModuleInit {
   private readonly logger = new Logger(AgentModule.name);
@@ -99,11 +103,13 @@ export class AgentModule implements OnModuleInit {
     private readonly agentRegistry: AgentRegistry,
     private readonly contractRuleTool: ContractRuleTool,
     private readonly contractIrrTool: ContractIrrTool,
+    private readonly contractCleanerTool: ContractCleanerTool,
     private readonly mcpService: McpService,
   ) {}
 
   onModuleInit(): void {
-    // 注册合同风险场景工具（确定性本地插件）
+    // 注册合同风险场景工具（确定性本地插件 + AI 清洗）
+    this.toolRegistry.register(this.contractCleanerTool);
     this.toolRegistry.register(this.contractRuleTool);
     this.toolRegistry.register(this.contractIrrTool);
 

@@ -24,7 +24,7 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^10.0.0",
-    "@web-system/shared": "file:../../packages/shared",
+    "@web-system/shared": "workspace:*",
     "@web-system/types": "file:../../packages/types",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
