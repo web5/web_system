@@ -1,8 +1,9 @@
 ---
-name: auth-nodejs-cloudbase
 description: CloudBase Node SDK auth guide for server-side identity, user lookup, and custom login tickets. This skill should be used when Node.js code must read caller identity, inspect end users, or bridge an existing user system into CloudBase; not when configuring providers or building client login UI.
-version: 2.21.1
 alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:20.169Z
+provider: 
 ---
 
 ## Standalone Install Note

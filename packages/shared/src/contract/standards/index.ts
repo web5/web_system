@@ -9,11 +9,14 @@
 import type { ContractScene, LegalStandard, StandardMatch } from '../types';
 import { commonStandards } from './common';
 import { medicalInsuranceStandards } from './scenes/medical-insurance';
+import { consumerLoanStandards } from './scenes/consumer-loan';
+export { MARKET_BENCHMARKS, getMarketBenchmarks, findBenchmarkByType } from './benchmark';
 
 /** 全部标准 */
 export const ALL_STANDARDS: LegalStandard[] = [
   ...commonStandards,
   ...medicalInsuranceStandards,
+  ...consumerLoanStandards,
 ];
 
 /** 获取全部标准 */

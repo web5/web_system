@@ -1,0 +1,41 @@
+<!-- 合同翻译官 - 对话追问页 -->
+<view class="page">
+  <!-- 顶部提示 -->
+  <view class="chat-head">
+    <text class="chat-head-text">基于本次合同上下文回答</text>
+  </view>
+
+  <!-- 消息列表 -->
+  <view class="chat-box">
+    <view wx:for="{{chatMessages}}" wx:key="index" class="chat-msg {{item.role}}">
+      <view class="msg-avatar">{{item.role === 'ai' ? 'AI' : '我'}}</view>
+      <view class="msg-bubble">{{item.text}}</view>
+    </view>
+    <view class="chat-msg ai" wx:if="{{sending}}">
+      <view class="msg-avatar">AI</view>
+      <view class="msg-bubble msg-thinking">
+        <text>正在思考</text>
+        <view class="thinking-dots">
+          <view class="tdot"></view><view class="tdot"></view><view class="tdot"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 底部输入栏 -->
+<view class="chat-input-bar">
+  <input
+    class="chat-input"
+    placeholder="如：这个利率合法吗？提前还款会怎样？"
+    placeholder-class="chat-input-ph"
+    value="{{input}}"
+    confirm-type="send"
+    bindinput="onInput"
+    bindconfirm="send"
+    disabled="{{sending}}"
+  />
+  <button class="chat-send" bindtap="send" disabled="{{sending || !input}}">
+    {{sending ? '...' : '发送'}}
+  </button>
+</view>

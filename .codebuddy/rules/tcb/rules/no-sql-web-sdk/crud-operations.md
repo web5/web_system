@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:47.465Z
+provider: 
+---
+
 # CRUD Operations with CloudBase
 
 This document covers Create, Update, and Delete operations for CloudBase document database.

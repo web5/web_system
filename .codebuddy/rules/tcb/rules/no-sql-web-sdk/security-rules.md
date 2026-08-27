@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:51.006Z
+provider: 
+---
+
 # CloudBase NoSQL Database Security Rules
 
 This document covers how to configure security rules for CloudBase NoSQL database collections to control read/write permissions.

@@ -137,8 +137,16 @@ services:
       - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
       - MCP_GATEWAY_URL=${MCP_GATEWAY_URL:-}
       - AUTH_SERVICE_URL=http://auth-service:3001
+      - AI_SERVICE_URL=http://ai-service:3003
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=web_system
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-change_me_in_dev}
+      - DB_DATABASE=web_system
     depends_on:
       - redis
+      - postgres
     networks:
       - web_network
     restart: unless-stopped

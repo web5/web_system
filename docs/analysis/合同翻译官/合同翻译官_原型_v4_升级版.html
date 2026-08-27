@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>合同翻译官 · 交互原型 v4（升级版：月供卡 + 权益金额 + 快速追问）</title>
+<style>
+  :root {
+    --primary: #1E6FFF;
+    --primary-dark: #1656C8;
+    --primary-soft: #EAF2FF;
+    --bg: #F5F7FA;
+    --card: #FFFFFF;
+    --text: #1A1F2E;
+    --text-2: #5B6372;
+    --text-3: #9AA1AD;
+    --danger: #E5484D;
+    --danger-soft: #FDEBEC;
+    --warn: #E8833A;
+    --warn-soft: #FFF3E6;
+    --ok: #2E9E5B;
+    --ok-soft: #E7F5EC;
+    --money: #D2691E;
+    --money-soft: #FFF3E6;
+    --border: #E8EBF0;
+    --radius: 14px;
+    --shadow: 0 2px 12px rgba(20,30,50,.06);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background:#E9EDF3;
+    display:flex; justify-content:center; align-items:flex-start;
+    min-height:100vh; padding:20px 0;
+  }
+  .phone {
+    width:390px; background:var(--bg); border-radius:40px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18); border:8px solid #111;
+    position:relative; min-height:844px;
+  }
+  .status-bar { height:40px; background:var(--card); display:flex; align-items:flex-end; justify-content:space-between; padding:0 22px 6px; font-size:13px; font-weight:600; color:var(--text); }
+  .nav-bar {
+    height:48px; background:var(--card); display:flex; align-items:center; justify-content:center;
+    position:sticky; top:0; z-index:20; border-bottom:1px solid var(--border);
+    font-size:16px; font-weight:600; color:var(--text);
+  }
+  .nav-bar .back { position:absolute; left:14px; font-size:22px; color:var(--text-2); cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; }
+  .screen { display:none; }
+  .screen.active { display:block; animation:fadeIn .25s ease; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+  .btn-primary { background:var(--primary); color:#fff; border:none; border-radius:12px; padding:15px; font-size:16px; font-weight:600; width:100%; cursor:pointer; transition:opacity .2s; }
+  .btn-primary:active { opacity:.85; }
+
+  /* ===== 结论屏 ===== */
+  .result-hero { padding:20px 16px 16px; background:var(--card); }
+  .result-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .result-tag { font-size:12px; color:var(--primary); background:var(--primary-soft); padding:4px 10px; border-radius:20px; font-weight:600; }
+  .score-box { border-radius:var(--radius); padding:18px; text-align:center; margin-bottom:16px; background:linear-gradient(135deg,#E5484D,#F26A6E); color:#fff; }
+  .score-box .big { font-size:44px; font-weight:800; line-height:1; }
+  .score-box .score-label { font-size:13px; margin-top:6px; opacity:.95; }
+  .score-box .score-sub { font-size:12px; margin-top:4px; opacity:.85; }
+  .conclusion-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; margin-bottom:16px; border:1px solid var(--border); }
+  .conclusion-card .t { font-size:13px; color:var(--text-3); margin-bottom:8px; font-weight:600; }
+  .conclusion-text { font-size:15px; color:var(--text); line-height:1.7; font-weight:500; }
+  .conclusion-text em { color:var(--danger); font-style:normal; font-weight:700; }
+
+  /* ===== 月供构成卡（loanPlan 新增） ===== */
+  .plan-card {
+    background:linear-gradient(135deg,#EAF2FF,#E6F0FF); border:1px solid #C9DFFF;
+    border-radius:var(--radius); padding:16px; margin:16px; position:relative; overflow:hidden;
+  }
+  .plan-card .tag-new { position:absolute; top:12px; right:12px; font-size:10px; color:var(--primary); background:#fff; border:1px solid var(--primary); border-radius:20px; padding:2px 8px; font-weight:700; }
+  .plan-card .pt { font-size:13px; color:var(--primary-dark); font-weight:700; margin-bottom:10px; }
+  .plan-type { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .plan-type .badge { font-size:13px; font-weight:700; color:#fff; background:var(--primary); padding:5px 12px; border-radius:20px; }
+  .plan-type .desc { font-size:12px; color:var(--text-2); flex:1; }
+  /* 本金/利息比例条 */
+  .pie-row { display:flex; align-items:center; gap:14px; margin:6px 0 12px; }
+  .pie-wrap { width:64px; height:64px; flex-shrink:0; }
+  .pie { width:64px; height:64px; border-radius:50%; background:conic-gradient(var(--primary) 0 22%, var(--primary-soft) 22% 100%); position:relative; }
+  .pie::after { content:""; position:absolute; inset:14px; background:#fff; border-radius:50%; }
+  .pie-legend { flex:1; display:flex; flex-direction:column; gap:5px; }
+  .lg-row { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-2); }
+  .lg-dot { width:10px; height:10px; border-radius:3px; }
+  .lg-row b { color:var(--text); font-weight:700; }
+  .lg-row .lt { color:var(--text-3); margin-left:auto; }
+  .plan-risk { background:#fff; border-radius:10px; padding:10px 12px; margin-top:6px; border:1px solid #D9E8FF; }
+  .plan-risk .rl { font-size:12px; font-weight:700; color:var(--warn); margin-bottom:3px; }
+  .plan-risk .rt { font-size:12px; color:var(--text-2); line-height:1.6; }
+  .plan-cons { margin-top:8px; }
+  .plan-cons .c { display:flex; gap:7px; font-size:12px; color:var(--text-2); line-height:1.6; margin-bottom:4px; }
+  .plan-cons .c .x { color:var(--danger); flex-shrink:0; }
+  .plan-cons .c .ok { color:var(--ok); flex-shrink:0; }
+
+  /* ===== 关键数字 ===== */
+  .keynum-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; margin:16px; }
+  .keynum-card .t { font-size:13px; color:var(--text-3); margin-bottom:10px; font-weight:600; }
+  .keynum-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .kn-item { background:var(--bg); border-radius:10px; padding:12px; }
+  .kn-item .l { font-size:11px; color:var(--text-3); margin-bottom:4px; }
+  .kn-item .v { font-size:18px; font-weight:800; color:var(--text); }
+  .kn-item .hint { font-size:10px; color:var(--primary); margin-top:3px; }
+  .kn-item.warn .v { color:var(--danger); }
+
+  /* ===== 权益最大化（optimize 新增） ===== */
+  .section-head { padding:16px 16px 8px; display:flex; align-items:center; gap:8px; }
+  .section-head .t { font-size:15px; font-weight:700; color:var(--text); flex:1; }
+  .section-head .c { font-size:11px; color:var(--text-3); }
+  .optimize-list { padding:0 16px 8px; }
+  .opt-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:12px; border:1px solid var(--border); overflow:hidden; }
+  .opt-head { padding:14px; cursor:pointer; display:flex; gap:10px; align-items:center; }
+  .opt-head .stage { flex-shrink:0; width:26px; height:26px; border-radius:8px; font-size:11px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; }
+  .opt-head .stage.s1 { background:var(--primary); }
+  .opt-head .stage.s2 { background:var(--ok); }
+  .opt-head .stage.s3 { background:var(--warn); }
+  .opt-head .ot { font-size:13px; font-weight:600; color:var(--text); flex:1; }
+  .opt-head .chev { color:var(--text-3); transition:transform .25s; }
+  .opt-card.open .chev { transform:rotate(180deg); }
+  .opt-body { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .opt-card.open .opt-body { max-height:400px; }
+  .opt-inner { padding:0 14px 14px; }
+  .opt-inner .od { font-size:12px; color:var(--text-2); line-height:1.7; margin-bottom:8px; }
+  .opt-inner .ask { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--primary); background:var(--primary-soft); padding:7px 12px; border-radius:20px; cursor:pointer; font-weight:600; }
+  .opt-inner .ask:active { opacity:.7; }
+
+  /* ===== 权益清单（带可主张金额） ===== */
+  .rights-list { padding:0 16px 8px; }
+  .right { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:12px; border:1px solid var(--border); overflow:hidden; }
+  .right-head { padding:14px; cursor:pointer; display:flex; gap:12px; align-items:flex-start; }
+  .right-main { flex:1; }
+  .right-title { font-size:14px; font-weight:600; color:var(--text); line-height:1.5; }
+  .right-desc { font-size:12px; color:var(--text-2); margin-top:4px; line-height:1.5; }
+  .right-amount { flex-shrink:0; text-align:center; background:var(--money-soft); border:1px solid #FFD9B8; border-radius:10px; padding:6px 10px; }
+  .right-amount .al { font-size:10px; color:#B2592A; font-weight:600; }
+  .right-amount .av { font-size:16px; font-weight:800; color:var(--money); }
+  .right-body { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .right.open .right-body { max-height:400px; }
+  .right-inner { padding:0 14px 14px; }
+  .right-inner .ask { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--ok); background:var(--ok-soft); padding:7px 12px; border-radius:20px; cursor:pointer; font-weight:600; }
+  .right-inner .ask:active { opacity:.7; }
+
+  /* ===== 对话追问区（快速引用） ===== */
+  .chat-section { padding:8px 16px 20px; }
+  .chat-title { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .chat-title .ct { font-size:15px; font-weight:700; color:var(--text); }
+  .chat-title .tip { font-size:11px; color:var(--text-3); }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding:2px 0 12px; -webkit-overflow-scrolling:touch; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex-shrink:0; font-size:12px; color:var(--primary); background:var(--primary-soft); border:1px solid #C9DFFF; padding:8px 13px; border-radius:20px; cursor:pointer; font-weight:500; }
+  .chip:active { background:var(--primary); color:#fff; }
+  .chat-box { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; }
+  .chat-msg { display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; }
+  .msg-avatar { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .msg-avatar.me { background:var(--text-3); }
+  .msg-bubble { flex:1; font-size:13px; color:var(--text); background:var(--bg); border-radius:12px; padding:10px 12px; line-height:1.6; }
+  .chat-msg.me { flex-direction:row-reverse; }
+  .chat-msg.me .msg-bubble { background:var(--primary); color:#fff; }
+  .chat-input-row { display:flex; gap:8px; margin-top:12px; }
+  .chat-input { flex:1; background:var(--card); border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; font-size:14px; outline:none; color:var(--text); }
+  .chat-input:focus { border-color:var(--primary); }
+  .chat-send { flex-shrink:0; background:var(--primary); color:#fff; border:none; border-radius:12px; padding:0 20px; font-size:14px; font-weight:600; cursor:pointer; }
+  .disclaimer { margin:8px 16px; background:var(--warn-soft); border:1px solid #FFD9B8; border-radius:10px; padding:12px; font-size:11px; color:#B2592A; line-height:1.6; }
+  .btn-area { padding:0 16px 20px; }
+  .btn-outline { background:#fff; color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:14px; font-size:15px; font-weight:600; width:100%; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+
+  <!-- ================= 结论屏（结论三段式 + 月供卡） ================= -->
+  <div class="screen active" id="screen-result">
+    <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>合同体检报告</div>
+
+    <div class="result-hero">
+      <div class="result-head">
+        <span class="result-tag">消费贷 · 贷款合同</span>
+        <span style="font-size:12px;color:var(--text-3)">2026-08-27</span>
+      </div>
+      <div class="score-box">
+        <div class="big">42</div>
+        <div class="score-label">健康指数 · 偏低</div>
+        <div class="score-sub">发现 2 个高风险点，签字前务必处理</div>
+      </div>
+    </div>
+
+    <!-- 结论三段式：一句话判断 / 最值钱一句话 / 立刻做一件事 -->
+    <div class="conclusion-card" style="margin:16px">
+      <div class="t">一句话判断</div>
+      <div class="conclusion-text">这份贷款有 <em>2 处高风险</em>，签字前务必先处理利率和还款方式问题。</div>
+    </div>
+
+    <!-- ===== 月供构成卡（loanPlan 新增） ===== -->
+    <div class="plan-card">
+      <div class="tag-new">NEW</div>
+      <div class="pt">你的月供构成 · 一眼看懂</div>
+      <div class="plan-type">
+        <span class="badge">先息后本</span>
+        <div class="desc">每月只还利息，本金最后一次性归还</div>
+      </div>
+      <div class="pie-row">
+        <div class="pie-wrap"><div class="pie"></div></div>
+        <div class="pie-legend">
+          <div class="lg-row"><span class="lg-dot" style="background:var(--primary)"></span>本金 <b>22%</b><span class="lt">2,200/月</span></div>
+          <div class="lg-row"><span class="lg-dot" style="background:var(--primary-soft)"></span>利息 <b>78%</b><span class="lt">7,800/月</span></div>
+        </div>
+      </div>
+      <div class="plan-risk">
+        <div class="rl">⚠️ 前期本金占比极低</div>
+        <div class="rt">先息后本下，前 11 个月你几乎都在还利息，本金没怎么减。若中途提前还款，省不下多少利息，反而不划算。</div>
+      </div>
+      <div class="plan-cons">
+        <div class="c"><span class="ok">✓</span>前期月供压力小，现金流更宽裕</div>
+        <div class="c"><span class="x">✕</span>总利息偏高，最后一个月需一次性还大额本金</div>
+        <div class="c"><span class="x">✕</span>提前还款节省的利息有限</div>
+      </div>
+    </div>
+
+    <!-- 关键数字（带"意味着什么"提示） -->
+    <div class="keynum-card">
+      <div class="t">关键数字</div>
+      <div class="keynum-grid">
+        <div class="kn-item warn"><div class="l">真实年化利率</div><div class="v">25.06%</div><div class="hint">≈ 借 1 万一年利息 2,506 元</div></div>
+        <div class="kn-item"><div class="l">总利息</div><div class="v">12,878 元</div></div>
+        <div class="kn-item"><div class="l">本金</div><div class="v">10 万</div></div>
+        <div class="kn-item"><div class="l">期数</div><div class="v">12 期</div></div>
+      </div>
+    </div>
+
+    <div class="btn-area">
+      <button class="btn-outline" onclick="go('screen-optimize')">看权益最大化 + 快速追问 ↓</button>
+    </div>
+  </div>
+
+  <!-- ================= 权益最大化屏（optimize + 权益金额 + 追问） ================= -->
+  <div class="screen" id="screen-optimize">
+    <div class="nav-bar"><div class="back" onclick="go('screen-result')">‹</div>怎么把权益最大化</div>
+
+    <!-- 权益最大化 3 时间点 -->
+    <div class="section-head">
+      <div class="t">权益最大化 · 3 个关键时机</div>
+      <div class="c">按时间线</div>
+    </div>
+    <div class="optimize-list">
+      <div class="opt-card open">
+        <div class="opt-head" onclick="toggleOpt(this)">
+          <div class="stage s1">签前</div>
+          <div class="ot">签字前：把"砍头息"服务费谈掉</div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="opt-body"><div class="opt-inner">
+          <div class="od">合同预扣 5,000 元"服务费"，这属于砍头息。签字前要求剔除，可少付 5,000 元本金对应的利息。</div>
+          <span class="ask" onclick="ask('砍头息服务费 5000 元，签字前怎么跟对方谈？')">我想追问</span>
+        </div></div>
+      </div>
+      <div class="opt-card">
+        <div class="opt-head" onclick="toggleOpt(this)">
+          <div class="stage s2">签后</div>
+          <div class="ot">签字后：超出 24% 部分可主张调整</div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="opt-body"><div class="opt-inner">
+          <div class="od">你的真实年化 25.06%，超 24% 保护线。已付超 36% 部分可要求返还，超 24% 部分可主张调整。</div>
+          <span class="ask" onclick="ask('我实际年化 25.06%，超出 24% 的部分具体怎么算？能要回多少？')">我想追问</span>
+        </div></div>
+      </div>
+      <div class="opt-card">
+        <div class="opt-head" onclick="toggleOpt(this)">
+          <div class="stage s3">长期</div>
+          <div class="ot">长期：先息后本提前还款时机</div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="opt-body"><div class="opt-inner">
+          <div class="od">先息后本前期本金占比低，提前还款省不了多少利息。若真需提前，等本金占比上去后再还更划算。</div>
+          <span class="ask" onclick="ask('先息后本什么时候提前还款最划算？要付违约金吗？')">我想追问</span>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- 权益清单（带可主张金额绿色 chip） -->
+    <div class="section-head">
+      <div class="t">可主张的权益</div>
+      <div class="c">3 条 · 合计可争取 ¥8,000</div>
+    </div>
+    <div class="rights-list">
+      <div class="right open">
+        <div class="right-head" onclick="toggleRight(this)">
+          <div class="right-main">
+            <div class="right-title">要求退还超出 24% 部分的利息</div>
+            <div class="right-desc">真实年化 25.06%，超 24% 部分可主张调整</div>
+          </div>
+          <div class="right-amount"><div class="al">可争取</div><div class="av">¥1,260</div></div>
+        </div>
+        <div class="right-body"><div class="right-inner">
+          <div class="od" style="font-size:12px;color:var(--text-2);line-height:1.7;margin-bottom:8px;">依据《民间借贷司法解释》第 25 条：年利率超 24% 部分不予支持。你多付的 1,260 元可协商调整或诉请返还。</div>
+          <span class="ask" onclick="ask('超出 24% 的 1260 元怎么退回？需要什么证据？')">我想追问</span>
+        </div></div>
+      </div>
+      <div class="right">
+        <div class="right-head" onclick="toggleRight(this)">
+          <div class="right-main">
+            <div class="right-title">按实际到手金额算利息（砍头息）</div>
+            <div class="right-desc">借 10 万到手 9.5 万，应按 9.5 万计息</div>
+          </div>
+          <div class="right-amount"><div class="al">可争取</div><div class="av">¥6,740</div></div>
+        </div>
+        <div class="right-body"><div class="right-inner">
+          <div class="od" style="font-size:12px;color:var(--text-2);line-height:1.7;margin-bottom:8px;">依据《民法典》第 670 条，利息不得预先扣除。5,000 元不应计入本金，对应利息一并调整。</div>
+          <span class="ask" onclick="ask('砍头息 5000 元怎么主张按实际到账算利息？')">我想追问</span>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- 免责声明（升级版边界提醒） -->
+    <div class="disclaimer">提示：本工具基于"法定标准 + 维权路径"提供知识与建议，不代写法律文书、不出具法律意见；具体可主张金额的最终成立与金额，以裁判机关/监管部门认定或双方协商为准。</div>
+
+    <div class="btn-area">
+      <button class="btn-outline" onclick="go('screen-chat')">进入 AI 追问 ↓</button>
+    </div>
+  </div>
+
+  <!-- ================= 对话追问屏（快速引用 chips） ================= -->
+  <div class="screen" id="screen-chat">
+    <div class="nav-bar"><div class="back" onclick="go('screen-optimize')">‹</div>有疑问？继续追问 AI</div>
+    <div style="padding:16px 16px 0">
+      <div class="chips">
+        <div class="chip" onclick="ask('这个利率合法吗？超出部分能退吗？')">利率合法吗？能退吗？</div>
+        <div class="chip" onclick="ask('先息后本怎么还划算？')">先息后本怎么还划算？</div>
+        <div class="chip" onclick="ask('提前还款要付违约金吗？')">提前还款要付违约金吗？</div>
+        <div class="chip" onclick="ask('服务费能要求退吗？')">服务费能要求退吗？</div>
+      </div>
+      <div class="chat-box">
+        <div class="chat-msg">
+          <div class="msg-avatar">AI</div>
+          <div class="msg-bubble">你好！我是合同翻译官。你可以点上方快捷问题，或直接问我关于这份贷款合同的任何疑问，我会基于这份合同上下文回答你。</div>
+        </div>
+        <div class="chat-msg me">
+          <div class="msg-avatar me">我</div>
+          <div class="msg-bubble" id="userMsg">先息后本怎么还划算？</div>
+        </div>
+        <div class="chat-msg">
+          <div class="msg-avatar">AI</div>
+          <div class="msg-bubble">你这份是"先息后本"，前期几乎只还利息、本金没怎么减。我的建议：<br>① 若你打算持有满期，就正常按月还；<br>② 若想提前还款，等本金占比上去（约第 8 期后）再还，省下的利息才明显；<br>③ 提前还款前先算违约金，别让违约金吃掉省下的利息。要我帮你算具体提前多久还最划算吗？</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:12px 16px">
+      <div class="chat-input-row">
+        <input class="chat-input" placeholder="输入你的问题…" value="先息后本怎么还划算？" />
+        <button class="chat-send" onclick="ask('')">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 首页（仅作返回锚点） ================= -->
+  <div class="screen" id="screen-home">
+    <div class="nav-bar"><div class="back hidden">‹</div>合同体检报告 · 示例</div>
+    <div style="padding:40px 20px;text-align:center;color:var(--text-3);line-height:1.8">
+      原型演示：<br>本稿聚焦「升级版」三大能力 ——<br><br>
+      ① <b style="color:var(--primary)">月供构成卡</b>：先息后本/本金占比一眼看懂<br>
+      ② <b style="color:var(--money)">可主张金额</b>：权益绿色金额 chip + 权益最大化<br>
+      ③ <b style="color:var(--ok)">快速引用追问</b>：快捷 chips + "我想追问"按钮<br><br>
+      <button class="btn-primary" style="margin-top:20px;max-width:240px" onclick="go('screen-result')">查看完整报告</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function go(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo({top:0, behavior:'instant'});
+  }
+  function toggleOpt(el) { el.closest('.opt-card').classList.toggle('open'); }
+  function toggleRight(el) { el.closest('.right').classList.toggle('open'); }
+  function ask(q) {
+    if (q) {
+      const userMsg = document.getElementById('userMsg');
+      if (userMsg) userMsg.textContent = q;
+    }
+    go('screen-chat');
+  }
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { ImageGenTool } from './tools/image-gen.tool';
 import { ImageGenClient } from '../common/http/image-gen.client';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { bianbianAgent } from './agents/bianbian.agent';
+import { AgentLogModule } from '../agent-log/agent-log.module';
 import {
   AgentEngine,
   AgentRunner,
@@ -66,7 +67,7 @@ const runnerProvider: Provider = {
 };
 
 @Module({
-  imports: [ConversationModule, HttpModule],
+  imports: [ConversationModule, HttpModule, AgentLogModule],
   providers: [
     clientRegistryProvider,
     toolRegistryProvider,

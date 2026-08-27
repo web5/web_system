@@ -26,6 +26,7 @@
     "@nestjs/typeorm": "^10.0.0",
     "@web-system/shared": "workspace:*",
     "@web-system/types": "file:../../packages/types",
+    "body-parser": "^1.20.4",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",

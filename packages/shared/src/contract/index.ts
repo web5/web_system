@@ -8,6 +8,9 @@ export type {
   StandardMatch,
   LoanAnalysis,
   LoanParams,
+  RepaymentType,
+  LoanPlan,
+  MarketBenchmark,
 } from './types';
 
 export {
@@ -22,4 +25,7 @@ export {
   getByScene,
   matchByText,
   getById,
+  MARKET_BENCHMARKS,
+  getMarketBenchmarks,
+  findBenchmarkByType,
 } from './standards';

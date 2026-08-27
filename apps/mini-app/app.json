@@ -4,6 +4,7 @@
     "pages/contract/upload/upload",
     "pages/contract/analyzing/analyzing",
     "pages/contract/result/result",
+    "pages/contract/chat/chat",
     "pages/contract/history/history",
     "pages/contract/mine/mine",
     "pages/index/index",

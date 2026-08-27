@@ -31,6 +31,7 @@ export class ProxyService implements OnModuleInit {
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
   private finnewsProxy!: ReturnType<typeof createProxyMiddleware>;
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
+  private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
@@ -143,6 +144,10 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
+    // Agent 运行记录（/api/agent-runs/* → ai-service）
+    // 与其它服务一致：只剥 /api，ai-service controller 是 @Controller('agent-runs')
+    this.agentRunsProxy = this.createProxy(this.aiServiceUrl, '^/api');
+
     this.logger.log('所有 Proxy 实例初始化完成');
   }
 
@@ -158,6 +163,7 @@ export class ProxyService implements OnModuleInit {
   getUploadStaticProxy() { return this.uploadStaticProxy; }
   getBianbianStaticProxy() { return this.bianbianStaticProxy; }
   getMcpProxy() { return this.mcpProxy; }
+  getAgentRunsProxy() { return this.agentRunsProxy; }
   getFinnewsProxy() { return this.finnewsProxy; }
   getContentProxy() { return this.contentProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }

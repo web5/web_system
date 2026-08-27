@@ -26,12 +26,27 @@
   </view>
 
   <!-- AI 思考中动态提示 -->
-  <view class="thinking" wx:if="{{thinkingText}}">
+  <view class="thinking" wx:if="{{thinkingText && !streamingVisible}}">
     <view class="thinking-dots">
       <view class="tdot"></view>
       <view class="tdot"></view>
       <view class="tdot"></view>
     </view>
     <text class="thinking-text">{{thinkingText}}</text>
+  </view>
+
+  <!-- 流式生成：AI 正在逐字写报告 -->
+  <view class="streaming-box" wx:if="{{streamingVisible}}">
+    <view class="streaming-head">
+      <view class="streaming-dots">
+        <view class="tdot"></view>
+        <view class="tdot"></view>
+        <view class="tdot"></view>
+      </view>
+      <text class="streaming-title">AI 正在生成你的风险报告…</text>
+    </view>
+    <scroll-view scroll-y class="streaming-scroll" enable-flex>
+      <text class="streaming-text">{{streamingText}}</text>
+    </scroll-view>
   </view>
 </view>

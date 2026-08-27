@@ -7,7 +7,7 @@ export async function runChat(
   message: string,
   conversationId?: string,
 ): Promise<void> {
-  const id = agentId ?? 'study-assistant';
+  const id = agentId ?? 'general-assistant';
   let agent;
   try {
     agent = harness.agentRegistry.get(id);

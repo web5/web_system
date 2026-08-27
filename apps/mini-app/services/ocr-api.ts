@@ -13,9 +13,17 @@ export interface OcrResult {
 
 /**
  * 选择图片并 OCR 识别文字。
+ *
+ * 注意：loading 不应在点按钮时就显示（此时系统选图面板还没关），
+ * 而应等用户选定图片、真正开始上传识别时再显示。通过 onUploadStart 回调触发。
+ *
  * @param sourceType 图片来源：camera / album
+ * @param options 可选：onUploadStart 在图片选定、即将上传识别时回调
  */
-export function chooseAndRecognize(sourceType: 'camera' | 'album'): Promise<OcrResult> {
+export function chooseAndRecognize(
+  sourceType: 'camera' | 'album',
+  options?: { onUploadStart?: () => void },
+): Promise<OcrResult> {
   return new Promise((resolve, reject) => {
     wx.chooseMedia({
       count: 1,
@@ -28,6 +36,8 @@ export function chooseAndRecognize(sourceType: 'camera' | 'album'): Promise<OcrR
           reject(new Error('未获取到图片'));
           return;
         }
+        // 用户已选定图片，此时才进入"上传识别"阶段，回调让页面显示 loading
+        options?.onUploadStart?.();
         // 读为 base64
         wx.getFileSystemManager().readFile({
           filePath: file.tempFilePath,

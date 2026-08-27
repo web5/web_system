@@ -2,7 +2,6 @@
  * 合同翻译官 - 上传页
  * 支持拍照/相册 OCR 识别 + 文本粘贴 + 示例样本
  */
-import { analyzeContract } from '../../../services/contract-api';
 import { chooseAndRecognize } from '../../../services/ocr-api';
 
 // 示例样本（演示用）
@@ -59,9 +58,13 @@ Page({
 
   /** OCR 识别合同图片 */
   doOcr(sourceType: 'camera' | 'album') {
-    this.setData({ ocring: true });
-    wx.showLoading({ title: '识别图片中...' });
-    chooseAndRecognize(sourceType)
+    // 先打开系统选图面板（不显示 loading），等用户选定图片进入上传识别时再显示 loading
+    chooseAndRecognize(sourceType, {
+      onUploadStart: () => {
+        this.setData({ ocring: true });
+        wx.showLoading({ title: '识别图片中...' });
+      },
+    })
       .then((res) => {
         wx.hideLoading();
         this.setData({ ocring: false });
@@ -87,7 +90,7 @@ Page({
       });
   },
 
-  async startAnalyze() {
+  startAnalyze() {
     const text = this.data.contractText.trim();
     if (!text) {
       wx.showToast({ title: '请先粘贴合同内容、识别图片或选择示例', icon: 'none' });
@@ -95,22 +98,12 @@ Page({
     }
 
     this.setData({ analyzing: true });
-    wx.navigateTo({
+
+    // 待分析内容存 storage，由 analyzing 页发起流式分析
+    wx.setStorageSync('contract_pending', { text, scene: this.data.scene });
+
+    wx.redirectTo({
       url: '/pages/contract/analyzing/analyzing',
     });
-
-    try {
-      const report = await analyzeContract(text, this.data.scene);
-      const storage = wx.getStorageSync('contract_report') || {};
-      storage.latest = { ...report, createdAt: Date.now() };
-      wx.setStorageSync('contract_report', storage);
-
-      wx.redirectTo({
-        url: '/pages/contract/result/result',
-      });
-    } catch (err: any) {
-      this.setData({ analyzing: false });
-      wx.showToast({ title: err?.message || '分析失败，请重试', icon: 'none' });
-    }
   },
 });

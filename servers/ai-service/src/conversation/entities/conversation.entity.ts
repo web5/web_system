@@ -36,11 +36,13 @@ export class Conversation extends UuidEntity {
   summarizedCount: number;
 
   /** 未压缩的近期原始消息（Agent 短列表，受 keepRecent 控制） */
-  @Column({ type: 'json', nullable: false, default: () => "'[]'", comment: 'Agent 近期原始消息' })
+  // MySQL 不允许 JSON 列设置默认值（否则 TypeORM synchronize 报 "can't have a default value"）
+  // 改 nullable: true，应用层已用 `recentMessages ?? []` 兜底
+  @Column({ type: 'json', nullable: true, comment: 'Agent 近期原始消息' })
   recentMessages: Array<{
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
     toolCallId?: string;
     name?: string;
-  }>;
+  }> | null;
 }

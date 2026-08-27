@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:51:17.762Z
+provider: 
+---
+
 # Core — CloudBase CLI
 
 > Core foundation for all CloudBase CLI operations (云开发 CLI 核心基础).
