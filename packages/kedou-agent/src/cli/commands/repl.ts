@@ -3,12 +3,12 @@ import { Harness } from '../harness';
 
 /** 交互式 REPL 对话 */
 export async function runRepl(harness: Harness, agentId?: string): Promise<void> {
-  let agent = agentId ?? 'study-assistant';
+  let agent = agentId ?? 'general-assistant';
   try {
     harness.agentRegistry.get(agent);
   } catch {
-    console.error(`错误：未找到 Agent "${agent}"，使用默认 study-assistant`);
-    agent = 'study-assistant';
+    console.error(`错误：未找到 Agent "${agent}"，使用默认 general-assistant`);
+    agent = 'general-assistant';
   }
 
   console.log('\n进入对话（输入 /exit 退出，/help 帮助，/agent <id> 切换 Agent）\n');

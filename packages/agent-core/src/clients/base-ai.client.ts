@@ -50,6 +50,19 @@ export interface ChatWithToolsResult {
   finishReason?: string;
 }
 
+/**
+ * 流式带工具推理的事件。
+ * - content_delta：模型正在生成 content 的增量片段（供前端"边生成边渲染"）
+ * - done：整轮推理结束，携带最终 result（含 toolCalls 判断结果）
+ */
+export interface StreamToolEvent {
+  type: 'content_delta' | 'done';
+  /** content_delta 时：本片增量文本 */
+  delta?: string;
+  /** done 时：本轮完整结果 */
+  result?: ChatWithToolsResult;
+}
+
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
@@ -82,6 +95,24 @@ export abstract class BaseAiClient {
     tools: ToolCallSchema[],
     options?: ChatOptions,
   ): Promise<ChatWithToolsResult>;
+
+  /**
+   * 流式带工具推理。
+   * 默认实现：非流式客户端回退到 chatWithTools，一次性吐出全部 content，
+   * 保证不破坏现有引擎调用（引擎无需感知客户端是否真流式）。
+   * 支持真流式的客户端（如 DeepSeek）应覆写此方法，逐 token 吐 content_delta。
+   */
+  async *chatWithToolsStream(
+    messages: ChatMessage[],
+    tools: ToolCallSchema[],
+    options?: ChatOptions,
+  ): AsyncGenerator<StreamToolEvent, void, unknown> {
+    const result = await this.chatWithTools(messages, tools, options);
+    if (result.content) {
+      yield { type: 'content_delta', delta: result.content };
+    }
+    yield { type: 'done', result };
+  }
 
   getModelInfo(): ModelInfo {
     return {

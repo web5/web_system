@@ -4,7 +4,7 @@
 
 - **自带模型**：你配置自己的大模型 API key（不消耗作者 token）。
 - **零运行时依赖**：纯 Node ≥18，原生 `fetch`。
-- **内置 Agent**：`study-assistant`（学习助手）、`dev-assistant`（开发助手，含 coding 工具）。
+- **内置 Agent**：`general-assistant`（通用问答智能体，联网 + 读写文件 + 执行命令）。
 
 ## 安装
 
@@ -35,8 +35,8 @@ kedou-agent config
 ## 使用
 
 ```bash
-kedou-agent                           # 交互式 REPL 对话
-kedou-agent chat [--agent dev-assistant]   # 指定 Agent 对话
+kedou-agent                           # 交互式 REPL 对话（默认通用问答智能体）
+kedou-agent chat [--agent general-assistant]   # 指定 Agent 对话
 kedou-agent config                    # 配置 / 重新配置
 kedou-agent agents                    # 查看可用 Agent
 kedou-agent models                    # 查看模型与搜索配置状态
@@ -48,9 +48,9 @@ kedou-agent --version / --help
 
 | Agent | 工具 | 说明 |
 |-------|------|------|
-| `study-assistant` | web-search | 学习助手，可联网查询 |
-| `general-assistant` | web-search / list-dir / read-file / grep-search / write-file / shell-exec | 通用助手，全工具（写/执行走确认） |
-| `dev-assistant` | list-dir / read-file / grep-search / write-file / shell-exec | 开发助手，读写代码、受限执行命令 |
+| `general-assistant` | web-search / list-dir / read-file / grep-search / write-file / shell-exec | 通用问答智能体，全工具（写/执行走确认） |
+
+> CLI 目前只内置通用问答智能体。如需在 CLI 中扩展更多 agent，需另行设计加载机制（当前不做）。
 
 ## 安全
 

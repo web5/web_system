@@ -1,4 +1,9 @@
 /* ===== 合同翻译官 - 首页 ===== */
+/* 显式覆盖 app.wxss 的全局黑色 page 背景，避免重编译瞬间黑屏 */
+page {
+  background: #F5F7FA;
+}
+
 .page {
   min-height: 100vh;
   background: linear-gradient(180deg, #EAF2FF 0%, #F5F7FA 30%);

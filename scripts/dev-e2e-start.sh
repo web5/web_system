@@ -3,7 +3,7 @@
 # 微前端平台端到端本地验证启动脚本
 #
 # 流程:
-#   1. 构建 externals（vue/router/pinia/antd/axios/dayjs → public/static/externals/）
+#   1. 构建自建 CDN externals（vue/router/pinia/antd/axios/dayjs(+插件)/vue-demi → public/static/cdn/）
 #   2. 构建基座 shell（→ public/shell/）
 #   3. 构建微前端模块 portal/admin（→ public/static/modules/<key>/<version>/）
 #   4. seed DB（deploy_modules + deploy_deployments dev 指针）

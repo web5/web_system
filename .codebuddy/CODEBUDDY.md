@@ -33,6 +33,15 @@
 | admin-web (dev) | 5174 |
 | docs (static) | 4173 |
 
+## 本地启动速查
+
+- **全栈一键**：`./start-local.sh`（安装依赖 + 构建 shared/types + 起 6 服务 + 2 前端），详见 `docs/development/local-dev-setup.md`
+- **admin 后台（vite dev）**：`cd apps/admin && pnpm dev` → `http://localhost:5174/admin/`（base 为 `/admin/`）
+- **portal（vite dev）**：`cd apps/portal && pnpm dev` → `http://localhost:5173/portal/`（base 为 `/portal/`，URL 必须带 `/portal/` 前缀；微前端模块用 `pnpm build --mode mf`）
+- **本地 nginx 集成**：构建前端后 `sudo ~/local/nginx/sbin/nginx` 启动、`-s reload` 重载，访问 `https://local.kedouai.com/admin/`（配置见根目录 `local.nginx.conf`，已被 `conf.d/web_system-local.conf` include）
+
+> ⚠️ **admin 路由 base 是 `/admin/`**：页面 URL 必须带 `/admin/` 前缀（如 `/admin/agents`），不带会 404。admin 详细开发指南（启动/依赖/路由/nginx 集成/Agent 调试）见 `docs/development/admin-dev.md`。
+
 ## 设计常量
 
 **平台（暗色）**：主色 `#f97316` 暖橙 / 暗底 `#0A0A0D` / 文字 `#F8FAFC`

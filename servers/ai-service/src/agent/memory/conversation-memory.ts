@@ -24,7 +24,7 @@ export class ConversationMemory implements ConversationMemoryPort {
   /** 加载：返回 [summary, ...recentMessages] 供引擎拼接 */
   async load(userId: string, conversationId: string): Promise<{ summary: string | null; messages: ChatMessage[] }> {
     const mem = await this.conversationService.loadAgentMemory(userId, conversationId);
-    const messages: ChatMessage[] = mem.recentMessages.map((m) => ({
+    const messages: ChatMessage[] = (mem.recentMessages ?? []).map((m) => ({
       role: m.role,
       content: m.content,
       ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),

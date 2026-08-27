@@ -19,9 +19,44 @@
     <text class="conclusion-text">{{report.conclusion}}</text>
   </view>
 
+  <!-- 月供构成卡（loanPlan 新增：先息后本/本金占比 一眼看懂） -->
+  <view class="plan-card" wx:if="{{report.loanPlan}}">
+    <view class="plan-head">
+      <text class="plan-title">你的月供构成 · 一眼看懂</text>
+      <text class="plan-tag">NEW</text>
+    </view>
+    <view class="plan-type-row">
+      <text class="plan-badge">{{report.loanPlan.repaymentType}}</text>
+      <text class="plan-desc">{{report.loanPlan.termExplain}}</text>
+    </view>
+    <view class="plan-risk" wx:if="{{report.loanPlan.riskNote}}">
+      <text class="plan-risk-t">关键点</text>
+      <text class="plan-risk-tx">{{report.loanPlan.riskNote}}</text>
+    </view>
+    <view class="plan-cons">
+      <view class="plan-c" wx:for="{{report.loanPlan.pros}}" wx:key="index">
+        <text class="plan-c-ok">✓</text><text class="plan-c-tx">{{item}}</text>
+      </view>
+      <view class="plan-c" wx:for="{{report.loanPlan.cons}}" wx:for-index="ci" wx:key="ci">
+        <text class="plan-c-x">✕</text><text class="plan-c-tx">{{item}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 关键数字（合同里真实算出的数字） -->
+  <view class="keynum-card" wx:if="{{report.keyNumbers && report.keyNumbers.length}}">
+    <text class="card-title">关键数字</text>
+    <view class="keynum-grid">
+      <view wx:for="{{report.keyNumbers}}" wx:key="label" class="keynum-item">
+        <text class="keynum-label">{{item.label}}</text>
+        <text class="keynum-value">{{item.value}}</text>
+      </view>
+    </view>
+  </view>
+
   <!-- 风险信号 -->
   <view class="section-head">
-    <text class="section-title">风险信号</text>
+    <text class="section-title">⚠️ 风险信号</text>
     <text class="section-count">{{summary.danger + summary.warn + summary.ok}} 项</text>
   </view>
 
@@ -69,6 +104,116 @@
             <text class="term-text">{{item.termExplain}}</text>
           </view>
         </view>
+        <!-- 我想追问（askableQuestions 快捷引用） -->
+        <view class="ask-row" wx:if="{{item.askableQuestions && item.askableQuestions.length}}">
+          <text
+            class="ask-btn"
+            wx:for="{{item.askableQuestions}}"
+            wx:key="index"
+            wx:for-item="q"
+            data-q="{{q}}"
+            bindtap="askFollowUp"
+          >追问：{{q}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 我的权益（可主张权益表） -->
+  <view class="section-head" wx:if="{{rights.length}}">
+    <text class="section-title">🛡️ 我的权益</text>
+    <text class="section-count">{{rights.length}} 条可主张</text>
+  </view>
+
+  <view class="rights-list">
+    <view
+      wx:for="{{rights}}"
+      wx:key="id"
+      class="right {{item.open ? 'open' : ''}}"
+      data-index="{{index}}"
+      bindtap="toggleRight"
+    >
+      <view class="right-head">
+        <view class="right-main">
+          <text class="right-title">{{item.title}}</text>
+          <text class="right-desc">{{item.description}}</text>
+        </view>
+        <view class="right-amount" wx:if="{{item.amount}}">
+          <text class="amount-label">可争取</text>
+          <text class="amount-value">¥{{item.amount}}</text>
+        </view>
+      </view>
+
+      <view class="right-body" wx:if="{{item.open}}">
+        <!-- 法律依据 -->
+        <view class="signal-sec">
+          <text class="sec-title">法律依据</text>
+          <view class="legal-box">
+            <text class="law-name">{{item.legalBasis.law}}</text>
+            <text class="law-article">{{item.legalBasis.article}}</text>
+            <text class="law-quote">{{item.legalBasis.quote}}</text>
+          </view>
+        </view>
+        <!-- 3 步操作 -->
+        <view class="signal-sec">
+          <text class="sec-title">你可以这样做</text>
+          <view wx:for="{{item.actions}}" wx:for-item="action" wx:key="index" class="action-step">
+            <view class="action-num">{{index + 1}}</view>
+            <text class="action-text">{{action}}</text>
+          </view>
+        </view>
+        <!-- 我想追问 -->
+        <view class="ask-row" wx:if="{{item.askableQuestions && item.askableQuestions.length}}">
+          <text
+            class="ask-btn ask-btn-green"
+            wx:for="{{item.askableQuestions}}"
+            wx:key="index"
+            wx:for-item="q"
+            data-q="{{q}}"
+            bindtap="askFollowUp"
+          >追问：{{q}}</text>
+        </view>
+      </view>
+
+      <view class="right-chev">{{item.open ? '收起' : '查看操作'}}</view>
+    </view>
+  </view>
+
+  <!-- 权益最大化（optimize 新增：成交前/成交后/长期） -->
+  <view class="section-head" wx:if="{{optimize.length}}">
+    <text class="section-title">🚀 怎么把权益最大化</text>
+    <text class="section-count">{{optimize.length}} 个关键时机</text>
+  </view>
+
+  <view class="optimize-list">
+    <view
+      wx:for="{{optimize}}"
+      wx:key="index"
+      class="optimize {{item.open ? 'open' : ''}}"
+      data-index="{{index}}"
+      bindtap="toggleOptimize"
+    >
+      <view class="optimize-head">
+        <text class="optimize-stage {{item.stage === '成交后' ? 's2' : item.stage === '长期' ? 's3' : 's1'}}">{{item.stage}}</text>
+        <text class="optimize-title">{{item.title}}</text>
+        <text class="chev">{{item.open ? '收起' : '展开'}}</text>
+      </view>
+      <view class="optimize-body" wx:if="{{item.open}}">
+        <text class="optimize-desc">{{item.plainText}}</text>
+        <view wx:for="{{item.actions}}" wx:for-item="action" wx:key="index" class="action-step">
+          <view class="action-num">{{index + 1}}</view>
+          <text class="action-text">{{action}}</text>
+        </view>
+        <view class="ask-row" wx:if="{{item.askableQuestions && item.askableQuestions.length}}">
+          <text
+            class="ask-btn"
+            wx:for="{{item.askableQuestions}}"
+            wx:key="idx"
+            wx:for-item="q"
+            data-q="{{q}}"
+            bindtap="askFollowUp"
+          >追问：{{q}}</text>
+        </view>
       </view>
     </view>
   </view>
@@ -76,6 +221,18 @@
   <!-- 免责声明 -->
   <view class="disclaimer">
     <text class="disclaimer-text">{{report.disclaimer}}</text>
+  </view>
+
+  <!-- 追问入口：进入独立对话页 chat（第一轮展示分析结论，空白等待用户输入） -->
+  <view class="chat-section">
+    <view class="chat-title">
+      <text class="chat-title-text">有疑问？继续追问 AI</text>
+      <text class="chat-title-tip">基于本次合同上下文回答</text>
+    </view>
+    <view class="chat-entry" bindtap="goChat">
+      <view class="chat-entry-text">进入对话界面，向 AI 追问任何条款问题</view>
+      <text class="chat-entry-btn">追问 →</text>
+    </view>
   </view>
 
   <button class="home-btn" bindtap="goHome">回到首页</button>

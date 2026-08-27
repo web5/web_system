@@ -63,6 +63,10 @@ async function bootstrap() {
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
       },
     },
+    // CORP 放宽为 cross-origin：自建 /static/cdn/ 等资源可能被 http 页面（非 trustworthy origin）
+    // 以"名义跨源"方式加载，若保持 same-origin 会被浏览器 ERR_BLOCKED_BY_RESPONSE.NotSameOrigin 拦截。
+    // https 页面同源不受影响，此处仅避免 http 本地 dev 下相对路径静态资源被拦截。
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
   // CORS 配置

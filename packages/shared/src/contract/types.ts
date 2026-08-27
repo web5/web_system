@@ -43,6 +43,48 @@ export interface LegalStandard {
   actions: string[];
   /** 术语解释 */
   termExplain?: string;
+  /** 可主张金额计算说明（付费锚点：用户能要回多少钱） */
+  refundableAmount?: {
+    /** 计算公式（含占位符，可替换成合同真实数字） */
+    formula: string;
+    /** 大白话说明 */
+    note: string;
+    /** 带数字的示例 */
+    example: string;
+  };
+}
+
+/** 还款方式 */
+export type RepaymentType = '等额本息' | '等额本金' | '先息后本' | '未知';
+
+/** 贷款方案解读（loanPlan，贷款类合同必输出，前端"月供构成卡"） */
+export interface LoanPlan {
+  /** 还款方式 */
+  repaymentType: RepaymentType;
+  /** 这种还款方式的大白话解释 */
+  termExplain: string;
+  /** 优点 */
+  pros: string[];
+  /** 缺点（如先息后本前期本金占比低的问题） */
+  cons: string[];
+  /** 关键风险点（"前期几乎都在还利息，提前还款不划算"） */
+  riskNote: string;
+  /** 总利息（来自 contract-irr） */
+  totalInterest: number;
+  /** 真实年化利率（来自 contract-irr，百分比数值） */
+  effectiveApr: number;
+  /** 个性化建议 */
+  suggestions: string[];
+}
+
+/** 市场基准（同类贷款对比用，确定性数据） */
+export interface MarketBenchmark {
+  /** 贷款类型，如"消费贷""购车贷" */
+  type: string;
+  /** 常见真实年化区间，如"3.4%~12%" */
+  typicalAprRange: string;
+  /** 大白话说明 */
+  note: string;
 }
 
 /** 文本命中的结果 */

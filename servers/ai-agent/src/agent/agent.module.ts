@@ -1,4 +1,5 @@
 import { Module, OnModuleInit, Logger, Provider } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AgentEngine,
   AgentRunner,
@@ -8,16 +9,19 @@ import {
   Hy3Client,
   DeepseekClient,
   ToolRegistry,
-  InMemoryConversationMemory,
   McpToolMeta,
 } from '@kedou-ai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
 import { ContractCleanerTool } from '../contract/tools/contract-cleaner.tool';
+import { ContractBenchmarkTool } from '../contract/tools/contract-benchmark.tool';
 import { contractRiskAgent } from '../contract/agents/contract-risk.agent';
 import { McpService } from '../mcp/mcp.service';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentController } from './agent.controller';
+import { DbConversationMemory } from './memory/db-conversation-memory';
+import { AgentConversation } from './memory/agent-conversation.entity';
+import { AgentRunPusher } from './agent-run-pusher';
 
 /**
  * Agent harness 统一注册入口（复用 @kedou-ai/agent-core）。
@@ -51,24 +55,16 @@ const compactionProvider: Provider = {
   inject: [ClientRegistry],
 };
 
-// 内存版记忆（合同风险为一次性分析，MVP 阶段无需 DB 持久化多轮记忆）
-const memoryProvider: Provider = {
-  provide: InMemoryConversationMemory,
-  useFactory: (compaction: Compaction): InMemoryConversationMemory => {
-    return new InMemoryConversationMemory(compaction);
-  },
-  inject: [Compaction],
-};
-
+// 数据库版记忆：多轮追问上下文落库到 agent_conversations，跨请求/跨重启保持
 const engineProvider: Provider = {
   provide: AgentEngine,
   useFactory: (
     clientRegistry: ClientRegistry,
     toolRegistry: ToolRegistry,
     agentRegistry: AgentRegistry,
-    memory: InMemoryConversationMemory,
+    memory: DbConversationMemory,
   ): AgentEngine => new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory),
-  inject: [ClientRegistry, ToolRegistry, AgentRegistry, InMemoryConversationMemory],
+  inject: [ClientRegistry, ToolRegistry, AgentRegistry, DbConversationMemory],
 };
 
 const runnerProvider: Provider = {
@@ -78,22 +74,24 @@ const runnerProvider: Provider = {
 };
 
 @Module({
-  imports: [McpModule],
+  imports: [McpModule, TypeOrmModule.forFeature([AgentConversation])],
   providers: [
     clientRegistryProvider,
     toolRegistryProvider,
     agentRegistryProvider,
     compactionProvider,
-    memoryProvider,
     engineProvider,
     runnerProvider,
+    DbConversationMemory,
+    AgentRunPusher,
     // 合同风险场景特有
     ContractRuleTool,
     ContractIrrTool,
     ContractCleanerTool,
+    ContractBenchmarkTool,
   ],
   controllers: [AgentController],
-  exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, InMemoryConversationMemory, Compaction],
+  exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],
 })
 export class AgentModule implements OnModuleInit {
   private readonly logger = new Logger(AgentModule.name);
@@ -104,6 +102,7 @@ export class AgentModule implements OnModuleInit {
     private readonly contractRuleTool: ContractRuleTool,
     private readonly contractIrrTool: ContractIrrTool,
     private readonly contractCleanerTool: ContractCleanerTool,
+    private readonly contractBenchmarkTool: ContractBenchmarkTool,
     private readonly mcpService: McpService,
   ) {}
 
@@ -112,6 +111,7 @@ export class AgentModule implements OnModuleInit {
     this.toolRegistry.register(this.contractCleanerTool);
     this.toolRegistry.register(this.contractRuleTool);
     this.toolRegistry.register(this.contractIrrTool);
+    this.toolRegistry.register(this.contractBenchmarkTool);
 
     // 注册 Agent 定义
     this.agentRegistry.register(contractRiskAgent);

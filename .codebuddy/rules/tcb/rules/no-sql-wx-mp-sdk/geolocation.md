@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:55.501Z
+provider: 
+---
+
 # Geolocation Queries with CloudBase
 
 This document explains how to work with geographic data and perform location-based queries in CloudBase.
@@ -438,4 +446,3 @@ function NearbyPlaces({ userLat, userLon }) {
     );
 }
 ```
-

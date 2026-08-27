@@ -4,24 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>科豆AI</title>
-  <!-- 外部依赖从公开 CDN 加载（挂全局），shell 不再打包这些库（减小包体积）。
+  <!-- 公共依赖从自建 CDN 加载（挂全局），shell 不再打包这些库（减小包体积）。
        顺序：vue → vue-demi(pinia 依赖) → vue-router → pinia → dayjs → dayjs 插件 → antd（antd UMD 依赖 Vue/dayjs/7 个 dayjs 插件）→ axios。
-       版本与本地 pnpm-lock 对齐（vite.config 的 viteExternalsPlugin 映射同名全局）。 -->
-  <script src="https://cdn.staticfile.org/vue/3.5.31/vue.global.prod.js"></script>
-  <script src="https://unpkg.com/vue-demi@0.14.10/lib/index.iife.js"></script>
-  <script src="https://cdn.staticfile.org/vue-router/4.6.4/vue-router.global.prod.js"></script>
-  <script src="https://cdn.staticfile.org/pinia/2.3.1/pinia.iife.prod.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/dayjs.min.js"></script>
+       版本与本地 pnpm-lock 对齐（vite.config 的 viteExternalsPlugin 映射同名全局）。
+       资源由 scripts/build-externals.mjs 产出到 servers/gateway/public/static/cdn/，
+       nginx 托管 /static/cdn/ 并提供 CORS 头，dev/prod 统一从自家域名加载，不依赖外部 CDN。 -->
+  <script src="/static/cdn/vue.js"></script>
+  <script src="/static/cdn/vue-demi.js"></script>
+  <script src="/static/cdn/vue-router.js"></script>
+  <script src="/static/cdn/pinia.js"></script>
+  <script src="/static/cdn/dayjs.js"></script>
   <!-- antd UMD 需要的 dayjs 插件（全局名 dayjs_plugin_*，antd 引用同名） -->
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/advancedFormat.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/customParseFormat.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/localeData.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/weekday.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/weekOfYear.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/weekYear.js"></script>
-  <script src="https://cdn.staticfile.org/dayjs/1.11.21/plugin/quarterOfYear.js"></script>
-  <script src="https://cdn.staticfile.org/ant-design-vue/4.2.6/antd.min.js"></script>
-  <script src="https://cdn.staticfile.org/axios/1.13.6/axios.min.js"></script>
+  <script src="/static/cdn/dayjs-advancedFormat.js"></script>
+  <script src="/static/cdn/dayjs-customParseFormat.js"></script>
+  <script src="/static/cdn/dayjs-localeData.js"></script>
+  <script src="/static/cdn/dayjs-weekday.js"></script>
+  <script src="/static/cdn/dayjs-weekOfYear.js"></script>
+  <script src="/static/cdn/dayjs-weekYear.js"></script>
+  <script src="/static/cdn/dayjs-quarterOfYear.js"></script>
+  <script src="/static/cdn/antd.js"></script>
+  <script src="/static/cdn/axios.js"></script>
   <script>
     window.__SHARED__ = window.__SHARED__ || {};
     window.__MODULES__ = window.__MODULES__ || {};
