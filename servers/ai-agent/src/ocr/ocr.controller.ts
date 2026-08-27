@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Logger, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { OcrService } from './ocr.service';
 import { OcrRecognizeDto } from './dto/ocr-recognize.dto';
@@ -13,6 +13,7 @@ export class OcrController {
   constructor(private readonly ocrService: OcrService) {}
 
   @Post('recognize')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'OCR 识别合同图片文字，返回识别文本' })
   async recognize(@Body() dto: OcrRecognizeDto) {
     const result = await this.ocrService.recognize(dto.imageBase64);

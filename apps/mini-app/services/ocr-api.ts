@@ -66,7 +66,9 @@ function recognizeBase64(imageBase64: string, scene?: string): Promise<OcrResult
       },
       success: (res) => {
         const data = res.data as any;
-        if (res.statusCode === 200 && data?.code === 0 && data?.data) {
+        // 兼容 2xx（NestJS POST 默认 201 Created，部分接口返回 200 OK）
+        const isHttpOk = res.statusCode >= 200 && res.statusCode < 300;
+        if (isHttpOk && data?.code === 0 && data?.data) {
           resolve({
             text: data.data.text || '',
             blockCount: data.data.blockCount || 0,

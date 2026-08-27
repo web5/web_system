@@ -10,6 +10,7 @@ import compression from 'compression';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { json, urlencoded } from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -148,6 +149,11 @@ async function bootstrap() {
 
   // 全局异常过滤器 — 生产环境掩码内部错误信息
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // 请求体大小限制：默认 100kb 太小，合同图片 OCR base64 几 MB 会被拦
+  // 提升到 20mb 以容纳 OCR 拍照识别（base64 约原图 1.3x）
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ limit: '20mb', extended: true }));
 
   // 统一响应格式 { code, data, message }
   app.useGlobalInterceptors(new TransformInterceptor());

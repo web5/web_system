@@ -1,12 +1,15 @@
-import { login } from './services/auth';
+import { login, isLoggedIn } from './services/auth';
 
 App<IAppOption>({
   onLaunch() {
     this.autoLogin();
   },
 
-  /** 启动时自动登录 */
+  /** 启动时自动登录（已有 token 则跳过，避免覆盖本地测试 token） */
   async autoLogin() {
+    if (isLoggedIn()) {
+      return;
+    }
     try {
       await login();
     } catch (err) {
@@ -18,7 +21,7 @@ App<IAppOption>({
     userInfo: null,
     token: '',
     refreshToken: '',
-    apiBase: 'https://dev.kedouai.com/api',
+    apiBase: 'http://local.kedouai.com',
     bianbianOrigin: undefined,
     bianbianDesc: undefined,
     bianbianResult: undefined,

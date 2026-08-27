@@ -59,7 +59,7 @@ export function analyzeContract(text: string, scene?: string): Promise<ContractR
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      timeout: 180000,
+      timeout: 300000, // agent 编排 + IRR + LLM 多步，超时调到 5 分钟
       success: () => {
         // 流式结果通过 onChunkReceived 处理
       },

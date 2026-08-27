@@ -68,7 +68,8 @@ export class ProxyService implements OnModuleInit {
     this.systemProxy = this.createProxy(this.systemServiceUrl, '^/api');
 
     // AI Agent 服务（agent 编排，SSE 长链路，AI_TASK 超时）
-    this.aiAgentProxy = this.createProxy(this.aiAgentServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
+    // pathRewrite：/api/ai-agent/agent/run → /agent/run（ai-agent 的 controller 是 agent/ocr，不带 /ai-agent 前缀）
+    this.aiAgentProxy = this.createProxy(this.aiAgentServiceUrl, '^/api/ai-agent', API_TIMEOUT.GATEWAY.AI_TASK);
 
     // 变变产品实际上属于 ai-service（servers/ai-service/src/bianbian/）
     // 不要指到 user-service，那边没有 bianbian controller
