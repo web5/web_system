@@ -1,0 +1,52 @@
+<!-- 合同翻译官 - 解读中 -->
+<view class="page">
+  <!-- 转圈 -->
+  <view class="ring-wrap">
+    <view class="ring"></view>
+    <view class="ring-center">
+      <text class="ring-ic">盾</text>
+    </view>
+  </view>
+
+  <text class="title">正在为你体检合同</text>
+  <text class="sub">大约需要 1 分钟，请稍候…</text>
+
+  <!-- 进度步骤 -->
+  <view class="step-list">
+    <view wx:for="{{steps}}" wx:key="index" class="step {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}">
+      <view class="dot">
+        <text wx:if="{{item.done}}">✓</text>
+        <text wx:else>{{index + 1}}</text>
+      </view>
+      <view class="step-info">
+        <text class="step-n">{{item.text}}</text>
+        <text class="step-d">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- AI 思考中动态提示 -->
+  <view class="thinking" wx:if="{{thinkingText && !streamingVisible}}">
+    <view class="thinking-dots">
+      <view class="tdot"></view>
+      <view class="tdot"></view>
+      <view class="tdot"></view>
+    </view>
+    <text class="thinking-text">{{thinkingText}}</text>
+  </view>
+
+  <!-- 流式生成：AI 正在逐字写报告 -->
+  <view class="streaming-box" wx:if="{{streamingVisible}}">
+    <view class="streaming-head">
+      <view class="streaming-dots">
+        <view class="tdot"></view>
+        <view class="tdot"></view>
+        <view class="tdot"></view>
+      </view>
+      <text class="streaming-title">AI 正在生成你的风险报告…</text>
+    </view>
+    <scroll-view scroll-y class="streaming-scroll" enable-flex>
+      <text class="streaming-text">{{streamingText}}</text>
+    </scroll-view>
+  </view>
+</view>

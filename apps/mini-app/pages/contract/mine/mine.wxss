@@ -1,0 +1,82 @@
+/* ===== 合同翻译官 - 我的 ===== */
+/* 显式覆盖 app.wxss 的全局黑色 page 背景，避免重编译瞬间黑屏 */
+page {
+  background: #F5F7FA;
+}
+
+.page {
+  min-height: 100vh;
+  background: #F5F7FA;
+  padding-bottom: 60rpx;
+}
+.mine-head {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  background: #fff;
+  padding: 40rpx 32rpx;
+}
+.avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: #1E6FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-text {
+  font-size: 40rpx;
+  color: #fff;
+  font-weight: 700;
+}
+.mine-n {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1A1F2E;
+  display: block;
+}
+.mine-d {
+  font-size: 24rpx;
+  color: #9AA1AD;
+  margin-top: 6rpx;
+  display: block;
+}
+
+.mine-group {
+  margin: 24rpx 32rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+.mine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30rpx;
+  border-bottom: 1rpx solid #E8EBF0;
+}
+.mine-row:last-child {
+  border-bottom: none;
+}
+.row-n {
+  font-size: 28rpx;
+  color: #1A1F2E;
+}
+.row-go {
+  font-size: 30rpx;
+  color: #9AA1AD;
+}
+
+.disclaimer {
+  margin: 24rpx 32rpx;
+  background: #FFF3E6;
+  border: 1rpx solid #FFD9B8;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+}
+.disclaimer-text {
+  font-size: 22rpx;
+  color: #B2592A;
+  line-height: 1.6;
+}

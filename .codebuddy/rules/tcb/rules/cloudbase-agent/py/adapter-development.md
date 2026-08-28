@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:51:07.306Z
+provider: 
+---
+
 # Custom Adapter Development
 
 This guide explains how to build custom AG-UI protocol adapters in Python.

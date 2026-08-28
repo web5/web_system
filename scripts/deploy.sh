@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # ============================================================
-# deploy.sh — 一键部署脚本（后端服务 / 前端微前端模块）
+# deploy.sh — 一键部署脚本（后端服务 / 前端微前端模块 / 自建 CDN）
 #
 # 用法：
 #   ./scripts/deploy.sh dev gateway          # 后端服务 → dev
 #   ./scripts/deploy.sh prod all             # 全部后端服务 → prod
 #   ./scripts/deploy.sh dev portal           # 前端模块(portal/admin/shell) → dev
+#   ./scripts/deploy.sh dev cdn              # 自建 CDN 公共依赖(static/cdn) → dev
 #   DRY_RUN=1 ./scripts/deploy.sh dev user   # 预览不执行
 #
 # 后端服务：本地 build → tar dist → scp → 解压 → 依赖检查 → pm2 reload
 # 前端模块：RELEASE_TAG=<git short> 构建 → 上传 public/static/modules/<m>/<V>/ → 更新 deploy 表
+# 自建 CDN：本地 build-externals.mjs 生成 → 上传 public/static/cdn/（vue/antd/axios/dayjs 等公共依赖）
 # ============================================================
 set -uo pipefail
 
@@ -30,7 +32,7 @@ case "$TARGET" in
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
-BACKEND_SERVICES="gateway auth user ai system todo content-hub mcp-gateway"
+BACKEND_SERVICES="gateway auth user ai ai-agent system todo content-hub mcp-gateway"
 FRONTEND_MODULES="shell portal admin"
 
 # 服务名 → servers/ 目录名（pm2 进程名与目录一致）
@@ -40,6 +42,7 @@ svc_dir() {
     auth) echo auth-service ;;
     user) echo user-service ;;
     ai) echo ai-service ;;
+    ai-agent) echo ai-agent ;;
     system) echo system-service ;;
     todo) echo todo-service ;;
     content-hub) echo content-hub ;;
@@ -54,6 +57,7 @@ svc_pkg() {
     auth) echo @web-system/auth-service ;;
     user) echo @web-system/user-service ;;
     ai) echo @web-system/ai-service ;;
+    ai-agent) echo @web-system/ai-agent ;;
     system) echo @web-system/system-service ;;
     todo) echo @web-system/todo-service ;;
     content-hub) echo @web-system/content-hub ;;
@@ -89,10 +93,30 @@ deploy_backend() { # $1=service_name
   scp_to "/tmp/${svc}-deploy.tar.gz"
   local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
   cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
+  # 补建 @kedouai/agent-core 软链（指向远端 packages/agent-core），防止新包名部署后解析失败
+  cmd="$cmd && { [ -e /data/web_system/packages/agent-core ] && { [ -e node_modules/@kedouai/agent-core ] || { mkdir -p node_modules/@kedouai && ln -sfn ../../../../packages/agent-core node_modules/@kedouai/agent-core && echo '  [fix] agent-core 已补'; }; }; }"
   cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
   remote "$cmd"
   rm -f "/tmp/${svc}-deploy.tar.gz"
   log "$svc 部署完成"
+}
+
+deploy_cdn() {
+  # 自建 CDN 公共依赖（vue/vue-router/pinia/antd/axios/dayjs(+插件)/vue-demi）
+  # 先本地生成产物，再上传到远端 servers/gateway/public/static/cdn/，供 /static/cdn/ 托管。
+  log "部署自建 CDN 公共依赖 → $TARGET"
+  local src="$ROOT/servers/gateway/public/static/cdn"
+  if [ ! -d "$src" ]; then
+    log "  本地未找到 $src，先运行 scripts/build-externals.mjs 生成产物"
+    say "cd $ROOT && node scripts/build-externals.mjs"
+  fi
+  if [ "$DRY_RUN" != "1" ]; then
+    tar czf "/tmp/cdn-deploy.tar.gz" -C "$ROOT/servers/gateway/public/static" cdn
+    scp_to "/tmp/cdn-deploy.tar.gz"
+    remote "mkdir -p /data/web_system/servers/gateway/public/static && cd /data/web_system/servers/gateway/public/static && rm -rf cdn && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
+    rm -f "/tmp/cdn-deploy.tar.gz"
+  fi
+  log "自建 CDN 部署完成"
 }
 
 deploy_frontend() { # $1=module_name
@@ -137,6 +161,9 @@ rm -f /tmp/.deploy_cnf"
 case "$WHAT" in
   all)
     for svc in $BACKEND_SERVICES; do deploy_backend "$svc"; done
+    ;;
+  cdn)
+    deploy_cdn
     ;;
   shell|portal|admin)
     deploy_frontend "$WHAT"

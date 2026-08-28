@@ -15,7 +15,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.2",
     "@types/wechat-miniprogram": "^3.4.10",
-    "@web-system/shared": "file:../../packages/shared",
+    "@web-system/shared": "workspace:*",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "miniprogram-automator": "^0.12.1",

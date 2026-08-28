@@ -115,6 +115,68 @@ export class ProxyController {
     proxyReq.end();
   }
 
+  // AI Agent SSE 流式（agent 编排，如合同风险识别）— 原生 http 转发
+  @Post('ai-agent/agent/run')
+  @Header('Content-Type', 'text/event-stream')
+  @Header('Cache-Control', 'no-cache')
+  @Header('Connection', 'keep-alive')
+  @Header('X-Accel-Buffering', 'no')
+  proxyAiAgentRun(@Req() req: Request, @Res() res: Response) {
+    const agentUrl = this.proxyService.getAiAgentServiceUrl();
+    const body = JSON.stringify(req.body);
+
+    const parsedUrl = url.parse(agentUrl);
+    const options: http.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: '/agent/run',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Connection': 'keep-alive',
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
+      },
+      timeout: API_TIMEOUT.GATEWAY.AI_TASK,
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      proxyRes.on('data', (chunk: Buffer) => res.write(chunk));
+      proxyRes.on('end', () => res.end());
+    });
+
+    req.on('close', () => { proxyReq.destroy(); });
+
+    proxyReq.on('error', (err) => {
+      this.logger.error(`AI Agent proxy error: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(502).json({ code: 502, message: 'AI Agent service unavailable' });
+      }
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      if (!res.headersSent) {
+        res.status(504).json({ code: 504, message: 'AI Agent service timeout' });
+      }
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  }
+
+  // AI Agent 精确匹配 /api/ai-agent（无尾斜杠）
+  @All('ai-agent')
+  proxyAiAgentExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAiAgentProxy()(req, res);
+  }
+
+  // AI Agent 通配 /api/ai-agent/:path(*)
+  @All('ai-agent/:path(*)')
+  proxyAiAgentWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAiAgentProxy()(req, res);
+  }
+
   // TTS 语音合成 — 用原生 http 转发，确保二进制音频流原样透传
   @Post('ai/tts/speak')
   proxyAiTtsSpeak(@Req() req: Request, @Res() res: Response) {
@@ -202,6 +264,26 @@ export class ProxyController {
   @All('admin/:path(*)')
   proxySystemWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getSystemProxy()(req, res);
+  }
+
+  // Agent 运行记录（/api/agent-runs/* → ai-service）
+  @All('agent-runs')
+  proxyAgentRunsExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentRunsProxy()(req, res);
+  }
+  @All('agent-runs/:path(*)')
+  proxyAgentRunsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentRunsProxy()(req, res);
+  }
+
+  // Agent 定义管理（/api/agent-defs/* → ai-service）
+  @All('agent-defs')
+  proxyAgentDefsExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentDefsProxy()(req, res);
+  }
+  @All('agent-defs/:path(*)')
+  proxyAgentDefsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentDefsProxy()(req, res);
   }
 
   // 精确匹配 /api/bianbian（无尾斜杠）

@@ -1,8 +1,9 @@
 ---
-name: web-development
 description: Use when users need to implement, integrate, debug, build, deploy, or validate a Web frontend after the product direction is already clear, especially for React, Vue, Vite, browser flows, or CloudBase Web integration.
-version: 2.21.1
 alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:51:03.792Z
+provider: 
 ---
 
 ## Standalone Install Note

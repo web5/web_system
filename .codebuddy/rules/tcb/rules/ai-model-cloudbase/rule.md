@@ -1,7 +1,9 @@
 ---
-name: ai-model-cloudbase
 description: Complete guide for calling AI models with CloudBase - covers JS/Node SDK and WeChat Mini Program. Text generation, streaming, and image generation.
 alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:12.904Z
+provider: 
 ---
 
 ## When to use this skill
@@ -419,4 +421,3 @@ interface HunyuanGenerateImageOutput {
 3. **Keep API Keys secure** - Never expose in client-side code
 4. **Initialize early** - Initialize SDK/cloud in app entry point
 5. **Check for [DONE]** - In WeChat Mini Program streaming, check `event.data === "[DONE]"` to stop
-

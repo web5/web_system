@@ -10,6 +10,7 @@ import compression from 'compression';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { json, urlencoded } from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -62,6 +63,10 @@ async function bootstrap() {
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
       },
     },
+    // CORP 放宽为 cross-origin：自建 /static/cdn/ 等资源可能被 http 页面（非 trustworthy origin）
+    // 以"名义跨源"方式加载，若保持 same-origin 会被浏览器 ERR_BLOCKED_BY_RESPONSE.NotSameOrigin 拦截。
+    // https 页面同源不受影响，此处仅避免 http 本地 dev 下相对路径静态资源被拦截。
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
   // CORS 配置
@@ -148,6 +153,11 @@ async function bootstrap() {
 
   // 全局异常过滤器 — 生产环境掩码内部错误信息
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // 请求体大小限制：默认 100kb 太小，合同图片 OCR base64 几 MB 会被拦
+  // 提升到 20mb 以容纳 OCR 拍照识别（base64 约原图 1.3x）
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ limit: '20mb', extended: true }));
 
   // 统一响应格式 { code, data, message }
   app.useGlobalInterceptors(new TransformInterceptor());

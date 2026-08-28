@@ -17,6 +17,10 @@ export { ToolRegistry } from './registry/tool.registry';
 export { AgentRegistry } from './registry/agent.registry';
 export { ClientRegistry } from './registry/client.registry';
 
+// MCP 工具适配器（插件化：远程工具接入统一 Tool 契约）
+export { McpToolAdapter } from './mcp/mcp-tool.adapter';
+export type { McpToolMeta, McpToolParameter, McpToolExecutor } from './mcp/mcp-tool.adapter';
+
 // 引擎
 export { AgentEngine } from './core/agent-engine';
 export { AgentRunner } from './core/agent-runner';

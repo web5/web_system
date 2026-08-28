@@ -1,0 +1,55 @@
+<!-- 合同翻译官 - 首页 -->
+<view class="page">
+  <!-- 品牌区 -->
+  <view class="hero">
+    <view class="hero-shield">
+      <text class="hero-shield-ic">盾</text>
+    </view>
+    <text class="hero-title">合同翻译官</text>
+    <text class="hero-slogan">签字前，先查一查</text>
+    <text class="hero-desc">拍照识别合同，AI 帮你翻译成大白话，找出风险点</text>
+  </view>
+
+  <!-- 一键上传卡片 -->
+  <view class="upload-card" bindtap="goUpload">
+    <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUU2RkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgMTQuODk5QTcgNyAwIDEgMSAxNS43MSA4aDEuNzlhNC41IDQuNSAwIDAgMSAyLjUgOC4yNDIiLz48cGF0aCBkPSJNMTIgMTJ2OSIvPjxwYXRoIGQ9Im0xNiAxNi00LTQtNCA0Ii8+PC9zdmc+" mode="aspectFit" />
+    <text class="upload-title">上传合同，立即体检</text>
+    <text class="upload-desc">支持拍照 / 相册 / 文件 · 自动识别合同类型</text>
+    <view class="upload-badges">
+      <text class="badge">自动识别场景</text>
+      <text class="badge">3 分钟出报告</text>
+    </view>
+  </view>
+
+  <!-- 能查什么 -->
+  <view class="section">
+    <text class="section-title">能查什么风险？</text>
+    <view class="scene-grid">
+      <view class="scene-item">
+        <text class="scene-ic">贷</text>
+        <text class="scene-n">消费贷 / 购车贷款</text>
+        <text class="scene-d">真实年化利率 · 砍头息 · 违约金</text>
+      </view>
+      <view class="scene-item">
+        <text class="scene-ic">险</text>
+        <text class="scene-n">保险条款</text>
+        <text class="scene-d">保障责任 · 免责 · 等待期</text>
+      </view>
+      <view class="scene-item">
+        <text class="scene-ic">租</text>
+        <text class="scene-n">租房合同</text>
+        <text class="scene-d">押金 · 违约金 · 维修责任</text>
+      </view>
+      <view class="scene-item">
+        <text class="scene-ic">他</text>
+        <text class="scene-n">其他合同</text>
+        <text class="scene-d">格式条款 · 强制搭售</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 免责声明 -->
+  <view class="disclaimer">
+    <text class="disclaimer-text">仅用于理解合同、识别风险，不构成法律 / 理财 / 投资建议。重大决策请咨询持牌专业人士。</text>
+  </view>
+</view>

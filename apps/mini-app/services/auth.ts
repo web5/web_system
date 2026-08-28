@@ -23,17 +23,37 @@ export function isLoggedIn(): boolean {
  */
 export async function login(): Promise<void> {
   try {
-    const { code } = await wx.login();
+    // wx.login 显式 Promise 封装（不依赖基础库 Promise 风格）
+    const loginRes = await new Promise<WechatMiniprogram.LoginSuccessCallbackResult>(
+      (resolve, reject) => {
+        wx.login({
+          success: (r) => resolve(r),
+          fail: (err) => reject(err),
+        });
+      },
+    );
+    const { code } = loginRes;
     if (!code) {
       throw new Error('wx.login 获取 code 失败');
     }
 
-    const res = await wx.request({
-      url: `${getApp<IAppOption>().globalData.apiBase || ''}${AUTH_API}`,
-      method: 'POST',
-      data: { code },
-      timeout: 10000,
-    });
+    // wx.request 不返回 Promise（原生返回 RequestTask），需手动 Promise 封装
+    const res = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>(
+      (resolve, reject) => {
+        wx.request({
+          url: `${getApp<IAppOption>().globalData.apiBase || ''}${AUTH_API}`,
+          method: 'POST',
+          data: { code },
+          timeout: 10000,
+          header: {
+            // 强制不压缩（gateway 启用 compression，开发者工具对 gzip 响应解析失败）
+            'Accept-Encoding': 'identity',
+          },
+          success: (r) => resolve(r),
+          fail: (err) => reject(err),
+        });
+      },
+    );
 
     if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
       const data = res.data as { accessToken: string; refreshToken: string; user: { id: number; nickname: string; avatarUrl: string } };
@@ -41,7 +61,7 @@ export async function login(): Promise<void> {
       const app = getApp<IAppOption>();
       app.globalData.userInfo = data.user;
     } else {
-      throw new Error(`登录接口返回异常: ${res.statusCode}`);
+      throw new Error(`登录接口返回异常: ${res.statusCode} ${JSON.stringify(res.data)}`);
     }
   } catch (err) {
     console.error('[auth] 登录失败:', err);

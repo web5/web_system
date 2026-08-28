@@ -1,0 +1,81 @@
+/* ===== 合同翻译官 - 历史 ===== */
+/* 显式覆盖 app.wxss 的全局黑色 page 背景，避免重编译瞬间黑屏 */
+page {
+  background: #F5F7FA;
+}
+
+.page {
+  min-height: 100vh;
+  background: #F5F7FA;
+  padding: 24rpx 32rpx;
+}
+.hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+.hist-item {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+.hist-ic {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 16rpx;
+  background: #EAF2FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.hist-ic-text {
+  font-size: 28rpx;
+  color: #1E6FFF;
+  font-weight: 700;
+}
+.hist-info {
+  flex: 1;
+}
+.hist-n {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1F2E;
+  display: block;
+}
+.hist-d {
+  font-size: 22rpx;
+  color: #9AA1AD;
+  margin-top: 4rpx;
+  display: block;
+}
+.hist-stat {
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+}
+.hist-stat.danger {
+  background: #FDEBEC;
+  color: #E5484D;
+}
+.hist-stat.warn {
+  background: #FFF3E6;
+  color: #E8833A;
+}
+.hist-stat.ok {
+  background: #E7F5EC;
+  color: #2E9E5B;
+}
+.empty {
+  padding: 120rpx 0;
+  text-align: center;
+}
+.empty-text {
+  font-size: 28rpx;
+  color: #9AA1AD;
+}

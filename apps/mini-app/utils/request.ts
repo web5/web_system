@@ -3,7 +3,7 @@
  * 自动携带 JWT Token，401 时触发重新登录
  */
 
-import { API_TIMEOUT } from '@web-system/shared';
+import { API_TIMEOUT } from './constants';
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -66,6 +66,9 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
       timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
       header: {
         'Content-Type': 'application/json',
+        // 强制不压缩：gateway 启用了 compression，但 wx.request 在开发者工具对 gzip 响应解析失败
+        // (Failed to load response data)。identity 表示不压缩，gateway 会返回明文。
+        'Accept-Encoding': 'identity',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.header,
       },

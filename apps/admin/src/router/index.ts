@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { ROLE_PERMISSIONS } from '@web-system/types';
 import { useUserStore } from '@/stores/user';
+// Login 静态引入，避免未登录跳转登录页时需等待懒加载 chunk 造成白屏
+import LoginView from '@/views/Login.vue';
 
 /**
  * 解析 JWT token，检查是否过期
@@ -29,7 +31,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/Login.vue'),
+    component: LoginView,
     meta: { requiresAuth: false },
   },
   {
@@ -62,6 +64,37 @@ const routes: RouteRecordRaw[] = [
         name: 'BianbianManage',
         component: () => import('@/views/BianbianManage.vue'),
         meta: { title: '变变管理', permission: 'bianbian:view' },
+      },
+      {
+        path: 'agents',
+        name: 'Agents',
+        meta: { title: 'Agents', permission: 'agents:view' },
+        children: [
+          {
+            path: '',
+            name: 'AgentOverview',
+            component: () => import('@/views/Agents/AgentOverview.vue'),
+            meta: { title: 'Agent 概览', permission: 'agents:view' },
+          },
+          {
+            path: 'runs/:agentId',
+            name: 'AgentRuns',
+            component: () => import('@/views/Agents/AgentRuns.vue'),
+            meta: { title: 'Agent 对话记录', permission: 'agents:view' },
+          },
+          {
+            path: 'runs/:agentId/run/:id',
+            name: 'AgentRunDetail',
+            component: () => import('@/views/Agents/AgentRunDetail.vue'),
+            meta: { title: 'Run 详情', permission: 'agents:view' },
+          },
+          {
+            path: 'definitions',
+            name: 'AgentDefList',
+            component: () => import('@/views/Agents/AgentDefList.vue'),
+            meta: { title: 'Agent 定义管理', permission: 'agents:manage' },
+          },
+        ],
       },
       {
         path: 'users',
