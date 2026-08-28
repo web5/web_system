@@ -266,18 +266,22 @@ git push origin <当前分支>
 
 ### 5.3 提 PR 到 master
 
-> **token**：已存在仓库根 `.env` 的 `GITHUB_PR_TOKEN`（fine-grained PAT，权限 pull_requests:write + contents:read，不进 git）。
-> 本地 `gh` 可能未装；没装就用 GitHub API（curl），流程如下。
+**方式 0：CI 自动提 PR（推荐，零人工）**
 
+已配置 GitHub Actions（`.github/workflows/auto-pr.yml`）：push 到 `feature/*` / `fix/*` 分支时**自动创建 PR 到 master**，幂等（已有 PR 则跳过），用 GitHub 内置 `GITHUB_TOKEN`（不落地本地）。
+> ⚠️ 前提：仓库 Settings → Actions → General → Workflow permissions 需开启 **"Read and write permissions"**（否则 token 只读无法建 PR）。
+> 只要 push `feature/xxx` / `fix/xxx` 分支，GitHub Actions 会自动建 PR，无需手动操作。
+
+**方式 A：gh CLI**（token 已存根 `.env` 的 `GITHUB_PR_TOKEN`）
 ```bash
-cd /Users/geekwen/workspace/web_system
 export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)
-
-# 方式 A：装了 gh（推荐）
 gh pr create --base master --head $(git branch --show-current) \
   --title "feat(scope): 标题" --body "PR 描述..."
+```
 
-# 方式 B：未装 gh，用 GitHub API
+**方式 B：GitHub API**（未装 gh 时）
+```bash
+export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)
 cat > .tmp-pr.json <<'EOF'
 { "title": "...", "head": "<当前分支>", "base": "master", "body": "..." }
 EOF
@@ -288,4 +292,4 @@ rm -f .tmp-pr.json
 ```
 
 > **安全**：token 不写进任何脚本/文件（临时文件用完即删）；命令输出里 token 要打码；不要 commit `.env`（已被 `.gitignore` 忽略）。
-> **AI 智能体铁律**：提 PR 时先从 `.env` 读 `GITHUB_PR_TOKEN`；`gh` 不可用时用 GitHub API；token 绝不明文写入可被提交的文件。
+> **AI 智能体铁律**：提 PR 时先从 `.env` 读 `GITHUB_PR_TOKEN`；优先依赖 CI 自动提（方式 0）；手动时 `gh` 不可用则用 GitHub API；token 绝不明文写入可被提交的文件。
