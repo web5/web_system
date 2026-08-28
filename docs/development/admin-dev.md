@@ -236,5 +236,60 @@ const AGENT_SCENE_MAP: Record<string, string> = {
 | 调 prompt | **DB 优先**：在 `/admin/agents/definitions` 编辑对应 agent 的 systemPrompt → 发布（≤30s 生效）；也可改 `servers/ai-agent/src/contract/agents/contract-risk.agent.ts` 代码兜底 |
 | 加新场景分组 | 改 `AgentOverview.vue` 的 `AGENT_SCENE_MAP` |
 | **改 admin 前端页面后更新** | 见 §一·C（构建微前端产物 → 拷贝 → 更新版本表） |
+| **提交 + 提 PR** | 见 §五 |
 
 > ⚠️ **AI 智能体铁律**：改完 admin/portal 前端源码后，必须按 §一·C 执行「构建 → 拷贝 → 更新版本表」三步，否则页面不生效。
+
+---
+
+## 五、提交 & 提 PR（MR）
+
+> 通用规则（不只 admin，适用本仓库任何改动）。
+
+### 5.1 提交前：确认改动范围
+
+```bash
+cd /Users/geekwen/workspace/web_system
+git branch --show-current        # 确认当前分支（如 feature/xxx）
+git status --short               # 看改动，区分本次工作 vs 无关改动
+```
+
+> ⚠️ 工作区常有非本次会话的未提交文件（如 `docs/.../known-issues.md`、`docs/development/optimization-roadmap.md`）。**只 add 本次工作相关文件**，不要把无关改动带进提交。用 `git add <具体文件/目录>` 精确暂存。
+
+### 5.2 提交 + push
+
+```bash
+git add <file1> <file2> <dir/>          # 精确暂存本次工作文件
+git commit -m "feat(scope): 描述"
+git push origin <当前分支>
+```
+
+### 5.3 提 PR 到 master
+
+**方式 0：CI 自动提 PR（推荐，零人工）**
+
+已配置 GitHub Actions（`.github/workflows/auto-pr.yml`）：push 到 `feature/*` / `fix/*` 分支时**自动创建 PR 到 master**，幂等（已有 PR 则跳过），用 GitHub 内置 `GITHUB_TOKEN`（不落地本地）。
+> ⚠️ 前提：仓库 Settings → Actions → General → Workflow permissions 需开启 **"Read and write permissions"**（否则 token 只读无法建 PR）。
+> 只要 push `feature/xxx` / `fix/xxx` 分支，GitHub Actions 会自动建 PR，无需手动操作。
+
+**方式 A：gh CLI**（token 已存根 `.env` 的 `GITHUB_PR_TOKEN`）
+```bash
+export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)
+gh pr create --base master --head $(git branch --show-current) \
+  --title "feat(scope): 标题" --body "PR 描述..."
+```
+
+**方式 B：GitHub API**（未装 gh 时）
+```bash
+export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)
+cat > .tmp-pr.json <<'EOF'
+{ "title": "...", "head": "<当前分支>", "base": "master", "body": "..." }
+EOF
+curl -s -X POST https://api.github.com/repos/web5/web_system/pulls \
+  -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" --data @.tmp-pr.json
+rm -f .tmp-pr.json
+```
+
+> **安全**：token 不写进任何脚本/文件（临时文件用完即删）；命令输出里 token 要打码；不要 commit `.env`（已被 `.gitignore` 忽略）。
+> **AI 智能体铁律**：提 PR 时先从 `.env` 读 `GITHUB_PR_TOKEN`；优先依赖 CI 自动提（方式 0）；手动时 `gh` 不可用则用 GitHub API；token 绝不明文写入可被提交的文件。
