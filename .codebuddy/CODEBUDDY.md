@@ -24,11 +24,12 @@
 
 | 服务 | 端口 |
 |------|------|
-| gateway | 3000 |
-| auth-service | 3001 |
-| user-service | 3002 |
-| ai-service | 3003 |
-| system-service | 3004 |
+| gateway | 6000 |
+| auth-service | 6101 |
+| user-service | 6002 |
+| ai-service | 6003 |
+| ai-agent | 6010 |
+| system-service | 6004 |
 | portal (dev) | 5173 |
 | admin-web (dev) | 5174 |
 | docs (static) | 4173 |
@@ -98,6 +99,21 @@
 | Docker | .dockerignore + 每个服务 healthcheck + 敏感端口仅内网 | 无 .dockerignore，端口全开，无健康检查 |
 | 生产 Redis | `127.0.0.1:6379:6379` | `6379:6379`（公网暴露） |
 | 脚本路径 | `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` | `dirname "$0"` 相对路径 |
+
+> ⚠️ **微前端页面模块更新铁律**：`admin` / `portal` / `mcp-admin` 都是微前端子模块，由 gateway `__manifest__` 决定加载版本。
+> **改完前端源码后必须「构建 → 拷贝 → 更新版本表 → 验证/清缓存」四步才生效**，否则浏览器仍加载旧产物。
+> 以 admin 为例（`<module>` 换 portal/mcp-admin 同理）：
+> ```bash
+> cd apps/admin && V=$(git -C ../.. rev-parse --short HEAD)
+> RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
+> mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
+> # ⚠️ 版本表在 web_system_deploy 库（不是 web_system！），gateway 独立数据源连它
+> #    UPDATE web_system_deploy.deploy_deployments SET current_version='$V' WHERE env_id='dev' AND module_key='admin'
+> sleep 12   # gateway TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway 清内存缓存
+> curl -s localhost:6000/__manifest__   # 确认 admin version=$V
+> ```
+> 两个最容易踩的坑：① 版本表在 **web_system_deploy** 库（写错库 manifest 不变）；② gateway 有 **TTL 10s 版本缓存**（改完要等/重启 gateway）。
+> 详见 `docs/development/admin-dev.md` §一·C。改完页面不执行这四步，等同于没改。
 
 > 完整版：`.codebuddy/references/coding-best-practices.md`  
 > 审计报告：`docs/archive/todo-list/audit-report-2026-07-26.md`
