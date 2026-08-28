@@ -115,6 +115,12 @@
 > 两个最容易踩的坑：① 版本表在 **web_system_deploy** 库（写错库 manifest 不变）；② gateway 有 **TTL 10s 版本缓存**（改完要等/重启 gateway）。
 > 详见 `docs/development/admin-dev.md` §一·C。改完页面不执行这四步，等同于没改。
 
+> ⚠️ **提交 & 提 PR 铁律**（用户要求提交时执行）：
+> - **只 add 本次工作文件**：工作区常有无关未提交文件（`known-issues.md`、`optimization-roadmap.md` 等），用 `git add <具体文件>` 精确暂存，别混入。
+> - **token**：GitHub PAT 已存在根 `.env` 的 `GITHUB_PR_TOKEN`（不进 git）。读取：`export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)`。
+> - **提 PR 到 master**：`gh` 已装用 `gh pr create --base master --head <分支> ...`；未装则用 GitHub API（`curl -X POST https://api.github.com/repos/web5/web_system/pulls`，`Authorization: Bearer $GH_TOKEN`）。临时 json 用完即删，token 不明文写入可提交文件。
+> - 详见 `docs/development/admin-dev.md` §五。
+
 > 完整版：`.codebuddy/references/coding-best-practices.md`  
 > 审计报告：`docs/archive/todo-list/audit-report-2026-07-26.md`
 
