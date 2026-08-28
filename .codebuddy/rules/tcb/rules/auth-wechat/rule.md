@@ -1,8 +1,9 @@
 ---
-name: auth-wechat-miniprogram
 description: CloudBase WeChat Mini Program native authentication guide. This skill should be used when users need mini program identity handling, OPENID/UNIONID access, or `wx.cloud` auth behavior in projects where login is native and automatic.
-version: 2.21.1
 alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:25.295Z
+provider: 
 ---
 
 ## Standalone Install Note

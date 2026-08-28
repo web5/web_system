@@ -10,6 +10,7 @@ export class ProxyService implements OnModuleInit {
   private readonly authServiceUrl: string;
   private readonly userServiceUrl: string;
   private readonly aiServiceUrl: string;
+  private readonly aiAgentServiceUrl: string;
   private readonly systemServiceUrl: string;
   private readonly todoServiceUrl: string;
   private readonly uploadServiceUrl: string;
@@ -20,6 +21,7 @@ export class ProxyService implements OnModuleInit {
   private userProxy!: ReturnType<typeof createProxyMiddleware>;
   private authProxy!: ReturnType<typeof createProxyMiddleware>;
   private aiProxy!: ReturnType<typeof createProxyMiddleware>;
+  private aiAgentProxy!: ReturnType<typeof createProxyMiddleware>;
   private systemProxy!: ReturnType<typeof createProxyMiddleware>;
   private bianbianProxy!: ReturnType<typeof createProxyMiddleware>;
   private todoProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -29,6 +31,8 @@ export class ProxyService implements OnModuleInit {
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
   private finnewsProxy!: ReturnType<typeof createProxyMiddleware>;
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
+  private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
+  private agentDefsProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
@@ -37,6 +41,7 @@ export class ProxyService implements OnModuleInit {
     this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6001');
     this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
     this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:6003');
+    this.aiAgentServiceUrl = this.configService.get('AI_AGENT_SERVICE_URL', 'http://localhost:6010');
     this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:6004');
     this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:6005');
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
@@ -63,6 +68,10 @@ export class ProxyService implements OnModuleInit {
     // AI 任务（对话 / 生图）链路较长，给 120s
     this.aiProxy = this.createProxy(this.aiServiceUrl, '^/api', API_TIMEOUT.GATEWAY.AI_TASK);
     this.systemProxy = this.createProxy(this.systemServiceUrl, '^/api');
+
+    // AI Agent 服务（agent 编排，SSE 长链路，AI_TASK 超时）
+    // pathRewrite：/api/ai-agent/agent/run → /agent/run（ai-agent 的 controller 是 agent/ocr，不带 /ai-agent 前缀）
+    this.aiAgentProxy = this.createProxy(this.aiAgentServiceUrl, '^/api/ai-agent', API_TIMEOUT.GATEWAY.AI_TASK);
 
     // 变变产品实际上属于 ai-service（servers/ai-service/src/bianbian/）
     // 不要指到 user-service，那边没有 bianbian controller
@@ -136,12 +145,31 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
+    // Agent 运行记录（/api/agent-runs/* → ai-service）
+    // 与其它服务一致：只剥 /api，ai-service controller 是 @Controller('agent-runs')
+    this.agentRunsProxy = this.createProxy(this.aiServiceUrl, '^/api');
+
+    // Agent 定义管理（/api/agent-defs/* → ai-service）
+    // pathRewrite：/api/agent-defs/admin/agent-defs → /admin/agent-defs（ai-service controller 是 @Controller('admin/agent-defs')）
+    this.agentDefsProxy = createProxyMiddleware({
+      target: this.aiServiceUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/agent-defs': '/admin/agent-defs' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
     this.logger.log('所有 Proxy 实例初始化完成');
   }
 
   getUserProxy() { return this.userProxy; }
   getAuthProxy() { return this.authProxy; }
   getAiProxy() { return this.aiProxy; }
+  getAiAgentProxy() { return this.aiAgentProxy; }
+  getAiAgentServiceUrl() { return this.aiAgentServiceUrl; }
   getSystemProxy() { return this.systemProxy; }
   getBianbianProxy() { return this.bianbianProxy; }
   getTodoProxy() { return this.todoProxy; }
@@ -149,6 +177,8 @@ export class ProxyService implements OnModuleInit {
   getUploadStaticProxy() { return this.uploadStaticProxy; }
   getBianbianStaticProxy() { return this.bianbianStaticProxy; }
   getMcpProxy() { return this.mcpProxy; }
+  getAgentRunsProxy() { return this.agentRunsProxy; }
+  getAgentDefsProxy() { return this.agentDefsProxy; }
   getFinnewsProxy() { return this.finnewsProxy; }
   getContentProxy() { return this.contentProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }

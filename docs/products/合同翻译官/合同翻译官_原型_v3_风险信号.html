@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>合同翻译官 · 交互原型 v3（风险信号）</title>
+<style>
+  :root {
+    --primary: #1E6FFF;
+    --primary-dark: #1656C8;
+    --primary-soft: #EAF2FF;
+    --bg: #F5F7FA;
+    --card: #FFFFFF;
+    --text: #1A1F2E;
+    --text-2: #5B6372;
+    --text-3: #9AA1AD;
+    --danger: #E5484D;
+    --danger-soft: #FDEBEC;
+    --warn: #E8833A;
+    --warn-soft: #FFF3E6;
+    --ok: #2E9E5B;
+    --ok-soft: #E7F5EC;
+    --border: #E8EBF0;
+    --radius: 14px;
+    --shadow: 0 2px 12px rgba(20,30,50,.06);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background:#E9EDF3;
+    display:flex; justify-content:center; align-items:flex-start;
+    min-height:100vh; padding:20px 0;
+  }
+  .phone {
+    width:390px; background:var(--bg); border-radius:40px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18); border:8px solid #111;
+    position:relative; min-height:844px;
+  }
+  .status-bar {
+    height:40px; background:var(--card); display:flex; align-items:flex-end; justify-content:space-between;
+    padding:0 22px 6px; font-size:13px; font-weight:600; color:var(--text);
+  }
+  .nav-bar {
+    height:48px; background:var(--card); display:flex; align-items:center; justify-content:center;
+    position:sticky; top:0; z-index:20; border-bottom:1px solid var(--border);
+    font-size:16px; font-weight:600; color:var(--text);
+  }
+  .nav-bar .back { position:absolute; left:14px; font-size:22px; color:var(--text-2); cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; }
+  .nav-bar .back.hidden { visibility:hidden; }
+  .screen { display:none; }
+  .screen.active { display:block; animation:fadeIn .25s ease; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+  .tabbar {
+    position:sticky; bottom:0; background:var(--card); border-top:1px solid var(--border);
+    display:flex; height:60px; padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tab {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    color:var(--text-3); font-size:11px; cursor:pointer; transition:color .2s;
+  }
+  .tab.active { color:var(--primary); }
+  .tab .ti { width:22px; height:22px; }
+  .tab .ti svg { width:100%; height:100%; }
+
+  .btn-primary {
+    background:var(--primary); color:#fff; border:none; border-radius:12px;
+    padding:15px; font-size:16px; font-weight:600; width:100%; cursor:pointer;
+    transition:opacity .2s, transform .1s;
+  }
+  .btn-primary:active { opacity:.85; transform:scale(.99); }
+  .btn-outline {
+    background:#fff; color:var(--primary); border:1.5px solid var(--primary); border-radius:12px;
+    padding:14px; font-size:15px; font-weight:600; width:100%; cursor:pointer;
+  }
+
+  /* ===== 首页 ===== */
+  .home-hero { background:linear-gradient(135deg,#1E6FFF,#2E8BFF); color:#fff; padding:26px 20px 90px; border-radius:0 0 26px 26px; }
+  .home-logo { font-size:13px; opacity:.9; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .home-hero h1 { font-size:26px; font-weight:700; margin-bottom:8px; }
+  .home-hero p { font-size:14px; opacity:.92; line-height:1.5; }
+  .upload-card {
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    margin:-55px 16px 0; padding:22px; text-align:center; position:relative;
+  }
+  .upload-card .big-icon { width:56px; height:56px; margin:6px auto 12px; color:var(--primary); }
+  .upload-card h3 { font-size:16px; color:var(--text); margin-bottom:4px; }
+  .upload-card .sub { font-size:13px; color:var(--text-3); margin-bottom:16px; }
+  .upload-card .badge-row { display:flex; justify-content:center; gap:8px; margin-bottom:14px; }
+  .badge { font-size:11px; padding:3px 8px; border-radius:20px; background:var(--primary-soft); color:var(--primary); }
+
+  .home-section { margin:22px 16px 0; }
+  .home-section h4 { font-size:15px; color:var(--text); margin-bottom:12px; font-weight:600; }
+  .scene-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .scene-item {
+    background:var(--card); border-radius:12px; padding:14px; box-shadow:var(--shadow);
+    cursor:pointer; border:1.5px solid transparent; transition:border-color .2s;
+  }
+  .scene-item:active { border-color:var(--primary); }
+  .scene-item .ic { width:26px; height:26px; margin-bottom:8px; }
+  .scene-item .n { font-size:14px; font-weight:600; color:var(--text); }
+  .scene-item .d { font-size:11px; color:var(--text-3); margin-top:2px; }
+
+  .home-tip {
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    margin:16px; padding:14px; display:flex; gap:10px; align-items:flex-start; font-size:12px; color:var(--text-2); line-height:1.6;
+  }
+  .home-tip .tip-ic { flex-shrink:0; width:18px; height:18px; margin-top:1px; color:var(--warn); }
+
+  /* ===== 上传页 ===== */
+  .upload-body { padding:20px 16px; }
+  .upload-options { display:flex; gap:12px; }
+  .upload-opt {
+    flex:1; background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:22px 12px; text-align:center; cursor:pointer; border:2px solid transparent; transition:border-color .2s;
+  }
+  .upload-opt:active { border-color:var(--primary); }
+  .upload-opt .ic { width:34px; height:34px; margin:0 auto 10px; color:var(--primary); }
+  .upload-opt .n { font-size:14px; font-weight:600; color:var(--text); }
+  .upload-opt .d { font-size:11px; color:var(--text-3); margin-top:3px; }
+  .sample-card {
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    margin-top:18px; padding:14px;
+  }
+  .sample-card h4 { font-size:14px; color:var(--text); margin-bottom:10px; font-weight:600; }
+  .sample-list { display:flex; flex-direction:column; gap:8px; }
+  .sample-item {
+    display:flex; align-items:center; gap:10px; padding:10px 12px; border:1.5px solid var(--border);
+    border-radius:10px; cursor:pointer; transition:border-color .2s;
+  }
+  .sample-item:active { border-color:var(--primary); }
+  .sample-item .ic { width:20px; height:20px; color:var(--text-3); flex-shrink:0; }
+  .sample-item .t { font-size:13px; color:var(--text); flex:1; }
+  .sample-item .go { font-size:13px; color:var(--primary); }
+
+  .privacy-note { margin-top:18px; font-size:11px; color:var(--text-3); line-height:1.6; text-align:center; }
+
+  /* ===== 解读中 ===== */
+  .analyzing { padding:40px 24px; text-align:center; }
+  .ring-wrap { position:relative; width:150px; height:150px; margin:50px auto 30px; }
+  .ring { width:150px; height:150px; border-radius:50%; border:6px solid var(--primary-soft); border-top-color:var(--primary); animation:spin 1s linear infinite; }
+  .ring-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:var(--primary); }
+  @keyframes spin { to{ transform:rotate(360deg);} }
+  .analyzing h2 { font-size:18px; color:var(--text); margin-bottom:8px; }
+  .analyzing .sub { font-size:13px; color:var(--text-3); margin-bottom:30px; }
+  .step-list { text-align:left; }
+  .step { display:flex; align-items:center; gap:12px; padding:12px 0; }
+  .step .dot {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600;
+    background:var(--border); color:var(--text-3);
+  }
+  .step.done .dot { background:var(--ok); color:#fff; }
+  .step.active .dot { background:var(--primary); color:#fff; animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(30,111,255,.4);} 50%{box-shadow:0 0 0 8px rgba(30,111,255,0);} }
+  .step .label { font-size:14px; color:var(--text); }
+  .step.done .label, .step.active .label { font-weight:600; }
+  .step .desc { font-size:12px; color:var(--text-3); }
+  .step .stat { font-size:11px; color:var(--text-3); margin-left:auto; }
+
+  /* ===== 结果页：结论屏 ===== */
+  .result-hero { padding:20px 16px 16px; background:var(--card); }
+  .result-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .result-tag { font-size:12px; color:var(--primary); background:var(--primary-soft); padding:4px 10px; border-radius:20px; font-weight:600; }
+  .score-box {
+    border-radius:var(--radius); padding:18px; text-align:center; margin-bottom:16px;
+  }
+  .score-box.danger { background:linear-gradient(135deg,#E5484D,#F26A6E); color:#fff; }
+  .score-box .big { font-size:44px; font-weight:800; line-height:1; }
+  .score-box .score-label { font-size:13px; margin-top:6px; opacity:.95; }
+  .score-box .score-sub { font-size:12px; margin-top:4px; opacity:.85; }
+
+  .conclusion-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; margin-bottom:16px; border:1px solid var(--border); }
+  .conclusion-card .t { font-size:13px; color:var(--text-3); margin-bottom:8px; font-weight:600; }
+  .conclusion-text { font-size:15px; color:var(--text); line-height:1.7; font-weight:500; }
+  .conclusion-text em { color:var(--danger); font-style:normal; font-weight:700; }
+
+  .money-card {
+    background:linear-gradient(135deg,#FFF3E6,#FFE9D6); border:1px solid #FFD9B8;
+    border-radius:var(--radius); padding:16px; margin-bottom:16px;
+  }
+  .money-card .t { font-size:12px; color:#B2592A; margin-bottom:4px; font-weight:600; }
+  .money-card .amount { font-size:28px; font-weight:800; color:#D2691E; }
+  .money-card .amount small { font-size:14px; font-weight:600; }
+  .money-card .d { font-size:12px; color:#B2592A; margin-top:4px; }
+
+  .key-points { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; }
+  .key-points .t { font-size:13px; color:var(--text-3); margin-bottom:10px; font-weight:600; }
+  .kp-item { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); align-items:flex-start; }
+  .kp-item:last-child { border-bottom:none; }
+  .kp-item .badge { flex-shrink:0; width:20px; height:20px; border-radius:6px; font-size:12px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .kp-item.danger .badge { background:var(--danger); }
+  .kp-item.warn .badge { background:var(--warn); }
+  .kp-item .txt { font-size:13px; color:var(--text); line-height:1.6; }
+
+  .btn-area { padding:18px 16px; }
+  .btn-scroll { background:#fff; color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:14px; font-size:15px; font-weight:600; width:100%; cursor:pointer; }
+
+  /* ===== 结果页：风险信号列表 ===== */
+  .signal-head { padding:16px; background:var(--card); border-bottom:1px solid var(--border); }
+  .signal-head .t { font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .signal-head .d { font-size:12px; color:var(--text-3); line-height:1.5; }
+  .signal-list { padding:12px 16px 20px; }
+  .signal {
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    margin-bottom:12px; overflow:hidden; border-left:4px solid var(--border);
+  }
+  .signal.level-danger { border-left-color:var(--danger); }
+  .signal.level-warn { border-left-color:var(--warn); }
+  .signal.level-ok { border-left-color:var(--ok); }
+  .signal-header { padding:14px; cursor:pointer; display:flex; gap:12px; align-items:flex-start; }
+  .signal .lvl {
+    flex-shrink:0; width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+  }
+  .signal.level-danger .lvl { background:var(--danger-soft); color:var(--danger); }
+  .signal.level-warn .lvl { background:var(--warn-soft); color:var(--warn); }
+  .signal.level-ok .lvl { background:var(--ok-soft); color:var(--ok); }
+  .signal .lvl svg { width:18px; height:18px; }
+  .signal-title { flex:1; }
+  .signal-title .n { font-size:14px; font-weight:600; color:var(--text); line-height:1.5; }
+  .signal-title .hl { color:var(--danger); font-weight:700; }
+  .signal-title .hl.warn { color:var(--warn); }
+  .signal-title .hl.ok { color:var(--ok); }
+  .signal-title .one { font-size:12px; color:var(--text-2); margin-top:4px; line-height:1.5; }
+  .signal .chev { flex-shrink:0; color:var(--text-3); margin-top:4px; transition:transform .25s; }
+  .signal.open .chev { transform:rotate(180deg); }
+  .signal-body { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .signal.open .signal-body { max-height:600px; }
+  .signal-inner { padding:0 14px 16px; }
+  .signal-inner .sec { margin-top:12px; }
+  .signal-inner .sec .st { font-size:12px; font-weight:700; color:var(--text-2); margin-bottom:6px; display:flex; align-items:center; gap:5px; }
+  .signal-inner .sec .st svg { width:14px; height:14px; }
+  .legal-box { background:var(--primary-soft); border-radius:10px; padding:12px; }
+  .legal-box .law { font-size:13px; color:var(--primary-dark); font-weight:600; margin-bottom:4px; }
+  .legal-box .desc { font-size:12px; color:var(--text-2); line-height:1.6; }
+  .steps { display:flex; flex-direction:column; gap:8px; }
+  .step-op { display:flex; gap:10px; align-items:flex-start; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .step-op .num { flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .step-op .tx { font-size:13px; color:var(--text); line-height:1.5; }
+  .step-op .tx .em { color:var(--primary); font-weight:600; }
+  .term-explain { margin-top:10px; display:flex; gap:6px; align-items:flex-start; background:#F7F8FA; border-radius:10px; padding:10px 12px; }
+  .term-explain .qi { flex-shrink:0; width:16px; height:16px; color:var(--text-3); margin-top:1px; }
+  .term-explain .t { font-size:12px; color:var(--text-2); line-height:1.6; }
+  .term-explain .t b { color:var(--primary); font-weight:600; }
+
+  /* 历史 */
+  .hist-empty { text-align:center; padding:80px 30px; color:var(--text-3); }
+  .hist-empty svg { width:52px; height:52px; margin-bottom:14px; opacity:.4; }
+  .hist-empty .n { font-size:14px; margin-bottom:4px; }
+  .hist-empty .d { font-size:12px; }
+  .hist-list { padding:12px 16px; }
+  .hist-item { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
+  .hist-item .ic { width:38px; height:38px; border-radius:10px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hist-item .ic svg { width:20px; height:20px; color:var(--primary); }
+  .hist-item .info { flex:1; }
+  .hist-item .info .n { font-size:14px; font-weight:600; color:var(--text); }
+  .hist-item .info .d { font-size:12px; color:var(--text-3); margin-top:2px; }
+  .hist-item .stat { font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; }
+  .hist-item .stat.danger { background:var(--danger-soft); color:var(--danger); }
+  .hist-item .stat.warn { background:var(--warn-soft); color:var(--warn); }
+  .hist-item .stat.ok { background:var(--ok-soft); color:var(--ok); }
+
+  /* 我的 */
+  .mine-head { background:var(--card); padding:24px 16px; display:flex; align-items:center; gap:14px; }
+  .avatar { width:56px; height:56px; border-radius:50%; background:var(--primary); color:#fff; font-size:22px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .mine-head .n { font-size:17px; font-weight:700; color:var(--text); }
+  .mine-head .d { font-size:12px; color:var(--text-3); margin-top:2px; }
+  .mine-group { margin:14px 16px; background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .mine-row { display:flex; align-items:center; gap:12px; padding:15px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .mine-row:last-child { border-bottom:none; }
+  .mine-row .ic { width:20px; height:20px; color:var(--text-2); }
+  .mine-row .n { flex:1; font-size:14px; color:var(--text); }
+  .mine-row .go { color:var(--text-3); font-size:16px; }
+  .disclaimer-box { margin:14px 16px; background:var(--warn-soft); border:1px solid #FFD9B8; border-radius:10px; padding:12px; font-size:11px; color:#B2592A; line-height:1.6; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- 状态栏 -->
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+
+  <!-- ================= 首页 ================= -->
+  <div class="screen active" id="screen-home">
+    <div class="home-hero">
+      <div class="home-logo">🛡️ 合同翻译官</div>
+      <h1>签字前，先查一查</h1>
+      <p>拍照识别合同，AI 帮你把条款<br>翻译成大白话，找出风险点</p>
+    </div>
+
+    <div class="upload-card">
+      <div class="big-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+      </div>
+      <h3>拍照或上传合同</h3>
+      <div class="sub">支持拍照 / 相册 / 文件 · 自动识别合同类型</div>
+      <div class="badge-row">
+        <span class="badge">自动识别场景</span>
+        <span class="badge">3 分钟出报告</span>
+      </div>
+      <button class="btn-primary" onclick="go('screen-upload')">上传合同，立即体检</button>
+    </div>
+
+    <div class="home-section">
+      <h4>想先了解，能查什么？</h4>
+      <div class="scene-grid">
+        <div class="scene-item" onclick="go('screen-upload')">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#1E6FFF" stroke-width="2" stroke-linecap="round"><path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M5 17H3v-4l2-5h9l4 5h1a2 2 0 0 1 2 2v2h-2"/><circle cx="12" cy="9" r="1"/></svg></div>
+          <div class="n">购车贷款</div>
+          <div class="d">真实利率 · 隐形费用</div>
+        </div>
+        <div class="scene-item" onclick="go('screen-upload')">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#1E6FFF" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+          <div class="n">消费贷</div>
+          <div class="d">年化利率 · 提前还款</div>
+        </div>
+        <div class="scene-item" onclick="go('screen-upload')">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#1E6FFF" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <div class="n">保险</div>
+          <div class="d">保障责任 · 免责条款</div>
+        </div>
+        <div class="scene-item" onclick="go('screen-upload')">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#1E6FFF" stroke-width="2" stroke-linecap="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-8"/><path d="M15 21v-8"/></svg></div>
+          <div class="n">其他合同</div>
+          <div class="d">租房 · 服务合同</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-tip">
+      <div class="tip-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div>仅用于理解合同、识别风险，不构成法律 / 理财 / 投资建议。重大决策请咨询持牌专业人士。</div>
+    </div>
+  </div>
+
+  <!-- ================= 上传页 ================= -->
+  <div class="screen" id="screen-upload">
+    <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>上传合同</div>
+    <div class="upload-body">
+      <div class="upload-options">
+        <div class="upload-opt" onclick="startAnalyze()">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div class="n">拍照识别</div>
+          <div class="d">拍摄合同页面</div>
+        </div>
+        <div class="upload-opt" onclick="startAnalyze()">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5L7 22"/></svg></div>
+          <div class="n">相册</div>
+          <div class="d">选择已有图片</div>
+        </div>
+        <div class="upload-opt" onclick="startAnalyze()">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <div class="n">文件</div>
+          <div class="d">上传 PDF / 图片</div>
+        </div>
+      </div>
+
+      <div class="sample-card">
+        <h4>没有合同？先看示例</h4>
+        <div class="sample-list">
+          <div class="sample-item" onclick="startAnalyze()">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg></div>
+            <div class="t">示例：消费贷款合同</div>
+            <div class="go">体验 ›</div>
+          </div>
+          <div class="sample-item" onclick="startAnalyze()">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+            <div class="t">示例：车险条款</div>
+            <div class="go">体验 ›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="privacy-note">🔒 文件加密存储 · 数据仅用于本次解读 · 可随时删除 · 不用于模型训练</div>
+    </div>
+  </div>
+
+  <!-- ================= 解读中 ================= -->
+  <div class="screen" id="screen-analyzing">
+    <div class="nav-bar"><div class="back hidden">‹</div>AI 合同解读中</div>
+    <div class="analyzing">
+      <div class="ring-wrap">
+        <div class="ring"></div>
+        <div class="ring-center" id="ringPct">0%</div>
+      </div>
+      <h2>正在为你体检合同</h2>
+      <div class="sub">大约需要 1 分钟，请稍候…</div>
+      <div class="step-list">
+        <div class="step done" id="st1"><div class="dot">✓</div><div><div class="label">识别合同文本</div><div class="desc">OCR 识别条款内容</div></div><div class="stat">完成</div></div>
+        <div class="step active" id="st2"><div class="dot" id="st2dot">2</div><div><div class="label">判断合同类型</div><div class="desc">识别消费贷 / 保险 / 租房…</div></div><div class="stat" id="st2stat">进行中</div></div>
+        <div class="step" id="st3"><div class="dot">3</div><div><div class="label">测算关键数字</div><div class="desc">真实年化利率 · 费用测算</div></div><div class="stat">等待</div></div>
+        <div class="step" id="st4"><div class="dot">4</div><div><div class="label">生成风险报告</div><div class="desc">风险信号 · 权益雷达</div></div><div class="stat">等待</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 结果页：结论屏 ================= -->
+  <div class="screen" id="screen-result">
+    <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>合同体检报告</div>
+
+    <div class="result-hero">
+      <div class="result-head">
+        <span class="result-tag">消费贷 · 贷款合同</span>
+        <span style="font-size:12px;color:var(--text-3)">2026-08-26</span>
+      </div>
+      <div class="score-box danger">
+        <div class="big">54</div>
+        <div class="score-label">健康指数 · 偏低</div>
+        <div class="score-sub">发现 2 个高风险点，建议签字前重点关注</div>
+      </div>
+    </div>
+
+    <div style="padding:0 16px">
+      <div class="conclusion-card">
+        <div class="t">一句话结论</div>
+        <div class="conclusion-text">这份贷款<span style="color:var(--primary)">表面月费率 1.5%</span>，但算上手续费，<em>实际年化利率高达 36%</em>，约为银行报价利率的 2 倍。</div>
+      </div>
+
+      <div class="money-card">
+        <div class="t">按此方案，你可能会多付</div>
+        <div class="amount">¥4,560 <small>/ 3年</small></div>
+        <div class="d">比按真实年化 15% 计息，3 年总共多还约 4,560 元</div>
+      </div>
+
+      <div class="key-points">
+        <div class="t">最该注意的 3 个点</div>
+        <div class="kp-item danger"><div class="badge">1</div><div class="txt"><b>实际利率超标</b>：年化 36%，超法定 24% 保护线，36% 部分可主张调整。</div></div>
+        <div class="kp-item danger"><div class="badge">2</div><div class="txt"><b>可能被"砍头息"</b>：借款 10 万，扣服务费后到手仅 9.5 万。</div></div>
+        <div class="kp-item warn"><div class="badge">3</div><div class="txt"><b>提前还款收 3% 违约金</b>，且前 12 期不得提前还款。</div></div>
+      </div>
+    </div>
+
+    <div class="btn-area">
+      <button class="btn-scroll" onclick="go('screen-signals')">查看详细风险报告 ↓</button>
+    </div>
+  </div>
+
+  <!-- ================= 结果页：风险信号列表 ================= -->
+  <div class="screen" id="screen-signals">
+    <div class="nav-bar"><div class="back" onclick="go('screen-result')">‹</div>风险信号 · 5 项</div>
+
+    <div class="signal-head">
+      <div class="t">这份合同的风险信号</div>
+      <div class="d">按严重程度排序。每一条用大白话告诉你：<b>风险是什么、有什么依据、你可以怎么做</b>。</div>
+    </div>
+
+    <div class="signal-list">
+      <!-- 信号1：利率超标 -->
+      <div class="signal level-danger">
+        <div class="signal-header" onclick="toggle(this)">
+          <div class="lvl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+          <div class="signal-title">
+            <div class="n">你的借款<span class="hl">实际年化利率 36%</span>，远超 24% 红线</div>
+            <div class="one">合同写的是"月费率 1.5%"，看似不高，实际年化却是报价的 2 倍</div>
+          </div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="signal-body"><div class="signal-inner">
+          <div class="sec">
+            <div class="st">📋 法律依据</div>
+            <div class="legal-box">
+              <div class="law">《民间借贷司法解释》第 25 条</div>
+              <div class="desc">年利率超过 <b>24%</b> 的部分，出借人请求支付，法院不予支持；超过 36% 的部分已支付可要求返还。</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="st">🛠️ 你可以怎么做</div>
+            <div class="steps">
+              <div class="step-op"><div class="num">1</div><div class="tx">核对还款计划表，确认每期还款金额与本合同一致</div></div>
+              <div class="step-op"><div class="num">2</div><div class="tx">对超过 <span class="em">24%</span> 的部分主张调整，超过 <span class="em">36%</span> 的部分可要求返还</div></div>
+              <div class="step-op"><div class="num">3</div><div class="tx">协商不成，可向金融监管部门投诉或咨询专业律师</div></div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="term-explain">
+              <div class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></div>
+              <div class="t"><b>什么是"实际年化利率"？</b>就是把各种手续费、服务费都算进去后，你这笔钱真实的借款成本。它比合同上写的"月利率"更能反映你多付了多少。</div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 信号2：砍头息 -->
+      <div class="signal level-danger">
+        <div class="signal-header" onclick="toggle(this)">
+          <div class="lvl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+          <div class="signal-title">
+            <div class="n">可能被"砍头息"：<span class="hl">借 10 万，到手仅 9.5 万</span></div>
+            <div class="one">合同预扣了 5,000 元"服务费"，这部分实际是你的额外成本</div>
+          </div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="signal-body"><div class="signal-inner">
+          <div class="sec">
+            <div class="st">📋 法律依据</div>
+            <div class="legal-box">
+              <div class="law">《民法典》第 670 条</div>
+              <div class="desc">借款的利息不得预先在本金中扣除。利息预先在本金中扣除的，应当按照<b>实际借款数额</b>返还借款并计算利息。</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="st">🛠️ 你可以怎么做</div>
+            <div class="steps">
+              <div class="step-op"><div class="num">1</div><div class="tx">主张按实际到手 <span class="em">9.5 万</span> 计算利息，而非 10 万</div></div>
+              <div class="step-op"><div class="num">2</div><div class="tx">要求对方提供费用明细，核对是否合法合规</div></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 信号3：提前还款违约金 -->
+      <div class="signal level-warn">
+        <div class="signal-header" onclick="toggle(this)">
+          <div class="lvl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+          <div class="signal-title">
+            <div class="n">提前还款要收 <span class="hl warn">3% 违约金</span>，前 12 期还不能提前还</div>
+            <div class="one">如果你打算 1 年内还清，这项条款对你影响较大</div>
+          </div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="signal-body"><div class="signal-inner">
+          <div class="sec">
+            <div class="st">📋 提示</div>
+            <div class="legal-box">
+              <div class="law">格式条款提示义务</div>
+              <div class="desc">此类限制提前还款的条款属<span style="color:var(--primary-dark);font-weight:600">与你有重大利害关系</span>的条款，机构须显著提示。未充分提示的，你可主张不成为合同内容。</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="st">🛠️ 你可以怎么做</div>
+            <div class="steps">
+              <div class="step-op"><div class="num">1</div><div class="tx">签字前，计算提前还款总成本，衡量是否划算</div></div>
+              <div class="step-op"><div class="num">2</div><div class="tx">若未被告知此项，可主张该条款未充分提示</div></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 信号4：捆绑附加 -->
+      <div class="signal level-warn">
+        <div class="signal-header" onclick="toggle(this)">
+          <div class="lvl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+          <div class="signal-title">
+            <div class="n">捆绑了<span class="hl warn">会员服务 / 附加产品</span>，你可能并不需要</div>
+            <div class="one">合同默认勾选"尊享会员"，每月自动扣费 30 元</div>
+          </div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="signal-body"><div class="signal-inner">
+          <div class="sec">
+            <div class="st">📋 法律依据</div>
+            <div class="legal-box">
+              <div class="law">《消费者权益保护法》第 9 条</div>
+              <div class="desc">消费者享有<b>自主选择商品或服务</b>的权利。强制搭售或默认勾选的行为，侵犯消费者自主选择权。</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="st">🛠️ 你可以怎么做</div>
+            <div class="steps">
+              <div class="step-op"><div class="num">1</div><div class="tx">要求取消默认勾选的附加服务</div></div>
+              <div class="step-op"><div class="num">2</div><div class="tx">若已被扣费，可主张退还</div></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 信号5：逾期罚息合规 -->
+      <div class="signal level-ok">
+        <div class="signal-header" onclick="toggle(this)">
+          <div class="lvl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></div>
+          <div class="signal-title">
+            <div class="n">逾期罚息 <span class="hl ok">在规定范围内</span>，这条没问题</div>
+            <div class="one">罚息按约定利率上浮 50%，未超法定上限，予以通过</div>
+          </div>
+          <div class="chev">⌄</div>
+        </div>
+        <div class="signal-body"><div class="signal-inner">
+          <div class="sec">
+            <div class="st">✅ 说明</div>
+            <div class="legal-box">
+              <div class="law">通过检查</div>
+              <div class="desc">此条款未发现侵害你权益的问题。继续按时还款即可。</div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="disclaimer-box">⚠️ 以上内容由 AI 生成，仅用于帮助你理解合同，不构成法律 / 理财 / 投资建议。重大决策请咨询持牌专业人士。</div>
+    </div>
+  </div>
+
+  <!-- ================= 历史 ================= -->
+  <div class="screen" id="screen-history">
+    <div class="nav-bar"><div class="back hidden">‹</div>历史记录</div>
+    <div class="hist-list">
+      <div class="hist-item" onclick="go('screen-result')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+        <div class="info"><div class="n">消费贷 · 贷款合同</div><div class="d">08-26 10:24 · 消费贷</div></div>
+        <div class="stat danger">2 高风险</div>
+      </div>
+      <div class="hist-item" onclick="go('screen-result')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/></svg></div>
+        <div class="info"><div class="n">购车贷款 · 合同</div><div class="d">08-25 19:02 · 购车</div></div>
+        <div class="stat warn">1 中风险</div>
+      </div>
+      <div class="hist-item" onclick="go('screen-result')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="info"><div class="n">百万医疗险 · 保单</div><div class="d">08-20 14:30 · 保险</div></div>
+        <div class="stat ok">检查通过</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 我的 ================= -->
+  <div class="screen" id="screen-mine">
+    <div class="nav-bar"><div class="back hidden">‹</div>我的</div>
+    <div class="mine-head">
+      <div class="avatar">柯</div>
+      <div><div class="n">柯同学</div><div class="d">合同体检用户</div></div>
+    </div>
+    <div class="mine-group">
+      <div class="mine-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div class="n">隐私与数据安全</div><div class="go">›</div></div>
+      <div class="mine-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></div><div class="n">法律与免责声明</div><div class="go">›</div></div>
+      <div class="mine-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/></svg></div><div class="n">关于合同翻译官</div><div class="go">›</div></div>
+      <div class="mine-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div><div class="n">意见反馈</div><div class="go">›</div></div>
+    </div>
+    <div class="disclaimer-box">合同翻译官仅用于理解合同与风险识别，不提供法律 / 理财 / 投资建议，不做产品比较与购买推荐。您的合同数据加密存储，仅用于本次解读，可随时删除，不用于模型训练。</div>
+  </div>
+
+  <!-- ===== 底部 Tab ===== -->
+  <div class="tabbar">
+    <div class="tab active" id="tab-home" onclick="switchTab('home')">
+      <div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+      <span>首页</span>
+    </div>
+    <div class="tab" id="tab-history" onclick="switchTab('history')">
+      <div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg></div>
+      <span>历史</span>
+    </div>
+    <div class="tab" id="tab-mine" onclick="switchTab('mine')">
+      <div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <span>我的</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 页面切换（保留 Tab 主页/历史/我的）
+  function go(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo({top:0, behavior:'instant'});
+  }
+
+  // 底部 Tab 切换
+  function switchTab(name) {
+    const map = { home:'screen-home', history:'screen-history', mine:'screen-mine' };
+    ['home','history','mine'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('active', k===name));
+    go(map[name]);
+  }
+
+  // 信号卡手风琴
+  function toggle(el) {
+    const card = el.closest('.signal');
+    card.classList.toggle('open');
+  }
+
+  // 解读中：4 步进度动画 + 自动跳结果
+  function startAnalyze() {
+    go('screen-analyzing');
+    const sts = ['st1','st2','st3','st4'];
+    const pctEl = document.getElementById('ringPct');
+    let step = 0;
+    // 重置
+    document.querySelectorAll('.step').forEach(s=>{ s.classList.remove('done','active'); s.querySelector('.dot').textContent = s.id.slice(2); });
+    sts.forEach((id,i)=>{ if(i<1){ const d=document.getElementById(id); d.classList.add('done'); d.querySelector('.dot').textContent='✓'; } });
+    const st2 = document.getElementById('st2'); st2.classList.add('active');
+    const doStep = (i) => {
+      if (i >= sts.length) { finish(); return; }
+      const el = document.getElementById(sts[i]);
+      el.classList.remove('active');
+      if (el === st2) { el.querySelector('.dot').textContent = '✓'; el.querySelector('.stat').textContent='完成'; }
+      el.classList.add('done');
+      el.querySelector('.dot').textContent = '✓';
+      const nxt = sts[i+1];
+      if (nxt) { const ne = document.getElementById(nxt); ne.classList.add('active'); document.getElementById(nxt+'stat') && (document.getElementById(nxt+'stat').textContent='进行中'); }
+      const pct = Math.min(100, Math.round((i+1)/4*100));
+      pctEl.textContent = pct + '%';
+      setTimeout(()=>doStep(i+1), 700);
+    };
+    setTimeout(()=>doStep(1), 700);
+    let fin=0;
+    function finish(){ fin=1; pctEl.textContent='100%'; setTimeout(()=>go('screen-result'), 500); }
+  }
+</script>
+</body>
+</html>

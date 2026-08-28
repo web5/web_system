@@ -11,6 +11,7 @@ module.exports = {
     { name: 'web-auth',          cwd: __dirname + '/servers/auth-service',  script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-user',          cwd: __dirname + '/servers/user-service',  script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-ai',            cwd: __dirname + '/servers/ai-service',    script: 'dist/main.js', max_memory_restart: '512M' },
+    { name: 'web-ai-agent',      cwd: __dirname + '/servers/ai-agent',      script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-system',        cwd: __dirname + '/servers/system-service', script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-todo',          cwd: __dirname + '/servers/todo-service',  script: 'dist/main.js', max_memory_restart: '512M' },
     { name: 'web-mcp-gateway',   cwd: __dirname + '/servers/mcp-gateway',   script: 'dist/main.js', max_memory_restart: '512M' },

@@ -1,8 +1,9 @@
 ---
-name: cloud-functions
 description: CloudBase function runtime guide for building, deploying, and debugging your own Event Functions or HTTP Functions. This skill should be used when users need application runtime code on CloudBase, not when they are merely calling CloudBase official platform APIs.
-version: 2.21.1
 alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:50:33.131Z
+provider: 
 ---
 
 ## Standalone Install Note

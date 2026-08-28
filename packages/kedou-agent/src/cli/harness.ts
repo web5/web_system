@@ -21,8 +21,6 @@ import {
   ToolRegistry,
   WebSearchTool,
 } from '@kedouai/agent-core';
-import { studyAssistantAgent } from './agents/study-assistant.agent';
-import { devAssistantAgent } from './agents/dev-assistant.agent';
 import { generalAssistantAgent } from './agents/general-assistant.agent';
 
 export interface Harness {
@@ -59,10 +57,8 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   toolRegistry.register(new WriteFileTool());
   toolRegistry.register(new ShellExecTool());
 
-  // Agent
+  // Agent（CLI 只集成通用问答智能体，其它场景的 agent 在服务端，不在此注册）
   const agentRegistry = new AgentRegistry();
-  agentRegistry.register(studyAssistantAgent);
-  agentRegistry.register(devAssistantAgent);
   agentRegistry.register(generalAssistantAgent);
 
   // 记忆 + 引擎（注入 confirm）

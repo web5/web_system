@@ -1,5 +1,8 @@
 export { API_TIMEOUT } from './api';
 
+// 合同翻译官 — 共享类型 / IRR / 法定标准库
+export * from './contract';
+
 // 统一数据模型基础件（规范业务表设计）
 export { AbstractEntity, BigIntEntity, UuidEntity } from './entities/abstract.entity';
 export { User } from './entities/user.entity';

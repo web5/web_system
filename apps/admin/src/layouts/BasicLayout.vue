@@ -33,6 +33,16 @@
           <template #icon><ApiOutlined /></template>
           <span>MCP 管理</span>
         </a-menu-item>
+        <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
+          <template #icon><RobotOutlined /></template>
+          <template #title>Agents</template>
+          <a-menu-item key="agents-runs">
+            <span>运行记录</span>
+          </a-menu-item>
+          <a-menu-item v-if="userStore.hasPermission('agents:manage')" key="agents-defs">
+            <span>定义管理</span>
+          </a-menu-item>
+        </a-sub-menu>
       </a-menu>
     </a-layout-sider>
 
@@ -115,7 +125,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons-vue';
+import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
@@ -139,6 +149,7 @@ const userAvatar = computed(() => {
 const currentTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '工作台', '/bianbian': '变变管理', '/users': '用户管理', '/settings': '系统设置',
+    '/agents': 'Agents',
   };
   const matched = route.matched.find((r) => r.meta.title);
   return (matched?.meta.title as string) || '工作台';
@@ -149,11 +160,16 @@ watch(() => route.path, (path) => {
   else if (path.includes('/settings')) selectedKeys.value = ['settings'];
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
+  else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
+  else if (path.includes('/agents')) selectedKeys.value = ['agents-runs'];
   else selectedKeys.value = ['dashboard'];
 }, { immediate: true });
 
 const handleMenuClick = ({ key }: { key: string }) => {
-  const routes: Record<string, string> = { dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp' };
+  const routes: Record<string, string> = {
+    dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
+    'agents-runs': '/agents', 'agents-defs': '/agents/definitions',
+  };
   router.push(routes[key] || '/dashboard');
 };
 

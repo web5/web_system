@@ -1,0 +1,144 @@
+/* ===== 合同翻译官 - 对话追问页 ===== */
+page {
+  background: #F5F7FA;
+}
+
+.page {
+  min-height: 100vh;
+  background: #F5F7FA;
+  box-sizing: border-box;
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.chat-head {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16rpx;
+}
+.chat-head-text {
+  font-size: 22rpx;
+  color: #9AA1AD;
+}
+
+/* 消息列表 */
+.chat-box {
+  display: flex;
+  flex-direction: column;
+}
+.chat-msg {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+  align-items: flex-start;
+}
+.chat-msg:last-child {
+  margin-bottom: 0;
+}
+.msg-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  font-weight: 700;
+  margin-top: 4rpx;
+}
+.chat-msg.ai .msg-avatar {
+  background: #EAF2FF;
+  color: #1E6FFF;
+}
+.chat-msg.user .msg-avatar {
+  background: #1E6FFF;
+  color: #fff;
+}
+.msg-bubble {
+  flex: 1;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+  color: #1A1F2E;
+  line-height: 1.6;
+  word-break: break-all;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+.chat-msg.user .msg-bubble {
+  background: #EAF2FF;
+}
+.msg-thinking {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  color: #5B6372;
+  font-size: 24rpx;
+}
+.thinking-dots {
+  display: flex;
+  gap: 6rpx;
+}
+.tdot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: #1E6FFF;
+  animation: blink 1.2s infinite;
+}
+.tdot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.tdot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* 底部输入栏（吸底） */
+.chat-input-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 32rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1rpx solid #E8EBF0;
+  box-sizing: border-box;
+}
+.chat-input {
+  flex: 1;
+  background: #F5F7FA;
+  border: 2rpx solid #E8EBF0;
+  border-radius: 40rpx;
+  padding: 18rpx 28rpx;
+  font-size: 26rpx;
+  color: #1A1F2E;
+  height: 80rpx;
+  box-sizing: border-box;
+}
+.chat-input-ph {
+  color: #B7BDC9;
+}
+.chat-send {
+  width: 128rpx;
+  flex-shrink: 0;
+  background: #1E6FFF;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+  padding: 0;
+  height: 80rpx;
+  line-height: 80rpx;
+  border: none;
+}
+.chat-send::after {
+  border: none;
+}
+.chat-send[disabled] {
+  background: #9DBFFF;
+  color: #fff;
+}

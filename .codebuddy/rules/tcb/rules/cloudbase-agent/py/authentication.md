@@ -1,3 +1,11 @@
+---
+description: 
+alwaysApply: false
+enabled: false
+updatedAt: 2026-08-27T07:51:11.563Z
+provider: 
+---
+
 # Authentication and User Context
 
 This guide explains how to implement authentication and manage user context in CloudBase Agent Python SDK using the framework's reserved fields pattern.

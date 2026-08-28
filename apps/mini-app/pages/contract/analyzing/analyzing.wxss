@@ -1,0 +1,185 @@
+/* ===== 合同翻译官 - 解读中 ===== */
+/* 显式覆盖 app.wxss 的全局黑色 page 背景，避免重编译瞬间黑屏 */
+page {
+  background: #fff;
+}
+
+.page {
+  min-height: 100vh;
+  background: #fff;
+  padding: 60rpx 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 转圈 */
+.ring-wrap {
+  position: relative;
+  width: 220rpx;
+  height: 220rpx;
+  margin-bottom: 48rpx;
+}
+.ring {
+  width: 220rpx;
+  height: 220rpx;
+  border-radius: 50%;
+  border: 10rpx solid #EAF2FF;
+  border-top-color: #1E6FFF;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ring-ic {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #EAF2FF;
+  color: #1E6FFF;
+  font-size: 36rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1A1F2E;
+}
+.sub {
+  font-size: 26rpx;
+  color: #9AA1AD;
+  margin-top: 12rpx;
+  margin-bottom: 56rpx;
+}
+
+/* 步骤 */
+.step-list {
+  width: 100%;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 24rpx 0;
+  opacity: 0.5;
+}
+.step.done,
+.step.active {
+  opacity: 1;
+}
+.dot {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: #E8EBF0;
+  color: #9AA1AD;
+  font-size: 26rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.step.done .dot {
+  background: #2E9E5B;
+  color: #fff;
+}
+.step.active .dot {
+  background: #1E6FFF;
+  color: #fff;
+}
+.step-info {
+  display: flex;
+  flex-direction: column;
+}
+.step-n {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1F2E;
+}
+.step-d {
+  font-size: 22rpx;
+  color: #9AA1AD;
+  margin-top: 4rpx;
+}
+
+/* AI 思考中提示 */
+.thinking {
+  margin-top: 56rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+.thinking-dots {
+  display: flex;
+  gap: 12rpx;
+}
+.tdot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #1E6FFF;
+  animation: blink 1.2s infinite;
+}
+.tdot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.tdot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes blink {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1); }
+}
+.thinking-text {
+  font-size: 24rpx;
+  color: #1E6FFF;
+}
+
+/* ===== 流式生成区（AI 逐字写报告） ===== */
+.streaming-box {
+  width: 100%;
+  margin-top: 48rpx;
+  background: #F7F8FA;
+  border: 1rpx solid #E8EBF0;
+  border-radius: 20rpx;
+  padding: 24rpx;
+}
+.streaming-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 16rpx;
+}
+.streaming-dots {
+  display: flex;
+  gap: 8rpx;
+}
+.streaming-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1E6FFF;
+}
+.streaming-scroll {
+  max-height: 360rpx;
+  width: 100%;
+}
+.streaming-text {
+  font-size: 22rpx;
+  color: #5B6372;
+  line-height: 1.7;
+  word-break: break-all;
+  white-space: pre-wrap;
+}

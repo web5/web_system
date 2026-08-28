@@ -52,7 +52,7 @@ export class AgentEngine {
       { role: 'user', content: input.userInput },
     ];
 
-    const toolSchemas = this.toolRegistry.toSchemas(agent.tools);
+    const toolSchemas = await this.toolRegistry.toSchemas(agent.tools);
     let currentConversationId = conversationId;
 
     // 累计本轮对话的 token 消耗（来自大模型返回的 usage）
@@ -65,11 +65,20 @@ export class AgentEngine {
     };
 
     for (let step = 0; step < agent.maxSteps; step++) {
-      let resp: ChatWithToolsResult;
+      let resp: ChatWithToolsResult | undefined;
+      let streamedContent = '';
       try {
-        resp = await client.chatWithTools(messages, toolSchemas, {
+        for await (const ev of client.chatWithToolsStream(messages, toolSchemas, {
           temperature: agent.temperature,
-        });
+        })) {
+          if (ev.type === 'content_delta' && ev.delta) {
+            streamedContent += ev.delta;
+            // 流式透传：模型正在生成最终回答内容，边生成边推给前端逐字渲染
+            yield { type: 'content_delta', content: ev.delta, step };
+          } else if (ev.type === 'done' && ev.result) {
+            resp = ev.result;
+          }
+        }
       } catch (error) {
         this.logger.error(`Agent ${agent.id} 模型调用失败: ${(error as Error).message}`);
         yield {
@@ -77,6 +86,10 @@ export class AgentEngine {
           content: `模型调用失败: ${(error as Error).message}`,
           usage: usageOf(accPrompt, accCompletion),
         };
+        return;
+      }
+      if (!resp) {
+        yield { type: 'error', content: '模型未返回结果' };
         return;
       }
       addUsage(resp.usage);
