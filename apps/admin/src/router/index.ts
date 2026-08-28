@@ -72,15 +72,27 @@ const routes: RouteRecordRaw[] = [
         children: [
           {
             path: '',
-            name: 'AgentList',
-            component: () => import('@/views/Agents/AgentList.vue'),
-            meta: { title: 'Agent 运行记录', permission: 'agents:view' },
+            name: 'AgentOverview',
+            component: () => import('@/views/Agents/AgentOverview.vue'),
+            meta: { title: 'Agent 概览', permission: 'agents:view' },
           },
           {
-            path: ':id',
+            path: 'runs/:agentId',
+            name: 'AgentRuns',
+            component: () => import('@/views/Agents/AgentRuns.vue'),
+            meta: { title: 'Agent 对话记录', permission: 'agents:view' },
+          },
+          {
+            path: 'runs/:agentId/run/:id',
             name: 'AgentRunDetail',
             component: () => import('@/views/Agents/AgentRunDetail.vue'),
             meta: { title: 'Run 详情', permission: 'agents:view' },
+          },
+          {
+            path: 'definitions',
+            name: 'AgentDefList',
+            component: () => import('@/views/Agents/AgentDefList.vue'),
+            meta: { title: 'Agent 定义管理', permission: 'agents:manage' },
           },
         ],
       },

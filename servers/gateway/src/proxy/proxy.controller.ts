@@ -276,6 +276,16 @@ export class ProxyController {
     return this.proxyService.getAgentRunsProxy()(req, res);
   }
 
+  // Agent 定义管理（/api/agent-defs/* → ai-service）
+  @All('agent-defs')
+  proxyAgentDefsExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentDefsProxy()(req, res);
+  }
+  @All('agent-defs/:path(*)')
+  proxyAgentDefsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAgentDefsProxy()(req, res);
+  }
+
   // 精确匹配 /api/bianbian（无尾斜杠）
   @All('bianbian')
   proxyBianbianExact(@Req() req: Request, @Res() res: Response) {

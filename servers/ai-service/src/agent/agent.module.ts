@@ -1,4 +1,4 @@
-import { Module, OnModuleInit, Logger, Provider } from '@nestjs/common';
+import { Module, OnModuleInit, OnModuleDestroy, Logger, Provider } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConversationModule } from '../conversation/conversation.module';
 import { ConversationMemory } from './memory/conversation-memory';
@@ -7,6 +7,7 @@ import { ImageGenClient } from '../common/http/image-gen.client';
 import { studyAssistantAgent } from './agents/study-assistant.agent';
 import { bianbianAgent } from './agents/bianbian.agent';
 import { AgentLogModule } from '../agent-log/agent-log.module';
+import { AgentDefSyncService } from './agent-def-sync.service';
 import {
   AgentEngine,
   AgentRunner,
@@ -79,26 +80,34 @@ const runnerProvider: Provider = {
     ConversationMemory,
     ImageGenClient,
     ImageGenTool,
+    AgentDefSyncService,
   ],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry],
 })
-export class AgentModule implements OnModuleInit {
+export class AgentModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgentModule.name);
 
   constructor(
     private readonly toolRegistry: ToolRegistry,
     private readonly agentRegistry: AgentRegistry,
     private readonly imageGenTool: ImageGenTool,
+    private readonly agentDefSync: AgentDefSyncService,
   ) {}
 
   onModuleInit(): void {
     // 注册 ai-service 特有工具（生图）
     this.toolRegistry.register(this.imageGenTool);
 
-    // 注册内置 Agent 定义
-    this.agentRegistry.register(studyAssistantAgent);
-    this.agentRegistry.register(bianbianAgent);
-
+    // 先注册代码内置 Agent 定义（upsert 兜底，幂等不抛重复）
+    this.agentRegistry.upsert(studyAssistantAgent);
+    this.agentRegistry.upsert(bianbianAgent);
     this.logger.log('Agent harness（agent-core）工具与 Agent 定义注册完成');
+
+    // 再启动 DB 定义同步：用 published 定义覆盖本地（DB 优先于代码兜底），并开启 30s 轮询
+    this.agentDefSync.start();
+  }
+
+  onModuleDestroy(): void {
+    this.agentDefSync.stop();
   }
 }

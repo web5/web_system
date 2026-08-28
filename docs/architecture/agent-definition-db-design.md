@@ -225,6 +225,25 @@ admin 编辑 systemPrompt → 存 draft → 点"发布"（version+1）
 
 > 决策记录：P1（30s 轮询自动生效）；库放 ai-service；迁移完删除代码定义。
 
+**一期实施状态（2026-08）**：已完成并通过端到端验证。关键产出：
+- `packages/agent-core/src/registry/agent.registry.ts`：新增 `upsert()` / `unregister()`
+- `servers/ai-service/src/agent-def/`：`AgentDefinitionEntity` + `AgentDefinitionVersionEntity` + `AgentDefService`（CRUD/发布/启停/版本/回滚/seed）+ `AgentDefController`(admin) + `AgentDefInternalController`(internal)
+- `servers/ai-service/src/agent/agent-def-sync.service.ts` 与 `servers/ai-agent/src/agent/agent-def-sync.service.ts`：启动拉取 + 30s 轮询 `upsert`
+- `servers/gateway`：新增 `/api/agent-defs/*` → ai-service 代理
+- `apps/admin`：Agents 菜单拆「运行记录 / 定义管理」；`AgentDefList.vue` 定义管理页；`api/agent-defs.ts`
+- 权限：`packages/types` 新增 `agents:manage`
+- seed：启动时把 contract-risk / study-assistant / bianbian 三个内置定义写入 DB（空表时）
+- 构建验证：ai-service / ai-agent / gateway `nest build` 通过；admin `vue-tsc`（仅 2 个既有 `@web-system/shared` 解析报错，非本次改动引入）
+- 部署：ai-agent 已纳入 PM2（`ecosystem.config.cjs` 新增 `web-ai-agent`）
+
+**端到端验证（2026-08-28，通过）**：
+1. 通过 admin 接口（gateway `/api/agent-defs`，JWT 鉴权）把 contract-risk 的 systemPrompt 追加 `【E2E验证-20260828】` 标记并发布 → 版本 v1→v2
+2. 等 ai-agent 30s 轮询后，触发一次 `agent/run`
+3. 查询 `agent_runs` 详情，确认该 run 的 `systemPrompt` 快照含 E2E 标记 → **证明改 prompt 后运行时生效（无需重启）**
+4. 回滚 contract-risk 到 v1 内容（发布为 v3，无标记），正式 prompt 干净
+
+> ⚠️ 收尾待办：seed 成功后，删除各服务代码里的 `*.agent.ts` 定义常量（`contract-risk.agent.ts` / `study-assistant.agent.ts` / `bianbian.agent.ts`），让 DB 成为唯一事实源。此项需在重启服务确认 DB 定义生效后再执行。
+
 ### 二期：工具配置化 + MCP 化（独立工程，单独设计）
 
 **背景**：一期只配置化了 `AgentDefinition`（prompt / model / tools 数组 / memory）。工具的**元数据**（name / description / 参数 schema）和**实现**仍是代码。

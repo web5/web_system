@@ -110,7 +110,8 @@ function stepColor(type: string) {
   return 'gray';
 }
 function goBack() {
-  router.push({ name: 'AgentList' });
+  const agentId = String(route.params.agentId || '');
+  router.push({ name: 'AgentRuns', params: { agentId } });
 }
 
 async function load() {

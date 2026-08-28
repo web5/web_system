@@ -131,10 +131,11 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard' },
   'mcp:view':       { code: 'mcp:view',       name: 'MCP 管理',     group: 'mcp' },
   'agents:view':    { code: 'agents:view',    name: 'Agents 对话',  group: 'mcp' },
+  'agents:manage':  { code: 'agents:manage',  name: 'Agent 定义管理', group: 'mcp' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   admin:  Object.keys(PERMISSIONS),
-  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view'],
-  viewer: ['dashboard:view', 'logs:view', 'bianbian:view'],
+  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view', 'agents:view', 'agents:manage'],
+  viewer: ['dashboard:view', 'logs:view', 'bianbian:view', 'agents:view'],
 };

@@ -1,4 +1,4 @@
-import { Module, OnModuleInit, Logger, Provider } from '@nestjs/common';
+import { Module, OnModuleInit, OnModuleDestroy, Logger, Provider } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AgentEngine,
@@ -22,6 +22,7 @@ import { AgentController } from './agent.controller';
 import { DbConversationMemory } from './memory/db-conversation-memory';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
+import { AgentDefSyncService } from './agent-def-sync.service';
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -84,6 +85,7 @@ const runnerProvider: Provider = {
     runnerProvider,
     DbConversationMemory,
     AgentRunPusher,
+    AgentDefSyncService,
     // 合同风险场景特有
     ContractRuleTool,
     ContractIrrTool,
@@ -93,7 +95,7 @@ const runnerProvider: Provider = {
   controllers: [AgentController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],
 })
-export class AgentModule implements OnModuleInit {
+export class AgentModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgentModule.name);
 
   constructor(
@@ -104,6 +106,7 @@ export class AgentModule implements OnModuleInit {
     private readonly contractCleanerTool: ContractCleanerTool,
     private readonly contractBenchmarkTool: ContractBenchmarkTool,
     private readonly mcpService: McpService,
+    private readonly agentDefSync: AgentDefSyncService,
   ) {}
 
   onModuleInit(): void {
@@ -113,8 +116,8 @@ export class AgentModule implements OnModuleInit {
     this.toolRegistry.register(this.contractIrrTool);
     this.toolRegistry.register(this.contractBenchmarkTool);
 
-    // 注册 Agent 定义
-    this.agentRegistry.register(contractRiskAgent);
+    // 注册代码内置 Agent 定义（upsert 兜底，幂等不抛重复）
+    this.agentRegistry.upsert(contractRiskAgent);
 
     // 演示"MCP 工具作为远程插件懒加载接入"（配置了 MCP_GATEWAY_URL 才生效）
     this.registerMcpTools();
@@ -122,6 +125,13 @@ export class AgentModule implements OnModuleInit {
     this.logger.log(
       'Agent harness（agent-core）工具与 Agent 定义注册完成: contract-risk',
     );
+
+    // 再启动 DB 定义同步：用 published 定义覆盖本地（DB 优先），并开启 30s 轮询
+    this.agentDefSync.start();
+  }
+
+  onModuleDestroy(): void {
+    this.agentDefSync.stop();
   }
 
   /** 通过 MCP 接入远程工具（懒加载，作为"一切皆插件"的演示） */

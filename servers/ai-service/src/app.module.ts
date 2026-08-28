@@ -12,6 +12,7 @@ import { TtsModule } from './tts/tts.module';
 import { AuthModule } from './auth/auth.module';
 import { AgentModule } from './agent/agent.module';
 import { AgentLogModule } from './agent-log/agent-log.module';
+import { AgentDefModule } from './agent-def/agent-def.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { AgentLogModule } from './agent-log/agent-log.module';
     TtsModule,
     AgentModule,
     AgentLogModule,
+    AgentDefModule,
   ],
 })
 export class AppModule {}
