@@ -17,6 +17,9 @@ export type {
 } from './micro-frontend';
 export { SnakeNamingStrategy } from './naming/snake-naming.strategy';
 
+// 后端 RBAC 权限守卫（各微服务统一使用）
+export { PermissionGuard, RequirePermission, REQUIRED_PERMISSION_KEY } from './auth/permission.guard';
+
 import dayjs from 'dayjs';
 
 /**

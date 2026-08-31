@@ -10,11 +10,12 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentLogService } from './agent-log.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionGuard, RequirePermission } from '@web-system/shared';
 
 @ApiTags('Agent Runs (admin)')
 @Controller('agent-runs')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PermissionGuard)
 export class AgentLogController {
   constructor(private readonly log: AgentLogService) {}
 
@@ -23,6 +24,7 @@ export class AgentLogController {
    * GET /api/agent-runs/agents
    */
   @Get('agents')
+  @RequirePermission('agents:view')
   @ApiOperation({ summary: '列出所有 agent（聚合，含总数/最近一次/错误数）' })
   async listAgents() {
     return this.log.getAgents();
@@ -33,6 +35,7 @@ export class AgentLogController {
    * GET /api/agent-runs?agentId=&userId=&status=&keyword=&startAt=&endAt=&page=&pageSize=
    */
   @Get()
+  @RequirePermission('agents:view')
   @ApiOperation({ summary: '分页列出 agent runs' })
   async list(
     @Query('agentId') agentId?: string,
@@ -63,6 +66,7 @@ export class AgentLogController {
    * GET /api/agent-runs/:id
    */
   @Get(':id')
+  @RequirePermission('agents:view')
   @ApiOperation({ summary: '查看某次 run 的完整原始数据' })
   async getOne(@Param('id') id: string) {
     const run = await this.log.getRun(id);

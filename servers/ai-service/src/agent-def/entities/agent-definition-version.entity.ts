@@ -1,5 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn, Index } from 'typeorm';
 import { AbstractEntity } from '@web-system/shared';
+import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
 
 /**
  * Agent 定义历史版本表（支持回滚）
@@ -32,6 +33,14 @@ export class AgentDefinitionVersionEntity extends AbstractEntity {
   @Column({ type: 'json', comment: '工具名数组' })
   tools: string[];
 
+  /** 能力数组快照（tool/mcp/skill） */
+  @Column({ type: 'json', nullable: true, comment: '能力数组快照' })
+  capabilities: CapabilityRef[] | null;
+
+  /** 可挂载技能摘要目录快照 */
+  @Column({ type: 'json', nullable: true, comment: '技能摘要目录快照' })
+  skills: SkillRef[] | null;
+
   @Column({ type: 'int', default: 10, comment: '最大步数' })
   maxSteps: number;
 
@@ -44,6 +53,10 @@ export class AgentDefinitionVersionEntity extends AbstractEntity {
     keepRecent: number;
     enabled: boolean;
   };
+
+  /** 流式输出开关快照 */
+  @Column({ type: 'boolean', default: true, comment: '是否流式输出' })
+  streaming: boolean;
 
   /** 变更说明（便于排查） */
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '变更说明' })

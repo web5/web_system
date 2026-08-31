@@ -1,5 +1,6 @@
 import { Column, Entity, PrimaryColumn, Index } from 'typeorm';
 import { AbstractEntity } from '@web-system/shared';
+import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
 
 /**
  * Agent 定义主表（数据库配置化）
@@ -29,9 +30,17 @@ export class AgentDefinitionEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 64, comment: '模型 id' })
   model: string;
 
-  /** 工具名数组（AgentDefinition.tools） */
+  /** 工具名数组（AgentDefinition.tools，兼容旧数据；新配置统一走 capabilities） */
   @Column({ type: 'json', comment: '工具名数组' })
   tools: string[];
+
+  /** 能力数组：本地工具 / MCP 远程工具 / Skill 三类统一引用 */
+  @Column({ type: 'json', nullable: true, comment: '能力数组（tool/mcp/skill）' })
+  capabilities: CapabilityRef[] | null;
+
+  /** 可挂载技能摘要目录（发布时从 capabilities 中 skill 类型 + 技能表解析） */
+  @Column({ type: 'json', nullable: true, comment: '可挂载技能摘要目录' })
+  skills: SkillRef[] | null;
 
   /** 最大步数 */
   @Column({ type: 'int', default: 10, comment: '最大步数' })
@@ -48,6 +57,10 @@ export class AgentDefinitionEntity extends AbstractEntity {
     keepRecent: number;
     enabled: boolean;
   };
+
+  /** 是否流式输出（默认 true；false=最终回答一次性输出） */
+  @Column({ type: 'boolean', default: true, comment: '是否流式输出' })
+  streaming: boolean;
 
   /** 当前版本号（每次 publish +1） */
   @Column({ type: 'int', default: 1, comment: '当前版本号' })

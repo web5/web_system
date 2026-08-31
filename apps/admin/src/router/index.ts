@@ -54,6 +54,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统设置', permission: 'settings:view' },
       },
       {
+        path: 'settings/roles',
+        name: 'RoleManagement',
+        component: () => import('@/views/Settings/RoleManagement.vue'),
+        meta: { title: '角色权限', permission: 'roles:manage' },
+      },
+      {
         path: 'mcp',
         name: 'McpAdmin',
         component: () => import('@/views/McpAdminPanel.vue'),
@@ -93,6 +99,18 @@ const routes: RouteRecordRaw[] = [
             name: 'AgentDefList',
             component: () => import('@/views/Agents/AgentDefList.vue'),
             meta: { title: 'Agent 定义管理', permission: 'agents:manage' },
+          },
+          {
+            path: 'skills',
+            name: 'SkillList',
+            component: () => import('@/views/Agents/SkillList.vue'),
+            meta: { title: '技能库', permission: 'skills:view' },
+          },
+          {
+            path: 'playground',
+            name: 'AgentPlayground',
+            component: () => import('@/views/Agents/AgentPlayground.vue'),
+            meta: { title: '对话调试', permission: 'agents:debug' },
           },
         ],
       },
@@ -137,7 +155,7 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   // 从 Pinia store 读取状态，而非裸解析 localStorage JSON
   const userStore = useUserStore();
   const token = userStore.token;
@@ -150,6 +168,15 @@ router.beforeEach((to, _from, next) => {
   if (to.path === '/login' && token) {
     next('/');
     return;
+  }
+
+  // 页面刷新后确保权限已从后端拉取（失败已 fallback 本地常量）
+  if (token && !userStore.permissionsReady) {
+    try {
+      await userStore.fetchPermissions();
+    } catch {
+      /* fetchPermissions 内部已 fallback，这里仅兜底 */
+    }
   }
 
   // 权限检查

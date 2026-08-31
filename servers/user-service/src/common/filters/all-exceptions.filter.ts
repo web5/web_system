@@ -17,13 +17,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse();
     const request = ctx.getRequest();
 
-    const isHttpException = exception instanceof HttpException;
+    // 兼容共享包（@web-system/shared）抛出的 HttpException 子类：
+    // 若包与服务的 @nestjs/common 是不同实例，instanceof 会失败，
+    // 但 getStatus 方法存在即按 HttpException 处理（避免误判 500）
+    const duckHttpException =
+      !!exception &&
+      typeof (exception as any)?.getStatus === 'function' &&
+      typeof (exception as any)?.getResponse === 'function';
+    const isHttpException = exception instanceof HttpException || duckHttpException;
     const status = isHttpException
-      ? exception.getStatus()
+      ? (exception as HttpException).getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const rawMessage = isHttpException
-      ? exception.getResponse()
+      ? (exception as HttpException).getResponse()
       : (exception as Error).message || 'Internal server error';
 
     const logMessage = {

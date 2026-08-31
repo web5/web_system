@@ -29,6 +29,10 @@
           <template #icon><SettingOutlined /></template>
           <span>系统设置</span>
         </a-menu-item>
+        <a-menu-item v-if="userStore.hasPermission('roles:manage')" key="roles">
+          <template #icon><SafetyCertificateOutlined /></template>
+          <span>角色权限</span>
+        </a-menu-item>
         <a-menu-item v-if="userStore.hasPermission('mcp:view')" key="mcp">
           <template #icon><ApiOutlined /></template>
           <span>MCP 管理</span>
@@ -41,6 +45,12 @@
           </a-menu-item>
           <a-menu-item v-if="userStore.hasPermission('agents:manage')" key="agents-defs">
             <span>定义管理</span>
+          </a-menu-item>
+          <a-menu-item v-if="userStore.hasPermission('skills:view')" key="agents-skills">
+            <span>技能库</span>
+          </a-menu-item>
+          <a-menu-item v-if="userStore.hasPermission('agents:debug')" key="agents-playground">
+            <span>对话调试</span>
           </a-menu-item>
         </a-sub-menu>
       </a-menu>
@@ -125,7 +135,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined } from '@ant-design/icons-vue';
+import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
@@ -157,10 +167,13 @@ const currentTitle = computed(() => {
 
 watch(() => route.path, (path) => {
   if (path.includes('/users')) selectedKeys.value = ['users'];
+  else if (path.includes('/settings/roles')) selectedKeys.value = ['roles'];
   else if (path.includes('/settings')) selectedKeys.value = ['settings'];
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
+  else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
+  else if (path.includes('/agents/playground')) selectedKeys.value = ['agents-playground'];
   else if (path.includes('/agents')) selectedKeys.value = ['agents-runs'];
   else selectedKeys.value = ['dashboard'];
 }, { immediate: true });
@@ -168,7 +181,9 @@ watch(() => route.path, (path) => {
 const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
-    'agents-runs': '/agents', 'agents-defs': '/agents/definitions',
+    roles: '/settings/roles',
+    'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
+    'agents-playground': '/agents/playground',
   };
   router.push(routes[key] || '/dashboard');
 };

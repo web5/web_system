@@ -7,6 +7,7 @@ export type StreamEventType =
   | 'content_delta'
   | 'tool_call'
   | 'tool_result'
+  | 'skill_load'
   | 'summary'
   | 'final'
   | 'error';

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import {
   buildServer,
   createHttpModule,
+  callApi,
   HttpModuleConfig,
   HttpToolDef,
 } from '@web-system/mcp-core';
@@ -276,6 +277,7 @@ export class McpService implements OnModuleInit {
         });
         this.logger.log(`已同步论文学习 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
       }
+      await this.syncModuleTools(existing.id, PAPER_HTTP_TOOLS);
       return;
     }
 
@@ -333,6 +335,7 @@ export class McpService implements OnModuleInit {
         });
         this.logger.log(`已同步机构行为 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
       }
+      await this.syncModuleTools(existing.id, INSTITUTION_HTTP_TOOLS);
       return;
     }
 
@@ -401,6 +404,7 @@ export class McpService implements OnModuleInit {
           `已同步财经资讯 base_url=${baseUrl} auth_type=${authType || '(无)'}`,
         );
       }
+      await this.syncModuleTools(existing.id, FINNEWS_HTTP_TOOLS);
       return;
     }
 
@@ -465,6 +469,7 @@ export class McpService implements OnModuleInit {
         });
         this.logger.log(`已同步公众号发布 base_url=${baseUrl} auth_type=${authType || '(无)'}`);
       }
+      await this.syncModuleTools(existing.id, WECHAT_MP_HTTP_TOOLS);
       return;
     }
 
@@ -486,6 +491,24 @@ export class McpService implements OnModuleInit {
     );
     await this.toolRepo.save(tools);
     this.logger.log(`已 seed 公众号发布 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
+  }
+
+  /**
+   * 工具差量同步：比对模块已有工具与代码声明，补插缺失项。
+   * 解决"seed 只在模块不存在时创建，历史模块升级后新工具不生效"的问题。
+   */
+  private async syncModuleTools(
+    moduleId: number,
+    declared: Array<{ name: string; description: string; method: string; path: string; params: unknown[] }>,
+  ): Promise<void> {
+    const existing = await this.toolRepo.find({ where: { module_id: moduleId } });
+    const existingNames = new Set(existing.map((t) => t.name));
+    const missing = declared.filter((t) => !existingNames.has(t.name));
+    if (missing.length === 0) return;
+    await this.toolRepo.save(
+      missing.map((t) => this.toolRepo.create({ module_id: moduleId, ...t })),
+    );
+    this.logger.log(`模块 #${moduleId} 补插缺失工具: ${missing.map((t) => t.name).join(', ')}`);
   }
 
   /** 从数据库构建 MCP Server（每个 session 独立实例，规避 SDK 单 transport 限制） */
@@ -554,5 +577,33 @@ export class McpService implements OnModuleInit {
 
   removeTransport(sessionId: string): void {
     this.transports.delete(sessionId);
+  }
+
+  /**
+   * 直接调用模块下的某个工具（供 ai-agent 等内部调用方经 /mcp/tools/call 使用）。
+   * 走与 MCP streamable-http 相同的 HttpModuleConfig + callApi 链路，无状态。
+   */
+  async callTool(
+    moduleCode: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const mod = await this.moduleRepo.findOne({
+      where: { code_key: moduleCode, enabled: true },
+      relations: ['tools'],
+    });
+    if (!mod) throw new NotFoundException(`模块 ${moduleCode} 不存在或未启用`);
+    const toolDef = (mod.tools ?? []).find((t) => t.name === toolName);
+    if (!toolDef) throw new NotFoundException(`工具 ${toolName} 在模块 ${moduleCode} 中不存在`);
+
+    const config = this.toConfig(mod);
+    const def: HttpToolDef = {
+      name: toolDef.name,
+      description: toolDef.description,
+      method: toolDef.method as HttpToolDef['method'],
+      path: toolDef.path,
+      params: toolDef.params ?? [],
+    };
+    return callApi(config, def, args ?? {});
   }
 }

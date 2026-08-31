@@ -12,15 +12,34 @@ export interface ApiResponse<T = any> {
   data?: T;
 }
 
+export interface CapabilityRef {
+  type: 'tool' | 'mcp' | 'skill';
+  ref: string;
+  enabled: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface SkillRef {
+  code: string;
+  name: string;
+  description: string;
+  requiredTools?: string[];
+  enabled?: boolean;
+}
+
 export interface AgentDef {
   id: string;
   name: string;
   systemPrompt: string;
   model: string;
   tools: string[];
+  capabilities: CapabilityRef[] | null;
+  skills: SkillRef[] | null;
   maxSteps: number;
   temperature: number | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
+  /** 是否流式输出 */
+  streaming: boolean;
   version: number;
   status: 'published' | 'draft';
   enabled: boolean;
@@ -45,9 +64,31 @@ export interface SaveAgentDefPayload {
   systemPrompt: string;
   model: string;
   tools: string[];
+  /** 能力数组（tool/mcp/skill）；不传时后端从 tools 派生 */
+  capabilities?: CapabilityRef[];
   maxSteps: number;
   temperature?: number | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
+  /** 是否流式输出（默认 true） */
+  streaming?: boolean;
+}
+
+/** MCP 模块（来自 mcp-gateway，配置器选择 MCP 工具用） */
+export interface McpToolItem {
+  id: number;
+  name: string;
+  description: string;
+  method: string;
+  path: string;
+}
+
+export interface McpModuleItem {
+  id: number;
+  name: string;
+  description: string;
+  code_key: string | null;
+  enabled: boolean;
+  tools: McpToolItem[];
 }
 
 /** 列所有定义 */
@@ -93,4 +134,9 @@ export function rollbackAgentDef(id: string, versionId: string): Promise<ApiResp
 /** 删除 */
 export function removeAgentDef(id: string): Promise<ApiResponse<{ ok: boolean }>> {
   return request.delete(`/agent-defs/${id}`);
+}
+
+/** MCP 模块列表（配置器选择 MCP 工具用，经 gateway /api/mcp/modules → mcp-gateway /api/modules） */
+export function listMcpModules(): Promise<{ modules: McpModuleItem[] }> {
+  return request.get('/mcp/modules');
 }

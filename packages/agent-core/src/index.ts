@@ -7,6 +7,11 @@ export * from './interfaces/tool.interface';
 export * from './interfaces/agent.interface';
 export * from './interfaces/runtime.interface';
 
+// Skill（on-demand 技能加载）
+export { SkillLoader } from './skills/skill-loader';
+export type { SkillProvider } from './skills/skill-loader';
+export { LOAD_SKILL_TOOL_NAME } from './core/agent-engine';
+
 // 模型客户端
 export * from './clients/base-ai.client';
 export { Hy3Client } from './clients/hy3.client';

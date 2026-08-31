@@ -1,8 +1,10 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
 import { AgentDefinitionEntity } from './entities/agent-definition.entity';
 import { AgentDefinitionVersionEntity } from './entities/agent-definition-version.entity';
+import { SkillService } from '../skill/skill.service';
 
 /** Agent 定义的可编辑字段（对应 AgentDefinition） */
 export interface AgentDefinitionPayload {
@@ -10,9 +12,13 @@ export interface AgentDefinitionPayload {
   systemPrompt: string;
   model: string;
   tools: string[];
+  /** 能力数组（tool/mcp/skill）。可选：不传时后端从 tools 派生 */
+  capabilities?: CapabilityRef[];
   maxSteps: number;
   temperature?: number | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
+  /** 是否流式输出（默认 true） */
+  streaming?: boolean;
 }
 
 /** admin 操作用户信息（来自 req.user） */
@@ -39,6 +45,7 @@ export class AgentDefService {
     private readonly defRepo: Repository<AgentDefinitionEntity>,
     @InjectRepository(AgentDefinitionVersionEntity)
     private readonly verRepo: Repository<AgentDefinitionVersionEntity>,
+    private readonly skillService: SkillService,
   ) {}
 
   /** 列表（全部定义，含状态/版本/启用） */
@@ -58,15 +65,20 @@ export class AgentDefService {
   async create(id: string, payload: AgentDefinitionPayload) {
     const exists = await this.defRepo.findOne({ where: { id } });
     if (exists) throw new BadRequestException(`Agent ${id} 已存在，请改用编辑`);
+    const { capabilities, tools } = this.normalizeCapabilities(payload);
+    const skills = await this.resolveSkills(capabilities);
     const row = this.defRepo.create({
       id,
       name: payload.name,
       systemPrompt: payload.systemPrompt,
       model: payload.model,
-      tools: payload.tools,
+      tools,
+      capabilities,
+      skills,
       maxSteps: payload.maxSteps,
       temperature: payload.temperature ?? null,
       memory: payload.memory,
+      streaming: payload.streaming ?? true,
       version: 0,
       status: 'draft',
       enabled: true,
@@ -81,13 +93,18 @@ export class AgentDefService {
   async update(id: string, payload: AgentDefinitionPayload, operator?: OperatorInfo) {
     const row = await this.defRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Agent ${id} 不存在`);
+    const { capabilities, tools } = this.normalizeCapabilities(payload);
+    const skills = await this.resolveSkills(capabilities);
     row.name = payload.name;
     row.systemPrompt = payload.systemPrompt;
     row.model = payload.model;
-    row.tools = payload.tools;
+    row.tools = tools;
+    row.capabilities = capabilities;
+    row.skills = skills;
     row.maxSteps = payload.maxSteps;
     row.temperature = payload.temperature ?? null;
     row.memory = payload.memory;
+    row.streaming = payload.streaming ?? true;
     // 已发布的定义被编辑后，标记为 draft，等重新 publish 生效（保留原版本号）
     if (row.status === 'published') {
       row.status = 'draft';
@@ -107,6 +124,7 @@ export class AgentDefService {
     if (!row) throw new NotFoundException(`Agent ${id} 不存在`);
 
     const nextVersion = row.version + 1;
+    const { capabilities, skills } = await this.ensureCapabilities(row);
     await this.verRepo.save(
       this.verRepo.create({
         agentId: row.id,
@@ -115,9 +133,12 @@ export class AgentDefService {
         systemPrompt: row.systemPrompt,
         model: row.model,
         tools: row.tools,
+        capabilities,
+        skills,
         maxSteps: row.maxSteps,
         temperature: row.temperature,
         memory: row.memory,
+        streaming: row.streaming,
         changeNote: changeNote ?? null,
         createdBy: operator?.username ?? operator?.id?.toString() ?? null,
       }),
@@ -171,9 +192,12 @@ export class AgentDefService {
     row.systemPrompt = ver.systemPrompt;
     row.model = ver.model;
     row.tools = ver.tools;
+    row.capabilities = ver.capabilities ?? this.deriveFromTools(ver.tools);
+    row.skills = ver.skills ?? null;
     row.maxSteps = ver.maxSteps;
     row.temperature = ver.temperature;
     row.memory = ver.memory;
+    row.streaming = ver.streaming ?? true;
 
     // 发布为下一个版本
     const nextVersion = row.version + 1;
@@ -185,9 +209,12 @@ export class AgentDefService {
         systemPrompt: row.systemPrompt,
         model: row.model,
         tools: row.tools,
+        capabilities: row.capabilities,
+        skills: row.skills,
         maxSteps: row.maxSteps,
         temperature: row.temperature,
         memory: row.memory,
+        streaming: row.streaming,
         changeNote: `回滚自 v${ver.version}`,
         createdBy: operator?.username ?? operator?.id?.toString() ?? null,
       }),
@@ -231,6 +258,7 @@ export class AgentDefService {
     const builtins = this.builtinSeeds();
     let seeded = 0;
     for (const b of builtins) {
+      const capabilities = this.deriveFromTools(b.tools);
       await this.defRepo.save(
         this.defRepo.create({
           id: b.id,
@@ -238,6 +266,8 @@ export class AgentDefService {
           systemPrompt: b.systemPrompt,
           model: b.model,
           tools: b.tools,
+          capabilities,
+          skills: null,
           maxSteps: b.maxSteps,
           temperature: b.temperature ?? null,
           memory: b.memory,
@@ -256,6 +286,8 @@ export class AgentDefService {
           systemPrompt: b.systemPrompt,
           model: b.model,
           tools: b.tools,
+          capabilities,
+          skills: null,
           maxSteps: b.maxSteps,
           temperature: b.temperature ?? null,
           memory: b.memory,
@@ -329,9 +361,12 @@ export class AgentDefService {
       systemPrompt: r.systemPrompt,
       model: r.model,
       tools: r.tools,
+      capabilities: r.capabilities,
+      skills: r.skills,
       maxSteps: r.maxSteps,
       temperature: r.temperature,
       memory: r.memory,
+      streaming: r.streaming,
       version: r.version,
       status: r.status,
       enabled: r.enabled,
@@ -340,5 +375,59 @@ export class AgentDefService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
+  }
+
+  // ── capabilities 辅助 ──
+
+  /** 从工具名数组派生 capabilities（老数据兼容） */
+  private deriveFromTools(tools: string[]): CapabilityRef[] {
+    return (tools || []).map((t) => ({ type: 'tool' as const, ref: t, enabled: true }));
+  }
+
+  /** 归一化 capabilities：不传则从 tools 派生；tools 列只保留本地工具名 */
+  private normalizeCapabilities(payload: AgentDefinitionPayload): {
+    capabilities: CapabilityRef[];
+    tools: string[];
+  } {
+    const caps = payload.capabilities?.length
+      ? payload.capabilities
+      : this.deriveFromTools(payload.tools);
+    const tools = caps
+      .filter((c) => c.type === 'tool' && c.enabled !== false)
+      .map((c) => c.ref);
+    return { capabilities: caps, tools };
+  }
+
+  /** 从 capabilities 解析技能摘要目录（查技能表补 name/description） */
+  private async resolveSkills(capabilities: CapabilityRef[]): Promise<SkillRef[] | null> {
+    const codes = (capabilities || [])
+      .filter((c) => c.type === 'skill' && c.enabled !== false)
+      .map((c) => c.ref);
+    if (!codes.length) return null;
+    const rows = await this.skillService.findByCodes(codes);
+    return rows.map((r) => ({
+      code: r.code,
+      name: r.name,
+      description: r.description,
+      requiredTools: r.requiredTools ?? undefined,
+      enabled: true,
+    }));
+  }
+
+  /** publish 兜底：行内 capabilities/skills 为空时从 tools 派生并落库 */
+  private async ensureCapabilities(row: AgentDefinitionEntity): Promise<{
+    capabilities: CapabilityRef[];
+    skills: SkillRef[] | null;
+  }> {
+    let capabilities = row.capabilities;
+    let skills = row.skills;
+    if (!capabilities?.length) {
+      capabilities = this.deriveFromTools(row.tools || []);
+      skills = null;
+      row.capabilities = capabilities;
+      row.skills = null;
+      await this.defRepo.save(row);
+    }
+    return { capabilities, skills };
   }
 }
