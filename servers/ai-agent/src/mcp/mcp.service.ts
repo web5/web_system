@@ -20,9 +20,12 @@ export class McpService {
   private readonly logger = new Logger(McpService.name);
   /** MCP 网关地址（可选，未配置则 MCP 工具不可用） */
   private readonly mcpGatewayUrl: string;
+  /** 网关共享密钥（与 mcp-gateway 的 MCP_CLIENT_KEY 一致） */
+  private readonly mcpClientKey: string;
 
   constructor(private readonly configService: ConfigService) {
     this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', '');
+    this.mcpClientKey = this.configService.get('MCP_CLIENT_KEY', '');
   }
 
   /** 是否已配置 MCP 网关 */
@@ -68,7 +71,10 @@ export class McpService {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.mcpClientKey ? { Authorization: `Bearer ${this.mcpClientKey}` } : {}),
+      },
       body,
       signal: AbortSignal.timeout(30000),
     });

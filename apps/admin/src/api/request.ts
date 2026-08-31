@@ -115,6 +115,11 @@ request.interceptors.response.use(
     // 后端 TransformInterceptor 统一包成 {code, data, message}，这里 unwrap data
     const body = response.data;
     if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+      // 业务错误（HTTP 200 + code!=0，如 ai-service 的 4030/4000）→ 与 HTTP 4xx/5xx 同样拒绝
+      if (body.code !== 0 && body.code !== undefined && body.code !== null) {
+        message.error(body.message || '请求失败');
+        return Promise.reject(body);
+      }
       return body.data;
     }
     return body;

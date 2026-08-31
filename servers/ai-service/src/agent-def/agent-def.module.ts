@@ -6,11 +6,13 @@ import { AgentDefService } from './agent-def.service';
 import { AgentDefController } from './agent-def.controller';
 import { AgentDefInternalController } from './agent-def.internal.controller';
 import { AuthModule } from '../auth/auth.module';
+import { SkillModule } from '../skill/skill.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AgentDefinitionEntity, AgentDefinitionVersionEntity]),
     AuthModule,
+    SkillModule,
   ],
   providers: [AgentDefService],
   controllers: [AgentDefController, AgentDefInternalController],

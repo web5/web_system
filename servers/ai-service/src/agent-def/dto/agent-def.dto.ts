@@ -5,11 +5,30 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { CapabilityRef } from '@kedouai/agent-core';
+
+class CapabilityDto implements CapabilityRef {
+  @IsString()
+  @IsNotEmpty()
+  type: 'tool' | 'mcp' | 'skill';
+
+  @IsString()
+  @IsNotEmpty()
+  ref: string;
+
+  @IsBoolean()
+  enabled: boolean;
+
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+}
 
 class MemoryDto {
   @IsInt()
@@ -45,6 +64,13 @@ export class SaveAgentDefDto {
   @IsString({ each: true })
   tools: string[];
 
+  /** 能力数组（tool/mcp/skill）。可选：不传时后端从 tools 派生（兼容旧前端） */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CapabilityDto)
+  capabilities?: CapabilityRef[];
+
   @IsInt()
   @Min(1)
   maxSteps: number;
@@ -56,6 +82,11 @@ export class SaveAgentDefDto {
   @ValidateNested()
   @Type(() => MemoryDto)
   memory: MemoryDto;
+
+  /** 是否流式输出（默认 true） */
+  @IsOptional()
+  @IsBoolean()
+  streaming?: boolean;
 }
 
 /** 启用/停用 */

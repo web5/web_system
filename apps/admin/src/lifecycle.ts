@@ -5,6 +5,7 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { setupAntd } from '@/plugins/antd';
 import App from './App.vue';
 import router from './router';
+import { vHasPerm } from './directives/v-has-perm';
 // 全局样式（含 :root / [data-theme] CSS 变量），微前端模式也必须引入
 import './style.css';
 
@@ -21,6 +22,7 @@ export const mount: ModuleLifecycle['mount'] = async (ctx: ModuleContext, contai
   pinia.use(piniaPluginPersistedstate);
   app.use(pinia);
   app.use(router);  // admin 自己的 router（base /admin/）
+  app.directive('has-perm', vHasPerm);
   setupAntd(app);
   app.provide('moduleContext', ctx);
   app.config.errorHandler = (err, _i, info) => console.error('[admin 模块错误]', err, info);

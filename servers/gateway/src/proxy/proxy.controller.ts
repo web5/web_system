@@ -165,6 +165,56 @@ export class ProxyController {
     proxyReq.end();
   }
 
+  // AI Agent Admin Playground SSE 流式（admin-run 端点，需 agents:debug 权限）— 原生 http 转发
+  @Post('ai-agent/agent/admin-run')
+  @Header('Content-Type', 'text/event-stream')
+  @Header('Cache-Control', 'no-cache')
+  @Header('Connection', 'keep-alive')
+  @Header('X-Accel-Buffering', 'no')
+  proxyAiAgentAdminRun(@Req() req: Request, @Res() res: Response) {
+    const agentUrl = this.proxyService.getAiAgentServiceUrl();
+    const body = JSON.stringify(req.body);
+
+    const parsedUrl = url.parse(agentUrl);
+    const options: http.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: '/agent/admin-run',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Connection': 'keep-alive',
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
+      },
+      timeout: API_TIMEOUT.GATEWAY.AI_TASK,
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      proxyRes.on('data', (chunk: Buffer) => res.write(chunk));
+      proxyRes.on('end', () => res.end());
+    });
+
+    req.on('close', () => { proxyReq.destroy(); });
+
+    proxyReq.on('error', (err) => {
+      this.logger.error(`AI Agent admin-run proxy error: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(502).json({ code: 502, message: 'AI Agent service unavailable' });
+      }
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      if (!res.headersSent) {
+        res.status(504).json({ code: 504, message: 'AI Agent service timeout' });
+      }
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  }
+
   // AI Agent 精确匹配 /api/ai-agent（无尾斜杠）
   @All('ai-agent')
   proxyAiAgentExact(@Req() req: Request, @Res() res: Response) {
@@ -252,6 +302,41 @@ export class ProxyController {
   @All('ai/:path(*)')
   proxyAiWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getAiProxy()(req, res);
+  }
+
+  // 权限管理（/api/admin/permissions、/api/admin/roles → user-service）
+  // 必须注册在 @All('admin/:path(*)')（system-service）之前，否则被通配抢走
+  @All('admin/permissions')
+  proxyPermsExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+  @All('admin/permissions/:path(*)')
+  proxyPermsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+  @All('admin/roles')
+  proxyRolesExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+  @All('admin/roles/:path(*)')
+  proxyRolesWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 技能库（/api/admin/skills → ai-service）
+  @All('admin/skills')
+  proxySkillsExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAiProxy()(req, res);
+  }
+  @All('admin/skills/:path(*)')
+  proxySkillsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAiProxy()(req, res);
+  }
+
+  // 当前用户权限（/api/permissions/my → user-service）
+  @All('permissions/my')
+  proxyMyPerms(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
   }
 
   // 精确匹配 /api/admin（无尾斜杠）

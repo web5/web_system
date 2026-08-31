@@ -113,29 +113,42 @@ export interface MiniprogramLoginResponse extends LoginResponse {
 // 权限系统
 export type Role = 'admin' | 'editor' | 'viewer';
 
+export type PermissionGroup = 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents';
+export type PermissionType = 'menu' | 'action' | 'api';
+
 export interface PermissionDef {
   code: string;
   name: string;
-  group: 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp';
+  group: PermissionGroup;
+  /** menu=菜单入口 / action=按钮操作 / api=接口权限（默认 action） */
+  type?: PermissionType;
 }
 
 export const PERMISSIONS: Record<string, PermissionDef> = {
-  'dashboard:view': { code: 'dashboard:view', name: '查看工作台', group: 'dashboard' },
-  'users:view':     { code: 'users:view',     name: '查看用户',   group: 'users' },
+  'dashboard:view': { code: 'dashboard:view', name: '查看工作台', group: 'dashboard', type: 'menu' },
+  'users:view':     { code: 'users:view',     name: '查看用户',   group: 'users', type: 'menu' },
   'users:create':   { code: 'users:create',   name: '创建用户',    group: 'users' },
   'users:edit':     { code: 'users:edit',     name: '编辑用户',    group: 'users' },
   'users:delete':   { code: 'users:delete',   name: '删除用户',    group: 'users' },
-  'settings:view':  { code: 'settings:view',  name: '查看设置',    group: 'settings' },
+  'settings:view':  { code: 'settings:view',  name: '查看设置',    group: 'settings', type: 'menu' },
   'settings:edit':  { code: 'settings:edit',  name: '修改设置',    group: 'settings' },
-  'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs' },
-  'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard' },
-  'mcp:view':       { code: 'mcp:view',       name: 'MCP 管理',     group: 'mcp' },
-  'agents:view':    { code: 'agents:view',    name: 'Agents 对话',  group: 'mcp' },
-  'agents:manage':  { code: 'agents:manage',  name: 'Agent 定义管理', group: 'mcp' },
+  'roles:view':     { code: 'roles:view',     name: '查看角色权限', group: 'settings', type: 'menu' },
+  'roles:manage':   { code: 'roles:manage',   name: '配置角色权限', group: 'settings' },
+  'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs', type: 'menu' },
+  'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard', type: 'menu' },
+  'mcp:view':       { code: 'mcp:view',       name: 'MCP 管理',     group: 'mcp', type: 'menu' },
+  'agents:view':    { code: 'agents:view',    name: 'Agents 对话',  group: 'agents', type: 'menu' },
+  'agents:debug':   { code: 'agents:debug',   name: '对话调试',     group: 'agents' },
+  'agents:manage':  { code: 'agents:manage',  name: 'Agent 定义管理', group: 'agents' },
+  'skills:view':    { code: 'skills:view',    name: '技能库查看',   group: 'agents', type: 'menu' },
+  'skills:manage':  { code: 'skills:manage',  name: '技能库管理',   group: 'agents' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   admin:  Object.keys(PERMISSIONS),
-  editor: ['dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view', 'agents:view', 'agents:manage'],
-  viewer: ['dashboard:view', 'logs:view', 'bianbian:view', 'agents:view'],
+  editor: [
+    'dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view',
+    'agents:view', 'agents:debug', 'agents:manage', 'skills:view',
+  ],
+  viewer: ['dashboard:view', 'logs:view', 'bianbian:view', 'agents:view', 'skills:view'],
 };

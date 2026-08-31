@@ -20,6 +20,9 @@ export class ClientRegistry {
 
   getOrFallback(modelId?: string): BaseAiClient {
     if (modelId && this.clients.has(modelId)) return this.clients.get(modelId)!;
+    if (modelId) {
+      this.logger.warn(`模型 ${modelId} 未注册，回退到默认模型（hy3）`);
+    }
     if (this.clients.has('hy3')) return this.clients.get('hy3')!;
     const first = this.clients.values().next().value;
     if (!first) throw new Error('无任何已注册模型客户端');

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Param, Req, Res } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Req, Res, Body } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
@@ -63,6 +63,28 @@ export class McpController {
     @Param('module') module: string,
   ): Promise<void> {
     return this.handleDelete(req, res, module);
+  }
+
+  // ── /mcp/tools/call 无状态直调端点（ai-agent 经 MCP 网关调用工具用）──
+
+  @Post('mcp/tools/call')
+  async callTool(@Req() req: Request, @Res() res: Response, @Body() body: any) {
+    if (!(await this.checkAuth(req, res))) return;
+    try {
+      const { module, tool, args } = body || {};
+      if (!module || !tool) {
+        res.status(400).json({ ok: false, message: 'module 和 tool 必填' });
+        return;
+      }
+      const result = await this.mcpService.callTool(String(module), String(tool), args ?? {});
+      res.json(result);
+    } catch (e: any) {
+      if (e.status === 404) {
+        res.status(404).json({ ok: false, message: e.message });
+        return;
+      }
+      res.status(500).json({ ok: false, message: e.message || '工具调用失败' });
+    }
   }
 
   // ── 共享实现 ──
