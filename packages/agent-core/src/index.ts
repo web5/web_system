@@ -26,6 +26,15 @@ export { ClientRegistry } from './registry/client.registry';
 export { McpToolAdapter } from './mcp/mcp-tool.adapter';
 export type { McpToolMeta, McpToolParameter, McpToolExecutor } from './mcp/mcp-tool.adapter';
 
+// 长任务插件（可选装饰器：把返回 jobId 的工具包装成自动轮询的同步工具；不绑定 MCP）
+export { withLongRunning, isTerminalJobStatus } from './plugins/long-running';
+export type {
+  JobStatus,
+  JobStatusFetcher,
+  JobIdDetector,
+  LongRunningOptions,
+} from './plugins/long-running';
+
 // 引擎
 export { AgentEngine } from './core/agent-engine';
 export { AgentRunner } from './core/agent-runner';

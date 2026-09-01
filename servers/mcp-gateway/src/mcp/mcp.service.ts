@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -7,12 +13,16 @@ import { randomUUID } from 'node:crypto';
 import {
   buildServer,
   createHttpModule,
+  createJobStatusModule,
   callApi,
+  executeJob,
   HttpModuleConfig,
   HttpToolDef,
+  HttpJobToolDef,
 } from '@web-system/mcp-core';
 import { McpModuleEntity } from './entities/mcp-module.entity';
 import { McpToolEntity } from './entities/mcp-tool.entity';
+import { McpJobEntity } from './entities/mcp-job.entity';
 
 /** 财经资讯微服务的 REST 接口声明（seed 到 mcp_modules） */
 const FINNEWS_HTTP_TOOLS: Array<{
@@ -223,6 +233,156 @@ const INSTITUTION_HTTP_TOOLS: Array<{
   },
 ];
 
+/** 发布模块「同步工具」声明（seed 到 mcp_modules/mcp_tools，code_key=deploy） */
+const DEPLOY_HTTP_TOOLS: Array<{
+  name: string;
+  description: string;
+  method: string;
+  path: string;
+  params: Array<{ name: string; type: string; required: boolean; description?: string }>;
+}> = [
+  {
+    name: 'list_modules',
+    description: '列出可发布模块（key/名称/类型/目录）。发布前用它确认模块标识，不要凭空猜测',
+    method: 'GET',
+    path: '/api/mcp/modules',
+    params: [],
+  },
+  {
+    name: 'get_current_versions',
+    description: '查询指定环境各模块的当前线上版本（含发布时间与发布人）',
+    method: 'GET',
+    path: '/api/mcp/current-versions',
+    params: [{ name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' }],
+  },
+  {
+    name: 'list_releases',
+    description: '列出版本发布历史（回滚候选版本），按发布时间倒序',
+    method: 'GET',
+    path: '/api/mcp/releases',
+    params: [
+      { name: 'env', type: 'string', required: false, description: '环境 local/dev/staging/prod' },
+      { name: 'component', type: 'string', required: false, description: '模块 key，如 admin' },
+    ],
+  },
+  {
+    name: 'publish_version',
+    description: '把某模块的线上指针切到指定历史版本（秒级生效，不重新构建）。用于回滚或版本回退',
+    method: 'POST',
+    path: '/api/mcp/version',
+    params: [
+      { name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' },
+      { name: 'versionTag', type: 'string', required: true, description: '目标版本标签（git 短哈希）' },
+      { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境必须传 true' },
+    ],
+  },
+  {
+    name: 'rollback',
+    description: '回滚到指定版本（走脚本级回滚任务，返回 taskId）。前端模块优先用 publish_version（秒级切换）',
+    method: 'POST',
+    path: '/api/mcp/rollback',
+    params: [
+      { name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' },
+      { name: 'versionTag', type: 'string', required: true, description: '目标版本标签' },
+      { name: 'component', type: 'string', required: false, description: '模块 key（可选，便于定位）' },
+      { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境必须传 true' },
+    ],
+  },
+  {
+    name: 'promote_release',
+    description: '灰度转全量：把 stable 指针切到灰度版本并禁用灰度规则。入参为灰度流水线的 jobId',
+    method: 'POST',
+    path: '/api/mcp/pipeline/{pipelineId}/promote',
+    params: [
+      { name: 'pipelineId', type: 'string', required: true, description: '灰度流水线的 jobId' },
+    ],
+  },
+];
+
+/** 发布模块「任务型工具」声明（代码内置，不进 mcp_tools 表） */
+const DEPLOY_JOB_TOOLS: HttpJobToolDef[] = [
+  {
+    name: 'publish_pipeline',
+    description:
+      '提交发布流水线：构建 → 投递产物 → 写版本表 → 切指针 → 等缓存并验证 → 清理旧版本。' +
+      '默认异步返回 jobId；传入 waitTimeoutSec（秒）可同步等待到终态。' +
+      '支持按「环境 + 模块 + 版本」发布；mode=grayscale 时为灰度发布（不切全量指针）',
+    longRunning: true,
+    waitTimeoutSec: 0,
+    submit: {
+      method: 'POST',
+      path: '/api/mcp/pipeline',
+      params: [
+        { name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' },
+        { name: 'moduleKey', type: 'string', required: true, description: '模块 key，如 admin / portal / todo-service' },
+        {
+          name: 'branch',
+          type: 'string',
+          required: false,
+          description:
+            '目标分支（默认 master）。发布在隔离的发布目录从远程仓库拉取该分支代码，' +
+            '不会基于当前工作区；先 push 到仓库再发布才能拿到最新代码',
+        },
+        {
+          name: 'commitId',
+          type: 'string',
+          required: false,
+          description:
+            '目标 commit（git 短哈希，默认取该分支最新）。' +
+            '已有该版本产物时复用秒级发布；否则在发布目录拉取该 commit 后构建',
+        },
+        {
+          name: 'mode',
+          type: 'string',
+          required: false,
+          description: 'direct=全量发布（默认）；grayscale=灰度发布（需配合 grayscaleRule）',
+        },
+        {
+          name: 'versionTag',
+          type: 'string',
+          required: false,
+          description: '已废弃，等价于 commitId（兼容旧调用）',
+        },
+        {
+          name: 'target',
+          type: 'string',
+          required: false,
+          description: '投递目标 local=本机静态目录（默认）；remote=SSH 到远程服务器',
+        },
+        {
+          name: 'grayscaleRule',
+          type: 'object',
+          required: false,
+          description:
+            '灰度规则（mode=grayscale 必填）：{type:"percent",value:10} 或 {type:"user-list",userIds:["u1"]} 或 {type:"header",key:"x-canary",values:["on"]}',
+        },
+        { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境发布必须传 true' },
+      ],
+    },
+    status: { method: 'GET', path: '/api/mcp/pipeline/{jobId}' },
+    cancel: { method: 'POST', path: '/api/mcp/pipeline/{jobId}/cancel' },
+    poll: { intervalMs: 3000 },
+  },
+];
+
+/** dev-only：模拟长任务，用于验证 T3 双模式，不触发真实构建 */
+const MOCK_JOB_TOOLS: HttpJobToolDef[] = [
+  {
+    name: 'mock_job',
+    description: '[仅非生产环境] 提交一个模拟长任务，用于验证长任务的异步/同步等待两种模式',
+    longRunning: true,
+    waitTimeoutSec: 0,
+    submit: {
+      method: 'POST',
+      path: '/api/mcp/mock-job',
+      params: [
+        { name: 'seconds', type: 'integer', required: false, description: '任务耗时秒数（1-600，默认 5）' },
+      ],
+    },
+    status: { method: 'GET', path: '/api/mcp/mock-job/{jobId}' },
+  },
+];
+
 @Injectable()
 export class McpService implements OnModuleInit {
   private readonly logger = new Logger(McpService.name);
@@ -233,14 +393,59 @@ export class McpService implements OnModuleInit {
     private readonly moduleRepo: Repository<McpModuleEntity>,
     @InjectRepository(McpToolEntity)
     private readonly toolRepo: Repository<McpToolEntity>,
+    @InjectRepository(McpJobEntity)
+    private readonly jobRepo: Repository<McpJobEntity>,
   ) {}
 
-  /** 启动时 seed 财经资讯 + 公众号发布 + 论文学习 HTTP 模块（自动注册后台微服务 REST 接口） */
+  /** 启动时 seed 各 HTTP 模块（自动注册后台微服务 REST 接口） */
   async onModuleInit(): Promise<void> {
     await this.seedFinnewsHttpModule();
     await this.seedWechatMpModule();
     await this.seedPaperModule();
     await this.seedInstitutionModule();
+    await this.seedDeployModule();
+  }
+
+  /** 某模块的代码内置任务型工具（job 声明不进 mcp_tools 表，结构不同） */
+  private jobToolsFor(codeKey: string): HttpJobToolDef[] {
+    if (codeKey !== 'deploy') return [];
+    const isProd = process.env.NODE_ENV === 'production';
+    return isProd ? DEPLOY_JOB_TOOLS : [...DEPLOY_JOB_TOOLS, ...MOCK_JOB_TOOLS];
+  }
+
+  /**
+   * 记录 jobId → 模块映射（通用 get_job_status 依赖）。
+   * @param operatorHint 调用者提示（API Key 前缀）；**禁止存完整凭证**，审计主数据在后端 audit_logs
+   */
+  private async recordJob(
+    jobId: string,
+    toolName: string,
+    codeKey: string,
+    operatorHint?: string,
+  ): Promise<void> {
+    try {
+      await this.jobRepo.upsert(
+        { job_id: jobId, code_key: codeKey, tool_name: toolName, operator: operatorHint ?? null },
+        ['job_id'],
+      );
+    } catch (e) {
+      this.logger.warn(`记录任务索引失败(${jobId}): ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * jobId → 模块路由。
+   * 优先查 mcp_jobs 索引表；未命中时按 jobId 前缀兜底（mock- → mock_job）。
+   */
+  private async resolveJobRoute(jobId: string): Promise<{ codeKey?: string; toolName?: string } | undefined> {
+    try {
+      const row = await this.jobRepo.findOne({ where: { job_id: jobId } });
+      if (row) return { codeKey: row.code_key, toolName: row.tool_name };
+    } catch (e) {
+      this.logger.warn(`查询任务索引失败(${jobId}): ${(e as Error).message}`);
+    }
+    if (jobId.startsWith('mock-')) return { codeKey: 'deploy', toolName: 'mock_job' };
+    return undefined;
   }
 
   /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
@@ -511,26 +716,53 @@ export class McpService implements OnModuleInit {
     this.logger.log(`模块 #${moduleId} 补插缺失工具: ${missing.map((t) => t.name).join(', ')}`);
   }
 
-  /** 从数据库构建 MCP Server（每个 session 独立实例，规避 SDK 单 transport 限制） */
-  private async buildServerFromDb(moduleCode?: string): Promise<McpServer> {
+  /**
+   * 从数据库构建 MCP Server（每个 session 独立实例，规避 SDK 单 transport 限制）。
+   * @param token 当前调用者凭证，透传给下游（auth_type=pass-through 的模块）
+   */
+  private async buildServerFromDb(moduleCode?: string, token?: string): Promise<McpServer> {
     const where: any = { enabled: true };
     if (moduleCode) where.code_key = moduleCode;
     const modules = await this.moduleRepo.find({ where });
     if (moduleCode && modules.length === 0) {
       throw new NotFoundException(`模块 ${moduleCode} 不存在或未启用`);
     }
-    const mcpModules = modules.map((m) => createHttpModule(m.name, this.toConfig(m)));
+
+    const configs: Array<{ codeKey: string; config: HttpModuleConfig }> = [];
+    const mcpModules = modules.map((m) => {
+      const config = this.toConfig(m, token);
+      if (m.code_key) configs.push({ codeKey: m.code_key, config });
+      return createHttpModule(m.name, config);
+    });
+
+    // 通用任务工具：get_job_status / cancel_job（跨模块，按 jobId 路由）
+    mcpModules.push(
+      createJobStatusModule({
+        modules: configs,
+        resolveModule: (jobId: string) => this.resolveJobRoute(jobId),
+      }),
+    );
+
     return buildServer(
       { name: 'mcp-gateway', version: '1.0.0', instructions: '统一 MCP 网关' },
       mcpModules,
     );
   }
 
-  private toConfig(m: McpModuleEntity): HttpModuleConfig {
+  private toConfig(m: McpModuleEntity, token?: string): HttpModuleConfig {
+    const codeKey = m.code_key ?? undefined;
     return {
       base_url: m.base_url,
       timeout: m.timeout,
       auth: { type: m.auth_type, ...(m.auth_config ?? {}) },
+      codeKey,
+      /** 凭证透传：把调用者的 API Key 原样带给下游，由下游换取 ownerId 落审计 */
+      credentialProvider: () => token,
+      onJobSubmitted: (job) => {
+        // 只存 key 前缀，避免把调用者凭证明文落库
+        void this.recordJob(job.jobId, job.toolName, job.codeKey ?? '', token?.slice(0, 12));
+      },
+      jobs: codeKey ? this.jobToolsFor(codeKey) : undefined,
       tools: (m.tools ?? []).map(
         (t) =>
           ({
@@ -550,17 +782,21 @@ export class McpService implements OnModuleInit {
     return this.transports.get(sessionId);
   }
 
-  async createTransport(): Promise<StreamableHTTPServerTransport> {
-    return this.buildAndConnect();
+  /** @param token 调用者凭证，绑定到本次会话的 server 实例，供下游透传 */
+  async createTransport(token?: string): Promise<StreamableHTTPServerTransport> {
+    return this.buildAndConnect(undefined, token);
   }
 
   /** 按模块 code_key 创建 transport（只暴露该模块工具），如 /mcp/finnews → finnews 的工具 */
-  async createModuleTransport(moduleCode: string): Promise<StreamableHTTPServerTransport> {
-    return this.buildAndConnect(moduleCode);
+  async createModuleTransport(moduleCode: string, token?: string): Promise<StreamableHTTPServerTransport> {
+    return this.buildAndConnect(moduleCode, token);
   }
 
-  private async buildAndConnect(moduleCode?: string): Promise<StreamableHTTPServerTransport> {
-    const server = await this.buildServerFromDb(moduleCode);
+  private async buildAndConnect(
+    moduleCode?: string,
+    token?: string,
+  ): Promise<StreamableHTTPServerTransport> {
+    const server = await this.buildServerFromDb(moduleCode, token);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sid) => {
@@ -587,16 +823,30 @@ export class McpService implements OnModuleInit {
     moduleCode: string,
     toolName: string,
     args: Record<string, unknown>,
+    token?: string,
   ): Promise<unknown> {
     const mod = await this.moduleRepo.findOne({
       where: { code_key: moduleCode, enabled: true },
       relations: ['tools'],
     });
     if (!mod) throw new NotFoundException(`模块 ${moduleCode} 不存在或未启用`);
+    const config = this.toConfig(mod, token);
+
+    // 通用任务工具（跨模块）：按 jobId 路由到归属模块
+    if (toolName === 'get_job_status' || toolName === 'cancel_job') {
+      return this.handleJobQuery(toolName, args ?? {}, token);
+    }
+
+    // 任务型工具：与 MCP 工具保持同一套 T3 语义（提交 / 可选同步等待）
+    const jobDef = (config.jobs ?? []).find((j) => j.name === toolName);
+    if (jobDef) {
+      const result = await executeJob(config, jobDef, args ?? {});
+      return { content: result.content[0]?.text ?? '', isError: result.isError ?? false };
+    }
+
     const toolDef = (mod.tools ?? []).find((t) => t.name === toolName);
     if (!toolDef) throw new NotFoundException(`工具 ${toolName} 在模块 ${moduleCode} 中不存在`);
 
-    const config = this.toConfig(mod);
     const def: HttpToolDef = {
       name: toolDef.name,
       description: toolDef.description,
@@ -604,6 +854,101 @@ export class McpService implements OnModuleInit {
       path: toolDef.path,
       params: toolDef.params ?? [],
     };
-    return callApi(config, def, args ?? {});
+    // 与任务型工具保持一致的返回结构：统一包装为 { content: "<json>" }
+    const result = await callApi(config, def, args ?? {}, { passThroughToken: token });
+    return { content: typeof result === 'string' ? result : JSON.stringify(result) };
+  }
+
+  /**
+   * 通用任务查询/取消（/mcp/tools/call 直调入口，与 MCP 工具 get_job_status / cancel_job 等价）。
+   * 按 jobId 找到归属模块，再走该模块任务工具的 status / cancel 接口。
+   */
+  private async handleJobQuery(
+    toolName: 'get_job_status' | 'cancel_job',
+    args: Record<string, unknown>,
+    token?: string,
+  ): Promise<unknown> {
+    const jobId = String(args?.jobId ?? '');
+    if (!jobId) throw new BadRequestException('缺少 jobId');
+    const route = await this.resolveJobRoute(jobId);
+    if (!route?.codeKey) throw new NotFoundException(`未知任务: ${jobId}`);
+
+    const mod = await this.moduleRepo.findOne({
+      where: { code_key: route.codeKey, enabled: true },
+    });
+    if (!mod) throw new NotFoundException(`模块 ${route.codeKey} 不存在或未启用`);
+
+    const config = this.toConfig(mod, token);
+    const jobs = config.jobs ?? [];
+    const jobDef =
+      (route.toolName ? jobs.find((j) => j.name === route.toolName) : undefined) ?? jobs[0];
+    if (!jobDef) throw new NotFoundException(`模块 ${route.codeKey} 未声明任务型工具`);
+
+    if (toolName === 'get_job_status') {
+      const st = await callApi(
+        config,
+        { method: jobDef.status.method, path: jobDef.status.path },
+        { jobId },
+        { passThroughToken: token },
+      );
+      return { content: JSON.stringify(st) };
+    }
+
+    if (!jobDef.cancel) {
+      throw new BadRequestException(`任务工具 ${jobDef.name} 不支持取消`);
+    }
+    const res = await callApi(config, jobDef.cancel, { jobId }, { passThroughToken: token });
+    return { content: JSON.stringify(res) };
+  }
+
+  /** seed 发布管理模块（code_key=deploy，指向 deploy-console 的 /api/mcp/* 接口） */
+  private async seedDeployModule(): Promise<void> {
+    const baseUrl = process.env.DEPLOY_CONSOLE_URL ?? 'http://127.0.0.1:6200';
+    const authType = 'pass-through';
+    const authConfig: Record<string, any> | null = null;
+    const timeout = 60;
+
+    let existing = await this.moduleRepo.findOne({ where: { code_key: 'deploy' } });
+    if (existing && existing.module_type !== 'http') {
+      await this.moduleRepo.delete({ id: existing.id });
+      existing = null;
+    }
+    if (existing) {
+      if (
+        existing.base_url !== baseUrl ||
+        existing.auth_type !== authType ||
+        existing.timeout !== timeout
+      ) {
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+          timeout,
+        });
+        this.logger.log(`已同步发布管理 base_url=${baseUrl} auth_type=${authType}`);
+      }
+      await this.syncModuleTools(existing.id, DEPLOY_HTTP_TOOLS);
+      return;
+    }
+
+    const mod = await this.moduleRepo.save(
+      this.moduleRepo.create({
+        name: '发布管理',
+        description:
+          '发布流水线：按「环境 + 模块 + 版本」发布微前端模块（admin/portal），支持灰度发布、转全量、回滚与版本历史查询',
+        base_url: baseUrl,
+        timeout,
+        auth_type: authType,
+        auth_config: authConfig,
+        module_type: 'http',
+        code_key: 'deploy',
+        enabled: true,
+      }),
+    );
+    const tools = DEPLOY_HTTP_TOOLS.map((t) => this.toolRepo.create({ module_id: mod.id, ...t }));
+    await this.toolRepo.save(tools);
+    this.logger.log(
+      `已 seed 发布管理 HTTP 模块: ${baseUrl}（${tools.length} 个同步工具 + ${this.jobToolsFor('deploy').length} 个任务型工具）`,
+    );
   }
 }
