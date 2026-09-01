@@ -148,9 +148,18 @@ export class AgentDefSyncService {
         description: `MCP 远程工具 ${cap.ref}`,
         inputSchema: { type: 'object', properties: {} },
       };
+      // 能力级运行时配置：longRunning 时自动轮询长任务到终态
+      const runtime = (cap.config ?? {}) as {
+        longRunning?: boolean;
+        maxWaitMs?: number;
+        timeoutMs?: number;
+        intervalMs?: number;
+      };
       try {
-        this.mcpService.registerMcpTool(this.toolRegistry, meta);
-        this.logger.log(`已注册 MCP 能力（懒加载）: ${cap.ref}`);
+        this.mcpService.registerMcpTool(this.toolRegistry, meta, runtime);
+        this.logger.log(
+          `已注册 MCP 能力（懒加载）: ${cap.ref}${runtime.longRunning ? ' [长任务]' : ''}`,
+        );
       } catch (err) {
         this.logger.warn(`MCP 能力注册跳过（可能冲突）: ${cap.ref} - ${(err as Error).message}`);
       }

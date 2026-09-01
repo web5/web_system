@@ -290,4 +290,118 @@ export const serverApi = {
     >,
 }
 
+/* ========== Pipelines（发布流水线） ========== */
+
+export interface PipelineItem {
+  id: string
+  env: string
+  moduleKey: string
+  versionTag?: string
+  mode: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  stage?: string
+  progress?: { current: number; total: number; message?: string }
+  logs?: string[]
+  error?: string
+  operator?: string
+  gitBranch?: string
+  gitCommit?: string
+  grayscaleRule?: Record<string, unknown>
+  canaryRuleId?: string
+  result?: Record<string, unknown>
+  startTime: number
+  endTime?: number
+  reuseArtifact?: boolean
+}
+
+export const pipelineApi = {
+  submit: (dto: {
+    env: string
+    moduleKey: string
+    /** 目标分支（默认 master），发布基于远程仓库该分支拉取代码 */
+    branch?: string
+    /** 目标 commit（git 短哈希，默认分支最新） */
+    commitId?: string
+    mode?: 'direct' | 'grayscale'
+    /** @deprecated 等价 commitId */
+    versionTag?: string
+    target?: 'local' | 'remote'
+    grayscaleRule?: Record<string, unknown>
+    confirm?: boolean
+  }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
+
+  list: (params?: { env?: string; moduleKey?: string; limit?: number }) =>
+    http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
+
+  get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
+
+  cancel: (id: string) => http.post(`/pipelines/${id}/cancel`) as Promise<{ id: string; status: string }>,
+
+  promote: (id: string) =>
+    http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
+
+  /** 可发布版本（含磁盘上未登记版本表的历史产物） */
+  releases: (env?: string, component?: string) =>
+    http.get('/pipelines/meta/releases', {
+      params: { ...(env ? { env } : {}), ...(component ? { component } : {}) },
+    }) as Promise<
+      {
+        versionTag: string
+        component?: string
+        env?: string
+        gitCommit?: string
+        gitBranch?: string
+        releasedBy?: string
+        releasedAt?: string
+        status?: string
+        note?: string
+        /** db=版本表记录；artifact=磁盘产物（未登记版本表） */
+        source?: 'db' | 'artifact'
+      }[]
+    >,
+}
+
+/* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
+
+export const STAGES = [
+  'check',
+  'pull',
+  'build',
+  'upload',
+  'restart',
+  'verify',
+  'cleanup',
+] as const
+
+export const hookApi = {
+  list: (key: string) =>
+    http.get(`/modules/${key}/hooks`) as Promise<
+      { stage: string; configured: boolean; enabled: boolean; updatedAt?: string; updatedBy?: string }[]
+    >,
+  get: (key: string, stage: string) =>
+    http.get(`/modules/${key}/hooks/${stage}`) as Promise<{
+      id?: string
+      moduleKey: string
+      stage: string
+      script: string
+      enabled: boolean
+      updatedBy?: string
+    } | null>,
+  save: (key: string, stage: string, script: string) =>
+    http.put(`/modules/${key}/hooks/${stage}`, { script }) as Promise<{
+      moduleKey: string
+      stage: string
+      updatedAt: string
+    }>,
+  remove: (key: string, stage: string) =>
+    http.delete(`/modules/${key}/hooks/${stage}`) as Promise<{ ok: boolean }>,
+  validate: (key: string, stage: string, script: string) =>
+    http.post(`/modules/${key}/hooks/${stage}/validate`, { script }) as Promise<{
+      ok: boolean
+      message: string
+    }>,
+  templates: (type: string) =>
+    http.get('/modules/hooks/templates', { params: { type } }) as Promise<Record<string, string>>,
+}
+
 export default http
