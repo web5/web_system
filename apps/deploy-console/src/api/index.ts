@@ -217,6 +217,31 @@ export const monitorApi = {
     http.get('/monitor/logs', {
       params: { env, service, lines },
     }) as Promise<{ lines: string[] }>,
+  localPm2: () =>
+    http.get('/monitor/local/pm2') as Promise<
+      {
+        name: string
+        status: 'online' | 'stopped' | 'errored'
+        cpu: number
+        memory: number
+        uptime: number
+        restarts: number
+      }[]
+    >,
+  localHealth: () =>
+    http.get('/monitor/local/health') as Promise<
+      {
+        service: string
+        address: string
+        status: 'up' | 'down'
+        response?: string
+        responseTime: number
+      }[]
+    >,
+  localLogs: (service: string, lines = 100) =>
+    http.get('/monitor/local/logs', {
+      params: { service, lines },
+    }) as Promise<{ lines: string[] }>,
 }
 
 /* ========== Audit ========== */
@@ -369,6 +394,8 @@ export const STAGES = [
   'build',
   'upload',
   'restart',
+  'version',
+  'pointer',
   'verify',
   'cleanup',
 ] as const

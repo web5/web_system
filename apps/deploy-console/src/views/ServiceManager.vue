@@ -21,7 +21,7 @@ function typeColor(type: string): string {
 // ============ 模块列表 ============
 const moduleList = ref<any[]>([])
 const moduleLoading = ref(false)
-const typeFilter = ref<string | undefined>(undefined)
+const activeType = ref<string>('all')
 
 const moduleFormVisible = ref(false)
 const moduleSaving = ref(false)
@@ -140,8 +140,8 @@ function removeModule(m: any) {
 }
 
 const filteredModules = computed(() => {
-  if (!typeFilter.value) return moduleList.value
-  return moduleList.value.filter((m: any) => m.type === typeFilter.value)
+  if (activeType.value === 'all') return moduleList.value
+  return moduleList.value.filter((m: any) => m.type === activeType.value)
 })
 
 onMounted(loadModules)
@@ -157,19 +157,14 @@ onMounted(loadModules)
 
     <a-card>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <a-space>
-          <span>共 {{ moduleList.length }} 个模块</span>
-          <a-select
-            v-model:value="typeFilter"
-            placeholder="按类型筛选"
-            allow-clear
-            style="width: 200px;"
-          >
-            <a-select-option v-for="t in TYPE_OPTIONS" :key="t.value" :value="t.value">
-              {{ t.label }}
-            </a-select-option>
-          </a-select>
-        </a-space>
+        <a-tabs v-model:activeKey="activeType" size="small">
+          <a-tab-pane key="all" :tab="`全部 (${moduleList.length})`" />
+          <a-tab-pane
+            v-for="t in TYPE_OPTIONS"
+            :key="t.value"
+            :tab="`${typeLabel(t.value)} (${moduleList.filter((m: any) => m.type === t.value).length})`"
+          />
+        </a-tabs>
         <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
       </div>
 
