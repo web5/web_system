@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { Client } from 'ssh2';
 import { EnvironmentService } from '../environment/environment.service';
 import { ServerService } from '../server/server.service';
@@ -33,6 +34,24 @@ export interface Pm2Process {
   uptime: number;
   restarts: number;
   port?: number;
+}
+
+/**
+ * pm2 jlist 原始 JSON 结构（仅声明实际使用的字段，避免 any）
+ */
+interface RawPm2Process {
+  name: string;
+  pid?: number;
+  pm2_env?: {
+    status?: string;
+    pm_uptime?: number;
+    restart_time?: number;
+    PORT?: number;
+  };
+  monit?: {
+    cpu?: number;
+    memory?: number;
+  };
 }
 
 /**
@@ -158,24 +177,15 @@ export class MonitorService {
     const sshConfig = await this.getSshConfig(env);
     const output = await this.execSsh(sshConfig, 'pm2 jlist');
 
-    let rawList: any[];
+    let rawList: RawPm2Process[];
     try {
-      rawList = JSON.parse(output.trim());
+      rawList = JSON.parse(output.trim()) as RawPm2Process[];
     } catch {
       throw new BadGatewayException('解析 pm2 jlist 输出失败');
     }
 
     // 转换为结构化数据
-    return rawList.map((proc: any) => ({
-      name: proc.name,
-      pid: proc.pid || 0,
-      status: proc.pm2_env?.status || 'unknown',
-      cpu: proc.monit?.cpu || 0,
-      memory: proc.monit?.memory || 0,
-      uptime: proc.pm2_env?.pm_uptime || 0,
-      restarts: proc.pm2_env?.restart_time || 0,
-      port: proc.pm2_env?.PORT || undefined,
-    }));
+    return rawList.map((proc) => this.toPm2Process(proc));
   }
 
   /**
@@ -244,5 +254,86 @@ export class MonitorService {
     const logs = output.trim().split('\n').filter(Boolean);
 
     return { service, logs };
+  }
+
+  // ===== 以下为本机（deploy-console 运行主机）监控，不走 SSH =====
+
+  /**
+   * 本机执行命令（Promise 封装，超时 10s）
+   * 复用于本机 pm2 进程查询/探活/日志；pm2 退出码非零时若仍有 stdout 也返回
+   */
+  private execLocal(command: string, timeoutMs = 10000): string {
+    try {
+      return execSync(command, { timeout: timeoutMs, encoding: 'utf8' }).toString();
+    } catch (e: any) {
+      if (e?.stdout) return e.stdout.toString();
+      throw new BadGatewayException(`本机命令执行失败: ${e?.message || e}`);
+    }
+  }
+
+  /**
+   * 获取本机 PM2 进程列表（在 deploy-console 运行主机直接执行 pm2 jlist）
+   */
+  async getLocalPm2List(): Promise<Pm2Process[]> {
+    let rawList: RawPm2Process[];
+    try {
+      rawList = JSON.parse(this.execLocal('pm2 jlist').trim()) as RawPm2Process[];
+    } catch {
+      throw new BadGatewayException('解析本机 pm2 jlist 输出失败');
+    }
+    return rawList.map((proc) => this.toPm2Process(proc));
+  }
+
+  /**
+   * 将 pm2 jlist 原始进程转换为结构化 Pm2Process（本地/远端共用，消除两份漂移代码）
+   */
+  private toPm2Process(proc: RawPm2Process): Pm2Process {
+    return {
+      name: proc.name,
+      pid: proc.pid || 0,
+      status: proc.pm2_env?.status || 'unknown',
+      cpu: proc.monit?.cpu || 0,
+      memory: proc.monit?.memory || 0,
+      uptime: proc.pm2_env?.pm_uptime || 0,
+      restarts: proc.pm2_env?.restart_time || 0,
+      port: proc.pm2_env?.PORT || undefined,
+    };
+  }
+
+  /**
+   * 本机服务健康检查：对本机 pm2 进程暴露的端口做连通性探测
+   */
+  async getLocalHealth(): Promise<HealthCheck[]> {
+    const procs = await this.getLocalPm2List();
+    const checks = procs
+      .filter((p) => p.port)
+      .map(async (p): Promise<HealthCheck> => {
+        const address = `127.0.0.1:${p.port}`;
+        const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${address}/ || echo "000:0"`;
+        try {
+          const output = this.execLocal(command);
+          const [httpCode, responseTime] = output.trim().split(':');
+          return {
+            service: p.name,
+            address,
+            status: httpCode !== '000' ? 'up' : 'down',
+            response: httpCode,
+            responseTime: parseFloat(responseTime) * 1000,
+          } as HealthCheck;
+        } catch {
+          return { service: p.name, address, status: 'down', response: 'timeout' };
+        }
+      });
+    return Promise.all(checks);
+  }
+
+  /**
+   * 拉取本机 PM2 日志
+   */
+  async getLocalLogs(service: string, lines = 100): Promise<{ service: string; logs: string[] }> {
+    const output = this.execLocal(
+      `pm2 logs ${service} --lines ${lines} --nostream --raw 2>/dev/null || echo "无日志"`,
+    );
+    return { service, logs: output.trim().split('\n').filter(Boolean) };
   }
 }
