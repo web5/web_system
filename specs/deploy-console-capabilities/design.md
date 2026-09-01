@@ -49,7 +49,15 @@ Deploy-Console 是发布控制台的「单一入口」：
 > 详细设计在各自批的 Plan→Design 阶段展开（符合 playbook 循环）。此处仅列关键决策，供批 2/批 3 agent 直接读取。
 
 ### 批 2（P0 可靠性 + 配置中心）
-- **③④⑤ 后端重建 + 探针 + 失败回滚**：在 `verify` 阶段调用 monitor 探针（复用 `getLocalHealth`/端口探活）；backend 模块的 `restart` 阶段改为从发布目录目标版本产物重建 pm2 进程；verify 失败触发自动回滚（含 backend restart），回滚动作写审计。
+
+#### 现状盘点（2026-09-01 读 pipeline.service.ts 后）
+- **④ 探活写记录已有雏形**：`stageVerify` → `verifyBackend`（`pipeline.service.ts:1072`）已轮询 `pm2 jlist` 检查 `status==='online'` 并写入 `p.result.online`（:1097），**但只查 pm2 进程状态，未做真实端口/HTTP 探活**（与评审「PORT 依赖」同类缺陷）。→ 增量 = 升级为真实端口探活 + 显式审计。
+- **⑤ verify 失败自动回滚完全未实现**：`run` 的 catch 块（:464）只标 `failed` + 写审计，**无任何回滚调用**。回滚能力在 `deploy` 模块（`deploy.service.ts` 的 `rollback`/`publishVersion`），需注入后由 pipeline 在 verify 失败时调用。
+
+#### 实现方案
+- **④**：`verifyBackend` 在 pm2 online 后，用 `pm2_env.PORT` 取端口，复用现有 `httpRequest` 做端口/HTTP 探活；结果写入 `p.result.healthCheck` 并审计一条 `pipeline.verify.healthcheck`。端口缺失时降级为 pm2 online（不阻塞）。
+- **③**：`restart` 阶段对 backend 改为从发布目录目标版本产物重建 pm2 进程（非仅切指针）；与 ⑤ 共用回滚路径。
+- **⑤**：`PipelineService` 注入 `DeployService`，在 `run` 的 catch 中若失败阶段为 `verify`（或 restart 之后）自动调用 `rollback` 回退到上一稳定版本，并审计留痕。
 - **⑥ Migration**：pipeline 增加 `migration` 阶段（或 pre-check 校验），仅 backend 模块触发；失败阻断。
 - **⑦ 并发锁**：以 `moduleKey + env` 为键的发布锁（DB 或 redis），拒绝/串行化并发发布，job 幂等去重。
 - **⑧ 多环境编排**：在 pipeline submit 支持 `targets: env[]`，顺序执行 + 统一回滚边界。
