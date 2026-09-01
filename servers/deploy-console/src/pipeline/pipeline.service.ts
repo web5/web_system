@@ -21,6 +21,7 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { HookService } from '../hook/hook.service';
+import { DeployService } from '../deploy/deploy.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
 const KEEP_VERSIONS = 5;
@@ -86,6 +87,7 @@ export class PipelineService {
     private readonly canaryService: CanaryService,
     private readonly auditService: AuditService,
     private readonly hookService: HookService,
+    private readonly deployService: DeployService,
   ) {}
 
   /**
@@ -409,6 +411,8 @@ export class PipelineService {
     if (target === 'remote' && p.env === 'local') {
       p.logs = [...(p.logs ?? []), 'local 环境不支持远程投递，已强制为本机投递'];
     }
+    let prevVersion: string | undefined;
+
     try {
       p.status = 'running';
       await this.save(p);
@@ -436,7 +440,15 @@ export class PipelineService {
           if (!(await this.runHook(p, 'upload'))) await this.stageUpload(p, uploadTarget);
         }
       }
-      // 5. version（写版本表）
+      // 5. version（写版本表）；回滚前先记录当前线上版本作为回退目标
+      try {
+        const dep = await this.deploymentRepo.findOne({
+          where: { envId: p.env, moduleKey: p.moduleKey },
+        });
+        prevVersion = dep?.currentVersion;
+      } catch {
+        /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
+      }
       await this.stageVersion(p);
       // 6. pointer：前端切指针/灰度规则；后端无指针
       if (!isBackend) {
@@ -472,6 +484,37 @@ export class PipelineService {
       await this.save(p);
       this.logger.error(`流水线失败: ${p.id} 阶段=${p.stage} : ${msg}`);
       if (p.status === 'failed') {
+        // ⑤ 验证阶段失败 → 自动回滚到上一稳定版本（verify 阶段才说明新版本已发布但不健康）
+        if (p.stage === 'verify' && prevVersion && prevVersion !== p.versionTag) {
+          try {
+            const rollTask = await this.deployService.startRollback(
+              p.env,
+              prevVersion,
+              p.operator,
+              p.moduleKey,
+            );
+            p.logs = [...(p.logs ?? []), `验证失败，已自动回滚到 ${prevVersion}（task=${rollTask}）`];
+            await this.auditService.log({
+              user: p.operator || 'unknown',
+              action: 'pipeline.auto-rollback',
+              env: p.env,
+              component: p.moduleKey,
+              status: 'success',
+              detail: `验证失败自动回滚: ${p.env}/${p.moduleKey} → ${prevVersion}（task=${rollTask}）`,
+            });
+          } catch (re) {
+            p.logs = [...(p.logs ?? []), `自动回滚失败: ${(re as Error).message}`];
+            this.logger.error(`自动回滚失败: ${(re as Error).message}`);
+            await this.auditService.log({
+              user: p.operator || 'unknown',
+              action: 'pipeline.auto-rollback',
+              env: p.env,
+              component: p.moduleKey,
+              status: 'failed',
+              detail: `验证失败自动回滚异常: ${(re as Error).message}`,
+            });
+          }
+        }
         await this.auditService.log({
           user: p.operator || 'unknown',
           action: 'pipeline.finish',
@@ -1069,22 +1112,39 @@ export class PipelineService {
     await this.save(p);
   }
 
-  /** 后端验证：pm2 服务重启后保持 online（短暂 launching 视为正常启动中） */
+  /** 后端验证：pm2 服务重启后保持 online，且端口真实可服务（避免「进程在但端口没起」的假健康） */
   private async verifyBackend(p: DeployPipelineEntity): Promise<void> {
     const mod = await this.moduleRegistry.get(p.moduleKey);
     const names = this.resolvePm2Names(p, mod);
     let ok = false;
+    let healthCheck: { port?: string | number; ok?: boolean; checkedAt?: string; note?: string } = {};
     for (let i = 0; i < 12; i++) {
       await this.sleep(2000);
       try {
         const jlist = this.exec(`"${this.pm2Bin}" jlist`);
-        const apps = JSON.parse(jlist) as Array<{ name?: string; pm2_env?: { status?: string } }>;
+        const apps = JSON.parse(jlist) as Array<{
+          name?: string;
+          pm2_env?: { status?: string; PORT?: string | number };
+        }>;
         for (const name of names) {
           const app = apps.find((a) => a.name === name);
           const status = app?.pm2_env?.status;
           if (status === 'online') {
             ok = true;
             p.logs = [...(p.logs ?? []), `服务在线: ${name}`];
+            // 真实端口探活：pm2 online 仅代表进程存活，端口在监听才是真健康
+            const port = app?.pm2_env?.PORT;
+            if (port) {
+              const probe = await this.httpRequest(`http://127.0.0.1:${port}/`, 'GET', 3000);
+              const reachable = probe.status > 0;
+              healthCheck = { port, ok: reachable, checkedAt: new Date().toISOString() };
+              p.logs = [
+                ...(p.logs ?? []),
+                `端口探活 ${port}: ${reachable ? '健康' : `未响应(HTTP ${probe.status})`}`,
+              ];
+            } else {
+              healthCheck = { note: 'pm2_env.PORT 缺失，降级为进程状态探活', ok: undefined };
+            }
             break;
           }
           p.logs = [...(p.logs ?? []), `等待服务上线: ${name}（${status || '未找到'}）`];
@@ -1094,10 +1154,19 @@ export class PipelineService {
         // 查询失败继续轮询
       }
     }
-    p.result = { ...(p.result ?? {}), online: ok };
+    p.result = { ...(p.result ?? {}), online: ok, healthCheck };
     if (!ok) {
       throw new Error(`服务重启后未在线: ${p.moduleKey}（请查看 pm2 logs）`);
     }
+    // 探活结果审计留痕
+    await this.auditService.log({
+      user: p.operator || 'unknown',
+      action: 'pipeline.verify.healthcheck',
+      env: p.env,
+      component: p.moduleKey,
+      status: healthCheck.ok === false ? 'warn' : 'success',
+      detail: `发布后健康检查: ${p.moduleKey} → ${p.versionTag}（port=${healthCheck.port ?? 'n/a'}, ok=${healthCheck.ok ?? 'n/a'}）`,
+    });
     await this.save(p);
   }
 
