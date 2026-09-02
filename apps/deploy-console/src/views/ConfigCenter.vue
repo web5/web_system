@@ -100,8 +100,9 @@ async function save() {
       scope: e.scope!,
       envId: e.scope === 'global' ? undefined : e.envId,
       moduleKey: e.scope === 'module' ? e.moduleKey : undefined,
-      key: e.key,
-      value: e.value,
+      // 上方已校验非空（密钥要求重新输入、非密钥要求填写）
+      key: e.key!,
+      value: e.value!,
       isSecret: e.isSecret,
       description: e.description,
     })
