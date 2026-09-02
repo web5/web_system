@@ -268,7 +268,10 @@ interface ModuleItem {
   defaultEnv?: string
 }
 const modules = ref<ModuleItem[]>([])
-const availableModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
+/** 可发布模块：后端 / 前端 / 微前端（mini-app 不在流水线能力范围） */
+const availableModules = computed(() =>
+  modules.value.filter((m) => ['micro-frontend', 'frontend', 'backend'].includes(m.type)),
+)
 const form = ref({
   moduleKey: '',
   branch: 'master',
@@ -381,8 +384,16 @@ async function onModuleChange() {
   if (mod?.defaultEnv && environments.value.some((e) => e.id === mod.defaultEnv)) {
     env.value = mod.defaultEnv
   }
+  // 灰度仅对前端/微前端（gateway resolveCanary 作用于页面静态资源）；后端服务只支持全量
+  if (mod && mod.type === 'backend') form.value.mode = 'direct'
   await Promise.all([loadReleases(), loadAvailTemplates()])
 }
+
+/** 当前所选模块是否支持灰度（后端服务不支持） */
+const canGrayscale = computed(() => {
+  const m = modules.value.find((x) => x.key === form.value.moduleKey)
+  return !!m && m.type !== 'backend'
+})
 function buildGrayscaleRule(): Record<string, unknown> | undefined {
   if (form.value.mode !== 'grayscale') return undefined
   if (form.value.grayscaleType === 'percent') {
@@ -768,7 +779,7 @@ onUnmounted(stopPolling)
           </a-col>
         </a-row>
 
-        <a-form-item label="模式">
+        <a-form-item v-if="canGrayscale" label="模式">
           <a-radio-group v-model:value="form.mode">
             <a-radio value="direct">全量</a-radio>
             <a-radio value="grayscale">灰度</a-radio>
