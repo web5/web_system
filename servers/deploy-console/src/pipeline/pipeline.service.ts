@@ -346,8 +346,11 @@ export class PipelineService {
     operator?: string,
   ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const p = await this.get(id);
-    if (!['failed', 'cancelled'].includes(p.status)) {
-      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，仅失败/已取消可重试`);
+    // 终态可重试：失败/取消 = 重试；成功 = 以相同参数"再次发布"（重复部署同一 commit，用于复验）
+    if (!['failed', 'cancelled', 'succeeded'].includes(p.status)) {
+      throw new BadRequestException(
+        `流水线 ${id} 状态为 ${p.status}，仅 失败/已取消/成功 可重试（运行中请等待结束）`,
+      );
     }
     await this.auditService.log({
       user: operator || p.operator || 'unknown',
