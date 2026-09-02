@@ -21,6 +21,8 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
+// 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
+import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { DeployService } from '../deploy/deploy.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
@@ -99,6 +101,7 @@ export class PipelineService {
     private readonly canaryService: CanaryService,
     private readonly auditService: AuditService,
     private readonly stageCommands: StageCommandService,
+    private readonly configs: ConfigCenterService,
     private readonly deployService: DeployService,
   ) {}
 
@@ -554,6 +557,27 @@ export class PipelineService {
   // ── 阶段命令（每模块每阶段一条 shell，DB 为真相源）────────────────
 
   /**
+   * 解析要注入的环境变量：配置中心按 global → env → module 合并的结果。
+   *
+   * 合并后的键**强制覆盖**既有环境（历史 `PORT=6200` 污染的对策）。
+   * 解析失败只告警不阻断——配置中心是增强能力，不该让整个发布失败。
+   */
+  private async resolveInjectEnv(p: DeployPipelineEntity): Promise<Record<string, string>> {
+    try {
+      const cfg = await this.configs.resolve(p.env, p.moduleKey);
+      const keys = Object.keys(cfg);
+      if (keys.length) {
+        p.logs = [...(p.logs ?? []), `[config] 注入 ${keys.length} 项配置（强制覆盖）`];
+        await this.save(p);
+      }
+      return cfg;
+    } catch (e) {
+      this.logger.warn(`解析配置失败，本次不注入配置: ${(e as Error).message}`);
+      return {};
+    }
+  }
+
+  /**
    * 执行某阶段的模块命令。
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
@@ -590,7 +614,9 @@ export class PipelineService {
     p.logs = [...(p.logs ?? []), `[${stage}] cwd: ${cwd}`];
     await this.save(p);
 
-    const code = await this.runShell(cmd.command, env, p, cmd.timeoutSec, cwd);
+    // 配置中心注入（global → env → module 强制覆盖）
+    const inject = await this.resolveInjectEnv(p);
+    const code = await this.runShell(cmd.command, { ...env, ...inject }, p, cmd.timeoutSec, cwd);
     if (code !== 0) {
       throw new Error(`[${stage}] 阶段命令执行失败（exit ${code}），详见日志`);
     }
@@ -670,12 +696,17 @@ export class PipelineService {
    * （线上出现过 `git: command not found`、`spawn npx ENOENT`），
    * 流水线不能依赖启动时的 shell PATH。
    */
-  private exec(cmd: string, cwd = this.releaseWorkspace): string {
+  private exec(
+    cmd: string,
+    cwd = this.releaseWorkspace,
+    extraEnv?: Record<string, string>,
+  ): string {
     return execSync(cmd, {
       cwd,
       encoding: 'utf-8',
       env: {
         ...process.env,
+        ...(extraEnv ?? {}),
         // pm2 / npx / pnpm 都是 node 脚本，PATH 必须包含 node 安装目录，
         // 否则子进程报 `env: node: No such file or directory`
         PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
@@ -928,7 +959,11 @@ export class PipelineService {
     }
 
     const restarted = names[0];
-    this.exec(`"${this.pm2Bin}" restart ${restarted} --update-env`);
+    // 配置中心注入：global → env → module 合并后**强制覆盖**进程环境。
+    // 这是历史 `PORT=6200` 污染的对策：端口等变量以配置中心为准，
+    // 禁止在 shell 全局预设里写死。
+    const injectEnv = await this.resolveInjectEnv(p);
+    this.exec(`"${this.pm2Bin}" restart ${restarted} --update-env`, undefined, injectEnv);
     p.logs = [...(p.logs ?? []), `服务已重启: ${restarted}`];
     p.result = { ...(p.result ?? {}), restarted };
     await this.save(p);

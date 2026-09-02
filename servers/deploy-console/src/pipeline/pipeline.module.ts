@@ -10,6 +10,7 @@ import { CanaryModule } from '../canary/canary.module';
 import { AuditModule } from '../audit/audit.module';
 import { DeployModule } from '../deploy/deploy.module';
 import { StageCommandModule } from '../stage-command/stage-command.module';
+import { ConfigCenterModule } from '../config/config.module';
 
 @Module({
   imports: [
@@ -21,6 +22,8 @@ import { StageCommandModule } from '../stage-command/stage-command.module';
     DeployModule,
     // 阶段命令（每模块每阶段一条 shell，DB 为真相源）
     StageCommandModule,
+    // 配置中心（发布/重启时按作用域合并并强制覆盖注入进程环境）
+    ConfigCenterModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],
