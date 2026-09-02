@@ -14,6 +14,7 @@ import { ConfigCenterModule } from '../config/config.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { NotificationModule } from '../notification/notification.module';
 import { ApprovalModule } from '../approval/approval.module';
+import { PipelineTemplateModule } from '../pipeline-template/pipeline-template.module';
 
 @Module({
   imports: [
@@ -33,6 +34,8 @@ import { ApprovalModule } from '../approval/approval.module';
     NotificationModule,
     // 审批门禁（需审批环境默认 prod：提交阻断，审批通过后执行）
     ApprovalModule,
+    // 流水线模板（提交解析模板 + 落实例快照）
+    PipelineTemplateModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],

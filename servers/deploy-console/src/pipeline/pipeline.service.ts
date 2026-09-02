@@ -27,6 +27,10 @@ import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
+import {
+  PipelineTemplateService,
+  needsApprovalForTemplate,
+} from '../pipeline-template/pipeline-template.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
 const KEEP_VERSIONS = 5;
@@ -72,6 +76,8 @@ export interface SubmitPipelineDto {
   commitId?: string;
   /** @deprecated 等价于 commitId，兼容旧调用 */
   versionTag?: string;
+  /** 流水线模板 ID（不传 = 模块默认模板，兼容旧调用/MCP） */
+  templateId?: string;
   /** 投递目标：local=本机静态目录；remote=SSH 到服务器。默认自动判定 */
   target?: 'local' | 'remote';
   /** 灰度规则（mode=grayscale 时必填）：{ type:'percent'|'user-list'|'header', ... } */
@@ -112,6 +118,8 @@ export class PipelineService {
     private readonly deployService: DeployService,
     // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
     private readonly approvals: ApprovalService,
+    // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
+    private readonly templates: PipelineTemplateService,
   ) {}
 
   /**
@@ -190,8 +198,16 @@ export class PipelineService {
     }
 
     const id = this.generateId();
-    // 审批门禁：需审批环境（默认 prod）的提交先阻断，审批通过后才执行
-    const needsApproval = await this.approvals.needsApproval(dto.env);
+    // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
+    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 审批门禁：模板策略覆盖环境规则（always/never），inherit 沿用环境（默认 prod）
+    const needsApproval = needsApprovalForTemplate(
+      tpl,
+      await this.approvals.needsApproval(dto.env),
+    );
+    const runTarget =
+      dto.target ??
+      (tpl.defaultTarget === 'auto' ? undefined : (tpl.defaultTarget as 'local' | 'remote'));
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -200,6 +216,11 @@ export class PipelineService {
       versionTag: dto.commitId ?? dto.versionTag,
       gitBranch: dto.branch || undefined,
       mode,
+      // 模板快照：模板后续修改/删除不影响已提交实例
+      templateId: tpl.id,
+      templateName: tpl.name,
+      skipVerify: !!tpl.skipVerify,
+      runTarget,
       status: needsApproval ? 'pending-approval' : 'pending',
       stage: 'check',
       progress: {
@@ -207,7 +228,9 @@ export class PipelineService {
         total: PIPELINE_STAGES.length,
         message: needsApproval ? '已提交，等待审批' : '已提交，等待执行',
       },
-      logs: needsApproval ? ['该环境发布需审批：提交已阻断，审批通过后自动执行'] : [],
+      logs: needsApproval
+        ? [`该发布需审批（模板「${tpl.name}」）：提交已阻断，审批通过后自动执行`]
+        : [],
       operator,
       grayscaleRule: dto.grayscaleRule,
       startTime: Date.now(),
@@ -230,7 +253,7 @@ export class PipelineService {
         env: dto.env,
         component: dto.moduleKey,
         status: 'pending_approval',
-        detail: `提交发布流水线 ${id}（mode=${mode}）→ 需审批，已阻断等待`,
+        detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）→ 需审批，已阻断等待`,
       });
       this.notifications.notify({
         event: 'deploy.pending-approval',
@@ -238,7 +261,7 @@ export class PipelineService {
         moduleKey: dto.moduleKey,
         versionTag: dto.commitId ?? dto.versionTag,
         status: 'warn',
-        detail: `${operator || 'unknown'} 提交发布待审批（审批单 ${approval.id}）`,
+        detail: `${operator || 'unknown'} 提交发布待审批（模板「${tpl.name}」，审批单 ${approval.id}）`,
         operator: operator || 'unknown',
       });
       return { jobId: id, status: 'pending-approval', approvalId: approval.id };
@@ -250,11 +273,11 @@ export class PipelineService {
       env: dto.env,
       component: dto.moduleKey,
       status: 'started',
-      detail: `提交发布流水线 ${id}（mode=${mode}）`,
+      detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）`,
     });
 
-    // 后台执行，不阻塞提交响应
-    void this.run(entity, dto.target);
+    // 后台执行，不阻塞提交响应（投递目标已随实例快照 runTarget 固化）
+    void this.run(entity);
 
     return { jobId: id, status: entity.status };
   }
@@ -599,9 +622,12 @@ export class PipelineService {
   // ── 执行引擎 ──────────────────────────────────────────────
 
   private async run(p: DeployPipelineEntity, target?: 'local' | 'remote'): Promise<void> {
+    // 投递目标：实例快照 runTarget（提交时模板/入参确定）优先；auto/缺省 → 配置或本机
+    const effectiveTarget =
+      p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : target;
     // local 环境只投递本机：远程投递到「本地环境」没有意义，且容易误改远程产物
     const uploadTarget =
-      p.env === 'local' ? 'local' : (target ?? this.resolveDefaultTarget());
+      p.env === 'local' ? 'local' : (effectiveTarget ?? this.resolveDefaultTarget());
     if (target === 'remote' && p.env === 'local') {
       p.logs = [...(p.logs ?? []), 'local 环境不支持远程投递，已强制为本机投递'];
     }
@@ -676,8 +702,10 @@ export class PipelineService {
       if (!isBackend) {
         await this.stagePointer(p);
       }
-      // 7. verify：前端 manifest / 后端 health check（可被阶段命令覆盖）
-      if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
+      // 7. verify：前端 manifest / 后端 health check（可被阶段命令覆盖；模板 skipVerify 快线跳过探活）
+      if (!p.skipVerify) {
+        if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
+      }
       // 8. cleanup（可被阶段命令覆盖）
       if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
 

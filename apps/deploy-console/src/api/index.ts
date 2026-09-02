@@ -379,6 +379,21 @@ export const serverApi = {
 
 /* ========== Pipelines（发布流水线） ========== */
 
+/** 流水线模板（流程定义；模块下可建多条） */
+export interface PipelineTemplate {
+  id: string
+  moduleKey: string
+  name: string
+  description?: string
+  skipVerify: boolean
+  approval: 'inherit' | 'always' | 'never'
+  defaultTarget: 'auto' | 'local' | 'remote'
+  enabled: boolean
+  builtin: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PipelineItem {
   id: string
   env: string
@@ -387,6 +402,10 @@ export interface PipelineItem {
   mode: string
   /** pending-approval=提交被审批门禁阻断，等待审批 */
   status: 'pending' | 'pending-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  templateId?: string
+  /** 模板名快照（旧实例为 null → 展示「默认」） */
+  templateName?: string
+  skipVerify?: boolean
   stage?: string
   progress?: { current: number; total: number; message?: string }
   logs?: string[]
@@ -415,6 +434,8 @@ export const pipelineApi = {
     versionTag?: string
     target?: 'local' | 'remote'
     grayscaleRule?: Record<string, unknown>
+    /** 流水线模板 ID（不传 = 模块默认模板） */
+    templateId?: string
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
 
@@ -455,6 +476,21 @@ export const pipelineApi = {
         source?: 'db' | 'artifact'
       }[]
     >,
+}
+
+/* ========== Pipeline Templates（流水线模板：流程定义） ========== */
+
+export const pipelineTemplateApi = {
+  list: (moduleKey: string) =>
+    http.get(`/modules/${moduleKey}/pipeline-templates`) as Promise<PipelineTemplate[]>,
+  create: (moduleKey: string, dto: Partial<PipelineTemplate>) =>
+    http.post(`/modules/${moduleKey}/pipeline-templates`, dto) as Promise<PipelineTemplate>,
+  duplicate: (moduleKey: string, id: string) =>
+    http.post(`/modules/${moduleKey}/pipeline-templates/${id}/duplicate`) as Promise<PipelineTemplate>,
+  update: (moduleKey: string, id: string, dto: Partial<PipelineTemplate>) =>
+    http.put(`/modules/${moduleKey}/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
+  remove: (moduleKey: string, id: string) =>
+    http.delete(`/modules/${moduleKey}/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
