@@ -13,6 +13,7 @@ import { StageCommandModule } from '../stage-command/stage-command.module';
 import { ConfigCenterModule } from '../config/config.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { NotificationModule } from '../notification/notification.module';
+import { ApprovalModule } from '../approval/approval.module';
 
 @Module({
   imports: [
@@ -30,6 +31,8 @@ import { NotificationModule } from '../notification/notification.module';
     ReleaseLockModule,
     // 通知中心（发布成功/失败/自动回滚事件推送）
     NotificationModule,
+    // 审批门禁（需审批环境默认 prod：提交阻断，审批通过后执行）
+    ApprovalModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],

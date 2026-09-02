@@ -55,6 +55,7 @@ const STAGE_LABEL: Record<string, string> = {
 function statusColor(status: string) {
   const map: Record<string, string> = {
     pending: 'blue',
+    'pending-approval': 'orange',
     running: 'processing',
     succeeded: 'success',
     failed: 'error',
@@ -65,6 +66,7 @@ function statusColor(status: string) {
 function statusText(status: string) {
   const map: Record<string, string> = {
     pending: '等待中',
+    'pending-approval': '待审批',
     running: '运行中',
     succeeded: '成功',
     failed: '失败',
@@ -148,7 +150,11 @@ function doSubmit(confirm: boolean) {
         grayscaleRule: rule,
         confirm,
       })
-      message.success(`流水线已提交: ${res.jobId}`)
+      if ((res as any).status === 'pending-approval') {
+        message.info(`已提交审批（${res.jobId}），审批通过后将自动发布`)
+      } else {
+        message.success(`流水线已提交: ${res.jobId}`)
+      }
       await loadPipelines()
       startPolling()
     } catch (e) {
@@ -172,8 +178,8 @@ function handleSubmit() {
   if (isProd) {
     Modal.confirm({
       title: '确认发布到生产环境',
-      content: `${desc}。此操作将影响线上服务，确认继续？`,
-      okText: '确认发布',
+      content: `${desc}。生产发布需审批：提交后将进入「待审批」状态，审批通过才会执行。确认提交？`,
+      okText: '提交审批',
       okType: 'danger',
       cancelText: '取消',
       onOk: () => doSubmit(true),
@@ -183,11 +189,51 @@ function handleSubmit() {
   doSubmit(false)
 }
 
+// ===== 审批（待审批流水线：通过/拒绝） =====
+const review = ref<{ pipeline: PipelineItem; action: 'approve' | 'reject' } | null>(null)
+const reviewComment = ref('')
+const reviewing = ref(false)
+
+function openApprove(p: PipelineItem) {
+  reviewComment.value = ''
+  review.value = { pipeline: p, action: 'approve' }
+}
+function openReject(p: PipelineItem) {
+  reviewComment.value = ''
+  review.value = { pipeline: p, action: 'reject' }
+}
+
+async function submitReview() {
+  if (!review.value) return
+  if (review.value.action === 'reject' && !reviewComment.value.trim()) {
+    message.warning('拒绝必须填写审批意见')
+    return
+  }
+  reviewing.value = true
+  try {
+    const res =
+      review.value.action === 'approve'
+        ? await pipelineApi.approve(review.value.pipeline.id, reviewComment.value.trim() || undefined)
+        : await pipelineApi.reject(review.value.pipeline.id, reviewComment.value.trim())
+    message.success(review.value.action === 'approve' ? '已审批通过，发布开始执行' : '已拒绝该发布')
+    review.value = null
+    await loadPipelines()
+    if (res.status === 'approved') startPolling()
+  } catch (e) {
+    message.error((e as Error).message || '操作失败')
+  } finally {
+    reviewing.value = false
+  }
+}
+
 async function handleCancel(p: PipelineItem) {
   Modal.confirm({
-    title: '确认取消',
-    content: `确定取消流水线 ${p.id} 吗？正在执行的阶段会中断。`,
-    okText: '取消任务',
+    title: p.status === 'pending-approval' ? '撤回审批请求' : '确认取消',
+    content:
+      p.status === 'pending-approval'
+        ? `撤回 ${p.id} 的发布审批请求？撤回后需重新提交。`
+        : `确定取消流水线 ${p.id} 吗？正在执行的阶段会中断。`,
+    okText: p.status === 'pending-approval' ? '撤回' : '取消任务',
     okType: 'danger',
     cancelText: '返回',
     onOk: async () => {
@@ -424,6 +470,9 @@ onUnmounted(stopPolling)
             </div>
             <span v-else style="color: #999;">
               {{ STAGE_LABEL[record.stage] || record.stage || '-' }}
+              <span v-if="record.progress?.message" style="color: #888;">
+                · {{ record.progress.message }}
+              </span>
               <span v-if="record.error" style="color: #cf1322;"> · {{ record.error }}</span>
             </span>
           </template>
@@ -436,14 +485,22 @@ onUnmounted(stopPolling)
           <template v-if="column.key === 'action'">
             <a-space>
               <a-button type="link" size="small" @click="showLogs(record)">日志</a-button>
+              <template v-if="record.status === 'pending-approval'">
+                <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
+                <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
+              </template>
               <a-button
-                v-if="record.status === 'running' || record.status === 'pending'"
+                v-if="
+                  record.status === 'running' ||
+                  record.status === 'pending' ||
+                  record.status === 'pending-approval'
+                "
                 type="link"
                 size="small"
                 danger
                 @click="handleCancel(record)"
               >
-                取消
+                {{ record.status === 'pending-approval' ? '撤回' : '取消' }}
               </a-button>
               <a-button
                 v-if="record.mode === 'grayscale' && record.status === 'succeeded'"
@@ -458,6 +515,29 @@ onUnmounted(stopPolling)
         </template>
       </a-table>
     </a-card>
+
+    <!-- 审批弹窗 -->
+    <a-modal
+      :open="!!review"
+      :title="review?.action === 'approve' ? '审批通过' : '拒绝发布'"
+      :confirm-loading="reviewing"
+      @ok="submitReview"
+      @cancel="review = null"
+    >
+      <p v-if="review" style="margin-bottom: 12px; color: #666;">
+        {{ review.pipeline.env }} / {{ review.pipeline.moduleKey }}
+        <template v-if="review.pipeline.versionTag">@ {{ review.pipeline.versionTag }}</template>
+        · 提交人 {{ review.pipeline.operator || '-' }} · 分支
+        {{ review.pipeline.gitBranch || '-' }}
+      </p>
+      <a-textarea
+        v-model:value="reviewComment"
+        :rows="3"
+        :placeholder="
+          review?.action === 'reject' ? '请填写拒绝原因（必填）' : '审批意见（可选）'
+        "
+      />
+    </a-modal>
 
     <!-- 日志抽屉 -->
     <a-drawer

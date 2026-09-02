@@ -26,6 +26,7 @@ import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
+import { ApprovalService } from '../approval/approval.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
 const KEEP_VERSIONS = 5;
@@ -107,6 +108,8 @@ export class PipelineService {
     private readonly releaseLock: ReleaseLockService,
     private readonly notifications: NotificationService,
     private readonly deployService: DeployService,
+    // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
+    private readonly approvals: ApprovalService,
   ) {}
 
   /**
@@ -152,7 +155,10 @@ export class PipelineService {
    * 提交发布流水线：落库后立即返回，后台异步执行。
    * 同一 (env, moduleKey) 不允许并发发布（避免产物互相覆盖）。
    */
-  async submit(dto: SubmitPipelineDto, operator?: string): Promise<{ jobId: string; status: string }> {
+  async submit(
+    dto: SubmitPipelineDto,
+    operator?: string,
+  ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const mode: PipelineMode = dto.mode ?? 'direct';
     if (!SUPPORTED_ENVS.includes(dto.env)) {
       throw new BadRequestException(
@@ -173,6 +179,8 @@ export class PipelineService {
     }
 
     const id = this.generateId();
+    // 审批门禁：需审批环境（默认 prod）的提交先阻断，审批通过后才执行
+    const needsApproval = await this.approvals.needsApproval(dto.env);
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -181,15 +189,49 @@ export class PipelineService {
       versionTag: dto.commitId ?? dto.versionTag,
       gitBranch: dto.branch || undefined,
       mode,
-      status: 'pending',
+      status: needsApproval ? 'pending-approval' : 'pending',
       stage: 'check',
-      progress: { current: 0, total: PIPELINE_STAGES.length, message: '已提交，等待执行' },
-      logs: [],
+      progress: {
+        current: 0,
+        total: PIPELINE_STAGES.length,
+        message: needsApproval ? '已提交，等待审批' : '已提交，等待执行',
+      },
+      logs: needsApproval ? ['该环境发布需审批：提交已阻断，审批通过后自动执行'] : [],
       operator,
       grayscaleRule: dto.grayscaleRule,
       startTime: Date.now(),
     });
     await this.pipelineRepo.save(entity);
+
+    if (needsApproval) {
+      const approval = await this.approvals.create({
+        pipelineId: id,
+        env: dto.env,
+        moduleKey: dto.moduleKey,
+        mode,
+        gitBranch: dto.branch || undefined,
+        commitId: dto.commitId ?? dto.versionTag,
+        operator: operator || 'unknown',
+      });
+      await this.auditService.log({
+        user: operator || 'unknown',
+        action: 'pipeline.submit',
+        env: dto.env,
+        component: dto.moduleKey,
+        status: 'pending_approval',
+        detail: `提交发布流水线 ${id}（mode=${mode}）→ 需审批，已阻断等待`,
+      });
+      this.notifications.notify({
+        event: 'deploy.pending-approval',
+        env: dto.env,
+        moduleKey: dto.moduleKey,
+        versionTag: dto.commitId ?? dto.versionTag,
+        status: 'warn',
+        detail: `${operator || 'unknown'} 提交发布待审批（审批单 ${approval.id}）`,
+        operator: operator || 'unknown',
+      });
+      return { jobId: id, status: 'pending-approval', approvalId: approval.id };
+    }
 
     await this.auditService.log({
       user: operator || 'unknown',
@@ -227,6 +269,13 @@ export class PipelineService {
     if (['succeeded', 'failed', 'cancelled'].includes(p.status)) {
       return { id, status: p.status };
     }
+    // 撤回待审批提交：联动关闭审批单，避免审批台出现孤儿单
+    if (p.status === 'pending-approval') {
+      const pending = await this.approvals.byPipelineId(id);
+      if (pending && pending.status === 'pending') {
+        await this.approvals.resolve(pending.id, 'reject', operator || 'unknown', '提交人撤回');
+      }
+    }
     this.cancelled.add(id);
     p.status = 'cancelled';
     p.endTime = Date.now();
@@ -241,6 +290,104 @@ export class PipelineService {
       detail: `取消流水线 ${id}（阶段: ${p.stage ?? '-'}）`,
     });
     return { id, status: p.status };
+  }
+
+  /**
+   * 审批通过：恢复待审批流水线并触发执行。
+   * 执行人记审批人（reviewer）：审批通过即代表其确认本次发布。
+   */
+  async approve(
+    id: string,
+    reviewer?: string,
+    comment?: string,
+  ): Promise<{ id: string; status: string }> {
+    const p = await this.get(id);
+    if (p.status !== 'pending-approval') {
+      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
+    }
+    const approval = await this.approvals.byPipelineId(id);
+    if (!approval) {
+      throw new NotFoundException(`流水线 ${id} 缺少审批单`);
+    }
+    await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
+
+    p.status = 'pending';
+    p.stage = 'check';
+    p.logs = [...(p.logs ?? []), `审批通过（审批人: ${reviewer || 'unknown'}）`];
+    p.progress = {
+      ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+      message: '审批通过，开始执行',
+    };
+    await this.pipelineRepo.save(p);
+
+    await this.auditService.log({
+      user: reviewer || 'unknown',
+      action: 'pipeline.approve',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'approved',
+      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+    });
+    this.notifications.notify({
+      event: 'deploy.approved',
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status: 'success',
+      detail: `${reviewer || 'unknown'} 已审批通过，发布开始执行`,
+      operator: p.operator,
+    });
+
+    // 后台执行，不阻塞审批响应
+    void this.run(p);
+
+    return { id, status: 'approved' };
+  }
+
+  /** 审批拒绝：流水线标记取消并留审批意见 */
+  async reject(
+    id: string,
+    reviewer?: string,
+    comment?: string,
+  ): Promise<{ id: string; status: string }> {
+    const p = await this.get(id);
+    if (p.status !== 'pending-approval') {
+      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
+    }
+    const approval = await this.approvals.byPipelineId(id);
+    if (!approval) {
+      throw new NotFoundException(`流水线 ${id} 缺少审批单`);
+    }
+    await this.approvals.resolve(approval.id, 'reject', reviewer || 'unknown', comment);
+
+    p.status = 'cancelled';
+    p.endTime = Date.now();
+    p.error = `审批拒绝: ${comment?.trim() || '无意见'}`;
+    p.progress = {
+      ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+      message: '审批拒绝',
+    };
+    await this.pipelineRepo.save(p);
+
+    await this.auditService.log({
+      user: reviewer || 'unknown',
+      action: 'pipeline.reject',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'rejected',
+      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+    });
+    this.notifications.notify({
+      event: 'deploy.rejected',
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status: 'failed',
+      detail: `${reviewer || 'unknown'} 拒绝了发布（意见: ${comment?.trim() || '无意见'}）`,
+      operator: p.operator,
+    });
+
+    return { id, status: 'rejected' };
   }
 
   /**
