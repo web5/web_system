@@ -115,6 +115,11 @@
    → 复用 `app.module` 的 namingStrategy，勿在脚本里另起一套配置。
 3. **typeorm `repo.upsert` 传 `conflictPaths` 会漏写列**：曾导致 20 行 `module_key` 全为空串，
    唯一索引建不起来。→ 批量迁移改用原生 `INSERT ... ON DUPLICATE KEY UPDATE`。
+4. **`pm2 restart` 退不干净旧进程 → 双实例抢端口（`EADDRINUSE: 6200`）**：
+   直接 restart 会出现两个 `dist/main.js` 并存、restart 计数飙升（本次已达 65）。
+   → 正确姿势：`pm2 stop` → `pkill -f "deploy-console/dist/main.js"` → 确认 `lsof -i :6200` 空闲 → `pm2 start`。
+   这正是本项目历史上「改代码 → 重建控制台 → 6200 端口冲突」反复踩坑的直接原因，
+   也正因如此，把构建命令数据化（不必为改一条命令而重建重启）才格外重要。
 
 ## 执行约定（方法论）
 
