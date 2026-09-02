@@ -331,14 +331,15 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 ```
 流水线 Pipeline（流程定义 · 全局资产，不绑定任何模块）
   组成：活动步骤集 steps（内置九阶段的可裁剪子集，version/pointer/check 为基线不可裁）
+       + **步骤命令**（用户给可配步骤内嵌 shell：支持上下文变量 {MODULE_KEY/MODULE_TYPE/MODULE_DIR/
+         RELEASE_DIR/COMMIT_ID/BRANCH/STAGE/DEPLOY_ENV} 与目标机器注入变量；未配命令 → 内置执行器）
        + 治理策略：审批(always/never/inherit)、失败自动回滚(previous/none)、默认投递(auto/local/remote)
-  回答："一次发布按什么流程走、受什么治理约束"
+  回答："一次发布按什么流程走、每步怎么执行、受什么治理约束"（**阶段命令由流水线自己定义**）
 
-模块 Module（一个可发布工程 · 定义它的"是什么"与"怎么构建"）
-  组成：key/name/type/dir（属性定义）
-       + stage_commands（该工程各可配阶段的 shell：build 必填，pull/check/restart/upload/verify/cleanup 可覆盖）
-       + 配置中心（per env×module 注入）、服务地址(ports)
-  回答："发什么工程、该工程每一步怎么构建/部署"
+模块 Module（一个可发布工程 · 纯目标与上下文）
+  组成：key/name/type/dir（属性定义，供流水线命令以 {MODULE_*} 变量引用）
+       + 仓库/分支来源 + 配置中心（per env×module 注入）+ 服务地址(ports)
+  回答："发什么工程、它的上下文是什么"（**不再持有任何阶段命令/构建逻辑**）
 
 发布请求/实例 Run（一次执行 · 流水线×模块×环境 的快照）
   组成：pipeline 快照(steps/策略) + moduleKey/type + env/branch/commit/mode/target + 运行态(stage/status/进度)
@@ -351,12 +352,18 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 执行模型：Run = 流水线(流程) × 模块(工程配置) × 请求参数(env/branch/commit/mode)
 合成规则（run → 按 pipeline.steps 顺序逐步骤执行）：
   ① 步骤集合与顺序      ← 来自【流水线】steps（快照固化到实例）
-  ② 每步执行体          ← 先查【模块】stage_commands：配置了命令 → 执行该 shell；
-                           未配置 → 用平台内置执行器（check/pull/build 等语义）
-  ③ 可配阶段集合        ← 模块级命令仅对"可配阶段"有意义（check/pull/build/upload/restart/verify/cleanup）
-                           version/pointer 永远内置，不读模块命令
+  ② 每步执行体          ← **流水线步骤命令**（用户在该步骤内嵌的 shell）→ 未配命令 → 平台内置执行器；
+                           命令内 {MODULE_*} 变量在运行时替换为实例绑定模块的上下文
+                           （过渡期兼容：步骤未配命令且模块存在老 stage_commands 时回退读取并标 deprecated）
+  ③ 命令作用阶段        ← 仅"可配阶段"（check/pull/build/upload/restart/verify/cleanup）可在流水线配命令；
+                           version/pointer 永远内置
   ④ 探活地址/配置注入   ← 【环境】ports + 【配置中心】env×module 作用域
   ⑤ 审批/回滚/投递      ← 【流水线】策略（提交时按 env 判定审批；verify 失败按 rollbackOnFailure 回滚）
+
+差异表达（同一流水线服务多工程时命令的工程差异怎么办）：
+  - 常规差异用变量分支：build 步骤命令内 `case "${MODULE_TYPE}" in backend) npx tsc -p tsconfig.json;; *) npx vite build;; esac`
+  - 特殊工程需要完全不同的流程/命令 → 复制该流水线为"专用线"（复制后改步骤命令），工程发布时选专用线；
+    **不再允许在模块上写命令**（模块"哑化"，与"阶段命令归流水线"一致）
 ```
 
 ### 3) 收口决策（消除双轨与命名歧义）
@@ -367,7 +374,8 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 | R2 | 术语统一：**「流水线」= 流程定义**；「模板」字眼从 UI 移除；执行记录统一叫**实例/发布任务** | 模块详情内的阶段命令仍叫"阶段命令"（它是模块的构建方法，不属流水线） |
 | R3 | 模块页回归纯工程视角：属性定义 + 阶段命令 + 配置 + 该模块各环境当前版本/回滚；**发布历史按流水线/实例管理在流水线页** | ModuleDetail 不再展示"模板管理"（已完成），进一步弱化"该模块的发布记录"在模块页的权重 |
 | R4 | 实例重试/再次发布语义 = 以快照参数重建实例（同流水线+模块+commit） | 已实现，文档化 |
-| R5 | 工具目录定位 = 步骤执行体的**素材库**（service=内置执行器；shell=可复用命令），供模块阶段命令插入与未来步骤参数化 | 已实现，文档化 |
+| R5 | 工具目录定位 = 步骤执行体的**素材库**（service=内置执行器；shell=可复用命令），供**流水线步骤命令**插入与未来步骤参数化 | 已实现，文档化 |
+| R6 | **阶段命令归属流水线**（用户决策）：模块不再持有阶段命令；命令写入流水线步骤（支持 {MODULE_*} 变量）。模块页的「阶段命令」tab 迁移为流水线步骤命令编辑器；`deploy_module_stage_commands` 标记 deprecated，过渡期作为"步骤未配命令且模块老命令存在"的兼容回退，随后下线 | 执行语义变更，需分期：先流水线步骤命令生效并支持回退 → UI 迁移 → 下线模块命令 |
 
 ### 4) UI 对应
 
