@@ -170,12 +170,17 @@ async function loadTemplates() {
 }
 
 async function handleRetry(p: PipelineItem) {
+  const isSucceeded = p.status === 'succeeded'
   Modal.confirm({
-    title: '重试发布',
-    content: `以相同参数重新提交（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
-      p.templateName || '默认'
-    }）？原实例记录保留。`,
-    okText: '重试',
+    title: isSucceeded ? '再次发布' : '重试发布',
+    content: isSucceeded
+      ? `以相同参数再次发布（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
+          p.templateName || '默认'
+        }，commit ${p.gitCommit || '-'}）？将重新执行一次完整发布。`
+      : `以相同参数重新提交（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
+          p.templateName || '默认'
+        }）？原实例记录保留。`,
+    okText: isSucceeded ? '再次发布' : '重试',
     cancelText: '取消',
     onOk: async () => {
       try {
@@ -584,12 +589,16 @@ onUnmounted(stopPolling)
             <a-space>
               <a-button type="link" size="small" @click="showLogs(record)">执行详情</a-button>
               <a-button
-                v-if="record.status === 'failed' || record.status === 'cancelled'"
+                v-if="
+                  record.status === 'failed' ||
+                  record.status === 'cancelled' ||
+                  record.status === 'succeeded'
+                "
                 type="link"
                 size="small"
                 @click="handleRetry(record)"
               >
-                重试
+                {{ record.status === 'succeeded' ? '再次发布' : '重试' }}
               </a-button>
               <template v-if="record.status === 'pending-approval'">
                 <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
