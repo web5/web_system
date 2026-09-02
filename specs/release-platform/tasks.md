@@ -212,6 +212,19 @@
   - 依赖：34
   - _验收：当 跑既有场景时无行为回退；测试全绿_
 
+## S7 · 执行体工具化收口（V6 落地，2026-09-02）
+
+> V6「平台逻辑应收敛为工具」执行体下沉完成，详细映射见 `design.md`「工具化落地状态」。
+
+- [x] 7.1 平台执行体全部下沉为可注入 service 工具 + 路径收口
+  - 依赖：35
+  - 范围：新增 `probe`（HTTP）/`pm2`（进程探活）/`shell`（命令执行）/`git`（发布目录拉取）/`artifact`（产物存储）/`registry`（版本+指针）/`remote`（远程投递）模块与 `release-paths` 纯函数；`pipeline.service.ts` 删除内联 exec/http/git/产物 fs/远程投递逻辑（净删约 390 行）
+  - _验收：当 检查 pipeline.service.ts 时，应不再包含手写 HTTP / pm2 / git / 产物 fs / 远程投递执行体；公共 API（submit/get/list/cancel/retry/approve/reject/listReleaseCandidates/switchPointer/promote）签名与 controller/MCP 调用不变_
+- [x] 7.2 verify 后端探活抛错被查询失败 catch 吞掉的 bug 修复
+  - 依赖：7.1
+  - _验收：当 端口不可达时，verifyBackend 应立即抛错（不再 12 轮耗尽后仍判成功），触发 verify 失败自动回滚_
+- [x] 7.3 回归：全量 jest 186/186 + `nest build` + lint 通过
+
 ## 发布记录
 
 - **2026-09-02 首次上线**（分支 `feature/contract-risk-ai`）

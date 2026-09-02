@@ -8,12 +8,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { spawn, execSync, ChildProcess } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
-import * as fs from 'fs';
-import * as http from 'http';
-import * as https from 'https';
-import * as crypto from 'crypto';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -31,6 +27,22 @@ import {
   PipelineTemplateService,
   needsApprovalForTemplate,
 } from '../pipeline-template/pipeline-template.service';
+// HTTP 探活工具（verify manifest 断言 / 后端端口探活 / 产物 HEAD 检查的执行体）
+import { HttpProbeService } from '../probe/http-probe.service';
+// pm2 进程健康探活工具（verify 后端探活 / restart 查名 / 回滚后探活复用）
+import { Pm2ProbeService, Pm2ProbeResult } from '../pm2/pm2-probe.service';
+// 命令执行工具（同步 exec + PATH + bin 解析）
+import { CommandService, buildChildEnv } from '../shell/command.service';
+// 发布目录 git 工作区工具（pull 内置步骤执行体）
+import { ReleaseGitService } from '../git/release-git.service';
+// 静态产物存储工具（upload/cleanup 内置步骤执行体）
+import { ArtifactStoreService } from '../artifact/artifact-store.service';
+// 版本注册表工具（version/pointer 内置步骤执行体）
+import { ReleaseRegistryService } from '../registry/release-registry.service';
+// 远程投递工具（upload remote 分支执行体）
+import { RemoteDeliveryService } from '../remote/remote-delivery.service';
+// 静态产物路径收口（产物目录/URL 等平台知识集中于此，V6）
+import * as releasePaths from './release-paths';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
 const KEEP_VERSIONS = 5;
@@ -120,6 +132,20 @@ export class PipelineService {
     private readonly approvals: ApprovalService,
     // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
     private readonly templates: PipelineTemplateService,
+    // HTTP 探活工具（verify manifest 断言 / 后端端口探活 / 产物 HEAD 检查）
+    private readonly httpProbe: HttpProbeService,
+    // pm2 进程健康探活（verify 后端探活 / restart 查名 / 回滚后探活）
+    private readonly pm2Probe: Pm2ProbeService,
+    // 命令执行（同步 exec + PATH + bin 解析）
+    private readonly command: CommandService,
+    // 发布目录 git 工作区（pull 执行体）
+    private readonly git: ReleaseGitService,
+    // 静态产物存储（upload/cleanup 执行体）
+    private readonly artifacts: ArtifactStoreService,
+    // 版本注册表（version/pointer 执行体）
+    private readonly registry: ReleaseRegistryService,
+    // 远程投递（upload remote 执行体）
+    private readonly remoteDelivery: RemoteDeliveryService,
   ) {}
 
   /**
@@ -133,26 +159,7 @@ export class PipelineService {
     );
   }
 
-  /** node / npm / npx / pnpm 所在目录（发布目录构建用；可配 RELEASE_NODE_BIN 覆盖） */
-  private get nodeBinDir(): string {
-    return (
-      this.configService.get<string>('RELEASE_NODE_BIN') || path.dirname(process.execPath)
-    );
-  }
-
-  private get npxBin(): string {
-    return path.join(this.nodeBinDir, 'npx');
-  }
-
-  private get pnpmBin(): string {
-    return this.configService.get<string>('RELEASE_PNPM_BIN') || path.join(this.nodeBinDir, 'pnpm');
-  }
-
-  private get pm2Bin(): string {
-    return this.configService.get<string>('RELEASE_PM2_BIN') || path.join(this.nodeBinDir, 'pm2');
-  }
-
-  /** gateway 内网地址，用于验证阶段查询 __manifest__（本地 http://localhost:6000） */
+  /** gateway 内网地址，验证阶段拼产物 URL / 查 __manifest__ 用（本地 http://localhost:6000） */
   private get gatewayUrl(): string {
     return this.configService.get<string>('GATEWAY_INTERNAL_URL') || 'http://localhost:6000';
   }
@@ -539,7 +546,7 @@ export class PipelineService {
     }
 
     if (component) {
-      for (const tag of this.listArtifactVersions(component)) {
+      for (const tag of this.artifacts.listVersions(component)) {
         if (seen.has(tag)) continue;
         seen.add(tag);
         rows.push({
@@ -553,26 +560,6 @@ export class PipelineService {
       }
     }
     return rows;
-  }
-
-  /** 发布目录产物目录中的版本列表（按修改时间倒序） */
-  listArtifactVersions(moduleKey: string): string[] {
-    const base = path.join(
-      this.releaseWorkspace,
-      'servers',
-      'gateway',
-      'public',
-      'static',
-      'modules',
-      moduleKey,
-    );
-    if (!fs.existsSync(base)) return [];
-    return fs
-      .readdirSync(base, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && fs.existsSync(path.join(base, d.name, 'index.js')))
-      .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(base, d.name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime)
-      .map((d) => d.name);
   }
 
   /**
@@ -592,42 +579,26 @@ export class PipelineService {
     if (mod.type !== 'micro-frontend') {
       throw new BadRequestException(`模块 ${moduleKey} 类型为 ${mod.type}，仅支持微前端模块切换版本`);
     }
-    const dir = path.join(
-      this.releaseWorkspace,
-      'servers',
-      'gateway',
-      'public',
-      'static',
-      'modules',
-      moduleKey,
-      versionTag,
-    );
-    if (!fs.existsSync(path.join(dir, 'index.js'))) {
+    if (!this.artifacts.exists(moduleKey, versionTag)) {
       throw new BadRequestException(
-        `版本产物不存在，无法切换: ${moduleKey}/${versionTag}（本地未找到 ${dir}/index.js）`,
+        `版本产物不存在，无法切换: ${moduleKey}/${versionTag}（发布目录产物目录缺 index.js）`,
       );
     }
 
-    const existing = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey } });
-    const row = existing ?? new DeployDeploymentEntity();
-    row.envId = env;
-    row.moduleKey = moduleKey;
-    row.currentVersion = versionTag;
-    row.status = 'deployed';
-    row.deployedAt = new Date();
-    row.deployedBy = operator;
-    await this.deploymentRepo.save(row);
-
-    // 补写版本记录，保证后续 list_releases 能看到
-    const v = new DeployVersionEntity();
-    v.env = env;
-    v.component = moduleKey;
-    v.versionTag = versionTag;
-    v.releasedBy = operator;
-    v.releasedAt = new Date();
-    v.status = 'active';
-    v.note = '历史版本回退切换（原记录缺失，以产物为准）';
-    await this.versionRepo.save(v);
+    await this.registry.setPointer({
+      env,
+      moduleKey,
+      currentVersion: versionTag,
+      deployedBy: operator,
+    });
+    // 补写版本记录，保证后续 list_releases 能看到（git 信息留空并标注来源）
+    await this.registry.registerVersion({
+      env,
+      moduleKey,
+      versionTag,
+      releasedBy: operator,
+      note: '历史版本回退切换（原记录缺失，以产物为准）',
+    });
 
     await this.auditService.log({
       user: operator || 'unknown',
@@ -656,18 +627,13 @@ export class PipelineService {
       throw new BadRequestException(`流水线 ${id} 缺少版本标签`);
     }
 
-    const existing = await this.deploymentRepo.findOne({
-      where: { envId: p.env, moduleKey: p.moduleKey },
+    await this.registry.setPointer({
+      env: p.env,
+      moduleKey: p.moduleKey,
+      currentVersion: p.versionTag,
+      deployedBy: operator ?? p.operator,
+      taskId: p.id,
     });
-    const row = existing ?? new DeployDeploymentEntity();
-    row.envId = p.env;
-    row.moduleKey = p.moduleKey;
-    row.currentVersion = p.versionTag;
-    row.status = 'deployed';
-    row.deployedAt = new Date();
-    row.deployedBy = operator ?? p.operator;
-    row.taskId = p.id;
-    await this.deploymentRepo.save(row);
 
     // 禁用本次灰度规则
     if (p.canaryRuleId) {
@@ -1046,11 +1012,8 @@ export class PipelineService {
       const child = spawn('bash', ['-c', command], {
         // 未显式传 cwd 时回落到发布目录，避免落到 deploy-console 自身目录
         cwd: cwd || this.releaseWorkspace,
-        env: {
-          ...process.env,
-          ...env,
-          PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
-        },
+        // PATH 补齐与 CommandService 同一实现（node 目录 / /usr/local/bin 等）
+        env: buildChildEnv(env, this.command.nodeBinDir()),
       });
       // 登记子进程：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
       this.shells.set(p.id, child);
@@ -1116,39 +1079,6 @@ export class PipelineService {
   }
 
   /**
-   * 执行外部命令（git / tar / scp / ssh 等）。
-   *
-   * 统一补齐常见命令目录：pm2 或 nohup 拉起的进程 PATH 可能极不完整
-   * （线上出现过 `git: command not found`、`spawn npx ENOENT`），
-   * 流水线不能依赖启动时的 shell PATH。
-   */
-  private exec(
-    cmd: string,
-    cwd = this.releaseWorkspace,
-    extraEnv?: Record<string, string>,
-  ): string {
-    return execSync(cmd, {
-      cwd,
-      encoding: 'utf-8',
-      env: {
-        ...process.env,
-        ...(extraEnv ?? {}),
-        // pm2 / npx / pnpm 都是 node 脚本，PATH 必须包含 node 安装目录，
-        // 否则子进程报 `env: node: No such file or directory`
-        PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
-      },
-    });
-  }
-
-  private gitShortHead(ws = this.releaseWorkspace): string {
-    return this.exec('git rev-parse --short HEAD', ws).trim();
-  }
-
-  private gitBranch(ws = this.releaseWorkspace): string {
-    return this.exec('git rev-parse --abbrev-ref HEAD', ws).trim();
-  }
-
-  /**
    * 阶段 1：校验模块类型、目标分支、commit 与 prod 约束。
    *
    * 发布语义（基于 git 拉取）：目标 = 远程仓库的 <branch>@<commitId>，
@@ -1174,7 +1104,7 @@ export class PipelineService {
     //   2) 无产物 → 走 pull 拉取该 commit 后构建
     // 未指定 → 发该分支最新 commit（pull 后确定）
     if (p.versionTag) {
-      p.reuseArtifact = this.hasArtifact(p.moduleKey, p.versionTag);
+      p.reuseArtifact = this.artifacts.exists(p.moduleKey, p.versionTag);
       if (p.reuseArtifact) {
         const history = await this.versionRepo.findOne({ where: { versionTag: p.versionTag } });
         p.gitCommit = history?.gitCommit ?? p.versionTag;
@@ -1205,77 +1135,27 @@ export class PipelineService {
       'pull',
       `拉取代码: ${p.gitBranch}@${p.versionTag || '最新'}`,
     );
-    const ws = this.releaseWorkspace;
-    if (!fs.existsSync(path.join(ws, '.git'))) {
-      throw new BadRequestException(
-        `发布目录不存在: ${ws}。请先初始化：git clone git@github.com:web5/web_system.git ${ws}`,
-      );
-    }
 
-    // fetch 远程 → 检出目标分支（本地无则从 origin 建）
-    this.exec('git fetch --all --prune', ws);
-    this.exec(
-      `git checkout -B ${p.gitBranch} origin/${p.gitBranch} 2>/dev/null || git checkout -B ${p.gitBranch} ${p.gitBranch}`,
-      ws,
-    );
-
-    // 指定 commit 则强制 reset（校验 commit 存在，不存在会抛错）
-    if (p.versionTag) {
-      this.exec(`git reset --hard ${p.versionTag}`, ws);
-    }
-    // 清理未跟踪文件/目录，避免残留污染构建
-    this.exec('git clean -fd', ws);
-
-    // 以实际 HEAD 为准记录 commit（未指定 commit 时即分支最新）
-    p.gitCommit = this.gitShortHead(ws);
-    p.versionTag = p.gitCommit;
+    // 发布目录同步到目标分支（工具内含 .git 校验 / fetch / checkout / reset / clean）
+    const commit = this.git.syncToBranch(p.gitBranch!, p.versionTag);
+    p.gitCommit = commit;
+    p.versionTag = commit;
     p.logs = [
       ...(p.logs ?? []),
-      `代码已就绪: ${p.gitBranch}@${p.gitCommit}（发布目录 ${ws}）`,
+      `代码已就绪: ${p.gitBranch}@${commit}（发布目录 ${this.git.workspace()}）`,
     ];
 
-    // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install）
-    this.ensureDeps(ws, p);
-
-    await this.save(p);
-  }
-
-  /** 依赖清单（pnpm-lock.yaml）变化时执行 pnpm install；以 .deploy-lock-hash 记录上次清单 */
-  private ensureDeps(ws: string, p: DeployPipelineEntity): void {
+    // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install；失败不阻断，
+    // 构建阶段会再次报错并给出清晰信息）
     try {
-      const lockFile = path.join(ws, 'pnpm-lock.yaml');
-      if (!fs.existsSync(lockFile)) return;
-      const hash = this.md5(fs.readFileSync(lockFile));
-      const hashFile = path.join(ws, '.deploy-lock-hash');
-      const last = fs.existsSync(hashFile) ? fs.readFileSync(hashFile, 'utf-8') : '';
-      if (hash === last) return;
-      p.logs = [...(p.logs ?? []), '依赖清单变化，执行 pnpm install...'];
-      this.exec(`"${this.pnpmBin}" install --prefer-offline`, ws);
-      fs.writeFileSync(hashFile, hash);
-      p.logs = [...(p.logs ?? []), '依赖安装完成'];
+      if (this.git.syncDependencies() === 'installed') {
+        p.logs = [...(p.logs ?? []), '依赖安装完成'];
+      }
     } catch (e) {
-      // 依赖安装失败不阻断后续（构建阶段会再次报错并给出清晰信息）
       p.logs = [...(p.logs ?? []), `[warn] 依赖同步失败: ${(e as Error).message}`];
     }
-  }
 
-  private md5(buf: Buffer): string {
-    return crypto.createHash('md5').update(buf).digest('hex');
-  }
-
-  /** 发布目录是否已有该模块的指定版本产物 */
-  private hasArtifact(moduleKey: string, versionTag: string): boolean {
-    const dir = path.join(
-      this.releaseWorkspace,
-      'servers',
-      'gateway',
-      'public',
-      'static',
-      'modules',
-      moduleKey,
-      versionTag,
-    );
-    return fs.existsSync(path.join(dir, 'index.js'));
+    await this.save(p);
   }
 
   /**
@@ -1287,45 +1167,22 @@ export class PipelineService {
    * 流水线内不再保留任何技术栈构建逻辑。
    */
 
-  /** 阶段 4：前端产物投递到发布目录的 nginx 静态目录 */
+  /** 阶段 4：前端产物投递（local=本机静态目录 / remote=SSH 到远端），执行体见 ArtifactStore/RemoteDelivery */
   private async stageUpload(p: DeployPipelineEntity, target: 'local' | 'remote'): Promise<void> {
     await this.enterStage(p, 'upload', `投递产物（${target}）`);
     const mod = await this.moduleRegistry.get(p.moduleKey);
     const src = path.join(this.releaseWorkspace, 'apps', mod.dir, 'dist');
 
     if (target === 'local') {
-      const dest = path.join(
-        this.releaseWorkspace,
-        'servers',
-        'gateway',
-        'public',
-        'static',
-        'modules',
-        p.moduleKey,
-        p.versionTag!,
-      );
-      fs.mkdirSync(dest, { recursive: true });
-      // 清空旧内容后再拷，避免残留过期文件
-      for (const f of fs.readdirSync(dest)) {
-        fs.rmSync(path.join(dest, f), { recursive: true, force: true });
-      }
-      fs.cpSync(src, dest, { recursive: true });
+      const dest = this.artifacts.uploadLocal(p.moduleKey, p.versionTag!, src);
       p.logs = [...(p.logs ?? []), `产物已投递到 ${dest}`];
     } else {
-      // 远程投递：scp 到服务器静态目录（服务器信息来自 deploy_servers）
-      const dest = `/data/web_system/servers/gateway/public/static/modules/${p.moduleKey}/${p.versionTag}`;
-      const { remoteHost, remoteUser } = this.readRemoteTarget(p);
-      const sshTarget = remoteUser ? `${remoteUser}@${remoteHost}` : remoteHost;
-      const tar = `/tmp/${p.moduleKey}-${p.versionTag}.tar.gz`;
-      if (fs.existsSync(tar)) fs.rmSync(tar);
-      this.exec(`tar czf ${tar} -C ${src} .`);
-      this.exec(`scp -o ConnectTimeout=15 ${tar} ${sshTarget}:/tmp/`);
-      this.exec(
-        `ssh -o ConnectTimeout=15 ${sshTarget} "mkdir -p ${dest} && cd ${dest} && rm -rf ./* && tar xzf /tmp/${path.basename(
-          tar,
-        )} && rm -f /tmp/${path.basename(tar)}"`,
-      );
-      fs.rmSync(tar, { force: true });
+      const { sshTarget, dest } = this.remoteDelivery.uploadDist({
+        env: p.env,
+        moduleKey: p.moduleKey,
+        version: p.versionTag!,
+        srcDir: src,
+      });
       p.logs = [...(p.logs ?? []), `产物已投递到 ${sshTarget}:${dest}`];
     }
 
@@ -1343,25 +1200,6 @@ export class PipelineService {
    * 前提：本机 pm2 的服务脚本已指向发布目录（RELEASE_WORKSPACE），
    * 因此 restart 即加载发布目录刚构建好的 dist，运行的就是本次发布的代码。
    */
-  /**
-   * 解析实际 pm2 服务名。模块注册表的 pm2 字段与实际 pm2 名经常不一致
-   * （如 todo-service → web-todo、auth-service → web-auth），按常见命名生成候选：
-   *   mod.pm2 / web-<key> / web-<去-service 后缀> / <key> / <去-service 后缀>
-   */
-  private resolvePm2Names(p: DeployPipelineEntity, mod: any): string[] {
-    const base = p.moduleKey.endsWith('-service')
-      ? p.moduleKey.replace(/-service$/, '')
-      : p.moduleKey;
-    const names = [
-      mod?.pm2,
-      `web-${p.moduleKey}`,
-      `web-${base}`,
-      p.moduleKey,
-      base,
-    ].filter((n): n is string => !!n);
-    return [...new Set(names)];
-  }
-
   private async stageRestart(p: DeployPipelineEntity): Promise<void> {
     await this.enterStage(p, 'restart', `重启服务: ${p.moduleKey}`);
     const mod = await this.moduleRegistry.get(p.moduleKey);
@@ -1370,17 +1208,17 @@ export class PipelineService {
     // 先用 jlist 确认实际存在的服务名，再只 restart 存在的。
     let names: string[] = [];
     try {
-      const jlist = this.exec(`"${this.pm2Bin}" jlist`);
-      const apps = JSON.parse(jlist) as Array<{ name?: string }>;
-      const exists = new Set(apps.map((a) => a.name));
-      names = this.resolvePm2Names(p, mod).filter((n) => exists.has(n));
+      const exists = new Set(this.pm2Probe.listProcesses().map((a) => a.name));
+      names = this.pm2Probe.resolvePm2Names(p.moduleKey, mod?.pm2).filter((n) => exists.has(n));
     } catch {
       // jlist 失败时退回顺序尝试
-      names = this.resolvePm2Names(p, mod);
+      names = this.pm2Probe.resolvePm2Names(p.moduleKey, mod?.pm2);
     }
     if (names.length === 0) {
       throw new Error(
-        `pm2 中未找到服务（尝试 ${this.resolvePm2Names(p, mod).join(' / ')}），请确认服务已用 pm2 纳管`,
+        `pm2 中未找到服务（尝试 ${this.pm2Probe
+          .resolvePm2Names(p.moduleKey, mod?.pm2)
+          .join(' / ')}），请确认服务已用 pm2 纳管`,
       );
     }
 
@@ -1389,43 +1227,29 @@ export class PipelineService {
     // 这是历史 `PORT=6200` 污染的对策：端口等变量以配置中心为准，
     // 禁止在 shell 全局预设里写死。
     const injectEnv = await this.resolveInjectEnv(p);
-    this.exec(`"${this.pm2Bin}" restart ${restarted} --update-env`, undefined, injectEnv);
+    this.command.exec(
+      `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
+      this.releaseWorkspace,
+      injectEnv,
+    );
     p.logs = [...(p.logs ?? []), `服务已重启: ${restarted}`];
     p.result = { ...(p.result ?? {}), restarted };
     await this.save(p);
   }
 
-  /** 读取远程投递目标（deploy-console 环境变量，未配置则抛错提示走 local） */
-  private readRemoteTarget(p: DeployPipelineEntity): { remoteHost: string; remoteUser?: string } {
-    const host = p.env === 'prod'
-      ? this.configService.get<string>('PROD_SERVER')
-      : this.configService.get<string>('DEV_SERVER');
-    const user = p.env === 'prod'
-      ? this.configService.get<string>('PROD_USER')
-      : this.configService.get<string>('DEV_USER');
-    if (!host) {
-      throw new BadRequestException(
-        `未配置 ${p.env} 服务器地址（DEV_SERVER/PROD_SERVER），无法远程投递；可改用 target=local`,
-      );
-    }
-    return { remoteHost: host, remoteUser: user };
-  }
-
   /** 阶段 4：写版本记录（deploy_versions，库为 web_system_deploy） */
   private async stageVersion(p: DeployPipelineEntity): Promise<void> {
     await this.enterStage(p, 'version', '写入版本记录');
-    const v = new DeployVersionEntity();
-    v.env = p.env;
-    v.component = p.moduleKey;
-    v.versionTag = p.versionTag!;
-    v.gitCommit = p.gitCommit;
-    v.gitBranch = p.gitBranch;
-    v.releasedBy = p.operator;
-    v.releasedAt = new Date();
-    v.status = 'active';
-    v.taskId = p.id;
-    v.note = p.mode === 'grayscale' ? '流水线灰度发布' : '流水线发布';
-    await this.versionRepo.save(v);
+    await this.registry.registerVersion({
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag!,
+      gitCommit: p.gitCommit,
+      gitBranch: p.gitBranch,
+      releasedBy: p.operator,
+      taskId: p.id,
+      note: p.mode === 'grayscale' ? '流水线灰度发布' : '流水线发布',
+    });
     p.logs = [...(p.logs ?? []), `版本记录已写入: ${p.versionTag}`];
     await this.save(p);
   }
@@ -1448,18 +1272,13 @@ export class PipelineService {
     }
 
     await this.enterStage(p, 'pointer', '切换当前版本指针');
-    const existing = await this.deploymentRepo.findOne({
-      where: { envId: p.env, moduleKey: p.moduleKey },
+    await this.registry.setPointer({
+      env: p.env,
+      moduleKey: p.moduleKey,
+      currentVersion: p.versionTag!,
+      deployedBy: p.operator,
+      taskId: p.id,
     });
-    const row = existing ?? new DeployDeploymentEntity();
-    row.envId = p.env;
-    row.moduleKey = p.moduleKey;
-    row.currentVersion = p.versionTag!;
-    row.status = 'deployed';
-    row.deployedAt = new Date();
-    row.deployedBy = p.operator;
-    row.taskId = p.id;
-    await this.deploymentRepo.save(row);
     p.logs = [...(p.logs ?? []), `指针已切换: ${p.env}/${p.moduleKey} → ${p.versionTag}`];
     await this.save(p);
   }
@@ -1477,8 +1296,8 @@ export class PipelineService {
       return;
     }
 
-    const artifactUrl = `${this.gatewayUrl}/static/modules/${p.moduleKey}/${p.versionTag}/index.js`;
-    const artifactOk = await this.httpHeadOk(artifactUrl);
+    const artifactUrl = releasePaths.moduleArtifactUrl(this.gatewayUrl, p.moduleKey, p.versionTag!);
+    const artifactOk = await this.httpProbe.headOk(artifactUrl);
     p.result = { ...(p.result ?? {}), artifactOk };
 
     if (p.mode === 'grayscale') {
@@ -1493,7 +1312,7 @@ export class PipelineService {
     // 等 gateway 版本缓存 TTL 过期（历史坑：改完版本表立刻查会拿到旧版本）
     await this.sleep((GATEWAY_VERSION_TTL_SEC + 2) * 1000);
 
-    const manifest = await this.fetchManifest();
+    const manifest = await this.httpProbe.fetchGatewayManifest(this.gatewayUrl);
     const entry = (manifest?.modules ?? []).find(
       (m: any) => m.name === p.moduleKey || m.key === p.moduleKey,
     );
@@ -1521,84 +1340,67 @@ export class PipelineService {
   ): Promise<{ ok: boolean; note: string; port?: string | number }> {
     try {
       const mod = await this.moduleRegistry.get(p.moduleKey);
-      const names = this.resolvePm2Names(p, mod);
-      const jlist = this.exec(`"${this.pm2Bin}" jlist`);
-      const apps = JSON.parse(jlist) as Array<{
-        name?: string;
-        pm2_env?: { status?: string; PORT?: string | number };
-      }>;
-
-      for (const name of names) {
-        const app = apps.find((a) => a.name === name);
-        if (app?.pm2_env?.status !== 'online') continue;
-        const port = app?.pm2_env?.PORT;
-        if (!port) {
-          return { ok: false, note: 'pm2_env.PORT 缺失，无法做端口探活' };
-        }
-        const probe = await this.httpRequest(`http://127.0.0.1:${port}/`, 'GET', 3000);
-        return {
-          ok: probe.status > 0,
-          note: `端口 ${port} ${probe.status > 0 ? '有响应' : '无响应'}`,
-          port,
-        };
-      }
-      return { ok: false, note: 'pm2 中未找到处于 online 的服务进程' };
+      const res = await this.pm2Probe.probeOnce(p.moduleKey, mod?.pm2);
+      if (!res.online) return { ok: false, note: 'pm2 中未找到处于 online 的服务进程' };
+      const port = res.hit?.port;
+      if (port == null) return { ok: false, note: 'pm2_env.PORT 缺失，无法做端口探活' };
+      const ok = res.reachable === true;
+      return { ok, note: `端口 ${port} ${ok ? '有响应' : '无响应'}`, port };
     } catch (e) {
       return { ok: false, note: (e as Error).message };
     }
   }
 
-  /** 后端验证：pm2 服务重启后保持 online，且端口真实可服务（避免「进程在但端口没起」的假健康） */
+  /**
+   * 后端验证：pm2 服务重启后保持 online，且端口真实可服务（避免「进程在但端口没起」的假健康）。
+   *
+   * 轮询语义：pm2 查询异常（jlist 失败/未纳管）→ 本轮跳过继续轮询；
+   * 命中 online 但端口不可达 = 假健康 → **立即抛错**，交由 verify 阶段失败处理自动回滚。
+   * （历史 bug：探活抛错写在 pm2 查询失败的 try/catch 内，被 catch 吞掉后 12 轮耗尽仍判成功，
+   *   假健康被当成发布成功 —— 重构为注入 Pm2ProbeService 时把判定移出 catch 修复。）
+   */
   private async verifyBackend(p: DeployPipelineEntity): Promise<void> {
     const mod = await this.moduleRegistry.get(p.moduleKey);
-    const names = this.resolvePm2Names(p, mod);
     let ok = false;
     let healthCheck: { port?: string | number; ok?: boolean; checkedAt?: string; note?: string } = {};
     for (let i = 0; i < 12; i++) {
       await this.sleep(2000);
+      let res: Pm2ProbeResult;
       try {
-        const jlist = this.exec(`"${this.pm2Bin}" jlist`);
-        const apps = JSON.parse(jlist) as Array<{
-          name?: string;
-          pm2_env?: { status?: string; PORT?: string | number };
-        }>;
-        for (const name of names) {
-          const app = apps.find((a) => a.name === name);
-          const status = app?.pm2_env?.status;
-          if (status === 'online') {
-            ok = true;
-            p.logs = [...(p.logs ?? []), `服务在线: ${name}`];
-            // 真实端口探活：pm2 online 仅代表进程存活，端口在监听才是真健康
-            const port = app?.pm2_env?.PORT;
-            if (port) {
-              const probe = await this.httpRequest(`http://127.0.0.1:${port}/`, 'GET', 3000);
-              const reachable = probe.status > 0;
-              healthCheck = { port, ok: reachable, checkedAt: new Date().toISOString() };
-              p.logs = [
-                ...(p.logs ?? []),
-                `端口探活 ${port}: ${reachable ? '健康' : `未响应(HTTP ${probe.status})`}`,
-              ];
-              // 进程 online 但端口无响应 = 假健康（典型：启动即崩、端口被占、依赖缺失）。
-              // 必须阻断，否则会留下"发布成功但服务不可用"的假象；
-              // 抛错后由 verify 阶段的失败处理自动回滚到上一稳定版本。
-              if (!reachable) {
-                p.result = { ...(p.result ?? {}), online: true, healthCheck };
-                await this.save(p);
-                throw new Error(
-                  `端口探活失败：${p.moduleKey} 进程已 online，但 127.0.0.1:${port} 无响应（终止发布并自动回滚）`,
-                );
-              }
-            } else {
-              healthCheck = { note: 'pm2_env.PORT 缺失，降级为进程状态探活', ok: undefined };
-            }
-            break;
-          }
-          p.logs = [...(p.logs ?? []), `等待服务上线: ${name}（${status || '未找到'}）`];
-        }
-        if (ok) break;
+        res = await this.pm2Probe.probeOnce(p.moduleKey, mod?.pm2);
       } catch {
-        // 查询失败继续轮询
+        // pm2 查询失败（jlist 异常等）继续轮询
+        continue;
       }
+      if (!res.online) {
+        // 逐候选提示等待（app 存在但非 online / pm2 中未找到）
+        for (const s of res.scans) {
+          p.logs = [...(p.logs ?? []), `等待服务上线: ${s.name}（${s.status ?? '未找到'}）`];
+        }
+        continue;
+      }
+
+      ok = true;
+      const hit = res.hit!;
+      p.logs = [...(p.logs ?? []), `服务在线: ${hit.name}`];
+      if (hit.port == null) {
+        // 进程 online 但无 PORT：降级为进程状态探活（不阻断）
+        healthCheck = { note: 'pm2_env.PORT 缺失，降级为进程状态探活', ok: undefined };
+        break;
+      }
+      const reachable = res.reachable === true;
+      healthCheck = { port: hit.port, ok: reachable, checkedAt: new Date().toISOString() };
+      p.logs = [...(p.logs ?? []), `端口探活 ${hit.port}: ${reachable ? '健康' : '未响应'}`];
+      if (!reachable) {
+        // 假健康必须阻断：进程 online 但端口无响应（典型：启动即崩、端口被占、依赖缺失）。
+        // 抛错后由 verify 阶段的失败处理自动回滚到上一稳定版本。
+        p.result = { ...(p.result ?? {}), online: true, healthCheck };
+        await this.save(p);
+        throw new Error(
+          `端口探活失败：${p.moduleKey} 进程已 online，但 127.0.0.1:${hit.port} 无响应（终止发布并自动回滚）`,
+        );
+      }
+      break;
     }
     p.result = { ...(p.result ?? {}), online: ok, healthCheck };
     if (!ok) {
@@ -1630,12 +1432,6 @@ export class PipelineService {
       return;
     }
 
-    const base = path.join(this.releaseWorkspace, 'servers', 'gateway', 'public', 'static', 'modules', p.moduleKey);
-    if (!fs.existsSync(base)) {
-      await this.save(p);
-      return;
-    }
-
     // 受保护：当前版本 + 所有启用中的灰度版本
     const protectedVersions = new Set<string>([p.versionTag!]);
     try {
@@ -1647,23 +1443,7 @@ export class PipelineService {
       this.logger.warn(`读取灰度规则失败，清理时可能误删: ${(e as Error).message}`);
     }
 
-    const dirs = fs
-      .readdirSync(base, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(base, d.name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
-
-    const kept: string[] = [];
-    const removed: string[] = [];
-    for (const d of dirs) {
-      if (protectedVersions.has(d.name) || kept.length < KEEP_VERSIONS) {
-        kept.push(d.name);
-        continue;
-      }
-      fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
-      removed.push(d.name);
-    }
-
+    const { kept, removed } = this.artifacts.cleanup(p.moduleKey, undefined, protectedVersions);
     p.result = { ...(p.result ?? {}), kept, removed };
     p.logs = [...(p.logs ?? []), `清理完成，保留 ${kept.length} 个版本${removed.length ? `，删除: ${removed.join(', ')}` : ''}`];
     await this.save(p);
@@ -1671,72 +1451,5 @@ export class PipelineService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
-  }
-
-  /**
-   * 简单的 GET 请求（JSON）。
-   *
-   * 注意：这里**不能用 fetch** —— Node 的 fetch(undici) 会拦截 6000 等端口
-   * （X11 等被列入 bad port 名单），导致访问 gateway 直接失败。改用 http 模块。
-   */
-  private httpRequest(
-    url: string,
-    method: 'GET' | 'HEAD',
-    timeoutMs = 10_000,
-  ): Promise<{ ok: boolean; status: number; json?: any }> {
-    return new Promise((resolve) => {
-      const lib = url.startsWith('https') ? https : http;
-      const req = lib.request(url, { method, timeout: timeoutMs }, (res) => {
-        const status = res.statusCode ?? 0;
-        const ok = status >= 200 && status < 300;
-
-        if (method === 'HEAD') {
-          res.resume();
-          res.on('end', () => resolve({ ok, status }));
-          return;
-        }
-
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          // 状态码与 JSON 解析分开判定：产物文件（.js）不是 JSON，解析失败不代表不可访问
-          let json: any;
-          try {
-            json = JSON.parse(data);
-          } catch {
-            json = undefined;
-          }
-          resolve({ ok, status, json });
-        });
-      });
-      req.on('error', () => resolve({ ok: false, status: 0 }));
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ ok: false, status: 0 });
-      });
-      req.end();
-    });
-  }
-
-  /** 产物可访问性检查（HEAD，避免下载整个产物） */
-  private async httpHeadOk(url: string): Promise<boolean> {
-    const res = await this.httpRequest(url, 'HEAD');
-    return res.ok;
-  }
-
-  /**
-   * 查询 gateway 模块清单（验证版本是否生效）。
-   * 兼容两种响应：裸 {modules:[...]} 与全局拦截器包装 {code,data:{modules:[...]}}
-   */
-  private async fetchManifest(): Promise<{ modules?: Array<{ name?: string; key?: string; version?: string }> } | null> {
-    const res = await this.httpRequest(`${this.gatewayUrl}/__manifest__`, 'GET');
-    if (!res.ok || !res.json) {
-      this.logger.warn(`查询 manifest 失败: HTTP ${res.status}`);
-      return null;
-    }
-    const data = res.json?.data ?? res.json;
-    return (data ?? null) as { modules?: Array<{ name?: string; key?: string; version?: string }> } | null;
   }
 }
