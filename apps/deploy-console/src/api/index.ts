@@ -423,6 +423,9 @@ export interface PipelineItem {
   /** 模板名快照（旧实例为 null → 展示「默认」） */
   templateName?: string
   skipVerify?: boolean
+  /** 活动阶段快照（null=全量九阶段） */
+  steps?: string[] | null
+  rollbackOnFailure?: 'previous' | 'none'
   stage?: string
   progress?: { current: number; total: number; message?: string }
   logs?: string[]
@@ -463,6 +466,10 @@ export const pipelineApi = {
 
   cancel: (id: string) => http.post(`/pipelines/${id}/cancel`) as Promise<{ id: string; status: string }>,
 
+  /** 重试失败的实例（相同参数重新提交新流水线） */
+  retry: (id: string) =>
+    http.post(`/pipelines/${id}/retry`) as Promise<{ jobId: string; status: string }>,
+
   /** 审批通过（待审批流水线；通过后自动执行） */
   approve: (id: string, comment?: string) =>
     http.post(`/pipelines/${id}/approve`, { comment }) as Promise<{ id: string; status: string }>,
@@ -497,17 +504,21 @@ export const pipelineApi = {
 
 /* ========== Pipeline Templates（流水线模板：流程定义） ========== */
 
+/** 流水线模板（全局定义，不绑模块；moduleKey='*'） */
 export const pipelineTemplateApi = {
-  list: (moduleKey: string) =>
-    http.get(`/modules/${moduleKey}/pipeline-templates`) as Promise<PipelineTemplate[]>,
-  create: (moduleKey: string, dto: Partial<PipelineTemplate>) =>
-    http.post(`/modules/${moduleKey}/pipeline-templates`, dto) as Promise<PipelineTemplate>,
-  duplicate: (moduleKey: string, id: string) =>
-    http.post(`/modules/${moduleKey}/pipeline-templates/${id}/duplicate`) as Promise<PipelineTemplate>,
-  update: (moduleKey: string, id: string, dto: Partial<PipelineTemplate>) =>
-    http.put(`/modules/${moduleKey}/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
-  remove: (moduleKey: string, id: string) =>
-    http.delete(`/modules/${moduleKey}/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+  /** 可用模板：传 moduleKey 返回「全局+该模块专属」；不传返回全部 */
+  list: (moduleKey?: string) =>
+    http.get('/pipeline-templates', {
+      params: moduleKey ? { moduleKey } : {},
+    }) as Promise<PipelineTemplate[]>,
+  create: (dto: Partial<PipelineTemplate>) =>
+    http.post('/pipeline-templates', dto) as Promise<PipelineTemplate>,
+  duplicate: (id: string) =>
+    http.post(`/pipeline-templates/${id}/duplicate`) as Promise<PipelineTemplate>,
+  update: (id: string, dto: Partial<PipelineTemplate>) =>
+    http.put(`/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
+  remove: (id: string) =>
+    http.delete(`/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Tools（工具目录：service 执行器 / shell CLI） ========== */

@@ -10,6 +10,7 @@ import {
   type PipelineTemplate,
 } from '@/api'
 import dayjs from 'dayjs'
+import PipelineTemplateManager from '@/components/PipelineTemplateManager.vue'
 
 // ===== 筛选 =====
 const env = ref('dev')
@@ -24,9 +25,44 @@ interface ModuleItem {
 const modules = ref<ModuleItem[]>([])
 const microFrontendModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
 
-// ===== 流水线模板（模块下可选，默认模板在首位） =====
+// ===== 流水线模板（全局定义，执行时选模块；list 返回该模块可用=全局+专属） =====
 const templates = ref<PipelineTemplate[]>([])
 const templateId = ref<string | undefined>(undefined)
+const tplMgrOpen = ref(false)
+
+// 执行步骤详情辅助（按实例 steps 快照渲染各步状态）
+const STEP_LABELS: Record<string, string> = {
+  check: '校验',
+  pull: '拉取代码',
+  build: '构建',
+  upload: '投递',
+  restart: '重启',
+  version: '写版本',
+  pointer: '切指针',
+  verify: '探活',
+  cleanup: '清理',
+}
+const STEP_COLORS: Record<string, string> = {
+  done: 'success',
+  running: 'processing',
+  error: 'error',
+  pending: 'default',
+}
+function stepList(p: PipelineItem) {
+  return (p.steps && p.steps.length ? p.steps : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']) as string[]
+}
+function stepState(p: PipelineItem, s: string): 'done' | 'running' | 'error' | 'pending' {
+  if (p.status === 'succeeded') return 'done'
+  const list = stepList(p)
+  const cur = list.indexOf(p.stage ?? '')
+  const i = list.indexOf(s)
+  if (p.status === 'failed' || p.status === 'cancelled') {
+    if (i < 0) return 'pending'
+    return i < cur ? 'done' : i === cur ? 'error' : 'pending'
+  }
+  if (p.status === 'pending-approval' || cur < 0 || i < 0) return 'pending'
+  return i < cur ? 'done' : i === cur ? 'running' : 'pending'
+}
 
 // ===== 提交表单 =====
 const form = ref({
@@ -131,6 +167,27 @@ async function loadTemplates() {
   } catch {
     templates.value = []
   }
+}
+
+async function handleRetry(p: PipelineItem) {
+  Modal.confirm({
+    title: '重试发布',
+    content: `以相同参数重新提交（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
+      p.templateName || '默认'
+    }）？原实例记录保留。`,
+    okText: '重试',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        const res = await pipelineApi.retry(p.id)
+        message.success(`已重新提交: ${res.jobId}`)
+        await loadPipelines()
+        if (res.status !== 'pending-approval') startPolling()
+      } catch (e) {
+        message.error((e as Error).message || '重试失败')
+      }
+    },
+  })
 }
 
 async function loadPipelines() {
@@ -339,8 +396,8 @@ onUnmounted(stopPolling)
 <template>
   <div>
     <div class="page-header">
-      <h2>发布流水线</h2>
-      <p>按「环境 + 模块 + 分支 + commit」发布：发布目录拉取远程代码 → 构建（前端打包/后端重启）→ 部署</p>
+      <h2>流水线</h2>
+      <p>流水线 = 独立流程定义（不绑定模块，可全局复用）。发布 = 选「模块 + 流水线 + 分支/commit」提交执行；实例可中断/重试，执行步骤实时可查</p>
     </div>
 
     <!-- 提交区 -->
@@ -367,15 +424,19 @@ onUnmounted(stopPolling)
           </a-select>
         </a-form-item>
 
-        <a-form-item label="流水线模板">
-          <a-select v-model:value="templateId" style="width: 230px;" placeholder="默认模板">
-            <a-select-option v-for="t in templates" :key="t.id" :value="t.id">
-              {{ t.name }}
-              <template v-if="t.skipVerify">（跳过探活）</template>
-              <template v-if="t.approval === 'always'">（强制审批）</template>
-              <template v-if="t.approval === 'never'">（免审批）</template>
-            </a-select-option>
-          </a-select>
+        <a-form-item label="流水线">
+          <a-space>
+            <a-select v-model:value="templateId" style="width: 220px;" placeholder="默认">
+              <a-select-option v-for="t in templates" :key="t.id" :value="t.id">
+                {{ t.name }}
+                <template v-if="t.builtin">（默认）</template>
+                <template v-if="t.skipVerify">（跳过探活）</template>
+                <template v-if="t.approval === 'always'">（强制审批）</template>
+                <template v-if="t.approval === 'never'">（免审批）</template>
+              </a-select-option>
+            </a-select>
+            <a-button size="small" @click="tplMgrOpen = true">管理</a-button>
+          </a-space>
         </a-form-item>
 
         <a-form-item label="分支">
@@ -521,7 +582,15 @@ onUnmounted(stopPolling)
           </template>
           <template v-if="column.key === 'action'">
             <a-space>
-              <a-button type="link" size="small" @click="showLogs(record)">日志</a-button>
+              <a-button type="link" size="small" @click="showLogs(record)">执行详情</a-button>
+              <a-button
+                v-if="record.status === 'failed' || record.status === 'cancelled'"
+                type="link"
+                size="small"
+                @click="handleRetry(record)"
+              >
+                重试
+              </a-button>
               <template v-if="record.status === 'pending-approval'">
                 <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
                 <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
@@ -579,9 +648,9 @@ onUnmounted(stopPolling)
     <!-- 日志抽屉 -->
     <a-drawer
       v-model:open="logVisible"
-      title="流水线日志"
+      title="执行详情"
       placement="right"
-      :width="720"
+      :width="760"
     >
       <template v-if="logRecord">
         <a-descriptions :column="2" size="small" bordered style="margin-bottom: 12px;">
@@ -597,11 +666,42 @@ onUnmounted(stopPolling)
           <a-descriptions-item label="提交">{{ logRecord.gitCommit || '-' }}</a-descriptions-item>
           <a-descriptions-item label="模板">{{ logRecord.templateName || '默认' }}</a-descriptions-item>
         </a-descriptions>
+
+        <!-- 执行步骤详情：按实例 steps 快照渲染各步状态 -->
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+            执行步骤（{{ stepList(logRecord).length }} 步）
+            <a-tag v-if="logRecord.rollbackOnFailure === 'none'" style="margin-left: 4px;">
+              失败不回滚
+            </a-tag>
+          </div>
+          <a-space wrap :size="6">
+            <a-tag
+              v-for="s in stepList(logRecord)"
+              :key="s"
+              :color="STEP_COLORS[stepState(logRecord, s)]"
+              style="margin-right: 0;"
+            >
+              {{ STEP_LABELS[s] || s }}
+            </a-tag>
+          </a-space>
+          <div v-if="logRecord.progress?.message" style="margin-top: 6px; color: #888; font-size: 12px;">
+            {{ logRecord.progress.message }}
+          </div>
+        </div>
+
         <div
           style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
                  font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 60vh; overflow: auto;"
         >{{ (logRecord.logs || []).join('\n') || '（无日志）' }}</div>
       </template>
     </a-drawer>
+
+    <!-- 流水线模板管理（全局定义，从模块管理抽离） -->
+    <PipelineTemplateManager
+      :open="tplMgrOpen"
+      @close="tplMgrOpen = false"
+      @changed="loadTemplates"
+    />
   </div>
 </template>

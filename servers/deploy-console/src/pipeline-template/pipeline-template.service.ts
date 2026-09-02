@@ -14,20 +14,20 @@ import {
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
 
 export const DEFAULT_TEMPLATE_NAME = '默认';
+/** 全局模板标记：moduleKey='*' 表示通用流水线（不绑定模块，执行时选目标模块） */
+export const GLOBAL_TEMPLATE = '*';
 
 const APPROVALS: TemplateApproval[] = ['inherit', 'always', 'never'];
 const TARGETS: TemplateTarget[] = ['auto', 'local', 'remote'];
 export const ROLLBACK_MODES = ['previous', 'none'] as const;
 export type RollbackMode = (typeof ROLLBACK_MODES)[number];
 
-/** 不可裁剪的语义/安全基线步骤（模板 steps 必须包含，且不可重排到产物产生前由保序保证） */
+/** 不可裁剪的语义/安全基线步骤 */
 export const CORE_STAGES: readonly string[] = ['check', 'version', 'pointer'];
 
 /**
- * 归一化模板活动阶段（纯函数，便于单测）：
- * - null/空 → null（= 全部九阶段）
- * - 仅可裁剪不可重排：必须是 PIPELINE_STAGES 的保序子序列
- * - 必含 check/version/pointer（安全校验与发布语义真相源）
+ * 归一化模板活动阶段（纯函数）：
+ * null/空 → null（= 全部九阶段）；仅可裁剪不可重排；必含 check/version/pointer。
  */
 export function normalizeSteps(steps?: (string | null | undefined)[] | null): string[] | null {
   if (!steps || steps.length === 0) return null;
@@ -52,30 +52,8 @@ export function normalizeSteps(steps?: (string | null | undefined)[] | null): st
   return s;
 }
 
-export interface TemplateSpec {
-  name: string;
-  description?: string;
-  /** 便捷开关（旧字段）：true 表示裁剪 verify；新输入建议用 steps 表达 */
-  skipVerify?: boolean;
-  /** 活动阶段子集（null/缺省=全量） */
-  steps?: string[];
-  /** verify 失败自动回滚 previous/none */
-  rollbackOnFailure?: RollbackMode;
-  approval?: TemplateApproval;
-  defaultTarget?: TemplateTarget;
-  enabled?: boolean;
-}
-
-/** 模板 id 生成 */
-function genId(): string {
-  return `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
 /**
- * 审批判定（纯函数，便于单测）：
- * - always → 必须审批（模板覆盖环境规则）
- * - never  → 免除审批
- * - inherit / 未设 → 沿用环境规则（needsApproval(env)）
+ * 审批判定（纯函数）：always→要审；never→免审；inherit/未设→沿用环境规则。
  */
 export function needsApprovalForTemplate(
   tpl: { approval?: string } | null | undefined,
@@ -87,13 +65,29 @@ export function needsApprovalForTemplate(
   return envNeedsApproval;
 }
 
+export interface TemplateSpec {
+  name: string;
+  description?: string;
+  skipVerify?: boolean;
+  steps?: string[];
+  rollbackOnFailure?: RollbackMode;
+  approval?: TemplateApproval;
+  defaultTarget?: TemplateTarget;
+  enabled?: boolean;
+}
+
+function genId(): string {
+  return `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 /**
- * 流水线模板服务（S6-I）。
+ * 流水线模板服务（全局化版本，S6 演进）。
  *
- * 语义要点：
- * - 每模块懒建一条 builtin「默认」模板（不可删/改名），兼容旧提交（不传模板走默认）
- * - 模板属模块；name 模块内唯一（DB 唯一索引兜底）
- * - 实例在提交时落模板快照（templateId/templateName/skipVerify），模板事后修改不影响已提交实例
+ * **流水线不跟模块走**：
+ * - 模板是全局资产（moduleKey='*'，GLOBAL_TEMPLATE），执行时再选目标模块；
+ * - 历史"模块专属模板"（moduleKey 为具体模块）兼容保留：提交时可被引用、列表可用；
+ * - 全局懒建一条不可删的 builtin「默认」模板（全流程+环境规则审批），
+ *   不传模板的提交/MCP 即走它，行为与旧版完全一致。
  */
 @Injectable()
 export class PipelineTemplateService {
@@ -120,7 +114,6 @@ export class PipelineTemplateService {
     }
   }
 
-  /** steps 与 skipVerify 统一：显式 steps 优先；仅 skipVerify=true 时剔除 verify；否则全量 */
   private resolveSteps(spec: { steps?: string[]; skipVerify?: boolean }): string[] | null {
     if (spec.steps !== undefined) return normalizeSteps(spec.steps);
     if (spec.skipVerify === true) {
@@ -129,17 +122,21 @@ export class PipelineTemplateService {
     return null;
   }
 
-  /** 模块默认模板：不存在则懒建（内置，不可删/改名）；竞态下靠唯一键吞错重查 */
-  async ensureDefault(moduleKey: string): Promise<DeployPipelineTemplateEntity> {
-    const existing = await this.repo.findOne({ where: { moduleKey, builtin: true } });
+  /** 全局默认模板：懒建（builtin 不可删/改名）；竞态靠唯一键吞错重查 */
+  async ensureDefault(): Promise<DeployPipelineTemplateEntity> {
+    const existing = await this.repo.findOne({
+      where: { moduleKey: GLOBAL_TEMPLATE, builtin: true },
+    });
     if (existing) return existing;
     const row = this.repo.create({
       id: genId(),
-      moduleKey,
+      moduleKey: GLOBAL_TEMPLATE,
       name: DEFAULT_TEMPLATE_NAME,
-      description: '默认发布流程：全量阶段 + 环境规则审批（不传模板即走此模板）',
+      description: '默认发布流程：全流程 + 环境规则审批（不传模板即走此模板）',
       builtin: true,
+      steps: null,
       skipVerify: false,
+      rollbackOnFailure: 'previous',
       approval: 'inherit',
       defaultTarget: 'auto',
       enabled: true,
@@ -148,22 +145,26 @@ export class PipelineTemplateService {
     try {
       return await this.repo.save(row);
     } catch {
-      // 并发首建撞唯一键：返回已建成的默认模板
-      const again = await this.repo.findOne({ where: { moduleKey, builtin: true } });
+      const again = await this.repo.findOne({
+        where: { moduleKey: GLOBAL_TEMPLATE, builtin: true },
+      });
       if (again) return again;
-      throw new BadRequestException(`创建 ${moduleKey} 默认模板失败，请重试`);
+      throw new BadRequestException('创建全局默认模板失败，请重试');
     }
   }
 
-  /** 提交解析：显式 id → 校验归属与启用；否则模块默认模板 */
+  /**
+   * 提交解析：显式 id → 校验「全局模板 或 属于该模块的专属模板」且启用；
+   * 未传 → 全局默认模板。
+   */
   async resolveForSubmit(
     moduleKey: string,
     templateId?: string,
   ): Promise<DeployPipelineTemplateEntity> {
-    if (!templateId) return this.ensureDefault(moduleKey);
+    if (!templateId) return this.ensureDefault();
     const tpl = await this.get(templateId);
-    if (tpl.moduleKey !== moduleKey) {
-      throw new BadRequestException(`模板 ${templateId} 不属于模块 ${moduleKey}`);
+    if (tpl.moduleKey !== GLOBAL_TEMPLATE && tpl.moduleKey !== moduleKey) {
+      throw new BadRequestException(`模板 ${templateId} 不可用于模块 ${moduleKey}（仅全局或该模块专属）`);
     }
     if (!tpl.enabled) {
       throw new BadRequestException(`模板「${tpl.name}」已停用，请启用或改选其他模板`);
@@ -171,14 +172,20 @@ export class PipelineTemplateService {
     return tpl;
   }
 
-  /** 模块模板列表（保证含 builtin 默认，在首位） */
-  async listByModule(moduleKey: string): Promise<DeployPipelineTemplateEntity[]> {
-    await this.ensureDefault(moduleKey);
+  /** 该模块可用的模板列表（全局模板 + 模块专属，全局默认置顶） */
+  async listUsable(moduleKey: string): Promise<DeployPipelineTemplateEntity[]> {
+    await this.ensureDefault();
     const rows = await this.repo.find({
-      where: { moduleKey },
+      where: [{ moduleKey: GLOBAL_TEMPLATE }, { moduleKey }],
       order: { builtin: 'DESC', createdAt: 'ASC' },
     });
     return rows;
+  }
+
+  /** 全部模板（流水线中心管理视图） */
+  async listAll(): Promise<DeployPipelineTemplateEntity[]> {
+    await this.ensureDefault();
+    return this.repo.find({ order: { moduleKey: 'ASC', builtin: 'DESC', createdAt: 'ASC' } });
   }
 
   async get(id: string): Promise<DeployPipelineTemplateEntity> {
@@ -187,24 +194,25 @@ export class PipelineTemplateService {
     return tpl;
   }
 
-  private async assertNameFree(moduleKey: string, name: string, exceptId?: string): Promise<void> {
-    const dup = await this.repo.findOne({ where: { moduleKey, name } });
+  private async assertNameFree(name: string, exceptId?: string): Promise<void> {
+    const dup = await this.repo.findOne({ where: { moduleKey: GLOBAL_TEMPLATE, name } });
     if (dup && dup.id !== exceptId) {
-      throw new ConflictException(`模块 ${moduleKey} 已存在同名模板「${name}」`);
+      throw new ConflictException(`已存在同名全局模板「${name}」`);
     }
   }
 
-  async create(moduleKey: string, spec: TemplateSpec, createdBy?: string): Promise<DeployPipelineTemplateEntity> {
+  /** 创建全局模板（流水线独立于模块） */
+  async create(spec: TemplateSpec, createdBy?: string): Promise<DeployPipelineTemplateEntity> {
     const name = spec.name?.trim();
     if (!name) throw new BadRequestException('模板名必填');
     this.assertApproval(spec.approval);
     this.assertTarget(spec.defaultTarget);
-    await this.assertNameFree(moduleKey, name);
     this.assertRollback(spec.rollbackOnFailure);
+    await this.assertNameFree(name);
     const steps = this.resolveSteps(spec);
     const row = this.repo.create({
       id: genId(),
-      moduleKey,
+      moduleKey: GLOBAL_TEMPLATE,
       name,
       description: spec.description?.trim() || undefined,
       steps,
@@ -219,14 +227,14 @@ export class PipelineTemplateService {
     return this.repo.save(row);
   }
 
-  /** 复制模板（含默认）：复制全部策略为新模板，名称加「副本」 */
+  /** 复制模板 */
   async duplicate(id: string, createdBy?: string): Promise<DeployPipelineTemplateEntity> {
     const src = await this.get(id);
     const name = `${src.name} 副本`;
-    await this.assertNameFree(src.moduleKey, name);
+    await this.assertNameFree(name);
     const row = this.repo.create({
       id: genId(),
-      moduleKey: src.moduleKey,
+      moduleKey: GLOBAL_TEMPLATE,
       name,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
@@ -253,14 +261,13 @@ export class PipelineTemplateService {
       if (tpl.builtin) {
         throw new BadRequestException('内置默认模板不可改名');
       }
-      await this.assertNameFree(tpl.moduleKey, name, id);
+      await this.assertNameFree(name, id);
       tpl.name = name;
     }
     this.assertApproval(patch.approval);
     this.assertTarget(patch.defaultTarget);
     this.assertRollback(patch.rollbackOnFailure);
-    if (patch.description !== undefined) tpl.description = patch.description.trim() || undefined;
-    // steps 优先：显式 steps 重算 skipVerify；仅 skipVerify 时按开关归一化 steps
+    if (patch.description !== undefined) tpl.description = patch.description?.trim() || undefined;
     if (patch.steps !== undefined) {
       tpl.steps = normalizeSteps(patch.steps);
       tpl.skipVerify = tpl.steps ? !tpl.steps.includes('verify') : (patch.skipVerify ?? false);
@@ -274,7 +281,6 @@ export class PipelineTemplateService {
     if (patch.approval !== undefined) tpl.approval = patch.approval;
     if (patch.defaultTarget !== undefined) tpl.defaultTarget = patch.defaultTarget;
     if (patch.enabled !== undefined) tpl.enabled = patch.enabled;
-    tpl.createdBy = tpl.createdBy ?? updatedBy;
     return this.repo.save(tpl);
   }
 

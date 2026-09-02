@@ -74,6 +74,12 @@ export class PipelineController {
     return this.pipelineService.promote(id, user?.username);
   }
 
+  @Post(':id/retry')
+  @ApiOperation({ summary: '重试失败的流水线（相同参数重新提交）' })
+  async retry(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.pipelineService.retry(id, user?.username);
+  }
+
   @Post(':id/approve')
   @ApiOperation({ summary: '审批通过（仅待审批流水线；通过后自动执行）' })
   async approve(
