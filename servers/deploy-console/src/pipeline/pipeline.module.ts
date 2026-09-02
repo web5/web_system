@@ -11,6 +11,7 @@ import { AuditModule } from '../audit/audit.module';
 import { DeployModule } from '../deploy/deploy.module';
 import { StageCommandModule } from '../stage-command/stage-command.module';
 import { ConfigCenterModule } from '../config/config.module';
+import { ReleaseLockModule } from '../release-lock/release-lock.module';
 
 @Module({
   imports: [
@@ -24,6 +25,8 @@ import { ConfigCenterModule } from '../config/config.module';
     StageCommandModule,
     // 配置中心（发布/重启时按作用域合并并强制覆盖注入进程环境）
     ConfigCenterModule,
+    // 发布锁（同一模块×环境串行化，避免并发覆盖版本指针）
+    ReleaseLockModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],

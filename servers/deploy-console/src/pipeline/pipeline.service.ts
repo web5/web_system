@@ -23,6 +23,7 @@ import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
+import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { DeployService } from '../deploy/deploy.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
@@ -102,6 +103,7 @@ export class PipelineService {
     private readonly auditService: AuditService,
     private readonly stageCommands: StageCommandService,
     private readonly configs: ConfigCenterService,
+    private readonly releaseLock: ReleaseLockService,
     private readonly deployService: DeployService,
   ) {}
 
@@ -428,6 +430,31 @@ export class PipelineService {
     }
     let prevVersion: string | undefined;
 
+    // 并发锁：同一「模块 × 环境」串行化发布。
+    // 否则两条流水线会互相覆盖版本指针，出现"发布 A 成功、实际跑的是 B 的产物"这类静默错误。
+    const locked = await this.releaseLock.acquire(p.moduleKey, p.env, p.id);
+    if (!locked) {
+      const reason = `${p.moduleKey}@${p.env} 正在发布中，请等待其结束后重试`;
+      p.status = 'failed';
+      p.error = reason;
+      p.progress = {
+        ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+        message: '发布被拒绝：已有进行中的发布',
+      };
+      p.endTime = Date.now();
+      await this.save(p);
+      await this.auditService.log({
+        user: p.operator || 'unknown',
+        action: 'pipeline.rejected',
+        env: p.env,
+        component: p.moduleKey,
+        status: 'failed',
+        detail: reason,
+      });
+      this.logger.warn(`发布被拒绝（并发）: ${p.id} ${p.env}/${p.moduleKey}`);
+      return;
+    }
+
     try {
       p.status = 'running';
       await this.save(p);
@@ -511,14 +538,33 @@ export class PipelineService {
               p.operator,
               p.moduleKey,
             );
-            p.logs = [...(p.logs ?? []), `验证失败，已自动回滚到 ${prevVersion}（task=${rollTask}）`];
+            // 必须等回滚真正跑完：startRollback 是异步 spawn，不等就不知道结果，
+            // "自动回滚"会变成"发起了动作但失败了也没人知道"。
+            const outcome = await this.deployService.waitTask(String(rollTask));
+            p.logs = [
+              ...(p.logs ?? []),
+              `验证失败，已自动回滚到 ${prevVersion}（task=${rollTask}, 结果=${outcome}）`,
+            ];
+
+            // 回滚后探活确认：服务是否真的恢复了，而不是只发起了回滚
+            let probeNote = '前端模块，跳过端口探活';
+            if (p.moduleType === 'backend') {
+              const probe = await this.probeBackendHealth(p);
+              probeNote = probe.note;
+              p.logs = [
+                ...(p.logs ?? []),
+                `回滚后探活: ${probe.ok ? '服务已恢复' : `服务未恢复（${probe.note}）`}`,
+              ];
+              await this.save(p);
+            }
+
             await this.auditService.log({
               user: p.operator || 'unknown',
               action: 'pipeline.auto-rollback',
               env: p.env,
               component: p.moduleKey,
-              status: 'success',
-              detail: `验证失败自动回滚: ${p.env}/${p.moduleKey} → ${prevVersion}（task=${rollTask}）`,
+              status: outcome === 'success' ? 'success' : 'failed',
+              detail: `验证失败自动回滚: ${p.env}/${p.moduleKey} → ${prevVersion}（task=${rollTask}, 结果=${outcome}, 探活=${probeNote}）`,
             });
           } catch (re) {
             p.logs = [...(p.logs ?? []), `自动回滚失败: ${(re as Error).message}`];
@@ -543,6 +589,8 @@ export class PipelineService {
         });
       }
     } finally {
+      // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
+      await this.releaseLock.release(p.moduleKey, p.env, p.id);
       this.cancelled.delete(p.id);
     }
   }
@@ -1086,6 +1134,42 @@ export class PipelineService {
     await this.save(p);
   }
 
+  /**
+   * 后端探活（**不抛错**，返回健康状态）：查 pm2 进程 → 取端口 → HTTP 探活。
+   * 供回滚后确认"服务确实恢复了"使用，与 verify 阶段的区别是不阻断流程。
+   */
+  private async probeBackendHealth(
+    p: DeployPipelineEntity,
+  ): Promise<{ ok: boolean; note: string; port?: string | number }> {
+    try {
+      const mod = await this.moduleRegistry.get(p.moduleKey);
+      const names = this.resolvePm2Names(p, mod);
+      const jlist = this.exec(`"${this.pm2Bin}" jlist`);
+      const apps = JSON.parse(jlist) as Array<{
+        name?: string;
+        pm2_env?: { status?: string; PORT?: string | number };
+      }>;
+
+      for (const name of names) {
+        const app = apps.find((a) => a.name === name);
+        if (app?.pm2_env?.status !== 'online') continue;
+        const port = app?.pm2_env?.PORT;
+        if (!port) {
+          return { ok: false, note: 'pm2_env.PORT 缺失，无法做端口探活' };
+        }
+        const probe = await this.httpRequest(`http://127.0.0.1:${port}/`, 'GET', 3000);
+        return {
+          ok: probe.status > 0,
+          note: `端口 ${port} ${probe.status > 0 ? '有响应' : '无响应'}`,
+          port,
+        };
+      }
+      return { ok: false, note: 'pm2 中未找到处于 online 的服务进程' };
+    } catch (e) {
+      return { ok: false, note: (e as Error).message };
+    }
+  }
+
   /** 后端验证：pm2 服务重启后保持 online，且端口真实可服务（避免「进程在但端口没起」的假健康） */
   private async verifyBackend(p: DeployPipelineEntity): Promise<void> {
     const mod = await this.moduleRegistry.get(p.moduleKey);
@@ -1116,6 +1200,16 @@ export class PipelineService {
                 ...(p.logs ?? []),
                 `端口探活 ${port}: ${reachable ? '健康' : `未响应(HTTP ${probe.status})`}`,
               ];
+              // 进程 online 但端口无响应 = 假健康（典型：启动即崩、端口被占、依赖缺失）。
+              // 必须阻断，否则会留下"发布成功但服务不可用"的假象；
+              // 抛错后由 verify 阶段的失败处理自动回滚到上一稳定版本。
+              if (!reachable) {
+                p.result = { ...(p.result ?? {}), online: true, healthCheck };
+                await this.save(p);
+                throw new Error(
+                  `端口探活失败：${p.moduleKey} 进程已 online，但 127.0.0.1:${port} 无响应（终止发布并自动回滚）`,
+                );
+              }
             } else {
               healthCheck = { note: 'pm2_env.PORT 缺失，降级为进程状态探活', ok: undefined };
             }
