@@ -14,6 +14,8 @@ import {
   DeploymentUnitOutlined,
   SettingOutlined,
   BellOutlined,
+  ExperimentOutlined,
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -36,6 +38,8 @@ const menuItems = [
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
   { key: '/config', label: '配置中心', icon: SettingOutlined },
   { key: '/notifications', label: '通知中心', icon: BellOutlined },
+  { key: '/canary', label: '灰度管理', icon: ExperimentOutlined },
+  { key: '/diagnose', label: '自助诊断', icon: ToolOutlined },
   { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 

@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CanaryService } from './canary.service';
 import { CurrentUser } from '../common/decorators';
-import { AuditService } from '../audit/audit.service';
+import { AuditService, diffObject } from '../audit/audit.service';
 
 @ApiTags('灰度规则')
 @Controller('canary')
@@ -41,6 +41,7 @@ export class CanaryController {
   @Put(':id')
   @ApiOperation({ summary: '更新灰度规则' })
   async update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any) {
+    const before = await this.canaryService.get(id);
     const r = await this.canaryService.update(id, body);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -48,6 +49,18 @@ export class CanaryController {
       component: `${r.envId}/${r.moduleKey}`,
       status: 'success',
       detail: `更新灰度规则: ${id}`,
+      changes: diffObject(
+        {
+          matchRule: before.matchRule,
+          canaryVersion: before.canaryVersion,
+          enabled: before.enabled,
+        },
+        {
+          matchRule: r.matchRule,
+          canaryVersion: r.canaryVersion,
+          enabled: r.enabled,
+        },
+      ),
     });
     return r;
   }

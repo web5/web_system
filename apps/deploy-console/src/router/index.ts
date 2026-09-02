@@ -93,6 +93,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/SystemSettings.vue'),
         meta: { title: '系统设置' },
       },
+      {
+        path: 'canary',
+        name: 'CanaryCenter',
+        component: () => import('@/views/CanaryCenter.vue'),
+        meta: { title: '灰度管理' },
+      },
+      {
+        path: 'diagnose',
+        name: 'DiagnoseCenter',
+        component: () => import('@/views/DiagnoseCenter.vue'),
+        meta: { title: '自助诊断' },
+      },
     ],
   },
 ]

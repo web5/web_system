@@ -243,17 +243,24 @@ export class MonitorService {
    * 拉取远程 PM2 日志
    * 执行 tail -n <lines> 获取指定服务的最近日志
    */
-  async getLogs(env: string, service: string, lines: number = 100): Promise<{ service: string; logs: string[] }> {
+  async getLogs(
+    env: string,
+    service: string,
+    lines: number = 100,
+    keyword?: string,
+  ): Promise<{ service: string; logs: string[]; matched?: number }> {
     const sshConfig = await this.getSshConfig(env);
 
     // 获取 pm2 日志路径
     const command = `pm2 logs ${service} --lines ${lines} --nostream --raw 2>/dev/null || echo "无日志"`;
     const output = await this.execSsh(sshConfig, command);
 
-    // 按行分割日志
-    const logs = output.trim().split('\n').filter(Boolean);
+    // 按行分割日志；keyword 在**结果侧**过滤（不进命令，杜绝命令注入）
+    const all = output.trim().split('\n').filter(Boolean);
+    const kw = keyword?.trim().toLowerCase();
+    const logs = kw ? all.filter((l) => l.toLowerCase().includes(kw)) : all;
 
-    return { service, logs };
+    return { service, logs, matched: kw ? logs.length : undefined };
   }
 
   // ===== 以下为本机（deploy-console 运行主机）监控，不走 SSH =====
@@ -330,10 +337,60 @@ export class MonitorService {
   /**
    * 拉取本机 PM2 日志
    */
-  async getLocalLogs(service: string, lines = 100): Promise<{ service: string; logs: string[] }> {
+  async getLocalLogs(
+    service: string,
+    lines = 100,
+    keyword?: string,
+  ): Promise<{ service: string; logs: string[]; matched?: number }> {
     const output = this.execLocal(
       `pm2 logs ${service} --lines ${lines} --nostream --raw 2>/dev/null || echo "无日志"`,
     );
-    return { service, logs: output.trim().split('\n').filter(Boolean) };
+    const all = output.trim().split('\n').filter(Boolean);
+    const kw = keyword?.trim().toLowerCase();
+    const logs = kw ? all.filter((l) => l.toLowerCase().includes(kw)) : all;
+    return { service, logs, matched: kw ? logs.length : undefined };
+  }
+
+  // ===== 自助诊断操作（任务 23）：进程重启 / 端口占用检测 =====
+
+  /** 重启远程服务（pm2 restart；输出尾部便于页面直接展示） */
+  async restartPm2(env: string, service: string): Promise<{ service: string; output: string }> {
+    const sshConfig = await this.getSshConfig(env);
+    const output = await this.execSsh(sshConfig, `pm2 restart ${service} 2>&1 | tail -20`);
+    return { service, output: output.trim() };
+  }
+
+  /** 重启本机服务（pm2 restart） */
+  restartLocalPm2(service: string): { service: string; output: string } {
+    const output = this.execLocal(`pm2 restart ${service} 2>&1 | tail -20`);
+    return { service, output: output.trim() };
+  }
+
+  /** 解析端口占用检测输出（lsof LISTEN 行）为结构化结果 */
+  private parsePortLines(port: number, output: string): { port: number; occupied: boolean; lines: string[] } {
+    const lines = output
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const occupied = !lines.some((l) => l.includes('__NONE__'));
+    return { port, occupied, lines: occupied ? lines : [] };
+  }
+
+  /** 远程端口占用检测（lsof LISTEN；无结果/命令缺失均按未占用处理，诊断尽力而为） */
+  async checkPort(env: string, port: number): Promise<{ port: number; occupied: boolean; lines: string[] }> {
+    const sshConfig = await this.getSshConfig(env);
+    const output = await this.execSsh(
+      sshConfig,
+      `lsof -iTCP:${port} -sTCP:LISTEN -P -n 2>/dev/null || echo "__NONE__"`,
+    );
+    return this.parsePortLines(port, output);
+  }
+
+  /** 本机端口占用检测 */
+  checkLocalPort(port: number): { port: number; occupied: boolean; lines: string[] } {
+    const output = this.execLocal(
+      `lsof -iTCP:${port} -sTCP:LISTEN -P -n 2>/dev/null || echo "__NONE__"`,
+    );
+    return this.parsePortLines(port, output);
   }
 }
