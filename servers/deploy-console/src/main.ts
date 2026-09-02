@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,8 +18,17 @@ async function bootstrap() {
   const port = configService.get<number>('PORT') || 6200;
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
-  // 启用 CORS（允许所有来源）
-  app.use(cors({ origin: true, credentials: true }));
+  // 启用 CORS（来源白名单来自环境变量 CORS_ORIGINS，禁止 origin:'*' / origin:true）
+  const corsOrigins = (configService.get<string>('CORS_ORIGINS', '') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  app.use(
+    cors({
+      origin: corsOrigins.length ? corsOrigins : false,
+      credentials: true,
+    }),
+  );
 
   // 安全头
   app.use(helmet());
@@ -40,6 +50,9 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
+
+  // 全局异常过滤器（铁律：每个微服务必须注册，未捕获异常统一结构化返回）
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Swagger 文档只在非 production 环境启用
   if (!isProduction) {

@@ -22,6 +22,8 @@ import {
   WebSearchTool,
 } from '@kedouai/agent-core';
 import { generalAssistantAgent } from './agents/general-assistant.agent';
+import { deployAssistantAgent } from './agents/deploy-assistant.agent';
+import { registerDeployTools, resolveMcpConfig } from './mcp/mcp-executor';
 
 export interface Harness {
   clientRegistry: ClientRegistry;
@@ -30,6 +32,8 @@ export interface Harness {
   searchRegistry: SearchProviderRegistry;
   engine: AgentEngine;
   memory: InMemoryConversationMemory;
+  /** 是否启用了 MCP 远程工具（配置了 MCP_GATEWAY_URL 才为 true） */
+  mcpEnabled: boolean;
 }
 
 /** 确认器：交互式 CLI 注入，弹 [y/N] 确认框；非交互返回 false（默认拒绝） */
@@ -61,10 +65,26 @@ export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
   const agentRegistry = new AgentRegistry();
   agentRegistry.register(generalAssistantAgent);
 
+  // MCP 远程发布工具 + 发布助手（可选：配置 MCP_GATEWAY_URL 才启用）
+  // 未配置时 CLI 完全不感知发布能力，其余工具不受影响
+  const mcpConfig = resolveMcpConfig();
+  if (mcpConfig) {
+    registerDeployTools(toolRegistry, mcpConfig);
+    agentRegistry.register(deployAssistantAgent);
+  }
+
   // 记忆 + 引擎（注入 confirm）
   const compaction = new Compaction(clientRegistry);
   const memory = new InMemoryConversationMemory(compaction);
   const engine = new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory);
 
-  return { clientRegistry, toolRegistry, agentRegistry, searchRegistry, engine, memory };
+  return {
+    clientRegistry,
+    toolRegistry,
+    agentRegistry,
+    searchRegistry,
+    engine,
+    memory,
+    mcpEnabled: !!mcpConfig,
+  };
 }

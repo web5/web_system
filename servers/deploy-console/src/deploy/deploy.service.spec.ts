@@ -8,6 +8,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
+import { StageCommandService } from '../stage-command/stage-command.service';
 
 /**
  * P0-2 单元测试：recordDeployment 改用原子 upsert，不再产生重复。
@@ -32,6 +33,10 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         { provide: EnvironmentService, useValue: { get: jest.fn() } },
         { provide: ModuleRegistryService, useValue: { list: jest.fn().mockResolvedValue([]) } },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: StageCommandService,
+          useValue: { resolve: jest.fn().mockResolvedValue(null) },
+        },
       ],
     }).compile();
     service = module.get(DeployService);

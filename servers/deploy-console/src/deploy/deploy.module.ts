@@ -9,6 +9,7 @@ import { ServerModule } from '../server/server.module';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
+import { StageCommandModule } from '../stage-command/stage-command.module';
 
 /**
  * 部署管理模块
@@ -19,6 +20,8 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
     EnvironmentModule,
     ModuleRegistryModule,
     ServerModule,
+    // 构建命令单一真相源：旧 deploy.sh 路径也改读这里，不再依赖 deploy_modules.buildCmd
+    StageCommandModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),
   ],
   controllers: [DeployController],

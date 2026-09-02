@@ -269,8 +269,12 @@ git push origin <当前分支>
 **方式 0：CI 自动提 PR（推荐，零人工）**
 
 已配置 GitHub Actions（`.github/workflows/auto-pr.yml`）：push 到 `feature/*` / `fix/*` 分支时**自动创建 PR 到 master**，幂等（已有 PR 则跳过），用 GitHub 内置 `GITHUB_TOKEN`（不落地本地）。
-> ⚠️ 前提：仓库 Settings → Actions → General → Workflow permissions 需开启 **"Read and write permissions"**（否则 token 只读无法建 PR）。
-> 只要 push `feature/xxx` / `fix/xxx` 分支，GitHub Actions 会自动建 PR，无需手动操作。
+> ⚠️ 前提（两步都要做，缺一不可）：仓库 **Settings → Actions → General → Workflow permissions** 区块：
+> 1. 单选 **"Read and write permissions"**（否则内置 `GITHUB_TOKEN` 只读，无法建 PR）；
+> 2. **勾选下方复选框 "Allow GitHub Actions to create and approve pull requests"**。
+>    ⚠️ 这一步极易被漏掉——即使第 1 步选了 Read/Write，只要这个复选框没勾，`pulls.create` 仍会 403 报
+>    `GitHub Actions is not permitted to create or approve pull requests`，PR 照样建不出来。
+> 两步都开启后，只要 push `feature/xxx` / `fix/xxx` 分支，GitHub Actions 会自动建 PR，无需手动操作。
 
 **方式 A：gh CLI**（token 已存根 `.env` 的 `GITHUB_PR_TOKEN`）
 ```bash

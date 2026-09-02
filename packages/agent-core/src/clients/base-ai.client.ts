@@ -88,6 +88,37 @@ export interface ModelInfo {
   available: boolean;
 }
 
+/**
+ * 解析模型输出的 JSON 文本工具调用（模型偶发把 function calling 写成
+ * 文本 JSON：`{"name":"web-search","arguments":{"query":"..."}}`）。
+ * 返回 null 表示内容不是可解析的工具调用 JSON。
+ */
+export function parseJsonToolCall(content: string): ToolCall[] | null {
+  const trimmed = (content || '').trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    const calls: ToolCall[] = [];
+    for (const item of arr) {
+      if (!item || typeof item.name !== 'string' || !item.name) continue;
+      let argsStr = '{}';
+      if (typeof item.arguments === 'string') argsStr = item.arguments;
+      else if (item.arguments && typeof item.arguments === 'object') {
+        argsStr = JSON.stringify(item.arguments);
+      }
+      calls.push({
+        id: `call_${calls.length + 1}`,
+        name: item.name,
+        arguments: argsStr,
+      });
+    }
+    return calls.length ? calls : null;
+  } catch {
+    return null;
+  }
+}
+
 export abstract class BaseAiClient {
   abstract readonly modelId: string;
   abstract readonly displayName: string;

@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ServerService } from './server.service';
 import { DeployServerEntity } from '../entities/deploy-server.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
+import { EnvironmentService } from '../environment/environment.service';
+import { ModuleRegistryService } from '../module-registry/module-registry.service';
 
 /**
  * P1 单元测试：服务器组 + 环境服务路由的解析与 CRUD 逻辑。
@@ -20,6 +22,11 @@ describe('ServerService (P1 serverName + route)', () => {
         ServerService,
         { provide: getRepositoryToken(DeployServerEntity), useValue: serverRepo },
         { provide: getRepositoryToken(DeployEnvServiceRouteEntity), useValue: routeRepo },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ModuleRegistryService,
+          useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) },
+        },
       ],
     }).compile();
     service = module.get(ServerService);

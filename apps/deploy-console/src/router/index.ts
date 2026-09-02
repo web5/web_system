@@ -28,6 +28,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布中心' },
       },
       {
+        path: 'pipelines',
+        name: 'PipelineCenter',
+        component: () => import('@/views/PipelineCenter.vue'),
+        meta: { title: '发布流水线' },
+      },
+      {
         path: 'environments',
         name: 'EnvironmentManager',
         component: () => import('@/views/EnvironmentManager.vue'),
@@ -68,6 +74,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AuditLog',
         component: () => import('@/views/AuditLog.vue'),
         meta: { title: '审计日志' },
+      },
+      {
+        path: 'config',
+        name: 'ConfigCenter',
+        component: () => import('@/views/ConfigCenter.vue'),
+        meta: { title: '配置中心' },
       },
     ],
   },

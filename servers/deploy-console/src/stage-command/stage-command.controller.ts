@@ -1,0 +1,91 @@
+import {
+  Controller,
+  Get,
+  Put,
+  Delete,
+  Post,
+  Param,
+  Body,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { StageCommandService } from './stage-command.service';
+import { CurrentUser } from '../common/decorators';
+import { CONFIGURABLE_STAGES } from '../entities/deploy-module-stage-command.entity';
+
+/**
+ * 阶段命令管理（**仅控制台 JWT，不暴露 MCP**）。
+ *
+ * 每模块每阶段一条 shell 命令，是发布流水线的唯一执行真相源；
+ * build 阶段未配置即 fail-fast，其余阶段未配置则回落到流水线内置逻辑。
+ */
+@ApiTags('阶段命令')
+@ApiBearerAuth()
+@Controller('modules')
+export class StageCommandController {
+  constructor(private readonly stageCommands: StageCommandService) {}
+
+  @Get(':key/stage-commands')
+  @ApiOperation({ summary: '某模块各阶段命令（含未配置的阶段）' })
+  async list(@Param('key') key: string) {
+    const rows = await this.stageCommands.listByModule(key);
+    const map = new Map(rows.map((r) => [r.stage, r]));
+    return CONFIGURABLE_STAGES.map((stage) => {
+      const row = map.get(stage);
+      return {
+        stage,
+        configured: !!row?.command,
+        command: row?.command ?? null,
+        enabled: row?.enabled ?? false,
+        timeoutSec: row?.timeoutSec ?? null,
+        updatedAt: row?.updatedAt ?? null,
+        updatedBy: row?.updatedBy ?? null,
+      };
+    });
+  }
+
+  /** 置于 :stage 路由之前，避免被参数路由吞掉 */
+  @Get('stage-commands/templates')
+  @ApiOperation({ summary: '按模块类型返回默认构建命令模板' })
+  templates(@Query('type') type: string) {
+    return this.stageCommands.template(type || 'frontend');
+  }
+
+  @Get(':key/stage-commands/:stage')
+  @ApiOperation({ summary: '某模块某阶段命令（未配置返回 null）' })
+  async get(@Param('key') key: string, @Param('stage') stage: string) {
+    return (await this.stageCommands.resolve(key, stage)) ?? null;
+  }
+
+  @Put(':key/stage-commands/:stage')
+  @ApiOperation({ summary: '保存阶段命令（保存前 bash -n 语法校验）' })
+  async save(
+    @Param('key') key: string,
+    @Param('stage') stage: string,
+    @Body() body: { command: string; timeoutSec?: number },
+    @CurrentUser() user: any,
+  ) {
+    if (!body || typeof body.command !== 'string') {
+      throw new BadRequestException('缺少 command 字段');
+    }
+    return this.stageCommands.upsert(key, stage, body.command, user?.username, body.timeoutSec);
+  }
+
+  @Delete(':key/stage-commands/:stage')
+  @ApiOperation({ summary: '删除阶段命令（该阶段恢复为流水线内置逻辑）' })
+  async remove(@Param('key') key: string, @Param('stage') stage: string) {
+    await this.stageCommands.remove(key, stage);
+    return { ok: true };
+  }
+
+  @Post(':key/stage-commands/:stage/validate')
+  @ApiOperation({ summary: '仅语法校验（不保存）' })
+  validate(@Body() body: { command: string }) {
+    if (!body || typeof body.command !== 'string') {
+      throw new BadRequestException('缺少 command 字段');
+    }
+    this.stageCommands.validate(body.command);
+    return { ok: true, message: '语法正确' };
+  }
+}

@@ -176,8 +176,10 @@
         </a-form-item>
         <a-form-item label="角色" name="role">
           <a-select v-model:value="formData.role" size="large">
-            <a-select-option value="user">普通用户</a-select-option>
             <a-select-option value="admin">管理员</a-select-option>
+            <a-select-option value="editor">编辑</a-select-option>
+            <a-select-option value="viewer">只读</a-select-option>
+            <a-select-option value="user">普通用户</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="状态" name="enabled">
@@ -300,11 +302,29 @@ const pagination = reactive<TablePaginationConfig>({
 });
 
 function roleTagColor(role: string) {
-  return role === 'admin' ? 'orange' : 'blue';
+  switch (role) {
+    case 'admin': return 'orange';
+    case 'editor': return 'blue';
+    case 'viewer': return 'cyan';
+    default: return 'default';
+  }
 }
 
 function roleLabel(role: string) {
-  return role === 'admin' ? '管理员' : '普通用户';
+  switch (role) {
+    case 'admin': return '管理员';
+    case 'editor': return '编辑';
+    case 'viewer': return '只读';
+    default: return '普通用户';
+  }
+}
+
+/** 从 roles 数组解析页面展示用的主角色（优先级 admin > editor > viewer > user） */
+function pickRole(roles: string[]): string {
+  if (roles.includes('admin')) return 'admin';
+  if (roles.includes('editor')) return 'editor';
+  if (roles.includes('viewer')) return 'viewer';
+  return roles.includes('user') ? 'user' : 'user';
 }
 
 function formatDate(d: string) {
@@ -331,7 +351,7 @@ async function fetchUsers() {
       ...user,
       avatar: user.avatar || defaultAvatar(user.gender),
       // 后端角色是 roles 数组、状态是 status 字符串，这里映射为页面用的 role/enabled
-      role: user.role || (Array.isArray(user.roles) && user.roles.includes('admin') ? 'admin' : 'user'),
+      role: pickRole(Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : [])),
       enabled: user.enabled !== undefined ? user.enabled : (user.status ? user.status === 'active' : true),
       createdAt: user.createdAt || '',
     }));
@@ -399,7 +419,10 @@ function editUser(record: User) {
 async function handleModalOk() {
   submitting.value = true;
   try {
+    // 页面用 role 单选，后端用 roles 数组（whitelist 只认 roles）
     const userData = { ...formData } as any;
+    userData.roles = formData.role ? [formData.role] : ['user'];
+    delete userData.role;
     if (editingId.value) {
       await updateUser(String(editingId.value), userData);
       message.success('更新成功');

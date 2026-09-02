@@ -108,8 +108,8 @@
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item label="工具（工具名数组，需已在对应服务注册）">
-        <a-select v-model:value="form.tools" mode="tags" placeholder="输入工具名回车添加" />
+      <a-form-item label="能力配置（本地工具 / MCP 远程工具 / Skills）">
+        <CapabilityConfigurator v-model:capabilities="form.capabilities" />
       </a-form-item>
       <a-form-item label="System Prompt">
         <a-textarea
@@ -135,6 +135,9 @@
           </a-form-item>
         </a-col>
       </a-row>
+      <a-form-item label="流式输出" extra="开启后 AI 回答逐字流式渲染；关闭后最终回答一次性输出（适合结构化报告类 Agent）">
+        <a-switch v-model:checked="form.streaming!" />
+      </a-form-item>
     </a-form>
   </a-modal>
 
@@ -193,8 +196,10 @@ import {
   type AgentDef,
   type AgentDefVersion,
   type SaveAgentDefPayload,
+  type CapabilityRef,
 } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
+import CapabilityConfigurator from './CapabilityConfigurator.vue';
 
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('agents:manage');
@@ -214,9 +219,11 @@ const defaultForm = (): SaveAgentDefPayload => ({
   systemPrompt: '',
   model: 'hy3',
   tools: [],
+  capabilities: [],
   maxSteps: 10,
   temperature: 0.7,
   memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+  streaming: true,
 });
 const form = reactive<SaveAgentDefPayload>(defaultForm());
 
@@ -269,15 +276,22 @@ function openCreate() {
 
 function openEdit(def: AgentDef) {
   editing.value = def;
+  // capabilities 为空时从 tools 派生（老数据兼容）
+  const caps: CapabilityRef[] =
+    def.capabilities?.length
+      ? def.capabilities.map((c) => ({ ...c }))
+      : (def.tools || []).map((t) => ({ type: 'tool', ref: t, enabled: true }));
   Object.assign(form, {
     id: def.id,
     name: def.name,
     systemPrompt: def.systemPrompt,
     model: def.model,
     tools: [...(def.tools || [])],
+    capabilities: caps,
     maxSteps: def.maxSteps,
     temperature: def.temperature ?? 0.7,
     memory: { ...def.memory },
+    streaming: def.streaming !== false,
   });
   editOpen.value = true;
 }

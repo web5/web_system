@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentRegistry, AgentDefinition } from '@kedouai/agent-core';
+import { AgentRegistry, AgentDefinition, CapabilityRef, SkillRef, ToolRegistry, McpToolMeta } from '@kedouai/agent-core';
+import { McpService } from '../mcp/mcp.service';
 
 /**
  * Agent 定义同步器（一期）
@@ -10,6 +11,9 @@ import { AgentRegistry, AgentDefinition } from '@kedouai/agent-core';
  *
  * 生命周期由宿主 AgentModule 控制：先注册代码内置定义（upsert 兜底），再调用
  * `start()` 做首次同步 + 定时轮询，保证 DB 定义优先于代码定义。
+ *
+ * 额外职责：对定义中的 mcp 能力做懒加载注册（幂等），让 capabilities 里的
+ * mcp:module/tool 变成可被 Agent 引擎调用的远程工具。
  *
  * 分层约束：本服务在 Nest 服务层，只通过 HTTP 拉取 ai-service；不直接碰数据库。
  */
@@ -24,6 +28,8 @@ export class AgentDefSyncService {
   constructor(
     private readonly configService: ConfigService,
     private readonly agentRegistry: AgentRegistry,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly mcpService: McpService,
   ) {
     const base = this.configService.get<string>('AI_SERVICE_URL', 'http://localhost:6003');
     this.endpoint = `${base.replace(/\/$/, '')}/internal/agent-definitions`;
@@ -67,6 +73,7 @@ export class AgentDefSyncService {
         const def = this.toAgentDefinition(row);
         if (!def) continue;
         this.agentRegistry.upsert(def);
+        this.registerMcpCapabilities(def);
         updated++;
       }
       if (updated > 0) {
@@ -87,19 +94,75 @@ export class AgentDefSyncService {
       return null;
     }
     const memory = (row.memory as { compactionThreshold?: number; keepRecent?: number; enabled?: boolean }) ?? {};
+
+    const capabilities = Array.isArray(row.capabilities)
+      ? (row.capabilities as CapabilityRef[])
+      : undefined;
+    const skills = Array.isArray(row.skills) ? (row.skills as SkillRef[]) : undefined;
+
+    // 本地工具 + MCP 工具名（mcp 用短名，注册/调用都走短名）
+    const localTools = capabilities
+      ? capabilities.filter((c) => c.type === 'tool' && c.enabled !== false).map((c) => c.ref)
+      : Array.isArray(row.tools)
+        ? (row.tools as string[])
+        : [];
+    const mcpTools = capabilities
+      ? capabilities
+          .filter((c) => c.type === 'mcp' && c.enabled !== false)
+          .map((c) => c.ref.split('/').pop() || c.ref)
+      : [];
+
     return {
       id,
       name,
       systemPrompt,
       model,
-      tools: Array.isArray(row.tools) ? (row.tools as string[]) : [],
+      tools: [...localTools, ...mcpTools],
+      capabilities,
+      skills,
       maxSteps: Number(row.maxSteps) || 10,
       temperature: typeof row.temperature === 'number' ? row.temperature : undefined,
+      streaming: row.streaming === false ? false : true,
       memory: {
         compactionThreshold: Number(memory.compactionThreshold) || 20,
         keepRecent: Number(memory.keepRecent) || 6,
         enabled: memory.enabled !== false,
       },
     };
+  }
+
+  /**
+   * 按定义中的 mcp 能力注册懒加载远程工具（幂等）。
+   * 注册名 = mcp:module/tool 的 tool 短名；schema 宽松（MCP 网关侧校验参数）。
+   */
+  private registerMcpCapabilities(def: AgentDefinition): void {
+    if (!this.mcpService.isAvailable()) return;
+    const mcpCaps = (def.capabilities ?? []).filter((c) => c.type === 'mcp' && c.enabled !== false);
+    for (const cap of mcpCaps) {
+      const [module, tool] = cap.ref.split('/');
+      if (!module || !tool) continue;
+      if (this.toolRegistry.has(tool)) continue;
+      const meta: McpToolMeta = {
+        name: tool,
+        module,
+        description: `MCP 远程工具 ${cap.ref}`,
+        inputSchema: { type: 'object', properties: {} },
+      };
+      // 能力级运行时配置：longRunning 时自动轮询长任务到终态
+      const runtime = (cap.config ?? {}) as {
+        longRunning?: boolean;
+        maxWaitMs?: number;
+        timeoutMs?: number;
+        intervalMs?: number;
+      };
+      try {
+        this.mcpService.registerMcpTool(this.toolRegistry, meta, runtime);
+        this.logger.log(
+          `已注册 MCP 能力（懒加载）: ${cap.ref}${runtime.longRunning ? ' [长任务]' : ''}`,
+        );
+      } catch (err) {
+        this.logger.warn(`MCP 能力注册跳过（可能冲突）: ${cap.ref} - ${(err as Error).message}`);
+      }
+    }
   }
 }

@@ -20,7 +20,7 @@ interface Pm2Item {
   restarts: number
 }
 
-const activeEnv = ref('dev')
+const activeKey = ref('dev')
 const healthList = ref<HealthItem[]>([])
 const pm2List = ref<Pm2Item[]>([])
 const loadingHealth = ref(false)
@@ -40,7 +40,10 @@ const logLoading = ref(false)
 async function loadHealth() {
   loadingHealth.value = true
   try {
-    healthList.value = await monitorApi.health(activeEnv.value)
+    healthList.value =
+      activeKey.value === 'local'
+        ? await monitorApi.localHealth()
+        : await monitorApi.health(activeKey.value)
   } catch {
     message.error('获取健康状态失败')
   } finally {
@@ -52,7 +55,10 @@ async function loadHealth() {
 async function loadPm2() {
   loadingPm2.value = true
   try {
-    pm2List.value = await monitorApi.pm2(activeEnv.value)
+    pm2List.value =
+      activeKey.value === 'local'
+        ? await monitorApi.localPm2()
+        : await monitorApi.pm2(activeKey.value)
   } catch {
     message.error('获取 PM2 进程失败')
   } finally {
@@ -73,7 +79,10 @@ async function viewLogs(service: string) {
   logLoading.value = true
   logContent.value = []
   try {
-    const res = await monitorApi.logs(activeEnv.value, service, 100)
+    const res =
+      activeKey.value === 'local'
+        ? await monitorApi.localLogs(service, 100)
+        : await monitorApi.logs(activeKey.value, service, 100)
     logContent.value = res.lines
   } catch {
     message.error('获取日志失败')
@@ -159,7 +168,8 @@ onUnmounted(() => {
     <a-card>
       <!-- 环境切换 + 自动刷新开关 -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <a-tabs v-model:activeKey="activeEnv" @change="loadAll">
+        <a-tabs v-model:activeKey="activeKey" @change="loadAll">
+          <a-tab-pane key="local" tab="本地" />
           <a-tab-pane key="dev" tab="DEV" />
           <a-tab-pane key="prod" tab="PROD" />
         </a-tabs>

@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionGuard, RequirePermission } from '@web-system/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -15,6 +16,8 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:view')
   @ApiOperation({ summary: '获取用户列表' })
   async findAll(
     @Query('page') page: number = 1,
@@ -86,6 +89,8 @@ export class UserController {
   }
 
   @Get('profile')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:view')
   @ApiOperation({ summary: '获取用户详情' })
   async profile(@Query('id') id: string) {
     if (id) {
@@ -95,24 +100,32 @@ export class UserController {
   }
 
   @Get(':id')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:view')
   @ApiOperation({ summary: '根据 ID 获取用户' })
   async findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
   }
 
   @Post()
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:create')
   @ApiOperation({ summary: '创建用户' })
   async create(@Body() userData: CreateUserDto) {
     return this.userService.create(userData);
   }
 
   @Put(':id')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:edit')
   @ApiOperation({ summary: '更新用户' })
   async update(@Param('id') id: string, @Body() userData: UpdateUserDto) {
     return this.userService.update(id, userData);
   }
 
   @Delete(':id')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:delete')
   @ApiOperation({ summary: '删除用户' })
   async remove(@Param('id') id: string) {
     await this.userService.remove(id);

@@ -6,6 +6,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import { McpModule } from './mcp/mcp.module';
 import { McpModuleEntity } from './mcp/entities/mcp-module.entity';
 import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
+import { McpJobEntity } from './mcp/entities/mcp-job.entity';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'mysql');
-        const entities = [McpModuleEntity, McpToolEntity];
+        const entities = [McpModuleEntity, McpToolEntity, McpJobEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql' as const,

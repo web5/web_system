@@ -15,6 +15,10 @@ servers/gateway/public/static/
 
 # Vite 加载 TS 配置时生成的临时文件
 *.timestamp-*.mjs
+*.timestamp-*.mts
+
+# 发布流水线：依赖锁指纹（发布目录 git clean 保护用，避免误删）
+.deploy-lock-hash
 
 # Logs
 logs/

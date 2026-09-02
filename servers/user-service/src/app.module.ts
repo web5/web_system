@@ -6,9 +6,13 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ApiKeyModule } from './api-key/api-key.module';
+import { PermissionModule } from './permission/permission.module';
 import { User } from './user/user.entity';
 import { McpApiKeyEntity } from './api-key/entities/mcp-api-key.entity';
 import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
+import { PermissionEntity } from './permission/entities/permission.entity';
+import { RoleEntity } from './permission/entities/role.entity';
+import { RolePermissionEntity } from './permission/entities/role-permission.entity';
 
 @Module({
   imports: [
@@ -22,7 +26,7 @@ import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'postgres');
-        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity];
+        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql',
@@ -63,6 +67,7 @@ import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
     UserModule,
     AuthModule,
     ApiKeyModule,
+    PermissionModule,
   ],
 })
 export class AppModule {}

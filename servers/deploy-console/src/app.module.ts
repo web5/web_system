@@ -12,6 +12,8 @@ import { EnvironmentModule } from './environment/environment.module';
 import { ModuleRegistryModule } from './module-registry/module-registry.module';
 import { CanaryModule } from './canary/canary.module';
 import { ServerModule } from './server/server.module';
+import { PipelineModule } from './pipeline/pipeline.module';
+import { McpDeployModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -52,6 +54,9 @@ import { ServerModule } from './server/server.module';
     ModuleRegistryModule,
     CanaryModule,
     ServerModule,
+    // 发布流水线（控制台 /api/pipelines/* + MCP /api/mcp/* 共用同一引擎）
+    PipelineModule,
+    McpDeployModule,
   ],
 })
 export class AppModule {}
