@@ -62,7 +62,7 @@ body {
   font-size: 17px;
   font-weight: var(--ws-font-weight-semibold);
   letter-spacing: 0.5px;
-  background: rgba(255, 255, 255, 0.04);
+  /* logo 区与侧栏纯黑融为一体，不再叠半透明白 */
   margin-bottom: 8px;
 
   .logo-icon {
