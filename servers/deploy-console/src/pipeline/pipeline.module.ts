@@ -15,6 +15,13 @@ import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { NotificationModule } from '../notification/notification.module';
 import { ApprovalModule } from '../approval/approval.module';
 import { PipelineTemplateModule } from '../pipeline-template/pipeline-template.module';
+import { ProbeModule } from '../probe/probe.module';
+import { Pm2Module } from '../pm2/pm2.module';
+import { ShellModule } from '../shell/shell.module';
+import { ReleaseGitModule } from '../git/release-git.module';
+import { ArtifactStoreModule } from '../artifact/artifact-store.module';
+import { ReleaseRegistryModule } from '../registry/release-registry.module';
+import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 
 @Module({
   imports: [
@@ -36,6 +43,20 @@ import { PipelineTemplateModule } from '../pipeline-template/pipeline-template.m
     ApprovalModule,
     // 流水线模板（提交解析模板 + 落实例快照）
     PipelineTemplateModule,
+    // HTTP 探活工具（verify manifest 断言 / 后端端口探活 / 产物 HEAD 检查）
+    ProbeModule,
+    // pm2 进程健康探活（verify 后端探活 / restart 查名 / 回滚后探活）
+    Pm2Module,
+    // 命令执行（同步 exec + PATH + bin 解析）
+    ShellModule,
+    // 发布目录 git 工作区（pull 执行体）
+    ReleaseGitModule,
+    // 静态产物存储（upload/cleanup 执行体）
+    ArtifactStoreModule,
+    // 版本注册表（version/pointer 执行体）
+    ReleaseRegistryModule,
+    // 远程投递（upload remote 执行体）
+    RemoteDeliveryModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],
