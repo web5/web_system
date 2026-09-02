@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { moduleApi, deployApi, stageCommandApi, CONFIGURABLE_STAGES } from '@/api'
+import { moduleApi, deployApi, stageCommandApi, toolApi, CONFIGURABLE_STAGES } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,10 +167,32 @@ async function removeCmd() {
   }
 }
 
+// ===== 工具命令插入（工具目录中的可复用命令一键追加到编辑器） =====
+const insertTool = ref<string | undefined>(undefined)
+const toolCmds = ref<{ code: string; name: string; command: string }[]>([])
+async function loadToolCmds() {
+  try {
+    const tools = await toolApi.list({ kind: 'shell' })
+    toolCmds.value = tools
+      .filter((t) => t.command && t.available)
+      .map((t) => ({ code: t.code, name: t.name, command: t.command as string }))
+  } catch {
+    toolCmds.value = []
+  }
+}
+function insertToolCmd(code: string) {
+  const t = toolCmds.value.find((x) => x.code === code)
+  if (!t) return
+  const sep = cmdText.value.trim() ? '\n' : ''
+  cmdText.value = cmdText.value + sep + `# --- 工具: ${t.name} ---\n` + t.command
+  cmdDirty.value = true
+}
+
 onMounted(async () => {
   await Promise.all([loadModule(), loadDeployments()])
   await loadCmdStatus()
   await loadCmd()
+  await loadToolCmds()
 })
 </script>
 
@@ -350,6 +372,18 @@ onMounted(async () => {
                   <a-tag v-if="cmdDirty" color="orange" style="margin-left: 6px;">未保存</a-tag>
                 </span>
                 <a-space>
+                  <a-select
+                    v-model:value="insertTool"
+                    placeholder="插入工具命令"
+                    style="width: 170px;"
+                    size="small"
+                    allow-clear
+                    @change="(v: string) => { insertToolCmd(v); insertTool = undefined }"
+                  >
+                    <a-select-option v-for="t in toolCmds" :key="t.code" :value="t.code">
+                      {{ t.name }}（{{ t.code }}）
+                    </a-select-option>
+                  </a-select>
                   <a-button size="small" @click="insertTemplate">插入模板</a-button>
                   <a-button size="small" @click="validateCmd">语法校验</a-button>
                   <a-button size="small" @click="loadCmd">刷新</a-button>

@@ -406,6 +406,8 @@ export interface ToolItem {
   category: string
   description?: string
   example?: string
+  /** 可复用命令正文（shell 工具，可被阶段命令编辑器插入） */
+  command?: string
   available: boolean
   builtin: boolean
   updatedAt?: string
@@ -526,7 +528,7 @@ export const pipelineTemplateApi = {
 export const toolApi = {
   list: (params?: { category?: string; kind?: string }) =>
     http.get('/tools', { params: params ?? {} }) as Promise<ToolItem[]>,
-  create: (dto: { name: string; kind?: string; category?: string; description?: string; example?: string }) =>
+  create: (dto: { name: string; kind?: string; category?: string; description?: string; example?: string; command?: string }) =>
     http.post('/tools', dto) as Promise<ToolItem>,
   update: (code: string, dto: Partial<ToolItem>) =>
     http.put(`/tools/${code}`, dto) as Promise<ToolItem>,

@@ -72,38 +72,59 @@ function removeTool(t: ToolItem) {
   })
 }
 
-// ===== 新增 shell 工具 =====
+// ===== 新增 / 编辑工具（含可复用命令正文，bash -n 由后端校验） =====
 const addOpen = ref(false)
 const addSaving = ref(false)
+const editingTool = ref<ToolItem | null>(null)
 const addForm = ref({
   name: '',
   category: 'generic' as string,
   description: '',
   example: '',
+  command: '',
 })
 
 function openAdd() {
-  addForm.value = { name: '', category: 'generic', description: '', example: '' }
+  editingTool.value = null
+  addForm.value = { name: '', category: 'generic', description: '', example: '', command: '' }
   addOpen.value = true
 }
-async function saveAdd() {
-  if (!addForm.value.name.trim()) {
+function openEdit(t: ToolItem) {
+  editingTool.value = t
+  addForm.value = {
+    name: t.name,
+    category: t.category,
+    description: t.description || '',
+    example: t.example || '',
+    command: t.command || '',
+  }
+  addOpen.value = true
+}
+async function saveTool() {
+  const m = addForm.value
+  if (!editingTool.value && !m.name.trim()) {
     message.warning('工具名必填')
     return
   }
   addSaving.value = true
   try {
-    await toolApi.create({
-      name: addForm.value.name.trim(),
-      category: addForm.value.category,
-      description: addForm.value.description.trim() || undefined,
-      example: addForm.value.example.trim() || undefined,
-    })
-    message.success('已新增（code 由名称自动生成）')
+    const payload = {
+      category: m.category,
+      description: m.description.trim() || undefined,
+      example: m.example.trim() || undefined,
+      command: m.command.trim() || undefined,
+    }
+    if (editingTool.value) {
+      await toolApi.update(editingTool.value.code, payload)
+      message.success('工具已更新')
+    } else {
+      await toolApi.create({ name: m.name.trim(), ...payload })
+      message.success('已新增（code 由名称自动生成）')
+    }
     addOpen.value = false
     await load()
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '新增失败')
+    message.error(e?.response?.data?.message || '保存失败')
   } finally {
     addSaving.value = false
   }
@@ -163,9 +184,10 @@ onMounted(load)
           </template>
         </a-table-column>
         <a-table-column title="说明" data-index="description" ellipsis />
-        <a-table-column title="示例" data-index="example" ellipsis>
+        <a-table-column title="命令/示例" key="cmd" ellipsis>
           <template #default="{ record }">
-            <code v-if="record.example" style="font-size: 12px;">{{ record.example }}</code>
+            <code v-if="record.command" style="font-size: 12px;">{{ record.command }}</code>
+            <span v-else-if="record.example" style="font-size: 12px; color: #888;">{{ record.example }}</span>
             <span v-else style="color: #bbb;">—</span>
           </template>
         </a-table-column>
@@ -174,27 +196,41 @@ onMounted(load)
             <a-switch :checked="record.available" size="small" @change="toggleAvailable(record)" />
           </template>
         </a-table-column>
-        <a-table-column title="操作" key="action" width="90">
+        <a-table-column title="操作" key="action" width="140">
           <template #default="{ record }">
-            <a-button
-              v-if="!record.builtin"
-              type="link"
-              size="small"
-              danger
-              @click="removeTool(record)"
-            >
-              删除
-            </a-button>
-            <span v-else style="color: #bbb; font-size: 12px;">内置</span>
+            <a-space>
+              <a-button type="link" size="small" @click="openEdit(record)">编辑</a-button>
+              <a-button
+                v-if="!record.builtin"
+                type="link"
+                size="small"
+                danger
+                @click="removeTool(record)"
+              >
+                删除
+              </a-button>
+              <span v-if="record.builtin && record.kind === 'service'" style="color: #bbb; font-size: 12px;">
+                内置
+              </span>
+            </a-space>
           </template>
         </a-table-column>
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="addOpen" title="新增 Shell 工具" :confirm-loading="addSaving" @ok="saveAdd">
+    <a-modal
+      v-model:open="addOpen"
+      :title="editingTool ? '编辑工具：' + editingTool.code : '新增 Shell 工具'"
+      :confirm-loading="addSaving"
+      @ok="saveTool"
+    >
       <a-form layout="vertical">
-        <a-form-item label="工具名（code 自动生成，如 My Tool → my-tool）" required>
-          <a-input v-model:value="addForm.name" placeholder="如：docker / jq" />
+        <a-form-item label="工具名（code 由创建时名称自动生成，如 My Tool → my-tool）">
+          <a-input
+            v-model:value="addForm.name"
+            :disabled="!!editingTool"
+            placeholder="如：docker / jq"
+          />
         </a-form-item>
         <a-form-item label="分类">
           <a-select v-model:value="addForm.category" style="width: 200px;">
@@ -203,11 +239,21 @@ onMounted(load)
             </a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item label="可复用命令正文（bash，保存时语法校验；可被阶段命令编辑器一键插入）">
+          <a-textarea
+            v-model:value="addForm.command"
+            :rows="4"
+            style="font-family: monospace; font-size: 12px;"
+            placeholder="如：
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${PORT:-6200}/
+支持流水线注入变量：DEPLOY_ENV / MODULE_KEY / MODULE_DIR / MODULE_TYPE / RELEASE_DIR / BRANCH / COMMIT_ID / STAGE / PM2_NAME"
+          />
+        </a-form-item>
         <a-form-item label="说明">
           <a-input v-model:value="addForm.description" />
         </a-form-item>
-        <a-form-item label="示例命令">
-          <a-textarea v-model:value="addForm.example" :rows="2" />
+        <a-form-item label="示例（无命令时列表展示）">
+          <a-input v-model:value="addForm.example" />
         </a-form-item>
       </a-form>
     </a-modal>

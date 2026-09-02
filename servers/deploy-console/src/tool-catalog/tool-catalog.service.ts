@@ -1,6 +1,15 @@
-import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { execSync } from 'child_process';
 import { DeployToolEntity } from '../entities/deploy-tool-catalog.entity';
 
 export interface ToolSpec {
@@ -9,7 +18,29 @@ export interface ToolSpec {
   category?: string;
   description?: string;
   example?: string;
+  /** 可复用命令正文（bash）；保存前语法校验 */
+  command?: string;
   available?: boolean;
+}
+
+/**
+ * bash -n 语法校验（与阶段命令保存一致）：
+ * 写入临时文件校验，规避 heredoc/EOF 冲突；语法错误抛 400 并带 stderr。
+ */
+export function assertShellSyntax(command: string): void {
+  const tmp = path.join(os.tmpdir(), `tool-cmd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.sh`);
+  fs.writeFileSync(tmp, command, 'utf-8');
+  try {
+    execSync(`bash -n "${tmp}"`, { encoding: 'utf-8' });
+  } catch (e: any) {
+    throw new BadRequestException(`命令语法错误: ${(e.stderr || e.message || '').toString().trim()}`);
+  } finally {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** 种子工具（service = 内置执行器，code 与 executeStage 步骤对应；shell = 外部 CLI） */
@@ -77,6 +108,7 @@ export class ToolCatalogService {
   async create(spec: ToolSpec): Promise<DeployToolEntity> {
     const code = spec.name?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || '';
     if (!code) throw new BadRequestException('工具名必填');
+    if (spec.kind === 'shell' && spec.command?.trim()) assertShellSyntax(spec.command);
     const dup = await this.repo.findOne({ where: { code } });
     if (dup) throw new ConflictException(`工具 code 已存在: ${code}`);
     if (spec.category && !CATEGORIES.includes(spec.category)) {
@@ -89,6 +121,7 @@ export class ToolCatalogService {
       category: spec.category ?? 'generic',
       description: spec.description?.trim() || undefined,
       example: spec.example?.trim() || undefined,
+      command: spec.command?.trim() || undefined,
       available: spec.available ?? true,
       builtin: false,
     });
@@ -97,8 +130,12 @@ export class ToolCatalogService {
 
   async update(code: string, patch: Partial<Omit<ToolSpec, 'name'>>): Promise<DeployToolEntity> {
     const row = await this.get(code);
+    if (patch.command !== undefined && patch.command?.trim() && row.kind === 'shell') {
+      assertShellSyntax(patch.command);
+    }
     if (patch.description !== undefined) row.description = patch.description?.trim() || undefined;
     if (patch.example !== undefined) row.example = patch.example?.trim() || undefined;
+    if (patch.command !== undefined) row.command = patch.command?.trim() || undefined;
     if (patch.available !== undefined) row.available = patch.available;
     if (patch.category !== undefined) {
       if (!CATEGORIES.includes(patch.category)) {

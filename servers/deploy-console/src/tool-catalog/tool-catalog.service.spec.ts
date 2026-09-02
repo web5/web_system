@@ -61,4 +61,26 @@ describe('ToolCatalogService', () => {
     const t = await service.update('curl', { available: false });
     expect(t.available).toBe(false);
   });
+
+  it('create 保存 shell 命令（语法合法）', async () => {
+    const t = await service.create({ name: 'health-check', command: 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-6200}/' });
+    expect(t.command).toContain('curl');
+    expect(t.kind).toBe('shell');
+  });
+
+  it('shell 命令语法错误拒绝 400', async () => {
+    await expect(
+      service.create({ name: 'bad-cmd', command: 'if then fi' }),
+    ).rejects.toThrow(BadRequestException);
+    repo.findOne.mockResolvedValue({ code: 'x', kind: 'shell', builtin: false });
+    await expect(
+      service.update('x', { command: 'while do done' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('update 命令置空即清除（清空不校验）', async () => {
+    repo.findOne.mockResolvedValue({ code: 'x', kind: 'shell', builtin: false });
+    const t = await service.update('x', { command: '' });
+    expect(t.command).toBeUndefined();
+  });
 });
