@@ -191,6 +191,13 @@ function handleLogout() {
   color: #fff;
   letter-spacing: 0.5px;
 }
+/* 侧栏 logo 品牌文字：dark theme 继承偏暗，显式白字 */
+.logo-text {
+  font-size: 16px;
+  font-weight: var(--ws-font-weight-semibold);
+  color: #fff;
+  letter-spacing: 0.5px;
+}
 .logo-sub {
   font-size: 11px;
   color: var(--ws-text-tertiary);
