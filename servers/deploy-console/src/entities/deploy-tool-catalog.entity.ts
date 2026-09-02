@@ -31,6 +31,10 @@ export class DeployToolEntity {
   @Column({ type: 'text', nullable: true, comment: '示例（shell 命令片段或 service 工具说明）' })
   example?: string;
 
+  /** 可复用命令正文（shell 工具支持；保存前 bash -n 语法校验，可被阶段命令编辑器一键插入） */
+  @Column({ type: 'text', nullable: true, comment: '工具命令正文（bash）' })
+  command?: string;
+
   @Column({ type: 'boolean', default: true, comment: '是否可用（停用后模板编辑器不推荐/不可选）' })
   available: boolean;
 
