@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SystemSettingsService } from './system-settings.service';
 import { REQUIRE_APPROVAL_ENVS_KEY } from '../approval/approval.service';
 import { CurrentUser } from '../common/decorators';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * 系统设置（仅控制台 JWT 可写）。
@@ -14,7 +15,10 @@ import { CurrentUser } from '../common/decorators';
 @ApiBearerAuth()
 @Controller('system-settings')
 export class SystemSettingsController {
-  constructor(private readonly settings: SystemSettingsService) {}
+  constructor(
+    private readonly settings: SystemSettingsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get('notify-channels')
   @ApiOperation({ summary: '通知渠道配置（DB 优先，env 兜底）' })
@@ -32,6 +36,7 @@ export class SystemSettingsController {
     if (!body || (body.webhookUrl === undefined && body.wecomUrl === undefined)) {
       throw new BadRequestException('缺少要保存的渠道配置');
     }
+    const before = await this.settings.notifyChannels(() => undefined);
     await this.settings.setNotifyChannels(
       {
         webhook: body.webhookUrl === undefined ? undefined : (body.webhookUrl ?? ''),
@@ -39,6 +44,16 @@ export class SystemSettingsController {
       },
       user?.username,
     );
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'system-settings.notify_channels',
+      status: 'success',
+      detail: '更新通知渠道配置',
+      changes: [
+        { field: 'webhookUrl', before: before.webhook, after: body.webhookUrl ?? '' },
+        { field: 'wecomUrl', before: before.wecom, after: body.wecomUrl ?? '' },
+      ],
+    });
     return { ok: true };
   }
 
@@ -63,7 +78,17 @@ export class SystemSettingsController {
       .map((s) => s.trim())
       .filter(Boolean)
       .join(',');
+    const before = await this.settings.get(REQUIRE_APPROVAL_ENVS_KEY);
     await this.settings.set(REQUIRE_APPROVAL_ENVS_KEY, value, user?.username);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'system-settings.approval_envs',
+      status: 'success',
+      detail: '更新审批门禁环境',
+      changes: [
+        { field: 'approvalEnvs', before: before || 'prod', after: value || 'prod' },
+      ],
+    });
     return { ok: true, envs: value || 'prod' };
   }
 }
