@@ -404,3 +404,26 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 - **S6-II 编排化 + 工具目录（本修订的主体）**：步骤执行器注册表 + run 数据驱动；内置步骤全量注册（含 rollback）；tool_catalog 种子+CRUD+「工具管理」页；模板编辑器从步骤库编排（选步骤/排序/换执行器/rollbackOnFailure）；步骤分类分组 UI；回归+度量/审计覆盖。任务 30-35。
   - 执行顺序依赖：I 先行（模板实例与审批语义落地、可发版），II 在其上替换执行内核——**每步执行器迁移后跑一次既有发布流程回归**，避免一次性大爆炸。
 
+---
+
+## 工具化落地状态（2026-09-02，V6 执行体收口）
+
+> V6「`pipeline.service.ts` 探活 URL 拼接等平台逻辑应收敛为工具」已全部落地（tasks.md S7）。
+> `PipelineService` 只保留状态机/编排（run/executeStage/轮询/日志/审计/回滚）与公共 API（controller/MCP 面），
+> 平台执行体全部下沉为可注入 service 工具（各带单测，tool-catalog `probe/deploy/semantic/cleanup` 分类的对应实现）：
+
+| 工具（module dir） | 承载执行体 | 消费步骤/动作 |
+|---|---|---|
+| `probe/http-probe.service.ts` | HTTP GET/HEAD、`__manifest__` 兼容解析（裸 / 拦截器包装） | verify(前端)、后端端口探活 |
+| `pm2/pm2-probe.service.ts` | pm2 jlist、服务名候选解析、进程 online + 端口探活 | restart 查名、verify(后端)、回滚后探活 |
+| `shell/command.service.ts` | 同步 exec、PATH 补齐、node/pm2/pnpm bin 解析 | 全部命令执行（git/tar/scp/ssh/pm2/pnpm） |
+| `git/release-git.service.ts` | fetch/checkout/reset/clean、pnpm-lock 指纹依赖同步 | pull |
+| `artifact/artifact-store.service.ts` | 产物目录 exists/listVersions/uploadLocal/cleanup | check(复用产物)、upload(local)、cleanup |
+| `registry/release-registry.service.ts` | deploy_versions 写入、deploy_deployments 指针 upsert | version、pointer、switchPointer、promote |
+| `remote/remote-delivery.service.ts` | tar/scp/ssh 远程投递、env 级服务器地址解析 | upload(remote) |
+| `pipeline/release-paths.ts` | 产物目录/URL/远端根 路径纯函数 | 全局（路径布局单点知识） |
+
+- 修复历史 bug：verify 后端「端口不可达」抛错原本写在 pm2 查询失败的 `try/catch` 内被吞掉，
+  假健康 12 轮耗尽仍判成功（⑤ 自动回滚从未被端口探活触发）；重构时判定移出 catch，现会立即抛错走回滚。
+- 服务工具换 remote 实现（V7 `service-kind: 'remote'`）时只改上述工具实现层，步骤定义与模板不变。
+
