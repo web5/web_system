@@ -72,6 +72,9 @@ export class ConfigController {
         after: body.isSecret ? SECRET_UNRECORDED : body.value,
         isSecret: !!body.isSecret,
       }),
+      changes: [
+        { field: 'value', before, after: body.isSecret ? SECRET_UNRECORDED : body.value },
+      ],
     });
 
     return saved;
@@ -98,6 +101,13 @@ export class ConfigController {
         isSecret: target?.isSecret ?? false,
         value: target?.isSecret ? SECRET_UNRECORDED : null,
       }),
+      changes: [
+        {
+          field: 'value',
+          before: target?.isSecret ? SECRET_UNRECORDED : null,
+          after: null,
+        },
+      ],
     });
 
     return { ok: true };

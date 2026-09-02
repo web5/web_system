@@ -242,6 +242,66 @@ export const monitorApi = {
     http.get('/monitor/local/logs', {
       params: { service, lines },
     }) as Promise<{ lines: string[] }>,
+
+  // ===== 自助诊断（任务 23） =====
+  restart: (env: string, service: string) =>
+    http.post('/monitor/pm2/restart', null, {
+      params: { env, service },
+    }) as Promise<{ service: string; output: string }>,
+  restartLocal: (service: string) =>
+    http.post('/monitor/local/pm2/restart', null, {
+      params: { service },
+    }) as Promise<{ service: string; output: string }>,
+  port: (env: string, port: number) =>
+    http.get('/monitor/port', { params: { env, port } }) as Promise<{
+      port: number
+      occupied: boolean
+      lines: string[]
+    }>,
+  localPort: (port: number) =>
+    http.get('/monitor/local/port', { params: { port } }) as Promise<{
+      port: number
+      occupied: boolean
+      lines: string[]
+    }>,
+  searchLogs: (env: string, service: string, keyword: string, lines = 300) =>
+    http.get('/monitor/logs', {
+      params: { env, service, keyword, lines },
+    }) as Promise<{ service: string; logs: string[]; matched?: number }>,
+  searchLocalLogs: (service: string, keyword: string, lines = 300) =>
+    http.get('/monitor/local/logs', {
+      params: { service, keyword, lines },
+    }) as Promise<{ service: string; logs: string[]; matched?: number }>,
+}
+
+/* ========== Canary（灰度规则） ========== */
+
+export interface CanaryRule {
+  id: string
+  envId: string
+  moduleKey: string
+  canaryVersion: string
+  matchRule: {
+    type: 'percent' | 'user-list' | 'header'
+    value?: number
+    userIds?: string[]
+    key?: string
+    values?: string[]
+  }
+  enabled: boolean
+  createdAt: string
+}
+
+export const canaryApi = {
+  list: (envId?: string, moduleKey?: string) =>
+    http.get('/canary', {
+      params: { ...(envId ? { envId } : {}), ...(moduleKey ? { moduleKey } : {}) },
+    }) as Promise<CanaryRule[]>,
+  update: (id: string, data: Partial<CanaryRule>) =>
+    http.put(`/canary/${id}`, data) as Promise<CanaryRule>,
+  remove: (id: string) => http.delete(`/canary/${id}`) as Promise<{ status: string }>,
+  preview: (id: string, userId: string) =>
+    http.post(`/canary/${id}/preview`, { userId }) as Promise<{ hit: boolean; rule: CanaryRule }>,
 }
 
 /* ========== Audit ========== */
@@ -258,6 +318,8 @@ export const auditApi = {
         component: string
         status: string
         detail: string
+        /** 字段级前后 diff（配置类写操作；无则为 undefined） */
+        changes?: { field: string; before?: unknown; after?: unknown }[]
       }[]
     }>,
 }
@@ -317,13 +379,55 @@ export const serverApi = {
 
 /* ========== Pipelines（发布流水线） ========== */
 
+/** 流水线模板（流程定义；模块下可建多条） */
+export interface PipelineTemplate {
+  id: string
+  moduleKey: string
+  name: string
+  description?: string
+  /** 活动阶段子集（null=全量九阶段） */
+  steps?: string[] | null
+  skipVerify: boolean
+  /** verify 失败自动回滚 previous/none */
+  rollbackOnFailure?: 'previous' | 'none'
+  approval: 'inherit' | 'always' | 'never'
+  defaultTarget: 'auto' | 'local' | 'remote'
+  enabled: boolean
+  builtin: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** 工具目录项（service=平台内置执行器；shell=外部 CLI） */
+export interface ToolItem {
+  code: string
+  name: string
+  kind: 'service' | 'shell'
+  category: string
+  description?: string
+  example?: string
+  /** 可复用命令正文（shell 工具，可被阶段命令编辑器插入） */
+  command?: string
+  available: boolean
+  builtin: boolean
+  updatedAt?: string
+}
+
 export interface PipelineItem {
   id: string
   env: string
   moduleKey: string
   versionTag?: string
   mode: string
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  /** pending-approval=提交被审批门禁阻断，等待审批 */
+  status: 'pending' | 'pending-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  templateId?: string
+  /** 模板名快照（旧实例为 null → 展示「默认」） */
+  templateName?: string
+  skipVerify?: boolean
+  /** 活动阶段快照（null=全量九阶段） */
+  steps?: string[] | null
+  rollbackOnFailure?: 'previous' | 'none'
   stage?: string
   progress?: { current: number; total: number; message?: string }
   logs?: string[]
@@ -352,15 +456,29 @@ export const pipelineApi = {
     versionTag?: string
     target?: 'local' | 'remote'
     grayscaleRule?: Record<string, unknown>
+    /** 流水线模板 ID（不传 = 模块默认模板） */
+    templateId?: string
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
 
-  list: (params?: { env?: string; moduleKey?: string; limit?: number }) =>
+  list: (params?: { env?: string; moduleKey?: string; templateId?: string; limit?: number }) =>
     http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
 
   get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
 
   cancel: (id: string) => http.post(`/pipelines/${id}/cancel`) as Promise<{ id: string; status: string }>,
+
+  /** 重试失败的实例（相同参数重新提交新流水线） */
+  retry: (id: string) =>
+    http.post(`/pipelines/${id}/retry`) as Promise<{ jobId: string; status: string }>,
+
+  /** 审批通过（待审批流水线；通过后自动执行） */
+  approve: (id: string, comment?: string) =>
+    http.post(`/pipelines/${id}/approve`, { comment }) as Promise<{ id: string; status: string }>,
+
+  /** 审批拒绝（拒绝必填意见） */
+  reject: (id: string, comment: string) =>
+    http.post(`/pipelines/${id}/reject`, { comment }) as Promise<{ id: string; status: string }>,
 
   promote: (id: string) =>
     http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
@@ -384,6 +502,43 @@ export const pipelineApi = {
         source?: 'db' | 'artifact'
       }[]
     >,
+
+  /** 各流水线模板运行摘要：{ [templateId]: { total, ok, latest } } */
+  summary: () =>
+    http.get('/pipelines/meta/summary') as Promise<
+      Record<string, { total: number; ok: number; latest: PipelineItem | null }>
+    >,
+}
+
+/* ========== Pipeline Templates（流水线模板：流程定义） ========== */
+
+/** 流水线模板（全局定义，不绑模块；moduleKey='*'） */
+export const pipelineTemplateApi = {
+  /** 可用模板：传 moduleKey 返回「全局+该模块专属」；不传返回全部 */
+  list: (moduleKey?: string) =>
+    http.get('/pipeline-templates', {
+      params: moduleKey ? { moduleKey } : {},
+    }) as Promise<PipelineTemplate[]>,
+  create: (dto: Partial<PipelineTemplate>) =>
+    http.post('/pipeline-templates', dto) as Promise<PipelineTemplate>,
+  duplicate: (id: string) =>
+    http.post(`/pipeline-templates/${id}/duplicate`) as Promise<PipelineTemplate>,
+  update: (id: string, dto: Partial<PipelineTemplate>) =>
+    http.put(`/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
+  remove: (id: string) =>
+    http.delete(`/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+}
+
+/* ========== Tools（工具目录：service 执行器 / shell CLI） ========== */
+
+export const toolApi = {
+  list: (params?: { category?: string; kind?: string }) =>
+    http.get('/tools', { params: params ?? {} }) as Promise<ToolItem[]>,
+  create: (dto: { name: string; kind?: string; category?: string; description?: string; example?: string; command?: string }) =>
+    http.post('/tools', dto) as Promise<ToolItem>,
+  update: (code: string, dto: Partial<ToolItem>) =>
+    http.put(`/tools/${code}`, dto) as Promise<ToolItem>,
+  remove: (code: string) => http.delete(`/tools/${code}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
@@ -516,6 +671,93 @@ export const configApi = {
     http.post('/config/snapshots', { envId, moduleKey, versionTag }) as Promise<{ id: string }>,
   restore: (envId: string, moduleKey: string, versionTag: string) =>
     http.post('/config/snapshots/restore', { envId, moduleKey, versionTag }) as Promise<number>,
+}
+
+/**
+ * 发布度量。
+ * 数据来自 deploy_pipelines 的聚合（流水线本身已记录 status/stage/起止时间），无额外埋点。
+ */
+export const metricsApi = {
+  overview: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/overview', { params }) as Promise<{
+      total: number
+      succeeded: number
+      failed: number
+      running: number
+      cancelled: number
+      successRate: number | null
+      avgDurationSec: number | null
+      p95DurationSec: number | null
+    }>,
+  trend: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/trend', { params }) as Promise<
+      { date: string; succeeded: number; failed: number }[]
+    >,
+  stageFailures: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/stage-failures', { params }) as Promise<
+      { stage: string; count: number }[]
+    >,
+  topModules: (params?: { env?: string; from?: number; to?: number; limit?: number }) =>
+    http.get('/metrics/releases/top-modules', { params }) as Promise<
+      { moduleKey: string; count: number }[]
+    >,
+  failures: (params?: {
+    env?: string
+    moduleKey?: string
+    stage?: string
+    from?: number
+    to?: number
+    limit?: number
+  }) =>
+    http.get('/metrics/releases/failures', { params }) as Promise<
+      {
+        id: string
+        moduleKey: string
+        env: string
+        versionTag: string | null
+        stage: string | null
+        error: string | null
+        startTime: number
+        endTime: number | null
+        operator: string | null
+      }[]
+    >,
+}
+
+/** 通知中心：站内历史 */
+export const notificationApi = {
+  list: (limit?: number) =>
+    http.get('/notifications', { params: { limit } }) as Promise<
+      {
+        id: string
+        event: string
+        env: string
+        moduleKey: string
+        versionTag: string | null
+        status: string
+        detail: string
+        operator: string | null
+        delivery: Record<string, string> | null
+        createdAt: string
+      }[]
+    >,
+}
+
+/** 系统设置：通知渠道配置（DB 可配，env 兜底） */
+export const systemSettingsApi = {
+  getNotifyChannels: () =>
+    http.get('/system-settings/notify-channels') as Promise<{
+      webhookUrl: string | null
+      wecomUrl: string | null
+    }>,
+  updateNotifyChannels: (dto: { webhookUrl?: string | null; wecomUrl?: string | null }) =>
+    http.put('/system-settings/notify-channels', dto) as Promise<{ ok: boolean }>,
+
+  /** 审批门禁：需要审批的环境（逗号分隔，默认 prod） */
+  getApprovalEnvs: () =>
+    http.get('/system-settings/approval-envs') as Promise<{ envs: string }>,
+  updateApprovalEnvs: (envs: string) =>
+    http.put('/system-settings/approval-envs', { envs }) as Promise<{ ok: boolean }>,
 }
 
 export default http

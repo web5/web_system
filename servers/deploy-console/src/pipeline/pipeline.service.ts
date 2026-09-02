@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -24,7 +24,13 @@ import { StageCommandService } from '../stage-command/stage-command.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
+import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
+import { ApprovalService } from '../approval/approval.service';
+import {
+  PipelineTemplateService,
+  needsApprovalForTemplate,
+} from '../pipeline-template/pipeline-template.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
 const KEEP_VERSIONS = 5;
@@ -70,6 +76,8 @@ export interface SubmitPipelineDto {
   commitId?: string;
   /** @deprecated 等价于 commitId，兼容旧调用 */
   versionTag?: string;
+  /** 流水线模板 ID（不传 = 模块默认模板，兼容旧调用/MCP） */
+  templateId?: string;
   /** 投递目标：local=本机静态目录；remote=SSH 到服务器。默认自动判定 */
   target?: 'local' | 'remote';
   /** 灰度规则（mode=grayscale 时必填）：{ type:'percent'|'user-list'|'header', ... } */
@@ -89,6 +97,8 @@ export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
   /** 取消标记（进程内即可，重启后任务本身也会中断） */
   private readonly cancelled = new Set<string>();
+  /** 运行中流水线的 shell 子进程：取消时立即 SIGKILL，避免"已取消的发布仍跑完整条流水线" */
+  private readonly shells = new Map<string, ChildProcess>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -104,7 +114,12 @@ export class PipelineService {
     private readonly stageCommands: StageCommandService,
     private readonly configs: ConfigCenterService,
     private readonly releaseLock: ReleaseLockService,
+    private readonly notifications: NotificationService,
     private readonly deployService: DeployService,
+    // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
+    private readonly approvals: ApprovalService,
+    // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
+    private readonly templates: PipelineTemplateService,
   ) {}
 
   /**
@@ -150,12 +165,24 @@ export class PipelineService {
    * 提交发布流水线：落库后立即返回，后台异步执行。
    * 同一 (env, moduleKey) 不允许并发发布（避免产物互相覆盖）。
    */
-  async submit(dto: SubmitPipelineDto, operator?: string): Promise<{ jobId: string; status: string }> {
+  async submit(
+    dto: SubmitPipelineDto,
+    operator?: string,
+  ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const mode: PipelineMode = dto.mode ?? 'direct';
     if (!SUPPORTED_ENVS.includes(dto.env)) {
       throw new BadRequestException(
         `不支持的环境: ${dto.env}（支持 ${SUPPORTED_ENVS.join(' / ')}）`,
       );
+    }
+    // 防命令注入：branch / commit 会拼进发布目录的 git 命令，白名单收敛（禁空格/引号/分号/$ 等）
+    const safeBranchRe = /^[A-Za-z0-9._/-]{1,128}$/;
+    if (dto.branch && !safeBranchRe.test(dto.branch)) {
+      throw new BadRequestException(`分支名含非法字符: ${dto.branch}`);
+    }
+    const targetCommit = dto.commitId ?? dto.versionTag;
+    if (targetCommit && !/^[A-Za-z0-9._-]{4,64}$/.test(targetCommit)) {
+      throw new BadRequestException(`目标 commit 含非法字符: ${targetCommit}`);
     }
     if (mode === 'grayscale' && !dto.grayscaleRule) {
       throw new BadRequestException('灰度发布必须提供 grayscaleRule');
@@ -171,6 +198,16 @@ export class PipelineService {
     }
 
     const id = this.generateId();
+    // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
+    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 审批门禁：模板策略覆盖环境规则（always/never），inherit 沿用环境（默认 prod）
+    const needsApproval = needsApprovalForTemplate(
+      tpl,
+      await this.approvals.needsApproval(dto.env),
+    );
+    const runTarget =
+      dto.target ??
+      (tpl.defaultTarget === 'auto' ? undefined : (tpl.defaultTarget as 'local' | 'remote'));
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -179,15 +216,58 @@ export class PipelineService {
       versionTag: dto.commitId ?? dto.versionTag,
       gitBranch: dto.branch || undefined,
       mode,
-      status: 'pending',
+      // 模板快照：模板后续修改/删除不影响已提交实例
+      templateId: tpl.id,
+      templateName: tpl.name,
+      steps: tpl.steps ?? null,
+      skipVerify: !!tpl.skipVerify,
+      rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
+      runTarget,
+      status: needsApproval ? 'pending-approval' : 'pending',
       stage: 'check',
-      progress: { current: 0, total: PIPELINE_STAGES.length, message: '已提交，等待执行' },
-      logs: [],
+      progress: {
+        current: 0,
+        total: PIPELINE_STAGES.length,
+        message: needsApproval ? '已提交，等待审批' : '已提交，等待执行',
+      },
+      logs: needsApproval
+        ? [`该发布需审批（模板「${tpl.name}」）：提交已阻断，审批通过后自动执行`]
+        : [],
       operator,
       grayscaleRule: dto.grayscaleRule,
       startTime: Date.now(),
     });
     await this.pipelineRepo.save(entity);
+
+    if (needsApproval) {
+      const approval = await this.approvals.create({
+        pipelineId: id,
+        env: dto.env,
+        moduleKey: dto.moduleKey,
+        mode,
+        gitBranch: dto.branch || undefined,
+        commitId: dto.commitId ?? dto.versionTag,
+        operator: operator || 'unknown',
+      });
+      await this.auditService.log({
+        user: operator || 'unknown',
+        action: 'pipeline.submit',
+        env: dto.env,
+        component: dto.moduleKey,
+        status: 'pending_approval',
+        detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）→ 需审批，已阻断等待`,
+      });
+      this.notifications.notify({
+        event: 'deploy.pending-approval',
+        env: dto.env,
+        moduleKey: dto.moduleKey,
+        versionTag: dto.commitId ?? dto.versionTag,
+        status: 'warn',
+        detail: `${operator || 'unknown'} 提交发布待审批（模板「${tpl.name}」，审批单 ${approval.id}）`,
+        operator: operator || 'unknown',
+      });
+      return { jobId: id, status: 'pending-approval', approvalId: approval.id };
+    }
 
     await this.auditService.log({
       user: operator || 'unknown',
@@ -195,11 +275,11 @@ export class PipelineService {
       env: dto.env,
       component: dto.moduleKey,
       status: 'started',
-      detail: `提交发布流水线 ${id}（mode=${mode}）`,
+      detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）`,
     });
 
-    // 后台执行，不阻塞提交响应
-    void this.run(entity, dto.target);
+    // 后台执行，不阻塞提交响应（投递目标已随实例快照 runTarget 固化）
+    void this.run(entity);
 
     return { jobId: id, status: entity.status };
   }
@@ -212,11 +292,44 @@ export class PipelineService {
   }
 
   /** 列出流水线（按开始时间倒序） */
-  async list(env?: string, moduleKey?: string, limit = 20): Promise<DeployPipelineEntity[]> {
+  async list(
+    env?: string,
+    moduleKey?: string,
+    limit = 20,
+    templateId?: string,
+  ): Promise<DeployPipelineEntity[]> {
     const where: Record<string, unknown> = {};
     if (env) where.env = env;
     if (moduleKey) where.moduleKey = moduleKey;
+    if (templateId) where.templateId = templateId;
     return this.pipelineRepo.find({ where, order: { startTime: 'DESC' }, take: limit });
+  }
+
+  /**
+   * 各流水线模板的运行摘要：总次数 / 成功次数 / 最近一次执行。
+   * 只统计提交时带 templateId 快照的实例（模板删除不影响历史归属）。
+   */
+  async listTemplateSummaries(
+    templateIds?: string[],
+  ): Promise<Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }>> {
+    const qb = this.pipelineRepo
+      .createQueryBuilder('p')
+      .where('p.templateId IS NOT NULL')
+      .orderBy('p.startTime', 'DESC')
+      .take(1000);
+    if (templateIds && templateIds.length) {
+      qb.andWhere('p.templateId IN (:...ids)', { ids: templateIds });
+    }
+    const rows = await qb.getMany();
+    const out: Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }> = {};
+    for (const p of rows) {
+      const t = p.templateId as string;
+      const item = out[t] || (out[t] = { total: 0, ok: 0, latest: null });
+      item.total += 1;
+      if (p.status === 'succeeded') item.ok += 1;
+      if (!item.latest) item.latest = p;
+    }
+    return out;
   }
 
   /** 取消流水线（幂等；仅对 pending/running 有意义） */
@@ -225,7 +338,23 @@ export class PipelineService {
     if (['succeeded', 'failed', 'cancelled'].includes(p.status)) {
       return { id, status: p.status };
     }
+    // 撤回待审批提交：联动关闭审批单，避免审批台出现孤儿单
+    if (p.status === 'pending-approval') {
+      const pending = await this.approvals.byPipelineId(id);
+      if (pending && pending.status === 'pending') {
+        await this.approvals.resolve(pending.id, 'reject', operator || 'unknown', '提交人撤回');
+      }
+    }
     this.cancelled.add(id);
+    // 立即中断正在执行的 shell 子进程（否则要等当前命令跑完/超时才真正终止）
+    const child = this.shells.get(id);
+    if (child) {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+    }
     p.status = 'cancelled';
     p.endTime = Date.now();
     p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: '已取消' };
@@ -239,6 +368,148 @@ export class PipelineService {
       detail: `取消流水线 ${id}（阶段: ${p.stage ?? '-'}）`,
     });
     return { id, status: p.status };
+  }
+
+  /**
+   * 重试失败的实例：以相同参数（模块/分支/commit/灰度规则/模板）重新提交一条新流水线。
+   * 仅 failed / cancelled 可重试；原实例保留，新实例走全新状态机与并发锁。
+   */
+  async retry(
+    id: string,
+    operator?: string,
+  ): Promise<{ jobId: string; status: string; approvalId?: string }> {
+    const p = await this.get(id);
+    // 终态可重试：失败/取消 = 重试；成功 = 以相同参数"再次发布"（重复部署同一 commit，用于复验）
+    if (!['failed', 'cancelled', 'succeeded'].includes(p.status)) {
+      throw new BadRequestException(
+        `流水线 ${id} 状态为 ${p.status}，仅 失败/已取消/成功 可重试（运行中请等待结束）`,
+      );
+    }
+    await this.auditService.log({
+      user: operator || p.operator || 'unknown',
+      action: 'pipeline.retry',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'started',
+      detail: `重试流水线 ${id}（原 ${p.status}）→ 重新提交`,
+    });
+    const dto: SubmitPipelineDto = {
+      env: p.env,
+      moduleKey: p.moduleKey,
+      mode: (p.mode === 'grayscale' ? 'grayscale' : 'direct') as PipelineMode,
+      branch: p.gitBranch || 'master',
+      commitId: p.gitCommit ?? p.versionTag,
+      grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
+      target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
+      templateId: p.templateId ?? undefined,
+    };
+    return this.submit(dto, operator || p.operator);
+  }
+
+  /**
+   * 审批通过：恢复待审批流水线并触发执行。
+   * 执行人记审批人（reviewer）：审批通过即代表其确认本次发布。
+   */
+  async approve(
+    id: string,
+    reviewer?: string,
+    comment?: string,
+  ): Promise<{ id: string; status: string }> {
+    const p = await this.get(id);
+    if (p.status !== 'pending-approval') {
+      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
+    }
+    const approval = await this.approvals.byPipelineId(id);
+    if (!approval) {
+      throw new NotFoundException(`流水线 ${id} 缺少审批单`);
+    }
+    await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
+
+    p.status = 'pending';
+    p.stage = 'check';
+    p.logs = [...(p.logs ?? []), `审批通过（审批人: ${reviewer || 'unknown'}）`];
+    p.progress = {
+      ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+      message: '审批通过，开始执行',
+    };
+    await this.pipelineRepo.save(p);
+
+    await this.auditService.log({
+      user: reviewer || 'unknown',
+      action: 'pipeline.approve',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'approved',
+      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      changes: [
+        { field: 'approval.status', before: 'pending', after: 'approved' },
+        { field: 'approval.comment', before: null, after: comment?.trim() || null },
+      ],
+    });
+    this.notifications.notify({
+      event: 'deploy.approved',
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status: 'success',
+      detail: `${reviewer || 'unknown'} 已审批通过，发布开始执行`,
+      operator: p.operator,
+    });
+
+    // 后台执行，不阻塞审批响应
+    void this.run(p);
+
+    return { id, status: 'approved' };
+  }
+
+  /** 审批拒绝：流水线标记取消并留审批意见 */
+  async reject(
+    id: string,
+    reviewer?: string,
+    comment?: string,
+  ): Promise<{ id: string; status: string }> {
+    const p = await this.get(id);
+    if (p.status !== 'pending-approval') {
+      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
+    }
+    const approval = await this.approvals.byPipelineId(id);
+    if (!approval) {
+      throw new NotFoundException(`流水线 ${id} 缺少审批单`);
+    }
+    await this.approvals.resolve(approval.id, 'reject', reviewer || 'unknown', comment);
+
+    p.status = 'cancelled';
+    p.endTime = Date.now();
+    p.error = `审批拒绝: ${comment?.trim() || '无意见'}`;
+    p.progress = {
+      ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+      message: '审批拒绝',
+    };
+    await this.pipelineRepo.save(p);
+
+    await this.auditService.log({
+      user: reviewer || 'unknown',
+      action: 'pipeline.reject',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'rejected',
+      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      changes: [
+        { field: 'approval.status', before: 'pending', after: 'rejected' },
+        { field: 'approval.comment', before: null, after: comment?.trim() || null },
+      ],
+    });
+    this.notifications.notify({
+      event: 'deploy.rejected',
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status: 'failed',
+      detail: `${reviewer || 'unknown'} 拒绝了发布（意见: ${comment?.trim() || '无意见'}）`,
+      operator: p.operator,
+    });
+
+    return { id, status: 'rejected' };
   }
 
   /**
@@ -422,9 +693,12 @@ export class PipelineService {
   // ── 执行引擎 ──────────────────────────────────────────────
 
   private async run(p: DeployPipelineEntity, target?: 'local' | 'remote'): Promise<void> {
+    // 投递目标：实例快照 runTarget（提交时模板/入参确定）优先；auto/缺省 → 配置或本机
+    const effectiveTarget =
+      p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : target;
     // local 环境只投递本机：远程投递到「本地环境」没有意义，且容易误改远程产物
     const uploadTarget =
-      p.env === 'local' ? 'local' : (target ?? this.resolveDefaultTarget());
+      p.env === 'local' ? 'local' : (effectiveTarget ?? this.resolveDefaultTarget());
     if (target === 'remote' && p.env === 'local') {
       p.logs = [...(p.logs ?? []), 'local 环境不支持远程投递，已强制为本机投递'];
     }
@@ -459,50 +733,32 @@ export class PipelineService {
       p.status = 'running';
       await this.save(p);
 
-      // 1. check：先内置安全校验（模块类型/prod 分支约束），再执行 check 阶段命令（附加校验）
-      await this.stageCheck(p);
-      await this.runStageCommand(p, 'check');
-
-      const isBackend = p.moduleType === 'backend';
+      // 活动阶段 = 实例快照 p.steps（模板提交时固化，null=全部九阶段）
+      const activeStages: string[] = (p.steps && p.steps.length
+        ? (p.steps as string[])
+        : [...PIPELINE_STAGES]) as string[];
 
       if (p.reuseArtifact) {
-        // 复用磁盘已有产物：跳过 pull/build/upload，直接切指针（秒级发布历史版本）
         p.logs = [...(p.logs ?? []), '已跳过 pull / build / upload（复用已有产物）'];
         await this.save(p);
-      } else {
-        // 2. pull：发布目录拉取远程仓库目标分支/commit（可被阶段命令覆盖）
-        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
-        // 3. build：强制由模块阶段命令驱动（未配置即终止，不回退任何内置硬编码）
-        if (!(await this.runStageCommand(p, 'build'))) {
-          throw new Error(
-            `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
-          );
+      }
+
+      // 数据驱动执行：每步由 executeStage 分派到内置执行器（平台语义）或阶段命令覆盖（S6-II）
+      for (const stage of activeStages) {
+        this.assertNotCancelled(p);
+        // version 前捕获当前线上版本（verify 失败自动回滚的回退目标）
+        if (stage === 'version') {
+          try {
+            const dep = await this.deploymentRepo.findOne({
+              where: { envId: p.env, moduleKey: p.moduleKey },
+            });
+            prevVersion = dep?.currentVersion;
+          } catch {
+            /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
+          }
         }
-        // 4. upload（前端投递产物）/ restart（后端重启服务）（可被阶段命令覆盖）
-        if (isBackend) {
-          if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
-        } else {
-          if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
-        }
+        await this.executeStage(p, stage, uploadTarget);
       }
-      // 5. version（写版本表）；回滚前先记录当前线上版本作为回退目标
-      try {
-        const dep = await this.deploymentRepo.findOne({
-          where: { envId: p.env, moduleKey: p.moduleKey },
-        });
-        prevVersion = dep?.currentVersion;
-      } catch {
-        /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
-      }
-      await this.stageVersion(p);
-      // 6. pointer：前端切指针/灰度规则；后端无指针
-      if (!isBackend) {
-        await this.stagePointer(p);
-      }
-      // 7. verify：前端 manifest / 后端 health check（可被阶段命令覆盖）
-      if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
-      // 8. cleanup（可被阶段命令覆盖）
-      if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
 
       p.status = 'succeeded';
       p.progress = { ...p.progress!, message: '发布完成' };
@@ -518,9 +774,11 @@ export class PipelineService {
         detail: `发布成功: ${p.env}/${p.moduleKey} → ${p.versionTag}（mode=${p.mode}, target=${uploadTarget}）`,
       });
       this.logger.log(`流水线完成: ${p.id} ${p.env}/${p.moduleKey} → ${p.versionTag}`);
+      void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
     } catch (e) {
       const msg = (e as Error).message;
-      p.status = 'cancelled' === p.status ? 'cancelled' : 'failed';
+      // 取消优先于失败：取消一旦发出（含 SIGKILL 中断命令引发的失败），终态一律记为 cancelled
+      p.status = this.cancelled.has(p.id) ? 'cancelled' : 'failed';
       if (p.status === 'failed') {
         p.error = msg;
         p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: `失败: ${msg}` };
@@ -530,7 +788,12 @@ export class PipelineService {
       this.logger.error(`流水线失败: ${p.id} 阶段=${p.stage} : ${msg}`);
       if (p.status === 'failed') {
         // ⑤ 验证阶段失败 → 自动回滚到上一稳定版本（verify 阶段才说明新版本已发布但不健康）
-        if (p.stage === 'verify' && prevVersion && prevVersion !== p.versionTag) {
+        if (
+          p.stage === 'verify' &&
+          p.rollbackOnFailure !== 'none' &&
+          prevVersion &&
+          prevVersion !== p.versionTag
+        ) {
           try {
             const rollTask = await this.deployService.startRollback(
               p.env,
@@ -566,6 +829,12 @@ export class PipelineService {
               status: outcome === 'success' ? 'success' : 'failed',
               detail: `验证失败自动回滚: ${p.env}/${p.moduleKey} → ${prevVersion}（task=${rollTask}, 结果=${outcome}, 探活=${probeNote}）`,
             });
+            void this.notifyPipelineEvent(
+              p,
+              'pipeline.auto-rollback',
+              outcome === 'success' ? 'warn' : 'failed',
+              `验证失败，已自动回滚到 ${prevVersion}（回滚结果=${outcome}, 探活=${probeNote}）`,
+            );
           } catch (re) {
             p.logs = [...(p.logs ?? []), `自动回滚失败: ${(re as Error).message}`];
             this.logger.error(`自动回滚失败: ${(re as Error).message}`);
@@ -587,11 +856,79 @@ export class PipelineService {
           status: 'failed',
           detail: `发布失败: ${p.env}/${p.moduleKey}（阶段 ${p.stage}）: ${msg}`,
         });
+        void this.notifyPipelineEvent(
+          p,
+          'pipeline.failed',
+          'failed',
+          `阶段 ${p.stage} 失败: ${msg}`,
+        );
       }
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
       this.cancelled.delete(p.id);
+    }
+  }
+
+  /**
+   * 单步执行（S6-II 步骤执行器分派）。
+   *
+   * 内置步骤 = 平台语义执行器（check/pull/build/upload/restart/version/pointer/verify/cleanup），
+   * 由模板 steps（实例快照 p.steps）驱动顺序执行；check/version/pointer 为安全与发布语义基线
+   * （模板校验已强制保留），upload/restart 按模块类型分派，verify 受 skipVerify 快照控制。
+   */
+  private async executeStage(
+    p: DeployPipelineEntity,
+    stage: string,
+    uploadTarget: 'local' | 'remote',
+  ): Promise<void> {
+    const isBackend = p.moduleType === 'backend';
+    switch (stage) {
+      case 'check':
+        // 安全基线：模块类型/prod 分支约束；随后执行 check 阶段命令（附加校验，可配）
+        await this.stageCheck(p);
+        await this.runStageCommand(p, 'check');
+        return;
+      case 'pull':
+        if (p.reuseArtifact) return; // 复用磁盘产物秒切，跳过拉取
+        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
+        return;
+      case 'build':
+        if (p.reuseArtifact) return;
+        if (!(await this.runStageCommand(p, 'build'))) {
+          // fail-fast：build 必须由模块阶段命令驱动，不回退任何内置硬编码
+          throw new Error(
+            `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
+          );
+        }
+        return;
+      case 'upload':
+        // 前端/微前端产物投递（后端走 restart，复用产物跳过）
+        if (p.reuseArtifact || isBackend) return;
+        if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
+        return;
+      case 'restart':
+        if (p.reuseArtifact || !isBackend) return;
+        if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
+        return;
+      case 'version':
+        // 写版本表（发布语义真相源，不可被命令覆盖）
+        await this.stageVersion(p);
+        return;
+      case 'pointer':
+        if (!isBackend) await this.stagePointer(p);
+        return;
+      case 'verify':
+        // 快线（skipVerify 快照）跳过探活与失败自动回滚
+        if (p.skipVerify) return;
+        if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
+        return;
+      case 'cleanup':
+        if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
+        return;
+      default:
+        // 模板校验已挡（steps 仅允许内置九阶段），双保险
+        throw new Error(`未知或不可编排步骤: ${stage}`);
     }
   }
 
@@ -603,6 +940,26 @@ export class PipelineService {
   }
 
   // ── 阶段命令（每模块每阶段一条 shell，DB 为真相源）────────────────
+
+  /**
+   * 发布关键事件通知（尽力而为；通知失败由 NotificationService 兜底，不影响发布主流程）。
+   */
+  private notifyPipelineEvent(
+    p: DeployPipelineEntity,
+    event: string,
+    status: 'success' | 'failed' | 'warn',
+    detail: string,
+  ): Promise<void> {
+    return this.notifications.notify({
+      event,
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status,
+      detail,
+      operator: p.operator,
+    });
+  }
 
   /**
    * 解析要注入的环境变量：配置中心按 global → env → module 合并的结果。
@@ -695,25 +1052,46 @@ export class PipelineService {
           PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
         },
       });
+      // 登记子进程：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
+      this.shells.set(p.id, child);
+      const unregister = () => this.shells.delete(p.id);
       const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+
+      // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
+      let flushTimer: ReturnType<typeof setTimeout> | undefined;
+      const scheduleFlush = () => {
+        if (flushTimer) return;
+        flushTimer = setTimeout(() => {
+          flushTimer = undefined;
+          this.save(p).catch(() => undefined);
+        }, 300);
+      };
       const pushLog = (line: string) => {
         p.logs = [...(p.logs ?? []), line];
-        this.save(p).catch(() => undefined);
+        scheduleFlush();
       };
+      const finalize = (code: number) => {
+        clearTimeout(timer);
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = undefined;
+        }
+        unregister();
+        resolve(code ?? 1);
+      };
+
       child.stdout.on('data', (d: Buffer) => {
         for (const line of String(d).split('\n').filter(Boolean)) pushLog(line);
       });
       child.stderr.on('data', (d: Buffer) => {
         for (const line of String(d).split('\n').filter(Boolean)) pushLog(`[stderr] ${line}`);
       });
-      child.on('close', (code: number) => {
-        clearTimeout(timer);
-        resolve(code ?? 1);
+      child.on('close', (code: number | null) => {
+        finalize(code ?? 1);
       });
       child.on('error', (err: Error) => {
-        clearTimeout(timer);
         pushLog(`[${env.STAGE ?? 'shell'}] 命令启动失败: ${err.message}`);
-        resolve(1);
+        finalize(1);
       });
     });
   }

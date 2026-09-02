@@ -21,4 +21,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // echarts 体积较大，单独分包：避免打进引用它的页面 chunk，
+        // 便于长效缓存，也不拖慢不依赖图表的页面首屏。
+        manualChunks(id: string) {
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) {
+            return 'echarts'
+          }
+        },
+      },
+    },
+  },
 })

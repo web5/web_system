@@ -144,3 +144,263 @@ L1 资源      环境 · 服务器组 · 模块注册表 · 服务路由
 
 修复 `cwd` 后**可作为 S2（配置中心）基线**；SHOULD 四项不阻塞，建议随 S2 一并处理。
 **`pipeline.service.ts` 从未被评审的历史盲区，本次已补齐。**
+
+---
+
+## 独立子代理评审结论（2026-09-02 终版，任务 8）
+
+**评审方式**：`code-explorer` 子代理按清单独立审查 `pipeline.service.ts`（只读，报告带行号），
+主 agent 对关键路径（发布锁、runShell/取消协作、命令拼接）二次读码核实后修复并补单测。
+评审对象为**当前最新代码**（含阶段命令驱动、审批门禁、通知等历次改动，非 S1 快照）。
+
+### 🔴 MUST 已修复（本次）
+
+1. **发布锁非互斥（并发双跑竞态）** — `release-lock.service.ts` `acquire`
+   原「findOne → 判断 → upsert」三步：两条并发发布同时读到"无锁"后都 upsert 成功
+   （ON DUPLICATE 无条件后写覆盖），**双双返回 true**，同一模块×环境并行发布、互相覆盖版本指针。
+   - 修复：改单条 `INSERT ... ON DUPLICATE KEY UPDATE` + IF 条件做**原子抢占**，
+     后到者不满足「自己持有或锁已过期」则不覆盖；读回校验最终持有者是否是自己。
+     单条语句决定 winner，跨实例同样互斥。
+   - 单测：`release-lock.service.spec.ts` 重写（含「并发落败方确认后返回 false」防回归用例）。
+
+2. **取消不中断子进程、且终态被 run 覆盖** — `pipeline.service.ts`
+   取消只置 DB 状态；`runShell` 内长命令（build 分钟级）不因取消中断，
+   run 继续跑完后以 succeeded 覆盖已取消行 → "已取消"的发布照样完成并上报成功。
+   - 修复：进程内登记运行中 `shells: Map<pipelineId, child>`，`cancel()` 立即 SIGKILL 子进程；
+     `run` 的 catch 里**取消优先于失败**（`cancelled.has(id)` → 终态 cancelled），
+     成功路径保持 succeeded（发布真实完成不可撤销）。
+3. **git 命令注入面** — `stagePull` 将用户可控 `gitBranch` / `versionTag` 直接拼进
+   `git checkout -B ${branch} ...` / `git reset --hard ${commit}`（无引号/白名单）。
+   - 修复：`submit` 入口白名单校验（branch `^[A-Za-z0-9._/-]{1,128}$`；
+     commit `^[A-Za-z0-9._-]{4,64}$`），非法输入 400 拒绝。
+
+### 🟡 SHOULD 已修复（本次顺手）
+
+1. **日志全量序列化**：`runShell` 每行输出都 `save` 整个 `p.logs`（JSON 数组随命令输出增长）。
+   → 300ms 合并节流落库，命令结束 flush。
+
+### 🟡 SHOULD 记录（未修，后续按需）
+
+1. **审批单并发创建非原子**：同一 env+module 并发提交 prod 时，`approval.create` 的重复检查
+   （findOne→save）存在窗口，理论上可产生两条 pending 审批单。**实际由发布锁兜底**：
+   approve 恢复执行时 acquire 失败即拒绝，不会双跑。若要根治，可加
+   `UNIQUE(env, module_key, status)` 化改造（status 演进需软删/历史表），成本高收益低，暂缓。
+2. `runShell` 真实执行/超时中断/取消中断的自动化测试依赖子进程 mock，未覆盖（记测试债）。
+3. `hook` 模块与前端 `hookApi` 死代码随 `deploy_module_hooks` 物理删表一并清理（S1 遗留 SHOULD）。
+
+### 🟢 KEEP（做得好的点）
+
+1. 发布锁带 TTL + 只释放自己持有的锁（强杀后不产生死锁、不误删他人抢占后的锁）。
+2. 失败处理按阶段差异化：verify 失败自动回滚到上一版本，并**等回滚任务真正跑完 + 探活确认**
+   才落审计（而非"发起了动作就宣称回滚"）。
+3. 取消采用阶段边界 `assertNotCancelled` + 本次补的 SIGKILL 双保险；锁在 finally 释放。
+4. 配置注入强制覆盖 + PATH 显式补齐（git/pm2/npx 不缺目录）。
+5. 审批门禁状态机经核验：approve/reject/cancel 竞争由 `ApprovalService.resolve` 幂等保护收敛，
+   pending-approval 提交不占 running 锁、不会误伤 dev 发布。
+
+### 终版结论
+
+**3 项 MUST 全部修复并有测试锁定；`pipeline.service.ts` 的独立评审盲区至此补齐（任务 8 达成）。**
+遗留 SHOULD 不阻塞，均已记录行号与建议，后续迭代按需处理。
+
+---
+
+## 流水线模板 + 实例（S6 演进）设计
+
+> 决策记录：需求见 `requirements.md`「L3b」；任务见 `tasks.md`「S6」。
+> 本方案尚未实施，待用户确认后进入执行。
+
+### 目标模型（三层分离）
+
+```
+模块（资源定义）          模块基本信息 / 阶段命令（如何构建） / 配置中心
+  └── 流水线模板（流程定义，S6 新增）  名称/说明 / skipVerify / 审批策略 / 默认投递 —— 模块下可建多条
+        └── 流水线实例（一次发布） deploy_pipelines（现状表，加模板快照引用）
+```
+
+把「这个模块怎么发」从**隐式一套**提升为**显式多套可选**：提交发布 = 选 模块 + 流水线模板 + 分支/commit/mode → 生成实例。
+
+### 关键决策
+
+| # | 决策 | 理由 |
+|---|---|---|
+| D1 | **实例复用 `deploy_pipelines` 现状表**，加 `template_id`（可空）+ `template_name`（快照）。不新建 run 表 | 现状表本就是「一条 = 一次发布」的实例表；审批/通知/度量/审计全部继续引用它，迁移成本最低，历史记录天然兼容 |
+| D2 | 模板表 `deploy_pipeline_templates`：`id / moduleKey / name / description / skipVerify / approval('inherit'\|'always'\|'never') / defaultTarget('auto'\|'local'\|'remote') / enabled / builtin / createdBy / createdAt`；UNIQUE(moduleKey, name) | 模板归属模块（用户诉求"针对模块添加流水线"）；builtin 默认模板不可删不可改名 |
+| D3 | 每模块懒建一条 **builtin 默认模板**（语义=现状：全流程 + 环境规则审批），无显式模板的旧提交/MCP 提交自动走它 | 兼容零成本；「复制默认」是新建模板的起点 |
+| D4 | **v1 可裁剪面仅两项**：`skipVerify`（跳探活，快线/调试线）+ `approval` 策略 + `defaultTarget`。`check/pull/build/upload/restart/version/pointer/cleanup` 固定 | version/pointer 是发布语义真相源（历史踩坑：版本与产物不一致）；build/pull/upload 是产物产生与投递基本盘，裁剪它们需要产物缓存机制支撑，列为后续（记 SHOULD） |
+| D5 | 实例执行按**提交时快照**（template_id/name/skipVerify/approval 判定已固化到实例），模板事后修改/删除不影响运行中与历史实例 | 发布可追溯、不可被模板变更"改写历史" |
+| D6 | 审批判定：`effective = 模板 approval ?? 'inherit'`；`need = always || (inherit && needsApproval(env))`；审批单/审计 detail 记录模板名 | 保留系统设置「REQUIRE_APPROVAL_ENVS」的 env 级规则，模板在其上做单模块覆盖 |
+| D7 | 模板管理仅控制台 JWT；MCP 提交可带 `templateId`（可选，缺省走默认模板） | 与阶段命令同安全边界 |
+
+### 数据模型
+
+```sql
+-- deploy_pipeline_templates
+id          varchar(64) PK        -- tpl-<ts>-<rand>
+module_key  varchar(64)           -- 模板归属模块；builtin 行 moduleKey='default'
+name        varchar(64)           -- UNIQUE(module_key, name)
+description varchar(255) NULL
+skip_verify tinyint default 0     -- true=不执行探活验证（快线）
+approval    varchar(8) default 'inherit'  -- inherit/always/never
+default_target varchar(8) default 'auto'  -- auto/local/remote
+enabled     tinyint default 1
+builtin     tinyint default 0     -- builtin 不可删/改名（moduleKey='default' 的行即模块默认模板）
+created_by / created_at / updated_at
+
+-- deploy_pipelines 增列（synchronize 自动，可空）
+template_id   varchar(64) NULL
+template_name varchar(64) NULL    -- 快照，模板删后仍可读
+```
+
+### API（新增，仅控制台）
+
+- `GET  /modules/:key/pipeline-templates` —— 模块模板列表（builtin default 恒在首位）
+- `POST /modules/:key/pipeline-templates` —— 新建（body: name/description/skipVerify/approval/defaultTarget/enabled；`name` 冲突 409）
+- `POST /modules/:key/pipeline-templates/:id/duplicate` —— 复制模板
+- `PUT/DELETE /modules/:key/pipeline-templates/:id` —— 编辑/删除（builtin 拒绝删除）
+- 写操作全部审计（diff：skipVerify/approval/defaultTarget/enabled/description）
+
+提交侧（改造现有，非新增路由）：
+- `POST /pipelines` body 增 `templateId?`；响应增 `templateId/templateName`
+
+### 执行与状态机
+
+- `submit`：解析模板（未传 → 模块 builtin default；模块无 builtin 则懒建）→ 校验模板 enabled → 落实例（template_id/name 快照 + skipVerify/approval 固化）→ 审批判定（D6）→ 无审批则照常 run
+- `run`：在 verify 阶段前判断 `p.skipVerify`（快照），true 则跳过 `stageVerify` 与 verify 失败自动回滚逻辑（快线语义：不探活、无自动回滚）
+- metrics / 通知 / 审计 / 审批单无需改动（实例行含新列即可）；历史记录 template_name 为 NULL → 前端显示「默认」
+
+### 前端
+
+- `ModuleDetail.vue` 新增「流水线模板」tab：模板表（builtin 置灰删按钮）+ 新建表单（名称必填；skipVerify/审批策略/默认投递开关）+ 复制默认 + 启停
+- `PipelineCenter.vue` 提交区：选模块后出现「流水线模板」下拉（默认模板在首位，展示名称+skipVerify/审批角标）；列表与详情抽屉展示模板名
+- 流水线列表列「模板」展示 template_name ?? '默认'
+
+### 风险与缓解
+
+- 历史实例无模板 → 一律展示「默认」，无迁移脚本（列可空）
+- MCP/旧调用不传 templateId → builtin default 懒建兜底，行为不变
+- 懒建竞态：同模块并发首提都查不到 builtin → 用「查无则建 + 唯一键冲突吞错重查」兜底
+- skipVerify 模板被滥用会绕过探活 → UI 给 warning 角标；审批策略 `never` + skipVerify 组合允许存在但模板页明示「高风险」
+
+### 遗留（记录不阻塞）
+
+- 更深阶段裁剪（禁 build/禁 cleanup 等）依赖「产物缓存 + 保留策略 per 模板」，S6 之后按需演进
+
+---
+
+## v2 修订（2026-09-02）：步骤编排化 + 工具目录
+
+> 用户追加：「回滚、探活等都可以做成工具，放到流水线的步骤里面」→ 模板从「九阶段内裁剪」升级为
+> **步骤序列编排**；平台内置能力（upload/restart/verify/cleanup/version/pointer/rollback）注册为
+> **内置步骤（执行器）**，与 shell 步骤同权，可被模板任意选用/排序/替换执行器。
+
+### 目标模型（v2）
+
+```
+工具注册表 tool_catalog（外部 CLI 元数据）  git/pnpm/npm/npx/bash/scp/rsync/tar/pm2/curl/node-http…
+                                             分类 + 说明 + 可用性 + 示例（给 shell 步骤参考，不逐 CLI 建执行器）
+步骤库 step_catalog（可编排单元）           code + name + category + executor
+    ├─ 内置步骤（平台语义，executor=builtin） check/pull/upload/restart/verify/cleanup/version/pointer/rollback
+    │     —— 执行器把现有 stageXxx 平台逻辑迁移为可注册单元；回滚=rollback 步骤、探活=verify 步骤
+    └─ 命令步骤（executor=shell）            由模块×步骤×env 的 stage_commands 提供 shell（现有机制）
+模板 pipeline_templates = 有序 steps 序列      [{stepCode, executor?, 覆盖命令?}...] + 审批策略 + rollbackOnFailure
+实例 = 按模板序列 + 提交时快照执行
+```
+
+### v2 关键决策（替代原 D4 的"固定九阶段 + skipVerify"）
+
+| # | 决策 |
+|---|---|
+| V1 | 内置步骤执行器化：`run()` 的顺序 if-else 硬编码改为**注册表驱动**。内置执行器 SPI：`execute(ctx): Promise<StepResult>`；现有 `stageCheck/stagePull/stageUpload/stageRestart/stageVersion/stagePointer/stageVerify/stageCleanup` 逐一迁移为执行器，**失败/通知/进度语义保持现状** |
+| V2 | 回滚三态：显式「rollback」内置步骤（=现有 rollback/switchPointer，可作模板步骤，做紧急回滚线）；失败自动回滚改**模板级 `rollbackOnFailure: 'previous' \| 'none'`**（替代硬编码"verify 失败回滚"，默认 previous 保持现状）；灰度 promote 保持独立动作不进步骤 |
+| V3 | 分类（步骤与工具共用分类枚举）：`code(代码获取) / build(构建) / deploy(投递部署) / probe(探活验证) / rollback(回滚) / cleanup(清理) / semantic(发布语义:version/pointer)`；UI 按分类分组 |
+| V4 | 安全边界不破：可编排**步骤集的下限白名单**——version/pointer 必须保留且不可排序到产物产生前；shell 命令仍仅 JWT、`bash -n` 校验、审计 |
+| V5 | 兼容：builtin 默认模板序列 = 现九阶段（含 rollbackOnFailure=previous），行为与 S1-S5 完全一致；历史实例 template 为 NULL 显示「默认」 |
+| V6 | **步骤与工具分离**（用户指定，例：`pipeline.service.ts` 探活 URL 拼接等平台逻辑应收敛为工具）：`step`=流程单元（做什么/顺序/失败语义），`tool`=执行体（怎么做）。`tool.kind ∈ {service, shell}`：service=平台内置执行器/可下沉独立服务的能力；shell=外部 CLI（可参数化）。模板步骤可换绑工具而不改流程语义；探活/回滚/写版本/切指针/重启/投递/清理全部注册为 service 工具 |
+| V7 | 服务工具与独立服务的演化口：工具实现层预留 `service-kind: 'builtin' \| 'remote'`——builtin=本进程执行器，remote=调用独立服务（如未来消息/探活独立服务），**步骤定义与模板不变**，只换工具实现绑定。当前全部 builtin，避免为单一用例建服务（与「消息服务暂不独立」同判断） |
+
+## 领域模型 v3：模块 × 流水线 × 实例（2026-09-02，澄清与收口）
+
+> 背景：此前模型经历了「模板挂模块 → 全局化」的演进，遗留两处不清：
+> ① 模板仍保留 `moduleKey='*'` 与「模块专属」双轨；② 「模块阶段命令」与「流水线步骤」在运行时的
+> 合成规则只存在于代码（run → executeStage → 查模块 stage_commands），未在设计层讲清。
+> 本节省做概念收口，**执行语义不变**，仅消除歧义并统一命名。
+
+### 1) 三个独立领域概念
+
+```
+流水线 Pipeline（流程定义 · 全局资产，不绑定任何模块）
+  组成：活动步骤集 steps（内置九阶段的可裁剪子集，version/pointer/check 为基线不可裁）
+       + **步骤命令**（用户给可配步骤内嵌 shell：支持上下文变量 {MODULE_KEY/MODULE_TYPE/MODULE_DIR/
+         RELEASE_DIR/COMMIT_ID/BRANCH/STAGE/DEPLOY_ENV} 与目标机器注入变量；未配命令 → 内置执行器）
+       + 治理策略：审批(always/never/inherit)、失败自动回滚(previous/none)、默认投递(auto/local/remote)
+  回答："一次发布按什么流程走、每步怎么执行、受什么治理约束"（**阶段命令由流水线自己定义**）
+
+模块 Module（一个可发布工程 · 纯目标与上下文）
+  组成：key/name/type/dir（属性定义，供流水线命令以 {MODULE_*} 变量引用）
+       + 仓库/分支来源 + 配置中心（per env×module 注入）+ 服务地址(ports)
+  回答："发什么工程、它的上下文是什么"（**不再持有任何阶段命令/构建逻辑**）
+
+发布请求/实例 Run（一次执行 · 流水线×模块×环境 的快照）
+  组成：pipeline 快照(steps/策略) + moduleKey/type + env/branch/commit/mode/target + 运行态(stage/status/进度)
+  回答："这一次在哪个环境、发哪个版本、走到哪一步"
+```
+
+### 2) 关系与运行时合成规则（唯一真理，消除代码里"隐性契约"）
+
+```
+执行模型：Run = 流水线(流程) × 模块(工程配置) × 请求参数(env/branch/commit/mode)
+合成规则（run → 按 pipeline.steps 顺序逐步骤执行）：
+  ① 步骤集合与顺序      ← 来自【流水线】steps（快照固化到实例）
+  ② 每步执行体          ← **流水线步骤命令**（用户在该步骤内嵌的 shell）→ 未配命令 → 平台内置执行器；
+                           命令内 {MODULE_*} 变量在运行时替换为实例绑定模块的上下文
+                           （过渡期兼容：步骤未配命令且模块存在老 stage_commands 时回退读取并标 deprecated）
+  ③ 命令作用阶段        ← 仅"可配阶段"（check/pull/build/upload/restart/verify/cleanup）可在流水线配命令；
+                           version/pointer 永远内置
+  ④ 探活地址/配置注入   ← 【环境】ports + 【配置中心】env×module 作用域
+  ⑤ 审批/回滚/投递      ← 【流水线】策略（提交时按 env 判定审批；verify 失败按 rollbackOnFailure 回滚）
+
+差异表达（同一流水线服务多工程时命令的工程差异怎么办）：
+  - 常规差异用变量分支：build 步骤命令内 `case "${MODULE_TYPE}" in backend) npx tsc -p tsconfig.json;; *) npx vite build;; esac`
+  - 特殊工程需要完全不同的流程/命令 → 复制该流水线为"专用线"（复制后改步骤命令），工程发布时选专用线；
+    **不再允许在模块上写命令**（模块"哑化"，与"阶段命令归流水线"一致）
+```
+
+### 3) 收口决策（消除双轨与命名歧义）
+
+| # | 决策 | 现状 → 目标 |
+|---|---|---|
+| R1 | 流水线一律全局，**不再存在「模块专属模板」新建路径** | 创建/编辑只作用于全局流水线；历史 moduleKey=具体模块的行仅兼容展示（标注"旧·专属"，不可新建、可删除/复制为全局） |
+| R2 | 术语统一：**「流水线」= 流程定义**；「模板」字眼从 UI 移除；执行记录统一叫**实例/发布任务** | 模块详情内的阶段命令仍叫"阶段命令"（它是模块的构建方法，不属流水线） |
+| R3 | 模块页回归纯工程视角：属性定义 + 阶段命令 + 配置 + 该模块各环境当前版本/回滚；**发布历史按流水线/实例管理在流水线页** | ModuleDetail 不再展示"模板管理"（已完成），进一步弱化"该模块的发布记录"在模块页的权重 |
+| R4 | 实例重试/再次发布语义 = 以快照参数重建实例（同流水线+模块+commit） | 已实现，文档化 |
+| R5 | 工具目录定位 = 步骤执行体的**素材库**（service=内置执行器；shell=可复用命令），供**流水线步骤命令**插入与未来步骤参数化 | 已实现，文档化 |
+| R6 | **阶段命令归属流水线**（用户决策）：模块不再持有阶段命令；命令写入流水线步骤（支持 {MODULE_*} 变量）。模块页的「阶段命令」tab 迁移为流水线步骤命令编辑器；`deploy_module_stage_commands` 标记 deprecated，过渡期作为"步骤未配命令且模块老命令存在"的兼容回退，随后下线 | 执行语义变更，需分期：先流水线步骤命令生效并支持回退 → UI 迁移 → 下线模块命令 |
+
+### 4) UI 对应
+
+```
+「流水线」页（流程视角）
+  左侧/上部：流水线列表（全局，新建/复制/编辑/启停）—— 一条流水线 = 一个可点击对象
+  点击某流水线 → 下钻：
+     - 定义详情（步骤/审批/回滚/投递）
+     - 该流水线的历史实例（含运行中，实时步骤详情）
+     - 「新建执行」：选 目标模块 + env + 分支/commit（提交参数，非定义修改）
+  列表操作：实例级 中断/重试(失败取消)/再次发布(成功)/转全量
+「模块」页（工程视角）
+  模块定义属性 + 阶段命令（构建方法）+ 配置中心 + 各环境当前版本与回滚
+  （发布动作可从模块详情发起：默认带出"可用于该模块的全局流水线"）
+```
+
+### 5) 落地点（若确认执行）
+
+- 文案与前端：`模板→流水线` 命名收口；流水线页加"按流水线下钻实例"；模块页发布按钮带流水线选择
+- 数据：删除/隐藏模块专属创建路径（不删历史数据，加 scope 展示过滤）
+- 文档：本节省收口为单一事实源
+
+### 分期（每期独立可上线）
+
+- **S6-I 模板 + 实例（基础形态）**：模板表/懒建默认/CRUD(审计 diff)/submit 按模板解析+审批策略/run 按快照 skipVerify(临时布尔)/前端 ModuleDetail 模板 tab + PipelineCenter 模板选择/回归。任务 24-29。
+- **S6-II 编排化 + 工具目录（本修订的主体）**：步骤执行器注册表 + run 数据驱动；内置步骤全量注册（含 rollback）；tool_catalog 种子+CRUD+「工具管理」页；模板编辑器从步骤库编排（选步骤/排序/换执行器/rollbackOnFailure）；步骤分类分组 UI；回归+度量/审计覆盖。任务 30-35。
+  - 执行顺序依赖：I 先行（模板实例与审批语义落地、可发版），II 在其上替换执行内核——**每步执行器迁移后跑一次既有发布流程回归**，避免一次性大爆炸。
+

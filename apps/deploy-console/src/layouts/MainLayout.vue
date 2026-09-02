@@ -10,9 +10,12 @@ import {
   UserOutlined,
   ApartmentOutlined,
   AppstoreOutlined,
-  ClusterOutlined,
   DeploymentUnitOutlined,
   SettingOutlined,
+  BellOutlined,
+  ExperimentOutlined,
+  ToolOutlined,
+  BuildOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -23,17 +26,26 @@ const authStore = useAuthStore()
 
 const collapsed = ref(false)
 
+// 头像用用户名首字母，便于辨识
+const avatarLetter = computed(() =>
+  (authStore.user?.username || 'U').slice(0, 1).toUpperCase(),
+)
+
 // 菜单项
 const menuItems = [
   { key: '/dashboard', label: '仪表盘', icon: DashboardOutlined },
   { key: '/deploy', label: '发布中心', icon: CloudUploadOutlined },
-  { key: '/pipelines', label: '发布流水线', icon: DeploymentUnitOutlined },
+  { key: '/pipelines', label: '流水线', icon: DeploymentUnitOutlined },
   { key: '/modules', label: '模块管理', icon: AppstoreOutlined },
-  { key: '/services', label: '服务管理', icon: ClusterOutlined },
   { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
   { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
   { key: '/config', label: '配置中心', icon: SettingOutlined },
+  { key: '/notifications', label: '通知中心', icon: BellOutlined },
+  { key: '/canary', label: '灰度管理', icon: ExperimentOutlined },
+  { key: '/diagnose', label: '自助诊断', icon: ToolOutlined },
+  { key: '/tools', label: '工具目录', icon: BuildOutlined },
+  { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 
 // 当前选中的菜单项
@@ -71,7 +83,26 @@ function handleLogout() {
       :trigger="null"
     >
       <div class="logo">
-        {{ collapsed ? 'DC' : '发布管理控制台' }}
+        <svg
+          class="logo-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <!-- 蜂巢 cell：外六边形 + 内六边形 -->
+          <path
+            d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z"
+            stroke="#F5A623"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M12 6.6 L17.6 9.8 V16.2 L12 19.4 L6.4 16.2 V9.8 Z"
+            fill="#F5A623"
+          />
+        </svg>
+        <span v-if="!collapsed" class="logo-text">Beehive</span>
       </div>
       <a-menu
         theme="dark"
@@ -91,27 +122,33 @@ function handleLogout() {
       <a-layout-header class="app-header">
         <div style="display: flex; align-items: center; gap: 16px;">
           <span style="font-size: 16px; font-weight: 600;">
-            {{ route.meta.title || '发布管理控制台' }}
+            {{ route.meta.title || 'Beehive' }}
           </span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
-          <a-avatar size="small" style="background-color: #001529;">
-            <template #icon><UserOutlined /></template>
-          </a-avatar>
-          <span style="font-size: 14px;">
-            {{ authStore.user?.username || '用户' }}
-          </span>
-          <a-tag v-if="authStore.user?.role" color="blue">
-            {{ authStore.user.role }}
-          </a-tag>
-          <a-button
-            type="text"
-            size="small"
-            @click="handleLogout"
-          >
-            <template #icon><LogoutOutlined /></template>
-            退出
-          </a-button>
+          <a-dropdown trigger="['click']">
+            <span class="user-trigger">
+              <div class="user-avatar">{{ avatarLetter }}</div>
+              <span class="user-info">
+                <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
+                <span v-if="authStore.user?.role" class="user-role">{{ authStore.user.role }}</span>
+              </span>
+              <svg class="user-caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M2 4 L5 7 L8 4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <template #overlay>
+              <a-menu @click="({ key }: any) => key === 'logout' && handleLogout()">
+                <a-menu-item key="profile" disabled>
+                  <UserOutlined />个人信息
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="logout">
+                  <LogoutOutlined />退出登录
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </div>
       </a-layout-header>
 
@@ -122,3 +159,70 @@ function handleLogout() {
     </a-layout>
   </a-layout>
 </template>
+
+<style scoped>
+.logo-text-block {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  margin-left: 8px;
+}
+.logo-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.logo-sub {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-top: 2px;
+}
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.user-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.25);
+}
+.user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+}
+.user-role {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-top: 2px;
+}
+.user-caret {
+  color: #bfbfbf;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+</style>

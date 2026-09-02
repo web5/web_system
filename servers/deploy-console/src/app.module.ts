@@ -14,6 +14,10 @@ import { CanaryModule } from './canary/canary.module';
 import { ServerModule } from './server/server.module';
 import { PipelineModule } from './pipeline/pipeline.module';
 import { McpDeployModule } from './mcp/mcp.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
+import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
 
 @Module({
   imports: [
@@ -57,6 +61,14 @@ import { McpDeployModule } from './mcp/mcp.module';
     // 发布流水线（控制台 /api/pipelines/* + MCP /api/mcp/* 共用同一引擎）
     PipelineModule,
     McpDeployModule,
+    // 发布度量（成功率 / 时长 / 失败阶段分布 / 失败下钻）
+    MetricsModule,
+    // 系统设置（通知渠道等系统级配置，页面可维护）
+    SystemSettingsModule,
+    // 流水线模板（模板=流程定义 / 实例=一次发布）
+    PipelineTemplateModule,
+    // 工具目录（service 内置执行器 / shell CLI 元数据）
+    ToolCatalogModule,
   ],
 })
 export class AppModule {}
