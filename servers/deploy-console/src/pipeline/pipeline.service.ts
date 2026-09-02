@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -91,6 +91,8 @@ export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
   /** 取消标记（进程内即可，重启后任务本身也会中断） */
   private readonly cancelled = new Set<string>();
+  /** 运行中流水线的 shell 子进程：取消时立即 SIGKILL，避免"已取消的发布仍跑完整条流水线" */
+  private readonly shells = new Map<string, ChildProcess>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -164,6 +166,15 @@ export class PipelineService {
       throw new BadRequestException(
         `不支持的环境: ${dto.env}（支持 ${SUPPORTED_ENVS.join(' / ')}）`,
       );
+    }
+    // 防命令注入：branch / commit 会拼进发布目录的 git 命令，白名单收敛（禁空格/引号/分号/$ 等）
+    const safeBranchRe = /^[A-Za-z0-9._/-]{1,128}$/;
+    if (dto.branch && !safeBranchRe.test(dto.branch)) {
+      throw new BadRequestException(`分支名含非法字符: ${dto.branch}`);
+    }
+    const targetCommit = dto.commitId ?? dto.versionTag;
+    if (targetCommit && !/^[A-Za-z0-9._-]{4,64}$/.test(targetCommit)) {
+      throw new BadRequestException(`目标 commit 含非法字符: ${targetCommit}`);
     }
     if (mode === 'grayscale' && !dto.grayscaleRule) {
       throw new BadRequestException('灰度发布必须提供 grayscaleRule');
@@ -277,6 +288,15 @@ export class PipelineService {
       }
     }
     this.cancelled.add(id);
+    // 立即中断正在执行的 shell 子进程（否则要等当前命令跑完/超时才真正终止）
+    const child = this.shells.get(id);
+    if (child) {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+    }
     p.status = 'cancelled';
     p.endTime = Date.now();
     p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: '已取消' };
@@ -678,7 +698,8 @@ export class PipelineService {
       void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
     } catch (e) {
       const msg = (e as Error).message;
-      p.status = 'cancelled' === p.status ? 'cancelled' : 'failed';
+      // 取消优先于失败：取消一旦发出（含 SIGKILL 中断命令引发的失败），终态一律记为 cancelled
+      p.status = this.cancelled.has(p.id) ? 'cancelled' : 'failed';
       if (p.status === 'failed') {
         p.error = msg;
         p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: `失败: ${msg}` };
@@ -885,25 +906,46 @@ export class PipelineService {
           PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
         },
       });
+      // 登记子进程：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
+      this.shells.set(p.id, child);
+      const unregister = () => this.shells.delete(p.id);
       const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+
+      // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
+      let flushTimer: ReturnType<typeof setTimeout> | undefined;
+      const scheduleFlush = () => {
+        if (flushTimer) return;
+        flushTimer = setTimeout(() => {
+          flushTimer = undefined;
+          this.save(p).catch(() => undefined);
+        }, 300);
+      };
       const pushLog = (line: string) => {
         p.logs = [...(p.logs ?? []), line];
-        this.save(p).catch(() => undefined);
+        scheduleFlush();
       };
+      const finalize = (code: number) => {
+        clearTimeout(timer);
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = undefined;
+        }
+        unregister();
+        resolve(code ?? 1);
+      };
+
       child.stdout.on('data', (d: Buffer) => {
         for (const line of String(d).split('\n').filter(Boolean)) pushLog(line);
       });
       child.stderr.on('data', (d: Buffer) => {
         for (const line of String(d).split('\n').filter(Boolean)) pushLog(`[stderr] ${line}`);
       });
-      child.on('close', (code: number) => {
-        clearTimeout(timer);
-        resolve(code ?? 1);
+      child.on('close', (code: number | null) => {
+        finalize(code ?? 1);
       });
       child.on('error', (err: Error) => {
-        clearTimeout(timer);
         pushLog(`[${env.STAGE ?? 'shell'}] 命令启动失败: ${err.message}`);
-        resolve(1);
+        finalize(1);
       });
     });
   }

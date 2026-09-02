@@ -45,7 +45,17 @@ export class ReleaseLockService {
     private readonly repo: Repository<DeployReleaseLockEntity>,
   ) {}
 
-  /** 尝试获取锁；被他人持有且未过期时返回 false */
+  /**
+   * 尝试获取锁（**原子互斥**）；被他人持有且未过期时返回 false。
+   *
+   * 历史缺陷：旧的「findOne → 判断 → upsert」三步在并发下有竞态——
+   * 两条发布同时读到"无锁"，都 upsert 成功（ON DUPLICATE 后写覆盖），双双返回 true，
+   * 同一「模块 × 环境」会并行发布、互相覆盖版本指针。
+   *
+   * 修复：改单条 `INSERT ... ON DUPLICATE KEY UPDATE`（带 IF 条件）做原子抢占，
+   * 后到者若「不是自己持有且锁未过期」则不覆盖行；随后读回校验最终持有者是否是自己。
+   * 单条语句决定了 winner，无需 find+insert 间隙，跨实例同样互斥。
+   */
   async acquire(
     moduleKey: string,
     env: string,
@@ -55,32 +65,43 @@ export class ReleaseLockService {
     const lockKey = buildLockKey(moduleKey, env);
     const now = Date.now();
 
-    let current: LockState | null = null;
+    // 预检（非互斥）：他人持有且未过期时直接拒绝，避免无谓的 CAS 写
     try {
-      current = await this.repo.findOne({ where: { lockKey } });
+      const current = await this.repo.findOne({ where: { lockKey } });
+      if (!canAcquire(current, pipelineId, now)) {
+        this.logger.warn(
+          `发布被拒绝：${lockKey} 已被流水线 ${current?.pipelineId} 持有（至 ${new Date(
+            current?.expiresAt ?? now,
+          ).toISOString()}）`,
+        );
+        return false;
+      }
     } catch (e) {
-      // 查锁失败不阻断发布：拿不到锁最多是并发保护失效，不该让发布起不来
-      this.logger.warn(`查询发布锁失败，按无锁处理: ${(e as Error).message}`);
+      // 查锁失败不阻断发布：继续尝试原子抢占（CAS 成功与否才是最终结论）
+      this.logger.warn(`查询发布锁失败，尝试原子抢占: ${(e as Error).message}`);
     }
 
-    if (!canAcquire(current, pipelineId, now)) {
-      this.logger.warn(
-        `发布被拒绝：${lockKey} 已被流水线 ${current?.pipelineId} 持有（至 ${new Date(
-          current?.expiresAt ?? now,
-        ).toISOString()}）`,
+    try {
+      await this.repo.query(
+        `INSERT INTO deploy_release_locks (lock_key, pipeline_id, acquired_at, expires_at)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           pipeline_id = IF(pipeline_id = VALUES(pipeline_id) OR expires_at <= VALUES(acquired_at), VALUES(pipeline_id), pipeline_id),
+           expires_at  = IF(pipeline_id = VALUES(pipeline_id) OR expires_at <= VALUES(acquired_at), VALUES(expires_at), expires_at),
+           acquired_at = IF(pipeline_id = VALUES(pipeline_id) OR expires_at <= VALUES(acquired_at), VALUES(acquired_at), acquired_at)`,
+        [lockKey, pipelineId, now, now + ttlMs],
       );
+    } catch (e) {
+      this.logger.warn(`获取发布锁失败（可能并发抢占）: ${(e as Error).message}`);
       return false;
     }
 
+    // 校验最终持有者是否是自己：并发下后到者的 ON DUPLICATE 不满足 IF 条件，锁仍归先到者
     try {
-      await this.repo.upsert(
-        { lockKey, pipelineId, acquiredAt: now, expiresAt: now + ttlMs },
-        { conflictPaths: ['lockKey'] },
-      );
-      return true;
+      const row = await this.repo.findOne({ where: { lockKey } });
+      return row?.pipelineId === pipelineId;
     } catch (e) {
-      // 并发插入撞唯一键 → 视为未抢到
-      this.logger.warn(`获取发布锁失败（可能并发抢占）: ${(e as Error).message}`);
+      this.logger.warn(`确认发布锁持有者失败，视为未抢到: ${(e as Error).message}`);
       return false;
     }
   }
