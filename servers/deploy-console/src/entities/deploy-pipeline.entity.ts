@@ -116,6 +116,14 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'boolean', default: false, comment: '跳过探活验证（模板快照）' })
   skipVerify?: boolean;
 
+  /** 活动阶段快照：null=全部九阶段（模板 steps 子集，提交时固化） */
+  @Column({ type: 'json', nullable: true, comment: '活动阶段快照（null=全量）' })
+  steps?: string[] | null;
+
+  /** 失败自动回滚开关快照（previous/none） */
+  @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚快照' })
+  rollbackOnFailure?: string;
+
   /** 投递目标快照（提交时模板 defaultTarget/入参确定；auto 提交时解析默认） */
   @Column({ type: 'varchar', length: 8, nullable: true, comment: '投递目标快照 auto/local/remote' })
   runTarget?: string;

@@ -38,8 +38,38 @@ async function handleLogin() {
 
 <template>
   <div class="login-container">
+    <!-- 背景蜂巢装饰：嵌套六边形，弱化呈现 -->
+    <svg
+      class="login-hive"
+      viewBox="0 0 360 360"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M0 190 L75 60 L225 60 L300 190 L225 320 L75 320 Z"
+        stroke="#F5A623"
+        stroke-width="2"
+        stroke-linejoin="round"
+        opacity="0.28"
+      />
+      <path
+        d="M55 190 L102.5 107.7 L197.5 107.7 L245 190 L197.5 272.3 L102.5 272.3 Z"
+        stroke="#F5A623"
+        stroke-width="1.5"
+        stroke-linejoin="round"
+        opacity="0.18"
+      />
+      <path
+        d="M105 190 L127.5 151 L172.5 151 L195 190 L172.5 229 L127.5 229 Z"
+        fill="#F5A623"
+        opacity="0.35"
+      />
+    </svg>
     <div class="login-card">
-      <h1>发布管理控制台</h1>
+      <img class="login-logo" src="/console/favicon.svg" alt="Beehive" />
+      <h1>Beehive</h1>
+      <p class="login-subtitle">自运转的智能研发蜂巢</p>
       <a-form
         :model="formState"
         layout="vertical"

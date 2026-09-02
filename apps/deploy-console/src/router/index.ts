@@ -105,6 +105,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DiagnoseCenter.vue'),
         meta: { title: '自助诊断' },
       },
+      {
+        path: 'tools',
+        name: 'ToolCatalog',
+        component: () => import('@/views/ToolCatalog.vue'),
+        meta: { title: '工具目录' },
+      },
     ],
   },
 ]

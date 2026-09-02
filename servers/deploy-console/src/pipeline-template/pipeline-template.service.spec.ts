@@ -5,8 +5,45 @@ import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-templa
 import {
   PipelineTemplateService,
   needsApprovalForTemplate,
+  normalizeSteps,
   DEFAULT_TEMPLATE_NAME,
 } from './pipeline-template.service';
+
+describe('normalizeSteps（活动阶段校验，纯函数）', () => {
+  it('null/空 → null（= 全量九阶段）', () => {
+    expect(normalizeSteps(undefined)).toBeNull();
+    expect(normalizeSteps([])).toBeNull();
+  });
+
+  it('合法裁剪（剔除 verify/cleanup）保留并校验', () => {
+    expect(normalizeSteps(['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer'])).toEqual([
+      'check',
+      'pull',
+      'build',
+      'upload',
+      'restart',
+      'version',
+      'pointer',
+    ]);
+  });
+
+  it('非法步骤拒绝', () => {
+    expect(() => normalizeSteps(['check', 'rollback'])).toThrow(BadRequestException);
+  });
+
+  it('重复步骤拒绝', () => {
+    expect(() => normalizeSteps(['check', 'check', 'version', 'pointer'])).toThrow(BadRequestException);
+  });
+
+  it('重排拒绝（仅可裁剪不可重排）', () => {
+    expect(() => normalizeSteps(['version', 'pointer', 'check'])).toThrow(BadRequestException);
+  });
+
+  it('裁剪核心步骤（check/version/pointer）拒绝', () => {
+    expect(() => normalizeSteps(['pull', 'build', 'version', 'pointer'])).toThrow(BadRequestException);
+    expect(() => normalizeSteps(['check', 'pull', 'build'])).toThrow(BadRequestException);
+  });
+});
 
 describe('needsApprovalForTemplate（审批判定，纯函数）', () => {
   it('always 强制审批（即使 dev 不需要）', () => {

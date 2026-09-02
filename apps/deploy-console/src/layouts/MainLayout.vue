@@ -16,6 +16,7 @@ import {
   BellOutlined,
   ExperimentOutlined,
   ToolOutlined,
+  BuildOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -40,6 +41,7 @@ const menuItems = [
   { key: '/notifications', label: '通知中心', icon: BellOutlined },
   { key: '/canary', label: '灰度管理', icon: ExperimentOutlined },
   { key: '/diagnose', label: '自助诊断', icon: ToolOutlined },
+  { key: '/tools', label: '工具目录', icon: BuildOutlined },
   { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 
@@ -78,7 +80,26 @@ function handleLogout() {
       :trigger="null"
     >
       <div class="logo">
-        {{ collapsed ? 'DC' : '发布管理控制台' }}
+        <svg
+          class="logo-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <!-- 蜂巢 cell：外六边形 + 内六边形 -->
+          <path
+            d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z"
+            stroke="#F5A623"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M12 6.6 L17.6 9.8 V16.2 L12 19.4 L6.4 16.2 V9.8 Z"
+            fill="#F5A623"
+          />
+        </svg>
+        <span v-if="!collapsed" class="logo-text">Beehive</span>
       </div>
       <a-menu
         theme="dark"
@@ -98,7 +119,7 @@ function handleLogout() {
       <a-layout-header class="app-header">
         <div style="display: flex; align-items: center; gap: 16px;">
           <span style="font-size: 16px; font-weight: 600;">
-            {{ route.meta.title || '发布管理控制台' }}
+            {{ route.meta.title || 'Beehive' }}
           </span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">

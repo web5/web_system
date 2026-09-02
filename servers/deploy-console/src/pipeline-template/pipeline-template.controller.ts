@@ -4,7 +4,16 @@ import { PipelineTemplateService, TemplateSpec } from './pipeline-template.servi
 import { CurrentUser } from '../common/decorators';
 import { AuditService, diffObject } from '../audit/audit.service';
 
-const SNAPSHOT_KEYS = ['name', 'description', 'skipVerify', 'approval', 'defaultTarget', 'enabled'] as const;
+const SNAPSHOT_KEYS = [
+  'name',
+  'description',
+  'steps',
+  'skipVerify',
+  'rollbackOnFailure',
+  'approval',
+  'defaultTarget',
+  'enabled',
+] as const;
 
 /**
  * 流水线模板管理（**仅控制台 JWT，不暴露 MCP**）。
