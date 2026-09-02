@@ -598,7 +598,8 @@ async function submitReview() {
 }
 
 onMounted(async () => {
-  await Promise.all([refreshAll(), loadEnvironments()])
+  // 模块列表是卡片区数据源（moduleCards 按模块一卡）——缺失时页面恒为空态「暂无可发布模块」
+  await Promise.all([refreshAll(), loadEnvironments(), loadModules()])
   if (hasRunning()) tick()
 })
 onUnmounted(stopPolling)
