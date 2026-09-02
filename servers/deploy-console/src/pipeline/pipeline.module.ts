@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DeployPipelineEntity } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
+import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { PipelineService } from './pipeline.service';
 import { PipelineController } from './pipeline.controller';
 // 内置步骤执行器（每个步骤的执行体独立为类，注入各自工具）
@@ -35,7 +36,12 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DeployPipelineEntity, DeployVersionEntity, DeployDeploymentEntity]),
+    TypeOrmModule.forFeature([
+      DeployPipelineEntity,
+      DeployVersionEntity,
+      DeployDeploymentEntity,
+      DeployPipelineTemplateEntity,
+    ]),
     ModuleRegistryModule,
     CanaryModule,
     AuditModule,
