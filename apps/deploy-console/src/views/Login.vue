@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+// favicon 走模块资产打包（public/ 被 gitignore，不依赖发布目录手放文件）
+import faviconUrl from '@/assets/console-favicon.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -67,7 +69,7 @@ async function handleLogin() {
       />
     </svg>
     <div class="login-card">
-      <img class="login-logo" src="/console/favicon.svg" alt="Beehive" />
+      <img class="login-logo" :src="faviconUrl" alt="Beehive" />
       <h1>Beehive</h1>
       <p class="login-subtitle">自运转的智能研发蜂巢</p>
       <a-form
