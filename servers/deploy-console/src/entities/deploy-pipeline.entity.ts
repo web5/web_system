@@ -105,6 +105,21 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'json', nullable: true, comment: '发布结果快照（产物路径/验证结果等）' })
   result?: Record<string, unknown>;
 
+  /** 实例所用流水线模板（提交时快照，模板后续变更不影响历史实例） */
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '流水线模板 ID（快照）' })
+  templateId?: string;
+
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '流水线模板名（快照）' })
+  templateName?: string;
+
+  /** 跳过 verify（快线）——模板快照固化到实例 */
+  @Column({ type: 'boolean', default: false, comment: '跳过探活验证（模板快照）' })
+  skipVerify?: boolean;
+
+  /** 投递目标快照（提交时模板 defaultTarget/入参确定；auto 提交时解析默认） */
+  @Column({ type: 'varchar', length: 8, nullable: true, comment: '投递目标快照 auto/local/remote' })
+  runTarget?: string;
+
   @Column({ type: 'bigint', comment: '开始时间（毫秒时间戳）' })
   @Index()
   startTime: number;

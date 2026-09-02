@@ -16,6 +16,7 @@ import { PipelineModule } from './pipeline/pipeline.module';
 import { McpDeployModule } from './mcp/mcp.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
 
 @Module({
   imports: [
@@ -63,6 +64,8 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
     MetricsModule,
     // 系统设置（通知渠道等系统级配置，页面可维护）
     SystemSettingsModule,
+    // 流水线模板（模板=流程定义 / 实例=一次发布）
+    PipelineTemplateModule,
   ],
 })
 export class AppModule {}

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { pipelineApi, environmentApi, deployApi, type PipelineItem } from '@/api'
+import {
+  pipelineApi,
+  environmentApi,
+  deployApi,
+  pipelineTemplateApi,
+  type PipelineItem,
+  type PipelineTemplate,
+} from '@/api'
 import dayjs from 'dayjs'
 
 // ===== 筛选 =====
@@ -16,6 +23,10 @@ interface ModuleItem {
 }
 const modules = ref<ModuleItem[]>([])
 const microFrontendModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
+
+// ===== 流水线模板（模块下可选，默认模板在首位） =====
+const templates = ref<PipelineTemplate[]>([])
+const templateId = ref<string | undefined>(undefined)
 
 // ===== 提交表单 =====
 const form = ref({
@@ -112,6 +123,16 @@ async function loadReleases() {
   }
 }
 
+async function loadTemplates() {
+  templateId.value = undefined
+  try {
+    templates.value = await pipelineTemplateApi.list(form.value.moduleKey)
+    if (templates.value.length) templateId.value = templates.value[0].id
+  } catch {
+    templates.value = []
+  }
+}
+
 async function loadPipelines() {
   try {
     pipelines.value = await pipelineApi.list({ env: env.value, limit: 20 })
@@ -148,6 +169,7 @@ function doSubmit(confirm: boolean) {
         mode: form.value.mode,
         target: form.value.target,
         grayscaleRule: rule,
+        templateId: templateId.value || undefined,
         confirm,
       })
       if ((res as any).status === 'pending-approval') {
@@ -299,13 +321,13 @@ async function onEnvChange() {
   await Promise.all([loadReleases(), loadPipelines()])
 }
 async function onModuleChange() {
-  await loadReleases()
+  await Promise.all([loadReleases(), loadTemplates()])
 }
 
 onMounted(async () => {
   await loadEnvironments()
   await loadModules()
-  await loadReleases()
+  await Promise.all([loadReleases(), loadTemplates()])
   await loadPipelines()
   if (pipelines.value.some((p) => p.status === 'running' || p.status === 'pending')) {
     startPolling()
@@ -341,6 +363,17 @@ onUnmounted(stopPolling)
           >
             <a-select-option v-for="m in microFrontendModules" :key="m.key" :value="m.key">
               {{ m.name }}（{{ m.key }}）
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+
+        <a-form-item label="流水线模板">
+          <a-select v-model:value="templateId" style="width: 230px;" placeholder="默认模板">
+            <a-select-option v-for="t in templates" :key="t.id" :value="t.id">
+              {{ t.name }}
+              <template v-if="t.skipVerify">（跳过探活）</template>
+              <template v-if="t.approval === 'always'">（强制审批）</template>
+              <template v-if="t.approval === 'never'">（免审批）</template>
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -429,6 +462,7 @@ onUnmounted(stopPolling)
           { title: '模块', dataIndex: 'moduleKey', key: 'moduleKey', width: 100 },
           { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 110 },
           { title: '模式', dataIndex: 'mode', key: 'mode', width: 90 },
+          { title: '模板', key: 'template', width: 110 },
           { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
           { title: '阶段/进度', key: 'stage', width: 200 },
           { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
@@ -452,6 +486,9 @@ onUnmounted(stopPolling)
             <a-tag :color="record.mode === 'grayscale' ? 'orange' : 'blue'">
               {{ record.mode === 'grayscale' ? '灰度' : '全量' }}
             </a-tag>
+          </template>
+          <template v-if="column.key === 'template'">
+            <span>{{ record.templateName || '默认' }}</span>
           </template>
           <template v-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ statusText(record.status) }}</a-tag>
@@ -558,6 +595,7 @@ onUnmounted(stopPolling)
           <a-descriptions-item label="版本">{{ logRecord.versionTag || '-' }}</a-descriptions-item>
           <a-descriptions-item label="分支">{{ logRecord.gitBranch || '-' }}</a-descriptions-item>
           <a-descriptions-item label="提交">{{ logRecord.gitCommit || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="模板">{{ logRecord.templateName || '默认' }}</a-descriptions-item>
         </a-descriptions>
         <div
           style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
