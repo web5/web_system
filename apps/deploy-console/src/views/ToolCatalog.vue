@@ -96,7 +96,8 @@ function openEdit(t: ToolItem) {
     category: t.category,
     description: t.description || '',
     example: t.example || '',
-    command: t.command || '',
+    // 内置工具命令可能未落库：以 example 作为可编辑起点（保存后写入 command）
+    command: t.command || t.example || '',
   }
   addOpen.value = true
 }

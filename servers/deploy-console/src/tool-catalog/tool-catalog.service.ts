@@ -82,9 +82,19 @@ export class ToolCatalogService {
   async ensureSeeds(): Promise<void> {
     for (const seed of SEED_TOOLS) {
       const exists = await this.repo.findOne({ where: { code: seed.code as string } });
-      if (exists) continue;
+      if (exists) {
+        // 老库内置 shell 行无 command：用种子 example 补一次（禁用内置命令请「停用」工具而非清空）
+        if (exists.kind === 'shell' && !exists.command && exists.example && seed.code === exists.code) {
+          exists.command = exists.example;
+          await this.repo.save(exists).catch(() => undefined);
+        }
+        continue;
+      }
       try {
-        await this.repo.save(this.repo.create(seed as DeployToolEntity));
+        const row = this.repo.create(seed as DeployToolEntity);
+        // shell 种子：未显式给 command 时用 example 作为可编辑命令正文（内置命令可编辑/保存）
+        if (row.kind === 'shell' && !row.command) row.command = row.example;
+        await this.repo.save(row);
       } catch {
         /* 并发首建撞主键忽略 */
       }
