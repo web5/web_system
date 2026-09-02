@@ -202,3 +202,87 @@ L1 资源      环境 · 服务器组 · 模块注册表 · 服务路由
 
 **3 项 MUST 全部修复并有测试锁定；`pipeline.service.ts` 的独立评审盲区至此补齐（任务 8 达成）。**
 遗留 SHOULD 不阻塞，均已记录行号与建议，后续迭代按需处理。
+
+---
+
+## 流水线模板 + 实例（S6 演进）设计
+
+> 决策记录：需求见 `requirements.md`「L3b」；任务见 `tasks.md`「S6」。
+> 本方案尚未实施，待用户确认后进入执行。
+
+### 目标模型（三层分离）
+
+```
+模块（资源定义）          模块基本信息 / 阶段命令（如何构建） / 配置中心
+  └── 流水线模板（流程定义，S6 新增）  名称/说明 / skipVerify / 审批策略 / 默认投递 —— 模块下可建多条
+        └── 流水线实例（一次发布） deploy_pipelines（现状表，加模板快照引用）
+```
+
+把「这个模块怎么发」从**隐式一套**提升为**显式多套可选**：提交发布 = 选 模块 + 流水线模板 + 分支/commit/mode → 生成实例。
+
+### 关键决策
+
+| # | 决策 | 理由 |
+|---|---|---|
+| D1 | **实例复用 `deploy_pipelines` 现状表**，加 `template_id`（可空）+ `template_name`（快照）。不新建 run 表 | 现状表本就是「一条 = 一次发布」的实例表；审批/通知/度量/审计全部继续引用它，迁移成本最低，历史记录天然兼容 |
+| D2 | 模板表 `deploy_pipeline_templates`：`id / moduleKey / name / description / skipVerify / approval('inherit'\|'always'\|'never') / defaultTarget('auto'\|'local'\|'remote') / enabled / builtin / createdBy / createdAt`；UNIQUE(moduleKey, name) | 模板归属模块（用户诉求"针对模块添加流水线"）；builtin 默认模板不可删不可改名 |
+| D3 | 每模块懒建一条 **builtin 默认模板**（语义=现状：全流程 + 环境规则审批），无显式模板的旧提交/MCP 提交自动走它 | 兼容零成本；「复制默认」是新建模板的起点 |
+| D4 | **v1 可裁剪面仅两项**：`skipVerify`（跳探活，快线/调试线）+ `approval` 策略 + `defaultTarget`。`check/pull/build/upload/restart/version/pointer/cleanup` 固定 | version/pointer 是发布语义真相源（历史踩坑：版本与产物不一致）；build/pull/upload 是产物产生与投递基本盘，裁剪它们需要产物缓存机制支撑，列为后续（记 SHOULD） |
+| D5 | 实例执行按**提交时快照**（template_id/name/skipVerify/approval 判定已固化到实例），模板事后修改/删除不影响运行中与历史实例 | 发布可追溯、不可被模板变更"改写历史" |
+| D6 | 审批判定：`effective = 模板 approval ?? 'inherit'`；`need = always || (inherit && needsApproval(env))`；审批单/审计 detail 记录模板名 | 保留系统设置「REQUIRE_APPROVAL_ENVS」的 env 级规则，模板在其上做单模块覆盖 |
+| D7 | 模板管理仅控制台 JWT；MCP 提交可带 `templateId`（可选，缺省走默认模板） | 与阶段命令同安全边界 |
+
+### 数据模型
+
+```sql
+-- deploy_pipeline_templates
+id          varchar(64) PK        -- tpl-<ts>-<rand>
+module_key  varchar(64)           -- 模板归属模块；builtin 行 moduleKey='default'
+name        varchar(64)           -- UNIQUE(module_key, name)
+description varchar(255) NULL
+skip_verify tinyint default 0     -- true=不执行探活验证（快线）
+approval    varchar(8) default 'inherit'  -- inherit/always/never
+default_target varchar(8) default 'auto'  -- auto/local/remote
+enabled     tinyint default 1
+builtin     tinyint default 0     -- builtin 不可删/改名（moduleKey='default' 的行即模块默认模板）
+created_by / created_at / updated_at
+
+-- deploy_pipelines 增列（synchronize 自动，可空）
+template_id   varchar(64) NULL
+template_name varchar(64) NULL    -- 快照，模板删后仍可读
+```
+
+### API（新增，仅控制台）
+
+- `GET  /modules/:key/pipeline-templates` —— 模块模板列表（builtin default 恒在首位）
+- `POST /modules/:key/pipeline-templates` —— 新建（body: name/description/skipVerify/approval/defaultTarget/enabled；`name` 冲突 409）
+- `POST /modules/:key/pipeline-templates/:id/duplicate` —— 复制模板
+- `PUT/DELETE /modules/:key/pipeline-templates/:id` —— 编辑/删除（builtin 拒绝删除）
+- 写操作全部审计（diff：skipVerify/approval/defaultTarget/enabled/description）
+
+提交侧（改造现有，非新增路由）：
+- `POST /pipelines` body 增 `templateId?`；响应增 `templateId/templateName`
+
+### 执行与状态机
+
+- `submit`：解析模板（未传 → 模块 builtin default；模块无 builtin 则懒建）→ 校验模板 enabled → 落实例（template_id/name 快照 + skipVerify/approval 固化）→ 审批判定（D6）→ 无审批则照常 run
+- `run`：在 verify 阶段前判断 `p.skipVerify`（快照），true 则跳过 `stageVerify` 与 verify 失败自动回滚逻辑（快线语义：不探活、无自动回滚）
+- metrics / 通知 / 审计 / 审批单无需改动（实例行含新列即可）；历史记录 template_name 为 NULL → 前端显示「默认」
+
+### 前端
+
+- `ModuleDetail.vue` 新增「流水线模板」tab：模板表（builtin 置灰删按钮）+ 新建表单（名称必填；skipVerify/审批策略/默认投递开关）+ 复制默认 + 启停
+- `PipelineCenter.vue` 提交区：选模块后出现「流水线模板」下拉（默认模板在首位，展示名称+skipVerify/审批角标）；列表与详情抽屉展示模板名
+- 流水线列表列「模板」展示 template_name ?? '默认'
+
+### 风险与缓解
+
+- 历史实例无模板 → 一律展示「默认」，无迁移脚本（列可空）
+- MCP/旧调用不传 templateId → builtin default 懒建兜底，行为不变
+- 懒建竞态：同模块并发首提都查不到 builtin → 用「查无则建 + 唯一键冲突吞错重查」兜底
+- skipVerify 模板被滥用会绕过探活 → UI 给 warning 角标；审批策略 `never` + skipVerify 组合允许存在但模板页明示「高风险」
+
+### 遗留（记录不阻塞）
+
+- 更深阶段裁剪（禁 build/禁 cleanup 等）依赖「产物缓存 + 保留策略 per 模板」，S6 之后按需演进
+
