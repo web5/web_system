@@ -144,3 +144,61 @@ L1 资源      环境 · 服务器组 · 模块注册表 · 服务路由
 
 修复 `cwd` 后**可作为 S2（配置中心）基线**；SHOULD 四项不阻塞，建议随 S2 一并处理。
 **`pipeline.service.ts` 从未被评审的历史盲区，本次已补齐。**
+
+---
+
+## 独立子代理评审结论（2026-09-02 终版，任务 8）
+
+**评审方式**：`code-explorer` 子代理按清单独立审查 `pipeline.service.ts`（只读，报告带行号），
+主 agent 对关键路径（发布锁、runShell/取消协作、命令拼接）二次读码核实后修复并补单测。
+评审对象为**当前最新代码**（含阶段命令驱动、审批门禁、通知等历次改动，非 S1 快照）。
+
+### 🔴 MUST 已修复（本次）
+
+1. **发布锁非互斥（并发双跑竞态）** — `release-lock.service.ts` `acquire`
+   原「findOne → 判断 → upsert」三步：两条并发发布同时读到"无锁"后都 upsert 成功
+   （ON DUPLICATE 无条件后写覆盖），**双双返回 true**，同一模块×环境并行发布、互相覆盖版本指针。
+   - 修复：改单条 `INSERT ... ON DUPLICATE KEY UPDATE` + IF 条件做**原子抢占**，
+     后到者不满足「自己持有或锁已过期」则不覆盖；读回校验最终持有者是否是自己。
+     单条语句决定 winner，跨实例同样互斥。
+   - 单测：`release-lock.service.spec.ts` 重写（含「并发落败方确认后返回 false」防回归用例）。
+
+2. **取消不中断子进程、且终态被 run 覆盖** — `pipeline.service.ts`
+   取消只置 DB 状态；`runShell` 内长命令（build 分钟级）不因取消中断，
+   run 继续跑完后以 succeeded 覆盖已取消行 → "已取消"的发布照样完成并上报成功。
+   - 修复：进程内登记运行中 `shells: Map<pipelineId, child>`，`cancel()` 立即 SIGKILL 子进程；
+     `run` 的 catch 里**取消优先于失败**（`cancelled.has(id)` → 终态 cancelled），
+     成功路径保持 succeeded（发布真实完成不可撤销）。
+3. **git 命令注入面** — `stagePull` 将用户可控 `gitBranch` / `versionTag` 直接拼进
+   `git checkout -B ${branch} ...` / `git reset --hard ${commit}`（无引号/白名单）。
+   - 修复：`submit` 入口白名单校验（branch `^[A-Za-z0-9._/-]{1,128}$`；
+     commit `^[A-Za-z0-9._-]{4,64}$`），非法输入 400 拒绝。
+
+### 🟡 SHOULD 已修复（本次顺手）
+
+1. **日志全量序列化**：`runShell` 每行输出都 `save` 整个 `p.logs`（JSON 数组随命令输出增长）。
+   → 300ms 合并节流落库，命令结束 flush。
+
+### 🟡 SHOULD 记录（未修，后续按需）
+
+1. **审批单并发创建非原子**：同一 env+module 并发提交 prod 时，`approval.create` 的重复检查
+   （findOne→save）存在窗口，理论上可产生两条 pending 审批单。**实际由发布锁兜底**：
+   approve 恢复执行时 acquire 失败即拒绝，不会双跑。若要根治，可加
+   `UNIQUE(env, module_key, status)` 化改造（status 演进需软删/历史表），成本高收益低，暂缓。
+2. `runShell` 真实执行/超时中断/取消中断的自动化测试依赖子进程 mock，未覆盖（记测试债）。
+3. `hook` 模块与前端 `hookApi` 死代码随 `deploy_module_hooks` 物理删表一并清理（S1 遗留 SHOULD）。
+
+### 🟢 KEEP（做得好的点）
+
+1. 发布锁带 TTL + 只释放自己持有的锁（强杀后不产生死锁、不误删他人抢占后的锁）。
+2. 失败处理按阶段差异化：verify 失败自动回滚到上一版本，并**等回滚任务真正跑完 + 探活确认**
+   才落审计（而非"发起了动作就宣称回滚"）。
+3. 取消采用阶段边界 `assertNotCancelled` + 本次补的 SIGKILL 双保险；锁在 finally 释放。
+4. 配置注入强制覆盖 + PATH 显式补齐（git/pm2/npx 不缺目录）。
+5. 审批门禁状态机经核验：approve/reject/cancel 竞争由 `ApprovalService.resolve` 幂等保护收敛，
+   pending-approval 提交不占 running 锁、不会误伤 dev 发布。
+
+### 终版结论
+
+**3 项 MUST 全部修复并有测试锁定；`pipeline.service.ts` 的独立评审盲区至此补齐（任务 8 达成）。**
+遗留 SHOULD 不阻塞，均已记录行号与建议，后续迭代按需处理。

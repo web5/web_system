@@ -48,9 +48,14 @@
   - _验收：当 查阅两份文档时，其关于阶段命令的陈述应与 design.md 一致_
   - 落地：`deploy.service.ts`（旧 `deploy.sh` 路径）改读 `stage_commands`；`buildCmd` 标 `@deprecated`；两份文档矛盾表述已对齐
   - ⚠️ **物理删列/删表待执行**：本轮只做逻辑废弃以保证可回滚；建议观察一个发布周期后再删 `deploy_modules.build_cmd` 列与 `deploy_module_hooks` 表
-- [ ] 8. `pipeline.service.ts` 纳入独立子代理评审
+- [x] 8. `pipeline.service.ts` 纳入独立子代理评审
   - 依赖：3
   - _验收：当 S1 代码完成后，design.md 应存在独立评审结论记录_
+  - 结论见 `design.md`「独立子代理评审结论（2026-09-02 终版，任务 8）」
+  - 修复 3 项 MUST：**发布锁原子互斥**（CAS 替代 find+upsert，防同模块×环境并发双跑）、
+    **取消立即 SIGKILL + 取消终态优先**（防"已取消仍跑完并上报成功"）、**git 命令注入面**（branch/commit 白名单）
+  - 顺手修复：runShell 日志 300ms 节流落库
+  - 补测试：release-lock acquire 互斥与并发落败用例（全量 113/113 通过）
 
 ## S2 · P0 配置中心（L2）
 
