@@ -98,9 +98,49 @@ L1 资源      环境 · 服务器组 · 模块注册表 · 服务路由
 - 风险：合并两套机制是一次性破坏性迁移。→ 缓解：迁移前备份，提供回滚脚本。
 - 权衡：version/pointer 不 shell 化，损失「完全自定义发布」的灵活性。→ 取舍：版本与指针是发布语义真相源，交给 shell 会导致版本与产物不一致（历史踩坑）。
 - 风险：扩大评审范围拉长节奏。→ 缓解：按阶段评审，仅 pipeline/配置中心改动强制评审。
+- 风险：**独立运维脚本（非 Nest 运行时的 DataSource）与服务端 entity 配置漂移**。实测踩过两次：
+  脚本未配 `SnakeNamingStrategy` 导致建表列为驼峰、与服务端 synchronize 互相 ALTER；
+  新增 `scripts/` 被 `nest build` 纳入编译，使产物由 `dist/main.js` 错位为 `dist/src/main.js`。
+  → 缓解：脚本复用 `app.module` 的 namingStrategy；新增非服务目录须同步 `tsconfig.include`。
+  详见 `tasks.md`「上线踩坑」。
 
-## 评审结论
+## 评审结论（2026-09-02，命令驱动流水线）
 
-> 由独立子代理执行（`rd-review`），结论追加于此。
-> 批 1 历史成果（本地监控、tab 化、命令注入/CORS/异常过滤器/any 四项 MUST 修复）已收编，见 `tasks.md` S0。
-> **`pipeline.service.ts` 的评审待 S1 完成后执行**（历史盲区，本次补齐）。
+**评审范围**：本次全部改动——`deploy-module-stage-command.entity.ts`、`stage-command` 模块（service/controller/module）、
+`pipeline.service.ts`（执行器与编排）、`deploy.service.ts`、迁移脚本、前端 `stageCommandApi` 与 `ModuleDetail.vue`。
+
+> 说明：本轮计划由独立子代理执行，但子代理两次均只回传工具调用、未输出报告文本（该子代理为只读，无法写文件），
+> 故改由主 agent 按同一评审清单执行。**独立性不足，建议后续由另一 agent 或人工复核**。
+
+### 🔴 MUST 必改（已修复）
+
+1. **执行器丢失 `cwd`，默认模板命令会编译错目标** — `pipeline.service.ts` `runShell`
+   从旧 `stageBuild` 重构时未继承 `spawn` 的 `cwd` 设置，导致命令在 deploy-console 自身目录下执行。
+   9 个使用默认模板（`npx tsc -p tsconfig.json` / `npx vite build`）的模块会编译错误目标或直接失败。
+   - 修复：新增纯函数 `resolveStageCwd()`（后端 `servers/<dir>`，其余 `apps/<dir>`），
+     `runShell` 接收 `cwd` 并以发布目录兜底；补防回归测试 `pipeline.service.spec.ts`。
+   - 教训：重构「带环境假设的执行逻辑」时，`cwd` / `env` / `PATH` 属于易丢失的隐式契约，必须有测试锁定。
+
+### 🟡 SHOULD 建议改（未修，记为待办）
+
+1. **`any` 使用**：`runStageCommand` 的 `mod: any`、`stage as any`，controller 的 `user: any`
+   （沿用 `hook.controller` 既有写法）。建议定义 `ModuleSnapshot` 与 `CurrentUserDto` 收口。
+2. **测试未覆盖**：执行器 `runStageCommand`/`runShell` 的真实执行与超时中断、controller 鉴权、
+   迁移脚本的冲突检测分支。均需依赖 mock 或集成测试。
+3. **死代码**：前端 `hookApi` 与后端 `hook` 模块已无调用方；随物理删表一并清理。
+4. **`buildCmd` 仍在 `module-registry` 返回 DTO 中**，前端若仍可编辑会误导；建议前端隐藏该字段。
+
+### 🟢 KEEP（做得好的点）
+
+1. **权限正确**：`auth.module.ts:32` 注册全局 `APP_GUARD`(JwtAuthGuard)，阶段命令 API 未标 `@Public()`，
+   **仅 JWT 可写、未被 MCP 暴露**——已实测确认。
+2. `bash -n` 校验写临时文件而非 heredoc，规避命令体包含 `EOF` 的冲突。
+3. **fail-fast 语义正确**：build 未配置即抛错终止，不回退任何内置技术栈命令。
+4. `version`/`pointer` 确实拒绝配置（`CONFIGURABLE_STAGES` 白名单约束）。
+5. 迁移脚本默认 dry-run，冲突**只列清单、绝不静默覆盖**；执行前自动备份。
+6. 单一真相源落地：两套互斥机制已合并，`pipeline.service.ts` 内无任何技术栈分支。
+
+### 基线结论
+
+修复 `cwd` 后**可作为 S2（配置中心）基线**；SHOULD 四项不阻塞，建议随 S2 一并处理。
+**`pipeline.service.ts` 从未被评审的历史盲区，本次已补齐。**
