@@ -90,16 +90,17 @@ function handleLogout() {
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          <!-- 蜂巢 cell：外六边形 + 内六边形 -->
+          <!-- 蜂巢 cell：外层框架深琥珀 + 内部亮琥珀（外深内浅层次） -->
           <path
             d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z"
-            stroke="#F5A623"
-            stroke-width="1.6"
+            fill="#9A3412"
+            stroke="#FB923C"
+            stroke-width="1.4"
             stroke-linejoin="round"
           />
           <path
             d="M12 6.6 L17.6 9.8 V16.2 L12 19.4 L6.4 16.2 V9.8 Z"
-            fill="#F5A623"
+            fill="#FBBF24"
           />
         </svg>
         <span v-if="!collapsed" class="logo-text">Beehive</span>
@@ -186,13 +187,6 @@ function handleLogout() {
   margin-left: 8px;
 }
 .logo-title {
-  font-size: 16px;
-  font-weight: var(--ws-font-weight-semibold);
-  color: #fff;
-  letter-spacing: 0.5px;
-}
-/* 侧栏 logo 品牌文字：dark theme 继承偏暗，显式白字 */
-.logo-text {
   font-size: 16px;
   font-weight: var(--ws-font-weight-semibold);
   color: #fff;
