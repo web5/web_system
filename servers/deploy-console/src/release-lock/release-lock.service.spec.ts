@@ -38,14 +38,14 @@ describe('buildLockKey', () => {
   });
 });
 
-describe('ReleaseLockService', () => {
+describe('ReleaseLockService.acquire（原子互斥 CAS）', () => {
   let service: ReleaseLockService;
   let repo: any;
 
   beforeEach(async () => {
     repo = {
       findOne: jest.fn(),
-      upsert: jest.fn().mockResolvedValue({}),
+      query: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -57,46 +57,62 @@ describe('ReleaseLockService', () => {
     service = moduleRef.get(ReleaseLockService);
   });
 
-  it('无锁时获取成功并写入', async () => {
-    repo.findOne.mockResolvedValue(null);
-    await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(true);
-    expect(repo.upsert).toHaveBeenCalledTimes(1);
-
-    const [entity] = repo.upsert.mock.calls[0];
-    expect(entity.lockKey).toBe('auth-service@dev');
-    expect(entity.pipelineId).toBe('p1');
-    expect(entity.expiresAt - entity.acquiredAt).toBe(DEFAULT_LOCK_TTL_MS);
+  const holder = (pipelineId: string, expiresAt: number) => ({
+    lockKey: 'auth-service@dev',
+    pipelineId,
+    acquiredAt: 0,
+    expiresAt,
   });
 
-  it('他人持有未过期时获取失败，且不写库', async () => {
-    repo.findOne.mockResolvedValue({
-      lockKey: 'auth-service@dev',
-      pipelineId: 'p2',
-      acquiredAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-    });
+  it('无锁：执行原子抢占并确认自己是持有者', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(null) // 预检：无锁
+      .mockResolvedValueOnce(holder('p1', Date.now() + DEFAULT_LOCK_TTL_MS)); // 确认：自己
+    await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(true);
+
+    // CAS 语句必须走 ON DUPLICATE + IF 条件（不带条件会覆盖他人锁 → 非互斥）
+    expect(repo.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = repo.query.mock.calls[0];
+    expect(sql).toContain('INSERT INTO deploy_release_locks');
+    expect(sql).toContain('ON DUPLICATE KEY UPDATE');
+    expect(sql).toContain('IF(');
+    expect(params).toContain('auth-service@dev');
+    expect(params).toContain('p1');
+  });
+
+  it('他人持有未过期：直接拒绝，不执行 CAS', async () => {
+    repo.findOne.mockResolvedValueOnce(holder('p2', Date.now() + 60_000));
     await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(false);
-    expect(repo.upsert).not.toHaveBeenCalled();
+    expect(repo.query).not.toHaveBeenCalled();
   });
 
-  it('锁已过期时可抢占', async () => {
-    repo.findOne.mockResolvedValue({
-      lockKey: 'auth-service@dev',
-      pipelineId: 'p2',
-      acquiredAt: 0,
-      expiresAt: Date.now() - 1,
-    });
+  it('锁已过期：可抢占并成为持有者', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(holder('p2', Date.now() - 1)) // 预检：过期可抢
+      .mockResolvedValueOnce(holder('p1', Date.now() + DEFAULT_LOCK_TTL_MS)); // 确认：自己
     await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(true);
   });
 
-  it('查锁异常时按无锁处理（不阻断发布）', async () => {
-    repo.findOne.mockRejectedValue(new Error('db down'));
-    await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(true);
+  it('并发竞争落败（他人持锁，后到者 CAS 未生效）：确认后仍返回 false', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(null) // 预检：无锁（竞态窗口）
+      .mockResolvedValueOnce(holder('p2', Date.now() + 60_000)); // 确认：CAS 后锁被先到者持有
+    await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(false);
+    // CAS 已尽力执行（无抛错），但最终持有者是别人 → false
+    expect(repo.query).toHaveBeenCalledTimes(1);
   });
 
-  it('写入撞唯一键时视为未抢到', async () => {
-    repo.findOne.mockResolvedValue(null);
-    repo.upsert.mockRejectedValue(new Error('Duplicate entry'));
+  it('预检查询异常：仍尝试 CAS；确认异常则安全失败', async () => {
+    repo.findOne
+      .mockRejectedValueOnce(new Error('db down')) // 预检异常
+      .mockRejectedValueOnce(new Error('db down')); // 确认异常
+    await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(false);
+    expect(repo.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('CAS 写失败：返回 false（不误判抢到锁）', async () => {
+    repo.findOne.mockResolvedValueOnce(null);
+    repo.query.mockRejectedValue(new Error('Duplicate entry'));
     await expect(service.acquire('auth-service', 'dev', 'p1')).resolves.toBe(false);
   });
 

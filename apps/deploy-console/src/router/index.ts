@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布流水线' },
       },
       {
+        path: 'pipelines/:id',
+        name: 'PipelineDetail',
+        component: () => import('@/views/PipelineDetail.vue'),
+        meta: { title: '流水线详情' },
+      },
+      {
         path: 'environments',
         name: 'EnvironmentManager',
         component: () => import('@/views/EnvironmentManager.vue'),
@@ -52,18 +58,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模块详情' },
       },
       {
-        path: 'services',
-        name: 'ServiceAddressManager',
-        component: () => import('@/views/ServiceAddressManager.vue'),
-        meta: { title: '服务管理' },
-      },
-      {
-        path: 'services/:key',
-        name: 'ServiceDetail',
-        component: () => import('@/views/ServiceDetail.vue'),
-        meta: { title: '服务环境详情' },
-      },
-      {
         path: 'monitor',
         name: 'ServiceMonitor',
         component: () => import('@/views/ServiceMonitor.vue'),
@@ -80,6 +74,36 @@ const routes: RouteRecordRaw[] = [
         name: 'ConfigCenter',
         component: () => import('@/views/ConfigCenter.vue'),
         meta: { title: '配置中心' },
+      },
+      {
+        path: 'notifications',
+        name: 'NotificationCenter',
+        component: () => import('@/views/NotificationCenter.vue'),
+        meta: { title: '通知中心' },
+      },
+      {
+        path: 'settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/SystemSettings.vue'),
+        meta: { title: '系统设置' },
+      },
+      {
+        path: 'canary',
+        name: 'CanaryCenter',
+        component: () => import('@/views/CanaryCenter.vue'),
+        meta: { title: '灰度管理' },
+      },
+      {
+        path: 'diagnose',
+        name: 'DiagnoseCenter',
+        component: () => import('@/views/DiagnoseCenter.vue'),
+        meta: { title: '自助诊断' },
+      },
+      {
+        path: 'tools',
+        name: 'ToolCatalog',
+        component: () => import('@/views/ToolCatalog.vue'),
+        meta: { title: '工具目录' },
       },
     ],
   },

@@ -1,166 +1,64 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { message, Modal } from 'ant-design-vue'
-import { deployApi, environmentApi } from '@/api'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
+import { deployApi, environmentApi, pipelineApi, type PipelineItem } from '@/api'
 import dayjs from 'dayjs'
+import PipelineSubmit from '@/components/PipelineSubmit.vue'
+
+const router = useRouter()
 
 // ===== 环境 =====
 const env = ref('dev')
-const environments = ref<{ id: string; name: string; builtin: boolean }[]>([])
+const environments = ref<{ id: string; name: string }[]>([])
 
-// 模块列表（来自后端 /deploy/modules，与 deploy.sh 共用 modules.json）
-interface DeployModule {
-  key: string
-  name: string
-  type: 'backend' | 'frontend' | 'micro-frontend' | 'mini-app'
-  dir: string
-  pm2?: string
-  publicPath?: string
-  buildCmd?: string
-  entry?: string
-  description?: string
-  builtin?: boolean
-  enabled?: boolean
+// ===== 数据 =====
+const modules = ref<any[]>([])
+const curMap = ref<Record<string, any>>({})
+const plMap = ref<Record<string, PipelineItem>>({})
+const loading = ref(false)
+
+const TYPE_OPTIONS: Record<string, { label: string; color: string }> = {
+  backend: { label: '后端', color: 'blue' },
+  frontend: { label: '前端', color: 'green' },
+  'micro-frontend': { label: '微前端', color: 'purple' },
+  'mini-app': { label: '小程序', color: 'orange' },
 }
-const modules = ref<DeployModule[]>([])
-const modulesLoading = ref(false)
+const rows = computed(() =>
+  modules.value
+    .filter((m: any) => m.enabled !== false)
+    .map((m: any) => ({ ...m, cur: curMap.value[m.key], pl: plMap.value[m.key] })),
+)
 
-// 当前环境各模块当前版本（「不同环境指定不同版本」展示）
-const currentVersions = ref<Record<string, any>>({})
-
-// 版本记录（DB）
-const versions = ref<any[]>([])
-const versionsLoading = ref(false)
-
-// 任务状态
-const deployingKey = ref('')
-const currentTaskId = ref('')
-const taskStatus = ref('')
-const taskLogs = ref<string[]>([])
-const logPanelRef = ref<HTMLElement | null>(null)
-let eventSource: EventSource | null = null
-
-function statusTagClass(status: string) {
+function pipelineStatusColor(status: string) {
   const map: Record<string, string> = {
-    pending: 'status-tag-pending',
-    running: 'status-tag-running',
-    success: 'status-tag-success',
-    failed: 'status-tag-failed',
+    pending: 'blue',
+    'pending-approval': 'orange',
+    running: 'processing',
+    succeeded: 'success',
+    failed: 'error',
+    cancelled: 'default',
   }
-  return map[status] || ''
+  return map[status] || 'default'
 }
-function statusText(status: string) {
+function pipelineStatusText(status: string) {
   const map: Record<string, string> = {
     pending: '等待中',
+    'pending-approval': '待审批',
     running: '运行中',
-    success: '成功',
+    succeeded: '成功',
     failed: '失败',
+    cancelled: '已取消',
   }
   return map[status] || status
 }
-function typeTag(type: string) {
-  return type === 'backend' ? '后端' : '前端'
-}
-function currentVersionOf(key: string) {
-  return currentVersions.value[key]?.currentVersion || '—'
-}
-
-// ===== 部署 =====
-function handleDeployModule(key: string) {
-  if (env.value === 'prod') {
-    Modal.confirm({
-      title: '确认部署',
-      content: `确认要部署模块 ${key} 到生产环境吗？此操作将影响线上服务。`,
-      okText: '确认部署',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => runDeploy(key, true),
-    })
-  } else {
-    runDeploy(key, false)
-  }
-}
-async function runDeploy(key: string, confirm: boolean) {
-  deployingKey.value = key
-  try {
-    const res = await deployApi.deploy(env.value, key, confirm)
-    currentTaskId.value = res.taskId
-    taskLogs.value = []
-    taskStatus.value = 'pending'
-    connectSSE(res.taskId)
-    message.info(`部署任务已启动: ${key} → ${env.value}`)
-  } catch {
-    message.error('启动部署失败')
-  } finally {
-    deployingKey.value = ''
-  }
+function fmt(ts?: string | number) {
+  if (ts === undefined || ts === null || ts === '') return '—'
+  const d = dayjs(typeof ts === 'string' && /^\d{13}$/.test(ts) ? Number(ts) : ts)
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : String(ts)
 }
 
-// ===== 回滚（选历史版本）=====
-function handleRollback(record: any) {
-  if (env.value === 'prod') {
-    Modal.confirm({
-      title: '确认回滚',
-      content: `确认要将 ${env.value} 环境回滚到版本 ${record.versionTag}（${record.component}）吗？`,
-      okText: '确认回滚',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => doRollback(record.versionTag, record.component, true),
-    })
-  } else {
-    doRollback(record.versionTag, record.component, false)
-  }
-}
-async function doRollback(tag: string, component: string, confirm: boolean) {
-  try {
-    const res = await deployApi.rollback(env.value, tag, confirm)
-    currentTaskId.value = res.taskId
-    taskLogs.value = []
-    taskStatus.value = 'pending'
-    connectSSE(res.taskId)
-    message.info('回滚任务已启动')
-  } catch {
-    message.error('启动回滚失败')
-  }
-}
-
-// ===== SSE =====
-function connectSSE(taskId: string) {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-  eventSource = new EventSource(`/api/deploy/stream/${taskId}`)
-  eventSource.onmessage = async (event) => {
-    if (event.data === '[DONE]') {
-      eventSource?.close()
-      eventSource = null
-      deployingKey.value = ''
-      loadCurrentVersions()
-      loadVersions()
-      return
-    }
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'log') {
-        taskLogs.value.push(data.line)
-        await nextTick()
-        if (logPanelRef.value) logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight
-      } else if (data.type === 'status') {
-        taskStatus.value = data.status
-      }
-    } catch {
-      taskLogs.value.push(event.data)
-    }
-  }
-  eventSource.onerror = () => {
-    eventSource?.close()
-    eventSource = null
-    deployingKey.value = ''
-  }
-}
-
-// ===== 数据加载 =====
+// ===== 加载 =====
 async function loadEnvironments() {
   try {
     environments.value = await environmentApi.list()
@@ -172,53 +70,55 @@ async function loadEnvironments() {
   }
 }
 async function loadModules() {
-  modulesLoading.value = true
   try {
     modules.value = await deployApi.modules()
   } catch {
     message.error('加载模块列表失败')
-  } finally {
-    modulesLoading.value = false
   }
 }
-async function loadCurrentVersions() {
+async function loadBoard() {
+  loading.value = true
   try {
-    const list = await deployApi.currentVersions(env.value)
-    const map: Record<string, any> = {}
-    for (const v of list) map[v.moduleKey] = v
-    currentVersions.value = map
+    const [curList, plList] = await Promise.all([
+      deployApi.currentVersions(env.value),
+      pipelineApi.list({ env: env.value, limit: 300 }),
+    ])
+    const cm: Record<string, any> = {}
+    for (const v of curList) cm[v.moduleKey] = v
+    curMap.value = cm
+    const pm: Record<string, PipelineItem> = {}
+    for (const p of plList) {
+      if (!pm[p.moduleKey]) pm[p.moduleKey] = p
+    }
+    plMap.value = pm
   } catch {
-    // 非致命
-  }
-}
-async function loadVersions() {
-  versionsLoading.value = true
-  try {
-    versions.value = await deployApi.versions(env.value)
-  } catch {
-    message.error('加载版本记录失败')
+    message.error('加载发布状态失败')
   } finally {
-    versionsLoading.value = false
+    loading.value = false
   }
 }
-
 async function onEnvChange() {
-  await Promise.all([loadCurrentVersions(), loadVersions()])
+  await loadBoard()
 }
 
-function formatDate(date: string) {
-  return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '—'
+// ===== 发起发布（抽屉，走流水线） =====
+const releaseOpen = ref(false)
+const releaseModuleKey = ref('')
+function openRelease(row: any) {
+  releaseModuleKey.value = row.key
+  releaseOpen.value = true
+}
+function onSubmitted() {
+  void loadBoard()
+}
+function gotoDetail(row: any) {
+  router.push(`/modules/${row.key}`)
 }
 
 onMounted(async () => {
   await loadEnvironments()
   await loadModules()
-  await loadCurrentVersions()
-  await loadVersions()
-})
-
-onUnmounted(() => {
-  if (eventSource) eventSource.close()
+  await loadBoard()
 })
 </script>
 
@@ -226,97 +126,99 @@ onUnmounted(() => {
   <div>
     <div class="page-header">
       <h2>发布中心</h2>
-      <p>按模块发布（前端打包 / 后端 Git），带环境 ID，不同环境可指定不同版本</p>
+      <p>发布看板：按「环境 × 模块」查看当前部署版本与最近一次发布结果。发布动作统一走发布流水线。</p>
     </div>
 
     <!-- 环境选择 -->
     <a-card style="margin-bottom: 16px;">
-      <span style="margin-right: 8px;">环境:</span>
-      <a-select v-model:value="env" style="width: 200px;" @change="onEnvChange">
-        <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
-          {{ e.name }}（{{ e.id }}）
-        </a-select-option>
-      </a-select>
-      <a-button style="margin-left: 16px;" :loading="modulesLoading" @click="loadModules">刷新模块</a-button>
-      <a-button style="margin-left: 8px;" type="link" @click="$router.push('/environments')">环境管理</a-button>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <a-space>
+          <span>环境:</span>
+          <a-select v-model:value="env" style="width: 200px;" @change="onEnvChange">
+            <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
+              {{ e.name }}（{{ e.id }}）
+            </a-select-option>
+          </a-select>
+          <a-button :loading="loading" @click="loadBoard">刷新</a-button>
+        </a-space>
+        <a-button type="link" @click="$router.push('/pipelines')">流水线管理</a-button>
+      </div>
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-top: 12px;"
+        message="发布统一通过「流水线」执行（校验 → 拉码 → 构建 → 投递/重启 → 写版本 → 切指针 → 探活）。模块详情中可查看版本历史与回滚。"
+      />
     </a-card>
 
-    <!-- 模块列表（含当前版本）-->
-    <a-card title="可发布模块" style="margin-bottom: 16px;">
+    <!-- 发布看板 -->
+    <a-card :loading="loading" title="发布状态">
       <a-table
         :columns="[
           { title: '模块', dataIndex: 'name', key: 'name' },
-          { title: '标识', dataIndex: 'key', key: 'key' },
-          { title: '类型', dataIndex: 'type', key: 'type', width: 100 },
-          { title: `${env} 当前版本`, dataIndex: 'currentVersion', key: 'currentVersion', width: 200 },
-          { title: '操作', key: 'action', width: 160 },
+          { title: '类型', dataIndex: 'type', key: 'type', width: 90 },
+          { title: `当前版本（${env}）`, key: 'cur', width: 190 },
+          { title: '部署时间', key: 'deployedAt', width: 160 },
+          { title: '部署人', key: 'deployedBy', width: 110 },
+          { title: '最近流水线执行', key: 'pl', ellipsis: true },
+          { title: '操作', key: 'action', width: 190 },
         ]"
-        :data-source="modules"
-        :loading="modulesLoading"
+        :data-source="rows"
         :pagination="false"
         row-key="key"
         size="small"
+        :locale="{ emptyText: '暂无模块' }"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'type'">
-            <a-tag :color="record.type === 'backend' ? 'blue' : 'green'">{{ typeTag(record.type) }}</a-tag>
+          <template v-if="column.key === 'name'">
+            <a style="color: #1677ff;" @click="gotoDetail(record)">{{ record.name }}</a>
+            <span style="color: #999; margin-left: 6px; font-family: monospace;">{{ record.key }}</span>
+            <a-tag v-if="record.builtin" color="gold" style="margin-left: 4px; font-size: 11px;">内置</a-tag>
           </template>
-          <template v-if="column.key === 'currentVersion'">
-            <a-tag :color="currentVersionOf(record.key) === '—' ? 'default' : 'purple'">
-              {{ currentVersionOf(record.key) }}
+          <template v-else-if="column.key === 'type'">
+            <a-tag :color="TYPE_OPTIONS[record.type]?.color || 'default'">
+              {{ TYPE_OPTIONS[record.type]?.label || record.type }}
             </a-tag>
           </template>
-          <template v-if="column.key === 'action'">
-            <a-button
-              type="primary"
-              size="small"
-              :danger="env === 'prod'"
-              :loading="deployingKey === record.key"
-              @click="handleDeployModule(record.key)"
-            >
-              部署到 {{ env.toUpperCase() }}
-            </a-button>
+          <template v-else-if="column.key === 'cur'">
+            <a-tag :color="record.cur?.currentVersion ? 'purple' : 'default'">
+              {{ record.cur?.currentVersion || '未部署' }}
+            </a-tag>
+          </template>
+          <template v-else-if="column.key === 'deployedAt'">
+            <span style="color: #666;">{{ fmt(record.cur?.deployedAt) }}</span>
+          </template>
+          <template v-else-if="column.key === 'deployedBy'">
+            {{ record.cur?.deployedBy || '—' }}
+          </template>
+          <template v-else-if="column.key === 'pl'">
+            <template v-if="record.pl">
+              <a-tag :color="pipelineStatusColor(record.pl.status)" style="margin-right: 4px;">
+                {{ pipelineStatusText(record.pl.status) }}
+              </a-tag>
+              <span style="color: #555;">{{ record.pl.templateName || '默认' }} · v{{ record.pl.versionTag || '—' }}</span>
+              <span style="color: #999; margin-left: 6px;">{{ fmt(record.pl.startTime) }}</span>
+            </template>
+            <span v-else style="color: #bbb;">暂无流水线执行</span>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <a-space>
+              <a-button type="primary" size="small" :danger="env === 'prod'" @click="openRelease(record)">
+                发起发布
+              </a-button>
+              <a-button type="link" size="small" @click="gotoDetail(record)">模块详情</a-button>
+            </a-space>
           </template>
         </template>
       </a-table>
     </a-card>
 
-    <!-- 版本记录（按环境）-->
-    <a-card title="版本记录（按环境）" style="margin-bottom: 16px;">
-      <a-table
-        :columns="[
-          { title: '组件', dataIndex: 'component', key: 'component', width: 160 },
-          { title: '版本标签', dataIndex: 'versionTag', key: 'versionTag' },
-          { title: 'Git', dataIndex: 'gitCommit', key: 'gitCommit', width: 120 },
-          { title: '发布人', dataIndex: 'releasedBy', key: 'releasedBy', width: 120 },
-          { title: '时间', dataIndex: 'releasedAt', key: 'releasedAt', width: 160 },
-          { title: '操作', key: 'action', width: 100 },
-        ]"
-        :data-source="versions"
-        :loading="versionsLoading"
-        :pagination="{ pageSize: 10 }"
-        row-key="id"
-        size="small"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'releasedAt'">{{ formatDate(record.releasedAt) }}</template>
-          <template v-if="column.key === 'action'">
-            <a-button type="link" size="small" danger @click="handleRollback(record)">回滚</a-button>
-          </template>
-        </template>
-      </a-table>
-    </a-card>
-
-    <!-- 部署日志 -->
-    <a-card title="部署日志">
-      <div v-if="currentTaskId" style="margin-bottom: 12px;">
-        <span style="margin-right: 8px;">任务 ID: {{ currentTaskId }}</span>
-        <a-tag :class="statusTagClass(taskStatus)">{{ statusText(taskStatus) }}</a-tag>
-      </div>
-      <div ref="logPanelRef" class="log-panel" style="min-height: 200px;">
-        <div v-if="taskLogs.length === 0" style="color: #666;">暂无日志输出...</div>
-        <div v-for="(line, idx) in taskLogs" :key="idx" class="log-line">{{ line }}</div>
-      </div>
-    </a-card>
+    <!-- 发起发布抽屉 -->
+    <PipelineSubmit
+      v-model:open="releaseOpen"
+      :initial-env="env"
+      :initial-module-key="releaseModuleKey"
+      @submitted="onSubmitted"
+    />
   </div>
 </template>

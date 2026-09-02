@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { AuditLogEntity } from '../entities/audit-log.entity';
+import { AuditLogEntity, AuditChangeItem } from '../entities/audit-log.entity';
 
 /**
  * 审计日志条目结构（接口层）
@@ -19,6 +19,34 @@ export interface AuditLogEntry {
   component?: string;
   status: string;
   detail: string;
+  /** 字段级前后 diff（可选，配置类写操作提供） */
+  changes?: AuditChangeItem[];
+}
+
+/**
+ * 求两个对象之间的字段级 diff（纯函数，便于单测）。
+ *
+ * 约定：
+ * - 对比键为两个对象键的并集，值以 JSON.stringify 判等（对象/数组按整体对比）；
+ * - 值相等不输出；键只出现在 before（被删除）或只出现在 after（新增）都会输出；
+ * - before/after 原样保留（脚本/JSON 等长值交给前端按字段折叠展示）。
+ */
+export function diffObject(
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown> | null | undefined,
+): AuditChangeItem[] {
+  const keys = new Set([
+    ...Object.keys(before ?? {}),
+    ...Object.keys(after ?? {}),
+  ]);
+  const out: AuditChangeItem[] = [];
+  for (const field of keys) {
+    const b = (before as Record<string, unknown> | undefined)?.[field];
+    const a = (after as Record<string, unknown> | undefined)?.[field];
+    if (JSON.stringify(b) === JSON.stringify(a)) continue;
+    out.push({ field, before: b, after: a });
+  }
+  return out;
 }
 
 /**
@@ -51,7 +79,8 @@ export class AuditService {
   }
 
   /**
-   * 记录审计日志（落库 + 文件备份）
+   * 记录审计日志（落库 + 文件备份）。
+   * entry.changes 为字段级前后 diff（可选），null/空数组不写入。
    */
   async log(entry: Partial<AuditLogEntry>): Promise<void> {
     const ts = new Date();
@@ -64,6 +93,7 @@ export class AuditService {
       component: entry.component,
       status: entry.status || 'unknown',
       detail: entry.detail || '',
+      changes: entry.changes?.length ? entry.changes : null,
     };
 
     // 写入 MySQL
@@ -106,6 +136,7 @@ export class AuditService {
       component: r.component,
       status: r.status,
       detail: r.detail,
+      changes: r.changes ?? undefined,
     }));
 
     return { data, total, page, limit };

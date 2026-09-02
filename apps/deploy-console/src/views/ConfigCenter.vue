@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { configApi, environmentApi, moduleApi } from '@/api'
+import { configApi, environmentApi, moduleApi, serverApi } from '@/api'
 import { message, Modal } from 'ant-design-vue'
+
+const activeTab = ref('kv')
 
 interface ConfigRow {
   id: string
@@ -41,6 +43,39 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+// ===== 环境信息视图（环境自身参数 + 服务器组路由） =====
+interface EnvInfo {
+  id: string
+  name: string
+  builtin: boolean
+  publicUrl?: string
+  ports?: Record<string, string>
+  /** 该环境下 serviceName -> serverName */
+  routeMap: Record<string, string>
+}
+const envInfos = ref<EnvInfo[]>([])
+
+async function loadEnvInfo() {
+  try {
+    const [envList, routes] = await Promise.all([
+      environmentApi.list() as Promise<EnvInfo[]>,
+      serverApi.listRoutes(),
+    ])
+    const routeMap: Record<string, Record<string, string>> = {}
+    for (const r of routes) {
+      ;(routeMap[r.envId] = routeMap[r.envId] || {})[r.serviceName] = r.serverName
+    }
+    envInfos.value = envList.map((e) => ({ ...e, routeMap: routeMap[e.id] || {} }))
+  } catch {
+    message.error('加载环境信息失败')
+  }
+}
+
+function openCreateForEnv(envId: string) {
+  editing.value = { scope: 'env', envId, key: '', value: '', isSecret: false, moduleKey: '' }
+  modalOpen.value = true
 }
 
 async function loadOptions() {
@@ -134,13 +169,15 @@ function remove(row: ConfigRow) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadOptions(), load()])
+  await Promise.all([loadOptions(), load(), loadEnvInfo()])
 })
 </script>
 
 <template>
   <div>
-    <a-card title="配置中心">
+    <a-tabs v-model:activeKey="activeTab">
+      <a-tab-pane key="kv" tab="键值配置">
+        <a-card title="键值配置（作用域覆盖注入）">
       <template #extra>
         <a-space wrap>
           <a-select
@@ -186,6 +223,7 @@ onMounted(async () => {
         :loading="loading"
         row-key="id"
         :pagination="{ pageSize: 20 }"
+        :locale="{ emptyText: '暂无键值配置。可将环境级参数（如 PUBLIC_URL / DB_HOST）以「环境级」新增；各环境自身信息见「环境信息」' }"
       >
         <a-table-column title="配置键" data-index="key" />
         <a-table-column title="值">
@@ -217,7 +255,72 @@ onMounted(async () => {
         <code>PORT=6200</code> 污染的对策，<b>请勿在 shell 全局预设里写死 PORT 等变量</b>。<br />
         密钥以 AES-256-GCM 加密存储，页面只显示掩码、不支持读取明文；修改密钥需重新输入真实值。
       </div>
-    </a-card>
+        </a-card>
+      </a-tab-pane>
+
+      <!-- 环境信息视图 -->
+      <a-tab-pane key="env" tab="环境信息">
+        <a-card title="环境参数">
+          <p style="color: #666; margin-bottom: 12px;">
+            每个部署环境的自身信息（公网地址、后端服务地址映射、服务器组路由）在「环境管理」中维护，此处只读汇总；环境的运行参数/变量请作为<b>环境级配置</b>新增。
+          </p>
+          <a-table
+            :data-source="envInfos"
+            :pagination="false"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '暂无环境' }"
+          >
+            <a-table-column title="环境" data-index="id">
+              <template #default="{ record }">
+                <b>{{ record.name }}</b>（{{ record.id }}）
+                <a-tag v-if="record.builtin" color="blue" style="margin-left: 4px;">内置</a-tag>
+              </template>
+            </a-table-column>
+            <a-table-column title="公网地址" key="url">
+              <template #default="{ record }">{{ record.publicUrl || '—' }}</template>
+            </a-table-column>
+            <a-table-column title="服务地址（后端模块）" key="ports">
+              <template #default="{ record }">
+                <template v-if="record.ports && Object.keys(record.ports).length">
+                  <a-tag v-for="(addr, mod) in record.ports" :key="mod" style="margin-bottom: 2px;">
+                    {{ mod }} → {{ addr }}
+                  </a-tag>
+                </template>
+                <span v-else style="color: #bbb;">—</span>
+              </template>
+            </a-table-column>
+            <a-table-column title="服务器组（服务 → 组）" key="routes">
+              <template #default="{ record }">
+                <template v-if="Object.keys(record.routeMap).length">
+                  <a-tag
+                    v-for="(srv, svc) in record.routeMap"
+                    :key="svc"
+                    color="geekblue"
+                    style="margin-bottom: 2px;"
+                  >
+                    {{ svc }} → {{ srv }}
+                  </a-tag>
+                </template>
+                <span v-else style="color: #bbb;">—</span>
+              </template>
+            </a-table-column>
+            <a-table-column title="操作" key="action" width="240">
+              <template #default="{ record }">
+                <a-space>
+                  <a-button size="small" @click="openCreateForEnv(record.id)">为该环境新增配置</a-button>
+                  <a-button size="small" type="link" @click="$router.push('/environments')">环境管理</a-button>
+                </a-space>
+              </template>
+            </a-table-column>
+          </a-table>
+          <div style="margin-top: 12px; color: #888; font-size: 12px;">
+            提示：环境相关的运行参数/变量请在此新增为<b>环境级配置</b>（如 <code>PUBLIC_URL</code>、<code>DB_HOST</code>），
+            发布/重启时按 global → env → module 优先级合并注入对应进程。
+          </div>
+        </a-card>
+      </a-tab-pane>
+    </a-tabs>
 
     <a-modal
       v-model:open="modalOpen"

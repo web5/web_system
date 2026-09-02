@@ -48,9 +48,14 @@
   - _验收：当 查阅两份文档时，其关于阶段命令的陈述应与 design.md 一致_
   - 落地：`deploy.service.ts`（旧 `deploy.sh` 路径）改读 `stage_commands`；`buildCmd` 标 `@deprecated`；两份文档矛盾表述已对齐
   - ⚠️ **物理删列/删表待执行**：本轮只做逻辑废弃以保证可回滚；建议观察一个发布周期后再删 `deploy_modules.build_cmd` 列与 `deploy_module_hooks` 表
-- [ ] 8. `pipeline.service.ts` 纳入独立子代理评审
+- [x] 8. `pipeline.service.ts` 纳入独立子代理评审
   - 依赖：3
   - _验收：当 S1 代码完成后，design.md 应存在独立评审结论记录_
+  - 结论见 `design.md`「独立子代理评审结论（2026-09-02 终版，任务 8）」
+  - 修复 3 项 MUST：**发布锁原子互斥**（CAS 替代 find+upsert，防同模块×环境并发双跑）、
+    **取消立即 SIGKILL + 取消终态优先**（防"已取消仍跑完并上报成功"）、**git 命令注入面**（branch/commit 白名单）
+  - 顺手修复：runShell 日志 300ms 节流落库
+  - 补测试：release-lock acquire 互斥与并发落败用例（全量 113/113 通过）
 
 ## S2 · P0 配置中心（L2）
 
@@ -111,15 +116,101 @@
 
 ## S4 · P1 治理与可观测（L5/L6）
 
-- [ ] 18. 审批门禁（prod）— _验收：当 未审批的 prod 发布提交时，应被阻断并留记录_
-- [ ] 19. 通知中心 — _验收：当 发布/失败/审批/回滚事件发生时，应送达已配置通道_
-- [ ] 20. 审计增强（全量 diff）— _验收：当 任意变更发生，应可追溯人/时间/前后 diff_
-- [ ] 21. 发布度量仪表盘 — _验收：当 查看度量页，应按环境/模块/时间筛选展示成功率与时长_
+- [x] 18. 审批门禁（prod）— _验收：当 未审批的 prod 发布提交时，应被阻断并留记录_
+  - `deploy_approvals` 审批单 + `ApprovalService`：需要审批的环境读系统设置 `REQUIRE_APPROVAL_ENVS`
+    （「系统设置 → 审批门禁」页可配，逗号分隔；未配置默认仅 prod）
+  - 门禁点：`PipelineService.submit` —— 提交到需审批环境的发布**不立即执行**，进入 `pending-approval` 状态、
+    留审批单（提交人/审批人/意见/时间）并通知；approve 通过后自动触发执行（执行人记审批人）；
+    reject 则取消并留意见；撤回（cancel）联动关闭审批单，避免孤儿单
+  - 接口：`POST /api/pipelines/:id/approve` / `:id/reject`、`GET|PUT /api/system-settings/approval-envs`
+  - 前端：发布流水线页新增「待审批」状态标签与 通过/拒绝/撤回 操作（拒绝必填意见）；
+    prod 提交按钮文案改为「提交审批」；通知中心新增 pending-approval/approved/rejected 事件标签
+  - ⚠️ 当前单账号（admin）环境，审批人可与提交人相同；多用户账号体系落地后应加「禁止自审」规则
+    （审批单已存 operator/reviewer，可直接判定）
+- [x] 19. 通知中心 — _验收：当 发布/失败/审批/回滚事件发生时，应送达已配置通道_
+  - `NotificationService`：写 `notification_logs`（站内历史）+ 异步分发
+  - 通道（服务端环境变量配置，可选）：`NOTIFY_WEBHOOK_URL`（通用 Webhook，结构化 JSON）、`NOTIFY_WECOM_URL`（企业微信 markdown）
+  - 事件接入点：`pipeline.succeeded` / `pipeline.failed` / `pipeline.auto-rollback`（pipeline.service 3 处）
+  - **铁律：通知尽力而为**——任何失败（无通道/超时/推送失败）都不抛错、不阻塞发布；送达结果写回 `delivery` 供运维发现"推不出去"
+  - API：`GET /api/notifications`（历史）、`GET /api/notifications/channels`（通道状态）
+  - 前端：新增「通知中心」页（站内历史 + 送达状态 + 事件筛选）与「系统设置」页（通知渠道配置）
+  - **系统设置模块**（`system_settings` 通用键值表 + `SystemSettingsModule`）：通知渠道从"仅 env 硬编码"改为 **DB 可配置、env 兜底**——
+    未在页面配置过的通道自动回退到环境变量，升级迁移期间通知不丢；后续审批开关等系统级配置也收进本模块
+  - ⚠️ 独立「消息通知服务」**暂不建设**：当前仅发布平台一个生产者，内嵌实现足够；
+    启动信号（第二个服务要发通知 / 用户级订阅已读 / 需要消息队列）出现时再拆
+- [x] 20. 审计增强（全量 diff）— _验收：当 任意变更发生，应可追溯人/时间/前后 diff_
+  - `audit_logs` 新增 `changes` JSON 列（字段级 `[{field,before,after}]`）+ `AuditService.diffObject` 纯函数
+  - 接入点：配置中心保存/删除（原本 detail 已含 before/after，现结构化）、审批通过/拒绝（approval.status/comment）、
+    通知渠道与审批门禁配置（系统设置写操作首次带审计）、阶段命令保存/删除与发布脚本 Hook 保存/删除
+    （**这两个此前完全没有审计，本次补齐**，脚本前后全文可查）
+  - 前端：审计页新增「变更」列（N 处变更）→ diff 抽屉：红底=变更前 / 绿底=变更后，长脚本自动折叠滚动
+  - 说明：发布/回滚/流水线等动作类已有 detail 审计（人/时间/动作/结果），不强制结构化 diff
+- [x] 21. 发布度量仪表盘 — _验收：当 查看度量页，应按环境/模块/时间筛选展示成功率与时长_
+  - 数据源即 `deploy_pipelines`（流水线本就记录 status/stage/起止时间），**零埋点、零采集改造**
+  - 后端 `metrics` 模块：`overview`（成功率/平均/P95 时长）、`trend`、`stage-failures`、`top-modules`、**`failures` 下钻**
+  - 前端：ECharts（按需引入 + `manualChunks` 单独分包：Dashboard 602KB→8.4KB，echarts 独立缓存）；Dashboard 新增发布度量区块：
+    成功率卡片（**无终态记录显示"—"而非 0%**）、按天堆叠柱状趋势、失败阶段横向条形（**点击下钻**查看具体失败记录与错误信息）
+  - 防 SQL 注入：过滤条件全部参数化；`limit` 限上限
+  - 基线数据：保留（含 48 次 build 历史失败，可用于对比修复前后的成功率变化）
 
 ## S5 · P1 灰度与接入（L7/L8）
 
-- [ ] 22. 灰度增强（规则/放量/全量）— _验收：当 灰度放量时，命中流量应加载 canary 版本_
-- [ ] 23. 自助诊断工具 — _验收：当 执行端口检测/进程重启/日志检索时，应在页面完成无需 SSH_
+- [x] 22. 灰度增强（规则/放量/全量）— _验收：当 灰度放量时，命中流量应加载 canary 版本_
+  - 命中链路（既有）：gateway 按规则加载 canary 版本；percent 用 userId+ruleId FNV-1a 稳定哈希
+  - 新增「灰度管理」页：规则列表（环境/模块/灰度版本/规则类型/状态）、**百分比放量滑块调整**、
+    **命中预览（输入 userId 判断）**、启用/停用、删除
+  - `canary.update` 审计补 matchRule/canaryVersion/enabled 前后 diff（复用审计 diff 能力）
+  - 灰度规则由「发布流水线 → 灰度发布」自动创建；转全量走「流水线 → 转全量」
+- [x] 23. 自助诊断工具 — _验收：当 执行端口检测/进程重启/日志检索时，应在页面完成无需 SSH_
+  - monitor 新增运维操作端点（本机 + 远程 env 各一组）：
+    `POST pm2/restart`（重启留审计）、`GET port`（lsof LISTEN 占用检测）、`GET logs?keyword=`（**关键词在结果侧过滤，不进命令**，service 名白名单）
+  - 新增「自助诊断」页：诊断目标（本机 / dev / prod）+ 服务下拉，
+    **端口占用检测 / 进程信息+一键重启 / 日志关键词检索**三卡片，全程页面操作、无需 SSH
+  - 覆盖历史遗留：6200 端口冲突的排查已可在页面完成（此前需命令行 lsof）
+  - 重启均写审计（action=monitor.restart）
+
+## S6 · 流水线模板 + 实例（L3b）
+
+- [x] 24. 模板数据模型 + 模块懒建 builtin 默认模板
+  - 依赖：无
+  - _验收：当 模块无模板且首次提交/打开模板页时，应存在不可删除的默认模板；实例表新列可空兼容历史_
+- [x] 25. 后端模板 CRUD API（`/modules/:key/pipeline-templates`，仅 JWT，写操作审计 diff）
+  - 依赖：24
+  - _验收：当 新建模板名称冲突时 409；builtin 不可删；复制默认可生成同名自定义模板_
+- [x] 26. submit 按 templateId 解析：实例落模板快照 + 审批策略判定（always/never 覆盖 env 规则）
+  - 依赖：24
+  - _验收：当 提交指定 always 审批模板到 dev 时，应进入待审批；指定 never 模板到 prod 时应直接执行_
+- [x] 27. run 按快照跳过 verify（含「verify 失败自动回滚」同步跳过）
+  - 依赖：26
+  - _验收：当 skipVerify 模板的实例执行时，应无 verify 阶段且无自动回滚逻辑_
+- [x] 28. 前端：ModuleDetail「流水线模板」tab + PipelineCenter 模板选择与展示
+  - 依赖：25、26
+  - _验收：当 页面操作时，应能新建/编辑/启停模板并随提交生效，记录/详情可见模板名_
+- [x] 29. 回归：MCP/旧调用不传模板走默认、历史实例展示「默认」、metrics/审批/通知不回归
+  - 依赖：26、27、28
+  - _验收：当 不传 templateId 提交时，行为与 S5 完全一致；全量测试与既有发布流程通过_
+
+### S6-II · 步骤编排化 + 工具目录（v2，依赖 S6-I）
+
+- [x] 30. 步骤执行器注册表：内置步骤 SPI + `stageXxx` 逐一迁移（check/pull/upload/restart/verify/cleanup）
+  - 依赖：S6-I 完成
+  - _验收：当 同一流水线按新内核跑通时，失败/通知/进度语义与 S5 完全一致；每迁移一个执行器跑一次既有发布回归_
+- [x] 31. version/pointer 语义步骤 + run 数据驱动（模板 steps 序列执行，含下限白名单校验）
+  - 依赖：30
+  - _验收：当 模板序列不含/前置 version/pointer 时 400 拒绝；默认模板序列执行结果与 S5 一致_
+- [x] 32. rollback 内置步骤 + 模板级 `rollbackOnFailure`（替代硬编码 verify 失败自动回滚）
+  - 依赖：30、31
+  - _验收：当 模板 rollbackOnFailure=previous 时，verify 失败自动回滚行为与 S5 一致；=none 时不回滚；显式 rollback 步骤可用于紧急回滚线_
+- [x] 33. 工具目录 tool_catalog：种子数据 + CRUD（仅 JWT，审计）+「工具管理」页（分类/说明/示例）
+  - 依赖：无（可与 30-32 并行）
+  - 范围：统一目录同时收录 **service 工具（内置执行器：探活/回滚/写版本/切指针/重启/投递等）** 与 **shell 工具（git/pm2/curl…）**，`kind` 区分；探活等平台逻辑从 `pipeline.service.ts` 收敛进对应 service 工具实现
+  - _验收：当 打开工具管理页，应看到按分类分组、标注 kind 的工具（内置服务工具不可删、可停用；shell 工具可增改/停用）；审计留痕_
+- [x] 34. 模板步骤编排编辑器（选步骤/排序/换执行器/rollbackOnFailure）+ 步骤分类分组展示
+  - 依赖：31、32、33
+  - _验收：当 编辑模板时，应能从步骤库按分类选取并排序生成序列；保存后随提交生效_
+- [x] 35. 回归：S1-S5 全部发布场景（dev/prod/灰度/回滚/审批/度量）+ 全量测试通过
+  - 依赖：34
+  - _验收：当 跑既有场景时无行为回退；测试全绿_
 
 ## 发布记录
 

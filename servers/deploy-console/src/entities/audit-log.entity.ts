@@ -6,6 +6,13 @@ import {
 } from 'typeorm';
 import { AbstractEntity } from '@web-system/shared';
 
+/** 审计变更条目：字段级 before/after（前后值 diff） */
+export interface AuditChangeItem {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+
 /**
  * 审计日志持久化实体（对应 AuditLogEntry）。
  * 落库支持结构化查询；id 由审计服务写入 uuid（见 audit.service）。
@@ -39,4 +46,8 @@ export class AuditLogEntity extends AbstractEntity {
 
   @Column({ type: 'text', comment: '详情（JSON 字符串或文本）' })
   detail: string;
+
+  /** 字段级变更 diff（[{field,before,after}]）：配置类写操作记录前/后值，支撑审计页 diff 视图 */
+  @Column({ type: 'json', nullable: true, comment: '字段级变更（before/after）' })
+  changes?: AuditChangeItem[] | null;
 }
