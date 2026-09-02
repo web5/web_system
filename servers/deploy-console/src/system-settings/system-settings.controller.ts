@@ -1,6 +1,7 @@
 import { Controller, Get, Put, Body, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SystemSettingsService } from './system-settings.service';
+import { REQUIRE_APPROVAL_ENVS_KEY } from '../approval/approval.service';
 import { CurrentUser } from '../common/decorators';
 
 /**
@@ -39,5 +40,30 @@ export class SystemSettingsController {
       user?.username,
     );
     return { ok: true };
+  }
+
+  @Get('approval-envs')
+  @ApiOperation({ summary: '需要审批的环境列表（逗号分隔；默认 prod）' })
+  async approvalEnvs() {
+    const v = await this.settings.get(REQUIRE_APPROVAL_ENVS_KEY);
+    return { envs: v || 'prod' };
+  }
+
+  @Put('approval-envs')
+  @ApiOperation({ summary: '更新需审批的环境列表（逗号分隔；清空回落默认 prod）' })
+  async updateApprovalEnvs(
+    @Body() body: { envs?: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!body || body.envs === undefined) {
+      throw new BadRequestException('缺少 envs 参数');
+    }
+    const value = body.envs
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(',');
+    await this.settings.set(REQUIRE_APPROVAL_ENVS_KEY, value, user?.username);
+    return { ok: true, envs: value || 'prod' };
   }
 }

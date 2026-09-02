@@ -323,7 +323,8 @@ export interface PipelineItem {
   moduleKey: string
   versionTag?: string
   mode: string
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  /** pending-approval=提交被审批门禁阻断，等待审批 */
+  status: 'pending' | 'pending-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   stage?: string
   progress?: { current: number; total: number; message?: string }
   logs?: string[]
@@ -361,6 +362,14 @@ export const pipelineApi = {
   get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
 
   cancel: (id: string) => http.post(`/pipelines/${id}/cancel`) as Promise<{ id: string; status: string }>,
+
+  /** 审批通过（待审批流水线；通过后自动执行） */
+  approve: (id: string, comment?: string) =>
+    http.post(`/pipelines/${id}/approve`, { comment }) as Promise<{ id: string; status: string }>,
+
+  /** 审批拒绝（拒绝必填意见） */
+  reject: (id: string, comment: string) =>
+    http.post(`/pipelines/${id}/reject`, { comment }) as Promise<{ id: string; status: string }>,
 
   promote: (id: string) =>
     http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
@@ -597,6 +606,12 @@ export const systemSettingsApi = {
     }>,
   updateNotifyChannels: (dto: { webhookUrl?: string | null; wecomUrl?: string | null }) =>
     http.put('/system-settings/notify-channels', dto) as Promise<{ ok: boolean }>,
+
+  /** 审批门禁：需要审批的环境（逗号分隔，默认 prod） */
+  getApprovalEnvs: () =>
+    http.get('/system-settings/approval-envs') as Promise<{ envs: string }>,
+  updateApprovalEnvs: (envs: string) =>
+    http.put('/system-settings/approval-envs', { envs }) as Promise<{ ok: boolean }>,
 }
 
 export default http

@@ -73,4 +73,27 @@ export class PipelineController {
   async promote(@Param('id') id: string, @CurrentUser() user: any) {
     return this.pipelineService.promote(id, user?.username);
   }
+
+  @Post(':id/approve')
+  @ApiOperation({ summary: '审批通过（仅待审批流水线；通过后自动执行）' })
+  async approve(
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.pipelineService.approve(id, user?.username, body?.comment);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: '审批拒绝（仅待审批流水线；拒绝必填意见）' })
+  async reject(
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!body?.comment?.trim()) {
+      throw new BadRequestException('拒绝必须填写审批意见');
+    }
+    return this.pipelineService.reject(id, user?.username, body.comment);
+  }
 }

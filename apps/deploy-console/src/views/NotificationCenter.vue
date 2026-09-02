@@ -27,6 +27,9 @@ const EVENT_LABELS: Record<string, string> = {
   'pipeline.failed': '发布失败',
   'pipeline.auto-rollback': '自动回滚',
   'pipeline.rejected': '发布被拒（并发）',
+  'deploy.pending-approval': '发布待审批',
+  'deploy.approved': '审批通过',
+  'deploy.rejected': '审批拒绝',
 }
 
 const filtered = computed(() => {
