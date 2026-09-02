@@ -14,6 +14,7 @@ import * as path from 'path';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
+import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
@@ -112,6 +113,8 @@ export class PipelineService {
     private readonly versionRepo: Repository<DeployVersionEntity>,
     @InjectRepository(DeployDeploymentEntity)
     private readonly deploymentRepo: Repository<DeployDeploymentEntity>,
+    @InjectRepository(DeployPipelineTemplateEntity)
+    private readonly templateRepo: Repository<DeployPipelineTemplateEntity>,
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly canaryService: CanaryService,
     private readonly auditService: AuditService,
@@ -298,24 +301,38 @@ export class PipelineService {
 
   /**
    * 各流水线模板的运行摘要：总次数 / 成功次数 / 最近一次执行。
-   * 只统计提交时带 templateId 快照的实例（模板删除不影响历史归属）。
+   *
+   * 兼容历史实例：全局默认模板（moduleKey='*'）懒建之前的提交没有 templateId 快照，
+   * 按 moduleKey 归属到该模块的内置默认模板（或全局默认兜底），使其在按模板维度的
+   * 首页概览中可见（design V5：历史 NULL 实例显示为「默认」）。
    */
   async listTemplateSummaries(
     templateIds?: string[],
   ): Promise<Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }>> {
-    const qb = this.pipelineRepo
-      .createQueryBuilder('p')
-      .where('p.templateId IS NOT NULL')
-      .orderBy('p.startTime', 'DESC')
-      .take(1000);
+    const qb = this.pipelineRepo.createQueryBuilder('p').orderBy('p.startTime', 'DESC').take(1000);
     if (templateIds && templateIds.length) {
+      // 显式指定模板：只统计这些模板的实例（含它们懒建前也归属不到的历史，忽略）
       qb.andWhere('p.templateId IN (:...ids)', { ids: templateIds });
     }
     const rows = await qb.getMany();
+
+    // 全量概览时才需要做 NULL 归属：moduleKey → 内置默认模板（模块专属优先，'*' 兜底）
+    let builtinByModule = new Map<string, string>();
+    if (!templateIds || !templateIds.length) {
+      const builtins = await this.templateRepo.find({ where: { builtin: true } });
+      for (const t of builtins) {
+        if (!builtinByModule.has(t.moduleKey)) builtinByModule.set(t.moduleKey, t.id);
+      }
+    }
+    const globalDefaultId = builtinByModule.get('*');
+
     const out: Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }> = {};
     for (const p of rows) {
-      const t = p.templateId as string;
-      const item = out[t] || (out[t] = { total: 0, ok: 0, latest: null });
+      // 历史实例无模板快照 → 归属模块内置默认（或全局默认）；两者皆无则跳过（不应发生）
+      const key =
+        p.templateId ?? builtinByModule.get(p.moduleKey) ?? globalDefaultId;
+      if (!key) continue;
+      const item = out[key] || (out[key] = { total: 0, ok: 0, latest: null });
       item.total += 1;
       if (p.status === 'succeeded') item.ok += 1;
       if (!item.latest) item.latest = p;
