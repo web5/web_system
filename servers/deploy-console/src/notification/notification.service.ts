@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationLogEntity } from '../entities/notification-log.entity';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 
 export type NotifyStatus = 'success' | 'failed' | 'warn';
 
@@ -53,15 +53,12 @@ export class NotificationService {
   constructor(
     @InjectRepository(NotificationLogEntity)
     private readonly repo: Repository<NotificationLogEntity>,
-    private readonly configService: ConfigService,
+    private readonly settings: SystemSettingsService,
   ) {}
 
-  /** 通道配置状态（供运维确认是否已接通） */
-  channels(): { webhook: string | null; wecom: string | null } {
-    return {
-      webhook: this.configService.get<string>('NOTIFY_WEBHOOK_URL') || null,
-      wecom: this.configService.get<string>('NOTIFY_WECOM_URL') || null,
-    };
+  /** 通道配置：DB 优先、env 兜底（迁移期间 env 仍生效，页面配过则以 DB 为准） */
+  async channels(): Promise<{ webhook: string | null; wecom: string | null }> {
+    return this.settings.notifyChannels((k) => process.env[k]);
   }
 
   /**
@@ -95,7 +92,7 @@ export class NotificationService {
 
   private async dispatch(entry: NotifyEntry, logId: string | null): Promise<void> {
     const delivery: Record<string, string> = {};
-    const { webhook, wecom } = this.channels();
+    const { webhook, wecom } = await this.channels();
 
     if (webhook) {
       delivery.webhook = await this.safePost(webhook, {

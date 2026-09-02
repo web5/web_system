@@ -1,11 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotificationLogEntity } from '../entities/notification-log.entity';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { NotificationService, formatNotifyText } from './notification.service';
 
 describe('formatNotifyText（纯函数）', () => {
-  it('成功事件含绿色图标与关键字段', () => {
+  it('成功事件含图标与关键字段', () => {
     const text = formatNotifyText({
       event: 'pipeline.succeeded',
       env: 'dev',
@@ -35,7 +35,7 @@ describe('formatNotifyText（纯函数）', () => {
 describe('NotificationService', () => {
   let service: NotificationService;
   let repo: any;
-  let config: { get: jest.Mock };
+  let settings: { notifyChannels: jest.Mock };
 
   beforeEach(async () => {
     repo = {
@@ -44,28 +44,31 @@ describe('NotificationService', () => {
       find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
     };
-    config = { get: jest.fn().mockReturnValue(undefined) };
+    settings = {
+      notifyChannels: jest.fn().mockResolvedValue({ webhook: null, wecom: null }),
+    };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationService,
         { provide: getRepositoryToken(NotificationLogEntity), useValue: repo },
-        { provide: ConfigService, useValue: config },
+        { provide: SystemSettingsService, useValue: settings },
       ],
     }).compile();
     service = moduleRef.get(NotificationService);
   });
 
   describe('channels', () => {
-    it('未配置通道时返回空', () => {
-      expect(service.channels()).toEqual({ webhook: null, wecom: null });
+    it('未配置通道时返回空', async () => {
+      await expect(service.channels()).resolves.toEqual({ webhook: null, wecom: null });
     });
 
-    it('读取环境变量配置', () => {
-      config.get.mockImplementation((k: string) =>
-        k === 'NOTIFY_WEBHOOK_URL' ? 'https://hook.example' : undefined,
-      );
-      expect(service.channels().webhook).toBe('https://hook.example');
+    it('透传系统设置解析结果（DB 优先、env 兜底由 SystemSettingsService 负责）', async () => {
+      settings.notifyChannels.mockResolvedValue({ webhook: 'https://hook.example', wecom: null });
+      await expect(service.channels()).resolves.toEqual({
+        webhook: 'https://hook.example',
+        wecom: null,
+      });
     });
   });
 
@@ -112,9 +115,7 @@ describe('NotificationService', () => {
 
   describe('list', () => {
     it('限制上限，避免异常入参', async () => {
-      repo.find.mockResolvedValue([]);
       await service.list(99999);
-      // find 只接收一个参数对象（options），因此解构第一个元素即可
       const [opts] = repo.find.mock.calls[0];
       expect(opts.take).toBe(200);
     });
