@@ -242,6 +242,66 @@ export const monitorApi = {
     http.get('/monitor/local/logs', {
       params: { service, lines },
     }) as Promise<{ lines: string[] }>,
+
+  // ===== 自助诊断（任务 23） =====
+  restart: (env: string, service: string) =>
+    http.post('/monitor/pm2/restart', null, {
+      params: { env, service },
+    }) as Promise<{ service: string; output: string }>,
+  restartLocal: (service: string) =>
+    http.post('/monitor/local/pm2/restart', null, {
+      params: { service },
+    }) as Promise<{ service: string; output: string }>,
+  port: (env: string, port: number) =>
+    http.get('/monitor/port', { params: { env, port } }) as Promise<{
+      port: number
+      occupied: boolean
+      lines: string[]
+    }>,
+  localPort: (port: number) =>
+    http.get('/monitor/local/port', { params: { port } }) as Promise<{
+      port: number
+      occupied: boolean
+      lines: string[]
+    }>,
+  searchLogs: (env: string, service: string, keyword: string, lines = 300) =>
+    http.get('/monitor/logs', {
+      params: { env, service, keyword, lines },
+    }) as Promise<{ service: string; logs: string[]; matched?: number }>,
+  searchLocalLogs: (service: string, keyword: string, lines = 300) =>
+    http.get('/monitor/local/logs', {
+      params: { service, keyword, lines },
+    }) as Promise<{ service: string; logs: string[]; matched?: number }>,
+}
+
+/* ========== Canary（灰度规则） ========== */
+
+export interface CanaryRule {
+  id: string
+  envId: string
+  moduleKey: string
+  canaryVersion: string
+  matchRule: {
+    type: 'percent' | 'user-list' | 'header'
+    value?: number
+    userIds?: string[]
+    key?: string
+    values?: string[]
+  }
+  enabled: boolean
+  createdAt: string
+}
+
+export const canaryApi = {
+  list: (envId?: string, moduleKey?: string) =>
+    http.get('/canary', {
+      params: { ...(envId ? { envId } : {}), ...(moduleKey ? { moduleKey } : {}) },
+    }) as Promise<CanaryRule[]>,
+  update: (id: string, data: Partial<CanaryRule>) =>
+    http.put(`/canary/${id}`, data) as Promise<CanaryRule>,
+  remove: (id: string) => http.delete(`/canary/${id}`) as Promise<{ status: string }>,
+  preview: (id: string, userId: string) =>
+    http.post(`/canary/${id}/preview`, { userId }) as Promise<{ hit: boolean; rule: CanaryRule }>,
 }
 
 /* ========== Audit ========== */
