@@ -69,12 +69,13 @@ describe('ToolCatalogService', () => {
   });
 
   it('shell 命令语法错误拒绝 400', async () => {
+    // 未闭合引号必然触发 bash 语法错误
     await expect(
-      service.create({ name: 'bad-cmd', command: 'if then fi' }),
+      service.create({ name: 'bad-cmd', command: 'echo "abc' }),
     ).rejects.toThrow(BadRequestException);
     repo.findOne.mockResolvedValue({ code: 'x', kind: 'shell', builtin: false });
     await expect(
-      service.update('x', { command: 'while do done' }),
+      service.update('x', { command: 'printf "%s' }),
     ).rejects.toThrow(BadRequestException);
   });
 
