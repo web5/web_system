@@ -292,11 +292,44 @@ export class PipelineService {
   }
 
   /** 列出流水线（按开始时间倒序） */
-  async list(env?: string, moduleKey?: string, limit = 20): Promise<DeployPipelineEntity[]> {
+  async list(
+    env?: string,
+    moduleKey?: string,
+    limit = 20,
+    templateId?: string,
+  ): Promise<DeployPipelineEntity[]> {
     const where: Record<string, unknown> = {};
     if (env) where.env = env;
     if (moduleKey) where.moduleKey = moduleKey;
+    if (templateId) where.templateId = templateId;
     return this.pipelineRepo.find({ where, order: { startTime: 'DESC' }, take: limit });
+  }
+
+  /**
+   * 各流水线模板的运行摘要：总次数 / 成功次数 / 最近一次执行。
+   * 只统计提交时带 templateId 快照的实例（模板删除不影响历史归属）。
+   */
+  async listTemplateSummaries(
+    templateIds?: string[],
+  ): Promise<Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }>> {
+    const qb = this.pipelineRepo
+      .createQueryBuilder('p')
+      .where('p.templateId IS NOT NULL')
+      .orderBy('p.startTime', 'DESC')
+      .take(1000);
+    if (templateIds && templateIds.length) {
+      qb.andWhere('p.templateId IN (:...ids)', { ids: templateIds });
+    }
+    const rows = await qb.getMany();
+    const out: Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }> = {};
+    for (const p of rows) {
+      const t = p.templateId as string;
+      const item = out[t] || (out[t] = { total: 0, ok: 0, latest: null });
+      item.total += 1;
+      if (p.status === 'succeeded') item.ok += 1;
+      if (!item.latest) item.latest = p;
+    }
+    return out;
   }
 
   /** 取消流水线（幂等；仅对 pending/running 有意义） */

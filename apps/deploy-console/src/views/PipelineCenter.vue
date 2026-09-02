@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
   pipelineApi,
@@ -10,28 +11,10 @@ import {
   type PipelineTemplate,
 } from '@/api'
 import dayjs from 'dayjs'
-import PipelineTemplateManager from '@/components/PipelineTemplateManager.vue'
 
-// ===== 筛选 =====
-const env = ref('dev')
-const environments = ref<{ id: string; name: string }[]>([])
+const router = useRouter()
 
-// ===== 可选模块（仅微前端可走流水线）=====
-interface ModuleItem {
-  key: string
-  name: string
-  type: string
-  defaultEnv?: string
-}
-const modules = ref<ModuleItem[]>([])
-const microFrontendModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
-
-// ===== 流水线模板（全局定义，执行时选模块；list 返回该模块可用=全局+专属） =====
-const templates = ref<PipelineTemplate[]>([])
-const templateId = ref<string | undefined>(undefined)
-const tplMgrOpen = ref(false)
-
-// 执行步骤详情辅助（按实例 steps 快照渲染各步状态）
+// ===== 状态 / 时间展示 =====
 const STEP_LABELS: Record<string, string> = {
   check: '校验',
   pull: '拉取代码',
@@ -43,61 +26,16 @@ const STEP_LABELS: Record<string, string> = {
   verify: '探活',
   cleanup: '清理',
 }
-const STEP_COLORS: Record<string, string> = {
-  done: 'success',
-  running: 'processing',
-  error: 'error',
-  pending: 'default',
-}
-function stepList(p: PipelineItem) {
-  return (p.steps && p.steps.length ? p.steps : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']) as string[]
-}
-function stepState(p: PipelineItem, s: string): 'done' | 'running' | 'error' | 'pending' {
-  if (p.status === 'succeeded') return 'done'
-  const list = stepList(p)
-  const cur = list.indexOf(p.stage ?? '')
-  const i = list.indexOf(s)
-  if (p.status === 'failed' || p.status === 'cancelled') {
-    if (i < 0) return 'pending'
-    return i < cur ? 'done' : i === cur ? 'error' : 'pending'
-  }
-  if (p.status === 'pending-approval' || cur < 0 || i < 0) return 'pending'
-  return i < cur ? 'done' : i === cur ? 'running' : 'pending'
-}
 
-// ===== 提交表单 =====
-const form = ref({
-  moduleKey: '',
-  branch: 'master',
-  commitId: undefined as string | undefined,
-  mode: 'direct' as 'direct' | 'grayscale',
-  grayscaleType: 'percent' as 'percent' | 'user-list' | 'header',
-  percentValue: 10,
-  userIds: '',
-  headerKey: 'x-canary',
-  headerValues: 'on',
-  target: 'local' as 'local' | 'remote',
-})
-const submitting = ref(false)
-
-// 可发布版本（回滚候选）
-const releases = ref<
-  { versionTag: string; note?: string; releasedAt?: string; source?: 'db' | 'artifact' }[]
->([])
-
-// ===== 流水线列表 =====
-const pipelines = ref<PipelineItem[]>([])
-const loading = ref(false)
-let timer: number | undefined
-
-const STAGE_LABEL: Record<string, string> = {
-  check: '校验',
-  build: '构建',
-  upload: '投递',
-  version: '版本表',
-  pointer: '切指针',
-  verify: '验证',
-  cleanup: '清理',
+// 模块类型标签（用于卡片头）
+const TYPE_OPTIONS: { value: string; label: string; color: string }[] = [
+  { value: 'backend', label: '后端服务', color: 'blue' },
+  { value: 'frontend', label: '前端模块', color: 'green' },
+  { value: 'micro-frontend', label: '微前端', color: 'purple' },
+  { value: 'mini-app', label: '小程序', color: 'orange' },
+]
+function typeLabel(type: string) {
+  return TYPE_OPTIONS.find((t) => t.value === type)?.label || type
 }
 
 function statusColor(status: string) {
@@ -130,6 +68,222 @@ function durationMs(p: PipelineItem) {
   return p.endTime - p.startTime
 }
 
+// ===== 流水线（流程定义）列表 =====
+const templates = ref<PipelineTemplate[]>([])
+const summaryMap = ref<Record<string, { total: number; ok: number; latest: PipelineItem | null }>>({})
+const loading = ref(false)
+let timer: number | undefined
+
+const TPL_STAGES = [
+  { key: 'check', label: '校验（安全基线）', core: true },
+  { key: 'pull', label: '拉取代码' },
+  { key: 'build', label: '构建' },
+  { key: 'upload', label: '投递' },
+  { key: 'restart', label: '重启' },
+  { key: 'version', label: '写版本（发布语义）', core: true },
+  { key: 'pointer', label: '切指针（发布语义）', core: true },
+  { key: 'verify', label: '探活验证' },
+  { key: 'cleanup', label: '清理旧版本' },
+]
+const TPL_ALL_KEYS = TPL_STAGES.map((s) => s.key)
+
+function approvalText(a: string) {
+  const map: Record<string, string> = { inherit: '沿用环境规则', always: '始终审批', never: '免除审批' }
+  return map[a] || a
+}
+function targetText(t: string) {
+  const map: Record<string, string> = { auto: '自动', local: '本机', remote: '远程' }
+  return map[t] || t
+}
+function stepSummary(t: PipelineTemplate) {
+  const total = TPL_STAGES.length
+  const active = t.steps && t.steps.length ? t.steps.length : total
+  return `${active}/${total} 步${t.skipVerify ? ' · 跳过探活' : ''}${
+    t.rollbackOnFailure === 'none' ? ' · 失败不回滚' : ''
+  }`
+}
+
+async function loadSummary() {
+  try {
+    summaryMap.value = await pipelineApi.summary()
+  } catch {
+    /* 首页概览失败不阻塞 */
+  }
+}
+async function loadTemplates() {
+  loading.value = true
+  try {
+    const list = await pipelineTemplateApi.list()
+    templates.value = list
+  } catch {
+    message.error('加载流水线失败')
+  } finally {
+    loading.value = false
+  }
+}
+async function refreshAll() {
+  await Promise.all([loadTemplates(), loadSummary()])
+}
+// 轻量轮询：有实例运行/待跑时刷新摘要
+function tick() {
+  stopPolling()
+  timer = window.setInterval(async () => {
+    await loadSummary()
+    const running = Object.values(summaryMap.value).some(
+      (s) => s.latest && ['running', 'pending', 'pending-approval'].includes(s.latest.status),
+    )
+    if (!running) stopPolling()
+  }, 3000)
+}
+function stopPolling() {
+  if (timer) {
+    window.clearInterval(timer)
+    timer = undefined
+  }
+}
+function hasRunning() {
+  return Object.values(summaryMap.value).some(
+    (s) => s.latest && ['running', 'pending', 'pending-approval'].includes(s.latest.status),
+  )
+}
+
+function gotoDetail(t: PipelineTemplate) {
+  router.push(`/pipelines/${t.id}`)
+}
+
+// ===== 新建 / 编辑弹窗 =====
+const modal = ref({
+  open: false,
+  editing: null as PipelineTemplate | null,
+  name: '',
+  description: '',
+  steps: TPL_ALL_KEYS as string[],
+  rollbackOnFailure: 'previous' as string,
+  approval: 'inherit' as string,
+  defaultTarget: 'auto' as string,
+})
+const saving = ref(false)
+
+function openCreate() {
+  modal.value = {
+    open: true,
+    editing: null,
+    name: '',
+    description: '',
+    steps: [...TPL_ALL_KEYS],
+    rollbackOnFailure: 'previous',
+    approval: 'inherit',
+    defaultTarget: 'auto',
+  }
+}
+function openEdit(t: PipelineTemplate) {
+  modal.value = {
+    open: true,
+    editing: t,
+    name: t.name,
+    description: t.description || '',
+    steps: t.steps && t.steps.length ? [...t.steps] : [...TPL_ALL_KEYS],
+    rollbackOnFailure: t.rollbackOnFailure ?? 'previous',
+    approval: t.approval,
+    defaultTarget: t.defaultTarget,
+  }
+}
+async function saveTemplate() {
+  const m = modal.value
+  if (!m.name.trim()) {
+    message.warning('流水线名必填')
+    return
+  }
+  saving.value = true
+  try {
+    const orderedSteps = TPL_STAGES.filter((s) => m.steps.includes(s.key)).map((s) => s.key)
+    const dto = {
+      name: m.name.trim(),
+      description: m.description.trim() || undefined,
+      steps: orderedSteps,
+      rollbackOnFailure: m.rollbackOnFailure as PipelineTemplate['rollbackOnFailure'],
+      approval: m.approval as PipelineTemplate['approval'],
+      defaultTarget: m.defaultTarget as PipelineTemplate['defaultTarget'],
+    }
+    if (m.editing) {
+      await pipelineTemplateApi.update(m.editing.id, dto)
+      message.success('流水线已更新')
+    } else {
+      await pipelineTemplateApi.create(dto)
+      message.success('流水线已创建')
+    }
+    modal.value.open = false
+    await refreshAll()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+async function duplicate(t: PipelineTemplate) {
+  try {
+    await pipelineTemplateApi.duplicate(t.id)
+    message.success(`已复制为「${t.name} 副本」`)
+    await refreshAll()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '复制失败')
+  }
+}
+async function toggle(t: PipelineTemplate) {
+  try {
+    await pipelineTemplateApi.update(t.id, { enabled: !t.enabled })
+    await refreshAll()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '操作失败')
+  }
+}
+function remove(t: PipelineTemplate) {
+  Modal.confirm({
+    title: '删除流水线',
+    content: `删除「${t.name}」？已提交的执行记录（实例）不受影响，仍可在发布中心查看。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await pipelineTemplateApi.remove(t.id)
+        message.success('已删除')
+        await refreshAll()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
+      }
+    },
+  })
+}
+
+// ===== 发起发布（抽屉内提交：选模块 + 本流水线/任意流水线 + 分支/commit） =====
+const submitOpen = ref(false)
+const submitting = ref(false)
+const env = ref('dev')
+const environments = ref<{ id: string; name: string }[]>([])
+interface ModuleItem {
+  key: string
+  name: string
+  type: string
+  defaultEnv?: string
+}
+const modules = ref<ModuleItem[]>([])
+const availableModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
+const form = ref({
+  moduleKey: '',
+  branch: 'master',
+  commitId: undefined as string | undefined,
+  mode: 'direct' as 'direct' | 'grayscale',
+  grayscaleType: 'percent' as 'percent' | 'user-list' | 'header',
+  percentValue: 10,
+  userIds: '',
+  headerKey: 'x-canary',
+  headerValues: 'on',
+  templateId: undefined as string | undefined,
+})
+const releases = ref<{ versionTag: string; note?: string }[]>([])
+const availTemplates = ref<PipelineTemplate[]>([])
+
 async function loadEnvironments() {
   try {
     environments.value = await environmentApi.list()
@@ -140,18 +294,13 @@ async function loadEnvironments() {
     message.error('加载环境列表失败')
   }
 }
-
 async function loadModules() {
   try {
     modules.value = await deployApi.modules()
-    if (!form.value.moduleKey && microFrontendModules.value.length) {
-      form.value.moduleKey = microFrontendModules.value[0].key
-    }
   } catch {
     message.error('加载模块列表失败')
   }
 }
-
 async function loadReleases() {
   try {
     releases.value = await pipelineApi.releases(env.value, form.value.moduleKey)
@@ -159,51 +308,81 @@ async function loadReleases() {
     releases.value = []
   }
 }
-
-async function loadTemplates() {
-  templateId.value = undefined
+async function loadAvailTemplates() {
   try {
-    templates.value = await pipelineTemplateApi.list(form.value.moduleKey)
-    if (templates.value.length) templateId.value = templates.value[0].id
+    availTemplates.value = await pipelineTemplateApi.list(form.value.moduleKey)
+    if (!form.value.templateId && availTemplates.value.length) {
+      form.value.templateId = availTemplates.value[0].id
+    }
   } catch {
-    templates.value = []
+    availTemplates.value = []
   }
 }
-
-async function handleRetry(p: PipelineItem) {
-  const isSucceeded = p.status === 'succeeded'
-  Modal.confirm({
-    title: isSucceeded ? '再次发布' : '重试发布',
-    content: isSucceeded
-      ? `以相同参数再次发布（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
-          p.templateName || '默认'
-        }，commit ${p.gitCommit || '-'}）？将重新执行一次完整发布。`
-      : `以相同参数重新提交（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}，模板 ${
-          p.templateName || '默认'
-        }）？原实例记录保留。`,
-    okText: isSucceeded ? '再次发布' : '重试',
-    cancelText: '取消',
-    onOk: async () => {
-      try {
-        const res = await pipelineApi.retry(p.id)
-        message.success(`已重新提交: ${res.jobId}`)
-        await loadPipelines()
-        if (res.status !== 'pending-approval') startPolling()
-      } catch (e) {
-        message.error((e as Error).message || '重试失败')
-      }
-    },
+function openSubmit(initKey?: string) {
+  form.value.moduleKey = initKey || availableModules.value[0]?.key || ''
+  form.value.templateId = undefined
+  form.value.branch = 'master'
+  form.value.commitId = undefined
+  form.value.mode = 'direct'
+  submitOpen.value = true
+  void loadModules().then(() => {
+    if (!form.value.moduleKey && availableModules.value.length) {
+      form.value.moduleKey = availableModules.value[0].key
+    }
+    return Promise.all([loadReleases(), loadAvailTemplates()])
   })
 }
+// ===== 按模块查看（一模块一卡） =====
+interface ModuleCard {
+  module: any
+  templates: PipelineTemplate[]
+  total: number
+  ok: number
+  latest: PipelineItem | null
+}
+const moduleCards = computed<ModuleCard[]>(() =>
+  availableModules.value.map((m) => {
+    const ts = templates.value.filter(
+      (t: any) => !t.moduleKey || t.moduleKey === '*' || t.moduleKey === m.key,
+    )
+    let latest: PipelineItem | null = null
+    let total = 0
+    let ok = 0
+    for (const t of ts) {
+      const s = summaryMap.value[t.id]
+      total += s?.total || 0
+      ok += s?.ok || 0
+      if (s?.latest && (!latest || s.latest.startTime > latest.startTime)) {
+        latest = s.latest
+      }
+    }
+    return { module: m, templates: ts, total, ok, latest }
+  }),
+)
 
-async function loadPipelines() {
-  try {
-    pipelines.value = await pipelineApi.list({ env: env.value, limit: 20 })
-  } catch {
-    message.error('加载流水线列表失败')
-  }
+const mpOpen = ref(false)
+const mpModule = ref<ModuleCard | null>(null)
+function openModulePipelines(m: ModuleCard) {
+  mpModule.value = m
+  mpOpen.value = true
+}
+function openReleaseForModule(m: ModuleCard) {
+  openSubmit(m.module.key)
+}
+function gotoModuleDetail(m: any) {
+  router.push(`/modules/${m.key}`)
 }
 
+async function onEnvChange() {
+  await Promise.all([loadReleases(), loadAvailTemplates()])
+}
+async function onModuleChange() {
+  const mod = modules.value.find((m) => m.key === form.value.moduleKey)
+  if (mod?.defaultEnv && environments.value.some((e) => e.id === mod.defaultEnv)) {
+    env.value = mod.defaultEnv
+  }
+  await Promise.all([loadReleases(), loadAvailTemplates()])
+}
 function buildGrayscaleRule(): Record<string, unknown> | undefined {
   if (form.value.mode !== 'grayscale') return undefined
   if (form.value.grayscaleType === 'percent') {
@@ -218,7 +397,6 @@ function buildGrayscaleRule(): Record<string, unknown> | undefined {
   if (!values.length) throw new Error('灰度请求头取值不能为空')
   return { type: 'header', key: form.value.headerKey, values }
 }
-
 function doSubmit(confirm: boolean) {
   submitting.value = true
   const run = async () => {
@@ -230,36 +408,41 @@ function doSubmit(confirm: boolean) {
         branch: form.value.branch || 'master',
         commitId: form.value.commitId || undefined,
         mode: form.value.mode,
-        target: form.value.target,
         grayscaleRule: rule,
-        templateId: templateId.value || undefined,
+        templateId: form.value.templateId || undefined,
         confirm,
       })
       if ((res as any).status === 'pending-approval') {
         message.info(`已提交审批（${res.jobId}），审批通过后将自动发布`)
       } else {
-        message.success(`流水线已提交: ${res.jobId}`)
+        message.success(`已提交: ${res.jobId}`)
       }
-      await loadPipelines()
-      startPolling()
-    } catch (e) {
-      message.error((e as Error).message || '提交流水线失败')
+      submitOpen.value = false
+      await refreshAll()
+      tick()
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || e?.message || '提交流水线失败')
     } finally {
       submitting.value = false
     }
   }
   void run()
 }
-
 function handleSubmit() {
   if (!form.value.moduleKey) {
     message.warning('请选择要发布的模块')
     return
   }
+  if (!form.value.templateId) {
+    message.warning('请选择要使用的流水线')
+    return
+  }
   const isProd = env.value === 'prod'
-  const desc = form.value.commitId
-    ? `发布 ${form.value.moduleKey} 到 ${env.value}（分支 ${form.value.branch} @ ${form.value.commitId}）`
-    : `发布 ${form.value.moduleKey} 到 ${env.value}（分支 ${form.value.branch} 最新提交）`
+  const desc = `按「${
+    availTemplates.value.find((t) => t.id === form.value.templateId)?.name || '流水线'
+  }」发布 ${form.value.moduleKey} 到 ${env.value}（分支 ${form.value.branch}${
+    form.value.commitId ? ` @ ${form.value.commitId}` : ' 最新'
+  }）`
   if (isProd) {
     Modal.confirm({
       title: '确认发布到生产环境',
@@ -274,66 +457,95 @@ function handleSubmit() {
   doSubmit(false)
 }
 
-// ===== 审批（待审批流水线：通过/拒绝） =====
-const review = ref<{ pipeline: PipelineItem; action: 'approve' | 'reject' } | null>(null)
-const reviewComment = ref('')
-const reviewing = ref(false)
-
-function openApprove(p: PipelineItem) {
-  reviewComment.value = ''
-  review.value = { pipeline: p, action: 'approve' }
+// ===== 全部执行记录（全局浏览，含早期未关联模板快照的实例） =====
+const plOpen = ref(false)
+const plEnv = ref('')
+const plList = ref<PipelineItem[]>([])
+const plLoading = ref(false)
+const logVisible = ref(false)
+const logRecord = ref<PipelineItem | null>(null)
+const STEP_COLORS: Record<string, string> = {
+  done: 'success',
+  running: 'processing',
+  error: 'error',
+  pending: 'default',
 }
-function openReject(p: PipelineItem) {
-  reviewComment.value = ''
-  review.value = { pipeline: p, action: 'reject' }
+function stepList(p: PipelineItem) {
+  return (p.steps && p.steps.length
+    ? p.steps
+    : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']) as string[]
 }
-
-async function submitReview() {
-  if (!review.value) return
-  if (review.value.action === 'reject' && !reviewComment.value.trim()) {
-    message.warning('拒绝必须填写审批意见')
-    return
+function stepState(p: PipelineItem, s: string): 'done' | 'running' | 'error' | 'pending' {
+  if (p.status === 'succeeded') return 'done'
+  const list = stepList(p)
+  const cur = list.indexOf(p.stage ?? '')
+  const i = list.indexOf(s)
+  if (p.status === 'failed' || p.status === 'cancelled') {
+    if (i < 0) return 'pending'
+    return i < cur ? 'done' : i === cur ? 'error' : 'pending'
   }
-  reviewing.value = true
+  if (p.status === 'pending-approval' || cur < 0 || i < 0) return 'pending'
+  return i < cur ? 'done' : i === cur ? 'running' : 'pending'
+}
+async function loadPl() {
+  plLoading.value = true
   try {
-    const res =
-      review.value.action === 'approve'
-        ? await pipelineApi.approve(review.value.pipeline.id, reviewComment.value.trim() || undefined)
-        : await pipelineApi.reject(review.value.pipeline.id, reviewComment.value.trim())
-    message.success(review.value.action === 'approve' ? '已审批通过，发布开始执行' : '已拒绝该发布')
-    review.value = null
-    await loadPipelines()
-    if (res.status === 'approved') startPolling()
-  } catch (e) {
-    message.error((e as Error).message || '操作失败')
+    plList.value = await pipelineApi.list(plEnv.value ? { env: plEnv.value, limit: 50 } : { limit: 50 })
+  } catch {
+    message.error('加载执行记录失败')
   } finally {
-    reviewing.value = false
+    plLoading.value = false
   }
 }
-
-async function handleCancel(p: PipelineItem) {
+function openRecords() {
+  plEnv.value = environments.value[0]?.id || ''
+  plOpen.value = true
+  void loadPl()
+}
+function showLogs(p: PipelineItem) {
+  logRecord.value = p
+  logVisible.value = true
+}
+function plRetry(p: PipelineItem) {
+  const isSucceeded = p.status === 'succeeded'
+  Modal.confirm({
+    title: isSucceeded ? '再次发布' : '重试发布',
+    content: isSucceeded
+      ? `以相同参数再次发布（${p.env} / ${p.moduleKey}，分支 ${p.gitBranch || '-'}）？`
+      : `以相同参数重新提交（${p.env} / ${p.moduleKey}）？原实例记录保留。`,
+    okText: isSucceeded ? '再次发布' : '重试',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        const res = await pipelineApi.retry(p.id)
+        message.success(`已重新提交: ${res.jobId}`)
+        await Promise.all([loadPl(), refreshAll()])
+        tick()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || e?.message || '重试失败')
+      }
+    },
+  })
+}
+function plCancel(p: PipelineItem) {
   Modal.confirm({
     title: p.status === 'pending-approval' ? '撤回审批请求' : '确认取消',
-    content:
-      p.status === 'pending-approval'
-        ? `撤回 ${p.id} 的发布审批请求？撤回后需重新提交。`
-        : `确定取消流水线 ${p.id} 吗？正在执行的阶段会中断。`,
-    okText: p.status === 'pending-approval' ? '撤回' : '取消任务',
+    content: `确定取消实例 ${p.id} 吗？`,
+    okText: '确认',
     okType: 'danger',
     cancelText: '返回',
     onOk: async () => {
       try {
         await pipelineApi.cancel(p.id)
         message.success('已请求取消')
-        await loadPipelines()
+        await Promise.all([loadPl(), refreshAll()])
       } catch {
         message.error('取消失败')
       }
     },
   })
 }
-
-async function handlePromote(p: PipelineItem) {
+function plPromote(p: PipelineItem) {
   Modal.confirm({
     title: '灰度转全量',
     content: `将把 ${p.env} / ${p.moduleKey} 的全量指针切到 ${p.versionTag}，并禁用灰度规则。确认？`,
@@ -343,63 +555,51 @@ async function handlePromote(p: PipelineItem) {
       try {
         await pipelineApi.promote(p.id)
         message.success('已转全量')
-        await loadPipelines()
-      } catch (e) {
-        message.error((e as Error).message || '转全量失败')
+        await Promise.all([loadPl(), refreshAll()])
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || e?.message || '转全量失败')
       }
     },
   })
 }
-
-// ===== 日志 =====
-const logVisible = ref(false)
-const logRecord = ref<PipelineItem | null>(null)
-async function showLogs(p: PipelineItem) {
+const review = ref<{ p: PipelineItem; action: 'approve' | 'reject' } | null>(null)
+const reviewComment = ref('')
+const reviewing = ref(false)
+function openApprove(p: PipelineItem) {
+  reviewComment.value = ''
+  review.value = { p, action: 'approve' }
+}
+function openReject(p: PipelineItem) {
+  reviewComment.value = ''
+  review.value = { p, action: 'reject' }
+}
+async function submitReview() {
+  if (!review.value) return
+  if (review.value.action === 'reject' && !reviewComment.value.trim()) {
+    message.warning('拒绝必须填写审批意见')
+    return
+  }
+  reviewing.value = true
   try {
-    logRecord.value = await pipelineApi.get(p.id)
-  } catch {
-    logRecord.value = p
-  }
-  logVisible.value = true
-}
-
-// ===== 轮询（仅在有运行中任务时刷新）=====
-function startPolling() {
-  stopPolling()
-  timer = window.setInterval(async () => {
-    await loadPipelines()
-    if (!pipelines.value.some((p) => p.status === 'running' || p.status === 'pending')) {
-      stopPolling()
+    if (review.value.action === 'approve') {
+      await pipelineApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
+      message.success('已审批通过，发布开始执行')
+    } else {
+      await pipelineApi.reject(review.value.p.id, reviewComment.value.trim())
+      message.success('已拒绝该发布')
     }
-  }, 3000)
-}
-function stopPolling() {
-  if (timer) {
-    window.clearInterval(timer)
-    timer = undefined
+    review.value = null
+    await Promise.all([loadPl(), refreshAll()])
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e?.message || '操作失败')
+  } finally {
+    reviewing.value = false
   }
-}
-
-async function onEnvChange() {
-  await Promise.all([loadReleases(), loadPipelines()])
-}
-async function onModuleChange() {
-  // 模块默认部署环境：选模块时自动切到其 defaultEnv（若存在且可用），仍可手动改
-  const mod = modules.value.find((m) => m.key === form.value.moduleKey)
-  if (mod?.defaultEnv && environments.value.some((e) => e.id === mod.defaultEnv)) {
-    env.value = mod.defaultEnv
-  }
-  await Promise.all([loadReleases(), loadTemplates(), loadPipelines()])
 }
 
 onMounted(async () => {
-  await loadEnvironments()
-  await loadModules()
-  await Promise.all([loadReleases(), loadTemplates()])
-  await loadPipelines()
-  if (pipelines.value.some((p) => p.status === 'running' || p.status === 'pending')) {
-    startPolling()
-  }
+  await Promise.all([refreshAll(), loadEnvironments()])
+  if (hasRunning()) tick()
 })
 onUnmounted(stopPolling)
 </script>
@@ -407,65 +607,165 @@ onUnmounted(stopPolling)
 <template>
   <div>
     <div class="page-header">
-      <h2>流水线</h2>
-      <p>流水线 = 独立流程定义（不绑定模块，可全局复用）。发布 = 选「模块 + 流水线 + 分支/commit」提交执行；实例可中断/重试，执行步骤实时可查</p>
+      <h2>发布流水线</h2>
+      <p>流水线 = 可复用的流程定义（校验 → 拉码 → 构建 → 投递 → 重启 → 写版本 → 切指针 → 探活 → 清理）。
+        每次发布 = 基于某条流水线执行一次，产生一条执行记录（实例）。点击流水线可查看其最近执行与全部历史。</p>
     </div>
 
-    <!-- 提交区 -->
-    <a-card title="提交发布" style="margin-bottom: 16px;">
-      <a-form layout="inline">
-        <a-form-item label="环境">
-          <a-select v-model:value="env" style="width: 160px;" @change="onEnvChange">
-            <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
-              {{ e.name }}（{{ e.id }}）
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+    <!-- 工具栏 -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div>
+        <a-button :loading="loading" @click="refreshAll">刷新</a-button>
+      </div>
+      <a-space>
+        <a-button @click="openRecords">执行记录</a-button>
+        <a-button type="primary" @click="openSubmit" :disabled="!availableModules.length">发起发布</a-button>
+      </a-space>
+    </div>
 
-        <a-form-item label="模块">
-          <a-select
-            v-model:value="form.moduleKey"
-            style="width: 180px;"
-            placeholder="选择模块"
-            @change="onModuleChange"
+    <!-- 流水线卡片列表（按模块一卡） -->
+    <a-spin :spinning="loading">
+      <a-row :gutter="[16, 16]" v-if="moduleCards.length">
+        <a-col
+          v-for="mc in moduleCards"
+          :key="mc.module.key"
+          :xs="24"
+          :sm="12"
+          :lg="8"
+          :xl="6"
+        >
+          <a-card
+            hoverable
+            size="small"
+            class="tpl-card"
+            @click="gotoModuleDetail(mc.module)"
           >
-            <a-select-option v-for="m in microFrontendModules" :key="m.key" :value="m.key">
-              {{ m.name }}（{{ m.key }}）
+            <!-- 头部：模块名 -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+              <div style="min-width: 0;">
+                <div style="font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  {{ mc.module.name }}
+                </div>
+                <div style="margin-top: 4px;">
+                  <a-tag color="blue" style="font-size: 11px;">{{ typeLabel(mc.module.type) }}</a-tag>
+                  <a-tag v-if="mc.module.builtin" color="gold" style="font-size: 11px;">内置</a-tag>
+                </div>
+              </div>
+              <span
+                style="color: #999; font-size: 12px; flex-shrink: 0; font-family: monospace;"
+              >{{ mc.module.key }}</span>
+            </div>
+
+            <!-- 最近执行摘要（按模块聚合） -->
+            <div
+              v-if="mc.latest"
+              style="background: #fafafa; border: 1px solid #f0f0f0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;"
+            >
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                <a-tag :color="statusColor(mc.latest.status)" style="margin-right: 0;">
+                  {{ statusText(mc.latest.status) }}
+                </a-tag>
+                <span style="color: #555;">{{ mc.latest.env }}</span>
+                <span v-if="mc.latest.templateName" style="color: #888;">
+                  · {{ mc.latest.templateName }}
+                </span>
+              </div>
+              <div style="font-size: 12px; color: #888; margin-top: 4px; display: flex; justify-content: space-between;">
+                <span>
+                  v{{ mc.latest.versionTag || '—' }}
+                  <template v-if="mc.latest.stage">
+                    · {{ STEP_LABELS[mc.latest.stage] || mc.latest.stage }}
+                  </template>
+                </span>
+                <span>{{ formatTime(mc.latest.startTime) }}</span>
+              </div>
+            </div>
+            <div
+              v-else
+              style="color: #bbb; font-size: 12px; padding: 8px 0;"
+            >该模块暂无发布记录</div>
+
+            <!-- 底部统计 + 操作 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+              <span style="font-size: 12px; color: #999;">
+                共 {{ mc.total }} 次 · 成功 {{ mc.ok }}
+              </span>
+              <a-space size="small" @click.stop>
+                <a-button type="link" size="small" @click="gotoModuleDetail(mc.module)">模块详情</a-button>
+                <a-button type="link" size="small" @click="openReleaseForModule(mc)">发布</a-button>
+              </a-space>
+            </div>
+          </a-card>
+        </a-col>
+      </a-row>
+      <a-empty v-else-if="!loading" description="暂无可发布模块" />
+    </a-spin>
+
+    <!-- 发起发布抽屉 -->
+    <a-drawer
+      :open="submitOpen"
+      title="发起发布"
+      placement="right"
+      :width="720"
+      @close="submitOpen = false"
+    >
+      <a-form layout="vertical">
+        <a-row :gutter="12">
+          <a-col :span="12">
+            <a-form-item label="环境" required>
+              <a-select v-model:value="env" @change="onEnvChange">
+                <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
+                  {{ e.name }}（{{ e.id }}）
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="模块（后端/前端/微前端均可走流水线发布）" required>
+              <a-select
+                v-model:value="form.moduleKey"
+                placeholder="选择模块"
+                @change="onModuleChange"
+              >
+                <a-select-option v-for="m in availableModules" :key="m.key" :value="m.key">
+                  {{ m.name }}（{{ m.key }}）
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-form-item label="使用流水线" required>
+          <a-select v-model:value="form.templateId" placeholder="选择流水线">
+            <a-select-option v-for="t in availTemplates" :key="t.id" :value="t.id">
+              {{ t.name }}
+              <template v-if="t.builtin">（默认）</template>
+              <template v-if="t.approval === 'always'">（强制审批）</template>
+              <template v-if="t.approval === 'never'">（免审批）</template>
             </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="流水线">
-          <a-space>
-            <a-select v-model:value="templateId" style="width: 220px;" placeholder="默认">
-              <a-select-option v-for="t in templates" :key="t.id" :value="t.id">
-                {{ t.name }}
-                <template v-if="t.builtin">（默认）</template>
-                <template v-if="t.skipVerify">（跳过探活）</template>
-                <template v-if="t.approval === 'always'">（强制审批）</template>
-                <template v-if="t.approval === 'never'">（免审批）</template>
-              </a-select-option>
-            </a-select>
-            <a-button size="small" @click="tplMgrOpen = true">管理</a-button>
-          </a-space>
-        </a-form-item>
-
-        <a-form-item label="分支">
-          <a-input v-model:value="form.branch" style="width: 160px;" placeholder="master" />
-        </a-form-item>
-
-        <a-form-item label="Commit">
-          <a-select
-            v-model:value="form.commitId"
-            style="width: 240px;"
-            allow-clear
-            placeholder="留空=分支最新提交"
-          >
-            <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.versionTag">
-              {{ r.versionTag }}{{ r.source === 'artifact' ? ' · 磁盘产物' : '' }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+        <a-row :gutter="12">
+          <a-col :span="12">
+            <a-form-item label="分支">
+              <a-input v-model:value="form.branch" placeholder="master" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="Commit（留空=分支最新提交）">
+              <a-select
+                v-model:value="form.commitId"
+                allow-clear
+                placeholder="留空=最新"
+              >
+                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.versionTag">
+                  {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
 
         <a-form-item label="模式">
           <a-radio-group v-model:value="form.mode">
@@ -474,16 +774,9 @@ onUnmounted(stopPolling)
           </a-radio-group>
         </a-form-item>
 
-        <a-form-item label="投递">
-          <a-radio-group v-model:value="form.target">
-            <a-radio value="local">本机</a-radio>
-            <a-radio value="remote">远程服务器</a-radio>
-          </a-radio-group>
-        </a-form-item>
-
         <a-form-item v-if="form.mode === 'grayscale'" label="灰度规则">
-          <a-space>
-            <a-select v-model:value="form.grayscaleType" style="width: 120px;">
+          <a-space wrap>
+            <a-select v-model:value="form.grayscaleType" style="width: 130px;">
               <a-select-option value="percent">百分比</a-select-option>
               <a-select-option value="user-list">用户名单</a-select-option>
               <a-select-option value="header">请求头</a-select-option>
@@ -494,13 +787,12 @@ onUnmounted(stopPolling)
               :min="1"
               :max="100"
               addon-after="%"
-              style="width: 120px;"
             />
             <a-input
               v-if="form.grayscaleType === 'user-list'"
               v-model:value="form.userIds"
               placeholder="用户 ID，逗号分隔"
-              style="width: 220px;"
+              style="width: 260px;"
             />
             <template v-if="form.grayscaleType === 'header'">
               <a-input v-model:value="form.headerKey" placeholder="请求头名" style="width: 140px;" />
@@ -509,44 +801,66 @@ onUnmounted(stopPolling)
           </a-space>
         </a-form-item>
 
-        <a-form-item>
-          <a-button type="primary" :loading="submitting" :danger="env === 'prod'" @click="handleSubmit">
-            提交发布
-          </a-button>
-        </a-form-item>
-        <a-form-item>
-          <a-button :loading="loading" @click="loadPipelines">刷新列表</a-button>
-        </a-form-item>
+        <a-alert
+          type="info"
+          show-icon
+          style="margin-bottom: 12px;"
+          message="产物投递由系统自动决定：测试环境(local/dev)=本机，正式发布按配置投递到生产服务器。发布基于远程仓库分支 + commit（隔离发布目录 git 拉取），请先 commit & push 再发布"
+        />
+        <a-button
+          type="primary"
+          :loading="submitting"
+          :danger="env === 'prod'"
+          block
+          @click="handleSubmit"
+        >
+          提交{{ env === 'prod' ? '（生产，需审批）' : '发布' }}
+        </a-button>
       </a-form>
-      <a-alert
-        type="info"
-        show-icon
-        style="margin-top: 8px;"
-        message="发布基于远程仓库的分支 + commit（在隔离的发布目录 git 拉取），请先 commit & push 到仓库再发布"
-      />
-    </a-card>
+    </a-drawer>
 
-    <!-- 流水线列表 -->
-    <a-card title="流水线记录">
+    <!-- 全部执行记录抽屉（全局浏览；流水线归属见模板详情页历史） -->
+    <a-drawer
+      :open="plOpen"
+      title="执行记录"
+      placement="right"
+      :width="920"
+      @close="plOpen = false"
+    >
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <a-space>
+          <span>环境</span>
+          <a-select
+            v-model:value="plEnv"
+            allow-clear
+            placeholder="全部"
+            style="width: 160px;"
+            @change="loadPl"
+          >
+            <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
+              {{ e.name }}（{{ e.id }}）
+            </a-select-option>
+          </a-select>
+        </a-space>
+        <a-button :loading="plLoading" @click="loadPl">刷新</a-button>
+      </div>
       <a-table
         :columns="[
-          { title: '流水线', dataIndex: 'id', key: 'id', width: 180 },
-          { title: '模块', dataIndex: 'moduleKey', key: 'moduleKey', width: 100 },
+          { title: '实例', dataIndex: 'id', key: 'id', width: 140 },
+          { title: '环境/模块', key: 'who', width: 170 },
+          { title: '模板', dataIndex: 'templateName', key: 'templateName', width: 110 },
           { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 110 },
-          { title: '模式', dataIndex: 'mode', key: 'mode', width: 90 },
-          { title: '模板', key: 'template', width: 110 },
-          { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
-          { title: '阶段/进度', key: 'stage', width: 200 },
+          { title: '状态', dataIndex: 'status', key: 'status', width: 110 },
           { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
-          { title: '耗时', key: 'duration', width: 90 },
-          { title: '开始时间', key: 'startTime', width: 150 },
-          { title: '操作', key: 'action', width: 200 },
+          { title: '开始时间', dataIndex: 'startTime', key: 'startTime', width: 150 },
+          { title: '操作', key: 'action', width: 210 },
         ]"
-        :data-source="pipelines"
+        :data-source="plList"
+        :loading="plLoading"
         :pagination="{ pageSize: 10 }"
-        :loading="loading"
         row-key="id"
         size="small"
+        :locale="{ emptyText: '暂无执行记录' }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'id'">
@@ -554,55 +868,29 @@ onUnmounted(stopPolling)
               <span style="font-family: monospace;">{{ String(record.id).slice(-12) }}</span>
             </a-tooltip>
           </template>
-          <template v-if="column.key === 'mode'">
-            <a-tag :color="record.mode === 'grayscale' ? 'orange' : 'blue'">
+          <template v-else-if="column.key === 'who'">
+            <a-tag :color="record.mode === 'grayscale' ? 'orange' : 'blue'" style="margin-right: 0;">
               {{ record.mode === 'grayscale' ? '灰度' : '全量' }}
             </a-tag>
+            {{ record.env }} / {{ record.moduleKey }}
           </template>
-          <template v-if="column.key === 'template'">
-            <span>{{ record.templateName || '默认' }}</span>
+          <template v-else-if="column.key === 'templateName'">
+            {{ record.templateName || '—' }}
           </template>
-          <template v-if="column.key === 'status'">
+          <template v-else-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ statusText(record.status) }}</a-tag>
           </template>
-          <template v-if="column.key === 'stage'">
-            <div v-if="record.status === 'running' || record.status === 'pending'">
-              <div style="font-size: 12px; margin-bottom: 2px;">
-                {{ STAGE_LABEL[record.stage] || record.stage || '-' }}
-                <span v-if="record.reuseArtifact" style="color: #999;">（复用产物）</span>
-              </div>
-              <a-progress
-                :percent="Math.round(((record.progress?.current || 0) / (record.progress?.total || 7)) * 100)"
-                size="small"
-              />
-              <div style="font-size: 12px; color: #888;">{{ record.progress?.message }}</div>
-            </div>
-            <span v-else style="color: #999;">
-              {{ STAGE_LABEL[record.stage] || record.stage || '-' }}
-              <span v-if="record.progress?.message" style="color: #888;">
-                · {{ record.progress.message }}
-              </span>
-              <span v-if="record.error" style="color: #cf1322;"> · {{ record.error }}</span>
-            </span>
-          </template>
-          <template v-if="column.key === 'duration'">
-            {{ (durationMs(record) / 1000).toFixed(1) }}s
-          </template>
-          <template v-if="column.key === 'startTime'">
+          <template v-else-if="column.key === 'startTime'">
             {{ formatTime(record.startTime) }}
           </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" size="small" @click="showLogs(record)">执行详情</a-button>
+          <template v-else-if="column.key === 'action'">
+            <a-space size="small" wrap>
+              <a-button type="link" size="small" @click="showLogs(record)">查看</a-button>
               <a-button
-                v-if="
-                  record.status === 'failed' ||
-                  record.status === 'cancelled' ||
-                  record.status === 'succeeded'
-                "
+                v-if="['failed', 'cancelled', 'succeeded'].includes(record.status)"
                 type="link"
                 size="small"
-                @click="handleRetry(record)"
+                @click="plRetry(record)"
               >
                 {{ record.status === 'succeeded' ? '再次发布' : '重试' }}
               </a-button>
@@ -611,23 +899,19 @@ onUnmounted(stopPolling)
                 <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
               </template>
               <a-button
-                v-if="
-                  record.status === 'running' ||
-                  record.status === 'pending' ||
-                  record.status === 'pending-approval'
-                "
+                v-if="record.status === 'running' || record.status === 'pending'"
                 type="link"
                 size="small"
                 danger
-                @click="handleCancel(record)"
+                @click="plCancel(record)"
               >
-                {{ record.status === 'pending-approval' ? '撤回' : '取消' }}
+                取消
               </a-button>
               <a-button
                 v-if="record.mode === 'grayscale' && record.status === 'succeeded'"
                 type="link"
                 size="small"
-                @click="handlePromote(record)"
+                @click="plPromote(record)"
               >
                 转全量
               </a-button>
@@ -635,60 +919,26 @@ onUnmounted(stopPolling)
           </template>
         </template>
       </a-table>
-    </a-card>
+    </a-drawer>
 
-    <!-- 审批弹窗 -->
-    <a-modal
-      :open="!!review"
-      :title="review?.action === 'approve' ? '审批通过' : '拒绝发布'"
-      :confirm-loading="reviewing"
-      @ok="submitReview"
-      @cancel="review = null"
-    >
-      <p v-if="review" style="margin-bottom: 12px; color: #666;">
-        {{ review.pipeline.env }} / {{ review.pipeline.moduleKey }}
-        <template v-if="review.pipeline.versionTag">@ {{ review.pipeline.versionTag }}</template>
-        · 提交人 {{ review.pipeline.operator || '-' }} · 分支
-        {{ review.pipeline.gitBranch || '-' }}
-      </p>
-      <a-textarea
-        v-model:value="reviewComment"
-        :rows="3"
-        :placeholder="
-          review?.action === 'reject' ? '请填写拒绝原因（必填）' : '审批意见（可选）'
-        "
-      />
-    </a-modal>
-
-    <!-- 日志抽屉 -->
-    <a-drawer
-      v-model:open="logVisible"
-      title="执行详情"
-      placement="right"
-      :width="760"
-    >
+    <!-- 实例日志抽屉 -->
+    <a-drawer v-model:open="logVisible" title="执行详情" placement="right" :width="720">
       <template v-if="logRecord">
         <a-descriptions :column="2" size="small" bordered style="margin-bottom: 12px;">
-          <a-descriptions-item label="流水线">{{ logRecord.id }}</a-descriptions-item>
+          <a-descriptions-item label="实例">{{ logRecord.id }}</a-descriptions-item>
           <a-descriptions-item label="状态">
             <a-tag :color="statusColor(logRecord.status)">{{ statusText(logRecord.status) }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="环境/模块">
-            {{ logRecord.env }} / {{ logRecord.moduleKey }}
-          </a-descriptions-item>
-          <a-descriptions-item label="版本">{{ logRecord.versionTag || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="环境/模块">{{ logRecord.env }} / {{ logRecord.moduleKey }}</a-descriptions-item>
+          <a-descriptions-item label="模板">{{ logRecord.templateName || '—' }}</a-descriptions-item>
           <a-descriptions-item label="分支">{{ logRecord.gitBranch || '-' }}</a-descriptions-item>
           <a-descriptions-item label="提交">{{ logRecord.gitCommit || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="模板">{{ logRecord.templateName || '默认' }}</a-descriptions-item>
+          <a-descriptions-item label="操作人">{{ logRecord.operator || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="耗时">{{ (durationMs(logRecord) / 1000).toFixed(1) }}s</a-descriptions-item>
         </a-descriptions>
-
-        <!-- 执行步骤详情：按实例 steps 快照渲染各步状态 -->
         <div style="margin-bottom: 12px;">
           <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
             执行步骤（{{ stepList(logRecord).length }} 步）
-            <a-tag v-if="logRecord.rollbackOnFailure === 'none'" style="margin-left: 4px;">
-              失败不回滚
-            </a-tag>
           </div>
           <a-space wrap :size="6">
             <a-tag
@@ -700,11 +950,14 @@ onUnmounted(stopPolling)
               {{ STEP_LABELS[s] || s }}
             </a-tag>
           </a-space>
-          <div v-if="logRecord.progress?.message" style="margin-top: 6px; color: #888; font-size: 12px;">
-            {{ logRecord.progress.message }}
-          </div>
+          <a-alert
+            v-if="logRecord.error"
+            type="error"
+            show-icon
+            :message="logRecord.error"
+            style="margin-top: 8px;"
+          />
         </div>
-
         <div
           style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
                  font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 60vh; overflow: auto;"
@@ -712,11 +965,34 @@ onUnmounted(stopPolling)
       </template>
     </a-drawer>
 
-    <!-- 流水线模板管理（全局定义，从模块管理抽离） -->
-    <PipelineTemplateManager
-      :open="tplMgrOpen"
-      @close="tplMgrOpen = false"
-      @changed="loadTemplates"
-    />
+    <!-- 审批弹窗 -->
+    <a-modal
+      :open="!!review"
+      :title="review?.action === 'approve' ? '审批通过' : '拒绝发布'"
+      :confirm-loading="reviewing"
+      @ok="submitReview"
+      @cancel="review = null"
+    >
+      <p v-if="review" style="margin-bottom: 12px; color: #666;">
+        {{ review.p.env }} / {{ review.p.moduleKey }}
+        <template v-if="review.p.versionTag">@ {{ review.p.versionTag }}</template>
+        · 提交人 {{ review.p.operator || '-' }}
+      </p>
+      <a-textarea
+        v-model:value="reviewComment"
+        :rows="3"
+        :placeholder="review?.action === 'reject' ? '请填写拒绝原因（必填）' : '审批意见（可选）'"
+      />
+    </a-modal>
   </div>
 </template>
+
+<style scoped>
+.tpl-card {
+  height: 100%;
+}
+.tpl-card :deep(.ant-card-body) {
+  display: flex;
+  flex-direction: column;
+}
+</style>

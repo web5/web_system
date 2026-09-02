@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布流水线' },
       },
       {
+        path: 'pipelines/:id',
+        name: 'PipelineDetail',
+        component: () => import('@/views/PipelineDetail.vue'),
+        meta: { title: '流水线详情' },
+      },
+      {
         path: 'environments',
         name: 'EnvironmentManager',
         component: () => import('@/views/EnvironmentManager.vue'),
@@ -50,18 +56,6 @@ const routes: RouteRecordRaw[] = [
         name: 'ModuleDetail',
         component: () => import('@/views/ModuleDetail.vue'),
         meta: { title: '模块详情' },
-      },
-      {
-        path: 'services',
-        name: 'ServiceAddressManager',
-        component: () => import('@/views/ServiceAddressManager.vue'),
-        meta: { title: '服务管理' },
-      },
-      {
-        path: 'services/:key',
-        name: 'ServiceDetail',
-        component: () => import('@/views/ServiceDetail.vue'),
-        meta: { title: '服务环境详情' },
       },
       {
         path: 'monitor',
