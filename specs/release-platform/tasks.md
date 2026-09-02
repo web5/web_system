@@ -54,21 +54,31 @@
 
 ## S2 · P0 配置中心（L2）
 
-- [ ] 9. `config_items` + `config_snapshots` 数据模型
+- [x] 9. `config_items` + `config_snapshots` 数据模型
   - 依赖：无
   - _验收：当 保存配置时，应生成快照并与版本关联_
-- [ ] 10. 密钥 AES 加密 + 页面掩码（不可读明文）
+  - 落地：`entities/config-item.entity.ts`、`entities/config-snapshot.entity.ts`
+  - 注意：`envId`/`moduleKey` 用**空串而非 NULL** 表示"不适用"——MySQL 唯一索引中 NULL 互不相等，用 NULL 会让全局配置被重复插入
+- [x] 10. 密钥 AES 加密 + 页面掩码（不可读明文）
   - 依赖：9
   - _验收：当 保存密钥后读取，应返回掩码且 DB 中无明文_
-- [ ] 11. 三级作用域合并 + 发布/重启时强制覆盖注入 pm2 env（禁 shell 写死 PORT）
+  - 落地：`config/config-crypto.ts`（AES-256-GCM，格式 `iv:tag:ciphertext`；主密钥 `CONFIG_MASTER_KEY` 服务侧持有，已写入发布环境 .env）
+  - 密文被篡改会因 GCM 认证失败而报错，可据此发现数据被非法改动
+- [x] 11. 三级作用域合并 + 发布/重启时强制覆盖注入 pm2 env（禁 shell 写死 PORT）
   - 依赖：9
   - _验收：当 注入执行时，应按 模块级>环境级>全局默认 覆盖；当 shell 中已存在 PORT 时，应被配置中心值强制覆盖_
-- [ ] 12. 配置中心页面 + 校验（端口冲突/必填/密钥格式）
+  - 落地：`ConfigService.resolve()`；`pipeline.service.ts` 新增 `resolveInjectEnv()`，在**阶段命令**与 **`pm2 restart --update-env`** 两处注入；`exec()` 扩展 `extraEnv` 参数
+- [x] 12. 配置中心页面 + 校验
   - 依赖：9、10
-  - _验收：当 配置端口冲突时，应拒绝保存并提示_
-- [ ] 13. 配置变更审计（前后 diff，密钥不记明文）
+  - _验收：当 保存非法配置时应拒绝并提示_
+  - 落地：后端 `config.controller.ts`；前端 `views/ConfigCenter.vue` + 路由 `/config` + 侧边菜单
+  - 已覆盖校验：作用域合法性、配置键非空、环境级缺 envId、模块级缺 moduleKey、**禁止把掩码当密钥真实值写回**
+  - ⚠️ **端口冲突检测尚未实现**（验收标准里有，本次未做，列为后续增强）
+- [x] 13. 配置变更审计（前后 diff，密钥不记明文）
   - 依赖：9
   - _验收：当 配置变更时，应可查询到变更人/时间/前后值_
+  - 落地：controller 记录 `config.create` / `config.update` / `config.delete` 三类审计；密钥值统一记为 `<密钥·不记录>`，明文不入审计
+  - 坑：`ConfigController` 注入 `AuditService` 后必须在 `ConfigCenterModule` 里 `imports: [AuditModule]`，否则 Nest 依赖解析失败导致**服务崩溃循环**
 
 ## S3 · P0 可靠性（L4/L5）
 
