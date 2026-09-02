@@ -21,6 +21,7 @@ interface ModuleItem {
   key: string
   name: string
   type: string
+  defaultEnv?: string
 }
 const modules = ref<ModuleItem[]>([])
 const microFrontendModules = computed(() => modules.value.filter((m) => m.type === 'micro-frontend'))
@@ -383,7 +384,12 @@ async function onEnvChange() {
   await Promise.all([loadReleases(), loadPipelines()])
 }
 async function onModuleChange() {
-  await Promise.all([loadReleases(), loadTemplates()])
+  // 模块默认部署环境：选模块时自动切到其 defaultEnv（若存在且可用），仍可手动改
+  const mod = modules.value.find((m) => m.key === form.value.moduleKey)
+  if (mod?.defaultEnv && environments.value.some((e) => e.id === mod.defaultEnv)) {
+    env.value = mod.defaultEnv
+  }
+  await Promise.all([loadReleases(), loadTemplates(), loadPipelines()])
 }
 
 onMounted(async () => {

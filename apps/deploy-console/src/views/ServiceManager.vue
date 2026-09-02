@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { moduleApi } from '@/api'
+import { moduleApi, environmentApi } from '@/api'
 
 // ============ 类型定义 ============
 const TYPE_OPTIONS = [
@@ -27,6 +27,7 @@ const moduleFormVisible = ref(false)
 const moduleSaving = ref(false)
 const editingKey = ref('')
 
+const envs = ref<any[]>([])
 const moduleForm = reactive({
   key: '',
   name: '',
@@ -35,6 +36,7 @@ const moduleForm = reactive({
   pm2: '',
   publicPath: '',
   buildCmd: '',
+  defaultEnv: '',
   enabled: true,
 })
 
@@ -49,6 +51,14 @@ async function loadModules() {
   }
 }
 
+async function loadEnvs() {
+  try {
+    envs.value = await environmentApi.list()
+  } catch {
+    envs.value = []
+  }
+}
+
 function resetModuleForm() {
   Object.assign(moduleForm, {
     key: '',
@@ -58,6 +68,7 @@ function resetModuleForm() {
     pm2: '',
     publicPath: '',
     buildCmd: '',
+    defaultEnv: '',
     enabled: true,
   })
 }
@@ -78,6 +89,7 @@ function openModuleEdit(m: any) {
     pm2: m.pm2 || '',
     publicPath: m.publicPath || '',
     buildCmd: m.buildCmd || '',
+    defaultEnv: m.defaultEnv || '',
     enabled: m.enabled !== false,
   })
   moduleFormVisible.value = true
@@ -98,6 +110,7 @@ async function submitModuleForm() {
       pm2: moduleForm.pm2.trim() || undefined,
       publicPath: moduleForm.publicPath.trim() || undefined,
       buildCmd: moduleForm.buildCmd.trim() || undefined,
+      defaultEnv: moduleForm.defaultEnv || undefined,
       enabled: moduleForm.enabled,
     }
     if (editingKey.value) {
@@ -144,7 +157,10 @@ const filteredModules = computed(() => {
   return moduleList.value.filter((m: any) => m.type === activeType.value)
 })
 
-onMounted(loadModules)
+onMounted(() => {
+  void loadModules()
+  void loadEnvs()
+})
 </script>
 
 <template>
@@ -174,7 +190,8 @@ onMounted(loadModules)
           { title: '名称', dataIndex: 'name', key: 'name', width: 180 },
           { title: '类型', dataIndex: 'type', key: 'type', width: 200 },
           { title: '目录', dataIndex: 'dir', key: 'dir' },
-          { title: 'pm2 / publicPath', key: 'meta', width: 220 },
+          { title: 'pm2 / publicPath', key: 'meta', width: 200 },
+          { title: '默认环境', key: 'defaultEnv', width: 100 },
           { title: '状态', key: 'status', width: 100 },
           { title: '操作', key: 'action', width: 200 },
         ]"
@@ -192,6 +209,10 @@ onMounted(loadModules)
           <template v-else-if="column.key === 'meta'">
             <span v-if="record.pm2" style="margin-right: 8px;">pm2={{ record.pm2 }}</span>
             <span v-if="record.publicPath">pub={{ record.publicPath }}</span>
+          </template>
+          <template v-else-if="column.key === 'defaultEnv'">
+            <span v-if="record.defaultEnv" style="font-size: 12px;">{{ record.defaultEnv }}</span>
+            <span v-else style="color: #bbb;">—</span>
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="record.enabled !== false ? 'green' : 'default'">
@@ -257,6 +278,18 @@ onMounted(loadModules)
         </a-row>
         <a-form-item label="buildCmd（前端模块构建命令）">
           <a-input v-model:value="moduleForm.buildCmd" placeholder="如 cd apps/auth-service && pnpm build" />
+        </a-form-item>
+        <a-form-item label="默认部署环境（发布/监控/诊断默认选中该模块时用它）">
+          <a-select
+            v-model:value="moduleForm.defaultEnv"
+            allow-clear
+            placeholder="未设置（按页面默认）"
+            style="width: 240px;"
+          >
+            <a-select-option v-for="e in envs" :key="e.id" :value="e.id">
+              {{ e.name }}（{{ e.id }}）
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="启用">
           <a-switch v-model:checked="moduleForm.enabled" />
