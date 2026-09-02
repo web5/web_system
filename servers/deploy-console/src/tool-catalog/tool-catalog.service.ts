@@ -118,7 +118,9 @@ export class ToolCatalogService {
   async create(spec: ToolSpec): Promise<DeployToolEntity> {
     const code = spec.name?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || '';
     if (!code) throw new BadRequestException('工具名必填');
-    if (spec.kind === 'shell' && spec.command?.trim()) assertShellSyntax(spec.command);
+    // 默认 shell 工具；以最终 kind 校验命令（入参未传 kind 时按 shell 处理）
+    const kind = spec.kind ?? 'shell';
+    if (kind === 'shell' && spec.command?.trim()) assertShellSyntax(spec.command);
     const dup = await this.repo.findOne({ where: { code } });
     if (dup) throw new ConflictException(`工具 code 已存在: ${code}`);
     if (spec.category && !CATEGORIES.includes(spec.category)) {
@@ -127,7 +129,7 @@ export class ToolCatalogService {
     const row = this.repo.create({
       code,
       name: spec.name.trim(),
-      kind: spec.kind ?? 'shell',
+      kind,
       category: spec.category ?? 'generic',
       description: spec.description?.trim() || undefined,
       example: spec.example?.trim() || undefined,
