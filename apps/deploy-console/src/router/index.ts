@@ -81,6 +81,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ConfigCenter.vue'),
         meta: { title: '配置中心' },
       },
+      {
+        path: 'notifications',
+        name: 'NotificationCenter',
+        component: () => import('@/views/NotificationCenter.vue'),
+        meta: { title: '通知中心' },
+      },
+      {
+        path: 'settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/SystemSettings.vue'),
+        meta: { title: '系统设置' },
+      },
     ],
   },
 ]

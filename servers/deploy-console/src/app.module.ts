@@ -15,6 +15,7 @@ import { ServerModule } from './server/server.module';
 import { PipelineModule } from './pipeline/pipeline.module';
 import { McpDeployModule } from './mcp/mcp.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
 
 @Module({
   imports: [
@@ -60,6 +61,8 @@ import { MetricsModule } from './metrics/metrics.module';
     McpDeployModule,
     // 发布度量（成功率 / 时长 / 失败阶段分布 / 失败下钻）
     MetricsModule,
+    // 系统设置（通知渠道等系统级配置，页面可维护）
+    SystemSettingsModule,
   ],
 })
 export class AppModule {}

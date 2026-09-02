@@ -13,6 +13,7 @@ import {
   ClusterOutlined,
   DeploymentUnitOutlined,
   SettingOutlined,
+  BellOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -34,6 +35,8 @@ const menuItems = [
   { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
   { key: '/config', label: '配置中心', icon: SettingOutlined },
+  { key: '/notifications', label: '通知中心', icon: BellOutlined },
+  { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 
 // 当前选中的菜单项

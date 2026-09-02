@@ -569,4 +569,34 @@ export const metricsApi = {
     >,
 }
 
+/** 通知中心：站内历史 */
+export const notificationApi = {
+  list: (limit?: number) =>
+    http.get('/notifications', { params: { limit } }) as Promise<
+      {
+        id: string
+        event: string
+        env: string
+        moduleKey: string
+        versionTag: string | null
+        status: string
+        detail: string
+        operator: string | null
+        delivery: Record<string, string> | null
+        createdAt: string
+      }[]
+    >,
+}
+
+/** 系统设置：通知渠道配置（DB 可配，env 兜底） */
+export const systemSettingsApi = {
+  getNotifyChannels: () =>
+    http.get('/system-settings/notify-channels') as Promise<{
+      webhookUrl: string | null
+      wecomUrl: string | null
+    }>,
+  updateNotifyChannels: (dto: { webhookUrl?: string | null; wecomUrl?: string | null }) =>
+    http.put('/system-settings/notify-channels', dto) as Promise<{ ok: boolean }>,
+}
+
 export default http
