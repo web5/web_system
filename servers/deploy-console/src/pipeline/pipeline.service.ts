@@ -338,6 +338,39 @@ export class PipelineService {
   }
 
   /**
+   * 重试失败的实例：以相同参数（模块/分支/commit/灰度规则/模板）重新提交一条新流水线。
+   * 仅 failed / cancelled 可重试；原实例保留，新实例走全新状态机与并发锁。
+   */
+  async retry(
+    id: string,
+    operator?: string,
+  ): Promise<{ jobId: string; status: string; approvalId?: string }> {
+    const p = await this.get(id);
+    if (!['failed', 'cancelled'].includes(p.status)) {
+      throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，仅失败/已取消可重试`);
+    }
+    await this.auditService.log({
+      user: operator || p.operator || 'unknown',
+      action: 'pipeline.retry',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'started',
+      detail: `重试流水线 ${id}（原 ${p.status}）→ 重新提交`,
+    });
+    const dto: SubmitPipelineDto = {
+      env: p.env,
+      moduleKey: p.moduleKey,
+      mode: (p.mode === 'grayscale' ? 'grayscale' : 'direct') as PipelineMode,
+      branch: p.gitBranch || 'master',
+      commitId: p.gitCommit ?? p.versionTag,
+      grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
+      target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
+      templateId: p.templateId ?? undefined,
+    };
+    return this.submit(dto, operator || p.operator);
+  }
+
+  /**
    * 审批通过：恢复待审批流水线并触发执行。
    * 执行人记审批人（reviewer）：审批通过即代表其确认本次发布。
    */

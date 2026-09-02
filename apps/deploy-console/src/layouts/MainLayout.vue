@@ -31,7 +31,7 @@ const collapsed = ref(false)
 const menuItems = [
   { key: '/dashboard', label: '仪表盘', icon: DashboardOutlined },
   { key: '/deploy', label: '发布中心', icon: CloudUploadOutlined },
-  { key: '/pipelines', label: '发布流水线', icon: DeploymentUnitOutlined },
+  { key: '/pipelines', label: '流水线', icon: DeploymentUnitOutlined },
   { key: '/modules', label: '模块管理', icon: AppstoreOutlined },
   { key: '/services', label: '服务管理', icon: ClusterOutlined },
   { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
