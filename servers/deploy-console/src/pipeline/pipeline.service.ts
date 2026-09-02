@@ -24,6 +24,7 @@ import { StageCommandService } from '../stage-command/stage-command.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
+import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
@@ -104,6 +105,7 @@ export class PipelineService {
     private readonly stageCommands: StageCommandService,
     private readonly configs: ConfigCenterService,
     private readonly releaseLock: ReleaseLockService,
+    private readonly notifications: NotificationService,
     private readonly deployService: DeployService,
   ) {}
 
@@ -518,6 +520,7 @@ export class PipelineService {
         detail: `发布成功: ${p.env}/${p.moduleKey} → ${p.versionTag}（mode=${p.mode}, target=${uploadTarget}）`,
       });
       this.logger.log(`流水线完成: ${p.id} ${p.env}/${p.moduleKey} → ${p.versionTag}`);
+      void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
     } catch (e) {
       const msg = (e as Error).message;
       p.status = 'cancelled' === p.status ? 'cancelled' : 'failed';
@@ -566,6 +569,12 @@ export class PipelineService {
               status: outcome === 'success' ? 'success' : 'failed',
               detail: `验证失败自动回滚: ${p.env}/${p.moduleKey} → ${prevVersion}（task=${rollTask}, 结果=${outcome}, 探活=${probeNote}）`,
             });
+            void this.notifyPipelineEvent(
+              p,
+              'pipeline.auto-rollback',
+              outcome === 'success' ? 'warn' : 'failed',
+              `验证失败，已自动回滚到 ${prevVersion}（回滚结果=${outcome}, 探活=${probeNote}）`,
+            );
           } catch (re) {
             p.logs = [...(p.logs ?? []), `自动回滚失败: ${(re as Error).message}`];
             this.logger.error(`自动回滚失败: ${(re as Error).message}`);
@@ -587,6 +596,12 @@ export class PipelineService {
           status: 'failed',
           detail: `发布失败: ${p.env}/${p.moduleKey}（阶段 ${p.stage}）: ${msg}`,
         });
+        void this.notifyPipelineEvent(
+          p,
+          'pipeline.failed',
+          'failed',
+          `阶段 ${p.stage} 失败: ${msg}`,
+        );
       }
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
@@ -603,6 +618,26 @@ export class PipelineService {
   }
 
   // ── 阶段命令（每模块每阶段一条 shell，DB 为真相源）────────────────
+
+  /**
+   * 发布关键事件通知（尽力而为；通知失败由 NotificationService 兜底，不影响发布主流程）。
+   */
+  private notifyPipelineEvent(
+    p: DeployPipelineEntity,
+    event: string,
+    status: 'success' | 'failed' | 'warn',
+    detail: string,
+  ): Promise<void> {
+    return this.notifications.notify({
+      event,
+      env: p.env,
+      moduleKey: p.moduleKey,
+      versionTag: p.versionTag,
+      status,
+      detail,
+      operator: p.operator,
+    });
+  }
 
   /**
    * 解析要注入的环境变量：配置中心按 global → env → module 合并的结果。

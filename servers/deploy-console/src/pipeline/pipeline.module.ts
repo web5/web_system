@@ -12,6 +12,7 @@ import { DeployModule } from '../deploy/deploy.module';
 import { StageCommandModule } from '../stage-command/stage-command.module';
 import { ConfigCenterModule } from '../config/config.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { ReleaseLockModule } from '../release-lock/release-lock.module';
     ConfigCenterModule,
     // 发布锁（同一模块×环境串行化，避免并发覆盖版本指针）
     ReleaseLockModule,
+    // 通知中心（发布成功/失败/自动回滚事件推送）
+    NotificationModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],
