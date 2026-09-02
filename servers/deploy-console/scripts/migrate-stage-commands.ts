@@ -17,6 +17,7 @@
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
+import { SnakeNamingStrategy } from '@web-system/shared';
 import {
   DeployModuleStageCommandEntity,
   CONFIGURABLE_STAGES,
@@ -43,6 +44,9 @@ async function main() {
     password: process.env.MYSQL_PASSWORD,
     database: process.env.MYSQL_DB,
     entities: [DeployModuleStageCommandEntity],
+    // 必须与 app.module 的 namingStrategy 一致：否则建出的列是驼峰（moduleKey），
+    // 与服务端 synchronize 期望的下划线列（module_key）互相打架，两边反复 ALTER。
+    namingStrategy: new SnakeNamingStrategy(),
     synchronize: true, // 建表：结构以 entity 为权威，无需重启控制台
     charset: 'utf8mb4',
   });
@@ -117,17 +121,20 @@ async function main() {
       return;
     }
 
+    // 用原生 upsert：typeorm 的 repo.upsert 在 conflictPaths 传属性名时会漏写列
+    // （曾导致 module_key 全部落为空串），故这里直接用 SQL 保证列完整。
+    const upsertSql = `
+      INSERT INTO deploy_module_stage_commands
+        (id, module_key, stage, command, enabled, created_at, updated_at)
+      VALUES (UUID(), ?, ?, ?, 1, NOW(6), NOW(6))
+      ON DUPLICATE KEY UPDATE
+        command = VALUES(command), enabled = 1, updated_at = NOW(6)
+    `;
     for (const w of writes) {
-      await repo.upsert(
-        repo.create({ moduleKey: w.moduleKey, stage: w.stage, command: w.command, enabled: true }),
-        { conflictPaths: ['moduleKey', 'stage'] },
-      );
+      await ds.query(upsertSql, [w.moduleKey, w.stage, w.command]);
     }
     for (const d of defaults) {
-      await repo.upsert(
-        repo.create({ moduleKey: d.moduleKey, stage: 'build', command: d.command, enabled: true }),
-        { conflictPaths: ['moduleKey', 'stage'] },
-      );
+      await ds.query(upsertSql, [d.moduleKey, 'build', d.command]);
     }
     console.log(`✅ 迁移完成：写入 ${writes.length} 条，默认模板 ${defaults.length} 条`);
   } finally {
