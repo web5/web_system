@@ -111,7 +111,17 @@
 
 ## S4 · P1 治理与可观测（L5/L6）
 
-- [ ] 18. 审批门禁（prod）— _验收：当 未审批的 prod 发布提交时，应被阻断并留记录_
+- [x] 18. 审批门禁（prod）— _验收：当 未审批的 prod 发布提交时，应被阻断并留记录_
+  - `deploy_approvals` 审批单 + `ApprovalService`：需要审批的环境读系统设置 `REQUIRE_APPROVAL_ENVS`
+    （「系统设置 → 审批门禁」页可配，逗号分隔；未配置默认仅 prod）
+  - 门禁点：`PipelineService.submit` —— 提交到需审批环境的发布**不立即执行**，进入 `pending-approval` 状态、
+    留审批单（提交人/审批人/意见/时间）并通知；approve 通过后自动触发执行（执行人记审批人）；
+    reject 则取消并留意见；撤回（cancel）联动关闭审批单，避免孤儿单
+  - 接口：`POST /api/pipelines/:id/approve` / `:id/reject`、`GET|PUT /api/system-settings/approval-envs`
+  - 前端：发布流水线页新增「待审批」状态标签与 通过/拒绝/撤回 操作（拒绝必填意见）；
+    prod 提交按钮文案改为「提交审批」；通知中心新增 pending-approval/approved/rejected 事件标签
+  - ⚠️ 当前单账号（admin）环境，审批人可与提交人相同；多用户账号体系落地后应加「禁止自审」规则
+    （审批单已存 operator/reviewer，可直接判定）
 - [x] 19. 通知中心 — _验收：当 发布/失败/审批/回滚事件发生时，应送达已配置通道_
   - `NotificationService`：写 `notification_logs`（站内历史）+ 异步分发
   - 通道（服务端环境变量配置，可选）：`NOTIFY_WEBHOOK_URL`（通用 Webhook，结构化 JSON）、`NOTIFY_WECOM_URL`（企业微信 markdown）
