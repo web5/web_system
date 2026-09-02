@@ -112,7 +112,13 @@
 ## S4 · P1 治理与可观测（L5/L6）
 
 - [ ] 18. 审批门禁（prod）— _验收：当 未审批的 prod 发布提交时，应被阻断并留记录_
-- [ ] 19. 通知中心 — _验收：当 发布/失败/审批/回滚事件发生时，应送达已配置通道_
+- [x] 19. 通知中心 — _验收：当 发布/失败/审批/回滚事件发生时，应送达已配置通道_
+  - `NotificationService`：写 `notification_logs`（站内历史）+ 异步分发
+  - 通道（服务端环境变量配置，可选）：`NOTIFY_WEBHOOK_URL`（通用 Webhook，结构化 JSON）、`NOTIFY_WECOM_URL`（企业微信 markdown）
+  - 事件接入点：`pipeline.succeeded` / `pipeline.failed` / `pipeline.auto-rollback`（pipeline.service 3 处）
+  - **铁律：通知尽力而为**——任何失败（无通道/超时/推送失败）都不抛错、不阻塞发布；送达结果写回 `delivery` 供运维发现"推不出去"
+  - API：`GET /api/notifications`（历史）、`GET /api/notifications/channels`（通道状态）
+  - ⚠️ **前端"站内通知"展示页待补**：当前历史可通过 API 查询，UI 列表未做（可复用 AuditLog 页或新增）
 - [ ] 20. 审计增强（全量 diff）— _验收：当 任意变更发生，应可追溯人/时间/前后 diff_
 - [x] 21. 发布度量仪表盘 — _验收：当 查看度量页，应按环境/模块/时间筛选展示成功率与时长_
   - 数据源即 `deploy_pipelines`（流水线本就记录 status/stage/起止时间），**零埋点、零采集改造**
