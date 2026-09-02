@@ -461,7 +461,7 @@ export const pipelineApi = {
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
 
-  list: (params?: { env?: string; moduleKey?: string; limit?: number }) =>
+  list: (params?: { env?: string; moduleKey?: string; templateId?: string; limit?: number }) =>
     http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
 
   get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
@@ -501,6 +501,12 @@ export const pipelineApi = {
         /** db=版本表记录；artifact=磁盘产物（未登记版本表） */
         source?: 'db' | 'artifact'
       }[]
+    >,
+
+  /** 各流水线模板运行摘要：{ [templateId]: { total, ok, latest } } */
+  summary: () =>
+    http.get('/pipelines/meta/summary') as Promise<
+      Record<string, { total: number; ok: number; latest: PipelineItem | null }>
     >,
 }
 

@@ -38,13 +38,15 @@ export class PipelineController {
   @ApiOperation({ summary: '流水线列表' })
   @ApiQuery({ name: 'env', required: false, type: String })
   @ApiQuery({ name: 'moduleKey', required: false, type: String })
+  @ApiQuery({ name: 'templateId', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async list(
     @Query('env') env?: string,
     @Query('moduleKey') moduleKey?: string,
+    @Query('templateId') templateId?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.pipelineService.list(env, moduleKey, limit ? Number(limit) : 20);
+    return this.pipelineService.list(env, moduleKey, limit ? Number(limit) : 20, templateId);
   }
 
   /** 可发布版本（回滚候选）；合入磁盘上未在版本表登记的历史产物，便于按版本发布 */
@@ -54,6 +56,20 @@ export class PipelineController {
   @ApiQuery({ name: 'component', required: false, type: String })
   async releases(@Query('env') env?: string, @Query('component') component?: string) {
     return this.pipelineService.listReleaseCandidates(env, component);
+  }
+
+  /** 各流水线模板的运行摘要（供流水线管理页展示最近执行/次数） */
+  @Get('meta/summary')
+  @ApiOperation({ summary: '各流水线模板运行摘要（总次数/成功/最近执行）' })
+  @ApiQuery({ name: 'templateIds', required: false, type: String })
+  async summary(@Query('templateIds') templateIds?: string) {
+    const ids = templateIds
+      ? templateIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    return this.pipelineService.listTemplateSummaries(ids);
   }
 
   @Get(':id')
