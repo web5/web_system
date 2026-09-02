@@ -90,12 +90,16 @@ body {
   border-bottom: 1px solid #2a2a2e !important;
   z-index: 1;
 
-  /* header 内文字/用户区统一浅色，避免浅主题 token 把深底洗白 */
+  /* header 内标题浅色，避免浅主题 token 把深底洗白 */
   .header-title,
   .user-trigger,
-  .user-name,
   .ant-typography {
     color: #f5f5f5;
+  }
+  /* 用户区：名字与角色同色系（tertiary 中灰，深底上柔和协调） */
+  .user-name,
+  .user-role {
+    color: var(--ws-text-tertiary);
   }
 }
 
