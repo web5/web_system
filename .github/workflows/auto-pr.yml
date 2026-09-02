@@ -1,0 +1,74 @@
+# 自动提 PR 到 master
+#
+# 触发：push 到任意非 master/main 分支时，自动创建 PR 到 master。
+# 幂等：若该分支已存在 PR，则跳过（不重复创建）。
+# 安全：使用 GitHub 内置 GITHUB_TOKEN（secrets 自动注入，不落地本地、不进仓库）。
+#
+# 权限：workflow 需要 pull-requests: write 才能创建 PR。
+# GITHUB_TOKEN 默认权限有限，若未开启则手动在仓库 Settings → Actions → General
+# 开启 "Workflow permissions: Read and write permissions"。
+name: auto-pr
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    # 只在 feature/* 或 fix/* 开发分支自动建 PR，避免 docs/、release/ 等误建
+    if: startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 自动创建 PR 到 master
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { repo, owner } = context.repo;
+            const head = context.ref.replace(/^refs\/heads\//, '');
+            const base = 'master';
+
+            // 1) 幂等检查：该分支是否已有 PR
+            const { data: existing } = await github.rest.pulls.list({
+              owner, repo, state: 'open', head: `${owner}:${head}`, base,
+            });
+            if (existing.length > 0) {
+              console.log(`已存在 PR #${existing[0].number}，跳过创建`);
+              return { skipped: true, number: existing[0].number, url: existing[0].html_url };
+            }
+
+            // 2) 生成标题 / body：比较 base↔head 取出全部提交（注意：
+            //    pulls.listCommits 只能列已存在 PR 的提交且必须传 pull_number，
+            //    新分支还没有 PR，应用 repos.compareCommits 取两分支间提交）
+            const { data: compare } = await github.rest.repos.compareCommits({
+              owner, repo, base, head,
+            });
+            const commits = compare.commits || [];
+            const titles = commits.slice(0, 5).map((c) => c.commit.message.split('\n')[0]);
+            const title = titles[0] ? titles[0].slice(0, 100) : `feat(${head}): 变更`;
+            const body = [
+              `## 自动生成的 PR（由 GitHub Actions 创建）`,
+              ``,
+              `- **分支**: \`${head}\` → \`${base}\``,
+              `- **提交数**: ${commits.length}`,
+              ``,
+              `### 提交列表`,
+              ...commits.map((c) => `- ${c.commit.message.split('\n')[0]}`),
+              ``,
+              `> 请 review 后合并。若描述需完善，可手动编辑。`,
+            ].join('\n');
+
+            // 3) 创建 PR
+            const { data: pr } = await github.rest.pulls.create({
+              owner, repo, title, head, base, body,
+            });
+            console.log(`PR 已创建: #${pr.number} ${pr.html_url}`);
+            return { created: true, number: pr.number, url: pr.html_url };
