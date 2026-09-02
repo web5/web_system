@@ -231,7 +231,8 @@ function handleLogout() {
 .user-name {
   font-size: 14px;
   font-weight: var(--ws-font-weight-semibold);
-  color: var(--ws-text-primary);
+  /* 与 .user-role 同色系（tertiary 中灰）—— 避免被全局 .app-header .user-name 覆盖（scoped 选择器特异性等同但后置胜出） */
+  color: var(--ws-text-tertiary);
 }
 .user-role {
   font-size: 11px;
