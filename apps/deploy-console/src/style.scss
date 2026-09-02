@@ -50,11 +50,13 @@ body {
 }
 
 .app-sider .logo {
-  height: 48px;
+  height: 52px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  /* 与菜单项图标列左对齐（不再居中） */
+  justify-content: flex-start;
+  padding: 0 16px;
+  gap: 10px;
   color: #fff;
   font-size: 17px;
   font-weight: var(--ws-font-weight-semibold);
@@ -63,9 +65,10 @@ body {
   margin-bottom: 8px;
 
   .logo-icon {
-    width: 22px;
-    height: 22px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
+    display: block;
   }
 
   .logo-text {
