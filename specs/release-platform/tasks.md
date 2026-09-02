@@ -171,44 +171,44 @@
 
 ## S6 · 流水线模板 + 实例（L3b）
 
-- [ ] 24. 模板数据模型 + 模块懒建 builtin 默认模板
+- [x] 24. 模板数据模型 + 模块懒建 builtin 默认模板
   - 依赖：无
   - _验收：当 模块无模板且首次提交/打开模板页时，应存在不可删除的默认模板；实例表新列可空兼容历史_
-- [ ] 25. 后端模板 CRUD API（`/modules/:key/pipeline-templates`，仅 JWT，写操作审计 diff）
+- [x] 25. 后端模板 CRUD API（`/modules/:key/pipeline-templates`，仅 JWT，写操作审计 diff）
   - 依赖：24
   - _验收：当 新建模板名称冲突时 409；builtin 不可删；复制默认可生成同名自定义模板_
-- [ ] 26. submit 按 templateId 解析：实例落模板快照 + 审批策略判定（always/never 覆盖 env 规则）
+- [x] 26. submit 按 templateId 解析：实例落模板快照 + 审批策略判定（always/never 覆盖 env 规则）
   - 依赖：24
   - _验收：当 提交指定 always 审批模板到 dev 时，应进入待审批；指定 never 模板到 prod 时应直接执行_
-- [ ] 27. run 按快照跳过 verify（含「verify 失败自动回滚」同步跳过）
+- [x] 27. run 按快照跳过 verify（含「verify 失败自动回滚」同步跳过）
   - 依赖：26
   - _验收：当 skipVerify 模板的实例执行时，应无 verify 阶段且无自动回滚逻辑_
-- [ ] 28. 前端：ModuleDetail「流水线模板」tab + PipelineCenter 模板选择与展示
+- [x] 28. 前端：ModuleDetail「流水线模板」tab + PipelineCenter 模板选择与展示
   - 依赖：25、26
   - _验收：当 页面操作时，应能新建/编辑/启停模板并随提交生效，记录/详情可见模板名_
-- [ ] 29. 回归：MCP/旧调用不传模板走默认、历史实例展示「默认」、metrics/审批/通知不回归
+- [x] 29. 回归：MCP/旧调用不传模板走默认、历史实例展示「默认」、metrics/审批/通知不回归
   - 依赖：26、27、28
   - _验收：当 不传 templateId 提交时，行为与 S5 完全一致；全量测试与既有发布流程通过_
 
 ### S6-II · 步骤编排化 + 工具目录（v2，依赖 S6-I）
 
-- [ ] 30. 步骤执行器注册表：内置步骤 SPI + `stageXxx` 逐一迁移（check/pull/upload/restart/verify/cleanup）
+- [x] 30. 步骤执行器注册表：内置步骤 SPI + `stageXxx` 逐一迁移（check/pull/upload/restart/verify/cleanup）
   - 依赖：S6-I 完成
   - _验收：当 同一流水线按新内核跑通时，失败/通知/进度语义与 S5 完全一致；每迁移一个执行器跑一次既有发布回归_
-- [ ] 31. version/pointer 语义步骤 + run 数据驱动（模板 steps 序列执行，含下限白名单校验）
+- [x] 31. version/pointer 语义步骤 + run 数据驱动（模板 steps 序列执行，含下限白名单校验）
   - 依赖：30
   - _验收：当 模板序列不含/前置 version/pointer 时 400 拒绝；默认模板序列执行结果与 S5 一致_
-- [ ] 32. rollback 内置步骤 + 模板级 `rollbackOnFailure`（替代硬编码 verify 失败自动回滚）
+- [x] 32. rollback 内置步骤 + 模板级 `rollbackOnFailure`（替代硬编码 verify 失败自动回滚）
   - 依赖：30、31
   - _验收：当 模板 rollbackOnFailure=previous 时，verify 失败自动回滚行为与 S5 一致；=none 时不回滚；显式 rollback 步骤可用于紧急回滚线_
-- [ ] 33. 工具目录 tool_catalog：种子数据 + CRUD（仅 JWT，审计）+「工具管理」页（分类/说明/示例）
+- [x] 33. 工具目录 tool_catalog：种子数据 + CRUD（仅 JWT，审计）+「工具管理」页（分类/说明/示例）
   - 依赖：无（可与 30-32 并行）
   - 范围：统一目录同时收录 **service 工具（内置执行器：探活/回滚/写版本/切指针/重启/投递等）** 与 **shell 工具（git/pm2/curl…）**，`kind` 区分；探活等平台逻辑从 `pipeline.service.ts` 收敛进对应 service 工具实现
   - _验收：当 打开工具管理页，应看到按分类分组、标注 kind 的工具（内置服务工具不可删、可停用；shell 工具可增改/停用）；审计留痕_
-- [ ] 34. 模板步骤编排编辑器（选步骤/排序/换执行器/rollbackOnFailure）+ 步骤分类分组展示
+- [x] 34. 模板步骤编排编辑器（选步骤/排序/换执行器/rollbackOnFailure）+ 步骤分类分组展示
   - 依赖：31、32、33
   - _验收：当 编辑模板时，应能从步骤库按分类选取并排序生成序列；保存后随提交生效_
-- [ ] 35. 回归：S1-S5 全部发布场景（dev/prod/灰度/回滚/审批/度量）+ 全量测试通过
+- [x] 35. 回归：S1-S5 全部发布场景（dev/prod/灰度/回滚/审批/度量）+ 全量测试通过
   - 依赖：34
   - _验收：当 跑既有场景时无行为回退；测试全绿_
 
