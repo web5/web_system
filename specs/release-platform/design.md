@@ -316,6 +316,8 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 | V3 | 分类（步骤与工具共用分类枚举）：`code(代码获取) / build(构建) / deploy(投递部署) / probe(探活验证) / rollback(回滚) / cleanup(清理) / semantic(发布语义:version/pointer)`；UI 按分类分组 |
 | V4 | 安全边界不破：可编排**步骤集的下限白名单**——version/pointer 必须保留且不可排序到产物产生前；shell 命令仍仅 JWT、`bash -n` 校验、审计 |
 | V5 | 兼容：builtin 默认模板序列 = 现九阶段（含 rollbackOnFailure=previous），行为与 S1-S5 完全一致；历史实例 template 为 NULL 显示「默认」 |
+| V6 | **步骤与工具分离**（用户指定，例：`pipeline.service.ts` 探活 URL 拼接等平台逻辑应收敛为工具）：`step`=流程单元（做什么/顺序/失败语义），`tool`=执行体（怎么做）。`tool.kind ∈ {service, shell}`：service=平台内置执行器/可下沉独立服务的能力；shell=外部 CLI（可参数化）。模板步骤可换绑工具而不改流程语义；探活/回滚/写版本/切指针/重启/投递/清理全部注册为 service 工具 |
+| V7 | 服务工具与独立服务的演化口：工具实现层预留 `service-kind: 'builtin' \| 'remote'`——builtin=本进程执行器，remote=调用独立服务（如未来消息/探活独立服务），**步骤定义与模板不变**，只换工具实现绑定。当前全部 builtin，避免为单一用例建服务（与「消息服务暂不独立」同判断） |
 
 ### 分期（每期独立可上线）
 
