@@ -12,6 +12,7 @@ import {
   AppstoreOutlined,
   ClusterOutlined,
   DeploymentUnitOutlined,
+  SettingOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -32,6 +33,7 @@ const menuItems = [
   { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
   { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
+  { key: '/config', label: '配置中心', icon: SettingOutlined },
 ]
 
 // 当前选中的菜单项

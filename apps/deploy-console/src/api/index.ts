@@ -481,4 +481,41 @@ export const stageCommandApi = {
     http.get('/modules/stage-commands/templates', { params: { type } }) as Promise<string | null>,
 }
 
+/**
+ * 配置中心（仅控制台 JWT 可访问）。
+ * 安全边界：密钥在接口层即返回掩码，前端拿不到明文，也就不可能误展示。
+ */
+export const configApi = {
+  list: (scope?: string, envId?: string, moduleKey?: string) =>
+    http.get('/config/items', { params: { scope, envId, moduleKey } }) as Promise<
+      {
+        id: string
+        scope: string
+        envId: string
+        moduleKey: string
+        key: string
+        value: string
+        isSecret: boolean
+        enabled: boolean
+        description?: string
+        updatedBy?: string
+        updatedAt?: string
+      }[]
+    >,
+  save: (dto: {
+    scope: string
+    envId?: string
+    moduleKey?: string
+    key: string
+    value: string
+    isSecret?: boolean
+    description?: string
+  }) => http.put('/config/items', dto) as Promise<{ id: string; key: string }>,
+  remove: (id: string) => http.delete(`/config/items/${id}`) as Promise<{ ok: boolean }>,
+  snapshot: (envId: string, moduleKey: string, versionTag: string) =>
+    http.post('/config/snapshots', { envId, moduleKey, versionTag }) as Promise<{ id: string }>,
+  restore: (envId: string, moduleKey: string, versionTag: string) =>
+    http.post('/config/snapshots/restore', { envId, moduleKey, versionTag }) as Promise<number>,
+}
+
 export default http
