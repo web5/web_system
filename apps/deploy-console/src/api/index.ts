@@ -431,4 +431,54 @@ export const hookApi = {
     http.get('/modules/hooks/templates', { params: { type } }) as Promise<Record<string, string>>,
 }
 
+/**
+ * 可配置阶段：version / pointer 是发布语义真相源，固定由流水线执行，不可配置。
+ * 其中 **build 必须配置命令**（未配置即 fail-fast），其余阶段未配置则回落到内置逻辑。
+ */
+export const CONFIGURABLE_STAGES = [
+  'check',
+  'pull',
+  'build',
+  'upload',
+  'restart',
+  'verify',
+  'cleanup',
+] as const
+
+/** 阶段命令：发布流水线唯一执行真相源（替代已废弃的 hookApi） */
+export const stageCommandApi = {
+  list: (key: string) =>
+    http.get(`/modules/${key}/stage-commands`) as Promise<
+      {
+        stage: string
+        configured: boolean
+        command: string | null
+        enabled: boolean
+        timeoutSec: number | null
+        updatedAt?: string
+        updatedBy?: string
+      }[]
+    >,
+  get: (key: string, stage: string) =>
+    http.get(`/modules/${key}/stage-commands/${stage}`) as Promise<{
+      command: string
+      timeoutSec?: number
+    } | null>,
+  save: (key: string, stage: string, command: string, timeoutSec?: number) =>
+    http.put(`/modules/${key}/stage-commands/${stage}`, { command, timeoutSec }) as Promise<{
+      moduleKey: string
+      stage: string
+      updatedAt: string
+    }>,
+  remove: (key: string, stage: string) =>
+    http.delete(`/modules/${key}/stage-commands/${stage}`) as Promise<{ ok: boolean }>,
+  validate: (key: string, stage: string, command: string) =>
+    http.post(`/modules/${key}/stage-commands/${stage}/validate`, { command }) as Promise<{
+      ok: boolean
+      message: string
+    }>,
+  template: (type: string) =>
+    http.get('/modules/stage-commands/templates', { params: { type } }) as Promise<string | null>,
+}
+
 export default http

@@ -9,7 +9,7 @@ import { ModuleRegistryModule } from '../module-registry/module-registry.module'
 import { CanaryModule } from '../canary/canary.module';
 import { AuditModule } from '../audit/audit.module';
 import { DeployModule } from '../deploy/deploy.module';
-import { HookModule } from '../hook/hook.module';
+import { StageCommandModule } from '../stage-command/stage-command.module';
 
 @Module({
   imports: [
@@ -19,8 +19,8 @@ import { HookModule } from '../hook/hook.module';
     AuditModule,
     // 复用 DeployService 的版本查询能力（可发布版本列表）
     DeployModule,
-    // 发布脚本 Hook（各阶段可自定义 shell）
-    HookModule,
+    // 阶段命令（每模块每阶段一条 shell，DB 为真相源）
+    StageCommandModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService],

@@ -44,8 +44,18 @@ export class DeployModuleEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '前端 public 子路径' })
   publicPath?: string;
 
-  /** 自定义构建命令（缺省 npx vite build） */
-  @Column({ type: 'varchar', length: 255, nullable: true, comment: '自定义构建命令' })
+  /**
+   * @deprecated 已废弃：构建命令统一由 `deploy_module_stage_commands`（stage=build）承载。
+   *
+   * 本字段仅为向后兼容保留——旧 `deploy.sh` 的参数注入已改读新表，
+   * 它不再是真相源；观察一个发布周期后随物理删列一并移除。
+   */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    comment: '自定义构建命令（已废弃，见 deploy_module_stage_commands）',
+  })
   buildCmd?: string;
 
   /** 微前端远程入口文件（如 remoteEntry.js） */
