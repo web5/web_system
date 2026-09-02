@@ -327,6 +327,10 @@ export class PipelineService {
       component: p.moduleKey,
       status: 'approved',
       detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      changes: [
+        { field: 'approval.status', before: 'pending', after: 'approved' },
+        { field: 'approval.comment', before: null, after: comment?.trim() || null },
+      ],
     });
     this.notifications.notify({
       event: 'deploy.approved',
@@ -376,6 +380,10 @@ export class PipelineService {
       component: p.moduleKey,
       status: 'rejected',
       detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      changes: [
+        { field: 'approval.status', before: 'pending', after: 'rejected' },
+        { field: 'approval.comment', before: null, after: comment?.trim() || null },
+      ],
     });
     this.notifications.notify({
       event: 'deploy.rejected',

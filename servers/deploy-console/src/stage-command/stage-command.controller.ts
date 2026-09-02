@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StageCommandService } from './stage-command.service';
 import { CurrentUser } from '../common/decorators';
 import { CONFIGURABLE_STAGES } from '../entities/deploy-module-stage-command.entity';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * 阶段命令管理（**仅控制台 JWT，不暴露 MCP**）。
@@ -24,7 +25,10 @@ import { CONFIGURABLE_STAGES } from '../entities/deploy-module-stage-command.ent
 @ApiBearerAuth()
 @Controller('modules')
 export class StageCommandController {
-  constructor(private readonly stageCommands: StageCommandService) {}
+  constructor(
+    private readonly stageCommands: StageCommandService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get(':key/stage-commands')
   @ApiOperation({ summary: '某模块各阶段命令（含未配置的阶段）' })
@@ -69,13 +73,42 @@ export class StageCommandController {
     if (!body || typeof body.command !== 'string') {
       throw new BadRequestException('缺少 command 字段');
     }
-    return this.stageCommands.upsert(key, stage, body.command, user?.username, body.timeoutSec);
+    const before = (await this.stageCommands.resolve(key, stage))?.command ?? null;
+    const saved = await this.stageCommands.upsert(
+      key,
+      stage,
+      body.command,
+      user?.username,
+      body.timeoutSec,
+    );
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: before === null ? 'stage-command.create' : 'stage-command.update',
+      component: key,
+      status: 'success',
+      detail: `保存 ${stage} 阶段命令`,
+      changes: [{ field: `${stage}.command`, before, after: body.command }],
+    });
+    return saved;
   }
 
   @Delete(':key/stage-commands/:stage')
   @ApiOperation({ summary: '删除阶段命令（该阶段恢复为流水线内置逻辑）' })
-  async remove(@Param('key') key: string, @Param('stage') stage: string) {
+  async remove(
+    @Param('key') key: string,
+    @Param('stage') stage: string,
+    @CurrentUser() user: any,
+  ) {
+    const before = (await this.stageCommands.resolve(key, stage))?.command ?? null;
     await this.stageCommands.remove(key, stage);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'stage-command.remove',
+      component: key,
+      status: 'success',
+      detail: `删除 ${stage} 阶段命令（恢复内置逻辑）`,
+      changes: [{ field: `${stage}.command`, before, after: null }],
+    });
     return { ok: true };
   }
 

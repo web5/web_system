@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { HookService } from './hook.service';
 import { CurrentUser } from '../common/decorators';
+import { AuditService } from '../audit/audit.service';
 
 /**
  * 发布脚本 Hook 管理（仅控制台，不暴露 MCP）。
@@ -21,7 +22,10 @@ import { CurrentUser } from '../common/decorators';
 @ApiBearerAuth()
 @Controller('modules')
 export class HookController {
-  constructor(private readonly hookService: HookService) {}
+  constructor(
+    private readonly hookService: HookService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get(':key/hooks')
   @ApiOperation({ summary: '某模块各阶段 Hook 状态（含未配置项）' })
@@ -54,13 +58,37 @@ export class HookController {
     if (!body || typeof body.script !== 'string') {
       throw new BadRequestException('缺少 script 字段');
     }
-    return this.hookService.save(key, stage, body.script, user?.username);
+    const before = (await this.hookService.get(key, stage))?.script ?? null;
+    const saved = await this.hookService.save(key, stage, body.script, user?.username);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: before === null ? 'hook.create' : 'hook.update',
+      component: key,
+      status: 'success',
+      detail: `保存 ${stage} 阶段脚本`,
+      changes: [{ field: `${stage}.script`, before, after: body.script }],
+    });
+    return saved;
   }
 
   @Delete(':key/hooks/:stage')
   @ApiOperation({ summary: '删除脚本（恢复内置逻辑）' })
-  async removeHook(@Param('key') key: string, @Param('stage') stage: string) {
-    return this.hookService.remove(key, stage);
+  async removeHook(
+    @Param('key') key: string,
+    @Param('stage') stage: string,
+    @CurrentUser() user: any,
+  ) {
+    const before = (await this.hookService.get(key, stage))?.script ?? null;
+    const res = await this.hookService.remove(key, stage);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'hook.remove',
+      component: key,
+      status: 'success',
+      detail: `删除 ${stage} 阶段脚本（恢复内置逻辑）`,
+      changes: [{ field: `${stage}.script`, before, after: null }],
+    });
+    return res;
   }
 
   @Post(':key/hooks/:stage/validate')

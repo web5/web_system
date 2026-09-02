@@ -258,6 +258,8 @@ export const auditApi = {
         component: string
         status: string
         detail: string
+        /** 字段级前后 diff（配置类写操作；无则为 undefined） */
+        changes?: { field: string; before?: unknown; after?: unknown }[]
       }[]
     }>,
 }

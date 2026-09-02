@@ -3,6 +3,12 @@ import { ref, onMounted } from 'vue'
 import { auditApi } from '@/api'
 import dayjs from 'dayjs'
 
+interface AuditChange {
+  field: string
+  before?: unknown
+  after?: unknown
+}
+
 interface AuditItem {
   id: number
   timestamp: string
@@ -12,6 +18,7 @@ interface AuditItem {
   component: string
   status: string
   detail: string
+  changes?: AuditChange[]
 }
 
 const dataList = ref<AuditItem[]>([])
@@ -110,8 +117,22 @@ const columns = [
   { title: '环境', dataIndex: 'env', key: 'env', width: 80 },
   { title: '组件', dataIndex: 'component', key: 'component', width: 120 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '变更', dataIndex: 'changes', key: 'changes', width: 90 },
   { title: '详情', dataIndex: 'detail', key: 'detail', ellipsis: true },
 ]
+
+// ===== 变更 diff 抽屉 =====
+const diffVisible = ref(false)
+const diffRecord = ref<AuditItem | null>(null)
+function openDiff(record: AuditItem) {
+  diffRecord.value = record
+  diffVisible.value = true
+}
+function valText(v: unknown): string {
+  if (v === null || v === undefined) return '（空）'
+  if (typeof v === 'string') return v
+  return JSON.stringify(v, null, 2)
+}
 
 onMounted(() => {
   loadData()
@@ -185,8 +206,62 @@ onMounted(() => {
           <template v-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
           </template>
+          <template v-if="column.key === 'changes'">
+            <a-button
+              v-if="record.changes?.length"
+              type="link"
+              size="small"
+              @click="openDiff(record)"
+            >
+              {{ record.changes.length }} 处变更 →
+            </a-button>
+            <span v-else style="color: #bbb;">—</span>
+          </template>
         </template>
       </a-table>
     </a-card>
+
+    <!-- 变更明细抽屉 -->
+    <a-drawer v-model:open="diffVisible" title="变更明细（前后 diff）" placement="right" :width="680">
+      <template v-if="diffRecord">
+        <a-descriptions :column="2" size="small" bordered style="margin-bottom: 16px;">
+          <a-descriptions-item label="时间">{{ formatTime(diffRecord.timestamp) }}</a-descriptions-item>
+          <a-descriptions-item label="操作人">{{ diffRecord.user }}</a-descriptions-item>
+          <a-descriptions-item label="操作">{{ diffRecord.action }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag :color="statusColor(diffRecord.status)">{{ diffRecord.status }}</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="环境">{{ diffRecord.env?.toUpperCase() || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="模块">{{ diffRecord.component || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="详情" :span="2">{{ diffRecord.detail }}</a-descriptions-item>
+        </a-descriptions>
+
+        <a-empty v-if="!(diffRecord.changes || []).length" description="无字段级变更记录" />
+        <div
+          v-for="c in diffRecord.changes || []"
+          :key="c.field"
+          style="margin-bottom: 14px;"
+        >
+          <div style="font-weight: 600; margin-bottom: 4px; font-size: 13px;">{{ c.field }}</div>
+          <div style="display: flex; gap: 8px; align-items: flex-start;">
+            <div
+              style="flex: 1; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;
+                     padding: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
+                     word-break: break-all; max-height: 220px; overflow: auto;"
+            >
+              {{ valText(c.before) }}
+            </div>
+            <span style="color: #aaa; margin-top: 8px;">→</span>
+            <div
+              style="flex: 1; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px;
+                     padding: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
+                     word-break: break-all; max-height: 220px; overflow: auto;"
+            >
+              {{ valText(c.after) }}
+            </div>
+          </div>
+        </div>
+      </template>
+    </a-drawer>
   </div>
 </template>
