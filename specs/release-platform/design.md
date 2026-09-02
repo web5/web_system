@@ -286,3 +286,40 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 
 - 更深阶段裁剪（禁 build/禁 cleanup 等）依赖「产物缓存 + 保留策略 per 模板」，S6 之后按需演进
 
+---
+
+## v2 修订（2026-09-02）：步骤编排化 + 工具目录
+
+> 用户追加：「回滚、探活等都可以做成工具，放到流水线的步骤里面」→ 模板从「九阶段内裁剪」升级为
+> **步骤序列编排**；平台内置能力（upload/restart/verify/cleanup/version/pointer/rollback）注册为
+> **内置步骤（执行器）**，与 shell 步骤同权，可被模板任意选用/排序/替换执行器。
+
+### 目标模型（v2）
+
+```
+工具注册表 tool_catalog（外部 CLI 元数据）  git/pnpm/npm/npx/bash/scp/rsync/tar/pm2/curl/node-http…
+                                             分类 + 说明 + 可用性 + 示例（给 shell 步骤参考，不逐 CLI 建执行器）
+步骤库 step_catalog（可编排单元）           code + name + category + executor
+    ├─ 内置步骤（平台语义，executor=builtin） check/pull/upload/restart/verify/cleanup/version/pointer/rollback
+    │     —— 执行器把现有 stageXxx 平台逻辑迁移为可注册单元；回滚=rollback 步骤、探活=verify 步骤
+    └─ 命令步骤（executor=shell）            由模块×步骤×env 的 stage_commands 提供 shell（现有机制）
+模板 pipeline_templates = 有序 steps 序列      [{stepCode, executor?, 覆盖命令?}...] + 审批策略 + rollbackOnFailure
+实例 = 按模板序列 + 提交时快照执行
+```
+
+### v2 关键决策（替代原 D4 的"固定九阶段 + skipVerify"）
+
+| # | 决策 |
+|---|---|
+| V1 | 内置步骤执行器化：`run()` 的顺序 if-else 硬编码改为**注册表驱动**。内置执行器 SPI：`execute(ctx): Promise<StepResult>`；现有 `stageCheck/stagePull/stageUpload/stageRestart/stageVersion/stagePointer/stageVerify/stageCleanup` 逐一迁移为执行器，**失败/通知/进度语义保持现状** |
+| V2 | 回滚三态：显式「rollback」内置步骤（=现有 rollback/switchPointer，可作模板步骤，做紧急回滚线）；失败自动回滚改**模板级 `rollbackOnFailure: 'previous' \| 'none'`**（替代硬编码"verify 失败回滚"，默认 previous 保持现状）；灰度 promote 保持独立动作不进步骤 |
+| V3 | 分类（步骤与工具共用分类枚举）：`code(代码获取) / build(构建) / deploy(投递部署) / probe(探活验证) / rollback(回滚) / cleanup(清理) / semantic(发布语义:version/pointer)`；UI 按分类分组 |
+| V4 | 安全边界不破：可编排**步骤集的下限白名单**——version/pointer 必须保留且不可排序到产物产生前；shell 命令仍仅 JWT、`bash -n` 校验、审计 |
+| V5 | 兼容：builtin 默认模板序列 = 现九阶段（含 rollbackOnFailure=previous），行为与 S1-S5 完全一致；历史实例 template 为 NULL 显示「默认」 |
+
+### 分期（每期独立可上线）
+
+- **S6-I 模板 + 实例（基础形态）**：模板表/懒建默认/CRUD(审计 diff)/submit 按模板解析+审批策略/run 按快照 skipVerify(临时布尔)/前端 ModuleDetail 模板 tab + PipelineCenter 模板选择/回归。任务 24-29。
+- **S6-II 编排化 + 工具目录（本修订的主体）**：步骤执行器注册表 + run 数据驱动；内置步骤全量注册（含 rollback）；tool_catalog 种子+CRUD+「工具管理」页；模板编辑器从步骤库编排（选步骤/排序/换执行器/rollbackOnFailure）；步骤分类分组 UI；回归+度量/审计覆盖。任务 30-35。
+  - 执行顺序依赖：I 先行（模板实例与审批语义落地、可发版），II 在其上替换执行内核——**每步执行器迁移后跑一次既有发布流程回归**，避免一次性大爆炸。
+
