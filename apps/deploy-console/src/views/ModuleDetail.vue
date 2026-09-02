@@ -213,6 +213,9 @@ onMounted(async () => {
           <a-tag>{{ TYPE_LABELS[moduleInfo.type] || moduleInfo.type }}</a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="代码目录">{{ moduleInfo.dir }}</a-descriptions-item>
+        <a-descriptions-item label="默认部署环境">
+          {{ moduleInfo.defaultEnv || '—' }}
+        </a-descriptions-item>
         <a-descriptions-item v-if="moduleInfo.pm2" label="pm2 进程">{{ moduleInfo.pm2 }}</a-descriptions-item>
         <a-descriptions-item v-if="moduleInfo.publicPath" label="publicPath">{{ moduleInfo.publicPath }}</a-descriptions-item>
         <a-descriptions-item v-if="moduleInfo.buildCmd" label="buildCmd">{{ moduleInfo.buildCmd }}</a-descriptions-item>

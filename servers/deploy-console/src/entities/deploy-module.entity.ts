@@ -44,6 +44,10 @@ export class DeployModuleEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '前端 public 子路径' })
   publicPath?: string;
 
+  /** 默认部署环境：发布/监控/诊断入口默认选中（模块级，可改） */
+  @Column({ type: 'varchar', length: 32, nullable: true, comment: '默认部署环境 ID' })
+  defaultEnv?: string;
+
   /**
    * @deprecated 已废弃：构建命令统一由 `deploy_module_stage_commands`（stage=build）承载。
    *

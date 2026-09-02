@@ -109,6 +109,11 @@ export class ModuleDto {
   @IsOptional()
   buildCmd?: string;
 
+  /** 默认部署环境（发布/监控/诊断入口默认选中；可改） */
+  @IsString()
+  @IsOptional()
+  defaultEnv?: string;
+
   @IsString()
   @IsOptional()
   entry?: string;
