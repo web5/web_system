@@ -82,4 +82,9 @@ export class ReleaseRegistryService {
     const dep = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey } });
     return dep?.currentVersion;
   }
+
+  /** 按版本标签查版本记录（复用产物时回填 gitCommit 用；跨 env 任意一条即可） */
+  async findByVersionTag(versionTag: string): Promise<DeployVersionEntity | undefined> {
+    return (await this.versionRepo.findOne({ where: { versionTag } })) ?? undefined;
+  }
 }

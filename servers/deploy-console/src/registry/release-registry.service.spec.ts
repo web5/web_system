@@ -3,12 +3,13 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 
 describe('ReleaseRegistryService（版本表/指针工具）', () => {
-  let versionRepo: { create: jest.Mock; save: jest.Mock };
+  let versionRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
   let deploymentRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
   let svc: ReleaseRegistryService;
 
   beforeEach(() => {
     versionRepo = {
+      findOne: jest.fn(async () => null),
       create: jest.fn((d: Partial<DeployVersionEntity>) => ({ ...d })),
       save: jest.fn(async (x: unknown) => x),
     };
@@ -75,5 +76,13 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(await svc.currentVersion('dev', 'admin')).toBe('abc');
     deploymentRepo.findOne.mockResolvedValue(null);
     expect(await svc.currentVersion('dev', 'admin')).toBeUndefined();
+  });
+
+  it('findByVersionTag 按标签查版本记录；无记录 → undefined', async () => {
+    const found = { versionTag: 'abc', gitCommit: 'abc' };
+    versionRepo.findOne.mockResolvedValue(found);
+    expect(await svc.findByVersionTag('abc')).toBe(found);
+    versionRepo.findOne.mockResolvedValue(null);
+    expect(await svc.findByVersionTag('nope')).toBeUndefined();
   });
 });
