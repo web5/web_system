@@ -1,4 +1,9 @@
-/* 全局样式 - 浅色主题，侧边栏深色 */
+/* =============================================================
+ * deploy-console — 业务全局样式
+ * P1-1 去裸值：颜色/圆角/字号优先引用 @web-system/ui 语义 token（var(--ws-*)）。
+ * 保留例外（须注释）：登录页品牌渐变、终端日志深色块、Beehive 图标品牌色。
+ * ============================================================= */
+
 @import 'ant-design-vue/dist/reset.css';
 
 * {
@@ -15,10 +20,8 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background-color: #f0f2f5;
-  color: rgba(0, 0, 0, 0.88);
+  background-color: var(--ws-bg-page);
+  color: var(--ws-text-primary);
 }
 
 /* 滚动条样式 */
@@ -28,8 +31,8 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
+  background: var(--ws-border);
+  border-radius: var(--ws-radius-pill);
 }
 
 ::-webkit-scrollbar-track {
@@ -41,8 +44,9 @@ body {
   min-height: 100vh;
 }
 
+/* 侧栏：深色反白面板（固定色，不随 data-theme） */
 .app-sider {
-  background-color: #001529;
+  background-color: #171717;
 }
 
 .app-sider .logo {
@@ -53,7 +57,7 @@ body {
   gap: 8px;
   color: #fff;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: var(--ws-font-weight-semibold);
   letter-spacing: 0.5px;
   background: rgba(255, 255, 255, 0.04);
   margin-bottom: 8px;
@@ -70,12 +74,12 @@ body {
 }
 
 .app-header {
-  background: #fff;
+  background: var(--ws-bg-surface);
   padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  border-bottom: 1px solid var(--ws-border-subtle);
   z-index: 1;
 }
 
@@ -85,7 +89,9 @@ body {
   min-height: calc(100vh - 64px);
 }
 
-/* 登录页 */
+/* =============================================================
+ * 登录页（例外：品牌渐变，维持既有视觉，不随 data-theme）
+ * ============================================================= */
 .login-container {
   height: 100vh;
   position: relative;
@@ -110,9 +116,9 @@ body {
   padding: 40px;
   position: relative;
   z-index: 1;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  background: var(--ws-bg-surface);
+  border-radius: var(--ws-radius-lg);
+  box-shadow: var(--ws-shadow-popover);
 }
 
 .login-card .login-logo {
@@ -127,14 +133,14 @@ body {
   margin-bottom: 8px;
   font-size: 28px;
   letter-spacing: 1px;
-  color: #1a1a2e;
+  color: var(--ws-text-primary);
 }
 
 .login-card .login-subtitle {
   text-align: center;
   margin-bottom: 28px;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--ws-text-tertiary);
   letter-spacing: 1px;
 }
 
@@ -144,23 +150,26 @@ body {
 
   h2 {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: var(--ws-font-weight-semibold);
     margin-bottom: 4px;
+    color: var(--ws-text-primary);
   }
 
   p {
-    color: rgba(0, 0, 0, 0.45);
+    color: var(--ws-text-tertiary);
     font-size: 14px;
   }
 }
 
-/* 日志面板 */
+/* =============================================================
+ * 日志面板（例外：终端深色块，固定深底浅字，不随 data-theme）
+ * ============================================================= */
 .log-panel {
   background: #1e1e1e;
   color: #d4d4d4;
   border-radius: 6px;
   padding: 16px;
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-family: var(--ws-font-mono);
   font-size: 13px;
   line-height: 1.6;
   max-height: 400px;
@@ -175,36 +184,11 @@ body {
 
 /* 环境卡片 */
 .env-card {
-  border-radius: 8px;
+  border-radius: var(--ws-radius-lg);
   overflow: hidden;
   transition: box-shadow 0.3s;
 
   &:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--ws-shadow-popover);
   }
-}
-
-/* 状态标签颜色 */
-.status-tag-pending {
-  color: #1677ff;
-  background: #e6f4ff;
-  border-color: #91caff;
-}
-
-.status-tag-running {
-  color: #fa8c16;
-  background: #fff7e6;
-  border-color: #ffd591;
-}
-
-.status-tag-success {
-  color: #52c41a;
-  background: #f6ffed;
-  border-color: #b7eb8f;
-}
-
-.status-tag-failed {
-  color: #ff4d4f;
-  background: #fff2f0;
-  border-color: #ffccc7;
 }

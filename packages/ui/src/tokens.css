@@ -1,239 +1,227 @@
 /* =============================================================
- * @web-system/ui — 设计 Token（CSS 变量）
- * 科豆 AI 品牌规范：品牌色（橙 #F97316） + Element Plus 风格中性系
- * 默认即浅色（Element Plus 观感）：浅灰页面底 / 白卡片 / 中性灰边框 / 4px 圆角
- * 深色通过 [data-theme="dark"] 覆盖（预留，当前未启用）
+ * @web-system/ui — 语义设计 Token（CSS 变量）
+ *
+ * ⚠️ 数值必须与 packages/ui/src/tokens.ts 保持一致（人工同步，自动生成留 TODO）。
+ *
+ * 命名规范（Geist 语义 scale）：
+ *   --ws-gray-{100..1000}   中性灰，数字越大越深（light）；dark 同数字镜像深浅
+ *   --ws-brand-{50..900}    品牌橙 scale（#F97316 = 500）
+ *   --ws-{success|warning|error|info}-{100|500}  语义色
+ *   --ws-{bg|text|border|input}-{role}           高层语义角色（业务优先引用）
+ *   --ws-radius-* / --ws-space-* / --ws-shadow-* / --ws-font-*
+ *
+ * 主题裁决 DR-3：#F97316 品牌主橙；#FF8C42 降级 accent（hover/图表强调）。
+ * DR-4：light = canonical（:root）；dark = [data-theme='dark'] 全量镜像。
+ *
+ * 兼容：末尾 alias 块保留全部旧变量名（过渡期双写），删除动作单独开 PR。
  * ============================================================= */
 
 :root {
-  /* ===== 品牌色（科豆橙，作为主色/强调） ===== */
-  --color-brand-50:  #FFF7ED;
-  --color-brand-100: #FFEDD5;
-  --color-brand-200: #FED7AA;
-  --color-brand-400: #FB923C;
-  --color-brand-500: #F97316;
-  --color-brand-600: #EA580C;
-  --color-brand-700: #C2410C;
-  --color-accent:    #FF8C42;
+  /* ===== 品牌橙 scale（tokens.ts colors.brand） ===== */
+  --ws-brand-50:  #FFF7ED;
+  --ws-brand-100: #FFEDD5;
+  --ws-brand-200: #FED7AA;
+  --ws-brand-300: #FDBA74;
+  --ws-brand-400: #FB923C;
+  --ws-brand-500: #F97316;
+  --ws-brand-600: #EA580C;
+  --ws-brand-700: #C2410C;
+  --ws-brand-800: #9A3412;
+  --ws-brand-900: #7C2D12;
+  --ws-brand-accent: #FF8C42;
 
-  /* ===== AntD 主题映射 ===== */
-  --ant-color-primary: var(--color-brand-500);
-  --ant-color-primary-hover: var(--color-brand-600);
-  --ant-color-primary-active: var(--color-brand-700);
+  /* ===== 中性灰 scale · light 列（tokens.ts colors.gray.light） ===== */
+  --ws-gray-100: #FAFAFA;
+  --ws-gray-200: #F2F2F2;
+  --ws-gray-300: #EBEBEB;
+  --ws-gray-400: #E5E5E5;
+  --ws-gray-500: #D4D4D4;
+  --ws-gray-600: #A3A3A3;
+  --ws-gray-700: #737373;
+  --ws-gray-800: #525252;
+  --ws-gray-900: #262626;
+  --ws-gray-1000: #171717;
+
+  /* ===== 语义色（tokens.ts colors.{success|warning|error|info}.light） ===== */
+  --ws-success-100: #EAF6EC;
+  --ws-success-500: #398E4A;
+  --ws-warning-100: #FEF3DC;
+  --ws-warning-500: #F5A623;
+  --ws-error-100: #FCEBEC;
+  --ws-error-500: #E5484D;
+  --ws-info-100: #FFF7ED;
+  --ws-info-500: #F97316;
+
+  /* ===== 语义角色层（tokens.ts roles.light；业务优先引用） ===== */
+  --ws-bg-page: #FAFAFA;
+  --ws-bg-surface: #FFFFFF;
+  --ws-bg-elevated: #FFFFFF;
+  --ws-bg-subtle: #F2F2F2;
+  --ws-bg-hover: #F2F2F2;
+  --ws-text-primary: #171717;
+  --ws-text-secondary: #525252;
+  --ws-text-tertiary: #A3A3A3;
+  --ws-text-disabled: #D4D4D4;
+  --ws-border: #E5E5E5;
+  --ws-border-subtle: #EBEBEB;
+  --ws-input-bg: #FFFFFF;
+  --ws-input-border: #E5E5E5;
+  --ws-input-placeholder: #A3A3A3;
+  --ws-overlay: rgba(0, 0, 0, 0.5);
+
+  /* ===== 登录页（例外场景，随主题双值） ===== */
+  --ws-login-gradient: linear-gradient(135deg, #FAFAFA 0%, #FFFFFF 100%);
+  --ws-login-box-bg: #FFFFFF;
+  --ws-login-title: #171717;
+
+  /* ===== 圆角 / 间距 / 阴影 / 字体（tokens.ts） ===== */
+  --ws-radius-sm: 4px;
+  --ws-radius-md: 6px;
+  --ws-radius-lg: 8px;
+  --ws-radius-pill: 9999px;
+
+  --ws-space-4: 4px;
+  --ws-space-8: 8px;
+  --ws-space-12: 12px;
+  --ws-space-16: 16px;
+  --ws-space-24: 24px;
+  --ws-space-32: 32px;
+  --ws-space-48: 48px;
+
+  --ws-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --ws-shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  --ws-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --ws-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono',
+    'Cascadia Code', Menlo, Consolas, monospace;
+  --ws-font-size-h1: 32px;
+  --ws-font-size-h2: 24px;
+  --ws-font-size-h3: 18px;
+  --ws-font-size-h4: 16px;
+  --ws-font-size-base: 14px;
+  --ws-font-size-caption: 12px;
+  --ws-font-weight-regular: 400;
+  --ws-font-weight-medium: 500;
+  --ws-font-weight-semibold: 600;
+
+  /* =============================================================
+   * 兼容 alias（需求文档 7.1：过渡期保留全部旧变量名，勿删）
+   * 均 var() 引用新角色变量 → light/dark 自动跟随
+   * ============================================================= */
+  --color-brand-50: var(--ws-brand-50);
+  --color-brand-100: var(--ws-brand-100);
+  --color-brand-200: var(--ws-brand-200);
+  --color-brand-400: var(--ws-brand-400);
+  --color-brand-500: var(--ws-brand-500);
+  --color-brand-600: var(--ws-brand-600);
+  --color-brand-700: var(--ws-brand-700);
+  --accent: var(--ws-brand-accent);
+  --ant-color-primary: var(--ws-brand-500);
+  --ant-color-primary-hover: var(--ws-brand-600);
+  --ant-color-primary-active: var(--ws-brand-700);
   --ant-color-primary-bg: rgba(249, 115, 22, 0.1);
   --ant-color-primary-bg-hover: rgba(249, 115, 22, 0.16);
-  --ant-color-primary-border: var(--color-brand-500);
-  --ant-color-primary-text: var(--color-brand-500);
-
-  /* ===== 表面（Element Plus 浅色：浅灰页面底 / 白卡片） ===== */
-  --surface-0: #F5F7FA; /* 页面底色（el 应用灰） */
-  --surface-1: #FFFFFF; /* 页头 / 侧栏 / 白底区 */
-  --surface-2: #FFFFFF; /* 卡片 / 表格容器 */
-  --surface-3: #FAFAFA; /* 表头 / 次级填充 */
-  --surface-4: #F5F7FA; /* hover 填充 */
-
-  /* ===== 卡片 ===== */
-  --card-bg-start: #FFFFFF;
-  --card-bg-end: #FFFFFF;
-  --card-border: #EBEEF5;
+  --ant-color-primary-border: var(--ws-brand-500);
+  --ant-color-primary-text: var(--ws-brand-500);
+  --surface-0: var(--ws-bg-page);
+  --surface-1: var(--ws-bg-surface);
+  --surface-2: var(--ws-bg-surface);
+  --surface-3: var(--ws-bg-subtle);
+  --surface-4: var(--ws-bg-hover);
+  --card-bg-start: var(--ws-bg-surface);
+  --card-bg-end: var(--ws-bg-surface);
+  --card-border: var(--ws-border-subtle);
   --card-border-hover: rgba(249, 115, 22, 0.4);
-
-  /* ===== 页头 ===== */
-  --header-bg: #FFFFFF;
-  --header-border: #EBEEF5;
-
-  /* ===== 文本（Element Plus 灰阶） ===== */
-  --text-heading: #303133;
-  --text-primary: #303133;
-  --text-body: #606266;
-  --text-secondary: #606266;
-  --text-tertiary: #909399;
-  --text-muted: #909399;
-  --text-faint: #C0C4CC;
-  --text-disabled: #C0C4CC;
-
-  /* ===== 边框（Element Plus 中性灰） ===== */
-  --border-subtle: #EBEEF5;   /* extra-light：卡片/分隔 */
-  --border-default: #DCDFE6;   /* regular：输入框/默认边框 */
-  --border-light: #E4E7ED;    /* light */
-  --border-lighter: #EBEEF5;  /* lighter */
-  --border-divider: #EBEEF5;  /* divider */
-
-  /* ===== 输入框 ===== */
-  --input-bg: #FFFFFF;
-  --input-border: #DCDFE6;
-  --input-text: #606266;
-  --input-placeholder: #A8ABB2;
-
-  /* ===== 表格 ===== */
-  --table-header-bg: #FAFAFA;
-  --table-header-text: #909399;
-  --table-row-border: #EBEEF5;
-  --table-hover-bg: #F5F7FA;
-
-  /* ===== 弹窗 ===== */
-  --modal-bg: #FFFFFF;
-  --modal-title: #303133;
-  --modal-border: #EBEEF5;
-
-  /* ===== 遮罩 ===== */
-  --overlay-bg: rgba(0, 0, 0, 0.5);
-  --overlay-action-bg: #FFFFFF;
-
-  /* ===== 阴影（Element Plus 柔和投影） ===== */
-  --shadow-card: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  --shadow-login: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-
-  /* ===== 标签页 ===== */
-  --tab-bg: #F5F7FA;
-  --tab-border: #EBEEF5;
-  --tab-count-bg: #F5F7FA;
-
-  /* ===== 标签 ===== */
-  --tag-bg: #F5F7FA;
-
-  /* ===== 登录页 ===== */
-  --login-gradient: linear-gradient(135deg, #F5F7FA 0%, #FFFFFF 100%);
-  --login-box-bg: #FFFFFF;
-  --login-title: #303133;
-
-  /* ===== 图表 ===== */
-  --chart-axis-line: #EBEEF5;
-  --chart-axis-label: #909399;
-  --chart-split-line: #F5F7FA;
-  --chart-legend-text: #606266;
+  --header-bg: var(--ws-bg-surface);
+  --header-border: var(--ws-border-subtle);
+  --text-heading: var(--ws-text-primary);
+  --text-primary: var(--ws-text-primary);
+  --text-body: var(--ws-text-secondary);
+  --text-secondary: var(--ws-text-secondary);
+  --text-tertiary: var(--ws-text-tertiary);
+  --text-muted: var(--ws-text-tertiary);
+  --text-faint: var(--ws-gray-500);
+  --text-disabled: var(--ws-text-disabled);
+  --border-subtle: var(--ws-border-subtle);
+  --border-default: var(--ws-border);
+  --border-light: var(--ws-border-subtle);
+  --border-lighter: var(--ws-border-subtle);
+  --border-divider: var(--ws-border-subtle);
+  --input-bg: var(--ws-input-bg);
+  --input-border: var(--ws-input-border);
+  --input-text: var(--ws-text-secondary);
+  --input-placeholder: var(--ws-input-placeholder);
+  --table-header-bg: var(--ws-bg-subtle);
+  --table-header-text: var(--ws-text-tertiary);
+  --table-row-border: var(--ws-border-subtle);
+  --table-hover-bg: var(--ws-bg-hover);
+  --modal-bg: var(--ws-bg-surface);
+  --modal-title: var(--ws-text-primary);
+  --modal-border: var(--ws-border-subtle);
+  --overlay-bg: var(--ws-overlay);
+  --overlay-action-bg: var(--ws-bg-surface);
+  --shadow-card: var(--ws-shadow-card);
+  --shadow-login: var(--ws-shadow-popover);
+  --tab-bg: var(--ws-bg-subtle);
+  --tab-border: var(--ws-border-subtle);
+  --tab-count-bg: var(--ws-bg-subtle);
+  --tag-bg: var(--ws-bg-subtle);
+  --login-gradient: var(--ws-login-gradient);
+  --login-box-bg: var(--ws-login-box-bg);
+  --login-title: var(--ws-login-title);
+  --chart-axis-line: var(--ws-border-subtle);
+  --chart-axis-label: var(--ws-text-tertiary);
+  --chart-split-line: var(--ws-bg-subtle);
+  --chart-legend-text: var(--ws-text-secondary);
 }
 
-/* ===== 浅色主题（与默认一致，供显式设置 data-theme="light" 使用） ===== */
-[data-theme='light'] {
-  --surface-0: #F5F7FA;
-  --surface-1: #FFFFFF;
-  --surface-2: #FFFFFF;
-  --surface-3: #FAFAFA;
-  --surface-4: #F5F7FA;
-
-  --card-bg-start: #FFFFFF;
-  --card-bg-end: #FFFFFF;
-  --card-border: #EBEEF5;
-  --card-border-hover: rgba(249, 115, 22, 0.4);
-
-  --header-bg: #FFFFFF;
-  --header-border: #EBEEF5;
-
-  --text-heading: #303133;
-  --text-primary: #303133;
-  --text-body: #606266;
-  --text-secondary: #606266;
-  --text-tertiary: #909399;
-  --text-muted: #909399;
-  --text-faint: #C0C4CC;
-  --text-disabled: #C0C4CC;
-
-  --border-subtle: #EBEEF5;
-  --border-default: #DCDFE6;
-  --border-light: #E4E7ED;
-  --border-lighter: #EBEEF5;
-  --border-divider: #EBEEF5;
-
-  --input-bg: #FFFFFF;
-  --input-border: #DCDFE6;
-  --input-text: #606266;
-  --input-placeholder: #A8ABB2;
-
-  --table-header-bg: #FAFAFA;
-  --table-header-text: #909399;
-  --table-row-border: #EBEEF5;
-  --table-hover-bg: #F5F7FA;
-
-  --modal-bg: #FFFFFF;
-  --modal-title: #303133;
-  --modal-border: #EBEEF5;
-
-  --overlay-bg: rgba(0, 0, 0, 0.5);
-  --overlay-action-bg: #FFFFFF;
-
-  --shadow-card: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  --shadow-login: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-
-  --tab-bg: #F5F7FA;
-  --tab-border: #EBEEF5;
-  --tab-count-bg: #F5F7FA;
-
-  --tag-bg: #F5F7FA;
-
-  --login-gradient: linear-gradient(135deg, #F5F7FA 0%, #FFFFFF 100%);
-  --login-box-bg: #FFFFFF;
-  --login-title: #303133;
-
-  --chart-axis-line: #EBEEF5;
-  --chart-axis-label: #909399;
-  --chart-split-line: #F5F7FA;
-  --chart-legend-text: #606266;
-}
-
-/* ===== 深色主题（预留，可选启用） ===== */
+/* =============================================================
+ * 深色主题（DR-4：与 :root 的 ws-* key 集合一一对应，防遗漏回退 light 值）
+ * 数值来源 tokens.ts（gray.dark / 语义.dark / roles.dark / shadow.dark）
+ * 不变项（brand scale、radius、space、font）随 :root，无需重复。
+ * ============================================================= */
 [data-theme='dark'] {
-  --surface-0: #1D1E1F;
-  --surface-1: #141414;
-  --surface-2: #1D1D1D;
-  --surface-3: #262727;
-  --surface-4: #2A2A2B;
+  --ws-gray-100: #0A0A0A;
+  --ws-gray-200: #111111;
+  --ws-gray-300: #1A1A1A;
+  --ws-gray-400: #2A2A2A;
+  --ws-gray-500: #333333;
+  --ws-gray-600: #525252;
+  --ws-gray-700: #737373;
+  --ws-gray-800: #A3A3A3;
+  --ws-gray-900: #D4D4D4;
+  --ws-gray-1000: #EDEDED;
 
-  --card-bg-start: #1D1D1D;
-  --card-bg-end: #1D1D1D;
-  --card-border: #303030;
-  --card-border-hover: rgba(249, 115, 22, 0.4);
+  --ws-success-100: #16301C;
+  --ws-success-500: #4CAA5E;
+  --ws-warning-100: #332A14;
+  --ws-warning-500: #F5A623;
+  --ws-error-100: #3A1F21;
+  --ws-error-500: #F2555A;
+  --ws-info-100: #33220F;
+  --ws-info-500: #FB923C;
 
-  --header-bg: #141414;
-  --header-border: #303030;
+  --ws-bg-page: #0A0A0A;
+  --ws-bg-surface: #1A1A1A;
+  --ws-bg-elevated: #242424;
+  --ws-bg-subtle: #111111;
+  --ws-bg-hover: #2A2A2A;
+  --ws-text-primary: #EDEDED;
+  --ws-text-secondary: #A3A3A3;
+  --ws-text-tertiary: #737373;
+  --ws-text-disabled: #525252;
+  --ws-border: #2A2A2A;
+  --ws-border-subtle: #333333;
+  --ws-input-bg: #1A1A1A;
+  --ws-input-border: #2A2A2A;
+  --ws-input-placeholder: #737373;
+  --ws-overlay: rgba(0, 0, 0, 0.6);
 
-  --text-heading: #E5EAF3;
-  --text-primary: #E5EAF3;
-  --text-body: #CFD3DC;
-  --text-secondary: #A3A6AD;
-  --text-tertiary: #8D9095;
-  --text-muted: #6B6E73;
-  --text-faint: #4C4E52;
-  --text-disabled: #6B6E73;
+  --ws-login-gradient: linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 100%);
+  --ws-login-box-bg: #1A1A1A;
+  --ws-login-title: #EDEDED;
 
-  --border-subtle: #303030;
-  --border-default: #434343;
-  --border-light: #3A3A3A;
-  --border-lighter: #303030;
-  --border-divider: #303030;
-
-  --input-bg: #1D1D1D;
-  --input-border: #434343;
-  --input-text: #CFD3DC;
-  --input-placeholder: #6B6E73;
-
-  --table-header-bg: #262727;
-  --table-header-text: #A3A6AD;
-  --table-row-border: #303030;
-  --table-hover-bg: #262727;
-
-  --modal-bg: #1D1D1D;
-  --modal-title: #E5EAF3;
-  --modal-border: #303030;
-
-  --overlay-bg: rgba(0, 0, 0, 0.6);
-  --overlay-action-bg: #1D1D1D;
-
-  --shadow-card: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
-  --shadow-login: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
-
-  --tab-bg: #262727;
-  --tab-border: #303030;
-  --tab-count-bg: #262727;
-
-  --tag-bg: #262727;
-
-  --login-gradient: linear-gradient(135deg, #141414 0%, #1D1D1D 100%);
-  --login-box-bg: #1D1D1D;
-  --login-title: #E5EAF3;
-
-  --chart-axis-line: #303030;
-  --chart-axis-label: #8D9095;
-  --chart-split-line: #262727;
-  --chart-legend-text: #A3A6AD;
+  --ws-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --ws-shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
