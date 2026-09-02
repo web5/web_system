@@ -19,6 +19,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
+import { StageCommandService } from '../stage-command/stage-command.service';
 
 /**
  * 任务状态枚举
@@ -71,6 +72,7 @@ export class DeployService {
     private readonly environmentService: EnvironmentService,
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly serverService: ServerService,
+    private readonly stageCommands: StageCommandService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -498,6 +500,28 @@ export class DeployService {
     return task.id;
   }
 
+  /**
+   * 等待任务到达终态。
+   *
+   * 回滚/部署脚本是 spawn 出去的异步进程，`startRollback` / `startDeploy` 只返回 taskId。
+   * 调用方若不等待就无法知道结果——"自动回滚"很可能只是发起了动作，实际并没成功。
+   * 自动回滚这类"补救动作"必须等结果，否则失败会静默。
+   */
+  async waitTask(
+    taskId: string,
+    timeoutMs = 10 * 60 * 1000,
+  ): Promise<'success' | 'failed' | 'timeout'> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const task = await this.taskRepo.findOne({ where: { id: taskId } });
+      if (!task) return 'failed';
+      if (task.status === 'success') return 'success';
+      if (task.status === 'failed' || task.status === 'cancelled') return 'failed';
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return 'timeout';
+  }
+
   private executeBuildScript(task: DeployTask, webSystemDir: string, component: string) {
     const scriptPath = path.join(webSystemDir, 'scripts', 'build-all.sh');
     void this.updateTask(task, 'running', `执行构建: bash scripts/build-all.sh ${component}`);
@@ -535,7 +559,8 @@ export class DeployService {
         type: m.type,
         dir: m.dir,
         publicPath: m.publicPath ?? '',
-        buildCmd: m.buildCmd ?? '',
+        // 构建命令统一读单一真相源（不再用已废弃的 deploy_modules.buildCmd）
+        buildCmd: (await this.stageCommands.resolve(m.key, 'build'))?.command ?? '',
         pm2: m.pm2 ?? '',
       });
       // 后端服务：按环境服务路由解析多服务器（serverName 组），注入 DEPLOY_SERVERS

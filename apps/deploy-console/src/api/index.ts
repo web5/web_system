@@ -217,6 +217,31 @@ export const monitorApi = {
     http.get('/monitor/logs', {
       params: { env, service, lines },
     }) as Promise<{ lines: string[] }>,
+  localPm2: () =>
+    http.get('/monitor/local/pm2') as Promise<
+      {
+        name: string
+        status: 'online' | 'stopped' | 'errored'
+        cpu: number
+        memory: number
+        uptime: number
+        restarts: number
+      }[]
+    >,
+  localHealth: () =>
+    http.get('/monitor/local/health') as Promise<
+      {
+        service: string
+        address: string
+        status: 'up' | 'down'
+        response?: string
+        responseTime: number
+      }[]
+    >,
+  localLogs: (service: string, lines = 100) =>
+    http.get('/monitor/local/logs', {
+      params: { service, lines },
+    }) as Promise<{ lines: string[] }>,
 }
 
 /* ========== Audit ========== */
@@ -288,6 +313,209 @@ export const serverApi = {
         }[]
       }[]
     >,
+}
+
+/* ========== Pipelines（发布流水线） ========== */
+
+export interface PipelineItem {
+  id: string
+  env: string
+  moduleKey: string
+  versionTag?: string
+  mode: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  stage?: string
+  progress?: { current: number; total: number; message?: string }
+  logs?: string[]
+  error?: string
+  operator?: string
+  gitBranch?: string
+  gitCommit?: string
+  grayscaleRule?: Record<string, unknown>
+  canaryRuleId?: string
+  result?: Record<string, unknown>
+  startTime: number
+  endTime?: number
+  reuseArtifact?: boolean
+}
+
+export const pipelineApi = {
+  submit: (dto: {
+    env: string
+    moduleKey: string
+    /** 目标分支（默认 master），发布基于远程仓库该分支拉取代码 */
+    branch?: string
+    /** 目标 commit（git 短哈希，默认分支最新） */
+    commitId?: string
+    mode?: 'direct' | 'grayscale'
+    /** @deprecated 等价 commitId */
+    versionTag?: string
+    target?: 'local' | 'remote'
+    grayscaleRule?: Record<string, unknown>
+    confirm?: boolean
+  }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
+
+  list: (params?: { env?: string; moduleKey?: string; limit?: number }) =>
+    http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
+
+  get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
+
+  cancel: (id: string) => http.post(`/pipelines/${id}/cancel`) as Promise<{ id: string; status: string }>,
+
+  promote: (id: string) =>
+    http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
+
+  /** 可发布版本（含磁盘上未登记版本表的历史产物） */
+  releases: (env?: string, component?: string) =>
+    http.get('/pipelines/meta/releases', {
+      params: { ...(env ? { env } : {}), ...(component ? { component } : {}) },
+    }) as Promise<
+      {
+        versionTag: string
+        component?: string
+        env?: string
+        gitCommit?: string
+        gitBranch?: string
+        releasedBy?: string
+        releasedAt?: string
+        status?: string
+        note?: string
+        /** db=版本表记录；artifact=磁盘产物（未登记版本表） */
+        source?: 'db' | 'artifact'
+      }[]
+    >,
+}
+
+/* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
+
+export const STAGES = [
+  'check',
+  'pull',
+  'build',
+  'upload',
+  'restart',
+  'version',
+  'pointer',
+  'verify',
+  'cleanup',
+] as const
+
+export const hookApi = {
+  list: (key: string) =>
+    http.get(`/modules/${key}/hooks`) as Promise<
+      { stage: string; configured: boolean; enabled: boolean; updatedAt?: string; updatedBy?: string }[]
+    >,
+  get: (key: string, stage: string) =>
+    http.get(`/modules/${key}/hooks/${stage}`) as Promise<{
+      id?: string
+      moduleKey: string
+      stage: string
+      script: string
+      enabled: boolean
+      updatedBy?: string
+    } | null>,
+  save: (key: string, stage: string, script: string) =>
+    http.put(`/modules/${key}/hooks/${stage}`, { script }) as Promise<{
+      moduleKey: string
+      stage: string
+      updatedAt: string
+    }>,
+  remove: (key: string, stage: string) =>
+    http.delete(`/modules/${key}/hooks/${stage}`) as Promise<{ ok: boolean }>,
+  validate: (key: string, stage: string, script: string) =>
+    http.post(`/modules/${key}/hooks/${stage}/validate`, { script }) as Promise<{
+      ok: boolean
+      message: string
+    }>,
+  templates: (type: string) =>
+    http.get('/modules/hooks/templates', { params: { type } }) as Promise<Record<string, string>>,
+}
+
+/**
+ * 可配置阶段：version / pointer 是发布语义真相源，固定由流水线执行，不可配置。
+ * 其中 **build 必须配置命令**（未配置即 fail-fast），其余阶段未配置则回落到内置逻辑。
+ */
+export const CONFIGURABLE_STAGES = [
+  'check',
+  'pull',
+  'build',
+  'upload',
+  'restart',
+  'verify',
+  'cleanup',
+] as const
+
+/** 阶段命令：发布流水线唯一执行真相源（替代已废弃的 hookApi） */
+export const stageCommandApi = {
+  list: (key: string) =>
+    http.get(`/modules/${key}/stage-commands`) as Promise<
+      {
+        stage: string
+        configured: boolean
+        command: string | null
+        enabled: boolean
+        timeoutSec: number | null
+        updatedAt?: string
+        updatedBy?: string
+      }[]
+    >,
+  get: (key: string, stage: string) =>
+    http.get(`/modules/${key}/stage-commands/${stage}`) as Promise<{
+      command: string
+      timeoutSec?: number
+    } | null>,
+  save: (key: string, stage: string, command: string, timeoutSec?: number) =>
+    http.put(`/modules/${key}/stage-commands/${stage}`, { command, timeoutSec }) as Promise<{
+      moduleKey: string
+      stage: string
+      updatedAt: string
+    }>,
+  remove: (key: string, stage: string) =>
+    http.delete(`/modules/${key}/stage-commands/${stage}`) as Promise<{ ok: boolean }>,
+  validate: (key: string, stage: string, command: string) =>
+    http.post(`/modules/${key}/stage-commands/${stage}/validate`, { command }) as Promise<{
+      ok: boolean
+      message: string
+    }>,
+  template: (type: string) =>
+    http.get('/modules/stage-commands/templates', { params: { type } }) as Promise<string | null>,
+}
+
+/**
+ * 配置中心（仅控制台 JWT 可访问）。
+ * 安全边界：密钥在接口层即返回掩码，前端拿不到明文，也就不可能误展示。
+ */
+export const configApi = {
+  list: (scope?: string, envId?: string, moduleKey?: string) =>
+    http.get('/config/items', { params: { scope, envId, moduleKey } }) as Promise<
+      {
+        id: string
+        scope: string
+        envId: string
+        moduleKey: string
+        key: string
+        value: string
+        isSecret: boolean
+        enabled: boolean
+        description?: string
+        updatedBy?: string
+        updatedAt?: string
+      }[]
+    >,
+  save: (dto: {
+    scope: string
+    envId?: string
+    moduleKey?: string
+    key: string
+    value: string
+    isSecret?: boolean
+    description?: string
+  }) => http.put('/config/items', dto) as Promise<{ id: string; key: string }>,
+  remove: (id: string) => http.delete(`/config/items/${id}`) as Promise<{ ok: boolean }>,
+  snapshot: (envId: string, moduleKey: string, versionTag: string) =>
+    http.post('/config/snapshots', { envId, moduleKey, versionTag }) as Promise<{ id: string }>,
+  restore: (envId: string, moduleKey: string, versionTag: string) =>
+    http.post('/config/snapshots/restore', { envId, moduleKey, versionTag }) as Promise<number>,
 }
 
 export default http

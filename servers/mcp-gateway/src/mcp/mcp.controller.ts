@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Param, Req, Res } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Req, Res, Body } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
@@ -65,6 +65,33 @@ export class McpController {
     return this.handleDelete(req, res, module);
   }
 
+  // ── /mcp/tools/call 无状态直调端点（ai-agent 经 MCP 网关调用工具用）──
+
+  @Post('mcp/tools/call')
+  async callTool(@Req() req: Request, @Res() res: Response, @Body() body: any) {
+    if (!(await this.checkAuth(req, res))) return;
+    try {
+      const { module, tool, args } = body || {};
+      if (!module || !tool) {
+        res.status(400).json({ ok: false, message: 'module 和 tool 必填' });
+        return;
+      }
+      const result = await this.mcpService.callTool(
+        String(module),
+        String(tool),
+        args ?? {},
+        this.extractToken(req),
+      );
+      res.json(result);
+    } catch (e: any) {
+      if (e.status === 404) {
+        res.status(404).json({ ok: false, message: e.message });
+        return;
+      }
+      res.status(500).json({ ok: false, message: e.message || '工具调用失败' });
+    }
+  }
+
   // ── 共享实现 ──
 
   /**
@@ -120,9 +147,17 @@ export class McpController {
     }
   }
 
+  /** 提取调用者凭证（透传给下游模块，用于审计追溯到人） */
+  private extractToken(req: Request): string | undefined {
+    const auth = req.headers?.['authorization'];
+    if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) return undefined;
+    return auth.slice(7).trim() || undefined;
+  }
+
   private async handlePost(req: Request, res: Response, moduleCode?: string): Promise<void> {
     if (!(await this.checkAuth(req, res))) return;
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const token = this.extractToken(req);
     try {
       const existing = sessionId ? this.mcpService.getTransport(sessionId) : undefined;
       if (existing) {
@@ -131,8 +166,8 @@ export class McpController {
       }
       if (!sessionId && isInitializeRequest(req.body)) {
         const transport = moduleCode
-          ? await this.mcpService.createModuleTransport(moduleCode)
-          : await this.mcpService.createTransport();
+          ? await this.mcpService.createModuleTransport(moduleCode, token)
+          : await this.mcpService.createTransport(token);
         await transport.handleRequest(req, res, req.body);
         return;
       }

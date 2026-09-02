@@ -14,6 +14,7 @@ import { Response, Request } from 'express';
 import { AgentRunner, AgentRegistry, StreamEvent } from '@kedouai/agent-core';
 import { AgentRunDto } from './dto/agent-run.dto';
 import { AuthGuard } from '../auth/auth.guard';
+import { PermissionGuard, RequirePermission } from '@web-system/shared';
 import { AgentRunPusher } from './agent-run-pusher';
 
 @ApiTags('AI Agent')
@@ -28,13 +29,32 @@ export class AgentController {
     private readonly runPusher: AgentRunPusher,
   ) {}
 
-  /** Agent 运行（SSE 流式，含工具调用过程） */
+  /** Agent 运行（C 端，SSE 流式，含工具调用过程） */
   @Post('run')
   @ApiOperation({ summary: '运行 Agent（流式 SSE，返回工具调用与最终回答）' })
   async run(@Body() dto: AgentRunDto, @Res() res: Response, @Req() req: Request) {
+    await this.handleRun(dto, res, req);
+  }
+
+  /**
+   * Admin Playground 专用运行端点：要求 agents:debug 权限（消耗真实 LLM token）。
+   * C 端用户无此权限，无法绕过权限校验直刷对话。
+   */
+  @Post('admin-run')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('agents:debug')
+  @ApiOperation({ summary: 'Admin 对话调试运行（需 agents:debug）' })
+  async adminRun(@Body() dto: AgentRunDto, @Res() res: Response, @Req() req: Request) {
+    await this.handleRun(dto, res, req);
+  }
+
+  /** 共用运行逻辑（SSE 流式 + 步骤收集 + 异步落库） */
+  private async handleRun(dto: AgentRunDto, res: Response, req: Request): Promise<void> {
     const user = (req as any).user;
     const userId = String(user?.id ?? '');
-    this.logger.log(`收到 agent/run 请求: agentId=${dto.agentId} userId=${userId} inputLen=${(dto.userInput || '').length}`);
+    this.logger.log(
+      `收到 agent/run 请求: agentId=${dto.agentId} userId=${userId} inputLen=${(dto.userInput || '').length}`,
+    );
     if (!userId) {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
     }

@@ -1,7 +1,7 @@
 /**
  * DeepSeek 客户端（OpenAI 兼容），原生 fetch 版。
  */
-import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk, ToolCallSchema, ToolCall, ChatWithToolsResult, StreamToolEvent } from './base-ai.client';
+import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk, ToolCallSchema, ToolCall, ChatWithToolsResult, StreamToolEvent, parseJsonToolCall } from './base-ai.client';
 import { Logger } from '../lib/logger';
 import { API_TIMEOUT } from '../lib/timeout';
 import { postJson, streamSse } from '../lib/fetch-http';
@@ -69,13 +69,18 @@ export class DeepseekClient extends BaseAiClient {
       if (!choice) throw new Error('Invalid response from DeepSeek API');
 
       const rawToolCalls: any[] | undefined = message.tool_calls;
-      const toolCalls: ToolCall[] = Array.isArray(rawToolCalls)
+      let toolCalls: ToolCall[] = Array.isArray(rawToolCalls)
         ? rawToolCalls.map((tc) => ({
             id: tc.id,
             name: tc.function?.name,
             arguments: tc.function?.arguments ?? '{}',
           }))
         : [];
+      // 兜底：模型偶发把工具调用写成文本 JSON
+      if (toolCalls.length === 0) {
+        const parsed = parseJsonToolCall(message.content ?? '');
+        if (parsed) toolCalls = parsed;
+      }
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -186,13 +191,18 @@ export class DeepseekClient extends BaseAiClient {
     }
 
     // 组装 toolCalls（若有）
-    const toolCalls: ToolCall[] = sawAnyToolCall
+    let toolCalls: ToolCall[] = sawAnyToolCall
       ? Object.values(toolAcc).map((a) => ({
           id: a.id || `call_${Math.random().toString(36).slice(2, 10)}`,
           name: a.name,
           arguments: a.arguments || '{}',
         }))
       : [];
+    // 兜底：模型偶发把工具调用写成文本 JSON（content 而非 tool_calls delta）
+    if (toolCalls.length === 0) {
+      const parsed = parseJsonToolCall(content);
+      if (parsed) toolCalls = parsed;
+    }
 
     const assistantMessage: ChatMessage = {
       role: 'assistant',

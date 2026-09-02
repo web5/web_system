@@ -45,10 +45,13 @@ jobs:
               return { skipped: true, number: existing[0].number, url: existing[0].html_url };
             }
 
-            // 2) 生成标题 / body：取首个 commit message 作为标题，列出全部提交
-            const { data: commits } = await github.rest.pulls.listCommits({
-              owner, repo, head, base,
+            // 2) 生成标题 / body：比较 base↔head 取出全部提交（注意：
+            //    pulls.listCommits 只能列已存在 PR 的提交且必须传 pull_number，
+            //    新分支还没有 PR，应用 repos.compareCommits 取两分支间提交）
+            const { data: compare } = await github.rest.repos.compareCommits({
+              owner, repo, base, head,
             });
+            const commits = compare.commits || [];
             const titles = commits.slice(0, 5).map((c) => c.commit.message.split('\n')[0]);
             const title = titles[0] ? titles[0].slice(0, 100) : `feat(${head}): 变更`;
             const body = [

@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { AgentModule } from './agent/agent.module';
 import { AgentLogModule } from './agent-log/agent-log.module';
 import { AgentDefModule } from './agent-def/agent-def.module';
+import { SkillModule } from './skill/skill.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { AgentDefModule } from './agent-def/agent-def.module';
     AgentModule,
     AgentLogModule,
     AgentDefModule,
+    SkillModule,
   ],
 })
 export class AppModule {}

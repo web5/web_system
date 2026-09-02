@@ -7,6 +7,11 @@ export * from './interfaces/tool.interface';
 export * from './interfaces/agent.interface';
 export * from './interfaces/runtime.interface';
 
+// Skill（on-demand 技能加载）
+export { SkillLoader } from './skills/skill-loader';
+export type { SkillProvider } from './skills/skill-loader';
+export { LOAD_SKILL_TOOL_NAME } from './core/agent-engine';
+
 // 模型客户端
 export * from './clients/base-ai.client';
 export { Hy3Client } from './clients/hy3.client';
@@ -20,6 +25,15 @@ export { ClientRegistry } from './registry/client.registry';
 // MCP 工具适配器（插件化：远程工具接入统一 Tool 契约）
 export { McpToolAdapter } from './mcp/mcp-tool.adapter';
 export type { McpToolMeta, McpToolParameter, McpToolExecutor } from './mcp/mcp-tool.adapter';
+
+// 长任务插件（可选装饰器：把返回 jobId 的工具包装成自动轮询的同步工具；不绑定 MCP）
+export { withLongRunning, isTerminalJobStatus } from './plugins/long-running';
+export type {
+  JobStatus,
+  JobStatusFetcher,
+  JobIdDetector,
+  LongRunningOptions,
+} from './plugins/long-running';
 
 // 引擎
 export { AgentEngine } from './core/agent-engine';
