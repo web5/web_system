@@ -97,6 +97,25 @@
 - [ ] 22. 灰度增强（规则/放量/全量）— _验收：当 灰度放量时，命中流量应加载 canary 版本_
 - [ ] 23. 自助诊断工具 — _验收：当 执行端口检测/进程重启/日志检索时，应在页面完成无需 SSH_
 
+## 发布记录
+
+- **2026-09-02 首次上线**（分支 `feature/contract-risk-ai`）
+  - 提交：`c447795`（命令驱动流水线）→ `d9703bf`（tsconfig 只编译 src）→ `3974e70`（迁移脚本原生 SQL + SnakeNamingStrategy）
+  - 发布目录 `~/web_system_release`：`git pull` → `nest build` → `pm2 start web-deploy-console`
+  - 结果：服务 online、监听 6200、`synchronize` 无报错；阶段命令 6 个路由全部 Mapped
+  - 数据：`deploy_module_stage_commands` 20 条（11 条迁移 + 9 条默认模板）
+
+### 上线踩坑（务必记住）
+
+1. **新增 `scripts/` 导致构建产物错位**：tsconfig 无 `include` 时，运维脚本被纳入编译，
+   tsc rootDir 退化为项目根，产物由 `dist/main.js` 变为 `dist/src/main.js`，pm2 启动报 `MODULE_NOT_FOUND`。
+   → 已修：`include: ["src/**/*"]` + `exclude` 加 `scripts`。**今后新增非服务代码目录必须同步检查 tsconfig**。
+2. **独立脚本的 DataSource 必须对齐 `SnakeNamingStrategy`**：否则建表列是驼峰（`moduleKey`），
+   与服务端 synchronize 期望的下划线列（`module_key`）互相 ALTER，服务连不上库。
+   → 复用 `app.module` 的 namingStrategy，勿在脚本里另起一套配置。
+3. **typeorm `repo.upsert` 传 `conflictPaths` 会漏写列**：曾导致 20 行 `module_key` 全为空串，
+   唯一索引建不起来。→ 批量迁移改用原生 `INSERT ... ON DUPLICATE KEY UPDATE`。
+
 ## 执行约定（方法论）
 
 - **TDD**：每个任务 RED（写失败测试）→ GREEN（最少代码通过）→ REFACTOR，逐项勾选本文件。

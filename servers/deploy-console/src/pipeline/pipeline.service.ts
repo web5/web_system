@@ -31,6 +31,18 @@ const GATEWAY_VERSION_TTL_SEC = 10;
 const BUILD_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
+ * 阶段命令的工作目录：后端 `servers/<dir>`，前端/微前端/小程序 `apps/<dir>`。
+ *
+ * 默认模板命令（如 `npx tsc -p tsconfig.json`、`npx vite build`）依赖 cwd 定位配置与产物，
+ * 必须在模块目录下执行——否则会在 deploy-console 自身目录下编译错目标。
+ * 抽成纯函数以便单测：该缺陷正是重构 `stageBuild` 时丢失 cwd 引入的。
+ */
+export function resolveStageCwd(ws: string, moduleType?: string, dir?: string): string {
+  if (!dir) return ws;
+  return path.join(ws, moduleType === 'backend' ? 'servers' : 'apps', dir);
+}
+
+/**
  * 支持发布的环境。
  *
  * `local` = 本机环境（gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）。
@@ -573,7 +585,12 @@ export class PipelineService {
     p.logs = [...(p.logs ?? []), `[${stage}] $ ${cmd.command}`];
     await this.save(p);
 
-    const code = await this.runShell(cmd.command, env, p, cmd.timeoutSec);
+    // 命令必须在模块目录下执行：默认模板依赖 cwd 定位 tsconfig / 产物目录
+    const cwd = resolveStageCwd(this.releaseWorkspace, mod?.type || p.moduleType, mod?.dir);
+    p.logs = [...(p.logs ?? []), `[${stage}] cwd: ${cwd}`];
+    await this.save(p);
+
+    const code = await this.runShell(cmd.command, env, p, cmd.timeoutSec, cwd);
     if (code !== 0) {
       throw new Error(`[${stage}] 阶段命令执行失败（exit ${code}），详见日志`);
     }
@@ -591,10 +608,13 @@ export class PipelineService {
     env: Record<string, string>,
     p: DeployPipelineEntity,
     timeoutSec?: number,
+    cwd?: string,
   ): Promise<number> {
     return new Promise((resolve) => {
       const timeoutMs = timeoutSec && timeoutSec > 0 ? timeoutSec * 1000 : BUILD_TIMEOUT_MS;
       const child = spawn('bash', ['-c', command], {
+        // 未显式传 cwd 时回落到发布目录，避免落到 deploy-console 自身目录
+        cwd: cwd || this.releaseWorkspace,
         env: {
           ...process.env,
           ...env,
