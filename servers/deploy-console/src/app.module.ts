@@ -14,6 +14,7 @@ import { CanaryModule } from './canary/canary.module';
 import { ServerModule } from './server/server.module';
 import { PipelineModule } from './pipeline/pipeline.module';
 import { McpDeployModule } from './mcp/mcp.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -57,6 +58,8 @@ import { McpDeployModule } from './mcp/mcp.module';
     // 发布流水线（控制台 /api/pipelines/* + MCP /api/mcp/* 共用同一引擎）
     PipelineModule,
     McpDeployModule,
+    // 发布度量（成功率 / 时长 / 失败阶段分布 / 失败下钻）
+    MetricsModule,
   ],
 })
 export class AppModule {}

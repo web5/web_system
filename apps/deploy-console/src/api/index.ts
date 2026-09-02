@@ -518,4 +518,55 @@ export const configApi = {
     http.post('/config/snapshots/restore', { envId, moduleKey, versionTag }) as Promise<number>,
 }
 
+/**
+ * 发布度量。
+ * 数据来自 deploy_pipelines 的聚合（流水线本身已记录 status/stage/起止时间），无额外埋点。
+ */
+export const metricsApi = {
+  overview: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/overview', { params }) as Promise<{
+      total: number
+      succeeded: number
+      failed: number
+      running: number
+      cancelled: number
+      successRate: number | null
+      avgDurationSec: number | null
+      p95DurationSec: number | null
+    }>,
+  trend: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/trend', { params }) as Promise<
+      { date: string; succeeded: number; failed: number }[]
+    >,
+  stageFailures: (params?: { env?: string; moduleKey?: string; from?: number; to?: number }) =>
+    http.get('/metrics/releases/stage-failures', { params }) as Promise<
+      { stage: string; count: number }[]
+    >,
+  topModules: (params?: { env?: string; from?: number; to?: number; limit?: number }) =>
+    http.get('/metrics/releases/top-modules', { params }) as Promise<
+      { moduleKey: string; count: number }[]
+    >,
+  failures: (params?: {
+    env?: string
+    moduleKey?: string
+    stage?: string
+    from?: number
+    to?: number
+    limit?: number
+  }) =>
+    http.get('/metrics/releases/failures', { params }) as Promise<
+      {
+        id: string
+        moduleKey: string
+        env: string
+        versionTag: string | null
+        stage: string | null
+        error: string | null
+        startTime: number
+        endTime: number | null
+        operator: string | null
+      }[]
+    >,
+}
+
 export default http
