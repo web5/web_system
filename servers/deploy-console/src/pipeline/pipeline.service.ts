@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   Logger,
   BadRequestException,
   NotFoundException,
@@ -27,27 +28,18 @@ import {
   PipelineTemplateService,
   needsApprovalForTemplate,
 } from '../pipeline-template/pipeline-template.service';
-// HTTP 探活工具（verify manifest 断言 / 后端端口探活 / 产物 HEAD 检查的执行体）
-import { HttpProbeService } from '../probe/http-probe.service';
-// pm2 进程健康探活工具（verify 后端探活 / restart 查名 / 回滚后探活复用）
-import { Pm2ProbeService, Pm2ProbeResult } from '../pm2/pm2-probe.service';
-// 命令执行工具（同步 exec + PATH + bin 解析）
-import { CommandService, buildChildEnv } from '../shell/command.service';
-// 发布目录 git 工作区工具（pull 内置步骤执行体）
-import { ReleaseGitService } from '../git/release-git.service';
-// 静态产物存储工具（upload/cleanup 内置步骤执行体）
+// pm2 进程探活工具（回滚后健康检查 probeBackendHealth 复用）
+import { Pm2ProbeService } from '../pm2/pm2-probe.service';
+// 静态产物存储工具（公共 API：可发布版本/历史版本切换的产物检查）
 import { ArtifactStoreService } from '../artifact/artifact-store.service';
-// 版本注册表工具（version/pointer 内置步骤执行体）
+// 版本注册表工具（公共 API：历史版本切换/灰度转全量的指针与版本写入）
 import { ReleaseRegistryService } from '../registry/release-registry.service';
-// 远程投递工具（upload remote 分支执行体）
-import { RemoteDeliveryService } from '../remote/remote-delivery.service';
-// 静态产物路径收口（产物目录/URL 等平台知识集中于此，V6）
-import * as releasePaths from './release-paths';
+// 命令执行工具（runShell 子进程 PATH / node bin 解析用）
+import { CommandService, buildChildEnv } from '../shell/command.service';
+// 内置步骤执行器注册表（executeStage 数据驱动分派）
+import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
+import { BuiltinStepDef, StepContext } from './steps/step.types';
 
-/** 保留的历史版本目录数量（用户约定 N=5） */
-const KEEP_VERSIONS = 5;
-/** gateway 版本缓存 TTL（秒）—— 验证阶段必须等它过期后再断言 */
-const GATEWAY_VERSION_TTL_SEC = 10;
 /** 构建超时（毫秒） */
 const BUILD_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -132,20 +124,17 @@ export class PipelineService {
     private readonly approvals: ApprovalService,
     // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
     private readonly templates: PipelineTemplateService,
-    // HTTP 探活工具（verify manifest 断言 / 后端端口探活 / 产物 HEAD 检查）
-    private readonly httpProbe: HttpProbeService,
-    // pm2 进程健康探活（verify 后端探活 / restart 查名 / 回滚后探活）
+    // pm2 进程探活（回滚后健康检查 probeBackendHealth 复用）
     private readonly pm2Probe: Pm2ProbeService,
-    // 命令执行（同步 exec + PATH + bin 解析）
+    // 命令执行（runShell 子进程 PATH / node bin 解析）
     private readonly command: CommandService,
-    // 发布目录 git 工作区（pull 执行体）
-    private readonly git: ReleaseGitService,
-    // 静态产物存储（upload/cleanup 执行体）
+    // 静态产物存储（公共 API：可发布版本 / 历史版本切换的产物检查）
     private readonly artifacts: ArtifactStoreService,
-    // 版本注册表（version/pointer 执行体）
+    // 版本注册表（公共 API：历史版本切换 / 灰度转全量的指针与版本写入）
     private readonly registry: ReleaseRegistryService,
-    // 远程投递（upload remote 执行体）
-    private readonly remoteDelivery: RemoteDeliveryService,
+    // 内置步骤注册表（executeStage 按步骤元数据数据驱动分派；执行体在各自 executor 内）
+    @Inject(PIPELINE_BUILTIN_STEPS)
+    private readonly builtinSteps: Record<string, BuiltinStepDef>,
   ) {}
 
   /**
@@ -157,11 +146,6 @@ export class PipelineService {
     return (
       this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release'
     );
-  }
-
-  /** gateway 内网地址，验证阶段拼产物 URL / 查 __manifest__ 用（本地 http://localhost:6000） */
-  private get gatewayUrl(): string {
-    return this.configService.get<string>('GATEWAY_INTERNAL_URL') || 'http://localhost:6000';
   }
 
   private generateId(): string {
@@ -837,64 +821,59 @@ export class PipelineService {
   }
 
   /**
-   * 单步执行（S6-II 步骤执行器分派）。
+   * 单步执行（数据驱动）：按步骤注册表元数据分派，不做任何「步骤具体怎么做」的判断。
    *
-   * 内置步骤 = 平台语义执行器（check/pull/build/upload/restart/version/pointer/verify/cleanup），
-   * 由模板 steps（实例快照 p.steps）驱动顺序执行；check/version/pointer 为安全与发布语义基线
-   * （模板校验已强制保留），upload/restart 按模块类型分派，verify 受 skipVerify 快照控制。
+   * 每个内置步骤在 step-registry 中声明：
+   *   category（特性分类） + commandMode（命令协作语义） + skip（守卫） + run（执行体）。
+   * engine 只负责：查表 → 守卫跳过 → 命令覆盖优先级（base/override/required/none）→ 构造 ctx 调执行体。
+   * 步骤"怎么做"全部在独立 executor（steps/*.executor.ts）中，各自注入所需 service 工具。
    */
   private async executeStage(
     p: DeployPipelineEntity,
     stage: string,
     uploadTarget: 'local' | 'remote',
   ): Promise<void> {
-    const isBackend = p.moduleType === 'backend';
-    switch (stage) {
-      case 'check':
-        // 安全基线：模块类型/prod 分支约束；随后执行 check 阶段命令（附加校验，可配）
-        await this.stageCheck(p);
-        await this.runStageCommand(p, 'check');
+    const def = this.builtinSteps[stage];
+    if (!def) {
+      // 模板校验已挡（steps 仅允许内置九阶段），双保险
+      throw new Error(`未知或不可编排步骤: ${stage}`);
+    }
+    const ctx: StepContext = {
+      pipeline: p,
+      uploadTarget,
+      enterStage: (message) => this.enterStage(p, stage, message),
+      log: (line) => {
+        p.logs = [...(p.logs ?? []), line];
+      },
+      save: () => this.save(p),
+      sleep: (ms) => this.sleep(ms),
+      assertNotCancelled: () => this.assertNotCancelled(p),
+    };
+
+    // 守卫：实例快照/配置决定跳过（复用产物 / 快线 / 模块类型不适用）
+    if (def.skip?.(p)) return;
+
+    switch (def.commandMode) {
+      case 'base':
+        // check：安全基线恒内置执行，命令作附加校验
+        await def.run!(ctx);
+        await this.runStageCommand(p, stage);
         return;
-      case 'pull':
-        if (p.reuseArtifact) return; // 复用磁盘产物秒切，跳过拉取
-        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
-        return;
-      case 'build':
-        if (p.reuseArtifact) return;
-        if (!(await this.runStageCommand(p, 'build'))) {
-          // fail-fast：build 必须由模块阶段命令驱动，不回退任何内置硬编码
+      case 'required':
+        // build：必须由模块阶段命令驱动，未配置 fail-fast
+        if (!(await this.runStageCommand(p, stage))) {
           throw new Error(
             `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
           );
         }
         return;
-      case 'upload':
-        // 前端/微前端产物投递（后端走 restart，复用产物跳过）
-        if (p.reuseArtifact || isBackend) return;
-        if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
-        return;
-      case 'restart':
-        if (p.reuseArtifact || !isBackend) return;
-        if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
-        return;
-      case 'version':
-        // 写版本表（发布语义真相源，不可被命令覆盖）
-        await this.stageVersion(p);
-        return;
-      case 'pointer':
-        if (!isBackend) await this.stagePointer(p);
-        return;
-      case 'verify':
-        // 快线（skipVerify 快照）跳过探活与失败自动回滚
-        if (p.skipVerify) return;
-        if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
-        return;
-      case 'cleanup':
-        if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
+      case 'override':
+        // 配置了命令则覆盖执行体，未配置回退内置
+        if (!(await this.runStageCommand(p, stage))) await def.run!(ctx);
         return;
       default:
-        // 模板校验已挡（steps 仅允许内置九阶段），双保险
-        throw new Error(`未知或不可编排步骤: ${stage}`);
+        // none：version/pointer 发布语义真相源，纯内置
+        await def.run!(ctx);
     }
   }
 
@@ -1078,258 +1057,6 @@ export class PipelineService {
     await this.save(p);
   }
 
-  /**
-   * 阶段 1：校验模块类型、目标分支、commit 与 prod 约束。
-   *
-   * 发布语义（基于 git 拉取）：目标 = 远程仓库的 <branch>@<commitId>，
-   * 由 pull 阶段在发布目录拉取，不再基于当前工作区代码。
-   */
-  private async stageCheck(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'check', '校验模块、分支与目标版本');
-    const mod = await this.moduleRegistry.get(p.moduleKey);
-    if (!['micro-frontend', 'frontend', 'backend'].includes(mod.type)) {
-      throw new BadRequestException(
-        `模块 ${p.moduleKey} 类型为 ${mod.type}，流水线暂不支持（支持 micro-frontend/frontend/backend）`,
-      );
-    }
-    p.moduleType = mod.type;
-
-    // 目标分支：未指定默认 master（与 prod 约束一致）
-    const branch = p.gitBranch || 'master';
-    p.gitBranch = branch;
-
-    // ── 按 commit 发布 ──────────────────────────────────────────
-    // 指定了 commitId（即 versionTag）：
-    //   1) 发布目录已有该版本产物 → 复用产物，跳过 pull/build（秒级发布历史版本）
-    //   2) 无产物 → 走 pull 拉取该 commit 后构建
-    // 未指定 → 发该分支最新 commit（pull 后确定）
-    if (p.versionTag) {
-      p.reuseArtifact = this.artifacts.exists(p.moduleKey, p.versionTag);
-      if (p.reuseArtifact) {
-        const history = await this.versionRepo.findOne({ where: { versionTag: p.versionTag } });
-        p.gitCommit = history?.gitCommit ?? p.versionTag;
-        p.logs = [
-          ...(p.logs ?? []),
-          `复用已有产物: ${p.moduleKey}/${p.versionTag}（跳过拉取与构建）`,
-        ];
-      }
-    } else {
-      p.reuseArtifact = false;
-    }
-
-    if (p.env === 'prod' && branch !== 'master') {
-      throw new BadRequestException(`现网仅允许发布 master 分支版本，目标分支: ${branch}`);
-    }
-    await this.save(p);
-  }
-
-  /**
-   * 阶段 2：发布目录 git 拉取（fetch → checkout 分支 → reset commit → clean）。
-   *
-   * 发布目录与开发工作区隔离；每次发布都保证代码 = 目标 commit，
-   * 不会出现「本地未提交代码被发出去」的情况。
-   */
-  private async stagePull(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(
-      p,
-      'pull',
-      `拉取代码: ${p.gitBranch}@${p.versionTag || '最新'}`,
-    );
-
-    // 发布目录同步到目标分支（工具内含 .git 校验 / fetch / checkout / reset / clean）
-    const commit = this.git.syncToBranch(p.gitBranch!, p.versionTag);
-    p.gitCommit = commit;
-    p.versionTag = commit;
-    p.logs = [
-      ...(p.logs ?? []),
-      `代码已就绪: ${p.gitBranch}@${commit}（发布目录 ${this.git.workspace()}）`,
-    ];
-
-    // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install；失败不阻断，
-    // 构建阶段会再次报错并给出清晰信息）
-    try {
-      if (this.git.syncDependencies() === 'installed') {
-        p.logs = [...(p.logs ?? []), '依赖安装完成'];
-      }
-    } catch (e) {
-      p.logs = [...(p.logs ?? []), `[warn] 依赖同步失败: ${(e as Error).message}`];
-    }
-
-    await this.save(p);
-  }
-
-  /**
-   * 阶段 3（build）已完全由模块阶段命令驱动，见 `runStageCommand`。
-   *
-   * 历史包袱已删除：此处原先硬编码 `nest build` / `vite build`，后又改为读
-   * `deploy_modules.buildCmd`（与 `deploy_module_hooks` 形成两套互斥机制，文档互相矛盾）。
-   * 现统一收敛到 `deploy_module_stage_commands` 单一真相源，未配置即 fail-fast，
-   * 流水线内不再保留任何技术栈构建逻辑。
-   */
-
-  /** 阶段 4：前端产物投递（local=本机静态目录 / remote=SSH 到远端），执行体见 ArtifactStore/RemoteDelivery */
-  private async stageUpload(p: DeployPipelineEntity, target: 'local' | 'remote'): Promise<void> {
-    await this.enterStage(p, 'upload', `投递产物（${target}）`);
-    const mod = await this.moduleRegistry.get(p.moduleKey);
-    const src = path.join(this.releaseWorkspace, 'apps', mod.dir, 'dist');
-
-    if (target === 'local') {
-      const dest = this.artifacts.uploadLocal(p.moduleKey, p.versionTag!, src);
-      p.logs = [...(p.logs ?? []), `产物已投递到 ${dest}`];
-    } else {
-      const { sshTarget, dest } = this.remoteDelivery.uploadDist({
-        env: p.env,
-        moduleKey: p.moduleKey,
-        version: p.versionTag!,
-        srcDir: src,
-      });
-      p.logs = [...(p.logs ?? []), `产物已投递到 ${sshTarget}:${dest}`];
-    }
-
-    p.result = {
-      ...(p.result ?? {}),
-      artifactPath: `/static/modules/${p.moduleKey}/${p.versionTag}/`,
-      target,
-    };
-    await this.save(p);
-  }
-
-  /**
-   * 阶段 4（后端）：重启服务。
-   *
-   * 前提：本机 pm2 的服务脚本已指向发布目录（RELEASE_WORKSPACE），
-   * 因此 restart 即加载发布目录刚构建好的 dist，运行的就是本次发布的代码。
-   */
-  private async stageRestart(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'restart', `重启服务: ${p.moduleKey}`);
-    const mod = await this.moduleRegistry.get(p.moduleKey);
-
-    // pm2 restart 对不存在的进程报错但退出码可能是 0，不能依赖退出码判断。
-    // 先用 jlist 确认实际存在的服务名，再只 restart 存在的。
-    let names: string[] = [];
-    try {
-      const exists = new Set(this.pm2Probe.listProcesses().map((a) => a.name));
-      names = this.pm2Probe.resolvePm2Names(p.moduleKey, mod?.pm2).filter((n) => exists.has(n));
-    } catch {
-      // jlist 失败时退回顺序尝试
-      names = this.pm2Probe.resolvePm2Names(p.moduleKey, mod?.pm2);
-    }
-    if (names.length === 0) {
-      throw new Error(
-        `pm2 中未找到服务（尝试 ${this.pm2Probe
-          .resolvePm2Names(p.moduleKey, mod?.pm2)
-          .join(' / ')}），请确认服务已用 pm2 纳管`,
-      );
-    }
-
-    const restarted = names[0];
-    // 配置中心注入：global → env → module 合并后**强制覆盖**进程环境。
-    // 这是历史 `PORT=6200` 污染的对策：端口等变量以配置中心为准，
-    // 禁止在 shell 全局预设里写死。
-    const injectEnv = await this.resolveInjectEnv(p);
-    this.command.exec(
-      `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
-      this.releaseWorkspace,
-      injectEnv,
-    );
-    p.logs = [...(p.logs ?? []), `服务已重启: ${restarted}`];
-    p.result = { ...(p.result ?? {}), restarted };
-    await this.save(p);
-  }
-
-  /** 阶段 4：写版本记录（deploy_versions，库为 web_system_deploy） */
-  private async stageVersion(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'version', '写入版本记录');
-    await this.registry.registerVersion({
-      env: p.env,
-      moduleKey: p.moduleKey,
-      versionTag: p.versionTag!,
-      gitCommit: p.gitCommit,
-      gitBranch: p.gitBranch,
-      releasedBy: p.operator,
-      taskId: p.id,
-      note: p.mode === 'grayscale' ? '流水线灰度发布' : '流水线发布',
-    });
-    p.logs = [...(p.logs ?? []), `版本记录已写入: ${p.versionTag}`];
-    await this.save(p);
-  }
-
-  /** 阶段 5：切指针（direct）或写灰度规则（grayscale） */
-  private async stagePointer(p: DeployPipelineEntity): Promise<void> {
-    if (p.mode === 'grayscale') {
-      await this.enterStage(p, 'pointer', '写入灰度规则（不切 stable 指针）');
-      const rule = await this.canaryService.create({
-        envId: p.env,
-        moduleKey: p.moduleKey,
-        canaryVersion: p.versionTag!,
-        matchRule: p.grayscaleRule as any,
-        enabled: true,
-      });
-      p.canaryRuleId = rule.id;
-      p.logs = [...(p.logs ?? []), `灰度规则已创建: ${rule.id} → ${p.versionTag}`];
-      await this.save(p);
-      return;
-    }
-
-    await this.enterStage(p, 'pointer', '切换当前版本指针');
-    await this.registry.setPointer({
-      env: p.env,
-      moduleKey: p.moduleKey,
-      currentVersion: p.versionTag!,
-      deployedBy: p.operator,
-      taskId: p.id,
-    });
-    p.logs = [...(p.logs ?? []), `指针已切换: ${p.env}/${p.moduleKey} → ${p.versionTag}`];
-    await this.save(p);
-  }
-
-  /**
-   * 阶段 7：验证。
-   * 前端：等 gateway TTL 过期后断言 __manifest__ 版本已更新（历史坑：不等 TTL 会读到旧版本）
-   * 后端：验证 pm2 服务在线
-   */
-  private async stageVerify(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'verify', '验证发布结果');
-
-    if (p.moduleType === 'backend') {
-      await this.verifyBackend(p);
-      return;
-    }
-
-    const artifactUrl = releasePaths.moduleArtifactUrl(this.gatewayUrl, p.moduleKey, p.versionTag!);
-    const artifactOk = await this.httpProbe.headOk(artifactUrl);
-    p.result = { ...(p.result ?? {}), artifactOk };
-
-    if (p.mode === 'grayscale') {
-      if (!artifactOk) {
-        throw new Error(`灰度产物不可访问: ${artifactUrl}`);
-      }
-      p.logs = [...(p.logs ?? []), `灰度产物可访问: ${artifactUrl}`];
-      await this.save(p);
-      return;
-    }
-
-    // 等 gateway 版本缓存 TTL 过期（历史坑：改完版本表立刻查会拿到旧版本）
-    await this.sleep((GATEWAY_VERSION_TTL_SEC + 2) * 1000);
-
-    const manifest = await this.httpProbe.fetchGatewayManifest(this.gatewayUrl);
-    const entry = (manifest?.modules ?? []).find(
-      (m: any) => m.name === p.moduleKey || m.key === p.moduleKey,
-    );
-    const online = entry?.version;
-    p.result = { ...(p.result ?? {}), manifestVersion: online ?? null };
-
-    if (online && online !== p.versionTag) {
-      throw new Error(
-        `验证失败：gateway manifest 版本为 ${online}，期望 ${p.versionTag}（TTL 已等待仍不一致，请检查 gateway 缓存或产物路径）`,
-      );
-    }
-    if (!online) {
-      throw new Error(`验证失败：manifest 中未找到模块 ${p.moduleKey}`);
-    }
-    p.logs = [...(p.logs ?? []), `manifest 已确认: ${p.moduleKey} → ${online}`];
-    await this.save(p);
-  }
 
   /**
    * 后端探活（**不抛错**，返回健康状态）：查 pm2 进程 → 取端口 → HTTP 探活。
@@ -1351,103 +1078,6 @@ export class PipelineService {
     }
   }
 
-  /**
-   * 后端验证：pm2 服务重启后保持 online，且端口真实可服务（避免「进程在但端口没起」的假健康）。
-   *
-   * 轮询语义：pm2 查询异常（jlist 失败/未纳管）→ 本轮跳过继续轮询；
-   * 命中 online 但端口不可达 = 假健康 → **立即抛错**，交由 verify 阶段失败处理自动回滚。
-   * （历史 bug：探活抛错写在 pm2 查询失败的 try/catch 内，被 catch 吞掉后 12 轮耗尽仍判成功，
-   *   假健康被当成发布成功 —— 重构为注入 Pm2ProbeService 时把判定移出 catch 修复。）
-   */
-  private async verifyBackend(p: DeployPipelineEntity): Promise<void> {
-    const mod = await this.moduleRegistry.get(p.moduleKey);
-    let ok = false;
-    let healthCheck: { port?: string | number; ok?: boolean; checkedAt?: string; note?: string } = {};
-    for (let i = 0; i < 12; i++) {
-      await this.sleep(2000);
-      let res: Pm2ProbeResult;
-      try {
-        res = await this.pm2Probe.probeOnce(p.moduleKey, mod?.pm2);
-      } catch {
-        // pm2 查询失败（jlist 异常等）继续轮询
-        continue;
-      }
-      if (!res.online) {
-        // 逐候选提示等待（app 存在但非 online / pm2 中未找到）
-        for (const s of res.scans) {
-          p.logs = [...(p.logs ?? []), `等待服务上线: ${s.name}（${s.status ?? '未找到'}）`];
-        }
-        continue;
-      }
-
-      ok = true;
-      const hit = res.hit!;
-      p.logs = [...(p.logs ?? []), `服务在线: ${hit.name}`];
-      if (hit.port == null) {
-        // 进程 online 但无 PORT：降级为进程状态探活（不阻断）
-        healthCheck = { note: 'pm2_env.PORT 缺失，降级为进程状态探活', ok: undefined };
-        break;
-      }
-      const reachable = res.reachable === true;
-      healthCheck = { port: hit.port, ok: reachable, checkedAt: new Date().toISOString() };
-      p.logs = [...(p.logs ?? []), `端口探活 ${hit.port}: ${reachable ? '健康' : '未响应'}`];
-      if (!reachable) {
-        // 假健康必须阻断：进程 online 但端口无响应（典型：启动即崩、端口被占、依赖缺失）。
-        // 抛错后由 verify 阶段的失败处理自动回滚到上一稳定版本。
-        p.result = { ...(p.result ?? {}), online: true, healthCheck };
-        await this.save(p);
-        throw new Error(
-          `端口探活失败：${p.moduleKey} 进程已 online，但 127.0.0.1:${hit.port} 无响应（终止发布并自动回滚）`,
-        );
-      }
-      break;
-    }
-    p.result = { ...(p.result ?? {}), online: ok, healthCheck };
-    if (!ok) {
-      throw new Error(`服务重启后未在线: ${p.moduleKey}（请查看 pm2 logs）`);
-    }
-    // 探活结果审计留痕
-    await this.auditService.log({
-      user: p.operator || 'unknown',
-      action: 'pipeline.verify.healthcheck',
-      env: p.env,
-      component: p.moduleKey,
-      status: healthCheck.ok === false ? 'warn' : 'success',
-      detail: `发布后健康检查: ${p.moduleKey} → ${p.versionTag}（port=${healthCheck.port ?? 'n/a'}, ok=${healthCheck.ok ?? 'n/a'}）`,
-    });
-    await this.save(p);
-  }
-
-  /** 阶段 8：清理旧版本目录，保留最近 KEEP_VERSIONS 个（受保护版本不删）；后端无产物不清理 */
-  private async stageCleanup(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'cleanup', '清理历史版本');
-    if (p.moduleType === 'backend') {
-      p.logs = [...(p.logs ?? []), '后端模块无静态产物，跳过清理'];
-      await this.save(p);
-      return;
-    }
-    if (this.resolveDefaultTarget() !== 'local') {
-      p.logs = [...(p.logs ?? []), '远程投递模式跳过本地清理'];
-      await this.save(p);
-      return;
-    }
-
-    // 受保护：当前版本 + 所有启用中的灰度版本
-    const protectedVersions = new Set<string>([p.versionTag!]);
-    try {
-      const rules = await this.canaryService.list(p.env, p.moduleKey);
-      for (const r of rules) {
-        if (r.enabled) protectedVersions.add(r.canaryVersion);
-      }
-    } catch (e) {
-      this.logger.warn(`读取灰度规则失败，清理时可能误删: ${(e as Error).message}`);
-    }
-
-    const { kept, removed } = this.artifacts.cleanup(p.moduleKey, undefined, protectedVersions);
-    p.result = { ...(p.result ?? {}), kept, removed };
-    p.logs = [...(p.logs ?? []), `清理完成，保留 ${kept.length} 个版本${removed.length ? `，删除: ${removed.join(', ')}` : ''}`];
-    await this.save(p);
-  }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
