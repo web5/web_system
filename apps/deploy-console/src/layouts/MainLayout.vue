@@ -161,6 +161,24 @@ function handleLogout() {
 </template>
 
 <style scoped>
+:deep(.ant-menu-dark) {
+  background: transparent;
+}
+
+:deep(.ant-menu-dark .ant-menu-item) {
+  color: #a3a3a3;
+}
+
+:deep(.ant-menu-dark .ant-menu-item:hover) {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #ededed;
+}
+
+:deep(.ant-menu-dark .ant-menu-item-selected) {
+  background-color: rgba(249, 115, 22, 0.18);
+  color: #fb923c;
+}
+
 .logo-text-block {
   display: flex;
   flex-direction: column;
@@ -169,13 +187,13 @@ function handleLogout() {
 }
 .logo-title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: var(--ws-font-weight-semibold);
   color: #fff;
   letter-spacing: 0.5px;
 }
 .logo-sub {
   font-size: 11px;
-  color: #8c8c8c;
+  color: var(--ws-text-tertiary);
   margin-top: 2px;
 }
 .user-trigger {
@@ -183,12 +201,12 @@ function handleLogout() {
   align-items: center;
   gap: 10px;
   padding: 6px 12px 6px 6px;
-  border-radius: 8px;
+  border-radius: var(--ws-radius-lg);
   cursor: pointer;
   transition: background-color 0.2s;
 }
 .user-trigger:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: var(--ws-bg-hover);
 }
 .user-avatar {
   width: 36px;
@@ -197,12 +215,12 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  background: linear-gradient(135deg, var(--ws-brand-500) 0%, var(--ws-brand-accent) 100%);
   color: #fff;
-  font-weight: 600;
+  font-weight: var(--ws-font-weight-semibold);
   font-size: 15px;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
 }
 .user-info {
   display: flex;
@@ -211,16 +229,16 @@ function handleLogout() {
 }
 .user-name {
   font-size: 14px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.88);
+  font-weight: var(--ws-font-weight-semibold);
+  color: var(--ws-text-primary);
 }
 .user-role {
   font-size: 11px;
-  color: #8c8c8c;
+  color: var(--ws-text-tertiary);
   margin-top: 2px;
 }
 .user-caret {
-  color: #bfbfbf;
+  color: var(--ws-text-tertiary);
   display: flex;
   align-items: center;
   flex-shrink: 0;
