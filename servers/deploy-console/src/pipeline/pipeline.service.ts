@@ -219,7 +219,9 @@ export class PipelineService {
       // 模板快照：模板后续修改/删除不影响已提交实例
       templateId: tpl.id,
       templateName: tpl.name,
+      steps: tpl.steps ?? null,
       skipVerify: !!tpl.skipVerify,
+      rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
       runTarget,
       status: needsApproval ? 'pending-approval' : 'pending',
       stage: 'check',
@@ -662,52 +664,32 @@ export class PipelineService {
       p.status = 'running';
       await this.save(p);
 
-      // 1. check：先内置安全校验（模块类型/prod 分支约束），再执行 check 阶段命令（附加校验）
-      await this.stageCheck(p);
-      await this.runStageCommand(p, 'check');
-
-      const isBackend = p.moduleType === 'backend';
+      // 活动阶段 = 实例快照 p.steps（模板提交时固化，null=全部九阶段）
+      const activeStages: string[] = (p.steps && p.steps.length
+        ? (p.steps as string[])
+        : [...PIPELINE_STAGES]) as string[];
 
       if (p.reuseArtifact) {
-        // 复用磁盘已有产物：跳过 pull/build/upload，直接切指针（秒级发布历史版本）
         p.logs = [...(p.logs ?? []), '已跳过 pull / build / upload（复用已有产物）'];
         await this.save(p);
-      } else {
-        // 2. pull：发布目录拉取远程仓库目标分支/commit（可被阶段命令覆盖）
-        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
-        // 3. build：强制由模块阶段命令驱动（未配置即终止，不回退任何内置硬编码）
-        if (!(await this.runStageCommand(p, 'build'))) {
-          throw new Error(
-            `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
-          );
+      }
+
+      // 数据驱动执行：每步由 executeStage 分派到内置执行器（平台语义）或阶段命令覆盖（S6-II）
+      for (const stage of activeStages) {
+        this.assertNotCancelled(p);
+        // version 前捕获当前线上版本（verify 失败自动回滚的回退目标）
+        if (stage === 'version') {
+          try {
+            const dep = await this.deploymentRepo.findOne({
+              where: { envId: p.env, moduleKey: p.moduleKey },
+            });
+            prevVersion = dep?.currentVersion;
+          } catch {
+            /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
+          }
         }
-        // 4. upload（前端投递产物）/ restart（后端重启服务）（可被阶段命令覆盖）
-        if (isBackend) {
-          if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
-        } else {
-          if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
-        }
+        await this.executeStage(p, stage, uploadTarget);
       }
-      // 5. version（写版本表）；回滚前先记录当前线上版本作为回退目标
-      try {
-        const dep = await this.deploymentRepo.findOne({
-          where: { envId: p.env, moduleKey: p.moduleKey },
-        });
-        prevVersion = dep?.currentVersion;
-      } catch {
-        /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
-      }
-      await this.stageVersion(p);
-      // 6. pointer：前端切指针/灰度规则；后端无指针
-      if (!isBackend) {
-        await this.stagePointer(p);
-      }
-      // 7. verify：前端 manifest / 后端 health check（可被阶段命令覆盖；模板 skipVerify 快线跳过探活）
-      if (!p.skipVerify) {
-        if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
-      }
-      // 8. cleanup（可被阶段命令覆盖）
-      if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
 
       p.status = 'succeeded';
       p.progress = { ...p.progress!, message: '发布完成' };
@@ -737,7 +719,12 @@ export class PipelineService {
       this.logger.error(`流水线失败: ${p.id} 阶段=${p.stage} : ${msg}`);
       if (p.status === 'failed') {
         // ⑤ 验证阶段失败 → 自动回滚到上一稳定版本（verify 阶段才说明新版本已发布但不健康）
-        if (p.stage === 'verify' && prevVersion && prevVersion !== p.versionTag) {
+        if (
+          p.stage === 'verify' &&
+          p.rollbackOnFailure !== 'none' &&
+          prevVersion &&
+          prevVersion !== p.versionTag
+        ) {
           try {
             const rollTask = await this.deployService.startRollback(
               p.env,
@@ -811,6 +798,68 @@ export class PipelineService {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
       this.cancelled.delete(p.id);
+    }
+  }
+
+  /**
+   * 单步执行（S6-II 步骤执行器分派）。
+   *
+   * 内置步骤 = 平台语义执行器（check/pull/build/upload/restart/version/pointer/verify/cleanup），
+   * 由模板 steps（实例快照 p.steps）驱动顺序执行；check/version/pointer 为安全与发布语义基线
+   * （模板校验已强制保留），upload/restart 按模块类型分派，verify 受 skipVerify 快照控制。
+   */
+  private async executeStage(
+    p: DeployPipelineEntity,
+    stage: string,
+    uploadTarget: 'local' | 'remote',
+  ): Promise<void> {
+    const isBackend = p.moduleType === 'backend';
+    switch (stage) {
+      case 'check':
+        // 安全基线：模块类型/prod 分支约束；随后执行 check 阶段命令（附加校验，可配）
+        await this.stageCheck(p);
+        await this.runStageCommand(p, 'check');
+        return;
+      case 'pull':
+        if (p.reuseArtifact) return; // 复用磁盘产物秒切，跳过拉取
+        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
+        return;
+      case 'build':
+        if (p.reuseArtifact) return;
+        if (!(await this.runStageCommand(p, 'build'))) {
+          // fail-fast：build 必须由模块阶段命令驱动，不回退任何内置硬编码
+          throw new Error(
+            `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
+          );
+        }
+        return;
+      case 'upload':
+        // 前端/微前端产物投递（后端走 restart，复用产物跳过）
+        if (p.reuseArtifact || isBackend) return;
+        if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
+        return;
+      case 'restart':
+        if (p.reuseArtifact || !isBackend) return;
+        if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
+        return;
+      case 'version':
+        // 写版本表（发布语义真相源，不可被命令覆盖）
+        await this.stageVersion(p);
+        return;
+      case 'pointer':
+        if (!isBackend) await this.stagePointer(p);
+        return;
+      case 'verify':
+        // 快线（skipVerify 快照）跳过探活与失败自动回滚
+        if (p.skipVerify) return;
+        if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
+        return;
+      case 'cleanup':
+        if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
+        return;
+      default:
+        // 模板校验已挡（steps 仅允许内置九阶段），双保险
+        throw new Error(`未知或不可编排步骤: ${stage}`);
     }
   }
 

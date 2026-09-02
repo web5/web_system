@@ -385,13 +385,30 @@ export interface PipelineTemplate {
   moduleKey: string
   name: string
   description?: string
+  /** 活动阶段子集（null=全量九阶段） */
+  steps?: string[] | null
   skipVerify: boolean
+  /** verify 失败自动回滚 previous/none */
+  rollbackOnFailure?: 'previous' | 'none'
   approval: 'inherit' | 'always' | 'never'
   defaultTarget: 'auto' | 'local' | 'remote'
   enabled: boolean
   builtin: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** 工具目录项（service=平台内置执行器；shell=外部 CLI） */
+export interface ToolItem {
+  code: string
+  name: string
+  kind: 'service' | 'shell'
+  category: string
+  description?: string
+  example?: string
+  available: boolean
+  builtin: boolean
+  updatedAt?: string
 }
 
 export interface PipelineItem {
@@ -491,6 +508,18 @@ export const pipelineTemplateApi = {
     http.put(`/modules/${moduleKey}/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
   remove: (moduleKey: string, id: string) =>
     http.delete(`/modules/${moduleKey}/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+}
+
+/* ========== Tools（工具目录：service 执行器 / shell CLI） ========== */
+
+export const toolApi = {
+  list: (params?: { category?: string; kind?: string }) =>
+    http.get('/tools', { params: params ?? {} }) as Promise<ToolItem[]>,
+  create: (dto: { name: string; kind?: string; category?: string; description?: string; example?: string }) =>
+    http.post('/tools', dto) as Promise<ToolItem>,
+  update: (code: string, dto: Partial<ToolItem>) =>
+    http.put(`/tools/${code}`, dto) as Promise<ToolItem>,
+  remove: (code: string) => http.delete(`/tools/${code}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */

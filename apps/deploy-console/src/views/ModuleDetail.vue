@@ -184,12 +184,28 @@ onMounted(async () => {
 // ===== 流水线模板（流程定义：模块下可建多条发布流程，实例按提交时快照执行） =====
 const templates = ref<PipelineTemplate[]>([])
 const tplLoading = ref(false)
+
+// 内置九阶段（模板可选子集；core=安全/发布语义基线，不可裁剪）
+const TPL_STAGES = [
+  { key: 'check', label: '校验（安全基线）', core: true },
+  { key: 'pull', label: '拉取代码' },
+  { key: 'build', label: '构建' },
+  { key: 'upload', label: '投递' },
+  { key: 'restart', label: '重启' },
+  { key: 'version', label: '写版本（发布语义）', core: true },
+  { key: 'pointer', label: '切指针（发布语义）', core: true },
+  { key: 'verify', label: '探活验证' },
+  { key: 'cleanup', label: '清理旧版本' },
+]
+const TPL_ALL_KEYS = TPL_STAGES.map((s) => s.key)
+
 const tplModal = ref({
   open: false,
   editing: null as PipelineTemplate | null,
   name: '',
   description: '',
-  skipVerify: false,
+  steps: TPL_ALL_KEYS as string[],
+  rollbackOnFailure: 'previous' as string,
   approval: 'inherit' as string,
   defaultTarget: 'auto' as string,
 })
@@ -224,7 +240,8 @@ function openTplCreate() {
     editing: null,
     name: '',
     description: '',
-    skipVerify: false,
+    steps: [...TPL_ALL_KEYS],
+    rollbackOnFailure: 'previous',
     approval: 'inherit',
     defaultTarget: 'auto',
   }
@@ -235,7 +252,8 @@ function openTplEdit(t: PipelineTemplate) {
     editing: t,
     name: t.name,
     description: t.description || '',
-    skipVerify: t.skipVerify,
+    steps: t.steps && t.steps.length ? [...t.steps] : [...TPL_ALL_KEYS],
+    rollbackOnFailure: t.rollbackOnFailure ?? 'previous',
     approval: t.approval,
     defaultTarget: t.defaultTarget,
   }
@@ -250,10 +268,13 @@ async function saveTpl() {
     return
   }
   try {
+    // 步骤按内置顺序提交（core 项由 UI 锁定保留）；skipVerify 由服务端从 steps 派生，不再双输入
+    const orderedSteps = TPL_STAGES.filter((s) => m.steps.includes(s.key)).map((s) => s.key)
     const dto = {
       name: m.name.trim(),
       description: m.description.trim() || undefined,
-      skipVerify: m.skipVerify,
+      steps: orderedSteps,
+      rollbackOnFailure: m.rollbackOnFailure as PipelineTemplate['rollbackOnFailure'],
       approval: m.approval as PipelineTemplate['approval'],
       defaultTarget: m.defaultTarget as PipelineTemplate['defaultTarget'],
     }
@@ -584,8 +605,23 @@ function removeTpl(t: PipelineTemplate) {
         <a-form-item label="说明">
           <a-input v-model:value="tplModal.description" />
         </a-form-item>
-        <a-form-item label="跳过探活验证（快线：不 verify，失败不自动回滚）">
-          <a-switch v-model:checked="tplModal.skipVerify" />
+        <a-form-item
+          label="活动步骤（check / version / pointer 为安全与发布语义基线，不可裁剪）"
+        >
+          <a-checkbox-group
+            v-model:value="tplModal.steps"
+            style="display: flex; flex-wrap: wrap; gap: 4px 16px;"
+          >
+            <a-checkbox v-for="s in TPL_STAGES" :key="s.key" :value="s.key" :disabled="s.core">
+              {{ s.label }}
+            </a-checkbox>
+          </a-checkbox-group>
+        </a-form-item>
+        <a-form-item label="探活失败自动回滚">
+          <a-radio-group v-model:value="tplModal.rollbackOnFailure">
+            <a-radio value="previous">自动回滚到上一版本</a-radio>
+            <a-radio value="none">不回滚（保留现场排查）</a-radio>
+          </a-radio-group>
         </a-form-item>
         <a-form-item label="审批策略">
           <a-radio-group v-model:value="tplModal.approval">

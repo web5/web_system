@@ -50,12 +50,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   color: #fff;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   background: rgba(255, 255, 255, 0.04);
   margin-bottom: 8px;
+
+  .logo-icon {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    white-space: nowrap;
+  }
 }
 
 .app-header {
@@ -77,25 +88,54 @@ body {
 /* 登录页 */
 .login-container {
   height: 100vh;
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
+.login-hive {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  right: -140px;
+  top: -120px;
+  pointer-events: none;
+}
+
 .login-card {
   width: 400px;
   padding: 40px;
+  position: relative;
+  z-index: 1;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
+.login-card .login-logo {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+}
+
 .login-card h1 {
   text-align: center;
-  margin-bottom: 32px;
-  font-size: 24px;
+  margin-bottom: 8px;
+  font-size: 28px;
+  letter-spacing: 1px;
   color: #1a1a2e;
+}
+
+.login-card .login-subtitle {
+  text-align: center;
+  margin-bottom: 28px;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+  letter-spacing: 1px;
 }
 
 /* 页面标题 */

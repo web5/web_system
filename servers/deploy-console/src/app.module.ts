@@ -17,6 +17,7 @@ import { McpDeployModule } from './mcp/mcp.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
+import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
 
 @Module({
   imports: [
@@ -66,6 +67,8 @@ import { PipelineTemplateModule } from './pipeline-template/pipeline-template.mo
     SystemSettingsModule,
     // 流水线模板（模板=流程定义 / 实例=一次发布）
     PipelineTemplateModule,
+    // 工具目录（service 内置执行器 / shell CLI 元数据）
+    ToolCatalogModule,
   ],
 })
 export class AppModule {}

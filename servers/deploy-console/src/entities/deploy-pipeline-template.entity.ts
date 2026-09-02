@@ -33,8 +33,16 @@ export class DeployPipelineTemplateEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '说明' })
   description?: string;
 
-  @Column({ type: 'boolean', default: false, comment: '跳过探活验证（快线）' })
+  @Column({ type: 'boolean', default: false, comment: '跳过探活验证（快线；由 steps 派生，兼容保留）' })
   skipVerify: boolean;
+
+  /** 活动阶段子集：null=全部九阶段；仅可裁剪不可重排，必含 check/version/pointer */
+  @Column({ type: 'json', nullable: true, comment: '活动阶段子集（null=全量，保序子序列）' })
+  steps?: string[] | null;
+
+  /** verify 失败自动回滚：previous=回滚上一版本（默认）；none=不回滚 */
+  @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚 previous/none' })
+  rollbackOnFailure: 'previous' | 'none';
 
   @Column({ type: 'varchar', length: 8, default: 'inherit', comment: '审批策略 inherit/always/never' })
   approval: TemplateApproval;
