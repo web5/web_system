@@ -98,7 +98,15 @@ interface HttpJobToolDef {
 
 **页面**：模块详情 → 「发布脚本」tab：阶段菜单 + shell 编辑器 + 插入模板 / 语法校验 / 保存 / 恢复默认。
 
-**注意**：`deploy_modules.buildCmd` 字段已废弃（旧版自定义构建命令），一律改用 build 阶段 Hook。
+> **注意（2026-09-02 更新）**：本节的 `deploy_module_hooks` 机制与 `deploy_modules.buildCmd` 字段
+> **均已废弃，合并为单一真相源** `deploy_module_stage_commands`（每模块每阶段一条 shell 命令）。
+>
+> 阶段语义按「是否有合理内置默认」分级：
+> - `build`：**必须配置命令**，未配置即终止发布，不回退任何内置硬编码；
+> - `check` / `pull` / `upload` / `restart` / `verify` / `cleanup`：可选覆盖，未配置用流水线内置逻辑；
+> - `version` / `pointer`：发布语义真相源，固定由流水线执行，不可配置。
+>
+> 权威定义见 `specs/release-platform/design.md`（历史问题复盘：两套互斥机制 + 文档矛盾 + 发布核心从未评审）。
 
 ## 四、发布流水线（deploy-console）
 

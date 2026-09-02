@@ -19,6 +19,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
+import { StageCommandService } from '../stage-command/stage-command.service';
 
 /**
  * 任务状态枚举
@@ -71,6 +72,7 @@ export class DeployService {
     private readonly environmentService: EnvironmentService,
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly serverService: ServerService,
+    private readonly stageCommands: StageCommandService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -535,7 +537,8 @@ export class DeployService {
         type: m.type,
         dir: m.dir,
         publicPath: m.publicPath ?? '',
-        buildCmd: m.buildCmd ?? '',
+        // 构建命令统一读单一真相源（不再用已废弃的 deploy_modules.buildCmd）
+        buildCmd: (await this.stageCommands.resolve(m.key, 'build'))?.command ?? '',
         pm2: m.pm2 ?? '',
       });
       // 后端服务：按环境服务路由解析多服务器（serverName 组），注入 DEPLOY_SERVERS

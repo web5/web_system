@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { moduleApi, deployApi, hookApi, STAGES } from '@/api'
+import { moduleApi, deployApi, stageCommandApi, CONFIGURABLE_STAGES } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,87 +80,88 @@ function fmtDate(d: string | null | undefined): string {
   return isNaN(dt.getTime()) ? '—' : dt.toLocaleString('zh-CN')
 }
 
-// ===== 发布脚本 Hook =====
-const hookStage = ref<string>('build')
-const hookScript = ref('')
-const hookDirty = ref(false)
-const hookSaving = ref(false)
-const hookStatus = ref<Record<string, { configured: boolean; updatedBy?: string }>>({})
+// ===== 阶段命令（发布流水线唯一执行真相源）=====
+const cmdStage = ref<string>('build')
+const cmdText = ref('')
+const cmdDirty = ref(false)
+const cmdSaving = ref(false)
+const cmdStatus = ref<Record<string, { configured: boolean; updatedBy?: string }>>({})
 
-async function loadHookStatus() {
+async function loadCmdStatus() {
   try {
-    const list = await hookApi.list(moduleKey.value)
+    const list = await stageCommandApi.list(moduleKey.value)
     const map: Record<string, { configured: boolean; updatedBy?: string }> = {}
     for (const item of list) map[item.stage] = item
-    hookStatus.value = map
+    cmdStatus.value = map
   } catch {
     // 非致命
   }
 }
 
-async function loadHook() {
+async function loadCmd() {
   try {
-    const h = await hookApi.get(moduleKey.value, hookStage.value)
-    hookScript.value = h?.script ?? ''
-    hookDirty.value = false
+    const c = await stageCommandApi.get(moduleKey.value, cmdStage.value)
+    cmdText.value = c?.command ?? ''
+    cmdDirty.value = false
   } catch {
-    message.error('加载脚本失败')
+    message.error('加载阶段命令失败')
   }
 }
 
-function selectHookStage(e: { key: string }) {
-  hookStage.value = String(e.key)
-  void loadHook()
+function selectCmdStage(e: { key: string }) {
+  cmdStage.value = String(e.key)
+  void loadCmd()
 }
 
+/** 插入默认模板：后端按模块类型返回默认构建命令 */
 async function insertTemplate() {
   try {
-    const tpls = await hookApi.templates(moduleInfo.value?.type || 'frontend')
-    if (tpls[hookStage.value]) {
-      hookScript.value = tpls[hookStage.value]
-      hookDirty.value = true
+    const tpl = await stageCommandApi.template(moduleInfo.value?.type || 'frontend')
+    if (tpl) {
+      cmdText.value = tpl
+      cmdDirty.value = true
     } else {
-      message.warning('该阶段暂无模板')
+      message.warning('该模块类型暂无默认模板')
     }
   } catch {
     message.error('获取模板失败')
   }
 }
 
-async function validateHook() {
+async function validateCmd() {
   try {
-    await hookApi.validate(moduleKey.value, hookStage.value, hookScript.value)
+    await stageCommandApi.validate(moduleKey.value, cmdStage.value, cmdText.value)
     message.success('语法正确')
   } catch (e: any) {
     message.error(e?.response?.data?.message || '语法错误')
   }
 }
 
-async function saveHook() {
-  if (!hookScript.value.trim()) {
-    message.warning('脚本为空，如需清除请用「恢复默认」')
+async function saveCmd() {
+  if (!cmdText.value.trim()) {
+    message.warning('命令为空，如需清除请用「恢复默认」')
     return
   }
-  hookSaving.value = true
+  cmdSaving.value = true
   try {
-    await hookApi.save(moduleKey.value, hookStage.value, hookScript.value)
+    await stageCommandApi.save(moduleKey.value, cmdStage.value, cmdText.value)
     message.success('已保存')
-    hookDirty.value = false
-    await loadHookStatus()
+    cmdDirty.value = false
+    await loadCmdStatus()
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存失败')
   } finally {
-    hookSaving.value = false
+    cmdSaving.value = false
   }
 }
 
-async function removeHook() {
+async function removeCmd() {
   try {
-    await hookApi.remove(moduleKey.value, hookStage.value)
+    await stageCommandApi.remove(moduleKey.value, cmdStage.value)
     message.success('已恢复流水线内置逻辑')
-    hookScript.value = ''
-    hookDirty.value = false
-    await loadHookStatus()
+    cmdText.value = ''
+    cmdDirty.value = false
+    await loadCmdStatus()
   } catch {
     message.error('恢复失败')
   }
@@ -168,8 +169,8 @@ async function removeHook() {
 
 onMounted(async () => {
   await Promise.all([loadModule(), loadDeployments()])
-  await loadHookStatus()
-  await loadHook()
+  await loadCmdStatus()
+  await loadCmd()
 })
 </script>
 
@@ -312,21 +313,26 @@ onMounted(async () => {
         <!-- 两个 tab 都不显示时的兜底 -->
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
 
-        <!-- 发布脚本 Hook tab（各阶段可自定义 shell，DB 为真相源） -->
-        <a-tab-pane key="hooks" tab="发布脚本">
+        <!-- 阶段命令 tab（每模块每阶段一条 shell，DB 为唯一真相源） -->
+        <a-tab-pane key="stage-commands" tab="阶段命令">
           <div style="display: flex; gap: 16px;">
             <div style="width: 170px; flex-shrink: 0;">
               <a-menu
-                :selected-keys="[hookStage]"
+                :selected-keys="[cmdStage]"
                 mode="inline"
                 style="border-right: none;"
-                @click="selectHookStage"
+                @click="selectCmdStage"
               >
-                <a-menu-item v-for="s in STAGES" :key="s">
+                <a-menu-item v-for="s in CONFIGURABLE_STAGES" :key="s">
                   <span style="display: inline-flex; align-items: center; gap: 6px;">
                     {{ s }}
                     <a-tag
-                      v-if="hookStatus[s]?.configured"
+                      v-if="s === 'build'"
+                      color="red"
+                      style="font-size: 11px; line-height: 14px; height: auto; padding: 0 4px;"
+                    >必填</a-tag>
+                    <a-tag
+                      v-else-if="cmdStatus[s]?.configured"
                       color="green"
                       style="font-size: 11px; line-height: 14px; height: auto; padding: 0 4px;"
                     >自定义</a-tag>
@@ -337,32 +343,36 @@ onMounted(async () => {
             <div style="flex: 1; min-width: 0;">
               <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <span>
-                  <b>{{ hookStage }}</b> 阶段脚本
-                  <a-tag v-if="hookStatus[hookStage]?.configured" color="blue" style="margin-left: 6px;">
-                    最后编辑：{{ hookStatus[hookStage]?.updatedBy || '—' }}
+                  <b>{{ cmdStage }}</b> 阶段命令
+                  <a-tag v-if="cmdStatus[cmdStage]?.configured" color="blue" style="margin-left: 6px;">
+                    最后编辑：{{ cmdStatus[cmdStage]?.updatedBy || '—' }}
                   </a-tag>
-                  <a-tag v-if="hookDirty" color="orange" style="margin-left: 6px;">未保存</a-tag>
+                  <a-tag v-if="cmdDirty" color="orange" style="margin-left: 6px;">未保存</a-tag>
                 </span>
                 <a-space>
                   <a-button size="small" @click="insertTemplate">插入模板</a-button>
-                  <a-button size="small" @click="validateHook">语法校验</a-button>
-                  <a-button size="small" @click="loadHook">刷新</a-button>
-                  <a-popconfirm title="恢复该阶段为流水线内置逻辑？" ok-text="恢复" cancel-text="取消" @confirm="removeHook">
+                  <a-button size="small" @click="validateCmd">语法校验</a-button>
+                  <a-button size="small" @click="loadCmd">刷新</a-button>
+                  <a-popconfirm title="恢复该阶段为流水线内置逻辑？" ok-text="恢复" cancel-text="取消" @confirm="removeCmd">
                     <a-button size="small" danger>恢复默认</a-button>
                   </a-popconfirm>
-                  <a-button size="small" type="primary" :loading="hookSaving" @click="saveHook">保存</a-button>
+                  <a-button size="small" type="primary" :loading="cmdSaving" @click="saveCmd">保存</a-button>
                 </a-space>
               </div>
               <a-textarea
-                v-model:value="hookScript"
+                v-model:value="cmdText"
                 :rows="20"
                 style="font-family: monospace; font-size: 12px; line-height: 1.6;"
-                placeholder="# 留空 = 使用流水线内置逻辑
-# 点击「插入模板」可快速生成对应模块类型的默认脚本"
+                :placeholder="
+                  cmdStage === 'build'
+                    ? '# build 阶段必填：未配置将直接终止发布（不回退任何内置硬编码）\n# 点击「插入模板」可生成该模块类型的默认构建命令'
+                    : '# 留空 = 使用流水线内置逻辑\n# 填写后该阶段改由本命令执行'
+                "
               />
               <div style="margin-top: 8px; color: #888; font-size: 12px; line-height: 1.8;">
                 可用环境变量：<code>DEPLOY_ENV / MODULE_KEY / BRANCH / COMMIT_ID / RELEASE_DIR / STAGE / MODULE_TYPE / MODULE_DIR / PM2_NAME</code><br />
-                脚本以 <code>bash</code> 非交互执行，输出流式进入流水线日志；退出码非 0 视为该阶段失败、中断发布。
+                命令以 <code>bash -c</code> 执行，输出流式进入流水线日志；退出码非 0 视为该阶段失败、中断发布。<br />
+                <code>version</code> / <code>pointer</code> 为发布语义真相源，固定由流水线执行，不在此配置。
               </div>
             </div>
           </div>

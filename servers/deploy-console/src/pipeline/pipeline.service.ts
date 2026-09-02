@@ -20,7 +20,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
-import { HookService } from '../hook/hook.service';
+import { StageCommandService } from '../stage-command/stage-command.service';
 import { DeployService } from '../deploy/deploy.service';
 
 /** 保留的历史版本目录数量（用户约定 N=5） */
@@ -86,7 +86,7 @@ export class PipelineService {
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly canaryService: CanaryService,
     private readonly auditService: AuditService,
-    private readonly hookService: HookService,
+    private readonly stageCommands: StageCommandService,
     private readonly deployService: DeployService,
   ) {}
 
@@ -417,10 +417,9 @@ export class PipelineService {
       p.status = 'running';
       await this.save(p);
 
-      // 1. check：先内置安全校验（模块类型/prod 分支约束），再执行 check hook（附加校验）
+      // 1. check：先内置安全校验（模块类型/prod 分支约束），再执行 check 阶段命令（附加校验）
       await this.stageCheck(p);
-      if (await this.runHook(p, 'check')) {
-      }
+      await this.runStageCommand(p, 'check');
 
       const isBackend = p.moduleType === 'backend';
 
@@ -429,15 +428,19 @@ export class PipelineService {
         p.logs = [...(p.logs ?? []), '已跳过 pull / build / upload（复用已有产物）'];
         await this.save(p);
       } else {
-        // 2. pull：发布目录拉取远程仓库目标分支/commit（可被 hook 覆盖）
-        if (!(await this.runHook(p, 'pull'))) await this.stagePull(p);
-        // 3. build：前端 vite / 后端 nest（可被 hook 覆盖）
-        if (!(await this.runHook(p, 'build'))) await this.stageBuild(p);
-        // 4. upload（前端投递产物）/ restart（后端重启服务）（可被 hook 覆盖）
+        // 2. pull：发布目录拉取远程仓库目标分支/commit（可被阶段命令覆盖）
+        if (!(await this.runStageCommand(p, 'pull'))) await this.stagePull(p);
+        // 3. build：强制由模块阶段命令驱动（未配置即终止，不回退任何内置硬编码）
+        if (!(await this.runStageCommand(p, 'build'))) {
+          throw new Error(
+            `模块 ${p.moduleKey} 未配置 build 阶段命令，无法构建，发布终止（请在「模块详情 → 阶段命令」中配置）`,
+          );
+        }
+        // 4. upload（前端投递产物）/ restart（后端重启服务）（可被阶段命令覆盖）
         if (isBackend) {
-          if (!(await this.runHook(p, 'restart'))) await this.stageRestart(p);
+          if (!(await this.runStageCommand(p, 'restart'))) await this.stageRestart(p);
         } else {
-          if (!(await this.runHook(p, 'upload'))) await this.stageUpload(p, uploadTarget);
+          if (!(await this.runStageCommand(p, 'upload'))) await this.stageUpload(p, uploadTarget);
         }
       }
       // 5. version（写版本表）；回滚前先记录当前线上版本作为回退目标
@@ -454,10 +457,10 @@ export class PipelineService {
       if (!isBackend) {
         await this.stagePointer(p);
       }
-      // 7. verify：前端 manifest / 后端 health check（可被 hook 覆盖）
-      if (!(await this.runHook(p, 'verify'))) await this.stageVerify(p);
-      // 8. cleanup（可被 hook 覆盖）
-      if (!(await this.runHook(p, 'cleanup'))) await this.stageCleanup(p);
+      // 7. verify：前端 manifest / 后端 health check（可被阶段命令覆盖）
+      if (!(await this.runStageCommand(p, 'verify'))) await this.stageVerify(p);
+      // 8. cleanup（可被阶段命令覆盖）
+      if (!(await this.runStageCommand(p, 'cleanup'))) await this.stageCleanup(p);
 
       p.status = 'succeeded';
       p.progress = { ...p.progress!, message: '发布完成' };
@@ -536,18 +539,18 @@ export class PipelineService {
     return 'local';
   }
 
-  // ── 发布脚本 Hook（开发者可自定义各阶段 shell）──────────────────
+  // ── 阶段命令（每模块每阶段一条 shell，DB 为真相源）────────────────
 
   /**
-   * 执行某阶段的自定义脚本。
-   * @returns true=有 hook 且已执行；false=未配置 hook（调用方继续走内置逻辑）
+   * 执行某阶段的模块命令。
+   * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
-  private async runHook(p: DeployPipelineEntity, stage: string): Promise<boolean> {
-    const hook = await this.hookService.resolveScript(p.moduleKey, stage);
-    if (!hook) return false;
+  private async runStageCommand(p: DeployPipelineEntity, stage: string): Promise<boolean> {
+    const cmd = await this.stageCommands.resolve(p.moduleKey, stage);
+    if (!cmd) return false;
 
     this.assertNotCancelled(p);
-    await this.enterStage(p, stage as any, `执行自定义脚本: ${p.moduleKey}/${stage}`);
+    await this.enterStage(p, stage as any, `执行阶段命令: ${p.moduleKey}/${stage}`);
 
     let mod: any = null;
     try {
@@ -567,33 +570,38 @@ export class PipelineService {
       MODULE_DIR: mod?.dir || '',
       PM2_NAME: mod?.pm2 || p.moduleKey,
     };
-    p.logs = [...(p.logs ?? []), `[hook:${stage}] 执行 ${hook.file}`];
+    p.logs = [...(p.logs ?? []), `[${stage}] $ ${cmd.command}`];
     await this.save(p);
 
-    const code = await this.runScriptFile(hook.file, env, p);
+    const code = await this.runShell(cmd.command, env, p, cmd.timeoutSec);
     if (code !== 0) {
-      throw new Error(`[hook:${stage}] 自定义脚本执行失败（exit ${code}），详见日志`);
+      throw new Error(`[${stage}] 阶段命令执行失败（exit ${code}），详见日志`);
     }
-    p.logs = [...(p.logs ?? []), `[hook:${stage}] 自定义脚本完成`];
+    p.logs = [...(p.logs ?? []), `[${stage}] 阶段命令完成`];
     await this.save(p);
     return true;
   }
 
-  /** 执行 hook 脚本文件（bash），输出流式进流水线日志 */
-  private runScriptFile(
-    file: string,
+  /**
+   * 执行 shell 命令（bash -c），输出流式进流水线日志。
+   * 超时优先用该阶段配置的 timeoutSec，缺省用 BUILD_TIMEOUT_MS。
+   */
+  private runShell(
+    command: string,
     env: Record<string, string>,
     p: DeployPipelineEntity,
+    timeoutSec?: number,
   ): Promise<number> {
     return new Promise((resolve) => {
-      const child = spawn('bash', [file], {
+      const timeoutMs = timeoutSec && timeoutSec > 0 ? timeoutSec * 1000 : BUILD_TIMEOUT_MS;
+      const child = spawn('bash', ['-c', command], {
         env: {
           ...process.env,
           ...env,
           PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${this.nodeBinDir}`,
         },
       });
-      const timer = setTimeout(() => child.kill('SIGKILL'), BUILD_TIMEOUT_MS);
+      const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
       const pushLog = (line: string) => {
         p.logs = [...(p.logs ?? []), line];
         this.save(p).catch(() => undefined);
@@ -610,7 +618,7 @@ export class PipelineService {
       });
       child.on('error', (err: Error) => {
         clearTimeout(timer);
-        pushLog(`[hook] 脚本启动失败: ${err.message}`);
+        pushLog(`[${env.STAGE ?? 'shell'}] 命令启动失败: ${err.message}`);
         resolve(1);
       });
     });
@@ -793,103 +801,14 @@ export class PipelineService {
     return fs.existsSync(path.join(dir, 'index.js'));
   }
 
-  /** 阶段 3：构建。前端 vite build --mode mf；后端 nest build */
-  private async stageBuild(p: DeployPipelineEntity): Promise<void> {
-    await this.enterStage(p, 'build', `构建 ${p.moduleKey}（${p.moduleType}）`);
-    const mod = await this.moduleRegistry.get(p.moduleKey);
-    const ws = this.releaseWorkspace;
-    if (p.moduleType === 'backend') {
-      this.buildBackend(p, ws, mod.dir);
-    } else {
-      await this.buildFrontend(p, ws, mod.dir);
-    }
-    await this.save(p);
-  }
-
-  /** 后端构建：nest build（发布目录 servers/<dir>） */
-  private buildBackend(p: DeployPipelineEntity, ws: string, dir: string): void {
-    const serverDir = path.join(ws, 'servers', dir);
-    p.logs = [...(p.logs ?? []), `后端构建: ${dir}`];
-    try {
-      this.exec(`"${this.npxBin}" --no-install nest build`, serverDir);
-    } catch (e) {
-      throw new Error(`后端构建失败（${dir}）: ${(e as Error).message}`);
-    }
-    if (!fs.existsSync(path.join(serverDir, 'dist', 'main.js'))) {
-      throw new Error(`后端构建产物缺失: ${serverDir}/dist/main.js`);
-    }
-    p.logs = [...(p.logs ?? []), `后端构建完成: ${dir} -> dist/`];
-  }
-
-  /** 前端构建：vite build --mode mf（发布目录 apps/<dir>） */
-  private async buildFrontend(p: DeployPipelineEntity, ws: string, dir: string): Promise<void> {
-    const appDir = path.join(ws, 'apps', dir);
-
-    // 1. 确保 workspace 依赖包已构建（@web-system/shared / types 的 main 指向 dist，
-    //    发布目录 clone 后 dist 不被 git 管理，缺失会导致 vite 解析失败）
-    try {
-      this.exec(`"${this.pnpmBin}" --filter @web-system/shared build`, ws);
-      this.exec(`"${this.pnpmBin}" --filter @web-system/types build`, ws);
-    } catch (e) {
-      throw new Error(`workspace 依赖包构建失败: ${(e as Error).message}`);
-    }
-
-    // 2. 预建 dist 目录（部分 vite 插件构建时写 dist/version.json，目录缺失会 ENOENT）
-    fs.mkdirSync(path.join(appDir, 'dist'), { recursive: true });
-
-    // 优先用 node 直接执行 vite 的 bin 入口。
-    // 原因：pm2 拉起的服务进程 PATH 可能不含 npx（曾出现 spawn npx ENOENT），
-    // 直接用 process.execPath + vite bin 绝对路径可摆脱对 shell PATH 的依赖。
-    const viteBin = [
-      path.join(appDir, 'node_modules', 'vite', 'bin', 'vite.js'),
-      path.join(this.releaseWorkspace, 'node_modules', 'vite', 'bin', 'vite.js'),
-    ].find((f) => fs.existsSync(f));
-    const cmd = viteBin ? process.execPath : 'npx';
-    const args = viteBin ? [viteBin, 'build', '--mode', 'mf'] : ['vite', 'build', '--mode', 'mf'];
-    if (!viteBin) {
-      p.logs = [...(p.logs ?? []), '警告: 未找到 vite bin，回退 npx（依赖 PATH）'];
-    }
-
-    const code = await new Promise<number>((resolve, reject) => {
-      const child = spawn(cmd, args, {
-        cwd: appDir,
-        env: {
-          ...process.env,
-          RELEASE_TAG: p.versionTag!,
-          MF_FORMAT: 'system',
-          // 兜底补齐常见 node 安装目录
-          PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/opt/homebrew/bin`,
-        },
-      });
-      const timer = setTimeout(() => child.kill('SIGKILL'), BUILD_TIMEOUT_MS);
-      child.stdout.on('data', (d: Buffer) => {
-        const line = d.toString().trim();
-        if (line) p.logs = [...(p.logs ?? []), line];
-      });
-      child.stderr.on('data', (d: Buffer) => {
-        const line = d.toString().trim();
-        if (line) p.logs = [...(p.logs ?? []), `[stderr] ${line}`];
-      });
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-      child.on('close', (c: number) => {
-        clearTimeout(timer);
-        resolve(c);
-      });
-    });
-
-    if (code !== 0) {
-      throw new Error(`构建失败，退出码 ${code}（详见日志尾部）`);
-    }
-
-    const dist = path.join(appDir, 'dist');
-    if (!fs.existsSync(path.join(dist, 'index.js'))) {
-      throw new Error(`构建产物缺失: ${dist}/index.js`);
-    }
-    await this.save(p);
-  }
+  /**
+   * 阶段 3（build）已完全由模块阶段命令驱动，见 `runStageCommand`。
+   *
+   * 历史包袱已删除：此处原先硬编码 `nest build` / `vite build`，后又改为读
+   * `deploy_modules.buildCmd`（与 `deploy_module_hooks` 形成两套互斥机制，文档互相矛盾）。
+   * 现统一收敛到 `deploy_module_stage_commands` 单一真相源，未配置即 fail-fast，
+   * 流水线内不再保留任何技术栈构建逻辑。
+   */
 
   /** 阶段 4：前端产物投递到发布目录的 nginx 静态目录 */
   private async stageUpload(p: DeployPipelineEntity, target: 'local' | 'remote'): Promise<void> {

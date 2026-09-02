@@ -13,7 +13,8 @@
 | 表 | 作用 | 关键字段 |
 |---|---|---|
 | `deploy_environments` | 环境注册表（一等公民） | `id`(PK), `name`, `host`, `sshUser`, `sshKeyPath`, `remoteDir`, `publicUrl`, `ports`(json), `builtin` |
-| `deploy_modules` | 模块注册表（可部署单元） | `key`(unique), `name`, `type`(backend/frontend/micro-frontend/mini-app), `dir`, `pm2`, `publicPath`, `buildCmd`, `entry`, `entryUrl`, `externals`, `isShell`, `builtin`, `enabled` |
+| `deploy_modules` | 模块注册表（可部署单元） | `key`(unique), `name`, `type`(backend/frontend/micro-frontend/mini-app), `dir`, `pm2`, `publicPath`, `buildCmd`(**已废弃**，见下表), `entry`, `entryUrl`, `externals`, `isShell`, `builtin`, `enabled` |
+| `deploy_module_stage_commands` | 阶段命令（发布执行唯一真相源，2026-09-02 新增） | `module_key`+`stage`(unique), `command`, `enabled`, `timeout_sec`, `updated_by` |
 | `deploy_versions` | 发布版本历史 | `env`, `component`, `versionTag`, `gitCommit`, `gitBranch`, `releasedBy`, `releasedAt`, `taskId`, `status`, `note` |
 | `deploy_deployments` | 环境×模块 → 当前版本指针 | `envId`, `moduleKey`, `currentVersion`, `status`, `deployedAt`, `deployedBy`, `taskId` |
 | `deploy_tasks` | 部署任务（SSE 推流 + 落库） | `id`, `type`(build/deploy/rollback), `env`, `component`, `tag`, `status`, `logs`(json), `error`, `operator` |
