@@ -9,7 +9,7 @@
     </template>
   </a-page-header>
 
-  <a-row :gutter="16">
+  <a-row :gutter="12">
     <!-- 左：控制区 -->
     <a-col :xs="24" :md="8" :lg="7">
       <a-card :bordered="true" size="small" title="运行配置">

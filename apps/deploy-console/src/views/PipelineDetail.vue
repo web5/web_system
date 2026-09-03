@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -33,10 +33,14 @@ const tplId = computed(() => String(route.params.id || ''))
 const tpl = ref<PipelineTemplate | null>(null)
 const history = ref<PipelineItem[]>([])
 const loading = ref(false)
-const activeTab = ref('latest')
+/** flow=执行流程（当前选中实例流程图）/ history=历史记录 */
+const activeTab = ref<'flow' | 'history'>('flow')
 let timer: number | undefined
 
-const latest = computed(() => history.value[0] || null)
+// ===== 当前查看的实例（selectedRun：默认最新一次，?run= 可深链到任意历史） =====
+const selectedRun = ref<PipelineItem | null>(null)
+const selectedRunId = computed(() => selectedRun.value?.id || '')
+
 const runTotal = computed(() => history.value.length)
 const runOk = computed(() => history.value.filter((p) => p.status === 'succeeded').length)
 
@@ -64,12 +68,100 @@ async function loadHistory(limit = 200) {
     loading.value = false
   }
 }
+
+/** 指定实例为「当前查看」，同步 URL ?run=（支持刷新/分享/前进后退） */
+function pickRun(p: PipelineItem | null) {
+  selectedRun.value = p
+  if (p) {
+    router.replace({ query: { ...route.query, run: p.id } })
+  } else {
+    // 清空 ?run（删除/无目标时移除深链参数，避免残留指向失效 id）
+    router.replace({ query: { ...route.query, run: undefined } })
+  }
+}
+/**
+ * 从历史/接口解析目标实例并选中（优先 ?run=，缺省取最新一次）。
+ * 兜底：?run 指向已删除/不存在实例时，回落到最新一次并纠正 URL。
+ */
+async function loadSelectedRun() {
+  const qRun = String(route.query.run || '')
+  const targetId = qRun || history.value[0]?.id || ''
+  if (!targetId) {
+    pickRun(null)
+    return
+  }
+  let target = history.value.find((h) => h.id === targetId) || null
+  if (!target) {
+    try {
+      target = await pipelineApi.get(targetId)
+    } catch {
+      target = null
+    }
+  }
+  // 兜底：指定实例不存在/已被删除 → 回落到最新一次并清理 ?run
+  if (!target) {
+    const fallback = history.value[0] || null
+    if (fallback) {
+      selectedRun.value = fallback
+      router.replace({ query: { ...route.query, run: fallback.id } })
+      return
+    }
+    pickRun(null)
+    return
+  }
+  selectedRun.value = target
+  if (!qRun) {
+    // 默认选中最新：同步 URL 便于状态一致
+    router.replace({ query: { ...route.query, run: target.id } })
+  }
+}
+
+/** 历史表格「查看详情/点 ID」：切到流程图 Tab 并加载该实例 */
+function viewRunInFlow(p: PipelineItem) {
+  pickRun(p)
+  activeTab.value = 'flow'
+}
+
+// ?run 变化（点浏览器前进/后退、外部深链）→ 重新选中
+watch(
+  () => route.query.run,
+  async (v) => {
+    if (v && v !== selectedRunId.value) {
+      // history 已加载则本地命中，否则单拉
+      const target = history.value.find((h) => h.id === v) || null
+      if (target) {
+        selectedRun.value = target
+      } else {
+        await loadSelectedRun()
+      }
+    }
+  },
+)
+
+// 轮询：仅「当前查看实例」仍在运行/等待时 3s 拉最新，驱动流程图推进
+async function pollTick() {
+  const run = selectedRun.value
+  if (!run) {
+    stopPolling()
+    return
+  }
+  const id = run.id
+  const fresh = await pipelineApi.get(id).catch(() => null)
+  if (!fresh) {
+    stopPolling()
+    return
+  }
+  // 竞态防护：await 期间用户切到别的实例 → 丢弃本次结果，避免旧数据覆盖新选中
+  if (selectedRunId.value !== id) return
+  // 同步到 selectedRun + 历史列表中的同一行
+  selectedRun.value = fresh
+  const idx = history.value.findIndex((h) => h.id === id)
+  if (idx >= 0) history.value[idx] = fresh
+  if (!isLive(fresh)) stopPolling()
+}
 function startPolling() {
   stopPolling()
-  timer = window.setInterval(async () => {
-    await loadHistory(50)
-    if (!isLive(history.value[0])) stopPolling()
-  }, 3000)
+  timer = window.setInterval(() => void pollTick(), 3000)
 }
 function stopPolling() {
   if (timer) {
@@ -77,11 +169,30 @@ function stopPolling() {
     timer = undefined
   }
 }
+watch(
+  () => selectedRun.value?.status,
+  (s) => {
+    if (isLive(selectedRun.value)) startPolling()
+    else stopPolling()
+  },
+)
 
-// ===== 实例操作（重试/取消/审批/转全量） =====
+function copyRunId(p: PipelineItem) {
+  if (navigator.clipboard) {
+    navigator.clipboard
+      .writeText(p.id)
+      .then(() => message.success('实例 ID 已复制'))
+      .catch(() => message.warning('复制失败，请手动选择'))
+  } else {
+    message.warning('当前环境不支持剪贴板，请手动选择')
+  }
+}
+
+// ===== 实例操作（重试/取消/审批/转全量/删除） =====
 async function afterChange() {
-  await loadHistory(50)
-  if (isLive(history.value[0])) startPolling()
+  await loadHistory(200)
+  await loadSelectedRun()
+  if (isLive(selectedRun.value)) startPolling()
 }
 function handleRetry(p: PipelineItem) {
   const isSucceeded = p.status === 'succeeded'
@@ -120,6 +231,28 @@ function handleCancel(p: PipelineItem) {
         await loadHistory(50)
       } catch {
         message.error('取消失败')
+      }
+    },
+  })
+}
+async function handleRemove(p: PipelineItem) {
+  Modal.confirm({
+    title: '删除执行记录',
+    content: `确定删除实例 ${p.id} 的记录吗？仅从历史列表移除，不影响当前版本指针与产物。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '返回',
+    onOk: async () => {
+      try {
+        await pipelineApi.remove(p.id)
+        message.success('已删除执行记录')
+        await loadHistory(200)
+        // 删除的恰好是当前查看实例 → 回落到最新一次
+        if (selectedRunId.value === p.id) {
+          await loadSelectedRun()
+        }
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || e?.message || '删除失败')
       }
     },
   })
@@ -188,25 +321,27 @@ async function ensureScriptView(moduleKey: string) {
     scriptViewMap.value[moduleKey] = []
   }
 }
-async function onCommandClick(stage: string) {
-  const p = latest.value
+// ===== 阶段详情抽屉（三合一：命令/日志/结果） =====
+const cmdInitialTab = ref<'command' | 'logs' | 'result'>('command')
+/** 底部执行日志关键字过滤（节点点击联动） */
+const logKeyword = ref('')
+async function openStageDrawer(stage: string, tab: 'command' | 'logs' | 'result' = 'command') {
+  const p = selectedRun.value
   if (!p) return
   await ensureScriptView(p.moduleKey)
   const list = scriptViewMap.value[p.moduleKey] || []
   cmdItem.value = list.find((it) => it.stage === stage) ?? null
+  cmdInitialTab.value = tab
   cmdOpen.value = true
 }
-
-// ===== 日志定位 =====
-const logKeyword = ref('')
+/** 点流程图节点 → 打开抽屉「执行日志」Tab + 底部日志同步过滤 */
 function onStageClick(stage: string) {
   logKeyword.value = stage
-  message.info(`已按阶段「${STEP_LABELS[stage] || stage}」过滤日志，可清除关键字恢复`)
+  void openStageDrawer(stage, 'logs')
 }
-
-// ===== 历史记录跳转 =====
-function gotoRun(p: PipelineItem) {
-  router.push(`/pipelines/${tplId.value}/${p.id}`)
+/** 点节点下「命令」入口 → 打开抽屉「命令」Tab */
+function onCommandClick(stage: string) {
+  void openStageDrawer(stage, 'command')
 }
 
 // ===== 立即发布（按当前流水线提交新实例） =====
@@ -297,7 +432,8 @@ function submitRelease() {
 onMounted(async () => {
   await Promise.all([loadTpl(), loadEnvironments()])
   await loadHistory(200)
-  if (isLive(history.value[0])) startPolling()
+  // 默认选中：?run= 指定的历史实例，缺省 = 最新一次；running 由 watch 自动轮询
+  await loadSelectedRun()
 })
 onUnmounted(stopPolling)
 </script>
@@ -350,9 +486,9 @@ onUnmounted(stopPolling)
 
       <a-card size="small" :loading="loading">
         <a-tabs v-model:activeKey="activeTab">
-          <!-- 当前执行 -->
-          <a-tab-pane key="latest" tab="当前执行">
-            <a-empty v-if="!latest" description="该流水线还没有执行记录">
+          <!-- 执行流程（当前查看实例，默认最新一次） -->
+          <a-tab-pane key="flow" tab="执行流程">
+            <a-empty v-if="!selectedRun" description="该流水线还没有执行记录">
               <template #description>
                 <span>该流水线还没有执行记录</span>
                 <br />
@@ -362,68 +498,76 @@ onUnmounted(stopPolling)
               </template>
             </a-empty>
 
-            <template v-if="latest">
-              <!-- 元信息 -->
-              <a-descriptions :column="4" size="small" bordered style="margin-bottom: 12px;">
-                <a-descriptions-item label="状态">
-                  <a-tag :color="statusColor(latest.status)">{{ statusText(latest.status) }}</a-tag>
-                </a-descriptions-item>
-                <a-descriptions-item label="环境 / 模块">{{ latest.env }} / {{ latest.moduleKey }}</a-descriptions-item>
-                <a-descriptions-item label="版本">{{ latest.versionTag || '—' }}</a-descriptions-item>
-                <a-descriptions-item label="分支 / commit">
-                  {{ latest.gitBranch || '—' }} @ {{ latest.gitCommit || '—' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="操作人">{{ latest.operator || '—' }}</a-descriptions-item>
-                <a-descriptions-item label="开始">{{ formatTime(latest.startTime) }}</a-descriptions-item>
-                <a-descriptions-item label="结束">{{ formatTime(latest.endTime) }}</a-descriptions-item>
-                <a-descriptions-item label="耗时">{{ (durationMs(latest) / 1000).toFixed(1) }}s</a-descriptions-item>
-              </a-descriptions>
+            <template v-if="selectedRun">
+              <!-- 摘要条：正在看哪个实例 -->
+              <div
+                style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                       background: #fafafa; border: 1px solid #f0f0f0; border-radius: 6px;
+                       padding: 8px 12px; margin-bottom: 12px; font-size: 13px;"
+              >
+                <span style="color: #1677ff; font-family: monospace; cursor: pointer;" title="点击复制实例 ID" @click="copyRunId(selectedRun)">
+                  #{{ String(selectedRun.id).slice(-12) }}
+                </span>
+                <a-tag :color="statusColor(selectedRun.status)" style="margin-right: 0;">
+                  {{ statusText(selectedRun.status) }}
+                </a-tag>
+                <span style="color: #666;">{{ selectedRun.env }} / {{ selectedRun.moduleKey }}</span>
+                <template v-if="selectedRun.gitBranch">
+                  <span style="color: #888;">{{ selectedRun.gitBranch }}@{{ selectedRun.gitCommit || '—' }}</span>
+                </template>
+                <span v-if="selectedRun.operator" style="color: #888;">· {{ selectedRun.operator }}</span>
+                <span style="margin-left: auto; color: #999; font-size: 12px;">
+                  {{ formatTime(selectedRun.startTime) }}
+                  <template v-if="selectedRun.endTime || ['succeeded', 'failed', 'cancelled'].includes(selectedRun.status)">
+                    · {{ (durationMs(selectedRun) / 1000).toFixed(1) }}s
+                  </template>
+                </span>
+              </div>
 
-              <!-- 进度流程图 -->
+              <!-- 进度流程图（点击节点看该阶段详情） -->
               <ProgressFlow
-                :instance="latest"
+                :instance="selectedRun"
                 @stage-click="onStageClick"
                 @command-click="onCommandClick"
               />
 
-              <div v-if="latest.error" style="margin-top: 12px;">
-                <a-alert type="error" show-icon :message="latest.error" />
+              <div v-if="selectedRun.error" style="margin-top: 12px;">
+                <a-alert type="error" show-icon :message="selectedRun.error" />
               </div>
 
-              <!-- 操作 -->
+              <!-- 操作（作用于当前查看实例：停止/重试/审批/转全量） -->
               <div style="margin-top: 12px;">
                 <a-space>
                   <a-button
-                    v-if="['running', 'pending'].includes(latest.status)"
+                    v-if="['running', 'pending'].includes(selectedRun.status)"
                     danger
-                    @click="handleCancel(latest)"
-                  >取消</a-button>
-                  <a-button v-if="latest.status === 'pending-approval'" danger @click="handleCancel(latest)">
+                    @click="handleCancel(selectedRun)"
+                  >停止</a-button>
+                  <a-button v-if="selectedRun.status === 'pending-approval'" danger @click="handleCancel(selectedRun)">
                     撤回审批
                   </a-button>
-                  <template v-if="latest.status === 'pending-approval'">
-                    <a-button type="primary" @click="openApprove(latest)">审批通过</a-button>
-                    <a-button danger @click="openReject(latest)">拒绝</a-button>
+                  <template v-if="selectedRun.status === 'pending-approval'">
+                    <a-button type="primary" @click="openApprove(selectedRun)">审批通过</a-button>
+                    <a-button danger @click="openReject(selectedRun)">拒绝</a-button>
                   </template>
                   <a-button
-                    v-if="['failed', 'cancelled', 'succeeded'].includes(latest.status)"
-                    @click="handleRetry(latest)"
+                    v-if="['failed', 'cancelled', 'succeeded'].includes(selectedRun.status)"
+                    @click="handleRetry(selectedRun)"
                   >
-                    {{ latest.status === 'succeeded' ? '再次发布' : '重试' }}
+                    {{ selectedRun.status === 'succeeded' ? '再次发布' : '重试' }}
                   </a-button>
                   <a-button
-                    v-if="latest.mode === 'grayscale' && latest.status === 'succeeded'"
+                    v-if="selectedRun.mode === 'grayscale' && selectedRun.status === 'succeeded'"
                     type="primary"
-                    @click="handlePromote(latest)"
+                    @click="handlePromote(selectedRun)"
                   >灰度转全量</a-button>
-                  <a-button @click="gotoRun(latest)">查看完整详情</a-button>
                 </a-space>
               </div>
 
               <!-- 日志 -->
               <div style="margin-top: 12px;">
                 <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">执行日志</div>
-                <PipelineRunLogs :lines="latest.logs || []" :keyword="logKeyword" />
+                <PipelineRunLogs :lines="selectedRun.logs || []" :keyword="logKeyword" />
               </div>
             </template>
           </a-tab-pane>
@@ -440,7 +584,7 @@ onUnmounted(stopPolling)
                 { title: '阶段/结果', key: 'stage', ellipsis: true },
                 { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
                 { title: '开始时间', dataIndex: 'startTime', key: 'startTime', width: 150 },
-                { title: '操作', key: 'action', width: 240 },
+                { title: '操作', key: 'action', width: 300 },
               ]"
               :data-source="history"
               :loading="loading"
@@ -451,8 +595,8 @@ onUnmounted(stopPolling)
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'id'">
-                  <a-tooltip :title="record.id">
-                    <span style="font-family: monospace; cursor: pointer; color: #1677ff;" @click="gotoRun(record)">
+                  <a-tooltip :title="`点击查看该实例的执行流程：${record.id}`">
+                    <span style="font-family: monospace; cursor: pointer; color: #1677ff;" @click="viewRunInFlow(record)">
                       {{ String(record.id).slice(-12) }}
                     </span>
                   </a-tooltip>
@@ -480,7 +624,7 @@ onUnmounted(stopPolling)
                 </template>
                 <template v-else-if="column.key === 'action'">
                   <a-space size="small" wrap>
-                    <a-button type="link" size="small" @click="gotoRun(record)">查看详情</a-button>
+                    <a-button type="link" size="small" @click="viewRunInFlow(record)">详情</a-button>
                     <a-button
                       v-if="['failed', 'cancelled', 'succeeded'].includes(record.status)"
                       type="link"
@@ -506,6 +650,13 @@ onUnmounted(stopPolling)
                       size="small"
                       @click="handlePromote(record)"
                     >转全量</a-button>
+                    <a-button
+                      v-if="!['running', 'pending', 'pending-approval'].includes(record.status)"
+                      type="link"
+                      size="small"
+                      danger
+                      @click="handleRemove(record)"
+                    >删除</a-button>
                   </a-space>
                 </template>
               </template>
@@ -597,6 +748,11 @@ onUnmounted(stopPolling)
     </a-modal>
 
     <!-- 阶段命令抽屉 -->
-    <StageCommandDrawer v-model:open="cmdOpen" :item="cmdItem" />
+    <StageCommandDrawer
+      v-model:open="cmdOpen"
+      :item="cmdItem"
+      :instance="selectedRun"
+      :initial-tab="cmdInitialTab"
+    />
   </div>
 </template>

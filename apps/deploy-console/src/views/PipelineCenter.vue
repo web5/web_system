@@ -315,8 +315,10 @@ async function loadReleases() {
 async function loadAvailTemplates() {
   try {
     availTemplates.value = await pipelineTemplateApi.list(form.value.moduleKey)
-    if (!form.value.templateId && availTemplates.value.length) {
-      form.value.templateId = availTemplates.value[0].id
+    if (!form.value.templateId) {
+      const lockId = lockTemplateId.value
+      lockTemplateId.value = ''
+      form.value.templateId = lockId || availTemplates.value[0]?.id || undefined
     }
   } catch {
     availTemplates.value = []
@@ -363,6 +365,102 @@ const moduleCards = computed<ModuleCard[]>(() =>
     return { module: m, templates: ts, total, ok, latest }
   }),
 )
+
+// ===== 摊平「模块×模板」流水线记录 + 四维筛选 =====
+interface PipelineRow {
+  tpl: PipelineTemplate
+  module: any
+  total: number
+  ok: number
+  latest: PipelineItem | null
+}
+const pipelineRows = computed<PipelineRow[]>(() => {
+  const rows: PipelineRow[] = []
+  for (const m of availableModules.value) {
+    const ts = templates.value.filter(
+      (t: any) => !t.moduleKey || t.moduleKey === '*' || t.moduleKey === m.key,
+    )
+    for (const t of ts) {
+      const s = summaryMap.value[t.id]
+      rows.push({
+        tpl: t,
+        module: m,
+        total: s?.total || 0,
+        ok: s?.ok || 0,
+        latest: s?.latest || null,
+      })
+    }
+  }
+  return rows
+})
+
+// 筛选状态（点「查询」才生效；「重置」清空）
+const fKeyword = ref('')
+const fModule = ref('')
+const fType = ref('all')
+const fStatus = ref('all')
+const appliedFilters = ref({ keyword: '', module: '', type: 'all', status: 'all' })
+function doSearch() {
+  appliedFilters.value = {
+    keyword: fKeyword.value.trim().toLowerCase(),
+    module: fModule.value,
+    type: fType.value,
+    status: fStatus.value,
+  }
+}
+function resetFilters() {
+  fKeyword.value = ''
+  fModule.value = ''
+  fType.value = 'all'
+  fStatus.value = 'all'
+  doSearch()
+}
+const STATUS_FILTERS = [
+  { value: 'all', label: '全部状态' },
+  { value: 'succeeded', label: '成功' },
+  { value: 'failed', label: '失败' },
+  { value: 'running', label: '运行中' },
+  { value: 'none', label: '从未执行' },
+]
+const filteredRows = computed<PipelineRow[]>(() => {
+  const f = appliedFilters.value
+  return pipelineRows.value.filter((r) => {
+    if (f.keyword) {
+      const hay =
+        `${r.module.name} ${r.tpl.name || ''} ${r.tpl.moduleKey || ''} ${r.module.key}`.toLowerCase()
+      if (!hay.includes(f.keyword)) return false
+    }
+    if (f.module && r.module.key !== f.module) return false
+    if (f.type === 'builtin' && !r.tpl.builtin) return false
+    if (f.type === 'custom' && r.tpl.builtin) return false
+    // 状态筛选用「全部」= 不过滤；'none' = 从未执行（latest 为空）；其余精确匹配
+    if (f.status && f.status !== 'all') {
+      const st = r.latest?.status || null
+      if (f.status === 'none') {
+        if (st !== null) return false
+      } else if (st !== f.status) {
+        return false
+      }
+    }
+    return true
+  })
+})
+/** 流水线展示名：默认 = 模块名；模板名非空且与模块名不同时追加「 · 模板名」 */
+function rowName(r: PipelineRow): string {
+  const t = (r.tpl.name || '').trim()
+  if (t && !r.module.name.includes(t) && t !== '默认') return `${r.module.name} · ${t}`
+  return r.module.name
+}
+
+// 行内「执行」：打开发起抽屉并锁定该模板
+const lockTemplateId = ref('')
+function executeTpl(r: PipelineRow) {
+  lockTemplateId.value = r.tpl.id
+  openSubmit(r.module.key)
+}
+function gotoPipelineDetail(r: PipelineRow) {
+  router.push(`/pipelines/${r.tpl.id}`)
+}
 
 const mpOpen = ref(false)
 const mpModule = ref<ModuleCard | null>(null)
@@ -665,94 +763,116 @@ onUnmounted(stopPolling)
         每次发布 = 基于某条流水线执行一次，产生一条执行记录（实例）。点击流水线可查看其最近执行与全部历史。</p>
     </div>
 
-    <!-- 工具栏 -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <div>
-        <a-button :loading="loading" @click="refreshAll">刷新</a-button>
-      </div>
-      <a-space>
-        <a-button @click="openRecords">执行记录</a-button>
-        <a-button type="primary" @click="openSubmit" :disabled="!availableModules.length">发起发布</a-button>
-      </a-space>
-    </div>
-
-    <!-- 流水线卡片列表（按模块一卡） -->
-    <a-spin :spinning="loading">
-      <a-row :gutter="[16, 16]" v-if="moduleCards.length">
-        <a-col
-          v-for="mc in moduleCards"
-          :key="mc.module.key"
-          :xs="24"
-          :sm="12"
-          :lg="8"
-          :xl="6"
+    <!-- 筛选表单（四维度）+ 新建流水线 -->
+    <a-card size="small" style="margin-bottom: 12px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <a-input
+          v-model:value="fKeyword"
+          allow-clear
+          placeholder="搜索流水线名 / 模块名 / key"
+          style="width: 220px;"
+          @press-enter="doSearch"
+        />
+        <a-select
+          v-model:value="fModule"
+          placeholder="全部模块"
+          allow-clear
+          style="width: 170px;"
         >
-          <a-card
-            hoverable
-            size="small"
-            class="tpl-card"
-            @click="gotoModuleDetail(mc.module)"
-          >
-            <!-- 头部：模块名 -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-              <div style="min-width: 0;">
-                <div style="font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  {{ mc.module.name }}
-                </div>
-                <div style="margin-top: 4px;">
-                  <a-tag color="blue" style="font-size: 11px;">{{ typeLabel(mc.module.type) }}</a-tag>
-                  <a-tag v-if="mc.module.builtin" color="gold" style="font-size: 11px;">内置</a-tag>
-                </div>
-              </div>
-              <span
-                style="color: #999; font-size: 12px; flex-shrink: 0; font-family: monospace;"
-              >{{ mc.module.key }}</span>
-            </div>
+          <a-select-option v-for="m in availableModules" :key="m.key" :value="m.key">
+            {{ m.name }}（{{ m.key }}）
+          </a-select-option>
+        </a-select>
+        <a-select v-model:value="fType" style="width: 120px;">
+          <a-select-option value="all">全部类型</a-select-option>
+          <a-select-option value="builtin">内置</a-select-option>
+          <a-select-option value="custom">自定义</a-select-option>
+        </a-select>
+        <a-select v-model:value="fStatus" style="width: 140px;">
+          <a-select-option v-for="o in STATUS_FILTERS" :key="o.value" :value="o.value">
+            {{ o.label }}
+          </a-select-option>
+        </a-select>
+        <a-button type="primary" @click="doSearch">查询</a-button>
+        <a-button @click="resetFilters">重置</a-button>
+        <div style="flex: 1;" />
+        <a-button :loading="loading" @click="refreshAll">刷新</a-button>
+        <a-button type="primary" @click="openCreate">+ 新建流水线</a-button>
+      </div>
+    </a-card>
 
-            <!-- 最近执行摘要（按模块聚合） -->
-            <div
-              v-if="mc.latest"
-              style="background: #fafafa; border: 1px solid #f0f0f0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;"
-            >
-              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
-                <a-tag :color="statusColor(mc.latest.status)" style="margin-right: 0;">
-                  {{ statusText(mc.latest.status) }}
-                </a-tag>
-                <span style="color: #555;">{{ mc.latest.env }}</span>
-                <span v-if="mc.latest.templateName" style="color: #888;">
-                  · {{ mc.latest.templateName }}
-                </span>
-              </div>
-              <div style="font-size: 12px; color: #888; margin-top: 4px; display: flex; justify-content: space-between;">
-                <span>
-                  v{{ mc.latest.versionTag || '—' }}
-                  <template v-if="mc.latest.stage">
-                    · {{ STEP_LABELS[mc.latest.stage] || mc.latest.stage }}
-                  </template>
-                </span>
-                <span>{{ formatTime(mc.latest.startTime) }}</span>
-              </div>
-            </div>
-            <div
-              v-else
-              style="color: #bbb; font-size: 12px; padding: 8px 0;"
-            >该模块暂无发布记录</div>
-
-            <!-- 底部统计 + 操作 -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-              <span style="font-size: 12px; color: #999;">
-                共 {{ mc.total }} 次 · 成功 {{ mc.ok }}
+    <!-- 流水线记录表格（摊平「模块 × 模板」） -->
+    <a-card size="small" :loading="loading">
+      <a-table
+        :columns="[
+          { title: '流水线名称', key: 'name', width: 250 },
+          { title: '类型', key: 'type', width: 90 },
+          { title: '模块', key: 'module', width: 130 },
+          { title: '最近执行', key: 'recent' },
+          { title: '成功率', key: 'stat', width: 110 },
+          { title: '操作', key: 'action', width: 180 },
+        ]"
+        :data-source="filteredRows"
+        :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
+        :row-key="(r: any) => `${r.module.key}:${r.tpl.id}`"
+        size="small"
+        :locale="{ emptyText: '没有匹配的流水线' }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'name'">
+            <a-tooltip :title="record.tpl.description || ''">
+              <span style="font-weight: 500; cursor: pointer; color: #1677ff;" @click="gotoPipelineDetail(record)">
+                {{ rowName(record) }}
               </span>
-              <a-space size="small" @click.stop>
-                <a-button type="link" size="small" @click="gotoModuleDetail(mc.module)">模块详情</a-button>
-                <a-button type="link" size="small" @click="openReleaseForModule(mc)">发布</a-button>
-              </a-space>
+            </a-tooltip>
+            <div style="font-size: 12px; color: #999;">
+              <template v-if="!record.tpl.enabled"><a-tag color="default" style="font-size: 11px;">已停用</a-tag> </template>
+              <template v-if="record.tpl.skipVerify"><a-tag color="cyan" style="font-size: 11px;">跳过探活</a-tag> </template>
+              <template v-if="record.tpl.approval === 'always'"><a-tag color="orange" style="font-size: 11px;">始终审批</a-tag> </template>
             </div>
-          </a-card>
-        </a-col>
-      </a-row>
-      <a-empty v-else-if="!loading" description="暂无可发布模块" />
-    </a-spin>
+          </template>
+          <template v-else-if="column.key === 'type'">
+            <a-tag :color="record.tpl.builtin ? 'blue' : 'orange'">
+              {{ record.tpl.builtin ? '内置' : '自定义' }}
+            </a-tag>
+          </template>
+          <template v-else-if="column.key === 'module'">
+            <span style="font-family: monospace; font-size: 12px; color: #555;">{{ record.module.key }}</span>
+            <div style="font-size: 12px; color: #bbb;">{{ typeLabel(record.module.type) }}</div>
+          </template>
+          <template v-else-if="column.key === 'recent'">
+            <template v-if="record.latest">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <a-tag :color="statusColor(record.latest.status)" style="margin-right: 0;">
+                  {{ statusText(record.latest.status) }}
+                </a-tag>
+                <span style="color: #666; font-size: 12px;">{{ record.latest.env }}</span>
+                <span v-if="record.latest.versionTag" style="color: #888; font-size: 12px;">
+                  v{{ record.latest.versionTag }}
+                </span>
+                <span v-if="record.latest.stage" style="color: #888; font-size: 12px;">
+                  · {{ STEP_LABELS[record.latest.stage] || record.latest.stage }}
+                </span>
+              </div>
+              <div style="font-size: 12px; color: #bbb;">{{ formatTime(record.latest.startTime) }}</div>
+            </template>
+            <span v-else style="color: #bbb; font-size: 12px;">从未执行</span>
+          </template>
+          <template v-else-if="column.key === 'stat'">
+            <span style="font-size: 12px; color: #666;">{{ record.total }} 次 · 成功 {{ record.ok }}</span>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <a-space size="small">
+              <a-button type="link" size="small" @click="gotoPipelineDetail(record)">详情</a-button>
+              <a-button type="link" size="small" @click="openEdit(record.tpl)">编辑</a-button>
+              <a-button type="link" size="small" :disabled="!record.tpl.enabled" @click="executeTpl(record)">
+                执行
+              </a-button>
+            </a-space>
+          </template>
+        </template>
+      </a-table>
+    </a-card>
 
     <!-- 发起发布抽屉 -->
     <a-drawer

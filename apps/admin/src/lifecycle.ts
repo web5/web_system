@@ -6,8 +6,10 @@ import { setupAntd } from '@/plugins/antd';
 import App from './App.vue';
 import router from './router';
 import { vHasPerm } from './directives/v-has-perm';
-// 全局样式（含 :root / [data-theme] CSS 变量），微前端模式也必须引入
-import './style.css';
+// UI 规范：语义 token + antd 兜底（2026-09-03 D 接入，替代原 style.css）
+// mf cssScope 豁免 :root/[data-theme]/html/body，变量在 html 全局生效
+import '@web-system/ui/tokens.css';
+import '@web-system/ui/theme.css';
 
 /** Admin 后台微前端模块生命周期。用自带 router（base /admin/）。 */
 let app: VueApp | null = null;

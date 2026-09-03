@@ -1,5 +1,26 @@
 import * as path from 'path';
-import { resolveStageCwd } from './pipeline.service';
+import { resolveStageCwd, isDeletablePipeline } from './pipeline.service';
+
+/**
+ * 执行记录删除状态门禁的防回归测试。
+ *
+ * 背景：历史「删除执行记录」被设计为纯清理（不动版本指针/产物），
+ * 但 running/pending/pending-approval 中的实例若被删，正在执行的引擎还会
+ * 回写状态/日志到已删行，产生幽灵更新。此测试锁定「仅终态可删」。
+ */
+describe('isDeletablePipeline（执行记录删除状态门禁）', () => {
+  it('终态（succeeded/failed/cancelled）可删', () => {
+    for (const s of ['succeeded', 'failed', 'cancelled']) {
+      expect(isDeletablePipeline(s)).toBe(true);
+    }
+  });
+
+  it('运行/待执行/待审批不可删（须先停止或等待结束）', () => {
+    for (const s of ['running', 'pending', 'pending-approval']) {
+      expect(isDeletablePipeline(s)).toBe(false);
+    }
+  });
+});
 
 /**
  * 阶段命令工作目录的防回归测试。

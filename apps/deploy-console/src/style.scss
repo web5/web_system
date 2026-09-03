@@ -125,7 +125,8 @@ body {
 }
 
 /* =============================================================
- * 登录页（例外：品牌渐变，维持既有视觉，不随 data-theme）
+ * 登录页（例外：固定品牌橙黑面板，不随 data-theme —— G 裁决 2026-09-03
+ * 原深蓝 Beehive 渐变 #1a1a2e→#0f3460 弃用，改深色外壳语言 + 品牌橙 #F97316）
  * ============================================================= */
 .login-container {
   height: 100vh;
@@ -134,7 +135,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  /* 深色渐变（值与 --dc-panel-* 同源）+ 右上品牌橙光晕 */
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(249, 115, 22, 0.12), transparent 65%),
+    linear-gradient(135deg, #0f0f12 0%, #161618 100%);
 }
 
 .login-hive {
@@ -151,9 +155,12 @@ body {
   padding: 40px;
   position: relative;
   z-index: 1;
-  background: var(--ws-bg-surface);
+  /* 深色玻璃面板（固定反白，不随 data-theme） */
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--ws-radius-lg);
-  box-shadow: var(--ws-shadow-popover);
+  box-shadow: var(--ws-shadow-card);
+  backdrop-filter: blur(10px);
 }
 
 .login-card .login-logo {
@@ -168,14 +175,14 @@ body {
   margin-bottom: 8px;
   font-size: 28px;
   letter-spacing: 1px;
-  color: var(--ws-text-primary);
+  color: var(--dc-panel-header-text);
 }
 
 .login-card .login-subtitle {
   text-align: center;
   margin-bottom: 28px;
   font-size: 14px;
-  color: var(--ws-text-tertiary);
+  color: rgba(255, 255, 255, 0.55);
   letter-spacing: 1px;
 }
 

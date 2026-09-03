@@ -6,8 +6,9 @@ export type ThemeMode = 'dark' | 'light';
 export const useThemeStore = defineStore(
   'theme',
   () => {
-    // 默认 dark：与 style.css 的 :root（"Dark default + Light"）保持一致
-    const mode = ref<ThemeMode>('dark');
+    // 默认 light：2026-09-03 D 裁决（负责人要求 admin 默认亮色），
+    // 与 @web-system/ui light canonical 同极性（:root=light + [data-theme=dark]）
+    const mode = ref<ThemeMode>('light');
 
     const isDark = computed(() => mode.value === 'dark');
 
