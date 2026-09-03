@@ -136,3 +136,28 @@
 ### 观察
 
 - 本轮顺带确认：header 内所有 hover 触发（用户卡等）应统一用"深壳语言"（--dc-panel-menu-hover 白透明），不可引用随主题的浅色面板 hover（--ws-bg-hover）。已作为 color-reference §3 补充认知，后续 header 内新触发器直接沿用。
+
+---
+
+## R6 · 2026-09-03 · R2 控件选型代码整改落地（用户验收指出遗漏）
+
+> 触发：发布验收时用户指出"灰度管理筛选器仍用 select"。R2 只升格了规则，代码整改（灰度管理页）漏排期——R2 记录待办未闭环的教训：**升格规则必须同轮绑定一个"整改者"（具体文件），否则文档与代码脱节**。
+
+### 落地
+
+| # | 事项 | 做法 |
+|---|---|---|
+| 1 | CanaryCenter 环境筛选 select → `a-tabs`（页面主导筛选维度，design.md §2 #10） | envId 用 a-tabs 切换即刷新；模块（动态）保留 select + 查询按钮 |
+| 2 | **更正 R2 #2 误报**：ServiceManager 类型筛选在试点改造时已是 `a-tabs`（template 174-181），并非 select——R2 登记时只核对了 script 未核对 template | 评审记录只追加原则下，以此更正为准 |
+
+### 同类扫描结论（R2 规则适用边界澄清）
+
+- **适用**：页面主导筛选维度（浏览型页面顶部互斥切换，如灰度管理按环境、服务管理按类型）。
+- **豁免**：
+  - 表单内选择字段（PipelineSubmit/PipelineCenter 的 env/module/template/branch/release/grayscaleType）——动态选项或提交字段；
+  - 复合查询表单（AuditLog 环境/操作类型 + 日期范围 + 查询/重置）——多字段查询工具栏，select 紧凑合理。
+- 结论已足够支撑走查：**新页面"主导筛选维度"互斥单选 ≤5 必须 tabs/radio；工具型表单 select 不违规**。下轮把此边界补进 design.md §2 #10 措辞。
+
+### 观察
+
+- AuditLog 环境筛选**硬编码 dev/prod**（未走 environmentApi），与系统环境表（dev/local/prod/prev）不一致——下轮改走环境 API，避免审计日志查不到 local/prev 环境操作。
