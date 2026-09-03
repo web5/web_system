@@ -138,6 +138,11 @@ export const uiTokens = {
       light: '0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08)',
       dark: '0 2px 8px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45)',
     },
+    /** 头像品牌橙光晕（Backlog C：原 MainLayout 散写 rgba(249,115,22,.25)） */
+    avatar: {
+      light: '0 2px 6px rgba(249, 115, 22, 0.25)',
+      dark: '0 2px 6px rgba(249, 115, 22, 0.35)',
+    },
   },
   /** Typography：不引 Geist 字体（P2-2），西文 Inter + 中文系统回退 */
   font: {

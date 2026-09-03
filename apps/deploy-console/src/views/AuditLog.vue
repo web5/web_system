@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { auditApi } from '@/api'
+import { ref, computed, onMounted } from 'vue'
+import { auditApi, environmentApi } from '@/api'
 import dayjs from 'dayjs'
 
 interface AuditChange {
@@ -31,6 +31,20 @@ const pageSize = ref(20)
 const filterEnv = ref<string | undefined>(undefined)
 const filterAction = ref<string | undefined>(undefined)
 const dateRange = ref<[string, string] | undefined>(undefined)
+
+// 环境选项动态化（Backlog B：去硬编码 dev/prod，走 environmentApi，避免漏 local/prev 环境）
+const environments = ref<{ id: string; name: string }[]>([])
+const envOptions = computed(() => [
+  { label: '全部', value: undefined },
+  ...environments.value.map((e) => ({ label: e.name, value: e.id })),
+])
+async function loadEnvironments() {
+  try {
+    environments.value = await environmentApi.list()
+  } catch {
+    environments.value = []
+  }
+}
 
 // 加载审计日志
 async function loadData() {
@@ -136,6 +150,7 @@ function valText(v: unknown): string {
 
 onMounted(() => {
   loadData()
+  loadEnvironments()
 })
 </script>
 
@@ -153,12 +168,8 @@ onMounted(() => {
           v-model:value="filterEnv"
           placeholder="环境"
           allow-clear
-          style="width: 120px;"
-          :options="[
-            { label: '全部', value: undefined },
-            { label: 'DEV', value: 'dev' },
-            { label: 'PROD', value: 'prod' },
-          ]"
+          style="width: 140px;"
+          :options="envOptions"
         />
         <a-select
           v-model:value="filterAction"
