@@ -149,7 +149,7 @@ function isDone(s: string) {
   align-items: center;
   padding: 0 2px;
 }
-/* 横向连线：从本节点圆心向右延伸半个节点宽 */
+/* 横向连线：从本节点圆心向右延伸半个节点宽（默认色加深到 #d9d9d9，确保「待执行」段也清晰可见） */
 .flow-item::after {
   content: '';
   position: absolute;
@@ -158,7 +158,7 @@ function isDone(s: string) {
   width: 50%;
   height: 2px;
   z-index: 0;
-  background: #f0f0f0;
+  background: #d9d9d9;
 }
 .flow-item.clickable { cursor: pointer; }
 .flow-item.rail-done::after { background: #52c41a; }
