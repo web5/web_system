@@ -548,66 +548,7 @@ export const toolApi = {
   remove: (code: string) => http.delete(`/tools/${code}`) as Promise<{ ok: boolean }>,
 }
 
-/* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
-
-export const STAGES = [
-  'check',
-  'pull',
-  'build',
-  'upload',
-  'restart',
-  'version',
-  'pointer',
-  'verify',
-  'cleanup',
-] as const
-
-export const hookApi = {
-  list: (key: string) =>
-    http.get(`/modules/${key}/hooks`) as Promise<
-      { stage: string; configured: boolean; enabled: boolean; updatedAt?: string; updatedBy?: string }[]
-    >,
-  get: (key: string, stage: string) =>
-    http.get(`/modules/${key}/hooks/${stage}`) as Promise<{
-      id?: string
-      moduleKey: string
-      stage: string
-      script: string
-      enabled: boolean
-      updatedBy?: string
-    } | null>,
-  save: (key: string, stage: string, script: string) =>
-    http.put(`/modules/${key}/hooks/${stage}`, { script }) as Promise<{
-      moduleKey: string
-      stage: string
-      updatedAt: string
-    }>,
-  remove: (key: string, stage: string) =>
-    http.delete(`/modules/${key}/hooks/${stage}`) as Promise<{ ok: boolean }>,
-  validate: (key: string, stage: string, script: string) =>
-    http.post(`/modules/${key}/hooks/${stage}/validate`, { script }) as Promise<{
-      ok: boolean
-      message: string
-    }>,
-  templates: (type: string) =>
-    http.get('/modules/hooks/templates', { params: { type } }) as Promise<Record<string, string>>,
-}
-
-/**
- * 可配置阶段：version / pointer 是发布语义真相源，固定由流水线执行，不可配置。
- * 其中 **build 必须配置命令**（未配置即 fail-fast），其余阶段未配置则回落到内置逻辑。
- */
-export const CONFIGURABLE_STAGES = [
-  'check',
-  'pull',
-  'build',
-  'upload',
-  'restart',
-  'verify',
-  'cleanup',
-] as const
-
-/** 阶段命令：发布流水线唯一执行真相源（替代已废弃的 hookApi） */
+/** 阶段命令：发布流水线唯一执行真相源 */
 export const stageCommandApi = {
   list: (key: string) =>
     http.get(`/modules/${key}/stage-commands`) as Promise<
