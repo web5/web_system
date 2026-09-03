@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
-import type { ThemeConfig } from 'ant-design-vue/es/config-provider/context';
-// 品牌主题（原 @web-system/ui 的 antdTheme，整合后内联避免额外依赖）
-const antdTheme: ThemeConfig = {
-  token: { colorPrimary: '#F97316', colorInfo: '#F97316', colorLink: '#F97316', borderRadius: 4 },
-};
 import {
   listModules,
   createModule,
