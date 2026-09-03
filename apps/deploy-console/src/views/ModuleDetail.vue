@@ -2,7 +2,16 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { moduleApi, deployApi, environmentApi, serverApi, stageCommandApi } from '@/api'
+import {
+  moduleApi,
+  deployApi,
+  environmentApi,
+  serverApi,
+  stageCommandApi,
+  pipelineApi,
+  pipelineTemplateApi,
+} from '@/api'
+import PipelineSubmit from '@/components/PipelineSubmit.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,22 +135,42 @@ async function loadDeployments() {
   }
 }
 
-async function doBuild() {
-  try {
-    const r = await deployApi.build(moduleKey.value)
-    message.success(`构建任务已创建：${r.taskId}`)
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '构建失败')
-  }
+// ===== 发起发布（按流水线：构建 + 投递 + 切指针 + 探活） =====
+const publishOpen = ref(false)
+function openPublish() {
+  publishOpen.value = true
+}
+async function onPublished() {
+  await loadDeployments()
 }
 
+// ===== 回滚 = 以该版本 commit 重新走流水线发布（重建到旧版本代码） =====
+const rollbacking = ref(false)
 async function doRollback(row: any) {
+  rollbacking.value = true
   try {
-    await deployApi.rollback(row.env, row.versionTag, true)
-    message.success(`已回滚 ${row.env} → ${row.versionTag}`)
+    const tpls = await pipelineTemplateApi.list(moduleKey.value)
+    if (!tpls.length) {
+      message.error('该模块没有可用流水线，无法发起回滚发布')
+      return
+    }
+    const templateId = tpls[0].id
+    const res = await pipelineApi.submit({
+      env: row.env,
+      moduleKey: moduleKey.value,
+      commitId: row.versionTag,
+      mode: 'direct',
+      templateId,
+      confirm: row.env === 'prod',
+    })
+    message.success(`已提交回滚发布（${(res as any).jobId}），将以 ${row.versionTag} 重新构建部署`)
     await loadDeployments()
+    // 流水线异步执行，稍后自动刷新一次拿最新状态
+    setTimeout(() => void loadDeployments(), 3000)
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '回滚失败')
+    message.error(e?.response?.data?.message || '回滚发布提交失败')
+  } finally {
+    rollbacking.value = false
   }
 }
 
@@ -258,8 +287,11 @@ onMounted(async () => {
           </a-tag>
         </a-descriptions-item>
       </a-descriptions>
-      <div style="margin-top: 12px;">
-        <a-button type="primary" @click="doBuild">构建</a-button>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <a-button type="primary" @click="openPublish">发起发布</a-button>
+        <span style="color: #999; font-size: 12px;">
+          按流水线发布：git 拉取 → 构建 → 投递 → 切指针 → 探活；需要先 commit &amp; push
+        </span>
       </div>
     </a-card>
 
@@ -305,9 +337,10 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`回滚 ${record.env} 到 ${record.versionTag}？`"
-                  ok-text="回滚"
+                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
+                  ok-text="回滚发布"
                   cancel-text="取消"
+                  :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
                 >
                   <a-button type="link" size="small">回滚到此版本</a-button>
@@ -404,9 +437,10 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`回滚 ${record.env} 到 ${record.versionTag}？`"
-                  ok-text="回滚"
+                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
+                  ok-text="回滚发布"
                   cancel-text="取消"
+                  :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
                 >
                   <a-button type="link" size="small">回滚到此版本</a-button>
@@ -514,5 +548,12 @@ onMounted(async () => {
       </a-tabs>
     </a-card>
 
+    <!-- 发起发布抽屉（按流水线：构建+投递+切指针+探活） -->
+    <PipelineSubmit
+      v-model:open="publishOpen"
+      :initial-env="moduleInfo?.defaultEnv || undefined"
+      :initial-module-key="moduleKey"
+      @submitted="onPublished"
+    />
   </div>
 </template>
