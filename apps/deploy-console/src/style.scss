@@ -66,8 +66,9 @@ body {
   margin-bottom: 8px;
 
   .logo-icon {
-    width: 30px;
-    height: 30px;
+    /* 52px 高 logo 区内的协调尺寸：36 留 8px 呼吸感，45 会顶格失衡 */
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
     display: block;
   }
