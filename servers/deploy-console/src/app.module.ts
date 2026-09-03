@@ -18,6 +18,7 @@ import { MetricsModule } from './metrics/metrics.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
 import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
+import { ReleaseGitModule } from './git/release-git.module';
 
 @Module({
   imports: [
@@ -69,6 +70,8 @@ import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
     PipelineTemplateModule,
     // 工具目录（service 内置执行器 / shell CLI 元数据）
     ToolCatalogModule,
+    // 发布目录 git 工作区工具（含 BranchController = GET /modules/:key/branches）
+    ReleaseGitModule,
   ],
 })
 export class AppModule {}

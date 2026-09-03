@@ -11,6 +11,7 @@ import {
   environmentApi,
   deployApi,
   pipelineTemplateApi,
+  moduleApi,
   type PipelineTemplate,
 } from '@/api'
 
@@ -31,7 +32,15 @@ const modules = ref<any[]>([])
 const availableModules = computed(() => modules.value.filter((m: any) => m.enabled !== false))
 const availTemplates = ref<PipelineTemplate[]>([])
 const releases = ref<{ versionTag: string; note?: string }[]>([])
+/** 模块代码目录的远程 git 分支（origin/*） */
+const gitBranches = ref<string[]>([])
+/** 发布目录当前分支（HEAD 提示用） */
+const gitCurrent = ref<string | null>(null)
 const submitting = ref(false)
+
+/** 当 initialModuleKey 传入（即从模块详情/列表点击进入）时，隐藏模块下拉 */
+const lockModule = computed(() => !!props.initialModuleKey)
+const gitBranchesLoading = ref(false)
 
 const form = ref({
   env: 'dev',
@@ -95,10 +104,32 @@ async function loadReleases() {
     releases.value = []
   }
 }
+async function loadBranches(moduleKey: string) {
+  if (!moduleKey) {
+    gitBranches.value = []
+    gitCurrent.value = null
+    return
+  }
+  gitBranchesLoading.value = true
+  try {
+    const r = await moduleApi.branches(moduleKey)
+    gitBranches.value = r.branches || []
+    gitCurrent.value = (r.current && r.current !== 'HEAD') ? r.current : null
+    // 若当前分支未在列表中（例如刚切换未推送），把当前分支补进列表以便默认选中
+    if (gitCurrent.value && !gitBranches.value.includes(gitCurrent.value)) {
+      gitBranches.value = [gitCurrent.value, ...gitBranches.value]
+    }
+  } catch {
+    gitBranches.value = []
+    gitCurrent.value = null
+  } finally {
+    gitBranchesLoading.value = false
+  }
+}
 
 function resetForm() {
   form.value.moduleKey = props.initialModuleKey || ''
-  form.value.branch = 'master'
+  form.value.branch = gitCurrent.value && gitCurrent.value !== 'HEAD' ? gitCurrent.value : 'master'
   form.value.commitId = undefined
   form.value.mode = 'direct'
   form.value.grayscaleType = 'percent'
@@ -119,12 +150,23 @@ watch(
     if (!form.value.moduleKey && availableModules.value.length) {
       form.value.moduleKey = availableModules.value[0].key
     }
-    await Promise.all([loadTemplates(), loadReleases()])
+    await Promise.all([loadTemplates(), loadReleases(), loadBranches(form.value.moduleKey)])
+    // 加载完分支后：若用户未选过，落到当前分支；否则保持
+    if (!form.value.branch || form.value.branch === 'master') {
+      if (gitCurrent.value) form.value.branch = gitCurrent.value
+    }
   },
 )
 
+/** 当加载到的当前分支覆盖默认 master（用户首次打开抽屉时希望看到当前分支） */
+watch(gitCurrent, (cur) => {
+  if (cur && (!form.value.branch || form.value.branch === 'master')) {
+    form.value.branch = cur
+  }
+})
+
 function onModuleChange() {
-  void Promise.all([loadTemplates(), loadReleases()])
+  void Promise.all([loadTemplates(), loadReleases(), loadBranches(form.value.moduleKey)])
 }
 function onEnvChange() {
   void Promise.all([loadReleases(), loadTemplates()])
@@ -231,7 +273,7 @@ const envLabel = (id: string) => {
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="模块" required>
+          <a-form-item v-if="!lockModule" label="模块" required>
             <a-select
               v-model:value="form.moduleKey"
               placeholder="选择模块（后端/前端/微前端均可用）"
@@ -244,6 +286,23 @@ const envLabel = (id: string) => {
                 </a-tag>
               </a-select-option>
             </a-select>
+          </a-form-item>
+          <a-form-item v-else label="模块">
+            <a-tag color="blue" style="font-size: 13px;">
+              {{ availableModules.find((m: any) => m.key === form.moduleKey)?.name || form.moduleKey }}
+              <span style="font-family: monospace; color: #888; margin-left: 4px;">{{ form.moduleKey }}</span>
+              <a-tag
+                v-if="availableModules.find((m: any) => m.key === form.moduleKey)"
+                :color="TYPE_OPTIONS[availableModules.find((m: any) => m.key === form.moduleKey)?.type]?.color"
+                style="margin-left: 6px; font-size: 11px;"
+              >
+                {{ TYPE_OPTIONS[availableModules.find((m: any) => m.key === form.moduleKey)?.type]?.label
+                  || availableModules.find((m: any) => m.key === form.moduleKey)?.type }}
+              </a-tag>
+            </a-tag>
+            <a-typography-text type="secondary" style="margin-left: 8px; font-size: 12px;">
+              从模块点击进入，模块已锁定
+            </a-typography-text>
           </a-form-item>
         </a-col>
       </a-row>
@@ -268,7 +327,23 @@ const envLabel = (id: string) => {
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item label="分支">
-            <a-input v-model:value="form.branch" placeholder="master" />
+            <a-select
+              v-model:value="form.branch"
+              show-search
+              allow-clear
+              :placeholder="gitBranches.length ? '选择分支（可直接输入）' : '加载分支中…'"
+              :filter-option="(input: string, opt: any) => (opt?.value || '').toString().toLowerCase().includes(input.toLowerCase())"
+              :loading="gitBranchesLoading"
+            >
+              <a-select-option v-for="b in gitBranches" :key="b" :value="b">
+                {{ b }}{{ b === gitCurrent ? '（当前）' : '' }}
+              </a-select-option>
+              <template v-if="!gitBranches.length" #notFoundContent>
+                <a-typography-text type="secondary" style="padding: 8px;">
+                  暂无可用分支，请先 git push
+                </a-typography-text>
+              </template>
+            </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="12">
@@ -285,6 +360,12 @@ const envLabel = (id: string) => {
           </a-form-item>
         </a-col>
       </a-row>
+      <div v-if="gitCurrent" style="margin: -8px 0 12px; font-size: 12px; color: #888;">
+        <span style="margin-right: 8px;">发布目录当前分支：<b>{{ gitCurrent }}</b></span>
+        <span v-if="gitBranches.length === 0" style="color: #fa8c16;">
+          未拉取到远程分支，确认 origin 是否可达
+        </span>
+      </div>
 
       <a-form-item label="模式">
         <a-radio-group v-model:value="form.mode">

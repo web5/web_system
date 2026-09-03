@@ -172,13 +172,20 @@ export class PipelineTemplateService {
     return tpl;
   }
 
-  /** 该模块可用的模板列表（全局模板 + 模块专属，全局默认置顶） */
+  /** 该模块可用的模板列表（全局模板 + 模块专属，builtin「默认」取全局唯一） */
   async listUsable(moduleKey: string): Promise<DeployPipelineTemplateEntity[]> {
     await this.ensureDefault();
     const rows = await this.repo.find({
       where: [{ moduleKey: GLOBAL_TEMPLATE }, { moduleKey }],
       order: { builtin: 'DESC', createdAt: 'ASC' },
     });
+    // 去重：模块专属的 builtin「默认」被全局 builtin「默认」覆盖
+    // （保证前端"流水线选择"下拉不再出现两条同名「默认（默认）」）
+    if (rows.some((r) => r.moduleKey === GLOBAL_TEMPLATE && r.builtin && r.name === DEFAULT_TEMPLATE_NAME)) {
+      return rows.filter(
+        (r) => !(r.builtin && r.moduleKey !== GLOBAL_TEMPLATE && r.name === DEFAULT_TEMPLATE_NAME),
+      );
+    }
     return rows;
   }
 
