@@ -41,6 +41,12 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:<nodeBin> pm
 # 或走控制台接口 POST /api/deploy/deploy（deploy.sh 体系）
 ```
 
+> **一键脚本（推荐）**：`./scripts/publish-deploy-console.sh`（仓库根执行）——
+> 自动完成「release 同步(ff-only) → 后端 nest build → 前端 vite build → 孤儿进程清理
+> + 干净 env 重启（6200 一致性校验，见 §4.3/§4.4）→ pm2 save → 健康复检」，
+> 内置端口/环境变量全部铁律，一次授权跑完。
+> 参数：`--skip-sync`（跳过同步）/ `--skip-health`（跳过复检）；环境变量 `DRY_RUN=1` 预览、`RELEASE_DIR=` 覆盖发布目录。
+
 ### 2.2 其余模块 —— 发布流水线
 
 ```bash
