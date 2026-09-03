@@ -189,23 +189,6 @@ function handleLogout() {
   color: var(--dc-panel-menu-text-selected);
 }
 
-.logo-text-block {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  margin-left: 8px;
-}
-.logo-title {
-  font-size: 16px;
-  font-weight: var(--ws-font-weight-semibold);
-  color: #fff;
-  letter-spacing: 0.5px;
-}
-.logo-sub {
-  font-size: 11px;
-  color: var(--ws-text-tertiary);
-  margin-top: 2px;
-}
 /* 悬浮触发器（深色 header 内）：hover 用白 6% 透明底 = 深壳语言（同侧栏菜单 hover，
  * --dc-panel-menu-hover），文字 tertiary → header 亮色；禁用 var(--ws-bg-hover) 浅灰底
  * （浅灰 #F2F2F2 在深底上突兀——R3 用户反馈；规则见 color-reference §3/§2） */
@@ -238,7 +221,7 @@ function handleLogout() {
   font-weight: var(--ws-font-weight-semibold);
   font-size: 15px;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+  box-shadow: var(--ws-shadow-avatar);
 }
 .user-info {
   display: flex;

@@ -161,3 +161,23 @@
 ### 观察
 
 - AuditLog 环境筛选**硬编码 dev/prod**（未走 environmentApi），与系统环境表（dev/local/prod/prev）不一致——下轮改走环境 API，避免审计日志查不到 local/prev 环境操作。
+
+---
+
+## 整改 Backlog（负责人确认 · 2026-09-03 起生效）
+
+> 流程（design.md §5-7）：升格规则涉及 ≥2 文件/跨页/跨端 → 先出本清单 → **负责人勾选后才动代码**。勾选方式：在对应行追加 `✅ 已确认` 或直接告知编号。
+
+| # | 候选项 | 影响文件 | 改动点 | 状态 |
+|---|---|---|---|---|
+| A | design.md §2 #10 补适用边界（R6 结论） | `design.md` | 文档措辞补充 | ✅ 2026-09-03 |
+| B | AuditLog 环境筛选走 `environmentApi` | `AuditLog.vue` | select 选项动态化 | ✅ 2026-09-03 |
+| C | 头像阴影 alpha token 化（R3 #4 遗留） | `MainLayout.vue` + tokens | 加 `shadow.avatar` / `--ws-shadow-avatar` | ✅ 2026-09-03 |
+| K | 死代码清理（logo-title/logo-text-block） | `MainLayout.vue` | 删未用 class | ✅ 2026-09-03 |
+| D | **admin 灰度接入 token**（删自身变量、App 主题照抄样板） | admin 全端多文件 | 全套视觉对齐 | ⏸ 立项项：跨端大迁移，建议独立 rd-plan + 试点页先行，勿塞入零散整改 |
+| E | mcp-admin / shell 灰度 | mcp-admin / shell | 同上 | ⏸ 依赖 D 稳定后灰度（P2 节奏） |
+| F | tokens.css 自动生成脚本 | `scripts/` | 工具（需处理 alias/例外段，非纯生成） | ⏸ 单独设计：生成器会覆盖 alias 段，建议做"diff 校验脚本"先行 |
+| G | 登录页渐变裁决 | Login + tokens | 视觉决策 | ⏸ 待负责人拍板：保留深蓝 / 切品牌橙黑 |
+| H | echarts 色板 token 化 | `Dashboard.vue` | 图表色引用 | ⏸ 随 Dashboard 页视觉评审排期 |
+
+> 已闭环不在此列：R4 !important 清零、R5 用户卡 hover、R6 CanaryCenter tabs。
