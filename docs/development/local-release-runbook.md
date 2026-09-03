@@ -124,6 +124,14 @@ dest="servers/gateway/public/static/modules/$MODULE_KEY/$COMMIT_ID"
 - **gateway manifest 响应被全局拦截器包装**：解析用 `json.data ?? json`（`__manifest__` 实际返回 `{code,data:{modules}}`）
 - **Node fetch 访问 :6000 失败**（X11 bad port）：流水线验证改用 `http` 模块；服务间地址直连服务端口而非 gateway 代理
 
+### 4.5 nginx 静态源与 shell 产物（2026-09-03 亲历，双份不一致是最大坑）
+
+- **`/static/modules/` nginx alias 已单源化 → 发布目录**（`~/web_system_release/servers/gateway/public/static/modules/`）。
+  历史坑：alias 曾指向工作区，但发布流程往发布目录写 → 新版本 404、回滚版本也可能 404（浏览器看到 `Failed to load resource ... 404` + shell loader 报"加载模块失败"）。
+  **排查模块 404**：先确认 nginx alias 指向哪边 + 目标目录是否含该版本；两边不一致即为双写遗漏。
+- **shell 基座 html = `servers/gateway/public/shell/index.html`**（本地构建产物，gitignore 未跟踪）。发布目录丢它时 `/admin/` 返回 `index.html not found for shell`（IndexHtmlService.render catch 文案）——与模块版本无关（回滚也无效）。恢复：从工作区 `cp -R servers/gateway/public/shell` 补齐发布目录，无需重启。
+- 改 alias 后 `sudo ~/local/nginx/sbin/nginx -t && -s reload`；reload 需 sudo 密码（后台无法执行，需人工）。
+
 ## 五、验证清单
 
 ```bash
