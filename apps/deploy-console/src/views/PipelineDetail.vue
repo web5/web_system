@@ -74,9 +74,15 @@ function pickRun(p: PipelineItem | null) {
   selectedRun.value = p
   if (p) {
     router.replace({ query: { ...route.query, run: p.id } })
+  } else {
+    // 清空 ?run（删除/无目标时移除深链参数，避免残留指向失效 id）
+    router.replace({ query: { ...route.query, run: undefined } })
   }
 }
-/** 从历史/接口解析目标实例并选中（优先 ?run=，缺省取最新一次） */
+/**
+ * 从历史/接口解析目标实例并选中（优先 ?run=，缺省取最新一次）。
+ * 兜底：?run 指向已删除/不存在实例时，回落到最新一次并纠正 URL。
+ */
 async function loadSelectedRun() {
   const qRun = String(route.query.run || '')
   const targetId = qRun || history.value[0]?.id || ''
@@ -92,8 +98,19 @@ async function loadSelectedRun() {
       target = null
     }
   }
+  // 兜底：指定实例不存在/已被删除 → 回落到最新一次并清理 ?run
+  if (!target) {
+    const fallback = history.value[0] || null
+    if (fallback) {
+      selectedRun.value = fallback
+      router.replace({ query: { ...route.query, run: fallback.id } })
+      return
+    }
+    pickRun(null)
+    return
+  }
   selectedRun.value = target
-  if (!qRun && target) {
+  if (!qRun) {
     // 默认选中最新：同步 URL 便于状态一致
     router.replace({ query: { ...route.query, run: target.id } })
   }
@@ -123,18 +140,22 @@ watch(
 
 // 轮询：仅「当前查看实例」仍在运行/等待时 3s 拉最新，驱动流程图推进
 async function pollTick() {
-  if (!selectedRun.value) {
+  const run = selectedRun.value
+  if (!run) {
     stopPolling()
     return
   }
-  const fresh = await pipelineApi.get(selectedRun.value.id).catch(() => null)
+  const id = run.id
+  const fresh = await pipelineApi.get(id).catch(() => null)
   if (!fresh) {
     stopPolling()
     return
   }
+  // 竞态防护：await 期间用户切到别的实例 → 丢弃本次结果，避免旧数据覆盖新选中
+  if (selectedRunId.value !== id) return
   // 同步到 selectedRun + 历史列表中的同一行
   selectedRun.value = fresh
-  const idx = history.value.findIndex((h) => h.id === fresh.id)
+  const idx = history.value.findIndex((h) => h.id === id)
   if (idx >= 0) history.value[idx] = fresh
   if (!isLive(fresh)) stopPolling()
 }
