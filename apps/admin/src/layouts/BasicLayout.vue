@@ -58,7 +58,7 @@
 
     <a-layout>
       <!-- 顶栏 -->
-      <a-layout-header class="top-header" :style="{ marginLeft: collapsed ? '80px' : '220px' }">
+      <a-layout-header class="top-header" :style="{ marginLeft: collapsed ? '104px' : '244px' }">
         <div class="header-left">
           <a-breadcrumb>
             <a-breadcrumb-item>
@@ -112,7 +112,7 @@
         <router-view />
       </a-layout-content>
 
-      <a-layout-footer class="footer" :style="{ marginLeft: collapsed ? '80px' : '220px' }">
+      <a-layout-footer class="footer" :style="{ marginLeft: collapsed ? '104px' : '244px' }">
         <div class="footer-inner">
           <div class="footer-brand">
             <img src="/logo.svg" alt="科豆 AI" width="20" height="10" />
