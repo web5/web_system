@@ -155,25 +155,27 @@ onMounted(async () => {
     </div>
 
     <a-card style="margin-bottom: 16px;">
-      <a-space wrap>
-        <a-select v-model:value="envId" style="width: 160px;" @change="loadRules">
-          <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
-            {{ e.name }}（{{ e.id }}）
-          </a-select-option>
-        </a-select>
-        <a-select
-          v-model:value="moduleKey"
-          placeholder="全部模块"
-          allow-clear
-          style="width: 220px;"
-          @change="loadRules"
-        >
-          <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
-            {{ m.name }}（{{ m.key }}）
-          </a-select-option>
-        </a-select>
-        <a-button type="primary" @click="loadRules">查询</a-button>
-      </a-space>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <!-- 环境互斥单选（≤5 固定）：a-tabs 替代 a-select（design.md §2 #10 / R2 升格） -->
+        <a-tabs v-model:activeKey="envId" size="small" @change="loadRules">
+          <a-tab-pane v-for="e in environments" :key="e.id" :tab="e.name" />
+        </a-tabs>
+        <!-- 模块为动态多选项（模块可增删），按规则保留 select（design.md §2 #10：动态/>5 才用 select） -->
+        <a-space wrap>
+          <a-select
+            v-model:value="moduleKey"
+            placeholder="全部模块"
+            allow-clear
+            style="width: 220px;"
+            @change="loadRules"
+          >
+            <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
+              {{ m.name }}（{{ m.key }}）
+            </a-select-option>
+          </a-select>
+          <a-button type="primary" @click="loadRules">查询</a-button>
+        </a-space>
+      </div>
     </a-card>
 
     <a-card title="灰度规则" :loading="loading">

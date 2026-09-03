@@ -1,4 +1,9 @@
-/* 全局样式 - 浅色主题，侧边栏深色 */
+/* =============================================================
+ * deploy-console — 业务全局样式
+ * P1-1 去裸值：颜色/圆角/字号优先引用 @web-system/ui 语义 token（var(--ws-*)）。
+ * 保留例外（须注释）：登录页品牌渐变、终端日志深色块、Beehive 图标品牌色。
+ * ============================================================= */
+
 @import 'ant-design-vue/dist/reset.css';
 
 * {
@@ -15,10 +20,8 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background-color: #f0f2f5;
-  color: rgba(0, 0, 0, 0.88);
+  background-color: var(--ws-bg-page);
+  color: var(--ws-text-primary);
 }
 
 /* 滚动条样式 */
@@ -28,12 +31,29 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
+  background: var(--ws-border);
+  border-radius: var(--ws-radius-pill);
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* =============================================================
+ * deploy-console 外壳固定深色（例外：反白面板，不随 data-theme）
+ * --dc-* = app 局部变量（css-override-rules §3：app 局部用 --app-* 前缀），不进共享 tokens；
+ * 值须与 App.vue SHELL_HEADER_BG / MainLayout.vue scoped 引用同源（R4）
+ * ============================================================= */
+:root {
+  --dc-panel-sider-bg: #0F0F12; /* 侧栏容器（MainLayout.vue :deep 引用） */
+  --dc-panel-header-bg: #161618; /* 顶栏背景（App.vue Layout.colorBgHeader 同值） */
+  --dc-panel-header-border: #2a2a2e;
+  --dc-panel-header-text: #f5f5f5;
+  --dc-panel-menu-text: #a3a3a3;
+  --dc-panel-menu-text-hover: #ededed;
+  --dc-panel-menu-text-selected: #fb923c;
+  --dc-panel-menu-hover: rgba(255, 255, 255, 0.06);
+  --dc-panel-menu-selected: rgba(249, 115, 22, 0.18);
 }
 
 /* 布局 */
@@ -41,42 +61,61 @@ body {
   min-height: 100vh;
 }
 
-.app-sider {
-  background-color: #001529;
-}
+/* 侧栏：深色反白面板（固定色，不随 data-theme）
+ * 容器背景色由 MainLayout.vue scoped :deep 提供（R4 去 !important：
+ * antd 4.2.6 Layout 无 siderBg token，scoped 高特异替代） */
 
 .app-sider .logo {
-  height: 48px;
+  height: 52px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  /* 与菜单项图标列左对齐（不再居中） */
+  justify-content: flex-start;
+  padding: 0 16px;
+  gap: 10px;
   color: #fff;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: var(--ws-font-weight-semibold);
   letter-spacing: 0.5px;
-  background: rgba(255, 255, 255, 0.04);
+  /* logo 区与侧栏纯黑融为一体，不再叠半透明白 */
   margin-bottom: 8px;
 
   .logo-icon {
-    width: 22px;
-    height: 22px;
+    /* 52px 高 logo 区内的协调尺寸：36 留 8px 呼吸感，45 会顶格失衡 */
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
+    display: block;
   }
 
   .logo-text {
+    color: #ffffff;
     white-space: nowrap;
   }
 }
 
+/* 顶部 header：固定深色（比内容区更深），形成「外深内浅」包裹
+ * 背景色由 App.vue Layout.colorBgHeader 提供（固定深 #161618，R4 去 !important） */
 .app-header {
-  background: #fff;
+  color: var(--dc-panel-header-text);
   padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  border-bottom: 1px solid var(--dc-panel-header-border);
   z-index: 1;
+
+  /* header 内标题浅色，避免浅主题 token 把深底洗白 */
+  .header-title,
+  .user-trigger,
+  .ant-typography {
+    color: var(--dc-panel-header-text);
+  }
+  /* 用户区：名字与角色同色系（tertiary 中灰，深底上柔和协调） */
+  .user-name,
+  .user-role {
+    color: var(--ws-text-tertiary);
+  }
 }
 
 .app-content {
@@ -85,7 +124,9 @@ body {
   min-height: calc(100vh - 64px);
 }
 
-/* 登录页 */
+/* =============================================================
+ * 登录页（例外：品牌渐变，维持既有视觉，不随 data-theme）
+ * ============================================================= */
 .login-container {
   height: 100vh;
   position: relative;
@@ -110,9 +151,9 @@ body {
   padding: 40px;
   position: relative;
   z-index: 1;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  background: var(--ws-bg-surface);
+  border-radius: var(--ws-radius-lg);
+  box-shadow: var(--ws-shadow-popover);
 }
 
 .login-card .login-logo {
@@ -127,14 +168,14 @@ body {
   margin-bottom: 8px;
   font-size: 28px;
   letter-spacing: 1px;
-  color: #1a1a2e;
+  color: var(--ws-text-primary);
 }
 
 .login-card .login-subtitle {
   text-align: center;
   margin-bottom: 28px;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--ws-text-tertiary);
   letter-spacing: 1px;
 }
 
@@ -144,23 +185,26 @@ body {
 
   h2 {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: var(--ws-font-weight-semibold);
     margin-bottom: 4px;
+    color: var(--ws-text-primary);
   }
 
   p {
-    color: rgba(0, 0, 0, 0.45);
+    color: var(--ws-text-tertiary);
     font-size: 14px;
   }
 }
 
-/* 日志面板 */
+/* =============================================================
+ * 日志面板（例外：终端深色块，固定深底浅字，不随 data-theme）
+ * ============================================================= */
 .log-panel {
   background: #1e1e1e;
   color: #d4d4d4;
   border-radius: 6px;
   padding: 16px;
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-family: var(--ws-font-mono);
   font-size: 13px;
   line-height: 1.6;
   max-height: 400px;
@@ -175,36 +219,11 @@ body {
 
 /* 环境卡片 */
 .env-card {
-  border-radius: 8px;
+  border-radius: var(--ws-radius-lg);
   overflow: hidden;
   transition: box-shadow 0.3s;
 
   &:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--ws-shadow-popover);
   }
-}
-
-/* 状态标签颜色 */
-.status-tag-pending {
-  color: #1677ff;
-  background: #e6f4ff;
-  border-color: #91caff;
-}
-
-.status-tag-running {
-  color: #fa8c16;
-  background: #fff7e6;
-  border-color: #ffd591;
-}
-
-.status-tag-success {
-  color: #52c41a;
-  background: #f6ffed;
-  border-color: #b7eb8f;
-}
-
-.status-tag-failed {
-  color: #ff4d4f;
-  background: #fff2f0;
-  border-color: #ffccc7;
 }

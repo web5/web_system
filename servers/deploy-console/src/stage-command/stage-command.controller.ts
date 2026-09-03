@@ -49,6 +49,22 @@ export class StageCommandController {
     });
   }
 
+  /**
+   * 「发布脚本」面板数据源：每阶段的命令来源、原文、内置说明。
+   *
+   * 与上文 `list` 的区别：
+   *  - `list`：纯 DB 行（用于阶段脚本编辑器，行无命令则不显示）
+   *  - `resolveView`：合并视图（用于 ModuleDetail / PipelineDetail 步骤展示，
+   *    把「没配置」的情况也补成 `builtin` 说明，告诉运维该阶段没有自定义脚本时会发生什么）
+   *
+   * 单一真相源仍是 `deploy_module_stage_commands` 表，本接口只做合并+视图，不落库。
+   */
+  @Get(':key/pipeline-script-view')
+  @ApiOperation({ summary: '某模块流水线脚本视图（合并已配置命令与流程内置说明）' })
+  async scriptView(@Param('key') key: string) {
+    return this.stageCommands.resolveView(key);
+  }
+
   /** 置于 :stage 路由之前，避免被参数路由吞掉 */
   @Get('stage-commands/templates')
   @ApiOperation({ summary: '按模块类型返回默认构建命令模板' })

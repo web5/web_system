@@ -19,7 +19,10 @@ import { BuildDto, DeployDto, RollbackDto, PublishVersionDto, PublishModuleDto }
 
 /**
  * 部署管理控制器
- * 提供构建、部署、回滚、任务查询和 SSE 实时进度推送
+ *
+ * @deprecated 发布动作类端点（build/deploy/rollback/publish-version/modules/publish）
+ *   已被「发布流水线 POST /api/pipelines」取代，保留仅为兼容旧调用方；
+ *   请勿在新代码中使用，前端统一走 pipelineApi。查询类端点（tasks/versions/modules 等）继续保留。
  */
 @ApiTags('部署管理')
 @ApiBearerAuth()
@@ -34,7 +37,7 @@ export class DeployController {
    * 启动本地构建
    */
   @Post('build')
-  @ApiOperation({ summary: '启动构建' })
+  @ApiOperation({ summary: '启动构建（已弃用，请用 POST /pipelines 流水线）', deprecated: true })
   @ApiResponse({ status: 200, description: '返回任务 ID' })
   async build(@Body() body: BuildDto, @CurrentUser() user: any) {
     const taskId = await this.deployService.startBuild(body.component, user?.username);
@@ -53,7 +56,7 @@ export class DeployController {
    * prod 环境必须传 confirm=true
    */
   @Post('deploy')
-  @ApiOperation({ summary: '启动部署' })
+  @ApiOperation({ summary: '启动部署（已弃用，请用 POST /pipelines 流水线）', deprecated: true })
   @ApiResponse({ status: 200, description: '返回任务 ID' })
   @ApiResponse({ status: 400, description: 'prod 操作需要确认' })
   async deploy(@Body() body: DeployDto, @CurrentUser() user: any) {
@@ -77,7 +80,7 @@ export class DeployController {
    * prod 环境必须传 confirm=true
    */
   @Post('rollback')
-  @ApiOperation({ summary: '回滚' })
+  @ApiOperation({ summary: '回滚（已弃用，请用 POST /pipelines 流水线）', deprecated: true })
   @ApiResponse({ status: 200, description: '返回任务 ID' })
   @ApiResponse({ status: 400, description: 'prod 操作需要确认' })
   async rollback(@Body() body: RollbackDto, @CurrentUser() user: any) {
@@ -101,7 +104,7 @@ export class DeployController {
    * prod 环境必须传 confirm=true，且仅允许 master 分支版本
    */
   @Post('publish-version')
-  @ApiOperation({ summary: '发布指定版本（秒级切换，不重新构建）' })
+  @ApiOperation({ summary: '发布指定版本（已弃用，请用 POST /pipelines 流水线）', deprecated: true })
   @ApiResponse({ status: 200, description: '切换完成' })
   @ApiResponse({ status: 400, description: '版本不存在/类型不支持/prod 约束' })
   async publishVersion(@Body() body: PublishVersionDto, @CurrentUser() user: any) {
@@ -134,7 +137,7 @@ export class DeployController {
    * prod 环境必须传 confirm=true，且仅允许 master 分支
    */
   @Post('modules/publish')
-  @ApiOperation({ summary: '发布微前端模块（构建+上传+切指针）' })
+  @ApiOperation({ summary: '发布微前端模块（已弃用，请用 POST /pipelines 流水线）', deprecated: true })
   @ApiResponse({ status: 200, description: '发布完成' })
   @ApiResponse({ status: 400, description: '模块不存在/非微前端/prod 约束' })
   async publishModule(@Body() body: PublishModuleDto, @CurrentUser() user: any) {

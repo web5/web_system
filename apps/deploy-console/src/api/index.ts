@@ -188,6 +188,13 @@ export const moduleApi = {
   create: (dto: any) => http.post('/modules', dto) as Promise<any>,
   update: (key: string, dto: any) => http.put(`/modules/${key}`, dto) as Promise<any>,
   remove: (key: string) => http.delete(`/modules/${key}`) as Promise<any>,
+  /** 列出模块对应代码目录的 git 远程分支（origin/*），含当前分支与 HEAD */
+  branches: (key: string) =>
+    http.get(`/modules/${key}/branches`) as Promise<{
+      branches: string[]
+      current: string | null
+      head: string | null
+    }>,
 }
 
 /* ========== Monitor ========== */
@@ -541,66 +548,7 @@ export const toolApi = {
   remove: (code: string) => http.delete(`/tools/${code}`) as Promise<{ ok: boolean }>,
 }
 
-/* ========== Hooks（发布脚本，各阶段自定义 shell） ========== */
-
-export const STAGES = [
-  'check',
-  'pull',
-  'build',
-  'upload',
-  'restart',
-  'version',
-  'pointer',
-  'verify',
-  'cleanup',
-] as const
-
-export const hookApi = {
-  list: (key: string) =>
-    http.get(`/modules/${key}/hooks`) as Promise<
-      { stage: string; configured: boolean; enabled: boolean; updatedAt?: string; updatedBy?: string }[]
-    >,
-  get: (key: string, stage: string) =>
-    http.get(`/modules/${key}/hooks/${stage}`) as Promise<{
-      id?: string
-      moduleKey: string
-      stage: string
-      script: string
-      enabled: boolean
-      updatedBy?: string
-    } | null>,
-  save: (key: string, stage: string, script: string) =>
-    http.put(`/modules/${key}/hooks/${stage}`, { script }) as Promise<{
-      moduleKey: string
-      stage: string
-      updatedAt: string
-    }>,
-  remove: (key: string, stage: string) =>
-    http.delete(`/modules/${key}/hooks/${stage}`) as Promise<{ ok: boolean }>,
-  validate: (key: string, stage: string, script: string) =>
-    http.post(`/modules/${key}/hooks/${stage}/validate`, { script }) as Promise<{
-      ok: boolean
-      message: string
-    }>,
-  templates: (type: string) =>
-    http.get('/modules/hooks/templates', { params: { type } }) as Promise<Record<string, string>>,
-}
-
-/**
- * 可配置阶段：version / pointer 是发布语义真相源，固定由流水线执行，不可配置。
- * 其中 **build 必须配置命令**（未配置即 fail-fast），其余阶段未配置则回落到内置逻辑。
- */
-export const CONFIGURABLE_STAGES = [
-  'check',
-  'pull',
-  'build',
-  'upload',
-  'restart',
-  'verify',
-  'cleanup',
-] as const
-
-/** 阶段命令：发布流水线唯一执行真相源（替代已废弃的 hookApi） */
+/** 阶段命令：发布流水线唯一执行真相源 */
 export const stageCommandApi = {
   list: (key: string) =>
     http.get(`/modules/${key}/stage-commands`) as Promise<
@@ -634,6 +582,32 @@ export const stageCommandApi = {
     }>,
   template: (type: string) =>
     http.get('/modules/stage-commands/templates', { params: { type } }) as Promise<string | null>,
+  /**
+   * 流水线脚本视图（ModuleDetail「发布脚本」Tab / PipelineDetail 实例步骤展开使用）。
+   *
+   * 合并展示：
+   *  - 模块已配置 shell → source=configured（含原文 + 编辑人 + 时间）
+   *  - 未配置走流程内置 → source=builtin（含「pipeline 内置做什么」说明）
+   *  - 必填阶段未配置 → source=required-unset（提示「发布将失败」）
+   *  - 语义真相源（version/pointer） → source=semantic（不可改）
+   *
+   * 单一真相源仍是 `deploy_module_stage_commands` 表；该端点合并 + 加视图，不写库。
+   */
+  scriptView: (key: string) =>
+    http.get(`/modules/${key}/pipeline-script-view`) as Promise<
+      {
+        stage: string
+        source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
+        command: string | null
+        enabled: boolean
+        timeoutSec: number | null
+        updatedAt: string | null
+        updatedBy: string | null
+        title: string
+        builtin: string
+        commandMode: 'base' | 'required' | 'override' | 'none'
+      }[]
+    >,
 }
 
 /**

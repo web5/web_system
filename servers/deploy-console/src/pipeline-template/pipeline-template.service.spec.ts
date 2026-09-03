@@ -167,5 +167,43 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
         order: { builtin: 'DESC', createdAt: 'ASC' },
       });
     });
+
+    it('listUsable 在存在全局 builtin「默认」时，去掉模块专属同名 builtin 记录', async () => {
+      repo.findOne.mockResolvedValue(globalDefault());
+      const rows = [
+        // 全局默认（保留）
+        {
+          id: 'g-default',
+          moduleKey: GLOBAL_TEMPLATE,
+          name: '默认',
+          builtin: true,
+          enabled: true,
+          approval: 'inherit',
+        },
+        // 模块专属「默认」（被去掉）
+        {
+          id: 'm-default',
+          moduleKey: 'auth-service',
+          name: '默认',
+          builtin: true,
+          enabled: true,
+          approval: 'inherit',
+        },
+        // 模块自定义模板（保留）
+        {
+          id: 'm-custom',
+          moduleKey: 'auth-service',
+          name: '快线',
+          builtin: false,
+          enabled: true,
+          approval: 'never',
+        },
+      ];
+      repo.find.mockResolvedValue(rows);
+      const out = await service.listUsable('auth-service');
+      const ids = out.map((r) => r.id);
+      expect(ids).toEqual(['g-default', 'm-custom']);
+      expect(ids).not.toContain('m-default');
+    });
   });
 });
