@@ -810,7 +810,7 @@ onUnmounted(stopPolling)
         ]"
         :data-source="filteredRows"
         :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-        :row-key="(r: any) => r.tpl.id"
+        :row-key="(r: any) => `${r.module.key}:${r.tpl.id}`"
         size="small"
         :locale="{ emptyText: '没有匹配的流水线' }"
       >
