@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   Param,
   Query,
@@ -117,5 +118,12 @@ export class PipelineController {
       throw new BadRequestException('拒绝必须填写审批意见');
     }
     return this.pipelineService.reject(id, user?.username, body.comment);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '删除执行记录（纯清理，仅终态可删；running/pending 返回 400）' })
+  async remove(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.pipelineService.remove(id, user?.username);
+    return { ok: true };
   }
 }

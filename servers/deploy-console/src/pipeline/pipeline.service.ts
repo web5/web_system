@@ -57,6 +57,19 @@ export function resolveStageCwd(ws: string, moduleType?: string, dir?: string): 
 }
 
 /**
+ * 执行记录「删除」状态门禁（纯函数，防回归测试）。
+ *
+ * 删除 = 纯清理记录（不动版本指针/产物），仅终态（成功/失败/取消）可删；
+ * running/pending/pending-approval 中的实例若被删，正在执行的引擎仍会回写
+ * 状态/日志到已删行 → 幽灵更新，故必须先停止或等待结束。
+ */
+export const DELETABLE_PIPELINE_STATUS = ['succeeded', 'failed', 'cancelled'] as const;
+
+export function isDeletablePipeline(status: string): boolean {
+  return (DELETABLE_PIPELINE_STATUS as readonly string[]).includes(status);
+}
+
+/**
  * 支持发布的环境。
  *
  * `local` = 本机环境（gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）。
@@ -376,6 +389,28 @@ export class PipelineService {
       detail: `取消流水线 ${id}（阶段: ${p.stage ?? '-'}）`,
     });
     return { id, status: p.status };
+  }
+
+  /**
+   * 删除执行记录（纯清理：移除历史列表中的记录行，不动版本指针/产物）。
+   * 仅终态可删（isDeletablePipeline）；运行/待执行/待审批实例不可删（先停止或等待结束）。
+   */
+  async remove(id: string, operator?: string): Promise<void> {
+    const p = await this.get(id);
+    if (!isDeletablePipeline(p.status)) {
+      throw new BadRequestException(
+        `流水线 ${id} 状态为 ${p.status}，仅 成功/失败/已取消 可删除（运行中请先停止或等待结束）`,
+      );
+    }
+    await this.pipelineRepo.delete(id);
+    await this.auditService.log({
+      user: operator || p.operator || 'unknown',
+      action: 'pipeline.delete',
+      env: p.env,
+      component: p.moduleKey,
+      status: 'deleted',
+      detail: `删除执行记录 ${id}（原 ${p.status}，纯清理不动版本指针/产物）`,
+    });
   }
 
   /**
