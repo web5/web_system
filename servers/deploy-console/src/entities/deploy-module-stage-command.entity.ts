@@ -42,6 +42,38 @@ export const DEFAULT_BUILD_TEMPLATE: Record<string, string> = {
 };
 
 /**
+ * 各阶段「流程内置」逻辑的对外说明（仅可读视图，不返回实际代码）。
+ *
+ * 用于 PipelineDetail / ModuleDetail 的「发布脚本」面板：展示某个阶段
+ * 由模块自定义（已配置 shell），还是由流水线内置逻辑兜底（无 shell、仅说明文字）。
+ *
+ * - `check` / `pull` / `restart` / `verify` / `cleanup` / `pointer` / `version`：
+ *   都有合理内置逻辑，未配置时走该逻辑
+ * - `build`：必填项，未配置即终止发布（fail-fast）
+ * - version / pointer：发布语义真相源，不允许用户配置
+ */
+export const STAGE_BUILTIN_DESCRIPTIONS: Record<string, string> = {
+  check:
+    '安全基线：校验模块存在与类型（micro-frontend/frontend/backend）；prod 限定 master 分支；指定 commit 时按磁盘产物决定是否复用。',
+  pull:
+    '内置拉取：发布目录 git fetch → checkout 目标分支 → reset commit → clean；pnpm-lock.yaml 指纹变化才 install；并预构建共享 workspace 包（@web-system/shared / @web-system/types）。',
+  build:
+    '【必填·由模块提供】每模块独立的构建命令（DB 真相源），可任意 shell；未配置即发布终止。',
+  upload:
+    '内置投递：frontend 拷贝 dist/ 到发布目录 gateway public 静态资源目录；backend 跳过本阶段。',
+  restart:
+    '内置重启：仅后端服务，按模块 pm2 名称 `pm2 restart <name>` 重启进程。',
+  version:
+    '【发布语义真相源·固定由流水线执行】写 deploy_versions 表（库 web_system_deploy，含 git 信息）。',
+  pointer:
+    '【发布语义真相源·固定由流水线执行】upsert deploy_deployments.current_version；后端服务跳过本阶段。',
+  verify:
+    '内置探活：frontend 等待 gateway TTL 10s 后 curl __manifest__ 断言版本已切换；backend 通过 pm2.HTTP 探活确认在线。',
+  cleanup:
+    '内置清理：保留最近 5 个产物版本，清理更旧的（被灰度规则引用的版本跳过）。',
+};
+
+/**
  * 模块阶段命令（发布流水线唯一执行真相源）。
  *
  * 本表合并了历史上两套互斥机制，终结文档与代码互相矛盾的局面：
