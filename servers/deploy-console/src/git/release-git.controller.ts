@@ -8,9 +8,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import * as path from 'path';
+import { existsSync } from 'fs';
 import { ReleaseGitService } from './release-git.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { resolveStageCwd } from '../pipeline/pipeline.service';
 
 /**
  * 分支列表接口（**仅控制台 JWT**）。
@@ -46,12 +47,11 @@ export class BranchController {
     let dir = ws;
     try {
       const m = await this.modules.get(key);
-      if (m.dir) {
-        const candidate = path.join(ws, m.dir);
-        // 仅当目录存在且避免目录穿越
-        if (candidate.startsWith(ws + path.sep) || candidate === ws) {
-          dir = candidate;
-        }
+      // 与发布流水线一致：backend → servers/<dir>，其余 → apps/<dir>。
+      // monorepo 所有模块共享同一仓库，模块子目录不存在时回落到 ws 根。
+      if (m?.dir) {
+        const candidate = resolveStageCwd(ws, m.type, m.dir);
+        if (existsSync(candidate)) dir = candidate;
       }
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
