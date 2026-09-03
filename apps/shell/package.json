@@ -13,6 +13,7 @@
     "@ant-design/icons-vue": "^7.0.0",
     "@web-system/shared": "workspace:*",
     "@web-system/shell-loader": "workspace:*",
+    "@web-system/ui": "workspace:*",
     "ant-design-vue": "^4.1.0",
     "axios": "^1.6.0",
     "dayjs": "^1.11.0",
