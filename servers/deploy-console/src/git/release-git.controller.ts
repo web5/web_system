@@ -45,8 +45,10 @@ export class BranchController {
     }
     const ws = this.git.workspace();
     let dir = ws;
+    let mDir: string | undefined;
     try {
       const m = await this.modules.get(key);
+      mDir = m.dir;
       if (m.dir) {
         const candidate = path.join(ws, m.dir);
         // 仅当目录存在且避免目录穿越
@@ -64,8 +66,12 @@ export class BranchController {
     try {
       current = this.git.branchName(dir);
       head = this.git.fullHead(dir);
-    } catch {
+    } catch (e: any) {
       // 容忍：仓库尚未 checkout 时 current/head 可能为 'HEAD'
+      console.error('[BranchController] branchName/fullHead error:', e?.message, 'dir=', dir);
+    }
+    if (!branches.length) {
+      console.error('[BranchController] branches empty; dir=', dir, 'ws=', ws, 'm.dir=', mDir);
     }
     return { branches, current, head };
   }
