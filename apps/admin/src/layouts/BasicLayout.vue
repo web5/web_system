@@ -297,8 +297,7 @@ const handleLogout = async () => {
 .user-arrow { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
 
 .content {
-  margin: 16px auto 0; padding: 0;
-  max-width: 1440px;
+  margin: 16px 16px 0; padding: 0;
   background: transparent; min-height: calc(100vh - 56px - 92px);
 }
 .footer {
@@ -306,7 +305,7 @@ const handleLogout = async () => {
   background: transparent !important;
 }
 .footer-inner {
-  max-width: 1440px; margin: 0 auto; padding: 16px 16px 24px;
+  padding: 16px 16px 24px;
   border-top: 1px solid var(--border-divider);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
