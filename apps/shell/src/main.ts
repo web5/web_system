@@ -13,6 +13,9 @@ import { MicroFrontendLoader } from '@web-system/shell-loader';
 import type { ModuleContext } from '@web-system/shared';
 import { setupAntdAll } from './antd-all';
 import { saveAuth, clearAuth } from './auth-storage';
+// UI 规范：语义 token + 全局基础样式（2026-09-03 shell 视觉统一；css 子路径直指 ui src）
+import '@web-system/ui/tokens.css';
+import '@web-system/ui/theme.css';
 
 // ============================================================
 // 基座启动入口（微前端基座 Shell）

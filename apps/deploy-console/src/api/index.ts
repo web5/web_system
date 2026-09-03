@@ -490,6 +490,10 @@ export const pipelineApi = {
   promote: (id: string) =>
     http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
 
+  /** 删除执行记录（纯清理：不动版本指针/产物；running/pending 返回 400） */
+  remove: (id: string) =>
+    http.delete(`/pipelines/${id}`) as Promise<{ ok: boolean }>,
+
   /** 可发布版本（含磁盘上未登记版本表的历史产物） */
   releases: (env?: string, component?: string) =>
     http.get('/pipelines/meta/releases', {

@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { shallowRef, watch, onMounted } from 'vue';
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
-import { theme } from 'ant-design-vue';
+import { antdTheme } from '@web-system/ui';
 import { useThemeStore } from '@/stores/theme';
 
 const themeStore = useThemeStore();
@@ -20,19 +20,11 @@ onMounted(() => {
 // antd 内部会再包一层 computed(() => props.theme)，若这里也是响应式 Proxy，
 // 双层响应式会导致 Input 等组件的 component token（inputPaddingVerticalLG/fontSizeLG 等）
 // 派生失败，size="large" 的 padding/fontSize 不生效（高度塌成 24px）。
-const makeTheme = () => ({
-  algorithm: themeStore.isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-  token: {
-    colorPrimary: '#FF8C42',
-    colorLink: '#FF8C42',
-    colorSuccess: '#7ED957',
-    borderRadius: 4,
-  },
-});
-const themeConfig = shallowRef(makeTheme());
+// 2026-09-03 D 接入：使用 @web-system/ui 语义 antd 主题（uiTokens 全量组件 token）
+const themeConfig = shallowRef(antdTheme(themeStore.isDark ? 'dark' : 'light'));
 
 watch(() => themeStore.isDark, () => {
-  themeConfig.value = makeTheme();
+  themeConfig.value = antdTheme(themeStore.isDark ? 'dark' : 'light');
 });
 </script>
 
