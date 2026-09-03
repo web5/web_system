@@ -287,7 +287,8 @@ const handleLogout = async () => {
 .user-arrow { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
 
 .content {
-  margin: 16px 16px 0; padding: 0;
+  margin: 16px auto 0; padding: 0;
+  max-width: 1440px;
   background: transparent; min-height: calc(100vh - 56px - 92px);
 }
 .footer {
