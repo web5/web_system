@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import * as fs from 'fs';
 import * as path from 'path';
 import { ReleaseGitService } from './release-git.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
@@ -45,10 +44,8 @@ export class BranchController {
     }
     const ws = this.git.workspace();
     let dir = ws;
-    let mDir: string | undefined;
     try {
       const m = await this.modules.get(key);
-      mDir = m.dir;
       if (m.dir) {
         const candidate = path.join(ws, m.dir);
         // 仅当目录存在且避免目录穿越
@@ -66,12 +63,8 @@ export class BranchController {
     try {
       current = this.git.branchName(dir);
       head = this.git.fullHead(dir);
-    } catch (e: any) {
+    } catch {
       // 容忍：仓库尚未 checkout 时 current/head 可能为 'HEAD'
-      console.error('[BranchController] branchName/fullHead error:', e?.message, 'dir=', dir);
-    }
-    if (!branches.length) {
-      console.error('[BranchController] branches empty; dir=', dir, 'ws=', ws, 'm.dir=', mDir);
     }
     return { branches, current, head };
   }
