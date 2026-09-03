@@ -64,6 +64,20 @@
 **平台（暗色）**：主色 `#f97316` 暖橙 / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
 **变变产品（暖色）**：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` 暖白 / 文字 `#333333`
 
+> ⚠️ **admin 系（deploy-console/admin/mcp-admin）UI 数值以 `packages/ui/src/tokens.ts` 为准**（DR-3 主橙 #F97316，平台段），变变品牌色只用于 portal/mini-app。改 UI 前必走下方「UI 页面生成铁律」。
+
+## UI 页面生成铁律（admin 系 · 每个 UI 任务强制）
+
+> 细则本体在 `docs/ui/`（单事实源，**入口 = `docs/ui/README.md` 读取地图**），规则 `.codebuddy/rules/ui-interface/` 负责触发。收到任何 UI 任务（新页面/改版/调样式/改交互）按此执行：
+
+1. 读 `docs/ui/README.md`（读取地图，按任务类型定位最小集）→ 新页面必读 `docs/ui/design.md`（判断层）
+2. 按 `docs/ui/page-spec-template.md` 填**页面规格书**（新页 Full / 小改 Quick）
+3. **规格书先给用户确认，确认后才写码**——禁止跳过直接实现
+4. 改色/加色 → 读 `docs/ui/color-reference.md`；覆盖冲突/"改了不生效" → 读 `docs/ui/css-override-rules.md`
+5. 完成后自检（design.md §5：无裸色/无新增 !important/dark 过目/截图基线），修正记录追加 `docs/ui/geist-token-评审记录.md`（只追加）
+
+**最小禁项**：禁裸 hex/rgba（只引 `--ws-*`）；禁新增 `!important`；禁 emoji 图标；互斥单选 ≤5 固定选项禁 `a-select`（用 tabs/radio）；主操作 primary ≤1；破坏性操作必二次确认；portal/mini-app 品牌端不套用本规范（DR-5）。
+
 ## 开发规则
 
 1. 大改动走 Superpowers 工作流：brainstorm → plan → execute → review

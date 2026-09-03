@@ -1,0 +1,38 @@
+---
+description: UI 界面实现规范（admin 系）。任务涉及新建/修改 Vue 页面、admin/deploy-console/mcp-admin 界面、antd 组件外观、颜色/Token、hover、布局、交互、CSS 覆盖时使用。细则本体在 docs/ui/，本规则只负责触发与动作顺序。
+alwaysApply: false
+enabled: true
+updatedAt: 2026-09-03T00:00:00.000Z
+---
+
+# UI 界面实现规则（导航 + 动作门）
+
+> 单事实源：先读 `docs/ui/README.md`（读取地图）定位最小文档集，细则在 docs/ui/ 各文档；本规则**不复制数值与细则**（防双份漂移），只规定"触发 + 动作顺序 + 最小禁项"。
+> 适用：deploy-console / admin / mcp-admin / 内部工具端。portal / mini-app 品牌端不适用（DR-5）。
+
+## 动作门（顺序不可跳）
+
+1. 读 `docs/ui/README.md`（读取地图）→ 按「任务 × 最小文档集」定位；新页面必读 `docs/ui/design.md`（判断层：类型模板/布局铁律/交互矩阵）。
+2. 按 `docs/ui/page-spec-template.md` 填**页面规格书**（新页 Full / 小改 Quick）。
+3. **规格书先给用户过目确认，确认后才写码**（禁止跳过直接实现）。
+4. 涉及颜色/加色/hover → 读 `docs/ui/color-reference.md`（颜色定义点地图：8 类位置 + hover 阶梯，禁自行发明色）。
+5. 覆盖 antd 外观或"改了不生效" → 读 `docs/ui/css-override-rules.md`（覆盖优先级 + 四问 + 排查五步）。
+6. 写完后按 `design.md` §5 自检（grep 裸色/!important、双主题过目、截图基线），修正记录追加到 `docs/ui/geist-token-评审记录.md`（只追加不覆盖）。
+
+## 核心约束精要（来不及翻 docs 时的最小禁项）
+
+- 色值只引用 `--ws-*` CSS 变量或 `uiTokens`；禁裸 hex/rgba。新色必须先入 `packages/ui/src/tokens.ts` + `tokens.css`（双文件同步）。
+- 禁新增 `!important`（全仓库清零目标，存量见 css-override-rules.md §7）。
+- antd 组件外观优先 ThemeConfig 组件 token（`antd-theme.ts`）；单页特例才 scoped `:deep`（引 --ws-*），禁页面级裸 `.ant-xxx` 全局覆盖。
+- 字重只用 400/500/600；图标用 SVG（tabler/antd icons），禁 emoji。
+- 互斥单选 ≤5 且固定 → `a-tabs`（≤4）/ `a-radio-group`（5 或空间紧），不用 `a-select`。
+- hover 分层：容器类（行/菜单/下拉项）用 `--ws-bg-hover`；悬浮触发器（header 用户卡等）**不加整块灰底**。
+- 主操作 primary ≤1；破坏性操作必二次确认（文案含后果）；空态 = 原因 + 出路；数字列 tabular-nums、代码/端口/ID 用 `.ws-mono`。
+- 页面类型先判定（design.md §1），禁止自创布局骨架。
+- dark 主题不是"调暗"：新写样式 light/dark 都要过目，禁漏变量回退。
+
+## 生效提示
+
+- 新建/修改本规则后需**新开会话**生效。
+- 验证：向 AI 询问"当前应用了哪些规则"。
+- 手动引用：对话中 `@ui-interface`。

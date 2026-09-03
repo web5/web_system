@@ -39,16 +39,31 @@ body {
   background: transparent;
 }
 
+/* =============================================================
+ * deploy-console 外壳固定深色（例外：反白面板，不随 data-theme）
+ * --dc-* = app 局部变量（css-override-rules §3：app 局部用 --app-* 前缀），不进共享 tokens；
+ * 值须与 App.vue SHELL_HEADER_BG / MainLayout.vue scoped 引用同源（R4）
+ * ============================================================= */
+:root {
+  --dc-panel-sider-bg: #0F0F12; /* 侧栏容器（MainLayout.vue :deep 引用） */
+  --dc-panel-header-bg: #161618; /* 顶栏背景（App.vue Layout.colorBgHeader 同值） */
+  --dc-panel-header-border: #2a2a2e;
+  --dc-panel-header-text: #f5f5f5;
+  --dc-panel-menu-text: #a3a3a3;
+  --dc-panel-menu-text-hover: #ededed;
+  --dc-panel-menu-text-selected: #fb923c;
+  --dc-panel-menu-hover: rgba(255, 255, 255, 0.06);
+  --dc-panel-menu-selected: rgba(249, 115, 22, 0.18);
+}
+
 /* 布局 */
 .app-layout {
   min-height: 100vh;
 }
 
-/* 侧栏：深色反白面板（固定色，不随 data-theme） */
-.app-sider {
-  background-color: #0F0F12 !important;
-  color: #fff;
-}
+/* 侧栏：深色反白面板（固定色，不随 data-theme）
+ * 容器背景色由 MainLayout.vue scoped :deep 提供（R4 去 !important：
+ * antd 4.2.6 Layout 无 siderBg token，scoped 高特异替代） */
 
 .app-sider .logo {
   height: 52px;
@@ -73,29 +88,28 @@ body {
     display: block;
   }
 
-  /* 强制白色品牌文字：防止 antd light token 在浅主题下覆盖 */
   .logo-text {
-    color: #ffffff !important;
+    color: #ffffff;
     white-space: nowrap;
   }
 }
 
-/* 顶部 header：固定深色（比内容区更深），形成「外深内浅」包裹 */
+/* 顶部 header：固定深色（比内容区更深），形成「外深内浅」包裹
+ * 背景色由 App.vue Layout.colorBgHeader 提供（固定深 #161618，R4 去 !important） */
 .app-header {
-  background-color: #161618 !important;
-  color: #f5f5f5;
+  color: var(--dc-panel-header-text);
   padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #2a2a2e !important;
+  border-bottom: 1px solid var(--dc-panel-header-border);
   z-index: 1;
 
   /* header 内标题浅色，避免浅主题 token 把深底洗白 */
   .header-title,
   .user-trigger,
   .ant-typography {
-    color: #f5f5f5;
+    color: var(--dc-panel-header-text);
   }
   /* 用户区：名字与角色同色系（tertiary 中灰，深底上柔和协调） */
   .user-name,
