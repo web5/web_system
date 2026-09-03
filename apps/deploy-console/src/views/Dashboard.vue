@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import { environmentApi, auditApi, metricsApi } from '@/api'
 import EChart from '@/components/EChart.vue'
+import { uiTokens } from '@web-system/ui'
 
 interface EnvInfo {
   env: string
@@ -72,6 +73,14 @@ function statusColor(status: string) {
   return map[status] || 'default'
 }
 
+// 图表/状态语义色（Backlog H：echarts 不解析 CSS var，从 uiTokens 常量取值；light 语义色两主题通用）
+const CHART_COLOR = {
+  success: uiTokens.colors.success.light[500], // #398E4A
+  error: uiTokens.colors.error.light[500], // #E5484D
+  warning: uiTokens.colors.warning.light[500], // #F5A623
+  neutral: uiTokens.roles.light.textTertiary, // #A3A3A3
+}
+
 // ===== 发布度量（数据源为 deploy_pipelines 聚合，无额外埋点）=====
 const RANGES = [
   { label: '近 7 天', value: 7 },
@@ -102,10 +111,10 @@ const successRateText = computed(() => {
 
 const successRateColor = computed(() => {
   const r = overview.value?.successRate
-  if (r === null || r === undefined) return '#8c8c8c'
-  if (r >= 0.9) return '#52c41a'
-  if (r >= 0.7) return '#faad14'
-  return '#ff4d4f'
+  if (r === null || r === undefined) return CHART_COLOR.neutral
+  if (r >= 0.9) return CHART_COLOR.success
+  if (r >= 0.7) return CHART_COLOR.warning
+  return CHART_COLOR.error
 })
 
 const trendOption = computed(() => ({
@@ -119,14 +128,14 @@ const trendOption = computed(() => ({
       name: '成功',
       type: 'bar',
       stack: 'total',
-      itemStyle: { color: '#52c41a' },
+      itemStyle: { color: CHART_COLOR.success },
       data: trend.value.map((t) => t.succeeded),
     },
     {
       name: '失败',
       type: 'bar',
       stack: 'total',
-      itemStyle: { color: '#ff4d4f' },
+      itemStyle: { color: CHART_COLOR.error },
       data: trend.value.map((t) => t.failed),
     },
   ],
@@ -141,7 +150,7 @@ const stageOption = computed(() => {
     xAxis: { type: 'value', minInterval: 1 },
     yAxis: { type: 'category', data: reversed.map((s) => s.stage) },
     series: [
-      { type: 'bar', itemStyle: { color: '#ff7875' }, data: reversed.map((s) => s.count) },
+      { type: 'bar', itemStyle: { color: CHART_COLOR.error }, data: reversed.map((s) => s.count) },
     ],
   }
 })
@@ -249,7 +258,7 @@ onMounted(() => {
         <a-col :xs="24" :lg="10">
           <div style="font-weight: 500; margin-bottom: 8px;">
             失败阶段分布
-            <span style="font-weight: 400; color: #888; font-size: 12px;">（点击条形下钻）</span>
+            <span style="font-weight: 400; color: var(--ws-text-tertiary); font-size: 12px;">（点击条形下钻）</span>
           </div>
           <EChart :option="stageOption" height="240px" @chart-click="onStageClick" />
         </a-col>
@@ -279,7 +288,7 @@ onMounted(() => {
           <a-table-column title="操作人" data-index="operator" />
           <a-table-column title="错误信息">
             <template #default="{ record }">
-              <span style="color: #cf1322;">{{ record.error || '—' }}</span>
+              <span style="color: var(--ws-error-500);">{{ record.error || '—' }}</span>
             </template>
           </a-table-column>
         </a-table>
@@ -340,7 +349,7 @@ onMounted(() => {
             <a-list-item-meta>
               <template #title>
                 <span style="font-weight: 500;">{{ item.user }}</span>
-                <span style="margin-left: 8px; color: rgba(0,0,0,0.45);">
+                <span style="margin-left: 8px; color: var(--ws-text-secondary);">
                   执行了 {{ item.action }}
                 </span>
                 <a-tag v-if="item.env" color="blue" style="margin-left: 8px;">
@@ -352,12 +361,12 @@ onMounted(() => {
               </template>
               <template #description>
                 <a-tag :color="statusColor(item.status)">{{ item.status }}</a-tag>
-                <span style="margin-left: 8px; color: rgba(0,0,0,0.45);">
+                <span style="margin-left: 8px; color: var(--ws-text-secondary);">
                   {{ item.detail }}
                 </span>
               </template>
               <template #avatar>
-                <span style="color: rgba(0,0,0,0.45); font-size: 12px;">
+                <span style="color: var(--ws-text-secondary); font-size: 12px;">
                   {{ formatTime(item.timestamp) }}
                 </span>
               </template>
