@@ -433,10 +433,14 @@ const filteredRows = computed<PipelineRow[]>(() => {
     if (f.module && r.module.key !== f.module) return false
     if (f.type === 'builtin' && !r.tpl.builtin) return false
     if (f.type === 'custom' && r.tpl.builtin) return false
-    if (f.status) {
+    // 状态筛选用「全部」= 不过滤；'none' = 从未执行（latest 为空）；其余精确匹配
+    if (f.status && f.status !== 'all') {
       const st = r.latest?.status || null
-      if (f.status === 'none') return st === null
-      if (st !== f.status) return false
+      if (f.status === 'none') {
+        if (st !== null) return false
+      } else if (st !== f.status) {
+        return false
+      }
     }
     return true
   })
