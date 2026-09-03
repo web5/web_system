@@ -53,6 +53,80 @@ export class ReleaseGitService {
     return this.command.exec('git rev-parse --abbrev-ref HEAD', ws ?? this.workspace()).trim();
   }
 
+  /** 当前 HEAD 完整哈希 */
+  fullHead(ws?: string): string {
+    return this.command.exec('git rev-parse HEAD', ws ?? this.workspace()).trim();
+  }
+
+  /**
+     * 列出远程分支（origin/* 去头）。
+     * 用于发布中心「分支」下拉选择，前端只读、用户不直接输入。
+     * 无远程（本地仓库/未 push）时退化为本地分支，保证 UI 有值可选。
+     *
+     * 实现说明：`command.exec` 走 `sh -c` 解析，避免用 `for-each-ref` 的
+     * 单引号 format（含 `()` 占位会被 sh 当子 shell 报错）；改用 `branch -r`
+     * + sed/JS 二次处理。
+     */
+  listRemoteBranches(opts?: { dir?: string; maxCount?: number }): string[] {
+    const dir = opts?.dir ?? this.workspace();
+    try {
+      this.command.exec(`git fetch --all --prune >/dev/null 2>&1`, dir);
+    } catch {
+      // 离线/无网络/无 remote：容忍，下一步走本地分支兜底
+    }
+    // 1) 远程分支（origin/*），按最近提交倒序
+      let out = '';
+      try {
+        out = this.command.exec(
+          `git branch -r --no-color --sort=-committerdate`,
+          dir,
+        );
+        const remote = out
+          .split('\n')
+          .map((s) => s.trim().replace(/^\*+\s*/, ''))
+          .filter(Boolean)
+          .filter((s) => s.startsWith('origin/') && !s.includes('->')) // 排除 HEAD 指针
+          .map((s) => s.replace(/^origin\//, ''));
+        if (remote.length) {
+          return this.limitBranches(remote, opts?.maxCount);
+        }
+      } catch {
+        // git < 2.7 不支持 --sort：回退到无排序
+        try {
+          out = this.command.exec(`git branch -r --no-color`, dir);
+          const remote = out
+            .split('\n')
+            .map((s) => s.trim().replace(/^\*+\s*/, ''))
+            .filter(Boolean)
+            .filter((s) => s.startsWith('origin/') && !s.includes('->'))
+            .map((s) => s.replace(/^origin\//, ''));
+          if (remote.length) return this.limitBranches(remote, opts?.maxCount);
+        } catch {
+          // ignore & 走本地分支
+        }
+      }
+      // 2) 兜底：返回本地分支
+      try {
+        out = this.command.exec(`git branch --no-color --sort=-committerdate`, dir);
+      } catch {
+        try {
+          out = this.command.exec(`git branch --no-color`, dir);
+        } catch {
+          return [];
+        }
+      }
+    const locals = out
+      .split('\n')
+      .map((s) => s.trim().replace(/^\*+\s*/, ''))
+      .filter(Boolean);
+    return this.limitBranches(locals, opts?.maxCount);
+  }
+
+  private limitBranches(list: string[], max?: number): string[] {
+    if (!max || max <= 0) return list;
+    return list.slice(0, max);
+  }
+
   /**
    * 发布目录同步到目标分支（fetch → checkout 目标分支 → 可选 reset commit → clean）。
    * 返回同步后的实际 commit（未指定 commit 时即分支最新）。

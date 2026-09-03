@@ -40,6 +40,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '流水线详情' },
       },
       {
+        path: 'pipelines/:id/:runId',
+        name: 'PipelineRunDetail',
+        component: () => import('@/views/PipelineRunDetail.vue'),
+        meta: { title: '发布执行详情' },
+      },
+      {
         path: 'environments',
         name: 'EnvironmentManager',
         component: () => import('@/views/EnvironmentManager.vue'),

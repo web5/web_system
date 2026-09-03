@@ -4,18 +4,16 @@ import { message, Modal } from 'ant-design-vue'
 import { moduleApi, environmentApi } from '@/api'
 
 // ============ 类型定义 ============
+// 类型标签统一中性呈现（Geist 克制：颜色只编码"状态/是否内置"两类语义）
 const TYPE_OPTIONS = [
-  { value: 'backend', label: '后端服务（pm2 部署）', color: 'blue' },
-  { value: 'frontend', label: '前端模块（打包到网关）', color: 'green' },
-  { value: 'micro-frontend', label: '微前端模块（shell 加载）', color: 'purple' },
-  { value: 'mini-app', label: '小程序', color: 'orange' },
+  { value: 'backend', label: '后端服务（pm2 部署）' },
+  { value: 'frontend', label: '前端模块（打包到网关）' },
+  { value: 'micro-frontend', label: '微前端模块（shell 加载）' },
+  { value: 'mini-app', label: '小程序' },
 ] as const
 
 function typeLabel(type: string): string {
   return TYPE_OPTIONS.find((t) => t.value === type)?.label || type
-}
-function typeColor(type: string): string {
-  return TYPE_OPTIONS.find((t) => t.value === type)?.color || 'default'
 }
 
 // ============ 模块列表 ============
@@ -168,10 +166,10 @@ onMounted(() => {
     <div class="page-header">
       <h2>模块管理</h2>
       <p>模块注册表是发布系统的「模块元数据」真相源。后端模块（pm2 部署）、前端模块、微前端模块、小程序均在此登记。点击「详情」查看并管理该模块前端/后台的部署版本与环境。</p>
-      <p style="color: #888;">启动时若表为空，会从 <code>scripts/modules.json</code> 种子导入（标记为 builtin）。builtin 不可删除，可改字段。</p>
+      <p style="color: var(--ws-text-tertiary);">启动时若表为空，会从 <code class="ws-mono">scripts/modules.json</code> 种子导入（标记为 builtin）。builtin 不可删除，可改字段。</p>
     </div>
 
-    <a-card>
+    <a-card class="svc-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <a-tabs v-model:activeKey="activeType" size="small">
           <a-tab-pane key="all" :tab="`全部 (${moduleList.length})`" />
@@ -202,20 +200,26 @@ onMounted(() => {
         size="small"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'type'">
-            <a-tag :color="typeColor(record.type)">{{ typeLabel(record.type) }}</a-tag>
-            <a-tag v-if="record.builtin" color="gold" style="margin-left: 4px;">内置</a-tag>
+          <template v-if="column.key === 'key'">
+            <span class="ws-mono">{{ record.key }}</span>
+          </template>
+          <template v-else-if="column.key === 'type'">
+            <a-tag class="svc-type">{{ typeLabel(record.type) }}</a-tag>
+            <a-tag v-if="record.builtin" class="svc-builtin" style="margin-left: 4px;">内置</a-tag>
+          </template>
+          <template v-else-if="column.key === 'dir'">
+            <span class="ws-mono">{{ record.dir }}</span>
           </template>
           <template v-else-if="column.key === 'meta'">
-            <span v-if="record.pm2" style="margin-right: 8px;">pm2={{ record.pm2 }}</span>
-            <span v-if="record.publicPath">pub={{ record.publicPath }}</span>
+            <span v-if="record.pm2" style="margin-right: 8px;" class="ws-mono">pm2={{ record.pm2 }}</span>
+            <span v-if="record.publicPath" class="ws-mono">pub={{ record.publicPath }}</span>
           </template>
           <template v-else-if="column.key === 'defaultEnv'">
-            <span v-if="record.defaultEnv" style="font-size: 12px;">{{ record.defaultEnv }}</span>
-            <span v-else style="color: #bbb;">—</span>
+            <span v-if="record.defaultEnv" class="ws-mono">{{ record.defaultEnv }}</span>
+            <span v-else class="svc-dash">—</span>
           </template>
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="record.enabled !== false ? 'green' : 'default'">
+            <a-tag :class="record.enabled !== false ? 'svc-status-on' : 'svc-status-off'">
               {{ record.enabled !== false ? '启用' : '禁用' }}
             </a-tag>
           </template>
@@ -302,3 +306,51 @@ onMounted(() => {
     </a-modal>
   </div>
 </template>
+
+<style scoped>
+/* 试点页 token 化样式：颜色一律引用 @web-system/ui 语义变量（P0-4/5.2） */
+.svc-card {
+  border: none;
+  border-radius: var(--ws-radius-lg);
+  /* shadow-as-border（Geist 技法）：细边框随层级平滑，替代默认实线 border */
+  box-shadow: 0 0 0 1px var(--ws-border);
+}
+
+/* 类型标签：中性低饱和（克制：颜色只编码状态/内置两类语义） */
+.svc-type {
+  color: var(--ws-text-secondary);
+  background: var(--ws-bg-subtle);
+  border: 1px solid var(--ws-border-subtle);
+}
+
+/* 内置徽标：品牌橙 tint（light 底用浅橙 / dark 用深棕底） */
+.svc-builtin {
+  color: var(--ws-brand-700);
+  background: var(--ws-brand-50);
+  border: 1px solid var(--ws-brand-100);
+}
+
+/* 状态标签：启用 = success 语义；禁用 = 中性 */
+.svc-status-on {
+  color: var(--ws-success-500);
+  background: var(--ws-success-100);
+  border: 1px solid var(--ws-success-100);
+}
+
+.svc-status-off {
+  color: var(--ws-text-tertiary);
+  background: var(--ws-bg-subtle);
+  border: 1px solid var(--ws-border-subtle);
+}
+
+.svc-dash {
+  color: var(--ws-text-disabled);
+  font-size: var(--ws-font-size-caption);
+}
+
+:global([data-theme='dark']) .svc-builtin {
+  color: var(--ws-brand-300);
+  background: var(--ws-brand-900);
+  border-color: var(--ws-brand-800);
+}
+</style>

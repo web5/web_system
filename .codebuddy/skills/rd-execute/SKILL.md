@@ -30,6 +30,15 @@ TODO 列表
 全部完成后 → 调用 rd-review Agent
 ```
 
+## UI 任务分支（强制，先规格后代码）
+
+TODO 中包含"页面/组件/样式/交互/视觉"类任务时，每个 UI 类 TODO 实现前：
+
+1. 加载规则 `@ui-interface`（或直接读 `docs/ui/design.md` + `page-spec-template.md`）。
+2. 产出**页面规格书**（新页 Full / 小改 Quick），规格未获用户确认前**不写实现代码**。
+3. 涉及颜色/覆盖时查 `docs/ui/color-reference.md` / `docs/ui/css-override-rules.md`。
+4. 完成后按 `design.md` §5 自检 + 评审记录回流（只追加）。
+
 ## TDD 规则
 
 ### 什么必须测

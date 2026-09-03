@@ -85,20 +85,22 @@ function handleLogout() {
       <div class="logo">
         <svg
           class="logo-icon"
-          viewBox="0 0 24 24"
+          viewBox="0 0 32 32"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          <!-- 蜂巢 cell：外六边形 + 内六边形 -->
+          <!-- 与 favicon 同款：深底 + 金色蜂巢 cell（融入侧栏深色背景，外深内亮层次清晰） -->
+          <rect x="1" y="1" width="30" height="30" rx="7" fill="#001529" />
           <path
-            d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z"
+            d="M16 6 L25 11 V21 L16 26 L7 21 V11 Z"
             stroke="#F5A623"
-            stroke-width="1.6"
+            stroke-width="1.8"
             stroke-linejoin="round"
+            fill="none"
           />
           <path
-            d="M12 6.6 L17.6 9.8 V16.2 L12 19.4 L6.4 16.2 V9.8 Z"
+            d="M16 10.6 L21.6 13.8 V20.2 L16 23.4 L10.4 20.2 V13.8 Z"
             fill="#F5A623"
           />
         </svg>
@@ -161,34 +163,51 @@ function handleLogout() {
 </template>
 
 <style scoped>
-.logo-text-block {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  margin-left: 8px;
-}
-.logo-title {
-  font-size: 16px;
-  font-weight: 600;
+/* 侧栏容器固定深色（例外：反白面板，不随 data-theme）
+ * antd 4.2.6 Layout 无 siderBg token → scoped :deep 提特异 (0,3,0) 替代原 style.scss !important（R4）
+ * 色值引用 app 局部 --dc-panel-*（style.scss :root 定义，R4 升变量） */
+:deep(.ant-layout-sider.app-sider) {
+  background-color: var(--dc-panel-sider-bg);
   color: #fff;
-  letter-spacing: 0.5px;
 }
-.logo-sub {
-  font-size: 11px;
-  color: #8c8c8c;
-  margin-top: 2px;
+
+:deep(.ant-menu-dark) {
+  background: transparent;
 }
+
+:deep(.ant-menu-dark .ant-menu-item) {
+  color: var(--dc-panel-menu-text);
+}
+
+:deep(.ant-menu-dark .ant-menu-item:hover) {
+  background-color: var(--dc-panel-menu-hover);
+  color: var(--dc-panel-menu-text-hover);
+}
+
+:deep(.ant-menu-dark .ant-menu-item-selected) {
+  background-color: var(--dc-panel-menu-selected);
+  color: var(--dc-panel-menu-text-selected);
+}
+
+/* 悬浮触发器（深色 header 内）：hover 用白 6% 透明底 = 深壳语言（同侧栏菜单 hover，
+ * --dc-panel-menu-hover），文字 tertiary → header 亮色；禁用 var(--ws-bg-hover) 浅灰底
+ * （浅灰 #F2F2F2 在深底上突兀——R3 用户反馈；规则见 color-reference §3/§2） */
 .user-trigger {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 12px 6px 6px;
-  border-radius: 8px;
+  border-radius: var(--ws-radius-lg);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 .user-trigger:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: var(--dc-panel-menu-hover);
+}
+.user-trigger:hover .user-name,
+.user-trigger:hover .user-role,
+.user-trigger:hover .user-caret {
+  color: var(--dc-panel-header-text);
 }
 .user-avatar {
   width: 36px;
@@ -197,12 +216,12 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  background: linear-gradient(135deg, var(--ws-brand-500) 0%, var(--ws-brand-accent) 100%);
   color: #fff;
-  font-weight: 600;
+  font-weight: var(--ws-font-weight-semibold);
   font-size: 15px;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.25);
+  box-shadow: var(--ws-shadow-avatar);
 }
 .user-info {
   display: flex;
@@ -211,16 +230,17 @@ function handleLogout() {
 }
 .user-name {
   font-size: 14px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.88);
+  font-weight: var(--ws-font-weight-semibold);
+  /* 与 .user-role 同色系（tertiary 中灰）—— 避免被全局 .app-header .user-name 覆盖（scoped 选择器特异性等同但后置胜出） */
+  color: var(--ws-text-tertiary);
 }
 .user-role {
   font-size: 11px;
-  color: #8c8c8c;
+  color: var(--ws-text-tertiary);
   margin-top: 2px;
 }
 .user-caret {
-  color: #bfbfbf;
+  color: var(--ws-text-tertiary);
   display: flex;
   align-items: center;
   flex-shrink: 0;

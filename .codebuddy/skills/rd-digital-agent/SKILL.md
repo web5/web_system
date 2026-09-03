@@ -29,6 +29,10 @@ version: 3.0.0
   │
   ├─ 架构 / 选型 / 安全 / 数据库设计 ──→ .skills/tech-review（辅助审查）
   │
+  ├─ UI / 页面 / 样式 / 交互任务 ───────→ .skills/fe-developer（前端开发技能）
+  │
+  ├─ 服务 / 接口 / 数据 / 安全横切 / 部署 → .skills/be-developer（后端开发技能）
+  │
   └─ 编码任务（所有）─────────────────→ 加载 Karpathy 编程准则
        （在 rd-execute 执行时自动参考）
 ```

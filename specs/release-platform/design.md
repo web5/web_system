@@ -427,3 +427,21 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
   假健康 12 轮耗尽仍判成功（⑤ 自动回滚从未被端口探活触发）；重构时判定移出 catch，现会立即抛错走回滚。
 - 服务工具换 remote 实现（V7 `service-kind: 'remote'`）时只改上述工具实现层，步骤定义与模板不变。
 
+### 内置步骤执行器化（V1 落地，2026-09-02，方案 B 档）
+
+> V1「stageXxx 逐一迁移为执行器 + run 数据驱动」在工具化收口之上落地：
+> `executeStage` 的 switch 硬编码（步骤行为/跳过条件/命令覆盖优先级散落 case 内）收敛为
+> 声明式步骤注册表 `pipeline/steps/step-registry.ts`。每个内置步骤 = 元数据：
+> `category`（特性分类）+ `commandMode`（命令协作语义）+ `skip`（守卫）+ `run`（执行体）。
+
+| 概念 | 落地 |
+|---|---|
+| 步骤元数据 | `pipeline/steps/step-registry.ts`（check/pull/build/upload/restart/version/pointer/verify/cleanup 九步声明） |
+| 执行体 | `pipeline/steps/*.executor.ts` 独立执行器（各自构造注入工具；build 无内置体，commandMode=required 命令驱动） |
+| 执行契约 | `StepContext`（pipeline/uploadTarget + enterStage/log/save/sleep/assertNotCancelled）——执行器与状态机唯一耦合点 |
+| commandMode | `base`(check 恒内置+命令附加) / `override`(命令优先，未配回退内置) / `required`(build 未配命令 fail-fast) / `none`(version/pointer 语义真相源不可覆盖) |
+| 守卫 skip | 复用产物 reuseArtifact / 快线 skipVerify / 模块类型适配，全部声明在注册表 |
+
+engine（`pipeline.service.ts`，1085 行）不再持有任何步骤"怎么做"，只做：状态机
+（run/进度/取消/锁/审计/自动回滚）+ 命令覆盖调度（`runStageCommand`）+ 公共 API。
+验证：jest 197/197，`nest build` + lint 通过。

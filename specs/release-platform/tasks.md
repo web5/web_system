@@ -225,6 +225,19 @@
   - _验收：当 端口不可达时，verifyBackend 应立即抛错（不再 12 轮耗尽后仍判成功），触发 verify 失败自动回滚_
 - [x] 7.3 回归：全量 jest 186/186 + `nest build` + lint 通过
 
+## S8 · 步骤执行器化 + 数据驱动分派（V1/方案 B 落地，2026-09-02）
+
+> executeStage 由 switch 硬编码改为配置驱动：步骤行为/守卫/命令覆盖语义收敛为注册表元数据，
+> 执行体外迁独立 executor。详见 `design.md`「内置步骤执行器化」。
+
+- [x] 8.1 内置步骤注册表 `step-registry.ts`（category/commandMode/skip/run 九步声明）+ `executeStage` 数据驱动
+  - 依赖：7.3
+  - _验收：当 检查 executeStage 时，应无 switch case 与任何步骤实现细节；分派只按注册表元数据（守卫跳过 → commandMode 命令覆盖优先级 → 执行体）_
+- [x] 8.2 九步骤执行体外迁独立 executor（`steps/*.executor.ts`），各自注入工具，经 `StepContext` 与 engine 通信
+  - 依赖：8.1
+  - _验收：当 增加/修改步骤行为时，只改对应 executor 与注册表元数据，engine 无感知；build 步骤无内置执行体（required 命令驱动）_
+- [x] 8.3 回归：全量 jest 197/197（新增 step-registry/check.executor 11 用例）+ `nest build` + lint 通过
+
 ## 发布记录
 
 - **2026-09-02 首次上线**（分支 `feature/contract-risk-ai`）

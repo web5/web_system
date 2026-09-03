@@ -1,6 +1,8 @@
-/* =============================================================
- * @web-system/ui — 全局样式 + AntD 覆盖
- * ============================================================= */
+/* @web-system/ui — 全局样式 + antd 兜底覆盖（极少）
+ * 收敛说明（P0-6）：antd 能表达的覆盖已转移进 antd-theme.ts 组件 token
+ * （Layout/Menu/Table/Card/Statistic/Form/Tabs/Modal），本文件无 !important；
+ * 保留 = reset / 布局工具类 / 登录页例外。
+ */
 
 * {
   margin: 0;
@@ -12,9 +14,10 @@ html,
 body {
   width: 100%;
   height: 100%;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--surface-0);
-  color: var(--text-primary);
+  font-family: var(--ws-font-sans);
+  font-size: var(--ws-font-size-base);
+  background: var(--ws-bg-page);
+  color: var(--ws-text-primary);
   transition: background 0.3s ease, color 0.3s ease;
 }
 
@@ -23,70 +26,33 @@ body {
   height: 100%;
 }
 
-/* ===== Ant Design Layout 覆盖 ===== */
-.ant-layout {
-  background: var(--surface-0) !important;
-}
-.ant-layout-header {
-  background: var(--surface-1) !important;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.ant-layout-sider {
-  background: var(--surface-1) !important;
-  border-right: 1px solid var(--border-subtle);
-}
-.ant-menu {
-  background: transparent !important;
-  color: var(--text-secondary) !important;
-}
-.ant-menu-item-selected {
-  background: rgba(249, 115, 22, 0.12) !important;
-  color: var(--color-brand-500) !important;
+/* ===== 工具类：mono / 表格数字对齐（P1-2） ===== */
+.ws-mono {
+  font-family: var(--ws-font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ===== Table 覆盖 ===== */
-.ant-table {
-  background: var(--surface-2) !important;
-  color: var(--text-primary) !important;
-}
-.ant-table-thead > tr > th {
-  background: var(--surface-3) !important;
-  color: var(--text-secondary) !important;
-  border-color: var(--border-subtle) !important;
-}
+/* 运维数据表全局开 tabular-nums（代码/端口/数字列对齐） */
+.ant-table-thead > tr > th,
 .ant-table-tbody > tr > td {
-  border-color: var(--border-subtle) !important;
-  color: var(--text-primary) !important;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ===== Card 覆盖 ===== */
-.ant-card {
-  background: var(--surface-2) !important;
-  border-color: var(--border-subtle) !important;
-  color: var(--text-primary) !important;
-}
-.ant-card-head {
-  border-color: var(--border-subtle) !important;
-  color: var(--text-primary) !important;
+/* ===== 工具类：shadow-as-border（Geist 边框技法） ===== */
+.ws-hairline {
+  border-radius: var(--ws-radius-md);
+  box-shadow: 0 0 0 1px var(--ws-border);
 }
 
-/* ===== Statistic 覆盖 ===== */
-.ant-statistic-title {
-  color: var(--text-tertiary) !important;
-}
-.ant-statistic-content {
-  color: var(--text-primary) !important;
-}
-
-/* ===== 登录页 ===== */
+/* ===== 例外：登录页专属 ===== */
 .login-container {
-  background: var(--login-gradient) !important;
+  background: var(--ws-login-gradient);
 }
 .login-box {
-  background: var(--login-box-bg) !important;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-login);
+  background: var(--ws-login-box-bg);
+  border: 1px solid var(--ws-border-subtle);
+  box-shadow: var(--ws-shadow-popover);
 }
 .login-title {
-  color: var(--login-title) !important;
+  color: var(--ws-login-title);
 }
