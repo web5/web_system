@@ -85,22 +85,23 @@ function handleLogout() {
       <div class="logo">
         <svg
           class="logo-icon"
-          viewBox="0 0 24 24"
+          viewBox="0 0 32 32"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          <!-- 蜂巢 cell：外层框架深琥珀 + 内部亮琥珀（外深内浅层次） -->
+          <!-- 与 favicon 同款：深底 + 金色蜂巢 cell（融入侧栏深色背景，外深内亮层次清晰） -->
+          <rect x="1" y="1" width="30" height="30" rx="7" fill="#001529" />
           <path
-            d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z"
-            fill="#9A3412"
-            stroke="#FB923C"
-            stroke-width="1.4"
+            d="M16 6 L25 11 V21 L16 26 L7 21 V11 Z"
+            stroke="#F5A623"
+            stroke-width="1.8"
             stroke-linejoin="round"
+            fill="none"
           />
           <path
-            d="M12 6.6 L17.6 9.8 V16.2 L12 19.4 L6.4 16.2 V9.8 Z"
-            fill="#FBBF24"
+            d="M16 10.6 L21.6 13.8 V20.2 L16 23.4 L10.4 20.2 V13.8 Z"
+            fill="#F5A623"
           />
         </svg>
         <span v-if="!collapsed" class="logo-text">Beehive</span>
