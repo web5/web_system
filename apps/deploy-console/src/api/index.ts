@@ -188,6 +188,13 @@ export const moduleApi = {
   create: (dto: any) => http.post('/modules', dto) as Promise<any>,
   update: (key: string, dto: any) => http.put(`/modules/${key}`, dto) as Promise<any>,
   remove: (key: string) => http.delete(`/modules/${key}`) as Promise<any>,
+  /** 列出模块对应代码目录的 git 远程分支（origin/*），含当前分支与 HEAD */
+  branches: (key: string) =>
+    http.get(`/modules/${key}/branches`) as Promise<{
+      branches: string[]
+      current: string | null
+      head: string | null
+    }>,
 }
 
 /* ========== Monitor ========== */
