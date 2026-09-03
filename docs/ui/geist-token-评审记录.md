@@ -174,7 +174,7 @@
 | B | AuditLog 环境筛选走 `environmentApi` | `AuditLog.vue` | select 选项动态化 | ✅ 2026-09-03 |
 | C | 头像阴影 alpha token 化（R3 #4 遗留） | `MainLayout.vue` + tokens | 加 `shadow.avatar` / `--ws-shadow-avatar` | ✅ 2026-09-03 |
 | K | 死代码清理（logo-title/logo-text-block） | `MainLayout.vue` | 删未用 class | ✅ 2026-09-03 |
-| D | **admin 灰度接入 token**（删自身变量、App 主题照抄样板） | admin 全端多文件 | 全套视觉对齐 | ⏸ 立项项：**已预研**（2026-09-03 code-explorer），关键障碍 = 主题极性相反（admin `:root`=dark 默认 vs ui `:root`=light）+ 17 处 !important + 品牌色值不同（#FF8C42/#0A0A0D vs #F97316/#0A0A0A）——建议独立 rd-plan，试点页先行 |
+| D | **admin 接入 @web-system/ui**（Phase1 代码完成） | admin 多文件 | 删 style.css（变量/17 !important/login override）→ ui tokens.css/theme.css + antdTheme；默认主题 dark→light（负责人裁决） | ✅ Phase1 代码接入 2026-09-03；⏳ 待 mf 构建发布 + 全页目检（mf cssScope 豁免 :root 已确认可行） |
 | E | mcp-admin / shell 灰度 | mcp-admin / shell | 同上 | ⏸ 依赖 D 稳定后灰度（P2 节奏） |
 | F | tokens 同步校验脚本 | `scripts/check-tokens-sync.mjs` | diff 校验（剥离注释，防"ts 改 css 忘同步"） | ✅ 2026-09-03（生成器有覆盖 alias 风险，采用只读校验替代） |
 | G | 登录页渐变裁决 | Login + tokens | 视觉决策 | ⏸ 待负责人拍板：保留深蓝 / 切品牌橙黑 |
