@@ -163,22 +163,30 @@ function handleLogout() {
 </template>
 
 <style scoped>
+/* 侧栏容器固定深色（例外：反白面板，不随 data-theme）
+ * antd 4.2.6 Layout 无 siderBg token → scoped :deep 提特异 (0,3,0) 替代原 style.scss !important（R4）
+ * 色值引用 app 局部 --dc-panel-*（style.scss :root 定义，R4 升变量） */
+:deep(.ant-layout-sider.app-sider) {
+  background-color: var(--dc-panel-sider-bg);
+  color: #fff;
+}
+
 :deep(.ant-menu-dark) {
   background: transparent;
 }
 
 :deep(.ant-menu-dark .ant-menu-item) {
-  color: #a3a3a3;
+  color: var(--dc-panel-menu-text);
 }
 
 :deep(.ant-menu-dark .ant-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.06);
-  color: #ededed;
+  background-color: var(--dc-panel-menu-hover);
+  color: var(--dc-panel-menu-text-hover);
 }
 
 :deep(.ant-menu-dark .ant-menu-item-selected) {
-  background-color: rgba(249, 115, 22, 0.18);
-  color: #fb923c;
+  background-color: var(--dc-panel-menu-selected);
+  color: var(--dc-panel-menu-text-selected);
 }
 
 .logo-text-block {
@@ -198,6 +206,9 @@ function handleLogout() {
   color: var(--ws-text-tertiary);
   margin-top: 2px;
 }
+/* 悬浮触发器（深色 header 内）：hover 用白 6% 透明底 = 深壳语言（同侧栏菜单 hover，
+ * --dc-panel-menu-hover），文字 tertiary → header 亮色；禁用 var(--ws-bg-hover) 浅灰底
+ * （浅灰 #F2F2F2 在深底上突兀——R3 用户反馈；规则见 color-reference §3/§2） */
 .user-trigger {
   display: flex;
   align-items: center;
@@ -205,10 +216,15 @@ function handleLogout() {
   padding: 6px 12px 6px 6px;
   border-radius: var(--ws-radius-lg);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 .user-trigger:hover {
-  background-color: var(--ws-bg-hover);
+  background-color: var(--dc-panel-menu-hover);
+}
+.user-trigger:hover .user-name,
+.user-trigger:hover .user-role,
+.user-trigger:hover .user-caret {
+  color: var(--dc-panel-header-text);
 }
 .user-avatar {
   width: 36px;

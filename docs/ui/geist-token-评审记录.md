@@ -48,3 +48,91 @@
 - Before 基线流程化：下轮新试点页改造前先截图存档。
 - tokens.css 自动生成脚本（与 tokens.ts 同源）—— 当前人工同步 + 7.3 diff 核对。
 - 灰度计划：admin → mcp-admin → shell（实现文档第 6 节），每端一页试点后全量。
+
+---
+
+## R2 · 2026-09-03 · 用户反馈：Selector 用法规范（升格 design.md §2 #10）
+
+> 触发：用户指出灰度管理页（`CanaryCenter.vue`）"环境/模块"使用 `a-select`，违反"选项少且互斥时首选 Tabs/Radio"的判断原则。
+> 性质：**单条规则首次出现即升格** —— R1 试点（视觉层）漏检了"控件选型"这一类判断维度；本条由用户口头反馈直接沉淀。
+
+### 修正记录
+
+| # | 问题描述 | 是否重复 | 可观察行为 | 归属 | 行动 |
+|---|---------|---------|-----------|------|------|
+| 1 | 灰度管理页"环境"用 `a-select`，4 个固定选项互斥单选，宜 `a-tabs` | 新 | 折叠选项增加操作成本；右侧"模块"项同理 | 规则 | 已升格 `design.md` §2 #10（≤4 用 tabs / 5 用 radio / 仅动态或>5 才用 select） |
+| 2 | `ServiceManager.vue` "按类型筛选" 4 个固定类型（backend/frontend/micro-frontend/mini-app）同样用 select | 同 #1 | 黄金参照页亦犯此错 → R1 漏检 | 规则 | 同规则覆盖；整改时一并改 Tabs（按 §6 灰度节奏排期） |
+
+### 观察
+
+- R1 试点验收时聚焦"视觉/Token 收敛"，未覆盖"控件选型"类判断层。下轮灰度评审（R3 起）需把控件选型列入走查清单（§5.3 扩展项）。
+- 灰度管理页"模块"项选项数动态（来自 deploy_deployments 表），按 #10 规则保留 select 合理；评注记录为"观察"不强制改。
+
+---
+
+## R3 · 2026-09-03 · 用户反馈：hover 高亮颜色治理（升格 design.md §2 #11 + 新建 color-reference.md）
+
+> 触发：MainLayout 用户卡（`.user-trigger`）hover 为整块灰底（`--ws-bg-hover` #F2F2F2），浅色 header 上反馈近乎不可见、与圆形头像叠置观感脏。
+> 根因：hover 无分层语义 —— 行/项/trigger/按压共用同一值；且深色侧栏 hover/selected 散写 rgba 裸值（R1 规则 2 的"固定面板色例外"允许了散写，未升具名 token）。
+
+### 修正记录
+
+| # | 问题描述 | 是否重复 | 可观察行为 | 归属 | 行动 |
+|---|---------|---------|-----------|------|------|
+| 1 | 用户卡 hover 整块灰底不优雅（浅底几乎无反馈 + 灰底套圆） | 新 | hover 反馈弱、形态脏 | 规则 | 升格 design.md §2 #11：悬浮触发器类不加整块灰底，用文字加深/阴影微反馈 |
+| 2 | hover 无分层：行/项/trigger/按压共用 `--ws-bg-hover`，无 active 阶梯 | 新 | 无按压态表达 | token | tokens.roles 补 `bgActive`（gray-300：light #EBEBEB / dark 待定稿） |
+| 3 | 深色侧栏 hover/selected 散写 alpha（`rgba(255,255,255,.06)` / `rgba(249,115,22,.18)`）与 `#ededed`/`#a3a3a3` | 新 | grep 裸值可发现 | token | R1 规则 2 例外面板色升具名 token（--panel-item-hover/selected）；扫全仓库同类 |
+| 4 | 头像阴影 `rgba(249,115,22,.25)`、头像渐变（已 token） | 新 | grep 可发现 | token | 阴影 alpha 进 tokens.shadow 或透明引用（已登记 color-reference.md §4） |
+
+### 观察
+
+- R1-5"lint 拦裸色"只覆盖了业务页面，**深色面板/头像等 header 区域例外值未被拦截** → 扩大裸值扫描范围至 layouts/全局组件。
+- 治理结论落 `docs/ui/color-reference.md`（颜色定义点地图）：色值只能出现在 8 类位置，hover 色只有 6 种 Token 来源，不得自行发明深浅。
+
+### 待办（下轮迭代）
+
+- [ ] tokens.roles 补 `bgActive`（light #EBEBEB / dark 值核 gray 阶梯）。
+- [ ] MainLayout 深色侧栏裸值 → 具名 token；用户卡 hover 按 §3 弱反馈整改。
+- [ ] 全仓库裸色扫描（color-reference §5 命令），登记/清理。
+
+---
+
+## R4 · 2026-09-03 · !important 清零 + 外壳色收敛 + bgActive 落地（R3 遗留实操）
+
+> R3 三项待办本轮全部落地；全部改动通过 lint；`!important` CSS 声明清零（grep 验证，仅注释提及）。
+
+### 落地明细
+
+| # | 事项 | 做法 | 验证 |
+|---|---|---|---|
+| 1 | style.scss 4 处 `!important`（.app-sider 背景 / .logo-text / .app-header 背景 + 边框） | Header 背景 → App.vue `Layout.colorBgHeader`（app 侧扩展，共享 antdTheme 保持中性）；Sider 背景 → MainLayout.vue scoped `:deep(.ant-layout-sider.app-sider)` (0,3,0)（**ant-design-vue 4.2.6 实测无 `siderBg` token**）；logo-text/边框提特异去 `!important` | grep 无声明级 !important；lint 0 |
+| 2 | antd-theme `SIDER_BG` #171717 与 style.scss #0F0F12 漂移 | 统一为 #0F0F12（colorBgTrigger 与侧栏同色） | 注释留痕 |
+| 3 | 外壳散写 rgba/hex（menu hover/selected、sider/header 容器、文字） | 升 app 局部变量 `--dc-panel-*`（style.scss `:root`，遵循 css-override §3 app 局部 `--app-*` 规则，不进共享 tokens） | MainLayout scoped 全部改 var 引用 |
+| 4 | tokens.roles 补 `bgActive` | light #EBEBEB（gray-300）/ dark #333333（按压微亮）| tokens.ts ↔ tokens.css 双同步 |
+| 5 | Beehive logo `#001529`/`#F5A623` | 登记 color-reference §4 品牌图标例外（不参与主题） | 保留 |
+
+### 遗留（下轮）
+
+- 用户卡 hover 按 color-reference §3 弱反馈整改（`.user-trigger:hover` 灰底改文字加深 + caret 反馈）——本轮未动 `.user-trigger`，避免与"头像 hover 不优雅"问题混淆，单独一轮做并截图对比。
+- 视觉回归目检：本轮为结构整改（色值全部等价迁移），需 `pnpm dev` 目检确认外壳视觉无回退。
+
+---
+
+## R5 · 2026-09-03 · 用户卡 hover 弱反馈整改（R3 用户反馈闭环）
+
+> R3 用户反馈的"头像 hover 不优雅"最终落点：`.user-trigger:hover` 原用 `--ws-bg-hover`（浅灰 #F2F2F2）铺整块灰底，在 deploy-console **深色 header**（#161618）上突兀刺眼——根因是"浅色面板 hover 色被用在深色外壳的可点击触发器上"（hover 语义错配，color-reference §3 已沉淀该规则）。
+
+### 变更（MainLayout.vue scoped）
+
+- hover 底：`var(--ws-bg-hover)` → `var(--dc-panel-menu-hover)`（白 6% 透明，深壳 hover 语言，与侧栏菜单 hover 同款）。
+- hover 文字：`.user-name/.user-role/.user-caret` tertiary → `var(--dc-panel-header-text)`（#f5f5f5）提亮。
+- transition 补 `color 0.2s`。
+
+### 验证
+
+- lint 0；规则落 color-reference §3（深壳内触发器 hover 参考本节）。
+- 待用户 `pnpm dev` 目检 hover 观感（Before = 浅灰块，After = 白 6% subtle 块 + 文字提亮）。
+
+### 观察
+
+- 本轮顺带确认：header 内所有 hover 触发（用户卡等）应统一用"深壳语言"（--dc-panel-menu-hover 白透明），不可引用随主题的浅色面板 hover（--ws-bg-hover）。已作为 color-reference §3 补充认知，后续 header 内新触发器直接沿用。

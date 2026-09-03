@@ -87,6 +87,7 @@ export const uiTokens = {
       bgElevated: '#FFFFFF', // 弹层 / 下拉
       bgSubtle: '#F2F2F2', // gray-200 表头 / hover / 次级填充
       bgHover: '#F2F2F2',
+      bgActive: '#EBEBEB', // gray-300 按压高亮（R3 补：hover→active 阶梯）
       textPrimary: '#171717', // gray-1000
       textSecondary: '#525252', // gray-800
       textTertiary: '#A3A3A3', // gray-600
@@ -107,6 +108,7 @@ export const uiTokens = {
       bgElevated: '#242424',
       bgSubtle: '#111111',
       bgHover: '#2A2A2A',
+      bgActive: '#333333', // 按压微亮（初值，dark 阶梯待评审微调）
       textPrimary: '#EDEDED',
       textSecondary: '#A3A3A3',
       textTertiary: '#737373',

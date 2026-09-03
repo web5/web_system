@@ -10,7 +10,7 @@ import { uiTokens, type UiThemeMode } from './tokens';
  * - DR：主色 #F97316；圆角保持 4。
  */
 const t = uiTokens;
-const SIDER_BG = '#171717';
+const SIDER_BG = '#0F0F12'; // 侧栏固定深色（R4 统一：原 #171717 与 style.scss 实际 #0F0F12 不一致漂移）
 const BRAND_BG_SOFT = 'rgba(249, 115, 22, 0.12)';
 
 export function antdTheme(mode: UiThemeMode = 'light'): ThemeConfig {
