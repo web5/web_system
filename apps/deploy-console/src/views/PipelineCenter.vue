@@ -162,6 +162,7 @@ const modal = ref({
   rollbackOnFailure: 'previous' as string,
   approval: 'inherit' as string,
   defaultTarget: 'auto' as string,
+  enabled: true,
 })
 const saving = ref(false)
 
@@ -175,6 +176,7 @@ function openCreate() {
     rollbackOnFailure: 'previous',
     approval: 'inherit',
     defaultTarget: 'auto',
+    enabled: true,
   }
 }
 function openEdit(t: PipelineTemplate) {
@@ -187,6 +189,7 @@ function openEdit(t: PipelineTemplate) {
     rollbackOnFailure: t.rollbackOnFailure ?? 'previous',
     approval: t.approval,
     defaultTarget: t.defaultTarget,
+    enabled: t.enabled !== false,
   }
 }
 async function saveTemplate() {
@@ -1158,6 +1161,73 @@ onUnmounted(stopPolling)
         :rows="3"
         :placeholder="review?.action === 'reject' ? '请填写拒绝原因（必填）' : '审批意见（可选）'"
       />
+    </a-modal>
+
+    <!-- 流水线模板编辑弹窗（创建 / 编辑） -->
+    <a-modal
+      :open="modal.open"
+      :title="modal.editing ? '编辑流水线' : '+ 新建流水线'"
+      :confirm-loading="saving"
+      :width="720"
+      :ok-text="modal.editing ? '保存' : '创建'"
+      @ok="saveTemplate"
+      @cancel="modal.open = false"
+    >
+      <a-form layout="vertical">
+        <a-row :gutter="12">
+          <a-col :span="12">
+            <a-form-item label="流水线名" required>
+              <a-input v-model:value="modal.name" placeholder="例如：灰度专用" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="启用">
+              <a-switch v-model:checked="modal.enabled" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item label="说明">
+          <a-input v-model:value="modal.description" placeholder="选填：流水线用途/特性简述" />
+        </a-form-item>
+        <a-form-item label="活动步骤（未勾选的步骤会被跳过）">
+          <a-checkbox-group v-model:value="modal.steps">
+            <a-checkbox v-for="s in TPL_ALL_KEYS" :key="s" :value="s">
+              {{ STEP_LABELS[s] }}
+            </a-checkbox>
+          </a-checkbox-group>
+        </a-form-item>
+        <a-row :gutter="12">
+          <a-col :span="8">
+            <a-form-item label="探活失败">
+              <a-radio-group v-model:value="modal.rollbackOnFailure">
+                <a-radio value="previous">自动回滚</a-radio>
+                <a-radio value="none">不回滚</a-radio>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+          <a-col :span="8">
+            <a-form-item label="审批">
+              <a-radio-group v-model:value="modal.approval">
+                <a-radio value="inherit">继承环境</a-radio>
+                <a-radio value="always">始终</a-radio>
+                <a-radio value="never">免审</a-radio>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+          <a-col :span="8">
+            <a-form-item label="投递目标">
+              <a-radio-group v-model:value="modal.defaultTarget">
+                <a-radio value="auto">自动</a-radio>
+                <a-radio value="local">本机</a-radio>
+                <a-radio value="remote">远程</a-radio>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <div v-if="modal.editing" style="color: #999; font-size: 12px; border-top: 1px dashed #eee; padding-top: 8px;">
+          注意：步骤顺序由代码固定；本弹窗只控制「活动步骤」开关。回滚/审批/投递在新建后仍可在流水线详情页查看其默认行为。
+        </div>
+      </a-form>
     </a-modal>
   </div>
 
