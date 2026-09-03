@@ -201,8 +201,10 @@ const handleLogout = async () => {
 .sider { overflow: auto; position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; }
 .sider-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 16px;
+  height: 56px;
+  background: var(--header-bg);
+  border-bottom: none;
 }
 .sider-logo {
   display: flex; align-items: center; gap: 10px;
