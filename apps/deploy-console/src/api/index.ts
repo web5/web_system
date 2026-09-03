@@ -641,6 +641,32 @@ export const stageCommandApi = {
     }>,
   template: (type: string) =>
     http.get('/modules/stage-commands/templates', { params: { type } }) as Promise<string | null>,
+  /**
+   * 流水线脚本视图（ModuleDetail「发布脚本」Tab / PipelineDetail 实例步骤展开使用）。
+   *
+   * 合并展示：
+   *  - 模块已配置 shell → source=configured（含原文 + 编辑人 + 时间）
+   *  - 未配置走流程内置 → source=builtin（含「pipeline 内置做什么」说明）
+   *  - 必填阶段未配置 → source=required-unset（提示「发布将失败」）
+   *  - 语义真相源（version/pointer） → source=semantic（不可改）
+   *
+   * 单一真相源仍是 `deploy_module_stage_commands` 表；该端点合并 + 加视图，不写库。
+   */
+  scriptView: (key: string) =>
+    http.get(`/modules/${key}/pipeline-script-view`) as Promise<
+      {
+        stage: string
+        source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
+        command: string | null
+        enabled: boolean
+        timeoutSec: number | null
+        updatedAt: string | null
+        updatedBy: string | null
+        title: string
+        builtin: string
+        commandMode: 'base' | 'required' | 'override' | 'none'
+      }[]
+    >,
 }
 
 /**

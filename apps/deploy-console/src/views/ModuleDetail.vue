@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { moduleApi, deployApi, environmentApi, serverApi } from '@/api'
+import { moduleApi, deployApi, environmentApi, serverApi, stageCommandApi } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,13 +24,84 @@ const TYPE_LABELS: Record<string, string> = {
   'mini-app': '小程序',
 }
 
+const SOURCE_LABELS: Record<string, { label: string; color: string; tip: string }> = {
+  // 模块已配置 shell（真相源在 DB）
+  configured: { label: '模块脚本', color: 'blue', tip: '本模块在「阶段命令」表中自定义了 shell，发布时执行' },
+  // 流程内置兜底（未配置）
+  builtin: { label: '流程内置', color: 'default', tip: '未配置 shell，将由流水线内置逻辑兜底' },
+  // 必填阶段未配置（=发布终止）
+  'required-unset': {
+    label: '必填·未配置',
+    color: 'red',
+    tip: 'build 阶段必须配置 shell，未配置 = 发布立即终止',
+  },
+  // 语义真相源（不允许用户改）
+  semantic: { label: '语义真相源', color: 'purple', tip: '由流水线固定执行（version/pointer），不允许改' },
+}
+
 // 后端模块 → 后台 tab，前端模块 → 前端 tab
 const showBackendTab = computed(() => moduleInfo.value?.type === 'backend')
 const showFrontendTab = computed(() =>
   ['frontend', 'micro-frontend', 'mini-app'].includes(moduleInfo.value?.type),
 )
+// 所有可发布模块（backend/frontend/micro-frontend）都展示「发布脚本」Tab
+const showScriptTab = computed(() =>
+  ['backend', 'frontend', 'micro-frontend'].includes(moduleInfo.value?.type),
+)
 // 默认激活的 tab
 const activeTab = ref<string>('')
+
+// 默认展开哪几个阶段：build/release/verify 等常调的核心阶段默认展开，让运维不用挨个点
+const expandedStages = ref<Record<string, boolean>>({})
+function toggleStep(stage: string) {
+  expandedStages.value[stage] = !expandedStages.value[stage]
+}
+
+// ===== 发布脚本（9 阶段流水线视图） =====
+type ScriptViewItem = {
+  stage: string
+  source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
+  command: string | null
+  enabled: boolean
+  timeoutSec: number | null
+  updatedAt: string | null
+  updatedBy: string | null
+  title: string
+  builtin: string
+  commandMode: 'base' | 'required' | 'override' | 'none'
+}
+const scriptView = ref<ScriptViewItem[]>([])
+const scriptLoading = ref(false)
+async function loadScriptView() {
+  if (!showScriptTab.value) return
+  scriptLoading.value = true
+  try {
+    scriptView.value = await stageCommandApi.scriptView(moduleKey.value)
+    // 默认展开核心阶段（build/pull/verify）；让运维一进 Tab 就能看到「最重要的命令」
+    // 而不必挨个点击。其余阶段按需展开。
+    expandedStages.value = {
+      pull: true,
+      build: true,
+      verify: true,
+      cleanup: true,
+    }
+  } catch {
+    // 静默：脚本视图是只读辅助，挂了不阻断模块详情
+  } finally {
+    scriptLoading.value = false
+  }
+}
+function copyCmd(cmd: string) {
+  // navigator.clipboard 在 https/local 才可用；可用范围外回退提示
+  if (navigator.clipboard) {
+    navigator.clipboard
+      .writeText(cmd)
+      .then(() => message.success('已复制'))
+      .catch(() => message.warning('复制失败，请手动选择'))
+  } else {
+    message.warning('当前环境不支持剪贴板，请手动选择')
+  }
+}
 
 async function loadModule() {
   moduleLoading.value = true
@@ -153,6 +224,8 @@ onMounted(async () => {
   await loadModule()
   await loadServiceEnv()
   await loadDeployments()
+  // 脚本视图：依赖 moduleInfo.type（决定 showScriptTab），故放最后加载
+  await loadScriptView()
 })
 </script>
 
@@ -347,7 +420,97 @@ onMounted(async () => {
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
 
         <!-- 阶段命令 tab（每模块每阶段一条 shell，DB 为唯一真相源） -->
-        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
+        <!--
+          「发布脚本」Tab：展示本模块 9 阶段实际命令——
+            - 已配置 = 显示 shell（可复制）+ 模块脚本标记
+            - 未配置走流程内置 = 显示 builtin 说明 + 流程内置标记
+            - build 必填未配置 = 红色「必填·未配置」（发布将失败）
+            - version/pointer = 紫色「语义真相源」（不可改）
+          让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
+        -->
+        <a-tab-pane v-if="showScriptTab" key="script" tab="发布脚本">
+          <a-spin :spinning="scriptLoading">
+            <a-alert
+              type="info"
+              show-icon
+              style="margin-bottom: 12px;"
+              message="发布流水线 9 阶段，每阶段要么由模块自定义（脚本在「模块脚本」列），要么由流水线内置逻辑兜底。点击展开看命令原文或内置说明。"
+            />
+            <a-empty
+              v-if="!scriptLoading && scriptView.length === 0"
+              description="暂无脚本视图"
+            />
+            <div v-else>
+              <div
+                v-for="item in scriptView"
+                :key="item.stage"
+                style="border: 1px solid #f0f0f0; border-radius: 6px; margin-bottom: 10px; background: #fff;"
+              >
+                <!-- 阶段标题行：序号 / 阶段 / 来源标签 -->
+                <div
+                  style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; cursor: pointer; background: #fafafa; border-radius: 6px 6px 0 0;"
+                  @click="toggleStep(item.stage)"
+                >
+                  <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                    <span style="color: #999; font-family: monospace; font-size: 12px;">{{ item.stage }}</span>
+                    <span style="font-weight: 600;">{{ item.title }}</span>
+                    <a-tooltip :title="SOURCE_LABELS[item.source]?.tip || ''">
+                      <a-tag :color="SOURCE_LABELS[item.source]?.color || 'default'" style="margin-right: 0;">
+                        {{ SOURCE_LABELS[item.source]?.label || item.source }}
+                      </a-tag>
+                    </a-tooltip>
+                    <span
+                      v-if="item.source === 'required-unset'"
+                      style="color: #cf1322; font-size: 12px;"
+                    >⚠ 发布时将立即终止</span>
+                  </div>
+                  <a-space>
+                    <a-tag v-if="item.timeoutSec" color="cyan">超时 {{ item.timeoutSec }}s</a-tag>
+                    <span style="color: #999; font-size: 12px;" v-if="item.updatedBy">
+                      最近编辑：{{ item.updatedBy }}
+                    </span>
+                  </a-space>
+                </div>
+                <!-- 展开区：命令原文 / 内置说明 -->
+                <div
+                  v-show="expandedStages[item.stage]"
+                  style="padding: 12px; border-top: 1px solid #f0f0f0;"
+                >
+                  <template v-if="item.source === 'configured' && item.command">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <span style="font-size: 12px; color: #999;">shell 命令（DB 真相源）</span>
+                      <a-button size="small" type="link" @click="copyCmd(item.command)">复制</a-button>
+                    </div>
+                    <pre
+                      style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
+                             font-family: monospace; font-size: 12px; white-space: pre-wrap;
+                             max-height: 320px; overflow: auto; margin: 0;"
+                    >{{ item.command }}</pre>
+                    <div v-if="item.builtin" style="margin-top: 8px; color: #666; font-size: 12px;">
+                      <span style="color: #999;">叠加流程内置：</span>{{ item.builtin }}
+                    </div>
+                  </template>
+                  <template v-else-if="item.source === 'required-unset'">
+                    <a-alert
+                      type="error"
+                      show-icon
+                      :message="item.builtin"
+                    />
+                  </template>
+                  <template v-else>
+                    <a-alert
+                      :type="item.source === 'semantic' ? 'warning' : 'info'"
+                      show-icon
+                      :message="item.builtin"
+                    />
+                  </template>
+                </div>
+              </div>
+            </div>
+          </a-spin>
+        </a-tab-pane>
+
+        <a-empty v-if="!showBackendTab && !showFrontendTab && !showScriptTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
     </a-card>
 

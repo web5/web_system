@@ -7,6 +7,7 @@ import {
   environmentApi,
   deployApi,
   pipelineTemplateApi,
+  stageCommandApi,
   type PipelineItem,
   type PipelineTemplate,
 } from '@/api'
@@ -238,6 +239,41 @@ function showLogs(p: PipelineItem) {
   logVisible.value = true
 }
 
+// ===== 阶段命令查看（点击步骤标签打开） =====
+// 拉取模块「发布脚本」视图；点击步骤标签弹出该阶段的命令/内置说明。
+//
+// 此处展示的是模块**当前**配置的命令，而非执行时实际下发的快照；
+// 真实下发命令还可通过日志中 `[stage] $ ...` 行回溯，二者结合即可定位。
+const scriptViewMap = ref<Record<string, any[]>>({})
+const cmdModalOpen = ref(false)
+const cmdModalStage = ref('')
+const cmdModalItem = ref<any>(null)
+async function ensureScriptView(moduleKey: string) {
+  if (!moduleKey || scriptViewMap.value[moduleKey]) return
+  try {
+    scriptViewMap.value[moduleKey] = await stageCommandApi.scriptView(moduleKey)
+  } catch {
+    scriptViewMap.value[moduleKey] = []
+  }
+}
+async function openStageCmd(record: PipelineItem, stage: string) {
+  await ensureScriptView(record.moduleKey)
+  const list = scriptViewMap.value[record.moduleKey] || []
+  cmdModalItem.value = list.find((it: any) => it.stage === stage) ?? null
+  cmdModalStage.value = stage
+  cmdModalOpen.value = true
+}
+function copyCmd(cmd: string) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(cmd).then(
+      () => message.success('已复制'),
+      () => message.warning('复制失败，请手动选择'),
+    )
+  } else {
+    message.warning('当前环境不支持剪贴板，请手动选择')
+  }
+}
+
 // ===== 立即发布（按当前流水线提交新实例） =====
 const releaseOpen = ref(false)
 const submitting = ref(false)
@@ -414,13 +450,15 @@ onUnmounted(stopPolling)
                 <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
                   执行步骤（{{ stepList(latest).length }} 步）
                   <a-tag v-if="latest.rollbackOnFailure === 'none'" style="margin-left: 4px;">失败不回滚</a-tag>
+                  <a-tag color="cyan" style="margin-left: 4px;">点击标签查看命令</a-tag>
                 </div>
                 <a-space wrap :size="6">
                   <a-tag
                     v-for="s in stepList(latest)"
                     :key="s"
                     :color="STEP_COLORS[stepState(latest, s)]"
-                    style="margin-right: 0;"
+                    style="margin-right: 0; cursor: pointer;"
+                    @click="openStageCmd(latest, s)"
                   >
                     {{ STEP_LABELS[s] || s }}
                   </a-tag>
@@ -605,13 +643,15 @@ onUnmounted(stopPolling)
         <div style="margin-bottom: 12px;">
           <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
             执行步骤（{{ stepList(logRecord).length }} 步）
+            <a-tag color="cyan" style="margin-left: 6px;">点击查看命令</a-tag>
           </div>
           <a-space wrap :size="6">
             <a-tag
               v-for="s in stepList(logRecord)"
               :key="s"
               :color="STEP_COLORS[stepState(logRecord, s)]"
-              style="margin-right: 0;"
+              style="margin-right: 0; cursor: pointer;"
+              @click="openStageCmd(logRecord, s)"
             >
               {{ STEP_LABELS[s] || s }}
             </a-tag>
@@ -688,6 +728,55 @@ onUnmounted(stopPolling)
           message="发布到生产环境将进入审批流程，审批通过后才执行。"
         />
       </a-form>
+    </a-modal>
+
+    <!-- 阶段命令查看 modal（点击步骤标签触发） -->
+    <a-modal
+      v-model:open="cmdModalOpen"
+      :title="`阶段命令：${cmdModalItem?.title || cmdModalStage}`"
+      :footer="null"
+      :width="720"
+    >
+      <template v-if="cmdModalItem">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+          <span style="color: #999; font-family: monospace;">{{ cmdModalItem.stage }}</span>
+          <a-tag v-if="cmdModalItem.source === 'configured'" color="blue">模块脚本</a-tag>
+          <a-tag v-else-if="cmdModalItem.source === 'required-unset'" color="red">必填·未配置</a-tag>
+          <a-tag v-else-if="cmdModalItem.source === 'semantic'" color="purple">语义真相源</a-tag>
+          <a-tag v-else color="default">流程内置</a-tag>
+          <a-tag v-if="cmdModalItem.timeoutSec" color="cyan">
+            超时 {{ cmdModalItem.timeoutSec }}s
+          </a-tag>
+        </div>
+
+        <template v-if="cmdModalItem.source === 'configured' && cmdModalItem.command">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 12px; color: #999;">shell 命令（DB 真相源）</span>
+            <a-button size="small" type="link" @click="copyCmd(cmdModalItem.command)">复制</a-button>
+          </div>
+          <pre
+            style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
+                   font-family: monospace; font-size: 12px; white-space: pre-wrap;
+                   max-height: 360px; overflow: auto; margin: 0;"
+          >{{ cmdModalItem.command }}</pre>
+          <div v-if="cmdModalItem.builtin" style="margin-top: 8px; color: #666; font-size: 12px;">
+            <span style="color: #999;">叠加流程内置：</span>{{ cmdModalItem.builtin }}
+          </div>
+        </template>
+
+        <a-alert
+          v-else-if="cmdModalItem.source === 'required-unset'"
+          type="error"
+          show-icon
+          :message="cmdModalItem.builtin"
+        />
+        <a-alert
+          v-else
+          :type="cmdModalItem.source === 'semantic' ? 'warning' : 'info'"
+          show-icon
+          :message="cmdModalItem.builtin"
+        />
+      </template>
     </a-modal>
   </div>
 </template>
