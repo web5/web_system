@@ -2,17 +2,18 @@
   <a-layout class="layout">
     <!-- 左侧菜单 -->
     <a-layout-sider v-model:collapsed="collapsed" :collapsedWidth="80" class="sider" width="220">
-      <div class="sider-header">
-        <div class="sider-logo" @click="router.push('/dashboard')">
-          <img src="/logo.svg" alt="科豆 AI" class="sider-logo-img" width="28" height="15" />
-          <span v-if="!collapsed" class="logo-text">科豆 AI</span>
-        </div>
-        <button class="collapse-toggle" :title="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
-          <MenuFoldOutlined v-if="!collapsed" />
-          <MenuUnfoldOutlined v-else />
-        </button>
+    <div class="sider-header">
+      <div class="sider-logo" @click="router.push('/dashboard')">
+        <img src="/logo.svg" alt="科豆 AI" class="sider-logo-img" width="28" height="15" />
+        <span v-if="!collapsed" class="logo-text">科豆 AI</span>
       </div>
-      <a-menu v-model:selectedKeys="selectedKeys" :theme="themeStore.isDark ? 'dark' : 'light'" mode="inline" @click="handleMenuClick">
+      <button class="collapse-toggle" :title="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
+        <MenuFoldOutlined v-if="!collapsed" />
+        <MenuUnfoldOutlined v-else />
+      </button>
+    </div>
+    <div class="sider-body">
+    <a-menu v-model:selectedKeys="selectedKeys" :theme="themeStore.isDark ? 'dark' : 'light'" mode="inline" @click="handleMenuClick">
         <a-menu-item key="dashboard">
           <template #icon><DashboardOutlined /></template>
           <span>工作台</span>
@@ -54,11 +55,12 @@
           </a-menu-item>
         </a-sub-menu>
       </a-menu>
+      </div>
     </a-layout-sider>
 
     <a-layout>
       <!-- 顶栏 -->
-      <a-layout-header class="top-header" :style="{ marginLeft: collapsed ? '104px' : '244px' }">
+      <a-layout-header class="top-header">
         <div class="header-left">
           <a-breadcrumb>
             <a-breadcrumb-item>
@@ -108,11 +110,11 @@
       </a-layout-header>
 
       <!-- 内容区 -->
-      <a-layout-content class="content" :style="{ marginLeft: collapsed ? '104px' : '244px' }">
+      <a-layout-content class="content">
         <router-view />
       </a-layout-content>
 
-      <a-layout-footer class="footer" :style="{ marginLeft: collapsed ? '104px' : '244px' }">
+      <a-layout-footer class="footer">
         <div class="footer-inner">
           <div class="footer-brand">
             <img src="/logo.svg" alt="科豆 AI" width="20" height="10" />
@@ -198,7 +200,13 @@ const handleLogout = async () => {
 <style scoped>
 .layout { min-height: 100vh; }
 
-.sider { overflow: auto; position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; }
+/* 布局结构（2026-09-03 重构）：sider 参与流（非 fixed），右侧列自动从 sider 右缘无缝开始，
+ * 消除原"fixed sider + marginLeft 244"造成的 24px 顶部/内容切口 */
+.sider {
+  position: sticky; top: 0; height: 100vh; z-index: 10;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sider-body { flex: 1; overflow-y: auto; }
 .sider-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px;
@@ -294,12 +302,12 @@ const handleLogout = async () => {
   background: transparent; min-height: calc(100vh - 56px - 92px);
 }
 .footer {
-  padding: 0 16px 24px;
+  padding: 0;
   background: transparent !important;
 }
 .footer-inner {
+  max-width: 1440px; margin: 0 auto; padding: 16px 16px 24px;
   border-top: 1px solid var(--border-divider);
-  padding-top: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .footer-brand {
