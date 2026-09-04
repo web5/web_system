@@ -536,10 +536,16 @@ onMounted(loadTables);
 .db-mode-tabs {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
-/* 把确定高度从 a-tabs 透传进 tabpane，否则 tabpane 默认按内容撑高 */
+/* 把确定高度从 a-tabs 透传进 tabpane：
+ * .ant-tabs 是 flex column，nav 占自身高度，content-holder 用 flex:1 占「剩余」高度；
+ * 不能给 content-holder height:100%，否则它位于 nav 之后还要 100% 整高，
+ * 会让面板底部溢出被裁，造成底部边框缺失（边框显示不完整） */
 .db-mode-tabs :deep(.ant-tabs-content-holder) {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 .db-mode-tabs :deep(.ant-tabs-content) {
   height: 100%;
