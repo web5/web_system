@@ -10,7 +10,8 @@ export type StreamEventType =
   | 'skill_load'
   | 'summary'
   | 'final'
-  | 'error';
+  | 'error'
+  | 'permission_request';
 
 export interface StreamEvent {
   type: StreamEventType;
@@ -19,6 +20,11 @@ export interface StreamEvent {
   args?: unknown;
   step?: number;
   conversationId?: string;
+  /**
+   * permission_request 专用：确认请求 id。
+   * 客户端据此调用确认接口（approve/reject），服务端挂起工具执行直到确认。
+   */
+  requestId?: string;
   /** 本轮对话累计的 token 消耗（final/error 事件携带，来自大模型返回的 usage） */
   usage?: {
     promptTokens: number;

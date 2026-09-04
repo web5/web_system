@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Param,
   Res,
   Req,
   UseGuards,
@@ -17,6 +18,7 @@ import { AgentRunDto } from './dto/agent-run.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionGuard, RequirePermission } from '@web-system/shared';
 import { AgentRunPusher } from './agent-run-pusher';
+import { PermissionBroker } from './permission-broker';
 
 @ApiTags('AI Agent')
 @Controller('agent')
@@ -29,6 +31,7 @@ export class AgentController {
     private readonly agentRegistry: AgentRegistry,
     private readonly runPusher: AgentRunPusher,
     private readonly clientRegistry: ClientRegistry,
+    private readonly permissionBroker: PermissionBroker,
   ) {}
 
   /** Agent 运行（C 端，SSE 流式，含工具调用过程） */
@@ -57,6 +60,27 @@ export class AgentController {
   @ApiOperation({ summary: '列出已注册的可用模型' })
   listModels() {
     return { models: this.clientRegistry.listModels() };
+  }
+
+  /**
+   * 权限确认：前端弹窗后调用（approve=true 允许 / false 拒绝）。
+   * 只用 AuthGuard（登录即可），因为 C 端业务用户也需要确认自己触发的高危操作；
+   * 由 PermissionBroker 校验确认者 userId 与发起 run 的用户一致，防止越权替他人确认。
+   */
+  @Post('permission/:requestId')
+  @ApiOperation({ summary: '确认/拒绝 Agent 工具执行的权限请求' })
+  async resolvePermission(
+    @Param('requestId') requestId: string,
+    @Body() body: { approve?: boolean },
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const userId = String(user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    const ok = this.permissionBroker.resolve(requestId, userId, body.approve === true);
+    return { ok };
   }
 
   /** 共用运行逻辑（SSE 流式 + 步骤收集 + 异步落库） */
@@ -97,6 +121,18 @@ export class AgentController {
     }
 
     try {
+      // 权限确认器：工具遇到高危操作时，把 permission_request 事件写入 SSE 流并挂起，
+      // 等待前端通过 POST /agent/permission/:requestId 确认（60s 超时自动拒绝）
+      const confirmHandler = async (message: string): Promise<boolean> => {
+        return new Promise<boolean>((resolve) => {
+          const requestId = this.permissionBroker.register(userId, resolve);
+          res.write(
+            `data: ${JSON.stringify({ type: 'permission_request', requestId, content: message })}\n\n`,
+          );
+          setTimeout(() => this.permissionBroker.rejectTimeout(requestId), 60_000);
+        });
+      };
+
       const stream = this.agentRunner.stream(
         {
           agentId: dto.agentId,
@@ -106,6 +142,7 @@ export class AgentController {
           model: dto.model,
         },
         userId,
+        confirmHandler,
       );
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {

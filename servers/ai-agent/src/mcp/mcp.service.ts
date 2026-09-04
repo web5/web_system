@@ -21,6 +21,8 @@ export interface McpToolRuntimeConfig {
   maxWaitMs?: number;
   /** 轮询间隔（毫秒），默认 3000 */
   intervalMs?: number;
+  /** 是否写操作（发布/回滚/删除等）——执行前需权限确认（走 ctx.confirm） */
+  requiresConfirm?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -73,9 +75,11 @@ export class McpService {
     const executor = {
       execute: (m: McpToolMeta, args: Record<string, unknown>) => this.callMcpTool(m, args, timeoutMs),
     };
+    // 写操作标记合并进 meta，使 McpToolAdapter 执行前走权限确认
+    const finalMeta: McpToolMeta = config?.requiresConfirm ? { ...meta, requiresConfirm: true } : meta;
 
     toolRegistry.registerLazy(meta.name, () => {
-      const adapter = new McpToolAdapter(meta, executor);
+      const adapter = new McpToolAdapter(finalMeta, executor);
       if (!config?.longRunning) return adapter;
       return withLongRunning(adapter, {
         fetchStatus: (jobId: string) => this.fetchJobStatus(jobId, timeoutMs),

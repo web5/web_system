@@ -212,7 +212,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, nextTick, watch, reactive } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import { listAgentDefs, type AgentDef } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
 
@@ -662,8 +662,49 @@ function handleEvent(ev: any) {
       scrollToBottom();
       break;
     }
+    case 'permission_request': {
+      // 高危操作权限确认：弹窗 + 调确认接口（非阻塞，不卡 SSE 流循环）
+      void handlePermissionRequest(ev);
+      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
+      break;
+    }
     default:
       events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
+  }
+}
+
+/**
+ * 权限确认：弹确认框，用户允许/拒绝后调后端确认接口。
+ * 服务端在工具执行处挂起等待，60s 超时自动拒绝。
+ */
+async function handlePermissionRequest(ev: any) {
+  const requestId = ev.requestId;
+  if (!requestId) return;
+  let approve = false;
+  try {
+    approve = await new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title: 'Agent 请求执行高危操作',
+        content: ev.content || '该操作需要你的确认',
+        okText: '允许',
+        cancelText: '拒绝',
+        okType: 'danger',
+        width: 520,
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+  } catch {
+    approve = false;
+  }
+  try {
+    await fetch(`/api/ai-agent/agent/permission/${requestId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userStore.token}` },
+      body: JSON.stringify({ approve }),
+    });
+  } catch {
+    // 确认接口失败：服务端 60s 超时自动拒绝，无需额外处理
   }
 }
 
