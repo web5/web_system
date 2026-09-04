@@ -81,7 +81,8 @@ import { ref, watch, onMounted } from 'vue';
 import { listMcpModules, type CapabilityRef, type McpModuleItem } from '@/api/agent-defs';
 import { listSkills, type SkillItem } from '@/api/skills';
 
-const props = defineProps<{ capabilities: CapabilityRef[] }>();
+// capabilities 可为空（新建 Agent 时表单尚未初始化），内部以 props.capabilities || [] 兜底
+const props = defineProps<{ capabilities?: CapabilityRef[] }>();
 const emit = defineEmits<{
   (e: 'update:capabilities', v: CapabilityRef[]): void;
 }>();

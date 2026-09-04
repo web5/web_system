@@ -224,12 +224,15 @@ export class PermissionService implements OnModuleInit {
   // ──────────────────────── 权限解析 ────────────────────────
 
   /**
-   * 当前登录用户权限码（admin 特判全量）
-   * @param user req.user（auth-service verify 返回，含 roles）
+   * 当前登录用户权限码
+   * - super_admin：代码级特判全量（不依赖 role_permissions 表，避免 seed 时序差异）
+   * - 其余角色（含 admin/editor/viewer/自定义）：按 role_permissions 表解析；
+   *   admin 的内置权限由 seed 覆盖为 ROLE_PERMISSIONS.admin（不含 database:query），
+   *   与各服务 PermissionsGuard 的常量语义保持一致
    */
   async getMyPermissions(user: { roles?: string[] }): Promise<string[]> {
     const roles = user?.roles?.length ? user.roles : [];
-    if (roles.includes('admin')) return Object.keys(PERMISSIONS);
+    if (roles.includes('super_admin')) return Object.keys(PERMISSIONS);
     return this.getPermissionsForRoles(roles);
   }
 
