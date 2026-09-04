@@ -29,6 +29,7 @@ import { DbConversationMemory } from './memory/db-conversation-memory';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
+import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
 import { AgentSkillProvider } from '../skill/agent-skill-provider';
 
@@ -136,6 +137,7 @@ const runnerProvider: Provider = {
     DbConversationMemory,
     AgentRunPusher,
     AgentDefSyncService,
+    PermissionBroker,
     // 合同风险场景特有
     ContractRuleTool,
     ContractIrrTool,
