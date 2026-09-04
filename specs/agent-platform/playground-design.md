@@ -1,6 +1,6 @@
 # Agent Playground 对话界面 · 技术方案 Review
 
-> 写于 2026-09-04，过去 4 小时内对 Playground 做了多轮小修（加来源标签、过程卡片、loading dots 等），暴露了底层架构问题。本文档**整体重审**对话流方案，给出稳的新架构，避免再反复修改。
+> 写于 2026-09-04。过去 4 小时内对 Playground 做了多轮小修（加来源标签、过程卡片、loading dots 等），暴露了底层架构问题。本文档**整体重审**对话流方案，并**融合 ACP（Agent Client Protocol）风格**的协议设计，给出稳的新架构，避免再反复修改。
 
 ---
 
@@ -20,10 +20,10 @@ currentAssistant.content += ev.content;  // ← 改的是原对象，不触发�
 
 Vue 3 `ref<Msg[]>` 内部用 reactive 包装，但 `array[i]` **第一次访问才**返回 reactive(obj) proxy。原对象引用 `currentAssistant` 不会自动 reactive 化，修改它**永远不会**触发响应。
 
-**修法**：push 后**必须**用 `messages.value[i]` 重新指向 reactive proxy。
+**修法**：push 后**必须**用 `messages.value[i]` 重新指向 reactive proxy。（已完成止血，最终方案见 2.3）
 
 ### 1.2 【中】状态机分散
-当前用了 5 个独立的状态字段：
+当前用了 5+ 个独立的状态字段：
 
 | 字段 | 用途 | 位置 |
 |------|------|------|
@@ -60,13 +60,13 @@ Vue 3 `ref<Msg[]>` 内部用 reactive 包装，但 `array[i]` **第一次访问�
 - `3717a17` 加来源标签（tool / direct）
 - `64f4c4a` 过程卡片化（tool_call/result 不再当消息）
 - `2b36cdd` typing-dots loading
-- 本次 `2b36cdd+` reactive proxy 修复
+- `c9e1c58` reactive proxy 修复
 
 **每个 commit 都是"局部 patch"，没有动底层数据模型**。这种"补丁式演进"会越改越脆——下次再出问题（并发、删除、断网重连）还是修不干净。
 
 ---
 
-## 二、推荐新架构（消息驱动 + 状态机）
+## 二、推荐新架构（消息驱动 + 状态机 + ACP 风格协议）
 
 ### 2.1 核心改动：单真相源 + 显式状态机
 
@@ -80,6 +80,8 @@ interface Msg {
   ts: number;
   /** 显式状态机，替代 streaming + type:error 两个字段 */
   status: MsgStatus;
+  /** 客户端消息 id（ACP 风格路由，见 2.6） */
+  clientMsgId?: string;
   /** 回答来源（仅 status='done' 时有效） */
   source?: 'tool' | 'direct';
   /** 错误信息（仅 status='error' 时） */
@@ -99,11 +101,11 @@ interface Msg {
 ```ts
 // 替代 currentAssistant 全局变量
 function findStreamingAssistant(): Msg | undefined {
-  return [...messages.value].reverse().find(m => m.role === 'assistant' && m.status === 'streaming');
+  return [...messages].reverse().find(m => m.role === 'assistant' && m.status === 'streaming');
 }
 
 // handleEvent 不再持有 currentAssistant
-function handleEvent(ev: any) {
+function handleEvent(ev: AgentEvent) {
   const cur = findStreamingAssistant();
   switch (ev.type) {
     case 'content_delta':
@@ -126,7 +128,7 @@ function handleEvent(ev: any) {
 
 ### 2.3 reactive 化整个数组
 
-把 ref 数组改成 reactive 数组，**消除** push-后-重指的心智负担：
+把 ref 数组改成 reactive 数组，**根除** push-后-重指的心智负担：
 
 ```ts
 // 改前
@@ -172,17 +174,85 @@ msg.processes.push({ procType: 'tool_call', ... });
 </template>
 ```
 
+### 2.6 协议层设计（ACP 风格）
+
+不直接引入 ACP 依赖（它仍处 `0.x`、以 stdio 为主），但吸收它三个核心思想，把 SSE 事件协议一次定到位。
+
+#### 2.6.1 事件三分类
+
+ACP 把消息分 `request / response / notification` 三类，映射到我们：
+
+| ACP 分类 | 语义 | 映射到我们的实现 |
+|---------|------|------------------|
+| `request` | 客户端→Agent（带 id，期望响应） | `POST /agent/admin-run` 的 body（`userInput` + `clientMsgId`） |
+| `response` | Agent→客户端（关联 request id） | `content_delta` / `tool_call` / `tool_result` / `skill_load` / `final` / `error` |
+| `notification` | Agent→客户端（单向，无 id） | `progress` / `status` / `reasoning`（预留） |
+
+#### 2.6.2 显式消息 id 路由（治 1.4「事件路由脆弱」）
+
+```ts
+// 客户端 send() 生成稳定 id，随请求下发
+const clientMsgId = crypto.randomUUID();
+fetch('/api/ai-agent/agent/admin-run', {
+  body: JSON.stringify({ userInput, clientMsgId, conversationId, ... })
+});
+
+// 后端 SSE 每个事件透传 clientMsgId
+interface AgentEvent {
+  kind: 'response' | 'notification';
+  type: 'content_delta' | 'tool_call' | 'tool_result' | 'skill_load' | 'final' | 'error' | 'progress' | 'status';
+  clientMsgId: string;   // 关键：路由到具体 assistant 消息
+  conversationId?: string;
+  step?: number;
+  content?: string;
+  name?: string;
+  args?: unknown;
+}
+
+// 前端路由：从 findStreamingAssistant() 升级为精确命中
+function handleEvent(ev: AgentEvent) {
+  const msg = messages.find(m => m.clientMsgId === ev.clientMsgId);
+  // ...
+}
+```
+
+**好处**：并发 SSE 流（未来）天然支持；断线重连、多轮对话不串。
+
+#### 2.6.3 权限协商（预留 schema，本期不实现）
+
+ACP 的 `permission_request`：Agent 执行高危动作前，请求客户端批准。
+
+```ts
+// 预留事件位（schema 先定，本期不接）
+interface PermissionEvent {
+  kind: 'notification';
+  type: 'permission_request';
+  clientMsgId: string;
+  toolName: string;      // 如 'mcp_gateway.exec_sql'
+  reason: string;
+  // 客户端可回：approve / reject
+}
+```
+
+对应 RBAC 演进：现在 RBAC 管「谁能用 admin」，未来加「Agent 运行时调哪些高危工具需人审」。
+
+#### 2.6.4 与后端的关系（本次范围边界）
+
+- **本期必做**（前端）：状态机 + 消息驱动 + reactive 数组，**不改后端也能完成**，用 `findStreamingAssistant()` 兜底路由。
+- **本期可选**（后端，小改）：`agent/admin-run` 接收可选 `clientMsgId` 并透传到 SSE 事件，前端切换为精确 id 路由。
+- **预留**：`permission_request` / `reasoning` / `progress` 事件位（schema 留好，不实现）。
+
 ---
 
 ## 三、迁移路径
 
-### 阶段一：紧急止血（已做）
-修 reactive proxy 引用坑，AI 回答能正常显示。
+### 阶段一：紧急止血（已完成）
+修 reactive proxy 引用坑，AI 回答能正常显示。commit `c9e1c58`。
 
 ### 阶段二：状态字段统一（半天，~150 行 diff）
 - `Msg.streaming: boolean` + `Msg.type: 'error'` → `Msg.status: MsgStatus` + `Msg.error?` + `Msg.abortReason?`
 - 改 handleEvent 写 status
-- 改 template 判定
+- 改 template 判定（2.5）
 - 改 retry / copy / 重发逻辑
 
 ### 阶段三：消息驱动重构（1 天，~300 行 diff）
@@ -190,30 +260,38 @@ msg.processes.push({ procType: 'tool_call', ... });
 - 改 `Msg.processes: ProcessItem[]`
 - handleEvent 用 findStreamingAssistant() 找当前消息
 - 改 `messages: reactive<Msg[]>([])` 去掉 ref/.value
-- 同步 `processItems: reactive<ProcessItem[]>([])` 实际改成 `Msg.processes`
+- 同步 `processItems` 改成 `Msg.processes`
+
+### 阶段三.5：协议字段对齐（可选，改后端，小改）
+- 后端 `agent/admin-run` 接收可选 `clientMsgId`，SSE 事件透传
+- 前端 `handleEvent` 从 `findStreamingAssistant()` 升级为 `clientMsgId` 精确路由（2.6.2）
+- 为未来并发流铺路，非本期阻塞项
 
 ### 阶段四：增强（可选，2-3 天）
-- 多轮并发支持（`ev.clientMsgId` 显式路由）
+- 多轮并发支持（`clientMsgId` 显式路由）
 - 消息删除（cascade 删 processes）
 - 对话导出为 Markdown
 - reasoning 事件支持（o1 / deepseek-r1）
+- `permission_request` 权限协商（2.6.3）
 
 ---
 
-## 四、决策点（待用户拍板）
+## 四、决策点
 
-| # | 问题 | 我的建议 |
-|---|------|----------|
-| 1 | 是否**全量**迁移到新架构（阶段二 + 阶段三）？ | **建议是**。投入 1.5 天，后续 6 个月内不再被 Playground UX 问题打扰。 |
-| 2 | 是否要支持**消息删除**？ | 阶段四做，不阻塞。 |
-| 3 | 现状保留 `Debugger` 面板？ | **保留**，作为深度调试入口（结构化事件流）。 |
-| 4 | 是否需要 `reasoning`（思考）事件？ | 阶段四做。 |
-| 5 | 现状 4 轮 commit 合并策略？ | 不 squash（每个 commit 自洽），最终发版 tag 即可。 |
+| # | 问题 | 状态 |
+|---|------|------|
+| 1 | 是否**全量**迁移到新架构（阶段二 + 阶段三）？ | ✅ **已拍板（2026-09-04 用户确认按推荐执行）**，采用 ACP 风格协议 |
+| 2 | 是否要支持**消息删除**？ | 阶段四做，不阻塞 |
+| 3 | 现状保留 `Debugger` 面板？ | **保留**，作为深度调试入口（结构化事件流） |
+| 4 | 是否需要 `reasoning`（思考）事件？ | 阶段四做 |
+| 5 | 历史 commit 合并策略？ | 不 squash（每个 commit 自洽），最终发版 tag 即可 |
+| 6 | 后端是否透传 `clientMsgId`？ | 阶段三.5，小改，非阻塞（可先 findStreamingAssistant 兜底） |
 
 ---
 
 ## 五、不在本次范围
 
-- 后端 ai-agent SSE 事件格式（不需要改）
+- 直接引入 ACP 依赖（stdio 传输 / JSON-RPC 全套 / 多并发 session）——过度设计，等 spec 稳定后再评估
+- 后端 ai-agent SSE 事件格式大改（本期最多透传 `clientMsgId`，见 2.6.4）
 - 多用户并发对话（不在本系统范围）
 - 移动端适配（admin 是桌面端）
