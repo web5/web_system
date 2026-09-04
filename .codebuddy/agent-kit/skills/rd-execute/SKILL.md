@@ -1,7 +1,7 @@
 ---
 name: rd-execute
 description: TDD 执行 Agent — 严格遵循红→绿→重构循环，智能调度子代理，逐项完成任务列表，收尾走 verification-before-completion 强制验证。触发：开始实现、写代码、TDD。
-version: 1.1.0
+version: 1.2.0
 ---
 
 # ⚡ Execute Agent（TDD 开发执行）

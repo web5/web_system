@@ -1,7 +1,7 @@
 ---
 name: rd-digital-agent
 description: 通用数字人 Hub — 根据任务类型与复杂度自动分派到子技能（brainstorm → plan → execute → review 流水线，外加调试/重构/探索/验证门/审查）。方案探索、内容创作、问题修复、重构等场景的入口。
-version: 4.0.0
+version: 4.1.0
 ---
 
 # 通用数字人 Hub
