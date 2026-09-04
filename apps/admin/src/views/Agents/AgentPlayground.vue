@@ -60,31 +60,79 @@
             <div class="empty-hint">选择上方 Agent 后发送消息开始调试</div>
           </div>
 
-          <div v-for="m in messages" :key="m.id" class="bubble-wrap" :class="m.role">
-            <!-- 头像 -->
-            <div class="avatar" :class="m.role">{{ m.role === 'user' ? '我' : 'AI' }}</div>
-            <!-- 气泡 -->
-            <div class="bubble" :class="m.role">
-              <div class="bubble-meta">
-                <span class="bubble-name">{{ m.role === 'user' ? '我' : agentName(m) }}</span>
-                <span class="bubble-time">{{ fmtTime(m.ts) }}</span>
+          <template v-for="item in timeline" :key="item.key">
+            <!-- 用户/AI 消息气泡 -->
+            <template v-if="item.kind === 'msg'">
+              <div class="bubble-wrap" :class="(item as Msg).role">
+                <div class="avatar" :class="(item as Msg).role">{{ (item as Msg).role === 'user' ? '我' : 'AI' }}</div>
+                <div class="bubble" :class="(item as Msg).role">
+                  <div class="bubble-meta">
+                    <span class="bubble-name">{{ (item as Msg).role === 'user' ? '我' : agentName(item as Msg) }}</span>
+                    <a-tag
+                      v-if="(item as Msg).role === 'assistant' && (item as Msg).source === 'tool'"
+                      size="small"
+                      color="green"
+                      class="src-tag"
+                      title="本次回答基于工具调用结果（联网搜索/查数据等）"
+                    >基于工具</a-tag>
+                    <a-tag
+                      v-else-if="(item as Msg).role === 'assistant' && (item as Msg).source === 'direct'"
+                      size="small"
+                      class="src-tag tag-direct"
+                      title="本次回答未调用任何工具，可能是模型推测/过时信息，谨慎采纳"
+                    >AI 直答</a-tag>
+                    <span class="bubble-time">{{ fmtTime((item as Msg).ts) }}</span>
+                  </div>
+                  <template v-if="(item as Msg).type === 'error'">
+                    <div class="err-inline">⚠ {{ (item as Msg).content }}</div>
+                  </template>
+                  <template v-else>
+                    <div class="bubble-text">{{ (item as Msg).content }}<span v-if="(item as Msg).streaming" class="cursor">▍</span></div>
+                  </template>
+                  <div v-if="!(item as Msg).streaming" class="bubble-actions">
+                    <a-button v-if="canRetry(item as Msg)" type="text" size="small" class="act" title="重新发送该轮" @click="retryMsg(item as Msg)">
+                      <template #icon><svg class="act-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M902.5 556.5c-10.4 0-19.3 7.6-20.4 18-9.7 96.2-51.6 184-117.8 248.2C697 886.9 608 928.8 512 928.8c-99.7 0-193.2-39.3-263.5-110.7L136 705.8h243.2c11 0 20-9 20-20s-9-20-20-20H95c-11 0-20 9-20 20v264.2c0 11 9 20 20 20s20-9 20-20V805l112.6 112.4c78.1 78.1 182 121.1 292.4 121.1 114.7 0 222.5-44.7 303.6-125.9C905.4 831.3 950 716.3 943.6 592.6c-.9-20-17.7-36.1-41.1-36.1zM929 19c-11 0-20 9-20 20v156.9l-112.6-112.4C718.2 5.4 614.3-37.6 504-37.6c-114.7 0-222.5 44.7-303.6 125.9-79.5 79.5-128.1 187.6-136.8 304.2-.6 8 5.4 15 13.4 15.9h7.4c9.4 0 17.3-7 18.4-16.4 16.7-201.6 186.4-364 391.2-364 100.1 0 193.6 39.3 263.5 110.7L736.7 318.2H493.8c-11 0-20 9-20 20s9 20 20 20H911c11 0 20-9 20-20V39c0-11-9-20-20-20z"/></svg></template>
+                    </a-button>
+                    <a-button type="text" size="small" class="act" title="复制" @click="copyMsg(item as Msg)">
+                      <template #icon><svg class="act-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M832 64H296c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h496v688c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8V96c0-17.7-14.3-32-32-32zM704 192H192c-17.7 0-32 14.3-32 32v672c0 17.7 14.3 32 32 32h512c17.7 0 32-14.3 32-32V224c0-17.7-14.3-32-32-32z"/></svg></template>
+                    </a-button>
+                  </div>
+                </div>
               </div>
-              <template v-if="m.type === 'error'">
-                <div class="err-inline">⚠ {{ m.content }}</div>
-              </template>
-              <template v-else>
-                <div class="bubble-text">{{ m.content }}<span v-if="m.streaming" class="cursor">▍</span></div>
-              </template>
-              <div v-if="!m.streaming" class="bubble-actions">
-                <a-button v-if="canRetry(m)" type="text" size="small" class="act" title="重新发送该轮" @click="retryMsg(m)">
-                  <template #icon><svg class="act-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M902.5 556.5c-10.4 0-19.3 7.6-20.4 18-9.7 96.2-51.6 184-117.8 248.2C697 886.9 608 928.8 512 928.8c-99.7 0-193.2-39.3-263.5-110.7L136 705.8h243.2c11 0 20-9 20-20s-9-20-20-20H95c-11 0-20 9-20 20v264.2c0 11 9 20 20 20s20-9 20-20V805l112.6 112.4c78.1 78.1 182 121.1 292.4 121.1 114.7 0 222.5-44.7 303.6-125.9C905.4 831.3 950 716.3 943.6 592.6c-.9-20-17.7-36.1-41.1-36.1zM929 19c-11 0-20 9-20 20v156.9l-112.6-112.4C718.2 5.4 614.3-37.6 504-37.6c-114.7 0-222.5 44.7-303.6 125.9-79.5 79.5-128.1 187.6-136.8 304.2-.6 8 5.4 15 13.4 15.9h7.4c9.4 0 17.3-7 18.4-16.4 16.7-201.6 186.4-364 391.2-364 100.1 0 193.6 39.3 263.5 110.7L736.7 318.2H493.8c-11 0-20 9-20 20s9 20 20 20H911c11 0 20-9 20-20V39c0-11-9-20-20-20z"/></svg></template>
-                </a-button>
-                <a-button type="text" size="small" class="act" title="复制" @click="copyMsg(m)">
-                  <template #icon><svg class="act-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M832 64H296c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h496v688c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8V96c0-17.7-14.3-32-32-32zM704 192H192c-17.7 0-32 14.3-32 32v672c0 17.7 14.3 32 32 32h512c17.7 0 32-14.3 32-32V224c0-17.7-14.3-32-32-32z"/></svg></template>
-                </a-button>
+            </template>
+
+            <!-- 过程卡片：工具调用 / 工具结果 / 技能加载 / 思考 -->
+            <template v-else>
+              <div class="proc-card" :class="`proc-${(item as ProcessItem).procType}`">
+                <div class="proc-head" @click="toggleProc(item as ProcessItem)">
+                  <span class="proc-icon">
+                    <template v-if="(item as ProcessItem).procType === 'tool_call'">🔧</template>
+                    <template v-else-if="(item as ProcessItem).procType === 'tool_result'">✅</template>
+                    <template v-else-if="(item as ProcessItem).procType === 'thinking'">🤔</template>
+                    <template v-else>📦</template>
+                  </span>
+                  <span class="proc-title">
+                    <template v-if="(item as ProcessItem).procType === 'tool_call'">调用工具 · <code>{{ (item as ProcessItem).name }}</code></template>
+                    <template v-else-if="(item as ProcessItem).procType === 'tool_result'">工具返回 · <code>{{ (item as ProcessItem).name }}</code></template>
+                    <template v-else-if="(item as ProcessItem).procType === 'thinking'">模型思考</template>
+                    <template v-else>加载技能 · <code>{{ (item as ProcessItem).name }}</code></template>
+                  </span>
+                  <span v-if="(item as ProcessItem).step !== undefined" class="proc-step">step {{ (item as ProcessItem).step }}</span>
+                  <span class="proc-toggle">{{ procExpanded[(item as ProcessItem).id] ? '▾' : '▸' }}</span>
+                </div>
+                <div v-if="procExpanded[(item as ProcessItem).id]" class="proc-body">
+                  <div v-if="(item as ProcessItem).args" class="proc-block">
+                    <div class="proc-block-label">参数</div>
+                    <pre class="proc-pre">{{ (item as ProcessItem).args }}</pre>
+                  </div>
+                  <div v-if="(item as ProcessItem).content" class="proc-block">
+                    <div class="proc-block-label">{{ (item as ProcessItem).procType === 'tool_call' ? '请求' : '返回内容' }}</div>
+                    <pre class="proc-pre">{{ truncate((item as ProcessItem).content || '', 2000) }}</pre>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </template>
+          </template>
         </div>
 
         <!-- 输入区 -->
@@ -153,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, nextTick, watch } from 'vue';
+import { onMounted, ref, computed, nextTick, watch, reactive } from 'vue';
 import { message } from 'ant-design-vue';
 import { listAgentDefs, type AgentDef } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
@@ -161,6 +209,8 @@ import { useUserStore } from '@/stores/user';
 /** 对话消息（主面板，干净的用户/AI/错误） */
 interface Msg {
   id: number;
+  /** 区分消息 vs 过程卡片（在时间线中） */
+  kind?: 'msg';
   role: 'user' | 'assistant';
   content: string;
   ts: number;
@@ -168,11 +218,31 @@ interface Msg {
   /** 错误等特殊类型 */
   type?: 'error';
   /**
- ** 回答来源（assistant）：
- ** - 'tool'    本次回答基于工具调用（如联网搜索、查数据库等）
- ** - 'direct'  模型直接回答，未调用工具（信息可能不准确/过时）
- */
+   * 回答来源（assistant）：
+   * - 'tool'    本次回答基于工具调用（如联网搜索、查数据库等）
+   * - 'direct'  模型直接回答，未调用工具（信息可能不准确/过时）
+   */
   source?: 'tool' | 'direct';
+}
+
+/**
+ * 过程事件：思考/工具调用/工具结果（不作为独立消息渲染，而是穿插在主面板对话流中）
+ */
+interface ProcessItem {
+  id: number;
+  /** 时间线中标记为过程卡片 */
+  kind: 'proc';
+  /** 过程类型 */
+  procType: 'thinking' | 'tool_call' | 'tool_result' | 'skill_load';
+  /** 工具名 / 技能 code（思考类无） */
+  name?: string;
+  /** 工具参数（JSON 字符串） */
+  args?: string;
+  /** 工具结果 / 思考内容（可能很长） */
+  content?: string;
+  /** 步骤号（用于分组） */
+  step?: number;
+  ts: number;
 }
 
 /** 调试事件（Debugger 面板） */
@@ -194,6 +264,8 @@ const userInput = ref('');
 const conversationId = ref('');
 const streaming = ref(false);
 const messages = ref<Msg[]>([]);
+/** 过程事件（思考/工具调用/工具结果）按时间线穿插渲染 */
+const processItems = ref<ProcessItem[]>([]);
 const events = ref<Evt[]>([]);
 const debugOpen = ref(false);
 const scrollBox = ref<HTMLElement | null>(null);
@@ -319,9 +391,12 @@ function clearSession() {
   }
   conversationId.value = '';
   messages.value = [];
+  processItems.value = [];
+  Object.keys(procExpanded).forEach((k) => delete procExpanded[Number(k)]);
   events.value = [];
   userInput.value = '';
   currentAssistant = null;
+  usedTool = false;
   streaming.value = false;
   scrollToBottom();
 }
@@ -504,6 +579,21 @@ function handleEvent(ev: any) {
         currentAssistant.streaming = false;
         currentAssistant = null;
       }
+      // 作为过程卡片推到主面板（不是消息气泡）
+      const procType: ProcessItem['procType'] =
+        ev.type === 'tool_call' ? 'tool_call' :
+        ev.type === 'tool_result' ? 'tool_result' :
+        'skill_load';
+      processItems.value.push({
+        id: msgSeq++,
+        kind: 'proc',
+        procType,
+        name: ev.name,
+        args: ev.args ? (typeof ev.args === 'string' ? ev.args : JSON.stringify(ev.args, null, 2)) : undefined,
+        content: ev.content,
+        step: ev.step,
+        ts: Date.now(),
+      });
       events.value.push({
         type: ev.type,
         name: ev.name,
@@ -541,11 +631,36 @@ function handleEvent(ev: any) {
       closeStreamingAssistant();
       events.value.push({ type: 'error', content: ev.content, step: ev.step });
       pushError(ev.content || '运行失败');
+      // 本轮过程卡片作废
+      processItems.value = [];
+      usedTool = false;
       break;
     }
     default:
       events.value.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
   }
+}
+
+/** 主面板时间线：把消息和过程事件按 ts 交错合并 */
+type TimelineItem = (Msg | ProcessItem) & { key: string };
+
+const timeline = computed<TimelineItem[]>(() => {
+  const list: TimelineItem[] = [];
+  for (const m of messages.value) list.push({ ...m, kind: 'msg' as const, key: `m-${m.id}` });
+  for (const p of processItems.value) list.push({ ...p, key: `p-${p.id}` });
+  return list.sort((a, b) => a.ts - b.ts);
+});
+
+/** 过程卡片展开/折叠状态（按 ProcessItem.id） */
+const procExpanded = reactive<Record<number, boolean>>({});
+
+function toggleProc(p: ProcessItem) {
+  procExpanded[p.id] = !procExpanded[p.id];
+}
+
+function truncate(s: string, n: number) {
+  if (!s) return '';
+  return s.length > n ? s.slice(0, n) + `\n…（已截断，共 ${s.length} 字）` : s;
 }
 
 function closeStreamingAssistant() {
@@ -659,6 +774,60 @@ onMounted(() => {
 .src-tag { font-size: 10px !important; line-height: 1.2 !important; padding: 0 4px !important; margin-left: 2px; }
 .tag-direct { background: #f0f0f0 !important; color: #888 !important; border-color: #d0d0d0 !important; }
 .bubble-wrap.user .bubble-meta { justify-content: flex-end; }
+
+/* ========== 过程卡片：思考/工具调用/工具结果/技能加载 ========== */
+.proc-card {
+  margin: 6px 0 6px 36px;
+  max-width: 78%;
+  border-radius: 6px;
+  border: 1px solid #e6e8eb;
+  background: #fafbfc;
+  font-size: 12px;
+  overflow: hidden;
+  transition: all .2s;
+}
+.proc-card:hover { border-color: #c8d0d8; }
+.proc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.proc-icon { font-size: 13px; }
+.proc-title { flex: 1; color: #4a5560; }
+.proc-title code { background: #eef1f4; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #4a5560; }
+.proc-step { font-size: 10px; color: #99a0a8; padding: 1px 6px; background: #eef1f4; border-radius: 8px; }
+.proc-toggle { color: #99a0a8; font-size: 10px; width: 12px; text-align: center; }
+.proc-body { padding: 0 10px 8px; border-top: 1px dashed #e6e8eb; }
+.proc-block { margin-top: 6px; }
+.proc-block-label { font-size: 10px; color: #99a0a8; margin-bottom: 2px; }
+.proc-pre {
+  margin: 0;
+  font-family: 'SF Mono','Menlo','Consolas',monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #2d3748;
+  background: #fff;
+  border: 1px solid #eef1f4;
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 类型配色 */
+.proc-tool_call { border-left: 3px solid #6c8eff; background: #f4f7ff; }
+.proc-tool_call .proc-title { color: #2a4ec0; }
+.proc-tool_result { border-left: 3px solid #2ea44f; background: #f3fbf5; }
+.proc-tool_result .proc-title { color: #1e6b36; }
+.proc-skill_load { border-left: 3px solid #b07be0; background: #faf5fd; }
+.proc-skill_load .proc-title { color: #6b3a9c; }
+.proc-thinking { border-left: 3px solid #f5a623; background: #fffaf3; }
+.proc-thinking .proc-title { color: #a96b00; }
 .bubble-name { font-size: 11px; font-weight: 600; }
 .bubble-wrap.user .bubble-name { color: #dbe9ff; }
 .bubble-wrap.assistant .bubble-name { color: #52a84a; }
