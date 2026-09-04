@@ -10,6 +10,7 @@
 |---|---|---|---|
 | ★ 必读（总纲） | `design.md` | 判断层：页面类型模板 / 布局铁律 / 交互矩阵 / 视觉约束 / 生成后自检 | 任何 UI 任务 |
 | 必读（生成前） | `page-spec-template.md` | 页面规格书模板（Full / Quick） | 新页面 / 大改 / 小改，写码前填 |
+| 必读（原型生成） | `prototype-scaffold.html` | 原型稿基础骨架：移动端 `.phone` + 桌面端 `.desktop` 双形态、`:root` Token、交互模式库（go/modal/toast/toggle…） | 生成可点击交互稿时复制骨架 |
 | 按需 | `color-reference.md` | 颜色定义点地图（8 类位置 + hover 阶梯 + 例外登记） | 改色 / 加色 / hover |
 | 按需 | `css-override-rules.md` | 覆盖优先级 + 四问 + 排查五步 + 现状登记 | 覆盖 antd / 改了不生效 |
 | 活跃写入 | `geist-token-评审记录.md` | 评审回流（只追加不覆盖） | 完成 UI 后追加修正记录 |
@@ -28,6 +29,7 @@
 | 小改样式 / 调色 / hover | `design.md` 相关条目 + `color-reference.md` §2/§3 |
 | 覆盖 antd / 改了不生效 | `css-override-rules.md`（§2 四问 + 排查五步） |
 | 暗色适配 | `design.md` §4 + `packages/ui/src/tokens.css` dark 块 |
+| **生成原型稿（可点击交互稿）** | 通用方法：ai-agent-kit `references/fe-prototype-common.md`（分层/触发/Token 方法/评审清单）→ 工程装配：复制 `prototype-scaffold.html` 骨架 + 主色/目录/命名按 fe-developer「原型稿生成」→ 评审过 → 回填 `page-spec-template.md` |
 | 加新 Token / 改数值 | `packages/ui/src/tokens.ts`（代码事实源）→ 同步 `tokens.css`；裁决查 `archive/geist-token-需求文档.md` §9 DR |
 | 评审规则溯源 | `geist-token-评审记录.md`（R1/R2/R3…） |
 | 完成一个 UI 任务后 | `design.md` §5 自检 + 修正记录追加到 `geist-token-评审记录.md` |
