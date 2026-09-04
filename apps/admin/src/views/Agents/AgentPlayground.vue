@@ -167,6 +167,12 @@ interface Msg {
   streaming?: boolean;
   /** 错误等特殊类型 */
   type?: 'error';
+  /**
+ ** 回答来源（assistant）：
+ ** - 'tool'    本次回答基于工具调用（如联网搜索、查数据库等）
+ ** - 'direct'  模型直接回答，未调用工具（信息可能不准确/过时）
+ */
+  source?: 'tool' | 'direct';
 }
 
 /** 调试事件（Debugger 面板） */
@@ -198,8 +204,12 @@ const modelsLoading = ref(false);
 const selectedModel = ref('');
 
 let msgSeq = 0;
+/** 当前正在流式输出的 AI 消息 */
 let currentAssistant: Msg | null = null;
+/** 进行中请求的取消控制器（切换 Agent / 新建会话时中断） */
 let abortCtrl: AbortController | null = null;
+/** 本轮是否调用了工具（用于回答来源标注）；final 后重置 */
+let usedTool = false;
 
 const agentNameOfId = computed(() => {
   const a = agents.value.find((x) => x.id === agentId.value);
@@ -486,22 +496,10 @@ function handleEvent(ev: any) {
       scrollToBottom();
       break;
     }
-    case 'final': {
-      if (currentAssistant) {
-        currentAssistant.content = ev.content ?? currentAssistant.content;
-        currentAssistant.streaming = false;
-        currentAssistant = null;
-      } else if (ev.content) {
-        messages.value.push({ id: msgSeq++, role: 'assistant', content: ev.content, ts: Date.now() });
-      }
-      if (ev.conversationId) conversationId.value = ev.conversationId;
-      events.value.push({ type: 'final', content: ev.content, step: ev.step });
-      scrollToBottom();
-      break;
-    }
     case 'tool_call':
     case 'tool_result':
     case 'skill_load': {
+      if (ev.type === 'tool_call') usedTool = true;
       if (currentAssistant && ev.type === 'tool_call') {
         currentAssistant.streaming = false;
         currentAssistant = null;
@@ -513,6 +511,29 @@ function handleEvent(ev: any) {
         args: ev.args,
         step: ev.step,
       });
+      scrollToBottom();
+      break;
+    }
+    case 'final': {
+      if (currentAssistant) {
+        currentAssistant.content = ev.content ?? currentAssistant.content;
+        currentAssistant.source = usedTool ? 'tool' : 'direct';
+        currentAssistant.streaming = false;
+        currentAssistant = null;
+      } else if (ev.content) {
+        // 无流式 content_delta 直接 final 的情况：也按 usedTool 标记
+        messages.value.push({
+          id: msgSeq++,
+          role: 'assistant',
+          content: ev.content,
+          ts: Date.now(),
+          source: usedTool ? 'tool' : 'direct',
+        });
+      }
+      if (ev.conversationId) conversationId.value = ev.conversationId;
+      events.value.push({ type: 'final', content: ev.content, step: ev.step });
+      // 本轮结束重置
+      usedTool = false;
       scrollToBottom();
       break;
     }
@@ -635,6 +656,8 @@ onMounted(() => {
   border-top-left-radius: 2px;
 }
 .bubble-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
+.src-tag { font-size: 10px !important; line-height: 1.2 !important; padding: 0 4px !important; margin-left: 2px; }
+.tag-direct { background: #f0f0f0 !important; color: #888 !important; border-color: #d0d0d0 !important; }
 .bubble-wrap.user .bubble-meta { justify-content: flex-end; }
 .bubble-name { font-size: 11px; font-weight: 600; }
 .bubble-wrap.user .bubble-name { color: #dbe9ff; }
