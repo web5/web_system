@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { OperationLogsService } from '../operation-logs/operation-logs.service';
 import { UpdateSettingsDto } from './update-settings.dto';
+import { Public, RequirePermission } from '../auth/decorators';
 
 @ApiTags('系统设置')
 @Controller('admin/settings')
@@ -13,11 +14,14 @@ export class SettingsController {
   ) {}
 
   @Get()
+  @RequirePermission('settings:view')
   @ApiOperation({ summary: '获取全部系统配置' })
   async getAll() {
     return { code: 0, data: await this.settingsService.getAll() };
   }
 
+  // 公开配置项：前端未登录时也会读取（如登录页展示的平台名），豁免鉴权
+  @Public()
   @Get('public/:key')
   @ApiOperation({ summary: '获取公开配置项' })
   async getPublic(@Param('key') key: string) {
@@ -28,6 +32,7 @@ export class SettingsController {
   }
 
   @Put()
+  @RequirePermission('settings:edit')
   @ApiOperation({ summary: '批量更新系统配置' })
   async update(@Body() data: UpdateSettingsDto) {
     // 过滤掉非 string 值，防止嵌套对象/数组注入
