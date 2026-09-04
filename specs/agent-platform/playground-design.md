@@ -296,10 +296,10 @@ case 'permission_request': {
 - 前端 `handleEvent` 从 `findStreamingAssistant()` 升级为 `clientMsgId` 精确路由
 - 为未来并发流铺路
 
-### 阶段四：协议收敛（半天）
-- 前端 import `agent-core` 的 `StreamEvent` 类型，handleEvent 按 `ev.type` 收窄
-- 补 `summary`（中间总结过程卡片）+ `token`（Debugger token 计数）
-- 统一 `Msg`/`ProcessItem` 与 `StreamEvent` 的类型映射
+### 阶段四：协议收敛（✅ 已完成 · `cbecd00`）
+- 前端 tsconfig 加 `@kedouai/agent-core` 别名（type-only），`handleEvent` 用 `StreamEvent` 类型替代 `any`
+- `summary` / `token` 预留显式 case（**保留类型**，未来接渲染，当前进 Debugger）—— 非补渲染
+- 统一 `Msg`/`ProcessItem` 与 `StreamEvent` 字段映射
 
 ### 阶段五：页面权限确认（✅ 已完成 · 逐次确认）
 - `permission_request` 事件 + 暂停恢复 + 确认接口 + 前端弹窗（3.3）
@@ -327,7 +327,7 @@ case 'permission_request': {
 | 6 | 后端是否透传 `clientMsgId`？ | 阶段三.5，小改，非阻塞 |
 | 7 | **权限确认粒度**（会话级 vs 逐次）？ | ✅ **已定：逐次确认**（`cf8e826`） |
 | 8 | **哪些工具算高危**（需确认清单）？ | ✅ **已定**：shell_exec / write_file / MCP 写操作（5 个 deploy 工具） |
-| 9 | 协议收敛是否抽到 `shared` 统一导出？ | 待定：前端可直接依赖 agent-core，或抽 shared |
+| 9 | 协议收敛是否抽到 `shared` 统一导出？ | ✅ **已定**：tsconfig paths 直接指 agent-core/src（type-only，零运行时依赖） |
 
 ---
 
