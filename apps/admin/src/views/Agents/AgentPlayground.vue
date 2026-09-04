@@ -83,10 +83,13 @@
                     >AI 直答</a-tag>
                     <span class="bubble-time">{{ fmtTime((item as Msg).ts) }}</span>
                   </div>
-                  <template v-if="(item as Msg).type === 'error'">
-                    <div class="err-inline">⚠ {{ (item as Msg).content }}</div>
+                  <template v-if="(item as Msg).status === 'error'">
+                    <div class="err-inline">⚠ {{ (item as Msg).error || (item as Msg).content }}</div>
                   </template>
-                  <template v-else-if="(item as Msg).streaming && !(item as Msg).content">
+                  <template v-else-if="(item as Msg).status === 'aborted'">
+                    <div class="aborted-inline">⏸ {{ (item as Msg).abortReason || '已中断' }}</div>
+                  </template>
+                  <template v-else-if="(item as Msg).status === 'pending'">
                     <!-- AI 占位气泡：等待首个字到达时显示 typing dots -->
                     <div class="typing-dots" :title="`AI 正在思考…（${(item as Msg).role}）`">
                       <span></span><span></span><span></span>
@@ -94,9 +97,9 @@
                     </div>
                   </template>
                   <template v-else>
-                    <div class="bubble-text">{{ (item as Msg).content }}<span v-if="(item as Msg).streaming" class="cursor">▍</span></div>
+                    <div class="bubble-text">{{ (item as Msg).content }}<span v-if="(item as Msg).status === 'streaming'" class="cursor">▍</span></div>
                   </template>
-                  <div v-if="!(item as Msg).streaming" class="bubble-actions">
+                  <div v-if="(item as Msg).status !== 'pending' && (item as Msg).status !== 'streaming'" class="bubble-actions">
                     <a-button v-if="canRetry(item as Msg)" type="text" size="small" class="act" title="重新发送该轮" @click="retryMsg(item as Msg)">
                       <template #icon><svg class="act-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M902.5 556.5c-10.4 0-19.3 7.6-20.4 18-9.7 96.2-51.6 184-117.8 248.2C697 886.9 608 928.8 512 928.8c-99.7 0-193.2-39.3-263.5-110.7L136 705.8h243.2c11 0 20-9 20-20s-9-20-20-20H95c-11 0-20 9-20 20v264.2c0 11 9 20 20 20s20-9 20-20V805l112.6 112.4c78.1 78.1 182 121.1 292.4 121.1 114.7 0 222.5-44.7 303.6-125.9C905.4 831.3 950 716.3 943.6 592.6c-.9-20-17.7-36.1-41.1-36.1zM929 19c-11 0-20 9-20 20v156.9l-112.6-112.4C718.2 5.4 614.3-37.6 504-37.6c-114.7 0-222.5 44.7-303.6 125.9-79.5 79.5-128.1 187.6-136.8 304.2-.6 8 5.4 15 13.4 15.9h7.4c9.4 0 17.3-7 18.4-16.4 16.7-201.6 186.4-364 391.2-364 100.1 0 193.6 39.3 263.5 110.7L736.7 318.2H493.8c-11 0-20 9-20 20s9 20 20 20H911c11 0 20-9 20-20V39c0-11-9-20-20-20z"/></svg></template>
                     </a-button>
@@ -213,6 +216,9 @@ import { message } from 'ant-design-vue';
 import { listAgentDefs, type AgentDef } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
 
+/** 对话消息状态机（ACP 风格：显式状态替代 streaming + type:error 两个字段） */
+type MsgStatus = 'pending' | 'streaming' | 'done' | 'error' | 'aborted';
+
 /** 对话消息（主面板，干净的用户/AI/错误） */
 interface Msg {
   id: number;
@@ -221,19 +227,24 @@ interface Msg {
   role: 'user' | 'assistant';
   content: string;
   ts: number;
-  streaming?: boolean;
-  /** 错误等特殊类型 */
-  type?: 'error';
+  /** 显式状态机：pending(等待首字) / streaming(流式中) / done / error / aborted */
+  status: MsgStatus;
   /**
-   * 回答来源（assistant）：
+   * 回答来源（仅 status='done' 时有效）：
    * - 'tool'    本次回答基于工具调用（如联网搜索、查数据库等）
    * - 'direct'  模型直接回答，未调用工具（信息可能不准确/过时）
    */
   source?: 'tool' | 'direct';
+  /** 错误信息（仅 status='error' 时） */
+  error?: string;
+  /** 中断原因（仅 status='aborted' 时） */
+  abortReason?: string;
+  /** 过程卡片（仅 assistant 消息，归属消息而非全局） */
+  processes?: ProcessItem[];
 }
 
 /**
- * 过程事件：思考/工具调用/工具结果（不作为独立消息渲染，而是穿插在主面板对话流中）
+ * 过程事件：思考/工具调用/工具结果（不作为独立消息渲染，而是归属到某条 assistant 消息）
  */
 interface ProcessItem {
   id: number;
@@ -270,10 +281,9 @@ const agentId = ref('');
 const userInput = ref('');
 const conversationId = ref('');
 const streaming = ref(false);
-const messages = ref<Msg[]>([]);
-/** 过程事件（思考/工具调用/工具结果）按时间线穿插渲染 */
-const processItems = ref<ProcessItem[]>([]);
-const events = ref<Evt[]>([]);
+/** 单真相源：对话消息数组（reactive，直接 push 对象即可响应，无 reactive proxy 引用坑） */
+const messages = reactive<Msg[]>([]);
+const events = reactive<Evt[]>([]);
 const debugOpen = ref(false);
 const scrollBox = ref<HTMLElement | null>(null);
 const debugBox = ref<HTMLElement | null>(null);
@@ -283,12 +293,13 @@ const modelsLoading = ref(false);
 const selectedModel = ref('');
 
 let msgSeq = 0;
-/** 当前正在流式输出的 AI 消息 */
-let currentAssistant: Msg | null = null;
 /** 进行中请求的取消控制器（切换 Agent / 新建会话时中断） */
 let abortCtrl: AbortController | null = null;
-/** 本轮是否调用了工具（用于回答来源标注）；final 后重置 */
-let usedTool = false;
+
+/** 找当前正在等待/流式输出的 assistant 消息（替代全局 currentAssistant 变量） */
+function findStreamingAssistant(): Msg | undefined {
+  return [...messages].reverse().find((m) => m.role === 'assistant' && (m.status === 'pending' || m.status === 'streaming'));
+}
 
 const agentNameOfId = computed(() => {
   const a = agents.value.find((x) => x.id === agentId.value);
@@ -366,12 +377,12 @@ function scrollToBottom() {
     if (dbg && debugOpen.value) dbg.scrollTop = dbg.scrollHeight;
   });
 }
-watch([() => messages.value.length, () => events.value.length, () => currentAssistant?.content], scrollToBottom);
+watch([() => messages.length, () => events.length], scrollToBottom);
 
 /** 切换 Agent：上下文独立，自动重置 */
 watch(agentId, (val, oldVal) => {
   if (val === oldVal) return;
-  if (messages.value.length > 0 || conversationId.value || streaming.value) {
+  if (messages.length > 0 || conversationId.value || streaming.value) {
     clearSession();
     message.info('已切换 Agent，会话已重置');
   }
@@ -397,13 +408,10 @@ function clearSession() {
     abortCtrl = null;
   }
   conversationId.value = '';
-  messages.value = [];
-  processItems.value = [];
+  messages.splice(0, messages.length);
   Object.keys(procExpanded).forEach((k) => delete procExpanded[Number(k)]);
-  events.value = [];
+  events.splice(0, events.length);
   userInput.value = '';
-  currentAssistant = null;
-  usedTool = false;
   streaming.value = false;
   scrollToBottom();
 }
@@ -419,7 +427,7 @@ async function copyConversationId() {
 
 /** 消息文本（复制/导出） */
 function msgText(m: Msg): string {
-  return m.type === 'error' ? `[错误] ${m.content}` : m.content;
+  return m.status === 'error' ? `[错误] ${m.error || m.content}` : m.content;
 }
 async function copyMsg(m: Msg) {
   const text = msgText(m);
@@ -434,18 +442,17 @@ async function copyMsg(m: Msg) {
 
 function canRetry(m: Msg): boolean {
   if (streaming.value || m.role !== 'user') return false;
-  const lastUser = [...messages.value].reverse().find((x) => x.role === 'user');
+  const lastUser = [...messages].reverse().find((x) => x.role === 'user');
   return !!lastUser && lastUser.id === m.id;
 }
 async function retryMsg(m: Msg) {
   if (streaming.value) return;
-  const idx = messages.value.findIndex((x) => x.id === m.id);
+  const idx = messages.findIndex((x) => x.id === m.id);
   if (idx < 0) return;
   if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
   // 回滚该轮之后的所有消息与事件
-  messages.value.splice(idx);
-  events.value = [];
-  currentAssistant = null;
+  messages.splice(idx);
+  events.splice(0, events.length);
   streaming.value = false;
   userInput.value = m.content;
   await send();
@@ -459,17 +466,17 @@ function exportChat() {
   lines.push(`- 会话：${conversationId.value || '（单轮）'}`);
   lines.push(`- 导出时间：${new Date().toLocaleString()}`);
   lines.push('');
-  for (const m of messages.value) {
+  for (const m of messages) {
     lines.push(`## ${m.role === 'user' ? '我' : 'AI'} · ${fmtTime(m.ts)}`);
     lines.push('');
     lines.push(msgText(m));
     lines.push('');
   }
-  if (events.value.length) {
+  if (events.length) {
     lines.push('---');
     lines.push('# 运行事件');
     lines.push('');
-    for (const e of events.value) {
+    for (const e of events) {
       lines.push(`- [${evtTag(e.type)}] ${e.name || ''}${e.step != null ? ` (step ${e.step})` : ''}`);
       if (e.type === 'tool_call' && e.args) lines.push(`  \`\`\`json\n  ${formatJson(e.args)}\n  \`\`\``);
       else if (e.content) lines.push(`  ${e.content}`);
@@ -500,20 +507,18 @@ async function send() {
   streaming.value = true;
   userInput.value = '';
 
-  messages.value.push({ id: msgSeq++, role: 'user', content: input, ts: Date.now() });
+  messages.push({ id: msgSeq++, role: 'user', content: input, ts: Date.now(), status: 'done' });
   // 立即创建 AI 占位气泡（不等后端首个 content_delta），避免「点发送后空白等待」
-  // 重要：push 后必须重新指向 messages.value[idx]，才能拿到 reactive proxy，
-  // 否则后续 currentAssistant.content += ... 改的是原对象引用，不触发响应
-  const assistantIdx = messages.value.length;
-  messages.value.push({
+  // reactive 数组直接 push 对象即可响应，无 reactive proxy 引用坑
+  messages.push({
     id: msgSeq++,
     kind: 'msg',
     role: 'assistant',
     content: '',
     ts: Date.now(),
-    streaming: true,
+    status: 'pending',
+    processes: [],
   });
-  currentAssistant = messages.value[assistantIdx] as Msg;
   scrollToBottom();
 
   abortCtrl = new AbortController();
@@ -537,11 +542,10 @@ async function send() {
     if (!res.ok || !res.body) {
       const text = await res.text().catch(() => '');
       const errMsg = text || `请求失败: HTTP ${res.status}`;
-      pushError(errMsg);
-      // 把空气泡标记为错误（不显示 typing dots）
-      if (currentAssistant && !currentAssistant.content) {
-        currentAssistant.type = 'error';
-        currentAssistant.content = errMsg;
+      const cur = findStreamingAssistant();
+      if (cur) {
+        cur.status = 'error';
+        cur.error = errMsg;
       }
       return;
     }
@@ -572,23 +576,21 @@ async function send() {
     }
   } catch (err: any) {
     if (err?.name === 'AbortError') {
-      // 用户主动中断：把空气泡标为已中断
-      if (currentAssistant && !currentAssistant.content) {
-        currentAssistant.content = '（已中断）';
+      // 用户主动中断：把占位气泡标为已中断
+      const cur = findStreamingAssistant();
+      if (cur && !cur.content) {
+        cur.status = 'aborted';
+        cur.abortReason = '已中断';
       }
       return;
     }
     const msg = `网络错误: ${err?.message || '未知'}`;
-    pushError(msg);
-    if (currentAssistant && !currentAssistant.content) {
-      currentAssistant.type = 'error';
-      currentAssistant.content = msg;
+    const cur = findStreamingAssistant();
+    if (cur) {
+      cur.status = 'error';
+      cur.error = msg;
     }
   } finally {
-    if (currentAssistant) {
-      currentAssistant.streaming = false;
-      currentAssistant = null;
-    }
     abortCtrl = null;
     streaming.value = false;
     scrollToBottom();
@@ -599,30 +601,22 @@ function handleEvent(ev: any) {
   switch (ev.type) {
     case 'content_delta': {
       if (!ev.content) break;
-      if (!currentAssistant) {
-        // 兜底：极少数情况下 send() 的占位气泡没创建（例如中途切 agent）
-        const idx = messages.value.length;
-        messages.value.push({ id: msgSeq++, kind: 'msg', role: 'assistant', content: '', ts: Date.now(), streaming: true });
-        currentAssistant = messages.value[idx] as Msg;
-      }
-      currentAssistant.content += ev.content;
+      const cur = findStreamingAssistant();
+      if (!cur) break;
+      if (cur.status === 'pending') cur.status = 'streaming';
+      cur.content += ev.content;
       scrollToBottom();
       break;
     }
     case 'tool_call':
     case 'tool_result':
     case 'skill_load': {
-      if (ev.type === 'tool_call') usedTool = true;
-      // tool_call 阶段：保留 AI 占位气泡（不置 null），让"等待工具返回"时有视觉延续
-      if (currentAssistant && ev.type === 'tool_call') {
-        currentAssistant.streaming = false;
-      }
-      // 作为过程卡片推到主面板（不是消息气泡）
+      const cur = findStreamingAssistant();
       const procType: ProcessItem['procType'] =
         ev.type === 'tool_call' ? 'tool_call' :
         ev.type === 'tool_result' ? 'tool_result' :
         'skill_load';
-      processItems.value.push({
+      const proc: ProcessItem = {
         id: msgSeq++,
         kind: 'proc',
         procType,
@@ -631,61 +625,59 @@ function handleEvent(ev: any) {
         content: ev.content,
         step: ev.step,
         ts: Date.now(),
-      });
-      events.value.push({
-        type: ev.type,
-        name: ev.name,
-        content: ev.content,
-        args: ev.args,
-        step: ev.step,
-      });
+      };
+      // 过程卡片归属到当前 assistant 消息（而非全局数组）
+      if (cur) {
+        if (!cur.processes) cur.processes = [];
+        cur.processes.push(proc);
+      }
+      events.push({ type: ev.type, name: ev.name, content: ev.content, args: ev.args, step: ev.step });
       scrollToBottom();
       break;
     }
     case 'final': {
-      if (currentAssistant) {
-        currentAssistant.content = ev.content ?? currentAssistant.content;
-        currentAssistant.source = usedTool ? 'tool' : 'direct';
-        currentAssistant.streaming = false;
-        currentAssistant = null;
-      } else if (ev.content) {
-        // 无流式 content_delta 直接 final 的情况：也按 usedTool 标记
-        messages.value.push({
-          id: msgSeq++,
-          role: 'assistant',
-          content: ev.content,
-          ts: Date.now(),
-          source: usedTool ? 'tool' : 'direct',
-        });
+      const cur = findStreamingAssistant();
+      if (cur) {
+        cur.content = ev.content ?? cur.content;
+        // 来源标签：本轮是否有工具调用，直接看归属的 processes
+        cur.source = (cur.processes?.some((p) => p.procType === 'tool_call')) ? 'tool' : 'direct';
+        cur.status = 'done';
       }
       if (ev.conversationId) conversationId.value = ev.conversationId;
-      events.value.push({ type: 'final', content: ev.content, step: ev.step });
-      // 本轮结束重置
-      usedTool = false;
+      events.push({ type: 'final', content: ev.content, step: ev.step });
       scrollToBottom();
       break;
     }
     case 'error': {
-      closeStreamingAssistant();
-      events.value.push({ type: 'error', content: ev.content, step: ev.step });
-      pushError(ev.content || '运行失败');
-      // 本轮过程卡片作废
-      processItems.value = [];
-      usedTool = false;
+      const cur = findStreamingAssistant();
+      if (cur) {
+        cur.status = 'error';
+        cur.error = ev.content || '运行失败';
+        cur.processes = [];  // 本轮过程卡片作废
+      } else {
+        // 兜底：无占位消息时新建错误消息
+        messages.push({ id: msgSeq++, role: 'assistant', content: ev.content || '运行失败', ts: Date.now(), status: 'error', error: ev.content || '运行失败' });
+      }
+      events.push({ type: 'error', content: ev.content, step: ev.step });
+      scrollToBottom();
       break;
     }
     default:
-      events.value.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
+      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
   }
 }
 
-/** 主面板时间线：把消息和过程事件按 ts 交错合并 */
-type TimelineItem = (Msg | ProcessItem) & { key: string };
+/** 主面板时间线：把消息和其归属的过程事件按 ts 交错合并 */
+type TimelineItem = (Msg & { key: string }) | (ProcessItem & { key: string });
 
 const timeline = computed<TimelineItem[]>(() => {
   const list: TimelineItem[] = [];
-  for (const m of messages.value) list.push({ ...m, kind: 'msg' as const, key: `m-${m.id}` });
-  for (const p of processItems.value) list.push({ ...p, key: `p-${p.id}` });
+  for (const m of messages) {
+    list.push({ ...m, kind: 'msg', key: `m-${m.id}` } as TimelineItem);
+    for (const p of m.processes || []) {
+      list.push({ ...p, kind: 'proc', key: `p-${p.id}` } as TimelineItem);
+    }
+  }
   return list.sort((a, b) => a.ts - b.ts);
 });
 
@@ -699,18 +691,6 @@ function toggleProc(p: ProcessItem) {
 function truncate(s: string, n: number) {
   if (!s) return '';
   return s.length > n ? s.slice(0, n) + `\n…（已截断，共 ${s.length} 字）` : s;
-}
-
-function closeStreamingAssistant() {
-  if (currentAssistant) {
-    currentAssistant.streaming = false;
-    currentAssistant = null;
-  }
-}
-
-function pushError(errMsg: string) {
-  messages.value.push({ id: msgSeq++, role: 'assistant', type: 'error', content: errMsg, ts: Date.now() });
-  scrollToBottom();
 }
 
 onMounted(() => {
@@ -923,6 +903,8 @@ onMounted(() => {
 }
 .err-inline { color: #cf1322; font-size: 13px; white-space: pre-wrap; }
 .bubble-wrap.user .err-inline { color: #ffd6d6; }
+.aborted-inline { color: #d48806; font-size: 13px; white-space: pre-wrap; }
+.bubble-wrap.user .aborted-inline { color: #ffe58f; }
 
 /* 输入区 */
 .chat-input {
