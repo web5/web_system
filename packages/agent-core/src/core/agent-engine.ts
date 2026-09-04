@@ -104,6 +104,8 @@ export class AgentEngine {
       accPrompt += u.promptTokens;
       accCompletion += u.completionTokens;
     };
+    // 本轮已执行的工具调用名（用于多步工具链完成后的 summary 总结事件）
+    const toolSteps: string[] = [];
 
     for (let step = 0; step < agent.maxSteps; step++) {
       let resp: ChatWithToolsResult | undefined;
@@ -152,6 +154,15 @@ export class AgentEngine {
         if (agent.streaming === false && streamedContent) {
           yield { type: 'content_delta', content: streamedContent, step };
         }
+        // 多步工具链完成：发 summary 总结事件（前端渲染为过程卡片）
+        if (toolSteps.length) {
+          yield {
+            type: 'summary',
+            content: `已完成 ${toolSteps.length} 步工具调用：${toolSteps.join(' → ')}。基于上述结果汇总结论如下。`,
+            step,
+            usage: usageOf(accPrompt, accCompletion),
+          };
+        }
         yield {
           type: 'final',
           content: resp.content,
@@ -165,6 +176,7 @@ export class AgentEngine {
       // 5. 执行工具并回写（load_skill 走引擎内置逻辑，其余走 ToolRegistry）
       for (const call of resp.toolCalls) {
         const args = this.parseArgs(call);
+        toolSteps.push(call.name);
         yield { type: 'tool_call', name: call.name, args, step };
 
         if (call.name === LOAD_SKILL_TOOL_NAME && this.skillLoader) {
