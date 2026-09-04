@@ -70,8 +70,8 @@ function parseXmlToolCalls(content: string): ToolCall[] | null {
 
 export class Hy3Client extends BaseAiClient {
   readonly modelId = 'hy3';
-  readonly displayName = '混元 Turbo';
-  readonly description = '腾讯混元 Turbo（Tencent MaaS TokenHub）';
+  readonly displayName = 'hy3';
+  readonly description = 'hy3（腾讯混元，Tencent MaaS TokenHub）';
   private readonly logger = new Logger(Hy3Client.name);
 
   private getApiKey(): string {

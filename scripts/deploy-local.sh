@@ -83,6 +83,22 @@ deploy_frontend() {
   run "cd '$WORKSPACE' && NODE_OPTIONS= node -e \"const m=require('mysql2/promise');(async()=>{const c=await m.createConnection({host:'127.0.0.1',port:3306,user:'root',password:'KedouLocal@2026',database:'web_system_deploy'});await c.execute(\\\"UPDATE deploy_deployments SET current_version='$ver', status='deployed', deployed_at=NOW() WHERE module_key='$mod'\\\");console.log('  version -> $ver');await c.end()})()\""
 }
 
+# ---------- 共享包同步（packages/*，后端服务的依赖） ----------
+# 注意：release 内部有自己的 packages，且 servers/*/node_modules 软链到 release/packages，
+#      所以只同步 servers 源码不够，共享包改动必须同步并在 release 内重建。
+sync_packages() {
+  log "===== 同步共享包 packages → release ====="
+  local p
+  for p in types shared agent-core mcp-core; do
+    [ -d "$WORKSPACE/packages/$p/src" ] || continue
+    run "mkdir -p '$RELEASE/packages/$p'"
+    run "rsync -a --delete --exclude 'node_modules' --exclude 'dist' \
+         '$WORKSPACE/packages/$p/src/' '$RELEASE/packages/$p/src/'"
+  done
+  log "release 内构建共享包 ..."
+  run "cd '$RELEASE' && NODE_OPTIONS= pnpm --filter '@web-system/types' --filter '@web-system/shared' --filter '@kedouai/agent-core' run build"
+}
+
 # ---------- 后端部署 ----------
 deploy_backend() {
   local name="$1" port="$2" dir="$3" pkg="$4"
@@ -140,6 +156,9 @@ log "workspace: $WORKSPACE"
 log "release:   $RELEASE"
 log "目标: $TARGETS"
 [ "$DRY_RUN" = "1" ] && warn "DRY_RUN 模式：只打印不执行"
+
+# 先同步共享包（后端服务依赖 packages/*）
+[ "$TARGETS" = "all" ] || [ "$TARGETS" != "admin" ] && sync_packages
 
 # 后端先发（前端 manifest 依赖后端服务）
 # 注意：清单用冒号分隔，需指定 IFS=':'，否则 read 按空格切分会导致整行被当成 name
