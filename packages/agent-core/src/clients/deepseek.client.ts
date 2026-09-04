@@ -150,6 +150,9 @@ export class DeepseekClient extends BaseAiClient {
     // 工具调用按 index 聚合：index -> { id, name, arguments(拼接) }
     const toolAcc: Record<number, { id: string; name: string; arguments: string }> = {};
     let sawAnyToolCall = false;
+    let lastUsage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
 
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
       headers: { Authorization: `Bearer ${key}` },
@@ -161,6 +164,16 @@ export class DeepseekClient extends BaseAiClient {
         parsed = JSON.parse(ev.data);
       } catch {
         continue;
+      }
+      // 流式 usage：include_usage=true 时，末尾 chunk 带 usage 且 choices 为空
+      if (parsed.usage && typeof parsed.usage.prompt_tokens === 'number') {
+        lastUsage = {
+          promptTokens: parsed.usage.prompt_tokens,
+          completionTokens: parsed.usage.completion_tokens ?? 0,
+          totalTokens:
+            parsed.usage.total_tokens ??
+            parsed.usage.prompt_tokens + (parsed.usage.completion_tokens ?? 0),
+        };
       }
       const choice = parsed.choices?.[0];
       if (!choice) continue;
@@ -217,6 +230,7 @@ export class DeepseekClient extends BaseAiClient {
         toolCalls,
         assistantMessage,
         finishReason,
+        usage: lastUsage,
       },
     };
   }

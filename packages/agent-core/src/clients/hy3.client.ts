@@ -202,6 +202,7 @@ export class Hy3Client extends BaseAiClient {
       max_tokens: options?.maxTokens ?? 4000,
       top_p: options?.topP ?? 1.0,
       stream: true,
+      stream_options: { include_usage: true },
     };
     if (tools.length > 0) {
       payload.tools = tools;
@@ -212,6 +213,9 @@ export class Hy3Client extends BaseAiClient {
     let finishReason: string | undefined;
     const toolAcc: Record<number, { id: string; name: string; arguments: string }> = {};
     let sawAnyToolCall = false;
+    let lastUsage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
 
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
       headers: { Authorization: `Bearer ${key}` },
@@ -223,6 +227,16 @@ export class Hy3Client extends BaseAiClient {
         parsed = JSON.parse(ev.data);
       } catch {
         continue;
+      }
+      // 流式 usage：include_usage=true 时，末尾 chunk 带 usage 且 choices 为空
+      if (parsed.usage && typeof parsed.usage.prompt_tokens === 'number') {
+        lastUsage = {
+          promptTokens: parsed.usage.prompt_tokens,
+          completionTokens: parsed.usage.completion_tokens ?? 0,
+          totalTokens:
+            parsed.usage.total_tokens ??
+            parsed.usage.prompt_tokens + (parsed.usage.completion_tokens ?? 0),
+        };
       }
       const choice = parsed.choices?.[0];
       if (!choice) continue;
@@ -270,7 +284,7 @@ export class Hy3Client extends BaseAiClient {
     };
     yield {
       type: 'done',
-      result: { content, toolCalls, assistantMessage, finishReason },
+      result: { content, toolCalls, assistantMessage, finishReason, usage: lastUsage },
     };
   }
 
