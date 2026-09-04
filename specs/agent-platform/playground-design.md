@@ -203,12 +203,14 @@ agent-core StreamEvent（协议单一来源，稳定）
 
 **原则**：协议只有一份，客户端差异只在**传输层**（本地直调 / HTTP+SSE / 未来 stdio）和**渲染层**（终端 / 浏览器）。CLI 未来若连远程服务，加 HTTP+SSE 传输适配器即可，**不是重写协议**；对外对接 ACP，加 stdio JSON-RPC adapter 做翻译，**不推倒内部协议**。
 
-### 3.3 页面权限确认
+### 3.3 页面权限确认（✅ 已实现 · 逐次确认 · `cf8e826`）
 
-**现状**：
-- 引擎层已有 `ToolContext.confirm?`（`packages/agent-core/src/interfaces/tool.interface.ts`），工具在危险操作（删除/覆盖写等）前调用
+**实现状态**：已完成「逐次确认」完整链路。用户 2026-09-04 拍板：直接上逐次确认（不做会话级开关）；高危清单 = `shell_exec` / `write_file` / MCP 写操作。
+
+**现状（已接通）**：
+- 引擎层已有 `ToolContext.confirm?`（`packages/agent-core/src/interfaces/tool.interface.ts`），工具在危险操作前调用
 - **CLI 已用**：`buildHarness((m) => replConfirm(m))` 弹 `[y/N]`；非交互直接拒绝
-- **Web 服务端断了**：`agent.controller.ts` 的 `handleRun` 调 `agentRunner.stream(input, userId)` —— **没传 confirmHandler**
+- **Web 服务端已接通**：`handleRun` 注入 `confirmHandler`（此前未传，本次补齐）
 
 **挑战**：CLI 的 confirm 是同步的（工具内部 `await confirm(message)`），但 Web 是 SSE 单向流 + 工具执行 `await` 结果——需要「流中途暂停，等前端用户批准后恢复」。
 
@@ -263,12 +265,16 @@ case 'permission_request': {
 }
 ```
 
-**确认粒度（分期）**：
+**已定粒度：逐次确认**（不做会话级开关）。
 
-| 期 | 粒度 | 机制 | 适用 |
-|----|------|------|------|
-| 短期 | 会话级开关 | 发送前声明「允许危险操作」，confirmHandler 直接读开关 | Playground 调试（管理员信任自己的 Agent） |
-| 中期 | 逐次确认 | 上述 permission_request 暂停-恢复 | C 端业务（高危写操作让终端用户逐次批） |
+**高危清单（需确认）**：
+- 本地工具：`shell_exec`（rm/mv/rmdir/chmod/chown/mkdir）、`write_file`（所有写操作）——CLI 端已就绪
+- MCP 写操作：`publish_pipeline` / `publish_version` / `rollback` / `promote_release` / `cancel_job`（`deploy` 模块，5 个）
+
+**落地补充（方案之外的关键实现）**：
+1. `McpToolMeta` 加 `requiresConfirm` 标记 + `McpToolAdapter.execute` 补 `ctx.confirm`（此前 MCP 工具完全忽略 ctx，不确认）
+2. `PermissionBroker` 加 **userId 越权校验**（确认者必须 == 发起 run 的用户）
+3. 60s 超时自动拒绝（fail-closed，不挂死）
 
 对应 RBAC 演进：现在 RBAC 管「谁能用 admin」，未来加「Agent 运行时调哪些高危工具需人审」。
 
@@ -295,9 +301,10 @@ case 'permission_request': {
 - 补 `summary`（中间总结过程卡片）+ `token`（Debugger token 计数）
 - 统一 `Msg`/`ProcessItem` 与 `StreamEvent` 的类型映射
 
-### 阶段五：页面权限确认（短期半天 + 中期 1 天）
-- 短期：会话级「允许危险操作」开关
-- 中期：`permission_request` 事件 + 暂停恢复 + 确认接口 + 前端弹窗（3.3）
+### 阶段五：页面权限确认（✅ 已完成 · 逐次确认）
+- `permission_request` 事件 + 暂停恢复 + 确认接口 + 前端弹窗（3.3）
+- 高危清单：shell_exec / write_file / MCP 写操作（5 个 deploy 工具）
+- commit `cf8e826`
 
 ### 阶段六：增强（可选，2-3 天）
 - 多轮并发支持（`clientMsgId` 显式路由）
@@ -318,8 +325,8 @@ case 'permission_request': {
 | 4 | 是否需要 `reasoning`（思考）事件？ | 阶段六做 |
 | 5 | 历史 commit 合并策略？ | 不 squash，最终发版 tag |
 | 6 | 后端是否透传 `clientMsgId`？ | 阶段三.5，小改，非阻塞 |
-| 7 | **权限确认粒度**（会话级 vs 逐次）？ | 待定：先短期开关，中期逐次 |
-| 8 | **哪些工具算高危**（需确认清单）？ | 待定：建议 shell_exec / write_file / MCP 写操作 |
+| 7 | **权限确认粒度**（会话级 vs 逐次）？ | ✅ **已定：逐次确认**（`cf8e826`） |
+| 8 | **哪些工具算高危**（需确认清单）？ | ✅ **已定**：shell_exec / write_file / MCP 写操作（5 个 deploy 工具） |
 | 9 | 协议收敛是否抽到 `shared` 统一导出？ | 待定：前端可直接依赖 agent-core，或抽 shared |
 
 ---
