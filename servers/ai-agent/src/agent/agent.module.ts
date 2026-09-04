@@ -1,4 +1,5 @@
 import { Module, OnModuleInit, OnModuleDestroy, Logger, Provider } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AgentEngine,
@@ -7,13 +8,13 @@ import {
   ClientRegistry,
   Compaction,
   Hy3Client,
-  DeepseekClient,
   ToolRegistry,
   McpToolMeta,
   SkillLoader,
   SearchProviderRegistry,
   WsaSearchProvider,
   WebSearchTool,
+  TokenHubClient,
 } from '@kedouai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
@@ -28,6 +29,7 @@ import { DbConversationMemory } from './memory/db-conversation-memory';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
+import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
 import { AgentSkillProvider } from '../skill/agent-skill-provider';
 
@@ -39,12 +41,32 @@ import { AgentSkillProvider } from '../skill/agent-skill-provider';
 
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
-  useFactory: (): ClientRegistry => {
+  useFactory: (configService: ConfigService): ClientRegistry => {
     const registry = new ClientRegistry();
     registry.register(new Hy3Client());
-    registry.register(new DeepseekClient());
+    // 说明：不再注册 DeepseekClient（走 api.deepseek.com 官方通道、需独立 key，
+    // 与 TokenHub 模型混用易混淆）；DeepSeek 系列统一走下方的 TokenHub 托管模型。
+
+    // TokenHub 网关托管模型（model 可配；hy3 由 Hy3Client 注册）
+    // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro,hy4-preview,glm-5.3
+    const models = (
+      configService.get<string>(
+        'TOKENHUB_MODELS',
+        'deepseek-v4-flash,deepseek-v4-pro,hy4-preview',
+      ) || ''
+    )
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const seen = new Set<string>();
+    for (const m of models) {
+      if (seen.has(m)) continue;
+      seen.add(m);
+      registry.register(new TokenHubClient(m));
+    }
     return registry;
   },
+  inject: [ConfigService],
 };
 
 const toolRegistryProvider: Provider = {
@@ -115,6 +137,7 @@ const runnerProvider: Provider = {
     DbConversationMemory,
     AgentRunPusher,
     AgentDefSyncService,
+    PermissionBroker,
     // 合同风险场景特有
     ContractRuleTool,
     ContractIrrTool,

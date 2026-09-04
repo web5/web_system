@@ -1,7 +1,7 @@
 ---
 name: rd-digital-agent
 description: 研发数字人 Hub — 根据任务复杂度自动路由到 4 个子 Agent（brainstorm → plan → execute → review）。TDD 开发、修复 Bug、添加功能、重构等场景的入口。
-version: 3.0.0
+version: 3.1.0
 ---
 
 # 研发数字人 Hub
@@ -23,7 +23,7 @@ version: 3.0.0
   │                                         ↓
   │                                      .skills/rd-execute → rd-review
   │
-  ├─ 小改动 / "修 bug" / 简单 CRUD ────→ .skills/rd-execute（直连）
+  ├─ 小改动 / "修 bug" / 简单 CRUD ────→ .skills/rd-execute（直连，仍须最小计划+方案，原型稿按 rd-plan 判定可省）
   │                                         ↓
   │                                      .skills/rd-review
   │
@@ -47,6 +47,26 @@ version: 3.0.0
 | 🔍 Review | `rd-review/SKILL.md` | 自检代码质量 |
 | 🧭 Karpathy 准则 | `~/.codebuddy/skills/karpathy-coding-guidelines/SKILL.md` | 编码纪律（Think First / Simplicity / Surgical / Goal-Driven） |
 | 📚 Karpathy Wiki | `~/.codebuddy/skills/karpathy-llm-wiki/SKILL.md` | 持久化知识库管理 |
+
+## 交付门禁（写码前强制校验）
+
+进入 `rd-execute` 前，主 Agent 必须确认「交付三件套」状态。三件套区分**强制**与**按需**：
+
+| 产物 | 强制 | 是否产出由谁决定 | 内容由谁确认 |
+|------|------|------------------|--------------|
+| 计划（TODO 列表） | 每次 | — | 人 |
+| 方案（design / 选型 / 接口契约） | 每次 | — | 人 |
+| 原型稿（UI 规格 或 架构原型） | **按需** | **人**（rd-plan 末尾拍板） | 人 |
+
+门禁逻辑（`rd-execute` 入口硬校验）：
+- 计划 ✓ 且 方案 ✓
+- 且（若判定「需要原型稿」 → 原型稿 ✓ 且人已确认）
+- 否则**禁止进入实现**，强制回退到对应产出环节补齐。
+
+要点：
+- **原型稿的「是否产出」由人决策**（rd-plan 阶段末尾显式询问/确认），AI 仅给建议：UI 大改 / 新功能 / 跨模块 → 建议产出；小改动 / 简单 CRUD → 可省。
+- 一旦人判定需要，原型稿内容仍须**人确认**后才进 execute。
+- 确认权始终在人；AI 无权替自己确认任何一件。
 
 ## TDD 多 Agents 协作团队模式（Context 隔离）
 

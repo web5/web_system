@@ -4,9 +4,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { BianbianAdminService, MaterialCreateDto, MaterialUpdateDto } from './bianbian-admin.service';
+import { RequirePermission } from '../auth/decorators';
 
 @ApiTags('变变素材管理（管理员）')
 @Controller('admin/bianbian')
+// 类级默认权限：所有写操作要求 bianbian:manage；两个读接口在方法级覆盖为 bianbian:view
+@RequirePermission('bianbian:manage')
 export class BianbianAdminController {
   private readonly logger = new Logger(BianbianAdminController.name);
 
@@ -15,6 +18,7 @@ export class BianbianAdminController {
   // ========== 分类 ==========
 
   @Get('categories')
+  @RequirePermission('bianbian:view')
   @ApiOperation({ summary: '素材分类列表（含各分类素材数量）' })
   async getCategories() {
     const data = await this.adminService.getCategories();
@@ -24,6 +28,7 @@ export class BianbianAdminController {
   // ========== 素材 CRUD ==========
 
   @Get('materials')
+  @RequirePermission('bianbian:view')
   @ApiOperation({ summary: '素材列表' })
   @ApiQuery({ name: 'category', required: false })
   @ApiQuery({ name: 'keyword', required: false })

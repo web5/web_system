@@ -147,18 +147,22 @@ function isDone(s: string) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 2px;
+  /* padding 已去除：原本 0 2px 让相邻节点间出现 4px 间隙，导致相邻
+     节点连接线之间出现留白「断开」。现在 ::after width:100%
+     从本节点中点跨到下一节点中点，连成完整线。 */
+  padding: 0;
 }
-/* 横向连线：从本节点圆心向右延伸半个节点宽 */
+/* 横向连线：从本节点圆心向右延伸到下一节点圆心（width: 100% 跨越本 item 全宽 +
+   下一 item 的左半，恰好对接下一节点的中点）。默认色加深 #d9d9d9 让「待执行」段也可见。 */
 .flow-item::after {
   content: '';
   position: absolute;
   top: 15px;
   left: 50%;
-  width: 50%;
+  width: 100%;
   height: 2px;
   z-index: 0;
-  background: #f0f0f0;
+  background: #d9d9d9;
 }
 .flow-item.clickable { cursor: pointer; }
 .flow-item.rail-done::after { background: #52c41a; }

@@ -133,6 +133,12 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
+      {
+        path: 'database',
+        name: 'Database',
+        component: () => import('@/views/Database/DataBrowser.vue'),
+        meta: { title: '数据浏览', permission: 'database:view' },
+      },
     ],
   },
   // 403 无权限页面

@@ -36,6 +36,11 @@ export interface McpToolMeta {
   };
   /** 所属 MCP 模块/服务 */
   module?: string;
+  /**
+   * 是否写操作（发布/回滚/删除等）——执行前需权限确认。
+   * 为 true 时执行前调用 ctx.confirm，无确认器默认拒绝。
+   */
+  requiresConfirm?: boolean;
 }
 
 /** MCP 工具执行器：由服务层注入，负责实际调用远程 MCP 能力 */
@@ -118,8 +123,24 @@ export class McpToolAdapter implements ToolDefinition {
     };
   }
 
-  async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
     try {
+      // 写操作（requiresConfirm）执行前权限确认：无确认器默认拒绝，与本地工具行为一致
+      if (this.meta.requiresConfirm) {
+        if (!ctx.confirm) {
+          return {
+            success: false,
+            content: '',
+            error: `MCP 写操作 ${this.name} 需权限确认，但当前环境无确认器（默认拒绝）`,
+          };
+        }
+        const ok = await ctx.confirm(
+          `⚠️ 即将执行 MCP 写操作：${this.name}\n参数：${JSON.stringify(args)}\n确认继续? [y/N] `,
+        );
+        if (ok !== true) {
+          return { success: false, content: '', error: `MCP 写操作 ${this.name} 已被用户拒绝。` };
+        }
+      }
       const result = await this.executor.execute(this.meta, args);
       return { success: true, content: result.content };
     } catch (error) {

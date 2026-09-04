@@ -70,8 +70,8 @@ function parseXmlToolCalls(content: string): ToolCall[] | null {
 
 export class Hy3Client extends BaseAiClient {
   readonly modelId = 'hy3';
-  readonly displayName = '混元 Turbo';
-  readonly description = '腾讯混元 Turbo（Tencent MaaS TokenHub）';
+  readonly displayName = 'hy3';
+  readonly description = 'hy3（腾讯混元，Tencent MaaS TokenHub）';
   private readonly logger = new Logger(Hy3Client.name);
 
   private getApiKey(): string {
@@ -162,11 +162,14 @@ export class Hy3Client extends BaseAiClient {
         assistantMessage,
         finishReason: choice?.finish_reason,
         usage:
-          usage && typeof usage.prompt_tokens === 'number'
+          usage
             ? {
-                promptTokens: usage.prompt_tokens,
-                completionTokens: usage.completion_tokens ?? 0,
-                totalTokens: usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0),
+                promptTokens: usage.prompt_tokens ?? usage.input_tokens ?? 0,
+                completionTokens: usage.completion_tokens ?? usage.output_tokens ?? 0,
+                totalTokens:
+                  usage.total_tokens ??
+                  (usage.prompt_tokens ?? usage.input_tokens ?? 0) +
+                    (usage.completion_tokens ?? usage.output_tokens ?? 0),
               }
             : undefined,
       };
@@ -202,6 +205,7 @@ export class Hy3Client extends BaseAiClient {
       max_tokens: options?.maxTokens ?? 4000,
       top_p: options?.topP ?? 1.0,
       stream: true,
+      stream_options: { include_usage: true },
     };
     if (tools.length > 0) {
       payload.tools = tools;
@@ -212,6 +216,9 @@ export class Hy3Client extends BaseAiClient {
     let finishReason: string | undefined;
     const toolAcc: Record<number, { id: string; name: string; arguments: string }> = {};
     let sawAnyToolCall = false;
+    let lastUsage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
 
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
       headers: { Authorization: `Bearer ${key}` },
@@ -223,6 +230,20 @@ export class Hy3Client extends BaseAiClient {
         parsed = JSON.parse(ev.data);
       } catch {
         continue;
+      }
+      // 流式 usage：OpenAI Chat Completions 用 prompt_tokens/completion_tokens；
+      // TokenHub 兼容 Responses API 时用 input_tokens/output_tokens（字段名不同）
+      const u = parsed.usage;
+      if (u) {
+        const prompt = u.prompt_tokens ?? u.input_tokens;
+        const completion = u.completion_tokens ?? u.output_tokens;
+        if (typeof prompt === 'number' && typeof completion === 'number') {
+          lastUsage = {
+            promptTokens: prompt,
+            completionTokens: completion,
+            totalTokens: u.total_tokens ?? prompt + completion,
+          };
+        }
       }
       const choice = parsed.choices?.[0];
       if (!choice) continue;
@@ -270,7 +291,7 @@ export class Hy3Client extends BaseAiClient {
     };
     yield {
       type: 'done',
-      result: { content, toolCalls, assistantMessage, finishReason },
+      result: { content, toolCalls, assistantMessage, finishReason, usage: lastUsage },
     };
   }
 

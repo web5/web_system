@@ -84,24 +84,22 @@ agent_created: true
 | 未认证订阅号无法发布     | 明确告知该公众号类型不支持发布，只能建草稿                            |
 | 返回为空 / 无数据        | 如实说明「发布失败 / 草稿创建失败」，不编造 media_id 或 publish_id          |
 | 工具调用超时            | 单次重试 1 次；仍失败则告知用户稍后重试                                  |
-| MCP 调用失败（连接不通/超时/500） | **进入降级链路**：执行 `web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`（见下方「4. MCP 降级兜底」），完成后如实汇报降级结果 |
+| 发布（建草稿/群发） | **统一走 dev 机器 content-hub 直连 POST**（见第 4 节），不再经 MCP；业务错误仍按本表其他行处理 |
 | 跨场景诉求（群发/菜单/素材管理） | 明确告知本服务仅覆盖草稿与发布，其他公众号能力需走微信公众平台后台               |
 
 ---
 
-## 4. MCP 降级兜底（MCP 不可用时）
+## 4. 发布链路（dev 机器 content-hub 直连 POST，标准方式）
 
-当 MCP 调用失败（连接不通 / 超时 / 服务端 5xx / HTTP 401 之外的异常）时，使用工程内降级脚本，通过 SSH 到 dev 机器直连 content-hub REST 接口完成建稿/发布。
+发布统一走 dev 机器 content-hub 的 REST 接口直连建稿/发布。这是标准发布路径。
 
-### 4.1 触发条件
+### 4.1 方式说明
 
-满足任一即触发降级：
-- `create_wechat_draft` / `publish_to_wechat` 返回连接错误、超时、500，而非业务错误（如「缺少封面」）
-- MCP 工具根本不可用（tools/list 失败 / 连接器未授权）
+发布默认就走本直连链路，不依赖 MCP 在线：
+- 入参与 MCP 工具一致：`title` / `html` / `thumb_media_id?` / `digest?` / `source_url?`。
+- 业务错误（如「缺少封面」「未配置凭证」）按第 3 节处理。
 
-> 「缺少封面」「未配置凭证」等**业务错误不属于降级场景**，按第 3 节处理，不要走降级。
-
-### 4.2 降级脚本
+### 4.2 直连脚本
 
 脚本路径：`/Users/geekwen/workspace/web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`
 
@@ -109,23 +107,23 @@ agent_created: true
 |------|------|
 | （无）| 建草稿（默认，安全） |
 | `--publish` | 建草稿 + 一键发布 |
-| `--title "标题"` | 自定义标题（默认「{日期}财经日报（降级通道）」） |
+| `--title "标题"` | 自定义标题（默认「{日期}财经日报（直连通道）」） |
 | `--dry-run` | 只打印不执行 |
 
 行为：SSH 到 dev 机器（`ubuntu@175.27.189.123`）→ 探测 content-hub（:6007）→ 拉取财经数据（`/api/market-pulse`、`/api/topics`）→ 生成带封面图的 HTML → 调 `/api/content/wechat/draft`（或 `/publish`）。
 
-### 4.3 降级执行约束
+### 4.3 直连执行约束
 
 | # | 约束 |
 |---|------|
 | 1 | 默认只建草稿（与门禁 1 一致），用户明确要求发布才加 `--publish` |
-| 2 | 降级成功要如实汇报 media_id / publish_id 与「已走降级链路」说明 |
-| 3 | 降级脚本要求本机可 SSH 到 dev 机器（密钥已配置），失败时如实告知用户降级链路也不可用 |
+| 2 | 发布成功如实汇报 media_id / publish_id，并注明走 dev 直连链路 |
+| 3 | 直连链路要求本机可 SSH 到 dev 机器（密钥已配置），失败时如实告知用户直连链路也不可用 |
 
 ### 4.4 与 web-system-finnews 的配合
 
-若降级原因是 MCP 整体不可用，`web-system-finnews` 技能同样应走降级：
-- 内容来源降级：直接调用 dev 机器 content-hub 的 `/api/market-pulse`、`/api/topics`（脚本已内置）
-- 即两个技能共用一个降级脚本，一次执行完成「取数 + 生成 + 建稿」
+`web-system-finnews` 技能同样走本直连链路：
+- 内容来源：直接调用 dev 机器 content-hub 的 `/api/market-pulse`、`/api/topics`（脚本已内置）
+- 两个技能共用一个直连脚本，一次执行完成「取数 + 生成 + 建稿」
 
 ---
