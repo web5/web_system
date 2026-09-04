@@ -810,7 +810,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.pg { display: flex; flex-direction: column; height: calc(100vh - 140px); min-height: 480px; }
+.pg { display: flex; flex-direction: column; flex: 1; min-height: 480px; }
 .pg-head {
   display: flex;
   align-items: center;

@@ -204,7 +204,7 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
-.layout { min-height: 100vh; }
+.layout { height: 100vh; overflow: hidden; }
 
 /* 布局结构（2026-09-03 重构）：sider 参与流（非 fixed），右侧列自动从 sider 右缘无缝开始，
  * 消除原"fixed sider + marginLeft 244"造成的 24px 顶部/内容切口 */
@@ -303,8 +303,14 @@ const handleLogout = async () => {
 .user-arrow { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
 
 .content {
-  margin: 16px 16px 0; padding: 0;
-  background: transparent; min-height: calc(100vh - 56px - 92px);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  margin: 16px 16px 0;
+  padding: 0 0 16px;
+  background: transparent;
 }
 .footer {
   padding: 0;
