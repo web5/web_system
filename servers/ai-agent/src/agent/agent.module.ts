@@ -46,9 +46,14 @@ const clientRegistryProvider: Provider = {
     registry.register(new Hy3Client());
     registry.register(new DeepseekClient());
 
-    // TokenHub 网关托管模型（model 可配，缺省 deepseek-v4-flash）
-    // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro-0813,glm-5.3
-    const models = (configService.get<string>('TOKENHUB_MODELS', 'deepseek-v4-flash') || '')
+    // TokenHub 网关托管模型（model 可配；hy3 由 Hy3Client 注册）
+    // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro,hy4-preview,glm-5.3
+    const models = (
+      configService.get<string>(
+        'TOKENHUB_MODELS',
+        'deepseek-v4-flash,deepseek-v4-pro,hy4-preview',
+      ) || ''
+    )
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);

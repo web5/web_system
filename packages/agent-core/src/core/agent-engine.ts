@@ -60,7 +60,8 @@ export class AgentEngine {
     confirmHandler?: (message: string) => Promise<boolean>,
   ): AsyncGenerator<StreamEvent> {
     const agent = this.agentRegistry.get(input.agentId);
-    const client = this.clientRegistry.getOrFallback(agent.model);
+    // 允许本次运行临时覆盖模型（Playground 调试/多模型对比用）
+    const client = this.clientRegistry.getOrFallback(input.model || agent.model);
     this.loadedSkills.clear();
 
     // 1. 加载历史记忆（摘要 + 近期消息）

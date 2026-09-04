@@ -31,4 +31,9 @@ export interface RunInput {
   agentId: string;
   userInput: string;
   conversationId?: string;
+  /**
+   * 临时覆盖 Agent 定义中的模型（调试/对比用）。
+   * 不传则用 Agent 定义里的 model；传入时仅本次运行生效，不修改 Agent 定义。
+   */
+  model?: string;
 }
