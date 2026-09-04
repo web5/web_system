@@ -50,6 +50,27 @@ export class RestartExecutor {
     const injectEnv = await this.resolveInjectEnv(p, ctx);
     const ws =
       this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release';
+
+    // ---- 端口孤儿清理（铁律，参考 deploy-local.sh / publish-ai-agent.sh）----
+    // restart 前确保目标端口占用者 == pm2 当前 pid；否则 kill 残留孤儿进程，避免新进程
+    // EADDRINUSE 崩溃、对外仍是旧实例（如 ai-agent 6010 端口被旧孤儿抢占，发布不生效）。
+    const app = this.pm2Probe.listProcesses().find((a) => a.name === restarted);
+    const port = app?.pm2_env?.PORT;
+    if (port != null) {
+      const pm2Pid = app?.pid != null ? String(app.pid) : undefined;
+      const occupiers = this.command
+        .exec(`lsof -tiTCP:${port} -sTCP:LISTEN`, ws, {})
+        .split(/\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const orphans = pm2Pid ? occupiers.filter((occ) => occ !== pm2Pid) : [];
+      for (const occ of orphans) {
+        this.command.exec(`kill -9 ${occ}`, ws, {});
+        ctx.log(`清理端口 ${port} 孤儿进程 ${occ}（非 pm2 pid ${pm2Pid}）`);
+      }
+      if (orphans.length) await ctx.save();
+    }
+
     this.command.exec(
       `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
       ws,
