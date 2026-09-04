@@ -86,6 +86,13 @@
                   <template v-if="(item as Msg).type === 'error'">
                     <div class="err-inline">⚠ {{ (item as Msg).content }}</div>
                   </template>
+                  <template v-else-if="(item as Msg).streaming && !(item as Msg).content">
+                    <!-- AI 占位气泡：等待首个字到达时显示 typing dots -->
+                    <div class="typing-dots" :title="`AI 正在思考…（${(item as Msg).role}）`">
+                      <span></span><span></span><span></span>
+                      <span class="typing-tip">AI 正在思考…</span>
+                    </div>
+                  </template>
                   <template v-else>
                     <div class="bubble-text">{{ (item as Msg).content }}<span v-if="(item as Msg).streaming" class="cursor">▍</span></div>
                   </template>
@@ -494,6 +501,16 @@ async function send() {
   userInput.value = '';
 
   messages.value.push({ id: msgSeq++, role: 'user', content: input, ts: Date.now() });
+  // 立即创建 AI 占位气泡（不等后端首个 content_delta），避免「点发送后空白等待」
+  currentAssistant = {
+    id: msgSeq++,
+    kind: 'msg',
+    role: 'assistant',
+    content: '',
+    ts: Date.now(),
+    streaming: true,
+  };
+  messages.value.push(currentAssistant);
   scrollToBottom();
 
   abortCtrl = new AbortController();
@@ -518,6 +535,11 @@ async function send() {
       const text = await res.text().catch(() => '');
       const errMsg = text || `请求失败: HTTP ${res.status}`;
       pushError(errMsg);
+      // 把空气泡标记为错误（不显示 typing dots）
+      if (currentAssistant && !currentAssistant.content) {
+        currentAssistant.type = 'error';
+        currentAssistant.content = errMsg;
+      }
       return;
     }
 
@@ -546,8 +568,19 @@ async function send() {
       }
     }
   } catch (err: any) {
-    if (err?.name === 'AbortError') return;
-    pushError(`网络错误: ${err?.message || '未知'}`);
+    if (err?.name === 'AbortError') {
+      // 用户主动中断：把空气泡标为已中断
+      if (currentAssistant && !currentAssistant.content) {
+        currentAssistant.content = '（已中断）';
+      }
+      return;
+    }
+    const msg = `网络错误: ${err?.message || '未知'}`;
+    pushError(msg);
+    if (currentAssistant && !currentAssistant.content) {
+      currentAssistant.type = 'error';
+      currentAssistant.content = msg;
+    }
   } finally {
     if (currentAssistant) {
       currentAssistant.streaming = false;
@@ -575,9 +608,9 @@ function handleEvent(ev: any) {
     case 'tool_result':
     case 'skill_load': {
       if (ev.type === 'tool_call') usedTool = true;
+      // tool_call 阶段：保留 AI 占位气泡（不置 null），让"等待工具返回"时有视觉延续
       if (currentAssistant && ev.type === 'tool_call') {
         currentAssistant.streaming = false;
-        currentAssistant = null;
       }
       // 作为过程卡片推到主面板（不是消息气泡）
       const procType: ProcessItem['procType'] =
@@ -858,6 +891,31 @@ onMounted(() => {
 .act-ico { width: 13px; height: 13px; fill: currentColor; display: block; }
 .cursor { color: #52c41a; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* AI 思考中：三个跳动圆点 + 文字 */
+.typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  min-height: 24px;
+}
+.typing-dots > span:not(.typing-tip) {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #b0b8c0; display: inline-block;
+  animation: typing-bounce 1.2s infinite ease-in-out both;
+}
+.typing-dots > span:nth-child(1) { animation-delay: -0.32s; }
+.typing-dots > span:nth-child(2) { animation-delay: -0.16s; }
+.typing-dots .typing-tip {
+  margin-left: 6px; color: #99a0a8; font-size: 12px; line-height: 1;
+  background: none; width: auto; height: auto; border-radius: 0;
+  animation: none;
+}
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.35; }
+  40% { transform: scale(1); opacity: 1; }
+}
 .err-inline { color: #cf1322; font-size: 13px; white-space: pre-wrap; }
 .bubble-wrap.user .err-inline { color: #ffd6d6; }
 
