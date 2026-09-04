@@ -502,15 +502,18 @@ async function send() {
 
   messages.value.push({ id: msgSeq++, role: 'user', content: input, ts: Date.now() });
   // 立即创建 AI 占位气泡（不等后端首个 content_delta），避免「点发送后空白等待」
-  currentAssistant = {
+  // 重要：push 后必须重新指向 messages.value[idx]，才能拿到 reactive proxy，
+  // 否则后续 currentAssistant.content += ... 改的是原对象引用，不触发响应
+  const assistantIdx = messages.value.length;
+  messages.value.push({
     id: msgSeq++,
     kind: 'msg',
     role: 'assistant',
     content: '',
     ts: Date.now(),
     streaming: true,
-  };
-  messages.value.push(currentAssistant);
+  });
+  currentAssistant = messages.value[assistantIdx] as Msg;
   scrollToBottom();
 
   abortCtrl = new AbortController();
@@ -597,8 +600,10 @@ function handleEvent(ev: any) {
     case 'content_delta': {
       if (!ev.content) break;
       if (!currentAssistant) {
-        currentAssistant = { id: msgSeq++, role: 'assistant', content: '', ts: Date.now(), streaming: true };
-        messages.value.push(currentAssistant);
+        // 兜底：极少数情况下 send() 的占位气泡没创建（例如中途切 agent）
+        const idx = messages.value.length;
+        messages.value.push({ id: msgSeq++, kind: 'msg', role: 'assistant', content: '', ts: Date.now(), streaming: true });
+        currentAssistant = messages.value[idx] as Msg;
       }
       currentAssistant.content += ev.content;
       scrollToBottom();
