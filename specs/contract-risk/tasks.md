@@ -4,26 +4,31 @@
 
 ## 任务清单
 
-- [ ] **T1. shared 类型定义**（`packages/shared/src/contract/types.ts` + `index.ts`）
+- [x] **T1. shared 类型定义**（`packages/shared/src/contract/types.ts` + `index.ts`）
   - 定义 `LegalStandard`、`ContractScene`、`LoanAnalysis`、IRR 函数签名
   - 在 `packages/shared/src/index.ts` re-export
   - 依赖：无
 
-- [ ] **T2. IRR 计算模块**（`packages/shared/src/contract/irr.ts`）
+- [x] **T2. IRR 计算模块**（`packages/shared/src/contract/irr.ts`）
   - `calculateIRR` / `analyzeLoan` / 净现值函数
   - 二分法 + 牛顿迭代，边界处理
   - 依赖：T1
   - 验收：对照 spec/requirements.md IRR 用例
 
-- [ ] **T3. 标准库 v1**（`packages/shared/src/contract/standards/`）
-  - `common.ts` 通用 8 尺子 + `scenes/medical-insurance.ts` 等待期尺子
+- [x] **T3. 标准库 v1**（`packages/shared/src/contract/standards/`）
+  - `common.ts` 通用 8 尺子 + `scenes/medical-insurance.ts` 等待期尺子（+ 额外 `scenes/consumer-loan.ts` 消费贷场景）
   - `index.ts` 的 `getStandards/getByScene/matchByText`
   - 依赖：T1
   - 验收：spec 标准库用例
 
-- [ ] **T4. shared 构建验证**
+- [x] **T4. shared 构建验证**
   - `pnpm --filter @web-system/shared build` 通过
   - 依赖：T2, T3
+
+## 阶段一验收结论（2026-09-04）
+- T1–T3 代码均已落地于 `packages/shared/src/contract/`（`types.ts` / `irr.ts` / `standards/` 含 `common` + `medical-insurance` + `consumer-loan` 场景），并在 `packages/shared/src/index.ts` re-export。
+- T4 已验证：`pnpm --filter @web-system/shared build`（tsc）通过，无类型错误。
+- 阶段一基础库完成，作为阶段二（ai-service `contract` 模块 + 小程序页面 + 护栏/飞轮）的依赖底座。
 
 ## 验收关联
 - T2 → requirements.md「IRR 模块」节
