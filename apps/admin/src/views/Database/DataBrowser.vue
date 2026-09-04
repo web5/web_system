@@ -20,32 +20,34 @@
           <aside class="panel ws-hairline table-panel">
             <div class="panel-title">数据表<span class="panel-count">{{ tables.length }}</span></div>
             <div class="panel-body">
-              <a-input-search
-                v-model:value="keyword"
-                placeholder="搜索表名或注释"
-                allow-clear
-                size="small"
-              />
-              <div class="table-list" v-if="!tableLoading">
-                <div
-                  v-for="t in filteredTables"
-                  :key="t.name"
-                  class="table-item"
-                  :class="{ selected: t.name === selectedTable }"
-                  @click="selectTable(t.name)"
-                >
-                  <span class="table-name">
-                    <span class="ws-mono">{{ t.name }}</span>
-                    <a-tag v-if="t.sensitive" class="tag-sensitive">敏感</a-tag>
-                  </span>
-                  <span class="table-rows">{{ fmtRows(t.rows) }}</span>
+              <div class="table-list-wrap">
+                <a-input-search
+                  v-model:value="keyword"
+                  placeholder="搜索表名或注释"
+                  allow-clear
+                  size="small"
+                />
+                <div class="table-list" v-if="!tableLoading">
+                  <div
+                    v-for="t in filteredTables"
+                    :key="t.name"
+                    class="table-item"
+                    :class="{ selected: t.name === selectedTable }"
+                    @click="selectTable(t.name)"
+                  >
+                    <span class="table-name">
+                      <span class="ws-mono">{{ t.name }}</span>
+                      <a-tag v-if="t.sensitive" class="tag-sensitive">敏感</a-tag>
+                    </span>
+                    <span class="table-rows">{{ fmtRows(t.rows) }}</span>
+                  </div>
+                  <a-empty v-if="!filteredTables.length" description="未匹配到表，调整关键词" class="list-empty" />
                 </div>
-                <a-empty v-if="!filteredTables.length" description="未匹配到表，调整关键词" class="list-empty" />
+                <div v-else class="list-loading"><a-spin size="small" /></div>
+                <a-button v-if="tableError" type="link" size="small" class="retry-btn" @click="loadTables">
+                  加载失败，点击重试
+                </a-button>
               </div>
-              <div v-else class="list-loading"><a-spin size="small" /></div>
-              <a-button v-if="tableError" type="link" size="small" class="retry-btn" @click="loadTables">
-                加载失败，点击重试
-              </a-button>
             </div>
           </aside>
 
@@ -561,17 +563,26 @@ onMounted(loadTables);
   padding: var(--ws-space-12);
 }
 
-/* 表列表 */
+/* 表列表：固定高度 + 内部 flex 滚动（panel-body 必须有 min-height:0 + overflow:hidden
+   才能让 table-list 的 flex:1 真正算出可滚动高度） */
 .table-panel {
   max-height: calc(100vh - 240px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+.table-list-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .table-list {
   margin-top: var(--ws-space-8);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  flex: 1;
 }
 .table-item {
   display: flex;
