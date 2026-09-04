@@ -156,9 +156,12 @@ export class AgentEngine {
         }
         // 多步工具链完成：发 summary 总结事件（前端渲染为过程卡片）
         if (toolSteps.length) {
+          const finalText = (resp.content || '').replace(/\s+/g, ' ').trim();
+          const finalPreview = finalText.slice(0, 150);
+          const ellipsis = finalText.length > 150 ? '…' : '';
           yield {
             type: 'summary',
-            content: `已完成 ${toolSteps.length} 步工具调用：${toolSteps.join(' → ')}。基于上述结果汇总结论如下。`,
+            content: `已完成 ${toolSteps.length} 步工具调用：${toolSteps.join(' → ')}。\n结论预览：${finalPreview}${ellipsis}`,
             step,
             usage: usageOf(accPrompt, accCompletion),
           };
