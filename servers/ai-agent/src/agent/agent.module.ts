@@ -1,4 +1,5 @@
 import { Module, OnModuleInit, OnModuleDestroy, Logger, Provider } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AgentEngine,
@@ -14,6 +15,7 @@ import {
   SearchProviderRegistry,
   WsaSearchProvider,
   WebSearchTool,
+  TokenHubClient,
 } from '@kedouai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
@@ -39,12 +41,26 @@ import { AgentSkillProvider } from '../skill/agent-skill-provider';
 
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
-  useFactory: (): ClientRegistry => {
+  useFactory: (configService: ConfigService): ClientRegistry => {
     const registry = new ClientRegistry();
     registry.register(new Hy3Client());
     registry.register(new DeepseekClient());
+
+    // TokenHub 网关托管模型（model 可配，缺省 deepseek-v4-flash）
+    // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro-0813,glm-5.3
+    const models = (configService.get<string>('TOKENHUB_MODELS', 'deepseek-v4-flash') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const seen = new Set<string>();
+    for (const m of models) {
+      if (seen.has(m)) continue;
+      seen.add(m);
+      registry.register(new TokenHubClient(m));
+    }
     return registry;
   },
+  inject: [ConfigService],
 };
 
 const toolRegistryProvider: Provider = {
