@@ -115,21 +115,21 @@ deploy_backend() {
   log "release 内构建 $pkg ..."
   run "cd '$RELEASE' && NODE_OPTIONS= pnpm --filter '$pkg' run build"
 
-  # 3) 端口占用检查
-  # ⚠️ 重要：pm2 记录的 pid 与实际监听端口的进程 pid 可能不同（pm2 记录的是包装进程），
-  #    因此不能"排除 pm2 pid 后 kill 其余"，否则会误杀正常服务。
-  #    默认只检测不清理；确需清理残留孤儿进程时显式设置 FORCE_CLEAN=1，
-  #    且仅当进程环境变量中查不到 PM2_HOME（即非 pm2 管理）时才终止。
-  local pids pid
+  # 3) 端口占用检查：清理"孤儿残留进程"
+  # ⚠️ 注意：`pm2 pid <name>` 返回的可能是已失效的旧 pid，不能用它做判断（会误杀正常服务）。
+  #    必须以 `pm2 jlist` 中该 app 的当前 pid 为准：
+  #    端口上的进程 ≠ jlist pid  ⇒ 它是残留孤儿（占着端口导致新进程监听不上），需要清理。
+  local jlist_pid pids pid
+  jlist_pid="$(pm2 jlist 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);const a=(j||[]).find(x=>x.name==='$name');process.stdout.write(a&&a.pid?String(a.pid):'')}catch(e){process.stdout.write('')}})" 2>/dev/null || echo '')"
   pids="$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || echo '')"
   for pid in $pids; do
     [ -z "${pid:-}" ] && continue
-    if [ "${FORCE_CLEAN:-0}" = "1" ] && ! ps -p "$pid" -E 2>/dev/null | grep -q "PM2_HOME"; then
-      warn "FORCE_CLEAN：终止非 pm2 管理的残留进程 $pid（端口 $port）"
+    if [ -n "$jlist_pid" ] && [ "$pid" != "$jlist_pid" ]; then
+      warn "端口 ${port} 被残留进程 ${pid} 占用（pm2 当前 pid=${jlist_pid}），终止以便新进程监听"
       run "kill $pid 2>/dev/null || true"
       sleep 1
     else
-      log "端口 $port 由进程 $pid 监听（视为 pm2 管理，跳过清理）"
+      log "端口 ${port} 由进程 ${pid} 监听（与 pm2 pid 一致，正常）"
     fi
   done
 
