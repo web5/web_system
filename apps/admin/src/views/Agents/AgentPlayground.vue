@@ -215,6 +215,7 @@ import { onMounted, ref, computed, nextTick, watch, reactive } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { listAgentDefs, type AgentDef } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
+import type { StreamEvent } from '@kedouai/agent-core';
 
 /** 对话消息状态机（ACP 风格：显式状态替代 streaming + type:error 两个字段） */
 type MsgStatus = 'pending' | 'streaming' | 'done' | 'error' | 'aborted';
@@ -597,7 +598,7 @@ async function send() {
   }
 }
 
-function handleEvent(ev: any) {
+function handleEvent(ev: StreamEvent) {
   switch (ev.type) {
     case 'content_delta': {
       if (!ev.content) break;
@@ -668,6 +669,12 @@ function handleEvent(ev: any) {
       events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
       break;
     }
+    case 'summary':
+    case 'token': {
+      // 预留：引擎未来产生中间总结（summary）/ token 事件；当前仅进 Debugger，未来接渲染
+      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
+      break;
+    }
     default:
       events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
   }
@@ -677,7 +684,7 @@ function handleEvent(ev: any) {
  * 权限确认：弹确认框，用户允许/拒绝后调后端确认接口。
  * 服务端在工具执行处挂起等待，60s 超时自动拒绝。
  */
-async function handlePermissionRequest(ev: any) {
+async function handlePermissionRequest(ev: StreamEvent) {
   const requestId = ev.requestId;
   if (!requestId) return;
   let approve = false;
