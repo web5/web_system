@@ -8,7 +8,6 @@ import {
   ClientRegistry,
   Compaction,
   Hy3Client,
-  DeepseekClient,
   ToolRegistry,
   McpToolMeta,
   SkillLoader,
@@ -44,7 +43,8 @@ const clientRegistryProvider: Provider = {
   useFactory: (configService: ConfigService): ClientRegistry => {
     const registry = new ClientRegistry();
     registry.register(new Hy3Client());
-    registry.register(new DeepseekClient());
+    // 说明：不再注册 DeepseekClient（走 api.deepseek.com 官方通道、需独立 key，
+    // 与 TokenHub 模型混用易混淆）；DeepSeek 系列统一走下方的 TokenHub 托管模型。
 
     // TokenHub 网关托管模型（model 可配；hy3 由 Hy3Client 注册）
     // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro,hy4-preview,glm-5.3
