@@ -1,7 +1,7 @@
 ---
 name: rd-plan
 description: 方案设计 Agent — 将选定方案细化为可执行的任务列表，输出 requirements/design/tasks。触发：就按这个做、细化方案、拆任务。
-version: 1.0.0
+version: 1.1.0
 ---
 
 # 📋 Plan Agent（方案设计）
