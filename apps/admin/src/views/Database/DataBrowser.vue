@@ -540,7 +540,7 @@ onMounted(loadTables);
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
   gap: var(--ws-space-16);
-  align-items: start;
+  align-items: stretch;
 }
 .panel {
   background: var(--ws-bg-surface);
