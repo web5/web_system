@@ -508,7 +508,10 @@ onMounted(loadTables);
 .db-page {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* content(flex) 提供确定高度，本页占满后内部面板各自滚动，外层不再整体滚动 */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 页头 */
@@ -534,6 +537,16 @@ onMounted(loadTables);
   flex: 1;
   min-height: 0;
 }
+/* 把确定高度从 a-tabs 透传进 tabpane，否则 tabpane 默认按内容撑高 */
+.db-mode-tabs :deep(.ant-tabs-content-holder) {
+  height: 100%;
+}
+.db-mode-tabs :deep(.ant-tabs-content) {
+  height: 100%;
+}
+.db-mode-tabs :deep(.ant-tabs-tabpane) {
+  height: 100%;
+}
 
 /* 浏览布局：左右分栏 */
 .browse-layout {
@@ -541,6 +554,8 @@ onMounted(loadTables);
   grid-template-columns: 264px minmax(0, 1fr);
   gap: var(--ws-space-16);
   align-items: stretch;
+  height: 100%;
+  min-height: 0;
 }
 .panel {
   background: var(--ws-bg-surface);
@@ -561,14 +576,22 @@ onMounted(loadTables);
 }
 .panel-body {
   padding: var(--ws-space-12);
+  /* 参与高度链：占满 table-panel 剩余高度，否则内部 table-list 的 flex:1 相对“内容高”失效，
+     永远不触发 overflow 滚动，列表底部还会被外层 overflow:hidden 裁掉 */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 表列表：固定高度 + 内部 flex 滚动（panel-body 必须有 min-height:0 + overflow:hidden
    才能让 table-list 的 flex:1 真正算出可滚动高度） */
 .table-panel {
-  max-height: calc(100vh - 240px);
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 .table-list-wrap {
@@ -640,7 +663,10 @@ onMounted(loadTables);
 
 /* 右侧详情 */
 .detail-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  height: 100%;
   overflow: hidden;
 }
 .detail-head {
@@ -681,6 +707,8 @@ onMounted(loadTables);
   padding: var(--ws-space-8) 0;
 }
 .view-body {
+  flex: 1;
+  min-height: 0;
   padding: var(--ws-space-8);
   overflow: auto;
 }
@@ -784,6 +812,9 @@ onMounted(loadTables);
   display: flex;
   flex-direction: column;
   gap: var(--ws-space-12);
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
 }
 .sql-hint code {
   font-size: 12px;
