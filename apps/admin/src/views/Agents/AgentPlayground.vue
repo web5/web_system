@@ -99,7 +99,18 @@
               @keydown="onKeydown"
             />
             <div class="input-bar">
-              <span class="input-tip">{{ streaming ? 'Agent 正在回复…' : agentId ? `当前：${agentNameOfId}` : '请先选择 Agent' }}</span>
+              <div class="bar-left">
+                <a-select
+                  v-model:value="selectedModel"
+                  size="small"
+                  class="model-picker"
+                  :options="modelOptions"
+                  :loading="modelsLoading"
+                />
+                <span class="input-tip">
+                  {{ streaming ? 'Agent 正在回复…' : agentId ? `Agent：${agentNameOfId}` : '请先选择 Agent' }}
+                </span>
+              </div>
               <a-button type="primary" :loading="streaming" :disabled="!agentId || !userInput.trim()" @click="send">
                 <template #icon><svg class="send-ico" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M931.4 498.9 110.2 92.9c-8.4-4.1-18.5-.6-22.5 7.8-1.1 2.4-1.6 4.9-1.6 7.5v187.1c0 8.4 5.3 15.8 13.1 18.5l315.5 99.8-315.5 99.8c-7.8 2.7-13.1 10.1-13.1 18.5v187.1c0 2.6.5 5.1 1.6 7.5 3 6.4 10.4 10.4 17.8 10.4 1.6 0 3.2-.3 4.7-.9l821.3-406c7.8-3.9 11.7-12.5 8.7-20.9-1-2.2-2.5-4.2-4.4-5.7z" fill="currentColor"/></svg></template>
                 发送
@@ -181,6 +192,10 @@ const events = ref<Evt[]>([]);
 const debugOpen = ref(false);
 const scrollBox = ref<HTMLElement | null>(null);
 const debugBox = ref<HTMLElement | null>(null);
+/** 可选模型（从 ai-agent /agent/models 拉取）；'' = 跟随 Agent 定义 */
+const models = ref<Array<{ id: string; displayName: string; available: boolean }>>([]);
+const modelsLoading = ref(false);
+const selectedModel = ref('');
 
 let msgSeq = 0;
 let currentAssistant: Msg | null = null;
@@ -190,6 +205,45 @@ const agentNameOfId = computed(() => {
   const a = agents.value.find((x) => x.id === agentId.value);
   return a ? `${a.name}（${a.id}）` : agentId.value || '';
 });
+
+/** 当前 Agent 定义里的模型（selectedModel 为空时使用） */
+const agentModel = computed(() => {
+  const a = agents.value.find((x) => x.id === agentId.value);
+  return a?.model || '';
+});
+
+const modelOptions = computed(() => {
+  const list = [
+    {
+      value: '',
+      label: agentModel.value ? `跟随 Agent（${agentModel.value}）` : '跟随 Agent 定义',
+    },
+  ];
+  for (const m of models.value) {
+    list.push({
+      value: m.id,
+      label: `${m.displayName || m.id}${m.available ? '' : '（不可用）'}`,
+    });
+  }
+  return list;
+});
+
+/** 拉取已注册模型列表（ai-agent /agent/models） */
+async function loadModels() {
+  modelsLoading.value = true;
+  try {
+    const res = await fetch('/api/ai-agent/agent/models', {
+      headers: { Authorization: `Bearer ${userStore.token}` },
+    });
+    const j = await res.json();
+    const data = (j?.data ?? j) as { models?: Array<{ id: string; displayName: string; available: boolean }> };
+    models.value = Array.isArray(data?.models) ? data.models : [];
+  } catch {
+    models.value = [];
+  } finally {
+    modelsLoading.value = false;
+  }
+}
 
 function agentName(m: Msg): string {
   if (m.role === 'user') return '我';
@@ -369,6 +423,8 @@ async function send() {
         agentId: agentId.value,
         userInput: input,
         conversationId: conversationId.value || undefined,
+        // 调试时可选临时覆盖模型（空 = 跟随 Agent 定义）
+        model: selectedModel.value || undefined,
       }),
       signal: abortCtrl.signal,
     });
@@ -483,7 +539,10 @@ function pushError(errMsg: string) {
   scrollToBottom();
 }
 
-onMounted(reloadAgents);
+onMounted(() => {
+  reloadAgents();
+  loadModels();
+});
 </script>
 
 <style scoped>
@@ -632,8 +691,17 @@ onMounted(reloadAgents);
   align-items: center;
   justify-content: space-between;
   margin-top: 8px;
+  gap: 8px;
 }
-.input-tip { font-size: 11px; color: #bbb; }
+.bar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.model-picker { width: 200px; }
+.input-tip {
+  font-size: 11px;
+  color: #bbb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .send-ico { width: 14px; height: 14px; fill: currentColor; margin-right: 2px; }
 
 /* Debugger 面板 */
