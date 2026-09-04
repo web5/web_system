@@ -511,7 +511,9 @@ onMounted(loadTables);
   /* content(flex) 提供确定高度，本页占满后内部面板各自滚动，外层不再整体滚动 */
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  /* 不能 overflow:hidden：它是硬裁剪器，会把 panel 画在盒子外侧的 box-shadow 外框
+   * （超出内容区的底边/左边）无条件裁掉，造成边框只剩部分边。
+   * 面板内部滚动由 .panel-body/.view-body 各自处理，这里无需裁剪 */
 }
 
 /* 页头 */
