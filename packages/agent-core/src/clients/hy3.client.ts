@@ -162,11 +162,14 @@ export class Hy3Client extends BaseAiClient {
         assistantMessage,
         finishReason: choice?.finish_reason,
         usage:
-          usage && typeof usage.prompt_tokens === 'number'
+          usage
             ? {
-                promptTokens: usage.prompt_tokens,
-                completionTokens: usage.completion_tokens ?? 0,
-                totalTokens: usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0),
+                promptTokens: usage.prompt_tokens ?? usage.input_tokens ?? 0,
+                completionTokens: usage.completion_tokens ?? usage.output_tokens ?? 0,
+                totalTokens:
+                  usage.total_tokens ??
+                  (usage.prompt_tokens ?? usage.input_tokens ?? 0) +
+                    (usage.completion_tokens ?? usage.output_tokens ?? 0),
               }
             : undefined,
       };
@@ -228,15 +231,19 @@ export class Hy3Client extends BaseAiClient {
       } catch {
         continue;
       }
-      // 流式 usage：include_usage=true 时，末尾 chunk 带 usage 且 choices 为空
-      if (parsed.usage && typeof parsed.usage.prompt_tokens === 'number') {
-        lastUsage = {
-          promptTokens: parsed.usage.prompt_tokens,
-          completionTokens: parsed.usage.completion_tokens ?? 0,
-          totalTokens:
-            parsed.usage.total_tokens ??
-            parsed.usage.prompt_tokens + (parsed.usage.completion_tokens ?? 0),
-        };
+      // 流式 usage：OpenAI Chat Completions 用 prompt_tokens/completion_tokens；
+      // TokenHub 兼容 Responses API 时用 input_tokens/output_tokens（字段名不同）
+      const u = parsed.usage;
+      if (u) {
+        const prompt = u.prompt_tokens ?? u.input_tokens;
+        const completion = u.completion_tokens ?? u.output_tokens;
+        if (typeof prompt === 'number' && typeof completion === 'number') {
+          lastUsage = {
+            promptTokens: prompt,
+            completionTokens: completion,
+            totalTokens: u.total_tokens ?? prompt + completion,
+          };
+        }
       }
       const choice = parsed.choices?.[0];
       if (!choice) continue;
