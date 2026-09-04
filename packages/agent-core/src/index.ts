@@ -16,6 +16,7 @@ export { LOAD_SKILL_TOOL_NAME } from './core/agent-engine';
 export * from './clients/base-ai.client';
 export { Hy3Client } from './clients/hy3.client';
 export { DeepseekClient } from './clients/deepseek.client';
+export { TokenHubClient } from './clients/tokenhub.client';
 
 // 注册表
 export { ToolRegistry } from './registry/tool.registry';
