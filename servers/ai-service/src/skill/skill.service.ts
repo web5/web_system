@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import AdmZip from 'adm-zip';
 import { AgentSkillEntity } from './entities/agent-skill.entity';
+import { AgentDefinitionEntity } from '../agent-def/entities/agent-definition.entity';
 import { SaveSkillDto, ParsedSkillFile } from './dto/skill.dto';
 
 /** 当前用户（来自 req.user） */
@@ -26,6 +27,8 @@ export class SkillService {
   constructor(
     @InjectRepository(AgentSkillEntity)
     private readonly repo: Repository<AgentSkillEntity>,
+    @InjectRepository(AgentDefinitionEntity)
+    private readonly defRepo: Repository<AgentDefinitionEntity>,
   ) {}
 
   /** 列表（不含 content 大字段） */
@@ -84,10 +87,21 @@ export class SkillService {
     return this.toView(saved, true);
   }
 
-  /** 删除（TODO：T8 capabilities 落地后补"被 Agent 引用拒绝"校验） */
+  /** 删除（被 Agent 的 capabilities 引用时拒绝，防止 Agent 配置悬空） */
   async remove(code: string) {
     const row = await this.repo.findOne({ where: { code } });
     if (!row) throw new NotFoundException(`技能 ${code} 不存在`);
+
+    // 检查是否有 Agent 引用该技能
+    const defs = await this.defRepo.find();
+    const users = defs.filter((d) =>
+      (d.capabilities ?? []).some((c) => c.type === 'skill' && c.ref === code),
+    );
+    if (users.length > 0) {
+      const names = users.map((u) => `${u.name || u.id}`).join('、');
+      throw new BadRequestException(`技能 ${code} 正被 Agent 引用（${names}），请先在对应 Agent 中移除该技能后再删除`);
+    }
+
     await this.repo.remove(row);
     this.logger.log(`技能 ${code} 已删除`);
     return { ok: true };
