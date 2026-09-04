@@ -592,7 +592,8 @@ onMounted(loadTables);
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
+  /* 不能 overflow:hidden：会裁掉 .ws-hairline 用 box-shadow 画的外框。
+   * 高度由 grid stretch + 内部 panel-body overflow 控制，无需在此裁剪 */
 }
 .table-list-wrap {
   flex: 1 1 auto;
@@ -667,7 +668,8 @@ onMounted(loadTables);
   flex-direction: column;
   min-width: 0;
   height: 100%;
-  overflow: hidden;
+  /* 不能 overflow:hidden：会裁掉 .ws-hairline 用 box-shadow 画的外框。
+   * 内部 view-body 自身 overflow:auto 处理滚动 */
 }
 .detail-head {
   display: flex;
