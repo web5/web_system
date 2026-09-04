@@ -65,7 +65,7 @@
             <template v-if="item.kind === 'msg'">
               <div class="bubble-wrap" :class="(item as Msg).role">
                 <div class="avatar" :class="(item as Msg).role">{{ (item as Msg).role === 'user' ? '我' : 'AI' }}</div>
-                <div class="bubble" :class="(item as Msg).role">
+                <div class="bubble" :class="[(item as Msg).role, { loading: (item as Msg).status === 'pending' || (item as Msg).status === 'streaming' }]">
                   <div class="bubble-meta">
                     <span class="bubble-name">{{ (item as Msg).role === 'user' ? '我' : agentName(item as Msg) }}</span>
                     <a-tag
@@ -206,8 +206,13 @@
                 <span class="evt-name">{{ e.name || evtTag(e.type) }}</span>
                 <span class="evt-step">{{ e.step != null ? `step ${e.step}` : '' }}</span>
               </div>
-              <div v-if="e.usage" class="evt-usage" title="本次回答 token 消耗">
-                ⚡ {{ e.usage.promptTokens }} + {{ e.usage.completionTokens }} = {{ e.usage.totalTokens }} tokens
+              <template v-if="e.usage && (e.usage.promptTokens || e.usage.completionTokens)">
+                <div class="evt-usage" title="本次回答 token 消耗">
+                  ⚡ {{ e.usage.promptTokens }} + {{ e.usage.completionTokens }} = {{ e.usage.totalTokens }} tokens
+                </div>
+              </template>
+              <div v-else-if="e.type === 'final' || e.type === 'error'" class="evt-usage evt-usage-empty" title="模型未返回 token 统计">
+                ⚡ 暂无 token 统计
               </div>
               <pre v-if="e.type === 'tool_call' && e.args" class="evt-content">{{ formatJson(e.args) }}</pre>
               <pre v-else-if="e.content" class="evt-content">{{ e.content }}</pre>
@@ -470,6 +475,31 @@ async function retryMsg(m: Msg) {
   await send();
 }
 
+/** 控制台日志：每条 SSE 事件实时打印（带 conversationId + 时间戳，便于开发者定位） */
+function logEvent(ev: any, label: string) {
+  const conv = conversationId.value || 'no-conv';
+  console.log(`[PG][${conv}][${new Date().toISOString()}][${label}]`, ev);
+}
+
+/** 导出当前会话的事件流 + 消息日志（JSON），便于排查问题 */
+function exportLogs() {
+  const payload = {
+    conversationId: conversationId.value || '(no-conv)',
+    user: userStore.user?.username || '(unknown)',
+    exportedAt: new Date().toISOString(),
+    events: events.map((e) => ({ ...e })),
+    messages: messages.map((m) => ({ ...m })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `agent-logs-${payload.conversationId}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  message.success('日志已导出（开发者工具 console 也可实时查看）');
+}
+
 function exportChat() {
   const lines: string[] = [];
   lines.push('# Agent 对话记录');
@@ -610,6 +640,9 @@ async function send() {
 }
 
 function handleEvent(ev: StreamEvent) {
+  // 实时打印到 console（开发者定位问题用；带 conversationId + 时间戳 + 事件类型）
+  // eslint-disable-next-line no-console
+  console.log(`[PG][${conversationId.value || 'no-conv'}][${new Date().toISOString()}][${ev.type}]`, ev);
   switch (ev.type) {
     case 'content_delta': {
       if (!ev.content) break;
@@ -864,6 +897,17 @@ onMounted(() => {
   background: #f6f6f6;
   border: 1px solid #eee;
   border-top-left-radius: 2px;
+}
+/* AI 气泡 loading 态（pending/streaming）：呼吸背景渐变 + 蓝色边框，提示「正在回复」 */
+.bubble-wrap.assistant .bubble.loading {
+  background-image: linear-gradient(135deg, #f6f6f6 0%, #e8f0ff 50%, #f6f6f6 100%);
+  background-size: 200% 200%;
+  border-color: #b6cff0;
+  animation: bubble-breath 1.8s ease-in-out infinite;
+}
+@keyframes bubble-breath {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 .bubble-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
 .src-tag { font-size: 10px !important; line-height: 1.2 !important; padding: 0 4px !important; margin-left: 2px; }
