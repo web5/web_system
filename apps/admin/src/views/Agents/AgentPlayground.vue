@@ -119,12 +119,14 @@
                     <template v-if="(item as ProcessItem).procType === 'tool_call'">🔧</template>
                     <template v-else-if="(item as ProcessItem).procType === 'tool_result'">✅</template>
                     <template v-else-if="(item as ProcessItem).procType === 'thinking'">🤔</template>
+                    <template v-else-if="(item as ProcessItem).procType === 'summary'">📋</template>
                     <template v-else>📦</template>
                   </span>
                   <span class="proc-title">
                     <template v-if="(item as ProcessItem).procType === 'tool_call'">调用工具 · <code>{{ (item as ProcessItem).name }}</code></template>
                     <template v-else-if="(item as ProcessItem).procType === 'tool_result'">工具返回 · <code>{{ (item as ProcessItem).name }}</code></template>
                     <template v-else-if="(item as ProcessItem).procType === 'thinking'">模型思考</template>
+                    <template v-else-if="(item as ProcessItem).procType === 'summary'">工具链总结</template>
                     <template v-else>加载技能 · <code>{{ (item as ProcessItem).name }}</code></template>
                   </span>
                   <span v-if="(item as ProcessItem).step !== undefined" class="proc-step">step {{ (item as ProcessItem).step }}</span>
@@ -136,7 +138,11 @@
                     <pre class="proc-pre">{{ (item as ProcessItem).args }}</pre>
                   </div>
                   <div v-if="(item as ProcessItem).content" class="proc-block">
-                    <div class="proc-block-label">{{ (item as ProcessItem).procType === 'tool_call' ? '请求' : '返回内容' }}</div>
+                    <div class="proc-block-label">
+                      <template v-if="(item as ProcessItem).procType === 'tool_call'">请求</template>
+                      <template v-else-if="(item as ProcessItem).procType === 'summary'">总结</template>
+                      <template v-else>返回内容</template>
+                    </div>
                     <pre class="proc-pre">{{ truncate((item as ProcessItem).content || '', 2000) }}</pre>
                   </div>
                 </div>
@@ -200,6 +206,9 @@
                 <span class="evt-name">{{ e.name || evtTag(e.type) }}</span>
                 <span class="evt-step">{{ e.step != null ? `step ${e.step}` : '' }}</span>
               </div>
+              <div v-if="e.usage" class="evt-usage" title="本次回答 token 消耗">
+                ⚡ {{ e.usage.promptTokens }} + {{ e.usage.completionTokens }} = {{ e.usage.totalTokens }} tokens
+              </div>
               <pre v-if="e.type === 'tool_call' && e.args" class="evt-content">{{ formatJson(e.args) }}</pre>
               <pre v-else-if="e.content" class="evt-content">{{ e.content }}</pre>
             </a-timeline-item>
@@ -252,7 +261,7 @@ interface ProcessItem {
   /** 时间线中标记为过程卡片 */
   kind: 'proc';
   /** 过程类型 */
-  procType: 'thinking' | 'tool_call' | 'tool_result' | 'skill_load';
+  procType: 'thinking' | 'tool_call' | 'tool_result' | 'skill_load' | 'summary';
   /** 工具名 / 技能 code（思考类无） */
   name?: string;
   /** 工具参数（JSON 字符串） */
@@ -271,6 +280,8 @@ interface Evt {
   content?: string;
   args?: unknown;
   step?: number;
+  /** token 消耗（final/error/summary 事件携带） */
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
 const userStore = useUserStore();
@@ -645,7 +656,7 @@ function handleEvent(ev: StreamEvent) {
         cur.status = 'done';
       }
       if (ev.conversationId) conversationId.value = ev.conversationId;
-      events.push({ type: 'final', content: ev.content, step: ev.step });
+      events.push({ type: 'final', content: ev.content, step: ev.step, usage: ev.usage });
       scrollToBottom();
       break;
     }
@@ -659,7 +670,7 @@ function handleEvent(ev: StreamEvent) {
         // 兜底：无占位消息时新建错误消息
         messages.push({ id: msgSeq++, role: 'assistant', content: ev.content || '运行失败', ts: Date.now(), status: 'error', error: ev.content || '运行失败' });
       }
-      events.push({ type: 'error', content: ev.content, step: ev.step });
+      events.push({ type: 'error', content: ev.content, step: ev.step, usage: ev.usage });
       scrollToBottom();
       break;
     }
@@ -669,10 +680,28 @@ function handleEvent(ev: StreamEvent) {
       events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
       break;
     }
-    case 'summary':
+    case 'summary': {
+      // 多步工具链总结：渲染为过程卡片（归属当前 assistant 消息，final 前出现）
+      const cur = findStreamingAssistant();
+      const proc: ProcessItem = {
+        id: msgSeq++,
+        kind: 'proc',
+        procType: 'summary',
+        content: ev.content,
+        step: ev.step,
+        ts: Date.now(),
+      };
+      if (cur) {
+        if (!cur.processes) cur.processes = [];
+        cur.processes.push(proc);
+      }
+      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step, usage: ev.usage });
+      scrollToBottom();
+      break;
+    }
     case 'token': {
-      // 预留：引擎未来产生中间总结（summary）/ token 事件；当前仅进 Debugger，未来接渲染
-      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step });
+      // token 事件（预留）：引擎未来逐块报告 token 消耗；当前进 Debugger
+      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step, usage: ev.usage });
       break;
     }
     default:
@@ -894,6 +923,8 @@ onMounted(() => {
 .proc-skill_load .proc-title { color: #6b3a9c; }
 .proc-thinking { border-left: 3px solid #f5a623; background: #fffaf3; }
 .proc-thinking .proc-title { color: #a96b00; }
+.proc-summary { border-left: 3px solid #13c2c2; background: #f2fbfb; }
+.proc-summary .proc-title { color: #0e8f8f; }
 .bubble-name { font-size: 11px; font-weight: 600; }
 .bubble-wrap.user .bubble-name { color: #dbe9ff; }
 .bubble-wrap.assistant .bubble-name { color: #52a84a; }
@@ -1033,6 +1064,7 @@ onMounted(() => {
 .evt-head { display: flex; justify-content: space-between; gap: 8px; }
 .evt-name { font-weight: 600; color: #333; }
 .evt-step { font-size: 10px; color: #999; }
+.evt-usage { margin-top: 4px; font-size: 10px; color: #8c8c8c; font-family: monospace; }
 .evt-content {
   margin: 6px 0 0;
   padding: 6px 8px;
