@@ -6,7 +6,7 @@ import { CommandService } from '../../shell/command.service';
 // 配置中心服务（发布/重启时按 global→env→module 合并并强制覆盖注入进程环境）
 import { ConfigService as ConfigCenterService } from '../../config/config.service';
 import { StepContext } from './step.types';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, chmod } from 'fs/promises';
 import { join } from 'path';
 
 /**
@@ -168,5 +168,7 @@ async function renderEnvFile(envFile: string, cfg: Record<string, string>): Prom
 
   let out = lines.join('\n');
   if (out && !out.endsWith('\n')) out += '\n';
+  // writeFile 的 mode 仅对新建文件生效；已存在文件需显式 chmod（可能含密钥明文 → 600）
   await writeFile(envFile, out, { mode: 0o600 });
+  await chmod(envFile, 0o600);
 }

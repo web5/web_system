@@ -73,7 +73,11 @@ export class TokenHubClient extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? 8000,
+      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
+      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
+      // （TOKENHUB_REASONING_EFFORT 可覆盖）
+      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
       stream: false,
     };
     if (tools.length > 0) {
@@ -111,6 +115,9 @@ export class TokenHubClient extends BaseAiClient {
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
       };
       const usage = data.usage;
+      this.logger.log(
+        `[tokenhub] ${this.modelId} non-stream: finish=${choice?.finish_reason} contentLen=${(message.content ?? '').length} toolCalls=${toolCalls.length} usage=${JSON.stringify(usage ?? null)}`,
+      );
       return {
         content: assistantMessage.content,
         toolCalls,
@@ -145,11 +152,31 @@ export class TokenHubClient extends BaseAiClient {
       throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
     }
 
+    // 观测：本轮客户端模式（排查"正文为空/被截断"用，日志 [tokenhub] 前缀）
+    this.logger.log(
+      `[tokenhub] ${this.modelId} 进入流式调用 streamMode=${process.env.TOKENHUB_STREAM ?? 'true'} msgs=${messages.length} tools=${tools.length} options.maxTokens=${options?.maxTokens ?? 'unset'}`,
+    );
+
+    // 非流回退：DeepSeek 系在 stream=true 时网关会忽略 reasoning_effort，推理 token
+    // 挤满输出预算导致正文为 0（长报告被截断成空）。TOKENHUB_STREAM=false 时改走
+    // 一次非流调用（chatWithTools 已带 reasoning_effort=none），把完整正文作为一段
+    // content_delta 透传，引擎与前端协议不变。
+    if ((process.env.TOKENHUB_STREAM ?? 'true') === 'false') {
+      const result = await this.chatWithTools(messages, tools, options);
+      if (result.content) yield { type: 'content_delta', delta: result.content };
+      yield { type: 'done', result };
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? 8000,
+      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
+      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
+      // （TOKENHUB_REASONING_EFFORT 可覆盖）
+      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -229,6 +256,9 @@ export class TokenHubClient extends BaseAiClient {
       content,
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
+    this.logger.log(
+      `[tokenhub] ${this.modelId} stream-done: finish=${finishReason} contentLen=${content.length} toolCalls=${toolCalls.length} usage=${JSON.stringify(lastUsage ?? null)}`,
+    );
     yield {
       type: 'done',
       result: { content, toolCalls, assistantMessage, finishReason, usage: lastUsage },
@@ -247,7 +277,11 @@ export class TokenHubClient extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? 8000,
+      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
+      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
+      // （TOKENHUB_REASONING_EFFORT 可覆盖）
+      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
       stream: true,
     };
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
