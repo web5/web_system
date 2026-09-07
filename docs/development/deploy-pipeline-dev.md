@@ -172,7 +172,7 @@ export const deployAgent: AgentDefinition = {
   id: 'deploy',
   name: '发布助手',
   systemPrompt: /* 见下 */,
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash', // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管
   tools: ['publish_pipeline', 'get_job_status', 'cancel_job', 'publish_version',
           'rollback', 'promote_release', 'list_modules', 'get_current_versions', 'list_releases'],
   capabilities: [
