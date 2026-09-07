@@ -56,19 +56,40 @@ export class RestartExecutor {
     // ---- 端口孤儿清理（铁律，参考 deploy-local.sh / publish-ai-agent.sh）----
     // restart 前确保目标端口占用者 == pm2 当前 pid；否则 kill 残留孤儿进程，避免新进程
     // EADDRINUSE 崩溃、对外仍是旧实例（如 ai-agent 6010 端口被旧孤儿抢占，发布不生效）。
+    //
+    // ⚠️ 防自杀护栏（2026-09-07 根因修复）：历史上 pm2_env.PORT 被污染（如 ai-agent 误存
+    // PORT=6200）时，会把 6200 的真正占用者——正在执行流水线的 deploy-console 自己——误判为
+    // "孤儿" kill -9 掉，导致发布卡死在 restart 阶段。因此：
+    //   1) 只清理"非 pm2 纳管"的占用者（真孤儿/僵尸），pm2 里的服务一律不杀；
+    //   2) 端口取"配置中心注入值 → pm2_env.PORT"两级，前者优先（配置中心是权威）；
+    //   3) 若目标端口被其它 pm2 服务占用 → 记录告警（疑似 PORT 污染/冲突），不再自杀。
+    const pm2Pids = new Set(
+      this.pm2Probe
+        .listProcesses()
+        .map((a) => (a.pid != null ? String(a.pid) : ''))
+        .filter(Boolean),
+    );
     const app = this.pm2Probe.listProcesses().find((a) => a.name === restarted);
-    const port = app?.pm2_env?.PORT;
+    const port = injectEnv.PORT ?? app?.pm2_env?.PORT;
     if (port != null) {
-      const pm2Pid = app?.pid != null ? String(app.pid) : undefined;
       const occupiers = this.command
-        .exec(`lsof -tiTCP:${port} -sTCP:LISTEN`, ws, {})
+        .exec(`lsof -tiTCP:${port} -sTCP:LISTEN`, ws, {}, 15_000)
         .split(/\s+/)
         .map((s) => s.trim())
         .filter(Boolean);
-      const orphans = pm2Pid ? occupiers.filter((occ) => occ !== pm2Pid) : [];
+      const orphans = occupiers.filter((occ) => !pm2Pids.has(occ));
       for (const occ of orphans) {
-        this.command.exec(`kill -9 ${occ}`, ws, {});
-        ctx.log(`清理端口 ${port} 孤儿进程 ${occ}（非 pm2 pid ${pm2Pid}）`);
+        this.command.exec(`kill -9 ${occ}`, ws, {}, 15_000);
+        ctx.log(`清理端口 ${port} 孤儿进程 ${occ}（非 pm2 纳管）`);
+      }
+      const managedConflicts = occupiers.filter(
+        (occ) => pm2Pids.has(occ) && occ !== String(app?.pid ?? ''),
+      );
+      if (managedConflicts.length) {
+        ctx.log(
+          `⚠️ 端口 ${port} 被其它 pm2 服务占用（${managedConflicts.join(', ')}），` +
+            '疑似 pm2_env PORT 污染/配置冲突，已跳过清理。请核查该模块配置中心 PORT 后重新发布。',
+        );
       }
       if (orphans.length) await ctx.save();
     }
@@ -95,11 +116,20 @@ export class RestartExecutor {
       }
     }
 
-    this.command.exec(
-      `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
-      ws,
-      injectEnv,
-    );
+    try {
+      // 90s 上限：pm2 restart 正常秒级返回；极端（daemon 响应/进程 graceful 阻塞）时不致流水线无限卡 restart
+      this.command.exec(
+        `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
+        ws,
+        injectEnv,
+        90_000,
+      );
+    } catch (e) {
+      // 超时/异常不等于发布失败：pm2 daemon 可能已重启完。记录告警，交给后续 verify 探活兜底。
+      const msg = (e as Error).message;
+      ctx.log(`[restart] 重启命令异常/超时: ${msg.slice(0, 240)}`);
+      this.logger.warn(`pm2 restart ${restarted} 命令异常: ${msg}`);
+    }
     ctx.log(`服务已重启: ${restarted}`);
     p.result = { ...(p.result ?? {}), restarted };
     await ctx.save();
