@@ -10,6 +10,11 @@
     "check:env": "bash scripts/check-env.sh",
     "check:health": "bash scripts/health-check.sh",
     "sync:schema": "bash scripts/sync-schema.sh",
-    "sync:kit": "bash scripts/sync-agent-kit.sh"
+    "sync:kit": "bash scripts/sync-agent-kit.sh",
+    "redline:local": "bash scripts/redline/check-commit.sh",
+    "redline:scan": "bash scripts/redline/scan-rules.sh cached",
+    "redline:tree": "bash scripts/redline/scan-rules.sh tree",
+    "hooks:install": "bash scripts/redline/install-git-hooks.sh",
+    "hooks:status": "bash scripts/redline/install-git-hooks.sh -d"
   }
 }

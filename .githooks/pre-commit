@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# pre-commit — 提交前红线检查（L0）
+# 由 git 通过 core.hooksPath=.githooks 自动调用；由 install-git-hooks.sh 激活。
+# 检查内容见 scripts/redline/scan-rules.sh（R1~R4）。
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -n "$ROOT" ] || exit 0
+
+# 只对 staged 变更做检查
+exec bash "$ROOT/scripts/redline/check-commit.sh"
