@@ -16,7 +16,8 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/data-source.ts",
-    "seed": "ts-node -r dotenv/config scripts/seed.ts"
+    "seed": "ts-node -r dotenv/config scripts/seed.ts",
+    "lint:ci": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
   "dependencies": {
     "@liaoliaots/nestjs-redis": "^10.0.0",

@@ -151,6 +151,12 @@
 > - **提 PR 到 master**：`gh` 已装用 `gh pr create --base master --head <分支> ...`；未装则用 GitHub API（`curl -X POST https://api.github.com/repos/web5/web_system/pulls`，`Authorization: Bearer $GH_TOKEN`）。临时 json 用完即删，token 不明文写入可提交文件。
 > - 详见 `docs/development/admin-dev.md` §五。
 
+> ⚠️ **git/CI 红线门禁（quality-gate / kit-gate，2026-09 启用）**：
+> - **本地 pre-commit**：`core.hooksPath=.githooks`（已装），提交自动扫 R1~R4（调试残留/敏感文件/占位/@ts-ignore/:any）。安装：`pnpm hooks:install`；卸载：`pnpm hooks:status` 或脚本 `-u`。
+> - **quality-gate.yml**：PR 自动扫红线 R1~R5 + 改动包 lint(lint:ci 只读)/build/test。提交含 `console.log`、改动包 build 失败 → PR 无法 merge。master 需开分支保护。
+> - **kit-gate.yml（skip-eval 约定）**：改数字人行为定义（`.codebuddy/skills/`、`.codebuddy/agent-kit/` 指南/规则）**必须附评测报告**到 `.codebuddy/evals/reports/`，否则 CI 拦截。**纯排版/错别字/不影响行为的改动** → PR 描述注明 `skip-eval` 并在 commit message 说明即可豁免。
+> - 红线脚本：`pnpm redline:local`（staged 扫描）/ `pnpm redline:scan`（全量 staged）/ `pnpm redline:tree`（本地全仓巡检）。详见 `docs/development/ai-native-sdlc-ci-deployment.md`。
+
 > 完整版：`.codebuddy/references/coding-best-practices.md`  
 > 审计报告：`docs/archive/todo-list/audit-report-2026-07-26.md`
 

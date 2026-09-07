@@ -1,0 +1,67 @@
+# quality-gate — PR 代码质量门禁（红线扫描 + 改动包 build/test）
+#
+# 设计：docs/development/ai-native-sdlc-ci-deployment.md §2.3
+#   job1 redline-scan  : R1~R5 红线扫描（近零成本，PR diff）
+#   job2 changed-build : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
+# 职责分离：auto-pr.yml 只负责建 PR，本 workflow 负责检查。
+# 启用要求：master 分支保护开启，要求本 workflow 通过才可 merge。
+name: quality-gate
+
+on:
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redline-scan:
+    name: 红线扫描 (R1~R5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PR diff 红线扫描
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || 'origin/master' }}"
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1 >/dev/null 2>&1 || true
+          fi
+          # 两点 diff（clean checkout 下 git diff <sha> 即 <sha>..HEAD）
+          bash scripts/redline/scan-rules.sh diff "$BASE"
+
+  changed-packages:
+    name: 改动包 build/test
+    runs-on: ubuntu-latest
+    needs: redline-scan
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        name: pnpm setup
+        with:
+          version: 9   # 与本地 pnpm -v 对齐；若 lockfile 由其它 pnpm 生成需调整
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: 提取改动包并逐个 build/test
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || 'origin/master' }}"
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1 >/dev/null 2>&1 || true
+          fi
+          # 两点 diff（clean checkout 下 git diff <sha> 即 <sha>..HEAD）
+          # 注意：lint 档暂未挂载——仓库子包 ESLint 9 缺 flat config（存量问题），
+          # 待补齐 eslint.config.* 后在此加 --lint（见 scripts/ci/changed-packages.sh）
+          bash scripts/ci/changed-packages.sh "$BASE"

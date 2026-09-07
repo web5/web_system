@@ -51,14 +51,14 @@
 - 验收：任意新需求走 brainstorm 后，`docs/intents/` 下存在对应文件，且 spec 引用其路径。
 - 涉及：`.codebuddy/skills/rd-brainstorm/SKILL.md`、`docs/intents/`
 
-#### 任务 2：Hook 等效实现（git + CI 守门）
+> ⚠️ 2026-09-07 更新：机器化红线（任务 2 改造版）+ Evals 运行体（任务 4 改造版）已有**完整部署设计**，
+> 见 `docs/development/ai-native-sdlc-ci-deployment.md`（M1/M2 任务拆分 + 验收 + 落地方位）。下方为原任务简述。
+
+#### 任务 2：Hook 等效实现（git + CI 守门）→ 已细化为 CI 部署文档 §2（M1）
 - 目标：红线从「规则文本」变成「机器检查」，治微前端部署等反复踩坑问题。
-- 做法：
-  - 加 `pre-commit` hook：拦截 `.env`、token 类敏感文件进 git（根 `.env` 有 `GITHUB_PR_TOKEN`）。
-  - 加 lint-staged：commit 前自动跑 eslint + typecheck。
-  - `auto-pr.yml` 增加 CI 门禁：`pnpm build` + 单测必须绿才可 merge（当前仅自动建 PR，无检查）。
-- 验收：提交含 `.env` 的变更被拒；PR 未过 lint/build 无法 merge。
-- 涉及：根 `.git-hooks/` 或 husky、`lint-staged`、`.github/workflows/auto-pr.yml`
+- 做法：零依赖原生 `.githooks/pre-commit`（本地秒级 R1~R4）+ `.github/workflows/quality-gate.yml`（PR 门禁：R1~R5 红线扫描 + 改动包 build/test）+ `scripts/redline/*` + `scripts/ci/changed-packages.sh`。
+- 验收：提交含 `console.log`/`.env` 被拦；改动包 build 失败 → PR 无法 merge。
+- 涉及：`.githooks/`、`scripts/redline/`、`scripts/ci/changed-packages.sh`、`.github/workflows/quality-gate.yml`
 
 #### 任务 3：REVIEW.md（PR 审查顺序）
 - 目标：PR 审查有固定顺序，不凭经验。
@@ -68,11 +68,11 @@
 
 ### 第二批：需投入但收益稳定
 
-#### 任务 4：Evals（回归评测）
+#### 任务 4：Evals（回归评测）→ 已细化为 CI 部署文档 §3（M2）
 - 目标：换模型/改规则后防退步。
-- 做法：从归档踩坑提炼 8-10 个高频场景（CORS 硬编码 `*`、异常过滤器缺失、微前端版本表写错库、console.log 残留、`.env` 提交…），做成 `scripts/evals/` 下的检查清单 + 自动检测脚本。
-- 验收：`pnpm evals` 一键跑完场景集，输出通过率。
-- 涉及：`scripts/evals/`、根 `package.json` scripts
+- 做法（web_system 作为消费方）：`.codebuddy/evals/`（报告区，避开 agent-kit 同步覆盖）+ `scripts/redline/check-kit-structure.sh`（L1 结构守护）+ `.github/workflows/kit-gate.yml`（结构检查 + 改行为定义必须附评测报告）。完整评测（L2~L4）在 ai-agent-kit 源仓库跑（工具已齐），报告拷回 `.codebuddy/evals/reports/`。
+- 验收：改动 `.codebuddy/skills` 不附报告 → PR 被拦；删 skill 文件 → 结构检查失败。
+- 涉及：`.codebuddy/evals/`、`scripts/redline/check-kit-structure.sh`、`.github/workflows/kit-gate.yml`
 
 ### 第三批：暂缓（成本 > 当前收益）
 
