@@ -23,19 +23,41 @@
   </view>
 </view>
 
-<!-- 底部输入栏 -->
+<!-- 底部输入栏（吸底：快捷问题 chips + textarea + 发送） -->
 <view class="chat-input-bar">
-  <input
-    class="chat-input"
-    placeholder="如：这个利率合法吗？提前还款会怎样？"
-    placeholder-class="chat-input-ph"
-    value="{{input}}"
-    confirm-type="send"
-    bindinput="onInput"
-    bindconfirm="send"
-    disabled="{{sending}}"
-  />
-  <button class="chat-send" bindtap="send" disabled="{{sending || !input}}">
-    {{sending ? '...' : '发送'}}
-  </button>
+  <!-- 快捷追问 chips（来自本次报告 askableQuestions，点一下即发送） -->
+  <scroll-view
+    wx:if="{{suggestions.length}}"
+    class="chat-chips {{sending ? 'is-sending' : ''}}"
+    scroll-x="{{true}}"
+    enhanced
+    show-scrollbar="{{false}}"
+  >
+    <view
+      wx:for="{{suggestions}}"
+      wx:key="*this"
+      class="chip"
+      data-q="{{item}}"
+      bindtap="onTapChip"
+    >{{item}}</view>
+  </scroll-view>
+
+  <view class="input-row">
+    <textarea
+      class="chat-input"
+      placeholder="如：这个利率合法吗？提前还款会怎样？"
+      placeholder-class="chat-input-ph"
+      value="{{input}}"
+      auto-height
+      maxlength="200"
+      cursor-spacing="20"
+      fixed="{{true}}"
+      show-confirm-bar="{{false}}"
+      bindinput="onInput"
+      disabled="{{sending}}"
+    ></textarea>
+    <button class="chat-send" bindtap="send" disabled="{{sending || !input}}">
+      {{sending ? '…' : '发送'}}
+    </button>
+  </view>
 </view>

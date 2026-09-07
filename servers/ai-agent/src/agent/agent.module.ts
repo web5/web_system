@@ -21,6 +21,7 @@ import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
 import { ContractCleanerTool } from '../contract/tools/contract-cleaner.tool';
 import { ContractBenchmarkTool } from '../contract/tools/contract-benchmark.tool';
 import { contractRiskAgent } from '../contract/agents/contract-risk.agent';
+import { ContractConversationService } from '../contract/contract-conversation.service';
 import { deployAgent } from '../deploy/agents/deploy.agent';
 import { McpService } from '../mcp/mcp.service';
 import { McpModule } from '../mcp/mcp.module';
@@ -29,6 +30,7 @@ import { DbConversationMemory } from './memory/db-conversation-memory';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
+import { AgentConversationQueryService } from './agent-conversation-query.service';
 import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
 import { AgentSkillProvider } from '../skill/agent-skill-provider';
@@ -143,6 +145,8 @@ const runnerProvider: Provider = {
     ContractIrrTool,
     ContractCleanerTool,
     ContractBenchmarkTool,
+    ContractConversationService,
+    AgentConversationQueryService,
   ],
   controllers: [AgentController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],

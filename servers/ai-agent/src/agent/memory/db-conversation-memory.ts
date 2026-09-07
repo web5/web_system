@@ -56,6 +56,8 @@ export class DbConversationMemory implements ConversationMemoryPort {
 
     let summary: string | null = existing?.summary ?? null;
     let summarizedCount = existing?.summarizedCount ?? 0;
+    // 标题只在无既有值时生成（首条 user 前 20 字），既有值保留——业务快照服务后续可覆盖
+    const title = existing?.title ?? this.defaultTitle(fullRunMessages);
 
     // 触发摘要压缩：旧摘要 + 早期消息 → 新摘要，近期保留 config.keepRecent 条
     if (this.compaction.shouldCompact(recent, config)) {
@@ -65,15 +67,14 @@ export class DbConversationMemory implements ConversationMemoryPort {
       if (next) {
         summary = next;
         summarizedCount += oldPart.length;
-        await this.repo.save(
-          this.repo.create({
-            id,
-            userId,
-            summary,
-            summarizedCount,
-            messages: newRecent,
-          }),
-        );
+        await this.saveConversation({
+          id,
+          userId,
+          title,
+          summary,
+          summarizedCount,
+          messages: newRecent,
+        });
         this.logger.log(
           `[DB] 触发摘要压缩: 压缩 ${oldPart.length} 条，保留 ${newRecent.length} 条，会话 ${id}`,
         );
@@ -81,16 +82,37 @@ export class DbConversationMemory implements ConversationMemoryPort {
       }
     }
 
-    await this.repo.save(
-      this.repo.create({
-        id,
-        userId,
-        summary,
-        summarizedCount,
-        messages: recent,
-      }),
-    );
+    await this.saveConversation({
+      id,
+      userId,
+      title,
+      summary,
+      summarizedCount,
+      messages: recent,
+    });
     return id;
+  }
+
+  /**
+   * 落库会话。仅携带对话记忆字段（id/userId/title/summary/summarizedCount/messages），
+   * 不携带 report/meta 业务列——TypeORM 对未提供的列不生成 UPDATE，避免把快照列覆盖为空。
+   */
+  private async saveConversation(data: {
+    id: string;
+    userId: string;
+    title: string;
+    summary: string | null;
+    summarizedCount: number;
+    messages: StoredMessage[];
+  }): Promise<void> {
+    await this.repo.save(this.repo.create(data));
+  }
+
+  /** 默认标题：首条 user 消息去空白后前 20 字 */
+  private defaultTitle(fullRunMessages: ChatMessage[]): string {
+    const firstUser = fullRunMessages.find((m) => m.role === 'user');
+    const text = (firstUser?.content ?? '').replace(/\s+/g, ' ').trim();
+    return text ? text.substring(0, 20) : '新对话';
   }
 
   /** 生成新会话 id（uuid v4，Node crypto 生成，跨 MySQL/PG 通用） */

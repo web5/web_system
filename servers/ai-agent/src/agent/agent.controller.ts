@@ -4,11 +4,14 @@ import {
   Post,
   Body,
   Param,
+  Query,
+  ParseUUIDPipe,
   Res,
   Req,
   UseGuards,
   HttpException,
   HttpStatus,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -19,6 +22,9 @@ import { AuthGuard } from '../auth/auth.guard';
 import { PermissionGuard, RequirePermission } from '@web-system/shared';
 import { AgentRunPusher } from './agent-run-pusher';
 import { PermissionBroker } from './permission-broker';
+import { AgentConversationQueryService } from './agent-conversation-query.service';
+import { ListConversationsDto } from './dto/conversation-query.dto';
+import { ContractConversationService } from '../contract/contract-conversation.service';
 
 @ApiTags('AI Agent')
 @Controller('agent')
@@ -32,7 +38,49 @@ export class AgentController {
     private readonly runPusher: AgentRunPusher,
     private readonly clientRegistry: ClientRegistry,
     private readonly permissionBroker: PermissionBroker,
+    private readonly contractConversationService: ContractConversationService,
+    private readonly conversationQueryService: AgentConversationQueryService,
   ) {}
+
+  /**
+   * 我的对话列表（C 端历史）：仅当前用户，updatedAt 倒序，轻量列分页。
+   * 供 mini-app 历史记录页展示多次合同分析记录。
+   */
+  @Get('conversations')
+  @ApiOperation({ summary: '我的 Agent 对话列表（分页）' })
+  async listConversations(@Query() query: ListConversationsDto, @Req() req: Request) {
+    const userId = String((req as any).user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    return this.conversationQueryService.listConversations(userId, query.page, query.pageSize);
+  }
+
+  /** 对话详情（含报告快照与消息序列）：仅会话所属用户可读，他人会话统一 404 */
+  @Get('conversations/:id')
+  @ApiOperation({ summary: 'Agent 对话详情（报告快照 + 消息序列）' })
+  async getConversation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: Request,
+  ) {
+    const userId = String((req as any).user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    const conv = await this.conversationQueryService.getConversation(userId, id);
+    if (!conv) {
+      throw new NotFoundException('对话不存在');
+    }
+    return {
+      id: conv.id,
+      title: conv.title,
+      report: conv.report,
+      meta: conv.meta,
+      messages: Array.isArray(conv.messages) ? conv.messages : [],
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+    };
+  }
 
   /** Agent 运行（C 端，SSE 流式，含工具调用过程） */
   @Post('run')
@@ -197,5 +245,20 @@ export class AgentController {
       .catch(() => {
         /* pusher 内已 warn，不外抛 */
       });
+
+    // 合同风险场景：分析 final 若为结构化报告 → 落 report 快照（独立于摘要压缩，保证历史可回放）。
+    // 追问文本无法解析成报告 → 服务内 no-op，天然不覆盖既有快照。
+    if (
+      dto.agentId === 'contract-risk' &&
+      conversationIdFromEngine &&
+      finalAnswer &&
+      !errorMessage
+    ) {
+      this.contractConversationService
+        .snapshotReport(userId, conversationIdFromEngine, finalAnswer)
+        .catch(() => {
+          /* 快照失败不阻塞对话主链路 */
+        });
+    }
   }
 }
