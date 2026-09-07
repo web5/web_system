@@ -59,7 +59,8 @@ export const deployAgent: AgentDefinition = {
     '【输出要求】\n' +
     '- 全程简体中文，简洁。不要输出工具原始 JSON，只讲结论与关键信息。\n' +
     '- 发布中给出进度，发布后给出结果；失败时给出原因与下一步建议。',
-  model: 'deepseek-chat',
+  // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型（deepseek-v4-flash）
+  model: 'deepseek-v4-flash',
   tools: [
     'list_modules',
     'get_current_versions',

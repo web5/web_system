@@ -1,5 +1,10 @@
 /**
- * DeepSeek 客户端（OpenAI 兼容），原生 fetch 版。
+ * [已弃用] DeepSeek 官方直连客户端（OpenAI 兼容），原生 fetch 版。
+ *
+ * 背景：官方直连 deepseek-chat（api.deepseek.com + DEEPSEEK_API_KEY）已下线，
+ * DeepSeek 系列统一走 TokenHub 托管模型（见 tokenhub.client.ts，如 deepseek-v4-flash）。
+ * ai-agent / ai-service 均已不再注册本客户端。
+ * 本文件暂时保留仅为兼容 kedou-agent CLI（独立子项目）引用；新代码禁止使用。
  */
 import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk, ToolCallSchema, ToolCall, ChatWithToolsResult, StreamToolEvent, parseJsonToolCall } from './base-ai.client';
 import { Logger } from '../lib/logger';
@@ -135,7 +140,7 @@ export class DeepseekClient extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? 8000,
       stream: true,
       stream_options: { include_usage: true },
     };

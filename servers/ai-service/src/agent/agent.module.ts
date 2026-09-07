@@ -15,7 +15,7 @@ import {
   ClientRegistry,
   Compaction,
   Hy3Client,
-  DeepseekClient,
+  TokenHubClient,
   ToolRegistry,
 } from '@kedouai/agent-core';
 
@@ -23,13 +23,14 @@ import {
  * Agent harness 统一注册入口（收敛自 @kedouai/agent-core）。
  * 引擎/注册表/客户端/摘要压缩均复用 agent-core（纯 TS），
  * 通过 useFactory 桥接进 Nest DI；ConversationMemory(DB 版) 与 ImageGenTool(生图) 为 ai-service 特有。
+ * 说明：官方直连 DeepseekClient(deepseek-chat) 已下线，统一走 TokenHub 托管（deepseek-v4-flash）。
  */
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
   useFactory: (): ClientRegistry => {
     const registry = new ClientRegistry();
     registry.register(new Hy3Client());
-    registry.register(new DeepseekClient());
+    registry.register(new TokenHubClient('deepseek-v4-flash'));
     return registry;
   },
 };
