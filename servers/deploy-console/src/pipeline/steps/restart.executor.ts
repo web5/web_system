@@ -6,6 +6,8 @@ import { CommandService } from '../../shell/command.service';
 // 配置中心服务（发布/重启时按 global→env→module 合并并强制覆盖注入进程环境）
 import { ConfigService as ConfigCenterService } from '../../config/config.service';
 import { StepContext } from './step.types';
+import { readFile, writeFile } from 'fs/promises';
+import { join } from 'path';
 
 /**
  * restart 内置步骤执行体（category=deploy，后端服务重启）。
@@ -71,6 +73,28 @@ export class RestartExecutor {
       if (orphans.length) await ctx.save();
     }
 
+    // ---- 配置中心值渲染落盘 .env（增量①）----
+    // 背景：配置原本只经 pm2 restart --update-env 注入"进程 env"，但 ai-agent 等经
+    // publish 脚本启动、以及远端 /data 路径的服务，都靠读 <serviceDir>/.env 文件拿配置，
+    // 因此吃不到配置中心（历史上 key 只能手改服务器 .env，易改错位置）。
+    // 这里在重启前把配置中心 resolve 结果（global→env→module 覆盖后）合并写进进程
+    // 运行目录的 .env：文件持久化 + pm2 进程注入双保险。文件 0600（可能含密钥明文，
+    // 仅本机服务读取，与人工编辑 .env 语义一致）。
+    const injectKeys = Object.keys(injectEnv);
+    if (injectKeys.length) {
+      const proc = this.pm2Probe.listProcesses().find((a) => a.name === restarted);
+      const runDir =
+        (proc as any)?.pm2_env?.pm_cwd || join(ws, 'servers', mod?.dir || p.moduleKey);
+      try {
+        await renderEnvFile(join(runDir, '.env'), injectEnv);
+        ctx.log(`[config] 配置中心值已渲染落盘 ${join(runDir, '.env')}（${injectKeys.length} 项, 0600）`);
+        await ctx.save();
+      } catch (e) {
+        // 落盘失败不阻断：进程注入仍会生效；记 warn 供排查
+        this.logger.warn(`渲染 .env 失败（不阻断重启）: ${(e as Error).message}`);
+      }
+    }
+
     this.command.exec(
       `"${this.command.pm2Bin()}" restart ${restarted} --update-env`,
       ws,
@@ -99,4 +123,50 @@ export class RestartExecutor {
       return {};
     }
   }
+}
+
+/** dotenv 值序列化：纯安全字符裸写，其余用 JSON 双引号+转义（dotenv 兼容解析） */
+function serializeEnvValue(v: string): string {
+  if (/^[A-Za-z0-9_\-./:@%+=,]+$/.test(v)) return v;
+  return JSON.stringify(v);
+}
+
+/**
+ * 把配置中心 resolve 结果合并写进目标 .env 文件：
+ * - 保留原文件其它行（注释/未被配置中心纳管的本地 key），仅覆盖/追加配置中心下发的 key；
+ * - 已存在 key 覆盖首个匹配行，未命中则追加到文件末尾；
+ * - 以 0600 写出（可能含密钥明文，仅供本机服务读取）。
+ */
+async function renderEnvFile(envFile: string, cfg: Record<string, string>): Promise<void> {
+  let lines: string[] = [];
+  try {
+    const raw = await readFile(envFile, 'utf8');
+    if (raw.trim() !== '') {
+      lines = raw.split('\n');
+      if (lines.length && lines[lines.length - 1] === '') lines.pop(); // 去尾空，末尾统一补一个
+    }
+  } catch {
+    lines = []; // 文件不存在 → 新建
+  }
+
+  const keyAt = new Map<string, number>();
+  lines.forEach((l, i) => {
+    const m = l.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (m && !keyAt.has(m[1])) keyAt.set(m[1], i);
+  });
+
+  for (const [k, v] of Object.entries(cfg)) {
+    const line = `${k}=${serializeEnvValue(v)}`;
+    const idx = keyAt.get(k);
+    if (idx !== undefined) {
+      lines[idx] = line;
+    } else {
+      lines.push(line);
+      keyAt.set(k, lines.length - 1);
+    }
+  }
+
+  let out = lines.join('\n');
+  if (out && !out.endsWith('\n')) out += '\n';
+  await writeFile(envFile, out, { mode: 0o600 });
 }

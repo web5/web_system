@@ -58,6 +58,25 @@ step "发布目录: ${RELEASE_DIR}（分支 ${BRANCH}）"
 [ -d "$RELEASE_DIR/packages/agent-core" ] || err "发布目录缺少 agent-core: $RELEASE_DIR/packages/agent-core"
 [ -x "$NODE_BIN/nest" ] || err "发布目录缺少构建工具 node_modules/.bin/nest，先执行依赖安装"
 
+# ---------- 0.5 运行期环境预检（防呆） ----------
+# 背景：ai-agent 由本脚本在 RELEASE_DIR 构建并 pm2 运行，运行实例读的是
+# RELEASE_DIR/servers/ai-agent/.env（不是工作区 .env）。且若未配置 TOKENHUB_API_KEY，
+# TokenHubClient.getApiKey() 会回退用 HY3_API_KEY 直连 TokenHub 网关 → 稳定 402/401，
+# 表面上像"欠费"，实际是 key 配错位置/未配置。这里在发布前显式检查并告警。
+AI_ENV_FILE="${RELEASE_DIR}/servers/ai-agent/.env"
+if [ -f "$AI_ENV_FILE" ] && grep -qE '^[[:space:]]*TOKENHUB_API_KEY=[^[:space:]]+' "$AI_ENV_FILE"; then
+  step "release .env 已配置 TOKENHUB_API_KEY（TokenHub 模型可用）"
+else
+  warn "release .env 未配置有效的 TOKENHUB_API_KEY → deepseek-v4-flash/pro/hy4-preview 将不可用"
+  warn "（TokenHubClient 会回退 HY3_API_KEY 直连 TokenHub 返回 402，非欠费即是此因）。"
+  warn "请编辑 ${AI_ENV_FILE} 添加 TOKENHUB_API_KEY=sk-tp-... 后重跑本脚本"
+fi
+if [ -f "$AI_ENV_FILE" ] && grep -qE '^[[:space:]]*HY3_API_KEY=[^[:space:]]+' "$AI_ENV_FILE"; then
+  step "release .env 已配置 HY3_API_KEY（hy3 可用）"
+else
+  warn "release .env 未配置 HY3_API_KEY → hy3 模型不可用"
+fi
+
 # ---------- 1. 同步发布目录（ff-only，失败则 reset --hard 到 origin） ----------
 # 说明：release 是纯发布镜像，常规用 ff-only；若工作区曾 amend/rebase 重写 commit
 # hash，本地 HEAD 与 origin 同内容但 hash 不同，ff-only 会失败。此时只要工作树干净
