@@ -58,12 +58,16 @@ export class CommandService {
     return path.join(this.nodeBinDir(), 'npx');
   }
 
-  /** 同步执行命令（PATH 补齐），返回 stdout 原文（git/tar/scp/ssh/pm2/pnpm 等共用） */
-  exec(cmd: string, cwd: string, extraEnv: Record<string, string> = {}): string {
+  /**
+   * 同步执行命令（PATH 补齐），返回 stdout 原文（git/tar/scp/ssh/pm2/pnpm 等共用）。
+   * @param timeoutMs 执行超时（毫秒）；>0 时超时抛 ETIMEDOUT 并清理子进程，0=不设超时（兼容旧调用）
+   */
+  exec(cmd: string, cwd: string, extraEnv: Record<string, string> = {}, timeoutMs = 0): string {
     return execSync(cmd, {
       cwd,
       encoding: 'utf-8',
       env: buildChildEnv(extraEnv, this.nodeBinDir()),
+      timeout: timeoutMs,
     });
   }
 }
