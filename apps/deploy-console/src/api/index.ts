@@ -51,49 +51,6 @@ export const authApi = {
 
 /* ========== Deploy ========== */
 export const deployApi = {
-  build: (component: string) =>
-    http.post('/deploy/build', { component }) as Promise<{ taskId: string }>,
-  deploy: (env: string, component: string, confirm = false) =>
-    http.post('/deploy/deploy', { env, component, confirm }) as Promise<{
-      taskId: string
-    }>,
-  rollback: (env: string, tag: string, confirm = false) =>
-    http.post('/deploy/rollback', { env, tag, confirm }) as Promise<{
-      taskId: string
-    }>,
-  publishVersion: (env: string, versionTag: string, confirm = false) =>
-    http.post('/deploy/publish-version', { env, versionTag, confirm }) as Promise<{
-      status: string
-      message: string
-      component: string
-      versionTag: string
-    }>,
-  tasks: () =>
-    http.get('/deploy/tasks') as Promise<
-      {
-        id: string
-        env: string
-        component: string
-        status: string
-        startedAt: string
-        finishedAt: string
-        logs: string[]
-      }[]
-    >,
-  task: (id: string) =>
-    http.get(`/deploy/task/${id}`) as Promise<{
-      id: string
-      env: string
-      component: string
-      status: string
-      startedAt: string
-      finishedAt: string
-      logs: string[]
-    }>,
-  releases: (env: string) =>
-    http.get('/deploy/releases', { params: { env } }) as Promise<
-      { tag: string; date: string; size: string }[]
-    >,
   modules: () =>
     http.get('/deploy/modules') as Promise<
       {
@@ -134,32 +91,6 @@ export const deployApi = {
         note?: string
       }[]
     }>,
-  currentVersions: (env: string) =>
-    http.get('/deploy/current-versions', { params: { env } }) as Promise<
-      {
-        envId: string
-        moduleKey: string
-        moduleName: string
-        currentVersion: string
-        status: string
-        deployedAt: string
-        deployedBy: string
-      }[]
-    >,
-  versions: (env?: string) =>
-    http.get('/deploy/versions', { params: env ? { env } : {} }) as Promise<
-      {
-        id: string
-        env: string
-        component: string
-        versionTag: string
-        gitCommit?: string
-        gitBranch?: string
-        releasedBy?: string
-        releasedAt: string
-        status: string
-      }[]
-    >,
 }
 
 /* ========== Environments ========== */

@@ -1022,9 +1022,10 @@ onUnmounted(stopPolling)
       </div>
       <a-table
         :columns="[
-          { title: '实例', dataIndex: 'id', key: 'id', width: 140 },
-          { title: '环境/模块', key: 'who', width: 170 },
-          { title: '模板', dataIndex: 'templateName', key: 'templateName', width: 110 },
+          { title: '流水线 ID', dataIndex: 'id', key: 'id', width: 140 },
+          { title: '名称', key: 'name', width: 150 },
+          { title: '模块', key: 'module', width: 170 },
+          { title: '环境', dataIndex: 'env', key: 'env', width: 80 },
           { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 110 },
           { title: '状态', dataIndex: 'status', key: 'status', width: 110 },
           { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
@@ -1044,14 +1045,15 @@ onUnmounted(stopPolling)
               <span style="font-family: monospace;">{{ String(record.id).slice(-12) }}</span>
             </a-tooltip>
           </template>
-          <template v-else-if="column.key === 'who'">
-            <a-tag :color="record.mode === 'grayscale' ? 'orange' : 'blue'" style="margin-right: 0;">
+          <template v-else-if="column.key === 'name'">
+            <!-- 流水线名称缺省回填模块名（design §13：name ?? moduleKey） -->
+            {{ record.templateName || record.moduleKey }}
+          </template>
+          <template v-else-if="column.key === 'module'">
+            <a-tag :color="record.mode === 'grayscale' ? 'orange' : 'blue'" style="margin-right: 4px;">
               {{ record.mode === 'grayscale' ? '灰度' : '全量' }}
             </a-tag>
-            {{ record.env }} / {{ record.moduleKey }}
-          </template>
-          <template v-else-if="column.key === 'templateName'">
-            {{ record.templateName || '—' }}
+            {{ record.moduleKey }}
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ statusText(record.status) }}</a-tag>

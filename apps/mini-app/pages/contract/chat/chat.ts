@@ -7,12 +7,26 @@
  * 追问复用同一会话（conversationId），AI 结合已分析的合同上下文作答。
  */
 import type { ContractReport } from '../../../services/contract-api';
-import { sendContractFollowUp, getContractConversation } from '../../../services/contract-api';
+import { sendContractFollowUp, sendContractFollowUpStream, getContractConversation } from '../../../services/contract-api';
 
 interface ChatMsg {
   role: 'user' | 'ai';
   text: string;
+  /** 内部唯一 id，用于流式阶段定位气泡（仅运行时使用，不渲染） */
+  _id?: string;
+  /** 是否正在接收 SSE 增量（true 时显示流式光标） */
+  streaming?: boolean;
 }
+
+/** 工具名 → 中文执行文案（与 analyzing / assistant 屏同义，工具阶段可见输出） */
+const TOOL_HINT: Record<string, string> = {
+  'contract-cleaner': '正在清洗 OCR 识别噪声…',
+  'contract-rule': '正在扫描法定风险信号…',
+  'contract-irr': '正在测算真实年化利率…',
+  'contract-benchmark': '正在对比市场基准…',
+  'law-search': '正在检索法律条文…',
+  'web-search': '正在联网检索…',
+};
 
 /** 快捷追问 chips：收集报告里 signals/rights/optimize 的可追问问题，去空去重 */
 function collectSuggestions(report?: ContractReport | null): string[] {
@@ -56,6 +70,8 @@ Page({
     chatMessages: [] as ChatMsg[],
     input: '',
     sending: false,
+    /** AI 长消息"展开/收起"状态：按消息数组下标记录是否已展开（true=展开显示全文） */
+    expandMap: {} as Record<number, boolean>,
     /** 历史对话加载中（加载完成前禁止发送，避免并发覆盖初始消息） */
     historyLoading: false,
     /** 快捷追问 chips（来自当前报告的 askableQuestions） */
@@ -117,12 +133,39 @@ Page({
         }
         // tool 消息不展示
       }
-      this.setData({ chatMessages, suggestions: collectSuggestions(detail.report) });
-    } catch {
       this.setData({
-        chatMessages: [{ role: 'ai', text: '对话历史加载失败，请稍后重试。' }],
+        chatMessages,
+        suggestions: collectSuggestions(detail.report),
       });
-      return;
+    } catch (err: any) {
+      // 把错误细节打到 console，便于排查（401/404/500/网络）
+      console.error('[chat] history load failed', { conversationId, err });
+      // 降级：网络/服务异常时，回退到本地缓存的报告（同一会话的首条结论），
+      // 让用户能继续追问；如彻底拿不到也给出更明确提示而不是冷冰冰的"加载失败"
+      const storage = wx.getStorageSync('contract_report');
+      const last = storage?.latest as (ContractReport & { conversationId?: string }) | undefined;
+      const errHint =
+        (err && (err.statusCode ? `HTTP ${err.statusCode}` : null)) ||
+        (err && (err.errMsg || err.message)) ||
+        '网络异常';
+      if (last && last.conversationId === conversationId) {
+        const aiMsg = last.conclusion || '合同风险分析已完成。有什么具体条款想进一步了解，可以直接问我。';
+        this.setData({
+          chatMessages: [{ role: 'ai', text: aiMsg }],
+          suggestions: collectSuggestions(last),
+        });
+        wx.showToast({
+          title: `对话历史暂未拉到（${errHint}），已显示最近一次报告`,
+          icon: 'none',
+          duration: 2500,
+        });
+      } else {
+        this.setData({
+          chatMessages: [
+            { role: 'ai', text: `对话历史暂时拉不到（${errHint}）。你仍然可以继续追问——AI 会结合该会话上下文回复。` },
+          ],
+        });
+      }
     } finally {
       this.setData({ historyLoading: false });
     }
@@ -184,7 +227,7 @@ Page({
     this.sendWith(question);
   },
 
-  /** 发送追问（内部实现，支持传入具体问题） */
+  /** 发送追问（内部实现，支持传入具体问题）—— 真 SSE 流式渲染 */
   sendWith(question: string) {
     if (this.data.sending) return;
     this.clearChips(); // 发送即收起快捷问题条
@@ -195,28 +238,63 @@ Page({
       return;
     }
 
-    this.setData({
-      chatMessages: [...this.data.chatMessages, { role: 'user', text: question }],
-      input: '',
-      sending: true,
-    });
+    // 先 push 用户消息 + 一条 AI 占位气泡（流式期间持续更新 text）
+    const aiId = `ai-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    (this as any)._aiIds = (this as any)._aiIds || new Set();
+    (this as any)._aiIds.add(aiId);
+    const baseMessages = [
+      ...this.data.chatMessages,
+      { role: 'user' as const, text: question, _id: `u-${Date.now()}` },
+      { role: 'ai' as const, text: '', _id: aiId, streaming: true },
+    ];
+    this.setData({ chatMessages: baseMessages, input: '', sending: true });
     this.scrollToBottom();
 
-    sendContractFollowUp(question, conversationId)
-      .then((reply) => {
-        this.setData({
-          chatMessages: [
-            ...this.data.chatMessages,
-            { role: 'ai', text: reply || '抱歉，暂时无法回答这个问题。' },
-          ],
-          sending: false,
-        });
-        this.scrollToBottom();
-      })
-      .catch(() => {
-        wx.showToast({ title: '追问失败，请稍后再试', icon: 'none' });
+    const replaceAiText = (nextText: string, done: boolean) => {
+      const ids = (this as any)._aiIds as Set<string>;
+      if (done) ids.delete(aiId);
+      const messages = this.data.chatMessages.map((m: any) =>
+        m._id === aiId ? { ...m, text: nextText, streaming: !done } : m,
+      );
+      this.setData({ chatMessages: messages });
+      this.scrollToBottom();
+    };
+
+    sendContractFollowUpStream(question, conversationId, {
+      onEvent: (event) => {
+        // 工具阶段：把"思考中…"换成具体步骤文案，弥补流式报告前的"空档感"
+        if (event.type === 'tool_call') {
+          const name = event.name || '分析工具';
+          replaceAiText(`🔧 ${TOOL_HINT[name] || `正在执行「${name}」…`}`, false);
+        } else if (event.type === 'tool_result') {
+          replaceAiText('✅ 已收到工具结果，正在整理回答…', false);
+        } else if (event.type === 'start') {
+          replaceAiText('正在思考你的问题…', false);
+        }
+      },
+      onDelta: (delta) => {
+        const cur = (this.data.chatMessages.find((m: any) => m._id === aiId) as any) || { text: '' };
+        replaceAiText((cur.text || '') + delta, false);
+      },
+      onReply: (reply) => {
+        replaceAiText(reply || '抱歉，暂时无法回答这个问题。', true);
         this.setData({ sending: false });
-      });
+      },
+      onError: (err) => {
+        const cur = (this.data.chatMessages.find((m: any) => m._id === aiId) as any) || { text: '' };
+        replaceAiText(`${cur.text || ''}\n\n追问失败：${err?.message || '稍后再试'}`.trim(), true);
+        this.setData({ sending: false });
+        wx.showToast({ title: '追问失败，请稍后再试', icon: 'none' });
+      },
+    });
+  },
+
+  /** 切换 AI 长消息的展开/收起状态 */
+  onToggleExpand(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    if (Number.isNaN(idx)) return;
+    const cur = !!this.data.expandMap[idx];
+    this.setData({ expandMap: { ...this.data.expandMap, [idx]: !cur } });
   },
 
   scrollToBottom() {

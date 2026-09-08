@@ -10,6 +10,7 @@ import {
   CONFIGURABLE_STAGES,
   DEFAULT_BUILD_TEMPLATE,
   STAGE_BUILTIN_DESCRIPTIONS,
+  StageAction,
 } from '../entities/deploy-module-stage-command.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
 
@@ -18,6 +19,57 @@ const ALL_PIPELINE_STAGES = PIPELINE_STAGES as readonly string[];
 export interface ResolvedStageCommand {
   command: string;
   timeoutSec?: number;
+}
+
+/**
+ * 从一行记录取出要执行的操作序列（纯函数，便于单测）。
+ *
+ * 兼容优先：`actions` 为空时把存量 `command` 包装成单操作 ——
+ * 保证 v4 上线后所有未迁移模块行为完全不变。
+ */
+export function pickActions(row: {
+  actions?: StageAction[] | null;
+  command?: string | null;
+  timeoutSec?: number | null;
+}): StageAction[] {
+  const list = (row.actions ?? []).filter((a) => a && a.enabled !== false);
+  if (list.length) return list;
+  if (row.command?.trim()) {
+    return [
+      {
+        id: 'a1',
+        type: 'shell',
+        name: '主操作',
+        code: row.command.trim(),
+        timeoutSec: row.timeoutSec ?? undefined,
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * 操作序列校验（纯函数，保存前调用）。
+ * @returns 错误列表；空数组表示合法
+ */
+export function validateActions(actions: StageAction[]): string[] {
+  const errs: string[] = [];
+  const ids = new Set<string>();
+  actions.forEach((a, i) => {
+    const at = `操作#${i + 1}`;
+    if (!a?.id) errs.push(`${at} 缺少 id`);
+    else if (ids.has(a.id)) errs.push(`${at} id 重复: ${a.id}`);
+    else ids.add(a.id);
+    if (!a?.name?.trim()) errs.push(`${at} 缺少名称`);
+    if (a?.type === 'shell' && !a.code?.trim()) errs.push(`${at}（${a.name}）shell 操作缺少脚本`);
+    if (a?.type === 'service' && !a.tool?.trim()) {
+      errs.push(`${at}（${a.name}）service 操作缺少工具 code`);
+    }
+    if (a && a.type !== 'shell' && a.type !== 'service') {
+      errs.push(`${at} 未知操作类型: ${String(a.type)}`);
+    }
+  });
+  return errs;
 }
 
 /**
@@ -40,6 +92,8 @@ export interface StageScriptView {
   source: 'configured' | 'builtin' | 'required-unset' | 'semantic';
   /** 已配置 shell 原文（仅 source=configured 时返回） */
   command: string | null;
+  /** v4 多操作（节点内 1..N 个执行动作）；单命令形态也包装成 1 个操作 */
+  actions: StageAction[];
   /** 是否启用（仅 source=configured 时有意义） */
   enabled: boolean;
   /** 超时秒数（仅 source=configured 时返回） */
@@ -108,6 +162,17 @@ export class StageCommandService {
   }
 
   /**
+   * 解析阶段内的操作序列（v4 多操作执行入口）。
+   *
+   * 空数组 = 该阶段没有可执行操作（调用方按 commandMode 走内置逻辑或 fail-fast）。
+   */
+  async resolveActions(moduleKey: string, stage: string): Promise<StageAction[]> {
+    const row = await this.repo.findOne({ where: { moduleKey, stage, enabled: true } });
+    if (!row) return [];
+    return pickActions(row);
+  }
+
+  /**
    * shell 语法校验（bash -n）。
    *
    * 阶段命令是任意 shell，保存前必须校验：既防手滑语法错误导致发布中途失败，
@@ -159,12 +224,15 @@ export class StageCommandService {
       const commandMode = STAGE_COMMAND_MODE[stage];
       const title = STAGE_TITLES[stage] ?? stage;
       const builtin = STAGE_BUILTIN_DESCRIPTIONS[stage] ?? '';
+      // 视图层多操作：单命令形态也包装成 1 个操作，前端无需区分两种形态
+      const acts = row ? pickActions(row) : [];
 
       // 发布语义真相源（version/pointer）：永远不准用户改，UI 上展示「流程内置」即可
       if (commandMode === 'none') {
         return {
           stage,
           source: 'semantic',
+          actions: acts,
           command: null,
           enabled: false,
           timeoutSec: null,
@@ -183,6 +251,7 @@ export class StageCommandService {
           return {
             stage,
             source: 'required-unset',
+          actions: acts,
             command: null,
             enabled: false,
             timeoutSec: null,
@@ -196,6 +265,7 @@ export class StageCommandService {
         return {
           stage,
           source: 'configured',
+          actions: acts,
           command: row!.command,
           enabled: row!.enabled,
           timeoutSec: row!.timeoutSec ?? null,
@@ -212,6 +282,7 @@ export class StageCommandService {
         return {
           stage,
           source: 'configured',
+          actions: acts,
           command: row!.command,
           enabled: row!.enabled,
           timeoutSec: row!.timeoutSec ?? null,
@@ -225,6 +296,7 @@ export class StageCommandService {
       return {
         stage,
         source: 'builtin',
+          actions: acts,
         command: null,
         enabled: false,
         timeoutSec: null,
@@ -249,23 +321,43 @@ export class StageCommandService {
     command: string,
     updatedBy?: string,
     timeoutSec?: number,
+    actions?: StageAction[],
   ): Promise<DeployModuleStageCommandEntity> {
     if (!(CONFIGURABLE_STAGES as readonly string[]).includes(stage)) {
       throw new BadRequestException(
         `阶段 ${stage} 不可配置：version/pointer 是发布语义真相源，固定由流水线执行`,
       );
     }
-    if (!command?.trim()) {
-      throw new BadRequestException('命令不能为空');
+
+    // 多操作形态：逐条校验结构 + 每个 shell 操作做 bash -n
+    const hasActions = !!(actions && actions.length);
+    if (hasActions) {
+      const errs = validateActions(actions!);
+      if (errs.length) throw new BadRequestException(errs.join('；'));
+      for (const a of actions!) {
+        if (a.type === 'shell' && a.code?.trim()) this.validate(a.code);
+      }
+    } else {
+      if (!command?.trim()) {
+        throw new BadRequestException('命令不能为空');
+      }
+      this.validate(command); // 保存前 bash -n 语法校验
     }
-    this.validate(command); // 保存前 bash -n 语法校验
 
     let row = await this.repo.findOne({ where: { moduleKey, stage } });
     if (!row) {
-      row = this.repo.create({ moduleKey, stage, command: command.trim(), enabled: true });
+      row = this.repo.create({ moduleKey, stage, command: command?.trim() || '', enabled: true });
     } else {
-      row.command = command.trim();
+      row.command = command?.trim() || '';
       row.enabled = true;
+    }
+    if (hasActions) {
+      row.actions = actions!;
+      // command 列非空约束：回填首个 shell 操作脚本，保证旧读取路径仍有内容
+      const firstShell = actions!.find((a) => a.type === 'shell' && a.code?.trim());
+      row.command = firstShell?.code?.trim() ?? '';
+    } else if (row.actions?.length) {
+      row.actions = null; // 回退到单命令形态
     }
     row.updatedBy = updatedBy;
     if (timeoutSec !== undefined) row.timeoutSec = timeoutSec;

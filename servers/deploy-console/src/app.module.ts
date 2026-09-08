@@ -19,6 +19,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
 import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
 import { ReleaseGitModule } from './git/release-git.module';
+import { ReleaseHookModule } from './hook/release-hook.module';
 
 @Module({
   imports: [
@@ -72,6 +73,8 @@ import { ReleaseGitModule } from './git/release-git.module';
     ToolCatalogModule,
     // 发布目录 git 工作区工具（含 BranchController = GET /modules/:key/branches）
     ReleaseGitModule,
+    // CI/CD 发布触发（POST /api/hooks/release：HMAC 签名 + deliveryId 幂等）
+    ReleaseHookModule,
   ],
 })
 export class AppModule {}

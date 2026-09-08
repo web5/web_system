@@ -7,9 +7,21 @@
 
   <!-- 消息列表 -->
   <view class="chat-box">
-    <view wx:for="{{chatMessages}}" wx:key="index" class="chat-msg {{item.role}}">
+    <view wx:for="{{chatMessages}}" wx:key="index" wx:for-index="idx" class="chat-msg {{item.role}}">
       <view class="msg-avatar">{{item.role === 'ai' ? 'AI' : '我'}}</view>
-      <view class="msg-bubble">{{item.text}}</view>
+      <view
+        class="msg-bubble {{item.text.length > 140 && !expandMap[idx] ? 'collapsed' : ''}}"
+      >
+        <view class="msg-text">{{item.text}}</view>
+        <view
+          wx:if="{{item.text.length > 140}}"
+          class="msg-expand"
+          catchtap="onToggleExpand"
+          data-idx="{{idx}}"
+        >
+          {{expandMap[idx] ? '收起 ▲' : '展开更多 ▼'}}
+        </view>
+      </view>
     </view>
     <view class="chat-msg ai" wx:if="{{sending}}">
       <view class="msg-avatar">AI</view>
@@ -51,7 +63,6 @@
       auto-height
       maxlength="200"
       cursor-spacing="20"
-      fixed="{{true}}"
       show-confirm-bar="{{false}}"
       bindinput="onInput"
       bindfocus="onInputFocus"

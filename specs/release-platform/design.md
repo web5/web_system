@@ -445,3 +445,512 @@ template_name varchar(64) NULL    -- 快照，模板删后仍可读
 engine（`pipeline.service.ts`，1085 行）不再持有任何步骤"怎么做"，只做：状态机
 （run/进度/取消/锁/审计/自动回滚）+ 命令覆盖调度（`runStageCommand`）+ 公共 API。
 验证：jest 197/197，`nest build` + lint 通过。
+
+---
+
+## v4 修订（2026-09-08）：内核极简化 —— 通用 shell 工具 + 流水线自配节点脚本
+
+> 用户决策：「除了内置 git 的一些 hook 能力，shell 脚本完全是一个通用的 shell 工具就好，
+> 其他的都是在流水线那里自己配置对应的节点脚本。」
+> 三个拍板点（用户确认按建议执行）：
+> ① `version`/`pointer` **不脚本化**（发布语义真相源，平台托管，只可开关不可编辑）；
+> ② 配置注入**横切保留**（平台执行任何脚本前统一注入）；孤儿清理 / `.env` 渲染等护栏
+> **降级为可插入的 shell 工具**，模板默认插入、用户可删，保存时 warning 不阻断；
+> ③ 迁移必须**先回填模板、后切模式**，顺序反了会把所有发布打挂。
+
+### 1) 目标形态
+
+```
+平台内核（只剩三样）
+  ├─ git 拉取（+ hook 扩展点）  统一行为：fetch/checkout/reset/clean + lock 指纹依赖同步
+  ├─ 通用 shell 工具            一个执行器：跑任意命令，注入变量，流式日志，超时，退出码即成败
+  └─ version / pointer          发布语义，平台写库，绝不 shell 化
+
+平台横切能力（不属任何步骤，永远生效）
+  配置注入 · 日志 · 发布锁 · 取消 · 审计 · 失败自动回滚 · 通知 · 度量
+
+流水线节点（其余全部 = 用户自配脚本）
+  check / build / upload / restart / verify / cleanup
+```
+
+**解决的问题**：v2/v3 的内置执行器把「端口、pm2 名、产物路径」藏在代码里隐式推导
+（`resolvePm2Names()` 猜 5 个候选取第一个存在的、`STATIC_MODULES_REL` 全局常量、
+入口文件 `index.js` 写死），用户无法在流水线里指定。v4 后这些**全部写进脚本**，所见即所得。
+
+### 2) 步骤模式两态化（取代四态 commandMode）
+
+| 模式 | 语义 | 步骤 |
+|---|---|---|
+| `platform` | 平台托管，不可编辑、不可覆盖，只可开关 | `version` / `pointer` |
+| `script` | 必须配脚本，未配（且未显式禁用）即该阶段 fail-fast | `check` / `pull`* / `build` / `upload` / `restart` / `verify` / `cleanup` |
+
+- 删除 `base`；`override` 的内置兜底清空后退化为 `script`。
+- `pull` 特殊：**平台内置 git 拉取恒执行**，脚本作为 hook 附加（前置/后置二选一，默认后置）。
+- **禁用开关**：`script` 态允许 `enabled=false` 表示「本模块不需要这一步」（如 backend 无 upload、
+  frontend 无 restart）。建流水线按 `MODULE_TYPE` 生成模板时自动置 disabled，避免误 fail-fast。
+
+### 3) 安全基线上提（check 脚本化后的补偿）
+
+`check.executor.ts` 原本承载的**安全基线**不能随脚本一起变成可选，上提到 `submit` 入口（平台级，不可绕过）：
+
+| 校验 | 位置 |
+|---|---|
+| 模块存在 + 类型属于 `micro-frontend/frontend/backend` | `submit`（平台） |
+| prod 仅允许 master 分支 | `submit`（平台） |
+| branch / commitId 白名单（`^[A-Za-z0-9._/-]{1,128}$` / `^[A-Za-z0-9._-]{4,64}$`） | `submit`（平台，已实现） |
+| `reuseArtifact` 判定（决定跳过哪些步骤，属流程语义） | `submit`（平台） |
+| 业务自检（依赖是否就绪、磁盘空间、自定义门禁） | `check` 脚本（用户） |
+
+### 4) 平台保留的横切能力（不随脚本化丢失）
+
+| 能力 | 归属 | 说明 |
+|---|---|---|
+| **配置注入** | 横切 | `runShell` 执行任何脚本前，按 global→env→module 合并并**强制覆盖**注入（历史 `PORT=6200` 污染对策）。脚本无需感知 |
+| PATH 补齐 | 横切 | git / pm2 / pnpm / node bin 显式注入，脚本里可直接用 |
+| 流式日志 + 300ms 节流落库 | 横切 | 已实现 |
+| 超时中断 / 取消 SIGKILL | 横切 | 已实现 |
+| 发布锁（原子抢占）+ 审计 + 通知 + 度量 | 横切 | 已实现 |
+| 失败自动回滚 | 横切 | 绑定「步骤退出码非 0」而非「verify 步骤名」，`rollbackOnFailure` 模板级策略不变 |
+| `.env` 渲染落盘 0600 | **shell 工具**（可选） | 从 restart 执行体抽出，模板默认插入 |
+| 端口孤儿清理 | **shell 工具**（可选） | 从 restart 执行体抽出，模板默认插入；仅杀非 pm2 纳管占用者（防自杀铁律） |
+
+### 5) 变量清单（脚本可用，平台注入）
+
+**已有**：`MODULE_KEY` `MODULE_TYPE` `MODULE_DIR` `RELEASE_DIR` `COMMIT_ID` `BRANCH` `STAGE` `DEPLOY_ENV`
+
+**v4 新增**：
+
+| 变量 | 来源 | 说明 |
+|---|---|---|
+| `PORT` | 配置中心 → 模块注册表 `port` → `pm2_env.PORT` | 后端探活/清理端口 |
+| `PM2_NAME` | 模块注册表 `pm2` → `web-<key>` | 不再猜测，显式优先 |
+| `PUBLIC_PATH` | 模块注册表 `publicPath` → `MODULE_KEY` | 静态资源子目录（**该字段现有但执行器未读取，v4 接线**） |
+| `ARTIFACT_DIR` | `$RELEASE_DIR/servers/gateway/public/static/modules/$PUBLIC_PATH/$COMMIT_ID` | 产物目标目录 |
+| `ENTRY_FILE` | 模块注册表 `entry` → `index.js` | 产物入口文件 |
+| `GATEWAY_URL` | `GATEWAY_INTERNAL_URL` → `http://localhost:6000` | manifest 探活地址 |
+| `KEEP_VERSIONS` | 配置 → `5` | cleanup 保留数 |
+| `UPLOAD_TARGET` | 实例快照 `local`/`remote` | 投递目标 |
+
+### 6) 默认脚本模板（迁移时按 `MODULE_TYPE` 回填）
+
+> 全部 `set -euo pipefail`；cwd = `$RELEASE_DIR/<module.dir>`（后端 `servers/<dir>`，其余 `apps/<dir>`）；
+> 平台已在执行前注入上述变量，脚本可直接引用。
+
+**backend · build**
+```bash
+set -euo pipefail
+[ -d dist ] && mv dist "/tmp/hook-dist-${MODULE_DIR}-$(date +%s)"   # 规避批量删除审批
+npx nest build
+```
+
+**backend · restart**
+```bash
+set -euo pipefail
+NAME="${PM2_NAME:?未解析到 pm2 进程名}"
+
+# [护栏·可删] 端口孤儿清理：仅杀非 pm2 纳管占用者，避免新进程 EADDRINUSE、对外仍是旧实例
+if [ -n "${PORT:-}" ]; then
+  PM2_PIDS="$(pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(p=>p.pid).join(" ")))')"
+  for PID in $(lsof -tiTCP:"${PORT}" -sTCP:LISTEN || true); do
+    case " ${PM2_PIDS} " in *" ${PID} "*) ;; *) kill -9 "${PID}" && echo "清理端口 ${PORT} 孤儿进程 ${PID}";; esac
+  done
+fi
+
+pm2 restart "${NAME}" --update-env
+```
+
+**backend · verify**
+```bash
+set -euo pipefail
+for i in $(seq 1 12); do
+  sleep 2
+  ST="$(pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s).find(x=>x.name===process.env.PM2_NAME);console.log(a?a.pm2_env.status:"missing")})')"
+  [ "$ST" = "online" ] && break
+done
+[ "${ST:-}" = "online" ] || { echo "服务未上线: ${PM2_NAME}"; exit 1; }
+# 假健康必须阻断：进程 online 但端口无响应 → 退出码非 0 → 触发自动回滚
+curl -fsS -m 5 -o /dev/null "http://127.0.0.1:${PORT}/" || { echo "端口探活失败: ${PORT}"; exit 1; }
+```
+
+**backend · upload / cleanup** → 生成时置 `disabled`
+
+**frontend / micro-frontend · build**
+```bash
+set -euo pipefail
+pnpm --filter @web-system/shared build            # workspace 依赖
+RELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf
+```
+
+**frontend / micro-frontend · upload**
+```bash
+set -euo pipefail
+SRC="${RELEASE_DIR}/apps/${MODULE_DIR}/dist"
+DEST="${ARTIFACT_DIR}"
+[ -d "${DEST}" ] && mv "${DEST}" "/tmp/upload-${MODULE_KEY}-$(date +%s)"
+mkdir -p "${DEST}" && cp -R "${SRC}/." "${DEST}/"
+test -f "${DEST}/${ENTRY_FILE}" || { echo "产物入口缺失: ${DEST}/${ENTRY_FILE}"; exit 1; }
+```
+
+**frontend / micro-frontend · verify**
+```bash
+set -euo pipefail
+curl -fsS -o /dev/null "${GATEWAY_URL}/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/${ENTRY_FILE}"
+sleep 12   # gateway 版本缓存 TTL 10s（历史坑：改完版本表立刻查会拿到旧版本）
+V="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})')"
+[ "${V}" = "${COMMIT_ID}" ] || { echo "manifest 版本为 ${V:-空}，期望 ${COMMIT_ID}"; exit 1; }
+```
+
+**frontend / micro-frontend · cleanup**
+```bash
+set -euo pipefail
+cd "$(dirname "${ARTIFACT_DIR}")"
+ls -1t | tail -n +$((KEEP_VERSIONS + 1)) | while read -r v; do
+  case " ${COMMIT_ID} " in *" ${v} "*) continue;; esac   # 当前版本受保护
+  mv "${v}" "/tmp/cleanup-${MODULE_KEY}-${v}-$(date +%s)"  # 改名而非删除（规避删除审批）
+done
+```
+> 灰度引用的版本是否受保护：`cleanup` 执行体现在会查 `canaryService` 排除启用中的灰度版本。
+> 脚本化后该保护**丢失**（脚本读不到规则表）。补偿：平台在 `cleanup` 步骤执行前把受保护版本
+> 注入变量 `PROTECTED_VERSIONS`（空格分隔），脚本用它过滤；缺失该变量的旧脚本按「仅保护当前版本」降级并在保存时 warning。
+
+**frontend / micro-frontend · restart** → 生成时置 `disabled`
+
+### 7) 迁移计划（顺序不可颠倒）
+
+| # | 步骤 | 闸口 |
+|---|---|---|
+| M0 | 加 feature flag `PIPELINE_SCRIPT_MODE`（默认 `off`，保留旧 executor 一个发布周期可秒回） | — |
+| M1 | 补全变量注入层（`PORT`/`PM2_NAME`/`PUBLIC_PATH`/`ARTIFACT_DIR`/`BUILD_OUTPUT_DIR`/`ENTRY_FILE`/`GATEWAY_URL`/`GATEWAY_TTL_SEC`/`KEEP_VERSIONS`/`PROTECTED_VERSIONS`/`WS_SAFE_DELETE`）；`publicPath` 字段接线 | ✅ **2026-09-08 已完成**：`resolveStageVars()` 纯函数 + `runStageCommand` 接入；端口优先级「配置中心 → pm2 实际进程」（`lookupPm2Port` 兜底，查询失败不阻断）；`PROTECTED_VERSIONS` 由 `resolveProtectedVersions()` 下发（当前版本 + 启用中灰度版本）。新增 8 个单测，全量 231 通过 |
+| M2 | 安全基线上提到 `submit`（类型/prod 分支/白名单/reuseArtifact）；`check` 执行体保留与否由 flag 决定 | 现有 check 用例全绿 |
+| M3 | 8 个 executor 语义翻译为模板（按 `backend`/`frontend`/`micro-frontend`），落模板表 | `bash -n` 全通过 |
+| M4 | **回填**：为所有模块与现有流水线按类型填充脚本 + 按类型置 disabled | **闸口：任一活跃模块缺脚本即中止** |
+| M5 | 切 flag `on`：`script` 态生效，未配脚本 fail-fast | 先拿 `todo-service` 试发 dev |
+| M6 | 回归：dev 后端 + dev 前端 + 灰度 + 回滚 + prod 拦截各一次 | 全绿后观察一个发布周期 |
+| M7 | 删旧 executor 与 `step-registry` 执行体；`commandMode` 物理收敛为 `platform`/`script` | — |
+
+**回滚方案**：M0–M6 任一环节出问题，`PIPELINE_SCRIPT_MODE=off` 即回到内置执行器路径，
+回填的脚本数据保留（不删），下次开启可直接复用。
+
+### 8) 风险与缓解
+
+| 风险 | 缓解 |
+|---|---|
+| **护栏从强制变可选**（孤儿清理/.env 渲染被用户删掉） | 模板默认插入 + 工具目录可一键插回 + 保存时按模块类型检测关键护栏缺失给 warning（不阻断） |
+| **升级不扩散**：内置执行器改了全体受益，脚本化后各流水线副本要各自改 | 脚本支持引用工具 `${TOOL:xxx}` 而非复制全文；平台工具升级时提示"有 N 条流水线引用了旧版" |
+| **平台知识散落进脚本**（产物路径、TTL 10s） | 用变量（`ARTIFACT_DIR`）而非字面量；`GATEWAY_TTL_SEC` 也注入为变量，脚本写 `sleep $((GATEWAY_TTL_SEC + 2))` |
+| **cleanup 灰度保护丢失** | `PROTECTED_VERSIONS` 变量注入（见 §6） |
+| **backend 被 upload 卡死 / frontend 被 restart 卡死** | 模板生成时按类型置 `disabled`；`submit` 前二次校验 disabled 集合与类型匹配 |
+| 任意 shell 的误操作面 | 仅 JWT 可写、不暴露 MCP、`bash -n` 校验、审计留痕（与现有阶段命令同安全边界） |
+
+### 9) 验收（EARS）
+
+- 当用户编辑某节点脚本时，应能直接写明端口 / pm2 名 / 产物目录，且发布行为与之严格一致。
+- 当 `script` 态节点未配脚本且未 disabled 时，该阶段应 fail-fast 并明确报错，不回退任何内置行为。
+- 当 `version`/`pointer` 步骤被尝试编辑时，应被拒绝（UI 置灰 + API 400）。
+- 当脚本引用 `${PORT}` 时，应取「配置中心 → 模块注册表 → pm2_env」优先级链，且不再做候选名猜测。
+- 当 `PIPELINE_SCRIPT_MODE=off` 时，行为应与 v3 完全一致（回归基准）。
+- 当 backend 模块发布时，upload/cleanup 应默认 disabled 且不阻断。
+- 当 cleanup 执行时，当前版本与启用中的灰度版本应受保护不被清理。
+
+### 10) 二次评审补充（2026-09-08）：执行契约与遗留风险
+
+> 对 v4 初稿的自查。以下 18 项在初稿中缺失或定义不清，其中 **C1/C2/C4 是会导致线上事故的硬缺口**，
+> 必须在 M1–M3 闭环；其余在 M4 前完成。
+
+#### C1 · 脚本 → 平台的结果回传协议（初稿缺失，最高优先级）
+
+现状：各执行体直接写 `p.result`（`upload`→`artifactPath/target`、`restart`→`restarted`、
+`verify`→`online/healthCheck/manifestVersion`、`cleanup`→`kept/removed`），这些字段被
+审计文案、通知内容、度量、MCP 返回消费。脚本化后**这条回路会断**，平台拿不到结果。
+
+约定：平台执行脚本前导出 `WS_RESULT_FILE`（临时文件路径），脚本按需写入 JSON，平台在脚本
+退出后读取并合并进 `p.result`（JSON 非法 → 记 warning，不阻断）。
+
+```bash
+# 脚本侧
+echo '{"healthCheck":{"port":"6005","ok":true}}' > "$WS_RESULT_FILE"
+```
+
+- 只合并**白名单键**（防脚本污染语义字段：`version`/`pointer`/`status` 等不可写）。
+- 未写文件 = 该节点无结构化结果（与现状"无 result"等价，不报错）。
+
+#### C2 · 退出码语义与节点级容错（初稿未定义）
+
+| 退出码 | 语义 |
+|---|---|
+| `0` | 成功 |
+| 非 0 | 节点失败 → 中断发布 → 触发 `rollbackOnFailure` 策略 |
+
+补充节点级开关 `continueOnError`（默认 false）：置 true 时非 0 仅记 warning 并继续。
+用途：`cleanup` 一类"失败不该让已成功的发布变红"的节点。**禁止用于 `build`/`upload`**
+（产物未就绪却继续，会切指针到空产物）。
+
+#### C3 · 超时矩阵（初稿只继承了 build 的 timeoutSec）
+
+`runShell` 现在缺省回落到 `BUILD_TIMEOUT_MS`，对非构建节点明显不合适（restart 卡死要等满构建超时）。
+
+| 节点 | 默认超时 | 可配 |
+|---|---|---|
+| check | 60s | 是 |
+| build | `BUILD_TIMEOUT_MS`（600s） | 是 |
+| upload | 300s | 是 |
+| restart | 120s | 是 |
+| verify | 120s（含 gateway TTL 12s 等待） | 是 |
+| cleanup | 60s | 是 |
+
+#### C4 · 子进程组回收（现存缺陷，脚本化后放大）
+
+`runShell` 用 `spawn('bash', ['-c', cmd])`，**未 `detached`**，超时/取消时 `child.kill('SIGKILL')`
+只杀 bash 本身——`vite build` / `nest build` 派生的 node 孙进程会残留，继续占用端口和 CPU，
+下一次发布撞上残留进程（正是历史上"6200 孤儿进程"的同类问题）。
+
+修复：`spawn(..., { detached: true })` + `process.kill(-child.pid, 'SIGKILL')` 杀整个进程组；
+Windows 无进程组概念时降级为 `taskkill /pid /t /f`。
+
+#### C5 · 日志脱敏（安全风险）
+
+配置注入会把**密钥类变量**（配置中心 `isSecret=1`）注入脚本环境。脚本里 `set -x` 或
+`echo $XXX` 会把明文写进流水线日志，而日志对审计/通知可见。
+
+对策：日志写入前，对"本次注入的密钥变量值"做掩码替换（`***`）。在 `runShell` 的
+日志节流落库处统一做，不依赖脚本自觉。
+
+#### C6 · 脚本指纹与追溯
+
+实例快照存脚本**内容 hash**（`scriptHash`），审计记 `scriptHash`。故障时可回答
+"当时跑的是哪份脚本"——脚本化后这是唯一的责任界定依据。
+
+#### C7 · 流水线全局化 vs 按类型禁用（v3 R1 与 v4 的语义冲突）
+
+v3 收口：流水线一律全局、不绑模块，类型差异用 `{MODULE_*}变量` 分支。
+v4 初稿：按 `MODULE_TYPE` 生成模板并置 disabled——**两者冲突**（disabled 是流水线级配置，
+同一条流水线被 backend 和 frontend 共用时无法同时 disabled 又不 disabled）。
+
+收口方案：
+- 流水线增 `appliesTo: ModuleType[]`（默认全类型），提交时校验目标模块类型在范围内；
+- 节点禁用改为**按类型禁用列表** `disabledFor: ['backend']`，而非布尔 disabled；
+- 脚本内仍可用 `case "$MODULE_TYPE" in ... esac` 做分支，两者不冲突。
+
+#### C8 · 模块级 `deploy_module_stage_commands` 的下线路径（初稿未写）
+
+v3 R6 已定"命令归流水线、模块表 deprecated"，v4 承接该决策，但需明确过渡：
+
+1. 过渡期：流水线节点未配脚本时，**回退读取模块级老命令**并在日志与 UI 标注 `deprecated`；
+2. M4 回填完成后关闭回退（flag 控制），观察一个发布周期；
+3. 下线：删表 + 删 `stage-command` 模块 + 删前端 `stageCommandApi`（与 `hook` 死代码一并清理，
+   该项是 S1 遗留 SHOULD，本次顺带闭环）；
+4. 前端 ModuleDetail「阶段命令」tab 同步下线。
+
+#### C9 · 回滚时的脚本版本（初稿未定义）
+
+回滚是"重建实例发旧版本"，但脚本属于流水线定义、不随代码版本回退。
+→ 用**最新脚本**发**旧代码**，可能与发布时的脚本不一致（旧脚本有 bug 时这是优点，
+新脚本不兼容旧代码时这是风险）。
+
+决策：回滚**使用最新脚本**，但实例与审计须标注 `scriptDrift=true`（脚本版本与原始发布时不同），
+UI 给出提示，便于判断回滚失败是否为脚本漂移所致。
+
+#### C10 · 平台差异（macOS 本地 vs Linux 远程）
+
+本地发布目录在 macOS，远程在 Linux。模板中 `lsof`/`date +%s`/`mv` 两边通用，但
+`sed -i`、`stat`、`date -d`、`ps` 参数不同。
+
+对策：模板与用户脚本增 `platform: any | macos | linux` 标记；提交时校验
+`platform` 与实例 `UPLOAD_TARGET` 匹配，不匹配给 warning（不阻断，避免误伤）。
+
+#### C11 · 依赖预检
+
+脚本依赖 `pm2`/`curl`/`node`/`lsof`/`pnpm`。现在缺失时表现为"执行到一半失败"，排查成本高。
+
+对策：节点执行前跑一次依赖检查（`command -v` 列表，声明在脚本元信息 `requires` 上），
+缺失即明确报错"缺少依赖 xxx"。`tool_catalog` 已有 `available` 字段，可扩展为检测命令。
+
+#### C12 · 幂等矩阵（retry 语义）
+
+retry 从失败节点继续，要求节点可重入：
+
+| 节点 | 幂等 | 说明 |
+|---|---|---|
+| check | 是 | 纯校验 |
+| build | 是 | 先 mv 走旧 dist 再构建 |
+| upload | 是 | 目标目录存在则先移走再拷 |
+| restart | 是 | `pm2 restart` 天然幂等 |
+| verify | 是 | 只读 |
+| cleanup | 是 | mv 到 /tmp 带时间戳，重跑结果略不同但安全 |
+
+#### C13 · 试跑与 dry-run
+
+- `bash -n` 语法校验（已有）；
+- 新增**节点级试跑**：选一个已在跑的实例，单节点重跑（仅 dev），不切指针；
+- 禁止 prod 试跑。
+
+#### C14 · `mv` 到 `/tmp` 不应固化进平台模板
+
+现有 build/upload hook 里的 `mv dist /tmp/...` 是为规避 **CodeBuddy IDE 的批量删除审批**，
+属本地开发环境特有约束，在 CI/服务器环境无意义，且会持续污染 `/tmp`。
+
+对策：抽出为变量 `SAFE_DELETE_STRATEGY=mv|rm`（默认 `rm`），本地环境 profile 置 `mv`。
+模板里统一写 `${WS_SAFE_DELETE}` 包装，不再硬编码。
+
+#### C15 · 日志量上限
+
+脚本输出可能达 MB 级（构建日志）。需单节点日志条数与总长度上限（如 5000 行 / 1MB），
+超出截断并标注"日志已截断，完整输出见 xxx"。现状无上限。
+
+#### C16 · 执行权限
+
+脚本以 deploy-console 进程用户运行。需明确：禁止以 root 跑（或显式标注风险），
+且脚本内 `sudo` 不可用（PATH 与 TTY 均不具备）。
+
+#### C17 · 工具引用展开
+
+`${TOOL:xxx}` 展开自 DB（仅 JWT 可写），风险等同脚本本身，可接受；但需防**递归引用**
+（工具 A 引用工具 B 引用 A）→ 展开深度上限 3，超限报错。
+
+#### C18 · 节点间产物传递的变量命名
+
+初稿 `ARTIFACT_DIR` 在 build 节点语义是"构建输出"、在 upload 节点是"投递目标"，同名不同义易误用。
+拆为两个变量：
+
+- `BUILD_OUTPUT_DIR` = `$RELEASE_DIR/apps/$MODULE_DIR/dist`（build 产出、upload 源）
+- `ARTIFACT_DIR` = 投递目标目录（仅 upload/verify/cleanup 使用）
+
+### 11) v4 任务增量（并入 tasks.md S9）
+
+| # | 任务 | 依赖 |
+|---|---|---|
+| 9.1 | `WS_RESULT_FILE` 回传协议 + 白名单合并 + 单测 | M1 |
+| 9.2 | 退出码语义 + `continueOnError` 节点开关（build/upload 禁用） | M1 |
+| 9.3 | 节点超时矩阵（各节点独立 timeoutSec 与默认值） | M1 |
+| 9.4 | **子进程组回收**（detached + kill(-pid)） | M1（与脚本化独立，建议单独先修） |
+| 9.5 | 日志脱敏（注入的密钥变量值掩码） | M1 |
+| 9.6 | 脚本指纹 `scriptHash` 入实例与审计 | M2 |
+| 9.7 | `appliesTo` + `disabledFor` 取代布尔 disabled | M2 |
+| 9.8 | 模块级命令回退 + deprecated 标注 + 下线清理 | M4 |
+| 9.9 | 回滚脚本漂移标记 `scriptDrift` | M5 |
+| 9.10 | 平台标记 / 依赖预检 / 试跑 / 幂等说明 | M4 |
+| 9.11 | `SAFE_DELETE_STRATEGY` 抽变量 + 日志上限 + 权限说明 | M4 |
+| 9.12 | 工具引用展开深度限制 + `BUILD_OUTPUT_DIR` 拆分 | M3 |
+
+> 9.4 虽属脚本化的配套，但**它修的是现存缺陷**，与 v4 是否推进无关，建议独立优先修。
+
+---
+
+## 12) 节点内多操作（2026-09-08 追加）
+
+> 用户决策：节点下支持多个脚本/步骤；默认 1 个操作（需要才加）；操作支持「引用内置工具」。
+
+### 12.1 为什么加这层
+
+单个节点一段 bash 能写多件事，但平台不感知"步骤"，导致：失败只能定位到节点、无法混用内置能力与 shell、
+无法对某一步单独开关/设超时、看不出每步耗时。加「操作」层后这些全部可解，且**不破坏 v4 的内核极简**——
+流程图仍只有 9 个节点，复杂度收在节点内部。
+
+### 12.2 两层结构（职责边界，防止流程图膨胀）
+
+| 层 | 职责 | 数量 | 是否参与流程图排序 |
+|---|---|---|---|
+| **节点 Node** | 流程语义单元：有 category、决定失败策略、参与编排 | 固定 9 个 | 是 |
+| **操作 Action** | 执行动作：怎么干 | 1..N（默认 1） | 否（在节点内局部排序） |
+
+### 12.3 数据模型
+
+`deploy_pipeline_steps`（或现有步骤表）的 `command` 单字段 → `actions` JSON 数组：
+
+```json
+[{ "id":"a1", "type":"shell",   "name":"端口孤儿清理", "code":"...", "timeout":30,  "cont":true },
+ { "id":"a2", "type":"shell",   "name":".env 渲染落盘","code":"...", "timeout":20,  "cont":true },
+ { "id":"a3", "type":"shell",   "name":"pm2 restart", "code":"...", "timeout":120, "cont":false },
+ { "id":"a0", "type":"service", "name":"git 拉取",    "tool":"git-pull", "builtin":true }]
+```
+
+| 字段 | 说明 |
+|---|---|
+| `type` | `shell`（自写脚本）/ `service`（引用工具目录里的内置工具）/ 内置标记 `builtin:true` |
+| `cont` | `continueOnError`：该操作失败不中断节点（护栏类默认 true） |
+| `timeout` | 操作级超时，与节点级总超时并存，先到先触发 |
+| `builtin` | 平台内置操作，不可删、不可排序（如 pull 节点的 git 拉取恒为 op0） |
+
+### 12.4 执行语义
+
+- 操作**顺序执行**；任一失败 → 节点失败，除非该操作 `cont=true`
+- 日志按操作分段，前缀 `[<node>/op<N>]`，失败直接定位到操作
+- 任一操作可写 `$WS_RESULT_FILE`，**按 key 合并**而非整段覆盖（C1 的补充）
+- `platform` 节点（version / pointer）`actions=[]` 且不可新增（API 400）
+- `git` 节点的 op0 恒为平台内置拉取（builtin），用户只能在其后追加 hook
+
+### 12.5 与工具目录的关系（解决"升级不扩散"）
+
+操作有两种实现方式：
+
+| 方式 | 工具升级后 |
+|---|---|
+| `shell`（脚本里复制了工具片段） | 不扩散，需逐个改脚本 |
+| `service`（引用工具） | **自动扩散**，所有引用节点受益 |
+
+因此工具目录里的**平台能力类工具**（探活、写版本、切指针、回滚）应优先以「引用」方式使用；
+shell 片段插入只作为临时手段。这正是 V6（工具=执行体，步骤=流程单元）在 UI 上的落地。
+
+### 12.6 迁移影响
+
+- 现有 9 个默认模板需拆成操作：`restart` → 孤儿清理(cont=true) / .env 渲染(cont=true) / pm2 restart(cont=false)
+- 未拆分节点的兼容：`actions = [{type:'shell', code: <原 command>}]`，行为不变
+- 回填时 `timeout` / `cont` 取节点原值
+
+### 12.7 验收
+
+- 当节点配置多个操作时，应按数组顺序执行，并在日志中按 `opN` 分段留痕。
+- 当某操作 `cont=true` 且失败时，节点应继续执行后续操作，且节点最终状态为成功并记 warning。
+- 当 `platform` 节点被尝试新增操作时，应被拒绝（UI 锁定 + API 400）。
+- 当操作 `type=service` 引用工具被升级时，引用该工具的所有节点应在下次发布自动使用新实现。
+- 当节点 `actions` 为空且非 platform 态时，应 fail-fast（等同未配置脚本）。
+
+---
+
+## 13) 流水线名称：按模块名自动填充（2026-09-08）
+
+> 用户决策：流水线名称默认不叫「默认流水线」，**直接用模块名填充**；
+> 真实实现时数据库也按此规则自动填充，不需要人工起名。
+
+### 13.1 规则
+
+```
+流水线名称（name）缺省值 = 模块名（moduleKey）
+```
+
+一条流水线服务一个模块（v3 R1 后流水线全局化，但默认模板仍按模块懒建），
+因此「这个模块的发布线」就叫模块名最直观 —— 用户看到 `admin` 就知道发的是 admin，
+不需要额外维护一套命名。
+
+### 13.2 三层落地
+
+| 层 | 规则 | 说明 |
+|---|---|---|
+| **数据层（真相源）** | 懒建默认流水线时 `name = moduleKey`；模块注册表新增模块时同步生成 | 新建即有名，无空态 |
+| **回填** | 存量 `name` 为空 / 为「默认流水线」的行，按 `module_key` 批量回填 | 一次性迁移，见下方 SQL |
+| **展示层兜底** | 读取时 `name ?? moduleKey`，避免历史脏数据显示空白 | 只读兜底，不写库 |
+| **改名** | 用户可改；改名作用于**该流水线的全部实例**（流水线是定义，实例引用它） | 历史实例保留 ID 与提交时参数快照，仅显示名同步 |
+
+### 13.3 回填示例
+
+```sql
+-- 存量流水线：名称为空或为占位值时，按模块名回填
+UPDATE deploy_pipeline_templates
+SET name = module_key
+WHERE name IS NULL OR name = '' OR name = '默认流水线';
+
+-- 实例快照列（历史记录）同步显示名
+UPDATE deploy_pipelines p
+  JOIN deploy_pipeline_templates t ON t.id = p.template_id
+SET p.template_name = t.name
+WHERE p.template_id IS NOT NULL;
+```
+
+> 迁移前先备份两张表；`name` 若需唯一约束，应在回填**之后**再加，否则会与重复占位值冲突。
+
+### 13.4 验收
+
+- 当新建模块时，其默认流水线名称应等于模块名，不为空。
+- 当读取到 `name` 为空的历史流水线时，页面应显示模块名而非空白。
+- 当修改某流水线名称时，该流水线下的全部实例在列表与详情中应显示新名称。
+- 当同一模块存在多条流水线（如「admin」与「admin-快线」）时，名称应可区分且均可改名。
