@@ -167,7 +167,7 @@ page {
 /* 一体化输入胶囊：白底圆角容器内含透明输入框 + 右侧橙色小圆钮，视觉=一个整体 */
 .chat-composer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 14rpx;
   background: #fff;
   border: 2rpx solid #EEF0F4;
@@ -177,22 +177,27 @@ page {
 }
 .chat-input {
   flex: 1;
+  align-self: center;
   background: transparent;
   border: none;
   border-radius: 0;
-  padding: 10rpx 0;
+  padding: 0;
+  margin: 0;
   font-size: 26rpx;
   color: #1A1F2E;
-  line-height: 1.5;
-  min-height: 72rpx;
+  line-height: 76rpx;          /* 单行时与 send 按钮同高 → placeholder/value 真正垂直居中 */
+  min-height: 76rpx;
   max-height: 180rpx;
   box-sizing: border-box;
   width: auto;
+  align-self: stretch;          /* 多行时输入框高度自然增高 */
 }
 .chat-input-ph {
   color: #B7BDC9;
+  line-height: 76rpx;            /* 占位文字与正式文字同一行高 → 视觉一致 */
 }
-/* 小圆发送按钮：实心橙钮内嵌于胶囊右侧（未输入灰），视觉让位给输入区 */
+/* 小圆发送按钮：实心橙钮内嵌于胶囊右侧（未输入灰），视觉让位给输入区
+   align-self: flex-end 无论 input 是否多行，send 永远贴 composer 底 */
 .chat-send {
   flex: 0 0 76rpx;
   width: 76rpx;
@@ -201,6 +206,7 @@ page {
   max-width: 76rpx;
   box-sizing: border-box;
   flex-shrink: 0;
+  align-self: flex-end;
   border-radius: 50%;
   background: #F97316;
   color: #fff;
