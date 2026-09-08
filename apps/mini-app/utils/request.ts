@@ -8,9 +8,36 @@ import { API_TIMEOUT } from './constants';
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
-/** 获取 app 实例 */
-function getApp(): IAppOption {
-  return getApp<IAppOption>();
+/** 取 wx 全局 app 实例 — 优先 storage 兜底，避开异步栈里 wx.getApp 抛 "not a function" */
+function getAppInstance(): IAppOption | null {
+  // 1) 优先从 storage 拿（app.ts onLaunch 时写入）
+  try {
+    const cached = wx.getStorageSync('api_base');
+    if (cached) {
+      // 复刻一个最小 app 对象（仅供 token 同步使用）
+      const tok = wx.getStorageSync('access_token') || '';
+      return { globalData: { apiBase: cached, token: tok } } as unknown as IAppOption;
+    }
+  } catch {}
+  // 2) 兜底再尝试 wx.getApp / getApp（带异常兜住）
+  try {
+    const fn = (wx as any).getApp;
+    if (typeof fn === 'function') return fn() as IAppOption;
+  } catch {}
+  try {
+    if (typeof getApp === 'function') return (getApp as any)() as IAppOption;
+  } catch {}
+  return null;
+}
+
+/** 取 apiBase：优先 storage，兜底 wx.getApp，避开反复调用栈溢出风险 */
+function getApiBase(): string {
+  try {
+    const cached = wx.getStorageSync('api_base');
+    if (cached) return cached;
+  } catch {}
+  const app = getAppInstance();
+  return app?.globalData?.apiBase || '';
 }
 
 /** 从 storage 读取 token */
@@ -23,22 +50,18 @@ export function getRefreshToken(): string {
   return wx.getStorageSync(REFRESH_TOKEN_KEY) || '';
 }
 
-/** 保存 token 到 storage 和 globalData */
+/** 保存 token 到 storage（globalData.token 是冗余同步，已去掉以避免依赖 wx.getApp） */
 export function setToken(accessToken: string, refreshToken?: string): void {
   wx.setStorageSync(TOKEN_KEY, accessToken);
   if (refreshToken) {
     wx.setStorageSync(REFRESH_TOKEN_KEY, refreshToken);
   }
-  const app = getApp();
-  app.globalData.token = accessToken;
 }
 
 /** 清除 token */
 export function clearToken(): void {
   wx.removeStorageSync(TOKEN_KEY);
   wx.removeStorageSync(REFRESH_TOKEN_KEY);
-  const app = getApp();
-  app.globalData.token = '';
 }
 
 interface RequestOptions {
@@ -54,8 +77,11 @@ interface RequestOptions {
 
 /** 通用请求方法 */
 export function request<T = any>(options: RequestOptions): Promise<T> {
-  const app = getApp();
-  const baseUrl = app.globalData.apiBase;
+  // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
+  const baseUrl = getApiBase();
+  if (!baseUrl) {
+    return Promise.reject(new Error('应用未初始化，请稍后重试或重启小程序'));
+  }
   const token = getToken();
 
   return new Promise((resolve, reject) => {

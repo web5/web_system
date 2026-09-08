@@ -2,6 +2,11 @@ import { login, isLoggedIn } from './services/auth';
 
 App<IAppOption>({
   onLaunch() {
+    // 把 apiBase 同步落到 storage，供后续请求绕过 wx.getApp 直接读，
+    // 避免某些异步栈里 wx.getApp 调用抛错或栈溢出
+    try {
+      wx.setStorageSync('api_base', this.globalData.apiBase);
+    } catch {}
     this.autoLogin();
   },
 

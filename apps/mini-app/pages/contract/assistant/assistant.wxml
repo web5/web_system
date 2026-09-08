@@ -1,0 +1,104 @@
+<!-- 合同助手 - 对话式体检入口
+     文字/图片 → 左侧 AI 流式输出报告气泡（带节流）→ 报告卡 + 查看完整报告按钮 -->
+<view class="page">
+  <!-- 对话消息流 -->
+  <view class="msg-list">
+    <view wx:for="{{messages}}" wx:key="id" class="chat-msg {{item.role}}">
+      <view class="msg-avatar">{{item.role === 'ai' ? 'AI' : '我'}}</view>
+      <view class="asst-body">
+        <!-- 用户文本：摘要预览（避免长文本撑爆消息流；点击气泡展开抽屉看完整内容） -->
+        <view
+          wx:if="{{item.role === 'user'}}"
+          class="asst-bubble user"
+          bindtap="onOpenUserText"
+          data-id="{{item.id}}"
+          hover-class="asst-bubble-hover"
+        >
+          <text wx:if="{{item.kind === 'image'}}" class="asst-tag">（图片识别）</text>
+          <text class="asst-text">{{item.text}}</text>
+          <text wx:if="{{item.fullText && item.fullText.length > 80}}" class="asst-more">点击查看更多</text>
+        </view>
+        <!-- AI 报告文本气泡（流式逐字渲染；工具阶段先显示"进行中"提示） -->
+        <view wx:elif="{{item.kind === 'report-text'}}" class="asst-bubble ai">
+          <text wx:if="{{!item.text && item.hint}}" class="asst-hint">{{item.hint}}</text>
+          <text wx:if="{{item.text}}" class="asst-text" space="nbsp">{{item.text}}</text>
+          <text wx:if="{{item.isStreaming}}" class="asst-cursor">▌</text>
+        </view>
+        <!-- AI 报告卡：出报告后用结构化卡片呈现 + 跳转按钮 -->
+        <view wx:elif="{{item.kind === 'progress'}}" class="asst-progress {{item.done ? 'done' : ''}}">
+          <text class="asst-progress-text">{{item.text}}</text>
+        </view>
+        <view wx:elif="{{item.kind === 'report-card'}}" class="report-card">
+          <view class="report-card-head">
+            <text class="report-card-ic">·</text>
+            <text class="report-card-title">报告已生成</text>
+          </view>
+          <view wx:if="{{item.report}}" class="report-card-body">
+            <view class="report-card-row">
+              <text class="report-card-label">合同类型</text>
+              <text class="report-card-val">{{item.report.scene || '未知'}}</text>
+            </view>
+            <view class="report-card-row">
+              <text class="report-card-label">风险信号</text>
+              <text class="report-card-val">
+                {{item.report.signals.length || 0}} 条
+                <text wx:if="{{item.report.danger}}" class="danger-dot">{{item.report.danger}} 高风险</text>
+                <text wx:if="{{item.report.warn}}" class="warn-dot"> · {{item.report.warn}} 中风险</text>
+              </text>
+            </view>
+            <view class="report-card-conclusion">{{item.report.conclusion || ''}}</view>
+          </view>
+          <view class="report-card-actions">
+            <button class="report-card-btn" bindtap="onOpenReport" data-id="{{item.id}}">查看完整报告</button>
+            <button class="report-card-btn ghost" bindtap="onContinueChat" data-id="{{item.id}}">继续追问</button>
+          </view>
+        </view>
+        <!-- AI 普通文本（追问回复 / 错误 / 提示） -->
+        <view wx:else class="asst-bubble ai">
+          <text class="asst-text" space="nbsp">{{item.text}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部：＋附件 + 一体化输入胶囊 + 发送钮 -->
+  <view class="chat-input-bar">
+    <view class="chat-composer">
+      <button class="attach-btn" bindtap="onAttach" aria-label="添加合同图片">＋</button>
+      <textarea
+        class="chat-input"
+        placeholder="把合同文字粘贴给我，或点＋选合同照片，立即体检"
+        placeholder-class="chat-input-ph"
+        value="{{input}}"
+        auto-height
+        maxlength="-1"
+        cursor-spacing="20"
+        show-confirm-bar="{{false}}"
+        bindinput="onInput"
+        disabled="{{sending}}"
+      ></textarea>
+      <button
+        class="chat-send"
+        bindtap="send"
+        disabled="{{sending || !input}}"
+        aria-label="发送并体检"
+      >{{sending ? '…' : '↑'}}</button>
+    </view>
+  </view>
+
+  <!-- 用户原文抽屉（点击摘要气泡时弹出） -->
+  <view
+    wx:if="{{userDrawer.open}}"
+    class="drawer-mask"
+    bindtap="onCloseUserText"
+  ></view>
+  <view class="drawer {{userDrawer.open ? 'open' : ''}}">
+    <view class="drawer-head">
+      <text class="drawer-title">用户原文</text>
+      <text class="drawer-close" bindtap="onCloseUserText">×</text>
+    </view>
+    <scroll-view scroll-y class="drawer-body">
+      <text class="drawer-text">{{userDrawer.text}}</text>
+    </scroll-view>
+  </view>
+</view>

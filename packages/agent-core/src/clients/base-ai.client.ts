@@ -65,11 +65,12 @@ export interface ChatWithToolsResult {
 /**
  * 流式带工具推理的事件。
  * - content_delta：模型正在生成 content 的增量片段（供前端"边生成边渲染"）
+ * - reasoning_delta：模型正在"思考"的增量片段（供前端做"思考中"可视化）
  * - done：整轮推理结束，携带最终 result（含 toolCalls 判断结果）
  */
 export interface StreamToolEvent {
-  type: 'content_delta' | 'done';
-  /** content_delta 时：本片增量文本 */
+  type: 'content_delta' | 'reasoning_delta' | 'done';
+  /** content_delta / reasoning_delta 时：本片增量文本 */
   delta?: string;
   /** done 时：本轮完整结果 */
   result?: ChatWithToolsResult;

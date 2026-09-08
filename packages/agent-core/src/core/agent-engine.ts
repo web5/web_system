@@ -121,6 +121,11 @@ export class AgentEngine {
             if (agent.streaming !== false) {
               yield { type: 'content_delta', content: ev.delta, step };
             }
+          } else if (ev.type === 'reasoning_delta' && ev.delta) {
+            // 推理增量透传：供前端"思考中"可视化；不计入最终 content
+            if (agent.streaming !== false) {
+              yield { type: 'reasoning_delta', content: ev.delta, step };
+            }
           } else if (ev.type === 'done' && ev.result) {
             resp = ev.result;
           }

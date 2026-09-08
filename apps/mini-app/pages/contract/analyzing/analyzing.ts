@@ -1,73 +1,55 @@
 /**
  * 合同翻译官 - 解读中
- * 基于 SSE 事件流动态更新"AI 思考中"文案（真实反映 AI 当前步骤）。
- * 4 步进度动画 + 事件驱动文案，完成后跳转 result 页。
+ *
+ * 按 v5 原型稿实现（思考卡 + 时序）：
+ *  1. 思考阶段：模型 reasoning 流（reasoning_delta）流入「AI 正在思考」低矮卡（固定高可滚）。
+ *  2. 首个 tool_call 到达（= 思考完成、决定要做什么）：
+ *     - 思考卡收起为一行「AI 已完成思考」摘要
+ *     - 此刻才渲染执行步骤骨架（步骤是思考得出的产物），并点亮第一个工具
+ *  3. 工具逐项 running→done；报告轮 content_delta 到达 →「生成体检报告」running + "已生成 N 字" 跳动
+ *  4. onDone 落报告并跳 result
  */
 import { analyzeContractStream, StreamEvent } from '../../../services/contract-api';
 
+/** 思考结束后才出现的执行步骤骨架（contract-risk 固定工具流） */
+const EXEC_PLAN = [
+  { id: 'rule', name: 'contract-rule', hint: '扫描法定风险信号' },
+  { id: 'irr', name: 'contract-irr', hint: '测算真实年化利率' },
+  { id: 'benchmark', name: 'contract-benchmark', hint: '对比市场基准' },
+  { id: 'report', name: '_report', hint: '生成体检报告' },
+];
+
 Page({
   data: {
-    steps: [
-      { text: '识别合同文本', desc: 'OCR 识别条款内容', done: true, active: false },
-      { text: '判断合同类型', desc: '识别消费贷 / 保险 / 租房', done: false, active: true },
-      { text: '测算关键数字', desc: '真实年化利率 · 费用测算', done: false, active: false },
-      { text: '生成风险报告', desc: '风险信号 · 权益雷达', done: false, active: false },
-    ],
-    thinkingText: '',
-    // 流式生成：LLM 逐字生成报告内容，实时展示（展示原始 JSON 文本增量）
-    streamingText: '',
-    streamingVisible: false,
+    /** 动态子标题（sub）：思考期→执行期→报告字数 */
+    thinkingText: '正在读取合同内容…',
+    /** 执行步骤骨架：思考完成（首个 tool_call）后才出现 */
+    toolSteps: [] as Array<{ id: string; name: string; hint: string; status: 'pending' | 'running' | 'done' }>,
+    /** 思考区：open=展示正文（固定高可滚）/ done=已结束（标题变"已完成"，默认收起） */
+    think: { open: true, done: false, text: '' },
   },
 
-  // 工具名 → 用户文案映射（真实反映 agent 当前步骤）
+  // 工具名 → 用户文案映射
   toolTextMap: {
-    'contract-cleaner': '正在清洗 OCR 识别噪声...',
-    'contract-rule': '正在扫描法定风险信号...',
-    'contract-irr': '正在测算真实年化利率...',
+    'contract-cleaner': '正在清洗合同文本…',
+    'contract-rule': '正在扫描法定风险信号…',
+    'contract-irr': '正在测算真实年化利率…',
+    'contract-benchmark': '正在对比市场基准…',
+    'law-search': '正在检索法律条文…',
+    'web-search': '正在联网检索…',
   } as Record<string, string>,
 
-  // 兜底文案（未识别到 tool_call 时轮换）
+  // 思考期（reasoning 首个 delta 到达前）的兜底轮换文案
   fallbackList: [
-    'AI 正在分析合同条款...',
-    '正在整理风险报告...',
-    'AI 正在深度思考，请稍候...',
+    'AI 正在认真看你的合同…',
+    '正在梳理关键条款…',
+    '马上就好，再等一下',
   ],
 
   onLoad() {
-    // 4 步进度动画
-    this.startStepAnimation();
-
-    // 从 storage 读取待分析内容并启动流式分析
     this.startAnalysis();
   },
 
-  /** 4 步进度动画（前 3 步模拟，第 4 步"生成报告"由事件驱动真实状态） */
-  startStepAnimation() {
-    let step = 1;
-    const timer = setInterval(() => {
-      // 页面已卸载/数据被清时及时清理（防 redirectTo 后回调访问 undefined 抛 MiniProgramError）
-      if (!this.data || !Array.isArray(this.data.steps)) {
-        clearInterval(timer);
-        (this as any).stepTimer = null;
-        return;
-      }
-      if (step >= 4) {
-        clearInterval(timer);
-        (this as any).stepTimer = null;
-        return;
-      }
-      const steps = this.data.steps.map((s: any, i: number) => ({
-        ...s,
-        done: i < step,
-        active: i === step,
-      }));
-      this.setData({ steps });
-      step++;
-    }, 1200);
-    (this as any).stepTimer = timer;
-  },
-
-  /** 启动流式分析，按 SSE 事件更新文案 */
   startAnalysis() {
     const pending = wx.getStorageSync('contract_pending') as
       | { text?: string; scene?: string }
@@ -81,30 +63,20 @@ Page({
       return;
     }
 
-    // 启动兜底文案轮换（收到 tool_call 事件后自动停止）
-    this.setData({ thinkingText: 'AI 正在开始分析...' });
     this.startFallbackRotation();
 
     analyzeContractStream(text, scene, {
       onEvent: (event: StreamEvent) => this.handleSseEvent(event),
-      // 流式增量：LLM 逐字生成报告内容，实时展示
-      // 节流渲染：合并 160ms 内增量一次 setData，且只展示尾部窗口，
-      // 避免每 delta 全量 setData 大文本（单次分析可达数万字符）拖死 UI/模拟器
-      onDelta: (delta) => {
-        if (!(this as any).streamAcc) (this as any).streamAcc = '';
-        (this as any).streamAcc += delta;
-        if ((this as any).streamingTimer) return;
-        (this as any).streamingTimer = setTimeout(() => {
-          (this as any).streamingTimer = null;
-          const acc: string = (this as any).streamAcc || '';
-          this.setData({
-            streamingVisible: true,
-            streamingText: acc.length > 3000 ? '…' + acc.slice(-3000) : acc,
-          });
-        }, 160);
-      },
+      // 思考增量：节流追加到思考卡（执行开始后的报告轮思考不再打扰）
+      onReasoning: (delta) => this.appendThinking(delta),
+      // 报告正文增量：报告轮 running → "已生成 N 字"
+      onDelta: (delta) => this.countReportWords(delta),
       onDone: (report) => {
-        // 存储报告供 result 页读取（含 conversationId，供后续追问复用同一上下文）
+        if ((this as any)._thinkTimer) clearTimeout((this as any)._thinkTimer);
+        if ((this as any)._wordTimer) clearTimeout((this as any)._wordTimer);
+        (this as any)._thinkBuf = '';
+        (this as any)._wordBuf = 0;
+        // 存储报告供 result 页读取
         const storage = wx.getStorageSync('contract_report') || {};
         storage.latest = {
           ...report,
@@ -112,7 +84,10 @@ Page({
           createdAt: Date.now(),
         };
         wx.setStorageSync('contract_report', storage);
-        this.setData({ thinkingText: '报告生成完成' });
+        this.setData({
+          thinkingText: '体检完成，正在打开报告…',
+          toolSteps: this.data.toolSteps.map((s) => ({ ...s, status: 'done' })),
+        });
         this.redirectResult();
       },
       onError: (err) => {
@@ -122,36 +97,104 @@ Page({
     });
   },
 
-  /** 根据 SSE 事件更新进度步骤与文案 */
+  /** 思考增量：节流追加到思考卡；已进入执行阶段（toolSteps 非空）后忽略后续轮的思考 */
+  appendThinking(delta: string) {
+    if (this.data.toolSteps.length > 0) return;
+    this.stopFallback();
+    (this as any)._thinkBuf = ((this as any)._thinkBuf || '') + delta;
+    if ((this as any)._thinkTimer) return;
+    (this as any)._thinkTimer = setTimeout(() => {
+      (this as any)._thinkTimer = null;
+      const txt: string = (this as any)._thinkBuf || '';
+      this.setData({
+        thinkingText: 'AI 正在思考…',
+        think: { open: true, done: false, text: txt },
+      });
+    }, 150);
+  },
+
+  /** 报告正文增量：确保"生成体检报告"running，并显示"已生成 N 字" */
+  countReportWords(delta: string) {
+    (this as any)._wordBuf = ((this as any)._wordBuf || 0) + delta.length;
+    if ((this as any)._wordTimer) return;
+    (this as any)._wordTimer = setTimeout(() => {
+      (this as any)._wordTimer = null;
+      // 收到正文 = LLM 已开始输出报告，点亮"生成体检报告"
+      const toolSteps = this.data.toolSteps.map((s) =>
+        s.name === '_report' && s.status === 'pending'
+          ? { ...s, status: 'running' as const }
+          : s,
+      );
+      this.setData({
+        toolSteps,
+        thinkingText: `AI 正在写报告，已生成 ${(this as any)._wordBuf || 0} 字…`,
+      });
+    }, 150);
+  },
+
+  /** 点击思考卡标题：展开 / 收起 */
+  toggleThink() {
+    this.setData({ think: { ...this.data.think, open: !this.data.think.open } });
+  },
+
+  /** SSE 事件：首个 tool_call = 思考完成 → 渲染步骤骨架；tool_result/final 更新状态 */
   handleSseEvent(event: StreamEvent) {
-    // content_delta 量大且走 onDelta 渲染，这里不做任何处理
-    // 记录 final 事件携带的会话 id，供 result 页追问复用
     if (event.type === 'final' && event.conversationId) {
       (this as any).conversationId = event.conversationId;
+      return;
     }
+
     if (event.type === 'tool_call') {
-      // 事件驱动后停止兜底轮换，避免覆盖真实文案
       this.stopFallback();
       const toolName = event.name || '';
-      // 第 3 步（测算）done，第 4 步（生成报告）active
-      const steps = this.data.steps.map((s: any, i: number) => ({
-        ...s,
-        done: i < 3,
-        active: i === 3,
-      }));
-      this.setData({
-        steps,
-        thinkingText: this.toolTextMap[toolName] || `正在执行${toolName}...`,
-      });
+      const hint = this.toolTextMap[toolName] || `正在做「${toolName}」…`;
+
+      // 首次 tool_call：思考完成 → 收起思考卡 + 列出执行骨架（步骤是思考得出的产物）
+      if (this.data.toolSteps.length === 0) {
+        const inPlan = EXEC_PLAN.some((p) => p.name === toolName);
+        const toolSteps = inPlan
+          ? EXEC_PLAN.map((p) =>
+              p.name === toolName ? { ...p, status: 'running' as const } : { ...p, status: 'pending' as const },
+            )
+          : [...EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const }))];
+        if (!inPlan) {
+          toolSteps.push({ id: `${toolName}-${Date.now()}`, name: toolName, hint, status: 'running' });
+        }
+        this.setData({
+          toolSteps,
+          thinkingText: hint,
+          think: { ...this.data.think, done: true, open: false },
+        });
+        return;
+      }
+
+      // 后续工具：预置项置 running；未预置自定义工具追加
+      const toolSteps = this.data.toolSteps.map((s) =>
+        s.name === toolName && s.status !== 'done' ? { ...s, status: 'running' as const } : s,
+      );
+      if (!toolSteps.some((s) => s.name === toolName)) {
+        toolSteps.push({
+          id: `${toolName}-${Date.now()}`,
+          name: toolName,
+          hint,
+          status: 'running' as const,
+        });
+      }
+      this.setData({ toolSteps, thinkingText: hint });
     } else if (event.type === 'tool_result') {
-      // 工具执行完成，保持"正在整理"文案
-      this.setData({ thinkingText: '正在整理分析结果...' });
-    } else if (event.type === 'start') {
-      this.setData({ thinkingText: 'AI 正在开始分析...' });
+      const toolName = event.name || '';
+      const targetIdx = toolName
+        ? this.data.toolSteps.findIndex((s) => s.name === toolName && s.status === 'running')
+        : this.data.toolSteps.findIndex((s) => s.status === 'running');
+      const toolSteps =
+        targetIdx >= 0
+          ? this.data.toolSteps.map((s, i) => (i === targetIdx ? { ...s, status: 'done' as const } : s))
+          : this.data.toolSteps;
+      this.setData({ toolSteps });
     }
   },
 
-  /** 兜底文案轮换（长时间无 tool_call 事件时，避免界面静止） */
+  /** 兜底文案轮换（思考期无 reasoning 时避免界面静止） */
   startFallbackRotation() {
     if ((this as any).fallbackTimer) return;
     let idx = 0;
@@ -175,14 +218,7 @@ Page({
 
   onUnload() {
     this.stopFallback();
-    if ((this as any).streamingTimer) {
-      clearTimeout((this as any).streamingTimer);
-      (this as any).streamingTimer = null;
-    }
-    if ((this as any).stepTimer) {
-      clearInterval((this as any).stepTimer);
-      (this as any).stepTimer = null;
-    }
-    (this as any).streamAcc = '';
+    if ((this as any)._thinkTimer) clearTimeout((this as any)._thinkTimer);
+    if ((this as any)._wordTimer) clearTimeout((this as any)._wordTimer);
   },
 });

@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>合同翻译官 · 交互原型 v5（完整版：3 Tab + 8 屏闭环 + 多场景）</title>
+<!--
+  合同翻译官 · 交互原型 v5（整合版）
+  =====================================================================
+  定位：把 v3（首页/上传/解读/历史/我的）+ v4（报告升级：月供卡/权益/追问）+ 新能力
+        （assistant 对话式体检 / history 多记录回放 / 场景样本切换）整合为一份完整可点交互稿。
+  用法：浏览器直接打开本文件。所有跳转纯前端 mock，无需后端。
+
+  8 屏闭环（左侧手机屏）：
+    Tab1  首页 index     → ① 上传合同立即体检 → 上传
+                         ② 与 AI 对话直接体检 → 助手
+    Tab2  历史 history   → 点任一记录 → 报告（历史回放，back 回历史）
+    Tab3  我的 mine      → 免责声明 / 隐私（底部弹层）
+    上传   upload        → 开始分析 → 解读中
+    解读中 analyzing     → 自动走完 4 步 → 报告
+    助手   assistant     → 对话式发合同 → 流式提示 → 报告卡 → 完整报告
+    报告   result        → 健康指数/月供卡/关键数字/风险信号/权益最大化 → 就报告追问 → 对话
+    对话   chat          → 历史追问（chips 快捷问 + 自由输入）
+
+  修改指引：
+    1) 换场景样本：改 <script> 里 SCENES 数据（每场景一份合同 mock，字段齐全即自动渲染各屏）。
+    2) 改首页/上传/我的等静态文案：直接改对应 <div class="screen" id="screen-xxx"> 区块。
+    3) 演示默认场景：右侧面板点选，或在面板里点「直接看报告」。
+=====================================================================
+-->
+<style>
+  :root {
+    --primary: #1E6FFF;
+    --primary-dark: #1656C8;
+    --primary-soft: #EAF2FF;
+    --bg: #F5F7FA;
+    --card: #FFFFFF;
+    --text: #1A1F2E;
+    --text-2: #5B6372;
+    --text-3: #9AA1AD;
+    --danger: #E5484D;
+    --danger-soft: #FDEBEC;
+    --warn: #E8833A;
+    --warn-soft: #FFF3E6;
+    --ok: #2E9E5B;
+    --ok-soft: #E7F5EC;
+    --money: #D2691E;
+    --money-soft: #FFF3E6;
+    --border: #E8EBF0;
+    --radius: 14px;
+    --shadow: 0 2px 12px rgba(20,30,50,.06);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg,#E6EBF2,#DCE3EE);
+    min-height:100vh;
+  }
+  .stage { display:flex; justify-content:center; align-items:center; gap:34px; flex-wrap:wrap; padding:32px 20px; }
+
+  /* ================= 手机壳 ================= */
+  .phone {
+    width:390px; height:844px; flex-shrink:0; display:flex; flex-direction:column;
+    background:var(--bg); border-radius:40px; overflow:hidden;
+    box-shadow:0 24px 70px rgba(10,20,40,.28); border:8px solid #111; position:relative;
+  }
+  .status-bar { height:40px; flex:none; background:var(--card); display:flex; align-items:flex-end; justify-content:space-between; padding:0 22px 6px; font-size:13px; font-weight:600; color:var(--text); }
+  .screen { display:none; flex-direction:column; flex:1; min-height:0; }
+  .screen.active { display:flex; animation:fadeIn .22s ease; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+  .nav-bar { flex:none; height:48px; background:var(--card); display:flex; align-items:center; justify-content:center; position:relative; font-size:16px; font-weight:600; color:var(--text); border-bottom:1px solid var(--border); }
+  .nav-bar .back { position:absolute; left:8px; font-size:22px; color:var(--text-2); cursor:pointer; width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:10px; }
+  .nav-bar .back:active { background:var(--bg); }
+  .scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+  .tabbar { flex:none; background:var(--card); border-top:1px solid var(--border); display:flex; height:56px; padding-bottom:env(safe-area-inset-bottom); }
+  .tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:var(--text-3); font-size:11px; cursor:pointer; transition:color .2s; }
+  .tab.active { color:var(--primary); }
+  .tab .ti { font-size:18px; line-height:1; }
+  .tab .tt { font-weight:500; }
+
+  .btn-primary { background:var(--primary); color:#fff; border:none; border-radius:12px; padding:15px; font-size:16px; font-weight:600; width:100%; cursor:pointer; transition:opacity .2s; }
+  .btn-primary:active { opacity:.85; }
+  .btn-outline { background:#fff; color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:14px; font-size:15px; font-weight:600; width:100%; cursor:pointer; }
+  .btn-ghost { background:transparent; color:var(--text-3); border:none; font-size:13px; cursor:pointer; text-decoration:underline; }
+  .btn-area { padding:14px 16px 22px; }
+  .disclaimer-tip { margin:8px 16px 16px; background:var(--warn-soft); border:1px solid #FFD9B8; border-radius:10px; padding:12px; font-size:11px; color:#B2592A; line-height:1.6; }
+
+  /* ================= 首页 ================= */
+  .home-hero { background:linear-gradient(135deg,#1E6FFF,#2E8BFF); color:#fff; padding:24px 20px 40px; }
+  .home-logo { font-size:13px; opacity:.92; display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .home-hero h1 { font-size:25px; font-weight:700; margin-bottom:6px; }
+  .home-hero p { font-size:12.5px; line-height:1.6; opacity:.92; }
+  .entry-cards { padding:16px 16px 0; margin-top:-24px; position:relative; }
+  .entry { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--border); padding:16px; margin-bottom:12px; cursor:pointer; display:flex; gap:12px; align-items:center; }
+  .entry:active { transform:scale(.992); }
+  .entry .e-ic { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+  .entry.cam .e-ic { background:var(--primary-soft); }
+  .entry.chat .e-ic { background:linear-gradient(135deg,#E7F5EC,#DDF1E5); }
+  .entry .e-main { flex:1; }
+  .entry .e-t { font-size:15.5px; font-weight:700; color:var(--text); }
+  .entry .e-d { font-size:11.5px; color:var(--text-3); margin-top:3px; line-height:1.5; }
+  .entry .e-go { font-size:22px; color:var(--text-3); }
+  .scene-grid { padding:4px 16px 6px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .scene-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
+  .scene-item .si { width:30px; height:30px; border-radius:8px; background:var(--primary-soft); color:var(--primary); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
+  .scene-item .n { font-size:13px; font-weight:600; color:var(--text); }
+  .scene-item .d { font-size:10.5px; color:var(--text-3); margin-top:2px; line-height:1.4; }
+  .sec-head { padding:16px 16px 8px; font-size:14px; font-weight:700; color:var(--text); }
+
+  /* ================= 上传 ================= */
+  .up-body { padding:16px; }
+  .up-actions { display:flex; gap:12px; margin-bottom:14px; }
+  .up-act { flex:1; background:var(--card); border:1.5px dashed var(--primary); border-radius:16px; padding:18px 8px; text-align:center; cursor:pointer; }
+  .up-act:active { background:var(--primary-soft); }
+  .up-act .ua-ic { font-size:26px; }
+  .up-act .ua-t { font-size:13.5px; font-weight:600; color:var(--text); margin-top:6px; }
+  .up-act .ua-d { font-size:10.5px; color:var(--text-3); margin-top:3px; line-height:1.4; }
+  .up-or { text-align:center; font-size:11px; color:var(--text-3); margin:2px 0 12px; }
+  .up-text { width:100%; min-height:118px; background:var(--card); border:1.5px solid var(--border); border-radius:12px; padding:12px; font-size:12px; color:var(--text); line-height:1.7; outline:none; resize:none; font-family:inherit; }
+  .up-text:focus { border-color:var(--primary); }
+  .up-samples { margin-top:12px; }
+  .up-samples .sl { font-size:12px; color:var(--text-2); margin-bottom:8px; font-weight:600; }
+  .samples { display:flex; gap:8px; flex-wrap:wrap; }
+  .sample { font-size:12px; color:var(--primary); background:var(--primary-soft); border:1px solid #C9DFFF; border-radius:16px; padding:7px 12px; cursor:pointer; }
+  .sample:active { background:var(--primary); color:#fff; }
+  .up-scene { margin-top:14px; }
+  .up-scene .sl { font-size:12px; color:var(--text-2); margin-bottom:8px; font-weight:600; }
+  .scene-chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .scene-chip { font-size:12px; color:var(--text-2); background:var(--card); border:1.5px solid var(--border); border-radius:16px; padding:7px 12px; cursor:pointer; }
+  .scene-chip.active { color:var(--primary); border-color:var(--primary); background:var(--primary-soft); font-weight:600; }
+  .up-note { margin-top:16px; font-size:11px; color:var(--text-3); line-height:1.6; text-align:center; }
+
+  /* ================= 解读中 ================= */
+  .analyzing { padding:20px 24px; text-align:center; }
+  .ring-wrap { position:relative; width:150px; height:150px; margin:44px auto 26px; }
+  .ring { width:150px; height:150px; border-radius:50%; border:6px solid var(--primary-soft); border-top-color:var(--primary); animation:spin 1s linear infinite; }
+  .ring-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:var(--primary); }
+  @keyframes spin { to{ transform:rotate(360deg);} }
+  .analyzing h2 { font-size:18px; color:var(--text); margin-bottom:6px; }
+  .analyzing .sub { font-size:12px; color:var(--text-3); margin-bottom:26px; line-height:1.6; }
+  .step { display:flex; align-items:center; gap:12px; padding:11px 0; }
+  .step .dot { width:28px; height:28px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:var(--border); color:var(--text-3); }
+  .step.done .dot { background:var(--ok); color:#fff; }
+  .step.active .dot { background:var(--primary); color:#fff; animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(30,111,255,.4);} 50%{box-shadow:0 0 0 9px rgba(30,111,255,0);} }
+  .step .st-main { flex:1; text-align:left; }
+  .step .label { font-size:14px; color:var(--text); }
+  .step .desc { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  .step.done .label, .step.active .label { font-weight:600; }
+  .step .stat { font-size:11px; color:var(--text-3); }
+  .step.done .stat { color:var(--ok); }
+  .skip { margin-top:18px; font-size:12px; color:var(--text-3); text-decoration:underline; background:none; border:none; cursor:pointer; }
+
+  /* ===== 解读中 · 执行明细（预置 → 灰/蓝/绿 三态） ===== */
+  .run-steps { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
+  .run-step {
+    display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:999px;
+    font-size:13px; text-align:left; transition:background .25s,color .25s,border-color .25s;
+    background:#F2F3F5; border:1px solid #E8EBF0; color:var(--text-3);
+  }
+  .run-step.running {
+    background:var(--primary-soft); border-color:#9CC4FF; color:var(--primary); font-weight:600;
+    animation:toolPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes toolPulse { 0%,100%{box-shadow:0 0 0 0 rgba(30,111,255,0);} 50%{box-shadow:0 0 0 6px rgba(30,111,255,.06);} }
+  .run-step.done { background:var(--ok-soft); border-color:#A9DDBA; color:var(--ok); }
+  .run-step .ri { width:20px; text-align:center; flex-shrink:0; }
+  .run-step .rt { flex:1; }
+  .run-step .rs { font-size:10.5px; opacity:.85; flex-shrink:0; }
+  /* AI 思考卡片：等待期把模型真正的思考过程流式呈现，可点标题收起/展开 */
+  .think-card {
+    margin:14px 0 18px; text-align:left; background:#F7F8FA;
+    border:1px solid var(--border); border-radius:12px; overflow:hidden;
+    transition:border-color .2s;
+  }
+  .think-card.open { border-color:#C9DFFF; }
+  .think-hd { display:flex; align-items:center; gap:7px; padding:10px 12px; cursor:pointer; user-select:none; }
+  .think-ic { font-size:13px; }
+  .think-t { flex:1; font-size:12.5px; font-weight:600; color:var(--text-2); }
+  .think-state { font-size:10px; color:var(--text-3); }
+  .think-state.ing { color:var(--primary); }
+  .think-chev { color:var(--text-3); transition:transform .25s; font-size:12px; }
+  .think-card.collapsed .think-chev { transform:rotate(180deg); }
+  .think-bd { height:0; overflow:hidden; transition:height .3s ease; }
+  .think-card.open .think-bd { height:100px; }
+  .think-card.collapsed .think-bd { height:0; }
+  .think-body {
+    height:100%; overflow-y:auto;
+    padding:0 12px 11px; font-size:11.5px; color:#6B7280; line-height:1.75;
+    -webkit-overflow-scrolling:touch;
+  }
+  .think-body p { margin:0 0 6px; animation:thinkLine .3s ease; }
+  @keyframes thinkLine { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+  .analyzing .stream-note {
+    margin-top:16px; text-align:left; background:#F7F8FA; border:1px dashed var(--border);
+    border-radius:12px; padding:10px 12px; font-size:11.5px; color:var(--text-3); line-height:1.6;
+  }
+
+  /* ================= 助手 / 对话 ================= */
+  .chat-wrap { display:flex; flex-direction:column; height:100%; }
+  .chat-list { flex:1; overflow-y:auto; padding:16px 14px; }
+  .chat-msg { display:flex; gap:9px; margin-bottom:12px; align-items:flex-start; }
+  .chat-msg.me { flex-direction:row-reverse; }
+  .avatar { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:var(--primary); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .avatar.me { background:var(--text-3); }
+  .bubble { max-width:78%; font-size:13px; color:var(--text); background:var(--card); border-radius:4px 14px 14px 14px; padding:10px 12px; line-height:1.65; box-shadow:0 1px 4px rgba(20,30,50,.05); border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; }
+  .chat-msg.me .bubble { background:var(--primary); color:#fff; border-color:var(--primary); border-radius:14px 4px 14px 14px; }
+  .chat-msg.typing .bubble { color:var(--text-3); }
+  .typedots span { display:inline-block; width:5px; height:5px; margin:0 1px; border-radius:50%; background:var(--text-3); animation:td 1s infinite; }
+  .typedots span:nth-child(2){ animation-delay:.2s; } .typedots span:nth-child(3){ animation-delay:.4s; }
+  @keyframes td { 0%,60%,100%{transform:translateY(0);opacity:.5;} 30%{transform:translateY(-3px);opacity:1;} }
+  /* 报告卡（助手对话流里的缩略卡） */
+  .rcard { background:var(--card); border:1.5px solid #C9DFFF; border-radius:14px; box-shadow:var(--shadow); padding:13px; margin-top:8px; cursor:pointer; max-width:85%; }
+  .rcard:active { background:var(--primary-soft); }
+  .rcard .rc-top { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+  .rcard .rc-tag { font-size:10px; color:var(--primary); background:var(--primary-soft); padding:2px 8px; border-radius:20px; font-weight:600; }
+  .rcard .rc-sc { flex:1; text-align:right; font-size:19px; font-weight:800; }
+  .rcard .rc-sc.danger { color:var(--danger); } .rcard .rc-sc.warn { color:var(--warn); } .rcard .rc-sc.ok { color:var(--ok); }
+  .rcard .rc-l1 { font-size:12.5px; font-weight:700; color:var(--text); }
+  .rcard .rc-l2 { font-size:11px; color:var(--text-2); margin-top:4px; line-height:1.55; }
+  .rcard .rc-open { margin-top:9px; font-size:11.5px; color:var(--primary); font-weight:600; }
+  .chat-bar { flex:none; background:var(--card); border-top:1px solid var(--border); padding:9px 12px calc(9px + env(safe-area-inset-bottom)); }
+  .chips { display:flex; gap:7px; overflow-x:auto; padding:2px 0 9px; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex-shrink:0; font-size:11.5px; color:var(--primary); background:var(--primary-soft); border:1px solid #C9DFFF; padding:6px 12px; border-radius:16px; cursor:pointer; font-weight:500; }
+  .chip:active { background:var(--primary); color:#fff; }
+  .input-row { display:flex; gap:8px; }
+  .input-row input { flex:1; background:var(--bg); border:1.5px solid var(--border); border-radius:22px; padding:10px 14px; font-size:13.5px; outline:none; color:var(--text); }
+  .input-row input:focus { border-color:var(--primary); }
+  .send { flex-shrink:0; background:var(--primary); color:#fff; border:none; border-radius:20px; padding:0 18px; font-size:13px; font-weight:600; cursor:pointer; }
+  .send:active { opacity:.85; }
+  .bubble .mini-plain { color:var(--text-3); font-size:11px; }
+
+  /* ================= 报告（result） ================= */
+  .result-hero { padding:18px 16px 14px; background:var(--card); }
+  .result-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .result-tag { font-size:11.5px; color:var(--primary); background:var(--primary-soft); padding:4px 10px; border-radius:20px; font-weight:600; }
+  .result-tag .play { margin-left:6px; padding:1px 6px; border-radius:10px; background:#fff; border:1px solid var(--primary); color:var(--primary); font-size:9.5px; }
+  .result-date { font-size:11px; color:var(--text-3); }
+  .score-box { border-radius:var(--radius); padding:18px; text-align:center; background:linear-gradient(135deg,#E5484D,#F26A6E); color:#fff; }
+  .score-box.warn { background:linear-gradient(135deg,#E8833A,#F2A04E); }
+  .score-box.ok { background:linear-gradient(135deg,#2E9E5B,#3FB871); }
+  .score-box .big { font-size:42px; font-weight:800; line-height:1; }
+  .score-box .score-label { font-size:13px; margin-top:6px; opacity:.96; }
+  .score-box .score-sub { font-size:11.5px; margin-top:4px; opacity:.88; }
+  .conclusion-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:15px; margin:14px 16px 0; border:1px solid var(--border); }
+  .conclusion-card .t { font-size:11.5px; color:var(--text-3); margin-bottom:7px; font-weight:600; }
+  .conclusion-text { font-size:14.5px; color:var(--text); line-height:1.7; font-weight:500; }
+  .conclusion-text em { color:var(--danger); font-style:normal; font-weight:700; }
+
+  .plan-card { background:linear-gradient(135deg,#EAF2FF,#E6F0FF); border:1px solid #C9DFFF; border-radius:var(--radius); padding:15px; margin:14px 16px 0; }
+  .plan-card .pt { font-size:13px; color:var(--primary-dark); font-weight:700; margin-bottom:10px; }
+  .plan-type { display:flex; align-items:center; gap:8px; margin-bottom:11px; }
+  .plan-type .badge { font-size:12.5px; font-weight:700; color:#fff; background:var(--primary); padding:5px 12px; border-radius:20px; flex-shrink:0; }
+  .plan-type .desc { font-size:11px; color:var(--text-2); line-height:1.4; }
+  .pie-row { display:flex; align-items:center; gap:14px; margin:6px 0 12px; }
+  .pie-wrap { width:62px; height:62px; flex-shrink:0; }
+  .pie { width:62px; height:62px; border-radius:50%; background:conic-gradient(var(--primary) 0 22%, var(--primary-soft) 22% 100%); position:relative; }
+  .pie::after { content:""; position:absolute; inset:14px; background:#fff; border-radius:50%; }
+  .pie-legend { flex:1; display:flex; flex-direction:column; gap:5px; }
+  .lg-row { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-2); }
+  .lg-dot { width:10px; height:10px; border-radius:3px; }
+  .lg-row b { color:var(--text); font-weight:700; }
+  .lg-row .lt { color:var(--text-3); margin-left:auto; }
+  .plan-risk { background:#fff; border-radius:10px; padding:10px 12px; margin-top:6px; border:1px solid #D9E8FF; }
+  .plan-risk .rl { font-size:12px; font-weight:700; color:var(--warn); margin-bottom:4px; }
+  .plan-risk .rt { font-size:11.5px; color:var(--text-2); line-height:1.6; }
+  .plan-cons { margin-top:9px; }
+  .plan-cons .c { display:flex; gap:7px; font-size:11.5px; color:var(--text-2); line-height:1.6; margin-bottom:4px; }
+  .plan-cons .c .x { color:var(--danger); flex-shrink:0; }
+  .plan-cons .c .ok { color:var(--ok); flex-shrink:0; }
+
+  .ins-card { background:linear-gradient(135deg,#E7F5EC,#DEF0E6); border:1px solid #C3E5CE; border-radius:var(--radius); padding:15px; margin:14px 16px 0; }
+  .ins-card .pt { font-size:13px; color:#1F7A45; font-weight:700; margin-bottom:11px; }
+  .ins-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ins-item { background:#fff; border-radius:9px; padding:9px 10px; }
+  .ins-item .il { font-size:10.5px; color:var(--text-3); }
+  .ins-item .iv { font-size:15.5px; font-weight:800; color:var(--text); margin-top:2px; }
+  .ins-item .iv.g { color:var(--ok); } .ins-item .iv.o { color:var(--warn); }
+
+  .keynum-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:15px; margin:14px 16px 0; }
+  .keynum-card .t { font-size:12px; color:var(--text-3); margin-bottom:10px; font-weight:600; }
+  .keynum-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .kn-item { background:var(--bg); border-radius:10px; padding:11px; }
+  .kn-item .l { font-size:10.5px; color:var(--text-3); margin-bottom:4px; }
+  .kn-item .v { font-size:16.5px; font-weight:800; color:var(--text); }
+  .kn-item .hint { font-size:10px; color:var(--primary); margin-top:3px; }
+  .kn-item.warn .v { color:var(--danger); }
+
+  .sec-title { padding:18px 16px 8px; display:flex; align-items:center; gap:8px; }
+  .sec-title .t { font-size:15px; font-weight:700; color:var(--text); flex:1; }
+  .sec-title .c { font-size:10.5px; color:var(--text-3); }
+
+  .signal { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); margin:0 16px 11px; overflow:hidden; border-left:4px solid var(--border); }
+  .signal.level-danger { border-left-color:var(--danger); }
+  .signal.level-warn { border-left-color:var(--warn); }
+  .signal.level-ok { border-left-color:var(--ok); }
+  .signal-hd { padding:13px 14px; cursor:pointer; display:flex; gap:11px; align-items:flex-start; }
+  .signal .lvl { flex-shrink:0; width:28px; height:28px; border-radius:9px; font-size:13px; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .signal.level-danger .lvl { background:var(--danger-soft); color:var(--danger); }
+  .signal.level-warn .lvl { background:var(--warn-soft); color:var(--warn); }
+  .signal.level-ok .lvl { background:var(--ok-soft); color:var(--ok); }
+  .signal-ti { flex:1; }
+  .signal-ti .n { font-size:13.5px; font-weight:600; color:var(--text); line-height:1.5; }
+  .signal-ti .n em { font-style:normal; color:var(--danger); font-weight:700; }
+  .signal-ti .n em.warn { color:var(--warn); }
+  .signal-ti .one { font-size:11px; color:var(--text-2); margin-top:4px; line-height:1.5; }
+  .chev { flex-shrink:0; color:var(--text-3); margin-top:5px; transition:transform .25s; }
+  .signal.open .chev { transform:rotate(180deg); }
+  .signal-bd { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .signal.open .signal-bd { max-height:900px; }
+  .signal-in { padding:0 14px 14px; }
+  .signal-in .sec { margin-top:11px; }
+  .signal-in .sec .st { font-size:11.5px; font-weight:700; color:var(--text-2); margin-bottom:6px; }
+  .legal-box { background:var(--primary-soft); border-radius:10px; padding:11px; }
+  .legal-box .law { font-size:12.5px; color:var(--primary-dark); font-weight:600; margin-bottom:4px; }
+  .legal-box .d { font-size:11.5px; color:var(--text-2); line-height:1.6; }
+  .steps { display:flex; flex-direction:column; gap:7px; }
+  .step-op { display:flex; gap:9px; align-items:flex-start; background:var(--bg); border-radius:9px; padding:9px 11px; }
+  .step-op .num { flex-shrink:0; width:18px; height:18px; border-radius:50%; background:var(--primary); color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .step-op .tx { font-size:12.5px; color:var(--text); line-height:1.55; }
+  .term-explain { margin-top:9px; display:flex; gap:6px; align-items:flex-start; background:var(--bg); border-radius:9px; padding:9px 11px; }
+  .term-explain .qi { flex-shrink:0; color:var(--text-3); margin-top:1px; font-size:12px; }
+  .term-explain .tx { font-size:11.5px; color:var(--text-2); line-height:1.6; }
+  .term-explain .tx b { color:var(--primary); font-weight:600; }
+
+  .opt-card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); margin:0 16px 11px; border:1px solid var(--border); overflow:hidden; }
+  .opt-hd { padding:13px; cursor:pointer; display:flex; gap:10px; align-items:center; }
+  .opt-hd .stage { flex-shrink:0; width:24px; height:24px; border-radius:7px; font-size:10.5px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; }
+  .opt-hd .stage.s1 { background:var(--primary); } .opt-hd .stage.s2 { background:var(--ok); } .opt-hd .stage.s3 { background:var(--warn); }
+  .opt-hd .ot { font-size:13px; font-weight:600; color:var(--text); flex:1; line-height:1.5; }
+  .opt-card.open .chev { transform:rotate(180deg); }
+  .opt-bd { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .opt-card.open .opt-bd { max-height:400px; }
+  .opt-in { padding:0 14px 13px; }
+  .opt-in .od { font-size:11.5px; color:var(--text-2); line-height:1.65; margin-bottom:9px; }
+  .ask-btn { display:inline-flex; align-items:center; font-size:11.5px; color:var(--ok); background:var(--ok-soft); border:1px solid #C3E5CE; padding:6px 11px; border-radius:16px; cursor:pointer; font-weight:600; }
+  .ask-btn:active { opacity:.75; }
+  .ask-btn.blue { color:var(--primary); background:var(--primary-soft); border-color:#C9DFFF; }
+
+  .right { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); margin:0 16px 11px; border:1px solid var(--border); overflow:hidden; }
+  .right-hd { padding:13px; cursor:pointer; display:flex; gap:12px; align-items:flex-start; }
+  .right-main { flex:1; }
+  .right-title { font-size:13.5px; font-weight:600; color:var(--text); line-height:1.5; }
+  .right-desc { font-size:11px; color:var(--text-2); margin-top:4px; line-height:1.5; }
+  .right-amt { flex-shrink:0; text-align:center; background:var(--money-soft); border:1px solid #FFD9B8; border-radius:9px; padding:5px 9px; }
+  .right-amt .al { font-size:9.5px; color:#B2592A; font-weight:600; }
+  .right-amt .av { font-size:15px; font-weight:800; color:var(--money); }
+  .right.open .chev { transform:rotate(180deg); }
+  .right-bd { max-height:0; overflow:hidden; transition:max-height .3s ease; }
+  .right.open .right-bd { max-height:400px; }
+  .right-in { padding:0 14px 13px; }
+  .right-in .rd { font-size:11.5px; color:var(--text-2); line-height:1.65; margin-bottom:9px; }
+
+  /* ================= 历史 ================= */
+  .tab-page-head { padding:14px 16px 4px; }
+  .tab-page-head .tt { font-size:19px; font-weight:800; color:var(--text); }
+  .tab-page-head .td { font-size:11.5px; color:var(--text-3); margin-top:3px; }
+  .hist-list { padding:8px 16px 4px; }
+  .hist-item { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--border); padding:14px; margin-bottom:11px; display:flex; align-items:center; gap:12px; cursor:pointer; }
+  .hist-item:active { background:var(--bg); }
+  .hist-ic { width:40px; height:40px; border-radius:11px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0; }
+  .hist-info { flex:1; }
+  .hist-info .n { font-size:14px; font-weight:600; color:var(--text); }
+  .hist-info .n .sc { color:var(--text-3); font-weight:500; }
+  .hist-info .d { font-size:11px; color:var(--text-3); margin-top:3px; }
+  .hist-stat { font-size:11px; font-weight:700; padding:4px 9px; border-radius:16px; flex-shrink:0; }
+  .hist-stat.danger { background:var(--danger-soft); color:var(--danger); }
+  .hist-stat.warn { background:var(--warn-soft); color:var(--warn); }
+  .hist-stat.ok { background:var(--ok-soft); color:var(--ok); }
+
+  /* ================= 我的 ================= */
+  .mine-head { background:var(--card); padding:22px 16px; display:flex; align-items:center; gap:13px; }
+  .avatar-lg { width:54px; height:54px; border-radius:50%; background:var(--primary); color:#fff; font-size:21px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .mine-head .n { font-size:16.5px; font-weight:700; color:var(--text); }
+  .mine-head .d { font-size:11.5px; color:var(--text-3); margin-top:3px; }
+  .mine-grp { margin:14px 16px; background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .mine-row { display:flex; align-items:center; gap:11px; padding:14px 15px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .mine-row:last-child { border-bottom:none; }
+  .mine-row .mi { font-size:15px; color:var(--primary); width:22px; text-align:center; }
+  .mine-row .n { flex:1; font-size:13.5px; color:var(--text); }
+  .mine-row .v { font-size:11px; color:var(--text-3); }
+  .mine-row .go { color:var(--text-3); font-size:14px; }
+  .mine-footer { text-align:center; font-size:10px; color:var(--text-3); padding:6px 20px 14px; line-height:1.7; }
+
+  /* ================= 弹层（免责/隐私） ================= */
+  .mask { display:none; position:absolute; inset:0; background:rgba(10,16,30,.45); z-index:50; align-items:flex-end; justify-content:center; }
+  .mask.show { display:flex; }
+  .modal { width:100%; background:#fff; border-radius:20px 20px 0 0; padding:20px 18px calc(18px + env(safe-area-inset-bottom)); animation:up .22s ease; }
+  @keyframes up { from{transform:translateY(40px);opacity:0;} to{transform:none;opacity:1;} }
+  .modal .mt { font-size:16px; font-weight:700; color:var(--text); margin-bottom:10px; }
+  .modal .mc { font-size:13px; color:var(--text-2); line-height:1.8; }
+  .modal .mk { margin-top:16px; }
+
+  /* ================= 右侧演示面板 ================= */
+  .demo { width:300px; flex-shrink:0; background:rgba(255,255,255,.82); backdrop-filter:blur(8px); border-radius:18px; box-shadow:0 14px 44px rgba(20,30,50,.16); padding:18px; border:1px solid #fff; }
+  .demo h3 { font-size:15px; font-weight:800; color:var(--text); margin-bottom:4px; }
+  .demo .sub { font-size:11px; color:var(--text-3); line-height:1.6; margin-bottom:12px; }
+  .demo .grp { font-size:11px; font-weight:700; color:var(--text-2); margin:12px 0 7px; }
+  .scene-opt { display:flex; gap:8px; }
+  .sopt { flex:1; text-align:center; font-size:11px; font-weight:600; padding:8px 4px; border-radius:10px; border:1.5px solid var(--border); background:#fff; color:var(--text-2); cursor:pointer; line-height:1.3; }
+  .sopt .en { display:block; font-size:9px; color:var(--text-3); margin-top:2px; font-weight:500; }
+  .sopt.active { border-color:var(--primary); color:var(--primary); background:var(--primary-soft); }
+  .demo .map { font-size:10.5px; color:var(--text-2); line-height:1.85; }
+  .demo .map b { color:var(--primary); font-weight:600; }
+  .demo .dbtn { width:100%; margin-top:8px; }
+  .demo .tip { margin-top:10px; font-size:10.5px; color:var(--text-3); line-height:1.7; background:var(--card); border:1px dashed var(--border); border-radius:10px; padding:9px 11px; }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <!-- ==================== 手机壳 ==================== -->
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+
+    <!-- ========== ① 首页（Tab1） ========== -->
+    <div class="screen active" id="screen-home">
+      <div class="scroll">
+        <div class="home-hero">
+          <div class="home-logo">🛡️ 合同翻译官</div>
+          <h1>签字前，先查一查</h1>
+          <p>拍照识别合同，AI 帮你翻译成大白话，找出风险点，还能帮你把权益争取回来</p>
+        </div>
+        <div class="entry-cards">
+          <div class="entry cam" onclick="go('screen-upload')">
+            <div class="e-ic">📷</div>
+            <div class="e-main">
+              <div class="e-t">上传合同，立即体检</div>
+              <div class="e-d">支持拍照 / 相册 / 文件 · 自动识别合同类型</div>
+            </div>
+            <div class="e-go">›</div>
+          </div>
+          <div class="entry chat" onclick="go('screen-assistant')">
+            <div class="e-ic">💬</div>
+            <div class="e-main">
+              <div class="e-t">与 AI 对话，直接体检</div>
+              <div class="e-d">粘贴合同文字或拍张照片发我 · 像聊天一样出报告</div>
+            </div>
+            <div class="e-go">›</div>
+          </div>
+        </div>
+        <div class="sec-head">能查什么风险？</div>
+        <div class="scene-grid">
+          <div class="scene-item"><div class="si">贷</div><div class="n">消费贷 / 购车贷款</div><div class="d">真实年化利率 · 砍头息 · 违约金</div></div>
+          <div class="scene-item"><div class="si">险</div><div class="n">保险条款</div><div class="d">保障责任 · 免责 · 等待期</div></div>
+          <div class="scene-item"><div class="si">租</div><div class="n">租房合同</div><div class="d">押金 · 违约金 · 维修责任</div></div>
+          <div class="scene-item"><div class="si">他</div><div class="n">其他合同</div><div class="d">格式条款 · 强制搭售</div></div>
+        </div>
+        <div class="disclaimer-tip" style="margin-top:14px">仅用于理解合同、识别风险，不构成法律 / 理财 / 投资建议。重大决策请咨询持牌专业人士。</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab active" onclick="tab('home')"><span class="ti">🏠</span><span class="tt">首页</span></div>
+        <div class="tab" onclick="tab('history')"><span class="ti">🕘</span><span class="tt">历史</span></div>
+        <div class="tab" onclick="tab('mine')"><span class="ti">👤</span><span class="tt">我的</span></div>
+      </div>
+    </div>
+
+    <!-- ========== ② 上传 ========== -->
+    <div class="screen" id="screen-upload">
+      <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>上传合同</div>
+      <div class="scroll">
+        <div class="up-body">
+          <div class="up-actions">
+            <div class="up-act" onclick="notice('演示环境：此处对接「拍照 / OCR 识别」，可在开发者工具或真机体验实拍识别。')">
+              <div class="ua-ic">📷</div><div class="ua-t">拍照识别</div><div class="ua-d">拍合同页面，自动 OCR</div>
+            </div>
+            <div class="up-act" onclick="notice('演示环境：此处对接「相册选图」，识别流程同拍照。')">
+              <div class="ua-ic">🖼️</div><div class="ua-t">相册选择</div><div class="ua-d">从相册选合同照片</div>
+            </div>
+          </div>
+          <div class="up-or">— 或 粘贴 / 手输合同文字 —</div>
+          <textarea class="up-text" id="upText" placeholder="把合同里的关键条款粘贴到这里…（演示可用下方示例填充）"></textarea>
+          <div class="up-samples">
+            <div class="sl">示例合同（点一下自动填入）</div>
+            <div class="samples">
+              <span class="sample" onclick="loadSample('consumer-loan')">消费贷</span>
+              <span class="sample" onclick="loadSample('car-lease')">购车融资租赁</span>
+              <span class="sample" onclick="loadSample('medical')">医疗保险</span>
+            </div>
+          </div>
+          <div class="up-scene">
+            <div class="sl">合同场景（不选则自动识别）</div>
+            <div class="scene-chips" id="upSceneChips"></div>
+          </div>
+          <div style="margin-top:18px">
+            <button class="btn-primary" onclick="startAnalyze()">开始 AI 体检</button>
+          </div>
+          <div class="up-note">内容仅用于本次解读 · 可随时删除 · 不用于模型训练</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== ③ 解读中 ========== -->
+    <div class="screen" id="screen-analyzing">
+      <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>正在解读</div>
+      <div class="scroll">
+        <div class="analyzing">
+          <div class="ring-wrap"><div class="ring"></div><div class="ring-center">解读中</div></div>
+          <h2>AI 正在给你的合同做体检</h2>
+          <div class="sub" id="anSub">正在读取合同内容…</div>
+          <!-- AI 思考卡片：模型真实思考过程流式呈现，点击标题可收起/展开 -->
+          <div class="think-card collapsed" id="anThink" onclick="toggleThink()">
+            <div class="think-hd">
+              <span class="think-ic">🤔</span>
+              <span class="think-t" id="anThinkTitle">AI 正在思考…</span>
+              <span class="think-state ing" id="anThinkState">思考中</span>
+              <span class="think-chev">⌄</span>
+            </div>
+            <div class="think-bd"><div class="think-body" id="anThinkBody"></div></div>
+          </div>
+          <!-- 执行明细：进入即全量预置（灰=待执行）→ 逐项变蓝（进行中）→ 变绿（完成） -->
+          <div id="anRunSteps"></div>
+          <div class="stream-note">思考完成后会列出它要做哪些检查，做完一项勾一项，不会让你干等。</div>
+          <button class="skip" onclick="finishAnalyze(true)">跳过等待，直接看报告 →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== ④ 助手（对话式体检） ========== -->
+    <div class="screen" id="screen-assistant">
+      <div class="nav-bar"><div class="back" onclick="go('screen-home')">‹</div>合同助手 · AI 体检</div>
+      <div class="chat-wrap">
+        <div class="chat-list" id="asstList"></div>
+        <div class="chat-bar">
+          <div class="chips" id="asstChips"></div>
+          <div class="input-row">
+            <input id="asstInput" placeholder="粘贴合同文字，或输入你的问题…" />
+            <button class="send" onclick="asstSend()">发送</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== ⑤ 报告（result，按当前场景渲染） ========== -->
+    <div class="screen" id="screen-result">
+      <div class="nav-bar"><div class="back" id="resultBack" onclick="resultBack()">‹</div>合同体检报告</div>
+      <div class="scroll" id="resultBody"></div>
+    </div>
+
+    <!-- ========== ⑥ 追问对话（chat） ========== -->
+    <div class="screen" id="screen-chat">
+      <div class="nav-bar"><div class="back" onclick="resultBack()">‹</div>有疑问？继续追问 AI</div>
+      <div class="chat-wrap">
+        <div class="chat-list" id="chatList"></div>
+        <div class="chat-bar">
+          <div class="chips" id="chatChips"></div>
+          <div class="input-row">
+            <input id="chatInput" placeholder="输入你的问题…" />
+            <button class="send" onclick="chatSend()">发送</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== ⑦ 历史（Tab2） ========== -->
+    <div class="screen" id="screen-history">
+      <div class="scroll">
+        <div class="tab-page-head">
+          <div class="tt">历史记录</div>
+          <div class="td">每次体检自动归档到这里，可随时回看完整报告并继续追问</div>
+        </div>
+        <div class="hist-list" id="histList"></div>
+      </div>
+      <div class="tabbar">
+        <div class="tab" onclick="tab('home')"><span class="ti">🏠</span><span class="tt">首页</span></div>
+        <div class="tab active" onclick="tab('history')"><span class="ti">🕘</span><span class="tt">历史</span></div>
+        <div class="tab" onclick="tab('mine')"><span class="ti">👤</span><span class="tt">我的</span></div>
+      </div>
+    </div>
+
+    <!-- ========== ⑧ 我的（Tab3） ========== -->
+    <div class="screen" id="screen-mine">
+      <div class="scroll">
+        <div class="mine-head">
+          <div class="avatar-lg">微</div>
+          <div>
+            <div class="n">微信用户</div>
+            <div class="d">合同翻译官 · 让每一次签字都安心</div>
+          </div>
+        </div>
+        <div class="mine-grp">
+          <div class="mine-row" onclick="openModal('disclaimer')"><span class="mi">⚖️</span><span class="n">免责声明</span><span class="go">›</span></div>
+          <div class="mine-row" onclick="openModal('privacy')"><span class="mi">🔒</span><span class="n">隐私与数据安全</span><span class="go">›</span></div>
+          <div class="mine-row"><span class="mi">ℹ️</span><span class="n">当前版本</span><span class="v">v0.6.0</span><span class="go">›</span></div>
+          <div class="mine-row"><span class="mi">💬</span><span class="n">意见反馈</span><span class="go">›</span></div>
+        </div>
+        <div class="mine-footer">科豆 AI 出品<br>让普通人也读得懂自己的合同</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab" onclick="tab('home')"><span class="ti">🏠</span><span class="tt">首页</span></div>
+        <div class="tab" onclick="tab('history')"><span class="ti">🕘</span><span class="tt">历史</span></div>
+        <div class="tab active" onclick="tab('mine')"><span class="ti">👤</span><span class="tt">我的</span></div>
+      </div>
+      <!-- 弹层 -->
+      <div class="mask" id="modalMask">
+        <div class="modal">
+          <div class="mt" id="modalTitle">免责声明</div>
+          <div class="mc" id="modalBody"></div>
+          <div class="mk"><button class="btn-primary" onclick="closeModal()">我知道了</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mask" id="toastMask"><div style="width:100%;text-align:center"><div id="toastBody" style="display:inline-block;max-width:280px;background:rgba(16,22,40,.82);color:#fff;font-size:12.5px;line-height:1.6;border-radius:12px;padding:12px 15px;margin-top:40%"></div></div></div>
+  </div>
+
+  <!-- ==================== 演示面板 ==================== -->
+  <aside class="demo">
+    <h3>合同翻译官 · v5 演示</h3>
+    <div class="sub">8 屏完整闭环 · 内置 3 套合同样本，右侧可随时切换「下一次分析」用哪份样本。</div>
+    <div class="grp">当前样本（影响：上传 / 对话 新分析）</div>
+    <div class="scene-opt" id="demoScene"></div>
+    <div class="grp">动线速览（点手机屏体验）</div>
+    <div class="map">
+      首页 → <b>上传</b> → <b>解读中</b> → <b>报告</b><br>
+      首页 → <b>助手</b> → 发合同 → 报告卡 → <b>报告</b><br>
+      <b>报告</b> → 就报告追问 → <b>对话</b><br>
+      <b>历史</b> Tab → 点记录 → <b>报告回放</b><br>
+      <b>我的</b> Tab → 免责 / 隐私
+    </div>
+    <button class="btn-outline dbtn" onclick="openReport(currentScene,'history')">直接看「当前样本」报告</button>
+    <div class="tip">💡 修改样本/文案：编辑文件内 <code>SCENES</code> 数据与各 <code>screen-*</code> 区块即可，全部屏自动联动。</div>
+  </aside>
+</div>
+
+<script>
+/* ================================================================
+ * mock 数据区：改这里即可换三套合同样本
+ * 结构说明（report 渲染各屏通用）：
+ *   label 场景名｜type 合同类型｜date 展示日期｜score 健康指数(0-100)
+ *   conclusion 一句话判断｜signals 风险信号｜monthly/insurance 可选卡
+ *   keyNumbers 关键数字｜optimize 权益时机｜rights 可主张权益
+ *   example 粘贴示例用的合同文本
+ * ================================================================ */
+const SCENES = {
+  'consumer-loan': {
+    label: '消费贷', type: '个人消费贷款合同', date: '今天 14:32',
+    example: '甲方（出借人）与乙方（借款人）签订个人消费贷款合同，借款本金人民币壹拾万元整（¥100,000），分 12 期归还。首期支付前，乙方应向甲方一次性支付服务费 5,000 元；乙方另须投保"安心宝"人身意外险（保费 3,000 元）方可放款。合同约定名义年利率 21.6%（月利率 1.8%），每月 15 日归还当月本息，采用"先息后本"方式：前 11 个月仅偿还利息，第 12 期一次性归还本金。乙方提前还款的，甲方按剩余本金 3% 收取违约金。',
+    score: 42, scoreSub: '发现 2 个高风险点，签字前务必处理',
+    conclusion: '这份贷款有 <em>2 处高风险</em>（真实利率超保护上限 + 砍头息），且隐含搭售保险，<em>不建议直接签</em>，先把下面的问题谈清楚。',
+    monthly: {
+      type: '先息后本', desc: '前 11 个月只还利息，本金最后一次性归还',
+      pct: 22, pLabel: '本金', pVal: '2,200 / 月', intPct: 78, iLabel: '利息', iVal: '7,800 / 月',
+      riskT: '前期本金占比极低', riskD: '前 11 个月几乎都在还利息，本金没怎么减。若中途提前还款，省不下多少利息，反而不划算。',
+      cons: [
+        { ok: true, text: '前期月供压力小，现金流更宽裕' },
+        { ok: false, text: '总利息偏高，最后一个月需一次性还大额本金' },
+        { ok: false, text: '提前还款节省的利息有限' },
+      ],
+    },
+    keyNumbers: [
+      { l: '真实年化利率', v: '25.06%', hint: '≈ 借 1 万一年利息 2,506 元', warn: true },
+      { l: '总利息', v: '12,878 元' },
+      { l: '实际到手', v: '95,000 元', hint: '已预扣 5,000 服务费' },
+      { l: '期数', v: '12 期' },
+    ],
+    signals: [
+      { level: 'danger', lv: '高', title: '真实年化 <em>25.06%</em>，超过司法保护上限', one: '名义利率 21.6%，加上"服务费"折进成本后，真实年化被推高到 25.06%',
+        law: { src: '《最高人民法院关于审理民间借贷案件适用法律若干问题的规定》第 25 条', d: '超出合同成立时一年期 LPR 四倍的利息部分，法院不予支持。当前约定超上限部分无效。' },
+        steps: ['先用本工具 IRR 帮你算清真实年化', '保存好放款凭证与全部还款记录', '超出保护上限部分可主张不予支付或调整'],
+        term: { q: '司法保护上限', a: '指法律允许的借款利率上限。超出部分的利息约定无效，借款人可拒绝支付，已经支付的可以主张抵扣本金。' } },
+      { level: 'danger', lv: '高', title: '放款前预扣 <em>5,000 元"服务费"</em>（砍头息）', one: '合同写借 10 万，实际到手 9.5 万，却按 10 万本金计息',
+        law: { src: '《民法典》第 670 条', d: '借款的利息不得预先在本金中扣除。利息预先在本金中扣除的，应当按照实际借款数额返还借款并计算利息。' },
+        steps: ['要求按实际到账 9.5 万计息', '预扣费用可主张折抵本金', '拒绝返还的可向金融监管部门投诉'],
+        term: { q: '砍头息', a: '出借人放款时先从本金里扣除利息或各种费用，导致你实际拿到手的钱少于合同借款额。法律上应按实际拿到手的金额计息。' } },
+      { level: 'warn', lv: '中', title: '搭售"安心宝"保险 3,000 元才放款', one: '变相增加融资成本，涉嫌强制搭售',
+        law: { src: '《关于进一步规范金融营销宣传行为的通知》', d: '不得强制搭售保险等金融产品或服务，不得以购买产品为贷款放款前提。' },
+        steps: ['明确要求不投保也放款', '保留对方"不买不放款"的证据', '向银保监投诉热线反映'],
+        term: null },
+    ],
+    optimize: [
+      { stage: '签前', t: '签字前：把"砍头息"服务费谈掉', od: '合同预扣 5,000 元"服务费"，这属于砍头息。签字前要求剔除，可少付 5,000 元本金对应的利息。', ask: '砍头息服务费 5000 元，签字前怎么跟对方谈？' },
+      { stage: '签后', t: '签字后：超出 24% 部分可主张调整', od: '你的真实年化 25.06%，超保护上限。超出的部分可主张不予支付或调整。', ask: '实际年化 25.06%，超出上限的部分具体怎么算？' },
+      { stage: '长期', t: '长期：先息后本提前还款时机', od: '前期本金占比低，提前还款省不了多少利息。若真要提前，等本金占比上去后再还更划算。', ask: '先息后本什么时候提前还款最划算？' },
+    ],
+    rights: [
+      { t: '要求退还超出保护上限部分的利息', d: '真实年化 25.06%，超出部分可主张调整', amount: '¥1,260', law: '依据民间借贷司法解释，超上限部分不予支持。你多付的 1,260 元可协商调整或诉请返还。', ask: '超出部分的 1260 元怎么退回？需要什么证据？' },
+      { t: '按实际到手金额算利息（砍头息）', d: '借 10 万到手 9.5 万，应按 9.5 万计息', amount: '¥6,740', law: '依据《民法典》670 条，5,000 元预扣费用不应计入本金，对应利息一并调整。', ask: '砍头息 5000 元怎么主张按实际到账算利息？' },
+    ],
+  },
+
+  'car-lease': {
+    label: '购车融资租赁', type: '融资租赁合同（售后回租）', date: '昨天 11:08',
+    example: '甲方（出租人）与乙方（承租人）签订汽车融资租赁合同，车辆含税价 120,000 元，乙方支付首付 12,000 元后，甲方出资 108,000 元购买该车并回租给乙方使用。租赁期 36 个月，每期支付租金 3,480 元；乙方另须于放款前支付融资服务费 6,000 元。合同约定：乙方逾期支付一期租金的，甲方有权取回车辆并要求全部剩余租金加速到期；车辆保险须在甲方指定保险公司投保。租赁期满，乙方支付留购价 1 元后取得车辆所有权。',
+    score: 61, scoreSub: '发现 1 个高风险点，违约条款需要特别留意',
+    conclusion: '这是一份<em>名为租赁、实为融资买车</em>的合同。真实年化约 <em>9.8%</em> 尚可，但<em>逾期即收车 + 租金加速到期</em>的违约条款对你不利，需要重点谈。',
+    monthly: {
+      type: '等额月租', desc: '每月租金固定，含车辆本金与租息',
+      pct: 76, pLabel: '车辆本金', pVal: '2,645 / 月', intPct: 24, iLabel: '租息', iVal: '835 / 月',
+      riskT: '违约金与收车条款偏严', riskD: '逾期一期即可能被收车，且全部剩余租金加速到期，压力集中在违约时点。',
+      cons: [
+        { ok: true, text: '留购价 1 元，期满可过户到自己名下' },
+        { ok: false, text: '须在指定保险公司投保，保费议价空间小' },
+        { ok: false, text: '逾期一期即触发收车 + 全部租金加速到期' },
+      ],
+    },
+    keyNumbers: [
+      { l: '融资总额', v: '108,000 元' },
+      { l: '月租金', v: '3,480 元' },
+      { l: '真实年化', v: '9.8%', warn: true, hint: '已含 6,000 服务费折入' },
+      { l: '租赁期', v: '36 期' },
+    ],
+    signals: [
+      { level: 'danger', lv: '高', title: '逾期一期即<em>收车 + 全部租金加速到期</em>', one: '违约触发条件过苛，轻微逾期可能被要求一次性付清全部剩余租金',
+        law: { src: '《民法典》第 745 / 752 条', d: '出租人取回租赁物前应履行催告义务；违约后果应与违约程度相当，明显过高的违约金可请求调整。' },
+        steps: ['还车前先确认是否已充分催告', '主张违约金过高请求法院酌减', '协商分期补付替代一次性加速到期'],
+        term: { q: '租金加速到期', a: '条款约定当出现逾期等情形时，所有未到期租金立即视为全部到期、需要一次性付清。此类条款往往需要配合催告等前置程序才有效。' } },
+      { level: 'warn', lv: '中', title: '6,000 元融资服务费计入分期成本', one: '服务费被摊进 36 期租金，推高了你的真实资金成本',
+        law: { src: '《融资租赁公司监督管理暂行办法》第 17 条', d: '融资租赁公司不得以服务费等名义变相收取砍头息性质的费用。' },
+        steps: ['签约前要求披露费用计算方式', '主张服务费不计入租赁本金', '必要时投诉至地方金融监管局'],
+        term: null },
+      { level: 'warn', lv: '中', title: '强制在指定保险公司投保', one: '保费渠道被锁定，可能比自行投保更贵',
+        law: { src: '《民法典》第 497 条', d: '不合理地加重对方责任、排除对方主要权利的格式条款无效。' },
+        steps: ['询问是否可用其他保险公司同等险种', '对比指定渠道与自购保费差异', '差异过大可主张该条不合理'],
+        term: null },
+    ],
+    optimize: [
+      { stage: '签前', t: '签字前：服务费与保费渠道先谈', od: '6,000 元服务费若无法免除，至少要求它不计入本金；保险争取自购渠道，一年能省几百到上千元。', ask: '融资服务费能要求不计入本金吗？' },
+      { stage: '签后', t: '用款期：保持征信与还款纪律', od: '逾期一次就可能触发收车条款，宁可分期补也不要硬扛到逾期；万一逾期，第一时间沟通补付。', ask: '不小心逾期了一期怎么办？会被直接收车吗？' },
+    ],
+    rights: [
+      { t: '主张 6,000 元服务费不计入租赁本金', d: '费用应一次性另行披露，不应摊进每期租金', amount: '约 ¥1,260', law: '服务费若未提供实质服务，可主张其不应折入融资成本；监管亦禁止变相砍头息。', ask: '怎么主张服务费不摊进租金？' },
+    ],
+  },
+
+  'medical': {
+    label: '医疗保险', type: '百万医疗险条款', date: '8 月 29 日',
+    example: '本保险合同由投保人自愿投保，被保险人因意外或疾病在保险期间内发生的、符合本合同约定的合理且必要的住院医疗费用，保险人按约定给付保险金。本合同等待期为 30 日（续保无等待期），一般医疗年度免赔额 10,000 元。保险责任限于在中华人民共和国境内（不含港澳台）二级及以上公立医院普通部发生的费用；在私立医院、特需部、国际部就医的费用不予给付。投保人故意隐瞒既往病史的，保险人不承担保险责任且不退还保险费。本合同所载免责条款以特别约定为准。',
+    score: 76, scoreSub: '条款整体中等偏上，但有 1 处需与投保人确认',
+    conclusion: '保障额度充足，但有<em>既往症免责 + 指定医院限制</em>两块要看清。特别是免责条款若未向你<em>提示和明确说明</em>，依法可能不生效。',
+    insurance: {
+      items: [
+        { l: '年度保额', v: '600 万' },
+        { l: '年缴保费', v: '6,500 元' },
+        { l: '等待期', v: '30 天', cls: 'o' },
+        { l: '免赔额', v: '1 万', cls: 'o' },
+      ],
+      riskT: '关键提醒', riskD: '"既往症除外"与你是否有体检异常直接相关，投保前务必逐条核对健康告知。',
+    },
+    keyNumbers: [
+      { l: '一般医疗保额', v: '600 万' },
+      { l: '免赔额', v: '10,000 元' },
+      { l: '等待期', v: '30 天' },
+      { l: '报销范围', v: '社保内 + 自费药' },
+    ],
+    signals: [
+      { level: 'danger', lv: '高', title: '免责条款<em>未尽提示说明义务</em>，可能不生效', one: '"既往症除外"写在附则里，投保时无人向你逐条说明',
+        law: { src: '《保险法》第 17 条', d: '对保险合同中免除保险人责任的条款，保险人未作提示或者明确说明的，该条款不产生效力。' },
+        steps: ['回看投保页面是否有免责条款弹窗确认记录', '若无明确说明，可主张该免责条款不生效', '申请理赔被拒时，可据此提出异议'],
+        term: { q: '提示说明义务', a: '保险人对免责条款，必须用加粗、弹窗等显著方式提示，并向你口头/书面解释其含义。没做到，这一条就对你无效。' } },
+      { level: 'warn', lv: '中', title: '等待期 30 天内确诊不赔，需确认计算口径', one: '首次投保后 30 天内发生的疾病不赔，续保无等待期',
+        law: null,
+        steps: ['确认等待期是否因续保/转保清零', '等待期内非紧急体检可适当延后', '留意"确诊日"还是"就诊日"为准'],
+        term: null },
+      { level: 'warn', lv: '中', title: '限定二级以上公立医院普通部', one: '特需部 / VIP 部 / 私立医院就医费用不予报销',
+        law: null,
+        steps: ['就医前先确认医院是否符合条款', '需要特需服务可另买中高端医疗险', '急诊在非约定医院也尽量转诊'],
+        term: null },
+    ],
+    optimize: [
+      { stage: '签前', t: '投保前：逐条核对健康告知', od: '"既往症除外"边界取决于你的健康告知。有体检异常的，先咨询是否符合，别留拒赔隐患。', ask: '我有过体检异常，会影响理赔吗？怎么告知最稳妥？' },
+      { stage: '签后', t: '就医前：先确认医院与报销范围', od: '只报二级以上公立普通部。紧急就医后若不符合条件，尽快转院以保住报销资格。', ask: '去私立医院看过病，费用还能报吗？' },
+    ],
+    rights: [],
+  },
+};
+
+/* 历史记录顺序（列表显示顺序 = 最近在上） */
+const HISTORY = [
+  { key: 'consumer-loan' },
+  { key: 'car-lease' },
+  { key: 'medical' },
+];
+
+let currentScene = 'consumer-loan';   // 当前演示场景
+let pendingScene = 'consumer-loan';   // 上传/助手「下一次分析」使用的场景
+let resultReturn = 'screen-home';     // 结果页 back 目标
+
+/* ================= 导航 ================= */
+function go(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const sc = document.getElementById(id).querySelector('.scroll, .chat-list');
+  if (sc) sc.scrollTop = 0;
+}
+function tab(name) {
+  if (name === 'home') go('screen-home');
+  else if (name === 'history') { renderHistory(); go('screen-history'); }
+  else go('screen-mine');
+}
+function resultBack() { go(resultReturn); }
+
+/* 轻提示与弹层 */
+function notice(text) {
+  const t = document.getElementById('toastBody');
+  t.innerHTML = text;
+  document.getElementById('toastMask').classList.add('show');
+  clearTimeout(notice._tm);
+  notice._tm = setTimeout(closeModal, 2200);
+}
+function closeModal() {
+  document.getElementById('toastMask').classList.remove('show');
+  document.getElementById('modalMask').classList.remove('show');
+}
+const MODALS = {
+  disclaimer: ['免责声明', '合同翻译官仅用于帮助你理解合同与识别风险，不提供法律 / 理财 / 投资建议，不做产品比较与购买推荐。重大财务或法律决策，请咨询持牌专业人士。'],
+  privacy: ['隐私与数据安全', '你的合同文件加密存储，数据仅用于本次解读，可随时删除，不用于模型训练。我们不会向第三方出售你的个人信息。'],
+};
+function openModal(k) {
+  document.getElementById('modalTitle').textContent = MODALS[k][0];
+  document.getElementById('modalBody').textContent = MODALS[k][1];
+  document.getElementById('modalMask').classList.add('show');
+}
+
+/* ================= 上传 / 解读中 ================= */
+function loadSample(key) {
+  document.getElementById('upText').value = SCENES[key].example;
+  pendingScene = key;
+  refreshSceneChips();
+  notice('已填入「' + SCENES[key].label + '」示例合同，可直接开始体检');
+}
+function refreshSceneChips() {
+  const box = document.getElementById('upSceneChips');
+  box.innerHTML = '<span class="scene-chip" onclick="setScene(\'auto\')">🔍 自动识别</span>' +
+    Object.keys(SCENES).map(k =>
+      '<span class="scene-chip' + (pendingScene === k ? ' active' : '') + '" onclick="setScene(\'' + k + '\')">' + SCENES[k].label + '</span>'
+    ).join('');
+}
+function setScene(k) { pendingScene = k; refreshSceneChips(); }
+
+/* 执行计划骨架：进入即全量预置，逐项转 灰(待执行) → 蓝(进行中) → 绿(完成) */
+const ANALYZE_PLAN = [
+  { t: '扫描法定风险信号' },
+  { t: '测算真实年化利率' },
+  { t: '对比市场基准' },
+  { t: '生成体检报告' },
+];
+const anTimers = [];
+function cancelAnTimers() {
+  while (anTimers.length) {
+    const h = anTimers.pop();
+    clearTimeout(h);
+    clearInterval(h);
+  }
+}
+function anT(fn, ms) { anTimers.push(setTimeout(fn, ms)); }
+function startAnalyze() {
+  const text = document.getElementById('upText').value.trim();
+  if (!text) { notice('请先粘贴合同文字，或用上方「示例合同」一键填充'); return; }
+  renderAnalyzing();
+  go('screen-analyzing');
+  runAnalyzeSteps();
+}
+/** 渲染执行明细（思考完成后才出现：步骤是思考得出的产物） */
+function renderRunSteps() {
+  document.getElementById('anRunSteps').innerHTML = ANALYZE_PLAN.map((s, i) =>
+    '<div class="run-step" id="anRun' + i + '"><span class="ri">○</span><span class="rt">' + s.t + '</span><span class="rs">待执行</span></div>'
+  ).join('');
+}
+function renderAnalyzing() {
+  // 思考期间不显示执行明细（还没确定要执行什么）
+  document.getElementById('anRunSteps').innerHTML = '';
+  // 重置思考卡片：收着、标题"AI 正在思考…"，等待阶段输出时再展开
+  const think = document.getElementById('anThink');
+  if (think) {
+    think.classList.remove('open');
+    think.classList.add('collapsed');
+  }
+  const tb = document.getElementById('anThinkBody');
+  if (tb) tb.innerHTML = '';
+  const tt = document.getElementById('anThinkTitle');
+  const st = document.getElementById('anThinkState');
+  if (tt) tt.textContent = 'AI 正在思考…';
+  if (st) { st.textContent = '思考中'; st.className = 'think-state ing'; }
+  const sub = document.getElementById('anSub');
+  if (sub) sub.textContent = '正在读取合同内容…';
+}
+function toggleThink() {
+  const c = document.getElementById('anThink');
+  if (!c) return;
+  c.classList.toggle('collapsed');
+  if (c.classList.contains('collapsed')) c.classList.remove('open');
+  else c.classList.add('open');
+}
+/** 思考区固定高 100px（open，约 4-5 行可滚）/0（收起），永不撑开 */
+const THINK_H = 100;
+/* mock：模型真正的思考内容（真实链路为 tokenhub 流式 reasoning_content，逐字/逐段送达） */
+const THINK_LINES = [
+  '这是一份个人消费贷款合同：本金 10 万、12 期、先息后本，名义年化 21.6%。',
+  '先看放款前预扣的 5000 元"服务费"——这种预扣如果计入本金，就是砍头息，利息应按实际到账 9.5 万计算。',
+  '再看名义 21.6% 只是表面费率，实际成本要把服务费摊进去，得调 IRR 算真实年化，很可能超过司法保护上限。',
+  '合同还搭售了 3000 元"安心宝"保险，先不急着定性，让规则库按标准扫一遍最稳。',
+  '先把这三类风险信号从规则库捞出来，再算 IRR，最后给结论。',
+];
+function runAnalyzeSteps() {
+  cancelAnTimers();
+  const sub = (t) => { const el = document.getElementById('anSub'); if (el) el.textContent = t; };
+  const mark = (i, cls, ri, rs) => {
+    const el = document.getElementById('anRun' + i);
+    if (!el) return;
+    el.className = 'run-step ' + cls;
+    el.querySelector('.ri').textContent = ri;
+    el.querySelector('.rs').textContent = rs;
+  };
+  sub('正在读取合同内容…');
+  // 阶段 0：模型"思考"——思考内容一段段流入思考卡片（等待期有真实内容）
+  anT(() => {
+    const think = document.getElementById('anThink');
+    if (think) { think.classList.remove('collapsed'); think.classList.add('open'); }
+    sub('AI 正在分析合同条款…');
+    let t = 0;
+    THINK_LINES.forEach((line, idx) => {
+      anT(() => {
+        const body = document.getElementById('anThinkBody');
+        if (body) body.innerHTML += '<p>' + line + '</p>';
+      }, t);
+      t += 650;
+    });
+    // 思考完成：收起为固定高度 0 的摘要行，此时才列出"思考得出的执行步骤"，然后进入执行
+    anT(() => {
+      const think = document.getElementById('anThink');
+      if (think) { think.classList.remove('open'); think.classList.add('collapsed'); }
+      const tt = document.getElementById('anThinkTitle');
+      const st = document.getElementById('anThinkState');
+      if (tt) tt.textContent = 'AI 已完成思考';
+      if (st) { st.textContent = '3.3s'; st.className = 'think-state'; }
+      sub('思考完成，列出检查步骤并开始执行…');
+      renderRunSteps();
+    }, t + 400);
+  }, 600);
+  // 工具 1/2/3：本地工具毫秒级完成，步骤间 ~1.4s 展示即可
+  anT(() => { mark(0, 'running', '🔧', '进行中…'); sub('正在做「扫描法定风险信号」…'); }, 5100);
+  anT(() => { mark(0, 'done', '✅', '完成'); mark(1, 'running', '🔧', '进行中…'); sub('正在做「测算真实年化利率」…'); }, 6500);
+  anT(() => { mark(1, 'done', '✅', '完成'); mark(2, 'running', '🔧', '进行中…'); sub('正在做「对比市场基准」…'); }, 7900);
+  // 阶段 4：生成报告 = LLM 输出，耗时最长 → 用"已生成 N 字"持续跳动给出产出感
+  anT(() => {
+    mark(2, 'done', '✅', '完成');
+    mark(3, 'running', '🔧', '进行中…');
+    sub('AI 正在写报告，已生成 0 字…');
+    let words = 0;
+    const counter = setInterval(() => {
+      words += 180;
+      sub('AI 正在写报告，已生成 ' + words + ' 字…');
+      if (words >= 2500) {
+        clearInterval(counter);
+        mark(3, 'done', '✅', '完成');
+        sub('体检完成，正在打开报告…');
+        anT(() => finishAnalyze(false), 700);
+      }
+    }, 140);
+    anTimers.push(counter);
+  }, 9300);
+}
+function finishAnalyze(manual) {
+  cancelAnTimers();
+  if (!manual) {
+    currentScene = pendingScene; // 新分析产出 = 当前所选样本
+  }
+  openReport(currentScene, 'screen-home', true);
+}
+
+/* ================= 报告（result）渲染 ================= */
+function openReport(sceneKey, backTo, isNew) {
+  const s = SCENES[sceneKey];
+  currentScene = sceneKey;
+  resultReturn = backTo || 'screen-home';
+  document.getElementById('resultBody').innerHTML = buildReport(s, isNew);
+  go('screen-result');
+  document.getElementById('resultBack').innerHTML = '‹';
+  if (currentScene === 'medical') { /* 无特别处理 */ }
+}
+function scoreCls(score) { return score < 60 ? 'danger' : score < 85 ? 'warn' : 'ok'; }
+function buildReport(s, isNew) {
+  let h = '';
+  h += '<div class="result-hero"><div class="result-head"><span class="result-tag">' + s.type + (isNew ? '' : '<span class="play">历史回放</span>') + '</span><span class="result-date">' + s.date + '</span></div>' +
+       '<div class="score-box ' + scoreCls(s.score) + '"><div class="big">' + s.score + '</div><div class="score-label">' + (s.score >= 85 ? '健康指数 · 良好' : s.score >= 60 ? '健康指数 · 一般' : '健康指数 · 偏低') + '</div><div class="score-sub">' + s.scoreSub + '</div></div></div>';
+
+  h += '<div class="conclusion-card"><div class="t">一句话判断</div><div class="conclusion-text">' + s.conclusion + '</div></div>';
+
+  if (s.monthly) {
+    h += '<div class="plan-card"><div class="pt">你的月供构成 · 一眼看懂</div>' +
+         '<div class="plan-type"><span class="badge">' + s.monthly.type + '</span><div class="desc">' + s.monthly.desc + '</div></div>' +
+         '<div class="pie-row"><div class="pie-wrap"><div class="pie" style="background:conic-gradient(var(--primary) 0 ' + s.monthly.pct + '%, var(--primary-soft) ' + s.monthly.pct + '% 100%)"></div></div>' +
+         '<div class="pie-legend"><div class="lg-row"><span class="lg-dot" style="background:var(--primary)"></span>' + s.monthly.pLabel + ' <b>' + s.monthly.pct + '%</b><span class="lt">' + s.monthly.pVal + '</span></div>' +
+         '<div class="lg-row"><span class="lg-dot" style="background:var(--primary-soft)"></span>' + s.monthly.iLabel + ' <b>' + s.monthly.intPct + '%</b><span class="lt">' + s.monthly.iVal + '</span></div></div></div>' +
+         '<div class="plan-risk"><div class="rl">⚠️ ' + s.monthly.riskT + '</div><div class="rt">' + s.monthly.riskD + '</div></div>' +
+         '<div class="plan-cons">' + s.monthly.cons.map(c => '<div class="c"><span class="' + (c.ok ? 'ok">✓' : 'x">✕') + '</span>' + c.text + '</div>').join('') + '</div></div>';
+  }
+  if (s.insurance) {
+    h += '<div class="ins-card"><div class="pt">保障速览</div><div class="ins-grid">' +
+         s.insurance.items.map(it => '<div class="ins-item"><div class="il">' + it.l + '</div><div class="iv ' + (it.cls || 'g') + '">' + it.v + '</div></div>').join('') +
+         '</div><div class="plan-risk" style="margin-top:11px;border-color:#C3E5CE"><div class="rl" style="color:var(--warn)">⚠️ ' + s.insurance.riskT + '</div><div class="rt">' + s.insurance.riskD + '</div></div></div>';
+  }
+
+  h += '<div class="keynum-card"><div class="t">关键数字</div><div class="keynum-grid">' +
+       s.keyNumbers.map(k => '<div class="kn-item' + (k.warn ? ' warn' : '') + '"><div class="l">' + k.l + '</div><div class="v">' + k.v + '</div>' + (k.hint ? '<div class="hint">' + k.hint + '</div>' : '') + '</div>').join('') +
+       '</div></div>';
+
+  h += '<div class="sec-title"><span class="t">风险信号</span><span class="c">' + s.signals.length + ' 项</span></div>';
+  h += s.signals.map((sig, i) => {
+    let inner = '';
+    if (sig.law) inner += '<div class="sec"><div class="st">⚖️ 法律依据</div><div class="legal-box"><div class="law">' + sig.law.src + '</div><div class="d">' + sig.law.d + '</div></div></div>';
+    if (sig.steps) inner += '<div class="sec"><div class="st">✅ 建议这么做</div><div class="steps">' + sig.steps.map((st, j) => '<div class="step-op"><div class="num">' + (j + 1) + '</div><div class="tx">' + st + '</div></div>').join('') + '</div></div>';
+    if (sig.term) inner += '<div class="term-explain"><span class="qi">❓</span><div class="tx"><b>' + sig.term.q + '：</b>' + sig.term.a + '</div></div>';
+    inner += '<div style="margin-top:10px"><span class="ask-btn blue" onclick="askFromReport(\'' + currentScene + '\',\'' + escQ(sig.one) + '\')">🔍 就这条追问</span></div>';
+    return '<div class="signal level-' + sig.level + '" id="sig' + currentScene + i + '"><div class="signal-hd" onclick="toggleSignal(this)">' +
+           '<div class="lvl">' + (sig.level === 'danger' ? '!' : sig.level === 'warn' ? '!' : '✓') + '</div>' +
+           '<div class="signal-ti"><div class="n">' + sig.title + '</div><div class="one">' + sig.one + '</div></div><div class="chev">⌄</div></div>' +
+           '<div class="signal-bd"><div class="signal-in">' + inner + '</div></div></div>';
+  }).join('');
+
+  if (s.optimize && s.optimize.length) {
+    h += '<div class="sec-title"><span class="t">权益最大化 · 3 个关键时机</span></div>';
+    h += s.optimize.map((o, i) =>
+      '<div class="opt-card"><div class="opt-hd" onclick="toggleOpt(this)"><div class="stage s' + (i + 1) + '">' + (o.stage === '签前' ? '签前' : o.stage === '签后' ? '签后' : '长期').substring(0, 1) + '</div><div class="ot">' + o.t + '</div><div class="chev">⌄</div></div>' +
+      '<div class="opt-bd"><div class="opt-in"><div class="od">' + o.od + '</div><span class="ask-btn" onclick="askFromReport(\'' + currentScene + '\',\'' + escQ(o.ask) + '\')">我想追问</span></div></div></div>'
+    ).join('');
+  }
+
+  if (s.rights && s.rights.length) {
+    h += '<div class="sec-title"><span class="t">可主张的权益</span><span class="c">合计可争取</span></div>';
+    h += s.rights.map(r =>
+      '<div class="right"><div class="right-hd" onclick="toggleRight(this)"><div class="right-main"><div class="right-title">' + r.t + '</div><div class="right-desc">' + r.d + '</div></div>' +
+      '<div class="right-amt"><div class="al">可争取</div><div class="av">' + r.amount + '</div></div><div class="chev">⌄</div></div>' +
+      '<div class="right-bd"><div class="right-in"><div class="rd">' + r.law + '</div><span class="ask-btn" onclick="askFromReport(\'' + currentScene + '\',\'' + escQ(r.ask) + '\')">我想追问</span></div></div></div>'
+    ).join('');
+  }
+
+  h += '<div class="disclaimer-tip" style="margin-top:14px">提示：本工具基于"法定标准 + 维权路径"提供知识与建议，不代写法律文书、不出具法律意见；具体金额以裁判机关 / 监管部门认定或双方协商为准。</div>';
+  h += '<div class="btn-area"><button class="btn-outline" onclick="openChat(\'' + currentScene + '\')">就这份报告继续追问 AI</button></div>';
+  return h;
+}
+function escQ(q) { return String(q).replace(/'/g, '’').replace(/"/g, '”').substring(0, 40); }
+function toggleSignal(el) { el.closest('.signal').classList.toggle('open'); }
+function toggleOpt(el) { el.closest('.opt-card').classList.toggle('open'); }
+function toggleRight(el) { el.closest('.right').classList.toggle('open'); }
+function askFromReport(scene, q) { openChat(scene, q); }
+
+/* ================= 对话 / 助手 消息 ================= */
+let chatSeq = 0;
+function addMsg(listId, role, html) {
+  const list = document.getElementById(listId);
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (role === 'me' ? ' me' : '');
+  div.innerHTML = '<div class="avatar' + (role === 'me' ? ' me' : '') + '">' + (role === 'me' ? '我' : 'AI') + '</div><div class="bubble">' + html + '</div>';
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+function typingMsg(listId, text) {
+  const list = document.getElementById(listId);
+  const div = document.createElement('div');
+  div.className = 'chat-msg typing';
+  div.id = 'typing_' + listId;
+  div.innerHTML = '<div class="avatar">AI</div><div class="bubble">' + text + ' <span class="typedots"><span></span><span></span><span></span></span></div>';
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+function killTyping(listId) {
+  const t = document.getElementById('typing_' + listId);
+  if (t) t.remove();
+}
+
+function initAssistant() {
+  const list = document.getElementById('asstList');
+  list.innerHTML = '';
+  addMsg('asstList', 'ai', '你好，我是合同翻译官。把要查的合同发给我：<br>① 直接粘贴合同文字；<br>② 或点下方示例一键体验。<br>收到后我会立即在这段对话里给你出体检报告。');
+  const chipsBox = document.getElementById('asstChips');
+  chipsBox.innerHTML = '<span class="chip" onclick="asstSendExample()">📄 发一份示例合同</span><span class="chip" onclick="notice(\'示例：粘贴一段真实合同条款即可体验，演示环境可直接用示例合同。\')">拍照 / 相册发合同</span>';
+  document.getElementById('asstInput').value = '';
+}
+function asstSendExample() {
+  const scene = pendingScene;
+  currentScene = pendingScene;
+  const ex = SCENES[scene].example;
+  addMsg('asstList', 'me', '【' + SCENES[scene].label + '合同 · ' + SCENES[scene].type + '】<div class="mini-plain">' + ex.substring(0, 66) + '…</div>');
+  asstAnalyzeFlow(scene);
+}
+function asstSend() {
+  const inp = document.getElementById('asstInput');
+  const text = inp.value.trim();
+  if (!text) { notice('先粘贴一段合同文字，或点上方「示例合同」'); return; }
+  inp.value = '';
+  const isQuestion = text.length < 40 && /[吗呢怎么是否哪啥？?]/.test(text);
+  if (isQuestion) { // 短句当追问
+    addMsg('asstList', 'me', text);
+    typingMsg('asstList', '正在结合这份合同回答你');
+    setTimeout(() => { killTyping('asstList'); addMsg('asstList', 'ai', mockAnswer(currentScene, text)); }, 1300);
+    return;
+  }
+  addMsg('asstList', 'me', text.length > 120 ? text.substring(0, 120) + '…（全文已收到）' : text);
+  asstAnalyzeFlow(pendingScene);
+}
+function asstAnalyzeFlow(scene) {
+  currentScene = scene;
+  const sub = [
+    '正在清洗识别文本…',
+    '正在扫描法定风险信号…',
+    '正在测算真实年化 / 关键数字…',
+    '正在生成结构化体检报告…',
+  ];
+  let i = 0;
+  const step = () => {
+    if (i < sub.length) typingMsg('asstList', sub[i]);
+    else {
+      killTyping('asstList');
+      renderReportCard(scene);
+      return;
+    }
+    setTimeout(step, 780);
+    i++;
+  };
+  step();
+}
+function renderReportCard(scene) {
+  const s = SCENES[scene];
+  const list = document.getElementById('asstList');
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg';
+  wrap.innerHTML = '<div class="avatar">AI</div>' +
+    '<div><div class="bubble" style="border-radius:14px">体检完成，这是你的报告摘要 👇</div>' +
+    '<div class="rcard" onclick="openReport(\'' + scene + '\',\'screen-assistant\',true)">' +
+    '<div class="rc-top"><span class="rc-tag">' + s.type + '</span><span class="rc-sc ' + scoreCls(s.score) + '">' + s.score + '</span></div>' +
+    '<div class="rc-l1">' + s.conclusion.replace(/<[^>]+>/g, '').substring(0, 34) + '…</div>' +
+    '<div class="rc-l2">发现 ' + s.signals.filter(x => x.level === 'danger').length + ' 个高风险 · ' + s.signals.filter(x => x.level === 'warn').length + ' 个中风险</div>' +
+    '<div class="rc-open">查看完整报告 ›</div></div></div>';
+  list.appendChild(wrap);
+  list.scrollTop = list.scrollHeight;
+  addMsg('asstList', 'ai', '你可以继续在这段对话里问我任何细节，也可以点上方报告卡看完整版。');
+}
+const ANSWERS = {
+  'consumer-loan': {
+    g: '结合这份贷款合同：你的<em>真实年化 25.06%</em>，超出司法保护上限，超出部分可主张不予支付；预扣的 5,000 元"服务费"属于砍头息，应改按实际到账 9.5 万计息。',
+    k: ['利率', '年化', '24%', '36%', '上限'], ka: '按民间借贷司法解释，超出合同成立时一年期 LPR 四倍的利息部分法院不予支持。你的 25.06% 已超上限，多付部分可主张抵扣本金或要求返还。',
+    k2: ['提前还款', '违约金', '还划算'], ka2: '先息后本前期本金占比低，此时提前还款省不了多少利息；建议先对照违约金条款算一下，别让违约金吃掉省下的利息。',
+    k3: ['服务费', '砍头息', '5000'], ka3: '5,000 元服务费在放款前扣除，属于"利息预先扣除"，依法应改按实际借款 9.5 万计息，多算的利息可以主张返还。',
+  },
+  'car-lease': {
+    g: '结合这份融资租赁合同：真实年化约 9.8%（已含服务费），价格中等；最大的坑是<em>逾期一期即收车 + 全部租金加速到期</em>，违约条款对你不利。',
+    k: ['收车', '逾期', '违约'], ka: '逾期一期即触发收车与租金加速到期。法律上出租人收回租赁物前应先催告，违约金明显过高也可请求法院酌减——真逾期了，第一时间沟通补付，别硬扛。',
+    k2: ['服务费', '保险', '指定'], ka2: '6,000 元服务费若无实质服务可主张不折入本金；"必须到指定公司投保"若明显抬高成本，可主张该格式条款不合理。',
+  },
+  'medical': {
+    g: '结合这份医疗保险条款：保额 600 万很充足，重点看<em>既往症免责</em>与<em>二级以上公立普通部</em>的就医限制。若投保时没人向你逐条说明免责条款，依法可主张该条款不生效。',
+    k: ['既往症', '免责', '不赔'], ka: '保险人对免责条款负有"提示 + 明确说明"义务，否则该条款不产生效力。投保时若只是让你勾选、没解释含义，理赔被拒时可据此主张。',
+    k2: ['等待期', '30天'], ka2: '首次投保后 30 天内确诊的疾病不在保障内（续保无等待期）。注意条款写的是"确诊日"还是"就诊日"，等待期内尽量别安排非紧急就医。',
+    k3: ['医院', '私立', '特需'], ka3: '合同限二级及以上公立医院普通部，特需 / 国际部 / 私立费用不予报销。紧急就医后如不符合条件，尽快转院以保住报销资格。',
+  },
+};
+function mockAnswer(scene, q) {
+  const A = ANSWERS[scene];
+  let hit = null;
+  const pairs = [['k', 'ka'], ['k2', 'ka2'], ['k3', 'ka3']];
+  for (const [arr, ans] of pairs) {
+    if (A[arr] && A[arr].some(w => q.includes(w))) { hit = A[ans]; break; }
+  }
+  return hit || A.g;
+}
+function openChat(scene, presetQ) {
+  currentScene = scene;
+  go('screen-chat');
+  const list = document.getElementById('chatList');
+  list.innerHTML = '';
+  const s = SCENES[scene];
+  addMsg('chatList', 'ai', '基于你这份「' + s.label + ' · ' + s.type + '」（健康指数 ' + s.score + '），有什么疑问尽管问我。');
+  const chipsBox = document.getElementById('chatChips');
+  const qs = [];
+  if (s.signals[0]) qs.push(s.signals[0].one);
+  if (s.optimize && s.optimize[0]) qs.push(s.optimize[0].ask);
+  if (s.optimize && s.optimize[1]) qs.push(s.optimize[1].ask);
+  qs.push('这个利率 / 条款合法吗？');
+  chipsBox.innerHTML = qs.map(q => '<span class="chip" onclick="chatChip(\'' + scene + '\',\'' + escQ(q) + '\')">' + q.substring(0, 12) + '</span>').join('');
+  document.getElementById('chatInput').value = presetQ || '';
+  if (presetQ) chatSend();
+}
+function chatChip(scene, q) {
+  document.getElementById('chatInput').value = q;
+  chatSend();
+}
+function chatSend() {
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  addMsg('chatList', 'me', text);
+  typingMsg('chatList', '正在基于这份合同上下文回答你');
+  setTimeout(() => {
+    killTyping('chatList');
+    addMsg('chatList', 'ai', mockAnswer(currentScene, text));
+  }, 1200);
+}
+
+/* ================= 历史 ================= */
+function renderHistory() {
+  const list = document.getElementById('histList');
+  list.innerHTML = HISTORY.map(h => {
+    const s = SCENES[h.key];
+    const danger = s.signals.filter(x => x.level === 'danger').length;
+    const warn = s.signals.filter(x => x.level === 'warn').length;
+    const stat = danger > 0 ? ['danger', danger + ' 个高风险'] : warn > 0 ? ['warn', warn + ' 个中风险'] : ['ok', '检查通过'];
+    return '<div class="hist-item" onclick="openReport(\'' + h.key + '\',\'screen-history\',false)">' +
+      '<div class="hist-ic">🛡️</div>' +
+      '<div class="hist-info"><div class="n">合同体检 · <span class="sc">' + s.label + ' / ' + (s.type.length > 12 ? s.type.substring(0, 12) + '…' : s.type) + '</span></div><div class="d">' + s.date + ' · 已完成</div></div>' +
+      '<div class="hist-stat ' + stat[0] + '">' + stat[1] + '</div></div>';
+  }).join('');
+}
+
+/* ================= 演示面板 ================= */
+function renderDemoScene() {
+  document.getElementById('demoScene').innerHTML = Object.keys(SCENES).map(k =>
+    '<div class="sopt' + (pendingScene === k ? ' active' : '') + '" onclick="pickScene(\'' + k + '\')">' + SCENES[k].label + '<span class="en">' + SCENES[k].type.substring(0, 6) + '</span></div>'
+  ).join('');
+}
+function pickScene(k) {
+  pendingScene = k;
+  currentScene = k;
+  renderDemoScene();
+  refreshSceneChips();
+  notice('下次分析（上传 / 助手发合同）将使用「' + SCENES[k].label + '」样本');
+}
+
+/* ================= 初始化 ================= */
+function init() {
+  renderDemoScene();
+  refreshSceneChips();
+  renderHistory();
+  initAssistant();
+  renderAnalyzing();
+  go('screen-home');
+}
+document.addEventListener('DOMContentLoaded', init);
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (e.target && e.target.id === 'asstInput') asstSend();
+  else if (e.target && e.target.id === 'chatInput') chatSend();
+});
+</script>
+</body>
+</html>
