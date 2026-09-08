@@ -240,6 +240,16 @@ export class TokenHubClient extends BaseAiClient {
         content += delta.content;
         yield { type: 'content_delta', delta: delta.content };
       }
+      // 推理增量：DeepSeek 系用 reasoning_content；个别网关兼容层用 thinking(.content)，
+      // 统一收集后 yield reasoning_delta 供前端"思考中"可视化
+      const rawReasoning =
+        (delta as any).reasoning_content ??
+        (typeof (delta as any).thinking === 'string'
+          ? (delta as any).thinking
+          : (delta as any).thinking?.content);
+      if (typeof rawReasoning === 'string' && rawReasoning) {
+        yield { type: 'reasoning_delta', delta: rawReasoning };
+      }
       if (Array.isArray(delta.tool_calls)) {
         sawAnyToolCall = true;
         for (const tc of delta.tool_calls) {

@@ -183,3 +183,88 @@ page {
   word-break: break-all;
   white-space: pre-wrap;
 }
+.streaming-text.placeholder {
+  color: #9AA1AD;
+  font-style: italic;
+}
+
+/* ===== 执行步骤明细（预置全量 → 灰/蓝/绿 三态） ===== */
+.tool-steps {
+  width: 100%;
+  margin-top: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+.tool-step {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 14rpx 22rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  transition: background .25s, color .25s, border-color .25s;
+  background: #F2F3F5;
+  border: 1rpx solid #E8EBF0;
+  color: #9AA1AD; /* pending 灰 */
+}
+.tool-step.running {
+  background: rgba(30, 111, 255, 0.08);
+  border-color: rgba(30, 111, 255, 0.3);
+  color: #1E6FFF;
+  animation: toolPulse 1.4s ease-in-out infinite;
+}
+@keyframes toolPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(30, 111, 255, 0); }
+  50% { box-shadow: 0 0 0 6rpx rgba(30, 111, 255, 0.06); }
+}
+.tool-step.done {
+  background: rgba(46, 158, 91, 0.08);
+  border-color: rgba(46, 158, 91, 0.18);
+  color: #2E9E5B;
+}
+.tool-step-ic { flex-shrink: 0; width: 34rpx; text-align: center; }
+.tool-step-text { flex: 1; line-height: 1.4; }
+.tool-step-state {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  opacity: .85;
+}
+
+/* ===== AI 思考卡（reasoning 流可视化；低矮可滚，默认展开思考中，执行后收起为一行） ===== */
+.think-card {
+  width: 100%;
+  margin: 10rpx 0 20rpx;
+  background: #F7F8FA;
+  border: 1rpx solid #E8EBF0;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+.think-hd {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 16rpx 20rpx;
+}
+.think-ic { font-size: 26rpx; }
+.think-t {
+  flex: 1;
+  font-size: 25rpx;
+  font-weight: 600;
+  color: #5B6372;
+}
+.think-state { font-size: 20rpx; color: #9AA1AD; }
+.think-state.ing { color: #1E6FFF; }
+.think-chev { color: #9AA1AD; font-size: 22rpx; transform: rotate(180deg); transition: transform .25s; }
+.think-card.open .think-chev { transform: none; }
+.think-bd { height: 0; overflow: hidden; transition: height .25s ease; }
+.think-card.open .think-bd { height: 180rpx; }
+.think-body { height: 100%; box-sizing: border-box; padding: 0 20rpx 16rpx; }
+.think-text {
+  font-size: 22rpx;
+  color: #6B7280;
+  line-height: 1.7;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
