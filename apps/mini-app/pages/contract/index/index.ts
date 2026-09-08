@@ -11,6 +11,12 @@ Page({
     });
   },
 
+  goAssistant() {
+    wx.navigateTo({
+      url: '/pages/contract/assistant/assistant',
+    });
+  },
+
   goHistory() {
     wx.switchTab({
       url: '/pages/contract/history/history',

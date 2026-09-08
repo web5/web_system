@@ -1,8 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DeployModuleStageCommandEntity } from '../entities/deploy-module-stage-command.entity';
-import { StageCommandService } from './stage-command.service';
+import {
+  DeployModuleStageCommandEntity,
+  StageAction,
+} from '../entities/deploy-module-stage-command.entity';
+import {
+  StageCommandService,
+  pickActions,
+  validateActions,
+} from './stage-command.service';
 
 describe('StageCommandService', () => {
   let service: StageCommandService;
