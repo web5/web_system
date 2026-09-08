@@ -21,7 +21,7 @@
       <text class="think-chev">⌄</text>
     </view>
     <view class="think-bd">
-      <scroll-view scroll-y class="think-body" enable-flex>
+      <scroll-view scroll-y class="think-body" enable-flex scroll-top="{{thinkScrollTop}}">
         <text class="think-text" space="nbsp">{{think.text}}</text>
       </scroll-view>
     </view>

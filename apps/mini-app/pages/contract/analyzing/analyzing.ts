@@ -27,6 +27,8 @@ Page({
     toolSteps: [] as Array<{ id: string; name: string; hint: string; status: 'pending' | 'running' | 'done' }>,
     /** 思考区：open=展示正文（固定高可滚）/ done=已结束（标题变"已完成"，默认收起） */
     think: { open: true, done: false, text: '' },
+    /** 思考卡片内部 scroll-view 滚动位置：每次思考追加后推到末尾 */
+    thinkScrollTop: 0,
   },
 
   // 工具名 → 用户文案映射
@@ -109,6 +111,8 @@ Page({
       this.setData({
         thinkingText: 'AI 正在思考…',
         think: { open: true, done: false, text: txt },
+        // 持续把内部 scroll-view 滚到最新追加的位置（用文本长度当目标坐标）
+        thinkScrollTop: txt.length,
       });
     }, 150);
   },
