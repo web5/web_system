@@ -26,6 +26,25 @@ import { postJson, streamSse } from '../lib/fetch-http';
 
 const DEFAULT_BASE_URL = 'https://tokenhub.tencentmaas.com/v1';
 
+/**
+ * DeepSeek 系"推理档思考预算"控制（TokenHub stream=true 实测 2026-09-08）：
+ * 网关在流式下会忽略 reasoning_effort，但会透传官方 `thinking` 参数：
+ *   - { type: 'disabled' }            → 关思考，纯正文（content 一定完整）
+ *   - { type: 'enabled', budget_tokens: N } → 思考限 N token，正文保底（推荐，保留"边思考边答"）
+ * 读取 TOKENHUB_THINKING：'none' | 'budget:<N>' | 空。
+ * 空时仅对 DeepSeek 推理系默认 budget:1024（防长任务思考把正文挤成 0），其余模型不加限制。
+ */
+function resolveThinking(modelId: string): Record<string, unknown> {
+  const cfg = (process.env.TOKENHUB_THINKING ?? '').trim().toLowerCase();
+  if (cfg === 'none' || cfg === 'disabled') return { thinking: { type: 'disabled' } };
+  const m = cfg.match(/^budget:(\d+)$/);
+  if (m) return { thinking: { type: 'enabled', budget_tokens: Number(m[1]) } };
+  if (modelId.toLowerCase().includes('deepseek')) {
+    return { thinking: { type: 'enabled', budget_tokens: 1024 } };
+  }
+  return {};
+}
+
 export class TokenHubClient extends BaseAiClient {
   readonly modelId: string;
   readonly displayName: string;
@@ -74,10 +93,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
-      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
-      // （TOKENHUB_REASONING_EFFORT 可覆盖）
-      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
+      ...resolveThinking(this.modelId),
       stream: false,
     };
     if (tools.length > 0) {
@@ -173,10 +189,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
-      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
-      // （TOKENHUB_REASONING_EFFORT 可覆盖）
-      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
+      ...resolveThinking(this.modelId),
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -278,10 +291,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      // 关推理：DeepSeek 系把 token 花在 reasoning_content 会挤掉正文，
-      // 在 plan 网关 4000 cap 下正文被挤成 0；统一 none 保证 content 可完整输出
-      // （TOKENHUB_REASONING_EFFORT 可覆盖）
-      reasoning_effort: (process.env.TOKENHUB_REASONING_EFFORT as string) || 'none',
+      ...resolveThinking(this.modelId),
       stream: true,
     };
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
