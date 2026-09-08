@@ -70,6 +70,8 @@ Page({
     chatMessages: [] as ChatMsg[],
     input: '',
     sending: false,
+    /** AI 长消息"展开/收起"状态：按消息数组下标记录是否已展开（true=展开显示全文） */
+    expandMap: {} as Record<number, boolean>,
     /** 历史对话加载中（加载完成前禁止发送，避免并发覆盖初始消息） */
     historyLoading: false,
     /** 快捷追问 chips（来自当前报告的 askableQuestions） */
@@ -285,6 +287,14 @@ Page({
         wx.showToast({ title: '追问失败，请稍后再试', icon: 'none' });
       },
     });
+  },
+
+  /** 切换 AI 长消息的展开/收起状态 */
+  onToggleExpand(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    if (Number.isNaN(idx)) return;
+    const cur = !!this.data.expandMap[idx];
+    this.setData({ expandMap: { ...this.data.expandMap, [idx]: !cur } });
   },
 
   scrollToBottom() {

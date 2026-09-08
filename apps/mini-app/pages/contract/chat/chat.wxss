@@ -76,6 +76,28 @@ page {
   word-break: break-all;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
 }
+.msg-text {
+  font-size: 26rpx;
+  color: inherit;
+  line-height: 1.6;
+  word-break: break-all;
+}
+/* 长 AI 消息：默认折叠为 5 行 + 展开更多；展开后显示全文 + 收起 */
+.msg-bubble.collapsed .msg-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg-expand {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #1E6FFF;
+  text-align: right;
+  line-height: 1.2;
+}
+.msg-expand:active { opacity: 0.7; }
 .chat-msg.user .msg-bubble {
   background: #EAF2FF;
 }
