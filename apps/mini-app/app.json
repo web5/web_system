@@ -3,6 +3,7 @@
     "pages/contract/index/index",
     "pages/contract/upload/upload",
     "pages/contract/analyzing/analyzing",
+    "pages/contract/assistant/assistant",
     "pages/contract/result/result",
     "pages/contract/chat/chat",
     "pages/contract/history/history",

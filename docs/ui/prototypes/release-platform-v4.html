@@ -233,6 +233,9 @@
     <div class="side-item" onclick="desk('detail',this)">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       流水线详情</div>
+    <div class="side-item" onclick="desk('module',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+      模块详情（落位）</div>
     <div class="side-sep">资源</div>
     <div class="side-item" onclick="desk('tools',this)">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8z"/></svg>
@@ -379,6 +382,35 @@
             <div class="card" id="editDetail"></div>
           </div>
 
+        </div>
+      </div>
+
+      <!-- ============ 屏3b：模块详情 · 阶段命令（多操作编辑的真实落位） ============ -->
+      <div class="screen" id="desk-module">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row">
+              <b style="font-size:15px">admin</b>
+              <span class="tag gray">micro-frontend</span>
+              <span class="muted mono">apps/admin · publicPath=admin</span>
+            </div>
+            <button class="btn" onclick="gotoFlowEdit()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6M14 6h6M4 12h6M14 12h6M4 18h6M14 18h6"/><circle cx="12" cy="6" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg>进入流程图编辑态</button>
+          </div>
+          <div class="banner info" style="margin-top:10px">
+            <span><b>落位说明</b>：本屏对应真实产品「模块管理 → 模块详情 → 阶段命令」tab。
+              多操作编辑器嵌在右侧；点右上「进入流程图编辑态」跳到流水线详情的编辑态（节点拖拽）。
+              <b>组件来源</b>：实例详情的流程图<b>复用现有</b> <code>ProgressFlow.vue</code>；
+              编辑态流程图与多操作编辑器为<b>新增</b>组件。</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="grid2" style="grid-template-columns:250px 1fr;gap:14px;align-items:start;">
+            <div>
+              <div class="t">阶段（9）</div>
+              <div id="modStageList"></div>
+            </div>
+            <div id="modStageDetail"></div>
+          </div>
         </div>
       </div>
 
@@ -1044,7 +1076,7 @@ function desk(name,el){
   if(el) el.classList.add('active');
   document.querySelectorAll('.content .screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById('desk-'+name).classList.add('active');
-  var map={list:'流水线',submit:'提交发布',detail:'流水线详情',tools:'工具目录',legend:'设计决策速查'};
+  var map={list:'流水线',submit:'提交发布',detail:'流水线详情',module:'模块详情（落位）',tools:'工具目录',legend:'设计决策速查'};
   document.getElementById('deskTitle').textContent=map[name]||'';
 }
 /* 图标（禁用 emoji，统一 SVG） */
@@ -1125,7 +1157,91 @@ var tt;
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');
   clearTimeout(tt);tt=setTimeout(function(){e.classList.remove('show');},1900);}
 
-renderFilters(); renderRuns(); renderPreview();
+/* ===== 屏：模块详情 · 阶段命令（多操作编辑真实落位） ===== */
+var modStage='restart', modAct=null;
+function modNode(){ return NODES.filter(function(x){return x.id===modStage;})[0]; }
+
+function renderModule(){
+  var h='';
+  NODES.forEach(function(n){
+    var acts=getActs(n);
+    var src=n.mode==='platform'?'semantic':(acts.length?'configured':'builtin');
+    h+='<div class="act '+(modStage===n.id?'on':'')+'" onclick="pickModStage(\''+n.id+'\')" style="margin-bottom:4px">'
+      +'<span class="an">'+n.name+'</span>'
+      +'<span class="tag '+(src==='semantic'?'purple':src==='configured'?'primary':'gray')+'">'
+      +(src==='semantic'?'语义':src==='configured'?'已配置':'内置')+'</span>'
+      +'<span class="am">'+acts.length+'</span></div>';
+  });
+  document.getElementById('modStageList').innerHTML=h;
+
+  var n=modNode(), acts=getActs(n);
+  var d='<div class="t">阶段 · '+n.name+'（'+acts.length+' 个操作）</div>';
+  d+='<div class="hint" style="margin-bottom:10px">'+n.desc+'</div>';
+
+  if(n.mode==='platform'){
+    d+='<div class="act lock"><span class="an" style="color:var(--text-3)">发布语义真相源 · 0 个操作，不可配置</span>'
+      +'<span class="tag gray">locked</span></div>';
+    d+='<div class="banner danger"><span>尝试保存操作将被拒绝：<code>PUT /modules/:key/stage-commands/version → 400</code></span></div>';
+  }else{
+    acts.forEach(function(a,i){
+      d+='<div class="act '+((modAct||acts[0].id)===a.id?'on':'')+(a.builtin?' lock':'')+'" '
+        +(a.builtin?'':'onclick="pickModAct(\''+a.id+'\')" ')+'>'
+        +'<span class="an">op'+(i+1)+' '+a.name+'</span>'
+        +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
+        +(a.cont?'<span class="tag warn">容错</span>':'')
+        +'<span class="am">'+(a.timeoutSec||60)+'s</span>'
+        +(a.builtin?'<span class="tag gray">内置</span>'
+          :'<button class="btn mini gray" onclick="event.stopPropagation();delModAct(\''+a.id+'\')">'+ic('trash')+'</button>')
+        +'</div>';
+    });
+    d+='<div class="row" style="margin-bottom:10px">'
+      +'<button class="btn ghost mini" onclick="addModAct()">'+ic('plus')+'操作</button>'
+      +'<button class="btn ghost mini" onclick="openAddTool()">'+ic('plus')+'引用工具</button>'
+      +'<span class="muted">默认 1 个，需要才加</span></div>';
+
+    var act=acts.filter(function(a){return a.id===modAct;})[0]
+          || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
+    if(act){
+      d+='<div class="editor-wrap"><div class="editor-bar"><span>操作 · '+act.name+'</span>'
+        +'<span class="row"><button class="btn ghost sm" onclick="validate()">'+ic('term')+'校验</button>'
+        +'<button class="btn sm" onclick="toast(\'已保存：PUT actions 全量提交，审计记 diff\')">'+ic('save')+'保存</button>'
+        +'</span></div>'
+        +(act.type==='service'
+          ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
+          : codeEditor(String(act.code||'')))
+        +'</div>';
+      d+='<div class="hint">保存以 <b>actions 数组</b>整体提交（非增量）；单命令形态由后端包装成 1 个操作，前后端行为一致。</div>';
+    }
+  }
+  document.getElementById('modStageDetail').innerHTML=d;
+}
+function pickModStage(s){ modStage=s; modAct=null; renderModule(); }
+function pickModAct(id){ modAct=id; renderModule(); }
+function addModAct(){
+  var n=modNode(); if(!n||n.mode==='platform') return;
+  if(!EXTRA_ACTS[n.id]) EXTRA_ACTS[n.id]=getActs(n);
+  var arr=EXTRA_ACTS[n.id];
+  arr.push({id:'a'+(arr.length+1),type:'shell',name:'新操作',timeoutSec:60,cont:false,code:'# 在此编写脚本'});
+  modAct=arr[arr.length-1].id; renderModule(); renderEditList(); toast('已添加操作');
+}
+function delModAct(id){
+  var n=modNode(); var arr=EXTRA_ACTS[n.id]||getActs(n); var i=-1;
+  for(var k=0;k<arr.length;k++){ if(arr[k].id===id){ i=k; break; } }
+  if(i<0) return;
+  if(arr[i].builtin){ toast('内置操作不可删除'); return; }
+  arr.splice(i,1); EXTRA_ACTS[n.id]=arr;
+  if(modAct===id) modAct=null;
+  renderModule(); renderEditList(); toast('已删除操作');
+}
+/** 跳到流水线详情的编辑态（流程图 + 节点拖拽） */
+function gotoFlowEdit(){
+  if(!CUR) openRun(RUNS[0].id);
+  desk('detail', document.querySelectorAll('.side-item')[2]);
+  if(!editing) toggleEdit();
+  toast('已进入编辑态：流程图 + 节点拖拽');
+}
+
+renderFilters(); renderRuns(); renderPreview(); renderModule();
 </script>
 </body>
 </html>
