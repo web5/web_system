@@ -60,6 +60,8 @@ Page({
     historyLoading: false,
     /** 快捷追问 chips（来自当前报告的 askableQuestions） */
     suggestions: [] as string[],
+    /** chips 是否可见：聚焦输入时浮现，失焦/发送后收起 */
+    showChips: false,
   },
 
   onLoad(options: Record<string, string | undefined>) {
@@ -134,6 +136,29 @@ Page({
     this.setData({ input: e.detail.value });
   },
 
+  /** 聚焦输入框：浮现快捷追问 chips（有建议时） */
+  onInputFocus() {
+    if (this.data.suggestions.length) {
+      this.setData({ showChips: true });
+    }
+  },
+
+  /** 失焦：延迟收起 chips，避免点 chip 时被误收 */
+  onInputBlur() {
+    (this as any).chipsHideTimer = setTimeout(() => {
+      this.setData({ showChips: false });
+    }, 250);
+  },
+
+  /** 收起 chips 并清掉延迟计时器 */
+  clearChips() {
+    if ((this as any).chipsHideTimer) {
+      clearTimeout((this as any).chipsHideTimer);
+      (this as any).chipsHideTimer = null;
+    }
+    this.setData({ showChips: false });
+  },
+
   /** 点击快捷追问 chip：直接以该问题发起追问 */
   onTapChip(e: any) {
     if (this.data.historyLoading) {
@@ -162,6 +187,7 @@ Page({
   /** 发送追问（内部实现，支持传入具体问题） */
   sendWith(question: string) {
     if (this.data.sending) return;
+    this.clearChips(); // 发送即收起快捷问题条
     const conversationId = this.data.conversationId;
 
     if (!conversationId) {
