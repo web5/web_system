@@ -223,6 +223,12 @@ page {
   border-color: rgba(46, 158, 91, 0.18);
   color: #2E9E5B;
 }
+.tool-step.skipped {
+  background: #F7F8FA;
+  border-color: #E8EBF0;
+  color: #B7BDC9;
+}
+.tool-step.skipped .tool-step-state { color: #B7BDC9; }
 .tool-step-ic { flex-shrink: 0; width: 34rpx; text-align: center; }
 .tool-step-text { flex: 1; line-height: 1.4; }
 .tool-step-state {
