@@ -29,7 +29,7 @@ Page({
       id: string;
       name: string;
       hint: string;
-      status: 'pending' | 'running' | 'done';
+      status: 'pending' | 'running' | 'done' | 'skipped';
     }>,
     /** 思考状态条：done=已完成（绿色）；text=全文缓存（抽屉展示） */
     think: { done: false, text: '' },
@@ -173,8 +173,13 @@ Page({
           id: string;
           name: string;
           hint: string;
-          status: 'pending' | 'running' | 'done';
-        }> = EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const }));
+          status: 'pending' | 'running' | 'done' | 'skipped';
+        }> = EXEC_PLAN.map((p, i) => ({
+          ...p,
+          // 排在首个 tool_call 之前且没被调用的步骤：直接标"已跳过"
+          // （如粘贴场景不调 cleaner：cleaner 排在首位、首调是 rule，cleaner 即视为跳过）
+          status: inPlanIdx >= 0 && i < inPlanIdx ? ('skipped' as const) : ('pending' as const),
+        }));
         if (inPlanIdx >= 0) {
           toolSteps[inPlanIdx] = { ...toolSteps[inPlanIdx], status: 'running' as const };
         } else {

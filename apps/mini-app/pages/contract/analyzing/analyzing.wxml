@@ -25,10 +25,10 @@
   <!-- 执行步骤：思考完成（首个 tool_call）后才出现；灰 → 蓝 → 绿 -->
   <view class="tool-steps" wx:if="{{toolSteps.length}}">
     <view wx:for="{{toolSteps}}" wx:key="id" class="tool-step {{item.status}}">
-      <text class="tool-step-ic">{{item.status === 'done' ? '✅' : item.status === 'running' ? '🔧' : '○'}}</text>
+      <text class="tool-step-ic">{{item.status === 'done' ? '✅' : item.status === 'running' ? '🔧' : item.status === 'skipped' ? '—' : '○'}}</text>
       <text class="tool-step-text">{{item.hint}}</text>
       <text class="tool-step-state">
-        {{item.status === 'pending' ? '待执行' : item.status === 'running' ? '进行中…' : '完成'}}
+        {{item.status === 'pending' ? '待执行' : item.status === 'running' ? '进行中…' : item.status === 'skipped' ? '已跳过' : '完成'}}
       </text>
     </view>
   </view>
