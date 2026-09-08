@@ -1,79 +1,69 @@
 /**
  * 合同翻译官 - 解读中
- * 基于 SSE 事件流动态更新"AI 思考中"文案（真实反映 AI 当前步骤）。
- * 4 步进度动画 + 事件驱动文案，完成后跳转 result 页。
+ *
+ * 按 v5 原型稿高保真实现：
+ *  1. 思考阶段：AI 思考状态条 = 单行收缩（默认不展开正文），右上「查看完整思考 ›」
+ *     点击后从底部抽屉（mask + sheet）展示完整思考内容（内容流式追加并自动滚底）。
+ *  2. 思考完成：状态条整体变绿（done），此时才列出执行步骤（步骤是思考得出的产物）。
+ *  3. 执行阶段：步骤逐项 pending(灰)→running(蓝)→done(绿)；报告轮 content_delta →
+ *     "生成体检报告"running + "已生成 N 字"跳动。
+ *  4. onDone 落报告并跳 result。
  */
 import { analyzeContractStream, StreamEvent } from '../../../services/contract-api';
 
+/** 执行步骤骨架（contract-risk 固定工具流）：思考完成后才列出 */
+const EXEC_PLAN = [
+  { id: 'cleaner', name: 'contract-cleaner', hint: '清洗合同文本' },
+  { id: 'rule', name: 'contract-rule', hint: '扫描法定风险信号' },
+  { id: 'irr', name: 'contract-irr', hint: '测算真实年化利率' },
+  { id: 'benchmark', name: 'contract-benchmark', hint: '对比市场基准' },
+  { id: 'report', name: '_report', hint: '生成体检报告' },
+];
+
 Page({
   data: {
-    steps: [
-      { text: '识别合同文本', desc: 'OCR 识别条款内容', done: true, active: false },
-      { text: '判断合同类型', desc: '识别消费贷 / 保险 / 租房', done: false, active: true },
-      { text: '测算关键数字', desc: '真实年化利率 · 费用测算', done: false, active: false },
-      { text: '生成风险报告', desc: '风险信号 · 权益雷达', done: false, active: false },
-    ],
-    thinkingText: '',
-    // 流式生成：LLM 逐字生成报告内容，实时展示（展示原始 JSON 文本增量）
-    streamingText: '',
-    streamingVisible: false,
+    /** 动态子标题（sub）：思考中/执行中/报告字数 */
+    thinkingText: '正在读取合同内容…',
+    /** 执行步骤骨架：思考完成（首个 tool_call）后才出现 */
+    toolSteps: [] as Array<{
+      id: string;
+      name: string;
+      hint: string;
+      status: 'pending' | 'running' | 'done' | 'skipped';
+    }>,
+    /** 思考状态条：done=已完成（绿色）；text=全文缓存（抽屉展示） */
+    think: { done: false, text: '' },
+    /** 思考全文抽屉是否打开 */
+    thinkDrawer: false,
+    /** 抽屉 scroll-view 滚动位置（全文追加自动到底） */
+    thinkScrollTop: 0,
   },
 
-  // 工具名 → 用户文案映射（真实反映 agent 当前步骤）
+  // 工具名 → 用户文案映射
   toolTextMap: {
-    'contract-cleaner': '正在清洗 OCR 识别噪声...',
-    'contract-rule': '正在扫描法定风险信号...',
-    'contract-irr': '正在测算真实年化利率...',
+    'contract-cleaner': '清洗合同文本…',
+    'contract-rule': '扫描法定风险信号…',
+    'contract-irr': '测算真实年化利率…',
+    'contract-benchmark': '对比市场基准…',
+    'law-search': '检索法律条文…',
+    'web-search': '联网检索…',
   } as Record<string, string>,
 
-  // 兜底文案（未识别到 tool_call 时轮换）
-  fallbackList: [
-    'AI 正在分析合同条款...',
-    '正在整理风险报告...',
-    'AI 正在深度思考，请稍候...',
-  ],
+  // 思考期（reasoning 首个 delta 到达前）兜底轮换文案
+  fallbackList: ['AI 正在认真看你的合同…', '正在梳理关键条款…', '马上就好，再等一下'],
 
   onLoad() {
-    // 4 步进度动画
-    this.startStepAnimation();
-
-    // 从 storage 读取待分析内容并启动流式分析
     this.startAnalysis();
   },
 
-  /** 4 步进度动画（前 3 步模拟，第 4 步"生成报告"由事件驱动真实状态） */
-  startStepAnimation() {
-    let step = 1;
-    const timer = setInterval(() => {
-      // 页面已卸载/数据被清时及时清理（防 redirectTo 后回调访问 undefined 抛 MiniProgramError）
-      if (!this.data || !Array.isArray(this.data.steps)) {
-        clearInterval(timer);
-        (this as any).stepTimer = null;
-        return;
-      }
-      if (step >= 4) {
-        clearInterval(timer);
-        (this as any).stepTimer = null;
-        return;
-      }
-      const steps = this.data.steps.map((s: any, i: number) => ({
-        ...s,
-        done: i < step,
-        active: i === step,
-      }));
-      this.setData({ steps });
-      step++;
-    }, 1200);
-    (this as any).stepTimer = timer;
-  },
-
-  /** 启动流式分析，按 SSE 事件更新文案 */
   startAnalysis() {
     const pending = wx.getStorageSync('contract_pending') as
-      | { text?: string; scene?: string }
+      | { text?: string; scene?: string; source?: string }
       | undefined;
     const text = pending?.text || '';
     const scene = pending?.scene;
+    // 输入来源决定 cleaner 是否可预判跳过：仅 OCR 识别文本可能含噪声需要清洗；粘贴文本直接跳过
+    (this as any)._inputSource = pending?.source === 'ocr' ? 'ocr' : 'paste';
 
     if (!text) {
       wx.showToast({ title: '缺少待分析内容', icon: 'none' });
@@ -81,30 +71,20 @@ Page({
       return;
     }
 
-    // 启动兜底文案轮换（收到 tool_call 事件后自动停止）
-    this.setData({ thinkingText: 'AI 正在开始分析...' });
     this.startFallbackRotation();
 
     analyzeContractStream(text, scene, {
       onEvent: (event: StreamEvent) => this.handleSseEvent(event),
-      // 流式增量：LLM 逐字生成报告内容，实时展示
-      // 节流渲染：合并 160ms 内增量一次 setData，且只展示尾部窗口，
-      // 避免每 delta 全量 setData 大文本（单次分析可达数万字符）拖死 UI/模拟器
-      onDelta: (delta) => {
-        if (!(this as any).streamAcc) (this as any).streamAcc = '';
-        (this as any).streamAcc += delta;
-        if ((this as any).streamingTimer) return;
-        (this as any).streamingTimer = setTimeout(() => {
-          (this as any).streamingTimer = null;
-          const acc: string = (this as any).streamAcc || '';
-          this.setData({
-            streamingVisible: true,
-            streamingText: acc.length > 3000 ? '…' + acc.slice(-3000) : acc,
-          });
-        }, 160);
-      },
+      // 思考增量：节流缓存全文；执行开始后（toolSteps 非空）忽略后续轮思考
+      onReasoning: (delta) => this.appendThinking(delta),
+      // 报告正文增量：字数跳动
+      onDelta: (delta) => this.countReportWords(delta),
       onDone: (report) => {
-        // 存储报告供 result 页读取（含 conversationId，供后续追问复用同一上下文）
+        if ((this as any)._thinkTimer) clearTimeout((this as any)._thinkTimer);
+        if ((this as any)._wordTimer) clearTimeout((this as any)._wordTimer);
+        (this as any)._thinkBuf = '';
+        (this as any)._wordBuf = 0;
+        // 存储报告供 result 页读取
         const storage = wx.getStorageSync('contract_report') || {};
         storage.latest = {
           ...report,
@@ -112,7 +92,10 @@ Page({
           createdAt: Date.now(),
         };
         wx.setStorageSync('contract_report', storage);
-        this.setData({ thinkingText: '报告生成完成' });
+        this.setData({
+          thinkingText: '体检完成，正在打开报告…',
+          toolSteps: this.data.toolSteps.map((s) => ({ ...s, status: 'done' as const })),
+        });
         this.redirectResult();
       },
       onError: (err) => {
@@ -122,36 +105,134 @@ Page({
     });
   },
 
-  /** 根据 SSE 事件更新进度步骤与文案 */
+  /** 思考增量：节流缓存全文（think.text），若抽屉开着则自动滚底 */
+  appendThinking(delta: string) {
+    if (this.data.toolSteps.length > 0) return;
+    this.stopFallback();
+    (this as any)._thinkBuf = ((this as any)._thinkBuf || '') + delta;
+    if ((this as any)._thinkTimer) return;
+    (this as any)._thinkTimer = setTimeout(() => {
+      (this as any)._thinkTimer = null;
+      const txt: string = (this as any)._thinkBuf || '';
+      this.setData({
+        thinkingText: 'AI 正在思考…',
+        think: { done: false, text: txt },
+        thinkScrollTop: txt.length,
+      });
+    }, 150);
+  },
+
+  /** 报告正文增量：确保"生成体检报告"running 并显示字数 */
+  countReportWords(delta: string) {
+    (this as any)._wordBuf = ((this as any)._wordBuf || 0) + delta.length;
+    if ((this as any)._wordTimer) return;
+    (this as any)._wordTimer = setTimeout(() => {
+      (this as any)._wordTimer = null;
+      const toolSteps = this.data.toolSteps.map((s) =>
+        s.name === '_report' && s.status === 'pending'
+          ? { ...s, status: 'running' as const }
+          : s,
+      );
+      this.setData({
+        toolSteps,
+        thinkingText: `AI 正在写报告，已生成 ${(this as any)._wordBuf || 0} 字…`,
+      });
+    }, 150);
+  },
+
+  /** 打开思考全文抽屉 */
+  onOpenThink() {
+    this.setData({
+      thinkDrawer: true,
+      thinkScrollTop: (this.data.think.text || '').length,
+    });
+  },
+
+  /** 关闭思考全文抽屉 */
+  onCloseThink() {
+    this.setData({ thinkDrawer: false });
+  },
+
+  /** 拦截事件冒泡（mask 内点击 sheet 不关闭） */
+  noop() {},
+
+  /** SSE 事件：首个 tool_call = 思考完成 → 渲染执行步骤骨架 */
   handleSseEvent(event: StreamEvent) {
-    // content_delta 量大且走 onDelta 渲染，这里不做任何处理
-    // 记录 final 事件携带的会话 id，供 result 页追问复用
     if (event.type === 'final' && event.conversationId) {
       (this as any).conversationId = event.conversationId;
+      return;
     }
+
     if (event.type === 'tool_call') {
-      // 事件驱动后停止兜底轮换，避免覆盖真实文案
       this.stopFallback();
       const toolName = event.name || '';
-      // 第 3 步（测算）done，第 4 步（生成报告）active
-      const steps = this.data.steps.map((s: any, i: number) => ({
-        ...s,
-        done: i < 3,
-        active: i === 3,
-      }));
-      this.setData({
-        steps,
-        thinkingText: this.toolTextMap[toolName] || `正在执行${toolName}...`,
-      });
+      const hint = this.toolTextMap[toolName] || `正在做「${toolName}」…`;
+
+      // 首次 tool_call：思考完成 → 状态条变绿 + 列出执行骨架
+      if (this.data.toolSteps.length === 0) {
+        const inPlanIdx = EXEC_PLAN.findIndex((p) => p.name === toolName);
+        const isOcr = (this as any)._inputSource === 'ocr';
+        let toolSteps: Array<{
+          id: string;
+          name: string;
+          hint: string;
+          status: 'pending' | 'running' | 'done' | 'skipped';
+        }> = EXEC_PLAN.map((p, i) => {
+          // 1) cleaner 预判：粘贴文本不会清洗 → 出计划即标跳过（OCR 源则保留待真实调用）
+          // 2) 排在首个 tool_call 之前的其它 pending 步骤也视为跳过
+          let status: 'pending' | 'running' | 'done' | 'skipped' = 'pending';
+          if (p.name === 'cleaner' && !isOcr) status = 'skipped';
+          else if (inPlanIdx >= 0 && i < inPlanIdx) status = 'skipped';
+          return { ...p, status };
+        });
+        if (inPlanIdx >= 0) {
+          toolSteps[inPlanIdx] = { ...toolSteps[inPlanIdx], status: 'running' as const };
+        } else {
+          // 未预置的自定义工具（law-search 等）插到最前执行
+          toolSteps.unshift({
+            id: `${toolName}-${Date.now()}`,
+            name: toolName,
+            hint,
+            status: 'running',
+          });
+        }
+        this.setData({
+          toolSteps,
+          thinkingText: hint,
+          think: { ...this.data.think, done: true },
+        });
+        return;
+      }
+
+      // 后续工具：预置项置 running；未预置追加到最前
+      const toolSteps = this.data.toolSteps.map((s) =>
+        s.name === toolName && s.status !== 'done' ? { ...s, status: 'running' as const } : s,
+      );
+      if (!toolSteps.some((s) => s.name === toolName)) {
+        toolSteps.unshift({
+          id: `${toolName}-${Date.now()}`,
+          name: toolName,
+          hint,
+          status: 'running',
+        });
+      }
+      this.setData({ toolSteps, thinkingText: hint });
     } else if (event.type === 'tool_result') {
-      // 工具执行完成，保持"正在整理"文案
-      this.setData({ thinkingText: '正在整理分析结果...' });
-    } else if (event.type === 'start') {
-      this.setData({ thinkingText: 'AI 正在开始分析...' });
+      const toolName = event.name || '';
+      const targetIdx = toolName
+        ? this.data.toolSteps.findIndex((s) => s.name === toolName && s.status === 'running')
+        : this.data.toolSteps.findIndex((s) => s.status === 'running');
+      const toolSteps =
+        targetIdx >= 0
+          ? this.data.toolSteps.map((s, i) =>
+              i === targetIdx ? { ...s, status: 'done' as const } : s,
+            )
+          : this.data.toolSteps;
+      this.setData({ toolSteps });
     }
   },
 
-  /** 兜底文案轮换（长时间无 tool_call 事件时，避免界面静止） */
+  /** 兜底文案轮换（思考期无 reasoning 时避免界面静止） */
   startFallbackRotation() {
     if ((this as any).fallbackTimer) return;
     let idx = 0;
@@ -175,14 +256,7 @@ Page({
 
   onUnload() {
     this.stopFallback();
-    if ((this as any).streamingTimer) {
-      clearTimeout((this as any).streamingTimer);
-      (this as any).streamingTimer = null;
-    }
-    if ((this as any).stepTimer) {
-      clearInterval((this as any).stepTimer);
-      (this as any).stepTimer = null;
-    }
-    (this as any).streamAcc = '';
+    if ((this as any)._thinkTimer) clearTimeout((this as any)._thinkTimer);
+    if ((this as any)._wordTimer) clearTimeout((this as any)._wordTimer);
   },
 });

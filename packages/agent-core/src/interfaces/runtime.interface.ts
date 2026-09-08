@@ -5,6 +5,7 @@
 export type StreamEventType =
   | 'token'
   | 'content_delta'
+  | 'reasoning_delta'
   | 'tool_call'
   | 'tool_result'
   | 'skill_load'

@@ -1,5 +1,10 @@
 import * as path from 'path';
-import { resolveStageCwd, isDeletablePipeline } from './pipeline.service';
+import {
+  resolveStageCwd,
+  isDeletablePipeline,
+  killShellProcess,
+  resolveStageVars,
+} from './pipeline.service';
 
 /**
  * 执行记录删除状态门禁的防回归测试。
@@ -47,5 +52,157 @@ describe('resolveStageCwd（阶段命令工作目录）', () => {
   it('模块目录缺失时回落到发布目录（不落到 deploy-console 自身目录）', () => {
     expect(resolveStageCwd(ws, 'backend', undefined)).toBe(ws);
     expect(resolveStageCwd(ws, undefined, undefined)).toBe(ws);
+  });
+});
+
+/**
+ * 子进程组终止的防回归测试。
+ *
+ * 背景：runShell 用 `spawn('bash', ['-c', cmd])` 派生构建命令，超时/取消时
+ * 原实现只 `child.kill()` 杀 bash 本身，vite / nest build 等**孙进程会残留**，
+ * 继续占用端口与 CPU，下一次发布撞上残留进程（历史「6200 孤儿进程」同类根因）。
+ * 修复：detached 进程组 + 负 pid 整组终止。此测试锁定「必须按进程组终止」。
+ */
+describe('killShellProcess（shell 子进程组终止）', () => {
+  it('按负 pid 杀进程组（孙进程一并终止）', () => {
+    const targeted: number[] = [];
+    const result = killShellProcess(
+      4321,
+      (pid) => {
+        targeted.push(pid);
+      },
+      () => {
+        throw new Error('不应降级为只杀直接子进程');
+      },
+    );
+    expect(targeted).toEqual([-4321]);
+    expect(result).toBe('group');
+  });
+
+  it('负 pid 不支持时降级为终止直接子进程（如 Windows）', () => {
+    const signals: string[] = [];
+    const result = killShellProcess(
+      4321,
+      () => {
+        throw new Error('ESRCH');
+      },
+      (signal) => {
+        signals.push(signal);
+      },
+    );
+    expect(signals).toEqual(['SIGKILL']);
+    expect(result).toBe('child');
+  });
+
+  it('pid 缺失时不做任何终止', () => {
+    const result = killShellProcess(0, () => undefined, () => undefined);
+    expect(result).toBe('none');
+  });
+});
+
+/**
+ * 阶段变量的防回归测试（v4 M1）。
+ *
+ * 背景：v4 把 upload / restart / verify 等内置执行器下沉为「用户自配脚本」后，
+ * 端口、pm2 进程名、产物路径不能再由平台代码隐式推导（历史：猜 5 个 pm2 候选名、
+ * 产物路径硬编码、入口文件写死 index.js）。此测试锁定「全部显式下发为变量」。
+ */
+describe('resolveStageVars（阶段命令变量）', () => {
+  const ws = '/release';
+
+  it('后端：构建产物落在 servers/<dir>/dist，pm2 名取模块注册表字段', () => {
+    const v = resolveStageVars({
+      env: 'local',
+      moduleKey: 'todo-service',
+      moduleType: 'backend',
+      dir: 'todo-service',
+      pm2: 'web-todo',
+      releaseWorkspace: ws,
+      commitId: 'abc1234',
+    });
+    expect(v.BUILD_OUTPUT_DIR).toBe(path.join(ws, 'servers', 'todo-service', 'dist'));
+    expect(v.PM2_NAME).toBe('web-todo');
+    expect(v.MODULE_TYPE).toBe('backend');
+  });
+
+  it('前端 / 微前端：构建产物落在 apps/<dir>/dist', () => {
+    const v = resolveStageVars({
+      env: 'local',
+      moduleKey: 'admin',
+      moduleType: 'micro-frontend',
+      dir: 'admin',
+      releaseWorkspace: ws,
+      commitId: 'abc1234',
+    });
+    expect(v.BUILD_OUTPUT_DIR).toBe(path.join(ws, 'apps', 'admin', 'dist'));
+  });
+
+  it('端口优先级：配置中心 > pm2 实际进程（配置中心是权威）', () => {
+    const v = resolveStageVars({
+      env: 'local',
+      moduleKey: 'ai-agent',
+      releaseWorkspace: ws,
+      config: { PORT: '6010' },
+      pm2Port: '6200', // 模拟 pm2_env 被污染
+    });
+    expect(v.PORT).toBe('6010');
+  });
+
+  it('配置中心无 PORT 时兜底读 pm2 实际进程', () => {
+    const v = resolveStageVars({
+      env: 'local',
+      moduleKey: 'gateway',
+      releaseWorkspace: ws,
+      pm2Port: 6000,
+    });
+    expect(v.PORT).toBe('6000');
+  });
+
+  it('PUBLIC_PATH：模块 publicPath 优先，缺省回落 moduleKey（字段接线）', () => {
+    const withCfg = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'admin',
+      publicPath: 'admin-portal',
+      releaseWorkspace: ws,
+      commitId: 'v1',
+    });
+    expect(withCfg.PUBLIC_PATH).toBe('admin-portal');
+    expect(withCfg.ARTIFACT_DIR).toBe(
+      path.join(ws, 'servers', 'gateway', 'public', 'static', 'modules', 'admin-portal', 'v1'),
+    );
+
+    const fallback = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'admin',
+      releaseWorkspace: ws,
+      commitId: 'v1',
+    });
+    expect(fallback.PUBLIC_PATH).toBe('admin');
+  });
+
+  it('入口文件缺省 index.js；pm2 名缺省 web-<moduleKey>', () => {
+    const v = resolveStageVars({ env: 'dev', moduleKey: 'portal', releaseWorkspace: ws });
+    expect(v.ENTRY_FILE).toBe('index.js');
+    expect(v.PM2_NAME).toBe('web-portal');
+  });
+
+  it('探活与清理变量：gateway 地址/TTL、保留数、受保护版本、删除策略', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'admin',
+      releaseWorkspace: ws,
+      protectedVersions: ['v2', 'v3'],
+      safeDelete: 'rm',
+    });
+    expect(v.GATEWAY_URL).toBe('http://localhost:6000');
+    expect(v.GATEWAY_TTL_SEC).toBe('10');
+    expect(v.KEEP_VERSIONS).toBe('5');
+    expect(v.PROTECTED_VERSIONS).toBe('v2 v3');
+    expect(v.WS_SAFE_DELETE).toBe('rm -rf');
+  });
+
+  it('删除策略缺省为 mv（规避批量删除审批，不写死在平台代码里）', () => {
+    const v = resolveStageVars({ env: 'dev', moduleKey: 'admin', releaseWorkspace: ws });
+    expect(v.WS_SAFE_DELETE).toBe('mv');
   });
 });

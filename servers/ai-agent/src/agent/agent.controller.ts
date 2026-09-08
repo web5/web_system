@@ -195,9 +195,9 @@ export class AgentController {
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
-        // content_delta 是逐字增量（可能上千条），只透传前端用于逐字渲染，
+        // content_delta / reasoning_delta 是逐字增量（可能上千条），只透传前端用于逐字渲染，
         // 不落库 steps（避免 agent-runs 表被污染/膨胀）
-        if (event.type !== 'content_delta') {
+        if (event.type !== 'content_delta' && event.type !== 'reasoning_delta') {
           steps.push({
             type: event.type,
             name: event.name,

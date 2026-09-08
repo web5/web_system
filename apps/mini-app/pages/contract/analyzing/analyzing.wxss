@@ -183,3 +183,154 @@ page {
   word-break: break-all;
   white-space: pre-wrap;
 }
+.streaming-text.placeholder {
+  color: #9AA1AD;
+  font-style: italic;
+}
+
+/* ===== 执行步骤明细（预置全量 → 灰/蓝/绿 三态） ===== */
+.tool-steps {
+  width: 100%;
+  margin-top: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+.tool-step {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 14rpx 22rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  transition: background .25s, color .25s, border-color .25s;
+  background: #F2F3F5;
+  border: 1rpx solid #E8EBF0;
+  color: #9AA1AD; /* pending 灰 */
+}
+.tool-step.running {
+  background: rgba(30, 111, 255, 0.08);
+  border-color: rgba(30, 111, 255, 0.3);
+  color: #1E6FFF;
+  animation: toolPulse 1.4s ease-in-out infinite;
+}
+@keyframes toolPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(30, 111, 255, 0); }
+  50% { box-shadow: 0 0 0 6rpx rgba(30, 111, 255, 0.06); }
+}
+.tool-step.done {
+  background: rgba(46, 158, 91, 0.08);
+  border-color: rgba(46, 158, 91, 0.18);
+  color: #2E9E5B;
+}
+.tool-step.skipped {
+  background: #F7F8FA;
+  border-color: #E8EBF0;
+  color: #B7BDC9;
+}
+.tool-step.skipped .tool-step-state { color: #B7BDC9; }
+.tool-step-ic { flex-shrink: 0; width: 34rpx; text-align: center; }
+.tool-step-text { flex: 1; line-height: 1.4; }
+.tool-step-state {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  opacity: .85;
+}
+
+/* ===== AI 思考状态条（单行收缩；完成态变绿；全文放抽屉） ===== */
+.think-card {
+  width: 100%;
+  margin: 10rpx 0 20rpx;
+  background: #F7F8FA;
+  border: 1rpx solid #E8EBF0;
+  border-radius: 20rpx;
+  overflow: hidden;
+  transition: background .25s, border-color .25s;
+}
+.think-card.done {
+  background: #E7F5EC;
+  border-color: #A9DDBA;
+}
+.think-card.done .think-t { color: #2E9E5B; }
+.think-hd {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
+}
+.think-ic { font-size: 28rpx; flex-shrink: 0; }
+.think-t {
+  flex: 1;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #5B6372;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.think-state { font-size: 20rpx; color: #9AA1AD; flex-shrink: 0; }
+.think-state.ing { color: #1E6FFF; }
+.think-more {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  color: #1E6FFF;
+  background: #fff;
+  border: 1rpx solid #C9DFFF;
+  border-radius: 999rpx;
+  padding: 6rpx 16rpx;
+  font-weight: 600;
+}
+.think-card.done .think-more {
+  color: #2E9E5B;
+  border-color: #A9DDBA;
+}
+.think-more:active { opacity: .75; }
+
+/* ===== 思考全文抽屉（底部滑出半屏可滚） ===== */
+.mask {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(10, 16, 30, 0.45);
+  display: none;
+}
+.mask.show { display: flex; }
+.mask.drawer-mask {
+  align-items: flex-end;
+  z-index: 100;
+}
+.sheet {
+  width: 100%;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 28rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  animation: sheetUp .22s ease;
+}
+@keyframes sheetUp {
+  from { transform: translateY(48rpx); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.sheet-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  flex-shrink: 0;
+}
+.sheet-title { font-size: 32rpx; font-weight: 700; color: #1A1F2E; }
+.sheet-close { font-size: 36rpx; color: #9AA1AD; padding: 4rpx 8rpx; }
+.sheet-bd {
+  height: 420rpx;
+  box-sizing: border-box;
+}
+.sheet-text {
+  font-size: 24rpx;
+  color: #5B6372;
+  line-height: 1.75;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+

@@ -27,6 +27,32 @@ export const CONFIGURABLE_STAGES = [
 
 export type ConfigurableStage = (typeof CONFIGURABLE_STAGES)[number];
 
+/** 操作执行类型：shell=自写脚本 / service=引用工具目录里的内置工具 */
+export type StageActionType = 'shell' | 'service';
+
+/**
+ * 阶段内的一个执行动作（v4 §12）。
+ *
+ * 与「阶段（节点）」的职责边界：节点是流程语义单元（9 个，参与编排与失败策略），
+ * 操作只是执行动作，不参与流程图排序。
+ */
+export interface StageAction {
+  id: string;
+  type: StageActionType;
+  name: string;
+  /** type=shell 时的脚本正文（bash -c 执行） */
+  code?: string;
+  /** type=service 时引用的工具 code（deploy_tool_catalog.code） */
+  tool?: string;
+  /** 操作级超时（秒）；为空用阶段级 timeoutSec */
+  timeoutSec?: number;
+  /** continueOnError：该操作失败不中断阶段（护栏类操作用） */
+  cont?: boolean;
+  enabled?: boolean;
+  /** 平台内置操作（如 pull 的 git 拉取），不可删除 */
+  builtin?: boolean;
+}
+
 /**
  * 各模块类型的默认构建命令（数据化模板，design.md 决策 4）。
  *
@@ -96,9 +122,20 @@ export class DeployModuleStageCommandEntity {
   @Column({ type: 'varchar', length: 32, comment: '流水线阶段' })
   stage: string;
 
-  /** shell 命令（bash -c 执行） */
+  /** shell 命令（bash -c 执行）—— 单操作形态，v4 多操作为空时回退到它 */
   @Column({ type: 'text', comment: 'shell 命令' })
   command: string;
+
+  /**
+   * v4 多操作：一个阶段内 1..N 个执行动作，顺序执行。
+   *
+   * 为什么需要：单条 shell 无法满足「失败定位到具体步骤」「一个阶段内混用内置能力与脚本」
+   * 「某一步单独设超时/容错」。拆成操作后日志按 opN 分段，护栏类操作可单独 continueOnError。
+   *
+   * 兼容：`actions` 为空时回退执行 `command`（等价单操作），存量数据零改动。
+   */
+  @Column({ type: 'json', nullable: true, comment: '节点内多操作（v4），为空回退 command' })
+  actions?: StageAction[] | null;
 
   @Column({ type: 'boolean', default: true, comment: '是否启用' })
   enabled: boolean;

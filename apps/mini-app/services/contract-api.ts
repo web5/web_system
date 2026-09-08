@@ -11,12 +11,45 @@ const AGENT_ID = 'contract-risk';
 const CONVERSATIONS_URL = '/api/ai-agent/agent/conversations';
 
 /**
+ * 缓存 apiBase：基础库 3.16.0 在某些时机（如异步栈 / Promise reject / 异常对象序列化）
+ * 会出现 `wx.getApp is not a function` 或栈溢出。改为优先 storage（app.ts onLaunch 时写入），
+ * getToken() 仍每次调用以支持刷新。
+ */
+let _apiBaseCache: string | undefined;
+function getApiBase(): string {
+  if (_apiBaseCache === undefined) {
+    // 1) 优先 storage
+    try {
+      const cached = wx.getStorageSync('api_base');
+      if (cached) {
+        _apiBaseCache = cached;
+        return _apiBaseCache;
+      }
+    } catch {}
+    // 2) 兜底再试 getApp（带异常兜住）
+    try {
+      const fn = (wx as any).getApp;
+      if (typeof fn === 'function') {
+        _apiBaseCache = fn().globalData.apiBase;
+        return _apiBaseCache as string;
+      }
+      if (typeof getApp === 'function') {
+        _apiBaseCache = (getApp as any)().globalData.apiBase;
+        return _apiBaseCache as string;
+      }
+    } catch {}
+    _apiBaseCache = '';
+  }
+  return _apiBaseCache;
+}
+
+/**
  * SSE 本地调试日志开关（默认开启）。
  * - 开发者工具 Console 过滤 `[SSE]`：查看请求生命周期 + 每条原始 chunk（SSE data 消息）；
  * - 过滤 `[EVENT]`：查看 analyzing 页解析出的每个 SSE 事件。
  * 本地联调完成 / 提审前请把 SSE_DEBUG 改回 false，避免刷日志。
  */
-const SSE_DEBUG = false;
+const SSE_DEBUG = true;
 
 /** 打点：仅 SSE_DEBUG 开启时输出到 Console（间接引用 console.log，规避 pre-commit R1 红线扫描） */
 const sseConsoleLog = (console as unknown as { log: (...args: unknown[]) => void }).log.bind(console);
@@ -33,7 +66,15 @@ function truncateText(text: string, max: number): string {
 
 /** SSE 事件类型（与 agent-core StreamEvent 对齐） */
 export interface StreamEvent {
-  type: 'start' | 'content_delta' | 'tool_call' | 'tool_result' | 'final' | 'error';
+  type:
+    | 'start'
+    | 'content_delta'
+    | 'reasoning_delta'
+    | 'tool_call'
+    | 'tool_result'
+    | 'summary'
+    | 'final'
+    | 'error';
   content?: string;
   name?: string;
   conversationId?: string;
@@ -134,6 +175,8 @@ export interface AnalyzeHandlers {
   onEvent(event: StreamEvent): void;
   /** LLM 逐字生成内容增量（content_delta 事件），供前端"AI 正在生成报告"实时渲染 */
   onDelta?(delta: string): void;
+  /** 模型推理增量（reasoning_delta 事件），供前端"思考中"可视化 */
+  onReasoning?(delta: string): void;
   /** 分析完成，返回结构化报告 */
   onDone(report: ContractReport): void;
   /** 分析失败 */
@@ -151,8 +194,7 @@ export function analyzeContractStream(
   scene: string | undefined,
   handlers: AnalyzeHandlers,
 ): void {
-  const app = getApp<IAppOption>();
-  const baseUrl = app.globalData.apiBase;
+  const baseUrl = getApiBase();
   const token = getToken();
   const requestUrl = `${baseUrl}${AGENT_RUN_URL}`;
 
@@ -183,6 +225,13 @@ export function analyzeContractStream(
       // onChunkReceived 很可能不触发，整包响应会直接进入 success.data。
       // 这里按相同 SSE 协议解析一次，模拟器/真机通用。
       if (done) return;
+      // 5xx/4xx 业务错：明确上抛，避免"页面卡在 loading 没有任何提示"
+      if (res.statusCode >= 400) {
+        const msg = (res as any)?.data?.message || `请求失败 (HTTP ${res.statusCode})`;
+        sseDebug('[analyze HTTP 错误]', res.statusCode, msg);
+        handlers.onError(new Error(msg));
+        return;
+      }
       try {
         const fullText = decodeChunk((res && (res as any).data) as any);
         if (fullText == null) return;
@@ -253,6 +302,10 @@ function parseSseEventsStream(
       if (event.type === 'content_delta' && handlers.onDelta && event.content) {
         handlers.onDelta(event.content);
       }
+      // 推理增量：透传给前端"思考中"可视化（若注册了 onReasoning）
+      if (event.type === 'reasoning_delta' && handlers.onReasoning && event.content) {
+        handlers.onReasoning(event.content);
+      }
       if (event.type === 'error') {
         markDone();
         handlers.onError(new Error(event.content || '分析失败'));
@@ -285,9 +338,36 @@ export function sendContractFollowUp(question: string, conversationId: string): 
   });
 }
 
+/**
+ * 追问（流式版本，UI 真正实时渲染）：
+ *  - onEvent  任意 SSE 事件（tool_call / tool_result / start ...）
+ *  - onDelta  content_delta 增量（LLM 逐字吐字）
+ *  - onReply  final 一次性完整回复
+ *  - onError  失败
+ */
+export function sendContractFollowUpStream(
+  question: string,
+  conversationId: string,
+  handlers: FollowUpStreamHandlers,
+): void {
+  sendFollowUpStream(question, conversationId, handlers);
+}
+
 /** 追问流式事件处理器 */
 export interface FollowUpHandlers {
   onReply(reply: string): void;
+  onError(err: Error): void;
+}
+
+/** 追问流式事件处理器（带 onDelta 增量渲染，供 UI 真正流式显示） */
+export interface FollowUpStreamHandlers {
+  /** 任意 SSE 事件透传（tool_call / tool_result / final 等），供 UI 给出过程化提示 */
+  onEvent?(event: StreamEvent): void;
+  /** LLM 逐字增量（SSE content_delta 事件） */
+  onDelta?(delta: string): void;
+  /** 追问最终回复文本（final 事件） */
+  onReply(reply: string): void;
+  /** 失败 */
   onError(err: Error): void;
 }
 
@@ -298,10 +378,9 @@ export interface FollowUpHandlers {
 function sendFollowUpStream(
   question: string,
   conversationId: string,
-  handlers: FollowUpHandlers,
+  handlers: FollowUpStreamHandlers,
 ): void {
-  const app = getApp<IAppOption>();
-  const baseUrl = app.globalData.apiBase;
+  const baseUrl = getApiBase();
   const token = getToken();
   const requestUrl = `${baseUrl}${AGENT_RUN_URL}`;
 
@@ -326,6 +405,13 @@ function sendFollowUpStream(
       sseDebug('[followUp 请求结束]', 'statusCode=', res.statusCode);
       // 兜底：开发者工具对 enableChunked 支持不全，整包可能直接进 success.data
       if (done) return;
+      // 5xx/4xx 业务错：明确上抛，避免追问没响应用户无感
+      if (res.statusCode >= 400) {
+        const msg = (res as any)?.data?.message || `请求失败 (HTTP ${res.statusCode})`;
+        sseDebug('[followUp HTTP 错误]', res.statusCode, msg);
+        handlers.onError(new Error(msg));
+        return;
+      }
       try {
         const fullText = decodeChunk((res && (res as any).data) as any);
         if (fullText == null) return;
@@ -340,6 +426,11 @@ function sendFollowUpStream(
           if (!payload) continue;
           try {
             const event = JSON.parse(payload) as StreamEvent;
+            // 过程事件透传 + content_delta 增量（让 UI 真正流式渲染）
+            if (handlers.onEvent) handlers.onEvent(event);
+            if (event.type === 'content_delta' && handlers.onDelta && event.content) {
+              handlers.onDelta(event.content);
+            }
             if (event.type === 'final') {
               done = true;
               handlers.onReply(event.content || '');
@@ -391,6 +482,11 @@ function sendFollowUpStream(
         if (!payload) continue;
         try {
           const event = JSON.parse(payload) as StreamEvent;
+          // 过程事件透传 + content_delta 增量（让 UI 真正流式渲染）
+          if (handlers.onEvent) handlers.onEvent(event);
+          if (event.type === 'content_delta' && handlers.onDelta && event.content) {
+            handlers.onDelta(event.content);
+          }
           if (event.type === 'final') {
             done = true;
             handlers.onReply(event.content || '');

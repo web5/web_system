@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   DashboardOutlined,
-  CloudUploadOutlined,
   MonitorOutlined,
   AuditOutlined,
   LogoutOutlined,
@@ -34,7 +33,6 @@ const avatarLetter = computed(() =>
 // 菜单项
 const menuItems = [
   { key: '/dashboard', label: '仪表盘', icon: DashboardOutlined },
-  { key: '/deploy', label: '发布中心', icon: CloudUploadOutlined },
   { key: '/pipelines', label: '流水线', icon: DeploymentUnitOutlined },
   { key: '/modules', label: '模块管理', icon: AppstoreOutlined },
   { key: '/environments', label: '环境管理', icon: ApartmentOutlined },

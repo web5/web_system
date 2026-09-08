@@ -2,7 +2,16 @@
 # ============================================================
 # deploy.sh — 一键部署脚本（后端服务 / 前端微前端模块 / 自建 CDN）
 #
-# 用法：
+# ⚠️ DEPRECATED（2026-09-08）：本脚本为**旧发布链路**，已不再作为发布入口。
+#    - 发布请统一走发布流水线：POST /api/pipelines（控制台「流水线」页 / MCP / CI 触发端点）
+#    - 本脚本已知缺陷（不再修复）：
+#        1) 无 micro-frontend 分支，调用必然 exit 1；
+#        2) 第 154 行更新的是 web_system 库，而版本表实际在 web_system_deploy。
+#    - 暂不物理删除的原因：scripts/publish.sh 仍调用它（传统发布链路依赖），
+#      且 DeployService 的回滚探活仍引用其任务模型。
+#    - 后续：publish.sh 迁移到流水线后，本脚本连同 /api/deploy/* 旧动作接口一并删除。
+#
+# 用法（仅历史兼容，勿用于新场景）：
 #   ./scripts/deploy.sh dev gateway          # 后端服务 → dev
 #   ./scripts/deploy.sh prod all             # 全部后端服务 → prod
 #   ./scripts/deploy.sh dev portal           # 前端模块(portal/admin/shell) → dev

@@ -11,6 +11,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import { STATIC_MODULES_REL } from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -67,6 +70,145 @@ export const DELETABLE_PIPELINE_STATUS = ['succeeded', 'failed', 'cancelled'] as
 
 export function isDeletablePipeline(status: string): boolean {
   return (DELETABLE_PIPELINE_STATUS as readonly string[]).includes(status);
+}
+
+/**
+ * 结果回传禁写键（v4 C1）：这些是流水线语义字段，
+ * 脚本通过 $WS_RESULT_FILE 回传结果时不允许覆盖，防止篡改发布状态。
+ */
+const RESULT_BLOCKED_KEYS = new Set([
+  'id',
+  'status',
+  'stage',
+  'logs',
+  'versionTag',
+  'commitId',
+  'moduleKey',
+  'env',
+  'result',
+  'error',
+  'progress',
+  'startTime',
+  'endTime',
+  'operator',
+  'createdAt',
+  'updatedAt',
+]);
+
+/** 模块快照（阶段变量解析用，避免在此处退化为 any） */
+export interface ModuleSnapshot {
+  type?: string;
+  dir?: string;
+  pm2?: string;
+  publicPath?: string;
+  entry?: string;
+}
+
+/** 阶段变量解析入参（纯函数入参，便于单测） */
+export interface StageVarsInput {
+  env: string;
+  moduleKey: string;
+  moduleType?: string;
+  dir?: string;
+  pm2?: string;
+  publicPath?: string;
+  entry?: string;
+  branch?: string;
+  commitId?: string;
+  stage?: string;
+  releaseWorkspace: string;
+  /** 配置中心 resolve 结果（global → env → module，优先级最高） */
+  config?: Record<string, string>;
+  /** pm2 进程实际 PORT：配置中心没有时的兜底 */
+  pm2Port?: string | number;
+  /** 受保护版本（当前版本 + 启用中的灰度版本），cleanup 用 */
+  protectedVersions?: string[];
+  gatewayUrl?: string;
+  /** gateway 版本缓存 TTL（秒），verify 等待用 */
+  gatewayTtlSec?: number;
+  /** cleanup 保留版本数 */
+  keepVersions?: number;
+  /** 删除策略：mv=改名到临时目录（规避批量删除审批）/ rm=直接删除 */
+  safeDelete?: 'mv' | 'rm';
+}
+
+/**
+ * 解析阶段命令可用的环境变量（v4 M1，纯函数便于单测）。
+ *
+ * 背景：v4 把 upload / restart / verify 等内置执行器下沉为「用户自配脚本」后，
+ * 端口、pm2 进程名、产物路径不能再由平台代码隐式推导
+ * （历史：`resolvePm2Names()` 猜 5 个候选取第一个、产物路径硬编码、入口文件写死 index.js）。
+ * 这里把全部平台知识**显式下发为变量**，脚本直接引用即可：
+ *
+ * - 端口优先级：**配置中心 → pm2 实际进程**（配置中心是权威，历史 `PORT=6200` 污染对策）
+ * - `PUBLIC_PATH` 取自模块注册表 `publicPath`（该字段此前已存在但执行器从未读取），缺省回落 moduleKey
+ * - `BUILD_OUTPUT_DIR`（构建产物，upload 的源）与 `ARTIFACT_DIR`（投递目标）拆开，避免同名歧义
+ */
+export function resolveStageVars(i: StageVarsInput): Record<string, string> {
+  const cfg = i.config ?? {};
+  const type = i.moduleType || '';
+  const dir = i.dir || i.moduleKey;
+  const publicPath = i.publicPath || i.moduleKey;
+  const entry = i.entry || 'index.js';
+  const version = i.commitId || '';
+  const ws = i.releaseWorkspace;
+  const port = cfg.PORT || (i.pm2Port != null ? String(i.pm2Port) : '');
+
+  return {
+    DEPLOY_ENV: i.env || '',
+    MODULE_KEY: i.moduleKey,
+    MODULE_TYPE: type,
+    MODULE_DIR: dir,
+    BRANCH: i.branch || '',
+    COMMIT_ID: version,
+    RELEASE_DIR: ws,
+    STAGE: i.stage || '',
+    // 进程与端口：显式解析，不做候选名猜测
+    PM2_NAME: i.pm2 || `web-${i.moduleKey}`,
+    PORT: port,
+    // 静态资源（publicPath 接线）
+    PUBLIC_PATH: publicPath,
+    ENTRY_FILE: entry,
+    BUILD_OUTPUT_DIR: path.join(ws, type === 'backend' ? 'servers' : 'apps', dir, 'dist'),
+    ARTIFACT_DIR: path.join(ws, STATIC_MODULES_REL, publicPath, version),
+    // 探活与清理
+    GATEWAY_URL: i.gatewayUrl || 'http://localhost:6000',
+    GATEWAY_TTL_SEC: String(i.gatewayTtlSec ?? 10),
+    KEEP_VERSIONS: String(i.keepVersions ?? 5),
+    PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
+    WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
+  };
+}
+
+/** 进程终止方式：group=按进程组整组终止（负 pid）/ child=降级为直接子进程 / none=已退出 */
+export type KillResult = 'group' | 'child' | 'none';
+
+/**
+ * 终止 shell 进程组（纯函数，便于单测）。
+ *
+ * 背景：`bash -c` 派生的 vite / nest build 等实际构建进程是孙进程，
+ * 只终止 bash 本身会残留孙进程继续占用端口与 CPU ——
+ * 这正是历史上「6200 孤儿进程抢端口、发布不生效」的同类根因。
+ * 因此以 detached 进程组启动，终止时用**负 pid** 一次性杀整组；
+ * 平台不支持负 pid（如 Windows）时降级为终止直接子进程。
+ */
+export function killShellProcess(
+  pid: number,
+  killGroup: (pid: number, signal: NodeJS.Signals) => void,
+  killChild: (signal: NodeJS.Signals) => void,
+): KillResult {
+  if (!pid) return 'none';
+  try {
+    killGroup(-pid, 'SIGKILL');
+    return 'group';
+  } catch {
+    try {
+      killChild('SIGKILL');
+      return 'child';
+    } catch {
+      return 'none';
+    }
+  }
 }
 
 /**
@@ -369,13 +511,7 @@ export class PipelineService {
     this.cancelled.add(id);
     // 立即中断正在执行的 shell 子进程（否则要等当前命令跑完/超时才真正终止）
     const child = this.shells.get(id);
-    if (child) {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* ignore */
-      }
-    }
+    if (child) this.killShell(child);
     p.status = 'cancelled';
     p.endTime = Date.now();
     p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: '已取消' };
@@ -984,31 +1120,44 @@ export class PipelineService {
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
   private async runStageCommand(p: DeployPipelineEntity, stage: string): Promise<boolean> {
-    const cmd = await this.stageCommands.resolve(p.moduleKey, stage);
-    if (!cmd) return false;
+    const acts = await this.stageCommands.resolveActions(p.moduleKey, stage);
+    if (!acts.length) return false;
 
     this.assertNotCancelled(p);
     await this.enterStage(p, stage as any, `执行阶段命令: ${p.moduleKey}/${stage}`);
 
-    let mod: any = null;
+    let mod: ModuleSnapshot | null = null;
     try {
       mod = await this.moduleRegistry.get(p.moduleKey);
     } catch {
-      /* 查不到模块信息时 env 留空 */
+      /* 查不到模块信息时变量走兜底 */
     }
 
-    const env: Record<string, string> = {
-      DEPLOY_ENV: p.env || '',
-      MODULE_KEY: p.moduleKey,
-      BRANCH: p.gitBranch || '',
-      COMMIT_ID: p.versionTag || '',
-      RELEASE_DIR: this.releaseWorkspace,
-      STAGE: stage,
-      MODULE_TYPE: mod?.type || p.moduleType || '',
-      MODULE_DIR: mod?.dir || '',
-      PM2_NAME: mod?.pm2 || p.moduleKey,
-    };
-    p.logs = [...(p.logs ?? []), `[${stage}] $ ${cmd.command}`];
+    // 配置中心（global → env → module 强制覆盖）
+    const inject = await this.resolveInjectEnv(p);
+    // 端口兜底：配置中心没有时才读 pm2 实际进程（配置中心是权威，历史 PORT=6200 污染对策）
+    const pm2Port = inject.PORT ? undefined : this.lookupPm2Port(mod?.pm2, p.moduleKey);
+    const protectedVersions = await this.resolveProtectedVersions(p);
+
+    const env = resolveStageVars({
+      env: p.env,
+      moduleKey: p.moduleKey,
+      moduleType: mod?.type || p.moduleType,
+      dir: mod?.dir,
+      pm2: mod?.pm2,
+      publicPath: mod?.publicPath,
+      entry: mod?.entry,
+      branch: p.gitBranch,
+      commitId: p.versionTag,
+      stage,
+      releaseWorkspace: this.releaseWorkspace,
+      config: inject,
+      pm2Port,
+      protectedVersions,
+      gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
+      safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
+    });
+    p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
 
     // 命令必须在模块目录下执行：默认模板依赖 cwd 定位 tsconfig / 产物目录
@@ -1016,15 +1165,134 @@ export class PipelineService {
     p.logs = [...(p.logs ?? []), `[${stage}] cwd: ${cwd}`];
     await this.save(p);
 
-    // 配置中心注入（global → env → module 强制覆盖）
-    const inject = await this.resolveInjectEnv(p);
-    const code = await this.runShell(cmd.command, { ...env, ...inject }, p, cmd.timeoutSec, cwd);
-    if (code !== 0) {
-      throw new Error(`[${stage}] 阶段命令执行失败（exit ${code}），详见日志`);
+    // 结果回传文件（v4 C1）：操作可写入 JSON，平台按白名单合并进 result
+    const resultFile = path.join(os.tmpdir(), `ws-result-${p.id}-${stage}.json`);
+    try {
+      fs.rmSync(resultFile, { force: true });
+    } catch {
+      /* 清理失败不影响执行 */
+    }
+
+    // 逐操作顺序执行；失败即阶段失败，除非该操作 continueOnError
+    for (let i = 0; i < acts.length; i++) {
+      const a = acts[i];
+      const op = `op${i + 1}`;
+      this.assertNotCancelled(p);
+
+      if (a.type === 'service') {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[${stage}/${op}] 引用工具 ${a.tool ?? '—'}（暂无内置实现，跳过）`,
+        ];
+        await this.save(p);
+        continue;
+      }
+
+      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} $ ${a.code ?? ''}`];
+      await this.save(p);
+
+      // 配置中心值强制覆盖（PORT 等已参与上方变量解析，此处保证其余配置也注入进程）
+      const code = await this.runShell(a.code ?? '', { ...env, ...inject, WS_RESULT_FILE: resultFile }, p, a.timeoutSec, cwd);
+
+      // 读取操作回传的结果（按 key 合并，非整段覆盖）
+      const got = this.readStageResult(resultFile, stage, op);
+      if (Object.keys(got).length) {
+        p.result = { ...(p.result ?? {}), ...got };
+      }
+
+      if (code !== 0) {
+        if (a.cont) {
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stage}/${op}] ${a.name} 失败（exit ${code}），continueOnError=是，继续执行`,
+          ];
+          await this.save(p);
+          continue;
+        }
+        throw new Error(`[${stage}/${op}] ${a.name} 执行失败（exit ${code}），详见日志`);
+      }
+      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} 完成`];
+      await this.save(p);
+    }
+
+    try {
+      fs.rmSync(resultFile, { force: true });
+    } catch {
+      /* ignore */
     }
     p.logs = [...(p.logs ?? []), `[${stage}] 阶段命令完成`];
     await this.save(p);
     return true;
+  }
+
+  /**
+   * 读取 pm2 实际进程的 PORT（**仅**作为配置中心缺 PORT 时的兜底）。
+   *
+   * 历史上 `pm2_env.PORT` 被污染过（如 ai-agent 误存 6200），因此它优先级最低；
+   * 查询失败一律返回 undefined，绝不阻断发布。
+   */
+  private lookupPm2Port(pm2Name: string | undefined, moduleKey: string): string | undefined {
+    try {
+      const apps = this.pm2Probe.listProcesses();
+      const candidates = [pm2Name, `web-${moduleKey}`, moduleKey].filter(
+        (n): n is string => !!n,
+      );
+      for (const name of candidates) {
+        const app = apps.find((a) => a.name === name);
+        const port = app?.pm2_env?.PORT;
+        if (port != null) return String(port);
+      }
+    } catch (e) {
+      this.logger.warn(`读取 pm2 端口失败（不阻断）: ${(e as Error).message}`);
+    }
+    return undefined;
+  }
+
+  /**
+   * 读取操作通过 `$WS_RESULT_FILE` 回传的结果（v4 C1）。
+   *
+   * 操作可写 JSON 回传结构化结果（如探活端口、投递路径），平台**按 key 合并**
+   * 而非整段覆盖，并过滤流水线语义字段；文件缺失 / JSON 非法一律忽略不阻断。
+   */
+  private readStageResult(file: string, stage: string, op: string): Record<string, unknown> {
+    try {
+      if (!fs.existsSync(file)) return {};
+      const raw = fs.readFileSync(file, 'utf8');
+      if (!raw.trim()) return {};
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (RESULT_BLOCKED_KEYS.has(k)) {
+          this.logger.warn(`[${stage}/${op}] 结果文件含受保护字段 ${k}，已忽略`);
+          continue;
+        }
+        out[k] = v;
+      }
+      return out;
+    } catch (e) {
+      this.logger.warn(`[${stage}/${op}] 解析结果文件失败（忽略）: ${(e as Error).message}`);
+      return {};
+    }
+  }
+
+  /**
+   * 解析 cleanup 受保护版本：当前版本 + 启用中的灰度版本。
+   *
+   * 内置 cleanup 执行体原本直接读 canaryService；脚本化后脚本读不到规则表，
+   * 故由平台通过 `PROTECTED_VERSIONS` 变量下发（design §10 cleanup 补偿）。
+   */
+  private async resolveProtectedVersions(p: DeployPipelineEntity): Promise<string[]> {
+    const set = new Set<string>();
+    if (p.versionTag) set.add(p.versionTag);
+    try {
+      const rules = await this.canaryService.list(p.env, p.moduleKey);
+      for (const r of rules) {
+        if (r.enabled && r.canaryVersion) set.add(r.canaryVersion);
+      }
+    } catch (e) {
+      this.logger.warn(`读取灰度规则失败，cleanup 保护可能不全: ${(e as Error).message}`);
+    }
+    return [...set];
   }
 
   /**
@@ -1045,11 +1313,17 @@ export class PipelineService {
         cwd: cwd || this.releaseWorkspace,
         // PATH 补齐与 CommandService 同一实现（node 目录 / /usr/local/bin 等）
         env: buildChildEnv(env, this.command.nodeBinDir()),
+        // 独立进程组：终止时可按负 pid 整组 kill，避免 vite / nest build 等孙进程残留
+        // 继续占用端口与 CPU（历史「6200 孤儿进程抢端口、发布不生效」的同类根因）
+        detached: true,
       });
       // 登记子进程：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
       this.shells.set(p.id, child);
       const unregister = () => this.shells.delete(p.id);
-      const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+      const timer = setTimeout(() => {
+        pushLog(`[${env.STAGE ?? 'shell'}] 执行超时（${Math.round(timeoutMs / 1000)}s），终止进程组`);
+        this.killShell(child);
+      }, timeoutMs);
 
       // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
       let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1064,7 +1338,10 @@ export class PipelineService {
         p.logs = [...(p.logs ?? []), line];
         scheduleFlush();
       };
+      let settled = false;
       const finalize = (code: number) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         if (flushTimer) {
           clearTimeout(flushTimer);
@@ -1083,11 +1360,33 @@ export class PipelineService {
       child.on('close', (code: number | null) => {
         finalize(code ?? 1);
       });
+      // 兜底：detached 进程组里若有孙进程仍持有 stdio，'close' 可能迟迟不触发。
+      // bash 自身退出 1s 后按 exit code 收口，避免流水线白白卡到超时才结束。
+      child.on('exit', (code: number | null) => {
+        setTimeout(() => finalize(code ?? 1), 1000);
+      });
       child.on('error', (err: Error) => {
         pushLog(`[${env.STAGE ?? 'shell'}] 命令启动失败: ${err.message}`);
         finalize(1);
       });
     });
+  }
+
+  /**
+   * 终止 shell 子进程及其派生的整个进程组。
+   *
+   * `bash -c` 会派生 vite / nest build 等实际构建进程作为孙进程，
+   * 只 kill bash 本身会残留孙进程继续占用端口与 CPU ——
+   * 这正是历史上「6200 孤儿进程抢端口、发布不生效」的同类根因。
+   * 因此以 detached 方式创建进程组，终止时用负 pid 一次杀整组；
+   * 平台不支持负 pid 时（如 Windows）降级为终止直接子进程。
+   */
+  private killShell(child: ChildProcess): void {
+    killShellProcess(
+      child.pid ?? 0,
+      (pid, signal) => process.kill(pid, signal),
+      (signal) => child.kill(signal),
+    );
   }
 
   private async save(p: DeployPipelineEntity): Promise<void> {
