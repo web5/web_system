@@ -171,25 +171,33 @@
   .think-card {
     margin:14px 0 18px; text-align:left; background:#F7F8FA;
     border:1px solid var(--border); border-radius:12px; overflow:hidden;
-    transition:border-color .2s;
+    transition:background .25s,border-color .25s;
   }
-  .think-card.open { border-color:#C9DFFF; }
-  .think-hd { display:flex; align-items:center; gap:7px; padding:10px 12px; cursor:pointer; user-select:none; }
-  .think-ic { font-size:13px; }
+  .think-card.done { background:var(--ok-soft); border-color:#A9DDBA; }
+  .think-card.done .think-t { color:var(--ok); }
+  .think-card.done .think-more { color:var(--ok); background:#fff; border-color:#A9DDBA; }
+  .think-card { margin:14px 0 18px; background:#F7F8FA; border:1px solid var(--border); border-radius:12px; transition:background .25s,border-color .25s; }
+  .think-hd { display:flex; align-items:center; gap:8px; padding:10px 12px; }
+  .think-ic { font-size:14px; }
   .think-t { flex:1; font-size:12.5px; font-weight:600; color:var(--text-2); }
-  .think-state { font-size:10px; color:var(--text-3); }
+  .think-state { font-size:10px; color:var(--text-3); flex-shrink:0; }
   .think-state.ing { color:var(--primary); }
-  .think-chev { color:var(--text-3); transition:transform .25s; font-size:12px; }
-  .think-card.collapsed .think-chev { transform:rotate(180deg); }
-  .think-bd { height:0; overflow:hidden; transition:height .3s ease; }
-  .think-card.open .think-bd { height:100px; }
-  .think-card.collapsed .think-bd { height:0; }
-  .think-body {
-    height:100%; overflow-y:auto;
-    padding:0 12px 11px; font-size:11.5px; color:#6B7280; line-height:1.75;
-    -webkit-overflow-scrolling:touch;
+  /* "查看完整思考"按钮：默认只在右侧展示，点击从下方抽屉展开全文 */
+  .think-more { flex-shrink:0; font-size:10.5px; color:var(--primary); background:#fff; border:1px solid #C9DFFF; padding:4px 10px; border-radius:999px; cursor:pointer; font-weight:600; }
+  .think-more:active { opacity:.7; }
+
+  /* 抽屉：AI 思考全文（从手机底部滑出，半屏可滚） */
+  .sheet {
+    width:100%; max-height:72%; display:flex; flex-direction:column;
+    background:#fff; border-radius:20px 20px 0 0;
+    padding:16px 18px calc(16px + env(safe-area-inset-bottom));
+    animation:up .22s ease;
   }
-  .think-body p { margin:0 0 6px; animation:thinkLine .3s ease; }
+  .sheet-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .sheet-hd .st { font-size:15px; font-weight:700; color:var(--text); }
+  .sheet-close { font-size:20px; color:var(--text-3); cursor:pointer; line-height:1; }
+  .sheet-bd { overflow-y:auto; font-size:12px; color:var(--text-2); line-height:1.75; -webkit-overflow-scrolling:touch; }
+  .sheet-bd p { margin:0 0 8px; animation:thinkLine .3s ease; }
   @keyframes thinkLine { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
   .analyzing .stream-note {
     margin-top:16px; text-align:left; background:#F7F8FA; border:1px dashed var(--border);
@@ -211,6 +219,30 @@
   @keyframes td { 0%,60%,100%{transform:translateY(0);opacity:.5;} 30%{transform:translateY(-3px);opacity:1;} }
   /* 报告卡（助手对话流里的缩略卡） */
   .rcard { background:var(--card); border:1.5px solid #C9DFFF; border-radius:14px; box-shadow:var(--shadow); padding:13px; margin-top:8px; cursor:pointer; max-width:85%; }
+/* assistant 屏：工具执行卡片（5 步进度合并为单卡片，避免零碎打字气泡） */
+.plan-card-title { background:var(--card); border:1px solid var(--border); color:var(--text-2); font-size:12.5px; }
+.plan-run-card {
+  background:#F7F8FA; border:1px solid var(--border); border-radius:14px;
+  padding:4px 12px; margin-top:8px; max-width:85%; box-sizing:border-box;
+}
+.plan-run-step {
+  display:flex; align-items:center; gap:8px; padding:9px 0; font-size:12.5px;
+  border-top:1px solid var(--border);
+}
+.plan-run-step:first-child { border-top:none; }
+.plan-run-step .ic { width:18px; text-align:center; flex-shrink:0; }
+.plan-run-step .hint { flex:1; color:var(--text); }
+.plan-run-step .state { font-size:10px; color:var(--text-3); flex-shrink:0; }
+.plan-run-step.pending .ic { color:var(--text-3); }
+.plan-run-step.running .ic { color:var(--primary); animation:planSpin 1.4s ease-in-out infinite; }
+.plan-run-step.running .hint { color:var(--primary); font-weight:600; }
+.plan-run-step.running .state { color:var(--primary); }
+.plan-run-step.done .ic { color:var(--ok); }
+.plan-run-step.done .state { color:var(--ok); }
+@keyframes planSpin {
+  0%,100% { transform:rotate(0deg) scale(1); }
+  50% { transform:rotate(8deg) scale(1.08); }
+}
   .rcard:active { background:var(--primary-soft); }
   .rcard .rc-top { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
   .rcard .rc-tag { font-size:10px; color:var(--primary); background:var(--primary-soft); padding:2px 8px; border-radius:20px; font-weight:600; }
@@ -499,17 +531,16 @@
           <div class="ring-wrap"><div class="ring"></div><div class="ring-center">解读中</div></div>
           <h2>AI 正在给你的合同做体检</h2>
           <div class="sub" id="anSub">正在读取合同内容…</div>
-          <!-- AI 思考卡片：模型真实思考过程流式呈现，点击标题可收起/展开 -->
-          <div class="think-card collapsed" id="anThink" onclick="toggleThink()">
+          <!-- AI 思考状态条：默认一行收缩；点「查看完整思考」→ 底部抽屉展示全文 -->
+          <div class="think-card" id="anThink">
             <div class="think-hd">
               <span class="think-ic">🤔</span>
               <span class="think-t" id="anThinkTitle">AI 正在思考…</span>
               <span class="think-state ing" id="anThinkState">思考中</span>
-              <span class="think-chev">⌄</span>
+              <span class="think-more" id="anThinkMore" onclick="openThinkSheet(event)">查看完整思考 ›</span>
             </div>
-            <div class="think-bd"><div class="think-body" id="anThinkBody"></div></div>
           </div>
-          <!-- 执行明细：进入即全量预置（灰=待执行）→ 逐项变蓝（进行中）→ 变绿（完成） -->
+          <!-- 执行明细：思考完成后出现（灰=待执行）→ 逐项变蓝（进行中）→ 变绿（完成） -->
           <div id="anRunSteps"></div>
           <div class="stream-note">思考完成后会列出它要做哪些检查，做完一项勾一项，不会让你干等。</div>
           <button class="skip" onclick="finishAnalyze(true)">跳过等待，直接看报告 →</button>
@@ -603,6 +634,17 @@
     </div>
 
     <div class="mask" id="toastMask"><div style="width:100%;text-align:center"><div id="toastBody" style="display:inline-block;max-width:280px;background:rgba(16,22,40,.82);color:#fff;font-size:12.5px;line-height:1.6;border-radius:12px;padding:12px 15px;margin-top:40%"></div></div></div>
+
+    <!-- 思考全文抽屉（analyzing 屏「查看完整思考」打开） -->
+    <div class="mask" id="thinkSheetMask" onclick="if(event.target===this)closeThinkSheet()">
+      <div class="sheet">
+        <div class="sheet-hd">
+          <span class="st">AI 思考过程</span>
+          <span class="sheet-close" onclick="closeThinkSheet()">✕</span>
+        </div>
+        <div class="sheet-bd" id="thinkSheetBody"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ==================== 演示面板 ==================== -->
@@ -861,14 +903,11 @@ function renderRunSteps() {
 function renderAnalyzing() {
   // 思考期间不显示执行明细（还没确定要执行什么）
   document.getElementById('anRunSteps').innerHTML = '';
-  // 重置思考卡片：收着、标题"AI 正在思考…"，等待阶段输出时再展开
+  // 重置思考状态条：单行收缩；全文只在底部抽屉里按需查看
   const think = document.getElementById('anThink');
-  if (think) {
-    think.classList.remove('open');
-    think.classList.add('collapsed');
-  }
-  const tb = document.getElementById('anThinkBody');
-  if (tb) tb.innerHTML = '';
+  if (think) think.classList.remove('done');
+  _thinkLines = [];
+  closeThinkSheet(true);
   const tt = document.getElementById('anThinkTitle');
   const st = document.getElementById('anThinkState');
   if (tt) tt.textContent = 'AI 正在思考…';
@@ -876,15 +915,39 @@ function renderAnalyzing() {
   const sub = document.getElementById('anSub');
   if (sub) sub.textContent = '正在读取合同内容…';
 }
-function toggleThink() {
-  const c = document.getElementById('anThink');
-  if (!c) return;
-  c.classList.toggle('collapsed');
-  if (c.classList.contains('collapsed')) c.classList.remove('open');
-  else c.classList.add('open');
+
+/* 抽屉（思考全文）：思考行默认收起，点「查看完整思考」从底部滑出 */
+let _thinkLines = [];
+function sheetEl() { return document.getElementById('thinkSheetMask'); }
+function sheetOpen() { const el = sheetEl(); return !!el && el.classList.contains('show'); }
+function renderThinkSheet() {
+  const body = document.getElementById('thinkSheetBody');
+  if (body) {
+    body.innerHTML = _thinkLines.length
+      ? _thinkLines.map((l) => '<p>' + l + '</p>').join('')
+      : '<p>思考内容生成中…</p>';
+  }
 }
-/** 思考区固定高 100px（open，约 4-5 行可滚）/0（收起），永不撑开 */
-const THINK_H = 100;
+function openThinkSheet(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  renderThinkSheet();
+  const el = sheetEl();
+  if (el) el.classList.add('show');
+}
+function closeThinkSheet(instant) {
+  const el = sheetEl();
+  if (el) el.classList.remove('show');
+  if (instant) {
+    const body = document.getElementById('thinkSheetBody');
+    if (body) body.innerHTML = '';
+  }
+}
+function appendThinkLine(line) {
+  _thinkLines.push(line);
+  const body = document.getElementById('thinkSheetBody');
+  if (body && sheetOpen()) body.innerHTML += '<p>' + line + '</p>';
+}
+
 /* mock：模型真正的思考内容（真实链路为 tokenhub 流式 reasoning_content，逐字/逐段送达） */
 const THINK_LINES = [
   '这是一份个人消费贷款合同：本金 10 万、12 期、先息后本，名义年化 21.6%。',
@@ -904,23 +967,18 @@ function runAnalyzeSteps() {
     el.querySelector('.rs').textContent = rs;
   };
   sub('正在读取合同内容…');
-  // 阶段 0：模型"思考"——思考内容一段段流入思考卡片（等待期有真实内容）
+  // 阶段 0：模型"思考"——思考内容逐段生成，状态条保持单行；全文见抽屉
   anT(() => {
-    const think = document.getElementById('anThink');
-    if (think) { think.classList.remove('collapsed'); think.classList.add('open'); }
     sub('AI 正在分析合同条款…');
     let t = 0;
-    THINK_LINES.forEach((line, idx) => {
-      anT(() => {
-        const body = document.getElementById('anThinkBody');
-        if (body) body.innerHTML += '<p>' + line + '</p>';
-      }, t);
+    THINK_LINES.forEach((line) => {
+      anT(() => appendThinkLine(line), t);
       t += 650;
     });
-    // 思考完成：收起为固定高度 0 的摘要行，此时才列出"思考得出的执行步骤"，然后进入执行
+    // 思考完成：状态条变绿色（done），此时才列出"思考得出的执行步骤"
     anT(() => {
       const think = document.getElementById('anThink');
-      if (think) { think.classList.remove('open'); think.classList.add('collapsed'); }
+      if (think) think.classList.add('done');
       const tt = document.getElementById('anThinkTitle');
       const st = document.getElementById('anThinkState');
       if (tt) tt.textContent = 'AI 已完成思考';
@@ -1093,24 +1151,55 @@ function asstSend() {
 }
 function asstAnalyzeFlow(scene) {
   currentScene = scene;
-  const sub = [
-    '正在清洗识别文本…',
-    '正在扫描法定风险信号…',
-    '正在测算真实年化 / 关键数字…',
-    '正在生成结构化体检报告…',
+  // 工具阶段合并为一个「步骤执行卡片」，4 步状态实时切换（避免 4 个零碎打字气泡）
+  const steps = [
+    { text: '清洗合同文本' },
+    { text: '扫描法定风险信号' },
+    { text: '测算真实年化利率' },
+    { text: '对比市场基准' },
+    { text: '生成体检报告' },
   ];
+  const planEl = renderPlanRunCard(steps);
   let i = 0;
-  const step = () => {
-    if (i < sub.length) typingMsg('asstList', sub[i]);
-    else {
-      killTyping('asstList');
+  const tick = () => {
+    if (i < steps.length) {
+      if (i > 0) updatePlanRunStep(planEl, i - 1, 'done');
+      updatePlanRunStep(planEl, i, 'running');
+    } else {
+      updatePlanRunStep(planEl, steps.length - 1, 'done');
       renderReportCard(scene);
       return;
     }
-    setTimeout(step, 780);
     i++;
+    setTimeout(tick, 780);
   };
-  step();
+  tick();
+}
+/** 工具执行卡片（assistant 屏）：5 步 pending→running→done，嵌在 AI 气泡下面 */
+function renderPlanRunCard(steps) {
+  const list = document.getElementById('asstList');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  const inner = steps.map((s, i) =>
+    '<div class="plan-run-step pending" data-idx="' + i + '">' +
+    '<span class="ic">○</span>' +
+    '<span class="hint">' + s.text + '</span>' +
+    '<span class="state">待执行</span></div>'
+  ).join('');
+  msg.innerHTML =
+    '<div class="avatar">AI</div>' +
+    '<div><div class="bubble plan-card-title">正在分析你的合同…</div>' +
+    '<div class="plan-run-card">' + inner + '</div></div>';
+  list.appendChild(msg);
+  list.scrollTop = list.scrollHeight;
+  return msg;
+}
+function updatePlanRunStep(planEl, idx, status) {
+  const step = planEl.querySelector('.plan-run-step[data-idx="' + idx + '"]');
+  if (!step) return;
+  step.className = 'plan-run-step ' + status;
+  step.querySelector('.ic').textContent = status === 'done' ? '✅' : status === 'running' ? '🔧' : '○';
+  step.querySelector('.state').textContent = status === 'done' ? '完成' : status === 'running' ? '进行中…' : '待执行';
 }
 function renderReportCard(scene) {
   const s = SCENES[scene];
