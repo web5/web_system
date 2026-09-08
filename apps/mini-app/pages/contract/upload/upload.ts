@@ -36,10 +36,12 @@ Page({
     analyzing: false,
     scene: '',
     ocring: false,
+    /** 输入来源：paste=粘贴/示例（无需清洗），ocr=拍照/相册识别 */
+    source: 'paste' as 'paste' | 'ocr',
   },
 
   onInput(e: any) {
-    this.setData({ contractText: e.detail.value });
+    this.setData({ contractText: e.detail.value, source: 'paste' });
   },
 
   onSceneChange(e: any) {
@@ -50,7 +52,7 @@ Page({
     const key = e.currentTarget.dataset.key as string;
     const text = SAMPLES[key];
     if (!text) return;
-    this.setData({ contractText: text, scene: SAMPLE_SCENE[key] || '' });
+    this.setData({ contractText: text, scene: SAMPLE_SCENE[key] || '', source: 'paste' });
   },
 
   /** 拍照识别 */
@@ -75,7 +77,7 @@ Page({
         wx.hideLoading();
         this.setData({ ocring: false });
         if (res.text) {
-          this.setData({ contractText: res.text });
+          this.setData({ contractText: res.text, source: 'ocr' });
           wx.showToast({ title: `识别到 ${res.blockCount} 段文字`, icon: 'success' });
         } else {
           wx.showToast({ title: '未识别到文字', icon: 'none' });
@@ -102,7 +104,7 @@ Page({
       return;
     }
     this.setData({ analyzing: true });
-    wx.setStorageSync('contract_pending', { text, scene: this.data.scene });
+    wx.setStorageSync('contract_pending', { text, scene: this.data.scene, source: this.data.source });
     wx.redirectTo({ url: '/pages/contract/analyzing/analyzing' });
   },
 });

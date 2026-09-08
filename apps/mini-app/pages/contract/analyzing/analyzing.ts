@@ -58,10 +58,12 @@ Page({
 
   startAnalysis() {
     const pending = wx.getStorageSync('contract_pending') as
-      | { text?: string; scene?: string }
+      | { text?: string; scene?: string; source?: string }
       | undefined;
     const text = pending?.text || '';
     const scene = pending?.scene;
+    // 输入来源决定 cleaner 是否可预判跳过：仅 OCR 识别文本可能含噪声需要清洗；粘贴文本直接跳过
+    (this as any)._inputSource = pending?.source === 'ocr' ? 'ocr' : 'paste';
 
     if (!text) {
       wx.showToast({ title: '缺少待分析内容', icon: 'none' });
@@ -169,17 +171,20 @@ Page({
       // 首次 tool_call：思考完成 → 状态条变绿 + 列出执行骨架
       if (this.data.toolSteps.length === 0) {
         const inPlanIdx = EXEC_PLAN.findIndex((p) => p.name === toolName);
+        const isOcr = (this as any)._inputSource === 'ocr';
         let toolSteps: Array<{
           id: string;
           name: string;
           hint: string;
           status: 'pending' | 'running' | 'done' | 'skipped';
-        }> = EXEC_PLAN.map((p, i) => ({
-          ...p,
-          // 排在首个 tool_call 之前且没被调用的步骤：直接标"已跳过"
-          // （如粘贴场景不调 cleaner：cleaner 排在首位、首调是 rule，cleaner 即视为跳过）
-          status: inPlanIdx >= 0 && i < inPlanIdx ? ('skipped' as const) : ('pending' as const),
-        }));
+        }> = EXEC_PLAN.map((p, i) => {
+          // 1) cleaner 预判：粘贴文本不会清洗 → 出计划即标跳过（OCR 源则保留待真实调用）
+          // 2) 排在首个 tool_call 之前的其它 pending 步骤也视为跳过
+          let status: 'pending' | 'running' | 'done' | 'skipped' = 'pending';
+          if (p.name === 'cleaner' && !isOcr) status = 'skipped';
+          else if (inPlanIdx >= 0 && i < inPlanIdx) status = 'skipped';
+          return { ...p, status };
+        });
         if (inPlanIdx >= 0) {
           toolSteps[inPlanIdx] = { ...toolSteps[inPlanIdx], status: 'running' as const };
         } else {

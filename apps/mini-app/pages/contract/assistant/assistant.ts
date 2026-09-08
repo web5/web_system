@@ -113,7 +113,7 @@ Page({
           return;
         }
         this.pushUser(text, 'image', res.blockCount);
-        this.startAnalyze(text);
+        this.startAnalyze(text, 'ocr');
       })
       .catch((err: any) => {
         this.setData({ sending: false });
@@ -138,11 +138,11 @@ Page({
     this.pushUser(text, 'text');
     this.setData({ input: '' });
     if (this.data.conversationId) {
-      this.startFollowUp(text);
+    this.startFollowUp(text);
     } else {
-      this.startAnalyze(text);
+    this.startAnalyze(text, 'paste');
     }
-  },
+    },
 
   /** 用户气泡只展示摘要，不展示长合同原文（点击展开抽屉看完整内容） */
   pushUser(text: string, kind: 'text' | 'image', blockCount?: number) {
@@ -169,7 +169,7 @@ Page({
   },
 
   /** 首次分析：一张「步骤执行卡片」展示 5 步，随 SSE 事件点亮；完成后追加报告摘要卡 */
-  startAnalyze(text: string) {
+  startAnalyze(text: string, source: 'paste' | 'ocr' = 'paste') {
     if (this.data.sending) return;
     this.setData({ sending: true });
     const planId = nextId();
@@ -178,7 +178,12 @@ Page({
       role: 'ai',
       kind: 'plan-run',
       hint: '正在分析你的合同…',
-      steps: EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const })),
+      // 输入来源预判：粘贴文本不需要 cleaner 清洗 → 初始即跳过；OCR 源保留待真实调用
+      steps: EXEC_PLAN.map((p) => ({
+        ...p,
+        status:
+          p.name === 'contract-cleaner' && source !== 'ocr' ? ('skipped' as const) : ('pending' as const),
+      })),
     };
     this.setData({ messages: [...this.data.messages, planMsg] });
     this.scrollToBottom();
