@@ -5,6 +5,7 @@ import { CommandService } from '../shell/command.service';
 /** pm2 进程信息（jlist 子集） */
 export interface Pm2App {
   name?: string;
+  pid?: number;
   pm2_env?: { status?: string; PORT?: string | number };
 }
 

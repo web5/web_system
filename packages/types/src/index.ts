@@ -111,9 +111,17 @@ export interface MiniprogramLoginResponse extends LoginResponse {
 }
 
 // 权限系统
-export type Role = 'admin' | 'editor' | 'viewer';
 
-export type PermissionGroup = 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents';
+/**
+ * 角色层级：super_admin > admin > editor > viewer
+ *
+ * super_admin 是唯一持有 `database:query` 的角色 —— 可执行只读 SQL、查看敏感表与脱敏字段明文。
+ * 引入背景：数据库浏览涉及用户隐私数据，需要比 admin 更高一档的角色来兜底。
+ */
+export type Role = 'super_admin' | 'admin' | 'editor' | 'viewer';
+
+export type PermissionGroup =
+  | 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents' | 'database';
 export type PermissionType = 'menu' | 'action' | 'api';
 
 export interface PermissionDef {
@@ -136,18 +144,26 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'roles:manage':   { code: 'roles:manage',   name: '配置角色权限', group: 'settings' },
   'logs:view':      { code: 'logs:view',      name: '查看日志',    group: 'logs', type: 'menu' },
   'bianbian:view':  { code: 'bianbian:view',  name: '变变管理',    group: 'dashboard', type: 'menu' },
+  'bianbian:manage':{ code: 'bianbian:manage', name: '变变素材管理', group: 'dashboard' },
   'mcp:view':       { code: 'mcp:view',       name: 'MCP 管理',     group: 'mcp', type: 'menu' },
   'agents:view':    { code: 'agents:view',    name: 'Agents 对话',  group: 'agents', type: 'menu' },
   'agents:debug':   { code: 'agents:debug',   name: '对话调试',     group: 'agents' },
   'agents:manage':  { code: 'agents:manage',  name: 'Agent 定义管理', group: 'agents' },
   'skills:view':    { code: 'skills:view',    name: '技能库查看',   group: 'agents', type: 'menu' },
   'skills:manage':  { code: 'skills:manage',  name: '技能库管理',   group: 'agents' },
+  // 数据库浏览
+  'database:view':  { code: 'database:view',  name: '查看业务数据', group: 'database', type: 'menu' },
+  'database:query': { code: 'database:query', name: '执行只读 SQL', group: 'database' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  admin:  Object.keys(PERMISSIONS),
+  // 超管：全部权限（唯一持有 database:query —— 可执行只读 SQL、看敏感表与明文）
+  super_admin: Object.keys(PERMISSIONS),
+  // admin：可浏览业务数据，但不可执行任意 SQL
+  admin: Object.keys(PERMISSIONS).filter((p) => p !== 'database:query'),
   editor: [
-    'dashboard:view', 'users:view', 'settings:view', 'logs:view', 'bianbian:view',
+    'dashboard:view', 'users:view', 'settings:view', 'logs:view',
+    'bianbian:view', 'bianbian:manage',
     'agents:view', 'agents:debug', 'agents:manage', 'skills:view',
   ],
   viewer: ['dashboard:view', 'logs:view', 'bianbian:view', 'agents:view', 'skills:view'],

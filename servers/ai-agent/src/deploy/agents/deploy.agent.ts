@@ -59,7 +59,8 @@ export const deployAgent: AgentDefinition = {
     '【输出要求】\n' +
     '- 全程简体中文，简洁。不要输出工具原始 JSON，只讲结论与关键信息。\n' +
     '- 发布中给出进度，发布后给出结果；失败时给出原因与下一步建议。',
-  model: 'deepseek-chat',
+  // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型（deepseek-v4-flash）
+  model: 'deepseek-v4-flash',
   tools: [
     'list_modules',
     'get_current_versions',
@@ -79,13 +80,13 @@ export const deployAgent: AgentDefinition = {
       type: 'mcp',
       ref: 'deploy/publish_pipeline',
       enabled: true,
-      config: { longRunning: true, maxWaitMs: 600_000, intervalMs: 3000 },
+      config: { longRunning: true, maxWaitMs: 600_000, intervalMs: 3000, requiresConfirm: true },
     },
     { type: 'mcp', ref: 'deploy/get_job_status', enabled: true },
-    { type: 'mcp', ref: 'deploy/cancel_job', enabled: true },
-    { type: 'mcp', ref: 'deploy/publish_version', enabled: true },
-    { type: 'mcp', ref: 'deploy/rollback', enabled: true },
-    { type: 'mcp', ref: 'deploy/promote_release', enabled: true },
+    { type: 'mcp', ref: 'deploy/cancel_job', enabled: true, config: { requiresConfirm: true } },
+    { type: 'mcp', ref: 'deploy/publish_version', enabled: true, config: { requiresConfirm: true } },
+    { type: 'mcp', ref: 'deploy/rollback', enabled: true, config: { requiresConfirm: true } },
+    { type: 'mcp', ref: 'deploy/promote_release', enabled: true, config: { requiresConfirm: true } },
   ],
   maxSteps: 12,
   temperature: 0.2,
