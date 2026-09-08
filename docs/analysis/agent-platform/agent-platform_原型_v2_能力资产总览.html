@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 平台 · 能力资产总览 · 高保真原型 v2</title>
+<style>
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --row-hover:#EFF2F6;
+    --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC;
+    --warn:#E8833A;  --warn-soft:#FFF3E6;
+    --ok:#2E9E5B;    --ok-soft:#E7F5EC;
+    --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+    --shadow:0 2px 12px rgba(20,30,50,.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;display:flex;justify-content:center;padding:24px;min-height:100vh;}
+
+  .desktop{width:1240px;height:800px;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);display:flex;position:relative;flex-shrink:0;}
+  .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:16px 12px;}
+  .sidebar .logo{font-size:15px;font-weight:700;color:var(--text);padding:8px 10px 14px;}
+  .side-group{font-size:11px;color:var(--text-3);padding:6px 12px 6px;font-weight:600;letter-spacing:.5px;}
+  .side-item{padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:14px;
+    cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:10px;}
+  .side-item:hover{background:var(--row-hover);}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .side-item svg{width:18px;height:18px;flex-shrink:0;}
+  .side-foot{margin-top:auto;font-size:11px;color:var(--text-3);padding:10px 12px;line-height:1.6;}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:56px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;justify-content:space-between;}
+  .crumb{font-size:13px;color:var(--text-3);}
+  .crumb b{color:var(--text);font-weight:600;}
+  .content{flex:1;overflow:auto;padding:20px;}
+
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:16px;margin-bottom:16px;border:1px solid var(--border);}
+  .card .t{font-size:13px;color:var(--text-3);margin-bottom:10px;font-weight:600;}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
+  .page-head h1{font-size:24px;font-weight:600;color:var(--text);}
+  .page-head .sub{font-size:13px;color:var(--text-3);margin-top:4px;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .num{font-variant-numeric:tabular-nums;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;}
+
+  .btn-def{background:#fff;color:var(--text-2);border:1px solid var(--border);
+    border-radius:10px;padding:7px 14px;font-size:13px;cursor:pointer;}
+  .btn-def:hover{border-color:var(--primary);color:var(--primary);}
+  .btn-sm{border:1px solid var(--border);background:#fff;color:var(--text-2);border-radius:8px;
+    padding:4px 10px;font-size:12px;cursor:pointer;}
+  .btn-sm:hover{border-color:var(--primary);color:var(--primary);}
+  .btn-sm[disabled]{opacity:.5;cursor:not-allowed;border-color:var(--border);color:var(--text-3);}
+  .tag{font-size:12px;padding:3px 9px;border-radius:20px;font-weight:600;display:inline-block;}
+  .tag.primary{color:var(--primary);background:var(--primary-soft);}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);}
+  .tag.danger{color:var(--danger);background:var(--danger-soft);}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+  .kpi .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .kpi:hover{border-color:var(--primary);}
+
+  .filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+  select{padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+    font-size:13px;color:var(--text);background:var(--card);outline:none;}
+  .seg{display:inline-flex;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .seg button{border:none;background:transparent;padding:6px 14px;font-size:13px;color:var(--text-2);cursor:pointer;}
+  .seg button.on{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-weight:600;color:var(--text-2);background:var(--bg);
+    padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text);}
+  tr:hover td{background:var(--row-hover);}
+  .pager{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--text-3);}
+  .pager button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer;color:var(--text-2);}
+
+  .empty,.error{text-align:center;padding:36px 20px;color:var(--text-3);}
+  .skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,#eef0f3 25%,#e3e6ea 37%,#eef0f3 63%);
+    background-size:400% 100%;animation:sk 1.2s ease infinite;margin:12px 0;}
+  @keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+  .state{display:none;}
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);
+    color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:60;opacity:0;
+    pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+  .note{font-size:12px;color:var(--text-3);line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div class="desktop">
+  <div class="sidebar">
+    <div class="logo">Admin · Agent 平台</div>
+    <div class="side-group">AGENT 平台</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>平台总览</div>
+    <div class="side-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>能力资产</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Agent 观测</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Run 详情</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>知识集合</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>检索调试器</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v6l-5 9a2 2 0 0 0 1.8 3h12.4A2 2 0 0 0 20 17l-5-9V2"/><path d="M8 2h8"/></svg>Agent 评测</div>
+    <div class="side-item" onclick="toast('本稿仅含「能力资产总览」页')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>模型单价</div>
+    <div class="side-foot">高保真逐页稿 v2<br>本页：能力资产总览<br>只读聚合 · 编辑回各模块</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb">Agent 平台 / <b>能力资产</b></div>
+      <div class="muted">管理员 · 演示数据</div>
+    </div>
+
+    <div class="content">
+      <div class="page-head">
+        <div><h1>能力资产</h1>
+          <div class="sub">按 agent 汇总挂载的能力（只读聚合，编辑请回到各模块）</div></div>
+        <button class="btn-def" onclick="reload()">刷新</button>
+      </div>
+
+      <div class="filters">
+        <select onchange="reload()">
+          <option>contract-risk</option><option>study-assistant</option><option>bianbian</option>
+        </select>
+        <span class="muted">共 18 项能力 · 由 ai-service 聚合：agent 定义 / mcp-gateway / 技能库 / knowledge-service</span>
+      </div>
+
+      <div class="kpis">
+        <div class="card kpi"><div class="t">本地工具</div><div class="v">6</div><div class="muted">代码注册 · ToolRegistry</div></div>
+        <div class="card kpi"><div class="t">MCP 工具</div><div class="v">9</div><div class="muted">mcp-gateway · 远程</div></div>
+        <div class="card kpi"><div class="t">技能</div><div class="v">1</div><div class="muted">ai-service 技能库 · on-demand</div></div>
+        <div class="card kpi"><div class="t">知识集合</div><div class="v">2</div><div class="muted">knowledge-service · 1 未授权</div></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+          <span class="t" style="color:var(--text);font-size:14px;font-weight:600;">能力明细（只读）</span>
+          <div class="seg">
+            <button class="on" onclick="filterType(this,'all')">全部</button>
+            <button onclick="filterType(this,'tool')">工具</button>
+            <button onclick="filterType(this,'mcp')">MCP</button>
+            <button onclick="filterType(this,'skill')">技能</button>
+            <button onclick="filterType(this,'knowledge')">知识</button>
+          </div>
+        </div>
+
+        <div class="filters" style="margin-bottom:10px;">
+          <button class="btn-sm" onclick="setState('loading')">演示：加载中</button>
+          <button class="btn-sm" onclick="setState('empty')">演示：未挂载能力</button>
+          <button class="btn-sm" onclick="setState('error')">演示：MCP 子源失败</button>
+          <button class="btn-sm" onclick="setState('data')">恢复数据</button>
+        </div>
+
+        <!-- 正常态 -->
+        <div id="cap-data">
+          <table>
+            <thead><tr><th>类型</th><th>名称</th><th>来源</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody id="cap-rows">
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">contract_rule</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">contract_irr</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">contract_benchmark</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">contract_cleaner</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-08-28</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">web_search</td><td>代码注册 · WSA</td><td><span class="tag ok">启用</span></td><td class="num">2026-08-28</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="tool"><td><span class="tag primary">tool</span></td><td class="mono">ocr_recognize</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-08-28</td><td><span class="muted">—</span></td></tr>
+              <tr data-type="mcp"><td><span class="tag primary">mcp</span></td><td class="mono">publish_pipeline</td><td class="mono">mcp-gateway</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-06</td><td><button class="btn-sm" onclick="toast('跳转 /mcp（MCP 模块管理）')">去 MCP 管理</button></td></tr>
+              <tr data-type="mcp"><td><span class="tag primary">mcp</span></td><td class="mono">law_search</td><td class="mono">mcp-gateway</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-06</td><td><button class="btn-sm" onclick="toast('跳转 /mcp（MCP 模块管理）')">去 MCP 管理</button></td></tr>
+              <tr data-type="skill"><td><span class="tag primary">skill</span></td><td class="mono">contract-risk-playbook</td><td>ai-service 技能库</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-04</td><td><button class="btn-sm" onclick="toast('跳转 /agents/skills（技能库）')">去技能库</button></td></tr>
+              <tr data-type="knowledge"><td><span class="tag primary">knowledge</span></td><td class="mono">合同法规库</td><td class="mono">knowledge-service</td><td><span class="tag ok">已授权</span></td><td class="num">2026-09-06</td><td><button class="btn-sm" onclick="toast('跳转 /agents/knowledge（知识集合）')">去知识集合</button></td></tr>
+              <tr data-type="knowledge"><td><span class="tag primary">knowledge</span></td><td class="mono">儿童安全话术</td><td class="mono">knowledge-service</td><td><span class="tag warn">未授权</span></td><td class="num">2026-09-05</td><td><button class="btn-sm" disabled title="需要 knowledge:manage 权限">去知识集合</button></td></tr>
+            </tbody>
+          </table>
+          <div class="pager"><span>共 18 项 · 显示 1-11</span>
+            <button onclick="toast('上一页（演示）')">上一页</button>
+            <button onclick="toast('下一页（演示）')">下一页</button></div>
+        </div>
+
+        <!-- 加载中 -->
+        <div class="state" id="cap-loading">
+          <div class="skeleton" style="width:55%"></div>
+          <div class="skeleton" style="width:92%"></div>
+          <div class="skeleton" style="width:78%"></div>
+          <div class="skeleton" style="width:85%"></div>
+          <div class="skeleton" style="width:64%"></div>
+        </div>
+
+        <!-- 空态 -->
+        <div class="state" id="cap-empty">
+          <div class="empty"><div>该 agent 未挂载任何能力</div>
+            <div class="muted" style="margin-top:6px;">去定义管理配置 capabilities（tool / mcp / skill / knowledge）</div></div>
+        </div>
+
+        <!-- 分区失败 -->
+        <div class="state" id="cap-error">
+          <div class="muted" style="margin-bottom:8px;">本地工具 · 代码注册（6 项正常展示）</div>
+          <table>
+            <thead><tr><th>类型</th><th>名称</th><th>来源</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag primary">tool</span></td><td class="mono">contract_rule</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+              <tr><td><span class="tag primary">tool</span></td><td class="mono">contract_irr</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+            </tbody>
+          </table>
+          <div class="error" style="padding:22px 20px;">
+            <div>MCP 工具分区加载失败：mcp-gateway 不可达</div>
+            <div class="muted" style="margin-top:6px;">其他分区照常展示，不整页降级</div>
+            <button class="btn-def" style="margin-top:12px;" onclick="setState('data')">重试</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        数据来源说明（评审用）：agent 定义 capabilities（ai-service）· 工具清单（mcp-gateway `mcp_tools`）· 技能表（ai-service）· 知识集合授权（knowledge-service）。<br>
+        全部由 ai-service 聚合 API 返回，前端不直连各服务；本页无写操作，跳转目标页各自校验权限。
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  var toastTimer;
+  function toast(msg){
+    var el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1600);
+  }
+  function setState(name){
+    ['data','loading','empty','error'].forEach(function(k){
+      var el = document.getElementById('cap-' + k);
+      if (!el) return;
+      if (k === 'data'){ el.style.display = (k === name) ? '' : 'none'; }
+      else { el.style.display = (k === name) ? 'block' : 'none'; }
+    });
+  }
+  function reload(){
+    setState('loading');
+    setTimeout(function(){ setState('data'); toast('已刷新能力资产'); }, 900);
+  }
+  function filterType(btn, type){
+    btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    document.querySelectorAll('#cap-rows tr').forEach(function(tr){
+      tr.style.display = (type === 'all' || tr.dataset.type === type) ? '' : 'none';
+    });
+  }
+</script>
+</body>
+</html>
