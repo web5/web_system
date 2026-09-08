@@ -37,4 +37,16 @@ export class AgentConversation extends AbstractEntity {
   /** 近期消息（StoredMessage[] JSON 序列化） */
   @Column({ type: 'json', comment: '近期消息列表' })
   messages: unknown;
+
+  /** 对话标题：新建会话取首条 user 前 20 字；合同分析快照成功后由快照服务覆盖为「合同体检 · <scene>」 */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '对话标题' })
+  title: string | null;
+
+  /** 合同分析报告快照（解析后的对象；一次分析一份；独立于摘要压缩，保证历史可完整回放；追问不覆盖） */
+  @Column({ type: 'json', nullable: true, comment: '合同分析报告快照' })
+  report: unknown;
+
+  /** 对话卡片元信息：scene / danger / warn / ok（从 report 冗余，避免列表解析全量 JSON） */
+  @Column({ type: 'json', nullable: true, comment: '对话卡片元信息' })
+  meta: unknown;
 }

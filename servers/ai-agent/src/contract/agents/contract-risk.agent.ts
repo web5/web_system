@@ -81,7 +81,9 @@ export const contractRiskAgent: AgentDefinition = {
     '- 只解读、不推荐：绝不做出"该不该买""哪个好""建议购买"等比较或推荐结论。\n' +
     '- disclaimer 固定字符串："本工具基于法定标准与维权路径提供知识与建议，不代写法律文书、不出具法律意见；具体可主张金额的最终成立与金额，以裁判机关/监管部门认定或双方协商为准。"\n' +
     '- 测算必须基于工具返回的真实数值（IRR / 基准库 / 标准库），不得臆造；对比同类贷款只引用 contract-benchmark 返回的区间。',
-  model: 'deepseek-chat',
+  // 官方直连 deepseek-chat 已下线：DeepSeek 系统一走 TokenHub 托管（deepseek-v4-flash）。
+  // 注意：本文件仅作"无 DB 兜底"用，运行态以 ai-service DB(agent_definitions) 定义为准。
+  model: 'deepseek-v4-flash',
   tools: ['contract-cleaner', 'contract-rule', 'contract-irr', 'contract-benchmark'],
   maxSteps: 15,
   temperature: 0.3,

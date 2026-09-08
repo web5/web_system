@@ -181,3 +181,33 @@
 | H | echarts 色板 token 化 | `Dashboard.vue` | 图表/状态色改 `uiTokens` 常量（echarts 不解析 CSS var，DOM 内联改 `--ws-*` var） | ✅ 2026-09-03 |
 
 > 已闭环不在此列：R4 !important 清零、R5 用户卡 hover、R6 CanaryCenter tabs。
+
+---
+
+## R7 · 2026-09-04 · admin 数据浏览页（`Database/DataBrowser.vue`）自检
+
+> 新页面（列表页·主从分栏变体，参照 ServiceManager 视觉 canonical + UserList 页头），Full 规格书经用户确认后实现（specs/database-browser/）。
+
+### 走查清单
+
+| # | 检查项 | 结果 | 备注 |
+|---|---|---|---|
+| 1 | 无裸色 / 无新增 !important | ✅ | grep `#[hex]/rgba/!important` 0 命中；token 全走 `--ws-*` |
+| 2 | 卡片/等宽/语义 tag 复用既有工具类 | ✅ | `.ws-hairline` / `.ws-mono`；tag 语义色：隐藏=error、脱敏=warning、主键/索引/敏感=brand |
+| 3 | 状态矩阵全覆盖 | ✅ | loading/空态(原因+出路)/失败重试/防重复提交(执行锁)/全只读无破坏性操作 |
+| 4 | 两级 Tab 层级与切表行为 | ✅ | 页面级（默认 size）vs 右栏卡片级（size=small）；Tab 带行数/字段数计数；切表保持当前 Tab（AC-12.2） |
+| 5 | 脱敏后端化 | ✅ | 服务端 masking（凭证 `***`、个人信息打码），前端不接收明文；单测 31 项全绿 |
+| 6 | dark 主题 | ⏸ | 变量全走 `--ws-*` 理论自动适配，截图基线待后端发布后补 |
+
+### 修正记录（问题 → 行动）
+
+| # | 问题 | 归属 | 行动 |
+|---|---|---|---|
+| 1 | MySQL 8 保留字坑：`TABLE_ROWS AS rows` 语法错误 | 实现 | 别名改 `rowCount`（`ROWS` 是保留字） |
+| 2 | user-service `getMyPermissions` 的 admin"全量"特判会泄漏 `database:query` 给 admin，与后端 PermissionsGuard 常量语义（admin 不含 database:query）矛盾 | 跨服务 | 特判移交 `super_admin`；admin 走 role_permissions 表（seed 后与 ROLE_PERMISSIONS.admin 一致） |
+| 3 | system-service 原零鉴权，首接全局 JWT Guard | 跨服务 | settings/logs/bianbian 三模块补权限码；`settings/public/:key` 标 `@Public()`；专项回归 401 无回归 |
+
+### 待办
+
+- 后端 system-service 发布（6004，需 commit 后走流水线）后：三角色端到端走查 + 截图存档 `docs/ui/baselines/admin-database-browser-{light,dark}.png`
+- 存量用户升超管走 `scripts/db/grant-super-admin.mjs <username>`

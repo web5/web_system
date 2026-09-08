@@ -45,8 +45,15 @@ Page({
   startStepAnimation() {
     let step = 1;
     const timer = setInterval(() => {
+      // 页面已卸载/数据被清时及时清理（防 redirectTo 后回调访问 undefined 抛 MiniProgramError）
+      if (!this.data || !Array.isArray(this.data.steps)) {
+        clearInterval(timer);
+        (this as any).stepTimer = null;
+        return;
+      }
       if (step >= 4) {
         clearInterval(timer);
+        (this as any).stepTimer = null;
         return;
       }
       const steps = this.data.steps.map((s: any, i: number) => ({
@@ -57,6 +64,7 @@ Page({
       this.setData({ steps });
       step++;
     }, 1200);
+    (this as any).stepTimer = timer;
   },
 
   /** 启动流式分析，按 SSE 事件更新文案 */
@@ -80,13 +88,20 @@ Page({
     analyzeContractStream(text, scene, {
       onEvent: (event: StreamEvent) => this.handleSseEvent(event),
       // 流式增量：LLM 逐字生成报告内容，实时展示
+      // 节流渲染：合并 160ms 内增量一次 setData，且只展示尾部窗口，
+      // 避免每 delta 全量 setData 大文本（单次分析可达数万字符）拖死 UI/模拟器
       onDelta: (delta) => {
         if (!(this as any).streamAcc) (this as any).streamAcc = '';
         (this as any).streamAcc += delta;
-        this.setData({
-          streamingVisible: true,
-          streamingText: (this as any).streamAcc,
-        });
+        if ((this as any).streamingTimer) return;
+        (this as any).streamingTimer = setTimeout(() => {
+          (this as any).streamingTimer = null;
+          const acc: string = (this as any).streamAcc || '';
+          this.setData({
+            streamingVisible: true,
+            streamingText: acc.length > 3000 ? '…' + acc.slice(-3000) : acc,
+          });
+        }, 160);
       },
       onDone: (report) => {
         // 存储报告供 result 页读取（含 conversationId，供后续追问复用同一上下文）
@@ -109,6 +124,7 @@ Page({
 
   /** 根据 SSE 事件更新进度步骤与文案 */
   handleSseEvent(event: StreamEvent) {
+    // content_delta 量大且走 onDelta 渲染，这里不做任何处理
     // 记录 final 事件携带的会话 id，供 result 页追问复用
     if (event.type === 'final' && event.conversationId) {
       (this as any).conversationId = event.conversationId;
@@ -159,6 +175,14 @@ Page({
 
   onUnload() {
     this.stopFallback();
+    if ((this as any).streamingTimer) {
+      clearTimeout((this as any).streamingTimer);
+      (this as any).streamingTimer = null;
+    }
+    if ((this as any).stepTimer) {
+      clearInterval((this as any).stepTimer);
+      (this as any).stepTimer = null;
+    }
     (this as any).streamAcc = '';
   },
 });

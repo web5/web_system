@@ -32,6 +32,8 @@ import {
   Col,
   Table,
   ConfigProvider,
+  Alert,
+  Drawer,
 } from 'ant-design-vue';
 import 'ant-design-vue/dist/reset.css';
 
@@ -52,6 +54,7 @@ const components = [
   Checkbox, Radio, DatePicker, Empty, Spin,
   Layout, Menu, Breadcrumb, Dropdown,
   Row, Col, Table, ConfigProvider,
+  Alert, Drawer,
 ];
 
 export function setupAntd(app: App) {

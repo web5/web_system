@@ -38,6 +38,10 @@
           <template #icon><ApiOutlined /></template>
           <span>MCP 管理</span>
         </a-menu-item>
+        <a-menu-item v-if="userStore.hasPermission('database:view')" key="database">
+          <template #icon><DatabaseOutlined /></template>
+          <span>数据浏览</span>
+        </a-menu-item>
         <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
           <template #icon><RobotOutlined /></template>
           <template #title>Agents</template>
@@ -137,7 +141,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined } from '@ant-design/icons-vue';
+import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
@@ -161,7 +165,7 @@ const userAvatar = computed(() => {
 const currentTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '工作台', '/bianbian': '变变管理', '/users': '用户管理', '/settings': '系统设置',
-    '/agents': 'Agents',
+    '/agents': 'Agents', '/database': '数据浏览',
   };
   const matched = route.matched.find((r) => r.meta.title);
   return (matched?.meta.title as string) || '工作台';
@@ -173,6 +177,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/settings')) selectedKeys.value = ['settings'];
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
+  else if (path.includes('/database')) selectedKeys.value = ['database'];
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
   else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
   else if (path.includes('/agents/playground')) selectedKeys.value = ['agents-playground'];
@@ -183,6 +188,7 @@ watch(() => route.path, (path) => {
 const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
+    database: '/database',
     roles: '/settings/roles',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground',
@@ -198,7 +204,7 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
-.layout { min-height: 100vh; }
+.layout { height: 100vh; overflow: hidden; }
 
 /* 布局结构（2026-09-03 重构）：sider 参与流（非 fixed），右侧列自动从 sider 右缘无缝开始，
  * 消除原"fixed sider + marginLeft 244"造成的 24px 顶部/内容切口 */
@@ -297,8 +303,14 @@ const handleLogout = async () => {
 .user-arrow { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
 
 .content {
-  margin: 16px 16px 0; padding: 0;
-  background: transparent; min-height: calc(100vh - 56px - 92px);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  margin: 16px 16px 0;
+  padding: 0 0 16px;
+  background: transparent;
 }
 .footer {
   padding: 0;

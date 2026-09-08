@@ -1,0 +1,63 @@
+# kit-gate — 数字人 kit 结构守护（L1'）+ 行为定义变更报告门禁
+#
+# 设计：docs/development/ai-native-sdlc-ci-deployment.md §3.4
+#   job1 structure : L1 结构完备检查（S1~S6，覆盖双 skills 根，近零成本）
+#   job2 report    : 改了数字人行为定义必须附评测报告
+#
+# 行为定义范围：.codebuddy/skills/（运行源，直接决定数字人行为）
+#   + .codebuddy/agent-kit/（镜像，被 AGENT.md 引用加载的规则/指南）
+# 评测报告区：.codebuddy/evals/reports/（放这里是因为 .codebuddy/agent-kit
+#   是 sync-to-target.sh 的 rm -rf 覆盖区，报告放里面会被清）
+# 完整评测（L2~L4）在 ai-agent-kit 源仓库跑，web_system 只做存在性守护。
+name: kit-gate
+
+on:
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    name: L1 结构检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: kit 结构完备检查 (S1~S6)
+        run: bash scripts/redline/check-kit-structure.sh
+
+  eval-report-gate:
+    name: 行为变更需附评测报告
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 检查行为定义变更是否附评测报告
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$BASE_SHA" --depth=1 >/dev/null 2>&1 || true
+          changed=$(git diff --name-only "$BASE_SHA" HEAD -- \
+            .codebuddy/skills/ \
+            .codebuddy/agent-kit/AGENT.md \
+            .codebuddy/agent-kit/skills/ \
+            .codebuddy/agent-kit/rules/ \
+            .codebuddy/agent-kit/references/ \
+            | grep -v '\.codebuddy/agent-kit/README.md' | wc -l | tr -d ' ')
+          report=$(git diff --name-only "$BASE_SHA" HEAD -- .codebuddy/evals/reports/ \
+            | grep -v TEMPLATE | wc -l | tr -d ' ')
+          echo "行为定义变更文件: $changed；新增评测报告: $report"
+          if [ "$changed" -gt 0 ] && [ "$report" -eq 0 ]; then
+            echo "::error::PR 修改了数字人行为定义（.codebuddy/skills 或 agent-kit 指南/规则）但未附评测报告。"
+            echo "请在 ai-agent-kit 源仓库跑 run-eval.sh（或按 run-baseline.md 手动档），"
+            echo "报告复制到 .codebuddy/evals/reports/（模板 TEMPLATE.md），命名 <hash>-<日期>.md。"
+            echo "若为纯排版/错别字等不影响行为的改动，在 PR 描述注明 skip-eval 并在 commit message 说明。"
+            exit 1
+          fi
+          echo "评测报告门禁通过。"

@@ -8,7 +8,8 @@ page {
   background: #F5F7FA;
   box-sizing: border-box;
   padding: 20rpx 32rpx;
-  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
+  /* 底部吸底栏：chips + 一体化输入胶囊 + 安全区，留足空间 */
+  padding-bottom: calc(216rpx + env(safe-area-inset-bottom));
 }
 
 .chat-head {
@@ -94,51 +95,97 @@ page {
   animation-delay: 0.4s;
 }
 
-/* 底部输入栏（吸底） */
+/* ===== 底部吸底输入栏（一体化胶囊：背景透明，整条=一个白色圆角容器） ===== */
 .chat-input-bar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   display: flex;
-  gap: 16rpx;
-  padding: 16rpx 32rpx;
-  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  border-top: 1rpx solid #E8EBF0;
+  flex-direction: column;
   box-sizing: border-box;
+  padding: 12rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));
+}
+
+/* 快捷追问 chips（聚焦输入框时浮现，横向滚动胶囊） */
+.chat-chips {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0 8rpx 14rpx;
+}
+.chip {
+  display: inline-block;
+  max-width: 420rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  background: #EAF2FF;
+  border: 1rpx solid #C9DFFF;
+  color: #1E6FFF;
+  font-size: 24rpx;
+  line-height: 1.4;
+  border-radius: 999rpx;
+  padding: 10rpx 24rpx;
+  margin-right: 14rpx;
+}
+.chat-chips.is-sending .chip {
+  opacity: 0.55;
+}
+
+/* 一体化输入胶囊：白底圆角容器内含透明输入框 + 右侧橙色小圆钮，视觉=一个整体 */
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 14rpx;
+  background: #fff;
+  border: 2rpx solid #EEF0F4;
+  border-radius: 48rpx;
+  padding: 8rpx 10rpx 8rpx 32rpx;
+  box-shadow: 0 6rpx 20rpx rgba(31, 36, 46, 0.05);
 }
 .chat-input {
   flex: 1;
-  background: #F5F7FA;
-  border: 2rpx solid #E8EBF0;
-  border-radius: 40rpx;
-  padding: 18rpx 28rpx;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 10rpx 0;
   font-size: 26rpx;
   color: #1A1F2E;
-  height: 80rpx;
+  line-height: 1.5;
+  min-height: 72rpx;
+  max-height: 180rpx;
   box-sizing: border-box;
+  width: auto;
 }
 .chat-input-ph {
   color: #B7BDC9;
 }
+/* 小圆发送按钮：实心橙钮内嵌于胶囊右侧（未输入灰），视觉让位给输入区 */
 .chat-send {
-  width: 128rpx;
+  width: 76rpx;
+  height: 76rpx;
   flex-shrink: 0;
-  background: #1E6FFF;
+  border-radius: 50%;
+  background: #F97316;
   color: #fff;
-  font-size: 28rpx;
+  font-size: 32rpx;
   font-weight: 600;
-  border-radius: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   padding: 0;
-  height: 80rpx;
-  line-height: 80rpx;
   border: none;
+  margin: 0;
+  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.28);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 .chat-send::after {
   border: none;
 }
 .chat-send[disabled] {
-  background: #9DBFFF;
-  color: #fff;
+  background: #E8EAED;
+  color: #C3C8D0;
+  box-shadow: none;
 }

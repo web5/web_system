@@ -132,7 +132,8 @@ export class OcrService {
     if (!rawText.trim()) return rawText;
 
     try {
-      const model = this.clientRegistry.getOrFallback('deepseek-chat');
+      // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型（deepseek-v4-flash）
+      const model = this.clientRegistry.getOrFallback('deepseek-v4-flash');
       const cleaned = await model.chat(
         [
           { role: 'system', content: CLEANER_SYSTEM_PROMPT },

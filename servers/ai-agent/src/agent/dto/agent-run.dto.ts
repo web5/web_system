@@ -11,4 +11,10 @@ export class AgentRunDto {
   @IsOptional()
   @IsUUID('4', { message: 'conversationId 必须是 UUID' })
   conversationId?: string;
+
+  /** 临时覆盖模型（仅本次运行生效，不修改 Agent 定义） */
+  @IsOptional()
+  @IsString({ message: 'model 必须是字符串' })
+  @MaxLength(64, { message: 'model 过长' })
+  model?: string;
 }
