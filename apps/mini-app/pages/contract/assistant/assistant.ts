@@ -1,10 +1,11 @@
 /**
  * 合同助手 - 对话式体检入口
  *
- * 形态：发文字/图片 → 在对话流里看 AI 流式生成报告 → 报告卡（摘要 + 查看完整报告 + 继续追问）。
- *
- * 与"完成自动跳 result"的旧决策调整：留对话里看流式过程更符合"对话式体检"心智；
- * 用户想看完整报告时点 [查看完整报告] 按钮，携带 conversationId 跳 result 页。
+ * 按 v5 原型稿高保真实现：
+ *  - 发合同后，AI 气泡 = 单张「步骤执行卡片」（清洗/扫描/测算/对比/生成报告 5 步）
+ *    步骤逐项 灰(待执行) → 蓝(执行中) → 绿(完成)，不再碎成多条打字气泡
+ *  - 全绿后追加「报告摘要卡」（查看完整报告 → result），并可在同会话继续追问
+ *  - 追问（已存在 conversationId）走真 SSE 流式，逐字渲染回答
  */
 import { chooseAndRecognize } from '../../../services/ocr-api';
 import {
@@ -14,22 +15,33 @@ import {
   type StreamEvent,
 } from '../../../services/contract-api';
 
+/** 执行步骤骨架（contract-risk 固定工具流） */
+const EXEC_PLAN = [
+  { id: 'cleaner', name: 'contract-cleaner', hint: '清洗合同文本' },
+  { id: 'rule', name: 'contract-rule', hint: '扫描法定风险信号' },
+  { id: 'irr', name: 'contract-irr', hint: '测算真实年化利率' },
+  { id: 'benchmark', name: 'contract-benchmark', hint: '对比市场基准' },
+  { id: 'report', name: '_report', hint: '生成体检报告' },
+];
+
+/** 工具名 → 中文执行文案（用于自定义工具追加 / 追问进度提示） */
+const TOOL_HINT: Record<string, string> = {
+  'contract-cleaner': '清洗合同文本…',
+  'contract-rule': '扫描法定风险信号…',
+  'contract-irr': '测算真实年化利率…',
+  'contract-benchmark': '对比市场基准…',
+  'law-search': '检索法律条文…',
+  'web-search': '联网检索…',
+};
+
+type Step = { id: string; name: string; hint: string; status: 'pending' | 'running' | 'done' };
+
 type Msg =
   | { id: number; role: 'user'; kind: 'text' | 'image'; text: string; fullText: string }
-  | { id: number; role: 'ai'; kind: 'report-text'; text: string; isStreaming: boolean; hint?: string }
+  | { id: number; role: 'ai'; kind: 'text'; text: string }
+  | { id: number; role: 'ai'; kind: 'plan-run'; hint: string; steps: Step[] }
   | { id: number; role: 'ai'; kind: 'report-card'; report: ContractReport; conversationId: string }
-  | { id: number; role: 'ai'; kind: 'progress'; text: string; done: boolean }
-  | { id: number; role: 'ai'; kind: 'text'; text: string };
-
-/** 工具调用阶段 → 用户可见的进行中文案（与 analyzing 页 toolTextMap 同语义） */
-const TOOL_HINTS: Record<string, string> = {
-  'contract-cleaner': '正在清洗识别文本…',
-  'contract-rule': '正在扫描法定风险信号…',
-  'contract-irr': '正在测算真实年化利率…',
-  'contract-benchmark': '正在对比市场基准…',
-  'law-search': '正在检索法律条文…',
-  'web-search': '正在联网检索…',
-};
+  | { id: number; role: 'ai'; kind: 'progress'; text: string; done: boolean };
 
 const AI_GREETING =
   '把要查的合同发给我：\n① 直接粘贴合同文字；\n② 或点左下角 ＋，拍照 / 从相册选合同照片。\n收到后我会立即在这对话里分析给你。';
@@ -54,7 +66,6 @@ Page({
   },
 
   onLoad() {
-    // 上一轮体检结束回到本页：给个收尾提示
     const last = wx.getStorageSync('contract_report')?.latest as
       | { scene?: string; conversationId?: string }
       | undefined;
@@ -62,7 +73,12 @@ Page({
       this.setData({
         messages: [
           ...this.data.messages,
-          { id: nextId(), role: 'ai', kind: 'text', text: `刚才那份「${last.scene}」已体检完成。想看详情在「历史」里点开；想查新合同，直接发我即可。` },
+          {
+            id: nextId(),
+            role: 'ai',
+            kind: 'text',
+            text: `刚才那份「${last.scene}」已体检完成。想看详情在「历史」里点开；想查新合同，直接发我即可。`,
+          },
         ],
       });
     }
@@ -121,7 +137,6 @@ Page({
     }
     this.pushUser(text, 'text');
     this.setData({ input: '' });
-    // 若已存在 conversationId（已分析过），这次按"追问"走（发往同会话 AI）
     if (this.data.conversationId) {
       this.startFollowUp(text);
     } else {
@@ -153,71 +168,88 @@ Page({
     this.setData({ userDrawer: { open: false, text: '' } });
   },
 
-  /** 首次分析：发 SSE 流式事件，在对话里逐字渲染 AI 报告文本；final 时 parseReport 渲染报告卡 */
+  /** 首次分析：一张「步骤执行卡片」展示 5 步，随 SSE 事件点亮；完成后追加报告摘要卡 */
   startAnalyze(text: string) {
     if (this.data.sending) return;
     this.setData({ sending: true });
-    const aiId = nextId();
-    // 报告流式主气泡：先空，等 onDelta 增量实时追加；移除此前的"打字机"模拟
-    this.setData({
-      messages: [
-        ...this.data.messages,
-        { id: aiId, role: 'ai', kind: 'report-text', text: '', isStreaming: true, hint: '已收到合同，开始体检…' },
-      ],
-    });
-    let buffered = '';
+    const planId = nextId();
+    const planMsg: Msg = {
+      id: planId,
+      role: 'ai',
+      kind: 'plan-run',
+      hint: '正在分析你的合同…',
+      steps: EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const })),
+    };
+    this.setData({ messages: [...this.data.messages, planMsg] });
+    this.scrollToBottom();
+
     let conversationId = '';
-    // 工具阶段进度气泡：同名工具复用同一气泡（避免重复刷屏）
-    const toolBubbleMap = new Map<string, number>();
+    let reportSeen = false;
     const self = this;
+
+    const patchPlan = (patch: (s: Step) => Step): void => {
+      const messages = this.data.messages.map((m) =>
+        m.id === planId && m.kind === 'plan-run'
+          ? { ...m, steps: m.steps.map((s) => patch(s)) }
+          : m,
+      ) as Msg[];
+      this.setData({ messages });
+    };
+    const setStep = (name: string, status: Step['status'], onlyPending = false): void => {
+      patchPlan((s) =>
+        s.name === name && (!onlyPending || s.status === 'pending')
+          ? { ...s, status }
+          : s,
+      );
+    };
 
     analyzeContractStream(text, '', {
       onEvent: (event: StreamEvent) => {
-        // final 事件携带会话 id：供后续在同一对话追问复用（与 analyzing 页同法）
         if (event.type === 'final' && event.conversationId) {
           conversationId = event.conversationId;
-          return;
-        }
-        // 工具执行阶段：每个工具一个独立小气泡（进行中），完成后打勾，
-        // 让"分析"看起来在真正做，而不是一直在等一个长耗时后整体出结果
-        if (event.type === 'tool_call') {
-          const name = event.name || '分析';
-          if (!toolBubbleMap.has(name)) {
-            const pid = nextId();
-            toolBubbleMap.set(name, pid);
-            const tip = TOOL_HINTS[name] || `正在执行「${name}」…`;
-            self.setData({ messages: self.appendProgress(pid, `🔧 ${tip}`, false) });
+        } else if (event.type === 'tool_call') {
+          const name = event.name || '';
+          // 骨架项 → running；未预置自定义工具追加到最前
+          const has = EXEC_PLAN.some((p) => p.name === name);
+          if (!has) {
+            const messages = this.data.messages.map((m) =>
+              m.id === planId && m.kind === 'plan-run'
+                ? {
+                    ...m,
+                    steps: [
+                      {
+                        id: `${name}-${Date.now()}`,
+                        name,
+                        hint: TOOL_HINT[name] || `正在做「${name}」…`,
+                        status: 'running' as const,
+                      },
+                      ...m.steps,
+                    ],
+                  }
+                : m,
+            ) as Msg[];
+            this.setData({ messages });
+          } else {
+            setStep(name, 'running');
           }
         } else if (event.type === 'tool_result') {
-          // 找到最近一个进行中的进度气泡，标完成；找不到就新建一条
-          let pid: number | undefined;
-          for (const [name, id] of toolBubbleMap.entries()) {
-            const m = self.data.messages.find((x) => x.id === id);
-            if (m && 'kind' in m && m.kind === 'progress' && !m.done) {
-              pid = id;
-              self.setData({ messages: self.markProgressDone(id, `✅ 「${name}」完成`) });
-              break;
-            }
-          }
-          if (pid === undefined) {
-            const id = nextId();
-            self.setData({ messages: self.appendProgress(id, '✅ 工具结果已收齐', true) });
-          }
-        } else if (event.type === 'start') {
-          self.setData({ messages: self.updateHint(aiId, 'AI 正在开始分析…') });
+          const name = event.name || '';
+          setStep(name, 'done');
         }
       },
-      onDelta: (delta) => {
-        // 真流式：后端吐字即追加，不做前端打字机模拟
-        buffered += delta;
-        self.setData({ messages: self.updateAiText(aiId, buffered) });
-        self.scrollToBottom();
+      // 报告正文（JSON）开始 → 点亮"生成体检报告"（正文不逐字展示）
+      onDelta: () => {
+        if (!reportSeen) {
+          reportSeen = true;
+          setStep('_report', 'running', true);
+        }
       },
       onDone: (report) => {
-        // onDone 返回的已是容错解析好的结构化报告，直接用于报告卡渲染与缓存
         const safeReport: ContractReport = {
           scene: report?.scene || '未知',
-          conclusion: report?.conclusion || '（报告已生成，但内容无法直接结构化展示，请点 [查看完整报告] 跳转查看）',
+          conclusion:
+            report?.conclusion ||
+            '（报告已生成，但内容无法直接结构化展示，请点 [查看完整报告] 跳转查看）',
           signals: report?.signals || [],
           rights: report?.rights,
           loanPlan: report?.loanPlan,
@@ -225,46 +257,64 @@ Page({
           keyNumbers: report?.keyNumbers,
           disclaimer: report?.disclaimer,
         };
-        // 落本地缓存（与 result 页 / chat 追问页共用同一 storage key）
         try {
           wx.setStorageSync('contract_report', {
             latest: { ...safeReport, conversationId, createdAt: Date.now() },
           });
         } catch {}
-        self.setData({
-          conversationId,
+        // 卡片收尾：生成报告 → 完成
+        const allDone = this.data.messages.map((m) =>
+          m.id === planId && m.kind === 'plan-run'
+            ? {
+                ...m,
+                hint: '体检完成，这是你的报告摘要 👇',
+                steps: m.steps.map((s) =>
+                  s.name === '_report' ? { ...s, status: 'done' as const } : s,
+                ),
+              }
+            : m,
+        ) as Msg[];
+        const tail: Msg[] = [
+          {
+            id: nextId(),
+            role: 'ai',
+            kind: 'report-card',
+            report: safeReport,
+            conversationId,
+          },
+          {
+            id: nextId(),
+            role: 'ai',
+            kind: 'text',
+            text: '你可以继续在这段对话里问我任何细节，也可以点上方报告卡看完整版。',
+          },
+        ];
+        this.setData({
           sending: false,
-          messages: [
-            ...self.removeById(aiId), // 移除流式正文气泡，替换为报告卡
-            {
-              id: nextId(),
-              role: 'ai',
-              kind: 'report-card',
-              report: safeReport,
-              conversationId,
-            },
-          ],
+          conversationId,
+          messages: [...allDone, ...tail],
         });
-        self.scrollToBottom();
+        this.scrollToBottom();
       },
       onError: (e) => {
-        self.setData({
+        this.setData({
           sending: false,
-          messages: self.updateAiText(aiId, `${buffered}\n\n分析失败：${e.message}`).map((m) =>
-            m.id === aiId ? { ...m, isStreaming: false } : m,
-          ),
+          messages: [
+            ...this.data.messages,
+            { id: nextId(), role: 'ai', kind: 'text', text: `分析失败：${e.message}，请稍后重试` },
+          ],
         });
+        this.scrollToBottom();
       },
     });
   },
 
-  /** 追问：已存在 conversationId 时调用（真 SSE 流式渲染，与 chat 屏同体验） */
+  /** 追问：已存在 conversationId 时调用（真 SSE 流式渲染） */
   startFollowUp(question: string) {
     if (this.data.sending) return;
     if (!this.data.conversationId) return;
     this.setData({ sending: true });
     const aiId = nextId();
-    // 工具阶段小气泡也用同一套 map
     const toolBubbleMap = new Map<string, number>();
     this.setData({
       messages: [
@@ -277,7 +327,7 @@ Page({
       self.setData({ messages: self.replaceText(aiId, text) });
       self.scrollToBottom();
     };
-    const appendProgress = (pid: number, text: string, done: boolean) => {
+    const pushProgress = (pid: number, text: string, done: boolean) => {
       self.setData({ messages: self.appendProgress(pid, text, done) });
       self.scrollToBottom();
     };
@@ -288,13 +338,13 @@ Page({
           if (!toolBubbleMap.has(name)) {
             const pid = nextId();
             toolBubbleMap.set(name, pid);
-            appendProgress(pid, `🔧 正在调用「${name}」…`, false);
+            pushProgress(pid, `🔧 ${TOOL_HINT[name] || `正在调用「${name}」…`}`, false);
           }
         } else if (event.type === 'tool_result') {
           for (const [name, pid] of toolBubbleMap.entries()) {
             const m = self.data.messages.find((x) => x.id === pid);
             if (m && 'kind' in m && m.kind === 'progress' && !m.done) {
-              appendProgress(pid, `✅ 「${name}」完成`, true);
+              pushProgress(pid, `✅ 「${name}」完成`, true);
               break;
             }
           }
@@ -303,7 +353,6 @@ Page({
         }
       },
       onDelta: (delta) => {
-        // 真实流式：每段 delta 立即追加到当前 AI 气泡
         const cur = (self.data.messages.find((m) => m.id === aiId) as any) || { text: '' };
         replaceText((cur.text || '') + delta);
       },
@@ -322,49 +371,30 @@ Page({
   /** [查看完整报告]：跳 result 报告页（携带 conversationId 走 API 详情） */
   onOpenReport(e: any) {
     const id = Number(e.currentTarget.dataset.id);
-    const msg = this.data.messages.find((m) => 'kind' in m && m.kind === 'report-card' && m.id === id) as
-      | Extract<Msg, { kind: 'report-card' }>
-      | undefined;
+    const msg = this.data.messages.find(
+      (m) => 'kind' in m && m.kind === 'report-card' && m.id === id,
+    ) as Extract<Msg, { kind: 'report-card' }> | undefined;
     if (!msg) return;
     wx.navigateTo({ url: `/pages/contract/result/result?conversationId=${msg.conversationId}` });
   },
 
-  /** [继续追问]：聚焦到输入框（用户接着发文字 = 追问） */
+  /** [继续追问]：提示在输入框继续发问 */
   onContinueChat() {
     wx.showToast({ title: '在下方输入框继续发问', icon: 'none' });
   },
 
-  /** 工具：构造"按 id 替换为新 text"的消息数组 */
-  updateAiText(aiId: number, text: string): Msg[] {
-    return this.data.messages.map((m) =>
-      m.id === aiId && 'kind' in m && m.kind === 'report-text' ? { ...m, text, hint: '' } : m,
-    ) as Msg[];
-  },
-  /** 工具：更新 AI 气泡的"进行中"文案（内容未出时展示） */
-  updateHint(aiId: number, hint: string): Msg[] {
-    return this.data.messages.map((m) =>
-      m.id === aiId && 'kind' in m && m.kind === 'report-text' ? { ...m, hint } : m,
-    ) as Msg[];
-  },
+  /** 工具：按 id 替换 AI 文本消息 */
   replaceText(aiId: number, text: string): Msg[] {
-    return this.data.messages.map((m) => (m.id === aiId ? ({ ...m, text } as Msg) : m));
+    return this.data.messages.map((m) =>
+      m.id === aiId && 'kind' in m && m.kind === 'text' ? { ...m, text } : m,
+    ) as Msg[];
   },
-  removeById(aiId: number): Msg[] {
-    return this.data.messages.filter((m) => m.id !== aiId);
-  },
-
-  /** 工具：新增一个工具阶段"进度"小气泡（独立展示，不替换其他气泡） */
+  /** 工具：追加一条追问阶段的进度小胶囊（独立展示） */
   appendProgress(pid: number, text: string, done: boolean): Msg[] {
     return [
       ...this.data.messages,
       { id: pid, role: 'ai' as const, kind: 'progress' as const, text, done },
     ];
-  },
-  /** 工具：把某条 progress 气泡标完成（替换其 text + done=true） */
-  markProgressDone(pid: number, text: string): Msg[] {
-    return this.data.messages.map((m) =>
-      m.id === pid && 'kind' in m && m.kind === 'progress' ? { ...m, text, done: true } : m,
-    );
   },
 
   scrollToBottom() {
