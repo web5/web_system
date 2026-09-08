@@ -11,6 +11,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { STATIC_MODULES_REL } from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
@@ -69,6 +71,29 @@ export const DELETABLE_PIPELINE_STATUS = ['succeeded', 'failed', 'cancelled'] as
 export function isDeletablePipeline(status: string): boolean {
   return (DELETABLE_PIPELINE_STATUS as readonly string[]).includes(status);
 }
+
+/**
+ * 结果回传禁写键（v4 C1）：这些是流水线语义字段，
+ * 脚本通过 $WS_RESULT_FILE 回传结果时不允许覆盖，防止篡改发布状态。
+ */
+const RESULT_BLOCKED_KEYS = new Set([
+  'id',
+  'status',
+  'stage',
+  'logs',
+  'versionTag',
+  'commitId',
+  'moduleKey',
+  'env',
+  'result',
+  'error',
+  'progress',
+  'startTime',
+  'endTime',
+  'operator',
+  'createdAt',
+  'updatedAt',
+]);
 
 /** 模块快照（阶段变量解析用，避免在此处退化为 any） */
 export interface ModuleSnapshot {
@@ -1095,8 +1120,8 @@ export class PipelineService {
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
   private async runStageCommand(p: DeployPipelineEntity, stage: string): Promise<boolean> {
-    const cmd = await this.stageCommands.resolve(p.moduleKey, stage);
-    if (!cmd) return false;
+    const acts = await this.stageCommands.resolveActions(p.moduleKey, stage);
+    if (!acts.length) return false;
 
     this.assertNotCancelled(p);
     await this.enterStage(p, stage as any, `执行阶段命令: ${p.moduleKey}/${stage}`);
@@ -1132,7 +1157,7 @@ export class PipelineService {
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
     });
-    p.logs = [...(p.logs ?? []), `[${stage}] $ ${cmd.command}`];
+    p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
 
     // 命令必须在模块目录下执行：默认模板依赖 cwd 定位 tsconfig / 产物目录
@@ -1140,10 +1165,60 @@ export class PipelineService {
     p.logs = [...(p.logs ?? []), `[${stage}] cwd: ${cwd}`];
     await this.save(p);
 
-    // 配置中心值强制覆盖（PORT 等已参与上方变量解析，此处保证其余配置也注入进程）
-    const code = await this.runShell(cmd.command, { ...env, ...inject }, p, cmd.timeoutSec, cwd);
-    if (code !== 0) {
-      throw new Error(`[${stage}] 阶段命令执行失败（exit ${code}），详见日志`);
+    // 结果回传文件（v4 C1）：操作可写入 JSON，平台按白名单合并进 result
+    const resultFile = path.join(os.tmpdir(), `ws-result-${p.id}-${stage}.json`);
+    try {
+      fs.rmSync(resultFile, { force: true });
+    } catch {
+      /* 清理失败不影响执行 */
+    }
+
+    // 逐操作顺序执行；失败即阶段失败，除非该操作 continueOnError
+    for (let i = 0; i < acts.length; i++) {
+      const a = acts[i];
+      const op = `op${i + 1}`;
+      this.assertNotCancelled(p);
+
+      if (a.type === 'service') {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[${stage}/${op}] 引用工具 ${a.tool ?? '—'}（暂无内置实现，跳过）`,
+        ];
+        await this.save(p);
+        continue;
+      }
+
+      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} $ ${a.code ?? ''}`];
+      await this.save(p);
+
+      // 配置中心值强制覆盖（PORT 等已参与上方变量解析，此处保证其余配置也注入进程）
+      const code = await this.runShell(a.code ?? '', { ...env, ...inject, WS_RESULT_FILE: resultFile }, p, a.timeoutSec, cwd);
+
+      // 读取操作回传的结果（按 key 合并，非整段覆盖）
+      const got = this.readStageResult(resultFile, stage, op);
+      if (Object.keys(got).length) {
+        p.result = { ...(p.result ?? {}), ...got };
+      }
+
+      if (code !== 0) {
+        if (a.cont) {
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stage}/${op}] ${a.name} 失败（exit ${code}），continueOnError=是，继续执行`,
+          ];
+          await this.save(p);
+          continue;
+        }
+        throw new Error(`[${stage}/${op}] ${a.name} 执行失败（exit ${code}），详见日志`);
+      }
+      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} 完成`];
+      await this.save(p);
+    }
+
+    try {
+      fs.rmSync(resultFile, { force: true });
+    } catch {
+      /* ignore */
     }
     p.logs = [...(p.logs ?? []), `[${stage}] 阶段命令完成`];
     await this.save(p);
@@ -1171,6 +1246,33 @@ export class PipelineService {
       this.logger.warn(`读取 pm2 端口失败（不阻断）: ${(e as Error).message}`);
     }
     return undefined;
+  }
+
+  /**
+   * 读取操作通过 `$WS_RESULT_FILE` 回传的结果（v4 C1）。
+   *
+   * 操作可写 JSON 回传结构化结果（如探活端口、投递路径），平台**按 key 合并**
+   * 而非整段覆盖，并过滤流水线语义字段；文件缺失 / JSON 非法一律忽略不阻断。
+   */
+  private readStageResult(file: string, stage: string, op: string): Record<string, unknown> {
+    try {
+      if (!fs.existsSync(file)) return {};
+      const raw = fs.readFileSync(file, 'utf8');
+      if (!raw.trim()) return {};
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (RESULT_BLOCKED_KEYS.has(k)) {
+          this.logger.warn(`[${stage}/${op}] 结果文件含受保护字段 ${k}，已忽略`);
+          continue;
+        }
+        out[k] = v;
+      }
+      return out;
+    } catch (e) {
+      this.logger.warn(`[${stage}/${op}] 解析结果文件失败（忽略）: ${(e as Error).message}`);
+      return {};
+    }
   }
 
   /**

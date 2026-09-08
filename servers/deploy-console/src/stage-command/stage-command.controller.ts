@@ -10,9 +10,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { StageCommandService } from './stage-command.service';
+import { StageCommandService, pickActions } from './stage-command.service';
 import { CurrentUser } from '../common/decorators';
-import { CONFIGURABLE_STAGES } from '../entities/deploy-module-stage-command.entity';
+import {
+  CONFIGURABLE_STAGES,
+  StageAction,
+} from '../entities/deploy-module-stage-command.entity';
 import { AuditService } from '../audit/audit.service';
 
 /**
@@ -83,27 +86,43 @@ export class StageCommandController {
   async save(
     @Param('key') key: string,
     @Param('stage') stage: string,
-    @Body() body: { command: string; timeoutSec?: number },
+    @Body() body: { command?: string; timeoutSec?: number; actions?: StageAction[] },
     @CurrentUser() user: any,
   ) {
-    if (!body || typeof body.command !== 'string') {
-      throw new BadRequestException('缺少 command 字段');
+    const hasActions = Array.isArray(body?.actions) && body.actions.length > 0;
+    // 多操作形态下 command 可空（由 actions 承载执行内容）
+    if (!hasActions && (!body || typeof body.command !== 'string' || !body.command.trim())) {
+      throw new BadRequestException('缺少 command 字段（或提供 actions 多操作）');
     }
-    const before = (await this.stageCommands.resolve(key, stage))?.command ?? null;
+    const beforeActs = await this.stageCommands.resolveActions(key, stage);
+    const before = beforeActs.length ? JSON.stringify(beforeActs) : null;
     const saved = await this.stageCommands.upsert(
       key,
       stage,
-      body.command,
+      body.command ?? '',
       user?.username,
       body.timeoutSec,
+      body.actions,
     );
+    // 审计：多操作记 actions 全量（截断防超长），单操作记 command
+    const afterActs = pickActions(saved);
+    const after = afterActs.length ? JSON.stringify(afterActs) : null;
+    const clip = (s: string | null) => (s && s.length > 1000 ? `${s.slice(0, 1000)}…` : s);
     await this.auditService.log({
       user: user?.username || 'unknown',
       action: before === null ? 'stage-command.create' : 'stage-command.update',
       component: key,
       status: 'success',
-      detail: `保存 ${stage} 阶段命令`,
-      changes: [{ field: `${stage}.command`, before, after: body.command }],
+      detail: hasActions
+        ? `保存 ${stage} 阶段多操作（${body.actions!.length} 个）`
+        : `保存 ${stage} 阶段命令`,
+      changes: [
+        {
+          field: hasActions ? `${stage}.actions` : `${stage}.command`,
+          before: clip(before),
+          after: clip(after),
+        },
+      ],
     });
     return saved;
   }

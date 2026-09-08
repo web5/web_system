@@ -13,10 +13,25 @@ import {
 } from './pipeline.stages'
 
 /** 阶段命令抽屉 item（与 stageCommandApi.scriptView 返回项一致） */
+/** v4 操作（阶段内 1..N 个执行动作） */
+export interface StageActionView {
+  id: string
+  type: 'shell' | 'service'
+  name: string
+  code?: string
+  tool?: string
+  timeoutSec?: number
+  cont?: boolean
+  enabled?: boolean
+  builtin?: boolean
+}
+
 export interface StageScriptItem {
   stage: string
   source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
   command: string | null
+  /** v4 多操作；单命令形态由后端包装成 1 个操作，前端无需区分 */
+  actions: StageActionView[]
   enabled: boolean
   timeoutSec: number | null
   updatedAt: string | null
@@ -49,6 +64,9 @@ watch(
   },
   { immediate: true },
 )
+
+/** 该阶段的操作序列（后端已保证单命令形态也返回 1 个操作） */
+const actions = computed(() => props.item?.actions ?? [])
 
 const SOURCE_TAG = computed(() => {
   const s = props.item?.source
@@ -151,8 +169,32 @@ function copyCmd(cmd: string) {
             show-icon
             :message="item.builtin"
           />
+          <!-- v4 多操作列表 -->
+          <template v-if="actions.length">
+            <a-divider orientation="left" style="margin: 16px 0 10px;">
+              操作列表（{{ actions.length }}）
+            </a-divider>
+            <a-list size="small" :data-source="actions" bordered>
+              <template #renderItem="{ item: act, index }">
+                <a-list-item>
+                  <a-space size="small" wrap>
+                    <span style="font-family: monospace; color: #999;">op{{ index + 1 }}</span>
+                    <a-tag :color="act.type === 'service' ? 'purple' : 'blue'">
+                      {{ act.type === 'service' ? '工具' : 'shell' }}
+                    </a-tag>
+                    <span>{{ act.name }}</span>
+                    <span v-if="act.type === 'service'" style="color: #999;">{{ act.tool }}</span>
+                    <a-tag v-if="act.cont" color="orange">容错</a-tag>
+                    <a-tag v-if="act.builtin" color="default">内置</a-tag>
+                    <span v-if="act.timeoutSec" style="color: #999;">{{ act.timeoutSec }}s</span>
+                  </a-space>
+                </a-list-item>
+              </template>
+            </a-list>
+          </template>
           <p style="margin-top: 12px; color: #999; font-size: 12px;">
-            说明：此处展示模块当前配置的命令。真实执行命令可在「日志」Tab 通过「[stage] $ ...」行回溯。
+            说明：此处展示模块当前配置的操作。真实执行内容可在「日志」Tab 通过「[stage/opN] $ ...」行回溯；
+            标记「容错」的操作失败不中断阶段，其余操作失败即阶段失败。
           </p>
         </a-tab-pane>
 
