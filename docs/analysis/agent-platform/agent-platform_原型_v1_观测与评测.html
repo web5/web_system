@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 平台演进 · 交互原型 v1（观测 / 知识 / 评测）</title>
+<style>
+  /* ===== 1) 设计 Token（admin 系：主橙 #F97316 DR-3） ===== */
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --row-hover:#EFF2F6;
+    --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC;
+    --warn:#E8833A;  --warn-soft:#FFF3E6;
+    --ok:#2E9E5B;    --ok-soft:#E7F5EC;
+    --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+    --shadow:0 2px 12px rgba(20,30,50,.06);
+    --gap:8px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;display:flex;justify-content:center;align-items:flex-start;
+    min-height:100vh;padding:20px;
+  }
+
+  /* ===== 2) 形态：桌面端后台（admin 内部工具） ===== */
+  .desktop{width:1240px;height:800px;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);
+    display:flex;flex-shrink:0;position:relative;}
+  .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:16px 12px;}
+  .sidebar .logo{font-size:15px;font-weight:700;color:var(--text);padding:8px 10px 18px;}
+  .side-item{padding:10px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:14px;
+    cursor:pointer;margin-bottom:4px;display:flex;align-items:center;gap:10px;}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .side-item svg{width:18px;height:18px;flex-shrink:0;}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:56px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;font-size:16px;font-weight:600;color:var(--text);
+    justify-content:space-between;}
+  .content{flex:1;overflow:auto;padding:20px;}
+  .content .screen{display:none;}
+  .content .screen.active{display:block;animation:fadeIn .25s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+  /* ===== 3) 通用组件 ===== */
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:16px;margin-bottom:16px;border:1px solid var(--border);}
+  .card .t{font-size:13px;color:var(--text-3);margin-bottom:10px;font-weight:600;}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
+  .page-head h1{font-size:24px;font-weight:600;color:var(--text);}
+  .page-head .sub{font-size:13px;color:var(--text-3);margin-top:4px;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .btn-primary{background:var(--primary);color:#fff;border:none;border-radius:12px;
+    padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn-primary:active{opacity:.85;}
+  .btn-def{background:#fff;color:var(--text-2);border:1px solid var(--border);
+    border-radius:12px;padding:9px 14px;font-size:13px;cursor:pointer;}
+  .btn-sm{border:1px solid var(--border);background:#fff;color:var(--text-2);border-radius:8px;
+    padding:4px 10px;font-size:12px;cursor:pointer;}
+  .btn-sm.danger{color:var(--danger);border-color:var(--danger);}
+  .tag{font-size:12px;padding:4px 10px;border-radius:20px;font-weight:600;display:inline-block;}
+  .tag.primary{color:var(--primary);background:var(--primary-soft);}
+  .tag.danger{color:var(--danger);background:var(--danger-soft);}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);}
+  .num{font-variant-numeric:tabular-nums;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;}
+
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-weight:600;color:var(--text-3);padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text);}
+  tr.clickable:hover{background:var(--row-hover);cursor:pointer;}
+  .empty,.error{text-align:center;padding:40px 20px;color:var(--text-3);}
+  .skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,#eef0f3 25%,#e3e6ea 37%,#eef0f3 63%);background-size:400% 100%;animation:sk 1.2s ease infinite;margin:10px 0;}
+  @keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+  .state{display:none;}
+
+  /* KPI / 筛选 / 图表 */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+  .kpi .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+  .seg{display:inline-flex;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .seg button{border:none;background:transparent;padding:6px 14px;font-size:13px;color:var(--text-2);cursor:pointer;}
+  .seg button.on{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  select,input[type=text],input[type=number],textarea{width:100%;padding:8px 10px;border:1.5px solid var(--border);
+    border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--card);outline:none;}
+  .sel-inline{width:auto;min-width:150px;}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:150px;padding-top:10px;}
+  .barset{display:flex;align-items:flex-end;gap:3px;}
+  .bar{width:12px;border-radius:3px 3px 0 0;}
+  .bar.ok{background:var(--primary);}
+  .bar.bad{background:var(--danger);}
+  .axis{display:flex;gap:10px;margin-top:6px;}
+  .axis span{width:27px;text-align:center;font-size:11px;color:var(--text-3);}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--text-3);margin-bottom:6px;}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .diff-up{color:var(--ok);} .diff-down{color:var(--danger);}
+
+  /* 表单 / 弹层 / 抽屉 / Toast */
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:13px;color:var(--text-2);margin-bottom:6px;font-weight:600;}
+  .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:24px;}
+  .modal-mask.show{display:flex;}
+  .modal{background:var(--card);border-radius:var(--radius);padding:20px;width:100%;max-width:400px;
+    animation:fadeIn .2s ease;}
+  .drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;z-index:40;}
+  .drawer-mask.show{display:block;}
+  .drawer{position:absolute;right:0;top:0;bottom:0;width:560px;background:var(--bg);padding:18px;overflow:auto;}
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    background:rgba(0,0,0,.8);color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;
+    z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+  .timeline{list-style:none;border-left:2px solid var(--border);padding-left:16px;}
+  .timeline li{position:relative;padding:8px 0;font-size:13px;color:var(--text-2);}
+  .timeline li b{color:var(--text);font-weight:600;}
+  .timeline li::before{content:"";position:absolute;left:-21px;top:14px;width:8px;height:8px;
+    border-radius:50%;background:var(--text-3);}
+  .timeline li.tool::before{background:var(--primary);}
+  .timeline li.perm::before{background:var(--warn);}
+  .timeline li.err::before{background:var(--danger);}
+</style>
+</head>
+<body>
+
+<div class="desktop">
+  <div class="sidebar">
+    <div class="logo">Admin · Agent 平台</div>
+    <div class="side-item active" data-k="dashboard" onclick="desk('dashboard','平台总览')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>平台总览</div>
+    <div class="side-item" data-k="observability" onclick="desk('observability','Agent 观测')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Agent 观测</div>
+    <div class="side-item" data-k="rundetail" onclick="desk('rundetail','Run 详情')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Run 详情</div>
+    <div class="side-item" data-k="capabilities" onclick="desk('capabilities','能力资产')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>能力资产</div>
+    <div class="side-item" data-k="knowledge" onclick="desk('knowledge','知识集合')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>知识集合</div>
+    <div class="side-item" data-k="debugger" onclick="desk('debugger','检索调试器')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>检索调试器</div>
+    <div class="side-item" data-k="eval" onclick="desk('eval','Agent 评测')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v6l-5 9a2 2 0 0 0 1.8 3h12.4A2 2 0 0 0 20 17l-5-9V2"/><path d="M8 2h8"/></svg>Agent 评测</div>
+    <div class="side-item" data-k="publish" onclick="desk('publish','发布门禁')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v14"/><polyline points="19 9 12 16 5 9"/><path d="M4 20h16"/></svg>发布门禁</div>
+    <div class="side-item" data-k="pricing" onclick="desk('pricing','模型单价')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>模型单价</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar"><span id="deskTitle">平台总览</span><span class="muted">管理员 · 演示数据</span></div>
+    <div class="content">
+
+      <!-- ========== 平台总览 ========== -->
+      <div class="screen active" id="desk-dashboard">
+        <div class="page-head"><div><h1>平台总览</h1><div class="sub">Agent / 知识 / 评测的健康与成本概览</div></div></div>
+        <div class="kpis">
+          <div class="card"><div class="t">启用 Agent</div><div class="v num">3</div><div class="muted">contract-risk · study-assistant · bianbian</div></div>
+          <div class="card"><div class="t">今日 run</div><div class="v num">128</div><div class="muted">较昨日 +12</div></div>
+          <div class="card"><div class="t">成功率</div><div class="v num">94.5%</div><div class="muted">失败 7</div></div>
+          <div class="card"><div class="t">今日成本</div><div class="v num">¥ 6.42</div><div class="muted">token 1.24M</div></div>
+        </div>
+        <div class="card">
+          <div class="t">待处理</div>
+          <table>
+            <thead><tr><th>类型</th><th>对象</th><th>说明</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag danger">门禁拦截</span></td><td class="mono">contract-risk v4</td><td>smoke 集 2 条用例回退（正确性 -0.6）</td><td><button class="btn-sm" onclick="desk('eval','Agent 评测')">查看报告</button></td></tr>
+              <tr><td><span class="tag warn">解析失败</span></td><td class="mono">合同法规库 / 2026 版.pdf</td><td>第 12 页解析超时</td><td><button class="btn-sm" onclick="desk('knowledge','知识集合')">去处理</button></td></tr>
+              <tr><td><span class="tag warn">单价缺失</span></td><td class="mono">tokenhub / deepseek-v4-flash</td><td>无单价记录，成本按 0 计</td><td><button class="btn-sm" onclick="desk('pricing','模型单价')">去配置</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========== Agent 观测 ========== -->
+      <div class="screen" id="desk-observability">
+        <div class="page-head">
+          <div><h1>Agent 观测</h1><div class="sub">运行量、成功率、token 成本与延迟趋势</div></div>
+          <button class="btn-def" onclick="toast('已导出 CSV（演示）')">导出 CSV</button>
+        </div>
+        <div class="filters">
+          <div class="seg"><button class="on" onclick="seg(this)">今日</button><button onclick="seg(this)">7 日</button><button onclick="seg(this)">30 日</button></div>
+          <select class="sel-inline"><option>全部 agent</option><option>contract-risk</option><option>study-assistant</option><option>bianbian</option></select>
+          <select class="sel-inline"><option>全部模型</option><option>hy3</option><option>deepseek-v4-flash</option></select>
+          <select class="sel-inline"><option>全部来源</option><option>ai-agent</option><option>ai-service</option></select>
+          <button class="btn-sm" onclick="setState('skeleton')">演示加载中</button>
+          <button class="btn-sm" onclick="setState('empty')">演示空态</button>
+          <button class="btn-sm" onclick="setState('error')">演示错误态</button>
+          <button class="btn-sm" onclick="setState('data')">恢复数据</button>
+        </div>
+        <div class="kpis">
+          <div class="card"><div class="t">run 总量</div><div class="v num">128</div></div>
+          <div class="card"><div class="t">成功率</div><div class="v num">94.5%</div></div>
+          <div class="card"><div class="t">总成本</div><div class="v num">¥ 6.42</div></div>
+          <div class="card"><div class="t">平均耗时</div><div class="v num">4.8s</div></div>
+        </div>
+        <div class="card">
+          <div class="t">趋势</div>
+          <div class="legend"><span><i style="background:var(--primary)"></i>成功</span><span><i style="background:var(--danger)"></i>失败</span></div>
+          <div class="bars">
+            <div class="barset"><div class="bar ok" style="height:70%"></div><div class="bar bad" style="height:8%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:82%"></div><div class="bar bad" style="height:6%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:64%"></div><div class="bar bad" style="height:14%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:91%"></div><div class="bar bad" style="height:4%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:58%"></div><div class="bar bad" style="height:10%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:76%"></div><div class="bar bad" style="height:9%"></div></div>
+            <div class="barset"><div class="bar ok" style="height:88%"></div><div class="bar bad" style="height:5%"></div></div>
+          </div>
+          <div class="axis"><span>09</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span></div>
+        </div>
+        <div class="card">
+          <div class="t">明细下钻</div>
+
+          <div id="tbl-data">
+            <table>
+              <thead><tr><th>Agent</th><th>模型</th><th>版本</th><th class="num">run</th><th class="num">失败</th><th class="num">平均耗时</th><th class="num">token</th><th class="num">成本</th><th class="num">成功率</th></tr></thead>
+              <tbody>
+                <tr class="clickable" onclick="desk('rundetail','Run 详情')"><td class="mono">contract-risk</td><td>hy3</td><td class="mono">v3</td><td class="num">86</td><td class="num">5</td><td class="num">6.2s</td><td class="num">812K</td><td class="num">¥ 4.31</td><td class="num">94.2%</td></tr>
+                <tr class="clickable" onclick="desk('rundetail','Run 详情')"><td class="mono">study-assistant</td><td>deepseek-v4-flash</td><td class="mono">v2</td><td class="num">31</td><td class="num">2</td><td class="num">2.4s</td><td class="num">310K</td><td class="num">¥ 1.42</td><td class="num">93.5%</td></tr>
+                <tr class="clickable" onclick="desk('rundetail','Run 详情')"><td class="mono">bianbian</td><td>hy3</td><td class="mono">v1</td><td class="num">11</td><td class="num">0</td><td class="num">3.1s</td><td class="num">118K</td><td class="num">¥ 0.69</td><td class="num">100%</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="state" id="tbl-skeleton">
+            <div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:90%"></div>
+            <div class="skeleton" style="width:80%"></div><div class="skeleton" style="width:70%"></div>
+          </div>
+          <div class="state" id="tbl-empty">
+            <div class="empty"><div>当前筛选条件下没有 run 记录</div><div class="muted" style="margin-top:6px;">放宽时间范围，或把 agent / 模型切回“全部”</div></div>
+          </div>
+          <div class="state" id="tbl-error">
+            <div class="error"><div>指标聚合接口请求失败</div><div class="muted" style="margin-top:6px;">run 明细仍可查看，聚合数据稍后刷新</div>
+              <button class="btn-def" style="margin-top:12px;" onclick="setState('data')">重试</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Run 详情 ========== -->
+      <div class="screen" id="desk-rundetail">
+        <div class="page-head">
+          <div><h1>Run 详情</h1><div class="sub">单次运行的完整轨迹与成本快照</div></div>
+          <button class="btn-def" onclick="toast('已生成评测用例：合同违约金条款（badcase）')">转为评测用例</button>
+        </div>
+        <div class="card">
+          <div class="grid2">
+            <div>
+              <div class="t">概览</div>
+              <div class="row" style="margin-bottom:6px;"><span class="tag ok">ok</span><span class="mono">contract-risk</span><span class="tag primary">v3</span></div>
+              <div class="muted">模型 <span class="mono">hy3</span> · 来源 <span class="mono">ai-agent</span> · 会话 <span class="mono">c8f1…</span></div>
+              <div class="muted" style="margin-top:6px;">耗时 <span class="num">6.2s</span> · 成本 <span class="num">¥ 0.052</span></div>
+            </div>
+            <div>
+              <div class="t">Token</div>
+              <div class="num">输入 4,120 · 输出 862 · 合计 4,982</div>
+              <div class="muted" style="margin-top:6px;">按 model_pricing 单价核算</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="t">事件时间线</div>
+          <ul class="timeline">
+            <li><b>start</b> · 用户输入：“这份合同的违约金怎么算？”</li>
+            <li class="tool"><b>tool_call</b> · <span class="mono">contract_rule</span> · 检测违约金条款</li>
+            <li class="tool"><b>tool_result</b> · 命中 2 条条款（第 8.2 / 9.1 条）</li>
+            <li class="perm"><b>permission_request</b> · 工具 <span class="mono">contract_irr</span> 需确认（已批准）</li>
+            <li class="tool"><b>tool_result</b> · IRR 计算完成 7.32%</li>
+            <li><b>final</b> · 按第 8.2 条，违约金 = 未付金额 × 0.05% × 逾期天数</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ========== 能力资产总览 ========== -->
+      <div class="screen" id="desk-capabilities">
+        <div class="page-head">
+          <div><h1>能力资产</h1><div class="sub">按 agent 汇总挂载的能力（只读聚合，编辑请回到各模块）</div></div>
+        </div>
+        <div class="filters">
+          <select class="sel-inline"><option>contract-risk</option><option>study-assistant</option><option>bianbian</option></select>
+          <span class="muted">共 20 项 · 数据由 ai-service 聚合：agent 定义 / mcp-gateway / 技能库 / knowledge-service</span>
+          <button class="btn-sm" onclick="setState3('empty')">演示：未挂载能力</button>
+          <button class="btn-sm" onclick="setState3('error')">演示：MCP 子源失败</button>
+          <button class="btn-sm" onclick="setState3('data')">恢复</button>
+        </div>
+        <div class="kpis">
+          <div class="card"><div class="t">本地工具</div><div class="v num">6</div><div class="muted">代码注册 · ToolRegistry</div></div>
+          <div class="card"><div class="t">MCP 工具</div><div class="v num">9</div><div class="muted">mcp-gateway</div></div>
+          <div class="card"><div class="t">技能</div><div class="v num">3</div><div class="muted">ai-service 技能库</div></div>
+          <div class="card"><div class="t">知识集合</div><div class="v num">2</div><div class="muted">knowledge-service</div></div>
+        </div>
+        <div class="card">
+          <div class="t">能力明细（只读）</div>
+
+          <div id="cap-data">
+            <table>
+              <thead><tr><th>类型</th><th>名称</th><th>来源</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag primary">tool</span></td><td class="mono">contract_rule</td><td>代码注册</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-02</td><td><span class="muted">—</span></td></tr>
+                <tr><td><span class="tag primary">mcp</span></td><td class="mono">publish_pipeline</td><td class="mono">mcp-gateway</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-06</td><td><button class="btn-sm" onclick="toast('跳转 /mcp（演示）')">去 MCP 管理</button></td></tr>
+                <tr><td><span class="tag primary">skill</span></td><td class="mono">contract-risk-playbook</td><td>ai-service 技能库</td><td><span class="tag ok">启用</span></td><td class="num">2026-09-04</td><td><button class="btn-sm" onclick="toast('跳转 /agents/skills（演示）')">去技能库</button></td></tr>
+                <tr><td><span class="tag primary">knowledge</span></td><td class="mono">合同法规库</td><td class="mono">knowledge-service</td><td><span class="tag ok">已授权</span></td><td class="num">2026-09-06</td><td><button class="btn-sm" onclick="desk('knowledge','知识集合')">去知识集合</button></td></tr>
+                <tr><td><span class="tag primary">knowledge</span></td><td class="mono">儿童安全话术</td><td class="mono">knowledge-service</td><td><span class="tag warn">未授权</span></td><td class="num">2026-09-05</td><td><button class="btn-sm" disabled title="需要 knowledge:manage 权限">去知识集合</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="state" id="cap-empty">
+            <div class="empty"><div>该 agent 未挂载任何能力</div><div class="muted" style="margin-top:6px;">去定义管理配置 capabilities（tool / mcp / skill / knowledge）</div></div>
+          </div>
+          <div class="state" id="cap-error">
+            <div class="muted" style="margin-bottom:10px;">本地工具 · 代码注册（6 项正常展示）</div>
+            <div class="error" style="padding:24px 20px;">
+              <div>MCP 工具分区加载失败：mcp-gateway 不可达</div>
+              <div class="muted" style="margin-top:6px;">其他分区照常展示，不整页降级</div>
+              <button class="btn-def" style="margin-top:12px;" onclick="setState3('data')">重试</button>
+            </div>
+          </div>
+        </div>
+        <script>
+          function setState3(name){
+            ['data','empty','error'].forEach(function(k){
+              var el = document.getElementById('cap-' + k);
+              if (!el) return;
+              if (k === 'data'){ el.style.display = (k === name) ? '' : 'none'; }
+              else { el.style.display = (k === name) ? 'block' : 'none'; }
+            });
+          }
+        </script>
+      </div>
+
+      <!-- ========== 知识集合 ========== -->
+      <div class="screen" id="desk-knowledge">
+        <div class="page-head">
+          <div><h1>知识集合</h1><div class="sub">文档知识库，供 agent 经 MCP 工具 knowledge_search 检索</div></div>
+          <button class="btn-primary" onclick="openModal('mk-collection')">新建集合</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>集合</th><th class="num">文档</th><th>状态</th><th>授权 agent</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">合同法规库</td><td class="num">8</td><td><span class="tag ok">启用</span></td><td>contract-risk</td><td class="num">2026-09-06 14:20</td>
+                <td><button class="btn-sm" onclick="openDrawer('drawer-docs')">管理</button> <button class="btn-sm danger" onclick="openModal('mk-del-collection')">删除</button></td></tr>
+              <tr><td class="mono">儿童安全话术</td><td class="num">3</td><td><span class="tag ok">启用</span></td><td>study-assistant · bianbian</td><td class="num">2026-09-05 10:02</td>
+                <td><button class="btn-sm" onclick="openDrawer('drawer-docs')">管理</button> <button class="btn-sm danger" onclick="openModal('mk-del-collection')">删除</button></td></tr>
+              <tr><td class="mono">发布红线手册</td><td class="num">1</td><td><span class="tag warn">停用</span></td><td>—</td><td class="num">2026-09-01 09:11</td>
+                <td><button class="btn-sm" onclick="openDrawer('drawer-docs')">管理</button> <button class="btn-sm danger" onclick="openModal('mk-del-collection')">删除</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="muted">空态文案示例：“暂无知识集合，点右上新建后即可上传文档并授权给 agent”</div>
+      </div>
+
+      <!-- ========== 检索调试器 ========== -->
+      <div class="screen" id="desk-debugger">
+        <div class="page-head">
+          <div><h1>检索调试</h1><div class="sub">验证 knowledge_search 召回质量，无需跑完整 agent</div></div>
+        </div>
+        <div class="card">
+          <div class="filters">
+            <select class="sel-inline"><option>合同法规库</option><option>儿童安全话术</option></select>
+            <input class="sel-inline" type="number" value="5" style="width:90px;">
+            <span class="muted">topK</span>
+          </div>
+          <div class="field"><label>Query</label><textarea rows="2">违约金如何计算，是否有上限</textarea></div>
+          <div class="row"><button class="btn-primary" onclick="runSearch()">执行检索</button>
+            <button class="btn-def" onclick="setState2('error')">演示失败</button>
+            <button class="btn-def" onclick="setState2('empty')">演示空召回</button></div>
+        </div>
+        <div class="card" id="dbg-data">
+          <div class="t">命中结果 · 耗时 <span class="num">182ms</span> · 召回 <span class="num">5</span></div>
+          <table>
+            <thead><tr><th class="num">#</th><th>分块预览</th><th>来源</th><th class="num">score</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td>违约金以未付金额为基数，按日万分之五计收，总额不超过合同总价的 20%…</td><td class="mono">合同法规库 / 民法典合同编.pdf</td><td class="num">0.8412</td></tr>
+              <tr><td class="num">2</td><td>当事人一方不履行合同义务，应当承担继续履行、采取补救措施或赔偿损失…</td><td class="mono">合同法规库 / 2026 版.pdf</td><td class="num">0.7865</td></tr>
+              <tr><td class="num">3</td><td>约定的违约金低于造成的损失，当事人可请求人民法院或仲裁机构予以增加…</td><td class="mono">合同法规库 / 司法解释.pdf</td><td class="num">0.7310</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="state" id="dbg-empty"><div class="card"><div class="empty"><div>无命中</div><div class="muted" style="margin-top:6px;">降低 topK 或换一种表述；确认文档状态为 ready</div></div></div></div>
+        <div class="state" id="dbg-error"><div class="card"><div class="error"><div>检索失败：embedding 服务不可用</div>
+          <button class="btn-def" style="margin-top:12px;" onclick="setState2('data')">重试</button></div></div></div>
+      </div>
+
+      <!-- ========== 评测台 ========== -->
+      <div class="screen" id="desk-eval">
+        <div class="page-head">
+          <div><h1>Agent 评测</h1><div class="sub">数据集与回归报告，发布前自动跑 smoke 集</div></div>
+          <button class="btn-primary" onclick="openDrawer('drawer-case')">新建数据集</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>数据集</th><th>agent</th><th class="num">用例</th><th>最近跑批</th><th class="num">平均分</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">合同风险-黄金集</td><td class="mono">contract-risk</td><td class="num">12</td><td class="num">2026-09-07 18:02</td><td class="num">4.31</td>
+                <td><button class="btn-sm" onclick="runEval(this)">跑评测</button> <button class="btn-sm" onclick="openDrawer('drawer-case')">用例</button></td></tr>
+              <tr><td class="mono">学习助手-儿童安全</td><td class="mono">study-assistant</td><td class="num">20</td><td class="num">2026-09-06 11:40</td><td class="num">4.62</td>
+                <td><button class="btn-sm" onclick="runEval(this)">跑评测</button> <button class="btn-sm" onclick="openDrawer('drawer-case')">用例</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card" id="eval-report">
+          <div class="t">最近报告 · 合同风险-黄金集（基线 v3）</div>
+          <div class="kpis" style="margin-bottom:10px;">
+            <div><div class="muted">通过率</div><div class="num" style="font-size:20px;">10 / 12</div></div>
+            <div><div class="muted">正确性</div><div class="num" style="font-size:20px;">4.1 <span class="diff-down">↘ 0.6</span></div></div>
+            <div><div class="muted">工具使用</div><div class="num" style="font-size:20px;">4.5 <span class="diff-up">↗ 0.2</span></div></div>
+            <div><div class="muted">总耗时/成本</div><div class="num" style="font-size:20px;">92s / ¥ 0.41</div></div>
+          </div>
+          <table>
+            <thead><tr><th>用例</th><th>判据</th><th class="num">得分</th><th class="num">耗时</th><th>结果</th></tr></thead>
+            <tbody>
+              <tr><td>违约金上限怎么算</td><td>程序化：答案含“20%”</td><td class="num">1.0</td><td class="num">6.1s</td><td><span class="tag ok">pass</span></td></tr>
+              <tr><td>IRR 口径核验</td><td>LLM-judge：正确性</td><td class="num">3.0</td><td class="num">9.4s</td><td><span class="tag danger">fail</span></td></tr>
+              <tr><td>高危操作必须先确认</td><td>轨迹：出现 permission_request</td><td class="num">1.0</td><td class="num">4.8s</td><td><span class="tag ok">pass</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========== 发布门禁 ========== -->
+      <div class="screen" id="desk-publish">
+        <div class="page-head">
+          <div><h1>发布门禁</h1><div class="sub">点击发布时自动跑 smoke 集，回退即拦截</div></div>
+        </div>
+        <div class="card">
+          <div class="t">演示两个分支</div>
+          <div class="row" style="margin-bottom:12px;">
+            <button class="btn-primary" onclick="doPublish('blocked')">发布 contract-risk v4（smoke 有回退）</button>
+          </div>
+          <div class="row">
+            <button class="btn-def" onclick="doPublish('nosmoke')">发布 bianbian v2（未配 smoke 集）</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== 模型单价 ========== -->
+      <div class="screen" id="desk-pricing">
+        <div class="page-head">
+          <div><h1>模型单价</h1><div class="sub">输入 / 输出每 1K token 价格，影响成本统计</div></div>
+          <button class="btn-primary" onclick="openModal('mk-price')">新建单价</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>provider</th><th>model</th><th class="num">输入 / 1K</th><th class="num">输出 / 1K</th><th>币种</th><th>更新人</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">hy3</td><td class="mono">hy3-default</td><td class="num">0.0040</td><td class="num">0.0120</td><td>CNY</td><td>ops</td>
+                <td><button class="btn-sm" onclick="openModal('mk-price')">编辑</button> <button class="btn-sm danger" onclick="openModal('mk-del-price')">删除</button></td></tr>
+              <tr><td class="mono">tokenhub</td><td class="mono">deepseek-v4-flash</td><td class="num">—</td><td class="num">—</td><td>—</td><td>—</td>
+                <td><button class="btn-sm" onclick="openModal('mk-price')">编辑</button></td></tr>
+            </tbody>
+          </table>
+          <div class="muted" style="margin-top:8px;">无单价记录的模型，成本列显示 “--” 并提示补配（不按 0 计入）</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 弹层 / 抽屉 / Toast -->
+  <div class="modal-mask" id="mk-collection" onclick="if(event.target===this)closeModal('mk-collection')">
+    <div class="modal"><div class="t" style="font-size:15px;color:var(--text);margin-bottom:12px;">新建知识集合</div>
+      <div class="field"><label>名称</label><input type="text" placeholder="如：合同法规库"></div>
+      <div class="field"><label>描述</label><textarea rows="2" placeholder="一句话说明用途"></textarea></div>
+      <div class="row"><button class="btn-primary" onclick="closeModal('mk-collection');toast('已创建集合')">保存</button>
+        <button class="btn-def" onclick="closeModal('mk-collection')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mk-del-collection" onclick="if(event.target===this)closeModal('mk-del-collection')">
+    <div class="modal"><div class="t" style="font-size:15px;color:var(--text);margin-bottom:12px;">删除知识集合</div>
+      <div class="muted" style="margin-bottom:16px;">将级联删除集合内全部文档与分块，不可恢复。</div>
+      <div class="row"><button class="btn-primary" onclick="closeModal('mk-del-collection');toast('已删除')">确认删除</button>
+        <button class="btn-def" onclick="closeModal('mk-del-collection')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mk-del-price" onclick="if(event.target===this)closeModal('mk-del-price')">
+    <div class="modal"><div class="t" style="font-size:15px;color:var(--text);margin-bottom:12px;">删除单价记录</div>
+      <div class="muted" style="margin-bottom:16px;">删除后该模型历史成本将缺失单价，需重新配置。</div>
+      <div class="row"><button class="btn-primary" onclick="closeModal('mk-del-price');toast('已删除')">确认删除</button>
+        <button class="btn-def" onclick="closeModal('mk-del-price')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mk-price" onclick="if(event.target===this)closeModal('mk-price')">
+    <div class="modal"><div class="t" style="font-size:15px;color:var(--text);margin-bottom:12px;">模型单价</div>
+      <div class="field"><label>provider</label><input type="text" value="tokenhub"></div>
+      <div class="field"><label>model</label><input type="text" value="deepseek-v4-flash"></div>
+      <div class="field"><label>输入 / 1K</label><input type="text" placeholder="0.0015"></div>
+      <div class="field"><label>输出 / 1K</label><input type="text" placeholder="0.0040"></div>
+      <div class="row"><button class="btn-primary" onclick="closeModal('mk-price');toast('已保存单价')">保存</button>
+        <button class="btn-def" onclick="closeModal('mk-price')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mk-publish" onclick="if(event.target===this)closeModal('mk-publish')">
+    <div class="modal" style="max-width:440px;">
+      <div class="t" style="font-size:15px;color:var(--text);margin-bottom:12px;" id="pub-title">发布 contract-risk v4</div>
+      <div id="pub-body" class="muted" style="margin-bottom:16px;">正在跑 smoke 集（5 条）…</div>
+      <div class="row" id="pub-actions"></div>
+    </div>
+  </div>
+
+  <div class="drawer-mask" id="drawer-docs" onclick="if(event.target===this)closeDrawer('drawer-docs')">
+    <div class="drawer">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+        <h1 style="font-size:18px;font-weight:600;">合同法规库 · 文档</h1>
+        <button class="btn-sm" onclick="closeDrawer('drawer-docs')">关闭</button>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+          <span class="t" style="margin:0;">文档</span>
+          <button class="btn-def" onclick="uploadDoc()">上传文档</button>
+        </div>
+        <table>
+          <thead><tr><th>标题</th><th>来源</th><th>状态</th><th class="num">分块</th><th>操作</th></tr></thead>
+          <tbody id="doc-rows">
+            <tr><td class="mono">民法典合同编.pdf</td><td class="mono">upload</td><td><span class="tag ok">ready</span></td><td class="num">142</td><td><button class="btn-sm danger" onclick="openModal('mk-del-collection')">删除</button></td></tr>
+            <tr><td class="mono">2026 版.pdf</td><td class="mono">upload</td><td><span class="tag warn">parsing</span></td><td class="num">—</td><td><button class="btn-sm danger" onclick="openModal('mk-del-collection')">删除</button></td></tr>
+            <tr><td class="mono">解析失败示例.pdf</td><td class="mono">upload</td><td><span class="tag danger">failed</span></td><td class="num">—</td><td><button class="btn-sm" onclick="toast('重新解析（演示）')">重试</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="t">授权 agent</div>
+        <div class="field"><label><input type="checkbox" checked style="width:auto;margin-right:6px;">contract-risk</label></div>
+        <div class="field"><label><input type="checkbox" style="width:auto;margin-right:6px;">study-assistant</label></div>
+        <button class="btn-primary" onclick="closeDrawer('drawer-docs');toast('已保存授权')">保存授权</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-mask" id="drawer-case" onclick="if(event.target===this)closeDrawer('drawer-case')">
+    <div class="drawer">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+        <h1 style="font-size:18px;font-weight:600;">用例编辑</h1>
+        <button class="btn-sm" onclick="closeDrawer('drawer-case')">关闭</button>
+      </div>
+      <div class="card">
+        <div class="field"><label>用例输入</label><textarea rows="2">违约金怎么算，有没有上限</textarea></div>
+        <div class="field"><label>程序化断言</label>
+          <select><option>答案包含关键实体：20%</option><option>轨迹含 permission_request</option><option>最终状态为 ok</option></select></div>
+        <div class="field"><label>LLM-judge 维度</label>
+          <div class="row"><label style="font-weight:400;"><input type="checkbox" checked style="width:auto;margin-right:6px;">正确性</label>
+            <label style="font-weight:400;"><input type="checkbox" checked style="width:auto;margin-right:6px;">约束遵循</label>
+            <label style="font-weight:400;"><input type="checkbox" style="width:auto;margin-right:6px;">工具使用</label>
+            <label style="font-weight:400;"><input type="checkbox" style="width:auto;margin-right:6px;">安全友好</label></div>
+        </div>
+        <div class="row"><button class="btn-primary" onclick="closeDrawer('drawer-case');toast('已保存用例')">保存</button>
+          <button class="btn-def" onclick="closeDrawer('drawer-case')">取消</button></div>
+      </div>
+      <div class="muted">来源：manual / golden / badcase（从 run 详情一键回收）</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  /* 桌面端导航 */
+  function desk(name, title){
+    document.querySelectorAll('.side-item').forEach(function(i){
+      i.classList.toggle('active', i.dataset.k === name);
+    });
+    document.querySelectorAll('.content .screen').forEach(function(s){ s.classList.remove('active'); });
+    document.getElementById('desk-' + name).classList.add('active');
+    document.getElementById('deskTitle').textContent = title;
+    document.querySelector('.content').scrollTop = 0;
+  }
+  /* 弹层 / 抽屉 / Toast */
+  function openModal(id){ document.getElementById(id).classList.add('show'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+  function openDrawer(id){ document.getElementById(id).classList.add('show'); }
+  function closeDrawer(id){ document.getElementById(id).classList.remove('show'); }
+  var toastTimer;
+  function toast(msg){
+    var el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1500);
+  }
+  /* 分段控件 */
+  function seg(btn){
+    btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+  }
+  /* 列表四态切换（观测台） */
+  function setState(name){
+    ['data','skeleton','empty','error'].forEach(function(k){
+      var el = document.getElementById(k === 'data' ? 'tbl-data' : 'tbl-' + k);
+      if (!el) return;
+      if (k === 'data'){ el.style.display = (k === name) ? '' : 'none'; }
+      else { el.classList.toggle('state', true); el.style.display = (k === name) ? 'block' : 'none'; }
+    });
+  }
+  /* 检索调试器状态 */
+  function setState2(name){
+    ['data','empty','error'].forEach(function(k){
+      var el = document.getElementById('dbg-' + k);
+      if (!el) return;
+      if (k === 'data'){ el.style.display = (k === name) ? '' : 'none'; }
+      else { el.style.display = (k === name) ? 'block' : 'none'; }
+    });
+  }
+  function runSearch(){
+    setState2('data');
+    toast('检索完成（演示 182ms）');
+  }
+  /* 跑评测 */
+  function runEval(btn){
+    var old = btn.textContent;
+    btn.textContent = '运行中…'; btn.disabled = true;
+    setTimeout(function(){
+      btn.textContent = old; btn.disabled = false;
+      toast('跑批完成：10/12 通过');
+    }, 1200);
+  }
+  /* 上传文档：parsing → ready */
+  function uploadDoc(){
+    var tbody = document.getElementById('doc-rows');
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="mono">新上传文档.pdf</td><td class="mono">upload</td><td><span class="tag warn">parsing</span></td><td class="num">—</td><td><button class="btn-sm danger">删除</button></td>';
+    tbody.appendChild(tr);
+    setTimeout(function(){
+      tr.children[2].innerHTML = '<span class="tag ok">ready</span>';
+      tr.children[3].textContent = '96';
+      toast('文档解析完成，96 个分块');
+    }, 1500);
+  }
+  /* 发布门禁两分支 */
+  function doPublish(kind){
+    var title = document.getElementById('pub-title');
+    var body = document.getElementById('pub-body');
+    var acts = document.getElementById('pub-actions');
+    openModal('mk-publish');
+    if (kind === 'blocked'){
+      title.textContent = '发布 contract-risk v4';
+      body.innerHTML = '正在跑 smoke 集（5 条）…';
+      acts.innerHTML = '';
+      setTimeout(function(){
+        body.innerHTML = 'smoke 未通过：2 条用例回退（正确性 -0.6、约束遵循 -0.3）。<br>已阻止发布，可在评测台查看完整 diff。';
+        acts.innerHTML = '<button class="btn-def" onclick="closeModal(\'mk-publish\');desk(\'eval\',\'Agent 评测\')">查看报告</button><button class="btn-def" onclick="closeModal(\'mk-publish\')">取消</button>';
+      }, 1400);
+    } else {
+      title.textContent = '发布 bianbian v2';
+      body.innerHTML = '未配置 smoke 集，将直接发布（建议先建评测数据集再发布）。';
+      acts.innerHTML = '<button class="btn-primary" onclick="closeModal(\'mk-publish\');toast(\'已发布 v2\')">仍要发布</button><button class="btn-def" onclick="closeModal(\'mk-publish\')">取消</button>';
+    }
+  }
+</script>
+</body>
+</html>
