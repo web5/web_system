@@ -10,7 +10,9 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody：CI/CD 触发端点需用**原始请求体**做 HMAC 验签
+  // （重新序列化 JSON 会因键顺序/空白差异导致签名永远不匹配）
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 

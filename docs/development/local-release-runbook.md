@@ -38,7 +38,8 @@ deploy-console 是发布工具自身，**不能走流水线**（`stageRestart` �
 cd ~/web_system_release/servers/deploy-console && npx --no-install nest build
 # 重启（干净环境，避免 PORT 等变量污染）
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:<nodeBin> pm2 restart web-deploy-console --update-env
-# 或走控制台接口 POST /api/deploy/deploy（deploy.sh 体系）
+# 旧链路（2026-09-08 已废弃，勿用）：POST /api/deploy/deploy —— deploy.sh 体系，
+# 已知缺陷：无 micro-frontend 分支（必然 exit 1）、版本表写错库。发布统一走 POST /api/pipelines。
 ```
 
 > **一键脚本（推荐）**：`./scripts/publish-deploy-console.sh`（仓库根执行）——

@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布平台 v4 · 交互原型（流水线记录 → 详情双 Tab → 拖拽编排）</title>
+<style>
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC;
+    --warn:#E8833A;  --warn-soft:#FFF3E6;
+    --ok:#2E9E5B;    --ok-soft:#E7F5EC;
+    --info:#5B6372;  --info-soft:#EEF1F5;
+    --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+    --shadow:0 2px 12px rgba(20,30,50,.06);
+    --mono:'Geist Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;}
+
+  .desktop{width:1280px;height:840px;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);display:flex;position:relative;}
+  .sidebar{width:196px;background:var(--card);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:16px 12px;flex-shrink:0;}
+  .sidebar .logo{font-size:14px;font-weight:700;color:var(--text);padding:8px 10px 4px;}
+  .sidebar .logo span{display:block;font-size:11px;font-weight:400;color:var(--text-3);margin-top:3px;}
+  .side-item{padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13px;
+    cursor:pointer;margin-bottom:3px;display:flex;align-items:center;gap:9px;}
+  .side-item:hover{background:var(--info-soft);}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .side-item .ico{width:15px;height:15px;flex-shrink:0;}
+  .side-sep{font-size:11px;color:var(--text-3);padding:14px 12px 6px;font-weight:600;}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:52px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;font-size:15px;font-weight:600;color:var(--text);
+    justify-content:space-between;flex-shrink:0;}
+  .content{flex:1;overflow:auto;padding:18px 20px;}
+  .content .screen{display:none;}
+  .content .screen.active{display:block;}
+
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:14px 16px;margin-bottom:12px;border:1px solid var(--border);}
+  .card .t{font-size:12px;color:var(--text-3);margin-bottom:9px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.4px;}
+  .card h3{font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600;}
+
+  .btn{background:var(--primary);color:#fff;border:none;border-radius:8px;
+    padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s;
+    display:inline-flex;align-items:center;justify-content:center;gap:5px;}
+  .bic{width:13px;height:13px;flex-shrink:0;}
+  .btn.mini .bic{width:11px;height:11px;}
+  .pinfo{display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--info-soft);
+    border-radius:8px;margin-bottom:12px;font-size:13px;}
+  .pinfo .pd{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .btn:hover{opacity:.88;}
+  .btn.ghost{background:transparent;color:var(--primary);border:1.5px solid var(--primary);}
+  .btn.ghost:hover{background:var(--primary-soft);}
+  .btn.sm{padding:5px 10px;font-size:12px;}
+  .btn.gray{background:var(--info-soft);color:var(--text-2);}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;display:inline-block;}
+  .tag.primary{color:var(--primary);background:var(--primary-soft);}
+  .tag.danger{color:var(--danger);background:var(--danger-soft);}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);}
+  .tag.gray{color:var(--text-2);background:var(--info-soft);}
+  .row{display:flex;align-items:center;gap:8px;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .mono{font-family:var(--mono);}
+  .hint{font-size:11px;color:var(--text-3);margin-top:6px;line-height:1.6;}
+
+  /* ---- 列表 ---- */
+  .filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+  .fchip{padding:5px 11px;border-radius:20px;font-size:12px;cursor:pointer;
+    background:var(--info-soft);color:var(--text-2);border:1px solid transparent;}
+  .fchip:hover{border-color:var(--primary);}
+  .fchip.on{background:var(--primary-soft);color:var(--primary);font-weight:600;border-color:var(--primary);}
+
+  table.list{width:100%;font-size:12.5px;border-collapse:collapse;}
+  table.list th{text-align:left;padding:9px 8px;color:var(--text-3);font-size:11px;font-weight:600;
+    border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;}
+  table.list td{padding:10px 8px;border-bottom:1px solid var(--border);color:var(--text);}
+  table.list tr{cursor:pointer;}
+  table.list tr:hover td{background:var(--info-soft);}
+  table.list td.k{font-family:var(--mono);}
+  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block;margin-right:6px;}
+  .dot.ok{background:var(--ok);} .dot.warn{background:var(--warn);}
+  .dot.danger{background:var(--danger);} .dot.gray{background:var(--text-3);}
+
+  /* ---- Tab ---- */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+  .tab{padding:9px 16px;font-size:13px;font-weight:600;color:var(--text-3);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab:hover{color:var(--text-2);}
+  .tab.on{color:var(--primary);border-bottom-color:var(--primary);}
+
+  /* ---- 步骤 ---- */
+  .steps{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;}
+  .step{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;
+    background:var(--info-soft);color:var(--text-2);border:1px solid transparent;min-width:82px;text-align:center;}
+  .step:hover{border-color:var(--primary);}
+  .step.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);}
+  .step.pending{background:var(--info-soft);color:var(--text-3);}
+  .step.running{background:var(--primary-soft);color:var(--primary);}
+  .step.success{background:var(--ok-soft);color:var(--ok);}
+  .step.failed{background:var(--danger-soft);color:var(--danger);}
+  .step.skipped{background:#F2F3F5;color:var(--text-3);text-decoration:line-through;}
+  .step.rollback{background:#F3E8FF;color:#7C3AED;}
+
+  .logbox{background:#1A1F2E;color:#D8DEE9;font-family:var(--mono);font-size:11.5px;
+    line-height:1.7;padding:12px;border-radius:8px;max-height:240px;overflow:auto;white-space:pre-wrap;}
+  .logbox .op-h{color:#C4A5F7;font-weight:600;}
+  .resultbox{background:#FBFBFC;border:1px solid var(--border);border-radius:8px;padding:11px;
+    font-family:var(--mono);font-size:11.5px;color:var(--text);max-height:120px;overflow:auto;}
+  .meta{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px;}
+  .meta .m{background:var(--info-soft);border-radius:8px;padding:8px 10px;}
+  .meta .m .k{font-size:11px;color:var(--text-3);}
+  .meta .m .v{font-size:12.5px;font-weight:600;color:var(--text);font-family:var(--mono);margin-top:2px;}
+
+  /* ---- 流程图：节点 + 连接线（编辑态 / 实例详情共用） ---- */
+  .flow{display:flex;align-items:center;overflow-x:auto;padding:16px 6px 20px;min-height:74px;}
+  .fnode{position:relative;min-width:108px;padding:9px 13px;border:1.5px solid var(--border);
+    border-radius:10px;background:var(--card);cursor:pointer;transition:all .15s;flex-shrink:0;}
+  .fnode:hover{border-color:var(--primary);transform:translateY(-1px);}
+  .fnode.active{border-color:var(--primary);background:var(--primary-soft);
+    box-shadow:0 0 0 3px var(--primary-soft);}
+  .fnode .fidx{position:absolute;top:-9px;left:-9px;width:19px;height:19px;border-radius:50%;
+    background:var(--card);color:var(--text-2);font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;border:1.5px solid var(--border);}
+  .fnode .fname{font-size:13px;font-weight:600;color:var(--text);display:block;}
+  .fnode .ftag{display:block;font-size:10px;margin-top:3px;color:var(--text-3);}
+  .fnode .fgrip{position:absolute;top:-9px;right:-9px;font-size:10px;color:var(--text-3);
+    background:var(--card);border:1.5px solid var(--border);border-radius:4px;padding:0 3px;}
+  .fnode .fcnt{position:absolute;bottom:-9px;right:-6px;font-size:9px;font-weight:700;
+    background:var(--primary);color:#fff;border-radius:8px;padding:1px 5px;}
+  .act{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);
+    border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;margin-bottom:5px;}
+  .act:hover{border-color:var(--primary);}
+  .act.on{border-color:var(--primary);background:var(--primary-soft);}
+  .act.lock{background:var(--info-soft);cursor:default;}
+  .act .an{font-weight:600;color:var(--text);flex:1;}
+  .act .am{font-size:11px;color:var(--text-3);font-family:var(--mono);}
+  .farrow{width:28px;height:2px;background:var(--border);position:relative;flex-shrink:0;}
+  .farrow:after{content:'';position:absolute;right:-1px;top:-3px;border-left:6px solid var(--border);
+    border-top:4px solid transparent;border-bottom:4px solid transparent;}
+  /* 运行状态 */
+  .fnode.running{border-color:var(--primary);background:var(--primary-soft);}
+  .fnode.success{border-color:var(--ok);background:var(--ok-soft);}
+  .fnode.failed{border-color:var(--danger);background:var(--danger-soft);}
+  .fnode.skipped{opacity:.45;}
+  .fnode.skipped .fname{text-decoration:line-through;}
+  .fnode.rollback{border-color:#7C3AED;background:#F3E8FF;}
+  .farrow.done{background:var(--ok);} .farrow.done:after{border-left-color:var(--ok);}
+  .farrow.fail{background:var(--danger);} .farrow.fail:after{border-left-color:var(--danger);}
+  /* 拖拽插入指示 */
+  .fnode.dragging{opacity:.3;}
+  .fnode.ins-l{box-shadow:-3px 0 0 0 var(--primary);}
+  .fnode.ins-r{box-shadow:3px 0 0 0 var(--primary);}
+
+  .editor-wrap{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+  .editor-bar{background:#161B22;padding:6px 10px;font-size:11px;color:#8B949E;
+    display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #21262D;}
+  .code-wrap{display:flex;background:#0D1117;font-family:var(--mono);font-size:12px;line-height:1.7;}
+  .code-gutter{padding:11px 9px;color:#495057;background:#0A0E13;text-align:right;
+    user-select:none;min-width:36px;border-right:1px solid #1C2128;white-space:pre;overflow:hidden;}
+  .code-main{position:relative;flex:1;height:200px;}
+  .code-hl,.code-in{margin:0;padding:11px 12px;border:0;font-family:var(--mono);font-size:12px;
+    line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+  .code-hl{position:absolute;inset:0;color:#E6EDF3;overflow:auto;pointer-events:none;}
+  .code-in{position:absolute;inset:0;background:transparent;color:transparent;
+    caret-color:#58A6FF;resize:none;outline:none;overflow:auto;}
+  .code-in::selection{background:#264F78;}
+  .c-cmt{color:#8B949E;font-style:italic;}
+  .c-kw{color:#FF7B72;}
+  .c-var{color:#79C0FF;}
+  textarea.code{width:100%;min-height:180px;border:none;padding:11px;font-family:var(--mono);
+    font-size:12px;line-height:1.65;color:var(--text);background:#FBFBFC;outline:none;resize:vertical;}
+
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+  .chip{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--info-soft);
+    color:var(--text-2);cursor:pointer;font-family:var(--mono);border:1px solid transparent;}
+  .chip:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft);}
+
+  .cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+  .cfg{display:flex;align-items:center;justify-content:space-between;font-size:12px;
+    padding:7px 10px;background:var(--info-soft);border-radius:8px;}
+  .cfg label{color:var(--text-2);}
+  select.mini,input.mini{padding:4px 7px;border:1px solid var(--border);border-radius:6px;
+    font-size:12px;color:var(--text);background:var(--card);outline:none;}
+
+  .banner{padding:9px 12px;border-radius:8px;font-size:12px;margin-top:10px;display:flex;gap:8px;align-items:flex-start;}
+  .banner.warn{background:var(--warn-soft);color:#8A4B12;border:1px solid #F6DCB8;}
+  .banner.info{background:var(--info-soft);color:var(--text-2);border:1px solid var(--border);}
+  .banner.danger{background:var(--danger-soft);color:#A3242A;border:1px solid #F7C9CB;}
+
+  table.kv{width:100%;font-size:12px;border-collapse:collapse;}
+  table.kv td{padding:5px 6px;border-bottom:1px solid var(--border);}
+  table.kv td:first-child{color:var(--text-3);font-family:var(--mono);width:170px;}
+  table.kv td:last-child{color:var(--text);}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--text-2);margin-bottom:5px;font-weight:600;}
+  .field select,.field input{width:100%;padding:8px 10px;border:1.5px solid var(--border);
+    border-radius:8px;font-size:13px;color:var(--text);background:var(--card);outline:none;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+
+  .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:24px;}
+  .modal-mask.show{display:flex;}
+  .modal{background:var(--card);border-radius:var(--radius);padding:20px;width:100%;max-width:380px;}
+  .toast{position:absolute;left:50%;bottom:32px;transform:translateX(-50%);
+    background:rgba(0,0,0,.82);color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;
+    z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="desktop">
+
+  <div class="sidebar">
+    <div class="logo">发布平台<span>v4 · 内核极简化</span></div>
+    <div class="side-sep">发布</div>
+    <div class="side-item active" onclick="desk('list',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      流水线</div>
+    <div class="side-item" onclick="desk('submit',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      提交发布</div>
+    <div class="side-item" onclick="desk('detail',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      流水线详情</div>
+    <div class="side-sep">资源</div>
+    <div class="side-item" onclick="desk('tools',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8z"/></svg>
+      工具目录</div>
+    <div class="side-item" onclick="desk('legend',this)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+      设计决策速查</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <span id="deskTitle">流水线</span>
+      <span class="muted">管理员 · admin</span>
+    </div>
+    <div class="content">
+
+      <!-- ============ 屏1：流水线（所有发布记录） ============ -->
+      <div class="screen active" id="desk-list">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:6px;">
+            <div class="t" style="margin:0">发布记录</div>
+            <div class="row">
+              <button class="btn ghost sm" onclick="desk('submit',document.querySelectorAll('.side-item')[1])"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>新建发布</button>
+            </div>
+          </div>
+          <div class="filters" id="filters"></div>
+          <table class="list">
+            <thead><tr><th style="width:96px">流水线 ID</th><th style="width:130px">名称</th>
+              <th style="width:158px">模块</th>
+              <th style="width:60px">环境</th><th style="width:80px">版本</th><th>分支</th>
+              <th style="width:90px">状态</th><th style="width:60px">耗时</th>
+              <th style="width:86px">触发</th><th style="width:66px">时间</th></tr></thead>
+            <tbody id="runList"></tbody>
+          </table>
+          <div class="hint">点击任意一行进入流水线详情（默认「实例详情」Tab）。记录同时涵盖<b>前端页面</b>（admin / portal）与<b>后台服务</b>（gateway / todo-service / ai-agent 等）。</div>
+        </div>
+      </div>
+
+      <!-- ============ 屏2：提交发布 ============ -->
+      <div class="screen" id="desk-submit">
+        <div class="grid2">
+          <div class="card">
+            <div class="t">发布参数</div>
+            <div class="field"><label>流水线</label>
+              <select><option>默认流水线</option><option>前端快线（skipVerify）</option></select></div>
+            <div class="field"><label>模块</label>
+              <select id="subModule" onchange="renderPreview()">
+                <option value="todo-service">todo-service（backend · 6005）</option>
+                <option value="admin" selected>admin（micro-frontend）</option>
+                <option value="portal">portal（micro-frontend）</option>
+              </select></div>
+            <div class="grid2">
+              <div class="field"><label>环境</label><select><option>local</option><option>dev</option><option>prod</option></select></div>
+              <div class="field"><label>分支</label><input value="feature/contract-risk-ai"></div>
+            </div>
+            <div class="grid2">
+              <div class="field"><label>Commit（可选）</label><input placeholder="留空 = 当前 HEAD，如 9263f62"></div>
+              <div class="field"><label>模式</label><select><option>正式</option><option>灰度</option></select></div>
+            </div>
+            <div class="banner info">
+              <span>安全基线上提至 submit（平台级，不可绕过）：模块类型校验 · prod 仅 master · branch/commit 白名单 · reuseArtifact 判定。</span>
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button class="btn" onclick="submitPipeline()">提交发布</button>
+              <button class="btn gray">存为草稿</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="t">本次将执行的节点（按模块类型过滤）</div>
+            <div id="previewList"></div>
+            <div class="hint">灰度模式下 <b>pointer</b> 不切 stable 指针，改为写灰度规则。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 屏3：流水线详情（双 Tab + 编辑态） ============ -->
+      <div class="screen" id="desk-detail">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row">
+              <b style="font-size:15px" id="dMod">admin</b>
+              <span class="tag gray" id="dEnv">local</span>
+              <span class="mono muted" id="dVer">9263f62</span>
+              <span class="tag primary" id="dStatus">运行中</span>
+            </div>
+            <div class="row">
+              <button class="btn ghost sm" id="btnEdit" onclick="toggleEdit()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>编辑流水线</button>
+              <button class="btn ghost sm" onclick="cancelRun()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>取消</button>
+              <button class="btn gray sm" onclick="toast('重试：从失败操作所在节点继续')"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>重试</button>
+              <button class="btn ghost sm" onclick="rollback()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>回滚</button>
+            </div>
+          </div>
+
+          <div class="pinfo">
+            <span class="tag primary">流水线</span>
+            <b id="pName">默认流水线</b>
+            <span class="pd muted" id="pDesc">全量流程：拉取 → 构建 → 投递 → 重启 → 写版本 → 切指针 → 探活 → 清理</span>
+            <button class="btn mini ghost" onclick="openRename()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>名称 / 备注</button>
+          </div>
+
+          <div class="tabs" style="margin-top:4px;">
+            <div class="tab on" id="tab-inst" onclick="switchTab('inst')">实例详情</div>
+            <div class="tab" id="tab-hist" onclick="switchTab('hist')">历史记录</div>
+          </div>
+
+          <!-- Tab1 实例详情 -->
+          <div id="pane-inst">
+            <div class="meta">
+              <div class="m"><div class="k">流水线</div><div class="v">默认</div></div>
+              <div class="m"><div class="k">版本</div><div class="v" id="mVer">9263f62</div></div>
+              <div class="m"><div class="k">分支</div><div class="v" style="font-size:11px" id="mBranch">feature/…</div></div>
+              <div class="m"><div class="k">scriptHash</div><div class="v">a91f3c7</div></div>
+              <div class="m"><div class="k">耗时</div><div class="v" id="mDur">—</div></div>
+            </div>
+            <div class="flow" id="flowRun"></div>
+            <div id="stepBody"></div>
+          </div>
+
+          <!-- Tab2 历史记录 -->
+          <div id="pane-hist" style="display:none">
+            <div class="t">该流水线的历史实例（点击一行 → 切回「实例详情」查看该次执行）</div>
+            <table class="list">
+              <thead><tr><th style="width:110px">实例 ID</th><th style="width:90px">版本</th>
+                <th style="width:70px">环境</th><th>分支</th><th style="width:100px">状态</th>
+                <th style="width:80px">耗时</th><th style="width:90px">触发</th><th style="width:80px">时间</th></tr></thead>
+              <tbody id="histList"></tbody>
+            </table>
+          </div>
+
+          <!-- 编辑态 -->
+          <div id="pane-edit" style="display:none">
+            <div class="banner info" style="margin-top:0">
+              <span>编辑态：上方为流程图，<b>拖住节点</b>放到目标节点的左半区 / 右半区即可调整顺序；点击节点在下方编辑 shell 脚本。
+                <code>version</code> / <code>pointer</code> 为 platform 态，<b>可移动位置但不可编辑脚本</b>。</span>
+            </div>
+            <div class="card" style="margin-top:12px">
+              <div class="t">流程编排（拖住节点 · 放到目标节点左/右半区决定插入位置）</div>
+              <div class="flow" id="flowEdit"></div>
+              <div class="row" style="margin-top:4px">
+                <button class="btn sm" onclick="saveOrder()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存顺序</button>
+                <button class="btn gray sm" onclick="toggleEdit()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>退出编辑</button>
+              </div>
+            </div>
+            <div class="card" id="editDetail"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ============ 屏4：工具目录 ============ -->
+      <div class="screen" id="desk-tools">
+        <div class="card">
+          <div class="t">工具目录（可插入脚本 · 护栏降级为可选用工具）</div>
+          <table class="kv" id="toolTable"></table>
+          <div class="hint">v4 决策：内置执行器删除后，孤儿清理 / .env 渲染等护栏不再是强制行为，而是这里的可插入工具（模板默认插入，用户可删）。保存时若检测到「后端模块缺孤儿清理」给 warning，不阻断。</div>
+        </div>
+      </div>
+
+      <!-- ============ 屏5：设计决策速查 ============ -->
+      <div class="screen" id="desk-legend">
+        <div class="card">
+          <div class="t">v4 核心变更</div>
+          <table class="kv">
+            <tr><td>platform 态</td><td>version / pointer —— 发布语义真相源，UI 置灰 + API 400 拒绝编辑</td></tr>
+            <tr><td>script 态</td><td>check / build / upload / restart / verify / cleanup —— 必须配脚本，未配（且未禁用）即 fail-fast</td></tr>
+            <tr><td>git 内置</td><td>pull 恒由平台执行（fetch/checkout/reset/clean + lock 指纹），脚本只作 hook 附加</td></tr>
+            <tr><td>参数不再猜测</td><td>PM2_NAME / PORT / PUBLIC_PATH / ARTIFACT_DIR 显式注入，优先级：配置中心 → 模块注册表 → pm2_env</td></tr>
+            <tr><td>结果回传</td><td>脚本写 $WS_RESULT_FILE（JSON），平台按白名单合并进 result</td></tr>
+            <tr><td>退出码</td><td>0 成功；非 0 失败并触发 rollbackOnFailure；continueOnError 仅允许 cleanup 类</td></tr>
+            <tr><td>超时</td><td>按节点独立配置（check 60 / build 600 / upload 300 / restart 120 / verify 120 / cleanup 60）</td></tr>
+            <tr><td>日志脱敏</td><td>注入的密钥变量值在落库前统一掩码为 ***</td></tr>
+            <tr><td>脚本指纹</td><td>scriptHash 入实例与审计，回答「当时跑的是哪份脚本」</td></tr>
+            <tr><td>回滚漂移</td><td>回滚用最新脚本发旧代码 → 标记 scriptDrift=true</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <div class="t">待确认 / 原型未覆盖</div>
+          <div class="banner warn" style="margin-top:0">
+            <span>C10 平台差异（macOS/Linux）· C11 依赖预检 · C13 节点试跑 · C15 日志上限 —— 执行期行为，待 M4 落地后补。</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="mRollback">
+    <div class="modal">
+      <h3 style="margin-bottom:8px;">回滚到上一稳定版本</h3>
+      <div class="muted" style="margin-bottom:12px;line-height:1.7;">
+        目标版本 <b class="mono">45b5a30</b>（当前 <b class="mono">9263f62</b>）
+      </div>
+      <div class="banner warn" style="margin-top:0;margin-bottom:14px;">
+        <span>回滚使用<b>最新脚本</b>发布旧代码，与当时脚本可能不同（<b>scriptDrift</b>）。若回滚失败，请优先排查脚本漂移。</span>
+      </div>
+      <div class="row"><button class="btn" onclick="closeModal('mRollback');toast('已提交回滚，scriptDrift=true')">确认回滚</button>
+      <button class="btn gray" onclick="closeModal('mRollback')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mAddTool">
+    <div class="modal">
+      <h3 style="margin-bottom:10px;">添加操作 · 引用内置工具</h3>
+      <div class="field"><label>选择工具</label><select id="toolSel"></select></div>
+      <div class="hint" style="margin-bottom:12px">引用后该操作由工具实现执行；工具升级时所有引用它的节点自动受益，无需逐个改脚本（解决「升级不扩散」）。</div>
+      <div class="row"><button class="btn" onclick="addToolAct()">添加</button>
+      <button class="btn gray" onclick="closeModal('mAddTool')">取消</button></div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mRename">
+    <div class="modal" style="max-width:420px">
+      <h3 style="margin-bottom:12px;">流水线名称与备注</h3>
+      <div class="field"><label>名称</label><input id="rnName" placeholder="如：前端快线（skipVerify）"></div>
+      <div class="field"><label>备注描述</label><textarea id="rnDesc" rows="3"
+        style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;
+        font-size:13px;color:var(--text);font-family:inherit;outline:none;resize:vertical;"
+        placeholder="说明这条流水线的用途、适用场景、注意事项"></textarea></div>
+      <div class="hint" style="margin-bottom:12px">改名与备注会记审计；历史实例保留提交时的名称快照，不受后续改名影响。</div>
+      <div class="row">
+        <button class="btn" onclick="saveRename()"><svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>保存</button>
+        <button class="btn gray" onclick="closeModal('mRename')">取消</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ============ 数据：节点定义 ============ */
+var NODES = [
+  {id:'check', name:'check', mode:'script', cat:'校验',
+   desc:'业务自检（依赖就绪 / 磁盘空间 / 自定义门禁）。安全基线已上提至 submit。',
+   script:'set -euo pipefail\n# 业务自检：磁盘空间\nAVAIL=$(df -Pm "$RELEASE_DIR" | awk \'NR==2{print $4}\')\n[ "$AVAIL" -gt 2048 ] || { echo "磁盘不足: ${AVAIL}MB"; exit 1; }\necho "磁盘可用 ${AVAIL}MB"',
+   timeout:60, cont:false, disabledFor:[], requires:['df']},
+
+  {id:'pull', name:'pull', mode:'git', cat:'代码',
+   desc:'平台内置 git 拉取（fetch / checkout / reset / clean + pnpm-lock 指纹依赖同步），脚本仅作 hook 附加。',
+   script:'# 可选 hook：平台拉取完成后执行\necho "拉取完成: ${COMMIT_ID} @ ${BRANCH}"',
+   timeout:300, cont:false, disabledFor:[], requires:[]},
+
+  {id:'build', name:'build', mode:'script', cat:'构建',
+   desc:'必须配置命令（required）。未配置即 fail-fast，绝不回退内置技术栈命令。',
+   script:'set -euo pipefail\npnpm --filter @web-system/shared build\nRELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf',
+   timeout:600, cont:false, disabledFor:[], requires:['pnpm','npx']},
+
+  {id:'upload', name:'upload', mode:'script', cat:'投递',
+   desc:'产物投递。源 = BUILD_OUTPUT_DIR，目标 = ARTIFACT_DIR（可用 PUBLIC_PATH 指定静态资源子目录）。',
+   script:'set -euo pipefail\nSRC="${BUILD_OUTPUT_DIR}"\nDEST="${ARTIFACT_DIR}"\n[ -d "${DEST}" ] && mv "${DEST}" "/tmp/upload-${MODULE_KEY}-$(date +%s)"\nmkdir -p "${DEST}" && cp -R "${SRC}/." "${DEST}/"\ntest -f "${DEST}/${ENTRY_FILE}" || { echo "产物入口缺失"; exit 1; }\necho "{\\"artifactPath\\":\\"/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/\\"}" > "$WS_RESULT_FILE"',
+   timeout:300, cont:false, disabledFor:['backend'], requires:['cp']},
+
+  {id:'restart', name:'restart', mode:'script', cat:'部署',
+   desc:'后端重启。端口与进程名不再猜测，直接用 PM2_NAME / PORT。',
+   script:'set -euo pipefail\nNAME="${PM2_NAME:?未解析到 pm2 进程名}"\n\n# [护栏·可删] 端口孤儿清理：仅杀非 pm2 纳管占用者\nif [ -n "${PORT:-}" ]; then\n  PM2_PIDS="$(pm2 jlist | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(p=>p.pid).join(" ")))\')"\n  for PID in $(lsof -tiTCP:"${PORT}" -sTCP:LISTEN || true); do\n    case " ${PM2_PIDS} " in *" ${PID} "*) ;; *) kill -9 "${PID}";; esac\n  done\nfi\n\npm2 restart "${NAME}" --update-env\necho "{\\"restarted\\":\\"${NAME}\\",\\"port\\":\\"${PORT}\\"}" > "$WS_RESULT_FILE"',
+   timeout:120, cont:false, disabledFor:['frontend','micro-frontend'], requires:['pm2','lsof','node']},
+
+  {id:'version', name:'version', mode:'platform', cat:'发布语义',
+   desc:'写 deploy_versions（库：web_system_deploy）。发布语义真相源，平台托管，不可编辑。',
+   script:'', timeout:0, cont:false, disabledFor:[], requires:[]},
+
+  {id:'pointer', name:'pointer', mode:'platform', cat:'发布语义',
+   desc:'upsert deploy_deployments.current_version。后端模块不切指针（无静态产物）。',
+   script:'', timeout:0, cont:false, disabledFor:['backend'], requires:[]},
+
+  {id:'verify', name:'verify', mode:'script', cat:'探活',
+   desc:'前端：产物可访问 + 等 gateway TTL 后断言 manifest；后端：端口探活，假健康必须阻断。',
+   script:'set -euo pipefail\nsleep $((GATEWAY_TTL_SEC + 2))   # gateway 版本缓存 TTL 10s\nV="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})\')"\n[ "${V}" = "${COMMIT_ID}" ] || { echo "manifest 版本为 ${V:-空}"; exit 1; }\necho "{\\"manifestVersion\\":\\"${V}\\"}" > "$WS_RESULT_FILE"',
+   timeout:120, cont:false, disabledFor:[], requires:['curl','node']},
+
+  {id:'cleanup', name:'cleanup', mode:'script', cat:'清理',
+   desc:'保留最近 KEEP_VERSIONS 个版本；当前版本与 PROTECTED_VERSIONS（灰度引用）受保护。',
+   script:'set -euo pipefail\ncd "$(dirname "${ARTIFACT_DIR}")"\nls -1t | tail -n +$((KEEP_VERSIONS + 1)) | while read -r v; do\n  case " ${PROTECTED_VERSIONS} ${COMMIT_ID} " in *" ${v} "*) continue;; esac\n  ${WS_SAFE_DELETE} "${v}" "/tmp/cleanup-${MODULE_KEY}-${v}-$(date +%s)"\ndone',
+   timeout:60, cont:true, disabledFor:['backend'], requires:['ls']},
+];
+
+/* 节点内多操作：restart / pull 为多操作示例，其余节点走「单操作」兼容（默认 1 个） */
+var EXTRA_ACTS={
+  restart:[
+    {id:'a1',type:'shell',name:'端口孤儿清理（护栏）',timeout:30,cont:true,
+     code:'# 仅杀非 pm2 纳管的端口占用者\nPM2_PIDS="$(pm2 jlist | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(p=>p.pid).join(" ")))\')"\nfor PID in $(lsof -tiTCP:"${PORT}" -sTCP:LISTEN || true); do\n  case " ${PM2_PIDS} " in *" ${PID} "*) ;; *) kill -9 "${PID}";; esac\ndone'},
+    {id:'a2',type:'shell',name:'.env 渲染落盘（护栏）',timeout:20,cont:true,
+     code:'# 配置中心值合并写进运行目录 .env（0600）\numask 077\nenv | grep -E "^(PORT|DB_|JWT_)" >> "${RELEASE_DIR}/servers/${MODULE_DIR}/.env"'},
+    {id:'a3',type:'shell',name:'pm2 restart（主操作）',timeout:120,cont:false,
+     code:'set -euo pipefail\nNAME="${PM2_NAME:?未解析到 pm2 进程名}"\npm2 restart "${NAME}" --update-env'}
+  ],
+  pull:[
+    {id:'a0',type:'service',name:'git 拉取（平台内置）',tool:'git-pull',builtin:true,timeout:300,cont:false},
+    {id:'a1',type:'shell',name:'拉取后 hook',timeout:60,cont:false,
+     code:'echo "拉取完成: ${COMMIT_ID} @ ${BRANCH}"'}
+  ]
+};
+function getActs(n){
+  if(n.mode==='platform') return [];
+  if(EXTRA_ACTS[n.id]) return EXTRA_ACTS[n.id];
+  return [{id:'a1',type:'shell',name:'主操作',code:n.script,timeout:n.timeout,cont:n.cont}];
+}
+var VARS = ['MODULE_KEY','MODULE_TYPE','MODULE_DIR','RELEASE_DIR','COMMIT_ID','BRANCH','DEPLOY_ENV',
+            'PORT','PM2_NAME','PUBLIC_PATH','ARTIFACT_DIR','BUILD_OUTPUT_DIR','ENTRY_FILE',
+            'GATEWAY_URL','GATEWAY_TTL_SEC','KEEP_VERSIONS','PROTECTED_VERSIONS','WS_RESULT_FILE','WS_SAFE_DELETE'];
+
+var RESOLVED = {
+  backend:{MODULE_KEY:'todo-service',MODULE_TYPE:'backend',PORT:'6005',PM2_NAME:'web-todo',
+    BUILD_OUTPUT_DIR:'$RELEASE_DIR/servers/todo-service/dist',ENTRY_FILE:'main.js'},
+  'micro-frontend':{MODULE_KEY:'admin',MODULE_TYPE:'micro-frontend',PORT:'—',PM2_NAME:'—',
+    ARTIFACT_DIR:'$RELEASE_DIR/servers/gateway/public/static/modules/admin/9263f62',
+    BUILD_OUTPUT_DIR:'$RELEASE_DIR/apps/admin/dist',PUBLIC_PATH:'admin',ENTRY_FILE:'index.js'},
+  frontend:{MODULE_KEY:'portal',MODULE_TYPE:'frontend',PORT:'—',PM2_NAME:'—',
+    ARTIFACT_DIR:'$RELEASE_DIR/servers/gateway/public/static/modules/portal/9263f62',
+    BUILD_OUTPUT_DIR:'$RELEASE_DIR/apps/portal/dist',PUBLIC_PATH:'portal',ENTRY_FILE:'index.js'}
+};
+
+var TOOLS = [
+  {code:'port-orphan-clean', name:'端口孤儿清理', kind:'shell', cat:'deploy',
+   desc:'仅杀非 pm2 纳管的端口占用者，避免新进程 EADDRINUSE、对外仍是旧实例（防自杀铁律）'},
+  {code:'render-env-file', name:'.env 渲染落盘', kind:'shell', cat:'deploy',
+   desc:'把配置中心 resolve 结果合并写进进程运行目录 .env（0600），供读文件而非进程 env 的服务使用'},
+  {code:'deps-precheck', name:'依赖预检', kind:'shell', cat:'generic',
+   desc:'校验 pm2/curl/node/lsof 是否存在，缺失即明确报错，避免执行到一半才失败'},
+  {code:'manifest-assert', name:'manifest 版本断言', kind:'shell', cat:'probe',
+   desc:'等 gateway TTL 后断言 __manifest__ 版本，兼容拦截器包装（json.data ?? json）'},
+  {code:'git-pull', name:'git 拉取', kind:'service', cat:'code', desc:'平台内置执行体，不进工具编辑器（仅展示）'},
+  {code:'write-version', name:'写版本表', kind:'service', cat:'semantic', desc:'平台内置执行体，version 步骤，不可替换'},
+  {code:'switch-pointer', name:'切指针', kind:'service', cat:'semantic', desc:'平台内置执行体，pointer 步骤，不可替换'},
+];
+
+/* ============ 数据：发布记录（前端页面 + 后台服务） ============ */
+var RUNS = [
+  {id:'r-1021',pname:'admin',module:'admin',       mt:'micro-frontend',env:'local',ver:'9263f62',branch:'feature/contract-risk-ai',status:'running',dur:'—',   by:'admin',        time:'09:55'},
+  {id:'r-1020',pname:'todo-service',module:'todo-service',mt:'backend',       env:'local',ver:'9263f62',branch:'feature/contract-risk-ai',status:'failed', dur:'38s', by:'admin',        time:'09:48'},
+  {id:'r-1019',pname:'gateway',module:'gateway',     mt:'backend',       env:'dev',  ver:'45b5a30',branch:'master',                   status:'success',dur:'52s',by:'ci:release',   time:'09:31'},
+  {id:'r-1018',pname:'portal',  module:'portal',      mt:'micro-frontend',env:'dev',  ver:'6aa2682',branch:'master',                   status:'success',dur:'41s',by:'ci:release',   time:'09:30'},
+  {id:'r-1017',pname:'admin',module:'admin',       mt:'micro-frontend',env:'local',ver:'45b5a30',branch:'feature/contract-risk-ai',status:'success',dur:'39s',by:'admin',        time:'08:12'},
+  {id:'r-1016',pname:'ai-agent',module:'ai-agent',    mt:'backend',       env:'local',ver:'45b5a30',branch:'feature/contract-risk-ai',status:'success',dur:'47s',by:'mcp:deploy',   time:'08:05'},
+  {id:'r-1015',pname:'admin',  module:'admin',       mt:'micro-frontend',env:'local',ver:'3fbb450',branch:'feature/contract-risk-ai',status:'success',dur:'36s',by:'admin',        time:'昨 19:22'},
+  {id:'r-1014',pname:'user-service',module:'user-service',mt:'backend',       env:'dev',  ver:'3fbb450',branch:'master',                   status:'success',dur:'44s',by:'ci:release',   time:'昨 18:40'},
+];
+var ST={running:['primary','运行中'],success:['ok','成功'],failed:['danger','失败'],cancelled:['gray','已取消']};
+
+/* ============ 屏1：列表 ============ */
+var filter='all';
+function renderFilters(){
+  var fs=[['all','全部'],['frontend','前端页面'],['backend','后台服务'],['local','环境 local'],['dev','环境 dev']];
+  var h='';
+  fs.forEach(function(f){
+    h+='<span class="fchip '+(filter===f[0]?'on':'')+'" onclick="setFilter(\''+f[0]+'\')">'+f[1]+'</span>';
+  });
+  document.getElementById('filters').innerHTML=h;
+}
+function setFilter(f){ filter=f; renderFilters(); renderRuns(); }
+function matchRun(r){
+  if(filter==='all') return true;
+  if(filter==='frontend') return r.mt!=='backend';
+  if(filter==='backend') return r.mt==='backend';
+  return r.env===filter;
+}
+function renderRuns(){
+  var h='';
+  RUNS.filter(matchRun).forEach(function(r){
+    var s=ST[r.status];
+    h+='<tr onclick="openRun(\''+r.id+'\')">'
+      +'<td class="k">'+r.id+'</td>'
+      +'<td>'+r.pname+'</td>'
+      +'<td><b>'+r.module+'</b> <span class="tag '+(r.mt==='backend'?'primary':'gray')+'" '
+      +'style="font-size:10px;padding:1px 6px">'+(r.mt==='backend'?'backend':r.mt)+'</span></td>'
+      +'<td>'+r.env+'</td>'
+      +'<td class="k">'+r.ver+'</td>'
+      +'<td class="k" style="color:var(--text-2)">'+r.branch+'</td>'
+      +'<td><span class="dot '+s[0]+'"></span>'+s[1]+'</td>'
+      +'<td class="k">'+r.dur+'</td>'
+      +'<td class="k" style="font-size:11px">'+r.by+'</td>'
+      +'<td class="muted">'+r.time+'</td></tr>';
+  });
+  document.getElementById('runList').innerHTML=h;
+}
+
+/* ============ 屏3：详情 ============ */
+var CUR=null, RUN=null, timer=null, editing=false;
+
+function openRun(id){
+  CUR=RUNS.filter(function(r){return r.id===id;})[0];
+  desk('detail', document.querySelectorAll('.side-item')[2]);
+  document.getElementById('dMod').textContent=CUR.module;
+  document.getElementById('dEnv').textContent=CUR.env;
+  document.getElementById('dVer').textContent=CUR.ver;
+  document.getElementById('pName').textContent=CUR.pname;
+  var s=ST[CUR.status];
+  var el=document.getElementById('dStatus');
+  el.className='tag '+s[0]; el.textContent=s[1];
+  document.getElementById('mVer').textContent=CUR.ver;
+  document.getElementById('mBranch').textContent=CUR.branch;
+  document.getElementById('mDur').textContent=CUR.dur;
+  exitEdit();
+  switchTab('inst');
+  renderHist();
+  buildRun();
+  renderSteps(); stepBody(null);
+  if(CUR.status==='running') runNext();
+}
+
+function switchTab(t){
+  document.getElementById('tab-inst').className='tab'+(t==='inst'?' on':'');
+  document.getElementById('tab-hist').className='tab'+(t==='hist'?' on':'');
+  document.getElementById('pane-inst').style.display=(t==='inst'&&!editing)?'block':'none';
+  document.getElementById('pane-hist').style.display=(t==='hist'&&!editing)?'block':'none';
+  document.getElementById('pane-edit').style.display=editing?'block':'none';
+}
+
+function renderHist(){
+  var h='';
+  RUNS.filter(function(r){return r.module===CUR.module;}).forEach(function(r){
+    var s=ST[r.status];
+    h+='<tr onclick="openRun(\''+r.id+'\')" '+(r.id===CUR.id?'style="background:var(--primary-soft)"':'')+'>'
+      +'<td class="k">'+r.id+'</td><td class="k">'+r.ver+'</td><td>'+r.env+'</td>'
+      +'<td class="k" style="color:var(--text-2)">'+r.branch+'</td>'
+      +'<td><span class="dot '+s[0]+'"></span>'+s[1]+'</td>'
+      +'<td class="k">'+r.dur+'</td><td class="k" style="font-size:11px">'+r.by+'</td>'
+      +'<td class="muted">'+r.time+'</td></tr>';
+  });
+  document.getElementById('histList').innerHTML=h;
+}
+
+/* ---- 编辑态（拖拽排序 + 脚本编辑） ---- */
+var editSeq=NODES.map(function(n){return n.id;});
+var editCur='build';
+var dragId=null;
+
+function toggleEdit(){
+  editing=!editing;
+  document.getElementById('btnEdit').innerHTML=editing?(ic('x')+'退出编辑'):(ic('edit')+'编辑流水线');
+  if(editing){ renderEditList(); renderEditDetail(); }
+  switchTab(document.getElementById('tab-inst').className.indexOf('on')>=0?'inst':'hist');
+}
+function exitEdit(){
+  editing=false;
+  document.getElementById('btnEdit').innerHTML=ic('edit')+'编辑流水线';
+}
+
+function renderEditList(){
+  var h='';
+  editSeq.forEach(function(id,i){
+    var n=NODES.filter(function(x){return x.id===id;})[0];
+    if(i>0) h+='<div class="farrow"></div>';
+    h+='<div class="fnode '+(editCur===id?'active':'')+'" draggable="true" '
+      +'ondragstart="ds(event,\''+id+'\')" ondragend="de()" '
+      +'ondragover="fover(event)" ondrop="fdrop(event,\''+id+'\')" '
+      +'onclick="pick(\''+id+'\')">'
+      +'<span class="fidx">'+(i+1)+'</span>'
+      +'<span class="fgrip">⣿</span>'
+      +'<span class="fcnt">'+getActs(n).length+'</span>'
+      +'<span class="fname">'+n.name+'</span>'
+      +'<span class="ftag">'
+      +(n.mode==='platform'?'platform · 不可编辑':n.mode==='git'?'git 内置 + hook':'script · 可编辑')
+      +'</span></div>';
+  });
+  document.getElementById('flowEdit').innerHTML=h;
+}
+var insSide='l';
+function ds(e,id){ dragId=id; e.dataTransfer.effectAllowed='move';
+  var el=e.currentTarget; setTimeout(function(){el.classList.add('dragging');},0); }
+function de(){
+  document.querySelectorAll('.fnode').forEach(function(x){x.classList.remove('dragging','ins-l','ins-r');});
+  dragId=null;
+}
+function fover(e){
+  e.preventDefault();
+  var el=e.currentTarget, r=el.getBoundingClientRect();
+  insSide=(e.clientX < r.left + r.width/2)?'l':'r';
+  document.querySelectorAll('.fnode').forEach(function(x){x.classList.remove('ins-l','ins-r');});
+  el.classList.add(insSide==='l'?'ins-l':'ins-r');
+}
+function fdrop(e,targetId){
+  e.preventDefault();
+  if(!dragId) return;
+  var moved=dragId, from=editSeq.indexOf(moved);
+  if(from<0) return;
+  editSeq.splice(from,1);
+  var to=editSeq.indexOf(targetId); if(insSide==='r') to++;
+  editSeq.splice(to,0,moved);
+  de(); renderEditList(); checkOrder();
+  toast('已移动 '+moved+' → 第 '+(editSeq.indexOf(moved)+1)+' 位');
+}
+function checkOrder(){
+  var iBuild=editSeq.indexOf('build'), iVer=editSeq.indexOf('version'), iPtr=editSeq.indexOf('pointer');
+  if(iVer<iBuild){ toast('约束：version 不可排在 build 之前，已还原'); }
+  if(iPtr<iVer){ toast('约束：pointer 必须在 version 之后，已还原'); }
+}
+function saveOrder(){ toast('顺序已保存 · 审计留痕 · 影响后续实例（运行中实例用快照不受影响）'); }
+var editAct=null;
+function pick(id){ editCur=id; editAct=null; renderEditList(); renderEditDetail(); }
+function pickAct(aid){ editAct=aid; renderEditDetail(); }
+function curNodeObj(){ return NODES.filter(function(x){return x.id===editCur;})[0]; }
+function ensureActs(){
+  var n=curNodeObj();
+  if(!EXTRA_ACTS[n.id]) EXTRA_ACTS[n.id]=getActs(n);
+  return EXTRA_ACTS[n.id];
+}
+function addShellAct(){
+  var n=curNodeObj(); if(!n||n.mode==='platform') return;
+  var arr=ensureActs();
+  arr.push({id:'a'+(arr.length+1),type:'shell',name:'新操作',timeout:60,cont:false,code:'# 在此编写脚本'});
+  editAct=arr[arr.length-1].id; renderEditList(); renderEditDetail(); toast('已添加 shell 操作');
+}
+function openAddTool(){
+  var s=document.getElementById('toolSel');
+  if(s && s.options.length===0){
+    TOOLS.forEach(function(t){
+      var o=document.createElement('option'); o.value=t.code; o.textContent=t.name+'（'+t.kind+'）'; s.appendChild(o);
+    });
+  }
+  openModal('mAddTool');
+}
+function addToolAct(){
+  var sel=document.getElementById('toolSel');
+  var t=TOOLS.filter(function(x){return x.code===sel.value;})[0];
+  var n=curNodeObj(); if(!n||!t||n.mode==='platform') return;
+  var arr=ensureActs();
+  arr.push({id:'a'+(arr.length+1),type:'service',name:t.name,tool:t.code,timeout:60,cont:false});
+  editAct=arr[arr.length-1].id; closeModal('mAddTool');
+  renderEditList(); renderEditDetail(); toast('已引用工具：'+t.name);
+}
+function delAct(aid){
+  var arr=ensureActs(), i=-1;
+  for(var k=0;k<arr.length;k++){ if(arr[k].id===aid){ i=k; break; } }
+  if(i<0) return;
+  if(arr[i].builtin){ toast('内置操作不可删除'); return; }
+  arr.splice(i,1);
+  if(editAct===aid) editAct=null;
+  renderEditList(); renderEditDetail(); toast('已删除操作');
+}
+
+function renderEditDetail(){
+  var n=NODES.filter(function(x){return x.id===editCur;})[0];
+  var h='<div class="t">节点 · '+n.name+' '
+    +(n.mode==='platform'?'<span class="tag gray">platform · 不可编辑</span>':
+      n.mode==='git'?'<span class="tag primary">平台内置 + hook</span>':
+      '<span class="tag ok">script · 必配</span>')+'</div>';
+  h+='<div class="hint" style="margin-bottom:10px">'+n.desc+'</div>';
+
+  var acts=getActs(n), act=null;
+  if(acts.length){
+    act=acts.filter(function(a){return a.id===editAct;})[0]
+       || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
+  }
+  if(n.mode==='platform'){
+    h+='<div class="act lock"><span class="an" style="color:var(--text-3)">0 个操作 · 平台托管，不可新增</span>'
+      +'<span class="tag gray">locked</span></div>';
+  }else{
+    h+='<div class="t">操作列表（'+acts.length+'）· 顺序执行，点击编辑</div>';
+    acts.forEach(function(a,i){
+      h+='<div class="act '+(act&&act.id===a.id?'on':'')+(a.builtin?' lock':'')+'" '
+        +(a.builtin?'':'onclick="pickAct(\''+a.id+'\')" ') +'>'
+        +'<span class="an">'+a.name+'</span>'
+        +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
+        +'<span class="am">'+a.timeout+'s'+(a.cont?' · 容错':'')+'</span>'
+        +(a.builtin?'<span class="tag gray">内置</span>'
+          :'<button class="btn mini gray" onclick="event.stopPropagation();delAct(\''+a.id+'\')" title="删除操作">'+ic('trash')+'</button>')
+        +'</div>';
+    });
+    h+='<div class="row" style="margin-bottom:12px">'
+      +'<button class="btn ghost mini" onclick="addShellAct()">'+ic('plus')+'shell 操作</button>'
+      +'<button class="btn ghost mini" onclick="openAddTool()">'+ic('plus')+'引用内置工具</button>'
+      +'<span class="muted">默认 1 个操作，需要才加</span></div>';
+  }
+
+  if(n.mode==='platform'){
+    h+='<div class="editor-wrap"><div class="editor-bar"><span>平台托管执行体（无脚本）</span><span class="mono">locked</span></div>'
+      +'<textarea class="code" disabled>version / pointer 为发布语义真相源：&#10;· 不允许配置脚本（API 400 拒绝）&#10;· 只可整体开关（enabled）&#10;· 历史踩坑：shell 化会导致版本标签与代码内容不一致</textarea></div>';
+    h+='<div class="banner danger"><span>尝试保存脚本将被拒绝：<code>PUT /pipelines/:id/steps/version → 400 platform step is not editable</code></span></div>';
+  }else{
+    h+='<div class="editor-wrap"><div class="editor-bar"><span>'
+      +(act?(act.type==='service'?'引用工具 · '+act.name:'操作 · '+act.name):'未选择操作')+'</span>'
+      +'<span class="row"><button class="btn ghost sm" onclick="validate()">'+ic('term')+'bash -n 校验</button>'
+      +'<button class="btn sm" onclick="save()">'+ic('save')+'保存脚本</button></span></div>'
+      +((act&&act.type==='service')
+        ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
+        : codeEditor(String((act&&act.code)||'')))
+      +'</div>';
+
+    h+='<div class="t" style="margin-top:12px">可用变量（点击插入）</div><div class="chips">';
+    VARS.forEach(function(v){ h+='<span class="chip" onclick="ins(\''+v+'\')">${'+v+'}</span>'; });
+    h+='</div>';
+
+    h+='<div class="t" style="margin-top:12px">插入工具片段</div><div class="chips">';
+    TOOLS.filter(function(t){return t.kind==='shell';}).forEach(function(t){
+      h+='<span class="chip" onclick="insTool(\''+t.code+'\')">+ '+t.name+'</span>'; });
+    h+='</div>';
+
+    h+='<div class="cfg-grid">'
+      +'<div class="cfg"><label>操作超时（秒）</label><input class="mini" style="width:70px" value="'+(act?act.timeout:60)+'"></div>'
+      +'<div class="cfg"><label>continueOnError</label><select class="mini" '+(n.id==='build'||n.id==='upload'?'disabled':'')+'><option>'+((act&&act.cont)?'是':'否')+'</option><option>'+((act&&act.cont)?'否':'是')+'</option></select></div>'
+      +'<div class="cfg"><label>禁用模块类型</label><span class="mono" style="font-size:11px">'+(n.disabledFor.length?n.disabledFor.join(', '):'—')+'</span></div>'
+      +'<div class="cfg"><label>依赖 requires</label><span class="mono" style="font-size:11px">'+(n.requires.length?n.requires.join(', '):'—')+'</span></div>'
+      +'</div>';
+
+    if(n.id==='build'||n.id==='upload'){
+      h+='<div class="banner danger"><span>continueOnError 对 build / upload <b>强制禁用</b>：产物未就绪却继续，会把指针切到空产物。</span></div>';
+    }
+    if(n.id==='restart'){
+      h+='<div class="banner info"><span>解析链：<code>配置中心 PORT → 模块注册表 → pm2_env.PORT</code>；PM2_NAME 同理，<b>不再做 5 候选猜测</b>。</span></div>';
+    }
+    if(n.id==='cleanup'){
+      h+='<div class="banner warn"><span>灰度引用版本受保护：平台注入 <code>PROTECTED_VERSIONS</code>；旧脚本缺该变量时降级并 warning。</span></div>';
+    }
+  }
+
+  var mt=CUR?CUR.mt:'micro-frontend', r=RESOLVED[mt], tb='<table class="kv">';
+  h+='<div class="t" style="margin-top:14px">变量解析预览（'+mt+'）</div>';
+  ['MODULE_KEY','MODULE_TYPE','PORT','PM2_NAME','PUBLIC_PATH','BUILD_OUTPUT_DIR','ARTIFACT_DIR','ENTRY_FILE'].forEach(function(k){
+    if(r[k]!==undefined) tb+='<tr><td>'+k+'</td><td>'+r[k]+'</td></tr>';
+  });
+  tb+='<tr><td>GATEWAY_URL</td><td>http://localhost:6000</td></tr>'
+     +'<tr><td>KEEP_VERSIONS</td><td>5</td></tr>'
+     +'<tr><td>WS_RESULT_FILE</td><td>/tmp/ws-result-&lt;runId&gt;.json</td></tr></table>';
+  h+=tb;
+  document.getElementById('editDetail').innerHTML=h;
+}
+
+function ins(v){
+  var t=document.getElementById('code'); if(!t) return;
+  t.value=t.value+'\n${'+v+'}'; syncCode(); toast('已插入 ${'+v+'}');
+}
+function insTool(code){
+  var t=document.getElementById('code'); if(!t) return;
+  var snip={'port-orphan-clean':'# [护栏] 端口孤儿清理（仅杀非 pm2 纳管）\nPM2_PIDS="$(pm2 jlist | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(p=>p.pid).join(" ")))\')"\nfor PID in $(lsof -tiTCP:"${PORT}" -sTCP:LISTEN || true); do\n  case " ${PM2_PIDS} " in *" ${PID} "*) ;; *) kill -9 "${PID}";; esac\ndone',
+    'render-env-file':'# [护栏] 配置中心值渲染落盘（0600）\numask 077 && env | grep -E "^(PORT|DB_|JWT_)" >> .env',
+    'deps-precheck':'# [护栏] 依赖预检\nfor c in pm2 curl node lsof; do command -v "$c" >/dev/null || { echo "缺少依赖: $c"; exit 1; }; done',
+    'manifest-assert':'# [护栏] manifest 版本断言（兼容拦截器包装）\nV="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})\')"'};
+  t.value=t.value+'\n\n'+(snip[code]||'# '+code); syncCode(); toast('已插入工具片段');
+}
+function validate(){ toast('bash -n 通过'); }
+function save(){
+  var t=document.getElementById('code');
+  if(CUR&&CUR.mt==='backend'&&editCur==='restart'&&t&&t.value.indexOf('lsof')<0){
+    toast('已保存（warning：后端模块未检测到端口孤儿清理护栏）');
+  }else{ toast('已保存 · 审计留痕 · scriptHash 更新'); }
+}
+
+/* ---- 实例执行 ---- */
+/* 多操作节点的日志：按操作分段（失败可直接定位到 opN） */
+var ACTLOGS={
+  restart:[
+    {n:'端口孤儿清理',st:'success',t:'1s',
+     lines:'[restart/op1] PM2_PIDS=71163 64966 65281 ...\n[restart/op1] lsof 6005 → 无孤儿进程\n[restart/op1] 退出码 0'},
+    {n:'.env 渲染落盘',st:'success',t:'0.4s',
+     lines:'[restart/op2] 合并 6 项配置 → servers/todo-service/.env（0600）\n[restart/op2] 退出码 0'},
+    {n:'pm2 restart',st:'success',t:'3s',
+     lines:'[restart/op3] NAME=web-todo  PORT=6005\n[restart/op3] pm2 restart web-todo --update-env\n[restart/op3] 退出码 0'}
+  ],
+  pull:[
+    {n:'git 拉取（平台内置）',st:'success',t:'6s',
+     lines:'[pull/op0] 平台内置：git fetch origin\n[pull/op0] git reset --hard 9263f62\n[pull/op0] pnpm-lock 指纹一致，跳过 install'},
+    {n:'拉取后 hook',st:'success',t:'0.1s',
+     lines:'[pull/op1] 拉取完成: 9263f62 @ feature/contract-risk-ai'}
+  ]
+};
+var LOGS={
+  check:'[check] 业务自检\n[check] 磁盘可用 51200MB\n[check] 退出码 0',
+  pull:'[pull] 平台内置：git fetch origin feature/contract-risk-ai\n[pull] git reset --hard 9263f62\n[pull] pnpm-lock 指纹一致，跳过 install\n[pull] hook 附加：拉取完成 9263f62 @ feature/contract-risk-ai',
+  build:'[build] pnpm --filter @web-system/shared build\n[build] RELEASE_TAG=9263f62 npx vite build --mode mf\n[build] building for production...\n[build] ✓ 218 modules transformed\n[build] dist/index.js  1,204.31 kB\n[build] 退出码 0（耗时 42s）',
+  upload:'[upload] SRC=$RELEASE_DIR/apps/admin/dist\n[upload] DEST=$ARTIFACT_DIR\n[upload] 已投递 142 个文件\n[upload] 入口校验通过: index.js\n[upload] WS_RESULT_FILE 已写入',
+  restart:'[restart] NAME=web-todo  PORT=6005\n[restart] 端口孤儿清理: 无\n[restart] pm2 restart web-todo --update-env\n[restart] [PM2] Applying action restartProcessId on app [web-todo]\n[restart] 服务已重启，退出码 0',
+  version:'[version] 平台托管：写 deploy_versions（库 web_system_deploy）\n[version] git_commit=9263f62  branch=feature/contract-risk-ai',
+  pointer:'[pointer] 平台托管：upsert deploy_deployments.current_version=9263f62\n[pointer] 等待 gateway TTL 10s 后由 verify 断言',
+  verify:'[verify] sleep $((GATEWAY_TTL_SEC + 2))  # 12s\n[verify] GET http://localhost:6000/__manifest__\n[verify] manifest 版本为 45b5a30，期望 9263f62\n[verify] 退出码 1 → 触发 rollbackOnFailure=previous'
+};
+var RESULTS={
+  upload:'{\n  "artifactPath": "/static/modules/admin/9263f62/",\n  "target": "local"\n}',
+  restart:'{\n  "restarted": "web-todo",\n  "port": "6005"\n}'
+};
+
+function buildRun(){
+  var mt=CUR.mt;
+  RUN={seq:editSeq.map(function(id){
+    var n=NODES.filter(function(x){return x.id===id;})[0];
+    return {id:id,name:n.name,mode:n.mode,skipped:n.disabledFor.indexOf(mt)>=0,state:'pending'};
+  }),idx:0,t0:Date.now()};
+}
+
+var ST_CN={pending:'待执行',running:'执行中',success:'成功',failed:'失败',skipped:'已跳过',rollback:'自动回滚'};
+function renderSteps(){
+  if(!RUN) return;
+  var h='';
+  RUN.seq.forEach(function(s,i){
+    if(i>0){
+      var prev=RUN.seq[i-1];
+      var ac=prev.state==='success'?'done':(prev.state==='failed'?'fail':'');
+      h+='<div class="farrow '+ac+'"></div>';
+    }
+    h+='<div class="fnode '+s.state+'" onclick="stepBody(\''+s.id+'\')">'
+      +'<span class="fidx">'+(i+1)+'</span>'
+      +'<span class="fname">'+s.name+'</span>'
+      +'<span class="ftag">'+(ST_CN[s.state]||s.state)+'</span>'
+      +'</div>';
+  });
+  document.getElementById('flowRun').innerHTML=h;
+}
+
+function stepBody(id){
+  if(!id){ document.getElementById('stepBody').innerHTML=
+    '<div class="banner info"><span>点击上方任一节点查看日志与回传结果（WS_RESULT_FILE）。</span></div>'; return; }
+  var s=RUN.seq.filter(function(x){return x.id===id;})[0];
+  if(!s) return;
+  var n=NODES.filter(function(x){return x.id===id;})[0];
+  var cls=s.state==='failed'?'ln-err':s.state==='success'?'ln-ok':'ln-dim';
+  var stTag=s.state==='failed'?'danger':s.state==='success'?'ok':'gray';
+  var segs=ACTLOGS[id], logHtml='';
+  if(segs){
+    segs.forEach(function(g,i){
+      var ok=g.st==='success';
+      logHtml+='<div style="margin-bottom:7px">'
+        +'<div class="op-h">── op'+(i+1)+' '+g.n+'　'+(ok?'成功 ':'失败 ')+g.t+'</div>'
+        +'<span class="'+(ok?'ln-ok':'ln-err')+'">'+String(g.lines).replace(/</g,'&lt;')+'</span></div>';
+    });
+  }else{
+    logHtml='<span class="'+cls+'">'+String(LOGS[id]||'（暂无日志）').replace(/</g,'&lt;')+'</span>';
+  }
+  document.getElementById('stepBody').innerHTML=
+    '<div class="grid2" style="margin-top:4px">'
+    +'<div><div class="t">日志 · '+s.name+' <span class="tag '+stTag+'">'+s.state+'</span>'
+    +(segs?' <span class="muted">按操作分段</span>':'')+'</div>'
+    +'<div class="logbox">'+logHtml+'</div></div>'
+    +'<div><div class="t">回传结果 · WS_RESULT_FILE</div>'
+    +'<div class="resultbox">'+(RESULTS[id]?RESULTS[id].replace(/</g,'&lt;'):'<span class="muted">该节点未写入结果文件（等价无 result）</span>')+'</div>'
+    +'<div class="t" style="margin-top:10px">节点元信息</div>'
+    +'<table class="kv"><tr><td>mode</td><td>'+n.mode+'</td></tr>'
+    +'<tr><td>耗时</td><td>'+(s.dur?s.dur+'s':'—')+'</td></tr>'
+    +'<tr><td>退出码</td><td>'+(s.state==='failed'?'1':(s.state==='success'?'0':'—'))+'</td></tr>'
+    +'<tr><td>scriptHash</td><td>a91f3c7</td></tr>'
+    +'<tr><td>continueOnError</td><td>'+(n.cont?'是':'否')+'</td></tr></table></div></div>';
+}
+
+function runNext(){
+  if(!RUN) return;
+  while(RUN.idx<RUN.seq.length && RUN.seq[RUN.idx].skipped){ RUN.seq[RUN.idx].state='skipped'; RUN.idx++; }
+  if(RUN.idx>=RUN.seq.length){
+    document.getElementById('dStatus').textContent='成功';
+    document.getElementById('dStatus').className='tag ok';
+    document.getElementById('mDur').textContent=Math.round((Date.now()-RUN.t0)/1000)+'s';
+    renderSteps(); return;
+  }
+  var s=RUN.seq[RUN.idx]; s.state='running'; renderSteps();
+  var dur=(s.id==='verify'?3000:(s.id==='build'?2200:1100));
+  timer=setTimeout(function(){
+    if(!RUN) return;
+    if(s.id==='verify'&&CUR.mt==='micro-frontend'){
+      s.state='failed'; s.dur=13; RUN.idx++;
+      RUN.seq.push({id:'rollback',name:'自动回滚',mode:'platform',skipped:false,state:'running'});
+      renderSteps(); stepBody('verify');
+      var el=document.getElementById('dStatus');
+      el.textContent='失败 · 自动回滚中'; el.className='tag danger';
+      setTimeout(function(){
+        RUN.seq[RUN.seq.length-1].state='rollback';
+        el.textContent='已回滚'; renderSteps();
+        toast('verify 失败 → 已回滚到 45b5a30（等探活确认后落审计）');
+      },1800);
+      return;
+    }
+    s.state='success'; s.dur=Math.round(dur/1000); RUN.idx++;
+    renderSteps(); runNext();
+  },dur);
+}
+function cancelRun(){
+  if(timer) clearTimeout(timer); RUN=null;
+  var el=document.getElementById('dStatus');
+  if(el){ el.textContent='已取消'; el.className='tag gray'; }
+  toast('已取消：SIGKILL 进程组（含孙进程）后终态记为 cancelled');
+}
+
+/* ============ 屏2：提交发布 ============ */
+function renderPreview(){
+  var m=document.getElementById('subModule').value;
+  var mt=m==='todo-service'?'backend':'micro-frontend';
+  var h='<table class="kv">';
+  editSeq.forEach(function(id){
+    var n=NODES.filter(function(x){return x.id===id;})[0];
+    var sk=n.disabledFor.indexOf(mt)>=0;
+    h+='<tr><td>'+n.name+'</td><td>'+(sk
+      ?'<span class="tag gray">跳过</span> <span class="muted">disabledFor: '+n.disabledFor.join('/')+'</span>'
+      :(n.mode==='platform'?'<span class="tag gray">平台托管</span>':
+        n.mode==='git'?'<span class="tag primary">平台内置 + hook</span>':
+        '<span class="tag ok">执行脚本</span> <span class="muted">超时 '+n.timeout+'s</span>'))+'</td></tr>';
+  });
+  h+='</table>';
+  document.getElementById('previewList').innerHTML=h;
+}
+function submitPipeline(){
+  var m=document.getElementById('subModule').value;
+  var rec={id:'r-1022',pname:m,module:m,mt:m==='todo-service'?'backend':'micro-frontend',env:'local',
+    ver:'9263f62',branch:'feature/contract-risk-ai',status:'running',dur:'—',by:'admin',time:'刚刚'};
+  RUNS.unshift(rec);
+  renderRuns(); openRun(rec.id);
+}
+
+/* ============ 屏4：工具目录 ============ */
+(function(){
+  var h='<tr><td style="color:var(--text-3)">工具</td><td style="color:var(--text-3);font-family:inherit">分类 / kind / 说明</td></tr>';
+  var last='';
+  var CN={deploy:'deploy 投递部署',probe:'probe 探活验证',code:'code 代码获取',semantic:'semantic 发布语义',generic:'generic 通用'};
+  TOOLS.forEach(function(t){
+    if(t.cat!==last){ h+='<tr><td colspan="2" style="color:var(--text-3);font-family:inherit;font-weight:600;padding-top:10px">'+(CN[t.cat]||t.cat)+'</td></tr>'; last=t.cat; }
+    h+='<tr><td class="mono">'+t.code+'<br><span class="tag '+(t.kind==='service'?'primary':'gray')+'">'+t.kind+'</span></td>'
+      +'<td style="font-family:inherit"><b>'+t.name+'</b><br><span class="muted">'+t.desc+'</span></td></tr>';
+  });
+  document.getElementById('toolTable').innerHTML=h;
+})();
+
+/* ============ 通用 ============ */
+function desk(name,el){
+  if(timer){ clearTimeout(timer); timer=null; }
+  document.querySelectorAll('.side-item').forEach(function(i){i.classList.remove('active');});
+  if(el) el.classList.add('active');
+  document.querySelectorAll('.content .screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('desk-'+name).classList.add('active');
+  var map={list:'流水线',submit:'提交发布',detail:'流水线详情',tools:'工具目录',legend:'设计决策速查'};
+  document.getElementById('deskTitle').textContent=map[name]||'';
+}
+/* 图标（禁用 emoji，统一 SVG） */
+function ic(n){
+  var P={
+    edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
+    check:'<polyline points="20 6 9 17 4 12"/>',
+    term:'<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+    trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    rollback:'<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
+    retry:'<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>'
+  };
+  return '<svg class="bic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(P[n]||'')+'</svg>';
+}
+/* 流水线名称与备注 */
+var PIPELINE={name:'默认流水线',desc:'全量流程：拉取 → 构建 → 投递 → 重启 → 写版本 → 切指针 → 探活 → 清理'};
+function openRename(){
+  document.getElementById('rnName').value=PIPELINE.name;
+  document.getElementById('rnDesc').value=PIPELINE.desc;
+  openModal('mRename');
+}
+function saveRename(){
+  var n=document.getElementById('rnName').value.trim();
+  var d=document.getElementById('rnDesc').value.trim();
+  if(!n){ toast('名称不能为空'); return; }
+  PIPELINE.name=n; PIPELINE.desc=d;
+  // 流水线是定义、实例引用它：改名作用于同名流水线的全部记录；
+  // 历史实例保留提交时快照（runId 与 ID 不变），仅显示名同步。
+  var oldName=CUR?CUR.pname:null;
+  if(oldName){ RUNS.forEach(function(r){ if(r.pname===oldName) r.pname=n; }); }
+  if(CUR) CUR.pname=n;
+  document.getElementById('pName').textContent=n;
+  renderRuns();
+  document.getElementById('pDesc').textContent=d||'（无备注）';
+  closeModal('mRename'); toast('已保存 · 审计留痕 · 历史实例保留提交时快照');
+}
+/* bash 语法高亮 + 行号 */
+function hl(code){
+  var KW=/\b(set|if|then|else|elif|fi|for|in|do|done|case|esac|while|until|function|return|exit|echo|cd|mv|cp|mkdir|rm|test|sleep|export|source|umask|env|grep|awk|sed|read|local|node|curl|pm2|ls|df)\b/g;
+  return String(code||'').split('\n').map(function(line){
+    var l=line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if(/^\s*#/.test(l)) return '<span class="c-cmt">'+l+'</span>';
+    l=l.replace(/(\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*)/g,'<span class="c-var">$1</span>');
+    l=l.replace(KW,'<span class="c-kw">$1</span>');
+    return l;
+  }).join('\n');
+}
+function gutter(n){ var s=''; for(var i=1;i<=n;i++){ s+=i+'\n'; } return s; }
+function syncCode(){
+  var ta=document.getElementById('code'); if(!ta) return;
+  var h=document.getElementById('codeHl'), g=document.getElementById('codeGut');
+  if(h) h.innerHTML=hl(ta.value);
+  if(g) g.textContent=gutter(ta.value.split('\n').length);
+}
+function syncScroll(){
+  var ta=document.getElementById('code'); if(!ta) return;
+  var h=document.getElementById('codeHl'), g=document.getElementById('codeGut');
+  if(h) h.scrollTop=ta.scrollTop;
+  if(g) g.scrollTop=ta.scrollTop;
+}
+function codeEditor(v){
+  var esc=v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div class="code-wrap">'
+    +'<div class="code-gutter" id="codeGut">'+gutter(v.split('\n').length)+'</div>'
+    +'<div class="code-main">'
+    +'<pre class="code-hl" id="codeHl">'+hl(v)+'</pre>'
+    +'<textarea class="code-in" id="code" spellcheck="false" '
+    +'oninput="syncCode()" onscroll="syncScroll()">'+esc+'</textarea>'
+    +'</div></div>';
+}
+function rollback(){ openModal('mRollback'); }
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+var tt;
+function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(function(){e.classList.remove('show');},1900);}
+
+renderFilters(); renderRuns(); renderPreview();
+</script>
+</body>
+</html>
