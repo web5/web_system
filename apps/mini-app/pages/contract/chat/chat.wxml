@@ -10,11 +10,11 @@
     <view wx:for="{{chatMessages}}" wx:key="index" wx:for-index="idx" class="chat-msg {{item.role}}">
       <view class="msg-avatar">{{item.role === 'ai' ? 'AI' : '我'}}</view>
       <view
-        class="msg-bubble {{item.role === 'ai' && item.text.length > 140 && !expandMap[idx] ? 'collapsed' : ''}}"
+        class="msg-bubble {{item.text.length > 140 && !expandMap[idx] ? 'collapsed' : ''}}"
       >
         <view class="msg-text">{{item.text}}</view>
         <view
-          wx:if="{{item.role === 'ai' && item.text.length > 140}}"
+          wx:if="{{item.text.length > 140}}"
           class="msg-expand"
           catchtap="onToggleExpand"
           data-idx="{{idx}}"
