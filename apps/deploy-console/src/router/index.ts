@@ -22,12 +22,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '仪表盘' },
       },
       {
-        path: 'deploy',
-        name: 'DeployCenter',
-        component: () => import('@/views/DeployCenter.vue'),
-        meta: { title: '发布中心' },
-      },
-      {
         path: 'pipelines',
         name: 'PipelineCenter',
         component: () => import('@/views/PipelineCenter.vue'),

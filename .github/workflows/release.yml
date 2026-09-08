@@ -1,0 +1,162 @@
+# release — 推送 master 后自动触发发布流水线（CI → CD 断链打通）
+#
+# 设计：specs/ci-cd/design.md「P0 · 打通断链」
+#   本 workflow 不执行任何部署动作，只把「发布意图」投递给发布平台
+#   （deploy-console 的 POST /api/hooks/release），由平台流水线统一执行：
+#   锁 / 审批 / 审计 / 通知 / 度量 / 自动回滚 全部保留，CI 不绕过平台治理。
+#
+# 前置条件：
+#   1) runs-on: self-hosted —— deploy-console 运行在内网（默认 http://127.0.0.1:6200），
+#      GitHub 托管 runner 访问不到；需在能访问该地址的本机注册 self-hosted runner。
+#   2) 仓库 Secrets：
+#        RELEASE_HOOK_URL     发布平台地址，如 http://127.0.0.1:6200
+#        RELEASE_HOOK_SECRET  与发布平台 .env 的 RELEASE_HOOK_SECRET 一致
+#        DEPLOY_CONSOLE_TOKEN 控制台 JWT（仅用于轮询流水线状态，建议 CI 专用账号并定期轮换）
+#
+# 安全：
+#   - HMAC-SHA256 签名（X-Hub-Signature-256）+ 时间戳（X-Ws-Timestamp）防重放
+#   - deliveryId 幂等：workflow 重跑 / 网络重试不会产生第二条流水线
+#   - 验签对象是原始请求体，签名用 node 计算，避免 jq/openssl 环境差异
+name: release
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 目标环境（local / dev / staging / prod）
+        required: true
+        default: dev
+      modules:
+        description: 模块 key（逗号分隔，留空 = 自动解析本次改动模块）
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    name: 触发发布流水线
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 解析目标环境与改动模块
+        id: plan
+        env:
+          INPUT_ENV: ${{ github.event.inputs.env }}
+          INPUT_MODULES: ${{ github.event.inputs.modules }}
+        run: |
+          set -euo pipefail
+          ENV="${INPUT_ENV:-dev}"
+          BRANCH="${GITHUB_REF_NAME}"
+          COMMIT="$(git rev-parse --short HEAD)"
+
+          if [ -n "${INPUT_MODULES:-}" ]; then
+            MODULES="$(echo "$INPUT_MODULES" | tr ',' ' ')"
+          else
+            # 取本次 push 触达的 servers/<svc> 与 apps/<app>，目录名即 moduleKey
+            BASE="$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)"
+            MODULES="$(git diff --name-only "$BASE" HEAD \
+              | grep -E '^(servers|apps)/' \
+              | cut -d/ -f2 | sort -u | tr '\n' ' ')"
+          fi
+
+          if [ -z "$(echo "$MODULES" | tr -d ' ')" ]; then
+            echo "未检测到模块变更，跳过发布"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "modules=$MODULES" >> "$GITHUB_OUTPUT"
+          echo "目标: env=$ENV branch=$BRANCH commit=$COMMIT modules=$MODULES"
+
+      - name: 投递发布意图并轮询至终态
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          RELEASE_HOOK_URL: ${{ secrets.RELEASE_HOOK_URL }}
+          RELEASE_HOOK_SECRET: ${{ secrets.RELEASE_HOOK_SECRET }}
+          DEPLOY_CONSOLE_TOKEN: ${{ secrets.DEPLOY_CONSOLE_TOKEN }}
+          PLAN_ENV: ${{ steps.plan.outputs.env }}
+          PLAN_BRANCH: ${{ steps.plan.outputs.branch }}
+          PLAN_COMMIT: ${{ steps.plan.outputs.commit }}
+          PLAN_MODULES: ${{ steps.plan.outputs.modules }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          : "${RELEASE_HOOK_URL:?缺 secrets.RELEASE_HOOK_URL}"
+          : "${RELEASE_HOOK_SECRET:?缺 secrets.RELEASE_HOOK_SECRET}"
+
+          sign() { # $1=timestamp $2=body → 输出 sha256=<hex>
+            node -e '
+              const c = require("crypto");
+              const [ts, body] = process.argv.slice(1);
+              process.stdout.write(
+                "sha256=" + c.createHmac("sha256", process.env.RELEASE_HOOK_SECRET)
+                  .update(ts + "." + body).digest("hex")
+              );
+            ' "$1" "$2"
+          }
+          jget() { # $1=json $2=key
+            printf '%s' "$1" | node -e '
+              let s = "";
+              process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                try { const j = JSON.parse(s); process.stdout.write(String(j[process.argv[1]] ?? "")); }
+                catch { process.stdout.write(""); }
+              });
+            ' "$2"
+          }
+
+          failed=0
+          for MOD in $PLAN_MODULES; do
+            DELIVERY="${RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}-${MOD}"
+            BODY="$(node -e '
+              const [d, env, m, b, c] = process.argv.slice(1);
+              process.stdout.write(JSON.stringify({
+                deliveryId: d, env, moduleKey: m, branch: b, commitId: c,
+                mode: "direct", source: "release.yml", event: "push",
+              }));
+            ' "$DELIVERY" "$PLAN_ENV" "$MOD" "$PLAN_BRANCH" "$PLAN_COMMIT")"
+
+            TS="$(date +%s)"
+            SIG="$(sign "$TS" "$BODY")"
+            RESP="$(curl -sS -m 20 -X POST "$RELEASE_HOOK_URL/api/hooks/release" \
+              -H 'Content-Type: application/json' \
+              -H "X-Hub-Signature-256: $SIG" \
+              -H "X-Ws-Timestamp: $TS" \
+              --data "$BODY")" || { echo "::error::投递失败: $MOD"; failed=1; continue; }
+
+            JOB="$(jget "$RESP" jobId)"
+            if [ -z "$JOB" ]; then
+              echo "::error::未拿到 jobId: $MOD → $RESP"
+              failed=1
+              continue
+            fi
+            echo "已受理: $MOD → jobId=$JOB"
+
+            # 轮询至终态（最长 20 分钟）
+            for i in $(seq 1 120); do
+              sleep 10
+              ST_JSON="$(curl -sS -m 15 "$RELEASE_HOOK_URL/api/pipelines/$JOB" \
+                -H "Authorization: Bearer $DEPLOY_CONSOLE_TOKEN")" || continue
+              ST="$(jget "$ST_JSON" status)"
+              case "$ST" in
+                succeeded) echo "✓ $MOD 发布成功"; break ;;
+                failed|cancelled) echo "::error::$MOD 发布失败（$ST）"; failed=1; break ;;
+                rejected) echo "::error::$MOD 被拒绝（并发锁未获取）"; failed=1; break ;;
+              esac
+              if [ "$i" -eq 120 ]; then
+                echo "::error::$MOD 轮询超时（20min）"; failed=1
+              fi
+            done
+          done
+
+          exit $failed

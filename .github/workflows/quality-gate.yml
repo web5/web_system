@@ -62,6 +62,7 @@ jobs:
             git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1 >/dev/null 2>&1 || true
           fi
           # 两点 diff（clean checkout 下 git diff <sha> 即 <sha>..HEAD）
-          # 注意：lint 档暂未挂载——仓库子包 ESLint 9 缺 flat config（存量问题），
-          # 待补齐 eslint.config.* 后在此加 --lint（见 scripts/ci/changed-packages.sh）
-          bash scripts/ci/changed-packages.sh "$BASE"
+          # lint 档（--lint）：只读检查，用 lint:ci（无 --fix），子包未配 lint 脚本则跳过。
+          # 若某子包配了 lint 但缺 ESLint flat config 会在此失败——属存量问题，
+          # 修复方式：补 eslint.config.*；临时绕过可去掉 --lint 参数。
+          bash scripts/ci/changed-packages.sh "$BASE" --lint
