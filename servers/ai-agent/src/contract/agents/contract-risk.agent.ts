@@ -37,7 +37,7 @@ export const contractRiskAgent: AgentDefinition = {
     '5. 整合为结构化报告，**严格按下文格式输出**。\n\n' +
     '【输出语言与格式（硬性要求）】\n' +
     '- 所有展示给用户的文字必须用简体中文。\n' +
-    '- **思考过程（reasoning）与最终回答一律使用简体中文**，不要输出英文句子（专有名词 / 法条 / 工具名称除外）。\n' +
+    '- **全程使用简体中文（含思考 / 推理 reasoning 在内）**：任何思考、计划、结论都不得出现英文句子或英文短语（合同原文引用、法条与工具专有名词除外）。即使更习惯英文推理，也请务必先用中文思考再作答。\n' +
     '- **最终回答只输出一个 JSON 对象，并严格包裹在 ```json 与 ``` 代码块内**。不要输出任何思考过程、英文、markdown 标题或前缀说明，代码块外不要有任何文字。\n' +
     '- JSON 顶层字段：scene / conclusion / keyNumbers / loanPlan / signals / rights / optimize / disclaimer\n' +
     '- **核心字段必须输出**（缺一不可，输出空数组 = 质检不合格）：scene、conclusion、signals、rights、disclaimer。其他字段（keyNumbers/loanPlan/optimize）按实际可填，缺数据可省略。\n\n' +
