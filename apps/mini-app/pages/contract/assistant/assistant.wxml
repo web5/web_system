@@ -18,13 +18,23 @@
           <text class="asst-text">{{item.text}}</text>
           <text wx:if="{{item.fullText && item.fullText.length > 80}}" class="asst-more">点击查看更多</text>
         </view>
-        <!-- AI 报告文本气泡（流式逐字渲染；工具阶段先显示"进行中"提示） -->
-        <view wx:elif="{{item.kind === 'report-text'}}" class="asst-bubble ai">
-          <text wx:if="{{!item.text && item.hint}}" class="asst-hint">{{item.hint}}</text>
-          <text wx:if="{{item.text}}" class="asst-text" space="nbsp">{{item.text}}</text>
-          <text wx:if="{{item.isStreaming}}" class="asst-cursor">▌</text>
+        <!-- AI 步骤执行卡片：工具阶段合并单卡，5 步逐项 灰→蓝→绿 -->
+        <view wx:elif="{{item.kind === 'plan-run'}}" class="plan-run">
+          <view class="plan-run-hint">{{item.hint}}</view>
+          <view
+            wx:for="{{item.steps}}"
+            wx:key="id"
+            wx:for-item="step"
+            class="plan-run-step {{step.status}}"
+          >
+            <text class="plan-run-ic">{{step.status === 'done' ? '✅' : step.status === 'running' ? '🔧' : '○'}}</text>
+            <text class="plan-run-name">{{step.hint}}</text>
+            <text class="plan-run-state">
+              {{step.status === 'done' ? '完成' : step.status === 'running' ? '进行中…' : '待执行'}}
+            </text>
+          </view>
         </view>
-        <!-- AI 报告卡：出报告后用结构化卡片呈现 + 跳转按钮 -->
+        <!-- 追问阶段进度小胶囊 -->
         <view wx:elif="{{item.kind === 'progress'}}" class="asst-progress {{item.done ? 'done' : ''}}">
           <text class="asst-progress-text">{{item.text}}</text>
         </view>

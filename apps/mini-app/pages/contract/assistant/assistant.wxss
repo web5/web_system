@@ -232,6 +232,44 @@ page {
   border-color: rgba(46, 158, 91, 0.18);
 }
 
+/* ===== 步骤执行卡片：工具阶段合并单卡，5 步逐项 灰→蓝→绿 ===== */
+.plan-run {
+  background: #fff;
+  border: 2rpx solid #E8EBF0;
+  border-radius: 20rpx;
+  padding: 8rpx 20rpx 12rpx;
+  box-shadow: 0 4rpx 16rpx rgba(31, 36, 46, 0.04);
+  max-width: 92%;
+  box-sizing: border-box;
+}
+.plan-run-hint {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #5B6372;
+  padding: 14rpx 0 10rpx;
+}
+.plan-run-step {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 14rpx 0;
+  border-top: 1rpx solid #F0F2F5;
+  font-size: 25rpx;
+  color: #9AA1AD; /* pending 灰 */
+}
+.plan-run-step .plan-run-ic { flex-shrink: 0; width: 34rpx; text-align: center; }
+.plan-run-step .plan-run-name { flex: 1; }
+.plan-run-step .plan-run-state { flex-shrink: 0; font-size: 20rpx; }
+.plan-run-step.running { color: #1E6FFF; font-weight: 600; }
+.plan-run-step.running .plan-run-ic { animation: asst-plan-spin 1.4s ease-in-out infinite; }
+.plan-run-step.running .plan-run-state { color: #1E6FFF; font-weight: 500; }
+.plan-run-step.done { color: #2E9E5B; }
+.plan-run-step.done .plan-run-state { color: #2E9E5B; font-weight: 500; }
+@keyframes asst-plan-spin {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(8deg) scale(1.1); }
+}
+
 /* 报告卡：出报告后用结构化卡片呈现 */
 .report-card {
   background: linear-gradient(135deg, #EAF2FF 0%, #fff 100%);

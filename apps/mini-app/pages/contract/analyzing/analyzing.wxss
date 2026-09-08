@@ -231,7 +231,7 @@ page {
   opacity: .85;
 }
 
-/* ===== AI 思考卡（reasoning 流可视化；低矮可滚，默认展开思考中，执行后收起为一行） ===== */
+/* ===== AI 思考状态条（单行收缩；完成态变绿；全文放抽屉） ===== */
 .think-card {
   width: 100%;
   margin: 10rpx 0 20rpx;
@@ -239,31 +239,91 @@ page {
   border: 1rpx solid #E8EBF0;
   border-radius: 20rpx;
   overflow: hidden;
+  transition: background .25s, border-color .25s;
 }
+.think-card.done {
+  background: #E7F5EC;
+  border-color: #A9DDBA;
+}
+.think-card.done .think-t { color: #2E9E5B; }
 .think-hd {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  padding: 16rpx 20rpx;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
 }
-.think-ic { font-size: 26rpx; }
+.think-ic { font-size: 28rpx; flex-shrink: 0; }
 .think-t {
   flex: 1;
-  font-size: 25rpx;
+  font-size: 26rpx;
   font-weight: 600;
   color: #5B6372;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-.think-state { font-size: 20rpx; color: #9AA1AD; }
+.think-state { font-size: 20rpx; color: #9AA1AD; flex-shrink: 0; }
 .think-state.ing { color: #1E6FFF; }
-.think-chev { color: #9AA1AD; font-size: 22rpx; transform: rotate(180deg); transition: transform .25s; }
-.think-card.open .think-chev { transform: none; }
-.think-bd { height: 0; overflow: hidden; transition: height .25s ease; }
-.think-card.open .think-bd { height: 180rpx; }
-.think-body { height: 100%; box-sizing: border-box; padding: 0 20rpx 16rpx; }
-.think-text {
-  font-size: 22rpx;
-  color: #6B7280;
-  line-height: 1.7;
+.think-more {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  color: #1E6FFF;
+  background: #fff;
+  border: 1rpx solid #C9DFFF;
+  border-radius: 999rpx;
+  padding: 6rpx 16rpx;
+  font-weight: 600;
+}
+.think-card.done .think-more {
+  color: #2E9E5B;
+  border-color: #A9DDBA;
+}
+.think-more:active { opacity: .75; }
+
+/* ===== 思考全文抽屉（底部滑出半屏可滚） ===== */
+.mask {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(10, 16, 30, 0.45);
+  display: none;
+}
+.mask.show { display: flex; }
+.mask.drawer-mask {
+  align-items: flex-end;
+  z-index: 100;
+}
+.sheet {
+  width: 100%;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 28rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  animation: sheetUp .22s ease;
+}
+@keyframes sheetUp {
+  from { transform: translateY(48rpx); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.sheet-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  flex-shrink: 0;
+}
+.sheet-title { font-size: 32rpx; font-weight: 700; color: #1A1F2E; }
+.sheet-close { font-size: 36rpx; color: #9AA1AD; padding: 4rpx 8rpx; }
+.sheet-bd {
+  height: 420rpx;
+  box-sizing: border-box;
+}
+.sheet-text {
+  font-size: 24rpx;
+  color: #5B6372;
+  line-height: 1.75;
   word-break: break-all;
   white-space: pre-wrap;
 }

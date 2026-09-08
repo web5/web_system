@@ -9,25 +9,20 @@
   </view>
 
   <text class="title">正在为你体检合同</text>
-  <!-- 动态子标题：思考中/执行中/报告字数 -->
+  <!-- 动态子标题：思考中 / 执行中 / 报告字数 -->
   <text class="sub">{{thinkingText}}</text>
 
-  <!-- AI 思考卡：思考内容流式呈现；执行开始后自动收起为一行摘要；点击标题可展开/收起 -->
-  <view class="think-card {{think.open ? 'open' : 'collapsed'}}" bindtap="toggleThink">
+  <!-- AI 思考状态条：单行收缩；完成态变绿；点「查看完整思考」从底部抽屉看全文 -->
+  <view class="think-card {{think.done ? 'done' : ''}}">
     <view class="think-hd">
       <text class="think-ic">🤔</text>
       <text class="think-t">{{think.done ? 'AI 已完成思考' : 'AI 正在思考…'}}</text>
       <text class="think-state {{think.done ? '' : 'ing'}}">{{think.done ? '完成' : '思考中'}}</text>
-      <text class="think-chev">⌄</text>
-    </view>
-    <view class="think-bd">
-      <scroll-view scroll-y class="think-body" enable-flex scroll-top="{{thinkScrollTop}}">
-        <text class="think-text" space="nbsp">{{think.text}}</text>
-      </scroll-view>
+      <text class="think-more" bindtap="onOpenThink">查看完整思考 ›</text>
     </view>
   </view>
 
-  <!-- 执行步骤：思考完成（首个 tool_call）后才出现；pending 灰 → running 蓝 → done 绿 -->
+  <!-- 执行步骤：思考完成（首个 tool_call）后才出现；灰 → 蓝 → 绿 -->
   <view class="tool-steps" wx:if="{{toolSteps.length}}">
     <view wx:for="{{toolSteps}}" wx:key="id" class="tool-step {{item.status}}">
       <text class="tool-step-ic">{{item.status === 'done' ? '✅' : item.status === 'running' ? '🔧' : '○'}}</text>
@@ -36,5 +31,18 @@
         {{item.status === 'pending' ? '待执行' : item.status === 'running' ? '进行中…' : '完成'}}
       </text>
     </view>
+  </view>
+</view>
+
+<!-- 思考全文抽屉：从底部滑出，半屏可滚 -->
+<view class="mask drawer-mask {{thinkDrawer ? 'show' : ''}}" bindtap="onCloseThink" catchtouchmove="noop">
+  <view class="sheet" catchtap="noop">
+    <view class="sheet-hd">
+      <text class="sheet-title">AI 思考过程</text>
+      <text class="sheet-close" bindtap="onCloseThink">✕</text>
+    </view>
+    <scroll-view scroll-y class="sheet-bd" scroll-top="{{thinkScrollTop}}" scroll-with-animation>
+      <text class="sheet-text" space="nbsp">{{think.text || '（思考内容生成中…）'}}</text>
+    </scroll-view>
   </view>
 </view>

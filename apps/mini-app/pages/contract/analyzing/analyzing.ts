@@ -1,18 +1,19 @@
 /**
  * 合同翻译官 - 解读中
  *
- * 按 v5 原型稿实现（思考卡 + 时序）：
- *  1. 思考阶段：模型 reasoning 流（reasoning_delta）流入「AI 正在思考」低矮卡（固定高可滚）。
- *  2. 首个 tool_call 到达（= 思考完成、决定要做什么）：
- *     - 思考卡收起为一行「AI 已完成思考」摘要
- *     - 此刻才渲染执行步骤骨架（步骤是思考得出的产物），并点亮第一个工具
- *  3. 工具逐项 running→done；报告轮 content_delta 到达 →「生成体检报告」running + "已生成 N 字" 跳动
- *  4. onDone 落报告并跳 result
+ * 按 v5 原型稿高保真实现：
+ *  1. 思考阶段：AI 思考状态条 = 单行收缩（默认不展开正文），右上「查看完整思考 ›」
+ *     点击后从底部抽屉（mask + sheet）展示完整思考内容（内容流式追加并自动滚底）。
+ *  2. 思考完成：状态条整体变绿（done），此时才列出执行步骤（步骤是思考得出的产物）。
+ *  3. 执行阶段：步骤逐项 pending(灰)→running(蓝)→done(绿)；报告轮 content_delta →
+ *     "生成体检报告"running + "已生成 N 字"跳动。
+ *  4. onDone 落报告并跳 result。
  */
 import { analyzeContractStream, StreamEvent } from '../../../services/contract-api';
 
-/** 思考结束后才出现的执行步骤骨架（contract-risk 固定工具流） */
+/** 执行步骤骨架（contract-risk 固定工具流）：思考完成后才列出 */
 const EXEC_PLAN = [
+  { id: 'cleaner', name: 'contract-cleaner', hint: '清洗合同文本' },
   { id: 'rule', name: 'contract-rule', hint: '扫描法定风险信号' },
   { id: 'irr', name: 'contract-irr', hint: '测算真实年化利率' },
   { id: 'benchmark', name: 'contract-benchmark', hint: '对比市场基准' },
@@ -21,32 +22,35 @@ const EXEC_PLAN = [
 
 Page({
   data: {
-    /** 动态子标题（sub）：思考期→执行期→报告字数 */
+    /** 动态子标题（sub）：思考中/执行中/报告字数 */
     thinkingText: '正在读取合同内容…',
     /** 执行步骤骨架：思考完成（首个 tool_call）后才出现 */
-    toolSteps: [] as Array<{ id: string; name: string; hint: string; status: 'pending' | 'running' | 'done' }>,
-    /** 思考区：open=展示正文（固定高可滚）/ done=已结束（标题变"已完成"，默认收起） */
-    think: { open: true, done: false, text: '' },
-    /** 思考卡片内部 scroll-view 滚动位置：每次思考追加后推到末尾 */
+    toolSteps: [] as Array<{
+      id: string;
+      name: string;
+      hint: string;
+      status: 'pending' | 'running' | 'done';
+    }>,
+    /** 思考状态条：done=已完成（绿色）；text=全文缓存（抽屉展示） */
+    think: { done: false, text: '' },
+    /** 思考全文抽屉是否打开 */
+    thinkDrawer: false,
+    /** 抽屉 scroll-view 滚动位置（全文追加自动到底） */
     thinkScrollTop: 0,
   },
 
   // 工具名 → 用户文案映射
   toolTextMap: {
-    'contract-cleaner': '正在清洗合同文本…',
-    'contract-rule': '正在扫描法定风险信号…',
-    'contract-irr': '正在测算真实年化利率…',
-    'contract-benchmark': '正在对比市场基准…',
-    'law-search': '正在检索法律条文…',
-    'web-search': '正在联网检索…',
+    'contract-cleaner': '清洗合同文本…',
+    'contract-rule': '扫描法定风险信号…',
+    'contract-irr': '测算真实年化利率…',
+    'contract-benchmark': '对比市场基准…',
+    'law-search': '检索法律条文…',
+    'web-search': '联网检索…',
   } as Record<string, string>,
 
-  // 思考期（reasoning 首个 delta 到达前）的兜底轮换文案
-  fallbackList: [
-    'AI 正在认真看你的合同…',
-    '正在梳理关键条款…',
-    '马上就好，再等一下',
-  ],
+  // 思考期（reasoning 首个 delta 到达前）兜底轮换文案
+  fallbackList: ['AI 正在认真看你的合同…', '正在梳理关键条款…', '马上就好，再等一下'],
 
   onLoad() {
     this.startAnalysis();
@@ -69,9 +73,9 @@ Page({
 
     analyzeContractStream(text, scene, {
       onEvent: (event: StreamEvent) => this.handleSseEvent(event),
-      // 思考增量：节流追加到思考卡（执行开始后的报告轮思考不再打扰）
+      // 思考增量：节流缓存全文；执行开始后（toolSteps 非空）忽略后续轮思考
       onReasoning: (delta) => this.appendThinking(delta),
-      // 报告正文增量：报告轮 running → "已生成 N 字"
+      // 报告正文增量：字数跳动
       onDelta: (delta) => this.countReportWords(delta),
       onDone: (report) => {
         if ((this as any)._thinkTimer) clearTimeout((this as any)._thinkTimer);
@@ -88,7 +92,7 @@ Page({
         wx.setStorageSync('contract_report', storage);
         this.setData({
           thinkingText: '体检完成，正在打开报告…',
-          toolSteps: this.data.toolSteps.map((s) => ({ ...s, status: 'done' })),
+          toolSteps: this.data.toolSteps.map((s) => ({ ...s, status: 'done' as const })),
         });
         this.redirectResult();
       },
@@ -99,7 +103,7 @@ Page({
     });
   },
 
-  /** 思考增量：节流追加到思考卡；已进入执行阶段（toolSteps 非空）后忽略后续轮的思考 */
+  /** 思考增量：节流缓存全文（think.text），若抽屉开着则自动滚底 */
   appendThinking(delta: string) {
     if (this.data.toolSteps.length > 0) return;
     this.stopFallback();
@@ -110,20 +114,18 @@ Page({
       const txt: string = (this as any)._thinkBuf || '';
       this.setData({
         thinkingText: 'AI 正在思考…',
-        think: { open: true, done: false, text: txt },
-        // 持续把内部 scroll-view 滚到最新追加的位置（用文本长度当目标坐标）
+        think: { done: false, text: txt },
         thinkScrollTop: txt.length,
       });
     }, 150);
   },
 
-  /** 报告正文增量：确保"生成体检报告"running，并显示"已生成 N 字" */
+  /** 报告正文增量：确保"生成体检报告"running 并显示字数 */
   countReportWords(delta: string) {
     (this as any)._wordBuf = ((this as any)._wordBuf || 0) + delta.length;
     if ((this as any)._wordTimer) return;
     (this as any)._wordTimer = setTimeout(() => {
       (this as any)._wordTimer = null;
-      // 收到正文 = LLM 已开始输出报告，点亮"生成体检报告"
       const toolSteps = this.data.toolSteps.map((s) =>
         s.name === '_report' && s.status === 'pending'
           ? { ...s, status: 'running' as const }
@@ -136,12 +138,23 @@ Page({
     }, 150);
   },
 
-  /** 点击思考卡标题：展开 / 收起 */
-  toggleThink() {
-    this.setData({ think: { ...this.data.think, open: !this.data.think.open } });
+  /** 打开思考全文抽屉 */
+  onOpenThink() {
+    this.setData({
+      thinkDrawer: true,
+      thinkScrollTop: (this.data.think.text || '').length,
+    });
   },
 
-  /** SSE 事件：首个 tool_call = 思考完成 → 渲染步骤骨架；tool_result/final 更新状态 */
+  /** 关闭思考全文抽屉 */
+  onCloseThink() {
+    this.setData({ thinkDrawer: false });
+  },
+
+  /** 拦截事件冒泡（mask 内点击 sheet 不关闭） */
+  noop() {},
+
+  /** SSE 事件：首个 tool_call = 思考完成 → 渲染执行步骤骨架 */
   handleSseEvent(event: StreamEvent) {
     if (event.type === 'final' && event.conversationId) {
       (this as any).conversationId = event.conversationId;
@@ -153,35 +166,44 @@ Page({
       const toolName = event.name || '';
       const hint = this.toolTextMap[toolName] || `正在做「${toolName}」…`;
 
-      // 首次 tool_call：思考完成 → 收起思考卡 + 列出执行骨架（步骤是思考得出的产物）
+      // 首次 tool_call：思考完成 → 状态条变绿 + 列出执行骨架
       if (this.data.toolSteps.length === 0) {
-        const inPlan = EXEC_PLAN.some((p) => p.name === toolName);
-        const toolSteps = inPlan
-          ? EXEC_PLAN.map((p) =>
-              p.name === toolName ? { ...p, status: 'running' as const } : { ...p, status: 'pending' as const },
-            )
-          : [...EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const }))];
-        if (!inPlan) {
-          toolSteps.push({ id: `${toolName}-${Date.now()}`, name: toolName, hint, status: 'running' });
+        const inPlanIdx = EXEC_PLAN.findIndex((p) => p.name === toolName);
+        let toolSteps: Array<{
+          id: string;
+          name: string;
+          hint: string;
+          status: 'pending' | 'running' | 'done';
+        }> = EXEC_PLAN.map((p) => ({ ...p, status: 'pending' as const }));
+        if (inPlanIdx >= 0) {
+          toolSteps[inPlanIdx] = { ...toolSteps[inPlanIdx], status: 'running' as const };
+        } else {
+          // 未预置的自定义工具（law-search 等）插到最前执行
+          toolSteps.unshift({
+            id: `${toolName}-${Date.now()}`,
+            name: toolName,
+            hint,
+            status: 'running',
+          });
         }
         this.setData({
           toolSteps,
           thinkingText: hint,
-          think: { ...this.data.think, done: true, open: false },
+          think: { ...this.data.think, done: true },
         });
         return;
       }
 
-      // 后续工具：预置项置 running；未预置自定义工具追加
+      // 后续工具：预置项置 running；未预置追加到最前
       const toolSteps = this.data.toolSteps.map((s) =>
         s.name === toolName && s.status !== 'done' ? { ...s, status: 'running' as const } : s,
       );
       if (!toolSteps.some((s) => s.name === toolName)) {
-        toolSteps.push({
+        toolSteps.unshift({
           id: `${toolName}-${Date.now()}`,
           name: toolName,
           hint,
-          status: 'running' as const,
+          status: 'running',
         });
       }
       this.setData({ toolSteps, thinkingText: hint });
@@ -192,7 +214,9 @@ Page({
         : this.data.toolSteps.findIndex((s) => s.status === 'running');
       const toolSteps =
         targetIdx >= 0
-          ? this.data.toolSteps.map((s, i) => (i === targetIdx ? { ...s, status: 'done' as const } : s))
+          ? this.data.toolSteps.map((s, i) =>
+              i === targetIdx ? { ...s, status: 'done' as const } : s,
+            )
           : this.data.toolSteps;
       this.setData({ toolSteps });
     }
