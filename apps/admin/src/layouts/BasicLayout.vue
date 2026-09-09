@@ -61,6 +61,9 @@
           <a-menu-item key="agents-knowledge">
             <span>知识集合</span>
           </a-menu-item>
+          <a-menu-item key="agents-retrieval">
+            <span>检索调试</span>
+          </a-menu-item>
           <a-menu-item v-if="userStore.hasPermission('agents:manage')" key="agents-defs">
             <span>定义管理</span>
           </a-menu-item>
@@ -198,6 +201,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/agents/capabilities')) selectedKeys.value = ['agents-capabilities'];
   else if (path.includes('/agents/metrics')) selectedKeys.value = ['agents-metrics'];
   else if (path.includes('/agents/knowledge')) selectedKeys.value = ['agents-knowledge'];
+  else if (path.includes('/agents/retrieval')) selectedKeys.value = ['agents-retrieval'];
   else if (path.includes('/agents')) selectedKeys.value = ['agents-runs'];
   else selectedKeys.value = ['dashboard'];
 }, { immediate: true });
@@ -210,6 +214,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',
     'agents-metrics': '/agents/metrics', 'agents-knowledge': '/agents/knowledge',
+    'agents-retrieval': '/agents/retrieval',
   };
   router.push(routes[key] || '/dashboard');
 };
