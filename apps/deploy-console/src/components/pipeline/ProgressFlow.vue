@@ -2,9 +2,9 @@
 import { computed } from 'vue'
 import type { PipelineItem } from '@/api'
 import {
-  STEP_LABELS,
   stepList,
   stepState,
+  stepLabelOf,
   statusColor,
   statusText,
   isLive,
@@ -47,6 +47,18 @@ function isRunning(s: string) {
 }
 function isDone(s: string) {
   return stateOf(s) === 'done'
+}
+
+/** 节点展示名（v5 按 nodes label；legacy 按九阶段中文） */
+function labelOf(s: string) {
+  return stepLabelOf(props.instance, s)
+}
+/** 该节点是否平台节点 / watchdog（基于实例 nodes 快照） */
+function isPlatform(s: string) {
+  return props.instance.nodes?.find((n) => n.key === s)?.kind === 'platform'
+}
+function isWatchdog(s: string) {
+  return !!props.instance.nodes?.find((n) => n.key === s)?.watchdog
 }
 </script>
 
@@ -94,7 +106,12 @@ function isDone(s: string) {
         </div>
 
         <div class="flow-label">
-          <span class="stage-name" :class="{ current: s === currentStage }">{{ STEP_LABELS[s] || s }}</span>
+          <span class="stage-name" :class="{ current: s === currentStage }">{{ labelOf(s) }}</span>
+          <template v-if="isPlatform(s) || isWatchdog(s)">
+            <span class="mini-tag" :class="isPlatform(s) ? 't-plat' : 't-watch'">
+              {{ isPlatform(s) ? '平台' : '⚠ watchdog' }}
+            </span>
+          </template>
           <span class="cmd-link" title="查看该阶段发布命令" @click.stop="emit('commandClick', s)">命令</span>
         </div>
         <div class="flow-sub">
@@ -236,6 +253,21 @@ function isDone(s: string) {
   line-height: 16px;
   cursor: pointer;
   white-space: nowrap;
+}
+.mini-tag {
+  font-size: 10px;
+  line-height: 16px;
+  border-radius: 3px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.mini-tag.t-plat {
+  color: #722ed1;
+  background: #f9f0ff;
+}
+.mini-tag.t-watch {
+  color: #e8833a;
+  background: #fff3e6;
 }
 .flow-sub {
   margin-top: 4px;
