@@ -41,6 +41,8 @@ export interface AgentRunStep {
   args?: unknown;
   step?: number;
   ts: number;
+  /** final/error 等事件携带的模型用量（Phase2.3 起随步骤落库） */
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
 }
 
 export interface AgentRunDetail {
@@ -60,6 +62,13 @@ export interface AgentRunDetail {
   durationMs: number | null;
   source: string;
   createdAt: string;
+  /** Agent 定义版本快照（Phase2.3） */
+  agentVersion: number | null;
+  /** token 用量与成本（Phase2.3；无单价时成本为 0） */
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  cost: string | null;
 }
 
 export interface AgentSummary {

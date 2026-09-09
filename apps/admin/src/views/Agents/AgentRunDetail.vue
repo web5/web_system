@@ -27,7 +27,15 @@
           <a-descriptions-item label="会话 ID">{{ run.conversationId || '—' }}</a-descriptions-item>
           <a-descriptions-item label="模型">{{ run.model || '—' }}</a-descriptions-item>
           <a-descriptions-item label="工具">{{ (run.tools || []).join(', ') || '—' }}</a-descriptions-item>
-          <a-descriptions-item label="耗时">{{ run.durationMs != null ? `${run.durationMs} ms` : '—' }}</a-descriptions-item>
+          <a-descriptions-item label="Agent 版本">{{ run.agentVersion != null ? `v${run.agentVersion}` : '—' }}</a-descriptions-item>
+          <a-descriptions-item label="Token 用量">
+            <span v-if="run.totalTokens != null" class="ws-mono">
+              P {{ fmtNum(run.promptTokens) }} / C {{ fmtNum(run.completionTokens) }} / T {{ fmtNum(run.totalTokens) }}
+            </span>
+            <span v-else>—</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="成本">{{ fmtCost(run.cost) }}</a-descriptions-item>
+          <a-descriptions-item label="耗时">{{ fmtDuration(run.durationMs) }}</a-descriptions-item>
           <a-descriptions-item label="步骤数">{{ run.steps?.length || 0 }}</a-descriptions-item>
           <a-descriptions-item label="创建时间" :span="2">{{ formatDateTime(run.createdAt) }}</a-descriptions-item>
           <a-descriptions-item v-if="run.error" label="错误" :span="2">
@@ -64,6 +72,9 @@
             </div>
             <pre v-if="s.content" class="step-content">{{ s.content }}</pre>
             <pre v-if="s.args" class="step-content step-args">{{ formatJson(s.args) }}</pre>
+            <div v-if="s.usage" class="step-usage">
+              usage P {{ fmtNum(s.usage.promptTokens ?? null) }} / C {{ fmtNum(s.usage.completionTokens ?? null) }} / T {{ fmtNum(s.usage.totalTokens ?? null) }}
+            </div>
           </a-timeline-item>
         </a-timeline>
       </a-card>
@@ -101,6 +112,16 @@ function formatJson(v: unknown) {
   } catch {
     return String(v);
   }
+}
+function fmtNum(n: number | null | undefined) {
+  return n == null ? '—' : n.toLocaleString('zh-CN');
+}
+function fmtCost(c: string | null | undefined) {
+  return c == null ? '—' : `¥ ${Number(c).toFixed(4)}`;
+}
+function fmtDuration(ms: number | null | undefined) {
+  if (ms == null) return '—';
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
 }
 function stepColor(type: string) {
   if (type === 'error') return 'red';
@@ -161,6 +182,12 @@ onMounted(load);
 .step-ts {
   font-size: 12px;
   color: #999;
+}
+.step-usage {
+  font-size: 11px;
+  color: var(--ws-text-tertiary);
+  font-family: var(--ws-font-mono);
+  margin-top: 4px;
 }
 .step-content {
   background: #fafafa;
