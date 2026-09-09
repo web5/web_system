@@ -166,12 +166,14 @@ export class AgentController {
     let systemPrompt = '';
     let tools: string[] | null = null;
     let model: string | null = null;
+    let agentVersion: number | null = null;
     try {
       const def = this.agentRegistry.get(dto.agentId);
       agentName = def?.name ?? null;
       systemPrompt = def?.systemPrompt ?? '';
       tools = def?.tools ?? null;
       model = def?.model ?? null;
+      agentVersion = def?.version ?? null;
     } catch {
       // agentId 找不到时，agent-runner 也会报错
     }
@@ -245,6 +247,7 @@ export class AgentController {
         systemPrompt,
         tools,
         model,
+        agentVersion,
         steps,
         finalAnswer,
         error: errorMessage,

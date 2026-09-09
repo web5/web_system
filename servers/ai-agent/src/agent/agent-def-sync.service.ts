@@ -117,6 +117,8 @@ export class AgentDefSyncService {
       name,
       systemPrompt,
       model,
+      // 版本快照（Phase2.3：随定义下发，供回放/遥测/成本统计区分版本）
+      version: row.version != null ? Number(row.version) : undefined,
       tools: [...localTools, ...mcpTools],
       capabilities,
       skills,
