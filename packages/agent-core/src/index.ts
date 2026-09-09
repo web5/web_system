@@ -6,6 +6,7 @@
 export * from './interfaces/tool.interface';
 export * from './interfaces/agent.interface';
 export * from './interfaces/runtime.interface';
+export * from './interfaces/telemetry.interface';
 
 // Skill（on-demand 技能加载）
 export { SkillLoader } from './skills/skill-loader';

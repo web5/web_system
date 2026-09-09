@@ -129,4 +129,75 @@ describe('AgentEngine (agent-core)', () => {
 
     expect(events.some((e) => e.type === 'error' && e.content.includes('最大步数'))).toBe(true);
   });
+
+  describe('TelemetryPort（Phase2.1）', () => {
+    it('注入 telemetry 时，run 触发 onRunStart / onLlmSpan / onRunEnd（无工具直接回答）', async () => {
+      const agent = makeAgent();
+      agentRegistry.get.mockReturnValue(agent);
+      const client = makeStreamingClient(
+        jest.fn().mockResolvedValue({
+          content: '你好',
+          toolCalls: [],
+          assistantMessage: { role: 'assistant', content: '你好' },
+          usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        } as ChatWithToolsResult),
+      );
+      clientRegistry.getOrFallback.mockReturnValue(client as any);
+
+      const tel = {
+        onRunStart: jest.fn(),
+        onLlmSpan: jest.fn(),
+        onToolSpan: jest.fn(),
+        onSkillLoad: jest.fn(),
+        onRunEnd: jest.fn(),
+      };
+      const telemetryEngine = new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory, undefined, tel as any);
+
+      const events: any[] = [];
+      for await (const e of telemetryEngine.run({ agentId: 'test-agent', userInput: 'hi' }, 'u1', 'r1')) events.push(e);
+
+      expect(tel.onRunStart).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'r1', agentId: 'test-agent', userId: 'u1', model: 'hy3' }),
+      );
+      expect(tel.onLlmSpan).toHaveBeenCalledTimes(1);
+      expect(tel.onLlmSpan).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'r1', operation: 'chat_with_tools', inputTokens: 10, outputTokens: 5 }),
+      );
+      expect(tel.onToolSpan).not.toHaveBeenCalled();
+      expect(tel.onRunEnd).toHaveBeenCalledWith(expect.objectContaining({ runId: 'r1', status: 'ok', totalTokens: 15 }));
+    });
+
+    it('工具执行后触发 onToolSpan（含失败信息）', async () => {
+      const agent = makeAgent();
+      agentRegistry.get.mockReturnValue(agent);
+      const call: ToolCall = { id: 't1', name: 'calc', arguments: '{}' };
+      const client = makeStreamingClient(
+        jest
+          .fn()
+          .mockResolvedValueOnce({
+            content: '',
+            toolCalls: [call],
+            assistantMessage: { role: 'assistant', content: '', toolCalls: [call] },
+          } as ChatWithToolsResult)
+          .mockResolvedValueOnce({
+            content: 'ok',
+            toolCalls: [],
+            assistantMessage: { role: 'assistant', content: 'ok' },
+          } as ChatWithToolsResult),
+      );
+      clientRegistry.getOrFallback.mockReturnValue(client as any);
+      toolRegistry.execute.mockResolvedValue({ success: false, content: '', error: '工具爆炸' });
+
+      const tel = { onRunStart: jest.fn(), onLlmSpan: jest.fn(), onToolSpan: jest.fn(), onSkillLoad: jest.fn(), onRunEnd: jest.fn() };
+      const telemetryEngine = new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory, undefined, tel as any);
+
+      const events: any[] = [];
+      for await (const e of telemetryEngine.run({ agentId: 'test-agent', userInput: 'x' }, 'u1', 'r2')) events.push(e);
+
+      expect(tel.onToolSpan).toHaveBeenCalledTimes(1);
+      expect(tel.onToolSpan).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'r2', tool: 'calc', ok: false, error: '工具爆炸' }),
+      );
+    });
+  });
 });

@@ -11,6 +11,14 @@
  */
 import { AgentDefinition } from '../interfaces/agent.interface';
 import { resolveAgentCapabilities } from './capability-resolver';
+import {
+  TelemetryPort,
+  TelemetryRunStart,
+  TelemetryLlmSpan,
+  TelemetryToolSpan,
+  TelemetrySkillLoad,
+  TelemetryRunEnd,
+} from '../interfaces/telemetry.interface';
 import { StreamEvent, RunInput } from '../interfaces/runtime.interface';
 import { ToolRegistry } from '../registry/tool.registry';
 import { AgentRegistry } from '../registry/agent.registry';
@@ -52,7 +60,26 @@ export class AgentEngine {
     private readonly agentRegistry: AgentRegistry,
     private readonly memory: ConversationMemoryPort,
     private readonly skillLoader?: SkillLoader,
+    private readonly telemetry?: TelemetryPort,
   ) {}
+
+  /** 安全发出遥测事件：端口缺省/抛错都不影响 run 主链路 */
+  private emit(
+    name: keyof TelemetryPort,
+    event: TelemetryRunStart | TelemetryLlmSpan | TelemetryToolSpan | TelemetrySkillLoad | TelemetryRunEnd,
+  ): void {
+    const fn = this.telemetry?.[name] as
+      | ((
+          e: TelemetryRunStart | TelemetryLlmSpan | TelemetryToolSpan | TelemetrySkillLoad | TelemetryRunEnd,
+        ) => void | Promise<void>)
+      | undefined;
+    if (!fn) return;
+    try {
+      void fn(event);
+    } catch {
+      // 遥测失败不阻断 agent 主链路
+    }
+  }
 
   async *run(
     input: RunInput,
@@ -62,8 +89,18 @@ export class AgentEngine {
   ): AsyncGenerator<StreamEvent> {
     const agent = this.agentRegistry.get(input.agentId);
     // 允许本次运行临时覆盖模型（Playground 调试/多模型对比用）
-    const client = this.clientRegistry.getOrFallback(input.model || agent.model);
+    const model = input.model || agent.model;
+    const client = this.clientRegistry.getOrFallback(model);
     this.loadedSkills.clear();
+    const runStartAt = Date.now();
+    this.emit('onRunStart', {
+      runId,
+      agentId: agent.id,
+      agentVersion: agent.version != null ? String(agent.version) : undefined,
+      userId,
+      model,
+      ts: runStartAt,
+    });
 
     // 1. 加载历史记忆（摘要 + 近期消息）
     let conversationId = input.conversationId;
@@ -110,6 +147,7 @@ export class AgentEngine {
     const toolSteps: string[] = [];
 
     for (let step = 0; step < agent.maxSteps; step++) {
+      const stepStartedAt = Date.now();
       let resp: ChatWithToolsResult | undefined;
       let streamedContent = '';
       try {
@@ -139,13 +177,41 @@ export class AgentEngine {
           content: `模型调用失败: ${(error as Error).message}`,
           usage: usageOf(accPrompt, accCompletion),
         };
+        this.emit('onRunEnd', {
+          runId,
+          status: 'error',
+          error: `模型调用失败: ${(error as Error).message}`,
+          durationMs: Date.now() - runStartAt,
+          totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
+          ts: Date.now(),
+        });
         return;
       }
       if (!resp) {
         yield { type: 'error', content: '模型未返回结果' };
+        this.emit('onRunEnd', {
+          runId,
+          status: 'error',
+          error: '模型未返回结果',
+          durationMs: Date.now() - runStartAt,
+          totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
+          ts: Date.now(),
+        });
         return;
       }
       addUsage(resp.usage);
+      if (resp.usage) {
+        this.emit('onLlmSpan', {
+          runId,
+          operation: 'chat_with_tools',
+          model,
+          inputTokens: resp.usage.promptTokens,
+          outputTokens: resp.usage.completionTokens,
+          latencyMs: Date.now() - stepStartedAt,
+          step,
+          ts: Date.now(),
+        });
+      }
 
       messages.push(resp.assistantMessage);
 
@@ -180,6 +246,13 @@ export class AgentEngine {
           conversationId: currentConversationId,
           usage: usageOf(accPrompt, accCompletion),
         };
+        this.emit('onRunEnd', {
+          runId,
+          status: 'ok',
+          durationMs: Date.now() - runStartAt,
+          totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
+          ts: Date.now(),
+        });
         return;
       }
 
@@ -191,14 +264,29 @@ export class AgentEngine {
 
         if (call.name === LOAD_SKILL_TOOL_NAME && this.skillLoader) {
           const events = await this.handleLoadSkill(call, args, step, messages);
-          for (const ev of events) yield ev;
+          for (const ev of events) {
+            if (ev.type === 'skill_load') {
+              this.emit('onSkillLoad', { runId, skill: ev.name ?? '', step, ts: Date.now() });
+            }
+            yield ev;
+          }
           continue;
         }
 
+        const toolStartedAt = Date.now();
         const result = await this.toolRegistry.execute(
           { name: call.name, args, id: call.id },
           { userId, runId, deps: {}, confirm: confirmHandler },
         );
+        this.emit('onToolSpan', {
+          runId,
+          tool: call.name,
+          ok: result.success,
+          error: result.success ? undefined : result.error,
+          latencyMs: Date.now() - toolStartedAt,
+          step,
+          ts: Date.now(),
+        });
 
         yield {
           type: 'tool_result',
@@ -222,6 +310,14 @@ export class AgentEngine {
       content: `达到最大步数限制 (${agent.maxSteps})`,
       usage: usageOf(accPrompt, accCompletion),
     };
+    this.emit('onRunEnd', {
+      runId,
+      status: 'error',
+      error: `达到最大步数限制 (${agent.maxSteps})`,
+      durationMs: Date.now() - runStartAt,
+      totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
+      ts: Date.now(),
+    });
   }
 
   /**

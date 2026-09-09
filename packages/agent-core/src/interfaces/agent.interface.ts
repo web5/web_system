@@ -56,4 +56,6 @@ export interface AgentDefinition {
    * true=content_delta 逐字推送；false=最终回答一次性输出。
    */
   streaming?: boolean;
+  /** 定义版本快照（DB 下发时填充；用于回放/遥测区分"跑的是哪个版本"） */
+  version?: number;
 }
