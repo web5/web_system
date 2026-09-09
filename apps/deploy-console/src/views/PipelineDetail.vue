@@ -16,7 +16,9 @@ import PipelineRunLogs from '@/components/pipeline/PipelineRunLogs.vue'
 import StageCommandDrawer, {
   type StageScriptItem,
 } from '@/components/pipeline/StageCommandDrawer.vue'
+import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
 import {
+  PIPELINE_STAGES,
   STEP_LABELS,
   stepList,
   statusColor,
@@ -24,6 +26,7 @@ import {
   formatTime,
   durationMs,
   isLive,
+  checkSemanticOrder,
 } from '@/components/pipeline/pipeline.stages'
 
 const route = useRoute()
@@ -313,8 +316,9 @@ async function submitReview() {
 const scriptViewMap = ref<Record<string, StageScriptItem[]>>({})
 const cmdOpen = ref(false)
 const cmdItem = ref<StageScriptItem | null>(null)
-async function ensureScriptView(moduleKey: string) {
-  if (!moduleKey || scriptViewMap.value[moduleKey]) return
+async function ensureScriptView(moduleKey: string, force = false) {
+  if (!moduleKey) return
+  if (!force && scriptViewMap.value[moduleKey]) return
   try {
     scriptViewMap.value[moduleKey] = (await stageCommandApi.scriptView(moduleKey)) as StageScriptItem[]
   } catch {
@@ -342,6 +346,231 @@ function onStageClick(stage: string) {
 /** 点节点下「命令」入口 → 打开抽屉「命令」Tab */
 function onCommandClick(stage: string) {
   void openStageDrawer(stage, 'command')
+}
+
+// ===== 编辑流水线（模板元信息 + 节点可拖拽重排 + 节点脚本编辑） =====
+const editOpen = ref(false)
+const editSaving = ref(false)
+/** 编辑态草稿：模板元信息 */
+const metaDraft = ref({
+  name: '',
+  description: '',
+  enabled: true,
+  approval: 'inherit' as 'inherit' | 'always' | 'never',
+  rollbackOnFailure: 'previous' as 'previous' | 'none',
+  defaultTarget: 'auto' as 'auto' | 'local' | 'remote',
+})
+/** 编辑态草稿：活动步骤顺序（PIPELINE_STAGES 的保序子序列，可重排） */
+const stepDraft = ref<string[]>([])
+/** 编辑态草稿：全量 9 步是否勾选 */
+const stepEnabled = ref<Record<string, boolean>>({})
+/** 拖拽状态 */
+const dragStep = ref('')
+const dropSide = ref<'l' | 'r'>('r')
+/** 节点脚本编辑：作用模块（脚本真相源在模块级） */
+const editorModules = ref<any[]>([])
+const scriptModule = ref('')
+const editingStage = ref('')
+const editingItem = ref<StageScriptItem | null>(null)
+
+const CORE_UNREMOVABLE = ['check', 'version', 'pointer']
+const isCoreStep = (s: string) => CORE_UNREMOVABLE.includes(s)
+
+function openEditor() {
+  if (!tpl.value) return
+  metaDraft.value = {
+    name: tpl.value.name,
+    description: tpl.value.description || '',
+    enabled: tpl.value.enabled,
+    approval: tpl.value.approval,
+    rollbackOnFailure: tpl.value.rollbackOnFailure || 'previous',
+    defaultTarget: tpl.value.defaultTarget || 'auto',
+  }
+  const base = tpl.value.steps && tpl.value.steps.length ? [...tpl.value.steps] : [...PIPELINE_STAGES]
+  stepDraft.value = base
+  stepEnabled.value = Object.fromEntries([...PIPELINE_STAGES].map((s) => [s, base.includes(s)]))
+  // 作用模块：优先当前查看实例的模块；其次模板专属模块；再退到历史最近模块
+  const candidate = selectedRun.value?.moduleKey || (tpl.value.moduleKey !== '*' ? tpl.value.moduleKey : history.value[0]?.moduleKey)
+  scriptModule.value = candidate || ''
+  editingStage.value = ''
+  editingItem.value = null
+  editOpen.value = true
+  void loadEditorModules()
+}
+
+/** 排序语义校验（与后端 normalizeSteps 同规则） */
+function orderError(): string {
+  const errs = checkSemanticOrder(stepDraft.value)
+  return errs.length ? errs[0] : ''
+}
+
+async function loadEditorModules() {
+  try {
+    const mods = await deployApi.modules()
+    editorModules.value = mods.filter((m: any) =>
+      ['backend', 'frontend', 'micro-frontend'].includes(m.type),
+    )
+    if (!scriptModule.value && editorModules.value.length) {
+      scriptModule.value = editorModules.value[0].key
+    }
+  } catch {
+    editorModules.value = []
+  }
+}
+
+/** 切换脚本作用模块 → 拉该模块 scriptView（节点脚本按模块配置） */
+async function onScriptModuleChange() {
+  editingStage.value = ''
+  editingItem.value = null
+  if (!scriptModule.value) return
+  await ensureScriptView(scriptModule.value)
+}
+
+/** 拖拽结束立即屏蔽紧随的 click，避免「拖完节点顺手打开脚本编辑器」 */
+let justDragged = false
+
+/** 点击流程图节点：打开该节点脚本编辑器（version/pointer 语义真相源不可编辑） */
+function onEditNodeClick(stage: string) {
+  if (justDragged) return // 刚拖拽过，忽略此次 click
+  if (!scriptModule.value) {
+    message.warning('请先选择脚本作用模块')
+    return
+  }
+  if (stage === 'version' || stage === 'pointer') {
+    message.warning('version / pointer 是发布语义真相源，平台托管，不可编辑')
+    return
+  }
+  void (async () => {
+    if (!scriptViewMap.value[scriptModule.value]) {
+      await onScriptModuleChange()
+    }
+    const list = scriptViewMap.value[scriptModule.value] || []
+    const item = list.find((it) => it.stage === stage)
+    if (item) {
+      editingStage.value = stage
+      editingItem.value = item
+    } else {
+      message.warning(`未找到 ${stage} 的脚本视图`)
+    }
+  })()
+}
+
+/** 脚本保存成功后的刷新 */
+async function onScriptEditorSaved() {
+  editingItem.value = null
+  editingStage.value = ''
+  if (scriptModule.value) {
+    await ensureScriptView(scriptModule.value, true)
+  }
+}
+
+/** 步骤勾选切换 */
+function toggleStepEnable(s: string) {
+  if (isCoreStep(s)) return // check/version/pointer 不可裁剪（发布语义基线）
+  stepEnabled.value[s] = !stepEnabled.value[s]
+  if (stepEnabled.value[s]) {
+    // 重新加入：插回该步骤在内置序中的位置（尽量靠近原语义位，避免后续排序混乱）
+    const base = [...PIPELINE_STAGES] as string[]
+    const orderIdx = base.indexOf(s)
+    let insertAt = stepDraft.value.length
+    for (let i = 0; i < stepDraft.value.length; i++) {
+      const curIdx = base.indexOf(stepDraft.value[i])
+      if (curIdx > orderIdx) {
+        insertAt = i
+        break
+      }
+    }
+    stepDraft.value.splice(insertAt, 0, s)
+    // 若新序违反语义，提示并仍回退勾选
+    if (orderError()) {
+      stepDraft.value.splice(stepDraft.value.indexOf(s), 1)
+      stepEnabled.value[s] = false
+      message.warning(`重新启用「${STEP_LABELS[s] || s}」会违反发布语义顺序，请在启用后拖到正确位置`)
+    }
+  } else {
+    const i = stepDraft.value.indexOf(s)
+    if (i >= 0) stepDraft.value.splice(i, 1)
+  }
+}
+
+/** 拖拽：dragstart */
+function dragStart(e: DragEvent, s: string) {
+  dragStep.value = s
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+function dragEnd() {
+  dragStep.value = ''
+  // 拖拽是真实操作（非仅按下又松开）：进入时清空，结束时置位并延迟复位
+  justDragged = true
+  window.setTimeout(() => {
+    justDragged = false
+  }, 150)
+}
+function dragOver(e: DragEvent) {
+  e.preventDefault()
+  const el = e.currentTarget as HTMLElement
+  const r = el.getBoundingClientRect()
+  dropSide.value = e.clientX < r.left + r.width / 2 ? 'l' : 'r'
+}
+function dragDrop(e: DragEvent, target: string) {
+  e.preventDefault()
+  justDragged = true
+  window.setTimeout(() => {
+    justDragged = false
+  }, 150)
+  const moved = dragStep.value
+  dragStep.value = ''
+  if (!moved || moved === target) return
+  const seq = [...stepDraft.value]
+  const from = seq.indexOf(moved)
+  if (from < 0) return
+  seq.splice(from, 1)
+  let to = seq.indexOf(target)
+  if (dropSide.value === 'r') to += 1
+  if (to < 0) to = seq.length
+  const candidate = [...seq.slice(0, to), moved, ...seq.slice(to)]
+  const errs = checkSemanticOrder(candidate)
+  if (errs.length) {
+    message.warning(`不可移动：${errs[0]}`)
+    return
+  }
+  stepDraft.value = candidate
+}
+
+/** 保存模板（元信息 + 步骤顺序） */
+async function saveEditor() {
+  if (!tpl.value) return
+  const err = orderError()
+  if (err) {
+    message.warning(err)
+    return
+  }
+  editSaving.value = true
+  try {
+    const body: Record<string, any> = {
+      // builtin 模板不可改名（后端 400）；改名仅自定义模板且名字确实变化时提交
+      ...(tpl.value.builtin || metaDraft.value.name.trim() === tpl.value.name
+        ? {}
+        : { name: metaDraft.value.name.trim() }),
+      description: metaDraft.value.description.trim() || undefined,
+      enabled: metaDraft.value.enabled,
+      approval: metaDraft.value.approval,
+      rollbackOnFailure: metaDraft.value.rollbackOnFailure,
+      defaultTarget: metaDraft.value.defaultTarget,
+      // 与内置默认一致（全 9 步）时存 null，保持"默认模板=全量"语义
+      steps: stepDraft.value.length === PIPELINE_STAGES.length ? null : stepDraft.value,
+    }
+    await pipelineTemplateApi.update(tplId.value, body)
+    message.success('流水线已保存')
+    editOpen.value = false
+    await loadTpl()
+    await loadHistory(200)
+    await loadSelectedRun()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || e?.message || '保存失败')
+  } finally {
+    editSaving.value = false
+  }
 }
 
 // ===== 立即发布（按当前流水线提交新实例） =====
@@ -441,7 +670,7 @@ onUnmounted(stopPolling)
 <template>
   <div>
     <div class="page-header" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-      <a-button type="link" @click="router.back()">← 返回</a-button>
+      <a-button type="link" @click="router.push('/pipelines')">← 返回</a-button>
       <h2 style="margin: 0;">流水线详情</h2>
       <template v-if="tpl">
         <a-tag color="blue" style="font-size: 14px;">{{ tpl.name }}</a-tag>
@@ -450,6 +679,10 @@ onUnmounted(stopPolling)
         <a-tag v-if="tpl.approval === 'always'" color="orange">始终审批</a-tag>
         <a-tag v-if="tpl.approval === 'never'" color="red">免审批</a-tag>
         <a-tag v-if="tpl.skipVerify" color="cyan">跳过探活</a-tag>
+      </template>
+      <div style="flex: 1;" />
+      <template v-if="tpl">
+        <a-button type="primary" ghost @click="openEditor">编辑流水线</a-button>
       </template>
     </div>
 
@@ -666,6 +899,166 @@ onUnmounted(stopPolling)
       </a-card>
     </template>
 
+    <!-- 编辑流水线抽屉（元信息 + 节点重排 + 节点脚本） -->
+    <a-drawer
+      :open="editOpen"
+      title="编辑流水线"
+      placement="right"
+      :width="860"
+      :footer-style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }"
+      @close="editOpen = false"
+    >
+      <div style="display: flex; flex-direction: column; gap: 16px; height: 100%;">
+        <!-- 基本信息 -->
+        <a-card size="small" title="基本信息" :bordered="false" style="background: #fafafa;">
+          <a-form layout="vertical">
+            <a-row :gutter="12">
+              <a-col :span="12">
+                <a-form-item label="流水线名">
+                  <a-input v-model:value="metaDraft.name" :disabled="tpl?.builtin" />
+                  <div v-if="tpl?.builtin" style="font-size: 12px; color: #999;">内置默认模板不可改名（可用「复制」另建）</div>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="启用">
+                  <a-switch v-model:checked="metaDraft.enabled" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-form-item label="说明">
+              <a-input v-model:value="metaDraft.description" placeholder="流水线用途 / 变更备注" />
+            </a-form-item>
+            <a-row :gutter="12">
+              <a-col :span="8">
+                <a-form-item label="探活失败">
+                  <a-radio-group v-model:value="metaDraft.rollbackOnFailure">
+                    <a-radio value="previous">自动回滚</a-radio>
+                    <a-radio value="none">不回滚</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+              <a-col :span="8">
+                <a-form-item label="审批">
+                  <a-radio-group v-model:value="metaDraft.approval">
+                    <a-radio value="inherit">继承环境</a-radio>
+                    <a-radio value="always">始终</a-radio>
+                    <a-radio value="never">免审</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+              <a-col :span="8">
+                <a-form-item label="投递目标">
+                  <a-radio-group v-model:value="metaDraft.defaultTarget">
+                    <a-radio value="auto">自动</a-radio>
+                    <a-radio value="local">本机</a-radio>
+                    <a-radio value="remote">远程</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-card>
+
+        <!-- 流程编排：节点勾选 + 拖拽排序 -->
+        <a-card size="small" :bordered="false" style="background: #fafafa;">
+          <template #title>
+            流程编排
+            <span style="font-weight: normal; font-size: 12px; color: #999; margin-left: 8px;">
+              勾选活动节点 · 拖住节点放到目标节点左/右半区调整顺序（check/version/pointer 为语义基线，不可裁剪、不可颠倒）
+            </span>
+          </template>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;">
+            <a-checkable-tag
+              v-for="s in PIPELINE_STAGES"
+              :key="s"
+              :checked="!!stepEnabled[s]"
+              :disabled="isCoreStep(s)"
+              @change="toggleStepEnable(s)"
+            >
+              {{ STEP_LABELS[s] || s }}
+              <template v-if="isCoreStep(s)">
+                <a-tooltip title="check/version/pointer 为发布语义基线，不可裁剪">
+                  <span style="color:#999;"> ⭐</span>
+                </a-tooltip>
+              </template>
+            </a-checkable-tag>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 8px; border: 1px dashed #e5e5e5; border-radius: 8px; background: #fff;">
+            <template v-for="(s, i) in stepDraft" :key="s">
+              <div v-if="i > 0" class="f-arrow"></div>
+              <div
+                class="f-node"
+                draggable="true"
+                :class="{ 'f-core': isCoreStep(s), 'f-platform': s === 'version' || s === 'pointer' }"
+                @dragstart="dragStart($event, s)"
+                @dragend="dragEnd"
+                @dragover="dragOver"
+                @drop="dragDrop($event, s)"
+                @click="onEditNodeClick(s)"
+              >
+                <span class="f-seq">{{ i + 1 }}</span>
+                <span class="f-name">{{ STEP_LABELS[s] || s }}</span>
+                <span class="f-tag">{{ isCoreStep(s) ? '平台' : 'script' }}</span>
+              </div>
+            </template>
+            <span v-if="!stepDraft.length" style="color:#bbb; font-size: 12px;">请至少勾选 check/version/pointer（语义基线）</span>
+          </div>
+          <div v-if="orderError()" style="margin-top: 8px;">
+            <a-alert type="error" show-icon :message="`当前顺序不可保存：${orderError()}`" />
+          </div>
+        </a-card>
+
+        <!-- 节点脚本编辑 -->
+        <a-card size="small" :bordered="false" style="background: #fafafa; flex: 1; min-height: 300px;">
+          <template #title>
+            节点脚本
+            <span style="font-weight: normal; font-size: 12px; color: #999; margin-left: 8px;">
+              脚本按模块保存，先选择「作用模块」，再点上方节点编辑；改动只影响该模块的发布
+            </span>
+          </template>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span style="font-size: 13px; color: #666;">作用模块</span>
+            <a-select
+              v-model:value="scriptModule"
+              style="width: 300px;"
+              placeholder="选择要查看/编辑脚本的模块"
+              show-search
+              :filter-option="(input: string, opt: any) => (opt?.label || '').toLowerCase().includes(input.toLowerCase())"
+              @change="onScriptModuleChange"
+            >
+              <a-select-option v-for="m in editorModules" :key="m.key" :value="m.key" :label="`${m.name}（${m.key}）`">
+                {{ m.name }}（{{ m.key }}）
+              </a-select-option>
+            </a-select>
+            <span style="color:#999; font-size:12px;">点击上方节点编辑对应阶段脚本 · 双击「version/pointer」不可编辑</span>
+          </div>
+
+          <template v-if="scriptModule">
+            <template v-if="editingItem">
+              <StageActionsEditor
+                :module-key="scriptModule"
+                :item="editingItem"
+                @saved="onScriptEditorSaved"
+                @cancel="editingItem = null; editingStage = ''"
+              />
+            </template>
+            <a-empty v-else :description="`已加载 ${scriptModule} 的脚本视图，点击上方节点开始编辑`" />
+          </template>
+          <a-empty v-else description="暂无可用模块" />
+        </a-card>
+      </div>
+
+      <template #footer>
+        <span style="color:#999; font-size: 12px;">
+          保存后按新流程生效；已运行中的发布仍按其提交时的快照执行
+        </span>
+        <span>
+          <a-button style="margin-right: 8px;" @click="editOpen = false">取消</a-button>
+          <a-button type="primary" :loading="editSaving" @click="saveEditor">保存流水线</a-button>
+        </span>
+      </template>
+    </a-drawer>
+
     <!-- 审批弹窗 -->
     <a-modal
       :open="!!review"
@@ -756,3 +1149,82 @@ onUnmounted(stopPolling)
     />
   </div>
 </template>
+
+<style scoped>
+/* 编辑流水线：拖拽节点（沿用原型流程图的横向链路） */
+.f-arrow {
+  width: 22px;
+  height: 2px;
+  background: #d9d9d9;
+  position: relative;
+  flex-shrink: 0;
+}
+.f-arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  border-left: 6px solid #d9d9d9;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.f-node {
+  position: relative;
+  min-width: 76px;
+  padding: 8px 10px;
+  border: 1.5px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  cursor: grab;
+  text-align: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+.f-node:hover {
+  border-color: #1677ff;
+  transform: translateY(-1px);
+}
+.f-node:active {
+  cursor: grabbing;
+}
+.f-node.f-core {
+  border-color: #722ed1;
+  background: #f9f0ff;
+}
+.f-node.f-platform {
+  border-color: #722ed1;
+  background: #f9f0ff;
+}
+.f-node.f-platform .f-name {
+  color: #722ed1;
+}
+.f-seq {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #d9d9d9;
+  font-size: 10px;
+  font-weight: 700;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.f-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+.f-tag {
+  display: block;
+  font-size: 10px;
+  color: #999;
+  margin-top: 2px;
+}
+</style>

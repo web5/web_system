@@ -10,8 +10,10 @@ import {
   stageCommandApi,
   pipelineApi,
   pipelineTemplateApi,
+  type StageAction,
 } from '@/api'
 import PipelineSubmit from '@/components/PipelineSubmit.vue'
+import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,6 +80,8 @@ type ScriptViewItem = {
   title: string
   builtin: string
   commandMode: 'base' | 'required' | 'override' | 'none'
+  /** v4 多操作；单命令形态后端已包装成 1 个操作 */
+  actions?: StageAction[]
 }
 const scriptView = ref<ScriptViewItem[]>([])
 const scriptLoading = ref(false)
@@ -247,6 +251,31 @@ async function saveServerName(envRow: any, val: string) {
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存服务器组失败')
   }
+}
+
+// ===== 阶段命令编辑（v4 多操作，复用共享编辑器 StageActionsEditor） =====
+/** 正在编辑的阶段（空 = 未编辑） */
+const editStage = ref('')
+/** 正在编辑的阶段项（传给共享编辑器，由其维护 draft/保存/校验） */
+const editItem = ref<ScriptViewItem | null>(null)
+
+function startEdit(item: ScriptViewItem) {
+  if (item.source === 'semantic') {
+    message.warning('version / pointer 是发布语义真相源，不可编辑')
+    return
+  }
+  editStage.value = item.stage
+  editItem.value = item
+}
+
+function cancelEdit() {
+  editStage.value = ''
+  editItem.value = null
+}
+
+async function onEditorSaved() {
+  cancelEdit()
+  await loadScriptView()
 }
 
 onMounted(async () => {
@@ -499,10 +528,19 @@ onMounted(async () => {
                     >⚠ 发布时将立即终止</span>
                   </div>
                   <a-space>
+                    <a-tag v-if="(item.actions?.length ?? 0) > 1" color="geekblue">
+                      {{ item.actions?.length }} 个操作
+                    </a-tag>
                     <a-tag v-if="item.timeoutSec" color="cyan">超时 {{ item.timeoutSec }}s</a-tag>
                     <span style="color: #999; font-size: 12px;" v-if="item.updatedBy">
                       最近编辑：{{ item.updatedBy }}
                     </span>
+                    <a-button
+                      v-if="item.source !== 'semantic'"
+                      size="small"
+                      type="link"
+                      @click.stop="startEdit(item)"
+                    >编辑操作</a-button>
                   </a-space>
                 </div>
                 <!-- 展开区：命令原文 / 内置说明 -->
@@ -536,6 +574,17 @@ onMounted(async () => {
                       :type="item.source === 'semantic' ? 'warning' : 'info'"
                       show-icon
                       :message="item.builtin"
+                    />
+                  </template>
+
+                  <!-- v4 多操作编辑器（点标题行「编辑操作」展开；共享组件，ModuleDetail/PipelineDetail 同源） -->
+                  <template v-if="editStage === item.stage && editItem">
+                    <a-divider style="margin: 14px 0 10px;" />
+                    <StageActionsEditor
+                      :module-key="moduleKey"
+                      :item="editItem"
+                      @saved="onEditorSaved"
+                      @cancel="cancelEdit"
                     />
                   </template>
                 </div>

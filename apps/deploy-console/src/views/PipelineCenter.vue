@@ -1227,7 +1227,8 @@ onUnmounted(stopPolling)
           </a-col>
         </a-row>
         <div v-if="modal.editing" style="color: #999; font-size: 12px; border-top: 1px dashed #eee; padding-top: 8px;">
-          注意：步骤顺序由代码固定；本弹窗只控制「活动步骤」开关。回滚/审批/投递在新建后仍可在流水线详情页查看其默认行为。
+          注意：本弹窗只控制「活动步骤」开关；步骤顺序（拖拽重排）与节点脚本请到「流水线详情 → 编辑流水线」调整。
+          check/version/pointer 为语义基线，不可裁剪。
         </div>
       </a-form>
     </a-modal>

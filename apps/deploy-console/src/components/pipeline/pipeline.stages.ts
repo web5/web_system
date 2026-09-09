@@ -65,6 +65,51 @@ export function formatTime(ts?: number): string {
   return ts ? dayjs(ts).format('YYYY-MM-DD HH:mm:ss') : '—'
 }
 
+/**
+ * 步骤语义硬约束（与 servers/deploy-console/src/pipeline-template/pipeline-template.service.ts
+ * STEP_SEMANTIC_ORDER 保持一致；前端用于拖拽排序即时校验，后端保存时二次拦截）。
+ */
+export const STEP_SEMANTIC_ORDER: ReadonlyArray<readonly [string, string]> = [
+  ['check', 'pull'],
+  ['check', 'build'],
+  ['check', 'upload'],
+  ['check', 'restart'],
+  ['check', 'version'],
+  ['check', 'pointer'],
+  ['check', 'verify'],
+  ['check', 'cleanup'],
+  ['pull', 'build'],
+  ['pull', 'upload'],
+  ['pull', 'restart'],
+  ['pull', 'version'],
+  ['pull', 'pointer'],
+  ['pull', 'verify'],
+  ['pull', 'cleanup'],
+  ['build', 'upload'],
+  ['build', 'restart'],
+  ['build', 'version'],
+  ['build', 'pointer'],
+  ['build', 'verify'],
+  ['upload', 'version'],
+  ['restart', 'version'],
+  ['version', 'pointer'],
+  ['pointer', 'verify'],
+]
+
+/** 校验步骤顺序是否满足语义硬约束；返回违规描述列表（空 = 合法） */
+export function checkSemanticOrder(steps: string[]): string[] {
+  const idx = new Map(steps.map((s, i) => [s, i]))
+  const errs: string[] = []
+  for (const [before, after] of STEP_SEMANTIC_ORDER) {
+    const bi = idx.get(before)
+    const ai = idx.get(after)
+    if (bi !== undefined && ai !== undefined && bi >= ai) {
+      errs.push(`「${before}」必须排在「${after}」之前（发布语义基线，不可颠倒）`)
+    }
+  }
+  return errs
+}
+
 export function formatTimeShort(ts?: number): string {
   return ts ? dayjs(ts).format('MM-DD HH:mm:ss') : '—'
 }

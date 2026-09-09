@@ -484,6 +484,23 @@ export const toolApi = {
 }
 
 /** 阶段命令：发布流水线唯一执行真相源 */
+/** v4 操作：阶段内的一个执行动作（阶段可含 1..N 个，顺序执行） */
+export interface StageAction {
+  id: string
+  /** shell=自写脚本 / service=引用工具目录里的内置工具 */
+  type: 'shell' | 'service'
+  name: string
+  code?: string
+  tool?: string
+  /** 操作级超时（秒） */
+  timeoutSec?: number
+  /** continueOnError：失败不中断阶段（护栏类操作用） */
+  cont?: boolean
+  enabled?: boolean
+  /** 平台内置操作（不可删除） */
+  builtin?: boolean
+}
+
 export const stageCommandApi = {
   list: (key: string) =>
     http.get(`/modules/${key}/stage-commands`) as Promise<
@@ -502,8 +519,19 @@ export const stageCommandApi = {
       command: string
       timeoutSec?: number
     } | null>,
-  save: (key: string, stage: string, command: string, timeoutSec?: number) =>
-    http.put(`/modules/${key}/stage-commands/${stage}`, { command, timeoutSec }) as Promise<{
+  /**
+   * 保存阶段命令。
+   *
+   * v4 支持两种形态（后端均兼容）：
+   * - 多操作：`{ actions: [...] }`（推荐，按 actions 顺序执行）
+   * - 单命令：`{ command, timeoutSec }`（存量形态，后端包装成 1 个操作）
+   */
+  save: (
+    key: string,
+    stage: string,
+    payload: { command?: string; timeoutSec?: number; actions?: StageAction[] },
+  ) =>
+    http.put(`/modules/${key}/stage-commands/${stage}`, payload) as Promise<{
       moduleKey: string
       stage: string
       updatedAt: string
