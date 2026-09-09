@@ -66,6 +66,7 @@ export class McpService {
     toolRegistry: ToolRegistry,
     meta: McpToolMeta,
     config?: McpToolRuntimeConfig,
+    binding?: { allowedCollections?: string[] },
   ): void {
     if (!this.isAvailable()) {
       this.logger.warn(`MCP 网关未配置，跳过 MCP 工具注册: ${meta.name}`);
@@ -73,7 +74,10 @@ export class McpService {
     }
     const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const executor = {
-      execute: (m: McpToolMeta, args: Record<string, unknown>) => this.callMcpTool(m, args, timeoutMs),
+      execute: (m: McpToolMeta, args: Record<string, unknown>) => {
+        this.assertKnowledgeBound(m, args, binding?.allowedCollections);
+        return this.callMcpTool(m, args, timeoutMs);
+      },
     };
     // 写操作标记合并进 meta，使 McpToolAdapter 执行前走权限确认
     const finalMeta: McpToolMeta = config?.requiresConfirm ? { ...meta, requiresConfirm: true } : meta;
@@ -104,6 +108,26 @@ export class McpService {
       timeoutMs,
     );
     return res.content;
+  }
+
+  /**
+   * 知识集合授权校验（开放决策 7 = C：集合随 agent 定义装配绑定）。
+   * 调用 knowledge 工具时，args.collectionId 必须 ∈ 该 agent 定义 capabilities 里
+   * 显式绑定的集合集；不在绑定集 → 明确错误（R3.4），不静默返回空。
+   */
+  private assertKnowledgeBound(
+    meta: McpToolMeta,
+    args: Record<string, unknown>,
+    allowed?: string[],
+  ): void {
+    if (meta.module !== 'knowledge') return;
+    const collectionId = args.collectionId;
+    if (typeof collectionId !== 'string') return; // status/delete 按 docId 时由知识库侧校验
+    if (!allowed?.length || !allowed.includes(collectionId)) {
+      throw new Error(
+        `知识集合未授权给当前 agent: ${collectionId}（请在 agent 定义 capabilities 中为 ${meta.name} 配置 config.collectionId）`,
+      );
+    }
   }
 
   /** 通过 MCP 网关调用远程工具 */
