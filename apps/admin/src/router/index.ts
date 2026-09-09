@@ -89,6 +89,12 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'Agent 概览', permission: 'agents:view' },
           },
           {
+            path: 'metrics',
+            name: 'AgentMetrics',
+            component: () => import('@/views/Agents/MetricsPage.vue'),
+            meta: { title: 'Agent 观测', permission: 'agents:view' },
+          },
+          {
             path: 'capabilities',
             name: 'AgentCapabilities',
             component: () => import('@/views/Agents/CapabilitiesPage.vue'),
