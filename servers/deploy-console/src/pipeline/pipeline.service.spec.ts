@@ -4,6 +4,8 @@ import {
   isDeletablePipeline,
   killShellProcess,
   resolveStageVars,
+  resolveRunStages,
+  isRollbackAnchor,
 } from './pipeline.service';
 
 /**
@@ -13,6 +15,56 @@ import {
  * 但 running/pending/pending-approval 中的实例若被删，正在执行的引擎还会
  * 回写状态/日志到已删行，产生幽灵更新。此测试锁定「仅终态可删」。
  */
+describe('resolveRunStages / isRollbackAnchor（v5 执行计划与回滚锚点）', () => {
+  const v5nodes = () => [
+    { kind: 'platform', key: 'git' },
+    { kind: 'script', key: 'build', label: '构建' },
+    { kind: 'platform', key: 'version' },
+    { kind: 'platform', key: 'pointer' },
+    { kind: 'script', key: 'verify', label: '探活', watchdog: true },
+  ];
+
+  it('无 nodes/steps → legacy 九阶段，回滚锚点=verify', () => {
+    const plan = resolveRunStages({});
+    expect(plan.mode).toBe('legacy');
+    expect(plan.keys.length).toBe(9);
+    expect(isRollbackAnchor('verify', plan)).toBe(true);
+    expect(isRollbackAnchor('build', plan)).toBe(false);
+  });
+
+  it('legacy steps 子集 → keys=子集，verify 仍为回滚锚点', () => {
+    const plan = resolveRunStages({ steps: ['check', 'pull', 'build', 'version', 'pointer', 'verify'] });
+    expect(plan.mode).toBe('legacy');
+    expect(plan.keys).toEqual(['check', 'pull', 'build', 'version', 'pointer', 'verify']);
+    expect(isRollbackAnchor('verify', plan)).toBe(true);
+  });
+
+  it('v5 nodes → mode=nodes，keys 保序，watchdog 节点为回滚锚点', () => {
+    const plan = resolveRunStages({ nodes: v5nodes() } as any);
+    expect(plan.mode).toBe('nodes');
+    expect(plan.keys).toEqual(['git', 'build', 'version', 'pointer', 'verify']);
+    expect(plan.rollbackAnchor).toBe('verify');
+    expect(isRollbackAnchor('verify', plan)).toBe(true);
+    expect(isRollbackAnchor('pointer', plan)).toBe(false);
+  });
+
+  it('v5 nodes 无 watchdog → rollbackAnchor undefined（永不自动回滚）', () => {
+    const nodes = [
+      { kind: 'platform', key: 'git' },
+      { kind: 'platform', key: 'version' },
+      { kind: 'platform', key: 'pointer' },
+    ];
+    const plan = resolveRunStages({ nodes } as any);
+    expect(plan.rollbackAnchor).toBeUndefined();
+    expect(isRollbackAnchor('git', plan)).toBe(false);
+  });
+
+  it('submit 初始首节点=git（v5）', () => {
+    const plan = resolveRunStages({ nodes: v5nodes() } as any);
+    expect(plan.keys[0]).toBe('git');
+  });
+});
+
 describe('isDeletablePipeline（执行记录删除状态门禁）', () => {
   it('终态（succeeded/failed/cancelled）可删', () => {
     for (const s of ['succeeded', 'failed', 'cancelled']) {

@@ -10,23 +10,29 @@ import {
   stageCommandApi,
   type PipelineItem,
   type PipelineTemplate,
+  type TemplateNode,
+  PLATFORM_NODE_KEYS,
+  PLATFORM_NODE_LABELS,
 } from '@/api'
 import ProgressFlow from '@/components/pipeline/ProgressFlow.vue'
 import PipelineRunLogs from '@/components/pipeline/PipelineRunLogs.vue'
 import StageCommandDrawer, {
   type StageScriptItem,
 } from '@/components/pipeline/StageCommandDrawer.vue'
-import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
+import StageActionsEditor, {
+  type EditorItem,
+} from '@/components/pipeline/StageActionsEditor.vue'
 import {
-  PIPELINE_STAGES,
-  STEP_LABELS,
   stepList,
+  stepLabelOf,
   statusColor,
   statusText,
   formatTime,
   durationMs,
   isLive,
-  checkSemanticOrder,
+  checkNodes,
+  nodeDisplayName,
+  legacyToNodes,
 } from '@/components/pipeline/pipeline.stages'
 
 const route = useRoute()
@@ -334,7 +340,45 @@ async function openStageDrawer(stage: string, tab: 'command' | 'logs' | 'result'
   if (!p) return
   await ensureScriptView(p.moduleKey)
   const list = scriptViewMap.value[p.moduleKey] || []
-  cmdItem.value = list.find((it) => it.stage === stage) ?? null
+  const found = list.find((it) => it.stage === stage) ?? null
+  if (found) {
+    cmdItem.value = found
+    cmdInitialTab.value = tab
+    cmdOpen.value = true
+    return
+  }
+  // v5 nodes：script 节点 key 不在固定 9 阶段视图 → 按「模块 × key」读配置（git/version/pointer 平台节点给只读说明）
+  const isPlat = (PLATFORM_NODE_KEYS as readonly string[]).includes(stage)
+  if (isPlat) {
+    cmdItem.value = {
+      stage,
+      source: 'semantic',
+      command: null,
+      actions: [],
+      enabled: false,
+      timeoutSec: null,
+      updatedAt: null,
+      updatedBy: null,
+      title: PLATFORM_NODE_LABELS[stage] || stage,
+      builtin: '平台托管节点：git/写版本号为发布语义真相源，命令由平台内置执行，不可配置。',
+      commandMode: 'none',
+    }
+  } else {
+    const row = await stageCommandApi.get(p.moduleKey, stage).catch(() => null)
+    cmdItem.value = {
+      stage,
+      source: row?.command?.trim() || row?.actions?.length ? 'configured' : 'required-unset',
+      command: row?.command ?? null,
+      actions: row?.actions ?? [],
+      enabled: !!row?.enabled,
+      timeoutSec: row?.timeoutSec ?? null,
+      updatedAt: row?.updatedAt ?? null,
+      updatedBy: row?.updatedBy ?? null,
+      title: stepLabelOf(p, stage),
+      builtin: row?.command?.trim() || row?.actions?.length ? '' : '该节点按「模块 × 节点 key」配置脚本；未配置时按节点 optional 决定跳过或失败。',
+      commandMode: 'override',
+    }
+  }
   cmdInitialTab.value = tab
   cmdOpen.value = true
 }
@@ -348,7 +392,7 @@ function onCommandClick(stage: string) {
   void openStageDrawer(stage, 'command')
 }
 
-// ===== 编辑流水线（模板元信息 + 节点可拖拽重排 + 节点脚本编辑） =====
+// ===== 编辑流水线（nodes 编排：platform 锁定 + script 增删拖拽 + 节点脚本编辑） =====
 const editOpen = ref(false)
 const editSaving = ref(false)
 /** 编辑态草稿：模板元信息 */
@@ -360,21 +404,18 @@ const metaDraft = ref({
   rollbackOnFailure: 'previous' as 'previous' | 'none',
   defaultTarget: 'auto' as 'auto' | 'local' | 'remote',
 })
-/** 编辑态草稿：活动步骤顺序（PIPELINE_STAGES 的保序子序列，可重排） */
-const stepDraft = ref<string[]>([])
-/** 编辑态草稿：全量 9 步是否勾选 */
-const stepEnabled = ref<Record<string, boolean>>({})
+/** 编辑态草稿：nodes 序列（platform + script，保序；旧模板打开时预转存） */
+const nodeDraft = ref<TemplateNode[]>([])
+/** 当前选中的节点 key（点 script 节点后编辑 label/key/脚本；platform 不可选中） */
+const selNodeKey = ref('')
 /** 拖拽状态 */
-const dragStep = ref('')
+const dragKey = ref('')
 const dropSide = ref<'l' | 'r'>('r')
 /** 节点脚本编辑：作用模块（脚本真相源在模块级） */
 const editorModules = ref<any[]>([])
 const scriptModule = ref('')
-const editingStage = ref('')
-const editingItem = ref<StageScriptItem | null>(null)
-
-const CORE_UNREMOVABLE = ['check', 'version', 'pointer']
-const isCoreStep = (s: string) => CORE_UNREMOVABLE.includes(s)
+const editingItem = ref<EditorItem | null>(null)
+const isPlatformNode = (key: string) => (PLATFORM_NODE_KEYS as readonly string[]).includes(key)
 
 function openEditor() {
   if (!tpl.value) return
@@ -386,21 +427,37 @@ function openEditor() {
     rollbackOnFailure: tpl.value.rollbackOnFailure || 'previous',
     defaultTarget: tpl.value.defaultTarget || 'auto',
   }
-  const base = tpl.value.steps && tpl.value.steps.length ? [...tpl.value.steps] : [...PIPELINE_STAGES]
-  stepDraft.value = base
-  stepEnabled.value = Object.fromEntries([...PIPELINE_STAGES].map((s) => [s, base.includes(s)]))
+  // 旧模板（无 nodes）打开即预转存为 nodes 草稿（保存才落库；所见即转存后效果）
+  nodeDraft.value = tpl.value.nodes && tpl.value.nodes.length
+    ? JSON.parse(JSON.stringify(tpl.value.nodes))
+    : legacyToNodes({
+        steps: tpl.value.steps ?? null,
+        skipVerify: !!tpl.value.skipVerify,
+        rollbackOnFailure: tpl.value.rollbackOnFailure ?? 'previous',
+      })
+  selNodeKey.value = ''
   // 作用模块：优先当前查看实例的模块；其次模板专属模块；再退到历史最近模块
   const candidate = selectedRun.value?.moduleKey || (tpl.value.moduleKey !== '*' ? tpl.value.moduleKey : history.value[0]?.moduleKey)
   scriptModule.value = candidate || ''
-  editingStage.value = ''
   editingItem.value = null
   editOpen.value = true
   void loadEditorModules()
 }
 
-/** 排序语义校验（与后端 normalizeSteps 同规则） */
-function orderError(): string {
-  const errs = checkSemanticOrder(stepDraft.value)
+/** 当前草稿节点（按 key） */
+function nodeOf(key: string): TemplateNode | undefined {
+  return nodeDraft.value.find((n) => n.key === key)
+}
+
+/** 选中的节点对象（未选中或 platform 时为 null） */
+const selectedNode = computed<TemplateNode | null>(() => {
+  const n = nodeOf(selNodeKey.value)
+  return n && n.kind === 'script' ? n : null
+})
+
+/** nodes 语义校验（镜像后端 §14.5）：返回首条错误或空串 */
+function nodesError(): string {
+  const errs = checkNodes(nodeDraft.value)
   return errs.length ? errs[0] : ''
 }
 
@@ -418,93 +475,157 @@ async function loadEditorModules() {
   }
 }
 
-/** 切换脚本作用模块 → 拉该模块 scriptView（节点脚本按模块配置） */
-async function onScriptModuleChange() {
-  editingStage.value = ''
-  editingItem.value = null
-  if (!scriptModule.value) return
-  await ensureScriptView(scriptModule.value)
-}
-
 /** 拖拽结束立即屏蔽紧随的 click，避免「拖完节点顺手打开脚本编辑器」 */
 let justDragged = false
 
-/** 点击流程图节点：打开该节点脚本编辑器（version/pointer 语义真相源不可编辑） */
-function onEditNodeClick(stage: string) {
+/** 切换脚本作用模块：若已选中 script 节点则重读该模块 × key 脚本 */
+function onScriptModuleChange() {
+  if (selNodeKey.value) void loadNodeScript(selNodeKey.value)
+}
+
+/** 点击 script 节点：选中并读取该模块 × key 的脚本配置 */
+function onNodeClick(key: string) {
   if (justDragged) return // 刚拖拽过，忽略此次 click
+  if (isPlatformNode(key)) {
+    message.warning('git / 写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
+    return
+  }
+  selNodeKey.value = key
   if (!scriptModule.value) {
     message.warning('请先选择脚本作用模块')
     return
   }
-  if (stage === 'version' || stage === 'pointer') {
-    message.warning('version / pointer 是发布语义真相源，平台托管，不可编辑')
+  void loadNodeScript(key)
+}
+
+/** 读取「作用模块 × 节点 key」现有配置（未配置返回空 EditorItem 供新写） */
+async function loadNodeScript(key: string) {
+  try {
+    const row = await stageCommandApi.get(scriptModule.value, key)
+    editingItem.value = {
+      stage: key,
+      source: row?.command?.trim() || row?.actions?.length ? 'configured' : 'required-unset',
+      command: row?.command ?? null,
+      actions: row?.actions ?? [],
+      enabled: !!row?.enabled,
+      timeoutSec: row?.timeoutSec ?? null,
+    }
+  } catch {
+    editingItem.value = null
+    message.error(`读取 ${scriptModule.value} × ${key} 脚本失败`)
+  }
+}
+
+/** 脚本保存成功后的刷新（保持选中态） */
+async function onScriptEditorSaved() {
+  if (selNodeKey.value && scriptModule.value) {
+    await loadNodeScript(selNodeKey.value)
+  }
+}
+
+/** 点顶部「+ 添加节点」或连接线「+」：直接落一个新 script 节点并选中编辑 */
+function addScriptNode(slot: number) {
+  const n: TemplateNode = { kind: 'script', key: nextNodeKey(), label: '新节点', optional: false }
+  nodeDraft.value.splice(slot, 0, n)
+  selNodeKey.value = n.key
+  if (!scriptModule.value) {
+    message.warning('请先在下方选择脚本作用模块')
     return
   }
-  void (async () => {
-    if (!scriptViewMap.value[scriptModule.value]) {
-      await onScriptModuleChange()
-    }
-    const list = scriptViewMap.value[scriptModule.value] || []
-    const item = list.find((it) => it.stage === stage)
-    if (item) {
-      editingStage.value = stage
-      editingItem.value = item
-    } else {
-      message.warning(`未找到 ${stage} 的脚本视图`)
-    }
-  })()
-}
-
-/** 脚本保存成功后的刷新 */
-async function onScriptEditorSaved() {
   editingItem.value = null
-  editingStage.value = ''
-  if (scriptModule.value) {
-    await ensureScriptView(scriptModule.value, true)
-  }
+  void loadNodeScript(n.key)
+  // 下一帧聚焦 label 输入
+  window.setTimeout(() => {
+    const el = document.getElementById('edLabel-' + n.key) as HTMLInputElement | null
+    el?.focus()
+  }, 50)
 }
 
-/** 步骤勾选切换 */
-function toggleStepEnable(s: string) {
-  if (isCoreStep(s)) return // check/version/pointer 不可裁剪（发布语义基线）
-  stepEnabled.value[s] = !stepEnabled.value[s]
-  if (stepEnabled.value[s]) {
-    // 重新加入：插回该步骤在内置序中的位置（尽量靠近原语义位，避免后续排序混乱）
-    const base = [...PIPELINE_STAGES] as string[]
-    const orderIdx = base.indexOf(s)
-    let insertAt = stepDraft.value.length
-    for (let i = 0; i < stepDraft.value.length; i++) {
-      const curIdx = base.indexOf(stepDraft.value[i])
-      if (curIdx > orderIdx) {
-        insertAt = i
-        break
-      }
-    }
-    stepDraft.value.splice(insertAt, 0, s)
-    // 若新序违反语义，提示并仍回退勾选
-    if (orderError()) {
-      stepDraft.value.splice(stepDraft.value.indexOf(s), 1)
-      stepEnabled.value[s] = false
-      message.warning(`重新启用「${STEP_LABELS[s] || s}」会违反发布语义顺序，请在启用后拖到正确位置`)
-    }
-  } else {
-    const i = stepDraft.value.indexOf(s)
-    if (i >= 0) stepDraft.value.splice(i, 1)
-  }
+function nextNodeKey(): string {
+  const used = new Set(nodeDraft.value.map((n) => n.key))
+  let i = 2
+  let k = 'node'
+  while (used.has(k)) k = 'node-' + i++
+  return k
 }
 
-/** 拖拽：dragstart */
-function dragStart(e: DragEvent, s: string) {
-  dragStep.value = s
+/** 节点 label / key 即改即同步（改 key 需重查脚本） */
+function renameLabel(key: string, label: string) {
+  const n = nodeOf(key)
+  if (n) n.label = label || '新节点'
+}
+function renameKey(oldKey: string, val: string) {
+  const k = (val || '').trim()
+  if (!k) return
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(k) || isPlatformNode(k) || nodeDraft.value.some((n) => n.key === k && n.key !== oldKey)) {
+    message.warning('key 非法 / 占用平台保留字 / 重复')
+    return
+  }
+  const n = nodeOf(oldKey)
+  if (!n) return
+  n.key = k
+  if (selNodeKey.value === oldKey) selNodeKey.value = k
+  if (scriptModule.value) void loadNodeScript(k) // 新 key 模块可能已有脚本
+}
+
+/** optional / watchdog 开关 */
+function toggleNodeOptional(key: string, on: boolean) {
+  const n = nodeOf(key)
+  if (n) n.optional = on
+}
+function toggleNodeWatchdog(key: string, on: boolean) {
+  // watchdog 全局互斥：勾一个取消其它
+  nodeDraft.value.forEach((x) => {
+    if (x.kind === 'script') x.watchdog = false
+  })
+  const n = nodeOf(key)
+  if (n) n.watchdog = on
+}
+
+/** 删除 script 节点（平台节点不可删）；watchdog 删除有后果确认 */
+function askDeleteNode(key: string) {
+  const n = nodeOf(key)
+  if (!n) return
+  const isWatch = !!n.watchdog
+  const confirmTitle = isWatch
+    ? `删除 watchdog 节点「${n.label || key}」？`
+    : `删除 script 节点「${n.label || key}」？`
+  const content = isWatch
+    ? `该节点标记为 watchdog（自动回滚锚点）。删除后：此节点失败将不再触发自动回滚；若需保留自动回滚请先用其它 script 节点标记 watchdog。模块已配置的 ${key} 脚本会保留（孤儿标注）。`
+    : `节点将从本流水线移除，发布不再执行该步骤。模块已配置的 ${key} 脚本会保留（孤儿标注）。`
+  Modal.confirm({
+    title: confirmTitle,
+    content,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => doDeleteNode(key),
+  })
+}
+function doDeleteNode(key: string) {
+  nodeDraft.value = nodeDraft.value.filter((n) => n.key !== key)
+  if (selNodeKey.value === key) {
+    selNodeKey.value = ''
+    editingItem.value = null
+  }
+  message.success(`已删除节点 ${key}`)
+}
+
+/** 拖拽重排（script 可拖；platform 不可） */
+function dragStart(e: DragEvent, key: string) {
+  if (isPlatformNode(key)) {
+    e.preventDefault()
+    return
+  }
+  dragKey.value = key
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-}
-function dragEnd() {
-  dragStep.value = ''
-  // 拖拽是真实操作（非仅按下又松开）：进入时清空，结束时置位并延迟复位
   justDragged = true
   window.setTimeout(() => {
     justDragged = false
-  }, 150)
+  }, 200)
+}
+function dragEnd() {
+  dragKey.value = ''
 }
 function dragOver(e: DragEvent) {
   e.preventDefault()
@@ -512,35 +633,37 @@ function dragOver(e: DragEvent) {
   const r = el.getBoundingClientRect()
   dropSide.value = e.clientX < r.left + r.width / 2 ? 'l' : 'r'
 }
-function dragDrop(e: DragEvent, target: string) {
+function dragDrop(e: DragEvent, targetKey: string) {
   e.preventDefault()
   justDragged = true
   window.setTimeout(() => {
     justDragged = false
-  }, 150)
-  const moved = dragStep.value
-  dragStep.value = ''
-  if (!moved || moved === target) return
-  const seq = [...stepDraft.value]
+  }, 200)
+  const moved = dragKey.value
+  dragKey.value = ''
+  if (!moved || moved === targetKey) return
+  const seq = nodeDraft.value.map((n) => n.key)
   const from = seq.indexOf(moved)
   if (from < 0) return
   seq.splice(from, 1)
-  let to = seq.indexOf(target)
+  let to = seq.indexOf(targetKey)
   if (dropSide.value === 'r') to += 1
   if (to < 0) to = seq.length
   const candidate = [...seq.slice(0, to), moved, ...seq.slice(to)]
-  const errs = checkSemanticOrder(candidate)
+  const errs = checkNodes(candidate.map((k) => nodeOf(k)!).filter(Boolean))
   if (errs.length) {
     message.warning(`不可移动：${errs[0]}`)
     return
   }
-  stepDraft.value = candidate
+  // 按 candidate 顺序重排 nodeDraft
+  const byKey = new Map(nodeDraft.value.map((n) => [n.key, n]))
+  nodeDraft.value = candidate.map((k) => byKey.get(k)!).filter(Boolean)
 }
 
-/** 保存模板（元信息 + 步骤顺序） */
+/** 保存模板（元信息 + nodes） */
 async function saveEditor() {
   if (!tpl.value) return
-  const err = orderError()
+  const err = nodesError()
   if (err) {
     message.warning(err)
     return
@@ -557,8 +680,7 @@ async function saveEditor() {
       approval: metaDraft.value.approval,
       rollbackOnFailure: metaDraft.value.rollbackOnFailure,
       defaultTarget: metaDraft.value.defaultTarget,
-      // 与内置默认一致（全 9 步）时存 null，保持"默认模板=全量"语义
-      steps: stepDraft.value.length === PIPELINE_STAGES.length ? null : stepDraft.value,
+      nodes: nodeDraft.value,
     }
     await pipelineTemplateApi.update(tplId.value, body)
     message.success('流水线已保存')
@@ -847,7 +969,7 @@ onUnmounted(stopPolling)
                 </template>
                 <template v-else-if="column.key === 'stage'">
                   <span style="color: #666;">
-                    {{ STEP_LABELS[record.stage] || record.stage || '—' }}
+                    {{ stepLabelOf(record, record.stage || '') }}
                     <span v-if="record.reuseArtifact">（复用产物）</span>
                     <span v-if="record.error" style="color: #cf1322;"> · {{ record.error }}</span>
                   </span>
@@ -959,69 +1081,85 @@ onUnmounted(stopPolling)
           </a-form>
         </a-card>
 
-        <!-- 流程编排：节点勾选 + 拖拽排序 -->
+        <!-- 流程编排：nodes 画布（连接线插孔 + 平台锁定 + script 增删拖拽） -->
         <a-card size="small" :bordered="false" style="background: #fafafa;">
           <template #title>
             流程编排
             <span style="font-weight: normal; font-size: 12px; color: #999; margin-left: 8px;">
-              勾选活动节点 · 拖住节点放到目标节点左/右半区调整顺序（check/version/pointer 为语义基线，不可裁剪、不可颠倒）
+              platform（git / 写版本号）锁定 · script 可拖拽 / 增删 / 配脚本 · 点连接线「+」直接落节点并选中编辑
             </span>
+            <a-button
+              style="margin-left: auto;"
+              size="small"
+              type="primary"
+              ghost
+              @click="addScriptNode(1)"
+            >+ 添加节点</a-button>
           </template>
-          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;">
-            <a-checkable-tag
-              v-for="s in PIPELINE_STAGES"
-              :key="s"
-              :checked="!!stepEnabled[s]"
-              :disabled="isCoreStep(s)"
-              @change="toggleStepEnable(s)"
-            >
-              {{ STEP_LABELS[s] || s }}
-              <template v-if="isCoreStep(s)">
-                <a-tooltip title="check/version/pointer 为发布语义基线，不可裁剪">
-                  <span style="color:#999;"> ⭐</span>
-                </a-tooltip>
-              </template>
-            </a-checkable-tag>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 8px; border: 1px dashed #e5e5e5; border-radius: 8px; background: #fff;">
-            <template v-for="(s, i) in stepDraft" :key="s">
-              <div v-if="i > 0" class="f-arrow"></div>
+
+          <div class="v5-canvas">
+            <template v-for="(n, i) in nodeDraft" :key="n.key">
+              <!-- 前插槽（git 前不显示，git 恒首位） -->
               <div
-                class="f-node"
-                draggable="true"
-                :class="{ 'f-core': isCoreStep(s), 'f-platform': s === 'version' || s === 'pointer' }"
-                @dragstart="dragStart($event, s)"
+                v-if="i > 0"
+                class="v5-slot"
+                title="在此位置插入节点"
+                @click="addScriptNode(i)"
+              >
+                <div class="v5-line"></div>
+                <button class="v5-plus" type="button">+</button>
+              </div>
+              <div
+                class="v5-node"
+                :class="{
+                  'v5-plat': n.kind === 'platform',
+                  'v5-watch': n.watchdog,
+                  'v5-sel': selNodeKey === n.key,
+                }"
+                :draggable="n.kind === 'script'"
+                @click="onNodeClick(n.key)"
+                @dragstart="dragStart($event, n.key)"
                 @dragend="dragEnd"
                 @dragover="dragOver"
-                @drop="dragDrop($event, s)"
-                @click="onEditNodeClick(s)"
+                @drop="dragDrop($event, n.key)"
               >
-                <span class="f-seq">{{ i + 1 }}</span>
-                <span class="f-name">{{ STEP_LABELS[s] || s }}</span>
-                <span class="f-tag">{{ isCoreStep(s) ? '平台' : 'script' }}</span>
+                <span class="v5-seq">{{ i + 1 }}</span>
+                <span v-if="n.kind === 'platform'" class="v5-lock" title="发布语义，平台托管">🔒</span>
+                <button
+                  v-if="n.kind === 'script'"
+                  class="v5-del"
+                  type="button"
+                  title="删除节点"
+                  @click.stop="askDeleteNode(n.key)"
+                >×</button>
+                <span v-if="n.watchdog" class="v5-wbadge" title="失败触发自动回滚">⚠</span>
+                <span class="v5-name">{{ nodeDisplayName(n) }}</span>
+                <span class="v5-key">{{ n.kind === 'platform' ? PLATFORM_NODE_LABELS[n.key] || n.key : n.key }}</span>
               </div>
             </template>
-            <span v-if="!stepDraft.length" style="color:#bbb; font-size: 12px;">请至少勾选 check/version/pointer（语义基线）</span>
+            <span v-if="!nodeDraft.length" style="color:#bbb; font-size:12px;">请至少保留 git 与写版本号（platform 节点）</span>
           </div>
-          <div v-if="orderError()" style="margin-top: 8px;">
-            <a-alert type="error" show-icon :message="`当前顺序不可保存：${orderError()}`" />
+
+          <div v-if="nodesError()" style="margin-top: 8px;">
+            <a-alert type="error" show-icon :message="`当前编排不可保存：${nodesError()}`" />
           </div>
         </a-card>
 
-        <!-- 节点脚本编辑 -->
-        <a-card size="small" :bordered="false" style="background: #fafafa; flex: 1; min-height: 300px;">
+        <!-- 节点配置：label/key/optional/watchdog + 脚本（作用模块 × key） -->
+        <a-card size="small" :bordered="false" style="background: #fafafa; flex: 1; min-height: 320px;">
           <template #title>
-            节点脚本
+            节点配置
             <span style="font-weight: normal; font-size: 12px; color: #999; margin-left: 8px;">
-              脚本按模块保存，先选择「作用模块」，再点上方节点编辑；改动只影响该模块的发布
+              选中 script 节点编辑；git / 写版本号由平台托管不可编辑
             </span>
           </template>
+
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
             <span style="font-size: 13px; color: #666;">作用模块</span>
             <a-select
               v-model:value="scriptModule"
               style="width: 300px;"
-              placeholder="选择要查看/编辑脚本的模块"
+              placeholder="选择脚本归属模块（脚本按模块保存）"
               show-search
               :filter-option="(input: string, opt: any) => (opt?.label || '').toLowerCase().includes(input.toLowerCase())"
               @change="onScriptModuleChange"
@@ -1030,21 +1168,54 @@ onUnmounted(stopPolling)
                 {{ m.name }}（{{ m.key }}）
               </a-select-option>
             </a-select>
-            <span style="color:#999; font-size:12px;">点击上方节点编辑对应阶段脚本 · 双击「version/pointer」不可编辑</span>
           </div>
 
-          <template v-if="scriptModule">
-            <template v-if="editingItem">
+          <template v-if="selectedNode">
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 12px;">
+              <div>
+                <div class="muted" style="margin-bottom:6px;">label（即改同步画布）</div>
+                <a-input
+                  :id="`edLabel-${selectedNode.key}`"
+                  :value="selectedNode.label"
+                  style="width:170px;"
+                  size="small"
+                  @change="(e: any) => renameLabel(selectedNode!.key, e.target.value)"
+                />
+              </div>
+              <div>
+                <div class="muted" style="margin-bottom:6px;">key（模块脚本读写点，改后同步）</div>
+                <a-input
+                  :value="selectedNode.key"
+                  style="width:170px; font-family: monospace;"
+                  size="small"
+                  @change="(e: any) => renameKey(selectedNode!.key, e.target.value)"
+                />
+              </div>
+              <a-checkbox
+                :checked="!!selectedNode.optional"
+                @change="(e: any) => toggleNodeOptional(selectedNode!.key, e.target.checked)"
+              >optional（未配脚本跳过）</a-checkbox>
+              <a-checkbox
+                :checked="!!selectedNode.watchdog"
+                @change="(e: any) => toggleNodeWatchdog(selectedNode!.key, e.target.checked)"
+              >watchdog（失败自动回滚）</a-checkbox>
+              <a-button size="small" danger @click="askDeleteNode(selectedNode.key)">删除节点</a-button>
+            </div>
+
+            <div v-if="scriptModule">
               <StageActionsEditor
+                v-if="editingItem"
                 :module-key="scriptModule"
                 :item="editingItem"
                 @saved="onScriptEditorSaved"
-                @cancel="editingItem = null; editingStage = ''"
+                @cancel="editingItem = null"
               />
-            </template>
-            <a-empty v-else :description="`已加载 ${scriptModule} 的脚本视图，点击上方节点开始编辑`" />
+              <a-empty v-else :description="`读取 ${scriptModule} × ${selectedNode.key} 脚本中…`" />
+            </div>
+            <a-empty v-else description="无可用模块，无法编辑脚本（可先保存节点结构）" />
           </template>
-          <a-empty v-else description="暂无可用模块" />
+
+          <a-empty v-else description="点击上方 script 节点开始配置（git / 写版本号平台托管）" />
         </a-card>
       </div>
 
@@ -1151,54 +1322,67 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
-/* 编辑流水线：拖拽节点（沿用原型流程图的横向链路） */
-.f-arrow {
-  width: 22px;
-  height: 2px;
-  background: #d9d9d9;
+/* ---- v5 nodes 画布 ---- */
+.v5-canvas {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  min-height: 74px;
+  padding: 10px 2px 14px;
+  flex-wrap: nowrap;
+}
+.v5-node {
   position: relative;
   flex-shrink: 0;
-}
-.f-arrow::after {
-  content: '';
-  position: absolute;
-  right: -1px;
-  top: -3px;
-  border-left: 6px solid #d9d9d9;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-}
-.f-node {
-  position: relative;
-  min-width: 76px;
-  padding: 8px 10px;
+  min-width: 108px;
+  padding: 8px 12px 9px;
   border: 1.5px solid #d9d9d9;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
-  cursor: grab;
+  cursor: pointer;
   text-align: center;
   transition: all 0.15s;
   user-select: none;
 }
-.f-node:hover {
-  border-color: #1677ff;
+.v5-node:hover {
+  border-color: #f97316;
   transform: translateY(-1px);
 }
-.f-node:active {
-  cursor: grabbing;
+.v5-node.v5-sel {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px #fff1e7;
 }
-.f-node.f-core {
-  border-color: #722ed1;
+.v5-node.v5-plat {
+  border-color: #d3c4ef;
   background: #f9f0ff;
+  cursor: not-allowed;
 }
-.f-node.f-platform {
-  border-color: #722ed1;
-  background: #f9f0ff;
+.v5-node.v5-watch {
+  border-color: #f0d4a8;
+  background: #fffbe6;
 }
-.f-node.f-platform .f-name {
+.v5-node.v5-plat .v5-name {
   color: #722ed1;
 }
-.f-seq {
+.v5-node.v5-plat .v5-key {
+  color: #9254de;
+}
+.v5-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.v5-key {
+  display: block;
+  font-size: 10px;
+  color: #999;
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.v5-seq {
   position: absolute;
   top: -8px;
   left: -8px;
@@ -1214,17 +1398,91 @@ onUnmounted(stopPolling)
   align-items: center;
   justify-content: center;
 }
-.f-name {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  white-space: nowrap;
+.v5-lock {
+  position: absolute;
+  top: -8px;
+  right: 24px;
+  font-size: 11px;
 }
-.f-tag {
-  display: block;
+.v5-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.v5-node:hover .v5-del {
+  opacity: 1;
+}
+.v5-wbadge {
+  position: absolute;
+  bottom: -8px;
+  left: -8px;
   font-size: 10px;
-  color: #999;
-  margin-top: 2px;
+  background: #e8833a;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-weight: 600;
+}
+.v5-slot {
+  position: relative;
+  width: 30px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.v5-line {
+  width: 30px;
+  height: 2px;
+  background: #d9d9d9;
+}
+.v5-slot::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: calc(50% - 3px);
+  border-left: 6px solid #d9d9d9;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.v5-plus {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px dashed #c3cad3;
+  color: #8a94a3;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  z-index: 2;
+}
+.v5-slot:hover .v5-plus {
+  border-color: #f97316;
+  border-style: solid;
+  color: #f97316;
+  background: #fff1e7;
 }
 </style>

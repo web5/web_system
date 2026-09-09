@@ -12,6 +12,7 @@ import {
   TemplateTarget,
 } from '../entities/deploy-pipeline-template.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
+import { normalizeNodes, isV5NodesEnabled, legacyStepsToNodes, TemplateNode } from './template-node';
 
 export const DEFAULT_TEMPLATE_NAME = '默认';
 /** 全局模板标记：moduleKey='*' 表示通用流水线（不绑定模块，执行时选目标模块） */
@@ -129,6 +130,8 @@ export interface TemplateSpec {
   description?: string;
   skipVerify?: boolean;
   steps?: string[];
+  /** v5 节点序列（platform+script）。提供则归一化落库；缺省保留 legacy steps 语义 */
+  nodes?: TemplateNode[] | null;
   rollbackOnFailure?: RollbackMode;
   approval?: TemplateApproval;
   defaultTarget?: TemplateTarget;
@@ -276,12 +279,23 @@ export class PipelineTemplateService {
     this.assertRollback(spec.rollbackOnFailure);
     await this.assertNameFree(name);
     const steps = this.resolveSteps(spec);
+    // v5：nodes 显式传入→归一化；未传→按 legacy 配置兜底转存（steps/skipVerify → nodes）
+    const nodes = isV5NodesEnabled()
+      ? spec.nodes !== undefined
+        ? normalizeNodes(spec.nodes)
+        : legacyStepsToNodes({
+            steps,
+            skipVerify: steps ? !steps.includes('verify') : (spec.skipVerify ?? false),
+            rollbackOnFailure: spec.rollbackOnFailure ?? 'previous',
+          })
+      : null;
     const row = this.repo.create({
       id: genId(),
       moduleKey: GLOBAL_TEMPLATE,
       name,
       description: spec.description?.trim() || undefined,
       steps,
+      nodes,
       skipVerify: steps ? !steps.includes('verify') : (spec.skipVerify ?? false),
       rollbackOnFailure: spec.rollbackOnFailure ?? 'previous',
       approval: spec.approval ?? 'inherit',
@@ -304,6 +318,7 @@ export class PipelineTemplateService {
       name,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
+      nodes: src.nodes ?? null,
       skipVerify: src.skipVerify,
       rollbackOnFailure: src.rollbackOnFailure ?? 'previous',
       approval: src.approval,
@@ -334,6 +349,9 @@ export class PipelineTemplateService {
     this.assertTarget(patch.defaultTarget);
     this.assertRollback(patch.rollbackOnFailure);
     if (patch.description !== undefined) tpl.description = patch.description?.trim() || undefined;
+    if (isV5NodesEnabled() && patch.nodes !== undefined) {
+      tpl.nodes = normalizeNodes(patch.nodes);
+    }
     if (patch.steps !== undefined) {
       tpl.steps = normalizeSteps(patch.steps);
       tpl.skipVerify = tpl.steps ? !tpl.steps.includes('verify') : (patch.skipVerify ?? false);
@@ -347,6 +365,20 @@ export class PipelineTemplateService {
     if (patch.approval !== undefined) tpl.approval = patch.approval;
     if (patch.defaultTarget !== undefined) tpl.defaultTarget = patch.defaultTarget;
     if (patch.enabled !== undefined) tpl.enabled = patch.enabled;
+    // 旧模板（nodes 为 null）在 v5 模式被编辑保存 → 一次性转存（steps/skipVerify/rollback 当前态 → nodes）
+    if (isV5NodesEnabled() && !tpl.nodes && patch.nodes === undefined) {
+      const steps =
+        tpl.steps && tpl.steps.length
+          ? tpl.steps
+          : tpl.skipVerify
+            ? ([...PIPELINE_STAGES] as string[]).filter((s) => s !== 'verify')
+            : null;
+      tpl.nodes = legacyStepsToNodes({
+        steps,
+        skipVerify: !!tpl.skipVerify,
+        rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
+      });
+    }
     return this.repo.save(tpl);
   }
 
