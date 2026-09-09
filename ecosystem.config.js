@@ -17,6 +17,8 @@ const DB_PORT = process.env.DB_PORT || '3306';
 const DB_USERNAME = process.env.DB_USERNAME || 'root';
 const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_DATABASE = process.env.DB_DATABASE || 'web_system';
+/** knowledge-service 独立库（RAG：集合/文档/分块），与主库同实例不同库名 */
+const KNOWLEDGE_DB_DATABASE = process.env.DB_DATABASE_KNOWLEDGE || 'web_system_knowledge';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
@@ -224,6 +226,26 @@ module.exports = {
       error_file: `${logBase}/content-hub-error.log`,
       out_file: `${logBase}/content-hub-out.log`,
       log_file: `${logBase}/content-hub-combined.log`,
+    },
+    {
+      ...commonConfig,
+      name: 'knowledge-service',
+      script: './servers/knowledge-service/dist/main.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 6011,
+        ...baseDbConfig,
+        DB_DATABASE: KNOWLEDGE_DB_DATABASE,
+        AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || '',
+        INTERNAL_API_KEY: process.env.KNOWLEDGE_INTERNAL_API_KEY || process.env.INTERNAL_API_KEY || '',
+        TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL || 'https://tokenhub.tencentmaas.com/v1',
+        TOKENHUB_API_KEY: process.env.TOKENHUB_API_KEY || process.env.HY3_API_KEY || process.env.LLM_API_KEY || '',
+        EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'bge-m3',
+        EVAL_LLM_MODEL: process.env.EVAL_LLM_MODEL || 'deepseek-v4-flash',
+      },
+      error_file: `${logBase}/knowledge-service-error.log`,
+      out_file: `${logBase}/knowledge-service-out.log`,
+      log_file: `${logBase}/knowledge-service-combined.log`,
     },
   ],
 };

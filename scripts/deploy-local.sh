@@ -41,6 +41,7 @@ web-ai-agent:6010:ai-agent:@web-system/ai-agent
 web-system:6004:system-service:@web-system/system-service
 web-mcp-gateway:6006:mcp-gateway:@web-system/mcp-gateway
 web-content-hub:6007:content-hub:@web-system/content-hub
+web-knowledge:6011:knowledge-service:@web-system/knowledge-service
 "
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[1;31m'; NC='\033[0m'
