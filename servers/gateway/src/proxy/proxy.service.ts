@@ -16,6 +16,7 @@ export class ProxyService implements OnModuleInit {
   private readonly uploadServiceUrl: string;
   private readonly mcpGatewayUrl: string;
   private readonly contentHubServiceUrl: string;
+  private readonly knowledgeServiceUrl: string;
 
   // 缓存 proxy 实例，避免每个请求都创建新实例
   private userProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -33,6 +34,7 @@ export class ProxyService implements OnModuleInit {
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentDefsProxy!: ReturnType<typeof createProxyMiddleware>;
+  private knowledgeProxy!: ReturnType<typeof createProxyMiddleware>;
 
   // 绑定 this，避免传递给 on.error 时丢失上下文
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
@@ -47,6 +49,7 @@ export class ProxyService implements OnModuleInit {
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
     this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', 'http://localhost:6006');
     this.contentHubServiceUrl = this.configService.get('CONTENT_HUB_SERVICE_URL', 'http://localhost:6007');
+    this.knowledgeServiceUrl = this.configService.get('KNOWLEDGE_SERVICE_URL', 'http://localhost:6011');
 
     this.boundErrorHandler = (err, _req, res) => {
       this.logger.error(`代理请求失败: ${err.message}`);
@@ -162,6 +165,10 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
+    // RAG 知识服务（/api/knowledge/* → knowledge-service）
+    // 只剥 /api，knowledge-service controller 是 @Controller('knowledge')
+    this.knowledgeProxy = this.createProxy(this.knowledgeServiceUrl, '^/api');
+
     this.logger.log('所有 Proxy 实例初始化完成');
   }
 
@@ -177,6 +184,7 @@ export class ProxyService implements OnModuleInit {
   getUploadStaticProxy() { return this.uploadStaticProxy; }
   getBianbianStaticProxy() { return this.bianbianStaticProxy; }
   getMcpProxy() { return this.mcpProxy; }
+  getKnowledgeProxy() { return this.knowledgeProxy; }
   getAgentRunsProxy() { return this.agentRunsProxy; }
   getAgentDefsProxy() { return this.agentDefsProxy; }
   getFinnewsProxy() { return this.finnewsProxy; }

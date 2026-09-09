@@ -371,6 +371,16 @@ export class ProxyController {
     return this.proxyService.getAgentRunsProxy()(req, res);
   }
 
+  // RAG 知识服务（/api/knowledge/* → knowledge-service）
+  @All('knowledge')
+  proxyKnowledgeExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getKnowledgeProxy()(req, res);
+  }
+  @All('knowledge/:path(*)')
+  proxyKnowledgeWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getKnowledgeProxy()(req, res);
+  }
+
   // Agent 定义管理（/api/agent-defs/* → ai-service）
   @All('agent-defs')
   proxyAgentDefsExact(@Req() req: Request, @Res() res: Response) {
