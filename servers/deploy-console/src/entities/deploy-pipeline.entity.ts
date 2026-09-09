@@ -120,6 +120,10 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'json', nullable: true, comment: '活动阶段快照（null=全量）' })
   steps?: string[] | null;
 
+  /** v5 节点快照：null=legacy（按 steps 语义）；非 null=模板 nodes 固化（模板后续改动不影响实例） */
+  @Column({ type: 'json', nullable: true, comment: 'v5 节点快照（null=legacy）' })
+  nodes?: import('../pipeline-template/template-node').TemplateNode[] | null;
+
   /** 失败自动回滚开关快照（previous/none） */
   @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚快照' })
   rollbackOnFailure?: string;
