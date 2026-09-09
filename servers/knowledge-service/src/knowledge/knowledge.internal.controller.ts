@@ -13,7 +13,8 @@ import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { KnowledgeCollectionService } from './collections.service';
 import { KnowledgeDocumentService } from './documents.service';
 import { KnowledgeSearchService } from './search.service';
-import { DeleteKnowledgeDto, IngestDocDto, SearchQueryDto } from './dto';
+import { RagEvaluationService } from './rag-eval.service';
+import { DeleteKnowledgeDto, IngestDocDto, RunEvalDto, SearchQueryDto } from './dto';
 
 /**
  * MCP 工具族 internal 接口（mcp-gateway seed 的 knowledge 模块直连 6011，
@@ -28,6 +29,7 @@ export class KnowledgeInternalController {
     private readonly collections: KnowledgeCollectionService,
     private readonly documents: KnowledgeDocumentService,
     private readonly search: KnowledgeSearchService,
+    private readonly evalService: RagEvaluationService,
   ) {}
 
   @Get('search')
@@ -48,6 +50,16 @@ export class KnowledgeInternalController {
   @Post('ingest')
   ingest(@Body() dto: IngestDocDto) {
     return this.documents.ingest(dto);
+  }
+
+  /** Ragas 三指标评测（3.5）：检索+问答对 → context/answer relevance + faithfulness 汇总 */
+  @Post('eval')
+  runEval(@Body() dto: RunEvalDto) {
+    return this.evalService.evaluate(
+      dto.collectionId,
+      dto.cases.map((c) => c.question),
+      dto.topK ?? 5,
+    );
   }
 
   @Post('delete')
