@@ -317,6 +317,30 @@ export const serverApi = {
 
 /* ========== Pipelines（发布流水线） ========== */
 
+/** v5 模板节点：platform=发布语义（git/写版本号，平台托管）；script=用户自定义脚本节点 */
+export interface TemplateNode {
+  kind: 'platform' | 'script'
+  /** git | version | pointer（platform）或自定义 script key */
+  key: string
+  /** script 节点展示名（platform 由前端映射） */
+  label?: string
+  /** script：未配脚本时跳过发布（默认必配 fail-fast） */
+  optional?: boolean
+  /** script：该节点失败触发自动回滚（全局仅 1 个） */
+  watchdog?: boolean
+  timeoutSec?: number
+}
+
+/** 平台保留字（script key 不可占用；stage_commands 也不可写） */
+export const PLATFORM_NODE_KEYS = ['git', 'version', 'pointer'] as const
+
+/** platform 节点展示 label（前端映射，避免每次传） */
+export const PLATFORM_NODE_LABELS: Record<string, string> = {
+  git: 'git · 拉取代码',
+  version: '写版本号',
+  pointer: '切指针',
+}
+
 /** 流水线模板（流程定义；模块下可建多条） */
 export interface PipelineTemplate {
   id: string
@@ -325,6 +349,8 @@ export interface PipelineTemplate {
   description?: string
   /** 活动阶段子集（null=全量九阶段） */
   steps?: string[] | null
+  /** v5 节点序列：null=legacy（steps 语义）；platform+script */
+  nodes?: TemplateNode[] | null
   skipVerify: boolean
   /** verify 失败自动回滚 previous/none */
   rollbackOnFailure?: 'previous' | 'none'
@@ -365,6 +391,8 @@ export interface PipelineItem {
   skipVerify?: boolean
   /** 活动阶段快照（null=全量九阶段） */
   steps?: string[] | null
+  /** v5 节点快照：null=legacy（steps 语义）；platform+script */
+  nodes?: TemplateNode[] | null
   rollbackOnFailure?: 'previous' | 'none'
   stage?: string
   progress?: { current: number; total: number; message?: string }
@@ -514,10 +542,18 @@ export const stageCommandApi = {
         updatedBy?: string
       }[]
     >,
+  /** 单节点配置（v5：任意 script key 读取，含 actions；未配置返回 null） */
   get: (key: string, stage: string) =>
     http.get(`/modules/${key}/stage-commands/${stage}`) as Promise<{
+      id?: string
+      moduleKey: string
+      stage: string
       command: string
-      timeoutSec?: number
+      actions?: StageAction[] | null
+      enabled: boolean
+      timeoutSec?: number | null
+      updatedAt?: string
+      updatedBy?: string | null
     } | null>,
   /**
    * 保存阶段命令。
