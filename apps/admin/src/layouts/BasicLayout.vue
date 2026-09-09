@@ -34,6 +34,10 @@
           <template #icon><SafetyCertificateOutlined /></template>
           <span>角色权限</span>
         </a-menu-item>
+        <a-menu-item v-if="userStore.hasPermission('agents:cost:view')" key="models">
+          <template #icon><DollarCircleOutlined /></template>
+          <span>模型单价</span>
+        </a-menu-item>
         <a-menu-item v-if="userStore.hasPermission('mcp:view')" key="mcp">
           <template #icon><ApiOutlined /></template>
           <span>MCP 管理</span>
@@ -144,7 +148,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined } from '@ant-design/icons-vue';
+import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined, DollarCircleOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
@@ -177,6 +181,7 @@ const currentTitle = computed(() => {
 watch(() => route.path, (path) => {
   if (path.includes('/users')) selectedKeys.value = ['users'];
   else if (path.includes('/settings/roles')) selectedKeys.value = ['roles'];
+  else if (path.includes('/settings/models')) selectedKeys.value = ['models'];
   else if (path.includes('/settings')) selectedKeys.value = ['settings'];
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
@@ -193,7 +198,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
     database: '/database',
-    roles: '/settings/roles',
+    roles: '/settings/roles', models: '/settings/models',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',
   };
