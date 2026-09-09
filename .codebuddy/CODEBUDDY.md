@@ -1,232 +1,418 @@
 # 科豆 AI · 项目入口
 
-## 是什么
+> 本文是 CodeBuddy / AI 常驻加载的**项目总入口**（v2 五段式重构，2026-09-09）。
+> 行文约定：**导航 + 一屏速查 + 关键铁律**，每个主题下方都给出「详细说明入口」指向单事实源文档 —— 落地执行前先打开权威文档，勿仅凭速查下结论。
+> 结构：**① 技术栈与快速启动 → ② 项目架构 → ③ 开发规则与数字人技能体系 → ④ 发布部署 → ⑤ 门禁与质量**。文档地图见文末附录。
 
-科豆 AI 儿童创造力平台 — 全栈 monorepo（Vue3 + NestJS + PostgreSQL + 微信小程序）。
+---
 
-**平台产品矩阵**：
+## 0 这是什么
+
+科豆AI项目平台 —— 全栈 monorepo（Vue3 + NestJS + MySQL/PostgreSQL + 微信小程序）。一个仓库装三类资产：
+
+| 类别 | 位置 | 说明 |
+|---|---|---|
+| 产品代码 | `apps/` `servers/` `packages/` | 前端应用 / 后端微服务 / 共享包 |
+| 人读文档 | `docs/` | 架构、开发、UI、产品、发布手册 |
+| 数字人体系 | `.codebuddy/` | agent-kit 行为定义 + skills 技能 + rules 触发规则 + 本入口 |
+
+**平台产品矩阵**（portal 端）：
 | 产品 | 定位 | 路由 |
-|------|------|------|
-| 变变 | AI 拼贴变身 3D 角色 | /create → /transform → /result |
-| 画板 | 自由绘画 + AI 文生图 | /draw |
-| AI 学习助手 | 少儿 AI 对话 | /chat |
+|---|---|---|
+| 变变 | AI 拼贴变身 3D 角色 | `/create → /transform → /result` |
+| 画板 | 自由绘画 + AI 文生图 | `/draw` |
+| AI 学习助手 | 少儿 AI 对话 | `/chat` |
 
-## 技术栈速查
+---
 
-| 层 | 技术 |
-|----|------|
-| 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x |
-| 后端 | NestJS 10 + TypeORM 0.3 + PostgreSQL |
-| 小程序 | 微信原生 + TypeScript |
-| 部署 | Docker Compose + Nginx |
+## 1 技术栈与快速启动
 
-## 端口
+### 1.1 技术栈
 
-| 服务 | 端口 |
-|------|------|
-| gateway | 6000 |
-| auth-service | 6101 |
-| user-service | 6002 |
-| ai-service | 6003 |
-| ai-agent | 6010 |
-| system-service | 6004 |
-| portal (dev) | 5173 |
-| admin-web (dev) | 5174 |
-| docs (static) | 4173 |
+| 层 | 技术 | 要点 |
+|---|---|---|
+| 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
+| 后端 | NestJS 10 + TypeORM + MySQL（本地）/ PostgreSQL（生产） | 每个微服务独立数据库，全部 TS strict |
+| 小程序 | 微信原生 + TS | `apps/mini-app` |
+| 共享包 | shared / types / shell-loader / ui / agent-core / kedou-agent | `packages/`，跨端配置一律收口到 `@web-system/shared` |
+| 部署 | pm2 + Docker Compose + Nginx + 自研发布平台（deploy-console） | 发布见 §4 |
 
-## 本地启动速查
+### 1.2 顶层目录速览
 
-- **全栈一键**：`./start-local.sh`（安装依赖 + 构建 shared/types + 起 6 服务 + 2 前端），详见 `docs/development/local-dev-setup.md`
-- **admin 后台（vite dev）**：`cd apps/admin && pnpm dev` → `http://localhost:5174/admin/`（base 为 `/admin/`）
-- **portal（vite dev）**：`cd apps/portal && pnpm dev` → `http://localhost:5173/portal/`（base 为 `/portal/`，URL 必须带 `/portal/` 前缀；微前端模块用 `pnpm build --mode mf`）
-- **本地 nginx 集成**：构建前端后 `sudo ~/local/nginx/sbin/nginx` 启动、`-s reload` 重载，访问 `https://local.kedouai.com/admin/`（配置见根目录 `local.nginx.conf`，已被 `conf.d/web_system-local.conf` include）
+```
+web_system/
+├── apps/        # 前端：shell(基座) admin portal mini-app deploy-console(独立 SPA)
+├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
+├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
+├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
+├── docs/        # 人读文档（分册地图见附录）
+├── .codebuddy/  # 数字人体系（agent-kit/skills/rules/references/evals + 本入口）
+├── migrations/  # 数据库迁移 SQL
+├── local.nginx.conf / micro-frontend.nginx.conf   # 本地 nginx 集成配置
+└── ecosystem.config.cjs / docker-compose*.yml      # pm2 进程清单 / 容器编排
+```
 
-> ⚠️ **admin 路由 base 是 `/admin/`**：页面 URL 必须带 `/admin/` 前缀（如 `/admin/agents`），不带会 404。admin 详细开发指南（启动/依赖/路由/nginx 集成/Agent 调试）见 `docs/development/admin-dev.md`。
+### 1.3 本地快速启动
 
-## 本地发布速查（2026-09 迁移后 · 运维手册：`docs/development/local-release-runbook.md`）
+> 权威教程（换机从零跑，含无 brew/sudo 装 MySQL+Redis）：`docs/development/local-dev-setup.md`
+> 完整开发指南（服务/启动/验证/FAQ）：`docs/development-guide.md`
 
-> 服务统一从**发布目录** `~/web_system_release` 运行（pm2 `web-*`，dotenv 按 cwd 加载**发布目录**的 `.env`）。
-> **发布 = 工作区 commit&push → 发布目录拉取分支 → 构建部署**（基于 git 拉取，不基于当前工作区）。
+```bash
+pnpm install                       # 首次装依赖（pnpm workspace）
+bash scripts/local-db.sh           # 起本地 MySQL(3306) + Redis(6379)，建库 web_system
+bash scripts/local-up.sh           # 构建共享包 + 全部后端 → pm2 启动(web-*) → 健康检查
+bash scripts/local-up.sh --no-build    # 跳过构建仅重启（改 .env 后最快）
+bash scripts/local-up.sh --seed        # 额外重置 admin 密码 admin123
+bash scripts/start-frontend.sh     # portal(5173) + admin(5174) + docs(4173)
+bash scripts/dev-e2e-start.sh      # 微前端端到端（构建 externals/shell/模块 + seed + gateway 前台）
+```
 
-- **端口**：gateway 6000 / auth 6101 / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / deploy-console 6200
-- **发布方式**：
-  - 后端服务 + admin/portal 前端 → **发布流水线**：`POST /api/pipelines`（deploy-console 6200，env=local，branch=feature/xxx），轮询 jobId 至 succeeded
-  - **deploy-console 自身 → 传统发布**（发布目录构建 dist + `pm2 restart web-deploy-console`），**勿走流水线**（stageRestart 会 restart 执行者，自杀式中断）
-  - 前端产物投递 `servers/gateway/public/static/modules/<key>/<version>/`，验证 manifest（等 gateway TTL 10s）
-- **Hook（DB 真相源，规避 CodeBuddy 删除审批）**：content-hub/upload-service/ai-agent（build）、admin/portal（build+upload+cleanup）已注册——构建/投递前 `mv` 旧产物到 `/tmp`。改 hook：控制台「模块详情→发布脚本」或 `PUT /api/modules/:key/hooks/:stage`
-- **关键坑**：
-  - 后台进程批量删除 **≥500 文件** 被 CodeBuddy 安全层拦截（后台无确认通道，报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`）→ 用 hook `mv` 方案，勿改 IDE 阈值（无效）
-  - pnpm install 中断残留 `*_tmp_*` 目录（tsc 报 `TS2688 node_tmp_xxx`）→ `mv` 到 `/tmp` 清理，缺失包从工作区 `cp -R` 补齐
-  - `pm2 --update-env` 会传播 pm2 记录的旧环境变量（如 PORT 污染，dotenv 不覆盖）→ 干净 env `start` + `pm2 save`
+前端单模块 standalone（快速排查样式/页面，不加载基座）：
 
-## 设计常量
+```bash
+cd apps/admin && npx vite --port 5175   # http://127.0.0.1:5175/admin/
+cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
+```
 
-**平台（暗色）**：主色 `#f97316` 暖橙 / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
-**变变产品（暖色）**：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` 暖白 / 文字 `#333333`
+> ⚠️ **admin 路由 base 是 `/admin/`**：页面 URL 必须带 `/admin/` 前缀（如 `/admin/agents`），不带会 404。portal 同理需 `/portal/` 前缀。
+> 本地 nginx 集成（配 `local.nginx.conf`）：`sudo ~/local/nginx/sbin/nginx` 启动 / `-s reload` 重载，访问 `https://local.kedouai.com/admin/`。
 
-> ⚠️ **admin 系（deploy-console/admin/mcp-admin）UI 数值以 `packages/ui/src/tokens.ts` 为准**（DR-3 主橙 #F97316，平台段），变变品牌色只用于 portal/mini-app。改 UI 前必走下方「UI 页面生成铁律」。
+### 1.4 验证脚本速查
 
-## UI 页面生成铁律（admin 系 · 每个 UI 任务强制）
+| 命令 | 作用 |
+|---|---|
+| `bash scripts/dev-verify.sh` | 全量：DB + 单测 + 集成 + 健康 |
+| `bash scripts/dev-verify.sh --unit/--integ/--health` | 分别跑单测 / 集成 / 健康自检 |
+| `node scripts/_test-p0.mjs` / `_test-p1.mjs` | 发布系统集成测试（真实 DB） |
+| `cd apps/* && pnpm dev` | 前端 dev server |
+| `cd servers/<svc> && pnpm dev` | 后端 nest watch 热重载 |
 
-> 细则本体在 `docs/ui/`（单事实源，**入口 = `docs/ui/README.md` 读取地图**），规则 `.codebuddy/rules/ui-interface/` 负责触发。收到任何 UI 任务（新页面/改版/调样式/改交互）按此执行：
+### 1.5 详细说明入口
 
-1. 读 `docs/ui/README.md`（读取地图，按任务类型定位最小集）→ 新页面必读 `docs/ui/design.md`（判断层）
+- `docs/development/local-dev-setup.md` — 新机器/换环境从零启动（含无 brew 装 DB）
+- `docs/development-guide.md` — 研发平台开发与使用总指南（分层/服务清单/启动/发布系统/FAQ）
+- `docs/development/admin-dev.md` — admin 微前端详细开发（依赖/路由/nginx 集成/微前端发布四步/提 PR）
+- `docs/development/whistle-local-dev.md` — whistle 本地代理
+
+---
+
+## 2 项目架构
+
+### 2.1 分层架构（总图见 `docs/development-guide.md` §1）
+
+```
+前端 apps/（shell 基座 + portal/admin 模块 + mini-app + deploy-console SPA）
+        │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
+Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基座 + 版本分发/灰度
+后端 servers/（auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console）
+基础设施：MySQL(web_system + web_system_deploy)  Redis  nginx  pm2
+```
+
+架构要点：
+- **每服务独立数据库**；所有 API 走 gateway 代理，前端不直连后端
+- **微前端**：shell 提供 `window.__SHARED__`（vue/router/pinia/antd 防重复打包）与版本 manifest；`packages/shell-loader` 按清单动态加载模块 `index.js/css`；CSS 用 `:where([data-module])` 前缀隔离；产物版本化存 `static/modules/<key>/<version>/`
+- **灰度**：gateway `deploy_canary_rules`（header/percent/user-list 三种匹配）
+
+### 2.2 服务与端口（pm2 进程名 `web-*`）
+
+| 服务 | 目录 | 端口 | 进程 | 说明 |
+|---|---|---|---|---|
+| gateway | servers/gateway | 6000 | web-gateway | API 反代 + 微前端基座 + 版本分发/灰度 |
+| auth-service | servers/auth-service | 6101 | web-auth | 认证（登录/JWT/微信） |
+| user-service | servers/user-service | 6002 | web-user | 用户 |
+| ai-service | servers/ai-service | 6003 | web-ai | AI（对话/生图/TTS） |
+| ai-agent | servers/ai-agent | 6010 | web-ai-agent | AI Agent（运行时引擎服务） |
+| system-service | servers/system-service | 6004 | web-system | 系统（配置/素材） |
+| todo-service | servers/todo-service | 6005 | web-todo | 待办 |
+| mcp-gateway | servers/mcp-gateway | 6006 | web-mcp-gateway | MCP 网关 |
+| content-hub | servers/content-hub | 6007 | web-content-hub | 内容中枢（财经/AI 资讯） |
+| upload-service | servers/upload-service | 6008 | web-upload | 上传 |
+| deploy-console | servers/deploy-console | 6200 | web-deploy-console | 运维控制台（发布/环境/监控，控制台 /console/） |
+
+### 2.3 前端应用
+
+| 应用 | 目录 | 类型 | 本地访问 |
+|---|---|---|---|
+| shell | apps/shell | 微前端基座 | 构建产物走 gateway(6000/) |
+| portal | apps/portal | 微前端模块 | http://localhost:5173/portal/ |
+| admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
+| deploy-console | apps/deploy-console | 独立 SPA（运维） | deploy-console 后端 serve（6200/console/） |
+| mini-app | apps/mini-app | 微信小程序 | 独立上传 |
+
+### 2.4 共享包（packages/）
+
+| 包 | 作用 |
+|---|---|
+| shared | 共享常量（API_TIMEOUT 分层）、SnakeNamingStrategy、UuidEntity 等 —— 跨端配置唯一收口 |
+| types | 权限等 TS 类型 |
+| shell-loader | 自研微前端加载器（register/mount/unmount，unmount 移除 CSS） |
+| ui | 共享 UI 组件 + 设计 token（`packages/ui/src/tokens.ts`，admin 系数值唯一真相源） |
+| agent-core | `@kedouai/agent-core`：Agent 核心库（纯 TS，ReAct 引擎/注册表/记忆压缩） |
+| kedou-agent | Agent CLI（交互式，基于 agent-core） |
+| mcp-core | MCP 核心 |
+
+### 2.5 数据与静态资源
+
+- **本地 DB**：`web_system`（业务）+ `web_system_deploy`（发布平台独立库，gateway 用独立数据源连它）—— ⚠️ 微前端版本表 `deploy_deployments` 在 **web_system_deploy** 库，勿写错库
+- **静态资源路径**（gateway 直接提供）：
+  - `/api/uploads/*` — 用户上传 + AI 生成图片统一路径；AI 图必须落盘此目录 + DB 存相对路径，不能只存远程 URL
+  - `/materials/svg/*` — 系统素材 SVG
+
+### 2.6 架构详细说明入口
+
+- `docs/development-guide.md` §1 — 分层/服务/共享包/微前端机制
+- `docs/architecture/技术架构.md` — 技术架构总述
+- `docs/architecture/micro-frontend-technical-design.md` — 微前端设计（共享依赖/CSS 隔离/产物分发）
+- `docs/architecture/网关URL规划.md` — 路由规划；`docs/architecture/MCP服务间鉴权.md` — 服务间鉴权；`docs/architecture/kedou-network-architecture.md` — 网络架构
+- `docs/architecture/agent-definition-db-design.md` — 数字人 Agent 定义数据模型（与 §3 数字人体系呼应）
+- `docs/architecture/release-system-design.md` / `release-system-implementation-plan.md` — 发布平台设计
+- `docs/architecture/micro-frontend-style-guide.md` — 微前端样式约束
+
+---
+
+## 3 开发规则与数字人技能体系（agent-kit）
+
+> 本节把 `.codebuddy/agent-kit` 数字人定义**整体加载进工程**。它不是一个文件，而是「指南 → 技能/SOP → 红线」三层体系 + 一套评测门禁。
+> 元仓库/方法论全文：`.codebuddy/agent-kit/README.md`；同步脚本 `scripts/sync-agent-kit.sh`。
+
+### 3.1 AI 协作范式（怎么和 AI 一起工作）
+
+- **定位**：把 AI 当数字同事 —— 人负责关键节点审核与决策，AI 负责产出与执行；工作瓶颈在流程设计，不在单点执行速度。
+- **人审 3 节点**：意图确认 → 设计确认 → 交付前审查。审查顺序：逻辑 → 合规/红线 → 对照 spec。
+- **版本化产物链**：意图(intent) → 设计(spec) → 执行 → 带审查记录的交付 → 复盘；产物落盘，不只在对话里。
+- **上下文工程**：上下文是有限资源 —— 即时加载、定期压缩、结论落盘；复杂任务拆给独立上下文子代理，主线程只留摘要。
+- **验证优先**：完成声明 = 验证证据，禁止「应该没问题」。小改动走简化档（thinking-checklist 3 问），大改动走完整链。
+
+### 3.2 常驻指南与画像（先读这个）
+
+| 文件 | 内容 |
+|---|---|
+| `.codebuddy/agent-kit/AGENT.md` | 智能体常驻操作总则（三层结构/工作流/人审节点/红线/加载方式） |
+| `.codebuddy/agent-kit/references/digital-agent-profile.md` | 数字人画像（六维定义实例） |
+| `.codebuddy/agent-kit/references/ai-methodology.md` | 完整方法论（8 节，可当分享 PPT） |
+| `.codebuddy/agent-kit/references/agent-definition-*.md` | 智能体定义方法论 + 六维填空模板 |
+
+### 3.3 技能地图（怎么干 —— Hub 路由）
+
+> 入口技能 `.codebuddy/skills/rd-digital-agent/SKILL.md`（研发数字人 Hub v3.1）按复杂度/类型路由到下列子技能：
+
+```
+用户请求
+  ├─ "怎么做"/设计方案/模糊需求 ───→ rd-brainstorm → rd-plan（用户选方案/确认后）→ rd-execute → rd-review
+  ├─ "拆任务"/细化/已有方案 ──────→ rd-plan → rd-execute → rd-review
+  ├─ 小改动/修 bug/简单 CRUD ─────→ rd-execute（直连，最小计划）→ rd-review
+  ├─ 架构/选型/安全/数据设计 ─────→ tech-review（辅助审查）
+  ├─ UI/页面/样式/交互 ──────────→ fe-developer（前端开发技能）＋ UI 铁律 §5.3
+  ├─ 服务/接口/数据/安全横切/部署 ──→ be-developer（后端开发技能）
+  └─ 编码任务（所有）────────────→ 加载 Karpathy 编程准则（rd-execute 执行时自动参考）
+```
+
+| 技能（.codebuddy/skills 或 agent-kit/skills） | 用途 |
+|---|---|
+| `rd-digital-agent` | Hub：按复杂度自动路由（brainstorm → plan → execute → review） |
+| `rd-brainstorm` / `rd-plan` | 探索方案选项（2-4 个对比）→ 细化为可执行任务列表 |
+| `rd-execute` | TDD 逐项实现（红→绿→重构），产出物落盘 |
+| `rd-review` / `tech-review` | 产物自检 / 架构·安全·数据审查（清单在各自 references/） |
+| `systematic-debugging` | 系统化调试（四阶段根因分析，遇 bug 先加载） |
+| `verification-before-completion` | 完成前强制验证门（声明完成前必走） |
+| `code-explore` | 代码库探索（索引优先/影响面分析） |
+| `incremental-refactoring` | 测试保护下的增量重构 |
+| `user-memory` | 用户偏好与项目上下文记忆 |
+| `be-developer` / `fe-developer` | 项目域技能：后端服务/接口/数据；admin 系前端页面/UI |
+| `karpathy-coding-*` | 行为编码准则（不过度设计/外科手术式改动/先立验证标准） |
+
+> ⚠️ 技能名带「触发词」（description），任务描述命中即自动加载；也可在 `.codebuddy/agent-kit/skills/rd-digital-agent/references/project-context.md` 找到项目上下文占位说明。
+
+### 3.4 评测体系（怎么证明 kit 变好了）
+
+- `.codebuddy/evals/` — 回归评测（五层过滤 L1 结构 → L2 路由 → L3 行为 → L4 端到端 → L5 实战 + 五维 rubric）
+- `.codebuddy/evals/README.md` — 评测运行手册
+- `.codebuddy/agent-kit/references/eval-framework.md` — 评测体系定稿
+- **门禁联动**：改 skills/agent-kit 行为定义 → 必须附评测报告（见 §5.1 kit-gate）
+
+### 3.5 项目工程铁律（横切自查，必看）
+
+> 这些规则源自真实踩坑，目标是提高 AI 编码「一次正确率」。完整版：`.codebuddy/references/coding-best-practices.md`
+
+**① 同类修改必须扫全量（Monorepo）**：改横切关注点前先 `grep` 所有服务，不能只改遇到的：
+```bash
+grep -r enableCors servers/*/src        # CORS 全部从 env 读
+grep -r useGlobalFilters servers/*/src  # 全局异常过滤器全注册
+grep -r 'console\.' servers/*/src       # 无 console.log 残留
+```
+
+**② 跨端配置禁止拷贝，收口 `@web-system/shared`**：新建/追加到 `packages/shared/src/` → index.ts re-export → 删各端本地拷贝。
+
+**③ 请求超时分三层，逐层排查**（前端 axios / gateway proxy / 后端 http client）：
+- 三层超时独立配置，真实超时取**最短层**；`ERR_ABORTED`/504 从最内层往外查
+- AI 类接口（`/api/ai/*`、`/api/bianbian/*`）必须用 `API_TIMEOUT.AI_TASK`（90s）+ gateway proxy `PROXY_TIMEOUT.AI_TASK`，否则被 30s 截断
+
+**④ 新增魔法数字先全局搜索**，复用已有常量，避免各端不一致。
+
+**⑤ 收口后清理冗余文件**：统一后删除旧配置，确认无旧 import 残留。
+
+**⑥ 后端加 shared 依赖**：`package.json` 加 `file:../../packages/shared` 即可，**勿在 tsconfig 加 paths**（会让 nest build 把 shared 源码编进 dist）。
+
+### 3.6 安全 / 质量 / 部署铁律速查
+
+| 类别 | 规则 | 正确做法 | 错误做法 |
+|---|---|---|---|
+| 安全 | CORS | `configService.get('CORS_ORIGINS','')` | 硬编码 `*` 或无参 enableCors |
+| 安全 | 异常消息 | 生产非 HttpException → `'服务器内部错误'` | 透出 `exception.message` |
+| 安全 | 输入校验 | @Body/@Query 用 class-validator DTO | `Record<string,string>` 裸类型 |
+| 安全 | 日志 | `new Logger('x').log()` | console.log |
+| 安全 | JWT_SECRET | 服务启动时校验非空 | 空串不报错 |
+| 质量 | JWT 校验 | 前端守卫校验 `exp` | 只查 token 存在 |
+| 质量 | 401 拦截 | 竞态锁+60s 超时重置+refreshToken | 无锁/锁永不重置 |
+| 质量 | 404/403 | 前端配置 404+403 页 | 权限失败跳 /dashboard |
+| 部署 | PM2 | `pm2 restart xxx \|\| pm2 start ...` | `pm2 delete; pm2 start` |
+| 部署 | 脚本路径 | `SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)` | `dirname $0` 相对路径 |
+| 通用 | TS | `strict: true`，禁止 `any` | 手选 subset / noImplicitAny:false |
+
+**Icon/静态资源规范**：禁 emoji 图标，统一 SVG；`/api/uploads/*`、`/materials/svg/*` 由 gateway 直出（见 §2.5）。
+
+### 3.7 技能/规则挂载关系（防混淆）
+
+```
+.codebuddy/agent-kit/   ← 通用方法论模板（跨项目复用，同步自 ai-agent-kit）
+.codebuddy/skills/      ← 本项目实例层（rd-* Hub + be/fe 领域技能 + coding-standards/tdd-workflow 等 references）
+.codebuddy/rules/       ← 机器触发层（mdc 规则：ui-interface → docs/ui；tcb → 云开发领域规则库）
+.codebuddy/CODEBUDDY.md ← 本总入口（AI 常驻加载，引导以上三层 + docs）
+```
+
+---
+
+## 4 发布部署
+
+> ⚠️ **核心认知（2026-09 迁移后）**：服务统一从**发布目录 `~/web_system_release`** 运行（pm2 `web-*`，dotenv 按 cwd 加载**发布目录**的 `.env`）。**发布 = 工作区 commit&push → 发布目录 git 拉取 → 构建部署**，不是基于当前工作区。
+> 完整运维手册：`docs/development/local-release-runbook.md`；流水线设计：`docs/development/deploy-pipeline-dev.md` + `docs/architecture/release-system-design.md`。
+
+### 4.1 三条发布通道（选对通道，别混用）
+
+| 发布对象 | 通道 | 操作 |
+|---|---|---|
+| 后端服务 + admin/portal 前端 | **发布流水线** | `POST /api/pipelines`（deploy-console 6200，env=local，branch=feature/xxx）→ 轮询 jobId 至 succeeded |
+| deploy-console 自身（6200） | **传统发布** | 仓库根 `./scripts/publish-deploy-console.sh`（release ff 同步→nest build→vite build→6200 孤儿进程清理→pm2 restart→save→健康复检）⚠️ 勿走流水线（会自杀式 restart 执行者） |
+| admin/portal 前端微前端模块 | 传统（改完源码生效路径） | 见下方「微前端模块四步铁律」 |
+
+**微前端模块更新四步铁律**（改 admin/portal 源码后必须执行，否则浏览器仍加载旧产物）：
+```bash
+cd apps/admin            # <module> 同理换 portal
+V=$(git -C ../.. rev-parse --short HEAD)
+RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
+mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
+# ⚠️ 版本表在 web_system_deploy.deploy_deployments（不是 web_system 库！）
+#    UPDATE web_system_deploy.deploy_deployments SET current_version='$V', status='deployed', deployed_at=NOW()
+#    WHERE env_id='dev' AND module_key='admin';
+sleep 12                                   # gateway TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway
+curl -s localhost:6000/__manifest__        # 确认 admin version=$V
+curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
+```
+> 两个最易踩坑：① 版本表在 **web_system_deploy** 库；② gateway 有 **TTL 10s 缓存**（要等待或重启 gateway）。
+
+### 4.2 发布相关脚本（scripts/）
+
+| 脚本 | 作用 |
+|---|---|
+| `local-up.sh` | 构建 + pm2 启动全部后端（本地开发态） |
+| `start-frontend.sh` | 起 portal/admin/docs 前端 |
+| `publish-deploy-console.sh` | deploy-console 传统发布（§4.1，支持 --skip-sync/--skip-health、DRY_RUN=1） |
+| `publish-ai-agent.sh` / `publish.sh` | ai-agent / 通用发布 |
+| `sync-agent-kit.sh` | 同步 ai-agent-kit → `.codebuddy/agent-kit` |
+| `build-module.mjs` | 微前端模块打包（vite build --mode mf） |
+| `deploy.sh / rollback.sh` | SSH 远程部署 / 回滚 |
+
+### 4.3 关键坑速查
+
+- **后台批量删除 ≥500 文件**被 CodeBuddy 安全层拦截（`SAFE_DELETE_BULK_CONFIRM_REQUIRED`）→ 用发布 Hook 的 `mv 到 /tmp` 方案（content-hub/upload/ai-agent build、admin/portal build+upload+cleanup 已注册），勿改 IDE 阈值
+- **pnpm install 中断**残留 `*_tmp_*` 目录 → tsc 报 `TS2688` → `mv` 到 /tmp 清理，缺失包从工作区 `cp -R` 补齐
+- **pm2 --update-env 传播旧 env**（PORT 污染，dotenv 不覆盖）→ 干净 env `start` + `pm2 save`
+- **6200 端口孤儿进程**：旧进程未释放端口 → 新进程 EADDRINUSE 崩溃、最终对外仍是旧孤儿 → `lsof -ti tcp:6200` kill 后 `pm2 restart web-deploy-console`，并确认占用 pid == pm2 当前 pid
+
+### 4.4 详细说明入口
+
+- `docs/development/local-release-runbook.md` — 本地发布运维手册（发布目录架构/Hook/坑位）
+- `docs/development/deploy-pipeline-dev.md` — 发布流水线设计（阶段/回滚/探活）
+- `docs/architecture/release-system-design.md` — 发布平台概念模型（模块/环境/服务器组/灰度）
+- `docs/development/ai-native-sdlc-ci-deployment.md` — CI 门禁与红绿线（见 §5）
+- `docs/development/admin-dev.md` §一·C — 微前端模块发布四步详解
+
+---
+
+## 5 门禁与质量
+
+### 5.1 三道门禁（红线机器化）
+
+| 门禁 | 时机 | 内容 | 违规后果 |
+|---|---|---|---|
+| 本地 pre-commit | commit | 扫 R1~R4（调试残留/敏感文件/占位/@ts-ignore/:any） | 阻断提交 |
+| quality-gate | PR | 扫红线 R1~R5 + 改动包 lint(lint:ci 只读)/build/test | 无法 merge |
+| kit-gate | PR（改数字人定义） | 改 `.codebuddy/skills/`、`.codebuddy/agent-kit/` 指南/规则**必须附评测报告**到 `.codebuddy/evals/reports/` | CI 拦截 |
+
+- **红线脚本**：`pnpm redline:local`（staged 扫描）/ `pnpm redline:scan`（全量 staged）/ `pnpm redline:tree`（本地全仓巡检）
+- **skip-eval 约定**：纯排版/错别字/不影响行为的改动 → PR 描述注明 `skip-eval` 并在 commit message 说明即可豁免 kit-gate
+- CI 文件：`.github/workflows/quality-gate.yml`、`kit-gate.yml`、`auto-pr.yml`（push feature/*/fix/* 自动提 PR 到 master，幂等）
+
+### 5.2 提交 & 提 PR 规范（用户要求提交时执行）
+
+- **只 add 本次工作文件**：精确 `git add <文件>`，勿混入 `known-issues.md`、`optimization-roadmap.md` 等无关文件
+- **token**：GitHub PAT 在根 `.env` 的 `GITHUB_PR_TOKEN`（不进 git）：`export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)`
+- **提 PR 到 master**：`gh` 可用 → `gh pr create --base master --head <分支> ...`；不可用 → GitHub API curl（临时 json 用完即删，token 不明文写入可提交文件）
+- 详见 `docs/development/admin-dev.md` §五
+
+### 5.3 UI 生成铁律（admin 系 · 每个 UI 任务强制）
+
+> 细则本体在 `docs/ui/`（单事实源，**入口 = `docs/ui/README.md`** 读取地图），规则 `.codebuddy/rules/ui-interface/` 负责触发。收到 UI 任务（新页/改版/调样式/交互）按此执行：
+
+1. 读 `docs/ui/README.md` → 新页面必读 `docs/ui/design.md`（判断层）
 2. 按 `docs/ui/page-spec-template.md` 填**页面规格书**（新页 Full / 小改 Quick）
 3. **规格书先给用户确认，确认后才写码**——禁止跳过直接实现
 4. 改色/加色 → 读 `docs/ui/color-reference.md`；覆盖冲突/"改了不生效" → 读 `docs/ui/css-override-rules.md`
-5. 完成后自检（design.md §5：无裸色/无新增 !important/dark 过目/截图基线），修正记录追加 `docs/ui/geist-token-评审记录.md`（只追加）
+5. 完成自检（design.md §5：无裸色/无新增 !important/dark 过目/截图基线），修正记录追加 `docs/ui/geist-token-评审记录.md`（只追加）
 
-**最小禁项**：禁裸 hex/rgba（只引 `--ws-*`）；禁新增 `!important`；禁 emoji 图标；互斥单选 ≤5 固定选项禁 `a-select`（用 tabs/radio）；主操作 primary ≤1；破坏性操作必二次确认；portal/mini-app 品牌端不套用本规范（DR-5）。
+**最小禁项**：禁裸 hex/rgba（只引 `--ws-*`）；禁新增 `!important`；禁 emoji 图标；互斥单选 ≤5 固定选项禁 `a-select`（用 tabs/radio）；主操作 primary ≤1；破坏性操作必二次确认。
 
-## 开发规则
+### 5.4 设计常量与 Token
 
-1. 大改动走 Superpowers 工作流：brainstorm → plan → execute → review
-2. 架构决策前加载 `tech-review` 审查
-3. 不主动 git commit
-4. TypeScript 严格模式，禁止 `any`
-5. 每个微服务独立数据库
-6. 所有 API 通过 gateway 代理
-7. **Icon 规范**：禁止使用 emoji 作为图标，统一使用 SVG icon；如果没有合适的 SVG icon，宁可不用 icon
-8. **静态资源路径**：
-   - `/api/uploads/*` — 用户上传文件和 AI 生成图片的统一路径（头像、变变图、画板等）
-   - `/materials/svg/*` — 系统素材 SVG，独立于页面路由，由 Gateway 直接提供
-   - AI 生成图片必须落盘到 `/api/uploads/` 目录 + 数据库存相对路径，不能只存远程 URL
+- **admin 系（deploy-console/admin/mcp-admin）UI 数值以 `packages/ui/src/tokens.ts` 为准**（DR-3 主橙 `#F97316`，平台段）
+- 平台（暗色）：主色 `#f97316` / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
+- 变变产品（暖色）：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` / 文字 `#333333` —— 品牌色只用于 portal/mini-app，不套用 admin UI 规范（DR-5）
 
-## AI 编程规范
+### 5.5 详细说明入口
 
-这些规则从真实踩坑中提炼，旨在提高 AI 编码的「一次正确率」，减少事后补救。
+- `docs/development/ai-native-sdlc-ci-deployment.md` — SDLC + CI 门禁全解（R1~R5 定义/hooks/kit-gate）
+- `docs/ui/README.md` — UI 规范读取地图
 
-### 安全铁律（每次改动必查）
+---
 
-| 规则 | 正确做法 | 错误做法 |
-|------|---------|---------|
-| CORS | `configService.get('CORS_ORIGINS', '')`，禁止 `origin: '*'` 或无参 `enableCors()` | 硬编码 `*` 或空参调用 |
-| 异常消息 | 生产环境非 HttpException → `'服务器内部错误'` | 直接返回 `exception.message` |
-| 输入校验 | 所有 @Body/@Query 用 class-validator DTO | `Record<string, string>` 裸类型 |
-| 日志 | `new Logger('xxx').log(...)` | `console.log/error(...)` |
-| JWT_SECRET | 每个服务 main.ts/AppModule 启动时校验非空 | 空字符串不报错 |
-| .env 密钥 | .env 文件加安全警告注释，密钥走环境变量注入 | 真实密钥明文暴露在文件中 |
-| 异常过滤器 | 每个微服务 main.ts 必须有全局异常过滤器 | 未处理异常直接暴露客户端 |
-| .env.example | CORS_ORIGINS 写具体域名，不写 `*` | 给开发者错误示范 |
+## 附录 A：docs 分册地图
 
-### 代码质量铁律
+| 分册 | 内容 |
+|---|---|
+| `docs/development/` | 开发流程/启动/发布手册/admin-dev/CI 门禁/local-dev-setup |
+| `docs/architecture/` | 技术架构/微前端/网关/MCP 鉴权/发布系统/Agent DB 设计 |
+| `docs/ui/` | UI 规范**单事实源**（README 地图/design/color/规格书模板/原型/评审记录） |
+| `docs/products/` | 产品设计素材 |
+| `docs/api/`、`docs/miniprogram/` | API 文档、小程序设计 |
+| `docs/plans/` `docs/intents/` `docs/analysis/` `docs/archive/` | 计划/意图/分析/归档（如 `docs/archive/todo-list/audit-report-2026-07-26.md`） |
+| `docs/发布与运维手册.md` `docs/工程完善计划.md` | 仓库级手册 |
 
-| 规则 | 正确做法 | 错误做法 |
-|------|---------|---------|
-| TS 严格模式 | `"strict": true` + `"strictPropertyInitialization": false` | 手选 subset 且 noImplicitAny: false |
-| JWT 校验 | 前端路由守卫校验 `exp` 过期 | 只检查 token 是否存在 |
-| 401 拦截器 | 竞态锁 + 60s 超时重置 + refreshToken 自动刷新 | 无锁或锁永不重置 |
-| 404/403 | 所有前端必须配置 404 + 403 页面 | 权限失败跳 /dashboard |
-| @types 版本 | 与运行时包主版本一致，放 devDependencies | @types/node@22 配 node:20，@types/helmet 放 dependencies |
-| 无用依赖 | 每个依赖都被源码 import，定期清理 | package.json 残留僵尸包 |
-| 变量初始化 | `let flag: boolean = false` | `let flag: boolean`（undefined） |
+## 附录 B：.codebuddy 结构
 
-### 部署铁律
+```
+.codebuddy/
+├── CODEBUDDY.md          ← 本入口（v2 五段式）
+├── agent-kit/            ← 数字人模板：AGENT.md + skills/(11) + rules/general/(5 红线) + references/(5)
+├── skills/               ← 项目实例技能：rd-* Hub + be-developer/fe-developer + user-memory
+├── rules/                ← 触发规则：ui-interface/(RULE.mdc→docs/ui) + tcb/(云开发领域规则)
+├── references/           ← coding-best-practices.md（工程铁律完整版）
+├── evals/                ← 评测体系（README + reports/ 落盘）
+├── archived/ teams/      ← 归档 / 多代理协作数据
+```
 
-| 规则 | 正确做法 | 错误做法 |
-|------|---------|---------|
-| PM2 | `pm2 restart xxx \|\| pm2 start ...` | `pm2 delete; pm2 start` |
-| Docker | .dockerignore + 每个服务 healthcheck + 敏感端口仅内网 | 无 .dockerignore，端口全开，无健康检查 |
-| 生产 Redis | `127.0.0.1:6379:6379` | `6379:6379`（公网暴露） |
-| 脚本路径 | `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` | `dirname "$0"` 相对路径 |
+---
 
-> ⚠️ **微前端页面模块更新铁律**：`admin` / `portal` / `mcp-admin` 都是微前端子模块，由 gateway `__manifest__` 决定加载版本。
-> **改完前端源码后必须「构建 → 拷贝 → 更新版本表 → 验证/清缓存」四步才生效**，否则浏览器仍加载旧产物。
-> 以 admin 为例（`<module>` 换 portal/mcp-admin 同理）：
-> ```bash
-> cd apps/admin && V=$(git -C ../.. rev-parse --short HEAD)
-> RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
-> mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
-> # ⚠️ 版本表在 web_system_deploy 库（不是 web_system！），gateway 独立数据源连它
-> #    UPDATE web_system_deploy.deploy_deployments SET current_version='$V' WHERE env_id='dev' AND module_key='admin'
-> sleep 12   # gateway TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway 清内存缓存
-> curl -s localhost:6000/__manifest__   # 确认 admin version=$V
-> ```
-> 两个最容易踩的坑：① 版本表在 **web_system_deploy** 库（写错库 manifest 不变）；② gateway 有 **TTL 10s 版本缓存**（改完要等/重启 gateway）。
-> 详见 `docs/development/admin-dev.md` §一·C。改完页面不执行这四步，等同于没改。
+## 维护约定
 
-> ⚠️ **提交 & 提 PR 铁律**（用户要求提交时执行）：
-> - **只 add 本次工作文件**：工作区常有无关未提交文件（`known-issues.md`、`optimization-roadmap.md` 等），用 `git add <具体文件>` 精确暂存，别混入。
-> - **token**：GitHub PAT 已存在根 `.env` 的 `GITHUB_PR_TOKEN`（不进 git）。读取：`export GH_TOKEN=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)`。
-> - **提 PR 到 master**：`gh` 已装用 `gh pr create --base master --head <分支> ...`；未装则用 GitHub API（`curl -X POST https://api.github.com/repos/web5/web_system/pulls`，`Authorization: Bearer $GH_TOKEN`）。临时 json 用完即删，token 不明文写入可提交文件。
-> - 详见 `docs/development/admin-dev.md` §五。
-
-> ⚠️ **git/CI 红线门禁（quality-gate / kit-gate，2026-09 启用）**：
-> - **本地 pre-commit**：`core.hooksPath=.githooks`（已装），提交自动扫 R1~R4（调试残留/敏感文件/占位/@ts-ignore/:any）。安装：`pnpm hooks:install`；卸载：`pnpm hooks:status` 或脚本 `-u`。
-> - **quality-gate.yml**：PR 自动扫红线 R1~R5 + 改动包 lint(lint:ci 只读)/build/test。提交含 `console.log`、改动包 build 失败 → PR 无法 merge。master 需开分支保护。
-> - **kit-gate.yml（skip-eval 约定）**：改数字人行为定义（`.codebuddy/skills/`、`.codebuddy/agent-kit/` 指南/规则）**必须附评测报告**到 `.codebuddy/evals/reports/`，否则 CI 拦截。**纯排版/错别字/不影响行为的改动** → PR 描述注明 `skip-eval` 并在 commit message 说明即可豁免。
-> - 红线脚本：`pnpm redline:local`（staged 扫描）/ `pnpm redline:scan`（全量 staged）/ `pnpm redline:tree`（本地全仓巡检）。详见 `docs/development/ai-native-sdlc-ci-deployment.md`。
-
-> 完整版：`.codebuddy/references/coding-best-practices.md`  
-> 审计报告：`docs/archive/todo-list/audit-report-2026-07-26.md`
-
-### 1. 同类修改必须扫全量（Monorepo 铁律）
-
-修改前必须 `grep` 所有同类文件，不能只改遇到的一个服务。
-
-**真实教训**：之前修了 gateway/auth/todo 三个服务的 CORS 默认值、异常过滤器、console.log→Logger，但 ai-service 仍硬编码 `origin: '*'`，system/user/upload 仍 `enableCors()` 无参。因为这些服务没有被"刚好触及"。
-
-**自查清单（修改任何横切关注点时）**：
-- CORS 配置 → `grep -r enableCors servers/*/src` 确认全部从环境变量读取
-- 异常过滤器 → `grep -r useGlobalFilters servers/*/src` 确认全部注册
-- console.log → `grep -r 'console\.' servers/*/src` 确认无残留
-- JWT_SECRET 校验 → 每个用 JWT 的服务 app.module.ts 或有 auth.guard 的都要
-
-### 2. 跨端配置禁止拷贝，必须收口到 `@web-system/shared`
-
-- 先在 `packages/shared/src/` 下新建或追加
-- 如需导出，在 `packages/shared/src/index.ts` 中 re-export
-- 删掉各端本地的拷贝文件，防止后续开发者误用旧文件
-
-### 2. 请求超时分三层，排查时逐层定位
-
-monorepo 中一次 HTTP 请求经过三层各自独立的超时配置：
-
-| 层 | 位置 | 典型值 |
-|----|------|--------|
-| 前端 axios / wx.request | `import { API_TIMEOUT } from '@web-system/shared'` | DEFAULT 10s/30s, AI_TASK 180s |
-| Gateway http-proxy-middleware | `servers/gateway/src/proxy/proxy.service.ts` 的 `PROXY_TIMEOUT` | DEFAULT 30s, AI_TASK 180s |
-| 后端 service 调第三方 | `servers/*/src/common/http/*.client.ts` | 30s |
-
-真实请求超时以 **三层中最短的那层** 为准。遇到「已取消」、504、或 ERR_ABORTED 时，从最内层往外排查，而不是只看某一层。
-
-**Gateway 层也是瓶颈**：新增 AI 类路由（`/api/ai/*`、`/api/bianbian/*`）时，必须在 `proxy.service.ts` 中给对应 proxy 传 `PROXY_TIMEOUT.AI_TASK`，否则会被 30s 默认值截断。
-
-### 3. AI 异步接口不能与 CRUD 共用默认超时
-
-调用第三方 AI 模型的接口（对话 `/ai/chat`、生图 `/ai/image/submit` 等）链路长，冷启动 + 队列等待经常 10-30s，必须单独设置 `API_TIMEOUT.AI_TASK`（90s），不能依赖全局 10s 默认值。
-
-### 4. 新增魔法数字前先全局搜索
-
-写任何硬编码的数字或字符串前，先搜索项目是否已有同类配置或常量。避免以下后果：
-- 同类重复配置导致各端行为不一致
-- 修改时只改了一处，其他地方仍是旧值
-
-### 5. 收口后清理冗余文件
-
-配置从分散改统一后，必须删除各端的旧配置文件，并确认没有任何地方仍然 import 旧路径。
-
-### 6. 前端项目加入共享包依赖
-
-portal / mini-app 如需引用 `@web-system/shared`：
-- `package.json` 加 `"@web-system/shared": "file:../../packages/shared"`
-- 小程序额外需要在 `tsconfig.json` 中配置 `paths` 映射
-- 执行 `pnpm install` 使符号链接生效
-
-**后端 service 添加方式不同**：
-- `package.json` 加 `"@web-system/shared": "file:../../packages/shared"`
-- **不要在 tsconfig.json 中加 paths 映射**（pnpm workspace 的符号链接已处理模块解析）
-- 加 paths 会导致 `nest build` 把 `packages/shared/src/` 源文件也编译进 dist，产生错误的目录结构
-- 执行 `pnpm install` + `pnpm build` 即可
-
-## Skills
-
-| Skill | 何时用 |
-|-------|--------|
-| `rd-digital-agent` | 入口 Hub，自动路由 |
-| `rd-brainstorm` | 模糊需求，出方案选项 |
-| `rd-plan` | 细化方案，拆任务 |
-| `rd-execute` | TDD 逐项实现 |
-| `rd-review` | 完成后自检 |
-| `tech-review` | 架构/安全/数据方案审查 |
-| `user-memory` | 用户偏好自动加载 |
+- 本入口文件保持「导航 + 速查 + 铁律」定位，**详细叙述一律下沉到 docs/ 与 .codebuddy/ 对应单事实源**；新增主题先在 §1~§5 挂位再补内容。
+- 改动 `.codebuddy/skills` / `agent-kit` 行为定义 → 附评测报告（或注明 skip-eval）；纯结构调整不影响行为。
