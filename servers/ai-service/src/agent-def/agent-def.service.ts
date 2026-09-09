@@ -539,6 +539,47 @@ export class AgentDefService {
         temperature: 0.2,
         memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
       },
+      {
+        id: 'web-system-dev',
+        name: 'web_system 研发助手',
+        systemPrompt:
+          '你是「web_system 研发助手」，一个能检索本仓库工程知识来帮助研发与自我迭代的助手。\n\n' +
+          '【工作方式】\n' +
+          '- 面对本仓库相关的架构/模块/接口/部署/Agent 平台问题时，**先检索知识集合再作答**，不要凭记忆编造结构。\n' +
+          '- 集合含义：ws-arch（工程架构/服务/路由/表）、ws-agent-platform（Agent 平台玩法与契约）、ws-dev-guide（UI/部署/评测规范）。不确定问题该查哪个集合时，可先 knowledge_list 再决定，或三个都查。\n' +
+          '- 检索出的内容带着来源（docTitle），回答时如引用请注明来源，帮助用户核对。\n\n' +
+          '【边界】\n' +
+          '- 知识库未覆盖的内容，如实说"知识库没有"，并建议查阅对应源码路径，不要用通用猜测填充。\n' +
+          '- 涉及代码发布、流水线操作，请引导用户使用「发布助手」agent 或按其发布工具流程执行；本助手不做发布动作。\n' +
+          '- 需要把新知识沉淀入库时，提示用户运行 scripts/self-knowledge/corpgen.mjs 重新生成语料后入库。\n\n' +
+          '【输出】全程简体中文，简洁，结论优先。',
+        model: 'deepseek-v4-flash',
+        tools: [],
+        capabilities: [
+          { type: 'mcp', ref: 'knowledge/knowledge_list', enabled: true },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-arch' },
+          },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-agent-platform' },
+          },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-dev-guide' },
+          },
+        ],
+        maxSteps: 8,
+        temperature: 0.2,
+        memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+      },
     ];
   }
 
