@@ -140,6 +140,24 @@ export class AgentDefSyncService {
   private registerMcpCapabilities(def: AgentDefinition): void {
     if (!this.mcpService.isAvailable()) return;
     const mcpCaps = (def.capabilities ?? []).filter((c) => c.type === 'mcp' && c.enabled !== false);
+
+    // 知识集合绑定（开放决策 7 = C）：knowledge 工具调用时 collectionId 必须 ∈ 本定义
+    // capabilities 里显式绑定的集合集（config.collectionId）。缺 collectionId 的 knowledge
+    // 能力视为装配错误 → 跳过注册（宁可明确错误，不静默放行全部集合）。
+    const boundCollectionsByTool = new Map<string, string[]>();
+    for (const cap of mcpCaps) {
+      const [module, tool] = cap.ref.split('/');
+      if (module !== 'knowledge' || !tool) continue;
+      const raw = (cap.config ?? {}) as { collectionId?: unknown };
+      if (typeof raw.collectionId !== 'string' || !raw.collectionId) {
+        this.logger.warn(`knowledge 能力缺少 config.collectionId，跳过注册: ${cap.ref}`);
+        continue;
+      }
+      const arr = boundCollectionsByTool.get(tool) ?? [];
+      arr.push(raw.collectionId);
+      boundCollectionsByTool.set(tool, arr);
+    }
+
     for (const cap of mcpCaps) {
       const [module, tool] = cap.ref.split('/');
       if (!module || !tool) continue;
@@ -158,7 +176,10 @@ export class AgentDefSyncService {
         intervalMs?: number;
       };
       try {
-        this.mcpService.registerMcpTool(this.toolRegistry, meta, runtime);
+        const binding = module === 'knowledge'
+          ? { allowedCollections: boundCollectionsByTool.get(tool) }
+          : undefined;
+        this.mcpService.registerMcpTool(this.toolRegistry, meta, runtime, binding);
         this.logger.log(
           `已注册 MCP 能力（懒加载）: ${cap.ref}${runtime.longRunning ? ' [长任务]' : ''}`,
         );
