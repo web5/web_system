@@ -60,6 +60,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '角色权限', permission: 'roles:manage' },
       },
       {
+        path: 'settings/models',
+        name: 'ModelPricing',
+        component: () => import('@/views/Settings/ModelPricingPage.vue'),
+        meta: { title: '模型单价', permission: 'agents:cost:view' },
+      },
+      {
         path: 'mcp',
         name: 'McpAdmin',
         component: () => import('@/views/McpAdminPanel.vue'),
