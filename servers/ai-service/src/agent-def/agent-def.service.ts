@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
 import { AgentDefinitionEntity } from './entities/agent-definition.entity';
 import { AgentDefinitionVersionEntity } from './entities/agent-definition-version.entity';
@@ -46,6 +47,7 @@ export class AgentDefService {
     @InjectRepository(AgentDefinitionVersionEntity)
     private readonly verRepo: Repository<AgentDefinitionVersionEntity>,
     private readonly skillService: SkillService,
+    private readonly configService: ConfigService,
   ) {}
 
   /** 列表（全部定义，含状态/版本/启用） */
@@ -245,12 +247,15 @@ export class AgentDefService {
   }
 
   /**
-   * 能力资产总览（Phase2.9 / D6.6）：按 agent 聚合本地工具 / MCP 远程 / 技能 / 知识（占位），
-   * 供 admin「能力资产」只读页。数据直接来自 DB 定义快照（唯一事实源，不扇出其它服务）。
+   * 能力资产总览（Phase2.9 / D6.6，Phase3.9 补知识集合）：按 agent 聚合本地工具 / MCP 远程 /
+   * 技能 / 知识集合。本地三类来自 DB 定义快照；知识集合 = 定义中 type:'mcp' 且 ref
+   * 'knowledge/*' + config.collectionId 的绑定集（开放决策 7 = C），元数据拉 knowledge-service。
    */
   async capabilitiesOverview(agentId?: string) {
     const defs = await this.getPublished();
     const targets = agentId ? defs.filter((d) => d.id === agentId) : defs;
+    // 预拉一次 knowledge-service 集合元数据；不可达则绑定集仍按 id 展示并标 unavailable
+    const kMap = await this.fetchKnowledgeCollections();
     return targets.map((d) => {
       const caps: CapabilityRef[] = (d.capabilities ?? []).filter((c) => c.enabled !== false);
       const declared = Array.isArray(d.capabilities) && d.capabilities.length > 0;
@@ -270,8 +275,28 @@ export class AgentDefService {
           longRunning: !!(c.config as { longRunning?: boolean } | undefined)?.longRunning,
         }));
       const skills: SkillRef[] = (d.skills ?? []) as SkillRef[];
-      // knowledge：Phase3 接入 knowledge-service 后由授权集合补齐（当前明确空，不静默臆造）
-      const knowledge: Array<{ type: 'knowledge'; name: string }> = [];
+      // 知识集合绑定（决策 7 = C：config.collectionId 显式引用即授权）
+      const boundIds = [
+        ...new Set(
+          caps
+            .filter((c) => c.type === 'mcp' && c.ref.startsWith('knowledge/'))
+            .map((c) => (c.config as { collectionId?: string } | undefined)?.collectionId)
+            .filter((id): id is string => !!id),
+        ),
+      ];
+      const knowledge = boundIds.map((id) => {
+        const meta = kMap.get(id);
+        return {
+          type: 'knowledge' as const,
+          collectionId: id,
+          name: meta?.name ?? id,
+          source: 'knowledge-service',
+          enabled: meta?.enabled ?? false,
+          docCount: meta?.docCount ?? 0,
+          available: !!meta,
+          kServiceError: kMap.error ?? null,
+        };
+      });
       return {
         agentId: d.id,
         name: d.name,
@@ -290,6 +315,40 @@ export class AgentDefService {
         stats: { tools: tools.length, mcp: mcp.length, skills: skills.length, knowledge: knowledge.length },
       };
     });
+  }
+
+  /** 拉 knowledge-service 全部集合（id→元数据），不可达返回空 Map + error（分区降级，不整批失败） */
+  private async fetchKnowledgeCollections(): Promise<
+    Map<string, { name: string; enabled: boolean; docCount: number }> & { error?: string | null }
+  > {
+    const map = new Map() as Map<string, { name: string; enabled: boolean; docCount: number }> & {
+      error?: string | null;
+    };
+    map.error = null;
+    const url = this.configService.get<string>('KNOWLEDGE_SERVICE_URL', '');
+    if (!url) return map;
+    try {
+      const key = this.configService.get<string>('INTERNAL_API_KEY', '');
+      const res = await fetch(`${url.replace(/\/+$/, '')}/knowledge/mcp/list`, {
+        headers: key ? { Authorization: `Bearer ${key}` } : {},
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!res.ok) throw new Error(`knowledge-service HTTP ${res.status}`);
+      const json = (await res.json()) as { data?: unknown } | unknown;
+      const list = (Array.isArray(json) ? json : (json as { data?: unknown }).data ?? []) as Array<{
+        id: string;
+        name: string;
+        enabled: boolean;
+        docCount: number;
+      }>;
+      for (const c of list) {
+        map.set(c.id, { name: c.name, enabled: c.enabled, docCount: c.docCount });
+      }
+    } catch (e) {
+      map.error = e instanceof Error ? e.message : 'knowledge-service 不可达';
+      this.logger.warn(`能力资产聚合: knowledge-service 拉取失败 - ${map.error}`);
+    }
+    return map;
   }
 
   /**

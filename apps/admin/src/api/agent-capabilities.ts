@@ -32,6 +32,12 @@ export interface CapSkill {
 export interface CapKnowledge {
   type: 'knowledge';
   name: string;
+  collectionId: string;
+  source: string;
+  enabled: boolean;
+  docCount: number;
+  available: boolean;
+  kServiceError?: string | null;
 }
 
 export interface CapOverviewAgent {
