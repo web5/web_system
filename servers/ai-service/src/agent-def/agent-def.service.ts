@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
 import { AgentDefinitionEntity } from './entities/agent-definition.entity';
 import { AgentDefinitionVersionEntity } from './entities/agent-definition-version.entity';
@@ -46,6 +47,7 @@ export class AgentDefService {
     @InjectRepository(AgentDefinitionVersionEntity)
     private readonly verRepo: Repository<AgentDefinitionVersionEntity>,
     private readonly skillService: SkillService,
+    private readonly configService: ConfigService,
   ) {}
 
   /** 列表（全部定义，含状态/版本/启用） */
@@ -245,12 +247,15 @@ export class AgentDefService {
   }
 
   /**
-   * 能力资产总览（Phase2.9 / D6.6）：按 agent 聚合本地工具 / MCP 远程 / 技能 / 知识（占位），
-   * 供 admin「能力资产」只读页。数据直接来自 DB 定义快照（唯一事实源，不扇出其它服务）。
+   * 能力资产总览（Phase2.9 / D6.6，Phase3.9 补知识集合）：按 agent 聚合本地工具 / MCP 远程 /
+   * 技能 / 知识集合。本地三类来自 DB 定义快照；知识集合 = 定义中 type:'mcp' 且 ref
+   * 'knowledge/*' + config.collectionId 的绑定集（开放决策 7 = C），元数据拉 knowledge-service。
    */
   async capabilitiesOverview(agentId?: string) {
     const defs = await this.getPublished();
     const targets = agentId ? defs.filter((d) => d.id === agentId) : defs;
+    // 预拉一次 knowledge-service 集合元数据；不可达则绑定集仍按 id 展示并标 unavailable
+    const kMap = await this.fetchKnowledgeCollections();
     return targets.map((d) => {
       const caps: CapabilityRef[] = (d.capabilities ?? []).filter((c) => c.enabled !== false);
       const declared = Array.isArray(d.capabilities) && d.capabilities.length > 0;
@@ -270,8 +275,28 @@ export class AgentDefService {
           longRunning: !!(c.config as { longRunning?: boolean } | undefined)?.longRunning,
         }));
       const skills: SkillRef[] = (d.skills ?? []) as SkillRef[];
-      // knowledge：Phase3 接入 knowledge-service 后由授权集合补齐（当前明确空，不静默臆造）
-      const knowledge: Array<{ type: 'knowledge'; name: string }> = [];
+      // 知识集合绑定（决策 7 = C：config.collectionId 显式引用即授权）
+      const boundIds = [
+        ...new Set(
+          caps
+            .filter((c) => c.type === 'mcp' && c.ref.startsWith('knowledge/'))
+            .map((c) => (c.config as { collectionId?: string } | undefined)?.collectionId)
+            .filter((id): id is string => !!id),
+        ),
+      ];
+      const knowledge = boundIds.map((id) => {
+        const meta = kMap.get(id);
+        return {
+          type: 'knowledge' as const,
+          collectionId: id,
+          name: meta?.name ?? id,
+          source: 'knowledge-service',
+          enabled: meta?.enabled ?? false,
+          docCount: meta?.docCount ?? 0,
+          available: !!meta,
+          kServiceError: kMap.error ?? null,
+        };
+      });
       return {
         agentId: d.id,
         name: d.name,
@@ -290,6 +315,40 @@ export class AgentDefService {
         stats: { tools: tools.length, mcp: mcp.length, skills: skills.length, knowledge: knowledge.length },
       };
     });
+  }
+
+  /** 拉 knowledge-service 全部集合（id→元数据），不可达返回空 Map + error（分区降级，不整批失败） */
+  private async fetchKnowledgeCollections(): Promise<
+    Map<string, { name: string; enabled: boolean; docCount: number }> & { error?: string | null }
+  > {
+    const map = new Map() as Map<string, { name: string; enabled: boolean; docCount: number }> & {
+      error?: string | null;
+    };
+    map.error = null;
+    const url = this.configService.get<string>('KNOWLEDGE_SERVICE_URL', '');
+    if (!url) return map;
+    try {
+      const key = this.configService.get<string>('INTERNAL_API_KEY', '');
+      const res = await fetch(`${url.replace(/\/+$/, '')}/knowledge/mcp/list`, {
+        headers: key ? { Authorization: `Bearer ${key}` } : {},
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!res.ok) throw new Error(`knowledge-service HTTP ${res.status}`);
+      const json = (await res.json()) as { data?: unknown } | unknown;
+      const list = (Array.isArray(json) ? json : (json as { data?: unknown }).data ?? []) as Array<{
+        id: string;
+        name: string;
+        enabled: boolean;
+        docCount: number;
+      }>;
+      for (const c of list) {
+        map.set(c.id, { name: c.name, enabled: c.enabled, docCount: c.docCount });
+      }
+    } catch (e) {
+      map.error = e instanceof Error ? e.message : 'knowledge-service 不可达';
+      this.logger.warn(`能力资产聚合: knowledge-service 拉取失败 - ${map.error}`);
+    }
+    return map;
   }
 
   /**
@@ -477,6 +536,47 @@ export class AgentDefService {
           { type: 'mcp', ref: 'deploy/promote_release', enabled: true, config: { requiresConfirm: true } },
         ],
         maxSteps: 12,
+        temperature: 0.2,
+        memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+      },
+      {
+        id: 'web-system-dev',
+        name: 'web_system 研发助手',
+        systemPrompt:
+          '你是「web_system 研发助手」，一个能检索本仓库工程知识来帮助研发与自我迭代的助手。\n\n' +
+          '【工作方式】\n' +
+          '- 面对本仓库相关的架构/模块/接口/部署/Agent 平台问题时，**先检索知识集合再作答**，不要凭记忆编造结构。\n' +
+          '- 集合含义：ws-arch（工程架构/服务/路由/表）、ws-agent-platform（Agent 平台玩法与契约）、ws-dev-guide（UI/部署/评测规范）。不确定问题该查哪个集合时，可先 knowledge_list 再决定，或三个都查。\n' +
+          '- 检索出的内容带着来源（docTitle），回答时如引用请注明来源，帮助用户核对。\n\n' +
+          '【边界】\n' +
+          '- 知识库未覆盖的内容，如实说"知识库没有"，并建议查阅对应源码路径，不要用通用猜测填充。\n' +
+          '- 涉及代码发布、流水线操作，请引导用户使用「发布助手」agent 或按其发布工具流程执行；本助手不做发布动作。\n' +
+          '- 需要把新知识沉淀入库时，提示用户运行 scripts/self-knowledge/corpgen.mjs 重新生成语料后入库。\n\n' +
+          '【输出】全程简体中文，简洁，结论优先。',
+        model: 'deepseek-v4-flash',
+        tools: [],
+        capabilities: [
+          { type: 'mcp', ref: 'knowledge/knowledge_list', enabled: true },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-arch' },
+          },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-agent-platform' },
+          },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-dev-guide' },
+          },
+        ],
+        maxSteps: 8,
         temperature: 0.2,
         memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
       },

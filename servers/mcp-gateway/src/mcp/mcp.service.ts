@@ -90,6 +90,69 @@ const FINNEWS_HTTP_TOOLS: Array<{
   },
 ];
 
+/**
+ * RAG 知识服务的 REST 接口声明（seed 到 mcp_modules，code_key=knowledge，指向 servers/knowledge-service）
+ * 集合与 agent 绑定 = agent 定义 capabilities 里 config:{collectionId} 显式引用（开放决策 7 = C）；
+ * 本服务只校验集合存在/启用，禁用/不存在返回明确错误。
+ */
+const KNOWLEDGE_HTTP_TOOLS: Array<{
+  name: string;
+  description: string;
+  method: string;
+  path: string;
+  params: Array<{ name: string; type: string; required: boolean; description?: string }>;
+}> = [
+  {
+    name: 'knowledge_search',
+    description: '在指定知识集合中按语义检索知识（须先 knowledge_list 确认集合可用且已授权给当前 agent）',
+    method: 'GET',
+    path: '/knowledge/mcp/search',
+    params: [
+      { name: 'collectionId', type: 'string', required: true, description: '知识集合 id（须为当前 agent 定义 capabilities 中显式绑定的集合）' },
+      { name: 'query', type: 'string', required: true, description: '检索问题/关键词' },
+      { name: 'topK', type: 'integer', required: false, description: '返回条数（默认 5，最大 50）' },
+    ],
+  },
+  {
+    name: 'knowledge_list',
+    description: '列出平台全部知识集合（id/名称/启用状态/文档数），便于确认要检索哪个集合',
+    method: 'GET',
+    path: '/knowledge/mcp/list',
+    params: [],
+  },
+  {
+    name: 'knowledge_status',
+    description: '查询某文档的解析状态（parsing/ready/failed）与分块数',
+    method: 'GET',
+    path: '/knowledge/mcp/status/{docId}',
+    params: [
+      { name: 'docId', type: 'string', required: true, description: '文档 id（knowledge_ingest 返回）' },
+    ],
+  },
+  {
+    name: 'knowledge_ingest',
+    description: '向指定知识集合录入一篇文档文本，同步解析分块并向量化，返回 {docId,status,chunkCount}',
+    method: 'POST',
+    path: '/knowledge/mcp/ingest',
+    params: [
+      { name: 'collectionId', type: 'string', required: true, description: '目标知识集合 id' },
+      { name: 'title', type: 'string', required: true, description: '文档标题' },
+      { name: 'text', type: 'string', required: true, description: '文档正文文本' },
+      { name: 'source', type: 'string', required: false, description: '来源标识' },
+    ],
+  },
+  {
+    name: 'knowledge_delete',
+    description: '删除文档或整个知识集合（级联删除其分块）；删除后再次检索将不再返回（R3.3）',
+    method: 'POST',
+    path: '/knowledge/mcp/delete',
+    params: [
+      { name: 'docId', type: 'string', required: false, description: '要删除的文档 id（与 collectionId 二选一）' },
+      { name: 'collectionId', type: 'string', required: false, description: '要删除的集合 id（与 docId 二选一）' },
+    ],
+  },
+];
+
 /** 公众号发布通道的 REST 接口声明（seed 到 mcp_modules，code_key=wechat_mp） */
 const WECHAT_MP_HTTP_TOOLS: Array<{
   name: string;
@@ -404,6 +467,7 @@ export class McpService implements OnModuleInit {
     await this.seedPaperModule();
     await this.seedInstitutionModule();
     await this.seedDeployModule();
+    await this.seedKnowledgeModule();
   }
 
   /** 某模块的代码内置任务型工具（job 声明不进 mcp_tools 表，结构不同） */
@@ -631,6 +695,73 @@ export class McpService implements OnModuleInit {
     );
     await this.toolRepo.save(tools);
     this.logger.log(`已 seed 财经资讯 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
+  }
+
+  /** seed RAG 知识模块（code_key=knowledge，指向 knowledge-service；Bearer token 与 knowledge-service INTERNAL_API_KEY 同值） */
+  private async seedKnowledgeModule(): Promise<void> {
+    const baseUrl = process.env.KNOWLEDGE_SERVICE_URL ?? 'http://localhost:6011';
+    const authType = process.env.KNOWLEDGE_SERVICE_AUTH_TYPE ?? 'bearer';
+    const authConfigRaw = process.env.KNOWLEDGE_SERVICE_AUTH_CONFIG ?? '';
+    let authConfig: Record<string, any> | null = null;
+    if (authConfigRaw) {
+      try {
+        authConfig = JSON.parse(authConfigRaw);
+      } catch (e) {
+        this.logger.warn(`KNOWLEDGE_SERVICE_AUTH_CONFIG JSON 解析失败: ${authConfigRaw}`);
+      }
+    }
+
+    let existing = await this.moduleRepo.findOne({ where: { code_key: 'knowledge' } });
+    if (existing && existing.module_type !== 'http') {
+      await this.moduleRepo.delete({ id: existing.id });
+      existing = null;
+    }
+    if (existing) {
+      let changed = false;
+      if (existing.base_url !== baseUrl) {
+        existing.base_url = baseUrl;
+        changed = true;
+      }
+      if (existing.auth_type !== authType) {
+        existing.auth_type = authType;
+        changed = true;
+      }
+      if (JSON.stringify(existing.auth_config ?? null) !== JSON.stringify(authConfig)) {
+        existing.auth_config = authConfig;
+        changed = true;
+      }
+      if (changed) {
+        await this.moduleRepo.update(existing.id, {
+          base_url: baseUrl,
+          auth_type: authType,
+          auth_config: authConfig,
+        });
+        this.logger.log(
+          `已同步 RAG 知识模块 base_url=${baseUrl} auth_type=${authType || '(无)'}`,
+        );
+      }
+      await this.syncModuleTools(existing.id, KNOWLEDGE_HTTP_TOOLS);
+      return;
+    }
+
+    const mod = await this.moduleRepo.save(
+      this.moduleRepo.create({
+        name: 'RAG 知识服务',
+        description: '知识集合检索/录入/管理：语义检索、文档向量化入库（servers/knowledge-service）',
+        base_url: baseUrl,
+        timeout: 60,
+        auth_type: authType,
+        auth_config: authConfig,
+        module_type: 'http',
+        code_key: 'knowledge',
+        enabled: true,
+      }),
+    );
+    const tools = KNOWLEDGE_HTTP_TOOLS.map((t) =>
+      this.toolRepo.create({ module_id: mod.id, ...t }),
+    );
+    await this.toolRepo.save(tools);
+    this.logger.log(`已 seed RAG 知识 HTTP 模块: ${baseUrl}（${tools.length} 个工具）`);
   }
 
   /** seed 公众号发布模块（code_key=wechat_mp，指向 content-hub 的公众号发布接口） */

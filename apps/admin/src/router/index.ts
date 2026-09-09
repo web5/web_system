@@ -101,6 +101,18 @@ const routes: RouteRecordRaw[] = [
             meta: { title: '能力资产', permission: 'agents:view' },
           },
           {
+            path: 'knowledge',
+            name: 'KnowledgeCollections',
+            component: () => import('@/views/Agents/KnowledgeCollectionsPage.vue'),
+            meta: { title: '知识集合', permission: 'knowledge:view' },
+          },
+          {
+            path: 'retrieval',
+            name: 'RetrievalDebugger',
+            component: () => import('@/views/Agents/RetrievalDebuggerPage.vue'),
+            meta: { title: '检索调试', permission: 'agents:debug' },
+          },
+          {
             path: 'runs/:agentId',
             name: 'AgentRuns',
             component: () => import('@/views/Agents/AgentRuns.vue'),

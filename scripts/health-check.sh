@@ -23,10 +23,11 @@ port_of() { # $1=service_name -> port
     todo)    echo $((PORT_BASE+5)) ;;
     mcp-gateway) echo 6006 ;;
     content-hub) echo 6007 ;;
+    knowledge) echo 6011 ;;
   esac
 }
 
-SERVICES="gateway auth user ai system todo mcp-gateway content-hub"
+SERVICES="gateway auth user ai system todo mcp-gateway content-hub knowledge"
 
 echo "===== 健康巡检：$TARGET ====="
 echo "--- 端口监听 ---"
