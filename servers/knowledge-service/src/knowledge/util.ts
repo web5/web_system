@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
 
-/** 内容校验和（32 位 hex；幂等去重用） */
+/** 内容校验和（取 SHA1 前 32 hex，对应列 char(32)；幂等去重用） */
 export function sha1hex(text: string): string {
-  return createHash('sha1').update(text).digest('hex');
+  return createHash('sha1').update(text).digest('hex').slice(0, 32);
 }
 
 /**
