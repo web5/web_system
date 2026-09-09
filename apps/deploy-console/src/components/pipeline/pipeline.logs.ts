@@ -30,3 +30,58 @@ export function stageLogLines(p: PipelineItem, stage: string): string[] {
 export function stageHasError(lines: string[]): boolean {
   return lines.some((l) => /error|fail|失败|回滚/i.test(l))
 }
+
+/**
+ * 操作级日志分段。
+ *
+ * 后端 v4 日志约定（pipeline.service.ts runStageCommand）：
+ *  - 每个操作开始时 push 一行 `[${stage}/${op}] ${name} $ ${code}`（op 起始锚）
+ *  - 结束时 push `[${stage}/${op}] ${name} 完成` / `...失败（exit n）` / `...continueOnError=是`
+ *  - 操作本身的 stdout/stderr 无前缀、紧随其后
+ * 因此把「op 起始锚行之后、到下一个 op 锚前」的行归为该 op 的输出；锚行前的
+ * 阶段说明行（`共 N 个操作` / `cwd: ...`）归入 prelude。
+ */
+
+const OP_HEAD_RE = /\[([a-z-]+)\/(op\d+)\]\s*(.*)/
+const OP_RUN_END_RE = /完成|失败|continueOnError|已跳过|引用工具/
+
+export interface OpSegment {
+  /** 操作号（op1/op2/…） */
+  op: string
+  /** 操作名（从锚行提取） */
+  name: string
+  /** 起始锚行原文（含 `$ code`） */
+  head: string
+  /** 该操作下的输出行（含结束锚行） */
+  body: string[]
+}
+
+/** 把某个阶段切出的日志段再按操作切成有序分段 */
+export function opSegments(lines: string[]): { prelude: string[]; ops: OpSegment[] } {
+  const prelude: string[] = []
+  const ops: OpSegment[] = []
+  let cur: OpSegment | null = null
+
+  for (const l of lines) {
+    const m = OP_HEAD_RE.exec(l)
+    // 操作起始锚：`[stage/opN] name $ cmd`
+    if (m && l.includes('$ ')) {
+      cur = { op: m[2], name: m[3]?.split('$')[0]?.trim() || m[2], head: l, body: [] }
+      ops.push(cur)
+      continue
+    }
+    // 其余 op 锚（完成/失败等结束锚）：归属当前操作
+    if (m && cur) {
+      cur.body.push(l)
+      if (OP_RUN_END_RE.test(l)) cur = null
+      continue
+    }
+    if (m && !cur) {
+      prelude.push(l)
+      continue
+    }
+    if (cur) cur.body.push(l)
+    else prelude.push(l)
+  }
+  return { prelude, ops }
+}

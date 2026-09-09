@@ -13,6 +13,7 @@ import {
   type StageAction,
 } from '@/api'
 import PipelineSubmit from '@/components/PipelineSubmit.vue'
+import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -252,14 +253,11 @@ async function saveServerName(envRow: any, val: string) {
   }
 }
 
-// ===== 阶段命令编辑（v4 多操作） =====
+// ===== 阶段命令编辑（v4 多操作，复用共享编辑器 StageActionsEditor） =====
 /** 正在编辑的阶段（空 = 未编辑） */
 const editStage = ref('')
-/** 编辑中的操作序列（深拷贝，避免污染只读视图） */
-const draft = ref<StageAction[]>([])
-/** 当前聚焦的操作下标 */
-const actIdx = ref(0)
-const saving = ref(false)
+/** 正在编辑的阶段项（传给共享编辑器，由其维护 draft/保存/校验） */
+const editItem = ref<ScriptViewItem | null>(null)
 
 function startEdit(item: ScriptViewItem) {
   if (item.source === 'semantic') {
@@ -267,94 +265,17 @@ function startEdit(item: ScriptViewItem) {
     return
   }
   editStage.value = item.stage
-  actIdx.value = 0
-  const acts = (item.actions || []) as StageAction[]
-  // 单命令形态（后端已包装成 1 个操作）与多操作形态在此统一为可编辑序列
-  draft.value = acts.length
-    ? JSON.parse(JSON.stringify(acts))
-    : [
-        {
-          id: 'a1',
-          type: 'shell' as const,
-          name: '主操作',
-          code: item.command || '',
-          timeoutSec: item.timeoutSec || undefined,
-        },
-      ]
+  editItem.value = item
 }
 
 function cancelEdit() {
   editStage.value = ''
-  draft.value = []
-  actIdx.value = 0
+  editItem.value = null
 }
 
-function addAction() {
-  draft.value.push({
-    id: `a${draft.value.length + 1}_${Date.now().toString(36)}`,
-    type: 'shell',
-    name: '新操作',
-    code: '# 在此编写脚本',
-    timeoutSec: 60,
-    cont: false,
-  })
-  actIdx.value = draft.value.length - 1
-}
-
-function delAction(i: number) {
-  if (draft.value[i]?.builtin) {
-    message.warning('内置操作不可删除')
-    return
-  }
-  draft.value.splice(i, 1)
-  if (actIdx.value >= draft.value.length) actIdx.value = Math.max(0, draft.value.length - 1)
-}
-
-async function validateDraft() {
-  const shells = draft.value.filter((a) => a.type === 'shell' && a.code?.trim())
-  if (!shells.length) {
-    message.warning('没有可校验的 shell 操作')
-    return
-  }
-  try {
-    for (const a of shells) {
-      await stageCommandApi.validate(moduleKey.value, editStage.value, a.code as string)
-    }
-    message.success(`语法校验通过（${shells.length} 个 shell 操作）`)
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '语法校验失败')
-  }
-}
-
-async function saveDraft() {
-  if (!draft.value.length) {
-    message.warning('至少需要一个操作')
-    return
-  }
-  if (draft.value.some((a) => !a.name?.trim())) {
-    message.warning('每个操作都需要名称')
-    return
-  }
-  if (new Set(draft.value.map((a) => a.id)).size !== draft.value.length) {
-    message.warning('操作 id 不能重复')
-    return
-  }
-  saving.value = true
-  try {
-    // 以 actions 数组整体提交；command 回填首个 shell 脚本（后端非空约束）
-    const firstShell = draft.value.find((a) => a.type === 'shell' && a.code?.trim())
-    await stageCommandApi.save(moduleKey.value, editStage.value, {
-      actions: draft.value,
-      command: firstShell?.code?.trim() || '',
-    })
-    message.success(`已保存（${draft.value.length} 个操作）`)
-    cancelEdit()
-    await loadScriptView()
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存失败')
-  } finally {
-    saving.value = false
-  }
+async function onEditorSaved() {
+  cancelEdit()
+  await loadScriptView()
 }
 
 onMounted(async () => {
@@ -656,99 +577,15 @@ onMounted(async () => {
                     />
                   </template>
 
-                  <!-- v4 多操作编辑器（点标题行「编辑操作」展开） -->
-                  <template v-if="editStage === item.stage">
-                    <a-divider orientation="left" style="margin: 14px 0 10px;">
-                      操作序列（{{ draft.length }}）
-                    </a-divider>
-                    <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-                      <!-- 操作列表 -->
-                      <div style="width: 250px; flex-shrink: 0;">
-                        <div
-                          v-for="(a, i) in draft"
-                          :key="a.id"
-                          style="border: 1px solid #f0f0f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; cursor: pointer; background: #fff;"
-                          :style="actIdx === i ? 'border-color:#1677ff; background:#e6f4ff;' : ''"
-                          @click="actIdx = i"
-                        >
-                          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                            <span style="font-family: monospace; color: #999; font-size: 11px;">op{{ i + 1 }}</span>
-                            <a-tag :color="a.type === 'service' ? 'purple' : 'blue'" style="margin: 0;">
-                              {{ a.type === 'service' ? '工具' : 'shell' }}
-                            </a-tag>
-                            <span style="font-size: 12px;">{{ a.name }}</span>
-                            <a-tag v-if="a.cont" color="orange" style="margin: 0;">容错</a-tag>
-                            <a-tag v-if="a.builtin" style="margin: 0;">内置</a-tag>
-                          </div>
-                        </div>
-                        <a-space size="small">
-                          <a-button size="small" @click="addAction">+ 操作</a-button>
-                          <a-button size="small" danger :disabled="!draft.length" @click="delAction(actIdx)">
-                            删除
-                          </a-button>
-                        </a-space>
-                      </div>
-
-                      <!-- 当前操作的编辑区 -->
-                      <div style="flex: 1; min-width: 280px;">
-                        <template v-if="draft[actIdx]">
-                          <a-space size="small" style="margin-bottom: 8px;" wrap>
-                            <a-input
-                              v-model:value="draft[actIdx].name"
-                              size="small"
-                              style="width: 150px;"
-                              placeholder="操作名称"
-                            />
-                            <a-select v-model:value="draft[actIdx].type" size="small" style="width: 96px;">
-                              <a-select-option value="shell">shell</a-select-option>
-                              <a-select-option value="service">工具</a-select-option>
-                            </a-select>
-                            <a-input-number
-                              v-model:value="draft[actIdx].timeoutSec"
-                              size="small"
-                              :min="1"
-                              style="width: 96px;"
-                            />
-                            <a-checkbox v-model:checked="draft[actIdx].cont">
-                              容错（失败不中断）
-                            </a-checkbox>
-                          </a-space>
-
-                          <a-textarea
-                            v-if="draft[actIdx].type === 'shell'"
-                            v-model:value="draft[actIdx].code"
-                            :rows="10"
-                            spellcheck="false"
-                            placeholder="在此编写 shell 脚本，可用变量：${MODULE_KEY} ${PM2_NAME} ${PORT} ${PUBLIC_PATH} ${ARTIFACT_DIR} ${WS_RESULT_FILE}"
-                            style="font-family: monospace; font-size: 12px; background: #1e1e1e; color: #d4d4d4;"
-                          />
-                          <template v-else>
-                            <a-alert type="info" show-icon message="工具型操作由内置工具执行，无需脚本" />
-                            <a-input
-                              v-model:value="draft[actIdx].tool"
-                              size="small"
-                              placeholder="工具 code（deploy_tool_catalog.code）"
-                              style="margin-top: 6px;"
-                            />
-                          </template>
-                        </template>
-                        <a-empty v-else description="暂无操作" />
-
-                        <div style="margin-top: 10px;">
-                          <a-space>
-                            <a-button size="small" type="primary" :loading="saving" @click="saveDraft">
-                              保存
-                            </a-button>
-                            <a-button size="small" @click="validateDraft">语法校验</a-button>
-                            <a-button size="small" @click="cancelEdit">取消</a-button>
-                          </a-space>
-                        </div>
-                        <div style="margin-top: 6px; color: #999; font-size: 12px;">
-                          操作自上而下顺序执行；标记「容错」的操作失败不中断阶段，其余失败即阶段失败。
-                          保存以 actions 数组整体提交。
-                        </div>
-                      </div>
-                    </div>
+                  <!-- v4 多操作编辑器（点标题行「编辑操作」展开；共享组件，ModuleDetail/PipelineDetail 同源） -->
+                  <template v-if="editStage === item.stage && editItem">
+                    <a-divider style="margin: 14px 0 10px;" />
+                    <StageActionsEditor
+                      :module-key="moduleKey"
+                      :item="editItem"
+                      @saved="onEditorSaved"
+                      @cancel="cancelEdit"
+                    />
                   </template>
                 </div>
               </div>
