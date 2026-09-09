@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class CreateCollectionDto {
   @IsString()
@@ -80,4 +91,29 @@ export class DeleteKnowledgeDto {
   @IsOptional()
   @IsString()
   docId?: string;
+}
+
+export class EvalCaseDto {
+  @IsString()
+  @IsNotEmpty()
+  question: string;
+}
+
+/** Ragas 评测入参：检索+问答对（3.5 脚本化，结果纳入 Phase4 eval_cases） */
+export class RunEvalDto {
+  @IsString()
+  @IsNotEmpty()
+  collectionId: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  topK?: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EvalCaseDto)
+  cases: EvalCaseDto[];
 }

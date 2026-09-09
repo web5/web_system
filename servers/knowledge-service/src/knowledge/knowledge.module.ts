@@ -8,6 +8,8 @@ import { TokenHubEmbeddingService } from './embedding.service';
 import { KnowledgeCollectionService } from './collections.service';
 import { KnowledgeDocumentService } from './documents.service';
 import { KnowledgeSearchService } from './search.service';
+import { LlmChatService } from './llm.service';
+import { RagEvaluationService } from './rag-eval.service';
 import { KnowledgeAdminController } from './knowledge.admin.controller';
 import { KnowledgeInternalController } from './knowledge.internal.controller';
 
@@ -22,6 +24,8 @@ import { KnowledgeInternalController } from './knowledge.internal.controller';
   ],
   providers: [
     TokenHubEmbeddingService,
+    LlmChatService,
+    RagEvaluationService,
     KnowledgeCollectionService,
     KnowledgeDocumentService,
     KnowledgeSearchService,
