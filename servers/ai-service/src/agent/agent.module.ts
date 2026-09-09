@@ -4,8 +4,6 @@ import { ConversationModule } from '../conversation/conversation.module';
 import { ConversationMemory } from './memory/conversation-memory';
 import { ImageGenTool } from './tools/image-gen.tool';
 import { ImageGenClient } from '../common/http/image-gen.client';
-import { studyAssistantAgent } from './agents/study-assistant.agent';
-import { bianbianAgent } from './agents/bianbian.agent';
 import { AgentLogModule } from '../agent-log/agent-log.module';
 import { AgentDefSyncService } from './agent-def-sync.service';
 import {
@@ -98,13 +96,9 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     // 注册 ai-service 特有工具（生图）
     this.toolRegistry.register(this.imageGenTool);
+    this.logger.log('Agent harness（agent-core）工具注册完成；Agent 定义由 DB 同步提供');
 
-    // 先注册代码内置 Agent 定义（upsert 兜底，幂等不抛重复）
-    this.agentRegistry.upsert(studyAssistantAgent);
-    this.agentRegistry.upsert(bianbianAgent);
-    this.logger.log('Agent harness（agent-core）工具与 Agent 定义注册完成');
-
-    // 再启动 DB 定义同步：用 published 定义覆盖本地（DB 优先于代码兜底），并开启 30s 轮询
+    // 启动 DB 定义同步：published 定义即注册表来源（DB 为唯一事实源，代码内置定义已删除）
     this.agentDefSync.start();
   }
 
