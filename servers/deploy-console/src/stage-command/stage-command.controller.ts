@@ -76,9 +76,9 @@ export class StageCommandController {
   }
 
   @Get(':key/stage-commands/:stage')
-  @ApiOperation({ summary: '某模块某阶段命令（未配置返回 null）' })
+  @ApiOperation({ summary: '某模块某阶段/节点 key 命令（含 actions，未配置返回 null）' })
   async get(@Param('key') key: string, @Param('stage') stage: string) {
-    return (await this.stageCommands.resolve(key, stage)) ?? null;
+    return this.stageCommands.getRow(key, stage);
   }
 
   @Put(':key/stage-commands/:stage')

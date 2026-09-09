@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布平台 v5 · nodes 编排交互稿</title>
+<style>
+  /* ---- 设计 Token（admin 系主橙 #F97316，DR-3） ---- */
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC;
+    --warn:#E8833A;  --warn-soft:#FFF3E6;
+    --ok:#2E9E5B;    --ok-soft:#E7F5EC;
+    --purple:#722ED1; --purple-soft:#F9F0FF;
+    --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+    --shadow:0 2px 12px rgba(20,30,50,.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;min-height:100vh;padding:20px;color:var(--text);}
+  .desktop{max-width:1240px;margin:0 auto;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);display:flex;min-height:820px;}
+  .sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);
+    padding:16px 12px;flex-shrink:0;}
+  .sidebar .logo{font-size:15px;font-weight:700;padding:8px 10px 18px;}
+  .side-item{padding:10px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;
+    cursor:pointer;margin-bottom:4px;}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:54px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;font-size:15px;font-weight:600;justify-content:space-between;}
+  .content{flex:1;overflow:auto;padding:18px;}
+  .content .screen{display:none;}
+  .content .screen.active{display:block;animation:fadeIn .2s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:16px;margin-bottom:14px;border:1px solid var(--border);}
+  .card .t{font-size:13px;color:var(--text-2);margin-bottom:10px;font-weight:600;
+    display:flex;align-items:center;gap:8px;}
+  .card .t .hint{font-weight:400;color:var(--text-3);font-size:12px;}
+  .tag{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:4px;}
+  .tag.plat{color:var(--purple);background:var(--purple-soft);}
+  .tag.script{color:var(--text-2);background:#F0F2F5;}
+  .tag.opt{color:var(--text-2);background:var(--card);border:1px dashed var(--border);}
+  .tag.watch{color:var(--warn);background:var(--warn-soft);}
+  .btn{border:1px solid var(--border);background:var(--card);border-radius:9px;padding:7px 14px;
+    font-size:13px;cursor:pointer;color:var(--text-2);transition:all .15s;}
+  .btn:hover{border-color:var(--primary);color:var(--primary);}
+  .btn.pri{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600;}
+  .btn.pri:hover{background:var(--primary-dark);color:#fff;}
+  .btn.danger{color:var(--danger);border-color:#f2c2c5;}
+  .btn.sm{padding:4px 10px;font-size:12px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+
+  /* ---- 流程编排画布 ---- */
+  .flow{display:flex;align-items:center;overflow-x:auto;padding:14px 4px 10px;gap:0;min-height:92px;}
+  .fnode{position:relative;min-width:104px;padding:9px 12px;border:1.5px solid var(--border);
+    border-radius:11px;background:var(--card);cursor:pointer;transition:all .15s;flex-shrink:0;
+    text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+  .fnode:hover{border-color:var(--primary);transform:translateY(-1px);}
+  .fnode.plat{border-color:#d3c4ef;background:var(--purple-soft);cursor:not-allowed;}
+  .fnode.watch{border-color:#f0d4a8;background:var(--warn-soft);}
+  .fnode.dragging{opacity:.35;}
+  .fnode .fname{display:block;font-size:13px;font-weight:600;}
+  .fnode.plat .fname{color:var(--purple);}
+  .fnode .fk{display:block;font-size:10px;color:var(--text-3);margin-top:2px;font-family:monospace;}
+  .fseq{position:absolute;top:-8px;left:-8px;width:19px;height:19px;border-radius:50%;
+    background:var(--card);border:1.5px solid var(--border);font-size:10px;font-weight:700;
+    color:var(--text-3);display:flex;align-items:center;justify-content:center;}
+  /* 连接线槽位：线上可插入（+ 插孔） */
+  .fslot{position:relative;width:44px;height:2px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center;}
+  .farrow{width:44px;height:2px;background:#c9d0d9;position:relative;flex-shrink:0;}
+  .fplus{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--card);
+    border:1.5px dashed #b9c1cc;color:#8a94a3;font-size:12px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .15s;font-weight:600;}
+  .fplus:hover{border-color:var(--primary);border-style:solid;color:var(--primary);
+    background:var(--primary-soft);}
+  .lock{font-size:10px;color:var(--purple);}
+  .wbadge{position:absolute;bottom:-8px;left:-8px;font-size:10px;background:var(--warn);color:#fff;
+    border-radius:10px;padding:1px 6px;font-weight:600;z-index:2;}
+  /* 节点卡片上的删除钮（script 才有；hover 出现） */
+  .delbtn{position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;
+    background:var(--danger);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;
+    z-index:3;}
+  .fnode:hover .delbtn{opacity:1;}
+  .delbtn:hover{background:#c93a3f;}
+
+  /* 节点侧栏 / 属性 */
+  .props{background:#FAFBFC;border:1px solid var(--border);border-radius:11px;padding:14px;}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;color:var(--text-2);}
+  .chk input{width:15px;height:15px;accent-color:var(--primary);}
+  .editor{background:#1E1E1E;border-radius:10px;padding:12px;font-family:monospace;font-size:12px;
+    color:#D4D4D4;min-height:120px;white-space:pre-wrap;}
+  .addrow{display:none;gap:8px;align-items:center;margin-top:10px;padding:12px;
+    background:var(--card);border:1.5px dashed var(--border);border-radius:11px;flex-wrap:wrap;}
+  .addrow.show{display:flex;}
+  .addrow input{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;width:170px;}
+  .addrow input:focus{border-color:var(--primary);}
+
+  /* 决策速查 */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  td,th{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#FAFBFC;font-weight:600;color:var(--text-2);}
+  .pick{color:var(--primary);font-weight:600;}
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;
+    justify-content:center;z-index:50;}
+  .modal-mask.show{display:flex;}
+  .modal{background:var(--card);border-radius:14px;padding:20px;width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+  .toast{position:fixed;left:50%;top:14%;transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;
+    padding:9px 18px;border-radius:10px;font-size:13px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="desktop">
+  <div class="sidebar">
+    <div class="logo">发布平台</div>
+    <div class="side-item" onclick="nav('pipe')">流水线记录</div>
+    <div class="side-item active" onclick="nav('edit')">流水线 · 编辑 nodes</div>
+    <div class="side-item" onclick="nav('run')">实例执行流程</div>
+    <div class="side-item" onclick="nav('decide')">设计决策速查</div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <span id="ttl">流水线详情 · 编辑态（v5 nodes）</span>
+      <span class="muted" style="display:flex;align-items:center;gap:6px;">
+        <span class="tag plat">platform · 不可编辑</span>
+        <span class="tag script">script · 可编辑</span>
+        <span class="tag watch">⚠ watchdog</span>
+      </span>
+    </div>
+    <div class="content">
+
+      <!-- ============ 屏 1：编辑态 nodes 画布 ============ -->
+      <div class="screen active" id="screen-edit">
+        <!-- 1) 基本信息 -->
+        <div class="card">
+          <div class="t">基本信息 <span class="hint">改名（内置不可）、备注、启停、审批、回滚策略沿用现编辑抽屉</span></div>
+          <div class="row" style="gap:20px;flex-wrap:wrap;">
+            <div><label style="font-size:12px;color:var(--text-3);">流水线名</label><div style="font-weight:600;">默认流程（后端）<span class="tag plat" style="margin-left:6px;">内置不可改名</span></div></div>
+            <div><label style="font-size:12px;color:var(--text-3);">说明</label><div class="muted">全流程 · 探活失败自动回滚 · 审批继承环境</div></div>
+            <div><label style="font-size:12px;color:var(--text-3);">启用</label><div><span class="tag ok">已启用</span></div></div>
+          </div>
+        </div>
+
+        <!-- 2) 流程编排画布 -->
+        <div class="card">
+          <div class="t">流程编排
+            <span class="hint">platform（git / 写版本号）锁定不可增删改 · script 可拖拽重排 / 增删 / 配脚本</span>
+            <span style="margin-left:auto;">
+              <button class="btn pri sm" onclick="addNodeAt(1)">+ 添加节点</button>
+            </span>
+          </div>
+
+          <div class="flow" id="flowEdit">
+            <!-- 由 JS 渲染；点连接线中间的 + 直接落节点并选中编辑 -->
+          </div>
+
+          <div class="muted" style="font-size:12px;">点连接线中间的「+」或顶部按钮 → 画布直接增加一个节点并自动选中，在下方「节点配置」里命名 / 改 key / 勾 optional·watchdog / 配脚本，改完即生效。</div>
+
+          <div id="errHint" style="display:none;margin-top:10px;"></div>
+        </div>
+
+        <!-- 3) 选中节点属性 + 脚本编辑器 -->
+        <div class="card" id="nodeProps">
+          <div class="t">节点配置 <span id="selNodeName" class="hint" style="margin-left:auto;"></span></div>
+          <div id="propsBody">
+            <div class="muted" style="padding:12px 0;text-align:center;">点击上方任意 script 节点查看配置；platform 节点点击会提示不可编辑</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 2：实例执行流程（nodes 渲染） ============ -->
+      <div class="screen" id="screen-run">
+        <div class="card">
+          <div class="t">实例执行流程 <span class="hint">按实例 nodes 快照渲染（platform 锁定色 / script / watchdog ⚠）</span>
+            <span style="margin-left:auto;"><span class="tag ok">成功</span> <span class="muted">job-20260909…</span></span>
+          </div>
+          <div class="flow" id="flowRun">
+            <!-- 由 JS 渲染 -->
+          </div>
+          <div style="margin-top:10px;color:var(--text-3);font-size:12px;border-top:1px dashed var(--border);padding-top:10px;">
+            <span class="muted">已按新 nodes 结构执行：git 拉码 → [script]安装依赖 → [script]构建 → version → pointer → [script ⚠]探活 → [script]通知</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="t">watchdog 自动回滚（规格待确认点）</div>
+          <div class="props" style="display:flex;gap:8px;align-items:flex-start;">
+            <span class="tag watch">⚠ 探活失败</span>
+            <div class="muted" style="flex:1;">标记为 watchdog 的 script 节点失败才触发自动回滚。当前模型：默认模板把「探活」标 watchdog —— 用户删掉它 = 显式放弃自动回滚。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 3：设计决策速查 ============ -->
+      <div class="screen" id="screen-decide">
+        <div class="card">
+          <div class="t">v5 nodes 编排 · 6 个待确认决策（对应规格 §7）</div>
+          <table>
+            <tr><th style="width:30px;">#</th><th style="width:190px;">问题</th><th>规格默认方案（待你批注）</th></tr>
+            <tr><td>1</td><td>「写版本号」视觉形态</td><td><span class="pick">git 一个节点 + 版本号区含 version / pointer 两个独立节点卡片</span>（独立可跳转、不可删）；≠ 合并成一张卡</td></tr>
+            <tr><td>2</td><td>watchdog 默认勾选</td><td>新加 script 节点默认<b>不勾</b>；仅旧模板转存时 verify→watchdog=true</td></tr>
+            <tr><td>3</td><td>孤儿脚本提示</td><td>删除 script 节点后，若模块仍配了该 key 脚本 → 编辑态底部弱提示「N 个模块仍配置了已移除节点脚本」，非阻塞</td></tr>
+            <tr><td>4</td><td>key slug 撞名</td><td>label「通知」→ notify；撞名自动追加 <span class="mono">-2</span></td></tr>
+            <tr><td>5</td><td>作用模块为空</td><td>无可发布模块 → 脚本卡空态文案，不阻断模板保存</td></tr>
+            <tr><td>6</td><td>删除粒度</td><td>只做单节点删除，不做批量</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <div class="t">交互演示提示（体验重点）</div>
+          <div style="font-size:13px;line-height:1.9;color:var(--text-2);">
+            ① <b>点任意连接线中间的「+」</b> → 直接在槽位插入节点（插入位置实时提示），也可从顶部「+ 添加节点」默认插到 git 后。<br>
+            ② 悬停任意 script 节点 → 右上角出现 <b>× 删除</b>，直接点在画布上删除（watchdog 删除会提示"不再自动回滚"）。<br>
+            ③ 尝试<b>拖动 script 节点</b>——platform（git/写版本号）不可拖；拖乱被语义拦截。<br>
+            ④ 点 script 节点 → 下方出现 optional / watchdog 开关 + 脚本编辑器占位。<br>
+            ⑤ 点 <span class="tag plat">git</span> / <span class="tag plat">写版本号</span> → 提示不可编辑。<br>
+            ⑥ 侧栏切「实例执行流程」看 nodes 渲染与 watchdog ⚠ 角标。
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认弹窗（破坏性操作） -->
+<div class="modal-mask" id="delModal">
+  <div class="modal">
+    <div style="font-size:15px;font-weight:600;margin-bottom:10px;" id="delTitle">删除 script 节点</div>
+    <div class="muted" style="line-height:1.7;margin-bottom:16px;" id="delBody"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" onclick="hide('delModal')">取消</button>
+      <button class="btn danger" onclick="doDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== 数据：当前模板 nodes ===== */
+var NODES = [
+  {kind:'platform', key:'git',       label:'git · 拉取代码', plat:true},
+  {kind:'script',   key:'install',   label:'安装依赖', keyRaw:'install', optional:false},
+  {kind:'script',   key:'build',     label:'构建',     keyRaw:'build',   optional:false},
+  {kind:'platform', key:'version',   label:'写版本号', plat:true, sub:'version'},
+  {kind:'platform', key:'pointer',   label:'切指针',   plat:true, sub:'pointer'},
+  {kind:'script',   key:'verify',    label:'探活',     keyRaw:'verify',  optional:false, watchdog:true},
+  {kind:'script',   key:'notify',    label:'发通知',   keyRaw:'notify',  optional:true},
+];
+var seq = NODES.map(function(n){return n.key;});
+var sel = null;         // 选中 script 节点 key
+var delTarget = null;
+var usedKeys = NODES.map(function(n){return n.key;});
+var PLATFORM_KEYS = ['git','version','pointer'];
+
+/* ===== 画布渲染 ===== */
+function renderFlow(){
+  var h='';
+  seq.forEach(function(key,i){
+    var n = NODES.filter(function(x){return x.key===key;})[0];
+    var plat = n.plat, watch = n.watchdog;
+    // 前插槽：第 i 个节点之前（首节点不显示，git 必须首位由 checkOrder 挡）
+    if(i>0){
+      h += '<div class="fslot" title="在「'+seq[i-1]+'」与「'+key+'」之间插入节点">'
+         + '<div class="farrow"></div>'
+         + '<button class="fplus" title="在「'+seq[i-1]+'」与「'+key+'」之间插入" onclick="insertAt(\''+key+'\')">+</button>'
+         + '</div>';
+    }
+    h += '<div class="fnode '+(plat?'plat':'')+(watch?'watch':'')+'" draggable="'+(!plat)+'" '
+       + 'id="node-'+key+'" onclick="onNode(\''+key+'\')" '
+       + 'ondragstart="ds(\''+key+'\',event)" ondragend="de()" '
+       + 'ondragover="ov(event)" ondrop="dp(\''+key+'\',event)">'
+       + '<span class="fseq">'+(i+1)+'</span>'
+       + (watch?'<span class="wbadge">⚠</span>':'')
+       + (!plat?'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+key+'\')">×</button>':'')
+       + (plat?'<span class="lock">🔒 </span>':'')
+       + '<span class="fname">'+n.label+'</span>'
+       + '<span class="fk">'+(plat?(n.sub||n.key):n.key)+'</span>'
+       + '</div>';
+  });
+  document.getElementById('flowEdit').innerHTML = h;
+  // 同步 run 屏（只读，不带插孔/删除）
+  var rh='', state={'verify':'done','install':'done','build':'done','notify':'pending'};
+  seq.forEach(function(key,i){
+    var n = NODES.filter(function(x){return x.key===key;})[0];
+    if(i>0) rh+='<div class="fslot"><div class="farrow"></div></div>';
+    rh += '<div class="fnode '+(n.plat?'plat':'')+(n.watchdog?'watch':'')+'" style="'+
+      (state[key]==='done'?'border-color:var(--ok);background:var(--ok-soft);':'')+'">'
+      + '<span class="fseq">'+(i+1)+'</span>'
+      + (n.watchdog?'<span class="wbadge">⚠</span>':'')
+      + '<span class="fname">'+n.label+'</span>'
+      + '<span class="fk">'+(n.plat?(n.sub||n.key):n.key)+'</span></div>';
+  });
+  document.getElementById('flowRun').innerHTML = rh;
+}
+
+/* 点连接线 + ：直接在槽位（target 之前）落一个节点并选中编辑 */
+function insertAt(targetKey){
+  var slot = seq.indexOf(targetKey);
+  if(slot<0) slot = 1;
+  addNodeAt(slot);
+}
+
+/* 在 seq 第 slot 个位置插入一个新 script 节点：直接落画布 + 选中 + 面板编辑 */
+function addNodeAt(slot){
+  var key = uniqueKey();
+  var n = {kind:'script', key:key, label:'新节点', optional:false, watchdog:false, fresh:true};
+  NODES.push(n); usedKeys.push(key);
+  seq.splice(slot, 0, key);
+  renderFlow();
+  onNode(key);
+  toast('已添加节点（key='+key+'），请在下方配置');
+  var el = document.getElementById('inLabel-'+key);
+  if(el) el.focus();
+}
+
+function uniqueKey(){
+  var i=2, base='node';
+  while(usedKeys.indexOf(base)>=0) base='node-'+(i++);
+  return base;
+}
+
+/* ===== 点击节点 ===== */
+function onNode(key){
+  var n = NODES.filter(function(x){return x.key===key;})[0];
+  if(n.plat){
+    toast('version / pointer 是发布语义真相源，平台托管，不可编辑');
+    return;
+  }
+  sel = key; document.querySelectorAll('.fnode').forEach(function(el){el.style.outline='none';});
+  document.getElementById('node-'+key).style.outline='2px solid var(--primary)';
+  renderProps(n);
+}
+
+function renderProps(n){
+  var h = '<div class="props">'
+    + '<div class="row" style="flex-wrap:wrap;gap:14px;align-items:flex-end;">'
+    + '<div><div class="muted" style="margin-bottom:6px;">label（即改即同步画布）</div>'
+    + '<input id="inLabel-'+n.key+'" value="'+n.label+'" oninput="renameLabel(\''+n.key+'\',this.value)" '
+    + 'style="border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;width:170px;"/></div>'
+    + '<div><div class="muted" style="margin-bottom:6px;">key <span class="mono">（模块脚本读写点，改后同步）</span></div>'
+    + '<input id="inKey-'+n.key+'" value="'+n.key+'" onchange="renameKey(\''+n.key+'\',this.value)" '
+    + 'class="mono" style="border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;width:150px;color:var(--text-2);"/></div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px;padding:2px 0;">'
+    + '<label class="chk"><input type="checkbox" '+(n.optional?'checked':'')+' onchange="getNode(\''+n.key+'\').optional=this.checked;toast(\'optional '+(this.checked?'开':'关')+'\')"> optional（未配脚本时跳过不阻断）</label>'
+    + '<label class="chk"><input type="checkbox" '+(n.watchdog?'checked':'')+' onchange="toggleWatch(\''+n.key+'\',this.checked)"> watchdog（失败触发自动回滚）</label>'
+    + '</div>'
+    + '<div><button class="btn danger sm" onclick="askDel(\''+n.key+'\')">删除节点</button></div>'
+    + '</div>'
+    + '<div style="margin-top:10px;"><div class="muted" style="margin-bottom:6px;">脚本（读写模块 × <span class="mono">'+n.key+'</span>）—— 编辑器复用现 StageActionsEditor，多操作</div>'
+    + '<div class="editor"># '+n.key+' 的操作序列\necho "在此编辑 / 保存至模块 stage_commands"</div></div>';
+  document.getElementById('selNodeName').textContent = '· 当前：'+n.label;
+  document.getElementById('propsBody').innerHTML = h;
+}
+
+function toggleWatch(key, on){
+  NODES.forEach(function(x){ x.watchdog = false; });
+  var n = NODES.find(function(x){return x.key===key;});
+  n.watchdog = on;
+  if(on) toast('已标记 watchdog：'+n.label+' 失败将自动回滚');
+  renderFlow();
+  if(sel===key) renderProps(n);
+}
+
+/* ===== 节点即时改名 / 换 key（面板内编辑，画布同步） ===== */
+function renameLabel(key, val){
+  var n = NODES.filter(function(x){return x.key===key;})[0];
+  if(!n) return;
+  n.label = val || '新节点';
+  renderFlow();
+  if(sel===key){ document.getElementById('selNodeName').textContent='· 当前：'+n.label; }
+}
+function renameKey(oldKey, val){
+  var k = (val||'').trim();
+  if(!k){ toast('key 不能为空'); renderProps(getNode(oldKey)); return; }
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(k)){ toast('key 格式非法：'+k); renderProps(getNode(oldKey)); return; }
+  if((PLATFORM_KEYS.indexOf(k)>=0)){ toast('key 不能占用平台保留字'); renderProps(getNode(oldKey)); return; }
+  if(usedKeys.indexOf(k)>=0 && k!==oldKey){ toast('key 重复：'+k); renderProps(getNode(oldKey)); return; }
+  var n = getNode(oldKey); if(!n) return;
+  usedKeys = usedKeys.filter(function(x){return x!==oldKey;});
+  usedKeys.push(k);
+  n.key = k;
+  seq = seq.map(function(x){return x===oldKey?k:x;});
+  if(sel===oldKey) sel = k;
+  renderFlow();
+  onNode(k);
+  toast('key 已改为 '+k+'（模块脚本读写点同步）');
+}
+
+function getNode(key){ return NODES.filter(function(x){return x.key===key;})[0]; }
+
+/* ===== 删除（破坏性确认，文案随 watchdog 变） ===== */
+function askDel(key){
+  delTarget = key;
+  var n = NODES.filter(function(x){return x.key===key;})[0];
+  document.getElementById('delTitle').textContent = '删除 script 节点「'+n.label+'」';
+  document.getElementById('delBody').innerHTML = n.watchdog
+    ? '该节点标记为 <b>watchdog（自动回滚锚点）</b>。<br>删除后：该节点失败将<b>不再触发自动回滚</b>，发布失败即失败（如需回滚请改用其它节点标记 watchdog）。<br><span class="muted">模块已配置的 '+key+' 脚本会被保留（孤儿标注）。</span>'
+    : '节点将从本流水线移除，发布不再执行该步骤。<br><span class="muted">模块已配置的 '+key+' 脚本会被保留（孤儿标注）。</span>';
+  show('delModal');
+}
+function doDelete(){
+  hide('delModal');
+  if(!delTarget) return;
+  NODES = NODES.filter(function(x){return x.key!==delTarget;});
+  seq = seq.filter(function(k){return k!==delTarget;});
+  usedKeys = NODES.map(function(n){return n.key;});
+  document.getElementById('propsBody').innerHTML = '<div class="muted" style="padding:12px 0;text-align:center;">点击任意 script 节点查看配置</div>';
+  document.getElementById('selNodeName').textContent='';
+  sel=null;
+  renderFlow();
+  toast('已删除节点：'+delTarget);
+  delTarget=null;
+}
+
+/* ===== 拖拽排序（script 可拖；校验 semantic：git 首位 / version 在 pointer 前） ===== */
+var dragKey='', side='r';
+function ds(key, e){ if(NODES.find(x=>x.key===key).plat) { e.preventDefault(); return; }
+  dragKey=key; e.dataTransfer.effectAllowed='move'; setTimeout(function(){document.getElementById('node-'+key).classList.add('dragging');},0); }
+function de(){ document.querySelectorAll('.fnode').forEach(function(el){el.classList.remove('dragging');}); dragKey=''; }
+function ov(e){ e.preventDefault(); var r=e.currentTarget.getBoundingClientRect();
+  side = (e.clientX < r.left+r.width/2) ? 'l':'r'; }
+function dp(target, e){
+  e.preventDefault();
+  if(!dragKey) return;
+  var key=dragKey; var from=seq.indexOf(key); if(from<0) return;
+  seq.splice(from,1);
+  var to=seq.indexOf(target); if(side==='r') to++;
+  seq.splice(to,0,key);
+  var err = checkOrder();
+  if(err){ toast(err); renderFlow(); return; }
+  renderFlow(); toast('已移动到第 '+(seq.indexOf(key)+1)+' 位');
+}
+function checkOrder(){
+  var i1=seq.indexOf('git');
+  if(i1!==0) return '「git」必须排在第一位';
+  var iv=seq.indexOf('version'), ip=seq.indexOf('pointer');
+  if(iv>ip) return '「version」必须排在「pointer」之前';
+  return null;
+}
+
+/* ===== 工具 ===== */
+function show(id){document.getElementById(id).classList.add('show');}
+function hide(id){document.getElementById(id).classList.remove('show');}
+var tt;
+function toast(m){ var el=document.getElementById('toast'); el.textContent=m; el.classList.add('show');
+  clearTimeout(tt); tt=setTimeout(function(){el.classList.remove('show');},1500); }
+function nav(name){
+  var map={'edit':['流水线详情 · 编辑态（v5 nodes）','edit'],'run':['实例执行流程（nodes 渲染）','run'],'decide':['设计决策速查 · 6 个待确认','decide'],'pipe':['流水线记录列表','pipe']};
+  var t=map[name];
+  document.querySelectorAll('.side-item').forEach(function(i){i.classList.remove('active');});
+  event.currentTarget.classList.add('active');
+  document.querySelectorAll('.content .screen').forEach(function(s){s.classList.remove('active');});
+  if(t[1]==='pipe'){ document.getElementById('screen-edit').classList.add('active'); }
+  else document.getElementById('screen-'+t[1]).classList.add('active');
+  document.getElementById('ttl').textContent=t[0];
+}
+renderFlow();
+</script>
+</body>
+</html>
