@@ -41,7 +41,8 @@ export const deployAssistantAgent: AgentDefinition = {
     '- 不编造版本号：版本标签必须来自工具返回。\n' +
     '- 绝不自行决定回滚生产环境。\n\n' +
     '【输出】全程简体中文，简洁；不要输出工具原始 JSON，只讲结论与关键信息。',
-  model: 'deepseek-chat',
+  // 官方直连已下线，统一走 TokenHub 托管模型（与服务端 deploy.agent 对齐）
+  model: 'deepseek-v4-flash',
   tools: [
     'list_modules',
     'get_current_versions',

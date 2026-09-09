@@ -38,6 +38,8 @@ export class AgentRunPusher {
       args?: unknown;
       step?: number;
       ts: number;
+      /** final/summary/error 事件携带的 token 用量（Phase1.6） */
+      usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     }>;
     finalAnswer?: string | null;
     error?: string | null;

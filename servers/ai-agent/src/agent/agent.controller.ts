@@ -148,7 +148,15 @@ export class AgentController {
     res.setHeader('X-Accel-Buffering', 'no');
 
     // 收集步骤流水 + 取 agent 定义快照（systemPrompt / tools / model）
-    const steps: Array<{ type: string; name?: string; content?: string; step?: number; ts: number }> = [];
+    // usage：final/summary/error 事件携带的 token 用量（Phase1.6 随 steps 落库，供成本/用量统计）
+    const steps: Array<{
+      type: string;
+      name?: string;
+      content?: string;
+      step?: number;
+      ts: number;
+      usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    }> = [];
     let finalAnswer: string | null = null;
     let errorMessage: string | null = null;
     let conversationIdFromEngine: string | null = null;
@@ -204,6 +212,8 @@ export class AgentController {
             content: event.content,
             step: event.step,
             ts: Date.now(),
+            // usage 只出现在 final/summary/error 等汇总事件，随 steps 落库（Phase1.6）
+            ...(event.usage ? { usage: event.usage } : {}),
           });
         }
         if (event.type === 'final') {
