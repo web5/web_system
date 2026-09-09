@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../../interfaces/tool.interface';
+import { toFunctionSchema } from '../../lib/function-schema';
 import { resolveWithinCwd } from './helpers';
 
 const MAX_BYTES = 64 * 1024;
@@ -27,26 +28,13 @@ export class WriteFileTool implements ToolDefinition {
       type: 'string',
       description: '写入模式: create 新建（已存在则报错）/ overwrite 覆盖 / append 追加。默认: 文件不存在则 create，存在则 overwrite',
       required: false,
+      enum: ['create', 'overwrite', 'append'],
     },
   };
 
   toSchema(): ToolSchema {
-    return {
-      type: 'function',
-      function: {
-        name: this.name,
-        description: this.description,
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: '文件路径' },
-            content: { type: 'string', description: '文本内容' },
-            mode: { type: 'string', description: 'create/overwrite/append' },
-          },
-          required: ['path', 'content'],
-        },
-      },
-    };
+    // 统一序列化：mode 的 enum 会出现在发往模型的 tools payload 中（Phase1.2）
+    return toFunctionSchema(this.name, this.description, this.parameters);
   }
 
   async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {

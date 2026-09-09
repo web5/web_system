@@ -15,7 +15,6 @@ export { LOAD_SKILL_TOOL_NAME } from './core/agent-engine';
 // 模型客户端
 export * from './clients/base-ai.client';
 export { Hy3Client } from './clients/hy3.client';
-export { DeepseekClient } from './clients/deepseek.client';
 export { TokenHubClient } from './clients/tokenhub.client';
 
 // 注册表
@@ -39,6 +38,8 @@ export type {
 // 引擎
 export { AgentEngine } from './core/agent-engine';
 export { AgentRunner } from './core/agent-runner';
+export { resolveAgentCapabilities } from './core/capability-resolver';
+export type { ResolvedAgentCapabilities } from './core/capability-resolver';
 
 // 记忆
 export * from './memory/stored-message';

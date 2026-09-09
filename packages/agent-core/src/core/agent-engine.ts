@@ -10,6 +10,7 @@
  * - 同一 run 内已加载技能去重（Set），重复调用返回提示，避免 token 浪费
  */
 import { AgentDefinition } from '../interfaces/agent.interface';
+import { resolveAgentCapabilities } from './capability-resolver';
 import { StreamEvent, RunInput } from '../interfaces/runtime.interface';
 import { ToolRegistry } from '../registry/tool.registry';
 import { AgentRegistry } from '../registry/agent.registry';
@@ -78,11 +79,12 @@ export class AgentEngine {
       }
     }
 
-    // 2. 拼接 messages（有技能 → 注入技能目录）
-    const hasSkills = this.hasSkills(agent);
+    // 2. 归一能力声明：工具名 + 技能目录统一来自 capabilities（无则回退旧字段）
+    const resolved = resolveAgentCapabilities(agent);
+    const hasSkills = !!this.skillLoader && resolved.skills.length > 0;
     let systemPrompt = agent.systemPrompt;
     if (hasSkills && this.skillLoader) {
-      const catalog = this.skillLoader.toCatalog(agent.skills);
+      const catalog = this.skillLoader.toCatalog(resolved.skills);
       if (catalog) systemPrompt = `${systemPrompt}\n${catalog}`;
     }
     const messages: ChatMessage[] = [
@@ -92,7 +94,7 @@ export class AgentEngine {
     ];
 
     // 3. 工具 schema（挂技能时追加 load_skill）
-    const toolSchemas = await this.toolRegistry.toSchemas(agent.tools);
+    const toolSchemas = await this.toolRegistry.toSchemas(resolved.tools);
     if (hasSkills) toolSchemas.push(LOAD_SKILL_SCHEMA);
     let currentConversationId = conversationId;
 
@@ -220,13 +222,6 @@ export class AgentEngine {
       content: `达到最大步数限制 (${agent.maxSteps})`,
       usage: usageOf(accPrompt, accCompletion),
     };
-  }
-
-  /** 判断 Agent 是否挂载了技能（skills 字段或 capabilities 中的 skill 类型） */
-  private hasSkills(agent: AgentDefinition): boolean {
-    if (!this.skillLoader) return false;
-    if (agent.skills?.length) return true;
-    return (agent.capabilities ?? []).some((c) => c.type === 'skill' && c.enabled !== false);
   }
 
   /**
