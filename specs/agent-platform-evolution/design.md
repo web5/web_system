@@ -71,26 +71,31 @@ run_metrics    聚合: agentId | model | source | date | runCount | okCount | er
 
 ## D4. RAG 知识服务（Phase 3）
 
-### D4.1 载体（推荐 A，见 §开放决策）
-- 推荐：独立轻服务 `servers/knowledge-service`（新库 `web_system_knowledge`，PostgreSQL + pgvector），对平台只暴露 MCP 工具（经 mcp-gateway 聚合，复用凭证/审计链路），不直接开放 HTTP 给业务。
-- 备选 B：先放 ai-service 内模块（同库），量起再拆。
+### D4.1 载体（✅ 已选定 2026-09-09：A 独立服务 + MySQL JSON 向量）
+- 独立轻服务 `servers/knowledge-service`（端口 6011，独立 MySQL 库 `web_system_knowledge`，`synchronize` 开发建表/生产走 `migrations/*.sql` 惯例）。
+- **向量存储**：全仓 MySQL、不引入 PG —— embedding 存 `knowledge_chunks.embedding`(JSON float 数组)，检索时应用层余弦 top-k（内部知识量级千级 chunk 足够；零新基建）。
+- 对平台只暴露 MCP 工具（经 mcp-gateway 聚合）+ admin 管理 REST（gateway `/api/knowledge`，权限 knowledge:view/manage），业务侧不直接开放 HTTP。
 
 ### D4.2 表
 ```text
-knowledge_collections  id | name | agentIds(json 授权白名单) | embedModel | meta | enabled
-knowledge_docs         id | collectionId | title | source | rawText(mediumtext) | status(parsing/ready/failed) | checksum
-knowledge_chunks       id | docId | seq | content | embedding(vector) | meta   (索引 HNSW)
+knowledge_collections  id(uuid) | name | description | agentIds(json 授权白名单) | embedModel | meta(json) | enabled | createdBy
+knowledge_docs         id(uuid) | collectionId | title | source | rawText(mediumtext) | status(parsing/ready/failed) | checksum | docMeta(json)
+knowledge_chunks       id(uuid) | docId | collectionId | seq | content(text) | embedding(json float[]) | meta(json)   (无 DB 向量索引，检索应用层余弦)
 ```
-- 权限：工具调用时校验发起 agentId ∈ collection.agentIds（R3.4：无授权返回明确错误）。
+- 权限（✅ 开放决策 7 = C：集合随 agent 定义装配绑定）：collection **不设 agentIds 白名单**；集合与 agent 的绑定 = agent 定义 `capabilities` 里 `{ type:'mcp', ref:'knowledge/<tool>', config:{ collectionId:'<id>' } }` 显式引用（定义装配即授权）。
+  - ai-agent 装配层（`agent-def-sync`）注册 knowledge 工具时收集该 agent 全部已绑定 collectionId，调用时校验 `args.collectionId ∈ 绑定集`，不在即**明确错误**；
+  - knowledge-service 侧校验 collection **存在 && enabled**，不存在/禁用返回明确错误（R3.4：未绑定任何集合的 agent 无知识工具可调或调用被明确拒绝，不静默返回空）。
 
-### D4.3 MCP 工具契约（注册进 mcp-gateway）
+### D4.3 MCP 工具契约（注册进 mcp-gateway，module code_key = `knowledge`）
 ```text
-knowledge_ingest(collectionId, title, text|fileRef, source?)  → jobId(docId), 异步解析分块
-knowledge_search(collectionId, query, topK=5)                 → [{chunkId, content, docTitle, score}]  // 带来源引用(R3.1)
-knowledge_list(collections?)                                  → 集合与授权可见性
-knowledge_delete(collectionId, docId?)                        → 删除(级联 chunks, R3.3)
-knowledge_status(docId)                                       → parsing/ready/failed 与分块数
+knowledge_ingest(collectionId, title, text, source?)  → {docId, status:parsing} 异步解析分块+向量化（R3.2）
+knowledge_search(collectionId, query, topK=5)         → [{chunkId, content, docTitle, score}]  // 带来源引用(R3.1)
+knowledge_list(collections?)                          → 全部集合 {id,name,description,enabled}（AI 侧可见性由装配绑定约束）
+knowledge_delete(collectionId?, docId?)               → 删除(级联 chunks, R3.3)：DELETE 集合 /api/knowledge/collections/:id 或文档 /api/knowledge/documents/:id
+knowledge_status(docId)                               → {status:parsing|ready|failed, chunkCount, title}
 ```
+- 说明：`knowledge_*` 不采用 T3 job 长任务（解析在 knowledge-service 内部队列即时跑，docId 即索引），故不走 mcp_jobs。
+- MCP 模块在 mcp-gateway seed（代码声明 → DB，同 finnews/deploy 惯例），base_url=`KNOWLEDGE_SERVICE_URL`，auth 用 internal 固定密钥；工具**自动出现在 /mcp 管理页**，运营停用 = 停整个 knowledge 模块。
 - embedding Provider 抽象：env 配置默认提供方（tokenhub/hy3 的 embedding 或腾讯云 bge），`EmbeddingProvider` 接口 + 注册表，风格同 `SearchProviderRegistry`。
 - 评测口径：检索+问答对按 **Ragas 三指标**（faithfulness / answer_relevance / context_relevance）出脚本化评测，纳入 Phase4 用例集。
 
@@ -169,9 +174,10 @@ eval_results   id | runId | caseId | assertType(programmatic|judge) | score | pa
 - **状态矩阵**：子源聚合失败 → **该能力分区显示错误态 + 重试**，其余分区照常展示（明确的分区失败，不做整页静默降级）；agent 未挂载任何能力 → 空态"该 agent 未挂载能力，去定义管理配置 capabilities"。
 
 ## 开放决策（待需求方拍板，写入 tasks 前确认）
-1. RAG 载体：A 独立 knowledge-service（推荐，贴合独立库铁律） vs B ai-service 内模块
-2. pgvector 引入：是否接受为本仓 Postgres 增加扩展（需 migrations 脚本）
+1. ✅ 已选定（2026-09-09）：**A 独立 knowledge-service**（servers/knowledge-service + 独立 MySQL 库 web_system_knowledge），对平台经 mcp-gateway 暴露工具 + admin REST 供管理
+2. ✅ 已选定（2026-09-09）：**不引入 pgvector/PG**——MySQL JSON 存 embedding + 应用层余弦 top-k（内部千级 chunk 够用，零新基建）
 3. 评测第二批触发时点：Phase3 验收后即触发 vs 先积累真实 run 再校准阈值后触发
 4. ✅ 已选定（2026-09-08）：**需要高保真拆分**——v1 综合稿（9 页合一）保留为 IA 总览；另产出**逐页独立的高保真原型稿 v2 系列**（每页一份 HTML，含完整导航/真实数据/状态矩阵/分页/交互反馈），作为实现依据。拆分方案与保真度标准见 `ui-prototypes.md`「高保真拆分方案」，首批文件在 `docs/analysis/agent-platform/`
 5. ✅ 已确认（2026-09-08）：Web 运营配套范围按 D6.2 全矩阵交付（含 P3 独立检索调试器、P4 收尾跨模块 Dashboard，不后置）；D6.3 权限点设计（knowledge:view/manage、agents:eval、agents:cost:view）已认可
 6. ✅ 已选定（2026-09-08）：**B —— 新增只读「能力资产总览」聚合页**（/agents/capabilities，随 Phase2 交付，聚合 API 归 ai-service，页面零写操作、跳回各模块；MCP/Skills 归属不动）。设计见 D6.6，页面规格见 `ui-prototypes.md` 10 号页，原型稿见 `agent-platform_原型_v1_观测与评测.html`「能力资产」
+7. ✅ 已选定（2026-09-09）：**C —— knowledge 工具按 agent 的授权机制 = 集合随 agent 定义装配绑定**：无 agentIds 白名单；agent 定义 capabilities 显式 `config:{collectionId}` 引用即授权；ai-agent 装配层收集绑定集并校验调用 collectionId，knowledge 侧校验集合存在/enabled（D4.2 权限行）。agent 不绑定任何集合 → 无知识工具可调，R3.4 以「明确错误/无工具」达成
