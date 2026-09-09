@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { PipelineItem } from '@/api'
 import PipelineRunLogs from './PipelineRunLogs.vue'
-import { stageLogLines, stageHasError } from './pipeline.logs'
+import { stageLogLines, stageHasError, opSegments, type OpSegment } from './pipeline.logs'
 import {
   STEP_LABELS,
   stepState,
@@ -94,6 +94,31 @@ const stageLines = computed(() =>
   props.instance && props.item ? stageLogLines(props.instance, props.item.stage) : [],
 )
 const stageErr = computed(() => stageHasError(stageLines.value))
+
+/** 按操作分段的日志（v4 多操作：一个操作一个可折叠块） */
+const segments = computed(() => {
+  const { prelude, ops } = opSegments(stageLines.value)
+  return { prelude, ops }
+})
+/** 操作块的折叠状态 */
+const opCollapsed = ref<Record<string, boolean>>({})
+function toggleOp(op: string) {
+  opCollapsed.value[op] = !opCollapsed.value[op]
+}
+/** 操作状态着色：失败红 / 容错继续橙 / 完成绿 / 未知蓝 */
+function opState(op: OpSegment): 'ok' | 'fail' | 'cont' | 'run' {
+  const txt = [...op.body, op.head].join('\n')
+  if (/失败|failed/i.test(txt) && !/continueOnError=是/i.test(txt)) return 'fail'
+  if (/continueOnError=是/i.test(txt)) return 'cont'
+  if (/完成/i.test(txt)) return 'ok'
+  return 'run'
+}
+const OP_STATE_META: Record<string, { color: string; text: string; bg: string }> = {
+  ok: { color: '#52c41a', text: '完成', bg: '#f6ffed' },
+  fail: { color: '#ff4d4f', text: '失败', bg: '#fff2f0' },
+  cont: { color: '#d48806', text: '失败·容错继续', bg: '#fffbe6' },
+  run: { color: '#1677ff', text: '执行中/无结束标记', bg: '#e6f4ff' },
+}
 
 /** 涉及产物/版本指针的阶段，结果 Tab 展示关联信息 */
 const versionHint = computed(() => {
@@ -198,10 +223,46 @@ function copyCmd(cmd: string) {
           </p>
         </a-tab-pane>
 
-        <!-- Tab ② 执行日志（该阶段段落） -->
+        <!-- Tab ② 执行日志（该阶段段落；有 v4 操作锚则按 op 分段展示） -->
         <a-tab-pane key="logs" tab="执行日志">
           <template v-if="instance">
+            <template v-if="segments.ops.length">
+              <div class="op-log-panel">
+                <!-- 阶段前导说明行 -->
+                <template v-if="segments.prelude.length">
+                  <div v-for="(l, pi) in segments.prelude" :key="'p' + pi" class="ol-line ol-plain">{{ l }}</div>
+                </template>
+
+                <!-- 每个操作一个块 -->
+                <div
+                  v-for="op in segments.ops"
+                  :key="op.op"
+                  class="op-block"
+                  :class="{ 'op-fail': opState(op) === 'fail' }"
+                >
+                  <div class="op-head" @click="toggleOp(op.op)">
+                    <span class="op-dot" :style="{ background: OP_STATE_META[opState(op)].color }"></span>
+                    <span class="op-idx">{{ op.op }}</span>
+                    <span class="op-name">{{ op.name }}</span>
+                    <a-tag :color="OP_STATE_META[opState(op)].color" style="margin: 0;">
+                      {{ OP_STATE_META[opState(op)].text }}
+                    </a-tag>
+                    <span class="op-code">{{ op.head.replace(/^\[[^\]]*\]\s*/, '') }}</span>
+                    <span class="op-caret">{{ opCollapsed[op.op] ? '▸' : '▾' }}</span>
+                  </div>
+                  <div v-show="!opCollapsed[op.op]" class="op-body">
+                    <div
+                      v-for="(l, li) in op.body"
+                      :key="li"
+                      class="ol-line"
+                      :class="/error|fail|失败|回滚|警告/i.test(l) ? 'ol-warn' : 'ol-plain'"
+                    >{{ l }}</div>
+                  </div>
+                </div>
+              </div>
+            </template>
             <PipelineRunLogs
+              v-else
               :lines="stageLines"
               :keyword="item.stage"
               empty-text="该阶段暂无输出（可能尚未执行或已跳过）"
@@ -249,3 +310,77 @@ function copyCmd(cmd: string) {
     <a-empty v-else description="暂无可展示的阶段信息" />
   </a-drawer>
 </template>
+
+<style scoped>
+/* 操作级日志分段（v4 多操作） */
+.op-log-panel {
+  background: #1e1e1e;
+  border-radius: 6px;
+  padding: 8px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.op-block {
+  border-top: 1px dashed #333;
+}
+.op-block:first-of-type {
+  border-top: none;
+}
+.op-block.op-fail {
+  background: rgba(255, 77, 79, 0.06);
+}
+.op-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #d4d4d4;
+  flex-wrap: wrap;
+}
+.op-head:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.op-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.op-idx {
+  color: #999;
+  font-family: monospace;
+}
+.op-name {
+  font-weight: 600;
+  color: #e8e8e8;
+}
+.op-code {
+  color: #91caff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+  font-family: monospace;
+  font-size: 11px;
+}
+.op-caret {
+  margin-left: auto;
+  color: #888;
+}
+.op-body {
+  padding: 0 12px 10px 44px;
+}
+.ol-line {
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.7;
+}
+.ol-warn {
+  color: #ff7875;
+}
+.ol-plain {
+  color: #b8b8b8;
+}
+</style>
