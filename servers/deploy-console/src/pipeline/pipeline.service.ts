@@ -43,6 +43,12 @@ import { CommandService, buildChildEnv } from '../shell/command.service';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
+import {
+  resolveNodeRunPlan,
+  legacyStepsToNodes,
+  isV5NodesEnabled,
+  TemplateNode,
+} from '../pipeline-template/template-node';
 
 /** 构建超时（毫秒） */
 const BUILD_TIMEOUT_MS = 10 * 60 * 1000;
@@ -70,6 +76,35 @@ export const DELETABLE_PIPELINE_STATUS = ['succeeded', 'failed', 'cancelled'] as
 
 export function isDeletablePipeline(status: string): boolean {
   return (DELETABLE_PIPELINE_STATUS as readonly string[]).includes(status);
+}
+
+/**
+ * 运行期执行计划（v5 nodes / legacy 两级回退）。
+ *
+ * - 实例带 nodes 快照（flag=on 提交产生）→ nodes 模式：keys=保序节点，watchKey=watchdog script 节点；
+ * - 否则 legacy：keys=steps 子集（null=九阶段），watchKey=verify（现有自动回滚锚点）。
+ */
+export interface RunPlan {
+  mode: 'nodes' | 'legacy';
+  keys: string[];
+  /** 自动回滚触发锚点：watchdog 节点 key（nodes）或 verify（legacy） */
+  rollbackAnchor?: string;
+}
+
+export function resolveRunStages(p: { nodes?: any[] | null; steps?: string[] | null }): RunPlan {
+  if (p.nodes && p.nodes.length) {
+    const plan = resolveNodeRunPlan(p.nodes as TemplateNode[]);
+    if (plan) {
+      return { mode: 'nodes', keys: plan.keys, rollbackAnchor: plan.watchKey };
+    }
+  }
+  const keys = p.steps?.length ? [...p.steps] : ([...PIPELINE_STAGES] as string[]);
+  return { mode: 'legacy', keys, rollbackAnchor: 'verify' };
+}
+
+/** 某阶段失败是否应触发自动回滚（nodes 模式看 watchdog；legacy 看 verify） */
+export function isRollbackAnchor(stage: string, plan: RunPlan): boolean {
+  return !!plan.rollbackAnchor && stage === plan.rollbackAnchor;
 }
 
 /**
@@ -357,6 +392,17 @@ export class PipelineService {
     const runTarget =
       dto.target ??
       (tpl.defaultTarget === 'auto' ? undefined : (tpl.defaultTarget as 'local' | 'remote'));
+    // v5 节点快照：模板带 nodes → 直接快照；v5 on 但模板仍是 legacy → 惰性转存（存量零迁移可跑）；v5 off → null（legacy）
+    const snapshotNodes: TemplateNode[] | null = isV5NodesEnabled()
+      ? tpl.nodes && tpl.nodes.length
+        ? (tpl.nodes as TemplateNode[])
+        : legacyStepsToNodes({
+            steps: tpl.steps ?? null,
+            skipVerify: !!tpl.skipVerify,
+            rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
+          })
+      : null;
+    const plan = snapshotNodes ? resolveNodeRunPlan(snapshotNodes) : null;
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -369,14 +415,16 @@ export class PipelineService {
       templateId: tpl.id,
       templateName: tpl.name,
       steps: tpl.steps ?? null,
+      nodes: snapshotNodes,
       skipVerify: !!tpl.skipVerify,
       rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
       runTarget,
       status: needsApproval ? 'pending-approval' : 'pending',
-      stage: 'check',
+      // v5 实例：初始 stage=首节点；进度按节点总数；legacy 保持 check + 9 阶段
+      stage: plan ? plan.keys[0] : 'check',
       progress: {
         current: 0,
-        total: PIPELINE_STAGES.length,
+        total: plan ? plan.keys.length : PIPELINE_STAGES.length,
         message: needsApproval ? '已提交，等待审批' : '已提交，等待执行',
       },
       logs: needsApproval
@@ -871,10 +919,16 @@ export class PipelineService {
       p.status = 'running';
       await this.save(p);
 
-      // 活动阶段 = 实例快照 p.steps（模板提交时固化，null=全部九阶段）
-      const activeStages: string[] = (p.steps && p.steps.length
-        ? (p.steps as string[])
-        : [...PIPELINE_STAGES]) as string[];
+      // 执行计划 = 实例快照：nodes（v5 platform+script）优先，null=legacy（steps 子集 → 全九阶段）
+      const plan = resolveRunStages(p);
+      const activeStages = plan.keys;
+      // nodes 模式下把 node 元数据带给 executeStage（区分 platform/script）
+      const nodeByKey = new Map(
+        (plan.mode === 'nodes' && p.nodes ? (p.nodes as TemplateNode[]) : []).map((n) => [
+          n.key,
+          n,
+        ]),
+      );
 
       if (p.reuseArtifact) {
         p.logs = [...(p.logs ?? []), '已跳过 pull / build / upload（复用已有产物）'];
@@ -884,7 +938,7 @@ export class PipelineService {
       // 数据驱动执行：每步由 executeStage 分派到内置执行器（平台语义）或阶段命令覆盖（S6-II）
       for (const stage of activeStages) {
         this.assertNotCancelled(p);
-        // version 前捕获当前线上版本（verify 失败自动回滚的回退目标）
+        // version 前捕获当前线上版本（watchdog/verify 失败自动回滚的回退目标）
         if (stage === 'version') {
           try {
             const dep = await this.deploymentRepo.findOne({
@@ -895,7 +949,7 @@ export class PipelineService {
             /* 查询失败不影响发布，仅导致失败时无法自动回滚 */
           }
         }
-        await this.executeStage(p, stage, uploadTarget);
+        await this.executeStage(p, stage, uploadTarget, nodeByKey.get(stage) ?? null);
       }
 
       p.status = 'succeeded';
@@ -925,9 +979,11 @@ export class PipelineService {
       await this.save(p);
       this.logger.error(`流水线失败: ${p.id} 阶段=${p.stage} : ${msg}`);
       if (p.status === 'failed') {
-        // ⑤ 验证阶段失败 → 自动回滚到上一稳定版本（verify 阶段才说明新版本已发布但不健康）
+        // ⑤ watchdog/verify 阶段失败 → 自动回滚到上一稳定版本
+        //   - v5 nodes：实例快照中 watchdog 节点（默认模板=探活）失败才回滚
+        //   - legacy：verify 失败才回滚（新版本已发布但不健康）
         if (
-          p.stage === 'verify' &&
+          isRollbackAnchor(p.stage || '', resolveRunStages(p)) &&
           p.rollbackOnFailure !== 'none' &&
           prevVersion &&
           prevVersion !== p.versionTag
@@ -1020,10 +1076,16 @@ export class PipelineService {
     p: DeployPipelineEntity,
     stage: string,
     uploadTarget: 'local' | 'remote',
+    v5Node?: TemplateNode | null,
   ): Promise<void> {
+    // v5 nodes 模式：platform 与 script 节点按自身语义分派（不经过 commandMode 覆盖）
+    if (v5Node) {
+      await this.executeV5Node(p, stage, uploadTarget, v5Node);
+      return;
+    }
     const def = this.builtinSteps[stage];
     if (!def) {
-      // 模板校验已挡（steps 仅允许内置九阶段），双保险
+      // 模板校验已挡（legacy steps 仅允许内置九阶段），双保险
       throw new Error(`未知或不可编排步骤: ${stage}`);
     }
     const ctx: StepContext = {
@@ -1063,6 +1125,51 @@ export class PipelineService {
         // none：version/pointer 发布语义真相源，纯内置
         await def.run!(ctx);
     }
+  }
+
+  /** v5 nodes 节点执行：platform=内置执行体（git 映射 pull 语义）；script=命令驱动 + optional/watchdog */
+  private async executeV5Node(
+    p: DeployPipelineEntity,
+    stage: string,
+    uploadTarget: 'local' | 'remote',
+    node: TemplateNode,
+  ): Promise<void> {
+    // script 节点：唯一执行体 = 模块 stage_commands 的操作序列（复用 v4 runStageCommand）
+    if (node.kind === 'script') {
+      const hasCmd = await this.runStageCommand(p, stage);
+      if (hasCmd) return;
+      if (node.optional) {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[${stage}] ${node.label ?? stage} 未配置脚本，已跳过（optional）`,
+        ];
+        await this.save(p);
+        return;
+      }
+      throw new Error(
+        `模块 ${p.moduleKey} 未配置 script 节点「${stage}」的操作，发布终止（节点 optional=false；可在「流水线详情 → 编辑流水线 → 节点脚本」配置）`,
+      );
+    }
+
+    // platform 节点：内置执行体，不可被命令覆盖（git→pull 拉码 / version / pointer）
+    const builtinKey = node.key === 'git' ? 'pull' : node.key;
+    const def = this.builtinSteps[builtinKey];
+    if (!def?.run) {
+      throw new Error(`platform 节点 ${stage} 无可执行内置逻辑（注册表缺失 ${builtinKey}）`);
+    }
+    const ctx: StepContext = {
+      pipeline: p,
+      uploadTarget,
+      enterStage: (message) => this.enterStage(p, stage, message),
+      log: (line) => {
+        p.logs = [...(p.logs ?? []), line];
+      },
+      save: () => this.save(p),
+      sleep: (ms) => this.sleep(ms),
+      assertNotCancelled: () => this.assertNotCancelled(p),
+    };
+    if (def.skip?.(p)) return; // 守卫：复用产物 / backend 跳过 pointer 等
+    await def.run(ctx);
   }
 
   /** 默认投递目标：配置优先，未配置时本机优先（本地开发直投本机静态目录） */
@@ -1401,9 +1508,12 @@ export class PipelineService {
 
   private async enterStage(p: DeployPipelineEntity, stage: string, message: string): Promise<void> {
     this.assertNotCancelled(p);
-    const index = PIPELINE_STAGES.indexOf(stage as any);
+    // current/total 按执行计划计算：nodes（v5）用节点序列；legacy 用九阶段/实例 steps 子集
+    const plan = resolveRunStages(p);
+    const index = plan.keys.indexOf(stage);
+    const total = plan.keys.length;
     p.stage = stage;
-    p.progress = { current: index + 1, total: PIPELINE_STAGES.length, message };
+    p.progress = { current: index + 1, total, message };
     p.logs = [...(p.logs ?? []), `[${new Date().toISOString()}] [${stage}] ${message}`];
     await this.save(p);
   }
