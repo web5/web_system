@@ -175,7 +175,12 @@ const rows = computed<CapRow[]>(() => {
     list.push({ key: `skill-${s.code}`, type: 'skill', name: s.name, detail: s.description || s.code, source: s.source });
   }
   for (const k of o.knowledge) {
-    list.push({ key: `knowledge-${k.name}`, type: 'knowledge', name: k.name, detail: '', source: 'knowledge-service' });
+    const detail = !k.available
+      ? '知识服务不可达'
+      : k.enabled
+        ? `${k.docCount} 文档`
+        : `${k.docCount} 文档 · 集合已停用`;
+    list.push({ key: `knowledge-${k.collectionId}`, type: 'knowledge', name: k.name, detail, source: 'knowledge-service' });
   }
   return list;
 });
@@ -214,7 +219,7 @@ function goSkills(): void {
   router.push('/agents/skills');
 }
 function goKnowledge(): void {
-  message.info('知识集合模块即将上线');
+  router.push('/agents/knowledge');
 }
 
 onMounted(() => {
