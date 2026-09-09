@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -28,6 +29,17 @@ export class AgentDefController {
   @ApiOperation({ summary: '列所有 Agent 定义' })
   async list() {
     return this.defs.list();
+  }
+
+  /**
+   * 能力资产总览（只读聚合：本地工具 / MCP / 技能 / 知识挂载情况）
+   * GET /api/agent-defs/capabilities?agentId=
+   */
+  @Get('capabilities')
+  @RequirePermission('agents:view')
+  @ApiOperation({ summary: '能力资产总览（按 agent 聚合四类能力，只读）' })
+  async capabilities(@Query('agentId') agentId?: string) {
+    return this.defs.capabilitiesOverview(agentId);
   }
 
   @Get(':id')

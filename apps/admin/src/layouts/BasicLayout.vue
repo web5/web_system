@@ -48,6 +48,9 @@
           <a-menu-item key="agents-runs">
             <span>运行记录</span>
           </a-menu-item>
+          <a-menu-item key="agents-capabilities">
+            <span>能力资产</span>
+          </a-menu-item>
           <a-menu-item v-if="userStore.hasPermission('agents:manage')" key="agents-defs">
             <span>定义管理</span>
           </a-menu-item>
@@ -181,6 +184,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
   else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
   else if (path.includes('/agents/playground')) selectedKeys.value = ['agents-playground'];
+  else if (path.includes('/agents/capabilities')) selectedKeys.value = ['agents-capabilities'];
   else if (path.includes('/agents')) selectedKeys.value = ['agents-runs'];
   else selectedKeys.value = ['dashboard'];
 }, { immediate: true });
@@ -191,7 +195,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
     database: '/database',
     roles: '/settings/roles',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
-    'agents-playground': '/agents/playground',
+    'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',
   };
   router.push(routes[key] || '/dashboard');
 };

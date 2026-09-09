@@ -245,6 +245,54 @@ export class AgentDefService {
   }
 
   /**
+   * 能力资产总览（Phase2.9 / D6.6）：按 agent 聚合本地工具 / MCP 远程 / 技能 / 知识（占位），
+   * 供 admin「能力资产」只读页。数据直接来自 DB 定义快照（唯一事实源，不扇出其它服务）。
+   */
+  async capabilitiesOverview(agentId?: string) {
+    const defs = await this.getPublished();
+    const targets = agentId ? defs.filter((d) => d.id === agentId) : defs;
+    return targets.map((d) => {
+      const caps: CapabilityRef[] = (d.capabilities ?? []).filter((c) => c.enabled !== false);
+      const declared = Array.isArray(d.capabilities) && d.capabilities.length > 0;
+      const tools = declared
+        ? caps
+            .filter((c) => c.type === 'tool')
+            .map((c) => ({ type: 'tool' as const, name: c.ref, source: '代码注册' }))
+        : (d.tools ?? []).map((t) => ({ type: 'tool' as const, name: t, source: '代码注册' }));
+      const mcp = caps
+        .filter((c) => c.type === 'mcp')
+        .map((c) => ({
+          type: 'mcp' as const,
+          ref: c.ref,
+          module: c.ref.split('/')[0] ?? '',
+          name: c.ref.split('/').pop() ?? c.ref,
+          source: 'mcp-gateway',
+          longRunning: !!(c.config as { longRunning?: boolean } | undefined)?.longRunning,
+        }));
+      const skills: SkillRef[] = (d.skills ?? []) as SkillRef[];
+      // knowledge：Phase3 接入 knowledge-service 后由授权集合补齐（当前明确空，不静默臆造）
+      const knowledge: Array<{ type: 'knowledge'; name: string }> = [];
+      return {
+        agentId: d.id,
+        name: d.name,
+        model: d.model,
+        version: d.version,
+        tools,
+        mcp,
+        skills: skills.map((s) => ({
+          type: 'skill' as const,
+          code: s.code,
+          name: s.name,
+          description: s.description,
+          source: 'ai-service 技能库',
+        })),
+        knowledge,
+        stats: { tools: tools.length, mcp: mcp.length, skills: skills.length, knowledge: knowledge.length },
+      };
+    });
+  }
+
+  /**
    * seed：确保内置 agent 定义在 DB 中存在（缺 id 则补录为 published v1）。
    *
    * DB 是 Agent 定义的唯一事实源（代码里的 *.agent.ts 已删除）。这里只做
