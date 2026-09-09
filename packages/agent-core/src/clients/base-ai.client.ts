@@ -2,6 +2,8 @@
  * AI 客户端统一抽象（纯 TS，无 Nest 依赖）。
  */
 
+import type { JsonSchemaProperty } from '../interfaces/tool.interface';
+
 export interface StreamChunk {
   content: string;
   done: boolean;
@@ -15,7 +17,7 @@ export interface ToolCallSchema {
     description: string;
     parameters: {
       type: 'object';
-      properties: Record<string, { type: string; description: string }>;
+      properties: Record<string, JsonSchemaProperty>;
       required: string[];
     };
   };

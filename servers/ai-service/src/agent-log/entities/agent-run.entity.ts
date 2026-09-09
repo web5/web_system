@@ -93,4 +93,26 @@ export class AgentRun extends AbstractEntity {
   /** run 所在服务（ai-service / ai-agent），方便区分来源 */
   @Column({ type: 'varchar', length: 32, default: 'ai-service', comment: '来源服务' })
   source: string;
+
+  // ── Phase2.3 观测列（成本/用量/版本快照） ──
+
+  /** Agent 定义版本快照（DB 下发填充，回放/观测区分"跑的是哪个版本"） */
+  @Column({ type: 'int', nullable: true, comment: 'Agent 定义版本快照' })
+  agentVersion: number | null;
+
+  /** prompt token 用量（自 final/summary 事件的 usage 汇总） */
+  @Column({ type: 'int', nullable: true, comment: 'prompt tokens' })
+  promptTokens: number | null;
+
+  /** completion token 用量 */
+  @Column({ type: 'int', nullable: true, comment: 'completion tokens' })
+  completionTokens: number | null;
+
+  /** 总 token 用量 */
+  @Column({ type: 'int', nullable: true, comment: 'total tokens' })
+  totalTokens: number | null;
+
+  /** 成本（按 model_pricing 单价 × usage 核算；无单价记 0） */
+  @Column({ type: 'decimal', precision: 12, scale: 6, nullable: true, comment: '成本 CNY' })
+  cost: string | null;
 }

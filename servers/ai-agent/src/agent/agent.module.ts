@@ -20,9 +20,7 @@ import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
 import { ContractCleanerTool } from '../contract/tools/contract-cleaner.tool';
 import { ContractBenchmarkTool } from '../contract/tools/contract-benchmark.tool';
-import { contractRiskAgent } from '../contract/agents/contract-risk.agent';
 import { ContractConversationService } from '../contract/contract-conversation.service';
-import { deployAgent } from '../deploy/agents/deploy.agent';
 import { McpService } from '../mcp/mcp.service';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentController } from './agent.controller';
@@ -38,7 +36,7 @@ import { AgentSkillProvider } from '../skill/agent-skill-provider';
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
  * 引擎/注册表/客户端/记忆均复用 agent-core，通过 useFactory 桥接进 Nest DI。
- * 合同风险识别为第一个落地场景：ContractRuleTool + ContractIrrTool + contractRiskAgent。
+ * 合同风险识别为第一个落地场景：ContractRuleTool + ContractIrrTool（Agent 定义由 DB 同步提供）。
  */
 
 const clientRegistryProvider: Provider = {
@@ -174,19 +172,14 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     this.toolRegistry.register(this.contractIrrTool);
     this.toolRegistry.register(this.contractBenchmarkTool);
 
-    // 注册代码内置 Agent 定义（upsert 兜底，幂等不抛重复）
-    this.agentRegistry.upsert(contractRiskAgent);
-    this.agentRegistry.upsert(deployAgent);
+    // Agent 定义（含 contract-risk / deploy）由 DB 唯一事实源提供：AgentDefSyncService
+    // 启动即拉取 ai-service 的 published 定义 upsert 到注册表，并按其 capabilities 懒注册
+    // MCP 工具（含 deploy 的长任务 publish_pipeline）。（代码内置 *.agent.ts 已删除）
 
     // 演示"MCP 工具作为远程插件懒加载接入"（配置了 MCP_GATEWAY_URL 才生效）
     this.registerMcpTools();
 
-    // 发布助手的 MCP 能力（publish_pipeline 为长任务，启用自动轮询）
-    this.registerDeployMcpCapabilities();
-
-    this.logger.log(
-      'Agent harness（agent-core）工具与 Agent 定义注册完成: contract-risk, deploy',
-    );
+    this.logger.log('Agent harness（agent-core）工具注册完成；Agent 定义由 DB 同步提供');
 
     // 再启动 DB 定义同步：用 published 定义覆盖本地（DB 优先），并开启 30s 轮询
     this.agentDefSync.start();
@@ -197,42 +190,8 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 注册发布助手的 MCP 能力。
-   * publish_pipeline 声明了 longRunning，启用长任务插件后对 Agent 引擎表现为同步工具，
-   * 引擎无需感知 jobId 轮询细节。
+   * 通过 MCP 接入远程工具（懒加载，作为"一切皆插件"的演示）
    */
-  private registerDeployMcpCapabilities(): void {
-    if (!this.mcpService.isAvailable()) {
-      this.logger.warn('MCP 网关未配置（MCP_GATEWAY_URL），跳过发布助手 MCP 工具注册');
-      return;
-    }
-    const runtimeConfig = (cap: { config?: Record<string, unknown> }) =>
-      (cap.config ?? {}) as {
-        longRunning?: boolean;
-        maxWaitMs?: number;
-        timeoutMs?: number;
-        intervalMs?: number;
-      };
-
-    for (const cap of deployAgent.capabilities ?? []) {
-      if (cap.type !== 'mcp' || cap.enabled === false) continue;
-      const [module, tool] = cap.ref.split('/');
-      if (!module || !tool || this.toolRegistry.has(tool)) continue;
-      this.mcpService.registerMcpTool(
-        this.toolRegistry,
-        {
-          name: tool,
-          module,
-          description: `MCP 远程工具 ${cap.ref}`,
-          inputSchema: { type: 'object', properties: {} },
-        },
-        runtimeConfig(cap),
-      );
-    }
-    this.logger.log('发布助手 MCP 能力注册完成（含长任务 publish_pipeline）');
-  }
-
-  /** 通过 MCP 接入远程工具（懒加载，作为"一切皆插件"的演示） */
   private registerMcpTools(): void {
     if (!this.mcpService.isAvailable()) {
       this.logger.warn('MCP 网关未配置（MCP_GATEWAY_URL），跳过 MCP 工具注册');

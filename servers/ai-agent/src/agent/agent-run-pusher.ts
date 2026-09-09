@@ -31,6 +31,8 @@ export class AgentRunPusher {
     systemPrompt: string;
     tools?: string[] | null;
     model?: string | null;
+    /** Agent 定义版本快照（Phase2.3） */
+    agentVersion?: number | null;
     steps: Array<{
       type: string;
       name?: string;
@@ -38,6 +40,8 @@ export class AgentRunPusher {
       args?: unknown;
       step?: number;
       ts: number;
+      /** final/summary/error 事件携带的 token 用量（Phase1.6） */
+      usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     }>;
     finalAnswer?: string | null;
     error?: string | null;

@@ -60,6 +60,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '角色权限', permission: 'roles:manage' },
       },
       {
+        path: 'settings/models',
+        name: 'ModelPricing',
+        component: () => import('@/views/Settings/ModelPricingPage.vue'),
+        meta: { title: '模型单价', permission: 'agents:cost:view' },
+      },
+      {
         path: 'mcp',
         name: 'McpAdmin',
         component: () => import('@/views/McpAdminPanel.vue'),
@@ -81,6 +87,18 @@ const routes: RouteRecordRaw[] = [
             name: 'AgentOverview',
             component: () => import('@/views/Agents/AgentOverview.vue'),
             meta: { title: 'Agent 概览', permission: 'agents:view' },
+          },
+          {
+            path: 'metrics',
+            name: 'AgentMetrics',
+            component: () => import('@/views/Agents/MetricsPage.vue'),
+            meta: { title: 'Agent 观测', permission: 'agents:view' },
+          },
+          {
+            path: 'capabilities',
+            name: 'AgentCapabilities',
+            component: () => import('@/views/Agents/CapabilitiesPage.vue'),
+            meta: { title: '能力资产', permission: 'agents:view' },
           },
           {
             path: 'runs/:agentId',

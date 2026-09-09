@@ -32,13 +32,14 @@ export interface AgentCliConfig {
 /** 已知模型清单（用于交互引导） */
 export const KNOWN_MODELS: Array<{ id: string; name: string; defaultBase?: string }> = [
   { id: 'hy3', name: '混元 Turbo（腾讯 MaaS TokenHub）', defaultBase: 'https://tokenhub.tencentmaas.com/v1' },
-  { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+  { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash（经 TokenHub 托管）', defaultBase: 'https://tokenhub.tencentmaas.com/v1' },
 ];
 
 /** 模型 id → 环境变量名 映射（供注入 process.env） */
 const ENV_MAP: Record<string, { key: string; base: string }> = {
   hy3: { key: 'HY3_API_KEY', base: 'HY3_BASE_URL' },
-  'deepseek-v4-flash': { key: 'DEPSEEK_API_KEY', base: 'DEPSEEK_BASE_URL' },
+  // 官方直连已下线：统一走 TokenHub 托管（TokenHubClient 的 key 缺省回落 HY3_API_KEY）
+  'deepseek-v4-flash': { key: 'TOKENHUB_API_KEY', base: 'TOKENHUB_BASE_URL' },
 };
 
 /** 搜索 key 映射（可选配置，供 web-search） */

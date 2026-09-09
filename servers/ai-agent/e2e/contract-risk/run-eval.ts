@@ -36,7 +36,7 @@ import { ContractRuleTool } from '../../src/contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../../src/contract/tools/contract-irr.tool';
 import { ContractCleanerTool } from '../../src/contract/tools/contract-cleaner.tool';
 import { ContractBenchmarkTool } from '../../src/contract/tools/contract-benchmark.tool';
-import { contractRiskAgent } from '../../src/contract/agents/contract-risk.agent';
+import { AgentDefinition } from '@kedouai/agent-core';
 
 /** CLI 参数 */
 export interface EvalCliArgs {
@@ -81,8 +81,23 @@ function listTokenHubModels(): string[] {
     .filter(Boolean);
 }
 
-/** 装载评测运行时（纯 agent-core 装配，不连 DB） */
-export function buildRuntime(model: string) {
+/**
+ * 从 ai-service 拉取 contract-risk 定义（DB 为 Agent 定义的唯一事实源，代码内置定义已删）。
+ * 需先启动 ai-service 且其 agent_definitions 已完成 seed。
+ */
+async function loadContractRiskAgent(): Promise<AgentDefinition> {
+  const base = (process.env.AI_SERVICE_URL ?? 'http://localhost:6003').replace(/\/$/, '');
+  const res = await fetch(`${base}/internal/agent-definitions`, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`拉取 Agent 定义失败 status=${res.status}（需先启动 ai-service 完成 seed）`);
+  const rows = (await res.json()) as Array<Record<string, unknown>>;
+  const row = rows.find((r) => r.id === 'contract-risk');
+  if (!row) throw new Error('ai-service 未返回 contract-risk 定义（检查 seed 是否执行）');
+  // DB 行即 AgentDefinition 快照（model/tools/capabilities/memory/maxSteps 等字段一一对应）
+  return row as unknown as AgentDefinition;
+}
+
+/** 装载评测运行时（真实工具 + DB 定义，不含 DB 之外的代码内置定义） */
+export async function buildRuntime(model: string) {
   const clientRegistry = new ClientRegistry();
   for (const m of listTokenHubModels()) {
     clientRegistry.register(new TokenHubClient(m));
@@ -96,13 +111,13 @@ export function buildRuntime(model: string) {
   const agentRegistry = new AgentRegistry();
   const memory = new InMemoryConversationMemory();
 
-  // 注册 contract-risk 的 4 个工具（与 AgentModule.onModuleInit 一致）
+  // 注册 contract-risk 的 4 个本地工具 + 从 DB 拉取 agent 定义
   const cleaner = new ContractCleanerTool(clientRegistry);
   toolRegistry.register(cleaner);
   toolRegistry.register(new ContractRuleTool());
   toolRegistry.register(new ContractIrrTool());
   toolRegistry.register(new ContractBenchmarkTool());
-  agentRegistry.upsert(contractRiskAgent);
+  agentRegistry.upsert(await loadContractRiskAgent());
 
   const engine = new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory);
   const runner = new AgentRunner(engine);
@@ -247,7 +262,7 @@ export async function runEval(args: EvalCliArgs): Promise<void> {
   process.stderr.write(`[run-eval] 模型=${chosen} 样本=${samples.length} 轮次/样本=${args.rounds ?? 1}\n`);
 
   // 构建一次 runtime，全部样本复用（Agent 工具注册是幂等且只读）
-  const runtime = buildRuntime(chosen);
+  const runtime = await buildRuntime(chosen);
   process.stderr.write(`[run-eval] 运行时就绪，注册模型=${runtime.modelId}\n`);
 
   const runs: SampleRunResult[] = [];
