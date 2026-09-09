@@ -670,7 +670,7 @@ onUnmounted(stopPolling)
 <template>
   <div>
     <div class="page-header" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-      <a-button type="link" @click="router.back()">← 返回</a-button>
+      <a-button type="link" @click="router.push('/pipelines')">← 返回</a-button>
       <h2 style="margin: 0;">流水线详情</h2>
       <template v-if="tpl">
         <a-tag color="blue" style="font-size: 14px;">{{ tpl.name }}</a-tag>
