@@ -36,8 +36,8 @@ export class DeployPipelineTemplateEntity {
   @Column({ type: 'boolean', default: false, comment: '跳过探活验证（快线；由 steps 派生，兼容保留）' })
   skipVerify: boolean;
 
-  /** 活动阶段子集：null=全部九阶段；仅可裁剪不可重排，必含 check/version/pointer */
-  @Column({ type: 'json', nullable: true, comment: '活动阶段子集（null=全量，保序子序列）' })
+  /** 活动阶段子集：null=全部九阶段；可拖拽重排，必含 check/version/pointer 且满足语义硬约束 */
+  @Column({ type: 'json', nullable: true, comment: '活动阶段子集（null=全量；可重排，须满足语义约束）' })
   steps?: string[] | null;
 
   /** verify 失败自动回滚：previous=回滚上一版本（默认）；none=不回滚 */

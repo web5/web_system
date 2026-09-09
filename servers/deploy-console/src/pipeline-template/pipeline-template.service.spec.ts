@@ -22,13 +22,31 @@ describe('normalizeSteps（活动阶段校验，纯函数）', () => {
     ).toEqual(['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer']);
   });
 
-  it('非法/重复/重排/缺核心均拒绝', () => {
+  it('非法/重复/缺核心均拒绝', () => {
     expect(() => normalizeSteps(['check', 'rollback'])).toThrow(BadRequestException);
     expect(() => normalizeSteps(['check', 'check', 'version', 'pointer'])).toThrow(
       BadRequestException,
     );
-    expect(() => normalizeSteps(['version', 'pointer', 'check'])).toThrow(BadRequestException);
     expect(() => normalizeSteps(['pull', 'build', 'version', 'pointer'])).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('语义约束内允许重排（cleanup 可前移、upload/restart 互调）', () => {
+    expect(
+      normalizeSteps(['check', 'pull', 'build', 'restart', 'upload', 'version', 'pointer', 'verify', 'cleanup']),
+    ).toEqual(['check', 'pull', 'build', 'restart', 'upload', 'version', 'pointer', 'verify', 'cleanup']);
+    expect(
+      normalizeSteps(['check', 'pull', 'build', 'upload', 'version', 'pointer', 'cleanup', 'verify']),
+    ).toEqual(['check', 'pull', 'build', 'upload', 'version', 'pointer', 'cleanup', 'verify']);
+  });
+
+  it('语义硬约束违规拒绝：check 不首/version 晚于 pointer/verify 早于 pointer', () => {
+    expect(() => normalizeSteps(['version', 'pointer', 'check'])).toThrow(BadRequestException);
+    expect(() => normalizeSteps(['check', 'pull', 'pointer', 'version'])).toThrow(
+      BadRequestException,
+    );
+    expect(() => normalizeSteps(['check', 'pull', 'build', 'upload', 'version', 'verify', 'pointer'])).toThrow(
       BadRequestException,
     );
   });
