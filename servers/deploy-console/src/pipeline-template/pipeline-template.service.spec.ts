@@ -176,6 +176,131 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
     });
   });
 
+  describe('v5 nodes（PIPELINE_V5_NODES 门禁）', () => {
+    const v5nodes = () => [
+      { kind: 'platform', key: 'git' },
+      { kind: 'script', key: 'build', label: '构建' },
+      { kind: 'platform', key: 'version' },
+      { kind: 'platform', key: 'pointer' },
+    ];
+
+    const origFlag = process.env.PIPELINE_V5_NODES;
+    afterEach(() => {
+      if (origFlag === undefined) delete process.env.PIPELINE_V5_NODES;
+      else process.env.PIPELINE_V5_NODES = origFlag;
+    });
+
+    it('flag=on：create 收 nodes 并归一落库', async () => {
+      process.env.PIPELINE_V5_NODES = 'on';
+      await service.create({ name: 'v5线', nodes: v5nodes() as any });
+      const created = repo.create.mock.calls[0][0];
+      expect(created.nodes.map((n: any) => n.key)).toEqual(['git', 'build', 'version', 'pointer']);
+    });
+
+    it('flag=off（缺省）：create 忽略 nodes（nodes=null，走 legacy）', async () => {
+      delete process.env.PIPELINE_V5_NODES;
+      await service.create({ name: 'legacy线', nodes: v5nodes() as any });
+      const created = repo.create.mock.calls[0][0];
+      expect(created.nodes).toBeNull();
+    });
+
+    it('flag=on 且 nodes 非法 → 400', async () => {
+      process.env.PIPELINE_V5_NODES = 'on';
+      const bad = [
+        { kind: 'platform', key: 'git' },
+        { kind: 'platform', key: 'version' }, // 缺 pointer
+      ];
+      await expect(service.create({ name: '坏线', nodes: bad as any })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('flag=on：update 落 nodes', async () => {
+      repo.findOne.mockResolvedValue(globalDefault());
+      process.env.PIPELINE_V5_NODES = 'on';
+      const updated = await service.update('g-default', { nodes: v5nodes() as any });
+      expect(updated.nodes!.length).toBe(4);
+    });
+
+    it('flag=off：update 忽略 nodes（保持原值 undefined）', async () => {
+      repo.findOne.mockResolvedValue(globalDefault());
+      delete process.env.PIPELINE_V5_NODES;
+      const ignored = await service.update('g-default', { nodes: v5nodes() as any });
+      expect(ignored.nodes).toBeUndefined(); // 未触碰，保持原值
+    });
+
+    it('duplicate 复制 nodes', async () => {
+      repo.findOne
+        .mockResolvedValueOnce({
+          id: 'g-default',
+          moduleKey: GLOBAL_TEMPLATE,
+          name: '默认',
+          steps: null,
+          nodes: v5nodes(),
+          skipVerify: false,
+          rollbackOnFailure: 'previous',
+          approval: 'inherit',
+          defaultTarget: 'auto',
+          enabled: true,
+          builtin: true,
+        })
+        .mockResolvedValueOnce(null);
+      const copy = await service.duplicate('g-default');
+      expect(copy.nodes!.length).toBe(4);
+    });
+
+    it('v5 on：create 未传 nodes → 按 legacy steps 兜底转存（全量含 git/watchdog）', async () => {
+      process.env.PIPELINE_V5_NODES = 'on';
+      await service.create({ name: '转存线', rollbackOnFailure: 'previous' });
+      const created = repo.create.mock.calls[0][0];
+      expect(created.nodes![0].key).toBe('git');
+      const keys = created.nodes!.map((n: any) => n.key);
+      expect(keys).toContain('version');
+      expect(keys.indexOf('version')).toBeLessThan(keys.indexOf('pointer'));
+    });
+
+    it('v5 on：旧模板（无 nodes）update 时自动转存为 nodes', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 'legacy-1',
+        moduleKey: GLOBAL_TEMPLATE,
+        name: '旧线',
+        steps: ['check', 'pull', 'build', 'version', 'pointer', 'verify'],
+        skipVerify: false,
+        rollbackOnFailure: 'previous',
+        approval: 'inherit',
+        defaultTarget: 'auto',
+        enabled: true,
+        builtin: false,
+        nodes: null,
+      });
+      process.env.PIPELINE_V5_NODES = 'on';
+      const updated = await service.update('legacy-1', { description: '改一下说明' });
+      expect(updated.nodes).toBeTruthy();
+      const verify = updated.nodes!.find((n: any) => n.key === 'verify') as any;
+      expect(verify.watchdog).toBe(true); // rollback=previous → verify 带 watchdog
+      expect(updated.nodes!.some((n: any) => n.key === 'upload')).toBe(false); // steps 已裁掉 upload
+    });
+
+    it('v5 off：旧模板 update 不产生 nodes（nodes 保持 null）', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 'legacy-2',
+        moduleKey: GLOBAL_TEMPLATE,
+        name: '旧线2',
+        steps: null,
+        skipVerify: false,
+        rollbackOnFailure: 'previous',
+        approval: 'inherit',
+        defaultTarget: 'auto',
+        enabled: true,
+        builtin: false,
+        nodes: null,
+      });
+      delete process.env.PIPELINE_V5_NODES;
+      const updated = await service.update('legacy-2', { description: 'v4 下只改说明' });
+      expect(updated.nodes).toBeNull();
+    });
+  });
+
   describe('list', () => {
     it('listUsable 返回全局+模块专属', async () => {
       repo.findOne.mockResolvedValue(globalDefault());

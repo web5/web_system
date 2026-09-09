@@ -270,3 +270,83 @@
 - **收尾**：每阶段完成走 `verification-before-completion` + `rd-review`；**不主动 commit**。
 - **阶段门**：S1 完成并评审后启动 S2；S1/S2/S3 为 P0，必须先闭环。
 - **上下文对抗**：每轮开工先重读本文件与 `design.md`，不依赖对话记忆。
+
+## S11 · v5 流水线开放化：nodes 编排（PIPELINE_V5_NODES，2026-09-09）
+
+> 方案：design.md §14（目标形态/数据模型/执行语义/顺序约束/迁移 N0-N7/UI/验收）。
+> 基线：S0-S8 已勾选（引擎 = S8 内置步骤注册表 + §12 actions 多操作）。**tasks.md 无 S9/S10**、代码无 `PIPELINE_V5_NODES`/`PIPELINE_SCRIPT_MODE` flag —— v4 脚本态未上线，off 回归基线以当前混合态代码为准（勿按 design §11 M 系列补 v4）。
+> 任务映射：11.1=N0+N1 · 11.2=N2 · 11.3=N3 · 11.4=N4 · 11.5=N5 · 11.6=N6(前端渲染) · 11.7=N6(flag on+回归) · 11.8=N7。
+
+- [x] 11.1（N0+N1）feature flag `PIPELINE_V5_NODES` + 模板/实例 `nodes` 列 + `normalizeNodes` + DTO/API 收 nodes（含 legacy 回退）
+  - 验证：template-node 11/11 绿 · pipeline-template 36/36 绿 · 全量 259/259 绿 · tsc 0 错 · nest build 通过
+  - 依赖：8.3（S8 回归基线绿）；代码须已含 §12 actions 多操作（已核实）
+  - _验收：当 `PIPELINE_V5_NODES` 缺省或 off 时，模板保存/提交即使带 nodes 也应走 legacy（steps）路径，线上行为完全不变_
+  - _验收：当 flag=on 且模板带 nodes 时，应校验通过并随提交固化到实例 `nodes` 快照；`steps` 列兼容保留_
+  - _验收：当 nodes 违反 §14.5（缺 git/version/pointer 任一、相对序 git→version→pointer 颠倒、key 重复/与 platform 保留字冲突、watchdog 超 1 个、key 不匹配 `^[A-Za-z0-9_-]{1,32}$`）时，应 400 拒绝_
+  - 落地：`pipeline-template/template-node.ts`（TemplateNode 类型 + normalizeNodes/isV5NodesEnabled/PLATFORM_RESERVED）；模板/实例 entity 加 `nodes`(json nullable)；`pipeline-template.service.ts` create/update/duplicate 收 nodes（flag=on 门禁）；controller SNAPSHOT_KEYS 加 `nodes`；`pipeline.service.ts` submit 快照 `nodes: tpl.nodes ?? null`
+  - 单测：是（template-node.spec 11 用例：normalizeNodes 合法/非法集合、flag 分支、保留字）
+
+- [x] 11.2（N2）module stage_commands 去 `CONFIGURABLE_STAGES` 白名单 → 任意 script 节点 key 可读写
+  - 验证：stage-command 32/32 绿 · 全量 262/262 绿 · tsc 0 错
+  - 依赖：11.1
+  - _验收：当 PUT `/modules/:key/stage-commands/notify`（非 git/version/pointer、格式合法）时，应保存成功并可被 `runStageCommand` 消费；当 key ∈ platform 保留字或含非法字符时，应 400 拒绝_
+  - _验收：当按 script 节点 key 读模块脚本（含 actions）时应返回；删节点 key 的孤儿命令应保留并标注「未被任何模板引用」_
+  - 落地：`template-node.ts` 加 `isWritableStageKey`；stage-command.service upsert 校验改「非保留字+格式」（git/version/pointer 拒绝）并加 `getRow`（按任意 key 读完整行含 actions）；controller GET `:stage` 改走 getRow；`list` 保留 legacy 9 阶段视图不变
+  - 单测：是（upsert 合法/保留字/非法格式 + 单 key 读取）
+
+- [x] 11.3（N3）engine：遍历 `nodes` 分派 + watchdog 回滚锚点 + 进度改 nodes.length
+  - 验证：resolveRunStages/isRollbackAnchor 纯函数 5 用例（pipeline.service.spec 21/21）· 全量 271/271 绿 · tsc 0 错 · nest build 通过
+  - 依赖：11.1、11.2
+  - _验收：当实例含 nodes 快照时，run() 遍历 nodes：platform→内置执行体（git 走 pull 执行器语义 / version 写表前捕 prevVersion / pointer 切指针）、script→runStageCommand(key)；进度 total=nodes.length_
+  - _验收：当 script 未配脚本且 optional=false 时 fail-fast；optional=true 时记 `[key] 未配置脚本，已跳过（optional）` 继续且不计失败_
+  - _验收：当 watchdog=true 节点失败（非 optional 跳过、rollbackOnFailure≠none、prevVersion≠versionTag）时应触发自动回滚（复用 startRollback/waitTask/探活/审计/通知）；legacy 实例仍按 `p.stage==='verify'` 回滚，行为不变_
+  - 落地：新增导出纯函数 `resolveRunStages`/`isRollbackAnchor`（pipeline.service）；run() 用 plan.keys 遍历 + executeStage 传 node；新增 `executeV5Node`（platform→内置执行体，git 映射 pull / script→runStageCommand+optional）；回滚 catch 改 isRollbackAnchor；enterStage 按 plan 计 current/total；submit 初始 stage/total 适配 nodes
+  - 单测：是（resolveRunStages/isRollbackAnchor 5 用例：legacy 九阶段/steps 子集/nodes/watchdog 缺失/首节点；engine 全路径留待 11.7 dev 实发回归）
+
+- [x] 11.4（N4）前端编辑态「nodes 画布」：添加/删除 script 节点 + optional/watchdog 开关 + 拖拽重排 + platform 锁定
+  - 验证：vue-tsc 0 错 · vite build 通过 · lint 0 告警（交互稿 release-platform-v5-nodes.html 已确认：连接线插孔即落即编 + 卡片删除钮）
+  - 依赖：11.1、11.2
+  - _验收：点「+ 添加节点」输 label → 自动生成合法 key，可勾 optional/watchdog，插入 git 后/version 前（watchdog 允许在 version/pointer 后）_
+  - _验收：编辑/删除/拖动 git/version/pointer 平台节点应被拒（UI 置灰 + 后端 400）；删 script/watchdog 前弹风险提示（warning 不阻断）_
+  - _验收：选中 script 节点编辑脚本 = 读写模块×key 的 stage_commands（复用 StageActionsEditor）_
+  - 落地：`PipelineDetail.vue` 编辑态重构为 nodes 画布（openEditor 旧模板 legacyToNodes 预转存 / addScriptNode 即落即编 / 连接线插孔 + 卡片删除钮 / platform 锁 / optional·watchdog 互斥 / label·key 即改即同步 / saveEditor PUT nodes）；`pipeline.stages.ts` 增 checkNodes/nodeDisplayName/stageKeys/stepLabelOf/legacyToNodes 镜像；`api/index.ts` TemplateNode + PLATFORM_NODE_KEYS/LABELS + PipelineTemplate/PipelineItem.nodes + stageCommandApi.get 返回完整行
+  - 单测：否（vue-tsc 0 错 + vite build 通过 + 手工冒烟留 11.7）
+
+- [x] 11.5（N5）legacy 9 阶段 → nodes 一次性转存（后端纯函数 + 保存/submit 接线）
+  - 验证：template-node 20/20 · pipeline-template 48/48 · 全量 279/279 绿 · tsc 0 错 · nest build 通过
+  - 依赖：11.1
+  - _验收：旧模板（nodes=null，有 steps/skipVerify）被编辑保存时 → 一次性生成 nodes（git/version/pointer→platform；其余转 script；含 verify 且 rollbackOnFailure='previous' 时该 verify 节点 watchdog=true）_
+  - _验收：flag=on 且提交引用无 nodes 旧模板时，submit 惰性转换 nodes 快照落实例，存量零迁移可跑；同模板实发行为与 legacy 一致_
+  - 落地：`template-node.ts` 纯函数 `legacyStepsToNodes()`（git/version/pointer→platform，pull 并入 git；check/build/upload/restart/verify/cleanup→script；verify+rollback=previous→watchdog；build optional=false，其余 optional=true）+ spec（全 9/skipVerify/rollback=none/自定义子集/自洽性 5 用例）；接线 template service create（v5 下未传 nodes 兜底转存）/update（旧模板保存即转存）/pipeline submit（惰性转换快照）
+  - ⚠️ 需先核对（已定中间值，11.7 实发校准）：script optional 暂定 build=false、其余=true（check 基线已上提 submit）；watchdog 探活节点 optional=true 时未配脚本会被跳过且自动回滚消失——若接受请保持，若需 fail-fast 在 11.7 后收紧
+  - 单测：是（legacyStepsToNodes 四类转换 + normalizeNodes 自洽 + service create/update/submit 接线用例）
+
+- [x] 11.6（N6 前端）实例/流程/日志/历史按 `nodes` 渲染（platform/script 视觉区分 + watchdog 角标）
+  - 验证：vue-tsc 0 错 · vite build 通过 · lint 0 告警
+  - 依赖：11.3、11.4
+  - _验收：查看含 nodes 实例的流程图/详情按快照渲染 nodes（platform 锁/警示色、watchdog 角标），日志按 `[key/opN]` 分段；legacy 仍按 9 阶段渲染_
+  - _验收：script 节点失败 → 流程图标记；watchdog 回滚在日志/审计/通知的阶段名以 key+label 呈现_
+  - 落地：`pipeline.stages.ts` stageKeys/stepList 三级回退 + nodeDisplayName/stepLabelOf；ProgressFlow 节点名按 nodes label + 平台/watchdog mini-tag；PipelineDetail 历史表格 stage 列 stepLabelOf、实例节点抽屉兜底（自定义 script key 按 get 读模块配置、platform 给只读说明）
+  - 单测：否（vue-tsc 0 错）
+
+- [ ] 11.7（N6）flag `on` + dev 实发回归（dev 后端 + dev 前端 + 灰度 + 回滚 + prod 拦截）
+  - 依赖：11.1–11.6 全部通过
+  - _验收：flag=on 后新模板与编辑保存一律 nodes；legacy 仅服务历史实例；dev 后端/前端/灰度/回滚/prod 拦截各一次通过_
+  - _验收：任一环节异常，flag=off 秒回 legacy，已存 nodes 数据保留（回滚方案）_
+  - 落地：release .env 置 flag=on；手动回归清单 + off/on 对比结论记录备注
+  - 单测：否（发布环境手工回归，勾选时附证据）
+
+- [ ] 11.8（N7）观察一个发布周期后清理 legacy 分支与运行期 `PIPELINE_STAGES` 硬编码（非阻塞）
+  - 依赖：11.7 + 观察一个发布周期
+  - _验收：清理后新建/编辑不再走 9 阶段常量分派；历史实例仍只读展示（显示层保留 stage→label）_
+  - 落地：`pipeline.service.ts` 删 legacy loop/commandMode 兼容/运行期 PIPELINE_STAGES 依赖；entity 收敛 PIPELINE_STAGES 为显示元数据；step-registry 保留 nodes 执行体
+  - 单测：是（清理后全量 jest + lint）
+
+### S11 需先核对清单（2026-09-09，plan-agent 只读核实）
+
+1. **S9/S10 缺席**：v4 `PIPELINE_SCRIPT_MODE` 无代码实现；off 基线以当前混合态代码为准。
+2. **git vs pull**：design §14.4 写 platform/git，代码仍是 pull（注册表/PIPELINE_STAGES/CONFIGURABLE_STAGES 均含 pull）；nodes 路径需把 git 映射到现有 pull 执行器；存量 stage='pull' 模块命令在 v5 下失效（git 不可覆盖），需定处置。
+3. **watchdog 空跑**：optional 跳过叠加 watchdog 时，探活节点未配脚本会被静默跳过且自动回滚消失；探活 watchdog 脚本来源需在 11.5/11.7 定案。
+4. **进度快照**：submit 现写死 `stage:'check'` + `total:PIPELINE_STAGES.length`；nodes 实例须首节点/`nodes.length`，历史行数值不迁移。
+5. **动态 key 读取**：scriptView 仍按固定 9 阶段组装；任意 script key 的 actions 读写需 11.2 补后端路径、11.4 同步前端。
+6. **保存语义**：旧模板"编辑即转 nodes"与"N6 后 legacy 仅服务历史实例"之间，旧模板被新提交引用的惰性转换 vs 拒绝存在二义，以 11.5 惰性转换 + 11.7 实证为准。

@@ -40,6 +40,10 @@ export class DeployPipelineTemplateEntity {
   @Column({ type: 'json', nullable: true, comment: '活动阶段子集（null=全量；可重排，须满足语义约束）' })
   steps?: string[] | null;
 
+  /** v5 节点序列：null=legacy（按 steps 语义走九阶段）；非 null=git/version/pointer 平台节点 + 自定义 script 节点 */
+  @Column({ type: 'json', nullable: true, comment: 'v5 节点序列（null=legacy 九阶段；platform+script）' })
+  nodes?: import('../pipeline-template/template-node').TemplateNode[] | null;
+
   /** verify 失败自动回滚：previous=回滚上一版本（默认）；none=不回滚 */
   @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚 previous/none' })
   rollbackOnFailure: 'previous' | 'none';
