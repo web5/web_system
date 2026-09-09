@@ -33,6 +33,30 @@ describe('StageCommandService', () => {
     service = moduleRef.get(StageCommandService);
   });
 
+  describe('getRow（v5：按 script 节点 key 读完整配置）', () => {
+    it('返回完整行（含 actions），未配置返回 null', async () => {
+      repo.findOne.mockResolvedValue({
+        moduleKey: 'auth-service',
+        stage: 'notify',
+        command: 'echo done',
+        actions: [{ id: 'a1', type: 'shell', name: '通知', code: 'echo done' }],
+        enabled: true,
+        timeoutSec: 30,
+      } as any);
+      const row = await service.getRow('auth-service', 'notify');
+      expect(row?.stage).toBe('notify');
+      expect(row?.actions).toHaveLength(1);
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { moduleKey: 'auth-service', stage: 'notify' },
+      });
+    });
+
+    it('不存在返回 null', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.getRow('auth-service', 'smoke')).resolves.toBeNull();
+    });
+  });
+
   describe('resolve', () => {
     it('未配置命令时返回 null', async () => {
       repo.findOne.mockResolvedValue(null);
@@ -191,12 +215,32 @@ describe('StageCommandService', () => {
     });
   });
 
-  describe('upsert', () => {
-    it('version/pointer 阶段不可配置（发布语义真相源）', async () => {
+  describe('upsert（v5：任意 script 节点 key 可配）', () => {
+    it('自定义 script key（notify）可保存（非 9 阶段白名单）', async () => {
+      repo.findOne.mockResolvedValue(null);
+      repo.create.mockReturnValue({
+        moduleKey: 'auth-service',
+        stage: 'notify',
+        command: 'echo done',
+        enabled: true,
+      });
+      repo.save.mockImplementation(async (row) => row);
+      const row = await service.upsert('auth-service', 'notify', 'echo done', 'alice');
+      expect(repo.create).toHaveBeenCalled();
+      expect(row.stage).toBe('notify');
+    });
+
+    it('platform 保留字 git/version/pointer 与非法格式拒绝（发布语义真相源 + key 规则）', async () => {
+      await expect(service.upsert('auth-service', 'git', 'echo hi')).rejects.toThrow(
+        BadRequestException,
+      );
       await expect(service.upsert('auth-service', 'version', 'echo hi')).rejects.toThrow(
         BadRequestException,
       );
       await expect(service.upsert('auth-service', 'pointer', 'echo hi')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.upsert('auth-service', 'bad key!', 'echo hi')).rejects.toThrow(
         BadRequestException,
       );
     });
