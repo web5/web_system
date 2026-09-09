@@ -954,3 +954,164 @@ WHERE p.template_id IS NOT NULL;
 - 当读取到 `name` 为空的历史流水线时，页面应显示模块名而非空白。
 - 当修改某流水线名称时，该流水线下的全部实例在列表与详情中应显示新名称。
 - 当同一模块存在多条流水线（如「admin」与「admin-快线」）时，名称应可区分且均可改名。
+
+---
+
+## 14) v5 修订（2026-09-09）：流水线开放化 —— 内核 = git + 版本，其余全部为自定义脚本节点
+
+> 用户决策（2026-09-09）：**「内置应该只有 git 和写版本号两个节点，其他都是自定义的。」**
+> 拍板（按 AI 推荐执行）：
+> ① verify 探活不再作为平台内置锚点，改为**模板节点级 `watchdog` 标记**：标记为 watchdog 的节点失败即触发
+>    自动回滚（默认模板仍把「探活」节点标上，用户删掉它 = 显式放弃自动回滚）；
+> ② 自定义节点脚本挂 **「模块 × 节点 key」级**（模板全局化被多模块共用，节点本体在模板、命令按模块配）；
+> ③ 节点 `optional` 开关决定未配脚本时行为：可选=跳过+warning（默认），必配=fail-fast。
+
+### 14.1 目标形态
+
+```
+平台托管（platform，不可编辑 · 只可开关 · 不可增删）
+  ├─ git 拉取（原 pull 阶段语义：fetch/checkout/reset/clean + 发布锁 + hook 扩展）
+  └─ 写版本号 = version（写版本表）+ pointer（切指针/灰度）   ← 发布语义真相源
+用户自定义（script，节点可增/删/排序，执行体 = 模块×节点 key 的操作序列）
+  build / upload / restart / verify / cleanup / check / 任意新增（跑测试、发通知……）
+平台横切（不属于任何节点，永远生效）
+  安全基线上提 submit（类型/prod 分支/白名单/reuseArtifact）· 配置注入 · 发布锁
+  · 日志分段 · 取消 · 审计 · 通知 · 度量 · watchdog 失败自动回滚
+```
+
+**与 v4 的本质差异**：v4 仍是"固定 9 阶段，命令可覆盖"；v5 把**节点集合本身**开放——
+模板不再只有 9 个固定槽位，而是一条 `nodes[]`，其中 platform 节点不可编辑，其余全是用户拼的脚本节点。
+"平台不懂业务"从"执行体可覆盖"推进到"节点结构也可编排"。
+
+### 14.2 演进脉络（为何现在做）
+
+| 阶段 | 内核 | 用户可动 |
+|---|---|---|
+| v1 | executor 内置一切 | 只能选模块 |
+| v3/S1 | 阶段命令化 | 覆盖阶段命令 |
+| v4 | + 多操作 actions | 节点内 1..N 操作 |
+| **v5** | **+ 节点可增删排序** | **整个流水线形状** |
+
+v4 已把"怎么干"交还用户；v5 把"干哪几步、顺序如何"也交还。剩下唯一平台不可让渡的是
+**发布语义**：拉代码（git）与记版本/切指针（version/pointer）——这两件事脚本化会在历史中
+反复造成"版本标签与代码不一致""写错库""回滚找不到锚点"这类静默事故，故仍平台托管。
+
+### 14.3 数据模型
+
+#### 14.3.1 模板节点（替换现有 steps 语义；兼容保留 steps 字段）
+
+`deploy_pipeline_templates` 新增 `nodes`（json，`TemplateNode[] | null`；null=旧 steps 兼容回退）：
+
+```ts
+type TemplateNode =
+  | { kind: 'platform'; key: 'git' | 'version' | 'pointer'; label?: string } // 不可编辑/增删
+  | {
+      kind: 'script'
+      key: string                    // 节点唯一 key（也是模块 stage_commands 的 stage，如 'build'/'notify'）
+      label: string                  // 展示名
+      optional?: boolean             // 未配脚本：默认 false=必配 fail-fast；true=跳过+warning
+      watchdog?: boolean             // 该节点失败触发自动回滚（取代"仅 verify 触发"）；默认模板探活节点 = true
+      timeoutSec?: number            // 节点级默认超时（可被模块 actions 覆盖）
+    }
+```
+
+- 约束：`key` 全局唯一（`^[A-Za-z0-9_-]{1,32}$`）；platform 三节点 **必须全部存在且相对序为
+  git → version → pointer**（version 记录当前线上版本在 pointer 之前，pointer 为收尾语义）；
+  script 节点插在 git 之后、version 之前之间任意位置（即业务动作都发生在"拉完码、记版本前"；
+  若确有"记版本后再通知"需求，watchdog 节点仍允许在 version/pointer 之后）。
+- 兼容：旧模板无 `nodes` 时，运行时按 legacy 规则解析（9 阶段 + `steps` 子集 + `skipVerify`），
+  **存量数据零迁移可跑**；前端编辑态对旧模板展示"9 阶段（经典）"，一旦用户点保存即落为新 nodes 结构。
+
+#### 14.3.2 模块命令（仅去白名单，结构不变）
+
+`deploy_module_stage_commands`：删除 `CONFIGURABLE_STAGES` 白名单（upsert 校验改为"非 platform 保留字即可"），
+`stage` 从"9 个固定枚举"放开为"任意 script 节点 key"。结构与 `actions` 多操作**不变**——
+v5 的 script 节点执行 = 完全复用现有 `runStageCommand` 路径。
+
+#### 14.3.3 实例快照
+
+`deploy_pipelines` 新增 `nodes` 快照（提交时复制模板 nodes）；运行时以实例快照为准（模板后续改动不影响运行中实例）。
+
+### 14.4 执行语义（engine 改动点）
+
+`run()` 循环不再用 `PIPELINE_STAGES` 索引，改为遍历 `p.nodes`：
+
+| 节点 | 分派 | 行为 |
+|---|---|---|
+| platform/git | 内置 | 拉码（reuseArtifact 跳过），不可被命令覆盖 |
+| platform/version | 内置 | 执行前捕获 `prevVersion`（自动回滚目标）；写版本表 |
+| platform/pointer | 内置 | 切指针/灰度规则；backend 跳过 |
+| script | `runStageCommand(key)` | 取模块 `stage_commands(key).actions` 逐操作执行；空且 optional=false → fail-fast；空且 optional=true → 记 `[key] 未配置脚本，已跳过（optional）` 继续 |
+| script + watchdog | 同上 | 失败时（且非 optional 跳过）→ 触发自动回滚（走现有 `startRollback` 链路） |
+
+- **回滚锚点迁移**：现状 `if (p.stage === 'verify' && ...)` 改为 `if (watchNodeFailed && prevVersion && rollbackOnFailure !== 'none')`。
+  `watchNodeFailed` = 实例快照中 `watchdog=true` 的节点（默认模板为「探活」）失败。
+- `enterStage` 的进度计数 `current/total` 从 `PIPELINE_STAGES` 改为 `nodes.length`。
+- 取消/锁/审计/通知/度量的"阶段"维度全部以节点 key 为准，不依赖 9 常量。
+
+### 14.5 顺序约束（normalize 升级）
+
+放开"仅内置 9 阶段"校验，改为对 nodes 的校验：
+
+1. platform 三节点必须存在；相对序 git → version → pointer 不可逆；
+2. script 节点 `key` 不与他人重复、不与 platform 保留字冲突；
+3. watchdog 节点若存在，只允许 1 个（探活类节点）；
+4. 任意 script 节点都允许被删除（不再有 check/build/upload/restart/verify/cleanup 强制保留——
+   安全基线与失败重试语义已由 submit + watchdog + rollback 策略接管）。
+
+> 风险提示（显式写进 UI）：删掉「探活/watchdog」= 发布不再自动回滚；删掉「构建」= 后端无产物
+> 上架（若该模块确实用上传旧产物或 reuseArtifact 可接受）。平台在这些删除时给出 warning，不阻断。
+
+### 14.6 迁移路径（顺序不可颠倒）
+
+| # | 步骤 | 闸口 |
+|---|---|---|
+| N0 | 加 feature flag `PIPELINE_V5_NODES`（默认 off = legacy 9 阶段路径） | — |
+| N1 | entity 加 `nodes` 列 + DTO/API 收 nodes；`normalizeNodes` 校验（§14.5） | 单测：合法/非法 nodes 集合 |
+| N2 | module stage_commands 去掉白名单（非 platform 保留字即可） | 存量用例全绿 |
+| N3 | engine：遍历 nodes 分派；`watchdog` 回滚锚点；进度按 nodes.length | jest：platform/script/optional/watchdog 全路径 |
+| N4 | 前端：编辑态支持"添加 script 节点"（key+label+optional+watchdog）+ 拖拽重排 + 删除（platform 灰） | vue-tsc 0 错 |
+| N5 | 保存时把旧 9 阶段模板一次性转 nodes（git/version/pointer=platform；其余按现有 steps+skipVerify 生成 script） | 回填后列表无异常 |
+| N6 | flag `on`：新模板/编辑保存一律 nodes；legacy 读路径仅服务历史实例 | dev 实发前端+后端+灰度+回滚 |
+| N7 | 观察一个发布周期后删 legacy 分支与 `PIPELINE_STAGES` 硬编码 | — |
+
+**回滚方案**：N0–N6 任一环节出问题，`PIPELINE_V5_NODES=off` 秒回 legacy；已存 nodes 模板数据保留不删。
+
+### 14.7 风险与缓解
+
+| 风险 | 缓解 |
+|---|---|
+| 用户删掉 watchdog/构建导致发布裸奔 | 删除时 warning（不阻断）+ 实例快照留痕可追溯 |
+| nodes 结构扩散到旧数据 | legacy 兼容路径 + flag 开关，无一次性全量迁移 |
+| "任意脚本节点"误操作面扩大 | 与 v4 相同边界：仅 JWT 可写、`bash -n` 校验、审计留痕 |
+| 回滚锚点从"verify 固定"变"watchdog 标记"，旧模板行为漂移 | 默认模板生成时探活节点标 watchdog=true，行为与 legacy 一致 |
+| script 节点 key 与模块 stage_commands 对不上（改名后旧 key 残留） | 保存节点时校验该 key 无冲突；孤儿命令保留但 UI 标注"未被任何模板引用" |
+
+### 14.8 UI（编辑态画布升级）
+
+- 节点卡片类型：platform（git/版本号，橙色/紫色，锁图标不可编辑不可删）；script（灰，可编辑）。
+- 「+ 添加节点」：输入 label → 自动生成 key（slug）；可选勾选 optional / watchdog。
+- 节点选中面板：label 改名（key 不可改或改名需显式确认）+ 作用模块脚本编辑（复用 StageActionsEditor，
+  对应模块 stage_commands[key]）。
+- 删除 script 节点 = 从模板 nodes 移除（Confirm，含 §14.5 风险提示）。
+- 流程图与执行实例、opN 日志分段、history 双 Tab 均按 nodes 渲染（platform/script 视觉区分）。
+
+### 14.9 任务增量（并入 tasks.md S11）
+
+| # | 任务 | 依赖 | 落地文件 |
+|---|---|---|---|
+| 11.1 | entity `nodes` 列 + `normalizeNodes` + DTO/API（含 legacy 回退） | N1 | template entity/service/controller + spec |
+| 11.2 | module stage_commands 去白名单 + 非 platform 保留字校验 | N2 | stage-command service + spec |
+| 11.3 | engine nodes 分派 + watchdog 回滚锚点 + 进度改 nodes.length | N3 | pipeline.service + spec |
+| 11.4 | 前端编辑态"添加/删除 script 节点 + optional/watchdog 开关 + 拖拽" | N4 | PipelineDetail + stages helper |
+| 11.5 | legacy 9 阶段 → nodes 一次性转存 | N5 | 保存前迁移函数 + spec |
+| 11.6 | flag 开关 + dev 实发回归（含灰度/回滚/prod 拦截） | N6 | config + 手动回归清单 |
+
+### 14.10 验收（EARS）
+
+- 当用户新建 script 节点时，应能在流水线任意位置插入并在编辑态配置脚本；当该模块未配脚本且节点 optional=true 时，应跳过并记 warning；optional=false 时应 fail-fast。
+- 当用户在任意 script 节点上标记 watchdog 且该节点执行失败时，应自动回滚到 version 节点记录的上一版本。
+- 当用户尝试编辑/删除 platform 节点（git/version/pointer）时，应被拒绝（UI 置灰 + API 400）。
+- 当 `PIPELINE_V5_NODES=off` 时，行为应与 v4（9 阶段 + steps 子集）完全一致。
+- 当旧模板未保存过 nodes 时，历史实例与详情页应按 legacy 语义展示且可正常运行。
+- 当 script 节点失败时，实例流程图应标记该节点失败、日志按 `[key/opN]` 分段、watchdog 回滚链路应复用现有自动回滚日志与审计。
