@@ -31,6 +31,21 @@ export class AgentLogController {
   }
 
   /**
+   * 日指标（观测台数据源：成功率 / token / 成本 / 耗时趋势）
+   * GET /api/agent-runs/metrics?agentId=&startDate=&endDate=
+   */
+  @Get('metrics')
+  @RequirePermission('agents:view')
+  @ApiOperation({ summary: 'run 日指标（run_metrics）' })
+  async metrics(
+    @Query('agentId') agentId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.log.listMetrics({ agentId, startDate, endDate });
+  }
+
+  /**
    * 列出 agent runs（分页 + 过滤）
    * GET /api/agent-runs?agentId=&userId=&status=&keyword=&startAt=&endAt=&page=&pageSize=
    */

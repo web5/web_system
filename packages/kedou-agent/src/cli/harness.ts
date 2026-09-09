@@ -7,7 +7,6 @@ import {
   AgentRegistry,
   ClientRegistry,
   Compaction,
-  DeepseekClient,
   GrepSearchTool,
   Hy3Client,
   InMemoryConversationMemory,
@@ -18,6 +17,7 @@ import {
   WriteFileTool,
   BingSearchProvider,
   WsaSearchProvider,
+  TokenHubClient,
   ToolRegistry,
   WebSearchTool,
 } from '@kedouai/agent-core';
@@ -40,12 +40,12 @@ export interface Harness {
 export type ConfirmHandler = (message: string) => Promise<boolean>;
 
 export function buildHarness(confirmHandler?: ConfirmHandler): Harness {
-  // 模型客户端
+  // 模型客户端：hy3 + TokenHub 托管模型（deepseek-v4-flash 走网关托管，替代已弃用的官方直连）
   const hy3 = new Hy3Client();
-  const deepseek = new DeepseekClient();
+  const deepseekV4 = new TokenHubClient('deepseek-v4-flash');
   const clientRegistry = new ClientRegistry();
   clientRegistry.register(hy3);
-  clientRegistry.register(deepseek);
+  clientRegistry.register(deepseekV4);
 
   // 搜索 Provider（优先腾讯云 WSA，未配置则回退 Bing）
   const searchRegistry = new SearchProviderRegistry();

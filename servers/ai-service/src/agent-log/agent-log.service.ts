@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, MoreThanOrEqual, LessThanOrEqual, Between } from 'typeorm';
 import { AgentRun } from './entities/agent-run.entity';
+import { ModelPricing } from './entities/model-pricing.entity';
+import { RunMetrics } from './entities/run-metrics.entity';
 
 export interface RecordRunInput {
   agentId: string;
@@ -19,12 +21,15 @@ export interface RecordRunInput {
     args?: unknown;
     step?: number;
     ts: number;
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
   }>;
   finalAnswer?: string | null;
   error?: string | null;
   status: 'ok' | 'error';
   durationMs?: number | null;
   source?: string;
+  /** Agent 定义版本快照（Phase2.3；ai-agent 推送时填充） */
+  agentVersion?: number | null;
 }
 
 /** Agent 运行记录查询参数（admin 列表用） */
@@ -56,11 +61,18 @@ export class AgentLogService {
   constructor(
     @InjectRepository(AgentRun)
     private readonly repo: Repository<AgentRun>,
+    @InjectRepository(ModelPricing)
+    private readonly pricingRepo: Repository<ModelPricing>,
+    @InjectRepository(RunMetrics)
+    private readonly metricsRepo: Repository<RunMetrics>,
   ) {}
 
   /** 写入一次 run（失败不抛错，run 记录是辅助功能，不能影响主链路） */
   async recordRun(input: RecordRunInput): Promise<AgentRun | null> {
     try {
+      // Phase2.3/2.4：从 steps 提取 usage、按单价核算成本，并同步增量日指标
+      const usage = this.extractUsage(input.steps);
+      const cost = await this.computeCost(input.model ?? '', usage.prompt, usage.completion);
       const row = this.repo.create({
         agentId: input.agentId,
         agentName: input.agentName ?? null,
@@ -76,8 +88,15 @@ export class AgentLogService {
         status: input.status,
         durationMs: input.durationMs ?? null,
         source: input.source ?? 'ai-service',
+        agentVersion: input.agentVersion ?? null,
+        promptTokens: usage.prompt || null,
+        completionTokens: usage.completion || null,
+        totalTokens: usage.total || null,
+        cost: cost.toFixed(6),
       });
-      return await this.repo.save(row);
+      const saved = await this.repo.save(row);
+      await this.upsertDailyMetric(saved);
+      return saved;
     } catch (err) {
       this.logger.error(`记录 agent run 失败: ${(err as Error).message}`);
       return null;
@@ -175,5 +194,78 @@ export class AgentLogService {
       source: r.source,
       createdAt: r.createdAt,
     };
+  }
+
+  // ── Phase2.4：成本核算 + 每日指标聚合 ──
+
+  /** 从 steps 提取最后出现的 usage（final/summary/error 事件携带，Phase1.6 起随步骤落库） */
+  private extractUsage(
+    steps: Array<{
+      usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+    }>,
+  ): { prompt: number; completion: number; total: number } {
+    let prompt = 0;
+    let completion = 0;
+    let total = 0;
+    for (const s of steps) {
+      if (!s.usage) continue;
+      prompt = s.usage.promptTokens ?? prompt;
+      completion = s.usage.completionTokens ?? completion;
+      total = s.usage.totalTokens ?? total;
+    }
+    return { prompt, completion, total };
+  }
+
+  /** 按 model_pricing 单价核算成本（CNY；无单价记录按 0，不发明数值） */
+  private async computeCost(model: string, prompt: number, completion: number): Promise<number> {
+    if (!model) return 0;
+    try {
+      const p = await this.pricingRepo.findOne({ where: { model } });
+      if (!p) return 0;
+      const inPrice = Number(p.inputPricePer1k || 0);
+      const outPrice = Number(p.outputPricePer1k || 0);
+      return (prompt * inPrice + completion * outPrice) / 1000;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** 增量聚合当日指标（agentId+model+source+date 行；run 记录即更新，供观测台趋势） */
+  private async upsertDailyMetric(run: AgentRun): Promise<void> {
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const key = {
+        agentId: run.agentId,
+        model: run.model ?? 'unknown',
+        source: run.source ?? 'ai-service',
+        date,
+      };
+      const found = await this.metricsRepo.findOne({ where: key });
+      const inc = {
+        runCount: (found?.runCount ?? 0) + 1,
+        okCount: (found?.okCount ?? 0) + (run.status === 'ok' ? 1 : 0),
+        errorCount: (found?.errorCount ?? 0) + (run.status === 'error' ? 1 : 0),
+        totalTokens: String(Number(found?.totalTokens ?? 0) + (run.totalTokens ?? 0)),
+        totalCost: (Number(found?.totalCost ?? 0) + Number(run.cost ?? 0)).toFixed(6),
+        totalDurationMs: (found?.totalDurationMs ?? 0) + (run.durationMs ?? 0),
+      };
+      if (found) {
+        await this.metricsRepo.update(found.id, inc);
+      } else {
+        await this.metricsRepo.save(this.metricsRepo.create({ ...key, ...inc } as Partial<RunMetrics>));
+      }
+    } catch (err) {
+      this.logger.warn(`更新 run_metrics 失败: ${(err as Error).message}`);
+    }
+  }
+
+  /** 查询日指标（观测台数据源） */
+  async listMetrics(q: { agentId?: string; startDate?: string; endDate?: string }): Promise<RunMetrics[]> {
+    const where: FindOptionsWhere<RunMetrics> = {};
+    if (q.agentId) where.agentId = q.agentId;
+    if (q.startDate || q.endDate) {
+      where.date = Between(q.startDate ?? '1970-01-01', q.endDate ?? '2999-12-31') as never;
+    }
+    return this.metricsRepo.find({ where, order: { date: 'ASC' } });
   }
 }

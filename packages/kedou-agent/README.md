@@ -64,7 +64,7 @@ kedou-agent --version / --help
 | 变量 | 说明 |
 |------|------|
 | `HY3_API_KEY` / `HY3_BASE_URL` | 混元 Turbo |
-| `DEPSEEK_API_KEY` | DeepSeek |
+| `TOKENHUB_API_KEY` / `TOKENHUB_BASE_URL` | DeepSeek V4 Flash（经 TokenHub 托管；key 缺省回落 HY3_API_KEY） |
 | `BING_SEARCH_API_KEY` | Bing Web Search（web-search 默认 Provider） |
 
 > 环境变量优先级高于 `~/.kedou` 配置文件。

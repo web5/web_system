@@ -132,6 +132,8 @@ const GROUP_LABELS: Record<string, string> = {
   logs: '日志',
   mcp: 'MCP',
   agents: 'Agents',
+  database: '数据浏览',
+  knowledge: '知识库',
 };
 
 function groupLabel(g: string): string {

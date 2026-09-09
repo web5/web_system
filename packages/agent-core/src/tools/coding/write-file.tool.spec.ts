@@ -66,4 +66,12 @@ describe('WriteFileTool', () => {
     expect(r.success).toBe(false);
     expect(r.error).toContain('越界');
   });
+
+  it('toSchema 包含 mode 的 enum（enum 可达模型 payload）', () => {
+    const schema = tool.toSchema();
+    const props = schema.function.parameters.properties;
+    expect(props.path).toMatchObject({ type: 'string' });
+    expect(props.mode).toMatchObject({ type: 'string', enum: ['create', 'overwrite', 'append'] });
+    expect(schema.function.parameters.required).toEqual(['path', 'content']);
+  });
 });
