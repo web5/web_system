@@ -6,6 +6,21 @@ import {
   ToolSchema,
 } from '@kedouai/agent-core';
 import { matchByText, getByScene, getStandards, type LegalStandard } from '@web-system/shared';
+import { DictClientService } from '../../dict/dict-client.service';
+
+/**
+ * 合同场景：字典 `contract_scene` 可扩可选值（前端 chips / 入参校验），
+ * 但**法定标准库仍以此常量为准** —— 新增场景必须同时补标准库，否则该场景判定为空。
+ * 校验用「字典值 ∪ 本常量」的宽松并集，避免运维误删项导致后端拒单。
+ */
+const CODE_SCENES = [
+  'consumer-loan',
+  'car-loan',
+  'medical-insurance',
+  'car-insurance',
+  'rental',
+  'other',
+];
 
 /**
  * 合同规则判定工具：用法定标准库（尺子）扫描合同文本，识别风险信号。
@@ -15,6 +30,9 @@ import { matchByText, getByScene, getStandards, type LegalStandard } from '@web-
  */
 @Injectable()
 export class ContractRuleTool implements ToolDefinition {
+  /** dictClient 可选：e2e/脚本里直接 new 时缺省走代码常量（Nest 运行时由 DI 注入） */
+  constructor(private readonly dictClient?: DictClientService) {}
+
   readonly name = 'contract-rule';
   readonly description =
     '用法定标准库扫描合同文本，识别风险信号（利率超标、砍头息、提前还款违约金、强制搭售等）。返回命中的标准、严重度与法律依据。当用户上传合同或要求识别合同风险时使用。';
@@ -61,9 +79,11 @@ export class ContractRuleTool implements ToolDefinition {
     }
 
     const scene = String(args.scene ?? '').trim() || undefined;
-    // 校验 scene 合法性
-    const validScenes = ['consumer-loan', 'car-loan', 'medical-insurance', 'car-insurance', 'rental', 'other'];
-    if (scene && !validScenes.includes(scene)) {
+    // 校验 scene 合法性：字典 contract_scene ∪ 代码常量（宽松并集，字典只增不减有效值）
+    const allowedScenes = this.dictClient
+      ? await this.dictClient.getAllowedValues('contract_scene', CODE_SCENES)
+      : CODE_SCENES;
+    if (scene && !allowedScenes.includes(scene)) {
       return { success: false, content: '', error: `无效场景: ${scene}` };
     }
 
@@ -88,7 +108,7 @@ export class ContractRuleTool implements ToolDefinition {
     });
 
     // 3. 附上该场景可用的全部标准清单（供 LLM 参考未命中项）
-    const availableScenes = scene ? [scene, 'other'] : ['consumer-loan', 'car-loan', 'medical-insurance', 'car-insurance', 'rental', 'other'];
+    const availableScenes = scene ? [scene, 'other'] : allowedScenes;
     const available = getStandards().filter((s) => availableScenes.includes(s.scene)).map((s) => s.id);
 
     const content = JSON.stringify({

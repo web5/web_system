@@ -91,10 +91,13 @@
       <a-row :gutter="16">
         <a-col :span="8">
           <a-form-item label="模型">
-            <a-select v-model:value="form.model">
-              <a-select-option value="hy3">hy3（混元）</a-select-option>
-              <a-select-option value="deepseek">deepseek</a-select-option>
-            </a-select>
+            <a-select
+              v-model:value="form.model"
+              show-search
+              option-filter-prop="label"
+              :options="modelOptions"
+              placeholder="从字典 llm_models 选择"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="8">
@@ -200,6 +203,7 @@ import {
 } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
 import CapabilityConfigurator from './CapabilityConfigurator.vue';
+import { fetchDictItems } from '@/api/dict';
 
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('agents:manage');
@@ -226,6 +230,25 @@ const defaultForm = (): SaveAgentDefPayload => ({
   streaming: true,
 });
 const form = reactive<SaveAgentDefPayload>(defaultForm());
+
+/**
+ * 模型下拉来自字典 llm_models（可用性以字典为准），hy3 由专用通道承载固定列出。
+ * 字典不可用时只保留 hy3，避免把过时的硬编码值继续写进 Agent 定义。
+ */
+const modelOptions = ref<Array<{ value: string; label: string }>>([{ value: 'hy3', label: 'hy3（混元）' }]);
+async function loadModelOptions(): Promise<void> {
+  try {
+    const res = await fetchDictItems('llm_models', { pageSize: 200 });
+    modelOptions.value = [
+      { value: 'hy3', label: 'hy3（混元）' },
+      ...res.items
+        .filter((i) => i.enabled && i.value !== 'hy3')
+        .map((i) => ({ value: i.value, label: `${i.label}（${i.value}）` })),
+    ];
+  } catch {
+    /* 保持兜底：只列 hy3 */
+  }
+}
 
 const columns = [
   { title: 'ID', dataIndex: 'id' },
@@ -367,5 +390,8 @@ async function rollback(ver: AgentDefVersion) {
   }
 }
 
-onMounted(reload);
+onMounted(() => {
+  void reload();
+  void loadModelOptions();
+});
 </script>

@@ -244,13 +244,13 @@
                 <a-space :size="12" wrap>
                   <a-range-picker v-model:value="logFilter.dateRange" />
                   <a-input v-model:value="logFilter.operator" placeholder="操作人" style="width: 140px" allow-clear />
-                  <a-select v-model:value="logFilter.type" style="width: 130px" allow-clear placeholder="全部类型">
-                    <a-select-option value="login">登录</a-select-option>
-                    <a-select-option value="logout">退出</a-select-option>
-                    <a-select-option value="update_setting">修改设置</a-select-option>
-                    <a-select-option value="create_user">创建用户</a-select-option>
-                    <a-select-option value="delete">删除</a-select-option>
-                  </a-select>
+                  <a-select
+                    v-model:value="logFilter.type"
+                    style="width: 150px"
+                    allow-clear
+                    placeholder="全部类型"
+                    :options="logTypeOptions"
+                  />
                   <a-button type="primary" @click="searchLogs">查询</a-button>
                 </a-space>
               </div>
@@ -281,6 +281,20 @@ import {
   MailOutlined, CloudOutlined, FileSearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import { getSettings, updateSettings, getLogs } from '@/api/settings';
+import { fetchDictItems } from '@/api/dict';
+
+/** 操作日志类型下拉来自字典 operation_log_type（写入端与筛选共用同一取值） */
+const logTypeOptions = ref<Array<{ value: string; label: string }>>([]);
+async function loadLogTypeOptions(): Promise<void> {
+  try {
+    const res = await fetchDictItems('operation_log_type', { pageSize: 100 });
+    logTypeOptions.value = res.items
+      .filter((i) => i.enabled)
+      .map((i) => ({ value: i.value, label: i.label }));
+  } catch {
+    /* 字典不可用时保持空下拉，仍可按操作人/时间查询 */
+  }
+}
 
 const tab = ref('basic');
 const savingBasic = ref(false);
@@ -416,6 +430,7 @@ onMounted(async () => {
     if (cfg[KEY.dailyTransformLimit]) quota.dailyTransformLimit = parseInt(cfg[KEY.dailyTransformLimit]);
   } catch { /* server may not be ready */ }
   searchLogs();
+  void loadLogTypeOptions();
 });
 </script>
 

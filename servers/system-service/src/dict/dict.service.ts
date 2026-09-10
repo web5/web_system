@@ -25,6 +25,18 @@ interface BuiltinDict {
   description: string;
   sort: number;
   fields: DictFieldDto[];
+  /**
+   * 初始数据行：**仅在该字典还没有任何 item 时**插入一次（幂等，不覆盖人工改动）。
+   * llm_models 刻意不预置（内容随业务变化，由运维维护）；而
+   * contract_scene / contract_risk_level / operation_log_type 是从代码常量迁移过来的，
+   * 不预置会让迁移期前端下拉直接空掉。
+   */
+  seedItems?: ReadonlyArray<{
+    value: string;
+    label: string;
+    attrs?: Record<string, DictAttrValue>;
+    sort?: number;
+  }>;
 }
 
 const BUILTIN_DICTS: readonly BuiltinDict[] = [
@@ -38,6 +50,53 @@ const BUILTIN_DICTS: readonly BuiltinDict[] = [
       { name: 'context_window', label: '上下文窗口(token)', type: 'number', length: 12, sort: 20 },
       { name: 'supports_vision', label: '支持视觉', type: 'boolean', sort: 30 },
       { name: 'note', label: '备注', type: 'text', length: 200, sort: 40 },
+    ],
+  },
+  {
+    code: 'contract_scene',
+    name: '合同场景',
+    description: '合同翻译官可选场景。⚠️ 新增场景需同时补法定标准库，否则该场景下判定结果为空',
+    sort: 20,
+    fields: [
+      { name: 'hint', label: '选择提示', type: 'string', length: 64, sort: 10 },
+    ],
+    seedItems: [
+      { value: 'consumer-loan', label: '消费贷', attrs: { hint: '网贷 / 消费分期' }, sort: 10 },
+      { value: 'car-loan', label: '车贷', attrs: { hint: '购车分期' }, sort: 20 },
+      { value: 'medical-insurance', label: '医疗险', attrs: { hint: '健康 / 医疗类保险' }, sort: 30 },
+      { value: 'car-insurance', label: '车险', attrs: { hint: '车辆保险' }, sort: 40 },
+      { value: 'rental', label: '租赁', attrs: { hint: '租房 / 设备租赁' }, sort: 50 },
+      { value: 'other', label: '其他', attrs: {}, sort: 90 },
+    ],
+  },
+  {
+    code: 'contract_risk_level',
+    name: '合同风险等级',
+    description: '风险信号严重度（展示用：文案、颜色、排序）；判定逻辑与计分公式仍在代码里',
+    sort: 30,
+    fields: [
+      { name: 'color', label: '配色语义', type: 'enum', options: ['danger', 'warn', 'ok'], sort: 10 },
+      { name: 'icon', label: '图标名', type: 'string', length: 32, sort: 20 },
+      { name: 'weight', label: '计入权重', type: 'number', length: 4, sort: 30 },
+    ],
+    seedItems: [
+      { value: 'danger', label: '高风险', attrs: { color: 'danger', icon: 'alert', weight: 20 }, sort: 10 },
+      { value: 'warn', label: '需关注', attrs: { color: 'warn', icon: 'warning', weight: 10 }, sort: 20 },
+      { value: 'ok', label: '正常', attrs: { color: 'ok', icon: 'check', weight: 0 }, sort: 30 },
+    ],
+  },
+  {
+    code: 'operation_log_type',
+    name: '操作日志类型',
+    description: 'admin 操作日志的 type 取值（写入端与筛选下拉共用）',
+    sort: 40,
+    fields: [],
+    seedItems: [
+      { value: 'login', label: '登录', sort: 10 },
+      { value: 'logout', label: '退出', sort: 20 },
+      { value: 'update_setting', label: '修改设置', sort: 30 },
+      { value: 'create_user', label: '创建用户', sort: 40 },
+      { value: 'delete', label: '删除', sort: 50 },
     ],
   },
 ];
@@ -84,9 +143,29 @@ export class DictService implements OnModuleInit {
         await this.typeRepo.save(type);
       }
       const existing = await this.fieldRepo.count({ where: { typeCode: d.code } });
-      if (existing === 0) {
+      if (existing === 0 && d.fields.length) {
         await this.fieldRepo.save(d.fields.map((f) => this.fieldRepo.create({ ...f, typeCode: d.code })));
         this.logger.log(`补齐内置字典字段: ${d.code} (${d.fields.length})`);
+      }
+
+      // 初始数据：仅在该字典一条 item 都没有时插入一次（不覆盖人工改动）
+      if (d.seedItems?.length) {
+        const itemCount = await this.itemRepo.count({ where: { typeCode: d.code } });
+        if (itemCount === 0) {
+          await this.itemRepo.save(
+            d.seedItems.map((it) =>
+              this.itemRepo.create({
+                typeCode: d.code,
+                value: it.value,
+                label: it.label,
+                attrs: it.attrs ?? null,
+                sort: it.sort ?? 0,
+                enabled: true,
+              }),
+            ),
+          );
+          this.logger.log(`补齐内置字典初始数据: ${d.code} (${d.seedItems.length})`);
+        }
       }
     }
   }
