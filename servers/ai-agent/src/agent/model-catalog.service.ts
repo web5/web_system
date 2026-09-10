@@ -153,20 +153,30 @@ export class ModelCatalogService {
   /**
    * 用最新清单重建注册表。
    * 刻意 clear 后回填而非换实例：ClientRegistry 被 AgentEngine 等按引用注入。
-   * hy3 由 Hy3Client 单独承载，不参与字典清单，每轮都要补回。
+   * hy3 由 Hy3Client 单独承载，每轮先补回；清单里若混入 'hy3' 必须跳过——
+   * ClientRegistry 以 modelId 为 key，注册 TokenHubClient('hy3') 会**覆盖** Hy3Client。
    */
   private apply(models: string[], source: ModelSource): void {
+    const WIRE_CLIENT_MODELS = new Set(['hy3']);
+    const wireOnly = models.filter((m) => WIRE_CLIENT_MODELS.has(m));
+    if (wireOnly.length) {
+      this.logger.warn(
+        `清单中的 ${wireOnly.join(', ')} 由专用 client 承载（非 TokenHub），已忽略以免覆盖注册`,
+      );
+    }
+    const effective = models.filter((m) => !WIRE_CLIENT_MODELS.has(m));
+
     this.registry.clear();
     this.registry.register(new Hy3Client());
-    for (const m of models) {
+    for (const m of effective) {
       this.registry.register(new TokenHubClient(m));
     }
     const changed =
-      this.state.source !== source || this.state.models.join(',') !== models.join(',');
-    this.state = { source, models, lastSyncAt: new Date().toISOString() };
+      this.state.source !== source || this.state.models.join(',') !== effective.join(',');
+    this.state = { source, models: effective, lastSyncAt: new Date().toISOString() };
     if (changed) {
       this.logger.log(
-        `模型清单已更新：来源=${source}、共 ${models.length} 个（hy3 + ${models.join(', ') || '无'}）`,
+        `模型清单已更新：来源=${source}、共 ${effective.length} 个（hy3 + ${effective.join(', ') || '无'}）`,
       );
     }
   }
