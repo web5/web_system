@@ -33,7 +33,7 @@
 |---|---|---|
 | 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
 | 后端 | NestJS 10 + TypeORM + MySQL（本地）/ PostgreSQL（生产） | 每个微服务独立数据库，全部 TS strict |
-| 小程序 | 微信原生 + TS | `apps/mini-app` |
+| 小程序 | 微信原生 + TS | `apps/mini-contract` |
 | 共享包 | shared / types / shell-loader / ui / agent-core / kedou-agent | `packages/`，跨端配置一律收口到 `@web-system/shared` |
 | 部署 | pm2 + Docker Compose + Nginx + 自研发布平台（deploy-console） | 发布见 §4 |
 
@@ -41,7 +41,7 @@
 
 ```
 web_system/
-├── apps/        # 前端：shell(基座) admin portal mini-app deploy-console(独立 SPA)
+├── apps/        # 前端：shell(基座) admin portal mini-contract(小程序,约定 mini-<业务>) deploy-console(独立 SPA)
 ├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
 ├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
@@ -102,7 +102,7 @@ cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
 ### 2.1 分层架构（总图见 `docs/development-guide.md` §1）
 
 ```
-前端 apps/（shell 基座 + portal/admin 模块 + mini-app + deploy-console SPA）
+前端 apps/（shell 基座 + portal/admin 模块 + mini-contract + deploy-console SPA）
         │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
 Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基座 + 版本分发/灰度
 后端 servers/（auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console）
@@ -138,7 +138,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | portal | apps/portal | 微前端模块 | http://localhost:5173/portal/ |
 | admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
 | deploy-console | apps/deploy-console | 独立 SPA（运维） | deploy-console 后端 serve（6200/console/） |
-| mini-app | apps/mini-app | 微信小程序 | 独立上传 |
+| mini-contract | apps/mini-contract | 微信小程序 | 独立上传 |
 
 ### 2.4 共享包（packages/）
 
@@ -378,7 +378,7 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 
 - **admin 系（deploy-console/admin/mcp-admin）UI 数值以 `packages/ui/src/tokens.ts` 为准**（DR-3 主橙 `#F97316`，平台段）
 - 平台（暗色）：主色 `#f97316` / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
-- 变变产品（暖色）：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` / 文字 `#333333` —— 品牌色只用于 portal/mini-app，不套用 admin UI 规范（DR-5）
+- 变变产品（暖色）：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` / 文字 `#333333` —— 品牌色只用于 portal/mini-contract，不套用 admin UI 规范（DR-5）
 
 ### 5.5 详细说明入口
 

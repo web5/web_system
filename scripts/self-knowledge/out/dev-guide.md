@@ -24,7 +24,7 @@
 | 归档（日常不读） | `archive/geist-token-需求文档.md` | Token 改造需求 + **DR 决策表（§9）** | 改 Token 体系 / 查裁决时 |
 | 归档（日常不读） | `archive/geist-token-实现文档.md` | 改造实现细节（含 §5.4 回流模板） | 溯源 / 体系改造时 |
 | 决策参考 | `rag-evaluation.md` | AI 文档读取是否建 RAG 的决策记录 | 讨论文档读取架构时 |
-| 参考（C 端品牌，勿套 admin） | `ui-design-spec.html` | 变变品牌视觉规范（Claymorphism） | 只做 portal/mini-app 时 |
+| 参考（C 端品牌，勿套 admin） | `ui-design-spec.html` | 变变品牌视觉规范（Claymorphism） | 只做 portal/mini-contract 时 |
 
 > ⚠️ `ui-design-spec.html`（#FF8C42 暖橙）是**品牌端**规范；admin 系数值以 `packages/ui/src/tokens.ts` 为准（DR-3 #F97316）。两套并行，勿混用。
 

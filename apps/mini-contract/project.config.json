@@ -1,5 +1,5 @@
 {
-  "description": "科豆 AI 对话小程序",
+  "description": "合同翻译官小程序",
   "packOptions": {
     "ignore": [],
     "include": []
@@ -51,7 +51,7 @@
   "compileType": "miniprogram",
   "libVersion": "3.3.4",
   "appid": "wxe7635bce95e7cff0",
-  "projectname": "mini-app",
+  "projectname": "mini-contract",
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",

@@ -97,7 +97,7 @@ version: 1.0.0
 |------|------|------|
 | portal | 5173 | Vue3 + AntdV 4.x |
 | admin-web | 5174 | Vue3 + AntdV 4.x |
-| mini-app | - | 微信小程序 |
+| mini-contract | - | 微信小程序 |
 
 ---
 

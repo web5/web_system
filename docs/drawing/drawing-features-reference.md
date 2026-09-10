@@ -35,7 +35,7 @@
 ## 2. 文件结构
 
 ```
-apps/mini-app/
+apps/mini-contract/
 ├── app.json                          # 页面注册
 ├── app.ts                             # 全局入口
 ├── pages/

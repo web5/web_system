@@ -42,7 +42,7 @@ agents:cost:view
 | 链路 | 路径 | 经过 Agent 编排？ |
 |---|---|---|
 | portal AI 助手 `/portal/chat` | `/api/ai/*` | ❌ 纯 LLM 对话 |
-| admin Playground / mini-app 合同 | `/api/ai-agent/*` | ✅ ReAct 编排 |
+| admin Playground / mini-contract 合同 | `/api/ai-agent/*` | ✅ ReAct 编排 |
 
 ---
 
@@ -50,7 +50,7 @@ agents:cost:view
 
 ```
 ┌─ 体验层 ───────────────────────────────────────────────────────┐
-│ admin「Agents」菜单 8 页 │ portal /chat │ mini-app 合同 │ kedou-agent CLI │
+│ admin「Agents」菜单 8 页 │ portal /chat │ mini-contract │ kedou-agent CLI │
 └────────────────────────────────────────────────────────────────┘
         │  /api/*  统一经 gateway:6000 反代，前端不直连后端
 ┌─ 管控层 · servers/ai-service:6003 ──────────────────────────────┐
@@ -133,7 +133,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 
 | 方法 | 外部路径 | 权限 | 用途 |
 |---|---|---|---|
-| POST | `/api/ai-agent/agent/run` | 登录 | **C 端 SSE 运行**（mini-app 在用） |
+| POST | `/api/ai-agent/agent/run` | 登录 | **C 端 SSE 运行**（mini-contract 在用） |
 | POST | `/api/ai-agent/agent/admin-run` | `agents:debug` | Playground 调试运行，额外返回定义快照 |
 | GET | `/api/ai-agent/agent/models` | `agents:debug` | 已注册模型 + 可用性 |
 | POST | `/api/ai-agent/agent/permission/:requestId` | 登录 | 危险工具二次确认 `{approve}` |
@@ -223,14 +223,14 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | 10 | 模型单价 | `/admin/settings/models` | `agents:cost:view` | `ModelPricingPage.vue` | 配合观测台核成本 |
 
 > 📌 菜单「运行记录」指向 `/agents`（概览页），真正的 run 列表需**从概览页点进某个 agent**。
-> 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-app/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
+> 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-contract/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
 
 **门户与小程序入口**
 
 | 入口 | 位置 | 走的链路 |
 |---|---|---|
 | AI 助手 | `/portal/chat`，导航栏「AI 助手」触发器在 `AppNavbar.vue` | `/api/ai/*`（**不经过 agent 编排**，源码注释标注为「保留旧页面兼容」） |
-| 合同风险 / OCR | `apps/mini-app` | `/api/ai-agent/*`（真编排） |
+| 合同风险 / OCR | `apps/mini-contract` | `/api/ai-agent/*`（真编排） |
 
 ---
 
@@ -273,7 +273,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 
 ## 7. 坑与易混淆点（按踩坑频率排序）
 
-1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-app 才走 `/api/ai-agent/*`。报问题时先分清。
+1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-contract 才走 `/api/ai-agent/*`。报问题时先分清。
 2. **菜单看不见** —— 100% 是权限。到 `/admin/settings/roles` 补 §0 的权限码；忘记密码 `bash scripts/local-up.sh --seed`（admin / admin123）。
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `.codebuddy/CODEBUDDY.md` §4.1。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
