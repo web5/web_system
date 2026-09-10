@@ -36,6 +36,22 @@ export function getMyPermissions(): Promise<string[]> {
   return request.get('/permissions/my');
 }
 
+export interface SyncPermissionResult {
+  permissionsAdded: number;
+  permissionsUpdated: number;
+  rolesAdded: number;
+  rolePermissionsCovered: number;
+}
+
+/**
+ * 同步权限点（以代码声明为准；幂等）。
+ * 用途：新增了权限码但前端菜单不出现时，点一下即可，无需重启 user-service。
+ * ⚠️ 会全量覆盖**内置角色**的权限（自定义角色不受影响）。
+ */
+export function syncPermissions(): Promise<SyncPermissionResult> {
+  return request.post('/admin/permissions/sync');
+}
+
 /** 权限点全量（按 group 分组） */
 export function listPermissions(): Promise<PermissionGroup[]> {
   return request.get('/admin/permissions');
