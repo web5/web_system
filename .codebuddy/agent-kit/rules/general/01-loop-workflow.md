@@ -10,3 +10,14 @@
 - 复盘（maintain）：收集反馈，形成下一轮 intent。
 
 每个产物独立可追溯，阶段间通过产物衔接而非口头传递。
+
+## 判定手段
+
+- 产物存在性：`scripts/check-artifacts.sh <工作区目录>`（按 `evals/golden-tasks/T*.md` 期望产物清单核对落盘率）。
+- 阶段衔接：下一阶段必须读上一阶段的落盘产物；由 L4 任务卡 D2（流程遵循）独立 judge 判定。
+
+## 不适用
+
+- 单步可完成的问答 / 探索（无中间产物），但结论仍须按 `03-versioned-artifacts.md` 落盘。
+
+> 为什么是这五个阶段：见 [`RATIONALE.md`](RATIONALE.md) §1。
