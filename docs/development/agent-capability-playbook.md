@@ -277,6 +277,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 
 1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-contract 才走 `/api/ai-agent/*`。报问题时先分清。
 2. **菜单看不见** —— 100% 是权限。到 `/admin/settings/roles` 补 §0 的权限码；忘记密码 `bash scripts/local-up.sh --seed`（admin / admin123）。
+   ⚠️ **新增权限码后菜单仍不出现**：权限点是 `PermissionService.seed()` 在 **user-service 启动时**从 `packages/types` 的 `PERMISSIONS` 写入 DB 的（内置角色权限按 `ROLE_PERMISSIONS` 全量覆盖）；前端菜单读 `/api/permissions/my`（走 DB）。所以**改完权限码必须重启 `web-user`**，否则后端鉴权（用代码常量）已放行、前端却看不到入口。
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `.codebuddy/CODEBUDDY.md` §4.1。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
 5. **「数字人」≠ 产品功能** —— `.codebuddy/agent-kit/` 是给 AI 用的开发侧方法论（11 skill + 5 红线），没有前端页面。面向用户的概念统一叫 Agent。
