@@ -202,6 +202,8 @@ AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工�
 
 可将本仓库推送到 `master` 时，自动把 `skills/`、`rules/`、`references/`、`kits/`、`AGENT.md` 拷贝到目标仓库的 `.codebuddy/agent-kit/` 并开 PR（幂等，无变更则跳过）。**支持一次同步到多个目标仓库**；单个目标失败不阻塞其余目标。
 
+> 同步分支 `sync/agent-kit` 由脚本独占：每轮都从目标仓库基线重建（与远端同名分支构成「兄弟提交」而非快进），因此重跑时以 `git push --force` 覆盖。**不要在该分支上放手工提交，会被覆盖。**
+
 前置条件（在 ai-agent-kit 仓库的 Settings → Secrets/Variables 配置）：
 - **Secret** `SYNC_TOKEN`：对各目标仓库有 write 权限的 PAT。
 - **Variable** `TARGET_REPOS`（可选）：逗号分隔的多个目标，如 `web5/web_system,web5/other`；单项可写 `owner/repo#分支` 单独指定基线分支。未设置时回退到旧的单目标 `TARGET_REPO`，再回退到默认值。
