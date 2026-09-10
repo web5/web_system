@@ -8,6 +8,7 @@ const SNAPSHOT_KEYS = [
   'name',
   'description',
   'steps',
+  'nodes',
   'skipVerify',
   'rollbackOnFailure',
   'approval',

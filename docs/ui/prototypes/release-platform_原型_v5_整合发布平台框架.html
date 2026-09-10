@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布平台 v5 · 整合框架原型（nodes 可交互）</title>
+<style>
+  /* ===== Token：与 packages/ui/src/tokens.css 对齐（数值以 tokens.ts 为准） ===== */
+  :root{
+    --ws-brand-500:#F97316; --ws-brand-600:#EA6A0A; --ws-brand-50:#FFF1E7;
+    --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-subtle:#F5F5F5; --ws-bg-hover:#F0F0F0;
+    --ws-text-primary:#1A1A1A; --ws-text-secondary:#5B6372; --ws-text-tertiary:#8C8C8C;
+    --ws-border:#E8E8E8; --ws-border-subtle:#F0F0F0;
+    --ws-success-500:#2E9E5B; --ws-success-100:#E7F5EC;
+    --ws-warning-500:#E8833A; --ws-warning-100:#FFF3E6;
+    --ws-error-500:#E5484D;   --ws-error-100:#FDEBEC;
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-shadow-card:0 2px 12px rgba(20,30,50,.06);
+    --ws-font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  [data-theme='dark']{
+    --ws-bg-page:#0A0A0A; --ws-bg-surface:#1A1A1A; --ws-bg-subtle:#141414; --ws-bg-hover:#262626;
+    --ws-text-primary:#EDEDED; --ws-text-secondary:#A0A0A0; --ws-text-tertiary:#808080;
+    --ws-border:#2A2A2A; --ws-border-subtle:#1F1F1F; --ws-brand-50:#3A2412;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;display:flex;justify-content:center;padding:24px;min-height:100vh;}
+  [data-theme='dark'] body{background:#000;}
+
+  .desktop{width:1280px;height:820px;background:var(--ws-bg-page);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--ws-border);display:flex;position:relative;flex-shrink:0;}
+
+  .sider{width:220px;background:var(--ws-bg-surface);border-right:1px solid var(--ws-border);
+    display:flex;flex-direction:column;flex-shrink:0;}
+  .sider-header{height:56px;display:flex;align-items:center;gap:8px;padding:0 12px;
+    border-bottom:1px solid var(--ws-border-subtle);font-size:15px;font-weight:700;color:var(--ws-text-primary);}
+  .sider-header .fold{cursor:pointer;color:var(--ws-text-tertiary);font-size:16px;}
+  .menu{flex:1;overflow-y:auto;padding:8px;}
+  .menu-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--ws-radius-md);
+    color:var(--ws-text-secondary);font-size:14px;cursor:pointer;margin-bottom:2px;}
+  .menu-item:hover{background:var(--ws-bg-hover);}
+  .menu-item.active{background:var(--ws-brand-50);color:var(--ws-brand-500);font-weight:600;}
+  .menu-item svg{width:16px;height:16px;flex-shrink:0;}
+  .menu-item .caret{margin-left:auto;font-size:11px;color:var(--ws-text-tertiary);}
+  .submenu{display:none;padding-left:14px;}
+  .submenu.open{display:block;}
+  .submenu .menu-item{font-size:13px;padding:7px 12px;}
+  .badge-new{font-size:10px;color:var(--ws-brand-500);border:1px solid var(--ws-brand-500);
+    border-radius:3px;padding:0 4px;margin-left:auto;}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .top-header{height:56px;background:var(--ws-bg-surface);border-bottom:1px solid var(--ws-border);
+    display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;}
+  .crumb{font-size:13px;color:var(--ws-text-tertiary);display:flex;align-items:center;gap:6px;}
+  .crumb b{color:var(--ws-text-primary);font-weight:600;}
+  .header-right{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--ws-text-secondary);}
+  .icon-btn{cursor:pointer;display:flex;align-items:center;}
+  .icon-btn svg{width:18px;height:18px;}
+  .user{display:flex;align-items:center;gap:6px;}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--ws-brand-500);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;}
+  .content{flex:1;overflow:auto;padding:16px;}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  .card{background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);
+    box-shadow:var(--ws-shadow-card);padding:14px 16px;margin-bottom:12px;border:1px solid var(--ws-border);}
+  .card .t{font-size:12px;color:var(--ws-text-tertiary);margin-bottom:9px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.4px;}
+  .muted{color:var(--ws-text-tertiary);font-size:12px;}
+  .mono{font-family:var(--ws-font-mono);}
+  .hint{font-size:11px;color:var(--ws-text-tertiary);margin-top:6px;line-height:1.7;}
+
+  .btn{background:var(--ws-brand-500);color:#fff;border:none;border-radius:var(--ws-radius-md);
+    padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;
+    align-items:center;justify-content:center;gap:5px;}
+  .btn:hover{opacity:.88;}
+  .btn.ghost{background:transparent;color:var(--ws-brand-500);border:1px solid var(--ws-brand-500);}
+  .btn.ghost:hover{background:var(--ws-brand-50);}
+  .btn.sm{padding:5px 10px;font-size:12px;}
+  .btn.mini{padding:3px 8px;font-size:11px;}
+  .btn.gray{background:var(--ws-bg-subtle);color:var(--ws-text-secondary);}
+  .btn svg{width:13px;height:13px;flex-shrink:0;}
+
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;display:inline-block;}
+  .tag.primary{color:var(--ws-brand-500);background:var(--ws-brand-50);}
+  .tag.danger{color:var(--ws-error-500);background:var(--ws-error-100);}
+  .tag.warn{color:var(--ws-warning-500);background:var(--ws-warning-100);}
+  .tag.ok{color:var(--ws-success-500);background:var(--ws-success-100);}
+  .tag.gray{color:var(--ws-text-secondary);background:var(--ws-bg-subtle);}
+  .tag.purple{color:#7C3AED;background:#F3E8FF;}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+  table.list{width:100%;font-size:12.5px;border-collapse:collapse;}
+  table.list th{text-align:left;padding:9px 8px;color:var(--ws-text-tertiary);font-size:11px;
+    font-weight:600;border-bottom:1px solid var(--ws-border);text-transform:uppercase;letter-spacing:.3px;}
+  table.list td{padding:10px 8px;border-bottom:1px solid var(--ws-border-subtle);color:var(--ws-text-primary);}
+  table.list tr{cursor:pointer;}
+  table.list tr:hover td{background:var(--ws-bg-hover);}
+  table.list td.k{font-family:var(--ws-font-mono);}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .dot.ok{background:var(--ws-success-500);} .dot.danger{background:var(--ws-error-500);}
+  .dot.primary{background:var(--ws-brand-500);} .dot.gray{background:var(--ws-text-tertiary);}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--ws-border);margin-bottom:14px;}
+  .tab{padding:9px 16px;font-size:13px;font-weight:600;color:var(--ws-text-tertiary);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab.on{color:var(--ws-brand-500);border-bottom-color:var(--ws-brand-500);}
+
+  .pinfo{display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--ws-bg-subtle);
+    border-radius:var(--ws-radius-md);margin-bottom:12px;font-size:13px;}
+  .pinfo .pd{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ws-text-tertiary);}
+  .meta{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px;}
+  .meta .m{background:var(--ws-bg-subtle);border-radius:var(--ws-radius-md);padding:8px 10px;}
+  .meta .m .k{font-size:11px;color:var(--ws-text-tertiary);}
+  .meta .m .v{font-size:12.5px;font-weight:600;color:var(--ws-text-primary);font-family:var(--ws-font-mono);margin-top:2px;}
+
+  /* 流程图：节点 + 连接线 */
+  .flow{display:flex;align-items:center;overflow-x:auto;padding:16px 6px 20px;min-height:78px;}
+  .fnode{position:relative;min-width:110px;padding:9px 13px;border:1.5px solid var(--ws-border);
+    border-radius:var(--ws-radius-lg);background:var(--ws-bg-surface);cursor:pointer;flex-shrink:0;}
+  .fnode:hover{border-color:var(--ws-brand-500);}
+  .fnode.active{border-color:var(--ws-brand-500);background:var(--ws-brand-50);}
+  .fnode .fidx{position:absolute;top:-9px;left:-9px;width:19px;height:19px;border-radius:50%;
+    background:var(--ws-bg-surface);color:var(--ws-text-secondary);font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;border:1.5px solid var(--ws-border);}
+  .fnode .fname{font-size:13px;font-weight:600;color:var(--ws-text-primary);display:block;}
+  .fnode .ftag{display:block;font-size:10px;margin-top:3px;color:var(--ws-text-tertiary);}
+  .fnode .fcnt{position:absolute;top:-9px;right:-9px;font-size:9px;font-weight:700;
+    background:var(--ws-brand-500);color:#fff;border-radius:8px;padding:1px 5px;}
+  .farrow{width:28px;height:2px;background:var(--ws-border);position:relative;flex-shrink:0;}
+  .farrow:after{content:'';position:absolute;right:-1px;top:-3px;border-left:6px solid var(--ws-border);
+    border-top:4px solid transparent;border-bottom:4px solid transparent;}
+  .fnode.running{border-color:var(--ws-brand-500);background:var(--ws-brand-50);}
+  .fnode.success{border-color:var(--ws-success-500);background:var(--ws-success-100);}
+  .fnode.failed{border-color:var(--ws-error-500);background:var(--ws-error-100);}
+  .fnode.skipped{opacity:.45;} .fnode.skipped .fname{text-decoration:line-through;}
+  .farrow.done{background:var(--ws-success-500);} .farrow.done:after{border-left-color:var(--ws-success-500);}
+  .farrow.fail{background:var(--ws-error-500);} .farrow.fail:after{border-left-color:var(--ws-error-500);}
+  .fnode.dragging{opacity:.3;}
+  .fnode.ins-l{box-shadow:-3px 0 0 0 var(--ws-brand-500);}
+  .fnode.ins-r{box-shadow:3px 0 0 0 var(--ws-brand-500);}
+
+  /* ---- v5 nodes：platform / watchdog 变体 + 连接线插孔 + 卡片删除 + 属性面板 ---- */
+  .fnode.plat{border-color:#D8CCF0;background:#F6F1FD;cursor:not-allowed;}
+  .fnode.plat .fname{color:#722ED1;}
+  .fnode.watch{border-color:#F0D8A8;background:#FFF6E8;}
+  .fnode.watch .fname{color:#B45309;}
+  .fnode .fk{display:block;font-size:10px;color:var(--ws-text-tertiary);margin-top:3px;font-family:var(--ws-font-mono);}
+  .fnode .flock{font-size:10px;color:#722ED1;display:block;margin-top:3px;}
+  .wbadge{position:absolute;bottom:-8px;left:-8px;font-size:10px;background:var(--ws-warning-500);color:#fff;
+    border-radius:10px;padding:1px 6px;font-weight:700;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,.15);}
+  /* 节点卡片删除钮（script hover 出现） */
+  .delbtn{position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;
+    background:var(--ws-error-500);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:3;font-weight:700;}
+  .fnode:hover .delbtn{opacity:1;}
+  .delbtn:hover{background:#C93A3F;}
+  /* 连接线槽位：线上可插入（+ 插孔） */
+  .fslot{position:relative;width:36px;height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .fplus{position:absolute;width:19px;height:19px;border-radius:50%;background:var(--ws-bg-surface);
+    border:1.5px dashed #B9C1CC;color:#8A94A3;font-size:13px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .15s;font-weight:700;}
+  .fplus:hover{border-color:var(--ws-brand-500);border-style:solid;color:var(--ws-brand-500);
+    background:var(--ws-brand-50);}
+  .lock{font-size:10px;color:#722ED1;}
+  /* 属性面板 */
+  .props{background:#FAFBFC;border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:14px;}
+  .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;color:var(--ws-text-secondary);}
+  .chk input{width:15px;height:15px;accent-color:var(--ws-brand-500);}
+  .in{width:170px;border:1.5px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:6px 10px;
+    font-size:13px;outline:none;font-family:inherit;}
+  .in:focus{border-color:var(--ws-brand-500);}
+  .in.mono{width:150px;font-family:var(--ws-font-mono);color:var(--ws-text-secondary);}
+  .addbar{display:flex;gap:8px;align-items:center;margin-top:10px;padding:10px 12px;
+    background:var(--ws-bg-subtle);border:1.5px dashed var(--ws-border);border-radius:var(--ws-radius-md);flex-wrap:wrap;}
+
+  /* 操作 */
+  .act{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ws-border);
+    border-radius:var(--ws-radius-md);background:var(--ws-bg-surface);cursor:pointer;font-size:12px;margin-bottom:5px;}
+  .act:hover{border-color:var(--ws-brand-500);}
+  .act.on{border-color:var(--ws-brand-500);background:var(--ws-brand-50);}
+  .act.lock{background:var(--ws-bg-subtle);cursor:default;}
+  .act .an{font-weight:600;color:var(--ws-text-primary);flex:1;}
+  .act .am{font-size:11px;color:var(--ws-text-tertiary);font-family:var(--ws-font-mono);}
+
+  /* 暗色代码编辑器 */
+  .editor-wrap{border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);overflow:hidden;}
+  .editor-bar{background:#161B22;padding:6px 10px;font-size:11px;color:#8B949E;
+    display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #21262D;}
+  .code-wrap{display:flex;background:#0D1117;font-family:var(--ws-font-mono);font-size:12px;line-height:1.7;}
+  .code-gutter{padding:11px 9px;color:#495057;background:#0A0E13;text-align:right;
+    user-select:none;min-width:36px;border-right:1px solid #1C2128;white-space:pre;overflow:hidden;}
+  .code-main{position:relative;flex:1;height:190px;}
+  .code-hl,.code-in{margin:0;padding:11px 12px;border:0;font-family:var(--ws-font-mono);font-size:12px;
+    line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+  .code-hl{position:absolute;inset:0;color:#E6EDF3;overflow:auto;pointer-events:none;}
+  .code-in{position:absolute;inset:0;background:transparent;color:transparent;
+    caret-color:#58A6FF;resize:none;outline:none;overflow:auto;}
+  .c-cmt{color:#8B949E;font-style:italic;} .c-kw{color:#FF7B72;} .c-var{color:#79C0FF;}
+  textarea.code{width:100%;min-height:150px;border:none;padding:11px;font-family:var(--ws-font-mono);
+    font-size:12px;line-height:1.65;color:var(--ws-text-primary);background:var(--ws-bg-subtle);outline:none;resize:vertical;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+  .chip{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--ws-bg-subtle);
+    color:var(--ws-text-secondary);cursor:pointer;font-family:var(--ws-font-mono);border:1px solid transparent;}
+  .chip:hover{border-color:var(--ws-brand-500);color:var(--ws-brand-500);background:var(--ws-brand-50);}
+
+  .banner{padding:9px 12px;border-radius:var(--ws-radius-md);font-size:12px;margin-top:10px;}
+  .banner.info{background:var(--ws-bg-subtle);color:var(--ws-text-secondary);border:1px solid var(--ws-border);}
+  .banner.warn{background:var(--ws-warning-100);color:#8A4B12;border:1px solid #F6DCB8;}
+  .banner.danger{background:var(--ws-error-100);color:#A3242A;border:1px solid #F7C9CB;}
+  .logbox{background:#1A1F2E;color:#D8DEE9;font-family:var(--ws-font-mono);font-size:11.5px;
+    line-height:1.7;padding:12px;border-radius:var(--ws-radius-md);max-height:220px;overflow:auto;white-space:pre-wrap;}
+  .logbox .op-h{color:#C4A5F7;font-weight:600;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .ph{text-align:center;padding:60px 20px;color:var(--ws-text-tertiary);}
+  .toast{position:absolute;left:50%;bottom:32px;transform:translateX(-50%);background:rgba(0,0,0,.82);
+    color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+  .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;}
+  .modal-mask.show{display:flex;}
+  .modal{background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);padding:18px;width:100%;max-width:420px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ws-text-secondary);margin-bottom:5px;font-weight:600;}
+  .field input,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--ws-border);
+    border-radius:var(--ws-radius-md);font-size:13px;color:var(--ws-text-primary);
+    background:var(--ws-bg-surface);outline:none;font-family:inherit;resize:vertical;}
+</style>
+</head>
+<body>
+<div class="desktop">
+
+  <aside class="sider">
+    <div class="sider-header"><span class="fold">☰</span>发布平台</div>
+    <div class="menu">
+      <div class="menu-item" data-k="dashboard" data-title="仪表盘" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>仪表盘</div>
+      <div class="menu-item active" data-k="pipeline" data-title="流水线" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        流水线<span class="badge-new">改版</span></div>
+      <div class="menu-item" data-k="detail" data-title="流水线详情" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        流水线详情<span class="badge-new">NEW</span></div>
+      <div class="menu-item" data-k="module" data-title="模块详情" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg>
+        模块详情<span class="badge-new">NEW</span></div>
+      <div class="menu-item" data-k="services" data-title="模块管理" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>模块管理</div>
+      <div class="menu-item" data-k="environments" data-title="环境管理" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>环境管理</div>
+      <div class="menu-item" data-k="monitor" data-title="服务监控" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>服务监控</div>
+      <div class="menu-item" data-k="audit" data-title="审计日志" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg>审计日志</div>
+      <div class="menu-item" data-k="config" data-title="配置中心" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.4.64.73.83.3.17.64.26 1 .26H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>配置中心</div>
+      <div class="menu-item" data-k="notifications" data-title="通知中心" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>通知中心</div>
+      <div class="menu-item" data-k="canary" data-title="灰度管理" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v20M15 2v20M3 7l6-5 6 5 6-5"/></svg>灰度管理</div>
+      <div class="menu-item" data-k="diagnose" data-title="自助诊断" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8z"/></svg>自助诊断</div>
+      <div class="menu-item" data-k="tools" data-title="工具目录" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8z"/></svg>
+        工具目录<span class="badge-new">增强</span></div>
+      <div class="menu-item" data-k="settings" data-title="系统设置" onclick="nav(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>系统设置</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top-header">
+      <div class="crumb">
+        <span id="crumbParent">发布平台</span> / <b id="crumbTitle">流水线</b>
+      </div>
+      <div class="header-right">
+        <div class="icon-btn" title="切换明暗主题" onclick="toggleTheme()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </div>
+        <div class="user"><div class="avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- 占位：现有 admin 页面 -->
+      <div class="screen" id="scr-ph">
+        <div class="card"><div class="ph">
+          <div style="font-size:15px;color:var(--ws-text-primary);" id="ph-title">工作台</div>
+          <div class="muted" style="margin-top:8px;">现有 admin 页面 · 本稿不重复绘制，仅标示整合位置</div>
+        </div></div>
+      </div>
+
+      <!-- 流水线列表 -->
+      <div class="screen active" id="scr-pipeline">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:6px;">
+            <div class="t" style="margin:0">发布记录</div>
+            <button class="btn ghost sm" onclick="toast('新建发布（提交弹窗：选模块/分支/commit/环境/模板，确认后进入流水线详情）')">新建发布</button>
+          </div>
+          <table class="list">
+            <thead><tr>
+              <th style="width:96px">流水线 ID</th><th style="width:130px">名称</th>
+              <th style="width:158px">模块</th><th style="width:60px">环境</th>
+              <th style="width:80px">版本</th><th>分支</th>
+              <th style="width:90px">状态</th><th style="width:60px">耗时</th>
+              <th style="width:86px">触发</th><th style="width:66px">时间</th>
+            </tr></thead>
+            <tbody id="runList"></tbody>
+          </table>
+          <div class="hint">点击任意一行进入「流水线详情」。记录涵盖<b>前端页面</b>（admin / portal）与<b>后台服务</b>（gateway / todo-service / ai-agent）。</div>
+        </div>
+      </div>
+
+      <!-- 流水线详情（双 Tab + 编辑态） -->
+      <div class="screen" id="scr-detail">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row">
+              <b style="font-size:15px" id="dMod">admin</b>
+              <span class="tag gray" id="dEnv">local</span>
+              <span class="mono muted" id="dVer">9263f62</span>
+              <span class="tag primary" id="dStatus">运行中</span>
+            </div>
+            <div class="row">
+              <button class="btn ghost sm" id="btnEdit" onclick="toggleEdit()">编辑流水线</button>
+              <button class="btn gray sm" onclick="toast('重试：从失败节点继续')">重试</button>
+              <button class="btn ghost sm" onclick="toast('回滚：使用最新脚本发旧代码，scriptDrift=true')">回滚</button>
+            </div>
+          </div>
+
+          <div class="pinfo">
+            <span class="tag primary">流水线</span>
+            <b id="pName">admin</b>
+            <span class="pd" id="pDesc">v5 nodes：git → 安装依赖 → 构建 → 写版本号 → 切指针 → 探活（watchdog）→ 通知</span>
+            <button class="btn ghost mini" onclick="openRename()">名称 / 备注</button>
+          </div>
+
+          <div class="tabs">
+            <div class="tab on" id="tab-inst" onclick="switchTab('inst')">实例详情</div>
+            <div class="tab" id="tab-hist" onclick="switchTab('hist')">历史记录</div>
+          </div>
+
+          <div id="pane-inst">
+            <div class="meta">
+              <div class="m"><div class="k">版本</div><div class="v" id="mVer">9263f62</div></div>
+              <div class="m"><div class="k">分支</div><div class="v" style="font-size:11px" id="mBranch">feature/…</div></div>
+              <div class="m"><div class="k">nodesHash</div><div class="v">a91f3c7</div></div>
+              <div class="m"><div class="k">耗时</div><div class="v" id="mDur">—</div></div>
+              <div class="m"><div class="k">结果</div><div class="v" id="mRes">—</div></div>
+            </div>
+            <div class="flow" id="flowRun"></div>
+            <div id="stepBody"></div>
+          </div>
+
+          <div id="pane-hist" style="display:none">
+            <div class="t">历史实例（点击一行 → 切回「实例详情」）</div>
+            <table class="list">
+              <thead><tr><th style="width:110px">实例 ID</th><th style="width:90px">版本</th>
+                <th style="width:70px">环境</th><th>分支</th><th style="width:100px">状态</th>
+                <th style="width:80px">耗时</th><th style="width:80px">时间</th></tr></thead>
+              <tbody id="histList"></tbody>
+            </table>
+          </div>
+
+          <div id="pane-edit" style="display:none">
+            <div class="banner info" style="margin-top:0">
+              <span><b>v5 nodes 编辑态</b>：<span class="tag purple">git / 写版本号 / 切指针</span> 平台节点<b>锁定</b>（不可增删改）；
+                script 节点可<b>拖拽重排 / 增删</b>。点连接线中间的「+」或右上「添加节点」→ 直接落节点并选中；
+                悬停节点卡片右上角「×」删除；选中后在下方配置 label / key / optional / watchdog 与脚本。</span>
+            </div>
+            <div class="card" style="margin-top:12px">
+              <div class="row" style="justify-content:space-between;">
+                <div class="t" style="margin:0">流程编排 <span class="muted" id="nodeCount"></span></div>
+                <button class="btn sm" onclick="addNodeDefault()">+ 添加节点</button>
+              </div>
+              <div class="flow" id="flowEdit"></div>
+              <div id="errHint" style="display:none;margin-top:8px;"></div>
+              <div class="row" style="margin-top:6px">
+                <button class="btn sm" onclick="saveFlow()">保存顺序</button>
+                <button class="btn gray sm" onclick="toggleEdit()">退出编辑</button>
+                <span class="muted" style="margin-left:auto">模块脚本按 <span class="mono">模块 × 节点 key</span> 读写；platform 节点无脚本。</span>
+              </div>
+            </div>
+            <div class="card" id="editDetail"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模块详情：多操作编辑落位 -->
+      <div class="screen" id="scr-module">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row">
+              <b style="font-size:15px">admin</b>
+              <span class="tag gray">micro-frontend</span>
+              <span class="muted mono">apps/admin · publicPath=admin</span>
+            </div>
+            <button class="btn" onclick="nav(document.querySelector('[data-k=\"detail\"]'));if(!editing)toggleEdit();">
+              进入流程图编辑态</button>
+          </div>
+          <div class="banner info" style="margin-top:10px">
+            <span><b>框架</b>：发布平台是<b>独立控制台</b>（deploy-console · 6200 · <code>/console/</code>），
+              左侧菜单即其真实 <code>MainLayout</code> 结构，与 admin 后台（科豆 AI）不是同一套。
+              <b>落位</b>：本页对应「模块管理 → 模块详情 → 发布脚本」tab；
+              实例详情流程图<b>复用</b> <code>ProgressFlow.vue</code>，编辑态流程图与多操作编辑器为<b>新增</b>组件。</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="grid2" style="grid-template-columns:250px 1fr;gap:14px;align-items:start;">
+            <div><div class="t">script 节点（按 nodes）</div><div id="modStageList"></div>
+              <div class="hint" style="margin-top:6px">platform（git/写版本号/切指针）无脚本；仅 script 节点按 <span class="mono">模块×key</span> 配多操作。</div></div>
+            <div id="modStageDetail"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 工具目录 -->
+      <div class="screen" id="scr-tools">
+        <div class="card">
+          <div class="t">工具目录（操作可「引用工具」，工具升级自动扩散）</div>
+          <table class="list">
+            <thead><tr><th style="width:180px">code</th><th style="width:80px">kind</th>
+              <th style="width:110px">分类</th><th>说明</th></tr></thead>
+            <tbody id="toolList"></tbody>
+          </table>
+          <div class="hint">操作有两种实现：<b>shell</b>（自写脚本）与 <b>service</b>（引用工具）。
+            引用方式下工具实现升级，所有引用节点自动受益。</div>
+        </div>
+      </div>
+
+      <!-- ===== 以下为发布平台「已有页面」还原，供后续功能实现对齐 ===== -->
+
+      <!-- 仪表盘 -->
+      <div class="screen" id="scr-dashboard">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="t" style="margin:0">发布度量</div>
+            <div class="row">
+              <select class="mini" style="padding:4px 7px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+                <option>全部环境</option><option>local</option><option>dev</option><option>prod</option>
+              </select>
+              <select class="mini" style="padding:4px 7px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+                <option>近 7 天</option><option>近 30 天</option><option>近 90 天</option>
+              </select>
+              <button class="btn gray sm" onclick="toast('刷新度量')">刷新</button>
+            </div>
+          </div>
+          <div class="meta" style="grid-template-columns:repeat(4,1fr);">
+            <div class="m"><div class="k">发布总数</div><div class="v">128</div></div>
+            <div class="m"><div class="k">成功率</div><div class="v" style="color:var(--ws-success-500)">94.5%</div></div>
+            <div class="m"><div class="k">平均时长</div><div class="v">42s</div></div>
+            <div class="m"><div class="k">P95 时长</div><div class="v">88s</div></div>
+          </div>
+          <div class="grid2">
+            <div style="border:1px dashed var(--ws-border);border-radius:8px;padding:20px;text-align:center;color:var(--ws-text-tertiary);font-size:12px;">
+              发布趋势（堆叠柱：成功 + 失败）
+            </div>
+            <div style="border:1px dashed var(--ws-border);border-radius:8px;padding:20px;text-align:center;color:var(--ws-text-tertiary);font-size:12px;">
+              失败阶段分布（横向条形 · 点击条形下钻）
+            </div>
+          </div>
+          <div class="t" style="margin-top:12px">下钻：失败记录</div>
+          <table class="list">
+            <thead><tr><th style="width:130px">时间</th><th style="width:120px">模块</th><th style="width:70px">环境</th>
+              <th style="width:90px">版本</th><th style="width:90px">操作人</th><th>错误信息</th></tr></thead>
+            <tbody>
+              <tr><td class="k">09-08 09:48</td><td>todo-service</td><td>local</td><td class="k">9263f62</td><td>admin</td>
+                <td style="color:var(--ws-error-500);">[verify/op1] manifest 断言失败：manifest 3fbb450 ≠ 期望 9263f62</td></tr>
+              <tr><td class="k">09-07 14:20</td><td>admin</td><td>dev</td><td class="k">45b5a30</td><td>ci:release</td>
+                <td style="color:var(--ws-error-500);">[build/op2] vite 构建产物缺失（exit 1）</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;"><b>LOCAL</b><span class="tag ok">开发</span></div>
+            <table class="list" style="margin-top:8px;">
+              <tbody>
+                <tr><td style="width:90px" class="muted">服务器</td><td class="k">本机</td></tr>
+                <tr><td class="muted">服务数量</td><td>11</td></tr>
+                <tr><td class="muted">访问地址</td><td class="k">https://local.kedouai.com</td></tr>
+                <tr><td class="muted">部署目录</td><td class="k">~/web_system_release</td></tr>
+              </tbody>
+            </table>
+            <div class="row" style="margin-top:8px;">
+              <span class="tag primary">gateway</span><span class="tag primary">ai-agent</span><span class="tag primary">todo-service</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="row" style="justify-content:space-between;"><b>PROD</b><span class="tag danger">生产</span></div>
+            <table class="list" style="margin-top:8px;">
+              <tbody>
+                <tr><td style="width:90px" class="muted">服务器</td><td class="k">106.52.176.246</td></tr>
+                <tr><td class="muted">服务数量</td><td>4</td></tr>
+                <tr><td class="muted">访问地址</td><td class="k">https://portal.kedouai.com</td></tr>
+                <tr><td class="muted">部署目录</td><td class="k">/data/web_system</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="t">最近操作</div>
+          <div class="act"><span class="an">09:55　admin 执行了 发布流水线 　<span class="tag primary">local</span> <span class="tag gray">admin</span></span><span class="tag ok">成功</span></div>
+          <div class="act"><span class="an">09:31　ci:release 执行了 发布流水线 　<span class="tag ok">dev</span> <span class="tag gray">gateway</span></span><span class="tag ok">成功</span></div>
+          <div class="act"><span class="an">09:12　admin 执行了 保存配置 　<span class="tag primary">local</span> <span class="tag gray">todo-service</span></span><span class="tag ok">成功</span></div>
+        </div>
+      </div>
+
+      <!-- 模块管理 -->
+      <div class="screen" id="scr-services">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px;">
+            <div class="row" style="gap:0;">
+              <div class="tab on" data-tab-group="svc" onclick="pickTab(this,'svc')">全部 (12)</div>
+              <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">后端服务 (7)</div>
+              <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">前端模块 (1)</div>
+              <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">微前端模块 (3)</div>
+              <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">小程序 (1)</div>
+            </div>
+            <button class="btn" onclick="toast('新建模块弹窗（key/名称/类型/目录/pm2/publicPath/默认环境）')">新建模块</button>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:130px">key</th><th style="width:130px">名称</th><th style="width:150px">类型</th>
+              <th style="width:130px">目录</th><th style="width:110px">pm2</th><th style="width:130px">publicPath</th>
+              <th style="width:80px">默认环境</th><th style="width:70px">状态</th><th style="width:150px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="k">admin</td><td>管理后台</td><td><span class="tag gray">micro-frontend</span> <span class="tag">内置</span></td>
+                <td class="k">admin</td><td>—</td><td class="k">admin</td><td class="k">local</td>
+                <td><span class="tag ok">启用</span></td>
+                <td><button class="btn mini ghost" onclick="nav(document.querySelector('[data-k=\'module\']'))">详情</button>
+                    <button class="btn mini gray" onclick="toast('编辑模块')">编辑</button></td></tr>
+              <tr><td class="k">todo-service</td><td>待办服务</td><td><span class="tag primary">backend</span></td>
+                <td class="k">todo-service</td><td class="k">web-todo</td><td>—</td><td class="k">local</td>
+                <td><span class="tag ok">启用</span></td>
+                <td><button class="btn mini ghost" onclick="nav(document.querySelector('[data-k=\'module\']'))">详情</button>
+                    <button class="btn mini gray" onclick="toast('编辑模块')">编辑</button></td></tr>
+              <tr><td class="k">gateway</td><td>网关</td><td><span class="tag primary">backend</span> <span class="tag">内置</span></td>
+                <td class="k">gateway</td><td class="k">web-gateway</td><td>—</td><td class="k">dev</td>
+                <td><span class="tag ok">启用</span></td>
+                <td><button class="btn mini ghost" onclick="nav(document.querySelector('[data-k=\'module\']'))">详情</button>
+                    <button class="btn mini gray" onclick="toast('编辑模块')">编辑</button></td></tr>
+            </tbody>
+          </table>
+          <div class="hint">模块注册表是「模块元数据」真相源；builtin 模块不可删除、可改字段。点「详情」进模块详情（含发布脚本多操作编辑）。</div>
+        </div>
+      </div>
+
+      <!-- 环境管理 -->
+      <div class="screen" id="scr-environments">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="t" style="margin:0">环境列表</div>
+            <button class="btn" onclick="toast('新建环境')">新建环境</button>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:120px">ID</th><th style="width:120px">名称</th><th style="width:220px">公网地址</th>
+              <th>已配置服务地址</th><th style="width:80px">内置</th><th style="width:140px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="k">local</td><td>本地环境</td><td class="k">https://local.kedouai.com</td>
+                <td><span class="tag gray">gateway=127.0.0.1:6000</span> <span class="tag gray">ai-agent=127.0.0.1:6010</span></td>
+                <td><span class="tag">自定义</span></td>
+                <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
+              <tr><td class="k">dev</td><td>开发环境</td><td class="k">https://dev.kedouai.com</td>
+                <td><span class="tag gray">gateway=175.27.189.123:8000</span></td>
+                <td><span class="tag primary">内置</span></td>
+                <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
+              <tr><td class="k">prod</td><td>生产环境</td><td class="k">https://portal.kedouai.com</td>
+                <td><span class="tag gray">gateway=106.52.176.246:8000</span></td>
+                <td><span class="tag primary">内置</span></td>
+                <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
+            </tbody>
+          </table>
+          <div class="hint">环境为一等公民；dev / prod 为内置环境不可删除。服务器连接信息在「服务器管理」配置。</div>
+        </div>
+        <div class="card">
+          <div class="t">环境配置（新建/编辑时展开）</div>
+          <div class="t" style="margin-top:6px">服务地址</div>
+          <table class="list">
+            <thead><tr><th style="width:180px">服务 key</th><th style="width:130px">名称</th><th style="width:140px">目录</th>
+              <th style="width:70px">内置</th><th>服务地址</th></tr></thead>
+            <tbody>
+              <tr><td class="k">gateway</td><td>网关</td><td class="k">gateway</td><td><span class="tag primary">内置</span></td>
+                <td><input class="mono" value="http://127.0.0.1:6000" style="width:280px;padding:3px 6px;border:1px solid var(--ws-border);border-radius:4px;font-size:12px;">
+                    <button class="btn mini ghost" style="margin-left:6px;" onclick="toast('已清除')">清除</button></td></tr>
+              <tr><td class="k">todo-service</td><td>待办服务</td><td class="k">todo-service</td><td><span class="tag">自定义</span></td>
+                <td><input class="mono" value="http://127.0.0.1:6005" style="width:280px;padding:3px 6px;border:1px solid var(--ws-border);border-radius:4px;font-size:12px;">
+                    <button class="btn mini ghost" style="margin-left:6px;" onclick="toast('已清除')">清除</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 服务监控 -->
+      <div class="screen" id="scr-monitor">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px;">
+            <div class="row" style="gap:0;">
+              <div class="tab on" data-tab-group="mon" onclick="pickTab(this,'mon')">本地</div>
+              <div class="tab" data-tab-group="mon" onclick="pickTab(this,'mon')">DEV</div>
+              <div class="tab" data-tab-group="mon" onclick="pickTab(this,'mon')">PROD</div>
+            </div>
+            <div class="row">
+              <span class="muted">自动刷新（10 秒）</span>
+              <button class="btn gray sm" onclick="toast('手动刷新')">手动刷新</button>
+            </div>
+          </div>
+          <div class="t" style="font-size:13px;color:var(--ws-text-primary);text-transform:none;">服务状态</div>
+          <table class="list">
+            <thead><tr><th style="width:150px">服务名</th><th>地址</th><th style="width:80px">状态</th>
+              <th style="width:80px">响应</th><th style="width:110px">响应时间</th><th style="width:100px">操作</th></tr></thead>
+            <tbody>
+              <tr><td>gateway</td><td class="k">http://127.0.0.1:6000</td><td><span class="tag ok">在线</span></td><td>200</td><td class="k">12 ms</td>
+                <td><button class="btn mini ghost" onclick="toast('日志抽屉：gateway - 日志')">查看日志</button></td></tr>
+              <tr><td>ai-agent</td><td class="k">http://127.0.0.1:6010</td><td><span class="tag ok">在线</span></td><td>200</td><td class="k">8 ms</td>
+                <td><button class="btn mini ghost" onclick="toast('日志抽屉：ai-agent - 日志')">查看日志</button></td></tr>
+              <tr><td>content-hub</td><td class="k">http://127.0.0.1:6007</td><td><span class="tag danger">离线</span></td><td>—</td><td>—</td>
+                <td><button class="btn mini ghost" onclick="toast('暂无日志')">查看日志</button></td></tr>
+            </tbody>
+          </table>
+          <div class="t" style="font-size:13px;color:var(--ws-text-primary);text-transform:none;margin-top:14px;">PM2 进程</div>
+          <table class="list">
+            <thead><tr><th style="width:150px">进程名</th><th style="width:80px">状态</th><th style="width:70px">CPU</th>
+              <th style="width:100px">内存</th><th style="width:110px">运行时间</th><th style="width:90px">重启次数</th><th style="width:100px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="k">web-gateway</td><td><span class="tag ok">online</span></td><td class="k">0.4%</td><td class="k">182 MB</td><td class="k">2 小时</td><td class="k">8</td>
+                <td><button class="btn mini ghost" onclick="toast('日志抽屉')">查看日志</button></td></tr>
+              <tr><td class="k">web-deploy-console</td><td><span class="tag ok">online</span></td><td class="k">0.2%</td><td class="k">164 MB</td><td class="k">12 分钟</td><td class="k">249</td>
+                <td><button class="btn mini ghost" onclick="toast('日志抽屉')">查看日志</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 审计日志 -->
+      <div class="screen" id="scr-audit">
+        <div class="card">
+          <div class="row" style="margin-bottom:10px;">
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+              <option>全部环境</option><option>local</option><option>dev</option><option>prod</option>
+            </select>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+              <option>全部操作</option><option>部署</option><option>回滚</option><option>配置</option><option>编辑</option>
+            </select>
+            <span class="muted">日期范围：2026-09-01 ~ 2026-09-09</span>
+            <button class="btn sm" onclick="toast('查询')">查询</button>
+            <button class="btn gray sm" onclick="toast('重置')">重置</button>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:140px">时间</th><th style="width:90px">用户</th><th style="width:110px">操作</th>
+              <th style="width:70px">环境</th><th style="width:120px">组件</th><th style="width:80px">状态</th>
+              <th style="width:100px">变更</th><th>详情</th></tr></thead>
+            <tbody>
+              <tr><td class="k">09-08 09:55:12</td><td>admin</td><td>pipeline.submit</td><td><span class="tag ok">LOCAL</span></td>
+                <td class="k">admin</td><td><span class="tag ok">成功</span></td>
+                <td><button class="btn mini ghost" onclick="toast('变更明细抽屉（前后 diff）')">3 处变更 →</button></td>
+                <td>提交发布流水线 → 9263f62</td></tr>
+              <tr><td class="k">09-08 09:48:03</td><td>admin</td><td>stage-command.update</td><td><span class="tag ok">LOCAL</span></td>
+                <td class="k">todo-service</td><td><span class="tag ok">成功</span></td>
+                <td><button class="btn mini ghost" onclick="toast('变更明细抽屉（前后 diff）')">1 处变更 →</button></td>
+                <td>保存 script 节点 build 多操作（2 个）</td></tr>
+              <tr><td class="k">09-08 09:31:44</td><td>ci:release</td><td>pipeline.succeeded</td><td><span class="tag ok">DEV</span></td>
+                <td class="k">gateway</td><td><span class="tag ok">成功</span></td><td>—</td><td>发布成功：45b5a30</td></tr>
+            </tbody>
+          </table>
+          <div class="hint">「N 处变更」打开右侧抽屉展示字段级前后 diff（左红 before → 右绿 after）；密钥值不记明文。</div>
+        </div>
+      </div>
+
+      <!-- 配置中心 -->
+      <div class="screen" id="scr-config">
+        <div class="card">
+          <div class="row" style="gap:0;margin-bottom:10px;">
+            <div class="tab on" data-tab-group="cfg" onclick="pickTab(this,'cfg')">键值配置</div>
+            <div class="tab" data-tab-group="cfg" onclick="pickTab(this,'cfg')">环境信息</div>
+          </div>
+          <div class="row" style="margin-bottom:10px;">
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+              <option>全局默认</option><option>环境级</option><option>模块级</option>
+            </select>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+              <option>全部环境</option><option>local</option><option>dev</option>
+            </select>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+              <option>全部模块</option><option>admin</option><option>todo-service</option>
+            </select>
+            <button class="btn gray sm" onclick="toast('刷新')">刷新</button>
+            <button class="btn sm" onclick="toast('新增配置（作用域联动表单）')">新增配置</button>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:150px">配置键</th><th style="width:170px">值</th><th style="width:90px">作用域</th>
+              <th style="width:80px">环境</th><th style="width:120px">模块</th><th style="width:100px">最后编辑人</th><th style="width:130px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="k">PORT</td><td class="k">6005</td><td><span class="tag primary">模块级</span></td><td>local</td><td class="k">todo-service</td><td>admin</td>
+                <td><button class="btn mini gray" onclick="toast('编辑配置')">编辑</button>
+                    <button class="btn mini ghost" onclick="toast('删除配置')">删除</button></td></tr>
+              <tr><td class="k">DB_PASSWORD</td><td><span class="muted">••••••••</span> <span class="tag warn">密钥·不可读</span></td>
+                <td><span class="tag primary">环境级</span></td><td>dev</td><td>—</td><td>admin</td>
+                <td><button class="btn mini gray" onclick="toast('编辑配置')">编辑</button>
+                    <button class="btn mini ghost" onclick="toast('删除配置')">删除</button></td></tr>
+              <tr><td class="k">PUBLIC_URL</td><td class="k">https://portal.kedouai.com</td><td><span class="tag primary">环境级</span></td><td>prod</td><td>—</td><td>admin</td>
+                <td><button class="btn mini gray" onclick="toast('编辑配置')">编辑</button>
+                    <button class="btn mini ghost" onclick="toast('删除配置')">删除</button></td></tr>
+            </tbody>
+          </table>
+          <div class="hint">
+            优先级：<b>模块级 &gt; 环境级 &gt; 全局默认</b>；发布/重启时<b>强制覆盖注入</b>进程环境（历史 PORT=6200 污染对策）；
+            密钥用 AES-256-GCM 加密存储，页面不可读明文。
+          </div>
+        </div>
+      </div>
+
+      <!-- 通知中心 -->
+      <div class="screen" id="scr-notifications">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+            <div class="row">
+              <span class="tag ok">站内通知：开启</span>
+              <span class="tag gray">Webhook：未配置</span>
+              <span class="tag gray">企业微信：未配置</span>
+            </div>
+            <button class="btn gray sm" onclick="toast('刷新')">刷新</button>
+          </div>
+          <div class="row" style="margin-bottom:10px;">
+            <span class="muted">事件类型：</span>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;width:180px;">
+              <option>全部</option><option>发布成功</option><option>发布失败</option><option>自动回滚</option>
+              <option>发布被拒（并发）</option><option>发布待审批</option><option>审批通过</option><option>审批拒绝</option>
+            </select>
+            <span class="muted">共 42 条</span>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:130px">时间</th><th style="width:120px">事件</th><th style="width:60px">环境</th>
+              <th style="width:120px">模块</th><th style="width:90px">版本</th><th style="width:90px">操作人</th><th>详情</th><th style="width:140px">送达</th></tr></thead>
+            <tbody>
+              <tr><td class="k">09-08 09:48</td><td><span class="tag danger">发布失败</span></td><td>local</td><td class="k">todo-service</td><td class="k">9263f62</td><td>admin</td>
+                <td style="color:var(--ws-error-500);">[verify/op1] manifest 断言失败（watchdog）</td><td class="k">站内</td></tr>
+              <tr><td class="k">09-08 09:31</td><td><span class="tag ok">发布成功</span></td><td>dev</td><td class="k">gateway</td><td class="k">45b5a30</td><td>ci:release</td>
+                <td>发布成功（52s）</td><td class="k">wecom: 已送达</td></tr>
+              <tr><td class="k">09-07 18:02</td><td><span class="tag warn">发布待审批</span></td><td>prod</td><td class="k">portal</td><td class="k">6aa2682</td><td>admin</td>
+                <td>提交到 prod，等待审批</td><td class="k">站内</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 灰度管理 -->
+      <div class="screen" id="scr-canary">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+            <div class="row" style="gap:0;">
+              <div class="tab on" data-tab-group="cny" onclick="pickTab(this,'cny')">local</div>
+              <div class="tab" data-tab-group="cny" onclick="pickTab(this,'cny')">dev</div>
+              <div class="tab" data-tab-group="cny" onclick="pickTab(this,'cny')">prod</div>
+            </div>
+            <div class="row">
+              <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;width:200px;">
+                <option>全部模块</option><option>admin</option><option>portal</option>
+              </select>
+              <button class="btn sm" onclick="toast('查询灰度规则')">查询</button>
+            </div>
+          </div>
+          <table class="list">
+            <thead><tr><th style="width:60px">环境</th><th style="width:110px">模块</th><th style="width:110px">灰度版本</th>
+              <th style="width:160px">规则</th><th style="width:80px">状态</th><th style="width:110px">创建时间</th><th style="width:230px">操作</th></tr></thead>
+            <tbody>
+              <tr><td>local</td><td class="k">admin</td><td class="k">9263f62</td><td>百分比放量 10%</td>
+                <td><span class="tag primary">生效中</span></td><td class="k">09-08 09:55</td>
+                <td><button class="btn mini ghost" onclick="toast('命中预览：输入 userId 判断是否命中')">命中预览</button>
+                    <button class="btn mini ghost" onclick="toast('调整放量：Slider 1-100')">调整放量</button>
+                    <button class="btn mini gray" onclick="toast('停用规则')">停用</button></td></tr>
+              <tr><td>dev</td><td class="k">portal</td><td class="k">6aa2682</td><td>白名单 3 人</td>
+                <td><span class="tag gray">已停用</span></td><td class="k">09-07 16:20</td>
+                <td><button class="btn mini ghost" onclick="toast('命中预览')">命中预览</button>
+                    <button class="btn mini gray" onclick="toast('启用规则')">启用</button>
+                    <button class="btn mini ghost" onclick="toast('删除规则')">删除</button></td></tr>
+            </tbody>
+          </table>
+          <div class="banner info">百分比放量用 <b>userId + ruleId 的 FNV-1a 稳定哈希</b>，同一用户稳定命中；验证通过后走「转全量」切 stable 指针并禁用规则。</div>
+        </div>
+      </div>
+
+      <!-- 自助诊断 -->
+      <div class="screen" id="scr-diagnose">
+        <div class="card">
+          <div class="row" style="margin-bottom:12px;">
+            <span class="muted">诊断目标：</span>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;width:200px;">
+              <option>本机（local）</option><option>开发环境（dev）</option><option>生产环境（prod）</option>
+            </select>
+            <span class="muted">选择服务：</span>
+            <select class="mini" style="padding:5px 8px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;width:240px;">
+              <option>gateway（online）</option><option>ai-agent（online）</option><option>todo-service（online）</option>
+            </select>
+            <button class="btn gray sm" onclick="toast('刷新进程列表')">刷新进程</button>
+          </div>
+          <div class="grid2" style="grid-template-columns:repeat(3,1fr);">
+            <div style="border:1px solid var(--ws-border);border-radius:8px;padding:12px;">
+              <div class="t">端口占用检测</div>
+              <div class="row">
+                <input value="6005" style="width:110px;padding:4px 7px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+                <button class="btn sm" onclick="toast('检测：端口 6005 已被占用')">检测</button>
+              </div>
+              <div class="row" style="margin-top:8px;"><span class="tag danger">端口 6005 已被占用</span></div>
+              <div class="logbox" style="margin-top:8px;max-height:150px;">COMMAND   PID    USER   FD   TYPE
+node    69584 geekwen   16u  IPv6 ... TCP *:6005 (LISTEN)</div>
+            </div>
+            <div style="border:1px solid var(--ws-border);border-radius:8px;padding:12px;">
+              <div class="t">进程信息</div>
+              <table class="list">
+                <tbody>
+                  <tr><td class="muted">服务</td><td class="k">todo-service</td></tr>
+                  <tr><td class="muted">状态</td><td><span class="tag ok">online</span></td></tr>
+                  <tr><td class="muted">CPU / 内存</td><td class="k">0.3% / 96 MB</td></tr>
+                  <tr><td class="muted">重启次数</td><td class="k">2</td></tr>
+                  <tr><td class="muted">运行时长</td><td class="k">40 分钟</td></tr>
+                </tbody>
+              </table>
+              <button class="btn sm" style="width:100%;margin-top:8px;background:var(--ws-error-500);"
+                      onclick="toast('重启：二次确认后执行 monitor.restart（写审计）')">重启服务</button>
+            </div>
+            <div style="border:1px solid var(--ws-border);border-radius:8px;padding:12px;">
+              <div class="t">日志检索</div>
+              <div class="row">
+                <input placeholder="关键词（留空=最近日志）" style="flex:1;padding:4px 7px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+                <select class="mini" style="padding:4px 7px;border:1px solid var(--ws-border);border-radius:6px;font-size:12px;">
+                  <option>100 行</option><option>300 行</option><option>1000 行</option>
+                </select>
+              </div>
+              <div class="row" style="margin-top:8px;"><span class="tag primary">命中 6 行</span></div>
+              <div class="logbox" style="margin-top:8px;max-height:150px;">[Nest] 69584  - 09/08/2026, 9:55:58 AM  LOG [Bootstrap] 服务已启动，监听端口: 6005
+[Nest] 69584  - 09/08/2026, 9:56:02 AM  ERROR <span style="color:#F2555A">connect ECONNREFUSED</span></div>
+            </div>
+          </div>
+          <div class="banner info">重启留审计记录（审计日志页按 <code>monitor.restart</code> 查看）；服务名与关键词做注入防护。</div>
+        </div>
+      </div>
+
+      <!-- 系统设置 -->
+      <div class="screen" id="scr-settings">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="t" style="margin:0">通知渠道配置</div>
+            <button class="btn sm" onclick="toast('已保存通知渠道')">保存</button>
+          </div>
+          <div class="field" style="max-width:640px;margin-top:10px;">
+            <label>通用 Webhook URL</label>
+            <input placeholder="https://hooks.example.com/...">
+          </div>
+          <div class="field" style="max-width:640px;">
+            <label>企业微信机器人 Webhook URL</label>
+            <input placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
+          </div>
+          <div class="banner info">留空即关闭该通道；配置存数据库，未配置时回退环境变量 <code>NOTIFY_WEBHOOK_URL</code> / <code>NOTIFY_WECOM_URL</code>；站内通知默认开启。</div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="t" style="margin:0">审批门禁（发布前人工确认）</div>
+            <button class="btn sm" onclick="toast('已保存审批环境')">保存</button>
+          </div>
+          <div class="field" style="max-width:640px;margin-top:10px;">
+            <label>需要审批的环境（逗号分隔，默认 prod）</label>
+            <input value="prod">
+          </div>
+          <div class="banner info">配置后，提交到这些环境的发布进入「待审批」，审批通过才执行；拒绝/撤回会关闭审批单避免孤儿单。</div>
+        </div>
+        <div class="card">
+          <div class="t">接入提示</div>
+          <div class="muted">其他系统级设置后续收敛到本页。</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="mRename">
+    <div class="modal">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;">流水线名称与备注</div>
+      <div class="field"><label>名称</label><input id="rnName"></div>
+      <div class="field"><label>备注描述</label><textarea id="rnDesc" rows="3"></textarea></div>
+      <div class="hint" style="margin-bottom:12px">改名作用于该流水线的全部实例；历史实例保留提交时快照。</div>
+      <div class="row">
+        <button class="btn" onclick="saveRename()">保存</button>
+        <button class="btn gray" onclick="closeModal('mRename')">取消</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mDelNode">
+    <div class="modal">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;" id="delTitle">删除 script 节点</div>
+      <div class="muted" style="line-height:1.7;margin-bottom:14px;" id="delBody"></div>
+      <div class="row" style="justify-content:flex-end;">
+        <button class="btn gray" onclick="closeModal('mDelNode')">取消</button>
+        <button class="btn" style="background:var(--ws-error-500);" onclick="doDeleteNode()">确认删除</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ===== 数据 ===== */
+/** v5 nodes：platform（git/写版本号/切指针）锁定不可增删改；script 可增删 / 拖拽 / 配脚本。
+ *  平台字段：plat=true 且 sub 指向引擎语义；watchdog 节点失败触发自动回滚（互斥 1 个）。 */
+var NODES=[
+ {id:'git',name:'git · 拉取代码',mode:'platform',plat:true,sub:'git',desc:'平台内置 git 拉取到 RELEASE_DIR；节点锁定不可增删改',code:''},
+ {id:'install',name:'安装依赖',mode:'script',plat:false,optional:false,watchdog:false,
+  desc:'安装依赖（pnpm install / npm ci）；可选实现，未配脚本且非 optional 即 fail-fast',
+  code:'set -euo pipefail\ncd "${RELEASE_DIR}" && pnpm install --frozen-lockfile'},
+ {id:'build',name:'构建',mode:'script',plat:false,optional:false,watchdog:false,
+  desc:'产物构建（vite build）；产物目录不存在即 fail-fast',
+  code:'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'},
+ {id:'version',name:'写版本号',mode:'platform',plat:true,sub:'version',desc:'平台内置：写 deploy_versions（发布语义真相源）',code:''},
+ {id:'pointer',name:'切指针',mode:'platform',plat:true,sub:'pointer',desc:'平台内置：upsert deploy_deployments.current_version',code:''},
+ {id:'verify',name:'探活',mode:'script',plat:false,optional:false,watchdog:true,
+  desc:'探活（watchdog）：失败触发自动回滚；删除该节点 = 显式放弃自动回滚',
+  code:'set -euo pipefail\nV="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})\')"\n[ "${V}" = "${COMMIT_ID}" ] || exit 1'},
+ {id:'notify',name:'发通知',mode:'script',plat:false,optional:true,watchdog:false,
+  desc:'发通知（optional）：未配脚本自动跳过、不阻断发布',
+  code:'set -euo pipefail\necho "发布完成 ${COMMIT_ID} @ ${DEPLOY_ENV}"'}
+];
+
+/** nodes 顺序真相源（可重排；platform 位置受语义约束） */
+var seq=NODES.map(function(n){return n.id;});
+/** script 节点的多操作扩展（其余回退到单「主操作」） */
+var EXTRA_ACTS={
+  install:[{id:'a1',type:'shell',name:'pnpm install',timeout:300,code:'pnpm install --frozen-lockfile'}],
+  build:[
+    {id:'a1',type:'shell',name:'安装依赖',timeout:300,cont:true,code:'pnpm install --frozen-lockfile'},
+    {id:'a2',type:'shell',name:'vite 构建',timeout:600,cont:false,
+     code:'RELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'}
+  ],
+  verify:[{id:'a1',type:'service',name:'manifest 断言（内置工具）',tool:'manifest-assert',builtin:true,timeout:60}],
+  notify:[{id:'a1',type:'shell',name:'通知 hook',timeout:20,code:'echo "发布完成 ${COMMIT_ID}"'}]
+};
+
+function findNode(k){ return NODES.filter(function(x){return x.id===k;})[0]; }
+function getActs(n){
+  if(n.mode==='platform') return [];
+  if(EXTRA_ACTS[n.id]) return EXTRA_ACTS[n.id];
+  return [{id:'a1',type:'shell',name:'主操作',code:n.code,timeout:60}];
+}
+
+var TOOLS=[
+ {code:'port-orphan-clean',kind:'shell',cat:'deploy',desc:'仅杀非 pm2 纳管的端口占用者'},
+ {code:'render-env-file',kind:'shell',cat:'deploy',desc:'配置中心值渲染落盘 .env（0600）'},
+ {code:'deps-precheck',kind:'shell',cat:'generic',desc:'依赖预检（pm2/curl/node/lsof）'},
+ {code:'artifact-sync',kind:'shell',cat:'deploy',desc:'产物目录同步（BUILD_OUTPUT_DIR → ARTIFACT_DIR）'},
+ {code:'manifest-assert',kind:'service',cat:'probe',desc:'manifest 版本断言（脚本节点可引用，内置工具）'}
+];
+
+var RUNS=[
+ {id:'r-1021',pname:'admin',module:'admin',mt:'micro-frontend',env:'local',ver:'9263f62',branch:'feature/contract-risk-ai',status:'running',dur:'—',by:'admin',time:'09:55'},
+ {id:'r-1020',pname:'todo-service',module:'todo-service',mt:'backend',env:'local',ver:'9263f62',branch:'feature/contract-risk-ai',status:'failed',failAt:'verify',dur:'38s',by:'admin',time:'09:48'},
+ {id:'r-1019',pname:'gateway',module:'gateway',mt:'backend',env:'dev',ver:'45b5a30',branch:'master',status:'success',dur:'52s',by:'ci:release',time:'09:31'},
+ {id:'r-1018',pname:'portal',module:'portal',mt:'micro-frontend',env:'dev',ver:'6aa2682',branch:'master',status:'success',dur:'41s',by:'ci:release',time:'09:30'},
+ {id:'r-1017',pname:'admin',module:'admin',mt:'micro-frontend',env:'local',ver:'45b5a30',branch:'feature/contract-risk-ai',status:'success',dur:'39s',by:'admin',time:'08:12'},
+ {id:'r-1016',pname:'ai-agent',module:'ai-agent',mt:'backend',env:'local',ver:'45b5a30',branch:'feature/contract-risk-ai',status:'success',dur:'47s',by:'mcp:deploy',time:'08:05'}
+];
+var ST={running:['primary','运行中'],success:['ok','成功'],failed:['danger','失败'],cancelled:['gray','已取消']};
+var VARS=['MODULE_KEY','MODULE_TYPE','MODULE_DIR','RELEASE_DIR','COMMIT_ID','BRANCH','DEPLOY_ENV','PORT','PM2_NAME','PUBLIC_PATH','ARTIFACT_DIR','BUILD_OUTPUT_DIR','ENTRY_FILE','GATEWAY_URL','GATEWAY_TTL_SEC','KEEP_VERSIONS','PROTECTED_VERSIONS','WS_RESULT_FILE','WS_SAFE_DELETE'];
+
+/* ===== 导航 ===== */
+function nav(el){
+  var k=el.getAttribute('data-k');
+  document.querySelectorAll('.menu-item').forEach(function(i){i.classList.remove('active');});
+  el.classList.add('active');
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('scr-'+k).classList.add('active');
+  var t=el.getAttribute('data-title')||'';
+  document.getElementById('crumbTitle').textContent=t;
+  document.getElementById('crumbParent').textContent='发布平台';
+  if(k==='ph') document.getElementById('ph-title').textContent=t;
+  if(k==='detail'&&!CUR) openRun(RUNS[0].id);
+  if(k==='module') renderModule();
+}
+function toggleSub(el,id){
+  var sub=document.getElementById(id);
+  sub.classList.toggle('open');
+  if(el){ var c=el.querySelector('.caret'); if(c) c.textContent=sub.classList.contains('open')?'▴':'▾'; }
+}
+function toggleTheme(){
+  var h=document.documentElement;
+  h.setAttribute('data-theme', h.getAttribute('data-theme')==='dark'?'light':'dark');
+}
+
+/* ===== 列表 ===== */
+function renderRuns(){
+  var h='';
+  RUNS.forEach(function(r){
+    var s=ST[r.status];
+    h+='<tr onclick="openRun(\''+r.id+'\')">'
+      +'<td class="k">'+r.id+'</td><td>'+r.pname+'</td>'
+      +'<td><b>'+r.module+'</b> <span class="tag '+(r.mt==='backend'?'primary':'gray')+'" style="font-size:10px;padding:1px 6px">'
+      +(r.mt==='backend'?'backend':r.mt)+'</span></td>'
+      +'<td>'+r.env+'</td><td class="k">'+r.ver+'</td>'
+      +'<td class="k" style="color:var(--ws-text-secondary)">'+r.branch+'</td>'
+      +'<td><span class="dot '+s[0]+'"></span>'+s[1]+'</td>'
+      +'<td class="k">'+r.dur+'</td><td class="k" style="font-size:11px">'+r.by+'</td>'
+      +'<td class="muted">'+r.time+'</td></tr>';
+  });
+  document.getElementById('runList').innerHTML=h;
+}
+
+/* ===== 详情 ===== */
+var CUR=null,RUN=null,timer=null,editing=false;
+function openRun(id){
+  CUR=RUNS.filter(function(r){return r.id===id;})[0];
+  var s=ST[CUR.status];
+  document.getElementById('dMod').textContent=CUR.module;
+  document.getElementById('dEnv').textContent=CUR.env;
+  document.getElementById('dVer').textContent=CUR.ver;
+  var el=document.getElementById('dStatus'); el.className='tag '+s[0]; el.textContent=s[1];
+  document.getElementById('pName').textContent=CUR.pname;
+  document.getElementById('mVer').textContent=CUR.ver;
+  document.getElementById('mBranch').textContent=CUR.branch;
+  document.getElementById('mDur').textContent=CUR.dur;
+  document.getElementById('mRes').textContent=CUR.status==='success'?'manifestVersion=9263f62':'—';
+  nav(document.querySelector('[data-k="detail"]'));
+  if(editing) toggleEdit();
+  switchTab('inst');
+  buildRun(); renderSteps(); stepBody(null);
+  renderHist();
+  if(CUR.status==='running') runNext();
+}
+function switchTab(t){
+  document.getElementById('tab-inst').className='tab'+(t==='inst'?' on':'');
+  document.getElementById('tab-hist').className='tab'+(t==='hist'?' on':'');
+  document.getElementById('pane-inst').style.display=(t==='inst'&&!editing)?'block':'none';
+  document.getElementById('pane-hist').style.display=(t==='hist'&&!editing)?'block':'none';
+  document.getElementById('pane-edit').style.display=editing?'block':'none';
+}
+function renderHist(){
+  var h='';
+  RUNS.filter(function(r){return r.module===CUR.module;}).forEach(function(r){
+    var s=ST[r.status];
+    h+='<tr onclick="openRun(\''+r.id+'\')" '+(r.id===CUR.id?'style="background:var(--ws-brand-50)"':'')+'>'
+      +'<td class="k">'+r.id+'</td><td class="k">'+r.ver+'</td><td>'+r.env+'</td>'
+      +'<td class="k" style="color:var(--ws-text-secondary)">'+r.branch+'</td>'
+      +'<td><span class="dot '+s[0]+'"></span>'+s[1]+'</td>'
+      +'<td class="k">'+r.dur+'</td><td class="muted">'+r.time+'</td></tr>';
+  });
+  document.getElementById('histList').innerHTML=h;
+}
+function buildRun(){
+  var failAt=(CUR.status==='failed')?(CUR.failAt||'verify'):null;
+  var pastFail=false;
+  RUN={seq:seq.map(function(k){
+    var n=findNode(k);
+    var st='pending';
+    if(CUR.status==='success') st='success';
+    else if(failAt){
+      if(k===failAt){ st='failed'; pastFail=true; }
+      else if(!pastFail) st='success';
+      else st='skipped';
+    }
+    return {id:n.id,name:n.name,mode:n.mode,plat:n.plat,watch:n.watchdog,sub:n.sub,
+      skipped:(CUR.status==='failed'&&pastFail&&k!==failAt)||(n.optional&&!EXTRA_ACTS[n.id]),
+      state:st};
+  }),idx:0};
+}
+var STCN={pending:'待执行',running:'执行中',success:'成功',failed:'失败',skipped:'已跳过'};
+function renderSteps(){
+  if(!RUN) return;
+  var h='';
+  RUN.seq.forEach(function(s,i){
+    if(i>0){
+      var p=RUN.seq[i-1];
+      h+='<div class="farrow '+(p.state==='success'?'done':p.state==='failed'?'fail':'')+'"></div>';
+    }
+    h+='<div class="fnode '+s.state+(s.plat?' plat':'')+(s.watch?' watch':'')+'" onclick="stepBody(\''+s.id+'\')">'
+      +'<span class="fidx">'+(i+1)+'</span>'
+      +(s.watch?'<span class="wbadge">⚠</span>':'')
+      +'<span class="fname">'+s.name+'</span>'
+      +(s.plat?'<span class="flock">🔒 platform</span>':'<span class="fk">'+s.id+'</span>')
+      +'<span class="ftag">'+(STCN[s.state]||s.state)+(s.optional?' · optional':'')+'</span></div>';
+  });
+  document.getElementById('flowRun').innerHTML=h;
+}
+function stepBody(id){
+  var box=document.getElementById('stepBody');
+  if(!id){ box.innerHTML='<div class="banner info">点击上方任一节点查看日志与回传结果。</div>'; return; }
+  var n=findNode(id);
+  if(!n) return;
+  var acts=getActs(n);
+  var log='';
+  acts.forEach(function(a,i){
+    log+='<div style="margin-bottom:7px"><div class="op-h">── op'+(i+1)+' '+a.name+'　成功</div>'
+      +'<span>['+id+'/op'+(i+1)+'] $ '+(a.code||('工具 '+a.tool)).split('\n')[0]+'\n['+id+'/op'+(i+1)+'] 退出码 0</span></div>';
+  });
+  if(!acts.length) log=n.mode==='platform'
+    ? '（platform · '+n.name+' 由引擎执行，'+n.desc.replace(/；.*/,'')+'）'
+    : '（未配置脚本'+(n.optional?' · optional 已跳过':'')+'）';
+  box.innerHTML='<div class="grid2"><div><div class="t">操作日志（按 opN 分段）</div>'
+    +'<div class="logbox">'+log+'</div></div>'
+    +'<div><div class="t">WS_RESULT_FILE 回传</div>'
+    +'<div class="logbox" style="max-height:120px">'
+    +(id==='build'?'{"artifactPath":"/static/modules/admin/9263f62/"}':(n.mode==='platform'?'（platform 无脚本，不写 result）':'（未写入）'))
+    +'</div><div class="hint">操作写 $WS_RESULT_FILE，平台按 key 合并进 result；语义字段（status/versionTag 等）被白名单过滤。</div></div></div>';
+}
+function runNext(){
+  if(!RUN) return;
+  while(RUN.idx<RUN.seq.length&&RUN.seq[RUN.idx].skipped){ RUN.seq[RUN.idx].state='skipped'; RUN.idx++; }
+  if(RUN.idx>=RUN.seq.length){
+    var el=document.getElementById('dStatus'); el.textContent='成功'; el.className='tag ok';
+    renderSteps(); return;
+  }
+  var s=RUN.seq[RUN.idx]; s.state='running'; renderSteps();
+  timer=setTimeout(function(){
+    if(!RUN) return;
+    if(s.id==='verify'&&s.watch&&CUR.mt==='micro-frontend'){
+      s.state='failed'; RUN.idx++; renderSteps(); stepBody('verify');
+      var el=document.getElementById('dStatus'); el.textContent='失败 · 自动回滚中'; el.className='tag danger';
+      toast('verify（watchdog）失败 → 触发自动回滚 rollbackOnFailure=previous');
+      return;
+    }
+    s.state='success'; RUN.idx++; renderSteps(); runNext();
+  }, s.mode==='platform'?500:(s.id==='build'?1400:800));
+}
+
+/* ===== 编辑态（v5 nodes：插孔即落即编 + 拖拽排序 + 卡片删除 + label/key/watchdog 面板） ===== */
+var editCur='', editAct=null, dragKey='', insSide='l';
+var PLATFORM_KEYS=['git','version','pointer'];
+var usedKeys=NODES.map(function(n){return n.id;});
+function toggleEdit(){
+  editing=!editing;
+  document.getElementById('btnEdit').textContent=editing?'退出编辑':'编辑流水线';
+  if(editing){ renderEditList(); renderEditDetail(); }
+  switchTab(document.getElementById('tab-inst').className.indexOf('on')>=0?'inst':'hist');
+}
+function renderEditList(){
+  var h='';
+  seq.forEach(function(id,i){
+    var n=findNode(id), plat=n.plat, watch=n.watchdog;
+    if(i>0){
+      h+='<div class="fslot" title="在「'+findNode(seq[i-1]).name+'」与「'+n.name+'」之间插入">'
+        +'<div class="farrow"></div>'
+        +'<button class="fplus" title="在「'+findNode(seq[i-1]).name+'」与「'+n.name+'」之间插入 script 节点" onclick="insertAt(\''+id+'\')">+</button></div>';
+    }
+    h+='<div class="fnode '+(plat?'plat':'')+(watch?'watch':'')+(editCur===id?'active':'')+'" '
+      +(plat?'':'draggable="true" ')+'id="node-'+id+'" '
+      +(plat?'':'ondragstart="ds(\''+id+'\',event)" ondragend="de()" ')
+      +'ondragover="ov(event)" ondrop="dp(\''+id+'\',event)" onclick="pick(\''+id+'\')">'
+      +'<span class="fidx">'+(i+1)+'</span>'
+      +(watch?'<span class="wbadge">⚠ watchdog</span>':'')
+      +(plat?'':'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+id+'\')">×</button>')
+      +(plat?'<span class="flock">🔒 platform</span>':'')
+      +'<span class="fname">'+n.name+'</span>'
+      +(plat?'<span class="fk">'+n.sub+'</span>':'<span class="fk">'+id+'</span>')
+      +'</div>';
+  });
+  document.getElementById('nodeCount').textContent='· '+seq.length+' 节点';
+  document.getElementById('flowEdit').innerHTML=h;
+}
+/* ===== 拖拽（script 可拖；platform 锁定）。落位语义约束：git 首位 / version 在 pointer 前 ===== */
+function ds(key,e){ var n=findNode(key); if(!n||n.plat){ e.preventDefault(); return; }
+  dragKey=key; e.dataTransfer.effectAllowed='move';
+  var el=document.getElementById('node-'+key); if(el) setTimeout(function(){el.classList.add('dragging');},0); }
+function de(){ document.querySelectorAll('#flowEdit .fnode').forEach(function(x){x.classList.remove('dragging','ins-l','ins-r');}); dragKey=''; }
+function ov(e){ e.preventDefault(); var el=e.currentTarget,r=el.getBoundingClientRect();
+  insSide=(e.clientX<r.left+r.width/2)?'l':'r';
+  document.querySelectorAll('#flowEdit .fnode').forEach(function(x){x.classList.remove('ins-l','ins-r');});
+  el.classList.add(insSide==='l'?'ins-l':'ins-r'); }
+function dp(tid,e){
+  e.preventDefault(); if(!dragKey) return;
+  var key=dragKey, m=findNode(key); if(!m) return;
+  var f=seq.indexOf(key); if(f<0) return;
+  var t=seq.indexOf(tid); if(t<0) return;
+  var s=seq.slice(); s.splice(f,1);
+  var to=s.indexOf(tid); if(insSide==='r') to++;
+  s.splice(to,0,key);
+  var err=checkOrder(s);
+  if(err){ toast('不可移动：'+err); de(); return; }
+  seq=s; de(); renderEditList(); renderEditDetail();
+  toast('已移动「'+m.name+'」→ 第 '+(to+1)+' 位');
+}
+function checkOrder(s){
+  if(s[0]!=='git') return '「git」必须排在第一位（发布语义基线）';
+  var iv=s.indexOf('version'), ip=s.indexOf('pointer');
+  if(iv<0||ip<0) return null;
+  if(iv>ip) return '「version（写版本号）」必须排在「pointer（切指针）」之前';
+  return null;
+}
+function saveFlow(){
+  var err=checkOrder(seq);
+  var eh=document.getElementById('errHint');
+  if(err){ eh.style.display='block'; eh.innerHTML='<div class="banner danger">'+err+'</div>'; toast('顺序不可保存'); return; }
+  eh.style.display='none';
+  toast('顺序已保存 · 审计留痕（nodes: '+seq.join(' → ')+'）');
+}
+/* ===== 添加节点（顶部按钮 / 插孔）：插入 seq 第 slot 个位置并选中 ===== */
+function insertAt(targetKey){
+  var slot=seq.indexOf(targetKey); if(slot<0) slot=seq.length;
+  addNodeAt(slot);
+}
+function addNodeDefault(){
+  // 顶部「+ 添加节点」：git 之后（第 2 位）
+  var gi=seq.indexOf('git'); addNodeAt((gi>=0?gi:0)+1);
+}
+function uniqueKey(){
+  var base='node', i=2;
+  while(usedKeys.indexOf(base)>=0) base='node'+(i++);
+  return base;
+}
+function addNodeAt(slot){
+  var key=uniqueKey();
+  var n={id:key,name:'新节点',mode:'script',plat:false,optional:false,watchdog:false,
+    desc:'自定义 script 节点：拖拽排序 / 下方配脚本',code:'# 在此编写脚本',fresh:true};
+  NODES.push(n); usedKeys.push(key);
+  seq.splice(slot,0,key);
+  renderEditList(); pick(key);
+  toast('已添加 script 节点（key='+key+'），请在下方配置 label/key/脚本');
+}
+/* ===== 选中与属性面板 ===== */
+function pick(id){
+  var n=findNode(id); if(!n) return;
+  if(n.plat){ toast('platform 节点（'+n.name+'）锁定，不可增删改'); return; }
+  editCur=id; editAct=null; renderEditList(); renderEditDetail();
+}
+function pickAct(aid){ editAct=aid; renderEditDetail(); }
+function renderEditDetail(){
+  var box=document.getElementById('editDetail');
+  if(!editCur){
+    box.innerHTML='<div class="hint" style="padding:20px 0;text-align:center;margin:0">'
+      +'点击上方 script 节点配置脚本；点连接线「+」或顶部「添加节点」直接落新节点。platform（git/写版本号/切指针）锁定。</div>';
+    return;
+  }
+  var n=findNode(editCur); if(!n) return;
+  var acts=getActs(n), act=null;
+  if(acts.length) act=acts.filter(function(a){return a.id===editAct;})[0]
+    || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
+  /* --- 属性面板：label / key / optional / watchdog --- */
+  var h='<div class="props">';
+  h+='<div class="t" style="margin-bottom:8px">节点属性 · <span style="text-transform:none">'+n.name+'</span></div>';
+  h+='<div class="row" style="align-items:flex-end;gap:14px;margin-bottom:8px;flex-wrap:wrap;">'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">label（即改即同步画布）</div>'
+    +'<input class="in" id="inLabel-'+n.id+'" value="'+n.name+'" oninput="renameLabel(\''+n.id+'\',this.value)"></div>'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">key <span class="mono" style="font-weight:400">（模块脚本读写点）</span></div>'
+    +'<input class="in mono" value="'+n.id+'" onchange="renameKey(\''+n.id+'\',this.value)"></div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px;padding:2px 0;">'
+    +'<label class="chk"><input type="checkbox" '+(n.optional?'checked':'')+' onchange="var x=findNode(\''+n.id+'\');x.optional=this.checked;toast(\'optional '+(n.optional?'开':'关')+'\')"> optional（未配脚本跳过不阻断）</label>'
+    +'<label class="chk"><input type="checkbox" '+(n.watchdog?'checked':'')+' onchange="toggleWatch(\''+n.id+'\',this.checked)"> watchdog（失败触发自动回滚）</label></div>'
+    +'<div><button class="btn mini gray" style="background:var(--ws-error-500);color:#fff;border:none;" onclick="askDel(\''+n.id+'\')">删除节点</button></div>'
+    +'</div>';
+  h+='<div class="muted">脚本读写：模块 × <span class="mono">'+n.id+'</span>（复用 StageActionsEditor，多操作按序执行）。</div>';
+  h+='</div>';
+  /* --- 脚本操作编辑器（复用多操作编辑器形态） --- */
+  h+='<div style="margin-top:12px"><div class="t">脚本 · 操作列表（'+acts.length+'）顺序执行</div>';
+  acts.forEach(function(a,i){
+    h+='<div class="act '+(act&&act.id===a.id?'on':'')+(a.builtin?' lock':'')+'" '
+      +(a.builtin?'':'onclick="pickAct(\''+a.id+'\')" ')+'>'
+      +'<span class="an">op'+(i+1)+' '+a.name+'</span>'
+      +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
+      +(a.cont?'<span class="tag warn">容错</span>':'')
+      +'<span class="am">'+(a.timeout||60)+'s</span>'
+      +(a.builtin?'<span class="tag gray">内置</span>':'<button class="btn mini gray" onclick="event.stopPropagation();delAct(\''+a.id+'\')">删</button>')
+      +'</div>';
+  });
+  h+='<div class="row" style="margin-bottom:10px">'
+    +'<button class="btn ghost mini" onclick="addAct()">+ shell 操作</button>'
+    +'<button class="btn ghost mini" onclick="toast(\'引用工具：工具升级自动扩散\')">+ 引用工具</button>'
+    +'<button class="btn ghost mini" onclick="toast(\'语法校验通过\')">校验</button></div>';
+  if(act){
+    h+='<div class="editor-wrap"><div class="editor-bar"><span>操作 · '+act.name+'</span>'
+      +'<span class="row"><button class="btn ghost sm" onclick="toast(\'bash -n 通过\')">校验</button>'
+      +'<button class="btn sm" onclick="toast(\'已保存 · 审计留痕\')">保存</button></span></div>'
+      +(act.type==='service'
+        ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
+        : codeEditor(String(act.code||'')))
+      +'</div>';
+    h+='<div class="t" style="margin-top:10px">可用变量（点击插入）</div><div class="chips">';
+    VARS.forEach(function(v){ h+='<span class="chip" onclick="ins(\''+v+'\')">${'+v+'}</span>'; });
+    h+='</div>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+}
+/* label / key 即改即同步 */
+function renameLabel(id,val){
+  var n=findNode(id); if(!n) return;
+  n.name=val||'新节点'; renderEditList();
+}
+function renameKey(oldKey,val){
+  var k=(val||'').trim();
+  if(!k){ toast('key 不能为空'); renderEditDetail(); return; }
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(k)){ toast('key 格式非法'); renderEditDetail(); return; }
+  if(PLATFORM_KEYS.indexOf(k)>=0){ toast('key 不能占用平台保留字'); renderEditDetail(); return; }
+  if(k!==oldKey&&usedKeys.indexOf(k)>=0){ toast('key 已存在'); renderEditDetail(); return; }
+  var n=findNode(oldKey); if(!n) return;
+  usedKeys=usedKeys.map(function(x){return x===oldKey?k:x;});
+  n.id=k;
+  seq=seq.map(function(x){return x===oldKey?k:x;});
+  editCur=k; renderEditList(); renderEditDetail();
+  toast('key 已改为 '+k+'（模块脚本读写点同步）');
+}
+/* watchdog 互斥（至多 1 个，移走旧锚点） */
+function toggleWatch(key,on){
+  var n=findNode(key); if(!n) return;
+  if(on){
+    NODES.forEach(function(x){ x.watchdog=false; });
+    n.watchdog=true;
+    toast('已标记 watchdog：「'+n.name+'」失败将触发自动回滚');
+  }else{
+    n.watchdog=false;
+    toast('已取消 watchdog：发布失败将不再自动回滚');
+  }
+  renderEditList();
+}
+/* 删除节点（破坏性确认，文案随 watchdog / optional 变） */
+var delKey='';
+function askDel(key){
+  var n=findNode(key); if(!n||n.plat) return;
+  delKey=key;
+  document.getElementById('delTitle').textContent='删除 script 节点「'+n.name+'」';
+  document.getElementById('delBody').innerHTML=(n.watchdog
+    ?'该节点标记为 <b>watchdog（自动回滚锚点）</b>。删除后：发布失败将<b>不再自动回滚</b>，如需回滚请先标记其它节点为 watchdog。<br>'
+    :'')+(n.optional
+      ?'该节点为 <b>optional</b>：删除后相关步骤不再执行（原本未配脚本即跳过）。<br>'
+      :'')+'<span class="muted">已配置该 key 的模块脚本会保留为「孤儿脚本」（弱提示，非阻塞）。</span>';
+  openModal('mDelNode');
+}
+function doDeleteNode(){
+  if(!delKey) return;
+  var wasWatch=findNode(delKey)?findNode(delKey).watchdog:false;
+  NODES=NODES.filter(function(x){return x.id!==delKey;});
+  seq=seq.filter(function(k){return k!==delKey;});
+  usedKeys=usedKeys.filter(function(k){return k!==delKey;});
+  if(editCur===delKey) editCur='';
+  closeModal('mDelNode');
+  renderEditList(); renderEditDetail();
+  toast('已删除节点：'+delKey+(wasWatch?'（不再自动回滚）':''));
+  delKey='';
+}
+/* 脚本操作增删 */
+function addAct(){
+  var n=findNode(editCur); if(!n) return;
+  if(!EXTRA_ACTS[n.id]) EXTRA_ACTS[n.id]=getActs(n);
+  var arr=EXTRA_ACTS[n.id];
+  arr.push({id:'a'+(arr.length+1)+'_'+Date.now().toString(36),type:'shell',name:'新操作',timeout:60,code:'# 在此编写脚本'});
+  editAct=arr[arr.length-1].id; renderEditList(); renderEditDetail(); toast('已添加操作');
+}
+function delAct(aid){
+  var n=findNode(editCur); if(!n) return;
+  var arr=EXTRA_ACTS[n.id]||getActs(n), i=-1;
+  for(var k=0;k<arr.length;k++){ if(arr[k].id===aid){ i=k; break; } }
+  if(i<0) return;
+  if(arr[i].builtin){ toast('内置操作不可删除'); return; }
+  arr.splice(i,1); EXTRA_ACTS[n.id]=arr;
+  if(editAct===aid) editAct=null;
+  renderEditList(); renderEditDetail(); toast('已删除操作');
+}
+
+/* ===== 模块详情（v5：模块脚本按 nodes 的 script 节点配置；platform 无脚本自动隐藏） ===== */
+var modKey='', modAct=null;
+function modNode(){ return findNode(modKey); }
+function renderModule(){
+  var scripts=seq.map(findNode).filter(function(x){return x&&!x.plat;});
+  if(scripts.length && scripts.filter(function(x){return x.id===modKey;}).length===0){
+    modKey=scripts[0].id;
+  }
+  var h='';
+  scripts.forEach(function(n){
+    var acts=getActs(n);
+    var src=EXTRA_ACTS[n.id]?'configured':(n.fresh?'empty':'builtin');
+    h+='<div class="act '+(modKey===n.id?'on':'')+'" onclick="pickModStage(\''+n.id+'\')">'
+      +'<span class="an">'+n.name+'</span>'
+      +(n.watchdog?'<span class="tag warn">watchdog</span>':'')
+      +'<span class="tag '+(src==='configured'?'primary':src==='empty'?'gray':'gray')+'">'
+      +(src==='configured'?'已配置':(src==='empty'?'未配置·'+(n.optional?'可选':'必配'):'内置'))+'</span>'
+      +'<span class="am">'+acts.length+' 操作</span></div>';
+  });
+  document.getElementById('modStageList').innerHTML=h;
+
+  if(!modKey || !modNode()){
+    document.getElementById('modStageDetail').innerHTML='<div class="hint" style="padding:18px 0;text-align:center;margin:0">当前 nodes 无 script 节点（仅 platform）——脚本无处可配。</div>';
+    return;
+  }
+  var n=modNode(), acts=getActs(n);
+  var d='<div class="t">script 节点 · '+n.name+'（'+acts.length+' 个操作）</div>';
+  d+='<div class="hint" style="margin-bottom:10px">'+n.desc+'</div>';
+  d+='<div class="row" style="margin-bottom:8px;gap:6px;">'
+    +(n.optional?'<span class="tag gray">optional</span>':'<span class="tag primary">required</span>')
+    +(n.watchdog?'<span class="tag warn">⚠ watchdog · 失败自动回滚</span>':'')
+    +'<span class="muted">脚本读写点：模块 × <span class="mono">'+n.id+'</span></span></div>';
+  acts.forEach(function(a,i){
+    d+='<div class="act '+((modAct||acts[0].id)===a.id?'on':'')+(a.builtin?' lock':'')+'" '
+      +(a.builtin?'':'onclick="pickModAct(\''+a.id+'\')" ')+'>'
+      +'<span class="an">op'+(i+1)+' '+a.name+'</span>'
+      +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
+      +(a.cont?'<span class="tag warn">容错</span>':'')
+      +'<span class="am">'+(a.timeout||60)+'s</span>'
+      +(a.builtin?'<span class="tag gray">内置</span>':'<button class="btn mini gray" onclick="event.stopPropagation();delModAct(\''+a.id+'\')">删</button>')
+      +'</div>';
+  });
+  d+='<div class="row" style="margin-bottom:10px">'
+    +'<button class="btn ghost mini" onclick="addModAct()">+ shell 操作</button>'
+    +'<button class="btn ghost mini" onclick="toast(\'引用工具：工具升级自动扩散\')">+ 引用工具</button></div>';
+  var act=acts.filter(function(a){return a.id===modAct;})[0]
+    || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
+  if(act){
+    d+='<div class="editor-wrap"><div class="editor-bar"><span>操作 · '+act.name+'</span>'
+      +'<span class="row"><button class="btn ghost sm" onclick="toast(\'bash -n 通过\')">校验</button>'
+      +'<button class="btn sm" onclick="toast(\'已保存：PUT actions 全量提交\')">保存</button></span></div>'
+      +(act.type==='service'
+        ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
+        : codeEditor(String(act.code||'')))
+      +'</div>';
+  }
+  d+='<div class="hint">保存以 <b>actions 数组</b>整体提交；该节点若被模板删除，脚本成「孤儿」但保留（弱提示）。</div>';
+  document.getElementById('modStageDetail').innerHTML=d;
+}
+function pickModStage(k){ modKey=k; modAct=null; renderModule(); }
+function pickModAct(id){ modAct=id; renderModule(); }
+function addModAct(){
+  var n=modNode(); if(!n) return;
+  if(!EXTRA_ACTS[n.id]) EXTRA_ACTS[n.id]=getActs(n);
+  var arr=EXTRA_ACTS[n.id];
+  arr.push({id:'a'+(arr.length+1)+'_'+Date.now().toString(36),type:'shell',name:'新操作',timeout:60,code:'# 在此编写脚本'});
+  modAct=arr[arr.length-1].id; renderModule(); toast('已添加操作');
+}
+function delModAct(aid){
+  var n=modNode(); if(!n) return;
+  var arr=EXTRA_ACTS[n.id]||getActs(n), i=-1;
+  for(var k=0;k<arr.length;k++){ if(arr[k].id===aid){ i=k; break; } }
+  if(i<0) return;
+  if(arr[i].builtin){ toast('内置操作不可删除'); return; }
+  arr.splice(i,1); EXTRA_ACTS[n.id]=arr;
+  if(modAct===aid) modAct=null;
+  renderModule(); toast('已删除操作');
+}
+
+/* ===== 编辑器（暗色 + 高亮） ===== */
+function hl(code){
+  var KW=/\b(set|if|then|else|fi|for|in|do|done|case|esac|while|function|exit|echo|cd|mv|cp|mkdir|test|sleep|export|umask|env|grep|awk|sed|read|local|node|curl|pm2|ls|df)\b/g;
+  return String(code||'').split('\n').map(function(l){
+    l=l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if(/^\s*#/.test(l)) return '<span class="c-cmt">'+l+'</span>';
+    l=l.replace(/(\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*)/g,'<span class="c-var">$1</span>');
+    return l.replace(KW,'<span class="c-kw">$1</span>');
+  }).join('\n');
+}
+function gutter(n){ var s=''; for(var i=1;i<=n;i++) s+=i+'\n'; return s; }
+function syncCode(){
+  var ta=document.getElementById('code'); if(!ta) return;
+  var h=document.getElementById('codeHl'), g=document.getElementById('codeGut');
+  if(h) h.innerHTML=hl(ta.value);
+  if(g) g.textContent=gutter(ta.value.split('\n').length);
+}
+function syncScroll(){
+  var ta=document.getElementById('code'); if(!ta) return;
+  var h=document.getElementById('codeHl'), g=document.getElementById('codeGut');
+  if(h) h.scrollTop=ta.scrollTop;
+  if(g) g.scrollTop=ta.scrollTop;
+}
+function codeEditor(v){
+  var esc=v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div class="code-wrap">'
+    +'<div class="code-gutter" id="codeGut">'+gutter(v.split('\n').length)+'</div>'
+    +'<div class="code-main"><pre class="code-hl" id="codeHl">'+hl(v)+'</pre>'
+    +'<textarea class="code-in" id="code" spellcheck="false" oninput="syncCode()" onscroll="syncScroll()">'+esc+'</textarea>'
+    +'</div></div>';
+}
+function ins(v){
+  var t=document.getElementById('code'); if(!t) return;
+  t.value+='\n${'+v+'}'; syncCode(); toast('已插入 ${'+v+'}');
+}
+
+/* ===== 工具目录 ===== */
+(function(){
+  var h='';
+  TOOLS.forEach(function(t){
+    h+='<tr><td class="k">'+t.code+'</td>'
+      +'<td><span class="tag '+(t.kind==='service'?'primary':'gray')+'">'+t.kind+'</span></td>'
+      +'<td class="muted">'+t.cat+'</td><td>'+t.desc+'</td></tr>';
+  });
+  document.getElementById('toolList').innerHTML=h;
+})();
+
+/* ===== 名称备注 ===== */
+function openRename(){
+  document.getElementById('rnName').value=CUR?CUR.pname:'';
+  document.getElementById('rnDesc').value='v5 nodes：git → 安装依赖 → 构建 → 写版本号 → 切指针 → 探活（watchdog）→ 通知';
+  openModal('mRename');
+}
+function saveRename(){
+  var n=document.getElementById('rnName').value.trim();
+  if(!n){ toast('名称不能为空'); return; }
+  var old=CUR?CUR.pname:null;
+  if(old) RUNS.forEach(function(r){ if(r.pname===old) r.pname=n; });
+  if(CUR) CUR.pname=n;
+  document.getElementById('pName').textContent=n;
+  closeModal('mRename'); renderRuns(); toast('已保存 · 审计留痕');
+}
+
+/* ===== 通用 ===== */
+/** 页内 Tab 切换（模块管理/服务监控/配置中心/灰度管理共用） */
+function pickTab(el, group){
+  document.querySelectorAll('[data-tab-group="'+group+'"]').forEach(function(t){ t.classList.remove('on'); });
+  el.classList.add('on');
+}
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+var tt;
+function toast(m){ var e=document.getElementById('toast'); e.textContent=m; e.classList.add('show');
+  clearTimeout(tt); tt=setTimeout(function(){e.classList.remove('show');},1800); }
+
+renderRuns();
+</script>
+</body>
+</html>
