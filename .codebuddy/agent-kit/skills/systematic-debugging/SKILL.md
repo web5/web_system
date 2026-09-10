@@ -78,4 +78,4 @@ version: 1.0.0
 ## 接管规则
 
 - 根因是跨模块的结构性问题 → 停止修补，转 `tech-review` 评估方案
-- 修复完成 → 必须走 `verification-before-completion` 再交付
+- 修复完成 → 必须走 `rd-execute` 的完成验证门再交付
