@@ -92,6 +92,7 @@ cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
 - `docs/development/local-dev-setup.md` — 新机器/换环境从零启动（含无 brew 装 DB）
 - `docs/development-guide.md` — 研发平台开发与使用总指南（分层/服务清单/启动/发布系统/FAQ）
 - `docs/development/admin-dev.md` — admin 微前端详细开发（依赖/路由/nginx 集成/微前端发布四步/提 PR）
+- `docs/development/agent-capability-playbook.md` — **Agent 能力体验手册**（四层架构/8 个 UI 入口/权限码/推荐走查路线/维护约定）— 动手体验或回归验证 Agent 先看这篇
 - `docs/development/whistle-local-dev.md` — whistle 本地代理
 
 ---
@@ -165,6 +166,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 - `docs/architecture/micro-frontend-technical-design.md` — 微前端设计（共享依赖/CSS 隔离/产物分发）
 - `docs/architecture/网关URL规划.md` — 路由规划；`docs/architecture/MCP服务间鉴权.md` — 服务间鉴权；`docs/architecture/kedou-network-architecture.md` — 网络架构
 - `docs/architecture/agent-definition-db-design.md` — 数字人 Agent 定义数据模型（与 §3 数字人体系呼应）
+- `docs/development/agent-capability-playbook.md` — Agent 能力全景与体验入口（agent-core / ai-agent:6010 / ai-service:6003 / knowledge:6011 的能力清单与表结构，改 Agent 相关代码后须同步更新该手册）
 - `docs/architecture/release-system-design.md` / `release-system-implementation-plan.md` — 发布平台设计
 - `docs/architecture/micro-frontend-style-guide.md` — 微前端样式约束
 
