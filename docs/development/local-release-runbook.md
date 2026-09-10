@@ -29,6 +29,17 @@
 
 ## 二、日常发布流程
 
+> ⚠️ **升级发布前先跑迁移**：`NODE_ENV=production` 下 TypeORM synchronize 关闭，
+> 新表不会自动创建，漏跑会出现「进程 online 但端口不监听」的隐性故障。
+> ```bash
+> ./scripts/apply-migrations.sh local    # 本机（root 有密码用 MYSQL_PWD=<密码>）
+> ./scripts/apply-migrations.sh dev      # 开发服务器
+> ./scripts/apply-migrations.sh prod     # 生产服务器
+> DRY_RUN=1 ./scripts/apply-migrations.sh dev   # 预演
+> ```
+> 幂等（已应用记在目标库 `schema_migrations`），详见 `DEPLOYMENT.md §一·6`。
+> 存量库首次接入：`--baseline-through 0006_dict_tables.sql`。
+
 ### 2.1 发布工具（deploy-console）自身 —— 传统发布
 
 deploy-console 是发布工具自身，**不能走流水线**（`stageRestart` 会 restart 执行者导致自杀式中断）。
