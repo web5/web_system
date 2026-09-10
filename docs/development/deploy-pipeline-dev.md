@@ -8,7 +8,7 @@
 
 | 项 | 结论 |
 |---|---|
-| 覆盖模块 | 前端/微前端（`admin`、`portal`）+ 后端服务（`todo-service` 等，pm2 管理）。`mcp-admin` 已合入 admin；mini-app 不纳入 |
+| 覆盖模块 | 前端/微前端（`admin`、`portal`）+ 后端服务（`todo-service` 等，pm2 管理）。`mcp-admin` 已合入 admin；mini-contract 不纳入 |
 | **发布语义** | **git 拉取**：发布目录（`~/web_system_release`）从远程仓库按「分支 + commit」拉取代码构建部署，**不基于当前工作区**。本地验证 = 工作区 commit&push → 发布目录拉取对应分支 → 部署 |
 | 前端发布 | 拉取 → `vite build --mode mf` → 产物投递发布目录 gateway public → 切指针 → manifest 验证 |
 | 后端发布 | 拉取 → `nest build` → `pm2 restart <服务>`（pm2 已指向发布目录）→ 服务在线验证 |

@@ -1,7 +1,7 @@
 /**
  * 超时配置 — 前后端统一，按场景分层
  *
- * - 前端 portal/admin-web/mini-app 直接用 API_TIMEOUT.{DEFAULT,AI_TASK,AI_QUERY}
+ * - 前端 portal/admin-web/mini-contract 直接用 API_TIMEOUT.{DEFAULT,AI_TASK,AI_QUERY}
  * - Gateway proxy 层用 API_TIMEOUT.GATEWAY.*
  * - 后端 service 调第三方 API 用 API_TIMEOUT.UPSTREAM.*
  *

@@ -1,7 +1,7 @@
 {
-  "name": "@web-system/mini-app",
+  "name": "@web-system/mini-contract",
   "version": "1.0.0",
-  "description": "WeChat Mini Program",
+  "description": "合同翻译官小程序（WeChat Mini Program）",
   "main": "app.ts",
   "scripts": {
     "dev": "echo 'Mini app development'",

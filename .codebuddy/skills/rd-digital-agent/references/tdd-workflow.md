@@ -202,9 +202,9 @@ global.wx = {
 
 ## 项目测试配置
 
-### Jest 配置（mini-app）
+### Jest 配置（mini-contract）
 
-**文件：** `apps/mini-app/tests/jest.config.js`
+**文件：** `apps/mini-contract/tests/jest.config.js`
 
 ```javascript
 module.exports = {
@@ -220,13 +220,13 @@ module.exports = {
 
 ```bash
 # 运行所有测试
-cd apps/mini-app && npx jest tests --config tests/jest.config.js
+cd apps/mini-contract && npx jest tests --config tests/jest.config.js
 
 # 监视模式（自动重跑）
-cd apps/mini-app && npx jest tests --config tests/jest.config.js --watch
+cd apps/mini-contract && npx jest tests --config tests/jest.config.js --watch
 
 # 运行特定测试文件
-cd apps/mini-app && npx jest tests/device.test.ts --config tests/jest.config.js
+cd apps/mini-contract && npx jest tests/device.test.ts --config tests/jest.config.js
 ```
 
 ---
