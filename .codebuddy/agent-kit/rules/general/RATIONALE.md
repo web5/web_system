@@ -2,7 +2,7 @@
 audience: human
 ---
 
-# 红线设计理由（人面 · L2）
+# 红线设计理由（人面）
 
 > 本目录五条红线的「为什么」集中于此。`NN-*.md` 是 AI 面（约束 + 判定手段），本文件是人面（决策背景 + 失败形态），AI 默认不加载。
 > 分层规范见 `references/dual-audience-design.md` §5.2。

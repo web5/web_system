@@ -4,7 +4,7 @@
 >
 > 本文 = 落点审计的沉淀。配套内容不变量条文已落：`AGENT.md`「开工前置」+ `skills/rd-plan/references/thinking-checklist.md` 简化档 · 最小交付卡。
 >
-> 版本：2026-09-10 v1.3（v1 = 简化档升级同批落地；v1.1 = profile 口径同步 + 数字人评测换基线判定；v1.2 = §六 待同步点 2/3 闭合——逃逸口统一不变量声明 + 非代码任务判据先行最小形态固化；**v1.3 = 设计与交付验证同构**：验证判据从"对话中的两件套"升级为编号落盘的「验证判据表 V1…Vn」（spec 收尾章节），交付侧按同一编号勾核；`verification-before-completion` 技能删除、职责收编进 `rd-execute` 完成验证门；新增唯一方法论来源声明——不并行 Superpowers 等第二套工作流）；**v1.4 = 双面分层（AI 面 / 人面）**：定义资产分离 AI 常驻面与人面（人面外置 `RATIONALE.md`，不占常驻上下文），红线五条补齐「判定手段」节，`eval-gate` 新增 S8 双面一致性检查，规范见 `references/dual-audience-design.md`；**v1.5 = 方法论融合为一套**：新增 `kits/`（L1 行为准则 / L2 执行手段库 / L3 协作主干），唯一性收敛为「编排权」，第二套编排技能的处理优先级为 补齐判据字段 → 同域同名以 `rd-*` 为准 → 整体卸载，规范见 `references/three-kits-architecture.md`。文件行号以该日期快照为准，后续以节名定位。
+> 版本：2026-09-10 v1.3（v1 = 简化档升级同批落地；v1.1 = profile 口径同步 + 数字人评测换基线判定；v1.2 = §六 待同步点 2/3 闭合——逃逸口统一不变量声明 + 非代码任务判据先行最小形态固化；**v1.3 = 设计与交付验证同构**：验证判据从"对话中的两件套"升级为编号落盘的「验证判据表 V1…Vn」（spec 收尾章节），交付侧按同一编号勾核；`verification-before-completion` 技能删除、职责收编进 `rd-execute` 完成验证门；新增唯一方法论来源声明——不并行 Superpowers 等第二套工作流）；**v1.4 = 双面分层（AI 面 / 人面）**：定义资产分离 AI 常驻面与人面（人面外置 `RATIONALE.md`，不占常驻上下文），红线五条补齐「判定手段」节，`eval-gate` 新增 S8 双面一致性检查，规范见 `references/dual-audience-design.md`；**v1.5 = 方法论融合为一套**：新增 `kits/`（L1 行为准则 / L2 执行手段库 / L3 协作主干），唯一性收敛为「编排权」，第二套编排技能的处理优先级为 补齐判据字段 → 同域同名以 `rd-*` 为准 → 整体卸载，规范见 `references/methodology-design.md`；**v1.6 = 移除「整体卸载」应急手段**（`scripts/uninstall-superpowers.sh` 已删除），处理优先级收敛为 补齐判据字段 → 同域同名以 `rd-*` 为准；**v1.7 = 资产模型再设计**（撤销 `kits/` 与 L1/L2/L3 编号：产出纪律常驻 `AGENT.md`、工程纪律并入技能实体、设计论证迁至 `references/methodology-design.md`）。文件行号以该日期快照为准，后续以节名定位。
 
 ## 〇、一句话结论
 

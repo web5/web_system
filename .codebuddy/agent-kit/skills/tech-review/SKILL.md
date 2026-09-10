@@ -2,7 +2,7 @@
 name: tech-review
 description: 方案审查 — 对重大设计决策进行多维度审查。当涉及结构/方案选型、信息结构设计、对外交付物设计、安全方案、发布方案、重构方案等需要确认的技术或业务决策时加载。
 trigger: 选型、结构、信息、交付物、安全、发布、重构、方案
-version: 1.0.0
+version: 1.0.1
 ---
 
 # 技术方案评审 (Tech Review / Design Review)
@@ -59,7 +59,7 @@ version: 1.0.0
 - 反例 / 必然失败清单是否被回应与规避（S5/M1），还是走过场？
 - 能力圈外的决策是否已声明并转交确认（M3）？
 
-详细标准见 `references/design-principles.md`；辨证问题见 `skills/rd-plan/references/thinking-checklist.md`；逐项检查见 `references/review-checklist.md`。
+详细标准见 `references/design-principles.md`；辨证问题见 `../rd-plan/references/thinking-checklist.md`；逐项检查见 `references/review-checklist.md`。
 
 ---
 
