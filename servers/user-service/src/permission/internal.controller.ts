@@ -23,8 +23,11 @@ export class InternalPermissionController {
 
   @Post('permissions/sync')
   @HttpCode(200)
-  async sync() {
-    const result = await this.svc.seed();
+  async sync(@Body() dto: { operator?: string; source?: string }) {
+    const result = await this.svc.syncAndAudit(
+      String(dto?.operator || 'internal').slice(0, 64),
+      String(dto?.source || '内部接口').slice(0, 32),
+    );
     return { code: 0, data: result, message: '权限已按代码声明同步' };
   }
 }
