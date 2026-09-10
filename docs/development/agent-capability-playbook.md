@@ -15,6 +15,7 @@
 | 日期 | 版本 | 变更内容 | 修订人 |
 |---|---|---|---|
 | 2026-09-10 | v1.0 | 初版：四层架构、8 个 UI 入口、CLI 入口、走查路线、易混淆点 | AI |
+| 2026-09-10 | v1.1 | 模型清单真相源迁移到 DB 字典：§3.2 增 `ModelCatalogService` 行；§7 增坑 10/11（改 env 不生效、字典里的 hy3 被过滤）；admin 新增「字典管理」页、原「模型单价」页改为「模型」页（可用清单 × 单价聚合） | AI |
 
 ---
 
@@ -150,6 +151,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | `PermissionBroker` | `src/agent/permission-broker.ts` | SSE 挂起 ↔ 确认接口的中介；uuid requestId + 校验同一 userId + **60s 超时自动拒绝** |
 | `DbConversationMemory` | `src/agent/memory/db-conversation-memory.ts` | 实现 `ConversationMemoryPort`，落 `agent_conversations`，含「不覆盖 report/meta」保护 |
 | `AgentDefSyncService` | `src/agent/agent-def-sync.service.ts` | 30s 轮询拉定义 + **按 capabilities 懒注册 MCP 远程工具** |
+| `ModelCatalogService` | `src/agent/model-catalog.service.ts` | 模型清单三级回落：**字典 `llm_models` → `TOKENHUB_MODELS` → 代码内置**；60s 轮询（`MODEL_POLL_MS`），拉取失败只 WARN 保留当前清单；`hy3` 由 Hy3Client 承载，清单里出现会被过滤 |
 | `AgentRunPusher` | `src/agent/agent-run-pusher.ts` | 异步回推 run 记录，失败只 warn，不拖垮主链路 |
 | `AgentSkillProvider` | `src/skill/agent-skill-provider.ts` | 向 ai-service `GET /internal/skills/:code` 拉全文，60s 内存缓存 |
 | 合同四件套 | `src/contract/tools/` | `contract-rule`（法定标准库扫描）/`contract-irr`（IRR 测算）/`contract-cleaner`（OCR 清洗）/`contract-benchmark`（市场基准） |
@@ -282,6 +284,8 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 7. **`ai-agent` / `knowledge-service` 未注册到 `scripts/modules.json`** —— 虽跑在 pm2 且有网关路由，但不在发布流水线和微前端清单里，deploy-console 管不到。
 8. **`DeepseekClient` 已下线** —— `README.md` 未同步，`dist/` 有残留，以 `src/` 为准。
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
+10. **改 `.env` 的 `TOKENHUB_MODELS` 想加模型却不生效** —— 模型清单现在的真相源是 **DB 字典 `llm_models`**（admin →「字典管理」，`MODEL_SOURCE=db` 默认）；`.env` 只在字典不可用/为空时兜底，代码内置常量再兜底。改字典后等 60s（`MODEL_POLL_MS`）或重启 `web-ai-agent`。排查入口：`GET /api/ai-agent/agent/models`（还带 `available`）与 ai-agent 日志里的「模型清单已更新：来源=db/env/builtin」。
+11. **字典里的 `hy3` 不会生效** —— `hy3` 由 `Hy3Client` 专用通道承载（与 TokenHub 的 key/base 不同），`ModelCatalogService` 会过滤并 WARN；要调 hy3 请确认 `HY3_API_KEY`，不要往 `llm_models` 里加。
 
 ---
 
