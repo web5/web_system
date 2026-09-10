@@ -17,6 +17,7 @@ import { McpDeployModule } from './mcp/mcp.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PipelineTemplateModule } from './pipeline-template/pipeline-template.module';
+import { PipelineStepCommandModule } from './pipeline-step-command/pipeline-step-command.module';
 import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
 import { ReleaseGitModule } from './git/release-git.module';
 import { ReleaseHookModule } from './hook/release-hook.module';
@@ -69,6 +70,8 @@ import { ReleaseHookModule } from './hook/release-hook.module';
     SystemSettingsModule,
     // 流水线模板（模板=流程定义 / 实例=一次发布）
     PipelineTemplateModule,
+    // 流水线节点命令（R6 新真相源：流水线 × 节点 key）
+    PipelineStepCommandModule,
     // 工具目录（service 内置执行器 / shell CLI 元数据）
     ToolCatalogModule,
     // 发布目录 git 工作区工具（含 BranchController = GET /modules/:key/branches）

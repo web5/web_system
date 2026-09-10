@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as releasePaths from '../pipeline/release-paths';
 
-/** 保留的历史版本目录数量（用户约定 N=5） */
+/** 每个命名空间保留的历史版本目录数量（用户约定 N=5） */
 export const KEEP_VERSIONS = 5;
 
 export interface ArtifactCleanupResult {
@@ -13,11 +13,11 @@ export interface ArtifactCleanupResult {
 }
 
 /**
- * 静态产物存储工具（upload/cleanup 内置步骤的执行体，tool-catalog `deploy/cleanup` 分类）。
+ * 静态产物存储工具（upload/cleanup 内置步骤的执行体）。
  *
- * 收敛自 pipeline.service.ts：hasArtifact / listArtifactVersions / stageUpload(local) /
- * stageCleanup / switchPointer 的产物检查 中散落的发布目录 fs 操作。
- * 目录/URL 布局知识见 release-paths（本服务为 fs 操作层）。
+ * R6 命名空间感知（design.md §3.1 D-a）：
+ * - legacy：`modules/<module>/<version>/`（一级目录含 index.js）
+ * - 流水线：`modules/<module>/<pipelineKey>/<version>/`（一级目录无 index.js，二级为版本）
  */
 @Injectable()
 export class ArtifactStoreService {
@@ -35,26 +35,61 @@ export class ArtifactStoreService {
     return releasePaths.moduleArtifactsRoot(this.workspace(), moduleKey);
   }
 
-  /** 指定版本产物目录（本地 fs） */
+  /** 指定版本产物目录（version 可含 `/`，如 `default/1a2b3c4`） */
   private dir(moduleKey: string, version: string): string {
     return releasePaths.moduleArtifactDir(this.workspace(), moduleKey, version);
   }
 
-  /** 产物是否已在磁盘（index.js 存在） */
+  /** 产物是否已在磁盘（index.js 存在；version 可含 `/`） */
   exists(moduleKey: string, version: string): boolean {
     return fs.existsSync(releasePaths.moduleArtifactEntry(this.workspace(), moduleKey, version));
   }
 
-  /** 磁盘产物版本列表（按修改时间倒序） */
-  listVersions(moduleKey: string): string[] {
+  /** 列出某模块产物根的一级子目录（含 mtime，按 mtime 倒序），供内部使用 */
+  private listL1(moduleKey: string): { name: string; mtime: number; isVersion: boolean }[] {
     const base = this.root(moduleKey);
     if (!fs.existsSync(base)) return [];
     return fs
       .readdirSync(base, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => ({
+        name: d.name,
+        mtime: fs.statSync(path.join(base, d.name)).mtimeMs,
+        // 一级目录含 index.js = legacy 版本；无 = 流水线命名空间
+        isVersion: fs.existsSync(path.join(base, d.name, 'index.js')),
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+  }
+
+  /** 列出某命名空间下的版本目录（二级） */
+  private listL2(moduleKey: string, ns: string): { name: string; mtime: number }[] {
+    const base = path.join(this.root(moduleKey), ns);
+    if (!fs.existsSync(base)) return [];
+    return fs
+      .readdirSync(base, { withFileTypes: true })
       .filter((d) => d.isDirectory() && fs.existsSync(path.join(base, d.name, 'index.js')))
-      .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(base, d.name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime)
-      .map((d) => d.name);
+      .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(base, d.name)).mtimeMs }));
+  }
+
+  /**
+   * 磁盘产物版本列表（按修改时间倒序，返回完整引用）。
+   * 合并 legacy（`<commit>`）与流水线命名空间（`<pipelineKey>/<commit>`）。
+   */
+  listVersions(moduleKey: string): string[] {
+    const l1 = this.listL1(moduleKey);
+    const results: { ref: string; mtime: number }[] = [];
+    for (const d of l1) {
+      if (d.isVersion) {
+        // legacy：一级目录即版本
+        results.push({ ref: d.name, mtime: d.mtime });
+      } else {
+        // 流水线命名空间：二级为版本
+        for (const v of this.listL2(moduleKey, d.name)) {
+          results.push({ ref: `${d.name}/${v.name}`, mtime: v.mtime });
+        }
+      }
+    }
+    return results.sort((a, b) => b.mtime - a.mtime).map((r) => r.ref);
   }
 
   /**
@@ -72,7 +107,7 @@ export class ArtifactStoreService {
   }
 
   /**
-   * 清理旧版本目录：保留最近 keep 个（受保护版本不删），返回保留/删除清单。
+   * 清理旧版本目录：每个命名空间各自保留最近 keep 个（legacy 独立计）。
    * 与 upload 一样是发布目录内 fs 操作，调用方负责收集受保护版本（灰度规则等）。
    */
   cleanup(
@@ -83,21 +118,39 @@ export class ArtifactStoreService {
     const base = this.root(moduleKey);
     if (!fs.existsSync(base)) return { kept: [], removed: [] };
 
-    const dirs = fs
-      .readdirSync(base, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(base, d.name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
-
     const kept: string[] = [];
     const removed: string[] = [];
-    for (const d of dirs) {
-      if (protectedVersions.has(d.name) || kept.length < keep) {
-        kept.push(d.name);
-        continue;
+
+    // 分组：legacy 直接处理，每个流水线命名空间独立处理
+    const l1 = this.listL1(moduleKey);
+    for (const d of l1) {
+      if (d.isVersion) {
+        // legacy 版本
+        if (protectedVersions.has(d.name) || kept.length < keep) {
+          kept.push(d.name);
+        } else {
+          fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
+          removed.push(d.name);
+        }
+      } else {
+        // 流水线命名空间：清理其下的版本
+        const nsKept: string[] = [];
+        const nsVersions = this.listL2(moduleKey, d.name).sort((a, b) => b.mtime - a.mtime);
+        for (const v of nsVersions) {
+          const ref = `${d.name}/${v.name}`;
+          if (protectedVersions.has(ref) || protectedVersions.has(v.name) || nsKept.length < keep) {
+            nsKept.push(ref);
+          } else {
+            fs.rmSync(path.join(base, d.name, v.name), { recursive: true, force: true });
+            removed.push(ref);
+          }
+        }
+        kept.push(...nsKept);
+        // 空命名空间目录清理（无版本时移除）
+        if (nsVersions.length === 0) {
+          fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
+        }
       }
-      fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
-      removed.push(d.name);
     }
     return { kept, removed };
   }

@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布平台 v12 · 流水线控制台（目标模块按入口联动）交互稿</title>
+<!--
+  原型稿：v12「目标模块按入口上下文联动」
+  依据：specs/release-platform/design.md §3.1（R6 落地 + 6b~6f IA 调整） + 2026-09-10 追加反馈：
+    ① 无模块上下文的入口（流水线列表「发起发布」/ 详情页头「发起发布」）→ 目标模块可选
+    ② 带记录上下文的入口（执行历史「再次发布」/ 当前运行「再次发布」）与模块页「发起发布/去发布」
+       → 目标模块默认选中且禁用，旁注说明
+    ③ 其余同 v11：编辑独立页 / 详情运行态 / 环境下拉 / 回滚下沉执行历史
+  骨架：docs/ui/prototype-scaffold.html（桌面端）· 主色 #F97316（DR-3）
+  定位：沟通产物；确认后回填 ui-spec-v6-pipeline-scripts.md 再编码
+-->
+<style>
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC; --warn:#E8833A; --warn-soft:#FFF3E6;
+    --ok:#2E9E5B; --ok-soft:#E7F5EC; --purple:#722ED1; --purple-soft:#F9F0FF;
+    --border:#E8EBF0; --line:#C9D0D9; --code-bg:#1E1E1E; --code-fg:#D4D4D4;
+    --fill-soft:#FAFBFC; --fill-chip:#F0F2F5; --bg-hover:#F2F4F7; --bg-active:#EBEEF2;
+    --radius:14px; --radius-sm:10px;
+    --shadow-card:0 2px 12px rgba(20,30,50,.06); --shadow-drawer:0 12px 48px rgba(0,0,0,.22);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--fill-chip);min-height:100vh;padding:20px;color:var(--text);}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .desktop{max-width:1320px;margin:0 auto;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);display:flex;height:900px;}
+  .sidebar{width:206px;background:var(--card);border-right:1px solid var(--border);padding:16px 12px;flex-shrink:0;}
+  .sidebar .logo{font-size:15px;font-weight:700;padding:8px 10px 4px;}
+  .sidebar .ver{font-size:11px;color:var(--text-3);padding:0 10px 16px;}
+  .side-item{padding:10px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;margin-bottom:4px;transition:background .15s;}
+  .side-item:hover{background:var(--bg-hover);}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .side-item .sub{display:block;font-size:11px;color:var(--text-3);margin-top:2px;font-weight:400;}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:56px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;
+    padding:0 20px;font-size:15px;font-weight:600;justify-content:space-between;flex-shrink:0;}
+  .crumb{font-size:12px;color:var(--text-3);font-weight:400;cursor:pointer;}
+  .crumb:hover{color:var(--primary);}
+  .content{flex:1;overflow:auto;padding:18px;}
+  .content .screen{display:none;}
+  .content .screen.active{display:block;animation:fadeIn .2s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px;margin-bottom:14px;border:1px solid var(--border);}
+  .card.flush{padding:0;}
+  .card .t{font-size:13px;color:var(--text-2);margin-bottom:12px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .card .t .hint{font-weight:400;color:var(--text-3);font-size:12px;}
+  .pagelink{font-size:20px;font-weight:600;}
+  .tag{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:4px;line-height:1.4;}
+  .tag.plat{color:var(--purple);background:var(--purple-soft);}
+  .tag.script{color:var(--text-2);background:var(--fill-chip);}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);}
+  .tag.danger{color:var(--danger);background:var(--danger-soft);}
+  .tag.pri{color:var(--primary);background:var(--primary-soft);}
+  .tag.plain{color:var(--text-2);background:var(--card);border:1px solid var(--border);}
+  .btn{border:1px solid var(--border);background:var(--card);border-radius:9px;padding:7px 14px;font-size:13px;cursor:pointer;
+    color:var(--text-2);transition:all .15s;font-weight:500;font-family:inherit;}
+  .btn:hover{border-color:var(--primary);color:var(--primary);}
+  .btn.pri{background:var(--primary);border-color:var(--primary);color:var(--card);font-weight:600;}
+  .btn.pri:hover{background:var(--primary-dark);border-color:var(--primary-dark);color:var(--card);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);}
+  .btn.danger:hover{border-color:var(--danger);color:var(--danger);}
+  .btn.sm{padding:4px 10px;font-size:12px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;border-color:var(--border);color:var(--text-3);}
+  .btn[disabled]:hover{border-color:var(--border);color:var(--text-3);}
+  .btn.loading{position:relative;color:transparent !important;}
+  .btn.loading::after{content:'';position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-7px 0 0 -7px;
+    border:2px solid rgba(255,255,255,.45);border-top-color:var(--card);border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .row{display:flex;align-items:center;gap:10px;}
+  .row.wrap{flex-wrap:wrap;}
+  .spacer{margin-left:auto;}
+  .muted{color:var(--text-3);font-size:12px;}
+  .fld{display:flex;flex-direction:column;gap:6px;}
+  .fld>label{font-size:12px;color:var(--text-3);}
+  .inp{border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);
+    background:var(--card);outline:none;transition:border-color .15s,box-shadow .15s;font-family:inherit;}
+  .inp:focus{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-soft);}
+  .inp[disabled]{background:var(--fill-chip);color:var(--text-3);cursor:not-allowed;}
+  .inp.err{border-color:var(--danger);box-shadow:0 0 0 2px var(--danger-soft);}
+  .errmsg{font-size:12px;color:var(--danger);display:none;}
+  .errmsg.show{display:block;}
+  .alert{display:flex;gap:10px;align-items:flex-start;border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;line-height:1.7;margin-bottom:14px;}
+  .alert:last-child{margin-bottom:0;}
+  .alert.info{background:var(--primary-soft);color:var(--text-2);}
+  .alert.warn{background:var(--warn-soft);color:var(--text-2);}
+  .alert .ic{flex-shrink:0;width:16px;height:16px;margin-top:2px;color:var(--primary);}
+  .alert.warn .ic{color:var(--warn);}
+  .alert b{color:var(--text);}
+  .alert .act{margin-left:auto;flex-shrink:0;}
+  .kv{display:grid;grid-template-columns:118px 1fr;gap:9px 14px;font-size:13px;align-items:baseline;}
+  .kv .k{color:var(--text-3);}
+  .kv .v{color:var(--text);word-break:break-all;}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+  .tab{padding:8px 14px;font-size:13px;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab:hover{color:var(--primary);}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);}
+  .seg button{border:none;background:transparent;padding:5px 12px;font-size:12px;color:var(--text-2);cursor:pointer;font-family:inherit;}
+  .seg button:hover{background:var(--bg-hover);}
+  .seg button.on{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+  th,td{padding:9px 10px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--border);}
+  th{background:var(--fill-soft);font-weight:600;color:var(--text-2);font-size:12px;white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.clickable{cursor:pointer;transition:background .15s;}
+  tbody tr.clickable:hover td{background:var(--bg-hover);}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .lk{color:var(--primary);cursor:pointer;text-decoration:none;}
+  .lk:hover{text-decoration:underline;}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  .pager{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border);justify-content:flex-end;}
+  .pager .pg{border:1px solid var(--border);border-radius:6px;min-width:26px;height:26px;display:inline-flex;align-items:center;
+    justify-content:center;font-size:12px;cursor:pointer;color:var(--text-2);background:var(--card);}
+  .pager .pg:hover{border-color:var(--primary);color:var(--primary);}
+  .pager .pg.on{background:var(--primary);border-color:var(--primary);color:var(--card);font-weight:600;}
+  .pager .pg.dis{color:var(--text-3);cursor:not-allowed;}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .kpi .box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;background:var(--fill-soft);}
+  .kpi .box .lab{font-size:12px;color:var(--text-3);margin-bottom:6px;}
+  .kpi .box .val{font-size:17px;font-weight:600;}
+  .dd{position:relative;display:inline-block;}
+  .dd-menu{display:none;position:absolute;right:0;top:26px;background:var(--card);border:1px solid var(--border);border-radius:8px;
+    box-shadow:var(--shadow-card);min-width:150px;padding:4px;z-index:20;}
+  .dd.open .dd-menu{display:block;}
+  .dd-item{padding:7px 10px;font-size:13px;border-radius:6px;cursor:pointer;color:var(--text-2);}
+  .dd-item:hover{background:var(--bg-hover);color:var(--primary);}
+  .tt{position:relative;display:inline-block;}
+  .tt .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:rgba(0,0,0,.85);color:var(--card);
+    font-size:11.5px;font-weight:400;line-height:1.5;padding:6px 9px;border-radius:6px;white-space:nowrap;z-index:30;}
+  .tt:hover .tip{display:block;}
+  .switch{position:relative;display:inline-block;width:38px;height:20px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch span{position:absolute;inset:0;background:var(--line);border-radius:20px;transition:.2s;cursor:pointer;}
+  .switch span:before{content:'';position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--card);border-radius:50%;transition:.2s;}
+  .switch input:checked + span{background:var(--primary);}
+  .switch input:checked + span:before{transform:translateX(18px);}
+  .sk{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--fill-chip) 25%,var(--border) 37%,var(--fill-chip) 63%);
+    background-size:400% 100%;animation:sk 1.2s ease infinite;}
+  @keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+  .state{padding:46px 20px;text-align:center;color:var(--text-3);}
+  .state .ic{width:40px;height:40px;margin:0 auto 10px;color:var(--text-3);opacity:.6;}
+  .state .ic svg{width:40px;height:40px;}
+  .state .ttl{font-size:14px;color:var(--text-2);font-weight:600;margin-bottom:6px;}
+  .state .act{margin-top:12px;}
+
+  .flow{display:flex;align-items:center;overflow-x:auto;padding:14px 4px 12px;min-height:92px;}
+  .fnode{position:relative;min-width:106px;padding:9px 12px;border:1.5px solid var(--border);border-radius:11px;background:var(--card);
+    cursor:pointer;transition:all .15s;flex-shrink:0;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+  .fnode:hover{border-color:var(--primary);transform:translateY(-1px);}
+  .fnode.sel{border-color:var(--primary);background:var(--primary-soft);}
+  .fnode.plat{border-color:var(--purple-soft);background:var(--purple-soft);}
+  .fnode.watch{border-color:var(--warn-soft);}
+  .fnode.done{border-color:var(--ok);background:var(--ok-soft);}
+  .fnode.fail{border-color:var(--danger);background:var(--danger-soft);}
+  .fnode .fname{display:block;font-size:13px;font-weight:600;}
+  .fnode.plat .fname{color:var(--purple);}
+  .fnode .fk{display:block;font-size:10px;color:var(--text-3);margin-top:3px;}
+  .fseq{position:absolute;top:-8px;left:-8px;width:19px;height:19px;border-radius:50%;background:var(--card);
+    border:1.5px solid var(--border);font-size:10px;font-weight:700;color:var(--text-3);display:flex;align-items:center;justify-content:center;}
+  .fslot{position:relative;width:44px;height:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .farrow{width:44px;height:2px;background:var(--line);}
+  .fplus{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--card);border:1.5px dashed var(--line);
+    color:var(--text-3);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:600;font-family:inherit;}
+  .fplus:hover{border-color:var(--primary);border-style:solid;color:var(--primary);background:var(--primary-soft);}
+  .wbadge{position:absolute;bottom:-8px;left:-8px;font-size:10px;background:var(--warn);color:var(--card);border-radius:10px;padding:1px 6px;font-weight:600;}
+  .delbtn{position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;background:var(--danger);color:var(--card);
+    border:none;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;font-family:inherit;}
+  .fnode:hover .delbtn{opacity:1;}
+
+  .scope{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);background:var(--fill-soft);
+    border:1px solid var(--border);border-radius:20px;padding:4px 12px;}
+  .ops{display:flex;flex-direction:column;gap:10px;margin-top:10px;}
+  .opcard{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--fill-soft);padding:12px;}
+  .opcard .ophead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .opcard .opidx{width:20px;height:20px;border-radius:50%;background:var(--primary-soft);color:var(--primary);font-size:11px;
+    font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .code-area{width:100%;background:var(--code-bg);color:var(--code-fg);border:none;border-radius:10px;padding:10px 12px;
+    font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.65;min-height:76px;resize:vertical;outline:none;}
+  .code-area:focus{box-shadow:0 0 0 2px var(--primary);}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .chip{font-size:11px;background:var(--fill-chip);color:var(--text-2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:ui-monospace,Menlo,monospace;}
+  .chip:hover{background:var(--primary-soft);color:var(--primary);}
+  .preview-out{background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:10px 12px;
+    font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.65;white-space:pre-wrap;word-break:break-all;}
+  .logbox{background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:10px 12px;
+    font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.7;white-space:pre-wrap;max-height:170px;overflow:auto;}
+  .addop{border:1.5px dashed var(--border);background:transparent;border-radius:var(--radius-sm);padding:9px;font-size:13px;
+    color:var(--text-2);cursor:pointer;width:100%;font-family:inherit;}
+  .addop:hover{border-color:var(--primary);color:var(--primary);}
+
+  .drawer-mask{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;z-index:40;}
+  .drawer-mask.show{display:block;animation:maskIn .2s ease;}
+  @keyframes maskIn{from{opacity:0;}to{opacity:1;}}
+  .drawer{position:fixed;top:0;right:0;height:100vh;background:var(--bg);box-shadow:var(--shadow-drawer);display:flex;
+    flex-direction:column;transform:translateX(100%);transition:transform .22s ease;z-index:41;}
+  .drawer-mask.show .drawer{transform:translateX(0);}
+  .drawer.w{width:640px;}
+  .drawer.xw{width:880px;}
+  .drawer .dhead{height:56px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;font-size:15px;font-weight:600;flex-shrink:0;}
+  .drawer .dhead .x{margin-left:auto;width:30px;height:30px;border:none;background:transparent;cursor:pointer;color:var(--text-3);font-size:18px;border-radius:8px;}
+  .drawer .dhead .x:hover{background:var(--bg-hover);color:var(--text);}
+  .drawer .dbody{flex:1;overflow:auto;padding:18px;}
+  .drawer .dfoot{height:60px;background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 20px;flex-shrink:0;}
+  .drawer .dsec{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
+  .drawer .dsec .t{font-size:13px;color:var(--text-2);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:60;}
+  .modal-mask.show{display:flex;animation:maskIn .15s ease;}
+  .modal{background:var(--card);border-radius:var(--radius);padding:20px;width:460px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+  .modal .mt{font-size:15px;font-weight:600;margin-bottom:10px;}
+  .modal .mb{font-size:13px;color:var(--text-2);line-height:1.8;margin-bottom:18px;}
+  .modal .mb b{color:var(--text);}
+  .modal .mf{display:flex;gap:10px;justify-content:flex-end;}
+  .toast{position:fixed;left:50%;top:14%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:var(--card);
+    padding:9px 18px;border-radius:10px;font-size:13px;z-index:70;opacity:0;pointer-events:none;transition:opacity .2s;display:flex;align-items:center;gap:8px;}
+  .toast.show{opacity:1;}
+  .toast .ti{font-size:14px;color:#6fe3a1;}
+  .toast.err .ti{color:#ff8a8f;}
+</style>
+</head>
+<body>
+
+<div class="desktop">
+  <div class="sidebar">
+    <div class="logo">发布平台</div>
+    <div class="ver">v12 原型 · 目标模块按入口联动</div>
+    <div class="side-item active" onclick="nav('list')">流水线<span class="sub">全部流水线列表</span></div>
+    <div class="side-item" onclick="nav('module')">模块<span class="sub">工程视角 · 当前版本</span></div>
+    <div class="side-item" onclick="nav('decide')">决策速查<span class="sub">IA 与状态覆盖</span></div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <span id="ttl">流水线</span>
+      <span class="muted" id="crumbWrap" style="display:none;"><span class="crumb" id="crumbBtn" onclick="crumbBack()">‹ 返回流水线列表</span></span>
+    </div>
+    <div class="content">
+
+      <!-- ============ 屏 0：流水线列表 ============ -->
+      <div class="screen active" id="screen-list">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <div class="pagelink">流水线</div>
+            <div class="muted" style="margin-top:4px;">全部流水线（全局线服务多模块；专用线只服务一个模块）。点行进入详情。</div>
+          </div>
+          <div class="row">
+            <div class="seg" id="stateSwitch">
+              <button class="on" onclick="setListState('normal',this)">正常</button>
+              <button onclick="setListState('loading',this)">加载</button>
+              <button onclick="setListState('empty',this)">空态</button>
+              <button onclick="setListState('error',this)">错误</button>
+            </div>
+            <button class="btn pri" onclick="toast('新建流水线（原型演示）')">新建流水线</button>
+          </div>
+        </div>
+        <div class="card flush">
+          <div class="toolbar">
+            <input class="inp" placeholder="搜索流水线名 / key" style="width:200px;">
+            <select class="inp" style="width:140px;"><option>全部模块</option><option>仅 admin</option><option>全局</option></select>
+            <select class="inp" style="width:140px;"><option>全部状态</option><option>运行中</option><option>成功</option><option>失败</option></select>
+            <div class="spacer"></div>
+            <span class="muted">共 3 条</span>
+          </div>
+          <div id="listBody"></div>
+          <div class="pager"><span class="pg dis">‹</span><span class="pg on">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">›</span></div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 1：流水线详情（运行态） ============ -->
+      <div class="screen" id="screen-pipe">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <div class="pagelink" id="pipeName">默认流程 <span class="tag plat" style="font-size:11px;">内置 · 不可改名</span></div>
+            <div class="muted" style="margin-top:4px;">全局流水线 · key <span class="mono" id="pipeKey">default</span> · 适用 <span id="pipeScope">全部模块</span> · 审批继承环境 · 失败回滚上一版本</div>
+          </div>
+          <div class="row">
+            <button class="btn" onclick="openEdit()">编辑</button>
+            <button class="btn pri" onclick="openSubmit('admin',true)">发起发布</button>
+          </div>
+        </div>
+
+        <div class="kpi" style="margin-bottom:14px;">
+          <div class="box"><div class="lab">最近运行</div><div class="val" style="color:var(--ok);">成功</div></div>
+          <div class="box"><div class="lab">最近版本</div><div class="val mono" style="font-size:14px;">default/1a2b3c4</div></div>
+          <div class="box"><div class="lab">执行次数</div><div class="val">42</div></div>
+          <div class="box"><div class="lab">近 7 天失败率</div><div class="val">4.8%</div></div>
+        </div>
+
+        <div class="card" style="padding:0 16px;">
+          <div class="tabs" style="margin-bottom:0;border-bottom:none;">
+            <div class="tab active" onclick="pipeTab('run')">当前运行</div>
+            <div class="tab" onclick="pipeTab('history')">执行历史</div>
+          </div>
+        </div>
+
+        <!-- 当前运行 -->
+        <div class="pane" id="pane-run">
+          <div class="card">
+            <div class="t">最新一次运行
+              <span class="hint">默认展示最近一次实例；点流程图节点看该阶段日志</span>
+              <span class="spacer"></span>
+              <span class="tag ok">成功</span><span class="muted mono">job-20260910-1422</span>
+              <div class="dd" id="ddRun">
+                <button class="btn sm" onclick="toggleDD('ddRun',event)">更多</button>
+                <div class="dd-menu">
+                  <div class="dd-item" onclick="openLog('build')">查看日志</div>
+                  <div class="dd-item" onclick="askSwitch('default/1a2b3c4','admin','本地环境')">回滚到此版本</div>
+                  <div class="dd-item" onclick="openSubmit('admin',true)">再次发布</div>
+                </div>
+              </div>
+            </div>
+            <div class="kv" style="margin-bottom:14px;">
+              <div class="k">环境 / 模块</div><div class="v">本地环境 · <span class="mono">admin</span></div>
+              <div class="k">版本</div><div class="v mono">default/1a2b3c4</div>
+              <div class="k">来源</div><div class="v mono">feature/contract-risk-ai @ 1a2b3c4</div>
+              <div class="k">耗时 / 操作人</div><div class="v">25s · geekwen</div>
+              <div class="k">产物目录</div><div class="v mono">modules/admin/default/1a2b3c4/</div>
+            </div>
+            <div class="flow" id="flowRun"></div>
+            <div class="row" style="justify-content:flex-end;margin-top:8px;">
+              <button class="btn" onclick="openLog('build')">查看完整日志</button>
+              <button class="btn" onclick="askSwitch('default/1a2b3c4','admin','本地环境')">回滚到此版本</button>
+              <button class="btn" onclick="openSubmit('admin',true)">再次发布</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="t">失败态示例 <span class="hint">同一分区换数据即可；失败节点标红 + 日志尾部 + 重试</span></div>
+            <div class="row" style="margin-bottom:10px;">
+              <span class="tag danger">失败 · 探活</span>
+              <span class="muted mono">job-20260909-1805 · dev · admin · admin-line/9f8e7d6</span>
+            </div>
+            <div class="logbox">[verify] 等待 gateway TTL 10s …
+[verify] 断言 /__manifest__ admin.version == 9f8e7d6 … 实际 5b4a3c2
+[verify] 探活失败：manifest 未生效（watchdog 节点 → 触发自动回滚）
+[rollback] 已将 dev/admin 指针回滚到 admin-line/3d2c1b0</div>
+            <div class="row" style="justify-content:flex-end;margin-top:10px;">
+              <button class="btn" onclick="openLog('verify')">查看完整日志</button>
+              <button class="btn pri" onclick="toast('已重试（原型演示）')">重试</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 执行历史 -->
+        <div class="pane" id="pane-history" style="display:none;">
+          <div class="card flush">
+            <div class="toolbar">
+              <select class="inp" style="width:130px;"><option>全部模块</option><option>admin</option><option>portal</option></select>
+              <select class="inp" style="width:130px;"><option>全部状态</option><option>成功</option><option>失败</option><option>运行中</option></select>
+              <select class="inp" style="width:130px;"><option>全部环境</option><option>本地</option><option>dev</option><option>prod</option></select>
+              <input class="inp" type="text" placeholder="按实例 / 版本 / 操作人" style="width:190px;">
+              <div class="spacer"></div>
+              <button class="btn sm" onclick="toast('已重置筛选')">重置</button>
+            </div>
+            <table>
+              <thead><tr>
+                <th style="width:172px;">实例</th><th style="width:70px;">环境</th><th style="width:104px;">模块</th>
+                <th style="width:180px;">版本</th><th style="width:118px;">状态</th><th style="width:170px;">时间 / 操作人</th><th style="width:178px;">操作</th>
+              </tr></thead>
+              <tbody>
+                <tr><td class="mono">job-20260910-1422</td><td>本地</td><td class="mono">admin</td>
+                  <td class="mono">default/1a2b3c4 <span class="tag ok">当前</span></td><td><span class="tag ok">成功</span></td>
+                  <td class="num">09-10 14:22 · geekwen</td><td><a class="lk" onclick="openLog('build')">详情</a> <span class="muted">·</span> <a class="lk" onclick="openSubmit('admin',true)">再次发布</a></td></tr>
+                <tr><td class="mono">job-20260909-1805</td><td>dev</td><td class="mono">admin</td>
+                  <td class="mono">admin-line/9f8e7d6</td><td><span class="tag danger">失败 · 探活</span></td>
+                  <td class="num">09-09 18:05 · geekwen</td>
+                  <td><a class="lk" onclick="openLog('verify')">详情</a> <span class="muted">·</span> <a class="lk" onclick="toast('已重试')">重试</a></td></tr>
+                <tr><td class="mono">job-20260908-1640</td><td>本地</td><td class="mono">admin</td>
+                  <td class="mono">default/4e5f6a7</td><td><span class="tag ok">成功</span></td>
+                  <td class="num">09-08 16:40 · lily</td>
+                  <td><a class="lk" onclick="openLog('build')">详情</a> <span class="muted">·</span> <a class="lk" onclick="askSwitch('default/4e5f6a7','admin','本地环境')">回滚到此版本</a> <span class="muted">·</span> <a class="lk" onclick="openSubmit('admin',true)">再次发布</a></td></tr>
+                <tr><td class="mono">job-20260905-1030</td><td>prod</td><td class="mono">admin</td>
+                  <td class="mono">default/7c1d2e3</td><td><span class="tag ok">成功</span></td>
+                  <td class="num">09-05 10:30 · lily</td>
+                  <td><a class="lk" onclick="openLog('build')">详情</a> <span class="muted">·</span> <a class="lk" onclick="askSwitch('default/7c1d2e3','admin','生产环境')">回滚到此版本</a> <span class="muted">·</span> <a class="lk" onclick="openSubmit('admin',true)">再次发布</a></td></tr>
+                <tr><td class="mono">job-20260904-0912</td><td>本地</td><td class="mono">portal</td>
+                  <td class="mono">default/2b3c4d5</td><td><span class="tag warn">运行中</span></td>
+                  <td class="num">09-04 09:12 · lily</td>
+                  <td><a class="lk" onclick="toast('运行中实例：实时进度（原型演示）')">查看进度</a></td></tr>
+              </tbody>
+            </table>
+            <div class="muted" style="padding:10px 16px;">回滚只切<b>本流水线命名空间</b>内的版本；其它流水线的版本请到对应流水线回滚。</div>
+            <div class="pager"><span class="pg dis">‹</span><span class="pg on">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">›</span></div>
+          </div>
+
+          <div class="card flush">
+            <div class="t" style="padding:16px 16px 0;">历史产物
+              <span class="hint">legacy：无流水线命名空间 · 只可回滚，不再新增</span>
+              <span class="spacer"></span><span class="tag warn">legacy</span>
+            </div>
+            <table>
+              <thead><tr><th style="width:170px;">版本</th><th>产物目录</th><th style="width:70px;">环境</th><th style="width:170px;">时间 / 操作人</th><th style="width:140px;">操作</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">3fbb450</td><td class="mono" style="color:var(--text-3);">modules/admin/3fbb450/</td><td>本地</td>
+                  <td class="num">08-28 15:10 · geekwen</td><td><a class="lk" onclick="askSwitch('3fbb450','admin','本地环境')">回滚到此版本</a></td></tr>
+                <tr><td class="mono">18e095e</td><td class="mono" style="color:var(--text-3);">modules/admin/18e095e/</td><td>dev</td>
+                  <td class="num">08-20 11:40 · geekwen</td><td><a class="lk" onclick="askSwitch('18e095e','admin','dev')">回滚到此版本</a></td></tr>
+              </tbody>
+            </table>
+            <div class="muted" style="padding:10px 16px;">legacy 与流水线命名空间按「一级目录是否含 index.js」区分，各自独立计保留数（保留 5）。</div>
+          </div>
+        </div>
+      </div>
+      <!-- ============ 屏 1b：编辑页（独立页面，路由 /pipelines/:id/edit） ============ -->
+      <div class="screen" id="screen-edit">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <div class="pagelink"><span id="editName">默认流程</span> <span class="tag plat" style="font-size:11px;">内置 · 不可改名</span></div>
+            <div class="muted" style="margin-top:4px;">编辑流水线 · 定义态（基本信息 / 流程编排 / 节点命令）· 未保存离开会确认</div>
+          </div>
+          <div class="row">
+            <div class="tt"><button class="btn danger" disabled>删除流水线</button><span class="tip">内置默认流水线不可删除</span></div>
+            <button class="btn" onclick="closeEdit()">取消</button>
+            <button class="btn pri" id="saveBtn" onclick="doSave()">保存</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="t">基本信息
+            <span class="hint">命令归属本流水线后，key 是产物命名空间的一段路径</span>
+          </div>
+          <div class="row wrap" style="gap:16px;align-items:flex-end;">
+            <div class="fld">
+              <label>流水线名</label>
+              <div class="tt"><input class="inp" value="默认流程" disabled style="width:180px;"><span class="tip">内置默认流水线不可改名，可「复制为专用线」另建</span></div>
+            </div>
+            <div class="fld">
+              <label>流水线 key（slug）</label>
+              <div>
+                <input class="inp mono" id="editKey" value="default" style="width:160px;" oninput="checkKey(this)">
+                <div class="errmsg" id="keyErr"></div>
+              </div>
+            </div>
+            <div class="fld"><label>适用模块</label><div class="muted">全部模块（全局流水线）</div></div>
+            <div class="fld"><label>启用</label><label class="switch" style="margin-top:4px;"><input type="checkbox" checked onchange="markDirty()"><span></span></label></div>
+            <div class="fld"><label>审批</label>
+              <div class="seg"><button class="on" onclick="segPick(this);markDirty()">继承环境</button><button onclick="segPick(this);markDirty()">始终</button><button onclick="segPick(this);markDirty()">从不</button></div></div>
+            <div class="fld"><label>失败回滚</label>
+              <div class="seg"><button class="on" onclick="segPick(this);markDirty()">回滚上一版本</button><button onclick="segPick(this);markDirty()">不回滚</button></div></div>
+          </div>
+          <div class="alert info" style="margin:14px 0 0;">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <div>产物路径 = 模块 × 流水线 key × 版本：<span class="mono" id="nsHint">modules/admin/default/1a2b3c4/</span><br>
+              全局线服务多模块时，命令差异用 <b>{MODULE_*}</b> 变量表达；差异大就「复制为专用线」。</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="t">流程编排
+            <span class="hint">platform（git/写版本号/切指针）锁定不可增删 · script 可增删、配命令</span>
+            <span class="spacer"></span><button class="btn sm pri" onclick="addNodeAt(1)">+ 添加节点</button>
+          </div>
+          <div class="flow" id="flowEdit"></div>
+          <div class="muted">点 script 节点在下方「节点命令」配置；点连接线「+」在槽位插入节点；hover 节点右上 × 删除。</div>
+        </div>
+
+        <div class="card">
+          <div class="t">节点命令 <span class="hint" id="selNodeName"></span></div>
+          <div id="propsBody"><div class="muted" style="padding:12px 0;text-align:center;">点击上方任意 script 节点配置其命令；platform 节点不可编辑</div></div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 2：模块页 ============ -->
+      <div class="screen" id="screen-module">
+        <div class="row" style="justify-content:space-between;margin-bottom:14px;">
+          <div><div class="pagelink">admin 管理端</div><div class="muted" style="margin-top:4px;">微前端 · apps/admin · 仓库 web_system</div></div>
+          <button class="btn pri" onclick="openPipe('默认流程','default','全部模块');openSubmit('admin',true)">发起发布</button>
+        </div>
+        <div class="alert info">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <div>本模块不再持有构建/投递命令（R6）：命令已归<b>流水线</b>节点所有。</div>
+          <a class="act lk" onclick="nav('list')">查看流水线 →</a>
+        </div>
+        <div class="card">
+          <div class="tabs">
+            <div class="tab active" onclick="pickModTab(this,'m-prop')">属性定义</div>
+            <div class="tab" onclick="pickModTab(this,'m-cfg')">配置中心</div>
+            <div class="tab" onclick="pickModTab(this,'m-ver')">各环境版本</div>
+          </div>
+          <div id="m-prop" class="modtab">
+            <div class="kv">
+              <div class="k">模块 key</div><div class="v mono">admin</div>
+              <div class="k">类型</div><div class="v">micro-frontend</div>
+              <div class="k">目录</div><div class="v mono">apps/admin</div>
+              <div class="k">静态产物根</div><div class="v mono">servers/gateway/public/static/modules/admin/</div>
+            </div>
+          </div>
+          <div id="m-cfg" class="modtab" style="display:none;"><div class="muted" style="padding:12px 0;">配置中心：env × module 作用域键值（密钥掩码），发布时强制注入进程环境。此处略。</div></div>
+          <div id="m-ver" class="modtab" style="display:none;">
+            <div class="muted" style="margin-bottom:10px;">只展示<b>当前线上版本</b>（版本号本身含命名空间前缀）。当前版本可能是多条流水线先后发布的结果，因此不标注「所属流水线」。</div>
+            <table>
+              <thead><tr><th style="width:90px;">环境</th><th>当前版本</th><th style="width:120px;">部署时间</th><th style="width:110px;">操作</th></tr></thead>
+              <tbody>
+                <tr><td>本地</td><td class="mono">default/1a2b3c4</td><td class="num">09-10 14:22</td><td><a class="lk" onclick="askSwitch('default/1a2b3c4','admin','本地环境')">回滚</a></td></tr>
+                <tr><td>dev</td><td class="mono">admin-line/9f8e7d6</td><td class="num">09-09 18:05</td><td><a class="lk" onclick="askSwitch('admin-line/9f8e7d6','admin','dev')">回滚</a></td></tr>
+                <tr><td>prod</td><td class="mono">default/7c1d2e3</td><td class="num">09-05 10:30</td><td><a class="lk" onclick="askSwitch('default/7c1d2e3','admin','生产环境')">回滚</a></td></tr>
+                <tr><td>测试环境</td><td colspan="3" class="muted">未发布 · <a class="lk" onclick="openPipe('默认流程','default','全部模块');openSubmit('admin',true)">去发布</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 3：决策速查 ============ -->
+      <div class="screen" id="screen-decide">
+        <div class="card">
+          <div class="t">本轮 IA（v9 → v11 累积）</div>
+          <table>
+            <thead><tr><th style="width:250px;">调整</th><th>落法</th></tr></thead>
+            <tbody>
+              <tr><td>「编排与命令」收进「编辑」</td><td>详情页右上「编辑」→ <b>独立编辑页</b>（路由跳转，面包屑返回详情；三段：基本信息 / 流程编排 / 节点命令），不用抽屉、不作详情页平级 tab</td></tr>
+              <tr><td>发布环境选择 = 下拉</td><td>环境是动态集合（环境管理中增删、数量不固定）→ <b>a-select</b>，不用 tabs 平铺（R2 规则例外：动态选项适用下拉）；选中后身份预览即时联动</td></tr>
+              <tr><td>目标模块按入口联动</td><td>① <b>列表行「发起发布」</b> → <b>可选</b>（不受 scope 限制，让用户选）；② <b>详情页头 / 执行历史/当前运行「再次发布」 / 模块页</b>入口 → <b>默认锁定 + 「已锁定」标签 + 旁注</b>（默认 = admin 或来源实例/模块的模块）；③ <b>专用线</b>的详情页头/记录入口 → 下拉只含其适用模块且直接锁定</td></tr>
+              <tr><td>详情页只留运行态</td><td>tab = 当前运行 / 执行历史；页头右上「编辑」「发起发布」</td></tr>
+              <tr><td>列表为入口</td><td>侧栏「流水线」→ 全部流水线列表；点行进详情</td></tr>
+              <tr><td>回滚下沉到执行历史</td><td>行内「回滚到此版本」；legacy 历史产物表跟随</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="t">本原型覆盖的交互状态（评审清单）</div>
+          <table>
+            <thead><tr><th style="width:220px;">状态</th><th>体现位置</th></tr></thead>
+            <tbody>
+              <tr><td>加载中</td><td>列表页「状态演示」切「加载」→ 骨架屏；编辑页「保存」按钮 loading</td></tr>
+              <tr><td>空态</td><td>列表页「状态演示」切「空态」（原因 + 出路）</td></tr>
+              <tr><td>错误态</td><td>列表页「状态演示」切「错误」（可重试）</td></tr>
+              <tr><td>破坏性二次确认</td><td>删除节点 / 回滚 / prod 提交 / 放弃未保存修改</td></tr>
+              <tr><td>禁用 + tooltip</td><td>编辑页：内置流水线不可改名、删除流水线禁用；platform 节点不可编辑</td></tr>
+              <tr><td>保存中防重复</td><td>「保存」点击后转 loading，1.2s 后成功提示</td></tr>
+              <tr><td>就地校验</td><td>流水线 key 格式/撞名红字；节点 key 保留字/重名/格式</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="t">交互演示提示</div>
+          <div style="font-size:13px;line-height:2;color:var(--text-2);">
+            ① 列表页右上「状态演示」可切换 正常 / 加载 / 空态 / 错误 四态。<br>
+            ② 点流水线行进详情；右上「编辑」进入<b>独立编辑页</b>（面包屑返回详情），「发起发布」开发布抽屉。<br>
+            ③ 编辑页：内置名/删除禁用（悬停 tooltip）；改 key 即时校验；点 script 节点配命令（多操作 + 变量 chips + 按模块预览）。<br>
+            ④ 点「保存」→ 按钮 loading；有未保存改动点「取消」/ 面包屑 / 侧栏离开 → 弹「放弃修改」确认。<br>
+            ⑤ 当前运行点流程图节点或「查看日志」→ 日志抽屉（阶段切换）；回滚 / prod 提交均有二次确认。
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===== 编辑抽屉已改为独立页面（见 #screen-edit）；发布/日志仍用抽屉 ===== -->
+
+<!-- ===== 发布抽屉 ===== -->
+<div class="drawer-mask" id="subDrawer" onclick="if(event.target===this)closeSubmit()">
+  <div class="drawer w">
+    <div class="dhead">发起发布 · <span id="subName">默认流程</span> <button class="x" onclick="closeSubmit()">×</button></div>
+    <div class="dbody">
+      <div class="dsec">
+        <div class="t">发布参数</div>
+        <div class="fld" style="margin-bottom:14px;">
+          <label>发布环境</label>
+          <div class="row">
+            <select class="inp" id="envSel" onchange="pickEnv(this.value)" style="width:230px;">
+              <option value="local">本地环境（local）</option>
+              <option value="dev">开发环境（dev）</option>
+              <option value="test">测试环境（test）</option>
+              <option value="stage">预发环境（stage）</option>
+              <option value="prod">生产环境（prod）</option>
+            </select>
+            <span class="muted">环境是动态集合（环境管理中增删，数量不固定）→ 用下拉，不平铺</span>
+          </div>
+        </div>
+        <div class="row wrap" style="gap:16px;">
+          <div class="fld"><label>目标模块</label>
+            <div class="row">
+              <select class="inp" id="selModule" onchange="renderSubmitPreview()" style="width:220px;"></select>
+              <span class="tag warn" id="modLockTag" style="display:none;">已锁定</span>
+              <span class="muted" id="modLockHint" style="display:none;"></span>
+            </div>
+          </div>
+          <div class="fld"><label>分支</label><input class="inp mono" value="feature/contract-risk-ai" style="width:220px;"></div>
+          <div class="fld"><label>commit（留空 = 分支最新）</label><input class="inp mono" id="inCommit" placeholder="1a2b3c4" style="width:170px;" oninput="renderSubmitPreview()"></div>
+          <div class="fld"><label>发布模式</label>
+            <div class="seg" id="modeSeg"><button class="on" onclick="pickMode('direct')">直接全量</button><button onclick="pickMode('gray')">灰度</button></div>
+          </div>
+        </div>
+        <div id="grayParams" style="display:none;margin-top:14px;">
+          <div class="muted" style="margin-bottom:8px;">灰度规则（后端服务不支持灰度）</div>
+          <div class="row wrap" style="gap:12px;">
+            <div class="seg"><button class="on">按百分比</button><button onclick="segPick(this)">按用户</button><button onclick="segPick(this)">按请求头</button></div>
+            <div class="fld"><label>百分比</label><input class="inp" type="text" value="10" style="width:80px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="dsec">
+        <div class="t">产物与版本身份预览 <span class="hint">提交前所见即落盘结果</span></div>
+        <div class="kv" id="nsKv"></div>
+        <div class="alert warn" style="margin:14px 0 0;">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div>线上指针按 <b>环境 + 模块</b> 唯一。多条流水线发布同一模块时<b>后写生效</b>，不提示、不拦截（决策 D-c）。</div>
+        </div>
+      </div>
+      <div id="prodHint" style="display:none;" class="alert info">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div>生产环境发布需审批：提交后进入「待审批」，审批通过才会执行。</div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <div class="spacer"></div>
+      <button class="btn" onclick="toast('已保存草稿（原型演示）')">保存草稿</button>
+      <button class="btn pri" onclick="askSubmit()">提交发布</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 日志抽屉 ===== -->
+<div class="drawer-mask" id="logDrawer" onclick="if(event.target===this)closeLog()">
+  <div class="drawer w">
+    <div class="dhead">执行日志 <span class="muted mono" style="font-weight:400;">job-20260910-1422</span> <button class="x" onclick="closeLog()">×</button></div>
+    <div class="dbody">
+      <div class="muted" style="margin-bottom:10px;">阶段（点击切换）</div>
+      <div class="seg" style="flex-wrap:wrap;" id="logStages"></div>
+      <div class="logbox" style="margin-top:12px;max-height:300px;" id="logBody"></div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end;">
+        <button class="btn sm" onclick="toast('已复制日志')">复制</button>
+        <button class="btn sm" onclick="toast('已下载日志')">下载</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 确认弹窗 ===== -->
+<div class="modal-mask" id="mSwitch">
+  <div class="modal">
+    <div class="mt">切换线上版本（回滚）</div>
+    <div class="mb" id="mSwitchBody"></div>
+    <div class="mf"><button class="btn" onclick="hide('mSwitch')">取消</button><button class="btn pri" onclick="doSwitch()">确认回滚</button></div>
+  </div>
+</div>
+<div class="modal-mask" id="mSubmit">
+  <div class="modal">
+    <div class="mt">确认提交发布</div>
+    <div class="mb" id="mSubmitBody"></div>
+    <div class="mf"><button class="btn" onclick="hide('mSubmit')">取消</button><button class="btn pri" onclick="doSubmit()">提交</button></div>
+  </div>
+</div>
+<div class="modal-mask" id="mDelNode">
+  <div class="modal">
+    <div class="mt" id="mDelTitle">删除节点</div>
+    <div class="mb" id="mDelBody"></div>
+    <div class="mf"><button class="btn" onclick="hide('mDelNode')">取消</button><button class="btn danger" onclick="doDelNode()">确认删除</button></div>
+  </div>
+</div>
+<div class="modal-mask" id="mDiscard">
+  <div class="modal">
+    <div class="mt">放弃修改？</div>
+    <div class="mb">当前编辑内容尚未保存，关闭后将丢失本次所有改动（含节点与命令）。</div>
+    <div class="mf"><button class="btn" onclick="hide('mDiscard')">继续编辑</button><button class="btn danger" onclick="forceCloseEdit()">放弃修改</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="ti">✓</span><span id="toastMsg"></span></div>
+
+    </div>
+  </div>
+</div>
+<script>
+/* ================= 数据 ================= */
+var PIPELINE = { name:'默认流程', key:'default', builtin:true, scope:'全部模块' };
+var NODES = [
+  { kind:'platform', key:'git',     label:'git · 拉取代码' },
+  { kind:'script',   key:'install', label:'安装依赖', optional:true,  watchdog:false, actions:[
+      { id:'a1', name:'按锁文件安装', type:'shell', code:'pnpm install --frozen-lockfile', timeoutSec:300, cont:false }
+  ]},
+  { kind:'script',   key:'build',   label:'构建',     optional:false, watchdog:false, actions:[
+      { id:'a1', name:'构建', type:'shell', timeoutSec:600, cont:false,
+        code:'case "${MODULE_TYPE}" in\n  backend)        npx tsc -p tsconfig.json ;;\n  micro-frontend) npx vite build --mode mf ;;\n  *)              npx vite build ;;\nesac' }
+  ]},
+  { kind:'platform', key:'version', label:'写版本号', sub:'version' },
+  { kind:'platform', key:'pointer', label:'切指针',   sub:'pointer' },
+  { kind:'script',   key:'verify',  label:'探活',     optional:false, watchdog:true,  actions:[
+      { id:'a1', name:'等待 TTL 并断言 manifest', type:'service', tool:'probe_manifest', timeoutSec:60, cont:false }
+  ]},
+  { kind:'script',   key:'notify',  label:'发通知',   optional:true,  watchdog:false, actions:[] }
+];
+var MODULES = [
+  { key:'admin',    name:'admin 管理端', type:'micro-frontend', dir:'apps/admin' },
+  { key:'portal',   name:'portal 门户',  type:'micro-frontend', dir:'apps/portal' },
+  { key:'ai-agent', name:'AI Agent',     type:'backend',        dir:'servers/ai-agent' }
+];
+var VARS = ['{MODULE_KEY}','{MODULE_TYPE}','{MODULE_DIR}','{RELEASE_DIR}','{BRANCH}','{COMMIT_ID}','{STAGE}','{DEPLOY_ENV}'];
+var USED_PL_KEYS = ['admin-line','content-hub-line'];   // 模拟已占用 slug（撞名校验用）
+var seq = NODES.map(function(n){ return n.key; });
+var usedKeys = NODES.map(function(n){ return n.key; });
+var PLATFORM_KEYS = ['git','version','pointer'];
+var sel = null, delTarget = null, swTarget = null, env = 'local', mode = 'direct', dirty = false;
+
+/* ================= 工具 ================= */
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function show(id){ $(id).classList.add('show'); }
+function hide(id){ $(id).classList.remove('show'); }
+var tt;
+function toast(m, type){
+  var el = $('toast'); $('toastMsg').textContent = m;
+  el.className = 'toast show ' + (type||'');
+  clearTimeout(tt); tt = setTimeout(function(){ el.classList.remove('show'); }, 1600);
+}
+function getNode(key){ return NODES.filter(function(x){ return x.key===key; })[0]; }
+function segPick(btn){ btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); }); btn.classList.add('on'); }
+function markDirty(){ dirty = true; }
+function toggleDD(id, e){
+  e.stopPropagation();
+  var el = $(id);
+  document.querySelectorAll('.dd.open').forEach(function(d){ if(d!==el) d.classList.remove('open'); });
+  el.classList.toggle('open');
+}
+function closeDD(){ document.querySelectorAll('.dd.open').forEach(function(d){ d.classList.remove('open'); }); }
+document.addEventListener('click', closeDD);
+
+/* ================= 导航 ================= */
+function nav(name){
+  if($('screen-edit').classList.contains('active') && dirty){ show('mDiscard'); return; }
+  var map = { list:['流水线','list'], module:['admin 管理端 · 工程视角','module'], decide:['IA 与状态覆盖','decide'] };
+  var t = map[name];
+  document.querySelectorAll('.side-item').forEach(function(i){ i.classList.remove('active'); });
+  event.currentTarget.classList.add('active');
+  document.querySelectorAll('.content > .screen').forEach(function(s){ s.classList.remove('active'); });
+  $('screen-' + t[1]).classList.add('active');
+  $('ttl').textContent = t[0];
+  $('crumbWrap').style.display = 'none';
+}
+function openPipe(name, key, scope){
+  document.querySelectorAll('.content > .screen').forEach(function(s){ s.classList.remove('active'); });
+  $('screen-pipe').classList.add('active');
+  $('ttl').textContent = '流水线 · ' + name;
+  $('crumbWrap').style.display = 'inline';
+  $('crumbBtn').textContent = '‹ 返回流水线列表';
+  PIPELINE.name = name; PIPELINE.key = key; PIPELINE.scope = scope;
+  $('pipeName').innerHTML = esc(name) + (name==='默认流程' ? ' <span class="tag plat" style="font-size:11px;">内置 · 不可改名</span>' : '');
+  $('pipeKey').textContent = key;
+  $('pipeScope').textContent = scope;
+  $('editName').textContent = name;
+  $('subName').textContent = name;
+  $('editKey').value = key; $('keyErr').className = 'errmsg';
+  renderFlow(); renderRunFlow(); renderSubmitPreview(); renderLogStages();
+  pipeTab('run');
+}
+function pipeTab(name){
+  var tabs = document.querySelectorAll('#screen-pipe .tabs .tab');
+  tabs[0].classList.toggle('active', name==='run');
+  tabs[1].classList.toggle('active', name==='history');
+  $('pane-run').style.display = name==='run' ? 'block' : 'none';
+  $('pane-history').style.display = name==='history' ? 'block' : 'none';
+}
+
+/* ================= 列表四态 ================= */
+function setListState(s, btn){
+  document.querySelectorAll('#stateSwitch button').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  var b = $('listBody');
+  if(s==='normal') b.innerHTML = listRows();
+  else if(s==='loading') b.innerHTML = skelRows();
+  else if(s==='empty') b.innerHTML = stateBlock('还没有流水线', '点右上「新建流水线」，或从「默认流程」复制一条专用线。',
+      '<button class="btn pri sm" onclick="toast(\'新建流水线（原型演示）\')">新建流水线</button>');
+  else b.innerHTML = stateBlock('加载失败', '列表接口请求失败，请稍后重试。',
+      '<button class="btn sm" onclick="retryList()">重试</button>', true);
+}
+function retryList(){
+  $('listBody').innerHTML = skelRows();
+  setTimeout(function(){ $('listBody').innerHTML = listRows(); toast('已重试成功'); }, 900);
+}
+function listRows(){
+  var head = '<table><thead><tr><th style="width:230px;">流水线</th><th style="width:120px;">适用模块</th><th style="width:210px;">最近运行</th><th style="width:180px;">最近版本</th><th style="width:90px;">执行次数</th><th style="width:120px;">操作</th></tr></thead><tbody>';
+  var rows = [
+    ['默认流程','default','全部模块', true,  '<span class="tag ok">成功</span>','09-10 14:22 · 本地','default/1a2b3c4','42'],
+    ['admin 专用线','admin-line','admin', false, '<span class="tag danger">失败 · 探活</span>','09-09 18:05 · dev','admin-line/9f8e7d6','7'],
+    ['content-hub 专用线','content-hub-line','content-hub', false, '<span class="tag ok">成功</span>','09-09 10:12 · dev','content-hub-line/5b4a3c2','13']
+  ];
+  var h = head;
+  rows.forEach(function(r){
+    h += '<tr class="clickable" onclick="openPipe(\'' + r[0] + '\',\'' + r[1] + '\',\'' + (r[2]==='admin'||r[2]==='content-hub' ? '仅 '+r[2] : r[2]) + '\')">'
+      + '<td><b>' + r[0] + '</b>' + (r[3] ? ' <span class="tag plat">内置</span>' : '') + '<div class="muted mono">key = ' + r[1] + '</div></td>'
+      + '<td>' + r[2] + '</td><td>' + r[4] + '<div class="muted">' + r[5] + '</div></td>'
+      + '<td class="mono">' + r[6] + '</td><td class="num">' + r[7] + '</td>'
+      + '<td onclick="event.stopPropagation();"><a class="lk" onclick="openPipe(\'' + r[0] + '\',\'' + r[1] + '\',\'' + (r[2]==='admin'||r[2]==='content-hub' ? '仅 '+r[2] : r[2]) + '\');openSubmit(null,false,true)">发起发布</a></td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+function skelRows(){
+  var h = '<table><thead><tr><th style="width:230px;">流水线</th><th style="width:120px;">适用模块</th><th style="width:210px;">最近运行</th><th style="width:180px;">最近版本</th><th style="width:90px;">执行次数</th><th style="width:120px;">操作</th></tr></thead><tbody>';
+  for(var i=0;i<4;i++){
+    h += '<tr><td><div class="sk" style="width:150px;"></div><div class="sk" style="width:90px;margin-top:6px;"></div></td>'
+      +  '<td><div class="sk" style="width:60px;"></div></td><td><div class="sk" style="width:120px;"></div></td>'
+      +  '<td><div class="sk" style="width:110px;"></div></td><td><div class="sk" style="width:30px;"></div></td><td><div class="sk" style="width:60px;"></div></td></tr>';
+  }
+  return h + '</tbody></table>';
+}
+function stateBlock(t, d, act, err){
+  var ic = err
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
+  return '<div class="state"><div class="ic">' + ic + '</div><div class="ttl">' + t + '</div><div>' + d + '</div><div class="act">' + (act||'') + '</div></div>';
+}
+
+/* ================= 流程图 ================= */
+var RUN_STATE = { git:'done', install:'done', build:'done', version:'done', pointer:'done', verify:'done', notify:'done' };
+function renderFlow(){
+  var h = '';
+  seq.forEach(function(key, i){
+    var n = getNode(key), plat = n.kind==='platform';
+    if(i>0) h += '<div class="fslot"><div class="farrow"></div><button class="fplus" title="在「'+seq[i-1]+'」与「'+key+'」之间插入" onclick="insertAt(\''+key+'\')">+</button></div>';
+    h += '<div class="fnode ' + (plat?'plat ':'') + (n.watchdog?'watch ':'') + (sel===key?'sel':'')
+      + '" id="node-'+key+'" onclick="onNode(\''+key+'\')">'
+      + '<span class="fseq">'+(i+1)+'</span>'
+      + (n.watchdog?'<span class="wbadge">watchdog</span>':'')
+      + (!plat?'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDelNode(\''+key+'\')">×</button>':'')
+      + '<span class="fname">'+esc(n.label)+'</span>'
+      + '<span class="fk mono">'+esc(plat?(n.sub||n.key):n.key)+'</span></div>';
+  });
+  $('flowEdit').innerHTML = h;
+  $('nsHint').textContent = 'modules/admin/' + PIPELINE.key + '/1a2b3c4/';
+}
+function renderRunFlow(){
+  var h = '';
+  seq.forEach(function(key, i){
+    var n = getNode(key);
+    if(i>0) h += '<div class="fslot"><div class="farrow"></div></div>';
+    h += '<div class="fnode ' + (n.kind==='platform'?'plat ':'') + ((RUN_STATE[key]==='done')?'done ':'')
+      + '" title="查看该阶段日志" onclick="openLog(\''+key+'\')">'
+      + '<span class="fseq">'+(i+1)+'</span>'
+      + (n.watchdog?'<span class="wbadge">watchdog</span>':'')
+      + '<span class="fname">'+esc(n.label)+'</span>'
+      + '<span class="fk mono">'+esc(n.kind==='platform'?(n.sub||n.key):n.key)+'</span></div>';
+  });
+  $('flowRun').innerHTML = h;
+}
+function insertAt(targetKey){ var at = seq.indexOf(targetKey); addNodeAt(at<0?1:at); }
+function addNodeAt(slot){
+  var key = uniqueKey();
+  NODES.push({ kind:'script', key:key, label:'新节点', optional:false, watchdog:false, actions:[] });
+  usedKeys.push(key);
+  seq.splice(slot, 0, key);
+  dirty = true;
+  renderFlow(); renderRunFlow(); renderLogStages(); onNode(key);
+  toast('已添加节点 '+key+'，请在下方配置命令');
+}
+function uniqueKey(){ var b='node', i=2; while(usedKeys.indexOf(b)>=0) b='node-'+(i++); return b; }
+function onNode(key){
+  var n = getNode(key); if(!n) return;
+  if(n.kind==='platform'){ toast('git / version / pointer 是发布语义真相源，平台托管，不可编辑','err'); return; }
+  sel = key; renderFlow(); renderProps(n);
+}
+
+/* ================= 节点命令编辑 ================= */
+function renderProps(n){
+  var h = '<div class="row wrap" style="gap:14px;align-items:flex-end;margin-bottom:6px;">'
+    + '<div class="fld"><label>节点名</label><input class="inp" id="inLabel-'+n.key+'" value="'+esc(n.label)+'" style="width:170px;" oninput="renameLabel(\''+n.key+'\',this.value)"></div>'
+    + '<div class="fld"><label>节点 key（命令读写键 · 本流水线内唯一）</label>'
+    + '<input class="inp mono" value="'+esc(n.key)+'" style="width:160px;color:var(--text-2);" onchange="renameKey(\''+n.key+'\',this.value)"></div>'
+    + '<div class="fld"><label>命令归属</label><span class="scope">本流水线：'+esc(PIPELINE.name)+' · <span class="mono">'+esc(PIPELINE.key)+'</span></span></div>'
+    + '<div class="fld"><label>策略</label><div class="row" style="gap:16px;">'
+    + '<label class="row" style="gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;"><input type="checkbox" '+(n.optional?'checked':'')+' onchange="setOptional(\''+n.key+'\',this.checked)"> optional（未配命令时跳过）</label>'
+    + '<label class="row" style="gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;"><input type="checkbox" '+(n.watchdog?'checked':'')+' onchange="toggleWatch(\''+n.key+'\',this.checked)"> watchdog（失败自动回滚）</label>'
+    + '</div></div>'
+    + '<div class="spacer"></div>'
+    + '<button class="btn danger sm" onclick="askDelNode(\''+n.key+'\')">删除节点</button>'
+    + '</div>';
+
+  h += '<div class="ops">';
+  if(!n.actions.length){
+    h += '<div class="alert ' + (n.optional ? 'info' : 'warn') + '" style="margin:0;">'
+      + (n.optional
+        ? '<div>该节点未配置命令，发布时会<b>跳过</b>（optional）。点下方「+ 添加操作」补命令。</div>'
+        : '<div>该节点未配置命令，发布到这里会<b>失败</b>（必配节点）。点下方「+ 添加操作」补命令。</div>')
+      + '</div>';
+  }
+  n.actions.forEach(function(a, i){
+    h += '<div class="opcard"><div class="ophead">'
+      + '<span class="opidx">'+(i+1)+'</span>'
+      + '<input class="inp" value="'+esc(a.name)+'" style="width:190px;" oninput="setOp(\''+n.key+'\',\''+a.id+'\',\'name\',this.value)">'
+      + '<span class="seg"><button class="'+(a.type==='shell'?'on':'')+'" onclick="setOp(\''+n.key+'\',\''+a.id+'\',\'type\',\'shell\')">shell</button>'
+      + '<button class="'+(a.type==='service'?'on':'')+'" onclick="setOp(\''+n.key+'\',\''+a.id+'\',\'type\',\'service\')">内置工具</button></span>'
+      + '<span class="muted">超时</span>'
+      + '<input class="inp mono" value="'+esc(a.timeoutSec||'')+'" style="width:64px;" oninput="setOp(\''+n.key+'\',\''+a.id+'\',\'timeoutSec\',this.value)">'
+      + '<span class="muted">秒</span>'
+      + '<label class="row" style="gap:5px;font-size:12px;color:var(--text-2);cursor:pointer;">'
+      + '<input type="checkbox" '+(a.cont?'checked':'')+' onchange="setOp(\''+n.key+'\',\''+a.id+'\',\'cont\',this.checked)"> 失败不中断</label>'
+      + '<button class="btn danger sm spacer" onclick="delOp(\''+n.key+'\',\''+a.id+'\')">删除</button>'
+      + '</div>';
+    if(a.type==='service'){
+      h += '<div class="row" style="gap:8px;"><span class="muted">内置工具 code</span>'
+        + '<input class="inp mono" value="'+esc(a.tool||'')+'" style="width:230px;" oninput="setOp(\''+n.key+'\',\''+a.id+'\',\'tool\',this.value)">'
+        + '<span class="muted">（工具目录中的 service 执行体）</span></div>';
+    } else {
+      h += '<textarea class="code-area" spellcheck="false" oninput="setOp(\''+n.key+'\',\''+a.id+'\',\'code\',this.value)">'+esc(a.code||'')+'</textarea>';
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '<button class="addop" style="margin-top:10px;" onclick="addOp(\''+n.key+'\')">+ 添加操作</button>';
+
+  h += '<div style="margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">'
+    + '<div class="muted" style="margin-bottom:4px;">可用变量（点击插入到第 1 个 shell 操作末尾）—— 全局线服务多模块时用它表达模块差异</div>'
+    + '<div class="chips">' + VARS.map(function(v){ return '<span class="chip" onclick="insertVar(\''+n.key+'\',\''+v+'\')">'+v+'</span>'; }).join('') + '</div>'
+    + '<div class="row" style="gap:10px;align-items:flex-end;">'
+    + '<div class="fld"><label>按模块预览替换结果</label>'
+    + '<select class="inp" id="pvModule" onchange="renderPreview(\''+n.key+'\')" style="width:200px;">'
+    + MODULES.map(function(m){ return '<option value="'+m.key+'">'+esc(m.name)+'（'+m.type+'）</option>'; }).join('')
+    + '</select></div>'
+    + '<button class="btn sm" onclick="renderPreview(\''+n.key+'\')">刷新预览</button>'
+    + '</div>'
+    + '<div class="preview-out" id="pvOut" style="margin-top:8px;"></div>'
+    + '</div>';
+
+  h += '<div class="muted" style="margin-top:12px;">命令随本流水线保存；删除节点 = 同时删除其命令（无孤儿脚本）。</div>';
+
+  $('selNodeName').textContent = '· 当前：' + n.label + '（' + n.key + '）';
+  $('propsBody').innerHTML = h;
+  renderPreview(n.key);
+}
+function renameLabel(key, val){
+  var n = getNode(key); if(!n) return;
+  n.label = val || '新节点'; dirty = true;
+  renderFlow();
+  $('selNodeName').textContent = '· 当前：' + n.label + '（' + n.key + '）';
+}
+function renameKey(oldKey, val){
+  var k = (val||'').trim(), n = getNode(oldKey);
+  if(!n) return;
+  var fail = null;
+  if(!k) fail = 'key 不能为空';
+  else if(!/^[A-Za-z0-9_-]{1,32}$/.test(k)) fail = 'key 格式非法（须 ^[A-Za-z0-9_-]{1,32}$）';
+  else if(PLATFORM_KEYS.indexOf(k)>=0) fail = 'key 不能占用平台保留字：' + k;
+  else if(usedKeys.indexOf(k)>=0 && k!==oldKey) fail = 'key 在本流水线内重复：' + k;
+  if(fail){ toast(fail,'err'); renderProps(n); return; }
+  usedKeys = usedKeys.filter(function(x){ return x!==oldKey; }); usedKeys.push(k);
+  n.key = k; seq = seq.map(function(x){ return x===oldKey?k:x; }); sel = k; dirty = true;
+  renderFlow(); renderRunFlow(); renderLogStages(); renderProps(n);
+  toast('key 已改为 ' + k);
+}
+function setOptional(key, on){ var n = getNode(key); if(n){ n.optional = on; dirty = true; toast('optional ' + (on?'开':'关')); } }
+function toggleWatch(key, on){
+  NODES.forEach(function(x){ x.watchdog = false; });
+  var n = getNode(key); if(n) n.watchdog = on;
+  dirty = true;
+  renderFlow(); renderRunFlow();
+  if(on) toast('已标记 watchdog：该节点失败将自动回滚');
+}
+function setOp(nodeKey, opId, field, value){
+  var n = getNode(nodeKey); if(!n) return;
+  var op = n.actions.filter(function(a){ return a.id===opId; })[0]; if(!op) return;
+  op[field] = value; dirty = true;
+  if(field==='type') renderProps(n);
+  if(field==='code') renderPreview(nodeKey);
+}
+function addOp(nodeKey){
+  var n = getNode(nodeKey); if(!n) return;
+  n.actions.push({ id:'a'+Date.now(), name:'新操作', type:'shell', code:'', timeoutSec:120, cont:false });
+  dirty = true; renderProps(n); toast('已添加操作');
+}
+function delOp(nodeKey, opId){
+  var n = getNode(nodeKey); if(!n) return;
+  n.actions = n.actions.filter(function(a){ return a.id!==opId; });
+  dirty = true; renderProps(n); toast('已删除操作');
+}
+function insertVar(nodeKey, v){
+  var n = getNode(nodeKey); if(!n) return;
+  var op = n.actions.filter(function(a){ return a.type==='shell'; })[0];
+  if(!op){ toast('请先添加一个 shell 操作','err'); return; }
+  op.code = (op.code||'') + v; dirty = true;
+  renderProps(n); toast('已插入 ' + v);
+}
+function renderPreview(nodeKey){
+  var n = getNode(nodeKey); if(!n) return;
+  var out = $('pvOut'); if(!out) return;
+  var modKey = ($('pvModule')||{}).value || MODULES[0].key;
+  var m = MODULES.filter(function(x){ return x.key===modKey; })[0] || MODULES[0];
+  var op = n.actions.filter(function(a){ return a.type==='shell'; })[0];
+  if(!op || !op.code){ out.textContent = '（无 shell 操作可预览）'; return; }
+  out.textContent = '# ' + m.name + ' · ' + nodeKey + '\n' + op.code
+    .replace(/\{MODULE_KEY\}/g, m.key).replace(/\{MODULE_TYPE\}/g, m.type)
+    .replace(/\{MODULE_DIR\}/g, m.dir).replace(/\{RELEASE_DIR\}/g, '/Users/geekwen/web_system_release')
+    .replace(/\{BRANCH\}/g, 'feature/contract-risk-ai').replace(/\{COMMIT_ID\}/g, '1a2b3c4')
+    .replace(/\{STAGE\}/g, nodeKey).replace(/\{DEPLOY_ENV\}/g, env);
+}
+
+/* ================= 编辑页（独立页面，路由跳转） ================= */
+function goScreen(id, title, crumb){
+  document.querySelectorAll('.content > .screen').forEach(function(s){ s.classList.remove('active'); });
+  $(id).classList.add('active');
+  $('ttl').textContent = title;
+  if(crumb){ $('crumbWrap').style.display = 'inline'; $('crumbBtn').textContent = crumb; }
+  else { $('crumbWrap').style.display = 'none'; }
+}
+function crumbBack(){
+  if($('screen-edit').classList.contains('active')){ closeEdit(); return; }
+  nav('list');
+}
+function checkKey(input){
+  var k = (input.value||'').trim().toLowerCase();
+  var err = $('keyErr');
+  if(!k){ err.textContent = 'key 不能为空'; err.className = 'errmsg show'; input.className = 'inp mono err'; return; }
+  if(!/^[a-z0-9-]{1,32}$/.test(k)){ err.textContent = '格式须匹配 ^[a-z0-9-]{1,32}$'; err.className = 'errmsg show'; input.className = 'inp mono err'; return; }
+  if(USED_PL_KEYS.indexOf(k)>=0){ err.textContent = '已存在同名流水线 key：' + k; err.className = 'errmsg show'; input.className = 'inp mono err'; return; }
+  err.className = 'errmsg'; input.className = 'inp mono';
+  PIPELINE.key = k; dirty = true;
+  renderFlow(); renderSubmitPreview();
+}
+function openEdit(){
+  goScreen('screen-edit', '编辑流水线 · ' + PIPELINE.name, '‹ 返回流水线详情');
+  dirty = false;
+  renderFlow();
+}
+function goBackToPipe(){
+  goScreen('screen-pipe', '流水线 · ' + PIPELINE.name, '‹ 返回流水线列表');
+}
+function closeEdit(){
+  if(dirty){ show('mDiscard'); return; }
+  goBackToPipe();
+}
+function forceCloseEdit(){ hide('mDiscard'); goBackToPipe(); dirty = false; }
+function doSave(){
+  var btn = $('saveBtn');
+  btn.classList.add('loading'); btn.disabled = true;
+  setTimeout(function(){
+    btn.classList.remove('loading'); btn.disabled = false;
+    dirty = false; goBackToPipe();
+    toast('流水线已保存（原型演示）');
+  }, 1200);
+}
+
+/* ================= 发布抽屉 ================= */
+function initSubmit(){
+  var only = scopedModule();
+  var list = only ? MODULES.filter(function(m){ return m.key === only; }) : MODULES;
+  $('selModule').innerHTML = list.map(function(m){
+    return '<option value="'+m.key+'">'+esc(m.name)+'（'+m.key+'）</option>';
+  }).join('');
+}
+function scopedModule(){
+  return (PIPELINE.scope || '').indexOf('仅 ') === 0 ? PIPELINE.scope.slice(2) : null;
+}
+function pickEnv(e){
+  env = e;
+  var sel = $('envSel'); if(sel) sel.value = e;
+  renderSubmitPreview();
+}
+function pickMode(m){
+  mode = m;
+  document.querySelectorAll('#modeSeg button').forEach(function(b,i){ b.classList.toggle('on', (m==='direct'?0:1)===i); });
+  $('grayParams').style.display = m==='gray' ? 'block' : 'none';
+}
+function currentRef(){
+  var modKey = $('selModule').value || MODULES[0].key;
+  var commit = ($('inCommit').value||'').trim() || '1a2b3c4(分支最新)';
+  return { modKey:modKey, commit:commit, ref:PIPELINE.key + '/' + commit };
+}
+function renderSubmitPreview(){
+  var kv = $('nsKv'); if(!kv) return;
+  var r = currentRef();
+  var m = MODULES.filter(function(x){ return x.key===r.modKey; })[0] || MODULES[0];
+  $('prodHint').style.display = env==='prod' ? 'flex' : 'none';
+  kv.innerHTML =
+      '<div class="k">版本标识</div><div class="v mono">'+esc(r.ref)+'</div>'
+    + '<div class="k">产物目录</div><div class="v mono">modules/'+esc(r.modKey)+'/'+esc(PIPELINE.key)+'/'+esc(r.commit)+'/</div>'
+    + '<div class="k">HTTP 入口</div><div class="v mono">/static/modules/'+esc(r.modKey)+'/'+esc(PIPELINE.key)+'/'+esc(r.commit)+'/index.js</div>'
+    + '<div class="k">写入指针</div><div class="v mono">deploy_deployments('+esc(env)+', '+esc(r.modKey)+').current_version</div>'
+    + '<div class="k">模块类型行为</div><div class="v">'+esc(m.type)+(m.type==='backend'?'（跳过投递/切指针，走重启 + 端口探活）':'（投递 + 切指针 + manifest 断言）')+'</div>';
+}
+function openSubmit(moduleKey, locked, fromList){
+  initSubmit();
+  var sel = $('selModule');
+  var only = scopedModule();
+  if(only && !fromList){
+    sel.value = only;
+    setModuleLock(true, '专用线仅适用模块 ' + only + '，不可修改');
+  } else if(locked && moduleKey){
+    sel.value = moduleKey;
+    setModuleLock(true, '已默认锁定 · 模块 ' + moduleKey + '（如需发其它模块，从列表入口选择）');
+  } else {
+    if(moduleKey) sel.value = moduleKey;
+    setModuleLock(false, '');
+  }
+  renderSubmitPreview();
+  show('subDrawer');
+}
+function setModuleLock(on, msg){
+  var sel = $('selModule');
+  sel.disabled = on;
+  $('modLockHint').textContent = msg || '';
+  $('modLockHint').style.display = on ? 'inline' : 'none';
+  $('modLockTag').style.display = on ? 'inline-flex' : 'none';
+}
+function closeSubmit(){ hide('subDrawer'); }
+function askSubmit(){
+  var r = currentRef();
+  $('mSubmitBody').innerHTML = (env==='prod')
+    ? '即将把 <b>'+esc(r.modKey)+'</b> 发布到 <b>生产环境</b>，版本 <span class="mono">'+esc(r.ref)+'</span>。<br>生产发布需审批：提交后进入「待审批」，审批通过才执行。'
+    : '将把 <b>'+esc(r.modKey)+'</b> 发布到 <b>'+esc(env)+'</b>，版本 <span class="mono">'+esc(r.ref)+'</span>。<br>产物落在 <span class="mono">modules/'+esc(r.modKey)+'/'+esc(PIPELINE.key)+'/</span>，并切换该模块的线上指针。';
+  show('mSubmit');
+}
+function doSubmit(){ hide('mSubmit'); closeSubmit(); toast('已提交（原型演示）'); }
+
+/* ================= 日志抽屉 ================= */
+var LOG_SAMPLE = {
+  git:'$ git fetch origin feature/contract-risk-ai\n$ git checkout feature/contract-risk-ai\n$ git reset --hard 1a2b3c4\nHEAD is now at 1a2b3c4 fix: contract risk list pagination\n[git] 完成 · 耗时 1.2s',
+  install:'[install] pnpm-lock.yaml 指纹未变化，跳过 install\n[install] 完成 · 耗时 0.1s',
+  build:'[build/op1] $ npx vite build --mode mf\n[build/op1] vite v5 · building for production...\n[build/op1] ✓ 128 modules transformed\n[build/op1] dist/index.js · 412.6 kB\n[build] 完成 · 耗时 11.4s',
+  version:'[version] 写入 deploy_versions（库 web_system_deploy）\n[version] component=admin · git_commit=1a2b3c4 · branch=feature/contract-risk-ai\n[version] 完成',
+  pointer:'[pointer] upsert deploy_deployments(local, admin).current_version = "default/1a2b3c4"\n[pointer] 完成',
+  verify:'[verify] 等待 gateway TTL 10s …\n[verify] GET /__manifest__ → admin.version == 1a2b3c4 ✓\n[verify] HEAD /static/modules/admin/default/1a2b3c4/index.js → 200 ✓\n[verify] 完成',
+  notify:'[notify] 控制台通知 + 审计日志已写入\n[notify] 完成'
+};
+function renderLogStages(){
+  $('logStages').innerHTML = seq.map(function(k, i){
+    var n = getNode(k);
+    return '<button data-k="'+k+'" onclick="pickStage(this)">'+(n.kind==='platform'?(n.sub||k):k)+'</button>';
+  }).join('');
+  var first = document.querySelector('#logStages button');
+  if(first) first.classList.add('on');
+  $('logBody').textContent = LOG_SAMPLE[seq[0]] || '（无日志）';
+}
+function pickStage(btn){
+  segPick(btn);
+  var k = btn.getAttribute('data-k');
+  $('logBody').textContent = LOG_SAMPLE[k] || '（无日志）';
+}
+function openLog(stage){
+  var btn = document.querySelector('#logStages button[data-k="'+stage+'"]');
+  if(btn){ segPick(btn); $('logBody').textContent = LOG_SAMPLE[stage] || '（无日志）'; }
+  show('logDrawer');
+}
+function closeLog(){ hide('logDrawer'); }
+
+/* ================= 模块页 / 回滚 / 删除节点 ================= */
+function pickModTab(el, id){
+  document.querySelectorAll('#screen-module .tabs .tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+  document.querySelectorAll('.modtab').forEach(function(d){ d.style.display = 'none'; });
+  $(id).style.display = 'block';
+}
+function askSwitch(ref, moduleKey, envName){
+  swTarget = ref;
+  $('mSwitchBody').innerHTML =
+      '将把 <b>'+esc(envName)+' / '+esc(moduleKey)+'</b> 的线上指针切到 <span class="mono">'+esc(ref)+'</span>。<br>'
+    + '影响：该环境用户即刻加载此版本产物（gateway 版本缓存 TTL 10s 后生效）。<br>'
+    + '<span class="muted">不做跨流水线互斥校验（决策 D-c）：其它流水线随后发布同一模块会再次覆盖指针。</span>';
+  show('mSwitch');
+}
+function doSwitch(){ hide('mSwitch'); toast('已回滚到：' + swTarget + '（原型演示）'); }
+function askDelNode(key){
+  var n = getNode(key); if(!n) return;
+  delTarget = key;
+  $('mDelTitle').textContent = '删除 script 节点「' + n.label + '」';
+  $('mDelBody').innerHTML = n.watchdog
+    ? '该节点是 <b>watchdog（自动回滚锚点）</b>。<br>删除后：它失败将<b>不再触发自动回滚</b>。<br>其 <b>'+n.actions.length+' 个操作（命令）随节点一并删除</b>。'
+    : '节点与其 <b>'+n.actions.length+' 个操作（命令）</b>将从本流水线移除，发布不再执行该步骤。';
+  show('mDelNode');
+}
+function doDelNode(){
+  hide('mDelNode');
+  if(!delTarget) return;
+  NODES = NODES.filter(function(x){ return x.key!==delTarget; });
+  seq = seq.filter(function(k){ return k!==delTarget; });
+  usedKeys = NODES.map(function(n){ return n.key; });
+  sel = null; dirty = true;
+  $('propsBody').innerHTML = '<div class="muted" style="padding:12px 0;text-align:center;">点击上方任意 script 节点配置其命令</div>';
+  $('selNodeName').textContent = '';
+  renderFlow(); renderRunFlow(); renderLogStages();
+  toast('已删除节点：' + delTarget);
+  delTarget = null;
+}
+
+/* ================= 启动 ================= */
+setListState('normal', document.querySelector('#stateSwitch button'));
+renderFlow();
+renderRunFlow();
+initSubmit();
+renderSubmitPreview();
+renderLogStages();
+</script>
+</body>
+</html>

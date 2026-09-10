@@ -6,6 +6,7 @@ import { AuditService, diffObject } from '../audit/audit.service';
 
 const SNAPSHOT_KEYS = [
   'name',
+  'key',
   'description',
   'steps',
   'nodes',

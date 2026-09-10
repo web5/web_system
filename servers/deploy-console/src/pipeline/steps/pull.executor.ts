@@ -41,8 +41,9 @@ export class PullExecutor {
 
     const commit = this.git.syncToBranch(p.gitBranch!, p.versionTag);
     p.gitCommit = commit;
-    p.versionTag = commit;
-    ctx.log(`代码已就绪: ${p.gitBranch}@${commit}（发布目录 ${this.git.workspace()}）`);
+    // R6 版本身份：<pipelineKey>/<commit>（产物落盘 modules/<module>/<key>/<commit>/）
+    p.versionTag = p.templateKey ? `${p.templateKey}/${commit}` : commit;
+    ctx.log(`代码已就绪: ${p.gitBranch}@${commit} → 版本 ${p.versionTag}（发布目录 ${this.git.workspace()}）`);
 
     // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install；失败不阻断）
     try {

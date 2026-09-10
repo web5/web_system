@@ -50,6 +50,14 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '发布版本标签' })
   versionTag?: string;
 
+  /**
+   * 流水线 key 快照（提交时从模板固化；R6 版本身份 = `<templateKey>/<commit>`）。
+   * 产物落盘 `modules/<module>/<templateKey>/<commit>/`；指针值 = 完整引用。
+   * null/undefined = legacy（版本标签不含流水线前缀，兼容历史）。
+   */
+  @Column({ type: 'varchar', length: 32, nullable: true, comment: '流水线 key 快照（版本命名空间用）' })
+  templateKey?: string;
+
   @Column({ type: 'varchar', length: 16, default: 'direct', comment: '模式 direct/grayscale' })
   mode: string;
 
