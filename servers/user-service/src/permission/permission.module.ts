@@ -8,6 +8,7 @@ import { RolePermissionEntity } from './entities/role-permission.entity';
 import { PermissionService } from './permission.service';
 import { PermissionController } from './permission.controller';
 import { InternalPermissionController } from './internal.controller';
+import { OperationLogClient } from './operation-log.client';
 import { InternalGuard } from '../api-key/internal.guard';
 
 @Module({
@@ -16,7 +17,7 @@ import { InternalGuard } from '../api-key/internal.guard';
     ConfigModule,
   ],
   controllers: [PermissionController, InternalPermissionController],
-  providers: [PermissionService, InternalGuard],
+  providers: [PermissionService, InternalGuard, OperationLogClient],
   exports: [PermissionService],
 })
 export class PermissionModule {}

@@ -52,6 +52,21 @@ export function syncPermissions(): Promise<SyncPermissionResult> {
   return request.post('/admin/permissions/sync');
 }
 
+/**
+ * 代码声明（packages/types）与数据库的权限差异（只读）。
+ * 用于页面提示"代码已加权限码、库里还没同步"。
+ */
+export interface PermissionDiff {
+  permissionsMissingInDb: string[];
+  permissionsExtraInDb: string[];
+  roles: Array<{ code: string; missingInDb: string[]; extraInDb: string[] }>;
+  hasDiff: boolean;
+}
+
+export function getPermissionDiff(): Promise<PermissionDiff> {
+  return request.get('/admin/permissions/diff');
+}
+
 /** 权限点全量（按 group 分组） */
 export function listPermissions(): Promise<PermissionGroup[]> {
   return request.get('/admin/permissions');

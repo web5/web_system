@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OperationLog } from '../config/operation-log.entity';
 import { OperationLogsController } from './operation-logs.controller';
+import { InternalLogsController } from './internal-logs.controller';
 import { OperationLogsService } from './operation-logs.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([OperationLog])],
-  controllers: [OperationLogsController],
+  controllers: [OperationLogsController, InternalLogsController],
   providers: [OperationLogsService],
   exports: [OperationLogsService],
 })
