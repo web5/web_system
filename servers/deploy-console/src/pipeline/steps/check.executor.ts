@@ -34,13 +34,16 @@ export class CheckExecutor {
     const branch = p.gitBranch || 'master';
     p.gitBranch = branch;
 
-    // ── 按 commit 发布 ──────────────────────────────────────────
+    // ── 按 commit 发布（R6：命名空间产物检查）─────────────────
     if (p.versionTag) {
-      p.reuseArtifact = this.artifacts.exists(p.moduleKey, p.versionTag);
+      // R6 版本身份：检查 modules/<module>/<templateKey>/<commit>/（有 key 时）
+      const fullRef = p.templateKey ? `${p.templateKey}/${p.versionTag}` : p.versionTag;
+      p.reuseArtifact = this.artifacts.exists(p.moduleKey, fullRef);
       if (p.reuseArtifact) {
-        const history = await this.registry.findByVersionTag(p.versionTag);
+        const history = await this.registry.findByVersionTag(fullRef);
         p.gitCommit = history?.gitCommit ?? p.versionTag;
-        ctx.log(`复用已有产物: ${p.moduleKey}/${p.versionTag}（跳过拉取与构建）`);
+        p.versionTag = fullRef; // 后续阶段（version/pointer）用完整引用
+        ctx.log(`复用已有产物: ${p.moduleKey}/${fullRef}（跳过拉取与构建）`);
       }
     } else {
       p.reuseArtifact = false;

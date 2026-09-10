@@ -30,8 +30,13 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'pipelines/:id',
         name: 'PipelineDetail',
-        component: () => import('@/views/PipelineDetail.vue'),
-        meta: { title: '流水线详情' },
+        component: () => import('@/views/PipelineDetail.vue'),        meta: { title: '流水线详情' },
+      },
+      {
+        path: 'pipelines/:id/edit',
+        name: 'PipelineEdit',
+        component: () => import('@/views/PipelineEdit.vue'),
+        meta: { title: '编辑流水线' },
       },
       {
         path: 'environments',

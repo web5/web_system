@@ -55,10 +55,7 @@ const showBackendTab = computed(() => moduleInfo.value?.type === 'backend')
 const showFrontendTab = computed(() =>
   ['frontend', 'micro-frontend', 'mini-app'].includes(moduleInfo.value?.type),
 )
-// 所有可发布模块（backend/frontend/micro-frontend）都展示「发布脚本」Tab
-const showScriptTab = computed(() =>
-  ['backend', 'frontend', 'micro-frontend'].includes(moduleInfo.value?.type),
-)
+// R6：模块不再持有命令，「发布脚本」tab 已移除（命令归流水线节点所有）
 // 默认激活的 tab
 const activeTab = ref<string>('')
 
@@ -86,8 +83,8 @@ type ScriptViewItem = {
 const scriptView = ref<ScriptViewItem[]>([])
 const scriptLoading = ref(false)
 async function loadScriptView() {
-  if (!showScriptTab.value) return
-  scriptLoading.value = true
+  // R6：脚本视图已随「发布脚本」tab 移除，此函数保留签名但不再加载
+  return
   try {
     scriptView.value = await stageCommandApi.scriptView(moduleKey.value)
     // 默认展开核心阶段（build/pull/verify）；让运维一进 Tab 就能看到「最重要的命令」
@@ -491,109 +488,19 @@ onMounted(async () => {
             - version/pointer = 紫色「语义真相源」（不可改）
           让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
         -->
-        <a-tab-pane v-if="showScriptTab" key="script" tab="发布脚本">
-          <a-spin :spinning="scriptLoading">
-            <a-alert
-              type="info"
-              show-icon
-              style="margin-bottom: 12px;"
-              message="发布流水线 9 阶段，每阶段要么由模块自定义（脚本在「模块脚本」列），要么由流水线内置逻辑兜底。点击展开看命令原文或内置说明。"
-            />
-            <a-empty
-              v-if="!scriptLoading && scriptView.length === 0"
-              description="暂无脚本视图"
-            />
-            <div v-else>
-              <div
-                v-for="item in scriptView"
-                :key="item.stage"
-                style="border: 1px solid #f0f0f0; border-radius: 6px; margin-bottom: 10px; background: #fff;"
-              >
-                <!-- 阶段标题行：序号 / 阶段 / 来源标签 -->
-                <div
-                  style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; cursor: pointer; background: #fafafa; border-radius: 6px 6px 0 0;"
-                  @click="toggleStep(item.stage)"
-                >
-                  <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
-                    <span style="color: #999; font-family: monospace; font-size: 12px;">{{ item.stage }}</span>
-                    <span style="font-weight: 600;">{{ item.title }}</span>
-                    <a-tooltip :title="SOURCE_LABELS[item.source]?.tip || ''">
-                      <a-tag :color="SOURCE_LABELS[item.source]?.color || 'default'" style="margin-right: 0;">
-                        {{ SOURCE_LABELS[item.source]?.label || item.source }}
-                      </a-tag>
-                    </a-tooltip>
-                    <span
-                      v-if="item.source === 'required-unset'"
-                      style="color: #cf1322; font-size: 12px;"
-                    >⚠ 发布时将立即终止</span>
-                  </div>
-                  <a-space>
-                    <a-tag v-if="(item.actions?.length ?? 0) > 1" color="geekblue">
-                      {{ item.actions?.length }} 个操作
-                    </a-tag>
-                    <a-tag v-if="item.timeoutSec" color="cyan">超时 {{ item.timeoutSec }}s</a-tag>
-                    <span style="color: #999; font-size: 12px;" v-if="item.updatedBy">
-                      最近编辑：{{ item.updatedBy }}
-                    </span>
-                    <a-button
-                      v-if="item.source !== 'semantic'"
-                      size="small"
-                      type="link"
-                      @click.stop="startEdit(item)"
-                    >编辑操作</a-button>
-                  </a-space>
-                </div>
-                <!-- 展开区：命令原文 / 内置说明 -->
-                <div
-                  v-show="expandedStages[item.stage]"
-                  style="padding: 12px; border-top: 1px solid #f0f0f0;"
-                >
-                  <template v-if="item.source === 'configured' && item.command">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                      <span style="font-size: 12px; color: #999;">shell 命令（DB 真相源）</span>
-                      <a-button size="small" type="link" @click="copyCmd(item.command)">复制</a-button>
-                    </div>
-                    <pre
-                      style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
-                             font-family: monospace; font-size: 12px; white-space: pre-wrap;
-                             max-height: 320px; overflow: auto; margin: 0;"
-                    >{{ item.command }}</pre>
-                    <div v-if="item.builtin" style="margin-top: 8px; color: #666; font-size: 12px;">
-                      <span style="color: #999;">叠加流程内置：</span>{{ item.builtin }}
-                    </div>
-                  </template>
-                  <template v-else-if="item.source === 'required-unset'">
-                    <a-alert
-                      type="error"
-                      show-icon
-                      :message="item.builtin"
-                    />
-                  </template>
-                  <template v-else>
-                    <a-alert
-                      :type="item.source === 'semantic' ? 'warning' : 'info'"
-                      show-icon
-                      :message="item.builtin"
-                    />
-                  </template>
+        <!-- R6：发布脚本 tab 已移除，替换为提示条 -->
+        <a-alert
+          type="info"
+          show-icon
+          style="margin-bottom: 0;"
+          message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
+        >
+          <template #description>
+            <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
+          </template>
+        </a-alert>
 
-                  <!-- v4 多操作编辑器（点标题行「编辑操作」展开；共享组件，ModuleDetail/PipelineDetail 同源） -->
-                  <template v-if="editStage === item.stage && editItem">
-                    <a-divider style="margin: 14px 0 10px;" />
-                    <StageActionsEditor
-                      :module-key="moduleKey"
-                      :item="editItem"
-                      @saved="onEditorSaved"
-                      @cancel="cancelEdit"
-                    />
-                  </template>
-                </div>
-              </div>
-            </div>
-          </a-spin>
-        </a-tab-pane>
-
-        <a-empty v-if="!showBackendTab && !showFrontendTab && !showScriptTab" description="该模块类型暂不支持版本管理" />
+        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
     </a-card>
 

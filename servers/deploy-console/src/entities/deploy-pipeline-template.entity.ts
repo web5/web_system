@@ -26,9 +26,18 @@ export class DeployPipelineTemplateEntity {
   @Index()
   moduleKey: string;
 
-  /** 模块内唯一（uq_tpl_module_name）；builtin 模板固定为「默认」 */
+  /** 模板内唯一（uq_tpl_module_name）；builtin 模板固定为「默认」 */
   @Column({ type: 'varchar', length: 64, comment: '模板名（模块内唯一）' })
   name: string;
+
+  /**
+   * 流水线 key（slug，^[a-z0-9-]{1,32}$，全局唯一）。
+   * 用途：产物命名空间的一段路径 modules/<模块>/<此 key>/<版本>/；
+   * 内置全局默认线 key = 'default'。
+   * 允许改名：历史产物按旧 key 目录留存、仍可回滚（目录名 = 版本值）。
+   */
+  @Column({ type: 'varchar', length: 32, default: 'default', comment: '流水线 key（slug，产物命名空间用）' })
+  key: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '说明' })
   description?: string;
