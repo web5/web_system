@@ -8,6 +8,7 @@ import {
   deployApi,
   pipelineTemplateApi,
   stageCommandApi,
+  pipelineStepApi,
   type PipelineItem,
   type PipelineTemplate,
   type TemplateNode,
@@ -411,9 +412,7 @@ const selNodeKey = ref('')
 /** 拖拽状态 */
 const dragKey = ref('')
 const dropSide = ref<'l' | 'r'>('r')
-/** 节点脚本编辑：作用模块（脚本真相源在模块级） */
-const editorModules = ref<any[]>([])
-const scriptModule = ref('')
+/** 节点命令编辑（R6：命令归属流水线，不再依赖作用模块） */
 const editingItem = ref<EditorItem | null>(null)
 const isPlatformNode = (key: string) => (PLATFORM_NODE_KEYS as readonly string[]).includes(key)
 
@@ -436,12 +435,8 @@ function openEditor() {
         rollbackOnFailure: tpl.value.rollbackOnFailure ?? 'previous',
       })
   selNodeKey.value = ''
-  // 作用模块：优先当前查看实例的模块；其次模板专属模块；再退到历史最近模块
-  const candidate = selectedRun.value?.moduleKey || (tpl.value.moduleKey !== '*' ? tpl.value.moduleKey : history.value[0]?.moduleKey)
-  scriptModule.value = candidate || ''
   editingItem.value = null
   editOpen.value = true
-  void loadEditorModules()
 }
 
 /** 当前草稿节点（按 key） */
@@ -461,47 +456,25 @@ function nodesError(): string {
   return errs.length ? errs[0] : ''
 }
 
-async function loadEditorModules() {
-  try {
-    const mods = await deployApi.modules()
-    editorModules.value = mods.filter((m: any) =>
-      ['backend', 'frontend', 'micro-frontend'].includes(m.type),
-    )
-    if (!scriptModule.value && editorModules.value.length) {
-      scriptModule.value = editorModules.value[0].key
-    }
-  } catch {
-    editorModules.value = []
-  }
-}
-
 /** 拖拽结束立即屏蔽紧随的 click，避免「拖完节点顺手打开脚本编辑器」 */
 let justDragged = false
 
-/** 切换脚本作用模块：若已选中 script 节点则重读该模块 × key 脚本 */
-function onScriptModuleChange() {
-  if (selNodeKey.value) void loadNodeScript(selNodeKey.value)
-}
-
-/** 点击 script 节点：选中并读取该模块 × key 的脚本配置 */
+/** 点击 script 节点：选中并读取流水线 × key 的命令配置 */
 function onNodeClick(key: string) {
-  if (justDragged) return // 刚拖拽过，忽略此次 click
+  if (justDragged) return
   if (isPlatformNode(key)) {
     message.warning('git / 写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
     return
   }
   selNodeKey.value = key
-  if (!scriptModule.value) {
-    message.warning('请先选择脚本作用模块')
-    return
-  }
   void loadNodeScript(key)
 }
 
-/** 读取「作用模块 × 节点 key」现有配置（未配置返回空 EditorItem 供新写） */
+/** 读取「流水线 × 节点 key」现有命令（R6：不再依赖作用模块） */
 async function loadNodeScript(key: string) {
+  if (!tpl.value) return
   try {
-    const row = await stageCommandApi.get(scriptModule.value, key)
+    const row = await pipelineStepApi.get(tpl.value.id, key)
     editingItem.value = {
       stage: key,
       source: row?.command?.trim() || row?.actions?.length ? 'configured' : 'required-unset',
@@ -512,13 +485,13 @@ async function loadNodeScript(key: string) {
     }
   } catch {
     editingItem.value = null
-    message.error(`读取 ${scriptModule.value} × ${key} 脚本失败`)
+    message.error(`读取流水线 × ${key} 命令失败`)
   }
 }
 
 /** 脚本保存成功后的刷新（保持选中态） */
 async function onScriptEditorSaved() {
-  if (selNodeKey.value && scriptModule.value) {
+  if (selNodeKey.value) {
     await loadNodeScript(selNodeKey.value)
   }
 }
@@ -528,10 +501,6 @@ function addScriptNode(slot: number) {
   const n: TemplateNode = { kind: 'script', key: nextNodeKey(), label: '新节点', optional: false }
   nodeDraft.value.splice(slot, 0, n)
   selNodeKey.value = n.key
-  if (!scriptModule.value) {
-    message.warning('请先在下方选择脚本作用模块')
-    return
-  }
   editingItem.value = null
   void loadNodeScript(n.key)
   // 下一帧聚焦 label 输入
@@ -565,7 +534,7 @@ function renameKey(oldKey: string, val: string) {
   if (!n) return
   n.key = k
   if (selNodeKey.value === oldKey) selNodeKey.value = k
-  if (scriptModule.value) void loadNodeScript(k) // 新 key 模块可能已有脚本
+  void loadNodeScript(k) // 新 key 可能有已存命令
 }
 
 /** optional / watchdog 开关 */
@@ -804,7 +773,7 @@ onUnmounted(stopPolling)
       </template>
       <div style="flex: 1;" />
       <template v-if="tpl">
-        <a-button type="primary" ghost @click="openEditor">编辑流水线</a-button>
+        <a-button type="primary" ghost @click="router.push({ name: 'PipelineEdit', params: { id: tplId } })">编辑流水线</a-button>
       </template>
     </div>
 
@@ -1154,22 +1123,6 @@ onUnmounted(stopPolling)
             </span>
           </template>
 
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-            <span style="font-size: 13px; color: #666;">作用模块</span>
-            <a-select
-              v-model:value="scriptModule"
-              style="width: 300px;"
-              placeholder="选择脚本归属模块（脚本按模块保存）"
-              show-search
-              :filter-option="(input: string, opt: any) => (opt?.label || '').toLowerCase().includes(input.toLowerCase())"
-              @change="onScriptModuleChange"
-            >
-              <a-select-option v-for="m in editorModules" :key="m.key" :value="m.key" :label="`${m.name}（${m.key}）`">
-                {{ m.name }}（{{ m.key }}）
-              </a-select-option>
-            </a-select>
-          </div>
-
           <template v-if="selectedNode">
             <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 12px;">
               <div>
@@ -1202,17 +1155,17 @@ onUnmounted(stopPolling)
               <a-button size="small" danger @click="askDeleteNode(selectedNode.key)">删除节点</a-button>
             </div>
 
-            <div v-if="scriptModule">
+            <div v-if="tpl">
               <StageActionsEditor
                 v-if="editingItem"
-                :module-key="scriptModule"
+                :template-id="tpl.id"
                 :item="editingItem"
                 @saved="onScriptEditorSaved"
                 @cancel="editingItem = null"
               />
-              <a-empty v-else :description="`读取 ${scriptModule} × ${selectedNode.key} 脚本中…`" />
+              <a-empty v-else :description="`读取 流水线 × ${selectedNode.key} 命令中…`" />
             </div>
-            <a-empty v-else description="无可用模块，无法编辑脚本（可先保存节点结构）" />
+            <a-empty v-else description="无可用流水线模板，无法编辑命令（可先保存节点结构）" />
           </template>
 
           <a-empty v-else description="点击上方 script 节点开始配置（git / 写版本号平台托管）" />

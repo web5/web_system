@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { stageCommandApi, type StageAction } from '@/api'
+import { pipelineStepApi, type StageAction } from '@/api'
 
-/** 编辑器输入项：来自 stageCommandApi.scriptView 中某项（阶段命令统一视图） */
+/** 编辑器输入项：来自 pipelineStepApi 中某项（流水线节点命令统一视图） */
 export interface EditorItem {
   stage: string
   source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
@@ -15,7 +15,8 @@ export interface EditorItem {
 }
 
 const props = defineProps<{
-  moduleKey: string
+  /** 流水线模板 ID（R6：命令归属流水线，不再用 moduleKey） */
+  templateId: string
   item: EditorItem
 }>()
 
@@ -85,7 +86,7 @@ async function validateDraft() {
   }
   try {
     for (const a of shells) {
-      await stageCommandApi.validate(props.moduleKey, props.item.stage, a.code as string)
+      await pipelineStepApi.validate(props.templateId, props.item.stage, a.code as string)
     }
     message.success(`语法校验通过（${shells.length} 个 shell 操作）`)
   } catch (e: any) {
@@ -110,7 +111,7 @@ async function saveDraft() {
   try {
     // 以 actions 数组整体提交；command 回填首个 shell 脚本（后端非空约束）
     const firstShell = draft.value.find((a) => a.type === 'shell' && a.code?.trim())
-    await stageCommandApi.save(props.moduleKey, props.item.stage, {
+    await pipelineStepApi.save(props.templateId, props.item.stage, {
       actions: draft.value,
       command: firstShell?.code?.trim() || '',
     })
@@ -130,7 +131,7 @@ async function saveDraft() {
       <span style="font-family: monospace; color: #999; font-size: 12px;">{{ item.stage }}</span>
       <span style="font-weight: 600;">操作序列（{{ draft.length }}）</span>
       <span style="color: #999; font-size: 12px; margin-left: auto;">
-        作用模块：<span style="font-family: monospace;">{{ moduleKey }}</span>
+        命令归属：<span style="font-family: monospace;">本流水线</span>
       </span>
     </div>
 

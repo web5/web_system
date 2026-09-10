@@ -20,7 +20,7 @@ export function moduleArtifactsRoot(releaseWorkspace: string, moduleKey: string)
   return path.join(releaseWorkspace, STATIC_MODULES_REL, moduleKey);
 }
 
-/** 指定版本的产物目录（本地 fs） */
+/** 指定版本的产物目录（本地 fs）；version 可含 `/`（`<pipelineKey>/<commit>` 命名空间） */
 export function moduleArtifactDir(
   releaseWorkspace: string,
   moduleKey: string,
@@ -46,4 +46,37 @@ export function moduleArtifactUrl(gatewayBaseUrl: string, moduleKey: string, ver
 /** gateway 模块清单 URL（verify 阶段断言版本已生效） */
 export function manifestUrl(gatewayBaseUrl: string): string {
   return `${gatewayBaseUrl}/__manifest__`;
+}
+
+// ── R6 版本身份（design.md §3.1 D-a）─────────────────────────
+
+/** 版本引用解析结果 */
+export interface ReleaseRef {
+  /** 流水线 key（无 `/` 前缀 = legacy 历史版本） */
+  pipelineKey?: string;
+  /** 版本号（git 短哈希） */
+  version: string;
+}
+
+/**
+ * 解析版本引用（**唯一解析点**，design.md §3.1 §7.3）。
+ *
+ * - `default/1a2b3c4` → `{ pipelineKey: 'default', version: '1a2b3c4' }`（流水线命名空间）
+ * - `1a2b3c4`         → `{ version: '1a2b3c4' }`（legacy 历史产物）
+ *
+ * 产物目录 = `modules/<module>/<完整引用>/`，`current_version` = 完整引用。
+ * gateway / nginx 零改动（gateway 只做字符串拼接，version 含 `/` 即多一级目录）。
+ */
+export function parseReleaseRef(ref: string): ReleaseRef {
+  const idx = ref.indexOf('/');
+  if (idx < 0) return { version: ref };
+  const pipelineKey = ref.slice(0, idx);
+  const version = ref.slice(idx + 1);
+  if (!pipelineKey || !version) return { version: ref };
+  return { pipelineKey, version };
+}
+
+/** 组装版本引用（`<pipelineKey>/<version>` 或纯 `<version>`） */
+export function buildReleaseRef(pipelineKey: string | undefined, version: string): string {
+  return pipelineKey ? `${pipelineKey}/${version}` : version;
 }
