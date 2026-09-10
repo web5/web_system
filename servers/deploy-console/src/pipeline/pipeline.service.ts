@@ -971,6 +971,8 @@ export class PipelineService {
         detail: `发布成功: ${p.env}/${p.moduleKey} → ${p.versionTag}（mode=${p.mode}, target=${uploadTarget}）`,
       });
       this.logger.log(`流水线完成: ${p.id} ${p.env}/${p.moduleKey} → ${p.versionTag}`);
+      // 发布成功后同步权限点（挂在这里的原因见方法注释；失败不影响发布结果）
+      await this.syncPermissionPoints(p);
       void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
     } catch (e) {
       const msg = (e as Error).message;
@@ -1185,6 +1187,63 @@ export class PipelineService {
   }
 
   // ── 阶段命令（每模块每阶段一条 shell，DB 为真相源）────────────────
+
+  /**
+   * 发布成功后同步权限点（幂等，调 user-service `POST /internal/permissions/sync`）。
+   *
+   * 为什么挂在发布流水线：权限码声明在共享包 `packages/types`，任何一次发布都可能带上
+   * 新权限码（改的是共享包，发布的是别的模块），而 DB 只在 user-service 启动时 seed
+   * —— 漏重启就会出现"接口调得通、前端菜单不出现"。挂在收尾处后，发布一次即自动对齐。
+   *
+   * 契约：**失败只告警不阻断**（权限同步不该让一次成功发布变成失败）；
+   * 环境变量 `PIPELINE_PERM_SYNC=false` 可关闭。
+   */
+  private async syncPermissionPoints(p: DeployPipelineEntity): Promise<void> {
+    if ((this.configService.get<string>('PIPELINE_PERM_SYNC') ?? 'true') === 'false') {
+      p.logs = [...(p.logs ?? []), '[perm-sync] 已按配置跳过权限同步（PIPELINE_PERM_SYNC=false）'];
+      await this.save(p);
+      return;
+    }
+    const key = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    if (!key) {
+      this.logger.warn('INTERNAL_API_KEY 未配置，跳过发布后的权限同步');
+      p.logs = [...(p.logs ?? []), '[perm-sync] ⚠️ 未配置 INTERNAL_API_KEY，跳过权限同步'];
+      await this.save(p);
+      return;
+    }
+    const base = (
+      this.configService.get<string>('USER_SERVICE_URL') || 'http://127.0.0.1:6002'
+    ).replace(/\/+$/, '');
+    // URL/key/body 一律经环境变量注入（密钥不进命令行与日志），operator 仅保留标识符字符
+    const operator = `pipeline:${(p.operator || 'system').replace(/[^\w.:-]/g, '').slice(0, 48)}`;
+    try {
+      const out = this.command.exec(
+        'curl -s -m 15 -X POST "$PERM_SYNC_URL" -H "Content-Type: application/json"' +
+          ' -H "x-internal-key: $PERM_SYNC_KEY" -d "$PERM_SYNC_BODY"',
+        this.releaseWorkspace,
+        {
+          PERM_SYNC_URL: `${base}/internal/permissions/sync`,
+          PERM_SYNC_KEY: key,
+          PERM_SYNC_BODY: JSON.stringify({ operator, source: '发布流水线' }),
+        },
+        20_000,
+      );
+      const ok = out.includes('"code":0');
+      p.logs = [
+        ...(p.logs ?? []),
+        ok
+          ? `[perm-sync] 权限点已同步（${out.trim().slice(0, 200)}）`
+          : `[perm-sync] ⚠️ 权限同步返回异常：${out.trim().slice(0, 200)}`,
+      ];
+    } catch (e) {
+      p.logs = [
+        ...(p.logs ?? []),
+        `[perm-sync] ⚠️ 权限同步失败（不影响发布结果）：${(e as Error).message.slice(0, 200)}`,
+      ];
+      this.logger.warn(`发布后权限同步失败（不阻断）: ${(e as Error).message}`);
+    }
+    await this.save(p);
+  }
 
   /**
    * 发布关键事件通知（尽力而为；通知失败由 NotificationService 兜底，不影响发布主流程）。

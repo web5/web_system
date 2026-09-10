@@ -12,6 +12,7 @@ import { User } from '@web-system/shared';
 import { PermissionEntity } from './entities/permission.entity';
 import { RoleEntity } from './entities/role.entity';
 import { RolePermissionEntity } from './entities/role-permission.entity';
+import { OperationLogClient } from './operation-log.client';
 
 /** seed 结果（供同步接口回传，便于确认"到底补了什么"） */
 export interface SeedResult {
@@ -19,6 +20,22 @@ export interface SeedResult {
   permissionsUpdated: number;
   rolesAdded: number;
   rolePermissionsCovered: number;
+}
+
+/**
+ * 代码声明（`packages/types`）与 DB 的差异快照，供 admin 角色权限页提示"未同步"。
+ *
+ * 自定义角色不出现在这里 —— 其权限本就由人在页面维护，没有"代码声明"可对比。
+ */
+export interface PermissionDiff {
+  /** 代码有、DB 没有（加了权限码但没同步） */
+  permissionsMissingInDb: string[];
+  /** DB 有、代码没有（代码删了但库里残留） */
+  permissionsExtraInDb: string[];
+  /** 内置角色权限差异 */
+  roles: Array<{ code: string; missingInDb: string[]; extraInDb: string[] }>;
+  /** 是否存在任何差异（前端据此决定是否提示） */
+  hasDiff: boolean;
 }
 
 /** 新建/编辑角色入参 */
@@ -57,6 +74,8 @@ export class PermissionService implements OnModuleInit {
     private readonly rpRepo: Repository<RolePermissionEntity>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // 操作日志上报（跨服务 → system-service /internal/logs；失败不阻断）
+    private readonly opLogs: OperationLogClient,
   ) {}
 
   // ────────────────────────── seed ──────────────────────────
@@ -141,6 +160,66 @@ export class PermissionService implements OnModuleInit {
         `新增角色 ${result.rolesAdded} 个、覆盖角色权限 ${result.rolePermissionsCovered} 条`,
     );
     return result;
+  }
+
+  /**
+   * 同步 + 审计（admin 页面按钮 / 脚本 / 发布流水线共用的主动入口）。
+   *
+   * 与 `seed()` 的区别：`seed()` 在服务启动时静默补齐（不写日志，否则每次重启都留一条），
+   * 本方法用于"有人或有流程主动触发"的场景，同步完成后落一条操作日志。
+   * 审计写失败只告警，不影响同步结果（见 OperationLogClient）。
+   */
+  async syncAndAudit(operator: string, source: string): Promise<SeedResult> {
+    const result = await this.seed();
+    await this.opLogs.write({
+      operator,
+      type: 'sync_permission',
+      target:
+        `权限同步（${source}）：新增 ${result.permissionsAdded}、更新 ${result.permissionsUpdated}、` +
+        `新增角色 ${result.rolesAdded}、覆盖角色权限 ${result.rolePermissionsCovered}`,
+    });
+    return result;
+  }
+
+  /**
+   * 代码声明 vs DB 的差异快照（只读，不写库）。
+   *
+   * 用于 admin「角色权限」页提示"代码已加权限码、数据库还没同步"——
+   * 这种状态下后端接口能过（鉴权读代码常量），前端菜单却不出现（读 DB）。
+   */
+  async diff(): Promise<PermissionDiff> {
+    const codeCodes = new Set(Object.keys(PERMISSIONS));
+    const dbCodes = new Set((await this.permRepo.find()).map((r) => r.code));
+
+    const dbByRole = new Map<string, Set<string>>();
+    for (const rp of await this.rpRepo.find()) {
+      const set = dbByRole.get(rp.roleCode) ?? new Set<string>();
+      set.add(rp.permissionCode);
+      dbByRole.set(rp.roleCode, set);
+    }
+
+    const roles = Object.entries(ROLE_PERMISSIONS)
+      .map(([code, perms]) => {
+        const inDb = dbByRole.get(code) ?? new Set<string>();
+        const expected = new Set(perms);
+        return {
+          code,
+          missingInDb: perms.filter((p) => !inDb.has(p)),
+          extraInDb: [...inDb].filter((p) => !expected.has(p)),
+        };
+      })
+      .filter((r) => r.missingInDb.length > 0 || r.extraInDb.length > 0);
+
+    const permissionsMissingInDb = [...codeCodes].filter((c) => !dbCodes.has(c));
+    const permissionsExtraInDb = [...dbCodes].filter((c) => !codeCodes.has(c));
+
+    return {
+      permissionsMissingInDb,
+      permissionsExtraInDb,
+      roles,
+      hasDiff:
+        permissionsMissingInDb.length > 0 || permissionsExtraInDb.length > 0 || roles.length > 0,
+    };
   }
 
   // ──────────────────────── 权限点查询 ────────────────────────
