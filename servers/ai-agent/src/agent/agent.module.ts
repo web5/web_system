@@ -28,6 +28,7 @@ import { DbConversationMemory } from './memory/db-conversation-memory';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
+import { BUILTIN_TOKENHUB_MODELS, ModelCatalogService } from './model-catalog.service';
 import { AgentConversationQueryService } from './agent-conversation-query.service';
 import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
@@ -40,20 +41,10 @@ import { AgentSkillProvider } from '../skill/agent-skill-provider';
  */
 
 /**
- * TOKENHUB_MODELS 未配置时的默认注册模型（hy3 由 Hy3Client 单独注册，不在本列）。
- * id 必须与网关 `GET {BASE_URL}/models` 返回的 id 一致，否则注册后调用会 404。
+ * 启动初值：先用 env / 内置清单把 registry 填满，避免 ModelCatalogService
+ * 首次异步同步完成前出现"无模型可用"的空窗；随后由 ModelCatalogService
+ * 按 DB 字典（→ env → 内置）刷新为最终清单。
  */
-const DEFAULT_TOKENHUB_MODELS = [
-  'deepseek/deepseek-v4-pro',
-  'deepseek/deepseek-v4-flash',
-  'deepseek-v4-pro-0813',
-  'hy4-preview',
-  'glm-5.3',
-  'kimi-k3',
-  'qwen3.5-plus',
-  'minimax-m3',
-].join(',');
-
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
   useFactory: (configService: ConfigService): ClientRegistry => {
@@ -64,7 +55,7 @@ const clientRegistryProvider: Provider = {
 
     // TokenHub 网关托管模型（model 可配；hy3 由 Hy3Client 注册）
     const models = (
-      configService.get<string>('TOKENHUB_MODELS', DEFAULT_TOKENHUB_MODELS) || ''
+      configService.get<string>('TOKENHUB_MODELS', BUILTIN_TOKENHUB_MODELS) || ''
     )
       .split(',')
       .map((s) => s.trim())
@@ -148,6 +139,7 @@ const runnerProvider: Provider = {
     DbConversationMemory,
     AgentRunPusher,
     AgentDefSyncService,
+    ModelCatalogService,
     PermissionBroker,
     // 合同风险场景特有
     ContractRuleTool,
@@ -172,6 +164,7 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     private readonly contractBenchmarkTool: ContractBenchmarkTool,
     private readonly mcpService: McpService,
     private readonly agentDefSync: AgentDefSyncService,
+    private readonly modelCatalog: ModelCatalogService,
     private readonly webSearchTool: WebSearchTool,
   ) {}
 
@@ -194,10 +187,14 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
 
     // 再启动 DB 定义同步：用 published 定义覆盖本地（DB 优先），并开启 30s 轮询
     this.agentDefSync.start();
+
+    // 模型清单同步：字典 llm_models 优先，回落 TOKENHUB_MODELS / 内置常量
+    this.modelCatalog.start();
   }
 
   onModuleDestroy(): void {
     this.agentDefSync.stop();
+    this.modelCatalog.stop();
   }
 
   /**

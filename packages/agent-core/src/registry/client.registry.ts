@@ -12,6 +12,18 @@ export class ClientRegistry {
     this.clients.set(client.modelId, client);
   }
 
+  /**
+   * 清空全部客户端。
+   *
+   * 用途：按最新模型清单重建注册表（如 DB 字典刷新后）。刻意**不换实例**——
+   * ClientRegistry 在启动时被 AgentEngine / Compaction 等按引用注入，
+   * 换实例不会传播；清空内部 Map 再 register 才能让调用方看到最新清单。
+   * 注意：clear 之后必须立刻回填，否则期间 get() 会抛「未注册」。
+   */
+  clear(): void {
+    this.clients.clear();
+  }
+
   get(modelId: string): BaseAiClient {
     const client = this.clients.get(modelId);
     if (!client) throw new Error(`模型 ${modelId} 未注册`);
