@@ -180,6 +180,8 @@ dict_items   (id uuid PK, type_code varchar(64), value varchar(128), label varch
 |---|---|---|
 | 2026-09-10 | v1 | 初稿：两层模型（type + item），待评审 |
 | 2026-09-10 | v2 | 采纳用户 7 条答复：归属 system-service；新增 `dict_fields` 字段定义层 + `attrs` JSON；搜索 + 分页；权限放宽到 editor/viewer 只读；模型页与字典页页面层合并 |
+| 2026-09-10 | v3 | 交互定稿：字典（类型）改为**独立编辑页**、记录（明细）用**右侧抽屉**、字段定义在编辑页内（原型 `docs/ui/prototypes/dict-module.html` v5） |
+| 2026-09-10 | v4 | **P2 已落地**：`/internal/dict/:code`（x-internal-key）+ ai-agent `ModelCatalogService` 三级回落（DB→env→内置，60s 轮询）；`ClientRegistry.clear()`；admin「模型」页聚合「可用清单（字典）× 单价」，与字典页互相跳转 |
 
 ---
 

@@ -36,7 +36,7 @@
         </a-menu-item>
         <a-menu-item v-if="userStore.hasPermission('agents:cost:view')" key="models">
           <template #icon><DollarCircleOutlined /></template>
-          <span>模型单价</span>
+          <span>模型</span>
         </a-menu-item>
         <a-menu-item v-if="userStore.hasPermission('system:dict:view')" key="dicts">
           <template #icon><DatabaseOutlined /></template>
