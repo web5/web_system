@@ -12,6 +12,7 @@ import {
   TemplateTarget,
 } from '../entities/deploy-pipeline-template.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
+import { normalizeNodes, isV5NodesEnabled, legacyStepsToNodes, TemplateNode } from './template-node';
 
 export const DEFAULT_TEMPLATE_NAME = '默认';
 /** 全局模板标记：moduleKey='*' 表示通用流水线（不绑定模块，执行时选目标模块） */
@@ -26,8 +27,67 @@ export type RollbackMode = (typeof ROLLBACK_MODES)[number];
 export const CORE_STAGES: readonly string[] = ['check', 'version', 'pointer'];
 
 /**
+ * 步骤的语义硬约束：`前` 若出现，必须排在 `后` 之前（只约束语义链，不约束全部顺序）。
+ *
+ * 设计说明：流水线引擎按实例快照 `p.steps` **数据驱动逐阶段执行**，本身允许任意顺序；
+ * 但以下相对顺序是发布语义的硬基线，颠倒会让流水线产生"假成功"或破坏自动回滚：
+ *   - check 必须首位（安全校验前置，一旦后置等于绕过门禁）；
+ *   - pull < build：未拉码就构建会构建到旧代码；
+ *   - build < upload / build < restart：产物未就绪投递/重启 = 空目录上架；
+ *   - upload/restart < version：未真正上架就写版本表 = "记录成功实为失败"；
+ *   - version < pointer：先切指针再写版本，回滚时 prevVersion 读取错位；
+ *   - pointer < verify：探活探的是切指针**前**的旧状态 = 假健康。
+ * cleanup 未做约束：它只 mv 超保留数的旧版本目录、且保护当前版本，可拖到任意位置。
+ * 其余相对顺序（如 upload 与 restart 谁先）不影响语义，允许自由拖拽。
+ */
+export const STEP_SEMANTIC_ORDER: ReadonlyArray<readonly [string, string]> = [
+  ['check', 'pull'],
+  ['check', 'build'],
+  ['check', 'upload'],
+  ['check', 'restart'],
+  ['check', 'version'],
+  ['check', 'pointer'],
+  ['check', 'verify'],
+  ['check', 'cleanup'],
+  ['pull', 'build'],
+  ['pull', 'upload'],
+  ['pull', 'restart'],
+  ['pull', 'version'],
+  ['pull', 'pointer'],
+  ['pull', 'verify'],
+  ['pull', 'cleanup'],
+  ['build', 'upload'],
+  ['build', 'restart'],
+  ['build', 'version'],
+  ['build', 'pointer'],
+  ['build', 'verify'],
+  ['upload', 'version'],
+  ['restart', 'version'],
+  ['version', 'pointer'],
+  ['pointer', 'verify'],
+];
+
+/**
+ * 校验步骤顺序是否满足语义硬约束（纯函数）。
+ * 返回违规描述列表；空数组 = 合法。仅校验「两者都启用」的相对顺序。
+ */
+export function checkSemanticOrder(steps: string[]): string[] {
+  const idx = new Map(steps.map((s, i) => [s, i]));
+  const errs: string[] = [];
+  for (const [before, after] of STEP_SEMANTIC_ORDER) {
+    const bi = idx.get(before);
+    const ai = idx.get(after);
+    if (bi !== undefined && ai !== undefined && bi >= ai) {
+      errs.push(`「${before}」必须排在「${after}」之前（发布语义基线，不可颠倒）`);
+    }
+  }
+  return errs;
+}
+
+/**
  * 归一化模板活动阶段（纯函数）：
- * null/空 → null（= 全部九阶段）；仅可裁剪不可重排；必含 check/version/pointer。
+ * null/空 → null（= 全部九阶段）；必含 check/version/pointer；
+ * **可自由拖拽排序**，但须满足 STEP_SEMANTIC_ORDER 语义硬约束。
  */
 export function normalizeSteps(steps?: (string | null | undefined)[] | null): string[] | null {
   if (!steps || steps.length === 0) return null;
@@ -40,14 +100,14 @@ export function normalizeSteps(steps?: (string | null | undefined)[] | null): st
       throw new BadRequestException(`非法步骤: ${x}（内置步骤: ${PIPELINE_STAGES.join(' / ')}）`);
     }
   }
-  const ordered = (PIPELINE_STAGES as readonly string[]).filter((st) => s.includes(st));
-  if (ordered.join(',') !== s.join(',')) {
-    throw new BadRequestException('步骤仅可裁剪、不可重排（顺序必须与内置流程一致）');
-  }
   for (const core of CORE_STAGES) {
     if (!s.includes(core)) {
       throw new BadRequestException(`步骤必须保留「${core}」（安全校验/发布语义基线，不可裁剪）`);
     }
+  }
+  const errs = checkSemanticOrder(s);
+  if (errs.length) {
+    throw new BadRequestException(`步骤顺序违反发布语义：${errs.join('；')}`);
   }
   return s;
 }
@@ -70,6 +130,8 @@ export interface TemplateSpec {
   description?: string;
   skipVerify?: boolean;
   steps?: string[];
+  /** v5 节点序列（platform+script）。提供则归一化落库；缺省保留 legacy steps 语义 */
+  nodes?: TemplateNode[] | null;
   rollbackOnFailure?: RollbackMode;
   approval?: TemplateApproval;
   defaultTarget?: TemplateTarget;
@@ -217,12 +279,23 @@ export class PipelineTemplateService {
     this.assertRollback(spec.rollbackOnFailure);
     await this.assertNameFree(name);
     const steps = this.resolveSteps(spec);
+    // v5：nodes 显式传入→归一化；未传→按 legacy 配置兜底转存（steps/skipVerify → nodes）
+    const nodes = isV5NodesEnabled()
+      ? spec.nodes !== undefined
+        ? normalizeNodes(spec.nodes)
+        : legacyStepsToNodes({
+            steps,
+            skipVerify: steps ? !steps.includes('verify') : (spec.skipVerify ?? false),
+            rollbackOnFailure: spec.rollbackOnFailure ?? 'previous',
+          })
+      : null;
     const row = this.repo.create({
       id: genId(),
       moduleKey: GLOBAL_TEMPLATE,
       name,
       description: spec.description?.trim() || undefined,
       steps,
+      nodes,
       skipVerify: steps ? !steps.includes('verify') : (spec.skipVerify ?? false),
       rollbackOnFailure: spec.rollbackOnFailure ?? 'previous',
       approval: spec.approval ?? 'inherit',
@@ -245,6 +318,7 @@ export class PipelineTemplateService {
       name,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
+      nodes: src.nodes ?? null,
       skipVerify: src.skipVerify,
       rollbackOnFailure: src.rollbackOnFailure ?? 'previous',
       approval: src.approval,
@@ -275,6 +349,9 @@ export class PipelineTemplateService {
     this.assertTarget(patch.defaultTarget);
     this.assertRollback(patch.rollbackOnFailure);
     if (patch.description !== undefined) tpl.description = patch.description?.trim() || undefined;
+    if (isV5NodesEnabled() && patch.nodes !== undefined) {
+      tpl.nodes = normalizeNodes(patch.nodes);
+    }
     if (patch.steps !== undefined) {
       tpl.steps = normalizeSteps(patch.steps);
       tpl.skipVerify = tpl.steps ? !tpl.steps.includes('verify') : (patch.skipVerify ?? false);
@@ -288,6 +365,20 @@ export class PipelineTemplateService {
     if (patch.approval !== undefined) tpl.approval = patch.approval;
     if (patch.defaultTarget !== undefined) tpl.defaultTarget = patch.defaultTarget;
     if (patch.enabled !== undefined) tpl.enabled = patch.enabled;
+    // 旧模板（nodes 为 null）在 v5 模式被编辑保存 → 一次性转存（steps/skipVerify/rollback 当前态 → nodes）
+    if (isV5NodesEnabled() && !tpl.nodes && patch.nodes === undefined) {
+      const steps =
+        tpl.steps && tpl.steps.length
+          ? tpl.steps
+          : tpl.skipVerify
+            ? ([...PIPELINE_STAGES] as string[]).filter((s) => s !== 'verify')
+            : null;
+      tpl.nodes = legacyStepsToNodes({
+        steps,
+        skipVerify: !!tpl.skipVerify,
+        rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
+      });
+    }
     return this.repo.save(tpl);
   }
 

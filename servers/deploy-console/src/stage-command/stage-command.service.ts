@@ -13,6 +13,7 @@ import {
   StageAction,
 } from '../entities/deploy-module-stage-command.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
+import { isWritableStageKey } from '../pipeline-template/template-node';
 
 const ALL_PIPELINE_STAGES = PIPELINE_STAGES as readonly string[];
 
@@ -159,6 +160,14 @@ export class StageCommandService {
     const row = await this.repo.findOne({ where: { moduleKey, stage, enabled: true } });
     if (!row?.command?.trim()) return null;
     return { command: row.command, timeoutSec: row.timeoutSec ?? undefined };
+  }
+
+  /**
+   * 读取模块某脚本节点 key 的完整配置（含 actions），供 v5 节点编辑/查看使用。
+   * 返回完整实体行（含 enabled/actions/timeoutSec），未配置返回 null。
+   */
+  async getRow(moduleKey: string, stage: string): Promise<DeployModuleStageCommandEntity | null> {
+    return this.repo.findOne({ where: { moduleKey, stage } });
   }
 
   /**
@@ -323,9 +332,10 @@ export class StageCommandService {
     timeoutSec?: number,
     actions?: StageAction[],
   ): Promise<DeployModuleStageCommandEntity> {
-    if (!(CONFIGURABLE_STAGES as readonly string[]).includes(stage)) {
+    // v5 开放：任意 script 节点 key 可配；platform 保留字（git/version/pointer）与非法格式拒绝
+    if (!isWritableStageKey(stage)) {
       throw new BadRequestException(
-        `阶段 ${stage} 不可配置：version/pointer 是发布语义真相源，固定由流水线执行`,
+        `阶段 ${stage} 不可配置：git/version/pointer 为平台保留（发布语义真相源），key 须匹配 ^[A-Za-z0-9_-]{1,32}$`,
       );
     }
 
