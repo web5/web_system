@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { SnakeNamingStrategy } from '@web-system/shared';
 import { AuthModule } from './auth/auth.module';
 import { DeployModule } from './deploy/deploy.module';
@@ -27,6 +27,9 @@ import { ReleaseHookModule } from './hook/release-hook.module';
     // 全局配置模块
     ConfigModule.forRoot({
       isGlobal: true,
+      // 显式指定配置路径：统一读本服务目录 servers/deploy-console/.env
+      // （不再依赖 cwd 的根 .env，避免换目录启动就读不到配置）
+      envFilePath: [resolve(__dirname, '../.env')],
     }),
     // MySQL 数据库连接（腾讯云/本机，凭据见 .env 的 MYSQL_*）
     TypeOrmModule.forRootAsync({
