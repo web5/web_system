@@ -130,7 +130,7 @@ task(name="review-agent", team_name="superpowers-tdd", mode="plan",
 
 ```
 web_system/
-├── apps/          admin-web:5174 / portal:5173 / mini-app
+├── apps/          admin-web:5174 / portal:5173 / mini-contract
 ├── servers/       gateway:3000 / auth:3001 / user:3002 / ai:3003 / system:3004
 └── packages/      types, shared
 ```

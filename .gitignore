@@ -70,7 +70,7 @@ artifacts/
 # Playwright CLI snapshots
 .playwright-cli/
 
-apps/mini-app/private.key
+apps/mini-contract/private.key
 
 
 

@@ -29,7 +29,7 @@ web_system/
 │   ├── portal/               # 用户门户（微前端模块）
 │   ├── admin/                # 管理后台（微前端模块，路由 base = /admin/）
 │   ├── deploy-console/       # 运维控制台前端（独立 SPA，由 6200 后端 serve）
-│   └── mini-app/             # 微信小程序（原生 + TS）
+│   └── mini-contract/        # 微信小程序·合同翻译官（原生 + TS）
 ├── servers/                  # 后端微服务（NestJS + TypeORM，每服务独立库）
 │   ├── gateway/              # API 反代 + 微前端基座 + 版本分发/灰度
 │   ├── auth-service/         # 认证（登录/JWT/微信）
@@ -58,6 +58,8 @@ web_system/
 └── ecosystem.config.cjs      # pm2 进程清单（web-*）
 ```
 
+> **小程序命名约定**：一个微信小程序 = 一个 `apps/mini-<业务>` 包（当前 `mini-contract` = 合同翻译官）。新增小程序时同步三处：① `rush.json` 登记 package；② `scripts/modules.json` 注册发布模块（`key` 与目录同名、`type=frontend`、`publicPath` 唯一）；③ 模块 key 由 `modules.json` 种子进发布平台 DB，如需改 key 走 `migrations/` 迁移（参考 `0005_rename_mini_app_to_mini_contract.sql`）。
+
 ---
 
 ## 3 技术栈
@@ -66,7 +68,7 @@ web_system/
 |---|---|---|
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
 | 后端 | NestJS 10 + TypeORM | MySQL（本地）/ PostgreSQL（生产），全部 TS strict |
-| 小程序 | 微信原生 + TS | `apps/mini-app` |
+| 小程序 | 微信原生 + TS | `apps/mini-contract`（合同翻译官） |
 | 共享 | pnpm workspace | 跨端配置统一收口 `@web-system/shared` |
 | 部署 | pm2 + Docker Compose + Nginx + 自研发布平台 | 见 §6 |
 
@@ -176,7 +178,7 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 ## 6 架构要点
 
 ```
-前端 apps/（shell 基座 + portal/admin 模块 + mini-app + deploy-console SPA）
+前端 apps/（shell 基座 + portal/admin 模块 + mini-contract 小程序 + deploy-console SPA）
         │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
 Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分发/灰度
 后端 servers/（12 个 NestJS 微服务，每服务独立库）
