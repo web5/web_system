@@ -91,6 +91,11 @@ version: 1.0.0
 
 ---
 
+## 跨角色质疑边（见 `../rd-digital-agent/references/challenge-playbook.md`）
+
+- 本角色**发起**：质疑 `rd-plan` / `rd-execute`（方案 / 架构是否过度设计、不可落地）。
+- 本角色**接收**：产品评审（人）→ 方案过度 / 不足；`rd-execute`（开发）→ 技术不可落地；`test-verification`（测试）→ 架构不可测。
+
 ## 参考文档
 
 - `references/design-principles.md` — 设计原则详解
