@@ -1,201 +1,141 @@
-# Web System
+# 科豆 AI（web_system）
 
-全栈 Web 应用系统 - 包含管理后台、少儿教育门户、小程序和后端服务
+全栈 monorepo —— 微前端基座 + 多个 NestJS 微服务 + 微信小程序 + 自研发布平台。
+一个仓库装三类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**数字人体系**（`.codebuddy/`）。
 
-## 项目结构
+> AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)；
+> 完整开发指南见 [docs/development-guide.md](./docs/development-guide.md)。
+
+---
+
+## 1 产品矩阵
+
+| 产品 | 定位 | 前端路由 |
+|---|---|---|
+| 变变 | AI 拼贴变身 3D 角色 | `/create → /transform → /result` |
+| 画板 | 自由绘画 + AI 文生图 | `/draw` |
+| AI 学习助手 | 少儿 AI 对话 | `/chat` |
+| Admin 后台 | 运营/系统管理 | `/admin/` |
+| 发布控制台 | 流水线、环境、监控 | `/console/` |
+
+---
+
+## 2 项目结构
 
 ```
 web_system/
-├── apps/                    # 前端应用
-│   ├── admin-web/          # 管理后台 (Vue3 + Ant Design Vue)
-│   ├── portal/             # 少儿教育门户 (Vue3 + Ant Design Vue)
-│   └── mini-app/           # 微信小程序
-├── servers/                 # 后端服务
-│   ├── gateway/            # API 网关 (NestJS)
-│   ├── auth-service/       # 认证服务 (NestJS)
-│   ├── user-service/       # 用户服务 (NestJS)
-│   ├── ai-service/         # AI 服务 (NestJS)
-│   ├── system-service/     # 系统管理 (NestJS)
-│   └── upload-service/     # 文件上传 (NestJS)
-├── packages/                # 共享包
-│   ├── types/              # TypeScript 类型定义
-│   └── shared/             # 公共工具 + API 超时等配置常量
-├── docs/                    # 文档（含 Whistle 配置等）
-└── scripts/                 # 运维脚本
+├── apps/                     # 前端应用
+│   ├── shell/                # 微前端基座（提供 window.__SHARED__ + 版本 manifest）
+│   ├── portal/               # 用户门户（微前端模块）
+│   ├── admin/                # 管理后台（微前端模块，路由 base = /admin/）
+│   ├── deploy-console/       # 运维控制台前端（独立 SPA，由 6200 后端 serve）
+│   └── mini-app/             # 微信小程序（原生 + TS）
+├── servers/                  # 后端微服务（NestJS + TypeORM，每服务独立库）
+│   ├── gateway/              # API 反代 + 微前端基座 + 版本分发/灰度
+│   ├── auth-service/         # 认证（登录/JWT/微信）
+│   ├── user-service/         # 用户
+│   ├── ai-service/           # AI（对话/生图/TTS/变变）
+│   ├── ai-agent/             # AI Agent 运行时引擎
+│   ├── system-service/       # 系统配置/素材
+│   ├── todo-service/         # 待办
+│   ├── mcp-gateway/          # MCP 网关
+│   ├── content-hub/          # 内容中枢（财经/AI 资讯）
+│   ├── upload-service/       # 上传
+│   ├── knowledge-service/    # 知识库 / RAG
+│   └── deploy-console/       # 发布平台后端
+├── packages/                 # 共享包
+│   ├── shared/               # 跨端配置唯一收口（API_TIMEOUT、命名策略、实体基类）
+│   ├── types/                # 权限等 TS 类型
+│   ├── ui/                   # 共享 UI + 设计 token
+│   ├── shell-loader/         # 自研微前端加载器
+│   ├── agent-core/           # @kedouai/agent-core（ReAct 引擎/注册表/记忆压缩）
+│   ├── kedou-agent/          # Agent CLI
+│   └── mcp-core/             # MCP 核心
+├── docs/                     # 人读文档（架构/开发/UI/产品/发布手册）
+├── scripts/                  # 构建/启动/验证/发布脚本
+├── migrations/               # 数据库迁移 SQL
+├── .codebuddy/               # 数字人体系（agent-kit / skills / rules）
+└── ecosystem.config.cjs      # pm2 进程清单（web-*）
 ```
 
-## 技术栈
+---
 
-### 前端
-- Vue 3 + TypeScript
-- Ant Design Vue
-- Vite
-- Pinia (状态管理)
-- Vue Router
+## 3 技术栈
 
-### 后端
-- NestJS
-- TypeORM
-- MySQL（本地）/ PostgreSQL（生产，见部署配置）
+| 层 | 技术 | 要点 |
+|---|---|---|
+| 前端 | Vue 3 + TypeScript + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
+| 后端 | NestJS 10 + TypeORM | MySQL（本地）/ PostgreSQL（生产），全部 TS strict |
+| 小程序 | 微信原生 + TS | `apps/mini-app` |
+| 共享 | pnpm workspace | 跨端配置统一收口 `@web-system/shared` |
+| 部署 | pm2 + Docker Compose + Nginx + 自研发布平台 | 见 §6 |
 
-### 工具
-- pnpm (包管理)
-- Whistle (本地开发代理)
+---
 
-## 快速开始
+## 4 快速开始
 
-> 换机器从零跑起，请先看 **[docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md)** —— 覆盖无 brew/sudo 安装 MySQL+Redis、`.env` 配置、种子用户等完整步骤。下面仅列要点。
+> 换机器从零跑起先看 **[docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md)**（含无 brew/sudo 安装 MySQL+Redis、`.env` 配置、种子用户）。
 
-### 0. 本地基础设施（无 brew / 无 sudo，仅首次）
-
-后端依赖 MySQL 与 Redis。若本机无 brew 或不想 `sudo`，用内置脚本把官方二进制装到 `~/local`：
+### 4.1 安装依赖
 
 ```bash
-# 启用 pnpm（若未启用）
-corepack enable && corepack prepare pnpm@9.15.0 --activate
-
-# 一键初始化并启动 MySQL(3306) + Redis(6379)，创建库 web_system
-bash scripts/local-db.sh
-```
-
-> 有 brew 也可直接 `brew install mysql redis`，但脚本默认读 `~/local` 下的二进制。
-
-### 1. 安装依赖
-
-```bash
+corepack enable && corepack prepare pnpm@9.15.0 --activate   # 启用 pnpm
 pnpm install
 pnpm --filter @web-system/shared build
 pnpm --filter @web-system/types build
 ```
 
-### 2. 配置 Whistle 代理（推荐 · 统一域名开发）
-
-没有 Whistle 时每个服务独立端口（5173/5174/3000/3001...），Cookie、OAuth 回调、跨域调试都很痛苦。Whistle 将所有服务映射到统一域名 `local.kedouai.com`。
-
-#### 安装与启动
+### 4.2 本地基础设施（首次）
 
 ```bash
-# 全局安装
-npm i -g whistle
-
-# 启动（默认代理端口 8899）
-w2 start
+bash scripts/local-db.sh     # 拉起 MySQL(3306) + Redis(6379)，建库 web_system
 ```
 
-#### 配置规则
+> 有 brew 也可 `brew install mysql redis`，但脚本默认读 `~/local` 下的官方二进制。
 
-打开 `http://127.0.0.1:8899` → **Rules** 页签，创建规则组 `kedouai-local`：
-
-```
-# ============================================================
-# 科豆 AI · 本地开发 Whistle 规则
-# 统一域名: local.kedouai.com
-# ============================================================
-
-# Admin 后台
-local.kedouai.com/admin    127.0.0.1:5174
-
-# API → Gateway
-local.kedouai.com/api/     127.0.0.1:3000
-
-# 上传文件
-local.kedouai.com/uploads/ 127.0.0.1:3002
-
-# 构建产物
-local.kedouai.com/assets/  127.0.0.1:5173
-
-# 文档 / Swagger
-local.kedouai.com/docs/    127.0.0.1:3000
-local.kedouai.com/swagger/ 127.0.0.1:3000
-
-# Portal 兜底
-local.kedouai.com          127.0.0.1:5173
-```
-
-#### 开启系统代理
-
-macOS：**系统偏好设置 → 网络 → 高级 → 代理**，勾选 HTTP/HTTPS 代理，服务器 `127.0.0.1`，端口 `8899`。
-
-或使用 Chrome 插件 [SwitchyOmega](https://chrome.google.com/webstore/detail/proxy-switchyomega/padekgcemlokbadohgkifijomclgjgif) 按需切换。
-
-> 详细配置参考 [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md)
-
-### 3. 启动服务
+### 4.3 启动
 
 ```bash
-# 推荐：一键全栈启动（先启 DB → 后端 6 个 → 前端 3 个，nohup 后台运行）
-bash scripts/start-local.sh
-
-# 额外初始化种子用户 admin / test
-bash scripts/start-local.sh --seed
-
-# 仅启动已配置好的服务（不含 DB 初始化、不含 seed）
-bash scripts/start-dev.sh
+bash scripts/local-up.sh            # 构建共享包 + 全部后端 → pm2 启动 → 健康检查
+bash scripts/local-up.sh --no-build # 跳过构建仅重启（改 .env 后最快）
+bash scripts/local-up.sh --seed     # 额外重置 admin 密码为 admin123
+bash scripts/start-frontend.sh      # 前端：portal(5173) + admin(5174) + docs(4173)
 ```
 
-或按场景启动：
+单模块 standalone（排查样式/页面，不加载基座）：
 
 ```bash
-# 只启动前端（后端已运行）
-bash scripts/start-frontend.sh
-
-# 只启动后端
-bash scripts/start-dev.sh    # 含前端，但后端已起来就跳过
-
-# 改完代码后，快速编译 + 重启 gateway / ai-service
-bash scripts/build-all.sh
-bash scripts/restart-servers.sh
+cd apps/admin  && npx vite --port 5175   # http://127.0.0.1:5175/admin/
+cd apps/portal && npx vite --port 5173   # http://127.0.0.1:5173/portal/
 ```
 
-手动按需启动（调试用）：
+> ⚠️ admin 路由 base 是 `/admin/`，portal 是 `/portal/`，URL 必须带前缀，否则 404。
+
+### 4.4 验证
 
 ```bash
-# ===== 后端 =====
-cd servers/gateway && pnpm dev &        # :3000
-cd servers/auth-service && pnpm dev &   # :3001
-cd servers/user-service && pnpm dev &   # :3002
-cd servers/ai-service && pnpm start:dev & # :3003 （注意：脚本名是 start:dev，不是 dev）
-cd servers/system-service && pnpm dev & # :3004
-cd servers/todo-service && pnpm dev &   # :3005
-
-# ===== 前端 =====
-cd apps/portal && pnpm dev &    # :5173
-cd apps/admin-web && pnpm dev & # :5174
-
-# ===== 文档 =====
-npx serve docs -p 4173 &        # :4173
+bash scripts/dev-verify.sh                  # 全量：DB + 单测 + 集成 + 健康
+bash scripts/dev-verify.sh --unit/--integ/--health
+node scripts/_test-p0.mjs                   # 发布系统集成测试（真实 DB）
 ```
 
-### 4. 访问
+### 4.5 环境变量
 
-Whistle 代理开启后，浏览器访问统一域名：
-
-| 页面 | 地址 |
-|------|------|
-| Portal | http://local.kedouai.com |
-| Admin | http://local.kedouai.com/admin |
-| API | http://local.kedouai.com/api/xxx |
-| Swagger | http://local.kedouai.com/docs |
-
-> 💡 **不开启 Whistle 代理**时可直接访问各端口：Portal → localhost:5173，Admin → localhost:5174
-
-### 5. 环境变量与初始账号
-
-每个后端服务在 `servers/<service>/.env` 读取配置，**这些文件已被 `.gitignore` 忽略，不会入库**，需自行创建。需 DB 的服务（auth / user / ai / system / todo）至少包含：
+每个后端服务读 `servers/<service>/.env`（已被 `.gitignore` 忽略，需自行创建）。需 DB 的服务至少包含：
 
 ```dotenv
 DB_TYPE=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USERNAME=root
-DB_PASSWORD=            # 与 §0 设置的 MySQL 密码一致，无密码则留空
+DB_PASSWORD=
 DB_DATABASE=web_system
 REDIS_URL=redis://127.0.0.1:6379
 JWT_SECRET=<随机 48 字节 hex>
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
-工程**不内置任何用户数据**，初始账号由 `servers/auth-service/scripts/seed.ts` 生成：
+初始账号不内置，由 seed 生成：
 
 ```bash
 cd servers/auth-service
@@ -203,108 +143,147 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 ```
 
 | 用户名 | 角色 | 密码 |
-|--------|------|------|
-| `admin` | admin | 由 `ADMIN_INIT_PASSWORD` 指定（缺失则脚本报错退出） |
-| `test`  | user  | 由 `TEST_INIT_PASSWORD` 指定（缺失则随机生成） |
+|---|---|---|
+| `admin` | admin | `ADMIN_INIT_PASSWORD`（缺失则脚本报错退出） |
+| `test` | user | `TEST_INIT_PASSWORD`（缺失则随机生成） |
 
-> seed 脚本的 DB 密码只从 `.env` 注入，源码无硬编码。详细排错见 [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md)。
+---
 
-## 端口分配
+## 5 端口分配
 
-| 应用/服务 | 端口 | 说明 |
-|----------|------|------|
-| portal | 5173 | 用户门户 |
-| admin-web | 5174 | 管理后台 |
-| docs | 4173 | 文档站点 |
-| gateway | 3000 | API 网关 |
-| auth-service | 3001 | 认证服务 |
-| user-service | 3002 | 用户服务 + 文件上传 |
-| ai-service | 3003 | AI 对话 + 图片生成 + 变变 |
-| system-service | 3004 | 系统管理 |
-| todo-service | 3005 | 待办 / 任务管理 |
+| 服务 / 应用 | 端口 | pm2 进程 | 说明 |
+|---|---|---|---|
+| gateway | 6000 | web-gateway | API 反代 + 微前端基座 + 版本分发/灰度 |
+| auth-service | 6101 | web-auth | 认证（6001 被本机其他项目占用，故用 6101） |
+| user-service | 6002 | web-user | 用户 |
+| ai-service | 6003 | web-ai | AI 对话/生图 |
+| system-service | 6004 | web-system | 系统配置 |
+| todo-service | 6005 | web-todo | 待办 |
+| mcp-gateway | 6006 | web-mcp-gateway | MCP 网关 |
+| content-hub | 6007 | web-content-hub | 内容中枢 |
+| upload-service | 6008 | web-upload | 上传 |
+| ai-agent | 6010 | web-ai-agent | Agent 运行时 |
+| knowledge-service | 6011 | — | 知识库 / RAG |
+| deploy-console | 6200 | web-deploy-console | 发布控制台（`/console/`） |
+| portal（dev） | 5173 | — | Vite dev |
+| admin（dev） | 5174 | — | Vite dev |
+| docs | 4173 | — | 静态文档站 |
 
-## 共享配置
+> 端口在 `ecosystem.config.cjs` 中写死 `env.PORT`，避免 `pm2 restart` 沿袭旧 PORT 造成端口漂移。
 
-`@web-system/shared`（`packages/shared/src/api.ts`）集中管理前后端公用的超时配置，portal / admin-web / mini-app / gateway / ai-service 均引用同一份常量。新增或调整超时只需改这一个文件：
+---
+
+## 6 架构要点
+
+```
+前端 apps/（shell 基座 + portal/admin 模块 + mini-app + deploy-console SPA）
+        │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
+Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分发/灰度
+后端 servers/（12 个 NestJS 微服务，每服务独立库）
+基础设施：MySQL（web_system + web_system_deploy）、Redis、Nginx、pm2
+```
+
+- **每服务独立数据库**；所有 API 走 gateway，前端不直连后端
+- **微前端**：shell 提供共享依赖防重复打包；CSS 用 `:where([data-module])` 前缀隔离；产物版本化存 `static/modules/<key>/<version>/`
+- **灰度**：gateway `deploy_canary_rules`（header / percent / user-list 三种匹配）
+- **静态资源**：`/api/uploads/*`（用户上传 + AI 生成图统一落盘）、`/materials/svg/*`（系统素材），均由 gateway 直出
+
+详细说明：[docs/architecture/技术架构.md](./docs/architecture/技术架构.md)、
+[docs/architecture/micro-frontend-technical-design.md](./docs/architecture/micro-frontend-technical-design.md)
+
+---
+
+## 7 发布与部署
+
+> 核心认知：服务统一从**发布目录 `~/web_system_release`** 运行（pm2 `web-*`，dotenv 按 cwd 加载发布目录 `.env`）。
+> **发布 = 工作区 commit & push → 发布目录 git 拉取 → 构建部署**，不是基于当前工作区。
+> 手册：[docs/development/local-release-runbook.md](./docs/development/local-release-runbook.md)
+
+### 7.1 三条发布通道（别混用）
+
+| 发布对象 | 通道 | 操作 |
+|---|---|---|
+| 后端服务 + admin/portal 前端 | **发布流水线** | `POST /api/pipelines`（deploy-console 6200，env=local，branch=feature/xxx）→ 轮询至 succeeded |
+| deploy-console 自身（6200） | **传统发布** | 仓库根 `./scripts/publish-deploy-console.sh`（⚠️ 勿走流水线，会自杀式重启执行者） |
+| admin/portal 前端微前端模块 | 四步铁律 | 见下 |
+
+### 7.2 微前端模块更新四步铁律
+
+改完 admin/portal 源码**必须**执行，否则浏览器仍加载旧产物：
+
+```bash
+cd apps/admin                       # portal 同理
+V=$(git -C ../.. rev-parse --short HEAD)
+RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
+mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
+# ⚠️ 版本表在 web_system_deploy.deploy_deployments（不是 web_system 库！）
+# UPDATE web_system_deploy.deploy_deployments SET current_version='$V', status='deployed', deployed_at=NOW()
+#   WHERE env_id='dev' AND module_key='admin';
+sleep 12                            # gateway 有 TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway
+curl -s localhost:6000/__manifest__ # 确认 admin version=$V
+```
+
+两个最容易踩的坑：① 版本表在 **web_system_deploy** 库；② gateway 有 **TTL 10s 缓存**。
+
+### 7.3 域名
+
+| 环境 | 域名 |
+|---|---|
+| 生产 | kedouai.com |
+| 测试 | dev.kedouai.com |
+| 本地 | local.kedouai.com（nginx 集成：`sudo ~/local/nginx/sbin/nginx`，配 `local.nginx.conf`） |
+
+---
+
+## 8 开发规范（工程铁律）
+
+> 完整版：`.codebuddy/references/coding-best-practices.md`
+
+1. **同类修改必须扫全量**：改横切关注点前先 grep 所有服务（`enableCors` / `useGlobalFilters` / `console.`）。
+2. **跨端配置禁止拷贝**：统一收口 `packages/shared/src/` → `index.ts` re-export → 删各端本地拷贝。
+3. **请求超时分三层**：前端 axios / gateway proxy / 后端 http client，真实超时取**最短层**；AI 类接口必须用 `API_TIMEOUT.AI_TASK`（90s）。
+4. **新增魔法数字先全局搜索**，复用已有常量。
+5. **收口后清理冗余文件**，确认无旧 import 残留。
+6. **后端加 shared 依赖**：`package.json` 加 `file:../../packages/shared`，**勿在 tsconfig 加 paths**（会让 nest build 把源码编进 dist）。
+7. TS 严格 `strict: true`，禁用 `any`；图标禁 emoji，统一 SVG。
+
+### 共享超时配置
 
 ```
 packages/shared/src/api.ts
-├── API_TIMEOUT.DEFAULT / AI_TASK / AI_QUERY      ← 前端用
-├── API_TIMEOUT.GATEWAY.{DEFAULT, AI_TASK, TTS}   ← Gateway proxy 用
-└── API_TIMEOUT.UPSTREAM.{DEFAULT, CHAT, ...}     ← 后端调第三方用
+├── API_TIMEOUT.DEFAULT / AI_TASK / AI_QUERY      ← 前端
+├── API_TIMEOUT.GATEWAY.{DEFAULT, AI_TASK, TTS}   ← Gateway proxy
+└── API_TIMEOUT.UPSTREAM.{DEFAULT, CHAT, ...}     ← 后端调第三方
 ```
 
-## 功能模块
+---
 
-### 管理后台 (admin-web)
-- 用户管理（列表、详情、增删改查）
-- 工作台
-- 系统设置
+## 9 文档地图
 
-### 少儿教育门户 (portal)
-- 首页（紫色渐变风格）
-  - 导航栏
-  - Hero 区域
-  - 课程卡片展示
-  - 特色功能
-- 画笔页面（Canvas 画板）
-  - 画笔/橡皮工具
-  - 颜色选择
-  - 画笔粗细调节
-  - 撤销功能
-  - 保存作品
+| 主题 | 入口 |
+|---|---|
+| 开发总指南 | [docs/development-guide.md](./docs/development-guide.md) |
+| 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
+| admin 微前端开发 | [docs/development/admin-dev.md](./docs/development/admin-dev.md) |
+| 本地发布运维 | [docs/development/local-release-runbook.md](./docs/development/local-release-runbook.md) |
+| 发布流水线设计 | [docs/development/deploy-pipeline-dev.md](./docs/development/deploy-pipeline-dev.md) |
+| Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
+| Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
+| CI 门禁与红绿线 | [docs/development/ai-native-sdlc-ci-deployment.md](./docs/development/ai-native-sdlc-ci-deployment.md) |
 
-### 小程序 (mini-app)
-- 首页
-- 画板功能
+---
 
-### 用户服务 (user-service)
-- 用户 CRUD API
-- 用户列表（分页）
-- 用户详情
-- 用户状态管理
+## 10 常见问题
 
-## 部署
+**Whistle 代理没生效**：确认 `w2 status` 在运行 → 系统代理指向 `127.0.0.1:8899` → Vite 开了 `host: true` → **不要加 `/etc/hosts`**（Chrome 默认绕过 127.x.x.x 代理，加了反而通不了）。
 
-### Docker 部署
-```bash
-docker-compose up -d
-```
+**改了 admin/portal 源码但页面没变**：走了浏览器旧产物，执行 §7.2 四步铁律。
 
-### 服务器部署
-目标服务器：106.52.176.246
+**`curl 6200` 返回旧行为**：6200 端口被旧孤儿进程占用。用 `lsof -ti tcp:6200` 找到并 `kill -9`，再 `pm2 restart web-deploy-console`，确认占用 pid == pm2 当前 pid。
 
-## 域名配置
+**build 报 `TS2688`**：`pnpm install` 中断残留 `*_tmp_*` 目录，`mv` 到 /tmp 清理后重装。
 
-| 环境 | 域名 |
-|------|------|
-| 生产 | kedouai.com |
-| 测试 | dev.kedouai.com |
-| 本地开发 | local.kedouai.com (通过 Whistle 代理统一) |
-
-## 开发规范
-
-- 使用 TypeScript
-- 遵循 ESLint 规则
-- 提交前运行测试
-
-
-## 常见问题
-
-### Whistle 代理没生效
-
-1. 确认 Whistle 在运行：`w2 status`
-2. 确认系统代理已开启：系统偏好设置 → 网络 → 高级 → 代理
-3. 确认 Vite 使用了 `host: true` 配置
-4. **不要加 `/etc/hosts`** —— Chrome 默认绕过 127.x.x.x 代理，加了反而通不了
-
-### 模块报错 "Expected JavaScript module but got text/html"
-
-Whistle 规则中的 `excludeFilter` 误杀了模块请求。使用本文档推荐的新规则（不包含 excludeFilter）即可。
-
-### 详细排查
-
-参见 [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) 第 10 节故障排查。
+---
 
 ## License
 
