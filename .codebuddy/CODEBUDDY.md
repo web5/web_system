@@ -33,7 +33,7 @@
 |---|---|---|
 | 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
 | 后端 | NestJS 10 + TypeORM + MySQL（本地）/ PostgreSQL（生产） | 每个微服务独立数据库，全部 TS strict |
-| 小程序 | 微信原生 + TS | `apps/mini-app` |
+| 小程序 | 微信原生 + TS | `apps/mini-contract` |
 | 共享包 | shared / types / shell-loader / ui / agent-core / kedou-agent | `packages/`，跨端配置一律收口到 `@web-system/shared` |
 | 部署 | pm2 + Docker Compose + Nginx + 自研发布平台（deploy-console） | 发布见 §4 |
 
@@ -41,7 +41,7 @@
 
 ```
 web_system/
-├── apps/        # 前端：shell(基座) admin portal mini-app deploy-console(独立 SPA)
+├── apps/        # 前端：shell(基座) admin portal mini-contract(小程序,约定 mini-<业务>) deploy-console(独立 SPA)
 ├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
 ├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
@@ -92,6 +92,7 @@ cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
 - `docs/development/local-dev-setup.md` — 新机器/换环境从零启动（含无 brew 装 DB）
 - `docs/development-guide.md` — 研发平台开发与使用总指南（分层/服务清单/启动/发布系统/FAQ）
 - `docs/development/admin-dev.md` — admin 微前端详细开发（依赖/路由/nginx 集成/微前端发布四步/提 PR）
+- `docs/development/agent-capability-playbook.md` — **Agent 能力体验手册**（四层架构/8 个 UI 入口/权限码/推荐走查路线/维护约定）— 动手体验或回归验证 Agent 先看这篇
 - `docs/development/whistle-local-dev.md` — whistle 本地代理
 
 ---
@@ -101,7 +102,7 @@ cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
 ### 2.1 分层架构（总图见 `docs/development-guide.md` §1）
 
 ```
-前端 apps/（shell 基座 + portal/admin 模块 + mini-app + deploy-console SPA）
+前端 apps/（shell 基座 + portal/admin 模块 + mini-contract + deploy-console SPA）
         │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
 Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基座 + 版本分发/灰度
 后端 servers/（auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console）
@@ -137,7 +138,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | portal | apps/portal | 微前端模块 | http://localhost:5173/portal/ |
 | admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
 | deploy-console | apps/deploy-console | 独立 SPA（运维） | deploy-console 后端 serve（6200/console/） |
-| mini-app | apps/mini-app | 微信小程序 | 独立上传 |
+| mini-contract | apps/mini-contract | 微信小程序 | 独立上传 |
 
 ### 2.4 共享包（packages/）
 
@@ -165,6 +166,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 - `docs/architecture/micro-frontend-technical-design.md` — 微前端设计（共享依赖/CSS 隔离/产物分发）
 - `docs/architecture/网关URL规划.md` — 路由规划；`docs/architecture/MCP服务间鉴权.md` — 服务间鉴权；`docs/architecture/kedou-network-architecture.md` — 网络架构
 - `docs/architecture/agent-definition-db-design.md` — 数字人 Agent 定义数据模型（与 §3 数字人体系呼应）
+- `docs/development/agent-capability-playbook.md` — Agent 能力全景与体验入口（agent-core / ai-agent:6010 / ai-service:6003 / knowledge:6011 的能力清单与表结构，改 Agent 相关代码后须同步更新该手册）
 - `docs/architecture/release-system-design.md` / `release-system-implementation-plan.md` — 发布平台设计
 - `docs/architecture/micro-frontend-style-guide.md` — 微前端样式约束
 
@@ -376,7 +378,7 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 
 - **admin 系（deploy-console/admin/mcp-admin）UI 数值以 `packages/ui/src/tokens.ts` 为准**（DR-3 主橙 `#F97316`，平台段）
 - 平台（暗色）：主色 `#f97316` / 暗底 `#0A0A0D` / 文字 `#F8FAFC`
-- 变变产品（暖色）：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` / 文字 `#333333` —— 品牌色只用于 portal/mini-app，不套用 admin UI 规范（DR-5）
+- 变变产品（暖色）：主色 `#FF8C42` 魔法橙 / 底色 `#FFF8F0` / 文字 `#333333` —— 品牌色只用于 portal/mini-contract，不套用 admin UI 规范（DR-5）
 
 ### 5.5 详细说明入口
 

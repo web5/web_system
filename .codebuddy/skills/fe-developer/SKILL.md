@@ -14,7 +14,7 @@ version: 1.0.0
 
 - 新页面 / 布局级大改 / 样式调整 / 交互修改（deploy-console / admin / mcp-admin / 未来内部工具）
 - 原型稿生成（需求对齐用的可点击交互 HTML，见「原型稿生成」一节）
-- 不适用：portal / mini-app（品牌端 DR-5，Claymorphism，走 `docs/ui/ui-design-spec.html`，不套本卡）
+- 不适用：portal / mini-contract（品牌端 DR-5，Claymorphism，走 `docs/ui/ui-design-spec.html`，不套本卡）
 
 ## 工作流
 
@@ -40,7 +40,7 @@ version: 1.0.0
 
 | 形态 | 容器 | 适用 | 基准 |
 |------|------|------|------|
-| 移动端 | `.phone` | 品牌/产品/C 端（portal/mini-app） | 390px |
+| 移动端 | `.phone` | 品牌/产品/C 端（portal/mini-contract） | 390px |
 | 桌面端 | `.desktop` | admin / deploy-console / 内部工具 | 1180–1440px |
 
 生成时**直接复制 `docs/ui/prototype-scaffold.html`**，删掉不用的那种形态，不从零写结构。
@@ -78,7 +78,7 @@ version: 1.0.0
 ### 8. 与规格书 / 最终代码的关系
 
 - 原型确认 → 填 `docs/ui/page-spec-template.md` → 用户确认 → 按 `design.md` 编码。
-- admin 系落地 Vue3 + Ant Design Vue；品牌端落 portal / mini-app（Claymorphism，`ui-design-spec.html`，不套本卡）。
+- admin 系落地 Vue3 + Ant Design Vue；品牌端落 portal / mini-contract（Claymorphism，`ui-design-spec.html`，不套本卡）。
 - 原型 Token 与 `packages/ui/src/tokens.ts` 对齐，但原型内联 CSS 变量，**不 import 业务包**。
 
 ### 9. 不做什么（工程特有补强）
@@ -104,7 +104,7 @@ version: 1.0.0
 
 - 不跳过规格书与用户确认；不写裸 hex/rgba、不新增 `!important`、不用 emoji 图标、不互斥单选 ≤5 用 `a-select`。
 - 不把 `docs/ui/` 数值/细则复制进业务代码（只引 `--ws-*` / `uiTokens`）。
-- 不套本规范到品牌端（portal/mini-app）。
+- 不套本规范到品牌端（portal/mini-contract）。
 - 微前端改动不执行"四步"不宣布完成。
 
 ## 参考文档
