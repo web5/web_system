@@ -10,7 +10,7 @@
 ## 0. 何时加载（适用边界）
 
 - **适用**：deploy-console / admin / mcp-admin / 未来内部工具端。**任何 UI 任务**（新页面、大改、视觉调整、交互修改）生成代码前必须先读本文档 + 填页面规格书。
-- **不适用**：portal / mini-app 品牌端（DR-5，Claymorphism 品牌 DNA，不套 admin 系规范）。
+- **不适用**：portal / mini-contract 品牌端（DR-5，Claymorphism 品牌 DNA，不套 admin 系规范）。
 - 机制目标：**生成前 30 秒改规格，好过生成后 3 屏再推翻**。本文档不追求 AI 一次到位，追求偏差可预期、可快速修正。
 
 ## 1. 页面类型模板（先判定类型，再谈布局）

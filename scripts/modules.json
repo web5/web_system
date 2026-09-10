@@ -12,5 +12,5 @@
   { "key": "shell",          "name": "微前端基座 Shell",    "type": "frontend", "dir": "shell",          "publicPath": "shell" },
   { "key": "portal",         "name": "门户 Portal",         "type": "micro-frontend", "dir": "portal",         "publicPath": "portal" },
   { "key": "admin",          "name": "管理后台 Admin",      "type": "micro-frontend", "dir": "admin",          "publicPath": "admin" },
-  { "key": "mini-app",       "name": "小程序 MiniApp",      "type": "frontend", "dir": "mini-app",       "publicPath": "mini", "buildCmd": "node scripts/upload.js" }
+  { "key": "mini-contract",  "name": "合同翻译官小程序",     "type": "frontend", "dir": "mini-contract",  "publicPath": "mini", "buildCmd": "node scripts/upload.js" }
 ]

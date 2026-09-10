@@ -44,7 +44,7 @@ export class AgentController {
 
   /**
    * 我的对话列表（C 端历史）：仅当前用户，updatedAt 倒序，轻量列分页。
-   * 供 mini-app 历史记录页展示多次合同分析记录。
+   * 供 mini-contract 历史记录页展示多次合同分析记录。
    */
   @Get('conversations')
   @ApiOperation({ summary: '我的 Agent 对话列表（分页）' })

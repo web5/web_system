@@ -44,7 +44,7 @@
 
 ### T0-4 清理子目录残留的 package-lock.json
 
-- **问题**：`apps/mini-app`、`apps/deploy-console`、`servers/system-service`、`servers/todo-service`、`servers/deploy-console` 子目录残留 npm 的 `package-lock.json`，在 pnpm workspace 中混用 npm 会破坏依赖一致性。
+- **问题**：`apps/mini-contract`、`apps/deploy-console`、`servers/system-service`、`servers/todo-service`、`servers/deploy-console` 子目录残留 npm 的 `package-lock.json`，在 pnpm workspace 中混用 npm 会破坏依赖一致性。
 - **执行**：
   1. `git rm` 上述 5 个 `package-lock.json`
   2. 在根 `package.json` 加 `"packageManager": "pnpm@9.15.0"` 和 `engines` 字段
@@ -115,7 +115,7 @@
 - **问题**：测试几乎为零：
   - 后端 11 个服务中仅 ai-service / auth-service / mcp-gateway 各 1 个测试文件
   - gateway / ai-agent / user-service / todo-service 等核心服务零测试
-  - 前端 5 个应用中仅 mini-app（3 个）、portal（1 个）有测试
+  - 前端 5 个应用中仅 mini-contract（3 个）、portal（1 个）有测试
 - **执行**（按优先级）：
   1. gateway：代理路由转发 + 错误处理的集成测试（mock 上游）
   2. auth-service：登录 / JWT 签发 / 权限校验的单元 + 集成测试

@@ -49,8 +49,8 @@
       "reviewCategory": "production"
     },
     {
-      "packageName": "@web-system/mini-app",
-      "projectFolder": "apps/mini-app",
+      "packageName": "@web-system/mini-contract",
+      "projectFolder": "apps/mini-contract",
       "shouldPublish": false,
       "reviewCategory": "production"
     },

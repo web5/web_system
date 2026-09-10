@@ -39,6 +39,21 @@ import { AgentSkillProvider } from '../skill/agent-skill-provider';
  * 合同风险识别为第一个落地场景：ContractRuleTool + ContractIrrTool（Agent 定义由 DB 同步提供）。
  */
 
+/**
+ * TOKENHUB_MODELS 未配置时的默认注册模型（hy3 由 Hy3Client 单独注册，不在本列）。
+ * id 必须与网关 `GET {BASE_URL}/models` 返回的 id 一致，否则注册后调用会 404。
+ */
+const DEFAULT_TOKENHUB_MODELS = [
+  'deepseek/deepseek-v4-pro',
+  'deepseek/deepseek-v4-flash',
+  'deepseek-v4-pro-0813',
+  'hy4-preview',
+  'glm-5.3',
+  'kimi-k3',
+  'qwen3.5-plus',
+  'minimax-m3',
+].join(',');
+
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
   useFactory: (configService: ConfigService): ClientRegistry => {
@@ -48,12 +63,8 @@ const clientRegistryProvider: Provider = {
     // 与 TokenHub 模型混用易混淆）；DeepSeek 系列统一走下方的 TokenHub 托管模型。
 
     // TokenHub 网关托管模型（model 可配；hy3 由 Hy3Client 注册）
-    // 例：TOKENHUB_MODELS=deepseek-v4-flash,deepseek-v4-pro,hy4-preview,glm-5.3
     const models = (
-      configService.get<string>(
-        'TOKENHUB_MODELS',
-        'deepseek-v4-flash,deepseek-v4-pro,hy4-preview',
-      ) || ''
+      configService.get<string>('TOKENHUB_MODELS', DEFAULT_TOKENHUB_MODELS) || ''
     )
       .split(',')
       .map((s) => s.trim())

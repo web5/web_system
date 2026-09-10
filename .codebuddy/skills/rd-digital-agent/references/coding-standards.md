@@ -400,10 +400,10 @@ module.exports = {
 
 **示例：**
 ```
-feat(mini-app): add device detection utility
+feat(mini-contract): add device detection utility
 fix(portal): resolve request.ts variable naming conflict
 refactor(servers): simplify proxy service configuration
-test(mini-app): add unit tests for detectDevice
+test(mini-contract): add unit tests for detectDevice
 ```
 
 ---
