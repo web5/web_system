@@ -63,7 +63,7 @@ const routes: RouteRecordRaw[] = [
         path: 'settings/models',
         name: 'ModelPricing',
         component: () => import('@/views/Settings/ModelPricingPage.vue'),
-        meta: { title: '模型单价', permission: 'agents:cost:view' },
+        meta: { title: '模型', permission: 'agents:cost:view' },
       },
       {
         path: 'settings/dicts',

@@ -2,18 +2,69 @@
   <div class="mp-page">
     <div class="page-head">
       <div>
-        <h2>模型单价</h2>
-        <p class="page-sub">run 成本按 usage × 单价核算；无单价记录的模型成本记 0，请及时补配</p>
+        <h2>模型</h2>
+        <p class="page-sub">
+          可用清单由「字典管理」的 <span class="ws-mono">llm_models</span> 决定；单价用于 run 成本核算，无单价记录的模型成本记 0
+        </p>
       </div>
       <a-space>
-        <a-button :loading="loading" @click="load">刷新</a-button>
-        <a-button type="primary" @click="openCreate">新建单价</a-button>
+        <a-button :loading="loading || catalogLoading" @click="refreshAll">刷新</a-button>
+        <a-button type="primary" @click="openCreate()">新建单价</a-button>
       </a-space>
     </div>
 
     <a-alert v-if="loadError" type="error" show-icon class="page-alert" :message="loadError" />
 
+    <a-alert v-if="catalogError" type="warning" show-icon class="page-alert" :message="catalogError" />
+
+    <a-card :bordered="false" class="table-card catalog-card">
+      <template #title>
+        <span class="catalog-title">可用模型清单</span>
+        <span class="catalog-sub">来自字典 <span class="ws-mono">llm_models</span>（在「字典管理」维护，Agent 侧 60s 内生效）</span>
+      </template>
+      <template #extra>
+        <a-button type="link" @click="goDicts">去字典管理</a-button>
+      </template>
+      <a-table
+        :columns="catalogColumns"
+        :data-source="dictModels"
+        :loading="catalogLoading"
+        :pagination="false"
+        size="small"
+        row-key="id"
+        :locale="{ emptyText: ' ' }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'model'">
+            <span class="ws-mono">{{ record.value }}</span>
+          </template>
+          <template v-else-if="column.dataIndex === 'provider'">
+            {{ (record.attrs && record.attrs.provider) || '—' }}
+          </template>
+          <template v-else-if="column.dataIndex === 'status'">
+            <a-tag v-if="record.enabled" color="success">启用</a-tag>
+            <a-tag v-else>停用</a-tag>
+          </template>
+          <template v-else-if="column.dataIndex === 'price'">
+            <span v-if="priceOf(record.value)" class="ws-mono">{{ fmtPrice(priceOf(record.value)!.inputPricePer1k) }}</span>
+            <a-tag v-else color="warning">未配置单价</a-tag>
+          </template>
+          <template v-else-if="column.dataIndex === 'action'">
+            <a-button type="link" size="small" @click="openCreate(record)">
+              {{ priceOf(record.value) ? '改单价' : '配置单价' }}
+            </a-button>
+          </template>
+        </template>
+      </a-table>
+      <a-empty
+        v-if="!catalogLoading && !dictModels.length"
+        class="page-empty"
+        description="字典 llm_models 暂无记录，去「字典管理」添加可用模型"
+      />
+    </a-card>
+
     <a-card :bordered="false" class="table-card">
+      <template #title><span class="catalog-title">模型单价</span></template>
       <a-table
         :columns="columns"
         :data-source="rows"
@@ -82,14 +133,22 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import type { FormInstance } from 'ant-design-vue';
 import { message } from 'ant-design-vue';
 import { fetchPricings, upsertPricing, removePricing, type ModelPricingItem } from '@/api/model-pricing';
+import { fetchDictItems, type DictItemRow } from '@/api/dict';
 
+const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const loadError = ref('');
 const rows = ref<ModelPricingItem[]>([]);
+
+/** 可用模型清单（来自字典 llm_models；单价表只管价格，可用性由字典决定） */
+const dictModels = ref<DictItemRow[]>([]);
+const catalogLoading = ref(false);
+const catalogError = ref('');
 
 const modalOpen = ref(false);
 const editing = ref<ModelPricingItem | null>(null);
@@ -108,6 +167,14 @@ const rules = {
   inputPricePer1k: [{ required: true, type: 'number' as const, min: 0, message: '输入价需 ≥ 0' }],
   outputPricePer1k: [{ required: true, type: 'number' as const, min: 0, message: '输出价需 ≥ 0' }],
 };
+
+const catalogColumns = [
+  { title: '模型 id', dataIndex: 'model' },
+  { title: '提供方', dataIndex: 'provider', width: 120 },
+  { title: '输入价 / 1K', dataIndex: 'price', width: 140, align: 'right' as const },
+  { title: '状态', dataIndex: 'status', width: 90 },
+  { title: '操作', dataIndex: 'action', width: 110 },
+];
 
 const columns = [
   { title: '模型', dataIndex: 'model' },
@@ -137,10 +204,45 @@ async function load(): Promise<void> {
   }
 }
 
-function openCreate(): void {
+function openCreate(item?: DictItemRow): void {
   editing.value = null;
-  Object.assign(form, { provider: '', model: '', inputPricePer1k: 0, outputPricePer1k: 0, currency: 'CNY' });
+  const attrProvider = item?.attrs ? item.attrs.provider : undefined;
+  Object.assign(form, {
+    provider: attrProvider ? String(attrProvider) : '',
+    model: item?.value ?? '',
+    inputPricePer1k: 0,
+    outputPricePer1k: 0,
+    currency: 'CNY',
+  });
   modalOpen.value = true;
+}
+
+/** 该模型 id 是否已配置单价 */
+function priceOf(model: string): ModelPricingItem | undefined {
+  return rows.value.find((p) => p.model === model);
+}
+
+function goDicts(): void {
+  void router.push('/admin/settings/dicts');
+}
+
+function refreshAll(): void {
+  void load();
+  void loadDictModels();
+}
+
+/** 可用模型清单来自字典 llm_models（可用性以字典为准，与单价解耦） */
+async function loadDictModels(): Promise<void> {
+  catalogLoading.value = true;
+  catalogError.value = '';
+  try {
+    const res = await fetchDictItems('llm_models', { pageSize: 200 });
+    dictModels.value = res.items;
+  } catch (e) {
+    catalogError.value = (e as Error).message || '加载可用模型清单失败';
+  } finally {
+    catalogLoading.value = false;
+  }
 }
 
 function openEdit(record: ModelPricingItem): void {
@@ -198,6 +300,7 @@ async function doRemove(record: ModelPricingItem): Promise<void> {
 
 onMounted(() => {
   void load();
+  void loadDictModels();
 });
 </script>
 
@@ -224,6 +327,20 @@ onMounted(() => {
 }
 .table-card {
   background: var(--ws-bg-surface);
+}
+.catalog-card {
+  margin-bottom: 14px;
+}
+.catalog-title {
+  font-size: var(--ws-font-size-body);
+  color: var(--ws-text-primary);
+  font-weight: var(--ws-font-weight-semibold);
+}
+.catalog-sub {
+  margin-left: 8px;
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-tertiary);
+  font-weight: var(--ws-font-weight-normal);
 }
 .mp-model {
   color: var(--ws-text-primary);

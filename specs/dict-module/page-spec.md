@@ -28,8 +28,7 @@
 | 4 | 左：字典类型列表 | 同上 | 列表：`名称`（次行 `.ws-mono` code）+ `内置` tag + 启用点 + 项数；**超过一屏内部滚动** | 见上 |
 | 5 | 右：字典明细搜索 + 状态筛选 | `keyword` / `enabled` | `a-input-search` + `a-select`（全部/启用/停用，表单内字段豁免 tabs 规则） | — |
 | 6 | 右：字典明细表 | 同上 | `a-table`（**服务端分页** `page`/`pageSize`，`showTotal`，`showSizeChanger`）+ 行内操作 | 见上 |
-| 7 | 弹层：新建/编辑字典 | `POST`/`PUT /admin/dict/types` | `a-modal`（基本信息 + 字段定义入口块） | — |
-| 7.1 | 抽屉：字段定义 | `PUT /admin/dict/types/:code/fields` | `a-drawer`（右侧滑出，逐字段卡片编辑） | `暂未定义字段 / 点下方「添加字段」开始配置` |
+| 7 | **独立页面**：新建/编辑字典 | `POST`/`PUT /admin/dict/types` + `PUT …/fields` | 路由 `settings/dicts/:code`（面包屑 + 基本信息 + 字段定义表格 + 危险区 + 页脚保存/取消） | — |
 | 8 | 弹层：新增/编辑字典项 | `POST`/`PUT /admin/dict/items` | `a-modal` + **按 `dict_fields` 动态渲染**的表单 | — |
 | 9 | 删除确认 | `DELETE …` | `a-popconfirm`（字典项）/ `a-modal.confirm`（字典类型） | — |
 
@@ -59,13 +58,14 @@
 
 左侧字典列表项：名称（`--ws-text-primary`）+ code（`.ws-mono` 次行）+ 内置 tag（`--ws-brand-*` soft）+ 项数角标；选中态用 `--ws-brand-soft` 底色 + `--ws-brand-500` 文字。
 
-## 字段定义区（右侧抽屉，2026-09-10 用户选定）
+## 字段定义区（字典编辑页内，2026-09-10 用户选定）
 
-- 入口：编辑/新建字典弹层内的「字段定义」信息块（显示已定义数量 + `name:type` chip 列表）+ 右侧「编辑字段定义」按钮。
-- 载体：**`a-drawer` 右侧滑出**（不做弹窗套弹窗；字段多时抽屉比表格行更好编辑）。
-- 内容：每个字段一张卡片，含字段名(`name`)/标签(`label`)/类型(`type`)/长度(`length`)/必填(`required`)/默认值或枚举项(`options`)；卡片右上角 ↑↓ 排序 + 删除。
-- 类型联动：`enum` 时第三行变「枚举项（逗号分隔）」，其余类型为「默认值」；`boolean`/`date`/`enum` 时长度输入禁用。
-- 保存：抽屉内「保存字段」→ 校验后写回弹层的字段草稿；关闭字典弹层时随字典一起提交（REST：`PUT /admin/dict/types/:code/fields` 整体覆盖）。
+- 载体：**字典编辑页内的表格**（页面宽度足够，行内直接编辑，不再用抽屉/弹层）。
+- 列：`#` / 字段名(`name`) / 标签(`label`) / 类型(`type`，select) / 长度(`length`) / 必填(`required`，switch) / 枚举项或默认值 / 操作（↑↓ 排序、删除）。
+- 类型联动：`enum` 行的最后一列变「枚举项（逗号分隔）」；`boolean`/`date`/`enum` 时长度输入禁用。
+- 保存：随字典一起提交（`PUT /admin/dict/types/:code/fields` **整体覆盖**，前端负责校验字段名规则与去重）。
+- 空态：`暂未定义字段，记录将只含 Value / 名称 两个字段`。
+- 提示：`删除字段只丢这一列的值，不删数据行`。
 - 已有明细的字典删除某字段时提示：`该字段在 N 条明细中已有值，删除后这些值不再展示（数据保留）`。
 - 空态：`该字典暂未定义字段，明细只含 Value / 名称 两列`。
 - 校验：`name` 唯一且符合 `^[a-z][a-z0-9_]*$`；`length` 正数；`enum` 至少 1 个选项。
