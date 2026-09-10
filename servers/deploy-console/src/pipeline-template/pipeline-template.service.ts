@@ -17,6 +17,10 @@ import { normalizeNodes, isV5NodesEnabled, legacyStepsToNodes, TemplateNode } fr
 export const DEFAULT_TEMPLATE_NAME = '默认';
 /** 全局模板标记：moduleKey='*' 表示通用流水线（不绑定模块，执行时选目标模块） */
 export const GLOBAL_TEMPLATE = '*';
+/** 内置默认线的 key（产物命名空间用） */
+export const DEFAULT_TEMPLATE_KEY = 'default';
+/** 流水线 key 格式：^[a-z0-9-]{1,32}$ */
+const TEMPLATE_KEY_RE = /^[a-z0-9-]{1,32}$/;
 
 const APPROVALS: TemplateApproval[] = ['inherit', 'always', 'never'];
 const TARGETS: TemplateTarget[] = ['auto', 'local', 'remote'];
@@ -127,6 +131,8 @@ export function needsApprovalForTemplate(
 
 export interface TemplateSpec {
   name: string;
+  /** 流水线 key（slug，产物命名空间用）；未传时自动生成（name 拼音/默认递增） */
+  key?: string;
   description?: string;
   skipVerify?: boolean;
   steps?: string[];
@@ -194,6 +200,7 @@ export class PipelineTemplateService {
       id: genId(),
       moduleKey: GLOBAL_TEMPLATE,
       name: DEFAULT_TEMPLATE_NAME,
+      key: DEFAULT_TEMPLATE_KEY,
       description: '默认发布流程：全流程 + 环境规则审批（不传模板即走此模板）',
       builtin: true,
       steps: null,
@@ -270,6 +277,19 @@ export class PipelineTemplateService {
     }
   }
 
+  /** 校验流水线 key 格式与唯一性；返回归一化后的 key */
+  private async normalizeKey(key?: string, exceptId?: string): Promise<string> {
+    const k = (key || '').trim().toLowerCase();
+    if (!TEMPLATE_KEY_RE.test(k)) {
+      throw new BadRequestException(`流水线 key 须匹配 ^[a-z0-9-]{1,32}$：${k || '(空)'}`);
+    }
+    const dup = await this.repo.findOne({ where: { key: k } });
+    if (dup && dup.id !== exceptId) {
+      throw new ConflictException(`已存在同名流水线 key「${k}」`);
+    }
+    return k;
+  }
+
   /** 创建全局模板（流水线独立于模块） */
   async create(spec: TemplateSpec, createdBy?: string): Promise<DeployPipelineTemplateEntity> {
     const name = spec.name?.trim();
@@ -278,6 +298,8 @@ export class PipelineTemplateService {
     this.assertTarget(spec.defaultTarget);
     this.assertRollback(spec.rollbackOnFailure);
     await this.assertNameFree(name);
+    const slugFromName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || DEFAULT_TEMPLATE_KEY;
+    const key = await this.normalizeKey(spec.key ?? slugFromName);
     const steps = this.resolveSteps(spec);
     // v5：nodes 显式传入→归一化；未传→按 legacy 配置兜底转存（steps/skipVerify → nodes）
     const nodes = isV5NodesEnabled()
@@ -293,6 +315,7 @@ export class PipelineTemplateService {
       id: genId(),
       moduleKey: GLOBAL_TEMPLATE,
       name,
+      key,
       description: spec.description?.trim() || undefined,
       steps,
       nodes,
@@ -312,10 +335,18 @@ export class PipelineTemplateService {
     const src = await this.get(id);
     const name = `${src.name} 副本`;
     await this.assertNameFree(name);
+    // 生成唯一 key：原 key + '-copy'，若冲突则追加递增
+    let key = `${src.key}-copy`.slice(0, 32);
+    let n = 2;
+    while (await this.repo.findOne({ where: { key } })) {
+      key = `${src.key}-copy${n++}`.slice(0, 32);
+      if (n > 99) { key = `${src.key}-${Date.now().toString(36)}`.slice(0, 32); break; }
+    }
     const row = this.repo.create({
       id: genId(),
       moduleKey: GLOBAL_TEMPLATE,
       name,
+      key,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
       nodes: src.nodes ?? null,
@@ -344,6 +375,9 @@ export class PipelineTemplateService {
       }
       await this.assertNameFree(name, id);
       tpl.name = name;
+    }
+    if (patch.key !== undefined) {
+      tpl.key = await this.normalizeKey(patch.key, id);
     }
     this.assertApproval(patch.approval);
     this.assertTarget(patch.defaultTarget);

@@ -346,6 +346,8 @@ export interface PipelineTemplate {
   id: string
   moduleKey: string
   name: string
+  /** 流水线 key（slug，产物命名空间用：modules/<模块>/<key>/<版本>/） */
+  key?: string
   description?: string
   /** 活动阶段子集（null=全量九阶段） */
   steps?: string[] | null
@@ -497,6 +499,65 @@ export const pipelineTemplateApi = {
     http.put(`/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
   remove: (id: string) =>
     http.delete(`/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+}
+
+/* ========== Pipeline Step Commands（流水线节点命令：R6 新真相源） ========== */
+
+/** 流水线节点命令行（deploy_pipeline_step_commands） */
+export interface PipelineStepCommand {
+  nodeKey: string
+  command: string
+  actions?: StageAction[] | null
+  enabled: boolean
+  timeoutSec?: number | null
+  updatedBy?: string | null
+  updatedAt?: string | null
+}
+
+export const pipelineStepApi = {
+  /** 某流水线各节点命令 */
+  list: (templateId: string) =>
+    http.get(`/pipeline-templates/${templateId}/steps`) as Promise<
+      {
+        nodeKey: string
+        configured: boolean
+        command: string | null
+        actions: StageAction[]
+        enabled: boolean
+        timeoutSec: number | null
+      }[]
+    >,
+
+  /** 某流水线某节点命令（含 actions；未配置返回 null） */
+  get: (templateId: string, nodeKey: string) =>
+    http.get(`/pipeline-templates/${templateId}/steps/${nodeKey}`) as Promise<
+      PipelineStepCommand | null
+    >,
+
+  /** 保存节点命令（保存前 bash -n 语法校验） */
+  save: (
+    templateId: string,
+    nodeKey: string,
+    dto: { command?: string; timeoutSec?: number; actions?: StageAction[] },
+  ) =>
+    http.put(`/pipeline-templates/${templateId}/steps/${nodeKey}`, dto) as Promise<PipelineStepCommand>,
+
+  /** 删除节点命令（该节点回落流程内置逻辑） */
+  remove: (templateId: string, nodeKey: string) =>
+    http.delete(`/pipeline-templates/${templateId}/steps/${nodeKey}`) as Promise<{ ok: boolean }>,
+
+  /** 仅语法校验（不保存） */
+  validate: (templateId: string, nodeKey: string, command: string) =>
+    http.post(`/pipeline-templates/${templateId}/steps/${nodeKey}/validate`, { command }) as Promise<{
+      ok: boolean
+      message: string
+    }>,
+
+  /** 按模块类型返回默认构建命令模板 */
+  templates: (type: string) =>
+    http.get('/pipeline-templates/steps/templates', { params: { type } }) as Promise<{
+      template: string | null
+    }>,
 }
 
 /* ========== Tools（工具目录：service 执行器 / shell CLI） ========== */

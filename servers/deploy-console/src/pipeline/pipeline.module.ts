@@ -21,6 +21,7 @@ import { CanaryModule } from '../canary/canary.module';
 import { AuditModule } from '../audit/audit.module';
 import { DeployModule } from '../deploy/deploy.module';
 import { StageCommandModule } from '../stage-command/stage-command.module';
+import { PipelineStepCommandModule } from '../pipeline-step-command/pipeline-step-command.module';
 import { ConfigCenterModule } from '../config/config.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -47,8 +48,10 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     AuditModule,
     // 复用 DeployService 的版本查询能力（可发布版本列表）
     DeployModule,
-    // 阶段命令（每模块每阶段一条 shell，DB 为真相源）
+    // 阶段命令（每模块每阶段一条 shell，DB 为真相源）→ 保留兼容 ModuleDetail 发布脚本 tab（待 F 下线）
     StageCommandModule,
+    // 流水线节点命令（R6 新真相源：流水线 × 节点 key）
+    PipelineStepCommandModule,
     // 配置中心（发布/重启时按作用域合并并强制覆盖注入进程环境）
     ConfigCenterModule,
     // 发布锁（同一模块×环境串行化，避免并发覆盖版本指针）

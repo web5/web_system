@@ -13,7 +13,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { STATIC_MODULES_REL } from './release-paths';
+import { STATIC_MODULES_REL, parseReleaseRef } from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -22,6 +22,7 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
+import { PipelineStepCommandService } from '../pipeline-step-command/pipeline-step-command.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
@@ -309,6 +310,7 @@ export class PipelineService {
     private readonly canaryService: CanaryService,
     private readonly auditService: AuditService,
     private readonly stageCommands: StageCommandService,
+    private readonly stepCommands: PipelineStepCommandService,
     private readonly configs: ConfigCenterService,
     private readonly releaseLock: ReleaseLockService,
     private readonly notifications: NotificationService,
@@ -414,6 +416,8 @@ export class PipelineService {
       // 模板快照：模板后续修改/删除不影响已提交实例
       templateId: tpl.id,
       templateName: tpl.name,
+      // R6 版本身份：流水线 key 快照（产物落盘 modules/<module>/<key>/<commit>/）
+      templateKey: (tpl as { key?: string }).key ?? undefined,
       steps: tpl.steps ?? null,
       nodes: snapshotNodes,
       skipVerify: !!tpl.skipVerify,
@@ -625,7 +629,8 @@ export class PipelineService {
       moduleKey: p.moduleKey,
       mode: (p.mode === 'grayscale' ? 'grayscale' : 'direct') as PipelineMode,
       branch: p.gitBranch || 'master',
-      commitId: p.gitCommit ?? p.versionTag,
+      // R6：versionTag 可能含 `<templateKey>/` 前缀，取纯 commit 传给 submit
+      commitId: p.gitCommit ?? (p.versionTag ? parseReleaseRef(p.versionTag).version : undefined),
       grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
       target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
       templateId: p.templateId ?? undefined,
@@ -1223,15 +1228,16 @@ export class PipelineService {
   }
 
   /**
-   * 执行某阶段的模块命令。
+   * 执行某阶段的流水线节点命令（R6：从模块级切换到流水线级）。
+   * 读 `deploy_pipeline_step_commands(templateId, nodeKey)` 而非 `deploy_module_stage_commands(moduleKey, stage)`。
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
   private async runStageCommand(p: DeployPipelineEntity, stage: string): Promise<boolean> {
-    const acts = await this.stageCommands.resolveActions(p.moduleKey, stage);
+    const acts = await this.stepCommands.resolveActions(p.templateId!, stage);
     if (!acts.length) return false;
 
     this.assertNotCancelled(p);
-    await this.enterStage(p, stage as any, `执行阶段命令: ${p.moduleKey}/${stage}`);
+    await this.enterStage(p, stage as any, `执行节点命令: ${p.templateName || p.templateId}/${stage}`);
 
     let mod: ModuleSnapshot | null = null;
     try {
