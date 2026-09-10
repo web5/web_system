@@ -104,7 +104,10 @@ dict_items   (id uuid PK, type_code varchar(64), value varchar(128), label varch
 
 ## 4. 后端接口
 
-承载服务：**system-service（:6004）**，gateway `admin/:path(*)` 已通配转发到它，无需改网关路由。
+> **完整接口契约（三入口 + 消费约定 + 字典目录）见 [`api-design.md`](./api-design.md)** —— 本节只列管理端概览。
+
+承载服务：**system-service（:6004）**。管理端走 gateway `admin/:path(*)` 通配；
+服务间走 `/internal/dict/:code`（x-internal-key）；**C 端只读走 `/dict/:code`（登录即可，gateway 已加 `/api/dict/*` 路由）**。
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
@@ -182,6 +185,7 @@ dict_items   (id uuid PK, type_code varchar(64), value varchar(128), label varch
 | 2026-09-10 | v2 | 采纳用户 7 条答复：归属 system-service；新增 `dict_fields` 字段定义层 + `attrs` JSON；搜索 + 分页；权限放宽到 editor/viewer 只读；模型页与字典页页面层合并 |
 | 2026-09-10 | v3 | 交互定稿：字典（类型）改为**独立编辑页**、记录（明细）用**右侧抽屉**、字段定义在编辑页内（原型 `docs/ui/prototypes/dict-module.html` v5） |
 | 2026-09-10 | v4 | **P2 已落地**：`/internal/dict/:code`（x-internal-key）+ ai-agent `ModelCatalogService` 三级回落（DB→env→内置，60s 轮询）；`ClientRegistry.clear()`；admin「模型」页聚合「可用清单（字典）× 单价」，与字典页互相跳转 |
+| 2026-09-10 | v5 | **枚举迁移批次一**：新增 `GET /dict/:code` C 端只读入口 + gateway 路由；内置字典 `contract_scene`/`contract_risk_level`/`operation_log_type`（支持 `seedItems` 一次性初始化）；ai-agent `DictClientService`；接口契约独立成册 `api-design.md` |
 
 ---
 
