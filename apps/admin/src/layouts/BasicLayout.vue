@@ -38,6 +38,10 @@
           <template #icon><DollarCircleOutlined /></template>
           <span>模型单价</span>
         </a-menu-item>
+        <a-menu-item v-if="userStore.hasPermission('system:dict:view')" key="dicts">
+          <template #icon><DatabaseOutlined /></template>
+          <span>字典管理</span>
+        </a-menu-item>
         <a-menu-item v-if="userStore.hasPermission('mcp:view')" key="mcp">
           <template #icon><ApiOutlined /></template>
           <span>MCP 管理</span>
@@ -191,6 +195,7 @@ watch(() => route.path, (path) => {
   if (path.includes('/users')) selectedKeys.value = ['users'];
   else if (path.includes('/settings/roles')) selectedKeys.value = ['roles'];
   else if (path.includes('/settings/models')) selectedKeys.value = ['models'];
+  else if (path.includes('/settings/dicts')) selectedKeys.value = ['dicts'];
   else if (path.includes('/settings')) selectedKeys.value = ['settings'];
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
@@ -210,7 +215,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
     database: '/database',
-    roles: '/settings/roles', models: '/settings/models',
+    roles: '/settings/roles', models: '/settings/models', dicts: '/settings/dicts',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',
     'agents-metrics': '/agents/metrics', 'agents-knowledge': '/agents/knowledge',

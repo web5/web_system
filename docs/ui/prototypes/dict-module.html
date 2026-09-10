@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字典管理 · 交互原型 v5（admin｜字典=独立页面，记录=抽屉）</title>
+<style>
+:root{
+  --primary:#F97316; --primary-soft:#FFF1E7;
+  --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+  --danger:#E5484D; --danger-soft:#FDEBEC; --ok:#2E9E5B; --ok-soft:#E7F5EC;
+  --border:#E8EBF0; --border-2:#F0F2F5; --radius:14px; --radius-sm:10px;
+  --shadow:0 2px 12px rgba(20,30,50,.06); --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#E9EDF3;
+  display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:24px;}
+.desktop{width:1200px;height:800px;background:var(--bg);border-radius:16px;overflow:hidden;position:relative;
+  box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);display:flex;}
+.sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);padding:16px 12px;flex-shrink:0;}
+.sidebar .logo{font-size:15px;font-weight:700;color:var(--text);padding:8px 10px 18px;}
+.side-group{font-size:11px;color:var(--text-3);letter-spacing:.5px;padding:12px 10px 6px;text-transform:uppercase;}
+.side-item{padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:14px;cursor:pointer;margin-bottom:2px;}
+.side-item:hover{background:var(--border-2);}
+.side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;}
+.topbar{height:56px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;
+  padding:0 20px;justify-content:space-between;flex-shrink:0;}
+.content{flex:1;overflow:auto;padding:20px;position:relative;}
+.view{display:none;} .view.active{display:block;}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;}
+.page-head h2{font-size:20px;font-weight:600;color:var(--text);}
+.page-head .sub{margin-top:4px;font-size:13px;color:var(--text-3);}
+.btn{font-size:13px;font-weight:500;border-radius:8px;padding:7px 14px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text-2);}
+.btn:hover{border-color:var(--primary);color:var(--primary);}
+.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary);}
+.btn.primary:hover{opacity:.9;color:#fff;}
+.btn.link{border:none;background:none;color:var(--primary);padding:4px 6px;}
+.btn.link.danger{color:var(--danger);}
+.btn[disabled]{opacity:.45;cursor:not-allowed;} .btn[disabled]:hover{border-color:var(--border);color:var(--text-2);}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+.cols{display:flex;gap:14px;align-items:flex-start;}
+.col-left{width:288px;flex-shrink:0;padding:12px;} .col-right{flex:1;min-width:0;padding:16px;}
+.col-title{font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.search{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:8px;padding:6px 9px;background:var(--card);margin-bottom:8px;}
+.search input{border:none;outline:none;font-size:13px;flex:1;color:var(--text);background:transparent;}
+.search .ph{color:var(--text-3);font-size:13px;}
+.dict-item{padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid transparent;margin-bottom:3px;}
+.dict-item:hover{background:var(--border-2);}
+.dict-item.active{background:var(--primary-soft);border-color:var(--primary);}
+.dict-item .nm{font-size:14px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;}
+.dict-item.active .nm{color:var(--primary);}
+.dict-item .cd{font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:3px;}
+.tag{font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600;}
+.tag.brand{color:var(--primary);background:var(--primary-soft);}
+.tag.off{color:var(--text-3);background:var(--border-2);}
+.count{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;margin-left:auto;}
+.table-wrap{overflow-x:auto;} table{width:100%;border-collapse:collapse;min-width:660px;}
+th{text-align:left;font-size:12px;font-weight:600;color:var(--text-3);padding:9px 10px;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{font-size:13px;color:var(--text-2);padding:9px 10px;border-bottom:1px solid var(--border-2);white-space:nowrap;}
+tr:hover td{background:#FAFBFC;} td.mono{font-family:var(--mono);color:var(--text);} td.num{font-variant-numeric:tabular-nums;}
+.row-off td{color:var(--text-3);} .row-off td.mono{color:var(--text-3);}
+.scroll-hint{font-size:11px;color:var(--text-3);margin-top:6px;}
+.sw{width:32px;height:18px;border-radius:20px;background:#D5D9E0;position:relative;cursor:pointer;transition:background .2s;display:inline-block;vertical-align:middle;}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s;}
+.sw.on{background:var(--primary);} .sw.on::after{transform:translateX(14px);}
+.pager{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:12px;font-size:12px;color:var(--text-3);}
+.pager .pg{border:1px solid var(--border);border-radius:6px;padding:3px 9px;cursor:pointer;background:var(--card);color:var(--text-2);}
+.pager .pg.on{border-color:var(--primary);color:var(--primary);background:var(--primary-soft);font-weight:600;}
+.pager .pg[disabled]{opacity:.4;cursor:not-allowed;}
+.empty{text-align:center;padding:36px 20px;color:var(--text-3);}
+.empty .em{width:38px;height:38px;margin:0 auto 10px;opacity:.5;}
+.empty .hint{font-size:13px;color:var(--text-2);margin-top:6px;}
+.alert{background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);
+  padding:10px 12px;font-size:13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+.skeleton{height:13px;border-radius:6px;background:linear-gradient(90deg,#eef0f3 25%,#e3e6ea 37%,#eef0f3 63%);background-size:400% 100%;animation:sk 1.1s ease infinite;margin:11px 0;}
+@keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+/* 字典编辑页（独立页面） */
+.crumb{font-size:12px;color:var(--text-3);margin-bottom:8px;}
+.crumb a{color:var(--primary);cursor:pointer;text-decoration:none;}
+.section-h{font-size:14px;font-weight:600;color:var(--text);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.section-h .sub{font-size:12px;color:var(--text-3);font-weight:400;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--text-2);margin-bottom:5px;font-weight:600;}
+.field input,.field textarea,.field select{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);outline:none;background:var(--card);font-family:inherit;}
+.field textarea{resize:vertical;min-height:62px;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);}
+.field input.mono{font-family:var(--mono);}
+.field.err input{border-color:var(--danger);}
+.field .msg{font-size:11px;color:var(--danger);margin-top:4px;display:none;} .field.err .msg{display:block;}
+.field .tip{font-size:11px;color:var(--text-3);margin-top:4px;}
+.field-row{display:flex;gap:14px;} .field-row .field{flex:1;}
+.inline-sw{display:flex;align-items:center;gap:8px;} .inline-sw label{margin:0;}
+.ftable input,.ftable select{width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;color:var(--text);outline:none;background:var(--card);font-family:inherit;}
+.ftable input:focus,.ftable select:focus{border-color:var(--primary);}
+.ftable input.mono{font-family:var(--mono);} .ftable td{white-space:normal;}
+.danger-zone{border:1px solid var(--danger);border-radius:var(--radius-sm);padding:13px;background:var(--danger-soft);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.danger-zone .t{font-size:13px;font-weight:600;color:var(--danger);}
+.danger-zone .s{font-size:12px;color:var(--text-2);margin-top:3px;line-height:1.5;}
+.page-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-2);}
+/* 抽屉：记录新增/编辑 */
+.drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:55;}
+.drawer-mask.show{opacity:1;pointer-events:auto;}
+.drawer{position:absolute;top:0;right:0;height:100%;width:460px;background:var(--card);z-index:56;
+  box-shadow:-8px 0 28px rgba(20,30,50,.14);transform:translateX(100%);transition:transform .24s ease;display:flex;flex-direction:column;}
+.drawer.show{transform:none;}
+.drawer-head{padding:16px 18px;border-bottom:1px solid var(--border-2);display:flex;justify-content:space-between;align-items:center;}
+.drawer-head h3{font-size:15px;font-weight:600;color:var(--text);}
+.drawer-head .x{cursor:pointer;color:var(--text-3);font-size:18px;line-height:1;padding:2px 6px;}
+.drawer-head .x:hover{color:var(--text);}
+.drawer-body{flex:1;overflow:auto;padding:16px 18px;}
+.drawer-foot{padding:12px 18px;border-top:1px solid var(--border-2);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.drawer-foot .left{font-size:11px;color:var(--text-3);}
+.drawer textarea{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);outline:none;resize:vertical;min-height:62px;font-family:inherit;}
+.drawer textarea:focus{border-color:var(--primary);}
+/* 破坏性确认（居中，非编辑类） */
+.mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:60;}
+.mask.show{display:flex;}
+.modal{background:var(--card);border-radius:var(--radius);padding:20px;width:440px;max-width:90%;}
+.modal h3{font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;}
+.modal .desc{font-size:13px;color:var(--text-2);line-height:1.7;}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border-2);}
+.toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);color:#fff;
+  padding:10px 18px;border-radius:10px;font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;}
+.toast.show{opacity:1;}
+.tip{position:relative;}
+.tip:hover::after{content:attr(data-tip);position:absolute;bottom:120%;left:50%;transform:translateX(-50%);
+  background:var(--text);color:#fff;font-size:11px;padding:5px 8px;border-radius:6px;white-space:nowrap;z-index:70;}
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="logo">科豆 AI · 后台</div>
+    <div class="side-group">系统设置</div>
+    <div class="side-item" onclick="toast('原型仅演示字典管理页')">站点与功能</div>
+    <div class="side-item" onclick="toast('原型仅演示字典管理页')">角色权限</div>
+    <div class="side-item" onclick="toast('原型仅演示字典管理页')">模型单价</div>
+    <div class="side-item active" onclick="showView('list')">字典管理</div>
+    <div class="side-group">Agent</div>
+    <div class="side-item" onclick="toast('原型仅演示字典管理页')">Agent 概览</div>
+    <div class="side-item" onclick="toast('原型仅演示字典管理页')">对话调试</div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <span style="font-size:16px;font-weight:600;color:var(--text)" id="topTitle">字典管理</span>
+      <span style="font-size:12px;color:var(--text-3)">管理员</span>
+    </div>
+    <div class="content">
+      <div class="view active" id="view-list">
+        <div class="alert" id="errBar" style="display:none">
+          <span id="errMsg">加载明细失败：网关 502</span>
+          <button class="btn" onclick="reload()">重试</button>
+        </div>
+        <div class="page-head">
+          <div><h2>字典管理</h2>
+            <div class="sub">维护系统维表数据；停用比删除安全，已落库的值仍可被解释</div></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="showError()">演示：失败态</button>
+            <button class="btn primary" onclick="openEdit(null)">新建字典</button>
+          </div>
+        </div>
+        <div class="cols">
+          <div class="card col-left">
+            <div class="col-title"><span>字典（<span id="typeCount">3</span>）</span></div>
+            <div class="search"><span class="ph">🔍</span>
+              <input id="typeSearch" placeholder="搜索字典编码 / 名称" oninput="renderTypeList()" /></div>
+            <div id="typeList" style="max-height:392px;overflow:auto"></div>
+          </div>
+          <div class="card col-right">
+            <div class="col-title">
+              <span id="itemTitle"></span>
+              <span style="display:flex;gap:8px;align-items:center">
+                <button class="btn link" onclick="openEdit(cur)">编辑字典</button>
+                <button class="btn primary" onclick="openItemDrawer()">新增记录</button>
+              </span>
+            </div>
+            <div class="cols" style="gap:8px;margin-bottom:10px">
+              <div class="search" style="margin:0;flex:1"><span class="ph">🔍</span>
+                <input id="itemSearch" placeholder="搜索 Value / 名称" oninput="onItemSearch()" /></div>
+              <select id="itemEnabled" onchange="renderItems()" style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-size:13px;color:var(--text-2);outline:none;">
+                <option value="">全部状态</option><option value="1">仅启用</option><option value="0">仅停用</option>
+              </select>
+            </div>
+            <div id="itemBody"></div>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-edit">
+        <div class="crumb"><a onclick="showView('list')">字典管理</a> / <span id="crumbName">新建字典</span></div>
+        <div class="page-head">
+          <div><h2 id="editTitle">新建字典</h2>
+            <div class="sub">字典结构（基本信息 + 字段定义）在此页维护；记录数据在列表页用抽屉维护</div></div>
+        </div>
+        <div class="card" style="padding:16px;margin-bottom:14px">
+          <div class="section-h">基本信息</div>
+          <div class="field-row">
+            <div class="field" id="fCode">
+              <label>字典编码</label><input id="iCode" class="mono" placeholder="llm_models" oninput="syncCrumb()" />
+              <div class="msg">只能包含小写字母、数字和下划线，且以字母开头</div>
+            </div>
+            <div class="field"><label>字典名称</label><input id="iName" placeholder="大模型清单" oninput="syncCrumb()" /></div>
+          </div>
+          <div class="field"><label>描述（选填）</label><input id="iDesc" placeholder="AI Agent 可用模型" /></div>
+          <div class="field inline-sw"><label>启用</label><span class="sw on" onclick="toggleSw(this)"></span>
+            <span style="font-size:11px;color:var(--text-3)">停用后业务侧视为空字典</span></div>
+        </div>
+        <div class="card" style="padding:16px;margin-bottom:14px">
+          <div class="section-h">字段定义
+            <span class="sub">决定明细表列与记录表单控件；length 为长度上限（写库强校验 + 输入前置拦截）</span></div>
+          <div class="table-wrap"><table class="ftable">
+            <thead><tr><th style="width:5%">#</th><th style="width:17%">字段名</th><th style="width:15%">标签</th>
+              <th style="width:13%">类型</th><th style="width:9%">长度</th><th style="width:8%">必填</th>
+              <th>枚举项 / 默认值</th><th style="width:13%">操作</th></tr></thead>
+            <tbody id="fieldRows"></tbody></table></div>
+          <div id="fieldEmpty" class="empty" style="padding:20px">
+            <div>暂未定义字段</div><div class="hint">记录将只含 Value / 名称 两个字段</div></div>
+          <button class="btn" style="margin-top:10px" onclick="addField()">+ 添加字段</button>
+          <div class="tip" style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.6">
+            保存时整体提交字段数组（覆盖式）。删除字段只丢这一列的值，不删数据行。</div>
+        </div>
+        <div id="dangerZone">
+          <div class="danger-zone">
+            <div><div class="t">删除字典</div>
+              <div class="s">连带删除字段定义与全部记录，不可恢复；已引用该字典的服务会回落至环境变量 / 内置默认值。</div></div>
+            <button class="btn link danger" onclick="openDeleteType()">删除</button>
+          </div>
+        </div>
+        <div class="page-foot">
+          <button class="btn" onclick="showView('list')">取消</button>
+          <button class="btn primary" onclick="saveType()">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-mask" id="dMask" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="dItem">
+    <div class="drawer-head"><h3 id="diTitle">新增记录</h3><span class="x" onclick="closeDrawer()">✕</span></div>
+    <div class="drawer-body">
+      <div class="field" id="fValue">
+        <label>Value（业务侧消费的原值，同字典内唯一）</label>
+        <input id="iValue" class="mono" placeholder="hy4-preview" />
+        <div class="msg">Value 必填且不可重复</div>
+      </div>
+      <div class="field"><label>名称（列表默认展示）</label><input id="iLabel" placeholder="Hy4 Preview" /></div>
+      <div id="dynFields"></div>
+      <div class="field"><label>排序</label><input id="iSort" type="number" value="10" /></div>
+      <div class="field inline-sw"><label>启用</label><span class="sw on" id="iEnabled" onclick="toggleSw(this)"></span></div>
+    </div>
+    <div class="drawer-foot">
+      <span class="left">记录改动即时生效</span>
+      <span style="display:flex;gap:8px">
+        <button class="btn" onclick="closeDrawer()">取消</button>
+        <button class="btn primary" onclick="saveItem()">保存</button>
+      </span>
+    </div>
+  </aside>
+  <div class="mask" id="mDelType" onclick="if(event.target===this)closeM('mDelType')">
+    <div class="modal">
+      <h3 id="delTitle">删除字典？</h3>
+      <div class="desc" id="delDesc"></div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeM('mDelType')">取消</button>
+        <button class="btn primary" style="background:var(--danger);border-color:var(--danger)"
+          onclick="closeM('mDelType');showView('list');toast('已删除（原型演示）')">确认删除</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+const FIELDS = {
+  llm_models: [
+    { name:'provider', label:'提供方', type:'enum', length:'', required:true, defaultValue:'tokenhub', options:'tokenhub,hy3,other' },
+    { name:'context_window', label:'上下文窗口(token)', type:'number', length:'12', required:false, defaultValue:'', options:'' },
+    { name:'supports_vision', label:'支持视觉', type:'boolean', length:'', required:false, defaultValue:'', options:'' },
+    { name:'note', label:'备注', type:'text', length:'200', required:false, defaultValue:'', options:'' },
+  ],
+  contract_tags: [ { name:'color', label:'标签色', type:'enum', length:'', required:false, defaultValue:'blue', options:'blue,orange,gray' } ],
+  region_code: [],
+};
+const DATA = {
+  llm_models: { name:'大模型清单', builtin:true, enabled:true, items:[
+    { v:'hy3', l:'混元 Turbo', sort:10, on:true, attrs:{ provider:'hy3', context_window:128000, supports_vision:false, note:'' } },
+    { v:'deepseek/deepseek-v4-pro', l:'DeepSeek V4 Pro', sort:20, on:true, attrs:{ provider:'tokenhub', context_window:1000000, supports_vision:false, note:'长报告主力' } },
+    { v:'deepseek/deepseek-v4-flash', l:'DeepSeek V4 Flash', sort:30, on:true, attrs:{ provider:'tokenhub', context_window:256000, supports_vision:false, note:'' } },
+    { v:'hy4-preview', l:'Hy4 Preview', sort:40, on:true, attrs:{ provider:'tokenhub', context_window:256000, supports_vision:true, note:'预览通道，可能有配额限制' } },
+    { v:'glm-5.3', l:'GLM 5.3', sort:50, on:true, attrs:{ provider:'other', context_window:200000, supports_vision:false, note:'' } },
+    { v:'kimi-k3', l:'Kimi K3', sort:60, on:false, attrs:{ provider:'other', context_window:512000, supports_vision:false, note:'额度调整中，暂时下线' } },
+    { v:'qwen3.5-plus', l:'Qwen 3.5 Plus', sort:70, on:true, attrs:{ provider:'other', context_window:null, supports_vision:false, note:'' } },
+    { v:'minimax-m3', l:'MiniMax M3', sort:80, on:true, attrs:{ provider:'other', context_window:null, supports_vision:false, note:'' } },
+    { v:'deepseek-v4-pro-0813', l:'DeepSeek V4 Pro (0813)', sort:90, on:true, attrs:{ provider:'tokenhub', context_window:1000000, supports_vision:false, note:'固定版本快照' } },
+  ]},
+  contract_tags: { name:'合同标签', builtin:false, enabled:true, items:[
+    { v:'loan', l:'借贷', sort:10, on:true, attrs:{ color:'orange' } },
+    { v:'rent', l:'租赁', sort:20, on:true, attrs:{ color:'blue' } },
+    { v:'labor', l:'劳务', sort:30, on:false, attrs:{ color:'gray' } },
+  ]},
+  region_code: { name:'地区编码', builtin:false, enabled:false, items:[] },
+};
+let cur='llm_models', page=1, pageSize=5, draft=[], editingCode=null;
+
+/* ===== 左：字典列表 ===== */
+function renderTypeList(){
+  const kw=document.getElementById('typeSearch').value.trim().toLowerCase();
+  const codes=Object.keys(DATA).filter(c=>!kw||c.includes(kw)||DATA[c].name.toLowerCase().includes(kw));
+  const box=document.getElementById('typeList');
+  document.getElementById('typeCount').textContent=codes.length;
+  if(!codes.length){box.innerHTML='<div class="empty" style="padding:24px"><div>未匹配「'+kw+'」</div><div class="hint">换个关键词，或点右上「新建字典」</div></div>';return;}
+  box.innerHTML=codes.map(code=>{const d=DATA[code];
+    return '<div class="dict-item '+(code===cur?'active':'')+'" onclick="pick(\''+code+'\')">'+
+      '<div class="nm"><span>'+d.name+'</span>'+(d.builtin?'<span class="tag brand">内置</span>':'')+
+      (!d.enabled?'<span class="tag off">停用</span>':'')+'<span class="count">'+d.items.length+'</span></div>'+
+      '<div class="cd">'+code+'</div></div>';}).join('');
+}
+function pick(code){cur=code;page=1;renderTypeList();renderItems(true);setTimeout(()=>renderItems(),320);}
+function onItemSearch(){page=1;renderItems();}
+
+/* ===== 右：明细（动态列全展示 + 横向滚动 + 分页） ===== */
+function renderItems(loading){
+  const d=DATA[cur], fields=FIELDS[cur]||[];
+  document.getElementById('itemTitle').innerHTML=d.name+(d.builtin?'<span class="tag brand" style="margin-left:6px">内置</span>':'')+
+    ' <span style="font-family:var(--mono);color:var(--text-3);font-weight:400">'+cur+'</span>';
+  const body=document.getElementById('itemBody');
+  if(loading){body.innerHTML='<div class="skeleton"></div>'.repeat(5);return;}
+  const kw=document.getElementById('itemSearch').value.trim().toLowerCase();
+  const en=document.getElementById('itemEnabled').value;
+  let rows=d.items.filter(it=>(!kw||it.v.toLowerCase().includes(kw)||it.l.toLowerCase().includes(kw))&&(en===''||String(it.on)===en));
+  if(!rows.length){
+    body.innerHTML='<div class="empty"><svg class="em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">'+
+      '<path d="M4 7h16M4 12h16M4 17h10"/></svg><div>'+(kw||en?'没有符合条件的记录':'该字典暂无记录')+'</div>'+
+      '<div class="hint">'+(kw||en?'换个关键词或清除筛选':'点右上「新增记录」添加第一条')+'</div></div>';return;}
+  const total=rows.length, pages=Math.max(1,Math.ceil(total/pageSize));
+  if(page>pages)page=pages;
+  rows=rows.slice((page-1)*pageSize,page*pageSize);
+  const dynHead=fields.map(f=>'<th>'+f.label+'</th>').join('');
+  const dynCell=(it)=>fields.map(f=>{const val=it.attrs?it.attrs[f.name]:undefined;
+    if(f.type==='boolean')return '<td>'+(val?'<span class="tag" style="color:var(--ok);background:var(--ok-soft)">是</span>':'<span class="tag off">否</span>')+'</td>';
+    if(f.type==='number')return '<td class="num">'+(val===null||val===undefined?'—':val)+'</td>';
+    return '<td>'+(val===null||val===undefined||val===''?'—':val)+'</td>';}).join('');
+  body.innerHTML='<div class="table-wrap"><table><thead><tr><th>Value</th><th>名称</th>'+dynHead+
+    '<th>排序</th><th>状态</th><th>操作</th></tr></thead><tbody>'+
+    rows.map(it=>'<tr class="'+(it.on?'':'row-off')+'"><td class="mono">'+it.v+'</td><td>'+it.l+'</td>'+dynCell(it)+
+      '<td class="num">'+it.sort+'</td><td><span class="sw '+(it.on?'on':'')+'" onclick="toggleRow(this,\''+it.v+'\')"></span></td>'+
+      '<td><button class="btn link" onclick="openItemDrawer(\''+it.v+'\')">编辑</button>'+
+      '<button class="btn link danger" onclick="toast(\'正式版用气泡确认：删除后历史数据无法解释，建议改用停用\')">删除</button></td></tr>').join('')+
+    '</tbody></table></div>'+(fields.length>3?'<div class="scroll-hint">列较多，可左右滑动表格查看全部字段</div>':'')+
+    '<div class="pager"><span>共 '+total+' 条 / '+pages+' 页</span>'+
+    '<span class="pg" onclick="goPage('+(page-1)+')" '+(page===1?'disabled':'')+'>‹</span>'+
+    '<span class="pg on">'+page+'</span>'+
+    '<span class="pg" onclick="goPage('+(page+1)+')" '+(page===pages?'disabled':'')+'>›</span>'+
+    '<select onchange="pageSize=+this.value;page=1;renderItems()" style="border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:12px;color:var(--text-2)">'+
+    '<option value="5" '+(pageSize===5?'selected':'')+'>5 条/页</option><option value="10" '+(pageSize===10?'selected':'')+'>10 条/页</option>'+
+    '<option value="20" '+(pageSize===20?'selected':'')+'>20 条/页</option></select></div>';
+}
+function goPage(p){if(p<1)return;page=p;renderItems();}
+function toggleRow(el,v){el.classList.toggle('on');const it=DATA[cur].items.find(x=>x.v===v);
+  if(it)it.on=!it.on;toast('已'+(it&&it.on?'启用':'停用')+'该记录');setTimeout(()=>renderItems(),300);}
+</script>
+<script>
+/* ===== 视图切换：列表 <-> 字典编辑页 ===== */
+function showView(name){
+  document.getElementById('view-list').classList.toggle('active',name==='list');
+  document.getElementById('view-edit').classList.toggle('active',name==='edit');
+  document.getElementById('topTitle').textContent=name==='list'?'字典管理':'字典编辑';
+  document.querySelector('.content').scrollTop=0;
+}
+/* ===== 字典编辑页（独立页面） ===== */
+function openEdit(code){
+  editingCode=code;
+  const isNew=!code;
+  document.getElementById('editTitle').textContent=isNew?'新建字典':'编辑字典';
+  const el=document.getElementById('iCode');
+  el.value=isNew?'':code; el.disabled=!isNew;
+  document.getElementById('iName').value=isNew?'':DATA[code].name;
+  document.getElementById('iDesc').value='';
+  draft=isNew?[]:JSON.parse(JSON.stringify(FIELDS[code]||[]));
+  document.getElementById('dangerZone').style.display=isNew?'none':'';
+  document.getElementById('fCode').classList.remove('err');
+  syncCrumb(); renderFieldTable(); showView('edit');
+}
+function syncCrumb(){
+  document.getElementById('crumbName').textContent=
+    document.getElementById('iName').value||document.getElementById('iCode').value||'新建字典';
+}
+function renderFieldTable(){
+  const tb=document.getElementById('fieldRows');
+  document.getElementById('fieldEmpty').style.display=draft.length?'none':'';
+  tb.innerHTML=draft.map((f,i)=>'<tr>'+
+    '<td style="color:var(--text-3);font-size:12px">'+(i+1)+'</td>'+
+    '<td><input class="mono" value="'+f.name+'" oninput="draft['+i+'].name=this.value" /></td>'+
+    '<td><input value="'+f.label+'" oninput="draft['+i+'].label=this.value" /></td>'+
+    '<td><select onchange="draft['+i+'].type=this.value;renderFieldTable()">'+
+      ['string','text','number','boolean','enum','date'].map(t=>'<option '+(t===f.type?'selected':'')+'>'+t+'</option>').join('')+'</select></td>'+
+    '<td><input value="'+(f.length||'')+'" '+(['boolean','date','enum'].indexOf(f.type)>=0?'disabled':'')+
+      ' oninput="draft['+i+'].length=this.value" /></td>'+
+    '<td><span class="sw '+(f.required?'on':'')+'" onclick="toggleSw(this);draft['+i+'].required=this.classList.contains(\'on\')"></span></td>'+
+    '<td><input value="'+(f.type==='enum'?(f.options||''):(f.defaultValue||''))+'" placeholder="'+
+      (f.type==='enum'?'逗号分隔，如 tokenhub,hy3':'默认值（选填）')+'" oninput="'+
+      (f.type==='enum'?'draft['+i+'].options=this.value':'draft['+i+'].defaultValue=this.value')+'" /></td>'+
+    '<td><button class="btn link" onclick="moveField('+i+',-1)" '+(i===0?'disabled':'')+'>↑</button>'+
+      '<button class="btn link" onclick="moveField('+i+',1)" '+(i===draft.length-1?'disabled':'')+'>↓</button>'+
+      '<button class="btn link danger" onclick="delField('+i+')">删除</button></td></tr>').join('');
+}
+function addField(){draft.push({name:'',label:'',type:'string',length:'',required:false,defaultValue:'',options:''});renderFieldTable();}
+function delField(i){draft.splice(i,1);renderFieldTable();}
+function moveField(i,delta){const j=i+delta;if(j<0||j>=draft.length)return;[draft[i],draft[j]]=[draft[j],draft[i]];renderFieldTable();}
+function saveType(){
+  const code=document.getElementById('iCode').value.trim();
+  if(!/^[a-z][a-z0-9_]*$/.test(code)){document.getElementById('fCode').classList.add('err');return;}
+  const names=draft.map(f=>f.name.trim());
+  if(names.some(n=>!/^[a-z][a-z0-9_]*$/.test(n))){toast('字段名只能包含小写字母、数字和下划线');return;}
+  if(new Set(names).size!==names.length){toast('字段名不可重复');return;}
+  FIELDS[code]=draft;
+  if(!DATA[code])DATA[code]={name:document.getElementById('iName').value.trim()||code,builtin:false,enabled:true,items:[]};
+  else if(document.getElementById('iName').value.trim())DATA[code].name=document.getElementById('iName').value.trim();
+  cur=code; renderTypeList(); showView('list'); renderItems();
+  toast('字典已保存（字段 '+draft.length+' 个）');
+}
+/* ===== 抽屉：记录新增/编辑（按字段定义动态渲染） ===== */
+function openItemDrawer(value){
+  const fields=FIELDS[cur]||[];
+  const it=value?DATA[cur].items.find(x=>x.v===value):null;
+  document.getElementById('diTitle').textContent=(it?'编辑记录：':'新增记录 · ')+cur;
+  document.getElementById('fValue').classList.remove('err');
+  const v=document.getElementById('iValue');
+  v.value=it?it.v:''; v.disabled=!!it;
+  document.getElementById('iLabel').value=it?it.l:'';
+  document.getElementById('iSort').value=it?it.sort:10;
+  document.getElementById('iEnabled').classList.toggle('on',it?it.on:true);
+  document.getElementById('dynFields').innerHTML=fields.map(f=>{
+    const val=it&&it.attrs?it.attrs[f.name]:(f.defaultValue||'');
+    const req=f.required?' <span style="color:var(--danger)">*</span>':'';
+    const tip=f.length?'<div class="tip">最多 '+f.length+(f.type==='number'?' 位':' 字符')+'</div>':'';
+    let c='';
+    if(f.type==='boolean')c='<span class="sw '+(val?'on':'')+'" onclick="toggleSw(this)"></span>';
+    else if(f.type==='enum'){const opts=String(f.options||'').split(',').map(s=>s.trim()).filter(Boolean);
+      c='<select>'+opts.map(o=>'<option '+(o===val?'selected':'')+'>'+o+'</option>').join('')+'</select>';}
+    else if(f.type==='text')c='<textarea maxlength="'+(f.length||4096)+'">'+(val||'')+'</textarea>';
+    else if(f.type==='number')c='<input type="number" value="'+(val===''||val===null?'':val)+'" />';
+    else if(f.type==='date')c='<input type="date" value="'+(val||'')+'" />';
+    else c='<input value="'+(val||'')+'" maxlength="'+(f.length||1024)+'" />';
+    return '<div class="field"><label>'+f.label+req+'</label>'+c+tip+'</div>';
+  }).join('')||'<div class="tip">该字典未定义字段，记录只有 Value / 名称。</div>';
+  document.getElementById('dMask').classList.add('show');
+  document.getElementById('dItem').classList.add('show');
+}
+function closeDrawer(){
+  document.getElementById('dMask').classList.remove('show');
+  document.getElementById('dItem').classList.remove('show');
+}
+function saveItem(){
+  const v=document.getElementById('iValue').value.trim();
+  if(!v){document.getElementById('fValue').classList.add('err');return;}
+  closeDrawer(); toast('记录已保存（原型演示）'); renderItems();
+}
+/* ===== 删除 / 状态演示 / 工具 ===== */
+function openDeleteType(){
+  const d=DATA[cur];
+  if(d.builtin){toast('内置字典不可删除');return;}
+  document.getElementById('delTitle').textContent='删除「'+d.name+'」？';
+  document.getElementById('delDesc').innerHTML='将同时删除其字段定义与 <b>'+d.items.length+
+    '</b> 条记录，<b>不可恢复</b>。<br>已引用该字典的服务会回落至环境变量 / 内置默认值（Agent 仍可用，但界面不可再维护）。<br>若只是暂时不用，建议改为<b>停用</b>。';
+  document.getElementById('mDelType').classList.add('show');
+}
+function showError(){document.getElementById('errBar').style.display='flex';}
+function reload(){document.getElementById('errBar').style.display='none';renderItems(true);setTimeout(()=>renderItems(),400);}
+function toggleSw(el){el.classList.toggle('on');}
+function closeM(id){document.getElementById(id).classList.remove('show');}
+let timer;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
+  clearTimeout(timer);timer=setTimeout(()=>el.classList.remove('show'),1700);}
+renderTypeList(); renderItems();
+</script>
+</body>
+</html>
