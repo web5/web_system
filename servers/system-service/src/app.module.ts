@@ -10,6 +10,7 @@ import { DatabaseExplorerModule } from './database-explorer/database-explorer.mo
 import { SettingsModule } from './settings/settings.module';
 import { OperationLogsModule } from './operation-logs/operation-logs.module';
 import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
+import { DictModule } from './dict/dict.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
     OperationLogsModule,
     BianbianAdminModule,
     DatabaseExplorerModule,
+    DictModule,
   ],
   providers: [
     // 顺序敏感：AuthGuard 先注入 request.user，PermissionsGuard 再读 user.roles

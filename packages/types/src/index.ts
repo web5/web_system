@@ -159,6 +159,9 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'agents:eval':      { code: 'agents:eval',      name: 'Agent 评测与发布门禁', group: 'agents' },
   'knowledge:view':   { code: 'knowledge:view',   name: '查看知识集合', group: 'knowledge', type: 'menu' },
   'knowledge:manage': { code: 'knowledge:manage', name: '管理知识集合', group: 'knowledge' },
+  // 字典 / 维表（system-service）
+  'system:dict:view':   { code: 'system:dict:view',   name: '查看字典维表', group: 'settings', type: 'menu' },
+  'system:dict:manage': { code: 'system:dict:manage', name: '维护字典维表', group: 'settings' },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
@@ -171,9 +174,11 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     'bianbian:view', 'bianbian:manage',
     'agents:view', 'agents:debug', 'agents:manage', 'skills:view',
     'agents:eval', 'knowledge:view',
+    'system:dict:view',
   ],
   viewer: [
     'dashboard:view', 'logs:view', 'bianbian:view',
     'agents:view', 'skills:view', 'knowledge:view',
+    'system:dict:view',
   ],
 };
