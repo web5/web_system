@@ -24,8 +24,8 @@
 
 | Anthropic 方法论 | 现有体系 | 状态 |
 |---|---|---|
-| CLAUDE.md | CODEBUDDY.md + `.codebuddy/rules/tcb/`（100+ 规则） | ✅ 已具备 |
-| Skills | 7 个 rd-* skills + 多个 user skills | ✅ 已具备 |
+| CLAUDE.md | CODEBUDDY.md（+ 触发规则 `.codebuddy/rules/ui-interface/`） | ✅ 已具备 |
+| Skills | agent-kit 13 个技能（rd-* / 需求 / 原型 / 调试 / 验证…）+ 项目专属 be/fe-developer | ✅ 已具备 |
 | Subagents | rd-digital-agent team 模式（brainstorm/plan/execute/review 独立上下文） | ✅ 已具备 |
 | Plan Mode | rd-plan 输出 TODO 后等待用户确认 | ✅ 已具备 |
 | spec.md | `specs/<feature>/{requirements,design,tasks}.md` | ✅ 已具备 |
@@ -53,6 +53,10 @@
 
 > ⚠️ 2026-09-07 更新：机器化红线（任务 2 改造版）+ Evals 运行体（任务 4 改造版）已有**完整部署设计**，
 > 见 `docs/development/ai-native-sdlc-ci-deployment.md`（M1/M2 任务拆分 + 验收 + 落地方位）。下方为原任务简述。
+>
+> ⚠️ 2026-09-10 收敛：数字人能力统一为**唯一能力源 `.codebuddy/agent-kit/` + 运行源镜像**；
+> `.codebuddy/evals/`、`.codebuddy/rules/tcb/`、`.codebuddy/archived/` 已删除，kit-gate 的评测报告门禁改为 S7「运行源 ↔ 能力源零漂移」检查。
+> 后续专项能力（如日志排查）按需再加。
 
 #### 任务 2：Hook 等效实现（git + CI 守门）→ 已细化为 CI 部署文档 §2（M1）
 - 目标：红线从「规则文本」变成「机器检查」，治微前端部署等反复踩坑问题。
@@ -70,9 +74,9 @@
 
 #### 任务 4：Evals（回归评测）→ 已细化为 CI 部署文档 §3（M2）
 - 目标：换模型/改规则后防退步。
-- 做法（web_system 作为消费方）：`.codebuddy/evals/`（报告区，避开 agent-kit 同步覆盖）+ `scripts/redline/check-kit-structure.sh`（L1 结构守护）+ `.github/workflows/kit-gate.yml`（结构检查 + 改行为定义必须附评测报告）。完整评测（L2~L4）在 ai-agent-kit 源仓库跑（工具已齐），报告拷回 `.codebuddy/evals/reports/`。
-- 验收：改动 `.codebuddy/skills` 不附报告 → PR 被拦；删 skill 文件 → 结构检查失败。
-- 涉及：`.codebuddy/evals/`、`scripts/redline/check-kit-structure.sh`、`.github/workflows/kit-gate.yml`
+- 做法（web_system 作为消费方）：`scripts/redline/check-kit-structure.sh`（S1~S7 结构守护，含运行源↔能力源零漂移）+ `.github/workflows/kit-gate.yml`（CI 执行同一份检查）。**完整评测（L2~L4）全部在 ai-agent-kit 源仓库跑**（工具已齐），本仓库不再设评测报告区。
+- 验收：运行源与能力源不一致 → PR 被拦；删 skill 文件 → 结构检查失败。
+- 涉及：`scripts/redline/check-kit-structure.sh`、`scripts/sync-agent-kit.sh`、`.github/workflows/kit-gate.yml`
 
 ### 第三批：暂缓（成本 > 当前收益）
 

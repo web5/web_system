@@ -3,9 +3,9 @@
 # check-kit-structure.sh — web_system 数字人 kit 结构完备检查（L1）
 #
 # 设计：docs/development/ai-native-sdlc-ci-deployment.md §3.3
-# 适配 web_system 的双 skills 根：
-#   运行源 .codebuddy/skills/        12 个（含项目专属 be/fe-developer、karpathy-*）
-#   镜像   .codebuddy/agent-kit/skills/ 11 个（ai-agent-kit 同步，通用层）
+# 适配 web_system 的双 skills 根（唯一能力源 = agent-kit 镜像）：
+#   能力源 .codebuddy/agent-kit/skills/  13 个（ai-agent-kit 同步，通用层）
+#   运行源 .codebuddy/skills/            = 镜像 13 个 + 项目专属 be/fe-developer + karpathy-* 符号链接
 #
 # 检查项（对应源仓库 eval-gate.yml 的 S1~S6，按 web_system 裁剪）：
 #   S1 必需文件齐全（AGENT.md / 方法论 / eval-framework / 5 条红线）
@@ -37,10 +37,10 @@ add_err()  { ERRS+=("$1"); }
 add_warn() { WARNS+=("$1"); }
 say() { [ "$VERBOSE" = "1" ] && echo -e "$1"; }
 
-# 运行源白名单（12）：含项目专属
-RUN_SKILLS="be-developer fe-developer karpathy-coding-guidelines karpathy-coding-rules-dami karpathy-llm-wiki rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review tech-review user-memory"
-# 镜像白名单（11）：通用层（ai-agent-kit 源仓库定义）
-KIT_SKILLS="code-explore incremental-refactoring rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review systematic-debugging tech-review user-memory verification-before-completion"
+# 运行源白名单（18）：镜像 13 + 项目专属 be/fe + 外部 karpathy-* 符号链接
+RUN_SKILLS="be-developer fe-developer code-explore incremental-refactoring karpathy-coding-guidelines karpathy-coding-rules-dami karpathy-llm-wiki rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
+# 能力源镜像白名单（13）：通用层（ai-agent-kit 源仓库定义）
+KIT_SKILLS="code-explore incremental-refactoring rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
 
 # ---------- S1 必需文件 ----------
 say "${B}── S1 必需文件齐全 ──${N}"
@@ -54,8 +54,8 @@ for f in \
   .codebuddy/agent-kit/rules/general/03-versioned-artifacts.md \
   .codebuddy/agent-kit/rules/general/04-subagent-isolation.md \
   .codebuddy/agent-kit/rules/general/05-red-line-check.md \
-  .codebuddy/evals/README.md \
-  .codebuddy/evals/reports/TEMPLATE.md; do
+  .codebuddy/skills/rd-digital-agent/SKILL.md \
+  .codebuddy/skills/rd-digital-agent/references/project-context.md; do
   if [ -f "$f" ]; then say "  ✓ $f"; else add_err "S1 缺少必需文件: $f"; fi
 done
 
@@ -104,7 +104,7 @@ fi
 # ---------- S5 决策树引用存在 ----------
 say "${B}── S5 决策树路由完整性 ──${N}"
 HUB=".codebuddy/skills/rd-digital-agent/SKILL.md"
-[ -f "$HUB" ] && hub_refs="$(grep -oE '(rd-brainstorm|rd-plan|rd-execute|rd-review|tech-review|user-memory|code-explore|incremental-refactoring|systematic-debugging|verification-before-completion|be-developer|fe-developer)' "$HUB" | sort -u | tr '\n' ' ')"
+[ -f "$HUB" ] && hub_refs="$(grep -oE '(rd-brainstorm|rd-plan|rd-execute|rd-review|tech-review|user-memory|code-explore|incremental-refactoring|systematic-debugging|requirement-translation|test-verification|ux-prototype-designer|be-developer|fe-developer)' "$HUB" | sort -u | tr '\n' ' ')"
 for s in $hub_refs; do
   if [ -f ".codebuddy/skills/$s/SKILL.md" ] || [ -f ".codebuddy/agent-kit/skills/$s/SKILL.md" ]; then
     say "  ✓ 路由 → $s"
@@ -122,6 +122,34 @@ if grep -q '兜底' .codebuddy/agent-kit/AGENT.md 2>/dev/null; then
     add_warn "S6 AGENT.md 红线(兜底实现须先做第一性判断) 缺少执行手段: rd-review/rd-execute 未见对应检查项"
   fi
 fi
+
+# ---------- S7 运行源 ↔ 能力源零漂移（唯一能力源） ----------
+say "${B}── S7 运行源 ↔ 能力源一致性 ──${N}"
+drift=0
+while IFS= read -r -d '' f; do
+  rel="${f#.codebuddy/agent-kit/skills/}"
+  # 项目专属文件：允许运行源含项目定制
+  case "$rel" in
+    rd-digital-agent/references/project-context.md) continue ;;
+  esac
+  if [ ! -f ".codebuddy/skills/$rel" ]; then
+    add_err "S7 运行源缺少镜像文件: .codebuddy/skills/$rel"; drift=1
+  elif ! cmp -s "$f" ".codebuddy/skills/$rel"; then
+    add_err "S7 运行源与能力源不一致（应保持镜像）: .codebuddy/skills/$rel"; drift=1
+  fi
+done < <(find .codebuddy/agent-kit/skills -type f -print0)
+# 反向：运行源不得存在能力源之外的孤儿文件（项目专属技能/文件除外）
+while IFS= read -r -d '' f; do
+  rel="${f#.codebuddy/skills/}"
+  case "$rel" in
+    be-developer/*|fe-developer/*|karpathy-*) continue ;;
+    rd-digital-agent/references/project-context.md) continue ;;
+  esac
+  if [ ! -f ".codebuddy/agent-kit/skills/$rel" ]; then
+    add_err "S7 运行源存在能力源之外的孤儿文件: .codebuddy/skills/$rel"; drift=1
+  fi
+done < <(find .codebuddy/skills -type f -print0)
+[ "$drift" = "0" ] && say "  ✓ 运行源与能力源双向一致（项目专属文件除外）"
 
 # ---------- 输出 ----------
 code=0

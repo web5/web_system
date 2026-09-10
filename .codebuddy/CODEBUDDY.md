@@ -46,7 +46,7 @@ web_system/
 ├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
 ├── docs/        # 人读文档（分册地图见附录）
-├── .codebuddy/  # 数字人体系（agent-kit/skills/rules/references/evals + 本入口）
+├── .codebuddy/  # 数字人体系（能力源 agent-kit + 运行源 skills + rules + references + 本入口）
 ├── migrations/  # 数据库迁移 SQL
 ├── local.nginx.conf / micro-frontend.nginx.conf   # 本地 nginx 集成配置
 └── ecosystem.config.cjs / docker-compose*.yml      # pm2 进程清单 / 容器编排
@@ -174,8 +174,9 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 
 ## 3 开发规则与数字人技能体系（agent-kit）
 
-> 本节把 `.codebuddy/agent-kit` 数字人定义**整体加载进工程**。它不是一个文件，而是「指南 → 技能/SOP → 红线」三层体系 + 一套评测门禁。
-> 元仓库/方法论全文：`.codebuddy/agent-kit/README.md`；同步脚本 `scripts/sync-agent-kit.sh`。
+> 本节把 `.codebuddy/agent-kit` 数字人定义**整体加载进工程**。它不是一个文件，而是「指南 → 技能/SOP → 红线」三层体系。
+> **唯一能力源 = `.codebuddy/agent-kit/`**（ai-agent-kit 仓库 CI 同步而来，v1.5「一条主干 + 两层纪律」融合版）；IDE 真正加载的**运行源**是 `.codebuddy/skills/`，其内容 = `agent-kit/skills` 全量镜像 + 项目专属 `be-developer`/`fe-developer` + 项目上下文文件。
+> 两者一致性由 `scripts/redline/check-kit-structure.sh` S7 机器守护；同步用 `scripts/sync-agent-kit.sh --apply`。元仓库/方法论全文：`.codebuddy/agent-kit/README.md`。
 
 ### 3.1 AI 协作范式（怎么和 AI 一起工作）
 
@@ -196,41 +197,49 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 
 ### 3.3 技能地图（怎么干 —— Hub 路由）
 
-> 入口技能 `.codebuddy/skills/rd-digital-agent/SKILL.md`（研发数字人 Hub v3.1）按复杂度/类型路由到下列子技能：
+> 入口技能 `.codebuddy/skills/rd-digital-agent/SKILL.md`（数字人 Hub v4.4，与能力源同版本）按任务类型/复杂度分派：
 
 ```
 用户请求
-  ├─ "怎么做"/设计方案/模糊需求 ───→ rd-brainstorm → rd-plan（用户选方案/确认后）→ rd-execute → rd-review
+  ├─ 模糊需求/需求澄清 ──────────→ requirement-translation（需求 spec）→ rd-brainstorm
+  ├─ "怎么做"/设计方案 ──────────→ rd-brainstorm → rd-plan（选方案/确认后）→ rd-execute → rd-review
   ├─ "拆任务"/细化/已有方案 ──────→ rd-plan → rd-execute → rd-review
-  ├─ 小改动/修 bug/简单 CRUD ─────→ rd-execute（直连，最小计划）→ rd-review
-  ├─ 架构/选型/安全/数据设计 ─────→ tech-review（辅助审查）
-  ├─ UI/页面/样式/交互 ──────────→ fe-developer（前端开发技能）＋ UI 铁律 §5.3
-  ├─ 服务/接口/数据/安全横切/部署 ──→ be-developer（后端开发技能）
-  └─ 编码任务（所有）────────────→ 加载 Karpathy 编程准则（rd-execute 执行时自动参考）
+  ├─ 做个原型/交互怎么设计 ──────→ ux-prototype-designer（原型稿 + 独立交互质检）→ rd-plan → rd-execute
+  ├─ 报错/测试失败 ──────────────→ systematic-debugging（四阶段根因）→ rd-execute 完成验证门
+  ├─ 重构/清理 ─────────────────→ incremental-refactoring → rd-execute 完成验证门
+  ├─ "X 在哪实现"/理解结构 ──────→ code-explore（只读探索）
+  ├─ 小改动/修 bug/简单任务 ─────→ rd-execute（直连，仍须最小计划 + 验证判据）→ rd-review
+  ├─ 架构/选型/安全/信息结构 ────→ tech-review（辅助审查）
+  ├─ 交付前独立盲测 ────────────→ test-verification（第三方盲测，对开发/需求质疑）
+  ├─ UI/页面/样式/交互（项目装配）→ fe-developer ＋ UI 铁律 §5.3 + `docs/ui/`
+  ├─ 服务/接口/数据/安全横切/部署 ─→ be-developer
+  └─ 任何交付前收尾 ────────────→ rd-execute 完成验证门（对照 V1…Vn，不分级）
 ```
 
-| 技能（.codebuddy/skills 或 agent-kit/skills） | 用途 |
+| 技能（运行源 `.codebuddy/skills/`） | 用途 |
 |---|---|
-| `rd-digital-agent` | Hub：按复杂度自动路由（brainstorm → plan → execute → review） |
-| `rd-brainstorm` / `rd-plan` | 探索方案选项（2-4 个对比）→ 细化为可执行任务列表 |
-| `rd-execute` | TDD 逐项实现（红→绿→重构），产出物落盘 |
-| `rd-review` / `tech-review` | 产物自检 / 架构·安全·数据审查（清单在各自 references/） |
+| `rd-digital-agent` | Hub：唯一编排入口，按类型/复杂度分派 |
+| `requirement-translation` | 链首：模糊意图 → 可验证需求 spec（验收判据/反例/待确认） |
+| `rd-brainstorm` / `rd-plan` | 探索方案选项（2-4 个对比）→ 细化为任务列表 + 验证判据表 V1…Vn |
+| `rd-execute` | TDD 逐项实现（红→绿→重构）+ **收尾完成验证门**（完成声明 = 验证证据） |
+| `rd-review` / `tech-review` | 实现者自查 / 方案·结构·数据·安全审查 |
+| `ux-prototype-designer` | 需求 → 可点击交互 HTML 原型稿 + 独立交互质检 |
+| `test-verification` | 独立第三方盲测（按需求判据构造反例，对开发/需求质疑） |
 | `systematic-debugging` | 系统化调试（四阶段根因分析，遇 bug 先加载） |
-| `verification-before-completion` | 完成前强制验证门（声明完成前必走） |
-| `code-explore` | 代码库探索（索引优先/影响面分析） |
 | `incremental-refactoring` | 测试保护下的增量重构 |
+| `code-explore` | 代码库探索（索引优先/影响面分析） |
 | `user-memory` | 用户偏好与项目上下文记忆 |
-| `be-developer` / `fe-developer` | 项目域技能：后端服务/接口/数据；admin 系前端页面/UI |
-| `karpathy-coding-*` | 行为编码准则（不过度设计/外科手术式改动/先立验证标准） |
+| `be-developer` / `fe-developer` | **项目专属**：后端服务/接口/数据；admin 系前端页面/UI |
+| `karpathy-coding-*` | 行为编码准则（本机 `~/.codebuddy/skills/` 符号链接：不过度设计/外科手术式改动/先立验证标准） |
 
-> ⚠️ 技能名带「触发词」（description），任务描述命中即自动加载；也可在 `.codebuddy/agent-kit/skills/rd-digital-agent/references/project-context.md` 找到项目上下文占位说明。
+> ⚠️ 技能名带「触发词」（description），任务描述命中即自动加载。
+> 项目上下文（结构/端口/技术栈/品牌常量/硬约束）唯一落点：`.codebuddy/skills/rd-digital-agent/references/project-context.md`。
 
 ### 3.4 评测体系（怎么证明 kit 变好了）
 
-- `.codebuddy/evals/` — 回归评测（五层过滤 L1 结构 → L2 路由 → L3 行为 → L4 端到端 → L5 实战 + 五维 rubric）
-- `.codebuddy/evals/README.md` — 评测运行手册
-- `.codebuddy/agent-kit/references/eval-framework.md` — 评测体系定稿
-- **门禁联动**：改 skills/agent-kit 行为定义 → 必须附评测报告（见 §5.1 kit-gate）
+- 本项目**不再自建评测报告库**：评测（五层过滤 L1 结构 → L2 路由 → L3 行为 → L4 端到端 → L5 实战 + 五维 rubric）在**上游 `ai-agent-kit` 仓库**运行，`agents/`、`evals/` 等落在源仓库。
+- 本项目只做两件机器守护：① `check-kit-structure.sh` S1~S7 结构完备；② S7 运行源 ↔ 能力源零漂移。
+- 评测方法论定稿：`.codebuddy/agent-kit/references/eval-framework.md`。
 
 ### 3.5 项目工程铁律（横切自查，必看）
 
@@ -276,11 +285,14 @@ grep -r 'console\.' servers/*/src       # 无 console.log 残留
 ### 3.7 技能/规则挂载关系（防混淆）
 
 ```
-.codebuddy/agent-kit/   ← 通用方法论模板（跨项目复用，同步自 ai-agent-kit）
-.codebuddy/skills/      ← 本项目实例层（rd-* Hub + be/fe 领域技能 + coding-standards/tdd-workflow 等 references）
-.codebuddy/rules/       ← 机器触发层（mdc 规则：ui-interface → docs/ui；tcb → 云开发领域规则库）
-.codebuddy/CODEBUDDY.md ← 本总入口（AI 常驻加载，引导以上三层 + docs）
+.codebuddy/agent-kit/   ← 唯一能力源（通用方法论，AI 同步自 ai-agent-kit：kits + skills(13) + rules/general + references）
+.codebuddy/skills/      ← 运行源（IDE 实际加载）= 能力源 skills 全量镜像 + be-developer/fe-developer + project-context.md
+.codebuddy/rules/       ← 机器触发层（mdc 规则：ui-interface → docs/ui）
+.codebuddy/references/  ← coding-best-practices.md（工程铁律完整版）
+.codebuddy/CODEBUDDY.md ← 本总入口（AI 常驻加载，引导以上各层 + docs）
 ```
+
+> 新增能力（如「日志排查」等专项技能）的路径：**先加到上游 ai-agent-kit → 经 CI 同步进能力源 → `sync-agent-kit.sh --apply` 落到运行源**；临时项目专属技能直接放 `.codebuddy/skills/<name>/SKILL.md` 并同步白名单（`check-kit-structure.sh` RUN_SKILLS）。
 
 ---
 
@@ -349,10 +361,10 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 |---|---|---|---|
 | 本地 pre-commit | commit | 扫 R1~R4（调试残留/敏感文件/占位/@ts-ignore/:any） | 阻断提交 |
 | quality-gate | PR | 扫红线 R1~R5 + 改动包 lint(lint:ci 只读)/build/test | 无法 merge |
-| kit-gate | PR（改数字人定义） | 改 `.codebuddy/skills/`、`.codebuddy/agent-kit/` 指南/规则**必须附评测报告**到 `.codebuddy/evals/reports/` | CI 拦截 |
+| kit-gate | PR（改数字人定义） | `check-kit-structure.sh` S1~S7：能力源必需文件齐全 / 无孤儿 skill / frontmatter 合规 / Hub 路由目标存在 / 红线有判定手段 / **运行源与能力源零漂移** | CI 拦截 |
 
 - **红线脚本**：`pnpm redline:local`（staged 扫描）/ `pnpm redline:scan`（全量 staged）/ `pnpm redline:tree`（本地全仓巡检）
-- **skip-eval 约定**：纯排版/错别字/不影响行为的改动 → PR 描述注明 `skip-eval` 并在 commit message 说明即可豁免 kit-gate
+- **kit 结构自检**：`bash scripts/redline/check-kit-structure.sh`（本地=CI 同一份脚本）；改运行源前先 `bash scripts/sync-agent-kit.sh`（dry-run 预览差异）
 - CI 文件：`.github/workflows/quality-gate.yml`、`kit-gate.yml`、`auto-pr.yml`（push feature/*/fix/* 自动提 PR 到 master，幂等）
 
 ### 5.2 提交 & 提 PR 规范（用户要求提交时执行）
@@ -404,12 +416,11 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 ```
 .codebuddy/
 ├── CODEBUDDY.md          ← 本入口（v2 五段式）
-├── agent-kit/            ← 数字人模板：AGENT.md + skills/(11) + rules/general/(5 红线) + references/(5)
-├── skills/               ← 项目实例技能：rd-* Hub + be-developer/fe-developer + user-memory
-├── rules/                ← 触发规则：ui-interface/(RULE.mdc→docs/ui) + tcb/(云开发领域规则)
-├── references/           ← coding-best-practices.md（工程铁律完整版）
-├── evals/                ← 评测体系（README + reports/ 落盘）
-├── archived/ teams/      ← 归档 / 多代理协作数据
+├── agent-kit/            ← 唯一能力源：AGENT.md + kits/(L1/L2/L3) + skills/(13) + rules/general/(5 红线) + references/(10)
+├── skills/               ← 运行源（IDE 加载）= agent-kit/skills 镜像 + be-developer/fe-developer
+│   └── rd-digital-agent/references/project-context.md   ← 项目上下文（项目专属，同步时排除）
+├── rules/                ← 触发规则：ui-interface/(RULE.mdc→docs/ui)
+└── references/           ← coding-best-practices.md（工程铁律完整版）
 ```
 
 ---
@@ -417,4 +428,5 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 ## 维护约定
 
 - 本入口文件保持「导航 + 速查 + 铁律」定位，**详细叙述一律下沉到 docs/ 与 .codebuddy/ 对应单事实源**；新增主题先在 §1~§5 挂位再补内容。
-- 改动 `.codebuddy/skills` / `agent-kit` 行为定义 → 附评测报告（或注明 skip-eval）；纯结构调整不影响行为。
+- 数字人能力收敛为**唯一能力源 `.codebuddy/agent-kit/`**：通用技能只在上游 `ai-agent-kit` 演进，经 CI 进能力源，再 `sync-agent-kit.sh --apply` 落运行源；运行源不得手工改通用技能（S7 会拦）。
+- 项目专属内容只有两处：`.codebuddy/skills/be-developer|fe-developer` 与 `rd-digital-agent/references/project-context.md`；新增专项能力（如日志排查）走「上游加 skill → 同步」或「运行源加项目专属技能 + 同步白名单」。

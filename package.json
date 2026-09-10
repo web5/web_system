@@ -11,6 +11,7 @@
     "check:health": "bash scripts/health-check.sh",
     "sync:schema": "bash scripts/sync-schema.sh",
     "sync:kit": "bash scripts/sync-agent-kit.sh",
+    "kit:check": "bash scripts/redline/check-kit-structure.sh",
     "redline:local": "bash scripts/redline/check-commit.sh",
     "redline:scan": "bash scripts/redline/scan-rules.sh cached",
     "redline:tree": "bash scripts/redline/scan-rules.sh tree",

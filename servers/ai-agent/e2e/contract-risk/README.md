@@ -67,11 +67,12 @@ e2e/contract-risk/
 ├── checker.spec.ts            # 判定单测（零 token，17 例）
 ├── run-eval.ts                # 运行器（--dry 可用；真实 run 待装配）
 ├── report.ts                  # 报告渲染 + 汇总
+├── reports/<YYYY-MM-DD>/      # 评测报告落盘（只追加不改写；raw/ 为本地诊断缓存，不入库）
 └── ../jest.config.js          # e2e 单测 jest 配置
 ```
 
-报告落盘：`.codebuddy/evals/reports/contract-risk/<YYYY-MM-DD>/<roundDir>.md`。
-模板：`.codebuddy/evals/reports/contract-risk/TEMPLATE.md`。
+报告落盘：`servers/ai-agent/e2e/contract-risk/reports/<YYYY-MM-DD>/<roundDir>.md`（随评测产物就地存放）。
+模板语义：ai-agent-kit 源仓库 `evals/reports/TEMPLATE.md`。
 
 ## 4. 怎么跑
 
@@ -116,8 +117,8 @@ npx ts-node -P tsconfig.json e2e/contract-risk/run-eval.ts --round 001 --model d
 1. ✅ 骨架目录 + 类型 + 判定函数签名 + 报告模板
 2. ✅ 7 份样本定稿（fixtures/texts + manifest.ts，数值现算）+ 判定实现（checker）+
     零 token 单测 17 例（`pnpm test:e2e`）与 `--dry` 自检
-3. ⏳ 写 run-eval 真实装配与运行（连真实 LLM）
-4. ⏳ 首份基线报告（无基线无趋势）
+3. ✅ 写 run-eval 真实装配与运行（连真实 LLM）
+4. ✅ 首份基线报告：`reports/2026-09-07/001.md`（7 样本，通过率 43%，deepseek-v4-pro）
 5. ⏳ 后续每个 agent 行为变更 → 跑 → 对比报告 → 决定合并
 
 
@@ -127,4 +128,4 @@ npx ts-node -P tsconfig.json e2e/contract-risk/run-eval.ts --round 001 --model d
 - 报告解析：`servers/ai-agent/src/contract/contract-report.parser.ts`
 - IRR/标准库：`packages/shared/src/contract/`
 - 评测方法论：`.codebuddy/agent-kit/references/eval-framework.md`
-- kit-gate 约定：改动 `.codebuddy/skills/`、agent-kit 行为定义才触发；**业务 agent 评测不触发 kit-gate**，报告独立落 `.codebuddy/evals/reports/contract-risk/`。
+- kit-gate 约定：改动 `.codebuddy/skills/`、agent-kit 行为定义才触发；**业务 agent 评测不触发 kit-gate**，报告就地落 `e2e/contract-risk/reports/`（本仓库不再有统一评测报告区）。

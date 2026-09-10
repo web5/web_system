@@ -3,7 +3,7 @@
 > 类型：tasks.md（Plan 阶段产物）
 > 日期：2026-09-02
 > 关联：需求 `requirements.md` · 方案 `design.md`
-> 执行：`rd-execute`（TDD 红→绿→重构）→ `verification-before-completion` → `rd-review`
+> 执行：`rd-execute`（TDD 红→绿→重构 + 收尾完成验证门）→ `rd-review`
 > 约定：每个任务 = 一个可独立验证的功能模块；验收 EARS；标注依赖；**本文件是进度真相源**（勾选状态跨会话可续）。
 
 ## S0 · 已完成并收编（原批 1）
@@ -267,7 +267,7 @@
 - **TDD**：每个任务 RED（写失败测试）→ GREEN（最少代码通过）→ REFACTOR，逐项勾选本文件。
 - **防回归**：每个缺陷修复补一个「修复前会失败」的测试；校验对外可见行为，不校验实现细节。
 - **证据**：宣称通过必须附实际运行结果（lint / 测试 / 接口返回）。
-- **收尾**：每阶段完成走 `verification-before-completion` + `rd-review`；**不主动 commit**。
+- **收尾**：每阶段完成走 `rd-execute` 完成验证门（对照 V1…Vn）+ `rd-review`；**不主动 commit**。
 - **阶段门**：S1 完成并评审后启动 S2；S1/S2/S3 为 P0，必须先闭环。
 - **上下文对抗**：每轮开工先重读本文件与 `design.md`，不依赖对话记忆。
 
