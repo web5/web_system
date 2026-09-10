@@ -4,6 +4,10 @@
 > 性质：将 Anthropic《AI Native SDLC playbook》方法论落地到 web_system 研发体系的 git/CI 层。
 > 关联：总纲 `docs/development/ai-native-sdlc-playbook.md`；实施 spec `docs/development/ai-native-sdlc-ci-deployment.md`。
 > 代码提交：`383f4e7` feat(ci): 机器化红线 + Evals 运行体部署到 git/CI 层（24 files，+1112/-22，已提交未推送）
+>
+> ⚠️ 2026-09-10 变更（本文为 2026-09-07 历史快照）：数字人能力收敛为「唯一能力源 `.codebuddy/agent-kit/` + 运行源 `.codebuddy/skills/` 镜像」；
+> **`.codebuddy/evals/` 与 kit-gate 的评测报告门禁已下线**（评测回归 ai-agent-kit 源仓库），kit-gate 现为 S1~S7 结构检查（含 S7 零漂移）。
+> 下文涉及 `.codebuddy/evals/` 的描述仅作历史记录。
 
 ---
 

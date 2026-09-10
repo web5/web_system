@@ -212,7 +212,7 @@ function saveRawFinal(sampleId: string, finalContent: string): void {
   try {
     const { writeFileSync, mkdirSync } = require('fs') as typeof import('fs');
     const date = new Date().toISOString().slice(0, 10);
-    const dir = resolve(__dirname, '../../../../.codebuddy/evals/reports/contract-risk', date, 'raw');
+    const dir = resolve(__dirname, 'reports', date, 'raw');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${sampleId}.final.txt`), finalContent, 'utf8');
   } catch {
@@ -286,11 +286,11 @@ export async function runEval(args: EvalCliArgs): Promise<void> {
   writeReportFile(markdown, args.round);
 }
 
-/** 报告落盘到 .codebuddy/evals/reports/contract-risk/<YYYY-MM-DD>/ */
+/** 报告落盘到 e2e/contract-risk/reports/<YYYY-MM-DD>/ */
 function writeReportFile(markdown: string, roundDir: string): void {
   const { writeFileSync, mkdirSync } = require('fs') as typeof import('fs');
   const date = new Date().toISOString().slice(0, 10);
-  const dir = resolve(__dirname, '../../../../.codebuddy/evals/reports/contract-risk', date);
+  const dir = resolve(__dirname, 'reports', date);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${roundDir}.md`);
   writeFileSync(file, markdown, 'utf8');

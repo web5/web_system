@@ -3,6 +3,9 @@
 > 配套 `ai-native-sdlc-playbook.md` 第二批任务（缺口② Hook 机器化 + 缺口③ Evals）。
 > 依据 `.codebuddy/agent-kit/`（红线 05-red-line-check、references/eval-framework.md §6 CI 门禁）设计。
 > 本文是**工程化任务的 spec**：给出每个落地物的路径、内容要点与验收标准；实施时按仓库实际微调，但设计决策与文件位置以此为准。
+>
+> 变更日志：
+> - 2026-09-10：数字人能力收敛为「唯一能力源 `.codebuddy/agent-kit/` + 运行源镜像」；**下线 `.codebuddy/evals/` 与 `eval-report-gate`**，新增 S7「运行源 ↔ 能力源零漂移」检查；删除 `.codebuddy/rules/tcb`、`.codebuddy/archived`（非 AI native 研发流程）。
 
 ## 0. 现状基线（2026-09-07 实测）
 
@@ -31,11 +34,11 @@ A. 代码质量红线（对工程代码）                        B. Evals 运�
 ┌──────────────▼───────────────┐      ┌───────────────┴──────────────────┐
 │ L1 CI quality-gate.yml（强制） │      │ L1' CI kit-gate.yml（守护运行时）   │
 │  PR 触发：静态红线扫描 +        │      │  PR 改动 .codebuddy/skills 等时：   │
-│  改动包 build+test            │      │  结构完备检查 + 强制附评测报告      │
+│  改动包 build+test            │      │  结构完备检查 + 运行源零漂移检查    │
 └──────────────────────────────┘      └──────────────────────────────────┘
 ```
 
-设计分工：**工程代码的「红线机器化」落在 web_system**；**数字人行为的「回归评测」权威在 ai-agent-kit 源仓库**（干净上下文 + AGENT_CMD 无头跑），web_system 侧以 `kit-gate.yml` 守住运行时结构不退化 + 强制「改了行为定义必须附报告」。
+设计分工：**工程代码的「红线机器化」落在 web_system**；**数字人行为的「回归评测」权威在 ai-agent-kit 源仓库**（干净上下文 + AGENT_CMD 无头跑）；web_system 侧以 `kit-gate.yml` 守住运行时结构不退化、运行源与能力源零漂移（评测报告不再落地本仓库，见顶部变更日志）。
 
 ## 2. A 部分：机器化红线
 
@@ -143,30 +146,31 @@ done
 
 ### 3.1 分工与存放规则（关键约束）
 
-- **报告存储**：`.codebuddy/agent-kit/` 是同步覆盖区（`sync-to-target.sh` 会 `rm -rf`），**评测报告/本地脚本一律放 `.codebuddy/evals/`**，与 agent-kit 平级、不受同步影响。
-- **完整评测**（L2 路由/L3 陷阱/L4 任务卡，需 AGENT_CMD 无头调 agent + judge）：在 ai-agent-kit 源仓库跑（工具已齐），报告落源 `evals/reports/`。web_system 不重复建设。
-- **web_system 承担**：L1 结构守护 + 评测报告门禁（对运行时 `.codebuddy/skills` 的直接改动）。
+- **能力收敛（2026-09-10）**：数字人能力**唯一来源 = `.codebuddy/agent-kit/`**（ai-agent-kit 仓库 CI 同步）；运行源 `.codebuddy/skills/` = 能力源 `skills/` 全量镜像 + 项目专属 `be-developer`/`fe-developer` + `rd-digital-agent/references/project-context.md`。
+- **完整评测**（L2 路由/L3 陷阱/L4 任务卡，需 AGENT_CMD 无头调 agent + judge）：**全部在 ai-agent-kit 源仓库跑**，报告落源仓库 `evals/reports/`；web_system 不建设报告区（原 `.codebuddy/evals/` 已下线）。
+- **web_system 承担**：S1~S7 结构守护 + 「运行源必须等于能力源镜像」的机器检查（S7）；项目专属白名单见 `scripts/sync-agent-kit.sh`。
 
 ### 3.2 落地物
 
 ```
-.codebuddy/evals/
-├── README.md                # web_system 侧评测手册：什么时候跑、报告放哪、如何引用源仓库工具
-├── reports/TEMPLATE.md      # 复制源 evals/reports/TEMPLATE.md 的评测报告模板
-scripts/redline/check-kit-structure.sh   # L1 结构完备检查（适配 web_system 双 skills 根）
-.github/workflows/kit-gate.yml           # L1' 守护：结构检查 + 报告门禁
+.codebuddy/agent-kit/                    # 唯一能力源（AI 同步自 ai-agent-kit：kits + skills(13) + rules/general + references）
+.codebuddy/skills/                       # 运行源 = 能力源镜像 + be-developer/fe-developer + project-context.md
+scripts/redline/check-kit-structure.sh   # L1 结构完备检查 S1~S7（适配 web_system 双 skills 根）
+scripts/sync-agent-kit.sh                # 能力源 → 运行源同步（默认 dry-run；--apply 写入）
+.github/workflows/kit-gate.yml           # L1' 守护：结构检查 + 零漂移
 ```
 
 ### 3.3 L1 结构检查（`check-kit-structure.sh`，适配 web_system 实际）
 
-web_system 有**两个 skills 根**：运行源 `.codebuddy/skills/`（**12 个**：rd-* + tech-review + user-memory + 项目专属 be/fe-developer + karpathy-* 3 个）与镜像 `.codebuddy/agent-kit/skills/`（11 个，纯通用层）。检查规则（对应 eval-gate.yml 的 S1~S6 但按 web_system 裁剪）：
+web_system 有**两个 skills 根**：**能力源** `.codebuddy/agent-kit/skills/`（**13 个**，纯通用层）与**运行源** `.codebuddy/skills/`（= 能力源 13 个 + 项目专属 `be-developer`/`fe-developer` + `karpathy-*` 3 个符号链接，共 18 项）。检查规则（对应 eval-gate.yml 但按 web_system 裁剪）：
 
-- S1 必需文件齐全：`.codebuddy/agent-kit/AGENT.md`、`references/ai-methodology.md`、`references/eval-framework.md`、`rules/general/01~05` 共 5 条红线齐全
-- S2 无孤儿 skill：两个 skills 根下每个目录都在白名单（运行源 12 个 + 镜像 11 个）
+- S1 必需文件齐全：`.codebuddy/agent-kit/AGENT.md`、`references/ai-methodology.md`、`references/eval-framework.md`、`rules/general/01~05` 共 5 条红线齐全，且运行源 Hub 与 `project-context.md` 就位
+- S2 无孤儿 skill：两个 skills 根下每个目录都在白名单（能力源 13 个 + 运行源 18 项）
 - S3 frontmatter `name:` 与目录名一致（对每个 `*/SKILL.md`）
-- S4 占位残留禁止（镜像 `references/` 与 `rules/` 不允许 `<your-team>/<your-project>`；运行源 skills 内允许项目占位）
+- S4 占位残留禁止（能力源 `references/` 与 `rules/` 不允许 `<your-team>/<your-project>`；运行源 skills 内允许项目占位）
 - S5 决策树引用存在：`rd-digital-agent/SKILL.md` 路由提到的子技能文件须存在
 - S6 红线绑定：AGENT.md 新增红线须在对应 skill 检查清单有执行项（防「只有口号、无执行」）
+- **S7 零漂移**：运行源每个文件须与能力源逐字节一致（例外：`rd-digital-agent/references/project-context.md` 为项目专属，允许定制）
 
 ### 3.4 CI：`.github/workflows/kit-gate.yml`
 
@@ -183,36 +187,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: L1 结构完备检查
+      - name: kit 结构完备检查 (S1~S7)
         run: bash scripts/redline/check-kit-structure.sh
-
-  eval-report-gate:          # 改了行为定义必须附评测报告
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - name: 检查行为改动是否附报告
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          changed=$(git diff --name-only "$BASE_SHA" HEAD -- \
-            .codebuddy/skills/ .codebuddy/agent-kit/AGENT.md \
-            .codebuddy/agent-kit/skills/ .codebuddy/agent-kit/rules/ \
-            .codebuddy/agent-kit/references/ | grep -v '\.codebuddy/agent-kit/README.md' | wc -l | tr -d ' ')
-          report=$(git diff --name-only "$BASE_SHA" HEAD -- .codebuddy/evals/reports/ \
-            | grep -v TEMPLATE | wc -l | tr -d ' ')
-          echo "行为定义变更文件: $changed；新增评测报告: $report"
-          if [ "$changed" -gt 0 ] && [ "$report" -eq 0 ]; then
-            echo "::error::PR 修改了数字人行为定义（.codebuddy/skills 或 agent-kit 规则）但未附评测报告。"
-            echo "请在 ai-agent-kit 源仓库跑 run-eval.sh，把报告复制到 .codebuddy/evals/reports/（模板：TEMPLATE.md）。"
-            echo "纯排版/不影响行为的改动，在 PR 描述注明 skip-eval 并在 commit message 说明。"
-            exit 1
-          fi
-          echo "评测报告门禁通过。"
 ```
 
-> `eval-report-gate` 的"评测报告从哪来"：行为定义改动若发生在镜像区（agent-kit），源头在 ai-agent-kit 仓库，由源仓库的 `eval-gate.yml` 管；运行源 `.codebuddy/skills/` 的直接改动才需本地评测。设计上 kit-gate 只做**存在性守护**，真正的评测动作人执行（无 AGENT_CMD 时跑 `run-baseline.md` 手动档）。
+> 为什么不再有 `eval-report-gate`：数字人能力收敛为「唯一能力源 = `.codebuddy/agent-kit/`」后，通用技能的改动**只能来自上游 ai-agent-kit**（其 PR 由源仓库 `eval-gate.yml` 管评测）；web_system 侧不再接受对通用技能的直接改动——改了就违反 S7 零漂移检查。完整评测（L2~L4）在源仓库跑，本仓库不再设报告区。
 
 ## 4. 根 package.json 聚合脚本（M1 落地即加）
 
@@ -221,9 +200,9 @@ jobs:
   // 现有保留
   "redline:local": "bash scripts/redline/check-commit.sh",        // 本地 staged 扫描（可手动跑）
   "redline:scan": "bash scripts/redline/scan-rules.sh diff origin/master...HEAD", // CI 同款
-  "kit:check": "bash scripts/redline/check-kit-structure.sh",      // kit 结构自检
-  "hooks:install": "bash scripts/redline/install-git-hooks.sh",   // 启用 .githooks
-  "evals:manual": "bash .codebuddy/evals/run-manual.sh"           // （M2）手动评测引导，调用源仓库 run-eval.sh
+  "kit:check": "bash scripts/redline/check-kit-structure.sh",      // kit 结构自检（S1~S7）
+  "sync:kit": "bash scripts/sync-agent-kit.sh",                    // 能力源 → 运行源同步（dry-run；--apply 写入）
+  "hooks:install": "bash scripts/redline/install-git-hooks.sh"    // 启用 .githooks
 }
 ```
 
@@ -243,7 +222,7 @@ jobs:
 
 | # | 任务 | 验收 | 状态 |
 |---|---|---|---|
-| 6 | `.codebuddy/evals/`（README + reports/TEMPLATE.md） | 目录就位，README 写清与源仓库工具关系 | ✅ 已落地（README 说明放 `.codebuddy/evals/` 因 agent-kit 是同步覆盖区） |
+| 6 | ~~`.codebuddy/evals/`（README + reports/TEMPLATE.md）~~ | — | ⛔ **已下线（2026-09-10）**：评测全部回归 ai-agent-kit 源仓库，本仓库不再存报告 |
 | 7 | `scripts/redline/check-kit-structure.sh` + `.github/workflows/kit-gate.yml` | 故意删一个 skill 的 SKILL.md → CI 结构检查失败；改 skills 不附报告 → 门禁拦截 | ✅ 已落地（脚本含 S1~S6；删文件实测 exit 1） |
 | 8 | 子包 `lint` 脚本拆 `lint:ci`，quality-gate 加 lint 档 | 全仓无 `--fix` 的 lint 检查跑绿 | 🟡 lint:ci 已注入 10 包；**lint 档未挂 CI**（被任务 10 阻塞） |
 | 9 | 手动：GitHub master 分支保护 + PR 描述 `skip-eval` 约定写入 CODEBUDDY.md | 无保护分支可绕过的门禁 | 🟡 skip-eval 约定已写入；**分支保护需在 GitHub Settings 手动开** |
@@ -253,11 +232,11 @@ jobs:
 
 ## 6. 注意事项（避免踩坑）
 
-1. **报告/脚本不要放 `.codebuddy/agent-kit/` 内**：同步脚本会 `rm -rf` 覆盖，放 `.codebuddy/evals/`。
+1. **不要手改运行源里的通用技能**：`.codebuddy/agent-kit/` 是同步覆盖区，运行源 `.codebuddy/skills/` 须与其保持镜像（S7 机器检查）；项目专属只允许 `be-developer`/`fe-developer` 与 `rd-digital-agent/references/project-context.md`。
 2. **lint 脚本全带 `--fix`**：不能直接挂 CI，M2 拆 `lint:ci` 之前 CI 只跑 `build`（含 tsc/vue-tsc 已覆盖类型检查）。
 3. **pnpm 版本未锁**：CI 用 `pnpm/action-setup@v4` 时显式写 `version:`（与本地 `pnpm -v` 一致），避免 lockfile 兼容漂移。
 4. **Nest 子包 `build` 可能吞错**（`build-all.sh` 曾 `2>/dev/null || echo skip`）：changed-packages.sh 必须 `set -e`，任何包 build 非零即整体失败——这正是门禁要抓的，不能学 build-all.sh 吞错。
-5. **`kit-gate` 不要照抄 eval-gate.yml 白名单**：源仓库有 14 个 skill，web_system 两个根分别只有 7/11 个，按实际目录生成白名单（M2 任务 7 实施时用 `ls .codebuddy/skills` 动态核对）。
+5. **`kit-gate` 白名单要随能力源走**：能力源 13 个 skill + 项目专属 `be-developer`/`fe-developer`；上游增删技能后同步更新 `check-kit-structure.sh` 的 `KIT_SKILLS`/`RUN_SKILLS`（用 `ls .codebuddy/agent-kit/skills` 核对）。
 6. R5 CORS 检查依赖 grep 模式，有误报可能：只对**新增行**判定 + 标注 `::warning::` 提示人工确认，不作为硬失败（避免阻塞合法 config 读取写法）。
 
 ## 7. 关联文件

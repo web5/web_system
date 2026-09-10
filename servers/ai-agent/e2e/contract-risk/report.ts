@@ -2,8 +2,8 @@
  * 合同翻译官 E2E 评测 · 报告生成。
  *
  * 职责：把 EvalRoundResult 渲染为 Markdown，落盘到
- * .codebuddy/evals/reports/contract-risk/<YYYY-MM-DD>/<roundDir>.md。
- * 模板语义对齐 .codebuddy/evals/reports/TEMPLATE.md 的对比栏 + 回归判定。
+ * e2e/contract-risk/reports/<YYYY-MM-DD>/<roundDir>.md。
+ * 模板语义对齐 ai-agent-kit 源仓库 evals/reports/TEMPLATE.md 的对比栏 + 回归判定。
  *
  * 使用红线安全写法：无 console / 无裸 any / 无占位标记字面。
  */
