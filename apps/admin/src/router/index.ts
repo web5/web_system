@@ -66,6 +66,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模型单价', permission: 'agents:cost:view' },
       },
       {
+        path: 'settings/dicts',
+        name: 'DictManage',
+        component: () => import('@/views/Settings/DictManagePage.vue'),
+        meta: { title: '字典管理', permission: 'system:dict:view' },
+      },
+      {
+        path: 'settings/dicts/:code',
+        name: 'DictEdit',
+        component: () => import('@/views/Settings/DictEditPage.vue'),
+        meta: { title: '字典编辑', permission: 'system:dict:manage' },
+      },
+      {
         path: 'mcp',
         name: 'McpAdmin',
         component: () => import('@/views/McpAdminPanel.vue'),
