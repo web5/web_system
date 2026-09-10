@@ -9,7 +9,7 @@ web_system/
 ├── apps/
 │   ├── admin-web:5174    (Vue3 + Vite + AntdV 4.x + Pinia)
 │   ├── portal:5173       (Vue3 + Vite + AntdV 4.x + Pinia)
-│   └── mini-app          (微信小程序 + TypeScript)
+│   └── mini-contract          (微信小程序 + TypeScript)
 ├── servers/
 │   ├── gateway:3000       (NestJS - API 网关 + Swagger + 静态资源)
 │   ├── auth-service:3001  (NestJS - 认证 + JWT + 微信登录 + 二维码)

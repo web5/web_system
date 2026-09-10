@@ -6,7 +6,7 @@
  * - 非报告（追问文本 / 解析失败）→ 返回 null，调用方据此"不覆盖"既有快照。
  *
  * 鲁棒性：LLM 可能在 JSON 前后混用思考文本、markdown 代码块、标题，甚至输出被截断。
- * 解析策略与 mini-app 侧保持一致：整体 parse → ```json 代码块 → 顶层配对括号扫描 → 截断容错。
+ * 解析策略与 mini-contract 侧保持一致：整体 parse → ```json 代码块 → 顶层配对括号扫描 → 截断容错。
  */
 export interface ContractReportSnapshot {
   scene: string;

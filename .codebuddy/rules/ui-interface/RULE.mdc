@@ -8,7 +8,7 @@ updatedAt: 2026-09-03T00:00:00.000Z
 # UI 界面实现规则（导航 + 动作门）
 
 > 单事实源：先读 `docs/ui/README.md`（读取地图）定位最小文档集，细则在 docs/ui/ 各文档；本规则**不复制数值与细则**（防双份漂移），只规定"触发 + 动作顺序 + 最小禁项"。
-> 适用：deploy-console / admin / mcp-admin / 内部工具端。portal / mini-app 品牌端不适用（DR-5）。
+> 适用：deploy-console / admin / mcp-admin / 内部工具端。portal / mini-contract 品牌端不适用（DR-5）。
 
 ## 动作门（顺序不可跳）
 
