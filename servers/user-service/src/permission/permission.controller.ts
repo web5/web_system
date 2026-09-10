@@ -72,4 +72,19 @@ export class PermissionController {
     const user = (req as any).user;
     return this.svc.getMyPermissions(user);
   }
+
+  /**
+   * 同步权限点（以代码声明为准：`packages/types` 的 PERMISSIONS / ROLE_PERMISSIONS）。
+   *
+   * 用于「加了新权限码但没重启本服务」的场景——后端鉴权读代码常量、前端菜单读 DB，
+   * 不同步就会出现"接口调得通但菜单不出现"。幂等，可重复调用。
+   * 注意：会**全量覆盖内置角色的权限**（自定义角色不受影响）。
+   */
+  @Post('admin/permissions/sync')
+  @RequirePermission('roles:manage')
+  @ApiOperation({ summary: '同步权限点与内置角色权限（幂等；覆盖内置角色）' })
+  async syncPermissions() {
+    const result = await this.svc.seed();
+    return { code: 0, data: result, message: '权限已按代码声明同步' };
+  }
 }

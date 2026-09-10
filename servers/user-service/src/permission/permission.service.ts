@@ -13,6 +13,14 @@ import { PermissionEntity } from './entities/permission.entity';
 import { RoleEntity } from './entities/role.entity';
 import { RolePermissionEntity } from './entities/role-permission.entity';
 
+/** seed 结果（供同步接口回传，便于确认"到底补了什么"） */
+export interface SeedResult {
+  permissionsAdded: number;
+  permissionsUpdated: number;
+  rolesAdded: number;
+  rolePermissionsCovered: number;
+}
+
 /** 新建/编辑角色入参 */
 export interface SaveRolePayload {
   code?: string;
@@ -57,10 +65,22 @@ export class PermissionService implements OnModuleInit {
     await this.seed();
   }
 
-  /** 权限点 + 内置角色 seed（幂等：upsert） */
-  async seed(): Promise<void> {
+  /**
+   * 权限点 + 内置角色 seed（幂等：upsert）。
+   *
+   * 调用时机：① 服务启动（onModuleInit）；② `POST /admin/permissions/sync`
+   * （人工/流水线触发）——后者用于"加了新权限码但没重启本服务"的场景：
+   * 后端各服务鉴权读代码常量、前端菜单读本表，不同步就会出现"接口通但菜单不出现"。
+   */
+  async seed(): Promise<SeedResult> {
+    const result: SeedResult = {
+      permissionsAdded: 0,
+      permissionsUpdated: 0,
+      rolesAdded: 0,
+      rolePermissionsCovered: 0,
+    };
+
     // 1. 权限点 upsert（代码声明为准）
-    let permCount = 0;
     for (const [code, def] of Object.entries(PERMISSIONS)) {
       const exists = await this.permRepo.findOne({ where: { code } });
       if (exists) {
@@ -74,6 +94,7 @@ export class PermissionService implements OnModuleInit {
             grp: def.group,
             type: def.type ?? 'action',
           });
+          result.permissionsUpdated++;
         }
       } else {
         await this.permRepo.save(
@@ -84,12 +105,11 @@ export class PermissionService implements OnModuleInit {
             type: def.type ?? 'action',
           }),
         );
-        permCount++;
+        result.permissionsAdded++;
       }
     }
 
     // 2. 内置角色 + 角色权限（ROLE_PERMISSIONS 为准，全量覆盖）
-    let roleCount = 0;
     for (const [code, perms] of Object.entries(ROLE_PERMISSIONS)) {
       const role = await this.roleRepo.findOne({ where: { code } });
       if (role) {
@@ -105,17 +125,22 @@ export class PermissionService implements OnModuleInit {
             isSystem: true,
           }),
         );
-        roleCount++;
+        result.rolesAdded++;
       }
       await this.rpRepo.delete({ roleCode: code });
       for (const p of perms) {
         await this.rpRepo.save(this.rpRepo.create({ roleCode: code, permissionCode: p }));
+        result.rolePermissionsCovered++;
       }
     }
 
-    if (permCount || roleCount) {
-      this.logger.log(`权限 seed 完成：新增权限点 ${permCount} 个、内置角色 ${roleCount} 个`);
-    }
+    // 缓存必须清：否则同步后 60s 内仍解析到旧权限集合
+    this.permCache.clear();
+    this.logger.log(
+      `权限 seed 完成：新增权限点 ${result.permissionsAdded} 个、更新 ${result.permissionsUpdated} 个、` +
+        `新增角色 ${result.rolesAdded} 个、覆盖角色权限 ${result.rolePermissionsCovered} 条`,
+    );
+    return result;
   }
 
   // ──────────────────────── 权限点查询 ────────────────────────

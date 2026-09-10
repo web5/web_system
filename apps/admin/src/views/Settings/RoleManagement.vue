@@ -5,6 +5,9 @@
   >
     <template #extra>
       <a-button type="primary" @click="openCreate">新建角色</a-button>
+      <a-tooltip title="以代码声明（packages/types）为准同步权限点；会覆盖内置角色权限">
+        <a-button :loading="syncing" @click="confirmSync">同步权限点</a-button>
+      </a-tooltip>
       <a-button :loading="loading" @click="reload">刷新</a-button>
     </template>
   </a-page-header>
@@ -99,17 +102,21 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import {
   listRoles,
   listPermissions,
   createRole as createRoleApi,
   updateRole,
   deleteRole,
+  syncPermissions,
   type RoleItem,
   type PermissionGroup,
 } from '@/api/permissions';
+import { useUserStore } from '@/stores/user';
 
+const userStore = useUserStore();
+const syncing = ref(false);
 const loading = ref(false);
 const permLoading = ref(false);
 const saving = ref(false);
@@ -138,6 +145,35 @@ const GROUP_LABELS: Record<string, string> = {
 
 function groupLabel(g: string): string {
   return GROUP_LABELS[g] || g;
+}
+
+/**
+ * 同步权限点：解决"新权限码只进了代码常量、没进 DB"导致菜单不出现的问题。
+ * 同步后立即刷新自身权限，让新菜单当场出现，不必重登。
+ */
+function confirmSync(): void {
+  Modal.confirm({
+    title: '同步权限点？',
+    content:
+      '将以代码声明（packages/types）为准：补齐新增权限点，并按 ROLE_PERMISSIONS 全量覆盖内置角色（admin / editor / viewer）的权限。自定义角色不受影响。',
+    okText: '确认同步',
+    cancelText: '取消',
+    onOk: async () => {
+      syncing.value = true;
+      try {
+        const r = await syncPermissions();
+        message.success(
+          `同步完成：新增权限点 ${r.permissionsAdded} 个、更新 ${r.permissionsUpdated} 个、覆盖角色权限 ${r.rolePermissionsCovered} 条`,
+        );
+        await userStore.fetchPermissions();
+        await reload();
+      } catch (e) {
+        message.error((e as Error).message || '同步失败');
+      } finally {
+        syncing.value = false;
+      }
+    },
+  });
 }
 function checkedInGroup(group: string): number {
   const g = permissionGroups.value.find((x) => x.group === group);
