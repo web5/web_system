@@ -10,11 +10,6 @@
 ai-agent-kit/
 ├── AGENT.md                    # 智能体常驻指南（始终加载的操作总则）
 ├── README.md                   # 本文件
-├── kits/                       # 一套方法论的三个组成部分
-│   ├── README.md               #   组成索引、单独加载、加载方式
-│   ├── L1-karpathy/            #   行为准则：单次代码产出的纪律（简洁/精准/可验证）
-│   ├── L2-superpowers/         #   执行手段库：TDD/调试/验证/并行分派等工程纪律
-│   └── L3-anthropic/           #   协作主干：编排入口（实体在 skills/rd-digital-agent）
 ├── skills/                     # 工作流引擎（数字人的「怎么干」）
 │   ├── rd-digital-agent/       #   Hub：唯一入口，按复杂度分派到下列子技能
 │   ├── requirement-translation/ #  链首：模糊意图→可验证需求 spec（验收判据/反例/待确认）
@@ -46,7 +41,9 @@ ai-agent-kit/
 │   ├── anthropic-workflow-mapping.md       # Anthropic 工作方法论落点映射（每任务：交付物 + 验证判据先行）
 │   ├── fe-dev-common.md                    # 前端开发通用技能与规则（业界通用能力包）
 │   ├── be-dev-common.md                    # 后端开发通用技能与规则（业界通用能力包）
-│   └── dual-audience-design.md             # 双面读者分层设计（AI 面 / 人面：三层加载 + 归属判据 + 防漂移）
+│   ├── dual-audience-design.md             # 双面读者分层设计（AI 面 / 人面：三层加载 + 归属判据 + 防漂移）
+│   ├── code-discipline.md                  # 产出纪律长版（五条纪律的反例 + 判定方式）
+│   └── methodology-design.md               # 方法论设计论证（一循环 + 三类资产；人面，不加载）
 ├── docs/
 │   └── development.md          #   开发与提交环境（贡献者：工具链 / 凭证 / 本地自检）
 ├── digital-agent-eval/         # 数字人技术产品型评测（定义维验收，独立于 evals/）
@@ -60,31 +57,28 @@ ai-agent-kit/
 │   ├── sync-to-target.sh       # 同步到其他仓库的脚本（目标可配置）
 │   ├── run-eval.sh             # 测评编排（AGENT_CMD 参数化，需被测 agent 无头调用）
 │   ├── check-artifacts.sh      # 产物落盘核对（D1 机器可判定）
-│   ├── check-structure.sh      # 结构检查 S1~S9（本地自检与 CI 的同一份脚本）
-│   ├── gen-report.sh           # 评测报告骨架生成
-│   ├── uninstall-superpowers.sh #  卸载全局 Superpowers 工作流 skill（可回滚）
-│   └── restore-superpowers.sh   #  卸载回滚（按备份清单恢复 symlink）
+│   ├── check-structure.sh      # 结构检查 S1~S8（本地自检与 CI 的同一份脚本）
+│   └── gen-report.sh           # 评测报告骨架生成
 └── .github/workflows/
     ├── sync-to-target.yml      # 推送 master 时自动开 PR 到目标仓库
     └── eval-gate.yml           # PR 门禁：结构检查 + 改 kit 必须附评测报告
 ```
 
-## 方法论的三个组成部分（一条主干 + 两层纪律）
+## 资产模型：一个循环 + 三类资产
 
-AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工程技能集 → Anthropic AI Native 协作方法论）。三者不是三选一，而是**一套方法论的三个组成部分**：
+一套 AI native 工作方式 = **一个循环**（意图 → 判据 V1…Vn → 执行 → 证据 → 人审 → 复盘）+ **三类正交资产**：
 
-| 组成 | 来源 | 回答的问题 | 实体 |
+| 资产 | 来源 | 回答什么 | 载体 |
 |---|---|---|---|
-| `L1-karpathy` 行为准则 | Karpathy | 这一次代码产出怎么写才不跑偏 | `kits/L1-karpathy/` |
-| `L2-superpowers` 执行手段库 | Superpowers | 这个工程动作怎么做得不偷懒 | `kits/L2-superpowers/` |
-| `L3-anthropic` 协作主干 | Anthropic | 整个任务怎么和人协作交付 | `skills/rd-digital-agent`（本仓库主体） |
+| **产出纪律** | Karpathy | 这一笔代码怎么写才不跑偏 | [`AGENT.md`](AGENT.md) §产出纪律 + [`references/code-discipline.md`](references/code-discipline.md) |
+| **工程纪律** | Superpowers | 这个工程动作怎么做才对 | `skills/` 内实体（TDD / 调试 / 完成验证门 / 增量重构 / 并行分派 / worktree / 请审接审） |
+| **协作主干** | Anthropic | 任务怎么组织、判据怎么定、人在哪审 | `skills/rd-digital-agent` + 12 子技能 + `rules/general/01–05` |
 
-结构：`L3 协作主干（阶段 / 判据 V1…Vn / 人审）→ 调用 L2 执行手段库 → 所有代码产出受 L1 行为准则约束`。判据的定义归主干、执行归手段库、可验证性归行为准则，三者分工不重叠。
+结构：`协作主干（阶段 / 判据 V1…Vn / 人审）→ 命中工程纪律 → 所有代码产出受产出纪律约束`。判据的定义归主干、执行归工程纪律、可验证性归产出纪律，三者分工不重叠。
 
-**唯一的是编排权**：`rd-*` 是唯一编排入口；L1/L2 属本套方法论的组成部分，不得禁用。宿主环境若存在第二套编排技能，首选解法是**补齐其模板的「交付物定义 + 验证判据」字段使其与主链同构**，而非整体卸载（风险与解法见设计文档 §三）。
+**唯一的是编排权**：`rd-*` 是唯一编排入口；工程纪律与产出纪律属本套方法论的组成部分，不得禁用。宿主环境若存在第二套编排技能，首选解法是**补齐其模板的「交付物定义 + 验证判据」字段使其与主链同构**，其次同域同名以 `rd-*` 为准。
 
-- 组成索引与单独加载：[`kits/README.md`](kits/README.md)
-- 设计论证、来源映射、风险与消解：[`references/three-kits-architecture.md`](references/three-kits-architecture.md)
+> 设计论证、来源映射、旧→新映射与分期：[`references/methodology-design.md`](references/methodology-design.md)（人面，不进 AI 常驻层）。
 
 ## 核心方法论（每条主张 + 依据 + 落点）
 
@@ -111,11 +105,11 @@ AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工�
 | 删除独立的 `verification-before-completion` 技能，职责收编进 `rd-execute` | ① 与宿主环境同名的另一套 skill 冲突，加载哪份不确定；② 完成验证是执行环节的收尾动作，独立成技能反而可被跳过。收编后成为必经步骤，且对照同一份 V# |
 | 主链唯一 = `rd-*`（编排权唯一） | 双编排入口 = 两个真相源。宿主项目实测：入口改走另一套工作流后，plan 产物的模板无交付物定义与判据字段，验证链被整体架空 |
 | 交付准入项含判据表，缺失即禁止进入实现 | "边写边补判据"等于用结果倒推标准；只有判据先行，它才有资格当 stop condition |
-| 红线机器化（`eval-gate` S1–S7） | 文本约定会退化。改 kit 的 PR 由 CI 强制：判据表 / 完成验证门 / 唯一方法论声明三处条文任一被删除即失败，防止验证链被悄悄摘除 |
+| 红线机器化（`eval-gate` S1–S8） | 文本约定会退化。改 kit 的 PR 由 CI 强制：判据表 / 完成验证门 / 唯一方法论声明三处条文任一被删除即失败，防止验证链被悄悄摘除 |
 | 人审固定三处，不随意增减 | 过多人不堪重负、过少则失控；顺序固定 逻辑 → 合规/红线 → 对照 spec，防止合规问题被逻辑讨论掩盖 |
 | 定义资产分 AI 面与人面，不追求统一写法 | 两类读者失败模式不对称：给 AI 加解释会占常驻上下文并稀释指令，给人只留条款则无人维护。唯一双面同源的内容是判据（V1…Vn），其余按加载层分离 |
 | 红线必须写出判定命令，写不出即未定义清楚 | 「靠自觉的红线不算红线」的文本约定会退化（人读一次、不会读第二次）；写不出判定命令，说明该条要么拆细、要么只是偏好而非红线 |
-| 唯一性限定为「编排权」，第二套技能优先对齐而非卸载 | 冲突面只在「谁能决定任务怎么分阶段」；历史上为排除 4 个编排类技能而整体卸载 20 个，连 TDD/验证/并行分派一起丢掉。现行优先级：补齐判据字段使其与主链同构 → 同域同名以 `rd-*` 为准 → 整体卸载（最后手段）；编排仍只有一个入口、判据仍只有一份 |
+| 唯一性限定为「编排权」 | 冲突面只在「谁能决定任务怎么分阶段」；解法：补齐判据字段使其与主链同构（首选）→ 同域同名以 `rd-*` 为准。编排只有一个入口、判据只有一份 |
 | L2 中被 L3 已收编的技能只写指针不重写 | 同一纪律两个真相源会导致改一处漏一处（本 kit 反复防的退化形态） |
 
 ## 方法来源 · Anthropic 工作方法论引用
@@ -135,7 +129,7 @@ AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工�
 
 **唯一方法论来源**：本 kit 的工作方式只有上表这一套——`rd-*` 流水线 + 验证判据表 V1…Vn + 完成验证门。宿主环境若同时存在同域或同名的其它工作流 skill，一律以本 kit 的 `rd-*` 为准，不以"环境里正好有"为选用理由。
 
-> 脚注：宿主环境若存在第二套「计划 → 执行」类工作流模板，风险是其计划产物不含「交付物定义 + 验证判据先行」，走它会绕过验证链（实测表现为"执行过程中设计时看不到交付验证"）。解法优先级：① 补齐其模板的判据字段使其与主链同构（首选）→ ② 同域同名冲突以 `rd-*` 为准 → ③ 确需清理宿主环境时用 `scripts/uninstall-superpowers.sh`（幂等，可用 `scripts/restore-superpowers.sh` 回滚），代价是工程纪律一并丢失，故为最后手段。详见 `references/three-kits-architecture.md` §三 R1。
+> 脚注：宿主环境若存在第二套「计划 → 执行」类工作流模板，风险是其计划产物不含「交付物定义 + 验证判据先行」，走它会绕过验证链（实测表现为"执行过程中设计时看不到交付验证"）。解法优先级：① 补齐其模板的判据字段使其与主链同构（首选）→ ② 同域同名冲突以 `rd-*` 为准。详见 `references/methodology-design.md` §七。
 
 逐层落点审计（每条主张对应到文件与行、含已知缺口）见 [`references/anthropic-workflow-mapping.md`](references/anthropic-workflow-mapping.md)。
 
@@ -146,8 +140,8 @@ AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工�
 ### 1. 作为智能体知识库加载
 将本仓库根目录整体作为智能体的知识源加载：
 - `AGENT.md` → 系统提示 / 项目入口
-- `kits/L{1,2,3}-*/SKILL.md` → 三个组成部分入口（L1 行为准则 / L2 执行手段库索引 / L3 主干指针）；同目录 `RATIONALE.md` 是人面文档，**不加载**
 - `skills/*/SKILL.md` → 各技能（入口 = `rd-digital-agent`，其余由它分派）；同目录 `RATIONALE.md` 是人面文档，**不加载**
+- `references/code-discipline.md` → 产出纪律长版（反例与判定方式，按需）
 - `rules/general/NN-*.md` → 红线规则（约束 + 判定手段）；同目录 `RATIONALE.md` 是人面文档，**不加载**
 - `references/ai-methodology.md` → 完整参考（可当内部分享大纲）
 - `references/anthropic-workflow-mapping.md` → 每条方法论主张的逐层落点与缺口审计，改 kit 前先看这里
@@ -194,13 +188,13 @@ AI native 最佳实践持续演进（Karpathy 行为纪律 → Superpowers 工�
 
 `.github/workflows/eval-gate.yml` 在 PR 时做两层检查（工具链 / 凭证 / 本地自检见 [`docs/development.md`](docs/development.md)）：
 
-- **结构检查 S1–S9**（本地与 CI 同一份脚本：`bash scripts/check-structure.sh`）：必需文件齐全、无孤儿 skill、frontmatter `name` 与目录名一致、无占位符残留、路由目标存在、红线有执行手段；并强制 `rd-plan` 的**验证判据表**、`rd-execute` 的**完成验证门**、`AGENT.md` 的**唯一方法论来源声明**三处条文存在——任一被删除即 CI 失败（防止验证链被悄悄摘除）。
+- **结构检查 S1–S8**（本地与 CI 同一份脚本：`bash scripts/check-structure.sh`）：必需文件齐全、无孤儿 skill、frontmatter `name` 与目录名一致、无占位符残留、路由目标存在、红线有执行手段；并强制 `rd-plan` 的**验证判据表**、`rd-execute` 的**完成验证门**、`AGENT.md` 的**唯一方法论来源声明**三处条文存在——任一被删除即 CI 失败（防止验证链被悄悄摘除）。
   - **S8 双面一致性**（规范见 `references/dual-audience-design.md`）：S8-1 `SKILL.md` 行数上限（普通 ≤150 / Hub ≤260）+ `version` 字段；S8-2 `RATIONALE.md` 的 `reviewed-at-version` 必须等于 `SKILL.md` 的 `version`（防人面与 AI 面漂移，确不影响可标 `stale: true`）；S8-3 每条红线必须含「判定手段」节；S8-4 `SKILL.md` 出现外部口径引用须指向外置文件（论证属人面，不得占常驻上下文）。
 - **评测报告门禁**：改动 `AGENT.md` / `skills/` / `rules/` / `references/` 必须附评测报告（`evals/reports/`）；若改动不影响智能体行为（纯排版、错别字、纯新增文档），在 **PR 描述**加 `skip-eval` 标签并在 **commit message** 说明理由。
 
 ## 同步到其他仓库（可选）
 
-可将本仓库推送到 `master` 时，自动把 `skills/`、`rules/`、`references/`、`kits/`、`AGENT.md` 拷贝到目标仓库的 `.codebuddy/agent-kit/` 并开 PR（幂等，无变更则跳过）。**支持一次同步到多个目标仓库**；单个目标失败不阻塞其余目标。
+可将本仓库推送到 `master` 时，自动把 `skills/`、`rules/`、`references/`、`AGENT.md` 拷贝到目标仓库的 `.codebuddy/agent-kit/` 并开 PR（幂等，无变更则跳过）。**支持一次同步到多个目标仓库**；单个目标失败不阻塞其余目标。
 
 > 同步分支 `sync/agent-kit` 由脚本独占：每轮都从目标仓库基线重建（与远端同名分支构成「兄弟提交」而非快进），因此重跑时以 `git push --force` 覆盖。**不要在该分支上放手工提交，会被覆盖。**
 
@@ -224,20 +218,22 @@ SYNC_TOKEN=xxx TARGET_REPOS="owner/repo-a,owner/repo-b#main" bash scripts/sync-t
 按融合后的 L1~L5 标尺自评：
 
 - ✅ L1 结构完整：三层结构、13 个 skills、5 条红线（**每条均含判定手段**）、CI 结构检查（`eval-gate.yml` S1–S8）就绪；4 个核心 skill 已外置人面 `RATIONALE.md`
-- ✅ L2/L3/L4 用例集已落盘：路由用例 21 条（`evals/cases/routing.md`）、陷阱用例 6 条（`evals/cases/behavior.md`）、端到端任务卡 6 张 + 五维 RUBRIC（`evals/golden-tasks/`）
+- ✅ L2/L3/L4 用例集已落盘：路由用例 28 条（`evals/cases/routing.md`）、陷阱用例 7 条（`evals/cases/behavior.md`）、端到端任务卡 6 张 + 五维 RUBRIC（`evals/golden-tasks/`）
 - ✅ 运行手册就绪：日常评测（`evals/README.md`）+ 干净基线（`evals/run-baseline.md`，judge 隔离防自评污染）
-- ✅ **首份基线已产出**：`evals/reports/6373b99-2026-09-10.md`（通过率 6/6，均分 13.2；judge 与被测分属独立会话）
+- ✅ **基线已重置**（2026-09-10，资产模型再设计触发换基线）：旧基线 `evals/reports/6373b99-2026-09-10.md`（通过率 6/6，均分 13.2）仅在旧定义下有效；新定义与采集状态见 `evals/reports/baseline-reset-2026-09-10.md`
 - ❌ 待办：① 人工复检 ≥20%（本轮 0%，未达手册要求）② 修任务卡产物命名与技能实际命名不一致（基线最大发现，导致机器落盘率失真至 14%）③ 固定被测模型/温度、每任务 ≥2 次重跑（本轮 1 次，D3/D5 受无人值守限制偏低）④ L5 实战验证需积累真实人审打回率数据 ⑤ 红线示例需按项目实例化
 
 ## 与你的主项目的关系
 
-本模板从某个具体项目抽象而来：保留 workflow 型 skills 与三层结构，剔除工程/业务专属规则，使数字人能力可被任意项目复用。同步机制把本仓库的演进持续回流到目标项目的 `.codebuddy/agent-kit/`，互不覆盖。
+本模板从某个具体项目抽象而来：保留 workflow 型 skills 与资产分层结构，剔除工程/业务专属规则，使数字人能力可被任意项目复用。同步机制把本仓库的演进持续回流到目标项目的 `.codebuddy/agent-kit/`，互不覆盖。
 
 ## 版本演进
 
 | 版本 | 日期 | 变更要点 |
 |---|---|---|
-| v1.5 | 2026-09-10 | **方法论融合为一套**：新增 `kits/`，一套方法论由三部分组成——L1 Karpathy 行为准则 / L2 Superpowers 执行手段库 / L3 Anthropic 协作主干（一条主干 + 两层纪律）；唯一性限定为「编排权」，第二套编排技能优先「补齐判据字段对齐」而非整体卸载；风险与解法见 `references/three-kits-architecture.md` §三 |
+| v1.7 | 2026-09-10 | **再设计为「一循环 + 三类资产」**：废除 `L1/L2/L3` 编号与 `kits/` 三个常驻 kit——产出纪律常驻 `AGENT.md`、工程纪律并入既有技能、来源论证降为人面（`references/methodology-design.md`）；设计论证不再出现在常驻层 |
+| v1.6 | 2026-09-10 | **移除「整体卸载」应急手段**：删除 `scripts/uninstall-superpowers.sh` 及回滚脚本，第二套编排技能的处理优先级收敛为 补齐判据字段 → 同域同名以 `rd-*` 为准 |
+| v1.5 | 2026-09-10 | **方法论融合为一套**：新增 `kits/`，一套方法论由三部分组成——L1 Karpathy 行为准则 / L2 Superpowers 执行手段库 / L3 Anthropic 协作主干（一条主干 + 两层纪律）；唯一性限定为「编排权」，第二套编排技能优先「补齐判据字段对齐」而非整体卸载；风险与解法见 `references/methodology-design.md`（该版结构已由 v1.7 取代） |
 | v1.4 | 2026-09-10 | **双面分层（AI 面 / 人面）**：定义资产分离 AI 常驻面与人面（`RATIONALE.md` 外置按需加载），红线五条补齐「判定手段」节，`eval-gate` 新增 S8 一致性检查；规范见 `references/dual-audience-design.md` |
 | v1.3 | 2026-09-10 | **设计与交付验证同构**：验证判据表 V1…Vn 成为 spec / 计划的收尾章节，交付时按同一编号勾核；删除独立 `verification-before-completion` 技能、职责收编进 `rd-execute`；新增唯一方法论来源声明；`eval-gate` 新增 S7 机器检查 |
 | v1.2 | 2026-09-04 | 六处逃逸口统一挂「分级不压缩交付物 + 验证判据」不变量；非代码任务的判据先行最小形态（验收核点节）固化 |
