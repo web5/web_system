@@ -29,6 +29,7 @@ import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
 import { BUILTIN_TOKENHUB_MODELS, ModelCatalogService } from './model-catalog.service';
+import { DictClientService } from '../dict/dict-client.service';
 import { AgentConversationQueryService } from './agent-conversation-query.service';
 import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
@@ -140,6 +141,7 @@ const runnerProvider: Provider = {
     AgentRunPusher,
     AgentDefSyncService,
     ModelCatalogService,
+    DictClientService,
     PermissionBroker,
     // 合同风险场景特有
     ContractRuleTool,

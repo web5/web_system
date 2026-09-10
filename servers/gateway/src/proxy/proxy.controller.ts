@@ -349,6 +349,16 @@ export class ProxyController {
     return this.proxyService.getUserProxy()(req, res);
   }
 
+  // 字典只读（/api/dict/:code → system-service；登录即可，供小程序/门户渲染业务枚举）
+  @All('dict')
+  proxyDictExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getSystemProxy()(req, res);
+  }
+  @All('dict/:path(*)')
+  proxyDictWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getSystemProxy()(req, res);
+  }
+
   // 精确匹配 /api/admin（无尾斜杠）
   @All('admin')
   proxySystemExact(@Req() req: Request, @Res() res: Response) {
