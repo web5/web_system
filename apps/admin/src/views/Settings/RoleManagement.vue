@@ -12,6 +12,29 @@
     </template>
   </a-page-header>
 
+  <!-- 未同步提示：代码声明与数据库不一致时出现（"接口通但菜单不出现"的根因就是它） -->
+  <a-alert v-if="diff?.hasDiff" type="warning" show-icon class="sync-alert">
+    <template #message>检测到权限点与代码声明不一致（未同步）</template>
+    <template #description>
+      <div v-if="diff.permissionsMissingInDb.length" class="diff-line">
+        代码有、数据库缺失 {{ diff.permissionsMissingInDb.length }} 个：
+        <span class="diff-codes">{{ preview(diff.permissionsMissingInDb) }}</span>
+      </div>
+      <div v-if="diff.permissionsExtraInDb.length" class="diff-line">
+        数据库有、代码已移除 {{ diff.permissionsExtraInDb.length }} 个：
+        <span class="diff-codes">{{ preview(diff.permissionsExtraInDb) }}</span>
+      </div>
+      <div v-for="r in diff.roles" :key="r.code" class="diff-line">
+        内置角色 {{ r.code }}：缺 {{ r.missingInDb.length }} 个、多 {{ r.extraInDb.length }} 个
+      </div>
+    </template>
+    <template #action>
+      <a-button size="small" type="primary" :loading="syncing" @click="confirmSync">
+        立即同步
+      </a-button>
+    </template>
+  </a-alert>
+
   <a-row :gutter="16">
     <!-- 左：角色列表 -->
     <a-col :xs="24" :md="8" :lg="6">
@@ -110,8 +133,10 @@ import {
   updateRole,
   deleteRole,
   syncPermissions,
+  getPermissionDiff,
   type RoleItem,
   type PermissionGroup,
+  type PermissionDiff,
 } from '@/api/permissions';
 import { useUserStore } from '@/stores/user';
 
@@ -123,6 +148,8 @@ const saving = ref(false);
 const roles = ref<RoleItem[]>([]);
 const permissionGroups = ref<PermissionGroup[]>([]);
 const current = ref<RoleItem | null>(null);
+/** 代码声明 vs DB 的差异（hasDiff 时页面顶部提示） */
+const diff = ref<PermissionDiff | null>(null);
 
 /** 当前角色的勾选状态（权限码 → boolean），随 current 切换重建 */
 const checkedSet = reactive<Record<string, boolean>>({});
@@ -175,6 +202,14 @@ function confirmSync(): void {
     },
   });
 }
+/** 差异列表预览：最多列 max 个，其余折叠为「等 N 个」 */
+function preview(list: string[], max = 6): string {
+  if (!list.length) return '—';
+  return list.length <= max
+    ? list.join('、')
+    : `${list.slice(0, max).join('、')} 等 ${list.length} 个`;
+}
+
 function checkedInGroup(group: string): number {
   const g = permissionGroups.value.find((x) => x.group === group);
   if (!g) return 0;
@@ -196,9 +231,15 @@ function resetChecked() {
 async function reload() {
   loading.value = true;
   try {
-    const [r, p] = await Promise.all([listRoles(), listPermissions()]);
+    const [r, p, d] = await Promise.all([
+      listRoles(),
+      listPermissions(),
+      // 差异是"锦上添花"的提示，拉取失败不该让整页报错
+      getPermissionDiff().catch(() => null),
+    ]);
     roles.value = (r || []) as RoleItem[];
     permissionGroups.value = (p || []) as PermissionGroup[];
+    diff.value = d;
     if (current.value) {
       const fresh = roles.value.find((x) => x.code === current.value?.code);
       if (fresh) selectRole(fresh);
@@ -266,6 +307,16 @@ onMounted(reload);
 </script>
 
 <style scoped>
+.sync-alert {
+  margin-bottom: 16px;
+}
+.diff-line {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.diff-codes {
+  font-family: monospace;
+}
 .role-item {
   padding: 10px 12px;
   border-radius: 8px;
