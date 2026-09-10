@@ -34,7 +34,7 @@ version: 1.0.0
   3. 验证：测试保持绿、不变式未破坏
   4. 记录：本轮改了什么、为什么
   ↓
-全部轮次完成 → 全量回归 → verification-before-completion
+全部轮次完成 → 全量回归 → `rd-execute` 的完成验证门
 ```
 
 ## 步骤粒度标准

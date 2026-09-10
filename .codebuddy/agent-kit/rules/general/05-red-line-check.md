@@ -32,3 +32,10 @@ fi
 ### 迁移路径
 
 新红线的落地路径：文档声明 → 纳入 pre-commit → 最终 CI 强制拦截。只停留在第一层的红线视为未完成。
+
+## 判定手段（本条自身的检查点）
+
+- `rules/general/NN-*.md` 每条必须含「判定手段」节，缺节即 CI 失败（`eval-gate.yml` S8-3）。
+- 本 kit 的机器化落点：`.github/workflows/eval-gate.yml`（S1–S8，PR 门禁）；本地复用 `scripts/check-artifacts.sh`。
+
+> 为什么文本红线必然退化：见 [`RATIONALE.md`](RATIONALE.md) §5。
