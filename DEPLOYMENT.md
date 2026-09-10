@@ -153,6 +153,41 @@ pm2 restart all --update-env
 | auth-service 连不上 5432 | 缺少 DB_TYPE 环境变量 | 确保 `.env` 中有 `DB_TYPE=mysql` |
 | PM2 找不到 dist | gateway dist 被误删 | 重新 `npx nest build` 并同步 |
 
+### 6. 数据库迁移（纳入发布流程）
+
+服务的 TypeORM 在 `NODE_ENV=production` 时 **synchronize 关闭**，新表不会自动创建；
+因此**每次升级发布前必须先跑迁移**，否则会出现 `QueryFailedError: Table 'xxx' doesn't exist`、
+服务启动即崩（进程 online 但端口不监听）。
+
+```bash
+# 开发服务器（175.27.189.123）
+./scripts/apply-migrations.sh dev
+
+# 生产服务器（106.52.176.246，DB 在腾讯云内网 172.16.16.10）
+./scripts/apply-migrations.sh prod
+
+# 本机（root 有密码时）
+MYSQL_PWD=<密码> ./scripts/apply-migrations.sh local
+
+# 预演（只打印计划，不落库）
+DRY_RUN=1 ./scripts/apply-migrations.sh dev
+```
+
+要点：
+
+- **幂等**：已应用项记录在目标库 `schema_migrations` 表，重复执行自动跳过；
+  迁移文件本身也均为 `CREATE TABLE IF NOT EXISTS`（双保险）
+- **目标库识别**：迁移文件头 `-- @database <db>` 注解优先（如 `0008_knowledge_tables.sql`
+  → `web_system_knowledge`），否则用默认库 `web_system`
+- **存量库首次接入**：0001 等 ALTER 型历史迁移无法幂等重跑，先基线记账再正常应用：
+  ```bash
+  ./scripts/apply-migrations.sh dev --baseline-through 0006_dict_tables.sql
+  ```
+- **凭据**：dev/prod 复用目标机 `/data/web_system/.env` 的 `DB_*`（密码不进命令行）；
+  本机走 `$SCRIPT_DIR/.env` 或 `MYSQL_PWD` 或 socket+root
+- **新增迁移**：在 `migrations/` 下按 `NNNN_描述.sql` 命名，全部使用
+  `CREATE TABLE IF NOT EXISTS` / 可重复执行语句，提交后即随发布自动应用
+
 ## 二、Nginx 网关服务器 (42.194.200.69)
 
 ### 1. 配置 HTTPS 代理
