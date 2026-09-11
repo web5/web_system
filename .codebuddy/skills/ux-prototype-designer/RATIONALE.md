@@ -3,7 +3,7 @@ reviewed-at-version: 1.1.0
 audience: human
 ---
 
-# ux-prototype-designer 设计理由（人面 · L2）
+# ux-prototype-designer 设计理由（人面）
 
 > 本文件不在 AI 执行路径上：AI 默认不加载，只在判断「能否跳过质检 / 能否直接替用户拍板」时按需跟随。
 > 改 `SKILL.md` 必须 bump `version` 并同步本文件 `reviewed-at-version`，否则 CI 失败（`eval-gate.yml` S8-2）。
