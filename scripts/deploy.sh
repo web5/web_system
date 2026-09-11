@@ -19,7 +19,7 @@
 #   DRY_RUN=1 ./scripts/deploy.sh dev user   # 预览不执行
 #
 # 后端服务：本地 build → tar dist → scp → 解压 → 依赖检查 → pm2 reload
-# 前端模块：RELEASE_TAG=<git short> 构建 → 上传 public/static/modules/<m>/<V>/ → 更新 deploy 表
+# 前端模块：MF_ALLOW_FLAT_BASE=1 RELEASE_TAG=<git short> 构建（历史扁平 base）→ 上传 public/static/modules/<m>/<V>/ → 更新 deploy 表
 # 自建 CDN：本地 build-externals.mjs 生成 → 上传 public/static/cdn/（vue/antd/axios/dayjs 等公共依赖）
 # ============================================================
 set -uo pipefail
@@ -143,7 +143,9 @@ deploy_frontend() { # $1=module_name
       rm -f "/tmp/shell-deploy.tar.gz"
     fi
   else
-    say "cd $ROOT/apps/$mod && RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf"
+    # ⚠️ 本脚本已 DEPRECATED，仍走历史扁平布局（产物落 modules/<mod>/<V>/）：
+    #    显式开逃生舱，否则 vite base 会按新契约（<产品线>/<版本>）拒绝构建。
+    say "cd $ROOT/apps/$mod && MF_ALLOW_FLAT_BASE=1 RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf"
     if [ "$DRY_RUN" != "1" ]; then
       tar czf "/tmp/${mod}-deploy.tar.gz" -C "$ROOT/apps/$mod/dist" .
       scp_to "/tmp/${mod}-deploy.tar.gz"
