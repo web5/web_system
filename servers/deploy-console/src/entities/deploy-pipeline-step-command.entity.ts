@@ -71,6 +71,15 @@ export class DeployPipelineStepCommandEntity {
   @Column({ type: 'boolean', default: true, comment: '是否启用' })
   enabled: boolean;
 
+  /**
+   * 平台托管（`locked=true`）：接口拒写、页面只读，写入只经代码内置脚本同步。
+   *
+   * 语义是"进 DB 真相源、但不允许页面改坏" —— git 拉取属发布语义基线，运维可在库里
+   * 审计/临时调整，但不能从控制台随意编辑（改坏即所有模板的拉码行为一起错）。
+   */
+  @Column({ type: 'boolean', default: false, comment: '平台托管：接口拒写、页面只读' })
+  locked: boolean;
+
   /** 节点级超时（秒）；为空则用流水线全局默认 */
   @Column({ type: 'int', nullable: true, comment: '超时秒数（为空用全局默认）' })
   timeoutSec?: number;

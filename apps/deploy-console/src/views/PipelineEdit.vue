@@ -121,8 +121,9 @@ const selectedNode = computed(() => {
 
 function onNodeClick(key: string) {
   if (justDragged) return
-  if (isPlatformNode(key)) {
-    message.warning('git / 写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
+  // git 是平台托管（locked）但可只读查看；version/pointer 不展示脚本
+  if (isPlatformNode(key) && key !== 'git') {
+    message.warning('写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
     return
   }
   selNodeKey.value = key
@@ -139,6 +140,8 @@ async function loadNodeScript(key: string) {
       actions: row?.actions ?? [],
       enabled: !!row?.enabled,
       timeoutSec: row?.timeoutSec ?? null,
+      // 平台托管（locked）：编辑器据此渲染只读
+      locked: !!(row as { locked?: boolean } | null)?.locked,
     }
   } catch {
     editingItem.value = null
@@ -444,7 +447,27 @@ onMounted(() => { void load() })
         节点命令
         <span v-if="selectedNode" class="muted-text" style="margin-left: 8px;">· 当前：{{ selectedNode.label }}（{{ selectedNode.key }}）</span>
       </template>
-      <div v-if="!selectedNode" class="empty-hint">点击上方任意 script 节点配置其命令；platform 节点不可编辑</div>
+      <!-- platform/git：平台托管脚本（locked），只读查看 -->
+      <template v-if="!selectedNode && selNodeKey === 'git'">
+        <a-alert
+          type="info"
+          show-icon
+          style="margin-bottom: 12px;"
+          message="git · 拉取代码：平台托管（locked）"
+          description="脚本正文随平台代码维护（启动 / 发布时自动同步到数据库），页面仅可查看与语法校验。"
+        />
+        <StageActionsEditor
+          v-if="editingItem"
+          :template-id="tplId"
+          :item="editingItem"
+          :readonly="true"
+          @cancel="editingItem = null"
+        />
+        <a-empty v-else description="读取 流水线 × git 命令中…" />
+      </template>
+      <div v-else-if="!selectedNode" class="empty-hint">
+        点击上方节点：script 可配置命令；git 可查看（平台托管只读）；写版本号不可选
+      </div>
       <template v-else>
         <div class="node-config-row">
           <div class="config-field">

@@ -509,6 +509,8 @@ export interface PipelineStepCommand {
   command: string
   actions?: StageAction[] | null
   enabled: boolean
+  /** 平台托管（locked）：接口拒写、页面只读（如 git） */
+  locked?: boolean
   timeoutSec?: number | null
   updatedBy?: string | null
   updatedAt?: string | null
@@ -524,6 +526,7 @@ export const pipelineStepApi = {
         command: string | null
         actions: StageAction[]
         enabled: boolean
+        locked: boolean
         timeoutSec: number | null
       }[]
     >,
