@@ -20,6 +20,7 @@ import PipelineRunLogs from '@/components/pipeline/PipelineRunLogs.vue'
 import StageCommandDrawer, {
   type StageScriptItem,
 } from '@/components/pipeline/StageCommandDrawer.vue'
+import BranchSelect from '@/components/BranchSelect.vue'
 import StageActionsEditor, {
   type EditorItem,
 } from '@/components/pipeline/StageActionsEditor.vue'
@@ -1261,7 +1262,8 @@ onUnmounted(stopPolling)
         <a-row :gutter="12">
           <a-col :span="12">
             <a-form-item label="分支">
-              <a-input v-model:value="relForm.branch" placeholder="master" />
+              <!-- 分支下拉（origin/*），与发布流水线页/共用抽屉一致；见 BranchSelect 组件头注释 -->
+              <BranchSelect v-model="relForm.branch" :module-key="relForm.moduleKey" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
