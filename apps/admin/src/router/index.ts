@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
-import { ROLE_PERMISSIONS } from '@web-system/types';
 import { useUserStore } from '@/stores/user';
 // Login 静态引入，避免未登录跳转登录页时需等待懒加载 chunk 造成白屏
 import LoginView from '@/views/Login.vue';
@@ -58,12 +57,6 @@ const routes: RouteRecordRaw[] = [
         name: 'RoleManagement',
         component: () => import('@/views/Settings/RoleManagement.vue'),
         meta: { title: '角色权限', permission: 'roles:manage' },
-      },
-      {
-        path: 'settings/models',
-        name: 'ModelPricing',
-        component: () => import('@/views/Settings/ModelPricingPage.vue'),
-        meta: { title: '模型', permission: 'agents:cost:view' },
       },
       {
         path: 'settings/dicts',
@@ -203,11 +196,18 @@ const router = createRouter({
   routes,
 });
 
+/**
+ * 本次页面加载是否已拉取过权限。
+ * 模块级变量：刷新页面即重置，**不能**用持久化的 permissionsReady 代替 ——
+ * 那个标记一旦被写脏（例如某次拉取异常写入了空数组），后续每次加载都不会再拉，
+ * 菜单会一直按空权限渲染成只剩「工作台」。
+ */
+let permissionsFetched = false;
+
 router.beforeEach(async (to, _from, next) => {
   // 从 Pinia store 读取状态，而非裸解析 localStorage JSON
   const userStore = useUserStore();
   const token = userStore.token;
-  const userRoles = userStore.userInfo?.roles || [];
 
   if (to.meta.requiresAuth && (!token || isTokenExpired(token))) {
     next('/login');
@@ -218,23 +218,25 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  // 页面刷新后确保权限已从后端拉取（失败已 fallback 本地常量）
-  if (token && !userStore.permissionsReady) {
+  // 每次页面加载都重新拉取一次权限（模块级标记，刷新即重置）。
+  // 不能只看持久化的 permissionsReady，否则权限一旦被写脏就永久生效：
+  // 表现为菜单塌陷成只剩「工作台」，而守卫（按角色映射）却放行页面，非常迷惑。
+  if (token && !permissionsFetched) {
     try {
       await userStore.fetchPermissions();
     } catch {
       /* fetchPermissions 内部已 fallback，这里仅兜底 */
     }
+    permissionsFetched = true;
   }
 
-  // 权限检查
+  // 权限检查：与侧边栏菜单同源（store.permissions；后端不可用时 store 内部已回退本地角色常量）。
+  // 早期这里用 userInfo.roles 直接映射 ROLE_PERMISSIONS，与菜单判定不同源，
+  // 会出现"菜单看得见、点进去 403"的不一致。
   const perm = to.meta.permission as string | undefined;
-  if (perm) {
-    const allowedPerms = userRoles.flatMap((r: string) => (ROLE_PERMISSIONS as Record<string, string[]>)[r] || []);
-    if (!allowedPerms.includes(perm)) {
-      next('/403');
-      return;
-    }
+  if (perm && !userStore.hasPermission(perm)) {
+    next('/403');
+    return;
   }
   next();
 });
