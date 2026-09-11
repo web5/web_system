@@ -75,7 +75,7 @@ push_key() {
     echo "  [skip] $alias 已免密"
     return
   fi
-  echo "  需要推送公钥到 $host（首次需输入密码）"
+  echo "  需要推送公钥到 ${host}（首次需输入密码）"
   if [ -n "$PASS" ]; then
     ssh-copy-id -i "$PUB" -o StrictHostKeyChecking=accept-new "$host" <<< "$PASS" >/dev/null 2>&1 \
       && echo "  [ok] 公钥已推送" || echo "  [warn] 自动推送失败，请手动: ssh-copy-id -i $PUB $host"

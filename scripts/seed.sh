@@ -52,7 +52,7 @@ case "$ACTION" in
     node "$SCRIPT_DIR/reset-auth-admin-password.mjs"
     ;;
   *)
-    echo "未知操作: $ACTION（支持: admin | deployment | reset-admin-pwd）"
+    echo "未知操作: ${ACTION}（支持: admin | deployment | reset-admin-pwd）"
     exit 1
     ;;
 esac
