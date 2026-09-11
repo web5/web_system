@@ -17,6 +17,7 @@
 | 2026-09-10 | v1.0 | 初版：四层架构、8 个 UI 入口、CLI 入口、走查路线、易混淆点 | AI |
 | 2026-09-10 | v1.1 | 模型清单真相源迁移到 DB 字典：§3.2 增 `ModelCatalogService` 行；§7 增坑 10/11（改 env 不生效、字典里的 hy3 被过滤）；admin 新增「字典管理」页、原「模型单价」页改为「模型」页（可用清单 × 单价聚合） | AI |
 | 2026-09-10 | v1.2 | 权限同步机制落地：§7 坑 2 的处理办法从"重启 `web-user`"改为**优先跑 `scripts/sync-permissions.sh` / 点「同步权限点」按钮**（无需重启）；§8.1 增"新增权限码"触发场景、§8.2 补权限真相与同步命令 | AI |
+| 2026-09-11 | v1.3 | 权限同步自动化：**发布流水线收尾自动同步**（`PIPELINE_PERM_SYNC`，失败不阻断）、同步动作落审计（`operation_logs` → `sync_permission`）、角色权限页顶部差异提示；§7 坑 2 补自动化与提示说明 | AI |
 
 ---
 
@@ -279,11 +280,13 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-contract 才走 `/api/ai-agent/*`。报问题时先分清。
 2. **菜单看不见** —— 100% 是权限。到 `/admin/settings/roles` 补 §0 的权限码；忘记密码 `bash scripts/local-up.sh --seed`（admin / admin123）。
    ⚠️ **新增权限码后菜单仍不出现**：权限是"双读"——后端各服务鉴权读**代码常量**（`ROLE_PERMISSIONS`），前端菜单读 **DB**（`/api/permissions/my`）。而权限点是 `PermissionService.seed()` 在 user-service 启动时才写进 DB 的，所以加了新码只重启后端服务，会出现"接口调得通、菜单不出现"。
-   **处理（按优先级）**：
-   ① 跑 `bash scripts/sync-permissions.sh`（幂等，走内部接口，发布后调用即可）；
+   **处理**：**发布流水线收尾会自动同步一次**（`PIPELINE_PERM_SYNC`，默认开，失败只告警不阻断发布），所以正常走发布流程无需人工干预。若是没走流水线（手工改代码/临时调试），按下面来：
+   ① 跑 `bash scripts/sync-permissions.sh`（幂等，走内部接口）；
    ② 或点 admin「角色权限」页右上角**同步权限点**按钮（同步后立即刷新自身权限，菜单当场出现，不必重登）；
    ③ 或重启 `web-user`。
-   三者等价（都执行 `seed()`，全量覆盖内置角色权限），但只有 ①② 不需要重启服务。
+   ①②③ 等价（都执行 `seed()`，全量覆盖内置角色权限），但只有 ①② 不需要重启服务。
+   **页面会主动提示**：「角色权限」页顶部在代码声明与 DB 不一致时出现黄色告警（缺失/多余权限点 + 内置角色差集），点「立即同步」即可 —— 不用等别人告诉你"菜单没出来"。
+   **审计**：每次同步都会落一条 `sync_permission` 操作日志（operator 为 `pipeline:<提交人>` 或页面用户名），在「操作日志」页可查。
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `.codebuddy/CODEBUDDY.md` §4.1。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
 5. **「数字人」≠ 产品功能** —— `.codebuddy/agent-kit/` 是给 AI 用的开发侧方法论（11 skill + 5 红线），没有前端页面。面向用户的概念统一叫 Agent。
@@ -306,7 +309,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 | 新增/更换 **模型客户端** | §3.1 模型客户端行、§5 环境变量表 |
 | `ai-agent` 增删/改 **HTTP 接口** | §3.2 接口表、§0 速查 |
 | `ai-service` 增删/改 **管理接口** 或权限码 | §3.3 接口表、§0 权限清单 |
-| 新增/改 **权限码**（`packages/types`） | §0 权限清单、§7 坑 2；**并执行 `scripts/sync-permissions.sh` 把权限点同步进 DB**（否则后端放行、前端菜单不出现） |
+| 新增/改 **权限码**（`packages/types`） | §0 权限清单、§7 坑 2；同步交给**发布流水线收尾自动执行**（`PIPELINE_PERM_SYNC`），未走流水线时跑 `scripts/sync-permissions.sh`（否则后端放行、前端菜单不出现） |
 | 新增/改 **数据表或字段** | §3.4 表清单（注意分库） |
 | admin 增删/改 **Agent 页面或路由** | §4 UI 入口表 |
 | 新增 SSE **事件类型** | §3.2 事件类型行 |

@@ -4,7 +4,10 @@
 > `POST /admin/permissions/sync`（roles:manage，页面按钮）、
 > `POST /internal/permissions/sync`（x-internal-key，供脚本/流水线）、
 > `scripts/sync-permissions.sh`、admin「角色权限」页同步按钮（同步后立即刷新自身权限，菜单当场出现）。
-> 未做（待定）：审计日志（§5 问题 2）。
+> **均已落地（2026-09-11）**：审计日志（写 `operation_logs`，类型 `sync_permission`；
+> 由 system-service `POST /internal/logs` 统一汇聚）、发布流水线收尾自动同步
+> （`PIPELINE_PERM_SYNC`，失败只告警不阻断发布）、角色权限页差异只读提示
+> （`GET /admin/permissions/diff`）。
 > 起因：字典模块上线后，admin 侧边栏看不到「字典管理」入口。排查结论——**不是前端产物问题**，
 > 而是新权限码只进了代码常量（后端鉴权用），没进 DB（前端菜单用）。
 
