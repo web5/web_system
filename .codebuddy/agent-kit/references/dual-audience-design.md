@@ -2,7 +2,7 @@
 kind: reference
 audience: dual
 loads: on-demand
-version: 1.0.0
+version: 1.1.0
 source: 本 kit 自演进（第 0 号实例 · 写作习惯团聚）
 ---
 
@@ -62,14 +62,19 @@ source: 本 kit 自演进（第 0 号实例 · 写作习惯团聚）
 ```
 skills/<name>/SKILL.md       # L1 AI 面
 skills/<name>/RATIONALE.md   # L2 人面（可选，存在即受版本同步约束）
-skills/<name>/references/*   # L2，双用按需
+skills/<name>/references/*   # L2，双用按需（模板 / 清单 / 长版说明）
+skills/<name>/scripts/*      # L1，可执行校验脚本（技能自带程序时用）
+skills/<name>/examples/*     # L2，样例产物（示范目标格式，按需）
 ```
 
-frontmatter 扩展字段（向后兼容，缺 `checks`/`loads`/`rationale` 不报错，缺 `version` 报错）：
+> 技能目录下**只允许**这四种载体（`SKILL.md` + `references` / `scripts` / `examples`）；新增资产类型须先在 `check-structure.sh` 登记（S2 附），否则门禁失败。
+
+frontmatter 扩展字段（向后兼容，缺 `checks`/`loads`/`rationale`/`kind` 不报错，缺 `version` 报错）：
 
 ```yaml
 ---
 name: rd-plan
+kind: discipline                 # hub | capability | discipline（缺省 = discipline）
 description: 方案设计 Agent — …触发：就按这个做、细化方案、拆任务。
 version: 1.2.0
 rationale: RATIONALE.md          # 缺省同目录；inline = 显式声明暂无外置人面
@@ -77,6 +82,14 @@ checks: .github/workflows/eval-gate.yml   # 与之绑定的机器检查
 loads: references/thinking-checklist.md   # 按需加载清单，禁止预载
 ---
 ```
+
+`kind` 取值决定 S8-1 的行数上限，须与技能实际形态一致：
+
+| `kind` | 含义 | 上限 | 实例 |
+|---|---|---|---|
+| `hub` | 唯一编排入口（含完整分派决策树） | 260 | `rd-digital-agent` |
+| `capability` | 维护某类持久资产（有状态，正文即流程/操作序列） | 260 | `karpathy-llm-wiki` |
+| `discipline`（缺省） | 约束"这一笔怎么做"的纪律 | 150 | TDD / 调试 / 重构 / 评审 |
 
 新增 / 改名技能的同步清单（缺一即出现孤儿或门禁失败）：
 
@@ -125,13 +138,13 @@ source: <事实来源或推导标记>   # 外部引用标出处；本地推导�
 2. 同目录存在 `RATIONALE.md` → 其 frontmatter `reviewed-at-version` 必须等于 `SKILL.md` 的 `version`；
 3. 不等 → CI 失败（S8-2）。确因改动不影响设计理由而不同步的，须在 `RATIONALE.md` 标 `stale: true` 并写明原因，CI 放行。
 
-行数上限：**普通 skill ≤ 150 行；Hub（`rd-digital-agent`，含完整分派决策树）≤ 260 行**。超出 → 抽 `references/`，不准靠压缩措辞硬塞。
+行数上限按 frontmatter `kind` 取：**`discipline`（缺省）≤ 150 行；`hub` / `capability` ≤ 260 行**。超出 → 抽 `references/`，不准靠压缩措辞硬塞。
 
 ## 八、机器检查 S8（`eval-gate.yml`）
 
 | 编号 | 检查项 | 判定 |
 |---|---|---|
-| S8-1 | `SKILL.md` 行数 ≤ 上限，且 frontmatter 含 `version` | 行数、`grep` |
+| S8-1 | `SKILL.md` 行数 ≤ 该技能 `kind` 对应上限，frontmatter 含 `version`，且 `kind` 取值合法 | 行数、`grep` |
 | S8-2 | 存在 `RATIONALE.md` 时，其 `reviewed-at-version` == `SKILL.md` 的 `version`（或标 `stale: true`） | 比对 |
 | S8-3 | `rules/general/NN-*.md` 每条必须含「判定手段」节 | `grep` |
 | S8-4 | `SKILL.md` 正文禁出现说服性标记（「Anthropic 认为」「依据是」等）在指令行内 | `grep` 白名单排除引用区 |
