@@ -4,6 +4,20 @@ import { AgentRegistry, AgentDefinition, CapabilityRef, SkillRef, ToolRegistry, 
 import { McpService } from '../mcp/mcp.service';
 
 /**
+ * 需要 collectionId 入参的 knowledge 工具（按集合操作 → 必须显式绑定集合）。
+ *
+ * 其余 knowledge 工具（knowledge_list / knowledge_status）是**集合无关**的：
+ * 它们的可见性取决于「该 agent 是否绑定了至少一个集合」，而不是它自己带 collectionId
+ * （开放决策 7 = C 的原意：不绑定任何集合的 agent 无知识工具可调）。
+ * 早期实现对本集合外的工具也强制要求 config.collectionId，导致 knowledge_list 被跳过注册。
+ */
+export const KNOWLEDGE_COLLECTION_SCOPED_TOOLS = new Set([
+  'knowledge_search',
+  'knowledge_ingest',
+  'knowledge_delete',
+]);
+
+/**
  * Agent 定义同步器（一期）
  *
  * 从 ai-service `GET /internal/agent-definitions` 拉取 published 且 enabled 的定义，
@@ -141,13 +155,14 @@ export class AgentDefSyncService {
     if (!this.mcpService.isAvailable()) return;
     const mcpCaps = (def.capabilities ?? []).filter((c) => c.type === 'mcp' && c.enabled !== false);
 
-    // 知识集合绑定（开放决策 7 = C）：knowledge 工具调用时 collectionId 必须 ∈ 本定义
-    // capabilities 里显式绑定的集合集（config.collectionId）。缺 collectionId 的 knowledge
-    // 能力视为装配错误 → 跳过注册（宁可明确错误，不静默放行全部集合）。
+    // 知识集合绑定（开放决策 7 = C）：按集合操作的知识工具（search/ingest/delete）调用时
+    // collectionId 必须 ∈ 本定义 capabilities 里显式绑定的集合集（config.collectionId）。
+    // 缺 collectionId 的**按集合操作**能力视为装配错误 → 跳过注册（宁可明确错误，不静默放行全部集合）。
     const boundCollectionsByTool = new Map<string, string[]>();
     for (const cap of mcpCaps) {
       const [module, tool] = cap.ref.split('/');
       if (module !== 'knowledge' || !tool) continue;
+      if (!KNOWLEDGE_COLLECTION_SCOPED_TOOLS.has(tool)) continue;
       const raw = (cap.config ?? {}) as { collectionId?: unknown };
       if (typeof raw.collectionId !== 'string' || !raw.collectionId) {
         this.logger.warn(`knowledge 能力缺少 config.collectionId，跳过注册: ${cap.ref}`);
@@ -157,10 +172,22 @@ export class AgentDefSyncService {
       arr.push(raw.collectionId);
       boundCollectionsByTool.set(tool, arr);
     }
+    // 是否绑定了至少一个集合 —— 集合无关的知识工具（knowledge_list/status）的注册前提
+    const hasKnowledgeBinding = boundCollectionsByTool.size > 0;
 
     for (const cap of mcpCaps) {
       const [module, tool] = cap.ref.split('/');
       if (!module || !tool) continue;
+      if (module === 'knowledge') {
+        const scoped = KNOWLEDGE_COLLECTION_SCOPED_TOOLS.has(tool);
+        // 按集合操作但未绑定集合（收集阶段已 WARN）：不注册，避免"注册了却必然被拒"
+        if (scoped && !boundCollectionsByTool.has(tool)) continue;
+        // 集合无关的知识工具：agent 未绑定任何集合则不注册（决策 7 = C：无绑定即无知识工具）
+        if (!scoped && !hasKnowledgeBinding) {
+          this.logger.warn(`agent 未绑定任何知识集合，跳过注册集合无关知识工具: ${cap.ref}`);
+          continue;
+        }
+      }
       if (this.toolRegistry.has(tool)) continue;
       const meta: McpToolMeta = {
         name: tool,

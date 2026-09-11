@@ -154,8 +154,7 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   // 数据库浏览
   'database:view':  { code: 'database:view',  name: '查看业务数据', group: 'database', type: 'menu' },
   'database:query': { code: 'database:query', name: '执行只读 SQL', group: 'database' },
-  // Agent 平台二期（Phase2/3）：观测成本 / 评测 / 知识
-  'agents:cost:view': { code: 'agents:cost:view', name: '查看成本与模型单价', group: 'agents' },
+  // Agent 平台二期（Phase2/3）：评测 / 知识（成本与模型单价已于 2026-09-11 下线，改由字典 llm_models 维护）
   'agents:eval':      { code: 'agents:eval',      name: 'Agent 评测与发布门禁', group: 'agents' },
   'knowledge:view':   { code: 'knowledge:view',   name: '查看知识集合', group: 'knowledge', type: 'menu' },
   'knowledge:manage': { code: 'knowledge:manage', name: '管理知识集合', group: 'knowledge' },

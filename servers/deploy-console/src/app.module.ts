@@ -53,6 +53,28 @@ import { ReleaseHookModule } from './hook/release-hook.module';
       rootPath:
         process.env.SERVE_ROOT ||
         join(__dirname, '..', '..', '..', 'apps', 'deploy-console', 'dist'),
+      /**
+       * ⚠️ 必须收窄回退范围：默认 '*' 会把「缺失的静态资源」也回退成 index.html 并返回 **200 + text/html**。
+       * 浏览器对 <script type="module"> 做严格 MIME 校验，拿到 HTML 会直接拒执行且报错含糊
+       * → 表现为懒加载路由白屏、控制台无有效线索（部署后旧标签页请求已下线的 chunk 时必然踩到）。
+       * 收窄为「无扩展名的路径」才回退：前端路由（/pipelines/123）仍由 SPA 接管，
+       * 而 assets/xxx.js、favicon.svg 这类带扩展名的缺失资源如实返回 404。
+       * gateway 侧同类问题已按同一规则修过（servers/gateway/src/static/static.module.ts）。
+       */
+      renderPath: /^\/[^.]*$/,
+      serveStaticOptions: {
+        index: ['index.html'],
+        setHeaders: (res, filePath) => {
+          if (isContentAddressed(filePath)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else {
+            // index.html / favicon 等：每次校验，保证部署后能立刻拿到新的 hash 资源路径
+            res.setHeader('Cache-Control', 'no-cache');
+          }
+        },
+        etag: true,
+        lastModified: true,
+      },
       exclude: ['/api/(.*)'],
     }),
     // 业务模块
@@ -84,3 +106,14 @@ import { ReleaseHookModule } from './hook/release-hook.module';
   ],
 })
 export class AppModule {}
+
+/**
+ * 是否内容寻址（内容变化 → 路径变化）→ 可以强缓存。
+ * 覆盖：Vite 产物 assets/*，以及文件名里带 8 位以上 hash 的静态资源。
+ * （与 gateway 的同名判定保持一致，见 servers/gateway/src/static/static.module.ts）
+ */
+export function isContentAddressed(filePath: string): boolean {
+  const p = String(filePath).replace(/\\/g, '/');
+  if (/\/(dist\/)?assets\//.test(p)) return true;
+  return /\.[A-Za-z0-9_-]{8,}\.(js|mjs|css|woff2?|ttf|eot|png|jpe?g|svg|webp|gif|ico)$/i.test(p);
+}

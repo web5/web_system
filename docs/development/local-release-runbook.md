@@ -21,8 +21,10 @@
 | upload-service | 6008 | `web-upload` | 流水线 |
 | ai-agent | 6010 | `web-ai-agent` | 流水线 |
 | deploy-console | 6200 | `web-deploy-console` | **传统发布** |
+| knowledge-service | 6011 | `web-knowledge` | 手工（未登记 `scripts/modules.json`） |
 | 前端 admin / portal | 经 gateway 6000 | — | 流水线（微前端） |
 
+- **服务清单唯一事实源 = 仓库根 `ecosystem.config.cjs`**：未登记的服务（`web-knowledge` 曾长期如此）在全量重启时会漏管 → 变成孤儿进程（§4.6）
 - 每个 pm2 进程 `cwd` = 发布目录对应 `servers/<dir>`，dotenv 按 cwd 加载**发布目录的 `.env`**（真相源）
 - 前端产物：`servers/gateway/public/static/modules/<key>/<version>/`，gateway manifest 切指针
 - 控制台：`https://local.kedouai.com/console/`（nginx → 6200；直连 `http://127.0.0.1:6200/console/`）
@@ -150,11 +152,44 @@ dest="servers/gateway/public/static/modules/$MODULE_KEY/$COMMIT_ID"
 - **shell 基座 html = `servers/gateway/public/shell/index.html`**（本地构建产物，gitignore 未跟踪）。发布目录丢它时 `/admin/` 返回 `index.html not found for shell`（IndexHtmlService.render catch 文案）——与模块版本无关（回滚也无效）。恢复：从工作区 `cp -R servers/gateway/public/shell` 补齐发布目录，无需重启。
 - 改 alias 后 `sudo ~/local/nginx/sbin/nginx -t && -s reload`；reload 需 sudo 密码（后台无法执行，需人工）。
 
+### 4.6 孤儿进程（多实例）—— 「改了不生效」的头号根源（2026-09-11 亲历）
+
+**现象**：`pm2 restart`/发布后行为不变；`pm2 list` 显示 online，但**实际占端口的进程不是 pm2 记录的那个 pid**（进程由 pm2 God 收养、已不在 pm2 进程表里）。
+
+**识别**（对比「端口持有者」与「pm2 管辖 pid」，不一致即中招）：
+```bash
+PIDS=$(pm2 jlist | python3 -c "import sys,json;print(' '.join(str(p['pid']) for p in json.load(sys.stdin)))")
+for p in 6000 6101 6002 6003 6004 6005 6006 6007 6008 6010 6011 6200; do
+  h=$(lsof -ti tcp:$p 2>/dev/null | head -1)
+  [ -n "$h" ] && case " $PIDS " in *" $h "*) ;; *) echo "!! $p 由孤儿进程 $h 服务（非 pm2 管辖）";; esac
+done
+```
+
+**清理**（只杀不在 pm2 列表里的 release 进程，pm2 管辖的一律保留）：
+```bash
+PIDS=$(pm2 jlist | python3 -c "import sys,json;print(' '.join(str(p['pid']) for p in json.load(sys.stdin)))")
+for x in $(ps -eo pid,command | grep "web_system_release/servers/" | grep "dist/main.js" | grep -v grep | awk '{print $1}'); do
+  case " $PIDS " in *" $x "*) echo "保留(pm2) $x";; *) kill -9 $x && echo "已杀 $x";; esac
+done
+# 然后逐服务干净重建（§4.3：delete + start，不用 restart/--update-env）
+pm2 delete web-xxx && pm2 start ecosystem.config.cjs --only web-xxx
+pm2 save
+```
+
+- ⚠️ `pm2 start ecosystem.config.cjs --only a --only b ...` **不生效**（`--only` 只认一个值，多余参数被忽略且静默失败）→ 逐个 start。
+- ⚠️ 清理后**未重启的服务不会自动重新监听**（它们此前一直处于"online 但不 listen"状态），必须逐个 `delete + start`。
+- 2026-09-11 实测：本机曾盘 **84 个** release node 进程（pm2 只管 12 个，最老的活到 9/9），其中 7 个服务的端口由孤儿进程服务；清理后 84 → 12，端口归属 12/12 对齐，`pm2 list` 重启计数全部归零。
+
+**防复发**：① 新服务先在 `ecosystem.config.cjs` 登记；② 重启一律 `delete + start`（不用 `restart --update-env`，见 §4.3）；③ 发版/重启后跑一次本节「识别」脚本。
+
 ## 五、验证清单
 
 ```bash
 # 端口健康（200/404 均正常，404=路由未匹配但服务在线）
-for p in 6000 6101 6002 6003 6004 6005 6006 6007 6008 6010 6200; do curl -s -o /dev/null -w "$p:%{http_code} " http://127.0.0.1:$p/; done; echo
+for p in 6000 6101 6002 6003 6004 6005 6006 6007 6008 6010 6011 6200; do curl -s -o /dev/null -w "$p:%{http_code} " http://127.0.0.1:$p/; done; echo
+# 端口归属校验：端口持有者必须 == pm2 记录的 pid，不等 = 孤儿进程在服务（§4.6）
+pm2 jlist | python3 -c "import sys,json;print(' '.join(str(p['pid']) for p in json.load(sys.stdin)))"
+lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(6000|6101|6002|6003|6004|6005|6006|6007|6008|6010|6011|6200)'
 # 前端 manifest
 curl -s http://127.0.0.1:6000/__manifest__   # 期望 admin/portal → 当前 commit
 # 产物可访问
@@ -172,3 +207,4 @@ curl -s -o /dev/null -w "%{http_code}" https://local.kedouai.com/console/pipelin
 | deploy-console 走传统发布 | 发布工具自身，流水线 restart 会自杀式中断 |
 | 其他模块走流水线 | 七阶段固化：pull/build/upload/restart/version/pointer/verify/cleanup |
 | Hook 机制 | 各模块各阶段可自定义 shell，规避删除审批 + 满足定制构建 |
+| 服务清单唯一事实源 = `ecosystem.config.cjs` | 未登记的服务必成孤儿（全量重启漏管）；重启一律 `delete + start`，验收看「端口持有者 == pm2 pid」而非仅看 `pm2 list` 的 online |

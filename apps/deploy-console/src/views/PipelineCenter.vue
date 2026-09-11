@@ -12,6 +12,7 @@ import {
   type PipelineTemplate,
 } from '@/api'
 import dayjs from 'dayjs'
+import BranchSelect from '@/components/BranchSelect.vue'
 
 const router = useRouter()
 
@@ -926,7 +927,8 @@ onUnmounted(stopPolling)
         <a-row :gutter="12">
           <a-col :span="12">
             <a-form-item label="分支">
-              <a-input v-model:value="form.branch" placeholder="master" />
+              <!-- 分支下拉（origin/*），避免手输写错；见 BranchSelect 组件头注释 -->
+              <BranchSelect v-model="form.branch" :module-key="form.moduleKey" />
             </a-form-item>
           </a-col>
           <a-col :span="12">

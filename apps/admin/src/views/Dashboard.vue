@@ -95,6 +95,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { useThemeStore } from '@/stores/theme';
+import { getUserList } from '@/api/user';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
@@ -140,21 +141,28 @@ const userChartOption = computed(() => {
 
 onMounted(async () => {
   try {
-    const [usersRes] = await Promise.all([
-      fetch('/api/users?limit=1').then(r => r.json()).catch(() => ({ total: 128 })),
-    ]);
-    stats.value.totalUsers = usersRes.total || 128;
-    stats.value.activeToday = 45;
-    stats.value.logs = 328;
-    stats.value.logsToday = 12;
-    recentLogs.value = [
-      { time: '2026-06-14 00:30', action: '管理员登录' },
-      { time: '2026-06-13 23:45', action: '更新系统设置：站点名称' },
-      { time: '2026-06-13 22:10', action: '创建新用户 teacher01' },
-      { time: '2026-06-13 21:00', action: '修改安全策略配置' },
-      { time: '2026-06-13 18:30', action: '查看用户列表' },
-    ];
-  } catch { /* use mock data */ }
+    // 走模块统一的 request 实例（自动带 Authorization、自动 unwrap {code,data}）。
+    // 原先用原生 fetch('/api/users?limit=1')：既不带 token（必然 401，user-service 日志
+    // 报 Authorization header missing），又读的是未 unwrap 的 body（total 恒为 undefined），
+    // 还被 .catch 吞成假数据 128 —— 等于把"接口挂了"伪装成"有数据"。
+    const usersRes = await getUserList({ page: 1, limit: 1 });
+    stats.value.totalUsers = Number(usersRes?.total ?? 0);
+  } catch (e) {
+    // 失败就如实显示 0 并打日志，不再用假数据顶替（否则接口故障会被悄悄掩盖）
+    console.error('[dashboard] 拉取用户总数失败:', e);
+    stats.value.totalUsers = 0;
+  }
+  // 以下统计项暂无后端接口，保留占位值（新增接口后应替换为真实数据）
+  stats.value.activeToday = 45;
+  stats.value.logs = 328;
+  stats.value.logsToday = 12;
+  recentLogs.value = [
+    { time: '2026-06-14 00:30', action: '管理员登录' },
+    { time: '2026-06-13 23:45', action: '更新系统设置：站点名称' },
+    { time: '2026-06-13 22:10', action: '创建新用户 teacher01' },
+    { time: '2026-06-13 21:00', action: '修改安全策略配置' },
+    { time: '2026-06-13 18:30', action: '查看用户列表' },
+  ];
 });
 </script>
 
