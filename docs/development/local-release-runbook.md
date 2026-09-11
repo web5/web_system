@@ -6,7 +6,7 @@
 
 ## 一、服务运行拓扑
 
-发布目录：`{{RELEASE_DIR}}`（git 分支跟随发布目标，日常为 `feature/*` 或 `master`）
+发布目录：`{{RELEASE_DIR}}`（**工程约定日常驻留 `feature/test`**；发布时由流水线 pull 阶段 `git checkout -B <branch> origin/<branch>` 临时切到目标分支，发布结束后可切回。prod 发布强制 master 分支）
 
 | 服务 | 端口 | pm2 名 | 发布方式 |
 |---|---|---|---|
