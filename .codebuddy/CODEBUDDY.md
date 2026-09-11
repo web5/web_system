@@ -175,7 +175,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 ## 3 开发规则与数字人技能体系（agent-kit）
 
 > 本节把 `.codebuddy/agent-kit` 数字人定义**整体加载进工程**。它不是一个文件，而是「指南 → 技能/SOP → 红线」三层体系。
-> **唯一能力源 = `.codebuddy/agent-kit/`**（ai-agent-kit 仓库 CI 同步而来，v1.5「一条主干 + 两层纪律」融合版）；IDE 真正加载的**运行源**是 `.codebuddy/skills/`，其内容 = `agent-kit/skills` 全量镜像 + 项目专属 `be-developer`/`fe-developer` + 项目上下文文件。
+> **唯一能力源 = `.codebuddy/agent-kit/`**（ai-agent-kit 仓库 CI 同步而来，现为 v1.8「一循环 + 三类资产 + 一类能力」）；IDE 真正加载的**运行源**是 `.codebuddy/skills/`，其内容 = `agent-kit/skills` 全量镜像 + 项目专属 `be-developer`/`fe-developer` + 项目上下文文件。
 > 两者一致性由 `scripts/redline/check-kit-structure.sh` S7 机器守护；同步用 `scripts/sync-agent-kit.sh --apply`。元仓库/方法论全文：`.codebuddy/agent-kit/README.md`。
 
 ### 3.1 AI 协作范式（怎么和 AI 一起工作）
@@ -230,7 +230,9 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | `code-explore` | 代码库探索（索引优先/影响面分析） |
 | `user-memory` | 用户偏好与项目上下文记忆 |
 | `be-developer` / `fe-developer` | **项目专属**：后端服务/接口/数据；admin 系前端页面/UI |
-| `karpathy-coding-*` | 行为编码准则（本机 `~/.codebuddy/skills/` 符号链接：不过度设计/外科手术式改动/先立验证标准） |
+| `karpathy-llm-wiki` | **资产维护型能力**：`raw/`（不可变源）→ `wiki/`（编译结论）知识库的建与维护（Ingest / Query / Lint）；**协议来自能力源，数据落本项目** |
+
+> 原 `karpathy-coding-guidelines` / `karpathy-coding-rules-dami` 两个本机符号链接技能**已退役**（2026-09-11）：其内容早已并入能力源的 `AGENT.md` §产出纪律 + `references/code-discipline.md`，保留即构成同一纪律的多重真相源。
 
 > ⚠️ 技能名带「触发词」（description），任务描述命中即自动加载。
 > 项目上下文（结构/端口/技术栈/品牌常量/硬约束）唯一落点：`.codebuddy/skills/rd-digital-agent/references/project-context.md`。
@@ -285,7 +287,7 @@ grep -r 'console\.' servers/*/src       # 无 console.log 残留
 ### 3.7 技能/规则挂载关系（防混淆）
 
 ```
-.codebuddy/agent-kit/   ← 唯一能力源（通用方法论，AI 同步自 ai-agent-kit：kits + skills(13) + rules/general + references）
+.codebuddy/agent-kit/   ← 唯一能力源（通用方法论，AI 同步自 ai-agent-kit：skills(14) + rules/general + references）
 .codebuddy/skills/      ← 运行源（IDE 实际加载）= 能力源 skills 全量镜像 + be-developer/fe-developer + project-context.md
 .codebuddy/rules/       ← 机器触发层（mdc 规则：ui-interface → docs/ui）
 .codebuddy/references/  ← coding-best-practices.md（工程铁律完整版）
