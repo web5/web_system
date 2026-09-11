@@ -172,8 +172,9 @@ cd apps/<app> && npx vite          # dev server（admin 端口 5174 被占用时
 ### 5.3 微前端模块发布（开发态快速验证）
 
 ```bash
-RELEASE_TAG=$(git rev-parse --short HEAD) npx vite build --mode mf   # 在 apps/<module> 下
-rsync -a --delete apps/<module>/dist/ servers/gateway/public/static/modules/<module>/<commit>/
+V=$(git rev-parse --short HEAD)                     # 在 apps/<module> 下
+RELEASE_TAG=default/$V npx vite build --mode mf     # 产品线段（default）必须带：缺了 base 少一层、public 资源 404
+rsync -a --delete apps/<module>/dist/ servers/gateway/public/static/modules/<module>/default/$V/
 # gateway versionCache TTL 10s 过期后生效（无需重启 gateway）
 ```
 
