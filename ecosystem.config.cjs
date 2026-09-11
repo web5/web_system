@@ -13,6 +13,9 @@
 //   端口表与 docs/development/local-release-runbook.md 对齐：
 //   gateway 6000 / auth 6101 / user 6002 / ai-service 6003 / ai-agent 6010 / system 6004
 //   todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / deploy-console 6200
+//   knowledge 6011（2026-09-11 补登记：此前为手工 pm2 start，全量重启会漏管）
+// ⚠️ 不在本清单中的服务 = 下一个孤儿进程：所有服务必须在此登记，重启一律走
+//   `pm2 delete <name> && pm2 start ecosystem.config.cjs --only <name>`。
 module.exports = {
   apps: [
     { name: 'web-gateway',        cwd: __dirname + '/servers/gateway',        script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6000 } },
@@ -26,5 +29,6 @@ module.exports = {
     { name: 'web-content-hub',    cwd: __dirname + '/servers/content-hub',    script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6007 } },
     { name: 'web-upload',         cwd: __dirname + '/servers/upload-service', script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6008 } },
     { name: 'web-deploy-console', cwd: __dirname + '/servers/deploy-console', script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6200 } },
+    { name: 'web-knowledge',      cwd: __dirname + '/servers/knowledge-service', script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6011 } },
   ],
 };
