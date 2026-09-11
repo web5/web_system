@@ -50,6 +50,8 @@ cd ~/web_system_release && node scripts/watch-integration.mjs --force    # 无�
 | 同步方式 | `git reset --hard origin/feature/test`；**工作区脏则跳过**（不覆盖人工改动，下轮重试） |
 | 发布方式 | 经 deploy-console 流水线逐个模块发布（`env=local`，`branch=feature/test`） |
 | 发布顺序 | 后端服务 → 前端/微前端 → **deploy-console 最后** |
+| 跳过模块 | 默认 `finnews,mini-contract`（本地必失败：前者仓库无目录、后者 build 是上传微信平台）；`--skip-modules a,b` 覆盖 |
+| deploy-console 特例 | 它**不走流水线**，而是跑 `scripts/publish-deploy-console.sh --skip-sync` —— 走流水线会在 restart 阶段 `pm2 restart web-deploy-console` 把执行流水线的进程杀掉，导致流水线永远停在 running 并占住发布锁 |
 | 失败处理 | 单模块失败/超时（20 分钟）只告警，继续后面的模块，最后汇总成功数 |
 | 重复保护 | 发布期间不重复触发；watcher 重启后从状态文件继续 |
 
@@ -81,6 +83,7 @@ pm2 delete web-release-watcher              # 停掉自动发布
 | `--dry-run` | — | 只打印计划，不执行 |
 | `--once` / `--force` | — | 检查一次 / 无视状态立刻全量发一次 |
 | `--no-follow-master` | — | 关闭"自动把 master 合进集成分支"（默认开启） |
+| `--skip-modules` | `finnews,mini-contract` | 本地不参与自动发布的模块（逗号分隔） |
 
 前置条件（缺失会直接报错退出）：
 
