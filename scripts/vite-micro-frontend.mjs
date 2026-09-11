@@ -22,6 +22,67 @@ const DEFAULT_EXTERNALS = {
 };
 
 /**
+ * 产物 base 的第二段：产品线（= 发布模板 key）。平台默认模板 key 为 `default`，
+ * 版本目录布局为 `/static/modules/<name>/<产品线>/<版本>/`。
+ */
+const DEFAULT_PRODUCT_SEGMENT = 'default';
+
+/** base 路径段的合法字符（禁空格/引号/`..` 等，避免拼进 URL 与远端部署路径） */
+const TAG_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * 解析 `RELEASE_TAG` → 产物 base。
+ *
+ * 契约：`<产品线>/<版本>`（流水线注入的是 `<templateKey>/<commit>`，如 `default/4caf272`）。
+ *
+ * 为什么「缺产品线段」直接报错而不是兜底一个默认值：
+ *   历史缺陷——只传纯 commit（`RELEASE_TAG=4caf272`）时，base 会少一层产品线段：
+ *   产物请求 `/static/modules/admin/4caf272/logo.svg`，而它实际部署在
+ *   `/static/modules/admin/default/4caf272/` —— 于是 logo.svg / favicon.svg / avatars/*
+ *   等 public 资源全部 404，且**构建期没有任何提示**（产物照常生成、页面照常能开）。
+ *   这类「静默产出坏产物」的代价远高于构建失败，故此处 fail-fast。
+ *
+ * 逃生舱：确需历史扁平 base（`/static/modules/<name>/<版本>/`）时显式设
+ *   `MF_ALLOW_FLAT_BASE=1`，此时按单段拼 base 并打印告警（仅用于兼容旧发布链路）。
+ */
+export function resolveMfBase(name, rawTag = process.env.RELEASE_TAG) {
+  const tag = String(rawTag ?? '').trim();
+  if (!tag) {
+    throw new Error(
+      `[mf] 缺少 RELEASE_TAG：产物 base 需要 /static/modules/${name}/<产品线>/<版本>/。\n` +
+        `     本地构建示例：RELEASE_TAG=${DEFAULT_PRODUCT_SEGMENT}/$(git rev-parse --short HEAD) MF_FORMAT=system npx vite build --mode mf\n` +
+        `     走发布流水线时由平台注入 <templateKey>/<commit>，无需手工传。`,
+    );
+  }
+
+  const segments = tag.split('/').filter((s) => s.length > 0);
+  for (const seg of segments) {
+    if (!TAG_SEGMENT_RE.test(seg)) {
+      throw new Error(`[mf] RELEASE_TAG 段 "${seg}" 含非法字符（仅允许字母/数字/. _ -）：${tag}`);
+    }
+  }
+  if (segments.length > 2) {
+    throw new Error(
+      `[mf] RELEASE_TAG 最多两段（<产品线>/<版本>），当前收到 ${segments.length} 段：${tag}`,
+    );
+  }
+  if (segments.length === 1) {
+    if (process.env.MF_ALLOW_FLAT_BASE !== '1') {
+      throw new Error(
+        `[mf] RELEASE_TAG "${tag}" 缺少产品线段，应为 "${DEFAULT_PRODUCT_SEGMENT}/${tag}"。\n` +
+          `     缺段会让 base 少一层，产物内 public 资源（logo.svg/favicon.svg/avatars 等）会静默 404。\n` +
+          `     确需历史扁平 base 时显式设 MF_ALLOW_FLAT_BASE=1。`,
+      );
+    }
+    console.warn(
+      `[mf] MF_ALLOW_FLAT_BASE=1：RELEASE_TAG="${tag}" 未带产品线段，按扁平 base 构建（历史兼容，勿用于新发布）`,
+    );
+  }
+
+  return `/static/modules/${name}/${segments.join('/')}/`;
+}
+
+/**
  * 生成微前端模块的 vite 配置。
  * 调用方在 vite.config.ts 里：
  *   export default defineConfig(({ mode }) => mode === 'mf' ? microFrontendConfig({ name: 'portal' }) : standaloneConfig)
@@ -35,9 +96,8 @@ export function microFrontendConfig(opts) {
   const externals = { ...DEFAULT_EXTERNALS, ...(opts.externals || {}) };
   // 模块名中的连字符转下划线，作为 UMD 全局变量名后缀
   const globalName = `__modules_${name.replace(/[-/]/g, '_')}`;
-  // 版本号由构建脚本通过 RELEASE_TAG 注入，作为 base 前缀的一部分
-  const version = process.env.RELEASE_TAG || 'dev';
-  const publicBase = `/static/modules/${name}/${version}/`;
+  // 产物 base（含产品线段）由 RELEASE_TAG 决定，校验规则见 resolveMfBase
+  const publicBase = resolveMfBase(name);
 
   return defineConfig({
     base: publicBase,
