@@ -13,7 +13,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { STATIC_MODULES_REL, parseReleaseRef } from './release-paths';
+import { STATIC_MODULES_REL, parseReleaseRef, toCommitId } from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -378,9 +378,13 @@ export class PipelineService {
     if (dto.branch && !safeBranchRe.test(dto.branch)) {
       throw new BadRequestException(`分支名含非法字符: ${dto.branch}`);
     }
-    const targetCommit = dto.commitId ?? dto.versionTag;
+    // 入参可能是**完整版本引用**（`default/<commit>`）——控制台「Commit」下拉取自版本列表，
+    // 值就是完整引用；而本接口按纯 commit 设计（白名单不含 `/`）。
+    // 故统一归一化为纯 commit（契约见 release-paths.toCommitId），避免「目标 commit 含非法字符」400。
+    const rawCommit = dto.commitId ?? dto.versionTag;
+    const targetCommit = toCommitId(rawCommit);
     if (targetCommit && !/^[A-Za-z0-9._-]{4,64}$/.test(targetCommit)) {
-      throw new BadRequestException(`目标 commit 含非法字符: ${targetCommit}`);
+      throw new BadRequestException(`目标 commit 含非法字符: ${rawCommit}`);
     }
     if (mode === 'grayscale' && !dto.grayscaleRule) {
       throw new BadRequestException('灰度发布必须提供 grayscaleRule');
@@ -426,10 +430,10 @@ export class PipelineService {
       id,
       env: dto.env,
       moduleKey: dto.moduleKey,
-      // commitId 与旧参数名 versionTag 等价
-      versionTag: dto.commitId ?? dto.versionTag,
+      // commitId 与旧参数名 versionTag 等价（已归一化为纯 commit）
+      versionTag: targetCommit,
       // 入参快照：versionTag 会被拉码结果覆盖，断言需要这份原始值
-      requestedCommit: dto.commitId ?? dto.versionTag,
+      requestedCommit: targetCommit,
       // 分支缺省 master：v5 下 git 是**首个节点**，check 阶段来不及兜底，
       // 若这里留空会把 undefined 拼进 git 命令（历史 check 在前时才靠它兜底）
       gitBranch: dto.branch || 'master',
@@ -468,7 +472,7 @@ export class PipelineService {
         moduleKey: dto.moduleKey,
         mode,
         gitBranch: dto.branch || undefined,
-        commitId: dto.commitId ?? dto.versionTag,
+        commitId: targetCommit,
         operator: operator || 'unknown',
       });
       await this.auditService.log({
@@ -483,7 +487,7 @@ export class PipelineService {
         event: 'deploy.pending-approval',
         env: dto.env,
         moduleKey: dto.moduleKey,
-        versionTag: dto.commitId ?? dto.versionTag,
+        versionTag: targetCommit,
         status: 'warn',
         detail: `${operator || 'unknown'} 提交发布待审批（模板「${tpl.name}」，审批单 ${approval.id}）`,
         operator: operator || 'unknown',

@@ -679,7 +679,8 @@ const relForm = ref({
   commitId: undefined as string | undefined,
   mode: 'direct' as 'direct' | 'grayscale',
 })
-const releases = ref<{ versionTag: string; note?: string }[]>([])
+/** 可发布版本候选：versionTag=完整引用（展示用），commit=纯短哈希（提交用） */
+const releases = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
 async function loadEnvironments() {
   try {
     environments.value = await environmentApi.list()
@@ -1266,7 +1267,7 @@ onUnmounted(stopPolling)
           <a-col :span="12">
             <a-form-item label="Commit（留空=最新）">
               <a-select v-model:value="relForm.commitId" allow-clear placeholder="留空=分支最新提交">
-                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.versionTag">
+                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
                   {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
                 </a-select-option>
               </a-select>
