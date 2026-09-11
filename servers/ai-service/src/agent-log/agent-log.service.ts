@@ -2,9 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, MoreThanOrEqual, LessThanOrEqual, Between } from 'typeorm';
 import { AgentRun } from './entities/agent-run.entity';
-import { ModelPricing } from './entities/model-pricing.entity';
 import { RunMetrics } from './entities/run-metrics.entity';
-import { ModelPricingCatalog, calcCost } from './model-pricing.catalog';
+import { DictPricingProvider } from './dict-pricing.provider';
 
 export interface RecordRunInput {
   agentId: string;
@@ -62,12 +61,9 @@ export class AgentLogService {
   constructor(
     @InjectRepository(AgentRun)
     private readonly repo: Repository<AgentRun>,
-    @InjectRepository(ModelPricing)
-    private readonly pricingRepo: Repository<ModelPricing>,
     @InjectRepository(RunMetrics)
     private readonly metricsRepo: Repository<RunMetrics>,
-    // 单价真相源：字典 llm_models（2026-09-11 由 model_pricing 表迁入）
-    private readonly priceCatalog: ModelPricingCatalog,
+    private readonly dictPricing: DictPricingProvider,
   ) {}
 
   /** 写入一次 run（失败不抛错，run 记录是辅助功能，不能影响主链路） */
@@ -75,7 +71,7 @@ export class AgentLogService {
     try {
       // Phase2.3/2.4：从 steps 提取 usage、按单价核算成本，并同步增量日指标
       const usage = this.extractUsage(input.steps);
-      const cost = await this.computeCost(input.model ?? '', usage.prompt, usage.completion);
+      const cost = this.computeCost(input.model ?? '', usage.prompt, usage.completion);
       const row = this.repo.create({
         agentId: input.agentId,
         agentName: input.agentName ?? null,
@@ -220,30 +216,13 @@ export class AgentLogService {
   }
 
   /**
-   * 按单价核算成本（CNY；无价按 0，不发明数值）。
-   *
-   * 价格真相源是字典 `llm_models` 的价格字段（2026-09-11 由旧表 `model_pricing` 迁入）。
-   * `PRICE_SOURCE` 三档（见 `model-pricing.catalog.ts`）：
-   * - `dict`（默认）：字典命中即用；未命中回落旧表（迁移期不断档）；
-   * - `dict-only`：未命中直接按 0，不查旧表；
-   * - `legacy`：完全走旧表（回退开关，行为与改造前一致）。
+   * 按字典 `llm_models` 维护的单价核算成本（CNY；未定价按 0，不发明数值）。
+   * 单价由 DictPricingProvider 定时同步进内存，这里只做一次 Map 查询（热路径不做 HTTP）。
    */
-  private async computeCost(model: string, prompt: number, completion: number): Promise<number> {
-    if (!model) return 0;
-    try {
-      if (this.priceCatalog.source !== 'legacy') {
-        const p = this.priceCatalog.get(model);
-        if (p) return calcCost(p, prompt, completion);
-        if (!this.priceCatalog.allowLegacyFallback) return 0;
-      }
-      const legacy = await this.pricingRepo.findOne({ where: { model } });
-      if (!legacy) return 0;
-      const inPrice = Number(legacy.inputPricePer1k || 0);
-      const outPrice = Number(legacy.outputPricePer1k || 0);
-      return (prompt * inPrice + completion * outPrice) / 1000;
-    } catch {
-      return 0;
-    }
+  private computeCost(model: string, prompt: number, completion: number): number {
+    const price = this.dictPricing.getPrice(model);
+    if (!price) return 0;
+    return (prompt * price.inPrice + completion * price.outPrice) / 1000;
   }
 
   /** 增量聚合当日指标（agentId+model+source+date 行；run 记录即更新，供观测台趋势） */

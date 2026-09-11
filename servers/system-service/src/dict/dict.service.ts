@@ -43,18 +43,19 @@ const BUILTIN_DICTS: readonly BuiltinDict[] = [
   {
     code: 'llm_models',
     name: '大模型清单',
-    description: 'AI Agent 可用模型。value = 网关 model id（如 hy4-preview），label = 页面展示名',
+    description: 'AI Agent 可用模型 + 单价（元/1K tokens）。单价用于 run 成本核算，未填按 0 计',
     sort: 10,
     fields: [
       { name: 'provider', label: '提供方', type: 'enum', required: true, defaultValue: 'tokenhub', options: ['tokenhub', 'hy3', 'other'], sort: 10 },
       { name: 'context_window', label: '上下文窗口(token)', type: 'number', length: 12, sort: 20 },
       { name: 'supports_vision', label: '支持视觉', type: 'boolean', sort: 30 },
       { name: 'note', label: '备注', type: 'text', length: 200, sort: 40 },
-      // 价格字段：2026-09-11 由旧表 model_pricing 迁入（该表随之退役，见 specs/llm-models-unify/design.md）。
-      // 口径沿用旧表「每 1K tokens」；**非必填** —— 允许"模型可用但未配价"（成本记 0，页面提示补配）。
-      { name: 'input_price_per1k', label: '输入价/1K', type: 'number', length: 8, sort: 50 },
-      { name: 'output_price_per1k', label: '输出价/1K', type: 'number', length: 8, sort: 60 },
-      { name: 'currency', label: '币种', type: 'enum', defaultValue: 'CNY', options: ['CNY', 'USD'], sort: 70 },
+      // 价格字段：2026-09-11 由旧表 model_pricing 迁入（该表随之退役留档，见 specs/llm-models-unify/design.md）。
+      // 口径沿用旧表「每 1K tokens」；**非必填** —— 允许「模型可用但未配价」（成本记 0，页面提示补配）。
+      // ⚠️ 字段定义（label/length/defaultValue）与已上线环境 dict_fields 保持一致，避免代码与库漂移。
+      { name: 'input_price_per1k', label: '输入价（元/1K）', type: 'number', length: 12, sort: 50 },
+      { name: 'output_price_per1k', label: '输出价（元/1K）', type: 'number', length: 12, sort: 60 },
+      { name: 'currency', label: '币种', type: 'string', length: 8, defaultValue: 'CNY', sort: 70 },
     ],
   },
   {
@@ -134,7 +135,7 @@ export class DictService implements OnModuleInit {
     await this.ensureBuiltin();
   }
 
-  /** 补齐内置字典结构与字段（幂等；字段仅在字典「还没有任何字段」时补齐，避免覆盖人工改动） */
+  /** 补齐内置字典结构与字段（幂等；字段按「逐个补缺」同步，已存在的一律不动） */
   async ensureBuiltin(): Promise<void> {
     for (const d of BUILTIN_DICTS) {
       let type = await this.typeRepo.findOne({ where: { code: d.code } });
@@ -147,6 +148,8 @@ export class DictService implements OnModuleInit {
         type.builtin = true;
         await this.typeRepo.save(type);
       }
+      // 字段按「逐个补缺」同步：缺哪个补哪个，已存在的字段一律不动（保护人工改动）。
+      // 旧规则是"该字典一个字段都没有时才补"，导致给内置字典新增字段后存量环境永远补不上。
       await this.ensureFields(d.code, d.fields);
 
       // 初始数据：仅在该字典一条 item 都没有时插入一次（不覆盖人工改动）

@@ -321,9 +321,12 @@ onMounted(async () => {
       </div>
     </a-card>
 
-    <!-- 前端 / 后台 tab -->
+    <!-- 前端 / 后台 tab
+         作为「卡片内的一行工具栏」呈现（小号 tabs + 底部细分隔线），与 ServiceManager /
+         CanaryCenter 等页面一致；此前 tabs 裸放在卡片 body 里，tab 栏像"野孩子"一样漂浮、
+         与下方内容缺少分隔 -->
     <a-card v-if="moduleInfo" :loading="dataLoading">
-      <a-tabs v-model:active-key="activeTab">
+      <a-tabs v-model:active-key="activeTab" size="small" class="md-tabbar">
         <!-- 后台 tab -->
         <a-tab-pane v-if="showBackendTab" key="backend" tab="后台">
           <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
@@ -513,3 +516,19 @@ onMounted(async () => {
     />
   </div>
 </template>
+
+<style scoped>
+/* 卡片内工具栏式 tabs（与 ServiceManager 的「卡片内一行工具栏」约定一致）：
+   - 小号尺寸，降低 tab 栏的视觉重量
+   - 去掉 antd 默认的 nav 下边距，改为一条细分隔线，避免 tab 栏"漂浮"、与内容无分隔
+   - 用 :deep() 穿透到 antd 生成的内部结构（scoped 样式默认到不了） */
+.md-tabbar {
+  margin-bottom: 16px;
+}
+.md-tabbar :deep(.ant-tabs-nav) {
+  margin-bottom: 0;
+}
+.md-tabbar :deep(.ant-tabs-nav::before) {
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+</style>

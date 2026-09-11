@@ -27,8 +27,17 @@ export class AuthGuard implements CanActivate {
     private readonly configService: ConfigService,
     private readonly reflector: Reflector,
   ) {
-    // 真实端口为 6101（见各服务 .env），勿沿用部分服务代码里遗留的 6001
-    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6101');
+    // auth-service 地址，由各环境通过 AUTH_SERVICE_URL 显式指定。端口约定：
+    //   - 本地：6101（本机 6001 被其它项目占用，见 servers/auth-service/.env）
+    //   - dev/prod：6001（见 ecosystem.config.js 与 .env.production.example）
+    // 此处默认值仅作兜底，与 user-service / ai-service / todo-service 的守卫保持一致。
+    //
+    // ⚠️ 必须把「空字符串」视为未配置：pm2 / 环境变量可能注入空串，
+    //    而 configService.get(key, default) 只在 key 未定义时才用 default，
+    //    拿到空串会执行 fetch('') 直接失败，最终被误报成 401「认证服务不可用」
+    //    （2026-09-11 dev 环境事故：字典管理 / 数据浏览等页面全量 401）。
+    const configured = (this.configService.get<string>('AUTH_SERVICE_URL') || '').trim();
+    this.authServiceUrl = (configured || 'http://127.0.0.1:6001').replace(/\/+$/, '');
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
