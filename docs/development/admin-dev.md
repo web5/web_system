@@ -132,12 +132,13 @@ $HOME/local/nginx/sbin/nginx -t
 # ===== 第 1 步：构建微前端产物（新版本号 = git short hash）=====
 cd apps/<module>                            # 如 apps/admin 或 apps/portal
 V=$(git -C ../.. rev-parse --short HEAD)    # 或手动指定，如 8f3a1c2
-RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
+P=default                                   # 产品线段（= 发布模板 key）；RELEASE_TAG 与部署路径必须一致
+RELEASE_TAG=$P/$V MF_FORMAT=system npx vite build --mode mf
 # 产物输出到 apps/<module>/dist/（index.js / index.css / 各路由 chunk）
 
 # ===== 第 2 步：拷贝到 gateway 静态目录（nginx 直出位置）=====
-mkdir -p ../gateway/public/static/modules/<module>/$V
-cp -r dist/* ../gateway/public/static/modules/<module>/$V/
+mkdir -p ../gateway/public/static/modules/<module>/$P/$V
+cp -r dist/* ../gateway/public/static/modules/<module>/$P/$V/
 
 # ===== 第 3 步：更新数据库版本表（关键！在 web_system_deploy 库）=====
 # ⚠️ 版本表在 web_system_deploy 库，不是 web_system 库！
@@ -149,8 +150,8 @@ const mysql = require('mysql2/promise');
 (async () => {
   const c = await mysql.createConnection({ host: '127.0.0.1', port: 3306, user: 'root', password: '<DB密码>', database: 'web_system_deploy' });
   const [rows] = await c.execute('SELECT * FROM deploy_deployments WHERE env_id=? AND module_key=?', ['dev', '<module>']);
-  if (rows.length) await c.execute('UPDATE deploy_deployments SET current_version=?, status=?, deployed_at=NOW() WHERE env_id=? AND module_key=? ORDER BY deployed_at DESC LIMIT 1', ['<V>', 'deployed', 'dev', '<module>']);
-  else await c.execute('INSERT INTO deploy_deployments (id, env_id, module_key, current_version, status, deployed_at) VALUES (UUID(), ?, ?, ?, ?, NOW())', ['dev', '<module>', '<V>', 'deployed']);
+  if (rows.length) await c.execute('UPDATE deploy_deployments SET current_version=?, status=?, deployed_at=NOW() WHERE env_id=? AND module_key=? ORDER BY deployed_at DESC LIMIT 1', ['<P>/<V>', 'deployed', 'dev', '<module>']);
+  else await c.execute('INSERT INTO deploy_deployments (id, env_id, module_key, current_version, status, deployed_at) VALUES (UUID(), ?, ?, ?, ?, NOW())', ['dev', '<module>', '<P>/<V>', 'deployed']);
   await c.end(); console.log('版本表更新完成');
 })();
 EOF
@@ -158,14 +159,15 @@ node .tmp-deploy.cjs && rm -f .tmp-deploy.cjs
 
 # ===== 第 4 步：验证 + 清缓存 =====
 sleep 12   # gateway 有 TTL 10s 版本缓存，先等它失效
-curl -s http://localhost:6000/__manifest__          # 看 <module> 的 version 是否变成 <V>
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:6000/static/modules/<module>/<V>/index.js   # 应为 200
+curl -s http://localhost:6000/__manifest__          # 看 <module> 的 version 是否变成 <P>/<V>
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:6000/static/modules/<module>/<P>/<V>/index.js   # 应为 200
 # 若 manifest 仍是旧版本：重启 gateway 清内存缓存 → pm2 restart web-gateway
 ```
 
 **要点 / 踩坑记录**：
 - **版本表在 `web_system_deploy` 库**（gateway 独立数据源 `deploy`），写错库（如写进 `web_system`）manifest 不会变，这是最容易踩的坑。
 - `RELEASE_TAG` 必须是**新值**（不能复用旧 hash），否则产物覆盖旧目录、entry 不变，浏览器缓存可能拉到旧的。
+- `RELEASE_TAG` 必须带**产品线段**（`<产品线>/<版本>`，即 `default/<hash>`）：缺段会让产物 base 少一层，产物内 public 资源（logo.svg / favicon.svg / avatars 等）静默 404 —— 现已由 `scripts/vite-micro-frontend.mjs` 的 `resolveMfBase` 在构建期拦截（确需扁平 base 才设 `MF_ALLOW_FLAT_BASE=1`）。
 - 模块 JS/CSS 由 nginx `/static/modules/` 直出（带 hash 强缓存 1 年）；版本目录名一变，manifest 的 entry 变，浏览器即拉新版，无需清浏览器缓存。
 - **gateway TTL 10s 版本缓存**：改完表后最多 10s manifest 自动刷新；若 12s 后仍旧，`pm2 restart web-gateway` 清内存缓存兜底。
 - **DB 密码**：本地 MySQL `root/{{LOCAL_DB_PASSWORD}}`（见各服务 `.env`）。生产走 deploy-console 正常发布流程，勿手改。

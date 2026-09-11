@@ -40,6 +40,10 @@ async function main() {
   }
   const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const version = commit;
+  // 产物 base 必须含产品线段（平台默认模板 key = default）：/static/modules/<key>/<产品线>/<版本>/
+  // 契约与校验见 scripts/vite-micro-frontend.mjs resolveMfBase：
+  // 只传纯 commit 会让 base 少一层，产物内 public 资源（logo.svg / favicon.svg / avatars 等）静默 404。
+  const releaseTag = `default/${commit}`;
   const buildTime = new Date().toISOString();
   log(`版本: ${version} (branch=${branch})`);
 
@@ -51,7 +55,7 @@ async function main() {
   execSync(buildCmd, {
     cwd: appDir,
     stdio: 'inherit',
-    env: { ...process.env, RELEASE_TAG: version },
+    env: { ...process.env, RELEASE_TAG: releaseTag },
   });
 
   // 4. 写 manifest.json

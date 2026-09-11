@@ -97,6 +97,7 @@ cd apps/portal && npx vite --port 5173  # http://127.0.0.1:5173/portal/
 - `docs/development/admin-dev.md` — admin 微前端详细开发（依赖/路由/nginx 集成/微前端发布四步/提 PR）
 - `docs/development/agent-capability-playbook.md` — **Agent 能力体验手册**（四层架构/8 个 UI 入口/权限码/推荐走查路线/维护约定）— 动手体验或回归验证 Agent 先看这篇
 - `docs/development/whistle-local-dev.md` — whistle 本地代理
+- `docs/development/cross-tool-agent-context-design.md` — **跨工具 Agent 上下文装配设计**（`AGENTS.md` 单一真相源 + Claude Code/Codex/Cursor 适配层；**设计方案，待评审，尚未实施**）
 
 ---
 
@@ -329,14 +330,15 @@ grep -r 'console\.' servers/*/src       # 无 console.log 残留
 ```bash
 cd apps/admin            # <module> 同理换 portal
 V=$(git -C ../.. rev-parse --short HEAD)
-RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
-mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
+P=default                # 产品线段（= 发布模板 key）；RELEASE_TAG 与部署路径必须一致，缺段会让 base 少一层
+RELEASE_TAG=$P/$V MF_FORMAT=system npx vite build --mode mf
+mkdir -p ../gateway/public/static/modules/admin/$P/$V && cp -r dist/* ../gateway/public/static/modules/admin/$P/$V/
 # ⚠️ 版本表在 web_system_deploy.deploy_deployments（不是 web_system 库！）
-#    UPDATE web_system_deploy.deploy_deployments SET current_version='$V', status='deployed', deployed_at=NOW()
+#    UPDATE web_system_deploy.deploy_deployments SET current_version='$P/$V', status='deployed', deployed_at=NOW()
 #    WHERE env_id='dev' AND module_key='admin';
 sleep 12                                   # gateway TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway
-curl -s localhost:6000/__manifest__        # 确认 admin version=$V
-curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
+curl -s localhost:6000/__manifest__        # 确认 admin version=$P/$V
+curl -s localhost:6000/static/modules/admin/$P/$V/index.js   # 确认 200
 ```
 > 两个最易踩坑：① 版本表在 **web_system_deploy** 库；② gateway 有 **TTL 10s 缓存**（要等待或重启 gateway）。
 
@@ -419,7 +421,7 @@ curl -s localhost:6000/static/modules/admin/$V/index.js   # 确认 200
 
 | 分册 | 内容 |
 |---|---|
-| `docs/development/` | 开发流程/启动/发布手册/admin-dev/CI 门禁/local-dev-setup |
+| `docs/development/` | 开发流程/启动/发布手册/admin-dev/CI 门禁/local-dev-setup/跨工具 Agent 装配设计 |
 | `docs/architecture/` | 技术架构/微前端/网关/MCP 鉴权/发布系统/Agent DB 设计 |
 | `docs/ui/` | UI 规范**单事实源**（README 地图/design/color/规格书模板/原型/评审记录） |
 | `docs/products/` | 产品设计素材 |

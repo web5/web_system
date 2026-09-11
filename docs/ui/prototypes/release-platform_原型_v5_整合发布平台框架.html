@@ -910,7 +910,7 @@ var NODES=[
   code:'set -euo pipefail\ncd "${RELEASE_DIR}" && pnpm install --frozen-lockfile'},
  {id:'build',name:'构建',mode:'script',plat:false,optional:false,watchdog:false,
   desc:'产物构建（vite build）；产物目录不存在即 fail-fast',
-  code:'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'},
+  code:'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'},
  {id:'version',name:'写版本号',mode:'platform',plat:true,sub:'version',desc:'平台内置：写 deploy_versions（发布语义真相源）',code:''},
  {id:'pointer',name:'切指针',mode:'platform',plat:true,sub:'pointer',desc:'平台内置：upsert deploy_deployments.current_version',code:''},
  {id:'verify',name:'探活',mode:'script',plat:false,optional:false,watchdog:true,
@@ -929,7 +929,7 @@ var EXTRA_ACTS={
   build:[
     {id:'a1',type:'shell',name:'安装依赖',timeout:300,cont:true,code:'pnpm install --frozen-lockfile'},
     {id:'a2',type:'shell',name:'vite 构建',timeout:600,cont:false,
-     code:'RELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'}
+     code:'RELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'}
   ],
   verify:[{id:'a1',type:'service',name:'manifest 断言（内置工具）',tool:'manifest-assert',builtin:true,timeout:60}],
   notify:[{id:'a1',type:'shell',name:'通知 hook',timeout:20,code:'echo "发布完成 ${COMMIT_ID}"'}]
@@ -959,7 +959,7 @@ var RUNS=[
  {id:'r-1016',pname:'ai-agent',module:'ai-agent',mt:'backend',env:'local',ver:'45b5a30',branch:'feature/contract-risk-ai',status:'success',dur:'47s',by:'mcp:deploy',time:'08:05'}
 ];
 var ST={running:['primary','运行中'],success:['ok','成功'],failed:['danger','失败'],cancelled:['gray','已取消']};
-var VARS=['MODULE_KEY','MODULE_TYPE','MODULE_DIR','RELEASE_DIR','COMMIT_ID','BRANCH','DEPLOY_ENV','PORT','PM2_NAME','PUBLIC_PATH','ARTIFACT_DIR','BUILD_OUTPUT_DIR','ENTRY_FILE','GATEWAY_URL','GATEWAY_TTL_SEC','KEEP_VERSIONS','PROTECTED_VERSIONS','WS_RESULT_FILE','WS_SAFE_DELETE'];
+var VARS=['MODULE_KEY','MODULE_TYPE','MODULE_DIR','RELEASE_DIR','COMMIT_ID','TPL_KEY','BRANCH','DEPLOY_ENV','PORT','PM2_NAME','PUBLIC_PATH','ARTIFACT_DIR','BUILD_OUTPUT_DIR','ENTRY_FILE','GATEWAY_URL','GATEWAY_TTL_SEC','KEEP_VERSIONS','PROTECTED_VERSIONS','WS_RESULT_FILE','WS_SAFE_DELETE'];
 
 /* ===== 导航 ===== */
 function nav(el){

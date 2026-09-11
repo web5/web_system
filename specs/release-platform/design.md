@@ -645,7 +645,7 @@ curl -fsS -m 5 -o /dev/null "http://127.0.0.1:${PORT}/" || { echo "端口探活�
 ```bash
 set -euo pipefail
 pnpm --filter @web-system/shared build            # workspace 依赖
-RELEASE_TAG="${COMMIT_ID}" npx vite build --mode mf
+RELEASE_TAG="${TPL_KEY}/${COMMIT_ID}" npx vite build --mode mf   # <产品线>/<版本>，产品线段必带
 ```
 
 **frontend / micro-frontend · upload**

@@ -117,7 +117,7 @@ interface HttpJobToolDef {
 | # | 阶段 | 说明 |
 |---|---|---|
 | 1 | `check` | 校验模块存在且为 micro-frontend；prod 校验 master 分支 |
-| 2 | `build` | `vite build --mode mf`，`RELEASE_TAG=<commit>` |
+| 2 | `build` | `vite build --mode mf`，`RELEASE_TAG=<templateKey>/<commit>`（产品线段必带；缺段会让产物 base 少一层、public 资源 404，构建期由 `resolveMfBase` 拦截） |
 | 3 | `upload` | 产物拷到 `servers/gateway/public/static/modules/<module>/<version>/` |
 | 4 | `version` | 写 `deploy_versions`（**库：web_system_deploy**） |
 | 5 | `pointer` | upsert `deploy_deployments` 的 `current_version` |

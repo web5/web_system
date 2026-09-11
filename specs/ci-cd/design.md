@@ -185,7 +185,7 @@
 | 钩子端点暴露在公网被伪造触发 | HMAC 签名 + 时间戳窗口 + `delivery_id` 幂等 + 来源 IP 段可选白名单；端点不返回任何敏感信息 |
 | GHCR 拉取需要凭据 | 目标机一次性 `docker login`，凭据进配置中心（现有密钥 AES 加密），不进仓库 |
 | P1 后构建失败排查变远（在云端不在本机） | Actions 日志按模块归档；失败时流水线日志保留最后 200 行并链接回 run url |
-| 前端 tar 产物与 `vite build --mode mf` 的 `RELEASE_TAG` 耦合 | 构建时统一注入 `RELEASE_TAG=$GITHUB_SHA::7`，与现状一致 |
+| 前端 tar 产物与 `vite build --mode mf` 的 `RELEASE_TAG` 耦合 | 构建时统一注入 `RELEASE_TAG=<templateKey>/$GITHUB_SHA::7`（产品线段必带），与现状一致 |
 | 制品库清理误删正在运行的版本 | 清理前查询 `deploy_deployments` 当前指针 + 灰度规则引用版本，命中即跳过（复用现有 cleanup 逻辑的判定） |
 | 一次改动触发多模块并发发布 | 发布锁已按 module×env 互斥；CI 侧串行提交并在同一 job 内聚合结果 |
 

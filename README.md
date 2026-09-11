@@ -216,13 +216,14 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 ```bash
 cd apps/admin                       # portal 同理
 V=$(git -C ../.. rev-parse --short HEAD)
-RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf
-mkdir -p ../gateway/public/static/modules/admin/$V && cp -r dist/* ../gateway/public/static/modules/admin/$V/
+P=default                           # 产品线段（= 发布模板 key），RELEASE_TAG 与部署路径必须一致
+RELEASE_TAG=$P/$V MF_FORMAT=system npx vite build --mode mf
+mkdir -p ../gateway/public/static/modules/admin/$P/$V && cp -r dist/* ../gateway/public/static/modules/admin/$P/$V/
 # ⚠️ 版本表在 web_system_deploy.deploy_deployments（不是 web_system 库！）
-# UPDATE web_system_deploy.deploy_deployments SET current_version='$V', status='deployed', deployed_at=NOW()
+# UPDATE web_system_deploy.deploy_deployments SET current_version='$P/$V', status='deployed', deployed_at=NOW()
 #   WHERE env_id='dev' AND module_key='admin';
 sleep 12                            # gateway 有 TTL 10s 版本缓存；仍旧则 pm2 restart web-gateway
-curl -s localhost:6000/__manifest__ # 确认 admin version=$V
+curl -s localhost:6000/__manifest__ # 确认 admin version=$P/$V
 ```
 
 两个最容易踩的坑：① 版本表在 **web_system_deploy** 库；② gateway 有 **TTL 10s 缓存**。
