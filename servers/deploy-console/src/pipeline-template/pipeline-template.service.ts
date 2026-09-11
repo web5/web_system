@@ -154,8 +154,9 @@ function genId(): string {
  * **流水线不跟模块走**：
  * - 模板是全局资产（moduleKey='*'，GLOBAL_TEMPLATE），执行时再选目标模块；
  * - 历史"模块专属模板"（moduleKey 为具体模块）兼容保留：提交时可被引用、列表可用；
- * - 全局懒建一条不可删的 builtin「默认」模板（全流程+环境规则审批），
- *   不传模板的提交/MCP 即走它，行为与旧版完全一致。
+ * - 全局模板在库里**只保留一条**（2026-09-11 收敛：保留运维自定义的 v5 模板作为基准，
+ *   删除历史 builtin「默认」）；不传模板的提交/MCP 即走这一条；
+ * - 仅当库里一条全局模板都没有时，才懒建内置「默认」兜底。
  */
 @Injectable()
 export class PipelineTemplateService {
@@ -190,10 +191,20 @@ export class PipelineTemplateService {
     return null;
   }
 
-  /** 全局默认模板：懒建（builtin 不可删/改名）；竞态靠唯一键吞错重查 */
+  /**
+   * 全局默认模板：优先返回**已有的全局模板**（builtin 优先，其次最早创建的），
+   * 一条都不存在时才懒建内置「默认」；竞态靠唯一键吞错重查。
+   *
+   * 为什么不再只认 builtin（2026-09-11 模板表收敛）：
+   * 生产/开发库都只保留**运维自定义的那条全局模板**（builtin=0）作为基准，历史 builtin「默认」已删除。
+   * 若仍按 `builtin: true` 查找，每次 ensureDefault 都会把内置「默认」重新建出来 → 模板表又变两条，
+   * 前端"流水线选择"下拉重新出现重复项。
+   */
   async ensureDefault(): Promise<DeployPipelineTemplateEntity> {
     const existing = await this.repo.findOne({
-      where: { moduleKey: GLOBAL_TEMPLATE, builtin: true },
+      where: { moduleKey: GLOBAL_TEMPLATE },
+      // builtin 优先，其次按创建时间取最早的一条 → 收敛后即那条自定义模板
+      order: { builtin: 'DESC', createdAt: 'ASC' },
     });
     if (existing) return existing;
     const row = this.repo.create({
@@ -215,7 +226,8 @@ export class PipelineTemplateService {
       return await this.repo.save(row);
     } catch {
       const again = await this.repo.findOne({
-        where: { moduleKey: GLOBAL_TEMPLATE, builtin: true },
+        where: { moduleKey: GLOBAL_TEMPLATE },
+        order: { builtin: 'DESC', createdAt: 'ASC' },
       });
       if (again) return again;
       throw new BadRequestException('创建全局默认模板失败，请重试');
