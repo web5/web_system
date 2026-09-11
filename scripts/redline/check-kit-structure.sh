@@ -5,7 +5,7 @@
 # 设计：docs/development/ai-native-sdlc-ci-deployment.md §3.3
 # 适配 web_system 的双 skills 根（唯一能力源 = agent-kit 镜像）：
 #   能力源 .codebuddy/agent-kit/skills/  13 个（ai-agent-kit 同步，通用层）
-#   运行源 .codebuddy/skills/            = 镜像 13 个 + 项目专属 be/fe-developer + karpathy-* 符号链接
+#   运行源 .codebuddy/skills/            = 镜像 14 个 + 项目专属 be/fe-developer
 #
 # 检查项（对应源仓库 eval-gate.yml 的 S1~S6，按 web_system 裁剪）：
 #   S1 必需文件齐全（AGENT.md / 方法论 / eval-framework / 5 条红线）
@@ -37,10 +37,10 @@ add_err()  { ERRS+=("$1"); }
 add_warn() { WARNS+=("$1"); }
 say() { [ "$VERBOSE" = "1" ] && echo -e "$1"; }
 
-# 运行源白名单（18）：镜像 13 + 项目专属 be/fe + 外部 karpathy-* 符号链接
-RUN_SKILLS="be-developer fe-developer code-explore incremental-refactoring karpathy-coding-guidelines karpathy-coding-rules-dami karpathy-llm-wiki rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
-# 能力源镜像白名单（13）：通用层（ai-agent-kit 源仓库定义）
-KIT_SKILLS="code-explore incremental-refactoring rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
+# 运行源白名单（17）：镜像 14 + 项目专属 be/fe
+RUN_SKILLS="be-developer fe-developer code-explore incremental-refactoring karpathy-llm-wiki rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
+# 能力源镜像白名单（14）：通用层（ai-agent-kit 源仓库定义）
+KIT_SKILLS="code-explore incremental-refactoring karpathy-llm-wiki rd-brainstorm rd-digital-agent rd-execute rd-plan rd-review requirement-translation systematic-debugging tech-review test-verification user-memory ux-prototype-designer"
 
 # ---------- S1 必需文件 ----------
 say "${B}── S1 必需文件齐全 ──${N}"
@@ -142,7 +142,7 @@ done < <(find .codebuddy/agent-kit/skills -type f -print0)
 while IFS= read -r -d '' f; do
   rel="${f#.codebuddy/skills/}"
   case "$rel" in
-    be-developer/*|fe-developer/*|karpathy-*) continue ;;
+    be-developer/*|fe-developer/*) continue ;;
     rd-digital-agent/references/project-context.md) continue ;;
   esac
   if [ ! -f ".codebuddy/agent-kit/skills/$rel" ]; then
