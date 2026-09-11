@@ -30,9 +30,28 @@ export interface ReleaseHookResult {
 }
 
 /**
- * CI/CD 发布触发服务。
+ * 供 CI 轮询的流水线状态快照。
  *
- * 定位：只做「接收发布意图 → 鉴权 → 幂等 → 转交流水线」，
+ * 刻意**不含** `logs` / `result` / `error` 细节中的路径信息 / 注入变量：
+ * CI 只需要"成功-失败-进行中"与当前阶段，其余属平台内部信息。
+ */
+export interface HookPipelineStatus {
+  jobId: string;
+  status: string;
+  stage?: string;
+  moduleKey: string;
+  env: string;
+  versionTag?: string;
+  /** 当前阶段进度文案（如「构建中 2/3」） */
+  message: string;
+  /** 终态时间（毫秒时间戳） */
+  endTime?: number;
+}
+
+/**
+ * CI/CD 发布触发与状态查询服务。
+ *
+ * 定位：只做「接收发布意图 → 鉴权 → 幂等 → 转交流水线」+「只读状态查询」，
  * **不包含任何执行逻辑** —— 执行仍由 `PipelineService.submit` 统一入口承担，
  * 使 CI 触发与控制台、MCP 三条入口共享同一套锁 / 审批 / 审计 / 回滚语义。
  *
@@ -159,6 +178,28 @@ export class ReleaseHookService {
       await this.events.save(ev).catch(() => undefined);
       throw e;
     }
+  }
+
+  /**
+   * 查询流水线状态（供 CI 轮询至终态）。
+   *
+   * 为什么不让 CI 拿控制台 JWT 轮询：控制台 token 是 `expiresIn: 24h` 的**短期登录态**，
+   * 存进 CI secrets 次日即 401（轮询静默失效、发布卡住）；且该 token 权限覆盖
+   * 发布/取消/审批，给 CI 等于放大凭据面。此处复用触发端的 hook 密钥做 HMAC 验签：
+   * 不过期、不新增凭据、权限恰好只够"看状态"。
+   */
+  async pipelineStatus(jobId: string): Promise<HookPipelineStatus> {
+    const p = await this.pipeline.get(jobId);
+    return {
+      jobId: p.id,
+      status: p.status,
+      stage: p.stage,
+      moduleKey: p.moduleKey,
+      env: p.env,
+      versionTag: p.versionTag,
+      message: p.progress?.message ?? '',
+      endTime: p.endTime,
+    };
   }
 
   /** payload 落库前裁剪：避免超长或意外携带敏感信息 */

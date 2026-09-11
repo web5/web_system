@@ -20,22 +20,22 @@
 
 ## 2. 前置条件（一次性配置）
 
+> **逐步操作手册（本机 + GitHub 各配什么、每个凭据怎么取/生成/轮换）：
+> [`gh-actions-setup.md`](./gh-actions-setup.md)** —— 首次配置照它从上到下做一遍即可。
+> 下面只列清单与要点。
+
 ### 2.1 self-hosted runner（必须）
 
 `deploy-console` 与发布目录都在本机，GitHub 托管 runner 到不了，必须在本机注册：
 
-```bash
-mkdir -p ~/actions-runner && cd ~/actions-runner
-# 版本与 token 见仓库 Settings → Actions → Runners → New runner
-curl -o runner.tar.gz -L https://github.com/actions/runner/releases/download/v<VER>/actions-runner-osx-arm64-<VER>.tar.gz
-tar xzf runner.tar.gz
-./config.sh --url https://github.com/web5/web_system --token <REG_TOKEN> \
-  --labels local-release --name mac-release --work _work
-./svc.sh install && ./svc.sh start     # 开机自启
-```
+| 项 | 值 |
+|---|---|
+| label | **`local-release`**（workflow 是 `runs-on: [self-hosted, local-release]`，不匹配会一直 `queued`） |
+| 运行身份 | 当前登录用户（需能读写发布目录、执行 `pm2`、读 `~/.ssh`） |
+| 安装 | `~/actions-runner` 下 `config.sh` → `./svc.sh install && ./svc.sh start`（开机自启） |
 
-⚠️ **最容易踩的坑**：runner 继承的是登录 shell 之外的环境，**PATH 里可能没有 node/pm2**（本项目用 fnm 管理 node）。不修的话 workflow 里会找不到 `nest` / `pm2`。
-建议给 runner 配环境文件（`actions-runner/.env`）：
+⚠️ **最容易踩的坑**：runner **不读 shell rc**（`.zshrc` 不生效），PATH 里可能没有 node/pm2（本项目用 fnm 管理 node），表现为 `nest: command not found` / `pm2: command not found`。
+给 runner 配环境文件（`~/actions-runner/.env`），改完 `./svc.sh stop && ./svc.sh start`：
 
 ```
 PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
@@ -53,7 +53,15 @@ PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/us
 |---|---|
 | `RELEASE_HOOK_URL` | `http://127.0.0.1:6200` |
 | `RELEASE_HOOK_SECRET` | 与发布平台 `servers/deploy-console/.env` 的 `RELEASE_HOOK_SECRET` **一致** |
-| `DEPLOY_CONSOLE_TOKEN` | 控制台 JWT（仅用于轮询流水线状态；建议 CI 专用账号并定期轮换） |
+
+> **触发与轮询共用这一把密钥**做 HMAC 验签（轮询走 `GET /api/hooks/pipelines/:jobId`），
+> 因此**不再需要** `DEPLOY_CONSOLE_TOKEN` —— 控制台 JWT 是 `expiresIn: 24h` 的短期登录态，
+> 放进 secrets 次日即 401；且权限覆盖发布/取消/审批，交给 CI 等于放大凭据面。
+>
+> 取密钥（复制到 GitHub Secrets）：
+> ```bash
+> grep '^RELEASE_HOOK_SECRET=' ~/web_system_release/servers/deploy-console/.env | cut -d= -f2-
+> ```
 
 ---
 
@@ -83,6 +91,8 @@ Actions → release → **Run workflow**：
 | 现象 | 原因 | 处置 |
 |---|---|---|
 | job 一直 `queued` / 无 runner | runner 未启动或 label 不匹配 | `cd ~/actions-runner && ./svc.sh status`；确认 label 为 `local-release` |
+| CI 报 401「签名校验失败」 | 平台 `.env` 与 GitHub Secret 的密钥不一致 | 对齐两边后重跑（手册 §2.2） |
+| CI 报 401「时间戳超出允许窗口」 | 本机时钟偏差 > 5 分钟（窗口 300s） | 校准系统时间 |
 | `nest: command not found` / `pm2: command not found` | runner 的 PATH 缺 node/pm2（见 §2.1） | 配 `.env` 后 `./svc.sh stop && ./svc.sh start` |
 | 提示"发布目录有未提交改动，拒绝发布" | 发布目录被手工改脏 | 在发布目录 `git status` 处理干净后重跑 job |
 | `ff-only 快进失败` | 发布目录有分叉提交 | 进发布目录查 `git log --oneline origin/feature/test..HEAD`，人工处理后重跑 |
