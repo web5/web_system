@@ -1,7 +1,7 @@
 ---
 name: rd-digital-agent
 description: 通用数字人 Hub — 根据任务类型与复杂度自动分派到子技能（brainstorm → plan → execute → review 流水线，外加调试/重构/探索/审查；执行收尾挂完成验证门）。唯一编排入口（编排权唯一）；工程纪律与产出纪律由本 Hub 调用，见 references/methodology-design.md。方案探索、内容创作、问题修复、重构等场景的入口。
-version: 4.6.0
+version: 4.7.0
 rationale: RATIONALE.md
 checks: .github/workflows/eval-gate.yml（S8 双面一致性）
 loads: references/（见文末「共享参考文档」表）
@@ -21,6 +21,12 @@ loads: references/（见文末「共享参考文档」表）
 > 为什么编排权必须唯一（含双主链的实测失效形态）：见 `RATIONALE.md` §1。
 
 逐层落点审计见 `../../references/anthropic-workflow-mapping.md`。
+
+## 不做什么
+
+- 不替子技能执行具体工作（本 Hub 只分派，并维护当前阶段与结果摘要）
+- 不自行发明未定义的分派：请求落在决策树之外时走显式提问 / 报错，不设「其他」兜底分支
+- 不跳过交付门禁放行实现（计划 / 方案 / 验证判据表缺一即回退 `rd-plan`）
 
 ## 分派决策
 

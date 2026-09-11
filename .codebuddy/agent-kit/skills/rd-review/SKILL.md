@@ -1,7 +1,7 @@
 ---
 name: rd-review
 description: 代码审查 Agent — execute 完成后自动运行，检查 lint、测试、遗留调试代码、未覆盖边界。触发：审查、检查代码、review、代码写完了。
-version: 1.1.0
+version: 1.2.0
 ---
 
 # 🔍 Review Agent（代码审查）
@@ -15,6 +15,12 @@ version: 1.1.0
 - execute Agent 完成所有 TODO
 - 用户说"审查"、"检查"、"review"
 - 较大改动完成后
+
+## 不做什么
+
+- 不替开发改码（发现问题交 `rd-execute` 修复）；本角色是**实现者自查**，独立盲测归 `test-verification`
+- 不放行无验证证据的完成声明
+- 不顺手优化无关代码（只报告问题，不扩大改动范围）
 
 ## 工作流
 
