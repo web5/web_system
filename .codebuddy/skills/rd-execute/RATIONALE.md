@@ -1,9 +1,9 @@
 ---
-reviewed-at-version: 1.3.0
+reviewed-at-version: 1.4.0
 audience: human
 ---
 
-# rd-execute 设计理由（人面 · L2）
+# rd-execute 设计理由（人面）
 
 > 本文件不在 AI 执行路径上：AI 默认不加载，只在判断「能否绕过入口门禁 / 完成验证门是否可豁免」时按需跟随。
 > 改 `SKILL.md` 必须 bump `version` 并同步本文件 `reviewed-at-version`，否则 CI 失败（`eval-gate.yml` S8-2）。
@@ -58,5 +58,6 @@ commit 是对外不可逆动作，落在人审节点（见 `rules/general/02-hum
 
 | 版本 | 变更 |
 |---|---|
+| 1.4.0 | 并入「隔离工作区（worktree）」纪律：原 L2 层撤销后，该能力由本技能承载 |
 | 1.3.0 | 补本文件（双面分层）：入口门禁理由、V# 同构理由、反模式出处、已知缺口；工作流语义未变 |
 | 1.2.0 | 完成验证门对照 rd-plan 同一份 V1…Vn（设计与交付同构） |
