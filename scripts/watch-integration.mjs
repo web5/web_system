@@ -57,6 +57,28 @@ const ONCE = hasFlag('--once');
 const DRY = hasFlag('--dry-run');
 /** 是否让集成分支自动跟随 master（默认开；--no-follow-master 关闭） */
 const FOLLOW_MASTER = !hasFlag('--no-follow-master');
+/**
+ * 本地不参与自动发布的模块：
+ * - `finnews`：模块注册表里有、但仓库里没有对应目录（构建阶段 `spawn bash ENOENT`）；
+ * - `mini-contract`：其 build 命令是上传微信小程序（需微信密钥，本地没有）。
+ * 两者在本地必然失败，留在列表里只会每轮刷告警。用 `--skip-modules a,b` 覆盖。
+ */
+const SKIP_MODULES = new Set(
+  (
+    getArg('--skip-modules', process.env.WATCH_SKIP_MODULES || 'finnews,mini-contract') || ''
+  )
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+/**
+ * 走"专用脚本"而非流水线的模块：发布它会重启流水线引擎自己
+ * （restart 阶段 `pm2 restart web-deploy-console` 把正在执行流水线的进程杀掉，
+ * 流水线会永远停在 running 并占着发布锁）。
+ */
+const SELF_PUBLISH_SCRIPTS = {
+  'deploy-console': ['scripts/publish-deploy-console.sh', '--skip-sync'],
+};
 /** 单个模块发布超时（20 分钟）；超时只告警，不阻塞后续模块 */
 const MODULE_TIMEOUT_MS = Number(getArg('--module-timeout-ms', '1200000'));
 
@@ -231,8 +253,11 @@ function syncTo(sha) {
 async function publishAll(sha) {
   const token = await login();
   const all = await api('GET', '/api/deploy/modules', token);
-  const mods = orderModules(Array.isArray(all) ? all.filter((m) => m.enabled !== false) : []);
+  const enabled = Array.isArray(all) ? all.filter((m) => m.enabled !== false) : [];
+  const mods = orderModules(enabled.filter((m) => !SKIP_MODULES.has(m.key)));
+  const skipped = enabled.filter((m) => SKIP_MODULES.has(m.key)).map((m) => m.key);
   log(`开始全量发布（${mods.length} 个模块，环境=${ENV_ID}，版本=${short(sha)}）`);
+  if (skipped.length) log(`按配置跳过：${skipped.join(', ')}（本地不可发布，--skip-modules 可改）`);
   log(`顺序：${mods.map((m) => m.key).join(' → ')}`);
 
   const results = [];
@@ -250,7 +275,33 @@ async function publishAll(sha) {
   return results;
 }
 
+/**
+ * 用专用脚本发布"会重启流水线引擎自己"的模块。
+ * `publish-deploy-console.sh` 自带构建、产物投递、孤儿清理与重启，且在流水线之外执行，
+ * 因此不会被它自己的 restart 阶段打断（实现细节见 docs/development/integration-branch.md）。
+ */
+function runSelfPublish(moduleKey, cmd) {
+  log(`  ${moduleKey}: 走专用脚本（${cmd.join(' ')}）—— 流水线方式会打断自身 restart`);
+  const [bin, ...binArgs] = cmd;
+  try {
+    execFileSync(bin, binArgs, {
+      cwd: RELEASE_DIR,
+      stdio: 'inherit',
+      timeout: MODULE_TIMEOUT_MS,
+    });
+    log(`  ${moduleKey}: ✓ succeeded（专用脚本）`);
+    return { key: moduleKey, status: 'succeeded' };
+  } catch (e) {
+    warn(`  ${moduleKey}: ✗ 专用脚本失败：${String(e.message).split('\n')[0]}`);
+    return { key: moduleKey, status: 'failed' };
+  }
+}
+
 async function publishOne(moduleKey, token) {
+  // 自发布模块（deploy-console）：走专用脚本，避免"流水线打断自己的 restart 阶段"
+  const selfScript = SELF_PUBLISH_SCRIPTS[moduleKey];
+  if (selfScript) return runSelfPublish(moduleKey, selfScript);
+
   let jobId;
   try {
     const res = await api('POST', '/api/pipelines', token, {
