@@ -61,9 +61,10 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'settings/models',
-        name: 'ModelPricing',
-        component: () => import('@/views/Settings/ModelPricingPage.vue'),
-        meta: { title: '模型', permission: 'agents:cost:view' },
+        name: 'Models',
+        component: () => import('@/views/Settings/ModelsPage.vue'),
+        // 模型清单/价格的维护已统一到「字典管理」，故权限与其他字典表一致（不再用 agents:cost:view）
+        meta: { title: '模型', permission: 'system:dict:view' },
       },
       {
         path: 'settings/dicts',
