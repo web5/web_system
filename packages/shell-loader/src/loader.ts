@@ -43,6 +43,8 @@ const SHARED_MODULES: Record<string, string> = {
   'ant-design-vue': 'antDesignVue',
   '@ant-design/icons-vue': 'antDesignIconsVue',
 };
+/** 脚本加载超时（毫秒）：网络异常时宁可失败可感，也不要一直挂起造成"页面静默 loading" */
+const MODULE_LOAD_TIMEOUT_MS = 30000;
 export class MicroFrontendLoader {
   /** 已注册的模块清单（name → manifest） */
   private manifests = new Map<string, ModuleManifest>();
@@ -148,17 +150,43 @@ export class MicroFrontendLoader {
 
     return System.import(manifest.entry)
       .then((mod: any) => {
-        const lifecycle = mod?.default ?? mod;
-        if (!lifecycle || typeof lifecycle.mount !== 'function') {
-          throw new Error(`模块 ${manifest.name}@${manifest.version} 未正确暴露 lifecycle（缺 mount）`);
-        }
-        return this.toLifecycle(lifecycle);
+        const lifecycle = this.resolveLifecycle(manifest, mod);
+        if (lifecycle) return lifecycle;
+        throw new Error(
+          `模块 ${manifest.name}@${manifest.version} 未暴露 lifecycle（缺 mount）: ${manifest.entry}`,
+        );
       })
       .catch((e: unknown) => {
         // System 加载失败（可能为 UMD 旧产物）→ 回退 UMD script
-        console.warn(`[loader] System 加载 ${manifest.name} 失败，回退 UMD: ${(e as Error)?.message}`);
-        return this.loadUmdScript(manifest);
+        const sysMsg = (e as Error)?.message || String(e);
+        console.warn(`[loader] System 加载 ${manifest.name} 失败，回退 UMD: ${sysMsg}`);
+        return this.loadUmdScript(manifest).catch((e2: unknown) => {
+          // 两条路径都失败：把两类原因都带上，避免只留一句笼统的"缺 mount"无法定位
+          const umdMsg = (e2 as Error)?.message || String(e2);
+          throw new Error(
+            `模块 ${manifest.name}@${manifest.version} 加载失败。System: ${sysMsg}；UMD: ${umdMsg}`,
+          );
+        });
       });
+  }
+
+  /**
+   * 解析模块导出的 lifecycle，三种来源按序尝试：
+   * ① System 命名空间的 default 导出（构建保留导出名时的正路）
+   * ② System 命名空间本身（mount 直接挂在命名空间上）
+   * ③ window.__MODULES__[name]（产物末尾的全局副作用；旧 UMD 产物，或导出名被压缩的历史产物）
+   *
+   * ③ 的必要性：历史产物 `export default` 被 Rollup 压缩掉（构建未设
+   * preserveEntrySignatures，见 scripts/vite-micro-frontend.mjs），此时 System 路径
+   * 已经执行过模块体、全局已挂好，不需要再拿同一份文件去当经典脚本二次加载。
+   */
+  private resolveLifecycle(manifest: ModuleManifest, mod?: any): ModuleLifecycle | null {
+    for (const candidate of [mod?.default, mod]) {
+      if (candidate && typeof candidate.mount === 'function') return this.toLifecycle(candidate);
+    }
+    const global = (window as any).__MODULES__?.[manifest.name];
+    if (global && typeof global.mount === 'function') return this.toLifecycle(global);
+    return null;
   }
 
   /** 把基座共享依赖（window.__SHARED__，来自 CDN 全局）注册为 System 模块。
@@ -188,20 +216,27 @@ export class MicroFrontendLoader {
   /** UMD script 加载（旧产物兼容）：执行后挂到 window.__MODULES__[name] */
   private loadUmdScript(manifest: ModuleManifest): Promise<ModuleLifecycle> {
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`加载模块超时（${MODULE_LOAD_TIMEOUT_MS / 1000}s）: ${manifest.entry}`));
+      }, MODULE_LOAD_TIMEOUT_MS);
       const script = document.createElement('script');
       script.src = manifest.entry;
       script.dataset.module = manifest.name;
       script.async = true;
       script.crossOrigin = 'anonymous';
       script.onload = () => {
-        const mod = (window as any).__MODULES__?.[manifest.name];
-        if (!mod || typeof mod.mount !== 'function') {
-          reject(new Error(`模块 ${manifest.name}@${manifest.version} 未正确暴露 lifecycle（缺 mount）`));
+        clearTimeout(timer);
+        const lifecycle = this.resolveLifecycle(manifest);
+        if (!lifecycle) {
+          reject(new Error(`模块 ${manifest.name}@${manifest.version} 未暴露 lifecycle（缺 mount）: ${manifest.entry}`));
           return;
         }
-        resolve(this.toLifecycle(mod));
+        resolve(lifecycle);
       };
-      script.onerror = () => reject(new Error(`加载模块失败: ${manifest.entry}`));
+      script.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error(`加载模块失败: ${manifest.entry}`));
+      };
       document.head.appendChild(script);
     });
   }
