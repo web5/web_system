@@ -19,6 +19,7 @@
 | 2026-09-10 | v1.2 | 权限同步机制落地：§7 坑 2 的处理办法从"重启 `web-user`"改为**优先跑 `scripts/sync-permissions.sh` / 点「同步权限点」按钮**（无需重启）；§8.1 增"新增权限码"触发场景、§8.2 补权限真相与同步命令 | AI |
 | 2026-09-11 | v1.3 | 权限同步自动化：**发布流水线收尾自动同步**（`PIPELINE_PERM_SYNC`，失败不阻断）、同步动作落审计（`operation_logs` → `sync_permission`）、角色权限页顶部差异提示；§7 坑 2 补自动化与提示说明 | AI |
 | 2026-09-11 | v1.4 | 单价真相源迁到字典：§2 链路改为按字典价核算、§3.4 `model_pricing` 标弃用、§4 入口 10 改为只读总览（权限改 `system:dict:view`）；§7 增坑 12（价格在哪维护、多久生效、旧表已失效） | AI |
+| 2026-09-11 | v1.5 | **「模型」页整体下线**（清单/价格统一在「字典管理 · 大模型清单」维护），§4 去掉该入口；§7 增坑 13（admin 内部跳转不能手写 `/admin` 前缀，router base 已含，重复会 404） | AI |
 
 ---
 
@@ -225,9 +226,12 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | 7 | 知识集合 / 检索调试 | `/admin/agents/knowledge`<br>`/admin/agents/retrieval` | `knowledge:view`<br>`agents:debug` | `KnowledgeCollectionsPage.vue`<br>`RetrievalDebuggerPage.vue` | 建集合灌文档看 chunk；选集合输入 query 调 topK 看相似度 |
 | 8 | 定义管理 | `/admin/agents/definitions` | `agents:manage` | `AgentDefList.vue` + `CapabilityConfigurator.vue` | CRUD + 发布 + 启停 + 版本历史 + 回滚 + MCP 工具勾选 |
 | 9 | 技能库 | `/admin/agents/skills` | `skills:view` | `SkillList.vue` | SKILL.md 正文、增删改、zip 导入 |
-| 10 | 模型（只读总览） | `/admin/settings/models` | `system:dict:view` | `ModelsPage.vue` | 看清单与价格、发现"启用未配价"；**维护在「字典管理 · 大模型清单」**（字段定义走独立页面、记录走抽屉） |
+
+> 📌 原第 10 行「模型」入口已下线（v1.5）：清单与价格统一在「字典管理 · 大模型清单」维护。**删除该入口**时，`ModelsPage.vue` 与 `settings/models` 路由也已移除。
+
 
 > 📌 菜单「运行记录」指向 `/agents`（概览页），真正的 run 列表需**从概览页点进某个 agent**。
+> 📌 **原「模型」页已下线**（v1.5）：模型清单与价格的唯一维护入口是「字典管理 · 大模型清单」（字段定义走独立页面、记录走抽屉），不再是独立菜单。
 > 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-contract/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
 
 **门户与小程序入口**
@@ -297,7 +301,8 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
 10. **改 `.env` 的 `TOKENHUB_MODELS` 想加模型却不生效** —— 模型清单现在的真相源是 **DB 字典 `llm_models`**（admin →「字典管理」，`MODEL_SOURCE=db` 默认）；`.env` 只在字典不可用/为空时兜底，代码内置常量再兜底。改字典后等 60s（`MODEL_POLL_MS`）或重启 `web-ai-agent`。排查入口：`GET /api/ai-agent/agent/models`（还带 `available`）与 ai-agent 日志里的「模型清单已更新：来源=db/env/builtin」。
 11. **字典里的 `hy3` 不会生效** —— `hy3` 由 `Hy3Client` 专用通道承载（与 TokenHub 的 key/base 不同），`ModelCatalogService` 会过滤并 WARN；要调 hy3 请确认 `HY3_API_KEY`，不要往 `llm_models` 里加。
-12. **改了模型价格却不生效（或以为要去旧表改）** —— 单价真相源已从 `model_pricing` 表迁到**字典 `llm_models` 的三个字段**（`input_price_per1k` / `output_price_per1k` / `currency`，2026-09-11）。维护入口：admin「字典管理 → 大模型清单」（字段定义走独立页面、记录走抽屉）。ai-service 由 `ModelPricingCatalog` 每 60s 拉一次（`PRICE_POLL_MS`），改完最多一分钟生效。旧表与 `admin/model-pricing` 的**写接口已下线**（只留只读对账），在上面改价**不会有任何效果**。`PRICE_SOURCE` 三档：`dict`（默认，字典未命中回落旧表）/`dict-only`/`legacy`（完全回退到旧表）。未配价的模型成本记 0 —— admin「模型」页顶部会提示「N 个启用中的模型未配置单价」。
+12. **改了模型价格却不生效（或以为要去旧表改）** —— 单价真相源已从 `model_pricing` 表迁到**字典 `llm_models` 的三个字段**（`input_price_per1k` / `output_price_per1k` / `currency`，2026-09-11）。维护入口：admin「字典管理 → 大模型清单」（字段定义走独立页面、记录走抽屉）。ai-service 由 `ModelPricingCatalog` 每 60s 拉一次（`PRICE_POLL_MS`），改完最多一分钟生效。旧表与 `admin/model-pricing` 的**写接口已下线**（只留只读对账），在上面改价**不会有任何效果**。`PRICE_SOURCE` 三档：`dict`（默认，字典未命中回落旧表）/`dict-only`/`legacy`（完全回退到旧表）。未配价的模型成本记 0。
+13. **admin 内部跳转 404（手写了 `/admin` 前缀）** —— admin 的 router 是 `createWebHistory('/admin/')`，**base 已含 `/admin`**；跳转里再写成 `/admin/settings/dicts/x`，vue-router 会再拼一次 base → 实际请求 `/admin/admin/settings/dicts/x` → 404（2026-09-11 一次修掉 6 处：`DictManagePage` / `DictEditPage` / 已删的 `ModelsPage`）。**规矩：`router.push()` 一律写不带 base 的路径**，如 `/settings/dicts/xxx`。
 
 ---
 
