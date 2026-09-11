@@ -136,7 +136,10 @@ deploy_frontend() { # $1=module_name
     if [ "$DRY_RUN" != "1" ]; then
       tar czf "/tmp/shell-deploy.tar.gz" -C "$ROOT/apps/shell/dist" .
       scp_to "/tmp/shell-deploy.tar.gz"
-      remote "cd /data/web_system/servers/gateway/public/shell && rm -rf ./* && tar xzf /tmp/shell-deploy.tar.gz && rm -f /tmp/shell-deploy.tar.gz"
+      # ⚠️ 基座走「合并投递」而非整目录替换：
+      # 已打开的旧标签页仍引用上一版带 hash 的 assets/*，删掉会直接 404（网关已改为缺失即 404）。
+      # 因此只覆盖 index.html / version.json / 新增 assets，并清理 7 天前的旧 assets 防止目录无限增长。
+      remote "cd /data/web_system/servers/gateway/public/shell && tar xzf /tmp/shell-deploy.tar.gz && { find assets -type f -mtime +7 -delete 2>/dev/null || true; } && rm -f /tmp/shell-deploy.tar.gz"
       rm -f "/tmp/shell-deploy.tar.gz"
     fi
   else

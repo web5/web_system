@@ -13,6 +13,7 @@ import { MicroFrontendLoader } from '@web-system/shell-loader';
 import type { ModuleContext } from '@web-system/shared';
 import { setupAntdAll } from './antd-all';
 import { saveAuth, clearAuth } from './auth-storage';
+import { startVersionCheck } from './version-check';
 // UI 规范：语义 token + 全局基础样式（2026-09-03 shell 视觉统一；css 子路径直指 ui src）
 import '@web-system/ui/tokens.css';
 import '@web-system/ui/theme.css';
@@ -219,3 +220,6 @@ AntdNS.message.config({ maxCount: 3 });
 import 'ant-design-vue/dist/reset.css';
 
 app.mount('#app');
+
+// 新版本探测：服务端 version.json 与构建时版本不一致 → 右下角提示"点击刷新"
+startVersionCheck();
