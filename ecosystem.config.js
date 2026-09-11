@@ -20,6 +20,13 @@ const DB_DATABASE = process.env.DB_DATABASE || 'web_system';
 /** knowledge-service 独立库（RAG：集合/文档/分块），与主库同实例不同库名 */
 const KNOWLEDGE_DB_DATABASE = process.env.DB_DATABASE_KNOWLEDGE || 'web_system_knowledge';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+/**
+ * 服务间调用：auth-service 地址（各服务 AuthGuard 转发 /auth/verify 用）。
+ * dev/prod 约定 6001；本地若该端口被占用，请在对应服务 .env 里显式覆盖（例如 6101）。
+ * ⚠️ 不要写成 `process.env.X || ''`：空串会被 ConfigService 当成「已配置」，
+ *    导致 fetch('') 失败并被误报成 401「认证服务不可用」（2026-09-11 dev 事故）。
+ */
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:6001';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
 const MINI_PROGRAM_SECRET = process.env.MINI_PROGRAM_SECRET || '';
@@ -68,7 +75,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6000,
         HOST: '0.0.0.0',
-        AUTH_SERVICE_URL: 'http://127.0.0.1:6001',
+        AUTH_SERVICE_URL,
         USER_SERVICE_URL: 'http://127.0.0.1:6002',
         AI_SERVICE_URL: 'http://127.0.0.1:6003',
         SYSTEM_SERVICE_URL: 'http://127.0.0.1:6004',
@@ -113,6 +120,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6002,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
       },
       error_file: `${logBase}/user-error.log`,
       out_file: `${logBase}/user-out.log`,
@@ -126,6 +134,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6003,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
         IMAGE_GEN_API_URL: process.env.IMAGE_GEN_API_URL || 'https://tokenhub.tencentmaas.com',
         IMAGE_GEN_API_KEY: process.env.IMAGE_GEN_API_KEY,
         IMAGE_GEN_MODEL: process.env.IMAGE_GEN_MODEL || 'stable-diffusion-xl',
@@ -143,6 +152,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6004,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
       },
       error_file: `${logBase}/system-error.log`,
       out_file: `${logBase}/system-out.log`,
@@ -157,6 +167,7 @@ module.exports = {
         PORT: 6005,
         ...baseDbConfig,
         JWT_SECRET,
+        AUTH_SERVICE_URL,
       },
       error_file: `${logBase}/todo-error.log`,
       out_file: `${logBase}/todo-out.log`,
@@ -236,7 +247,7 @@ module.exports = {
         PORT: 6011,
         ...baseDbConfig,
         DB_DATABASE: KNOWLEDGE_DB_DATABASE,
-        AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || '',
+        AUTH_SERVICE_URL,
         INTERNAL_API_KEY: process.env.KNOWLEDGE_INTERNAL_API_KEY || process.env.INTERNAL_API_KEY || '',
         TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL || 'https://tokenhub.tencentmaas.com/v1',
         TOKENHUB_API_KEY: process.env.TOKENHUB_API_KEY || process.env.HY3_API_KEY || process.env.LLM_API_KEY || '',
