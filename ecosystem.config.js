@@ -275,5 +275,38 @@ module.exports = {
       out_file: `${logBase}/knowledge-service-out.log`,
       log_file: `${logBase}/knowledge-service-combined.log`,
     },
+    /**
+     * ai-agent / deploy-console：长期**未登记**（靠手工 pm2 start）→ 全量重启会漏管，
+     * 变成「pm2 列表里看不到、端口却占着」的孤儿进程（2026-09-11 在 dev 上亲历：
+     * 这两个不在配置里，别的服务都能 delete+start，只能对它们用 restart 保留 env）。
+     *
+     * 只登记 `PORT`：两者的其余配置（DB / 密钥 / 发布路径 / 对接的服务器等）都在各自
+     * `servers/<svc>/.env` 里，由服务自身 ConfigModule 读取。**刻意不注入 JWT_SECRET**：
+     * ai-agent 原本没有该变量、deploy-console 用的是自己的值，注入会改变验签行为。
+     */
+    {
+      ...commonConfig,
+      name: 'ai-agent',
+      script: './servers/ai-agent/dist/main.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 6010,
+      },
+      error_file: `${logBase}/ai-agent-error.log`,
+      out_file: `${logBase}/ai-agent-out.log`,
+      log_file: `${logBase}/ai-agent-combined.log`,
+    },
+    {
+      ...commonConfig,
+      name: 'deploy-console',
+      script: './servers/deploy-console/dist/main.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 6200,
+      },
+      error_file: `${logBase}/deploy-console-error.log`,
+      out_file: `${logBase}/deploy-console-out.log`,
+      log_file: `${logBase}/deploy-console-combined.log`,
+    },
   ],
 };
