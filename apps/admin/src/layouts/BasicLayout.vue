@@ -34,7 +34,7 @@
           <template #icon><SafetyCertificateOutlined /></template>
           <span>角色权限</span>
         </a-menu-item>
-        <a-menu-item v-if="userStore.hasPermission('agents:cost:view')" key="models">
+        <a-menu-item v-if="userStore.hasPermission('system:dict:view')" key="models">
           <template #icon><DollarCircleOutlined /></template>
           <span>模型</span>
         </a-menu-item>

@@ -4,6 +4,7 @@ import { Repository, FindOptionsWhere, Like, MoreThanOrEqual, LessThanOrEqual, B
 import { AgentRun } from './entities/agent-run.entity';
 import { ModelPricing } from './entities/model-pricing.entity';
 import { RunMetrics } from './entities/run-metrics.entity';
+import { ModelPricingCatalog, calcCost } from './model-pricing.catalog';
 
 export interface RecordRunInput {
   agentId: string;
@@ -65,6 +66,8 @@ export class AgentLogService {
     private readonly pricingRepo: Repository<ModelPricing>,
     @InjectRepository(RunMetrics)
     private readonly metricsRepo: Repository<RunMetrics>,
+    // 单价真相源：字典 llm_models（2026-09-11 由 model_pricing 表迁入）
+    private readonly priceCatalog: ModelPricingCatalog,
   ) {}
 
   /** 写入一次 run（失败不抛错，run 记录是辅助功能，不能影响主链路） */
@@ -216,14 +219,27 @@ export class AgentLogService {
     return { prompt, completion, total };
   }
 
-  /** 按 model_pricing 单价核算成本（CNY；无单价记录按 0，不发明数值） */
+  /**
+   * 按单价核算成本（CNY；无价按 0，不发明数值）。
+   *
+   * 价格真相源是字典 `llm_models` 的价格字段（2026-09-11 由旧表 `model_pricing` 迁入）。
+   * `PRICE_SOURCE` 三档（见 `model-pricing.catalog.ts`）：
+   * - `dict`（默认）：字典命中即用；未命中回落旧表（迁移期不断档）；
+   * - `dict-only`：未命中直接按 0，不查旧表；
+   * - `legacy`：完全走旧表（回退开关，行为与改造前一致）。
+   */
   private async computeCost(model: string, prompt: number, completion: number): Promise<number> {
     if (!model) return 0;
     try {
-      const p = await this.pricingRepo.findOne({ where: { model } });
-      if (!p) return 0;
-      const inPrice = Number(p.inputPricePer1k || 0);
-      const outPrice = Number(p.outputPricePer1k || 0);
+      if (this.priceCatalog.source !== 'legacy') {
+        const p = this.priceCatalog.get(model);
+        if (p) return calcCost(p, prompt, completion);
+        if (!this.priceCatalog.allowLegacyFallback) return 0;
+      }
+      const legacy = await this.pricingRepo.findOne({ where: { model } });
+      if (!legacy) return 0;
+      const inPrice = Number(legacy.inputPricePer1k || 0);
+      const outPrice = Number(legacy.outputPricePer1k || 0);
       return (prompt * inPrice + completion * outPrice) / 1000;
     } catch {
       return 0;
