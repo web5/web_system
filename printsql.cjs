@@ -8,11 +8,11 @@ const audit = require('./dist/servers/deploy-console/src/entities/audit-log.enti
 
 const ds = new DataSource({
   type: 'mysql',
-  host: '127.0.0.1',
-  port: 3306,
-  username: 'root',
-  password: 'KedouLocal@2026',
-  database: 'web_system_deploy',
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 3306),
+  username: process.env.DB_USERNAME || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_DATABASE || 'web_system_deploy',
   namingStrategy: new SnakeNamingStrategy(),
   entities: [env.DeployEnvironmentEntity, dep.DeployDeploymentEntity, task.DeployTaskEntity, ver.DeployVersionEntity, audit.AuditLogEntity],
 });

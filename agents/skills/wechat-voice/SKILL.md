@@ -201,11 +201,11 @@ description: 文风与风格模仿工程——把"写得像某个高手"从感�
 1. `ImageGen` 出封面 PNG（本地）。
 2. `scp` 到 dev：
    ```bash
-   scp /local/cover.png ubuntu@175.27.189.123:/tmp/cover_<slug>.png
+   scp /local/cover.png ubuntu@{{DEV_HOST}}:/tmp/cover_<slug>.png
    ```
 3. dev 起 loopback 服务（content-hub 同在 dev，抓 `127.0.0.1` 即可，无需公网 IP）：
    ```bash
-   ssh ubuntu@175.27.189.123 "cd /tmp && (python3 -m http.server 6099 >/dev/null 2>&1 &)"
+   ssh ubuntu@{{DEV_HOST}} "cd /tmp && (python3 -m http.server 6099 >/dev/null 2>&1 &)"
    ```
 4. 文章首图固定引用 `http://127.0.0.1:6099/cover_<slug>.png`。
 
@@ -214,7 +214,7 @@ description: 文风与风格模仿工程——把"写得像某个高手"从感�
 ### 8.3 发布（一次 POST）
 
 ```bash
-ssh ubuntu@175.27.189.123 "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
+ssh ubuntu@{{DEV_HOST}} "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
   -H 'Content-Type: application/json' \
   -d '{\"title\":\"标题\",\"html\":\"<body><p>首段含封面img</p>...</body>\"}'"
 ```

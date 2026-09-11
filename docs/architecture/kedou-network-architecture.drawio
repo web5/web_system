@@ -8,7 +8,7 @@
         <mxCell id="title" value="web_system 网络架构 · dev 环境流量与运维链路" style="text;html=1;fontSize=26;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
           <mxGeometry x="40" y="30" width="800" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="subtitle" value="GATEWAY 42.194.200.69 ｜ DEV 175.27.189.123 ｜ PROD 106.52.176.246 ｜ 更新 2026-08-15" style="text;html=1;fontSize=13;fontColor=#64748B;" vertex="1" parent="1">
+        <mxCell id="subtitle" value="GATEWAY {{GATEWAY_HOST}} ｜ DEV {{DEV_HOST}} ｜ PROD {{PROD_HOST}} ｜ 更新 2026-08-15" style="text;html=1;fontSize=13;fontColor=#64748B;" vertex="1" parent="1">
           <mxGeometry x="40" y="70" width="800" height="24" as="geometry" />
         </mxCell>
 
@@ -21,10 +21,10 @@
         </mxCell>
 
         <!-- Zone B GATEWAY -->
-        <mxCell id="zoneGw" value="&lt;b&gt;GATEWAY 机 · 公网入口&lt;/b&gt;&lt;br&gt;42.194.200.69 · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="zoneGw" value="&lt;b&gt;GATEWAY 机 · 公网入口&lt;/b&gt;&lt;br&gt;{{GATEWAY_HOST}} · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="320" y="150" width="300" height="430" as="geometry" />
         </mxCell>
-        <mxCell id="dns" value="DNS：dev.kedouai.com → 42.194.200.69" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#C4B5FD;fontColor=#5B21B6;fontSize=10.5;arcSize=50;" vertex="1" parent="1">
+        <mxCell id="dns" value="DNS：dev.kedouai.com → {{GATEWAY_HOST}}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#C4B5FD;fontColor=#5B21B6;fontSize=10.5;arcSize=50;" vertex="1" parent="1">
           <mxGeometry x="350" y="212" width="240" height="30" as="geometry" />
         </mxCell>
         <mxCell id="nginx" value="&lt;b&gt;nginx · 反向代理&lt;/b&gt;&lt;br&gt;:80 / :443（TLS 证书）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#60A5FA;fontColor=#1E3A8A;strokeWidth=1.8;" vertex="1" parent="1">
@@ -44,7 +44,7 @@
         </mxCell>
 
         <!-- Zone C DEV -->
-        <mxCell id="zoneDev" value="&lt;b&gt;DEV 服务器&lt;/b&gt;&lt;br&gt;175.27.189.123 · ubuntu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="zoneDev" value="&lt;b&gt;DEV 服务器&lt;/b&gt;&lt;br&gt;{{DEV_HOST}} · ubuntu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="680" y="150" width="380" height="430" as="geometry" />
         </mxCell>
         <mxCell id="sg" value="腾讯云安全组放行：22 / 6000 / 6006 / 6200" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#FDBA74;fontColor=#9A3412;fontSize=10.5;arcSize=50;" vertex="1" parent="1">
@@ -70,7 +70,7 @@
         </mxCell>
 
         <!-- Zone D PROD -->
-        <mxCell id="zoneProd" value="&lt;b&gt;PROD 服务器&lt;/b&gt;&lt;br&gt;106.52.176.246 · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="zoneProd" value="&lt;b&gt;PROD 服务器&lt;/b&gt;&lt;br&gt;{{PROD_HOST}} · root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;verticalAlign=top;fontSize=15;fontColor=#0F172A;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="1100" y="330" width="260" height="170" as="geometry" />
         </mxCell>
         <mxCell id="prodSvc" value="&lt;b&gt;pm2 服务 × 6&lt;/b&gt;&lt;br&gt;（线上业务）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1E40AF;" vertex="1" parent="1">

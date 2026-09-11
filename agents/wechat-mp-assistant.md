@@ -385,7 +385,7 @@ maxTurns: 50
 
 发布（建草稿）统一走 **dev 机器 content-hub 直连 POST**，**不依赖 MCP、不做降级 / fallback**。封面图须在写作前挂 dev 可访问 URL（详见 `wechat-voice` §八，三不：不用 base64 / 不用本地路径 / 不临时才想）。
 
-- **建草稿**：`web-system-dev-machine` SSH 到 `ubuntu@175.27.189.123` → POST `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图）→ 返回 `media_id`
+- **建草稿**：`web-system-dev-machine` SSH 到 `ubuntu@{{DEV_HOST}}` → POST `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图）→ 返回 `media_id`
 - **群发**：由用户在公众号后台手动确认，**agent 不自动群发**
 - 完成后如实汇报 `media_id` 与后台链接
 - **业务错误**（缺封面 / 未配置凭证）按原技能错误处理并如实上报，不绕过

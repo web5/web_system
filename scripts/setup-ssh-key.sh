@@ -23,9 +23,13 @@ PASS="${1:-}"
 
 # 加载服务器地址（找不到就用默认值）
 if [ -f "$ENV_FILE" ]; then source "$ENV_FILE"; fi
-DEV_HOST="${DEV_SERVER:-ubuntu@175.27.189.123}"
-PROD_HOST="${PROD_SERVER:-root@106.52.176.246}"
-JUMP_HOST="root@42.194.200.69"
+DEV_HOST="${DEV_SERVER:-}"
+PROD_HOST="${PROD_SERVER:-}"
+JUMP_HOST="${JUMP_HOST:-}"
+if [ -z "$DEV_HOST" ] || [ -z "$PROD_HOST" ]; then
+  echo "[ERROR] 未配置 DEV_SERVER / PROD_SERVER：请在 $ENV_FILE 中填写（参考 .env.deploy.example）" >&2
+  exit 1
+fi
 
 KEY="$HOME/.ssh/id_ed25519_servers"
 PUB="$KEY.pub"
@@ -61,7 +65,7 @@ ensure_config() {
 echo "===== 配置 ~/.ssh/config ====="
 ensure_config kedou-dev  "$DEV_HOST"
 ensure_config kedou-prod "$PROD_HOST"
-ensure_config kedou-jump "$JUMP_HOST"
+[ -n "$JUMP_HOST" ] && ensure_config kedou-jump "$JUMP_HOST"
 
 # 测试是否已免密；否则用 ssh-copy-id 推公钥（只需这一次输密码）
 push_key() {

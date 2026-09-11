@@ -492,7 +492,7 @@
             <div class="row" style="justify-content:space-between;"><b>PROD</b><span class="tag danger">生产</span></div>
             <table class="list" style="margin-top:8px;">
               <tbody>
-                <tr><td style="width:90px" class="muted">服务器</td><td class="k">106.52.176.246</td></tr>
+                <tr><td style="width:90px" class="muted">服务器</td><td class="k">{{PROD_HOST}}</td></tr>
                 <tr><td class="muted">服务数量</td><td>4</td></tr>
                 <tr><td class="muted">访问地址</td><td class="k">https://portal.kedouai.com</td></tr>
                 <tr><td class="muted">部署目录</td><td class="k">/data/web_system</td></tr>
@@ -563,11 +563,11 @@
                 <td><span class="tag">自定义</span></td>
                 <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
               <tr><td class="k">dev</td><td>开发环境</td><td class="k">https://dev.kedouai.com</td>
-                <td><span class="tag gray">gateway=175.27.189.123:8000</span></td>
+                <td><span class="tag gray">gateway={{DEV_HOST}}:8000</span></td>
                 <td><span class="tag primary">内置</span></td>
                 <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
               <tr><td class="k">prod</td><td>生产环境</td><td class="k">https://portal.kedouai.com</td>
-                <td><span class="tag gray">gateway=106.52.176.246:8000</span></td>
+                <td><span class="tag gray">gateway={{PROD_HOST}}:8000</span></td>
                 <td><span class="tag primary">内置</span></td>
                 <td><button class="btn mini gray" onclick="toast('编辑环境')">编辑</button></td></tr>
             </tbody>

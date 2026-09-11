@@ -19,8 +19,9 @@ export class AuthService {
    */
   validateUser(username: string, password: string): boolean {
     const adminUser = this.configService.get<string>('ADMIN_USER') || 'admin';
-    const adminPass = this.configService.get<string>('ADMIN_PASS') || 'deploy2026';
-    return username === adminUser && password === adminPass;
+    const adminPass = this.configService.get<string>('ADMIN_PASS');
+    // 未配置 ADMIN_PASS 时拒绝所有登录（不再回落内置默认口令）
+    return !!adminPass && username === adminUser && password === adminPass;
   }
 
   /**

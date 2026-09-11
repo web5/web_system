@@ -11,7 +11,7 @@
 | 前置 | 状态 |
 |---|---|
 | dev 机可达（SSH 22 / console 6200 / gateway 6000） | ✅ 已验证 |
-| `deploy_servers.dev-default = 175.27.189.123 / ubuntu / /data/web_system` | ✅ 已存在 |
+| `deploy_servers.dev-default = {{DEV_HOST}} / ubuntu / /data/web_system` | ✅ 已存在 |
 | `RELEASE_HOOK_SECRET` 本机与 dev 机同值 | ✅ 已存在 |
 | 本机 `~/.ssh/id_ed25519_servers` 可登录 dev 机 | ✅ 已验证 |
 | 代码拉取既有能力：内置 `pull`（`PullExecutor`+`ReleaseGitService`）可作回退；dev 机 `RELEASE_WORKSPACE=/data/web_system` 且为 git clone（master、origin 可达）、默认模板首节点为 `platform/git` | ✅ 已核实（2026-09-11） |
@@ -56,7 +56,7 @@
 | 编号 | 任务 | 改动 | 验收 |
 |---|---|---|---|
 | T1 | 环境→target 解析器 | `pipeline.service.ts`：新增 `resolveTargetForEnv(env, explicit?, templateDefault?)`；`run()` 使用；缺配置 fail-fast | 单测：`local→local`、`dev→remote`、显式覆盖生效 |
-| T2 | 目标机改读 DB | `remote-delivery.service.ts`：`resolveTarget(env)` 走 `ServerService.resolveEnvDefaultServer`；`~` 展开绝对路径 | 单测：mock `deploy_servers` 返回 175.27.189.123；无配置时报错 |
+| T2 | 目标机改读 DB | `remote-delivery.service.ts`：`resolveTarget(env)` 走 `ServerService.resolveEnvDefaultServer`；`~` 展开绝对路径 | 单测：mock `deploy_servers` 返回 {{DEV_HOST}}；无配置时报错 |
 | T3 | 远端变量下发 | `pipeline.service.ts`：`resolveStageVars` 增加 `GIT_COMMIT/REMOTE_*` 字段；`StageVarsInput` 扩展 | 单测：变量值正确（含 `REMOTE_ARTIFACT_DIR` 拼装） |
 | T4 | 配置补齐 | 配置中心（`web_system_deploy.config_items`，scope=env, env_id=dev）：`REMOTE_CONSOLE_URL`、`REMOTE_GATEWAY_URL` | `curl` 读配置接口返回两条 |
 | T4b | 远端模块注册补齐 | dev 机 `deploy_modules.admin`：`dir='admin'`、`public_path='admin'`（决策 D4） | 远端 `resolveStageVars` 不再依赖 `moduleKey` 兜底 |

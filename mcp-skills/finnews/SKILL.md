@@ -91,8 +91,8 @@ agent_created: true
 
 | 维度 | 说明 |
 |------|------|
-| 降级数据源 | `http://127.0.0.1:6007/api/market-pulse`、`/api/topics?limit=N`、`/api/sector-hot`（经 SSH 访问 dev 机器 `ubuntu@175.27.189.123`） |
-| 调用方式 | `ssh ubuntu@175.27.189.123 "curl -s http://127.0.0.1:6007/api/market-pulse"` |
+| 降级数据源 | `http://127.0.0.1:6007/api/market-pulse`、`/api/topics?limit=N`、`/api/sector-hot`（经 SSH 访问 dev 机器 `ubuntu@{{DEV_HOST}}`） |
+| 调用方式 | `ssh ubuntu@{{DEV_HOST}} "curl -s http://127.0.0.1:6007/api/market-pulse"` |
 | 数据格式 | 与 MCP 工具返回一致（sentiment_index / hot_sectors / topics 列表） |
 | 与公众号联动 | 若同时需要发布，直接运行 `web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`，一次完成「取数+生成+建稿」 |
 

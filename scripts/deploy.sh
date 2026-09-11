@@ -36,8 +36,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 统一走 ~/.ssh/config 别名（由 scripts/setup-ssh-key.sh 一次性打通免密）
 case "$TARGET" in
-  dev)  SSH_HOST="kedou-dev";  PORT_BASE=6000 ;;
-  prod) SSH_HOST="kedou-prod"; PORT_BASE=3000 ;;
+  dev)  SSH_HOST="kedou-dev";  PORT_BASE=6000; REMOTE_DIR="${DEV_REMOTE_DIR:-/data/web_system}" ;;
+  prod) SSH_HOST="kedou-prod"; PORT_BASE=3000; REMOTE_DIR="${PROD_REMOTE_DIR:-/data/web_system}" ;;
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
@@ -100,10 +100,10 @@ deploy_backend() { # $1=service_name
   fi
   tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
   scp_to "/tmp/${svc}-deploy.tar.gz"
-  local cmd="cd /data/web_system/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
-  cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r /data/web_system/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
+  local cmd="cd $REMOTE_DIR/servers/$dir && rm -rf dist && tar xzf /tmp/${svc}-deploy.tar.gz && rm -f /tmp/${svc}-deploy.tar.gz"
+  cmd="$cmd && { [ -d node_modules/@web-system/shared ] || { mkdir -p node_modules/@web-system && cp -r $REMOTE_DIR/packages/shared node_modules/@web-system/shared; echo '  [fix] shared 已补'; }; }"
   # 补建 @kedouai/agent-core 软链（指向远端 packages/agent-core），防止新包名部署后解析失败
-  cmd="$cmd && { [ -e /data/web_system/packages/agent-core ] && { [ -e node_modules/@kedouai/agent-core ] || { mkdir -p node_modules/@kedouai && ln -sfn ../../../../packages/agent-core node_modules/@kedouai/agent-core && echo '  [fix] agent-core 已补'; }; }; }"
+  cmd="$cmd && { [ -e $REMOTE_DIR/packages/agent-core ] && { [ -e node_modules/@kedouai/agent-core ] || { mkdir -p node_modules/@kedouai && ln -sfn ../../../../packages/agent-core node_modules/@kedouai/agent-core && echo '  [fix] agent-core 已补'; }; }; }"
   cmd="$cmd && pm2 restart $dir 2>&1 | tail -1"
   remote "$cmd"
   rm -f "/tmp/${svc}-deploy.tar.gz"
@@ -122,7 +122,7 @@ deploy_cdn() {
   if [ "$DRY_RUN" != "1" ]; then
     tar czf "/tmp/cdn-deploy.tar.gz" -C "$ROOT/servers/gateway/public/static" cdn
     scp_to "/tmp/cdn-deploy.tar.gz"
-    remote "mkdir -p /data/web_system/servers/gateway/public/static && cd /data/web_system/servers/gateway/public/static && rm -rf cdn && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
+    remote "mkdir -p $REMOTE_DIR/servers/gateway/public/static && cd $REMOTE_DIR/servers/gateway/public/static && rm -rf cdn && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
     rm -f "/tmp/cdn-deploy.tar.gz"
   fi
   log "自建 CDN 部署完成"
@@ -136,7 +136,7 @@ deploy_frontend() { # $1=module_name
     if [ "$DRY_RUN" != "1" ]; then
       tar czf "/tmp/shell-deploy.tar.gz" -C "$ROOT/apps/shell/dist" .
       scp_to "/tmp/shell-deploy.tar.gz"
-      remote "cd /data/web_system/servers/gateway/public/shell && rm -rf ./* && tar xzf /tmp/shell-deploy.tar.gz && rm -f /tmp/shell-deploy.tar.gz"
+      remote "cd $REMOTE_DIR/servers/gateway/public/shell && rm -rf ./* && tar xzf /tmp/shell-deploy.tar.gz && rm -f /tmp/shell-deploy.tar.gz"
       rm -f "/tmp/shell-deploy.tar.gz"
     fi
   else
@@ -144,14 +144,14 @@ deploy_frontend() { # $1=module_name
     if [ "$DRY_RUN" != "1" ]; then
       tar czf "/tmp/${mod}-deploy.tar.gz" -C "$ROOT/apps/$mod/dist" .
       scp_to "/tmp/${mod}-deploy.tar.gz"
-      remote "mkdir -p /data/web_system/servers/gateway/public/static/modules/$mod/$V && cd /data/web_system/servers/gateway/public/static/modules/$mod/$V && rm -rf ./* && tar xzf /tmp/${mod}-deploy.tar.gz && rm -f /tmp/${mod}-deploy.tar.gz"
+      remote "mkdir -p $REMOTE_DIR/servers/gateway/public/static/modules/$mod/$V && cd $REMOTE_DIR/servers/gateway/public/static/modules/$mod/$V && rm -rf ./* && tar xzf /tmp/${mod}-deploy.tar.gz && rm -f /tmp/${mod}-deploy.tar.gz"
       rm -f "/tmp/${mod}-deploy.tar.gz"
       # 更新 deploy 表版本（密码经远程 cnf 注入，不暴露在命令行）
       local db_host db_user db_pass
       if [ "$TARGET" = "dev" ]; then
         db_host="${DEV_DB_HOST:-127.0.0.1}"; db_user="${DEV_DB_USER:-root}"; db_pass="${DEV_DB_PASS:-}"
       else
-        db_host="${PROD_DB_HOST:-172.16.16.10}"; db_user="${PROD_DB_USER:-root}"; db_pass="${PROD_DB_PASS:-}"
+        db_host="${PROD_DB_HOST:?请在 scripts/.env.deploy 配置 PROD_DB_HOST}"; db_user="${PROD_DB_USER:-root}"; db_pass="${PROD_DB_PASS:-}"
       fi
       local env_id="$TARGET"
       remote "cat > /tmp/.deploy_cnf <<'CNF'

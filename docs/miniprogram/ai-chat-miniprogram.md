@@ -602,7 +602,7 @@ export class AiController {
 
 1. **安装依赖**
 ```bash
-cd /Users/geekwen/workspace/web_system
+cd {{WORKSPACE_DIR}}
 rush update
 ```
 
@@ -618,7 +618,7 @@ pnpm run start:dev
 
 3. **启动小程序**
 - 打开微信开发者工具
-- 导入项目：`/Users/geekwen/workspace/web_system/apps/mini-contract`
+- 导入项目：`{{WORKSPACE_DIR}}/apps/mini-contract`
 - 配置 AppID：`wxe7635bce95e7cff0`
 
 ### 生产环境

@@ -11,8 +11,8 @@
 #   - 幂等：已应用记录在 schema_migrations 表，二次执行自动跳过；
 #     迁移文件本身也多为 CREATE TABLE IF NOT EXISTS（双保险）
 #   - 目标库：迁移文件头 `-- @database <db>` 注解优先，否则用默认库（web_system）
-#   - 多环境：local（本机 socket）/ dev（SSH 175.27.189.123）/ prod（SSH 106.52.176.246）
-#     dev/prod 复用目标机 /data/web_system/.env 的 DB_* 凭据（密码不进命令行）
+#   - 多环境：local（本机 socket）/ dev（SSH，地址取 scripts/.env.deploy 的 DEV_SERVER）/ prod（同 PROD_SERVER）
+#     dev/prod 复用目标机远端目录 .env 的 DB_* 凭据（密码不进命令行）
 #   - DRY_RUN=1 只打印将要执行的文件
 #
 # 用法：
@@ -36,6 +36,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1090
+[ -f "$SCRIPTS_DIR/.env.deploy" ] && source "$SCRIPTS_DIR/.env.deploy"
 MIGRATIONS_DIR="$SCRIPT_DIR/migrations"
 TARGET="${1:-}"
 shift || true
@@ -60,10 +63,16 @@ err()  { echo -e "${RED}[migrate][ERROR]${NC} $1" >&2; exit 1; }
 
 # ---------- 目标环境 ----------
 case "$TARGET" in
-  local) SSH_TARGET=""; REMOTE_DIR="";       DEFAULT_DB="web_system" ;;
-  dev)   SSH_TARGET="ubuntu@175.27.189.123"; REMOTE_DIR="/data/web_system"; DEFAULT_DB="web_system" ;;
-  prod)  SSH_TARGET="root@106.52.176.246";   REMOTE_DIR="/data/web_system"; DEFAULT_DB="web_system" ;;
+  local) SSH_TARGET=""; REMOTE_DIR=""; DEFAULT_DB="web_system" ;;
+  dev)   SSH_TARGET="${DEV_SERVER:-}";  REMOTE_DIR="${DEV_REMOTE_DIR:-/data/web_system}";  DEFAULT_DB="web_system" ;;
+  prod)  SSH_TARGET="${PROD_SERVER:-}"; REMOTE_DIR="${PROD_REMOTE_DIR:-/data/web_system}"; DEFAULT_DB="web_system" ;;
   *)     err "用法: $0 <local|dev|prod> [--db <dbname>]" ;;
+esac
+
+# 远端目标必须显式配置（脚本内不再内置任何真实服务器地址）
+case "$TARGET" in
+  dev)  [ -n "$SSH_TARGET" ] || err "未在 scripts/.env.deploy 配置 DEV_SERVER（参考 .env.deploy.example）" ;;
+  prod) [ -n "$SSH_TARGET" ] || err "未在 scripts/.env.deploy 配置 PROD_SERVER（参考 .env.deploy.example）" ;;
 esac
 
 find_local_mysql() {
