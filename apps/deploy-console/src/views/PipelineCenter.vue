@@ -288,7 +288,8 @@ const form = ref({
   headerValues: 'on',
   templateId: undefined as string | undefined,
 })
-const releases = ref<{ versionTag: string; note?: string }[]>([])
+/** 可发布版本候选：versionTag=完整引用（展示用），commit=纯短哈希（提交用） */
+const releases = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
 const availTemplates = ref<PipelineTemplate[]>([])
 
 async function loadEnvironments() {
@@ -935,7 +936,7 @@ onUnmounted(stopPolling)
                 allow-clear
                 placeholder="留空=最新"
               >
-                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.versionTag">
+                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
                   {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
                 </a-select-option>
               </a-select>

@@ -411,6 +411,34 @@ export interface PipelineItem {
   reuseArtifact?: boolean
 }
 
+/** 发布版本候选行：`versionTag` 是完整引用（`default/91f744b`），`commit` 是纯短哈希（提交用） */
+export interface ReleaseCandidate {
+  versionTag: string
+  /** 纯 commit（由 versionTag 末段推导）——提交接口只接受纯短哈希 */
+  commit: string
+  component?: string
+  env?: string
+  gitCommit?: string
+  gitBranch?: string
+  releasedBy?: string
+  releasedAt?: string
+  status?: string
+  note?: string
+  /** db=版本表记录；artifact=磁盘产物（未登记版本表） */
+  source?: 'db' | 'artifact'
+}
+
+/**
+ * 从版本引用取纯 commit（`default/91f744b` → `91f744b`）。
+ *
+ * 为什么需要：版本列表给的是**完整引用**，而提交接口的 `commitId` 按纯短哈希设计
+ * （白名单不含 `/`）——直接透传会 400「目标 commit 含非法字符」。UI 侧统一在这里收敛。
+ */
+export function commitOf(versionTag: string): string {
+  const i = (versionTag || '').lastIndexOf('/')
+  return i >= 0 ? versionTag.slice(i + 1) : versionTag
+}
+
 export const pipelineApi = {
   submit: (dto: {
     env: string
@@ -455,25 +483,13 @@ export const pipelineApi = {
   remove: (id: string) =>
     http.delete(`/pipelines/${id}`) as Promise<{ ok: boolean }>,
 
-  /** 可发布版本（含磁盘上未登记版本表的历史产物） */
+  /** 可发布版本（含磁盘上未登记版本表的历史产物）；行内带纯 commit，供「Commit」下拉直接提交 */
   releases: (env?: string, component?: string) =>
-    http.get('/pipelines/meta/releases', {
-      params: { ...(env ? { env } : {}), ...(component ? { component } : {}) },
-    }) as Promise<
-      {
-        versionTag: string
-        component?: string
-        env?: string
-        gitCommit?: string
-        gitBranch?: string
-        releasedBy?: string
-        releasedAt?: string
-        status?: string
-        note?: string
-        /** db=版本表记录；artifact=磁盘产物（未登记版本表） */
-        source?: 'db' | 'artifact'
-      }[]
-    >,
+    (
+      http.get('/pipelines/meta/releases', {
+        params: { ...(env ? { env } : {}), ...(component ? { component } : {}) },
+      }) as Promise<Omit<ReleaseCandidate, 'commit'>[]>
+    ).then((rows) => (rows ?? []).map((r) => ({ ...r, commit: commitOf(r.versionTag) }))),
 
   /** 各流水线模板运行摘要：{ [templateId]: { total, ok, latest } } */
   summary: () =>
