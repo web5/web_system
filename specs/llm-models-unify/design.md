@@ -3,6 +3,12 @@
 > 状态：**待评审**（2026-09-11）
 > 分支：`feature/llm-models-unify`
 > 关联：`specs/dict-module/design.md`（字典能力来源）、`docs/development/agent-capability-playbook.md`（坑 10 / 11）
+>
+> ⚠️ **本文档的 `ModelPricingCatalog` + `PRICE_SOURCE` 灰度方案未被最终采用。**
+> 2026-09-11 收尾实现改为 `DictPricingProvider`（60s 轮询字典进内存、核算时同步查表），
+> 并直接删除 `/api/admin/model-pricing` 只读过渡接口与网关路由 —— 见
+> `specs/model-pricing-to-dict/design.md` 与 `servers/ai-service/src/agent-log/dict-pricing.provider.ts`。
+> 本文档保留为方案演进记录，实施请以 `specs/model-pricing-to-dict/design.md` 为准。
 
 ---
 

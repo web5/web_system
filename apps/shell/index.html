@@ -9,22 +9,30 @@
        顺序：vue → vue-demi(pinia 依赖) → vue-router → pinia → dayjs → dayjs 插件 → antd（antd UMD 依赖 Vue/dayjs/7 个 dayjs 插件）→ axios。
        版本与本地 pnpm-lock 对齐（vite.config 的 viteExternalsPlugin 映射同名全局）。
        资源由 scripts/build-externals.mjs 产出到 servers/gateway/public/static/cdn/，
-       nginx 托管 /static/cdn/ 并提供 CORS 头，dev/prod 统一从自家域名加载，不依赖外部 CDN。 -->
-  <script src="/static/cdn/vue.js"></script>
-  <script src="/static/cdn/vue-demi.js"></script>
-  <script src="/static/cdn/vue-router.js"></script>
-  <script src="/static/cdn/pinia.js"></script>
-  <script src="/static/cdn/dayjs.js"></script>
+       nginx 托管 /static/cdn/ 并提供 CORS 头，dev/prod 统一从自家域名加载，不依赖外部 CDN。
+
+       为什么全部加 defer（2026-09-11）：
+         ① 不阻塞 HTML 解析 → #app 里的"正在加载"占位能立即渲染；此前是纯白屏，
+            外壳入口（type=module）要等这 14 个脚本全部下载执行完才跑，弱网下表现为
+            "一直 loading 且 console 无任何日志"（外壳的启动日志在入口里，还没执行到）。
+         ② defer 保持脚本执行顺序（含最后 type=module 的 shell 入口按文档序在后），
+            vue → vue-demi → … → antd → axios 的依赖顺序语义不变。
+         ③ 失败可定位：defer 脚本的报错发生在解析之后，body 末尾的内联诊断脚本能提前挂上监听。 -->
+  <script defer src="/static/cdn/vue.js"></script>
+  <script defer src="/static/cdn/vue-demi.js"></script>
+  <script defer src="/static/cdn/vue-router.js"></script>
+  <script defer src="/static/cdn/pinia.js"></script>
+  <script defer src="/static/cdn/dayjs.js"></script>
   <!-- antd UMD 需要的 dayjs 插件（全局名 dayjs_plugin_*，antd 引用同名） -->
-  <script src="/static/cdn/dayjs-advancedFormat.js"></script>
-  <script src="/static/cdn/dayjs-customParseFormat.js"></script>
-  <script src="/static/cdn/dayjs-localeData.js"></script>
-  <script src="/static/cdn/dayjs-weekday.js"></script>
-  <script src="/static/cdn/dayjs-weekOfYear.js"></script>
-  <script src="/static/cdn/dayjs-weekYear.js"></script>
-  <script src="/static/cdn/dayjs-quarterOfYear.js"></script>
-  <script src="/static/cdn/antd.js"></script>
-  <script src="/static/cdn/axios.js"></script>
+  <script defer src="/static/cdn/dayjs-advancedFormat.js"></script>
+  <script defer src="/static/cdn/dayjs-customParseFormat.js"></script>
+  <script defer src="/static/cdn/dayjs-localeData.js"></script>
+  <script defer src="/static/cdn/dayjs-weekday.js"></script>
+  <script defer src="/static/cdn/dayjs-weekOfYear.js"></script>
+  <script defer src="/static/cdn/dayjs-weekYear.js"></script>
+  <script defer src="/static/cdn/dayjs-quarterOfYear.js"></script>
+  <script defer src="/static/cdn/antd.js"></script>
+  <script defer src="/static/cdn/axios.js"></script>
   <script>
     window.__SHARED__ = window.__SHARED__ || {};
     window.__MODULES__ = window.__MODULES__ || {};
@@ -32,9 +40,112 @@
     // 若 gateway 未注入（本地 dev 直跑），用空清单占位
     window.__MODULES_MANIFEST__ = window.__MODULES_MANIFEST__ || { env: 'dev', modules: [], canary: null };
   </script>
+  <style>
+    /* 启动占位：外壳挂载后 Vue 会清空 #app，这里无需手动移除。
+       只用内联样式，避免依赖尚未加载的 bundle CSS。 */
+    .boot-fallback {
+      min-height: 60vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: #8c8c8c;
+      text-align: center;
+      padding: 24px;
+    }
+    .boot-fallback__spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid rgba(0, 0, 0, 0.12);
+      border-top-color: #fa8c16;
+      border-radius: 50%;
+      animation: boot-spin 0.8s linear infinite;
+    }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+    .boot-fallback__hint { font-size: 13px; line-height: 1.7; max-width: 560px; }
+    .boot-fallback__hint code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
+    .boot-fallback--error .boot-fallback__spinner { display: none; }
+    .boot-fallback--error { color: #cf1322; }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <!-- 外壳（Vue）挂载会清空本容器；占位用于"依赖仍在下载"的可见反馈 -->
+    <div id="boot-fallback" class="boot-fallback">
+      <div class="boot-fallback__spinner" aria-hidden="true"></div>
+      <p>正在加载应用资源…</p>
+      <p class="boot-fallback__hint" id="boot-hint">
+        首次访问需下载约 0.5MB 前端依赖（gzip 后），请稍候。
+      </p>
+    </div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
+  <script>
+    // 启动自诊断（2026-09-11）：外壳入口执行前的失败此前是"白屏 + 零日志"，无法定位。
+    // 这里做三件事：① 捕获资源/运行期错误；② 校验 CDN 全局是否齐全；③ 超时兜底提示。
+    (function () {
+      var REQUIRED_GLOBALS = {
+        Vue: '/static/cdn/vue.js',
+        VueRouter: '/static/cdn/vue-router.js',
+        Pinia: '/static/cdn/pinia.js',
+        antd: '/static/cdn/antd.js',
+        axios: '/static/cdn/axios.js',
+        dayjs: '/static/cdn/dayjs.js'
+      };
+      var fallback = document.getElementById('boot-fallback');
+      var hint = document.getElementById('boot-hint');
+
+      function report(html) {
+        if (!fallback) return;
+        fallback.classList.add('boot-fallback--error');
+        if (hint) hint.innerHTML = html;
+      }
+
+      // ① 资源/运行期错误（capture 阶段才能捕获资源加载错误）
+      window.addEventListener('error', function (e) {
+        var target = e && e.target;
+        if (target && target.tagName === 'SCRIPT') {
+          console.error('[boot] 依赖脚本加载失败:', target.src);
+          report('依赖加载失败：<code>' + (target.src || '') + '</code><br>请检查网络后强制刷新（Ctrl/Cmd + Shift + R）。');
+          return;
+        }
+        if (e && e.message) {
+          console.error('[boot] 启动异常:', e.message, e.filename);
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason;
+        console.error('[boot] 未处理的 Promise 异常:', r);
+      });
+
+      // ② 校验 CDN 全局：能覆盖"监听挂上之前就已失败"的情况
+      function checkGlobals() {
+        var missing = [];
+        Object.keys(REQUIRED_GLOBALS).forEach(function (k) {
+          if (!window[k]) missing.push(REQUIRED_GLOBALS[k]);
+        });
+        if (missing.length) {
+          console.error('[boot] 缺失全局依赖:', missing);
+          report('依赖未就绪，缺失：<br><code>' + missing.join('</code><br><code>') + '</code><br>请检查 <code>/static/cdn/</code> 是否可访问后刷新。');
+          return true;
+        }
+        return false;
+      }
+      window.addEventListener('load', function () {
+        if (!checkGlobals()) console.log('[boot] CDN 依赖已就绪，等待外壳启动…');
+      });
+
+      // ③ 超时兜底：外壳入口若一直没执行（无任何日志），给出可操作提示
+      var BOOT_TIMEOUT_MS = 20000;
+      setTimeout(function () {
+        if (window.__LOADER__) return; // 外壳已启动
+        if (checkGlobals()) return;    // 已定位到缺失依赖
+        console.warn('[boot] 依赖已就绪但外壳入口仍未执行，疑似入口脚本加载失败');
+        report('前端资源已下载完，但应用入口未启动（超过 ' + (BOOT_TIMEOUT_MS / 1000) + ' 秒）。<br>请查看 Network 中 <code>/shell/assets/*.js</code> 是否加载成功，然后强制刷新。');
+      }, BOOT_TIMEOUT_MS);
+    })();
+  </script>
 </body>
 </html>

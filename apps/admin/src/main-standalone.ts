@@ -4,7 +4,9 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { setupAntd } from '@/plugins/antd';
 import App from './App.vue';
 import router from './router';
-import './style.css';
+// UI 规范：语义 token + antd 兜底（2026-09-03 D 接入，替代已删除的 ./style.css）
+import '@web-system/ui/tokens.css';
+import '@web-system/ui/theme.css';
 
 const app = createApp(App);
 const pinia = createPinia();

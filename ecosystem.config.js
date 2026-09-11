@@ -22,6 +22,21 @@ const DB_DATABASE = process.env.DB_DATABASE || 'web_system';
 /** knowledge-service 独立库（RAG：集合/文档/分块），与主库同实例不同库名 */
 const KNOWLEDGE_DB_DATABASE = process.env.DB_DATABASE_KNOWLEDGE || 'web_system_knowledge';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+/**
+ * 服务间调用：auth-service 地址（各服务 AuthGuard 转发 /auth/verify 用）。
+ * dev/prod 约定 6001；本地若该端口被占用，请在对应服务 .env 里显式覆盖（例如 6101）。
+ * ⚠️ 不要写成 `process.env.X || ''`：空串会被 ConfigService 当成「已配置」，
+ *    导致 fetch('') 失败并被误报成 401「认证服务不可用」（2026-09-11 dev 事故）。
+ */
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:6001';
+/**
+ * 服务间调用：system-service 地址（字典/系统配置等内部接口用）。
+ * dev/prod 约定 6004；若某环境 system-service 端口不同，请用 SYSTEM_SERVICE_URL 显式覆盖。
+ * ⚠️ 历史坑：多个服务的 pm2 环境里残留过 `http://127.0.0.1:3004`（旧端口），
+ *    表现为「服务调 system-service 一律失败 / 字典拉取 401 或 fetch failed」。
+ *    排查时务必先看 `pm2 env <id>` 的这项，而不是只看 .env（pm2 env 优先于 dotenv）。
+ */
+const SYSTEM_SERVICE_URL = process.env.SYSTEM_SERVICE_URL || 'http://127.0.0.1:6004';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
 const MINI_PROGRAM_SECRET = process.env.MINI_PROGRAM_SECRET || '';
@@ -70,10 +85,10 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6000,
         HOST: '0.0.0.0',
-        AUTH_SERVICE_URL: 'http://127.0.0.1:6001',
+        AUTH_SERVICE_URL,
         USER_SERVICE_URL: 'http://127.0.0.1:6002',
         AI_SERVICE_URL: 'http://127.0.0.1:6003',
-        SYSTEM_SERVICE_URL: 'http://127.0.0.1:6004',
+        SYSTEM_SERVICE_URL,
         TODO_SERVICE_URL: 'http://127.0.0.1:6005',
         MCP_GATEWAY_URL: 'http://127.0.0.1:6006',
         CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6007',
@@ -115,6 +130,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6002,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
+        SYSTEM_SERVICE_URL,
       },
       error_file: `${logBase}/user-error.log`,
       out_file: `${logBase}/user-out.log`,
@@ -128,6 +145,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6003,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
+        SYSTEM_SERVICE_URL,
         IMAGE_GEN_API_URL: process.env.IMAGE_GEN_API_URL || 'https://tokenhub.tencentmaas.com',
         IMAGE_GEN_API_KEY: process.env.IMAGE_GEN_API_KEY,
         IMAGE_GEN_MODEL: process.env.IMAGE_GEN_MODEL || 'stable-diffusion-xl',
@@ -145,6 +164,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6004,
         ...baseDbConfig,
+        AUTH_SERVICE_URL,
       },
       error_file: `${logBase}/system-error.log`,
       out_file: `${logBase}/system-out.log`,
@@ -159,6 +179,8 @@ module.exports = {
         PORT: 6005,
         ...baseDbConfig,
         JWT_SECRET,
+        AUTH_SERVICE_URL,
+        SYSTEM_SERVICE_URL,
       },
       error_file: `${logBase}/todo-error.log`,
       out_file: `${logBase}/todo-out.log`,
@@ -172,6 +194,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6008,
         ...baseDbConfig,
+        SYSTEM_SERVICE_URL,
       },
       error_file: `${logBase}/upload-error.log`,
       out_file: `${logBase}/upload-out.log`,
@@ -185,6 +208,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6006,
         ...baseDbConfig,
+        SYSTEM_SERVICE_URL,
         // 财经资讯微服务（content-hub 内模块）：默认同机直连 :6007（Node fetch 对 gateway 代理端口有 bad port 问题）
         // 如需经 gateway 代理，可用环境变量覆盖 FINNEWS_SERVICE_URL=http://127.0.0.1:6000/api/finnews + AUTH_TYPE=bearer
         FINNEWS_SERVICE_URL: process.env.FINNEWS_SERVICE_URL || 'http://127.0.0.1:6007',
@@ -217,6 +241,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6007,
         ...baseDbConfig,
+        SYSTEM_SERVICE_URL,
         LLM_API_KEY: process.env.IMAGE_GEN_API_KEY || '',
         LLM_BASE_URL: 'https://tokenhub.tencentmaas.com/v1',
         LLM_MODEL: 'hy3',
@@ -238,7 +263,8 @@ module.exports = {
         PORT: 6011,
         ...baseDbConfig,
         DB_DATABASE: KNOWLEDGE_DB_DATABASE,
-        AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || '',
+        AUTH_SERVICE_URL,
+        SYSTEM_SERVICE_URL,
         INTERNAL_API_KEY: process.env.KNOWLEDGE_INTERNAL_API_KEY || process.env.INTERNAL_API_KEY || '',
         TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL || 'https://tokenhub.tencentmaas.com/v1',
         TOKENHUB_API_KEY: process.env.TOKENHUB_API_KEY || process.env.HY3_API_KEY || process.env.LLM_API_KEY || '',

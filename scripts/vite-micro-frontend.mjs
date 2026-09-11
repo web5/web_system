@@ -71,6 +71,14 @@ export function microFrontendConfig(opts) {
             rollupOptions: {
               input: entry,
               external: Object.keys(externals),
+              // ⚠️ 必须（且只能在「输入选项」这一层，放 output 里会被 Rollup 判为 Unknown output options 而静默忽略）：
+              // 入口是微前端「远端模块」，它的导出就是对外契约（default = lifecycle）。
+              // 默认（未设）时 Rollup 认为入口导出无人使用，会把导出名压缩/重写成 exports("l", …)
+              // 这类单字母，default 直接消失 → 基座 shell-loader 的 System.import 分支拿不到 mount，
+              // 只能靠产物末尾的 window.__MODULES__ 全局副作用 + UMD 回退侥幸挂载
+              // （两条路径都不成立时，页面表现为「一直 loading 且无任何报错」）。
+              // 设 'strict' 后 index.js 保留 export default / 命名导出，加载路径确定。
+              preserveEntrySignatures: 'strict',
               output: {
                 format: 'system',
                 entryFileNames: 'index.js',

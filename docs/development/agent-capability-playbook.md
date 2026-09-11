@@ -20,6 +20,7 @@
 | 2026-09-11 | v1.3 | 权限同步自动化：**发布流水线收尾自动同步**（`PIPELINE_PERM_SYNC`，失败不阻断）、同步动作落审计（`operation_logs` → `sync_permission`）、角色权限页顶部差异提示；§7 坑 2 补自动化与提示说明 | AI |
 | 2026-09-11 | v1.4 | 单价真相源迁到字典：§2 链路改为按字典价核算、§3.4 `model_pricing` 标弃用、§4 入口 10 改为只读总览（权限改 `system:dict:view`）；§7 增坑 12（价格在哪维护、多久生效、旧表已失效） | AI |
 | 2026-09-11 | v1.5 | **「模型」页整体下线**（清单/价格统一在「字典管理 · 大模型清单」维护），§4 去掉该入口；§7 增坑 13（admin 内部跳转不能手写 `/admin` 前缀，router base 已含，重复会 404） | AI |
+| 2026-09-11 | v1.6 | 收尾下线（过渡期结束）：单价迁入字典 `llm_models`（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
 
 ---
 
@@ -37,7 +38,6 @@ https://local.kedouai.com/admin/agents/playground     ← 对话调试，先看�
 agents:view  agents:manage  agents:debug
 skills:view  skills:manage
 knowledge:view  knowledge:manage
-agents:cost:view
 ```
 
 **服务端口**：gateway `6000` · ai-service `6003` · ai-agent `6010` · knowledge-service `6011` · mcp-gateway `6006`
@@ -184,7 +184,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 **技能库** `/api/admin/skills/*`（读 `skills:view` / 写 `skills:manage`）
 列表 · `:code` 详情正文 · 新建 · 全量覆盖编辑 · 删除 · `POST /import`（zip 技能包 ≤5MB）
 
-**成本核算** `/api/admin/model-pricing`（`agents:cost:view`）：列表 / 幂等 upsert / 删除
+**成本核算**：单价由字典 `llm_models` 的 attrs 维护（`input_price_per1k` / `output_price_per1k`，元 / 1K tokens；`currency` 仅展示），**无独立页面与接口**。ai-service 每 60s 拉 `/internal/dict/llm_models` 缓存进内存，落 run 时按内存单价核算（未定价按 0）；改价后 60s 内生效
 
 ### 3.4 数据表（7 张）
 
@@ -196,7 +196,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | `agent_definition_versions` | ai-service | agentId、version、全量快照、changeNote、createdBy |
 | `agent_runs` | ai-service | agentId、userId、conversationId、steps(json)、finalAnswer、error、status、durationMs、source、agentVersion、prompt/completion/totalTokens、cost |
 | `run_metrics` | ai-service | agentId、model、date、runCount、okCount、errorCount、totalTokens、totalCost、totalDurationMs |
-| `model_pricing` | ai-service | ⚠️ **已弃用**（2026-09-11）：单价已迁到字典 `llm_models` 的 `input_price_per1k` / `output_price_per1k` / `currency`；本表只留痕，写接口已下线 |
+| `model_pricing` | ai-service | ⚠️ **已停用（2026-09-11 留档）**：单价已迁到字典 `llm_models` 的 `input_price_per1k` / `output_price_per1k` / `currency`；表与存量数据保留、**不再读写**（只读过渡接口已随 v1.6 一并删除） |
 | `agent_skills` | ai-service | code(unique)、description(on-demand 摘要)、content(SKILL.md 正文)、requiredTools、enabled |
 | `agent_conversations` | **ai-agent** | id、userId、summary、summarizedCount、messages(json)、title、report、meta |
 
@@ -211,7 +211,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 
 ---
 
-## 4. UI 体验入口（admin 共 8 页）
+## 4. UI 体验入口（admin 共 9 页）
 
 > 基座前缀 `https://local.kedouai.com`（或 `http://localhost:5174`）。**admin 路由 base 是 `/admin/`**，漏了会 404。
 
@@ -272,7 +272,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 |---|---|---|---|
 | ① 看运行 | 5 min | playground 发一句需联网/需工具的话，盯 SSE 事件流 | 能看到 `tool_call`/`tool_result`，`skill_load` 在合适时机被触发 |
 | ② 验热更新 | 10 min | definitions 改 systemPrompt / 勾一个新工具 → **publish** → 等 30s → 回 playground | **无需重启服务**即生效（这是本架构最值得确认的一点） |
-| ③ 验观测闭环 | 5 min | 刚才那次 run 应已进入 `/admin/agents/runs/*/run/:id` | token/成本与 model-pricing 能对上 |
+| ③ 验观测闭环 | 5 min | 刚才那次 run 应已进入 `/admin/agents/runs/*/run/:id` | token/成本与字典 `llm_models` 里配置的单价能对上（改价后 60s 内生效） |
 | ④ 验权限闸门 | 5 min | CLI 或 playground 触发 `write-file`/`shell-exec` | 挂起 → 确认/拒绝两条分支都通；60s 超时自动拒绝 |
 | ⑤ 验知识检索 | 5 min | knowledge 灌一篇文档 → retrieval 调 topK 召回 → definitions 挂到某 agent → playground 复问 | 能正确引用刚灌进去的文档内容 |
 
@@ -365,3 +365,4 @@ ls packages/agent-core/src/tools/coding/
 | 本地发布运维手册 | [`docs/development/local-release-runbook.md`](local-release-runbook.md) |
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
 | 评测框架（L1~L4） | [`.codebuddy/agent-kit/references/eval-framework.md`](../../.codebuddy/agent-kit/references/eval-framework.md) |
+| 跨工具 Agent 上下文装配（AGENTS.md / Claude Code / Codex / Cursor） | [`docs/development/cross-tool-agent-context-design.md`](cross-tool-agent-context-design.md) |

@@ -333,16 +333,6 @@ export class ProxyController {
     return this.proxyService.getAiProxy()(req, res);
   }
 
-  // 模型单价（/api/admin/model-pricing → ai-service；必须注册在 admin/:path(*) 通配之前）
-  @All('admin/model-pricing')
-  proxyModelPricingExact(@Req() req: Request, @Res() res: Response) {
-    return this.proxyService.getAiProxy()(req, res);
-  }
-  @All('admin/model-pricing/:path(*)')
-  proxyModelPricingWildcard(@Req() req: Request, @Res() res: Response) {
-    return this.proxyService.getAiProxy()(req, res);
-  }
-
   // 当前用户权限（/api/permissions/my → user-service）
   @All('permissions/my')
   proxyMyPerms(@Req() req: Request, @Res() res: Response) {

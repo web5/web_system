@@ -11,9 +11,9 @@ import {
   environmentApi,
   deployApi,
   pipelineTemplateApi,
-  moduleApi,
   type PipelineTemplate,
 } from '@/api'
+import BranchSelect from '@/components/BranchSelect.vue'
 
 const props = defineProps<{
   open: boolean
@@ -41,7 +41,6 @@ const submitting = ref(false)
 
 /** 当 initialModuleKey 传入（即从模块详情/列表点击进入）时，隐藏模块下拉 */
 const lockModule = computed(() => !!props.initialModuleKey)
-const gitBranchesLoading = ref(false)
 
 const form = ref({
   env: 'dev',
@@ -105,27 +104,13 @@ async function loadReleases() {
     releases.value = []
   }
 }
-async function loadBranches(moduleKey: string) {
-  if (!moduleKey) {
-    gitBranches.value = []
-    gitCurrent.value = null
-    return
-  }
-  gitBranchesLoading.value = true
-  try {
-    const r = await moduleApi.branches(moduleKey)
-    gitBranches.value = r.branches || []
-    gitCurrent.value = (r.current && r.current !== 'HEAD') ? r.current : null
-    // 若当前分支未在列表中（例如刚切换未推送），把当前分支补进列表以便默认选中
-    if (gitCurrent.value && !gitBranches.value.includes(gitCurrent.value)) {
-      gitBranches.value = [gitCurrent.value, ...gitBranches.value]
-    }
-  } catch {
-    gitBranches.value = []
-    gitCurrent.value = null
-  } finally {
-    gitBranchesLoading.value = false
-  }
+/**
+ * BranchSelect 拉完分支后回传结果：用于「发布目录当前分支」提示与「未拉取到远程分支」告警。
+ * 分支的加载/默认选中逻辑已收敛到 BranchSelect 组件（auto-select-current）。
+ */
+function onBranchesLoaded(info: { branches: string[]; current: string | null }) {
+  gitBranches.value = info.branches
+  gitCurrent.value = info.current
 }
 
 function resetForm() {
@@ -151,23 +136,13 @@ watch(
     if (!form.value.moduleKey && availableModules.value.length) {
       form.value.moduleKey = availableModules.value[0].key
     }
-    await Promise.all([loadTemplates(), loadReleases(), loadBranches(form.value.moduleKey)])
-    // 加载完分支后：若用户未选过，落到当前分支；否则保持
-    if (!form.value.branch || form.value.branch === 'master') {
-      if (gitCurrent.value) form.value.branch = gitCurrent.value
-    }
+    await Promise.all([loadTemplates(), loadReleases()])
+    // 分支由 BranchSelect 依据 moduleKey 自行加载，并把「当前分支」作为默认（auto-select-current）
   },
 )
 
-/** 当加载到的当前分支覆盖默认 master（用户首次打开抽屉时希望看到当前分支） */
-watch(gitCurrent, (cur) => {
-  if (cur && (!form.value.branch || form.value.branch === 'master')) {
-    form.value.branch = cur
-  }
-})
-
 function onModuleChange() {
-  void Promise.all([loadTemplates(), loadReleases(), loadBranches(form.value.moduleKey)])
+  void Promise.all([loadTemplates(), loadReleases()])
 }
 function onEnvChange() {
   void Promise.all([loadReleases(), loadTemplates()])
@@ -328,23 +303,13 @@ const envLabel = (id: string) => {
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item label="分支">
-            <a-select
-              v-model:value="form.branch"
-              show-search
-              allow-clear
-              :placeholder="gitBranches.length ? '选择分支（可直接输入）' : '加载分支中…'"
-              :filter-option="(input: string, opt: any) => (opt?.value || '').toString().toLowerCase().includes(input.toLowerCase())"
-              :loading="gitBranchesLoading"
-            >
-              <a-select-option v-for="b in gitBranches" :key="b" :value="b">
-                {{ b }}{{ b === gitCurrent ? '（当前）' : '' }}
-              </a-select-option>
-              <template v-if="!gitBranches.length" #notFoundContent>
-                <a-typography-text type="secondary" style="padding: 8px;">
-                  暂无可用分支，请先 git push
-                </a-typography-text>
-              </template>
-            </a-select>
+            <!-- 分支下拉与发布流水线页/流水线详情页共用同一组件（见 BranchSelect 头注释） -->
+            <BranchSelect
+              v-model="form.branch"
+              :module-key="form.moduleKey"
+              auto-select-current
+              @loaded="onBranchesLoaded"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="12">
