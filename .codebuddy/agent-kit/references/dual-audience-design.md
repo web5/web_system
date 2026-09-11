@@ -15,7 +15,7 @@ source: 本 kit 自演进（第 0 号实例 · 写作习惯团聚）
 
 ## 一、做成 / 不算做成
 
-- **做成** = 任一定义资产的每个段落都能唯一归入 AI 面或人面；AI 常驻层（L1）里找不到一句说服性文字；人与 AI 共用的内容只有「判据」一类，且编号同源。
+- **做成** = 任一定义资产的每个段落都能唯一归入 AI 面或人面；AI 常驻层里找不到一句说服性文字；人与 AI 共用的内容只有「判据」一类，且编号同源。
 - **不算做成** = 出现下列任一（这四条即 S8 的检查项）：
   1. `SKILL.md` 正文出现「为什么 / 依据是 / 某某认为」等说服性内容；
   2. 某条 rules 只有约束文本、没有可执行的判定手段；
@@ -49,9 +49,9 @@ source: 本 kit 自演进（第 0 号实例 · 写作习惯团聚）
 
 | 层 | 内容 | 主要读者 | 预算 |
 |---|---|---|---|
-| **L0 契约** | frontmatter：`name` / `description`（含触发词）/ `version` / `checks` / `loads` / `rationale` | 机器路由 | 数十 token，常驻 |
-| **L1 指令** | `SKILL.md` 正文：纯祈使句步骤 | AI 命中后加载 | 硬上限（见 §七） |
-| **L2 外置** | `RATIONALE.md`（why / 决策 / 反例 / 演进）+ `references/*` | 人为主；AI 按需跟随 | 不限 |
+| **契约层** | frontmatter：`name` / `description`（含触发词）/ `version` / `checks` / `loads` / `rationale` | 机器路由 | 数十 token，常驻 |
+| **指令层** | `SKILL.md` 正文：纯祈使句步骤 | AI 命中后加载 | 硬上限（见 §七） |
+| **外置层** | `RATIONALE.md`（why / 决策 / 反例 / 演进）+ `references/*` | 人为主；AI 按需跟随 | 不限 |
 
 关键：**人面内容不是删掉，是降级到 L2**。这与 `rules/04` 的上下文工程原则同构——此前只是没把它用在「给人读的内容」上。
 
@@ -77,6 +77,13 @@ checks: .github/workflows/eval-gate.yml   # 与之绑定的机器检查
 loads: references/thinking-checklist.md   # 按需加载清单，禁止预载
 ---
 ```
+
+新增 / 改名技能的同步清单（缺一即出现孤儿或门禁失败）：
+
+1. `scripts/check-structure.sh` 的 S2 白名单与 S5 路由目标；
+2. `skills/rd-digital-agent/SKILL.md` 分派决策树与子技能矩阵；
+3. `evals/cases/routing.md` 路由用例（输入冻结，只追加）；
+4. `README.md` 目录结构。
 
 ### 5.2 rules（红线，必须可判定）
 
@@ -116,9 +123,9 @@ source: <事实来源或推导标记>   # 外部引用标出处；本地推导�
 
 1. `SKILL.md` 内容变更 → bump `version`；
 2. 同目录存在 `RATIONALE.md` → 其 frontmatter `reviewed-at-version` 必须等于 `SKILL.md` 的 `version`；
-3. 不等 → CI 失败（S8-3）。确因改动不影响设计理由而不同步的，须在 `RATIONALE.md` 标 `stale: true` 并写明原因，CI 放行。
+3. 不等 → CI 失败（S8-2）。确因改动不影响设计理由而不同步的，须在 `RATIONALE.md` 标 `stale: true` 并写明原因，CI 放行。
 
-行数上限（按当前实况 66–228 行设定，见 §十）：**普通 skill ≤ 150 行；Hub（`rd-digital-agent`，含完整分派决策树）≤ 260 行**。超出 → 抽 `references/`，不准靠压缩措辞硬塞。
+行数上限：**普通 skill ≤ 150 行；Hub（`rd-digital-agent`，含完整分派决策树）≤ 260 行**。超出 → 抽 `references/`，不准靠压缩措辞硬塞。
 
 ## 八、机器检查 S8（`eval-gate.yml`）
 
@@ -129,7 +136,7 @@ source: <事实来源或推导标记>   # 外部引用标出处；本地推导�
 | S8-3 | `rules/general/NN-*.md` 每条必须含「判定手段」节 | `grep` |
 | S8-4 | `SKILL.md` 正文禁出现说服性标记（「Anthropic 认为」「依据是」等）在指令行内 | `grep` 白名单排除引用区 |
 
-> S8 是**结构不变量**检查，不替代评测；改 kit 仍<｜hy_place▁holder▁no▁813｜> §评测报告门禁（`README.md` §改动 kit 的门禁）。
+> S8 是**结构不变量**检查，不替代评测；改 kit 仍受 `README.md` §改动 kit 的门禁 约束。
 
 ## 九、迁移路径（渐进，禁止一次性重写）
 

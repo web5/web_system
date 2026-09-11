@@ -1,7 +1,7 @@
 ---
 name: rd-digital-agent
-description: 通用数字人 Hub — 根据任务类型与复杂度自动分派到子技能（brainstorm → plan → execute → review 流水线，外加调试/重构/探索/审查；执行收尾挂完成验证门）。唯一编排入口（编排权唯一）；工程纪律与行为准则由本 Hub 调用，见 references/three-kits-architecture.md。方案探索、内容创作、问题修复、重构等场景的入口。
-version: 4.4.0
+description: 通用数字人 Hub — 根据任务类型与复杂度自动分派到子技能（brainstorm → plan → execute → review 流水线，外加调试/重构/探索/审查；执行收尾挂完成验证门）。唯一编排入口（编排权唯一）；工程纪律与产出纪律由本 Hub 调用，见 references/methodology-design.md。方案探索、内容创作、问题修复、重构等场景的入口。
+version: 4.6.0
 rationale: RATIONALE.md
 checks: .github/workflows/eval-gate.yml（S8 双面一致性）
 loads: references/（见文末「共享参考文档」表）
@@ -13,55 +13,55 @@ loads: references/（见文末「共享参考文档」表）
 
 ## 唯一方法论来源（编排权唯一）
 
-**方法来源唯一 = Anthropic AI native 工作方法论**（任务开工前先给交付物定义与验收判据 / spec 自带端到端验证步骤 / 完成要给证据；口径落点与论证见 `references/anthropic-workflow-mapping.md`）。本地化落点：设计阶段由 `rd-plan` 产出「验证判据表 V1…Vn」，交付阶段由 `rd-execute` 完成验证门按**同一编号**逐条给证据——**设计与交付验证同构**。
+**方法来源唯一 = Anthropic AI native 工作方法论**（任务开工前先给交付物定义与验收判据 / spec 自带端到端验证步骤 / 完成要给证据；口径落点与论证见 `../../references/anthropic-workflow-mapping.md`）。本地化落点：设计阶段由 `rd-plan` 产出「验证判据表 V1…Vn」，交付阶段由 `rd-execute` 完成验证门按**同一编号**逐条给证据——**设计与交付验证同构**。
 
-**编排权唯一**：宿主环境若存在同域/同名的第二套编排 skill（如 `brainstorming` / `writing-plans` / `executing-plans` / `spec-driven-development`），同域同名冲突以本 Kit 的 `rd-*` 为准，不以"环境里正好有"为选用理由。处理优先级：① 补齐其模板的「交付物定义 + 验证判据」字段使其与主链同构（首选）→ ② 以 `rd-*` 为准 → ③ 整体卸载（最后手段，见 `references/three-kits-architecture.md` §三 R1）。
+**编排权唯一**：宿主环境若存在同域/同名的第二套编排 skill（如 `brainstorming` / `writing-plans` / `executing-plans` / `spec-driven-development`），同域同名冲突以本 Kit 的 `rd-*` 为准，不以"环境里正好有"为选用理由。处理优先级：① 补齐其模板的「交付物定义 + 验证判据」字段使其与主链同构（首选）→ ② 以 `rd-*` 为准（见 `../../references/methodology-design.md` §七）。
 
-工程纪律类技能（TDD / 调试 / 完成前验证 / 并行分派）与行为准则由本 Hub 调用，属本套方法论组成部分，**不属第二套工作流、不得禁用**（组成关系见 `references/three-kits-architecture.md` §一）。
-> 为什么编排权必须唯一（含双主链的实测失效形态）与为什么不优先整体卸载：见 `RATIONALE.md` §1。
+工程纪律（TDD / 调试 / 完成前验证 / 增量重构 / 并行分派 / worktree / 请审接审）与产出纪律由本 Hub 调用，属本套方法论组成部分，**不属第二套工作流、不得禁用**（资产模型见 `../../references/methodology-design.md` §一）。
+> 为什么编排权必须唯一（含双主链的实测失效形态）：见 `RATIONALE.md` §1。
 
-逐层落点审计见 `references/anthropic-workflow-mapping.md`。
+逐层落点审计见 `../../references/anthropic-workflow-mapping.md`。
 
 ## 分派决策
 
 ```
 用户请求
   │
-  ├─ 模糊需求 / "我要个X" / 需求澄清 / 意图确认后 ──→ .skills/requirement-translation
+  ├─ 模糊需求 / "我要个X" / 需求澄清 / 意图确认后 ──→ skills/requirement-translation
   │                                         ↓ 产出需求 spec（验收判据 + 反例 + 待确认）
-  │                                      .skills/rd-brainstorm（探索方案选项）
+  │                                      skills/rd-brainstorm（探索方案选项）
   │
-  ├─ "怎么做" / "设计方案" / 模糊需求 ──→ .skills/rd-brainstorm
+  ├─ "怎么做" / "设计方案" / 模糊需求 ──→ skills/rd-brainstorm
   │                                         ↓ 用户选方案后
-  │                                      .skills/rd-plan
+  │                                      skills/rd-plan
   │                                         ↓ 用户确认后
-  │                                      .skills/rd-execute
+  │                                      skills/rd-execute
   │                                         ↓ 完成后
-  │                                      .skills/rd-review
+  │                                      skills/rd-review
   │
-  ├─ "拆任务" / "细化" / 已有明确方案 ──→ .skills/rd-plan
+  ├─ "拆任务" / "细化" / 已有明确方案 ──→ skills/rd-plan
   │                                         ↓
-  │                                      .skills/rd-execute → rd-review
+  │                                      skills/rd-execute → rd-review
   │
-  ├─ "做个原型" / 交互怎么设计 / 先看形态 → .skills/ux-prototype-designer
+  ├─ "做个原型" / 交互怎么设计 / 先看形态 → skills/ux-prototype-designer
   │                                         ↓ 产出原型稿 → 过独立交互质检 → 人确认
-  │                                      .skills/rd-plan（回填 page-spec）→ rd-execute → rd-review
+  │                                      skills/rd-plan（回填 page-spec）→ rd-execute → rd-review
   │
-  ├─ 报错 / 测试失败 / 意外行为 ───────→ .skills/systematic-debugging
+  ├─ 报错 / 测试失败 / 意外行为 ───────→ skills/systematic-debugging
   │                                         ↓ 根因修复后
   │                                      `rd-execute` 完成验证门（对照 V1…Vn）
   │
-  ├─ "重构" / "清理" / 消除重复 ───────→ .skills/incremental-refactoring
+  ├─ "重构" / "清理" / 消除重复 ───────→ skills/incremental-refactoring
   │                                         ↓ 全量回归后
   │                                      `rd-execute` 完成验证门（对照 V1…Vn）
   │
-  ├─ "X 在哪实现" / 理解项目结构 ──────→ .skills/code-explore（只读探索）
+  ├─ "X 在哪实现" / 理解项目结构 ──────→ skills/code-explore（只读探索）
   │
-  ├─ 小改动 / "修 bug" / 简单任务 ─────→ .skills/rd-execute（直连，仍须最小计划+方案，原型稿按 rd-plan 判定可省）
+  ├─ 小改动 / "修 bug" / 简单任务 ─────→ skills/rd-execute（直连，仍须最小计划+方案，原型稿按 rd-plan 判定可省）
   │                                         ↓
-  │                                      .skills/rd-review
+  │                                      skills/rd-review
   │
-  ├─ 架构 / 选型 / 安全 / 信息结构 ────→ .skills/tech-review（辅助审查）
+  ├─ 架构 / 选型 / 安全 / 信息结构 ────→ skills/tech-review（辅助审查）
   │
   ├─ 任何交付前收尾 ──────────────────→ `rd-execute` 完成验证门（任何任务不分级）
   │
@@ -103,7 +103,7 @@ loads: references/（见文末「共享参考文档」表）
    → `test-verification` 按需求 spec 验收判据盲测产物，对开发结果质疑、对需求判据缺失质疑；与开发者自证（`rd-execute` 完成验证门）互补不替代
 
 底层思考工具：`rd-plan/references/thinking-checklist.md`（苏格拉底辨证 / 第一性原理 / 芒格）——评审前自问、评审时复核答案质量。
-分级：日常小改动只跑 thinking-checklist 简化档（最小交付卡 4 行仍必答）；中大型 / 跨模块方案走完整评审链。**分级只压缩过程仪式，不豁免「交付物定义 + 验证判据先行」两件套**（开工前置不变量，见 AGENT.md；Anthropic 口径落点见 `references/anthropic-workflow-mapping.md`）。
+分级：日常小改动只跑 thinking-checklist 简化档（最小交付卡 4 行仍必答）；中大型 / 跨模块方案走完整评审链。**分级只压缩过程仪式，不豁免「交付物定义 + 验证判据先行」两件套**（开工前置不变量，见 AGENT.md；Anthropic 口径落点见 `../../references/anthropic-workflow-mapping.md`）。
 红线的执行入口也在此挂载：兜底红线（无业务定义即显式报错）落在两清单的 A 项；辨证铁律（答不出 = 待确认）贯穿全程。
 
 ## 跨角色质疑边（反馈回路，非单向接力）
@@ -153,6 +153,7 @@ loads: references/（见文末「共享参考文档」表）
 > 为什么需要子 Agent（单 Agent 顺序执行的上下文代价）：见 `RATIONALE.md` §3。
 
 - 每个子 Agent 独立上下文，完成后**立即释放**；主 Agent 只保存结果摘要——**摘要须含 结论 + 依据 + 未决项**，缺一即视为信息丢失。
+- **分派前提**：子任务之间**无共享文件、无顺序依赖**才可并行；任一子任务会改到另一子任务要读/改的文件 → 改为串行；子任务数 < 2 不并行。
 - 架构图、`task()` 调用示例、团队名占位符替换：见 `references/team-mode-playbook.md`（需要搭建团队模式时才加载）。
 - 宿主环境不提供 `Task` 工具时退化为串行执行，不视为违反工作流。
 
