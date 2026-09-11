@@ -7,6 +7,10 @@ interface PipeLike {
   env: string;
   gitBranch?: string;
   versionTag?: string;
+  /** R6 版本身份前缀（产物命名空间） */
+  templateKey?: string;
+  /** 入参 commit 快照 */
+  requestedCommit?: string;
   reuseArtifact: boolean;
   gitCommit?: string;
   moduleType?: string;
@@ -60,6 +64,35 @@ describe('CheckExecutor（check 安全基线执行体）', () => {
     expect(ctx.pipeline.reuseArtifact).toBe(true);
     expect(ctx.pipeline.gitCommit).toBe('abc1234');
     expect(d.registry.findByVersionTag).toHaveBeenCalledWith('abc1234');
+  });
+
+  it('v5 顺序（git 已把 versionTag 回填成完整引用）→ 不重复拼前缀，复用仍生效', async () => {
+    // 回归：v5 的 git 是首节点，check 在它之后跑；旧实现会拼成 default/default/91f744b → 复用永久失效
+    const d = deps({
+      artifacts: { exists: jest.fn(() => true) },
+      registry: { findByVersionTag: jest.fn(async () => ({ gitCommit: '91f744b' })) },
+    });
+    const ex = new CheckExecutor(d.moduleRegistry as never, d.artifacts as never, d.registry as never);
+    const ctx = mk({ versionTag: 'default/91f744b', templateKey: 'default' });
+    await ex.run(ctx as never as StepContext);
+
+    expect(d.artifacts.exists).toHaveBeenCalledWith('admin', 'default/91f744b');
+    expect(d.artifacts.exists).not.toHaveBeenCalledWith('admin', 'default/default/91f744b');
+    expect(ctx.pipeline.reuseArtifact).toBe(true);
+    expect(ctx.pipeline.versionTag).toBe('default/91f744b');
+  });
+
+  it('只有 requestedCommit（versionTag 尚未回填）→ 也能判定复用', async () => {
+    const d = deps({
+      artifacts: { exists: jest.fn(() => true) },
+      registry: { findByVersionTag: jest.fn(async () => ({ gitCommit: '91f744b' })) },
+    });
+    const ex = new CheckExecutor(d.moduleRegistry as never, d.artifacts as never, d.registry as never);
+    const ctx = mk({ requestedCommit: '91f744b', templateKey: 'default' });
+    await ex.run(ctx as never as StepContext);
+
+    expect(d.artifacts.exists).toHaveBeenCalledWith('admin', 'default/91f744b');
+    expect(ctx.pipeline.reuseArtifact).toBe(true);
   });
 
   it('不支持的模块类型 → 抛错', async () => {

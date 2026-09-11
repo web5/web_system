@@ -2,13 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ModuleRegistryService } from '../../module-registry/module-registry.service';
 import { ArtifactStoreService } from '../../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../../registry/release-registry.service';
+import { toCommitId } from '../release-paths';
 import { StepContext } from './step.types';
 
 /**
  * check 内置步骤执行体（category=semantic 安全基线）。
  *
  * 校验模块类型 / 目标分支 / prod 约束，设置 moduleType 快照；
- * 指定 commitId 时按「发布目录是否已有产物」决定 reuseArtifact（复用则跳过后续拉取构建）。
+ * 指定 commitId 时按「发布目录是否已有产物」决定 reuseArtifact（复用则跳过构建与投递）。
  */
 @Injectable()
 export class CheckExecutor {
@@ -35,15 +36,20 @@ export class CheckExecutor {
     p.gitBranch = branch;
 
     // ── 按 commit 发布（R6：命名空间产物检查）─────────────────
-    if (p.versionTag) {
+    // 归一化：v5 的 `git` 是**首节点**，会把 versionTag 回填成完整引用（`<templateKey>/<commit>`），
+    // 而 check 在它之后执行 —— 若这里再拼一次前缀就会得到 `default/default/<commit>`，
+    // 产物判定恒为不存在 → 复用永久失效（实测 reuse=False）。故先取纯 commit 再拼 fullRef；
+    // legacy 顺序（check 在 pull 之前）拿到的是纯 commit，两种顺序都对。
+    const commit = toCommitId(p.versionTag) ?? p.requestedCommit;
+    if (commit) {
       // R6 版本身份：检查 modules/<module>/<templateKey>/<commit>/（有 key 时）
-      const fullRef = p.templateKey ? `${p.templateKey}/${p.versionTag}` : p.versionTag;
+      const fullRef = p.templateKey ? `${p.templateKey}/${commit}` : commit;
       p.reuseArtifact = this.artifacts.exists(p.moduleKey, fullRef);
       if (p.reuseArtifact) {
         const history = await this.registry.findByVersionTag(fullRef);
-        p.gitCommit = history?.gitCommit ?? p.versionTag;
+        p.gitCommit = history?.gitCommit ?? commit;
         p.versionTag = fullRef; // 后续阶段（version/pointer）用完整引用
-        ctx.log(`复用已有产物: ${p.moduleKey}/${fullRef}（跳过拉取与构建）`);
+        ctx.log(`复用已有产物: ${p.moduleKey}/${fullRef}（跳过构建与投递）`);
       }
     } else {
       p.reuseArtifact = false;
