@@ -1,8 +1,9 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { Repository } from 'typeorm';
 import { DeployReleaseEventEntity } from '../entities/deploy-release-event.entity';
+import { DeployPipelineEntity } from '../entities/deploy-pipeline.entity';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { MAX_SKEW_SEC, ReleaseHookService } from './release-hook.service';
 import { ReleaseHookDto } from './release-hook.dto';
@@ -33,6 +34,19 @@ function makeService(opts: { secret?: string; existing?: DeployReleaseEventEntit
       submitted.push({ dto, operator });
       return { jobId: 'job-1', status: 'running' };
     }),
+    // 实体字段故意多带 logs / result（含内部路径）：状态查询必须裁剪掉
+    get: jest.fn(async (id: string) => ({
+      id,
+      status: 'running',
+      stage: 'build',
+      moduleKey: 'admin',
+      env: 'local',
+      versionTag: 'abc1234',
+      progress: { current: 2, total: 3, message: '构建中 2/3' },
+      logs: ['[build] 产物写入 /Users/geekwen/web_system_release/dist'],
+      result: { artifactPath: '/Users/geekwen/web_system_release/dist' },
+      endTime: undefined,
+    })),
   } as unknown as PipelineService;
 
   return {
@@ -41,6 +55,7 @@ function makeService(opts: { secret?: string; existing?: DeployReleaseEventEntit
     submitted,
     saved,
     submitMock: pipeline.submit as unknown as jest.Mock,
+    getMock: pipeline.get as unknown as jest.Mock,
   };
 }
 
@@ -84,6 +99,13 @@ describe('ReleaseHookService · 签名校验', () => {
     expect(() => svc.verifySignature('{}', sign('{}', Number(ts)), ts)).toThrow(
       UnauthorizedException,
     );
+  });
+
+  it('GET 查询用空请求体签名（与 CI 端 `ts + "."` 一致）', () => {
+    const { svc } = makeService({ secret: SECRET });
+    const ts = Math.floor(Date.now() / 1000);
+    // CI 轮询据此计算：rawBody 为空串
+    expect(() => svc.verifySignature('', sign('', ts), String(ts))).not.toThrow();
   });
 });
 
@@ -132,5 +154,47 @@ describe('ReleaseHookService · 幂等受理', () => {
     await expect(svc.handle(dto, JSON.stringify(dto))).rejects.toThrow('模块不存在');
     expect(saved[0].status).toBe('rejected');
     expect(saved[0].reason).toContain('模块不存在');
+  });
+});
+
+describe('ReleaseHookService · 状态查询（CI 轮询）', () => {
+  it('只回必要字段：日志与产物路径不出网关', async () => {
+    const { svc } = makeService({ secret: SECRET });
+    const r = await svc.pipelineStatus('job-1');
+
+    expect(r).toEqual({
+      jobId: 'job-1',
+      status: 'running',
+      stage: 'build',
+      moduleKey: 'admin',
+      env: 'local',
+      versionTag: 'abc1234',
+      message: '构建中 2/3',
+      endTime: undefined,
+    });
+    // 回归保护：曾把整实体回给 CI，把发布目录绝对路径与阶段日志一起泄了出去
+    const payload = JSON.stringify(r);
+    expect(payload).not.toContain('/Users/geekwen');
+    expect(payload).not.toContain('logs');
+    expect(payload).not.toContain('artifactPath');
+  });
+
+  it('流水线不存在时抛 404（而不是回空对象让 CI 误判）', async () => {
+    const { svc, getMock } = makeService({ secret: SECRET });
+    getMock.mockRejectedValueOnce(new NotFoundException('流水线不存在: 乱码'));
+    await expect(svc.pipelineStatus('乱码')).rejects.toThrow(NotFoundException);
+  });
+
+  it('progress 缺失时 message 退化为空串（不返回 undefined 给 CI 解析）', async () => {
+    const { svc, getMock } = makeService({ secret: SECRET });
+    getMock.mockResolvedValueOnce({
+      id: 'job-2',
+      status: 'succeeded',
+      moduleKey: 'user-service',
+      env: 'local',
+    } as DeployPipelineEntity);
+    const r = await svc.pipelineStatus('job-2');
+    expect(r.message).toBe('');
+    expect(r.status).toBe('succeeded');
   });
 });
