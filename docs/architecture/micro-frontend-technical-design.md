@@ -536,9 +536,12 @@ const DEFAULT_EXTERNALS = {
  * @param {string} opts.entry  入口文件相对路径，默认 src/main.ts
  */
 export function microFrontendConfig({ name, entry = 'src/main.ts' }) {
-  const version = process.env.RELEASE_TAG || 'dev'
+  // 产物 base 布局：/static/modules/<name>/<产品线>/<版本>/
+  // <产品线> = 发布模板 key（默认 default），由 RELEASE_TAG=<产品线>/<版本> 提供；
+  // 缺产品线段时构建期 fail-fast（实际实现见 scripts/vite-micro-frontend.mjs 的 resolveMfBase）
+  const publicBase = resolveMfBase(name)
   return defineConfig({
-    base: `/static/modules/${name}/${version}/`,  // 模块内相对资源根
+    base: publicBase,  // 模块内相对资源根
     define: appVersionDefine(),
     plugins: [
       appVersionPlugin(),
@@ -665,14 +668,16 @@ async function main() {
     ? process.argv[process.argv.indexOf('--branch') + 1]
     : execSync('git rev-parse --abbrev-ref HEAD').toString().trim()
   const version = commit
+  // 产物 base 需含产品线段：RELEASE_TAG=<产品线>/<版本>（平台默认产品线 = default）
+  const releaseTag = `default/${commit}`
   const buildTime = new Date().toISOString()
 
   // 3. 构建产物到 apps/<dir>/dist
   const appDir = resolve(moduleDef.dir)  // apps/portal
-  process.env.RELEASE_TAG = version
+  process.env.RELEASE_TAG = releaseTag
   const buildCmd = moduleDef.buildCmd || `npx vite build --mode mf`
-  console.log(`[build-module] 构建 ${moduleKey} @ ${version} (${branch})`)
-  execSync(buildCmd, { cwd: appDir, stdio: 'inherit', env: { ...process.env, RELEASE_TAG: version } })
+  console.log(`[build-module] 构建 ${moduleKey} @ ${releaseTag} (${branch})`)
+  execSync(buildCmd, { cwd: appDir, stdio: 'inherit', env: { ...process.env, RELEASE_TAG: releaseTag } })
 
   // 4. 写 manifest.json（gateway loader 读）
   const manifest = {
@@ -812,17 +817,17 @@ deploy_micro_frontend() {
   log "===== 部署微前端模块 $key ====="
   cd "$SCRIPT_DIR/apps/$dir"
 
-  # 版本号 = git commit short
-  local tag="${RELEASE_TAG:-$(git rev-parse --short HEAD)}"
-  log "构建 $dir (vite build --mode mf, version=$tag)..."
-  RELEASE_TAG=$tag npx vite build --mode mf 2>&1 || err "$dir 构建失败"
+  # 版本引用 = <产品线>/<版本>（产品线 = 发布模板 key，默认 default；缺段构建期 fail-fast）
+  local ref="${RELEASE_TAG:-default/$(git rev-parse --short HEAD)}"
+  log "构建 $dir (vite build --mode mf, release=$ref)..."
+  RELEASE_TAG=$ref npx vite build --mode mf 2>&1 || err "$dir 构建失败"
   log "$dir 构建完成 (index.js + index.css + manifest.json)"
 
   # 上传到 nginx 静态目录（不走 gateway public）
-  log "同步到 nginx 静态目录 ($SERVER:$REMOTE_DIR/static/modules/$key/$tag/)..."
-  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/static/modules/$key/$tag"
-  tar czf - -C dist . | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/static/modules/$key/$tag && tar xzf -"
-  log "$key 同步完成 (版本目录: static/modules/$key/$tag)"
+  log "同步到 nginx 静态目录 ($SERVER:$REMOTE_DIR/static/modules/$key/$ref/)..."
+  ssh $SSH_OPTS "$SERVER" "mkdir -p $REMOTE_DIR/static/modules/$key/$ref"
+  tar czf - -C dist . | ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR/static/modules/$key/$ref && tar xzf -"
+  log "$key 同步完成 (版本目录: static/modules/$key/$ref)"
 
   # 不重启 gateway（gateway versionCache TTL 自动过期；nginx 静态目录直出）
   # 不写兜底目录（微前端版本切换由 deployments 指针控制，不需要兜底）

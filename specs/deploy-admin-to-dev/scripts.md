@@ -430,7 +430,7 @@ C=$(git rev-parse --short HEAD); echo "commit=$C"
 # 2) 本机构建
 cd "$RELEASE_DIR/apps/$MODULE_DIR"
 [ -d dist ] && mv dist "/tmp/admin-dist-$(date +%s)"
-RELEASE_TAG="$C" MF_FORMAT=system node "$RELEASE_DIR/node_modules/vite/bin/vite.js" build --mode mf
+RELEASE_TAG="$TPL_KEY/$C" MF_FORMAT=system node "$RELEASE_DIR/node_modules/vite/bin/vite.js" build --mode mf
 
 # 3) 投递
 ARTIFACT_DIR="$REMOTE_DIR/servers/gateway/public/static/modules/$PUBLIC_PATH/$TPL_KEY/$C"
