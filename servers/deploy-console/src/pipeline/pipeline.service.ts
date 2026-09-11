@@ -23,6 +23,8 @@ import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { PipelineStepCommandService } from '../pipeline-step-command/pipeline-step-command.service';
+// 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
+import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
@@ -41,9 +43,15 @@ import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 // 命令执行工具（runShell 子进程 PATH / node bin 解析用）
 import { CommandService, buildChildEnv } from '../shell/command.service';
+// 发布目录 git 工作区（拉码后回填实际 commit 用）
+import { ReleaseGitService } from '../git/release-git.service';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
+// v5 节点执行策略（纯函数：check 恒内置 / git 支持 DB 脚本 / version·pointer 纯内置）
+import { planNodeExec } from './steps/node-exec-plan';
+// 拉码结果的版本身份与一致性断言（纯函数）
+import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
   resolveNodeRunPlan,
   legacyStepsToNodes,
@@ -327,6 +335,10 @@ export class PipelineService {
     private readonly artifacts: ArtifactStoreService,
     // 版本注册表（公共 API：历史版本切换 / 灰度转全量的指针与版本写入）
     private readonly registry: ReleaseRegistryService,
+    // 发布目录 git 工具（拉码后读实际 HEAD 回填版本，并做入参一致性断言）
+    private readonly git: ReleaseGitService,
+    // 平台托管脚本同步（发布前保证该模板的 git 脚本是最新版本）
+    private readonly platformScripts: PlatformScriptSeedService,
     // 内置步骤注册表（executeStage 按步骤元数据数据驱动分派；执行体在各自 executor 内）
     @Inject(PIPELINE_BUILTIN_STEPS)
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
@@ -386,6 +398,11 @@ export class PipelineService {
     const id = this.generateId();
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
     const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 发布前把平台托管脚本（git）同步到该模板：保证运行期一定拿到与代码一致的最新脚本
+    // （幂等；模板新建/被改过都不会漏。失败不阻断提交——拉码阶段还有内置回退）
+    await this.platformScripts.seedForTemplate(tpl.id).catch((e) => {
+      this.logger.warn(`平台托管脚本同步失败（模板 ${tpl.id}）: ${(e as Error).message}`);
+    });
     // 审批门禁：模板策略覆盖环境规则（always/never），inherit 沿用环境（默认 prod）
     const needsApproval = needsApprovalForTemplate(
       tpl,
@@ -411,7 +428,11 @@ export class PipelineService {
       moduleKey: dto.moduleKey,
       // commitId 与旧参数名 versionTag 等价
       versionTag: dto.commitId ?? dto.versionTag,
-      gitBranch: dto.branch || undefined,
+      // 入参快照：versionTag 会被拉码结果覆盖，断言需要这份原始值
+      requestedCommit: dto.commitId ?? dto.versionTag,
+      // 分支缺省 master：v5 下 git 是**首个节点**，check 阶段来不及兜底，
+      // 若这里留空会把 undefined 拼进 git 命令（历史 check 在前时才靠它兜底）
+      gitBranch: dto.branch || 'master',
       mode,
       // 模板快照：模板后续修改/删除不影响已提交实例
       templateId: tpl.id,
@@ -1095,20 +1116,21 @@ export class PipelineService {
       // 模板校验已挡（legacy steps 仅允许内置九阶段），双保险
       throw new Error(`未知或不可编排步骤: ${stage}`);
     }
-    const ctx: StepContext = {
-      pipeline: p,
-      uploadTarget,
-      enterStage: (message) => this.enterStage(p, stage, message),
-      log: (line) => {
-        p.logs = [...(p.logs ?? []), line];
-      },
-      save: () => this.save(p),
-      sleep: (ms) => this.sleep(ms),
-      assertNotCancelled: () => this.assertNotCancelled(p),
-    };
+    const ctx = this.buildStepContext(p, stage, uploadTarget);
 
     // 守卫：实例快照/配置决定跳过（复用产物 / 快线 / 模块类型不适用）
     if (def.skip?.(p)) return;
+
+    // legacy 拉码（stage=pull）：与 v5 的 git 节点同源 —— DB 命令优先（nodeKey 固定 'git'，
+    // 兼容历史 'pull'），未配置回退内置 pull；之后统一回填版本，避免 legacy 路径丢失版本身份。
+    if (stage === 'pull') {
+      const viaGit = await this.runStageCommand(p, 'git', stage);
+      const viaPull = viaGit ? false : await this.runStageCommand(p, stage);
+      if (viaGit || viaPull) await def.afterRun?.(ctx); // 脚本只拉码 → 平台收尾
+      else await def.run!(ctx); // 内置路径：run 内已含收尾
+      await this.resolveGitIdentity(p);
+      return;
+    }
 
     switch (def.commandMode) {
       case 'base':
@@ -1134,37 +1156,13 @@ export class PipelineService {
     }
   }
 
-  /** v5 nodes 节点执行：platform=内置执行体（git 映射 pull 语义）；script=命令驱动 + optional/watchdog */
-  private async executeV5Node(
+  /** 构造步骤执行上下文（engine → executor 的唯一桥，避免多处重复） */
+  private buildStepContext(
     p: DeployPipelineEntity,
     stage: string,
     uploadTarget: 'local' | 'remote',
-    node: TemplateNode,
-  ): Promise<void> {
-    // script 节点：唯一执行体 = 模块 stage_commands 的操作序列（复用 v4 runStageCommand）
-    if (node.kind === 'script') {
-      const hasCmd = await this.runStageCommand(p, stage);
-      if (hasCmd) return;
-      if (node.optional) {
-        p.logs = [
-          ...(p.logs ?? []),
-          `[${stage}] ${node.label ?? stage} 未配置脚本，已跳过（optional）`,
-        ];
-        await this.save(p);
-        return;
-      }
-      throw new Error(
-        `模块 ${p.moduleKey} 未配置 script 节点「${stage}」的操作，发布终止（节点 optional=false；可在「流水线详情 → 编辑流水线 → 节点脚本」配置）`,
-      );
-    }
-
-    // platform 节点：内置执行体，不可被命令覆盖（git→pull 拉码 / version / pointer）
-    const builtinKey = node.key === 'git' ? 'pull' : node.key;
-    const def = this.builtinSteps[builtinKey];
-    if (!def?.run) {
-      throw new Error(`platform 节点 ${stage} 无可执行内置逻辑（注册表缺失 ${builtinKey}）`);
-    }
-    const ctx: StepContext = {
+  ): StepContext {
+    return {
       pipeline: p,
       uploadTarget,
       enterStage: (message) => this.enterStage(p, stage, message),
@@ -1175,8 +1173,108 @@ export class PipelineService {
       sleep: (ms) => this.sleep(ms),
       assertNotCancelled: () => this.assertNotCancelled(p),
     };
-    if (def.skip?.(p)) return; // 守卫：复用产物 / backend 跳过 pointer 等
-    await def.run(ctx);
+  }
+
+  /**
+   * v5 nodes 节点执行：分派策略见 `steps/node-exec-plan.ts`（纯函数，可单测）。
+   *
+   * 两类节点与 legacy 九阶段的语义差异都收在这里：
+   * - `check`：恒内置执行安全基线（+ 命令叠加）—— 修「v5 下 check 被整段跳过」的阻塞项；
+   * - `git`：DB 锁定脚本优先、缺省回退内置 pull，之后统一回填版本（resolveGitIdentity）。
+   */
+  private async executeV5Node(
+    p: DeployPipelineEntity,
+    stage: string,
+    uploadTarget: 'local' | 'remote',
+    node: TemplateNode,
+  ): Promise<void> {
+    const ctx = this.buildStepContext(p, stage, uploadTarget);
+    const plan = planNodeExec(node);
+
+    switch (plan.how) {
+      // check：安全基线恒内置执行（复用检测 / 分支缺省 master / prod 分支约束），命令作为附加校验。
+      // 不这样做的话，v5 下 check 是 optional script 节点、未配命令即整段跳过 → 复用失效（详见 node-exec-plan.ts）
+      case 'check-base': {
+        const checkDef = this.builtinSteps.check;
+        if (!checkDef.skip?.(p)) await checkDef.run!(ctx);
+        await this.runStageCommand(p, stage);
+        return;
+      }
+
+      // git：DB 锁定脚本（平台托管）优先；模板未 seed → 回退内置 pull；两条路径之后都由平台回填版本
+      case 'git': {
+        const pullDef = this.builtinSteps.pull;
+        if (pullDef.skip?.(p)) return; // 守卫优先：复用产物 → 不拉码
+        const hasCmd = await this.runStageCommand(p, stage);
+        if (hasCmd) await pullDef.afterRun?.(ctx); // 脚本只拉码 → 依赖同步/预构建由平台收尾
+        else await pullDef.run!(ctx); // 内置路径：run 内已含收尾
+        await this.resolveGitIdentity(p);
+        return;
+      }
+
+      // script：命令驱动（未配命令按 optional 跳过 / 非 optional fail-fast）
+      case 'script': {
+        const hasCmd = await this.runStageCommand(p, stage);
+        if (hasCmd) return;
+        if (node.kind === 'script' && node.optional) {
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stage}] ${node.label ?? stage} 未配置脚本，已跳过（optional）`,
+          ];
+          await this.save(p);
+          return;
+        }
+        throw new Error(
+          `模块 ${p.moduleKey} 未配置 script 节点「${stage}」的操作，发布终止（节点 optional=false；可在「流水线详情 → 编辑流水线 → 节点脚本」配置）`,
+        );
+      }
+
+      // version / pointer：发布语义真相源，纯内置，不可被命令覆盖
+      default: {
+        const def = this.builtinSteps[plan.builtinKey];
+        if (!def?.run) {
+          throw new Error(`platform 节点 ${stage} 无可执行内置逻辑（注册表缺失 ${plan.builtinKey}）`);
+        }
+        if (def.skip?.(p)) return; // 守卫：backend 跳过 pointer 等
+        await def.run(ctx);
+      }
+    }
+  }
+
+  /**
+   * 拉码结果的平台侧收口（两条拉码路径共用）。
+   *
+   * 1) 读发布目录实际 HEAD → 回填 `gitCommit` 与 `versionTag`（`<templateKey>/<commit>`）；
+   * 2) 若实例带请求 commit 快照，则做**全哈希**一致性断言：不一致即中止发布。
+   *
+   * 这一步不放进 DB 脚本：脚本只管"把代码拉到位"，版本身份是发布语义真相源。
+   */
+  private async resolveGitIdentity(p: DeployPipelineEntity): Promise<void> {
+    const commit = this.git.shortHead(this.releaseWorkspace);
+    p.gitCommit = commit;
+    p.versionTag = buildVersionRef(p.templateKey, commit);
+    p.logs = [
+      ...(p.logs ?? []),
+      `代码已就绪: ${p.gitBranch}@${commit} → 版本 ${p.versionTag}（发布目录 ${this.releaseWorkspace}）`,
+    ];
+
+    if (p.requestedCommit) {
+      // 全哈希比对（避免短哈希位数差异误判）；resolve 失败即视为"请求的 commit 不可达"
+      const want = this.tryRevParse(p.requestedCommit);
+      const got = this.tryRevParse('HEAD');
+      assertCommitMatch(p.requestedCommit, want, got);
+      p.logs = [...(p.logs ?? []), `commit 校验通过: ${commit}`];
+    }
+    await this.save(p);
+  }
+
+  /** `git rev-parse <rev>^{commit}` 全哈希；不可达返回 null（不抛错，交断言统一报错） */
+  private tryRevParse(rev: string): string | null {
+    try {
+      return this.command.exec(`git rev-parse --verify ${rev}^{commit}`, this.releaseWorkspace).trim() || null;
+    } catch {
+      return null;
+    }
   }
 
   /** 默认投递目标：配置优先，未配置时本机优先（本地开发直投本机静态目录） */
@@ -1289,14 +1387,22 @@ export class PipelineService {
   /**
    * 执行某阶段的流水线节点命令（R6：从模块级切换到流水线级）。
    * 读 `deploy_pipeline_step_commands(templateId, nodeKey)` 而非 `deploy_module_stage_commands(moduleKey, stage)`。
+   *
+   * @param nodeKey       DB 里的节点 key（查找命令用；git 恒为 `'git'`，legacy 拉码也读它）
+   * @param progressStage 进度/日志/结果文件沿用执行计划里的阶段名（legacy 为 `'pull'`，v5 为节点 key）
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
-  private async runStageCommand(p: DeployPipelineEntity, stage: string): Promise<boolean> {
-    const acts = await this.stepCommands.resolveActions(p.templateId!, stage);
+  private async runStageCommand(
+    p: DeployPipelineEntity,
+    nodeKey: string,
+    progressStage: string = nodeKey,
+  ): Promise<boolean> {
+    const stage = progressStage;
+    const acts = await this.stepCommands.resolveActions(p.templateId!, nodeKey);
     if (!acts.length) return false;
 
     this.assertNotCancelled(p);
-    await this.enterStage(p, stage as any, `执行节点命令: ${p.templateName || p.templateId}/${stage}`);
+    await this.enterStage(p, stage as any, `执行节点命令: ${p.templateName || p.templateId}/${nodeKey}`);
 
     let mod: ModuleSnapshot | null = null;
     try {

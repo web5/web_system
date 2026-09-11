@@ -459,11 +459,11 @@ function nodesError(): string {
 /** 拖拽结束立即屏蔽紧随的 click，避免「拖完节点顺手打开脚本编辑器」 */
 let justDragged = false
 
-/** 点击 script 节点：选中并读取流水线 × key 的命令配置 */
+/** 点击节点：script 可编辑；git 平台托管但**可只读查看**；version/pointer 不展示 */
 function onNodeClick(key: string) {
   if (justDragged) return
-  if (isPlatformNode(key)) {
-    message.warning('git / 写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
+  if (isPlatformNode(key) && key !== 'git') {
+    message.warning('写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
     return
   }
   selNodeKey.value = key
@@ -482,6 +482,8 @@ async function loadNodeScript(key: string) {
       actions: row?.actions ?? [],
       enabled: !!row?.enabled,
       timeoutSec: row?.timeoutSec ?? null,
+      // 平台托管（locked）：编辑器据此渲染只读
+      locked: !!(row as { locked?: boolean } | null)?.locked,
     }
   } catch {
     editingItem.value = null
@@ -1119,11 +1121,33 @@ onUnmounted(stopPolling)
           <template #title>
             节点配置
             <span style="font-weight: normal; font-size: 12px; color: #999; margin-left: 8px;">
-              选中 script 节点编辑；git / 写版本号由平台托管不可编辑
+              选中 script 节点编辑；git 可查看（平台托管只读）；写版本号不可选
             </span>
           </template>
 
-          <template v-if="selectedNode">
+          <!-- platform/git：平台托管脚本（locked），只读查看 -->
+          <template v-if="!selectedNode && selNodeKey === 'git'">
+            <a-alert
+              type="info"
+              show-icon
+              style="margin-bottom: 12px;"
+              message="git · 拉取代码：平台托管（locked）"
+              description="脚本正文随平台代码维护（启动 / 发布时自动同步到数据库），页面仅可查看与语法校验。"
+            />
+            <div v-if="tpl">
+              <StageActionsEditor
+                v-if="editingItem"
+                :template-id="tpl.id"
+                :item="editingItem"
+                :readonly="true"
+                @cancel="editingItem = null"
+              />
+              <a-empty v-else description="读取 流水线 × git 命令中…" />
+            </div>
+            <a-empty v-else description="无可用流水线模板" />
+          </template>
+
+          <template v-else-if="selectedNode">
             <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 12px;">
               <div>
                 <div class="muted" style="margin-bottom:6px;">label（即改同步画布）</div>
@@ -1168,7 +1192,7 @@ onUnmounted(stopPolling)
             <a-empty v-else description="无可用流水线模板，无法编辑命令（可先保存节点结构）" />
           </template>
 
-          <a-empty v-else description="点击上方 script 节点开始配置（git / 写版本号平台托管）" />
+          <a-empty v-else description="点击上方节点：script 可配置，git 可查看（平台托管只读），写版本号不可选" />
         </a-card>
       </div>
 
