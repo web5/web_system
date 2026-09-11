@@ -13,7 +13,8 @@
 | 类别 | 位置 | 说明 |
 |---|---|---|
 | 产品代码 | `apps/` `servers/` `packages/` | 前端应用 / 后端微服务 / 共享包 |
-| 人读文档 | `docs/` | 架构、开发、UI、产品、发布手册 |
+| 人读文档 | `docs/` | 架构、开发、UI、产品、发布手册（**项目自产**） |
+| 知识库 | `raw/` `wiki/` | 外部素材（不可变）→ 编译知识文章 + 索引 + 日志（**AI 维护**，边界见 §3.3） |
 | 数字人体系 | `.codebuddy/` | agent-kit 行为定义 + skills 技能 + rules 触发规则 + 本入口 |
 
 **平台产品矩阵**（portal 端）：
@@ -45,7 +46,9 @@ web_system/
 ├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
 ├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
-├── docs/        # 人读文档（分册地图见附录）
+├── docs/        # 人读文档（分册地图见附录；项目自产）
+├── raw/         # 知识库·外部素材原文快照（不可变，只增不改；karpathy-llm-wiki 维护）
+├── wiki/        # 知识库·编译结论（文章 + index.md 全局索引 + log.md 操作日志）
 ├── .codebuddy/  # 数字人体系（能力源 agent-kit + 运行源 skills + rules + references + 本入口）
 ├── migrations/  # 数据库迁移 SQL
 ├── local.nginx.conf / micro-frontend.nginx.conf   # 本地 nginx 集成配置
@@ -231,6 +234,17 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | `user-memory` | 用户偏好与项目上下文记忆 |
 | `be-developer` / `fe-developer` | **项目专属**：后端服务/接口/数据；admin 系前端页面/UI |
 | `karpathy-llm-wiki` | **资产维护型能力**：`raw/`（不可变源）→ `wiki/`（编译结论）知识库的建与维护（Ingest / Query / Lint）；**协议来自能力源，数据落本项目** |
+
+**知识库数据落点与边界**（本项目约定，2026-09-11 定）：
+
+| 目录 | 内容 | 维护方式 |
+|---|---|---|
+| `raw/` | **外部**素材原文快照（文章 / 论文 / 推文 …） | AI 采集，**不可变**——只新增，不改写已落盘文件 |
+| `wiki/` | 由 `raw/` 编译出的知识文章 + `index.md` 全局索引 + `log.md` 操作日志 | AI 维护，人读与提问 |
+| `docs/` | **项目自产**文档（架构 / 开发 / UI / 产品 / 发布手册） | 人写，随代码演进 |
+
+- **边界判据**（只此一条）：**外部输入的编译结论** → `wiki/`；**本项目自产的东西** → `docs/`。项目自产文档不进 `wiki/`，外部素材原文不进 `docs/`。
+- 位置固定**在项目根**（`raw/` + `wiki/`）——技能默认即此布局，故**不改技能里的路径约定**；两个目录**随仓库入库**，知识库才能跨会话累积。
 
 > 原 `karpathy-coding-guidelines` / `karpathy-coding-rules-dami` 两个本机符号链接技能**已退役**（2026-09-11）：其内容早已并入能力源的 `AGENT.md` §产出纪律 + `references/code-discipline.md`，保留即构成同一纪律的多重真相源。
 
