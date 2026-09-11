@@ -87,6 +87,15 @@ export const useUserStore = defineStore(
     persist: {
       key: 'user-store',
       storage: localStorage,
+      /**
+       * 只持久化身份态，**权限码每次会话重新拉取**。
+       *
+       * 历史问题：permissions / permissionsReady 一起被持久化后，刷新页面时
+       * 路由守卫的 `if (!permissionsReady)` 直接短路 → 永不再拉取 →
+       * 服务端权限已同步、前端菜单却一直用旧集合（"新权限码加了但菜单不出现"
+       * 的第二个根因；第一个是 DB 没 seed）。
+       */
+      pick: ['token', 'refreshToken', 'userInfo'],
     },
   },
 );
