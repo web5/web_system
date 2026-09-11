@@ -3,6 +3,8 @@
  * 集成分支自动发布 watcher（**本地发布目录专用**）
  *
  * 作用：轮询远程集成分支（默认 `feature/test`），一旦有新提交就
+ *   0) 先把 `origin/master` 合进集成分支（可用 `--no-follow-master` 关闭）——
+ *      保证联调基准不落后于 master，冲突时只告警、不推半成品；
  *   1) 把发布目录硬同步到该提交（`git reset --hard origin/<branch>`）；
  *   2) 通过 deploy-console 流水线把**全部模块**重新发布一遍；
  *   3) 全部跑完后再回到轮询（发布期间不会重复触发）。
@@ -19,6 +21,7 @@
  *   node scripts/watch-integration.mjs --once                # 只检查一次，有更新才发
  *   node scripts/watch-integration.mjs --force               # 无视状态，立刻全量发布一次
  *   node scripts/watch-integration.mjs --dry-run             # 只打印将要做什么
+ *   node scripts/watch-integration.mjs --no-follow-master    # 不自动合并 master 进集成分支
  *   node scripts/watch-integration.mjs --branch feature/test --interval 30 --env local
  *
  * 常驻（推荐，pm2 管理；不要写进 ecosystem.config.cjs，避免 dev/prod 环境误启动）：
@@ -52,6 +55,8 @@ const ENV_ID = getArg('--env', process.env.WATCH_ENV || 'local');
 const CONSOLE_URL = getArg('--console', process.env.DEPLOY_CONSOLE_URL || 'http://127.0.0.1:6200').replace(/\/+$/, '');
 const ONCE = hasFlag('--once');
 const DRY = hasFlag('--dry-run');
+/** 是否让集成分支自动跟随 master（默认开；--no-follow-master 关闭） */
+const FOLLOW_MASTER = !hasFlag('--no-follow-master');
 /** 单个模块发布超时（20 分钟）；超时只告警，不阻塞后续模块 */
 const MODULE_TIMEOUT_MS = Number(getArg('--module-timeout-ms', '1200000'));
 
@@ -144,6 +149,67 @@ function orderModules(mods) {
   return [...mods].sort((a, b) => rank(a) - rank(b) || String(a.key).localeCompare(String(b.key)));
 }
 
+/** origin/master 是否已在当前 HEAD 的祖先链里 */
+function masterMerged() {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', 'origin/master', 'HEAD'], {
+      cwd: RELEASE_DIR,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 让集成分支跟随 master：把 `origin/master` 合进当前集成分支并推送。
+ *
+ * 为什么需要：master 不断有新 PR 合入，而集成分支是本地联调的基准——
+ * 不跟上就会"在旧 master 上验证新功能"，出现莫名其妙的冲突或缺失文件。
+ *
+ * 安全边界：**只在能自动合并时执行**；一旦冲突就 abort 并告警，留给人工处理，
+ * 不会把半成品状态推上去。工作区脏则本轮跳过。
+ *
+ * @returns 是否发生了合并（发生了就意味着集成分支多了一个提交，会触发一次发布）
+ */
+function followMaster() {
+  if (!FOLLOW_MASTER) return false;
+  try {
+    git('fetch', 'origin', 'master', BRANCH);
+  } catch (e) {
+    warn(`fetch 失败（跳过跟随 master）：${e.message}`);
+    return false;
+  }
+  if (masterMerged()) return false;
+  if (git('status', '--porcelain')) {
+    warn('发布目录有未提交改动，本轮跳过"跟随 master"');
+    return false;
+  }
+
+  log('检测到 master 有集成分支尚未包含的提交，正在合并…');
+  try {
+    git('merge', '--no-edit', 'origin/master');
+  } catch (e) {
+    warn(`合并 origin/master 冲突，已回滚（需人工处理）：${String(e.message).split('\n')[0]}`);
+    try {
+      git('merge', '--abort');
+    } catch {
+      /* 无进行中的合并 */
+    }
+    return false;
+  }
+
+  const head = git('rev-parse', 'HEAD');
+  log(`集成分支已合入 origin/master → ${short(head)}`);
+  try {
+    git('push', 'origin', `${BRANCH}`);
+  } catch (e) {
+    warn(`推送集成分支失败（本地已合并，远程未同步）：${String(e.message).split('\n')[0]}`);
+  }
+  return true;
+}
+
 /** 把发布目录硬同步到目标提交；工作区脏则拒绝（避免覆盖人工改动） */
 function syncTo(sha) {
   const dirty = git('status', '--porcelain');
@@ -234,7 +300,11 @@ async function syncAndPublish(sha) {
 
 async function main() {
   log(`watcher 启动：分支=${BRANCH}、环境=${ENV_ID}、轮询=${INTERVAL_S}s、发布目录=${RELEASE_DIR}`);
+  log(`跟随 master：${FOLLOW_MASTER ? '开' : '关'}`);
   if (DRY) warn('DRY-RUN：只检查与打印，不执行同步与发布');
+
+  // 启动即对齐 master：集成分支落后时先合并（合并本身会产生新提交 → 触发一轮发布）
+  if (!DRY) followMaster();
 
   git('fetch', 'origin', BRANCH);
   const remote0 = git('rev-parse', `origin/${BRANCH}`);
@@ -244,8 +314,12 @@ async function main() {
     log(`首次运行，记录基线 ${short(remote0)}（本次不发布）`);
     if (!DRY) writeState(remote0);
     state = remote0;
+  } else if (remote0 !== state) {
+    log(`上次已发布 ${short(state)}；origin/${BRANCH} 已是 ${short(remote0)}，立即执行一轮`);
+    await syncAndPublish(remote0);
+    state = readState() || state;
   } else {
-    log(`上次已发布 ${short(state)}；当前 origin/${BRANCH} = ${short(remote0)}`);
+    log(`已是最新（${short(state)}），等待更新…`);
   }
 
   if (hasFlag('--force')) {
@@ -269,6 +343,8 @@ async function main() {
     await sleep(INTERVAL_S * 1000);
     try {
       git('fetch', 'origin', BRANCH);
+      // 先让集成分支跟上 master：若产生合并提交，本轮就会检测到"更新"并发布
+      followMaster();
       const remote = git('rev-parse', `origin/${BRANCH}`);
       if (remote === state) continue;
 

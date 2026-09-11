@@ -45,6 +45,7 @@ cd ~/web_system_release && node scripts/watch-integration.mjs --force    # 无�
 | 项 | 说明 |
 |---|---|
 | 轮询对象 | `origin/feature/test`（`--branch` 可改） |
+| **跟随 master** | 每轮先检查 `origin/master` 是否已在集成分支祖先链里；缺就把 master 合进来并推送（**冲突只告警不推**，工作区脏则本轮跳过）。`--no-follow-master` 可关闭 |
 | 触发条件 | 远程 commit ≠ 上次成功发布的 commit（状态存在 `<发布目录>/.watch-integration.state`） |
 | 同步方式 | `git reset --hard origin/feature/test`；**工作区脏则跳过**（不覆盖人工改动，下轮重试） |
 | 发布方式 | 经 deploy-console 流水线逐个模块发布（`env=local`，`branch=feature/test`） |
@@ -79,6 +80,7 @@ pm2 delete web-release-watcher              # 停掉自动发布
 | `--console` | `http://127.0.0.1:6200` | deploy-console 地址 |
 | `--dry-run` | — | 只打印计划，不执行 |
 | `--once` / `--force` | — | 检查一次 / 无视状态立刻全量发一次 |
+| `--no-follow-master` | — | 关闭"自动把 master 合进集成分支"（默认开启） |
 
 前置条件（缺失会直接报错退出）：
 
