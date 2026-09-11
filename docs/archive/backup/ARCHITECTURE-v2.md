@@ -34,7 +34,7 @@
 
 ## 服务器角色
 
-### 69 服务器 (192.0.2.30) - 网关服务器
+### 69 服务器 ({{GATEWAY_HOST}}) - 网关服务器
 **角色：** Nginx 反向代理 + 静态资源托管
 
 | 服务 | 端口 | 说明 |
@@ -49,7 +49,7 @@
 └── admin/           # 管理后台 (admin.kedouai.com)
 ```
 
-### 246 服务器 (198.51.100.20) - 应用服务器
+### 246 服务器 ({{PROD_HOST}}) - 应用服务器
 **角色：** Node.js 后端服务 + 数据库
 
 | 服务 | 端口 | 说明 |
@@ -307,7 +307,7 @@ server {
     ssl_certificate_key /etc/nginx/ssl/kedouai.com.key;
     
     location / {
-        proxy_pass http://198.51.100.20:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -324,7 +324,7 @@ server {
     ssl_certificate_key /etc/nginx/ssl/kedouai.com.key;
     
     location / {
-        proxy_pass http://198.51.100.20:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

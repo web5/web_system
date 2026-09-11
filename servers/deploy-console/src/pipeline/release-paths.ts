@@ -1,4 +1,13 @@
 import * as path from 'path';
+import * as os from 'os';
+
+/**
+ * 默认发布目录（`RELEASE_WORKSPACE` 未配置时回落）。
+ * 取当前用户主目录下的 web_system_release，不绑定任何具体机器/用户名。
+ */
+export function defaultReleaseWorkspace(): string {
+  return path.join(os.homedir(), 'web_system_release');
+}
 
 /**
  * 静态产物路径工具（纯函数，便于单测）。

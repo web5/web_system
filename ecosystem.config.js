@@ -8,8 +8,10 @@
  * 重要：所有敏感信息（DB_PASSWORD、JWT_SECRET 等）必须通过 .env.production 设置！
  * 请勿修改此文件中的空字符串默认值，它们会在缺少环境变量时导致启动失败。
  */
+/** 运行根目录（发布目录）：通过 WEB_SYSTEM_DIR 注入，默认取当前工作目录 */
+const WEB_SYSTEM_DIR = process.env.WEB_SYSTEM_DIR || process.cwd();
 /** 尝试加载 .env.production，失败则从 process.env 读取 */
-try { require('dotenv').config({ path: '/data/web_system/.env.production' }); } catch (_) {}
+try { require('dotenv').config({ path: process.env.ENV_FILE || `${WEB_SYSTEM_DIR}/.env.production` }); } catch (_) {}
 
 const DB_TYPE = process.env.DB_TYPE || 'mysql';
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
@@ -43,12 +45,12 @@ const baseDbConfig = {
   REDIS_URL,
 };
 
-const logBase = process.env.LOG_BASE || '/data/web_system/logs';
+const logBase = process.env.LOG_BASE || `${WEB_SYSTEM_DIR}/logs`;
 
 const commonConfig = {
   instances: 1,
   exec_mode: 'fork',
-  cwd: '/data/web_system',
+  cwd: WEB_SYSTEM_DIR,
   time: true,
   merge_logs: true,
   autorestart: true,

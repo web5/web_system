@@ -26,7 +26,7 @@ export class ArtifactStoreService {
   /** 发布目录（RELEASE_WORKSPACE，可配；与 ReleaseGitService 同配置源） */
   workspace(): string {
     return (
-      this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release'
+      this.configService.get<string>('RELEASE_WORKSPACE') || releasePaths.defaultReleaseWorkspace()
     );
   }
 

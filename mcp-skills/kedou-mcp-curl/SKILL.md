@@ -14,7 +14,7 @@ description: 在无法加载 mcp.json / 没有 MCP 客户端的沙箱或云端�
 ## 调用函数（每次自动完成 initialize 拿会话 -> tools/call）
 
 ```bash
-KEDOU_TOKEN="kedou_256ee5214dd20af9b3e251712cabaa03a5ccc4479a2daf10"   # ← 换成你 ~/.workbuddy/mcp.json 里的 Bearer 值
+KEDOU_TOKEN="{{MCP_TOKEN}}"   # ← 换成你 ~/.workbuddy/mcp.json 里的 Bearer 值
 
 mcp_call() {
   local module="$1" tool="$2" args="$3"

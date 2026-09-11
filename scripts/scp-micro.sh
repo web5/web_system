@@ -13,7 +13,11 @@ if [ -f "${SCRIPT_DIR}/.env" ]; then
     source "${SCRIPT_DIR}/.env"
 fi
 
-HOST="${MICRO_HOST:-root@198.51.100.20}"
+HOST="${MICRO_HOST:-}"
+if [ -z "$HOST" ]; then
+    echo "[ERROR] 未配置 MICRO_HOST（在 scripts/.env 或环境变量中设置 user@host）" >&2
+    exit 1
+fi
 PASSWORD="${MICRO_PASSWORD:-}"
 
 LOCAL_PATH="${1:-}"

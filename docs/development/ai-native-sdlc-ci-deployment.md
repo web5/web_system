@@ -18,7 +18,7 @@
 | 测试 | 10 个子包有 jest，其余无 | 门禁只对「有 test 的改动包」跑 |
 | 聚合入口 | 根 package.json 无 lint/test/build 聚合 | 需补根级 `check:*` 聚合脚本 |
 | 敏感文件 | `.gitignore` 已忽略 `**/.env*`、`*.pem/key/cert`、agent key 配置 | 基线好，hooks 双保险 |
-| 源 kit | `/Users/geekwen/workspace/ai-agent-kit` 已有 `evals/`、`scripts/`、`eval-gate.yml` | web_system 只做消费方守护，不重复搭完整评测 |
+| 源 kit | `$HOME/workspace/ai-agent-kit` 已有 `evals/`、`scripts/`、`eval-gate.yml` | web_system 只做消费方守护，不重复搭完整评测 |
 | 同步覆盖 | `sync-to-target.sh` 用 `rm -rf .codebuddy/agent-kit` 后回拷 `skills/rules/references/AGENT.md/README.md` | **评测报告/本地脚本不得放 `.codebuddy/agent-kit/` 内** |
 
 ## 1. 总架构
@@ -244,5 +244,5 @@ jobs:
 - 方法论：`.codebuddy/agent-kit/references/ai-methodology.md`（红线机器化 §六）
 - 红线定义：`.codebuddy/agent-kit/rules/general/05-red-line-check.md`（含最小实现示例）
 - 评测定稿：`.codebuddy/agent-kit/references/eval-framework.md` §6 CI 门禁、§8 落地结构
-- 源仓库工具（引用不拷贝）：`/Users/geekwen/workspace/ai-agent-kit/scripts/{run-eval,check-artifacts,gen-report}.sh`
+- 源仓库工具（引用不拷贝）：`$HOME/workspace/ai-agent-kit/scripts/{run-eval,check-artifacts,gen-report}.sh`
 - 工程铁律来源：`.codebuddy/CODEBUDDY.md`「AI 编程规范」「部署铁律」

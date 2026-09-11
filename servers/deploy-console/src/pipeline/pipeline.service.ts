@@ -13,7 +13,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { STATIC_MODULES_REL, parseReleaseRef, toCommitId } from './release-paths';
+import { STATIC_MODULES_REL, parseReleaseRef, toCommitId, defaultReleaseWorkspace } from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -351,7 +351,7 @@ export class PipelineService {
    */
   private get releaseWorkspace(): string {
     return (
-      this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release'
+      this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace()
     );
   }
 

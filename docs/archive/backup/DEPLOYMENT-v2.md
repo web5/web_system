@@ -13,13 +13,13 @@
 
 ## 服务器架构
 
-### 69 服务器 (192.0.2.30) - Nginx 网关
+### 69 服务器 ({{GATEWAY_HOST}}) - Nginx 网关
 - **角色：** 反向代理 + SSL 终止 + 静态资源
 - **服务：**
   - Nginx (80/443)
   - 静态资源：`/var/www/portal` (门户页面)
 
-### 246 服务器 (198.51.100.20) - 应用服务
+### 246 服务器 ({{PROD_HOST}}) - 应用服务
 - **角色：** Node.js 后端 + 数据库
 - **服务：**
   - Gateway (3000) - API 网关
@@ -128,7 +128,7 @@ PORT=3000
 HOST=0.0.0.0
 NODE_ENV=production
 AUTH_SERVICE_URL=http://127.0.0.1:3001
-PUBLIC_URL=http://198.51.100.20:3000
+PUBLIC_URL=http://{{PROD_HOST}}:3000
 CORS_ORIGINS=*
 ```
 
