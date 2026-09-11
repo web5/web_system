@@ -62,10 +62,10 @@ async function bootstrap() {
         ],
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
         // Worker 来源：未显式声明 worker-src 时浏览器回退到 script-src，
-        // 而 script-src 不含 blob:，会导致 new Worker(blob:...) 被 CSP 拒绝
-        // （前端大计算能力如 OCR/PDF、部分库与浏览器注入脚本会用 blob: 建 Worker）。
-        // 注：data: 形式 worker 更易被 XSS 滥用，暂不放开。
-        workerSrc: ["'self'", 'blob:'],
+        // 而 script-src 不含 blob:/data:，会导致 new Worker(blob:...) 与
+        // new Worker('data:application/javascript;base64,...')（Vite ?worker&inline 形态）被拒。
+        // blob: 供前端大计算能力（OCR/PDF 等）使用；data: 供内联 Worker 形态使用。
+        workerSrc: ["'self'", 'blob:', 'data:'],
       },
     },
     // CORP 放宽为 cross-origin：自建 /static/cdn/ 等资源可能被 http 页面（非 trustworthy origin）
