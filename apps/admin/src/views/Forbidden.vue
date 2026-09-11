@@ -3,13 +3,23 @@
     <div class="forbidden-inner">
       <div class="forbidden-code">403</div>
       <h1 class="forbidden-title">无权限访问</h1>
-      <p class="forbidden-desc">你没有访问该页面的权限，请联系管理员</p>
+      <p class="forbidden-desc">{{ hint || '你没有访问该页面的权限，请联系管理员' }}</p>
       <div class="forbidden-actions">
-        <router-link to="/" class="btn-primary">返回工作台</router-link>
+        <button type="button" class="btn-primary" @click="go">{{ label }}</button>
       </div>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { useSafeReturn } from '@/composables/useSafeReturn';
+
+/**
+ * 「返回」按钮不能写死跳工作台：当前账号若连工作台都没权限，守卫会把导航再送回
+ * /403，用户看到的就是"点了没反应"。改为跳到有权限的第一个页面，都没有则退出登录。
+ */
+const { label, hint, go } = useSafeReturn();
+</script>
 
 <style scoped>
 .forbidden {
@@ -57,10 +67,13 @@
   padding: 10px 24px;
   background: #f97316;
   color: #ffffff;
+  border: none;
   border-radius: 8px;
   font-size: 14px;
+  font-family: inherit;
   font-weight: 500;
   text-decoration: none;
+  cursor: pointer;
   transition: background 0.2s;
 }
 

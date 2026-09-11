@@ -45,7 +45,7 @@
         <div class="m-kpi">
           <div class="m-kpi-label">成本（CNY）</div>
           <div class="m-kpi-value ws-mono">{{ kpis.cost }}</div>
-          <div class="m-kpi-note">按 model_pricing 单价核算</div>
+          <div class="m-kpi-note">按字典 llm_models 单价核算</div>
         </div>
       </a-col>
     </a-row>

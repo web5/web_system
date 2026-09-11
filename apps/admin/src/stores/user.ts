@@ -84,9 +84,16 @@ export const useUserStore = defineStore(
     };
   },
   {
+    /**
+     * 只持久化登录凭据与用户信息，**权限码不落盘**：
+     * permissions / permissionsReady 是短时缓存，落盘后一旦被写脏（空数组 + ready=true），
+     * 后续会话会一直沿用，表现为菜单塌陷成只剩「工作台」。
+     * 每次页面加载由路由守卫重新拉取（见 router/index.ts）。
+     */
     persist: {
       key: 'user-store',
       storage: localStorage,
+      paths: ['token', 'refreshToken', 'userInfo'],
     },
   },
 );

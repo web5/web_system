@@ -17,6 +17,7 @@
 | 2026-09-10 | v1.0 | 初版：四层架构、8 个 UI 入口、CLI 入口、走查路线、易混淆点 | AI |
 | 2026-09-10 | v1.1 | 模型清单真相源迁移到 DB 字典：§3.2 增 `ModelCatalogService` 行；§7 增坑 10/11（改 env 不生效、字典里的 hy3 被过滤）；admin 新增「字典管理」页、原「模型单价」页改为「模型」页（可用清单 × 单价聚合） | AI |
 | 2026-09-10 | v1.2 | 权限同步机制落地：§7 坑 2 的处理办法从"重启 `web-user`"改为**优先跑 `scripts/sync-permissions.sh` / 点「同步权限点」按钮**（无需重启）；§8.1 增"新增权限码"触发场景、§8.2 补权限真相与同步命令 | AI |
+| 2026-09-11 | v1.3 | 下线「模型」页：单价迁入字典 `llm_models` 的 attrs（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
 
 ---
 
@@ -34,7 +35,6 @@ https://local.kedouai.com/admin/agents/playground     ← 对话调试，先看�
 agents:view  agents:manage  agents:debug
 skills:view  skills:manage
 knowledge:view  knowledge:manage
-agents:cost:view
 ```
 
 **服务端口**：gateway `6000` · ai-service `6003` · ai-agent `6010` · knowledge-service `6011` · mcp-gateway `6006`
@@ -181,7 +181,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 **技能库** `/api/admin/skills/*`（读 `skills:view` / 写 `skills:manage`）
 列表 · `:code` 详情正文 · 新建 · 全量覆盖编辑 · 删除 · `POST /import`（zip 技能包 ≤5MB）
 
-**成本核算** `/api/admin/model-pricing`（`agents:cost:view`）：列表 / 幂等 upsert / 删除
+**成本核算**：单价由字典 `llm_models` 的 attrs 维护（`input_price_per1k` / `output_price_per1k`，元 / 1K tokens；`currency` 仅展示），**无独立页面与接口**。ai-service 每 60s 拉 `/internal/dict/llm_models` 缓存进内存，落 run 时按内存单价核算（未定价按 0）；改价后 60s 内生效
 
 ### 3.4 数据表（7 张）
 
@@ -193,7 +193,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | `agent_definition_versions` | ai-service | agentId、version、全量快照、changeNote、createdBy |
 | `agent_runs` | ai-service | agentId、userId、conversationId、steps(json)、finalAnswer、error、status、durationMs、source、agentVersion、prompt/completion/totalTokens、cost |
 | `run_metrics` | ai-service | agentId、model、date、runCount、okCount、errorCount、totalTokens、totalCost、totalDurationMs |
-| `model_pricing` | ai-service | provider、model(unique)、inputPricePer1k、outputPricePer1k、currency |
+| `model_pricing` | ai-service | **已停用（2026-09-11 留档）**：单价改由字典 `llm_models` 的 attrs 维护，表与存量数据保留、不再读写 |
 | `agent_skills` | ai-service | code(unique)、description(on-demand 摘要)、content(SKILL.md 正文)、requiredTools、enabled |
 | `agent_conversations` | **ai-agent** | id、userId、summary、summarizedCount、messages(json)、title、report、meta |
 
@@ -208,7 +208,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 
 ---
 
-## 4. UI 体验入口（admin 共 8 页）
+## 4. UI 体验入口（admin 共 9 页）
 
 > 基座前缀 `https://local.kedouai.com`（或 `http://localhost:5174`）。**admin 路由 base 是 `/admin/`**，漏了会 404。
 
@@ -223,7 +223,6 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | 7 | 知识集合 / 检索调试 | `/admin/agents/knowledge`<br>`/admin/agents/retrieval` | `knowledge:view`<br>`agents:debug` | `KnowledgeCollectionsPage.vue`<br>`RetrievalDebuggerPage.vue` | 建集合灌文档看 chunk；选集合输入 query 调 topK 看相似度 |
 | 8 | 定义管理 | `/admin/agents/definitions` | `agents:manage` | `AgentDefList.vue` + `CapabilityConfigurator.vue` | CRUD + 发布 + 启停 + 版本历史 + 回滚 + MCP 工具勾选 |
 | 9 | 技能库 | `/admin/agents/skills` | `skills:view` | `SkillList.vue` | SKILL.md 正文、增删改、zip 导入 |
-| 10 | 模型单价 | `/admin/settings/models` | `agents:cost:view` | `ModelPricingPage.vue` | 配合观测台核成本 |
 
 > 📌 菜单「运行记录」指向 `/agents`（概览页），真正的 run 列表需**从概览页点进某个 agent**。
 > 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-contract/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
@@ -266,7 +265,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 |---|---|---|---|
 | ① 看运行 | 5 min | playground 发一句需联网/需工具的话，盯 SSE 事件流 | 能看到 `tool_call`/`tool_result`，`skill_load` 在合适时机被触发 |
 | ② 验热更新 | 10 min | definitions 改 systemPrompt / 勾一个新工具 → **publish** → 等 30s → 回 playground | **无需重启服务**即生效（这是本架构最值得确认的一点） |
-| ③ 验观测闭环 | 5 min | 刚才那次 run 应已进入 `/admin/agents/runs/*/run/:id` | token/成本与 model-pricing 能对上 |
+| ③ 验观测闭环 | 5 min | 刚才那次 run 应已进入 `/admin/agents/runs/*/run/:id` | token/成本与字典 `llm_models` 里配置的单价能对上（改价后 60s 内生效） |
 | ④ 验权限闸门 | 5 min | CLI 或 playground 触发 `write-file`/`shell-exec` | 挂起 → 确认/拒绝两条分支都通；60s 超时自动拒绝 |
 | ⑤ 验知识检索 | 5 min | knowledge 灌一篇文档 → retrieval 调 topK 召回 → definitions 挂到某 agent → playground 复问 | 能正确引用刚灌进去的文档内容 |
 
@@ -355,3 +354,4 @@ ls packages/agent-core/src/tools/coding/
 | 本地发布运维手册 | [`docs/development/local-release-runbook.md`](local-release-runbook.md) |
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
 | 评测框架（L1~L4） | [`.codebuddy/agent-kit/references/eval-framework.md`](../../.codebuddy/agent-kit/references/eval-framework.md) |
+| 跨工具 Agent 上下文装配（AGENTS.md / Claude Code / Codex / Cursor） | [`docs/development/cross-tool-agent-context-design.md`](cross-tool-agent-context-design.md) |

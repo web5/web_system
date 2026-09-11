@@ -43,13 +43,17 @@ const BUILTIN_DICTS: readonly BuiltinDict[] = [
   {
     code: 'llm_models',
     name: '大模型清单',
-    description: 'AI Agent 可用模型。value = 网关 model id（如 hy4-preview），label = 页面展示名',
+    description: 'AI Agent 可用模型 + 单价（元/1K tokens）。单价用于 run 成本核算，未填按 0 计',
     sort: 10,
     fields: [
       { name: 'provider', label: '提供方', type: 'enum', required: true, defaultValue: 'tokenhub', options: ['tokenhub', 'hy3', 'other'], sort: 10 },
       { name: 'context_window', label: '上下文窗口(token)', type: 'number', length: 12, sort: 20 },
       { name: 'supports_vision', label: '支持视觉', type: 'boolean', sort: 30 },
       { name: 'note', label: '备注', type: 'text', length: 200, sort: 40 },
+      // 单价（2026-09-11 由 model_pricing 表迁入；ai-service 落 run 时按此核算成本）
+      { name: 'input_price_per1k', label: '输入价（元/1K）', type: 'number', length: 12, sort: 50 },
+      { name: 'output_price_per1k', label: '输出价（元/1K）', type: 'number', length: 12, sort: 60 },
+      { name: 'currency', label: '币种', type: 'string', length: 8, defaultValue: 'CNY', sort: 70 },
     ],
   },
   {
@@ -129,7 +133,7 @@ export class DictService implements OnModuleInit {
     await this.ensureBuiltin();
   }
 
-  /** 补齐内置字典结构与字段（幂等；字段仅在字典「还没有任何字段」时补齐，避免覆盖人工改动） */
+  /** 补齐内置字典结构与字段（幂等；字段按「逐个补缺」同步，已存在的一律不动） */
   async ensureBuiltin(): Promise<void> {
     for (const d of BUILTIN_DICTS) {
       let type = await this.typeRepo.findOne({ where: { code: d.code } });
@@ -142,10 +146,21 @@ export class DictService implements OnModuleInit {
         type.builtin = true;
         await this.typeRepo.save(type);
       }
-      const existing = await this.fieldRepo.count({ where: { typeCode: d.code } });
-      if (existing === 0 && d.fields.length) {
-        await this.fieldRepo.save(d.fields.map((f) => this.fieldRepo.create({ ...f, typeCode: d.code })));
-        this.logger.log(`补齐内置字典字段: ${d.code} (${d.fields.length})`);
+      // 字段按「逐个补缺」同步：缺哪个补哪个，已存在的字段一律不动（保护人工改动）。
+      // 旧规则是"该字典一个字段都没有时才补"，导致给内置字典新增字段后存量环境永远补不上。
+      if (d.fields.length) {
+        const existingNames = new Set(
+          (await this.fieldRepo.find({ where: { typeCode: d.code } })).map((f) => f.name),
+        );
+        const missing = d.fields.filter((f) => !existingNames.has(f.name));
+        if (missing.length) {
+          await this.fieldRepo.save(
+            missing.map((f) => this.fieldRepo.create({ ...f, typeCode: d.code })),
+          );
+          this.logger.log(
+            `补齐内置字典字段: ${d.code} (新增 ${missing.length}: ${missing.map((m) => m.name).join(', ')})`,
+          );
+        }
       }
 
       // 初始数据：仅在该字典一条 item 都没有时插入一次（不覆盖人工改动）
