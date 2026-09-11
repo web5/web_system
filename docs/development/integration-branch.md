@@ -1,6 +1,10 @@
-# 集成分支 `feature/test` 与自动发布 watcher
+# 集成分支 `feature/test` 与自动发布
 
-> 面向本地开发/联调：多个功能分支先在 `feature/test` 上集成，再由发布目录自动全量发布到 `local` 环境。
+> ⚠️ **2026-09-11 起：自动发布已切换为 GitHub Actions** —— 合并到 `feature/test` 即触发，且**按改动模块发布**（不再全量）。
+> 见 `docs/development/gh-actions-release.md`。因此本文第 3~4 节的**轮询 watcher 已停用**（pm2 进程 `web-release-watcher` 已删除），
+> 脚本 `scripts/watch-integration.mjs` 保留作为兜底（runner 掉线时可临时按 §4 启动）。
+>
+> 面向本地开发/联调：多个功能分支先在 `feature/test` 上集成，再由 **Actions** 发布到 `local` 环境。
 
 ---
 
