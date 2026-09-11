@@ -55,4 +55,12 @@ export interface BuiltinStepDef {
   skip?: (p: DeployPipelineEntity) => boolean;
   /** 执行体（commandMode 走内置路径时被调用；build/required 无内置执行体） */
   run?: (ctx: StepContext) => Promise<void>;
+  /**
+   * 命令驱动时的平台侧收尾（可选）。
+   *
+   * 用例：git 阶段改由 DB 脚本执行时，脚本只负责"把代码拉到位"，
+   * 而依赖同步 / 共享包预构建仍必须由平台执行（流水线级一次，避免并发竞态）。
+   * 未配置命令（走 `run`）时执行体自己已包含该收尾，引擎不重复调用。
+   */
+  afterRun?: (ctx: StepContext) => Promise<void>;
 }

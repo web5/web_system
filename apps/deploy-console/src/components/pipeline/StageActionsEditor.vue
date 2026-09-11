@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { pipelineStepApi, type StageAction } from '@/api'
 
@@ -12,13 +12,20 @@ export interface EditorItem {
   enabled: boolean
   timeoutSec: number | null
   title?: string
+  /** 平台托管（locked）：只读展示，不给编辑/保存入口 */
+  locked?: boolean
 }
 
 const props = defineProps<{
   /** 流水线模板 ID（R6：命令归属流水线，不再用 moduleKey） */
   templateId: string
   item: EditorItem
+  /** 只读模式（平台托管节点，如 git）：可查看脚本，不可编辑 */
+  readonly?: boolean
 }>()
+
+/** 只读判定：父级显式指定，或该节点被标记为平台托管 */
+const ro = computed(() => !!props.readonly || !!props.item.locked)
 
 const emit = defineEmits<{
   /** 保存成功（父级负责刷新 scriptView 与收起编辑器） */
@@ -50,6 +57,7 @@ onMounted(() => {
 })
 
 function addAction() {
+  if (ro.value) return // 平台托管节点只读
   draft.value.push({
     id: `a${draft.value.length + 1}_${Date.now().toString(36)}`,
     type: 'shell',
@@ -62,6 +70,7 @@ function addAction() {
 }
 
 function delAction(i: number) {
+  if (ro.value) return // 平台托管节点只读
   if (draft.value[i]?.builtin) {
     message.warning('内置操作不可删除')
     return
@@ -71,6 +80,7 @@ function delAction(i: number) {
 }
 
 function moveAction(i: number, dir: -1 | 1) {
+  if (ro.value) return // 平台托管节点只读
   const to = i + dir
   if (to < 0 || to >= draft.value.length) return
   const arr = draft.value
@@ -95,6 +105,10 @@ async function validateDraft() {
 }
 
 async function saveDraft() {
+  if (ro.value) {
+    message.warning('该节点由平台托管，不可编辑')
+    return
+  }
   if (!draft.value.length) {
     message.warning('至少需要一个操作')
     return
@@ -130,10 +144,20 @@ async function saveDraft() {
     <div class="editor-head">
       <span style="font-family: monospace; color: #999; font-size: 12px;">{{ item.stage }}</span>
       <span style="font-weight: 600;">操作序列（{{ draft.length }}）</span>
+      <a-tag v-if="ro" color="blue" style="margin: 0;">平台托管 · 只读</a-tag>
       <span style="color: #999; font-size: 12px; margin-left: auto;">
         命令归属：<span style="font-family: monospace;">本流水线</span>
       </span>
     </div>
+
+    <a-alert
+      v-if="ro"
+      type="info"
+      show-icon
+      style="margin: 8px 0 0;"
+      message="该节点由平台托管（locked），仅可查看"
+      description="脚本正文随平台代码维护（启动/发布时自动同步），页面不提供编辑入口；如需变更请调整内置脚本。"
+    />
 
     <div class="editor-body">
       <!-- 操作列表 -->
@@ -155,11 +179,11 @@ async function saveDraft() {
             <a-tag v-if="a.builtin" style="margin: 0;">内置</a-tag>
           </div>
           <a-space :size="2">
-            <a-button size="small" type="text" :disabled="i === 0" @click.stop="moveAction(i, -1)">↑</a-button>
-            <a-button size="small" type="text" :disabled="i === draft.length - 1" @click.stop="moveAction(i, 1)">↓</a-button>
+            <a-button size="small" type="text" :disabled="ro || i === 0" @click.stop="moveAction(i, -1)">↑</a-button>
+            <a-button size="small" type="text" :disabled="ro || i === draft.length - 1" @click.stop="moveAction(i, 1)">↓</a-button>
           </a-space>
         </div>
-        <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <div v-if="!ro" style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
           <a-button size="small" @click="addAction">+ 操作</a-button>
           <a-button size="small" danger :disabled="!draft.length || draft[actIdx]?.builtin" @click="delAction(actIdx)">
             删除
@@ -174,10 +198,11 @@ async function saveDraft() {
             <a-input
               v-model:value="draft[actIdx].name"
               size="small"
+              :disabled="ro"
               style="width: 150px;"
               placeholder="操作名称"
             />
-            <a-select v-model:value="draft[actIdx].type" size="small" style="width: 96px;">
+            <a-select v-model:value="draft[actIdx].type" size="small" :disabled="ro" style="width: 96px;">
               <a-select-option value="shell">shell</a-select-option>
               <a-select-option value="service">工具</a-select-option>
             </a-select>
@@ -185,9 +210,10 @@ async function saveDraft() {
               v-model:value="draft[actIdx].timeoutSec"
               size="small"
               :min="1"
+              :disabled="ro"
               style="width: 96px;"
             />
-            <a-checkbox v-model:checked="draft[actIdx].cont">
+            <a-checkbox v-model:checked="draft[actIdx].cont" :disabled="ro">
               容错（失败不中断）
             </a-checkbox>
           </a-space>
@@ -197,6 +223,7 @@ async function saveDraft() {
             v-model:value="draft[actIdx].code"
             :rows="10"
             spellcheck="false"
+            :disabled="ro"
             placeholder="在此编写 shell 脚本，可用变量：${MODULE_KEY} ${PM2_NAME} ${PORT} ${PUBLIC_PATH} ${ARTIFACT_DIR} ${WS_RESULT_FILE}"
             style="font-family: monospace; font-size: 12px; background: #1e1e1e; color: #d4d4d4;"
           />
@@ -205,6 +232,7 @@ async function saveDraft() {
             <a-input
               v-model:value="draft[actIdx].tool"
               size="small"
+              :disabled="ro"
               placeholder="工具 code（deploy_tool_catalog.code）"
               style="margin-top: 6px;"
             />
@@ -214,16 +242,21 @@ async function saveDraft() {
 
         <div style="margin-top: 10px;">
           <a-space>
-            <a-button size="small" type="primary" :loading="saving" @click="saveDraft">
+            <a-button v-if="!ro" size="small" type="primary" :loading="saving" @click="saveDraft">
               保存
             </a-button>
             <a-button size="small" @click="validateDraft">语法校验</a-button>
-            <a-button size="small" @click="emit('cancel')">取消</a-button>
+            <a-button size="small" @click="emit('cancel')">{{ ro ? '关闭' : '取消' }}</a-button>
           </a-space>
         </div>
         <div style="margin-top: 6px; color: #999; font-size: 12px;">
-          操作自上而下顺序执行；标记「容错」的操作失败不中断阶段，其余失败即阶段失败。
-          保存以 actions 数组整体提交。
+          <template v-if="ro">
+            平台托管节点：脚本随平台代码维护，仅可查看与语法校验。
+          </template>
+          <template v-else>
+            操作自上而下顺序执行；标记「容错」的操作失败不中断阶段，其余失败即阶段失败。
+            保存以 actions 数组整体提交。
+          </template>
         </div>
       </div>
     </div>

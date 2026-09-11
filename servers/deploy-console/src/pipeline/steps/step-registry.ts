@@ -44,6 +44,8 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       commandMode: 'override',
       skip: skipReuseArtifact,
       run: (ctx) => ex.pull.run(ctx),
+      // 命令驱动（DB 锁定脚本拉码）时，依赖同步与预构建仍由平台收尾
+      afterRun: (ctx) => ex.pull.afterSync(ctx),
     },
     build: {
       category: 'build',
