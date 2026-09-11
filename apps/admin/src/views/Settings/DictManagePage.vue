@@ -411,7 +411,9 @@ async function doRemove(record: DictItemRow): Promise<void> {
 }
 
 function openEditPage(code: string): void {
-  void router.push(`/admin/settings/dicts/${code}`);
+  // 注意：admin 的 router base 是 '/admin/'，这里**不能**再写 /admin 前缀，
+  // 否则 vue-router 会再拼一次 base（/admin/admin/...）→ 404
+  void router.push(`/settings/dicts/${code}`);
 }
 
 function openDrawer(record?: DictItemRow): void {

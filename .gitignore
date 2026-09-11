@@ -93,3 +93,6 @@ servers/ai-service/test-tts.js
 .agent-cli.config.json
 servers/ai-service/.agent-cli.config.json
 
+
+# 集成分支自动发布 watcher 的本地状态文件
+.watch-integration.state

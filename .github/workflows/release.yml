@@ -1,58 +1,70 @@
-# release — 推送 master 后自动触发发布流水线（CI → CD 断链打通）
+# release — 合并到集成分支后自动发布到本机（GitHub Actions → 发布目录）
 #
-# 设计：specs/ci-cd/design.md「P0 · 打通断链」
-#   本 workflow 不执行任何部署动作，只把「发布意图」投递给发布平台
-#   （deploy-console 的 POST /api/hooks/release），由平台流水线统一执行：
-#   锁 / 审批 / 审计 / 通知 / 度量 / 自动回滚 全部保留，CI 不绕过平台治理。
+# 设计：specs/ci-cd/gh-actions-release.md
+#   模块分两路，同一个 job 内分流：
+#     ① deploy-console（发布平台自己）→ **本 job 直连执行**
+#        它不能走平台流水线：restart 阶段 `pm2 restart web-deploy-console` 会把执行流水线的
+#        进程自己杀掉，且其后还有 version/pointer/verify 同在进程内 → 永久卡 running 并占锁。
+#     ② 其余模块 → 投递发布平台 `POST /api/hooks/release`，由平台流水线执行
+#        （锁/审批/审计/回滚/版本指针全部保留，CI 不绕过治理）
+#
+# 触发（决策 2026-09-11）：**仅 feature/test**（集成分支 → local）；
+#   master 不自动发布，需要时用 workflow_dispatch 手动指定。
 #
 # 前置条件：
-#   1) runs-on: self-hosted —— deploy-console 运行在内网（默认 http://127.0.0.1:6200），
-#      GitHub 托管 runner 访问不到；需在能访问该地址的本机注册 self-hosted runner。
-#   2) 仓库 Secrets：
-#        RELEASE_HOOK_URL     发布平台地址，如 http://127.0.0.1:6200
-#        RELEASE_HOOK_SECRET  与发布平台 .env 的 RELEASE_HOOK_SECRET 一致
-#        DEPLOY_CONSOLE_TOKEN 控制台 JWT（仅用于轮询流水线状态，建议 CI 专用账号并定期轮换）
+#   1) 本机注册 self-hosted runner，label `local-release`
+#      （deploy-console 与发布目录都在本机；runner 的 PATH 需含 node/pm2，否则找不到 nest/pm2）
+#   2) 仓库 Variables：`RELEASE_DIR`（可选，默认 /Users/geekwen/web_system_release）
+#   3) 仓库 Secrets：
+#        RELEASE_HOOK_URL      发布平台地址（如 http://127.0.0.1:6200）
+#        RELEASE_HOOK_SECRET   与平台 .env 的 RELEASE_HOOK_SECRET 一致
+#        DEPLOY_CONSOLE_TOKEN  控制台 JWT（仅用于轮询流水线状态，建议 CI 专用账号并定期轮换）
 #
-# 安全：
-#   - HMAC-SHA256 签名（X-Hub-Signature-256）+ 时间戳（X-Ws-Timestamp）防重放
-#   - deliveryId 幂等：workflow 重跑 / 网络重试不会产生第二条流水线
-#   - 验签对象是原始请求体，签名用 node 计算，避免 jq/openssl 环境差异
+# 安全：HMAC-SHA256 签名（X-Hub-Signature-256）+ 时间戳防重放 + deliveryId 幂等；
+#       验签对象是原始请求体，签名用 node 计算，避免 jq/openssl 环境差异。
 name: release
 
 on:
   push:
-    branches: [master, main]
+    branches: [feature/test]
   workflow_dispatch:
     inputs:
       env:
-        description: 目标环境（local / dev / staging / prod）
+        description: 目标环境（本地日常为 local）
         required: true
-        default: dev
+        default: local
       modules:
-        description: 模块 key（逗号分隔，留空 = 自动解析本次改动模块）
+        description: 模块 key（逗号分隔，留空 = 自动解析本次改动）
         required: false
 
 permissions:
   contents: read
 
+# 同一分支的多次合并串行发布，避免两个发布互相重启服务
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  trigger:
-    name: 触发发布流水线
-    runs-on: self-hosted
-    timeout-minutes: 30
+  release:
+    name: 发布（${{ github.event.inputs.env || 'local' }}）
+    runs-on: [self-hosted, local-release]
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 解析目标环境与改动模块
+      - name: 解析本次改动模块
         id: plan
         env:
           INPUT_ENV: ${{ github.event.inputs.env }}
           INPUT_MODULES: ${{ github.event.inputs.modules }}
+          # 本地无法发布的模块：mini-contract 的 build 命令是上传微信小程序（需微信密钥）
+          SKIP_MODULES: mini-contract
         run: |
           set -euo pipefail
-          ENV="${INPUT_ENV:-dev}"
+          ENV="${INPUT_ENV:-local}"
           BRANCH="${GITHUB_REF_NAME}"
           COMMIT="$(git rev-parse --short HEAD)"
 
@@ -62,25 +74,48 @@ jobs:
             # 取本次 push 触达的 servers/<svc> 与 apps/<app>，目录名即 moduleKey
             BASE="$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)"
             MODULES="$(git diff --name-only "$BASE" HEAD \
-              | grep -E '^(servers|apps)/' \
+              | grep -E '^(servers|apps)/' || true \
               | cut -d/ -f2 | sort -u | tr '\n' ' ')"
           fi
 
-          if [ -z "$(echo "$MODULES" | tr -d ' ')" ]; then
-            echo "未检测到模块变更，跳过发布"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          HAS_CONSOLE=false
+          REST=""
+          for M in $MODULES; do
+            case " $SKIP_MODULES " in
+              *" $M "*) echo "跳过（本地不可发布）: $M"; continue ;;
+            esac
+            if [ "$M" = "deploy-console" ]; then HAS_CONSOLE=true; else REST="$REST $M"; fi
+          done
+          REST="$(echo "$REST" | xargs || true)"
 
-          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "env=$ENV" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-          echo "modules=$MODULES" >> "$GITHUB_OUTPUT"
-          echo "目标: env=$ENV branch=$BRANCH commit=$COMMIT modules=$MODULES"
+          echo "has_console=$HAS_CONSOLE" >> "$GITHUB_OUTPUT"
+          echo "modules=$REST" >> "$GITHUB_OUTPUT"
 
-      - name: 投递发布意图并轮询至终态
-        if: steps.plan.outputs.skip != 'true'
+          if [ "$HAS_CONSOLE" = "false" ] && [ -z "$REST" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "本次无需要发布的模块（仅文档/配置改动）"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "plan: env=$ENV branch=$BRANCH commit=$COMMIT deploy-console=$HAS_CONSOLE modules=[$REST]"
+          fi
+
+      # ── ① deploy-console：直连执行（不能走平台流水线，见文件头说明） ──
+      - name: 发布 deploy-console（直连执行）
+        if: steps.plan.outputs.has_console == 'true'
+        env:
+          RELEASE_DIR: ${{ vars.RELEASE_DIR || '/Users/geekwen/web_system_release' }}
+          PLAN_BRANCH: ${{ steps.plan.outputs.branch }}
+        run: |
+          set -euo pipefail
+          echo "发布目录: $RELEASE_DIR（分支 $PLAN_BRANCH）"
+          bash "$GITHUB_WORKSPACE/scripts/release-deploy-console.sh" --branch "$PLAN_BRANCH"
+
+      # ── ② 其余模块：投递平台流水线（保留平台全部治理） ──
+      - name: 投递其余模块并轮询至终态
+        if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.modules != ''
         env:
           RELEASE_HOOK_URL: ${{ secrets.RELEASE_HOOK_URL }}
           RELEASE_HOOK_SECRET: ${{ secrets.RELEASE_HOOK_SECRET }}
