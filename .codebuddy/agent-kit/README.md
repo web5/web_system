@@ -209,7 +209,7 @@ ai-agent-kit/
 - **Variable** `TARGET_REPOS`（可选）：逗号分隔的多个目标，如 `web5/web_system,web5/other`；单项可写 `owner/repo#分支` 单独指定基线分支。未设置时回退到旧的单目标 `TARGET_REPO`，再回退到默认值。
 - **Variable** `TARGET_BASE`（可选，默认 `master`）：未用 `#分支` 指定时的基线分支。
 
-也可本地手动触发（环境与凭证见 `docs/development.md` §6）：
+> 未配置 `SYNC_TOKEN` 时脚本**跳过同步并以 0 退出**，CI 中只给一条 `::warning::` 注解、**不会让 workflow 变红**。排查「同步没生效」时先看运行摘要里有没有这条 warning。
 
 ```bash
 SYNC_TOKEN=xxx TARGET_REPOS="owner/repo-a,owner/repo-b#main" bash scripts/sync-to-target.sh
