@@ -77,7 +77,7 @@
 |--------|--------|
 | 任务名称 | 未来一周关注公司 |
 | 提示词 | 上方代码块内容（整体复制） |
-| 工作空间 | 云端项目「个人开发工作台」（或本地 /Users/geekwen/workspace/web_system） |
+| 工作空间 | 云端项目「个人开发工作台」（或本地 {{WORKSPACE_DIR}}） |
 | 调度 | 每周一 09:00（FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0），给出未来一周关注清单 |
 | 勾选技能 | **kedou-mcp-curl**（必须，提供 mcp_call curl 直调）+ **web-system-institutional-behavior-tracker**（必须，提供分析框架） |
 | 附加连接器 | **无需附加任何连接器**：四维硬数据由 kedouai 自托管 `institution` 模块提供（免授权）；tdx/mx-ds/westock 自动化中不可用，不要勾选 |

@@ -6,7 +6,7 @@
 
 ## 一、服务运行拓扑
 
-发布目录：`/Users/geekwen/web_system_release`（git 分支跟随发布目标，日常为 `feature/*` 或 `master`）
+发布目录：`{{RELEASE_DIR}}`（git 分支跟随发布目标，日常为 `feature/*` 或 `master`）
 
 | 服务 | 端口 | pm2 名 | 发布方式 |
 |---|---|---|---|

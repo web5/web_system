@@ -312,7 +312,7 @@ function renderPreview() {
     .replace(/\{MODULE_KEY\}/g, m?.key || 'admin')
     .replace(/\{MODULE_TYPE\}/g, m?.type || 'micro-frontend')
     .replace(/\{MODULE_DIR\}/g, 'apps/admin')
-    .replace(/\{RELEASE_DIR\}/g, '/Users/geekwen/web_system_release')
+    .replace(/\{RELEASE_DIR\}/g, '/path/to/release')
     .replace(/\{BRANCH\}/g, 'feature/x')
     .replace(/\{COMMIT_ID\}/g, 'abc1234')
     .replace(/\{STAGE\}/g, selNodeKey.value)

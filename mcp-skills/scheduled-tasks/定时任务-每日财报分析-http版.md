@@ -56,7 +56,7 @@
 |--------|--------|
 | 任务名称 | 每日财报分析（世界500强 A股/港股） |
 | 提示词 | 上方代码块内容 |
-| 工作空间 | 云端项目「个人开发工作台」（或本地 /Users/geekwen/workspace/web_system） |
+| 工作空间 | 云端项目「个人开发工作台」（或本地 {{WORKSPACE_DIR}}） |
 | 勾选技能 | **kedou-mcp-curl**（提供 mcp_call，用于 wechat_mp 建稿 / finnews 个股资讯） |
 | 勾选连接器 | westock（腾讯自选股）、mx-ds-mcp（东方财富）等财报数据源；网盘连接器 |
 

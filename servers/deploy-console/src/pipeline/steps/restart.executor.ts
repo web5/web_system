@@ -6,6 +6,7 @@ import { CommandService } from '../../shell/command.service';
 // 配置中心服务（发布/重启时按 global→env→module 合并并强制覆盖注入进程环境）
 import { ConfigService as ConfigCenterService } from '../../config/config.service';
 import { StepContext } from './step.types';
+import { defaultReleaseWorkspace } from '../release-paths';
 import { readFile, writeFile, chmod } from 'fs/promises';
 import { join } from 'path';
 
@@ -51,7 +52,7 @@ export class RestartExecutor {
     // 配置中心注入：强制覆盖进程环境（历史 `PORT=6200` 污染的对策，端口以配置中心为准）
     const injectEnv = await this.resolveInjectEnv(p, ctx);
     const ws =
-      this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release';
+      this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace();
 
     // ---- 端口孤儿清理（铁律，参考 deploy-local.sh / publish-ai-agent.sh）----
     // restart 前确保目标端口占用者 == pm2 当前 pid；否则 kill 残留孤儿进程，避免新进程

@@ -22,7 +22,7 @@
 #
 set -euo pipefail
 
-SRC="${SRC:-/Users/geekwen/workspace/ai-agent-kit}"
+SRC="${SRC:-$HOME/workspace/ai-agent-kit}"
 DST="${DST:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 KIT_REL=".codebuddy/agent-kit"

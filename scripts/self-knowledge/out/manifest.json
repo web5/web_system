@@ -1,16 +1,16 @@
 {
   "architecture": {
-    "file": "/Users/geekwen/workspace1/web_system/scripts/self-knowledge/out/architecture.md",
+    "file": "scripts/self-knowledge/out/architecture.md",
     "chars": 12609,
     "lines": 460
   },
   "agent-platform": {
-    "file": "/Users/geekwen/workspace1/web_system/scripts/self-knowledge/out/agent-platform.md",
+    "file": "scripts/self-knowledge/out/agent-platform.md",
     "chars": 2726,
     "lines": 102
   },
   "dev-guide": {
-    "file": "/Users/geekwen/workspace1/web_system/scripts/self-knowledge/out/dev-guide.md",
+    "file": "scripts/self-knowledge/out/dev-guide.md",
     "chars": 6309,
     "lines": 155
   }

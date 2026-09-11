@@ -5,6 +5,7 @@ import { ModuleRegistryService } from '../../module-registry/module-registry.ser
 import { ArtifactStoreService } from '../../artifact/artifact-store.service';
 import { RemoteDeliveryService } from '../../remote/remote-delivery.service';
 import { StepContext } from './step.types';
+import { defaultReleaseWorkspace } from '../release-paths';
 
 /**
  * upload 内置步骤执行体（category=deploy，前端/微前端产物投递）。
@@ -25,7 +26,7 @@ export class UploadExecutor {
 
     const mod = await this.moduleRegistry.get(p.moduleKey);
     const ws =
-      this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release';
+      this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace();
     const src = path.join(ws, 'apps', mod.dir, 'dist');
 
     if (ctx.uploadTarget === 'local') {

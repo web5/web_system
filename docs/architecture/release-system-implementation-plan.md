@@ -11,7 +11,7 @@
 - `deploy-console` TypeORM `synchronize: true` + entity glob（`app.module.ts`），**新增 entity 自动建表**。
 - `gateway` 显式 entities 数组；P1 两张新表**仅 deploy-console 消费**，gateway 不改。
 - `deploy-console` 无测试基础设施 → 需引入 jest。
-- 数据库 `web_system_deploy`；本机 mysql 客户端：`/Users/geekwen/local/mysql-8.4.0-macos14-arm64/bin/mysql`（后续脚本用 `$MYSQL` 代指）。
+- 数据库 `web_system_deploy`；本机 mysql 客户端：`$HOME/local/mysql-8.4.0-macos14-arm64/bin/mysql`（后续脚本用 `$MYSQL` 代指）。
 - 现有重复数据：`deploy_deployments` dev 下 admin 4 条、portal 24 条（均 a1f5301）。
 
 ---
