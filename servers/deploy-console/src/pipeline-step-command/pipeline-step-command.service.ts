@@ -119,6 +119,7 @@ export class PipelineStepCommandService {
         `节点 ${nodeKey} 不可配置：${PLATFORM_RESERVED.join('/')} 为平台保留（发布语义真相源）`,
       );
     }
+    await this.assertNotLocked(templateId, nodeKey);
 
     const hasActions = !!(actions && actions.length);
     if (hasActions) {
@@ -155,6 +156,24 @@ export class PipelineStepCommandService {
 
   /** 删除节点命令（该节点回落流程内置逻辑） */
   async remove(templateId: string, nodeKey: string): Promise<void> {
+    await this.assertNotLocked(templateId, nodeKey);
     await this.repo.delete({ templateId, nodeKey });
+  }
+
+  /**
+   * 平台托管守卫：`locked=true` 的节点拒绝从接口改写。
+   *
+   * 为什么既有保留字又要这一层：`git` 本身已被 `isWritableStageKey` 挡在 upsert 之外，
+   * 但 **remove 原先没有守卫**（可以整行删掉，拉码直接失效），且未来若要托管非保留字节点
+   * （如某个平台脚本节点）也需要通用机制。平台脚本的写入通道只有一条：
+   * `PlatformScriptSeedService`（随代码同步）——"谁能改发布语义基线"要有唯一答案。
+   */
+  private async assertNotLocked(templateId: string, nodeKey: string): Promise<void> {
+    const row = await this.repo.findOne({ where: { templateId, nodeKey } });
+    if (row?.locked) {
+      throw new BadRequestException(
+        `节点 ${nodeKey} 为平台托管（locked），不可编辑；如需变更请调整代码内置脚本（重启后自动同步）`,
+      );
+    }
   }
 }
