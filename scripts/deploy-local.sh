@@ -69,7 +69,7 @@ deploy_frontend() {
   log "版本号: $ver"
 
   # 1) workspace 内构建
-  log "构建 $mod（MF 模式）..."
+  log "构建 ${mod}（MF 模式）..."
   # 本脚本仍走历史扁平布局（部署到 modules/<mod>/<ver>/、版本表写纯 hash），
   # 故显式打开逃生舱：否则 vite base 会按新契约（<产品线>/<版本>）拒绝构建。
   # 契约与校验见 scripts/vite-micro-frontend.mjs resolveMfBase。
