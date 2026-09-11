@@ -96,7 +96,7 @@ deploy_backend() { # $1=service_name
   log "  构建 $pkg ..."
   /bin/rm -rf "$ROOT/servers/$dir/dist"
   if ! (cd "$ROOT/servers/$dir" && npx nest build); then
-    err "构建失败：$pkg（未部署，旧代码保留）"
+    err "构建失败：${pkg}（未部署，旧代码保留）"
   fi
   tar czf "/tmp/${svc}-deploy.tar.gz" -C "$ROOT/servers/$dir" dist
   scp_to "/tmp/${svc}-deploy.tar.gz"
