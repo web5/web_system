@@ -22,8 +22,10 @@ permissions:
 jobs:
   create-pr:
     runs-on: ubuntu-latest
-    # 只在 feature/* 或 fix/* 开发分支自动建 PR，避免 docs/、release/ 等误建
-    if: startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/')
+    # 只在 feature/* 或 fix/* 开发分支自动建 PR，避免 docs/、release/ 等误建。
+    # 例外：feature/test 是本地集成/联调分支（各功能 PR 的 base），不往 master 提 PR ——
+    # 它每次 push 都自动建 PR 只会产生噪音（历史上 PR #40 就是这么来的）。
+    if: (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/')) && github.ref_name != 'feature/test'
     steps:
       - uses: actions/checkout@v4
 
