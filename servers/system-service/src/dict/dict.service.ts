@@ -50,6 +50,11 @@ const BUILTIN_DICTS: readonly BuiltinDict[] = [
       { name: 'context_window', label: '上下文窗口(token)', type: 'number', length: 12, sort: 20 },
       { name: 'supports_vision', label: '支持视觉', type: 'boolean', sort: 30 },
       { name: 'note', label: '备注', type: 'text', length: 200, sort: 40 },
+      // 价格字段：2026-09-11 由旧表 model_pricing 迁入（该表随之退役，见 specs/llm-models-unify/design.md）。
+      // 口径沿用旧表「每 1K tokens」；**非必填** —— 允许"模型可用但未配价"（成本记 0，页面提示补配）。
+      { name: 'input_price_per1k', label: '输入价/1K', type: 'number', length: 8, sort: 50 },
+      { name: 'output_price_per1k', label: '输出价/1K', type: 'number', length: 8, sort: 60 },
+      { name: 'currency', label: '币种', type: 'enum', defaultValue: 'CNY', options: ['CNY', 'USD'], sort: 70 },
     ],
   },
   {
@@ -142,11 +147,7 @@ export class DictService implements OnModuleInit {
         type.builtin = true;
         await this.typeRepo.save(type);
       }
-      const existing = await this.fieldRepo.count({ where: { typeCode: d.code } });
-      if (existing === 0 && d.fields.length) {
-        await this.fieldRepo.save(d.fields.map((f) => this.fieldRepo.create({ ...f, typeCode: d.code })));
-        this.logger.log(`补齐内置字典字段: ${d.code} (${d.fields.length})`);
-      }
+      await this.ensureFields(d.code, d.fields);
 
       // 初始数据：仅在该字典一条 item 都没有时插入一次（不覆盖人工改动）
       if (d.seedItems?.length) {
@@ -168,6 +169,25 @@ export class DictService implements OnModuleInit {
         }
       }
     }
+  }
+
+  /**
+   * 按 `name` 增量补齐内置字段：缺失的插入，已存在的**不覆盖**。
+   *
+   * 为什么不能沿用「字段数为 0 才补齐」：内置字典会随版本新增字段（如 `llm_models`
+   * 新增的三个价格字段），而老环境早已有若干字段，旧写法会让新字段永远建不出来。
+   * 不覆盖已存在字段，是为了保护运维改过的 label / 长度上限 / 是否必填。
+   */
+  private async ensureFields(typeCode: string, defined: DictFieldDto[]): Promise<void> {
+    if (!defined.length) return;
+    const rows = await this.fieldRepo.find({ where: { typeCode } });
+    const have = new Set(rows.map((r) => r.name));
+    const missing = defined.filter((f) => !have.has(f.name));
+    if (!missing.length) return;
+    await this.fieldRepo.save(missing.map((f) => this.fieldRepo.create({ ...f, typeCode })));
+    this.logger.log(
+      `补齐内置字典字段: ${typeCode}（新增 ${missing.map((f) => f.name).join(', ')}）`,
+    );
   }
 
   // ===== 字典类型 =====
