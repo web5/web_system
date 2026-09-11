@@ -20,7 +20,7 @@ https://admin.kedouai.com
     ↓
 69 服务器 Nginx (SSL 终止 + 反向代理)
     ↓
-http://106.52.176.246:3000
+http://{{PROD_HOST}}:3000
     ↓
 246 服务器 Gateway 服务
 ├── 根据 Host 头返回静态资源
@@ -35,7 +35,7 @@ http://106.52.176.246:3000
 
 ## 服务器配置
 
-### 69 服务器 (42.194.200.69) - Nginx 网关
+### 69 服务器 ({{GATEWAY_HOST}}) - Nginx 网关
 **角色：** 纯反向代理，SSL 终止
 
 **配置：**
@@ -47,7 +47,7 @@ http://106.52.176.246:3000
 - ✅ 所有请求转发到 246:3000
 - ✅ SSL 终止在 Nginx 层
 
-### 246 服务器 (106.52.176.246) - 应用服务
+### 246 服务器 ({{PROD_HOST}}) - 应用服务
 **角色：** 网关服务 + 业务服务 + 静态资源
 
 **目录结构：**
@@ -82,7 +82,7 @@ pm2 logs gateway
 ### 1. 构建前端应用
 ```bash
 # 管理后台
-cd /home/ubuntu/.openclaw/workspace/web_system/apps/admin-web
+cd $HOME/.openclaw/workspace/web_system/apps/admin-web
 pnpm build
 
 # 门户页面（如有）
@@ -93,15 +93,15 @@ pnpm build
 ### 2. 上传静态资源到 246 服务器
 ```bash
 # 管理后台
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/admin/
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/admin/
 
 # 门户页面
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/portal/
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/portal/
 ```
 
 ### 3. 重启 Gateway 服务
 ```bash
-ssh root@106.52.176.246 "pm2 restart gateway"
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 ### 4. 验证访问
@@ -161,7 +161,7 @@ PORT=3000
 HOST=0.0.0.0
 NODE_ENV=production
 AUTH_SERVICE_URL=http://127.0.0.1:3001
-PUBLIC_URL=http://106.52.176.246:3000
+PUBLIC_URL=http://{{PROD_HOST}}:3000
 CORS_ORIGINS=*
 STATIC_ROOT=/root/web_system/static
 ```
@@ -174,7 +174,7 @@ server {
     server_name admin.kedouai.com;
     
     location / {
-        proxy_pass http://106.52.176.246:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -215,10 +215,10 @@ tail -f /var/log/nginx/admin.error.log
 **解决：**
 ```bash
 # 检查文件是否存在
-ssh root@106.52.176.246 "ls -la /root/web_system/static/admin/"
+ssh root@{{PROD_HOST}} "ls -la /root/web_system/static/admin/"
 
 # 重新上传
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/admin/
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/admin/
 
 # 重启服务
 pm2 restart gateway
@@ -248,7 +248,7 @@ pm2 restart all
 nginx -t
 
 # 测试 246 服务可达性
-curl http://106.52.176.246:3000/
+curl http://{{PROD_HOST}}:3000/
 
 # 重启 Nginx
 systemctl reload nginx

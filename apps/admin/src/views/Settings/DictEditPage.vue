@@ -316,7 +316,7 @@ async function submit(): Promise<void> {
     }
     await replaceDictFields(targetCode, buildFields());
     message.success(`字典已保存（字段 ${draft.value.length} 个）`);
-    void router.push('/admin/settings/dicts');
+    void router.push('/settings/dicts');
   } catch (e) {
     message.error((e as Error).message || '保存失败');
   } finally {
@@ -336,7 +336,7 @@ function confirmDelete(): void {
       try {
         await removeDictType(typeId.value);
         message.success('已删除');
-        void router.push('/admin/settings/dicts');
+        void router.push('/settings/dicts');
       } catch (e) {
         message.error((e as Error).message || '删除失败');
       }
@@ -345,7 +345,7 @@ function confirmDelete(): void {
 }
 
 function goBack(): void {
-  void router.push('/admin/settings/dicts');
+  void router.push('/settings/dicts');
 }
 
 onMounted(() => {

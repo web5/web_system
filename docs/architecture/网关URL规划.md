@@ -28,7 +28,7 @@ Gateway（端口 6000）是应用层唯一入口，统一处理全部请求：
 | 🔧 前端托管 | `/portal/`、`/admin/`、`/mcp-admin/` | `ServeStaticModule` | `StaticModule` |
 | 📚 接口文档 | `/docs`、`/swagger` | SwaggerModule | `SwaggerDocsModule` |
 
-**Nginx 层（SSL 层 42.194.200.69）路由：**
+**Nginx 层（SSL 层 {{GATEWAY_HOST}}）路由：**
 
 > SSL 层只做两件事：`/mcp` 直连 mcp-gateway，其余全部转发到 gateway。**前端（portal/admin/mcp-admin）和 API 都不在 nginx 层区分，统一走 `location /` 到 gateway 6000，由 gateway 内部分发。**
 
@@ -170,19 +170,19 @@ this.finnewsServiceUrl = configService.get('FINNEWS_SERVICE_URL', 'http://localh
 
 MCP 平台的路由分三层，职责清晰：
 
-### 5.1 Nginx 层（SSL 层 42.194.200.69）
+### 5.1 Nginx 层（SSL 层 {{GATEWAY_HOST}}）
 
-两处域名入口（均在 42.194.200.69）：
+两处域名入口（均在 {{GATEWAY_HOST}}）：
 
 **① 正式域名 `kedouai.com/mcp`**（`/etc/nginx/conf.d/default.conf` 的 kedouai.com server 块，2026-08-15 起）：
 
-> **环境指向（2026-08-15 12:25 起）**：正式域名 `/mcp` 已切到 **PROD（106.52.176.246:6006）**；
-> `/api/mcp`（key 申请/管理接口后端）仍指向 **DEV gateway（175.27.189.123:6000）**——PROD 的 gateway(3000) 是旧版（无 mcpProxy/mcp-admin 静态），申请页与 mcp-admin 管理台暂由 DEV 承载。
+> **环境指向（2026-08-15 12:25 起）**：正式域名 `/mcp` 已切到 **PROD（{{PROD_HOST}}:6006）**；
+> `/api/mcp`（key 申请/管理接口后端）仍指向 **DEV gateway（{{DEV_HOST}}:6000）**——PROD 的 gateway(3000) 是旧版（无 mcpProxy/mcp-admin 静态），申请页与 mcp-admin 管理台暂由 DEV 承载。
 
 ```nginx
 # MCP 正式对外端点：https://kedouai.com/mcp/finnews → PROD mcp-gateway
 location ~ ^/mcp(/.*)?$ {
-    proxy_pass http://106.52.176.246:6006;
+    proxy_pass http://{{PROD_HOST}}:6006;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -196,7 +196,7 @@ location ~ ^/mcp(/.*)?$ {
 
 # key 申请/管理接口（mcp-admin 前端同源调用）→ DEV gateway 6000（pathRewrite ^/api/mcp → /api）
 location ~ ^/api/mcp(/.*)?$ {
-    proxy_pass http://175.27.189.123:6000;
+    proxy_pass http://{{DEV_HOST}}:6000;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header Host $host;
@@ -212,8 +212,8 @@ location ~ ^/api/mcp(/.*)?$ {
 
 | 环境 | 服务器 | mcp-gateway | finnews 数据 | 说明 |
 |------|--------|-------------|--------------|------|
-| DEV | 175.27.189.123 | :6006 | 本机 finnews(:6007) | 开发/验证环境，承载 `/api/mcp` 后端与 mcp-admin 页面 |
-| PROD | 106.52.176.246 | :6006 | **跨机调 DEV** `https://dev.kedouai.com/api/finnews`（Bearer） | 现网正式端点 `kedouai.com/mcp/finnews` |
+| DEV | {{DEV_HOST}} | :6006 | 本机 finnews(:6007) | 开发/验证环境，承载 `/api/mcp` 后端与 mcp-admin 页面 |
+| PROD | {{PROD_HOST}} | :6006 | **跨机调 DEV** `https://dev.kedouai.com/api/finnews`（Bearer） | 现网正式端点 `kedouai.com/mcp/finnews` |
 
 > ⚠️ 测试发邮件（apply 验证码）时必须标注来源环境：`/api/mcp/keys/apply` 走公网时由 **DEV** 发信；PROD 的 SMTP 已同配置但现网 `/mcp` 端点不涉及发信。两环境的 `MCP_CLIENT_KEY`/`MCP_ADMIN_KEY`/`SMTP_*` 保持同值，key 双环境通用。
 > E2E 测试脚本：`servers/mcp-gateway/test/e2e-keys.sh [dev|prod] [--public]`，输出自动带 `[DEV]`/`[PROD]` 环境前缀。
@@ -223,7 +223,7 @@ location ~ ^/api/mcp(/.*)?$ {
 ```nginx
 # MCP 协议端点 → 直连 mcp-gateway（正则匹配 /mcp 和 /mcp/:module，不含 /mcp-admin）
 location ~ ^/mcp(/.*)?$ {
-    proxy_pass http://175.27.189.123:6006;
+    proxy_pass http://{{DEV_HOST}}:6006;
     proxy_http_version 1.1;
     proxy_set_header Connection '';
     proxy_buffering off;
@@ -232,7 +232,7 @@ location ~ ^/mcp(/.*)?$ {
 
 # 其余所有请求 → gateway（含 /api/* 和三个前端 SPA）
 location / {
-    proxy_pass http://175.27.189.123:6000;
+    proxy_pass http://{{DEV_HOST}}:6000;
     # ...（WebSocket / 超时 / 缓冲配置省略）
 }
 ```

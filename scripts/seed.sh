@@ -5,7 +5,7 @@
 # 用法：
 #   ./scripts/seed.sh dev admin              # 创建/重置本地 admin 账号
 #   ./scripts/seed.sh dev deployment         # 插入前端模块部署种子数据
-#   ./scripts/seed.sh dev reset-admin-pwd    # 重置 admin 密码为 deploy2026
+#   ./scripts/seed.sh dev reset-admin-pwd    # 重置 admin 密码为 {{ADMIN_PASSWORD}}
 #   ./scripts/seed.sh prod admin             # 生产 admin（走 kedou-prod 跳板）
 #
 # 说明：
@@ -30,7 +30,7 @@ case "$TARGET" in
     DB_USER="${DEV_DB_USER:-root}"; DB_PASS="${DEV_DB_PASS:-}"
     ;;
   prod)
-    DB_HOST="${PROD_DB_HOST:-172.16.16.10}"; DB_PORT="${PROD_DB_PORT:-3306}"
+    DB_HOST="${PROD_DB_HOST:?请在 scripts/.env.deploy 配置 PROD_DB_HOST}"; DB_PORT="${PROD_DB_PORT:-3306}"
     DB_USER="${PROD_DB_USER:-root}"; DB_PASS="${PROD_DB_PASS:-}"
     ;;
   *) echo "目标必须为 dev|prod"; exit 1 ;;

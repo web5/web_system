@@ -13,7 +13,7 @@ https://admin.kedouai.com 或 https://portal.kedouai.com
     ↓
 69 服务器 Nginx (SSL 终止)
     ↓ (根据域名转发，保持 Host 头)
-http://106.52.176.246:3000
+http://{{PROD_HOST}}:3000
     ↓
 246 服务器 Gateway 服务
     ├─ 根据 Host 头判断应用
@@ -79,15 +79,15 @@ pnpm build
 ### 2. 上传静态资源到 246 服务器
 ```bash
 # 管理后台
-rsync -avz apps/admin-web/dist/ root@106.52.176.246:/root/web_system/static/admin/
+rsync -avz apps/admin-web/dist/ root@{{PROD_HOST}}:/root/web_system/static/admin/
 
 # 门户页面
-rsync -avz apps/portal/dist/ root@106.52.176.246:/root/web_system/static/portal/
+rsync -avz apps/portal/dist/ root@{{PROD_HOST}}:/root/web_system/static/portal/
 ```
 
 ### 3. 重启 Gateway 服务
 ```bash
-ssh root@106.52.176.246 "pm2 restart gateway"
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 ### 4. 验证访问
@@ -138,7 +138,7 @@ server {
     server_name admin.kedouai.com;
     
     location / {
-        proxy_pass http://106.52.176.246:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -153,7 +153,7 @@ server {
     server_name portal.kedouai.com;
     
     location / {
-        proxy_pass http://106.52.176.246:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -201,7 +201,7 @@ PORT=3000
 HOST=0.0.0.0
 NODE_ENV=production
 AUTH_SERVICE_URL=http://127.0.0.1:3001
-PUBLIC_URL=http://106.52.176.246:3000
+PUBLIC_URL=http://{{PROD_HOST}}:3000
 CORS_ORIGINS=*
 STATIC_ROOT=/root/web_system/static
 ```

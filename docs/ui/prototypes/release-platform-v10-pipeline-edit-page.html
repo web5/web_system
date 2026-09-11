@@ -973,7 +973,7 @@ function renderPreview(nodeKey){
   if(!op || !op.code){ out.textContent = '（无 shell 操作可预览）'; return; }
   out.textContent = '# ' + m.name + ' · ' + nodeKey + '\n' + op.code
     .replace(/\{MODULE_KEY\}/g, m.key).replace(/\{MODULE_TYPE\}/g, m.type)
-    .replace(/\{MODULE_DIR\}/g, m.dir).replace(/\{RELEASE_DIR\}/g, '/Users/geekwen/web_system_release')
+    .replace(/\{MODULE_DIR\}/g, m.dir).replace(/\{RELEASE_DIR\}/g, '{{RELEASE_DIR}}')
     .replace(/\{BRANCH\}/g, 'feature/contract-risk-ai').replace(/\{COMMIT_ID\}/g, '1a2b3c4')
     .replace(/\{STAGE\}/g, nodeKey).replace(/\{DEPLOY_ENV\}/g, env);
 }

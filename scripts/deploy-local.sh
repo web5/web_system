@@ -24,8 +24,8 @@
 # ============================================================
 set -euo pipefail
 
-WORKSPACE="${WORKSPACE:-/Users/geekwen/workspace/web_system}"
-RELEASE="${RELEASE:-/Users/geekwen/web_system_release}"
+WORKSPACE="${WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+RELEASE="${RELEASE:-$HOME/web_system_release}"
 DRY_RUN="${DRY_RUN:-0}"
 SKIP_TEST="${SKIP_TEST:-0}"
 
@@ -81,7 +81,7 @@ deploy_frontend() {
 
   # 3) 更新版本表（local 生效行 + dev 保持一致）
   log "更新版本表 → $ver ..."
-  run "cd '$WORKSPACE' && NODE_OPTIONS= node -e \"const m=require('mysql2/promise');(async()=>{const c=await m.createConnection({host:'127.0.0.1',port:3306,user:'root',password:'KedouLocal@2026',database:'web_system_deploy'});await c.execute(\\\"UPDATE deploy_deployments SET current_version='$ver', status='deployed', deployed_at=NOW() WHERE module_key='$mod'\\\");console.log('  version -> $ver');await c.end()})()\""
+  run "cd '$WORKSPACE' && NODE_OPTIONS= node -e \"const m=require('mysql2/promise');(async()=>{const c=await m.createConnection({host:process.env.DB_HOST||'127.0.0.1',port:Number(process.env.DB_PORT||3306),user:process.env.DB_USERNAME||'root',password:process.env.DB_PASSWORD||'',database:process.env.DB_DATABASE||'web_system_deploy'});await c.execute(\\\"UPDATE deploy_deployments SET current_version='$ver', status='deployed', deployed_at=NOW() WHERE module_key='$mod'\\\");console.log('  version -> $ver');await c.end()})()\""
 }
 
 # ---------- 共享包同步（packages/*，后端服务的依赖） ----------

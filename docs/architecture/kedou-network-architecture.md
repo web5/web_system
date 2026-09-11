@@ -6,12 +6,12 @@
 
 | 角色 | IP | 登录用户 | 职责 |
 |---|---|---|---|
-| GATEWAY 机 | 42.194.200.69 | root | 公网入口，nginx :80/:443（TLS），按路径分发到 dev 机 |
-| DEV 机 | 175.27.189.123 | ubuntu | web-system 主站 :6000、deploy-console :6200、其他服务 :6006，配置中心 /data/env_config |
-| PROD 机 | 106.52.176.246 | root | 线上业务，pm2 服务 × 6 |
+| GATEWAY 机 | {{GATEWAY_HOST}} | root | 公网入口，nginx :80/:443（TLS），按路径分发到 dev 机 |
+| DEV 机 | {{DEV_HOST}} | ubuntu | web-system 主站 :6000、deploy-console :6200、其他服务 :6006，配置中心 /data/env_config |
+| PROD 机 | {{PROD_HOST}} | root | 线上业务，pm2 服务 × 6 |
 | 本地开发（Mac） | — | — | 本地 nginx（local.kedouai.com）+ 本机 web_system 各服务 |
 
-DNS 解析：`dev.kedouai.com` → 42.194.200.69（GATEWAY 机，**不是** dev 机）
+DNS 解析：`dev.kedouai.com` → {{GATEWAY_HOST}}（GATEWAY 机，**不是** dev 机）
 
 ## 二、用户流量路径
 
@@ -29,7 +29,7 @@ gateway nginx 关键配置（`/etc/nginx/conf.d/dev.kedouai.com.conf`）：
 ```nginx
 location /console/ {
     rewrite ^/console/(.*)$ /$1 break;          # 剥掉 /console/ 前缀
-    proxy_pass http://175.27.189.123:6200;      # → dev 机 deploy-console
+    proxy_pass http://{{DEV_HOST}}:6200;      # → dev 机 deploy-console
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header Connection '';
@@ -37,7 +37,7 @@ location /console/ {
     proxy_read_timeout 300s;
 }
 location / {
-    proxy_pass http://175.27.189.123:6000;      # → dev 机 web-system 主站
+    proxy_pass http://{{DEV_HOST}}:6000;      # → dev 机 web-system 主站
 }
 ```
 
@@ -50,8 +50,8 @@ deploy-console（dev:6200）持有三台机器的 SSH 权限：
 | 目标 | 方式 | 用途 |
 |---|---|---|
 | dev 本机（127.0.0.1 自连） | id_ed25519 → 自己的 authorized_keys | 监控本机 pm2（10 个进程） |
-| PROD（106.52.176.246） | dev 的 id_ed25519 已被 prod 信任 | 部署 / 监控线上 pm2（6 个进程） |
-| GATEWAY（42.194.200.69） | dev 的 id_ed25519 已被 gateway 信任 | nginx 配置管理 |
+| PROD（{{PROD_HOST}}） | dev 的 id_ed25519 已被 prod 信任 | 部署 / 监控线上 pm2（6 个进程） |
+| GATEWAY（{{GATEWAY_HOST}}） | dev 的 id_ed25519 已被 gateway 信任 | nginx 配置管理 |
 
 腾讯云安全组（dev 机）仅放行：**22 / 6000 / 6006 / 6200**。
 
@@ -63,11 +63,11 @@ flowchart LR
         B["浏览器"]
     end
 
-    subgraph gw["GATEWAY 机 · 42.194.200.69"]
+    subgraph gw["GATEWAY 机 · {{GATEWAY_HOST}}"]
         NG["nginx :80/:443 (TLS)"]
     end
 
-    subgraph dev["DEV 机 · 175.27.189.123"]
+    subgraph dev["DEV 机 · {{DEV_HOST}}"]
         WS["web-system<br/>:6000"]
         DC["deploy-console<br/>:6200 (SPA + /api)"]
         O["其他服务 :6006"]
@@ -75,7 +75,7 @@ flowchart LR
         DATA["/data/web_system<br/>/data/env_config"]
     end
 
-    subgraph prod["PROD 机 · 106.52.176.246"]
+    subgraph prod["PROD 机 · {{PROD_HOST}}"]
         P["pm2 服务 × 6"]
     end
 

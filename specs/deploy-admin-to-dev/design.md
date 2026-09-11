@@ -15,7 +15,7 @@
 本机 console(6200)
  ├─ 脚本 ：本机 release 目录 git pull + vite build --mode mf        （现有能力，不改）
  ├─ 脚本 ：tar + scp → dev 机 /data/web_system/.../modules/admin/default/<commit>/   （改造：目标机按环境解析）
- ├─ 接口 ：POST http://175.27.189.123:6200/api/hooks/release（HMAC） → 远端写版本表 + 切指针（DB 操作只发生在接口内）
+ ├─ 接口 ：POST http://{{DEV_HOST}}:6200/api/hooks/release（HMAC） → 远端写版本表 + 切指针（DB 操作只发生在接口内）
  └─ 脚本 ：curl https://dev.kedouai.com/__manifest__ 断言版本 + 产物 200（等 TTL 10s）
 ```
 
@@ -35,8 +35,8 @@ L1 资源   deploy_servers（目标机）+ 配置中心（远端地址/密钥）
    | env | target | 目标机 | 来源 |
    |---|---|---|---|
    | `local` | `local` | 本机 | 现状不变 |
-   | `dev` | `remote` | `deploy_servers.dev-default`（175.27.189.123 / ubuntu / /data/web_system） | 已存在，直接复用 |
-   | `prod` | `remote` | `deploy_servers.prod-default`（106.52.176.246） | 同机制，后续复用 |
+   | `dev` | `remote` | `deploy_servers.dev-default`（{{DEV_HOST}} / ubuntu / /data/web_system） | 已存在，直接复用 |
+   | `prod` | `remote` | `deploy_servers.prod-default`（{{PROD_HOST}}） | 同机制，后续复用 |
 
    解析优先级：**入参 `target` > 模板 `defaultTarget` > 环境级配置 `PIPELINE_TARGET`（配置中心） > 内置规则（local→local，其余→remote）**。
    现状 `p.env === 'local' ? 'local' : (effectiveTarget ?? resolveDefaultTarget())` 改为调用按环境解析的解析器，且**配置缺失时报错**而非静默投本机。
@@ -108,7 +108,7 @@ L1 资源   deploy_servers（目标机）+ 配置中心（远端地址/密钥）
 | 拉码现状 = 平台内置步骤 | `pull` 步骤 `commandMode='override'`，默认执行体 `PullExecutor`（`pipeline/steps/pull.executor.ts`）→ `ReleaseGitService`（`git/release-git.service.ts`） |
 | v5 模板中即 `platform` 节点 `git` | `template-node.ts`：`git` 必须首位，与 `version`/`pointer` 同属不可裁剪的平台语义 |
 | 命令序列 | `git fetch --all --prune` → `git checkout -B <branch> origin/<branch>` → （指定 commit 时）`git reset --hard <commit>` → `git clean -fd`；随后 pnpm-lock 指纹变化才 `pnpm install --prefer-offline`，再预构建 `@web-system/shared` / `@web-system/types` |
-| 作用目录 = **执行进程**的 `RELEASE_WORKSPACE` | `ReleaseGitService.workspace()` 读 `configService.get('RELEASE_WORKSPACE')`（默认 `/Users/geekwen/web_system_release`） |
+| 作用目录 = **执行进程**的 `RELEASE_WORKSPACE` | `ReleaseGitService.workspace()` 读 `configService.get('RELEASE_WORKSPACE')`（默认 `{{RELEASE_DIR}}`） |
 | dev 机该配置已就绪 | dev console `.env`：`RELEASE_WORKSPACE=/data/web_system`；该目录为 git clone（master、工作区干净、`origin` 可达）；console 进程 cwd 即此目录 |
 | dev 模板确含 git 节点 | `deploy_pipeline_templates` 默认模板 nodes 首节点 `{"key":"git","kind":"platform"}` |
 | dev 的 step commands 无 git | 仅 build/upload/restart/verify/cleanup —— 本期把它补上（见下） |
@@ -142,13 +142,13 @@ L1 资源   deploy_servers（目标机）+ 配置中心（远端地址/密钥）
 | 变量 | 值示例 | 用途 |
 |---|---|---|
 | `GIT_COMMIT` | `1a2b3c4` | 纯短哈希（接口 `commitId` 用）；缺省 `COMMIT_ID##*/` 兜底 |
-| `REMOTE_HOST` | `175.27.189.123` | SSH 目标 |
+| `REMOTE_HOST` | `{{DEV_HOST}}` | SSH 目标 |
 | `REMOTE_USER` | `ubuntu` | SSH 用户 |
-| `REMOTE_KEY` | `/Users/geekwen/.ssh/id_ed25519_servers` | SSH 私钥**绝对路径**（平台侧展开 `~`） |
+| `REMOTE_KEY` | `{{SSH_KEY_PATH}}` | SSH 私钥**绝对路径**（平台侧展开 `~`） |
 | `REMOTE_DIR` | `/data/web_system` | 目标机部署根目录 |
 | `REMOTE_ARTIFACT_DIR` | `/data/web_system/servers/gateway/public/static/modules/admin/default/1a2b3c4` | 远端产物目录 |
 | `REMOTE_GATEWAY_URL` | `https://dev.kedouai.com` | 探活入口 |
-| `REMOTE_CONSOLE_URL` | `http://175.27.189.123:6200` | 接口出口 |
+| `REMOTE_CONSOLE_URL` | `http://{{DEV_HOST}}:6200` | 接口出口 |
 | `RELEASE_HOOK_SECRET` | （已有，全环境同值） | HMAC 密钥 |
 
 > `COMMIT_ID` 在 R6 下是**完整引用**（`default/1a2b3c4`）；`GIT_COMMIT` 是纯短哈希。两者用途不同，勿混用。

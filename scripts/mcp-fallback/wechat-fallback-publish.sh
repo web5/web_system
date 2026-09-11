@@ -3,7 +3,7 @@
 # wechat-fallback-publish.sh — 公众号发布降级脚本
 #
 # 背景：MCP 主链路（finnews + wechat_mp）不通时，本脚本兜底：
-#   1. SSH 登录 dev 机器（ubuntu@175.27.189.123）
+#   1. SSH 登录 dev 机器（地址取 scripts/.env.deploy 的 DEV_SERVER）
 #   2. 传输 remote-wechat-publish.sh 到 dev 机器
 #   3. 在 dev 机器上调用 content-hub REST 接口
 #      - 拉取财经数据（/api/market-pulse、/api/topics）生成日报 HTML
@@ -17,14 +17,16 @@
 #   ./scripts/mcp-fallback/wechat-fallback-publish.sh --dry-run        # 只打印不执行
 #
 # 环境变量：
-#   DEV_HOST        dev 机器（默认 ubuntu@175.27.189.123）
+#   DEV_HOST        dev 机器（默认取 scripts/.env.deploy 的 DEV_SERVER）
 #   CH_BASE         content-hub 地址（默认 http://127.0.0.1:6007）
 #   COVER_IMAGE_URL 封面图 URL（默认 picsum 随机图）
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEV_HOST="${DEV_HOST:-ubuntu@175.27.189.123}"
+# shellcheck disable=SC1090
+[ -f "$SCRIPT_DIR/../.env.deploy" ] && source "$SCRIPT_DIR/../.env.deploy"
+DEV_HOST="${DEV_HOST:-${DEV_SERVER:-}}"
 CH_BASE="${CH_BASE:-http://127.0.0.1:6007}"
 COVER_IMAGE_URL="${COVER_IMAGE_URL:-https://dummyimage.com/800x400/FF8C42/fff.png&text=Finance+Daily}"
 PUBLISH=0
@@ -48,6 +50,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 TITLE="${TITLE:-${DATE_TAG}财经日报（降级通道）}"
+
+[ -n "$DEV_HOST" ] || err "未配置 DEV_HOST：请在 scripts/.env.deploy 设置 DEV_SERVER（或导出 DEV_HOST）"
 
 log "降级发布任务开始"
 log "目标机器: ${DEV_HOST}  content-hub: ${CH_BASE}"

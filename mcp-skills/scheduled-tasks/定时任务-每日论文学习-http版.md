@@ -62,7 +62,7 @@
 |--------|--------|
 | 任务名称 | 每日论文学习·定时拉取与发布 |
 | 提示词 | 上方代码块内容 |
-| 工作空间 | 云端项目「个人开发工作台」（或本地 /Users/geekwen/workspace/web_system） |
+| 工作空间 | 云端项目「个人开发工作台」（或本地 {{WORKSPACE_DIR}}） |
 | 勾选技能 | **kedou-mcp-curl**（必须，提供 mcp_call） |
 | 勾选连接器 | 腾讯文档（仅第四步用；kedou MCP 已由技能 curl 完成，无需勾选 finnews/wechat_mp 连接器） |
 

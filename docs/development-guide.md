@@ -181,7 +181,7 @@ rsync -a --delete apps/<module>/dist/ servers/gateway/public/static/modules/<mod
 
 ## 6. 发布系统（deploy-console）
 
-访问 `http://localhost:6200/console/`（登录 admin / deploy2026），或通过 nginx `/console/`。
+访问 `http://localhost:6200/console/`（登录 admin / {{ADMIN_PASSWORD}}），或通过 nginx `/console/`。
 
 ### 6.1 核心概念
 
@@ -235,9 +235,9 @@ node scripts/_test-p1.mjs   # 服务器组/路由（建表/迁移/唯一约束�
 # 网关（admin/admin123）
 curl -X POST http://127.0.0.1:6000/api/auth/login -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin123"}'
-# deploy-console（admin/deploy2026）
+# deploy-console（admin/{{ADMIN_PASSWORD}}）
 curl -X POST http://127.0.0.1:6200/api/auth/login -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"deploy2026"}'
+  -d '{"username":"admin","password":"{{ADMIN_PASSWORD}}"}'
 ```
 
 ---

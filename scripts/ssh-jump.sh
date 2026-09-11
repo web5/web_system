@@ -19,27 +19,34 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# 从环境配置文件加载服务器信息
+# 从环境配置文件加载服务器信息（scripts/.env.deploy 优先，其次 .env.prod / .env.dev）
 load_env_hosts() {
+  local deploy_file="$SCRIPT_DIR/.env.deploy"
+  if [ -f "$deploy_file" ]; then
+    source "$deploy_file"
+    JUMP_HOST="${JUMP_HOST:-}"
+    PROD_HOST="${PROD_HOST:-${PROD_SERVER:-}}"
+    DEV_HOST="${DEV_HOST:-${DEV_SERVER:-}}"
+  fi
   local env_file="$SCRIPT_DIR/.env.prod"
   if [ -f "$env_file" ]; then
     source "$env_file"
+    PROD_HOST="${PROD_HOST:-${SERVER:-}}"
     JUMP_HOST="${JUMP_HOST:-}"
-    PROD_HOST="${SERVER:-}"
   fi
   local dev_file="$SCRIPT_DIR/.env.dev"
   if [ -f "$dev_file" ]; then
     source "$dev_file"
-    DEV_HOST="${SERVER:-}"
+    DEV_HOST="${DEV_HOST:-${SERVER:-}}"
   fi
 }
 load_env_hosts
 
-# ===== 默认服务器配置（如 .env.* 中未定义） =====
-JUMP_HOST="${JUMP_HOST:-root@42.194.200.69}"
-DEV_HOST="${DEV_HOST:-ubuntu@175.27.189.123}"
-PROD_HOST="${PROD_HOST:-root@106.52.176.246}"
-# ===============================================
+# ===== 服务器地址一律从 .env 读取，未配置则报错（不在脚本内内置任何真实地址） =====
+require_host() { # $1=值 $2=变量名
+  [ -n "$1" ] || { echo "[ERROR] 未配置 $2：请在 scripts/.env.deploy 中设置（参考 .env.deploy.example）" >&2; exit 1; }
+}
+# ==============================================================================
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -103,10 +110,12 @@ case "${1:-help}" in
     echo "  本地 → 跳板机 → prod"
     ;;
   jump)
+    require_host "$JUMP_HOST" JUMP_HOST
     echo -e "${GREEN}正在登录跳板机...${NC}"
     ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "${JUMP_HOST}"
     ;;
   dev)
+    require_host "$DEV_HOST" DEV_SERVER
     shift
     if [ $# -gt 0 ]; then
       exec_via_jump "$DEV_HOST" "$*"
@@ -115,6 +124,7 @@ case "${1:-help}" in
     fi
     ;;
   prod)
+    require_host "$PROD_HOST" PROD_SERVER
     shift
     if [ $# -gt 0 ]; then
       exec_via_jump "$PROD_HOST" "$*"

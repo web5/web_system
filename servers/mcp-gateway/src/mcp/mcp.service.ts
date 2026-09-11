@@ -211,6 +211,19 @@ const PAPER_HTTP_TOOLS: Array<{
       { name: 'max_results', type: 'integer', required: false, description: '返回论文数（默认 10，最大 20）' },
     ],
   },
+  {
+    name: 'publish_paper_digest',
+    description:
+      '拉取最新 arXiv 论文并渲染为公众号摘要：默认创建图文草稿（不发布，可在后台确认排版），publish=true 时直接发布。供定时任务生成「每日论文速览」。返回 media_id / publish_id',
+    method: 'POST',
+    path: '/api/papers/digest',
+    params: [
+      { name: 'categories', type: 'string', required: false, description: 'arXiv 分类（默认 cs.AI+OR+cs.CL+OR+cs.CV+OR+cs.LG）' },
+      { name: 'max_results', type: 'integer', required: false, description: '论文数（默认 10，最大 20）' },
+      { name: 'title', type: 'string', required: false, description: '摘要标题（默认「每日论文速览 ｜ 日期」）' },
+      { name: 'publish', type: 'boolean', required: false, description: 'true=直接发布，false=仅建草稿（默认 false）' },
+    ],
+  },
 ];
 
 /** 机构行为数据通道的 REST 接口声明（seed 到 mcp_modules，code_key=institution） */
@@ -629,7 +642,8 @@ export class McpService implements OnModuleInit {
   }
 
   private async seedFinnewsHttpModule(): Promise<void> {
-    const baseUrl = process.env.FINNEWS_SERVICE_URL ?? 'http://localhost:6007';
+    // 统一默认地址为 127.0.0.1（与 paper/institution 一致），避免 localhost 解析不稳定
+    const baseUrl = process.env.FINNEWS_SERVICE_URL ?? 'http://127.0.0.1:6007';
     const authType = process.env.FINNEWS_SERVICE_AUTH_TYPE ?? '';
     const authConfigRaw = process.env.FINNEWS_SERVICE_AUTH_CONFIG ?? '';
     let authConfig: Record<string, any> | null = null;
@@ -766,7 +780,8 @@ export class McpService implements OnModuleInit {
 
   /** seed 公众号发布模块（code_key=wechat_mp，指向 content-hub 的公众号发布接口） */
   private async seedWechatMpModule(): Promise<void> {
-    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://localhost:6007';
+    // 统一默认地址为 127.0.0.1（与 paper/institution 一致），避免 localhost 解析不稳定
+    const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
     const authType = process.env.CONTENT_HUB_SERVICE_AUTH_TYPE ?? '';
     const authConfigRaw = process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG ?? '';
     let authConfig: Record<string, any> | null = null;

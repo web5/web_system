@@ -17,7 +17,10 @@
 | 2026-09-10 | v1.0 | 初版：四层架构、8 个 UI 入口、CLI 入口、走查路线、易混淆点 | AI |
 | 2026-09-10 | v1.1 | 模型清单真相源迁移到 DB 字典：§3.2 增 `ModelCatalogService` 行；§7 增坑 10/11（改 env 不生效、字典里的 hy3 被过滤）；admin 新增「字典管理」页、原「模型单价」页改为「模型」页（可用清单 × 单价聚合） | AI |
 | 2026-09-10 | v1.2 | 权限同步机制落地：§7 坑 2 的处理办法从"重启 `web-user`"改为**优先跑 `scripts/sync-permissions.sh` / 点「同步权限点」按钮**（无需重启）；§8.1 增"新增权限码"触发场景、§8.2 补权限真相与同步命令 | AI |
-| 2026-09-11 | v1.3 | 下线「模型」页：单价迁入字典 `llm_models` 的 attrs（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
+| 2026-09-11 | v1.3 | 权限同步自动化：**发布流水线收尾自动同步**（`PIPELINE_PERM_SYNC`，失败不阻断）、同步动作落审计（`operation_logs` → `sync_permission`）、角色权限页顶部差异提示；§7 坑 2 补自动化与提示说明 | AI |
+| 2026-09-11 | v1.4 | 单价真相源迁到字典：§2 链路改为按字典价核算、§3.4 `model_pricing` 标弃用、§4 入口 10 改为只读总览（权限改 `system:dict:view`）；§7 增坑 12（价格在哪维护、多久生效、旧表已失效） | AI |
+| 2026-09-11 | v1.5 | **「模型」页整体下线**（清单/价格统一在「字典管理 · 大模型清单」维护），§4 去掉该入口；§7 增坑 13（admin 内部跳转不能手写 `/admin` 前缀，router base 已含，重复会 404） | AI |
+| 2026-09-11 | v1.6 | 收尾下线（过渡期结束）：单价迁入字典 `llm_models`（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
 
 ---
 
@@ -77,7 +80,7 @@ knowledge:view  knowledge:manage
 
 1. **定义下发**：admin `/api/agent-defs/:id/publish` → `agent_definitions` + 版本快照 → 各服务 30s 轮询 → `AgentRegistry.upsert` → **改 prompt 运行时生效，无需重启**。
 2. **执行**：前端 → `POST /api/ai-agent/agent/run`（SSE）→ `AgentRunner.stream` → `AgentEngine` ReAct 循环（工具：本地合同工具 / web-search / MCP 懒加载 / `load_skill`）→ 遇危险工具发 `permission_request` 挂起等确认。
-3. **观测**：run 结束 → `AgentRunPusher` 异步 POST `/internal/agent-runs` → 落 `agent_runs` + `run_metrics` 聚合 → 按 `model_pricing` 核算成本。
+3. **观测**：run 结束 → `AgentRunPusher` 异步 POST `/internal/agent-runs` → 落 `agent_runs` + `run_metrics` 聚合 → 按**字典 `llm_models` 的价格字段**核算成本（ai-service `ModelPricingCatalog`，2026-09-11 起；旧表 `model_pricing` 仅留痕）。
 
 > ⚠️ Agent 定义**不在代码里**（`*.agent.ts` 已删除），全在 DB。想改行为就改 DB，不要去找 hardcode。
 
@@ -193,7 +196,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | `agent_definition_versions` | ai-service | agentId、version、全量快照、changeNote、createdBy |
 | `agent_runs` | ai-service | agentId、userId、conversationId、steps(json)、finalAnswer、error、status、durationMs、source、agentVersion、prompt/completion/totalTokens、cost |
 | `run_metrics` | ai-service | agentId、model、date、runCount、okCount、errorCount、totalTokens、totalCost、totalDurationMs |
-| `model_pricing` | ai-service | **已停用（2026-09-11 留档）**：单价改由字典 `llm_models` 的 attrs 维护，表与存量数据保留、不再读写 |
+| `model_pricing` | ai-service | ⚠️ **已停用（2026-09-11 留档）**：单价已迁到字典 `llm_models` 的 `input_price_per1k` / `output_price_per1k` / `currency`；表与存量数据保留、**不再读写**（只读过渡接口已随 v1.6 一并删除） |
 | `agent_skills` | ai-service | code(unique)、description(on-demand 摘要)、content(SKILL.md 正文)、requiredTools、enabled |
 | `agent_conversations` | **ai-agent** | id、userId、summary、summarizedCount、messages(json)、title、report、meta |
 
@@ -224,7 +227,11 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 | 8 | 定义管理 | `/admin/agents/definitions` | `agents:manage` | `AgentDefList.vue` + `CapabilityConfigurator.vue` | CRUD + 发布 + 启停 + 版本历史 + 回滚 + MCP 工具勾选 |
 | 9 | 技能库 | `/admin/agents/skills` | `skills:view` | `SkillList.vue` | SKILL.md 正文、增删改、zip 导入 |
 
+> 📌 原第 10 行「模型」入口已下线（v1.5）：清单与价格统一在「字典管理 · 大模型清单」维护。**删除该入口**时，`ModelsPage.vue` 与 `settings/models` 路由也已移除。
+
+
 > 📌 菜单「运行记录」指向 `/agents`（概览页），真正的 run 列表需**从概览页点进某个 agent**。
+> 📌 **原「模型」页已下线**（v1.5）：模型清单与价格的唯一维护入口是「字典管理 · 大模型清单」（字段定义走独立页面、记录走抽屉），不再是独立菜单。
 > 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-contract/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
 
 **门户与小程序入口**
@@ -278,11 +285,13 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-contract 才走 `/api/ai-agent/*`。报问题时先分清。
 2. **菜单看不见** —— 100% 是权限。到 `/admin/settings/roles` 补 §0 的权限码；忘记密码 `bash scripts/local-up.sh --seed`（admin / admin123）。
    ⚠️ **新增权限码后菜单仍不出现**：权限是"双读"——后端各服务鉴权读**代码常量**（`ROLE_PERMISSIONS`），前端菜单读 **DB**（`/api/permissions/my`）。而权限点是 `PermissionService.seed()` 在 user-service 启动时才写进 DB 的，所以加了新码只重启后端服务，会出现"接口调得通、菜单不出现"。
-   **处理（按优先级）**：
-   ① 跑 `bash scripts/sync-permissions.sh`（幂等，走内部接口，发布后调用即可）；
+   **处理**：**发布流水线收尾会自动同步一次**（`PIPELINE_PERM_SYNC`，默认开，失败只告警不阻断发布），所以正常走发布流程无需人工干预。若是没走流水线（手工改代码/临时调试），按下面来：
+   ① 跑 `bash scripts/sync-permissions.sh`（幂等，走内部接口）；
    ② 或点 admin「角色权限」页右上角**同步权限点**按钮（同步后立即刷新自身权限，菜单当场出现，不必重登）；
    ③ 或重启 `web-user`。
-   三者等价（都执行 `seed()`，全量覆盖内置角色权限），但只有 ①② 不需要重启服务。
+   ①②③ 等价（都执行 `seed()`，全量覆盖内置角色权限），但只有 ①② 不需要重启服务。
+   **页面会主动提示**：「角色权限」页顶部在代码声明与 DB 不一致时出现黄色告警（缺失/多余权限点 + 内置角色差集），点「立即同步」即可 —— 不用等别人告诉你"菜单没出来"。
+   **审计**：每次同步都会落一条 `sync_permission` 操作日志（operator 为 `pipeline:<提交人>` 或页面用户名），在「操作日志」页可查。
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `.codebuddy/CODEBUDDY.md` §4.1。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
 5. **「数字人」≠ 产品功能** —— `.codebuddy/agent-kit/` 是给 AI 用的开发侧方法论（11 skill + 5 红线），没有前端页面。面向用户的概念统一叫 Agent。
@@ -292,6 +301,8 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
 10. **改 `.env` 的 `TOKENHUB_MODELS` 想加模型却不生效** —— 模型清单现在的真相源是 **DB 字典 `llm_models`**（admin →「字典管理」，`MODEL_SOURCE=db` 默认）；`.env` 只在字典不可用/为空时兜底，代码内置常量再兜底。改字典后等 60s（`MODEL_POLL_MS`）或重启 `web-ai-agent`。排查入口：`GET /api/ai-agent/agent/models`（还带 `available`）与 ai-agent 日志里的「模型清单已更新：来源=db/env/builtin」。
 11. **字典里的 `hy3` 不会生效** —— `hy3` 由 `Hy3Client` 专用通道承载（与 TokenHub 的 key/base 不同），`ModelCatalogService` 会过滤并 WARN；要调 hy3 请确认 `HY3_API_KEY`，不要往 `llm_models` 里加。
+12. **改了模型价格却不生效（或以为要去旧表改）** —— 单价真相源已从 `model_pricing` 表迁到**字典 `llm_models` 的三个字段**（`input_price_per1k` / `output_price_per1k` / `currency`，2026-09-11）。维护入口：admin「字典管理 → 大模型清单」（字段定义走独立页面、记录走抽屉）。ai-service 由 `ModelPricingCatalog` 每 60s 拉一次（`PRICE_POLL_MS`），改完最多一分钟生效。旧表与 `admin/model-pricing` 的**写接口已下线**（只留只读对账），在上面改价**不会有任何效果**。`PRICE_SOURCE` 三档：`dict`（默认，字典未命中回落旧表）/`dict-only`/`legacy`（完全回退到旧表）。未配价的模型成本记 0。
+13. **admin 内部跳转 404（手写了 `/admin` 前缀）** —— admin 的 router 是 `createWebHistory('/admin/')`，**base 已含 `/admin`**；跳转里再写成 `/admin/settings/dicts/x`，vue-router 会再拼一次 base → 实际请求 `/admin/admin/settings/dicts/x` → 404（2026-09-11 一次修掉 6 处：`DictManagePage` / `DictEditPage` / 已删的 `ModelsPage`）。**规矩：`router.push()` 一律写不带 base 的路径**，如 `/settings/dicts/xxx`。
 
 ---
 
@@ -305,7 +316,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 | 新增/更换 **模型客户端** | §3.1 模型客户端行、§5 环境变量表 |
 | `ai-agent` 增删/改 **HTTP 接口** | §3.2 接口表、§0 速查 |
 | `ai-service` 增删/改 **管理接口** 或权限码 | §3.3 接口表、§0 权限清单 |
-| 新增/改 **权限码**（`packages/types`） | §0 权限清单、§7 坑 2；**并执行 `scripts/sync-permissions.sh` 把权限点同步进 DB**（否则后端放行、前端菜单不出现） |
+| 新增/改 **权限码**（`packages/types`） | §0 权限清单、§7 坑 2；同步交给**发布流水线收尾自动执行**（`PIPELINE_PERM_SYNC`），未走流水线时跑 `scripts/sync-permissions.sh`（否则后端放行、前端菜单不出现） |
 | 新增/改 **数据表或字段** | §3.4 表清单（注意分库） |
 | admin 增删/改 **Agent 页面或路由** | §4 UI 入口表 |
 | 新增 SSE **事件类型** | §3.2 事件类型行 |

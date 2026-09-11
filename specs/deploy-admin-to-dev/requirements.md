@@ -19,7 +19,7 @@
 dev 是**独立一套**：
 
 ```
-dev.kedouai.com → 42.194.200.69 (nginx SSL) → 175.27.189.123 (应用机)
+dev.kedouai.com → {{GATEWAY_HOST}} (nginx SSL) → {{DEV_HOST}} (应用机)
   应用机: /data/web_system（git clone, master）· gateway:6000（DEPLOY_ENV_ID 缺省=dev）
           deploy-console:6200 · MySQL 127.0.0.1（deploy 表复用 web_system 库）
   指针: deploy_deployments(dev/admin) = default/41fffaa
@@ -36,7 +36,7 @@ dev.kedouai.com → 42.194.200.69 (nginx SSL) → 175.27.189.123 (应用机)
 | 实现形态 | 存 `deploy_pipeline_step_commands(templateId, nodeKey='git')`（**改造**）；引擎优先执行脚本，未配置时**回退**内置 `PullExecutor` | 进 DB 真相源，可审计/可 SQL 调/可随迁移同步 |
 | 可编辑性 | 表加 `locked` 列（`git` 置 true）；接口拒写、UI 只读展示 | **不开放编辑** |
 | 命令序列 | `git fetch --all --prune` → `git checkout -B <branch> origin/<branch>` → （指定 commit）`git reset --hard <commit>` → `git clean -fd`；随后 pnpm-lock 指纹变化才 install，并预构建 shared/types | 与本机发布同口径（后两项仍由平台执行） |
-| 作用目录 | **执行进程**的 `RELEASE_DIR`/`RELEASE_WORKSPACE`：本机 `/Users/geekwen/web_system_release`；dev 机实测 `/data/web_system`（git clone、master、工作区干净、origin 可达） | 各机拉自己的目录 |
+| 作用目录 | **执行进程**的 `RELEASE_DIR`/`RELEASE_WORKSPACE`：本机 `{{RELEASE_DIR}}`；dev 机实测 `/data/web_system`（git clone、master、工作区干净、origin 可达） | 各机拉自己的目录 |
 | 谁执行 | 本机 pull = 服务「本机构建 admin 产物」（构建源头，必执行）；远端 pull = 服务「远端构建」（本期不触发） | 分工明确，互不干扰 |
 | 本期是否触发远端 pull | **否**：hook 带 `commitId` → 远端 `check` 命中 S1 已投递产物 → `reuseArtifact=true` → git/build/upload/restart 全跳过 | 正常链路无拉码动作 |
 | 语义归属 | `gitCommit`/`versionTag` 回填与 `commitId` 一致性断言**由平台**做，不由脚本产出 | 脚本可调而不破坏发布语义 |
@@ -74,7 +74,7 @@ dev.kedouai.com → 42.194.200.69 (nginx SSL) → 175.27.189.123 (应用机)
 - 当 显式传入 `target` 或模板配置了 `defaultTarget` 时，应以显式值为准
 
 ### 产物投递（脚本）
-- 当 构建完成时，系统应把 `apps/admin/dist` 打包投递到 `175.27.189.123:/data/web_system/servers/gateway/public/static/modules/admin/default/<commit>/`
+- 当 构建完成时，系统应把 `apps/admin/dist` 打包投递到 `{{DEV_HOST}}:/data/web_system/servers/gateway/public/static/modules/admin/default/<commit>/`
 - 当 目标目录已存在时，应先把旧目录改名移出（`mv`）再解包，**不得**执行可能被安全策略拒绝的批量删除
 - 当 SSH/scp 失败时，阶段应失败并把 stderr 写入流水线日志
 - 当 本机发布目录已存在该 commit 产物时，系统应跳过本机 build，但**仍执行**投递（不得因本机复用跳过远端 upload）
@@ -131,7 +131,7 @@ dev.kedouai.com → 42.194.200.69 (nginx SSL) → 175.27.189.123 (应用机)
 - 当 模块类型为 `micro-frontend` 时，重启阶段应跳过
 
 ### 入口一致性
-- 当 通过页面提交 `env=dev` 时，页面应提示"远端发布：目标机 175.27.189.123；产物投递后由该环境控制台切指针"
+- 当 通过页面提交 `env=dev` 时，页面应提示"远端发布：目标机 {{DEV_HOST}}；产物投递后由该环境控制台切指针"
 - 当 通过 MCP `publish_pipeline(env=dev, moduleKey=admin)` 调用时，结果应与页面等价（同一 `PipelineService.submit`）
 
 ## 非功能需求

@@ -63,7 +63,7 @@ async function bootstrap() {
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
         // Worker 来源：未显式声明 worker-src 时浏览器回退到 script-src，
         // 而 script-src 不含 blob:/data:，会导致 new Worker(blob:...) 与
-        // new Worker('data:application/javascript;base64,...')（Vite ?worker&inline 形态）被拒。
+        // new Worker('data:application/javascript;base64,...')（Vite ?worker&inline 形态）被拒绝。
         // blob: 供前端大计算能力（OCR/PDF 等）使用；data: 供内联 Worker 形态使用。
         workerSrc: ["'self'", 'blob:', 'data:'],
       },

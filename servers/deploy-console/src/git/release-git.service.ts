@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { CommandService } from '../shell/command.service';
+import { defaultReleaseWorkspace } from '../pipeline/release-paths';
 
 /** 依赖清单指纹文件（pnpm-lock.yaml 变化才重装） */
 const DEPS_HASH_FILE = '.deploy-lock-hash';
@@ -28,7 +29,7 @@ export class ReleaseGitService {
   /** 发布目录（RELEASE_WORKSPACE，可配） */
   workspace(): string {
     return (
-      this.configService.get<string>('RELEASE_WORKSPACE') || '/Users/geekwen/web_system_release'
+      this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace()
     );
   }
 

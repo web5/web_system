@@ -1,5 +1,6 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body } from '@nestjs/common';
 import { FinnewsService } from './services/finnews.service';
+import { ContentService, WechatMpPublishDto } from './content/services/content.service';
 import { ArxivCollector } from './content/collectors/arxiv.collector';
 
 /** 财经资讯 REST API（供 mcp-gateway 或其他系统调用） */
@@ -7,7 +8,10 @@ import { ArxivCollector } from './content/collectors/arxiv.collector';
 export class FinnewsController {
   private readonly arxivCollector = new ArxivCollector();
 
-  constructor(private readonly finnewsService: FinnewsService) {}
+  constructor(
+    private readonly finnewsService: FinnewsService,
+    private readonly contentService: ContentService,
+  ) {}
 
   /** 拉取 arXiv 论文（论文学习 MCP 数据源） */
   @Get('papers')
@@ -18,6 +22,27 @@ export class FinnewsController {
     const config = categories ? { categories } : {};
     const list = await this.arxivCollector.collect(config, Number(maxResults) || 10);
     return { count: list.length, papers: list };
+  }
+
+  /** 拉取最新论文并渲染为公众号摘要：默认仅建草稿，publish=true 直接发布（供定时任务 publish_paper_digest） */
+  @Post('papers/digest')
+  async publishPaperDigest(
+    @Body() body: { categories?: string; max_results?: number; title?: string; publish?: boolean },
+  ) {
+    const { title, html, digest, count } = await this.finnewsService.buildPaperDigest(
+      body.categories,
+      body.max_results,
+      body.title,
+    );
+    const dto: WechatMpPublishDto = { title, html, digest };
+    const result = body.publish
+      ? await this.contentService.publishWechatArticle(dto)
+      : await this.contentService.createWechatDraft(dto);
+    return {
+      mode: body.publish ? 'publish' : 'draft',
+      count,
+      ...result,
+    };
   }
 
   /** 最新话题列表 */

@@ -1,0 +1,415 @@
+#!/usr/bin/env node
+/**
+ * 集成分支自动发布 watcher（**本地发布目录专用**）
+ *
+ * 作用：轮询远程集成分支（默认 `feature/test`），一旦有新提交就
+ *   0) 先把 `origin/master` 合进集成分支（可用 `--no-follow-master` 关闭）——
+ *      保证联调基准不落后于 master，冲突时只告警、不推半成品；
+ *   1) 把发布目录硬同步到该提交（`git reset --hard origin/<branch>`）；
+ *   2) 通过 deploy-console 流水线把**全部模块**重新发布一遍；
+ *   3) 全部跑完后再回到轮询（发布期间不会重复触发）。
+ *
+ * 发布顺序（重要）：后端服务 → 前端/微前端 → **deploy-console 最后**。
+ *   原因：发布 deploy-console 会重启它自己，若它排在中间，会把它自己正在执行的
+ *   流水线打断（deploy-console 是流水线引擎本体）。
+ *
+ * 状态：把"上次成功发布的 commit"记在 `<发布目录>/.watch-integration.state`，
+ *   因此 watcher / 机器重启后不会重复发布；只有远程出现新提交才触发。
+ *
+ * 用法：
+ *   node scripts/watch-integration.mjs                       # 常驻（默认 30s 轮询）
+ *   node scripts/watch-integration.mjs --once                # 只检查一次，有更新才发
+ *   node scripts/watch-integration.mjs --force               # 无视状态，立刻全量发布一次
+ *   node scripts/watch-integration.mjs --dry-run             # 只打印将要做什么
+ *   node scripts/watch-integration.mjs --no-follow-master    # 不自动合并 master 进集成分支
+ *   node scripts/watch-integration.mjs --branch feature/test --interval 30 --env local
+ *
+ * 常驻（推荐，pm2 管理；不要写进 ecosystem.config.cjs，避免 dev/prod 环境误启动）：
+ *   pm2 start scripts/watch-integration.mjs --name web-release-watcher --interpreter node --cwd <发布目录>
+ *   pm2 save
+ *
+ * 前置：
+ *   - 发布目录（RELEASE_DIR，默认脚本上级目录）处于干净的 git 工作区；
+ *   - deploy-console 在跑（默认 http://127.0.0.1:6200），其 .env 里可读到 ADMIN_USER/ADMIN_PASS；
+ *   - 发布目录的 `servers/gateway/.env` 的 DEPLOY_ENV_ID 与 `--env` 一致（本地为 local）。
+ */
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** 发布目录：脚本所在的仓库根（发布目录里跑就是发布目录） */
+const RELEASE_DIR = process.env.RELEASE_DIR || path.resolve(__dirname, '..');
+
+const args = process.argv.slice(2);
+const getArg = (name, def) => {
+  const i = args.indexOf(name);
+  return i >= 0 && args[i + 1] ? args[i + 1] : def;
+};
+const hasFlag = (name) => args.includes(name);
+
+const BRANCH = getArg('--branch', process.env.WATCH_BRANCH || 'feature/test');
+const INTERVAL_S = Math.max(5, Number(getArg('--interval', process.env.WATCH_INTERVAL || '30')));
+const ENV_ID = getArg('--env', process.env.WATCH_ENV || 'local');
+const CONSOLE_URL = getArg('--console', process.env.DEPLOY_CONSOLE_URL || 'http://127.0.0.1:6200').replace(/\/+$/, '');
+const ONCE = hasFlag('--once');
+const DRY = hasFlag('--dry-run');
+/** 是否让集成分支自动跟随 master（默认开；--no-follow-master 关闭） */
+const FOLLOW_MASTER = !hasFlag('--no-follow-master');
+/**
+ * 本地不参与自动发布的模块：
+ * - `finnews`：模块注册表里有、但仓库里没有对应目录（构建阶段 `spawn bash ENOENT`）；
+ * - `mini-contract`：其 build 命令是上传微信小程序（需微信密钥，本地没有）。
+ * 两者在本地必然失败，留在列表里只会每轮刷告警。用 `--skip-modules a,b` 覆盖。
+ */
+const SKIP_MODULES = new Set(
+  (
+    getArg('--skip-modules', process.env.WATCH_SKIP_MODULES || 'finnews,mini-contract') || ''
+  )
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+/**
+ * 走"专用脚本"而非流水线的模块：发布它会重启流水线引擎自己
+ * （restart 阶段 `pm2 restart web-deploy-console` 把正在执行流水线的进程杀掉，
+ * 流水线会永远停在 running 并占着发布锁）。
+ */
+const SELF_PUBLISH_SCRIPTS = {
+  'deploy-console': ['scripts/publish-deploy-console.sh', '--skip-sync'],
+};
+/** 单个模块发布超时（20 分钟）；超时只告警，不阻塞后续模块 */
+const MODULE_TIMEOUT_MS = Number(getArg('--module-timeout-ms', '1200000'));
+
+const C = { g: '\x1b[32m', y: '\x1b[33m', r: '\x1b[31m', d: '\x1b[90m', x: '\x1b[0m' };
+const log = (m) => console.log(`${C.g}[watch]${C.x} ${m}`);
+const warn = (m) => console.warn(`${C.y}[watch][WARN]${C.x} ${m}`);
+const fail = (m) => console.error(`${C.r}[watch][ERROR]${C.x} ${m}`);
+const short = (sha) => String(sha || '').slice(0, 7);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 极简 .env 解析 */
+function loadEnvFile(file) {
+  if (!existsSync(file)) return {};
+  const out = {};
+  for (const raw of readFileSync(file, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const i = line.indexOf('=');
+    if (i === -1) continue;
+    let v = line.slice(i + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1);
+    }
+    out[line.slice(0, i).trim()] = v;
+  }
+  return out;
+}
+
+const consoleEnv = {
+  ...loadEnvFile(path.join(RELEASE_DIR, 'servers/deploy-console/.env')),
+  ...loadEnvFile(path.join(RELEASE_DIR, '.env')),
+};
+const ADMIN_USER = consoleEnv.ADMIN_USER || 'admin';
+const ADMIN_PASS = consoleEnv.ADMIN_PASS || '';
+
+function git(...gitArgs) {
+  return execFileSync('git', gitArgs, { cwd: RELEASE_DIR, encoding: 'utf8' }).trim();
+}
+
+/** "上次成功发布的 commit"落盘位置（随发布目录，不进 git） */
+const STATE_FILE = path.join(RELEASE_DIR, '.watch-integration.state');
+function readState() {
+  try {
+    return readFileSync(STATE_FILE, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+function writeState(sha) {
+  try {
+    writeFileSync(STATE_FILE, `${sha}\n`);
+  } catch (e) {
+    warn(`写入状态文件失败（下次可能重复发布）：${e.message}`);
+  }
+}
+
+async function login() {
+  const res = await fetch(`${CONSOLE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`deploy-console 登录失败：HTTP ${res.status}`);
+  const body = await res.json();
+  const token = body.token || body.accessToken || body?.data?.token;
+  if (!token) throw new Error('deploy-console 登录响应中没有 token');
+  return token;
+}
+
+async function api(method, p, token, body) {
+  const res = await fetch(`${CONSOLE_URL}${p}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`${method} ${p} → HTTP ${res.status}`);
+  return res.json();
+}
+
+/**
+ * 发布顺序：后端 → 前端/微前端 → deploy-console（最后，因为它重启会打断流水线引擎自己）。
+ */
+function orderModules(mods) {
+  const rank = (m) => (m.key === 'deploy-console' ? 2 : m.type === 'backend' ? 0 : 1);
+  return [...mods].sort((a, b) => rank(a) - rank(b) || String(a.key).localeCompare(String(b.key)));
+}
+
+/** origin/master 是否已在当前 HEAD 的祖先链里 */
+function masterMerged() {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', 'origin/master', 'HEAD'], {
+      cwd: RELEASE_DIR,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 让集成分支跟随 master：把 `origin/master` 合进当前集成分支并推送。
+ *
+ * 为什么需要：master 不断有新 PR 合入，而集成分支是本地联调的基准——
+ * 不跟上就会"在旧 master 上验证新功能"，出现莫名其妙的冲突或缺失文件。
+ *
+ * 安全边界：**只在能自动合并时执行**；一旦冲突就 abort 并告警，留给人工处理，
+ * 不会把半成品状态推上去。工作区脏则本轮跳过。
+ *
+ * @returns 是否发生了合并（发生了就意味着集成分支多了一个提交，会触发一次发布）
+ */
+function followMaster() {
+  if (!FOLLOW_MASTER) return false;
+  try {
+    git('fetch', 'origin', 'master', BRANCH);
+  } catch (e) {
+    warn(`fetch 失败（跳过跟随 master）：${e.message}`);
+    return false;
+  }
+  if (masterMerged()) return false;
+  if (git('status', '--porcelain')) {
+    warn('发布目录有未提交改动，本轮跳过"跟随 master"');
+    return false;
+  }
+
+  log('检测到 master 有集成分支尚未包含的提交，正在合并…');
+  try {
+    git('merge', '--no-edit', 'origin/master');
+  } catch (e) {
+    warn(`合并 origin/master 冲突，已回滚（需人工处理）：${String(e.message).split('\n')[0]}`);
+    try {
+      git('merge', '--abort');
+    } catch {
+      /* 无进行中的合并 */
+    }
+    return false;
+  }
+
+  const head = git('rev-parse', 'HEAD');
+  log(`集成分支已合入 origin/master → ${short(head)}`);
+  try {
+    git('push', 'origin', `${BRANCH}`);
+  } catch (e) {
+    warn(`推送集成分支失败（本地已合并，远程未同步）：${String(e.message).split('\n')[0]}`);
+  }
+  return true;
+}
+
+/** 把发布目录硬同步到目标提交；工作区脏则拒绝（避免覆盖人工改动） */
+function syncTo(sha) {
+  const dirty = git('status', '--porcelain');
+  if (dirty) {
+    warn('发布目录有未提交改动，跳过本次自动同步（避免覆盖你的本地修改）');
+    return false;
+  }
+  const cur = git('rev-parse', '--abbrev-ref', 'HEAD');
+  if (cur !== BRANCH) {
+    log(`切换分支：${cur} → ${BRANCH}`);
+    git('checkout', BRANCH);
+  }
+  git('reset', '--hard', sha);
+  log(`发布目录已同步到 ${short(sha)}`);
+  return true;
+}
+
+/** 逐个模块发布（串行；失败不中断，最后汇总） */
+async function publishAll(sha) {
+  const token = await login();
+  const all = await api('GET', '/api/deploy/modules', token);
+  const enabled = Array.isArray(all) ? all.filter((m) => m.enabled !== false) : [];
+  const mods = orderModules(enabled.filter((m) => !SKIP_MODULES.has(m.key)));
+  const skipped = enabled.filter((m) => SKIP_MODULES.has(m.key)).map((m) => m.key);
+  log(`开始全量发布（${mods.length} 个模块，环境=${ENV_ID}，版本=${short(sha)}）`);
+  if (skipped.length) log(`按配置跳过：${skipped.join(', ')}（本地不可发布，--skip-modules 可改）`);
+  log(`顺序：${mods.map((m) => m.key).join(' → ')}`);
+
+  const results = [];
+  for (const m of mods) {
+    const r = await publishOne(m.key, token);
+    results.push(r);
+  }
+
+  const ok = results.filter((r) => r.status === 'succeeded').length;
+  const bad = results.filter((r) => r.status !== 'succeeded');
+  log(`全量发布结束：成功 ${ok}/${results.length}`);
+  if (bad.length) {
+    warn(`未成功：${bad.map((b) => `${b.key}(${b.status})`).join(', ')}`);
+  }
+  return results;
+}
+
+/**
+ * 用专用脚本发布"会重启流水线引擎自己"的模块。
+ * `publish-deploy-console.sh` 自带构建、产物投递、孤儿清理与重启，且在流水线之外执行，
+ * 因此不会被它自己的 restart 阶段打断（实现细节见 docs/development/integration-branch.md）。
+ */
+function runSelfPublish(moduleKey, cmd) {
+  log(`  ${moduleKey}: 走专用脚本（${cmd.join(' ')}）—— 流水线方式会打断自身 restart`);
+  const [bin, ...binArgs] = cmd;
+  try {
+    execFileSync(bin, binArgs, {
+      cwd: RELEASE_DIR,
+      stdio: 'inherit',
+      timeout: MODULE_TIMEOUT_MS,
+    });
+    log(`  ${moduleKey}: ✓ succeeded（专用脚本）`);
+    return { key: moduleKey, status: 'succeeded' };
+  } catch (e) {
+    warn(`  ${moduleKey}: ✗ 专用脚本失败：${String(e.message).split('\n')[0]}`);
+    return { key: moduleKey, status: 'failed' };
+  }
+}
+
+async function publishOne(moduleKey, token) {
+  // 自发布模块（deploy-console）：走专用脚本，避免"流水线打断自己的 restart 阶段"
+  const selfScript = SELF_PUBLISH_SCRIPTS[moduleKey];
+  if (selfScript) return runSelfPublish(moduleKey, selfScript);
+
+  let jobId;
+  try {
+    const res = await api('POST', '/api/pipelines', token, {
+      env: ENV_ID,
+      moduleKey,
+      branch: BRANCH,
+    });
+    jobId = res.jobId || res.id;
+  } catch (e) {
+    fail(`${moduleKey}: 提交失败：${e.message}`);
+    return { key: moduleKey, status: 'submit-failed' };
+  }
+  log(`  ${moduleKey}: 已提交 ${jobId}，等待完成…`);
+
+  const deadline = Date.now() + MODULE_TIMEOUT_MS;
+  let lastMsg = '';
+  while (Date.now() < deadline) {
+    await sleep(5000);
+    let st;
+    try {
+      st = await api('GET', `/api/pipelines/${jobId}`, token);
+    } catch {
+      // deploy-console 自身发布时会重启，短暂不可达属正常，继续等
+      continue;
+    }
+    lastMsg = st.progress?.message || st.stage || '';
+    if (['succeeded', 'failed', 'cancelled'].includes(st.status)) {
+      const mark = st.status === 'succeeded' ? '✓' : '✗';
+      log(`  ${moduleKey}: ${mark} ${st.status}${st.error ? `（${st.error}）` : ''}`);
+      return { key: moduleKey, status: st.status, versionTag: st.versionTag };
+    }
+  }
+  warn(`  ${moduleKey}: 超时未完成（最后状态：${lastMsg}）`);
+  return { key: moduleKey, status: 'timeout' };
+}
+
+/** 执行一次"同步 + 全量发布"；仅在全部流程走完后推进状态（失败则下轮重试） */
+async function syncAndPublish(sha) {
+  if (DRY) {
+    log(`（dry-run）将同步到 ${short(sha)} 并全量发布到 ${ENV_ID} 环境`);
+    return;
+  }
+  if (!syncTo(sha)) return; // 工作区脏 → 跳过（不推进状态，等人工处理）
+  await publishAll(sha);
+  writeState(sha);
+}
+
+async function main() {
+  log(`watcher 启动：分支=${BRANCH}、环境=${ENV_ID}、轮询=${INTERVAL_S}s、发布目录=${RELEASE_DIR}`);
+  log(`跟随 master：${FOLLOW_MASTER ? '开' : '关'}`);
+  if (DRY) warn('DRY-RUN：只检查与打印，不执行同步与发布');
+
+  // 启动即对齐 master：集成分支落后时先合并（合并本身会产生新提交 → 触发一轮发布）
+  if (!DRY) followMaster();
+
+  git('fetch', 'origin', BRANCH);
+  const remote0 = git('rev-parse', `origin/${BRANCH}`);
+  let state = readState();
+  if (!state) {
+    // 首次运行：把当前远程位置记为基线、不发布（当前代码通常已手工部署过）
+    log(`首次运行，记录基线 ${short(remote0)}（本次不发布）`);
+    if (!DRY) writeState(remote0);
+    state = remote0;
+  } else if (remote0 !== state) {
+    log(`上次已发布 ${short(state)}；origin/${BRANCH} 已是 ${short(remote0)}，立即执行一轮`);
+    await syncAndPublish(remote0);
+    state = readState() || state;
+  } else {
+    log(`已是最新（${short(state)}），等待更新…`);
+  }
+
+  if (hasFlag('--force')) {
+    log('--force：立刻执行一次全量发布');
+    await syncAndPublish(remote0);
+    return;
+  }
+
+  if (ONCE) {
+    if (remote0 === state) {
+      log('无更新，无需发布');
+      return;
+    }
+    log(`检测到更新：${short(state)} → ${short(remote0)}`);
+    await syncAndPublish(remote0);
+    return;
+  }
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await sleep(INTERVAL_S * 1000);
+    try {
+      git('fetch', 'origin', BRANCH);
+      // 先让集成分支跟上 master：若产生合并提交，本轮就会检测到"更新"并发布
+      followMaster();
+      const remote = git('rev-parse', `origin/${BRANCH}`);
+      if (remote === state) continue;
+
+      log(`检测到 ${BRANCH} 更新：${short(state)} → ${short(remote)}`);
+      await syncAndPublish(remote);
+      const advanced = readState();
+      if (advanced && advanced !== state) state = advanced;
+    } catch (e) {
+      warn(`本轮检查失败（下轮重试）：${e.message}`);
+    }
+  }
+}
+
+main().catch((e) => {
+  fail(e.message);
+  process.exit(1);
+});

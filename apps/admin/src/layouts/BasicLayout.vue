@@ -34,6 +34,7 @@
           <template #icon><SafetyCertificateOutlined /></template>
           <span>角色权限</span>
         </a-menu-item>
+        <!-- 「模型」入口已下线：模型清单/价格的维护统一在「字典管理 · 大模型清单」 -->
         <a-menu-item v-if="userStore.hasPermission('system:dict:view')" key="dicts">
           <template #icon><DatabaseOutlined /></template>
           <span>字典管理</span>
