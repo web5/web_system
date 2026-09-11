@@ -1,9 +1,9 @@
 ---
-reviewed-at-version: 4.4.0
+reviewed-at-version: 4.7.0
 audience: human
 ---
 
-# rd-digital-agent（Hub）设计理由（人面 · L2）
+# rd-digital-agent（Hub）设计理由（人面）
 
 > 本文件不在 AI 执行路径上：AI 默认不加载，只在判断「能否绕过某条分派 / 门禁规则」时按需跟随。
 > 改 `SKILL.md` 必须 bump `version` 并同步本文件 `reviewed-at-version`，否则 CI 失败（`eval-gate.yml` S8-2）。
@@ -17,7 +17,7 @@ audience: human
 
 **为什么「环境里正好有」不是选用理由**：可用性 ≠ 适用性。判定标准是「这套流程的产物是否含交付物定义 + 验证判据」，不是「它是否已安装」。
 
-**为什么不优先整体卸载**：冲突面只有 4 个编排类技能（brainstorming / writing-plans / executing-plans / spec-driven-development），卸载面却是 20 个，代价是连 TDD 铁律、完成前验证、并行子 agent 一起丢掉。优先级：补齐判据字段使其与主链同构（首选）→ 同域同名以 `rd-*` 为准 → 整体卸载（最后手段，`scripts/uninstall-superpowers.sh`，幂等可回滚）。完整风险与解法见 `references/three-kits-architecture.md` §三 R1。
+**处理优先级**：补齐判据字段使其与主链同构（首选）→ 同域同名以 `rd-*` 为准。完整风险与解法见 `references/methodology-design.md` §七。
 
 ## §2 何时把角色升为独立 agent（「三信号」）
 
@@ -50,12 +50,15 @@ audience: human
 
 ## §5 分派决策树的维护约定
 
-决策树的**分支数**决定 L2 路由用例数（`digital-agent-eval/cases/routing.md` 当前 13 条）。新增分支必须同步补路由用例，否则出现「有分支、无验证」的黑洞；删分支同理要删用例。禁止出现「其他」兜底分支——不可分派 = 未定义行为。
+决策树的**分支数**决定 L2 路由用例数（本 kit 的 L2 路由用例见 `evals/cases/routing.md`，当前 28 条；数字人产品评测另有 `digital-agent-eval/cases/routing.md` 15 条，两者用途不同、不混用——见 `digital-agent-eval/README.md`）。新增分支必须同步补路由用例，否则出现「有分支、无验证」的黑洞；删分支同理要删用例。禁止出现「其他」兜底分支——不可分派 = 未定义行为。
 
 ## §6 变更历史
 
 | 版本 | 变更 |
 |---|---|
+| 4.7.0 | 补「不做什么」节（能力集必答项：Hub 只分派不代执行、不发明分派、不跳过交付门禁）；人面标题去掉旧 L 编号 |
+| 4.6.0 | 资产模型再设计：撤销 `kits/L1-L3`——工程纪律与产出纪律并入主干与技能实体；设计论证由 `three-kits-architecture.md` 迁至 `references/methodology-design.md`；补「并行分派前提」 |
+| 4.5.0 | 移除「整体卸载」应急手段（删除 `scripts/uninstall-superpowers.sh` 及回滚脚本），编排权冲突处理收敛为两级：补齐判据字段使其与主链同构 → 同域同名以 `rd-*` 为准 |
 | 4.4.0 | 唯一性从「方法论唯一」收敛为「编排权唯一」：删除「不启用任何第二套工作流」表述，改为三级处理优先级（补齐判据字段 → 同域同名以 `rd-*` 为准 → 整体卸载）；明确工程纪律与行为准则属本套方法论组成部分、不得禁用 |
 | 4.3.0 | 团队模式架构图与 `task()` 调用示例外置到 `references/team-mode-playbook.md`（AI 面常驻层瘦身 ~38 行）；摘要纪律补为「结论 + 依据 + 未决项」三项 |
 | 4.2.0 | 补本文件（双面分层）：单一方法论来源理由、升独立 agent 的三信号、子 Agent 代价、评审链顺序理由、决策树与路由用例的绑定约定；分派与门禁语义未变 |
