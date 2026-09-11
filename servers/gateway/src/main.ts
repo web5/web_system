@@ -61,6 +61,11 @@ async function bootstrap() {
           'https://unpkg.com',
         ],
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        // Worker 来源：未显式声明 worker-src 时浏览器回退到 script-src，
+        // 而 script-src 不含 blob:，会导致 new Worker(blob:...) 被 CSP 拒绝
+        // （前端大计算能力如 OCR/PDF、部分库与浏览器注入脚本会用 blob: 建 Worker）。
+        // 注：data: 形式 worker 更易被 XSS 滥用，暂不放开。
+        workerSrc: ["'self'", 'blob:'],
       },
     },
     // CORP 放宽为 cross-origin：自建 /static/cdn/ 等资源可能被 http 页面（非 trustworthy origin）
