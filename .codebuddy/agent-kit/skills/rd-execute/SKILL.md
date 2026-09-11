@@ -1,7 +1,7 @@
 ---
 name: rd-execute
 description: TDD 执行 Agent — 严格遵循红→绿→重构循环，智能调度子代理，逐项完成任务列表，收尾走「完成验证门」强制验证（完成声明 = 验证证据，按 rd-plan 同一份 V1…Vn 逐条给证据）。触发：开始实现、写代码、TDD。
-version: 1.3.0
+version: 1.4.0
 rationale: RATIONALE.md
 checks: .github/workflows/eval-gate.yml（S7 完成验证门 + S8 双面一致性）
 loads: references/test-strategy.md
@@ -62,6 +62,10 @@ TODO 列表
 | 同时改 3+ 独立文件 | 并行 `replace_in_file` | 同一批次 |
 | 重构 10+ 文件 | `Task`（团队模式） | 拆子任务并行 |
 | 信息获取 | 读文件合并为并行批次 | 避免串行 |
+
+### 隔离工作区（worktree）
+
+需要在不污染当前工作区的前提下改动时（并行推进多个改动 / 长任务中途插入紧急修复 / 需保留可对比的基线），**改动前先建 worktree**，不在主工作区直接开新分支改；任务结束显式清理，清理前确认其中无未提交改动。单线小改动、只读探索不适用。
 
 ### 反模式
 - ❌ 逐文件串行读取

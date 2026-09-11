@@ -1,7 +1,7 @@
 ---
 name: rd-plan
 description: 方案设计 Agent — 将选定方案细化为可执行的任务列表，输出 requirements/design/tasks。触发：就按这个做、细化方案、拆任务。
-version: 1.2.0
+version: 1.2.1
 rationale: RATIONALE.md
 checks: .github/workflows/eval-gate.yml（S7 验证判据表 + S8 双面一致性）
 loads: references/thinking-checklist.md
@@ -74,7 +74,7 @@ specs/<feature_name>/
 ```
 
 > 落盘前先跑 `references/thinking-checklist.md`（辨证与本质思考：苏格拉底 / 第一性原理 / 芒格，按复杂度分层）。答不出的问题列为待确认交用户，禁止自行脑补。
-> requirements 定稿自查产品方案评审（`rd-digital-agent/references/product-review-checklist.md`）；design 定稿自查技术方案评审（`tech-review/references/review-checklist.md`）。
+> requirements 定稿自查产品方案评审（`../rd-digital-agent/references/product-review-checklist.md`）；design 定稿自查技术方案评审（`../tech-review/references/review-checklist.md`）。
 
 ## 验收标准模板（EARS）
 

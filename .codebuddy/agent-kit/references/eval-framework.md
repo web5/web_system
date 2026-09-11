@@ -50,7 +50,7 @@ D1（产物落盘）和 D4（产出质量）是**不可妥协的底线**。流�
 
 ## 3. 用例组织：分层 + 任务卡并存
 
-- **L2 路由用例**：小用例，一条请求 → 一个期望分派，二元判定（对/错），全自动。**覆盖 Hub 分派决策树的全部 9 个分支**：brainstorm / plan / execute / review / debug / refactor / explore / tech-review / verification。
+- **L2 路由用例**：小用例，一条请求 → 一个期望分派，二元判定（对/错），全自动。**覆盖 Hub 分派决策树的全部 11 个分支**：requirement-translation / brainstorm / plan / execute / review / ux-prototype / debug / refactor / explore / tech-review / memory。
 - **L3 陷阱用例**：小用例，一个陷阱场景 → 一个期望行为，测红线是否被静默违反。四类高价值陷阱：复现不稳定的 bug、交付不附验证证据、模糊需求直接开工、重构顺手改 bug。
 - **L4 任务卡**：重任务卡 T1~T6（brainstorm / plan / execute+review / debug / review / full-loop），一张卡跑全链路，一次评完 D1~D5。
 
@@ -96,15 +96,15 @@ LLM-as-judge 最大的风险是评分标准漂移，导致纵向对比作废。�
 
 `eval-gate.yml` 两道关：
 
-1. **结构完备性**：必需文件存在、无孤儿 skill、占位残留检查（每次 PR 必跑，近零成本）；
+1. **结构完备性（S1~S8）**：必需文件存在、无孤儿 skill、frontmatter、占位残留、路由目标存在、红线有执行手段（S6）、交付验证链条文（S7）、双面一致性（S8）——每次 PR 必跑，近零成本；
 2. **评测报告门禁**：PR 改了 `AGENT.md / skills/ / rules/ / references/` 而 `evals/reports/` 无新增报告 → 拦截。纯排版变更可显式豁免。
 
 ## 7. 与 kit 的对应关系（可靠性来源汇总）
 
 | 测评组件 | 对应 kit 实际内容 | 判定方式 |
 |---|---|---|
-| L1 结构 | 三层结构、11 个 skills、5 条红线 + 交付验证链（判据表/完成验证门） | 脚本，机器判定 |
-| L2 路由 | `rd-digital-agent` 分派决策树（10 分支） | 二元判定，全自动 |
+| L1 结构 | 资产分层、13 个技能（Hub + 12 子技能）、5 条红线 + 交付验证链（判据表/完成验证门） | 脚本，机器判定 |
+| L2 路由 | `rd-digital-agent` 分派决策树（11 分支） | 二元判定，全自动 |
 | L3 陷阱 | 红线 01/02/05 + 各 skill 质量门 | rubric + 人工抽检 |
 | L4 任务卡 | 红线 03 产物链 + 红线 04 上下文隔离 | 五维 rubric + 产物清单机器核对 |
 | D1~D5 | 红线 03 / Hub / 红线 02 / 质量门 / 红线 04 | 见 §2 映射表 |
@@ -118,8 +118,8 @@ evals/
 ├── run-baseline.md           # 基线运行手册（干净上下文 + judge 隔离）
 ├── cases/
 │   ├── structure.md          # L1 静态结构检查清单（机器检查的用例化）
-│   ├── routing.md            # L2 路由用例（21 条，二元判定）
-│   └── behavior.md           # L3 陷阱用例（6 条，测红线静默违反）
+│   ├── routing.md            # L2 路由用例（28 条，二元判定）
+│   └── behavior.md           # L3 陷阱用例（7 条，测红线静默违反）
 ├── golden-tasks/
 │   ├── README.md             # 任务卡说明与使用规则
 │   ├── RUBRIC.md             # 五维评分标准（评分内核）
@@ -131,9 +131,9 @@ evals/
 ## 9. 落地路径（MVP 起步）
 
 1. 锁定五维 rubric（已实现 `RUBRIC.md`）；
-2. 写用例：L1 结构清单 + L2 路由 21 条 + L3 陷阱 6 条 + L4 任务卡 6 张（均已实现）；
-3. 跑**首份基线报告**（没有基线就没有趋势线，这是当前唯一未完成项；须按 `run-baseline.md` 在干净上下文执行）；
-4. L1 静态脚本进 CI（已实现 `eval-gate.yml`，覆盖 structure.md 的 S1~S5）；
+2. 写用例：L1 结构清单 + L2 路由 28 条 + L3 陷阱 7 条 + L4 任务卡 6 张（均已实现）；
+3. 跑**首份基线报告**（已于 2026-09-10 产出 `evals/reports/6373b99-2026-09-10.md`；后续基线按 `run-baseline.md` 在干净上下文执行）；
+4. L1 静态脚本进 CI（已实现 `scripts/check-structure.sh`，覆盖 structure.md 的 S1~S8）；
 5. 之后每次更新遵循闭环：**改 → 评 → 对比 → 决定是否合并**，报告落 `evals/reports/`。
 
 ## 10. 可靠性四机制

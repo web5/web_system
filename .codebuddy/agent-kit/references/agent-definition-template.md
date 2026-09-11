@@ -190,7 +190,7 @@
 
 > ⚠️ 技术产品型评测随本定义文档走，**归属 `digital-agent-eval/`，不并入 kit 的 `evals/`**（`evals/` 是 kit 自身方法论评测，不验收具体智能体产品）。下列 ✅ = 资产已构建落盘；实跑与通过率按 `digital-agent-eval/README.md` 执行。
 
-- L2 路由用例 13 条（覆盖分派决策树 10 分支 + 边界出口）✅ 已建 `digital-agent-eval/cases/routing.md`
-- L3 陷阱用例 9 条（红线静默违反场景）✅ 已建 `digital-agent-eval/cases/behavior.md`
+- L2 路由用例 15 条（覆盖画像分派树 + 边界出口）✅ 已建 `digital-agent-eval/cases/routing.md`
+- L3 陷阱用例 11 条（红线静默违反场景）✅ 已建 `digital-agent-eval/cases/behavior.md`
 - L4 端到端任务卡 6 张（T1~T6，覆盖产品链路/UX 原型/调试/重构/探索审查/验证门）✅ 已建 `digital-agent-eval/golden-tasks/`
 - 首份基线报告（构建版，资产齐备、实跑待执行）✅ 已建 `digital-agent-eval/reports/1b6fa62-2026-09-04.md`
