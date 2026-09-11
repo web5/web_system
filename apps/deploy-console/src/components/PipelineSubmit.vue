@@ -31,7 +31,8 @@ const environments = ref<{ id: string; name: string }[]>([])
 const modules = ref<any[]>([])
 const availableModules = computed(() => modules.value.filter((m: any) => m.enabled !== false))
 const availTemplates = ref<PipelineTemplate[]>([])
-const releases = ref<{ versionTag: string; note?: string }[]>([])
+/** 可发布版本候选：versionTag=完整引用（展示用），commit=纯短哈希（提交用） */
+const releases = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
 /** 模块代码目录的远程 git 分支（origin/*） */
 const gitBranches = ref<string[]>([])
 /** 发布目录当前分支（HEAD 提示用） */
@@ -353,7 +354,7 @@ const envLabel = (id: string) => {
               allow-clear
               placeholder="留空=最新"
             >
-              <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.versionTag">
+              <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
                 {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
               </a-select-option>
             </a-select>
