@@ -16,6 +16,19 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# 本机数据库凭据：优先取仓库根 .env（不入库），其次 scripts/.env.deploy，最后用环境变量
+for envf in "$ROOT/.env" "$ROOT/scripts/.env.deploy"; do
+  if [ -f "$envf" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$envf"
+    set +a
+  fi
+done
+: "${DB_PASSWORD:=${LOCAL_DB_PASSWORD:-${DEV_DB_PASS:-}}}"
+: "${DEPLOY_ADMIN_PASSWORD:=${ADMIN_PASS:-}}"
+export DB_PASSWORD DEPLOY_ADMIN_PASSWORD
+
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
 ok()   { echo -e "${G}  ✓${N} $1"; }
 fail() { echo -e "${R}  ✗${N} $1"; }
@@ -23,7 +36,7 @@ warn() { echo -e "${Y}  !${N} $1"; }
 
 MYSQL_BIN="$HOME/local/mysql-8.4.0-macos14-arm64/bin"
 MYSQL="$MYSQL_BIN/mysql"
-MYSQL_PASS="KedouLocal@2026"
+MYSQL_PASS="${DB_PASSWORD:-}"
 
 PASS=0; FAIL=0
 summary() { echo; echo -e "结果: ${G}${PASS} passed${N} / ${R}${FAIL} failed${N}"; }
@@ -93,11 +106,11 @@ if $DO_HEALTH; then
   else
     warn "网关登录未通过；可能未启动或密码不同。启动: ./scripts/local-up.sh"
   fi
-  # deploy-console 登录自检（6200，admin/deploy2026）
+  # deploy-console 登录自检（6200，凭据取 DEPLOY_ADMIN_USER / DEPLOY_ADMIN_PASSWORD）
   if curl -s -m 3 -X POST http://127.0.0.1:6200/api/auth/login \
       -H 'Content-Type: application/json' \
-      -d '{"username":"admin","password":"deploy2026"}' 2>/dev/null | grep -q '"token"'; then
-    ok "deploy-console 登录 OK（6200，admin/deploy2026）"
+      -d "{\"username\":\"${DEPLOY_ADMIN_USER:-admin}\",\"password\":\"${DEPLOY_ADMIN_PASSWORD:-}\"}" 2>/dev/null | grep -q '"token"'; then
+    ok "deploy-console 登录 OK（6200，admin）"
   else
     warn "deploy-console 未就绪（6200）；启动: pm2 restart web-deploy-console"
   fi

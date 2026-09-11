@@ -7,9 +7,12 @@
  */
 import { execSync } from 'child_process';
 
-const MYSQL = '/Users/geekwen/local/mysql-8.4.0-macos14-arm64/bin/mysql';
-const AUTH = `-h127.0.0.1 -uroot -p'KedouLocal@2026'`;
-const DB = 'web_system_deploy';
+const MYSQL = process.env.MYSQL_BIN || 'mysql';
+const DB_HOST = process.env.DB_HOST || '127.0.0.1';
+const DB_USER = process.env.DB_USERNAME || 'root';
+const DB_PASS = process.env.DB_PASSWORD || '';
+const AUTH = `-h${DB_HOST} -u${DB_USER}${DB_PASS ? ` -p'${DB_PASS}'` : ''}`;
+const DB = process.env.DB_DATABASE || 'web_system_deploy';
 
 const q = (sql) =>
   execSync(`${MYSQL} ${AUTH} ${DB} -N -e "${sql}" 2>/dev/null`).toString().trim();

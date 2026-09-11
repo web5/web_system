@@ -43,8 +43,8 @@ function makeService(opts: { secret?: string; existing?: DeployReleaseEventEntit
       env: 'local',
       versionTag: 'abc1234',
       progress: { current: 2, total: 3, message: '构建中 2/3' },
-      logs: ['[build] 产物写入 /Users/geekwen/web_system_release/dist'],
-      result: { artifactPath: '/Users/geekwen/web_system_release/dist' },
+      logs: ['[build] 产物写入 /tmp/release-workspace/dist'],
+      result: { artifactPath: '/tmp/release-workspace/dist' },
       endTime: undefined,
     })),
   } as unknown as PipelineService;
@@ -174,7 +174,7 @@ describe('ReleaseHookService · 状态查询（CI 轮询）', () => {
     });
     // 回归保护：曾把整实体回给 CI，把发布目录绝对路径与阶段日志一起泄了出去
     const payload = JSON.stringify(r);
-    expect(payload).not.toContain('/Users/geekwen');
+    expect(payload).not.toContain('/tmp/release-workspace');
     expect(payload).not.toContain('logs');
     expect(payload).not.toContain('artifactPath');
   });

@@ -11,7 +11,7 @@
 1. 读本文件 + 需求文档（~10 分钟，恢复全部上下文）。
 2. 复核现状基线是否变化：
    ```bash
-   cd /Users/geekwen/workspace/web_system
+   cd {{WORKSPACE_DIR}}
    git status --short                # 有无未提交改动
    cat packages/ui/package.json      # 结构是否仍如上文
    ls apps/deploy-console/src/views  # 试点页面是否仍在

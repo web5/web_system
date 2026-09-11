@@ -12,7 +12,7 @@ const DB = {
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USERNAME || 'root',
-  password: process.env.DB_PASSWORD || 'KedouLocal@2026',
+  password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'web_system',
 };
 const USERNAME = process.env.ADMIN_INIT_USERNAME || 'admin';

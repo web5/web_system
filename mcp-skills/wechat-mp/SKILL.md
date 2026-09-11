@@ -101,7 +101,7 @@ agent_created: true
 
 ### 4.2 直连脚本
 
-脚本路径：`/Users/geekwen/workspace/web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`
+脚本路径：`{{WORKSPACE_DIR}}/scripts/mcp-fallback/wechat-fallback-publish.sh`
 
 | 参数 | 说明 |
 |------|------|
@@ -110,7 +110,7 @@ agent_created: true
 | `--title "标题"` | 自定义标题（默认「{日期}财经日报（直连通道）」） |
 | `--dry-run` | 只打印不执行 |
 
-行为：SSH 到 dev 机器（`ubuntu@175.27.189.123`）→ 探测 content-hub（:6007）→ 拉取财经数据（`/api/market-pulse`、`/api/topics`）→ 生成带封面图的 HTML → 调 `/api/content/wechat/draft`（或 `/publish`）。
+行为：SSH 到 dev 机器（`ubuntu@{{DEV_HOST}}`）→ 探测 content-hub（:6007）→ 拉取财经数据（`/api/market-pulse`、`/api/topics`）→ 生成带封面图的 HTML → 调 `/api/content/wechat/draft`（或 `/publish`）。
 
 ### 4.3 直连执行约束
 

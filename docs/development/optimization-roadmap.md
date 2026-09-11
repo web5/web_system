@@ -233,7 +233,7 @@ servers/gateway/public/
 ### 执行命令
 
 ```bash
-cd /Users/geekwen/workspace/web_system/servers/gateway/public
+cd {{WORKSPACE_DIR}}/servers/gateway/public
 
 # 1. 建目录
 mkdir -p site-assets/svg site-assets/html site-assets/logo-proposals site-assets/qrcode

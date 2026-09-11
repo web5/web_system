@@ -23,7 +23,7 @@
 |---|---|---|
 | A1 | **能力源落后上游 kit master** | `diff -rq` kit master vs `.codebuddy/agent-kit/` → **13 文件差异**（7 个 skills + 5 个 references + `README.md`）。而 `origin/sync/agent-kit`（`804f4d7`）的改动集**正好就是这 13 个文件**，即 CI 同步 PR 已生成、只是未合并 |
 | A2 | **运行源落后能力源** | S7 报 11 文件不一致，涉及 `rd-plan` / `rd-execute` / `rd-review` / `tech-review` / `rd-digital-agent` / `ux-prototype-designer` |
-| A3 | **三个 `karpathy-*` 运行源目录是本机 symlink** | `karpathy-coding-guidelines` / `karpathy-coding-rules-dami` / `karpathy-llm-wiki` 均指向 `/Users/geekwen/.codebuddy/skills/...`，且**被 git 跟踪** → 换机器或 CI 克隆即断链 |
+| A3 | **三个 `karpathy-*` 运行源目录是本机 symlink** | `karpathy-coding-guidelines` / `karpathy-coding-rules-dami` / `karpathy-llm-wiki` 均指向 `$HOME/.codebuddy/skills/...`，且**被 git 跟踪** → 换机器或 CI 克隆即断链 |
 
 ### A1 明细（13 文件）
 

@@ -31,7 +31,7 @@
 
 ## 服务器角色
 
-### 69 服务器 (42.194.200.69) - Nginx 网关
+### 69 服务器 ({{GATEWAY_HOST}}) - Nginx 网关
 **角色：** 外网流量入口，纯反向代理
 
 | 配置项 | 值 | 说明 |
@@ -46,7 +46,7 @@
 ```nginx
 # 所有请求转发到 246 服务器的网关服务
 location / {
-    proxy_pass http://106.52.176.246:3000;
+    proxy_pass http://{{PROD_HOST}}:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -54,7 +54,7 @@ location / {
 }
 ```
 
-### 246 服务器 (106.52.176.246) - 生产环境
+### 246 服务器 ({{PROD_HOST}}) - 生产环境
 **角色：** 网关服务 + 业务服务 + 数据库
 
 | 服务 | 端口 | 说明 |
@@ -93,7 +93,7 @@ https://admin.kedouai.com/xxx
     ↓
 69 服务器 Nginx (SSL 终止)
     ↓
-http://106.52.176.246:3000/xxx
+http://{{PROD_HOST}}:3000/xxx
     ↓
 246 服务器 Gateway 服务
     ├─ / → 返回静态资源 (index.html, JS, CSS)
@@ -124,14 +124,14 @@ location / {
     try_files $uri $uri/ /index.html;
 }
 location /api {
-    proxy_pass http://106.52.176.246:3000;
+    proxy_pass http://{{PROD_HOST}}:3000;
 }
 ```
 
 **修改为：**
 ```nginx
 location / {
-    proxy_pass http://106.52.176.246:3000/admin/$uri;
+    proxy_pass http://{{PROD_HOST}}:3000/admin/$uri;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -139,14 +139,14 @@ location / {
 
 # SPA 路由：所有非文件请求返回 index.html
 location !/\.[^/]+$ {
-    proxy_pass http://106.52.176.246:3000/admin/index.html;
+    proxy_pass http://{{PROD_HOST}}:3000/admin/index.html;
 }
 ```
 
 **更简单的方案（推荐）：**
 ```nginx
 location / {
-    proxy_pass http://106.52.176.246:3000;
+    proxy_pass http://{{PROD_HOST}}:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -168,7 +168,7 @@ location / {
 **修改为：**
 ```nginx
 location / {
-    proxy_pass http://106.52.176.246:3000;
+    proxy_pass http://{{PROD_HOST}}:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -183,7 +183,7 @@ server {
     server_name api.kedouai.com;
     
     location / {
-        proxy_pass http://106.52.176.246:3000;
+        proxy_pass http://{{PROD_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -272,10 +272,10 @@ const apiRoutes = {
 cd apps/admin-web && pnpm build
 
 # 2. 上传到 246 服务器
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/admin/
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/admin/
 
 # 3. 重启网关服务
-ssh root@106.52.176.246 "pm2 restart gateway"
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 #### 3.2 开发环境部署
@@ -388,7 +388,7 @@ DEV_MODE=false
 
 2. **恢复静态资源到 69 服务器**：
    ```bash
-   rsync -avz /root/web_system/static/admin/ root@42.194.200.69:/var/www/admin/
+   rsync -avz /root/web_system/static/admin/ root@{{GATEWAY_HOST}}:/var/www/admin/
    ```
 
 3. **验证回滚**：

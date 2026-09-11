@@ -6,13 +6,12 @@
 #   测试前必须明确当前测的是哪套环境，测试输出会带 [DEV]/[PROD] 前缀，
 #   涉及发邮件的用例会在响应里标注「验证码邮件由 XX 环境发出」。
 #
-#   DEV  (175.27.189.123)  : 开发环境，mcp-gateway 直接跑 dist，finnews 同机
-#   PROD (106.52.176.246)  : 生产环境，mcp-gateway 6006；finnews 数据
-#                            经公网调 DEV 的 finnews 服务
+#   DEV  : 开发环境，mcp-gateway 直接跑 dist，finnews 同机
+#   PROD : 生产环境，mcp-gateway 6006；finnews 数据经公网调 DEV 的 finnews 服务
 #
-#   公网入口（SSL 层 42.194.200.69）：
-#     https://kedouai.com/mcp/finnews      → MCP 协议端点（现网域名）
-#     https://kedouai.com/api/mcp/keys/*   → key 申请/管理接口
+#   公网入口（SSL 层）：
+#     https://{{YOUR_DOMAIN}}/mcp/finnews      → MCP 协议端点（现网域名）
+#     https://{{YOUR_DOMAIN}}/api/mcp/keys/*   → key 申请/管理接口
 #
 # 用法:
 #   ./test/e2e-keys.sh dev              # 测 DEV 环境
@@ -20,30 +19,33 @@
 #   ./test/e2e-keys.sh dev --public     # 走公网正式域名测（不区分环境，走 SSL 层）
 #
 # 依赖的环境变量（发真实邮件/MCP 调用时需要）:
-#   MCP_TEST_CLIENT_KEY   旧的共享 MCP_CLIENT_KEY（兼容性用例）
-#   MCP_TEST_ADMIN_KEY    管理端 X-Admin-Key（list/revoke 用例）
+#   MCP_DEV_BASE           DEV 环境 mcp-gateway 基址（如 http://{{DEV_HOST}}:6006）
+#   MCP_PROD_BASE          PROD 环境 mcp-gateway 基址（如 http://{{PROD_HOST}}:6006）
+#   MCP_PUBLIC_BASE        公网正式域名（默认 https://kedouai.com）
+#   MCP_TEST_CLIENT_KEY    旧的共享 MCP_CLIENT_KEY（兼容性用例）
+#   MCP_TEST_ADMIN_KEY     管理端 X-Admin-Key（list/revoke 用例）
 # ===========================================================
 set -u
 
 ENV_ARG="${1:-}"
 PUBLIC="${2:-}"
 
-# ---- 环境配置表 ----
+# ---- 环境配置表（服务器地址一律从环境变量读取，不在脚本内内置） ----
 declare -A HOSTS=(
-  [dev]="http://175.27.189.123:6006"
-  [prod]="http://106.52.176.246:6006"
+  [dev]="${MCP_DEV_BASE:-}"
+  [prod]="${MCP_PROD_BASE:-}"
 )
 declare -A LABELS=(
   [dev]="DEV"
   [prod]="PROD"
 )
-PUBLIC_BASE="https://kedouai.com"
+PUBLIC_BASE="${MCP_PUBLIC_BASE:-https://kedouai.com}"
 
 if [ -z "$ENV_ARG" ] || [ -z "${HOSTS[$ENV_ARG]:-}" ]; then
   echo "用法: $0 [dev|prod] [--public]"
-  echo "  dev  = DEV  环境 (175.27.189.123:6006)"
-  echo "  prod = PROD 环境 (106.52.176.246:6006)"
-  echo "  追加 --public 则走公网正式域名 kedouai.com（经 SSL 层，不区分环境）"
+  echo "  dev  = DEV  环境（需设置 MCP_DEV_BASE，如 http://{{DEV_HOST}}:6006）"
+  echo "  prod = PROD 环境（需设置 MCP_PROD_BASE）"
+  echo "  追加 --public 则走公网正式域名 $PUBLIC_BASE（经 SSL 层，不区分环境）"
   exit 1
 fi
 

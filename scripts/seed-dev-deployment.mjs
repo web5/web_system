@@ -21,7 +21,11 @@ const require = createRequire(resolve(REPO_ROOT, 'servers/deploy-console/package
 const mysql = require('mysql2/promise');
 
 const DB = {
-  host: '127.0.0.1', port: 3306, user: 'root', password: 'KedouLocal@2026', database: 'web_system_deploy',
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USERNAME || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_DATABASE || 'web_system_deploy',
 };
 
 const modulesJson = JSON.parse(readFileSync(resolve(REPO_ROOT, 'scripts/modules.json'), 'utf-8'));

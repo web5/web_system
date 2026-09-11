@@ -38,14 +38,14 @@
 给 runner 配环境文件（`~/actions-runner/.env`），改完 `./svc.sh stop && ./svc.sh start`：
 
 ```
-PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+PATH=$HOME/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 ```
 
 ### 2.2 仓库 Variables（非敏感）
 
 | 名称 | 用途 | 默认 |
 |---|---|---|
-| `RELEASE_DIR` | 发布目录绝对路径 | 未配时用 `/Users/geekwen/web_system_release` |
+| `RELEASE_DIR` | 发布目录绝对路径 | 未配时用 `{{RELEASE_DIR}}` |
 
 ### 2.3 仓库 Secrets
 

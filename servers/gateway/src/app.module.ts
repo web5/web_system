@@ -69,7 +69,7 @@ import { DeployVersionModule } from './deploy-version/deploy-version.module';
         host: cfg.get('DEPLOY_DB_HOST', '127.0.0.1'),
         port: Number(cfg.get('DEPLOY_DB_PORT') || 3306),
         username: cfg.get('DEPLOY_DB_USER', 'root'),
-        password: cfg.get('DEPLOY_DB_PASSWORD', 'KedouLocal@2026'),
+        password: cfg.get('DEPLOY_DB_PASSWORD', ''),
         database: cfg.get('DEPLOY_DB_NAME', 'web_system_deploy'),
         entities: [DeployDeploymentEntity, DeployModuleEntity, DeployCanaryRuleEntity],
         // gateway 是只读消费者，绝不自动建表

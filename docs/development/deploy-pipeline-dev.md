@@ -316,7 +316,7 @@ done
 |---|---|---|
 | 1 | 流水线终态 succeeded | `status=succeeded`，logs 无错误 |
 | 2 | 产物落盘 | `ls servers/gateway/public/static/modules/admin/$V/` 有 `index.js` |
-| 3 | **版本表写对库** | `mysql -uroot -pKedouLocal@2026 web_system_deploy -e "SELECT current_version FROM deploy_deployments WHERE env_id='dev' AND module_key='admin';"` → `= $V` |
+| 3 | **版本表写对库** | `mysql -uroot -p{{LOCAL_DB_PASSWORD}} web_system_deploy -e "SELECT current_version FROM deploy_deployments WHERE env_id='dev' AND module_key='admin';"` → `= $V` |
 | 4 | 等 TTL 后 manifest 更新 | `sleep 12 && curl -s localhost:6000/__manifest__` → admin.version = `$V` |
 | 5 | 产物可访问 | `curl -s -o /dev/null -w "%{http_code}" https://local.kedouai.com/static/modules/admin/$V/index.js` → `200` |
 | 6 | 版本记录入库 | `deploy_versions` 新增，`git_commit=$V`、分支正确 |

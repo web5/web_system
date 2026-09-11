@@ -9,7 +9,7 @@
 #   4. seed DB（deploy_modules + deploy_deployments dev 指针）
 #   5. 启动 gateway:6000（前台运行，Ctrl+C 退出）
 #
-# 前置: MySQL 本机 127.0.0.1:3306，root/KedouLocal@2026，库 web_system_deploy 已存在
+# 前置: MySQL 本机 127.0.0.1:3306，root/{{LOCAL_DB_PASSWORD}}，库 web_system_deploy 已存在
 #
 # 用法: bash scripts/dev-e2e-start.sh
 # 验证: 浏览器访问 http://localhost:6000/ → 基座加载 → 进 /portal → loader 挂载 portal 模块
@@ -92,7 +92,7 @@ fi
 
 log "启动 gateway（前台运行，Ctrl+C 退出）..."
 log "验证步骤："
-log "  0. 先 reload nginx 让 8090 生效：sudo /Users/geekwen/local/nginx/sbin/nginx -s reload"
+log "  0. 先 reload nginx 让 8090 生效：sudo $HOME/local/nginx/sbin/nginx -s reload"
 log "  1. 浏览器访问 https://local.kedouai.com:8090/   → 应见基座布局 + 登录页"
 log "     （nginx 8090 配了 SSL，避开 Chrome 屏蔽 6000 端口；自签证书点「继续前往」）"
 log "  2. 登录后点「门户」菜单                       → loader 加载 /static/modules/portal/$COMMIT/index.js"

@@ -293,7 +293,7 @@ const keyColumns = [
               </a-col>
             </a-row>
             <a-form-item label="服务地址 base_url" required>
-              <a-input v-model:value="editForm.base_url" placeholder="http://172.16.16.10:8080" />
+              <a-input v-model:value="editForm.base_url" placeholder="http://127.0.0.1:8080" />
             </a-form-item>
             <a-row :gutter="16">
               <a-col :span="12">
