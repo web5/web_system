@@ -93,6 +93,16 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '来源 Git commit' })
   gitCommit?: string;
 
+  /**
+   * 入参 commit 快照（提交时写入，之后不再变）。
+   *
+   * 为什么需要单独一列：`versionTag` 会被拉码结果覆盖（git 阶段回填成
+   * `<templateKey>/<commit>`），入参就丢了 —— 而"拉码结果是否等于请求的 commit"
+   * 这条端到端断言必须拿入参比对，故另存一份。
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '请求的 commit（入参快照，用于一致性断言）' })
+  requestedCommit?: string;
+
   /** 灰度参数：{ type: 'percent'|'user-list'|'header', ... }，仅 mode=grayscale 时有值 */
   @Column({ type: 'json', nullable: true, comment: '灰度规则参数' })
   grayscaleRule?: Record<string, unknown>;

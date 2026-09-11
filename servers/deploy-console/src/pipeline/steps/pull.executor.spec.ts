@@ -90,12 +90,35 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     expect(logs.some((l) => l.includes('[warn] 共享包 @web-system/shared 预构建失败'))).toBe(true);
   });
 
-  it('commit 信息自动从 git 同步结果回填', async () => {
+  it('只负责拉码：版本身份回填由平台统一做（避免与 DB 脚本路径两套逻辑）', async () => {
     git.syncToBranch.mockReturnValue('deadbeef');
     const { ctx } = makeCtx();
     await executor.run(ctx);
-    expect((ctx.pipeline as any).gitCommit).toBe('deadbeef');
-    expect((ctx.pipeline as any).versionTag).toBe('deadbeef');
+    expect(git.syncToBranch).toHaveBeenCalledWith('master', 'prev');
+    // 版本身份是发布语义真相源 → 收口在 PipelineService.resolveGitIdentity
+    expect((ctx.pipeline as any).gitCommit).toBeUndefined();
+    expect((ctx.pipeline as any).versionTag).toBe('prev');
+  });
+
+  it('目标 commit 是完整引用（default/<commit>）时只把末段交给 git', async () => {
+    const { ctx } = makeCtx();
+    (ctx.pipeline as any).versionTag = 'default/abc1234';
+    await executor.run(ctx);
+    expect(git.syncToBranch).toHaveBeenCalledWith('master', 'abc1234');
+  });
+
+  it('afterSync 可独立调用：git 阶段由 DB 锁定脚本执行时，引擎用它收尾依赖同步与预构建', async () => {
+    const { ctx, logs } = makeCtx();
+    await executor.afterSync(ctx);
+    expect(cmd.exec).toHaveBeenCalledWith(
+      expect.stringContaining('--filter @web-system/shared build'),
+      '/tmp/ws',
+    );
+    expect(cmd.exec).toHaveBeenCalledWith(
+      expect.stringContaining('--filter @web-system/types build'),
+      '/tmp/ws',
+    );
+    expect(logs.some((l) => l.includes('预构建共享包'))).toBe(true);
   });
 
   it('pnpm install 失败也不阻断：仅记 warn，仍继续共享预构建', async () => {

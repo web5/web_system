@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ReleaseGitService } from '../../git/release-git.service';
 import { CommandService } from '../../shell/command.service';
+import { parseReleaseRef } from '../release-paths';
 import { StepContext } from './step.types';
 
 /**
@@ -14,17 +15,19 @@ import { StepContext } from './step.types';
  *      形成「并发 mv → 重建」竞态，导致 vite 打包解析失败。
  *   2) 单条流水线的 shared/types 重建耗时~几秒（tsc），多个微前端串联就是几倍 N。
  *
- * 因此抽到 pull 阶段一次执行（在 pnpm install 之后、模块 build 之前）。
+ * 因此抽到拉码之后一次执行（在 pnpm install 之后、模块 build 之前）。
  * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
  */
 const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
 
 /**
- * pull 内置步骤执行体（category=code）。
+ * pull 内置步骤执行体（category=code）——「拉码」的回退实现。
  *
- * 发布目录同步到目标分支（git fetch/checkout/reset/clean，含 .git 校验）+
- * pnpm-lock 指纹依赖同步（失败不阻断，构建阶段会再报错）+
- * 共享 workspace 包预构建（@web-system/shared + @web-system/types，流水级一次）。
+ * 职责边界（重要）：
+ * - **只负责把代码拉到目标 commit**（fetch/checkout/reset/clean，含 .git 校验）；
+ * - 版本身份（`gitCommit` / `versionTag`）由平台统一回填（`PipelineService.resolveGitIdentity`），
+ *   因为 v5 下该阶段可能改由 DB 锁定脚本执行（`nodeKey='git'`），两条路径必须同源；
+ * - 依赖同步与共享包预构建在 `afterSync()`：脚本驱动时引擎会显式调用它。
  */
 @Injectable()
 export class PullExecutor {
@@ -39,12 +42,21 @@ export class PullExecutor {
     const p = ctx.pipeline;
     await ctx.enterStage(`拉取代码: ${p.gitBranch}@${p.versionTag || '最新'}`);
 
-    const commit = this.git.syncToBranch(p.gitBranch!, p.versionTag);
-    p.gitCommit = commit;
-    // R6 版本身份：<pipelineKey>/<commit>（产物落盘 modules/<module>/<key>/<commit>/）
-    p.versionTag = p.templateKey ? `${p.templateKey}/${commit}` : commit;
-    ctx.log(`代码已就绪: ${p.gitBranch}@${commit} → 版本 ${p.versionTag}（发布目录 ${this.git.workspace()}）`);
+    // 目标 commit 可能是完整引用（`default/<commit>`），取末段交给 git；无 commit 时同步分支最新
+    this.git.syncToBranch(p.gitBranch!, parseReleaseRef(p.versionTag || '').version || undefined);
 
+    await this.afterSync(ctx);
+    await ctx.save();
+  }
+
+  /**
+   * 拉码之后的平台侧收尾：依赖同步 + 共享包预构建。
+   *
+   * 单独暴露的原因：git 阶段可能由 **DB 锁定脚本**驱动（脚本只负责"把代码拉到位"），
+   * 此时依赖安装与预构建仍必须由平台执行 —— 预构建要流水线级只做一次，
+   * 交给各模块脚本会重现「并发 mv → 重建」竞态（见文件头注释）。
+   */
+  async afterSync(ctx: StepContext): Promise<void> {
     // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install；失败不阻断）
     try {
       if (this.git.syncDependencies() === 'installed') {
@@ -71,7 +83,5 @@ export class PullExecutor {
         this.logger.warn(`共享包 ${pkg} 预构建失败: ${(e as Error).message}`);
       }
     }
-
-    await ctx.save();
   }
 }

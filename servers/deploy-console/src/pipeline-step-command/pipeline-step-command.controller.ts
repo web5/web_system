@@ -41,6 +41,8 @@ export class PipelineStepCommandController {
       command: r.command,
       actions: r.actions ?? [],
       enabled: r.enabled,
+      // 平台托管（locked）：页面据此渲染为只读，不给编辑入口
+      locked: !!r.locked,
       timeoutSec: r.timeoutSec ?? null,
       updatedAt: r.updatedAt ?? null,
       updatedBy: r.updatedBy ?? null,
