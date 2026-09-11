@@ -1,6 +1,6 @@
 ---
 name: web-system-dev-machine
-description: web_system dev 机器 SSH 访问技能——通过 SSH 免密登录 dev 服务器（ubuntu@175.27.189.123），在服务器上执行命令、运行脚本（拉取 arXiv 论文、调用 content-hub 接口、公众号建稿/发布等）。当定时任务/自动化需要登录 dev 机器执行论文抓取、内容生成、公众号发布等操作时调用本技能。
+description: web_system dev 机器 SSH 访问技能——通过 SSH 免密登录 dev 服务器（ubuntu@{{DEV_HOST}}），在服务器上执行命令、运行脚本（拉取 arXiv 论文、调用 content-hub 接口、公众号建稿/发布等）。当定时任务/自动化需要登录 dev 机器执行论文抓取、内容生成、公众号发布等操作时调用本技能。
 version: 1.0.0
 agent_created: true
 ---
@@ -13,7 +13,7 @@ agent_created: true
 
 | 项 | 值 |
 |------|-----|
-| SSH 目标 | `ubuntu@175.27.189.123` |
+| SSH 目标 | `ubuntu@{{DEV_HOST}}` |
 | 认证方式 | 密钥免密（`~/.ssh/id_ed25519_servers`），BatchMode=yes |
 | 连接超时 | ConnectTimeout=8 |
 | 关键服务 | content-hub `http://127.0.0.1:6007`、mcp-gateway `http://127.0.0.1:6006` |
@@ -23,13 +23,13 @@ agent_created: true
 
 ```bash
 # 测试连通
-ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@175.27.189.123 "echo ok"
+ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "echo ok"
 
 # 执行单条命令
-ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@175.27.189.123 "curl -s http://127.0.0.1:6007/api/market-pulse"
+ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "curl -s http://127.0.0.1:6007/api/market-pulse"
 
 # 执行多条命令（分号分隔）
-ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@175.27.189.123 "cd /workspace/daily-paper && python3 fetch_arxiv.py"
+ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "cd /workspace/daily-paper && python3 fetch_arxiv.py"
 ```
 
 ### 1.2 执行远程脚本（复杂逻辑）
@@ -41,7 +41,7 @@ ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@175.27.189.123 "cd /workspace/da
 B64=$(base64 < /path/to/remote-script.sh)
 
 # 2) 传输并执行
-ssh -o ConnectTimeout=15 ubuntu@175.27.189.123 \
+ssh -o ConnectTimeout=15 ubuntu@{{DEV_HOST}} \
   "echo '$B64' | base64 -d > /tmp/remote.sh && chmod +x /tmp/remote.sh && bash /tmp/remote.sh && rm -f /tmp/remote.sh"
 ```
 
@@ -49,10 +49,10 @@ ssh -o ConnectTimeout=15 ubuntu@175.27.189.123 \
 
 ```bash
 # 单文件
-scp -o ConnectTimeout=10 /local/file.py ubuntu@175.27.189.123:/tmp/
+scp -o ConnectTimeout=10 /local/file.py ubuntu@{{DEV_HOST}}:/tmp/
 
 # 目录（用 tar 管道）
-tar czf - /local/dir | ssh ubuntu@175.27.189.123 "cd /data && tar xzf -"
+tar czf - /local/dir | ssh ubuntu@{{DEV_HOST}} "cd /data && tar xzf -"
 ```
 
 ---
@@ -75,17 +75,17 @@ python3 fetch_arxiv.py            # → arxiv_raw.json
 python3 build_report.py           # → daily_paper_YYYY-MM-DD.md
 ```
 
-> `fetch_arxiv.py` / `build_report.py` 已部署在 dev 机器 `/workspace/daily-paper/`（2026-08-24 初始化完成，本地源在 `web_system/scripts/mcp-fallback/`）。若需要把 `arxiv_raw.json` 拉回本地处理，用 `scp ubuntu@175.27.189.123:/workspace/daily-paper/arxiv_raw.json /tmp/`。
+> `fetch_arxiv.py` / `build_report.py` 已部署在 dev 机器 `/workspace/daily-paper/`（2026-08-24 初始化完成，本地源在 `web_system/scripts/mcp-fallback/`）。若需要把 `arxiv_raw.json` 拉回本地处理，用 `scp ubuntu@{{DEV_HOST}}:/workspace/daily-paper/arxiv_raw.json /tmp/`。
 
 ### 2.2 目录/脚本初始化（已就绪，仅脚本损坏时参考）
 
 `/workspace/daily-paper` 与两个脚本已在 dev 机器就绪。若脚本损坏需重新上传：
 ```bash
-ssh ubuntu@175.27.189.123 "mkdir -p /workspace/daily-paper"
-scp /Users/geekwen/workspace/web_system/scripts/mcp-fallback/fetch_arxiv.py \
-    /Users/geekwen/workspace/web_system/scripts/mcp-fallback/build_report.py \
-    ubuntu@175.27.189.123:/tmp/
-ssh ubuntu@175.27.189.123 "sudo mv /tmp/fetch_arxiv.py /tmp/build_report.py /workspace/daily-paper/ && sudo chown -R ubuntu:ubuntu /workspace/daily-paper"
+ssh ubuntu@{{DEV_HOST}} "mkdir -p /workspace/daily-paper"
+scp {{WORKSPACE_DIR}}/scripts/mcp-fallback/fetch_arxiv.py \
+    {{WORKSPACE_DIR}}/scripts/mcp-fallback/build_report.py \
+    ubuntu@{{DEV_HOST}}:/tmp/
+ssh ubuntu@{{DEV_HOST}} "sudo mv /tmp/fetch_arxiv.py /tmp/build_report.py /workspace/daily-paper/ && sudo chown -R ubuntu:ubuntu /workspace/daily-paper"
 ```
 
 ---
@@ -95,7 +95,7 @@ ssh ubuntu@175.27.189.123 "sudo mv /tmp/fetch_arxiv.py /tmp/build_report.py /wor
 当 `fetch_arxiv.py` 不可用时，直接在 dev 机器上用 curl 拉 arXiv：
 
 ```bash
-ssh ubuntu@175.27.189.123 \
+ssh ubuntu@{{DEV_HOST}} \
   "curl -sL -A 'Mozilla/5.0' 'http://export.arxiv.org/api/query?search_query=cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.CV+OR+cat:cs.LG&sortBy=submittedDate&sortOrder=descending&start=0&max_results=10' -o /workspace/daily-paper/arxiv_raw.xml && echo done"
 ```
 
@@ -114,7 +114,7 @@ dev 机器上 content-hub 提供公众号 REST 接口（无需 MCP，直接 curl
 
 ```bash
 # 建草稿
-ssh ubuntu@175.27.189.123 "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
+ssh ubuntu@{{DEV_HOST}} "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
   -H 'Content-Type: application/json' \
   -d '{\"title\":\"标题\",\"html\":\"<body><p>正文</p></body>\"}'"
 
@@ -123,7 +123,7 @@ ssh ubuntu@175.27.189.123 "curl -s -X POST http://127.0.0.1:6007/api/content/wec
 
 **封面约束（必读）**：`html` 正文首段必须包含公网图片 `<img src="https://..." />`，否则服务端返回「缺少封面」错误。推荐占位图：`https://dummyimage.com/800x400/4A90E2/fff.png&text=arXiv+Daily`。
 
-**凭证**：dev 公众号 AppID 为 `wxc945245618717a06`（content-hub 进程环境已配置 WECHAT_MP_APP_ID/SECRET），无需在脚本中填密钥。
+**凭证**：dev 公众号 AppID 为 `{{WECHAT_MP_APP_ID}}`（content-hub 进程环境已配置 WECHAT_MP_APP_ID/SECRET），无需在脚本中填密钥。
 
 ---
 

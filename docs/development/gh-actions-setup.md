@@ -50,7 +50,7 @@ grep -c '^RELEASE_HOOK_SECRET=' ~/web_system_release/servers/deploy-console/.env
 所以 runner 要用的稳定路径是：
 
 ```
-/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin
+$HOME/.local/share/fnm/node-versions/v20.20.2/installation/bin
 ```
 
 ### 1.2 安装 self-hosted runner
@@ -90,7 +90,7 @@ runner **不读你的 shell rc**（`.zshrc` / `.zprofile` 都不生效），所�
 写一个 `~/actions-runner/.env`（runner 启动时自动加载）：
 
 ```
-PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+PATH=$HOME/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 ```
 
 生效：
@@ -103,7 +103,7 @@ cd ~/actions-runner && ./svc.sh stop && ./svc.sh start
 
 ```bash
 cd ~/actions-runner && ./run.sh --version >/dev/null 2>&1; \
-  env -i HOME=$HOME PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/bin:/bin \
+  env -i HOME=$HOME PATH=$HOME/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/bin:/bin \
   bash -lc 'node -v; pm2 -v'
 ```
 
@@ -183,7 +183,7 @@ curl -s "http://127.0.0.1:6200/api/hooks/pipelines/<某个 jobId>" \
 **方式 B（API，便于脚本化）**：
 
 ```bash
-cd /Users/geekwen/workspace1/web_system
+cd {{WORKSPACE_DIR}}
 PAT=$(grep '^GITHUB_PR_TOKEN=' .env | cut -d= -f2-)      # 需要 repo 权限，见 §2.4
 curl -s -X POST -H "Authorization: Bearer $PAT" \
   https://api.github.com/repos/web5/web_system/actions/runners/registration-token \
@@ -225,7 +225,7 @@ curl -s -H "Authorization: Bearer $PAT" https://api.github.com/user \
 |---|---|---|
 | Secret | `RELEASE_HOOK_URL` | `http://127.0.0.1:6200` |
 | Secret | `RELEASE_HOOK_SECRET` | §2.2 取到的 64 位 hex |
-| Variable | `RELEASE_DIR` | `/Users/geekwen/web_system_release`（可选） |
+| Variable | `RELEASE_DIR` | `{{RELEASE_DIR}}`（可选） |
 
 **Settings → Actions → General → Workflow permissions**：选 **Read and write permissions**
 （`auto-pr` 要 `pull-requests: write` 才能建 PR；仓库设置是上限，设成只读时 workflow 里声明再高也无效）
@@ -245,7 +245,7 @@ curl -s -H "Authorization: Bearer $PAT" https://api.github.com/user \
 
 # ② PATH 正确
 cd ~/actions-runner && ./svc.sh status
-env -i HOME=$HOME PATH=/Users/geekwen/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/bin:/bin \
+env -i HOME=$HOME PATH=$HOME/.local/share/fnm/node-versions/v20.20.2/installation/bin:/usr/bin:/bin \
   bash -lc 'node -v && pm2 -v'
 
 # ③ 平台活着

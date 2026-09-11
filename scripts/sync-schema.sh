@@ -34,7 +34,7 @@ case "$TARGET" in
     ;;
   prod)
     SSH_ALIAS="kedou-prod"
-    DB_HOST="${PROD_DB_HOST:-172.16.16.10}"; DB_PORT="${PROD_DB_PORT:-3306}"
+    DB_HOST="${PROD_DB_HOST:?请在 scripts/.env.deploy 配置 PROD_DB_HOST}"; DB_PORT="${PROD_DB_PORT:-3306}"
     DB_USER="${PROD_DB_USER:-root}"; DB_PASS="${PROD_DB_PASS:-}"
     ;;
   *) echo "目标必须为 dev|prod"; exit 1 ;;

@@ -9,7 +9,7 @@
 
 ### 1. 构建 Portal 应用
 ```bash
-cd /home/ubuntu/.openclaw/workspace/web_system/apps/portal
+cd $HOME/.openclaw/workspace/web_system/apps/portal
 pnpm install
 npx vite build  # 跳过类型检查
 ```
@@ -25,7 +25,7 @@ apps/portal/dist/
 
 ### 2. 上传到 246 服务器
 ```bash
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/portal/
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/portal/
 ```
 
 **上传结果：**
@@ -39,7 +39,7 @@ rsync -avz dist/ root@106.52.176.246:/root/web_system/static/portal/
 
 ### 3. 重启 Gateway 服务
 ```bash
-ssh root@106.52.176.246 "pm2 restart gateway"
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 ### 4. 验证访问
@@ -92,15 +92,15 @@ curl -sk -X POST https://admin.kedouai.com/api/auth/login \
 ### 更新 Admin 应用
 ```bash
 cd apps/admin-web && pnpm build
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/admin/
-ssh root@106.52.176.246 "pm2 restart gateway"
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/admin/
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 ### 更新 Portal 应用
 ```bash
 cd apps/portal && npx vite build
-rsync -avz dist/ root@106.52.176.246:/root/web_system/static/portal/
-ssh root@106.52.176.246 "pm2 restart gateway"
+rsync -avz dist/ root@{{PROD_HOST}}:/root/web_system/static/portal/
+ssh root@{{PROD_HOST}} "pm2 restart gateway"
 ```
 
 ---

@@ -77,13 +77,13 @@ pnpm dev        # → http://localhost:5173/portal/
 ### 启动 / 重载
 ```bash
 # 首次启动（80/443 需 root）
-sudo /Users/geekwen/local/nginx/sbin/nginx
+sudo $HOME/local/nginx/sbin/nginx
 
 # 改配置后重载
-sudo /Users/geekwen/local/nginx/sbin/nginx -s reload
+sudo $HOME/local/nginx/sbin/nginx -s reload
 
 # 校验配置（改配置前必跑）
-/Users/geekwen/local/nginx/sbin/nginx -t
+$HOME/local/nginx/sbin/nginx -t
 ```
 
 ### 访问地址（需 /etc/hosts 加域名映射）
@@ -101,7 +101,7 @@ sudo /Users/geekwen/local/nginx/sbin/nginx -s reload
 > ```bash
 > sudo security add-trusted-cert -d -r trustRoot \
 >   -k /Library/Keychains/System.keychain \
->   /Users/geekwen/local/nginx/conf/ssl/dev.kedouai.com.crt
+>   $HOME/local/nginx/conf/ssl/dev.kedouai.com.crt
 > ```
 > 信任后 `https://local.kedouai.com/admin/` 正常（未登录会跳 `/login?redirect=/admin/`，登录即可）。
 
@@ -168,7 +168,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:6000/static/modules/<m
 - `RELEASE_TAG` 必须是**新值**（不能复用旧 hash），否则产物覆盖旧目录、entry 不变，浏览器缓存可能拉到旧的。
 - 模块 JS/CSS 由 nginx `/static/modules/` 直出（带 hash 强缓存 1 年）；版本目录名一变，manifest 的 entry 变，浏览器即拉新版，无需清浏览器缓存。
 - **gateway TTL 10s 版本缓存**：改完表后最多 10s manifest 自动刷新；若 12s 后仍旧，`pm2 restart web-gateway` 清内存缓存兜底。
-- **DB 密码**：本地 MySQL `root/KedouLocal@2026`（见各服务 `.env`）。生产走 deploy-console 正常发布流程，勿手改。
+- **DB 密码**：本地 MySQL `root/{{LOCAL_DB_PASSWORD}}`（见各服务 `.env`）。生产走 deploy-console 正常发布流程，勿手改。
 - **AI 智能体铁律**：改完任何微前端前端源码（admin/portal/mcp-admin）后，必须执行上述「构建 → 拷贝 → 更新版本表（web_system_deploy 库）→ 验证/清缓存」四步，不能只改源码就宣称已生效。
 
 **当前微前端模块**：`shell`（基座，非业务）、`admin`、`portal`、`mcp-admin`。它们的 vite 配置统一走 `scripts/vite-micro-frontend.mjs` 的 `microFrontendConfig({ name })`（`mode=mf` 分支），产物结构一致。
@@ -249,7 +249,7 @@ const AGENT_SCENE_MAP: Record<string, string> = {
 ### 5.1 提交前：确认改动范围
 
 ```bash
-cd /Users/geekwen/workspace/web_system
+cd {{WORKSPACE_DIR}}
 git branch --show-current        # 确认当前分支（如 feature/xxx）
 git status --short               # 看改动，区分本次工作 vs 无关改动
 ```

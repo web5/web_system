@@ -27,13 +27,13 @@
 | 变量 | 示例 | 来源 |
 |---|---|---|
 | `GIT_COMMIT` | `1a2b3c4` | 平台（纯短哈希；缺省用 `${COMMIT_ID##*/}` 兜底） |
-| `REMOTE_HOST` | `175.27.189.123` | `deploy_servers.dev-default.host` |
+| `REMOTE_HOST` | `{{DEV_HOST}}` | `deploy_servers.dev-default.host` |
 | `REMOTE_USER` | `ubuntu` | `…sshUser` |
-| `REMOTE_KEY` | `/Users/geekwen/.ssh/id_ed25519_servers` | `…sshKeyPath`（**平台展开为绝对路径**） |
+| `REMOTE_KEY` | `{{SSH_KEY_PATH}}` | `…sshKeyPath`（**平台展开为绝对路径**） |
 | `REMOTE_DIR` | `/data/web_system` | `…remoteDir` |
 | `REMOTE_ARTIFACT_DIR` | `/data/web_system/servers/gateway/public/static/modules/admin/default/1a2b3c4` | 平台拼装 |
 | `REMOTE_GATEWAY_URL` | `https://dev.kedouai.com` | 配置中心（env=dev） |
-| `REMOTE_CONSOLE_URL` | `http://175.27.189.123:6200` | 配置中心（env=dev） |
+| `REMOTE_CONSOLE_URL` | `http://{{DEV_HOST}}:6200` | 配置中心（env=dev） |
 | `RELEASE_HOOK_SECRET` | `15ca…` | `.env`（两端同值） |
 
 > ⚠️ `COMMIT_ID` = **完整引用**（`default/1a2b3c4`），用于产物路径与 manifest 断言；
@@ -138,7 +138,7 @@ echo "[git] 就绪 HEAD=$(git rev-parse --short HEAD) branch=$(git rev-parse --a
 - **脚本**：管「本次拉码动作正确」—— 前置校验 + 自证，错误在 **git 阶段**暴露，日志自带可操作提示（先 push / 核对分支名）
 - **平台**：管「结果与入参一致」—— 回填 `gitCommit`/`versionTag` 并对入参做全哈希断言；**对未 seed 脚本走内置的模板同样生效**（脚本可被换掉，端到端契约不能只靠脚本）
 
-**作用目录 / 谁执行**（沿用现状，未变）：执行进程自己的 `RELEASE_DIR` —— 本机 `/Users/geekwen/web_system_release`；dev 机 `/data/web_system`（git clone、master、origin 可达，已实测）。本机流水线跑本机脚本（服务本机构建），远端 console 跑它自己的脚本，本机**不** ssh 过去跑 git。
+**作用目录 / 谁执行**（沿用现状，未变）：执行进程自己的 `RELEASE_DIR` —— 本机 `{{RELEASE_DIR}}`；dev 机 `/data/web_system`（git clone、master、origin 可达，已实测）。本机流水线跑本机脚本（服务本机构建），远端 console 跑它自己的脚本，本机**不** ssh 过去跑 git。
 
 **本期远端是否触发**：**否** —— hook 带 `commitId` + S1 已投递产物 → 远端 `check` 命中 → `reuseArtifact=true` → `git`/`build`/`upload`/`restart` 全跳过；仅当远端无该产物时才会真正拉码（即 design R2）。
 
@@ -409,11 +409,11 @@ REMOTE
 set -euo pipefail
 
 BRANCH="${BRANCH:-master}"
-RELEASE_DIR="${RELEASE_DIR:-/Users/geekwen/web_system_release}"
-REMOTE_HOST="175.27.189.123"; REMOTE_USER="ubuntu"; REMOTE_KEY="$HOME/.ssh/id_ed25519_servers"
+RELEASE_DIR="${RELEASE_DIR:-{{RELEASE_DIR}}}"
+REMOTE_HOST="{{DEV_HOST}}"; REMOTE_USER="ubuntu"; REMOTE_KEY="$HOME/.ssh/id_ed25519_servers"
 REMOTE_DIR="/data/web_system"
 REMOTE_GATEWAY="https://dev.kedouai.com"
-REMOTE_CONSOLE="http://175.27.189.123:6200"
+REMOTE_CONSOLE="http://{{DEV_HOST}}:6200"
 MODULE_KEY="admin"; MODULE_DIR="admin"; PUBLIC_PATH="admin"; TPL_KEY="default"
 : "${RELEASE_HOOK_SECRET:?请先 export RELEASE_HOOK_SECRET（与 dev 机同值）}"
 
@@ -476,20 +476,20 @@ echo "[verify] manifest=$VER（期望 $TPL_KEY/$C）artifact=HTTP $CODE"
 curl -s "http://127.0.0.1:6200/api/pipelines/<jobId>" -H "Authorization: Bearer $JWT" | jq '.logs[-20:]'
 
 # 远端产物是否存在
-ssh -i ~/.ssh/id_ed25519_servers ubuntu@175.27.189.123 \
+ssh -i ~/.ssh/id_ed25519_servers ubuntu@{{DEV_HOST}} \
   'ls -l /data/web_system/servers/gateway/public/static/modules/admin/default/'
 
 # 远端指针
-ssh -i ~/.ssh/id_ed25519_servers ubuntu@175.27.189.123 \
-  'MYSQL_PWD=web_system_root_2026 mysql -h127.0.0.1 -uroot web_system -e \
+ssh -i ~/.ssh/id_ed25519_servers ubuntu@{{DEV_HOST}} \
+  'MYSQL_PWD={{DEV_DB_PASSWORD}} mysql -h127.0.0.1 -uroot web_system -e \
    "select env_id,module_key,current_version,deployed_at from deploy_deployments where module_key=\"admin\";"'
 
 # 远端 manifest（TTL 10s 后）
 curl -s https://dev.kedouai.com/__manifest__ | python3 -m json.tool | head -20
 
 # 远端流水线记录
-ssh -i ~/.ssh/id_ed25519_servers ubuntu@175.27.189.123 \
-  'MYSQL_PWD=web_system_root_2026 mysql -h127.0.0.1 -uroot web_system -e \
+ssh -i ~/.ssh/id_ed25519_servers ubuntu@{{DEV_HOST}} \
+  'MYSQL_PWD={{DEV_DB_PASSWORD}} mysql -h127.0.0.1 -uroot web_system -e \
    "select id,env,module_key,status,version_tag,start_time from deploy_pipelines order by start_time desc limit 5;"'
 ```
 

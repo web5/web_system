@@ -11,7 +11,7 @@
   <rect x="0" y="0" width="1400" height="920" fill="#f8fafc"/>
 
   <text x="40" y="64" font-size="26" font-weight="700" fill="#0f172a">web_system 网络架构 · dev 环境流量与运维链路</text>
-  <text x="40" y="92" font-size="13" fill="#64748b">GATEWAY 42.194.200.69 ｜ DEV 175.27.189.123 ｜ PROD 106.52.176.246 ｜ 更新 2026-08-15</text>
+  <text x="40" y="92" font-size="13" fill="#64748b">GATEWAY {{GATEWAY_HOST}} ｜ DEV {{DEV_HOST}} ｜ PROD {{PROD_HOST}} ｜ 更新 2026-08-15</text>
 
   <!-- ===== Zone A 客户端 ===== -->
   <rect x="40" y="150" width="220" height="240" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
@@ -26,10 +26,10 @@
   <!-- ===== Zone B GATEWAY ===== -->
   <rect x="320" y="150" width="300" height="430" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
   <text x="470" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">GATEWAY 机 · 公网入口</text>
-  <text x="470" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">42.194.200.69 · root</text>
+  <text x="470" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">{{GATEWAY_HOST}} · root</text>
 
   <rect x="350" y="212" width="240" height="30" rx="15" fill="#ede9fe" stroke="#c4b5fd"/>
-  <text x="470" y="232" text-anchor="middle" font-size="10.5" fill="#5b21b6">DNS：dev.kedouai.com → 42.194.200.69</text>
+  <text x="470" y="232" text-anchor="middle" font-size="10.5" fill="#5b21b6">DNS：dev.kedouai.com → {{GATEWAY_HOST}}</text>
 
   <rect x="350" y="255" width="240" height="80" rx="10" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.8"/>
   <text x="470" y="287" text-anchor="middle" font-size="14" font-weight="700" fill="#1e3a8a">nginx · 反向代理</text>
@@ -50,7 +50,7 @@
   <!-- ===== Zone C DEV ===== -->
   <rect x="680" y="150" width="380" height="430" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
   <text x="870" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">DEV 服务器</text>
-  <text x="870" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">175.27.189.123 · ubuntu</text>
+  <text x="870" y="198" text-anchor="middle" font-size="11.5" fill="#64748b">{{DEV_HOST}} · ubuntu</text>
 
   <rect x="710" y="212" width="330" height="30" rx="15" fill="#fff7ed" stroke="#fdba74"/>
   <text x="875" y="232" text-anchor="middle" font-size="10.5" fill="#9a3412">腾讯云安全组放行：22 / 6000 / 6006 / 6200</text>
@@ -84,7 +84,7 @@
   <!-- ===== Zone D PROD ===== -->
   <rect x="1100" y="330" width="260" height="170" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
   <text x="1230" y="360" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">PROD 服务器</text>
-  <text x="1230" y="378" text-anchor="middle" font-size="11.5" fill="#64748b">106.52.176.246 · root</text>
+  <text x="1230" y="378" text-anchor="middle" font-size="11.5" fill="#64748b">{{PROD_HOST}} · root</text>
   <rect x="1125" y="400" width="210" height="80" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
   <text x="1230" y="432" text-anchor="middle" font-size="13" font-weight="700" fill="#1e40af">pm2 服务 × 6</text>
   <text x="1230" y="454" text-anchor="middle" font-size="11" fill="#1e40af">（线上业务）</text>

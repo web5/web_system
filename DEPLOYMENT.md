@@ -1,13 +1,17 @@
 # Web System 部署指南
 
+> ⚠️ **占位符说明**：本文中的 `{{GATEWAY_HOST}}` / `{{DEV_HOST}}` / `{{PROD_HOST}}` / `{{DEV_INTERNAL_HOST}}` /
+> `{{PROD_DB_HOST}}` / `{{DEV_DB_PASSWORD}}` / `{{JWT_SECRET}}` 等均为**占位符**。真实机器地址与凭据一律通过
+> `.env` / `.env.production` 注入（模板见 `.env.example`、`scripts/.env.deploy.example`），不写入仓库。
+
 ## 架构总览
 
 ```
 dev.kedouai.com
       ↓ DNS
-42.194.200.69 (Nginx 网关服务器, CentOS)
+{{GATEWAY_HOST}} (Nginx 网关服务器, CentOS)
       ↓ HTTPS 代理
-175.27.189.123:3000 / 10.206.16.5:3000 (内网)
+{{DEV_HOST}}:3000 / {{DEV_INTERNAL_HOST}}:3000 (内网)
       │
       ├── /                 → 301 重定向 → /portal/
       ├── /portal/*         → Portal SPA 回退 → public/portal/index.html
@@ -29,8 +33,8 @@ dev.kedouai.com
 
 | 角色 | IP | 用户 | 系统 |
 |------|-----|------|------|
-| Nginx 网关 | 42.194.200.69 | root | CentOS 5.4 |
-| 后端服务器 | 175.27.189.123 (公网) / 10.206.16.5 (内网) | ubuntu | Ubuntu 24.04 |
+| Nginx 网关 | {{GATEWAY_HOST}} | root | CentOS 5.4 |
+| 后端服务器 | {{DEV_HOST}} (公网) / {{DEV_INTERNAL_HOST}} (内网) | ubuntu | Ubuntu 24.04 |
 
 ## 端口分配
 
@@ -44,7 +48,7 @@ dev.kedouai.com
 | 3306 | MySQL | 本地数据库 |
 | 6379 | Redis | 系统原生运行 |
 
-## 一、后端服务器部署 (175.27.189.123)
+## 一、后端服务器部署 ({{DEV_HOST}})
 
 ### 1. 项目目录
 
@@ -74,14 +78,14 @@ AI_SERVICE_URL=http://127.0.0.1:3003
 SYSTEM_SERVICE_URL=http://127.0.0.1:3004
 PUBLIC_URL=http://dev.kedouai.com
 CORS_ORIGINS=*
-JWT_SECRET=kedouai-prod-jwt-secret-2026
+JWT_SECRET={{JWT_SECRET}}
 JWT_EXPIRES_IN=7d
 REDIS_URL=redis://127.0.0.1:6379
 DB_TYPE=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USERNAME=root
-DB_PASSWORD=web_system_root_2026
+DB_PASSWORD={{DEV_DB_PASSWORD}}
 DB_DATABASE=web_system
 ```
 
@@ -160,10 +164,10 @@ pm2 restart all --update-env
 服务启动即崩（进程 online 但端口不监听）。
 
 ```bash
-# 开发服务器（175.27.189.123）
+# 开发服务器（{{DEV_HOST}}）
 ./scripts/apply-migrations.sh dev
 
-# 生产服务器（106.52.176.246，DB 在腾讯云内网 172.16.16.10）
+# 生产服务器（{{PROD_HOST}}，DB 在腾讯云内网 {{PROD_DB_HOST}}）
 ./scripts/apply-migrations.sh prod
 
 # 本机（root 有密码时）
@@ -188,7 +192,7 @@ DRY_RUN=1 ./scripts/apply-migrations.sh dev
 - **新增迁移**：在 `migrations/` 下按 `NNNN_描述.sql` 命名，全部使用
   `CREATE TABLE IF NOT EXISTS` / 可重复执行语句，提交后即随发布自动应用
 
-## 二、Nginx 网关服务器 (42.194.200.69)
+## 二、Nginx 网关服务器 ({{GATEWAY_HOST}})
 
 ### 1. 配置 HTTPS 代理
 
@@ -209,7 +213,7 @@ server {
     ssl_certificate_key /etc/nginx/ssl/dev.kedouai.com/privkey.pem;
 
     location / {
-        proxy_pass http://175.27.189.123:3000;
+        proxy_pass http://{{DEV_HOST}}:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -264,7 +268,7 @@ Express 中间件处理前端路由：
 检查 MySQL 是否在运行：
 ```bash
 sudo systemctl status mysql
-mysql -h 127.0.0.1 -u root -pweb_system_root_2026 -e "SELECT 1;"
+mysql -h 127.0.0.1 -u root -p{{DEV_DB_PASSWORD}} -e "SELECT 1;"
 ```
 
 ### 2. 前端构建失败（vue-tsc 错误）
@@ -299,7 +303,7 @@ git commit -m "feat: xxx"
 git push
 
 # 服务器更新
-ssh ubuntu@175.27.189.123
+ssh ubuntu@{{DEV_HOST}}
 cd /data/web_system
 git pull
 # 按"三、更新部署"步骤执行

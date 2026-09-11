@@ -3,16 +3,22 @@
 # check-env.sh — 环境配置巡检
 # 用法：
 #   ./scripts/check-env.sh            # 对比本机（当前目录）与 .env.example
-#   ./scripts/check-env.sh dev        # 对比 dev 服务器（175.27.189.123）
-#   ./scripts/check-env.sh prod       # 对比 prod 服务器（106.52.176.246）
+#   ./scripts/check-env.sh dev        # 对比 dev 服务器
+#   ./scripts/check-env.sh prod       # 对比 prod 服务器
 # 输出：缺失变量 / 空值变量 / 与模板差异
+# 说明：服务器地址从 scripts/.env.deploy 读取（DEV_SERVER / PROD_SERVER），缺失即报错
 # ============================================================
 set -uo pipefail
 
-DEV_HOST="ubuntu@175.27.189.123"
-PROD_HOST="root@106.52.176.246"
-REMOTE_PATH="/data/web_system/.env.production"
-TEMPLATE="$(cd "$(dirname "$0")/.." && pwd)/.env.example"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1090
+[ -f "$SCRIPT_DIR/.env.deploy" ] && source "$SCRIPT_DIR/.env.deploy"
+
+DEV_HOST="${DEV_SERVER:-}"
+PROD_HOST="${PROD_SERVER:-}"
+DEV_REMOTE_PATH="${DEV_REMOTE_DIR:-/data/web_system}/.env.production"
+PROD_REMOTE_PATH="${PROD_REMOTE_DIR:-/data/web_system}/.env.production"
+TEMPLATE="$(cd "$SCRIPT_DIR/.." && pwd)/.env.example"
 
 usage() { echo "用法: $0 [dev|prod]"; exit 1; }
 
@@ -29,9 +35,11 @@ ENV_CONTENT=""
 if [ $# -eq 0 ]; then
   ENV_CONTENT="$(cat .env.production 2>/dev/null || echo '')"
 elif [ "$1" = "dev" ]; then
-  ENV_CONTENT="$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$DEV_HOST" "cat $REMOTE_PATH" 2>/dev/null || echo '')"
+  : "${DEV_HOST:?未在 scripts/.env.deploy 配置 DEV_SERVER（见 .env.deploy.example）}"
+  ENV_CONTENT="$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$DEV_HOST" "cat $DEV_REMOTE_PATH" 2>/dev/null || echo '')"
 elif [ "$1" = "prod" ]; then
-  ENV_CONTENT="$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$PROD_HOST" "cat $REMOTE_PATH" 2>/dev/null || echo '')"
+  : "${PROD_HOST:?未在 scripts/.env.deploy 配置 PROD_SERVER（见 .env.deploy.example）}"
+  ENV_CONTENT="$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$PROD_HOST" "cat $PROD_REMOTE_PATH" 2>/dev/null || echo '')"
 else
   usage
 fi

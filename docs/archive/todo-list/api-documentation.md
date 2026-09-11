@@ -433,7 +433,7 @@ export const todoApi = {
 ```bash
 # 启动 Docker MySQL
 docker run -d --name web-system-mysql -p 3306:3306 \
-  -e MYSQL_ROOT_PASSWORD=web_system_root_2026 \
+  -e MYSQL_ROOT_PASSWORD={{DEV_DB_PASSWORD}} \
   -e MYSQL_DATABASE=web_system \
   mysql:8.0
 

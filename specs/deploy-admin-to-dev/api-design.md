@@ -23,7 +23,7 @@
 
 | 项 | 值 |
 |---|---|
-| 完整地址 | `http://175.27.189.123:6200/api/hooks/release` |
+| 完整地址 | `http://{{DEV_HOST}}:6200/api/hooks/release` |
 | 方法 | `POST` |
 | 鉴权 | **HMAC-SHA256**（不走 JWT；CI 场景无登录态） |
 | 内容类型 | `application/json` |
@@ -120,7 +120,7 @@ check 阶段：fullRef = <templateKey>/<commitId> = default/1a2b3c4
 
 | 项 | 值 |
 |---|---|
-| 完整地址 | `http://175.27.189.123:6200/api/internal/release/register` |
+| 完整地址 | `http://{{DEV_HOST}}:6200/api/internal/release/register` |
 | 鉴权 | `X-Internal-Key: <INTERNAL_API_KEY>`（服务间密钥，已在两端 `.env` 一致） |
 | 实现位置 | `servers/deploy-console/src/registry/`（新增 controller）→ 复用 `ReleaseRegistryService.registerVersion` + `setPointer` |
 | 审计 | 写 `audit_logs`：`action='release.register.remote'`，`user=internal:<source>` |
@@ -167,7 +167,7 @@ check 阶段：fullRef = <templateKey>/<commitId> = default/1a2b3c4
 
 | 阶段 | 行为 |
 |---|---|
-| upload | 投递到 `175.27.189.123:/data/web_system/…`（脚本） |
+| upload | 投递到 `{{DEV_HOST}}:/data/web_system/…`（脚本） |
 | version/pointer | 调远端 ①（接口），本机库不再写入 |
 | verify | 断言 `https://dev.kedouai.com/__manifest__` + 产物 200 |
 | 日志 | 每阶段打印实际目标机与远端 jobId |
@@ -216,11 +216,11 @@ curl -s -X POST http://127.0.0.1:6006/mcp/tools/call \
 
 | 位置 | key | dev 值 | 说明 |
 |---|---|---|---|
-| 配置中心（scope=env, env_id=dev） | `REMOTE_CONSOLE_URL` | `http://175.27.189.123:6200` | ① 的调用地址 |
+| 配置中心（scope=env, env_id=dev） | `REMOTE_CONSOLE_URL` | `http://{{DEV_HOST}}:6200` | ① 的调用地址 |
 | 配置中心（scope=env, env_id=dev） | `REMOTE_GATEWAY_URL` | `https://dev.kedouai.com` | verify 断言的地址 |
 | 本机 `.env` | `RELEASE_HOOK_SECRET` | （与 dev 机同值） | HMAC 密钥；不写日志 |
 | 本机 `.env` | `PIPELINE_UPLOAD_TARGET` | `local`（**保持**） | 仅作为内置规则兜底，不再决定 dev 走向 |
-| DB `deploy_servers` | `dev-default` | `175.27.189.123 / ubuntu / ~/.ssh/id_ed25519_servers / /data/web_system` | 已存在 |
+| DB `deploy_servers` | `dev-default` | `{{DEV_HOST}} / ubuntu / ~/.ssh/id_ed25519_servers / /data/web_system` | 已存在 |
 
 ---
 

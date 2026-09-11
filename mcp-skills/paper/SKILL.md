@@ -98,7 +98,7 @@ agent_created: true
 
 ### 4.2 降级脚本
 
-脚本路径：`/Users/geekwen/workspace/web_system/scripts/mcp-fallback/paper-fallback-publish.sh`
+脚本路径：`{{WORKSPACE_DIR}}/scripts/mcp-fallback/paper-fallback-publish.sh`
 
 | 参数 | 说明 |
 |------|------|
@@ -108,7 +108,7 @@ agent_created: true
 | `--max 5` | 论文条数（默认 5） |
 | `--dry-run` | 只打印不执行 |
 
-行为：SSH 到 dev 机器（`ubuntu@175.27.189.123`）→ 探测 content-hub（:6007）+ arXiv 可达性 → 拉 arXiv Atom XML → 解析为中英双语 HTML（模板化中文导读）→ 调 `/api/content/wechat/draft`（或 `/publish`）。
+行为：SSH 到 dev 机器（`ubuntu@{{DEV_HOST}}`）→ 探测 content-hub（:6007）+ arXiv 可达性 → 拉 arXiv Atom XML → 解析为中英双语 HTML（模板化中文导读）→ 调 `/api/content/wechat/draft`（或 `/publish`）。
 
 ### 4.3 降级执行约束
 
