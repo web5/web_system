@@ -80,3 +80,19 @@ export function parseReleaseRef(ref: string): ReleaseRef {
 export function buildReleaseRef(pipelineKey: string | undefined, version: string): string {
   return pipelineKey ? `${pipelineKey}/${version}` : version;
 }
+
+/**
+ * 从版本引用取**纯 commit**（`SubmitPipelineDto.commitId` 的归一化入口）。
+ *
+ * 背景：控制台「Commit」下拉的数据来自版本列表（`/pipelines/meta/releases`），
+ * 而版本引用是**完整引用**（`<templateKey>/<commit>`，如 `default/1a2b3c4`）；
+ * 提交接口按「纯短哈希」设计（白名单 `^[A-Za-z0-9._-]{4,64}$`，`/` 非法）——
+ * 直接透传就会出现「目标 commit 含非法字符: default/1a2b3c4」400（线上已复现）。
+ *
+ * 故在入口统一归一化：完整引用取末段，纯 commit 原样返回；空值返回 undefined（=分支最新）。
+ */
+export function toCommitId(ref?: string | null): string | undefined {
+  const v = (ref ?? '').trim();
+  if (!v) return undefined;
+  return parseReleaseRef(v).version;
+}
