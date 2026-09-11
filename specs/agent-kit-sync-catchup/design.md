@@ -11,6 +11,7 @@
 | 2026-09-11 | v0.1 | 初稿：两个缺口 + 三步动作 + V1…V6 |
 | 2026-09-11 | v0.2 | 三个 `karpathy-*` symlink 确认同批处置；A1 机制定为 `git merge origin/sync/agent-kit`；补分发模型关系（本项目走 vendor 模式 + 保护清单） |
 | 2026-09-11 | v0.3 | **A3 执行完成**（三个 symlink 退役，`karpathy-llm-wiki` 改为真实目录镜像）；白名单 `RUN_SKILLS` 18→17、`KIT_SKILLS` 13→14；S7 移除已失效的 `karpathy-*` 豁免；`CODEBUDDY.md` §3.2/§3.3/§3.7 同步 |
+| 2026-09-11 | v0.4 | **知识库数据落点已定**：`raw/` + `wiki/` 固定在**项目根**（不改技能路径约定）、随仓库入库、与 `docs/` 按「外部输入编译 vs 项目自产」划界；约定落在 `.codebuddy/CODEBUDDY.md` §1 + §3.3（单一事实源），本文不再复述 |
 
 ---
 
