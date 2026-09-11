@@ -36,7 +36,7 @@ for a in "$@"; do
   case "$a" in
     --skip-sync) SKIP_SYNC=1 ;;
     --skip-health) SKIP_HEALTH=1 ;;
-    *) echo "未知参数: $a（支持 --skip-sync / --skip-health）" >&2; exit 2 ;;
+    *) echo "未知参数: ${a}（支持 --skip-sync / --skip-health）" >&2; exit 2 ;;
   esac
 done
 
