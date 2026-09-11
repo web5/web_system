@@ -76,8 +76,35 @@ function extractPathParams(path: string): string[] {
   return [...matches].map((m) => m[1]);
 }
 
+/** 调用后台 HTTP API 的统一错误结构 */
+export interface CallApiError {
+  error: {
+    type: 'http' | 'network' | 'timeout' | 'parse';
+    status?: number;
+    message: string;
+    detail?: string;
+  };
+}
+
+/** 把参数值序列化为字符串（修复 array/object 被 String() 压成 [object Object] 的 bug） */
+function serializeParamValue(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return JSON.stringify(v);
+}
+
+/** 是否值得重试：网络异常 / 超时 / 5xx 才重试，4xx 不重试 */
+function isRetryable(status: number | undefined): boolean {
+  return status === undefined || status >= 500;
+}
+
 /**
- * 调用后台 HTTP API。
+ * 调用后台 HTTP API（带重试、退避与统一错误结构）。
+ *
+ * - 网络错误 / 超时 / 5xx 自动重试 `retries` 次（默认 2），退避 `retryBackoffMs * 2^attempt`
+ * - 4xx 不重试（参数/鉴权类错误重试无意义）
+ * - 失败统一返回 `{ error: { type, status?, message, detail? } }`
+ *
  * @param opts.passThroughToken 当前调用者的凭证（auth.type === 'pass-through' 时以 X-Mcp-Key 透传）
  */
 export async function callApi(
@@ -89,6 +116,8 @@ export async function callApi(
   const baseUrl = (moduleConfig.base_url ?? '').replace(/\/$/, '');
   const method = (toolDef.method ?? 'GET').toUpperCase();
   const timeout = Number(moduleConfig.timeout ?? 30) * 1000;
+  const maxRetries = Math.max(0, Number(moduleConfig.retries ?? 2));
+  const backoffBase = Number(moduleConfig.retryBackoffMs ?? 300);
   let path = toolDef.path ?? '/';
 
   // 替换 path 参数
@@ -98,7 +127,7 @@ export async function callApi(
   for (const [key, value] of Object.entries(args)) {
     if (value === undefined || value === null) continue;
     if (pathParams.includes(key)) {
-      path = path.replace(`{${key}}`, String(value));
+      path = path.replace(`{${key}}`, encodeURIComponent(serializeParamValue(value)));
     } else {
       queryOrBody[key] = value;
     }
@@ -119,36 +148,59 @@ export async function callApi(
     headers[auth.key ?? 'Authorization'] = auth.value ?? '';
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  let lastErr: CallApiError['error'] | null = null;
 
-  try {
-    let url = `${baseUrl}${path}`;
-    const init: RequestInit = { method, headers, signal: controller.signal };
-
-    if (['POST', 'PUT', 'PATCH'].includes(method)) {
-      init.body = JSON.stringify(queryOrBody);
-    } else {
-      const qs = new URLSearchParams(
-        Object.entries(queryOrBody).map(([k, v]) => [k, String(v)] as [string, string]),
-      );
-      if (qs.toString()) url += `?${qs.toString()}`;
-    }
-
-    const resp = await fetch(url, init);
-    if (!resp.ok) {
-      return { error: `HTTP ${resp.status}`, detail: (await resp.text()).slice(0, 500) };
-    }
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
-      return await resp.json();
-    } catch {
-      return { text: await resp.text() };
+      let url = `${baseUrl}${path}`;
+      const init: RequestInit = { method, headers, signal: controller.signal };
+
+      if (['POST', 'PUT', 'PATCH'].includes(method)) {
+        init.body = JSON.stringify(queryOrBody);
+      } else {
+        const qs = new URLSearchParams(
+          Object.entries(queryOrBody).map(
+            ([k, v]) => [k, serializeParamValue(v)] as [string, string],
+          ),
+        );
+        if (qs.toString()) url += `?${qs.toString()}`;
+      }
+
+      const resp = await fetch(url, init);
+      if (!resp.ok) {
+        const detail = (await resp.text()).slice(0, 500);
+        lastErr = { type: 'http', status: resp.status, message: `HTTP ${resp.status}`, detail };
+        // 5xx 进入重试；4xx 直接返回
+        if (isRetryable(resp.status) && attempt < maxRetries) {
+          await sleep(backoffBase * 2 ** attempt);
+          continue;
+        }
+        return { error: lastErr };
+      }
+      try {
+        return await resp.json();
+      } catch {
+        return { text: await resp.text() };
+      }
+    } catch (e) {
+      const isAbort = e instanceof Error && e.name === 'AbortError';
+      lastErr = isAbort
+        ? { type: 'timeout', message: `请求超时（>${timeout}ms）` }
+        : { type: 'network', message: e instanceof Error ? e.message : String(e) };
+      if (attempt < maxRetries) {
+        await sleep(backoffBase * 2 ** attempt);
+        continue;
+      }
+      return { error: lastErr };
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
-  } finally {
-    clearTimeout(timer);
   }
+
+  // 兜底（理论上循环至少执行一次并在末次 return）
+  return { error: lastErr ?? { type: 'network', message: '未知错误' } };
 }
 
 /** 参数声明 → zod shape */
