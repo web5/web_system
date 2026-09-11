@@ -38,6 +38,8 @@ export class AgentDefSyncService {
   private readonly pollMs: number;
   private timer?: ReturnType<typeof setInterval>;
   private started = false;
+  /** 「MCP 网关未配置」告警只打一次，避免每个 agent 定义轮询时刷屏 */
+  private mcpUnavailableWarned = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -152,7 +154,20 @@ export class AgentDefSyncService {
    * 注册名 = mcp:module/tool 的 tool 短名；schema 宽松（MCP 网关侧校验参数）。
    */
   private registerMcpCapabilities(def: AgentDefinition): void {
-    if (!this.mcpService.isAvailable()) return;
+    if (!this.mcpService.isAvailable()) {
+      // 未配置 MCP 网关时静默跳过会导致「服务健康但工具全丢」——运行时才报「工具未注册」，
+      // 排查成本高（真实事故：dev 环境 .env 缺 MCP_GATEWAY_URL）。这里显式告警一次。
+      if (!this.mcpUnavailableWarned) {
+        this.mcpUnavailableWarned = true;
+        this.logger.warn(
+          'MCP_GATEWAY_URL 未配置：所有 mcp 类能力（如 knowledge_list/knowledge_search）将被跳过注册，' +
+            '运行时调用会报「工具未注册」。请在 .env 配置 MCP_GATEWAY_URL（如 http://127.0.0.1:6006）后重启本服务。',
+        );
+      }
+      return;
+    }
+    // 配置已恢复时重置告警标志，便于下一次异常时再次告警
+    this.mcpUnavailableWarned = false;
     const mcpCaps = (def.capabilities ?? []).filter((c) => c.type === 'mcp' && c.enabled !== false);
 
     // 知识集合绑定（开放决策 7 = C）：按集合操作的知识工具（search/ingest/delete）调用时

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AgentRegistry, ToolRegistry } from '@kedouai/agent-core';
 import { McpService } from '../mcp/mcp.service';
@@ -12,7 +13,10 @@ import { AgentDefSyncService } from './agent-def-sync.service';
  * 曾经的反例：knowledge_list 未配 collectionId 被一并跳过 → 运行时报「工具 knowledge_list 未注册」。
  */
 describe('AgentDefSyncService.registerMcpCapabilities', () => {
-  function setup(capabilities: Array<Record<string, unknown>>) {
+  function setup(
+    capabilities: Array<Record<string, unknown>>,
+    opts: { mcpAvailable?: boolean } = {},
+  ) {
     const configService = {
       get: (key: string, fallback?: string) =>
         key === 'AI_SERVICE_URL' ? 'http://ai-service.test' : fallback,
@@ -21,7 +25,7 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
     const toolRegistry = { has: jest.fn().mockReturnValue(false) } as unknown as ToolRegistry;
     const registerMcpTool = jest.fn();
     const mcpService = {
-      isAvailable: () => true,
+      isAvailable: () => opts.mcpAvailable !== false,
       registerMcpTool,
     } as unknown as McpService;
 
@@ -92,5 +96,56 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
     await svc.sync();
 
     expect(registeredNames(registerMcpTool)).toEqual(['list_modules']);
+  });
+
+  /**
+   * 回归：MCP_GATEWAY_URL 未配置时不得静默跳过。
+   * 真实事故：dev 环境 .env 缺 MCP_GATEWAY_URL → 所有 mcp 能力未注册，
+   * 服务日志毫无异常，直到 Playground 报「工具 knowledge_list 未注册」才暴露。
+   */
+  it('MCP 网关未配置 → 跳过注册并显式告警（不静默失败）', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { svc, registerMcpTool } = setup(
+        [
+          { type: 'mcp', ref: 'knowledge/knowledge_list', enabled: true },
+          {
+            type: 'mcp',
+            ref: 'knowledge/knowledge_search',
+            enabled: true,
+            config: { collectionId: 'ws-arch' },
+          },
+        ],
+        { mcpAvailable: false },
+      );
+
+      await svc.sync();
+
+      expect(registerMcpTool).not.toHaveBeenCalled();
+      const warned = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(warned).toContain('MCP_GATEWAY_URL');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('MCP 网关未配置的告警只打一次（30s 轮询不刷屏）', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { svc } = setup(
+        [{ type: 'mcp', ref: 'knowledge/knowledge_list', enabled: true }],
+        { mcpAvailable: false },
+      );
+
+      await svc.sync();
+      await svc.sync();
+
+      const hits = warnSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((m) => m.includes('MCP_GATEWAY_URL'));
+      expect(hits).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
