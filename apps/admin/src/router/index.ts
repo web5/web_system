@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { installChunkLoadErrorGuard, isChunkLoadError, showModuleLoadError } from '@/utils/module-load-error';
 // Login 静态引入，避免未登录跳转登录页时需等待懒加载 chunk 造成白屏
 import LoginView from '@/views/Login.vue';
 
@@ -240,5 +241,19 @@ router.beforeEach(async (to, _from, next) => {
   }
   next();
 });
+
+/**
+ * 懒加载 chunk 失败兜底（2026-09-11 事故）。
+ * 模块产物被服务端清理/覆盖后，路由动态 import 会 404；而 vue-router 在生产构建里
+ * 静默吞掉这类导航错误 —— 页面全白且控制台零日志。这里给出可见提示与刷新入口。
+ */
+router.onError((err) => {
+  if (isChunkLoadError(err)) {
+    showModuleLoadError(err, { moduleName: 'admin', source: 'router' });
+  }
+});
+
+// 组件内 defineAsyncComponent / 手动 import() 的失败不走 router.onError，这里兜底
+installChunkLoadErrorGuard('admin');
 
 export default router;

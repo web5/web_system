@@ -7,6 +7,16 @@ import * as releasePaths from '../pipeline/release-paths';
 /** 每个命名空间保留的历史版本目录数量（用户约定 N=5） */
 export const KEEP_VERSIONS = 5;
 
+/**
+ * 版本目录的最短保留时长（毫秒），默认 24h。
+ *
+ * 为什么需要：只按"最近 N 个"保留时，高频发布（一天十几次）会把几小时前的版本全部
+ * 清掉 —— 而用户浏览器里可能还开着那个版本的页面，切模块时会请求已被删除的分包 →
+ * 404 → 首屏空白（2026-09-11 事故）。加时间下限后，最近 24h 内的产物一定还在，
+ * 已打开的旧页面有充足窗口自然刷新。传 0 可关闭该下限（测试/特殊场景）。
+ */
+export const KEEP_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+
 export interface ArtifactCleanupResult {
   kept: string[];
   removed: string[];
@@ -107,16 +117,28 @@ export class ArtifactStoreService {
   }
 
   /**
-   * 清理旧版本目录：每个命名空间各自保留最近 keep 个（legacy 独立计）。
-   * 与 upload 一样是发布目录内 fs 操作，调用方负责收集受保护版本（灰度规则等）。
+   * 清理旧版本目录：每个命名空间各自保留
+   *   ① 受保护版本（当前版本 / 启用中的灰度版本，由调用方收集）
+   *   ② 最近 keep 个（legacy 与每个流水线命名空间独立计）
+   *   ③ **未满 minAgeMs 的版本**（时间下限，见 KEEP_MIN_AGE_MS）
+   *
+   * 为什么要 ③：只按数量保留时，高频发布会把几小时前的产物全清掉，而用户浏览器里
+   * 可能还开着那个版本的页面 → 切模块请求已删除的分包 → 白屏（2026-09-11 事故）。
+   *
+   * 与 upload 一样是发布目录内 fs 操作。
    */
   cleanup(
     moduleKey: string,
     keep = KEEP_VERSIONS,
     protectedVersions: ReadonlySet<string> = new Set(),
+    minAgeMs = KEEP_MIN_AGE_MS,
   ): ArtifactCleanupResult {
     const base = this.root(moduleKey);
     if (!fs.existsSync(base)) return { kept: [], removed: [] };
+
+    const now = Date.now();
+    /** 未满最短保留时长 → 一律保留（mtime 越新越该留） */
+    const withinMinAge = (mtime: number): boolean => minAgeMs > 0 && now - mtime < minAgeMs;
 
     const kept: string[] = [];
     const removed: string[] = [];
@@ -126,7 +148,7 @@ export class ArtifactStoreService {
     for (const d of l1) {
       if (d.isVersion) {
         // legacy 版本
-        if (protectedVersions.has(d.name) || kept.length < keep) {
+        if (protectedVersions.has(d.name) || kept.length < keep || withinMinAge(d.mtime)) {
           kept.push(d.name);
         } else {
           fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
@@ -138,7 +160,12 @@ export class ArtifactStoreService {
         const nsVersions = this.listL2(moduleKey, d.name).sort((a, b) => b.mtime - a.mtime);
         for (const v of nsVersions) {
           const ref = `${d.name}/${v.name}`;
-          if (protectedVersions.has(ref) || protectedVersions.has(v.name) || nsKept.length < keep) {
+          if (
+            protectedVersions.has(ref) ||
+            protectedVersions.has(v.name) ||
+            nsKept.length < keep ||
+            withinMinAge(v.mtime)
+          ) {
             nsKept.push(ref);
           } else {
             fs.rmSync(path.join(base, d.name, v.name), { recursive: true, force: true });
