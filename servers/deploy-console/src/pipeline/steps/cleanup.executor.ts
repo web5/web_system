@@ -29,7 +29,12 @@ export class CleanupExecutor {
     }
     const target = this.configService.get<string>('PIPELINE_UPLOAD_TARGET');
     if (target === 'remote') {
-      ctx.log('远程投递模式跳过本地清理');
+      // 边界说明（2026-09-12 核实）：远端投递时产物落在目标环境自己的机器上，由**目标环境
+      // 自己的发布平台**负责版本保留与清理（例如 dev 后端主机上那套 deploy-console）。
+      // 本平台没有远端磁盘的运维边界，不做远端 rm（误删风险远高于收益）。
+      // 但"跳过"不能是静默的 —— 否则会让人误以为已经清理过，故落进 result 供控制台展示。
+      ctx.log('远端投递模式：远端产物保留/清理由目标环境自行负责，本平台跳过');
+      p.result = { ...(p.result ?? {}), cleanup: { skipped: true, reason: 'remote-target' } };
       await ctx.save();
       return;
     }

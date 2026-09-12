@@ -173,6 +173,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 - `docs/development/agent-capability-playbook.md` — Agent 能力全景与体验入口（agent-core / ai-agent:6010 / ai-service:6003 / knowledge:6011 的能力清单与表结构，改 Agent 相关代码后须同步更新该手册）
 - `docs/architecture/release-system-design.md` / `release-system-implementation-plan.md` — 发布平台设计
 - `docs/architecture/micro-frontend-style-guide.md` — 微前端样式约束
+- `docs/architecture/static-artifact-cache-and-retention.md` — **静态产物缓存与版本保留策略**（固定名入口 `index.js`/`index.css` 必须 `no-cache`、带 hash 分包才 `immutable`；改网关缓存判定 / 发布清理策略 / 排查"切模块白屏但控制台无日志"先看这篇）
 
 ---
 

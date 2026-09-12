@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getStoredToken } from '@/stores/user';
+import { installChunkLoadErrorGuard, isChunkLoadError, showModuleLoadError } from '@/utils/module-load-error';
 
 /**
  * 解析 JWT token，检查是否过期
@@ -131,7 +132,7 @@ const router = createRouter({
 // 路由守卫：需要认证的页面跳转到登录页
 // 注意：必须与 request.ts 的 getStoredToken() 保持同一事实源（localStorage），
 // 否则 refreshToken 后 store 和 localStorage 不一致会导致 guard 误判。
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   if (to.meta?.requiresAuth) {
     const token = getStoredToken();
     if (!token || isTokenExpired(token)) {
@@ -141,5 +142,19 @@ router.beforeEach((to, from, next) => {
   }
   next();
 });
+
+/**
+ * 懒加载 chunk 失败兜底（2026-09-11 事故）。
+ * 模块产物被服务端清理/覆盖后，路由动态 import 会 404；而 vue-router 在生产构建里
+ * 静默吞掉这类导航错误 —— 页面全白且控制台零日志。这里给出可见提示与刷新入口。
+ */
+router.onError((err) => {
+  if (isChunkLoadError(err)) {
+    showModuleLoadError(err, { moduleName: 'portal', source: 'router' });
+  }
+});
+
+// 组件内 defineAsyncComponent / 手动 import() 的失败不走 router.onError，这里兜底
+installChunkLoadErrorGuard('portal');
 
 export default router;
