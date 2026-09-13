@@ -50,9 +50,16 @@ fi
 "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCK" ping || { echo "MySQL 启动失败"; tail -30 "$MYSQL_LOG"; exit 1; }
 echo "MySQL OK"
 
-echo "===== 创建数据库 web_system ====="
+echo "===== 创建数据库（幂等）====="
+# 三个库缺一不可：
+#   web_system            业务主库（auth/user/ai/system/todo/content-hub/mcp-gateway）
+#   web_system_deploy     发布平台（deploy-console 读写、gateway 只读版本指针）
+#   web_system_knowledge  RAG 知识库（knowledge-service）
+# 另：ai-agent 使用独立库 ai_agent，由服务自身 synchronize 创建，不在本脚本内。
 "$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCK" -uroot <<'SQL'
-CREATE DATABASE IF NOT EXISTS web_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS web_system            CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS web_system_deploy     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS web_system_knowledge  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 SQL
-echo "数据库 web_system 就绪"
+echo "数据库就绪: web_system / web_system_deploy / web_system_knowledge"
 echo "===== 完成 ====="

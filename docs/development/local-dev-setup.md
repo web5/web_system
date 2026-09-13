@@ -1,5 +1,13 @@
 # 本地开发环境搭建指南
 
+> ⚠️ **部分内容已过时（2026-09-13 标注）**：本文的服务数量、端口（文中为 3000 系列）、目录名（`admin-web`）与现状不符。
+> - 现状：**12 个后端服务**，端口 **6000 系列**（gateway 6000 / auth 6101(本地) / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / knowledge 6011 / deploy-console 6200）。
+> - **推荐入口**：`./scripts/bootstrap.sh --env local`（建库 → 迁移 → 构建 → 启动 → seed → 验证，`--dry-run` 可预演）。
+> - 数据初始化清单（哪些库、哪些 seed 必须做）：`docs/development/from-zero-init-data.md`。
+> - 发布目录机制与发布流程：`docs/development/local-release-runbook.md`。
+>
+> 以下内容保留作历史参考（`local-db.sh` 的使用方式仍然有效）。
+
 本指南说明如何在本机（macOS / Linux，无 brew、无 sudo）一键跑起 Web System 全栈工程：6 个 NestJS 后端服务 + 2 个前端（portal / admin-web）+ MySQL + Redis。
 
 > 适用场景：纯本机原生开发，不依赖 Docker。生产部署请参考 `DEPLOYMENT.md` 与 `docker-compose*.yml`。
