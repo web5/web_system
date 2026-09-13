@@ -118,7 +118,16 @@ log "模块 ${MODULE_KEY}｜目录 servers/${MODULE_DIR_NAME}｜配置源 ${ENV_
 check_deps
 
 NAME="$(resolve_name)"
-[ -n "$NAME" ] || die "pm2 中未找到服务（候选 ${PM2_NAME:-未设置} / web-${MODULE_KEY} / web-${MODULE_KEY%-service}）—— 请先纳管进程"
+if [ -z "$NAME" ]; then
+  # 首次纳管（bootstrap 场景）：pm2 里还没有该进程，回退到命名约定。
+  # 默认**关闭**，避免 typo 的 MODULE_KEY 凭空创建进程；bootstrap.sh 会显式置 PM2_ALLOW_NEW=1。
+  if [ "${PM2_ALLOW_NEW:-0}" = "1" ]; then
+    NAME="${PM2_NAME:-web-${MODULE_KEY}}"
+    log "pm2 中未找到 ${MODULE_KEY} → 首次纳管，进程名取 ${NAME}"
+  else
+    die "pm2 中未找到服务（候选 ${PM2_NAME:-未设置} / web-${MODULE_KEY} / web-${MODULE_KEY%-service}）—— 请先纳管进程，或置 PM2_ALLOW_NEW=1 允许首次创建"
+  fi
+fi
 
 if [ "$DRY_RUN" = "1" ]; then
   log "[DRY_RUN] 将清理端口 ${PORT:-未设置} 孤儿进程，并以干净环境重建："

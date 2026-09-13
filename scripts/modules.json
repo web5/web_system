@@ -8,6 +8,8 @@
   { "key": "upload-service", "name": "上传服务 Upload",     "type": "backend",  "dir": "upload-service", "pm2": "upload-service" },
   { "key": "mcp-gateway",    "name": "MCP 网关",            "type": "backend",  "dir": "mcp-gateway",    "pm2": "mcp-gateway" },
   { "key": "content-hub",    "name": "内容中枢 ContentHub", "type": "backend",  "dir": "content-hub",    "pm2": "content-hub" },
+  { "key": "ai-agent",       "name": "AI Agent 运行时",      "type": "backend",  "dir": "ai-agent",       "pm2": "ai-agent" },
+  { "key": "knowledge-service","name": "RAG 知识服务",       "type": "backend",  "dir": "knowledge-service","pm2": "knowledge-service" },
   { "key": "deploy-console", "name": "运维后台(后端)",      "type": "backend",  "dir": "deploy-console", "pm2": "deploy-console" },
   { "key": "shell",          "name": "微前端基座 Shell",    "type": "frontend", "dir": "shell",          "publicPath": "shell" },
   { "key": "portal",         "name": "门户 Portal",         "type": "micro-frontend", "dir": "portal",         "publicPath": "portal" },
