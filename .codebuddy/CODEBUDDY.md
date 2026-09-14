@@ -429,6 +429,7 @@ curl -s localhost:6000/static/modules/admin/$P/$V/index.js   # 确认 200
 | `docs/ui/` | UI 规范**单事实源**（README 地图/design/color/规格书模板/原型/评审记录） |
 | `docs/products/` | 产品设计素材 |
 | `docs/api/`、`docs/miniprogram/` | API 文档、小程序设计 |
+| `specs/` | **后端接口契约（api-design）**：各服务 `specs/<svc>/api-design.md` 由 `scripts/gen-api-design.mjs` 从 Swagger 注解自动生成，AI 自进化查接口真相优先看这里（永不过期）；`pipeline-node-model/` 含发布流水线设计 |
 | `docs/plans/` `docs/intents/` `docs/analysis/` `docs/archive/` | 计划/意图/分析/归档（如 `docs/archive/todo-list/audit-report-2026-07-26.md`） |
 | `docs/发布与运维手册.md` `docs/工程完善计划.md` | 仓库级手册 |
 

@@ -21,6 +21,7 @@
 | 2026-09-11 | v1.4 | 单价真相源迁到字典：§2 链路改为按字典价核算、§3.4 `model_pricing` 标弃用、§4 入口 10 改为只读总览（权限改 `system:dict:view`）；§7 增坑 12（价格在哪维护、多久生效、旧表已失效） | AI |
 | 2026-09-11 | v1.5 | **「模型」页整体下线**（清单/价格统一在「字典管理 · 大模型清单」维护），§4 去掉该入口；§7 增坑 13（admin 内部跳转不能手写 `/admin` 前缀，router base 已含，重复会 404） | AI |
 | 2026-09-11 | v1.6 | 收尾下线（过渡期结束）：单价迁入字典 `llm_models`（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
+| 2026-09-15 | v1.7 | 全量补齐 11 个后端微服务接口契约文档：新增 `scripts/gen-api-design.mjs`（从 Swagger 注解自动提取，含 DTO 字段级 schema，最多 2 层嵌套），生成 `specs/<svc>/api-design.md`；§相关文档索引 / §8.1 / §8.2 增加 api-design 索引指针与重生成命令 | AI |
 
 ---
 
@@ -321,12 +322,18 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 | admin 增删/改 **Agent 页面或路由** | §4 UI 入口表 |
 | 新增 SSE **事件类型** | §3.2 事件类型行 |
 | 服务端口 / 网关前缀变更 | §0 端口、§3.5 |
+| 新增/改 **HTTP 接口**（任意后端服务，含 deploy-console） | 对应服务的 `specs/<svc>/api-design.md`（`scripts/gen-api-design.mjs` 从 Swagger 注解自动生成，优先于手查）；网关路由真相见 `servers/gateway/src/proxy/proxy.controller.ts` |
 | 发现新的踩坑点 | §7（追加） |
 | 任何上述变更 | **§顶部变更日志追加一行** |
 
 ### 8.2 变更时同步确认的单事实源
 
 ```bash
+# 接口契约（自动生成，AI 自进化优先查阅，永不过期）
+ls specs/*/api-design.md
+# 重新生成（后端改了 controller 注解后）
+node scripts/gen-api-design.mjs
+
 # 接口真相：controller 装饰器
 grep -rn "@Post\|@Get\|@Put\|@Delete" servers/ai-agent/src servers/ai-service/src/agent-def servers/ai-service/src/agent-log servers/ai-service/src/skill
 
@@ -366,3 +373,4 @@ ls packages/agent-core/src/tools/coding/
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
 | 评测框架（L1~L4） | [`.codebuddy/agent-kit/references/eval-framework.md`](../../.codebuddy/agent-kit/references/eval-framework.md) |
 | 跨工具 Agent 上下文装配（AGENTS.md / Claude Code / Codex / Cursor） | [`docs/development/cross-tool-agent-context-design.md`](cross-tool-agent-context-design.md) |
+| **各后端服务接口契约（自动生成 · AI 自进化接口真相源）** | `specs/<svc>/api-design.md`：`deploy-console`（手写，分 `pipeline-node-model/` 与 `deploy-console/` 两份）、`auth-service`、`user-service`、`ai-service`、`ai-agent`、`system-service`、`todo-service`、`mcp-gateway`、`knowledge-service`、`content-hub`、`upload-service`、`gateway`；重生成脚本 [`scripts/gen-api-design.mjs`](../../scripts/gen-api-design.mjs) |
