@@ -67,6 +67,16 @@ export const deployApi = {
         enabled?: boolean
       }[]
     >,
+  /**
+   * 部署某版本到某环境 = **改指针**（把环境当前版本指向该版本目录）。
+   * 不做探活验证（改指针基本不会失败），验证由人工确认、后续接 AI 验证 agent。
+   */
+  deployVersion: (moduleKey: string, env: string, versionTag: string) =>
+    http.post(`/deploy/modules/${moduleKey}/envs/${env}/deploy`, { versionTag }) as Promise<{
+      env: string
+      moduleKey: string
+      versionTag: string
+    }>,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string
@@ -348,6 +358,8 @@ export interface PipelineTemplate {
   name: string
   /** 流水线 key（slug，产物命名空间用：modules/<模块>/<key>/<版本>/） */
   key?: string
+  /** 归属环境（local/dev/prod…）；一个模块默认三条流水线；null=全局模板不限环境 */
+  env?: string | null
   description?: string
   /** 活动阶段子集（null=全量九阶段） */
   steps?: string[] | null
@@ -555,6 +567,31 @@ export const pipelineTemplateApi = {
     http.put(`/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
   remove: (id: string) =>
     http.delete(`/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+}
+
+/* ========== 流水线变量（属于某条流水线；不复用配置中心） ========== */
+
+/** 流水线变量（deploy_pipeline_vars） */
+export interface PipelineVar {
+  id: string
+  key: string
+  /** 密钥值对外掩码为 ******** */
+  value: string
+  isSecret: boolean
+  description?: string
+  enabled: boolean
+  updatedBy?: string
+}
+
+export const pipelineVarApi = {
+  /** 某条流水线的变量（密钥掩码） */
+  list: (pipelineId: string) =>
+    http.get('/pipeline-vars', { params: { pipelineId } }) as Promise<PipelineVar[]>,
+  create: (pipelineId: string, dto: { key: string; value?: string; isSecret?: boolean; description?: string }) =>
+    http.post('/pipeline-vars', { ...dto, pipelineId }) as Promise<PipelineVar>,
+  update: (id: string, dto: Partial<Pick<PipelineVar, 'key' | 'value' | 'isSecret' | 'description' | 'enabled'>>) =>
+    http.put(`/pipeline-vars/${id}`, dto) as Promise<PipelineVar>,
+  remove: (id: string) => http.delete(`/pipeline-vars/${id}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Pipeline Step Commands（流水线节点命令：R6 新真相源） ========== */

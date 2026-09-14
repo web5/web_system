@@ -57,6 +57,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模块详情' },
       },
       {
+        path: 'modules/:key/edit',
+        name: 'ModuleEdit',
+        component: () => import('@/views/ModuleEdit.vue'),
+        meta: { title: '编辑模块' },
+      },
+      {
         path: 'monitor',
         name: 'ServiceMonitor',
         component: () => import('@/views/ServiceMonitor.vue'),
