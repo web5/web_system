@@ -8,8 +8,10 @@ import {
   deployApi,
   pipelineTemplateApi,
   stageCommandApi,
+  pipelineVarApi,
   type PipelineItem,
   type PipelineTemplate,
+  type PipelineVar,
 } from '@/api'
 import dayjs from 'dayjs'
 import BranchSelect from '@/components/BranchSelect.vue'
@@ -93,6 +95,15 @@ function targetText(t: string) {
   const map: Record<string, string> = { auto: '自动', local: '本机', remote: '远程' }
   return map[t] || t
 }
+/** 节点序列预览（v5 nodes 优先；legacy 回退九阶段名） */
+function nodeSeqText(t: PipelineTemplate) {
+  const nodes: any[] = (t as any).nodes || []
+  if (nodes.length) return nodes.map((n: any) => n.label || n.key).join(' → ')
+  const steps: string[] = (t as any).steps || []
+  if (steps.length) return steps.map((s) => STEP_LABELS[s] || s).join(' → ')
+  return TPL_ALL_KEYS.map((s) => STEP_LABELS[s] || s).join(' → ')
+}
+
 function stepSummary(t: PipelineTemplate) {
   const total = TPL_STAGES.length
   const active = t.steps && t.steps.length ? t.steps.length : total
@@ -156,6 +167,8 @@ const modal = ref({
   editing: null as PipelineTemplate | null,
   name: '',
   description: '',
+  /** 归属环境（一个模块默认 local / dev / prod 三条流水线） */
+  env: '',
   steps: TPL_ALL_KEYS as string[],
   rollbackOnFailure: 'previous' as string,
   approval: 'inherit' as string,
@@ -178,6 +191,7 @@ function openCreate() {
     editing: null,
     name: '',
     description: '',
+    env: environments.value[0]?.id || 'local',
     steps: [...TPL_ALL_KEYS],
     rollbackOnFailure: 'previous',
     approval: 'inherit',
@@ -185,6 +199,7 @@ function openCreate() {
     enabled: true,
     approvers: [],
   }
+  vars.value = []
 }
 function openEdit(t: PipelineTemplate) {
   modal.value = {
@@ -192,6 +207,7 @@ function openEdit(t: PipelineTemplate) {
     editing: t,
     name: t.name,
     description: t.description || '',
+    env: t.env || '',
     steps: t.steps && t.steps.length ? [...t.steps] : [...TPL_ALL_KEYS],
     rollbackOnFailure: t.rollbackOnFailure ?? 'previous',
     approval: t.approval,
@@ -199,7 +215,89 @@ function openEdit(t: PipelineTemplate) {
     enabled: t.enabled !== false,
     approvers: t.approvers ? [...t.approvers] : [],
   }
+  void loadVars(t.id)
 }
+// ===== 变量（属于本条流水线）=====
+const vars = ref<PipelineVar[]>([])
+const varsLoading = ref(false)
+const varSaving = ref(false)
+const varDrawer = ref({
+  open: false,
+  editing: null as PipelineVar | null,
+  key: '',
+  value: '',
+  isSecret: false,
+  description: '',
+})
+async function loadVars(pipelineId?: string) {
+  if (!pipelineId) {
+    vars.value = []
+    return
+  }
+  varsLoading.value = true
+  try {
+    vars.value = await pipelineVarApi.list(pipelineId)
+  } catch {
+    vars.value = []
+  } finally {
+    varsLoading.value = false
+  }
+}
+function openVarCreate() {
+  varDrawer.value = { open: true, editing: null, key: '', value: '', isSecret: false, description: '' }
+}
+function openVarEdit(v: PipelineVar) {
+  // 密钥不回显明文；留空 = 不更新
+  varDrawer.value = {
+    open: true,
+    editing: v,
+    key: v.key,
+    value: v.isSecret ? '' : v.value,
+    isSecret: v.isSecret,
+    description: v.description || '',
+  }
+}
+async function saveVar() {
+  const d = varDrawer.value
+  const tplId = modal.value.editing?.id
+  if (!tplId) {
+    message.warning('请先保存流水线')
+    return
+  }
+  if (!d.key.trim()) {
+    message.warning('变量键必填')
+    return
+  }
+  varSaving.value = true
+  try {
+    const dto = {
+      key: d.key.trim(),
+      value: d.value,
+      isSecret: d.isSecret,
+      description: d.description.trim() || undefined,
+    }
+    if (d.editing) await pipelineVarApi.update(d.editing.id, dto)
+    else await pipelineVarApi.create(tplId, dto)
+    message.success('变量已保存')
+    varDrawer.value.open = false
+    await loadVars(tplId)
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '保存变量失败')
+  } finally {
+    varSaving.value = false
+  }
+}
+async function removeVar(v: PipelineVar) {
+  const tplId = modal.value.editing?.id
+  if (!tplId) return
+  try {
+    await pipelineVarApi.remove(v.id)
+    await loadVars(tplId)
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '删除失败')
+  }
+}
+
 async function saveTemplate() {
   const m = modal.value
   if (!m.name.trim()) {
@@ -212,6 +310,7 @@ async function saveTemplate() {
     const dto = {
       name: m.name.trim(),
       description: m.description.trim() || undefined,
+      env: m.env || null,
       steps: orderedSteps,
       rollbackOnFailure: m.rollbackOnFailure as PipelineTemplate['rollbackOnFailure'],
       approval: m.approval as PipelineTemplate['approval'],
@@ -816,6 +915,8 @@ onUnmounted(stopPolling)
           { title: '流水线名称', key: 'name', width: 250 },
           { title: '类型', key: 'type', width: 90 },
           { title: '模块', key: 'module', width: 130 },
+          { title: '环境', key: 'env', width: 90 },
+          { title: '节点序列', key: 'nodes' },
           { title: '最近执行', key: 'recent' },
           { title: '成功率', key: 'stat', width: 110 },
           { title: '操作', key: 'action', width: 180 },
@@ -847,6 +948,13 @@ onUnmounted(stopPolling)
           <template v-else-if="column.key === 'module'">
             <span style="font-family: monospace; font-size: 12px; color: #555;">{{ record.module.key }}</span>
             <div style="font-size: 12px; color: #bbb;">{{ typeLabel(record.module.type) }}</div>
+          </template>
+          <template v-else-if="column.key === 'env'">
+            <a-tag v-if="record.tpl.env" color="blue">{{ record.tpl.env }}</a-tag>
+            <span v-else style="color: #bbb; font-size: 12px;">不限</span>
+          </template>
+          <template v-else-if="column.key === 'nodes'">
+            <span style="color: #666; font-size: 12px;">{{ nodeSeqText(record.tpl) }}</span>
           </template>
           <template v-else-if="column.key === 'recent'">
             <template v-if="record.latest">
@@ -1189,11 +1297,73 @@ onUnmounted(stopPolling)
             </a-form-item>
           </a-col>
           <a-col :span="12">
+            <a-form-item label="环境（一个模块默认 local / dev / prod 三条）">
+              <a-select v-model:value="modal.env" placeholder="选择环境">
+                <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
+                  {{ e.name }}（{{ e.id }}）
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
             <a-form-item label="启用">
               <a-switch v-model:checked="modal.enabled" />
             </a-form-item>
           </a-col>
         </a-row>
+
+        <!-- 变量（属于本条流水线；新建时先保存流水线才能加变量） -->
+        <a-form-item v-if="modal.editing" label="变量">
+          <div style="margin-bottom: 8px;">
+            <a-button size="small" type="primary" @click="openVarCreate">+ 新增变量</a-button>
+            <span style="color: #999; font-size: 12px; margin-left: 8px;">
+              节点脚本用 ${KEY} 引用；密钥只写入不回显
+            </span>
+          </div>
+          <a-table
+            :columns="[
+              { title: '键', key: 'key', width: 180 },
+              { title: '值', key: 'value' },
+              { title: '密钥', key: 'secret', width: 70 },
+              { title: '操作', key: 'action', width: 110 },
+            ]"
+            :data-source="vars"
+            :loading="varsLoading"
+            :pagination="false"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '该流水线未定义变量' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'key'">
+                <span style="font-family: monospace;">{{ record.key }}</span>
+              </template>
+              <template v-else-if="column.key === 'value'">
+                <span style="font-family: monospace;">{{ record.value }}</span>
+              </template>
+              <template v-else-if="column.key === 'secret'">
+                <a-tag :color="record.isSecret ? 'orange' : 'default'">
+                  {{ record.isSecret ? '是' : '否' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-space size="small">
+                  <a-button type="link" size="small" @click="openVarEdit(record)">编辑</a-button>
+                  <a-popconfirm title="删除该变量？" ok-text="删除" cancel-text="取消" @confirm="removeVar(record)">
+                    <a-button type="link" size="small" danger>删除</a-button>
+                  </a-popconfirm>
+                </a-space>
+              </template>
+            </template>
+          </a-table>
+        </a-form-item>
+        <a-alert
+          v-else
+          type="info"
+          show-icon
+          style="margin-bottom: 12px;"
+          message="变量属于某条流水线：先创建流水线，之后在「编辑」里维护变量。"
+        />
         <a-form-item label="说明">
           <a-input v-model:value="modal.description" placeholder="选填：流水线用途/特性简述" />
         </a-form-item>
@@ -1251,6 +1421,43 @@ onUnmounted(stopPolling)
       </a-form>
     </a-modal>
   </div>
+
+  <!-- 变量编辑抽屉（不套弹窗：编辑流水线是 modal，变量用 drawer） -->
+  <a-drawer
+    :open="varDrawer.open"
+    :title="varDrawer.editing ? '编辑变量' : '新增变量'"
+    placement="right"
+    :width="420"
+    @close="varDrawer.open = false"
+  >
+    <a-form layout="vertical">
+      <a-form-item label="键">
+        <a-input v-model:value="varDrawer.key" placeholder="PUBLISH_PATH" style="font-family: monospace;" />
+      </a-form-item>
+      <a-form-item label="值">
+        <a-input
+          v-model:value="varDrawer.value"
+          :placeholder="varDrawer.editing?.isSecret ? '留空表示不修改' : '~/web_system_release/...'"
+          style="font-family: monospace;"
+        />
+      </a-form-item>
+      <a-form-item label="说明">
+        <a-input v-model:value="varDrawer.description" placeholder="发布路径" />
+      </a-form-item>
+      <a-form-item label="密钥">
+        <a-switch v-model:checked="varDrawer.isSecret" />
+        <span style="color: #999; font-size: 12px; margin-left: 8px;">
+          密钥只写入不回显；列表显示为 ********
+        </span>
+      </a-form-item>
+    </a-form>
+    <template #footer>
+      <div style="display: flex; justify-content: space-between;">
+        <a-button @click="varDrawer.open = false">取消</a-button>
+        <a-button type="primary" :loading="varSaving" @click="saveVar">保存</a-button>
+      </div>
+    </template>
+  </a-drawer>
 
   <!-- 阶段命令查看 modal（点击步骤标签触发） -->
   <a-modal
