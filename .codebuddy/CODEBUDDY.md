@@ -8,7 +8,7 @@
 
 ## 0 这是什么
 
-科豆AI项目平台 —— 全栈 monorepo（Vue3 + NestJS + MySQL/PostgreSQL + 微信小程序）。一个仓库装三类资产：
+科豆AI项目平台 —— 全栈 monorepo（Vue3 + NestJS + 云 MySQL + 微信小程序）。一个仓库装三类资产：
 
 | 类别 | 位置 | 说明 |
 |---|---|---|
@@ -33,7 +33,7 @@
 | 层 | 技术 | 要点 |
 |---|---|---|
 | 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
-| 后端 | NestJS 10 + TypeORM + MySQL（本地）/ PostgreSQL（生产） | 每个微服务独立数据库，全部 TS strict |
+| 后端 | NestJS 10 + TypeORM + 云 MySQL 8.0.30-txsql（utf8mb4_0900_ai_ci） | 每个微服务独立数据库，全部 TS strict |
 | 小程序 | 微信原生 + TS | `apps/mini-contract` |
 | 共享包 | shared / types / shell-loader / ui / agent-core / kedou-agent | `packages/`，跨端配置一律收口到 `@web-system/shared` |
 | 部署 | pm2 + Docker Compose + Nginx + 自研发布平台（deploy-console） | 发布见 §4 |
@@ -42,8 +42,8 @@
 
 ```
 web_system/
-├── apps/        # 前端：shell(基座) admin portal mini-contract(小程序,约定 mini-<业务>) deploy-console(独立 SPA)
-├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
+├── apps/        # 前端：shell(基座) admin portal mini-app/mini-contract(小程序,约定 mini-<业务>) deploy-console(独立 SPA)
+├── servers/     # 后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload knowledge deploy-console
 ├── packages/    # 共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── scripts/     # 构建/启动/验证/发布脚本（local-up.sh start-frontend.sh dev-verify.sh publish-*.sh …）
 ├── docs/        # 人读文档（分册地图见附录；项目自产）
@@ -132,6 +132,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | mcp-gateway | servers/mcp-gateway | 6006 | web-mcp-gateway | MCP 网关 |
 | content-hub | servers/content-hub | 6007 | web-content-hub | 内容中枢（财经/AI 资讯） |
 | upload-service | servers/upload-service | 6008 | web-upload | 上传 |
+| knowledge-service | servers/knowledge-service | 6011 | web-knowledge | RAG 知识库（embedding/检索） |
 | deploy-console | servers/deploy-console | 6200 | web-deploy-console | 运维控制台（发布/环境/监控，控制台 /console/） |
 
 ### 2.3 前端应用
@@ -142,6 +143,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 | portal | apps/portal | 微前端模块 | http://localhost:5173/portal/ |
 | admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
 | deploy-console | apps/deploy-console | 独立 SPA（运维） | deploy-console 后端 serve（6200/console/） |
+| mini-app | apps/mini-app | 微信小程序（主端） | 独立上传 |
 | mini-contract | apps/mini-contract | 微信小程序 | 独立上传 |
 
 ### 2.4 共享包（packages/）
@@ -158,7 +160,7 @@ Gateway（6000）→ API 反代 /api/* → 各后端微服务；兼微前端基�
 
 ### 2.5 数据与静态资源
 
-- **本地 DB**：`web_system`（业务）+ `web_system_deploy`（发布平台独立库，gateway 用独立数据源连它）—— ⚠️ 微前端版本表 `deploy_deployments` 在 **web_system_deploy** 库，勿写错库
+- **数据库（统一腾讯云 MySQL 8.0.30-txsql，`utf8mb4_0900_ai_ci`）**：`web_system`（业务）+ `web_system_knowledge`（RAG 知识库，4 表）+ `web_system_deploy`（发布平台独立库，gateway 用独立数据源连它）。⚠️ 微前端版本表 `deploy_deployments` 在 **web_system_deploy** 库，勿写错库；dev 与 prod 当前共用同一 `web_system` 业务库（过渡态）
 - **静态资源路径**（gateway 直接提供）：
   - `/api/uploads/*` — 用户上传 + AI 生成图片统一路径；AI 图必须落盘此目录 + DB 存相对路径，不能只存远程 URL
   - `/materials/svg/*` — 系统素材 SVG
