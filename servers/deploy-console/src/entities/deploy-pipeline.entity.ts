@@ -61,8 +61,16 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 16, default: 'direct', comment: '模式 direct/grayscale' })
   mode: string;
 
-  /** 状态: pending | running | succeeded | failed | cancelled */
-  @Column({ type: 'varchar', length: 16, default: 'pending', comment: '状态 pending/running/succeeded/failed/cancelled' })
+  /**
+   * 状态: pending | running | succeeded | failed | cancelled
+   * | pending-approval（流水线级门禁，提交即阻断）
+   * | awaiting-approval（P0 节点级审批挂起，批准后从该节点之后继续）
+   *
+   * 长度 24：`pending-approval` / `awaiting-approval` 分别为 16 / 17 字符，
+   * 16 足够但无余量 —— 曾经因 `awaiting-approval` 超长导致写库失败
+   * （MySQL strict mode：Data too long），故一次性放宽。
+   */
+  @Column({ type: 'varchar', length: 24, default: 'pending', comment: '状态 pending/running/succeeded/failed/cancelled/pending-approval/awaiting-approval' })
   @Index()
   status: string;
 

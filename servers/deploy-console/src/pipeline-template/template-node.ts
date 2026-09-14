@@ -17,6 +17,10 @@ const LEGACY_SCRIPT_LABELS: Record<string, string> = {
  * 节点 = 流水线的组成单元，取代 v4 固定 9 阶段：
  *  - platform：git 拉码 / version 写版本 / pointer 切指针 —— 发布语义真相源，不可编辑/增删
  *  - script：用户自定义节点（build/verify/notify…），可增删排序，脚本存模块级 stage_commands
+ *  - approval：审批节点（design D8），可插任意位置，执行到它挂起、批准后从其后继续
+ *
+ * 目标模型（P0）：platform 三节点降级为普通 shell 节点 + service action，最终只剩
+ * shell / approval 两类；存量模板迁移在 P4，故 platform 目前仍保留。
  */
 
 /** 平台保留字（不可被 script 节点占用，也不允许作为 stage_commands key 写入） */
@@ -43,10 +47,42 @@ export interface ScriptNode {
   timeoutSec?: number;
 }
 
-export type TemplateNode = PlatformNode | ScriptNode;
+/**
+ * 审批节点（design D8：审批由「发布前置门禁」升级为**节点**）。
+ *
+ * 可插在任意位置（如 build 之后、restart 之前），执行到它时流水线挂起，
+ * 批准后**从该节点之后继续**，已完成的 shell 节点不重跑。
+ * 与 shell 节点共享 key/label 约束，但不参与 watchdog 计数（无可失败语义）。
+ */
+export interface ApprovalNode {
+  kind: 'approval';
+  /** 节点唯一 key（挂起态的恢复锚点，落 deploy_approvals.nodeKey） */
+  key: string;
+  label: string;
+  /** 指定审批人；空 = 任意有审批权限者 */
+  approvers?: string[];
+  /** 超时秒数；未配置 = 不超时（等人工处理） */
+  timeoutSec?: number;
+  /** 超时未批的处理：abort=失败终止（默认）/ auto-approve=自动通过 */
+  onTimeout?: ApprovalTimeoutAction;
+  /** 拒绝的处理：abort=失败终止（默认）/ rollback=回滚 */
+  onReject?: ApprovalRejectAction;
+}
 
-/** script 节点 key 格式 */
+export const APPROVAL_TIMEOUT_ACTIONS = ['abort', 'auto-approve'] as const;
+export const APPROVAL_REJECT_ACTIONS = ['abort', 'rollback'] as const;
+export type ApprovalTimeoutAction = (typeof APPROVAL_TIMEOUT_ACTIONS)[number];
+export type ApprovalRejectAction = (typeof APPROVAL_REJECT_ACTIONS)[number];
+
+export type TemplateNode = PlatformNode | ScriptNode | ApprovalNode;
+
+/** script / approval 节点 key 格式 */
 const SCRIPT_KEY_RE = /^[A-Za-z0-9_-]{1,32}$/;
+
+/** 节点是否可承载命令（approval 是纯等待语义，不配脚本） */
+export function isCommandNode(node: TemplateNode): boolean {
+  return node.kind === 'script';
+}
 
 /**
  * 归一化模板节点（纯函数）。
@@ -77,7 +113,7 @@ export function normalizeNodes(
   if (idxOf('version') > idxOf('pointer')) {
     throw new BadRequestException('「version」必须排在「pointer」之前（先写版本后切指针）');
   }
-  // key 唯一 + script 合法性
+  // key 唯一 + script / approval 合法性
   const seen = new Set<string>();
   let watchdogCount = 0;
   for (const n of list) {
@@ -86,14 +122,37 @@ export function normalizeNodes(
     if (n.kind === 'platform') {
       continue;
     }
-    // script
+    // script / approval 共用 key 与 label 约束
+    const kindLabel = n.kind === 'approval' ? 'approval' : 'script';
     if (PLATFORM_RESERVED.includes(n.key as any)) {
-      throw new BadRequestException(`script 节点 key 不能占用平台保留字: ${n.key}`);
+      throw new BadRequestException(`${kindLabel} 节点 key 不能占用平台保留字: ${n.key}`);
     }
     if (!SCRIPT_KEY_RE.test(n.key)) {
-      throw new BadRequestException(`script 节点 key 非法: ${n.key}（须匹配 ^[A-Za-z0-9_-]{1,32}$）`);
+      throw new BadRequestException(
+        `${kindLabel} 节点 key 非法: ${n.key}（须匹配 ^[A-Za-z0-9_-]{1,32}$）`,
+      );
     }
-    if (!n.label?.trim()) throw new BadRequestException(`script 节点「${n.key}」缺少 label`);
+    if (!n.label?.trim()) throw new BadRequestException(`${kindLabel} 节点「${n.key}」缺少 label`);
+    if (n.kind === 'approval') {
+      // 审批节点不承载命令、无失败语义 → 不占用 watchdog 唯一性
+      if (
+        n.onReject &&
+        !(APPROVAL_REJECT_ACTIONS as readonly string[]).includes(n.onReject)
+      ) {
+        throw new BadRequestException(
+          `approval 节点「${n.key}」onReject 非法: ${n.onReject}（可选 ${APPROVAL_REJECT_ACTIONS.join(' / ')}）`,
+        );
+      }
+      if (
+        n.onTimeout &&
+        !(APPROVAL_TIMEOUT_ACTIONS as readonly string[]).includes(n.onTimeout)
+      ) {
+        throw new BadRequestException(
+          `approval 节点「${n.key}」onTimeout 非法: ${n.onTimeout}（可选 ${APPROVAL_TIMEOUT_ACTIONS.join(' / ')}）`,
+        );
+      }
+      continue;
+    }
     if (n.watchdog) watchdogCount++;
   }
   if (watchdogCount > 1) throw new BadRequestException('watchdog 节点最多 1 个');

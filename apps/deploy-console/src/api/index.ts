@@ -385,8 +385,18 @@ export interface PipelineItem {
   moduleKey: string
   versionTag?: string
   mode: string
-  /** pending-approval=提交被审批门禁阻断，等待审批 */
-  status: 'pending' | 'pending-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  /**
+   * pending-approval=提交被审批门禁阻断（尚未执行任何阶段）
+   * awaiting-approval=执行到 approval 节点挂起（批准后从该节点之后继续）
+   */
+  status:
+    | 'pending'
+    | 'pending-approval'
+    | 'awaiting-approval'
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'cancelled'
   templateId?: string
   /** 模板名快照（旧实例为 null → 展示「默认」） */
   templateName?: string
@@ -469,12 +479,17 @@ export const pipelineApi = {
     http.post(`/pipelines/${id}/retry`) as Promise<{ jobId: string; status: string }>,
 
   /** 审批通过（待审批流水线；通过后自动执行） */
-  approve: (id: string, comment?: string) =>
-    http.post(`/pipelines/${id}/approve`, { comment }) as Promise<{ id: string; status: string }>,
+  /** 审批通过；nodeKey 指定节点（节点级挂起时用，缺省审批当前待决的那条） */
+  approve: (id: string, comment?: string, nodeKey?: string) =>
+    http.post(`/pipelines/${id}/approve`, { comment, nodeKey }) as Promise<{
+      id: string
+      status: string
+      resumedFrom?: string
+    }>,
 
   /** 审批拒绝（拒绝必填意见） */
-  reject: (id: string, comment: string) =>
-    http.post(`/pipelines/${id}/reject`, { comment }) as Promise<{ id: string; status: string }>,
+  reject: (id: string, comment: string, nodeKey?: string) =>
+    http.post(`/pipelines/${id}/reject`, { comment, nodeKey }) as Promise<{ id: string; status: string }>,
 
   promote: (id: string) =>
     http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,

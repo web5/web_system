@@ -37,10 +37,26 @@ export const STEP_COLORS: Record<string, string> = {
   pending: 'default',
 }
 
+/**
+ * 等待人工审批的状态。
+ *
+ * 两种语义（design D8：审批从「发布前置门禁」升级为**节点**）：
+ *  - `pending-approval`：流水线级门禁 —— 提交即阻断，**尚未执行任何阶段**；
+ *  - `awaiting-approval`：节点级挂起 —— 已跑到某个 approval 节点并停在那儿，
+ *    批准后**从该节点之后继续**（已执行的节点不重跑）。
+ * 页面动作（审批按钮、撤回文案、能否删除）都要同时覆盖两者，故收口成一处。
+ */
+export const APPROVAL_STATUSES = ['pending-approval', 'awaiting-approval'] as const;
+
+export function isApprovalPending(status?: string | null): boolean {
+  return !!status && (APPROVAL_STATUSES as readonly string[]).includes(status);
+}
+
 export function statusColor(status: string): string {
   const map: Record<string, string> = {
     pending: 'blue',
     'pending-approval': 'orange',
+    'awaiting-approval': 'orange',
     running: 'processing',
     succeeded: 'success',
     failed: 'error',
@@ -53,6 +69,7 @@ export function statusText(status: string): string {
   const map: Record<string, string> = {
     pending: '等待中',
     'pending-approval': '待审批',
+    'awaiting-approval': '节点待审批',
     running: '运行中',
     succeeded: '成功',
     failed: '失败',
@@ -249,11 +266,15 @@ export function stepState(p: PipelineItem, s: string): StepState {
     if (i < 0) return 'pending'
     return i < cur ? 'done' : i === cur ? 'error' : 'pending'
   }
+  // 门禁级：一个阶段都还没跑，全部算未开始
   if (p.status === 'pending-approval' || cur < 0 || i < 0) return 'pending'
+  // 节点级挂起：已执行的节点要显示为已完成，停在待审批的那个节点上
   return i < cur ? 'done' : i === cur ? 'running' : 'pending'
 }
 
 /** 实例是否仍在运行/等待（需要轮询） */
 export function isLive(p?: PipelineItem | null): boolean {
-  return !!p && ['running', 'pending', 'pending-approval'].includes(p.status)
+  if (!p) return false
+  // 挂起等审批同样需要轮询：审批可能在别处（API / 他人）发生，页面要能自己刷新过来
+  return ['running', 'pending', ...APPROVAL_STATUSES].includes(p.status)
 }

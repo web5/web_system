@@ -7,6 +7,7 @@ import {
   legacyStepsToNodes,
   PLATFORM_RESERVED,
   type TemplateNode,
+  type ApprovalNode,
 } from './template-node';
 
 const PLATFORM = (): TemplateNode[] => [
@@ -228,5 +229,120 @@ describe('isV5NodesEnabled（flag，缺省 off）', () => {
 describe('PLATFORM_RESERVED', () => {
   it('保留字 = git/version/pointer（作为 stage_commands 写入黑名单）', () => {
     expect(PLATFORM_RESERVED).toEqual(['git', 'version', 'pointer']);
+  });
+});
+
+/**
+ * 审批节点的防回归测试（P0 / design D8）。
+ *
+ * 背景：审批原本是「发布前置门禁」（提交即阻断，只能在最前面拦一次），
+ * 无法表达「构建完、重启前等人确认」这类诉求。升级为节点后它可以插在任意位置，
+ * 与 shell 节点混排，故保序 / key 唯一 / watchdog 计数都要在此锁定。
+ */
+describe('ApprovalNode（审批成为节点）', () => {
+  it('V1 类型定义含 key / label / approvers / timeoutSec / onTimeout / onReject', () => {
+    const n: ApprovalNode = {
+      kind: 'approval',
+      key: 'approve',
+      label: '发布确认',
+      approvers: ['bob'],
+      timeoutSec: 3600,
+      onTimeout: 'auto-approve',
+      onReject: 'rollback',
+    };
+    expect(n.kind).toBe('approval');
+    expect(n.key).toBe('approve');
+    expect(n.label).toBe('发布确认');
+    expect(n.approvers).toEqual(['bob']);
+    expect(n.timeoutSec).toBe(3600);
+    expect(n.onTimeout).toBe('auto-approve');
+    expect(n.onReject).toBe('rollback');
+    // 缺省：不指定审批人（任意有权限者）、不超时
+    const minimal: ApprovalNode = { kind: 'approval', key: 'a', label: 'A' };
+    expect(minimal.approvers).toBeUndefined();
+    expect(minimal.timeoutSec).toBeUndefined();
+  });
+
+  it('V2 与 shell 节点混排时保序（审批可插在任意位置）', () => {
+    const nodes: TemplateNode[] = [
+      { kind: 'platform', key: 'git' },
+      { kind: 'script', key: 'build', label: '构建' },
+      { kind: 'approval', key: 'approve', label: '发布确认' },
+      { kind: 'platform', key: 'version' },
+      { kind: 'platform', key: 'pointer' },
+      { kind: 'script', key: 'verify', label: '探活', watchdog: true },
+    ];
+    const out = normalizeNodes(nodes)!;
+    expect(out.map((n) => n.key)).toEqual([
+      'git',
+      'build',
+      'approve',
+      'version',
+      'pointer',
+      'verify',
+    ]);
+    expect(out[2]).toEqual({ kind: 'approval', key: 'approve', label: '发布确认' });
+  });
+
+  it('V3 approval 节点 key 与 shell 重复 → 拒绝', () => {
+    const nodes: TemplateNode[] = [
+      ...PLATFORM(),
+      { kind: 'script', key: 'gate', label: '门禁' },
+      { kind: 'approval', key: 'gate', label: '重复 key' },
+    ];
+    expect(() => normalizeNodes(nodes)).toThrow(/重复/);
+  });
+
+  it('V3 approval 节点同样受 key 格式 / 保留字 / label 约束', () => {
+    const reserved = [...PLATFORM(), { kind: 'approval', key: 'git', label: 'x' }] as any;
+    expect(() => normalizeNodes(reserved)).toThrow(/保留字|重复/);
+    const badKey = [...PLATFORM(), { kind: 'approval', key: 'bad key!', label: 'x' }] as any;
+    expect(() => normalizeNodes(badKey)).toThrow(/key 非法/);
+    const noLabel = [...PLATFORM(), { kind: 'approval', key: 'approve', label: '' }] as any;
+    expect(() => normalizeNodes(noLabel)).toThrow(/label/);
+  });
+
+  it('V4 approval 节点不占用 watchdog 唯一性（watchdog 只统计 shell 节点）', () => {
+    // 即便带上 watchdog 字段（历史数据/前端误传），审批节点也不参与计数
+    const nodes = [
+      ...PLATFORM(),
+      { kind: 'script', key: 'verify', label: '探活', watchdog: true },
+      { kind: 'approval', key: 'approve', label: '发布确认', watchdog: true },
+    ] as any;
+    expect(() => normalizeNodes(nodes)).not.toThrow();
+    // 两个 shell watchdog 仍然被拒（回归保护）
+    const two = [
+      ...PLATFORM(),
+      { kind: 'script', key: 'verify', label: '探活', watchdog: true },
+      { kind: 'script', key: 'smoke', label: '冒烟', watchdog: true },
+      { kind: 'approval', key: 'approve', label: '发布确认' },
+    ] as any;
+    expect(() => normalizeNodes(two)).toThrow(/watchdog/);
+  });
+
+  it('onReject / onTimeout 非法值 → 拒绝', () => {
+    const badReject = [
+      ...PLATFORM(),
+      { kind: 'approval', key: 'approve', label: 'a', onReject: 'whatever' },
+    ] as any;
+    expect(() => normalizeNodes(badReject)).toThrow(/onReject 非法/);
+    const badTimeout = [
+      ...PLATFORM(),
+      { kind: 'approval', key: 'approve', label: 'a', onTimeout: 'whatever' },
+    ] as any;
+    expect(() => normalizeNodes(badTimeout)).toThrow(/onTimeout 非法/);
+  });
+
+  it('执行计划：approval 计入 keys（执行到会挂起），但不进 scriptKeys（不可配命令）', () => {
+    const nodes: TemplateNode[] = [
+      { kind: 'platform', key: 'git' },
+      { kind: 'script', key: 'build', label: '构建' },
+      { kind: 'approval', key: 'approve', label: '发布确认' },
+      { kind: 'script', key: 'verify', label: '探活', watchdog: true },
+    ];
+    const plan = resolveNodeRunPlan(nodes)!;
+    expect(plan.keys).toEqual(['git', 'build', 'approve', 'verify']);
+    expect([...plan.scriptKeys].sort()).toEqual(['build', 'verify']);
+    expect(plan.watchKey).toBe('verify');
   });
 });
