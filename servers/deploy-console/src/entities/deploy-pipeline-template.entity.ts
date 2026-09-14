@@ -26,6 +26,16 @@ export class DeployPipelineTemplateEntity {
   @Index()
   moduleKey: string;
 
+  /**
+   * 归属环境（local / dev / prod …）。
+   *
+   * 为什么流水线要带环境：一个模块默认有 **3 条流水线**（local / dev / prod），
+   * 列表按「模块 × 环境」组织；新建时 moduleKey='*' 的全局模板不带环境（null）。
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true, comment: '归属环境（null=全局模板，不限环境）' })
+  @Index()
+  env?: string | null;
+
   /** 模板内唯一（uq_tpl_module_name）；builtin 模板固定为「默认」 */
   @Column({ type: 'varchar', length: 64, comment: '模板名（模块内唯一）' })
   name: string;

@@ -262,6 +262,64 @@ export class DeployController {
   }
 
   /**
+   * 写版本记录（流水线「发布」节点的脚本调用：上传产物后落一条版本）
+   */
+  @Post('modules/:moduleKey/versions')
+  @ApiOperation({ summary: '写版本记录（发布节点脚本用：上传产物 + 调用本接口）' })
+  async writeVersion(
+    @Param('moduleKey') moduleKey: string,
+    @Body() body: { versionTag: string; env?: string; gitCommit?: string; gitBranch?: string; note?: string },
+    @CurrentUser() user: any,
+  ) {
+    const v = await this.deployService.recordReleaseVersion({
+      moduleKey,
+      versionTag: body?.versionTag,
+      env: body?.env,
+      gitCommit: body?.gitCommit,
+      gitBranch: body?.gitBranch,
+      note: body?.note,
+      operator: user?.username,
+    });
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'release.write-version',
+      env: body?.env,
+      component: moduleKey,
+      status: 'success',
+      detail: `写版本记录: ${moduleKey} → ${v.versionTag}`,
+    });
+    return { id: v.id, moduleKey, versionTag: v.versionTag };
+  }
+
+  /**
+   * 部署某版本到某环境（= 改指针；不跑探活，验证人工确认）
+   */
+  @Post('modules/:moduleKey/envs/:env/deploy')
+  @ApiOperation({ summary: '部署版本（调用改指针接口，把环境指向该版本）' })
+  async deployModuleVersion(
+    @Param('moduleKey') moduleKey: string,
+    @Param('env') env: string,
+    @Body() body: { versionTag: string },
+    @CurrentUser() user: any,
+  ) {
+    const r = await this.deployService.deployVersion({
+      moduleKey,
+      env,
+      versionTag: body?.versionTag,
+      operator: user?.username,
+    });
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'release.deploy',
+      env,
+      component: moduleKey,
+      status: 'success',
+      detail: `部署（改指针）: ${env}/${moduleKey} → ${r.versionTag}`,
+    });
+    return r;
+  }
+
+  /**
    * 查询某环境各模块当前版本（「不同环境指定不同版本」展示用）
    */
   @Get('current-versions')

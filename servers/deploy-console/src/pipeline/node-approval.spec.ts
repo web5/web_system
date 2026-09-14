@@ -29,6 +29,7 @@ import { ReleaseGitService } from '../git/release-git.service';
 import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { PipelineService, PIPELINE_AWAITING_APPROVAL } from './pipeline.service';
+import { PipelineVarService } from './pipeline-var.service';
 import { PipelineSuspended } from './pipeline-suspension';
 import type { TemplateNode } from '../pipeline-template/template-node';
 import type { StepAction } from '../entities/deploy-pipeline-step-command.entity';
@@ -164,6 +165,8 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: getRepositoryToken(DeployVersionEntity), useValue: {} },
       { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { findOne: async () => null } },
       { provide: getRepositoryToken(DeployPipelineTemplateEntity), useValue: {} },
+      // 流水线变量：本 spec 关注审批挂起/恢复，变量不参与 → 空实现
+      { provide: PipelineVarService, useValue: { resolve: async () => ({}) } },
       { provide: ModuleRegistryService, useValue: moduleRegistry },
       { provide: CanaryService, useValue: canary },
       { provide: AuditService, useValue: audit },

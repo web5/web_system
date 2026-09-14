@@ -133,6 +133,8 @@ export interface TemplateSpec {
   name: string;
   /** 流水线 key（slug，产物命名空间用）；未传时自动生成（name 拼音/默认递增） */
   key?: string;
+  /** 归属环境（local/dev/prod…）；一个模块默认三条 */
+  env?: string | null;
   description?: string;
   skipVerify?: boolean;
   steps?: string[];
@@ -278,7 +280,10 @@ export class PipelineTemplateService {
   /** 全部模板（流水线中心管理视图） */
   async listAll(): Promise<DeployPipelineTemplateEntity[]> {
     await this.ensureDefault();
-    return this.repo.find({ order: { moduleKey: 'ASC', builtin: 'DESC', createdAt: 'ASC' } });
+    // 列表按「模块 → 环境」组织：一个模块默认 local / dev / prod 三条
+    return this.repo.find({
+      order: { moduleKey: 'ASC', env: 'ASC', builtin: 'DESC', createdAt: 'ASC' },
+    });
   }
 
   async get(id: string): Promise<DeployPipelineTemplateEntity> {
@@ -333,6 +338,7 @@ export class PipelineTemplateService {
       moduleKey: GLOBAL_TEMPLATE,
       name,
       key,
+      env: spec.env?.trim() || null,
       description: spec.description?.trim() || undefined,
       steps,
       nodes,
@@ -371,6 +377,7 @@ export class PipelineTemplateService {
       moduleKey: GLOBAL_TEMPLATE,
       name,
       key,
+      env: src.env ?? null,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
       nodes: src.nodes ?? null,
@@ -402,6 +409,9 @@ export class PipelineTemplateService {
     }
     if (patch.key !== undefined) {
       tpl.key = await this.normalizeKey(patch.key, id);
+    }
+    if (patch.env !== undefined) {
+      tpl.env = patch.env?.trim() || null;
     }
     this.assertApproval(patch.approval);
     this.assertTarget(patch.defaultTarget);
