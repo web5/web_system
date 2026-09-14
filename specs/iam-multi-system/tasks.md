@@ -7,34 +7,41 @@
 
 ## 1. 任务列表
 
-- [ ] **T1 数据模型：`users.systems`**（判据：V7）　依赖：无
+- [x] **T1 数据模型：`users.systems`**（判据：V7 ✅）　依赖：无
   - `packages/shared/src/entities/user.entity.ts` 加 `systems?: string[] | null` JSON 列
   - 回填脚本：openid 非空 → `['portal']`；`admin`/`test` → `['admin','deploy']`；其余兜底
   - 单测：回填规则纯函数（空值/openid/运营三类）
 
-- [ ] **T2 user-service：按系统过滤用户**（判据：V4, V5）　依赖：T1
+- [x] **T2 user-service：按系统过滤用户**（判据：V4 ✅, V5 ✅）　依赖：T1
   - `POST /internal/users/by-permissions` 增可选 `system`
   - `GET /users` 增 `system` 查询（默认 `admin`，`all` 显式放开）
   - 单测：过滤逻辑 + 与权限码的组合（AND）
 
-- [ ] **T3 auth-service：登录支持 system 并校验**（判据：V1, V2）　依赖：T1
+- [x] **T3 auth-service：登录支持 system 并校验**（判据：V1 ✅, V2 ✅）　依赖：T1
   - `LoginDto` 增 `system?`；JWT payload 增 `systems`
   - 校验：用户 `systems` 不含目标系统 → 403（message 明确）
   - 注册 / 微信 / 小程序三条创建路径写入 `['portal']`
   - 单测：三类用户 × 三个系统的登录矩阵
 
-- [ ] **T4 deploy-console：废弃自建登录，改验统一 JWT**（判据：V3, V6）　依赖：T3
+- [x] **T4 deploy-console：废弃自建登录，改验统一 JWT**（判据：V3 ✅, V6 ✅）　依赖：T3
   - 删除 `ADMIN_USER`/`ADMIN_PASS` 比对；`jwt.strategy.ts` 去掉硬编码 `role:'admin'`
   - 缺失 `JWT_SECRET` → 启动失败（去掉兜底串）
   - `ecosystem.config.js` 放开对 console 的 `JWT_SECRET` 注入（同步修改现行"刻意不注入"策略）
   - 单测：验签失败 / 缺 systems 的 token 被拒
 
-- [ ] **T5 console 前端：登录改走 auth-service**（判据：V3）　依赖：T4
+- [x] **T5 console 前端：登录改走 auth-service**（判据：V3 ✅）　依赖：T4
+  - 实际**零改造**：console 登录接口返回契约 `{token,user}` 保持不变，由后端代理到 auth-service。
+  - 追加：admin 前端登录 / 微信扫码登录显式传 `system:'admin'` —— 否则默认 portal 不做门禁，
+    **C 端账号仍能登进运营后台**（验收时发现的漏洞，已补）。
   - 登录调 `/api/auth/login`（同源走 gateway），token 结构改为 `{accessToken, refreshToken, user}`
   - 刷新逻辑复用 admin 前端的做法（裸 axios 调 `/api/auth/refresh`）
   - 手工验收：登录后能调 `/console/api/pipelines/meta/approvers`
 
-- [ ] **T6 数据迁移与验证**（判据：V7）　依赖：T1
+- [x] **T6 数据迁移与验证**（判据：V7 ✅ 本机）　依赖：T1
+  - 本机已完成（回填 4/4，越权 0）；`.env.example` 已同步（`ADMIN_PASS` 降级为逃生通道、
+    新增 `AUTH_SERVICE_URL` / `CONSOLE_ALLOW_LEGACY_LOGIN`）。
+  - **dev / prod 待执行**：在目标机跑 `node scripts/migrate-user-systems.mjs`（先 `DRY_RUN=1` 预演），
+    并把各服务 `.env` 的 `JWT_SECRET` 与 auth-service 对齐。
   - 本机 + dev 各跑一次回填；抽查 C 端与运营账号
   - 清理：console `.env` 移除 `ADMIN_PASS`（并同步 `.env.example`）
 

@@ -25,6 +25,8 @@ export interface LoginRequest {
 
 export interface WechatLoginRequest {
   code: string;
+  /** 目标系统：不传默认 portal（不做门禁）；运营后台扫码登录需传 admin */
+  system?: 'portal' | 'admin' | 'deploy';
 }
 
 export interface LoginResponse {
