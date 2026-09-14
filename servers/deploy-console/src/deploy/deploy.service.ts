@@ -223,6 +223,69 @@ export class DeployService {
   }
 
   /**
+   * 写一条版本记录（**新**：给流水线「发布」节点的脚本调用）。
+   *
+   * 背景：发布节点的语义是「上传文件 + 调用写版本接口」—— 版本不再由平台内置节点代写，
+   * 而是脚本显式调用本接口落库，从而走统一技术流程（引擎无发布特例）。
+   * 与 `recordVersion`（旧 deploy 任务成功后自动补记）的区别：入参显式、同步返回、失败即抛。
+   */
+  async recordReleaseVersion(input: {
+    moduleKey: string;
+    versionTag: string;
+    env?: string;
+    gitCommit?: string;
+    gitBranch?: string;
+    operator?: string;
+    note?: string;
+  }): Promise<DeployVersionEntity> {
+    if (!input?.moduleKey?.trim()) throw new Error('写版本失败: moduleKey 必填');
+    if (!input?.versionTag?.trim()) throw new Error('写版本失败: versionTag 必填');
+    const v = new DeployVersionEntity();
+    v.env = input.env || '';
+    v.component = input.moduleKey;
+    v.versionTag = input.versionTag;
+    v.gitCommit = input.gitCommit;
+    v.gitBranch = input.gitBranch;
+    v.releasedBy = input.operator;
+    v.releasedAt = new Date();
+    v.status = 'active';
+    v.note = input.note;
+    const saved = await this.versionRepo.save(v);
+    this.logger.log(`版本记录已写入: ${saved.versionTag} (${saved.env}/${saved.component})`);
+    return saved;
+  }
+
+  /**
+   * 部署某版本到某环境 = **改指针**（把环境当前版本指向该版本目录）。
+   *
+   * 不做探活验证（改指针基本不会失败），验证由人工确认、后续接 AI 验证 agent。
+   * 以原子 upsert 保证 `(envId, moduleKey)` 唯一行。
+   */
+  async deployVersion(input: {
+    moduleKey: string;
+    env: string;
+    versionTag: string;
+    operator?: string;
+  }): Promise<{ env: string; moduleKey: string; versionTag: string }> {
+    if (!input?.moduleKey?.trim()) throw new Error('部署失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new Error('部署失败: env 必填');
+    if (!input?.versionTag?.trim()) throw new Error('部署失败: versionTag 必填');
+    await this.deploymentRepo.upsert(
+      {
+        envId: input.env,
+        moduleKey: input.moduleKey,
+        currentVersion: input.versionTag,
+        status: 'deployed',
+        deployedAt: new Date(),
+        deployedBy: input.operator,
+      },
+      ['envId', 'moduleKey'],
+    );
+    this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
+    return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag };
+  }
+
+  /**
    * 更新环境-模块当前部署状态（「不同环境指定不同版本」核心）
    * 部署/回滚成功后 upsert (envId, moduleKey) 的当前版本
    */

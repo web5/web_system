@@ -52,6 +52,8 @@ export { killShellProcess };
 export type { KillResult };
 // approval 节点挂起信号与恢复起点
 import { PipelineSuspended, isPipelineSuspended, resolveStartIndex } from './pipeline-suspension';
+// 流水线变量（属于某条流水线；执行前解析注入节点脚本环境）
+import { PipelineVarService } from './pipeline-var.service';
 export { resolveStartIndex };
 // 发布目录 git 工作区（拉码后回填实际 commit 用）
 import { ReleaseGitService } from '../git/release-git.service';
@@ -168,6 +170,11 @@ export interface ModuleSnapshot {
 export interface StageVarsInput {
   env: string;
   moduleKey: string;
+  /**
+   * 流水线变量（属于某条流水线，编辑页维护）。
+   * **最后合并**：优先级 内置 → 配置中心 → 流水线变量 → 节点内联，故它可以覆盖配置中心同名键。
+   */
+  pipelineVars?: Record<string, string>;
   moduleType?: string;
   dir?: string;
   pm2?: string;
@@ -211,6 +218,8 @@ export interface StageVarsInput {
  */
 export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const cfg = i.config ?? {};
+  // 流水线变量（属于某条流水线）最后合并 —— 覆盖配置中心同名键，节点内联再覆盖它
+  const pipelineVars = i.pipelineVars ?? {};
   const type = i.moduleType || '';
   const dir = i.dir || i.moduleKey;
   const publicPath = i.publicPath || i.moduleKey;
@@ -243,6 +252,8 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
     WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
+    // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
+    ...pipelineVars,
   };
 }
 
@@ -332,6 +343,8 @@ export class PipelineService {
     // shell 执行通道（节点脚本的 bash -c 执行；可注入以便在测试里替换成假实现）
     @Inject(SHELL_RUNNER)
     private readonly shellRunner: ShellRunner,
+    // 流水线变量（属于某条流水线；执行前解析并注入节点脚本环境）
+    private readonly pipelineVars: PipelineVarService,
     // 静态产物存储（公共 API：可发布版本 / 历史版本切换的产物检查）
     private readonly artifacts: ArtifactStoreService,
     // 版本注册表（公共 API：历史版本切换 / 灰度转全量的指针与版本写入）
@@ -1715,6 +1728,8 @@ export class PipelineService {
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       platformScriptsDir: platformScriptsDir(),
+      // 流水线变量（编辑流水线页维护，${KEY} 引用）
+      pipelineVars: await this.pipelineVars.resolve(p.templateId),
     });
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
