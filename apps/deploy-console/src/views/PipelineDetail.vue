@@ -32,6 +32,7 @@ import {
   formatTime,
   durationMs,
   isLive,
+  isApprovalPending,
   checkNodes,
   nodeDisplayName,
   legacyToNodes,
@@ -226,13 +227,17 @@ function handleRetry(p: PipelineItem) {
   })
 }
 function handleCancel(p: PipelineItem) {
+  // 挂起等审批的取消 = 终止本次发布：已执行过的节点（构建/投递等）不会自动回滚
+  const suspended = p.status === 'awaiting-approval'
+  const approving = isApprovalPending(p.status)
   Modal.confirm({
-    title: p.status === 'pending-approval' ? '撤回审批请求' : '确认取消',
-    content:
-      p.status === 'pending-approval'
+    title: suspended ? '终止挂起中的发布' : approving ? '撤回审批请求' : '确认取消',
+    content: suspended
+      ? `终止 ${p.id} 吗？它已执行到「${p.stage || '-'}」节点并在等待审批，终止后已执行的动作不会回滚，需重新提交发布。`
+      : approving
         ? `撤回 ${p.id} 的发布审批请求？撤回后需重新提交。`
         : `确定取消实例 ${p.id} 吗？正在执行的阶段会中断。`,
-    okText: p.status === 'pending-approval' ? '撤回' : '取消任务',
+    okText: approving ? '撤回' : '取消任务',
     okType: 'danger',
     cancelText: '返回',
     onOk: async () => {
@@ -306,7 +311,11 @@ async function submitReview() {
   try {
     if (review.value.action === 'approve') {
       await pipelineApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
-      message.success('已审批通过，发布开始执行')
+      message.success(
+        review.value.p.status === 'awaiting-approval'
+          ? '已审批通过，从该节点之后继续执行'
+          : '已审批通过，发布开始执行',
+      )
     } else {
       await pipelineApi.reject(review.value.p.id, reviewComment.value.trim())
       message.success('已拒绝该发布')
@@ -871,10 +880,10 @@ onUnmounted(stopPolling)
                     danger
                     @click="handleCancel(selectedRun)"
                   >停止</a-button>
-                  <a-button v-if="selectedRun.status === 'pending-approval'" danger @click="handleCancel(selectedRun)">
-                    撤回审批
+                  <a-button v-if="isApprovalPending(selectedRun.status)" danger @click="handleCancel(selectedRun)">
+                    {{ selectedRun.status === 'awaiting-approval' ? '终止发布' : '撤回审批' }}
                   </a-button>
-                  <template v-if="selectedRun.status === 'pending-approval'">
+                  <template v-if="isApprovalPending(selectedRun.status)">
                     <a-button type="primary" @click="openApprove(selectedRun)">审批通过</a-button>
                     <a-button danger @click="openReject(selectedRun)">拒绝</a-button>
                   </template>
@@ -961,12 +970,12 @@ onUnmounted(stopPolling)
                     >
                       {{ record.status === 'succeeded' ? '再次发布' : '重试' }}
                     </a-button>
-                    <template v-if="record.status === 'pending-approval'">
+                    <template v-if="isApprovalPending(record.status)">
                       <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
                       <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
                     </template>
                     <a-button
-                      v-if="['running', 'pending'].includes(record.status)"
+                      v-if="['running', 'pending', 'awaiting-approval'].includes(record.status)"
                       type="link"
                       size="small"
                       danger
@@ -979,7 +988,7 @@ onUnmounted(stopPolling)
                       @click="handlePromote(record)"
                     >转全量</a-button>
                     <a-button
-                      v-if="!['running', 'pending', 'pending-approval'].includes(record.status)"
+                      v-if="!['running', 'pending', 'pending-approval', 'awaiting-approval'].includes(record.status)"
                       type="link"
                       size="small"
                       danger

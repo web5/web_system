@@ -13,6 +13,13 @@ import {
 } from '@/api'
 import dayjs from 'dayjs'
 import BranchSelect from '@/components/BranchSelect.vue'
+import {
+  statusColor as stageStatusColor,
+  statusText as stageStatusText,
+  stepState as stageStepState,
+  APPROVAL_STATUSES,
+  isApprovalPending,
+} from '@/components/pipeline/pipeline.stages'
 
 const router = useRouter()
 
@@ -40,27 +47,12 @@ function typeLabel(type: string) {
   return TYPE_OPTIONS.find((t) => t.value === type)?.label || type
 }
 
+// 状态展示与审批判定统一走 components/pipeline/pipeline.stages（单一真相源）
 function statusColor(status: string) {
-  const map: Record<string, string> = {
-    pending: 'blue',
-    'pending-approval': 'orange',
-    running: 'processing',
-    succeeded: 'success',
-    failed: 'error',
-    cancelled: 'default',
-  }
-  return map[status] || 'default'
+  return stageStatusColor(status)
 }
 function statusText(status: string) {
-  const map: Record<string, string> = {
-    pending: '等待中',
-    'pending-approval': '待审批',
-    running: '运行中',
-    succeeded: '成功',
-    failed: '失败',
-    cancelled: '已取消',
-  }
-  return map[status] || status
+  return stageStatusText(status)
 }
 function formatTime(ts?: number) {
   return ts ? dayjs(ts).format('MM-DD HH:mm:ss') : '—'
@@ -127,14 +119,17 @@ async function refreshAll() {
   await Promise.all([loadTemplates(), loadSummary()])
 }
 // 轻量轮询：有实例运行/待跑时刷新摘要
+/** 仍在运行 / 等待审批的实例（挂起态也要继续轮询，审批可能在别处发生） */
+function hasLiveLatest(): boolean {
+  return Object.values(summaryMap.value).some(
+    (s) => s.latest && ['running', 'pending', ...APPROVAL_STATUSES].includes(s.latest.status),
+  )
+}
 function tick() {
   stopPolling()
   timer = window.setInterval(async () => {
     await loadSummary()
-    const running = Object.values(summaryMap.value).some(
-      (s) => s.latest && ['running', 'pending', 'pending-approval'].includes(s.latest.status),
-    )
-    if (!running) stopPolling()
+    if (!hasLiveLatest()) stopPolling()
   }, 3000)
 }
 function stopPolling() {
@@ -144,9 +139,7 @@ function stopPolling() {
   }
 }
 function hasRunning() {
-  return Object.values(summaryMap.value).some(
-    (s) => s.latest && ['running', 'pending', 'pending-approval'].includes(s.latest.status),
-  )
+  return hasLiveLatest()
 }
 
 function gotoDetail(t: PipelineTemplate) {
@@ -591,16 +584,8 @@ function stepList(p: PipelineItem) {
     : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']) as string[]
 }
 function stepState(p: PipelineItem, s: string): 'done' | 'running' | 'error' | 'pending' {
-  if (p.status === 'succeeded') return 'done'
-  const list = stepList(p)
-  const cur = list.indexOf(p.stage ?? '')
-  const i = list.indexOf(s)
-  if (p.status === 'failed' || p.status === 'cancelled') {
-    if (i < 0) return 'pending'
-    return i < cur ? 'done' : i === cur ? 'error' : 'pending'
-  }
-  if (p.status === 'pending-approval' || cur < 0 || i < 0) return 'pending'
-  return i < cur ? 'done' : i === cur ? 'running' : 'pending'
+  // 与详情页同一套判定（含节点级挂起：已执行节点显示 done，停在待审批节点）
+  return stageStepState(p, s)
 }
 async function loadPl() {
   plLoading.value = true
@@ -684,8 +669,11 @@ function plRetry(p: PipelineItem) {
 }
 function plCancel(p: PipelineItem) {
   Modal.confirm({
-    title: p.status === 'pending-approval' ? '撤回审批请求' : '确认取消',
-    content: `确定取消实例 ${p.id} 吗？`,
+    title: p.status === 'awaiting-approval' ? '终止挂起中的发布' : isApprovalPending(p.status) ? '撤回审批请求' : '确认取消',
+    content:
+      p.status === 'awaiting-approval'
+        ? `终止 ${p.id} 吗？它已执行到「${p.stage || '-'}」节点并在等待审批，终止后已执行的动作不会回滚，需重新提交发布。`
+        : `确定取消实例 ${p.id} 吗？`,
     okText: '确认',
     okType: 'danger',
     cancelText: '返回',
@@ -1075,12 +1063,12 @@ onUnmounted(stopPolling)
               >
                 {{ record.status === 'succeeded' ? '再次发布' : '重试' }}
               </a-button>
-              <template v-if="record.status === 'pending-approval'">
+              <template v-if="isApprovalPending(record.status)">
                 <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
                 <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
               </template>
               <a-button
-                v-if="record.status === 'running' || record.status === 'pending'"
+                v-if="record.status === 'running' || record.status === 'pending' || record.status === 'awaiting-approval'"
                 type="link"
                 size="small"
                 danger
