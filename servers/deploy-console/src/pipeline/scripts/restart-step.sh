@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 # 阶段：restart（platform 节点 · 平台托管，locked=true，页面只读）
 # 依赖变量：RELEASE_DIR / MODULE_KEY / MODULE_DIR / MODULE_TYPE / PM2_NAME / PORT
+#           WS_PLATFORM_SCRIPTS_DIR（平台脚本目录，由引擎注入）
 #
 # 职责边界：本脚本只负责「委托谁」，不内联实现。
-#   - 平台托管脚本随 **deploy-console 版本**走（两端启动时幂等同步，不会漂移）；
-#   - 具体实现随 **业务代码**走（仓库 scripts/pipeline/restart-backend.sh：依赖装配校验 +
-#     干净环境重建），可 review、可 bash -n、可单测。
-#   二者分开，各自按自己的节奏演进；改了实现不必动库，改了「调用谁」才动库。
+#   - 实现自 2026-09-14 起**随 console 走**（同目录 restart-backend.sh），
+#     不再依赖发布分支里的 `scripts/pipeline/restart-backend.sh` ——
+#     否则「发布一个还没合入该脚本的旧分支」就会让重启阶段拿不到实现，
+#     而这个脚本本该是平台能力、不应受业务分支影响。
+#   - 平台托管脚本随 **deploy-console 版本**走（两端启动时幂等同步，不会漂移）。
 #
-# 稳定性：fail-fast，不静默降级 —— 发布分支缺脚本时显式失败（否则会悄悄退回旧语义，
-#   正是「脚本存在但跑的是旧逻辑」这类难查问题的来源）。
+# 稳定性：fail-fast，不静默降级 —— 找不到实现时显式失败。
 set -euo pipefail
 
 : "${RELEASE_DIR:?缺少 RELEASE_DIR（发布目录）}"
+: "${WS_PLATFORM_SCRIPTS_DIR:?缺少 WS_PLATFORM_SCRIPTS_DIR（平台脚本目录，由引擎注入）}"
 
-TARGET="$RELEASE_DIR/scripts/pipeline/restart-backend.sh"
+TARGET="$WS_PLATFORM_SCRIPTS_DIR/restart-backend.sh"
 if [ ! -f "$TARGET" ]; then
   echo "[pipeline:restart] 缺少 $TARGET" >&2
-  echo "[pipeline:restart] 说明：发布分支必须包含 scripts/pipeline/restart-backend.sh（master 已含）。" >&2
-  echo "[pipeline:restart] 处置：确认发布用的分支/commit 已合并该脚本，或先把分支合入 master 后重发。" >&2
+  echo "[pipeline:restart] 说明：该实现随 deploy-console 构建产物分发（nest-cli assets）。" >&2
+  echo "[pipeline:restart] 处置：检查 console 的 dist/pipeline/scripts/ 是否完整，必要时重新构建 console。" >&2
   exit 1
 fi
 

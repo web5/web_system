@@ -234,6 +234,26 @@ export function legacyStepsToNodes(opts: {
   return nodes;
 }
 
+/**
+ * 模板级审批人下沉到approval 节点（纯函数）。
+ *
+ * 节点未指定 `approvers` 时继承模板级配置；节点显式指定则以节点为准（更具体优先）。
+ * 提交时调用，结果随实例 nodes 快照，模板后续改动不影响历史实例。
+ */
+export function applyTemplateApprovers(
+  nodes: TemplateNode[] | null | undefined,
+  tplApprovers?: string[] | null,
+): TemplateNode[] | null {
+  if (!nodes || !nodes.length) return nodes ?? null;
+  const fallback = [
+    ...new Set((tplApprovers ?? []).map((s) => String(s ?? '').trim()).filter(Boolean)),
+  ];
+  if (!fallback.length) return nodes;
+  return nodes.map((n) =>
+    n.kind === 'approval' && !(n.approvers ?? []).length ? { ...n, approvers: [...fallback] } : n,
+  );
+}
+
 /** 节点执行计划（纯函数产物，engine run/executeStage 共用；nodes 为 null 时返回 null=legacy） */
 export interface NodeRunPlan {
   /** 保序的节点 key（git/version/pointer + script 自定义 key 按编排序） */

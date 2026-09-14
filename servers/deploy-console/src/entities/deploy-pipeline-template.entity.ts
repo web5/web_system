@@ -66,6 +66,16 @@ export class DeployPipelineTemplateEntity {
   @Column({ type: 'boolean', default: true, comment: '启用；停用后不可被提交引用' })
   enabled: boolean;
 
+  /**
+   * 模板级审批人（用户名列表，来自 user-service 中持有 `deploy:pipeline:approve` 的用户）。
+   *
+   * 与节点级 `nodes[kind=approval].approvers` 的关系：节点未指定时**继承这里**，
+   * 指定则以节点为准（节点更具体）。提交时把结果快照进实例 nodes，模板后续改动不影响历史实例。
+   * 为什么模板要有这一份：大多数流水线"谁能批"是整条线统一的策略，逐节点配一遍是重复劳动。
+   */
+  @Column({ type: 'json', nullable: true, comment: '模板级审批人（用户名列表）' })
+  approvers?: string[] | null;
+
   @Column({ type: 'boolean', default: false, comment: '内置默认模板（不可删除/改名）' })
   builtin: boolean;
 

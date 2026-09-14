@@ -13,6 +13,8 @@ import {
 } from '@/api'
 import dayjs from 'dayjs'
 import BranchSelect from '@/components/BranchSelect.vue'
+// 人员选择器（审批人等"选系统用户"的位置统一用它，避免手填用户名）
+import UserSelect from '@/components/UserSelect.vue'
 import {
   statusColor as stageStatusColor,
   statusText as stageStatusText,
@@ -157,6 +159,8 @@ const modal = ref({
   approval: 'inherit' as string,
   defaultTarget: 'auto' as string,
   enabled: true,
+  /** 模板级审批人（白名单；真正能否审批看权限码 deploy:pipeline:approve） */
+  approvers: [] as string[],
 })
 const saving = ref(false)
 
@@ -171,6 +175,7 @@ function openCreate() {
     approval: 'inherit',
     defaultTarget: 'auto',
     enabled: true,
+    approvers: [],
   }
 }
 function openEdit(t: PipelineTemplate) {
@@ -184,6 +189,7 @@ function openEdit(t: PipelineTemplate) {
     approval: t.approval,
     defaultTarget: t.defaultTarget,
     enabled: t.enabled !== false,
+    approvers: t.approvers ? [...t.approvers] : [],
   }
 }
 async function saveTemplate() {
@@ -202,6 +208,7 @@ async function saveTemplate() {
       rollbackOnFailure: m.rollbackOnFailure as PipelineTemplate['rollbackOnFailure'],
       approval: m.approval as PipelineTemplate['approval'],
       defaultTarget: m.defaultTarget as PipelineTemplate['defaultTarget'],
+      approvers: m.approvers?.length ? m.approvers : null,
     }
     if (m.editing) {
       await pipelineTemplateApi.update(m.editing.id, dto)
@@ -1217,6 +1224,13 @@ onUnmounted(stopPolling)
             </a-form-item>
           </a-col>
         </a-row>
+        <a-form-item label="审批人">
+          <UserSelect v-model="modal.approvers" placeholder="选择可审批的人（不选=所有有审批权限者）" />
+          <div style="color: #999; font-size: 12px; margin-top: 4px;">
+            候选来自 admin 系统中持有 <code>deploy:pipeline:approve</code> 权限的用户；
+            选了人 = 白名单（只有这些人能批），不选 = 所有持权限者都能批。
+          </div>
+        </a-form-item>
         <div v-if="modal.editing" style="color: #999; font-size: 12px; border-top: 1px dashed #eee; padding-top: 8px;">
           注意：本弹窗只控制「活动步骤」开关；步骤顺序（拖拽重排）与节点脚本请到「流水线详情 → 编辑流水线」调整。
           check/version/pointer 为语义基线，不可裁剪。

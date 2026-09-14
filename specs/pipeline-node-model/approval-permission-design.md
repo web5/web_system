@@ -1,7 +1,15 @@
 # 设计 · 审批人权限（`deploy:pipeline:approve`）
 
-> 状态：**影响清单待确认**（2026-09-14）
+> 状态：**B1 已实现并本机验证**（2026-09-14）；B2 未做
 > 方案选择：B —— 接权限体系（`packages/types` 权限码 → user-service → 控制台联动）
+>
+> **变更日志**
+> - 2026-09-14 B1 落地：`deploy` 分组 + `deploy:pipeline:approve` 权限码；
+>   user-service 新增 `POST /internal/users/by-permissions`；deploy-console 新增 `ApproverService`
+>   （60s 缓存 + 降级放行）与 `GET /api/pipelines/meta/approvers`，approve/reject 校验操作人。
+>   初始化：权限点入库并授予 `admin` / `super_admin`。
+>   验证：`/internal/users/by-permissions` 与 `/api/pipelines/meta/approvers` 均返回
+>   `[{"username":"admin","roles":["admin"]}]`，`degraded=false`。
 
 ---
 
@@ -69,6 +77,13 @@ Resp: { users: [...], degraded: boolean }    // degraded=true 表示权限服务
 | **B2 强绑定** | console 改成走 user-service 认证（JWT 统一），审批人就是登录态用户 | 大：改 console 登录体系 + 前端登录页 |
 
 建议：**先 B1**，把权限码与联动打通；B2 作为后续独立议题。
+（2026-09-14：已按 B1 实现 —— console 登录名 `admin` 与 user-service 的 `admin` 用户同名，
+校验即可命中。）
+
+**尚未做的部分**
+
+- 前端「审批人下拉联动」：目前流水线节点还没有配置界面（P3 画布），接口 `GET /api/pipelines/meta/approvers` 已就绪，画布落地时直接接上；`ApprovalNode.approvers` 仍按白名单取交集。
+- B2（console 改走 user-service 认证）未做。
 
 ---
 

@@ -5,6 +5,7 @@ import {
   isWritableStageKey,
   resolveNodeRunPlan,
   legacyStepsToNodes,
+  applyTemplateApprovers,
   PLATFORM_RESERVED,
   type TemplateNode,
   type ApprovalNode,
@@ -331,6 +332,23 @@ describe('ApprovalNode（审批成为节点）', () => {
       { kind: 'approval', key: 'approve', label: 'a', onTimeout: 'whatever' },
     ] as any;
     expect(() => normalizeNodes(badTimeout)).toThrow(/onTimeout 非法/);
+  });
+
+  it('模板级审批人下沉：approval 节点未指定时继承，已指定则不被覆盖', () => {
+    const nodes: TemplateNode[] = [
+      { kind: 'script', key: 'build', label: '构建' },
+      { kind: 'approval', key: 'gate', label: '发布确认' },
+      { kind: 'approval', key: 'gate2', label: '二次确认', approvers: ['bob'] },
+    ];
+    const out = applyTemplateApprovers(nodes, ['admin', ' alice ', '', 'admin']);
+    const gate = out![1] as ApprovalNode;
+    const gate2 = out![2] as ApprovalNode;
+    expect(gate.approvers).toEqual(['admin', 'alice']); // 去空去重
+    expect(gate2.approvers).toEqual(['bob']); // 节点更具体，不被覆盖
+    // 模板没配审批人 → 原样返回（不塞空数组）
+    expect(applyTemplateApprovers(nodes, null)).toBe(nodes);
+    expect(applyTemplateApprovers(nodes, [])).toBe(nodes);
+    expect(applyTemplateApprovers(null, ['admin'])).toBeNull();
   });
 
   it('执行计划：approval 计入 keys（执行到会挂起），但不进 scriptKeys（不可配命令）', () => {
