@@ -153,6 +153,14 @@
 
 ### 6.3 已知缺口（留给后续阶段）
 
+- **节点边界变更（用户 2026-09-14，影响 P4 目标模型）**：
+  ①`投递产物 + 写版本`合并为一个「**发布**」节点 —— 它是**普通 shell 节点、无内置语义**，
+     脚本两步：上传文件（工具）+ 调用写版本接口（工具），走统一技术流程（用户 2026-09-14 澄清）；
+  ②`切指针 + 验证`**移出流水线**，归「模块管理 → 环境部署」：部署 = 调用改指针接口，
+     **本期不自动探活（人工确认）**，后续接 AI 验证 agent 时在该子模块加「AI 验证」按钮。
+  即：P4 的 platform 节点不是简单降级为 shell，而是 `version` 并入发布节点、`pointer` 从流水线退役后独立提供给环境部署页调用。
+  详见 `docs/ui/page-specs/pipeline-product-logic-v1.md` §9。
+
 - **控制台 UI 未适配 `awaiting-approval`**：`statusColor` / `statusText` / `isLive` 三个状态表需加该项，
   否则挂起的实例会停止轮询、详情页不出现「审批通过 / 拒绝」按钮 —— 目前只能走 API（`POST /api/pipelines/:id/approve`）。
   涉及 `apps/deploy-console` 的 `components/pipeline/pipeline.stages.ts` + `views/PipelineDetail.vue` + `views/PipelineCenter.vue`，
