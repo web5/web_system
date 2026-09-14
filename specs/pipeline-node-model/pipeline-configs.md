@@ -127,6 +127,7 @@
 
 - 2026-09-14 首版：梳理 admin / ai-agent 两条发布流水线（拉代码 → 构建 → 审批 → 发布），含节点清单、发布参数默认值、历史数据清理范围与待确认项；同步落库。
 - 2026-09-14 改为**先只做本地**：远程两条停用（ssh 远程发布暂缓），新建 `tpl-local-admin` / `tpl-local-ai-agent` 两条本地流水线（只配 build，其余用平台内置 + 平台托管脚本）。
+- 2026-09-14 平台脚本收归 console（A 项）；审批人接入权限体系并抽出 `UserSelect` 人员选择器（C 项）。
 
 ---
 
@@ -134,9 +135,9 @@
 
 | # | 诉求 | 落点 | 阶段 |
 |---|---|---|---|
-| A | `restart-backend.sh` / `verify-backend.sh` 收归 console（跟 `git-step.sh` 一样作为平台脚本正文），不再委托工程 `scripts/pipeline/*.sh` | `servers/deploy-console/scripts/*.sh` + `step-scripts.ts`；工程侧脚本作废 | 待定 |
+| A | `restart-backend.sh` / `verify-backend.sh` 收归 console | ✅ 已做：实现副本放进 `servers/deploy-console/src/pipeline/scripts/`，step 脚本改调 `$WS_PLATFORM_SCRIPTS_DIR/*.sh`；工程侧两份保留但标 DEPRECATED（仅 `bootstrap.sh` 与人工运维用） | 2026-09-14 |
 | B | 全局参数有专门查看入口；自定义参数在流水线里体现 | 配置中心页 + 流水线详情「参数」面板（模板级变量 `scope=template`） | P2 |
-| C | 初始化「审批人」权限 | deploy-console 目前只有 env 单一管理员、无用户表；需先定落点（见下） | 待定 |
+| C | 初始化「审批人」权限 | ✅ 已做（方案 B1）：权限码 `deploy:pipeline:approve` + 模板级审批人白名单 + `UserSelect` 选择器，见 `approval-permission-design.md` | 2026-09-14 |
 
 **C 的两种落点（需要你选）**
 

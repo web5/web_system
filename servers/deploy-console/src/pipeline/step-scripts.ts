@@ -38,6 +38,17 @@ export const PLATFORM_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: strin
   { nodeKey: 'verify', file: VERIFY_STEP_SCRIPT_FILE, label: '部署验证（平台托管）' },
 ];
 
+/**
+ * 平台脚本目录（运行期绝对路径）。
+ *
+ * 供 `restart-step.sh` / `verify-step.sh` 定位随 console 分发的实现脚本
+ * （引擎通过 `WS_PLATFORM_SCRIPTS_DIR` 变量注入）—— 实现收归 console 后，
+ * 流水线不再依赖发布分支里的 `scripts/pipeline/*.sh`。
+ */
+export function platformScriptsDir(): string {
+  return join(__dirname, 'scripts');
+}
+
 /** 读取脚本正文（缺失时抛错：宁可启动报错，也不要静默用空脚本发布） */
 export function readStepScript(fileName: string): string {
   const file = join(__dirname, 'scripts', fileName);

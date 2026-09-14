@@ -360,6 +360,11 @@ export interface PipelineTemplate {
   defaultTarget: 'auto' | 'local' | 'remote'
   enabled: boolean
   builtin: boolean
+  /**
+   * 模板级审批人（用户名）。仅作白名单，能否审批仍看权限码
+   * `deploy:pipeline:approve`；节点未指定 approvers 时继承这里。
+   */
+  approvers?: string[] | null
   createdAt: string
   updatedAt: string
 }
@@ -377,6 +382,14 @@ export interface ToolItem {
   available: boolean
   builtin: boolean
   updatedAt?: string
+}
+
+/** 可审批人（来自 user-service，按权限码筛选） */
+export interface ApproverUser {
+  id: string
+  username: string
+  nickname?: string
+  roles: string[]
 }
 
 export interface PipelineItem {
@@ -497,6 +510,18 @@ export const pipelineApi = {
   /** 删除执行记录（纯清理：不动版本指针/产物；running/pending 返回 400） */
   remove: (id: string) =>
     http.delete(`/pipelines/${id}`) as Promise<{ ok: boolean }>,
+
+  /**
+   * 可审批人：admin 系统中持有 `deploy:pipeline:approve` 权限的用户。
+   * `degraded=true` 表示权限服务不可用/清单为空 —— 此时后端**不做审批校验**。
+   */
+  approvers: () =>
+    http.get('/pipelines/meta/approvers') as Promise<{
+      users: ApproverUser[]
+      degraded: boolean
+      reason?: string
+      permission: string
+    }>,
 
   /** 可发布版本（含磁盘上未登记版本表的历史产物）；行内带纯 commit，供「Commit」下拉直接提交 */
   releases: (env?: string, component?: string) =>

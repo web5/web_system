@@ -293,13 +293,28 @@ function handlePromote(p: PipelineItem) {
 const review = ref<{ p: PipelineItem; action: 'approve' | 'reject' } | null>(null)
 const reviewComment = ref('')
 const reviewing = ref(false)
+/** 可审批人（打开弹窗时拉一次；degraded=后端未做校验，需显式提示） */
+const approverInfo = ref<{ users: { username: string; nickname?: string }[]; degraded: boolean; reason?: string }>({
+  users: [],
+  degraded: false,
+})
+async function loadApprovers() {
+  try {
+    const r = await pipelineApi.approvers()
+    approverInfo.value = { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
+  } catch {
+    approverInfo.value = { users: [], degraded: true, reason: '获取可审批人失败' }
+  }
+}
 function openApprove(p: PipelineItem) {
   reviewComment.value = ''
   review.value = { p, action: 'approve' }
+  void loadApprovers()
 }
 function openReject(p: PipelineItem) {
   reviewComment.value = ''
   review.value = { p, action: 'reject' }
+  void loadApprovers()
 }
 async function submitReview() {
   if (!review.value) return
@@ -1230,6 +1245,17 @@ onUnmounted(stopPolling)
         {{ review.p.env }} / {{ review.p.moduleKey }}
         <template v-if="review.p.versionTag">@ {{ review.p.versionTag }}</template>
         · 提交人 {{ review.p.operator || '-' }}
+      </p>
+      <a-alert
+        v-if="approverInfo.degraded"
+        type="warning"
+        show-icon
+        banner
+        style="margin-bottom: 12px;"
+        :message="`未做审批权限校验：${approverInfo.reason || '权限服务不可用'}`"
+      />
+      <p v-else-if="approverInfo.users.length" style="margin-bottom: 12px; color: #666; font-size: 12px;">
+        可审批：{{ approverInfo.users.map((u) => u.nickname || u.username).join('、') }}
       </p>
       <a-textarea
         v-model:value="reviewComment"

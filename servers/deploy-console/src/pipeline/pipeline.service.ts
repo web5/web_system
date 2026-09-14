@@ -58,6 +58,8 @@ import { ReleaseGitService } from '../git/release-git.service';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
+// 平台托管脚本（正文 + 随 console 分发的脚本目录）
+import { platformScriptsDir } from './step-scripts';
 // v5 节点执行策略（纯函数：check 恒内置 / git 支持 DB 脚本 / version·pointer 纯内置）
 import { planNodeExec } from './steps/node-exec-plan';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
@@ -68,7 +70,9 @@ import {
   resolveNodeRunPlan,
   legacyStepsToNodes,
   isV5NodesEnabled,
+  applyTemplateApprovers,
   TemplateNode,
+  ApprovalNode,
 } from '../pipeline-template/template-node';
 
 /** 构建超时（毫秒） */
@@ -186,6 +190,11 @@ export interface StageVarsInput {
   keepVersions?: number;
   /** 删除策略：mv=改名到临时目录（规避批量删除审批）/ rm=直接删除 */
   safeDelete?: 'mv' | 'rm';
+  /**
+   * 平台脚本目录（随 console 分发的实现脚本，如 restart-backend.sh）。
+   * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
+   */
+  platformScriptsDir?: string;
 }
 
 /**
@@ -233,6 +242,7 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     KEEP_VERSIONS: String(i.keepVersions ?? 5),
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
+    WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
   };
 }
 
@@ -391,8 +401,12 @@ export class PipelineService {
    * 降级放行：user-service 不可达或清单为空时放行 —— 权限系统不该成为
    * 紧急发布的阻塞点，但会记 warn 日志留痕。
    */
-  private async assertCanReview(reviewer: string | undefined, action: string): Promise<void> {
-    const gate = await this.approvers.canApprove(reviewer);
+  private async assertCanReview(
+    reviewer: string | undefined,
+    action: string,
+    allowed?: string[],
+  ): Promise<void> {
+    const gate = await this.approvers.canApprove(reviewer, allowed);
     if (gate.ok) {
       if (gate.degraded) {
         this.logger.warn(
@@ -473,7 +487,12 @@ export class PipelineService {
             rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
           })
       : null;
-    const plan = snapshotNodes ? resolveNodeRunPlan(snapshotNodes) : null;
+    // 模板级审批人下沉到 approval 节点（节点未指定时继承），再整体快照进实例
+    const nodesSnapshot = applyTemplateApprovers(
+      snapshotNodes,
+      (tpl as { approvers?: string[] | null }).approvers,
+    );
+    const plan = nodesSnapshot ? resolveNodeRunPlan(nodesSnapshot) : null;
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -492,7 +511,7 @@ export class PipelineService {
       // R6 版本身份：流水线 key 快照（产物落盘 modules/<module>/<key>/<commit>/）
       templateKey: (tpl as { key?: string }).key ?? undefined,
       steps: tpl.steps ?? null,
-      nodes: snapshotNodes,
+      nodes: nodesSnapshot,
       skipVerify: !!tpl.skipVerify,
       rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
       runTarget,
@@ -729,7 +748,6 @@ export class PipelineService {
     nodeKey?: string,
   ): Promise<{ id: string; status: string; resumedFrom?: string }> {
     const p = await this.get(id);
-    await this.assertCanReview(reviewer, 'approve');
 
     // 节点级：从被挂起的节点之后继续
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
@@ -739,6 +757,13 @@ export class PipelineService {
       if (!approval) {
         throw new NotFoundException(`流水线 ${id} 缺少待审批的节点审批单`);
       }
+      // 校验：先过节点指定的审批人白名单，再看权限码
+      const node = (p.nodes ?? []).find((n) => n.key === (approval.nodeKey ?? p.stage));
+      await this.assertCanReview(
+        reviewer,
+        'approve',
+        node && node.kind === 'approval' ? node.approvers : undefined,
+      );
       await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
       const resumeAfter = approval.nodeKey ?? p.stage;
 
@@ -784,6 +809,7 @@ export class PipelineService {
     if (p.status !== 'pending-approval') {
       throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
     }
+    await this.assertCanReview(reviewer, 'approve');
     const approval =
       (await this.approvals.pendingForPipeline(id)) ?? (await this.approvals.byPipelineId(id));
     if (!approval) {
@@ -842,7 +868,6 @@ export class PipelineService {
     nodeKey?: string,
   ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
-    await this.assertCanReview(reviewer, 'reject');
 
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
       const approval =
@@ -853,8 +878,9 @@ export class PipelineService {
       }
       await this.approvals.resolve(approval.id, 'reject', reviewer || 'unknown', comment);
 
-      const node = (p.nodes ?? []).find((n) => n.key === approval.nodeKey);
+      const node = (p.nodes ?? []).find((n) => n.key === approval.nodeKey) as ApprovalNode | undefined;
       const onReject = node && node.kind === 'approval' ? node.onReject ?? 'abort' : 'abort';
+      await this.assertCanReview(reviewer, 'reject', node?.approvers);
       p.status = 'failed';
       p.endTime = Date.now();
       p.error = `节点「${approval.nodeKey ?? '-'}」审批拒绝: ${comment?.trim() || '无意见'}`;
@@ -896,6 +922,7 @@ export class PipelineService {
     if (p.status !== 'pending-approval') {
       throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
     }
+    await this.assertCanReview(reviewer, 'reject');
     const approval =
       (await this.approvals.pendingForPipeline(id)) ?? (await this.approvals.byPipelineId(id));
     if (!approval) {
@@ -1687,6 +1714,7 @@ export class PipelineService {
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
+      platformScriptsDir: platformScriptsDir(),
     });
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);

@@ -93,9 +93,17 @@ export class ApproverService {
    * 校验某人是否可以审批。
    * @returns { ok, degraded } —— degraded=true 表示没查到可审批人清单，按放行处理
    */
-  async canApprove(username?: string): Promise<{ ok: boolean; degraded: boolean; reason?: string }> {
+  async canApprove(
+    username?: string,
+    /** 节点/模板指定的审批人白名单；非空时不在名单内直接拒绝（优先于权限码） */
+    allowed?: string[],
+  ): Promise<{ ok: boolean; degraded: boolean; reason?: string }> {
     const who = (username || '').trim();
     if (!who) return { ok: false, degraded: false, reason: '操作人为空' };
+    const whitelist = (allowed ?? []).map((s) => String(s ?? '').trim()).filter(Boolean);
+    if (whitelist.length && !whitelist.includes(who)) {
+      return { ok: false, degraded: false, reason: `不在指定审批人内（${whitelist.join('、')}）` };
+    }
     const { users, degraded, reason } = await this.list();
     if (degraded) return { ok: true, degraded: true, reason }; // 降级放行
     if (!users.length) {
