@@ -16,6 +16,8 @@ import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
+// 可审批人（方案 B）：测试里用放行桩，避免真的去调 user-service
+import { ApproverService } from '../approval/approver.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { PipelineTemplateService } from '../pipeline-template/pipeline-template.service';
 import { Pm2ProbeService } from '../pm2/pm2-probe.service';
@@ -174,6 +176,15 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       ApprovalService,
       { provide: getRepositoryToken(DeployApprovalEntity), useValue: approvals },
       { provide: SystemSettingsService, useValue: { get: async () => null } },
+      // 审批权限校验：默认放行（真实拦截逻辑由 approver.service 自己测）
+      {
+        provide: ApproverService,
+        useValue: {
+          list: async () => ({ users: [], degraded: true, reason: 'test' }),
+          canApprove: async () => ({ ok: true, degraded: true, reason: 'test' }),
+          clearCache: () => undefined,
+        },
+      },
       { provide: PipelineTemplateService, useValue: {} },
       { provide: Pm2ProbeService, useValue: pm2Probe },
       { provide: CommandService, useValue: command },

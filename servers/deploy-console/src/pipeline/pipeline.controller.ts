@@ -91,6 +91,12 @@ export class PipelineController {
     return this.pipelineService.promote(id, user?.username);
   }
 
+  @Get('meta/approvers')
+  @ApiOperation({ summary: '可审批人（拥有 deploy:pipeline:approve 权限的系统用户）' })
+  async approvers() {
+    return this.pipelineService.listApprovers();
+  }
+
   @Post(':id/retry')
   @ApiOperation({ summary: '重试失败的流水线（相同参数重新提交）' })
   async retry(@Param('id') id: string, @CurrentUser() user: any) {

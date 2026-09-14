@@ -5,6 +5,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -30,6 +31,7 @@ import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
+import { ApproverService, APPROVE_PERMISSION } from '../approval/approver.service';
 import {
   PipelineTemplateService,
   needsApprovalForTemplate,
@@ -309,6 +311,8 @@ export class PipelineService {
     private readonly deployService: DeployService,
     // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
     private readonly approvals: ApprovalService,
+    // 可审批人：按权限码 deploy:pipeline:approve 从 user-service 拉（方案 B，弱绑定 + 降级放行）
+    private readonly approvers: ApproverService,
     // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
     private readonly templates: PipelineTemplateService,
     // pm2 进程探活（回滚后健康检查 probeBackendHealth 复用）
@@ -365,6 +369,42 @@ export class PipelineService {
   async waitFor(id: string): Promise<void> {
     const task = this.running.get(id);
     if (task) await task.catch(() => undefined);
+  }
+
+  /**
+   * 可审批人（供控制台下拉）。`degraded=true` 表示权限服务不可用/清单为空，
+   * 此时审批**不做校验**，前端需提示用户。
+   */
+  async listApprovers(): Promise<{
+    users: Array<{ id: string; username: string; nickname?: string; roles: string[] }>;
+    degraded: boolean;
+    reason?: string;
+    permission: string;
+  }> {
+    const r = await this.approvers.list();
+    return { ...r, permission: APPROVE_PERMISSION };
+  }
+
+  /**
+   * 审批权限校验（方案 B 弱绑定）。
+   *
+   * 降级放行：user-service 不可达或清单为空时放行 —— 权限系统不该成为
+   * 紧急发布的阻塞点，但会记 warn 日志留痕。
+   */
+  private async assertCanReview(reviewer: string | undefined, action: string): Promise<void> {
+    const gate = await this.approvers.canApprove(reviewer);
+    if (gate.ok) {
+      if (gate.degraded) {
+        this.logger.warn(
+          `审批权限未校验（降级放行）: ${action} by ${reviewer || '-'}（原因: ${gate.reason ?? '未知'}）`,
+        );
+      }
+      return;
+    }
+    throw new ForbiddenException(
+      `${reviewer || '当前操作人'} 无发布审批权限（需 ${APPROVE_PERMISSION}）；` +
+        '请在 admin 系统「角色管理」为对应用户授予该权限后重试',
+    );
   }
 
   /**
@@ -689,6 +729,7 @@ export class PipelineService {
     nodeKey?: string,
   ): Promise<{ id: string; status: string; resumedFrom?: string }> {
     const p = await this.get(id);
+    await this.assertCanReview(reviewer, 'approve');
 
     // 节点级：从被挂起的节点之后继续
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
@@ -801,6 +842,7 @@ export class PipelineService {
     nodeKey?: string,
   ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
+    await this.assertCanReview(reviewer, 'reject');
 
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
       const approval =
