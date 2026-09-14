@@ -38,9 +38,9 @@ export class InternalPermissionController {
    */
   @Post('users/by-permissions')
   @HttpCode(200)
-  async usersByPermissions(@Body() dto: { codes?: string[] }) {
+  async usersByPermissions(@Body() dto: { codes?: string[]; system?: string }) {
     const codes = Array.isArray(dto?.codes) ? dto.codes : [];
-    const users = await this.svc.findUsersByPermissions(codes);
+    const users = await this.svc.findUsersByPermissions(codes, dto?.system);
     return { code: 0, data: { users }, message: 'ok' };
   }
 }

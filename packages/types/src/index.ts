@@ -16,6 +16,11 @@ export type UserStatus = 'active' | 'inactive' | 'banned';
 export interface LoginRequest {
   username: string;
   password: string;
+  /**
+   * 目标系统：portal（C 端，默认）/ admin（运营）/ deploy（运维）。
+   * 只用于**收窄**——能不能进取决于账号自身的归属，不传不会放大权限。
+   */
+  system?: 'portal' | 'admin' | 'deploy';
 }
 
 export interface WechatLoginRequest {

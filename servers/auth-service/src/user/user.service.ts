@@ -75,6 +75,8 @@ export class UserService {
       email: data.email,
       phone: data.phone,
       roles: ['user'],
+      // IAM 一期：注册入口一律归 C 端，注册不可能自动获得后台访问权
+      systems: ['portal'],
     });
 
     return this.userRepository.save(user);
@@ -95,6 +97,7 @@ export class UserService {
       nickname: data.nickname,
       avatar: data.avatar,
       roles: ['user'],
+      systems: ['portal'], // 小程序用户 = C 端
     });
     return this.userRepository.save(user);
   }
@@ -114,6 +117,7 @@ export class UserService {
       nickname: data.nickname,
       avatar: data.avatar,
       roles: ['user'],
+      systems: ['portal'], // 公众号用户 = C 端
     });
     return this.userRepository.save(user);
   }

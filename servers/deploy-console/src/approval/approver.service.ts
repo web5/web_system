@@ -18,6 +18,12 @@ import { ConfigService } from '@nestjs/config';
 
 export const APPROVE_PERMISSION = 'deploy:pipeline:approve';
 
+/**
+ * 审批人必须归属的系统（IAM 一期）。
+ * C 端用户即便被误授该权限码，也不会出现在这里的候选里 —— 隔离是双保险。
+ */
+export const APPROVER_SYSTEM = 'deploy';
+
 export interface ApproverUser {
   id: string;
   username: string;
@@ -66,7 +72,7 @@ export class ApproverService {
       const res = await fetch(`${this.base}/internal/users/by-permissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-key': key },
-        body: JSON.stringify({ codes: [APPROVE_PERMISSION] }),
+        body: JSON.stringify({ codes: [APPROVE_PERMISSION], system: APPROVER_SYSTEM }),
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) {

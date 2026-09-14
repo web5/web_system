@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PERMISSIONS, ROLE_PERMISSIONS } from '@web-system/types';
-import { User } from '@web-system/shared';
+import { User, hasSystem, isAppSystem } from '@web-system/shared';
 import { PermissionEntity } from './entities/permission.entity';
 import { RoleEntity } from './entities/role.entity';
 import { RolePermissionEntity } from './entities/role-permission.entity';
@@ -350,6 +350,8 @@ export class PermissionService implements OnModuleInit {
    */
   async findUsersByPermissions(
     codes: string[],
+    /** 按归属系统过滤（IAM 一期）：如 deploy-console 只取 systems 含 'deploy' 的用户 */
+    system?: string,
   ): Promise<Array<{ id: string; username: string; nickname?: string; roles: string[] }>> {
     const want = [...new Set((codes ?? []).map((c) => String(c ?? '').trim()).filter(Boolean))];
     if (!want.length) return [];
@@ -373,7 +375,12 @@ export class PermissionService implements OnModuleInit {
       else qb.orWhere(`JSON_CONTAINS(u.roles, :${param})`, { [param]: JSON.stringify(r) });
     });
     const users = await qb.orderBy('u.username', 'ASC').getMany();
-    return users.map((u) => ({
+    // 系统隔离：C 端用户即便被误授运维权限码，也不会出现在运维侧的可选人里
+    const scoped =
+      system && system !== 'all' && isAppSystem(system)
+        ? users.filter((u) => hasSystem(u, system))
+        : users;
+    return scoped.map((u) => ({
       id: String(u.id),
       username: u.username,
       nickname: u.nickname || undefined,

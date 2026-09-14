@@ -54,6 +54,17 @@ export class User extends BigIntEntity {
   @Column({ type: 'json', nullable: true, comment: '角色列表' })
   roles: string[];
 
+  /**
+   * 归属系统（IAM 一期）：portal（C 端）/ admin（运营）/ deploy（运维）。
+   *
+   * 为什么需要：users 表里 C 端用户与运营、运维用户混存，只靠 roles 挡不住
+   * 「给 C 端账号授运维权限」。登录、授权、用户列表三处都按它过滤。
+   * 多值 —— 一个用户可以跨系统（如 admin 兼运维）。
+   * 判定与回填规则见 `packages/shared/src/user-systems.ts`（唯一真相源）。
+   */
+  @Column({ type: 'json', nullable: true, comment: '归属系统：portal/admin/deploy' })
+  systems?: string[] | null;
+
   /** 个人每日变身次数限制，NULL 表示使用全局默认 */
   @Column({ type: 'int', nullable: true, name: 'daily_transform_limit', comment: '每日变身次数上限，NULL=全局默认' })
   dailyTransformLimit: number | null;
