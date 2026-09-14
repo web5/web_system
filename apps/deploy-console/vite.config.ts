@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      // 共享 UI 组件的**源码**直引：@web-system/ui 以 dist 消费且流水线不构建它，
+      // 组件若走 dist 就得给它新增构建步骤（会制造"改了不生效"）。
+      // 指向源码后由本应用自己的 vite 编译，零额外构建环节。
+      '@web-system/ui/components': resolve(__dirname, '../../packages/ui/src/components'),
     },
   },
   server: {

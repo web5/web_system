@@ -38,6 +38,8 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': resolve(__dirname, 'src'),
         '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
+        // 共享 UI 组件源码直引（同 deploy-console：@web-system/ui 走 dist 且流水线不构建它）
+        '@web-system/ui/components': resolve(__dirname, '../../packages/ui/src/components'),
       },
     },
     server: {

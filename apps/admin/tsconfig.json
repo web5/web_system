@@ -5,7 +5,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@kedouai/agent-core": ["../../packages/agent-core/src/index.ts"]
+      "@kedouai/agent-core": ["../../packages/agent-core/src/index.ts"],
+      "@web-system/ui/components/*": ["../../packages/ui/src/components/*"]
     },
     "types": ["node", "vite/client"],
     "skipLibCheck": true
