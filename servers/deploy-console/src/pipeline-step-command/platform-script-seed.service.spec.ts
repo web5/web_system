@@ -1,5 +1,5 @@
 import { PlatformScriptSeedService } from './platform-script-seed.service';
-import { getPlatformStepScript } from '../pipeline/step-scripts';
+import { getPlatformStepScript, PLATFORM_STEP_SCRIPTS } from '../pipeline/step-scripts';
 
 /**
  * 平台托管脚本同步的防回归测试。
@@ -38,13 +38,31 @@ describe('PlatformScriptSeedService（平台托管脚本同步）', () => {
     svc = new PlatformScriptSeedService(repo as never, templates as never);
   });
 
-  it('无记录 → 新建 git 节点命令并置 locked=true', async () => {
+  it('无记录 → 为每个托管节点新建命令并置 locked=true', async () => {
     const wrote = await svc.seedForTemplate('t1');
     expect(wrote).toBe(true);
-    expect(repo.rows).toHaveLength(1);
-    expect(repo.rows[0]).toMatchObject({ templateId: 't1', nodeKey: 'git', locked: true, enabled: true });
-    expect(repo.rows[0].command).toContain('set -euo pipefail');
-    expect(repo.rows[0].updatedBy).toBe('system');
+    expect(repo.rows).toHaveLength(PLATFORM_STEP_SCRIPTS.length);
+    const git = repo.rows.find((r) => r.nodeKey === 'git');
+    expect(git).toMatchObject({ templateId: 't1', locked: true, enabled: true });
+    expect(git.command).toContain('set -euo pipefail');
+    expect(git.updatedBy).toBe('system');
+  });
+
+  /**
+   * restart / verify 于 2026-09-14 纳入平台托管。
+   * 此前它们是 locked=0 的用户自配节点、内容只存在 DB —— 换机器/重置库/另一端 console
+   * 都会与 master 的脚本漂移（"改了库这台生效、那台没生效"）。纳入后随版本幂等同步。
+   * 两者都只做「委托」，实现留在仓库 scripts/pipeline/ 下。
+   */
+  it('restart / verify 也已托管，且正文委托到仓库内的版本化脚本', async () => {
+    await svc.seedForTemplate('t1');
+    for (const nodeKey of ['restart', 'verify']) {
+      const row = repo.rows.find((r) => r.nodeKey === nodeKey);
+      expect(row).toBeTruthy();
+      expect(row.locked).toBe(true);
+      expect(row.command).toContain('scripts/pipeline/');
+      expect(row.command).toContain('exec bash');
+    }
   });
 
   it('内容与锁定位都已一致 → 不写库（幂等，避免每次启动都 UPDATE）', async () => {
@@ -78,6 +96,8 @@ describe('PlatformScriptSeedService（平台托管脚本同步）', () => {
   it('seedAll 遍历全部模板（新模板不会漏）', async () => {
     const changed = await svc.seedAll();
     expect(changed).toBe(2);
-    expect(repo.rows.map((r) => r.templateId).sort()).toEqual(['t1', 't2']);
+    // 每个模板都会补齐「全部托管节点」（git / restart / verify）
+    expect([...new Set(repo.rows.map((r) => r.templateId))].sort()).toEqual(['t1', 't2']);
+    expect(repo.rows).toHaveLength(2 * PLATFORM_STEP_SCRIPTS.length);
   });
 });
