@@ -16,10 +16,26 @@ import { join } from 'path';
 
 /** git 拉取脚本文件名（`src/pipeline/scripts/git-step.sh`） */
 export const GIT_STEP_SCRIPT_FILE = 'git-step.sh';
+/** restart 阶段脚本文件名（`src/pipeline/scripts/restart-step.sh`） */
+export const RESTART_STEP_SCRIPT_FILE = 'restart-step.sh';
+/** verify 阶段脚本文件名（`src/pipeline/scripts/verify-step.sh`） */
+export const VERIFY_STEP_SCRIPT_FILE = 'verify-step.sh';
 
-/** 平台托管脚本清单：`nodeKey` 固定为 v5 platform 节点名 */
+/**
+ * 平台托管脚本清单：`nodeKey` 固定为 v5 platform 节点名。
+ *
+ * restart / verify 自 2026-09-14 起纳入托管。此前它们是 `locked=0` 的用户自配节点，
+ * 内容只存在 DB —— 换机器 / 重置库 / 另一端 console 都会与 master 的脚本漂移
+ * （正是注释里点名的"SQL 迁移漏跑导致两台机器脚本不同"）。
+ * 纳入后：随 console 版本幂等同步到各环境，页面只读，可 `bash -n` 校验。
+ *
+ * 两者都只做「委托」——实现留在仓库 `scripts/pipeline/` 下随业务代码走，
+ * 改实现不必动库，改「调用谁」才动库。
+ */
 export const PLATFORM_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: string; label: string }> = [
   { nodeKey: 'git', file: GIT_STEP_SCRIPT_FILE, label: '拉取代码（平台托管）' },
+  { nodeKey: 'restart', file: RESTART_STEP_SCRIPT_FILE, label: '重启服务（平台托管）' },
+  { nodeKey: 'verify', file: VERIFY_STEP_SCRIPT_FILE, label: '部署验证（平台托管）' },
 ];
 
 /** 读取脚本正文（缺失时抛错：宁可启动报错，也不要静默用空脚本发布） */
