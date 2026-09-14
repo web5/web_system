@@ -13,8 +13,10 @@ import {
 } from '@/api'
 import dayjs from 'dayjs'
 import BranchSelect from '@/components/BranchSelect.vue'
-// 人员选择器（审批人等"选系统用户"的位置统一用它，避免手填用户名）
-import UserSelect from '@/components/UserSelect.vue'
+// 人员选择器：公共组件（@web-system/ui），admin 与 console 共用同一份实现。
+// 数据源由调用方注入 —— 这里注入「拉可审批人」的加载器。
+import UserSelect from '@web-system/ui/components/UserSelect.vue'
+import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import {
   statusColor as stageStatusColor,
   statusText as stageStatusText,
@@ -163,6 +165,12 @@ const modal = ref({
   approvers: [] as string[],
 })
 const saving = ref(false)
+
+/** 人员选择器的数据源：拉「可审批人」（持有 deploy:pipeline:approve 的系统用户） */
+const loadApprovers = async (): Promise<UserSelectLoadResult> => {
+  const r = await pipelineApi.approvers()
+  return { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
+}
 
 function openCreate() {
   modal.value = {
@@ -1225,7 +1233,12 @@ onUnmounted(stopPolling)
           </a-col>
         </a-row>
         <a-form-item label="审批人">
-          <UserSelect v-model="modal.approvers" placeholder="选择可审批的人（不选=所有有审批权限者）" />
+          <UserSelect
+            v-model="modal.approvers"
+            :load="loadApprovers"
+            degraded-text="未获取到可审批人名单：任何能登录控制台的人都能审批"
+            placeholder="选择可审批的人（不选=所有有审批权限者）"
+          />
           <div style="color: #999; font-size: 12px; margin-top: 4px;">
             候选来自 admin 系统中持有 <code>deploy:pipeline:approve</code> 权限的用户；
             选了人 = 白名单（只有这些人能批），不选 = 所有持权限者都能批。
