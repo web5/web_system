@@ -43,6 +43,20 @@
 | V6 | console 缺 `JWT_SECRET` 时启动失败 | 临时清空该变量后启动 | 进程退出码非 0 且日志明确 | 同上 |
 | V7 | 存量数据回填正确 | 查 `users`：`mp_openid/oa_openid` 非空 → systems 含 `portal`；`admin` → 含 `admin`+`deploy` | 两类各 100% 命中，0 遗漏 | 同上 |
 
+### 验证结果（本机，2026-09-14）
+
+| 编号 | 结果 | 证据 |
+|---|---|---|
+| V1 | ✅ | `ctest`（systems=[portal]）登 `deploy` / `admin` 均 **403**：`该账号不属于「运维控制台」，无法登录（可登录：用户端）`；登 `portal` 200 |
+| V2 | ✅ | `admin` + `system=deploy` → 200，payload `systems:["admin","deploy"]` |
+| V3 | ✅ | `.env` 的 `ADMIN_PASS` 已注释；console 登录代理返回 201，`token` 251 字符，带它调 `approvers` → 200 |
+| V4 | ✅ | 故意给 `role=user` 误授 `deploy:pipeline:approve`：不传 system 返回 4 人（含 `wx_*`），传 `system=deploy` 只剩 `admin` |
+| V5 | ✅ | `?system=admin` → admin、test；`?system=portal` → 2 个 `wx_/mp_`；`?system=deploy` → 仅 admin |
+| V6 | ✅ | `JWT_SECRET= node dist/main.js` → 启动即报 `deploy-console 缺少 JWT_SECRET…`，端口未监听 |
+| V7 | ✅ | 回填 4/4：`admin=[admin,deploy]`、`test=[admin]`、`wx_*=[portal]`、`mp_*=[portal]`；越权 0 |
+
+> 说明：V1 的 C 端账号（`ctest`）为临时建、验完即删；误授的 `role_permissions` 也已清理。
+
 ---
 
 ## 变更日志
