@@ -32,9 +32,16 @@ g(){ printf "\033[32m%s\033[0m\n" "$1"; }
 y(){ printf "\033[33m%s\033[0m\n" "$1"; }
 r(){ printf "\033[31m%s\033[0m\n" "$1"; }
 
-# 构建顺序：先共享包（被服务依赖），再后端服务
-PACKAGES=(shared types mcp-core)
-SERVICES=(gateway auth-service user-service ai-service system-service todo-service mcp-gateway finnews upload-service deploy-console)
+# 构建顺序：先共享包（被服务依赖），再后端服务。
+# ⚠️ agent-core 是 ai-service 的依赖，漏构建会报 Cannot find module '@kedouai/agent-core'。
+PACKAGES=(shared types mcp-core agent-core)
+# 后端服务清单以 scripts/modules.json 为**单一真相源**（曾出现 servers/finnews 这种不存在的目录、
+# 以及漏掉 ai-agent / knowledge-service 导致它们跑旧产物 —— 2026-09-13 修复）。
+SERVICES=()
+while IFS= read -r d; do [ -n "$d" ] && SERVICES+=("$d"); done < <(
+  node -e "for (const m of require('$ROOT/scripts/modules.json')) if (m.type === 'backend') console.log(m.dir);"
+)
+[ "${#SERVICES[@]}" -gt 0 ] || { r ">>> 未能从 scripts/modules.json 解析后端服务清单"; exit 1; }
 
 # ---------- 0. 依赖 ----------
 if [ ! -d "$ROOT/servers/auth-service/node_modules" ]; then

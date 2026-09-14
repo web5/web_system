@@ -1,8 +1,21 @@
 #!/bin/bash
 # ===========================================================
-# Web System - 生产环境一键部署脚本
+# ⚠️ DEPRECATED（2026-09-13）—— 请勿用于新部署
+#
+# 本脚本已过时且与现状不符：
+#   - 写死 3000/3001 端口（现状为 6000 系列，见 ecosystem.config.js）
+#   - 只覆盖 portal / auth / gateway，漏掉 system/user/ai/todo/upload/mcp-gateway/
+#     content-hub/knowledge-service/ai-agent/deploy-console
+#   - 用 `pm2 restart --update-env`，会把执行会话的变量固化进 pm2_env（污染源）
+#
+# 替代方案：
+#   后端 + 数据：  ssh <prod> 'cd /data/web_system && ./scripts/bootstrap.sh --env prod'
+#   单服务重启：   scripts/pipeline/restart-backend.sh（干净环境重建 + 依赖校验）
+#   发布后验证：   scripts/pipeline/verify-backend.sh
+#   设计方案：     docs/development/prod-release-plan.md
+#
 # 服务器配置见 scripts/.env.prod
-# TODO: 与 deploy.sh / deploy-dev.sh 代码重复率高，后续应统一为 deploy.sh + 环境变量
+# ===========================================================
 #
 # 用法:
 #   ./scripts/deploy-prod.sh              # 部署全部
