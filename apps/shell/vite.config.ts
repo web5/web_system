@@ -10,8 +10,22 @@ import { appVersionDefine, appVersionPlugin } from '../../scripts/vite-app-versi
 // pinia CDN 为 vue-demi iife，需先加载 vue-demi 全局（见 index.html）。
 // @ant-design/icons-vue 无 UMD CDN 版，仍由 shell 打包。
 // shell main.ts 启动时把全局依赖挂到 window.__SHARED__，微前端模块 external 后从这里取（同一份实例）。
+
+/**
+ * 产物 base —— **按版本加载**（用户 2026-09-15：基座不做覆盖式发布）。
+ *
+ * 发布流水线构建时注入 `COMMIT_ID`（= `<流水线 key>/<commit>`，如 `shell-local/ba5deba`），
+ * 产物投到 `static/modules/shell/<COMMIT_ID>/`，因此资源 base 必须指向该版本目录，
+ * 否则 index.html 里的 `/shell/assets/*` 会打到旧目录（版本切换后资源 404）。
+ * 本地/未注入版本标识时退回历史固定 base `/shell/`。
+ *
+ * 与微前端模块的 `resolveMfBase()` 同构：都由「产品线/版本」两级组成。
+ */
+const releaseTag = process.env.RELEASE_TAG || process.env.COMMIT_ID || '';
+const shellBase = releaseTag ? `/static/modules/shell/${releaseTag}/` : '/shell/';
+
 export default defineConfig({
-  base: '/shell/',
+  base: shellBase,
   define: appVersionDefine(),
   plugins: [
     appVersionPlugin(),
