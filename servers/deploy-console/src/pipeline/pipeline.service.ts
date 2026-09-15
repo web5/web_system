@@ -5,11 +5,11 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -31,6 +31,7 @@ import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
+import { ApproverService, APPROVE_PERMISSION } from '../approval/approver.service';
 import {
   PipelineTemplateService,
   needsApprovalForTemplate,
@@ -42,21 +43,38 @@ import { ArtifactStoreService } from '../artifact/artifact-store.service';
 // 版本注册表工具（公共 API：历史版本切换/灰度转全量的指针与版本写入）
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 // 命令执行工具（runShell 子进程 PATH / node bin 解析用）
-import { CommandService, buildChildEnv } from '../shell/command.service';
+import { CommandService } from '../shell/command.service';
+// shell 执行通道（可注入：测试用假实现，不打真实子进程）
+import { SHELL_RUNNER, ShellRunner, ShellRunHandle } from '../shell/shell-runner';
+// 进程组终止（原内联在本文件，抽到 shell/ 供 shell-runner 共用）
+import { killShellProcess, KillResult } from '../shell/shell-process';
+export { killShellProcess };
+export type { KillResult };
+// approval 节点挂起信号与恢复起点
+import { PipelineSuspended, isPipelineSuspended, resolveStartIndex } from './pipeline-suspension';
+// 流水线变量（属于某条流水线；执行前解析注入节点脚本环境）
+import { PipelineVarService } from './pipeline-var.service';
+export { resolveStartIndex };
 // 发布目录 git 工作区（拉码后回填实际 commit 用）
 import { ReleaseGitService } from '../git/release-git.service';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
+// 平台托管脚本（正文 + 随 console 分发的脚本目录）
+import { platformScriptsDir } from './step-scripts';
 // v5 节点执行策略（纯函数：check 恒内置 / git 支持 DB 脚本 / version·pointer 纯内置）
 import { planNodeExec } from './steps/node-exec-plan';
+// 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
+import { runActionSequence } from './steps/action-sequence';
 // 拉码结果的版本身份与一致性断言（纯函数）
 import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
   resolveNodeRunPlan,
   legacyStepsToNodes,
   isV5NodesEnabled,
+  applyTemplateApprovers,
   TemplateNode,
+  ApprovalNode,
 } from '../pipeline-template/template-node';
 
 /** 构建超时（毫秒） */
@@ -152,6 +170,11 @@ export interface ModuleSnapshot {
 export interface StageVarsInput {
   env: string;
   moduleKey: string;
+  /**
+   * 流水线变量（属于某条流水线，编辑页维护）。
+   * **最后合并**：优先级 内置 → 配置中心 → 流水线变量 → 节点内联，故它可以覆盖配置中心同名键。
+   */
+  pipelineVars?: Record<string, string>;
   moduleType?: string;
   dir?: string;
   pm2?: string;
@@ -174,6 +197,11 @@ export interface StageVarsInput {
   keepVersions?: number;
   /** 删除策略：mv=改名到临时目录（规避批量删除审批）/ rm=直接删除 */
   safeDelete?: 'mv' | 'rm';
+  /**
+   * 平台脚本目录（随 console 分发的实现脚本，如 restart-backend.sh）。
+   * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
+   */
+  platformScriptsDir?: string;
 }
 
 /**
@@ -190,6 +218,8 @@ export interface StageVarsInput {
  */
 export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const cfg = i.config ?? {};
+  // 流水线变量（属于某条流水线）最后合并 —— 覆盖配置中心同名键，节点内联再覆盖它
+  const pipelineVars = i.pipelineVars ?? {};
   const type = i.moduleType || '';
   const dir = i.dir || i.moduleKey;
   const publicPath = i.publicPath || i.moduleKey;
@@ -221,39 +251,14 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     KEEP_VERSIONS: String(i.keepVersions ?? 5),
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
+    WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
+    // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
+    ...pipelineVars,
   };
 }
 
-/** 进程终止方式：group=按进程组整组终止（负 pid）/ child=降级为直接子进程 / none=已退出 */
-export type KillResult = 'group' | 'child' | 'none';
-
-/**
- * 终止 shell 进程组（纯函数，便于单测）。
- *
- * 背景：`bash -c` 派生的 vite / nest build 等实际构建进程是孙进程，
- * 只终止 bash 本身会残留孙进程继续占用端口与 CPU ——
- * 这正是历史上「6200 孤儿进程抢端口、发布不生效」的同类根因。
- * 因此以 detached 进程组启动，终止时用**负 pid** 一次性杀整组；
- * 平台不支持负 pid（如 Windows）时降级为终止直接子进程。
- */
-export function killShellProcess(
-  pid: number,
-  killGroup: (pid: number, signal: NodeJS.Signals) => void,
-  killChild: (signal: NodeJS.Signals) => void,
-): KillResult {
-  if (!pid) return 'none';
-  try {
-    killGroup(-pid, 'SIGKILL');
-    return 'group';
-  } catch {
-    try {
-      killChild('SIGKILL');
-      return 'child';
-    } catch {
-      return 'none';
-    }
-  }
-}
+/** 流水线挂起（等审批）时的状态值（节点级审批，design D8 / R2） */
+export const PIPELINE_AWAITING_APPROVAL = 'awaiting-approval';
 
 /**
  * 支持发布的环境。
@@ -301,8 +306,10 @@ export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
   /** 取消标记（进程内即可，重启后任务本身也会中断） */
   private readonly cancelled = new Set<string>();
-  /** 运行中流水线的 shell 子进程：取消时立即 SIGKILL，避免"已取消的发布仍跑完整条流水线" */
-  private readonly shells = new Map<string, ChildProcess>();
+  /** 运行中流水线的 shell 执行句柄：取消时立即 SIGKILL，避免"已取消的发布仍跑完整条流水线" */
+  private readonly shells = new Map<string, ShellRunHandle>();
+  /** 后台执行的 run promise：引擎是非阻塞的，这里只是登记，便于 `waitFor` 等待结束 */
+  private readonly running = new Map<string, Promise<void>>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -325,12 +332,19 @@ export class PipelineService {
     private readonly deployService: DeployService,
     // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
     private readonly approvals: ApprovalService,
+    // 可审批人：按权限码 deploy:pipeline:approve 从 user-service 拉（方案 B，弱绑定 + 降级放行）
+    private readonly approvers: ApproverService,
     // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
     private readonly templates: PipelineTemplateService,
     // pm2 进程探活（回滚后健康检查 probeBackendHealth 复用）
     private readonly pm2Probe: Pm2ProbeService,
-    // 命令执行（runShell 子进程 PATH / node bin 解析）
+    // 命令执行（同步 exec / 子进程 PATH / node bin 解析）
     private readonly command: CommandService,
+    // shell 执行通道（节点脚本的 bash -c 执行；可注入以便在测试里替换成假实现）
+    @Inject(SHELL_RUNNER)
+    private readonly shellRunner: ShellRunner,
+    // 流水线变量（属于某条流水线；执行前解析并注入节点脚本环境）
+    private readonly pipelineVars: PipelineVarService,
     // 静态产物存储（公共 API：可发布版本 / 历史版本切换的产物检查）
     private readonly artifacts: ArtifactStoreService,
     // 版本注册表（公共 API：历史版本切换 / 灰度转全量的指针与版本写入）
@@ -357,6 +371,67 @@ export class PipelineService {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  /**
+   * 登记后台执行任务（引擎是非阻塞的，这里只是留一个可等待的句柄）。
+   *
+   * 用途：测试与运维脚本要确认「这次执行真的结束了」，而不是靠 sleep 猜；
+   * 引擎对外的非阻塞语义不变（submit / approve 依旧立即返回）。
+   */
+  private trackRun(id: string, task: Promise<void>): void {
+    this.running.set(id, task);
+    void task
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.running.get(id) === task) this.running.delete(id);
+      });
+  }
+
+  /** 等待某条流水线的后台执行结束（未在执行则立即返回） */
+  async waitFor(id: string): Promise<void> {
+    const task = this.running.get(id);
+    if (task) await task.catch(() => undefined);
+  }
+
+  /**
+   * 可审批人（供控制台下拉）。`degraded=true` 表示权限服务不可用/清单为空，
+   * 此时审批**不做校验**，前端需提示用户。
+   */
+  async listApprovers(): Promise<{
+    users: Array<{ id: string; username: string; nickname?: string; roles: string[] }>;
+    degraded: boolean;
+    reason?: string;
+    permission: string;
+  }> {
+    const r = await this.approvers.list();
+    return { ...r, permission: APPROVE_PERMISSION };
+  }
+
+  /**
+   * 审批权限校验（方案 B 弱绑定）。
+   *
+   * 降级放行：user-service 不可达或清单为空时放行 —— 权限系统不该成为
+   * 紧急发布的阻塞点，但会记 warn 日志留痕。
+   */
+  private async assertCanReview(
+    reviewer: string | undefined,
+    action: string,
+    allowed?: string[],
+  ): Promise<void> {
+    const gate = await this.approvers.canApprove(reviewer, allowed);
+    if (gate.ok) {
+      if (gate.degraded) {
+        this.logger.warn(
+          `审批权限未校验（降级放行）: ${action} by ${reviewer || '-'}（原因: ${gate.reason ?? '未知'}）`,
+        );
+      }
+      return;
+    }
+    throw new ForbiddenException(
+      `${reviewer || '当前操作人'} 无发布审批权限（需 ${APPROVE_PERMISSION}）；` +
+        '请在 admin 系统「角色管理」为对应用户授予该权限后重试',
+    );
   }
 
   /**
@@ -425,7 +500,12 @@ export class PipelineService {
             rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
           })
       : null;
-    const plan = snapshotNodes ? resolveNodeRunPlan(snapshotNodes) : null;
+    // 模板级审批人下沉到 approval 节点（节点未指定时继承），再整体快照进实例
+    const nodesSnapshot = applyTemplateApprovers(
+      snapshotNodes,
+      (tpl as { approvers?: string[] | null }).approvers,
+    );
+    const plan = nodesSnapshot ? resolveNodeRunPlan(nodesSnapshot) : null;
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -444,7 +524,7 @@ export class PipelineService {
       // R6 版本身份：流水线 key 快照（产物落盘 modules/<module>/<key>/<commit>/）
       templateKey: (tpl as { key?: string }).key ?? undefined,
       steps: tpl.steps ?? null,
-      nodes: snapshotNodes,
+      nodes: nodesSnapshot,
       skipVerify: !!tpl.skipVerify,
       rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
       runTarget,
@@ -505,7 +585,7 @@ export class PipelineService {
     });
 
     // 后台执行，不阻塞提交响应（投递目标已随实例快照 runTarget 固化）
-    void this.run(entity);
+    this.trackRun(id, this.run(entity));
 
     return { jobId: id, status: entity.status };
   }
@@ -578,11 +658,11 @@ export class PipelineService {
     if (['succeeded', 'failed', 'cancelled'].includes(p.status)) {
       return { id, status: p.status };
     }
-    // 撤回待审批提交：联动关闭审批单，避免审批台出现孤儿单
-    if (p.status === 'pending-approval') {
-      const pending = await this.approvals.byPipelineId(id);
-      if (pending && pending.status === 'pending') {
-        await this.approvals.resolve(pending.id, 'reject', operator || 'unknown', '提交人撤回');
+    // 撤回待审批（门禁级 / 节点级挂起）：联动关闭审批单，避免审批台出现孤儿单
+    if (p.status === 'pending-approval' || p.status === PIPELINE_AWAITING_APPROVAL) {
+      const pending = await this.approvals.pendingForPipeline(id);
+      if (pending) {
+        await this.approvals.resolve(pending.id, 'reject', operator || 'unknown', '提交人取消');
       }
     }
     this.cancelled.add(id);
@@ -666,17 +746,85 @@ export class PipelineService {
   /**
    * 审批通过：恢复待审批流水线并触发执行。
    * 执行人记审批人（reviewer）：审批通过即代表其确认本次发布。
+   *
+   * 两种审批语义：
+   *  - **节点级**（`awaiting-approval`，P0）：执行到 approval 节点挂起，
+   *    批准后从**该节点之后**继续，已完成的 shell 节点不重跑；
+   *  - **流水线级门禁**（`pending-approval`，历史）：提交即阻断，批准后从头执行。
+   *
+   * @param nodeKey 指定要批准的节点（同一时刻至多一条待决单，缺省自动取待决的那条）
    */
   async approve(
     id: string,
     reviewer?: string,
     comment?: string,
-  ): Promise<{ id: string; status: string }> {
+    nodeKey?: string,
+  ): Promise<{ id: string; status: string; resumedFrom?: string }> {
     const p = await this.get(id);
+
+    // 节点级：从被挂起的节点之后继续
+    if (p.status === PIPELINE_AWAITING_APPROVAL) {
+      const approval =
+        (nodeKey ? await this.approvals.pendingForNode(id, nodeKey) : null) ??
+        (await this.approvals.pendingForPipeline(id));
+      if (!approval) {
+        throw new NotFoundException(`流水线 ${id} 缺少待审批的节点审批单`);
+      }
+      // 校验：先过节点指定的审批人白名单，再看权限码
+      const node = (p.nodes ?? []).find((n) => n.key === (approval.nodeKey ?? p.stage));
+      await this.assertCanReview(
+        reviewer,
+        'approve',
+        node && node.kind === 'approval' ? node.approvers : undefined,
+      );
+      await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
+      const resumeAfter = approval.nodeKey ?? p.stage;
+
+      p.status = 'pending';
+      p.logs = [
+        ...(p.logs ?? []),
+        `审批通过（审批人: ${reviewer || 'unknown'}）节点: ${approval.nodeKey ?? '-'}，继续执行`,
+      ];
+      p.progress = {
+        ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+        message: '审批通过，继续执行',
+      };
+      await this.pipelineRepo.save(p);
+
+      await this.auditService.log({
+        user: reviewer || 'unknown',
+        action: 'pipeline.approve',
+        env: p.env,
+        component: p.moduleKey,
+        status: 'approved',
+        detail: `节点「${approval.nodeKey ?? '-'}」审批通过，流水线 ${id} 从其后继续执行（意见: ${comment?.trim() || '-'}）`,
+        changes: [
+          { field: 'approval.status', before: 'pending', after: 'approved' },
+          { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
+          { field: 'approval.comment', before: null, after: comment?.trim() || null },
+        ],
+      });
+      this.notifications.notify({
+        event: 'deploy.approved',
+        env: p.env,
+        moduleKey: p.moduleKey,
+        versionTag: p.versionTag,
+        status: 'success',
+        detail: `${reviewer || 'unknown'} 已审批通过节点「${approval.nodeKey ?? '-'}」，发布继续执行`,
+        operator: p.operator,
+      });
+
+      // 后台执行，不阻塞审批响应；resumeAfter 保证已完成节点不重跑
+      this.trackRun(id, this.run(p, undefined, { resumeAfter }));
+      return { id, status: 'approved', resumedFrom: resumeAfter ?? undefined };
+    }
+
     if (p.status !== 'pending-approval') {
       throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
     }
-    const approval = await this.approvals.byPipelineId(id);
+    await this.assertCanReview(reviewer, 'approve');
+    const approval =
+      (await this.approvals.pendingForPipeline(id)) ?? (await this.approvals.byPipelineId(id));
     if (!approval) {
       throw new NotFoundException(`流水线 ${id} 缺少审批单`);
     }
@@ -719,17 +867,77 @@ export class PipelineService {
     return { id, status: 'approved' };
   }
 
-  /** 审批拒绝：流水线标记取消并留审批意见 */
+  /**
+   * 审批拒绝。
+   *
+   * - **节点级**（`awaiting-approval`）：流水线置 `failed`（onReject='abort'，design 默认），
+   *   与门禁级的区别是它已经跑过部分节点，"拒绝"意味着这次发布中止且已有动作要留痕；
+   * - **流水线级门禁**（`pending-approval`）：尚未执行任何阶段，置 `cancelled`（历史语义）。
+   */
   async reject(
     id: string,
     reviewer?: string,
     comment?: string,
+    nodeKey?: string,
   ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
+
+    if (p.status === PIPELINE_AWAITING_APPROVAL) {
+      const approval =
+        (nodeKey ? await this.approvals.pendingForNode(id, nodeKey) : null) ??
+        (await this.approvals.pendingForPipeline(id));
+      if (!approval) {
+        throw new NotFoundException(`流水线 ${id} 缺少待审批的节点审批单`);
+      }
+      await this.approvals.resolve(approval.id, 'reject', reviewer || 'unknown', comment);
+
+      const node = (p.nodes ?? []).find((n) => n.key === approval.nodeKey) as ApprovalNode | undefined;
+      const onReject = node && node.kind === 'approval' ? node.onReject ?? 'abort' : 'abort';
+      await this.assertCanReview(reviewer, 'reject', node?.approvers);
+      p.status = 'failed';
+      p.endTime = Date.now();
+      p.error = `节点「${approval.nodeKey ?? '-'}」审批拒绝: ${comment?.trim() || '无意见'}`;
+      p.progress = {
+        ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+        message: '审批拒绝',
+      };
+      p.logs = [
+        ...(p.logs ?? []),
+        `[${approval.nodeKey ?? '-'}] 审批拒绝: ${comment?.trim() || '无意见'}` +
+          (onReject === 'rollback' ? '（onReject=rollback 尚未实现（P4），按 abort 终止）' : ''),
+      ];
+      await this.pipelineRepo.save(p);
+
+      await this.auditService.log({
+        user: reviewer || 'unknown',
+        action: 'pipeline.reject',
+        env: p.env,
+        component: p.moduleKey,
+        status: 'rejected',
+        detail: `节点「${approval.nodeKey ?? '-'}」审批拒绝，流水线 ${id} 终止（onReject=${onReject}, 意见: ${comment?.trim() || '-'}）`,
+        changes: [
+          { field: 'approval.status', before: 'pending', after: 'rejected' },
+          { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
+        ],
+      });
+      this.notifications.notify({
+        event: 'deploy.rejected',
+        env: p.env,
+        moduleKey: p.moduleKey,
+        versionTag: p.versionTag,
+        status: 'failed',
+        detail: `${reviewer || 'unknown'} 拒绝了节点「${approval.nodeKey ?? '-'}」的发布（意见: ${comment?.trim() || '无意见'}）`,
+        operator: p.operator,
+      });
+      return { id, status: 'rejected' };
+    }
+
     if (p.status !== 'pending-approval') {
       throw new BadRequestException(`流水线 ${id} 状态为 ${p.status}，不是待审批状态`);
     }
-    const approval = await this.approvals.byPipelineId(id);
+    await this.assertCanReview(reviewer, 'reject');
+    const approval =
+      (await this.approvals.pendingForPipeline(id)) ?? (await this.approvals.byPipelineId(id));
     if (!approval) {
       throw new NotFoundException(`流水线 ${id} 缺少审批单`);
     }
@@ -908,7 +1116,18 @@ export class PipelineService {
 
   // ── 执行引擎 ──────────────────────────────────────────────
 
-  private async run(p: DeployPipelineEntity, target?: 'local' | 'remote'): Promise<void> {
+  /**
+   * 执行主循环。
+   *
+   * @param opts.resumeAfter 恢复锚点：从该节点**之后**继续（已完成的节点不重跑）。
+   *   审批节点挂起后由 `approve()` 传入；空 = 从头执行。
+   *   挂起态持久化在实例 `stage`（= 当前节点 key）上，服务重启后也能据此续跑（design R2）。
+   */
+  private async run(
+    p: DeployPipelineEntity,
+    target?: 'local' | 'remote',
+    opts?: { resumeAfter?: string | null },
+  ): Promise<void> {
     // 投递目标：实例快照 runTarget（提交时模板/入参确定）优先；auto/缺省 → 配置或本机
     const effectiveTarget =
       p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : target;
@@ -952,6 +1171,15 @@ export class PipelineService {
       // 执行计划 = 实例快照：nodes（v5 platform+script）优先，null=legacy（steps 子集 → 全九阶段）
       const plan = resolveRunStages(p);
       const activeStages = plan.keys;
+      // 恢复起点：审批挂起后从被挂起的节点之后继续（V2：已完成的 shell 节点不重跑）
+      const startIndex = resolveStartIndex(activeStages, opts?.resumeAfter);
+      if (startIndex > 0) {
+        p.logs = [
+          ...(p.logs ?? []),
+          `继续执行：跳过已完成节点 ${activeStages.slice(0, startIndex).join(' → ')}`,
+        ];
+        await this.save(p);
+      }
       // nodes 模式下把 node 元数据带给 executeStage（区分 platform/script）
       const nodeByKey = new Map(
         (plan.mode === 'nodes' && p.nodes ? (p.nodes as TemplateNode[]) : []).map((n) => [
@@ -966,7 +1194,8 @@ export class PipelineService {
       }
 
       // 数据驱动执行：每步由 executeStage 分派到内置执行器（平台语义）或阶段命令覆盖（S6-II）
-      for (const stage of activeStages) {
+      for (let si = startIndex; si < activeStages.length; si++) {
+        const stage = activeStages[si];
         this.assertNotCancelled(p);
         // version 前捕获当前线上版本（watchdog/verify 失败自动回滚的回退目标）
         if (stage === 'version') {
@@ -1000,6 +1229,37 @@ export class PipelineService {
       await this.syncPermissionPoints(p);
       void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
     } catch (e) {
+      // ① 挂起（approval 节点）：**不是失败** —— 不写 error、不触发回滚、不算终态。
+      //    恢复锚点落在实例 stage 上（= 被挂起的节点 key），批准后从它之后继续。
+      if (isPipelineSuspended(e)) {
+        p.status = PIPELINE_AWAITING_APPROVAL;
+        p.stage = e.nodeKey;
+        p.progress = {
+          ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+          message: `等待审批: ${e.nodeLabel ?? e.nodeKey}`,
+        };
+        await this.save(p);
+        await this.auditService.log({
+          user: p.operator || 'unknown',
+          action: 'pipeline.awaiting-approval',
+          env: p.env,
+          component: p.moduleKey,
+          status: 'pending_approval',
+          detail: `流水线 ${p.id} 已在节点「${e.nodeLabel ?? e.nodeKey}」挂起，等待审批（审批单 ${e.approvalId}）`,
+        });
+        this.notifications.notify({
+          event: 'deploy.awaiting-approval',
+          env: p.env,
+          moduleKey: p.moduleKey,
+          versionTag: p.versionTag,
+          status: 'warn',
+          detail: `流水线 ${p.id} 在节点「${e.nodeLabel ?? e.nodeKey}」等待审批（审批单 ${e.approvalId}）`,
+          operator: p.operator,
+        });
+        this.logger.log(`流水线挂起等审批: ${p.id} 节点=${e.nodeKey} 审批单=${e.approvalId}`);
+        return;
+      }
+
       const msg = (e as Error).message;
       // 取消优先于失败：取消一旦发出（含 SIGKILL 中断命令引发的失败），终态一律记为 cancelled
       p.status = this.cancelled.has(p.id) ? 'cancelled' : 'failed';
@@ -1216,9 +1476,36 @@ export class PipelineService {
         return;
       }
 
+      // approval：创建节点级审批单 → 挂起流水线（后续节点不执行），等人工决议后继续。
+      // 挂起用异常跳出主循环（见 pipeline-suspension.ts），实例 stage 记当前节点作为恢复锚点。
+      case 'approval': {
+        if (node.kind !== 'approval') {
+          throw new Error(`节点 ${stage} 分派为 approval 但 kind=${node.kind}（模板数据异常）`);
+        }
+        await this.enterStage(p, stage, `等待审批: ${node.label ?? stage}`);
+        const approval = await this.approvals.createNode({
+          pipelineId: p.id,
+          nodeKey: stage,
+          nodeLabel: node.label,
+          env: p.env,
+          moduleKey: p.moduleKey,
+          mode: p.mode,
+          gitBranch: p.gitBranch,
+          commitId: p.versionTag,
+          operator: p.operator || 'unknown',
+        });
+        p.logs = [
+          ...(p.logs ?? []),
+          `[${stage}] ${node.label ?? stage}：已挂起等待审批（审批单 ${approval.id}）`,
+        ];
+        await this.save(p);
+        throw new PipelineSuspended(stage, approval.id, node.label);
+      }
+
       // script：命令驱动（未配命令按 optional 跳过 / 非 optional fail-fast）
       case 'script': {
-        const hasCmd = await this.runStageCommand(p, stage);
+        const nodeTimeoutSec = node.kind === 'script' ? node.timeoutSec : undefined;
+        const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec);
         if (hasCmd) return;
         if (node.kind === 'script' && node.optional) {
           p.logs = [
@@ -1400,6 +1687,8 @@ export class PipelineService {
     p: DeployPipelineEntity,
     nodeKey: string,
     progressStage: string = nodeKey,
+    /** 节点级默认超时（秒）；操作未配超时时用它（design §3 ShellNode.timeoutSec） */
+    nodeTimeoutSec?: number,
   ): Promise<boolean> {
     const stage = progressStage;
     const acts = await this.stepCommands.resolveActions(p.templateId!, nodeKey);
@@ -1438,6 +1727,9 @@ export class PipelineService {
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
+      platformScriptsDir: platformScriptsDir(),
+      // 流水线变量（编辑流水线页维护，${KEY} 引用）
+      pipelineVars: await this.pipelineVars.resolve(p.templateId),
     });
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
@@ -1455,52 +1747,35 @@ export class PipelineService {
       /* 清理失败不影响执行 */
     }
 
-    // 逐操作顺序执行；失败即阶段失败，除非该操作 continueOnError
-    for (let i = 0; i < acts.length; i++) {
-      const a = acts[i];
-      const op = `op${i + 1}`;
-      this.assertNotCancelled(p);
-
-      if (a.type === 'service') {
-        p.logs = [
-          ...(p.logs ?? []),
-          `[${stage}/${op}] 引用工具 ${a.tool ?? '—'}（暂无内置实现，跳过）`,
-        ];
-        await this.save(p);
-        continue;
-      }
-
-      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} $ ${a.code ?? ''}`];
-      await this.save(p);
-
+    // 逐操作顺序执行（语义见 steps/action-sequence.ts：失败即停 / continueOnError 放行 / 结果回传）
+    const outcome = await runActionSequence({
+      stage,
+      actions: acts,
       // 配置中心值强制覆盖（PORT 等已参与上方变量解析，此处保证其余配置也注入进程）
-      const code = await this.runShell(a.code ?? '', { ...env, ...inject, WS_RESULT_FILE: resultFile }, p, a.timeoutSec, cwd);
-
-      // 读取操作回传的结果（按 key 合并，非整段覆盖）
-      const got = this.readStageResult(resultFile, stage, op);
-      if (Object.keys(got).length) {
-        p.result = { ...(p.result ?? {}), ...got };
-      }
-
-      if (code !== 0) {
-        if (a.cont) {
-          p.logs = [
-            ...(p.logs ?? []),
-            `[${stage}/${op}] ${a.name} 失败（exit ${code}），continueOnError=是，继续执行`,
-          ];
-          await this.save(p);
-          continue;
-        }
-        throw new Error(`[${stage}/${op}] ${a.name} 执行失败（exit ${code}），详见日志`);
-      }
-      p.logs = [...(p.logs ?? []), `[${stage}/${op}] ${a.name} 完成`];
-      await this.save(p);
+      baseEnv: { ...env, ...inject },
+      resultFile,
+      defaultTimeoutSec: nodeTimeoutSec,
+      runShell: (inv) => this.runShell(inv.code, inv.env, p, inv.timeoutSec, cwd),
+      readResult: (op) => this.readStageResult(resultFile, stage, op),
+      onLog: (line) => {
+        p.logs = [...(p.logs ?? []), line];
+      },
+      assertNotCancelled: () => this.assertNotCancelled(p),
+    });
+    if (Object.keys(outcome.merged).length) {
+      p.result = { ...(p.result ?? {}), ...outcome.merged };
     }
 
     try {
       fs.rmSync(resultFile, { force: true });
     } catch {
       /* ignore */
+    }
+    if (outcome.tolerated.length) {
+      p.logs = [
+        ...(p.logs ?? []),
+        `[${stage}] 有 ${outcome.tolerated.length} 个操作失败但已放过（continueOnError）: ${outcome.tolerated.join('、')}`,
+      ];
     }
     p.logs = [...(p.logs ?? []), `[${stage}] 阶段命令完成`];
     await this.save(p);
@@ -1579,79 +1854,52 @@ export class PipelineService {
 
   /**
    * 执行 shell 命令（bash -c），输出流式进流水线日志。
-   * 超时优先用该阶段配置的 timeoutSec，缺省用 BUILD_TIMEOUT_MS。
+   *
+   * 真正的 spawn 在可注入的 `ShellRunner`（`shell/shell-runner.ts`）里 —— 抽这一层的唯一
+   * 目的就是让节点执行可测：否则 approval 的「挂起 → 批准后继续」只能靠真跑子进程验证。
+   * 超时优先用操作配置的 timeoutSec，缺省用 BUILD_TIMEOUT_MS。
    */
-  private runShell(
+  private async runShell(
     command: string,
     env: Record<string, string>,
     p: DeployPipelineEntity,
     timeoutSec?: number,
     cwd?: string,
   ): Promise<number> {
-    return new Promise((resolve) => {
-      const timeoutMs = timeoutSec && timeoutSec > 0 ? timeoutSec * 1000 : BUILD_TIMEOUT_MS;
-      const child = spawn('bash', ['-c', command], {
+    // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = undefined;
+        this.save(p).catch(() => undefined);
+      }, 300);
+    };
+    const pushLog = (line: string) => {
+      p.logs = [...(p.logs ?? []), line];
+      scheduleFlush();
+    };
+
+    try {
+      return await this.shellRunner.run({
+        command,
         // 未显式传 cwd 时回落到发布目录，避免落到 deploy-console 自身目录
         cwd: cwd || this.releaseWorkspace,
-        // PATH 补齐与 CommandService 同一实现（node 目录 / /usr/local/bin 等）
-        env: buildChildEnv(env, this.command.nodeBinDir()),
-        // 独立进程组：终止时可按负 pid 整组 kill，避免 vite / nest build 等孙进程残留
-        // 继续占用端口与 CPU（历史「6200 孤儿进程抢端口、发布不生效」的同类根因）
-        detached: true,
+        env,
+        timeoutSec,
+        defaultTimeoutMs: BUILD_TIMEOUT_MS,
+        nodeBinDir: this.command.nodeBinDir(),
+        onLog: pushLog,
+        // 登记句柄：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
+        onStart: (handle) => this.shells.set(p.id, handle),
       });
-      // 登记子进程：取消时可立即 SIGKILL，否则"已取消的发布"要等当前命令自然结束/超时才终止
-      this.shells.set(p.id, child);
-      const unregister = () => this.shells.delete(p.id);
-      const timer = setTimeout(() => {
-        pushLog(`[${env.STAGE ?? 'shell'}] 执行超时（${Math.round(timeoutMs / 1000)}s），终止进程组`);
-        this.killShell(child);
-      }, timeoutMs);
-
-      // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
-      let flushTimer: ReturnType<typeof setTimeout> | undefined;
-      const scheduleFlush = () => {
-        if (flushTimer) return;
-        flushTimer = setTimeout(() => {
-          flushTimer = undefined;
-          this.save(p).catch(() => undefined);
-        }, 300);
-      };
-      const pushLog = (line: string) => {
-        p.logs = [...(p.logs ?? []), line];
-        scheduleFlush();
-      };
-      let settled = false;
-      const finalize = (code: number) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (flushTimer) {
-          clearTimeout(flushTimer);
-          flushTimer = undefined;
-        }
-        unregister();
-        resolve(code ?? 1);
-      };
-
-      child.stdout.on('data', (d: Buffer) => {
-        for (const line of String(d).split('\n').filter(Boolean)) pushLog(line);
-      });
-      child.stderr.on('data', (d: Buffer) => {
-        for (const line of String(d).split('\n').filter(Boolean)) pushLog(`[stderr] ${line}`);
-      });
-      child.on('close', (code: number | null) => {
-        finalize(code ?? 1);
-      });
-      // 兜底：detached 进程组里若有孙进程仍持有 stdio，'close' 可能迟迟不触发。
-      // bash 自身退出 1s 后按 exit code 收口，避免流水线白白卡到超时才结束。
-      child.on('exit', (code: number | null) => {
-        setTimeout(() => finalize(code ?? 1), 1000);
-      });
-      child.on('error', (err: Error) => {
-        pushLog(`[${env.STAGE ?? 'shell'}] 命令启动失败: ${err.message}`);
-        finalize(1);
-      });
-    });
+    } finally {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = undefined;
+      }
+      this.shells.delete(p.id);
+    }
   }
 
   /**
@@ -1660,15 +1908,10 @@ export class PipelineService {
    * `bash -c` 会派生 vite / nest build 等实际构建进程作为孙进程，
    * 只 kill bash 本身会残留孙进程继续占用端口与 CPU ——
    * 这正是历史上「6200 孤儿进程抢端口、发布不生效」的同类根因。
-   * 因此以 detached 方式创建进程组，终止时用负 pid 一次杀整组；
-   * 平台不支持负 pid 时（如 Windows）降级为终止直接子进程。
+   * 终止细节（负 pid 整组杀 / 降级）在 `ShellRunHandle.kill()` 内实现。
    */
-  private killShell(child: ChildProcess): void {
-    killShellProcess(
-      child.pid ?? 0,
-      (pid, signal) => process.kill(pid, signal),
-      (signal) => child.kill(signal),
-    );
+  private killShell(handle: ShellRunHandle): void {
+    handle.kill();
   }
 
   private async save(p: DeployPipelineEntity): Promise<void> {

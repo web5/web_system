@@ -16,10 +16,17 @@ export type UserStatus = 'active' | 'inactive' | 'banned';
 export interface LoginRequest {
   username: string;
   password: string;
+  /**
+   * 目标系统：portal（C 端，默认）/ admin（运营）/ deploy（运维）。
+   * 只用于**收窄**——能不能进取决于账号自身的归属，不传不会放大权限。
+   */
+  system?: 'portal' | 'admin' | 'deploy';
 }
 
 export interface WechatLoginRequest {
   code: string;
+  /** 目标系统：不传默认 portal（不做门禁）；运营后台扫码登录需传 admin */
+  system?: 'portal' | 'admin' | 'deploy';
 }
 
 export interface LoginResponse {
@@ -121,7 +128,8 @@ export interface MiniprogramLoginResponse extends LoginResponse {
 export type Role = 'super_admin' | 'admin' | 'editor' | 'viewer';
 
 export type PermissionGroup =
-  | 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents' | 'database' | 'knowledge';
+  | 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents' | 'database' | 'knowledge'
+  | 'deploy';
 export type PermissionType = 'menu' | 'action' | 'api';
 
 export interface PermissionDef {
@@ -161,6 +169,20 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   // 字典 / 维表（system-service）
   'system:dict:view':   { code: 'system:dict:view',   name: '查看字典维表', group: 'settings', type: 'menu' },
   'system:dict:manage': { code: 'system:dict:manage', name: '维护字典维表', group: 'settings' },
+  /**
+   * 发布审批（deploy-console 流水线 approval 节点）。
+   *
+   * 为什么要有独立权限码：审批是"放行一次生产变更"的动作，不能谁都能批。
+   * 控制台的审批人下拉与审批校验都以它为准（见
+   * `specs/pipeline-node-model/approval-permission-design.md`）。
+   * 注意：只给 super_admin / admin（ROLE_PERMISSIONS 已按全量继承），
+   * editor / viewer 不授予。
+   */
+  'deploy:pipeline:approve': {
+    code: 'deploy:pipeline:approve',
+    name: '流水线发布审批',
+    group: 'deploy',
+  },
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {

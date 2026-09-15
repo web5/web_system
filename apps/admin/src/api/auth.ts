@@ -3,9 +3,12 @@ import type { LoginRequest, WechatLoginRequest, LoginResponse } from '@web-syste
 
 /**
  * 用户名密码登录
+ *
+ * `system: 'admin'` **必传**（IAM 一期）：登录默认按 `portal` 处理，而 portal 不做门禁 ——
+ * 不显式声明系统，C 端账号也能登进运营后台。
  */
 export function login(data: LoginRequest): Promise<LoginResponse> {
-  return request.post('/auth/login', data);
+  return request.post('/auth/login', { ...data, system: data.system ?? 'admin' });
 }
 
 /**
@@ -17,9 +20,11 @@ export function register(data: { username: string; password: string; email?: str
 
 /**
  * 微信扫码登录
+ *
+ * 同样声明 `system: 'admin'`：扫码进来的通常是 C 端账号，不声明系统就绕过了门禁。
  */
 export function wechatLogin(data: WechatLoginRequest): Promise<LoginResponse> {
-  return request.post('/auth/wechat-login', data);
+  return request.post('/auth/wechat-login', { ...data, system: data.system ?? 'admin' });
 }
 
 /**

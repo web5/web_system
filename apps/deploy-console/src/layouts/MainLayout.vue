@@ -30,27 +30,70 @@ const avatarLetter = computed(() =>
   (authStore.user?.username || 'U').slice(0, 1).toUpperCase(),
 )
 
-// 菜单项
-const menuItems = [
+/**
+ * 菜单结构（对齐原型 v14）：按**两个域**分组 ——
+ *  - 流水线管理：发布流水线 + 灰度 / 诊断 / 工具
+ *  - 模块管理：模块列表（含详情·编辑）+ 环境 / 监控 / 配置中心
+ * 其余（仪表盘 / 审计 / 通知 / 设置）保持一级。
+ */
+const topMenuItems = [
   { key: '/dashboard', label: '仪表盘', icon: DashboardOutlined },
-  { key: '/pipelines', label: '流水线', icon: DeploymentUnitOutlined },
-  { key: '/modules', label: '模块管理', icon: AppstoreOutlined },
-  { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
-  { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
-  { key: '/config', label: '配置中心', icon: SettingOutlined },
   { key: '/notifications', label: '通知中心', icon: BellOutlined },
-  { key: '/canary', label: '灰度管理', icon: ExperimentOutlined },
-  { key: '/diagnose', label: '自助诊断', icon: ToolOutlined },
-  { key: '/tools', label: '工具目录', icon: BuildOutlined },
   { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 
-// 当前选中的菜单项
-const selectedKeys = computed(() => [route.path])
+const menuGroups = [
+  {
+    key: 'grp-pipeline',
+    label: '流水线管理',
+    icon: DeploymentUnitOutlined,
+    children: [
+      { key: '/pipelines', label: '流水线列表', icon: DeploymentUnitOutlined },
+      { key: '/canary', label: '灰度管理', icon: ExperimentOutlined },
+      { key: '/diagnose', label: '自助诊断', icon: ToolOutlined },
+      { key: '/tools', label: '工具目录', icon: BuildOutlined },
+    ],
+  },
+  {
+    key: 'grp-module',
+    label: '模块管理',
+    icon: AppstoreOutlined,
+    children: [
+      { key: '/modules', label: '模块列表', icon: AppstoreOutlined },
+      { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
+      { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
+      { key: '/config', label: '配置中心', icon: SettingOutlined },
+    ],
+  },
+]
 
-// 菜单点击跳转
+const allMenuItems = [
+  ...topMenuItems,
+  ...menuGroups.flatMap((g) => g.children),
+]
+
+/** 分组 key 不是路由，点击不跳转 */
+function isGroupKey(key: string) {
+  return key.startsWith('grp-')
+}
+
+// 子菜单默认全展开（两级、项不多，折叠只是噪音）
+const openKeys = ref<string[]>(menuGroups.map((g) => g.key))
+
+// 当前选中的菜单项：详情页（/modules/:key、/pipelines/:id）高亮其归属的一级项
+const selectedKeys = computed(() => {
+  const p = route.path
+  if (allMenuItems.some((i) => i.key === p)) return [p]
+  const hit = allMenuItems
+    .filter((i) => i.key !== '/dashboard' && p.startsWith(`${i.key}/`))
+    .sort((a, b) => b.key.length - a.key.length)[0]
+  return [hit?.key ?? p]
+})
+
+// 菜单点击跳转（分组标题不是路由，点击只展开/收起，不跳转）
 function onMenuClick({ key }: { key: string }) {
+  if (isGroupKey(key)) return
   router.push(key)
 }
 
@@ -108,12 +151,24 @@ function handleLogout() {
         theme="dark"
         mode="inline"
         :selected-keys="selectedKeys"
+        :open-keys="openKeys"
+        @open-change="(keys: string[]) => (openKeys = keys)"
         @click="onMenuClick"
       >
-        <a-menu-item v-for="item in menuItems" :key="item.key">
+        <a-menu-item v-for="item in topMenuItems" :key="item.key">
           <component :is="item.icon" />
           <span>{{ item.label }}</span>
         </a-menu-item>
+        <a-sub-menu v-for="g in menuGroups" :key="g.key">
+          <template #icon>
+            <component :is="g.icon" />
+          </template>
+          <template #title>{{ g.label }}</template>
+          <a-menu-item v-for="c in g.children" :key="c.key">
+            <component :is="c.icon" />
+            <span>{{ c.label }}</span>
+          </a-menu-item>
+        </a-sub-menu>
       </a-menu>
     </a-layout-sider>
 

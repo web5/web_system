@@ -9,8 +9,10 @@ import {
   pipelineTemplateApi,
   stageCommandApi,
   pipelineStepApi,
+  pipelineVarApi,
   type PipelineItem,
   type PipelineTemplate,
+  type PipelineVar,
   type TemplateNode,
   PLATFORM_NODE_KEYS,
   PLATFORM_NODE_LABELS,
@@ -32,6 +34,7 @@ import {
   formatTime,
   durationMs,
   isLive,
+  isApprovalPending,
   checkNodes,
   nodeDisplayName,
   legacyToNodes,
@@ -44,8 +47,53 @@ const tplId = computed(() => String(route.params.id || ''))
 const tpl = ref<PipelineTemplate | null>(null)
 const history = ref<PipelineItem[]>([])
 const loading = ref(false)
-/** flow=执行流程（当前选中实例流程图）/ history=历史记录 */
-const activeTab = ref<'flow' | 'history'>('flow')
+// ===== 变量 Tab（只读；属于本条流水线，维护在「编辑流水线」） =====
+const pipelineVars = ref<PipelineVar[]>([])
+const varsLoading = ref(false)
+async function loadPipelineVars() {
+  const pid = selectedRun.value?.templateId
+  if (!pid) {
+    pipelineVars.value = []
+    return
+  }
+  varsLoading.value = true
+  try {
+    pipelineVars.value = await pipelineVarApi.list(pid)
+  } catch {
+    pipelineVars.value = []
+  } finally {
+    varsLoading.value = false
+  }
+}
+function onTabChange(key: string | number) {
+  if (key === 'vars') void loadPipelineVars()
+}
+
+/** flow=执行流程 / history=历史记录 / params=参数（本次生效值）/ vars=变量（本条流水线） */
+const activeTab = ref<'flow' | 'history' | 'params' | 'vars'>('flow')
+
+/**
+ * 参数 Tab：本次发布的生效值 + 来源。
+ *
+ * 来源层级（后者覆盖前者）：平台内置 → 配置中心 → 流水线变量 → 节点内联。
+ * 这里只展示取得到的层（变量层在第 4 步变量 API 落地后并入），
+ * 用途是排查「改了配置/变量为什么不生效」。
+ */
+const paramRows = computed<{ key: string; value: string; source: string }[]>(() => {
+  const p = selectedRun.value
+  if (!p) return []
+  const rows: { key: string; value: string; source: string }[] = [
+    { key: 'ENV', value: p.env || '—', source: '内置' },
+    { key: 'MODULE_KEY', value: p.moduleKey || '—', source: '内置' },
+    { key: 'GIT_BRANCH', value: p.gitBranch || '—', source: '本次入参' },
+    { key: 'GIT_COMMIT', value: p.gitCommit || '—', source: '本次入参' },
+    { key: 'VERSION_TAG', value: p.versionTag || '—', source: '本次入参' },
+    { key: 'MODE', value: p.mode || '—', source: '本次入参' },
+  ]
+  const rt = (p as any).runTarget
+  if (rt) rows.push({ key: 'RUN_TARGET', value: rt, source: '本次入参' })
+  return rows
+})
 let timer: number | undefined
 
 // ===== 当前查看的实例（selectedRun：默认最新一次，?run= 可深链到任意历史） =====
@@ -226,13 +274,17 @@ function handleRetry(p: PipelineItem) {
   })
 }
 function handleCancel(p: PipelineItem) {
+  // 挂起等审批的取消 = 终止本次发布：已执行过的节点（构建/投递等）不会自动回滚
+  const suspended = p.status === 'awaiting-approval'
+  const approving = isApprovalPending(p.status)
   Modal.confirm({
-    title: p.status === 'pending-approval' ? '撤回审批请求' : '确认取消',
-    content:
-      p.status === 'pending-approval'
+    title: suspended ? '终止挂起中的发布' : approving ? '撤回审批请求' : '确认取消',
+    content: suspended
+      ? `终止 ${p.id} 吗？它已执行到「${p.stage || '-'}」节点并在等待审批，终止后已执行的动作不会回滚，需重新提交发布。`
+      : approving
         ? `撤回 ${p.id} 的发布审批请求？撤回后需重新提交。`
         : `确定取消实例 ${p.id} 吗？正在执行的阶段会中断。`,
-    okText: p.status === 'pending-approval' ? '撤回' : '取消任务',
+    okText: approving ? '撤回' : '取消任务',
     okType: 'danger',
     cancelText: '返回',
     onOk: async () => {
@@ -288,13 +340,28 @@ function handlePromote(p: PipelineItem) {
 const review = ref<{ p: PipelineItem; action: 'approve' | 'reject' } | null>(null)
 const reviewComment = ref('')
 const reviewing = ref(false)
+/** 可审批人（打开弹窗时拉一次；degraded=后端未做校验，需显式提示） */
+const approverInfo = ref<{ users: { username: string; nickname?: string }[]; degraded: boolean; reason?: string }>({
+  users: [],
+  degraded: false,
+})
+async function loadApprovers() {
+  try {
+    const r = await pipelineApi.approvers()
+    approverInfo.value = { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
+  } catch {
+    approverInfo.value = { users: [], degraded: true, reason: '获取可审批人失败' }
+  }
+}
 function openApprove(p: PipelineItem) {
   reviewComment.value = ''
   review.value = { p, action: 'approve' }
+  void loadApprovers()
 }
 function openReject(p: PipelineItem) {
   reviewComment.value = ''
   review.value = { p, action: 'reject' }
+  void loadApprovers()
 }
 async function submitReview() {
   if (!review.value) return
@@ -306,7 +373,11 @@ async function submitReview() {
   try {
     if (review.value.action === 'approve') {
       await pipelineApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
-      message.success('已审批通过，发布开始执行')
+      message.success(
+        review.value.p.status === 'awaiting-approval'
+          ? '已审批通过，从该节点之后继续执行'
+          : '已审批通过，发布开始执行',
+      )
     } else {
       await pipelineApi.reject(review.value.p.id, reviewComment.value.trim())
       message.success('已拒绝该发布')
@@ -813,7 +884,7 @@ onUnmounted(stopPolling)
       </a-card>
 
       <a-card size="small" :loading="loading">
-        <a-tabs v-model:activeKey="activeTab">
+        <a-tabs v-model:activeKey="activeTab" @change="onTabChange">
           <!-- 执行流程（当前查看实例，默认最新一次） -->
           <a-tab-pane key="flow" tab="执行流程">
             <a-empty v-if="!selectedRun" description="该流水线还没有执行记录">
@@ -871,10 +942,10 @@ onUnmounted(stopPolling)
                     danger
                     @click="handleCancel(selectedRun)"
                   >停止</a-button>
-                  <a-button v-if="selectedRun.status === 'pending-approval'" danger @click="handleCancel(selectedRun)">
-                    撤回审批
+                  <a-button v-if="isApprovalPending(selectedRun.status)" danger @click="handleCancel(selectedRun)">
+                    {{ selectedRun.status === 'awaiting-approval' ? '终止发布' : '撤回审批' }}
                   </a-button>
-                  <template v-if="selectedRun.status === 'pending-approval'">
+                  <template v-if="isApprovalPending(selectedRun.status)">
                     <a-button type="primary" @click="openApprove(selectedRun)">审批通过</a-button>
                     <a-button danger @click="openReject(selectedRun)">拒绝</a-button>
                   </template>
@@ -961,12 +1032,12 @@ onUnmounted(stopPolling)
                     >
                       {{ record.status === 'succeeded' ? '再次发布' : '重试' }}
                     </a-button>
-                    <template v-if="record.status === 'pending-approval'">
+                    <template v-if="isApprovalPending(record.status)">
                       <a-button type="link" size="small" @click="openApprove(record)">通过</a-button>
                       <a-button type="link" size="small" danger @click="openReject(record)">拒绝</a-button>
                     </template>
                     <a-button
-                      v-if="['running', 'pending'].includes(record.status)"
+                      v-if="['running', 'pending', 'awaiting-approval'].includes(record.status)"
                       type="link"
                       size="small"
                       danger
@@ -979,7 +1050,7 @@ onUnmounted(stopPolling)
                       @click="handlePromote(record)"
                     >转全量</a-button>
                     <a-button
-                      v-if="!['running', 'pending', 'pending-approval'].includes(record.status)"
+                      v-if="!['running', 'pending', 'pending-approval', 'awaiting-approval'].includes(record.status)"
                       type="link"
                       size="small"
                       danger
@@ -989,6 +1060,78 @@ onUnmounted(stopPolling)
                 </template>
               </template>
             </a-table>
+          </a-tab-pane>
+
+          <!-- 参数（本次生效值） -->
+          <a-tab-pane key="params" tab="参数">
+            <a-empty v-if="!selectedRun" description="还没有执行记录" />
+            <template v-else>
+              <a-table
+                :columns="[
+                  { title: '键', key: 'key', width: 180 },
+                  { title: '生效值', key: 'value' },
+                  { title: '来源', key: 'source', width: 120 },
+                ]"
+                :data-source="paramRows"
+                :pagination="false"
+                row-key="key"
+                size="small"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'key'">
+                    <span style="font-family: monospace;">{{ record.key }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'value'">
+                    <span style="font-family: monospace;">{{ record.value }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'source'">
+                    <a-tag :color="record.source === '内置' ? 'default' : 'blue'">{{ record.source }}</a-tag>
+                  </template>
+                </template>
+              </a-table>
+              <div style="margin-top: 8px; color: #999; font-size: 12px;">
+                优先级：内置 → 配置中心 → 流水线变量 → 节点内联。
+              </div>
+            </template>
+          </a-tab-pane>
+
+          <!-- 变量（属于本条流水线，只读） -->
+          <a-tab-pane key="vars" tab="变量">
+            <a-empty v-if="!selectedRun" description="还没有执行记录" />
+            <template v-else>
+              <a-table
+                :columns="[
+                  { title: '键', key: 'key', width: 200 },
+                  { title: '值', key: 'value' },
+                  { title: '说明', key: 'desc', width: 200 },
+                  { title: '密钥', key: 'secret', width: 80 },
+                ]"
+                :data-source="pipelineVars"
+                :loading="varsLoading"
+                :pagination="false"
+                row-key="id"
+                size="small"
+                :locale="{ emptyText: '该流水线未定义变量' }"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'key'">
+                    <span style="font-family: monospace;">{{ record.key }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'value'">
+                    <span style="font-family: monospace;">{{ record.value }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'secret'">
+                    <a-tag :color="record.isSecret ? 'orange' : 'default'">
+                      {{ record.isSecret ? '是' : '否' }}
+                    </a-tag>
+                  </template>
+                </template>
+              </a-table>
+              <div style="margin-top: 8px; color: #999; font-size: 12px;">
+                变量<b>跟着流水线走</b>：增删改查在「编辑流水线」页，这里只读查看；节点脚本用
+                <span style="font-family: monospace;">${KEY}</span> 引用。
+              </div>
+            </template>
           </a-tab-pane>
         </a-tabs>
       </a-card>
@@ -1221,6 +1364,17 @@ onUnmounted(stopPolling)
         {{ review.p.env }} / {{ review.p.moduleKey }}
         <template v-if="review.p.versionTag">@ {{ review.p.versionTag }}</template>
         · 提交人 {{ review.p.operator || '-' }}
+      </p>
+      <a-alert
+        v-if="approverInfo.degraded"
+        type="warning"
+        show-icon
+        banner
+        style="margin-bottom: 12px;"
+        :message="`未做审批权限校验：${approverInfo.reason || '权限服务不可用'}`"
+      />
+      <p v-else-if="approverInfo.users.length" style="margin-bottom: 12px; color: #666; font-size: 12px;">
+        可审批：{{ approverInfo.users.map((u) => u.nickname || u.username).join('、') }}
       </p>
       <a-textarea
         v-model:value="reviewComment"

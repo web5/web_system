@@ -1,0 +1,7 @@
+/** jest 配置（@web-system/shared 单元测试） */
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testMatch: ['**/*.spec.ts'],
+  moduleFileExtensions: ['ts', 'js'],
+};

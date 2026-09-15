@@ -23,11 +23,8 @@ export class AuthController {
   @ApiResponse({ status: 200, description: '登录成功，返回 token' })
   @ApiResponse({ status: 401, description: '用户名或密码错误' })
   async login(@Body() body: LoginDto) {
-    const isValid = this.authService.validateUser(body.username, body.password);
-    if (!isValid) {
-      throw new UnauthorizedException('用户名或密码错误');
-    }
-    return this.authService.login(body.username);
+    // IAM 一期：登录代理给 auth-service（system=deploy），见 AuthService.login
+    return this.authService.login(body.username, body.password);
   }
 
   /**

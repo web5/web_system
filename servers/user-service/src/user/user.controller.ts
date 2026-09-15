@@ -23,8 +23,10 @@ export class UserController {
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10,
     @Query('keyword') keyword?: string,
+    /** 按归属系统过滤：portal / admin / deploy；不传或 all = 全部 */
+    @Query('system') system?: string,
   ) {
-    return this.userService.findAll(page, pageSize, keyword);
+    return this.userService.findAll(page, pageSize, keyword, system);
   }
 
   @Get('me')

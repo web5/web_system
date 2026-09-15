@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PERMISSIONS, ROLE_PERMISSIONS } from '@web-system/types';
-import { User } from '@web-system/shared';
+import { User, hasSystem, isAppSystem } from '@web-system/shared';
 import { PermissionEntity } from './entities/permission.entity';
 import { RoleEntity } from './entities/role.entity';
 import { RolePermissionEntity } from './entities/role-permission.entity';
@@ -338,6 +338,54 @@ export class PermissionService implements OnModuleInit {
     const roles = user?.roles?.length ? user.roles : [];
     if (roles.includes('super_admin')) return Object.keys(PERMISSIONS);
     return this.getPermissionsForRoles(roles);
+  }
+
+  /**
+   * 查询同时持有指定权限码的用户（供 deploy-console 拉「可审批人」）。
+   *
+   * 实现分两步，是因为**没有 user_roles 关联表**：用户角色存在 `users.roles`
+   * JSON 数组列里，只能先由 `role_permissions` 反查角色，再按角色过滤用户。
+   *
+   * @param codes 需**全部**满足的权限码（AND 语义）
+   */
+  async findUsersByPermissions(
+    codes: string[],
+    /** 按归属系统过滤（IAM 一期）：如 deploy-console 只取 systems 含 'deploy' 的用户 */
+    system?: string,
+  ): Promise<Array<{ id: string; username: string; nickname?: string; roles: string[] }>> {
+    const want = [...new Set((codes ?? []).map((c) => String(c ?? '').trim()).filter(Boolean))];
+    if (!want.length) return [];
+
+    // ① 持有全部权限码的角色（COUNT(DISTINCT) = 期望个数）
+    const rows = await this.rpRepo
+      .createQueryBuilder('rp')
+      .select('rp.role_code', 'roleCode')
+      .where('rp.permission_code IN (:...codes)', { codes: want })
+      .groupBy('rp.role_code')
+      .having('COUNT(DISTINCT rp.permission_code) = :n', { n: want.length })
+      .getRawMany<{ roleCode: string }>();
+    const roleCodes = rows.map((r) => r.roleCode).filter(Boolean);
+    if (!roleCodes.length) return [];
+
+    // ② users.roles 是 JSON 数组 → JSON_CONTAINS 匹配任一角色
+    const qb = this.userRepo.createQueryBuilder('u');
+    roleCodes.forEach((r, i) => {
+      const param = `role${i}`;
+      if (i === 0) qb.where(`JSON_CONTAINS(u.roles, :${param})`, { [param]: JSON.stringify(r) });
+      else qb.orWhere(`JSON_CONTAINS(u.roles, :${param})`, { [param]: JSON.stringify(r) });
+    });
+    const users = await qb.orderBy('u.username', 'ASC').getMany();
+    // 系统隔离：C 端用户即便被误授运维权限码，也不会出现在运维侧的可选人里
+    const scoped =
+      system && system !== 'all' && isAppSystem(system)
+        ? users.filter((u) => hasSystem(u, system))
+        : users;
+    return scoped.map((u) => ({
+      id: String(u.id),
+      username: u.username,
+      nickname: u.nickname || undefined,
+      roles: Array.isArray(u.roles) ? u.roles : [],
+    }));
   }
 
   /** 按角色列表解析权限码集合（内部接口 + 各服务 PermissionGuard 调用，60s 缓存） */

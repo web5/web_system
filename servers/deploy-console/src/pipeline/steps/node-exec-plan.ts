@@ -21,11 +21,14 @@ export type NodeExecPlan =
   | { how: 'script' }
   /** git：DB 锁定脚本优先，缺省回退内置 pull，之后由平台回填版本 */
   | { how: 'git' }
+  /** approval：审批节点 —— 创建节点级审批单并挂起流水线，等人工决议后继续 */
+  | { how: 'approval' }
   /** version / pointer：发布语义真相源，纯内置，不可被命令覆盖 */
   | { how: 'builtin'; builtinKey: string };
 
 /** 解析节点执行策略（纯函数） */
 export function planNodeExec(node: TemplateNode): NodeExecPlan {
+  if (node.kind === 'approval') return { how: 'approval' };
   if (node.kind === 'platform') {
     if (node.key === 'git') return { how: 'git' };
     return { how: 'builtin', builtinKey: node.key };

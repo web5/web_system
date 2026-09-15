@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ⚠️ DEPRECATED（2026-09-14）：**流水线不再使用本文件**。
+#    发布流水线的 verify 阶段改由 deploy-console 自带的副本执行
+#    （servers/deploy-console/src/pipeline/scripts/verify-backend.sh，随 console 构建产物分发）。
+#    本文件现仅供 `scripts/bootstrap.sh` 与人工运维在目标机本地使用；
+#    改动它**不会影响流水线**，改流水线行为请改 console 里的那份。
 # ============================================================
 # 发布流水线 · verify 阶段（backend）
 #
