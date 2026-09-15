@@ -114,6 +114,16 @@ Tabs： 基本信息 | 流程编排 | 参数 | 变量
 
 ---
 
+## 6.5 失败回滚语义（2026-09-15 收口）
+
+| 层 | 真相源 | 当前状态 |
+|---|---|---|
+| 回滚**锚点**（哪个节点失败触发回滚） | 节点上的 **watchdog** 标记（`resolveRunStages` → `rollbackAnchor`） | UI 暂未开放（用户 2026-09-15：小特性后续再加）；**没有 watchdog → 永不自动回滚** |
+| 回滚**开关** | 流水线级 `rollbackOnFailure`（`previous` / `none`） | 编辑页已移除该字段，payload 保持默认 `previous` |
+
+即：**当前默认不会自动回滚**（终态四节点没有任何节点标 watchdog）。后续若要开放：
+① 节点抽屉加「watchdog（失败自动回滚锚点）」勾选；② 或把 `rollbackOnFailure` 收敛进节点并弃用流水线级字段（需同步改引擎 `pipeline.service.ts` 的 `p.rollbackOnFailure !== 'none'` 判断）。
+
 ## 7. 文案
 
 决策 #7：实体只有**流水线 + 流水线实例**，**UI 一律叫「流水线」**，不出现「模板」。
