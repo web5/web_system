@@ -31,6 +31,28 @@ if [ -z "$changed_dirs" ]; then
   exit 0
 fi
 
+# ---- R6 前置：先构建「改动包的工作区依赖」 ----
+# 为什么需要：CI 是全新 checkout，`packages/*` 的 dist 不存在。脚本原本只 build 改动到的包，
+# 一旦改动包（apps/ servers/）依赖 packages/*（如 @web-system/shared / @web-system/ui），
+# TS 就会报 `TS2307 Cannot find module '@web-system/shared'` —— 表现为"本地能过、CI 挂"。
+# （历史现象：同时改了 packages/* 的 PR 恰好先构建了它们，于是"看起来随机通过"。）
+# 这里用 pnpm 的依赖过滤器 `<name>^...`（= 该包的全部工作区依赖，不含自身）按拓扑序构建。
+dep_filters=()
+for dir in $changed_dirs; do
+  [ -f "$dir/package.json" ] || continue
+  dep_name="$(node -p "require('./$dir/package.json').name" 2>/dev/null || echo '')"
+  if [ -n "$dep_name" ]; then
+    dep_filters+=("--filter" "${dep_name}^...")
+  fi
+done
+if [ "${#dep_filters[@]}" -gt 0 ]; then
+  echo "== 先构建改动包的工作区依赖（packages/*）=="
+  if ! pnpm -r ${dep_filters[@]+"${dep_filters[@]}"} build; then
+    echo "✗ 工作区依赖构建失败"
+    exit 1
+  fi
+fi
+
 fail=0
 for dir in $changed_dirs; do
   [ -f "$dir/package.json" ] || continue
