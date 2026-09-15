@@ -469,7 +469,7 @@ function onCommandClick(stage: string) {
 // ===== 编辑流水线（nodes 编排：platform 锁定 + script 增删拖拽 + 节点脚本编辑） =====
 const editOpen = ref(false)
 const editSaving = ref(false)
-/** 编辑态草稿：模板元信息 */
+/** 编辑态草稿：流水线元信息 */
 const metaDraft = ref({
   name: '',
   description: '',
@@ -478,7 +478,7 @@ const metaDraft = ref({
   rollbackOnFailure: 'previous' as 'previous' | 'none',
   defaultTarget: 'auto' as 'auto' | 'local' | 'remote',
 })
-/** 编辑态草稿：nodes 序列（platform + script，保序；旧模板打开时预转存） */
+/** 编辑态草稿：nodes 序列（platform + script，保序；旧流水线打开时预转存） */
 const nodeDraft = ref<TemplateNode[]>([])
 /** 当前选中的节点 key（点 script 节点后编辑 label/key/脚本；platform 不可选中） */
 const selNodeKey = ref('')
@@ -499,7 +499,7 @@ function openEditor() {
     rollbackOnFailure: tpl.value.rollbackOnFailure || 'previous',
     defaultTarget: tpl.value.defaultTarget || 'auto',
   }
-  // 旧模板（无 nodes）打开即预转存为 nodes 草稿（保存才落库；所见即转存后效果）
+  // 旧流水线（无 nodes）打开即预转存为 nodes 草稿（保存才落库；所见即转存后效果）
   nodeDraft.value = tpl.value.nodes && tpl.value.nodes.length
     ? JSON.parse(JSON.stringify(tpl.value.nodes))
     : legacyToNodes({
@@ -704,7 +704,7 @@ function dragDrop(e: DragEvent, targetKey: string) {
   nodeDraft.value = candidate.map((k) => byKey.get(k)!).filter(Boolean)
 }
 
-/** 保存模板（元信息 + nodes） */
+/** 保存流水线（元信息 + nodes） */
 async function saveEditor() {
   if (!tpl.value) return
   const err = nodesError()
@@ -715,7 +715,7 @@ async function saveEditor() {
   editSaving.value = true
   try {
     const body: Record<string, any> = {
-      // builtin 模板不可改名（后端 400）；改名仅自定义模板且名字确实变化时提交
+      // builtin 流水线不可改名（后端 400）；改名仅自定义流水线且名字确实变化时提交
       ...(tpl.value.builtin || metaDraft.value.name.trim() === tpl.value.name
         ? {}
         : { name: metaDraft.value.name.trim() }),
@@ -1155,7 +1155,7 @@ onUnmounted(stopPolling)
               <a-col :span="12">
                 <a-form-item label="流水线名">
                   <a-input v-model:value="metaDraft.name" :disabled="tpl?.builtin" />
-                  <div v-if="tpl?.builtin" style="font-size: 12px; color: #999;">内置默认模板不可改名（可用「复制」另建）</div>
+                  <div v-if="tpl?.builtin" style="font-size: 12px; color: #999;">内置默认流水线不可改名（可用「复制」另建）</div>
                 </a-form-item>
               </a-col>
               <a-col :span="12">
@@ -1290,7 +1290,7 @@ onUnmounted(stopPolling)
               />
               <a-empty v-else description="读取 流水线 × git 命令中…" />
             </div>
-            <a-empty v-else description="无可用流水线模板" />
+            <a-empty v-else description="无可用流水线" />
           </template>
 
           <template v-else-if="selectedNode">
@@ -1335,7 +1335,7 @@ onUnmounted(stopPolling)
               />
               <a-empty v-else :description="`读取 流水线 × ${selectedNode.key} 命令中…`" />
             </div>
-            <a-empty v-else description="无可用流水线模板，无法编辑命令（可先保存节点结构）" />
+            <a-empty v-else description="无可用流水线，无法编辑命令（可先保存节点结构）" />
           </template>
 
           <a-empty v-else description="点击上方节点：script 可配置，git 可查看（平台托管只读），写版本号不可选" />

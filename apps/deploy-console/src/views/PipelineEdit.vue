@@ -66,7 +66,7 @@ async function load() {
       approval: tpl.value.approval,
       rollbackOnFailure: tpl.value.rollbackOnFailure || 'previous',
     }
-    // nodes 草稿（旧模板无 nodes → 预转存）
+    // nodes 草稿（旧流水线无 nodes → 预转存）
     nodeDraft.value =
       tpl.value.nodes && tpl.value.nodes.length
         ? JSON.parse(JSON.stringify(tpl.value.nodes))

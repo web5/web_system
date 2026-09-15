@@ -174,7 +174,7 @@ const modal = ref({
   approval: 'inherit' as string,
   defaultTarget: 'auto' as string,
   enabled: true,
-  /** 模板级审批人（白名单；真正能否审批看权限码 deploy:pipeline:approve） */
+  /** 流水线级审批人（白名单；真正能否审批看权限码 deploy:pipeline:approve） */
   approvers: [] as string[],
 })
 const saving = ref(false)
@@ -478,7 +478,7 @@ const moduleCards = computed<ModuleCard[]>(() =>
   }),
 )
 
-// ===== 摊平「模块×模板」流水线记录 + 四维筛选 =====
+// ===== 摊平「模块×流水线」流水线记录 + 四维筛选 =====
 interface PipelineRow {
   tpl: PipelineTemplate
   module: any
@@ -557,14 +557,14 @@ const filteredRows = computed<PipelineRow[]>(() => {
     return true
   })
 })
-/** 流水线展示名：默认 = 模块名；模板名非空且与模块名不同时追加「 · 模板名」 */
+/** 流水线展示名：默认 = 模块名；流水线名非空且与模块名不同时追加「 · 流水线名」 */
 function rowName(r: PipelineRow): string {
   const t = (r.tpl.name || '').trim()
   if (t && !r.module.name.includes(t) && t !== '默认') return `${r.module.name} · ${t}`
   return r.module.name
 }
 
-// 行内「执行」：打开发起抽屉并锁定该模板
+// 行内「执行」：打开发起抽屉并锁定该流水线
 const lockTemplateId = ref('')
 function executeTpl(r: PipelineRow) {
   lockTemplateId.value = r.tpl.id
@@ -679,7 +679,7 @@ function handleSubmit() {
   doSubmit(false)
 }
 
-// ===== 全部执行记录（全局浏览，含早期未关联模板快照的实例） =====
+// ===== 全部执行记录（全局浏览，含早期未关联流水线快照的实例） =====
 const plOpen = ref(false)
 const plEnv = ref('')
 const plList = ref<PipelineItem[]>([])
@@ -908,7 +908,7 @@ onUnmounted(stopPolling)
       </div>
     </a-card>
 
-    <!-- 流水线记录表格（摊平「模块 × 模板」） -->
+    <!-- 流水线记录表格（摊平「模块 × 流水线」） -->
     <a-card size="small" :loading="loading">
       <a-table
         :columns="[
@@ -1109,7 +1109,7 @@ onUnmounted(stopPolling)
       </a-form>
     </a-drawer>
 
-    <!-- 全部执行记录抽屉（全局浏览；流水线归属见模板详情页历史） -->
+    <!-- 全部执行记录抽屉（全局浏览；流水线归属见流水线详情页历史） -->
     <a-drawer
       :open="plOpen"
       title="执行记录"
@@ -1222,7 +1222,7 @@ onUnmounted(stopPolling)
             <a-tag :color="statusColor(logRecord.status)">{{ statusText(logRecord.status) }}</a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="环境/模块">{{ logRecord.env }} / {{ logRecord.moduleKey }}</a-descriptions-item>
-          <a-descriptions-item label="模板">{{ logRecord.templateName || '—' }}</a-descriptions-item>
+          <a-descriptions-item label="流水线">{{ logRecord.templateName || '—' }}</a-descriptions-item>
           <a-descriptions-item label="分支">{{ logRecord.gitBranch || '-' }}</a-descriptions-item>
           <a-descriptions-item label="提交">{{ logRecord.gitCommit || '-' }}</a-descriptions-item>
           <a-descriptions-item label="操作人">{{ logRecord.operator || '-' }}</a-descriptions-item>
@@ -1279,7 +1279,7 @@ onUnmounted(stopPolling)
       />
     </a-modal>
 
-    <!-- 流水线模板编辑弹窗（创建 / 编辑） -->
+    <!-- 流水线编辑弹窗（创建 / 编辑） -->
     <a-modal
       :open="modal.open"
       :title="modal.editing ? '编辑流水线' : '+ 新建流水线'"
