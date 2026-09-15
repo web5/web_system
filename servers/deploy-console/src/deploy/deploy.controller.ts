@@ -100,6 +100,41 @@ export class DeployController {
   }
 
   /**
+   * 回滚到上一个版本（按模块，T2）
+   *
+   * 与废弃的 `POST /deploy/rollback`（跑旧 scripts/rollback.sh）不同：
+   *   - 前台类：只把指针切回上一版本
+   *   - 后台类：走与部署同一套「版本目录落地 dist + pm2 重启」；
+   *     版本目录已清理时用最近的 `dist.bak-<ts>` 兜底
+   * 上一版本取自 deploy_versions（同 env + 模块，取最近一条非当前版本）。
+   */
+  @Post('rollback-version')
+  @ApiOperation({ summary: '回滚模块到上一个版本（后台模块会落地 + 重启）' })
+  @ApiResponse({ status: 200, description: '返回 from / to' })
+  async rollbackVersion(@Body() body: { env: string; moduleKey: string; confirm?: boolean }, @CurrentUser() user: any) {
+    if (!body?.env || !body?.moduleKey) {
+      throw new BadRequestException('env 与 moduleKey 必填');
+    }
+    if (body.env === 'prod' && body.confirm !== true) {
+      throw new BadRequestException('Prod operations require confirm=true');
+    }
+    const r = await this.deployService.rollbackVersion({
+      env: body.env,
+      moduleKey: body.moduleKey,
+      operator: user?.username,
+    });
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'deploy.rollback-version',
+      env: body.env,
+      component: body.moduleKey,
+      status: 'success',
+      detail: `回滚 ${body.moduleKey} @ ${body.env}: ${r.from} -> ${r.to}`,
+    });
+    return { ...r, status: 'rolled-back' };
+  }
+
+  /**
    * 发布指定版本（版本库任选，前端/微前端模块秒级切换，不重新构建）
    * prod 环境必须传 confirm=true，且仅允许 master 分支版本
    */
