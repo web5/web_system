@@ -505,7 +505,7 @@ export class DeployService {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
     // 3. 上传到远端 nginx 静态目录（通过 deploy.sh 的 deploy_micro_frontend 函数）
-    const envVars = await this.buildEnvVars(env);
+    const envVars = await this.buildEnvVars(env, moduleKey);
     const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
     const child = spawn(
       'bash',
@@ -613,7 +613,7 @@ export class DeployService {
   ) {
     const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
     void this.updateTask(task, 'running', `执行部署: bash scripts/deploy.sh ${env} ${component} ${versionTag}`);
-    const envVars = await this.buildEnvVars(env);
+    const envVars = await this.buildEnvVars(env, component);
     // 注入模块注册表定义（DB 唯一真相源）；查不到时 deploy.sh 自行 fallback modules.json
     try {
       const m = await this.moduleRegistry.get(component);
@@ -687,10 +687,22 @@ export class DeployService {
    * 从 DB 环境表构造连接环境变量，注入给 deploy.sh/rollback.sh
    * （服务器连接信息已下沉 deploy_servers，此处只传环境级 publicUrl）
    */
-  private async buildEnvVars(env: string): Promise<Record<string, string>> {
-    const e = await this.environmentService.get(env);
+  private async buildEnvVars(env: string, moduleKey?: string): Promise<Record<string, string>> {
+    // 环境已归属模块（1:N）：有模块上下文就精确定位；否则按环境 id 取第一条（回滚等无模块场景）
+    let publicUrl = '';
+    if (moduleKey) {
+      try {
+        publicUrl = (await this.environmentService.get(moduleKey, env))?.publicUrl || '';
+      } catch {
+        /* 该模块无此环境 → 回退按 env id 取 */
+      }
+    }
+    if (!publicUrl) {
+      const rows = await this.environmentService.list({ id: env });
+      publicUrl = rows.find((r) => r.publicUrl)?.publicUrl || '';
+    }
     return {
-      DEPLOY_PUBLIC_URL: e.publicUrl || '',
+      DEPLOY_PUBLIC_URL: publicUrl,
     };
   }
 

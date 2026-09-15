@@ -27,8 +27,13 @@ const moduleSaving = ref(false)
 const editingKey = ref('')
 
 const envs = ref<any[]>([])
-/** 环境管理面板（原独立菜单页已并入此处） */
+/** 环境管理面板（原独立菜单页已并入此处）：环境归属模块，需先选模块 */
 const envPanelOpen = ref(false)
+const envPanelModule = ref<string>('')
+function openEnvPanel(moduleKey?: string) {
+  envPanelModule.value = moduleKey || envPanelModule.value || moduleList.value[0]?.key || ''
+  envPanelOpen.value = true
+}
 const moduleForm = reactive({
   key: '',
   name: '',
@@ -184,7 +189,7 @@ onMounted(() => {
           />
         </a-tabs>
         <a-space>
-          <a-button @click="envPanelOpen = true">环境管理</a-button>
+          <a-button @click="openEnvPanel()">环境管理</a-button>
           <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
         </a-space>
       </div>
@@ -320,7 +325,20 @@ onMounted(() => {
       placement="right"
       :destroy-on-close="true"
     >
-      <EnvManagerPanel @changed="loadEnvs" />
+      <a-form-item label="模块（环境归属于模块，切换模块看它的环境）">
+        <a-select
+          v-model:value="envPanelModule"
+          show-search
+          option-filter-prop="label"
+          style="max-width: 360px;"
+          :options="moduleList.map((m: any) => ({ value: m.key, label: `${m.name}（${m.key}）` }))"
+        />
+      </a-form-item>
+      <EnvManagerPanel
+        v-if="envPanelModule"
+        :module-key="envPanelModule"
+        @changed="loadEnvs"
+      />
     </a-drawer>
   </div>
 </template>

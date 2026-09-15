@@ -72,6 +72,26 @@ export class EnvironmentDto {
   @IsOptional()
   publicUrl?: string;
 
+  /** 本模块在本环境的服务地址（host:port 或域名）；前端类模块留空 */
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  serverName?: string;
+
+  @IsOptional()
+  port?: number;
+
+  /** 复制本模块已有环境的 address/serverName/publicUrl 作初值（仅创建时） */
+  @IsString()
+  @IsOptional()
+  copyFrom?: string;
+
+  /**
+   * @deprecated 旧模型 ports 映射，已被 address 取代；仅回滚期兼容，P2 移除
+   */
   @IsOptional()
   ports?: Record<string, string>;
 
