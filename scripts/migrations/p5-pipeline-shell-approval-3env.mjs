@@ -84,9 +84,12 @@ const MODULES = [
     remotePath: '/data/web_system/servers/gateway/public/static/modules/portal',
   },
   {
-    key: 'shell', // 前端基座（vite build）
-    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/shell`,
-    remotePath: '/data/web_system/servers/gateway/public/static/modules/shell',
+    key: 'shell', // 前端基座（vite build → index.html + assets）
+    // ⚠️ 覆盖式发布：gateway 直读 `public/shell/`（main.ts 里 ServeStatic），
+    // 不是按版本目录加载的微前端 —— 因此不能用默认的「版本目录」投递。
+    overlay: true,
+    localPath: `${HOME}/web_system_release/servers/gateway/public/shell`,
+    remotePath: '/data/web_system/servers/gateway/public/shell',
   },
   {
     key: 'mcp-gateway', // 后台服务（tsc，就地发布）
@@ -119,8 +122,28 @@ const NO_BUILD_KEY_MODULES = ['mini-contract'];
 /** 环境 → deploy_servers 里的 server_name（local 不走 ssh，同机投递） */
 const ENV_SERVER = { local: null, dev: 'dev-default', prod: 'prod-default' };
 
-/** 本地投递（shell action）：构建产物 → 本机产物目录，不切指针 */
-const localUploadScript = (mod) => `#!/usr/bin/env bash
+/**
+ * 本地投递（shell action）：构建产物 → 本机产物目录，不切指针。
+ *
+ * 两种形态：
+ *  - 默认（版本目录）：$PUBLISH_PATH/$COMMIT_ID —— 微前端/后台，生效靠「部署」切指针或换 dist
+ *  - overlay（覆盖式）：直接覆盖 $PUBLISH_PATH —— 基座 shell，gateway 直读 public/shell/，
+ *    没有版本化。覆盖前把旧目录改名为 <dir>.bak-<ts>，只保留最近 3 份。
+ */
+const localUploadScript = (mod) => (mod.overlay ? `#!/usr/bin/env bash
+# 覆盖式投递（基座 shell）：产物直接覆盖到 $PUBLISH_PATH（旧目录先备份）
+set -euo pipefail
+SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
+DST="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
+DST="\${DST/#\\~/$HOME}"
+[ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+[ -d "$DST" ] && mv "$DST" "$DST.bak-$(date +%s)"
+mkdir -p "$DST"
+cp -R "$SRC/." "$DST/"
+# 只保留最近 3 份备份（注意：macOS 的 head 不支持负数的 -n，改用 tail -n +4）
+for old in $(ls -1dt "$DST".bak-* 2>/dev/null | tail -n +4); do rm -rf "$old"; done
+echo "[release] 覆盖式投递完成: $DST"
+` : `#!/usr/bin/env bash
 # 本地投递：把构建产物放到本机发布目录（版本目录），不做生效动作（生效=模块管理里部署）
 set -euo pipefail
 VER="\${COMMIT_ID:?COMMIT_ID 为空，无法确定版本目录}"
@@ -134,7 +157,7 @@ mkdir -p "$DST/$VER"
 rm -rf "$DST/$VER"/* 2>/dev/null || true
 cp -R "$SRC/." "$DST/$VER/"
 echo "[release] 本地产物已就位: $DST/$VER"
-`;
+`);
 
 /** 远程投递（shell action，dev/prod 模板用；当前停用，等节点 host + SSH 通道） */
 const remoteUploadScript = (mod) => `#!/usr/bin/env bash
@@ -160,6 +183,31 @@ $SSH "$PUBLISH_USER@$PUBLISH_HOST" \\
   "rm -rf '$PUBLISH_PATH/$VER' && mkdir -p '$PUBLISH_PATH/$VER' && tar xzf '/tmp/$(basename "$TGZ")' -C '$PUBLISH_PATH/$VER' && rm -f '/tmp/$(basename "$TGZ")'"
 rm -f "$TGZ"
 echo "[release] 远端产物已就位: $PUBLISH_PATH/$VER"
+`;
+
+/**
+ * 覆盖式远程投递（基座 shell）：远端先备份目录，再解包覆盖（无版本目录）。
+ * 与 localUploadScript 的 overlay 形态配套。
+ */
+const remoteOverlayScript = (mod) => `#!/usr/bin/env bash
+# 覆盖式远程投递（基座 shell）：打包 → scp → 目标机备份后覆盖 $PUBLISH_PATH
+set -euo pipefail
+PUBLISH_HOST="\${PUBLISH_HOST:?缺少流水线变量 PUBLISH_HOST}"
+PUBLISH_USER="\${PUBLISH_USER:-ubuntu}"
+PUBLISH_KEY="\${PUBLISH_KEY:-$HOME/.ssh/id_ed25519_servers}"
+PUBLISH_PATH="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
+VER="\${COMMIT_ID:?COMMIT_ID 为空，无法确定版本}"
+SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
+[ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+SSH="ssh -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+SCP="scp -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+TGZ="/tmp/${mod.key}-overlay-$(echo "$VER" | tr '/' '-').tgz"
+tar czf "$TGZ" -C "$SRC" .
+$SCP "$TGZ" "$PUBLISH_USER@$PUBLISH_HOST:/tmp/"
+$SSH "$PUBLISH_USER@$PUBLISH_HOST" \\
+  "set -e; [ -d '$PUBLISH_PATH' ] && mv '$PUBLISH_PATH' '$PUBLISH_PATH.bak-'$(date +%s); mkdir -p '$PUBLISH_PATH'; tar xzf '/tmp/$(basename "$TGZ")' -C '$PUBLISH_PATH'; rm -f '/tmp/$(basename "$TGZ")'"
+rm -f "$TGZ"
+echo "[release] 远端覆盖式投递完成: $PUBLISH_PATH"
 `;
 
 /** 终态四节点：拉代码 → 构建 → 审批 → 发布 */
@@ -210,7 +258,11 @@ async function main() {
         errOut(`⚠️ 跳过 ${id}：deploy_servers 里没有 ${serverName}`);
         continue;
       }
-      const upload = isLocal ? localUploadScript(mod) : remoteUploadScript(mod);
+      const upload = isLocal
+        ? localUploadScript(mod)
+        : mod.overlay
+          ? remoteOverlayScript(mod)
+          : remoteUploadScript(mod);
       plan.templates.push({
         id,
         moduleKey: mod.key,
