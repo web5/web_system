@@ -204,13 +204,17 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(created.nodes).toBeNull();
     });
 
-    it('flag=on 且 nodes 非法 → 400', async () => {
+    it('flag=on 且 nodes 非法 → 400（终态：key 重复 / 空 label / 保留字节点名）', async () => {
       process.env.PIPELINE_V5_NODES = 'on';
-      const bad = [
-        { kind: 'platform', key: 'git' },
-        { kind: 'platform', key: 'version' }, // 缺 pointer
+      const dupKey = [
+        { kind: 'shell', key: 'build', label: '构建' },
+        { kind: 'shell', key: 'build', label: '重复' },
       ];
-      await expect(service.create({ name: '坏线', nodes: bad as any })).rejects.toThrow(
+      await expect(service.create({ name: '坏线', nodes: dupKey as any })).rejects.toThrow(
+        BadRequestException,
+      );
+      const noLabel = [{ kind: 'shell', key: 'build', label: ' ' }];
+      await expect(service.create({ name: '坏线2', nodes: noLabel as any })).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -249,14 +253,17 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(copy.nodes!.length).toBe(4);
     });
 
-    it('v5 on：create 未传 nodes → 按 legacy steps 兜底转存（全量含 git/watchdog）', async () => {
+    it('v5 on：create 未传 nodes → 按 legacy steps 兜底转存（终态只产出 shell 节点）', async () => {
       process.env.PIPELINE_V5_NODES = 'on';
       await service.create({ name: '转存线', rollbackOnFailure: 'previous' });
       const created = repo.create.mock.calls[0][0];
       expect(created.nodes![0].key).toBe('git');
+      expect(created.nodes![0].kind).toBe('shell'); // git 终态是 shell 节点
       const keys = created.nodes!.map((n: any) => n.key);
-      expect(keys).toContain('version');
-      expect(keys.indexOf('version')).toBeLessThan(keys.indexOf('pointer'));
+      // version / pointer 已移出流水线（写版本 = 发布节点的 service action；切指针 = 模块管理部署）
+      expect(keys).not.toContain('version');
+      expect(keys).not.toContain('pointer');
+      expect(created.nodes!.every((n: any) => n.kind === 'shell')).toBe(true);
     });
 
     it('v5 on：旧模板（无 nodes）update 时自动转存为 nodes', async () => {
