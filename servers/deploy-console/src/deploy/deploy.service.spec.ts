@@ -419,3 +419,66 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
     );
   });
 });
+
+describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到此版本」）', () => {
+  let service: DeployService;
+  let workspace: string;
+  let deploymentRepo: { upsert: jest.Mock; findOne: jest.Mock; find: jest.Mock };
+  let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
+  const svc = () => path.join(workspace, 'servers/mcp-gateway');
+
+  beforeEach(async () => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rollback-to-'));
+    fs.mkdirSync(path.join(svc(), 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(svc(), 'dist/main.js'), '// current');
+    ['A', 'B'].forEach((v) => {
+      fs.mkdirSync(path.join(svc(), 'mcp-gateway-local/' + v), { recursive: true });
+      fs.writeFileSync(path.join(svc(), 'mcp-gateway-local/' + v, '/main.js'), '// ' + v);
+    });
+    deploymentRepo = {
+      upsert: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({ currentVersion: 'mcp-gateway-local/B' }),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
+    const module = await Test.createTestingModule({
+      providers: [
+        DeployService,
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
+        },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ModuleRegistryService,
+          useValue: {
+            get: jest.fn().mockResolvedValue({ key: 'mcp-gateway', type: 'backend', dir: 'mcp-gateway', pm2: 'web-mcp-gateway' }),
+          },
+        },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: commands },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  it('按行指定版本：回滚到该版本（不是「上一个」）', async () => {
+    const r = await service.rollbackVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      to: 'mcp-gateway-local/A',
+    });
+    expect(r.to).toBe('mcp-gateway-local/A');
+    expect(fs.readFileSync(path.join(svc(), 'dist/main.js'), 'utf-8')).toBe('// A');
+  });
+
+  it('指定当前版本 → 报错', async () => {
+    await expect(
+      service.rollbackVersion({ moduleKey: 'mcp-gateway', env: 'local', to: 'mcp-gateway-local/B' }),
+    ).rejects.toThrow(/就是当前版本/);
+  });
+});

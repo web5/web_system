@@ -111,7 +111,10 @@ export class DeployController {
   @Post('rollback-version')
   @ApiOperation({ summary: '回滚模块到上一个版本（后台模块会落地 + 重启）' })
   @ApiResponse({ status: 200, description: '返回 from / to' })
-  async rollbackVersion(@Body() body: { env: string; moduleKey: string; confirm?: boolean }, @CurrentUser() user: any) {
+  async rollbackVersion(
+    @Body() body: { env: string; moduleKey: string; confirm?: boolean; to?: string },
+    @CurrentUser() user: any,
+  ) {
     if (!body?.env || !body?.moduleKey) {
       throw new BadRequestException('env 与 moduleKey 必填');
     }
@@ -122,6 +125,8 @@ export class DeployController {
       env: body.env,
       moduleKey: body.moduleKey,
       operator: user?.username,
+      // 指定目标版本（UI「回滚到此版本」按行传入）；省略 = 上一个版本
+      to: body.to,
     });
     await this.auditService.log({
       user: user?.username || 'unknown',
