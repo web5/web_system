@@ -16,7 +16,7 @@
  *   - dev / prod：enabled=0 —— 远程语义需要「节点 host + 平台 SSH 通道」（design §6 / P1），
  *     落地后把变量填好即可启用（PUBLISH_HOST / PUBLISH_USER / PUBLISH_PATH 已按环境预填）
  *
- * 产出：`tpl-<module>-<env>`（admin / ai-agent / gateway × local/dev/prod = 9 条）；
+ * 产出：`tpl-<module>-<env>`（admin / ai-agent / gateway / portal / shell / mcp-gateway × local/dev/prod = 18 条）；
  *       删除旧的 tpl-local-* / tpl-publish-*；
  *       删除全局默认模板（module_key='*'）—— 用户 2026-09-15 决定「先删了，少了再加」：
  *       各模块都按 local/dev/prod 各建一条，不再用「无归属的全局兜底」。
@@ -76,6 +76,22 @@ const MODULES = [
     key: 'ai-agent',
     localPath: `${HOME}/web_system_release/servers/ai-agent`,
     remotePath: '/data/web_system/servers/ai-agent',
+  },
+  // 2026-09-15 追加（用户：补核心模块）
+  {
+    key: 'portal', // 微前端入口
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/portal`,
+    remotePath: '/data/web_system/servers/gateway/public/static/modules/portal',
+  },
+  {
+    key: 'shell', // 前端基座（vite build）
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/shell`,
+    remotePath: '/data/web_system/servers/gateway/public/static/modules/shell',
+  },
+  {
+    key: 'mcp-gateway', // 后台服务（tsc，就地发布）
+    localPath: `${HOME}/web_system_release/servers/mcp-gateway`,
+    remotePath: '/data/web_system/servers/mcp-gateway',
   },
 ];
 /** 环境 → deploy_servers 里的 server_name（local 不走 ssh，同机投递） */
@@ -179,7 +195,9 @@ async function main() {
         name: `${mod.key} ${env} 发布`,
         key: `${mod.key}-${env}`,
         env,
-        enabled: isLocal ? 1 : 0, // 远程待 P1 SSH 通道（pipeline-configs.md §5）
+        // 2026-09-15：dev / prod 的 SSH 通道已验证（175.27.189.123 / 106.52.176.246，
+        // 目录 /data/web_system 可写）→ 全部启用；若后续要停用，改这里或控制台里点停用。
+        enabled: 1,
         nodes: terminalNodes(),
       });
       plan.commands.push({
