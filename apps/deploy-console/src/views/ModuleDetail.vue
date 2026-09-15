@@ -383,7 +383,27 @@ onMounted(async () => {
          CanaryCenter 等页面一致；此前 tabs 裸放在卡片 body 里，tab 栏像"野孩子"一样漂浮、
          与下方内容缺少分隔 -->
     <a-card v-if="moduleInfo" :loading="dataLoading">
-      <a-tabs v-model:active-key="activeTab" size="small" class="md-tabbar">
+      <!-- R6 提示：模块不再持有命令。
+           注意必须放在 a-tabs **外面** —— antd 的 tabs 内容区是 flex 行，
+           非 a-tab-pane 的直接子元素会被当作 flex item 挤压成窄条（曾把本提示
+           压成一列竖排文字）。 -->
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 16px;"
+        message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
+      >
+        <template #description>
+          <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
+        </template>
+      </a-alert>
+
+      <a-tabs
+        v-if="showBackendTab || showFrontendTab"
+        v-model:active-key="activeTab"
+        size="small"
+        class="md-tabbar"
+      >
         <!-- 后台 tab -->
         <a-tab-pane v-if="showBackendTab" key="backend" tab="后台">
           <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
@@ -536,9 +556,6 @@ onMounted(async () => {
           </a-table>
         </a-tab-pane>
 
-        <!-- 两个 tab 都不显示时的兜底 -->
-        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
-
         <!-- 版本列表：流水线「发布」节点产出；可对某一版本直接部署或下发 AI 验证 -->
         <a-tab-pane key="versions" tab="版本列表">
           <p style="color: #666; margin-bottom: 12px;">
@@ -618,20 +635,8 @@ onMounted(async () => {
             - version/pointer = 紫色「语义真相源」（不可改）
           让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
         -->
-        <!-- R6：发布脚本 tab 已移除，替换为提示条 -->
-        <a-alert
-          type="info"
-          show-icon
-          style="margin-bottom: 0;"
-          message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
-        >
-          <template #description>
-            <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
-          </template>
-        </a-alert>
-
-        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
+      <a-empty v-else description="该模块类型暂不支持版本管理" />
     </a-card>
 
     <!-- 部署版本弹窗（版本行进来：版本固定选环境；环境行进来：环境固定选版本） -->
