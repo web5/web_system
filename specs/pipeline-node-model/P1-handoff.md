@@ -45,13 +45,18 @@
 
 ## 3. 未完成（按优先级）
 
-### 3.1 后台模块「部署生效」动作（推荐方案 ①）
+### 3.1 后台模块「部署生效」动作 —— ✅ 已完成（PR #72 + #73，已验证）
 
 **问题**：后台投递脚本把产物放到 `servers/<key>/<流水线key>/<commit>/`，而服务实际运行的是 `servers/<key>/dist/`。
 前端类无此问题（网关按指针直接读版本目录）。
 
-**方案（已与用户倾向一致）**：在「模块管理 → 部署」里，对 **backend 模块**执行
-「把版本目录内容落到 `dist/` + pm2 重启」，与前端类的「切指针」并列 —— 保留版本化（可回滚），生效模型统一。
+**已实现**：`DeployService.deployVersion()` 改指针后，对 backend 模块调用 `applyBackendVersion()`：
+复制版本目录 → `servers/<dir>/dist`（保留版本目录可回滚），旧 dist 备份 `dist.bak-<ts>`（留最近 3 份），
+再重启 pm2（候选名：注册表 `pm2` 字段 → `web-<key>` → 裸 key，实测注册表存裸 key 而进程叫 `web-<key>`）。
+仅 local 生效；dev/prod 需远程通道，暂只改指针并 warn。前端类仍只改指针。
+
+**已验证**：`mcp-gateway` 部署到 local → dist 内容与 `mcp-gateway-local/49caaae` 一致、旧 dist 已备份、
+`web-mcp-gateway` 进程重启成功（restarts 计数 +1、status online）。
 
 - 落点参考：`servers/deploy-console/src/deploy/deploy.service.ts`（现按前端切指针实现）
 - 路径常量：`command.service.ts` 的 `nodeBinDir()` / `pm2Bin()` / `pnpmBin()`（读 `RELEASE_NODE_BIN` / `RELEASE_PM2_BIN` / `RELEASE_PNPM_BIN`）
