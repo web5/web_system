@@ -18,6 +18,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { CommandService } from '../shell/command.service';
 import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 
@@ -73,6 +74,7 @@ export class DeployService {
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly serverService: ServerService,
     private readonly stageCommands: StageCommandService,
+    private readonly commands: CommandService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -282,7 +284,85 @@ export class DeployService {
       ['envId', 'moduleKey'],
     );
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
+    // 后台模块：只改指针不生效（服务跑的是 servers/<dir>/dist）→ 还要「落地 + 重启」
+    await this.applyBackendVersion(input);
     return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag };
+  }
+
+  /**
+   * 后台模块的「部署生效」：把版本目录内容落到服务目录的 `dist/`，再重启 pm2 进程。
+   *
+   * 为什么需要这一步（2026-09-15 回归发现）：投递脚本把产物放到
+   * `servers/<dir>/<流水线key>/<commit>/`（版本目录，可回滚），而服务实际运行的是
+   * `servers/<dir>/dist/`。前端类无此问题 —— 网关按指针直接读版本目录。
+   *
+   * 采用「复制」而不是「移动」：版本目录保留，回滚时可再次部署旧版本。
+   * 旧 dist 先备份为 `dist.bak-<ts>`（只留最近 3 份），失败时可手工回滚。
+   *
+   * ⚠️ 当前只实现 **local（本机）**；dev / prod 需要远程通道（scp + 远端 pm2），暂只改指针。
+   */
+  private async applyBackendVersion(input: {
+    moduleKey: string;
+    env: string;
+    versionTag: string;
+    operator?: string;
+  }): Promise<void> {
+    let mod: { type?: string; dir?: string; pm2?: string } | null = null;
+    try {
+      mod = (await this.moduleRegistry.get(input.moduleKey)) as any;
+    } catch {
+      return; // 取不到模块信息 → 按前端类处理（只改指针）
+    }
+    if (!mod || mod.type !== 'backend') return;
+
+    if (input.env !== 'local') {
+      this.logger.warn(
+        `后台模块 ${input.moduleKey} 在 ${input.env} 的「落地 + 重启」需要远程通道，暂未实现（本次只改指针）`,
+      );
+      return;
+    }
+
+    const home = process.env.HOME || '';
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = mod.dir || input.moduleKey;
+    const src = path.join(ws, 'servers', dir, input.versionTag);
+    const dst = path.join(ws, 'servers', dir, 'dist');
+
+    if (!fs.existsSync(src)) {
+      throw new Error(
+        `部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线，或确认版本标签正确）`,
+      );
+    }
+
+    // 备份旧 dist（保留最近 3 份）
+    if (fs.existsSync(dst)) {
+      const bak = `${dst}.bak-${Date.now()}`;
+      fs.renameSync(dst, bak);
+      try {
+        const baks = fs
+          .readdirSync(path.dirname(dst))
+          .filter((f) => f.startsWith('dist.bak-'))
+          .sort();
+        for (const old of baks.slice(0, Math.max(0, baks.length - 3))) {
+          fs.rmSync(path.join(path.dirname(dst), old), { recursive: true, force: true });
+        }
+      } catch {
+        /* 备份清理失败不影响部署 */
+      }
+    }
+
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.cpSync(src, dst, { recursive: true });
+    this.logger.log(`后台落地完成: ${src} -> ${dst}`);
+
+    // 重启 pm2 进程（失败只告警：指针已改，避免整体回滚造成状态不一致）
+    const pm2Name = mod.pm2 || `web-${input.moduleKey}`;
+    try {
+      const out = this.commands.exec(`"${this.commands.pm2Bin()}" restart ${pm2Name}`, ws, {}, 60000);
+      this.logger.log(`pm2 重启 ${pm2Name} 完成: ${String(out).trim().split('\n')[0] || ''}`);
+    } catch (e) {
+      this.logger.warn(`pm2 重启 ${pm2Name} 失败（产物已落地，请手工重启）: ${(e as Error).message}`);
+    }
   }
 
   /**
