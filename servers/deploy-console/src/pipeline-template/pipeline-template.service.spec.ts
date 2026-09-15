@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import {
   PipelineTemplateService,
   needsApprovalForTemplate,
@@ -77,6 +78,11 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       providers: [
         PipelineTemplateService,
         { provide: getRepositoryToken(DeployPipelineTemplateEntity), useValue: repo },
+        // 新建流水线时会写入 git 默认脚本（可编辑），测试里只要不抛错即可
+        {
+          provide: PlatformScriptSeedService,
+          useValue: { ensureEditableDefaults: jest.fn(async () => false) },
+        },
       ],
     }).compile();
     service = moduleRef.get(PipelineTemplateService);
