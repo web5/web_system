@@ -356,13 +356,25 @@ export class DeployService {
     this.logger.log(`后台落地完成: ${src} -> ${dst}`);
 
     // 重启 pm2 进程（失败只告警：指针已改，避免整体回滚造成状态不一致）
-    const pm2Name = mod.pm2 || `web-${input.moduleKey}`;
-    try {
-      const out = this.commands.exec(`"${this.commands.pm2Bin()}" restart ${pm2Name}`, ws, {}, 60000);
-      this.logger.log(`pm2 重启 ${pm2Name} 完成: ${String(out).trim().split('\n')[0] || ''}`);
-    } catch (e) {
-      this.logger.warn(`pm2 重启 ${pm2Name} 失败（产物已落地，请手工重启）: ${(e as Error).message}`);
+    //
+    // 进程名候选：注册表 `pm2` 字段 → `web-<key>`（本机实际命名规范）→ 裸 key。
+    // 2026-09-15 实测：注册表存的是裸 key（如 `mcp-gateway`），而 pm2 进程叫
+    // `web-mcp-gateway` —— 只认注册表会重启失败，这里逐个试到成功为止。
+    const candidates = Array.from(
+      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
+    );
+    let restarted = '';
+    for (const name of candidates) {
+      try {
+        this.commands.exec(`"${this.commands.pm2Bin()}" restart ${name}`, ws, {}, 60000);
+        restarted = name;
+        break;
+      } catch (e) {
+        this.logger.warn(`pm2 restart ${name} 失败，试下一个候选: ${(e as Error).message}`);
+      }
     }
+    if (restarted) this.logger.log(`pm2 重启完成: ${restarted}`);
+    else this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
   }
 
   /**
