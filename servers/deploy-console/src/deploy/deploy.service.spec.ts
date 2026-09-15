@@ -14,6 +14,29 @@ import * as os from 'os';
 import * as path from 'path';
 import { CommandService } from '../shell/command.service';
 
+// ssh2 全程 mock：远程部署测试不能真的连机器
+jest.mock('ssh2', () => {
+  const { EventEmitter } = require('events');
+  class FakeClient extends EventEmitter {
+    connect = jest.fn((_cfg: any) => setImmediate(() => this.emit('ready')));
+    end = jest.fn();
+    sftp = jest.fn((cb: any) => cb(null, { fastPut: (_a: string, _b: string, cb2: any) => cb2(null) }));
+    exec = jest.fn((cmd: string, cb: any) => {
+      const s: any = new EventEmitter();
+      s.stderr = new EventEmitter();
+      cb(null, s);
+      // 每次调用时再取实现（测试里可随时替换）
+      const impl = (global as any).__sshExecImpl;
+      const r = typeof impl === 'function' ? impl(cmd) : { code: 0, out: 'ok' };
+      setImmediate(() => {
+        s.emit('data', Buffer.from(String(r.out || '')));
+        s.emit('close', r.code);
+      });
+    });
+  }
+  return { Client: FakeClient };
+});
+
 /**
  * P0-2 单元测试：recordDeployment 改用原子 upsert，不再产生重复。
  * 断言：conflict target 为 ['envId','moduleKey']（对应唯一约束 uk_env_module）。
@@ -116,6 +139,11 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     fs.writeFileSync(path.join(workspace, 'servers/mcp-gateway/dist/main.js'), '// old');
 
     commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
+    (global as any).__sshCmds = [];
+    (global as any).__sshExecImpl = (cmd: string) => {
+      ((global as any).__sshCmds as string[]).push(cmd);
+      return { code: 0, out: 'ok' };
+    };
     moduleRegistry = {
       get: jest.fn().mockResolvedValue({
         key: 'mcp-gateway',
@@ -137,7 +165,16 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         { provide: ModuleRegistryService, useValue: moduleRegistry },
-        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ServerService,
+          useValue: {
+            resolveServers: jest.fn().mockResolvedValue([]),
+            // 远程部署需要环境默认服务器
+            resolveEnvDefaultServer: jest
+              .fn()
+              .mockResolvedValue({ host: '127.0.0.1', sshUser: 'ubuntu', sshKeyPath: '/no/key' }),
+          },
+        },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
       ],
@@ -190,16 +227,36 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     expect(commands.exec).not.toHaveBeenCalled();
   });
 
-  it('后台 + 非 local 环境：暂只改指针（远程通道未实现）', async () => {
+  it('后台 + 非 local 环境：走 SSH 远程落地，本机不动', async () => {
     await service.deployVersion({
       moduleKey: 'mcp-gateway',
       env: 'dev',
       versionTag: 'mcp-gateway-local/abc1234',
     });
+    // 本机不重启、本机 dist 不变
     expect(commands.exec).not.toHaveBeenCalled();
     expect(fs.readFileSync(path.join(workspace, 'servers/mcp-gateway/dist/main.js'), 'utf-8')).toBe(
       '// old',
     );
+    // 远端执行过：备份 dist + 解包 + pm2 重启
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    expect(cmds.some((c) => c.includes('dist.bak-'))).toBe(true);
+    expect(cmds.some((c) => c.includes('pm2 restart'))).toBe(true);
+  });
+
+  it('后台 + 远程失败：抛错且指针不改（先落地后改指针）', async () => {
+    (global as any).__sshExecImpl = () => ({ code: 1, out: 'boom' });
+    const upsert = (service as any).deploymentRepo.upsert as jest.Mock;
+    upsert.mockClear();
+    await expect(
+      service.deployVersion({
+        moduleKey: 'mcp-gateway',
+        env: 'dev',
+        versionTag: 'mcp-gateway-local/abc1234',
+      }),
+    ).rejects.toThrow(/远程部署失败/);
+    expect(upsert).not.toHaveBeenCalled();
+    (global as any).__sshExecImpl = undefined;
   });
 });
 
