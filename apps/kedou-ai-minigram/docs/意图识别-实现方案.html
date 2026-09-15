@@ -79,7 +79,7 @@
   <h1>意图识别在主对话链路的实现方案</h1>
   <div class="meta">
     <span><b>日期</b> 2026-09-15</span>
-    <span><b>范围</b> ai-service + agent-core</span>
+    <span><b>范围</b> ai-agent（运行面）+ agent-core</span>
     <span><b>状态</b> 待评审</span>
     <span><b>上一篇</b> 多Agent意图路由-架构设计（架构层）</span>
   </div>
@@ -90,6 +90,27 @@
   上一篇回答的是<b>「意图识别该不该做、放哪层、怎么分 agent」</b>（设计层）；
   这一篇回答<b>「具体改哪几个文件、代码怎么写、怎么测」</b>（实现层）。
   所有路径、字段名、接口签名均取自 <code>~/web_system_release</code> 实际代码，不是示意。
+</div>
+
+<h2>服务职责边界（重要修正）</h2>
+<p class="sub">后端不是「一个 ai-service」，而是配置面 + 运行面两个服务分工</p>
+
+<table>
+  <tr><th style="width:110px"></th><th>ai-service（3003）</th><th>ai-agent（6010）</th></tr>
+  <tr><td><b>角色</b></td><td><b>配置面 + 数据面</b></td><td><b>运行面</b></td></tr>
+  <tr><td><b>网关前缀</b></td><td><code>/api/ai/*</code> · <code>/api/agent-defs/*</code> · <code>/api/agent-runs/*</code></td><td><code>/api/ai-agent/*</code></td></tr>
+  <tr><td><b>管什么</b></td><td>agent 定义（systemPrompt / capabilities / version）、skill 正文、run 记录落库、通用 chat/image/tts</td><td><b>agent 执行（SSE）</b>、会话存储、MCP 客户端、skill provider、合同工具、权限 broker、OCR、模型目录</td></tr>
+  <tr><td><b>关键接口</b></td><td><code>GET /internal/agent-definitions</code>（供拉取）<br><code>POST /internal/agent-runs</code>（收埋点）<br><code>@Controller('admin/agent-defs')</code></td><td><code>POST /agent/run</code><br><code>GET /agent/conversations</code><br><code>POST /agent/permission/:id</code></td></tr>
+</table>
+
+<p><b>数据流</b>：ai-service 存定义 → ai-agent 定时轮询（<code>agent-def-sync</code>）拉 <code>published + enabled</code>
+→ 本地 <code>AgentRegistry.upsert()</code> 热更新 → 执行 → run 记录 push 回 ai-service 落库。</p>
+
+<div class="callout warn">
+  <span class="t">⚠️ 由此修正三处（此前文档写在了 ai-service 上，是错的）</span>
+  1. <b>意图识别与 IntentService 落在 ai-agent</b>（运行面），不是 ai-service<br>
+  2. <b>会话锁定的表是 ai-agent 侧的 <code>agent_conversations</code></b>，不是 ai-service 的 <code>conversations</code><br>
+  3. C 端应用清单接口加在 <b>ai-service</b>（配置面出清单），执行仍走 ai-agent —— 两者由网关分流，不冲突
 </div>
 
 <h2><span class="n">0</span>一句话结论</h2>
@@ -104,13 +125,13 @@
   <div class="step"><span class="i">1</span><div><b>小程序 <span class="path">services/contract-api.ts</span></b>
     <div class="d">POST <code>/api/ai-agent/agent/run</code>，body 里 <code>agentId:'contract-risk'</code>（写死）</div></div></div>
   <div class="step"><span class="i">2</span><div><b>gateway 转发</b> → <code>ai-service</code></div></div>
-  <div class="step"><span class="i">3</span><div><b><span class="path">servers/ai-service/src/agent/agent.controller.ts</span> <code>@Post('run')</code></b>
+  <div class="step"><span class="i">3</span><div><b><span class="path">servers/ai-agent/src/agent/agent.controller.ts</span> <code>@Post('run')</code></b>
     <div class="d">鉴权 → 设 SSE 头 → <code>agentRegistry.get(dto.agentId)</code> 取快照（用于埋点）→ 启动 stream</div></div></div>
   <div class="step"><span class="i">4</span><div><b><span class="path">agent-runner.ts</span> → <span class="path">agent-engine.ts</span></b>
     <div class="d">生成 runId，按 agentId 取定义，装配记忆/工具，流式产出 <code>StreamEvent</code></div></div></div>
   <div class="step"><span class="i">5</span><div><b>controller 循环 <code>for await (const event of stream)</code></b>
     <div class="d">每个事件 <code>res.write</code> 推给客户端，同时收进 <code>steps</code>；遇到 <code>final</code> 记答案</div></div></div>
-  <div class="step"><span class="i">6</span><div><b><code>agentLog.recordRun(...)</code> 异步落库</b>
+  <div class="step"><span class="i">6</span><div><b><code>AgentRunPusher.push(...)</code> push 回 ai-service 落库</b>
     <div class="d">记 agentId / systemPrompt / steps / usage / durationMs</div></div></div>
 </div>
 
@@ -139,22 +160,22 @@
     <td><code>StreamEventType</code> 加 <code>'intent'</code>；<code>StreamEvent</code> 加 <code>intent?</code> 字段</td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/agent/intent/intent.service.ts</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/intent/intent.service.ts</span></td>
     <td><span class="tag t-new">新增</span></td>
-    <td>Nest 侧编排：读会话锁定 → 调分类器 → 写回 <code>conversations.agent_id</code></td>
+    <td>Nest 侧编排：读会话锁定 → 调分类器 → 写回 <code>agent_conversations.agent_id</code></td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/agent/dto/agent-run.dto.ts</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/dto/agent-run.dto.ts</span></td>
     <td><span class="tag t-mod">改</span></td>
     <td><code>agentId</code> 加 <code>@IsOptional()</code>，缺省视为 <code>'auto'</code></td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/agent/agent.controller.ts</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/agent.controller.ts</span></td>
     <td><span class="tag t-mod">改</span></td>
     <td>stream 前插入路由决策；先推 <code>intent</code> 事件；埋点改用解析后的 agentId</td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/conversation/entities/conversation.entity.ts</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/memory/agent-conversation.entity.ts</span></td>
     <td><span class="tag t-mod">改</span></td>
     <td>加 <code>agentId</code> + <code>intentHistory</code> 两列</td>
   </tr>
@@ -164,12 +185,12 @@
     <td>加列 + 索引（沿用现有编号与 snake_case 约定）</td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/agent/agent.module.ts</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/agent.module.ts</span></td>
     <td><span class="tag t-mod">改</span></td>
     <td>provider 注册 <code>IntentService</code>，注入 <code>ClientRegistry</code></td>
   </tr>
   <tr>
-    <td><span class="path">servers/ai-service/src/agent-log/…</span></td>
+    <td><span class="path">servers/ai-agent/src/agent/agent-run-pusher.ts</span></td>
     <td><span class="tag t-fix">修</span></td>
     <td><code>recordRun</code> 增记 <code>intentVia</code> / <code>intentConfidence</code>（可选，P1）</td>
   </tr>
@@ -373,7 +394,7 @@ export class IntentClassifier {
 <h2><span class="n">5</span>会话锁定与切换检测</h2>
 <p class="sub">这是决定体验下限的一段。不做锁定的后果：追问「那第二种呢」被切走、同一话题前后人格不一致、成本翻倍。</p>
 
-<pre><code>// servers/ai-service/src/agent/intent/intent.service.ts
+<pre><code>// servers/ai-agent/src/agent/intent/intent.service.ts
 @Injectable()
 export class IntentService {
   constructor(
@@ -427,7 +448,7 @@ export class IntentService {
     if (!conversationId) return;   // 首轮无会话，由 final 事件回来后再写
     await this.convRepo.update(conversationId, { agentId });
     await this.convRepo.query(
-      `UPDATE conversations
+      `UPDATE agent_conversations
           SET intent_history = JSON_ARRAY_APPEND(
                 COALESCE(intent_history, JSON_ARRAY()), '$',
                 CAST(JSON_OBJECT('agentId', ?, 'via', ?, 'ts', NOW()) AS JSON))
@@ -452,15 +473,15 @@ export class IntentService {
 <pre><code>-- migrations/0010_conversation_intent_routing.sql
 -- 背景：主对话接入多 Agent 意图路由，需要把「本会话当前由哪个 agent 负责」持久化，
 --       否则每一轮都会重新分类（人格割裂 + 成本翻倍）。
--- 目标库：web_system（ai-service）
+-- 目标库：web_system（ai-agent 侧会话表）
 -- 适用：NODE_ENV=production（TypeORM synchronize 关闭）的环境必须手动执行。
 
-ALTER TABLE conversations
+ALTER TABLE agent_conversations
   ADD COLUMN agent_id VARCHAR(64) NULL COMMENT '当前会话锁定的 agentId（意图路由）' AFTER title,
   ADD COLUMN intent_history JSON NULL COMMENT '意图判定流水：[{agentId,via,ts}]' AFTER agent_id;
 
-ALTER TABLE conversations
-  ADD INDEX idx_conversations_agent (agent_id);</code></pre>
+ALTER TABLE agent_conversations
+  ADD INDEX idx_agent_conversations_agent (agent_id);</code></pre>
 
 <pre><code>// conversation/entities/conversation.entity.ts —— 同步加字段
 /** 当前会话锁定的 agentId（意图路由；null = 尚未分类） */
@@ -517,8 +538,8 @@ const stream = this.agentRunner.stream(
   userId,
 );
 
-// ⑤ 埋点同样要用 resolvedAgentId，否则 agent_log 里会写进 'auto'
-this.agentLog.recordRun({ agentId: resolvedAgentId, /* …其余不变… */ });</code></pre>
+// ⑤ 埋点同样要用 resolvedAgentId，否则 agent_run 记录里会写进 'auto'
+this.runPusher.push({ agentId: resolvedAgentId, /* …其余不变… */ });</code></pre>
 
 <h2><span class="n">8</span>灰度开关与降级</h2>
 
@@ -586,7 +607,7 @@ INTENT_TIMEOUT_MS=1200              // 分类超时</code></pre>
 <footer>
   关联文档：多Agent意图路由-架构设计.html（架构层）·
   apps/kedou-ai-minigram/docs/实现方案-三Tab骨架.html（小程序侧）<br>
-  代码基线：<code>~/web_system_release</code> · servers/ai-service · packages/agent-core · migrations/
+  代码基线：<code>~/web_system_release</code> · servers/ai-agent（运行面） · servers/ai-service（配置面） · packages/agent-core · migrations/
 </footer>
 
 </div>

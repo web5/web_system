@@ -78,10 +78,31 @@
   <h1>多 Agent 意图路由架构设计</h1>
   <div class="meta">
     <span><b>日期</b> 2026-09-15</span>
-    <span><b>范围</b> ai-service / agent-core / 小程序</span>
+    <span><b>范围</b> ai-agent（运行面）/ ai-service（配置面）/ agent-core / 小程序</span>
     <span><b>配套</b> 意图识别-实现方案.html（代码级）</span>
   </div>
 </header>
+
+<h2>服务职责边界（重要修正）</h2>
+<p class="sub">后端不是「一个 ai-service」，而是配置面 + 运行面两个服务分工</p>
+
+<table>
+  <tr><th style="width:110px"></th><th>ai-service（3003）</th><th>ai-agent（6010）</th></tr>
+  <tr><td><b>角色</b></td><td><b>配置面 + 数据面</b></td><td><b>运行面</b></td></tr>
+  <tr><td><b>网关前缀</b></td><td><code>/api/ai/*</code> · <code>/api/agent-defs/*</code> · <code>/api/agent-runs/*</code></td><td><code>/api/ai-agent/*</code></td></tr>
+  <tr><td><b>管什么</b></td><td>agent 定义（systemPrompt / capabilities / version）、skill 正文、run 记录落库、通用 chat/image/tts</td><td><b>agent 执行（SSE）</b>、会话存储、MCP 客户端、skill provider、合同工具、权限 broker、OCR、模型目录</td></tr>
+  <tr><td><b>关键接口</b></td><td><code>GET /internal/agent-definitions</code>（供拉取）<br><code>POST /internal/agent-runs</code>（收埋点）<br><code>@Controller('admin/agent-defs')</code></td><td><code>POST /agent/run</code><br><code>GET /agent/conversations</code><br><code>POST /agent/permission/:id</code></td></tr>
+</table>
+
+<p><b>数据流</b>：ai-service 存定义 → ai-agent 定时轮询（<code>agent-def-sync</code>）拉 <code>published + enabled</code>
+→ 本地 <code>AgentRegistry.upsert()</code> 热更新 → 执行 → run 记录 push 回 ai-service 落库。</p>
+
+<div class="callout warn">
+  <span class="t">⚠️ 由此修正三处（此前文档写在了 ai-service 上，是错的）</span>
+  1. <b>意图识别与 IntentService 落在 ai-agent</b>（运行面），不是 ai-service<br>
+  2. <b>会话锁定的表是 ai-agent 侧的 <code>agent_conversations</code></b>，不是 ai-service 的 <code>conversations</code><br>
+  3. C 端应用清单接口加在 <b>ai-service</b>（配置面出清单），执行仍走 ai-agent —— 两者由网关分流，不冲突
+</div>
 
 <h2><span class="n">0</span>结论</h2>
 <div class="callout ok">
@@ -106,9 +127,9 @@
 <div class="callout warn">
   <span class="t">⚠️ 先纠正一个定位</span>
   <b>后端不在小程序仓库 <code>~/workspace1/web_system</code> 里。</b>
-  真后端在 <b><code>~/web_system_release/</code></b>（<code>servers/ai-service</code>、<code>packages/agent-core</code>、
-  <code>servers/mcp-gateway</code>）。链路是：小程序 → gateway(<code>/api/ai-agent/agent/run</code>) → ai-agent → agent-core。
-  在错误的仓库里找「agent 跑不起来」的原因会白费很多时间。
+  真后端在 <b><code>~/web_system_release/</code></b>（<code>servers/ai-agent</code> 运行面、<code>servers/ai-service</code> 配置面、
+  <code>packages/agent-core</code>、<code>servers/mcp-gateway</code>）。链路是：小程序 → gateway(<code>/api/ai-agent/agent/run</code>) →
+  <b>ai-agent(6010)</b> → agent-core。在错误的仓库、或错误的服务里找「agent 跑不起来」的原因会白费很多时间。
   <br><br>
   <b>另注：该目录会被反复 <code>reset --hard origin/master</code> 同步。</b>
   往里放的未提交文件（含未跟踪的文档）会被清掉，文档需 commit + push 才能存活。
@@ -168,7 +189,7 @@
 
 <div class="callout warn">
   <span class="t">⚠️ 硬前提：conversations 表没有 agentId 字段</span>
-  <code>servers/ai-service/src/conversation/entities/conversation.entity.ts</code> 当前只有
+  <code>servers/ai-agent/src/agent/memory/agent-conversation.entity.ts</code> 当前只有
   <code>userId / title / messages / summary / summarizedCount / recentMessages</code> ——
   <b>没有 agentId</b>。要做会话锁定必须加列 + 出 migration（见实现方案第 6 节）。
 </div>
@@ -243,7 +264,7 @@
 
 <footer>
   配套文档：意图识别-实现方案.html（代码级：改哪些文件、怎么写、怎么测）<br>
-  代码基线：<code>~/web_system_release</code> · <code>packages/agent-core</code> · <code>servers/ai-service</code> · <code>servers/mcp-gateway</code>
+  代码基线：<code>~/web_system_release</code> · <code>servers/ai-agent</code>（运行面） · <code>servers/ai-service</code>（配置面） · <code>packages/agent-core</code> · <code>servers/mcp-gateway</code>
 </footer>
 
 </div>

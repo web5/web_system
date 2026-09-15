@@ -1,7 +1,27 @@
 # 多 Agent 意图路由架构设计
 
-> 日期：2026-09-15 ｜ 范围：`servers/ai-service` / `packages/agent-core` / 小程序
+> 日期：2026-09-15 ｜ 范围：`servers/ai-agent`（运行面）/ `servers/ai-service`（配置面）/ `packages/agent-core` / 小程序
 > 配套：`意图识别-实现方案.md`（代码级：改哪些文件、怎么写、怎么测）
+
+
+## 服务职责边界（重要修正）
+
+后端**不是**一个 ai-service，而是「配置面 / 运行面」两个服务分工：
+
+| | **ai-service**（3003） | **ai-agent**（6010） |
+|---|---|---|
+| 角色 | **配置面 + 数据面** | **运行面** |
+| 网关前缀 | `/api/ai/*` · `/api/agent-defs/*` · `/api/agent-runs/*` | `/api/ai-agent/*` |
+| 管什么 | agent 定义（systemPrompt / capabilities / version）、skill 正文、run 记录落库、通用 chat/image/tts | **agent 执行（SSE）**、会话存储、MCP 客户端、skill provider、合同工具、权限 broker、OCR、模型目录 |
+| 关键接口 | `GET /internal/agent-definitions`（供拉取）、`POST /internal/agent-runs`（收埋点）、`@Controller('admin/agent-defs')` | `POST /agent/run`、`GET /agent/conversations`、`POST /agent/permission/:id` |
+
+**数据流**：ai-service 存定义 → ai-agent 定时轮询（agent-def-sync，约 30s）拉 published+enabled →
+本地 `AgentRegistry.upsert()` 热更新 → 执行 → run 记录 push 回 ai-service 落库。
+
+> ⚠️ 由此修正三处（此前文档写在了 ai-service 上，是错的）：
+> 1. **意图识别与 IntentService 落在 ai-agent**（运行面），不是 ai-service
+> 2. **会话锁定的表是 ai-agent 侧的 `agent_conversations`**，不是 ai-service 的 `conversations`
+> 3. C 端应用清单接口加在 **ai-service**（配置面出清单），执行仍走 ai-agent —— 两者由网关分流，不冲突
 
 ## 0. 结论
 
@@ -22,8 +42,8 @@
 
 ### ⚠️ 先纠正一个定位
 
-**后端不在小程序仓库 `~/workspace1/web_system` 里。** 真后端在 **`~/web_system_release/`**（`servers/ai-service`、`packages/agent-core`、`servers/mcp-gateway`）。
-链路：小程序 → gateway(`/api/ai-agent/agent/run`) → ai-agent → agent-core。在错误的仓库里找「agent 跑不起来」的原因会白费很多时间。
+**后端不在小程序仓库 `~/workspace1/web_system` 里。** 真后端在 **`~/web_system_release/`**（`servers/ai-agent` 运行面、`servers/ai-service` 配置面、`packages/agent-core`、`servers/mcp-gateway`）。
+链路：小程序 → gateway(`/api/ai-agent/agent/run`) → **ai-agent(6010)** → agent-core。在错误的仓库、或错误的服务里找「agent 跑不起来」的原因会白费很多时间。
 
 **另注：该目录会被反复 `reset --hard origin/master` 同步。** 往里放的未提交/未跟踪文件会被清掉，文档需 commit + push 才能存活。
 
@@ -32,13 +52,13 @@
 | 方案 | 做法 | 首字延迟 | 判断 |
 |---|---|---|---|
 | A · 前端分类 | 小程序先调分类接口，拿 agentId 再发起对话 | 两趟往返（卡两下） | ❌ 多一次鉴权与网络往返，弱网体验差 |
-| B · 独立路由服务 | 新起 router 服务夹在 gateway 与 ai-service 之间 | 多一跳 | ❌ 为 5 选 1 的分类引入一个服务，运维成本不成比例 |
+| B · 独立路由服务 | 新起 router 服务夹在 gateway 与 ai-agent 之间 | 多一跳 | ❌ 为 5 选 1 的分类引入一个服务，运维成本不成比例 |
 | **C · 后端内联** | `agentId` 可选，`'auto'` 时 controller 先分类再路由，SSE 先推 `intent` | **一次连接一次鉴权** | ✅ **选它**，复用现有鉴权 / 日志 / 会话体系，改动面最小 |
 
 流程：
 
 1. 小程序发一句（不传 agentId）
-2. ai-service 解析意图（三级快通道）
+2. ai-agent 解析意图（三级快通道）
 3. **SSE 先推 `{type:'intent', agentId, confidence, via}`** —— 前端可据此渲染 agent 徽标、也便于排查误判
 4. 再推正常 token 流（与现状一致）
 
@@ -69,7 +89,7 @@
 - **切换**：仅当 ①用户显式指定（`@xxx`）②高置信规则命中（≥0.88）③LLM 高置信且与当前不同（≥0.75）时才切
 - **兜底不切**：分类失败时保持现状，比乱切安全
 
-> ⚠️ **硬前提：`conversations` 表没有 agentId 字段。** `servers/ai-service/src/conversation/entities/conversation.entity.ts` 当前只有 `userId / title / messages / summary / summarizedCount / recentMessages`。要做会话锁定必须加列 + 出 migration。
+> ⚠️ **硬前提：`agent_conversations` 表没有 agentId 字段。** `servers/ai-agent/src/agent/memory/agent-conversation.entity.ts` 当前只有 `userId / title / summary / compactedCount / recentMessages / reportSnapshot / cardMeta`。要做会话锁定必须加列 + 出 migration。
 
 ## 4. Agent 清单建议
 
@@ -92,7 +112,7 @@
 |---|---|---|
 | `AgentRunDto.agentId` | 可选 | 不传或 `'auto'` → 服务端分类；显式传值 → 老行为完全不变（向后兼容） |
 | `StreamEventType` | 加一项 | 新增 `'intent'`，且必须是本轮第一个事件 |
-| `conversations` 表 | 加两列 | `agent_id`（锁定的 agent）+ `intent_history`（判定流水，可回溯） |
+| `agent_conversations` 表 | 加两列 | `agent_id`（锁定的 agent）+ `intent_history`（判定流水，可回溯） |
 | 小程序会话 | **必须配合** | **每轮回传 `conversationId`**，否则每轮都当新会话重分类 |
 
 ## 6. 成本与延迟
