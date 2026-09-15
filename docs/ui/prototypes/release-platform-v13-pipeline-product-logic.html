@@ -593,14 +593,12 @@
       </div>
 
       <div id="shellFields">
-        <div class="field"><label>脚本</label><textarea id="nScript" rows="4" placeholder="echo 构建 ${BUILD_CMD}&#10;…"></textarea>
-          <div class="note">用 <span class="mono">${KEY}</span> 引用本流水线的变量；发布节点就是「上传文件 + 调用写版本接口」两段脚本。</div>
+        <div class="field"><label>脚本</label><textarea id="nScript" rows="8" placeholder="echo 构建 ${BUILD_CMD}&#10;…"></textarea>
+          <div class="note">用 <span class="mono">${KEY}</span> 引用本流水线的变量（抽屉「变量 / 参数」Tab 可查键名）；
+            发布节点就是「上传文件 + 调用写版本接口」两段脚本。</div>
         </div>
-        <div class="field"><label>超时（秒）</label><input id="nTimeout" value="900"></div>
-        <div class="field"><label>可选（未配命令时跳过）</label>
-          <div class="radio-group"><div class="radio on">否</div><div class="radio">是</div></div>
-        </div>
-        <div class="note">命令在「编辑流水线 → 节点命令」里配；发布类节点建议引用 <span class="mono">${PUBLISH_PATH}</span> 等变量。</div>
+        <div class="field"><label>超时（秒，留空=不限）</label><input id="nTimeout" value="900"></div>
+        <div class="note">节点「策略」（可选 / watchdog）暂不上 UI（2026-09-15）——已配的值仍保留在节点数据里。</div>
       </div>
 
       <div id="approvalFields" style="display:none;">
@@ -619,8 +617,10 @@
       </div>
     </div>
     <footer>
+      <!-- 抽屉底部固定操作栏（用户 2026-09-15）：取消 = 关闭抽屉（不是只清表单）；保存/语法校验也是整包提交 -->
       <button class="btn ghost" onclick="closeDrawer()">取消</button>
-      <button class="btn" onclick="saveNode()">确定</button>
+      <button class="btn ghost" id="btnValidate" onclick="toast('语法校验：bash -n 通过（原型示意）')">语法校验</button>
+      <button class="btn" onclick="saveNode()">保存</button>
     </footer>
   </div>
 
@@ -822,7 +822,7 @@ function renderNodes(){
       (n.acts?'<span class="tag gray">'+n.acts.join(' + ')+'</span>':'')+'</div>'+
       (n.lock?'<div class="cn-key" style="margin-top:6px;">平台节点</div>':
         '<button class="cn-del" title="删除节点" onclick="delNode('+i+')">✕</button>');
-    card.onclick=function(){openNodeDrawer('edit');};
+    card.onclick=function(){openNodeDrawer('edit', n.key);};
     card.ondragstart=function(){dragFrom=i;card.classList.add('dragging');};
     card.ondragend=function(){card.classList.remove('dragging');};
     card.ondragover=function(e){e.preventDefault();};
@@ -852,11 +852,16 @@ function delNode(i){
 
 /* ---------- 节点抽屉 ---------- */
 var editing=null;
-function openNodeDrawer(mode){
-  editing=mode==='new'?null:{key:''};
-  document.getElementById('drawerTitle').textContent=mode==='new'?'新增节点':'节点配置';
-  document.getElementById('drawerSub').textContent=mode==='new'?'选择类型并填写基本信息':'审批节点可配置审批人、超时与拒绝动作';
-  pickKind('shell');
+function openNodeDrawer(mode, key){
+  editing = mode==='new' ? null : (nodes.find(function(n){return n.key===key;}) || null);
+  document.getElementById('drawerTitle').textContent = mode==='new' ? '新增节点' : '节点配置';
+  document.getElementById('drawerSub').textContent = (editing&&editing.kind==='approval')
+    ? '审批节点：可配置审批人、超时与拒绝动作'
+    : '执行节点：脚本 + 超时（策略先不上）';
+  document.getElementById('nName').value = editing ? (editing.label||'') : '';
+  document.getElementById('nKey').value  = editing ? editing.key : '';
+  document.getElementById('nScript').value = editing ? (editing.script||'') : '';
+  pickKind(editing && editing.kind==='approval' ? 'approval' : 'shell');
   document.getElementById('drawerMask').classList.add('show');
   document.getElementById('drawer').classList.add('show');
 }
@@ -869,15 +874,26 @@ function pickKind(k){
   document.getElementById('k-approval').classList.toggle('on',k==='approval');
   document.getElementById('shellFields').style.display=k==='shell'?'block':'none';
   document.getElementById('approvalFields').style.display=k==='approval'?'block':'none';
+  // 语法校验只对 shell 有意义（审批节点没有脚本）
+  document.getElementById('btnValidate').style.display=k==='shell'?'':'none';
 }
 function saveNode(){
   var key=document.getElementById('nKey').value.trim();
   var name=document.getElementById('nName').value.trim();
   var f=document.getElementById('fKey');
-  if(!/^[A-Za-z0-9_-]{1,32}$/.test(key)||['git','version','pointer'].indexOf(key)>=0){f.classList.add('err');return;}
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(key)||['version','pointer'].indexOf(key)>=0){f.classList.add('err');return;}
   f.classList.remove('err');
   var kind=document.getElementById('k-approval').classList.contains('on')?'approval':'shell';
-  nodes.push({key:key,label:name||key,kind:kind,approvers:kind==='approval'?['admin']:undefined});
+  if(editing){
+    editing.key=key; editing.label=name||key; editing.kind=kind;
+    editing.script=kind==='shell'?document.getElementById('nScript').value:'';
+    editing.approvers=kind==='approval'?['admin']:undefined;
+    closeDrawer();renderNodes();toast('已保存节点（未保存到库）');
+    return;
+  }
+  nodes.push({key:key,label:name||key,kind:kind,
+    script:kind==='shell'?document.getElementById('nScript').value:'',
+    approvers:kind==='approval'?['admin']:undefined});
   closeDrawer();renderNodes();toast('已新增节点（未保存）');
 }
 
