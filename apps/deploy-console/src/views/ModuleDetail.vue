@@ -387,7 +387,27 @@ onMounted(async () => {
          CanaryCenter 等页面一致；此前 tabs 裸放在卡片 body 里，tab 栏像"野孩子"一样漂浮、
          与下方内容缺少分隔 -->
     <a-card v-if="moduleInfo" :loading="dataLoading">
-      <a-tabs v-model:active-key="activeTab" size="small" class="md-tabbar">
+      <!-- R6 提示：模块不再持有命令。
+           注意必须放在 a-tabs **外面** —— antd 的 tabs 内容区是 flex 行，
+           非 a-tab-pane 的直接子元素会被当作 flex item 挤压成窄条（曾把本提示
+           压成一列竖排文字）。 -->
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 16px;"
+        message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
+      >
+        <template #description>
+          <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
+        </template>
+      </a-alert>
+
+      <a-tabs
+        v-if="showBackendTab || showFrontendTab"
+        v-model:active-key="activeTab"
+        size="small"
+        class="md-tabbar"
+      >
         <!-- 后台 tab -->
         <a-tab-pane v-if="showBackendTab" key="backend" tab="后台">
           <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
@@ -557,9 +577,6 @@ onMounted(async () => {
           </a-table>
         </a-tab-pane>
 
-        <!-- 两个 tab 都不显示时的兜底 -->
-        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
-
         <!-- 版本列表：流水线「发布」节点产出；可对某一版本直接部署或下发 AI 验证 -->
         <a-tab-pane key="versions" tab="版本列表">
           <p style="color: #666; margin-bottom: 12px;">
@@ -599,19 +616,7 @@ onMounted(async () => {
 
         <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
         <a-tab-pane key="deploy" tab="环境部署">
-          <!-- R6 提示：放 Tab 内部通栏展示（原来挂在 a-tabs 尾部被挤成右侧一条窄竖条） -->
-          <a-alert
-            type="info"
-            show-icon
-            style="margin-bottom: 12px;"
-            message="本模块不再持有构建 / 投递命令（R6）：命令已归流水线节点所有。"
-          >
-            <template #description>
-              构建与投递脚本在
-              <router-link :to="{ name: 'PipelineCenter' }">流水线管理 → 流水线列表</router-link>
-              里对应流水线的「流程编排」节点中维护；这里只做「部署」（把环境指针切到某个版本）。
-            </template>
-          </a-alert>
+          <!-- R6 提示统一放在卡片顶部（a-tabs 之外），此处不再重复 -->
           <p style="color: #666; margin-bottom: 12px;">
             部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
           </p>
@@ -654,6 +659,7 @@ onMounted(async () => {
         -->
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
+      <a-empty v-else description="该模块类型暂不支持版本管理" />
     </a-card>
 
     <!-- 部署版本弹窗（版本行进来：版本固定选环境；环境行进来：环境固定选版本） -->
@@ -703,6 +709,15 @@ onMounted(async () => {
 }
 .md-tabbar :deep(.ant-tabs-nav) {
   margin-bottom: 0;
+  /* tab 栏一律居左：antd 的 tabs 内容区是 flex 行，一旦有人往里塞非 a-tab-pane 子元素，
+     它会作为 flex item 抢占宽度、把 nav 挤到中间（历史 bug），这里显式兜底左对齐 */
+  justify-content: flex-start;
+}
+.md-tabbar :deep(.ant-tabs-nav-wrap) {
+  flex: none;
+}
+.md-tabbar :deep(.ant-tabs-nav-list) {
+  margin-right: auto;
 }
 .md-tabbar :deep(.ant-tabs-nav::before) {
   border-bottom: 1px solid var(--ws-border-subtle);
