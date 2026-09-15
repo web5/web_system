@@ -202,31 +202,27 @@ async function onPublished() {
   await loadDeployments()
 }
 
-// ===== 回滚 = 以该版本 commit 重新走流水线发布（重建到旧版本代码） =====
+/**
+ * 回滚 = **秒级切回某个历史版本**（不重新构建）：
+ *  - 后台模块：把该版本目录落地到 dist 并重启 pm2
+ *  - 前台模块：只改指针（网关按指针读版本目录）
+ * 以前这里是「以该版本 commit 重新跑一次流水线」，很重且要等构建；改走
+ * POST /deploy/rollback-version（T2，2026-09-15）。
+ */
 const rollbacking = ref(false)
 async function doRollback(row: any) {
   rollbacking.value = true
   try {
-    const tpls = await pipelineTemplateApi.list(moduleKey.value)
-    if (!tpls.length) {
-      message.error('该模块没有可用流水线，无法发起回滚发布')
-      return
-    }
-    const templateId = tpls[0].id
-    const res = await pipelineApi.submit({
+    const r = await deployApi.rollbackVersion({
       env: row.env,
       moduleKey: moduleKey.value,
-      commitId: row.versionTag,
-      mode: 'direct',
-      templateId,
+      to: row.versionTag,
       confirm: row.env === 'prod',
     })
-    message.success(`已提交回滚发布（${(res as any).jobId}），将以 ${row.versionTag} 重新构建部署`)
+    message.success(`已回滚：${r.from} → ${r.to}（后台模块已落地并重启，前台模块已切指针）`)
     await loadDeployments()
-    // 流水线异步执行，稍后自动刷新一次拿最新状态
-    setTimeout(() => void loadDeployments(), 3000)
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '回滚发布提交失败')
+    message.error(e?.response?.data?.message || '回滚失败')
   } finally {
     rollbacking.value = false
   }
@@ -447,8 +443,8 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
-                  ok-text="回滚发布"
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
                   cancel-text="取消"
                   :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
@@ -564,8 +560,8 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
-                  ok-text="回滚发布"
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
                   cancel-text="取消"
                   :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
