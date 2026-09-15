@@ -75,6 +75,9 @@ set -euo pipefail
 VER="\${COMMIT_ID:?COMMIT_ID 为空，无法确定版本目录}"
 SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
 DST="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
+# ⚠️ PUBLISH_PATH 以 ~ 开头（如 ~/web_system_release/...）：双引号里 ~ 不会被 bash 展开，
+# 2026-09-15 事故：产物被拷进字面量目录 apps/admin/~/... → 页面 404。这里显式展开。
+DST="\${DST/#\\~/$HOME}"
 [ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
 mkdir -p "$DST/$VER"
 rm -rf "$DST/$VER"/* 2>/dev/null || true
