@@ -479,6 +479,15 @@ export class PipelineService {
     const id = this.generateId();
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
     const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 一致性（2026-09-15）：一条流水线只属于一个环境（按「模块 × 环境」拆），
+    // 提交的环境必须与流水线的 env 相同 —— 否则会出现「env=dev 却跑 admin-local 流水线」
+    // 这种环境/流水线错配的实例（投递目标、产物命名空间全跟着流水线走，错配很隐蔽）。
+    const tplEnv = (tpl as { env?: string | null }).env;
+    if (tplEnv && tplEnv !== dto.env) {
+      throw new BadRequestException(
+        `流水线「${tpl.name}」属于环境 ${tplEnv}，与提交的目标环境 ${dto.env} 不一致；请改选 ${dto.env} 环境下的流水线`,
+      );
+    }
     // 发布前把平台托管脚本（git）同步到该模板：保证运行期一定拿到与代码一致的最新脚本
     // （幂等；模板新建/被改过都不会漏。失败不阻断提交——拉码阶段还有内置回退）
     await this.platformScripts.seedForTemplate(tpl.id).catch((e) => {
