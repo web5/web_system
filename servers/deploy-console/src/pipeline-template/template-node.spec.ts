@@ -47,28 +47,36 @@ describe('normalizeNodes（v5 模板节点校验，纯函数）', () => {
     expect(normalizeNodes(nodes)).toBeTruthy();
   });
 
-  it('缺平台步骤任一 → 拒绝', () => {
-    const noGit = PLATFORM().filter((n) => n.key !== 'git');
-    const noVersion = PLATFORM().filter((n) => n.key !== 'version');
-    expect(() => normalizeNodes(noGit)).toThrow(BadRequestException);
-    expect(() => normalizeNodes(noVersion)).toThrow(BadRequestException);
-  });
-
-  it('git 不在首位 → 拒绝', () => {
+  // 终态（design §3）：节点只有 shell / approval 两类，平台能力变成 service action，
+  // 故不再强制 git/version/pointer，也不再约束它们的相对序。
+  it('纯 shell + approval 模板可保存（不再强制平台三节点）', () => {
     const nodes: TemplateNode[] = [
-      { kind: 'script', key: 'build', label: 'b' },
-      ...PLATFORM(),
+      { kind: 'shell', key: 'git', label: '拉取代码' },
+      { kind: 'shell', key: 'build', label: '构建' },
+      { kind: 'approval', key: 'gate', label: '发布确认' },
+      { kind: 'shell', key: 'release', label: '发布' },
     ];
-    expect(() => normalizeNodes(nodes)).toThrow(/git.*第一位/);
+    const out = normalizeNodes(nodes)!;
+    expect(out.map((n) => n.key)).toEqual(['git', 'build', 'gate', 'release']);
+    expect(out.map((n) => n.kind)).toEqual(['shell', 'shell', 'approval', 'shell']);
   });
 
-  it('version 晚于 pointer（相对序颠倒）→ 拒绝', () => {
+  it('节点顺序自由（不再校验 git 首位 / version→pointer 相对序）', () => {
     const nodes: TemplateNode[] = [
+      { kind: 'shell', key: 'build', label: '构建' },
+      { kind: 'shell', key: 'git', label: '拉取代码' },
+      { kind: 'shell', key: 'release', label: '发布' },
+    ];
+    expect(normalizeNodes(nodes)!.map((n) => n.key)).toEqual(['build', 'git', 'release']);
+  });
+
+  it('旧 kind=script 仍被接受（= shell 的旧名，读取兼容）', () => {
+    const nodes: TemplateNode[] = [
+      { kind: 'script', key: 'build', label: '构建' },
       { kind: 'platform', key: 'git' },
-      { kind: 'platform', key: 'pointer' },
-      { kind: 'platform', key: 'version' },
     ];
-    expect(() => normalizeNodes(nodes)).toThrow(/version.*pointer/);
+    const out = normalizeNodes(nodes)!;
+    expect(out.map((n) => n.key)).toEqual(['build', 'git']);
   });
 
   it('script key 重复 / 占用平台保留字 / 非法格式 / 缺 label → 拒绝', () => {
@@ -99,35 +107,32 @@ describe('normalizeNodes（v5 模板节点校验，纯函数）', () => {
     expect(() => normalizeNodes(nodes)).toThrow(/watchdog/);
   });
 
-  it('platform 非法 key（不在保留字内）→ 拒绝', () => {
-    const nodes = [
-      { kind: 'platform', key: 'pull' },
-      { kind: 'platform', key: 'version' },
-      { kind: 'platform', key: 'pointer' },
-    ] as any;
-    expect(() => normalizeNodes(nodes)).toThrow();
+  it('保留字节点名：version / pointer 不可用作 shell 节点 key（能力已是 service action）', () => {
+    const asVersion = [{ kind: 'shell', key: 'version', label: '伪写版本' }] as any;
+    expect(() => normalizeNodes(asVersion)).toThrow(/保留字/);
+    const asPointer = [{ kind: 'shell', key: 'pointer', label: '伪切指针' }] as any;
+    expect(() => normalizeNodes(asPointer)).toThrow(/保留字/);
+    // git 已放开：拉码就是普通 shell 节点
+    expect(() => normalizeNodes([{ kind: 'shell', key: 'git', label: '拉取代码' }] as any)).not.toThrow();
   });
 });
 
 describe('legacyStepsToNodes（9 阶段 → nodes 一次性转存）', () => {
-  it('全量九阶段 + rollback=previous → git/version/pointer 为 platform，verify 带 watchdog', () => {
+  it('全量九阶段 + rollback=previous → 只产出 shell 节点；git 为 shell；version/pointer 不再生成', () => {
     const nodes = legacyStepsToNodes({ rollbackOnFailure: 'previous' });
+    // version / pointer 已移出流水线（写版本=发布节点的 service action；切指针=模块管理部署）
     expect(nodes.map((n) => n.key)).toEqual([
       'git',
       'check',
       'build',
       'upload',
       'restart',
-      'version',
-      'pointer',
       'verify',
       'cleanup',
     ]);
-    expect(nodes.filter((n) => n.kind === 'platform').map((n) => n.key)).toEqual([
-      'git',
-      'version',
-      'pointer',
-    ]);
+    // 终态：不再有 platform 节点
+    expect(nodes.filter((n) => n.kind === 'platform')).toHaveLength(0);
+    expect(nodes.every((n) => n.kind === 'shell')).toBe(true);
     const verify = nodes.find((n) => n.key === 'verify') as any;
     expect(verify.watchdog).toBe(true);
     expect(verify.optional).toBe(true);
@@ -200,7 +205,8 @@ describe('isWritableStageKey（stage_commands 可写判定）', () => {
   it('自定义 key 可写；platform 保留字与非法格式拒绝', () => {
     expect(isWritableStageKey('notify')).toBe(true);
     expect(isWritableStageKey('build')).toBe(true);
-    expect(isWritableStageKey('git')).toBe(false);
+    // git 已放开：终态拉码是普通 shell 节点，其脚本（平台托管）要能被写入
+    expect(isWritableStageKey('git')).toBe(true);
     expect(isWritableStageKey('version')).toBe(false);
     expect(isWritableStageKey('pointer')).toBe(false);
     expect(isWritableStageKey('')).toBe(false);
@@ -229,7 +235,9 @@ describe('isV5NodesEnabled（flag，缺省 off）', () => {
 
 describe('PLATFORM_RESERVED', () => {
   it('保留字 = git/version/pointer（作为 stage_commands 写入黑名单）', () => {
-    expect(PLATFORM_RESERVED).toEqual(['git', 'version', 'pointer']);
+    // 终态：git 放开（拉码是普通 shell 节点）；version/pointer 保留为节点名黑名单
+    //（能力已变成 service action，同名节点会造成语义误读）
+    expect(PLATFORM_RESERVED).toEqual(['version', 'pointer']);
   });
 });
 

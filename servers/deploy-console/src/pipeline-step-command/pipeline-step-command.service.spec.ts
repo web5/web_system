@@ -16,9 +16,16 @@ describe('PipelineStepCommandService（写入守卫）', () => {
       create: jest.fn((o: unknown) => o),
     } as never);
 
-  it('git：被平台保留字挡在 upsert 之外（结构上就不可写）', async () => {
-    const svc = mk({ templateId: 't1', nodeKey: 'git', locked: true });
-    await expect(svc.upsert('t1', 'git', 'echo hack')).rejects.toThrow(/平台保留/);
+  it('git：终态是普通 shell 节点，可配脚本（不再是保留字）', async () => {
+    // 无 locked 行 ⇒ 允许写入（git 已放开；带 locked 时仍被平台托管守卫拦，见下条）
+    const svc = mk({ templateId: 't1', nodeKey: 'git', locked: false });
+    await expect(svc.upsert('t1', 'git', 'echo git')).resolves.toBeTruthy();
+  });
+
+  it('version / pointer：仍是保留字（能力已变成 service action），不可作为节点配置', async () => {
+    const svc = mk({ templateId: 't1', nodeKey: 'version', locked: false });
+    await expect(svc.upsert('t1', 'version', 'echo hack')).rejects.toThrow(/保留/);
+    await expect(svc.upsert('t1', 'pointer', 'echo hack')).rejects.toThrow(/保留/);
   });
 
   it('locked 行（非保留字节点）：upsert 被平台托管守卫拒绝', async () => {

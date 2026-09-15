@@ -1506,10 +1506,11 @@ export class PipelineService {
 
       // script：命令驱动（未配命令按 optional 跳过 / 非 optional fail-fast）
       case 'script': {
-        const nodeTimeoutSec = node.kind === 'script' ? node.timeoutSec : undefined;
+        const isCmdNode = node.kind === 'shell' || node.kind === 'script';
+        const nodeTimeoutSec = isCmdNode ? node.timeoutSec : undefined;
         const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec, uploadTarget);
         if (hasCmd) return;
-        if (node.kind === 'script' && node.optional) {
+        if (isCmdNode && node.optional) {
           p.logs = [
             ...(p.logs ?? []),
             `[${stage}] ${node.label ?? stage} 未配置脚本，已跳过（optional）`,

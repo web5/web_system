@@ -12,39 +12,66 @@ const LEGACY_SCRIPT_LABELS: Record<string, string> = {
 };
 
 /**
- * v5 模板节点模型与校验（PIPELINE_V5_NODES）。
+ * 模板节点模型与校验（PIPELINE_V5_NODES）。
  *
- * 节点 = 流水线的组成单元，取代 v4 固定 9 阶段：
- *  - platform：git 拉码 / version 写版本 / pointer 切指针 —— 发布语义真相源，不可编辑/增删
- *  - script：用户自定义节点（build/verify/notify…），可增删排序，脚本存模块级 stage_commands
- *  - approval：审批节点（design D8），可插任意位置，执行到它挂起、批准后从其后继续
+ * **终态（design §3）**：节点只有**两类** ——
+ *  - `shell`：跑命令的节点（拉代码 / 构建 / 发布…），可增删排序、可拖动；
+ *    平台能力（写版本 / 切指针 / 重启 / 验证…）**不再是节点类型**，
+ *    而是 shell 节点里的一个 `service` action（见 `steps/service-tools.ts`）。
+ *  - `approval`：审批节点（design D8），执行到它挂起、批准后从其后继续。
  *
- * 目标模型（P0）：platform 三节点降级为普通 shell 节点 + service action，最终只剩
- * shell / approval 两类；存量模板迁移在 P4，故 platform 目前仍保留。
+ * 兼容读取：存量模板里还有 `platform`（git/version/pointer）与旧名 `script` 节点，
+ * 迁移完成前引擎仍需能跑它们（T5 数据迁移负责转换）。
+ *  - `script` = `shell` 的旧名，语义相同，新写入一律用 `shell`；
+ *  - `platform` 仅作为**读取兼容**保留，`normalizeNodes` 不再强制要求它们存在。
  */
 
-/** 平台保留字（不可被 script 节点占用，也不允许作为 stage_commands key 写入） */
-export const PLATFORM_RESERVED = ['git', 'version', 'pointer'] as const;
+/**
+ * 不再允许作为**节点 key** 的保留字。
+ *
+ * `git` 已放开：拉码在终态就是普通 shell 节点（脚本 = 平台托管的 git-step.sh）。
+ * `version` / `pointer` 保留：它们的能力已变成 `service` action，
+ * 若再出现同名节点会造成"以为它在写版本/切指针"的语义误读。
+ */
+export const PLATFORM_RESERVED = ['version', 'pointer'] as const;
 
 export type PlatformKey = (typeof PLATFORM_RESERVED)[number];
 
-export interface PlatformNode {
-  kind: 'platform';
-  key: PlatformKey;
-  label?: string;
-}
-
-export interface ScriptNode {
-  kind: 'script';
-  /** 节点唯一 key（也是模块 stage_commands 的 stage） */
+/** 终态：shell 节点（跑命令）。`actions` 由节点命令表提供，节点本身只描述结构与语义 */
+export interface ShellNode {
+  kind: 'shell';
+  /** 节点唯一 key（同时是「模板 × 节点 key」命令配置的键名） */
   key: string;
   label: string;
-  /** 未配脚本：默认 false=必配 fail-fast；true=跳过+warning */
+  /** 未配命令：默认 false=必配 fail-fast；true=跳过+warning */
   optional?: boolean;
-  /** 该节点失败触发自动回滚（取代"仅 verify 触发"） */
+  /** 该节点失败触发自动回滚（全局最多 1 个） */
   watchdog?: boolean;
-  /** 节点级默认超时（可被模块 actions 覆盖） */
+  /** 节点级默认超时（可被 action 覆盖） */
   timeoutSec?: number;
+}
+
+/**
+ * 旧名节点（= shell，历史数据与旧前端仍在写）。
+ * @deprecated 新写入请用 `kind: 'shell'`；两者引擎行为一致。
+ */
+export interface ScriptNode {
+  kind: 'script';
+  key: string;
+  label: string;
+  optional?: boolean;
+  watchdog?: boolean;
+  timeoutSec?: number;
+}
+
+/**
+ * 平台节点（**仅读取兼容**）。
+ * @deprecated 终态不再有 platform 节点：git → shell 节点；version/pointer → service action。
+ */
+export interface PlatformNode {
+  kind: 'platform';
+  key: string;
+  label?: string;
 }
 
 /**
@@ -74,14 +101,21 @@ export const APPROVAL_REJECT_ACTIONS = ['abort', 'rollback'] as const;
 export type ApprovalTimeoutAction = (typeof APPROVAL_TIMEOUT_ACTIONS)[number];
 export type ApprovalRejectAction = (typeof APPROVAL_REJECT_ACTIONS)[number];
 
-export type TemplateNode = PlatformNode | ScriptNode | ApprovalNode;
+export type TemplateNode = ShellNode | ScriptNode | ApprovalNode | PlatformNode;
 
-/** script / approval 节点 key 格式 */
+/** shell / script / approval 节点 key 格式 */
 const SCRIPT_KEY_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 /** 节点是否可承载命令（approval 是纯等待语义，不配脚本） */
 export function isCommandNode(node: TemplateNode): boolean {
-  return node.kind === 'script';
+  return node.kind === 'shell' || node.kind === 'script';
+}
+
+/** 节点类型的中文展示名（错误提示用） */
+function kindLabelOf(node: TemplateNode): string {
+  if (node.kind === 'approval') return 'approval';
+  if (node.kind === 'platform') return 'platform（旧）';
+  return 'shell';
 }
 
 /**
@@ -100,32 +134,24 @@ export function normalizeNodes(
   const list = nodes.filter((n): n is TemplateNode => !!n);
   if (list.length === 0) return null;
 
-  // platform 必须齐全
-  const keys = list.map((n) => n.key);
-  for (const reserved of PLATFORM_RESERVED) {
-    if (!keys.includes(reserved)) {
-      throw new BadRequestException(`节点必须保留平台步骤「${reserved}」（发布语义基线，不可裁剪）`);
-    }
-  }
-  // 相对序 git → version → pointer
-  const idxOf = (k: string) => keys.indexOf(k);
-  if (idxOf('git') !== 0) throw new BadRequestException('「git」必须排在第一位（先拉码后构建）');
-  if (idxOf('version') > idxOf('pointer')) {
-    throw new BadRequestException('「version」必须排在「pointer」之前（先写版本后切指针）');
-  }
-  // key 唯一 + script / approval 合法性
+  // key 唯一 + shell / approval 合法性
+  // 终态不再强制 git/version/pointer 三节点（平台能力已变成 service action），
+  // 也不再约束它们的相对序 —— 顺序由用户在画布上拖拽决定。
   const seen = new Set<string>();
   let watchdogCount = 0;
   for (const n of list) {
     if (seen.has(n.key)) throw new BadRequestException(`节点 key 重复: ${n.key}`);
     seen.add(n.key);
     if (n.kind === 'platform') {
+      // 旧节点：读取兼容，不校验 label（历史数据无 label）
       continue;
     }
-    // script / approval 共用 key 与 label 约束
-    const kindLabel = n.kind === 'approval' ? 'approval' : 'script';
+    // shell（含旧名 script）/ approval 共用 key 与 label 约束
+    const kindLabel = kindLabelOf(n);
     if (PLATFORM_RESERVED.includes(n.key as any)) {
-      throw new BadRequestException(`${kindLabel} 节点 key 不能占用平台保留字: ${n.key}`);
+      throw new BadRequestException(
+        `${kindLabel} 节点 key 不能占用保留字: ${n.key}（其能力已是 service action，不应用作节点名）`,
+      );
     }
     if (!SCRIPT_KEY_RE.test(n.key)) {
       throw new BadRequestException(
@@ -199,17 +225,13 @@ export function legacyStepsToNodes(opts: {
   const verifyWatchdog = withVerify && opts.rollbackOnFailure !== 'none';
 
   const nodes: TemplateNode[] = [];
-  nodes.push({ kind: 'platform', key: 'git' }); // git 恒首位
+  // git 恒首位：终态它就是普通 shell 节点（脚本 = 平台托管的 git-step.sh）
+  nodes.push({ kind: 'shell', key: 'git', label: '拉取代码' });
   for (const s of base) {
-    if (s === 'pull' || s === 'git') continue; // pull 已被 platform/git 取代
-    if (s === 'version') {
-      nodes.push({ kind: 'platform', key: 'version' });
-      continue;
-    }
-    if (s === 'pointer') {
-      nodes.push({ kind: 'platform', key: 'pointer' });
-      continue;
-    }
+    if (s === 'pull' || s === 'git') continue; // pull 已被 git 节点取代
+    // version / pointer：终态不再作为节点 —— 写版本是发布节点里的 service action，
+    // 切指针归「模块管理 → 环境部署」的人工动作，都不该出现在流水线编排里
+    if (s === 'version' || s === 'pointer') continue;
     if (s === 'verify' && !withVerify) continue; // skipVerify / 被裁剪
     if (!(BUILTIN_SCRIPT_KEYS as readonly string[]).includes(s as any)) continue;
     const optional =
@@ -217,19 +239,12 @@ export function legacyStepsToNodes(opts: {
         ? false // build：legacy required 语义，未配即 fail-fast
         : true; // check 基线已上提 submit / upload/restart/verify/cleanup 未配先 optional 跳过（11.7 实发校准）
     nodes.push({
-      kind: 'script',
+      kind: 'shell',
       key: s,
       label: LEGACY_SCRIPT_LABELS[s] ?? s,
       optional,
       watchdog: s === 'verify' && verifyWatchdog ? true : undefined,
     });
-  }
-  // 双保险：确保 version 不在 pointer 之后（相对序硬约束）
-  const ver = nodes.findIndex((n) => n.key === 'version');
-  const ptr = nodes.findIndex((n) => n.key === 'pointer');
-  if (ver >= 0 && ptr >= 0 && ver > ptr) {
-    const [v] = nodes.splice(ver, 1);
-    nodes.splice(ptr, 0, v);
   }
   return nodes;
 }
@@ -274,9 +289,9 @@ export function resolveNodeRunPlan(nodes?: TemplateNode[] | null): NodeRunPlan |
   const scriptKeys = new Set<string>();
   let watchKey: string | undefined;
   for (const n of nodes) {
-    if (n.kind !== 'script') continue;
+    if (!isCommandNode(n)) continue;
     scriptKeys.add(n.key);
-    if (n.watchdog && !watchKey) watchKey = n.key;
+    if (isCommandNode(n) && (n as ShellNode).watchdog && !watchKey) watchKey = n.key;
   }
   return { keys, watchKey, scriptKeys };
 }
