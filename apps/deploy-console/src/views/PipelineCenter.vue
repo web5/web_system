@@ -343,13 +343,15 @@ const pipelineRows = computed<PipelineRow[]>(() => {
 // 筛选状态（点「查询」才生效；「重置」清空）
 const fKeyword = ref('')
 const fModule = ref('')
+const fEnv = ref('all')
 const fType = ref('all')
 const fStatus = ref('all')
-const appliedFilters = ref({ keyword: '', module: '', type: 'all', status: 'all' })
+const appliedFilters = ref({ keyword: '', module: '', env: 'all', type: 'all', status: 'all' })
 function doSearch() {
   appliedFilters.value = {
     keyword: fKeyword.value.trim().toLowerCase(),
     module: fModule.value,
+    env: fEnv.value,
     type: fType.value,
     status: fStatus.value,
   }
@@ -357,10 +359,18 @@ function doSearch() {
 function resetFilters() {
   fKeyword.value = ''
   fModule.value = ''
+  fEnv.value = 'all'
   fType.value = 'all'
   fStatus.value = 'all'
   doSearch()
 }
+/** 环境筛选（用户 2026-09-15：方便快速定位 local / dev / prod 的记录） */
+const ENV_FILTERS = [
+  { value: 'all', label: '全部环境' },
+  { value: 'local', label: 'local' },
+  { value: 'dev', label: 'dev' },
+  { value: 'prod', label: 'prod' },
+]
 const STATUS_FILTERS = [
   { value: 'all', label: '全部状态' },
   { value: 'succeeded', label: '成功' },
@@ -372,10 +382,12 @@ const filteredRows = computed<PipelineRow[]>(() => {
   const f = appliedFilters.value
   return pipelineRows.value.filter((r) => {
     if (f.keyword) {
+      // 环境也进关键词（搜 "prod" 直接命中生产那几条）
       const hay =
-        `${r.module.name} ${r.tpl.name || ''} ${r.tpl.moduleKey || ''} ${r.module.key}`.toLowerCase()
+        `${r.module.name} ${r.tpl.name || ''} ${r.tpl.moduleKey || ''} ${r.module.key} ${(r.tpl as any).env || ''}`.toLowerCase()
       if (!hay.includes(f.keyword)) return false
     }
+    if (f.env !== 'all' && ((r.tpl as any).env || '') !== f.env) return false
     if (f.module && r.module.key !== f.module) return false
     if (f.type === 'builtin' && !r.tpl.builtin) return false
     if (f.type === 'custom' && r.tpl.builtin) return false
@@ -704,7 +716,7 @@ onUnmounted(stopPolling)
         每次发布 = 基于某条流水线执行一次，产生一条执行记录（实例）。点击流水线可查看其最近执行与全部历史。</p>
     </div>
 
-    <!-- 筛选表单（四维度）+ 新建流水线 -->
+    <!-- 筛选表单（五维度：关键词 / 模块 / 环境 / 类型 / 状态）+ 新建流水线 -->
     <a-card size="small" style="margin-bottom: 12px;">
       <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <a-input
@@ -722,6 +734,11 @@ onUnmounted(stopPolling)
         >
           <a-select-option v-for="m in availableModules" :key="m.key" :value="m.key">
             {{ m.name }}（{{ m.key }}）
+          </a-select-option>
+        </a-select>
+        <a-select v-model:value="fEnv" style="width: 120px;">
+          <a-select-option v-for="o in ENV_FILTERS" :key="o.value" :value="o.value">
+            {{ o.label }}
           </a-select-option>
         </a-select>
         <a-select v-model:value="fType" style="width: 120px;">
