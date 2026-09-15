@@ -16,8 +16,12 @@
  *   - dev / prod：enabled=0 —— 远程语义需要「节点 host + 平台 SSH 通道」（design §6 / P1），
  *     落地后把变量填好即可启用（PUBLISH_HOST / PUBLISH_USER / PUBLISH_PATH 已按环境预填）
  *
- * 产出：`tpl-<module>-<env>`（admin / ai-agent × local/dev/prod = 6 条）；
- *       删除旧的 tpl-local-* / tpl-publish-*；全局默认模板同步转成 shell/approval。
+ * 产出：`tpl-<module>-<env>`（admin / ai-agent / gateway × local/dev/prod = 9 条）；
+ *       删除旧的 tpl-local-* / tpl-publish-*；
+ *       删除全局默认模板（module_key='*'）—— 用户 2026-09-15 决定「先删了，少了再加」：
+ *       各模块都按 local/dev/prod 各建一条，不再用「无归属的全局兜底」。
+ *       ⚠️ 影响：库里其它模块（auth-service / todo-service / mcp-gateway…）当前没有流水线，
+ *          在控制台发起时会提示「无可用流水线」；需要时照本脚本的 MODULES 列表补即可。
  *
  * 用法：node scripts/migrations/p5-pipeline-shell-approval-3env.mjs        # dry-run
  *       APPLY=1 node scripts/migrations/p5-pipeline-shell-approval-3env.mjs
@@ -49,6 +53,11 @@ const MODULES = [
     key: 'admin',
     localPath: '~/web_system_release/servers/gateway/public/static/modules/admin',
     remotePath: '/data/web_system/servers/gateway/public/static/modules/admin',
+  },
+  {
+    key: 'gateway',
+    localPath: '~/web_system_release/servers/gateway',
+    remotePath: '/data/web_system/servers/gateway',
   },
   {
     key: 'ai-agent',
@@ -197,11 +206,11 @@ async function main() {
     }
   }
 
-  // 全局默认模板：同步转成 shell/approval
+  // 全局默认模板（module_key='*'）：**删除**（用户 2026-09-15：先删了，少了再加）
   const [globals] = await conn.query(
     "SELECT id, name FROM deploy_pipeline_templates WHERE module_key = '*'",
   );
-  const globalTpl = globals[0] || null;
+  const globalTpls = globals;
 
   out(`库: ${process.env.MYSQL_DB}  模式: ${APPLY ? 'APPLY（写入）' : 'DRY-RUN'}`);
   out('\n将创建模板：');
@@ -216,7 +225,11 @@ async function main() {
   out('\n流水线变量：');
   for (const v of plan.vars) out(`  ${v.pipelineId.padEnd(22)} ${v.key.padEnd(13)} = ${v.value}`);
   out(`\n删除旧模板：${OLD_TEMPLATES.join(', ')}`);
-  if (globalTpl) out(`全局模板 ${globalTpl.id}（${globalTpl.name}）nodes 转为 shell/approval 四节点`);
+  if (globalTpls.length) {
+    out(`删除全局默认模板：${globalTpls.map((g) => `${g.id}（${g.name}）`).join(', ')}`);
+  } else {
+    out('全局默认模板：无（已删过）');
+  }
 
   if (!APPLY) {
     out('\nDRY-RUN 结束（APPLY=1 才写库）');
@@ -269,23 +282,13 @@ async function main() {
       );
     }
 
-    // 全局默认模板转终态
-    if (globalTpl) {
-      const [rows] = await conn.query(
-        "SELECT node_key, command FROM deploy_pipeline_step_commands WHERE template_id = ?",
-        [globalTpl.id],
-      );
-      const cmdOf = (k) => rows.find((r) => r.node_key === k)?.command;
-      const uploadCmd = cmdOf('upload') || 'echo "[release] 未配置投递脚本"';
-      await conn.query('UPDATE deploy_pipeline_templates SET nodes = ? WHERE id = ?', [
-        JSON.stringify(terminalNodes()),
-        globalTpl.id,
-      ]);
-      await conn.query(
-        `INSERT INTO deploy_pipeline_step_commands (id, template_id, node_key, command, actions, enabled, locked, updated_by, created_at, updated_at)
-         VALUES (UUID(),?,'release',?,?,1,0,'migration-p5',NOW(6),NOW(6))`,
-        [globalTpl.id, uploadCmd, JSON.stringify(releaseActions(uploadCmd))],
-      );
+    // 删除全局默认模板（先删了，少了再加）
+    if (globalTpls.length) {
+      const gIds = globalTpls.map((g) => g.id);
+      const gph = gIds.map(() => '?').join(',');
+      await conn.query(`DELETE FROM deploy_pipeline_step_commands WHERE template_id IN (${gph})`, gIds);
+      await conn.query(`DELETE FROM deploy_pipeline_vars WHERE pipeline_id IN (${gph})`, gIds);
+      await conn.query(`DELETE FROM deploy_pipeline_templates WHERE id IN (${gph})`, gIds);
     }
     await conn.commit();
     out('\n✓ 已落库');
