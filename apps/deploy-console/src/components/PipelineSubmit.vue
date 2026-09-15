@@ -85,13 +85,18 @@ async function loadModules() {
 async function loadTemplates() {
   availTemplates.value = []
   try {
-    availTemplates.value = await pipelineTemplateApi.list(form.value.moduleKey)
+    const all = await pipelineTemplateApi.list(form.value.moduleKey)
+    // 一致性（2026-09-15）：一条流水线只属于一个环境，下拉里只给当前环境的流水线 ——
+    // 否则会提交出「env=dev 却跑 admin-local 流水线」这种错配实例（后端也已强校验）。
+    availTemplates.value = (all || []).filter((t: any) => !t.env || t.env === form.value.env)
     if (props.fixedTemplateId) {
       form.value.templateId = props.fixedTemplateId
       return
     }
-    if (!form.value.templateId && availTemplates.value.length) {
-      form.value.templateId = availTemplates.value[0].id
+    // 选中项不属于当前环境时，自动改选本环境的第一条
+    const cur = availTemplates.value.find((t: any) => t.id === form.value.templateId)
+    if (!cur) {
+      form.value.templateId = availTemplates.value[0]?.id || ''
     }
   } catch {
     availTemplates.value = []
