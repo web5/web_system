@@ -66,6 +66,8 @@ import { platformScriptsDir } from './step-scripts';
 import { planNodeExec } from './steps/node-exec-plan';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { runActionSequence } from './steps/action-sequence';
+// service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
+import { resolveServiceStep } from './steps/service-tools';
 // 拉码结果的版本身份与一致性断言（纯函数）
 import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
@@ -1505,7 +1507,7 @@ export class PipelineService {
       // script：命令驱动（未配命令按 optional 跳过 / 非 optional fail-fast）
       case 'script': {
         const nodeTimeoutSec = node.kind === 'script' ? node.timeoutSec : undefined;
-        const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec);
+        const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec, uploadTarget);
         if (hasCmd) return;
         if (node.kind === 'script' && node.optional) {
           p.logs = [
@@ -1689,6 +1691,8 @@ export class PipelineService {
     progressStage: string = nodeKey,
     /** 节点级默认超时（秒）；操作未配超时时用它（design §3 ShellNode.timeoutSec） */
     nodeTimeoutSec?: number,
+    /** 投递目标（service action 里的内置执行体需要，如 upload/restart） */
+    uploadTarget: 'local' | 'remote' = 'local',
   ): Promise<boolean> {
     const stage = progressStage;
     const acts = await this.stepCommands.resolveActions(p.templateId!, nodeKey);
@@ -1762,6 +1766,21 @@ export class PipelineService {
       baseEnv: { ...env, ...inject },
       resultFile,
       defaultTimeoutSec: nodeTimeoutSec,
+      // service action = 平台能力（design §3）：按 tool 名分派到内置执行体
+      runService: async (a, op) => {
+        const stepKey = resolveServiceStep(a.tool);
+        if (!stepKey) {
+          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 未知工具 ${a.tool ?? '—'}，跳过`];
+          return;
+        }
+        const def = this.builtinSteps[stepKey];
+        if (!def?.run) throw new Error(`工具 ${a.tool} 无内置实现（步骤 ${stepKey}）`);
+        if (def.skip?.(p)) {
+          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 工具 ${a.tool} 按守卫跳过（当前模块/环境不适用）`];
+          return;
+        }
+        await def.run(this.buildStepContext(p, stage, uploadTarget));
+      },
       runShell: (inv) => this.runShell(inv.code, inv.env, p, inv.timeoutSec, cwd),
       readResult: (op) => this.readStageResult(resultFile, stage, op),
       onLog: (line) => {
