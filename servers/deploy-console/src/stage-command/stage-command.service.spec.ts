@@ -230,10 +230,9 @@ describe('StageCommandService', () => {
       expect(row.stage).toBe('notify');
     });
 
-    it('platform 保留字 git/version/pointer 与非法格式拒绝（发布语义真相源 + key 规则）', async () => {
-      await expect(service.upsert('auth-service', 'git', 'echo hi')).rejects.toThrow(
-        BadRequestException,
-      );
+    it('保留字 version/pointer 与非法格式拒绝（git 已放开为普通 shell 节点）', async () => {
+      // git：终态是普通 shell 节点，其脚本可写（平台托管时由 locked 守卫另拦）
+      await expect(service.upsert('auth-service', 'git', 'echo hi')).resolves.toBeTruthy();
       await expect(service.upsert('auth-service', 'version', 'echo hi')).rejects.toThrow(
         BadRequestException,
       );

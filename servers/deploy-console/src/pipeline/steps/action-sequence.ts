@@ -34,6 +34,11 @@ export interface RunActionsDeps {
   defaultTimeoutSec?: number;
   /** 执行 shell，resolve 退出码（0=成功） */
   runShell: (inv: ActionShellInvocation) => Promise<number>;
+  /**
+   * 执行 service 操作（design §3：平台能力 = action）。
+   * 由调用方按 `a.tool` 分派到内置执行体；不传则 service 操作登记后跳过。
+   */
+  runService?: (a: StepAction, op: string) => Promise<void>;
   /** 操作结束后读取结果文件（按 key 合并；不含受保护字段） */
   readResult: (op: string) => Record<string, unknown>;
   /** 日志（逐行写流水线 logs） */
@@ -88,9 +93,25 @@ export async function runActionSequence(deps: RunActionsDeps): Promise<RunAction
     const op = `op${i + 1}`;
     deps.assertNotCancelled?.();
 
-    // service 操作：引用平台内置工具（P0 无内置实现，登记后跳过；不阻断节点）
+    // service 操作：调用平台内置能力（design §3：平台能力 = action，不再是节点类型）。
+    // 未注入 runService（或 tool 无法识别）时保持旧行为：登记后跳过、不阻断节点。
     if (a.type === 'service') {
-      deps.onLog(`[${deps.stage}/${op}] 引用工具 ${a.tool ?? '—'}（暂无内置实现，跳过）`);
+      if (!deps.runService) {
+        deps.onLog(`[${deps.stage}/${op}] 引用工具 ${a.tool ?? '—'}（未接入执行器，跳过）`);
+        continue;
+      }
+      try {
+        await deps.runService(a, op);
+        deps.onLog(`[${deps.stage}/${op}] 工具 ${a.tool} 完成`);
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (a.cont) {
+          deps.onLog(`[${deps.stage}/${op}] 工具 ${a.tool} 失败（${msg}），continueOnError=是，继续执行`);
+          tolerated.push(a.name);
+          continue;
+        }
+        throw e;
+      }
       continue;
     }
 

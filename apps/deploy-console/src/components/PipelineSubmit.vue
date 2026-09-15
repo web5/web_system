@@ -2,7 +2,7 @@
 /**
  * 发起发布抽屉（发布看板 / 流水线页 / 流水线详情页共用）。
  * 支持全部启用的模块（后端/前端/微前端/小程序）走流水线发布；
- * fixedTemplateId 传入后模板固定为该流水线（隐藏模板下拉）。
+ * fixedTemplateId 传入后固定使用该流水线（隐藏流水线下拉）。
  */
 import { ref, computed, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
@@ -19,7 +19,7 @@ const props = defineProps<{
   open: boolean
   initialEnv?: string
   initialModuleKey?: string
-  /** 传值 = 固定使用该流水线（隐藏模板选择） */
+  /** 传值 = 固定使用该流水线（隐藏流水线选择） */
   fixedTemplateId?: string
 }>()
 const emit = defineEmits<{

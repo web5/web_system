@@ -209,4 +209,84 @@ describe('runActionSequence（节点内多操作顺序执行）', () => {
     ).rejects.toThrow('流水线已被取消');
     expect(calls.length).toBe(1);
   });
+
+  // design §3 终态：平台能力（写版本/切指针…）是 shell 节点里的一个 service action
+  describe('service action（平台能力不再是节点类型）', () => {
+    const service = (id: string, tool: string, extra: Partial<StepAction> = {}): StepAction => ({
+      id,
+      type: 'service',
+      name: id,
+      tool,
+      ...extra,
+    });
+
+    it('按顺序调用 runService，且不占用 shell 执行计数', async () => {
+      const { runShell, readResult, calls } = makeRunner();
+      const ran: string[] = [];
+      const res = await runActionSequence(
+        baseDeps({
+          actions: [shell('s1', 'echo hi'), service('v1', 'write-version'), shell('s2', 'echo done')],
+          runShell,
+          readResult,
+          onLog: () => undefined,
+          runService: async (a) => {
+            ran.push(String(a.tool));
+          },
+        }),
+      );
+      expect(ran).toEqual(['write-version']);
+      expect(calls.length).toBe(2); // 两个 shell
+      expect(res.executed).toBe(2);
+    });
+
+    it('未注入 runService ⇒ 登记后跳过，不阻断节点（保持旧行为）', async () => {
+      const { runShell, readResult, calls } = makeRunner();
+      const logs: string[] = [];
+      await runActionSequence(
+        baseDeps({
+          actions: [service('v1', 'write-version')],
+          runShell,
+          readResult,
+          onLog: (l) => logs.push(l),
+        }),
+      );
+      expect(calls.length).toBe(0);
+      expect(logs.join('\n')).toContain('未接入执行器，跳过');
+    });
+
+    it('service 失败：默认中断（后续操作不执行）', async () => {
+      const { runShell, readResult, calls } = makeRunner();
+      await expect(
+        runActionSequence(
+          baseDeps({
+            actions: [service('v1', 'write-version'), shell('s2', 'echo never')],
+            runShell,
+            readResult,
+            onLog: () => undefined,
+            runService: async () => {
+              throw new Error('写版本失败');
+            },
+          }),
+        ),
+      ).rejects.toThrow('写版本失败');
+      expect(calls.length).toBe(0);
+    });
+
+    it('service 失败 + continueOnError ⇒ 记录并继续', async () => {
+      const { runShell, readResult, calls } = makeRunner();
+      const res = await runActionSequence(
+        baseDeps({
+          actions: [service('v1', 'notify', { cont: true }), shell('s2', 'echo ok')],
+          runShell,
+          readResult,
+          onLog: () => undefined,
+          runService: async () => {
+            throw new Error('通知失败');
+          },
+        }),
+      );
+      expect(res.tolerated).toEqual(['v1']);
+      expect(calls.length).toBe(1);
+    });
+  });
 });

@@ -11,6 +11,7 @@ import {
   pipelineApi,
   pipelineTemplateApi,
   type StageAction,
+  type ModuleEnvRow,
 } from '@/api'
 import PipelineSubmit from '@/components/PipelineSubmit.vue'
 import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
@@ -109,6 +110,8 @@ const showBackendTab = computed(() => moduleInfo.value?.type === 'backend')
 const showFrontendTab = computed(() =>
   ['frontend', 'micro-frontend', 'mini-app'].includes(moduleInfo.value?.type),
 )
+/** 环境 Tab：所有已知类型都展示（backend 改地址，前端类看访问地址） */
+const showEnvTab = computed(() => showBackendTab.value || showFrontendTab.value)
 // R6：模块不再持有命令，「发布脚本」tab 已移除（命令归流水线节点所有）
 // 默认激活的 tab
 const activeTab = ref<string>('')
@@ -235,30 +238,22 @@ function fmtDate(d: string | null | undefined): string {
   return isNaN(dt.getTime()) ? '—' : dt.toLocaleString('zh-CN')
 }
 
-// ===== 服务环境（backend 模块：各环境服务地址 + 服务器组；原「服务管理」能力已并入） =====
+// ===== 本模块的环境（1:N：环境归属模块）=====
+// backend：服务地址可编辑 + 服务器组；前端类：无服务地址，展示访问地址（publicUrl + publicPath）
 const svcLoading = ref(false)
-const envList = ref<any[]>([])
+const envList = ref<ModuleEnvRow[]>([])
 const serverNameOptions = ref<string[]>([])
-const svcOverview = ref<any | null>(null)
 
 async function loadServiceEnv() {
-  if (moduleInfo.value?.type !== 'backend') return
   svcLoading.value = true
   try {
-    const [rows, envs, servers] = await Promise.all([
-      serverApi.serviceOverview(),
-      environmentApi.list(),
-      serverApi.listServers(),
-    ])
-    envList.value = envs
-    serverNameOptions.value = Array.from(new Set(servers.map((s: any) => s.serverName)))
-    svcOverview.value = rows.find((r: any) => r.serviceName === moduleKey.value) || {
-      serviceName: moduleKey.value,
-      serviceType: moduleInfo.value.type || 'backend',
-      environments: envs.map((e: any) => ({ envId: e.id, address: '', serverName: '', port: undefined })),
+    envList.value = await environmentApi.listByModule(moduleKey.value)
+    if (moduleInfo.value?.type === 'backend') {
+      const servers = await serverApi.listServers()
+      serverNameOptions.value = Array.from(new Set(servers.map((s: any) => s.serverName)))
     }
   } catch {
-    message.error('加载服务环境失败')
+    message.error('加载模块环境失败')
   } finally {
     svcLoading.value = false
   }
@@ -269,35 +264,44 @@ function svcEnvName(envId: string): string {
   return e ? `${e.name}（${e.id}）` : envId
 }
 
-async function saveAddress(envRow: any, val: string) {
-  const env = envList.value.find((e) => e.id === envRow.envId)
-  if (!env) return
-  const ports = { ...(env.ports || {}) }
+function envPublicUrl(envId: string): string {
+  return envList.value.find((x) => x.id === envId)?.publicUrl || '—'
+}
+
+function envBuiltin(envId: string): boolean {
+  return !!envList.value.find((x) => x.id === envId)?.builtin
+}
+
+/** 前端类模块的访问地址：环境公网地址 + 模块 publicPath（如 https://dev.kedouai.com/admin/） */
+function envAccessUrl(envId: string): string {
+  const publicUrl = envList.value.find((x) => x.id === envId)?.publicUrl
+  if (!publicUrl) return '—'
+  const p = moduleInfo.value?.publicPath
+  if (!p) return publicUrl
+  return `${publicUrl.replace(/\/$/, '')}/${p.replace(/^\//, '').replace(/\/$/, '')}/`
+}
+
+function envCurrentVersion(envId: string): string {
+  return (
+    (data.value?.environments || []).find((e: any) => e.envId === envId)?.currentVersion || '—'
+  )
+}
+
+async function saveAddress(envRow: ModuleEnvRow, val: string) {
   const trimmed = (val || '').trim()
-  if (trimmed) {
-    ports[moduleKey.value] = trimmed
-  } else {
-    delete ports[moduleKey.value]
-  }
   try {
-    await environmentApi.update(envRow.envId, { ports })
-    message.success(`已更新 ${moduleKey.value}@${envRow.envId} 地址`)
+    await environmentApi.update(moduleKey.value, envRow.id, { address: trimmed || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 地址`)
     envRow.address = trimmed
-    env.ports = ports
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存地址失败')
   }
 }
 
-async function saveServerName(envRow: any, val: string) {
+async function saveServerName(envRow: ModuleEnvRow, val: string) {
   try {
-    await serverApi.createRoute({
-      envId: envRow.envId,
-      serviceName: moduleKey.value,
-      serverName: val || '',
-      port: envRow.port,
-    })
-    message.success(`已更新 ${moduleKey.value}@${envRow.envId} 服务器组`)
+    await environmentApi.update(moduleKey.value, envRow.id, { serverName: val || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 服务器组`)
     envRow.serverName = val || ''
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存服务器组失败')
@@ -456,34 +460,45 @@ onMounted(async () => {
           </a-table>
         </a-tab-pane>
 
-        <!-- 服务环境 tab（backend 模块：各环境服务地址 + 服务器组） -->
-        <a-tab-pane v-if="showBackendTab" key="service-env" tab="服务环境">
+        <!-- 模块环境 tab（1:N：环境归属模块；backend 可改地址/服务器组，前端类展示访问地址） -->
+        <a-tab-pane v-if="showEnvTab" key="service-env" tab="服务环境">
           <a-card :loading="svcLoading" :bordered="false" size="small">
             <p style="color: #666; margin-bottom: 12px;">
-              该服务在所有环境的「服务环境」。环境在「环境管理」中增删，此处自动同步列出；逐个编辑服务地址（ip:端口）和服务器组。
+              <b>本模块</b>的环境（环境归属模块：一个模块多个环境，dev/prod 每模块各一份）。
+              环境公网地址只读，服务地址与服务器组可就地编辑；环境的增删在「模块管理 → 环境管理」。
             </p>
             <a-table
               :columns="[
-                { title: '环境', dataIndex: 'envId', key: 'envId', width: 200 },
-                { title: '服务地址（ip:端口）', key: 'address', width: 360 },
-                { title: '服务器组', key: 'serverName', width: 260 },
+                { title: '环境', dataIndex: 'id', key: 'id', width: 180 },
+                { title: '环境公网地址', key: 'publicUrl', width: 200 },
+                ...(showBackendTab
+                  ? [
+                      { title: '服务地址（ip:端口）', key: 'address', width: 320 },
+                      { title: '服务器组', key: 'serverName', width: 220 },
+                    ]
+                  : [{ title: '访问地址', key: 'accessUrl', width: 320 }]),
+                { title: '当前版本', key: 'currentVersion', width: 160 },
               ]"
-              :data-source="svcOverview?.environments || []"
+              :data-source="envList"
               :pagination="false"
-              :row-key="(r: any) => r.envId"
+              :row-key="(r: any) => r.id"
               size="small"
             >
               <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'envId'">
-                  {{ svcEnvName(record.envId) }}
+                <template v-if="column.key === 'id'">
+                  {{ record.name }}（{{ record.id }}）
+                  <a-tag v-if="record.builtin" color="blue" style="margin-left: 4px;">内置</a-tag>
+                </template>
+                <template v-else-if="column.key === 'publicUrl'">
+                  {{ record.publicUrl || '—' }}
                 </template>
                 <template v-else-if="column.key === 'address'">
                   <a-input
                     :value="record.address"
                     placeholder="如 127.0.0.1:6000 或 dev.kedouai.com"
-                    style="width: 320px;"
+                    style="width: 280px;"
                     @press-enter="(e: any) => saveAddress(record, e.target.value)"
-                    @blur="(e: any) => { const v = e.target.value; if (v !== record.address) saveAddress(record, v) }"
+                    @blur="(e: any) => { const v = e.target.value; if (v !== (record.address || '')) saveAddress(record, v) }"
                   />
                 </template>
                 <template v-else-if="column.key === 'serverName'">
@@ -491,13 +506,19 @@ onMounted(async () => {
                     :value="record.serverName || undefined"
                     placeholder="选择服务器组"
                     allow-clear
-                    style="width: 220px;"
+                    style="width: 200px;"
                     @change="(v: any) => saveServerName(record, v || '')"
                   >
                     <a-select-option v-for="n in serverNameOptions" :key="n" :value="n">
                       {{ n }}
                     </a-select-option>
                   </a-select>
+                </template>
+                <template v-else-if="column.key === 'accessUrl'">
+                  <span class="ws-mono">{{ envAccessUrl(record.id) }}</span>
+                </template>
+                <template v-else-if="column.key === 'currentVersion'">
+                  <span class="ws-mono">{{ envCurrentVersion(record.id) }}</span>
                 </template>
               </template>
             </a-table>
@@ -595,6 +616,7 @@ onMounted(async () => {
 
         <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
         <a-tab-pane key="deploy" tab="环境部署">
+          <!-- R6 提示统一放在卡片顶部（a-tabs 之外），此处不再重复 -->
           <p style="color: #666; margin-bottom: 12px;">
             部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
           </p>
@@ -635,6 +657,7 @@ onMounted(async () => {
             - version/pointer = 紫色「语义真相源」（不可改）
           让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
         -->
+        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
       <a-empty v-else description="该模块类型暂不支持版本管理" />
     </a-card>
