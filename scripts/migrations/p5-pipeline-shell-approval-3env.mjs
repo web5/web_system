@@ -105,11 +105,17 @@ const MODULES = [
   { key: 'upload-service', localPath: `${HOME}/web_system_release/servers/upload-service`, remotePath: '/data/web_system/servers/upload-service' },
   { key: 'user-service', localPath: `${HOME}/web_system_release/servers/user-service`, remotePath: '/data/web_system/servers/user-service' },
   {
-    key: 'mini-contract', // frontend（构建脚本是上传小程序，产物仍按前端类放置）
+    key: 'mini-contract', // frontend
+    // ⚠️ 2026-09-15 实测：它的 build 是 `node scripts/upload.js`（上传小程序），
+    // 需要 `private.key`（小程序私钥），本机没有 → build 必然失败。
+    // 因此默认**停用**，等配好私钥再启用（见下 `NO_BUILD_KEY_MODULES`）。
     localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/mini-contract`,
     remotePath: '/data/web_system/servers/gateway/public/static/modules/mini-contract',
   },
 ];
+
+/** 缺构建凭据、默认停用的模块（跑起来必然失败的，别给运维错觉） */
+const NO_BUILD_KEY_MODULES = ['mini-contract'];
 /** 环境 → deploy_servers 里的 server_name（local 不走 ssh，同机投递） */
 const ENV_SERVER = { local: null, dev: 'dev-default', prod: 'prod-default' };
 
@@ -213,7 +219,8 @@ async function main() {
         env,
         // 2026-09-15：dev / prod 的 SSH 通道已验证（175.27.189.123 / 106.52.176.246，
         // 目录 /data/web_system 可写）→ 全部启用；若后续要停用，改这里或控制台里点停用。
-        enabled: 1,
+        // 缺构建凭据的模块默认停用（如 mini-contract 需要小程序私钥）
+        enabled: NO_BUILD_KEY_MODULES.includes(mod.key) ? 0 : 1,
         nodes: terminalNodes(),
       });
       plan.commands.push({
