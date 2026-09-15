@@ -3,7 +3,12 @@
 > 给新对话用。开场可直接说：
 > 「读 `specs/deploy-console/backend-deploy-effect-tasks.md`，从 T1 开始做」
 >
-> 最近更新：2026-09-15（**本机 local 部分已完成并验证**；剩 T1 远程 / T2 回滚 / T3 逐模块验证）
+> 最近更新：2026-09-15
+> - 本机 local 部署生效：**已完成并验证**
+> - T1 远程：**代码已合入（#76），未真机执行** —— 会改 dev/prod 机器的 dist 并重启 pm2，需确认后再跑
+> - T3 逐模块验证：**admin / mcp-gateway / ai-agent / portal / shell 已跑通**；
+>   `mini-contract` 缺小程序私钥 → 已停用（#76）；`shell` 改覆盖式投递（#77）
+> - T2 回滚：**未开始**
 
 ---
 
@@ -45,7 +50,11 @@ PR：**#72**（落地 + 重启）、**#73**（pm2 进程名回退）。
 
 ### T1 · 远程（dev / prod）后台部署生效
 
-**现状**：`applyBackendVersion()` 在 `env !== 'local'` 时只 warn 并跳过。
+**现状（2026-09-15 更新）**：`applyBackendRemote()` 已实现并合入（PR #76）——
+本地打包版本目录 → sftp 上传远端 → 远端备份旧 dist → 解包 → 远端 pm2 重启（候选名回退）；
+失败恢复备份并抛错。同时把 `deployVersion` 改为**先落地后改指针**（失败时指针不变）。
+**尚未在真机执行**：会改动 dev 机器（175.27.189.123）与 prod 机器（106.52.176.246）的
+`servers/<dir>/dist` 并重启服务，务必先确认窗口。
 
 **要做**：
 1. 复用远程通道（`deploy_servers` 的 `host` / `ssh_user` / `ssh_key_path`，已验证 SSH 通、
@@ -82,7 +91,19 @@ PR：**#72**（落地 + 重启）、**#73**（pm2 进程名回退）。
 
 ### T3 · 其余模块逐个验证投递路径
 
-**现状**：48 条流水线（16 模块 × 3 环境）里只有 `admin`、`mcp-gateway` 真跑过。
+**现状（2026-09-15 更新）**：
+
+| 模块 | 结果 |
+|---|---|
+| admin（微前端） | ✅ 跑通，产物在 `static/modules/admin/admin-local/<commit>/` |
+| mcp-gateway（后台） | ✅ 跑通 + 部署生效（dist 落地、`web-mcp-gateway` 重启） |
+| ai-agent（后台） | ✅ 跑通 + 部署生效（`web-ai-agent` 重启，health 200） |
+| portal（微前端） | ✅ 跑通，产物 31 个文件含 index.js/css |
+| shell（基座） | ✅ 跑通 **改覆盖式投递**（#77）—— 基座是 `index.html + assets`，
+gateway 直读 `public/shell/`，不能走版本目录；覆盖前自动备份 `shell.bak-<ts>` |
+| mini-contract | ❌ build 是 `node scripts/upload.js`（上传小程序），缺 `private.key`
+→ 必然失败，**已停用 3 条**（p5 的 `NO_BUILD_KEY_MODULES`） |
+| 其余 10 个后台模块 | ⏳ 未逐个跑（与 ai-agent 同构，先验一条即可代表一类） |
 
 **要做**：每类至少跑一条 local 全链路（拉码 → 构建 → 审批 → 投递 → 部署生效）：
 - 前端类：`portal`（micro-frontend）、`shell`（frontend）
