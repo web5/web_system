@@ -84,12 +84,14 @@ const MODULES = [
     remotePath: '/data/web_system/servers/gateway/public/static/modules/portal',
   },
   {
-    key: 'shell', // 前端基座（vite build → index.html + assets）
-    // ⚠️ 覆盖式发布：gateway 直读 `public/shell/`（main.ts 里 ServeStatic），
-    // 不是按版本目录加载的微前端 —— 因此不能用默认的「版本目录」投递。
-    overlay: true,
-    localPath: `${HOME}/web_system_release/servers/gateway/public/shell`,
-    remotePath: '/data/web_system/servers/gateway/public/shell',
+    key: 'shell', // 前端基座
+    // 用户 2026-09-15：**基座也按版本加载**（不做覆盖式发布）。
+    // 产物投到 static/modules/shell/<COMMIT_ID>/：
+    //   · 构建侧：apps/shell/vite.config.ts 的 base 由 COMMIT_ID 推导
+    //   · 网关侧：IndexHtmlService 按 deploy_deployments 的 shell 版本读版本目录
+    //     （取不到时退回旧固定路径 public/shell/index.html）
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/shell`,
+    remotePath: '/data/web_system/servers/gateway/public/static/modules/shell',
   },
   {
     key: 'mcp-gateway', // 后台服务（tsc，就地发布）
