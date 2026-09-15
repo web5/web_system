@@ -78,7 +78,7 @@ function isWatchdog(s: string) {
         <a-tag v-if="instance.mode === 'grayscale'" color="orange" style="margin-right: 0;">灰度</a-tag>
         <a-tag v-if="instance.reuseArtifact" color="cyan" style="margin-right: 0;">复用产物</a-tag>
         <span v-if="instance.templateName" style="color: #888; font-size: 12px;">
-          模板 · {{ instance.templateName }}
+          流水线 · {{ instance.templateName }}
         </span>
       </div>
       <span v-if="isLive(instance) && instance.progress?.message" class="flow-message">

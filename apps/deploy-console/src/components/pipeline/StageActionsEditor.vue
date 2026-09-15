@@ -19,7 +19,7 @@ export interface EditorItem {
 }
 
 const props = defineProps<{
-  /** 流水线模板 ID（R6：命令归属流水线，不再用 moduleKey） */
+  /** 流水线 ID（R6：命令归属流水线，不再用 moduleKey） */
   templateId: string
   item: EditorItem
   /** 只读模式（平台托管节点，如 git）：可查看脚本，不可编辑 */
