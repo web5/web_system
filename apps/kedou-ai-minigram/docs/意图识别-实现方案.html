@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>意图识别 · 主对话链路实现方案 | 科豆 AI</title>
+<style>
+  :root{
+    --brand:#F97316; --brand-soft:#FFF2E6; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#E4F6F2;
+    --ink:#1A1D23; --ink-2:#4A5261; --ink-3:#7B8494;
+    --line:#E8E4DE; --page:#F7F4F0; --card:#FFFFFF;
+    --code-bg:#FBFAF8; --ok:#0E9B8C; --warn:#C2410C; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);
+       font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:56px 28px 100px}
+  header{margin-bottom:38px;padding-bottom:26px;border-bottom:2px solid var(--ink)}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-txt);font-weight:700}
+  h1{font-size:31px;line-height:1.32;margin:12px 0 14px;letter-spacing:-.4px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--ink-3)}
+  .meta b{color:var(--ink-2);font-weight:600}
+  h2{font-size:21px;margin:52px 0 8px;letter-spacing:-.2px;padding-top:6px}
+  h2 .n{display:inline-block;min-width:30px;color:var(--brand);font-variant-numeric:tabular-nums}
+  h2 + .sub{color:var(--ink-3);font-size:13.5px;margin:0 0 20px}
+  h3{font-size:16px;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;margin:22px 0 8px;color:var(--ink-2);font-weight:600}
+  p{margin:11px 0}
+  ul,ol{margin:11px 0;padding-left:22px}
+  li{margin:5px 0}
+  code{font:13px/1.5 "SF Mono",Menlo,Consolas,monospace;background:var(--code-bg);
+       border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--brand-txt)}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-left:2px solid var(--brand);
+      border-radius:8px;padding:14px 16px;overflow-x:auto;margin:14px 0;font-size:12.5px;line-height:1.62}
+  pre code{background:none;border:none;padding:0;color:var(--ink);font-size:12.5px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;background:var(--card);
+        border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  th{background:#FBF9F7;text-align:left;padding:10px 13px;font-weight:600;font-size:12.5px;
+     color:var(--ink-2);border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:10px 13px;border-bottom:1px solid #F1EDE8;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .callout{border-radius:10px;padding:14px 17px;margin:18px 0;font-size:14px;line-height:1.7}
+  .callout .t{display:block;font-weight:700;margin-bottom:5px;font-size:13.5px}
+  .warn{background:#FFF6EE;border:1px solid #FBD9BC;color:#7C3A0F}
+  .warn .t{color:var(--warn)}
+  .ok{background:var(--accent-soft);border:1px solid #B9E4DC}
+  .ok .t{color:var(--accent)}
+  .info{background:#F4F7FB;border:1px solid #D9E3F0;color:#2A3F5F}
+  .info .t{color:#2A3F5F}
+  .path{font:12.5px/1.5 "SF Mono",Menlo,monospace;color:var(--ink-2);background:#F2EFEA;
+        border-radius:4px;padding:1px 6px;display:inline-block}
+  .tag{display:inline-block;font-size:11.5px;padding:1.5px 8px;border-radius:20px;
+       font-weight:600;vertical-align:middle;white-space:nowrap}
+  .t-new{background:var(--accent-soft);color:var(--accent)}
+  .t-mod{background:var(--brand-soft);color:var(--brand-txt)}
+  .t-fix{background:#FDECEA;color:var(--bad)}
+  .t-p0{background:#FDECEA;color:var(--bad)}
+  .t-p1{background:#FFF6EE;color:var(--warn)}
+  .t-p2{background:#F1F3F6;color:var(--ink-2)}
+  .flow{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:18px 0}
+  .flow .step{display:flex;gap:12px;padding:7px 0;align-items:flex-start}
+  .flow .step + .step{border-top:1px dashed #EFEBE5}
+  .flow .i{flex:0 0 22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;
+           font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .flow .i.g{background:var(--accent)}
+  .flow .i.d{background:#C9CFD8;color:#fff}
+  .flow b{font-weight:600}
+  .flow .d{color:var(--ink-3);font-size:13px}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="kicker">Implementation Spec · 科豆 AI</span>
+  <h1>意图识别在主对话链路的实现方案</h1>
+  <div class="meta">
+    <span><b>日期</b> 2026-09-15</span>
+    <span><b>范围</b> ai-service + agent-core</span>
+    <span><b>状态</b> 待评审</span>
+    <span><b>上一篇</b> 多Agent意图路由-架构设计（架构层）</span>
+  </div>
+</header>
+
+<div class="callout info">
+  <span class="t">这份文档与上一篇的分工</span>
+  上一篇回答的是<b>「意图识别该不该做、放哪层、怎么分 agent」</b>（设计层）；
+  这一篇回答<b>「具体改哪几个文件、代码怎么写、怎么测」</b>（实现层）。
+  所有路径、字段名、接口签名均取自 <code>~/web_system_release</code> 实际代码，不是示意。
+</div>
+
+<h2><span class="n">0</span>一句话结论</h2>
+<p>意图识别在主对话里落地，是 <b>1 个新服务 + 2 个新文件 + 5 处改动 + 1 条 migration</b>，
+核心动作只有一个：<b>在 <code>agent.controller.ts</code> 启动 stream 之前，把 <code>dto.agentId</code>
+从「客户端传死」变成「服务端解析出来的」</b>，其余（agent 执行、SSE、记忆、埋点结构）全部不动。</p>
+
+<h2><span class="n">1</span>现状执行链：改动落在哪一段</h2>
+<p class="sub">先把真实链路摆出来，才知道插入点在哪。全部基于当前代码。</p>
+
+<div class="flow">
+  <div class="step"><span class="i">1</span><div><b>小程序 <span class="path">services/contract-api.ts</span></b>
+    <div class="d">POST <code>/api/ai-agent/agent/run</code>，body 里 <code>agentId:'contract-risk'</code>（写死）</div></div></div>
+  <div class="step"><span class="i">2</span><div><b>gateway 转发</b> → <code>ai-service</code></div></div>
+  <div class="step"><span class="i">3</span><div><b><span class="path">servers/ai-service/src/agent/agent.controller.ts</span> <code>@Post('run')</code></b>
+    <div class="d">鉴权 → 设 SSE 头 → <code>agentRegistry.get(dto.agentId)</code> 取快照（用于埋点）→ 启动 stream</div></div></div>
+  <div class="step"><span class="i">4</span><div><b><span class="path">agent-runner.ts</span> → <span class="path">agent-engine.ts</span></b>
+    <div class="d">生成 runId，按 agentId 取定义，装配记忆/工具，流式产出 <code>StreamEvent</code></div></div></div>
+  <div class="step"><span class="i">5</span><div><b>controller 循环 <code>for await (const event of stream)</code></b>
+    <div class="d">每个事件 <code>res.write</code> 推给客户端，同时收进 <code>steps</code>；遇到 <code>final</code> 记答案</div></div></div>
+  <div class="step"><span class="i">6</span><div><b><code>agentLog.recordRun(...)</code> 异步落库</b>
+    <div class="d">记 agentId / systemPrompt / steps / usage / durationMs</div></div></div>
+</div>
+
+<div class="callout warn">
+  <span class="t">三个现状事实，直接决定实现方式</span>
+  <b>① <code>AgentRunDto.agentId</code> 是必填</b>（<code>@IsString()</code> 且<b>没有</b> <code>@IsOptional()</code>）→ 要支持 auto 必须先放开。<br>
+  <b>② 埋点第 3 步就已经取了 agent 定义快照</b>，用的是 <code>dto.agentId</code>；如果直接把 <code>'auto'</code> 传进来，
+  这里会 <code>get('auto')</code> 抛错被 catch 吞掉，导致 systemPrompt 快照为空 → <b>埋点静默降级</b>。必须一起改。<br>
+  <b>③ <code>ChatOptions</code> 只有 <code>temperature / maxTokens / topP</code></b>，
+  <b>没有 JSON mode / response_format</b>（<span class="path">packages/agent-core/src/clients/base-ai.client.ts:81</span>）
+  → 分类器的结构化输出只能靠 prompt 约束 + 自己解析，必须写容错。
+</div>
+
+<h2><span class="n">2</span>改动清单</h2>
+
+<table>
+  <tr><th style="width:42%">文件</th><th style="width:13%">动作</th><th>说明</th></tr>
+  <tr>
+    <td><span class="path">packages/agent-core/src/core/intent-classifier.ts</span></td>
+    <td><span class="tag t-new">新增</span></td>
+    <td>纯 TS 分类器：三级快通道（显式 → 规则 → LLM），无 DB / 无 Nest 依赖，可单测</td>
+  </tr>
+  <tr>
+    <td><span class="path">packages/agent-core/src/interfaces/runtime.interface.ts</span></td>
+    <td><span class="tag t-mod">改</span></td>
+    <td><code>StreamEventType</code> 加 <code>'intent'</code>；<code>StreamEvent</code> 加 <code>intent?</code> 字段</td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/agent/intent/intent.service.ts</span></td>
+    <td><span class="tag t-new">新增</span></td>
+    <td>Nest 侧编排：读会话锁定 → 调分类器 → 写回 <code>conversations.agent_id</code></td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/agent/dto/agent-run.dto.ts</span></td>
+    <td><span class="tag t-mod">改</span></td>
+    <td><code>agentId</code> 加 <code>@IsOptional()</code>，缺省视为 <code>'auto'</code></td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/agent/agent.controller.ts</span></td>
+    <td><span class="tag t-mod">改</span></td>
+    <td>stream 前插入路由决策；先推 <code>intent</code> 事件；埋点改用解析后的 agentId</td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/conversation/entities/conversation.entity.ts</span></td>
+    <td><span class="tag t-mod">改</span></td>
+    <td>加 <code>agentId</code> + <code>intentHistory</code> 两列</td>
+  </tr>
+  <tr>
+    <td><span class="path">migrations/0010_conversation_intent_routing.sql</span></td>
+    <td><span class="tag t-new">新增</span></td>
+    <td>加列 + 索引（沿用现有编号与 snake_case 约定）</td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/agent/agent.module.ts</span></td>
+    <td><span class="tag t-mod">改</span></td>
+    <td>provider 注册 <code>IntentService</code>，注入 <code>ClientRegistry</code></td>
+  </tr>
+  <tr>
+    <td><span class="path">servers/ai-service/src/agent-log/…</span></td>
+    <td><span class="tag t-fix">修</span></td>
+    <td><code>recordRun</code> 增记 <code>intentVia</code> / <code>intentConfidence</code>（可选，P1）</td>
+  </tr>
+</table>
+
+<h2><span class="n">3</span>契约变更：先定协议，再写代码</h2>
+
+<h3>3.1 入参</h3>
+<pre><code>// dto/agent-run.dto.ts
+export class AgentRunDto {
+  @IsOptional()                       // ← 新增：不传 = 自动路由
+  @IsString({ message: 'agentId 必须是字符串' })
+  agentId?: string;                   // 'auto' | 'translate' | 'horoscope' | … | 省略
+
+  @IsString()
+  @MaxLength(8000)
+  userInput: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  conversationId?: string;
+}</code></pre>
+
+<p>保持向后兼容：<code>contract-risk</code> 这类<b>显式传入的老调用一行都不用改</b>。只有不传或传 <code>'auto'</code> 才走分类。</p>
+
+<h3>3.2 新增 SSE 事件</h3>
+<pre><code>// packages/agent-core/src/interfaces/runtime.interface.ts
+export type StreamEventType =
+  | 'intent'          // ← 新增：路由决策结果，必须是本轮第一个事件
+  | 'token' | 'content_delta' | 'reasoning_delta'
+  | 'tool_call' | 'tool_result' | 'skill_load'
+  | 'summary' | 'final' | 'error' | 'permission_request';
+
+export interface StreamEvent {
+  type: StreamEventType;
+  // … 既有字段不变 …
+  /** intent 事件专用 */
+  intent?: {
+    agentId: string;                       // 最终选定的 agent
+    agentName?: string;
+    confidence: number;                    // 0~1
+    via: 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
+    switched?: boolean;                    // 本轮是否发生了 agent 切换
+    previousAgentId?: string;
+  };
+}</code></pre>
+
+<h3>3.3 时序（关键约束）</h3>
+<div class="flow">
+  <div class="step"><span class="i">1</span><div><b>POST /ai/agent/run</b> <span class="d">（body 无 agentId）</span></div></div>
+  <div class="step"><span class="i">2</span><div><b>服务端解析意图</b> <span class="d">目标 ≤ 300ms（规则命中则 ~0ms）</span></div></div>
+  <div class="step"><span class="i g">3</span><div><b>推 <code>{type:'intent',intent:{…}}</code></b>
+    <div class="d"><b>必须在第一个 token 之前</b> —— 前端要靠它渲染 agent 徽标。</div></div></div>
+  <div class="step"><span class="i">4</span><div><b>正常 token 流</b> <span class="d">与现状完全一致</span></div></div>
+  <div class="step"><span class="i d">5</span><div><b><code>final</code> 事件</b> <span class="d">带 conversationId，前端存起来</span></div></div>
+</div>
+
+<div class="callout warn">
+  <span class="t">前端必须配合的一点</span>
+  小程序侧 <code>conversationId</code> 要<b>每轮回传</b>。目前 <code>contract-api.ts</code> 里已有会话持久化逻辑，
+  但通用对话页是新建的壳 —— 如果漏传，每一轮都会被当成新会话重分类，表现为「同一话题两句由不同 agent 回答」。
+  这是这套方案<b>最容易出的线上事故</b>，建议列为 P0 验收项。
+</div>
+
+<h2><span class="n">4</span>分类器实现</h2>
+<p class="sub">放 <code>agent-core</code>（纯 TS），不碰 Nest、不碰 DB，方便单测和复用。</p>
+
+<h3>4.1 三级快通道</h3>
+<table>
+  <tr><th style="width:14%">级别</th><th style="width:22%">触发</th><th style="width:10%">延迟</th><th style="width:10%">成本</th><th>说明</th></tr>
+  <tr><td><b>L1 显式</b></td><td><code>@星座 …</code> / 发现页进入 / 已锁定</td><td>0</td><td>0</td><td>最高优先级，直接返回</td></tr>
+  <tr><td><b>L2 规则</b></td><td>关键词 + 正则</td><td>~0ms</td><td>0</td><td>覆盖约 70–80% 日常输入</td></tr>
+  <tr><td><b>L3 LLM</b></td><td>规则未命中</td><td>150–400ms</td><td>低</td><td><b>必须用 flash 档模型</b></td></tr>
+  <tr><td><b>L4 兜底</b></td><td>超时 / 解析失败 / 未知 agent</td><td>0</td><td>0</td><td>一律 <code>general</code></td></tr>
+</table>
+
+<h3>4.2 核心代码</h3>
+<pre><code>// packages/agent-core/src/core/intent-classifier.ts
+import { BaseAiClient } from '../clients/base-ai.client';
+
+export type IntentVia = 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
+
+export interface IntentResult {
+  agentId: string;
+  confidence: number;
+  via: IntentVia;
+}
+
+export interface ClassifyOptions {
+  /** 已知 agentId 白名单（从 AgentRegistry.list() 取，防止路由到未注册 agent） */
+  candidates: string[];
+  /** 会话已锁定的 agent（有则优先，除非显式切换） */
+  lockedAgentId?: string;
+  /** LLM 分类超时（ms），超时即兜底 */
+  timeoutMs?: number;
+}
+
+const RULE_TABLE: Array&lt;{ agentId: string; kw: RegExp; confidence: number }&gt; = [
+  { agentId: 'translate',  kw: /(翻译|翻成|译成|用(英|日|德|法|韩)文?怎么说|英文怎么讲)/, confidence: .92 },
+  { agentId: 'horoscope',  kw: /(星座|运势|星盘|塔罗|八字|生肖|上升星座|水逆)/,            confidence: .93 },
+  { agentId: 'tool',       kw: /(查一下|帮我算|汇率|天气|快递|股价|今天几号|单位换算)/,     confidence: .88 },
+  { agentId: 'baike',      kw: /(是什么|为什么|原理|如何工作|介绍一下|区别是|科普)/,        confidence: .80 },
+  { agentId: 'emotion',    kw: /(好累|难受|emo|焦虑|睡不着|想聊聊|心情不好|压力大)/,        confidence: .85 },
+];
+
+const CLASSIFY_PROMPT = `你是意图分类器。只输出一行 JSON，不要任何解释、不要 markdown 围栏。
+
+可选 agent：
+- emotion   情感陪聊、情绪倾诉、安慰共情
+- baike     百科科普、知识问答、原理讲解
+- horoscope 星座、运势、性格、塔罗（命理类，需免责）
+- translate 语言翻译、润色、多语种互译
+- tool      工具服务：查汇率/天气/快递/计算/实时信息
+- general   以上都不是，或输入过短无法判断
+
+输出格式：{"agentId":"xxx","confidence":0.9,"reason":"10字内"}
+confidence 低于 0.6 时直接选 general。`;
+
+export class IntentClassifier {
+  constructor(
+    private readonly client: BaseAiClient,   // ← 注入 flash 档，不要主对话模型
+    private readonly timeoutMs = 1200,
+  ) {}
+
+  async classify(userInput: string, o: ClassifyOptions): Promise&lt;IntentResult&gt; {
+    // L1-a 显式指定：@agent 前缀
+    const at = userInput.match(/^@([a-z0-9-]+)[\s:：]*/i);
+    if (at &amp;&amp; o.candidates.includes(at[1])) {
+      return { agentId: at[1], confidence: 1, via: 'explicit' };
+    }
+
+    // L1-b 会话锁定：已有 agent 且未显式切换 → 沿用（不做每轮重分类）
+    if (o.lockedAgentId &amp;&amp; o.candidates.includes(o.lockedAgentId)) {
+      return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
+    }
+
+    // L2 规则
+    for (const r of RULE_TABLE) {
+      if (r.kw.test(userInput) &amp;&amp; o.candidates.includes(r.agentId)) {
+        return { agentId: r.agentId, confidence: r.confidence, via: 'rule' };
+      }
+    }
+
+    // L3 LLM 分类（超时/失败 → L4）
+    try {
+      const raw = await this.withTimeout(
+        this.client.chat(
+          [
+            { role: 'system', content: CLASSIFY_PROMPT },
+            { role: 'user', content: userInput.slice(0, 500) },
+          ],
+          { temperature: 0, maxTokens: 60 },   // ← 0 温度 + 限长，压成本
+        ),
+        o.timeoutMs ?? this.timeoutMs,
+      );
+      const parsed = this.parse(raw, o.candidates);
+      if (parsed) return parsed;
+    } catch { /* 落到 L4 */ }
+
+    // L4 兜底
+    return { agentId: 'general', confidence: .3, via: 'fallback' };
+  }
+
+  /**
+   * 解析容错：ChatOptions 没有 JSON mode，模型可能输出围栏、前后废话、或非法 agentId。
+   * 三道防线：提取首个 JSON → 校验 agentId 在白名单 → 否则 null。
+   */
+  private parse(raw: string, candidates: string[]): IntentResult | null {
+    if (!raw) return null;
+    const cleaned = raw.replace(/```(?:json)?/g, '').trim();
+    const m = cleaned.match(/\{[\s\S]*?\}/);
+    if (!m) return null;
+    try {
+      const j = JSON.parse(m[0]);
+      const id = String(j.agentId ?? '').trim();
+      if (!candidates.includes(id)) return null;          // 幻觉出未知 agent → 丢弃
+      const c = Number(j.confidence);
+      return { agentId: id, confidence: Number.isFinite(c) ? Math.min(Math.max(c, 0), 1) : .6, via: 'llm' };
+    } catch { return null; }
+  }
+
+  private withTimeout&lt;T&gt;(p: Promise&lt;T&gt;, ms: number): Promise&lt;T&gt; {
+    return Promise.race([
+      p,
+      new Promise&lt;never&gt;((_, rej) =&gt; setTimeout(() =&gt; rej(new Error('classify timeout')), ms)),
+    ]);
+  }
+}</code></pre>
+
+<div class="callout warn">
+  <span class="t">⚠️ 三个必须遵守的实现约束</span>
+  <b>① 分类器必须用 flash 档。</b>当前 <code>agent.module.ts</code> 已注册 <code>TokenHubClient('deepseek-v4-flash')</code>，
+  直接 <code>clientRegistry.get('deepseek-v4-flash')</code> 复用即可，<b>不用新增模型、不用加 key</b>。
+  若用主对话同档模型，每次对话 token 成本直接翻倍 —— 这是这套架构唯一持续烧钱的点。<br>
+  <b>② <code>candidates</code> 必须来自 <code>agentRegistry.list()</code> 实时取</b>，不能写死数组。
+  否则 admin 后台新增/下线 agent 后，路由表和注册表会对不上。<br>
+  <b>③ 解析必须容错。</b>没有 JSON mode，实测模型会吐 <code>```json</code> 围栏或前后废话，
+  <code>JSON.parse</code> 裸调用会抛 —— 上面 <code>parse()</code> 的三道防线是必须的，不是可选优化。
+</div>
+
+<h2><span class="n">5</span>会话锁定与切换检测</h2>
+<p class="sub">这是决定体验下限的一段。不做锁定的后果：追问「那第二种呢」被切走、同一话题前后人格不一致、成本翻倍。</p>
+
+<pre><code>// servers/ai-service/src/agent/intent/intent.service.ts
+@Injectable()
+export class IntentService {
+  constructor(
+    @InjectRepository(Conversation) private readonly convRepo: Repository&lt;Conversation&gt;,
+    private readonly registry: AgentRegistry,
+    private readonly clientRegistry: ClientRegistry,
+  ) {}
+
+  async resolve(params: {
+    agentId?: string; userInput: string; conversationId?: string; userId: string;
+  }): Promise&lt;IntentResult &amp; { switched: boolean; previousAgentId?: string }&gt; {
+    const candidates = this.registry.list().map(a =&gt; a.id);
+
+    // 1) 显式传入（含 'auto' 之外的任何值）→ 直接走，不分类
+    if (params.agentId &amp;&amp; params.agentId !== 'auto' &amp;&amp; candidates.includes(params.agentId)) {
+      await this.lock(params.conversationId, params.agentId, 'explicit');
+      return { agentId: params.agentId, confidence: 1, via: 'explicit', switched: false };
+    }
+
+    // 2) 读会话锁定
+    let locked: string | undefined;
+    if (params.conversationId) {
+      const conv = await this.convRepo.findOne({ where: { id: params.conversationId } });
+      locked = conv?.agentId ?? undefined;
+    }
+
+    const classifier = new IntentClassifier(
+      this.clientRegistry.get('deepseek-v4-flash'),   // ← 复用已有 flash client
+    );
+    const r = await classifier.classify(params.userInput, { candidates, lockedAgentId: locked });
+
+    // 3) 切换判定：只有【显式指定】或【高置信规则/LLM 且与当前不同】才允许切
+    const shouldSwitch = !locked
+      || (r.via === 'explicit')
+      || (r.via === 'rule' &amp;&amp; r.confidence &gt;= .88)
+      || (r.via === 'llm'  &amp;&amp; r.confidence &gt;= .75);
+    const finalAgentId = shouldSwitch ? r.agentId : locked!;
+    const switched = !!locked &amp;&amp; finalAgentId !== locked;
+
+    // 兜底：万一分类出未注册 agent（理论上已被 candidates 过滤）
+    if (!candidates.includes(finalAgentId)) {
+      return { agentId: locked ?? 'general', confidence: .3, via: 'fallback',
+               switched: false, previousAgentId: locked };
+    }
+
+    await this.lock(params.conversationId, finalAgentId, r.via);
+    return { ...r, agentId: finalAgentId, switched, previousAgentId: locked };
+  }
+
+  private async lock(conversationId: string | undefined, agentId: string, via: string) {
+    if (!conversationId) return;   // 首轮无会话，由 final 事件回来后再写
+    await this.convRepo.update(conversationId, { agentId });
+    await this.convRepo.query(
+      `UPDATE conversations
+          SET intent_history = JSON_ARRAY_APPEND(
+                COALESCE(intent_history, JSON_ARRAY()), '$',
+                CAST(JSON_OBJECT('agentId', ?, 'via', ?, 'ts', NOW()) AS JSON))
+        WHERE id = ?`,
+      [agentId, via, conversationId],
+    );
+  }
+}</code></pre>
+
+<h4>切换阈值为什么这么定</h4>
+<table>
+  <tr><th style="width:24%">来源</th><th style="width:18%">切换阈值</th><th>理由</th></tr>
+  <tr><td>explicit（<code>@星座</code>）</td><td><b>无条件</b></td><td>用户显式指令，必须服从</td></tr>
+  <tr><td>rule</td><td><code>≥ 0.88</code></td><td>正则误伤率不低（如「我想了解一下你」命中 baike），宁可不切</td></tr>
+  <tr><td>llm</td><td><code>≥ 0.75</code></td><td>LLM 判断更准，但会话中途切换代价大，仍要留余量</td></tr>
+  <tr><td>fallback</td><td><b>不切</b></td><td>没把握时保持现状，比乱切安全</td></tr>
+</table>
+
+<h2><span class="n">6</span>落库：migration</h2>
+<p class="sub"><code>conversations</code> 表目前<b>没有 agentId 字段</b>，这是会话锁定的硬前提。沿用现有编号与 snake_case 约定。</p>
+
+<pre><code>-- migrations/0010_conversation_intent_routing.sql
+-- 背景：主对话接入多 Agent 意图路由，需要把「本会话当前由哪个 agent 负责」持久化，
+--       否则每一轮都会重新分类（人格割裂 + 成本翻倍）。
+-- 目标库：web_system（ai-service）
+-- 适用：NODE_ENV=production（TypeORM synchronize 关闭）的环境必须手动执行。
+
+ALTER TABLE conversations
+  ADD COLUMN agent_id VARCHAR(64) NULL COMMENT '当前会话锁定的 agentId（意图路由）' AFTER title,
+  ADD COLUMN intent_history JSON NULL COMMENT '意图判定流水：[{agentId,via,ts}]' AFTER agent_id;
+
+ALTER TABLE conversations
+  ADD INDEX idx_conversations_agent (agent_id);</code></pre>
+
+<pre><code>// conversation/entities/conversation.entity.ts —— 同步加字段
+/** 当前会话锁定的 agentId（意图路由；null = 尚未分类） */
+@Index()
+@Column({ type: 'varchar', length: 64, nullable: true, comment: '当前会话锁定的 agentId' })
+agentId: string | null;
+
+/** 意图判定流水，用于回溯「为什么当时路由到它」 */
+@Column({ type: 'json', nullable: true, comment: '意图判定流水' })
+intentHistory: Array&lt;{ agentId: string; via: string; ts: string }&gt; | null;</code></pre>
+
+<div class="callout warn">
+  <span class="t">历史数据</span>
+  存量会话 <code>agent_id</code> 全为 NULL，等价于「未锁定」→ 下一轮走正常分类后写入。
+  <b>不需要刷历史数据。</b>
+</div>
+
+<h2><span class="n">7</span>Controller 接线</h2>
+<p class="sub">只贴变化的部分。注意第 ③ 步那个埋点坑。</p>
+
+<pre><code>// agent.controller.ts —— 在 stream 启动前插入
+// ① 解析意图（agentId 省略或 'auto' 时才触发）
+const intent = await this.intentService.resolve({
+  agentId: dto.agentId,
+  userInput: dto.userInput,
+  conversationId: dto.conversationId,
+  userId,
+});
+const resolvedAgentId = intent.agentId;
+
+// ② 先推 intent 事件（必须早于任何 token）
+res.write(`data: ${JSON.stringify({
+  type: 'intent',
+  intent: {
+    agentId: resolvedAgentId,
+    agentName: this.agentRegistry.get(resolvedAgentId)?.name,
+    confidence: intent.confidence,
+    via: intent.via,
+    switched: intent.switched,
+    previousAgentId: intent.previousAgentId,
+  },
+})}\n\n`);
+
+// ③ 【易漏】取定义快照要用解析后的 id，不是 dto.agentId
+//    原来写 this.agentRegistry.get(dto.agentId)，auto 时会抛错被 catch 吞掉 → 快照为空
+const def = this.agentRegistry.get(resolvedAgentId);   // ← 改成 resolvedAgentId
+systemPrompt = def?.systemPrompt ?? '';
+tools = def?.tools ?? null;
+model = def?.model ?? null;
+
+// ④ 用解析后的 id 跑
+const stream = this.agentRunner.stream(
+  { agentId: resolvedAgentId, userInput: dto.userInput, conversationId: dto.conversationId },
+  userId,
+);
+
+// ⑤ 埋点同样要用 resolvedAgentId，否则 agent_log 里会写进 'auto'
+this.agentLog.recordRun({ agentId: resolvedAgentId, /* …其余不变… */ });</code></pre>
+
+<h2><span class="n">8</span>灰度开关与降级</h2>
+
+<pre><code>// 环境变量（ai-service 现有约定：直接读 process.env）
+INTENT_ROUTING_ENABLED=false        // 默认关。未配置 agent 时不能开，否则全部路由到 general
+INTENT_MODEL=deepseek-v4-flash      // 分类器模型，可换
+INTENT_TIMEOUT_MS=1200              // 分类超时</code></pre>
+
+<table>
+  <tr><th style="width:28%">故障场景</th><th style="width:26%">表现</th><th>降级行为</th></tr>
+  <tr><td>分类器模型不可用</td><td><code>chat()</code> 抛错</td><td>catch → <code>general</code>，对话不中断</td></tr>
+  <tr><td>分类超时（&gt;1.2s）</td><td>Promise.race reject</td><td>→ <code>general</code>，首字延迟不受影响</td></tr>
+  <tr><td>模型吐非法 agentId</td><td>不在 candidates</td><td>→ <code>general</code></td></tr>
+  <tr><td><code>agent_id</code> 列未加</td><td>SQL 报错</td><td><b>开关关闭时完全不触碰该列</b>，安全</td></tr>
+  <tr><td>registry 里没有 general</td><td>candidates 不含兜底</td><td><b>启动期自检告警</b>，管理员必须先建 general agent</td></tr>
+</table>
+
+<div class="callout ok">
+  <span class="t">为什么默认关闭</span>
+  意图路由<b>强依赖 admin 后台里那 6 个 agent 已配置并 publish</b>。
+  在 agent 还没配好时开开关，结果是所有输入都落 <code>general</code>（甚至报错）—— 比不开更糟。
+  建议开关与「agent 配置完成」绑定上线。
+</div>
+
+<h2><span class="n">9</span>测试用例</h2>
+<p class="sub">分类器是纯函数 + 可 mock 的 client，这层要单测全覆盖；LLM 分支用 mock。</p>
+
+<table>
+  <tr><th style="width:34%">输入</th><th style="width:16%">期望 agent</th><th style="width:14%">期望 via</th><th>说明 / 易错点</th></tr>
+  <tr><td><code>帮我把这段翻成英文</code></td><td>translate</td><td>rule</td><td>规则命中</td></tr>
+  <tr><td><code>@星座 我明天运势如何</code></td><td>horoscope</td><td>explicit</td><td><code>@</code> 前缀最高优先级</td></tr>
+  <tr><td><code>在吗</code></td><td>general</td><td>llm / fallback</td><td><b>短输入必须兜底</b>，不能硬塞某个专家</td></tr>
+  <tr><td><code>嗯</code> / <code>？？？</code></td><td>general</td><td>fallback</td><td>同上</td></tr>
+  <tr><td>（已锁定 translate）<code>那用日语呢</code></td><td>translate</td><td><b>locked</b></td><td>追问<b>不得</b>切走 —— 核心用例</td></tr>
+  <tr><td>（已锁定 baike）<code>顺便帮我翻一下这个</code></td><td>translate</td><td>rule + switched</td><td>高置信规则允许切换</td></tr>
+  <tr><td><code>今天心情有点糟</code></td><td>emotion</td><td>rule</td><td>情感优先级应高于 baike</td></tr>
+  <tr><td><code>美元兑人民币多少</code></td><td>tool</td><td>rule / llm</td><td>需实时数据</td></tr>
+  <tr><td>（mock 模型超时）</td><td>general</td><td>fallback</td><td>超时不得阻塞主对话</td></tr>
+  <tr><td>（mock 返回 <code>{"agentId":"不存在的"}</code>）</td><td>general</td><td>fallback</td><td>幻觉 agentId 必须丢弃</td></tr>
+  <tr><td>（mock 返回带 ```json 围栏的输出）</td><td>baike</td><td>llm</td><td>围栏必须能解析</td></tr>
+  <tr><td>老调用 <code>agentId:'contract-risk'</code></td><td>contract-risk</td><td>explicit</td><td><b>向后兼容回归</b></td></tr>
+</table>
+
+<h2><span class="n">10</span>验收清单</h2>
+<ul>
+  <li>✅ <code>agentId</code> 省略时，SSE <b>第一个</b>事件是 <code>intent</code></li>
+  <li>✅ 同一 conversationId 连续追问，<code>intent.via</code> 为 <code>locked</code> 且 agentId 不变</li>
+  <li>✅ <code>agent_log</code> 里 <code>agent_id</code> 是具体 agent，<b>不是 'auto'</b></li>
+  <li>✅ 埋点 <code>system_prompt</code> 非空（验证第 7 节第 ③ 点改对了）</li>
+  <li>✅ 分类器模型调用耗时 P95 &lt; 400ms；整体首字延迟增加 &lt; 300ms</li>
+  <li>✅ 关掉 <code>INTENT_ROUTING_ENABLED</code>，行为与改动前完全一致</li>
+  <li>✅ admin 后台下线某个 agent 后，<code>candidates</code> 同步移除，不再路由到它</li>
+</ul>
+
+<h2><span class="n">11</span>未决 / 需要你拍板</h2>
+<table>
+  <tr><th style="width:34%">问题</th><th style="width:14%">优先级</th><th>说明</th></tr>
+  <tr><td>6 个 agent 的配置与 prompt 由谁写</td><td><span class="tag t-p0">P0</span></td><td>代码只提供路由，agent 内容要在 admin 后台配。这是上线前置</td></tr>
+  <tr><td>星座时运的合规口径</td><td><span class="tag t-p0">P0</span></td><td>命理/占卜类在生成式 AI 备案与内容安全口径上敏感，建议 prompt 内置免责声明</td></tr>
+  <tr><td>前端是否展示 agent 徽标 + 手动切换</td><td><span class="tag t-p1">P1</span></td><td>成本极低但决定体验下限（路由错了用户能自救）</td></tr>
+  <tr><td><code>intent_history</code> 是否写入 agent_log</td><td><span class="tag t-p2">P2</span></td><td>便于回溯，但会增大日志体积</td></tr>
+  <tr><td>分类器是否要 A/B 不同模型</td><td><span class="tag t-p2">P2</span></td><td>先上 flash，跑两周看误判率再决定</td></tr>
+</table>
+
+<footer>
+  关联文档：多Agent意图路由-架构设计.html（架构层）·
+  apps/kedou-ai-minigram/docs/实现方案-三Tab骨架.html（小程序侧）<br>
+  代码基线：<code>~/web_system_release</code> · servers/ai-service · packages/agent-core · migrations/
+</footer>
+
+</div>
+</body>
+</html>
