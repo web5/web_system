@@ -12,6 +12,7 @@ import { EventEmitter } from 'events';
 import { spawn, exec, execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { Client } from 'ssh2';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
@@ -272,6 +273,10 @@ export class DeployService {
     if (!input?.moduleKey?.trim()) throw new Error('部署失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('部署失败: env 必填');
     if (!input?.versionTag?.trim()) throw new Error('部署失败: versionTag 必填');
+    // 顺序（2026-09-15 修正）：**先落地生效，再改指针** ——
+    // 落地失败时指针保持原值，不会出现「指针指向没生效的版本」这种撕裂状态。
+    await this.applyBackendVersion(input);
+
     await this.deploymentRepo.upsert(
       {
         envId: input.env,
@@ -284,8 +289,6 @@ export class DeployService {
       ['envId', 'moduleKey'],
     );
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
-    // 后台模块：只改指针不生效（服务跑的是 servers/<dir>/dist）→ 还要「落地 + 重启」
-    await this.applyBackendVersion(input);
     return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag };
   }
 
@@ -299,7 +302,7 @@ export class DeployService {
    * 采用「复制」而不是「移动」：版本目录保留，回滚时可再次部署旧版本。
    * 旧 dist 先备份为 `dist.bak-<ts>`（只留最近 3 份），失败时可手工回滚。
    *
-   * ⚠️ 当前只实现 **local（本机）**；dev / prod 需要远程通道（scp + 远端 pm2），暂只改指针。
+   * 本机（local）直接 cp；远程（dev / prod）走 SSH：打包 → sftp 上传 → 远端换 dist → pm2 重启。
    */
   private async applyBackendVersion(input: {
     moduleKey: string;
@@ -315,14 +318,13 @@ export class DeployService {
     }
     if (!mod || mod.type !== 'backend') return;
 
+    const home = process.env.HOME || '';
     if (input.env !== 'local') {
-      this.logger.warn(
-        `后台模块 ${input.moduleKey} 在 ${input.env} 的「落地 + 重启」需要远程通道，暂未实现（本次只改指针）`,
-      );
+      // 远程（dev / prod）：版本目录在**远端**（由远程投递流水线放好），走 SSH 换 dist + 重启
+      await this.applyBackendRemote(input, mod);
       return;
     }
 
-    const home = process.env.HOME || '';
     const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
     const dir = mod.dir || input.moduleKey;
     const src = path.join(ws, 'servers', dir, input.versionTag);
@@ -905,6 +907,129 @@ export class DeployService {
       this.logger.warn(`读取 modules.json 失败: ${e.message}`);
       return [];
     }
+  }
+
+  /**
+   * 远程（dev / prod）后台模块的部署生效（T1）：
+   *   ① 本地把版本目录打包 → ② sftp 上传远端 /tmp →
+   *   ③ 远端备份旧 dist → 解包到 dist → ④ 远端 pm2 重启（候选名回退）
+   *
+   * 任一步失败：远端**恢复备份**并抛错（不丢现场）；因为 `deployVersion` 是先落地后改指针，
+   * 抛错时指针不会变，整体保持"未部署"状态。
+   */
+  private async applyBackendRemote(
+    input: { moduleKey: string; env: string; versionTag: string; operator?: string },
+    mod: { dir?: string; pm2?: string },
+  ): Promise<void> {
+    const home = process.env.HOME || '';
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = mod.dir || input.moduleKey;
+    const src = path.join(ws, 'servers', dir, input.versionTag);
+    if (!fs.existsSync(src)) {
+      throw new Error(`部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线）`);
+    }
+
+    const tgz = path.join(os.tmpdir(), `deploy-${input.moduleKey}-${Date.now()}.tar.gz`);
+    execSync(`tar czf "${tgz}" -C "${src}" .`, { stdio: 'ignore' });
+
+    const sshConfig = await this.getSshConfig(input.env);
+    const remoteDir = `${this.getWebSystemDir()}/servers/${dir}`;
+    const remoteTmp = `/tmp/${path.basename(tgz)}`;
+    const stamp = Date.now();
+    const cands = Array.from(
+      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
+    );
+    const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
+    const cmd =
+      `set -e; mkdir -p '${remoteDir}'; ` +
+      `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
+      `mkdir -p '${remoteDir}/dist'; tar xzf '${remoteTmp}' -C '${remoteDir}/dist'; rm -f '${remoteTmp}'; ` +
+      `(${pm2Chain}) || echo "[warn] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）"`;
+
+    try {
+      await this.sshUpload(sshConfig, tgz, remoteTmp);
+      await this.sshRun(sshConfig, cmd, input.env);
+      this.logger.log(`远程落地完成: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
+    } catch (e) {
+      try {
+        await this.sshRun(
+          sshConfig,
+          `if [ ! -d '${remoteDir}/dist' ] && [ -d '${remoteDir}/dist.bak-${stamp}' ]; then mv '${remoteDir}/dist.bak-${stamp}' '${remoteDir}/dist'; fi`,
+          input.env,
+        );
+      } catch {
+        /* 恢复失败也只能告警：现场信息更重要 */
+      }
+      throw new Error(`远程部署失败（${input.env}）：${(e as Error).message}`);
+    } finally {
+      try {
+        fs.rmSync(tgz, { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** ssh2：sftp 上传单个文件 */
+  private sshUpload(sshConfig: any, localFile: string, remoteFile: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const client = new Client();
+      const done = (err?: Error) => {
+        try {
+          client.end();
+        } catch {
+          /* ignore */
+        }
+        err ? reject(err) : resolve();
+      };
+      client.on('ready', () => {
+        client.sftp((err, sftp) => {
+          if (err) return done(new Error(`SFTP 失败: ${err.message}`));
+          sftp.fastPut(localFile, remoteFile, (e: any) =>
+            done(e ? new Error(`上传失败: ${e.message}`) : undefined),
+          );
+        });
+      });
+      client.on('error', (e: Error) => done(new Error(`SSH 连接失败: ${e.message}`)));
+      client.on('timeout', () => done(new Error('SSH 连接超时')));
+      client.connect({ ...sshConfig, readyTimeout: 15000 });
+    });
+  }
+
+  /** ssh2：执行一条远程命令（收集 stdout / stderr，非 0 退出码即失败） */
+  private sshRun(sshConfig: any, cmd: string, tag: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const client = new Client();
+      const done = (err?: Error, out?: string) => {
+        try {
+          client.end();
+        } catch {
+          /* ignore */
+        }
+        err ? reject(err) : resolve(out || '');
+      };
+      client.on('ready', () => {
+        client.exec(cmd, (err, stream) => {
+          if (err) return done(new Error(`远程执行失败: ${err.message}`));
+          let out = '';
+          let errOut = '';
+          stream.on('data', (d: Buffer) => {
+            out += d.toString();
+          });
+          stream.stderr.on('data', (d: Buffer) => {
+            errOut += d.toString();
+          });
+          stream.on('close', (code: number) => {
+            if (code !== 0) return done(new Error(`远程命令退出码 ${code}: ${(errOut || out).trim()}`));
+            if (errOut.trim()) this.logger.warn(`[${tag}] 远程 stderr: ${errOut.trim()}`);
+            done(undefined, out);
+          });
+        });
+      });
+      client.on('error', (e: Error) => done(new Error(`SSH 连接失败: ${e.message}`)));
+      client.on('timeout', () => done(new Error('SSH 连接超时')));
+      client.connect({ ...sshConfig, readyTimeout: 15000 });
+    });
   }
 
   /**
