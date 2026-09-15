@@ -214,22 +214,24 @@ describe('isWritableStageKey（stage_commands 可写判定）', () => {
   });
 });
 
-describe('isV5NodesEnabled（flag，缺省 off）', () => {
+describe('isV5NodesEnabled（flag，缺省 on）', () => {
   const old = process.env.PIPELINE_V5_NODES;
   afterEach(() => {
     if (old === undefined) delete process.env.PIPELINE_V5_NODES;
     else process.env.PIPELINE_V5_NODES = old;
   });
 
-  it('缺省/off/On 大小写不敏感；on 才启用', () => {
+  it('缺省 = 开启（终态即 shell/approval）；只有显式 off/false/0/no 才回退 legacy', () => {
     delete process.env.PIPELINE_V5_NODES;
-    expect(isV5NodesEnabled()).toBe(false);
-    process.env.PIPELINE_V5_NODES = 'off';
-    expect(isV5NodesEnabled()).toBe(false);
+    expect(isV5NodesEnabled()).toBe(true);
     process.env.PIPELINE_V5_NODES = 'on';
     expect(isV5NodesEnabled()).toBe(true);
     process.env.PIPELINE_V5_NODES = 'ON';
     expect(isV5NodesEnabled()).toBe(true);
+    for (const off of ['off', 'OFF', 'false', '0', 'no']) {
+      process.env.PIPELINE_V5_NODES = off;
+      expect(isV5NodesEnabled()).toBe(false);
+    }
   });
 });
 

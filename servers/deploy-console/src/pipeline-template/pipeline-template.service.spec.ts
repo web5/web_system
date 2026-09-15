@@ -215,8 +215,8 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(created.nodes.map((n: any) => n.key)).toEqual(['git', 'build', 'version', 'pointer']);
     });
 
-    it('flag=off（缺省）：create 忽略 nodes（nodes=null，走 legacy）', async () => {
-      delete process.env.PIPELINE_V5_NODES;
+    it('flag 显式 off：create 忽略 nodes（nodes=null，走 legacy）', async () => {
+      process.env.PIPELINE_V5_NODES = 'off';
       await service.create({ name: 'legacy线', nodes: v5nodes() as any });
       const created = repo.create.mock.calls[0][0];
       expect(created.nodes).toBeNull();
@@ -244,9 +244,9 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(updated.nodes!.length).toBe(4);
     });
 
-    it('flag=off：update 忽略 nodes（保持原值 undefined）', async () => {
+    it('flag 显式 off：update 忽略 nodes（保持原值 undefined）', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
-      delete process.env.PIPELINE_V5_NODES;
+      process.env.PIPELINE_V5_NODES = 'off';
       const ignored = await service.update('g-default', { nodes: v5nodes() as any });
       expect(ignored.nodes).toBeUndefined(); // 未触碰，保持原值
     });
@@ -306,7 +306,7 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(updated.nodes!.some((n: any) => n.key === 'upload')).toBe(false); // steps 已裁掉 upload
     });
 
-    it('v5 off：旧模板 update 不产生 nodes（nodes 保持 null）', async () => {
+    it('v5 显式 off：旧模板 update 不产生 nodes（nodes 保持 null）', async () => {
       repo.findOne.mockResolvedValue({
         id: 'legacy-2',
         moduleKey: GLOBAL_TEMPLATE,
@@ -320,7 +320,7 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
         builtin: false,
         nodes: null,
       });
-      delete process.env.PIPELINE_V5_NODES;
+      process.env.PIPELINE_V5_NODES = 'off';
       const updated = await service.update('legacy-2', { description: 'v4 下只改说明' });
       expect(updated.nodes).toBeNull();
     });

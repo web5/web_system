@@ -187,7 +187,11 @@ export function normalizeNodes(
 
 /** v5 nodes 模式是否开启（缺省 off = legacy 9 阶段路径） */
 export function isV5NodesEnabled(): boolean {
-  return (process.env.PIPELINE_V5_NODES ?? 'off').toLowerCase() === 'on';
+  // 2026-09-15：**默认开启**（终态就是 shell/approval 节点）。
+  // 原来缺省是 off —— 照 .env.example 起的新环境会建出 nodes=null 的流水线
+  // （流程画布空白、只能靠 legacy steps 兜底）。现在只有显式写 off/false/0 才回退 legacy。
+  const v = (process.env.PIPELINE_V5_NODES ?? 'on').trim().toLowerCase();
+  return !['off', 'false', '0', 'no'].includes(v);
 }
 
 /**
