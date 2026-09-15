@@ -304,6 +304,39 @@ export class DeployService {
    *
    * 本机（local）直接 cp；远程（dev / prod）走 SSH：打包 → sftp 上传 → 远端换 dist → pm2 重启。
    */
+  /**
+   * 产物可用性守卫（P0，2026-09-15）。
+   *
+   * 背景：发布流水线的 build 节点产出到 `BUILD_OUTPUT_DIR`，投递脚本再拷它进版本目录；
+   * 这个链路**任何一环静默失败**（典型：tsc 增量编译
+   * 判定"已是最新"只写 `tsconfig.tsbuildinfo`、不产出 JS）都会得到一个存在但没内容的版本目录。
+   * 以前 `applyBackendVersion` 只判 `existsSync`，于是把空壳落到 `dist` → 服务启动即缺入口文件。
+   *
+   * 约定：**宁可不落地，也不要把坏产物落进去**（旧 dist 还在，服务不会因此挂掉）。
+   */
+  private assertArtifactUsable(src: string, versionTag: string): void {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(src);
+    } catch {
+      throw new Error(`部署失败：版本目录不可读 ${src}（版本 ${versionTag}）`);
+    }
+    if (!entries.length) {
+      throw new Error(
+        `部署失败：版本目录是空的 ${src}（版本 ${versionTag}）—— 构建产物没进版本目录，` +
+          `先跑该模块的发布流水线确认 build 节点产出（排查见 specs/deploy-console/gateway-and-shell-versioned-release.md §6）`,
+      );
+    }
+    // 只有 tsbuildinfo = tsc 增量编译"自认为最新"但实际没产出 JS 的典型症状，单独给提示
+    const meaningful = entries.filter((e) => !e.endsWith('.tsbuildinfo'));
+    if (!meaningful.length) {
+      throw new Error(
+        `部署失败：版本目录里只有 ${entries.join(' / ')}，没有真正的构建产物（${src}）；` +
+          `典型原因是 tsc 增量编译判定"已是最新"（incremental + dist 被清理过）—— 清掉 tsconfig.tsbuildinfo 后重跑构建`,
+      );
+    }
+  }
+
   private async applyBackendVersion(input: {
     moduleKey: string;
     env: string;
@@ -342,6 +375,11 @@ export class DeployService {
       this.restartPm2(mod, input.moduleKey, ws);
       return;
     }
+
+    // 产物守卫（P0，2026-09-15）：**存在 ≠ 有内容**。
+    // 实测事故：后台模块版本目录里只有 tsconfig.tsbuildinfo（tsc incremental 判定"已是最新"→ 没产出 JS），
+    // 旧逻辑照样把这份空壳 cp 到 dist → 服务起来后入口文件缺失直接变砖。这里在落地前先把门。
+    this.assertArtifactUsable(src, input.versionTag);
 
     // 备份旧 dist（保留最近 3 份）
     if (fs.existsSync(dst)) {
@@ -1018,6 +1056,8 @@ export class DeployService {
     if (!fs.existsSync(src)) {
       throw new Error(`部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线）`);
     }
+    // 同上：远端也是「存在 ≠ 有内容」，打包前先守卫，别把空目录 tar 到远端 dist
+    this.assertArtifactUsable(src, input.versionTag);
 
     const tgz = path.join(os.tmpdir(), `deploy-${input.moduleKey}-${Date.now()}.tar.gz`);
     execSync(`tar czf "${tgz}" -C "${src}" .`, { stdio: 'ignore' });

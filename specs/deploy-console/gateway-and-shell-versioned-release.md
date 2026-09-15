@@ -156,19 +156,23 @@ ssh <prod-host> 'ls /data/web_system/servers/gateway/public/static/modules/shell
 
 ## 6. 阻塞项 P0：后台构建产物没进版本目录（必须先修）
 
-**现象**（2026-09-15 实测）：`mcp-gateway` 的版本目录里**只有 `tsconfig.tsbuildinfo`**，没有编译产物；
-回滚到该版本后 `servers/mcp-gateway/dist/main.js` 消失 → 服务变砖（已人工恢复）。
+**根因已定位（2026-09-15）**：`dist` 曾被清理过只剩 `tsconfig.tsbuildinfo`，而 `mcp-gateway/tsconfig.json`
+开了 `"incremental": true` → 第二次 `tsc` 读到 tsbuildinfo 判定"已是最新"，**只更新 tsbuildinfo、不产出 JS**。
+现场证据：`~/web_system_release/servers/mcp-gateway/dist.bak-1789481803569/` 里只有 `tsconfig.tsbuildinfo`。
+相关背景：`BUILD_OUTPUT_DIR = <ws>/servers/<dir>/dist`（`pipeline.service.ts:248`），即**假定"就地构建"**。
 
-**影响**：方案 A 的 ③「版本目录 → dist」直接依赖产物在版本目录里 —— **此 bug 不修，gateway 版本化等于埋雷**。
+**已落地的保护（P0-1，防止把坏产物落地 / 投成版本目录）**：
 
-**排查路径**（次日第一步）：
+| 位置 | 保护 |
+|---|---|
+| `deploy.service.ts:assertArtifactUsable()` | 落地前校验：目录不可读 / 为空 / **只有 tsbuildinfo** → 直接报错，**不动现有 dist、不改指针**（宁可不落地，也不变砖） |
+| `deploy.service.ts` 的远程分支 `applyBackendRemote` | 打包前同样校验，不把空目录 tar 到远端 |
+| `p5...mjs` 的四段投递脚本 | `$SRC` 非空断言（本机/远端 × 版本式/overlay），源头拒绝把空产物投成版本目录 |
+| `deploy-artifact-guard.spec.ts` | 4 条测试：空目录 / 只有 tsbuildinfo / 有真产物 / **回滚同样受保护** |
 
-1. 流水线 build 节点的命令与 cwd：`p5...mjs` 的 `buildOf(mod.key)`（后台 = `npx tsc -p tsconfig.json`）；
-2. `BUILD_OUTPUT_DIR` 由谁注入、指向哪里（release 脚本用 `${BUILD_OUTPUT_DIR}` 作为 `$SRC`）；
-3. 对比 `servers/gateway/tsconfig.json`（`outDir: ./dist`）与 `servers/mcp-gateway/tsconfig.json` 的
-   `outDir` / `tsBuildInfoFile` —— 怀疑产物落在别处或 tsc 因 incremental 判定"已是最新"而未输出；
-4. 结论落到代码：**构建后断言产物非空**（`$SRC` 至少含入口文件），空则 fail-fast —— 这是 §6 的
-   **最小保护**，也是之前提过的"落地前校验产物非空"。
+**仍未解决（真正的根因修复，P0-2）**：tsc 增量编译为什么在 dist 被清理后不重新产出 ——
+候选处置：① 构建前清理 `tsconfig.tsbuildinfo`；② 后台流水线关闭 incremental；
+③ `BUILD_OUTPUT_DIR` 改为按节点 `stage_command` 显式声明（不再假定就地构建）。
 
 ---
 
