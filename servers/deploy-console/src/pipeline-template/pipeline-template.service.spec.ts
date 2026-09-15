@@ -93,26 +93,38 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
     defaultTarget: 'auto',
   });
 
-  describe('ensureDefault（全局默认模板）', () => {
-    it('不存在时创建 moduleKey=* 的 builtin 默认', async () => {
-      const tpl = await service.ensureDefault();
-      expect(tpl.moduleKey).toBe(GLOBAL_TEMPLATE);
-      expect(tpl.builtin).toBe(true);
+  describe('findGlobal（全局流水线：只查不建）', () => {
+    it('不存在时返回 null，且不写库（不再懒建内置「默认」）', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.findGlobal()).resolves.toBeNull();
+      expect(repo.save).not.toHaveBeenCalled();
     });
 
-    it('已存在时直接返回（幂等）', async () => {
+    it('已存在时直接返回该条', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
-      const tpl = await service.ensureDefault();
-      expect(tpl.id).toBe('g-default');
+      const tpl = await service.findGlobal();
+      expect(tpl?.id).toBe('g-default');
       expect(repo.save).not.toHaveBeenCalled();
     });
   });
 
   describe('resolveForSubmit', () => {
-    it('不传模板 → 全局默认', async () => {
+    it('不传模板 → 全局流水线', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
       const tpl = await service.resolveForSubmit('auth-service');
       expect(tpl.moduleKey).toBe(GLOBAL_TEMPLATE);
+    });
+
+    it('不传模板且没有全局流水线 → 明确报错（不再懒建后兜底）', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.resolveForSubmit('auth-service')).rejects.toThrow(
+        /未指定流水线，且当前没有全局默认流水线/,
+      );
+    });
+
+    it('不传模板且全局流水线已停用 → 拒绝', async () => {
+      repo.findOne.mockResolvedValue({ ...globalDefault(), enabled: false });
+      await expect(service.resolveForSubmit('auth-service')).rejects.toThrow(BadRequestException);
     });
 
     it('显式全局模板可用于任意模块', async () => {
