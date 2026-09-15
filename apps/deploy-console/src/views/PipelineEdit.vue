@@ -685,9 +685,23 @@ onMounted(() => { void load() })
               />
             </div>
             <!--
-              节点「策略」（optional / watchdog）先不上（用户 2026-09-15：小特性后续有需要再加）——
-              已配过的值仍在节点数据里保留，只是不给 UI 入口。
+              watchdog（失败自动回滚锚点）：用户 2026-09-15 决定补回 UI。
+              语义：只有标了 watchdog 的节点失败才会触发「回滚到上一版本」；
+              未标任何节点 = 永不自动回滚。全局至多一个（打开新的会清掉旧的）。
+              optional 仍未开放（保留在数据里，不给 UI 入口）。
             -->
+            <div v-if="isShellNode(selectedNode)" class="config-field" style="min-width: 300px;">
+              <label>失败自动回滚锚点（watchdog）</label>
+              <div class="row" style="align-items: center; gap: 8px;">
+                <a-switch
+                  :checked="!!selectedNode.watchdog"
+                  @change="(v: any) => toggleWatchdog(selectedNode!.key, !!v)"
+                />
+                <span class="muted-text">
+                  {{ selectedNode.watchdog ? '本节点失败 → 回滚上一版本' : '未标记（该流水线不会自动回滚）' }}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div v-if="isCreate" class="empty-hint" style="margin-top: 12px;">
