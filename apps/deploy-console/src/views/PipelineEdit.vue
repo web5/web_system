@@ -16,6 +16,8 @@ import {
 import UserSelect from '@web-system/ui/components/UserSelect.vue'
 import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
+import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
+import VarReferenceTable from '@/components/pipeline/VarReferenceTable.vue'
 import { isShellNode, nodeDisplayName } from '@/components/pipeline/pipeline.stages'
 
 /**
@@ -33,6 +35,8 @@ const isCreate = computed(() => route.name === 'PipelineEditCreate')
 const tplId = computed(() => (isCreate.value ? '' : String(route.params.id || '')))
 
 const tpl = ref<PipelineTemplate | null>(null)
+/** 编辑页当前 Tab：base=基本信息 / flow=流程编排 / params=参数 / vars=变量 */
+const pageTab = ref('base')
 const loading = ref(true)
 const saving = ref(false)
 const dirty = ref(false)
@@ -104,9 +108,6 @@ async function saveNodeFromDrawer() {
 
 // ── 变量（本条流水线）──
 const vars = ref<PipelineVar[]>([])
-const varForm = ref({ id: '', key: '', value: '', isSecret: false, description: '' })
-const varSaving = ref(false)
-const editingVar = computed(() => !!varForm.value.id)
 
 /**
  * 默认节点序列（新建态）：拉取代码 → 构建 → 发布确认 → 发布
@@ -369,6 +370,31 @@ function nodesError(): string {
   return ''
 }
 
+/**
+ * 新建时选的模块类型（前端 / 后台）—— 列表页选择后带在 query 上，
+ * 决定构建节点的初始脚本（用户 2026-09-15 原型：预填，可改）。
+ */
+const moduleType = computed(() => {
+  const q = String(route.query.moduleType || '')
+  return q === 'fe' ? 'fe' : q === 'be' ? 'be' : ''
+})
+
+function buildScriptFor(t: string) {
+  return t === 'fe'
+    ? 'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'
+    : 'set -euo pipefail\ncd "${RELEASE_DIR}"\nnpm ci\nnpx tsc -p tsconfig.json\necho \'{"artifactPath":"dist/"}\' > "$WS_RESULT_FILE"'
+}
+
+async function prefillBuildScript(id: string) {
+  const t = moduleType.value
+  if (!t) return
+  try {
+    await pipelineStepApi.save(id, 'build', { command: buildScriptFor(t), timeoutSec: 900 })
+  } catch {
+    // 预填失败不阻塞创建（用户可自己在节点抽屉里改脚本）
+  }
+}
+
 async function save() {
   if (!metaDraft.value.name.trim()) { message.warning('流水线名必填'); return }
   if (isCreate.value && !metaDraft.value.key.trim()) { message.warning('流水线 key 必填'); return }
@@ -393,6 +419,8 @@ async function save() {
         key: metaDraft.value.key,
         moduleKey: metaDraft.value.moduleKey,
       } as any)
+      // 按「前端 / 后台」预填构建节点脚本（用户 2026-09-15：新建时选类型 → 初始流水线带出构建命令）
+      await prefillBuildScript(created.id)
       dirty.value = false
       message.success('流水线已创建，key 已锁定')
       router.replace({ name: 'PipelineEdit', params: { id: created.id } })
@@ -462,82 +490,6 @@ async function loadVars() {
   }
 }
 
-function resetVarForm() {
-  varForm.value = { id: '', key: '', value: '', isSecret: false, description: '' }
-}
-
-function editVar(v: PipelineVar) {
-  varForm.value = {
-    id: v.id,
-    key: v.key,
-    value: '',
-    isSecret: !!v.isSecret,
-    description: v.description || '',
-  }
-}
-
-async function submitVar() {
-  const f = varForm.value
-  if (!f.key.trim()) { message.warning('变量键必填'); return }
-  varSaving.value = true
-  try {
-    if (f.id) {
-      await pipelineVarApi.update(f.id, {
-        key: f.key.trim(),
-        // 密钥留空 = 不更新（后端语义）
-        ...(f.value ? { value: f.value } : {}),
-        isSecret: f.isSecret,
-        description: f.description,
-      })
-    } else {
-      await pipelineVarApi.create(tplId.value, {
-        key: f.key.trim(),
-        value: f.value,
-        isSecret: f.isSecret,
-        description: f.description,
-      })
-    }
-    resetVarForm()
-    await loadVars()
-    message.success('变量已保存')
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存变量失败')
-  } finally {
-    varSaving.value = false
-  }
-}
-
-function removeVar(v: PipelineVar) {
-  Modal.confirm({
-    title: `删除变量「${v.key}」`,
-    content: '删除后节点脚本里的 ${' + v.key + '} 会取不到值。确认删除？',
-    okText: '确认删除',
-    okType: 'danger',
-    onOk: async () => {
-      try {
-        await pipelineVarApi.remove(v.id)
-        await loadVars()
-        message.success('变量已删除')
-      } catch (e: any) {
-        message.error(e?.response?.data?.message || '删除失败')
-      }
-    },
-  })
-}
-
-// ── 参数（只读，写脚本时查阅）──
-/** 平台注入的内置变量（引擎侧固定注入，不可改） */
-const BUILTIN_VARS = [
-  { key: 'RELEASE_DIR', desc: '发布根目录（目标机上的代码根）' },
-  { key: 'MODULE_KEY', desc: '当前模块 key' },
-  { key: 'MODULE_DIR', desc: '模块在仓库里的目录名' },
-  { key: 'MODULE_TYPE', desc: '模块类型（frontend / micro-frontend / backend）' },
-  { key: 'BRANCH', desc: '本次发布的分支' },
-  { key: 'COMMIT_ID', desc: '本次发布的 commit（也是版本号）' },
-  { key: 'STAGE', desc: '当前节点 key' },
-  { key: 'DEPLOY_ENV', desc: '目标环境（local / dev / prod）' },
-]
-
 const insertVar = (v: string) => {
   const item = editingItem.value
   if (!item?.actions?.length) { message.warning('请先添加一个 shell 操作'); return }
@@ -572,98 +524,75 @@ onMounted(() => { void load() })
       </div>
     </div>
 
-    <!-- 基本信息 -->
-    <a-card size="small" title="基本信息" style="margin-bottom: 16px;">
-      <template #extra>
-        <span class="muted-text">命令归属本流水线后，key 是产物命名空间的一段路径</span>
-      </template>
-      <div class="info-grid">
-        <div class="info-field">
-          <label>流水线名</label>
-          <a-input v-model:value="metaDraft.name" style="width: 200px;" @change="dirty = true" />
-        </div>
-        <div class="info-field">
-          <label>流水线 key（slug）</label>
-          <a-input
-            v-model:value="metaDraft.key"
-            :disabled="!isCreate"
-            style="width: 160px;"
-            class="mono-input"
-            @change="dirty = true"
-          />
-          <span v-if="!isCreate" class="muted-text">已保存，不可修改</span>
-        </div>
-        <div class="info-field">
-          <label>适用模块</label>
-          <a-select
-            v-if="isCreate"
-            v-model:value="metaDraft.moduleKey"
-            style="width: 180px;"
-            @change="dirty = true"
-          >
-            <a-select-option value="*">全部模块（全局）</a-select-option>
-            <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
-              {{ m.name }}（{{ m.type }}）
-            </a-select-option>
-          </a-select>
-          <div v-else class="mono-text">
-            {{ metaDraft.moduleKey === '*' ? '全部模块（全局）' : metaDraft.moduleKey }}
+    <!-- 编辑页 Tab（2026-09-15 原型定稿）：基本信息 / 流程编排 / 参数 / 变量 —— 没有「历史记录」（那是实例页的） -->
+    <a-tabs v-model:activeKey="pageTab">
+      <!-- Tab 1：基本信息（只剩身份字段；行为配置都在节点上，编辑态整体锁定） -->
+      <a-tab-pane key="base" tab="基本信息">
+        <a-card size="small">
+          <div class="info-grid">
+            <div class="info-field">
+              <label>流水线名</label>
+              <a-input
+                v-model:value="metaDraft.name"
+                :disabled="!isCreate"
+                style="width: 220px;"
+                @change="dirty = true"
+              />
+            </div>
+            <div class="info-field">
+              <label>流水线 key（slug）{{ isCreate ? ' · 保存后不可修改' : ' · 已保存，不可修改' }}</label>
+              <a-input
+                v-model:value="metaDraft.key"
+                :disabled="!isCreate"
+                style="width: 180px;"
+                class="mono-input"
+                @change="dirty = true"
+              />
+            </div>
+            <div class="info-field">
+              <label>模块</label>
+              <a-select
+                v-model:value="metaDraft.moduleKey"
+                :disabled="!isCreate"
+                style="width: 200px;"
+                @change="dirty = true"
+              >
+                <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
+                  {{ m.name }}（{{ m.key }}）
+                </a-select-option>
+              </a-select>
+            </div>
+            <div class="info-field">
+              <label>环境</label>
+              <a-select
+                v-model:value="metaDraft.env"
+                :disabled="!isCreate"
+                style="width: 180px;"
+                @change="dirty = true"
+              >
+                <a-select-option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}</a-select-option>
+              </a-select>
+            </div>
+            <div class="info-field">
+              <label>启用</label>
+              <a-switch v-model:checked="metaDraft.enabled" @change="dirty = true" />
+            </div>
           </div>
-        </div>
-        <div class="info-field">
-          <label>环境</label>
-          <a-select v-model:value="metaDraft.env" style="width: 170px;" @change="dirty = true">
-            <a-select-option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}</a-select-option>
-          </a-select>
-        </div>
-        <div class="info-field">
-          <label>启用</label>
-          <a-switch v-model:checked="metaDraft.enabled" @change="dirty = true" />
-        </div>
-        <div class="info-field">
-          <label>审批</label>
-          <a-radio-group v-model:value="metaDraft.approval" button-style="solid" size="small" @change="dirty = true">
-            <a-radio-button value="inherit">继承环境</a-radio-button>
-            <a-radio-button value="always">始终</a-radio-button>
-            <a-radio-button value="never">从不</a-radio-button>
-          </a-radio-group>
-        </div>
-        <div class="info-field">
-          <label>失败回滚</label>
-          <a-radio-group v-model:value="metaDraft.rollbackOnFailure" button-style="solid" size="small" @change="dirty = true">
-            <a-radio-button value="previous">回滚上一版本</a-radio-button>
-            <a-radio-button value="none">不回滚</a-radio-button>
-          </a-radio-group>
-        </div>
-        <div class="info-field">
-          <label>投递目标</label>
-          <a-radio-group v-model:value="metaDraft.defaultTarget" button-style="solid" size="small" @change="dirty = true">
-            <a-radio-button value="auto">自动</a-radio-button>
-            <a-radio-button value="local">本机</a-radio-button>
-            <a-radio-button value="remote">远程</a-radio-button>
-          </a-radio-group>
-        </div>
-        <div class="info-field" style="min-width: 320px; flex: 1;">
-          <label>审批人（不选 = 所有持权限者）</label>
-          <UserSelect
-            v-model="metaDraft.approvers"
-            :load="loadApprovers"
-            degraded-text="未获取到可审批人名单：任何能登录控制台的人都能审批"
-            placeholder="选择可审批的人"
-            @change="dirty = true"
-          />
-        </div>
-      </div>
-      <a-alert type="info" show-icon style="margin-top: 14px;">
-        <template #message>
-          变量属于本条流水线：写脚本时用 <span class="mono-text">${'{'}KEY{'}'}</span> 引用；
-          点任意节点在右侧抽屉可随时切「变量 / 参数」查键名。
-        </template>
-      </a-alert>
-    </a-card>
+          <a-alert type="info" show-icon style="margin-top: 14px;">
+            <template #message>
+              模块 / 环境决定投递机器：local = 本机，dev / prod = 远程（取「环境管理」的服务器配置，脚本用
+              <span class="mono-text">${'{'}DEPLOY_HOST{'}'}</span>）。
+              <b>审批（审批人 / 超时 / 拒绝后）在「发布确认」节点的抽屉里配置</b>、
+              <b>失败自动回滚在节点上标 watchdog</b> —— 都在流水线各节点里设置，不放在基本信息。
+              <span v-if="!isCreate">编辑态的基本信息（名 / key / 模块 / 环境）锁定不可改。</span>
+            </template>
+          </a-alert>
+        </a-card>
+      </a-tab-pane>
 
-    <!-- 流程编排 -->
-    <a-card size="small" style="margin-bottom: 16px;">
+      <!-- Tab 2：流程编排 -->
+      <a-tab-pane key="flow" tab="流程编排">
+        <a-card size="small">
       <template #title>
         流程编排
         <span class="muted-text" style="margin-left: 8px;">节点可增删、拖拽排序；点节点在右侧抽屉配置脚本</span>
@@ -697,8 +626,28 @@ onMounted(() => { void load() })
       </div>
       <div class="muted-text" style="margin-top: 8px;">
         拉取代码、构建、发布都是普通 shell 节点（脚本可编辑）；审批节点在抽屉里配审批人与超时动作。
+        <b>改动由页头「保存」统一提交</b>（不再有单独的「保存顺序」按钮）。
       </div>
-    </a-card>
+        </a-card>
+      </a-tab-pane>
+
+      <!-- Tab 3：参数（只读查阅，写脚本时对键名） -->
+      <a-tab-pane key="params" tab="参数">
+        <a-card size="small">
+          <VarReferenceTable :vars="vars" />
+        </a-card>
+      </a-tab-pane>
+
+      <!-- Tab 4：变量（本条流水线，可增删改） -->
+      <a-tab-pane key="vars" tab="变量">
+        <a-card size="small">
+          <div v-if="isCreate" class="empty-hint" style="padding: 24px 0; text-align: center;">
+            新建态：先「创建」流水线，再回来配变量
+          </div>
+          <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+        </a-card>
+      </a-tab-pane>
+    </a-tabs>
   </div>
   <div v-else style="padding: 100px; text-align: center;">
     <a-spin size="large" />
@@ -806,98 +755,15 @@ onMounted(() => { void load() })
         </div>
       </a-tab-pane>
 
-      <!-- Tab 2：变量（本条流水线，可增删改） -->
+      <!-- Tab 2：变量（本条流水线，可增删改）—— 与编辑页「变量」Tab 共用一个组件 -->
       <a-tab-pane key="vars" tab="变量">
         <div v-if="isCreate" class="empty-hint">新建态：先「创建」流水线，再配变量</div>
-        <template v-else>
-          <div class="var-form">
-            <a-input v-model:value="varForm.key" placeholder="键（如 PUBLISH_PATH）" style="width: 190px;" size="small" />
-            <a-input
-              v-model:value="varForm.value"
-              :placeholder="editingVar ? '值（留空 = 不更新，密钥不回显）' : '值'"
-              style="width: 240px;"
-              size="small"
-            />
-            <a-input v-model:value="varForm.description" placeholder="说明" style="width: 160px;" size="small" />
-            <a-checkbox v-model:checked="varForm.isSecret">密钥</a-checkbox>
-            <a-button type="primary" size="small" :loading="varSaving" @click="submitVar">
-              {{ editingVar ? '保存' : '添加' }}
-            </a-button>
-            <a-button v-if="editingVar" size="small" @click="resetVarForm">取消</a-button>
-          </div>
-
-          <a-table
-            :data-source="vars"
-            :pagination="false"
-            size="small"
-            row-key="id"
-            style="margin-top: 12px;"
-          >
-            <a-table-column title="键" data-index="key" :width="190">
-              <template #default="{ record }"><span class="mono-text">{{ record.key }}</span></template>
-            </a-table-column>
-            <a-table-column title="值" :width="180">
-              <template #default="{ record }">
-                <span class="mono-text">{{ record.isSecret ? '********' : record.value }}</span>
-              </template>
-            </a-table-column>
-            <a-table-column title="说明" data-index="description" />
-            <a-table-column title="密钥" :width="70">
-              <template #default="{ record }">
-                <a-tag :color="record.isSecret ? 'orange' : 'default'">{{ record.isSecret ? '是' : '否' }}</a-tag>
-              </template>
-            </a-table-column>
-            <a-table-column title="操作" :width="120">
-              <template #default="{ record }">
-                <a @click="editVar(record)">编辑</a>
-                <a-divider type="vertical" />
-                <a style="color: var(--ws-error-500);" @click="removeVar(record)">删除</a>
-              </template>
-            </a-table-column>
-            <template #emptyText>
-              <div class="empty-hint">未定义变量 · 节点脚本里的 ${'{'}KEY{'}'} 会取不到值</div>
-            </template>
-          </a-table>
-          <div class="muted-text" style="margin-top: 10px;">
-            变量属于本条流水线（不单独成页）；密钥只写入不回显，留空保存 = 不更新。
-          </div>
-        </template>
+        <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
       </a-tab-pane>
 
-      <!-- Tab 3：参数（只读，写脚本时查阅） -->
+      <!-- Tab 3：参数（只读，写脚本时查阅）—— 与编辑页「参数」Tab 共用一个组件 -->
       <a-tab-pane key="params" tab="参数">
-        <div class="muted-text" style="margin-bottom: 8px;">
-          注入优先级（后者覆盖前者）：平台内置 → 配置中心 → 流水线变量 → 节点内联
-        </div>
-        <a-table :data-source="BUILTIN_VARS" :pagination="false" size="small" row-key="key">
-          <a-table-column title="内置变量" data-index="key" :width="190">
-            <template #default="{ record }">
-              <span class="var-chip" @click="insertVar('${' + record.key + '}')">{{ record.key }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column title="说明" data-index="desc" />
-        </a-table>
-
-        <div class="t" style="margin: 16px 0 8px; font-weight: 600;">本条流水线的变量</div>
-        <a-table :data-source="vars" :pagination="false" size="small" row-key="id">
-          <a-table-column title="键" data-index="key" :width="190">
-            <template #default="{ record }">
-              <span class="var-chip" @click="insertVar('${' + record.key + '}')">{{ record.key }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column title="当前值" :width="200">
-            <template #default="{ record }">
-              <span class="mono-text">{{ record.isSecret ? '********' : record.value }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column title="说明" data-index="description" />
-          <template #emptyText>
-            <div class="empty-hint">还没有变量 · 去「变量」Tab 添加</div>
-          </template>
-        </a-table>
-        <div class="muted-text" style="margin-top: 10px;">
-          点键名可直接插入到当前节点的脚本末尾（${'{'}KEY{'}'} 形式）。
-        </div>
+        <VarReferenceTable :vars="vars" @pick="insertVar" />
       </a-tab-pane>
     </a-tabs>
 

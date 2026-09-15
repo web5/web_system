@@ -52,6 +52,14 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模块管理' },
       },
       {
+        // 新建模块：独立页（用户 2026-09-15：类型 → 目录 / publicPath / pm2 联动）
+        // 必须排在 modules/:key 之前，否则会被当成一个 key
+        path: 'modules/new',
+        name: 'ModuleCreate',
+        component: () => import('@/views/ModuleEdit.vue'),
+        meta: { title: '新建模块' },
+      },
+      {
         path: 'modules/:key',
         name: 'ModuleDetail',
         component: () => import('@/views/ModuleDetail.vue'),
