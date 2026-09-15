@@ -686,6 +686,15 @@ onMounted(async () => {
 }
 .md-tabbar :deep(.ant-tabs-nav) {
   margin-bottom: 0;
+  /* tab 栏一律居左：antd 的 tabs 内容区是 flex 行，一旦有人往里塞非 a-tab-pane 子元素，
+     它会作为 flex item 抢占宽度、把 nav 挤到中间（历史 bug），这里显式兜底左对齐 */
+  justify-content: flex-start;
+}
+.md-tabbar :deep(.ant-tabs-nav-wrap) {
+  flex: none;
+}
+.md-tabbar :deep(.ant-tabs-nav-list) {
+  margin-right: auto;
 }
 .md-tabbar :deep(.ant-tabs-nav::before) {
   border-bottom: 1px solid var(--ws-border-subtle);
