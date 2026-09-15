@@ -30,7 +30,10 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-        { provide: EnvironmentService, useValue: { get: jest.fn() } },
+        {
+          provide: EnvironmentService,
+          useValue: { get: jest.fn().mockResolvedValue({ publicUrl: '' }), list: jest.fn().mockResolvedValue([]) },
+        },
         { provide: ModuleRegistryService, useValue: { list: jest.fn().mockResolvedValue([]) } },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         {

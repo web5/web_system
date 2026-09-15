@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { ModuleDto } from '../common/dto';
+import { EnvironmentService } from '../environment/environment.service';
 
 /**
  * 模块注册表服务。
@@ -18,6 +19,7 @@ export class ModuleRegistryService implements OnModuleInit {
   constructor(
     @InjectRepository(DeployModuleEntity)
     private readonly moduleRepo: Repository<DeployModuleEntity>,
+    private readonly environmentService: EnvironmentService,
   ) {}
 
   /** 仓库根目录（deploy-console 的上两级） */
@@ -50,6 +52,14 @@ export class ModuleRegistryService implements OnModuleInit {
       );
       await this.moduleRepo.save(rows);
       this.logger.log(`模块注册表种子导入完成: ${rows.length} 个模块`);
+      // 种子模块也要有环境（EnvironmentService.onModuleInit 先于本文件执行，此时模块表为空）
+      for (const m of rows) {
+        try {
+          await this.environmentService.ensureModuleEnvs(m.key);
+        } catch (e: any) {
+          this.logger.warn(`模块 ${m.key} 补建内置环境失败: ${e?.message}`);
+        }
+      }
     } catch (e) {
       this.logger.error(`模块种子导入失败: ${e.message}`);
     }
@@ -68,7 +78,14 @@ export class ModuleRegistryService implements OnModuleInit {
   async create(dto: ModuleDto): Promise<DeployModuleEntity> {
     const exists = await this.moduleRepo.findOne({ where: { key: dto.key } });
     if (exists) throw new Error(`模块 key 已存在: ${dto.key}`);
-    return this.moduleRepo.save(this.moduleRepo.create({ ...dto, builtin: false }));
+    const m = await this.moduleRepo.save(this.moduleRepo.create({ ...dto, builtin: false }));
+    // 环境归属模块（1:N）：新模块立刻补齐 dev/prod 内置环境（Q3），失败不阻断建模块
+    try {
+      await this.environmentService.ensureModuleEnvs(m.key);
+    } catch (e: any) {
+      this.logger.warn(`模块 ${m.key} 补建内置环境失败: ${e?.message}`);
+    }
+    return m;
   }
 
   async update(key: string, dto: Partial<ModuleDto>): Promise<DeployModuleEntity> {
