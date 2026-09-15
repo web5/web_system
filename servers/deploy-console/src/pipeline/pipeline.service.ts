@@ -1731,6 +1731,13 @@ export class PipelineService {
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.templateId),
     });
+    // 平台自调用凭据：发布节点脚本要「调用写版本接口」（脚本里无用户 JWT）
+    // 见 deploy/internal-release.controller.ts —— 走 x-internal-key 内部密钥
+    // 默认地址：console 自身监听端口（PLATFORM_PORT，缺省 6200）
+    const platformPort = this.configService.get<string>('PLATFORM_PORT') || '6200';
+    env.WS_PLATFORM_API =
+      this.configService.get<string>('PLATFORM_API_BASE') || `http://127.0.0.1:${platformPort}/api`;
+    env.WS_INTERNAL_KEY = this.configService.get<string>('INTERNAL_API_KEY') || '';
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
 
