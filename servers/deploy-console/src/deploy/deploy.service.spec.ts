@@ -9,6 +9,10 @@ import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { CommandService } from '../shell/command.service';
 
 /**
  * P0-2 单元测试：recordDeployment 改用原子 upsert，不再产生重复。
@@ -39,6 +43,11 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         {
           provide: StageCommandService,
           useValue: { resolve: jest.fn().mockResolvedValue(null) },
+        },
+        // 后台模块部署「落地 + pm2 重启」依赖（本 spec 不触发，仅满足 DI）
+        {
+          provide: CommandService,
+          useValue: { pm2Bin: jest.fn(() => 'pm2'), exec: jest.fn(() => '') },
         },
       ],
     }).compile();
@@ -78,5 +87,118 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
       startTime: Date.now(),
     });
     expect(deploymentRepo.upsert).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 2026-09-15：后台模块部署必须「落地 + 重启」——
+ * 投递脚本把产物放在 servers/<dir>/<流水线key>/<commit>/（版本目录），
+ * 而服务跑的是 servers/<dir>/dist/。只改指针不生效。
+ */
+describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启）', () => {
+  let service: DeployService;
+  let workspace: string;
+  let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
+  let moduleRegistry: { get: jest.Mock };
+
+  beforeEach(async () => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-be-'));
+    // 版本目录（发布流水线的产物）
+    fs.mkdirSync(path.join(workspace, 'servers/mcp-gateway/mcp-gateway-local/abc1234'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(workspace, 'servers/mcp-gateway/mcp-gateway-local/abc1234/main.js'),
+      '// new',
+    );
+    // 旧 dist
+    fs.mkdirSync(path.join(workspace, 'servers/mcp-gateway/dist'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, 'servers/mcp-gateway/dist/main.js'), '// old');
+
+    commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
+    moduleRegistry = {
+      get: jest.fn().mockResolvedValue({
+        key: 'mcp-gateway',
+        type: 'backend',
+        dir: 'mcp-gateway',
+        pm2: 'web-mcp-gateway',
+      }),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        DeployService,
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
+        },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        { provide: ModuleRegistryService, useValue: moduleRegistry },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: commands },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  it('后台模块：版本目录落到 dist，并重启 pm2', async () => {
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+
+    const dist = path.join(workspace, 'servers/mcp-gateway/dist/main.js');
+    expect(fs.existsSync(dist)).toBe(true);
+    expect(fs.readFileSync(dist, 'utf-8')).toBe('// new');
+    expect(commands.exec).toHaveBeenCalled();
+    expect(String(commands.exec.mock.calls[0][0])).toContain('restart web-mcp-gateway');
+  });
+
+  it('后台模块：旧 dist 先备份（dist.bak-*）', async () => {
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+    const baks = fs
+      .readdirSync(path.join(workspace, 'servers/mcp-gateway'))
+      .filter((f) => f.startsWith('dist.bak-'));
+    expect(baks.length).toBe(1);
+    expect(fs.readFileSync(path.join(workspace, 'servers/mcp-gateway', baks[0], 'main.js'), 'utf-8')).toBe(
+      '// old',
+    );
+  });
+
+  it('后台模块：版本目录不存在 → 报错（不静默成功）', async () => {
+    await expect(
+      service.deployVersion({
+        moduleKey: 'mcp-gateway',
+        env: 'local',
+        versionTag: 'mcp-gateway-local/nope',
+      }),
+    ).rejects.toThrow(/找不到版本目录/);
+  });
+
+  it('前端类：只改指针，不落地/不重启', async () => {
+    moduleRegistry.get.mockResolvedValue({ key: 'admin', type: 'micro-frontend', dir: 'admin' });
+    await service.deployVersion({ moduleKey: 'admin', env: 'local', versionTag: 'admin-local/abc' });
+    expect(commands.exec).not.toHaveBeenCalled();
+  });
+
+  it('后台 + 非 local 环境：暂只改指针（远程通道未实现）', async () => {
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'dev',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+    expect(commands.exec).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(workspace, 'servers/mcp-gateway/dist/main.js'), 'utf-8')).toBe(
+      '// old',
+    );
   });
 });
