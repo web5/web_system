@@ -48,20 +48,32 @@ if (fs.existsSync(ENV_FILE)) {
 const SCRIPTS_DIR = path.join(ROOT, 'servers/deploy-console/src/pipeline/scripts');
 const gitScript = () => fs.readFileSync(path.join(SCRIPTS_DIR, 'git-step.sh'), 'utf8');
 
+/**
+ * 本机投递根目录（**绝对路径**：用户 2026-09-15 要求 PUBLISH_PATH 一律用绝对路径，
+ * 不用 `~` —— 双引号里 `~` 不展开，2026-09-15 事故就是这么把产物投进字面量 `~` 目录的）。
+ */
+const HOME = process.env.HOME || '/root';
+
 const MODULES = [
   {
     key: 'admin',
-    localPath: '~/web_system_release/servers/gateway/public/static/modules/admin',
+    // ⚠️ 末尾的 admin-local 是「产品线段」：gateway manifest 拼的是
+    //    /static/modules/<key>/<current_version>/，而 current_version = "<流水线 key>/<commit>"
+    //    = admin-local/3679b51 → 磁盘目录必须留这一级，否则页面 404。
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/admin/admin-local`,
+    // 远端（dev/prod）沿用既有扁平布局（历史 current_version 形如 default/<commit>），
+    // 暂不加产品线段 —— 远程通道打通前不动，避免和线上指针不一致
     remotePath: '/data/web_system/servers/gateway/public/static/modules/admin',
   },
   {
     key: 'gateway',
-    localPath: '~/web_system_release/servers/gateway',
+    // 后端服务：本机是「就地发布」（目录本身就是服务目录），不按版本分目录
+    localPath: `${HOME}/web_system_release/servers/gateway`,
     remotePath: '/data/web_system/servers/gateway',
   },
   {
     key: 'ai-agent',
-    localPath: '~/web_system_release/servers/ai-agent',
+    localPath: `${HOME}/web_system_release/servers/ai-agent`,
     remotePath: '/data/web_system/servers/ai-agent',
   },
 ];
