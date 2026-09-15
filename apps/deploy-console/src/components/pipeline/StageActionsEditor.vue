@@ -24,10 +24,23 @@ const props = defineProps<{
   item: EditorItem
   /** 只读模式（平台托管节点，如 git）：可查看脚本，不可编辑 */
   readonly?: boolean
+  /**
+   * 精简模式（用户 2026-09-15：操作名 / 类型 / 容错 / 排序先不上）。
+   *
+   * 只暴露「节点的主 shell 脚本 + 超时」，其余收起；但**保存仍整包提交**
+   * `draft`（含平台操作），所以精简模式下编辑脚本不会把「写版本记录」
+   * 这类 service 操作冲掉，只是它们不可编辑、以只读提示列出。
+   */
+  simple?: boolean
 }>()
 
 /** 只读判定：父级显式指定，或该节点被标记为平台托管 */
 const ro = computed(() => !!props.readonly || !!props.item.locked)
+
+/** 精简模式下要编辑的主 shell 操作（通常是第一个 shell 操作） */
+const primaryIdx = computed(() => draft.value.findIndex((a) => a.type === 'shell'))
+/** 精简模式下只读展示的平台操作（写版本 / 切指针 …） */
+const platformActions = computed(() => draft.value.filter((a) => a.type === 'service'))
 
 const emit = defineEmits<{
   /** 保存成功（父级负责刷新 scriptView 与收起编辑器） */
@@ -162,8 +175,8 @@ async function saveDraft() {
     />
 
     <div class="editor-body">
-      <!-- 操作列表 -->
-      <div class="op-list">
+      <!-- 操作列表（精简模式下不出来：操作名/类型/容错/排序先不上） -->
+      <div v-if="!simple" class="op-list">
         <div
           v-for="(a, i) in draft"
           :key="a.id"
@@ -195,7 +208,36 @@ async function saveDraft() {
 
       <!-- 当前操作的编辑区 -->
       <div class="op-editor">
-        <template v-if="draft[actIdx]">
+        <!-- 精简模式：只编主 shell 脚本 + 超时；平台操作只读列出（保存时整包提交，不会丢） -->
+        <template v-if="simple">
+          <template v-if="primaryIdx >= 0">
+            <a-space size="small" style="margin-bottom: 8px;" wrap>
+              <span style="font-size: 12px; color: #999;">超时（秒，留空=不限）</span>
+              <a-input-number
+                v-model:value="draft[primaryIdx].timeoutSec"
+                size="small"
+                :min="1"
+                :disabled="ro"
+                style="width: 96px;"
+              />
+            </a-space>
+            <a-textarea
+              v-model:value="draft[primaryIdx].code"
+              :rows="12"
+              spellcheck="false"
+              :disabled="ro"
+              placeholder="在此编写 shell 脚本，可用 ${KEY} 引用本流水线的变量（抽屉「变量 / 参数」Tab 可查）"
+              style="font-family: monospace; font-size: 12px; background: #1e1e1e; color: #d4d4d4;"
+            />
+          </template>
+          <a-empty v-else description="本节点只有平台操作，没有 shell 脚本" />
+          <div v-if="platformActions.length" class="simple-hint">
+            本节点还包含平台操作（随平台维护，不可编辑）：
+            {{ platformActions.map((a) => a.name || a.tool).join('、') }}
+          </div>
+        </template>
+
+        <template v-else-if="draft[actIdx]">
           <a-space size="small" style="margin-bottom: 8px;" wrap>
             <a-input
               v-model:value="draft[actIdx].name"
@@ -264,6 +306,10 @@ async function saveDraft() {
           <template v-if="ro">
             平台托管节点：脚本随平台代码维护，仅可查看与语法校验。
           </template>
+          <template v-else-if="simple">
+            脚本失败即节点失败；可用 <span style="font-family: monospace;">${'{'}KEY{'}'}</span>
+            引用本流水线变量（右侧抽屉「变量 / 参数」Tab 可查键名）。
+          </template>
           <template v-else>
             操作自上而下顺序执行；标记「容错」的操作失败不中断阶段，其余失败即阶段失败。
             保存以 actions 数组整体提交。
@@ -275,6 +321,11 @@ async function saveDraft() {
 </template>
 
 <style scoped>
+.simple-hint {
+  margin-top: 10px;
+  color: #999;
+  font-size: 12px;
+}
 .editor-head {
   display: flex;
   align-items: center;

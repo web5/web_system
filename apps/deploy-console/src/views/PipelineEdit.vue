@@ -284,11 +284,13 @@ function renameKey(oldKey: string, val: string) {
   void loadNodeScript(k)
 }
 
+/** 策略开关（optional / watchdog）暂不上 UI（用户 2026-09-15），保留函数以便后续接回 */
 function toggleOptional(key: string, on: boolean) {
   const n = nodeOf(key)
   if (n) { n.optional = on; dirty.value = true }
 }
 
+/** 见 toggleOptional：策略 UI 先收起 */
 function toggleWatchdog(key: string, on: boolean) {
   nodeDraft.value.forEach((x) => {
     if (isShellNode(x)) x.watchdog = false
@@ -692,23 +694,14 @@ onMounted(() => { void load() })
                 @change="(e: any) => renameKey(selectedNode!.key, e.target.value)"
               />
             </div>
-            <div class="config-field">
-              <label>策略</label>
-              <a-checkbox
-                v-if="selectedNode.kind === 'shell'"
-                :checked="!!selectedNode.optional"
-                @change="(e: any) => toggleOptional(selectedNode!.key, e.target.checked)"
-              >optional（未配命令时跳过）</a-checkbox>
-              <a-checkbox
-                v-if="selectedNode.kind === 'shell'"
-                :checked="!!selectedNode.watchdog"
-                style="margin-left: 16px;"
-                @change="(e: any) => toggleWatchdog(selectedNode!.key, e.target.checked)"
-              >watchdog（失败自动回滚）</a-checkbox>
-              <span v-if="selectedNode.kind === 'approval'" class="muted-text">
-                审批节点：挂起流水线等人工决议（审批人 / 超时动作）
-              </span>
+            <div v-if="selectedNode.kind === 'approval'" class="config-field">
+              <label>说明</label>
+              <span class="muted-text">审批节点：执行到它挂起流水线等人工决议（审批人 / 超时动作）</span>
             </div>
+            <!--
+              节点「策略」（optional / watchdog）先不上（用户 2026-09-15：小特性后续有需要再加）——
+              已配过的值仍在节点数据里保留，只是不给 UI 入口。
+            -->
           </div>
 
           <div v-if="isCreate" class="empty-hint" style="margin-top: 12px;">
@@ -719,6 +712,7 @@ onMounted(() => { void load() })
               v-if="editingItem"
               :template-id="tplId"
               :item="editingItem"
+              :simple="true"
               @saved="() => { if (selNodeKey) void loadNodeScript(selNodeKey) }"
               @cancel="editingItem = null"
             />
