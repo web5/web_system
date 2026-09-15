@@ -8,17 +8,13 @@ import {
   deployApi,
   pipelineTemplateApi,
   stageCommandApi,
-  pipelineVarApi,
   type PipelineItem,
   type PipelineTemplate,
-  type PipelineVar,
 } from '@/api'
 import dayjs from 'dayjs'
 import BranchSelect from '@/components/BranchSelect.vue'
-// 人员选择器：公共组件（@web-system/ui），admin 与 console 共用同一份实现。
-// 数据源由调用方注入 —— 这里注入「拉可审批人」的加载器。
-import UserSelect from '@web-system/ui/components/UserSelect.vue'
-import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
+// 流水线的编辑 / 新建走独立页面（PipelineEdit），列表页不再有新建/编辑弹窗，
+// 因此这里不再需要 UserSelect（人员选择器已挪到编辑页的「基本信息」里）。
 import {
   statusColor as stageStatusColor,
   statusText as stageStatusText,
@@ -161,177 +157,15 @@ function gotoDetail(t: PipelineTemplate) {
   router.push(`/pipelines/${t.id}`)
 }
 
-// ===== 新建 / 编辑弹窗 =====
-const modal = ref({
-  open: false,
-  editing: null as PipelineTemplate | null,
-  name: '',
-  description: '',
-  /** 归属环境（一个模块默认 local / dev / prod 三条流水线） */
-  env: '',
-  steps: TPL_ALL_KEYS as string[],
-  rollbackOnFailure: 'previous' as string,
-  approval: 'inherit' as string,
-  defaultTarget: 'auto' as string,
-  enabled: true,
-  /** 流水线级审批人（白名单；真正能否审批看权限码 deploy:pipeline:approve） */
-  approvers: [] as string[],
-})
-const saving = ref(false)
-
-/** 人员选择器的数据源：拉「可审批人」（持有 deploy:pipeline:approve 的系统用户） */
-const loadApprovers = async (): Promise<UserSelectLoadResult> => {
-  const r = await pipelineApi.approvers()
-  return { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
-}
-
+// ===== 新建 / 编辑：进独立编辑页（用户 2026-09-15：列表页不再弹窗）=====
 function openCreate() {
-  modal.value = {
-    open: true,
-    editing: null,
-    name: '',
-    description: '',
-    env: environments.value[0]?.id || 'local',
-    steps: [...TPL_ALL_KEYS],
-    rollbackOnFailure: 'previous',
-    approval: 'inherit',
-    defaultTarget: 'auto',
-    enabled: true,
-    approvers: [],
-  }
-  vars.value = []
+  router.push({ name: 'PipelineEditCreate' })
 }
 function openEdit(t: PipelineTemplate) {
-  modal.value = {
-    open: true,
-    editing: t,
-    name: t.name,
-    description: t.description || '',
-    env: t.env || '',
-    steps: t.steps && t.steps.length ? [...t.steps] : [...TPL_ALL_KEYS],
-    rollbackOnFailure: t.rollbackOnFailure ?? 'previous',
-    approval: t.approval,
-    defaultTarget: t.defaultTarget,
-    enabled: t.enabled !== false,
-    approvers: t.approvers ? [...t.approvers] : [],
-  }
-  void loadVars(t.id)
-}
-// ===== 变量（属于本条流水线）=====
-const vars = ref<PipelineVar[]>([])
-const varsLoading = ref(false)
-const varSaving = ref(false)
-const varDrawer = ref({
-  open: false,
-  editing: null as PipelineVar | null,
-  key: '',
-  value: '',
-  isSecret: false,
-  description: '',
-})
-async function loadVars(pipelineId?: string) {
-  if (!pipelineId) {
-    vars.value = []
-    return
-  }
-  varsLoading.value = true
-  try {
-    vars.value = await pipelineVarApi.list(pipelineId)
-  } catch {
-    vars.value = []
-  } finally {
-    varsLoading.value = false
-  }
-}
-function openVarCreate() {
-  varDrawer.value = { open: true, editing: null, key: '', value: '', isSecret: false, description: '' }
-}
-function openVarEdit(v: PipelineVar) {
-  // 密钥不回显明文；留空 = 不更新
-  varDrawer.value = {
-    open: true,
-    editing: v,
-    key: v.key,
-    value: v.isSecret ? '' : v.value,
-    isSecret: v.isSecret,
-    description: v.description || '',
-  }
-}
-async function saveVar() {
-  const d = varDrawer.value
-  const tplId = modal.value.editing?.id
-  if (!tplId) {
-    message.warning('请先保存流水线')
-    return
-  }
-  if (!d.key.trim()) {
-    message.warning('变量键必填')
-    return
-  }
-  varSaving.value = true
-  try {
-    const dto = {
-      key: d.key.trim(),
-      value: d.value,
-      isSecret: d.isSecret,
-      description: d.description.trim() || undefined,
-    }
-    if (d.editing) await pipelineVarApi.update(d.editing.id, dto)
-    else await pipelineVarApi.create(tplId, dto)
-    message.success('变量已保存')
-    varDrawer.value.open = false
-    await loadVars(tplId)
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存变量失败')
-  } finally {
-    varSaving.value = false
-  }
-}
-async function removeVar(v: PipelineVar) {
-  const tplId = modal.value.editing?.id
-  if (!tplId) return
-  try {
-    await pipelineVarApi.remove(v.id)
-    await loadVars(tplId)
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '删除失败')
-  }
+  router.push({ name: 'PipelineEdit', params: { id: t.id } })
 }
 
-async function saveTemplate() {
-  const m = modal.value
-  if (!m.name.trim()) {
-    message.warning('流水线名必填')
-    return
-  }
-  saving.value = true
-  try {
-    const orderedSteps = TPL_STAGES.filter((s) => m.steps.includes(s.key)).map((s) => s.key)
-    const dto = {
-      name: m.name.trim(),
-      description: m.description.trim() || undefined,
-      env: m.env || null,
-      steps: orderedSteps,
-      rollbackOnFailure: m.rollbackOnFailure as PipelineTemplate['rollbackOnFailure'],
-      approval: m.approval as PipelineTemplate['approval'],
-      defaultTarget: m.defaultTarget as PipelineTemplate['defaultTarget'],
-      approvers: m.approvers?.length ? m.approvers : null,
-    }
-    if (m.editing) {
-      await pipelineTemplateApi.update(m.editing.id, dto)
-      message.success('流水线已更新')
-    } else {
-      await pipelineTemplateApi.create(dto)
-      message.success('流水线已创建')
-    }
-    modal.value.open = false
-    await refreshAll()
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存失败')
-  } finally {
-    saving.value = false
-  }
-}
+/** 「可审批人」加载器已随编辑弹窗挪到 PipelineEdit（提交抽屉里不需要选人） */
 async function duplicate(t: PipelineTemplate) {
   try {
     await pipelineTemplateApi.duplicate(t.id)
@@ -1279,185 +1113,8 @@ onUnmounted(stopPolling)
       />
     </a-modal>
 
-    <!-- 流水线编辑弹窗（创建 / 编辑） -->
-    <a-modal
-      :open="modal.open"
-      :title="modal.editing ? '编辑流水线' : '+ 新建流水线'"
-      :confirm-loading="saving"
-      :width="720"
-      :ok-text="modal.editing ? '保存' : '创建'"
-      @ok="saveTemplate"
-      @cancel="modal.open = false"
-    >
-      <a-form layout="vertical">
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="流水线名" required>
-              <a-input v-model:value="modal.name" placeholder="例如：灰度专用" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="环境（一个模块默认 local / dev / prod 三条）">
-              <a-select v-model:value="modal.env" placeholder="选择环境">
-                <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
-                  {{ e.name }}（{{ e.id }}）
-                </a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="启用">
-              <a-switch v-model:checked="modal.enabled" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <!-- 变量（属于本条流水线；新建时先保存流水线才能加变量） -->
-        <a-form-item v-if="modal.editing" label="变量">
-          <div style="margin-bottom: 8px;">
-            <a-button size="small" type="primary" @click="openVarCreate">+ 新增变量</a-button>
-            <span style="color: #999; font-size: 12px; margin-left: 8px;">
-              节点脚本用 ${KEY} 引用；密钥只写入不回显
-            </span>
-          </div>
-          <a-table
-            :columns="[
-              { title: '键', key: 'key', width: 180 },
-              { title: '值', key: 'value' },
-              { title: '密钥', key: 'secret', width: 70 },
-              { title: '操作', key: 'action', width: 110 },
-            ]"
-            :data-source="vars"
-            :loading="varsLoading"
-            :pagination="false"
-            row-key="id"
-            size="small"
-            :locale="{ emptyText: '该流水线未定义变量' }"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'key'">
-                <span style="font-family: monospace;">{{ record.key }}</span>
-              </template>
-              <template v-else-if="column.key === 'value'">
-                <span style="font-family: monospace;">{{ record.value }}</span>
-              </template>
-              <template v-else-if="column.key === 'secret'">
-                <a-tag :color="record.isSecret ? 'orange' : 'default'">
-                  {{ record.isSecret ? '是' : '否' }}
-                </a-tag>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a-space size="small">
-                  <a-button type="link" size="small" @click="openVarEdit(record)">编辑</a-button>
-                  <a-popconfirm title="删除该变量？" ok-text="删除" cancel-text="取消" @confirm="removeVar(record)">
-                    <a-button type="link" size="small" danger>删除</a-button>
-                  </a-popconfirm>
-                </a-space>
-              </template>
-            </template>
-          </a-table>
-        </a-form-item>
-        <a-alert
-          v-else
-          type="info"
-          show-icon
-          style="margin-bottom: 12px;"
-          message="变量属于某条流水线：先创建流水线，之后在「编辑」里维护变量。"
-        />
-        <a-form-item label="说明">
-          <a-input v-model:value="modal.description" placeholder="选填：流水线用途/特性简述" />
-        </a-form-item>
-        <a-form-item label="活动步骤（未勾选的步骤会被跳过）">
-          <a-checkbox-group v-model:value="modal.steps">
-            <a-checkbox v-for="s in TPL_ALL_KEYS" :key="s" :value="s">
-              {{ STEP_LABELS[s] }}
-            </a-checkbox>
-          </a-checkbox-group>
-        </a-form-item>
-        <a-row :gutter="12">
-          <a-col :span="8">
-            <a-form-item label="探活失败">
-              <a-radio-group v-model:value="modal.rollbackOnFailure">
-                <a-radio value="previous">自动回滚</a-radio>
-                <a-radio value="none">不回滚</a-radio>
-              </a-radio-group>
-            </a-form-item>
-          </a-col>
-          <a-col :span="8">
-            <a-form-item label="审批">
-              <a-radio-group v-model:value="modal.approval">
-                <a-radio value="inherit">继承环境</a-radio>
-                <a-radio value="always">始终</a-radio>
-                <a-radio value="never">免审</a-radio>
-              </a-radio-group>
-            </a-form-item>
-          </a-col>
-          <a-col :span="8">
-            <a-form-item label="投递目标">
-              <a-radio-group v-model:value="modal.defaultTarget">
-                <a-radio value="auto">自动</a-radio>
-                <a-radio value="local">本机</a-radio>
-                <a-radio value="remote">远程</a-radio>
-              </a-radio-group>
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-form-item label="审批人">
-          <UserSelect
-            v-model="modal.approvers"
-            :load="loadApprovers"
-            degraded-text="未获取到可审批人名单：任何能登录控制台的人都能审批"
-            placeholder="选择可审批的人（不选=所有有审批权限者）"
-          />
-          <div style="color: #999; font-size: 12px; margin-top: 4px;">
-            候选来自 admin 系统中持有 <code>deploy:pipeline:approve</code> 权限的用户；
-            选了人 = 白名单（只有这些人能批），不选 = 所有持权限者都能批。
-          </div>
-        </a-form-item>
-        <div v-if="modal.editing" style="color: #999; font-size: 12px; border-top: 1px dashed #eee; padding-top: 8px;">
-          注意：本弹窗只控制「活动步骤」开关；步骤顺序（拖拽重排）与节点脚本请到「流水线详情 → 编辑流水线」调整。
-          check/version/pointer 为语义基线，不可裁剪。
-        </div>
-      </a-form>
-    </a-modal>
   </div>
 
-  <!-- 变量编辑抽屉（不套弹窗：编辑流水线是 modal，变量用 drawer） -->
-  <a-drawer
-    :open="varDrawer.open"
-    :title="varDrawer.editing ? '编辑变量' : '新增变量'"
-    placement="right"
-    :width="420"
-    @close="varDrawer.open = false"
-  >
-    <a-form layout="vertical">
-      <a-form-item label="键">
-        <a-input v-model:value="varDrawer.key" placeholder="PUBLISH_PATH" style="font-family: monospace;" />
-      </a-form-item>
-      <a-form-item label="值">
-        <a-input
-          v-model:value="varDrawer.value"
-          :placeholder="varDrawer.editing?.isSecret ? '留空表示不修改' : '~/web_system_release/...'"
-          style="font-family: monospace;"
-        />
-      </a-form-item>
-      <a-form-item label="说明">
-        <a-input v-model:value="varDrawer.description" placeholder="发布路径" />
-      </a-form-item>
-      <a-form-item label="密钥">
-        <a-switch v-model:checked="varDrawer.isSecret" />
-        <span style="color: #999; font-size: 12px; margin-left: 8px;">
-          密钥只写入不回显；列表显示为 ********
-        </span>
-      </a-form-item>
-    </a-form>
-    <template #footer>
-      <div style="display: flex; justify-content: space-between;">
-        <a-button @click="varDrawer.open = false">取消</a-button>
-        <a-button type="primary" :loading="varSaving" @click="saveVar">保存</a-button>
-      </div>
-    </template>
-  </a-drawer>
 
   <!-- 阶段命令查看 modal（点击步骤标签触发） -->
   <a-modal

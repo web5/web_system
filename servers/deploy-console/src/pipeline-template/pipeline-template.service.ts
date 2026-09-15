@@ -12,6 +12,7 @@ import {
   TemplateTarget,
 } from '../entities/deploy-pipeline-template.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
+import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import { normalizeNodes, isV5NodesEnabled, legacyStepsToNodes, TemplateNode } from './template-node';
 
 export const DEFAULT_TEMPLATE_NAME = '默认';
@@ -131,6 +132,13 @@ export function needsApprovalForTemplate(
 
 export interface TemplateSpec {
   name: string;
+  /**
+   * 归属模块；未传 = `'*'`（全局流水线）。
+   *
+   * 2026-09-15：一个模块默认 local / dev / prod 三条（用户口径），所以新建时要能指定模块 ——
+   * 此前 create 写死全局，新建出来的线会「摊平到所有模块」，与列表的「模块」列自相矛盾。
+   */
+  moduleKey?: string;
   /** 流水线 key（slug，产物命名空间用）；未传时自动生成（name 拼音/默认递增） */
   key?: string;
   /** 归属环境（local/dev/prod…）；一个模块默认三条 */
@@ -170,6 +178,8 @@ export class PipelineTemplateService {
   constructor(
     @InjectRepository(DeployPipelineTemplateEntity)
     private readonly repo: Repository<DeployPipelineTemplateEntity>,
+    /** 新建流水线时写入可编辑节点的默认脚本（git） */
+    private readonly stepSeed: PlatformScriptSeedService,
   ) {}
 
   private assertApproval(a?: TemplateApproval): void {
@@ -277,10 +287,14 @@ export class PipelineTemplateService {
     return tpl;
   }
 
-  private async assertNameFree(name: string, exceptId?: string): Promise<void> {
-    const dup = await this.repo.findOne({ where: { moduleKey: GLOBAL_TEMPLATE, name } });
+  private async assertNameFree(
+    name: string,
+    moduleKey: string = GLOBAL_TEMPLATE,
+    exceptId?: string,
+  ): Promise<void> {
+    const dup = await this.repo.findOne({ where: { moduleKey, name } });
     if (dup && dup.id !== exceptId) {
-      throw new ConflictException(`已存在同名全局模板「${name}」`);
+      throw new ConflictException(`模块 ${moduleKey} 下已存在同名流水线「${name}」`);
     }
   }
 
@@ -297,14 +311,15 @@ export class PipelineTemplateService {
     return k;
   }
 
-  /** 创建全局模板（流水线独立于模块） */
+  /** 创建流水线（默认全局；传 moduleKey 则归属该模块） */
   async create(spec: TemplateSpec, createdBy?: string): Promise<DeployPipelineTemplateEntity> {
     const name = spec.name?.trim();
-    if (!name) throw new BadRequestException('模板名必填');
+    if (!name) throw new BadRequestException('流水线名必填');
     this.assertApproval(spec.approval);
     this.assertTarget(spec.defaultTarget);
     this.assertRollback(spec.rollbackOnFailure);
-    await this.assertNameFree(name);
+    const moduleKey = spec.moduleKey?.trim() || GLOBAL_TEMPLATE;
+    await this.assertNameFree(name, moduleKey);
     const slugFromName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || DEFAULT_TEMPLATE_KEY;
     const key = await this.normalizeKey(spec.key ?? slugFromName);
     const steps = this.resolveSteps(spec);
@@ -320,7 +335,7 @@ export class PipelineTemplateService {
       : null;
     const row = this.repo.create({
       id: genId(),
-      moduleKey: GLOBAL_TEMPLATE,
+      moduleKey,
       name,
       key,
       env: spec.env?.trim() || null,
@@ -336,7 +351,15 @@ export class PipelineTemplateService {
       approvers: this.normalizeApprovers(spec.approvers),
       createdBy,
     });
-    return this.repo.save(row);
+    const saved = await this.repo.save(row);
+    // 新流水线的 git 节点要立刻有「可编辑的默认脚本」，否则页面点开是空的
+    // （git 已是普通 shell 节点，不再由平台托管脚本 seed —— 见 step-scripts.ts）
+    try {
+      await this.stepSeed.ensureEditableDefaults(saved.id);
+    } catch {
+      // 默认脚本初始化失败不阻断创建（下次启动 seedAll 会补）
+    }
+    return saved;
   }
 
   /** 审批人白名单归一化（去空去重；空数组存 null） */

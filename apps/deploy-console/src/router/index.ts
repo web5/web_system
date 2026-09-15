@@ -28,6 +28,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布流水线' },
       },
       {
+        // 新建态必须排在 pipelines/:id 之前（否则 'new' 会被当成 id）
+        path: 'pipelines/new/edit',
+        name: 'PipelineEditCreate',
+        component: () => import('@/views/PipelineEdit.vue'),
+        meta: { title: '新建流水线' },
+      },
+      {
         path: 'pipelines/:id',
         name: 'PipelineDetail',
         component: () => import('@/views/PipelineDetail.vue'),        meta: { title: '流水线详情' },
