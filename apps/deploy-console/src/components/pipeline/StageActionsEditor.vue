@@ -32,7 +32,15 @@ const props = defineProps<{
    * 这类 service 操作冲掉，只是它们不可编辑、以只读提示列出。
    */
   simple?: boolean
+  /**
+   * 隐藏组件自带的按钮行（保存 / 语法校验 / 取消）。
+   * 抽屉形态下这三个按钮由父级放在 `a-drawer` 的 footer 槽里（固定底部），
+   * 父级通过 ref 调 `save()` / `validate()` 触发。
+   */
+  hideActions?: boolean
 }>()
+
+defineExpose({ save: () => saveDraft(), validate: () => validateDraft() })
 
 /** 只读判定：父级显式指定，或该节点被标记为平台托管 */
 const ro = computed(() => !!props.readonly || !!props.item.locked)
@@ -293,7 +301,7 @@ async function saveDraft() {
         </template>
         <a-empty v-else description="暂无操作" />
 
-        <div style="margin-top: 10px;">
+        <div v-if="!hideActions" style="margin-top: 10px;">
           <a-space>
             <a-button v-if="!ro" size="small" type="primary" :loading="saving" @click="saveDraft">
               保存

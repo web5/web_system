@@ -76,6 +76,31 @@ const modules = ref<{ key: string; name: string; type: string }[]>([])
 // ── 右侧抽屉：节点 / 变量 / 参数 ──
 const drawerOpen = ref(false)
 const drawerTab = ref<'node' | 'vars' | 'params'>('node')
+/** 节点脚本编辑器（按钮行外置到抽屉 footer） */
+const stageRef = ref<{ save: () => Promise<void>; validate: () => Promise<void> } | null>(null)
+const nodeSaving = ref(false)
+/** 审批节点在模板层类型里还没建模（避免动到别人正在编辑的 api 文件），这里就地取宽类型 */
+const apNode = computed(() => (selectedNode.value || {}) as any)
+
+/** 抽屉底部「取消」= 关闭抽屉（用户 2026-09-15；原来是只清表单、抽屉不关） */
+function closeDrawer() {
+  drawerOpen.value = false
+}
+async function validateNode() {
+  await stageRef.value?.validate()
+}
+/** 抽屉底部「保存」：先存脚本（shell 节点），节点结构有改动再整条流水线落库 */
+async function saveNodeFromDrawer() {
+  if (!selectedNode.value) { message.warning('先选择一个节点'); return }
+  if (isCreate.value) { message.warning('先「创建」流水线，再保存节点脚本'); return }
+  nodeSaving.value = true
+  try {
+    if (selectedNode.value.kind === 'shell') await stageRef.value?.save()
+    if (dirty.value) await save()
+  } finally {
+    nodeSaving.value = false
+  }
+}
 
 // ── 变量（本条流水线）──
 const vars = ref<PipelineVar[]>([])
@@ -157,6 +182,15 @@ async function load() {
       tpl.value.nodes && tpl.value.nodes.length
         ? JSON.parse(JSON.stringify(tpl.value.nodes))
         : legacyToNodes()
+    // 审批节点字段补默认值（旧数据可能没有），保证抽屉里的单选有选中项
+    nodeDraft.value.forEach((n) => {
+      if (n.kind === 'approval') {
+        const a = n as any
+        a.approvers ||= []
+        a.timeoutAction ||= 'abort'
+        a.onReject ||= 'abort'
+      }
+    })
     selNodeKey.value = ''
     editingItem.value = null
     dirty.value = false
@@ -367,7 +401,14 @@ async function save() {
       await pipelineTemplateApi.update(tplId.value, dto)
       dirty.value = false
       message.success('流水线已保存')
+      const keepKey = selNodeKey.value
       await load()
+      // 抽屉里保存后保持选中，别把用户选中的节点丢掉
+      if (keepKey && nodeOf(keepKey)) {
+        selNodeKey.value = keepKey
+        drawerTab.value = 'node'
+        await loadNodeScript(keepKey)
+      }
     }
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存失败')
@@ -694,10 +735,6 @@ onMounted(() => { void load() })
                 @change="(e: any) => renameKey(selectedNode!.key, e.target.value)"
               />
             </div>
-            <div v-if="selectedNode.kind === 'approval'" class="config-field">
-              <label>说明</label>
-              <span class="muted-text">审批节点：执行到它挂起流水线等人工决议（审批人 / 超时动作）</span>
-            </div>
             <!--
               节点「策略」（optional / watchdog）先不上（用户 2026-09-15：小特性后续有需要再加）——
               已配过的值仍在节点数据里保留，只是不给 UI 入口。
@@ -707,14 +744,59 @@ onMounted(() => { void load() })
           <div v-if="isCreate" class="empty-hint" style="margin-top: 12px;">
             新建态：先「创建」流水线，再回来配节点脚本（命令按流水线落库）
           </div>
+
+          <!-- 审批节点：审批配置（不该出现脚本编辑器） -->
+          <template v-else-if="selectedNode.kind === 'approval'">
+            <div class="node-config-row" style="margin-top: 12px;">
+              <div class="config-field" style="min-width: 300px; flex: 1;">
+                <label>审批人（不选 = 所有持权限者）</label>
+                <UserSelect
+                  :model-value="apNode.approvers || []"
+                  :load="loadApprovers"
+                  degraded-text="未获取到可审批人名单：任何能登录控制台的人都能审批"
+                  placeholder="选择可审批的人"
+                  @update:model-value="(v: string[]) => { apNode.approvers = v; dirty = true }"
+                />
+              </div>
+              <div class="config-field">
+                <label>超时（秒，留空=不超时）</label>
+                <a-input-number
+                  v-model:value="apNode.timeoutSec"
+                  :min="1"
+                  style="width: 140px;"
+                  @change="dirty = true"
+                />
+              </div>
+            </div>
+            <div class="node-config-row" style="margin-top: 12px;">
+              <div class="config-field">
+                <label>超时未批</label>
+                <a-radio-group v-model:value="apNode.timeoutAction" button-style="solid" size="small" @change="dirty = true">
+                  <a-radio-button value="abort">终止</a-radio-button>
+                  <a-radio-button value="auto-approve">自动通过</a-radio-button>
+                </a-radio-group>
+              </div>
+              <div class="config-field">
+                <label>拒绝后</label>
+                <a-radio-group v-model:value="apNode.onReject" button-style="solid" size="small" @change="dirty = true">
+                  <a-radio-button value="abort">终止</a-radio-button>
+                  <a-radio-button value="rollback">回滚</a-radio-button>
+                </a-radio-group>
+              </div>
+            </div>
+          </template>
+
+          <!-- shell 节点：脚本（编辑器自带按钮已隐藏，按钮统一放抽屉 footer） -->
           <div v-else style="margin-top: 12px;">
             <StageActionsEditor
               v-if="editingItem"
+              ref="stageRef"
               :template-id="tplId"
               :item="editingItem"
               :simple="true"
+              :hide-actions="true"
               @saved="() => { if (selNodeKey) void loadNodeScript(selNodeKey) }"
-              @cancel="editingItem = null"
+              @cancel="closeDrawer"
             />
             <a-empty v-else :description="`读取 ${selectedNode.key} 命令中…`" />
           </div>
@@ -818,6 +900,15 @@ onMounted(() => { void load() })
         </div>
       </a-tab-pane>
     </a-tabs>
+
+    <!-- 抽屉底部固定操作栏（用户 2026-09-15）：取消 = 关闭抽屉；语法校验只对 shell 节点显示 -->
+    <template #footer>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <a-button @click="closeDrawer">取消</a-button>
+        <a-button v-if="selectedNode?.kind === 'shell'" @click="validateNode">语法校验</a-button>
+        <a-button type="primary" :loading="nodeSaving" @click="saveNodeFromDrawer">保存</a-button>
+      </div>
+    </template>
   </a-drawer>
 </template>
 

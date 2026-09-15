@@ -221,6 +221,18 @@
   .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;}
   .modal-mask.show{display:flex;}
   .modal{background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);padding:18px;width:100%;max-width:420px;}
+
+  /* 右侧抽屉（节点配置）：header / body / footer 三段式 —— body 独立滚动，footer 常驻底部 */
+  .drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;z-index:60;}
+  .drawer-mask.show{display:block;}
+  .drawer{position:absolute;right:0;top:0;bottom:0;width:560px;background:var(--ws-bg-subtle);z-index:61;
+    display:none;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.12);}
+  .drawer.show{display:flex;}
+  .drawer header{padding:14px 16px;border-bottom:1px solid var(--ws-border);background:var(--ws-bg-surface);}
+  .drawer .body{flex:1;overflow:auto;padding:16px;}
+  .drawer footer{padding:12px 16px;border-top:1px solid var(--ws-border);background:var(--ws-bg-surface);
+    display:flex;justify-content:flex-end;gap:8px;}
+  .drawer .dsec{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:12px;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;color:var(--ws-text-secondary);margin-bottom:5px;font-weight:600;}
   .field input,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--ws-border);
@@ -341,7 +353,7 @@
           <div class="pinfo">
             <span class="tag primary">流水线</span>
             <b id="pName">admin</b>
-            <span class="pd" id="pDesc">v5 nodes：git → 安装依赖 → 构建 → 写版本号 → 切指针 → 探活（watchdog）→ 通知</span>
+            <span class="pd" id="pDesc">终态 nodes：拉取代码 → 构建 → 发布确认（审批）→ 发布（上传 + 写版本）</span>
             <button class="btn ghost mini" onclick="openRename()">名称 / 备注</button>
           </div>
 
@@ -405,9 +417,10 @@
 
           <div id="pane-edit" style="display:none">
             <div class="banner info" style="margin-top:0">
-              <span><b>v5 nodes 编辑态</b>：<span class="tag purple">git / 写版本号 / 切指针</span> 平台节点<b>锁定</b>（不可增删改）；
-                script 节点可<b>拖拽重排 / 增删</b>。点连接线中间的「+」或右上「添加节点」→ 直接落节点并选中；
-                悬停节点卡片右上角「×」删除；选中后在下方配置 label / key / optional / watchdog 与脚本。</span>
+              <span><b>终态 nodes 编辑态</b>：节点只有 <span class="tag gray">shell</span>
+                <span class="tag primary">approval</span> 两类（拉取代码也是普通 shell 节点，脚本可编辑）；
+                节点可<b>拖拽重排 / 增删</b>，点连接线「+」或右上「添加节点」落新节点、悬停卡片右上「×」删除。
+                <b>点节点 → 右侧抽屉</b>：节点名 / key + 脚本（或审批配置），抽屉底部固定「取消 · 语法校验 · 保存」。</span>
             </div>
             <div class="card" style="margin-top:12px">
               <div class="row" style="justify-content:space-between;">
@@ -422,7 +435,7 @@
                 <span class="muted" style="margin-left:auto">模块脚本按 <span class="mono">模块 × 节点 key</span> 读写；platform 节点无脚本。</span>
               </div>
             </div>
-            <div class="card" id="editDetail"></div>
+            <!-- 节点配置改为右侧抽屉（见文末 drawer 标记），这里不再放内联属性面板 -->
 
             <!-- 编辑态：变量（属于本条流水线，可增删改查） -->
             <div class="card">
@@ -1013,49 +1026,60 @@ node    69584 geekwen   16u  IPv6 ... TCP *:6005 (LISTEN)</div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
+
+  <!-- 节点配置抽屉（header / body / footer；footer 固定在最下面） -->
+  <div class="drawer-mask" id="nodeDrawerMask" onclick="closeDrawer()"></div>
+  <div class="drawer" id="nodeDrawer">
+    <header>
+      <div class="t" style="margin:0;font-size:15px" id="ndTitle">节点配置</div>
+      <div class="muted" id="ndSub"></div>
+    </header>
+    <div class="body" id="ndBody"></div>
+    <footer>
+      <button class="btn ghost" onclick="closeDrawer()">取消</button>
+      <button class="btn ghost" id="ndValidate" onclick="toast('语法校验：bash -n 通过（原型示意）')">语法校验</button>
+      <button class="btn" onclick="saveNode()">保存</button>
+    </footer>
+  </div>
 </div>
 
 <script>
 /* ===== 数据 ===== */
-/** v5 nodes：platform（git/写版本号/切指针）锁定不可增删改；script 可增删 / 拖拽 / 配脚本。
- *  平台字段：plat=true 且 sub 指向引擎语义；watchdog 节点失败触发自动回滚（互斥 1 个）。 */
+/** 终态 nodes：只有 shell / approval 两类，可增删 / 拖拽 / 配脚本。
+ *  平台能力（写版本、切指针…）不再是节点类型，而是节点里的 service 操作（platformActs 只读展示）。
+ *  默认四条：拉取代码 → 构建 → 发布确认（审批）→ 发布。 */
 var NODES=[
- {id:'git',name:'git · 拉取代码',mode:'platform',plat:true,sub:'git',desc:'平台内置 git 拉取到 RELEASE_DIR；节点锁定不可增删改',code:''},
- {id:'install',name:'安装依赖',mode:'script',plat:false,optional:false,watchdog:false,
-  desc:'安装依赖（pnpm install / npm ci）；可选实现，未配脚本且非 optional 即 fail-fast',
-  code:'set -euo pipefail\ncd "${RELEASE_DIR}" && pnpm install --frozen-lockfile'},
- {id:'build',name:'构建',mode:'script',plat:false,optional:false,watchdog:false,
-  desc:'产物构建（vite build）；产物目录不存在即 fail-fast',
+ {id:'git',name:'拉取代码',kind:'shell',mode:'script',plat:false,
+  desc:'拉取代码（普通 shell 节点，脚本可编辑；git 的登录/密钥/权限归「git 信息维护层」）',
+  code:'set -euo pipefail\n# 拉取代码：普通 shell 节点，可自由改\ncd "${RELEASE_DIR}"\ngit fetch --all --prune\ngit checkout "${COMMIT_ID:-origin/master}"'},
+ {id:'build',name:'构建',kind:'shell',mode:'script',plat:false,
+  desc:'产物构建（vite build / tsc）；产物目录不存在即 fail-fast',
   code:'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'},
- {id:'version',name:'写版本号',mode:'platform',plat:true,sub:'version',desc:'平台内置：写 deploy_versions（发布语义真相源）',code:''},
- {id:'pointer',name:'切指针',mode:'platform',plat:true,sub:'pointer',desc:'平台内置：upsert deploy_deployments.current_version',code:''},
- {id:'verify',name:'探活',mode:'script',plat:false,optional:false,watchdog:true,
-  desc:'探活（watchdog）：失败触发自动回滚；删除该节点 = 显式放弃自动回滚',
-  code:'set -euo pipefail\nV="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})\')"\n[ "${V}" = "${COMMIT_ID}" ] || exit 1'},
- {id:'notify',name:'发通知',mode:'script',plat:false,optional:true,watchdog:false,
-  desc:'发通知（optional）：未配脚本自动跳过、不阻断发布',
-  code:'set -euo pipefail\necho "发布完成 ${COMMIT_ID} @ ${DEPLOY_ENV}"'}
+ {id:'gate',name:'发布确认',kind:'approval',mode:'approval',plat:false,
+  desc:'审批节点：执行到它挂起流水线，批准后从其后继续',
+  approvers:['admin'],timeout:3600,timeoutAction:'abort',onReject:'abort'},
+ {id:'release',name:'发布',kind:'shell',mode:'script',plat:false,
+  desc:'发布 = 上传产物（shell）+ 写版本记录（平台 service 操作，随平台维护）',
+  code:'set -euo pipefail\n# 上传产物到本机/目标机版本目录\necho "[release] 上传产物 → ${PUBLISH_PATH}/${COMMIT_ID}"',
+  platformActs:['写版本记录']}
 ];
 
-/** nodes 顺序真相源（可重排；platform 位置受语义约束） */
+/** nodes 顺序真相源（终态：只有 shell / approval，顺序自由） */
 var seq=NODES.map(function(n){return n.id;});
-/** script 节点的多操作扩展（其余回退到单「主操作」） */
-var EXTRA_ACTS={
-  install:[{id:'a1',type:'shell',name:'pnpm install',timeout:300,code:'pnpm install --frozen-lockfile'}],
-  build:[
-    {id:'a1',type:'shell',name:'安装依赖',timeout:300,cont:true,code:'pnpm install --frozen-lockfile'},
-    {id:'a2',type:'shell',name:'vite 构建',timeout:600,cont:false,
-     code:'RELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'}
-  ],
-  verify:[{id:'a1',type:'service',name:'manifest 断言（内置工具）',tool:'manifest-assert',builtin:true,timeout:60}],
-  notify:[{id:'a1',type:'shell',name:'通知 hook',timeout:20,code:'echo "发布完成 ${COMMIT_ID}"'}]
-};
 
 function findNode(k){ return NODES.filter(function(x){return x.id===k;})[0]; }
+/**
+ * 节点的执行操作序列。
+ * shell：1 个 shell 操作（脚本）+ 可能存在的平台操作（如发布节点的「写版本记录」，只读展示）
+ * approval：无操作（纯等待语义）
+ */
 function getActs(n){
-  if(n.mode==='platform') return [];
-  if(EXTRA_ACTS[n.id]) return EXTRA_ACTS[n.id];
-  return [{id:'a1',type:'shell',name:'主操作',code:n.code,timeout:60}];
+  if(n.kind==='approval') return [];
+  var acts=[{id:'a1',type:'shell',name:'主操作',code:n.code,timeout:60}];
+  (n.platformActs||[]).forEach(function(p,i){
+    acts.push({id:'p'+(i+1),type:'service',name:p,builtin:true});
+  });
+  return acts;
 }
 
 var TOOLS=[
@@ -1238,14 +1262,16 @@ function runNext(){
   }, s.mode==='platform'?500:(s.id==='build'?1400:800));
 }
 
-/* ===== 编辑态（v5 nodes：插孔即落即编 + 拖拽排序 + 卡片删除 + label/key/watchdog 面板） ===== */
+/* ===== 编辑态（终态 nodes：插孔即落即编 + 拖拽排序 + 卡片删除 + 点节点开右侧抽屉） ===== */
 var editCur='', editAct=null, dragKey='', insSide='l';
-var PLATFORM_KEYS=['git','version','pointer'];
+/** 平台保留 node key（写版本/切指针的能力已变成 service 操作，同名节点会造成语义误读） */
+var PLATFORM_KEYS=['version','pointer'];
 var usedKeys=NODES.map(function(n){return n.id;});
 function toggleEdit(){
   editing=!editing;
   document.getElementById('btnEdit').textContent=editing?'退出编辑':'编辑流水线';
-  if(editing){ renderEditList(); renderEditDetail(); }
+  if(editing){ renderEditList(); }
+  else { closeDrawer(); editCur=''; }
   switchTab(document.getElementById('tab-inst').className.indexOf('on')>=0?'inst':'hist');
 }
 function renderEditList(){
@@ -1263,16 +1289,15 @@ function renderEditList(){
       +'ondragover="ov(event)" ondrop="dp(\''+id+'\',event)" onclick="pick(\''+id+'\')">'
       +'<span class="fidx">'+(i+1)+'</span>'
       +(watch?'<span class="wbadge">⚠ watchdog</span>':'')
-      +(plat?'':'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+id+'\')">×</button>')
-      +(plat?'<span class="flock">🔒 platform</span>':'')
+      +'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+id+'\')">×</button>'
       +'<span class="fname">'+n.name+'</span>'
-      +(plat?'<span class="fk">'+n.sub+'</span>':'<span class="fk">'+id+'</span>')
+      +'<span class="fk">'+(n.kind==='approval'?'审批 · '+id:id)+'</span>'
       +'</div>';
   });
   document.getElementById('nodeCount').textContent='· '+seq.length+' 节点';
   document.getElementById('flowEdit').innerHTML=h;
 }
-/* ===== 拖拽（script 可拖；platform 锁定）。落位语义约束：git 首位 / version 在 pointer 前 ===== */
+/* ===== 拖拽（所有节点都可拖；终态无相对序约束，只查重复 key） ===== */
 function ds(key,e){ var n=findNode(key); if(!n||n.plat){ e.preventDefault(); return; }
   dragKey=key; e.dataTransfer.effectAllowed='move';
   var el=document.getElementById('node-'+key); if(el) setTimeout(function(){el.classList.add('dragging');},0); }
@@ -1295,11 +1320,8 @@ function dp(tid,e){
   toast('已移动「'+m.name+'」→ 第 '+(to+1)+' 位');
 }
 function checkOrder(s){
-  if(s[0]!=='git') return '「git」必须排在第一位（发布语义基线）';
-  var iv=s.indexOf('version'), ip=s.indexOf('pointer');
-  if(iv<0||ip<0) return null;
-  if(iv>ip) return '「version（写版本号）」必须排在「pointer（切指针）」之前';
-  return null;
+  // 终态：shell / approval 顺序自由，只查重复（写版本/切指针不再是节点，无相对序约束）
+  return new Set(s).size===s.length ? null : '节点 key 不能重复';
 }
 function saveFlow(){
   var err=checkOrder(seq);
@@ -1324,76 +1346,127 @@ function uniqueKey(){
 }
 function addNodeAt(slot){
   var key=uniqueKey();
-  var n={id:key,name:'新节点',mode:'script',plat:false,optional:false,watchdog:false,
-    desc:'自定义 script 节点：拖拽排序 / 下方配脚本',code:'# 在此编写脚本',fresh:true};
+  var n={id:key,name:'新节点',kind:'shell',mode:'script',plat:false,
+    desc:'自定义 shell 节点：拖拽排序 / 抽屉里配脚本',code:'# 在此编写脚本',fresh:true};
   NODES.push(n); usedKeys.push(key);
   seq.splice(slot,0,key);
   renderEditList(); pick(key);
-  toast('已添加 script 节点（key='+key+'），请在下方配置 label/key/脚本');
+  toast('已添加节点（key='+key+'），在右侧抽屉里配置脚本');
 }
-/* ===== 选中与属性面板 ===== */
+/* ===== 选中：高亮画布 + 打开右侧抽屉（属性面板不再内联） ===== */
 function pick(id){
   var n=findNode(id); if(!n) return;
-  if(n.plat){ toast('platform 节点（'+n.name+'）锁定，不可增删改'); return; }
-  editCur=id; editAct=null; renderEditList(); renderEditDetail();
+  editCur=id; editAct=null; renderEditList(); openNodeDrawer('edit', id);
+}
+/* ===================================================================
+ * 节点配置抽屉（用户 2026-09-15 定稿）
+ *  - header：节点名 + 一句说明
+ *  - body  ：节点名 / key / 类型 → shell 出「脚本 + 超时」，approval 出「审批人 / 超时 / 超时未批 / 拒绝后」
+ *  - footer：取消（= 关闭抽屉）· 语法校验（仅 shell 显示）· 保存  —— 固定抽屉最下面
+ * =================================================================== */
+var ndCurKey='';
+function openNodeDrawer(mode, key){
+  var n = key ? findNode(key) : null;
+  ndCurKey = n ? n.id : '';
+  document.getElementById('ndTitle').textContent = mode==='new' ? '新增节点' : ('节点 · '+(n?n.name:key));
+  document.getElementById('ndSub').textContent = (n && n.kind==='approval')
+    ? '审批节点：执行到它挂起流水线，批准后从其后继续'
+    : '执行节点：脚本 + 超时（策略 / 操作名 / 操作类型 / 容错先不上）';
+  document.getElementById('ndBody').innerHTML = ndBody(n);
+  ndPickKind(n && n.kind==='approval' ? 'approval' : 'shell');
+  document.getElementById('nodeDrawerMask').classList.add('show');
+  document.getElementById('nodeDrawer').classList.add('show');
+}
+function ndBody(n){
+  var kind = (n && n.kind==='approval') ? 'approval' : 'shell';
+  var h='<div class="dsec">';
+  h+='<div class="row" style="gap:16px;flex-wrap:wrap;">'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点名</div>'
+    +'<input class="in" id="ndName" value="'+((n&&n.name)||'')+'" style="width:180px"></div>'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点 key</div>'
+    +'<input class="in mono" id="ndKey" value="'+((n&&n.id)||'')+'" style="width:150px"></div>'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点类型</div>'
+    +'<div class="row" style="gap:6px">'
+    +'<button class="btn sm '+(kind==='shell'?'':'gray')+'" id="ndk-shell" onclick="ndPickKind(\'shell\')">执行（shell）</button>'
+    +'<button class="btn sm '+(kind==='approval'?'':'gray')+'" id="ndk-approval" onclick="ndPickKind(\'approval\')">审批（approval）</button>'
+    +'</div></div></div>';
+  h+='</div>';
+  /* shell */
+  h+='<div class="dsec" id="ndShellFields" style="margin-top:12px">'
+    +'<div class="muted" style="margin-bottom:5px;font-weight:600">脚本</div>'
+    +'<textarea class="code" id="ndScript" rows="12" style="width:100%">'+((n&&n.code)||'')+'</textarea>'
+    +'<div class="hint">用 <span class="mono">${KEY}</span> 引用本流水线的变量；发布节点就是「上传文件 + 调用写版本接口」两段。</div>'
+    +'<div class="row" style="gap:10px;align-items:center;margin-top:10px">'
+    +'<span class="muted">超时（秒，留空=不限）</span>'
+    +'<input class="in" id="ndTimeout" value="'+((n&&n.timeout)||900)+'" style="width:110px">'
+    +'</div>'
+    +(n&&n.platformActs&&n.platformActs.length
+      ? '<div class="hint" style="margin-top:8px">本节点还包含平台操作（随平台维护，不可编辑）：'
+        +n.platformActs.join('、')+'</div>' : '')
+    +'</div>';
+  /* approval */
+  h+='<div class="dsec" id="ndApprovalFields" style="margin-top:12px;display:none">'
+    +'<div class="muted" style="margin-bottom:5px;font-weight:600">审批人（不选 = 所有持权限者）</div>'
+    +'<div class="chips">'+(((n&&n.approvers)||['admin']).map(function(a){
+        return '<span class="chip">'+a+' ×</span>';}).join(''))+'</div>'
+    +'<div class="hint">候选来自持有 <span class="mono">deploy:pipeline:approve</span> 的用户；拉取失败时告警但不强校验。</div>'
+    +'<div class="row" style="gap:10px;align-items:center;margin-top:10px">'
+    +'<span class="muted">超时（秒，留空=不超时）</span>'
+    +'<input class="in" id="ndATimeout" value="'+((n&&n.timeout)||3600)+'" style="width:110px"></div>'
+    +'<div class="muted" style="margin:10px 0 5px;font-weight:600">超时未批</div>'
+    +'<div class="radio-group"><div class="radio '+(n&&n.timeoutAction==='auto-approve'?'':'on')+'">终止（abort）</div>'
+    +'<div class="radio '+(n&&n.timeoutAction==='auto-approve'?'on':'')+'">自动通过（auto-approve）</div></div>'
+    +'<div class="muted" style="margin:10px 0 5px;font-weight:600">拒绝后</div>'
+    +'<div class="radio-group"><div class="radio '+(n&&n.onReject==='rollback'?'':'on')+'">终止（abort）</div>'
+    +'<div class="radio '+(n&&n.onReject==='rollback'?'on':'')+'" onclick="toast(\'将回滚到本次发布前的基线版本\')">回滚（rollback）</div></div>'
+    +'</div>';
+  return h;
+}
+function ndPickKind(k){
+  document.getElementById('ndk-shell').className='btn sm '+(k==='shell'?'':'gray');
+  document.getElementById('ndk-approval').className='btn sm '+(k==='approval'?'':'gray');
+  document.getElementById('ndShellFields').style.display=k==='shell'?'block':'none';
+  document.getElementById('ndApprovalFields').style.display=k==='approval'?'block':'none';
+  document.getElementById('ndValidate').style.display=k==='shell'?'':'none';
+}
+function ndKindNow(){ return document.getElementById('ndk-approval').className.indexOf('gray')<0?'approval':'shell'; }
+function closeDrawer(){
+  document.getElementById('nodeDrawerMask').classList.remove('show');
+  document.getElementById('nodeDrawer').classList.remove('show');
+}
+function saveNode(){
+  var key=document.getElementById('ndKey').value.trim();
+  var name=document.getElementById('ndName').value.trim();
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(key)){ toast('key 格式非法（字母数字下划线连字符，1–32 位）'); return; }
+  if(PLATFORM_KEYS.indexOf(key)>=0){ toast('key 不能占用平台保留字（version / pointer）'); return; }
+  if(key!==ndCurKey && usedKeys.indexOf(key)>=0){ toast('key 已存在：'+key); return; }
+  var kind=ndKindNow();
+  var n=findNode(ndCurKey);
+  if(!n){
+    n={id:key,name:name||key,kind:kind,mode:kind==='approval'?'approval':'script',plat:false};
+    NODES.push(n); usedKeys.push(key); seq.push(key);
+  }
+  if(key!==n.id){
+    usedKeys=usedKeys.map(function(x){return x===n.id?key:x;});
+    seq=seq.map(function(x){return x===n.id?key:x;});
+    n.id=key;
+  }
+  n.name=name||key; n.kind=kind; n.mode=kind==='approval'?'approval':'script';
+  if(kind==='shell'){
+    n.code=document.getElementById('ndScript').value;
+    n.timeout=Number(document.getElementById('ndTimeout').value)||undefined;
+  }else{
+    n.timeout=Number(document.getElementById('ndATimeout').value)||undefined;
+    if(!n.approvers||!n.approvers.length) n.approvers=['admin'];
+  }
+  editCur=n.id;
+  closeDrawer(); renderEditList();
+  toast('已保存节点「'+n.name+'」（原型未落库）');
 }
 function pickAct(aid){ editAct=aid; renderEditDetail(); }
+/** 属性面板已移入右侧抽屉（openNodeDrawer）；保留空实现以兼容既有调用点 */
 function renderEditDetail(){
-  var box=document.getElementById('editDetail');
-  if(!editCur){
-    box.innerHTML='<div class="hint" style="padding:20px 0;text-align:center;margin:0">'
-      +'点击上方 script 节点配置脚本；点连接线「+」或顶部「添加节点」直接落新节点。platform（git/写版本号/切指针）锁定。</div>';
-    return;
-  }
-  var n=findNode(editCur); if(!n) return;
-  var acts=getActs(n), act=null;
-  if(acts.length) act=acts.filter(function(a){return a.id===editAct;})[0]
-    || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
-  /* --- 属性面板：label / key / optional / watchdog --- */
-  var h='<div class="props">';
-  h+='<div class="t" style="margin-bottom:8px">节点属性 · <span style="text-transform:none">'+n.name+'</span></div>';
-  h+='<div class="row" style="align-items:flex-end;gap:14px;margin-bottom:8px;flex-wrap:wrap;">'
-    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">label（即改即同步画布）</div>'
-    +'<input class="in" id="inLabel-'+n.id+'" value="'+n.name+'" oninput="renameLabel(\''+n.id+'\',this.value)"></div>'
-    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">key <span class="mono" style="font-weight:400">（模块脚本读写点）</span></div>'
-    +'<input class="in mono" value="'+n.id+'" onchange="renameKey(\''+n.id+'\',this.value)"></div>'
-    +'<div style="display:flex;flex-direction:column;gap:6px;padding:2px 0;">'
-    +'<label class="chk"><input type="checkbox" '+(n.optional?'checked':'')+' onchange="var x=findNode(\''+n.id+'\');x.optional=this.checked;toast(\'optional '+(n.optional?'开':'关')+'\')"> optional（未配脚本跳过不阻断）</label>'
-    +'<label class="chk"><input type="checkbox" '+(n.watchdog?'checked':'')+' onchange="toggleWatch(\''+n.id+'\',this.checked)"> watchdog（失败触发自动回滚）</label></div>'
-    +'<div><button class="btn mini gray" style="background:var(--ws-error-500);color:#fff;border:none;" onclick="askDel(\''+n.id+'\')">删除节点</button></div>'
-    +'</div>';
-  h+='<div class="muted">脚本读写：模块 × <span class="mono">'+n.id+'</span>（复用 StageActionsEditor，多操作按序执行）。</div>';
-  h+='</div>';
-  /* --- 脚本操作编辑器（复用多操作编辑器形态） --- */
-  h+='<div style="margin-top:12px"><div class="t">脚本 · 操作列表（'+acts.length+'）顺序执行</div>';
-  acts.forEach(function(a,i){
-    h+='<div class="act '+(act&&act.id===a.id?'on':'')+(a.builtin?' lock':'')+'" '
-      +(a.builtin?'':'onclick="pickAct(\''+a.id+'\')" ')+'>'
-      +'<span class="an">op'+(i+1)+' '+a.name+'</span>'
-      +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
-      +(a.cont?'<span class="tag warn">容错</span>':'')
-      +'<span class="am">'+(a.timeout||60)+'s</span>'
-      +(a.builtin?'<span class="tag gray">内置</span>':'<button class="btn mini gray" onclick="event.stopPropagation();delAct(\''+a.id+'\')">删</button>')
-      +'</div>';
-  });
-  h+='<div class="row" style="margin-bottom:10px">'
-    +'<button class="btn ghost mini" onclick="addAct()">+ shell 操作</button>'
-    +'<button class="btn ghost mini" onclick="toast(\'引用工具：工具升级自动扩散\')">+ 引用工具</button>'
-    +'<button class="btn ghost mini" onclick="toast(\'语法校验通过\')">校验</button></div>';
-  if(act){
-    h+='<div class="editor-wrap"><div class="editor-bar"><span>操作 · '+act.name+'</span>'
-      +'<span class="row"><button class="btn ghost sm" onclick="toast(\'bash -n 通过\')">校验</button>'
-      +'<button class="btn sm" onclick="toast(\'已保存 · 审计留痕\')">保存</button></span></div>'
-      +(act.type==='service'
-        ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
-        : codeEditor(String(act.code||'')))
-      +'</div>';
-    h+='<div class="t" style="margin-top:10px">可用变量（点击插入）</div><div class="chips">';
-    VARS.forEach(function(v){ h+='<span class="chip" onclick="ins(\''+v+'\')">${'+v+'}</span>'; });
-    h+='</div>';
-  }
-  h+='</div>';
-  box.innerHTML=h;
+  return;
 }
 /* label / key 即改即同步 */
 function renameLabel(id,val){
