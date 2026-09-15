@@ -37,6 +37,7 @@ import {
   isApprovalPending,
   checkNodes,
   nodeDisplayName,
+  isShellNode,
   legacyToNodes,
 } from '@/components/pipeline/pipeline.stages'
 
@@ -519,7 +520,7 @@ function nodeOf(key: string): TemplateNode | undefined {
 /** 选中的节点对象（未选中或 platform 时为 null） */
 const selectedNode = computed<TemplateNode | null>(() => {
   const n = nodeOf(selNodeKey.value)
-  return n && n.kind === 'script' ? n : null
+  return n && isShellNode(n) ? n : null
 })
 
 /** nodes 语义校验（镜像后端 §14.5）：返回首条错误或空串 */
@@ -619,7 +620,7 @@ function toggleNodeOptional(key: string, on: boolean) {
 function toggleNodeWatchdog(key: string, on: boolean) {
   // watchdog 全局互斥：勾一个取消其它
   nodeDraft.value.forEach((x) => {
-    if (x.kind === 'script') x.watchdog = false
+    if (isShellNode(x)) x.watchdog = false
   })
   const n = nodeOf(key)
   if (n) n.watchdog = on
@@ -1228,11 +1229,11 @@ onUnmounted(stopPolling)
               <div
                 class="v5-node"
                 :class="{
-                  'v5-plat': n.kind === 'platform',
                   'v5-watch': n.watchdog,
                   'v5-sel': selNodeKey === n.key,
+                  'v5-approval': n.kind === 'approval',
                 }"
-                :draggable="n.kind === 'script'"
+                :draggable="isShellNode(n)"
                 @click="onNodeClick(n.key)"
                 @dragstart="dragStart($event, n.key)"
                 @dragend="dragEnd"
@@ -1240,9 +1241,9 @@ onUnmounted(stopPolling)
                 @drop="dragDrop($event, n.key)"
               >
                 <span class="v5-seq">{{ i + 1 }}</span>
-                <span v-if="n.kind === 'platform'" class="v5-lock" title="发布语义，平台托管">🔒</span>
+                <span v-if="n.kind === 'approval'" class="v5-lock" title="审批节点：执行到此处挂起">✋</span>
                 <button
-                  v-if="n.kind === 'script'"
+                  v-if="isShellNode(n)"
                   class="v5-del"
                   type="button"
                   title="删除节点"
@@ -1250,10 +1251,10 @@ onUnmounted(stopPolling)
                 >×</button>
                 <span v-if="n.watchdog" class="v5-wbadge" title="失败触发自动回滚">⚠</span>
                 <span class="v5-name">{{ nodeDisplayName(n) }}</span>
-                <span class="v5-key">{{ n.kind === 'platform' ? PLATFORM_NODE_LABELS[n.key] || n.key : n.key }}</span>
+                <span class="v5-key">{{ n.kind === 'approval' ? '审批' : n.key }}</span>
               </div>
             </template>
-            <span v-if="!nodeDraft.length" style="color:#bbb; font-size:12px;">请至少保留 git 与写版本号（platform 节点）</span>
+            <span v-if="!nodeDraft.length" style="color:#bbb; font-size:12px;">还没有节点：点连接线「+」添加（拉取代码 / 构建 / 发布确认 / 发布）</span>
           </div>
 
           <div v-if="nodesError()" style="margin-top: 8px;">

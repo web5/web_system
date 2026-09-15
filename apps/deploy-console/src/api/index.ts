@@ -327,22 +327,33 @@ export const serverApi = {
 
 /* ========== Pipelines（发布流水线） ========== */
 
-/** v5 模板节点：platform=发布语义（git/写版本号，平台托管）；script=用户自定义脚本节点 */
+/**
+ * 流水线节点（终态：只有 shell / approval 两类）。
+ *
+ * - `shell`：跑命令的节点（拉代码 / 构建 / 发布…）；平台能力（写版本、切指针…）
+ *   是它里面的一个 `service` action，不再是节点类型；
+ * - `approval`：审批节点，执行到它挂起、批准后从其后继续；
+ * - `script` / `platform`：**历史数据**（旧名 / 旧平台节点），仅读取兼容。
+ */
 export interface TemplateNode {
-  kind: 'platform' | 'script'
-  /** git | version | pointer（platform）或自定义 script key */
+  kind: 'shell' | 'script' | 'platform' | 'approval'
+  /** 节点 key（git | build | release | 自定义）；version/pointer 为保留字不可用作节点名 */
   key: string
-  /** script 节点展示名（platform 由前端映射） */
+  /** shell/approval 节点展示名（旧 platform 由前端映射） */
   label?: string
-  /** script：未配脚本时跳过发布（默认必配 fail-fast） */
+  /** shell：未配脚本时跳过发布（默认必配 fail-fast） */
   optional?: boolean
   /** script：该节点失败触发自动回滚（全局仅 1 个） */
   watchdog?: boolean
   timeoutSec?: number
 }
 
-/** 平台保留字（script key 不可占用；stage_commands 也不可写） */
-export const PLATFORM_NODE_KEYS = ['git', 'version', 'pointer'] as const
+/**
+ * 保留字节点名（不可作为节点 key；stage_commands 也不可写）。
+ * 终态：git 已放开（拉码是普通 shell 节点）；version/pointer 保留——
+ * 它们的能力已变成 `service` action，同名节点会造成语义误读。
+ */
+export const PLATFORM_NODE_KEYS = ['version', 'pointer'] as const
 
 /** platform 节点展示 label（前端映射，避免每次传） */
 export const PLATFORM_NODE_LABELS: Record<string, string> = {

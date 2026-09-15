@@ -39,12 +39,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '编辑流水线' },
       },
       {
-        path: 'environments',
-        name: 'EnvironmentManager',
-        component: () => import('@/views/EnvironmentManager.vue'),
-        meta: { title: '环境管理' },
-      },
-      {
         path: 'modules',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),

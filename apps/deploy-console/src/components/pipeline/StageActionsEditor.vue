@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { pipelineStepApi, type StageAction } from '@/api'
+// 终态：平台能力 = 节点里的 service action，工具名与后端 steps/service-tools.ts 对齐
+import { SERVICE_TOOL_OPTIONS } from '@/components/pipeline/pipeline.stages'
 
 /** 编辑器输入项：来自 pipelineStepApi 中某项（流水线节点命令统一视图） */
 export interface EditorItem {
@@ -228,14 +230,23 @@ async function saveDraft() {
             style="font-family: monospace; font-size: 12px; background: #1e1e1e; color: #d4d4d4;"
           />
           <template v-else>
-            <a-alert type="info" show-icon message="工具型操作由内置工具执行，无需脚本" />
-            <a-input
+            <a-alert
+              type="info"
+              show-icon
+              message="平台能力（写版本 / 切指针 / 重启 / 验证…）用「工具」操作，选一个即可，无需脚本"
+            />
+            <a-select
               v-model:value="draft[actIdx].tool"
               size="small"
               :disabled="ro"
-              placeholder="工具 code（deploy_tool_catalog.code）"
-              style="margin-top: 6px;"
-            />
+              show-search
+              placeholder="选择平台工具"
+              style="margin-top: 6px; width: 100%;"
+            >
+              <a-select-option v-for="t in SERVICE_TOOL_OPTIONS" :key="t.value" :value="t.value">
+                {{ t.label }}（{{ t.value }}）
+              </a-select-option>
+            </a-select>
           </template>
         </template>
         <a-empty v-else description="暂无操作" />

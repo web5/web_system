@@ -7,7 +7,6 @@ import {
   AuditOutlined,
   LogoutOutlined,
   UserOutlined,
-  ApartmentOutlined,
   AppstoreOutlined,
   DeploymentUnitOutlined,
   SettingOutlined,
@@ -15,6 +14,7 @@ import {
   ExperimentOutlined,
   ToolOutlined,
   BuildOutlined,
+  ControlOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -33,13 +33,14 @@ const avatarLetter = computed(() =>
 /**
  * 菜单结构（对齐原型 v14）：按**两个域**分组 ——
  *  - 流水线管理：发布流水线 + 灰度 / 诊断 / 工具
- *  - 模块管理：模块列表（含详情·编辑）+ 环境 / 监控 / 配置中心
- * 其余（仪表盘 / 审计 / 通知 / 设置）保持一级。
+ *  - 模块管理：模块列表（含详情·编辑）+ 监控（环境管理已并入模块内的「服务环境」Tab，不再单独出菜单）
+ * 其余（仪表盘 / 审计 / 通知 / 配置中心 / 设置）保持一级 —— 配置中心是独立能力，不收进模块管理。
  */
 const topMenuItems = [
   { key: '/dashboard', label: '仪表盘', icon: DashboardOutlined },
   { key: '/audit', label: '审计日志', icon: AuditOutlined },
   { key: '/notifications', label: '通知中心', icon: BellOutlined },
+  { key: '/config', label: '配置中心', icon: ControlOutlined },
   { key: '/settings', label: '系统设置', icon: SettingOutlined },
 ]
 
@@ -61,9 +62,7 @@ const menuGroups = [
     icon: AppstoreOutlined,
     children: [
       { key: '/modules', label: '模块列表', icon: AppstoreOutlined },
-      { key: '/environments', label: '环境管理', icon: ApartmentOutlined },
       { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
-      { key: '/config', label: '配置中心', icon: SettingOutlined },
     ],
   },
 ]
