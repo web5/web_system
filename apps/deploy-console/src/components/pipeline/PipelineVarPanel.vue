@@ -140,22 +140,32 @@ function removeVar(v: PipelineVar) {
       </div>
     </a-card>
 
+    <!-- tableLayout=fixed：长值（如 PUBLISH_PATH 绝对路径）不再把列撑开，超出省略 + title 悬停看全文 -->
     <a-table
       :data-source="rows"
       :pagination="false"
       size="small"
       row-key="id"
+      table-layout="fixed"
       style="margin-top: 10px;"
     >
       <a-table-column title="键" data-index="key" :width="140" ellipsis>
-        <template #default="{ record }"><span class="mono-text">{{ record.key }}</span></template>
+        <template #default="{ record }">
+          <span class="mono-text" :title="record.key">{{ record.key }}</span>
+        </template>
       </a-table-column>
       <a-table-column title="值" :width="150" ellipsis>
         <template #default="{ record }">
-          <span class="mono-text">{{ record.isSecret ? '********' : record.value }}</span>
+          <span class="mono-text" :title="record.isSecret ? '********' : record.value">
+            {{ record.isSecret ? '********' : record.value }}
+          </span>
         </template>
       </a-table-column>
-      <a-table-column title="说明" data-index="description" ellipsis />
+      <a-table-column title="说明" data-index="description" ellipsis>
+        <template #default="{ record }">
+          <span :title="record.description">{{ record.description }}</span>
+        </template>
+      </a-table-column>
       <a-table-column title="密钥" :width="70">
         <template #default="{ record }">
           <a-tag :color="record.isSecret ? 'orange' : 'default'">{{ record.isSecret ? '是' : '否' }}</a-tag>
