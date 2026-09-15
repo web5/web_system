@@ -331,9 +331,16 @@ export class DeployService {
     const dst = path.join(ws, 'servers', dir, 'dist');
 
     if (!fs.existsSync(src)) {
-      throw new Error(
-        `部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线，或确认版本标签正确）`,
-      );
+      // 兜底（T2）：版本目录被清掉时，用最近的 dist 备份恢复 —— 回滚旧版本时很可能遇到
+      const restored = this.restoreDistBackup(path.dirname(dst));
+      if (!restored) {
+        throw new Error(
+          `部署失败：找不到版本目录 ${src}，也没有 dist 备份可恢复（先跑该模块的发布流水线）`,
+        );
+      }
+      this.logger.warn(`版本目录 ${src} 不存在，已用备份 ${restored} 恢复 dist`);
+      this.restartPm2(mod, input.moduleKey, ws);
+      return;
     }
 
     // 备份旧 dist（保留最近 3 份）
@@ -356,27 +363,100 @@ export class DeployService {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.cpSync(src, dst, { recursive: true });
     this.logger.log(`后台落地完成: ${src} -> ${dst}`);
+    this.restartPm2(mod, input.moduleKey, ws);
+  }
 
-    // 重启 pm2 进程（失败只告警：指针已改，避免整体回滚造成状态不一致）
-    //
-    // 进程名候选：注册表 `pm2` 字段 → `web-<key>`（本机实际命名规范）→ 裸 key。
-    // 2026-09-15 实测：注册表存的是裸 key（如 `mcp-gateway`），而 pm2 进程叫
-    // `web-mcp-gateway` —— 只认注册表会重启失败，这里逐个试到成功为止。
+  /**
+   * 用最近的 `dist.bak-<ts>` 恢复服务目录的 dist（版本目录缺失时的兜底）。
+   * @returns 使用的备份目录名（相对服务目录），没有可用备份时返回 null
+   */
+  private restoreDistBackup(serviceDir: string): string | null {
+    try {
+      const baks = fs
+        .readdirSync(serviceDir)
+        .filter((f) => f.startsWith('dist.bak-'))
+        .sort()
+        .reverse();
+      if (!baks.length) return null;
+      const pick = baks[0];
+      const dst = path.join(serviceDir, 'dist');
+      if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+      fs.renameSync(path.join(serviceDir, pick), dst);
+      return pick;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 重启后台模块的 pm2 进程。
+   * 进程名候选：注册表 `pm2` 字段 → `web-<key>` → 裸 key（实测注册表常存裸 key，
+   * 而进程叫 `web-<key>`），逐个尝试到成功为止；全失败只告警（不回滚，避免状态撕裂）。
+   */
+  private restartPm2(mod: { pm2?: string }, moduleKey: string, cwd: string): void {
     const candidates = Array.from(
-      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
+      new Set([mod.pm2, `web-${moduleKey}`, moduleKey].filter(Boolean) as string[]),
     );
-    let restarted = '';
     for (const name of candidates) {
       try {
-        this.commands.exec(`"${this.commands.pm2Bin()}" restart ${name}`, ws, {}, 60000);
-        restarted = name;
-        break;
+        this.commands.exec(`"${this.commands.pm2Bin()}" restart ${name}`, cwd, {}, 60000);
+        this.logger.log(`pm2 重启完成: ${name}`);
+        return;
       } catch (e) {
         this.logger.warn(`pm2 restart ${name} 失败，试下一个候选: ${(e as Error).message}`);
       }
     }
-    if (restarted) this.logger.log(`pm2 重启完成: ${restarted}`);
-    else this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
+    this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
+  }
+
+  /**
+   * 回滚到上一个版本（T2）。
+   *
+   * - 前台类：只把指针切回上一版本（网关直接读版本目录，天然可回滚）
+   * - 后台类：与部署同一套「落地 + 重启」；若版本目录已被清理，用最近的 `dist.bak-*` 兜底
+   *
+   * 上一版本取自 `deploy_versions`（同 env + 模块，排除当前指针，取最近一条）。
+   */
+  async rollbackVersion(input: {
+    moduleKey: string;
+    env: string;
+    operator?: string;
+  }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
+    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+
+    const cur = await this.deploymentRepo.findOne({
+      where: { envId: input.env, moduleKey: input.moduleKey },
+    });
+    if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
+
+    const rows = await this.versionRepo.find({
+      where: { env: input.env, component: input.moduleKey },
+      order: { releasedAt: 'DESC' } as any,
+    });
+    const prev = rows.find((r) => r.versionTag && r.versionTag !== cur.currentVersion);
+    if (!prev) throw new Error('回滚失败: 没有可回滚的历史版本');
+
+    // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
+    await this.applyBackendVersion({
+      moduleKey: input.moduleKey,
+      env: input.env,
+      versionTag: prev.versionTag,
+      operator: input.operator,
+    });
+    await this.deploymentRepo.upsert(
+      {
+        envId: input.env,
+        moduleKey: input.moduleKey,
+        currentVersion: prev.versionTag,
+        status: 'deployed',
+        deployedAt: new Date(),
+        deployedBy: input.operator,
+      },
+      ['envId', 'moduleKey'],
+    );
+    this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${prev.versionTag}`);
+    return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: prev.versionTag };
   }
 
   /**

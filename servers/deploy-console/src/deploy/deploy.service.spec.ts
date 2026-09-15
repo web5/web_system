@@ -314,3 +314,108 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
     expect(calls.some((c) => c.includes('restart web-gateway'))).toBe(true);
   });
 });
+
+/**
+ * T2：回滚动作（后台模块）
+ * - 回滚 = 找到「上一版本」→ 走与部署相同的落地 + 重启 → 改指针
+ * - 版本目录被清掉时，用最近的 dist.bak-<ts> 兜底恢复
+ */
+describe('DeployService.rollbackVersion（T2 回滚）', () => {
+  let service: DeployService;
+  let workspace: string;
+  let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
+  let deploymentRepo: { upsert: jest.Mock; findOne: jest.Mock; find: jest.Mock };
+  let versionRepo: { find: jest.Mock };
+
+  const svc = () => path.join(workspace, 'servers/mcp-gateway');
+
+  beforeEach(async () => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rollback-'));
+    fs.mkdirSync(path.join(workspace, 'servers/mcp-gateway/dist'), { recursive: true });
+    fs.writeFileSync(path.join(svc(), 'dist/main.js'), '// B(new)');
+    commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
+    deploymentRepo = {
+      upsert: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({ currentVersion: 'mcp-gateway-local/B' }),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    versionRepo = {
+      // B(当前) / A(上一个) / 更早
+      find: jest.fn().mockResolvedValue([
+        { versionTag: 'mcp-gateway-local/B' },
+        { versionTag: 'mcp-gateway-local/A' },
+      ]),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        DeployService,
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
+        },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: versionRepo },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ModuleRegistryService,
+          useValue: {
+            get: jest.fn().mockResolvedValue({
+              key: 'mcp-gateway',
+              type: 'backend',
+              dir: 'mcp-gateway',
+              pm2: 'web-mcp-gateway',
+            }),
+          },
+        },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: commands },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  it('回滚到上一版本：dist 变回该版本内容 + 指针回退', async () => {
+    fs.mkdirSync(path.join(svc(), 'mcp-gateway-local/A'), { recursive: true });
+    fs.writeFileSync(path.join(svc(), 'mcp-gateway-local/A/main.js'), '// A(old)');
+
+    const r = await service.rollbackVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      operator: 't2',
+    });
+
+    expect(r.from).toBe('mcp-gateway-local/B');
+    expect(r.to).toBe('mcp-gateway-local/A');
+    expect(fs.readFileSync(path.join(svc(), 'dist/main.js'), 'utf-8')).toBe('// A(old)');
+    expect(String(commands.exec.mock.calls[0][0])).toContain('restart web-mcp-gateway');
+    expect(deploymentRepo.upsert).toHaveBeenCalled();
+  });
+
+  it('版本目录已清理：用最近的 dist.bak-* 兜底恢复', async () => {
+    // 造一个备份（内容是 A）
+    fs.mkdirSync(path.join(svc(), 'dist.bak-1789000000000'), { recursive: true });
+    fs.writeFileSync(path.join(svc(), 'dist.bak-1789000000000/main.js'), '// A(backup)');
+
+    const r = await service.rollbackVersion({ moduleKey: 'mcp-gateway', env: 'local' });
+
+    expect(r.to).toBe('mcp-gateway-local/A');
+    expect(fs.readFileSync(path.join(svc(), 'dist/main.js'), 'utf-8')).toBe('// A(backup)');
+  });
+
+  it('没有历史版本 → 明确报错', async () => {
+    versionRepo.find.mockResolvedValue([{ versionTag: 'mcp-gateway-local/B' }]);
+    await expect(service.rollbackVersion({ moduleKey: 'mcp-gateway', env: 'local' })).rejects.toThrow(
+      /没有可回滚的历史版本/,
+    );
+  });
+
+  it('版本目录和备份都没有 → 报错（不静默成功）', async () => {
+    fs.rmSync(path.join(svc(), 'dist'), { recursive: true, force: true });
+    await expect(service.rollbackVersion({ moduleKey: 'mcp-gateway', env: 'local' })).rejects.toThrow(
+      /找不到版本目录|没有 dist 备份/,
+    );
+  });
+});
