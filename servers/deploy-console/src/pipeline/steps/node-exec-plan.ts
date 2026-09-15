@@ -17,22 +17,29 @@ import { TemplateNode } from '../../pipeline-template/template-node';
 export type NodeExecPlan =
   /** check：安全基线恒内置执行，DB 命令作为附加校验叠加 */
   | { how: 'check-base' }
-  /** 普通 script 节点：命令驱动（未配命令按 optional 跳过或 fail-fast） */
+  /** shell 节点：命令驱动（未配命令按 optional 跳过或 fail-fast） */
   | { how: 'script' }
   /** git：DB 锁定脚本优先，缺省回退内置 pull，之后由平台回填版本 */
   | { how: 'git' }
   /** approval：审批节点 —— 创建节点级审批单并挂起流水线，等人工决议后继续 */
   | { how: 'approval' }
-  /** version / pointer：发布语义真相源，纯内置，不可被命令覆盖 */
+  /** 旧 platform 节点（version/pointer）：发布语义真相源，纯内置，不可被命令覆盖 */
   | { how: 'builtin'; builtinKey: string };
 
-/** 解析节点执行策略（纯函数） */
+/**
+ * 解析节点执行策略（纯函数）。
+ *
+ * 终态：`shell` / `approval` 两类。`platform` 仅在存量数据里出现（读取兼容），
+ * 其中 git 走「DB 锁定脚本优先 + 内置 pull 回退」，version/pointer 走内置执行体。
+ */
 export function planNodeExec(node: TemplateNode): NodeExecPlan {
   if (node.kind === 'approval') return { how: 'approval' };
   if (node.kind === 'platform') {
     if (node.key === 'git') return { how: 'git' };
     return { how: 'builtin', builtinKey: node.key };
   }
+  // git 作为普通 shell 节点时同样走「脚本优先 + 内置回退」的拉码语义
+  if (node.key === 'git') return { how: 'git' };
   if (node.key === 'check') return { how: 'check-base' };
   return { how: 'script' };
 }

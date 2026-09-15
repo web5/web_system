@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DeployController } from './deploy.controller';
+import { InternalReleaseController } from './internal-release.controller';
 import { DeployService } from './deploy.service';
 import { AuditModule } from '../audit/audit.module';
 import { EnvironmentModule } from '../environment/environment.module';
@@ -24,7 +25,7 @@ import { StageCommandModule } from '../stage-command/stage-command.module';
     StageCommandModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),
   ],
-  controllers: [DeployController],
+  controllers: [DeployController, InternalReleaseController],
   providers: [DeployService],
   exports: [DeployService],
 })

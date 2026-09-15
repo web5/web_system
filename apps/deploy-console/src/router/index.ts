@@ -28,6 +28,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布流水线' },
       },
       {
+        // 新建态必须排在 pipelines/:id 之前（否则 'new' 会被当成 id）
+        path: 'pipelines/new/edit',
+        name: 'PipelineEditCreate',
+        component: () => import('@/views/PipelineEdit.vue'),
+        meta: { title: '新建流水线' },
+      },
+      {
         path: 'pipelines/:id',
         name: 'PipelineDetail',
         component: () => import('@/views/PipelineDetail.vue'),        meta: { title: '流水线详情' },
@@ -39,16 +46,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '编辑流水线' },
       },
       {
-        path: 'environments',
-        name: 'EnvironmentManager',
-        component: () => import('@/views/EnvironmentManager.vue'),
-        meta: { title: '环境管理' },
-      },
-      {
         path: 'modules',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),
         meta: { title: '模块管理' },
+      },
+      {
+        // 新建模块：独立页（用户 2026-09-15：类型 → 目录 / publicPath / pm2 联动）
+        // 必须排在 modules/:key 之前，否则会被当成一个 key
+        path: 'modules/new',
+        name: 'ModuleCreate',
+        component: () => import('@/views/ModuleEdit.vue'),
+        meta: { title: '新建模块' },
       },
       {
         path: 'modules/:key',

@@ -197,12 +197,15 @@ export class MonitorService {
   async healthCheck(env: string): Promise<HealthCheck[]> {
     const sshConfig = await this.getSshConfig(env);
 
-    // 服务地址从 DB 环境表的 ports 映射读取（完整 host:port 或域名）
-    const envEntity = await this.environmentService.get(env);
-    const ports = envEntity.ports || {};
-    const services: Array<{ name: string; address: string }> = Object.entries(ports)
-      .filter(([, addr]) => !!addr && addr.trim())
-      .map(([name, address]) => ({ name, address: address.trim() }));
+    // 服务地址从 DB 环境表读取：环境已归属模块（1:N），按环境 id 取该环境下所有模块行，
+    // 各行的 address 即该模块的服务地址（前端类模块无 address，跳过）
+    const envRows = await this.environmentService.list({ id: env });
+    const services: Array<{ name: string; address: string }> = envRows
+      .map((e) => ({
+        name: e.moduleKey,
+        address: (e.address || e.ports?.[e.moduleKey] || '').trim(),
+      }))
+      .filter((s) => !!s.address);
 
     const results: HealthCheck[] = [];
 

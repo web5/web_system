@@ -22,7 +22,11 @@ describe('ServerService (P1 serverName + route)', () => {
         ServerService,
         { provide: getRepositoryToken(DeployServerEntity), useValue: serverRepo },
         { provide: getRepositoryToken(DeployEnvServiceRouteEntity), useValue: routeRepo },
-        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: EnvironmentService,
+          // 环境已归属模块（1:N）：list 返回环境行（含 moduleKey/id/address/serverName）
+          useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) },
+        },
         {
           provide: ModuleRegistryService,
           useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) },

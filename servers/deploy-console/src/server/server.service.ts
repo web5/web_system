@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DeployServerEntity } from '../entities/deploy-server.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
+import { DeployEnvironmentEntity } from '../entities/deploy-environment.entity';
 import { ServerDto, EnvServiceRouteDto } from '../common/dto';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
@@ -131,6 +132,11 @@ export class ServerService {
     for (const r of routes) {
       routeMap.set(`${r.envId}:${r.serviceName}`, r);
     }
+    // 环境已归属模块（1:N）：按 (module_key, env_id) 建索引
+    const envMap = new Map<string, DeployEnvironmentEntity>();
+    for (const e of environments) envMap.set(`${e.moduleKey}:${e.id}`, e);
+    // 跨模块的环境 id 字典（同一 id 会在多模块重复，去重后逐环境展开）
+    const envIds = [...new Set(environments.map((e) => e.id))];
 
     const result: Array<{
       serviceName: string;
@@ -145,14 +151,15 @@ export class ServerService {
 
     for (const m of backendModules) {
       const envs: Array<{ envId: string; address: string; serverName: string; port?: number }> = [];
-      for (const env of environments) {
-        const ports = (env.ports || {}) as Record<string, string>;
-        const route = routeMap.get(`${env.id}:${m.key}`);
+      for (const envId of envIds) {
+        const row = envMap.get(`${m.key}:${envId}`);
+        const route = routeMap.get(`${envId}:${m.key}`);
         envs.push({
-          envId: env.id,
-          address: ports[m.key] || '',
-          serverName: route?.serverName || '',
-          port: route?.port,
+          envId,
+          // 真相源是环境行的 address；ports 仅迁移回滚期回退
+          address: row?.address || row?.ports?.[m.key] || '',
+          serverName: row?.serverName || route?.serverName || '',
+          port: row?.port ?? route?.port,
         });
       }
       result.push({

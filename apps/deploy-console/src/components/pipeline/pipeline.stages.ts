@@ -127,41 +127,64 @@ export function checkSemanticOrder(steps: string[]): string[] {
   return errs
 }
 
-/** v5 平台保留字（script key 不可占用；与后端 template-node PLATFORM_RESERVED 保持一致） */
-export const NODE_PLATFORM_KEYS = ['git', 'version', 'pointer'] as const
+/**
+ * 保留字节点名（与后端 template-node `PLATFORM_RESERVED` 保持一致）。
+ *
+ * 终态（design §3）：`git` 已放开 —— 拉码就是普通 shell 节点；
+ * `version` / `pointer` 保留为黑名单，因为它们的能力已变成 `service` action，
+ * 再出现同名节点会造成"以为它在写版本/切指针"的语义误读。
+ */
+export const NODE_PLATFORM_KEYS = ['version', 'pointer'] as const
 
-/** platform 节点固定 label（platform 节点由平台命名，script 用自身 label） */
+/** 旧 platform 节点的固定 label（仅历史数据展示用） */
 export const NODE_PLATFORM_LABELS: Record<string, string> = {
   git: 'git · 拉取代码',
   version: '写版本号',
   pointer: '切指针',
 }
 
+/**
+ * service action 可选工具（与后端 `steps/service-tools.ts` 的 tool 名一致）。
+ * 终态：平台能力 = 节点里的一个 service action，不再是节点类型。
+ */
+export const SERVICE_TOOL_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'write-version', label: '写版本记录' },
+  { value: 'switch-pointer', label: '切换版本指针' },
+  { value: 'restart', label: '重启服务' },
+  { value: 'verify', label: '部署验证' },
+  { value: 'upload', label: '投递产物' },
+  { value: 'pull', label: '拉取代码' },
+  { value: 'cleanup', label: '清理旧版本' },
+  { value: 'check', label: '安全基线校验' },
+]
+
+/** 节点是否可承载命令 / 可拖拽编辑（shell 或旧名 script；platform 仅读取兼容） */
+export function isShellNode(n: TemplateNode): boolean {
+  return n.kind === 'shell' || n.kind === 'script'
+}
+
 const NODE_KEY_RE = /^[A-Za-z0-9_-]{1,32}$/
 
-/** v5 nodes 校验（与后端 normalizeNodes 同规则）：返回违规列表，空 = 合法 */
+/**
+ * v5 nodes 校验（与后端 normalizeNodes 同规则）：返回违规列表，空 = 合法。
+ *
+ * 终态不再强制 git/version/pointer，也不再约束相对序 —— 顺序由画布拖拽决定。
+ */
 export function checkNodes(nodes: TemplateNode[]): string[] {
   const errs: string[] = []
-  const keys = nodes.map((n) => n.key)
   if (!nodes.length) return errs
-  for (const p of NODE_PLATFORM_KEYS) {
-    if (!keys.includes(p)) errs.push(`节点必须保留平台步骤「${p}」（发布语义基线）`)
-  }
-  const iGit = keys.indexOf('git')
-  if (iGit !== 0) errs.push('「git」必须排在第一位（先拉码后构建）')
-  const iVer = keys.indexOf('version')
-  const iPtr = keys.indexOf('pointer')
-  if (iVer >= 0 && iPtr >= 0 && iVer > iPtr) errs.push('「version」必须排在「pointer」之前')
   const seen = new Set<string>()
   let watchCount = 0
   for (const n of nodes) {
     if (seen.has(n.key)) errs.push(`节点 key 重复: ${n.key}`)
     seen.add(n.key)
-    if (n.kind === 'platform') continue
-    if ((NODE_PLATFORM_KEYS as readonly string[]).includes(n.key)) errs.push(`script key 不能占用平台保留字: ${n.key}`)
-    if (!NODE_KEY_RE.test(n.key)) errs.push(`script key 非法: ${n.key}`)
-    if (!n.label?.trim()) errs.push(`script 节点「${n.key}」缺少 label`)
-    if (n.watchdog) watchCount++
+    if (n.kind === 'platform') continue // 旧节点：仅读取兼容，不校验
+    if ((NODE_PLATFORM_KEYS as readonly string[]).includes(n.key)) {
+      errs.push(`节点 key 不能占用保留字: ${n.key}（其能力已是 service action，不应用作节点名）`)
+    }
+    if (!NODE_KEY_RE.test(n.key)) errs.push(`节点 key 非法: ${n.key}（须匹配 ^[A-Za-z0-9_-]{1,32}$）`)
+    if (!n.label?.trim()) errs.push(`节点「${n.key}」缺少 label`)
+    if (isShellNode(n) && (n as { watchdog?: boolean }).watchdog) watchCount++
   }
   if (watchCount > 1) errs.push('watchdog 节点最多 1 个')
   return errs

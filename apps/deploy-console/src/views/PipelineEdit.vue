@@ -5,19 +5,38 @@ import { message, Modal } from 'ant-design-vue'
 import {
   pipelineTemplateApi,
   pipelineStepApi,
+  pipelineVarApi,
+  pipelineApi,
   deployApi,
   type PipelineTemplate,
+  type PipelineVar,
   type TemplateNode,
   PLATFORM_NODE_KEYS,
-  PLATFORM_NODE_LABELS,
 } from '@/api'
+import UserSelect from '@web-system/ui/components/UserSelect.vue'
+import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
+import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
+import VarReferenceTable from '@/components/pipeline/VarReferenceTable.vue'
+import { isShellNode, nodeDisplayName } from '@/components/pipeline/pipeline.stages'
 
+/**
+ * 编辑流水线（定义态）。
+ *
+ * 用户 2026-09-15 批注后的交互：
+ *  - 列表页「编辑 / 新建」进本页，**不再弹窗**（新建态 = 路由 pipelines/new/edit，无 id）；
+ *  - `key` 新建时可填，**保存成功后只读**（它是产物命名空间的一段路径）；
+ *  - 节点信息与脚本放**右侧抽屉**：三 Tab = 节点 / 变量 / 参数（写脚本时随手查键名）；
+ *  - **git 是普通 shell 节点**：脚本可编辑；git 的登录/密钥/权限归「git 信息维护层」。
+ */
 const route = useRoute()
 const router = useRouter()
-const tplId = computed(() => String(route.params.id || ''))
+const isCreate = computed(() => route.name === 'PipelineEditCreate')
+const tplId = computed(() => (isCreate.value ? '' : String(route.params.id || '')))
 
 const tpl = ref<PipelineTemplate | null>(null)
+/** 编辑页当前 Tab：base=基本信息 / flow=流程编排 / params=参数 / vars=变量 */
+const pageTab = ref('base')
 const loading = ref(true)
 const saving = ref(false)
 const dirty = ref(false)
@@ -26,11 +45,26 @@ const dirty = ref(false)
 const metaDraft = ref({
   name: '',
   key: '',
-  description: '',
+  moduleKey: 'admin',
+  env: 'local',
   enabled: true,
   approval: 'inherit' as 'inherit' | 'always' | 'never',
   rollbackOnFailure: 'previous' as 'previous' | 'none',
+  defaultTarget: 'auto' as 'auto' | 'local' | 'remote',
+  approvers: [] as string[],
 })
+
+/** 人员选择器数据源：持有 deploy:pipeline:approve 的系统用户 */
+const loadApprovers = async (): Promise<UserSelectLoadResult> => {
+  const r = await pipelineApi.approvers()
+  return { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
+}
+
+const ENV_OPTIONS = [
+  { value: 'local', label: '本地环境（local）' },
+  { value: 'dev', label: '开发环境（dev）' },
+  { value: 'prod', label: '生产环境（prod）' },
+]
 
 // ── 节点编排 ──
 const nodeDraft = ref<TemplateNode[]>([])
@@ -40,15 +74,92 @@ const dragKey = ref('')
 const dropSide = ref<'l' | 'r'>('r')
 let justDragged = false
 
-// ── 模块预览 ──
+// ── 模块列表（新建时选归属模块）──
 const modules = ref<{ key: string; name: string; type: string }[]>([])
-const previewModule = ref('')
+
+// ── 右侧抽屉：节点 / 变量 / 参数 ──
+const drawerOpen = ref(false)
+const drawerTab = ref<'node' | 'vars' | 'params'>('node')
+/** 节点脚本编辑器（按钮行外置到抽屉 footer） */
+const stageRef = ref<{ save: () => Promise<void>; validate: () => Promise<void> } | null>(null)
+const nodeSaving = ref(false)
+/** 审批节点在模板层类型里还没建模（避免动到别人正在编辑的 api 文件），这里就地取宽类型 */
+const apNode = computed(() => (selectedNode.value || {}) as any)
+
+/** 抽屉底部「取消」= 关闭抽屉（用户 2026-09-15；原来是只清表单、抽屉不关） */
+function closeDrawer() {
+  drawerOpen.value = false
+}
+async function validateNode() {
+  await stageRef.value?.validate()
+}
+/** 抽屉底部「保存」：先存脚本（shell 节点），节点结构有改动再整条流水线落库 */
+async function saveNodeFromDrawer() {
+  if (!selectedNode.value) { message.warning('先选择一个节点'); return }
+  if (isCreate.value) { message.warning('先「创建」流水线，再保存节点脚本'); return }
+  nodeSaving.value = true
+  try {
+    if (selectedNode.value.kind === 'shell') await stageRef.value?.save()
+    if (dirty.value) await save()
+  } finally {
+    nodeSaving.value = false
+  }
+}
+
+// ── 变量（本条流水线）──
+const vars = ref<PipelineVar[]>([])
+
+/**
+ * 默认节点序列（新建态）：拉取代码 → 构建 → 发布确认 → 发布
+ *
+ * 注意：审批节点的 `approvers` / `onReject` 目前只在后端 `ApprovalNode` 里建模，
+ * 前端 api 的 `TemplateNode` 还没跟上（改了会碰到别人正在编辑的同一文件），
+ * 所以这里就地断言 —— 后端 normalizeNodes 会正常接收。
+ */
+function defaultNodes(): TemplateNode[] {
+  return [
+    { kind: 'shell', key: 'git', label: '拉取代码' },
+    { kind: 'shell', key: 'build', label: '构建' },
+    { kind: 'approval', key: 'gate', label: '发布确认', approvers: [], onReject: 'abort' } as TemplateNode,
+    { kind: 'shell', key: 'release', label: '发布' },
+  ]
+}
 
 const isPlatformNode = (key: string) => (PLATFORM_NODE_KEYS as readonly string[]).includes(key)
 
 async function load() {
   loading.value = true
   try {
+    try {
+      const mods = await deployApi.modules()
+      modules.value = (mods as any[]).filter((m) =>
+        ['backend', 'frontend', 'micro-frontend'].includes(m.type),
+      )
+    } catch {
+      modules.value = []
+    }
+
+    if (isCreate.value) {
+      tpl.value = null
+      metaDraft.value = {
+        name: '',
+        key: '',
+        moduleKey: modules.value[0]?.key || 'admin',
+        env: 'local',
+        enabled: true,
+        approval: 'inherit',
+        rollbackOnFailure: 'previous',
+        defaultTarget: 'auto',
+        approvers: [],
+      }
+      nodeDraft.value = defaultNodes()
+      vars.value = []
+      selNodeKey.value = ''
+      editingItem.value = null
+      dirty.value = false
+      return
+    }
+
     tpl.value = await pipelineTemplateApi.list().then(
       (all) => all.find((t) => t.id === tplId.value) || null,
     )
@@ -60,29 +171,31 @@ async function load() {
     metaDraft.value = {
       name: tpl.value.name,
       key: (tpl.value as any).key || 'default',
-      description: tpl.value.description || '',
-      enabled: tpl.value.enabled,
+      moduleKey: (tpl.value as any).moduleKey || '*',
+      env: (tpl.value as any).env || 'local',
+      enabled: tpl.value.enabled !== false,
       approval: tpl.value.approval,
       rollbackOnFailure: tpl.value.rollbackOnFailure || 'previous',
+      defaultTarget: ((tpl.value as any).defaultTarget || 'auto') as 'auto' | 'local' | 'remote',
+      approvers: (tpl.value as any).approvers ? [...(tpl.value as any).approvers] : [],
     }
-    // nodes 草稿（旧模板无 nodes → 预转存）
     nodeDraft.value =
       tpl.value.nodes && tpl.value.nodes.length
         ? JSON.parse(JSON.stringify(tpl.value.nodes))
         : legacyToNodes()
+    // 审批节点字段补默认值（旧数据可能没有），保证抽屉里的单选有选中项
+    nodeDraft.value.forEach((n) => {
+      if (n.kind === 'approval') {
+        const a = n as any
+        a.approvers ||= []
+        a.timeoutAction ||= 'abort'
+        a.onReject ||= 'abort'
+      }
+    })
     selNodeKey.value = ''
     editingItem.value = null
     dirty.value = false
-    // 加载模块列表（按模块预览用）
-    try {
-      const mods = await deployApi.modules()
-      modules.value = (mods as any[]).filter((m) =>
-        ['backend', 'frontend', 'micro-frontend'].includes(m.type),
-      )
-      if (modules.value.length) previewModule.value = modules.value[0].key
-    } catch {
-      modules.value = []
-    }
+    await loadVars()
   } catch {
     message.error('加载流水线失败')
   } finally {
@@ -93,15 +206,15 @@ async function load() {
 function legacyToNodes(): TemplateNode[] {
   const base = (tpl.value?.steps ?? null)?.length
     ? (tpl.value!.steps as string[])
-    : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']
-  const nodes: TemplateNode[] = [{ kind: 'platform', key: 'git' }]
+    : ['check', 'pull', 'build', 'upload', 'restart', 'verify', 'cleanup']
+  // 终态：git 是普通 shell 节点；version/pointer 不再生成（写版本 = 发布节点的 service action，
+  // 切指针 = 模块管理里的部署动作）
+  const nodes: TemplateNode[] = [{ kind: 'shell', key: 'git', label: '拉取代码' }]
   for (const s of base) {
-    if (s === 'pull' || s === 'git') continue
-    if (s === 'version') { nodes.push({ kind: 'platform', key: 'version' }); continue }
-    if (s === 'pointer') { nodes.push({ kind: 'platform', key: 'pointer' }); continue }
+    if (s === 'pull' || s === 'git' || s === 'version' || s === 'pointer') continue
     if (s === 'verify' && tpl.value?.skipVerify) continue
     nodes.push({
-      kind: 'script',
+      kind: 'shell',
       key: s,
       label: ({ check: '校验', build: '构建', upload: '投递', restart: '重启', verify: '探活', cleanup: '清理' } as Record<string, string>)[s] || s,
       optional: s !== 'build',
@@ -114,23 +227,26 @@ function legacyToNodes(): TemplateNode[] {
 function nodeOf(key: string): TemplateNode | undefined {
   return nodeDraft.value.find((n) => n.key === key)
 }
+/** 可配置的节点：shell / approval（终态只有这两类） */
 const selectedNode = computed(() => {
   const n = nodeOf(selNodeKey.value)
-  return n && n.kind === 'script' ? n : null
+  return n && (n.kind === 'shell' || n.kind === 'approval') ? n : null
 })
 
 function onNodeClick(key: string) {
   if (justDragged) return
-  // git 是平台托管（locked）但可只读查看；version/pointer 不展示脚本
-  if (isPlatformNode(key) && key !== 'git') {
-    message.warning('写版本号（version/pointer）是发布语义真相源，平台托管，不可编辑')
-    return
-  }
   selNodeKey.value = key
+  drawerTab.value = 'node'
+  drawerOpen.value = true
   void loadNodeScript(key)
 }
 
 async function loadNodeScript(key: string) {
+  if (!tplId.value) {
+    // 新建态：命令还没落库（保存后再配）
+    editingItem.value = null
+    return
+  }
   try {
     const row = await pipelineStepApi.get(tplId.value, key)
     editingItem.value = {
@@ -140,7 +256,6 @@ async function loadNodeScript(key: string) {
       actions: row?.actions ?? [],
       enabled: !!row?.enabled,
       timeoutSec: row?.timeoutSec ?? null,
-      // 平台托管（locked）：编辑器据此渲染只读
       locked: !!(row as { locked?: boolean } | null)?.locked,
     }
   } catch {
@@ -153,11 +268,12 @@ function addNode(slot: number) {
   const used = new Set(nodeDraft.value.map((n) => n.key))
   let k = 'node'; let i = 2
   while (used.has(k)) k = `node-${i++}`
-  nodeDraft.value.splice(slot, 0, { kind: 'script', key: k, label: '新节点', optional: false })
+  nodeDraft.value.splice(slot, 0, { kind: 'shell', key: k, label: '新节点', optional: false })
   selNodeKey.value = k
   editingItem.value = null
+  drawerTab.value = 'node'
+  drawerOpen.value = true
   dirty.value = true
-  void loadNodeScript(k)
   setTimeout(() => {
     const el = document.getElementById(`edLabel-${k}`) as HTMLInputElement | null
     el?.focus()
@@ -203,14 +319,16 @@ function renameKey(oldKey: string, val: string) {
   void loadNodeScript(k)
 }
 
+/** 策略开关（optional / watchdog）暂不上 UI（用户 2026-09-15），保留函数以便后续接回 */
 function toggleOptional(key: string, on: boolean) {
   const n = nodeOf(key)
   if (n) { n.optional = on; dirty.value = true }
 }
 
+/** 见 toggleOptional：策略 UI 先收起 */
 function toggleWatchdog(key: string, on: boolean) {
   nodeDraft.value.forEach((x) => {
-    if (x.kind === 'script') x.watchdog = false
+    if (isShellNode(x)) x.watchdog = false
   })
   const n = nodeOf(key)
   if (n) { (n as any).watchdog = on; dirty.value = true }
@@ -246,29 +364,80 @@ function onDrop(target: string, e: DragEvent) {
 // ── 保存 ──
 function nodesError(): string {
   const keys = nodeDraft.value.map((n) => n.key)
-  if (!keys.includes('git')) return '「git」必须保留'
-  if (keys.indexOf('version') > keys.indexOf('pointer')) return '「version」必须排在「pointer」之前'
+  if (!keys.length) return '至少需要一个节点'
   if (new Set(keys).size !== keys.length) return '节点 key 不能重复'
+  if (nodeDraft.value.some((n) => isPlatformNode(n.key))) return '节点 key 不能占用平台保留字（version / pointer）'
   return ''
 }
 
+/**
+ * 新建时选的模块类型（前端 / 后台）—— 列表页选择后带在 query 上，
+ * 决定构建节点的初始脚本（用户 2026-09-15 原型：预填，可改）。
+ */
+const moduleType = computed(() => {
+  const q = String(route.query.moduleType || '')
+  return q === 'fe' ? 'fe' : q === 'be' ? 'be' : ''
+})
+
+function buildScriptFor(t: string) {
+  return t === 'fe'
+    ? 'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'
+    : 'set -euo pipefail\ncd "${RELEASE_DIR}"\nnpm ci\nnpx tsc -p tsconfig.json\necho \'{"artifactPath":"dist/"}\' > "$WS_RESULT_FILE"'
+}
+
+async function prefillBuildScript(id: string) {
+  const t = moduleType.value
+  if (!t) return
+  try {
+    await pipelineStepApi.save(id, 'build', { command: buildScriptFor(t), timeoutSec: 900 })
+  } catch {
+    // 预填失败不阻塞创建（用户可自己在节点抽屉里改脚本）
+  }
+}
+
 async function save() {
+  if (!metaDraft.value.name.trim()) { message.warning('流水线名必填'); return }
+  if (isCreate.value && !metaDraft.value.key.trim()) { message.warning('流水线 key 必填'); return }
   const err = nodesError()
   if (err) { message.warning(err); return }
   saving.value = true
   try {
-    await pipelineTemplateApi.update(tplId.value, {
+    const dto = {
       name: metaDraft.value.name,
-      key: metaDraft.value.key,
-      description: metaDraft.value.description,
+      description: tpl.value?.description || '',
+      env: metaDraft.value.env,
       enabled: metaDraft.value.enabled,
       approval: metaDraft.value.approval,
       rollbackOnFailure: metaDraft.value.rollbackOnFailure,
+      defaultTarget: metaDraft.value.defaultTarget,
+      approvers: metaDraft.value.approvers.length ? metaDraft.value.approvers : undefined,
       nodes: nodeDraft.value,
-    } as any)
-    dirty.value = false
-    message.success('流水线已保存')
-    router.push({ name: 'PipelineDetail', params: { id: tplId.value } })
+    } as any
+    if (isCreate.value) {
+      const created = await pipelineTemplateApi.create({
+        ...dto,
+        key: metaDraft.value.key,
+        moduleKey: metaDraft.value.moduleKey,
+      } as any)
+      // 按「前端 / 后台」预填构建节点脚本（用户 2026-09-15：新建时选类型 → 初始流水线带出构建命令）
+      await prefillBuildScript(created.id)
+      dirty.value = false
+      message.success('流水线已创建，key 已锁定')
+      router.replace({ name: 'PipelineEdit', params: { id: created.id } })
+      await load()
+    } else {
+      await pipelineTemplateApi.update(tplId.value, dto)
+      dirty.value = false
+      message.success('流水线已保存')
+      const keepKey = selNodeKey.value
+      await load()
+      // 抽屉里保存后保持选中，别把用户选中的节点丢掉
+      if (keepKey && nodeOf(keepKey)) {
+        selNodeKey.value = keepKey
+        drawerTab.value = 'node'
+        await loadNodeScript(keepKey)
+      }
+    }
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存失败')
   } finally {
@@ -276,7 +445,27 @@ async function save() {
   }
 }
 
+async function removePipeline() {
+  if (!tpl.value) return
+  Modal.confirm({
+    title: `删除流水线「${tpl.value.name}」`,
+    content: '删除后该流水线及其节点命令一并移除，已有执行记录保留。确认删除？',
+    okText: '确认删除',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await pipelineTemplateApi.remove(tplId.value)
+        message.success('流水线已删除')
+        router.push({ name: 'PipelineCenter' })
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
+      }
+    },
+  })
+}
+
 function goBack() {
+  const to = { name: 'PipelineCenter' } as const
   if (dirty.value) {
     Modal.confirm({
       title: '放弃修改？',
@@ -284,46 +473,35 @@ function goBack() {
       okText: '放弃修改',
       okType: 'danger',
       cancelText: '继续编辑',
-      onOk: () => router.push({ name: 'PipelineDetail', params: { id: tplId.value } }),
+      onOk: () => router.push(to),
     })
   } else {
-    router.push({ name: 'PipelineDetail', params: { id: tplId.value } })
+    router.push(to)
   }
 }
 
-// ── 变量预览 ──
-const VARS = ['{MODULE_KEY}', '{MODULE_TYPE}', '{MODULE_DIR}', '{RELEASE_DIR}', '{BRANCH}', '{COMMIT_ID}', '{STAGE}', '{DEPLOY_ENV}']
-const previewOut = ref('')
+// ── 变量（本条流水线）──
+async function loadVars() {
+  if (!tplId.value) { vars.value = []; return }
+  try {
+    vars.value = await pipelineVarApi.list(tplId.value)
+  } catch {
+    vars.value = []
+  }
+}
 
-function insertVar(v: string) {
+const insertVar = (v: string) => {
   const item = editingItem.value
   if (!item?.actions?.length) { message.warning('请先添加一个 shell 操作'); return }
   const shell = item.actions.find((a) => a.type === 'shell')
   if (shell) { shell.code = (shell.code || '') + v; dirty.value = true }
 }
 
-function renderPreview() {
-  const item = editingItem.value
-  if (!item?.actions?.length) { previewOut.value = '（无 shell 操作可预览）'; return }
-  const shell = item.actions.find((a) => a.type === 'shell')
-  if (!shell?.code) { previewOut.value = '（无 shell 操作可预览）'; return }
-  const m = modules.value.find((x) => x.key === previewModule.value)
-  previewOut.value = `# ${(m?.name || previewModule.value)} · ${selNodeKey.value}\n${shell.code}`
-    .replace(/\{MODULE_KEY\}/g, m?.key || 'admin')
-    .replace(/\{MODULE_TYPE\}/g, m?.type || 'micro-frontend')
-    .replace(/\{MODULE_DIR\}/g, 'apps/admin')
-    .replace(/\{RELEASE_DIR\}/g, '/path/to/release')
-    .replace(/\{BRANCH\}/g, 'feature/x')
-    .replace(/\{COMMIT_ID\}/g, 'abc1234')
-    .replace(/\{STAGE\}/g, selNodeKey.value)
-    .replace(/\{DEPLOY_ENV\}/g, 'local')
-}
-
 onMounted(() => { void load() })
 </script>
 
 <template>
-  <div v-if="!loading && tpl">
+  <div v-if="!loading && (tpl || isCreate)">
     <!-- 页头 -->
     <div class="page-header">
       <div>
@@ -331,79 +509,93 @@ onMounted(() => { void load() })
           <a-breadcrumb-item>
             <router-link :to="{ name: 'PipelineCenter' }">流水线</router-link>
           </a-breadcrumb-item>
-          <a-breadcrumb-item>
-            <router-link :to="{ name: 'PipelineDetail', params: { id: tplId } }">{{ tpl.name }}</router-link>
-          </a-breadcrumb-item>
+          <a-breadcrumb-item>{{ isCreate ? '新建' : tpl?.name }}</a-breadcrumb-item>
           <a-breadcrumb-item>编辑</a-breadcrumb-item>
         </a-breadcrumb>
-        <h1 class="page-title">
-          {{ metaDraft.name }}
-          <a-tag v-if="tpl.builtin" color="purple">内置 · 不可改名</a-tag>
-        </h1>
-        <div class="page-sub">编辑流水线 · 定义态（基本信息 / 流程编排 / 节点命令）· 未保存离开会确认</div>
+        <h1 class="page-title">{{ isCreate ? '新建流水线' : metaDraft.name }}</h1>
+        <div class="page-sub">
+          定义态：基本信息 / 流程编排 / 右侧抽屉（节点 · 变量 · 参数）· 未保存离开会确认
+        </div>
       </div>
       <div class="page-actions">
-        <a-tooltip v-if="tpl.builtin" title="内置默认流水线不可删除">
-          <a-button danger disabled>删除流水线</a-button>
-        </a-tooltip>
-        <a-button v-else danger @click="message.info('删除流水线（原型演示）')">删除流水线</a-button>
+        <a-button v-if="!isCreate" danger @click="removePipeline">删除流水线</a-button>
         <a-button @click="goBack">取消</a-button>
-        <a-button type="primary" :loading="saving" @click="save">保存</a-button>
+        <a-button type="primary" :loading="saving" @click="save">{{ isCreate ? '创建' : '保存' }}</a-button>
       </div>
     </div>
 
-    <!-- 基本信息 -->
-    <a-card size="small" title="基本信息" style="margin-bottom: 16px;">
-      <template #extra>
-        <span class="muted-text">命令归属本流水线后，key 是产物命名空间的一段路径</span>
-      </template>
-      <div class="info-grid">
-        <div class="info-field">
-          <label>流水线名</label>
-          <a-input v-model:value="metaDraft.name" :disabled="tpl.builtin" style="width: 200px;" @change="dirty = true" />
-        </div>
-        <div class="info-field">
-          <label>流水线 key（slug）</label>
-          <a-input v-model:value="metaDraft.key" style="width: 160px;" class="mono-input" @change="dirty = true" />
-        </div>
-        <div class="info-field">
-          <label>适用模块</label>
-          <div>{{ tpl.moduleKey === '*' ? '全部模块（全局流水线）' : tpl.moduleKey }}</div>
-        </div>
-        <div class="info-field">
-          <label>启用</label>
-          <a-switch v-model:checked="metaDraft.enabled" @change="dirty = true" />
-        </div>
-        <div class="info-field">
-          <label>审批</label>
-          <a-radio-group v-model:value="metaDraft.approval" button-style="solid" size="small" @change="dirty = true">
-            <a-radio-button value="inherit">继承环境</a-radio-button>
-            <a-radio-button value="always">始终</a-radio-button>
-            <a-radio-button value="never">从不</a-radio-button>
-          </a-radio-group>
-        </div>
-        <div class="info-field">
-          <label>失败回滚</label>
-          <a-radio-group v-model:value="metaDraft.rollbackOnFailure" button-style="solid" size="small" @change="dirty = true">
-            <a-radio-button value="previous">回滚上一版本</a-radio-button>
-            <a-radio-button value="none">不回滚</a-radio-button>
-          </a-radio-group>
-        </div>
-      </div>
-      <a-alert type="info" show-icon style="margin-top: 14px;">
-        <template #message>
-          产物路径 = 模块 × 流水线 key × 版本：
-          <span class="mono-text">modules/admin/{{ metaDraft.key }}/1a2b3c4/</span>
-          <br />全局线服务多模块时，命令差异用 <b>{'{MODULE_*}'}</b> 变量表达；差异大就「复制为专用线」。
-        </template>
-      </a-alert>
-    </a-card>
+    <!-- 编辑页 Tab（2026-09-15 原型定稿）：基本信息 / 流程编排 / 参数 / 变量 —— 没有「历史记录」（那是实例页的） -->
+    <a-tabs v-model:activeKey="pageTab">
+      <!-- Tab 1：基本信息（只剩身份字段；行为配置都在节点上，编辑态整体锁定） -->
+      <a-tab-pane key="base" tab="基本信息">
+        <a-card size="small">
+          <div class="info-grid">
+            <div class="info-field">
+              <label>流水线名</label>
+              <a-input
+                v-model:value="metaDraft.name"
+                :disabled="!isCreate"
+                style="width: 220px;"
+                @change="dirty = true"
+              />
+            </div>
+            <div class="info-field">
+              <label>流水线 key（slug）{{ isCreate ? ' · 保存后不可修改' : ' · 已保存，不可修改' }}</label>
+              <a-input
+                v-model:value="metaDraft.key"
+                :disabled="!isCreate"
+                style="width: 180px;"
+                class="mono-input"
+                @change="dirty = true"
+              />
+            </div>
+            <div class="info-field">
+              <label>模块</label>
+              <a-select
+                v-model:value="metaDraft.moduleKey"
+                :disabled="!isCreate"
+                style="width: 200px;"
+                @change="dirty = true"
+              >
+                <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
+                  {{ m.name }}（{{ m.key }}）
+                </a-select-option>
+              </a-select>
+            </div>
+            <div class="info-field">
+              <label>环境</label>
+              <a-select
+                v-model:value="metaDraft.env"
+                :disabled="!isCreate"
+                style="width: 180px;"
+                @change="dirty = true"
+              >
+                <a-select-option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}</a-select-option>
+              </a-select>
+            </div>
+            <div class="info-field">
+              <label>启用</label>
+              <a-switch v-model:checked="metaDraft.enabled" @change="dirty = true" />
+            </div>
+          </div>
+          <a-alert type="info" show-icon style="margin-top: 14px;">
+            <template #message>
+              模块 / 环境决定投递机器：local = 本机，dev / prod = 远程（取「环境管理」的服务器配置，脚本用
+              <span class="mono-text">${'{'}DEPLOY_HOST{'}'}</span>）。
+              <b>审批（审批人 / 超时 / 拒绝后）在「发布确认」节点的抽屉里配置</b>、
+              <b>失败自动回滚在节点上标 watchdog</b> —— 都在流水线各节点里设置，不放在基本信息。
+              <span v-if="!isCreate">编辑态的基本信息（名 / key / 模块 / 环境）锁定不可改。</span>
+            </template>
+          </a-alert>
+        </a-card>
+      </a-tab-pane>
 
-    <!-- 流程编排 -->
-    <a-card size="small" style="margin-bottom: 16px;">
+      <!-- Tab 2：流程编排 -->
+      <a-tab-pane key="flow" tab="流程编排">
+        <a-card size="small">
       <template #title>
         流程编排
-        <span class="muted-text" style="margin-left: 8px;">platform 锁定不可增删 · script 可增删、配命令</span>
+        <span class="muted-text" style="margin-left: 8px;">节点可增删、拖拽排序；点节点在右侧抽屉配置脚本</span>
       </template>
       <template #extra>
         <a-button type="primary" size="small" @click="addNode(1)">+ 添加节点</a-button>
@@ -416,8 +608,8 @@ onMounted(() => { void load() })
           </div>
           <div
             class="flow-node"
-            :class="{ plat: n.kind === 'platform', watch: n.watchdog, sel: selNodeKey === n.key }"
-            :draggable="n.kind !== 'platform'"
+            :class="{ watch: n.watchdog, sel: selNodeKey === n.key, approval: n.kind === 'approval' }"
+            :draggable="isShellNode(n)"
             @click="onNodeClick(n.key)"
             @dragstart="onDragStart(n.key, $event)"
             @dragend="onDragEnd"
@@ -426,119 +618,164 @@ onMounted(() => { void load() })
           >
             <span class="flow-seq">{{ i + 1 }}</span>
             <span v-if="n.watchdog" class="watchdog-badge">wd</span>
-            <button
-              v-if="n.kind === 'script'"
-              class="node-del"
-              @click.stop="askDeleteNode(n.key)"
-            >×</button>
-            <span class="flow-name">{{ n.label || PLATFORM_NODE_LABELS[n.key] || n.key }}</span>
-            <span class="flow-key">{{ n.kind === 'platform' ? (PLATFORM_NODE_LABELS[n.key] ? n.key : n.key) : n.key }}</span>
+            <button v-if="isShellNode(n)" class="node-del" @click.stop="askDeleteNode(n.key)">×</button>
+            <span class="flow-name">{{ nodeDisplayName(n) }}</span>
+            <span class="flow-key">{{ n.kind === 'approval' ? '审批' : n.key }}</span>
           </div>
         </template>
       </div>
       <div class="muted-text" style="margin-top: 8px;">
-        点 script 节点在下方「节点命令」配置；点连接线「+」在槽位插入节点；拖拽 script 节点重排。
+        拉取代码、构建、发布都是普通 shell 节点（脚本可编辑）；审批节点在抽屉里配审批人与超时动作。
+        <b>改动由页头「保存」统一提交</b>（不再有单独的「保存顺序」按钮）。
       </div>
-    </a-card>
+        </a-card>
+      </a-tab-pane>
 
-    <!-- 节点命令 -->
-    <a-card size="small">
-      <template #title>
-        节点命令
-        <span v-if="selectedNode" class="muted-text" style="margin-left: 8px;">· 当前：{{ selectedNode.label }}（{{ selectedNode.key }}）</span>
-      </template>
-      <!-- platform/git：平台托管脚本（locked），只读查看 -->
-      <template v-if="!selectedNode && selNodeKey === 'git'">
-        <a-alert
-          type="info"
-          show-icon
-          style="margin-bottom: 12px;"
-          message="git · 拉取代码：平台托管（locked）"
-          description="脚本正文随平台代码维护（启动 / 发布时自动同步到数据库），页面仅可查看与语法校验。"
-        />
-        <StageActionsEditor
-          v-if="editingItem"
-          :template-id="tplId"
-          :item="editingItem"
-          :readonly="true"
-          @cancel="editingItem = null"
-        />
-        <a-empty v-else description="读取 流水线 × git 命令中…" />
-      </template>
-      <div v-else-if="!selectedNode" class="empty-hint">
-        点击上方节点：script 可配置命令；git 可查看（平台托管只读）；写版本号不可选
-      </div>
-      <template v-else>
-        <div class="node-config-row">
-          <div class="config-field">
-            <label>节点名</label>
-            <a-input
-              :id="`edLabel-${selectedNode.key}`"
-              :value="selectedNode.label"
-              style="width: 170px;"
-              size="small"
-              @change="(e: any) => renameLabel(selectedNode!.key, e.target.value)"
-            />
-          </div>
-          <div class="config-field">
-            <label>节点 key</label>
-            <a-input
-              :value="selectedNode.key"
-              style="width: 140px;"
-              size="small"
-              @change="(e: any) => renameKey(selectedNode!.key, e.target.value)"
-            />
-          </div>
-          <div class="config-field">
-            <label>策略</label>
-            <a-checkbox
-              :checked="!!selectedNode.optional"
-              @change="(e: any) => toggleOptional(selectedNode!.key, e.target.checked)"
-            >optional（未配命令时跳过）</a-checkbox>
-            <a-checkbox
-              :checked="!!selectedNode.watchdog"
-              style="margin-left: 16px;"
-              @change="(e: any) => toggleWatchdog(selectedNode!.key, e.target.checked)"
-            >watchdog（失败自动回滚）</a-checkbox>
-          </div>
-        </div>
+      <!-- Tab 3：参数（只读查阅，写脚本时对键名） -->
+      <a-tab-pane key="params" tab="参数">
+        <a-card size="small">
+          <VarReferenceTable :vars="vars" />
+        </a-card>
+      </a-tab-pane>
 
-        <div v-if="tpl" style="margin-top: 12px;">
-          <StageActionsEditor
-            v-if="editingItem"
-            :template-id="tpl.id"
-            :item="editingItem"
-            @saved="() => { if (selNodeKey) void loadNodeScript(selNodeKey) }"
-            @cancel="editingItem = null"
-          />
-          <a-empty v-else :description="`读取 流水线 × ${selectedNode.key} 命令中…`" />
-        </div>
-
-        <!-- 变量预览 -->
-        <div class="var-section">
-          <div class="muted-text" style="margin-bottom: 6px;">可用变量（全局线服务多模块时用它表达模块差异）</div>
-          <div class="var-chips">
-            <span v-for="v in VARS" :key="v" class="var-chip" @click="insertVar(v)">{{ v }}</span>
+      <!-- Tab 4：变量（本条流水线，可增删改） -->
+      <a-tab-pane key="vars" tab="变量">
+        <a-card size="small">
+          <div v-if="isCreate" class="empty-hint" style="padding: 24px 0; text-align: center;">
+            新建态：先「创建」流水线，再回来配变量
           </div>
-          <div style="display: flex; align-items: flex-end; gap: 12px; margin-top: 8px;">
-            <div class="config-field">
-              <label>按模块预览替换结果</label>
-              <a-select v-model:value="previewModule" style="width: 200px;" size="small" @change="renderPreview">
-                <a-select-option v-for="m in modules" :key="m.key" :value="m.key">
-                  {{ m.name }}（{{ m.type }}）
-                </a-select-option>
-              </a-select>
-            </div>
-            <a-button size="small" @click="renderPreview">刷新预览</a-button>
-          </div>
-          <pre v-if="previewOut" class="preview-code">{{ previewOut }}</pre>
-        </div>
-      </template>
-    </a-card>
+          <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+        </a-card>
+      </a-tab-pane>
+    </a-tabs>
   </div>
   <div v-else style="padding: 100px; text-align: center;">
     <a-spin size="large" />
   </div>
+
+  <!-- 右侧抽屉：节点 / 变量 / 参数 -->
+  <a-drawer
+    v-model:open="drawerOpen"
+    :width="640"
+    :title="selectedNode ? `节点 · ${selectedNode.label}（${selectedNode.key}）` : '节点配置'"
+    placement="right"
+  >
+    <a-tabs v-model:activeKey="drawerTab">
+      <!-- Tab 1：节点 -->
+      <a-tab-pane key="node" tab="节点">
+        <template v-if="selectedNode">
+          <div class="node-config-row">
+            <div class="config-field">
+              <label>节点名</label>
+              <a-input
+                :id="`edLabel-${selectedNode.key}`"
+                :value="selectedNode.label"
+                style="width: 170px;"
+                size="small"
+                @change="(e: any) => renameLabel(selectedNode!.key, e.target.value)"
+              />
+            </div>
+            <div class="config-field">
+              <label>节点 key</label>
+              <a-input
+                :value="selectedNode.key"
+                style="width: 140px;"
+                size="small"
+                @change="(e: any) => renameKey(selectedNode!.key, e.target.value)"
+              />
+            </div>
+            <!--
+              节点「策略」（optional / watchdog）先不上（用户 2026-09-15：小特性后续有需要再加）——
+              已配过的值仍在节点数据里保留，只是不给 UI 入口。
+            -->
+          </div>
+
+          <div v-if="isCreate" class="empty-hint" style="margin-top: 12px;">
+            新建态：先「创建」流水线，再回来配节点脚本（命令按流水线落库）
+          </div>
+
+          <!-- 审批节点：审批配置（不该出现脚本编辑器） -->
+          <template v-else-if="selectedNode.kind === 'approval'">
+            <div class="node-config-row" style="margin-top: 12px;">
+              <div class="config-field" style="min-width: 300px; flex: 1;">
+                <label>审批人（不选 = 所有持权限者）</label>
+                <UserSelect
+                  :model-value="apNode.approvers || []"
+                  :load="loadApprovers"
+                  degraded-text="未获取到可审批人名单：任何能登录控制台的人都能审批"
+                  placeholder="选择可审批的人"
+                  @update:model-value="(v: string[]) => { apNode.approvers = v; dirty = true }"
+                />
+              </div>
+              <div class="config-field">
+                <label>超时（秒，留空=不超时）</label>
+                <a-input-number
+                  v-model:value="apNode.timeoutSec"
+                  :min="1"
+                  style="width: 140px;"
+                  @change="dirty = true"
+                />
+              </div>
+            </div>
+            <div class="node-config-row" style="margin-top: 12px;">
+              <div class="config-field">
+                <label>超时未批</label>
+                <a-radio-group v-model:value="apNode.timeoutAction" button-style="solid" size="small" @change="dirty = true">
+                  <a-radio-button value="abort">终止</a-radio-button>
+                  <a-radio-button value="auto-approve">自动通过</a-radio-button>
+                </a-radio-group>
+              </div>
+              <div class="config-field">
+                <label>拒绝后</label>
+                <a-radio-group v-model:value="apNode.onReject" button-style="solid" size="small" @change="dirty = true">
+                  <a-radio-button value="abort">终止</a-radio-button>
+                  <a-radio-button value="rollback">回滚</a-radio-button>
+                </a-radio-group>
+              </div>
+            </div>
+          </template>
+
+          <!-- shell 节点：脚本（编辑器自带按钮已隐藏，按钮统一放抽屉 footer） -->
+          <div v-else style="margin-top: 12px;">
+            <StageActionsEditor
+              v-if="editingItem"
+              ref="stageRef"
+              :template-id="tplId"
+              :item="editingItem"
+              :simple="true"
+              :hide-actions="true"
+              @saved="() => { if (selNodeKey) void loadNodeScript(selNodeKey) }"
+              @cancel="closeDrawer"
+            />
+            <a-empty v-else :description="`读取 ${selectedNode.key} 命令中…`" />
+          </div>
+        </template>
+        <div v-else class="empty-hint">
+          点画布上的节点来配置：节点名 / key / 策略 + 脚本与操作序列
+        </div>
+      </a-tab-pane>
+
+      <!-- Tab 2：变量（本条流水线，可增删改）—— 与编辑页「变量」Tab 共用一个组件 -->
+      <a-tab-pane key="vars" tab="变量">
+        <div v-if="isCreate" class="empty-hint">新建态：先「创建」流水线，再配变量</div>
+        <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+      </a-tab-pane>
+
+      <!-- Tab 3：参数（只读，写脚本时查阅）—— 与编辑页「参数」Tab 共用一个组件 -->
+      <a-tab-pane key="params" tab="参数">
+        <VarReferenceTable :vars="vars" @pick="insertVar" />
+      </a-tab-pane>
+    </a-tabs>
+
+    <!-- 抽屉底部固定操作栏（用户 2026-09-15）：取消 = 关闭抽屉；语法校验只对 shell 节点显示 -->
+    <template #footer>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <a-button @click="closeDrawer">取消</a-button>
+        <a-button v-if="selectedNode?.kind === 'shell'" @click="validateNode">语法校验</a-button>
+        <a-button type="primary" :loading="nodeSaving" @click="saveNodeFromDrawer">保存</a-button>
+      </div>
+    </template>
+  </a-drawer>
 </template>
 
 <style scoped>
@@ -561,10 +798,9 @@ onMounted(() => { void load() })
   transition: all .15s; user-select: none; }
 .flow-node:hover { border-color: var(--ws-brand-500); transform: translateY(-1px); }
 .flow-node.sel { border-color: var(--ws-brand-500); background: var(--ws-brand-50); }
-.flow-node.plat { border-color: var(--ws-purple-100); background: var(--ws-purple-50); }
+.flow-node.approval { border-color: var(--ws-brand-500); }
 .flow-node.watch { border-color: var(--ws-warning-100); }
 .flow-name { display: block; font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
-.flow-node.plat .flow-name { color: #722ED1; }
 .flow-key { display: block; font-size: 10px; color: var(--ws-text-tertiary); margin-top: 2px;
   font-family: var(--ws-font-mono); }
 .flow-seq { position: absolute; top: -8px; left: -8px; width: 18px; height: 18px; border-radius: 50%;
@@ -575,27 +811,23 @@ onMounted(() => { void load() })
 .flow-slot { position: relative; width: 40px; height: 2px; flex-shrink: 0; display: flex; align-items: center; cursor: pointer; }
 .flow-arrow { width: 40px; height: 2px; background: var(--ws-gray-300); }
 .flow-plus { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--ws-bg-surface);
-  border: 1.5px dashed var(--ws-gray-400); color: var(--ws-text-tertiary); font-size: 12px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-weight: 600; border: 1.5px dashed; background: none; }
+  color: var(--ws-text-tertiary); font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-weight: 600; border: 1.5px dashed; }
 .flow-plus:hover { border-color: var(--ws-brand-500); color: var(--ws-brand-500); }
 .node-del { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%;
   background: var(--ws-error-500); color: #fff; border: none; font-size: 11px; cursor: pointer;
   display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; }
 .flow-node:hover .node-del { opacity: 1; }
 
-/* 节点配置 */
+/* 抽屉内的节点配置 */
 .node-config-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
 .config-field { display: flex; flex-direction: column; gap: 4px; }
 .config-field label { font-size: 12px; color: var(--ws-text-tertiary); }
 .empty-hint { padding: 24px; text-align: center; color: var(--ws-text-tertiary); font-size: 13px; }
 
-/* 变量预览 */
-.var-section { margin-top: 16px; border-top: 1px dashed var(--ws-border-subtle); padding-top: 12px; }
-.var-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 变量表单与 chips */
+.var-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .var-chip { font-size: 11px; background: var(--ws-bg-subtle); color: var(--ws-text-secondary);
   border-radius: 4px; padding: 2px 8px; cursor: pointer; font-family: var(--ws-font-mono); }
 .var-chip:hover { background: var(--ws-brand-50); color: var(--ws-brand-500); }
-.preview-code { background: #1E1E1E; color: #D4D4D4; border-radius: 8px; padding: 10px 12px;
-  font-family: var(--ws-font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap;
-  word-break: break-all; margin-top: 8px; }
 </style>

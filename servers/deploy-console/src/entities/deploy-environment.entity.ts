@@ -5,19 +5,25 @@ import {
 } from 'typeorm';
 
 /**
- * 部署环境注册表（一等公民）。
- * - 固定环境 dev / prod 为 builtin，不可删除。
- * - 其他环境可任意增删（如 staging / 压测环境）。
- * - ports: 后端模块 key -> 服务地址（`host:port` 或域名），监控/部署统一读它。
- *   列名保留 `ports`（兼容旧数据），但 value 类型从 `number`（端口）改为 `string`（完整地址）。
- *   例：`{ gateway: '127.0.0.1:6000', 'auth-service': 'dev.kedouai.com:6101' }`。
- *   留空表示该服务不在本环境部署。
- * - 服务器连接信息已下沉到 deploy_servers（serverName 服务器组），环境不再直接持有单台 host。
+ * 部署环境注册表 —— **归属模块（1:N）**。
+ *
+ * 关系：一个模块有多个环境，一个环境只属于一个模块（复合主键 `(module_key, id)`）。
+ * dev / prod 是「每模块各一份」的内置环境（builtin，不可删、地址可改）。
+ *
+ * @deprecated `ports`：旧模型「环境 → 各模块服务地址」的 JSON 映射，已被 `address`
+ * 取代。仅迁移回滚期保留（双读：address 优先，回退 ports[moduleKey]），P2 物理删列。
+ *
+ * 服务器连接信息在 deploy_servers（serverName 服务器组），环境只记组名。
+ * 设计见 specs/module-env-ownership/design.md。
  */
 @Entity('deploy_environments')
 export class DeployEnvironmentEntity {
-  /** 环境 ID，如 dev / prod / staging */
-  @PrimaryColumn({ type: 'varchar', length: 32, comment: '环境 ID' })
+  /** 所属模块 key（1:N 的「1」侧） */
+  @PrimaryColumn({ type: 'varchar', length: 64, comment: '所属模块 key' })
+  moduleKey: string;
+
+  /** 环境 ID，模块内唯一（如 dev / prod / staging） */
+  @PrimaryColumn({ type: 'varchar', length: 32, comment: '环境 ID（模块内唯一）' })
   id: string;
 
   /** 环境展示名 */
@@ -28,8 +34,23 @@ export class DeployEnvironmentEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '公网访问地址' })
   publicUrl?: string;
 
-  /** 后端模块服务地址映射: { moduleKey: 'host:port' 或域名 }。前端模块无需地址。 */
-  @Column({ type: 'json', nullable: true, comment: '后端模块服务地址映射（host:port 或域名）' })
+  /** 本模块在本环境的服务地址（`host:port` 或域名）；前端类模块无地址，留空 */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '服务地址（host:port 或域名）' })
+  address?: string;
+
+  /** 服务器组（deploy_servers.serverName） */
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '服务器组' })
+  serverName?: string;
+
+  /** 可选：覆盖服务器组内的端口 */
+  @Column({ type: 'int', nullable: true, comment: '覆盖端口' })
+  port?: number;
+
+  /**
+   * @deprecated 旧模型「环境 → 各模块服务地址」的 JSON 映射，已被 `address` 取代。
+   * 仅迁移回滚期保留，P2 物理删列（见 specs/module-env-ownership/design.md §4）。
+   */
+  @Column({ type: 'json', nullable: true, comment: '【废弃】后端模块服务地址映射（已由 address 取代）' })
   ports?: Record<string, string>;
 
   /** 是否内置环境（dev/prod），内置环境禁止删除 */
