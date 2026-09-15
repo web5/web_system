@@ -139,6 +139,7 @@ SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
 DST="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
 DST="\${DST/#\\~/$HOME}"
 [ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+[ -n "$(ls -A "$SRC" 2>/dev/null)" ] || { echo "[release] 构建产物为空: $SRC（典型：tsc 增量编译没产出 JS，只有 tsbuildinfo）"; exit 1; }
 [ -d "$DST" ] && mv "$DST" "$DST.bak-$(date +%s)"
 mkdir -p "$DST"
 cp -R "$SRC/." "$DST/"
@@ -155,6 +156,7 @@ DST="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
 # 2026-09-15 事故：产物被拷进字面量目录 apps/admin/~/... → 页面 404。这里显式展开。
 DST="\${DST/#\\~/$HOME}"
 [ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+[ -n "$(ls -A "$SRC" 2>/dev/null)" ] || { echo "[release] 构建产物为空: $SRC（典型：tsc 增量编译没产出 JS，只有 tsbuildinfo）"; exit 1; }
 mkdir -p "$DST/$VER"
 rm -rf "$DST/$VER"/* 2>/dev/null || true
 cp -R "$SRC/." "$DST/$VER/"
@@ -173,6 +175,7 @@ PUBLISH_PATH="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
 VER="\${COMMIT_ID:?COMMIT_ID 为空，无法确定版本目录}"
 SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
 [ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+[ -n "$(ls -A "$SRC" 2>/dev/null)" ] || { echo "[release] 构建产物为空: $SRC（典型：tsc 增量编译没产出 JS，只有 tsbuildinfo）"; exit 1; }
 SSH="ssh -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 SCP="scp -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 TGZ="/tmp/${mod.key}-$(echo "$VER" | tr '/' '-').tgz"
@@ -201,6 +204,7 @@ PUBLISH_PATH="\${PUBLISH_PATH:?缺少流水线变量 PUBLISH_PATH}"
 VER="\${COMMIT_ID:?COMMIT_ID 为空，无法确定版本}"
 SRC="\${BUILD_OUTPUT_DIR:?构建产物目录未注入}"
 [ -d "$SRC" ] || { echo "[release] 构建产物不存在: $SRC"; exit 1; }
+[ -n "$(ls -A "$SRC" 2>/dev/null)" ] || { echo "[release] 构建产物为空: $SRC（典型：tsc 增量编译没产出 JS，只有 tsbuildinfo）"; exit 1; }
 SSH="ssh -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 SCP="scp -i $PUBLISH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 TGZ="/tmp/${mod.key}-overlay-$(echo "$VER" | tr '/' '-').tgz"
