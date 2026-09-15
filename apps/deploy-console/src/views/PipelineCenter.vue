@@ -158,8 +158,17 @@ function gotoDetail(t: PipelineTemplate) {
 }
 
 // ===== 新建 / 编辑：进独立编辑页（用户 2026-09-15：列表页不再弹窗）=====
+/**
+ * 新建流水线：先选「前端 / 后台」—— 按类型载入初始四节点，
+ * 构建命令按类型预填（用户 2026-09-15 原型定稿）。
+ */
+const newTypeOpen = ref(false)
 function openCreate() {
-  router.push({ name: 'PipelineEditCreate' })
+  newTypeOpen.value = true
+}
+function confirmCreate(type: 'fe' | 'be') {
+  newTypeOpen.value = false
+  router.push({ name: 'PipelineEditCreate', query: { moduleType: type } })
 }
 function openEdit(t: PipelineTemplate) {
   router.push({ name: 'PipelineEdit', params: { id: t.id } })
@@ -840,6 +849,23 @@ onUnmounted(stopPolling)
         </template>
       </a-table>
     </a-card>
+
+    <!-- 新建流水线：先选模块类型（前端 / 后台）→ 初始流水线按类型预填构建命令 -->
+    <a-modal v-model:open="newTypeOpen" title="新建流水线 · 选择模块类型" :footer="null" width="520">
+      <div style="margin-bottom: 14px; color: var(--ws-text-tertiary); font-size: 12px;">
+        按类型载入初始流水线（拉取代码 → 构建 → 发布确认 → 发布），构建命令按类型预填，可改。
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <a-button block style="height: auto; padding: 14px;" @click="confirmCreate('fe')">
+          <div style="font-weight: 600;">前端（micro-frontend）</div>
+          <div style="font-size: 12px; color: var(--ws-text-tertiary);">初始构建：npx vite build</div>
+        </a-button>
+        <a-button block style="height: auto; padding: 14px;" @click="confirmCreate('be')">
+          <div style="font-weight: 600;">后台（backend）</div>
+          <div style="font-size: 12px; color: var(--ws-text-tertiary);">初始构建：npm ci + npx tsc</div>
+        </a-button>
+      </div>
+    </a-modal>
 
     <!-- 发起发布抽屉 -->
     <a-drawer

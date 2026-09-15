@@ -15,10 +15,13 @@ import { moduleApi } from '@/api'
 const route = useRoute()
 const router = useRouter()
 const moduleKey = computed(() => String(route.params.key || ''))
+/** 新建态（/modules/new）：key 可填、按类型自动带出目录与运行字段 */
+const isCreate = computed(() => route.name === 'ModuleCreate')
 
 const loading = ref(false)
 const saving = ref(false)
 const form = ref<Record<string, any>>({
+  key: '',
   name: '',
   type: 'backend',
   dir: '',
@@ -38,7 +41,36 @@ const TYPE_OPTIONS = [
 ]
 const isBackend = computed(() => form.value.type === 'backend')
 
+/**
+ * 类型 / key 联动（用户 2026-09-15 原型定稿）：
+ *  前端 → 目录 apps/<key>、publicPath /<key>/
+ *  后台 → 目录 servers/<key>、pm2 进程名 web-<key>
+ * 只填空字段，用户改过的不覆盖。
+ */
+function applyTypeDefaults() {
+  const k = (form.value.key || '').trim()
+  if (!k) return
+  const isBe = form.value.type === 'backend'
+  if (!form.value.dir) form.value.dir = isBe ? `servers/${k}` : `apps/${k}`
+  if (isBe && !form.value.pm2) form.value.pm2 = `web-${k}`
+  if (!isBe && !form.value.publicPath) form.value.publicPath = `/${k}/`
+  if (!form.value.buildCmd) {
+    form.value.buildCmd = isBe ? 'npm ci && npx tsc -p tsconfig.json' : 'npx vite build'
+  }
+}
+function onTypeChange() {
+  // 换类型时把「另一类」的字段清掉，再按新类型带出
+  form.value.dir = ''
+  if (form.value.type === 'backend') { form.value.publicPath = '' } else { form.value.pm2 = '' }
+  form.value.buildCmd = ''
+  applyTypeDefaults()
+}
+
 async function loadModule() {
+  if (isCreate.value) {
+    form.value = { key: '', name: '', type: 'backend', dir: '', pm2: '', publicPath: '', buildCmd: '', entry: '', description: '', enabled: true }
+    return
+  }
   if (!moduleKey.value) return
   loading.value = true
   try {
@@ -66,13 +98,22 @@ async function save() {
     message.warning('模块名称必填')
     return
   }
+  const payload = {
+    ...form.value,
+    name: form.value.name.trim(),
+    description: form.value.description?.trim() || undefined,
+  }
   saving.value = true
   try {
-    await moduleApi.update(moduleKey.value, {
-      ...form.value,
-      name: form.value.name.trim(),
-      description: form.value.description?.trim() || undefined,
-    })
+    if (isCreate.value) {
+      const key = String(form.value.key || '').trim()
+      if (!key) { message.warning('模块 key 必填'); saving.value = false; return }
+      await moduleApi.create({ ...payload, key })
+      message.success('模块已创建')
+      router.push({ name: 'ModuleDetail', params: { key } })
+      return
+    }
+    await moduleApi.update(moduleKey.value, payload)
     message.success('模块已保存')
     router.push({ name: 'ModuleDetail', params: { key: moduleKey.value } })
   } catch (e: any) {
@@ -83,6 +124,7 @@ async function save() {
 }
 
 function cancel() {
+  if (isCreate.value) { router.back(); return }
   router.push({ name: 'ModuleDetail', params: { key: moduleKey.value } })
 }
 
@@ -91,22 +133,30 @@ onMounted(loadModule)
 
 <template>
   <div style="padding: 16px;">
-    <a-card :loading="loading" :title="`编辑模块 · ${moduleKey}`">
+    <a-card :loading="loading" :title="isCreate ? '新建模块' : `编辑模块 · ${moduleKey}`">
       <a-form layout="vertical" style="max-width: 640px;">
-        <a-form-item label="模块 key（不可改）">
+        <a-form-item v-if="isCreate" label="模块 key（slug）· 保存后不可修改" required>
+          <a-input
+            v-model:value="form.key"
+            placeholder="admin"
+            style="font-family: monospace;"
+            @blur="applyTypeDefaults"
+          />
+        </a-form-item>
+        <a-form-item v-else label="模块 key（不可改）">
           <a-input :value="moduleKey" disabled style="font-family: monospace;" />
         </a-form-item>
         <a-form-item label="名称" required>
           <a-input v-model:value="form.name" placeholder="如：管理后台" />
         </a-form-item>
         <a-form-item label="类型">
-          <a-select v-model:value="form.type">
+          <a-select v-model:value="form.type" @change="onTypeChange">
             <a-select-option v-for="t in TYPE_OPTIONS" :key="t.value" :value="t.value">
               {{ t.label }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="代码目录">
+        <a-form-item label="代码目录（相对仓库根；按类型自动带出，可改）">
           <a-input v-model:value="form.dir" placeholder="apps/admin" style="font-family: monospace;" />
         </a-form-item>
         <a-form-item label="构建命令">
