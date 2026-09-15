@@ -79,12 +79,16 @@
 
 ## 5. 模板启用状态（2026-09-15 更新）
 
-**终态（2026-09-15）**：一条流水线 = 一个「模块 × 环境」，共 **18 条，全部启用**：
+**终态（2026-09-15）**：一条流水线 = 一个「模块 × 环境」，共 **16 模块 × 3 环境 = 48 条，全部启用**：
 
-| 模块 | local | dev | prod | 产物落点（本机） |
-|---|---|---|---|---|
-| admin / portal / shell（前端类） | ✅ | ✅ | ✅ | `servers/gateway/public/static/modules/<key>/<流水线key>/<commit>/` |
-| gateway / ai-agent / mcp-gateway（后台） | ✅ | ✅ | ✅ | `servers/<key>`（就地发布，pm2 重启） |
+| 类别 | 模块 | 产物落点（本机） |
+|---|---|---|
+| 前端类（micro-frontend / frontend） | admin / portal / shell / mini-contract | `servers/gateway/public/static/modules/<key>/<流水线key>/<commit>/` |
+| 后台（backend） | gateway / ai-agent / mcp-gateway / ai-service / auth-service / content-hub / deploy-console / finnews / system-service / todo-service / upload-service / user-service | `servers/<key>/<流水线key>/<commit>/`（**版本目录**，见下方「已知缺口」） |
+
+⚠️ **已知缺口（2026-09-15 回归发现）**：后台模块的本机投递目前也走「版本目录」，而服务实际跑的是
+`servers/<key>/dist/` —— 需要「部署」动作（或专用投递脚本）把版本目录落到 `dist` 并重启 pm2。
+前端类无此问题（网关按指针直接读版本目录）。
 
 远程（dev / prod）在 2026-09-15 验证过 SSH 连通性（`175.27.189.123` / `106.52.176.246`，
 `/data/web_system` 可写）后启用；p5 迁移脚本已把 `enabled` 统一置 1。
