@@ -595,6 +595,19 @@ onMounted(async () => {
 
         <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
         <a-tab-pane key="deploy" tab="环境部署">
+          <!-- R6 提示：放 Tab 内部通栏展示（原来挂在 a-tabs 尾部被挤成右侧一条窄竖条） -->
+          <a-alert
+            type="info"
+            show-icon
+            style="margin-bottom: 12px;"
+            message="本模块不再持有构建 / 投递命令（R6）：命令已归流水线节点所有。"
+          >
+            <template #description>
+              构建与投递脚本在
+              <router-link :to="{ name: 'PipelineCenter' }">流水线管理 → 流水线列表</router-link>
+              里对应流水线的「流程编排」节点中维护；这里只做「部署」（把环境指针切到某个版本）。
+            </template>
+          </a-alert>
           <p style="color: #666; margin-bottom: 12px;">
             部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
           </p>
@@ -635,18 +648,6 @@ onMounted(async () => {
             - version/pointer = 紫色「语义真相源」（不可改）
           让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
         -->
-        <!-- R6：发布脚本 tab 已移除，替换为提示条 -->
-        <a-alert
-          type="info"
-          show-icon
-          style="margin-bottom: 0;"
-          message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
-        >
-          <template #description>
-            <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
-          </template>
-        </a-alert>
-
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
     </a-card>
