@@ -57,10 +57,11 @@ const HOME = process.env.HOME || '/root';
 const MODULES = [
   {
     key: 'admin',
-    // ⚠️ 末尾的 admin-local 是「产品线段」：gateway manifest 拼的是
-    //    /static/modules/<key>/<current_version>/，而 current_version = "<流水线 key>/<commit>"
-    //    = admin-local/3679b51 → 磁盘目录必须留这一级，否则页面 404。
-    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/admin/admin-local`,
+    // ⚠️ 不要再拼「产品线段」：投递脚本里 VER=${COMMIT_ID}，而 COMMIT_ID 是**完整版本标签**
+    //    `<流水线 key>/<commit>`（= admin-local/d8d7e2c），产物自然落到
+    //    .../modules/admin/admin-local/<commit>/ 与 gateway manifest
+    //    /static/modules/<key>/<current_version>/ 对齐。PUBLISH_PATH 只到 <key> 一级。
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/admin`,
     // 远端（dev/prod）沿用既有扁平布局（历史 current_version 形如 default/<commit>），
     // 暂不加产品线段 —— 远程通道打通前不动，避免和线上指针不一致
     remotePath: '/data/web_system/servers/gateway/public/static/modules/admin',
