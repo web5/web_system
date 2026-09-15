@@ -16,7 +16,7 @@
  *   - dev / prod：enabled=0 —— 远程语义需要「节点 host + 平台 SSH 通道」（design §6 / P1），
  *     落地后把变量填好即可启用（PUBLISH_HOST / PUBLISH_USER / PUBLISH_PATH 已按环境预填）
  *
- * 产出：`tpl-<module>-<env>`（admin / ai-agent / gateway / portal / shell / mcp-gateway × local/dev/prod = 18 条）；
+ * 产出：`tpl-<module>-<env>`（admin / ai-agent / gateway / portal / shell / mcp-gateway / 其余 10 个模块 × local/dev/prod = 48 条）；
  *       删除旧的 tpl-local-* / tpl-publish-*；
  *       删除全局默认模板（module_key='*'）—— 用户 2026-09-15 决定「先删了，少了再加」：
  *       各模块都按 local/dev/prod 各建一条，不再用「无归属的全局兜底」。
@@ -92,6 +92,22 @@ const MODULES = [
     key: 'mcp-gateway', // 后台服务（tsc，就地发布）
     localPath: `${HOME}/web_system_release/servers/mcp-gateway`,
     remotePath: '/data/web_system/servers/mcp-gateway',
+  },
+  // 2026-09-15 再补剩余模块（用户：都加上）。约定：
+  //   backend → 就地发布到 servers/<dir>；frontend / micro-frontend → 静态产物 static/modules/<key>
+  { key: 'ai-service', localPath: `${HOME}/web_system_release/servers/ai-service`, remotePath: '/data/web_system/servers/ai-service' },
+  { key: 'auth-service', localPath: `${HOME}/web_system_release/servers/auth-service`, remotePath: '/data/web_system/servers/auth-service' },
+  { key: 'content-hub', localPath: `${HOME}/web_system_release/servers/content-hub`, remotePath: '/data/web_system/servers/content-hub' },
+  { key: 'deploy-console', localPath: `${HOME}/web_system_release/servers/deploy-console`, remotePath: '/data/web_system/servers/deploy-console' },
+  { key: 'finnews', localPath: `${HOME}/web_system_release/servers/finnews`, remotePath: '/data/web_system/servers/finnews' },
+  { key: 'system-service', localPath: `${HOME}/web_system_release/servers/system-service`, remotePath: '/data/web_system/servers/system-service' },
+  { key: 'todo-service', localPath: `${HOME}/web_system_release/servers/todo-service`, remotePath: '/data/web_system/servers/todo-service' },
+  { key: 'upload-service', localPath: `${HOME}/web_system_release/servers/upload-service`, remotePath: '/data/web_system/servers/upload-service' },
+  { key: 'user-service', localPath: `${HOME}/web_system_release/servers/user-service`, remotePath: '/data/web_system/servers/user-service' },
+  {
+    key: 'mini-contract', // frontend（构建脚本是上传小程序，产物仍按前端类放置）
+    localPath: `${HOME}/web_system_release/servers/gateway/public/static/modules/mini-contract`,
+    remotePath: '/data/web_system/servers/gateway/public/static/modules/mini-contract',
   },
 ];
 /** 环境 → deploy_servers 里的 server_name（local 不走 ssh，同机投递） */
