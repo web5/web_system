@@ -12,6 +12,7 @@ import {
   PLATFORM_NODE_LABELS,
 } from '@/api'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
+import { isShellNode, nodeDisplayName, checkNodes } from '@/components/pipeline/pipeline.stages'
 
 const route = useRoute()
 const router = useRouter()
@@ -93,15 +94,15 @@ async function load() {
 function legacyToNodes(): TemplateNode[] {
   const base = (tpl.value?.steps ?? null)?.length
     ? (tpl.value!.steps as string[])
-    : ['check', 'pull', 'build', 'upload', 'restart', 'version', 'pointer', 'verify', 'cleanup']
-  const nodes: TemplateNode[] = [{ kind: 'platform', key: 'git' }]
+    : ['check', 'pull', 'build', 'upload', 'restart', 'verify', 'cleanup']
+  // 终态：git 是普通 shell 节点；version/pointer 不再生成（写版本 = 发布节点的 service action，
+  // 切指针 = 模块管理里的部署动作）
+  const nodes: TemplateNode[] = [{ kind: 'shell', key: 'git', label: '拉取代码' }]
   for (const s of base) {
-    if (s === 'pull' || s === 'git') continue
-    if (s === 'version') { nodes.push({ kind: 'platform', key: 'version' }); continue }
-    if (s === 'pointer') { nodes.push({ kind: 'platform', key: 'pointer' }); continue }
+    if (s === 'pull' || s === 'git' || s === 'version' || s === 'pointer') continue
     if (s === 'verify' && tpl.value?.skipVerify) continue
     nodes.push({
-      kind: 'script',
+      kind: 'shell',
       key: s,
       label: ({ check: '校验', build: '构建', upload: '投递', restart: '重启', verify: '探活', cleanup: '清理' } as Record<string, string>)[s] || s,
       optional: s !== 'build',
@@ -153,7 +154,7 @@ function addNode(slot: number) {
   const used = new Set(nodeDraft.value.map((n) => n.key))
   let k = 'node'; let i = 2
   while (used.has(k)) k = `node-${i++}`
-  nodeDraft.value.splice(slot, 0, { kind: 'script', key: k, label: '新节点', optional: false })
+  nodeDraft.value.splice(slot, 0, { kind: 'shell', key: k, label: '新节点', optional: false })
   selNodeKey.value = k
   editingItem.value = null
   dirty.value = true
@@ -210,7 +211,7 @@ function toggleOptional(key: string, on: boolean) {
 
 function toggleWatchdog(key: string, on: boolean) {
   nodeDraft.value.forEach((x) => {
-    if (x.kind === 'script') x.watchdog = false
+    if (isShellNode(x)) x.watchdog = false
   })
   const n = nodeOf(key)
   if (n) { (n as any).watchdog = on; dirty.value = true }
@@ -416,8 +417,8 @@ onMounted(() => { void load() })
           </div>
           <div
             class="flow-node"
-            :class="{ plat: n.kind === 'platform', watch: n.watchdog, sel: selNodeKey === n.key }"
-            :draggable="n.kind !== 'platform'"
+            :class="{ watch: n.watchdog, sel: selNodeKey === n.key, approval: n.kind === 'approval' }"
+            :draggable="isShellNode(n)"
             @click="onNodeClick(n.key)"
             @dragstart="onDragStart(n.key, $event)"
             @dragend="onDragEnd"
@@ -427,17 +428,17 @@ onMounted(() => { void load() })
             <span class="flow-seq">{{ i + 1 }}</span>
             <span v-if="n.watchdog" class="watchdog-badge">wd</span>
             <button
-              v-if="n.kind === 'script'"
+              v-if="isShellNode(n)"
               class="node-del"
               @click.stop="askDeleteNode(n.key)"
             >×</button>
-            <span class="flow-name">{{ n.label || PLATFORM_NODE_LABELS[n.key] || n.key }}</span>
-            <span class="flow-key">{{ n.kind === 'platform' ? (PLATFORM_NODE_LABELS[n.key] ? n.key : n.key) : n.key }}</span>
+            <span class="flow-name">{{ nodeDisplayName(n) }}</span>
+            <span class="flow-key">{{ n.kind === 'approval' ? '审批' : n.key }}</span>
           </div>
         </template>
       </div>
       <div class="muted-text" style="margin-top: 8px;">
-        点 script 节点在下方「节点命令」配置；点连接线「+」在槽位插入节点；拖拽 script 节点重排。
+        点节点在下方「节点命令」配置（审批节点除外）；点连接线「+」在槽位插入节点；拖拽节点重排。
       </div>
     </a-card>
 

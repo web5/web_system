@@ -1,16 +1,21 @@
 <script setup lang="ts">
+/**
+ * 环境管理面板（原独立页 EnvironmentManager.vue 已并入「模块管理」）。
+ * 环境为一等公民：每个环境独立配置公网地址 + 后端模块服务地址（host:port 或域名）。
+ * dev / prod 为内置环境（不可删，可改）；其余任意增删。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { environmentApi, moduleApi } from '@/api'
 
+const emit = defineEmits<{ (e: 'changed'): void }>()
+
 // ============ 状态 ============
-// 环境列表
 const envList = ref<any[]>([])
 const loading = ref(false)
 
 // 后端服务模块（注册表）
 const backendModules = ref<any[]>([])
-const allModules = ref<any[]>([])
 const modulesLoading = ref(false)
 
 // 当前编辑环境
@@ -45,13 +50,9 @@ async function loadModules() {
   modulesLoading.value = true
   try {
     const list = await moduleApi.list()
-    allModules.value = list
     backendModules.value = list.filter((m: any) => m.type === 'backend')
-    if (backendModules.value.length === 0) {
-      message.warn('注册表中尚无 backend 模块，请先在「服务管理」中创建')
-    }
   } catch {
-    message.error('加载服务注册表失败')
+    message.error('加载模块注册表失败')
   } finally {
     modulesLoading.value = false
   }
@@ -101,9 +102,7 @@ function portForKey(envId: string, moduleKey: string): number | undefined {
 }
 
 // ============ 表单行为 ============
-// 从 env 构造各 backend 模块的服务地址：
-// 1) 已配值优先；2) 未配的 backend 模块按环境 ID + 默认端口表预填；
-// 3) frontend / micro-frontend / mini-app 类模块不预填（保留空）。
+// 从 env 构造各 backend 模块的服务地址：已配值优先 → 未配的按环境 + 默认端口表预填
 function buildPortsFromEnv(env: any): Record<string, string> {
   const ports: Record<string, string> = {}
   const envId = env?.id || ''
@@ -114,12 +113,8 @@ function buildPortsFromEnv(env: any): Record<string, string> {
       ports[m.key] = existing
       continue
     }
-    if (m.type === 'backend') {
-      const port = portForKey(envId, m.key)
-      ports[m.key] = port ? `${host}:${port}` : ''
-    } else {
-      ports[m.key] = ''
-    }
+    const port = portForKey(envId, m.key)
+    ports[m.key] = port ? `${host}:${port}` : ''
   }
   return ports
 }
@@ -198,6 +193,7 @@ async function saveEnv() {
       message.success('环境已创建')
     }
     formVisible.value = false
+    emit('changed')
     await loadEnvironments()
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存失败')
@@ -208,7 +204,7 @@ async function saveEnv() {
 
 function deleteEnv(e: any) {
   if (e.builtin) {
-    message.warn('内置环境不可删除')
+    message.warning('内置环境不可删除')
     return
   }
   Modal.confirm({
@@ -221,6 +217,8 @@ function deleteEnv(e: any) {
       try {
         await environmentApi.remove(e.id)
         message.success('已删除')
+        formVisible.value = false
+        emit('changed')
         await loadEnvironments()
       } catch (err: any) {
         message.error(err?.response?.data?.message || '删除失败')
@@ -251,12 +249,12 @@ onMounted(async () => {
 
 <template>
   <div>
-    <div class="page-header">
-      <h2>环境管理</h2>
-      <p>环境为一等公民：每个环境独立配置公网地址和后端服务地址（host:port 或域名）。服务器连接信息在「服务器管理」中配置（serverName 服务器组）。dev / prod 为内置环境（不可删，地址可改），其余可任意增删。</p>
-    </div>
+    <p style="color: var(--ws-text-secondary); margin-bottom: 12px;">
+      环境为一等公民：每个环境独立配置公网地址和后端服务地址（host:port 或域名）。
+      dev / prod 为内置环境（不可删，地址可改），其余可任意增删。
+    </p>
 
-    <a-card style="margin-bottom: 16px;">
+    <a-card style="margin-bottom: 16px;" :bordered="false">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <span>环境列表</span>
         <a-button type="primary" @click="openCreate">新建环境</a-button>
@@ -278,23 +276,33 @@ onMounted(async () => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'builtin'">
-            <a-tag :color="record.builtin ? 'gold' : 'default'">{{ record.builtin ? '内置' : '自定义' }}</a-tag>
+            <a-tag :color="record.builtin ? 'gold' : 'default'">
+              {{ record.builtin ? '内置' : '自定义' }}
+            </a-tag>
           </template>
           <template v-else-if="column.key === 'ports'">
             <span v-if="record.ports && Object.keys(record.ports).length">
-              <a-tag v-for="(addr, k) in record.ports" :key="k" style="margin-bottom: 2px;">{{ k }}={{ addr }}</a-tag>
+              <a-tag v-for="(addr, k) in record.ports" :key="k" style="margin-bottom: 2px;">
+                {{ k }}={{ addr }}
+              </a-tag>
             </span>
             <span v-else style="color: #999;">—</span>
           </template>
           <template v-else-if="column.key === 'action'">
             <a-button type="link" size="small" @click="openEdit(record)">编辑</a-button>
-            <a-button type="link" size="small" danger :disabled="record.builtin" @click="deleteEnv(record)">删除</a-button>
+            <a-button
+              type="link"
+              size="small"
+              danger
+              :disabled="record.builtin"
+              @click="deleteEnv(record)"
+            >删除</a-button>
           </template>
         </template>
       </a-table>
     </a-card>
 
-    <a-card title="环境配置" v-if="formVisible">
+    <a-card title="环境配置" v-if="formVisible" :bordered="false">
       <a-form layout="vertical">
         <!-- 基础环境（仅新建模式） -->
         <a-form-item v-if="!editingEnvId" label="基础环境（可选：把已有环境的地址填进来作模板）">
@@ -330,7 +338,8 @@ onMounted(async () => {
         <!-- 服务地址列表（从模块注册表自动加载） -->
         <a-divider>服务地址</a-divider>
         <p style="color: #666; margin-bottom: 8px;">
-          服务清单来自「服务管理」注册的 backend 模块。填入完整的服务地址，如 <code>127.0.0.1:6000</code> / <code>dev.kedouai.com</code>。留空表示该服务不在本环境部署。
+          服务清单来自「模块管理」注册的 backend 模块。填入完整的服务地址，如
+          <code>127.0.0.1:6000</code> / <code>dev.kedouai.com</code>。留空表示该服务不在本环境部署。
         </p>
         <a-table
           :columns="[
@@ -345,11 +354,13 @@ onMounted(async () => {
           :pagination="false"
           row-key="key"
           size="small"
-          :locale="{ emptyText: '尚无 backend 模块，请先在「服务管理」中创建' }"
+          :locale="{ emptyText: '尚无 backend 模块，请先在「模块管理」中创建' }"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'builtin'">
-              <a-tag :color="record.builtin ? 'gold' : 'default'">{{ record.builtin ? '内置' : '自定义' }}</a-tag>
+              <a-tag :color="record.builtin ? 'gold' : 'default'">
+                {{ record.builtin ? '内置' : '自定义' }}
+              </a-tag>
             </template>
             <template v-else-if="column.key === 'address'">
               <a-input
@@ -370,7 +381,9 @@ onMounted(async () => {
         </a-table>
 
         <div style="margin-top: 16px;">
-          <a-button type="primary" :loading="saving" @click="saveEnv">{{ editingEnvId ? '保存修改' : '创建环境' }}</a-button>
+          <a-button type="primary" :loading="saving" @click="saveEnv">
+            {{ editingEnvId ? '保存修改' : '创建环境' }}
+          </a-button>
           <a-button style="margin-left: 8px;" @click="formVisible = false">取消</a-button>
         </div>
       </a-form>

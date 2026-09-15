@@ -269,6 +269,15 @@ function svcEnvName(envId: string): string {
   return e ? `${e.name}（${e.id}）` : envId
 }
 
+// 环境自身信息（原「配置中心 → 环境信息」已迁移至此）：公网地址只读，环境在「环境管理」中维护
+function envPublicUrl(envId: string): string {
+  return envList.value.find((x) => x.id === envId)?.publicUrl || '—'
+}
+
+function envBuiltin(envId: string): boolean {
+  return !!envList.value.find((x) => x.id === envId)?.builtin
+}
+
 async function saveAddress(envRow: any, val: string) {
   const env = envList.value.find((e) => e.id === envRow.envId)
   if (!env) return
@@ -440,11 +449,13 @@ onMounted(async () => {
         <a-tab-pane v-if="showBackendTab" key="service-env" tab="服务环境">
           <a-card :loading="svcLoading" :bordered="false" size="small">
             <p style="color: #666; margin-bottom: 12px;">
-              该服务在所有环境的「服务环境」。环境在「环境管理」中增删，此处自动同步列出；逐个编辑服务地址（ip:端口）和服务器组。
+              该服务在<b>所有环境</b>的服务环境：环境公网地址（环境自身属性，只读）+ 本模块的服务地址与服务器组（可编辑）。
+              环境在「模块管理 → 环境管理」中增删，此处自动同步列出；环境信息统一在此查看（<b>不再在配置中心重复展示</b>）。
             </p>
             <a-table
               :columns="[
                 { title: '环境', dataIndex: 'envId', key: 'envId', width: 200 },
+                { title: '环境公网地址', key: 'publicUrl', width: 220 },
                 { title: '服务地址（ip:端口）', key: 'address', width: 360 },
                 { title: '服务器组', key: 'serverName', width: 260 },
               ]"
@@ -456,6 +467,12 @@ onMounted(async () => {
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'envId'">
                   {{ svcEnvName(record.envId) }}
+                  <a-tag v-if="envBuiltin(record.envId)" color="blue" style="margin-left: 4px;">
+                    内置
+                  </a-tag>
+                </template>
+                <template v-else-if="column.key === 'publicUrl'">
+                  {{ envPublicUrl(record.envId) }}
                 </template>
                 <template v-else-if="column.key === 'address'">
                   <a-input
