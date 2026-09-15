@@ -118,7 +118,7 @@ Tabs： 基本信息 | 流程编排 | 参数 | 变量
 
 | 层 | 真相源 | 当前状态 |
 |---|---|---|
-| 回滚**锚点**（哪个节点失败触发回滚） | 节点上的 **watchdog** 标记（`resolveRunStages` → `rollbackAnchor`） | UI 暂未开放（用户 2026-09-15：小特性后续再加）；**没有 watchdog → 永不自动回滚** |
+| 回滚**锚点**（哪个节点失败触发回滚） | 节点上的 **watchdog** 标记（`resolveRunStages` → `rollbackAnchor`） | **UI 已开放**：节点抽屉「失败自动回滚锚点（watchdog）」开关，全局至多一个（互斥）；**没有 watchdog → 永不自动回滚** |
 | 回滚**开关** | 流水线级 `rollbackOnFailure`（`previous` / `none`） | 编辑页已移除该字段，payload 保持默认 `previous` |
 
 即：**当前默认不会自动回滚**（终态四节点没有任何节点标 watchdog）。后续若要开放：
