@@ -67,6 +67,16 @@ export const deployApi = {
         enabled?: boolean
       }[]
     >,
+  /**
+   * 部署某版本到某环境 = **改指针**（把环境当前版本指向该版本目录）。
+   * 不做探活验证（改指针基本不会失败），验证由人工确认、后续接 AI 验证 agent。
+   */
+  deployVersion: (moduleKey: string, env: string, versionTag: string) =>
+    http.post(`/deploy/modules/${moduleKey}/envs/${env}/deploy`, { versionTag }) as Promise<{
+      env: string
+      moduleKey: string
+      versionTag: string
+    }>,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string
@@ -348,6 +358,8 @@ export interface PipelineTemplate {
   name: string
   /** 流水线 key（slug，产物命名空间用：modules/<模块>/<key>/<版本>/） */
   key?: string
+  /** 归属环境（local/dev/prod…）；一个模块默认三条流水线；null=全局模板不限环境 */
+  env?: string | null
   description?: string
   /** 活动阶段子集（null=全量九阶段） */
   steps?: string[] | null
@@ -360,6 +372,11 @@ export interface PipelineTemplate {
   defaultTarget: 'auto' | 'local' | 'remote'
   enabled: boolean
   builtin: boolean
+  /**
+   * 模板级审批人（用户名）。仅作白名单，能否审批仍看权限码
+   * `deploy:pipeline:approve`；节点未指定 approvers 时继承这里。
+   */
+  approvers?: string[] | null
   createdAt: string
   updatedAt: string
 }
@@ -379,14 +396,32 @@ export interface ToolItem {
   updatedAt?: string
 }
 
+/** 可审批人（来自 user-service，按权限码筛选） */
+export interface ApproverUser {
+  id: string
+  username: string
+  nickname?: string
+  roles: string[]
+}
+
 export interface PipelineItem {
   id: string
   env: string
   moduleKey: string
   versionTag?: string
   mode: string
-  /** pending-approval=提交被审批门禁阻断，等待审批 */
-  status: 'pending' | 'pending-approval' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  /**
+   * pending-approval=提交被审批门禁阻断（尚未执行任何阶段）
+   * awaiting-approval=执行到 approval 节点挂起（批准后从该节点之后继续）
+   */
+  status:
+    | 'pending'
+    | 'pending-approval'
+    | 'awaiting-approval'
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'cancelled'
   templateId?: string
   /** 模板名快照（旧实例为 null → 展示「默认」） */
   templateName?: string
@@ -469,12 +504,17 @@ export const pipelineApi = {
     http.post(`/pipelines/${id}/retry`) as Promise<{ jobId: string; status: string }>,
 
   /** 审批通过（待审批流水线；通过后自动执行） */
-  approve: (id: string, comment?: string) =>
-    http.post(`/pipelines/${id}/approve`, { comment }) as Promise<{ id: string; status: string }>,
+  /** 审批通过；nodeKey 指定节点（节点级挂起时用，缺省审批当前待决的那条） */
+  approve: (id: string, comment?: string, nodeKey?: string) =>
+    http.post(`/pipelines/${id}/approve`, { comment, nodeKey }) as Promise<{
+      id: string
+      status: string
+      resumedFrom?: string
+    }>,
 
   /** 审批拒绝（拒绝必填意见） */
-  reject: (id: string, comment: string) =>
-    http.post(`/pipelines/${id}/reject`, { comment }) as Promise<{ id: string; status: string }>,
+  reject: (id: string, comment: string, nodeKey?: string) =>
+    http.post(`/pipelines/${id}/reject`, { comment, nodeKey }) as Promise<{ id: string; status: string }>,
 
   promote: (id: string) =>
     http.post(`/pipelines/${id}/promote`) as Promise<{ id: string; versionTag: string }>,
@@ -482,6 +522,18 @@ export const pipelineApi = {
   /** 删除执行记录（纯清理：不动版本指针/产物；running/pending 返回 400） */
   remove: (id: string) =>
     http.delete(`/pipelines/${id}`) as Promise<{ ok: boolean }>,
+
+  /**
+   * 可审批人：admin 系统中持有 `deploy:pipeline:approve` 权限的用户。
+   * `degraded=true` 表示权限服务不可用/清单为空 —— 此时后端**不做审批校验**。
+   */
+  approvers: () =>
+    http.get('/pipelines/meta/approvers') as Promise<{
+      users: ApproverUser[]
+      degraded: boolean
+      reason?: string
+      permission: string
+    }>,
 
   /** 可发布版本（含磁盘上未登记版本表的历史产物）；行内带纯 commit，供「Commit」下拉直接提交 */
   releases: (env?: string, component?: string) =>
@@ -515,6 +567,31 @@ export const pipelineTemplateApi = {
     http.put(`/pipeline-templates/${id}`, dto) as Promise<PipelineTemplate>,
   remove: (id: string) =>
     http.delete(`/pipeline-templates/${id}`) as Promise<{ ok: boolean }>,
+}
+
+/* ========== 流水线变量（属于某条流水线；不复用配置中心） ========== */
+
+/** 流水线变量（deploy_pipeline_vars） */
+export interface PipelineVar {
+  id: string
+  key: string
+  /** 密钥值对外掩码为 ******** */
+  value: string
+  isSecret: boolean
+  description?: string
+  enabled: boolean
+  updatedBy?: string
+}
+
+export const pipelineVarApi = {
+  /** 某条流水线的变量（密钥掩码） */
+  list: (pipelineId: string) =>
+    http.get('/pipeline-vars', { params: { pipelineId } }) as Promise<PipelineVar[]>,
+  create: (pipelineId: string, dto: { key: string; value?: string; isSecret?: boolean; description?: string }) =>
+    http.post('/pipeline-vars', { ...dto, pipelineId }) as Promise<PipelineVar>,
+  update: (id: string, dto: Partial<Pick<PipelineVar, 'key' | 'value' | 'isSecret' | 'description' | 'enabled'>>) =>
+    http.put(`/pipeline-vars/${id}`, dto) as Promise<PipelineVar>,
+  remove: (id: string) => http.delete(`/pipeline-vars/${id}`) as Promise<{ ok: boolean }>,
 }
 
 /* ========== Pipeline Step Commands（流水线节点命令：R6 新真相源） ========== */

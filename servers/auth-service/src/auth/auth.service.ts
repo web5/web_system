@@ -1,4 +1,16 @@
-import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
+import {
+  resolveUserSystems,
+  normalizeAppSystem,
+  SYSTEM_LABELS,
+  type AppSystem,
+} from '@web-system/shared';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RedisService, DEFAULT_REDIS } from '@liaoliaots/nestjs-redis';
@@ -53,7 +65,30 @@ export class AuthService {
       throw new UnauthorizedException('账号已被禁用');
     }
 
-    return this.generateToken(user);
+    // 系统隔离（IAM 一期）：未声明归属时按 resolveUserSystems 判定，兜底为 portal，
+    // 因此 C 端账号即便拿到后台口令也进不来。
+    const systems = this.assertSystemAllowed(user, loginDto.system);
+    return this.generateToken(user, systems);
+  }
+
+  /**
+   * 系统门禁（IAM 一期）。
+   *
+   * 只对**后台系统**（admin / deploy）做校验：portal 是公开入口（注册即用），
+   * 不做限制 —— 否则会让运营账号也登不了 C 端，属于无谓的破坏。
+   * 核心诉求（C 端进不了后台）由这条判断保证。
+   *
+   * @returns 该账号归属的系统（供签发 payload 复用）
+   */
+  private assertSystemAllowed(user: User, rawSystem?: unknown): AppSystem[] {
+    const systems = resolveUserSystems(user);
+    const target = normalizeAppSystem(rawSystem);
+    if (target !== 'portal' && !systems.includes(target)) {
+      throw new ForbiddenException(
+        `该账号不属于「${SYSTEM_LABELS[target]}」，无法登录（可登录：${systems.map((s) => SYSTEM_LABELS[s]).join('、') || '无'}）`,
+      );
+    }
+    return systems;
   }
 
   /**
@@ -94,8 +129,11 @@ export class AuthService {
         });
       }
 
-      return this.generateToken(user);
+      // 微信扫码同样要走系统门禁：扫码用户通常是 C 端，不能凭扫码就进运营后台
+      const systems = this.assertSystemAllowed(user, wechatDto.system);
+      return this.generateToken(user, systems);
     } catch (error) {
+      if (error instanceof ForbiddenException) throw error;
       throw new BadRequestException('微信登录失败：' + error.message);
     }
   }
@@ -233,11 +271,15 @@ export class AuthService {
   /**
    * 生成 Token，access 和 refresh 通过 type 字段区分
    */
-  private async generateToken(user: User): Promise<LoginResponse> {
+  private async generateToken(user: User, systems?: AppSystem[]): Promise<LoginResponse> {
+    // systems 入 payload：下游（deploy-console / admin）据此判定可访问的系统，
+    // 不必再回查用户表。缺省时按规则现算，保证老调用点也有值。
+    const resolvedSystems = systems?.length ? systems : resolveUserSystems(user);
     const basePayload = {
       sub: user.id,
       username: user.username,
       roles: user.roles || ['user'],
+      systems: resolvedSystems,
     };
 
     const accessToken = await this.jwtService.signAsync(

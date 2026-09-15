@@ -26,6 +26,16 @@ export class DeployPipelineTemplateEntity {
   @Index()
   moduleKey: string;
 
+  /**
+   * 归属环境（local / dev / prod …）。
+   *
+   * 为什么流水线要带环境：一个模块默认有 **3 条流水线**（local / dev / prod），
+   * 列表按「模块 × 环境」组织；新建时 moduleKey='*' 的全局模板不带环境（null）。
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true, comment: '归属环境（null=全局模板，不限环境）' })
+  @Index()
+  env?: string | null;
+
   /** 模板内唯一（uq_tpl_module_name）；builtin 模板固定为「默认」 */
   @Column({ type: 'varchar', length: 64, comment: '模板名（模块内唯一）' })
   name: string;
@@ -65,6 +75,16 @@ export class DeployPipelineTemplateEntity {
 
   @Column({ type: 'boolean', default: true, comment: '启用；停用后不可被提交引用' })
   enabled: boolean;
+
+  /**
+   * 模板级审批人（用户名列表，来自 user-service 中持有 `deploy:pipeline:approve` 的用户）。
+   *
+   * 与节点级 `nodes[kind=approval].approvers` 的关系：节点未指定时**继承这里**，
+   * 指定则以节点为准（节点更具体）。提交时把结果快照进实例 nodes，模板后续改动不影响历史实例。
+   * 为什么模板要有这一份：大多数流水线"谁能批"是整条线统一的策略，逐节点配一遍是重复劳动。
+   */
+  @Column({ type: 'json', nullable: true, comment: '模板级审批人（用户名列表）' })
+  approvers?: string[] | null;
 
   @Column({ type: 'boolean', default: false, comment: '内置默认模板（不可删除/改名）' })
   builtin: boolean;

@@ -91,6 +91,12 @@ export class PipelineController {
     return this.pipelineService.promote(id, user?.username);
   }
 
+  @Get('meta/approvers')
+  @ApiOperation({ summary: '可审批人（拥有 deploy:pipeline:approve 权限的系统用户）' })
+  async approvers() {
+    return this.pipelineService.listApprovers();
+  }
+
   @Post(':id/retry')
   @ApiOperation({ summary: '重试失败的流水线（相同参数重新提交）' })
   async retry(@Param('id') id: string, @CurrentUser() user: any) {
@@ -98,26 +104,28 @@ export class PipelineController {
   }
 
   @Post(':id/approve')
-  @ApiOperation({ summary: '审批通过（仅待审批流水线；通过后自动执行）' })
+  @ApiOperation({
+    summary: '审批通过（待审批 / 节点挂起流水线；通过后继续执行，节点级从该节点之后继续）',
+  })
   async approve(
     @Param('id') id: string,
-    @Body() body: { comment?: string },
+    @Body() body: { comment?: string; nodeKey?: string },
     @CurrentUser() user: any,
   ) {
-    return this.pipelineService.approve(id, user?.username, body?.comment);
+    return this.pipelineService.approve(id, user?.username, body?.comment, body?.nodeKey);
   }
 
   @Post(':id/reject')
-  @ApiOperation({ summary: '审批拒绝（仅待审批流水线；拒绝必填意见）' })
+  @ApiOperation({ summary: '审批拒绝（仅待审批 / 节点挂起流水线；拒绝必填意见）' })
   async reject(
     @Param('id') id: string,
-    @Body() body: { comment?: string },
+    @Body() body: { comment?: string; nodeKey?: string },
     @CurrentUser() user: any,
   ) {
     if (!body?.comment?.trim()) {
       throw new BadRequestException('拒绝必须填写审批意见');
     }
-    return this.pipelineService.reject(id, user?.username, body.comment);
+    return this.pipelineService.reject(id, user?.username, body.comment, body?.nodeKey);
   }
 
   @Delete(':id')

@@ -20,6 +20,23 @@ export class DeployApprovalEntity {
   @Index()
   pipelineId: string;
 
+  /**
+   * 审批节点 key（P0：审批从「发布前置门禁」升级为**节点**，design D8）。
+   *
+   * - 为空 = 流水线级门禁单（历史语义：提交即阻断，一条流水线至多一张）；
+   * - 非空 = 节点级审批单，同一 `(pipelineId, nodeKey)` 至多一张 pending，
+   *   批准后引擎**从该节点之后继续**（已完成的节点不重跑）。
+   *
+   * 节点 key 同时是「挂起态恢复锚点」：实例 `stage` 记的是当前节点，
+   * 故服务重启后也能据此续跑，无需额外列。
+   */
+  @Column({ type: 'varchar', length: 32, nullable: true, comment: '审批节点 key（空=流水线级门禁）' })
+  @Index()
+  nodeKey?: string;
+
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '审批节点展示名（如「发布确认」）' })
+  nodeLabel?: string;
+
   @Column({ type: 'varchar', length: 16, comment: '环境' })
   @Index()
   env: string;

@@ -6,6 +6,21 @@ export * from './contract';
 // 统一数据模型基础件（规范业务表设计）
 export { AbstractEntity, BigIntEntity, UuidEntity } from './entities/abstract.entity';
 export { User } from './entities/user.entity';
+
+// IAM 一期：系统维度（归属判定 / 归一化，唯一真相源）
+export {
+  SYSTEMS,
+  SYSTEM_LABELS,
+  DEFAULT_APP_SYSTEM,
+  OPERATION_ROLES,
+  LEGACY_OPS_USERNAMES,
+  resolveUserSystems,
+  normalizeSystems,
+  normalizeAppSystem,
+  hasSystem,
+  isAppSystem,
+} from './user-systems';
+export type { AppSystem, SystemResolvableUser } from './user-systems';
 export type {
   ModuleContext,
   UserInfo,

@@ -20,6 +20,14 @@ export interface ApprovalCreateSpec {
   operator: string;
 }
 
+/** 节点级审批单（P0：审批成为流水线节点，可插任意位置） */
+export interface NodeApprovalCreateSpec extends ApprovalCreateSpec {
+  /** 审批节点 key（挂起/恢复锚点；同一流水线内唯一） */
+  nodeKey: string;
+  /** 节点展示名（留痕用，便于审批台看出卡在哪一步） */
+  nodeLabel?: string;
+}
+
 /**
  * 发布审批门禁。
  *
@@ -78,6 +86,54 @@ export class ApprovalService {
       createdAt: Date.now(),
     });
     return this.repo.save(row);
+  }
+
+  /**
+   * 创建**节点级**审批单（P0 核心）。
+   *
+   * 与 `create`（流水线级门禁）的两点差异：
+   *  1) 去重维度是 `(pipelineId, nodeKey)` 而非 `(env, moduleKey)` ——
+   *     同一条流水线可以在不同节点多次审批；
+   *  2) 重复触发同一节点时**复用已有待决单**（幂等），而不是抛冲突：
+   *     引擎重试 / 恢复重入不该因为"已经挂起过"而让整条流水线失败。
+   */
+  async createNode(spec: NodeApprovalCreateSpec): Promise<DeployApprovalEntity> {
+    const dup = await this.pendingForNode(spec.pipelineId, spec.nodeKey);
+    if (dup) return dup;
+    const row = this.repo.create({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      pipelineId: spec.pipelineId,
+      nodeKey: spec.nodeKey,
+      nodeLabel: spec.nodeLabel,
+      env: spec.env,
+      moduleKey: spec.moduleKey,
+      mode: spec.mode,
+      gitBranch: spec.gitBranch,
+      commitId: spec.commitId,
+      operator: spec.operator,
+      status: 'pending',
+      createdAt: Date.now(),
+    });
+    return this.repo.save(row);
+  }
+
+  /** 某流水线某节点**待决**的审批单（无则 null） */
+  async pendingForNode(
+    pipelineId: string,
+    nodeKey: string,
+  ): Promise<DeployApprovalEntity | null> {
+    return this.repo.findOne({
+      where: { pipelineId, nodeKey, status: 'pending' as ApprovalStatus },
+    });
+  }
+
+  /** 某流水线当前**待决**的审批单（节点级优先；无则取最早的流水线级单） */
+  async pendingForPipeline(pipelineId: string): Promise<DeployApprovalEntity | null> {
+    const rows = await this.repo.find({
+      where: { pipelineId, status: 'pending' as ApprovalStatus },
+      order: { createdAt: 'ASC' },
+    });
+    return rows.find((r) => !!r.nodeKey) ?? rows[0] ?? null;
   }
 
   async get(id: string): Promise<DeployApprovalEntity> {

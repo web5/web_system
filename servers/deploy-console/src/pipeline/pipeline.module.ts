@@ -4,8 +4,12 @@ import { DeployPipelineEntity } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { DeployPipelineVarEntity } from '../entities/deploy-pipeline-var.entity';
 import { PipelineService } from './pipeline.service';
 import { PipelineController } from './pipeline.controller';
+// 流水线变量（属于某条流水线；执行前解析注入节点脚本环境）
+import { PipelineVarService } from './pipeline-var.service';
+import { PipelineVarController } from './pipeline-var.controller';
 // 内置步骤执行器（每个步骤的执行体独立为类，注入各自工具）
 import { CheckExecutor } from './steps/check.executor';
 import { PullExecutor } from './steps/pull.executor';
@@ -42,6 +46,7 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
       DeployVersionEntity,
       DeployDeploymentEntity,
       DeployPipelineTemplateEntity,
+      DeployPipelineVarEntity,
     ]),
     ModuleRegistryModule,
     CanaryModule,
@@ -77,9 +82,10 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     // 远程投递（upload remote 执行体）
     RemoteDeliveryModule,
   ],
-  controllers: [PipelineController],
+  controllers: [PipelineController, PipelineVarController],
   providers: [
     PipelineService,
+    PipelineVarService,
     // 内置步骤执行体（独立注入工具，engine 不感知实现细节）
     CheckExecutor,
     PullExecutor,

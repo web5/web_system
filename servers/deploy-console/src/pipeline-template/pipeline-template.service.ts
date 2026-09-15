@@ -133,11 +133,18 @@ export interface TemplateSpec {
   name: string;
   /** 流水线 key（slug，产物命名空间用）；未传时自动生成（name 拼音/默认递增） */
   key?: string;
+  /** 归属环境（local/dev/prod…）；一个模块默认三条 */
+  env?: string | null;
   description?: string;
   skipVerify?: boolean;
   steps?: string[];
   /** v5 节点序列（platform+script）。提供则归一化落库；缺省保留 legacy steps 语义 */
   nodes?: TemplateNode[] | null;
+  /**
+   * 模板级审批人（用户名）。仅作**白名单**：真正能否审批仍看权限码
+   * `deploy:pipeline:approve`（ApproverService）。节点未指定 approvers 时继承这里。
+   */
+  approvers?: string[] | null;
   rollbackOnFailure?: RollbackMode;
   approval?: TemplateApproval;
   defaultTarget?: TemplateTarget;
@@ -273,7 +280,10 @@ export class PipelineTemplateService {
   /** 全部模板（流水线中心管理视图） */
   async listAll(): Promise<DeployPipelineTemplateEntity[]> {
     await this.ensureDefault();
-    return this.repo.find({ order: { moduleKey: 'ASC', builtin: 'DESC', createdAt: 'ASC' } });
+    // 列表按「模块 → 环境」组织：一个模块默认 local / dev / prod 三条
+    return this.repo.find({
+      order: { moduleKey: 'ASC', env: 'ASC', builtin: 'DESC', createdAt: 'ASC' },
+    });
   }
 
   async get(id: string): Promise<DeployPipelineTemplateEntity> {
@@ -328,6 +338,7 @@ export class PipelineTemplateService {
       moduleKey: GLOBAL_TEMPLATE,
       name,
       key,
+      env: spec.env?.trim() || null,
       description: spec.description?.trim() || undefined,
       steps,
       nodes,
@@ -337,9 +348,16 @@ export class PipelineTemplateService {
       defaultTarget: spec.defaultTarget ?? 'auto',
       enabled: spec.enabled ?? true,
       builtin: false,
+      approvers: this.normalizeApprovers(spec.approvers),
       createdBy,
     });
     return this.repo.save(row);
+  }
+
+  /** 审批人白名单归一化（去空去重；空数组存 null） */
+  private normalizeApprovers(list?: string[] | null): string[] | null {
+    const out = [...new Set((list ?? []).map((s) => String(s ?? '').trim()).filter(Boolean))];
+    return out.length ? out : null;
   }
 
   /** 复制模板 */
@@ -359,6 +377,7 @@ export class PipelineTemplateService {
       moduleKey: GLOBAL_TEMPLATE,
       name,
       key,
+      env: src.env ?? null,
       description: `${src.description ?? src.name}（副本）`,
       steps: src.steps ?? null,
       nodes: src.nodes ?? null,
@@ -391,6 +410,9 @@ export class PipelineTemplateService {
     if (patch.key !== undefined) {
       tpl.key = await this.normalizeKey(patch.key, id);
     }
+    if (patch.env !== undefined) {
+      tpl.env = patch.env?.trim() || null;
+    }
     this.assertApproval(patch.approval);
     this.assertTarget(patch.defaultTarget);
     this.assertRollback(patch.rollbackOnFailure);
@@ -411,6 +433,7 @@ export class PipelineTemplateService {
     if (patch.approval !== undefined) tpl.approval = patch.approval;
     if (patch.defaultTarget !== undefined) tpl.defaultTarget = patch.defaultTarget;
     if (patch.enabled !== undefined) tpl.enabled = patch.enabled;
+    if (patch.approvers !== undefined) tpl.approvers = this.normalizeApprovers(patch.approvers);
     // 旧模板（nodes 为 null）在 v5 模式被编辑保存 → 一次性转存（steps/skipVerify/rollback 当前态 → nodes）
     if (isV5NodesEnabled() && !tpl.nodes && patch.nodes === undefined) {
       const steps =

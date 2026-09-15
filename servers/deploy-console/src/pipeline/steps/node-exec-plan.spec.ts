@@ -35,4 +35,24 @@ describe('planNodeExec（v5 节点执行策略）', () => {
       expect(planNodeExec({ kind: 'script', key, label: key })).toEqual({ how: 'script' });
     }
   });
+
+  // P0：审批由「发布前置门禁」升级为节点（design D8），执行分派必须有独立分支
+  it('approval 节点 → 挂起等人批（不执行命令）', () => {
+    expect(
+      planNodeExec({ kind: 'approval', key: 'approve', label: '发布确认' }),
+    ).toEqual({ how: 'approval' });
+  });
+
+  it('approval 节点带审批人/拒绝策略不影响分派（策略在决议时使用）', () => {
+    expect(
+      planNodeExec({
+        kind: 'approval',
+        key: 'gate',
+        label: '门禁',
+        approvers: ['bob'],
+        onReject: 'rollback',
+        onTimeout: 'abort',
+      }),
+    ).toEqual({ how: 'approval' });
+  });
 });

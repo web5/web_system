@@ -28,6 +28,60 @@ const data = ref<{
 } | null>(null)
 const dataLoading = ref(false)
 
+// ===== 版本列表 / 环境部署 =====
+// 部署 = 调用改指针接口（把环境指向所选版本）；基本不会失败，本期不自动验证 → 人工确认，
+// 后续接 AI 验证 agent 时用「AI 验证」按钮下发验证任务。
+const envOptions = computed(() => (data.value?.environments || []).map((e: any) => e.envId))
+const versionOptions = computed(() =>
+  [...new Set((data.value?.versionHistory || []).map((v: any) => v.versionTag))],
+)
+const deployModal = ref({
+  open: false,
+  env: '',
+  versionTag: '',
+  /** 从版本行进来固定版本选环境；从环境行进来固定环境选版本 */
+  fixed: null as 'env' | 'version' | null,
+})
+const deploying = ref(false)
+function openDeployVersion(versionTag: string) {
+  deployModal.value = {
+    open: true,
+    env: envOptions.value[0] || '',
+    versionTag,
+    fixed: 'version',
+  }
+}
+function openDeployEnv(envId: string) {
+  deployModal.value = {
+    open: true,
+    env: envId,
+    versionTag: versionOptions.value[0] || '',
+    fixed: 'env',
+  }
+}
+async function doDeploy() {
+  const d = deployModal.value
+  if (!d.env || !d.versionTag) {
+    message.warning('请选择环境与版本')
+    return
+  }
+  deploying.value = true
+  try {
+    await deployApi.deployVersion(moduleKey.value, d.env, d.versionTag)
+    message.success(`已部署 ${d.env} → ${d.versionTag}（已改指针，请人工确认）`)
+    deployModal.value.open = false
+    await loadDeployments()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '部署失败')
+  } finally {
+    deploying.value = false
+  }
+}
+/** AI 验证：按版本下发验证任务（agent 未接入前只占位） */
+function aiVerify(versionTag: string) {
+  message.info(`AI 验证：${versionTag} 的验证任务待下发（agent 未接入）`)
+}
+
 const TYPE_LABELS: Record<string, string> = {
   backend: '后端服务',
   frontend: '前端模块',
@@ -315,6 +369,9 @@ onMounted(async () => {
       </a-descriptions>
       <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <a-button type="primary" @click="openPublish">发起发布</a-button>
+        <a-button @click="router.push({ name: 'ModuleEdit', params: { key: moduleKey } })">
+          编辑模块
+        </a-button>
         <span style="color: #999; font-size: 12px;">
           按流水线发布：git 拉取 → 构建 → 投递 → 切指针 → 探活；需要先 commit &amp; push
         </span>
@@ -482,6 +539,76 @@ onMounted(async () => {
         <!-- 两个 tab 都不显示时的兜底 -->
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
 
+        <!-- 版本列表：流水线「发布」节点产出；可对某一版本直接部署或下发 AI 验证 -->
+        <a-tab-pane key="versions" tab="版本列表">
+          <p style="color: #666; margin-bottom: 12px;">
+            版本由流水线「发布」节点（上传文件 + 调写版本接口）产出。点「部署」<b>弹窗选目标环境</b>；「AI 验证」对该版本下发验证任务。
+          </p>
+          <a-table
+            :columns="[
+              { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 200 },
+              { title: '来源任务', dataIndex: 'taskId', key: 'taskId', width: 160 },
+              { title: '发布时间', dataIndex: 'releasedAt', key: 'releasedAt', width: 180 },
+              { title: '发布人', dataIndex: 'releasedBy', key: 'releasedBy', width: 120 },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '操作', key: 'action', width: 170 },
+            ]"
+            :data-source="data?.versionHistory || []"
+            :pagination="{ pageSize: 10 }"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '该模块还没有版本记录' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'versionTag'">
+                <span style="font-family: monospace;">{{ record.versionTag }}</span>
+              </template>
+              <template v-else-if="column.key === 'releasedAt'">
+                {{ record.releasedAt ? String(record.releasedAt).slice(0, 19).replace('T', ' ') : '—' }}
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-space size="small">
+                  <a-button type="link" size="small" @click="openDeployVersion(record.versionTag)">部署</a-button>
+                  <a-button type="link" size="small" @click="aiVerify(record.versionTag)">AI 验证</a-button>
+                </a-space>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
+        <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
+        <a-tab-pane key="deploy" tab="环境部署">
+          <p style="color: #666; margin-bottom: 12px;">
+            部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
+          </p>
+          <a-table
+            :columns="[
+              { title: '环境', dataIndex: 'envId', key: 'envId', width: 140 },
+              { title: '当前版本', dataIndex: 'currentVersion', key: 'currentVersion' },
+              { title: '部署时间', dataIndex: 'deployedAt', key: 'deployedAt', width: 180 },
+              { title: '验证', key: 'verify', width: 90 },
+              { title: '操作', key: 'action', width: 130 },
+            ]"
+            :data-source="data?.environments || []"
+            :pagination="false"
+            row-key="envId"
+            size="small"
+            :locale="{ emptyText: '该模块还没有环境部署记录' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'deployedAt'">
+                {{ record.deployedAt ? String(record.deployedAt).slice(0, 19).replace('T', ' ') : '—' }}
+              </template>
+              <template v-else-if="column.key === 'verify'">
+                <a-tag color="default">人工</a-tag>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-button type="link" size="small" @click="openDeployEnv(record.envId)">部署版本</a-button>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
         <!-- 阶段命令 tab（每模块每阶段一条 shell，DB 为唯一真相源） -->
         <!--
           「发布脚本」Tab：展示本模块 9 阶段实际命令——
@@ -506,6 +633,33 @@ onMounted(async () => {
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
     </a-card>
+
+    <!-- 部署版本弹窗（版本行进来：版本固定选环境；环境行进来：环境固定选版本） -->
+    <a-modal
+      :open="deployModal.open"
+      title="部署版本"
+      :confirm-loading="deploying"
+      ok-text="确定部署"
+      cancel-text="取消"
+      @ok="doDeploy"
+      @cancel="deployModal.open = false"
+    >
+      <p style="color: #666; margin-bottom: 12px;">
+        模块 <b>{{ moduleKey }}</b> · 部署 = 调用改指针接口，不跑探活，部署后请人工确认。
+      </p>
+      <a-form layout="vertical">
+        <a-form-item label="目标环境">
+          <a-select v-model:value="deployModal.env" :disabled="deployModal.fixed === 'env'">
+            <a-select-option v-for="e in envOptions" :key="e" :value="e">{{ e }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="版本（来自流水线构建产物）">
+          <a-select v-model:value="deployModal.versionTag" :disabled="deployModal.fixed === 'version'">
+            <a-select-option v-for="v in versionOptions" :key="v" :value="v">{{ v }}</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
     <!-- 发起发布抽屉（按流水线：构建+投递+切指针+探活） -->
     <PipelineSubmit

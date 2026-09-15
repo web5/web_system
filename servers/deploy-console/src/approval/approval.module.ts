@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { ApprovalService } from './approval.service';
+// 可审批人：按权限码 deploy:pipeline:approve 从 user-service 拉取（方案 B）
+import { ApproverService } from './approver.service';
 import { SystemSettingsModule } from '../system-settings/system-settings.module';
 
 /**
@@ -15,7 +17,7 @@ import { SystemSettingsModule } from '../system-settings/system-settings.module'
     // 审批开关（REQUIRE_APPROVAL_ENVS）收在系统设置，页面可维护
     SystemSettingsModule,
   ],
-  providers: [ApprovalService],
-  exports: [ApprovalService],
+  providers: [ApprovalService, ApproverService],
+  exports: [ApprovalService, ApproverService],
 })
 export class ApprovalModule {}

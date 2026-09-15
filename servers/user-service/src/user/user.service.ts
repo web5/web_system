@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { hasSystem, isAppSystem } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { User } from './user.entity';
@@ -10,7 +11,16 @@ export class UserService {
     private userRepository: Repository<User>,
   ) {}
 
-  async findAll(page: number = 1, pageSize: number = 10, keyword?: string) {
+  /**
+   * 用户列表。
+   *
+   * @param system 按归属系统过滤（IAM 一期）：`portal` / `admin` / `deploy`；
+   *   不传 = **全部**；传 `all` 也是全部。
+   *   为什么默认全部而不是默认 admin：既有调用方（admin 用户管理页、MCP）不能因为
+   *   这次改动就少看到数据；隔离由**调用方显式传 system** 触发，
+   *   后续前端适配后再把默认值收紧。
+   */
+  async findAll(page: number = 1, pageSize: number = 10, keyword?: string, system?: string) {
     const pageNum = Number(page) || 1;
     const pageSizeNum = Number(pageSize) || 10;
     const trimmedKeyword = keyword?.trim();
@@ -27,13 +37,19 @@ export class UserService {
           ]
         : undefined,
     });
-    const safeUsers = users.map((u) => {
+    // systems 是 JSON 列，跨库（MySQL/Postgres）可靠的做法是在应用层过滤
+    const filtered =
+      system && system !== 'all' && isAppSystem(system)
+        ? users.filter((u) => hasSystem(u, system))
+        : users;
+    const safeUsers = filtered.map((u) => {
       const { password: _pwd, ...rest } = JSON.parse(JSON.stringify(u));
       return rest;
     });
     return {
       list: safeUsers,
-      total,
+      // 过滤发生在分页之后，故 total 以过滤后的行数为准，避免页码算错
+      total: system && system !== 'all' && isAppSystem(system) ? filtered.length : total,
       page: pageNum,
       pageSize: pageSizeNum,
     };

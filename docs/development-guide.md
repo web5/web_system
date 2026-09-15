@@ -2,6 +2,7 @@
 
 > 本文档面向本地开发与日常使用，覆盖技术架构、环境准备、启动、开发流程、发布系统、测试验证与常见问题。
 > 关联：`docs/architecture/release-system-design.md`（发布系统设计）、`docs/architecture/micro-frontend-technical-design.md`（微前端技术设计）。
+> 最近同步：2026-09-14 — 服务 10→12（新增 ai-agent:6010 / knowledge-service:6011，finnews 更名 content-hub:6007）；数据库统一腾讯云 MySQL 8.0.30-txsql（utf8mb4_0900_ai_ci）；前端补 mini-app；共享包补 agent-core/kedou-agent。
 
 ---
 
@@ -21,12 +22,12 @@
 └──────────────────────────────────────────────────────────────────────┘
               │ /api/* 反代（proxy 模块）
 ┌──────────────────────────── 后端微服务（servers/）───────────────────┐
-│ auth  user  ai  system  todo  mcp-gateway  finnews  upload            │
+│ auth  user  ai  ai-agent  system  todo  mcp-gateway  content-hub  upload  knowledge  deploy-console │
 │ deploy-console（发布/部署/监控控制台）                                  │
 └──────────────────────────────────────────────────────────────────────┘
               │
 ┌──────────────────────────── 基础设施 ─────────────────────────────────┐
-│  MySQL(3306: web_system + web_system_deploy)  Redis(6379)  nginx(8090)│
+│  云 MySQL(web_system + web_system_knowledge + web_system_deploy)  Redis(6379)  nginx(80/443)│
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -38,11 +39,13 @@
 | auth-service | servers/auth-service | 6101 | web-auth | 认证（登录/JWT/微信） |
 | user-service | servers/user-service | 6002 | web-user | 用户 |
 | ai-service | servers/ai-service | 6003 | web-ai | AI（对话/生图/TTS） |
+| ai-agent | servers/ai-agent | 6010 | web-ai-agent | AI Agent 运行时引擎（ReAct） |
 | system-service | servers/system-service | 6004 | web-system | 系统（配置/素材） |
 | todo-service | servers/todo-service | 6005 | web-todo | 待办 |
 | mcp-gateway | servers/mcp-gateway | 6006 | web-mcp-gateway | MCP 网关 |
 | content-hub | servers/content-hub | 6007 | web-content-hub | 内容中枢（财经资讯 + 论文/AI 资讯） |
 | upload-service | servers/upload-service | 6008 | web-upload | 上传 |
+| knowledge-service | servers/knowledge-service | 6011 | web-knowledge | RAG 知识库（embedding/检索） |
 | deploy-console | servers/deploy-console | 6200 | web-deploy-console | 运维控制台（发布/环境/服务器/监控） |
 
 > 注：auth-service 用 6101（6001 被其它项目占用）。
@@ -55,6 +58,7 @@
 | portal | apps/portal | 微前端模块 | http://localhost:5173 |
 | admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
 | deploy-console | apps/deploy-console | 独立 SPA（运维） | 由 deploy-console 后端 serve（6200/console/） |
+| mini-app | apps/mini-app | 微信小程序（主端） | 独立上传 |
 | mini-contract | apps/mini-contract | 小程序（合同翻译官） | 独立上传 |
 
 ### 1.4 共享包（packages/）
@@ -66,6 +70,8 @@
 | shell-loader | 自研微前端模块加载器（register/mount/unmount，unmount 移除 CSS） |
 | mcp-core | MCP 核心 |
 | ui | 共享 UI 组件 |
+| agent-core | `@kedouai/agent-core`：Agent 核心库（ReAct 引擎/注册表/记忆压缩） |
+| kedou-agent | Agent CLI（基于 agent-core） |
 
 ### 1.5 微前端机制（要点）
 
@@ -81,11 +87,11 @@
 ```
 web_system/
 ├── apps/            # 前端应用（shell/portal/admin/deploy-console/mini-contract）
-├── servers/         # 后端微服务（gateway/auth/user/ai/system/todo/mcp-gateway/finnews/upload/deploy-console）
-├── packages/        # 共享包（shared/types/shell-loader/mcp-core/ui）
+├── servers/         # 后端微服务（gateway/auth/user/ai/ai-agent/system/todo/mcp-gateway/content-hub/upload/knowledge/deploy-console）
+├── packages/        # 共享包（shared/types/shell-loader/mcp-core/ui/agent-core/kedou-agent）
 ├── scripts/         # 构建/部署/启动/验证脚本
 │   ├── local-db.sh          # 启动本地 MySQL + Redis
-│   ├── local-up.sh          # 一键构建 + pm2 启动 10 后端（推荐）
+│   ├── local-up.sh          # 一键构建 + pm2 启动 12 后端（推荐）
 │   ├── start-frontend.sh    # 启动 portal/admin/docs 前端
 │   ├── dev-e2e-start.sh     # 微前端端到端验证（构建 externals/shell/modules + seed + gateway）
 │   ├── dev-verify.sh        # 本地开发验证（DB/单测/集成/健康）
@@ -94,7 +100,7 @@ web_system/
 │   ├── _test-p0.mjs / _test-p1.mjs  # 发布系统集成测试
 │   └── migrations/          # 数据库迁移脚本
 ├── docs/            # 文档（architecture/ 含架构与设计文档）
-├── ecosystem.config.cjs     # pm2 后端进程清单（web-* 10 个）
+├── ecosystem.config.cjs     # pm2 后端进程清单（web-* 12 个）
 └── package.json / pnpm-workspace.yaml
 ```
 
@@ -262,7 +268,7 @@ curl -X POST http://127.0.0.1:6200/api/auth/login -H 'Content-Type: application/
 | 脚本 | 作用 |
 |---|---|
 | `scripts/local-db.sh` | 启动 MySQL + Redis |
-| `scripts/local-up.sh` | 构建 + pm2 启动 10 后端 + 健康检查 |
+| `scripts/local-up.sh` | 构建 + pm2 启动 12 后端 + 健康检查 |
 | `scripts/start-frontend.sh` | 启动 portal/admin/docs |
 | `scripts/dev-e2e-start.sh` | 微前端端到端验证 |
 | `scripts/dev-verify.sh` | 开发验证（DB/单测/集成/健康） |
