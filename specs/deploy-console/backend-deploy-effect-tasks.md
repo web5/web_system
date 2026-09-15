@@ -72,20 +72,21 @@ PR：**#72**（落地 + 重启）、**#73**（pm2 进程名回退）。
 
 ---
 
-### T2 · 回滚动作（后台）
+### T2 · 回滚动作（后台）—— ✅ 已完成并验证（PR #79）
 
-**现状**：只有"部署（切到某版本）"，回滚走的是"再部署一次旧版本"—— 目前可用
-（因为版本目录保留），但**没有一键回滚 + 未验证旧版本目录是否总在**。
+**已实现**：
+- `DeployService.rollbackVersion({moduleKey, env})`：取 `deploy_versions` 里最近一条非当前版本 →
+  后台走与部署同一套「落地 dist + pm2 重启」，前台只改指针 → 指针回退
+- 版本目录被清理时用最近的 `dist.bak-<ts>` 兜底恢复（warn 日志）
+- 抽 `restartPm2()`（候选名回退）与 `restoreDistBackup()`，部署/回滚共用
+- 新增 `POST /api/deploy/rollback-version`（prod 需 `confirm=true`，写审计日志）；
+  旧 `POST /deploy/rollback` 保留但废弃（跑旧脚本）
+- 单测 13 条（新增 4 条回滚）
 
-**要做**：
-1. 「回滚」按钮对 backend 模块：取上一版本 tag → 走与部署相同的落地 + 重启流程
-2. 兜底：版本目录缺失时，用最近的 `dist.bak-<ts>` 恢复
-3. 前端类保持现有"切指针"回滚
+**已验证**（mcp-gateway / local）：部署 A → 部署 B（dist 含 T2-B）→ 回滚 → `to=A`、dist 与 A 一致 ✓
 
-**V 判据**：
-- V1：部署 A → 部署 B → 回滚 → `dist` 内容 == A，pm2 重启成功
-- V2：删掉 A 的版本目录后回滚 → 用 `dist.bak-*` 恢复成功（有 warn 日志）
-- V3：单测覆盖两条路径
+**UI 待接**：模块详情页的「回滚」按钮目前走的还是旧端点，需切到 `rollback-version`
+（前端：`apps/deploy-console/src/views/ModuleDetail.vue`）。
 
 ---
 
