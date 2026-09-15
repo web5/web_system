@@ -42,15 +42,17 @@ const pick = (k: string) => emit('pick', '${' + k + '}')
     </a-table>
 
     <div style="margin: 16px 0 8px; font-weight: 600;">本条流水线的变量</div>
-    <a-table :data-source="vars" :pagination="false" size="small" row-key="id">
-      <a-table-column title="键" data-index="key" :width="180">
+    <a-table :data-source="vars" :pagination="false" size="small" row-key="id" table-layout="fixed">
+      <a-table-column title="键" data-index="key" :width="180" ellipsis>
         <template #default="{ record }">
-          <span class="var-chip" @click="pick(record.key)">{{ record.key }}</span>
+          <span class="var-chip" :title="record.key" @click="pick(record.key)">{{ record.key }}</span>
         </template>
       </a-table-column>
       <a-table-column title="当前值" :width="180" ellipsis>
         <template #default="{ record }">
-          <span class="mono-text">{{ record.isSecret ? '********' : record.value }}</span>
+          <span class="mono-text" :title="record.isSecret ? '********' : record.value">
+            {{ record.isSecret ? '********' : record.value }}
+          </span>
         </template>
       </a-table-column>
       <a-table-column title="说明" data-index="description" ellipsis />

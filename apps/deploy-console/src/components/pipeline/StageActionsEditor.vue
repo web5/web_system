@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { pipelineStepApi, type StageAction } from '@/api'
 // 终态：平台能力 = 节点里的 service action，工具名与后端 steps/service-tools.ts 对齐
@@ -62,22 +62,32 @@ const draft = ref<StageAction[]>([])
 const actIdx = ref(0)
 const saving = ref(false)
 
-onMounted(() => {
-  actIdx.value = 0
-  const acts = (props.item.actions || []) as StageAction[]
-  // 单命令形态（后端已包装成 1 个操作）与多操作形态在此统一为可编辑序列
-  draft.value = acts.length
-    ? JSON.parse(JSON.stringify(acts))
-    : [
-        {
-          id: 'a1',
-          type: 'shell' as const,
-          name: '主操作',
-          code: props.item.command || '',
-          timeoutSec: props.item.timeoutSec || undefined,
-        },
-      ]
-})
+/**
+ * 初始化操作序列。
+ * ⚠️ 用 watch 而不是 onMounted：抽屉先开、命令后到（loadNodeScript 是异步的），
+ * 或 editingItem 被整体替换时，onMounted 不会重跑 → 编辑器显示空脚本
+ * （用户 2026-09-15 实测：从列表进编辑页点节点，命令不显示；从详情进才显示）。
+ */
+watch(
+  () => props.item,
+  () => {
+    actIdx.value = 0
+    const acts = (props.item.actions || []) as StageAction[]
+    // 单命令形态（后端已包装成 1 个操作）与多操作形态在此统一为可编辑序列
+    draft.value = acts.length
+      ? JSON.parse(JSON.stringify(acts))
+      : [
+          {
+            id: 'a1',
+            type: 'shell' as const,
+            name: '主操作',
+            code: props.item.command || '',
+            timeoutSec: props.item.timeoutSec || undefined,
+          },
+        ]
+  },
+  { immediate: true },
+)
 
 function addAction() {
   if (ro.value) return // 平台托管节点只读
