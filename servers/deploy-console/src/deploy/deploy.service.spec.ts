@@ -202,3 +202,58 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     );
   });
 });
+
+describe('DeployService 后台部署 · pm2 进程名回退', () => {
+  let service: DeployService;
+  let workspace: string;
+  let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
+
+  beforeEach(async () => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-pm2-'));
+    fs.mkdirSync(path.join(workspace, 'servers/gateway/gateway-local/aaa'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, 'servers/gateway/gateway-local/aaa/main.js'), '// new');
+    commands = {
+      pm2Bin: () => '/usr/local/bin/pm2',
+      // 注册表里的裸名 `gateway` 不存在 → 失败；`web-gateway` 成功
+      exec: jest.fn((cmd: string) => {
+        if (String(cmd).includes('restart gateway')) throw new Error('Process or Namespace gateway not found');
+        return 'ok';
+      }),
+    } as any;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        DeployService,
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
+        },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: ModuleRegistryService,
+          useValue: {
+            get: jest.fn().mockResolvedValue({ key: 'gateway', type: 'backend', dir: 'gateway', pm2: 'gateway' }),
+          },
+        },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: commands },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  it('注册表进程名不存在时，回退到 web-<key>', async () => {
+    await service.deployVersion({
+      moduleKey: 'gateway',
+      env: 'local',
+      versionTag: 'gateway-local/aaa',
+    });
+    const calls = commands.exec.mock.calls.map((c: any[]) => String(c[0]));
+    expect(calls.some((c) => c.includes('restart gateway'))).toBe(true);
+    expect(calls.some((c) => c.includes('restart web-gateway'))).toBe(true);
+  });
+});
