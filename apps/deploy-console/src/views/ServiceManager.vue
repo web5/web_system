@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { moduleApi, environmentApi } from '@/api'
 import EnvManagerPanel from '@/components/EnvManagerPanel.vue'
+
+const router = useRouter()
 
 // ============ 类型定义 ============
 // 类型标签统一中性呈现（Geist 克制：颜色只编码"状态/是否内置"两类语义）
@@ -79,10 +82,12 @@ function resetModuleForm() {
   })
 }
 
+/**
+ * 新建模块：进**独立页面** /modules/new（用户 2026-09-15：编辑/新建都不要弹窗）。
+ * 页面里按「类型」联动代码目录 / publicPath / pm2（见 ModuleEdit 的 create 模式）。
+ */
 function openModuleCreate() {
-  editingKey.value = ''
-  resetModuleForm()
-  moduleFormVisible.value = true
+  router.push({ name: 'ModuleCreate' })
 }
 
 function openModuleEdit(m: any) {
