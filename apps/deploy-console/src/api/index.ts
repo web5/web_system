@@ -77,6 +77,19 @@ export const deployApi = {
       moduleKey: string
       versionTag: string
     }>,
+  /**
+   * 回滚到某版本（秒级，不重新构建）。
+   * 后台模块：把该版本目录落地到 dist 并重启 pm2；前台模块：只改指针。
+   * 不传 `to` = 回滚到上一个版本。
+   */
+  rollbackVersion: (body: { env: string; moduleKey: string; to?: string; confirm?: boolean }) =>
+    http.post('/deploy/rollback-version', body) as Promise<{
+      moduleKey: string
+      env: string
+      from: string
+      to: string
+      status: string
+    }>,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string

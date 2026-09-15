@@ -415,12 +415,15 @@ export class DeployService {
    * - 前台类：只把指针切回上一版本（网关直接读版本目录，天然可回滚）
    * - 后台类：与部署同一套「落地 + 重启」；若版本目录已被清理，用最近的 `dist.bak-*` 兜底
    *
-   * 上一版本取自 `deploy_versions`（同 env + 模块，排除当前指针，取最近一条）。
+   * 上一版本取自 `deploy_versions`（同 env + 模块，排除当前指针，取最近一条）；
+   * 也可由调用方**指定目标版本**（`to`）—— UI 的「回滚到此版本」就是按行指定。
    */
   async rollbackVersion(input: {
     moduleKey: string;
     env: string;
     operator?: string;
+    /** 回滚到指定版本（省略 = 上一个版本） */
+    to?: string;
   }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
     if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
@@ -430,33 +433,40 @@ export class DeployService {
     });
     if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
 
-    const rows = await this.versionRepo.find({
-      where: { env: input.env, component: input.moduleKey },
-      order: { releasedAt: 'DESC' } as any,
-    });
-    const prev = rows.find((r) => r.versionTag && r.versionTag !== cur.currentVersion);
-    if (!prev) throw new Error('回滚失败: 没有可回滚的历史版本');
+    let target = input.to?.trim();
+    if (!target) {
+      const rows = await this.versionRepo.find({
+        where: { env: input.env, component: input.moduleKey },
+        order: { releasedAt: 'DESC' } as any,
+      });
+      const prev = rows.find((r) => r.versionTag && r.versionTag !== cur.currentVersion);
+      if (!prev) throw new Error('回滚失败: 没有可回滚的历史版本');
+      target = prev.versionTag;
+    }
+    if (target === cur.currentVersion) {
+      throw new Error(`回滚失败: ${target} 就是当前版本`);
+    }
 
     // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
     await this.applyBackendVersion({
       moduleKey: input.moduleKey,
       env: input.env,
-      versionTag: prev.versionTag,
+      versionTag: target,
       operator: input.operator,
     });
     await this.deploymentRepo.upsert(
       {
         envId: input.env,
         moduleKey: input.moduleKey,
-        currentVersion: prev.versionTag,
+        currentVersion: target,
         status: 'deployed',
         deployedAt: new Date(),
         deployedBy: input.operator,
       },
       ['envId', 'moduleKey'],
     );
-    this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${prev.versionTag}`);
-    return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: prev.versionTag };
+    this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
+    return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
   }
 
   /**
