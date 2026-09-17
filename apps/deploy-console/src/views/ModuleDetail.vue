@@ -8,8 +8,8 @@ import {
   environmentApi,
   serverApi,
   stageCommandApi,
-  pipelineApi,
-  pipelineTemplateApi,
+  pipelineRunsApi,
+  pipelinesApi,
   type StageAction,
   type ModuleEnvRow,
 } from '@/api'

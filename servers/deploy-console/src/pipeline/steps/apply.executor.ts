@@ -24,7 +24,14 @@ import { StepContext } from './step.types';
  * 而终态要求「产物先进版本目录、再由部署动作落地」，两者模型不同。
  *
  * ⚠️ 影响面：本步骤会**重启后台服务**。gateway 是静态产物与 API 的宿主，
- * 重启期间所有微前端与 API 调用短暂不可用 —— 由流水线模板决定是否启用。
+ * 重启期间所有微前端与 API 调用短暂不可用。
+ *
+ * 是否启用 = 该流水线的 release 节点有没有配这个 action（目前只给 gateway 的三条流水线配了，
+ * 其余后台模块仍是「就地构建 + restart」），不是什么全局开关。
+ *
+ * 命名说明：`apply-version` 挂在**流水线**（定义，物理表 `deploy_pipeline_templates`）上；
+ * 每次执行产生的记录是**发布单**（`deploy_pipelines`）。两者的当前命名是反的，见
+ * specs/deploy-console/pipeline-naming.md —— 本步骤按该文档的收敛方向用词。
  */
 @Injectable()
 export class ApplyExecutor {
