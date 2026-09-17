@@ -47,6 +47,36 @@ export function moduleArtifactEntry(
   return path.join(moduleArtifactDir(releaseWorkspace, moduleKey, version), 'index.js');
 }
 
+// ── M2：部署目标推导（2026-09-17）────────────────────────────
+// 设计见 specs/deploy-console/artifact-path-and-deploy-model.md：
+// 部署位置是**模块的自有属性**（deployRoot），环境只决定"产物落在产物区的哪一层"，
+// 不再需要为每个环境配 3 套 PUBLISH_PATH / HOST / USER 变量。
+
+/** 产物区：流水线投递到这里，**不直接生效** */
+export function artifactsDir(releaseWorkspace: string, moduleKey: string, env: string, version: string): string {
+  return path.join(releaseWorkspace, 'artifacts', moduleKey, env, version);
+}
+
+/** 部署根：模块自持（相对发布目录根） */
+export function deployRootAbs(releaseWorkspace: string, deployRoot?: string): string {
+  return deployRoot ? path.join(releaseWorkspace, deployRoot) : releaseWorkspace;
+}
+
+/**
+ * 部署目标的绝对路径：`<ws>/<deployRoot>`，默认产物路径拼在其后（后台为 `dist`）。
+ * 未配 deployRoot 时返回空串 —— 调用方应回退到旧的流水线变量（双轨，零破坏）。
+ */
+export function deployTargetAbs(
+  releaseWorkspace: string,
+  deployRoot?: string,
+  defaultArtifactPath?: string | null,
+): string {
+  if (!deployRoot) return '';
+  const root = deployRootAbs(releaseWorkspace, deployRoot);
+  const sub = (defaultArtifactPath || '').replace(/^\/+|\/+$/g, '');
+  return sub ? path.join(root, sub) : root;
+}
+
 /** 产物 HTTP URL（gateway 静态服务可访问地址，verify 阶段 HEAD 探活用） */
 export function moduleArtifactUrl(gatewayBaseUrl: string, moduleKey: string, version: string): string {
   return `${gatewayBaseUrl}/static/modules/${moduleKey}/${version}/index.js`;
