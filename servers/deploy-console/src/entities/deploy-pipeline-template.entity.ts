@@ -16,7 +16,7 @@ export type TemplateTarget = 'auto' | 'local' | 'remote';
  *
  * S6-II 将扩展 steps 序列与工具绑定（见 design.md v2）。
  */
-@Entity('deploy_pipeline_templates')
+@Entity('deploy_pipelines')
 @Unique('uq_tpl_module_name', ['moduleKey', 'name'])
 export class DeployPipelineTemplateEntity {
   @PrimaryColumn({ type: 'varchar', length: 64, comment: '模板 ID（tpl-${ts}-${rand}）' })
