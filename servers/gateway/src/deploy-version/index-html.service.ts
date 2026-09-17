@@ -67,7 +67,7 @@ export class IndexHtmlService {
    * pub === 'console'：deploy-console 独立 SPA，不注入清单
    */
   async render(pub: string, req?: any): Promise<string> {
-    const html = this.readHtml(pub);
+    const html = await this.readHtml(pub);
     if (pub !== 'shell') {
       // deploy-console 等非微前端应用，只注入环境标识
       const meta = `<script>window.__DEPLOY_ENV__=${JSON.stringify(this.envId)};</script>`;
@@ -105,9 +105,16 @@ export class IndexHtmlService {
     return { env: envId, modules: entries, canary };
   }
 
-  /** 读取 index.html，带 mtime 缓存 */
-  private readHtml(pub: string): string {
-    const file = join(PUBLIC_ROOT, pub, 'index.html');
+  /**
+   * 读取 index.html，带 mtime 缓存。
+   *
+   * **基座 shell 按版本加载**（用户 2026-09-15：不做覆盖式发布）：
+   * 先查 `deploy_deployments`（当前环境 + shell）拿版本，再从
+   * `public/static/modules/shell/<版本>/index.html` 读；取不到版本或文件不存在时
+   * 退回历史固定路径 `public/shell/index.html`（保证老部署仍可启动）。
+   */
+  private async readHtml(pub: string): Promise<string> {
+    const file = pub === 'shell' ? await this.resolveShellHtmlFile() : join(PUBLIC_ROOT, pub, 'index.html');
     try {
       const mtime = statSync(file).mtimeMs;
       const cached = this.htmlCache.get(pub);
@@ -117,6 +124,19 @@ export class IndexHtmlService {
       return content;
     } catch {
       return '<html><head></head><body>index.html not found for ' + pub + '</body></html>';
+    }
+  }
+
+  /** 基座 html 路径：优先版本目录（static/modules/shell/<版本>/），否则旧固定目录 */
+  private async resolveShellHtmlFile(): Promise<string> {
+    const legacy = join(PUBLIC_ROOT, 'shell', 'index.html');
+    try {
+      const version = await this.getCurrentVersion(this.envId, 'shell');
+      if (!version) return legacy;
+      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', version, 'index.html');
+      return existsSync(versioned) ? versioned : legacy;
+    } catch {
+      return legacy;
     }
   }
 

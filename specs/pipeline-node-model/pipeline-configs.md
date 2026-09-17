@@ -77,9 +77,23 @@
 
 ---
 
-## 5. 模板启用状态（2026-09-14 更新）
+## 5. 模板启用状态（2026-09-15 更新）
 
-当前只跑**本地**，远程两条停用：
+**终态（2026-09-15）**：一条流水线 = 一个「模块 × 环境」，共 **16 模块 × 3 环境 = 48 条，全部启用**：
+
+| 类别 | 模块 | 产物落点（本机） |
+|---|---|---|
+| 前端类（micro-frontend / frontend） | admin / portal / shell / mini-contract | `servers/gateway/public/static/modules/<key>/<流水线key>/<commit>/` |
+| 后台（backend） | gateway / ai-agent / mcp-gateway / ai-service / auth-service / content-hub / deploy-console / finnews / system-service / todo-service / upload-service / user-service | `servers/<key>/<流水线key>/<commit>/`（**版本目录**，见下方「已知缺口」） |
+
+⚠️ **已知缺口（2026-09-15 回归发现）**：后台模块的本机投递目前也走「版本目录」，而服务实际跑的是
+`servers/<key>/dist/` —— 需要「部署」动作（或专用投递脚本）把版本目录落到 `dist` 并重启 pm2。
+前端类无此问题（网关按指针直接读版本目录）。
+
+远程（dev / prod）在 2026-09-15 验证过 SSH 连通性（`175.27.189.123` / `106.52.176.246`，
+`/data/web_system` 可写）后启用；p5 迁移脚本已把 `enabled` 统一置 1。
+
+> 历史（2026-09-14）：只跑本地，远程两条停用 —— 见下。
 
 | 模板 | module_key | 状态 | 节点 |
 |---|---|---|---|
@@ -143,3 +157,4 @@
 
 1. **轻量**：deploy-console 内建「审批人清单」配置（系统设置里一个多行/多选值），审批时校验操作人在清单内；先初始化 `admin`。
 2. **接权限体系**：在 `packages/types` 增加权限码（如 `deploy:pipeline:approve`），走 user-service 权限同步，控制台按权限码过滤可审批人 —— 与 admin 系统用户打通，但改动跨 3 个仓库包。
+- 2026-09-15 **首次真实发布踩坑（已修）**：local 投递脚本 `DST="${PUBLISH_PATH:?…}"`，PUBLISH_PATH 以 `~` 开头而双引号里 `~` 不展开 → 产物落进字面量目录 `apps/admin/~/…`，脚本却报「已就位」。页面 404。修复：脚本补 `DST="${DST/#\~/$HOME}"`（DB 内 3 条 local 流水线已更新；dev/prod 远程路径是绝对路径不受影响）。教训：**投递类脚本凡涉及用户路径变量，必须显式展开 `~`；日志打印的路径要校验存在性再报成功**。

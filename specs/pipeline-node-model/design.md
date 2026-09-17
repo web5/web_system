@@ -64,6 +64,8 @@
 | `docs/development/prod-release-plan.md` | prod 发布四条路径与首次部署前置清单 |
 | `docs/development/local-release-runbook.md` | 本机发布目录机制与发布流程 |
 | `specs/from-zero-bootstrap/` | `bootstrap.sh` 的需求与设计（**已实现**，PR #60） |
+| `specs/deploy-console/pipeline-edit-ui.md` | **编辑页 / 新建页 UI 交互定稿**（2026-09-15 原型确认）：独立路由 + Tabs、基本信息字段收敛、新建流程、新建模块 |
+| `specs/deploy-console/gateway-and-shell-versioned-release.md` | **gateway 走标准流水线 + shell（微前端基座）按版本加载 + 微前端独立管理动作**（2026-09-15 规划，次日实现） |
 
 ---
 
@@ -376,9 +378,23 @@ git(local) → build(local) → upload(host=dev-default, 传 dist) → restart(h
 
 ---
 
+## 9. UI 交互定稿（2026-09-15，原型已确认）
+
+完整规格见 `specs/deploy-console/pipeline-edit-ui.md`，此处只记**影响模型的三条**：
+
+1. **编辑 / 新建是独立路由页**（`/pipelines/:id/edit`、`/pipelines/new`），详情页不再内嵌编辑态。
+2. **基本信息只剩身份字段**（名 / key / 模块 / 环境 / 启用）：
+   `投递目标` 删除（环境即投递目标）；`审批 / 审批人` 下移到 **approval 节点**；
+   `失败回滚` 下移到**节点 watchdog 标记** → 与 §3 的「行为配置都在节点上」一致。
+3. **新建按模块类型（前端 / 后台）载入初始四节点**，构建命令按类型预填 —— 对应 §5.1 / §5.2 两条流水线的差异。
+
+---
+
 ## 变更日志
 
 - 2026-09-14 首版：基于现状调研（节点 kind=platform/script、变量仅内置+配置中心、审批为前置门禁）给出两类节点 + 变量的目标模型与两条流水线配置方案。
 - 2026-09-14 追加 §6「远程机器发布能力」：shell 节点加 `host`、SSH 执行通道、两种编排（远程自拉自建 / 本地构建+远程部署）、并发与回滚要点；落地阶段插入 P1（远程执行），后续阶段顺延。
 - 2026-09-14 追加 §0 方案总览（全景图 / 决策 D1–D8 / 阶段路线 P0–P4 / 关联文档）；§6.4 落定凭据决策：按环境拆密钥、无 passphrase、轮换 UI 一起做。
 - 2026-09-14 **P0 落地**：`ApprovalNode` 入模型、`planNodeExec` 加 `how='approval'`、节点级挂起/恢复（`awaiting-approval` + `stage` 作恢复锚点）、可注入 `ShellRunner` 让引擎首次可测；本机三节点端到端跑通。实现细节、五条落地决策与两条已知缺口见 `tasks.md` §4/§6 与 `P0-handoff.md` §9–§11。
+- 2026-09-15 **UI 交互定稿**（原型 v14 用户确认）：编辑/新建为独立路由页（Tabs：基本信息/流程编排/参数/变量，无「历史记录」）；基本信息收敛为 名/key/模块/环境/启用，`投递目标` 删除、`审批/审批人` 下移到 approval 节点、`失败回滚` 下移到节点 watchdog；新建按模块类型（前端/后台）预填初始四节点；新增「新建模块」页（类型 → 目录/publicPath/pm2）。规格见 `specs/deploy-console/pipeline-edit-ui.md`，摘要见 §9。
+- 2026-09-15 **gateway / shell 版本化发布（规划）**：gateway 由「就地发布」改为标准流水线 + 版本目录 + 指针切换（可回滚）；远端 shell（微前端基座）统一按版本目录加载、清掉 overlay 覆盖式死代码与 legacy 兜底；给 micro-frontend（含 shell）新增「发布并生效」独立管理动作。前置阻塞：**后台构建产物没进版本目录**（版本目录只有 tsbuildinfo → 落地会把服务搞挂）。规格见 `specs/deploy-console/gateway-and-shell-versioned-release.md`（未实现）。

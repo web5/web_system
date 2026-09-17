@@ -104,11 +104,30 @@ except Exception:
 listen_pid() { lsof -tiTCP:6200 -sTCP:LISTEN 2>/dev/null | head -1 || true; }
 
 restart_console() {
-  if ! dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} restart web-deploy-console --update-env)"; then
-    (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" restart web-deploy-console --update-env >/dev/null 2>&1) \
-      || err "pm2 restart 失败"
+  # 为什么不用 `pm2 restart`（2026-09-15 实测）：
+  #   console 只 `app.listen()`、没有 SIGINT 优雅退出；`pm2 restart` 后旧进程不释放 6200，
+  #   pm2 新起的进程因 EADDRINUSE 反复崩溃（restart_time 持续 +1），对外服务的仍是旧孤儿，
+  #   于是「6200 占用者 ≠ pm2 pid」永久不消失。
+  # 改为确定性重建：先放掉端口占用 → delete 条目 → start（新条目 restarts=0、pid 与监听者一致）。
+  local lp
+  for lp in $(lsof -tiTCP:6200 -sTCP:LISTEN 2>/dev/null || true); do
+    dry "kill -9 ${lp}（释放 6200）" || kill -9 "$lp" 2>/dev/null || true
+  done
+  # 顺带清掉同名脚本的历史残留进程（delete 不保证杀得掉已脱管的孤儿）
+  for lp in $(pgrep -f 'deploy-console/dist/main.js' 2>/dev/null || true); do
+    [ "$lp" = "$(pm2_pid)" ] && continue
+    dry "kill -9 ${lp}（残留 main.js）" || kill -9 "$lp" 2>/dev/null || true
+  done
+  sleep 1
+
+  if ! dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} delete web-deploy-console)"; then
+    (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" delete web-deploy-console >/dev/null 2>&1) || true
   fi
-  sleep 4
+  if ! dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} start dist/main.js --name web-deploy-console --cwd ${RELEASE_DIR}/servers/deploy-console)"; then
+    (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" start dist/main.js --name web-deploy-console --cwd "$RELEASE_DIR/servers/deploy-console" >/dev/null 2>&1) \
+      || err "pm2 start 失败"
+  fi
+  sleep 6
 }
 
 step "处理 6200 端口一致性（孤儿进程铁律）..."

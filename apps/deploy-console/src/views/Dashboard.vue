@@ -31,11 +31,12 @@ const loading = ref(false)
 // 加载环境信息
 async function loadEnvs() {
   try {
-    const list = await environmentApi.list()
+    // 环境已归属模块（1:N）：列表接口返回的是按 id 去重的环境字典（含 moduleCount）
+    const list = (await environmentApi.list()) as any[]
     envList.value = list.map((e: any) => ({
       env: e.id,
       server: e.host,
-      services: Object.keys(e.ports || {}),
+      services: e.moduleCount ? [`${e.moduleCount} 个模块`] : [],
       publicUrl: e.publicUrl || '',
       deployDir: e.remoteDir,
     }))

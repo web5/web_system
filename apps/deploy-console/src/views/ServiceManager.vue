@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { moduleApi, environmentApi } from '@/api'
+import EnvManagerPanel from '@/components/EnvManagerPanel.vue'
+
+const router = useRouter()
 
 // ============ 类型定义 ============
 // 类型标签统一中性呈现（Geist 克制：颜色只编码"状态/是否内置"两类语义）
@@ -26,6 +30,13 @@ const moduleSaving = ref(false)
 const editingKey = ref('')
 
 const envs = ref<any[]>([])
+/** 环境管理面板（原独立菜单页已并入此处）：环境归属模块，需先选模块 */
+const envPanelOpen = ref(false)
+const envPanelModule = ref<string>('')
+function openEnvPanel(moduleKey?: string) {
+  envPanelModule.value = moduleKey || envPanelModule.value || moduleList.value[0]?.key || ''
+  envPanelOpen.value = true
+}
 const moduleForm = reactive({
   key: '',
   name: '',
@@ -71,10 +82,12 @@ function resetModuleForm() {
   })
 }
 
+/**
+ * 新建模块：进**独立页面** /modules/new（用户 2026-09-15：编辑/新建都不要弹窗）。
+ * 页面里按「类型」联动代码目录 / publicPath / pm2（见 ModuleEdit 的 create 模式）。
+ */
 function openModuleCreate() {
-  editingKey.value = ''
-  resetModuleForm()
-  moduleFormVisible.value = true
+  router.push({ name: 'ModuleCreate' })
 }
 
 function openModuleEdit(m: any) {
@@ -166,6 +179,7 @@ onMounted(() => {
     <div class="page-header">
       <h2>模块管理</h2>
       <p>模块注册表是发布系统的「模块元数据」真相源。后端模块（pm2 部署）、前端模块、微前端模块、小程序均在此登记。点击「详情」查看并管理该模块前端/后台的部署版本与环境。</p>
+      <p style="color: var(--ws-text-tertiary);">环境的增删与公网地址/服务地址，点右上「环境管理」维护（原独立菜单页已并入此处）。</p>
       <p style="color: var(--ws-text-tertiary);">启动时若表为空，会从 <code class="ws-mono">scripts/modules.json</code> 种子导入（标记为 builtin）。builtin 不可删除，可改字段。</p>
     </div>
 
@@ -179,7 +193,10 @@ onMounted(() => {
             :tab="`${typeLabel(t.value)} (${moduleList.filter((m: any) => m.type === t.value).length})`"
           />
         </a-tabs>
-        <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
+        <a-space>
+          <a-button @click="openEnvPanel()">环境管理</a-button>
+          <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
+        </a-space>
       </div>
 
       <a-table
@@ -304,6 +321,30 @@ onMounted(() => {
         </div>
       </a-form>
     </a-modal>
+
+    <!-- 环境管理：原独立菜单页已并入模块管理，环境增删改在这里（变更后刷新模块表单的环境下拉） -->
+    <a-drawer
+      v-model:open="envPanelOpen"
+      title="环境管理"
+      width="960"
+      placement="right"
+      :destroy-on-close="true"
+    >
+      <a-form-item label="模块（环境归属于模块，切换模块看它的环境）">
+        <a-select
+          v-model:value="envPanelModule"
+          show-search
+          option-filter-prop="label"
+          style="max-width: 360px;"
+          :options="moduleList.map((m: any) => ({ value: m.key, label: `${m.name}（${m.key}）` }))"
+        />
+      </a-form-item>
+      <EnvManagerPanel
+        v-if="envPanelModule"
+        :module-key="envPanelModule"
+        @changed="loadEnvs"
+      />
+    </a-drawer>
   </div>
 </template>
 

@@ -12,12 +12,14 @@ import { EventEmitter } from 'events';
 import { spawn, exec, execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { Client } from 'ssh2';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { CommandService } from '../shell/command.service';
 import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 
@@ -73,6 +75,7 @@ export class DeployService {
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly serverService: ServerService,
     private readonly stageCommands: StageCommandService,
+    private readonly commands: CommandService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -270,6 +273,10 @@ export class DeployService {
     if (!input?.moduleKey?.trim()) throw new Error('部署失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('部署失败: env 必填');
     if (!input?.versionTag?.trim()) throw new Error('部署失败: versionTag 必填');
+    // 顺序（2026-09-15 修正）：**先落地生效，再改指针** ——
+    // 落地失败时指针保持原值，不会出现「指针指向没生效的版本」这种撕裂状态。
+    await this.applyBackendVersion(input);
+
     await this.deploymentRepo.upsert(
       {
         envId: input.env,
@@ -283,6 +290,221 @@ export class DeployService {
     );
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
     return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag };
+  }
+
+  /**
+   * 后台模块的「部署生效」：把版本目录内容落到服务目录的 `dist/`，再重启 pm2 进程。
+   *
+   * 为什么需要这一步（2026-09-15 回归发现）：投递脚本把产物放到
+   * `servers/<dir>/<流水线key>/<commit>/`（版本目录，可回滚），而服务实际运行的是
+   * `servers/<dir>/dist/`。前端类无此问题 —— 网关按指针直接读版本目录。
+   *
+   * 采用「复制」而不是「移动」：版本目录保留，回滚时可再次部署旧版本。
+   * 旧 dist 先备份为 `dist.bak-<ts>`（只留最近 3 份），失败时可手工回滚。
+   *
+   * 本机（local）直接 cp；远程（dev / prod）走 SSH：打包 → sftp 上传 → 远端换 dist → pm2 重启。
+   */
+  /**
+   * 产物可用性守卫（P0，2026-09-15）。
+   *
+   * 背景：发布流水线的 build 节点产出到 `BUILD_OUTPUT_DIR`，投递脚本再拷它进版本目录；
+   * 这个链路**任何一环静默失败**（典型：tsc 增量编译
+   * 判定"已是最新"只写 `tsconfig.tsbuildinfo`、不产出 JS）都会得到一个存在但没内容的版本目录。
+   * 以前 `applyBackendVersion` 只判 `existsSync`，于是把空壳落到 `dist` → 服务启动即缺入口文件。
+   *
+   * 约定：**宁可不落地，也不要把坏产物落进去**（旧 dist 还在，服务不会因此挂掉）。
+   */
+  private assertArtifactUsable(src: string, versionTag: string): void {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(src);
+    } catch {
+      throw new Error(`部署失败：版本目录不可读 ${src}（版本 ${versionTag}）`);
+    }
+    if (!entries.length) {
+      throw new Error(
+        `部署失败：版本目录是空的 ${src}（版本 ${versionTag}）—— 构建产物没进版本目录，` +
+          `先跑该模块的发布流水线确认 build 节点产出（排查见 specs/deploy-console/gateway-and-shell-versioned-release.md §6）`,
+      );
+    }
+    // 只有 tsbuildinfo = tsc 增量编译"自认为最新"但实际没产出 JS 的典型症状，单独给提示
+    const meaningful = entries.filter((e) => !e.endsWith('.tsbuildinfo'));
+    if (!meaningful.length) {
+      throw new Error(
+        `部署失败：版本目录里只有 ${entries.join(' / ')}，没有真正的构建产物（${src}）；` +
+          `典型原因是 tsc 增量编译判定"已是最新"（incremental + dist 被清理过）—— 清掉 tsconfig.tsbuildinfo 后重跑构建`,
+      );
+    }
+  }
+
+  private async applyBackendVersion(input: {
+    moduleKey: string;
+    env: string;
+    versionTag: string;
+    operator?: string;
+  }): Promise<void> {
+    let mod: { type?: string; dir?: string; pm2?: string } | null = null;
+    try {
+      mod = (await this.moduleRegistry.get(input.moduleKey)) as any;
+    } catch {
+      return; // 取不到模块信息 → 按前端类处理（只改指针）
+    }
+    if (!mod || mod.type !== 'backend') return;
+
+    const home = process.env.HOME || '';
+    if (input.env !== 'local') {
+      // 远程（dev / prod）：版本目录在**远端**（由远程投递流水线放好），走 SSH 换 dist + 重启
+      await this.applyBackendRemote(input, mod);
+      return;
+    }
+
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = mod.dir || input.moduleKey;
+    const src = path.join(ws, 'servers', dir, input.versionTag);
+    const dst = path.join(ws, 'servers', dir, 'dist');
+
+    if (!fs.existsSync(src)) {
+      // 兜底（T2）：版本目录被清掉时，用最近的 dist 备份恢复 —— 回滚旧版本时很可能遇到
+      const restored = this.restoreDistBackup(path.dirname(dst));
+      if (!restored) {
+        throw new Error(
+          `部署失败：找不到版本目录 ${src}，也没有 dist 备份可恢复（先跑该模块的发布流水线）`,
+        );
+      }
+      this.logger.warn(`版本目录 ${src} 不存在，已用备份 ${restored} 恢复 dist`);
+      this.restartPm2(mod, input.moduleKey, ws);
+      return;
+    }
+
+    // 产物守卫（P0，2026-09-15）：**存在 ≠ 有内容**。
+    // 实测事故：后台模块版本目录里只有 tsconfig.tsbuildinfo（tsc incremental 判定"已是最新"→ 没产出 JS），
+    // 旧逻辑照样把这份空壳 cp 到 dist → 服务起来后入口文件缺失直接变砖。这里在落地前先把门。
+    this.assertArtifactUsable(src, input.versionTag);
+
+    // 备份旧 dist（保留最近 3 份）
+    if (fs.existsSync(dst)) {
+      const bak = `${dst}.bak-${Date.now()}`;
+      fs.renameSync(dst, bak);
+      try {
+        const baks = fs
+          .readdirSync(path.dirname(dst))
+          .filter((f) => f.startsWith('dist.bak-'))
+          .sort();
+        for (const old of baks.slice(0, Math.max(0, baks.length - 3))) {
+          fs.rmSync(path.join(path.dirname(dst), old), { recursive: true, force: true });
+        }
+      } catch {
+        /* 备份清理失败不影响部署 */
+      }
+    }
+
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.cpSync(src, dst, { recursive: true });
+    this.logger.log(`后台落地完成: ${src} -> ${dst}`);
+    this.restartPm2(mod, input.moduleKey, ws);
+  }
+
+  /**
+   * 用最近的 `dist.bak-<ts>` 恢复服务目录的 dist（版本目录缺失时的兜底）。
+   * @returns 使用的备份目录名（相对服务目录），没有可用备份时返回 null
+   */
+  private restoreDistBackup(serviceDir: string): string | null {
+    try {
+      const baks = fs
+        .readdirSync(serviceDir)
+        .filter((f) => f.startsWith('dist.bak-'))
+        .sort()
+        .reverse();
+      if (!baks.length) return null;
+      const pick = baks[0];
+      const dst = path.join(serviceDir, 'dist');
+      if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+      fs.renameSync(path.join(serviceDir, pick), dst);
+      return pick;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 重启后台模块的 pm2 进程。
+   * 进程名候选：注册表 `pm2` 字段 → `web-<key>` → 裸 key（实测注册表常存裸 key，
+   * 而进程叫 `web-<key>`），逐个尝试到成功为止；全失败只告警（不回滚，避免状态撕裂）。
+   */
+  private restartPm2(mod: { pm2?: string }, moduleKey: string, cwd: string): void {
+    const candidates = Array.from(
+      new Set([mod.pm2, `web-${moduleKey}`, moduleKey].filter(Boolean) as string[]),
+    );
+    for (const name of candidates) {
+      try {
+        this.commands.exec(`"${this.commands.pm2Bin()}" restart ${name}`, cwd, {}, 60000);
+        this.logger.log(`pm2 重启完成: ${name}`);
+        return;
+      } catch (e) {
+        this.logger.warn(`pm2 restart ${name} 失败，试下一个候选: ${(e as Error).message}`);
+      }
+    }
+    this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
+  }
+
+  /**
+   * 回滚到上一个版本（T2）。
+   *
+   * - 前台类：只把指针切回上一版本（网关直接读版本目录，天然可回滚）
+   * - 后台类：与部署同一套「落地 + 重启」；若版本目录已被清理，用最近的 `dist.bak-*` 兜底
+   *
+   * 上一版本取自 `deploy_versions`（同 env + 模块，排除当前指针，取最近一条）；
+   * 也可由调用方**指定目标版本**（`to`）—— UI 的「回滚到此版本」就是按行指定。
+   */
+  async rollbackVersion(input: {
+    moduleKey: string;
+    env: string;
+    operator?: string;
+    /** 回滚到指定版本（省略 = 上一个版本） */
+    to?: string;
+  }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
+    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+
+    const cur = await this.deploymentRepo.findOne({
+      where: { envId: input.env, moduleKey: input.moduleKey },
+    });
+    if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
+
+    let target = input.to?.trim();
+    if (!target) {
+      const rows = await this.versionRepo.find({
+        where: { env: input.env, component: input.moduleKey },
+        order: { releasedAt: 'DESC' } as any,
+      });
+      const prev = rows.find((r) => r.versionTag && r.versionTag !== cur.currentVersion);
+      if (!prev) throw new Error('回滚失败: 没有可回滚的历史版本');
+      target = prev.versionTag;
+    }
+    if (target === cur.currentVersion) {
+      throw new Error(`回滚失败: ${target} 就是当前版本`);
+    }
+
+    // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
+    await this.applyBackendVersion({
+      moduleKey: input.moduleKey,
+      env: input.env,
+      versionTag: target,
+      operator: input.operator,
+    });
+    await this.deploymentRepo.upsert(
+      {
+        envId: input.env,
+        moduleKey: input.moduleKey,
+        currentVersion: target,
+        status: 'deployed',
+        deployedAt: new Date(),
+        deployedBy: input.operator,
+      },
+      ['envId', 'moduleKey'],
+    );
+    this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
+    return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
   }
 
   /**
@@ -505,7 +727,7 @@ export class DeployService {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
     // 3. 上传到远端 nginx 静态目录（通过 deploy.sh 的 deploy_micro_frontend 函数）
-    const envVars = await this.buildEnvVars(env);
+    const envVars = await this.buildEnvVars(env, moduleKey);
     const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
     const child = spawn(
       'bash',
@@ -613,7 +835,7 @@ export class DeployService {
   ) {
     const scriptPath = path.join(webSystemDir, 'scripts', 'deploy.sh');
     void this.updateTask(task, 'running', `执行部署: bash scripts/deploy.sh ${env} ${component} ${versionTag}`);
-    const envVars = await this.buildEnvVars(env);
+    const envVars = await this.buildEnvVars(env, component);
     // 注入模块注册表定义（DB 唯一真相源）；查不到时 deploy.sh 自行 fallback modules.json
     try {
       const m = await this.moduleRegistry.get(component);
@@ -687,10 +909,22 @@ export class DeployService {
    * 从 DB 环境表构造连接环境变量，注入给 deploy.sh/rollback.sh
    * （服务器连接信息已下沉 deploy_servers，此处只传环境级 publicUrl）
    */
-  private async buildEnvVars(env: string): Promise<Record<string, string>> {
-    const e = await this.environmentService.get(env);
+  private async buildEnvVars(env: string, moduleKey?: string): Promise<Record<string, string>> {
+    // 环境已归属模块（1:N）：有模块上下文就精确定位；否则按环境 id 取第一条（回滚等无模块场景）
+    let publicUrl = '';
+    if (moduleKey) {
+      try {
+        publicUrl = (await this.environmentService.get(moduleKey, env))?.publicUrl || '';
+      } catch {
+        /* 该模块无此环境 → 回退按 env id 取 */
+      }
+    }
+    if (!publicUrl) {
+      const rows = await this.environmentService.list({ id: env });
+      publicUrl = rows.find((r) => r.publicUrl)?.publicUrl || '';
+    }
     return {
-      DEPLOY_PUBLIC_URL: e.publicUrl || '',
+      DEPLOY_PUBLIC_URL: publicUrl,
     };
   }
 
@@ -801,6 +1035,131 @@ export class DeployService {
       this.logger.warn(`读取 modules.json 失败: ${e.message}`);
       return [];
     }
+  }
+
+  /**
+   * 远程（dev / prod）后台模块的部署生效（T1）：
+   *   ① 本地把版本目录打包 → ② sftp 上传远端 /tmp →
+   *   ③ 远端备份旧 dist → 解包到 dist → ④ 远端 pm2 重启（候选名回退）
+   *
+   * 任一步失败：远端**恢复备份**并抛错（不丢现场）；因为 `deployVersion` 是先落地后改指针，
+   * 抛错时指针不会变，整体保持"未部署"状态。
+   */
+  private async applyBackendRemote(
+    input: { moduleKey: string; env: string; versionTag: string; operator?: string },
+    mod: { dir?: string; pm2?: string },
+  ): Promise<void> {
+    const home = process.env.HOME || '';
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = mod.dir || input.moduleKey;
+    const src = path.join(ws, 'servers', dir, input.versionTag);
+    if (!fs.existsSync(src)) {
+      throw new Error(`部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线）`);
+    }
+    // 同上：远端也是「存在 ≠ 有内容」，打包前先守卫，别把空目录 tar 到远端 dist
+    this.assertArtifactUsable(src, input.versionTag);
+
+    const tgz = path.join(os.tmpdir(), `deploy-${input.moduleKey}-${Date.now()}.tar.gz`);
+    execSync(`tar czf "${tgz}" -C "${src}" .`, { stdio: 'ignore' });
+
+    const sshConfig = await this.getSshConfig(input.env);
+    const remoteDir = `${this.getWebSystemDir()}/servers/${dir}`;
+    const remoteTmp = `/tmp/${path.basename(tgz)}`;
+    const stamp = Date.now();
+    const cands = Array.from(
+      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
+    );
+    const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
+    const cmd =
+      `set -e; mkdir -p '${remoteDir}'; ` +
+      `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
+      `mkdir -p '${remoteDir}/dist'; tar xzf '${remoteTmp}' -C '${remoteDir}/dist'; rm -f '${remoteTmp}'; ` +
+      `(${pm2Chain}) || echo "[warn] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）"`;
+
+    try {
+      await this.sshUpload(sshConfig, tgz, remoteTmp);
+      await this.sshRun(sshConfig, cmd, input.env);
+      this.logger.log(`远程落地完成: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
+    } catch (e) {
+      try {
+        await this.sshRun(
+          sshConfig,
+          `if [ ! -d '${remoteDir}/dist' ] && [ -d '${remoteDir}/dist.bak-${stamp}' ]; then mv '${remoteDir}/dist.bak-${stamp}' '${remoteDir}/dist'; fi`,
+          input.env,
+        );
+      } catch {
+        /* 恢复失败也只能告警：现场信息更重要 */
+      }
+      throw new Error(`远程部署失败（${input.env}）：${(e as Error).message}`);
+    } finally {
+      try {
+        fs.rmSync(tgz, { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** ssh2：sftp 上传单个文件 */
+  private sshUpload(sshConfig: any, localFile: string, remoteFile: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const client = new Client();
+      const done = (err?: Error) => {
+        try {
+          client.end();
+        } catch {
+          /* ignore */
+        }
+        err ? reject(err) : resolve();
+      };
+      client.on('ready', () => {
+        client.sftp((err, sftp) => {
+          if (err) return done(new Error(`SFTP 失败: ${err.message}`));
+          sftp.fastPut(localFile, remoteFile, (e: any) =>
+            done(e ? new Error(`上传失败: ${e.message}`) : undefined),
+          );
+        });
+      });
+      client.on('error', (e: Error) => done(new Error(`SSH 连接失败: ${e.message}`)));
+      client.on('timeout', () => done(new Error('SSH 连接超时')));
+      client.connect({ ...sshConfig, readyTimeout: 15000 });
+    });
+  }
+
+  /** ssh2：执行一条远程命令（收集 stdout / stderr，非 0 退出码即失败） */
+  private sshRun(sshConfig: any, cmd: string, tag: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const client = new Client();
+      const done = (err?: Error, out?: string) => {
+        try {
+          client.end();
+        } catch {
+          /* ignore */
+        }
+        err ? reject(err) : resolve(out || '');
+      };
+      client.on('ready', () => {
+        client.exec(cmd, (err, stream) => {
+          if (err) return done(new Error(`远程执行失败: ${err.message}`));
+          let out = '';
+          let errOut = '';
+          stream.on('data', (d: Buffer) => {
+            out += d.toString();
+          });
+          stream.stderr.on('data', (d: Buffer) => {
+            errOut += d.toString();
+          });
+          stream.on('close', (code: number) => {
+            if (code !== 0) return done(new Error(`远程命令退出码 ${code}: ${(errOut || out).trim()}`));
+            if (errOut.trim()) this.logger.warn(`[${tag}] 远程 stderr: ${errOut.trim()}`);
+            done(undefined, out);
+          });
+        });
+      });
+      client.on('error', (e: Error) => done(new Error(`SSH 连接失败: ${e.message}`)));
+      client.on('timeout', () => done(new Error('SSH 连接超时')));
+      client.connect({ ...sshConfig, readyTimeout: 15000 });
+    });
   }
 
   /**

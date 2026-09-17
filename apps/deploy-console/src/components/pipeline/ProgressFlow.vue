@@ -53,9 +53,14 @@ function isDone(s: string) {
 function labelOf(s: string) {
   return stepLabelOf(props.instance, s)
 }
-/** 该节点是否平台节点 / watchdog（基于实例 nodes 快照） */
-function isPlatform(s: string) {
-  return props.instance.nodes?.find((n) => n.key === s)?.kind === 'platform'
+/**
+ * 该节点是否**审批节点**（基于实例 nodes 快照）。
+ *
+ * 终态已无 platform 节点（git 是普通 shell 节点、平台能力变成 service action），
+ * 这里原来的"平台节点"标记据此改成"审批节点"标记。
+ */
+function isApproval(s: string) {
+  return props.instance.nodes?.find((n) => n.key === s)?.kind === 'approval'
 }
 function isWatchdog(s: string) {
   return !!props.instance.nodes?.find((n) => n.key === s)?.watchdog
@@ -73,7 +78,7 @@ function isWatchdog(s: string) {
         <a-tag v-if="instance.mode === 'grayscale'" color="orange" style="margin-right: 0;">灰度</a-tag>
         <a-tag v-if="instance.reuseArtifact" color="cyan" style="margin-right: 0;">复用产物</a-tag>
         <span v-if="instance.templateName" style="color: #888; font-size: 12px;">
-          模板 · {{ instance.templateName }}
+          流水线 · {{ instance.templateName }}
         </span>
       </div>
       <span v-if="isLive(instance) && instance.progress?.message" class="flow-message">
@@ -107,9 +112,9 @@ function isWatchdog(s: string) {
 
         <div class="flow-label">
           <span class="stage-name" :class="{ current: s === currentStage }">{{ labelOf(s) }}</span>
-          <template v-if="isPlatform(s) || isWatchdog(s)">
-            <span class="mini-tag" :class="isPlatform(s) ? 't-plat' : 't-watch'">
-              {{ isPlatform(s) ? '平台' : '⚠ watchdog' }}
+          <template v-if="isApproval(s) || isWatchdog(s)">
+            <span class="mini-tag" :class="isApproval(s) ? 't-plat' : 't-watch'">
+              {{ isApproval(s) ? '审批' : '⚠ watchdog' }}
             </span>
           </template>
           <span class="cmd-link" title="查看该阶段发布命令" @click.stop="emit('commandClick', s)">命令</span>
