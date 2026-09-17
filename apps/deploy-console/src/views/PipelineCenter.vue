@@ -269,19 +269,25 @@ async function loadReleases() {
 }
 async function loadAvailTemplates() {
   try {
-    availTemplates.value = await pipelinesApi.list(form.value.moduleKey)
+    const all = await pipelinesApi.list(form.value.moduleKey)
+    // 一致性（同 PipelineSubmit）：一条流水线只属于一个环境，只给当前环境的候选
+    availTemplates.value = (all || []).filter((t: any) => !t.env || t.env === env.value)
+    // 行内「执行」带来的锁定流水线优先；否则自动选当前环境的第一条（用户 2026-09-17：
+    // 上下文已定时不需要再选一次流水线，只选分支 + commit）
     if (!form.value.templateId) {
       const lockId = lockTemplateId.value
       lockTemplateId.value = ''
       form.value.templateId = lockId || availTemplates.value[0]?.id || undefined
     }
-  } catch {
+  } catch (e: any) {
     availTemplates.value = []
+    message.error(e?.response?.data?.message || '加载流水线列表失败')
   }
 }
-function openSubmit(initKey?: string) {
+function openSubmit(initKey?: string, fixedTplId?: string) {
   form.value.moduleKey = initKey || availableModules.value[0]?.key || ''
-  form.value.templateId = undefined
+  fixedTemplateId.value = fixedTplId || ''
+  form.value.templateId = fixedTplId || undefined
   form.value.branch = 'master'
   form.value.commitId = undefined
   form.value.mode = 'direct'
@@ -419,11 +425,12 @@ function rowName(r: PipelineRow): string {
   return r.module.name
 }
 
-// 行内「执行」：打开发起抽屉并锁定该流水线
+// 行内「执行」：打开发起抽屉并**锁定该流水线**（不显示流水线下拉，只选分支 + commit）
 const lockTemplateId = ref('')
+const fixedTemplateId = ref('')
 function executeTpl(r: PipelineRow) {
   lockTemplateId.value = r.tpl.id
-  openSubmit(r.module.key)
+  openSubmit(r.module.key, r.tpl.id)
 }
 function gotoPipelineDetail(r: PipelineRow) {
   router.push(`/pipelines/${r.tpl.id}`)
@@ -901,7 +908,7 @@ onUnmounted(stopPolling)
           </a-col>
         </a-row>
 
-        <a-form-item label="使用流水线" required>
+        <a-form-item v-if="!fixedTemplateId" label="使用流水线" required>
           <a-select v-model:value="form.templateId" placeholder="选择流水线">
             <a-select-option v-for="t in availTemplates" :key="t.id" :value="t.id">
               {{ t.name }}
@@ -910,6 +917,11 @@ onUnmounted(stopPolling)
               <template v-if="t.approval === 'never'">（免审批）</template>
             </a-select-option>
           </a-select>
+        </a-form-item>
+        <a-form-item v-else label="使用流水线">
+          <a-tag color="blue">
+            {{ availTemplates.find((t) => t.id === fixedTemplateId)?.name || '本流水线' }}
+          </a-tag>
         </a-form-item>
 
         <a-row :gutter="12">

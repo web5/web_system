@@ -49,8 +49,9 @@ cd ~/workspace/web_system && git pull --ff-only && ./scripts/publish-deploy-cons
 
 ```bash
 cd ~/workspace/web_system_dev
-pnpm install --frozen-lockfile        # 15s 左右（命中缓存）
-pnpm --filter @web-system/shared build # 内部包产物，否则 jest 报 TS2307: Cannot find module '@web-system/shared'
+pnpm install --frozen-lockfile          # 15s 左右（命中缓存）
+pnpm --filter @web-system/shared build  # 内部包产物，否则 jest 报 TS2307: Cannot find module '@web-system/shared'
+pnpm --filter @web-system/ui build      # 同上（前端 vue-tsc 报 TS2307: '@web-system/ui'）
 ```
 
 ## 5. 收尾
