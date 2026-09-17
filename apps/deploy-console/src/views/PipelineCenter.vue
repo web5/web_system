@@ -284,9 +284,12 @@ async function loadAvailTemplates() {
     message.error(e?.response?.data?.message || '加载流水线列表失败')
   }
 }
-function openSubmit(initKey?: string, fixedTplId?: string) {
+function openSubmit(initKey?: string, fixedTplId?: string, tplEnv?: string) {
   form.value.moduleKey = initKey || availableModules.value[0]?.key || ''
   fixedTemplateId.value = fixedTplId || ''
+  fixedEnv.value = tplEnv || ''
+  fixedModuleKey.value = fixedTplId ? (initKey || '') : ''
+  if (fixedEnv.value) env.value = fixedEnv.value
   form.value.templateId = fixedTplId || undefined
   form.value.branch = 'master'
   form.value.commitId = undefined
@@ -425,12 +428,15 @@ function rowName(r: PipelineRow): string {
   return r.module.name
 }
 
-// 行内「执行」：打开发起抽屉并**锁定该流水线**（不显示流水线下拉，只选分支 + commit）
+// 行内「执行」：打开发起抽屉并**锁定该流水线** —— 流水线已绑定 模块 × 环境，
+// 所以环境 / 模块 / 流水线三者都只读，用户只选 分支 + commit（用户 2026-09-17）
 const lockTemplateId = ref('')
 const fixedTemplateId = ref('')
+const fixedEnv = ref('')
+const fixedModuleKey = ref('')
 function executeTpl(r: PipelineRow) {
   lockTemplateId.value = r.tpl.id
-  openSubmit(r.module.key, r.tpl.id)
+  openSubmit(r.module.key, r.tpl.id, r.tpl.env || '')
 }
 function gotoPipelineDetail(r: PipelineRow) {
   router.push(`/pipelines/${r.tpl.id}`)
@@ -886,7 +892,7 @@ onUnmounted(stopPolling)
         <a-row :gutter="12">
           <a-col :span="12">
             <a-form-item label="环境" required>
-              <a-select v-model:value="env" @change="onEnvChange">
+              <a-select v-model:value="env" :disabled="!!fixedEnv" @change="onEnvChange">
                 <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
                   {{ e.name }}（{{ e.id }}）
                 </a-select-option>
@@ -898,6 +904,7 @@ onUnmounted(stopPolling)
               <a-select
                 v-model:value="form.moduleKey"
                 placeholder="选择模块"
+                :disabled="!!fixedModuleKey"
                 @change="onModuleChange"
               >
                 <a-select-option v-for="m in availableModules" :key="m.key" :value="m.key">
