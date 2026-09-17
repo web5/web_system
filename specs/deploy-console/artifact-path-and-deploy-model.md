@@ -140,3 +140,15 @@ CDN 下"产物路径"就是**对象前缀内的相对路径**（`index.js` / `di
 9. **CDN 是否在本次范围**：先用 local-dir / remote-dir 落地，CDN 留到 M3 之后作为第三种 target？
 10. **CDN 凭据放哪**：确认走配置中心（不在模块表存密钥）
 11. **入口 URL 形态**：manifest 注入相对路径 vs 绝对 CDN URL（涉及 `entryUrl` 字段与 shell 基座取值）
+
+### 已拍板（2026-09-17）
+
+| # | 决策 |
+|---|---|
+| 9 | ✅ **CDN 不在本次范围**：先落 `local-dir` / `remote-dir`，CDN 作为 M3 之后的第三种 target |
+| 10 | ✅ **凭据走配置中心**，模块表不存密钥 |
+| 11 | ✅ **CDN 时 manifest 输出绝对 URL**（与 `entryUrl` 对上），本地/远程仍用相对路径 |
+
+另：开工顺序确认为 **M1（加 `deployRoot` 字段 + 回填）→ M2（平台按 模块根 + env 推导投递目标，旧变量双轨优先）**；
+实施前先出**模块原型交互稿**（模块部署设置 + 部署时选产物），见
+`docs/ui/prototypes/module-deploy-target-prototype.html`。
