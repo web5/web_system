@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="sec-t">外观</view>
+  <view class="list">
+    <view class="r" bindtap="toggleTheme"><text>深色模式</text><text class="v">{{themeText}} ›</text></view>
+    <view class="r" bindtap="pickFont"><text>字体大小</text><text class="v">{{fontSize}} ›</text></view>
+  </view>
+
+  <view class="sec-t">通知与隐私</view>
+  <view class="list">
+    <view class="r" bindtap="toggleNotify"><text>消息通知</text><text class="v">{{notify ? '已开启' : '已关闭'}} ›</text></view>
+    <view class="r" bindtap="toggleRecommend"><text>个性化推荐</text><text class="v">{{recommend ? '已开启' : '已关闭'}} ›</text></view>
+    <view class="r" bindtap="goPrivacy"><text>隐私设置</text><text class="v">›</text></view>
+  </view>
+
+  <view class="sec-t">通用</view>
+  <view class="list">
+    <view class="r" bindtap="clearCache"><text>清除缓存</text><text class="v">24.6MB ›</text></view>
+    <view class="r" bindtap="backWelcome"><text>返回欢迎页</text><text class="v">›</text></view>
+    <view class="r" bindtap="logout"><text>退出登录</text><text class="v">›</text></view>
+  </view>
+
+  <view class="foot">这里的设置影响整个小程序</view>
+</view>

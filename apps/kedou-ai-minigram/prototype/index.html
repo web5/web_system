@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>kedou-ai-minigram · 科豆 AI 小程序原型</title>
+<style>
+  :root {
+    --stage: #ECE8E3;
+    --nav-bg: #FFFFFF; --nav-text: #000000;
+    --page-bg: #F7F4F0; --card: #FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand: #F97316; --brand-soft: #FFF2E6; --brand-deep: #E8620A; --brand-txt: #C2410C;
+    --accent: #0E9B8C; --accent-soft: #E4F6F2;
+    --orange: #F97316; --orange-soft: #FFF2E6;
+    --green: #12A150; --green-soft: #E7F7EE;
+    --amber: #D98200; --amber-soft: #FFF6E5;
+    --red: #E5484D; --red-soft: #FDECEC;
+    --capsule: rgba(255,255,255,.86); --capsule-bd: rgba(0,0,0,.08);
+    --tab-bg: #FFFFFF; --tab-off: #8A90A0;
+    --mask: rgba(0,0,0,.45); --sheet: #FFFFFF; --sheet-gap: #F2F2F7;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+  }
+  body[data-theme="dark"] {
+    --stage: #0E1016;
+    --nav-bg: #1A1C24; --nav-text: #FFFFFF;
+    --page-bg: #0B0D12; --card: #171A22;
+    --line: rgba(255,255,255,.10);
+    --t1: #FFFFFF; --t2: rgba(235,235,245,.60); --t3: rgba(235,235,245,.32);
+    --brand: #FF9F45; --brand-soft: #3A2414; --brand-deep: #FFC08A; --brand-txt: #FFB27A;
+    --accent: #4ECDC4; --accent-soft: #14332F;
+    --orange: #F97316; --orange-soft: #3A2414;
+    --green: #3DBE77; --green-soft: #10301F;
+    --amber: #E5A13B; --amber-soft: #33270E;
+    --red: #FF6B6F; --red-soft: #3A1A1C;
+    --capsule: rgba(255,255,255,.10); --capsule-bd: rgba(255,255,255,.14);
+    --tab-bg: #12141B; --tab-off: #6E7385;
+    --mask: rgba(0,0,0,.62); --sheet: #1A1C24; --sheet-gap: #000000;
+    --shadow: 0 20px 56px rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--stage); color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-size: 14px; line-height: 1.6; min-height: 100vh; padding: 20px 12px 40px;
+    transition: background .25s, color .25s;
+  }
+  .head { text-align: center; margin-bottom: 14px; }
+  .head h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .head p { margin: 0; font-size: 12px; color: var(--t2); }
+  .head p b { color: var(--brand-txt); font-weight: 500; }
+  .stage { display: flex; gap: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+
+  /* ---------- 手机壳 ---------- */
+  .phone {
+    width: 390px; height: 812px; max-height: calc(100vh - 130px); flex: none;
+    background: var(--page-bg); border-radius: 50px; position: relative; overflow: hidden;
+    box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; flex-direction: column;
+  }
+  .wxbar { height: 44px; flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 5px; font-size: 13px; font-weight: 600; }
+  .wxbar .sig { display: flex; gap: 3px; align-items: flex-end; height: 11px; }
+  .wxbar .sig i { width: 3px; background: var(--t1); border-radius: 1px; display: block; }
+  .wxbar .bat { width: 25px; height: 12px; border: 1px solid var(--t1); border-radius: 3.5px; position: relative; opacity: .9; }
+  .wxbar .bat::after { content: ""; position: absolute; inset: 1.5px; width: 70%; background: var(--t1); border-radius: 1.5px; }
+
+  .navbar { height: 44px; flex: none; position: relative; display: flex; align-items: center; justify-content: center; background: var(--nav-bg); border-bottom: .5px solid var(--line); z-index: 12; }
+  .navbar .title { font-size: 17px; font-weight: 600; color: var(--nav-text); }
+  .navbar .back { position: absolute; left: 12px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .navbar .back svg { width: 11px; height: 18px; }
+  .navbar.has-back .back { opacity: 1; pointer-events: auto; }
+  .navbar .act { position: absolute; right: 104px; font-size: 13px; color: var(--brand-txt); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .navbar.has-act .act { opacity: 1; pointer-events: auto; }
+  .capsule { position: absolute; right: 7px; width: 87px; height: 32px; border-radius: 16px; background: var(--capsule); border: .5px solid var(--capsule-bd); display: flex; align-items: center; justify-content: space-around; cursor: pointer; backdrop-filter: blur(8px); }
+  .capsule .dots { display: flex; gap: 2.5px; }
+  .capsule .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--nav-text); display: block; }
+  .capsule .circle { width: 17px; height: 17px; border: 1.4px solid var(--nav-text); border-radius: 50%; position: relative; }
+  .capsule .circle::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2.2px; height: 5.5px; border-radius: 1px; background: var(--nav-text); transform: translate(-50%, -62%); }
+  .capsule .sep { width: .5px; height: 18px; background: var(--capsule-bd); }
+
+  .stack { flex: 1; position: relative; overflow: hidden; }
+  .page { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 22px; background: var(--page-bg); transition: transform .26s cubic-bezier(.32,.72,0,1), opacity .26s; }
+  .page::-webkit-scrollbar { width: 0; }
+  .page.tab { display: none; }
+  .page.tab.active { display: block; }
+  #p-chat.active { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .page.sub { transform: translateX(100%); opacity: 0; pointer-events: none; z-index: 8; }
+  .page.sub.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+  /* ---------- 通用组件 ---------- */
+  .cell { background: var(--card); border-radius: 12px; padding: 13px 14px; }
+  .sec-t { font-size: 12.5px; color: var(--t2); margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .sec-t em { font-style: normal; font-size: 11.5px; color: var(--t3); }
+  .chip { font-size: 12.5px; padding: 6px 13px; border-radius: 8px; white-space: nowrap; cursor: pointer; background: var(--card); color: var(--t2); border: .5px solid var(--line); }
+  .chip.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .scroll-x { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+  .scroll-x::-webkit-scrollbar { display: none; }
+  .btn { margin-top: 18px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; font-size: 16px; font-weight: 500; cursor: pointer; }
+  .btn:active { transform: scale(.985); }
+  .btn.dis { opacity: .35; }
+  .btn.ghost { background: var(--card); color: var(--t1); border: .5px solid var(--line); }
+  .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .list .r { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-bottom: .5px solid var(--line); font-size: 14px; cursor: pointer; }
+  .list .r:last-child { border-bottom: none; }
+  .list .r span { color: var(--t3); font-size: 13px; }
+  .list .r .v { color: var(--t2); font-size: 13px; }
+  .list .r .sic { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: none; margin-right: 10px; }
+  .list .r .sic svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .list .r .sic.t { background: linear-gradient(140deg, #F97316, #E8620A); }
+  .list .r .sic.c { background: linear-gradient(140deg, #12B5A4, #0E9B8C); }
+  .list .r .nm { flex: 1; text-align: left; color: var(--t1); }
+  .foot { margin-top: 20px; font-size: 10.5px; color: var(--t3); text-align: center; line-height: 1.9; }
+  .ai-note { margin-top: 14px; font-size: 10.5px; color: var(--t3); text-align: center; }
+
+  /* ---------- 欢迎页 ---------- */
+  .welcome { position: absolute; inset: 0; background: var(--page-bg); z-index: 20; display: flex; flex-direction: column; padding: 0 24px 26px; transition: opacity .26s, transform .3s; }
+  .welcome.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+  .w-group { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-bottom: 10px; }
+  .w-hello { font-size: 54px; font-weight: 600; line-height: 1; letter-spacing: -1.8px; color: var(--t1); }
+  .w-hello i { font-style: normal; color: var(--brand); }
+  .w-sub { margin-top: 15px; font-size: 13.5px; color: var(--t3); letter-spacing: .3px; }
+  .w-quote { margin-top: 40px; padding: 17px 18px; border-radius: 14px; background: var(--card);
+             box-shadow: 0 2px 4px rgba(20,30,60,.035), 0 12px 30px rgba(20,30,60,.075); }
+  .w-quote .k { font-size: 10.5px; color: var(--brand-txt); letter-spacing: .5px; }
+  .w-quote .cn { margin-top: 7px; font-size: 14.5px; line-height: 1.75; color: var(--t1); }
+  .w-quote .en { margin-top: 6px; font-size: 12.5px; line-height: 1.7; color: var(--t3); font-style: italic; }
+  .w-foot { padding-top: 20px; }
+  .w-foot .btn { margin-top: 0; }
+  .w-foot .claim { margin-top: 14px; font-size: 10.5px; color: var(--t3); line-height: 1.8; text-align: center; }
+  body[data-theme="dark"] .w-quote { box-shadow: 0 10px 26px rgba(0,0,0,.34); }
+  body[data-theme="dark"] .res { box-shadow: 0 8px 22px rgba(0,0,0,.3); }
+  body[data-theme="dark"] .vipcard { background: linear-gradient(120deg, #C2410C 0%, #9A3412 100%); }
+
+  /* ---------- 对话页 ---------- */
+  .msgs { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 6px; }
+  .msgs::-webkit-scrollbar { width: 0; }
+  .msg { display: flex; gap: 9px; margin-bottom: 16px; }
+  .msg .av { width: 30px; height: 30px; border-radius: 50%; flex: none; background: linear-gradient(140deg, var(--brand), var(--brand-deep)); color: #fff; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+  .msg.me { flex-direction: row-reverse; }
+  .msg.me .av { background: var(--line); color: var(--t2); }
+  .msg .bd { max-width: 78%; }
+  .msg .bub { background: var(--card); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 14.5px; line-height: 1.78; color: var(--t1); }
+  .msg.me .bub { background: var(--brand); color: #fff; border-radius: 14px 4px 14px 14px; }
+  .msg .bub .daily { display: inline-block; font-size: 10px; color: var(--brand-txt); background: var(--brand-soft); border-radius: 4px; padding: 2px 6px; margin-bottom: 7px; letter-spacing: .4px; }
+  .msg .bub .en { display: block; margin-top: 7px; font-size: 12.5px; line-height: 1.7; font-style: italic; color: var(--t3); }
+  .msg.me .bub .en { color: rgba(255,255,255,.8); }
+  .msg .meta { margin-top: 5px; font-size: 10px; color: var(--t3); }
+  .msg.me .meta { text-align: right; }
+  .sugs { display: flex; flex-wrap: wrap; gap: 7px; margin: 2px 0 4px 39px; }
+  .sugs span { font-size: 12.5px; padding: 7px 12px; border-radius: 15px; background: var(--card); color: var(--t2); border: .5px solid var(--line); cursor: pointer; }
+  .sugs span:active { background: var(--brand-soft); color: var(--brand-txt); }
+  .composer { flex: none; display: flex; align-items: center; gap: 9px; padding: 9px 14px 12px; background: var(--nav-bg); border-top: .5px solid var(--line); }
+  .composer .plus { width: 32px; height: 32px; border-radius: 50%; background: var(--page-bg); display: flex; align-items: center; justify-content: center; font-size: 19px; color: var(--t2); flex: none; cursor: pointer; }
+  .composer input { flex: 1; height: 38px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 0 15px; font-family: inherit; font-size: 14px; color: var(--t1); }
+  .composer input::placeholder { color: var(--t3); }
+  .composer .send { width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: var(--card); display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; cursor: pointer; transition: background .18s; }
+  .composer .send.on { background: var(--brand); color: #fff; }
+
+  /* ---------- 发现页 ---------- */
+  .cap { display: flex; align-items: center; gap: 13px; background: var(--card); border-radius: 14px; padding: 15px 15px; margin-bottom: 10px; cursor: pointer; }
+  .cap .ic { width: 42px; height: 42px; border-radius: 13px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .cap .ic svg { width: 21px; height: 21px; fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .cap .ic.t { background: linear-gradient(140deg, #F97316, #E8620A); box-shadow: 0 4px 12px rgba(249,115,22,.28); }
+  .cap .ic.c { background: linear-gradient(140deg, #12B5A4, #0E9B8C); box-shadow: 0 4px 12px rgba(14,155,140,.24); }
+  /* 暗色下实心彩色块降调，避免过曝 */
+  body[data-theme="dark"] .cap .ic.t, body[data-theme="dark"] .list .r .sic.t { background: linear-gradient(140deg, #C2410C, #9A3412); box-shadow: none; }
+  body[data-theme="dark"] .cap .ic.c, body[data-theme="dark"] .list .r .sic.c { background: linear-gradient(140deg, #0E7C70, #0B5F57); box-shadow: none; }
+  body[data-theme="dark"] .msg .av { background: linear-gradient(140deg, #C2410C, #9A3412); }
+  body[data-theme="dark"] .msg.me .bub { background: linear-gradient(140deg, #C2410C, #9A3412); color: #fff; }
+  .cap .tx { flex: 1; min-width: 0; }
+  .cap .tx b { display: block; font-size: 15.5px; font-weight: 600; letter-spacing: .3px; }
+  .cap .tx em { display: block; font-style: normal; font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+  .cap .go { color: var(--t3); font-size: 17px; flex: none; }
+  .cap.soon { background: transparent; border: 1px dashed var(--line); }
+  .cap.soon .ic { background: var(--line); box-shadow: none; }
+  .cap.soon .ic svg { stroke: var(--t3); }
+  .cap.soon .tx b { color: var(--t3); }
+  .cap.soon .tag { font-size: 10px; color: var(--t3); border: .5px solid var(--line); border-radius: 4px; padding: 2px 6px; flex: none; }
+
+  /* ---------- 翻译 ---------- */
+  .langbar { display: flex; align-items: center; gap: 10px; }
+  .langbar .side { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .langbar .side em { font-style: normal; font-size: 9px; color: var(--t3); }
+  .langbar .sw { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+  textarea.inp { width: 100%; min-height: 100px; max-height: 170px; resize: none; margin-top: 10px; background: var(--card); border: none; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 15px; line-height: 1.7; color: var(--t1); outline: none; }
+  textarea.inp::placeholder { color: var(--t3); }
+  .counter { text-align: right; font-size: 11px; color: var(--t3); margin: 5px 2px 0; }
+  .notice { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--brand-soft); font-size: 12.5px; color: var(--brand-txt); cursor: pointer; }
+  .notice em { font-style: normal; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t2); }
+  .grid3 { display: flex; gap: 9px; margin-top: 15px; }
+  .grid3 .g { flex: 1; background: var(--card); border-radius: 12px; padding: 11px 0 9px; text-align: center; cursor: pointer; }
+  .grid3 .g svg { width: 19px; height: 19px; stroke: var(--t1); fill: none; stroke-width: 1.6; }
+  .grid3 .g div { font-size: 11.5px; color: var(--t2); margin-top: 4px; }
+  .samples .s { font-size: 13px; color: var(--t2); padding: 10px 13px; border-radius: 10px; background: var(--card); margin-bottom: 6px; cursor: pointer; }
+  .srcbox { background: var(--card); border-radius: 12px; padding: 11px 13px; }
+  .srcbox b { display: block; font-size: 11px; color: var(--t3); font-weight: 400; margin-bottom: 4px; }
+  .srcbox span { font-size: 13px; color: var(--t2); }
+  .res { margin-top: 10px; padding: 16px 16px; border-radius: 12px; background: var(--card);
+         box-shadow: 0 1px 2px rgba(20,30,60,.03), 0 8px 22px rgba(20,30,60,.06); }
+  .res .tags { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; }
+  .res .tags i { font-style: normal; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--brand-soft); color: var(--brand-txt); }
+  .res .tags span { font-size: 10.5px; color: var(--t3); }
+  .res .txt { font-size: 16px; line-height: 1.75; min-height: 28px; }
+  .res .ops { display: flex; margin-top: 13px; padding-top: 11px; border-top: .5px solid var(--line); }
+  .res .ops u { flex: 1; text-decoration: none; font-size: 12px; color: var(--t2); text-align: center; cursor: pointer; }
+  .fold { margin-top: 10px; background: var(--card); border-radius: 12px; overflow: hidden; }
+  .fold .h { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; font-size: 13px; cursor: pointer; }
+  .fold .h b { font-weight: 400; font-size: 12px; color: var(--brand-txt); }
+  .fold .c { display: none; padding: 0 14px 13px; }
+  .fold.open .c { display: block; }
+  .fold .m { margin-bottom: 11px; }
+  .fold .m .k { font-size: 11px; color: var(--t3); margin-bottom: 3px; }
+  .fold .m .v { font-size: 13.5px; line-height: 1.7; }
+  .vip { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); display: flex; justify-content: space-between; font-size: 12.5px; color: var(--accent); cursor: pointer; }
+  .rowbtn { display: flex; gap: 9px; margin-top: 12px; }
+  .rowbtn div { flex: 1; height: 42px; border-radius: 21px; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 13.5px; cursor: pointer; }
+
+  /* ---------- 合同评估 ---------- */
+  .upload { background: var(--card); border-radius: 14px; padding: 20px 16px; text-align: center; border: 1px dashed var(--line); cursor: pointer; }
+  .upload .ic { width: 46px; height: 46px; margin: 0 auto 10px; border-radius: 14px; background: var(--brand-soft); display: flex; align-items: center; justify-content: center; }
+  .upload .ic svg { width: 23px; height: 23px; stroke: var(--brand); fill: none; stroke-width: 1.6; }
+  .upload .t { font-size: 14.5px; font-weight: 500; }
+  .upload .d { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+  .u-row { display: flex; gap: 9px; margin-top: 11px; }
+  .u-row div { flex: 1; height: 40px; border-radius: 20px; background: var(--card); display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; cursor: pointer; }
+  .u-row div svg { width: 15px; height: 15px; stroke: var(--t2); fill: none; stroke-width: 1.6; }
+  .score { display: flex; align-items: center; gap: 15px; background: var(--card); border-radius: 14px; padding: 16px; }
+  .score .ring { width: 74px; height: 74px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; flex-direction: column; background: conic-gradient(var(--amber) 0 62%, var(--line) 62% 100%); position: relative; }
+  .score .ring::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card); }
+  .score .ring .n { position: relative; z-index: 1; font-size: 22px; font-weight: 600; color: var(--amber); line-height: 1.1; }
+  .score .ring .l { position: relative; z-index: 1; font-size: 9px; color: var(--t3); }
+  .score .info .lv { font-size: 15.5px; font-weight: 600; color: var(--amber); }
+  .score .info .d { font-size: 12px; color: var(--t2); margin-top: 3px; line-height: 1.6; }
+  .risk { background: var(--card); border-radius: 12px; padding: 13px 14px; margin-bottom: 8px; }
+  .risk .rh { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .risk .rh i { font-style: normal; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+  .risk .rh .high { background: var(--red-soft); color: var(--red); }
+  .risk .rh .mid { background: var(--amber-soft); color: var(--amber); }
+  .risk .rh .low { background: var(--green-soft); color: var(--green); }
+  .risk .rh b { font-size: 13.5px; font-weight: 500; flex: 1; }
+  .risk .rc { font-size: 12.5px; color: var(--t2); line-height: 1.7; }
+  .risk .rf { font-size: 11.5px; color: var(--brand-txt); margin-top: 6px; padding-top: 6px; border-top: .5px solid var(--line); }
+
+  /* ---------- 我的 ---------- */
+  .profile { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 12px; padding: 15px 14px; cursor: pointer; }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; flex: none; }
+  .profile .n { font-size: 16px; font-weight: 500; }
+  .profile .d { font-size: 12px; color: var(--t3); margin-top: 2px; }
+  .vipcard { margin-top: 10px; padding: 14px; border-radius: 12px; background: linear-gradient(120deg, var(--brand), var(--brand-deep)); color: #fff; cursor: pointer; }
+  .vipcard .a { font-size: 15px; font-weight: 600; }
+  .vipcard .b { font-size: 12px; opacity: .92; margin-top: 3px; }
+  .logout { margin-top: 18px; text-align: center; font-size: 13.5px; color: var(--red); cursor: pointer; }
+
+  /* ---------- tabBar ---------- */
+  .tabbar { flex: none; height: calc(50px + 34px); background: var(--tab-bg); border-top: .5px solid var(--line); display: flex; padding-top: 5px; transition: transform .3s; z-index: 15; }
+  .phone.welcome-mode .tabbar { display: none; }
+  .tabbar .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding-bottom: 26px; }
+  .tabbar .tb svg { width: 23px; height: 23px; fill: none; stroke-width: 1.7; stroke: var(--tab-off); }
+  .tabbar .tb div { font-size: 10px; color: var(--tab-off); }
+  .tabbar .tb.on svg { stroke: var(--brand); }
+  .tabbar .tb.on div { color: var(--brand); }
+  .home-ind { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: var(--t1); opacity: .28; }
+  .phone.welcome-mode .home-ind { display: none; }
+
+  /* ---------- 浮层 ---------- */
+  .mask { position: absolute; inset: 0; background: var(--mask); opacity: 0; pointer-events: none; transition: opacity .22s; z-index: 30; }
+  .mask.show { opacity: 1; pointer-events: auto; }
+  .wx-toast { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.92); max-width: 72%; background: rgba(0,0,0,.78); color: #fff; font-size: 13.5px; line-height: 1.5; padding: 11px 17px; border-radius: 8px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
+  .wx-toast.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  .wx-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,.72); color: #fff; border-radius: 10px; padding: 17px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 60; min-width: 108px; }
+  .wx-loading.show { opacity: 1; }
+  .wx-loading .sp { width: 30px; height: 30px; border: 2.5px solid rgba(255,255,255,.22); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .wx-sheet { position: absolute; left: 0; right: 0; bottom: 0; transform: translateY(100%); transition: transform .28s cubic-bezier(.32,.72,0,1); z-index: 60; padding: 0 8px 8px; }
+  .wx-sheet.show { transform: translateY(0); }
+  .wx-sheet .grp2 { background: var(--sheet); border-radius: 13px; overflow: hidden; margin-bottom: 8px; }
+  .wx-sheet .grp2 .t { font-size: 12px; color: var(--t3); text-align: center; padding: 11px 0 9px; border-bottom: .5px solid var(--line); }
+  .wx-sheet .grp2 .i { height: 52px; display: flex; align-items: center; justify-content: center; font-size: 16px; border-bottom: .5px solid var(--line); cursor: pointer; }
+  .wx-sheet .grp2 .i:last-child { border-bottom: none; }
+  .wx-sheet .grp2 .i.on { color: var(--brand); }
+  .wx-sheet .cancel { background: var(--sheet); border-radius: 13px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 500; cursor: pointer; margin-bottom: 30px; }
+  .cap-menu { position: absolute; right: 8px; top: 96px; width: 156px; background: rgba(30,30,32,.94); border-radius: 9px; padding: 5px 0; z-index: 55; opacity: 0; transform: scale(.9); transform-origin: 100% 0; transition: opacity .16s, transform .16s; pointer-events: none; backdrop-filter: blur(10px); }
+  .cap-menu.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+  .cap-menu .i { padding: 11px 15px; font-size: 14px; color: #fff; cursor: pointer; border-bottom: .5px solid rgba(255,255,255,.1); }
+  .cap-menu .i:last-child { border-bottom: none; }
+
+  /* ---------- 右侧说明 ---------- */
+  .notes { width: 316px; flex: none; }
+  .notes h3 { font-size: 13px; margin: 0 0 10px; font-weight: 600; }
+  .notes .n { background: rgba(255,255,255,.72); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 9px; font-size: 12.5px; line-height: 1.75; color: var(--t2); }
+  body[data-theme="dark"] .notes .n { background: rgba(255,255,255,.05); }
+  .notes .n b { color: var(--t1); font-weight: 600; }
+  .notes .n code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--brand-txt); }
+  .notes ul { margin: 5px 0 0; padding-left: 16px; }
+  .notes li { margin-bottom: 3px; }
+  @media (max-width: 780px) { .notes { display: none; } }
+
+  .ctrls { display: flex; gap: 9px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .ctrls button { font-family: inherit; font-size: 12.5px; color: var(--t2); background: var(--card); border: .5px solid var(--line); border-radius: 10px; padding: 8px 16px; cursor: pointer; }
+  .ctrls button.on { color: var(--brand); border-color: var(--brand); }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>kedou-ai-minigram · 科豆 AI 小程序原型</h1>
+  <p>主界面 <b>AI 对话</b>（默认一句每日哲言）· 三个 tab：<b>对话 / 发现 / 我的</b> · 能力放发现，设置收进我的</p>
+</div>
+
+<div class="stage">
+  <div class="phone welcome-mode" id="phone">
+    <div class="wxbar">
+      <span id="clock">9:41</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        <span class="bat"></span>
+      </div>
+    </div>
+
+    <div class="navbar" id="navbar">
+      <div class="back" onclick="goBack()">
+        <svg viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1L1.5 9l8 8"/></svg>
+      </div>
+      <div class="title" id="navTitle">科豆 AI</div>
+      <div class="act" id="navAct">设置</div>
+      <div class="capsule" onclick="toggleCapMenu()">
+        <span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span>
+      </div>
+    </div>
+
+    <div class="stack">
+      <!-- ================= 欢迎页（启动页，非 tab） ================= -->
+      <div class="welcome" id="welcome">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+
+          <div class="w-quote">
+            <div class="k">今日一句</div>
+            <div class="cn">我们无法决定风的方向，但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind, but we can adjust the sails.</div>
+          </div>
+        </div>
+
+        <div class="w-foot">
+          <div class="btn" onclick="enterTab('chat')">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+
+      <!-- ================= 对话（tab 1，默认主界面） ================= -->
+      <div class="page tab active" id="p-chat">
+        <div class="msgs" id="msgs">
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub">
+                <span class="daily">今日一句</span>
+                我们无法决定风的方向，但可以调整帆的角度。
+                <span class="en">We cannot direct the wind, but we can adjust the sails.</span>
+              </div>
+              <div class="meta">内容由 AI 生成 · 09:41</div>
+            </div>
+          </div>
+          <div class="sugs" id="sugs">
+            <span onclick="ask('帮我翻一句话')">帮我翻一句话</span>
+            <span onclick="ask('看看合同风险')">看看合同风险</span>
+            <span onclick="ask('今天该做什么')">今天该做什么</span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="plus" onclick="wxToast('图片 / 文件 / 拍照')">+</div>
+          <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter')send()" />
+          <div class="send" id="sendBtn" onclick="send()">↑</div>
+        </div>
+      </div>
+
+      <!-- ================= 发现（tab 2） ================= -->
+      <div class="page tab" id="p-discover">
+        <div class="sec-t" style="margin-top:4px">AI 能力<em>点开即用</em></div>
+
+        <div class="cap" onclick="openApp('translate')">
+          <span class="ic t">
+            <svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg>
+          </span>
+          <span class="tx"><b>语言翻译官</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+          <span class="go">›</span>
+        </div>
+
+        <div class="cap" onclick="openApp('assess')">
+          <span class="ic c">
+            <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          </span>
+          <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+          <span class="go">›</span>
+        </div>
+
+        <div class="sec-t" style="margin-top:22px">即将上线</div>
+
+        <div class="cap soon" onclick="wxToast('论文速读 · 敬请期待')">
+          <span class="ic">
+            <svg viewBox="0 0 24 24"><path d="M4 5h7v14H4z"/><path d="M13 5h7v14h-7"/><path d="M15.5 9h2M15.5 12h2"/></svg>
+          </span>
+          <span class="tx"><b>论文速读</b><em>arXiv 每日精选 · 中英双语摘要</em></span>
+          <span class="tag">敬请期待</span>
+        </div>
+
+        <div class="cap soon" onclick="wxToast('文案改写 · 敬请期待')">
+          <span class="ic">
+            <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
+          </span>
+          <span class="tx"><b>文案改写</b><em>小红书 / 独立站 · 多平台语气适配</em></span>
+          <span class="tag">敬请期待</span>
+        </div>
+
+        <div class="foot">新能力会持续加在这里，设置统一收在「我的」</div>
+      </div>
+
+      <!-- ================= 我的（tab 3） ================= -->
+      <div class="page tab" id="p-mine">
+        <div class="profile" onclick="navigateTo('p-mine-profile', '个人信息')">
+          <div class="avatar">橙</div>
+          <div style="flex:1">
+            <div class="n">橙子哥哥</div>
+            <div class="d">已实名 · 138****6688</div>
+          </div>
+          <span style="color:var(--t3);font-size:13px">›</span>
+        </div>
+        <div class="vipcard" onclick="wxToast('会员：虚拟支付需走「虚拟内容」子类目')">
+          <div class="a">专业版</div>
+          <div class="b">深度润色 · 术语库 · 合同不限次评估</div>
+        </div>
+
+        <div class="sec-t">应用设置<em>各管各的</em></div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-tr-settings', '语言翻译官设置')">
+            <span class="sic t"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+            <span class="nm">语言翻译官</span><span>默认语气 · 术语库 ›</span>
+          </div>
+          <div class="r" onclick="navigateTo('p-as-settings', '合同评估设置')">
+            <span class="sic c"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+            <span class="nm">合同评估</span><span>严格度 · 关注风险点 ›</span>
+          </div>
+        </div>
+
+        <div class="sec-t">通用</div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-mine-settings', '小程序设置')">小程序设置<span>›</span></div>
+          <div class="r" onclick="wxToast('消息通知已开启')">消息通知<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('已清除 24.6MB 缓存')">清除缓存<span class="v">24.6MB ›</span></div>
+        </div>
+
+        <div class="sec-t">我的数据</div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-tr-history', '翻译历史')">我的翻译<span class="v">128 条 ›</span></div>
+          <div class="r" onclick="wxToast('我的合同')">我的合同<span class="v">12 份 ›</span></div>
+          <div class="r" onclick="wxToast('对话记录仅本机保留 30 天')">对话记录<span class="v">46 条 ›</span></div>
+        </div>
+
+        <div class="list" style="margin-top:10px">
+          <div class="r">用户协议与隐私政策<span>›</span></div>
+          <div class="r">关于科豆 AI<span class="v">v1.0.0 ›</span></div>
+        </div>
+        <div class="logout" onclick="wxToast('退出登录')">退出登录</div>
+        <div class="foot">
+          本服务使用生成式人工智能<br>已依法完成大模型与算法备案
+        </div>
+      </div>
+
+      <!-- ================= 二级页：语言翻译官 ================= -->
+      <div class="page sub" id="p-translate">
+        <div class="cell langbar">
+          <div class="side" onclick="pickLang('src')"><span id="langA">中文</span><em>▾</em></div>
+          <div class="sw" onclick="swap()">⇄</div>
+          <div class="side" onclick="pickLang('tgt')"><span id="langB">英语</span><em>▾</em></div>
+        </div>
+        <textarea class="inp" id="inp" placeholder="粘贴或输入要翻译的内容…"></textarea>
+        <div class="counter"><span id="cnt">0</span> / 500</div>
+        <div class="notice" id="pastebar" onclick="doPaste()">
+          <em>检测到复制的内容：这个报价我们再商量商量…</em><b>粘贴</b>
+        </div>
+        <div class="sec-t">语气</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="reg">正式</span><span class="chip" data-g="reg">商务</span>
+          <span class="chip" data-g="reg">日常</span><span class="chip" data-g="reg">学术</span>
+          <span class="chip" data-g="reg">轻松</span>
+        </div>
+        <div class="sec-t">风格</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="sty">完整</span><span class="chip" data-g="sty">简洁</span>
+          <span class="chip" data-g="sty">有说服力</span>
+        </div>
+        <div class="grid3">
+          <div class="g" onclick="wxToast('图片翻译：OCR 约 1.5–3s')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-6 6"/></svg><div>图片</div>
+          </div>
+          <div class="g" onclick="wxToast('语音：走微信同声传译插件')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><div>语音</div>
+          </div>
+          <div class="g" onclick="navigateTo('p-tr-history', '翻译历史')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><div>历史</div>
+          </div>
+        </div>
+        <div class="btn dis" id="go" onclick="doTranslate()">翻　译</div>
+        <div class="sec-t">不知道怎么开口？试试这些</div>
+        <div class="samples">
+          <div class="s" data-s="0">这个报价我们再商量商量，下周给你答复。</div>
+          <div class="s" data-s="1">麻烦尽快确认一下，我们这边等着排产。</div>
+          <div class="s" data-s="2">实在抱歉，这批货可能要晚两天到。</div>
+        </div>
+      </div>
+
+      <div class="page sub" id="p-tr-result">
+        <div class="srcbox"><b>原文 · <span id="rSrcLang">中文</span></b><span id="rSrc"></span></div>
+        <div class="res">
+          <div class="tags"><i>推荐</i><span id="rTag"></span></div>
+          <div class="txt" id="rNatural"></div>
+          <div class="ops">
+            <u onclick="wxToast('已复制到剪贴板')">复制</u>
+            <u onclick="wxToast('朗读：TTS 合成中')">朗读</u>
+            <u onclick="wxToast('已收进生词本')">收藏</u>
+            <u onclick="showAction()">更多</u>
+          </div>
+        </div>
+        <div class="fold" id="fold">
+          <div class="h" onclick="toggleFold()"><span>直译对照 · 委婉版 · 语气要点</span><b id="foldTxt">展开</b></div>
+          <div class="c">
+            <div class="m"><div class="k">直译对照</div><div class="v" id="rLiteral"></div></div>
+            <div class="m"><div class="k">委婉版</div><div class="v" id="rPolite"></div></div>
+            <div class="m" style="margin-bottom:0"><div class="k">语气要点</div><div class="v" id="rNotes"></div></div>
+          </div>
+        </div>
+        <div class="vip" onclick="wxToast('会员功能：旗舰模型深度润色')"><span>深度润色（旗舰模型）</span><span>会员 ›</span></div>
+        <div class="rowbtn">
+          <div onclick="goBack()">重新翻译</div>
+          <div onclick="wxToast('生成分享卡：canvas 出图 + 小程序码')">生成分享卡</div>
+        </div>
+        <div class="ai-note">内容由 AI 生成，仅供参考</div>
+      </div>
+
+      <div class="page sub" id="p-tr-history">
+        <div class="list">
+          <div class="r" onclick="wxToast('打开该条记录')">这个报价我们再商量商量…<span>10:24 ›</span></div>
+          <div class="r" onclick="wxToast('打开该条记录')">Could you confirm at your earliest…<span>昨天 ›</span></div>
+          <div class="r" onclick="wxToast('打开该条记录')">实在抱歉，这批货可能要晚两天到。<span>3 天前 ›</span></div>
+        </div>
+        <div class="foot">仅本机保留最近 30 天</div>
+      </div>
+
+      <div class="page sub" id="p-tr-settings">
+        <div class="sec-t" style="margin-top:4px">默认参数</div>
+        <div class="list">
+          <div class="r" onclick="showPicker('默认源语言', ['中文','英语','日语','德语'], '中文')">默认源语言<span class="v">中文 ›</span></div>
+          <div class="r" onclick="showPicker('默认目标语言', ['英语','中文','日语','德语'], '英语')">默认目标语言<span class="v">英语 ›</span></div>
+          <div class="r" onclick="showPicker('默认语气', ['正式','商务','日常','学术','轻松'], '正式')">默认语气<span class="v">正式 ›</span></div>
+          <div class="r" onclick="showPicker('默认风格', ['完整','简洁','有说服力'], '完整')">默认风格<span class="v">完整 ›</span></div>
+        </div>
+        <div class="sec-t">术语与历史</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('个人术语库：盘扣 / 贝母扣 固定译法')">个人术语库<span class="v">12 条 ›</span></div>
+          <div class="r" onclick="wxToast('流式输出已开启')">逐字流式输出<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('发音：美音')">朗读发音<span class="v">美音 ›</span></div>
+          <div class="r" onclick="wxToast('已清空翻译历史')">清空翻译历史<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置只影响「语言翻译官」</div>
+      </div>
+
+      <!-- ================= 二级页：合同评估 ================= -->
+      <div class="page sub" id="p-assess">
+        <div class="upload" onclick="runAssess()">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
+          </div>
+          <div class="t">上传或粘贴合同</div>
+          <div class="d">支持 PDF / Word / 图片 / 直接粘贴文本</div>
+        </div>
+        <div class="u-row">
+          <div onclick="wxToast('拍照：wx.chooseMedia')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>拍照
+          </div>
+          <div onclick="wxToast('相册：wx.chooseMedia')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4"/></svg>相册
+          </div>
+          <div onclick="wxToast('微信聊天文件：chooseMessageFile')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>文件
+          </div>
+        </div>
+
+        <div class="sec-t">合同类型</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="ct">采购</span><span class="chip" data-g="ct">劳动</span>
+          <span class="chip" data-g="ct">租赁</span><span class="chip" data-g="ct">服务</span>
+          <span class="chip" data-g="ct">保密</span><span class="chip" data-g="ct">借款</span>
+        </div>
+
+        <div class="sec-t">关注风险点<em>可多选</em></div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="rk" data-multi="1">付款条件</span>
+          <span class="chip on" data-g="rk" data-multi="1">违约责任</span>
+          <span class="chip" data-g="rk" data-multi="1">知识产权</span>
+          <span class="chip" data-g="rk" data-multi="1">保密</span>
+          <span class="chip" data-g="rk" data-multi="1">争议解决</span>
+          <span class="chip" data-g="rk" data-multi="1">不可抗力</span>
+        </div>
+
+        <div class="btn" onclick="runAssess()">开始评估</div>
+
+        <div class="sec-t">最近评估</div>
+        <div class="list">
+          <div class="r" onclick="showAssessResult()">设备采购合同_2026Q3<span>62 分 · 昨天 ›</span></div>
+          <div class="r" onclick="showAssessResult()">办公室租赁合同<span>81 分 · 3 天前 ›</span></div>
+        </div>
+        <div class="ai-note">评估结果由 AI 生成，仅供参考，不构成法律意见</div>
+      </div>
+
+      <div class="page sub" id="p-as-result">
+        <div class="score">
+          <div class="ring"><span class="n">62</span><span class="l">风险分</span></div>
+          <div class="info">
+            <div class="lv">中等风险</div>
+            <div class="d">共识别 7 处风险点：2 高 · 3 中 · 2 低<br>建议重点处理付款与违约条款</div>
+          </div>
+        </div>
+        <div class="sec-t">风险清单</div>
+        <div class="risk">
+          <div class="rh"><i class="high">高</i><b>付款条件：验收后 90 天付款</b></div>
+          <div class="rc">原条款「甲方于验收合格后 90 日内支付全部款项」——账期明显长于行业惯例（30–60 天），占用资金压力大，且未约定逾期利息。</div>
+          <div class="rf">建议：改为 30 天，并加「逾期按日万分之五支付违约金」</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="high">高</i><b>违约责任：仅单方约定</b></div>
+          <div class="rc">第 8 条只约定了乙方违约责任，甲方逾期付款无对应责任，权利义务不对等。</div>
+          <div class="rf">建议：补充甲方逾期付款的对称责任条款</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="mid">中</i><b>知识产权：成果归属含糊</b></div>
+          <div class="rc">未明确交付成果的知识产权归属与授权范围，后续二次开发可能受限。</div>
+          <div class="rf">建议：明确「交付即转移」或「授权使用」二选一</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="low">低</i><b>争议解决：管辖法院</b></div>
+          <div class="rc">约定在甲方所在地法院，异地诉讼成本较高。</div>
+          <div class="rf">建议：争取改为仲裁或己方所在地</div>
+        </div>
+        <div class="rowbtn">
+          <div onclick="wxToast('导出评估报告 PDF')">导出报告</div>
+          <div onclick="wxToast('针对条款继续追问 AI')">继续追问</div>
+        </div>
+        <div class="ai-note">评估结果由 AI 生成，仅供参考，不构成法律意见</div>
+      </div>
+
+      <div class="page sub" id="p-as-settings">
+        <div class="sec-t" style="margin-top:4px">评估偏好</div>
+        <div class="list">
+          <div class="r" onclick="showPicker('默认合同类型', ['采购','劳动','租赁','服务','保密','借款'], '采购')">默认合同类型<span class="v">采购 ›</span></div>
+          <div class="r" onclick="showPicker('评估严格度', ['宽松','标准','严格'], '标准')">评估严格度<span class="v">标准 ›</span></div>
+          <div class="r" onclick="wxToast('关注风险点：6 选 2 已配置')">默认关注风险点<span class="v">2 项 ›</span></div>
+          <div class="r" onclick="wxToast('适用法域：中国大陆')">适用法域<span class="v">中国大陆 ›</span></div>
+        </div>
+        <div class="sec-t">数据与导出</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('自动保存评估结果已开启')">自动保存评估结果<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('报告格式：PDF')">报告导出格式<span class="v">PDF ›</span></div>
+          <div class="r" onclick="wxToast('合同默认保留 180 天')">合同保留期限<span class="v">180 天 ›</span></div>
+          <div class="r" onclick="wxToast('已删除全部合同数据')">删除全部合同数据<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置只影响「合同评估」</div>
+      </div>
+
+      <div class="page sub" id="p-mine-profile">
+        <div class="profile" style="cursor:default">
+          <div class="avatar">橙</div>
+          <div style="flex:1">
+            <div class="n">橙子哥哥</div>
+            <div class="d">ID: 100238 · 2026-03 加入</div>
+          </div>
+        </div>
+        <div class="list" style="margin-top:10px">
+          <div class="r" onclick="wxToast('修改昵称')">昵称<span class="v">橙子哥哥 ›</span></div>
+          <div class="r" onclick="wxToast('更换手机号')">手机号<span class="v">138****6688 ›</span></div>
+          <div class="r" onclick="wxToast('绑定邮箱')">邮箱<span class="v">未绑定 ›</span></div>
+          <div class="r" onclick="wxToast('已实名认证')">实名认证<span class="v">已认证 ›</span></div>
+          <div class="r" onclick="wxToast('已绑定微信')">微信账号<span class="v">已绑定 ›</span></div>
+        </div>
+        <div class="foot">实名信息用于合同评估的合规留痕</div>
+      </div>
+
+      <div class="page sub" id="p-mine-settings">
+        <div class="sec-t" style="margin-top:4px">外观</div>
+        <div class="list">
+          <div class="r" onclick="toggleTheme();wxToast('已切换主题（darkmode）')">深色模式<span class="v" id="themeVal">跟随系统 ›</span></div>
+          <div class="r" onclick="wxToast('字体大小：标准')">字体大小<span class="v">标准 ›</span></div>
+        </div>
+        <div class="sec-t">通知与隐私</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('消息通知已开启')">消息通知<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('个性化推荐已关闭')">个性化推荐<span class="v">已关闭 ›</span></div>
+          <div class="r" onclick="wxToast('隐私设置')">隐私设置<span class="v">›</span></div>
+        </div>
+        <div class="sec-t">通用</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('已清除 24.6MB 缓存')">清除缓存<span class="v">24.6MB ›</span></div>
+          <div class="r" onclick="backWelcome()">返回欢迎页<span class="v">›</span></div>
+          <div class="r" onclick="wxToast('退出登录')">退出登录<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置影响整个小程序</div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tb on" data-t="chat">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/></svg>
+        <div>对话</div>
+      </div>
+      <div class="tb" data-t="discover">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/></svg>
+        <div>发现</div>
+      </div>
+      <div class="tb" data-t="mine">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>
+        <div>我的</div>
+      </div>
+    </div>
+    <div class="home-ind"></div>
+
+    <div class="cap-menu" id="capMenu">
+      <div class="i" onclick="wxToast('转发给朋友')">⤴ 转发给朋友</div>
+      <div class="i" onclick="wxToast('分享到朋友圈')">◎ 分享到朋友圈</div>
+      <div class="i" onclick="backWelcome()">⌂ 回到欢迎页</div>
+    </div>
+    <div class="wx-toast" id="wxToast"></div>
+    <div class="wx-loading" id="wxLoading"><span class="sp"></span><span id="wxLoadTxt">处理中…</span></div>
+    <div class="mask" id="mask" onclick="closeAll()"></div>
+    <div class="wx-sheet" id="wxSheet">
+      <div class="grp2" id="sheetBody"></div>
+      <div class="cancel" onclick="closeAll()">取消</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>本版改动</h3>
+    <div class="n">
+      <b>① 主界面 = 通用 AI 对话</b><br>
+      默认进入就是对话页。首条消息是<b>每日一句</b>（中文 + 英文），下方三个建议问题可直接点，底部输入栏常驻。简单问答在这里闭环，不用跳转。
+    </div>
+    <div class="n">
+      <b>② tabBar：对话 / 发现 / 我的</b><br>
+      翻译与合同评估从 tab <b>降级为「发现」里的能力卡</b>——它们是使用频率低、用完即走的功能，不该占一级入口。
+    </div>
+    <div class="n">
+      <b>③ 发现 = 能力市场</b><br>
+      当前两个可用能力（语言翻译官 / 合同评估）+ 两个占位（论文速读 / 文案改写）。<b>后续加新能力只改这一页</b>，不动 tabBar 结构。
+    </div>
+    <div class="n">
+      <b>④ 设置全部收进「我的」</b><br>
+      <ul>
+        <li><b>应用设置</b>：语言翻译官 / 合同评估 —— 带图标，标明管什么</li>
+        <li><b>通用</b>：小程序设置、通知、缓存</li>
+      </ul>
+      业务参数不再挂在业务页右上角，符合"设置就该在设置里"的直觉。
+    </div>
+    <div class="n">
+      <b>⑤ 欢迎页保留</b><br>
+      启动页仍是 <b>Hello.</b>，但入口从两个 icon 换成「今日一句 + 开始对话」——和对话页首条消息一致，形成连续感。
+    </div>
+    <div class="n">
+      <b>合规位</b><br>
+      对话气泡下方、两个业务结果页、欢迎页底部均有 AI 声明；合同评估额外标注<b>不构成法律意见</b>。隐式水印在返回体 metadata 里，原型不体现。
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <button onclick="toggleTheme()">深色 / 浅色</button>
+  <button onclick="backWelcome()">回到欢迎页</button>
+</div>
+
+<script>
+var DEMO = [
+  { src: '这个报价我们再商量商量，下周给你答复。',
+    literal: 'Let us discuss this quotation a bit more, and give you a reply next week.',
+    natural: 'We would like to discuss this quotation further and will get back to you next week.',
+    polite: 'We would like to give this quotation further consideration and will provide you with our reply next week.',
+    notes: '「再商量商量」口语色彩重，正式场合宜用 discuss further；「下周给你答复」用 get back to you 更自然。' },
+  { src: '麻烦尽快确认一下，我们这边等着排产。',
+    literal: 'Please confirm as soon as possible, we are waiting to schedule production.',
+    natural: 'Could you confirm at your earliest convenience? We are holding the production slot.',
+    polite: 'Whenever you have a moment, could you let me know? We are keeping the production line open for this order.',
+    notes: '「尽快」直译 as soon as possible 显得强硬，用 at your earliest convenience 更得体。' },
+  { src: '实在抱歉，这批货可能要晚两天到。',
+    literal: 'Really sorry, this batch of goods may arrive two days late.',
+    natural: 'We sincerely apologize — this shipment will be delayed by two days.',
+    polite: 'We are very sorry for the inconvenience, but this shipment may arrive about two days later than planned.',
+    notes: '中文道歉常加「实在」，英文 sincerely apologize 已足够；will be 比 may be 更显担当。' }
+];
+var LANGS = ['中文', '英语', '日语', '德语'];
+var cur = { src: '中文', tgt: '英语', reg: '正式', sty: '完整', tab: 'chat', sub: null };
+
+/* 对话演示回复 */
+var DAILY = { cn: '我们无法决定风的方向，但可以调整帆的角度。', en: 'We cannot direct the wind, but we can adjust the sails.' };
+var REPLY = {
+  '帮我翻一句话': { cn: '直接把要翻的内容发给我就行。如果要三版译文和语气点评，去「发现」页用「语言翻译官」——支持中英日德，还会告诉你哪句更得体、哪句容易冒犯人。', en: '' },
+  '看看合同风险': { cn: '把合同文本粘贴过来我先扫一遍。完整流程在「发现」页的「合同评估」：上传后按条款逐条标出高风险点，并给出可直接改的建议文案。', en: '' },
+  '今天该做什么': { cn: '挑一件最重要的事，只做 25 分钟。', en: 'Pick the one thing that matters most — and give it just 25 minutes.' },
+  'default': { cn: '我可以陪你聊聊天、翻一句话、看一份合同，也可以帮你把想法理清楚。复杂的事也可以直接说，我会拆成几步给你。', en: '' }
+};
+
+function $(id) { return document.getElementById(id); }
+
+/* ---------- 微信原生反馈 ---------- */
+var toastTimer;
+function wxToast(msg) {
+  var t = $('wxToast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1600);
+}
+function wxLoading(msg) { $('wxLoadTxt').textContent = msg || '处理中…'; $('wxLoading').classList.add('show'); }
+function hideLoading() { $('wxLoading').classList.remove('show'); }
+function closeAll() {
+  $('mask').classList.remove('show');
+  $('wxSheet').classList.remove('show');
+  $('capMenu').classList.remove('show');
+  $('mask').onclick = closeAll;
+}
+
+/* ---------- ActionSheet ---------- */
+function openSheet(title, items, onPick) {
+  var html = '<div class="t">' + title + '</div>';
+  items.forEach(function (it) {
+    html += '<div class="i' + (it.on ? ' on' : '') + '" data-v="' + it.label + '">' + it.label + '</div>';
+  });
+  $('sheetBody').innerHTML = html;
+  Array.prototype.forEach.call($('sheetBody').querySelectorAll('.i'), function (el) {
+    el.addEventListener('click', function () { closeAll(); if (onPick) onPick(el.dataset.v); });
+  });
+  $('mask').classList.add('show');
+  $('wxSheet').classList.add('show');
+}
+function showPicker(title, opts, curVal) {
+  openSheet(title, opts.map(function (o) { return { label: o, on: o === curVal }; }), function (v) { wxToast(title + '：' + v); });
+}
+var ACTION_HTML = ['复制译文', '加入生词本', '生成分享图', '举报'];
+function showAction() {
+  openSheet('译文操作', ACTION_HTML.map(function (o) { return { label: o }; }), function (v) { wxToast(v + '（演示）'); });
+}
+
+/* ---------- 胶囊菜单 ---------- */
+function toggleCapMenu() {
+  var m = $('capMenu');
+  var on = m.classList.toggle('show');
+  $('mask').classList.toggle('show', on);
+  if (on) $('mask').onclick = function () { m.classList.remove('show'); closeAll(); };
+  else $('mask').onclick = closeAll;
+}
+
+/* ---------- 导航 ---------- */
+var TAB_TITLE = { chat: '科豆 AI', discover: '发现', mine: '我的' };
+var SUB_TITLE = {
+  'p-translate': '语言翻译官', 'p-tr-result': '翻译结果', 'p-tr-history': '翻译历史', 'p-tr-settings': '语言翻译官设置',
+  'p-assess': '合同评估', 'p-as-result': '评估报告', 'p-as-settings': '合同评估设置',
+  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置'
+};
+/* 二级页右上角的动作 */
+var SUB_ACT = {
+  'p-translate': { text: '设置', fn: function () { navigateTo('p-tr-settings', '语言翻译官设置'); } },
+  'p-assess': { text: '设置', fn: function () { navigateTo('p-as-settings', '合同评估设置'); } }
+};
+
+function navigateTo(id, title) {
+  cur.sub = id;
+  $(id).classList.add('open');
+  $(id).scrollTop = 0;
+  $('navbar').classList.add('has-back');
+  $('navTitle').textContent = title || SUB_TITLE[id] || '';
+  var a = SUB_ACT[id];
+  if (a) { $('navAct').textContent = a.text; $('navAct').onclick = a.fn; $('navbar').classList.add('has-act'); }
+  else $('navbar').classList.remove('has-act');
+}
+function goBack() {
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  $('navbar').classList.remove('has-back');
+  $('navTitle').textContent = TAB_TITLE[cur.tab];
+  if (cur.tab === 'chat') { $('navAct').textContent = '新对话'; $('navAct').onclick = newChat; $('navbar').classList.add('has-act'); }
+  else $('navbar').classList.remove('has-act');
+}
+function enterTab(tab) {
+  $('phone').classList.remove('welcome-mode');
+  $('welcome').classList.add('hide');
+  switchTab(tab);
+}
+function backWelcome() {
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  $('phone').classList.add('welcome-mode');
+  $('welcome').classList.remove('hide');
+  $('navbar').classList.remove('has-back');
+  $('navTitle').textContent = '科豆 AI';
+  $('navbar').classList.remove('has-act');
+}
+function switchTab(tab) {
+  cur.tab = tab;
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  ['chat', 'discover', 'mine'].forEach(function (n) { $('p-' + n).classList.toggle('active', n === tab); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (x) {
+    x.classList.toggle('on', x.dataset.t === tab);
+  });
+  $('navTitle').textContent = TAB_TITLE[tab];
+  $('navbar').classList.remove('has-back');
+  if (tab === 'chat') { $('navAct').textContent = '新对话'; $('navAct').onclick = newChat; $('navbar').classList.add('has-act'); }
+  else $('navbar').classList.remove('has-act');
+  if (tab !== 'chat') $('p-' + tab).scrollTop = 0;
+}
+function openApp(name) {
+  if (name === 'translate') navigateTo('p-translate', '语言翻译官');
+  else navigateTo('p-assess', '合同评估');
+}
+
+/* ---------- 对话 ---------- */
+function now() { var d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function addMsg(who, cn, en) {
+  var box = $('msgs');
+  var el = document.createElement('div');
+  el.className = 'msg ' + who;
+  el.innerHTML =
+    '<div class="av">' + (who === 'ai' ? '豆' : '橙') + '</div>' +
+    '<div class="bd"><div class="bub">' + cn + (en ? '<span class="en">' + en + '</span>' : '') + '</div>' +
+    '<div class="meta">' + (who === 'ai' ? '内容由 AI 生成 · ' : '') + now() + '</div></div>';
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+function onType() { $('sendBtn').classList.toggle('on', $('cinp').value.trim().length > 0); }
+function send() {
+  var v = $('cinp').value.trim();
+  if (!v) { wxToast('说点什么吧'); return; }
+  $('cinp').value = ''; onType();
+  addMsg('me', v);
+  var sugs = $('sugs'); if (sugs) { sugs.parentNode.removeChild(sugs); }
+  setTimeout(function () { ask(v, true); }, 420);
+}
+function ask(q, fromInput) {
+  if (!fromInput) { addMsg('me', q); var s = $('sugs'); if (s) { s.parentNode.removeChild(s); } }
+  var r = REPLY[q] || REPLY['default'];
+  var el = addMsg('ai', '');
+  var bub = el.querySelector('.bub');
+  typeIn(bub, r.cn, r.en);
+}
+function typeIn(el, text, en) {
+  el.textContent = ''; var i = 0;
+  var t = setInterval(function () {
+    el.textContent = text.slice(0, ++i);
+    $('msgs').scrollTop = $('msgs').scrollHeight;
+    if (i >= text.length) {
+      clearInterval(t);
+      if (en) { var s = document.createElement('span'); s.className = 'en'; s.textContent = en; el.appendChild(s); $('msgs').scrollTop = $('msgs').scrollHeight; }
+    }
+  }, 18);
+}
+function newChat() {
+  $('msgs').innerHTML =
+    '<div class="msg ai"><div class="av">豆</div><div class="bd">' +
+    '<div class="bub"><span class="daily">今日一句</span>' + DAILY.cn + '<span class="en">' + DAILY.en + '</span></div>' +
+    '<div class="meta">内容由 AI 生成 · ' + now() + '</div></div></div>' +
+    '<div class="sugs" id="sugs">' +
+    '<span onclick="ask(\'帮我翻一句话\')">帮我翻一句话</span>' +
+    '<span onclick="ask(\'看看合同风险\')">看看合同风险</span>' +
+    '<span onclick="ask(\'今天该做什么\')">今天该做什么</span></div>';
+  wxToast('已开启新对话');
+}
+
+/* ---------- 翻译 ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="reg"], .chip[data-g="sty"]'), function (c) {
+  c.addEventListener('click', function () {
+    var g = c.dataset.g;
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="' + g + '"]'), function (x) { x.classList.remove('on'); });
+    c.classList.add('on');
+    if (g === 'reg') cur.reg = c.textContent; else cur.sty = c.textContent;
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="ct"]'), function (c) {
+  c.addEventListener('click', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="ct"]'), function (x) { x.classList.remove('on'); });
+    c.classList.add('on');
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-multi="1"]'), function (c) {
+  c.addEventListener('click', function () { c.classList.toggle('on'); });
+});
+
+function swap() { var a = cur.src; cur.src = cur.tgt; cur.tgt = a; $('langA').textContent = cur.src; $('langB').textContent = cur.tgt; }
+function pickLang(which) {
+  openSheet('选择' + (which === 'src' ? '源语言' : '目标语言'),
+    LANGS.map(function (l) { return { label: l, on: (which === 'src' ? cur.src : cur.tgt) === l }; }),
+    function (v) { if (which === 'src') { cur.src = v; $('langA').textContent = v; } else { cur.tgt = v; $('langB').textContent = v; } });
+}
+
+$('inp').addEventListener('input', function () {
+  var n = this.value.length;
+  if (n > 500) { this.value = this.value.slice(0, 500); n = 500; }
+  $('cnt').textContent = n;
+  $('go').classList.toggle('dis', n === 0);
+});
+function doPaste() {
+  $('inp').value = DEMO[0].src; $('cnt').textContent = DEMO[0].src.length;
+  $('go').classList.remove('dis'); $('pastebar').style.display = 'none';
+  wxToast('已粘贴剪贴板内容');
+}
+Array.prototype.forEach.call(document.querySelectorAll('.samples .s'), function (s) {
+  s.addEventListener('click', function () {
+    $('inp').value = DEMO[+s.dataset.s].src;
+    $('cnt').textContent = DEMO[+s.dataset.s].src.length;
+    $('go').classList.remove('dis');
+  });
+});
+function pick(text) {
+  for (var i = 0; i < DEMO.length; i++) if (DEMO[i].src === text) return DEMO[i];
+  return { src: text, literal: '（演示）Literal version here.', natural: '（演示）Natural, idiomatic translation appears here.', polite: '（演示）Softer version here.', notes: '原型内置三句示例的完整效果，自由输入走演示文案。' };
+}
+function doTranslate() {
+  var text = $('inp').value.trim();
+  if (!text) { wxToast('先输入内容'); return; }
+  if (cur.src === cur.tgt) { wxToast('源语言和目标语言不能相同'); return; }
+  var d = pick(text);
+  $('rSrc').textContent = d.src; $('rSrcLang').textContent = cur.src;
+  $('rTag').textContent = cur.reg + ' · ' + cur.sty + ' · ' + cur.src + '→' + cur.tgt;
+  $('rLiteral').textContent = d.literal;
+  $('rPolite').textContent = d.polite;
+  $('rNotes').textContent = d.notes;
+  $('fold').classList.remove('open'); $('foldTxt').textContent = '展开';
+  navigateTo('p-tr-result');
+  $('rNatural').textContent = '';
+  wxLoading('翻译中…');
+  setTimeout(function () { hideLoading(); typeIn($('rNatural'), d.natural); }, 950);
+}
+function toggleFold() {
+  var f = $('fold'); var open = !f.classList.contains('open');
+  f.classList.toggle('open', open);
+  $('foldTxt').textContent = open ? '收起' : '展开';
+  if (open) wxToast('按需生成：展开才请求模型');
+}
+
+/* ---------- 合同评估 ---------- */
+function runAssess() {
+  wxLoading('识别与评估中…');
+  setTimeout(function () { hideLoading(); showAssessResult(); }, 1100);
+}
+function showAssessResult() { navigateTo('p-as-result'); }
+
+/* ---------- tabBar ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (tb) {
+  tb.addEventListener('click', function () { switchTab(tb.dataset.t); });
+});
+
+/* ---------- 主题 ---------- */
+function toggleTheme() {
+  var dark = document.body.dataset.theme === 'dark';
+  document.body.dataset.theme = dark ? 'light' : 'dark';
+  $('themeVal').textContent = (dark ? '浅色' : '深色') + ' ›';
+}
+
+(function tick() {
+  var d = new Date();
+  $('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  setTimeout(tick, 20000);
+})();
+
+/* 初始化：navAct 默认指向新对话 */
+$('navAct').textContent = '新对话';
+$('navAct').onclick = newChat;
+</script>
+</body>
+</html>

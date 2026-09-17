@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="list">
+    <view class="r" wx:for="{{list}}" wx:key="id" bindtap="open">
+      <text>{{item.title}}</text>
+      <text class="v">{{item.time}} ›</text>
+    </view>
+  </view>
+  <view class="empty" wx:if="{{list.length === 0}}">暂无翻译记录</view>
+  <view class="foot">仅本机保留最近 30 天</view>
+</view>

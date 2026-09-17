@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="sec-t">评估偏好</view>
+  <view class="list">
+    <view class="r" bindtap="pickType"><text>默认合同类型</text><text class="v">{{contractType}} ›</text></view>
+    <view class="r" bindtap="pickStrict"><text>评估严格度</text><text class="v">{{strict}} ›</text></view>
+    <view class="r" bindtap="pickRisks"><text>默认关注风险点</text><text class="v">{{riskCount}} 项 ›</text></view>
+    <view class="r" bindtap="pickLaw"><text>适用法域</text><text class="v">{{law}} ›</text></view>
+  </view>
+
+  <view class="sec-t">数据与导出</view>
+  <view class="list">
+    <view class="r" bindtap="toggleAutoSave"><text>自动保存评估结果</text><text class="v">{{autoSave ? '已开启' : '已关闭'}} ›</text></view>
+    <view class="r" bindtap="pickFormat"><text>报告导出格式</text><text class="v">{{format}} ›</text></view>
+    <view class="r" bindtap="pickKeep"><text>合同保留期限</text><text class="v">{{keep}} ›</text></view>
+    <view class="r" bindtap="deleteAll"><text>删除全部合同数据</text><text class="v">›</text></view>
+  </view>
+
+  <view class="foot">这里的设置只影响「合同评估」功能</view>
+</view>

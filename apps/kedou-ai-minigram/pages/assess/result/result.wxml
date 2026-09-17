@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="score">
+    <view class="ring"><text class="n">{{score}}</text><text class="l">风险分</text></view>
+    <view class="info">
+      <view class="lv">{{level}}</view>
+      <view class="d">{{summary}}</view>
+    </view>
+  </view>
+
+  <view class="sec-t">风险清单</view>
+  <view class="risk" wx:for="{{items}}" wx:key="title">
+    <view class="rh">
+      <text class="badge {{item.levelClass}}">{{item.level}}</text>
+      <text class="b">{{item.title}}</text>
+    </view>
+    <view class="rc">{{item.detail}}</view>
+    <view class="rf">建议：{{item.advice}}</view>
+  </view>
+
+  <view class="rowbtn">
+    <view bindtap="exportReport">导出报告</view>
+    <view bindtap="askMore">继续追问</view>
+  </view>
+  <view class="ai">评估结果由 AI 生成，仅供参考，不构成法律意见</view>
+</view>

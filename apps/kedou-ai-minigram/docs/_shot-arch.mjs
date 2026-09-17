@@ -1,0 +1,17 @@
+import { createRequire } from 'node:module';
+const require = createRequire('/Users/geekwen/.workbuddy/binaries/node/workspace/');
+const puppeteer = require('puppeteer-core');
+const F = '/Users/geekwen/web_system_release/docs/intents/2026-09-15-kedou-ai-multi-agent-routing.html';
+const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-proxy-server', '--hide-scrollbars'] });
+const p = await b.newPage();
+const errs = []; p.on('pageerror', e => errs.push(String(e)));
+await p.setViewport({ width: 1000, height: 1200, deviceScaleFactor: 2 });
+await p.goto('file://' + F, { waitUntil: 'load' });
+await new Promise(r => setTimeout(r, 700));
+console.log('页面错误:', errs.length, errs.slice(0, 3).join(' | '));
+console.log('文档高度:', await p.evaluate(() => document.body.scrollHeight) + 'px');
+const d = '/Users/geekwen/web_system_release/docs/intents';
+await p.screenshot({ path: d + '/多Agent路由架构-预览-首屏.png' });
+await p.screenshot({ path: d + '/多Agent路由架构-预览-全页.png', fullPage: true });
+console.log('✓ 截图完成');
+await b.close();
