@@ -3,10 +3,10 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
-  pipelineTemplateApi,
+  pipelinesApi,
   pipelineStepApi,
   pipelineVarApi,
-  pipelineApi,
+  pipelineRunsApi,
   deployApi,
   type PipelineTemplate,
   type PipelineVar,
@@ -56,7 +56,7 @@ const metaDraft = ref({
 
 /** 人员选择器数据源：持有 deploy:pipeline:approve 的系统用户 */
 const loadApprovers = async (): Promise<UserSelectLoadResult> => {
-  const r = await pipelineApi.approvers()
+  const r = await pipelineRunsApi.approvers()
   return { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
 }
 
@@ -160,7 +160,7 @@ async function load() {
       return
     }
 
-    tpl.value = await pipelineTemplateApi.list().then(
+    tpl.value = await pipelinesApi.list().then(
       (all) => all.find((t) => t.id === tplId.value) || null,
     )
     if (!tpl.value) {
@@ -414,7 +414,7 @@ async function save() {
       nodes: nodeDraft.value,
     } as any
     if (isCreate.value) {
-      const created = await pipelineTemplateApi.create({
+      const created = await pipelinesApi.create({
         ...dto,
         key: metaDraft.value.key,
         moduleKey: metaDraft.value.moduleKey,
@@ -426,7 +426,7 @@ async function save() {
       router.replace({ name: 'PipelineEdit', params: { id: created.id } })
       await load()
     } else {
-      await pipelineTemplateApi.update(tplId.value, dto)
+      await pipelinesApi.update(tplId.value, dto)
       dirty.value = false
       message.success('流水线已保存')
       const keepKey = selNodeKey.value
@@ -454,7 +454,7 @@ async function removePipeline() {
     okType: 'danger',
     onOk: async () => {
       try {
-        await pipelineTemplateApi.remove(tplId.value)
+        await pipelinesApi.remove(tplId.value)
         message.success('流水线已删除')
         router.push({ name: 'PipelineCenter' })
       } catch (e: any) {

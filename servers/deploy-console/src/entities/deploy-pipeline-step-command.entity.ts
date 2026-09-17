@@ -43,15 +43,18 @@ export interface StepAction {
  * platform 节点（git/version/pointer）不可写（发布语义真相源，由流水线引擎固定执行）。
  */
 @Entity('deploy_pipeline_step_commands')
-@Unique(['templateId', 'nodeKey'])
+@Unique(['pipelineId', 'nodeKey'])
 export class DeployPipelineStepCommandEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  /** 归属流水线模板 ID（关联 deploy_pipeline_templates.id） */
-  @Column({ type: 'varchar', length: 64, comment: '流水线模板 ID' })
+  /**
+   * 归属流水线 ID（关联 deploy_pipelines.id）。
+   * 物理列名仍是历史的 `template_id`：改名只动语义层，避免数据迁移（见 specs/deploy-console/pipeline-naming.md）。
+   */
+  @Column({ name: 'template_id', type: 'varchar', length: 64, comment: '流水线 ID' })
   @Index()
-  templateId: string;
+  pipelineId: string;
 
   /** 节点 key（= TemplateNode.key；platform 保留字不可写） */
   @Column({ type: 'varchar', length: 32, comment: '节点 key' })

@@ -63,7 +63,21 @@
 同步改动：两个实体的 `@Entity()` 表名；`metrics.service.ts` 里 4 处原生 SQL
 `FROM deploy_pipelines` → `FROM deploy_pipeline_runs`（含注释）。
 
-未随本次改动（留在二档）：实体类名 / 字段名（`templateId`）/ API 名 / `tpl-` 的 ID 前缀。
+### 二档：语义层改名（2026-09-17 已做，**不动物理列名**）
+
+| 层 | 改动 |
+|---|---|
+| 后端实体 | `templateId` → **`pipelineId`**（71 处，8 个文件），`@Column({ name: 'template_id' })` 保持物理列名不变 → **零数据迁移** |
+| 后端 | `deploy_pipeline_step_commands` / `deploy_pipeline_runs` 里"所属流水线"一律叫 `pipelineId`；`metrics` 原生 SQL 同步 |
+| 前端 | `pipelineTemplateApi` → **`pipelinesApi`**（流水线定义，18 处）；`pipelineApi`（提交/执行）→ **`pipelineRunsApi`**（30 处） |
+
+**故意留着**：
+
+- 物理列名 `template_id`（避免又一次停机迁移，等下次有窗口时随其他变更一起改）
+- API 路径 `/pipeline-templates`（外部脚本/文档有引用，改名需同步，留到三档）
+- 实体类名 `DeployPipelineTemplateEntity`、TS 类型 `PipelineTemplate`（纯内部命名，收益小于风险，随日常迭代改）
+- 数据里的 `tpl-` 前缀 ID（48 个定义 + 370 处引用，需整体字符串迁移）
+- 「发布单侧」的 `pipelineId`（审批单 / 事件 / 锁指向的是**发布单**，语义上应叫 `runId`，本批未动）
 
 ## 7. 未来模板：与流水线解耦
 

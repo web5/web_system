@@ -3,10 +3,10 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
-  pipelineApi,
+  pipelineRunsApi,
   environmentApi,
   deployApi,
-  pipelineTemplateApi,
+  pipelinesApi,
   stageCommandApi,
   type PipelineItem,
   type PipelineTemplate,
@@ -110,7 +110,7 @@ function stepSummary(t: PipelineTemplate) {
 
 async function loadSummary() {
   try {
-    summaryMap.value = await pipelineApi.summary()
+    summaryMap.value = await pipelineRunsApi.summary()
   } catch {
     /* 首页概览失败不阻塞 */
   }
@@ -118,7 +118,7 @@ async function loadSummary() {
 async function loadTemplates() {
   loading.value = true
   try {
-    const list = await pipelineTemplateApi.list()
+    const list = await pipelinesApi.list()
     templates.value = list
   } catch {
     message.error('加载流水线失败')
@@ -177,7 +177,7 @@ function openEdit(t: PipelineTemplate) {
 /** 「可审批人」加载器已随编辑弹窗挪到 PipelineEdit（提交抽屉里不需要选人） */
 async function duplicate(t: PipelineTemplate) {
   try {
-    await pipelineTemplateApi.duplicate(t.id)
+    await pipelinesApi.duplicate(t.id)
     message.success(`已复制为「${t.name} 副本」`)
     await refreshAll()
   } catch (e: any) {
@@ -186,7 +186,7 @@ async function duplicate(t: PipelineTemplate) {
 }
 async function toggle(t: PipelineTemplate) {
   try {
-    await pipelineTemplateApi.update(t.id, { enabled: !t.enabled })
+    await pipelinesApi.update(t.id, { enabled: !t.enabled })
     await refreshAll()
   } catch (e: any) {
     message.error(e?.response?.data?.message || '操作失败')
@@ -201,7 +201,7 @@ function remove(t: PipelineTemplate) {
     cancelText: '取消',
     onOk: async () => {
       try {
-        await pipelineTemplateApi.remove(t.id)
+        await pipelinesApi.remove(t.id)
         message.success('已删除')
         await refreshAll()
       } catch (e: any) {
@@ -262,14 +262,14 @@ async function loadModules() {
 }
 async function loadReleases() {
   try {
-    releases.value = await pipelineApi.releases(env.value, form.value.moduleKey)
+    releases.value = await pipelineRunsApi.releases(env.value, form.value.moduleKey)
   } catch {
     releases.value = []
   }
 }
 async function loadAvailTemplates() {
   try {
-    availTemplates.value = await pipelineTemplateApi.list(form.value.moduleKey)
+    availTemplates.value = await pipelinesApi.list(form.value.moduleKey)
     if (!form.value.templateId) {
       const lockId = lockTemplateId.value
       lockTemplateId.value = ''
@@ -479,7 +479,7 @@ function doSubmit(confirm: boolean) {
   const run = async () => {
     try {
       const rule = buildGrayscaleRule()
-      const res = await pipelineApi.submit({
+      const res = await pipelineRunsApi.submit({
         env: env.value,
         moduleKey: form.value.moduleKey,
         branch: form.value.branch || 'master',
@@ -559,7 +559,7 @@ function stepState(p: PipelineItem, s: string): 'done' | 'running' | 'error' | '
 async function loadPl() {
   plLoading.value = true
   try {
-    plList.value = await pipelineApi.list(plEnv.value ? { env: plEnv.value, limit: 50 } : { limit: 50 })
+    plList.value = await pipelineRunsApi.list(plEnv.value ? { env: plEnv.value, limit: 50 } : { limit: 50 })
   } catch {
     message.error('加载执行记录失败')
   } finally {
@@ -626,7 +626,7 @@ function plRetry(p: PipelineItem) {
     cancelText: '取消',
     onOk: async () => {
       try {
-        const res = await pipelineApi.retry(p.id)
+        const res = await pipelineRunsApi.retry(p.id)
         message.success(`已重新提交: ${res.jobId}`)
         await Promise.all([loadPl(), refreshAll()])
         tick()
@@ -648,7 +648,7 @@ function plCancel(p: PipelineItem) {
     cancelText: '返回',
     onOk: async () => {
       try {
-        await pipelineApi.cancel(p.id)
+        await pipelineRunsApi.cancel(p.id)
         message.success('已请求取消')
         await Promise.all([loadPl(), refreshAll()])
       } catch {
@@ -665,7 +665,7 @@ function plPromote(p: PipelineItem) {
     cancelText: '取消',
     onOk: async () => {
       try {
-        await pipelineApi.promote(p.id)
+        await pipelineRunsApi.promote(p.id)
         message.success('已转全量')
         await Promise.all([loadPl(), refreshAll()])
       } catch (e: any) {
@@ -694,10 +694,10 @@ async function submitReview() {
   reviewing.value = true
   try {
     if (review.value.action === 'approve') {
-      await pipelineApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
+      await pipelineRunsApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
       message.success('已审批通过，发布开始执行')
     } else {
-      await pipelineApi.reject(review.value.p.id, reviewComment.value.trim())
+      await pipelineRunsApi.reject(review.value.p.id, reviewComment.value.trim())
       message.success('已拒绝该发布')
     }
     review.value = null

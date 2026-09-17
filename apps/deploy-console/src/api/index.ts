@@ -520,7 +520,7 @@ export function commitOf(versionTag: string): string {
   return i >= 0 ? versionTag.slice(i + 1) : versionTag
 }
 
-export const pipelineApi = {
+export const pipelineRunsApi = {
   submit: (dto: {
     env: string
     moduleKey: string
@@ -599,7 +599,7 @@ export const pipelineApi = {
 /* ========== Pipeline（流水线：流程定义） ========== */
 
 /** 流水线（全局定义，不绑模块；moduleKey='*'） */
-export const pipelineTemplateApi = {
+export const pipelinesApi = {
   /** 可用流水线：传 moduleKey 返回「全局+该模块专属」；不传返回全部 */
   list: (moduleKey?: string) =>
     http.get('/pipeline-templates', {
