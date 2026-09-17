@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>kedou-ai-minigram · 三 Tab 骨架落地实现方案</title>
+<style>
+  :root{
+    --brand:#F97316; --brand-deep:#EA6A0B; --brand-soft:#FFE7D1; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#D6F1EB;
+    --page-bg:#F7F4F0; --card:#FFFFFF;
+    --line:rgba(60,60,67,.12);
+    --t1:#10131A; --t2:rgba(60,60,67,.72); --t3:rgba(60,60,67,.42);
+    --ok:#15803D; --ok-bg:#E7F6EC;
+    --warn:#B45309; --warn-bg:#FEF3C7;
+    --no:#B91C1C; --no-bg:#FEE2E2;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  html,body{margin:0;padding:0}
+  body{background:var(--page-bg);color:var(--t1);
+       font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+       line-height:1.72;font-size:14.5px}
+  .wrap{max-width:920px;margin:0 auto;padding:44px 26px 90px}
+
+  .hero{margin-bottom:34px}
+  .hero .tag{display:inline-block;font-size:11px;letter-spacing:1.4px;color:var(--brand-txt);
+             background:var(--brand-soft);padding:4px 10px;border-radius:5px;font-weight:600}
+  .hero h1{font-size:30px;line-height:1.35;margin:14px 0 8px;letter-spacing:-.6px;font-weight:650}
+  .hero p{margin:0;color:var(--t3);font-size:13.5px}
+
+  h2{font-size:19px;margin:44px 0 6px;letter-spacing:-.2px;font-weight:650;
+     padding-left:12px;border-left:3px solid var(--brand)}
+  h2 small{display:block;font-size:12.5px;color:var(--t3);font-weight:400;margin-top:2px;letter-spacing:0}
+  h3{font-size:15px;margin:26px 0 8px;font-weight:600}
+
+  p{margin:9px 0}
+  ul{margin:9px 0;padding-left:20px}
+  li{margin:5px 0}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+       background:rgba(60,60,67,.06);padding:1.5px 5px;border-radius:4px;color:#8A3B0B}
+
+  pre{background:#12141B;color:#E6E8EE;border-radius:12px;padding:16px 18px;overflow-x:auto;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.7;margin:12px 0}
+  pre .c{color:#6E7385}
+  pre .k{color:#FFB27A}
+  pre .s{color:#9BD1A4}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:var(--card);
+        border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(20,30,60,.03),0 8px 22px rgba(20,30,60,.05)}
+  th{text-align:left;padding:11px 13px;background:#FFF8F2;color:var(--brand-txt);
+     font-weight:600;font-size:12.5px;letter-spacing:.3px;border-bottom:1px solid var(--line)}
+  td{padding:11px 13px;border-bottom:.5px solid var(--line);vertical-align:top;color:var(--t2)}
+  tr:last-child td{border-bottom:none}
+  td b,td strong{color:var(--t1);font-weight:600}
+  td code{white-space:nowrap}
+
+  .callout{border-radius:12px;padding:14px 16px;margin:14px 0;font-size:13.5px;line-height:1.75}
+  .callout .t{font-weight:650;margin-bottom:3px;display:block}
+  .warn{background:var(--warn-bg);color:#78350F}
+  .warn .t{color:var(--warn)}
+  .ok{background:var(--ok-bg);color:#14532D}
+  .ok .t{color:var(--ok)}
+  .risk{background:var(--no-bg);color:#7F1D1D}
+  .risk .t{color:var(--no)}
+
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;letter-spacing:.3px}
+  .p0{background:#FEE2E2;color:#B91C1C}
+  .p1{background:var(--warn-bg);color:#B45309}
+  .p2{background:var(--accent-soft);color:#0B6B60}
+
+  .yes{color:var(--ok);font-weight:700}
+  .no{color:var(--no);font-weight:700}
+
+  .steps{counter-reset:s;list-style:none;padding:0;margin:14px 0}
+  .steps li{counter-increment:s;position:relative;padding:12px 16px 12px 52px;background:var(--card);
+            border-radius:11px;margin-bottom:9px;box-shadow:0 1px 2px rgba(20,30,60,.03),0 6px 18px rgba(20,30,60,.045)}
+  .steps li::before{content:counter(s);position:absolute;left:14px;top:12px;width:24px;height:24px;
+                    border-radius:50%;background:var(--brand);color:#fff;font-size:12.5px;font-weight:650;
+                    display:flex;align-items:center;justify-content:center}
+  .steps li b{color:var(--t1)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  .box{background:var(--card);border-radius:12px;padding:14px 16px;
+       box-shadow:0 1px 2px rgba(20,30,60,.03),0 8px 22px rgba(20,30,60,.05)}
+  .box .t{font-weight:650;font-size:13.5px;margin-bottom:6px;color:var(--t1)}
+  .box ul{margin:0;padding-left:18px;font-size:13px;color:var(--t2)}
+  .box li{margin:4px 0}
+
+  .foot{margin-top:50px;padding-top:18px;border-top:.5px solid var(--line);font-size:12px;color:var(--t3)}
+  @media (max-width:760px){ .grid2{grid-template-columns:1fr} .wrap{padding:30px 16px 60px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <span class="tag">kedou-ai-minigram</span>
+    <h1>三 Tab 骨架落地实现方案</h1>
+    <p>把已验证的 HTML 原型（对话 / 发现 / 我的）落成真实小程序代码 · 2026-09-15</p>
+  </div>
+
+  <!-- ============ 0 结论 ============ -->
+  <h2>0. 结论先行<small>先给方案、给范围、给工作量，细节后面</small></h2>
+
+  <div class="callout ok">
+    <span class="t">推荐路径：低改动「新增 + 改写」，不做大规模搬迁</span>
+    利用现有 <code>pages/contract/chat</code> 这套已跑通的对话 UI 与 SSE 管线，<b>新增 2 个页面、改写 3 个页面</b>，
+    <code>app.json</code> 换 tabBar 指向。<b>现有 <code>pages/translate/</code>、<code>pages/assess/</code> 路径一律不动</b>，
+    只把它们从 tabBar 移到「发现」里作为二级入口 —— 避免大批量 <code>git mv</code>，也避免碰 <code>pages/draw</code>、<code>pages/bianbian</code> 这批历史页面。
+  </div>
+
+  <table>
+    <tr><th style="width:74px">优先级</th><th>事项</th><th style="width:96px">工作量</th><th style="width:78px">阻塞</th></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>app.json</b>：tabBar 换为 对话/发现/我的 + 去掉蓝主题</td><td>0.1 人日</td><td class="no">无</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>pages/chat</b>：从 contract/chat 抽通用对话首界面</td><td>0.5 人日</td><td class="no">后端 agentId</td></tr>
+    <tr><td><span class="pill p0">P0</span></td><td><b>pages/discover</b>：发现页（翻译官 / 合同评估入口）</td><td>0.3 人日</td><td class="no">无</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td><b>pages/mine</b>：设置分组收敛（三套设置合一）</td><td>0.4 人日</td><td class="no">无</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td><b>pages/welcome</b>：对齐 Hello. + 今日一句 + 开始对话</td><td>0.3 人日</td><td class="no">无</td></tr>
+    <tr><td><span class="pill p1">P1</span></td><td><b>services/agent-stream.ts</b>：SSE 管线参数化（去掉写死 agentId）</td><td>0.5 人日</td><td class="yes">后端配合</td></tr>
+    <tr><td><span class="pill p2">P2</span></td><td>历史页面清理（draw / bianbian / scan / records / contract/*）</td><td>1～2 人日</td><td class="no">无</td></tr>
+  </table>
+
+  <p style="color:var(--t3);font-size:12.5px">工作量是粗估区间，只用于排优先级，别当排期用。</p>
+
+  <!-- ============ 1 现状 ============ -->
+  <h2>1. 现状盘点<small>原型目标 vs 仓库真实状态，逐项对齐</small></h2>
+
+  <table>
+    <tr><th style="width:200px">原型里的东西</th><th>仓库里现在是什么</th><th style="width:66px">状态</th></tr>
+    <tr>
+      <td><b>tabBar：对话 / 发现 / 我的</b></td>
+      <td><code>app.json</code> 还是「翻译 / 合同评估 / 我的」，<code>selectedColor</code> 蓝色 <code>#1E6FFF</code></td>
+      <td class="no">未做</td>
+    </tr>
+    <tr>
+      <td><b>对话 = 默认主界面</b></td>
+      <td>无独立对话页。<code>pages/contract/chat/chat</code> 是「合同追问」专用版本，顶部写着「基于本次合同上下文回答」</td>
+      <td class="no">改造</td>
+    </tr>
+    <tr>
+      <td><b>发现页</b></td>
+      <td>不存在，需新建</td>
+      <td class="no">未做</td>
+    </tr>
+    <tr>
+      <td><b>我的 = 收纳所有设置</b></td>
+      <td><code>pages/mine/index/index.wxml</code> 已存在，但设置是三条平铺：<b>小程序设置 / 翻译设置 / 合同评估设置</b> —— 只是并列，没收敛</td>
+      <td class="no">改造</td>
+    </tr>
+    <tr>
+      <td><b>欢迎页 Hello. + 今日一句 + 开始对话</b></td>
+      <td><code>pages/welcome/index/index.wxml</code> 还是旧版：品牌头 + 「欢迎进入科豆 AI」+ 两个入口卡片 + 最近使用列表</td>
+      <td class="no">未做</td>
+    </tr>
+    <tr>
+      <td><b>橙色主题</b></td>
+      <td><code>app.json</code> 导航栏 <code>#1E6FFF</code>（蓝），tabBar <code>selectedColor</code> 同为蓝；<code>app.wxss</code> 只有 26 行，没有设计变量层</td>
+      <td class="no">未做</td>
+    </tr>
+    <tr>
+      <td><b>语言翻译官</b></td>
+      <td><code>pages/translate/*</code> 齐全，但 <code>index.ts</code> 里请求是<b>半成品</b>：<code>const res = null;</code> + <code>// TODO: 结果落本地缓存后跳转结果页</code></td>
+      <td class="no">断链</td>
+    </tr>
+    <tr>
+      <td><b>合同评估</b></td>
+      <td><code>pages/assess/*</code> + <code>services/contract-api.ts</code>（881 行，含 SSE 流式、会话列表、追问）——<b>这是全项目最完整的真连水管</b></td>
+      <td class="yes">可用</td>
+    </tr>
+  </table>
+
+  <h3>顺带扫出来的两个暗雷（不在本次范围，但得记一笔）</h3>
+  <ul>
+    <li><code>app.json</code> 里 <b>28 个页面</b>，其中 <code>pages/draw/</code>（Canvas 画板，带 5 个 behavior 文件）、<code>pages/bianbian/</code>、<code>pages/scan/</code>、<code>pages/records/</code>、<code>pages/contract/</code> 是历史堆积，和「科豆 AI 对话助手」的定位无关。<b>这次不动</b>，但列为 P2 —— 它们依赖 <code>utils/CanvasEngine*</code>、<code>utils/Brush.ts</code>，真删的时候得整套 eval。</li>
+    <li><code>pages/translate/index/index.ts</code> 的翻译请求<b>没接后端</b>。所以「语言翻译官」目前只有 UI，点进去转一圈返回 null 结果。这是发现页最需要先补的一环。</li>
+  </ul>
+
+  <!-- ============ 2 阻塞 ============ -->
+  <h2>2. 唯一硬阻塞：写死的 <code>contract-risk</code><small>原型要的是「通用对话」，管线现在是「合同专用」</small></h2>
+
+  <p><code>services/contract-api.ts</code> 顶部三个常量决定了它只能服务于合同：</p>
+
+  <pre><span class="k">const</span> AGENT_RUN_URL = <span class="s">'/api/ai-agent/agent/run'</span>;
+<span class="k">const</span> AGENT_ID      = <span class="s">'contract-risk'</span>;   <span class="c">// ← 写死，通用对话用不了</span>
+<span class="k">const</span> CONVERSATIONS_URL = <span class="s">'/api/ai-agent/agent/conversations'</span>;</pre>
+
+  <p>导出的 7 个函数里，<code>sendContractFollowUp</code> / <code>sendContractFollowUpStream</code> 已经是一套完整的<b>通用多轮追问</b>能力（带 SSE 增量、缓冲切行、会话持久化），只是被合同语义绑住了。<br/>
+  换句话说：<b>对话 tab 的后端能力其实已经有了 80%，只是没对外通用化。</b></p>
+
+  <table>
+    <tr><th style="width:80px">选项</th><th>做法</th><th>代价</th><th style="width:52px">结论</th></tr>
+    <tr>
+      <td><b>A 复制</b></td>
+      <td>拷一份成 <code>services/chat-api.ts</code>，只改 AGENT_ID</td>
+      <td>881 行双人发行人维护；后续改 SSE 逻辑要改两处</td>
+      <td class="no">否</td>
+    </tr>
+    <tr>
+      <td><b>B 参数化</b></td>
+      <td>抽出 <code>services/agent-stream.ts</code> 的工厂 <code>createAgentApi(agentId)</code>，合同版 = <code>createAgentApi('contract-risk')</code>，对话版 = <code>createAgentApi('kedou-chat')</code></td>
+      <td>一次性 ~0.5 人日重构；需要后端提供通用 agent</td>
+      <td class="yes">推荐</td>
+    </tr>
+    <tr>
+      <td><b>C 先 mock</b></td>
+      <td>对话页先用本地假数据跑通 UI 与交互，后端 ready 后换数据源</td>
+      <td>无</td>
+      <td class="yes">并行</td>
+    </tr>
+  </table>
+
+  <div class="callout warn">
+    <span class="t">建议：B + C 同时走</span>
+    前端按 <b>C</b> 先开工（对话页 UI / tabBar / 发现页不依赖后端），同步和后端口头确认
+    <b>B</b> 里 <code>kedou-chat</code> 这个 agent 能否排期。两条线不互相阻塞 —— 前端在 <code>agent-stream.ts</code> 就绪前用 mock adapter，接口签名保持一致，后端上线当天换一行 import 即可。
+  </div>
+
+  <!-- ============ 3 结构 ============ -->
+  <h2>3. 目标结构<small>新增 2 页、改写 3 页，其余路径原地不动</small></h2>
+
+  <table>
+    <tr><th style="width:150px">页面路径</th><th style="width:88px">动作</th><th>说明</th></tr>
+    <tr><td><code>pages/welcome/index/index</code></td><td><b>改写</b></td><td>换成 Hello. + 今日一句 + 「开始对话」 → <code>switchTab('pages/chat/index/index')</code></td></tr>
+    <tr><td><code>pages/chat/index/index</code></td><td><b>新建</b></td><td>通用对话首界面，UI 抄 <code>contract/chat</code>，去掉合同上下文提示条</td></tr>
+    <tr><td><code>pages/discover/index/index</code></td><td><b>新建</b></td><td>「语言翻译官」「合同评估」两个入口，<code>navigateTo</code> 跳既有页面</td></tr>
+    <tr><td><code>pages/mine/index/index</code></td><td><b>改写</b></td><td>三条并列设置 → 收敛为「应用设置」分组</td></tr>
+    <tr><td><code>pages/translate/*</code></td><td>不动</td><td>仅退出 tabBar，改为发现页二级入口</td></tr>
+    <tr><td><code>pages/assess/*</code></td><td>不动</td><td>同上</td></tr>
+    <tr><td><code>pages/draw|bianbian|scan|records|contract/*</code></td><td>不动</td><td>P2 清理，本次不碰</td></tr>
+  </table>
+
+  <h3>app.json 关键改动</h3>
+  <pre>{
+  <span class="k">"pages"</span>: [
+    <span class="s">"pages/welcome/index/index"</span>,   <span class="c">// 启动页（非 tab），保持首位</span>
+    <span class="s">"pages/chat/index/index"</span>,      <span class="c">// ← 新增</span>
+    <span class="s">"pages/discover/index/index"</span>,  <span class="c">// ← 新增</span>
+    ...其余保持不变
+  ],
+  <span class="k">"window"</span>: {
+    <span class="k">"navigationBarBackgroundColor"</span>: <span class="s">"#FFFFFF"</span>,  <span class="c">// ← 从 #1E6FFF 改白</span>
+    <span class="k">"navigationBarTextStyle"</span>: <span class="s">"black"</span>,          <span class="c">// ← 从 white 改黑</span>
+    <span class="k">"navigationBarTitleText"</span>: <span class="s">"科豆 AI"</span>
+  },
+  <span class="k">"tabBar"</span>: {
+    <span class="k">"color"</span>: <span class="s">"#9AA1AD"</span>,
+    <span class="k">"selectedColor"</span>: <span class="s">"#C2410C"</span>,              <span class="c">// ← 蓝 #1E6FFF → brand-txt</span>
+    <span class="k">"backgroundColor"</span>: <span class="s">"#FFFFFF"</span>,
+    <span class="k">"list"</span>: [
+      { <span class="k">"pagePath"</span>: <span class="s">"pages/chat/index/index"</span>,     <span class="k">"text"</span>: <span class="s">"对话"</span> },
+      { <span class="k">"pagePath"</span>: <span class="s">"pages/discover/index/index"</span>, <span class="k">"text"</span>: <span class="s">"发现"</span> },
+      { <span class="k">"pagePath"</span>: <span class="s">"pages/mine/index/index"</span>,    <span class="k">"text"</span>: <span class="s">"我的"</span> }
+    ]
+  }
+}</pre>
+
+  <div class="callout warn">
+    <span class="t">selectedColor 用 #C2410C 而不是 #F97316</span>
+    同上轮原型里踩的同一个坑：橙色 <code>#F97316</code> 在白底对比度只有 <b>2.9:1</b>，tabBar 选中文字会糊；
+    深色档 <code>#C2410C</code> 是 <b>5.4:1</b>，刚好过 AA。tabBar 这种地方不宜用纯品牌橙。
+  </div>
+
+  <!-- ============ 4 步骤 ============ -->
+  <h2>4. 实施步骤<small>按依赖顺序，前四步和后端口径无关</small></h2>
+
+  <ol class="steps">
+    <li><b>设计变量层</b>（0.2 人日）— 把原型那套 <code>--brand / --brand-txt / --accent / --page-bg</code> 落到 <code>app.wxss</code>（现在只有 26 行）。所有新页面统一从这里取色，杜绝硬编码色值到处飞。</li>
+    <li><b>app.json 换骨架</b>（0.1 人日）— tabBar 三个 tab + navigationBar 去蓝改白。此时暂时指向尚未存在的 <code>pages/chat</code>，编译会报错，所以紧接着做第 3 步。</li>
+    <li><b>新建 pages/chat</b>（0.5 人日）— 从 <code>pages/contract/chat/</code> 复制一份改：
+      <ul>
+        <li>删掉 <code>chat-head</code> 那条「基于本次合同上下文回答」</li>
+        <li>首屏注入「今日一句」作为 AI 首条消息（与欢迎页同文案，形成连续感）</li>
+        <li>SSE 数据源先接 mock adapter，接口签名按 <code>agent-stream.ts</code> 预留</li>
+      </ul>
+    </li>
+    <li><b>新建 pages/discover</b>（0.3 人日）— 两个入口卡片，<code>navigateTo</code> 到 <code>pages/translate/index/index</code> 与 <code>pages/assess/index/index</code>。预留后续插入新技能的槽位。</li>
+    <li><b>改写 pages/welcome</b>（0.3 人日）— 对齐 Hello. + 今日一句 + 「开始对话」。今日一句抽到 <code>utils/daily.ts</code> 统一维护，欢迎页与对话首条共用同一份，避免两处文案漂移。</li>
+    <li><b>改写 pages/mine</b>（0.4 人日）— 三条并列设置改成一个「应用设置」分组进入同等层级，翻译/评估各自的设置作为二级页。</li>
+    <li><b>services/agent-stream.ts 参数化</b>（0.5 人日，依赖后端）— 抽工厂 + 通用 agentId，<code>contract-api.ts</code> 改为工厂调用，现有合同评估链路行为不变。</li>
+    <li><b>冒烟 + 提交</b>（0.2 人日）— <code>tsc --noEmit</code> 通过 + 开发者工具可编译 + 三 tab 可切 + 欢迎页跳对话。顺带把这条分支 <b>117 个未提交文件</b>清了。</li>
+  </ol>
+
+  <!-- ============ 5 验收 ============ -->
+  <h2>5. 验收清单<small>逐条打勾，别只看「能编译」</small></h2>
+
+  <div class="grid2">
+    <div class="box">
+      <div class="t">功能</div>
+      <ul>
+        <li>启动进 welcome（非 tab 页，底部无 tabBar）</li>
+        <li>点「开始对话」→ <code>switchTab</code> 进对话，且<b>不可后退</b>回欢迎页</li>
+        <li>对话 tab 为默认选中项</li>
+        <li>发现页两个入口都能 <code>navigateTo</code> 抵达</li>
+        <li>「我的」里三套设置全部可达，无死链</li>
+      </ul>
+    </div>
+    <div class="box">
+      <div class="t">视觉 / 规范</div>
+      <ul>
+        <li>导航栏已去蓝；tabBar 选中色为 <code>#C2410C</code></li>
+        <li>无硬编码 <code>#F97316</code> / <code>#1E6FFF</code> 残留在新增页面</li>
+        <li>胶囊按钮不被导航栏遮挡（<code>getMenuButtonBoundingClientRect</code>）</li>
+        <li>底部文案：AI 生成声明 + 备案号，各页一致</li>
+        <li><code>tsc --noEmit</code> 零错误</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ 6 风险 ============ -->
+  <h2>6. 风险与未决<small>这些不确定项我没有替你猜</small></h2>
+
+  <table>
+    <tr><th style="width:170px">项</th><th>说明</th><th style="width:88px">需要谁定</th></tr>
+    <tr>
+      <td><b>通用对话 agent</b></td>
+      <td><b>已定：做。</b>不用单个 <code>kedou-chat</code>，改为 ai-service 内建「意图识别 → 多 agent 路由」（情感陪聊 / 百科科普 / 星座时运 / 语言翻译 / 工具服务 + general 兜底）。详见 <code>web_system_release/docs/intents/2026-09-15-kedou-ai-multi-agent-routing.html</code></td>
+      <td class="yes">已决</td>
+    </tr>
+    <tr>
+      <td><b>翻译接口断链</b></td>
+      <td><code>pages/translate/index/index.ts</code> 的 <code>const res = null</code> 是 TODO。发现页放「语言翻译官」入口前，最好先决定是先接真接口还是先隐藏该入口</td>
+      <td>你</td>
+    </tr>
+    <tr>
+      <td><b>暗色模式</b></td>
+      <td>原型有浅/暗两套，但 <code>app.json</code> 未声明 <code>"darkmode": true</code>。要不要这一期支持？不支持的话 Prototype 的暗色图要标为「未来态」</td>
+      <td>你</td>
+    </tr>
+    <tr>
+      <td><b>欢迎页引文</b></td>
+      <td>原型还有 Q1～Q6 六个方向没拍板（当前是去橙条版）。进小程序前建议定一个，否则 welcome 页要返工</td>
+      <td>你</td>
+    </tr>
+    <tr>
+      <td><b>历史页面清理</b></td>
+      <td>28 个页面里近一半与定位无关。留着会拖慢编译、混淆 <code>tsc</code> 报错来源。建议单开一期做</td>
+      <td>你</td>
+    </tr>
+  </table>
+
+  <div class="callout ok">
+    <span class="t">✅ 已决：通用对话走「多 Agent 意图路由」</span>
+    <code>agentId</code> 在 <code>AgentRunDto</code> 里<b>本来就是入参</b>，后端 <code>agent_definitions</code> 表已支持 per-agent 的
+    <code>systemPrompt</code> / <code>model</code> / <code>capabilities</code>（tool·mcp·skill）。<br/>
+    <b>第 2 步「发现页显式指定 agentId」可以直接独立上线</b> —— 不依赖意图识别，天然绕过分类。
+    意图路由是给「对话 tab」用的，并行做、后上，两条线不互相阻塞。
+  </div>
+
+  <div class="foot">
+    kedou-ai-minigram · 三 Tab 骨架落地实现方案 · 2026-09-15<br/>
+    路径：<code>apps/kedou-ai-minigram/docs/实现方案-三Tab骨架.html</code>　|　原型同源：<code>apps/kedou-ai-minigram/prototype/index.html</code>
+  </div>
+
+</div>
+</body>
+</html>

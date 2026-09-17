@@ -1,0 +1,36 @@
+<view class="page">
+  <view class="langbar">
+    <view class="side" bindtap="pickSrc">{{srcLang}}<text class="arw">▾</text></view>
+    <view class="sw" bindtap="swap">⇄</view>
+    <view class="side" bindtap="pickTgt">{{tgtLang}}<text class="arw">▾</text></view>
+  </view>
+
+  <textarea class="inp" placeholder="粘贴或输入要翻译的内容…" value="{{input}}" bindinput="onInput" maxlength="500" />
+  <view class="counter">{{input.length}} / 500</view>
+
+  <view class="notice" wx:if="{{clipboard}}" bindtap="doPaste">
+    <text class="txt">检测到复制的内容：{{clipboard}}</text>
+    <text class="act">粘贴</text>
+  </view>
+
+  <view class="sec-t">语气</view>
+  <scroll-view class="chips" scroll-x>
+    <view class="chip {{register === item ? 'on' : ''}}" wx:for="{{registers}}" wx:key="*this" data-v="{{item}}" bindtap="pickRegister">{{item}}</view>
+  </scroll-view>
+
+  <view class="sec-t">风格</view>
+  <scroll-view class="chips" scroll-x>
+    <view class="chip {{style === item ? 'on' : ''}}" wx:for="{{styles}}" wx:key="*this" data-v="{{item}}" bindtap="pickStyle">{{item}}</view>
+  </scroll-view>
+
+  <view class="grid3">
+    <view class="g" bindtap="onImage">图片</view>
+    <view class="g" bindtap="onVoice">语音</view>
+    <view class="g" bindtap="goHistory">历史</view>
+  </view>
+
+  <view class="btn {{input.length ? '' : 'dis'}}" bindtap="doTranslate">翻　译</view>
+
+  <view class="sec-t">不知道怎么开口？试试这些</view>
+  <view class="sample" wx:for="{{samples}}" wx:key="*this" data-v="{{item}}" bindtap="useSample">{{item}}</view>
+</view>

@@ -83,7 +83,7 @@
 
 | 类别 | 模块 | 产物落点（本机） |
 |---|---|---|
-| 前端类（micro-frontend / frontend） | admin / portal / shell / mini-contract | `servers/gateway/public/static/modules/<key>/<流水线key>/<commit>/` |
+| 前端类（micro-frontend / frontend） | admin / portal / shell / kedou-ai-minigram | `servers/gateway/public/static/modules/<key>/<流水线key>/<commit>/` |
 | 后台（backend） | gateway / ai-agent / mcp-gateway / ai-service / auth-service / content-hub / deploy-console / finnews / system-service / todo-service / upload-service / user-service | `servers/<key>/<流水线key>/<commit>/`（**版本目录**，见下方「已知缺口」） |
 
 ⚠️ **已知缺口（2026-09-15 回归发现）**：后台模块的本机投递目前也走「版本目录」，而服务实际跑的是

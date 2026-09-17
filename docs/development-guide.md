@@ -13,7 +13,7 @@
 ```
 ┌──────────────────────────── 前端（apps/）────────────────────────────┐
 │  shell（微前端基座）  portal（门户模块）  admin（后台模块）             │
-│  deploy-console（运维控制台）  mini-contract（小程序）                │
+│  deploy-console（运维控制台）  kedou-ai-minigram（小程序）                │
 └──────────────────────────────────────────────────────────────────────┘
               │ 微前端加载（shell-loader + window.__SHARED__ 共享依赖）
 ┌──────────────────────────── 网关层（gateway）────────────────────────┐
@@ -58,8 +58,7 @@
 | portal | apps/portal | 微前端模块 | http://localhost:5173 |
 | admin | apps/admin | 微前端模块 | http://localhost:5174/admin/ |
 | deploy-console | apps/deploy-console | 独立 SPA（运维） | 由 deploy-console 后端 serve（6200/console/） |
-| mini-app | apps/mini-app | 微信小程序（主端） | 独立上传 |
-| mini-contract | apps/mini-contract | 小程序（合同翻译官） | 独立上传 |
+| kedou-ai-minigram | apps/kedou-ai-minigram | 小程序（科豆 AI） | 独立上传 |
 
 ### 1.4 共享包（packages/）
 
@@ -86,7 +85,7 @@
 
 ```
 web_system/
-├── apps/            # 前端应用（shell/portal/admin/deploy-console/mini-contract）
+├── apps/            # 前端应用（shell/portal/admin/deploy-console/kedou-ai-minigram）
 ├── servers/         # 后端微服务（gateway/auth/user/ai/ai-agent/system/todo/mcp-gateway/content-hub/upload/knowledge/deploy-console）
 ├── packages/        # 共享包（shared/types/shell-loader/mcp-core/ui/agent-core/kedou-agent）
 ├── scripts/         # 构建/部署/启动/验证脚本

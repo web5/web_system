@@ -345,3 +345,30 @@ cd "$SCRIPT_DIR/../servers/auth-service"
 | 无用依赖 | 确认每个依赖都被 import |
 | PM2 部署 | restart 而非 delete+start |
 | Docker | healthcheck + 不暴露敏感端口 + .dockerignore |
+| TypeORM 版本 | 锁 0.3.x（1.x 的 `CURRENT_TIMESTAMP(6)` 与 `datetime(0)` 冲突） |
+| 新增实体时间列 | 显式 `precision: 3` / DDL 用 `DATETIME(3)` |
+| DDL 字符集 | 不显式指定 COLLATE（`utf8mb4_0900_ai_ci` 在 5.7 不存在） |
+
+---
+
+## 八、数据层：TypeORM / MySQL 兼容坑（2026-09-17 补，来自 mp-platform 方案实测）
+
+### 8.1 TypeORM 锁 0.3.x，不要升 1.x
+
+- **现象**：TypeORM 1.1.x 的 `@CreateDateColumn` 会强制生成 `CURRENT_TIMESTAMP(6)`，与既有 `datetime(0)` 列冲突（synchronize / 迁移直接报错）。
+- **口径**：全仓锁 `typeorm@0.3.31`；新增实体时间列统一显式 `precision: 3`，DDL 统一 `DATETIME(3)`。
+
+### 8.2 实体必须配下划线命名策略
+
+- **现象**：驼峰属性映射不到下划线列（`authorizerRefreshToken` → `authorizer_refresh_token`），运行期报 `Unknown column`。
+- **口径**：复用 `@web-system/shared` 的 `SnakeNamingStrategy`（跨端配置收口铁律），禁止各服务自造一份。
+
+### 8.3 DDL 不要显式指定 COLLATE
+
+- **现象**：`utf8mb4_0900_ai_ci` 是 MySQL 8 独有，DDL 写死会让 5.7 环境建表失败（云实例已是 8.0.30-txsql，但本地/历史环境可能是 5.7）。
+- **口径**：DDL 不写 `COLLATE`，用库默认值；仅在确有排序需求时才显式指定。
+
+### 8.4 微信/第三方凭证必须字段级加密落库
+
+- **场景**：`component_verify_ticket`、`authorizer_refresh_token` 一类可长期冒用的凭证。
+- **口径**：落库前加密（`FIELD_ENCRYPT_KEY`，`openssl rand -hex 32` 生成）；**密钥丢失即不可恢复**（需重新扫码授权），必须写进运维预案；接口一律不回原文。
