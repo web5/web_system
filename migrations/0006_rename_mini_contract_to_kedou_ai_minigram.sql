@@ -2,7 +2,10 @@
 --
 -- 背景：apps/mini-contract 更名为 apps/kedou-ai-minigram（产品定位从「合同翻译官」扩展为「科豆 AI」多能力小程序：
 --       翻译 / 合同评估 / 对话 三 Tab）。发布平台按「key 与目录同名」约定同步改名。
--- 同步：scripts/modules.json 的 key / name / dir 已改（kedou-ai-minigram / 科豆 AI 小程序 / kedou-ai-minigram）。
+-- 同步：scripts/modules.json 的 key / name / dir / type 已改
+--       （kedou-ai-minigram / 科豆 AI 小程序 / kedou-ai-minigram / mini-app）。
+--       type 由 frontend 改为 mini-app：小程序构建是「用 miniprogram-ci 上传微信」，不是 vite 打包静态产物，
+--       类型对了才能命中 DEFAULT_BUILD_TEMPLATE['mini-app'] 的正确默认构建命令。
 -- 前置：0005 已执行（当前模块 key 为 'mini-contract'）。
 --
 -- 目标库：发布平台库（deploy-console 的 DB_NAME，本地默认 web_system_deploy；
@@ -21,7 +24,8 @@
 UPDATE deploy_modules
 SET `key` = 'kedou-ai-minigram',
     name  = '科豆 AI 小程序',
-    dir   = 'kedou-ai-minigram'
+    dir   = 'kedou-ai-minigram',
+    type  = 'mini-app'
 WHERE `key` = 'mini-contract';
 
 -- 2) 关联表：module_key
