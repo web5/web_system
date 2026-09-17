@@ -42,15 +42,17 @@
   前端：  <模块.deployRoot>/<版本引用>/    ← 切指针即可（网关按指针读）
 ```
 
-### 2.2 部署动作
+### 2.2 部署动作（UI：版本列表 → 选一条 → 部署）
 
 ```
-1) 列出产物：GET /deploy/artifacts?moduleKey&env&version
-   → 返回该版本目录下**相对模块根**的产物路径列表（dist/、index.js、static/…）
-2) 用户确认：在控制台选中"这次要发布的产物路径"（可记住为模块默认值）
-3) 执行部署：POST /deploy/deploy  { moduleKey, env, version, artifactPath }
+1) **版本列表**：GET /deploy/versions?moduleKey（含环境列与「当前生效」标记）
+   → UI 呈现为表格：版本引用 / 环境 / 构建时间 / 产物 / 状态 / 操作
+2) **选中一条** → 列出该版本下**相对模块根**的产物路径候选（dist/、index.js、static/…）
+   → 用户确认"这次要发布的产物路径"（可设为模块默认值；只有一个候选时自动预选）
+3) **执行部署**：POST /deploy/deploy  { moduleKey, env, version, artifactPath }
    → 后台：把 <产物区>/<artifactPath> 落到 <deployRoot>/dist + 重启
    → 前端：指针切到 <版本引用>（产物路径即版本目录，无需拷贝）
+   → 选中的是历史版本 = 一次**回滚**
 ```
 
 ## 3. 数据模型改动
@@ -150,5 +152,5 @@ CDN 下"产物路径"就是**对象前缀内的相对路径**（`index.js` / `di
 | 11 | ✅ **CDN 时 manifest 输出绝对 URL**（与 `entryUrl` 对上），本地/远程仍用相对路径 |
 
 另：开工顺序确认为 **M1（加 `deployRoot` 字段 + 回填）→ M2（平台按 模块根 + env 推导投递目标，旧变量双轨优先）**；
-实施前先出**模块原型交互稿**（模块部署设置 + 部署时选产物），见
+实施前先出**原型交互稿**（「环境设置」+「部署」两个 Tab），见
 `docs/ui/prototypes/module-deploy-target-prototype.html`。

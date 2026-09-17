@@ -51,8 +51,8 @@
   <div class="sub">对应设计：specs/deploy-console/artifact-path-and-deploy-model.md　·　2026-09-17　·　本稿只画「模块」相关交互</div>
 
   <div class="tabs">
-    <div class="tab on" id="t1" onclick="go(1)">① 模块部署设置</div>
-    <div class="tab" id="t2" onclick="go(2)">② 部署：选产物并确认</div>
+    <div class="tab on" id="t1" onclick="go(1)">① 环境设置</div>
+    <div class="tab" id="t2" onclick="go(2)">② 部署</div>
   </div>
 
   <!-- ============ Tab 1：模块部署设置 ============ -->
@@ -124,39 +124,37 @@
     </div>
   </div>
 
-  <!-- ============ Tab 2：部署：选产物并确认 ============ -->
+  <!-- ============ Tab 2：部署（版本列表 → 选一条 → 部署） ============ -->
   <div id="p2" style="display:none">
     <div class="card">
-      <h3><span class="step" id="s1">1</span>选环境 + 版本</h3>
-      <div class="grid">
-        <div class="f"><label>环境</label>
-          <select class="in" id="d-env" onchange="resetArtifact()">
-            <option value="local">本地环境（local）</option>
-            <option value="dev" selected>开发环境（dev）</option>
-            <option value="prod">生产环境（prod）</option>
-          </select>
-        </div>
-        <div class="f"><label>版本（版本引用）</label>
-          <select class="in mono" id="d-ver" onchange="resetArtifact()">
-            <option>gateway-dev/d8d7e2c</option>
-            <option>gateway-dev/91f744b</option>
-            <option>gateway-dev/3ac9f10</option>
-          </select>
-        </div>
+      <h3>版本列表</h3>
+      <div class="row" style="margin-bottom:10px">
+        <select class="in" id="d-filter" style="width:180px" onchange="renderVersions()">
+          <option value="">全部环境</option>
+          <option value="local">local</option>
+          <option value="dev">dev</option>
+          <option value="prod">prod</option>
+        </select>
+        <span class="muted" style="font-size:12.5px">选中一条记录 → 点「部署」</span>
       </div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" onclick="listArtifacts()">列出产物</button>
-        <span class="muted" style="font-size:12.5px" id="d-where"></span>
-      </div>
+      <table>
+        <thead><tr>
+          <th style="width:38px"></th><th>版本引用</th><th style="width:80px">环境</th>
+          <th style="width:150px">构建时间</th><th style="width:150px">产物</th>
+          <th style="width:110px">状态</th><th style="width:90px">操作</th>
+        </tr></thead>
+        <tbody id="d-rows"></tbody>
+      </table>
+      <div class="hint">列表来自「产物区」里该模块各环境的版本；<b>当前生效</b>的那条带标签 —— 点其他条即可回滚。</div>
     </div>
 
-    <div class="card" id="d-list" style="display:none">
+    <div class="card" id="d-artifact" style="display:none">
       <h3><span class="step" id="s2">2</span>确认要发布的产物（相对模块根）</h3>
       <table>
         <thead><tr><th style="width:36px"></th><th>产物路径</th><th style="width:110px">类型</th><th style="width:90px">大小</th></tr></thead>
-        <tbody id="d-rows"></tbody>
+        <tbody id="d-arts"></tbody>
       </table>
-      <div class="hint">列出的是该版本目录下的产物候选；<b>由你确认哪个是这次要发布的东西</b>（可设为模块默认值）。</div>
+      <div class="hint">列出的是该版本下的产物候选；<b>由你确认哪个是这次要发布的东西</b>（可设为模块默认值）。</div>
     </div>
 
     <div class="card" id="d-confirm" style="display:none">
@@ -164,7 +162,7 @@
       <pre id="d-plan"></pre>
       <div class="row" style="margin-top:12px">
         <button class="btn" onclick="doDeploy()">确认部署</button>
-        <button class="btn gray" onclick="resetArtifact()">取消</button>
+        <button class="btn gray" onclick="resetDeploy()">取消</button>
       </div>
       <div class="banner info" id="d-result" style="display:none"></div>
     </div>
@@ -209,63 +207,90 @@ function preview(){
     document.getElementById('pv-url').innerHTML='<br>访问 URL：<span class="path">/static/modules/gateway/&lt;版本&gt;/</span>（相对路径）';
   }
 }
-function listArtifacts(){
-  var v=document.getElementById('d-ver').value, env=document.getElementById('d-env').value;
-  document.getElementById('d-where').textContent='产物区：artifacts/gateway/'+env+'/'+v+'/';
-  document.getElementById('d-rows').innerHTML=ARTIFACTS[v].map(function(a,i){
-    return '<tr id="r'+i+'" onclick="pick('+i+')" style="cursor:pointer">'
-      +'<td><input type="radio" name="art" id="a'+i+'"></td><td class="mono">'+a[0]+'</td><td>'+a[1]+'</td><td>'+a[2]+'</td></tr>';
+var VERSIONS=[
+  {v:'gateway-dev/d8d7e2c',env:'dev',t:'2026-09-17 14:02',cur:true,
+   arts:[['dist/','构建产物目录','2.1 MB'],['static/','静态资源','640 KB'],['index.js','入口文件','1.2 MB']]},
+  {v:'gateway-dev/91f744b',env:'dev',t:'2026-09-16 10:31',cur:false,
+   arts:[['dist/','构建产物目录','2.0 MB'],['static/','静态资源','612 KB']]},
+  {v:'gateway-local/3ac9f10',env:'local',t:'2026-09-15 22:16',cur:false,
+   arts:[['dist/','构建产物目录','2.2 MB'],['sql/','数据库脚本','18 KB']]},
+  {v:'gateway-prod/a1b2c3d',env:'prod',t:'2026-09-14 09:00',cur:false,
+   arts:[['dist/','构建产物目录','2.1 MB']]}
+];
+var curVer=null, curArt=null;
+function renderVersions(){
+  var f=document.getElementById('d-filter').value;
+  var rows=VERSIONS.filter(function(x){return !f||x.env===f});
+  document.getElementById('d-rows').innerHTML=rows.map(function(x,i){
+    var real=VERSIONS.indexOf(x);
+    return '<tr id="v'+real+'" onclick="selectVersion('+real+')" class="'+(curVer===x.v?'sel':'')+'" style="cursor:pointer">'
+      +'<td><input type="radio" name="ver" id="b'+real+'" '+(curVer===x.v?'checked':'')+'></td>'
+      +'<td class="mono">'+x.v+'</td><td>'+x.env+'</td><td>'+x.t+'</td>'
+      +'<td class="mono muted">'+x.arts.map(function(a){return a[0]}).join(' ')+'</td>'
+      +'<td>'+(x.cur?'<span style="color:var(--ok);font-weight:600">当前生效</span>':'—')+'</td>'
+      +'<td><button class="btn ghost" style="padding:3px 10px" onclick="event.stopPropagation();selectVersion('+real+')">部署</button></td></tr>';
   }).join('');
-  document.getElementById('d-list').style.display='';
-  document.getElementById('d-confirm').style.display='none';
-  sel=null;
 }
-function pick(i){
-  sel=ARTIFACTS[document.getElementById('d-ver').value][i];
-  ARTIFACTS[document.getElementById('d-ver').value].forEach(function(_,j){
-    document.getElementById('r'+j).className=(j===i?'sel':'');
-    document.getElementById('a'+j).checked=(j===i);
+function selectVersion(i){
+  curVer=VERSIONS[i].v; curArt=null;
+  VERSIONS.forEach(function(_,j){
+    var tr=document.getElementById('v'+j), b=document.getElementById('b'+j);
+    if(tr) tr.className=(j===i?'sel':'');
+    if(b) b.checked=(j===i);
   });
-  renderPlan();
+  document.getElementById('d-arts').innerHTML=VERSIONS[i].arts.map(function(a,k){
+    return '<tr id="a'+k+'" onclick="pickArtifact('+k+')" style="cursor:pointer">'
+      +'<td><input type="radio" name="art" id="p'+k+'"></td><td class="mono">'+a[0]+'</td><td>'+a[1]+'</td><td>'+a[2]+'</td></tr>';
+  }).join('');
+  document.getElementById('d-artifact').style.display='';
+  document.getElementById('d-confirm').style.display='none';
+  document.getElementById('d-result').style.display='none';
+  // 只有一个候选时直接预选，减少一次点击
+  if(VERSIONS[i].arts.length===1) pickArtifact(0);
 }
-function renderPlan(){
-  var v=document.getElementById('d-ver').value, env=document.getElementById('d-env').value, p=sel[0];
-  var lines=[];
-  lines.push('# 部署计划（原型示意）');
-  lines.push('模块      gateway');
-  lines.push('环境      '+env);
-  lines.push('版本      '+v);
-  lines.push('产物路径  '+p);
-  lines.push('');
-  lines.push('将执行：');
-  lines.push('  1) 取产物  artifacts/gateway/'+env+'/'+v+'/'+p);
+function pickArtifact(k){
+  var v=VERSIONS.filter(function(x){return x.v===curVer})[0];
+  curArt=v.arts[k];
+  v.arts.forEach(function(_,j){
+    document.getElementById('a'+j).className=(j===k?'sel':'');
+    document.getElementById('p'+j).checked=(j===k);
+  });
+  renderPlan(v);
+}
+function renderPlan(v){
+  var p=curArt[0], env=v.env;
+  var root=document.getElementById('rootPath').value||'servers/gateway';
+  var lines=['# 部署计划（原型示意）','模块      gateway','环境      '+env,'版本      '+v.v,'产物路径  '+p,'','将执行：',
+    '  1) 取产物  artifacts/gateway/'+env+'/'+v.v+'/'+p];
   if(target==='cdn'){
-    lines.push('  2) 上传到  cdn://modules/gateway/'+v+'/'+p);
-    lines.push('  3) 切指针  deploy_deployments(gateway, '+env+') -> '+v);
-    lines.push('  4) 生效URL https://cdn.example.com/modules/gateway/'+v+'/index.js（绝对路径，无需 purge）');
+    lines.push('  2) 上传到  cdn://modules/gateway/'+v.v+'/'+p);
+    lines.push('  3) 切指针  deploy_deployments(gateway, '+env+') -> '+v.v);
+    lines.push('  4) 生效URL https://cdn.example.com/modules/gateway/'+v.v+'/index.js（绝对路径，无需 purge）');
   }else{
-    lines.push('  2) 落地到  '+(document.getElementById('rootPath').value||'servers/gateway')+'/dist');
+    lines.push('  2) 落地到  '+root+'/dist');
     lines.push('  3) 重启    pm2 restart web-gateway');
-    lines.push('  4) 切指针  deploy_deployments(gateway, '+env+') -> '+v);
+    lines.push('  4) 切指针  deploy_deployments(gateway, '+env+') -> '+v.v);
   }
   document.getElementById('d-plan').textContent=lines.join('\n');
   document.getElementById('d-confirm').style.display='';
 }
 function doDeploy(){
-  var r=document.getElementById('d-result');
-  r.style.display='';
+  var v=VERSIONS.filter(function(x){return x.v===curVer})[0];
+  var r=document.getElementById('d-result'); r.style.display='';
   r.innerHTML=target==='cdn'
     ? '✅ 已部署：上传完成 + 指针已切换（<b>绝对 URL 生效</b>，旧版本对象保留以便回滚）'
-    : '✅ 已部署：产物已落地 dist + 服务已重启 + 指针已切换（旧 dist 留有 dist.bak 备份）';
+    : '✅ 已部署：产物已落地 dist + 服务已重启 + 指针已切换（旧 dist 留有 dist.bak 备份）'
+      + (v.cur?'':'<br>（这是一次<b>回滚</b>：指针从当前版本切到 '+v.v+'）');
   toast('部署已提交（原型示意）');
 }
-function resetArtifact(){
-  document.getElementById('d-list').style.display='none';
+function resetDeploy(){
+  document.getElementById('d-artifact').style.display='none';
   document.getElementById('d-confirm').style.display='none';
   document.getElementById('d-result').style.display='none';
-  sel=null;
+  curVer=null; curArt=null; renderVersions();
 }
 setTarget('local');
+renderVersions();
 </script>
 </body>
 </html>
