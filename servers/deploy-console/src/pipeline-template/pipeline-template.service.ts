@@ -233,9 +233,9 @@ export class PipelineTemplateService {
    */
   async resolveForSubmit(
     moduleKey: string,
-    templateId?: string,
+    pipelineId?: string,
   ): Promise<DeployPipelineTemplateEntity> {
-    if (!templateId) {
+    if (!pipelineId) {
       const global = await this.findGlobal();
       if (!global) {
         throw new BadRequestException(
@@ -247,9 +247,9 @@ export class PipelineTemplateService {
       }
       return global;
     }
-    const tpl = await this.get(templateId);
+    const tpl = await this.get(pipelineId);
     if (tpl.moduleKey !== GLOBAL_TEMPLATE && tpl.moduleKey !== moduleKey) {
-      throw new BadRequestException(`模板 ${templateId} 不可用于模块 ${moduleKey}（仅全局或该模块专属）`);
+      throw new BadRequestException(`模板 ${pipelineId} 不可用于模块 ${moduleKey}（仅全局或该模块专属）`);
     }
     if (!tpl.enabled) {
       throw new BadRequestException(`模板「${tpl.name}」已停用，请启用或改选其他模板`);

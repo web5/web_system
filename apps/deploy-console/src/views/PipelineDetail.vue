@@ -3,10 +3,10 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
-  pipelineApi,
+  pipelineRunsApi,
   environmentApi,
   deployApi,
-  pipelineTemplateApi,
+  pipelinesApi,
   stageCommandApi,
   pipelineStepApi,
   pipelineVarApi,
@@ -106,7 +106,7 @@ const runOk = computed(() => history.value.filter((p) => p.status === 'succeeded
 
 async function loadTpl() {
   try {
-    const all = await pipelineTemplateApi.list()
+    const all = await pipelinesApi.list()
     const found = all.find((t) => t.id === tplId.value)
     if (!found) {
       message.error('流水线不存在或已被删除')
@@ -121,7 +121,7 @@ async function loadTpl() {
 async function loadHistory(limit = 200) {
   loading.value = true
   try {
-    history.value = await pipelineApi.list({ templateId: tplId.value, limit })
+    history.value = await pipelineRunsApi.list({ templateId: tplId.value, limit })
   } catch {
     message.error('加载执行记录失败')
   } finally {
@@ -153,7 +153,7 @@ async function loadSelectedRun() {
   let target = history.value.find((h) => h.id === targetId) || null
   if (!target) {
     try {
-      target = await pipelineApi.get(targetId)
+      target = await pipelineRunsApi.get(targetId)
     } catch {
       target = null
     }
@@ -206,7 +206,7 @@ async function pollTick() {
     return
   }
   const id = run.id
-  const fresh = await pipelineApi.get(id).catch(() => null)
+  const fresh = await pipelineRunsApi.get(id).catch(() => null)
   if (!fresh) {
     stopPolling()
     return
@@ -265,7 +265,7 @@ function handleRetry(p: PipelineItem) {
     cancelText: '取消',
     onOk: async () => {
       try {
-        const res = await pipelineApi.retry(p.id)
+        const res = await pipelineRunsApi.retry(p.id)
         message.success(`已重新提交: ${res.jobId}`)
         await afterChange()
       } catch (e: any) {
@@ -290,7 +290,7 @@ function handleCancel(p: PipelineItem) {
     cancelText: '返回',
     onOk: async () => {
       try {
-        await pipelineApi.cancel(p.id)
+        await pipelineRunsApi.cancel(p.id)
         message.success('已请求取消')
         await loadHistory(50)
       } catch {
@@ -308,7 +308,7 @@ async function handleRemove(p: PipelineItem) {
     cancelText: '返回',
     onOk: async () => {
       try {
-        await pipelineApi.remove(p.id)
+        await pipelineRunsApi.remove(p.id)
         message.success('已删除执行记录')
         await loadHistory(200)
         // 删除的恰好是当前查看实例 → 回落到最新一次
@@ -329,7 +329,7 @@ function handlePromote(p: PipelineItem) {
     cancelText: '取消',
     onOk: async () => {
       try {
-        await pipelineApi.promote(p.id)
+        await pipelineRunsApi.promote(p.id)
         message.success('已转全量')
         await loadHistory(50)
       } catch (e: any) {
@@ -348,7 +348,7 @@ const approverInfo = ref<{ users: { username: string; nickname?: string }[]; deg
 })
 async function loadApprovers() {
   try {
-    const r = await pipelineApi.approvers()
+    const r = await pipelineRunsApi.approvers()
     approverInfo.value = { users: r.users ?? [], degraded: !!r.degraded, reason: r.reason }
   } catch {
     approverInfo.value = { users: [], degraded: true, reason: '获取可审批人失败' }
@@ -373,14 +373,14 @@ async function submitReview() {
   reviewing.value = true
   try {
     if (review.value.action === 'approve') {
-      await pipelineApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
+      await pipelineRunsApi.approve(review.value.p.id, reviewComment.value.trim() || undefined)
       message.success(
         review.value.p.status === 'awaiting-approval'
           ? '已审批通过，从该节点之后继续执行'
           : '已审批通过，发布开始执行',
       )
     } else {
-      await pipelineApi.reject(review.value.p.id, reviewComment.value.trim())
+      await pipelineRunsApi.reject(review.value.p.id, reviewComment.value.trim())
       message.success('已拒绝该发布')
     }
     review.value = null
@@ -726,7 +726,7 @@ async function saveEditor() {
       defaultTarget: metaDraft.value.defaultTarget,
       nodes: nodeDraft.value,
     }
-    await pipelineTemplateApi.update(tplId.value, body)
+    await pipelinesApi.update(tplId.value, body)
     message.success('流水线已保存')
     editOpen.value = false
     await loadTpl()
@@ -776,7 +776,7 @@ async function loadModules() {
 }
 async function loadReleases() {
   try {
-    releases.value = await pipelineApi.releases(relForm.value.env, relForm.value.moduleKey)
+    releases.value = await pipelineRunsApi.releases(relForm.value.env, relForm.value.moduleKey)
   } catch {
     releases.value = []
   }
@@ -800,7 +800,7 @@ function submitRelease() {
   submitting.value = true
   const run = async () => {
     try {
-      const res = await pipelineApi.submit({
+      const res = await pipelineRunsApi.submit({
         env: relForm.value.env,
         moduleKey: relForm.value.moduleKey,
         branch: relForm.value.branch || 'master',

@@ -68,21 +68,21 @@ export class PipelineStepCommandService {
   ) {}
 
   /** 读取某流水线某节点 key 的完整配置（含 actions）；未配置返回 null */
-  async getRow(templateId: string, nodeKey: string): Promise<DeployPipelineStepCommandEntity | null> {
-    return this.repo.findOne({ where: { templateId, nodeKey } });
+  async getRow(pipelineId: string, nodeKey: string): Promise<DeployPipelineStepCommandEntity | null> {
+    return this.repo.findOne({ where: { pipelineId, nodeKey } });
   }
 
   /** 列出某流水线全部节点命令 */
-  async listByTemplate(templateId: string): Promise<DeployPipelineStepCommandEntity[]> {
-    return this.repo.find({ where: { templateId }, order: { nodeKey: 'ASC' } });
+  async listByTemplate(pipelineId: string): Promise<DeployPipelineStepCommandEntity[]> {
+    return this.repo.find({ where: { pipelineId }, order: { nodeKey: 'ASC' } });
   }
 
   /**
    * 解析某流水线某节点的操作序列（运行时执行入口）。
    * 空数组 = 该节点没有可执行操作（调用方按 optional 走跳过或 fail-fast）。
    */
-  async resolveActions(templateId: string, nodeKey: string): Promise<StepAction[]> {
-    const row = await this.repo.findOne({ where: { templateId, nodeKey, enabled: true } });
+  async resolveActions(pipelineId: string, nodeKey: string): Promise<StepAction[]> {
+    const row = await this.repo.findOne({ where: { pipelineId, nodeKey, enabled: true } });
     if (!row) return [];
     return pickStepActions(row);
   }
@@ -107,7 +107,7 @@ export class PipelineStepCommandService {
 
   /** 新增或更新节点命令 */
   async upsert(
-    templateId: string,
+    pipelineId: string,
     nodeKey: string,
     command: string,
     updatedBy?: string,
@@ -119,7 +119,7 @@ export class PipelineStepCommandService {
         `节点 ${nodeKey} 不可配置：${PLATFORM_RESERVED.join('/')} 为平台保留（发布语义真相源）`,
       );
     }
-    await this.assertNotLocked(templateId, nodeKey);
+    await this.assertNotLocked(pipelineId, nodeKey);
 
     const hasActions = !!(actions && actions.length);
     if (hasActions) {
@@ -135,9 +135,9 @@ export class PipelineStepCommandService {
       this.validate(command);
     }
 
-    let row = await this.repo.findOne({ where: { templateId, nodeKey } });
+    let row = await this.repo.findOne({ where: { pipelineId, nodeKey } });
     if (!row) {
-      row = this.repo.create({ templateId, nodeKey, command: command?.trim() || '', enabled: true });
+      row = this.repo.create({ pipelineId, nodeKey, command: command?.trim() || '', enabled: true });
     } else {
       row.command = command?.trim() || '';
       row.enabled = true;
@@ -155,9 +155,9 @@ export class PipelineStepCommandService {
   }
 
   /** 删除节点命令（该节点回落流程内置逻辑） */
-  async remove(templateId: string, nodeKey: string): Promise<void> {
-    await this.assertNotLocked(templateId, nodeKey);
-    await this.repo.delete({ templateId, nodeKey });
+  async remove(pipelineId: string, nodeKey: string): Promise<void> {
+    await this.assertNotLocked(pipelineId, nodeKey);
+    await this.repo.delete({ pipelineId, nodeKey });
   }
 
   /**
@@ -168,8 +168,8 @@ export class PipelineStepCommandService {
    * （如某个平台脚本节点）也需要通用机制。平台脚本的写入通道只有一条：
    * `PlatformScriptSeedService`（随代码同步）——"谁能改发布语义基线"要有唯一答案。
    */
-  private async assertNotLocked(templateId: string, nodeKey: string): Promise<void> {
-    const row = await this.repo.findOne({ where: { templateId, nodeKey } });
+  private async assertNotLocked(pipelineId: string, nodeKey: string): Promise<void> {
+    const row = await this.repo.findOne({ where: { pipelineId, nodeKey } });
     if (row?.locked) {
       throw new BadRequestException(
         `节点 ${nodeKey} 为平台托管（locked），不可编辑；如需变更请调整代码内置脚本（重启后自动同步）`,
