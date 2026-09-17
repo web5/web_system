@@ -45,7 +45,8 @@ const conn = await mysql.createConnection({
   port: Number(env.MYSQL_PORT || 3306),
   user: env.MYSQL_USER,
   password: env.MYSQL_PASSWORD,
-  database: env.MYSQL_DB,
+  // MYSQL_DB 可被环境变量覆盖：影子库演练时走 scripts/db-shadow.mjs run（真库不受影响）
+  database: process.env.MYSQL_DB || env.MYSQL_DB,
   connectTimeout: 10000,
 });
 
