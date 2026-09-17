@@ -1,9 +1,15 @@
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/geekwen/.workbuddy/binaries/node/workspace/');
-const puppeteer = require('puppeteer-core');
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DIR = '/Users/geekwen/workspace1/web_system/apps/kedou-ai-minigram/prototype';
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// 原型预览图生成（本机跑）：node prototype/_shot-border.mjs
+// CHROME_PATH 覆盖 Chrome 路径；PUPPETEER_CORE_ROOT 指定 puppeteer-core 解析根（项目未安装时）
+const DIR = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const puppeteer = process.env.PUPPETEER_CORE_ROOT
+  ? createRequire(join(process.env.PUPPETEER_CORE_ROOT, 'index.js'))('puppeteer-core')
+  : require('puppeteer-core');
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const jobs = [
   { file: 'quote-border.html', out: '引言边框-总览.png' },

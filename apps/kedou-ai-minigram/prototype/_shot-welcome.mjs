@@ -1,10 +1,18 @@
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/geekwen/.workbuddy/binaries/node/workspace/');
-const puppeteer = require('puppeteer-core');
-const DIR = '/Users/geekwen/workspace1/web_system/apps/kedou-ai-minigram/prototype';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// 原型预览图生成（本机跑）：node prototype/_shot-welcome.mjs
+// CHROME_PATH 覆盖 Chrome 路径；PUPPETEER_CORE_ROOT 指定 puppeteer-core 解析根（项目未安装时）
+const DIR = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const puppeteer = process.env.PUPPETEER_CORE_ROOT
+  ? createRequire(join(process.env.PUPPETEER_CORE_ROOT, 'index.js'))('puppeteer-core')
+  : require('puppeteer-core');
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const b = await puppeteer.launch({
-  executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  executablePath: CHROME,
   headless: 'new',
   args: ['--no-proxy-server', '--hide-scrollbars'],
 });

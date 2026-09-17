@@ -7,7 +7,7 @@
 
 ```
 web_system/
-├── apps/        前端：shell(基座) / admin / portal / deploy-console(独立 SPA) / mini-contract(小程序)
+├── apps/        前端：shell(基座) / admin / portal / deploy-console(独立 SPA) / kedou-ai-minigram(小程序)
 ├── servers/     后端微服务：gateway auth user ai ai-agent system todo mcp-gateway content-hub upload deploy-console
 ├── packages/    共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── docs/        人读文档（架构 / 开发 / UI / 产品 / 发布）
@@ -22,7 +22,7 @@ web_system/
 | 领域 | 全栈 AI 产品平台（微信小程序 + Web 管理端 + AI Agent 运行时） |
 | 前端 | Vue3 + Vite + Pinia + Ant Design Vue 4.x；微前端：shell 基座 + `shell-loader` 动态加载模块 |
 | 后端 | NestJS 10 + TypeORM + MySQL（本地）/ PostgreSQL（生产）；每服务独立数据库，TS strict |
-| 小程序 | 微信原生 + TypeScript（`apps/mini-contract`） |
+| 小程序 | 微信原生 + TypeScript（`apps/kedou-ai-minigram`） |
 | 数据库 | `web_system`（业务）、`web_system_deploy`（发布平台，含微前端版本表 `deploy_deployments`） |
 | 部署 | pm2（进程名 `web-*`）+ Nginx + 自研发布平台 deploy-console |
 | 包管理 | pnpm workspace |

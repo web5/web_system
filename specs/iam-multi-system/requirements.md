@@ -1,7 +1,7 @@
 # 需求 · 统一账号与系统隔离（IAM 一期）
 
 > 状态：**待确认**（2026-09-14）
-> 上游：`brainstorm.md`（方案 A + 最小 B）。用户四项答复：①先 A 后 B；②**C 端用户必须与运营/运维彻底隔离**；③系统清单 = admin（运营）/ deploy-console（运维）/ portal（C 端，含 mini-contract）；④接受废弃 `.env` 的 `ADMIN_PASS`。
+> 上游：`brainstorm.md`（方案 A + 最小 B）。用户四项答复：①先 A 后 B；②**C 端用户必须与运营/运维彻底隔离**；③系统清单 = admin（运营）/ deploy-console（运维）/ portal（C 端，含 kedou-ai-minigram）；④接受废弃 `.env` 的 `ADMIN_PASS`。
 
 ---
 

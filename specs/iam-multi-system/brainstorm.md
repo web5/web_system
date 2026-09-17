@@ -77,7 +77,7 @@
 
 - [ ] portal 的 C 端用户（`wx_*` / `mp_contract_*`）是否必须与运营/运维用户彻底隔离？（决定 A 够不够，还是必须 B）
 - [ ] console 是否接受"可用性依赖 user-service"？（若不接受，需要本地缓存登录态/降级方案）
-- [ ] 内部"系统"清单怎么定：`admin`（运营）、`deploy-console`（运维）、`portal`（C 端）、`mini-contract`？还有别的吗？
+- [ ] 内部"系统"清单怎么定：`admin`（运营）、`deploy-console`（运维）、`portal`（C 端）、`kedou-ai-minigram`？还有别的吗？
 - [ ] 是否接受 console 用 admin 系统的账号登录（废弃 `.env` 的 `ADMIN_PASS`）？
 
 ---
