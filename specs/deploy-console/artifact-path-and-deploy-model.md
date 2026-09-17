@@ -42,15 +42,17 @@
   前端：  <模块.deployRoot>/<版本引用>/    ← 切指针即可（网关按指针读）
 ```
 
-### 2.2 部署动作
+### 2.2 部署动作（UI：版本列表 → 选一条 → 部署）
 
 ```
-1) 列出产物：GET /deploy/artifacts?moduleKey&env&version
-   → 返回该版本目录下**相对模块根**的产物路径列表（dist/、index.js、static/…）
-2) 用户确认：在控制台选中"这次要发布的产物路径"（可记住为模块默认值）
-3) 执行部署：POST /deploy/deploy  { moduleKey, env, version, artifactPath }
+1) **版本列表**：GET /deploy/versions?moduleKey（含环境列与「当前生效」标记）
+   → UI 呈现为表格：版本引用 / 环境 / 构建时间 / 产物 / 状态 / 操作
+2) **选中一条** → 列出该版本下**相对模块根**的产物路径候选（dist/、index.js、static/…）
+   → 用户确认"这次要发布的产物路径"（可设为模块默认值；只有一个候选时自动预选）
+3) **执行部署**：POST /deploy/deploy  { moduleKey, env, version, artifactPath }
    → 后台：把 <产物区>/<artifactPath> 落到 <deployRoot>/dist + 重启
    → 前端：指针切到 <版本引用>（产物路径即版本目录，无需拷贝）
+   → 选中的是历史版本 = 一次**回滚**
 ```
 
 ## 3. 数据模型改动
@@ -140,3 +142,15 @@ CDN 下"产物路径"就是**对象前缀内的相对路径**（`index.js` / `di
 9. **CDN 是否在本次范围**：先用 local-dir / remote-dir 落地，CDN 留到 M3 之后作为第三种 target？
 10. **CDN 凭据放哪**：确认走配置中心（不在模块表存密钥）
 11. **入口 URL 形态**：manifest 注入相对路径 vs 绝对 CDN URL（涉及 `entryUrl` 字段与 shell 基座取值）
+
+### 已拍板（2026-09-17）
+
+| # | 决策 |
+|---|---|
+| 9 | ✅ **CDN 不在本次范围**：先落 `local-dir` / `remote-dir`，CDN 作为 M3 之后的第三种 target |
+| 10 | ✅ **凭据走配置中心**，模块表不存密钥 |
+| 11 | ✅ **CDN 时 manifest 输出绝对 URL**（与 `entryUrl` 对上），本地/远程仍用相对路径 |
+
+另：开工顺序确认为 **M1（加 `deployRoot` 字段 + 回填）→ M2（平台按 模块根 + env 推导投递目标，旧变量双轨优先）**；
+实施前先出**原型交互稿**（「环境设置」+「部署」两个 Tab），见
+`docs/ui/prototypes/module-deploy-target-prototype.html`。
