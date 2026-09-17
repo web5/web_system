@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { artifactsDir, deployRootAbs, deployTargetAbs } from './release-paths';
 import {
   resolveStageCwd,
   isDeletablePipeline,
@@ -270,5 +271,43 @@ describe('resolveStageVars（阶段命令变量）', () => {
   it('删除策略缺省为 mv（规避批量删除审批，不写死在平台代码里）', () => {
     const v = resolveStageVars({ env: 'dev', moduleKey: 'admin', releaseWorkspace: ws });
     expect(v.WS_SAFE_DELETE).toBe('mv');
+  });
+});
+
+describe('M2 部署目标推导（模块自持 deployRoot，环境只分层）', () => {
+  const ws = '/ws';
+  it('产物区 = <ws>/artifacts/<module>/<env>/<版本>', () => {
+    expect(artifactsDir(ws, 'gateway', 'dev', 'gateway-dev/abc1234')).toBe(
+      '/ws/artifacts/gateway/dev/gateway-dev/abc1234',
+    );
+  });
+  it('部署目标 = <ws>/<deployRoot>/<默认产物>', () => {
+    expect(deployTargetAbs(ws, 'servers/gateway', 'dist/')).toBe('/ws/servers/gateway/dist');
+  });
+  it('前端类无默认产物 → 部署目标就是根本身（切指针）', () => {
+    expect(deployTargetAbs(ws, 'servers/gateway/public/static/modules/admin', null)).toBe(
+      '/ws/servers/gateway/public/static/modules/admin',
+    );
+  });
+  it('未配 deployRoot → 返回空串（调用方回退旧的流水线变量，双轨零破坏）', () => {
+    expect(deployTargetAbs(ws, undefined, 'dist/')).toBe('');
+    expect(deployRootAbs(ws, undefined)).toBe(ws);
+  });
+  it('注入新变量且不覆盖旧变量（旧模板行为不变）', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'gateway',
+      moduleType: 'backend',
+      dir: 'gateway',
+      deployRoot: 'servers/gateway',
+      defaultArtifactPath: 'dist/',
+      stage: 'release',
+      commitId: 'gateway-dev/abc1234',
+      releaseWorkspace: ws,
+      pipelineVars: { PUBLISH_PATH: '/legacy/path' },
+    });
+    expect(v.PUBLISH_PATH).toBe('/legacy/path');
+    expect(v.ARTIFACTS_DIR).toBe('/ws/artifacts/gateway/dev/gateway-dev/abc1234');
+    expect(v.DEPLOY_TARGET).toBe('/ws/servers/gateway/dist');
   });
 });
