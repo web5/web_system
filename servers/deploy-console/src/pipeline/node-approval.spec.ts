@@ -144,7 +144,7 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
     id: 'p1',
     env: 'local',
     moduleKey: 'todo-service',
-    templateId: 'tpl1',
+    pipelineId: 'tpl1',
     templateName: '测试模板',
     mode: 'direct',
     status: 'pending',

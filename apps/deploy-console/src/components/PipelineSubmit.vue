@@ -7,10 +7,10 @@
 import { ref, computed, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
-  pipelineApi,
+  pipelineRunsApi,
   environmentApi,
   deployApi,
-  pipelineTemplateApi,
+  pipelinesApi,
   type PipelineTemplate,
 } from '@/api'
 import BranchSelect from '@/components/BranchSelect.vue'
@@ -85,7 +85,7 @@ async function loadModules() {
 async function loadTemplates() {
   availTemplates.value = []
   try {
-    const all = await pipelineTemplateApi.list(form.value.moduleKey)
+    const all = await pipelinesApi.list(form.value.moduleKey)
     // 一致性（2026-09-15）：一条流水线只属于一个环境，下拉里只给当前环境的流水线 ——
     // 否则会提交出「env=dev 却跑 admin-local 流水线」这种错配实例（后端也已强校验）。
     availTemplates.value = (all || []).filter((t: any) => !t.env || t.env === form.value.env)
@@ -104,7 +104,7 @@ async function loadTemplates() {
 }
 async function loadReleases() {
   try {
-    releases.value = await pipelineApi.releases(form.value.env, form.value.moduleKey)
+    releases.value = await pipelineRunsApi.releases(form.value.env, form.value.moduleKey)
   } catch {
     releases.value = []
   }
@@ -173,7 +173,7 @@ function doSubmit(confirm: boolean) {
   const run = async () => {
     try {
       const rule = buildGrayscaleRule()
-      const res = await pipelineApi.submit({
+      const res = await pipelineRunsApi.submit({
         env: form.value.env,
         moduleKey: form.value.moduleKey,
         branch: form.value.branch || 'master',
