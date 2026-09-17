@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>模块部署目标 · 原型交互稿</title>
+<style>
+  :root{
+    --brand:#3b6ef6; --brand-50:#eef3ff; --text:#1f2329; --text2:#5c6270; --text3:#8a90a0;
+    --border:#e5e8ef; --bg:#f5f7fb; --surface:#fff; --ok:#16a34a; --warn:#d97706;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.55 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:var(--bg)}
+  .wrap{max-width:960px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--text3);font-size:12.5px;margin-bottom:18px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px}
+  .tab{padding:8px 14px;cursor:pointer;font-size:13.5px;color:var(--text2);border-bottom:2px solid transparent}
+  .tab.on{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+  .card h3{margin:0 0 12px;font-size:14.5px}
+  .radio-group{display:flex;gap:8px;flex-wrap:wrap}
+  .radio{padding:6px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--surface);font-size:13px;color:var(--text2)}
+  .radio.on{border-color:var(--brand);color:var(--brand);background:var(--brand-50);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin-top:12px}
+  .f label{display:block;font-size:12px;color:var(--text3);margin-bottom:4px}
+  .in{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font:inherit;background:var(--surface)}
+  .in:disabled{background:#fafbfc;color:var(--text3)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .btn{padding:7px 14px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:6px;cursor:pointer;font:inherit}
+  .btn.ghost{background:var(--surface);color:var(--brand)}
+  .btn.gray{background:var(--surface);color:var(--text2);border-color:var(--border)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{border-bottom:1px solid var(--border);padding:8px 6px;text-align:left}
+  th{color:var(--text3);font-weight:500;font-size:12px}
+  tr.sel{background:var(--brand-50)}
+  .hint{color:var(--text3);font-size:12.5px;margin-top:10px}
+  .banner{padding:10px 12px;border-radius:8px;font-size:12.5px;margin-top:12px}
+  .banner.info{background:var(--brand-50);color:#28408a}
+  .banner.warn{background:#fff7e6;color:#8a5a00}
+  .path{font-family:ui-monospace,Menlo,monospace;background:#f2f4f8;padding:2px 6px;border-radius:4px;font-size:12.5px}
+  .step{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;align-items:center;justify-content:center;font-size:12px;margin-right:6px}
+  .step.off{background:#c9cfdb}
+  pre{background:#f7f8fa;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;overflow:auto;margin:10px 0 0}
+  .muted{color:var(--text3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>模块部署目标 · 原型交互稿</h1>
+  <div class="sub">对应设计：specs/deploy-console/artifact-path-and-deploy-model.md　·　2026-09-17　·　本稿只画「模块」相关交互</div>
+
+  <div class="tabs">
+    <div class="tab on" id="t1" onclick="go(1)">① 环境设置</div>
+    <div class="tab" id="t2" onclick="go(2)">② 部署</div>
+  </div>
+
+  <!-- ============ Tab 1：模块部署设置 ============ -->
+  <div id="p1">
+    <div class="card">
+      <h3>模块</h3>
+      <div class="grid">
+        <div class="f"><label>模块名</label><input class="in" value="网关 Gateway" disabled></div>
+        <div class="f"><label>模块 key</label><input class="in mono" value="gateway" disabled></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>部署目标</h3>
+      <div class="radio-group">
+        <div class="radio on" id="dt-local" onclick="setTarget('local')">本地目录 local-dir</div>
+        <div class="radio" id="dt-remote" onclick="setTarget('remote')">远程目录 remote-dir</div>
+        <div class="radio" id="dt-cdn" onclick="setTarget('cdn')">CDN（对象存储）</div>
+      </div>
+
+      <!-- 本地 / 远程：目录形态 -->
+      <div class="grid" id="box-dir">
+        <div class="f"><label>部署根路径（相对发布目录根）</label>
+          <input class="in mono" id="rootPath" value="servers/gateway" oninput="preview()">
+        </div>
+        <div class="f" id="f-host" style="display:none"><label>目标机</label>
+          <input class="in" value="来自「环境管理」· dev-default（106.52.176.246）" disabled>
+        </div>
+      </div>
+
+      <!-- CDN：对象存储形态 -->
+      <div class="grid" id="box-cdn" style="display:none">
+        <div class="f"><label>对象前缀 prefix</label><input class="in mono" value="modules/gateway/" oninput="preview()"></div>
+        <div class="f"><label>访问域名 baseUrl</label><input class="in mono" value="https://cdn.example.com" oninput="preview()"></div>
+        <div class="f"><label>Bucket / Region</label><input class="in mono" value="web-system-1250000000 / ap-guangzhou"></div>
+        <div class="f"><label>凭据（SecretId / SecretKey）</label>
+          <input class="in" value="不在这里配置 —— 走配置中心" disabled>
+        </div>
+      </div>
+
+      <div class="banner warn" id="cdn-tip" style="display:none">
+        CDN 仅适用于<b>前端类 / 静态产物</b>（服务代码不能放 CDN 跑）；后台服务请选本地目录或远程目录。
+      </div>
+
+      <div class="banner info">
+        产物区（流水线投递到这里，<b>不直接生效</b>）：
+        <span class="path" id="pv-artifact">artifacts/gateway/&lt;env&gt;/&lt;版本&gt;/</span>
+        <br>
+        部署目标（模块自持，选中产物后落到这里）：
+        <span class="path" id="pv-deploy">servers/gateway/dist</span>
+        <span id="pv-url"></span>
+      </div>
+      <div class="hint">路径按「模块根 + 环境」自动推导 —— 不用再为每个环境配 3 套 PUBLISH_PATH / HOST / USER 变量。</div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="btn" onclick="toast('已保存模块部署设置（原型示意）')">保存</button>
+        <button class="btn gray" onclick="resetTarget()">重置</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>设计要点（本稿要确认的）</h3>
+      <div class="hint">
+        1. 部署目标是<b>模块的自有属性</b>，环境不参与路径决策 —— 所以一条流水线可以跑多个环境。<br>
+        2. 产物先入「产物区」，部署时才落到「部署目标」—— 产出与生效解耦。<br>
+        3. CDN 时不填密钥，凭据走配置中心；manifest 输出<b>绝对 URL</b>（本地/远程仍相对路径）。<br>
+        4. 产物 URL 含版本号 → 天然避缓存，切指针即生效，<b>无需 purge</b>。
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 2：部署（版本列表 → 选一条 → 部署） ============ -->
+  <div id="p2" style="display:none">
+    <div class="card">
+      <h3>版本列表</h3>
+      <div class="row" style="margin-bottom:10px">
+        <select class="in" id="d-filter" style="width:180px" onchange="renderVersions()">
+          <option value="">全部环境</option>
+          <option value="local">local</option>
+          <option value="dev">dev</option>
+          <option value="prod">prod</option>
+        </select>
+        <span class="muted" style="font-size:12.5px">选中一条记录 → 点「部署」</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:38px"></th><th>版本引用</th><th style="width:80px">环境</th>
+          <th style="width:150px">构建时间</th><th style="width:150px">产物</th>
+          <th style="width:110px">状态</th><th style="width:90px">操作</th>
+        </tr></thead>
+        <tbody id="d-rows"></tbody>
+      </table>
+      <div class="hint">列表来自「产物区」里该模块各环境的版本；<b>当前生效</b>的那条带标签 —— 点其他条即可回滚。</div>
+    </div>
+
+    <div class="card" id="d-artifact" style="display:none">
+      <h3><span class="step" id="s2">2</span>确认要发布的产物（相对模块根）</h3>
+      <table>
+        <thead><tr><th style="width:36px"></th><th>产物路径</th><th style="width:110px">类型</th><th style="width:90px">大小</th></tr></thead>
+        <tbody id="d-arts"></tbody>
+      </table>
+      <div class="hint">列出的是该版本下的产物候选；<b>由你确认哪个是这次要发布的东西</b>（可设为模块默认值）。</div>
+    </div>
+
+    <div class="card" id="d-confirm" style="display:none">
+      <h3><span class="step" id="s3">3</span>确认部署</h3>
+      <pre id="d-plan"></pre>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" onclick="doDeploy()">确认部署</button>
+        <button class="btn gray" onclick="resetDeploy()">取消</button>
+      </div>
+      <div class="banner info" id="d-result" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" style="display:none;position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#1f2329;color:#fff;padding:9px 16px;border-radius:6px;font-size:13px;z-index:9"></div>
+
+<script>
+var target='local', sel=null;
+var ARTIFACTS={
+  'gateway-dev/d8d7e2c':[['dist/','构建产物目录','2.1 MB'],['static/','静态资源','640 KB'],['index.js','入口文件','1.2 MB']],
+  'gateway-dev/91f744b':[['dist/','构建产物目录','2.0 MB'],['static/','静态资源','612 KB']],
+  'gateway-dev/3ac9f10':[['dist/','构建产物目录','2.2 MB'],['sql/','数据库脚本','18 KB']]
+};
+function go(n){
+  document.getElementById('t1').className='tab'+(n===1?' on':'');
+  document.getElementById('t2').className='tab'+(n===2?' on':'');
+  document.getElementById('p1').style.display=n===1?'':'none';
+  document.getElementById('p2').style.display=n===2?'':'none';
+}
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='';setTimeout(function(){t.style.display='none'},1800)}
+function setTarget(t){
+  target=t;
+  ['local','remote','cdn'].forEach(function(k){document.getElementById('dt-'+k).className='radio'+(t===k?' on':'')});
+  document.getElementById('box-dir').style.display=t==='cdn'?'none':'';
+  document.getElementById('box-cdn').style.display=t==='cdn'?'':'none';
+  document.getElementById('cdn-tip').style.display=t==='cdn'?'':'none';
+  document.getElementById('f-host').style.display=t==='remote'?'':'none';
+  preview();
+}
+function resetTarget(){setTarget('local')}
+function preview(){
+  var env='&lt;env&gt;', art='artifacts/gateway/'+env+'/&lt;版本&gt;/';
+  document.getElementById('pv-artifact').textContent=art;
+  if(target==='cdn'){
+    var base=document.querySelector('#box-cdn input[value^="https"]').value||'https://cdn.example.com';
+    document.getElementById('pv-deploy').textContent='（对象存储，无目录）';
+    document.getElementById('pv-url').innerHTML='<br>访问 URL：<span class="path">'+base+'/modules/gateway/&lt;版本&gt;/index.js</span>（<b>绝对 URL</b>）';
+  }else{
+    document.getElementById('pv-deploy').textContent=(document.getElementById('rootPath').value||'servers/gateway')+'/dist';
+    document.getElementById('pv-url').innerHTML='<br>访问 URL：<span class="path">/static/modules/gateway/&lt;版本&gt;/</span>（相对路径）';
+  }
+}
+var VERSIONS=[
+  {v:'gateway-dev/d8d7e2c',env:'dev',t:'2026-09-17 14:02',cur:true,
+   arts:[['dist/','构建产物目录','2.1 MB'],['static/','静态资源','640 KB'],['index.js','入口文件','1.2 MB']]},
+  {v:'gateway-dev/91f744b',env:'dev',t:'2026-09-16 10:31',cur:false,
+   arts:[['dist/','构建产物目录','2.0 MB'],['static/','静态资源','612 KB']]},
+  {v:'gateway-local/3ac9f10',env:'local',t:'2026-09-15 22:16',cur:false,
+   arts:[['dist/','构建产物目录','2.2 MB'],['sql/','数据库脚本','18 KB']]},
+  {v:'gateway-prod/a1b2c3d',env:'prod',t:'2026-09-14 09:00',cur:false,
+   arts:[['dist/','构建产物目录','2.1 MB']]}
+];
+var curVer=null, curArt=null;
+function renderVersions(){
+  var f=document.getElementById('d-filter').value;
+  var rows=VERSIONS.filter(function(x){return !f||x.env===f});
+  document.getElementById('d-rows').innerHTML=rows.map(function(x,i){
+    var real=VERSIONS.indexOf(x);
+    return '<tr id="v'+real+'" onclick="selectVersion('+real+')" class="'+(curVer===x.v?'sel':'')+'" style="cursor:pointer">'
+      +'<td><input type="radio" name="ver" id="b'+real+'" '+(curVer===x.v?'checked':'')+'></td>'
+      +'<td class="mono">'+x.v+'</td><td>'+x.env+'</td><td>'+x.t+'</td>'
+      +'<td class="mono muted">'+x.arts.map(function(a){return a[0]}).join(' ')+'</td>'
+      +'<td>'+(x.cur?'<span style="color:var(--ok);font-weight:600">当前生效</span>':'—')+'</td>'
+      +'<td><button class="btn ghost" style="padding:3px 10px" onclick="event.stopPropagation();selectVersion('+real+')">部署</button></td></tr>';
+  }).join('');
+}
+function selectVersion(i){
+  curVer=VERSIONS[i].v; curArt=null;
+  VERSIONS.forEach(function(_,j){
+    var tr=document.getElementById('v'+j), b=document.getElementById('b'+j);
+    if(tr) tr.className=(j===i?'sel':'');
+    if(b) b.checked=(j===i);
+  });
+  document.getElementById('d-arts').innerHTML=VERSIONS[i].arts.map(function(a,k){
+    return '<tr id="a'+k+'" onclick="pickArtifact('+k+')" style="cursor:pointer">'
+      +'<td><input type="radio" name="art" id="p'+k+'"></td><td class="mono">'+a[0]+'</td><td>'+a[1]+'</td><td>'+a[2]+'</td></tr>';
+  }).join('');
+  document.getElementById('d-artifact').style.display='';
+  document.getElementById('d-confirm').style.display='none';
+  document.getElementById('d-result').style.display='none';
+  // 只有一个候选时直接预选，减少一次点击
+  if(VERSIONS[i].arts.length===1) pickArtifact(0);
+}
+function pickArtifact(k){
+  var v=VERSIONS.filter(function(x){return x.v===curVer})[0];
+  curArt=v.arts[k];
+  v.arts.forEach(function(_,j){
+    document.getElementById('a'+j).className=(j===k?'sel':'');
+    document.getElementById('p'+j).checked=(j===k);
+  });
+  renderPlan(v);
+}
+function renderPlan(v){
+  var p=curArt[0], env=v.env;
+  var root=document.getElementById('rootPath').value||'servers/gateway';
+  var lines=['# 部署计划（原型示意）','模块      gateway','环境      '+env,'版本      '+v.v,'产物路径  '+p,'','将执行：',
+    '  1) 取产物  artifacts/gateway/'+env+'/'+v.v+'/'+p];
+  if(target==='cdn'){
+    lines.push('  2) 上传到  cdn://modules/gateway/'+v.v+'/'+p);
+    lines.push('  3) 切指针  deploy_deployments(gateway, '+env+') -> '+v.v);
+    lines.push('  4) 生效URL https://cdn.example.com/modules/gateway/'+v.v+'/index.js（绝对路径，无需 purge）');
+  }else{
+    lines.push('  2) 落地到  '+root+'/dist');
+    lines.push('  3) 重启    pm2 restart web-gateway');
+    lines.push('  4) 切指针  deploy_deployments(gateway, '+env+') -> '+v.v);
+  }
+  document.getElementById('d-plan').textContent=lines.join('\n');
+  document.getElementById('d-confirm').style.display='';
+}
+function doDeploy(){
+  var v=VERSIONS.filter(function(x){return x.v===curVer})[0];
+  var r=document.getElementById('d-result'); r.style.display='';
+  r.innerHTML=target==='cdn'
+    ? '✅ 已部署：上传完成 + 指针已切换（<b>绝对 URL 生效</b>，旧版本对象保留以便回滚）'
+    : '✅ 已部署：产物已落地 dist + 服务已重启 + 指针已切换（旧 dist 留有 dist.bak 备份）'
+      + (v.cur?'':'<br>（这是一次<b>回滚</b>：指针从当前版本切到 '+v.v+'）');
+  toast('部署已提交（原型示意）');
+}
+function resetDeploy(){
+  document.getElementById('d-artifact').style.display='none';
+  document.getElementById('d-confirm').style.display='none';
+  document.getElementById('d-result').style.display='none';
+  curVer=null; curArt=null; renderVersions();
+}
+setTarget('local');
+renderVersions();
+</script>
+</body>
+</html>
