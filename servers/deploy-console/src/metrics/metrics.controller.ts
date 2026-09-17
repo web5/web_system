@@ -13,7 +13,7 @@ function toNumber(v: unknown, name: string): number | undefined {
 /**
  * 发布度量（仅控制台 JWT 可访问）。
  *
- * 数据全部来自 `deploy_pipelines` 的聚合——流水线本身已完整记录
+ * 数据全部来自 `deploy_pipeline_runs` 的聚合——流水线本身已完整记录
  * status / stage / 起止时间，不需要额外埋点。
  */
 @ApiTags('发布度量')
