@@ -33,7 +33,7 @@ export type PipelineMode = 'direct' | 'grayscale';
  * 与 deploy_tasks 的区别：deploy_tasks 是脚本级任务（build/deploy/rollback），
  * deploy_pipelines 是发布流程级任务，带阶段进度与灰度语义。
  */
-@Entity('deploy_pipelines')
+@Entity('deploy_pipeline_runs')
 export class DeployPipelineEntity extends AbstractEntity {
   @PrimaryColumn({ type: 'varchar', length: 64, comment: '流水线 ID（${Date.now()}-${rand}）' })
   id: string;
