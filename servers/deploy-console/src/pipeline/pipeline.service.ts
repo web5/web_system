@@ -95,6 +95,26 @@ export function resolveStageCwd(ws: string, moduleType?: string, dir?: string): 
 }
 
 /**
+ * 删除构建产物目录（**纯函数，便于单测**；P0-2，2026-09-17）。
+ *
+ * 根因事故：后台服务 tsconfig 开 `incremental`，`dist` 被清理后只剩 `tsconfig.tsbuildinfo`
+ * → tsc 判定"已是最新"只更新 tsbuildinfo、不产出 JS → 版本目录空壳 → 落地后服务变砖。
+ * 构建前删掉整个产物目录即可保证全量重编。
+ *
+ * 失败不抛错：清理只是预防手段，落地环节还有 `assertArtifactUsable()` 兜底。
+ */
+export function cleanBuildOutputDir(outDir?: string): { cleaned: boolean; error?: string } {
+  if (!outDir) return { cleaned: false };
+  try {
+    if (!fs.existsSync(outDir)) return { cleaned: false };
+    fs.rmSync(outDir, { recursive: true, force: true });
+    return { cleaned: true };
+  } catch (e) {
+    return { cleaned: false, error: (e as Error).message };
+  }
+}
+
+/**
  * 执行记录「删除」状态门禁（纯函数，防回归测试）。
  *
  * 删除 = 纯清理记录（不动版本指针/产物），仅终态（成功/失败/取消）可删；
@@ -1695,6 +1715,32 @@ export class PipelineService {
    * @param progressStage 进度/日志/结果文件沿用执行计划里的阶段名（legacy 为 `'pull'`，v5 为节点 key）
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
+  /**
+   * 构建前清空产物目录（P0-2，2026-09-17）。
+   *
+   * 根因事故（09-15）：后台服务 `tsconfig.json` 开了 `"incremental": true`，
+   * 而 `dist` 曾被清理过、只留下 `tsconfig.tsbuildinfo` → 再次 `tsc` 读到 tsbuildinfo
+   * 判定「已是最新」，**只更新 tsbuildinfo、不产出 JS** → 版本目录是空壳 →
+   * 落地到 `dist` 后服务缺入口直接变砖（守门见 `deploy.service.assertArtifactUsable()`）。
+   *
+   * 处置：build 节点执行前把 `BUILD_OUTPUT_DIR` 整个删掉，保证每次都是全量构建
+   * （前端 vite 默认也会 emptyOutDir，删了对它无副作用）。
+   * 清理失败**不阻断**构建 —— 落地环节还有守卫兜底。
+   */
+  private async cleanBuildOutput(p: DeployPipelineEntity, outDir?: string): Promise<void> {
+    if (!outDir) return;
+    const r = cleanBuildOutputDir(outDir);
+    if (r.cleaned) {
+      p.logs = [
+        ...(p.logs ?? []),
+        `[build] 已清空产物目录 ${outDir}（避免 tsc incremental 复用残留 tsbuildinfo 导致不产出）`,
+      ];
+      await this.save(p);
+    } else if (r.error) {
+      p.logs = [...(p.logs ?? []), `[build] 清空产物目录失败（忽略，继续构建）：${r.error}`];
+    }
+  }
+
   private async runStageCommand(
     p: DeployPipelineEntity,
     nodeKey: string,
@@ -1745,6 +1791,9 @@ export class PipelineService {
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.templateId),
     });
+    // P0-2（2026-09-17）：构建前清空产物目录 —— 详见 cleanBuildOutput() 注释
+    if (nodeKey === 'build') await this.cleanBuildOutput(p, env.BUILD_OUTPUT_DIR);
+
     // 平台自调用凭据：发布节点脚本要「调用写版本接口」（脚本里无用户 JWT）
     // 见 deploy/internal-release.controller.ts —— 走 x-internal-key 内部密钥
     // 默认地址：console 自身监听端口（PLATFORM_PORT，缺省 6200）
