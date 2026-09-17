@@ -15,6 +15,7 @@ import { CheckExecutor } from './steps/check.executor';
 import { PullExecutor } from './steps/pull.executor';
 import { UploadExecutor } from './steps/upload.executor';
 import { RestartExecutor } from './steps/restart.executor';
+import { ApplyExecutor } from './steps/apply.executor';
 import { VersionExecutor } from './steps/version.executor';
 import { PointerExecutor } from './steps/pointer.executor';
 import { VerifyExecutor } from './steps/verify.executor';
@@ -91,6 +92,7 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     PullExecutor,
     UploadExecutor,
     RestartExecutor,
+    ApplyExecutor,
     VersionExecutor,
     PointerExecutor,
     VerifyExecutor,
@@ -103,17 +105,19 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
         pull: PullExecutor,
         upload: UploadExecutor,
         restart: RestartExecutor,
+        apply: ApplyExecutor,
         version: VersionExecutor,
         pointer: PointerExecutor,
         verify: VerifyExecutor,
         cleanup: CleanupExecutor,
       ) =>
-        buildBuiltinSteps({ check, pull, upload, restart, version, pointer, verify, cleanup } as BuiltinExecutors),
+        buildBuiltinSteps({ check, pull, upload, restart, apply, version, pointer, verify, cleanup } as BuiltinExecutors),
       inject: [
         CheckExecutor,
         PullExecutor,
         UploadExecutor,
         RestartExecutor,
+        ApplyExecutor,
         VersionExecutor,
         PointerExecutor,
         VerifyExecutor,
