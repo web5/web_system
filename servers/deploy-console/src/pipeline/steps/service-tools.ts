@@ -12,6 +12,9 @@ export const SERVICE_TOOL_TO_STEP: Readonly<Record<string, string>> = {
   'write-version': 'version',
   'switch-pointer': 'pointer',
   restart: 'restart',
+  // 方案 A（2026-09-17）：后台「部署生效」—— 版本目录 → dist + 重启 + 切指针，
+  // 让流水线跑完即生效（此前跑完还得人工去控制台点「部署」，且不可回滚）
+  'apply-version': 'apply',
   verify: 'verify',
   upload: 'upload',
   pull: 'pull',
@@ -30,6 +33,7 @@ export const SERVICE_TOOL_OPTIONS: ReadonlyArray<{ tool: string; label: string }
   { tool: 'write-version', label: '写版本记录' },
   { tool: 'switch-pointer', label: '切换版本指针' },
   { tool: 'restart', label: '重启服务' },
+  { tool: 'apply-version', label: '部署生效（后台：版本目录 → dist + 重启 + 切指针）' },
   { tool: 'verify', label: '部署验证' },
   { tool: 'upload', label: '投递产物' },
   { tool: 'pull', label: '拉取代码' },

@@ -66,7 +66,26 @@ release 节点 actions：
 即：把**现在人工在控制台点「部署」的那一步**纳入流水线的 release 节点，
 与「发布」语义一致（流水线跑完 = 已生效，可回滚）。
 
-### 3.2 改动点
+### 3.2 落地情况（2026-09-17 已实现并验证）
+
+| # | 改动 | 文件 |
+|---|---|---|
+| A1 | 新增 `apply` 内置步骤 + `ApplyExecutor`（执行体 = `DeployService.deployVersion()`），并在 `SERVICE_TOOL_TO_STEP` 暴露为 service action tool **`apply-version`** | `steps/apply.executor.ts`、`steps/step-registry.ts`、`steps/service-tools.ts`、`pipeline.module.ts` |
+| A3 | 幂等迁移给 `tpl-gateway-{local,dev,prod}` 的 release 节点补第 ③ 个 action | `scripts/migrations/p8-gateway-release-apply-action.mjs`（已执行，3 条；复跑 0 变更） |
+| — | 测试：`ApplyExecutor` 4 条 + 步骤注册表守卫（backend 执行 / 前端跳过 / 复用产物跳过） | `steps/apply.executor.spec.ts`、`steps/step-registry.spec.ts` |
+
+**实测验证**（本机，2026-09-17）：构造真实版本目录 `servers/gateway/gateway-local/verify-apply/`
+→ 走 `deployVersion()` → `dist` 被替换（旧 dist 留底 `dist.bak-<ts>`）、`web-gateway` 重启后 online、
+`deploy_deployments.current_version` 更新为 `gateway-local/verify-apply`、6200/6000 均 200。
+
+**路径约定（关键，已验证）**：投递脚本落到 `$PUBLISH_PATH/$COMMIT_ID`，而 `COMMIT_ID` 注入的正是
+`p.versionTag = <templateKey>/<commit>`；`applyBackendVersion()` 读 `servers/<dir>/<versionTag>` ——
+三者是同一路径，所以只需补 action 就能推广到其他后台模块（无需改投递脚本）。
+
+**尚未做**：完整跑一次 `tpl-gateway-local`（含拉码 → 构建 → 审批 → 发布），本次只验证了 ③ 这一步；
+审批节点会挂起流水线，跑完整链路时需在控制台批准一次。
+
+### 3.3 改动点（原始计划，供对照）
 
 | # | 文件 | 改动 |
 |---|---|---|
