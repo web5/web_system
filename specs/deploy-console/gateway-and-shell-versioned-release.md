@@ -170,9 +170,21 @@ ssh <prod-host> 'ls /data/web_system/servers/gateway/public/static/modules/shell
 | `p5...mjs` 的四段投递脚本 | `$SRC` 非空断言（本机/远端 × 版本式/overlay），源头拒绝把空产物投成版本目录 |
 | `deploy-artifact-guard.spec.ts` | 4 条测试：空目录 / 只有 tsbuildinfo / 有真产物 / **回滚同样受保护** |
 
-**仍未解决（真正的根因修复，P0-2）**：tsc 增量编译为什么在 dist 被清理后不重新产出 ——
-候选处置：① 构建前清理 `tsconfig.tsbuildinfo`；② 后台流水线关闭 incremental；
-③ `BUILD_OUTPUT_DIR` 改为按节点 `stage_command` 显式声明（不再假定就地构建）。
+**P0-2 已修复（2026-09-17）**：build 节点执行**前清空整个产物目录**（`cleanBuildOutputDir()`，
+纯函数，在 `runStageCommand()` 里 `nodeKey === 'build'` 时调用），保证每次全量重编，
+`tsbuildinfo` 无从残留。三候选里选了 ①（不改各服务 tsconfig、不改 `BUILD_OUTPUT_DIR` 契约，改动面最小）。
+测试 `pipeline-build-clean.spec.ts`（5 条）。
+
+**实测验证**：`mcp-gateway` 清理后全量重编，`dist` 产出 `main.js`（1205B）+ `admin/` `mcp/` 等，
+重启后 `MCP Gateway running on http://localhost:6006` —— 该服务此前一直跑着 09-15 遗留的占位产物
+（`main.js` 内容只有一行 `// T2-B`），本次一并恢复。
+
+**顺带修（同日巡检）**：`deploy_modules.pm2` 与 pm2 真实进程名普遍不一致 ——
+注册表写 `gateway` / `user-service`，实际是 `web-gateway` / `web-user`。
+后果：`gateway` 侥幸被第二个候选 `web-gateway` 兜住；但 `user-service` 的三个候选
+（`user-service` / `web-user-service` / `user-service`）**全部落空** → 重启静默失败、
+发布显示成功但服务没起来。已用 `scripts/migrations/p7-backend-pm2-names.mjs`（幂等）修正 11 项，
+种子 `scripts/modules.json` 同步。
 
 ---
 
