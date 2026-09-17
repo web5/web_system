@@ -7,7 +7,7 @@
 > - 本机 local 部署生效：**已完成并验证**
 > - T1 远程：**代码已合入（#76），未真机执行** —— 会改 dev/prod 机器的 dist 并重启 pm2，需确认后再跑
 > - T3 逐模块验证：**admin / mcp-gateway / ai-agent / portal / shell 已跑通**；
->   `mini-contract` 缺小程序私钥 → 已停用（#76）；`shell` 改覆盖式投递（#77）
+>   `kedou-ai-minigram` 缺小程序私钥 → 已停用（#76）；`shell` 改覆盖式投递（#77）
 > - T2 回滚：**未开始**
 
 ---
@@ -102,15 +102,15 @@ PR：**#72**（落地 + 重启）、**#73**（pm2 进程名回退）。
 | portal（微前端） | ✅ 跑通，产物 31 个文件含 index.js/css |
 | shell（基座） | ✅ 跑通 **改覆盖式投递**（#77）—— 基座是 `index.html + assets`，
 gateway 直读 `public/shell/`，不能走版本目录；覆盖前自动备份 `shell.bak-<ts>` |
-| mini-contract | ❌ build 是 `node scripts/upload.js`（上传小程序），缺 `private.key`
+| kedou-ai-minigram | ❌ build 是 `node scripts/upload.js`（上传小程序），缺 `private.key`
 → 必然失败，**已停用 3 条**（p5 的 `NO_BUILD_KEY_MODULES`） |
 | 其余 10 个后台模块 | ⏳ 未逐个跑（与 ai-agent 同构，先验一条即可代表一类） |
 
 **要做**：每类至少跑一条 local 全链路（拉码 → 构建 → 审批 → 投递 → 部署生效）：
 - 前端类：`portal`（micro-frontend）、`shell`（frontend）
 - 后台：`gateway`、`ai-agent`（跑通后顺带验证 T1 前的本机流程）
-- 特殊：`mini-contract` —— 它的构建是 `node scripts/upload.js`（上传小程序），
-  当前 `PUBLISH_PATH` 是按前端类给的 `static/modules/mini-contract`，**大概率要改**
+- 特殊：`kedou-ai-minigram` —— 它的构建是 `node scripts/upload.js`（上传小程序），
+  当前 `PUBLISH_PATH` 是按前端类给的 `static/modules/kedou-ai-minigram`，**大概率要改**
 
 **V 判据**：
 - V1：每条跑通 `succeeded`，版本记录写入

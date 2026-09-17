@@ -143,7 +143,7 @@ importers:
         specifier: ^2.2.0
         version: 2.2.12(typescript@5.6.3)
 
-  apps/mini-contract:
+  apps/kedou-ai-minigram:
     devDependencies:
       '@types/jest':
         specifier: ^30.0.0
@@ -3952,9 +3952,6 @@ packages:
     engines: {npm: '>= 7.0.0'}
     peerDependencies:
       '@swc/core': '*'
-
-  '@swc/types@0.1.26':
-    resolution: {integrity: sha512-lyMwd7WGgG79RS7EERZV3T8wMdmPq3xwyg+1nmAM64kIhx5yl+juO2PYIHb7vTiPgPCj8LYjsNV2T5wiQHUEaw==}
 
   '@swc/types@0.1.27':
     resolution: {integrity: sha512-K6h3iUlqeM946U4sXFYeahefR1YBbXJvko+hv8WS8/0BNJ4OHiHRywMnQUJCqkR7Y9+hqQ1TvEpiKqUhz7NEFg==}
@@ -10539,7 +10536,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.0
       '@babel/helper-validator-option': 7.27.1
-      browserslist: 4.28.1
+      browserslist: 4.28.2
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -13598,7 +13595,7 @@ snapshots:
   '@swc/core@1.4.14':
     dependencies:
       '@swc/counter': 0.1.3
-      '@swc/types': 0.1.26
+      '@swc/types': 0.1.27
     optionalDependencies:
       '@swc/core-darwin-arm64': 1.4.14
       '@swc/core-darwin-x64': 1.4.14
@@ -13619,10 +13616,6 @@ snapshots:
       '@swc/core': 1.15.43
       '@swc/counter': 0.1.3
       jsonc-parser: 3.3.1
-
-  '@swc/types@0.1.26':
-    dependencies:
-      '@swc/counter': 0.1.3
 
   '@swc/types@0.1.27':
     dependencies:
@@ -15773,7 +15766,7 @@ snapshots:
   caniuse-api@3.0.0:
     dependencies:
       browserslist: 4.28.2
-      caniuse-lite: 1.0.30001781
+      caniuse-lite: 1.0.30001792
       lodash.memoize: 4.1.2
       lodash.uniq: 4.5.0
 
@@ -16035,7 +16028,7 @@ snapshots:
 
   core-js-compat@3.25.1:
     dependencies:
-      browserslist: 4.28.1
+      browserslist: 4.28.2
 
   core-js@2.6.12: {}
 
@@ -16874,7 +16867,7 @@ snapshots:
 
   ext-list@2.2.2:
     dependencies:
-      mime-db: 1.52.0
+      mime-db: 1.54.0
 
   ext-name@5.0.0:
     dependencies:
@@ -17626,7 +17619,7 @@ snapshots:
 
   is-core-module@2.16.1:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   is-extglob@2.1.1: {}
 
@@ -18538,7 +18531,7 @@ snapshots:
       jest-message-util: 30.4.1
       jest-util: 30.4.1
       pretty-format: 30.4.1
-      semver: 7.7.4
+      semver: 7.8.5
       synckit: 0.11.12
     transitivePeerDependencies:
       - supports-color

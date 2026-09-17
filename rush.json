@@ -49,8 +49,8 @@
       "reviewCategory": "production"
     },
     {
-      "packageName": "@web-system/mini-contract",
-      "projectFolder": "apps/mini-contract",
+      "packageName": "@web-system/kedou-ai-minigram",
+      "projectFolder": "apps/kedou-ai-minigram",
       "shouldPublish": false,
       "reviewCategory": "production"
     },
