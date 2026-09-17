@@ -19,7 +19,10 @@ import {
  *   模板被打包时删掉，运行时无样式。
  * 显式 import 后 rollup 一定保留所有组件 + 其 style 模块。
  */
-const components: Array<{ install?: (app: VueApp) => void }> = [
+// 注意：这里不能声明成 `{ install?: (app) => void }` —— `Grid` 导出的是
+// `{ useBreakpoint, ... }`（没有 install），类型会对不上（TS2559）。
+// 用宽松类型 + 运行时判断 `typeof install === 'function'` 更稳（2026-09-15）。
+const components: unknown[] = [
   Affix, Anchor, AutoComplete, Alert, Avatar, Badge, Breadcrumb, Button, Calendar,
   Card, Collapse, Carousel, Cascader, Checkbox, Col, Comment, ConfigProvider, DatePicker,
   Descriptions, Divider, Dropdown, Drawer, Empty, FloatButton, Form, Grid, Input, Image,
@@ -32,8 +35,9 @@ const components: Array<{ install?: (app: VueApp) => void }> = [
 
 export function setupAntdAll(app: VueApp) {
   components.forEach((c) => {
-    if (c && typeof c.install === 'function') {
-      app.use(c as any);
+    const inst = (c as { install?: unknown } | undefined)?.install;
+    if (typeof inst === 'function') {
+      app.use(c as Parameters<VueApp['use']>[0]);
     }
   });
 }

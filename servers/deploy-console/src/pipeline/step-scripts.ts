@@ -31,12 +31,32 @@ export const VERIFY_STEP_SCRIPT_FILE = 'verify-step.sh';
  *
  * 两者都只做「委托」——实现留在仓库 `scripts/pipeline/` 下随业务代码走，
  * 改实现不必动库，改「调用谁」才动库。
+ *
+ * ⚠️ **git 自 2026-09-15 起不在托管清单里**（用户决定）：拉取代码是普通 shell 节点，
+ * 脚本存在 DB、页面可编辑；git 的登录 / 密钥 / 权限归「git 信息维护层」，流水线不关心。
+ * 新建流水线时的初始正文见 `DEFAULT_STEP_SCRIPTS`（写入一次，之后代码不再覆盖）。
  */
 export const PLATFORM_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: string; label: string }> = [
-  { nodeKey: 'git', file: GIT_STEP_SCRIPT_FILE, label: '拉取代码（平台托管）' },
   { nodeKey: 'restart', file: RESTART_STEP_SCRIPT_FILE, label: '重启服务（平台托管）' },
   { nodeKey: 'verify', file: VERIFY_STEP_SCRIPT_FILE, label: '部署验证（平台托管）' },
 ];
+
+/**
+ * **默认节点脚本**（一次性初始值，不是平台托管）。
+ *
+ * 与 `PLATFORM_STEP_SCRIPTS` 的区别：这里只在节点命令**不存在**时写入一次，且 `locked=false`
+ * —— 之后由运维在页面上改，平台不再覆盖（用户 2026-09-15：拉取代码也是自定义节点）。
+ */
+export const DEFAULT_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: string; label: string }> = [
+  { nodeKey: 'git', file: GIT_STEP_SCRIPT_FILE, label: '拉取代码（默认脚本，可编辑）' },
+];
+
+/** 取某个默认节点脚本的正文（用于新建流水线时的初始值） */
+export function getDefaultStepScript(nodeKey: string): string {
+  const item = DEFAULT_STEP_SCRIPTS.find((s) => s.nodeKey === nodeKey);
+  if (!item) throw new Error(`未知的默认节点脚本: ${nodeKey}`);
+  return readStepScript(item.file);
+}
 
 /**
  * 平台脚本目录（运行期绝对路径）。

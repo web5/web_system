@@ -169,6 +169,11 @@
   .props{background:#FAFBFC;border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:14px;}
   .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;color:var(--ws-text-secondary);}
   .chk input{width:15px;height:15px;accent-color:var(--ws-brand-500);}
+  /* 单选组（v13 同款；v14 之前漏了这个样式，导致「继承环境/始终/从不」竖排裸文字） */
+  .radio-group{display:flex;gap:8px;flex-wrap:wrap;}
+  .radio{padding:5px 12px;border:1px solid var(--ws-border);border-radius:8px;font-size:12.5px;
+    color:var(--ws-text-secondary);cursor:pointer;user-select:none;background:var(--ws-bg-surface);}
+  .radio.on{border-color:var(--ws-brand-500);color:var(--ws-brand-500);background:var(--ws-brand-50);font-weight:600;}
   .in{width:170px;border:1.5px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:6px 10px;
     font-size:13px;outline:none;font-family:inherit;}
   .in:focus{border-color:var(--ws-brand-500);}
@@ -221,6 +226,29 @@
   .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;}
   .modal-mask.show{display:flex;}
   .modal{background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);padding:18px;width:100%;max-width:420px;}
+
+  /* 右侧抽屉（节点配置）：header / body / footer 三段式 —— body 独立滚动，footer 常驻底部 */
+  .drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;z-index:60;}
+  .drawer-mask.show{display:block;}
+  .drawer{position:absolute;right:0;top:0;bottom:0;width:560px;background:var(--ws-bg-subtle);z-index:61;
+    display:none;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.12);}
+  .drawer.show{display:flex;}
+  .drawer header{padding:14px 16px;border-bottom:1px solid var(--ws-border);background:var(--ws-bg-surface);}
+  .drawer .body{flex:1;overflow:auto;padding:16px;}
+  .drawer footer{padding:12px 16px;border-top:1px solid var(--ws-border);background:var(--ws-bg-surface);
+    display:flex;justify-content:flex-end;gap:8px;}
+  .drawer .dsec{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:12px;}
+  /* 抽屉里的表格：定宽列 + 溢出省略（页面级 .list 是给全宽表格的，直接塞进抽屉会把键挤出屏、说明竖排） */
+  .drawer table.list{table-layout:fixed;}
+  .drawer table.list th,.drawer table.list td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .drawer table.list td{white-space:nowrap;}
+
+  /* 基本信息：定宽两列网格（标签在上、宽度对齐，避免原来挤成一团） */
+  .bgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;margin-top:8px;}
+  .bf{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  .bf>label{font-size:12px;font-weight:600;color:var(--ws-text-secondary);}
+  .bfull{grid-column:1 / -1;}
+  .bstatic{padding:6px 0;font-size:13px;color:var(--ws-text-primary);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;color:var(--ws-text-secondary);margin-bottom:5px;font-weight:600;}
   .field input,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--ws-border);
@@ -242,7 +270,7 @@
         流水线管理<span class="caret">▾</span></div>
       <div class="submenu open">
         <div class="menu-item active" data-k="pipeline" data-title="流水线列表" onclick="nav(this)">流水线列表</div>
-        <div class="menu-item" data-k="detail" data-title="编辑流水线" onclick="navEditFlow(this)">编辑流水线</div>
+        <div class="menu-item" id="miFlowEdit" data-k="flowedit" data-title="编辑流水线" onclick="nav(this)">编辑流水线</div>
         <div class="menu-item" data-k="detail" data-title="流水线详情" onclick="nav(this)">流水线详情</div>
       </div>
 
@@ -305,7 +333,7 @@
         <div class="card">
           <div class="row" style="justify-content:space-between;margin-bottom:6px;">
             <div class="t" style="margin:0">全部流水线（所有模块一屏列出）</div>
-            <button class="btn ghost sm" onclick="toast('新建发布（提交弹窗：选模块/分支/commit/环境/模板，确认后进入流水线详情）')">新建发布</button>
+            <button class="btn sm" onclick="openNewFlow()">+ 新建流水线</button>
           </div>
           <table class="list">
             <thead><tr>
@@ -332,7 +360,7 @@
               <span class="tag primary" id="dStatus">运行中</span>
             </div>
             <div class="row">
-              <button class="btn ghost sm" id="btnEdit" onclick="toggleEdit()">编辑流水线</button>
+              <button class="btn ghost sm" id="btnEdit" onclick="nav(document.getElementById('miFlowEdit'))">编辑流水线</button>
               <button class="btn gray sm" onclick="toast('重试：从失败节点继续')">重试</button>
               <button class="btn ghost sm" onclick="toast('回滚：使用最新脚本发旧代码，scriptDrift=true')">回滚</button>
             </div>
@@ -341,7 +369,7 @@
           <div class="pinfo">
             <span class="tag primary">流水线</span>
             <b id="pName">admin</b>
-            <span class="pd" id="pDesc">v5 nodes：git → 安装依赖 → 构建 → 写版本号 → 切指针 → 探活（watchdog）→ 通知</span>
+            <span class="pd" id="pDesc">终态 nodes：拉取代码 → 构建 → 发布确认（审批）→ 发布（上传 + 写版本）</span>
             <button class="btn ghost mini" onclick="openRename()">名称 / 备注</button>
           </div>
 
@@ -374,41 +402,99 @@
             </table>
           </div>
 
-          <!-- Tab：参数（本次生效值） -->
+          <!-- Tab：参数（只读查阅：内置 + 全局变量 + 本流水线变量；空也留面板） -->
           <div id="pane-params" style="display:none">
-            <div class="t">参数（本次生效值）</div>
-            <table class="list">
-              <thead><tr><th style="width:150px">键</th><th>生效值</th><th style="width:120px">来源</th><th>被覆盖</th></tr></thead>
-              <tbody>
-                <tr><td class="k">RELEASE_DIR</td><td class="k">~/web_system_release</td><td><span class="tag gray">内置</span></td><td class="muted">—</td></tr>
-                <tr><td class="k">PORT</td><td class="k">6000</td><td><span class="tag gray">配置中心·模块</span></td><td class="muted">配置中心·环境 6010</td></tr>
-                <tr><td class="k">PUBLISH_HOST</td><td class="k">127.0.0.1</td><td><span class="tag primary">流水线变量</span></td><td class="muted">—</td></tr>
-                <tr><td class="k">PUBLISH_PATH</td><td class="k">…/static/modules/admin</td><td><span class="tag primary">流水线变量</span></td><td class="muted">—</td></tr>
-                <tr><td class="k">BUILD_CMD</td><td class="k">npm run build</td><td><span class="tag primary">流水线变量</span></td><td class="muted">—</td></tr>
-              </tbody>
-            </table>
-            <div class="hint">优先级：内置 → 配置中心（global→env→module）→ <b>流水线变量</b> → 节点内联。排查「改了变量不生效」先看这里。</div>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div class="t" style="margin:0">参数（本次生效值）</div>
+              <input class="in" id="detParamQ" placeholder="检索参数 / 变量" style="width:220px" oninput="renderDetParams(this.value)">
+            </div>
+            <div id="detParamBox"></div>
+            <div class="hint">优先级：内置 → 配置中心（global→env→module）→ <b>全局变量</b> → <b>流水线变量</b> → 节点内联。
+              排查「改了变量不生效」先看这里；<b>没有额外参数时表格仍显示，只是内容为空</b>。</div>
           </div>
 
-          <!-- Tab：变量（属于本条流水线，只读；编辑在「编辑流水线」） -->
+          <!-- Tab：变量（全局 + 本条流水线；只读，编辑在「编辑流水线」） -->
           <div id="pane-vars" style="display:none">
-            <div class="row" style="justify-content:space-between;margin-bottom:6px;">
-              <div class="t" style="margin:0">变量（本条流水线）</div>
-              <button class="btn ghost sm" onclick="navEditFlow(document.querySelector('[data-title=\"编辑流水线\"]'));switchTab('vars')">去编辑流水线维护</button>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div class="t" style="margin:0">变量（全局 + 本条流水线）</div>
+              <button class="btn ghost sm" onclick="nav(document.getElementById('miFlowEdit'))">去编辑流水线维护</button>
             </div>
-            <table class="list">
-              <thead><tr><th style="width:150px">键</th><th>值</th><th>说明</th><th style="width:60px">密钥</th><th style="width:90px">更新人</th></tr></thead>
-              <tbody id="varList"></tbody>
-            </table>
-            <div class="hint">变量<b>跟着流水线走</b>：不单独成页，增删改查在「编辑流水线」页，这里只读查看。</div>
+            <div id="detVarBox"></div>
+            <div class="hint">变量<b>跟着流水线走</b>：不单独成页，增删改查在「编辑流水线」页，这里只读查看。
+              「自定义变量」为空时面板仍在（表头 + 空行），表示这条流水线没定义额外变量、直接用全局即可。</div>
           </div>
 
-          <div id="pane-edit" style="display:none">
-            <div class="banner info" style="margin-top:0">
-              <span><b>v5 nodes 编辑态</b>：<span class="tag purple">git / 写版本号 / 切指针</span> 平台节点<b>锁定</b>（不可增删改）；
-                script 节点可<b>拖拽重排 / 增删</b>。点连接线中间的「+」或右上「添加节点」→ 直接落节点并选中；
-                悬停节点卡片右上角「×」删除；选中后在下方配置 label / key / optional / watchdog 与脚本。</span>
+        </div>
+      </div>
+
+      <!-- 编辑流水线：独立页面（用户 2026-09-15：点「编辑」进新页面，不在详情页内切换界面；
+           无 实例详情/历史记录 等 Tab、无 实例头部（重试/回滚/命名备注）——那是详情页的东西） -->
+      <div class="screen" id="scr-flowedit">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row">
+              <b style="font-size:15px" id="feTitle">编辑流水线</b>
+              <span class="tag primary" id="feEnvTag">dev</span>
+              <span class="tag gray" id="feModTag">admin</span>
+              <span class="mono muted" id="feKeyTag">admin-dev</span>
             </div>
+            <div class="row">
+              <button class="btn ghost sm" onclick="nav(document.querySelector('[data-k=pipeline]'))">取消</button>
+              <button class="btn sm" onclick="saveFlow();toast('已保存流水线（原型示意）')">保存</button>
+            </div>
+          </div>
+
+          <div class="banner info" style="margin-top:12px">
+            <span><b>终态 nodes</b>：节点只有 <span class="tag gray">shell</span>
+              <span class="tag primary">approval</span> 两类（拉取代码也是普通 shell 节点，脚本可编辑）；
+              节点可<b>拖拽重排 / 增删</b>，点连接线「+」或右上「添加节点」落新节点、悬停卡片右上「×」删除。
+              <b>点节点 → 右侧抽屉</b>：节点名 / key + 脚本（或审批配置），抽屉底部固定「取消 · 语法校验 · 保存」。</span>
+          </div>
+
+          <!-- 编辑页 Tab（用户 2026-09-15：tab 不该消失；没有「历史记录」——那是实例页的） -->
+          <div class="tabs" style="margin-top:14px">
+            <div class="tab on" id="fet-base" onclick="feTab('base')">基本信息</div>
+            <div class="tab" id="fet-flow" onclick="feTab('flow')">流程编排</div>
+            <div class="tab" id="fet-params" onclick="feTab('params')">参数</div>
+            <div class="tab" id="fet-vars" onclick="feTab('vars')">变量</div>
+          </div>
+
+          <!-- Tab1 基本信息（用户 2026-09-15：模块/环境也不选 —— 流水线从「模块 × 环境」入口创建，
+               两者创建时已确定，页头只读展示；表单只留 名 / key / 启用） -->
+          <div id="fep-base">
+            <div class="card" style="margin-top:12px">
+              <div class="t">基本信息</div>
+              <div class="bgrid">
+                <div class="bf"><label>流水线名</label>
+                  <input class="in" id="feName" value="admin dev 发布" style="width:100%" oninput="feSyncHeader()"></div>
+                <div class="bf"><label id="feKeyLabel">流水线 key（slug）· 已保存，不可修改</label>
+                  <input class="in mono" id="feKey" value="admin-dev" disabled style="width:100%" oninput="feSyncHeader()"></div>
+                <div class="bf"><label>模块</label>
+                  <select class="in" id="feMod" style="width:100%" onchange="feSyncHeader()">
+                    <option value="">选择模块</option>
+                    <option selected>管理后台（admin）</option>
+                    <option>网关（gateway）</option>
+                    <option>待办服务（todo-service）</option>
+                    <option>AI 助手（ai-agent）</option>
+                  </select></div>
+                <div class="bf"><label>环境</label>
+                  <select class="in" id="feEnv" style="width:100%" onchange="feSyncHeader()">
+                    <option value="">选择环境</option>
+                    <option>本地环境（local）</option><option selected>开发环境（dev）</option><option>生产环境（prod）</option>
+                  </select></div>
+                <div class="bf"><label>启用</label>
+                  <label class="chk"><input type="checkbox" checked> 启用该流水线</label></div>
+              </div>
+              <div class="hint"><b>模块</b>选项来自模块注册表（其目录由构建 / 发布脚本确定，脚本里的
+                <span class="mono">${MODULE_DIR}</span> 与产物路径都跟着它走）；<b>环境</b>在新建时选择（决定投递机器：local = 本机，dev / prod = 远程，
+                取「环境管理」的服务器配置，脚本用 <span class="mono">${DEPLOY_HOST}</span> 引用）；
+                <b>编辑页的基本信息禁用不可修改</b>（名 / key / 环境都锁定）。
+                <b>审批（审批人 / 超时 / 拒绝后）在「发布确认」节点的抽屉里配置</b>、<b>失败自动回滚在节点上标 watchdog</b>。</div>
+            </div>
+          </div>
+
+          <!-- Tab2 流程编排（用户 2026-09-15：不需要单独的「保存顺序」按钮，改动由页头「保存」统一提交） -->
+          <div id="fep-flow" style="display:none">
             <div class="card" style="margin-top:12px">
               <div class="row" style="justify-content:space-between;">
                 <div class="t" style="margin:0">流程编排 <span class="muted" id="nodeCount"></span></div>
@@ -416,16 +502,22 @@
               </div>
               <div class="flow" id="flowEdit"></div>
               <div id="errHint" style="display:none;margin-top:8px;"></div>
-              <div class="row" style="margin-top:6px">
-                <button class="btn sm" onclick="saveFlow()">保存顺序</button>
-                <button class="btn gray sm" onclick="toggleEdit()">退出编辑</button>
-                <span class="muted" style="margin-left:auto">模块脚本按 <span class="mono">模块 × 节点 key</span> 读写；platform 节点无脚本。</span>
-              </div>
+              <div class="hint" style="margin-top:8px">拖拽卡片重排；增删 / 脚本改动由页头<b>「保存」</b>统一提交。模块脚本按
+                <span class="mono">模块 × 节点 key</span> 读写。</div>
             </div>
-            <div class="card" id="editDetail"></div>
+          </div>
 
-            <!-- 编辑态：变量（属于本条流水线，可增删改查） -->
-            <div class="card">
+          <!-- Tab3 参数（只读查阅，写脚本时对键名） -->
+          <div id="fep-params" style="display:none">
+            <div class="card" style="margin-top:12px">
+              <div class="t">参数</div>
+              <div id="feParamBox"></div>
+            </div>
+          </div>
+
+          <!-- Tab4 变量（本条流水线，可增删改） -->
+          <div id="fep-vars" style="display:none">
+            <div class="card" style="margin-top:12px">
               <div class="row" style="justify-content:space-between;margin-bottom:8px;">
                 <div class="t" style="margin:0">变量（属于本条流水线）</div>
                 <button class="btn sm" onclick="addVarPrompt()">+ 新增变量</button>
@@ -435,7 +527,7 @@
                   <th style="width:60px">密钥</th><th style="width:120px">操作</th></tr></thead>
                 <tbody id="pipeVarBody"></tbody>
               </table>
-              <div class="hint">节点脚本用 <span class="mono">${KEY}</span> 引用；变量<b>跟着流水线走</b>，详情页「变量」Tab 只读查看。</div>
+              <div class="hint">节点脚本用 <span class="mono">${KEY}</span> 引用；变量<b>跟着流水线走</b>。</div>
             </div>
           </div>
         </div>
@@ -635,7 +727,7 @@
               <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">微前端模块 (3)</div>
               <div class="tab" data-tab-group="svc" onclick="pickTab(this,'svc')">小程序 (1)</div>
             </div>
-            <button class="btn" onclick="toast('新建模块弹窗（key/名称/类型/目录/pm2/publicPath/默认环境）')">新建模块</button>
+            <button class="btn" onclick="goNewModule()">新建模块</button>
           </div>
           <table class="list">
             <thead><tr><th style="width:130px">key</th><th style="width:130px">名称</th><th style="width:150px">类型</th>
@@ -660,6 +752,53 @@
             </tbody>
           </table>
           <div class="hint">模块注册表是「模块元数据」真相源；builtin 模块不可删除、可改字段。点「详情」进模块详情（含发布脚本多操作编辑）。</div>
+        </div>
+      </div>
+
+      <!-- 新建模块：独立页（用户 2026-09-15：原来只是 toast 占位 → 补真实表单；
+           类型 = 前端/后台，决定初始代码目录、产物挂载点（publicPath）与 pm2 进程名） -->
+      <div class="screen" id="scr-modnew">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <div class="row"><b style="font-size:15px">新建模块</b></div>
+            <div class="row">
+              <button class="btn ghost sm" onclick="nav(document.querySelector('[data-k=services]'))">取消</button>
+              <button class="btn sm" onclick="toast('已保存模块（原型示意）');nav(document.querySelector('[data-k=services]'))">保存</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <div class="t">基本信息</div>
+            <div class="bgrid">
+              <div class="bf"><label>模块名</label>
+                <input class="in" id="mnName" placeholder="如：管理后台" style="width:100%"></div>
+              <div class="bf"><label>模块 key（slug）· 保存后不可修改</label>
+                <input class="in mono" id="mnKey" placeholder="admin" style="width:100%" oninput="mnSync()"></div>
+              <div class="bf bfull"><label>类型</label>
+                <div class="radio-group" style="margin-top:2px">
+                  <div class="radio" id="mnT-fe" onclick="setModType('fe')">前端（micro-frontend）</div>
+                  <div class="radio on" id="mnT-be" onclick="setModType('be')">后台（backend）</div>
+                </div></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <div class="t">目录与运行（按类型自动带出，可改）</div>
+            <div class="bgrid">
+              <div class="bf"><label>代码目录（相对仓库根）</label>
+                <input class="in mono" id="mnDir" style="width:100%"></div>
+              <div class="bf" id="mnPublicWrap" style="display:none"><label>publicPath（前端产物挂载点）</label>
+                <input class="in mono" id="mnPublic" style="width:100%"></div>
+              <div class="bf" id="mnPm2Wrap"><label>pm2 进程名（后台常驻服务）</label>
+                <input class="in mono" id="mnPm2" style="width:100%"></div>
+              <div class="bf"><label>默认环境</label>
+                <select class="in" id="mnEnv" style="width:100%">
+                  <option>本地环境（local）</option><option>开发环境（dev）</option><option>生产环境（prod）</option>
+                </select></div>
+            </div>
+            <div class="hint">模块是<b>元数据真相源</b>：目录 / publicPath / pm2 / 默认环境决定流水线脚本里的
+              <span class="mono">${MODULE_DIR}</span> 与产物路径 —— 流水线里不单独选模块，就是从这里带过去的。</div>
+          </div>
         </div>
       </div>
 
@@ -1012,50 +1151,114 @@ node    69584 geekwen   16u  IPv6 ... TCP *:6005 (LISTEN)</div>
       </div>
     </div>
   </div>
+  <!-- 新建流水线：先选 前端/后台（用户 2026-09-15：按类型载入初始流水线） -->
+  <div class="modal-mask" id="mNewFlow">
+    <div class="modal">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px;">新建流水线 · 选择模块类型</div>
+      <div class="muted" style="margin-bottom:14px;">按类型载入初始流水线（拉取代码 → 构建 → 发布确认 → 发布，构建命令按类型预填，可改）</div>
+      <div class="row" style="gap:10px;">
+        <button class="btn ghost" style="flex:1;padding:14px;" onclick="goNewFlow('fe')">
+          <b>前端（micro-frontend）</b><br>
+          <span class="muted" style="font-size:12px">初始构建：npx vite build</span>
+        </button>
+        <button class="btn ghost" style="flex:1;padding:14px;" onclick="goNewFlow('be')">
+          <b>后台（backend）</b><br>
+          <span class="muted" style="font-size:12px">初始构建：npm ci + npx tsc</span>
+        </button>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px;">
+        <button class="btn gray sm" onclick="closeModal('mNewFlow')">取消</button>
+      </div>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
+
+  <!-- 发起发布抽屉（用户 2026-09-15：模块/环境/流水线由所在行决定，只读；只留分支 + Commit + 模式） -->
+  <div class="drawer-mask" id="subMask" onclick="closeSubmitDrawer()"></div>
+  <div class="drawer" id="subDrawer" style="width:420px">
+    <header>
+      <div class="t" style="margin:0;font-size:15px">发起发布</div>
+      <div class="muted" id="subCtx">管理后台 Admin · 开发环境（dev）· admin dev 发布</div>
+    </header>
+    <div class="body">
+      <div class="dsec">
+        <div class="bf"><label>分支</label>
+          <select class="in" style="width:100%">
+            <option>master</option><option>feature/contract-risk-ai</option>
+          </select></div>
+        <div class="bf" style="margin-top:10px"><label>Commit（留空 = 分支最新提交）</label>
+          <input class="in mono" placeholder="留空=最新" style="width:100%"></div>
+        <div class="bf" style="margin-top:10px"><label>模式</label>
+          <div class="radio-group"><div class="radio on">全量</div><div class="radio">灰度</div></div></div>
+      </div>
+      <div class="hint">模块 / 环境 / 流水线由点击的那一行决定（这里只读展示）；发布基于<b>远程仓库分支 + commit</b> 与<b>模块构建命令</b>。</div>
+    </div>
+    <footer>
+      <button class="btn ghost" onclick="closeSubmitDrawer()">取消</button>
+      <button class="btn" onclick="doSubmit()">提交发布</button>
+    </footer>
+  </div>
+
+  <!-- 节点配置抽屉（header / body / footer；footer 固定在最下面） -->
+  <div class="drawer-mask" id="nodeDrawerMask" onclick="closeDrawer()"></div>
+  <div class="drawer" id="nodeDrawer">
+    <header>
+      <div class="t" style="margin:0;font-size:15px" id="ndTitle">节点配置</div>
+      <div class="muted" id="ndSub"></div>
+    </header>
+    <div class="body">
+      <div class="tabs" style="margin-bottom:12px">
+        <div class="tab on" id="ndt-node" onclick="ndTab('node')">节点</div>
+        <div class="tab" id="ndt-vars" onclick="ndTab('vars')">变量</div>
+        <div class="tab" id="ndt-params" onclick="ndTab('params')">参数</div>
+      </div>
+      <div id="ndBody"></div>
+    </div>
+    <footer>
+      <button class="btn ghost" onclick="closeDrawer()">取消</button>
+      <button class="btn ghost" id="ndValidate" onclick="toast('语法校验：bash -n 通过（原型示意）')">语法校验</button>
+      <button class="btn" onclick="saveNode()">保存</button>
+    </footer>
+  </div>
 </div>
 
 <script>
 /* ===== 数据 ===== */
-/** v5 nodes：platform（git/写版本号/切指针）锁定不可增删改；script 可增删 / 拖拽 / 配脚本。
- *  平台字段：plat=true 且 sub 指向引擎语义；watchdog 节点失败触发自动回滚（互斥 1 个）。 */
+/** 终态 nodes：只有 shell / approval 两类，可增删 / 拖拽 / 配脚本。
+ *  平台能力（写版本、切指针…）不再是节点类型，而是节点里的 service 操作（platformActs 只读展示）。
+ *  默认四条：拉取代码 → 构建 → 发布确认（审批）→ 发布。 */
 var NODES=[
- {id:'git',name:'git · 拉取代码',mode:'platform',plat:true,sub:'git',desc:'平台内置 git 拉取到 RELEASE_DIR；节点锁定不可增删改',code:''},
- {id:'install',name:'安装依赖',mode:'script',plat:false,optional:false,watchdog:false,
-  desc:'安装依赖（pnpm install / npm ci）；可选实现，未配脚本且非 optional 即 fail-fast',
-  code:'set -euo pipefail\ncd "${RELEASE_DIR}" && pnpm install --frozen-lockfile'},
- {id:'build',name:'构建',mode:'script',plat:false,optional:false,watchdog:false,
-  desc:'产物构建（vite build）；产物目录不存在即 fail-fast',
+ {id:'git',name:'拉取代码',kind:'shell',mode:'script',plat:false,
+  desc:'拉取代码（普通 shell 节点，脚本可编辑；git 的登录/密钥/权限归「git 信息维护层」）',
+  code:'set -euo pipefail\n# 拉取代码：普通 shell 节点，可自由改\ncd "${RELEASE_DIR}"\ngit fetch --all --prune\ngit checkout "${COMMIT_ID:-origin/master}"'},
+ {id:'build',name:'构建',kind:'shell',mode:'script',plat:false,
+  desc:'产物构建（vite build / tsc）；产物目录不存在即 fail-fast',
   code:'set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'},
- {id:'version',name:'写版本号',mode:'platform',plat:true,sub:'version',desc:'平台内置：写 deploy_versions（发布语义真相源）',code:''},
- {id:'pointer',name:'切指针',mode:'platform',plat:true,sub:'pointer',desc:'平台内置：upsert deploy_deployments.current_version',code:''},
- {id:'verify',name:'探活',mode:'script',plat:false,optional:false,watchdog:true,
-  desc:'探活（watchdog）：失败触发自动回滚；删除该节点 = 显式放弃自动回滚',
-  code:'set -euo pipefail\nV="$(curl -fsS "${GATEWAY_URL}/__manifest__" | node -e \'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const d=j.data??j;const m=(d.modules||[]).find(x=>x.name===process.env.MODULE_KEY);console.log(m?m.version:"")})\')"\n[ "${V}" = "${COMMIT_ID}" ] || exit 1'},
- {id:'notify',name:'发通知',mode:'script',plat:false,optional:true,watchdog:false,
-  desc:'发通知（optional）：未配脚本自动跳过、不阻断发布',
-  code:'set -euo pipefail\necho "发布完成 ${COMMIT_ID} @ ${DEPLOY_ENV}"'}
+ {id:'gate',name:'发布确认',kind:'approval',mode:'approval',plat:false,
+  desc:'审批节点：执行到它挂起流水线，批准后从其后继续',
+  approvers:['admin'],timeout:3600,timeoutAction:'abort',onReject:'abort'},
+ {id:'release',name:'发布',kind:'shell',mode:'script',plat:false,
+  desc:'发布 = 上传产物（shell）+ 写版本记录（平台 service 操作，随平台维护）',
+  code:'set -euo pipefail\n# 上传产物到本机/目标机版本目录\necho "[release] 上传产物 → ${PUBLISH_PATH}/${COMMIT_ID}"',
+  platformActs:['写版本记录']}
 ];
 
-/** nodes 顺序真相源（可重排；platform 位置受语义约束） */
+/** nodes 顺序真相源（终态：只有 shell / approval，顺序自由） */
 var seq=NODES.map(function(n){return n.id;});
-/** script 节点的多操作扩展（其余回退到单「主操作」） */
-var EXTRA_ACTS={
-  install:[{id:'a1',type:'shell',name:'pnpm install',timeout:300,code:'pnpm install --frozen-lockfile'}],
-  build:[
-    {id:'a1',type:'shell',name:'安装依赖',timeout:300,cont:true,code:'pnpm install --frozen-lockfile'},
-    {id:'a2',type:'shell',name:'vite 构建',timeout:600,cont:false,
-     code:'RELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build --mode mf\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"'}
-  ],
-  verify:[{id:'a1',type:'service',name:'manifest 断言（内置工具）',tool:'manifest-assert',builtin:true,timeout:60}],
-  notify:[{id:'a1',type:'shell',name:'通知 hook',timeout:20,code:'echo "发布完成 ${COMMIT_ID}"'}]
-};
 
 function findNode(k){ return NODES.filter(function(x){return x.id===k;})[0]; }
+/**
+ * 节点的执行操作序列。
+ * shell：1 个 shell 操作（脚本）+ 可能存在的平台操作（如发布节点的「写版本记录」，只读展示）
+ * approval：无操作（纯等待语义）
+ */
 function getActs(n){
-  if(n.mode==='platform') return [];
-  if(EXTRA_ACTS[n.id]) return EXTRA_ACTS[n.id];
-  return [{id:'a1',type:'shell',name:'主操作',code:n.code,timeout:60}];
+  if(n.kind==='approval') return [];
+  var acts=[{id:'a1',type:'shell',name:'主操作',code:n.code,timeout:60}];
+  (n.platformActs||[]).forEach(function(p,i){
+    acts.push({id:'p'+(i+1),type:'service',name:p,builtin:true});
+  });
+  return acts;
 }
 
 var TOOLS=[
@@ -1090,6 +1293,7 @@ function nav(el){
   if(k==='ph') document.getElementById('ph-title').textContent=t;
   if(k==='detail'&&!CUR) openRun(RUNS[0].id);
   if(k==='module') renderModule();
+  if(k==='flowedit'){ if(feMode!=='create') feMode='edit'; feApplyMode(); renderEditList(); }
 }
 function toggleSub(el,id){
   var sub=document.getElementById(id);
@@ -1120,7 +1324,7 @@ function renderRuns(){
 }
 
 /* ===== 详情 ===== */
-var CUR=null,RUN=null,timer=null,editing=false;
+var CUR=null,RUN=null,timer=null;
 function openRun(id){
   CUR=RUNS.filter(function(r){return r.id===id;})[0];
   var s=ST[CUR.status];
@@ -1134,7 +1338,6 @@ function openRun(id){
   document.getElementById('mDur').textContent=CUR.dur;
   document.getElementById('mRes').textContent=CUR.status==='success'?'manifestVersion=9263f62':'—';
   nav(document.querySelector('[data-k="detail"]'));
-  if(editing) toggleEdit();
   switchTab('inst');
   buildRun(); renderSteps(); stepBody(null);
   renderHist();
@@ -1144,11 +1347,13 @@ function switchTab(t){
   ['inst','hist','params','vars'].forEach(function(k){
     document.getElementById('tab-'+k).className='tab'+(t===k?' on':'');
   });
-  document.getElementById('pane-inst').style.display=(t==='inst'&&!editing)?'block':'none';
-  document.getElementById('pane-hist').style.display=(t==='hist'&&!editing)?'block':'none';
-  document.getElementById('pane-params').style.display=(t==='params'&&!editing)?'block':'none';
-  document.getElementById('pane-vars').style.display=(t==='vars'&&!editing)?'block':'none';
-  document.getElementById('pane-edit').style.display=editing?'block':'none';
+  document.getElementById('pane-inst').style.display=(t==='inst')?'block':'none';
+  document.getElementById('pane-hist').style.display=(t==='hist')?'block':'none';
+  document.getElementById('pane-params').style.display=(t==='params')?'block':'none';
+  document.getElementById('pane-vars').style.display=(t==='vars')?'block':'none';
+  // 两个「查阅型」Tab 每次进入都重渲染：空也要有表头（不是「还没有执行记录」那种空态）
+  if(t==='vars') renderDetVars();
+  if(t==='params') renderDetParams('');
 }
 function renderHist(){
   var h='';
@@ -1238,15 +1443,91 @@ function runNext(){
   }, s.mode==='platform'?500:(s.id==='build'?1400:800));
 }
 
-/* ===== 编辑态（v5 nodes：插孔即落即编 + 拖拽排序 + 卡片删除 + label/key/watchdog 面板） ===== */
+/* ===== 编辑态（终态 nodes：插孔即落即编 + 拖拽排序 + 卡片删除 + 点节点开右侧抽屉） ===== */
 var editCur='', editAct=null, dragKey='', insSide='l';
-var PLATFORM_KEYS=['git','version','pointer'];
+/** 平台保留 node key（写版本/切指针的能力已变成 service 操作，同名节点会造成语义误读） */
+var PLATFORM_KEYS=['version','pointer'];
 var usedKeys=NODES.map(function(n){return n.id;});
-function toggleEdit(){
-  editing=!editing;
-  document.getElementById('btnEdit').textContent=editing?'退出编辑':'编辑流水线';
-  if(editing){ renderEditList(); renderEditDetail(); }
-  switchTab(document.getElementById('tab-inst').className.indexOf('on')>=0?'inst':'hist');
+/* 用户 2026-09-15：编辑 = 独立页面（scr-flowedit）；
+   「新建」先选 前端/后台，按类型载入初始四节点（构建命令不同）。
+   基本信息：新建可编辑（名/key/环境），编辑页禁用不可修改；
+   页头的 环境/模块/key 标识随表单实时联动 —— 模块由构建/发布脚本目录确定，不进表单。 */
+var feMode='edit';
+function openNewFlow(){ openModal('mNewFlow'); }
+function goNewFlow(type){
+  closeModal('mNewFlow');
+  feMode='create';
+  nav(document.getElementById('miFlowEdit'));
+  document.getElementById('feTitle').textContent='新建流水线';
+  document.getElementById('feName').value='';
+  document.getElementById('feKey').value='';
+  document.getElementById('feEnv').value='';
+  document.getElementById('feMod').value='';
+  editCur='';
+  var b=findNode('build');
+  if(b){
+    if(type==='fe'){
+      b.name='构建';
+      b.desc='产物构建（vite build）；产物目录不存在即 fail-fast';
+      b.code='set -euo pipefail\ncd "${RELEASE_DIR}"\nRELEASE_TAG="${TPL_KEY:-default}/${COMMIT_ID}" npx vite build\necho \'{"artifactPath":"/static/modules/${PUBLIC_PATH}/${TPL_KEY:-default}/${COMMIT_ID}/"}\' > "$WS_RESULT_FILE"';
+    }else{
+      b.name='构建';
+      b.desc='产物构建（npm ci + tsc）；产物目录不存在即 fail-fast';
+      b.code='set -euo pipefail\ncd "${RELEASE_DIR}"\nnpm ci\nnpx tsc -p tsconfig.json\necho \'{"artifactPath":"dist/"}\' > "$WS_RESULT_FILE"';
+    }
+  }
+  renderEditList();
+  toast('已按「'+(type==='fe'?'前端':'后台')+'」载入初始四节点流水线（构建命令按类型预填，可改）');
+}
+/* 编辑页双模式：新建=表单可编辑 + 页头实时联动；编辑=基本信息整体禁用 */
+function feApplyMode(){
+  var create=(feMode==='create');
+  ['feName','feKey','feMod','feEnv'].forEach(function(id){ document.getElementById(id).disabled=!create; });
+  document.getElementById('feModTag').style.display=create?'none':'';
+  document.getElementById('feKeyLabel').textContent=create
+    ?'流水线 key（slug）· 保存后不可修改':'流水线 key（slug）· 已保存，不可修改';
+  feSyncHeader();
+}
+/* ---- 新建模块：独立页（类型决定目录 / publicPath / pm2） ---- */
+var mnType='be';
+function goNewModule(){
+  document.querySelectorAll('.menu-item').forEach(function(i){i.classList.remove('active');});
+  var mi=document.querySelector('[data-k=services]'); if(mi) mi.classList.add('active');
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('scr-modnew').classList.add('active');
+  document.getElementById('crumbTitle').textContent='新建模块';
+  document.getElementById('crumbParent').textContent='发布平台';
+  setModType('be');
+}
+function setModType(t){
+  mnType=t;
+  document.getElementById('mnT-fe').className='radio'+(t==='fe'?' on':'');
+  document.getElementById('mnT-be').className='radio'+(t==='be'?' on':'');
+  var key=(document.getElementById('mnKey').value||'<key>');
+  document.getElementById('mnDir').value=(t==='fe'?'apps/'+key:'servers/'+key);
+  document.getElementById('mnPublicWrap').style.display=(t==='fe')?'':'none';
+  document.getElementById('mnPm2Wrap').style.display=(t==='be')?'':'none';
+  if(t==='fe'){ document.getElementById('mnPublic').value='/'+key+'/'; }
+  else { document.getElementById('mnPm2').value='web-'+key; }
+}
+function mnSync(){ setModType(mnType); }
+function feSyncHeader(){
+  var envMap={'本地环境（local）':'local','开发环境（dev）':'dev','生产环境（prod）':'prod'};
+  var sel=document.getElementById('feEnv');
+  var ev=envMap[sel.value]||'';
+  document.getElementById('feEnvTag').textContent=ev||(feMode==='create'?'环境未选':'—');
+  var mk=(document.getElementById('feMod').value||'').match(/（([^）]+)）/);
+  document.getElementById('feModTag').textContent=(mk&&mk[1])||(feMode==='create'?'模块未选':'—');
+  document.getElementById('feKeyTag').textContent=document.getElementById('feKey').value
+    ||(feMode==='create'?'保存后生成':'—');
+}
+/* 编辑页 4 Tab：基本信息 / 流程编排 / 参数 / 变量（没有「历史记录」—— 那是实例页的） */
+function feTab(t){
+  ['base','flow','params','vars'].forEach(function(k){
+    document.getElementById('fet-'+k).className='tab'+(t===k?' on':'');
+    document.getElementById('fep-'+k).style.display=(t===k)?'block':'none';
+  });
+  if(t==='params') renderDetParams('','feParamBox');
 }
 function renderEditList(){
   var h='';
@@ -1263,16 +1544,15 @@ function renderEditList(){
       +'ondragover="ov(event)" ondrop="dp(\''+id+'\',event)" onclick="pick(\''+id+'\')">'
       +'<span class="fidx">'+(i+1)+'</span>'
       +(watch?'<span class="wbadge">⚠ watchdog</span>':'')
-      +(plat?'':'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+id+'\')">×</button>')
-      +(plat?'<span class="flock">🔒 platform</span>':'')
+      +'<button class="delbtn" title="删除节点" onclick="event.stopPropagation();askDel(\''+id+'\')">×</button>'
       +'<span class="fname">'+n.name+'</span>'
-      +(plat?'<span class="fk">'+n.sub+'</span>':'<span class="fk">'+id+'</span>')
+      +'<span class="fk">'+(n.kind==='approval'?'审批 · '+id:id)+'</span>'
       +'</div>';
   });
   document.getElementById('nodeCount').textContent='· '+seq.length+' 节点';
   document.getElementById('flowEdit').innerHTML=h;
 }
-/* ===== 拖拽（script 可拖；platform 锁定）。落位语义约束：git 首位 / version 在 pointer 前 ===== */
+/* ===== 拖拽（所有节点都可拖；终态无相对序约束，只查重复 key） ===== */
 function ds(key,e){ var n=findNode(key); if(!n||n.plat){ e.preventDefault(); return; }
   dragKey=key; e.dataTransfer.effectAllowed='move';
   var el=document.getElementById('node-'+key); if(el) setTimeout(function(){el.classList.add('dragging');},0); }
@@ -1295,11 +1575,8 @@ function dp(tid,e){
   toast('已移动「'+m.name+'」→ 第 '+(to+1)+' 位');
 }
 function checkOrder(s){
-  if(s[0]!=='git') return '「git」必须排在第一位（发布语义基线）';
-  var iv=s.indexOf('version'), ip=s.indexOf('pointer');
-  if(iv<0||ip<0) return null;
-  if(iv>ip) return '「version（写版本号）」必须排在「pointer（切指针）」之前';
-  return null;
+  // 终态：shell / approval 顺序自由，只查重复（写版本/切指针不再是节点，无相对序约束）
+  return new Set(s).size===s.length ? null : '节点 key 不能重复';
 }
 function saveFlow(){
   var err=checkOrder(seq);
@@ -1324,76 +1601,274 @@ function uniqueKey(){
 }
 function addNodeAt(slot){
   var key=uniqueKey();
-  var n={id:key,name:'新节点',mode:'script',plat:false,optional:false,watchdog:false,
-    desc:'自定义 script 节点：拖拽排序 / 下方配脚本',code:'# 在此编写脚本',fresh:true};
+  var n={id:key,name:'新节点',kind:'shell',mode:'script',plat:false,
+    desc:'自定义 shell 节点：拖拽排序 / 抽屉里配脚本',code:'# 在此编写脚本',fresh:true};
   NODES.push(n); usedKeys.push(key);
   seq.splice(slot,0,key);
   renderEditList(); pick(key);
-  toast('已添加 script 节点（key='+key+'），请在下方配置 label/key/脚本');
+  toast('已添加节点（key='+key+'），在右侧抽屉里配置脚本');
 }
-/* ===== 选中与属性面板 ===== */
+/* ===== 选中：高亮画布 + 打开右侧抽屉（属性面板不再内联） ===== */
 function pick(id){
   var n=findNode(id); if(!n) return;
-  if(n.plat){ toast('platform 节点（'+n.name+'）锁定，不可增删改'); return; }
-  editCur=id; editAct=null; renderEditList(); renderEditDetail();
+  editCur=id; editAct=null; renderEditList(); openNodeDrawer('edit', id);
+}
+/* ===================================================================
+ * 节点配置抽屉（用户 2026-09-15 定稿）
+ *  - header：节点名 + 一句说明
+ *  - body  ：节点名 / key / 类型 → shell 出「脚本 + 超时」，approval 出「审批人 / 超时 / 超时未批 / 拒绝后」
+ *  - footer：取消（= 关闭抽屉）· 语法校验（仅 shell 显示）· 保存  —— 固定抽屉最下面
+ * =================================================================== */
+var ndCurKey='', ndTabCur='node', ndKindCur='shell', ndVarQ='', ndParamQ='', ndVarAdding=false;
+function ndNode(){ return ndCurKey ? findNode(ndCurKey) : null; }
+function openNodeDrawer(mode, key){
+  var n = key ? findNode(key) : null;
+  ndCurKey = n ? n.id : '';
+  ndKindCur = (n && n.kind==='approval') ? 'approval' : 'shell';
+  ndTabCur='node'; ndVarQ=''; ndParamQ=''; ndVarAdding=false;
+  document.getElementById('ndTitle').textContent = mode==='new' ? '新增节点' : ('节点 · '+(n?n.name:key));
+  document.getElementById('ndSub').textContent = (n && n.kind==='approval')
+    ? '审批节点：执行到它挂起流水线，批准后从其后继续'
+    : '执行节点：脚本 + 超时（策略 / 操作名 / 操作类型 / 容错先不上）';
+  document.getElementById('nodeDrawerMask').classList.add('show');
+  document.getElementById('nodeDrawer').classList.add('show');
+  renderDrawer();
+}
+/* 抽屉三 Tab：节点 / 变量 / 参数（写脚本时随手查键名） */
+function ndTab(t){ ndTabCur=t; ndVarAdding=false; renderDrawer(); }
+function renderDrawer(){
+  ['node','vars','params'].forEach(function(t){
+    var el=document.getElementById('ndt-'+t); if(el) el.className='tab'+(ndTabCur===t?' on':'');
+  });
+  document.getElementById('ndBody').innerHTML =
+    ndTabCur==='node' ? ndNodePane() : (ndTabCur==='vars' ? ndVarsPane() : ndParamsPane());
+  var vbtn=document.getElementById('ndValidate');
+  if(vbtn) vbtn.style.display=(ndTabCur==='node'&&ndKindCur==='shell')?'':'none';
+}
+/* ---- Tab1：节点 ---- */
+function ndNodePane(){
+  var n=ndNode();
+  var kind = ndKindCur;
+  var h='<div class="dsec">';
+  h+='<div class="row" style="gap:16px;flex-wrap:wrap;">'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点名</div>'
+    +'<input class="in" id="ndName" value="'+((n&&n.name)||'')+'" style="width:180px"></div>'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点 key</div>'
+    +'<input class="in mono" id="ndKey" value="'+((n&&n.id)||'')+'" style="width:150px"></div>'
+    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">节点类型</div>'
+    +'<div class="row" style="gap:6px">'
+    +'<button class="btn sm '+(kind==='shell'?'':'gray')+'" id="ndk-shell" onclick="ndPickKind(\'shell\')">执行（shell）</button>'
+    +'<button class="btn sm '+(kind==='approval'?'':'gray')+'" id="ndk-approval" onclick="ndPickKind(\'approval\')">审批（approval）</button>'
+    +'</div></div></div>';
+  h+='</div>';
+  /* shell */
+  h+='<div class="dsec" id="ndShellFields" style="margin-top:12px">'
+    +'<div class="muted" style="margin-bottom:5px;font-weight:600">脚本</div>'
+    +'<textarea class="code" id="ndScript" rows="12" style="width:100%">'+((n&&n.code)||'')+'</textarea>'
+    +'<div class="hint">用 <span class="mono">${KEY}</span> 引用本流水线的变量；发布节点就是「上传文件 + 调用写版本接口」两段。</div>'
+    +'<div class="row" style="gap:10px;align-items:center;margin-top:10px">'
+    +'<span class="muted">超时（秒，留空=不限）</span>'
+    +'<input class="in" id="ndTimeout" value="'+((n&&n.timeout)||900)+'" style="width:110px">'
+    +'</div>'
+    +(n&&n.platformActs&&n.platformActs.length
+      ? '<div class="hint" style="margin-top:8px">本节点还包含平台操作（随平台维护，不可编辑）：'
+        +n.platformActs.join('、')+'</div>' : '')
+    +'</div>';
+  /* approval */
+  h+='<div class="dsec" id="ndApprovalFields" style="margin-top:12px;display:none">'
+    +'<div class="muted" style="margin-bottom:5px;font-weight:600">审批人（不选 = 所有持权限者）</div>'
+    +'<div class="chips">'+(((n&&n.approvers)||['admin']).map(function(a){
+        return '<span class="chip">'+a+' ×</span>';}).join(''))+'</div>'
+    +'<div class="hint">候选来自持有 <span class="mono">deploy:pipeline:approve</span> 的用户；拉取失败时告警但不强校验。</div>'
+    +'<div class="row" style="gap:10px;align-items:center;margin-top:10px">'
+    +'<span class="muted">超时（秒，留空=不超时）</span>'
+    +'<input class="in" id="ndATimeout" value="'+((n&&n.timeout)||3600)+'" style="width:110px"></div>'
+    +'<div class="muted" style="margin:10px 0 5px;font-weight:600">超时未批</div>'
+    +'<div class="radio-group"><div class="radio '+(n&&n.timeoutAction==='auto-approve'?'':'on')+'">终止（abort）</div>'
+    +'<div class="radio '+(n&&n.timeoutAction==='auto-approve'?'on':'')+'">自动通过（auto-approve）</div></div>'
+    +'<div class="muted" style="margin:10px 0 5px;font-weight:600">拒绝后</div>'
+    +'<div class="radio-group"><div class="radio '+(n&&n.onReject==='rollback'?'':'on')+'">终止（abort）</div>'
+    +'<div class="radio '+(n&&n.onReject==='rollback'?'on':'')+'" onclick="toast(\'将回滚到本次发布前的基线版本\')">回滚（rollback）</div></div>'
+    +'</div>';
+  return h;
+}
+function ndPickKind(k){ ndKindCur=k; renderDrawer(); }
+function ndKindNow(){ return ndKindCur; }
+/* ---- Tab2：变量（检索 + 按需新增 + 紧凑表；始终渲染表格，空则空内容） ---- */
+function ndVarsPane(){
+  var q=ndVarQ.toLowerCase();
+  var rows=pipeVars.filter(function(v){
+    return !q || (v.key+' '+(v.desc||'')).toLowerCase().indexOf(q)>=0;
+  });
+  var h='<div class="dsec">'
+    +'<div class="row" style="gap:8px;align-items:center">'
+    +'<input class="in" placeholder="检索变量（键 / 说明）" style="flex:1" value="'+(ndVarQ||'')+'" oninput="ndFilterVars(this.value)">'
+    +'<button class="btn sm" onclick="ndVarAdding=!ndVarAdding;renderDrawer()">'+(ndVarAdding?'收起':'+ 新增变量')+'</button>'
+    +'</div>';
+  if(ndVarAdding){
+    /* 新增表单：独立小面板 + 两列网格（原来挤成一行，看着像筛选栏） */
+    h+='<div class="dsec" style="margin-top:10px;background:var(--ws-bg-subtle)">'
+      +'<div class="t" style="margin:0 0 8px">新增变量</div>'
+      +'<div class="bgrid">'
+      +'<div class="bf"><label>键 *</label><input class="in mono" id="ndvKey" placeholder="如 PUBLISH_PATH" style="width:100%"></div>'
+      +'<div class="bf"><label>值</label><input class="in mono" id="ndvVal" placeholder="值（密钥保存后不回显）" style="width:100%"></div>'
+      +'<div class="bf"><label>说明</label><input class="in" id="ndvDesc" placeholder="用途说明" style="width:100%"></div>'
+      +'<div class="bf"><label>密钥</label><label class="chk"><input type="checkbox" id="ndvSecret"> 值不回显</label></div>'
+      +'</div>'
+      +'<div class="row" style="justify-content:flex-end;margin-top:10px">'
+      +'<button class="btn ghost sm" onclick="ndVarAdding=false;renderDrawer()">取消</button>'
+      +'<button class="btn sm" onclick="ndAddVar()">添加</button></div>'
+      +'</div>';
+  }
+  h+='<table class="list" style="margin-top:10px">'
+    +'<thead><tr><th style="width:140px">键</th><th style="width:150px">值</th><th>说明</th>'
+    +'<th style="width:44px">密钥</th><th style="width:96px">操作</th></tr></thead>'
+    +'<tbody id="ndVarRows">'+ndVarRowsHtml(rows)+'</tbody></table>'
+    +'<div class="hint">变量<b>跟着流水线走</b>（不单独成页）。空的时候表格也留着 —— 未定义就用全局变量。</div>'
+    +'</div>';
+  return h;
+}
+function ndVarRowsHtml(rows){
+  if(!rows.length){
+    return '<tr><td colspan="5" class="muted" style="text-align:center;padding:14px">'
+      +'没有匹配的流水线变量（未定义时节点脚本取全局变量）</td></tr>';
+  }
+  return rows.map(function(v){
+    return '<tr><td class="k" title="'+v.key+'">'+v.key+'</td>'
+      +'<td class="k" title="'+(v.secret?'********':v.value)+'">'+(v.secret?'********':v.value)+'</td>'
+      +'<td title="'+(v.desc||'')+'">'+(v.desc||'')+'</td>'
+      +'<td><span class="tag '+(v.secret?'warn':'gray')+'">'+(v.secret?'是':'否')+'</span></td>'
+      +'<td><button class="btn mini ghost" onclick="toast(\'编辑变量（原型示意）\')">编辑</button>'
+      +'<button class="btn mini gray" onclick="ndDelVar(\''+v.key+'\')">删除</button></td></tr>';
+  }).join('');
+}
+/** 只重渲染表格行，保住检索框焦点 */
+function ndFilterVars(v){
+  ndVarQ=v||'';
+  var q=ndVarQ.toLowerCase();
+  var rows=pipeVars.filter(function(x){
+    return !q || (x.key+' '+(x.desc||'')).toLowerCase().indexOf(q)>=0;
+  });
+  var tb=document.getElementById('ndVarRows'); if(tb) tb.innerHTML=ndVarRowsHtml(rows);
+}
+function ndAddVar(){
+  var k=(document.getElementById('ndvKey').value||'').trim();
+  if(!k){ toast('变量键必填'); return; }
+  pipeVars.push({key:k,value:document.getElementById('ndvVal').value||'',
+    desc:document.getElementById('ndvDesc').value||'',
+    secret:document.getElementById('ndvSecret').checked});
+  ndVarAdding=false; renderDrawer();
+  toast('已新增变量（原型未落库）');
+}
+function ndDelVar(k){
+  pipeVars=pipeVars.filter(function(v){return v.key!==k;});
+  renderDrawer(); toast('已删除变量');
+}
+/* ---- Tab3：参数（内置 + 全局 + 本流水线，只读查阅；同样带检索） ---- */
+var GLOBAL_VARS=[
+  {key:'PUBLISH_HOST',value:'127.0.0.1',desc:'发布目标机（所有流水线共用）'},
+  {key:'SSH_KEY',value:'********',desc:'远程发布私钥',secret:true}
+];
+function ndParamsPane(){
+  var q=ndParamQ.toLowerCase();
+  var hit=function(k,d){ return !q || (k+' '+d).toLowerCase().indexOf(q)>=0; };
+  var builtins=[['RELEASE_DIR','发布根目录'],['MODULE_KEY','当前模块 key'],['MODULE_DIR','模块目录名'],
+    ['MODULE_TYPE','模块类型'],['BRANCH','本次分支'],['COMMIT_ID','本次 commit（=版本号）'],
+    ['STAGE','当前节点 key'],['DEPLOY_ENV','目标环境']].filter(function(x){return hit(x[0],x[1]);});
+  var gv=GLOBAL_VARS.filter(function(v){return hit(v.key,v.desc||'');});
+  var pv=pipeVars.filter(function(v){return hit(v.key,v.desc||'');});
+  var h='<div class="dsec">'
+    +'<input class="in" placeholder="检索参数 / 变量" style="width:230px" value="'+(ndParamQ||'')+'" oninput="ndFilterParams(this.value)">'
+    +'<div class="hint" style="margin-top:8px">注入优先级（后者覆盖前者）：平台内置 → 配置中心 → <b>流水线变量</b> → 节点内联</div>'
+    +'<div id="ndParamRows" style="margin-top:10px">'+ndParamRowsHtml(builtins,gv,pv)+'</div></div>';
+  return h;
+}
+function ndParamRowsHtml(builtins,gv,pv){
+  var sec=function(title,rows,src){
+    var body=rows.length
+      ? rows.map(function(r){
+          var key=Array.isArray(r)?r[0]:r.key, desc=Array.isArray(r)?r[1]:(r.desc||'');
+          var val=Array.isArray(r)?'（运行时注入）':(r.secret?'********':r.value);
+          return '<tr><td class="k"><span class="mono">${'+key+'}</span></td><td class="k">'+val+'</td>'
+            +'<td>'+desc+'</td><td><span class="tag gray">'+src+'</span></td></tr>';
+        }).join('')
+      : '<tr><td colspan="4" class="muted" style="text-align:center;padding:12px">无</td></tr>';
+    return '<div class="t" style="margin:10px 0 6px">'+title+'</div>'
+      +'<table class="list"><thead><tr><th style="width:180px">键</th><th style="width:150px">值</th>'
+      +'<th>说明</th><th style="width:90px">来源</th></tr></thead><tbody>'+body+'</tbody></table>';
+  };
+  return sec('平台内置参数',builtins,'内置')
+    + sec('全局变量',gv,'全局')
+    + sec('本流水线变量',pv,'流水线变量');
+}
+function ndFilterParams(v){
+  ndParamQ=v||'';
+  var q=ndParamQ.toLowerCase();
+  var hit=function(k,d){ return !q || (k+' '+d).toLowerCase().indexOf(q)>=0; };
+  var builtins=[['RELEASE_DIR','发布根目录'],['MODULE_KEY','当前模块 key'],['MODULE_DIR','模块目录名'],
+    ['MODULE_TYPE','模块类型'],['BRANCH','本次分支'],['COMMIT_ID','本次 commit（=版本号）'],
+    ['STAGE','当前节点 key'],['DEPLOY_ENV','目标环境']].filter(function(x){return hit(x[0],x[1]);});
+  var gv=GLOBAL_VARS.filter(function(v){return hit(v.key,v.desc||'');});
+  var pv=pipeVars.filter(function(v){return hit(v.key,v.desc||'');});
+  var box=document.getElementById('ndParamRows'); if(box) box.innerHTML=ndParamRowsHtml(builtins,gv,pv);
+}
+function closeDrawer(){
+  document.getElementById('nodeDrawerMask').classList.remove('show');
+  document.getElementById('nodeDrawer').classList.remove('show');
+}
+/* ---- 发起发布抽屉 ---- */
+function openSubmitDrawer(ctx){
+  if(ctx) document.getElementById('subCtx').textContent=ctx;
+  document.getElementById('subMask').classList.add('show');
+  document.getElementById('subDrawer').classList.add('show');
+}
+function closeSubmitDrawer(){
+  document.getElementById('subMask').classList.remove('show');
+  document.getElementById('subDrawer').classList.remove('show');
+}
+function doSubmit(){
+  closeSubmitDrawer();
+  toast('已提交发布（原型示意）：进入流水线详情看执行');
+  nav(document.querySelector('[data-k="detail"]'));
+}
+function saveNode(){
+  // 保存只针对「节点」Tab；变量是行内即时生效，参数只读
+  if(ndTabCur!=='node'){
+    if(ndTabCur==='vars'){ toast('变量改动即时生效（原型示意）'); return; }
+    toast('参数只读，无需保存'); return;
+  }
+  var key=document.getElementById('ndKey').value.trim();
+  var name=document.getElementById('ndName').value.trim();
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(key)){ toast('key 格式非法（字母数字下划线连字符，1–32 位）'); return; }
+  if(PLATFORM_KEYS.indexOf(key)>=0){ toast('key 不能占用平台保留字（version / pointer）'); return; }
+  if(key!==ndCurKey && usedKeys.indexOf(key)>=0){ toast('key 已存在：'+key); return; }
+  var kind=ndKindNow();
+  var n=findNode(ndCurKey);
+  if(!n){
+    n={id:key,name:name||key,kind:kind,mode:kind==='approval'?'approval':'script',plat:false};
+    NODES.push(n); usedKeys.push(key); seq.push(key);
+  }
+  if(key!==n.id){
+    usedKeys=usedKeys.map(function(x){return x===n.id?key:x;});
+    seq=seq.map(function(x){return x===n.id?key:x;});
+    n.id=key;
+  }
+  n.name=name||key; n.kind=kind; n.mode=kind==='approval'?'approval':'script';
+  if(kind==='shell'){
+    n.code=document.getElementById('ndScript').value;
+    n.timeout=Number(document.getElementById('ndTimeout').value)||undefined;
+  }else{
+    n.timeout=Number(document.getElementById('ndATimeout').value)||undefined;
+    if(!n.approvers||!n.approvers.length) n.approvers=['admin'];
+  }
+  editCur=n.id;
+  closeDrawer(); renderEditList();
+  toast('已保存节点「'+n.name+'」（原型未落库）');
 }
 function pickAct(aid){ editAct=aid; renderEditDetail(); }
+/** 属性面板已移入右侧抽屉（openNodeDrawer）；保留空实现以兼容既有调用点 */
 function renderEditDetail(){
-  var box=document.getElementById('editDetail');
-  if(!editCur){
-    box.innerHTML='<div class="hint" style="padding:20px 0;text-align:center;margin:0">'
-      +'点击上方 script 节点配置脚本；点连接线「+」或顶部「添加节点」直接落新节点。platform（git/写版本号/切指针）锁定。</div>';
-    return;
-  }
-  var n=findNode(editCur); if(!n) return;
-  var acts=getActs(n), act=null;
-  if(acts.length) act=acts.filter(function(a){return a.id===editAct;})[0]
-    || acts.filter(function(a){return !a.builtin;})[0] || acts[0];
-  /* --- 属性面板：label / key / optional / watchdog --- */
-  var h='<div class="props">';
-  h+='<div class="t" style="margin-bottom:8px">节点属性 · <span style="text-transform:none">'+n.name+'</span></div>';
-  h+='<div class="row" style="align-items:flex-end;gap:14px;margin-bottom:8px;flex-wrap:wrap;">'
-    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">label（即改即同步画布）</div>'
-    +'<input class="in" id="inLabel-'+n.id+'" value="'+n.name+'" oninput="renameLabel(\''+n.id+'\',this.value)"></div>'
-    +'<div><div class="muted" style="margin-bottom:5px;font-weight:600">key <span class="mono" style="font-weight:400">（模块脚本读写点）</span></div>'
-    +'<input class="in mono" value="'+n.id+'" onchange="renameKey(\''+n.id+'\',this.value)"></div>'
-    +'<div style="display:flex;flex-direction:column;gap:6px;padding:2px 0;">'
-    +'<label class="chk"><input type="checkbox" '+(n.optional?'checked':'')+' onchange="var x=findNode(\''+n.id+'\');x.optional=this.checked;toast(\'optional '+(n.optional?'开':'关')+'\')"> optional（未配脚本跳过不阻断）</label>'
-    +'<label class="chk"><input type="checkbox" '+(n.watchdog?'checked':'')+' onchange="toggleWatch(\''+n.id+'\',this.checked)"> watchdog（失败触发自动回滚）</label></div>'
-    +'<div><button class="btn mini gray" style="background:var(--ws-error-500);color:#fff;border:none;" onclick="askDel(\''+n.id+'\')">删除节点</button></div>'
-    +'</div>';
-  h+='<div class="muted">脚本读写：模块 × <span class="mono">'+n.id+'</span>（复用 StageActionsEditor，多操作按序执行）。</div>';
-  h+='</div>';
-  /* --- 脚本操作编辑器（复用多操作编辑器形态） --- */
-  h+='<div style="margin-top:12px"><div class="t">脚本 · 操作列表（'+acts.length+'）顺序执行</div>';
-  acts.forEach(function(a,i){
-    h+='<div class="act '+(act&&act.id===a.id?'on':'')+(a.builtin?' lock':'')+'" '
-      +(a.builtin?'':'onclick="pickAct(\''+a.id+'\')" ')+'>'
-      +'<span class="an">op'+(i+1)+' '+a.name+'</span>'
-      +'<span class="tag '+(a.type==='service'?'primary':'gray')+'">'+(a.type==='service'?'工具':'shell')+'</span>'
-      +(a.cont?'<span class="tag warn">容错</span>':'')
-      +'<span class="am">'+(a.timeout||60)+'s</span>'
-      +(a.builtin?'<span class="tag gray">内置</span>':'<button class="btn mini gray" onclick="event.stopPropagation();delAct(\''+a.id+'\')">删</button>')
-      +'</div>';
-  });
-  h+='<div class="row" style="margin-bottom:10px">'
-    +'<button class="btn ghost mini" onclick="addAct()">+ shell 操作</button>'
-    +'<button class="btn ghost mini" onclick="toast(\'引用工具：工具升级自动扩散\')">+ 引用工具</button>'
-    +'<button class="btn ghost mini" onclick="toast(\'语法校验通过\')">校验</button></div>';
-  if(act){
-    h+='<div class="editor-wrap"><div class="editor-bar"><span>操作 · '+act.name+'</span>'
-      +'<span class="row"><button class="btn ghost sm" onclick="toast(\'bash -n 通过\')">校验</button>'
-      +'<button class="btn sm" onclick="toast(\'已保存 · 审计留痕\')">保存</button></span></div>'
-      +(act.type==='service'
-        ? '<textarea class="code" disabled>该操作由内置工具执行，无脚本。\n工具 code: '+(act.tool||'')+'</textarea>'
-        : codeEditor(String(act.code||'')))
-      +'</div>';
-    h+='<div class="t" style="margin-top:10px">可用变量（点击插入）</div><div class="chips">';
-    VARS.forEach(function(v){ h+='<span class="chip" onclick="ins(\''+v+'\')">${'+v+'}</span>'; });
-    h+='</div>';
-  }
-  h+='</div>';
-  box.innerHTML=h;
+  return;
 }
 /* label / key 即改即同步 */
 function renameLabel(id,val){
@@ -1637,11 +2112,56 @@ function renderPipeVars(){
       '<td><button class="btn mini ghost" onclick="toast(\'编辑变量（原型未展开）\')">编辑</button>'+
       '<button class="btn mini gray" onclick="delVar('+i+')">删除</button></td></tr>';
   }).join('');
-  document.getElementById('varList').innerHTML=pipeVars.map(function(v){
-    return '<tr><td class="k">'+v.key+'</td><td class="k">'+(v.secret?'********':v.value)+'</td><td>'+(v.desc||'')+'</td>'+
-      '<td><span class="tag '+(v.secret?'warn':'gray')+'">'+(v.secret?'是':'否')+'</span></td><td class="muted">admin</td></tr>';
-  }).join('');
+  renderDetVars();
 }
+/* ---- 详情页「变量」Tab：全局 + 本流水线（只读；空也留表头） ---- */
+function renderDetVars(){
+  var box=document.getElementById('detVarBox'); if(!box) return;
+  var tbl=function(title,rows,src){
+    var body=rows.length
+      ? rows.map(function(v){
+          return '<tr><td class="k">'+v.key+'</td><td class="k">'+(v.secret?'********':v.value)+'</td>'
+            +'<td>'+(v.desc||'')+'</td>'
+            +'<td><span class="tag '+(v.secret?'warn':'gray')+'">'+(v.secret?'是':'否')+'</span></td>'
+            +'<td><span class="tag gray">'+src+'</span></td></tr>';
+        }).join('')
+      : '<tr><td colspan="5" class="muted" style="text-align:center;padding:12px">'
+        +'该流水线未定义自定义变量（按需在「编辑流水线」里加）</td></tr>';
+    return '<div class="t" style="margin:8px 0 6px">'+title+'</div>'
+      +'<table class="list"><thead><tr><th style="width:150px">键</th><th style="width:170px">值</th><th>说明</th>'
+      +'<th style="width:56px">密钥</th><th style="width:90px">来源</th></tr></thead><tbody>'+body+'</tbody></table>';
+  };
+  box.innerHTML = tbl('全局变量（所有流水线共用）',GLOBAL_VARS,'全局')
+    + tbl('本条流水线变量',pipeVars,'流水线变量');
+}
+/* ---- 详情页「参数」Tab：内置 + 全局 + 本流水线（只读，带检索） ---- */
+function renderDetParams(q,target){
+  q=(q===undefined?(_detParamQ||''):q).toLowerCase(); _detParamQ=q;
+  var box=document.getElementById(target||'detParamBox'); if(!box) return;
+  var hit=function(k,d){ return !q || (k+' '+d).toLowerCase().indexOf(q)>=0; };
+  var sec=function(title,rows,src){
+    var body=rows.length
+      ? rows.map(function(r){
+          var key=Array.isArray(r)?r[0]:r.key, desc=Array.isArray(r)?r[1]:(r.desc||'');
+          var val=Array.isArray(r)?'（运行时注入）':(r.secret?'********':r.value);
+          return '<tr><td class="k">'+key+'</td><td class="k">'+val+'</td><td>'+desc+'</td>'
+            +'<td><span class="tag '+(src==='内置'?'gray':'primary')+'">'+src+'</span></td></tr>';
+        }).join('')
+      : '<tr><td colspan="4" class="muted" style="text-align:center;padding:12px">无</td></tr>';
+    return '<div class="t" style="margin:8px 0 6px">'+title+'</div>'
+      +'<table class="list"><thead><tr><th style="width:160px">键</th><th style="width:170px">生效值</th>'
+      +'<th>说明</th><th style="width:80px">来源</th></tr></thead><tbody>'+body+'</tbody></table>';
+  };
+  var builtins=[['RELEASE_DIR','发布根目录'],['MODULE_KEY','当前模块 key'],['MODULE_DIR','模块目录名'],
+    ['MODULE_TYPE','模块类型'],['BRANCH','本次分支'],['COMMIT_ID','本次 commit（=版本号）'],
+    ['STAGE','当前节点 key'],['DEPLOY_ENV','目标环境']].filter(function(x){return hit(x[0],x[1]);});
+  var gv=GLOBAL_VARS.filter(function(v){return hit(v.key,v.desc||'');});
+  var pv=pipeVars.filter(function(v){return hit(v.key,v.desc||'');});
+  box.innerHTML = sec('平台内置参数',builtins,'内置')
+    + sec('全局变量',gv,'全局')
+    + sec('本条流水线变量',pv,'流水线变量');
+}
+var _detParamQ='';
 function delVar(i){pipeVars.splice(i,1);renderPipeVars();toast('已删除变量（未保存）');}
 function addVarPrompt(){
   var k=prompt('变量键（如 PUBLISH_PATH）');if(!k) return;
@@ -1673,7 +2193,7 @@ var ENV_ROWS={
   'ai-agent':[{env:'local',cur:'v-0.3.1',t:'2026-09-12 11:52 · admin'}]
 };
 var curModule='admin';
-function navEditFlow(el){nav(el);if(!editing)toggleEdit();}
+
 function toggleMenu(el){
   var sub=el.nextElementSibling;
   if(sub&&sub.classList.contains('submenu')) sub.classList.toggle('open');

@@ -12,11 +12,16 @@ export class VersionExecutor {
 
   async run(ctx: StepContext): Promise<void> {
     const p = ctx.pipeline;
+    // 版本号来自 git 节点解析（COMMIT_ID）；为空说明拉码节点没跑或没解析出版本，
+    // 此时直接建库报 `Column 'version_tag' cannot be null` 完全看不出原因，故显式拦截。
+    if (!p.versionTag) {
+      throw new Error('写版本失败：版本号为空（git 节点未解析出 COMMIT_ID，检查拉码节点是否执行成功）');
+    }
     await ctx.enterStage('写入版本记录');
     await this.registry.registerVersion({
       env: p.env,
       moduleKey: p.moduleKey,
-      versionTag: p.versionTag!,
+      versionTag: p.versionTag,
       gitCommit: p.gitCommit,
       gitBranch: p.gitBranch,
       releasedBy: p.operator,

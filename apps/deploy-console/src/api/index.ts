@@ -77,6 +77,19 @@ export const deployApi = {
       moduleKey: string
       versionTag: string
     }>,
+  /**
+   * 回滚到某版本（秒级，不重新构建）。
+   * 后台模块：把该版本目录落地到 dist 并重启 pm2；前台模块：只改指针。
+   * 不传 `to` = 回滚到上一个版本。
+   */
+  rollbackVersion: (body: { env: string; moduleKey: string; to?: string; confirm?: boolean }) =>
+    http.post('/deploy/rollback-version', body) as Promise<{
+      moduleKey: string
+      env: string
+      from: string
+      to: string
+      status: string
+    }>,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string
@@ -103,23 +116,45 @@ export const deployApi = {
     }>,
 }
 
-/* ========== Environments ========== */
+/* ========== Environments（1:N：环境归属模块） ========== */
+
+/** 模块的环境行（子资源 /modules/:key/environments） */
+export interface ModuleEnvRow {
+  moduleKey: string
+  id: string
+  name: string
+  publicUrl?: string
+  address?: string
+  serverName?: string
+  port?: number
+  builtin: boolean
+}
+
+/** 环境字典行（跨模块去重，/environments?moduleKey=） */
+export interface EnvDictRow {
+  id: string
+  name: string
+  publicUrl?: string
+  builtin: boolean
+  moduleCount: number
+}
+
 export const environmentApi = {
-  list: () =>
-    http.get('/environments') as Promise<
-      {
-        id: string
-        name: string
-        publicUrl?: string
-        /** 服务地址映射：{ moduleKey: 'host:port' 或域名 } */
-        addresses?: Record<string, string>
-        builtin: boolean
-      }[]
-    >,
-  get: (id: string) => http.get(`/environments/${id}`) as Promise<any>,
-  create: (dto: any) => http.post('/environments', dto) as Promise<any>,
-  update: (id: string, dto: any) => http.put(`/environments/${id}`, dto) as Promise<any>,
-  remove: (id: string) => http.delete(`/environments/${id}`) as Promise<any>,
+  /** 环境字典（跨模块聚合，供筛选下拉）；传 moduleKey 则返回该模块的环境行 */
+  list: (moduleKey?: string) =>
+    http.get('/environments', { params: { moduleKey } }) as Promise<EnvDictRow[] | ModuleEnvRow[]>,
+  /** 某模块的环境列表（主入口） */
+  listByModule: (moduleKey: string) =>
+    http.get(`/modules/${moduleKey}/environments`) as Promise<ModuleEnvRow[]>,
+  create: (moduleKey: string, dto: any) =>
+    http.post(`/modules/${moduleKey}/environments`, dto) as Promise<ModuleEnvRow>,
+  update: (moduleKey: string, id: string, dto: any) =>
+    http.put(`/modules/${moduleKey}/environments/${id}`, dto) as Promise<ModuleEnvRow>,
+  remove: (moduleKey: string, id: string) =>
+    http.delete(`/modules/${moduleKey}/environments/${id}`) as Promise<{
+      ok: boolean
+      cascade: { deployments: number; routes: number; canaryRules: number; versions: number }
+    }>,
 }
 
 /* ========== Modules（模块注册表） ========== */
@@ -327,22 +362,33 @@ export const serverApi = {
 
 /* ========== Pipelines（发布流水线） ========== */
 
-/** v5 模板节点：platform=发布语义（git/写版本号，平台托管）；script=用户自定义脚本节点 */
+/**
+ * 流水线节点（终态：只有 shell / approval 两类）。
+ *
+ * - `shell`：跑命令的节点（拉代码 / 构建 / 发布…）；平台能力（写版本、切指针…）
+ *   是它里面的一个 `service` action，不再是节点类型；
+ * - `approval`：审批节点，执行到它挂起、批准后从其后继续；
+ * - `script` / `platform`：**历史数据**（旧名 / 旧平台节点），仅读取兼容。
+ */
 export interface TemplateNode {
-  kind: 'platform' | 'script'
-  /** git | version | pointer（platform）或自定义 script key */
+  kind: 'shell' | 'script' | 'platform' | 'approval'
+  /** 节点 key（git | build | release | 自定义）；version/pointer 为保留字不可用作节点名 */
   key: string
-  /** script 节点展示名（platform 由前端映射） */
+  /** shell/approval 节点展示名（旧 platform 由前端映射） */
   label?: string
-  /** script：未配脚本时跳过发布（默认必配 fail-fast） */
+  /** shell：未配脚本时跳过发布（默认必配 fail-fast） */
   optional?: boolean
   /** script：该节点失败触发自动回滚（全局仅 1 个） */
   watchdog?: boolean
   timeoutSec?: number
 }
 
-/** 平台保留字（script key 不可占用；stage_commands 也不可写） */
-export const PLATFORM_NODE_KEYS = ['git', 'version', 'pointer'] as const
+/**
+ * 保留字节点名（不可作为节点 key；stage_commands 也不可写）。
+ * 终态：git 已放开（拉码是普通 shell 节点）；version/pointer 保留——
+ * 它们的能力已变成 `service` action，同名节点会造成语义误读。
+ */
+export const PLATFORM_NODE_KEYS = ['version', 'pointer'] as const
 
 /** platform 节点展示 label（前端映射，避免每次传） */
 export const PLATFORM_NODE_LABELS: Record<string, string> = {
@@ -351,14 +397,14 @@ export const PLATFORM_NODE_LABELS: Record<string, string> = {
   pointer: '切指针',
 }
 
-/** 流水线模板（流程定义；模块下可建多条） */
+/** 流水线（流程定义；模块下可建多条） */
 export interface PipelineTemplate {
   id: string
   moduleKey: string
   name: string
   /** 流水线 key（slug，产物命名空间用：modules/<模块>/<key>/<版本>/） */
   key?: string
-  /** 归属环境（local/dev/prod…）；一个模块默认三条流水线；null=全局模板不限环境 */
+  /** 归属环境（local/dev/prod…）；一个模块默认三条流水线；null=全局流水线不限环境 */
   env?: string | null
   description?: string
   /** 活动阶段子集（null=全量九阶段） */
@@ -373,7 +419,7 @@ export interface PipelineTemplate {
   enabled: boolean
   builtin: boolean
   /**
-   * 模板级审批人（用户名）。仅作白名单，能否审批仍看权限码
+   * 流水线级审批人（用户名）。仅作白名单，能否审批仍看权限码
    * `deploy:pipeline:approve`；节点未指定 approvers 时继承这里。
    */
   approvers?: string[] | null
@@ -423,7 +469,7 @@ export interface PipelineItem {
     | 'failed'
     | 'cancelled'
   templateId?: string
-  /** 模板名快照（旧实例为 null → 展示「默认」） */
+  /** 流水线名快照（旧实例为 null → 展示「默认」） */
   templateName?: string
   skipVerify?: boolean
   /** 活动阶段快照（null=全量九阶段） */
@@ -487,7 +533,7 @@ export const pipelineApi = {
     versionTag?: string
     target?: 'local' | 'remote'
     grayscaleRule?: Record<string, unknown>
-    /** 流水线模板 ID（不传 = 模块默认模板） */
+    /** 流水线 ID（不传 = 模块默认流水线） */
     templateId?: string
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
@@ -543,18 +589,18 @@ export const pipelineApi = {
       }) as Promise<Omit<ReleaseCandidate, 'commit'>[]>
     ).then((rows) => (rows ?? []).map((r) => ({ ...r, commit: commitOf(r.versionTag) }))),
 
-  /** 各流水线模板运行摘要：{ [templateId]: { total, ok, latest } } */
+  /** 各流水线运行摘要：{ [templateId]: { total, ok, latest } } */
   summary: () =>
     http.get('/pipelines/meta/summary') as Promise<
       Record<string, { total: number; ok: number; latest: PipelineItem | null }>
     >,
 }
 
-/* ========== Pipeline Templates（流水线模板：流程定义） ========== */
+/* ========== Pipeline（流水线：流程定义） ========== */
 
-/** 流水线模板（全局定义，不绑模块；moduleKey='*'） */
+/** 流水线（全局定义，不绑模块；moduleKey='*'） */
 export const pipelineTemplateApi = {
-  /** 可用模板：传 moduleKey 返回「全局+该模块专属」；不传返回全部 */
+  /** 可用流水线：传 moduleKey 返回「全局+该模块专属」；不传返回全部 */
   list: (moduleKey?: string) =>
     http.get('/pipeline-templates', {
       params: moduleKey ? { moduleKey } : {},

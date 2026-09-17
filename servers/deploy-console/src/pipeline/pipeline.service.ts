@@ -66,6 +66,8 @@ import { platformScriptsDir } from './step-scripts';
 import { planNodeExec } from './steps/node-exec-plan';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { runActionSequence } from './steps/action-sequence';
+// service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
+import { resolveServiceStep } from './steps/service-tools';
 // 拉码结果的版本身份与一致性断言（纯函数）
 import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
@@ -477,6 +479,15 @@ export class PipelineService {
     const id = this.generateId();
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
     const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 一致性（2026-09-15）：一条流水线只属于一个环境（按「模块 × 环境」拆），
+    // 提交的环境必须与流水线的 env 相同 —— 否则会出现「env=dev 却跑 admin-local 流水线」
+    // 这种环境/流水线错配的实例（投递目标、产物命名空间全跟着流水线走，错配很隐蔽）。
+    const tplEnv = (tpl as { env?: string | null }).env;
+    if (tplEnv && tplEnv !== dto.env) {
+      throw new BadRequestException(
+        `流水线「${tpl.name}」属于环境 ${tplEnv}，与提交的目标环境 ${dto.env} 不一致；请改选 ${dto.env} 环境下的流水线`,
+      );
+    }
     // 发布前把平台托管脚本（git）同步到该模板：保证运行期一定拿到与代码一致的最新脚本
     // （幂等；模板新建/被改过都不会漏。失败不阻断提交——拉码阶段还有内置回退）
     await this.platformScripts.seedForTemplate(tpl.id).catch((e) => {
@@ -1504,10 +1515,11 @@ export class PipelineService {
 
       // script：命令驱动（未配命令按 optional 跳过 / 非 optional fail-fast）
       case 'script': {
-        const nodeTimeoutSec = node.kind === 'script' ? node.timeoutSec : undefined;
-        const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec);
+        const isCmdNode = node.kind === 'shell' || node.kind === 'script';
+        const nodeTimeoutSec = isCmdNode ? node.timeoutSec : undefined;
+        const hasCmd = await this.runStageCommand(p, stage, stage, nodeTimeoutSec, uploadTarget);
         if (hasCmd) return;
-        if (node.kind === 'script' && node.optional) {
+        if (isCmdNode && node.optional) {
           p.logs = [
             ...(p.logs ?? []),
             `[${stage}] ${node.label ?? stage} 未配置脚本，已跳过（optional）`,
@@ -1689,6 +1701,8 @@ export class PipelineService {
     progressStage: string = nodeKey,
     /** 节点级默认超时（秒）；操作未配超时时用它（design §3 ShellNode.timeoutSec） */
     nodeTimeoutSec?: number,
+    /** 投递目标（service action 里的内置执行体需要，如 upload/restart） */
+    uploadTarget: 'local' | 'remote' = 'local',
   ): Promise<boolean> {
     const stage = progressStage;
     const acts = await this.stepCommands.resolveActions(p.templateId!, nodeKey);
@@ -1731,6 +1745,13 @@ export class PipelineService {
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.templateId),
     });
+    // 平台自调用凭据：发布节点脚本要「调用写版本接口」（脚本里无用户 JWT）
+    // 见 deploy/internal-release.controller.ts —— 走 x-internal-key 内部密钥
+    // 默认地址：console 自身监听端口（PLATFORM_PORT，缺省 6200）
+    const platformPort = this.configService.get<string>('PLATFORM_PORT') || '6200';
+    env.WS_PLATFORM_API =
+      this.configService.get<string>('PLATFORM_API_BASE') || `http://127.0.0.1:${platformPort}/api`;
+    env.WS_INTERNAL_KEY = this.configService.get<string>('INTERNAL_API_KEY') || '';
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
     await this.save(p);
 
@@ -1755,6 +1776,21 @@ export class PipelineService {
       baseEnv: { ...env, ...inject },
       resultFile,
       defaultTimeoutSec: nodeTimeoutSec,
+      // service action = 平台能力（design §3）：按 tool 名分派到内置执行体
+      runService: async (a, op) => {
+        const stepKey = resolveServiceStep(a.tool);
+        if (!stepKey) {
+          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 未知工具 ${a.tool ?? '—'}，跳过`];
+          return;
+        }
+        const def = this.builtinSteps[stepKey];
+        if (!def?.run) throw new Error(`工具 ${a.tool} 无内置实现（步骤 ${stepKey}）`);
+        if (def.skip?.(p)) {
+          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 工具 ${a.tool} 按守卫跳过（当前模块/环境不适用）`];
+          return;
+        }
+        await def.run(this.buildStepContext(p, stage, uploadTarget));
+      },
       runShell: (inv) => this.runShell(inv.code, inv.env, p, inv.timeoutSec, cwd),
       readResult: (op) => this.readStageResult(resultFile, stage, op),
       onLog: (line) => {

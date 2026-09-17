@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import {
   PipelineTemplateService,
   needsApprovalForTemplate,
@@ -77,6 +78,11 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       providers: [
         PipelineTemplateService,
         { provide: getRepositoryToken(DeployPipelineTemplateEntity), useValue: repo },
+        // 新建流水线时会写入 git 默认脚本（可编辑），测试里只要不抛错即可
+        {
+          provide: PlatformScriptSeedService,
+          useValue: { ensureEditableDefaults: jest.fn(async () => false) },
+        },
       ],
     }).compile();
     service = moduleRef.get(PipelineTemplateService);
@@ -93,26 +99,38 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
     defaultTarget: 'auto',
   });
 
-  describe('ensureDefault（全局默认模板）', () => {
-    it('不存在时创建 moduleKey=* 的 builtin 默认', async () => {
-      const tpl = await service.ensureDefault();
-      expect(tpl.moduleKey).toBe(GLOBAL_TEMPLATE);
-      expect(tpl.builtin).toBe(true);
+  describe('findGlobal（全局流水线：只查不建）', () => {
+    it('不存在时返回 null，且不写库（不再懒建内置「默认」）', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.findGlobal()).resolves.toBeNull();
+      expect(repo.save).not.toHaveBeenCalled();
     });
 
-    it('已存在时直接返回（幂等）', async () => {
+    it('已存在时直接返回该条', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
-      const tpl = await service.ensureDefault();
-      expect(tpl.id).toBe('g-default');
+      const tpl = await service.findGlobal();
+      expect(tpl?.id).toBe('g-default');
       expect(repo.save).not.toHaveBeenCalled();
     });
   });
 
   describe('resolveForSubmit', () => {
-    it('不传模板 → 全局默认', async () => {
+    it('不传模板 → 全局流水线', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
       const tpl = await service.resolveForSubmit('auth-service');
       expect(tpl.moduleKey).toBe(GLOBAL_TEMPLATE);
+    });
+
+    it('不传模板且没有全局流水线 → 明确报错（不再懒建后兜底）', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.resolveForSubmit('auth-service')).rejects.toThrow(
+        /未指定流水线，且当前没有全局默认流水线/,
+      );
+    });
+
+    it('不传模板且全局流水线已停用 → 拒绝', async () => {
+      repo.findOne.mockResolvedValue({ ...globalDefault(), enabled: false });
+      await expect(service.resolveForSubmit('auth-service')).rejects.toThrow(BadRequestException);
     });
 
     it('显式全局模板可用于任意模块', async () => {
@@ -197,20 +215,24 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(created.nodes.map((n: any) => n.key)).toEqual(['git', 'build', 'version', 'pointer']);
     });
 
-    it('flag=off（缺省）：create 忽略 nodes（nodes=null，走 legacy）', async () => {
-      delete process.env.PIPELINE_V5_NODES;
+    it('flag 显式 off：create 忽略 nodes（nodes=null，走 legacy）', async () => {
+      process.env.PIPELINE_V5_NODES = 'off';
       await service.create({ name: 'legacy线', nodes: v5nodes() as any });
       const created = repo.create.mock.calls[0][0];
       expect(created.nodes).toBeNull();
     });
 
-    it('flag=on 且 nodes 非法 → 400', async () => {
+    it('flag=on 且 nodes 非法 → 400（终态：key 重复 / 空 label / 保留字节点名）', async () => {
       process.env.PIPELINE_V5_NODES = 'on';
-      const bad = [
-        { kind: 'platform', key: 'git' },
-        { kind: 'platform', key: 'version' }, // 缺 pointer
+      const dupKey = [
+        { kind: 'shell', key: 'build', label: '构建' },
+        { kind: 'shell', key: 'build', label: '重复' },
       ];
-      await expect(service.create({ name: '坏线', nodes: bad as any })).rejects.toThrow(
+      await expect(service.create({ name: '坏线', nodes: dupKey as any })).rejects.toThrow(
+        BadRequestException,
+      );
+      const noLabel = [{ kind: 'shell', key: 'build', label: ' ' }];
+      await expect(service.create({ name: '坏线2', nodes: noLabel as any })).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -222,9 +244,9 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(updated.nodes!.length).toBe(4);
     });
 
-    it('flag=off：update 忽略 nodes（保持原值 undefined）', async () => {
+    it('flag 显式 off：update 忽略 nodes（保持原值 undefined）', async () => {
       repo.findOne.mockResolvedValue(globalDefault());
-      delete process.env.PIPELINE_V5_NODES;
+      process.env.PIPELINE_V5_NODES = 'off';
       const ignored = await service.update('g-default', { nodes: v5nodes() as any });
       expect(ignored.nodes).toBeUndefined(); // 未触碰，保持原值
     });
@@ -249,14 +271,17 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(copy.nodes!.length).toBe(4);
     });
 
-    it('v5 on：create 未传 nodes → 按 legacy steps 兜底转存（全量含 git/watchdog）', async () => {
+    it('v5 on：create 未传 nodes → 按 legacy steps 兜底转存（终态只产出 shell 节点）', async () => {
       process.env.PIPELINE_V5_NODES = 'on';
       await service.create({ name: '转存线', rollbackOnFailure: 'previous' });
       const created = repo.create.mock.calls[0][0];
       expect(created.nodes![0].key).toBe('git');
+      expect(created.nodes![0].kind).toBe('shell'); // git 终态是 shell 节点
       const keys = created.nodes!.map((n: any) => n.key);
-      expect(keys).toContain('version');
-      expect(keys.indexOf('version')).toBeLessThan(keys.indexOf('pointer'));
+      // version / pointer 已移出流水线（写版本 = 发布节点的 service action；切指针 = 模块管理部署）
+      expect(keys).not.toContain('version');
+      expect(keys).not.toContain('pointer');
+      expect(created.nodes!.every((n: any) => n.kind === 'shell')).toBe(true);
     });
 
     it('v5 on：旧模板（无 nodes）update 时自动转存为 nodes', async () => {
@@ -281,7 +306,7 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(updated.nodes!.some((n: any) => n.key === 'upload')).toBe(false); // steps 已裁掉 upload
     });
 
-    it('v5 off：旧模板 update 不产生 nodes（nodes 保持 null）', async () => {
+    it('v5 显式 off：旧模板 update 不产生 nodes（nodes 保持 null）', async () => {
       repo.findOne.mockResolvedValue({
         id: 'legacy-2',
         moduleKey: GLOBAL_TEMPLATE,
@@ -295,7 +320,7 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
         builtin: false,
         nodes: null,
       });
-      delete process.env.PIPELINE_V5_NODES;
+      process.env.PIPELINE_V5_NODES = 'off';
       const updated = await service.update('legacy-2', { description: 'v4 下只改说明' });
       expect(updated.nodes).toBeNull();
     });

@@ -2,7 +2,7 @@
 /**
  * 发起发布抽屉（发布看板 / 流水线页 / 流水线详情页共用）。
  * 支持全部启用的模块（后端/前端/微前端/小程序）走流水线发布；
- * fixedTemplateId 传入后模板固定为该流水线（隐藏模板下拉）。
+ * fixedTemplateId 传入后固定使用该流水线（隐藏流水线下拉）。
  */
 import { ref, computed, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
@@ -19,7 +19,7 @@ const props = defineProps<{
   open: boolean
   initialEnv?: string
   initialModuleKey?: string
-  /** 传值 = 固定使用该流水线（隐藏模板选择） */
+  /** 传值 = 固定使用该流水线（隐藏流水线选择） */
   fixedTemplateId?: string
 }>()
 const emit = defineEmits<{
@@ -85,13 +85,18 @@ async function loadModules() {
 async function loadTemplates() {
   availTemplates.value = []
   try {
-    availTemplates.value = await pipelineTemplateApi.list(form.value.moduleKey)
+    const all = await pipelineTemplateApi.list(form.value.moduleKey)
+    // 一致性（2026-09-15）：一条流水线只属于一个环境，下拉里只给当前环境的流水线 ——
+    // 否则会提交出「env=dev 却跑 admin-local 流水线」这种错配实例（后端也已强校验）。
+    availTemplates.value = (all || []).filter((t: any) => !t.env || t.env === form.value.env)
     if (props.fixedTemplateId) {
       form.value.templateId = props.fixedTemplateId
       return
     }
-    if (!form.value.templateId && availTemplates.value.length) {
-      form.value.templateId = availTemplates.value[0].id
+    // 选中项不属于当前环境时，自动改选本环境的第一条
+    const cur = availTemplates.value.find((t: any) => t.id === form.value.templateId)
+    if (!cur) {
+      form.value.templateId = availTemplates.value[0]?.id || ''
     }
   } catch {
     availTemplates.value = []

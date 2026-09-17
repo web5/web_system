@@ -11,6 +11,7 @@ import {
   pipelineApi,
   pipelineTemplateApi,
   type StageAction,
+  type ModuleEnvRow,
 } from '@/api'
 import PipelineSubmit from '@/components/PipelineSubmit.vue'
 import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
@@ -109,6 +110,8 @@ const showBackendTab = computed(() => moduleInfo.value?.type === 'backend')
 const showFrontendTab = computed(() =>
   ['frontend', 'micro-frontend', 'mini-app'].includes(moduleInfo.value?.type),
 )
+/** 环境 Tab：所有已知类型都展示（backend 改地址，前端类看访问地址） */
+const showEnvTab = computed(() => showBackendTab.value || showFrontendTab.value)
 // R6：模块不再持有命令，「发布脚本」tab 已移除（命令归流水线节点所有）
 // 默认激活的 tab
 const activeTab = ref<string>('')
@@ -199,31 +202,27 @@ async function onPublished() {
   await loadDeployments()
 }
 
-// ===== 回滚 = 以该版本 commit 重新走流水线发布（重建到旧版本代码） =====
+/**
+ * 回滚 = **秒级切回某个历史版本**（不重新构建）：
+ *  - 后台模块：把该版本目录落地到 dist 并重启 pm2
+ *  - 前台模块：只改指针（网关按指针读版本目录）
+ * 以前这里是「以该版本 commit 重新跑一次流水线」，很重且要等构建；改走
+ * POST /deploy/rollback-version（T2，2026-09-15）。
+ */
 const rollbacking = ref(false)
 async function doRollback(row: any) {
   rollbacking.value = true
   try {
-    const tpls = await pipelineTemplateApi.list(moduleKey.value)
-    if (!tpls.length) {
-      message.error('该模块没有可用流水线，无法发起回滚发布')
-      return
-    }
-    const templateId = tpls[0].id
-    const res = await pipelineApi.submit({
+    const r = await deployApi.rollbackVersion({
       env: row.env,
       moduleKey: moduleKey.value,
-      commitId: row.versionTag,
-      mode: 'direct',
-      templateId,
+      to: row.versionTag,
       confirm: row.env === 'prod',
     })
-    message.success(`已提交回滚发布（${(res as any).jobId}），将以 ${row.versionTag} 重新构建部署`)
+    message.success(`已回滚：${r.from} → ${r.to}（后台模块已落地并重启，前台模块已切指针）`)
     await loadDeployments()
-    // 流水线异步执行，稍后自动刷新一次拿最新状态
-    setTimeout(() => void loadDeployments(), 3000)
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '回滚发布提交失败')
+    message.error(e?.response?.data?.message || '回滚失败')
   } finally {
     rollbacking.value = false
   }
@@ -235,30 +234,22 @@ function fmtDate(d: string | null | undefined): string {
   return isNaN(dt.getTime()) ? '—' : dt.toLocaleString('zh-CN')
 }
 
-// ===== 服务环境（backend 模块：各环境服务地址 + 服务器组；原「服务管理」能力已并入） =====
+// ===== 本模块的环境（1:N：环境归属模块）=====
+// backend：服务地址可编辑 + 服务器组；前端类：无服务地址，展示访问地址（publicUrl + publicPath）
 const svcLoading = ref(false)
-const envList = ref<any[]>([])
+const envList = ref<ModuleEnvRow[]>([])
 const serverNameOptions = ref<string[]>([])
-const svcOverview = ref<any | null>(null)
 
 async function loadServiceEnv() {
-  if (moduleInfo.value?.type !== 'backend') return
   svcLoading.value = true
   try {
-    const [rows, envs, servers] = await Promise.all([
-      serverApi.serviceOverview(),
-      environmentApi.list(),
-      serverApi.listServers(),
-    ])
-    envList.value = envs
-    serverNameOptions.value = Array.from(new Set(servers.map((s: any) => s.serverName)))
-    svcOverview.value = rows.find((r: any) => r.serviceName === moduleKey.value) || {
-      serviceName: moduleKey.value,
-      serviceType: moduleInfo.value.type || 'backend',
-      environments: envs.map((e: any) => ({ envId: e.id, address: '', serverName: '', port: undefined })),
+    envList.value = await environmentApi.listByModule(moduleKey.value)
+    if (moduleInfo.value?.type === 'backend') {
+      const servers = await serverApi.listServers()
+      serverNameOptions.value = Array.from(new Set(servers.map((s: any) => s.serverName)))
     }
   } catch {
-    message.error('加载服务环境失败')
+    message.error('加载模块环境失败')
   } finally {
     svcLoading.value = false
   }
@@ -269,35 +260,44 @@ function svcEnvName(envId: string): string {
   return e ? `${e.name}（${e.id}）` : envId
 }
 
-async function saveAddress(envRow: any, val: string) {
-  const env = envList.value.find((e) => e.id === envRow.envId)
-  if (!env) return
-  const ports = { ...(env.ports || {}) }
+function envPublicUrl(envId: string): string {
+  return envList.value.find((x) => x.id === envId)?.publicUrl || '—'
+}
+
+function envBuiltin(envId: string): boolean {
+  return !!envList.value.find((x) => x.id === envId)?.builtin
+}
+
+/** 前端类模块的访问地址：环境公网地址 + 模块 publicPath（如 https://dev.kedouai.com/admin/） */
+function envAccessUrl(envId: string): string {
+  const publicUrl = envList.value.find((x) => x.id === envId)?.publicUrl
+  if (!publicUrl) return '—'
+  const p = moduleInfo.value?.publicPath
+  if (!p) return publicUrl
+  return `${publicUrl.replace(/\/$/, '')}/${p.replace(/^\//, '').replace(/\/$/, '')}/`
+}
+
+function envCurrentVersion(envId: string): string {
+  return (
+    (data.value?.environments || []).find((e: any) => e.envId === envId)?.currentVersion || '—'
+  )
+}
+
+async function saveAddress(envRow: ModuleEnvRow, val: string) {
   const trimmed = (val || '').trim()
-  if (trimmed) {
-    ports[moduleKey.value] = trimmed
-  } else {
-    delete ports[moduleKey.value]
-  }
   try {
-    await environmentApi.update(envRow.envId, { ports })
-    message.success(`已更新 ${moduleKey.value}@${envRow.envId} 地址`)
+    await environmentApi.update(moduleKey.value, envRow.id, { address: trimmed || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 地址`)
     envRow.address = trimmed
-    env.ports = ports
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存地址失败')
   }
 }
 
-async function saveServerName(envRow: any, val: string) {
+async function saveServerName(envRow: ModuleEnvRow, val: string) {
   try {
-    await serverApi.createRoute({
-      envId: envRow.envId,
-      serviceName: moduleKey.value,
-      serverName: val || '',
-      port: envRow.port,
-    })
-    message.success(`已更新 ${moduleKey.value}@${envRow.envId} 服务器组`)
+    await environmentApi.update(moduleKey.value, envRow.id, { serverName: val || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 服务器组`)
     envRow.serverName = val || ''
   } catch (e: any) {
     message.error(e?.response?.data?.message || '保存服务器组失败')
@@ -383,7 +383,27 @@ onMounted(async () => {
          CanaryCenter 等页面一致；此前 tabs 裸放在卡片 body 里，tab 栏像"野孩子"一样漂浮、
          与下方内容缺少分隔 -->
     <a-card v-if="moduleInfo" :loading="dataLoading">
-      <a-tabs v-model:active-key="activeTab" size="small" class="md-tabbar">
+      <!-- R6 提示：模块不再持有命令。
+           注意必须放在 a-tabs **外面** —— antd 的 tabs 内容区是 flex 行，
+           非 a-tab-pane 的直接子元素会被当作 flex item 挤压成窄条（曾把本提示
+           压成一列竖排文字）。 -->
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 16px;"
+        message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
+      >
+        <template #description>
+          <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
+        </template>
+      </a-alert>
+
+      <a-tabs
+        v-if="showBackendTab || showFrontendTab"
+        v-model:active-key="activeTab"
+        size="small"
+        class="md-tabbar"
+      >
         <!-- 后台 tab -->
         <a-tab-pane v-if="showBackendTab" key="backend" tab="后台">
           <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
@@ -423,8 +443,8 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
-                  ok-text="回滚发布"
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
                   cancel-text="取消"
                   :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
@@ -436,34 +456,45 @@ onMounted(async () => {
           </a-table>
         </a-tab-pane>
 
-        <!-- 服务环境 tab（backend 模块：各环境服务地址 + 服务器组） -->
-        <a-tab-pane v-if="showBackendTab" key="service-env" tab="服务环境">
+        <!-- 模块环境 tab（1:N：环境归属模块；backend 可改地址/服务器组，前端类展示访问地址） -->
+        <a-tab-pane v-if="showEnvTab" key="service-env" tab="服务环境">
           <a-card :loading="svcLoading" :bordered="false" size="small">
             <p style="color: #666; margin-bottom: 12px;">
-              该服务在所有环境的「服务环境」。环境在「环境管理」中增删，此处自动同步列出；逐个编辑服务地址（ip:端口）和服务器组。
+              <b>本模块</b>的环境（环境归属模块：一个模块多个环境，dev/prod 每模块各一份）。
+              环境公网地址只读，服务地址与服务器组可就地编辑；环境的增删在「模块管理 → 环境管理」。
             </p>
             <a-table
               :columns="[
-                { title: '环境', dataIndex: 'envId', key: 'envId', width: 200 },
-                { title: '服务地址（ip:端口）', key: 'address', width: 360 },
-                { title: '服务器组', key: 'serverName', width: 260 },
+                { title: '环境', dataIndex: 'id', key: 'id', width: 180 },
+                { title: '环境公网地址', key: 'publicUrl', width: 200 },
+                ...(showBackendTab
+                  ? [
+                      { title: '服务地址（ip:端口）', key: 'address', width: 320 },
+                      { title: '服务器组', key: 'serverName', width: 220 },
+                    ]
+                  : [{ title: '访问地址', key: 'accessUrl', width: 320 }]),
+                { title: '当前版本', key: 'currentVersion', width: 160 },
               ]"
-              :data-source="svcOverview?.environments || []"
+              :data-source="envList"
               :pagination="false"
-              :row-key="(r: any) => r.envId"
+              :row-key="(r: any) => r.id"
               size="small"
             >
               <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'envId'">
-                  {{ svcEnvName(record.envId) }}
+                <template v-if="column.key === 'id'">
+                  {{ record.name }}（{{ record.id }}）
+                  <a-tag v-if="record.builtin" color="blue" style="margin-left: 4px;">内置</a-tag>
+                </template>
+                <template v-else-if="column.key === 'publicUrl'">
+                  {{ record.publicUrl || '—' }}
                 </template>
                 <template v-else-if="column.key === 'address'">
                   <a-input
                     :value="record.address"
                     placeholder="如 127.0.0.1:6000 或 dev.kedouai.com"
-                    style="width: 320px;"
+                    style="width: 280px;"
                     @press-enter="(e: any) => saveAddress(record, e.target.value)"
-                    @blur="(e: any) => { const v = e.target.value; if (v !== record.address) saveAddress(record, v) }"
+                    @blur="(e: any) => { const v = e.target.value; if (v !== (record.address || '')) saveAddress(record, v) }"
                   />
                 </template>
                 <template v-else-if="column.key === 'serverName'">
@@ -471,13 +502,19 @@ onMounted(async () => {
                     :value="record.serverName || undefined"
                     placeholder="选择服务器组"
                     allow-clear
-                    style="width: 220px;"
+                    style="width: 200px;"
                     @change="(v: any) => saveServerName(record, v || '')"
                   >
                     <a-select-option v-for="n in serverNameOptions" :key="n" :value="n">
                       {{ n }}
                     </a-select-option>
                   </a-select>
+                </template>
+                <template v-else-if="column.key === 'accessUrl'">
+                  <span class="ws-mono">{{ envAccessUrl(record.id) }}</span>
+                </template>
+                <template v-else-if="column.key === 'currentVersion'">
+                  <span class="ws-mono">{{ envCurrentVersion(record.id) }}</span>
                 </template>
               </template>
             </a-table>
@@ -523,8 +560,8 @@ onMounted(async () => {
               <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
               <template v-else-if="column.key === 'action'">
                 <a-popconfirm
-                  :title="`以 ${record.versionTag} 重新走流水线发布（回滚到该版本代码）？`"
-                  ok-text="回滚发布"
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
                   cancel-text="取消"
                   :ok-button-props="{ loading: rollbacking }"
                   @confirm="doRollback(record)"
@@ -535,9 +572,6 @@ onMounted(async () => {
             </template>
           </a-table>
         </a-tab-pane>
-
-        <!-- 两个 tab 都不显示时的兜底 -->
-        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
 
         <!-- 版本列表：流水线「发布」节点产出；可对某一版本直接部署或下发 AI 验证 -->
         <a-tab-pane key="versions" tab="版本列表">
@@ -578,6 +612,7 @@ onMounted(async () => {
 
         <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
         <a-tab-pane key="deploy" tab="环境部署">
+          <!-- R6 提示统一放在卡片顶部（a-tabs 之外），此处不再重复 -->
           <p style="color: #666; margin-bottom: 12px;">
             部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
           </p>
@@ -618,20 +653,9 @@ onMounted(async () => {
             - version/pointer = 紫色「语义真相源」（不可改）
           让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
         -->
-        <!-- R6：发布脚本 tab 已移除，替换为提示条 -->
-        <a-alert
-          type="info"
-          show-icon
-          style="margin-bottom: 0;"
-          message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
-        >
-          <template #description>
-            <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
-          </template>
-        </a-alert>
-
         <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
       </a-tabs>
+      <a-empty v-else description="该模块类型暂不支持版本管理" />
     </a-card>
 
     <!-- 部署版本弹窗（版本行进来：版本固定选环境；环境行进来：环境固定选版本） -->
@@ -681,6 +705,15 @@ onMounted(async () => {
 }
 .md-tabbar :deep(.ant-tabs-nav) {
   margin-bottom: 0;
+  /* tab 栏一律居左：antd 的 tabs 内容区是 flex 行，一旦有人往里塞非 a-tab-pane 子元素，
+     它会作为 flex item 抢占宽度、把 nav 挤到中间（历史 bug），这里显式兜底左对齐 */
+  justify-content: flex-start;
+}
+.md-tabbar :deep(.ant-tabs-nav-wrap) {
+  flex: none;
+}
+.md-tabbar :deep(.ant-tabs-nav-list) {
+  margin-right: auto;
 }
 .md-tabbar :deep(.ant-tabs-nav::before) {
   border-bottom: 1px solid var(--ws-border-subtle);
