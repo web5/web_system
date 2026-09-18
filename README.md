@@ -283,8 +283,6 @@ packages/shared/src/api.ts
 | 发布流水线设计 | [docs/development/deploy-pipeline-dev.md](./docs/development/deploy-pipeline-dev.md) |
 | Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
 | Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
-| CI 门禁与红绿线 | [docs/development/ai-native-sdlc-ci-deployment.md](./docs/development/ai-native-sdlc-ci-deployment.md) |
-| 跨工具 Agent 装配（设计方案，未实施） | [docs/development/cross-tool-agent-context-design.md](./docs/development/cross-tool-agent-context-design.md) |
 
 ---
 
