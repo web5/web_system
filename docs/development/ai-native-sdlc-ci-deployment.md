@@ -245,4 +245,4 @@ jobs:
 - 红线定义：`.codebuddy/agent-kit/rules/general/05-red-line-check.md`（含最小实现示例）
 - 评测定稿：`.codebuddy/agent-kit/references/eval-framework.md` §6 CI 门禁、§8 落地结构
 - 源仓库工具（引用不拷贝）：`$HOME/workspace/ai-agent-kit/scripts/{run-eval,check-artifacts,gen-report}.sh`
-- 工程铁律来源：`.codebuddy/CODEBUDDY.md`「AI 编程规范」「部署铁律」
+- 工程铁律来源：`.codebuddy/references/coding-best-practices.md`（全文）；入口说明见 `.codebuddy/CODEBUDDY.md` §2
