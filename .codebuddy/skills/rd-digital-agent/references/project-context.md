@@ -56,7 +56,7 @@ bash scripts/dev-verify.sh        # 全量验证：DB + 单测 + 集成 + 健康
 - 同类修改必须扫全量（`grep -r enableCors servers/*/src` 式）；跨端配置收口 `@web-system/shared`，禁各端拷贝。
 - 三层超时逐层核对；AI 类接口必须用 `API_TIMEOUT.AI_TASK`(90s) + gateway `PROXY_TIMEOUT.AI_TASK`。
 - 微前端改动必须走「构建 → 拷贝产物 → 更新版本表 → 验证 manifest」四步，否则浏览器仍加载旧产物。
-- 工程铁律完整版：`.codebuddy/references/coding-best-practices.md`。
+- 工程铁律完整版：`.codebuddy/rules/coding-best-practices.md`。
 
 ## 通用原则（适用于任何项目）
 
