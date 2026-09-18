@@ -6,10 +6,10 @@
 #   changed-packages.sh <ref-range>     # 默认对 origin/master...HEAD 改动
 #   changed-packages.sh <ref-range> --lint
 #
-# 设计（docs/development/ai-native-sdlc-ci-deployment.md §2.3）：
+# 设计：
 #   - 从 git diff 文件路径推断属于哪个子包（apps|servers|packages 下含 package.json 的目录）
-#   - 对每个包跑 build（= R6，内含 vue-tsc/tsc/nest build 类型检查）
-#   - 有 test 脚本的包再跑 test（= R7，jest --runInBand CI 模式）
+#   - 对每个包跑 build（内含 vue-tsc/tsc/nest build 类型检查）
+#   - 有 test 脚本的包再跑 test（jest --runInBand CI 模式）
 #   - set -e：任何包 build 非零即整体失败（门禁不吞错）
 # ============================================================
 set -euo pipefail

@@ -1,8 +1,9 @@
-# quality-gate — PR 代码质量门禁（红线扫描 + 改动包 build/test）
+# quality-gate — PR 代码质量门禁（改动包 build/test）
 #
-# 设计：docs/development/ai-native-sdlc-ci-deployment.md §2.3
-#   job1 redline-scan  : R1~R5 红线扫描（近零成本，PR diff）
-#   job2 changed-build : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
+#   changed-packages : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
+#
+# 2026-09-18：原 redline-scan job（scripts/redline/scan-rules.sh 红线扫描）随红线机制整体下线；
+#   本 workflow 只保留「改动包 build/test」。
 # 职责分离：auto-pr.yml 只负责建 PR，本 workflow 负责检查。
 # 启用要求：master 分支保护开启，要求本 workflow 通过才可 merge。
 name: quality-gate
@@ -16,27 +17,9 @@ permissions:
   contents: read
 
 jobs:
-  redline-scan:
-    name: 红线扫描 (R1~R5)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: PR diff 红线扫描
-        run: |
-          BASE="${{ github.event.pull_request.base.sha || 'origin/master' }}"
-          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-            git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1 >/dev/null 2>&1 || true
-          fi
-          # 两点 diff（clean checkout 下 git diff <sha> 即 <sha>..HEAD）
-          bash scripts/redline/scan-rules.sh diff "$BASE"
-
   changed-packages:
     name: 改动包 build/test
     runs-on: ubuntu-latest
-    needs: redline-scan
     steps:
       - uses: actions/checkout@v4
         with:
