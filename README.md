@@ -1,10 +1,21 @@
 # 科豆 AI（web_system）
 
 全栈 monorepo —— 微前端基座 + 多个 NestJS 微服务 + 微信小程序 + 自研发布平台。
-一个仓库装三类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**数字人体系**（`.codebuddy/`）。
+一个仓库装四类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**知识库**（`raw/` → `wiki/`）、**数字人体系**（`.codebuddy/`）。
 
-> AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)；
+> AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)（工程文档一律从本 README 进）；
 > 完整开发指南见 [docs/development-guide.md](./docs/development-guide.md)。
+
+### 资产构成与知识库边界（`raw/` + `wiki/`）
+
+| 目录 | 内容 | 维护方式 |
+|---|---|---|
+| `raw/` | **外部**素材原文快照（文章 / 论文 / 推文 …） | AI 采集，**不可变** —— 只新增，不改写已落盘文件 |
+| `wiki/` | 由 `raw/` 编译出的知识文章 + `index.md` 全局索引 + `log.md` 操作日志 | AI 维护，人读与提问 |
+| `docs/` | **项目自产**文档（架构 / 开发 / UI / 产品 / 发布手册） | 人写，随代码演进 |
+
+- **边界判据**（只此一条）：**外部输入的编译结论** → `wiki/`；**本项目自产的东西** → `docs/`。项目自产文档不进 `wiki/`，外部素材原文不进 `docs/`。
+- 位置固定在**项目根**（`raw/` + `wiki/`）—— 数字人技能默认即此布局，故不改技能里的路径约定；两个目录**随仓库入库**，知识库才能跨会话累积。
 
 ---
 
@@ -273,6 +284,7 @@ packages/shared/src/api.ts
 | Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
 | Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
 | CI 门禁与红绿线 | [docs/development/ai-native-sdlc-ci-deployment.md](./docs/development/ai-native-sdlc-ci-deployment.md) |
+| 跨工具 Agent 装配（设计方案，未实施） | [docs/development/cross-tool-agent-context-design.md](./docs/development/cross-tool-agent-context-design.md) |
 
 ---
 
