@@ -251,7 +251,7 @@ curl -s localhost:6000/__manifest__ # 确认 admin version=$P/$V
 
 ## 8 开发规范（工程铁律）
 
-> 完整版：`.codebuddy/references/coding-best-practices.md`
+> 完整版：`.codebuddy/rules/coding-best-practices.md`
 
 1. **同类修改必须扫全量**：改横切关注点前先 grep 所有服务（`enableCors` / `useGlobalFilters` / `console.`）。
 2. **跨端配置禁止拷贝**：统一收口 `packages/shared/src/` → `index.ts` re-export → 删各端本地拷贝。
