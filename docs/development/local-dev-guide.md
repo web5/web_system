@@ -2,7 +2,7 @@
 
 > **本文是本地开发的「总入口 / 索引」**：把「各服务怎么本地跑」与「通用基础能力的本地支持情况」收在一张表里，
 > 细节仍指向各专题文档，不复制它们的正文。
-> 建立：2026-09-19 ｜ 适用：macOS 本机（`local.kedouai.com` + 发布目录 `~/web_system_release`）
+> 适用：macOS 本机（`local.kedouai.com` + 发布目录 `~/web_system_release`）
 
 ## 0 先读这一段（事实源与优先级）
 
@@ -16,8 +16,7 @@
 | 4 | `scripts/modules.json` | 发布流水线可发布的模块清单（未登记 = 流水线管不到） |
 | 5 | 专题文档 | 流程、踩坑、验收步骤 |
 
-⚠️ **两篇文档已过时，别抄里面的端口**：`docs/development/local-dev-setup.md`（还是 3000 系列 + `admin-web`）、
-`docs/development/whistle-local-dev.md`（同上）。权威端口表看本文 §2 与 `local-release-runbook.md` §一。
+⚠️ 端口一律以本文 §2 为准：`local-dev-setup.md`、`whistle-local-dev.md` 里的端口与目录名不要直接照抄。
 
 ### 0.1 AI / Agent 阅读顺序（省 token 版）
 
@@ -58,7 +57,6 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 
 > **证书**：HTTPS 走自签 `dev.kedouai.com.crt`。未信任会 `ERR_CERT_AUTHORITY_INVALID` → shell 资源加载失败 → 白屏。
 > 一次性信任：`sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain $HOME/local/nginx/conf/ssl/dev.kedouai.com.crt`
-> （本机浏览器已验证可正常访问，换机器/重装才需要重做。）
 
 ---
 
@@ -165,13 +163,13 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | 主题 | 文档 |
 |---|---|
 | **总纲**（架构/端口/启动流程/发布/FAQ/脚本速查） | `docs/development-guide.md` |
-| 新机器从零起（MySQL+Redis / .env / 种子用户） | `docs/development/local-dev-setup.md`（⚠️ 端口已过时，仅基础设施部分可用） |
+| 新机器从零起（MySQL+Redis / .env / 种子用户） | `docs/development/local-dev-setup.md`（仅基础设施部分可用） |
 | **换机器初始化权威清单** | `docs/development/from-zero-init-data.md` |
 | **本地发布运维（发布目录 / pm2 / 流水线 / 踩坑）** | `docs/development/local-release-runbook.md`（端口表权威、§四踩坑、§五验证清单） |
 | admin / 前端开发 + nginx 集成 + 微前端四步 | `docs/development/admin-dev.md`（§一·B 地址、§一·C 四步权威） |
 | 发布流水线 / 发布 MCP / 发布 Agent | `docs/development/deploy-pipeline-dev.md` |
 | 控制台验收 | `docs/development/local-console-acceptance.md` |
-| Agent 能力体验与走查 | `docs/development/agent-capability-playbook.md`（含变更日志，维护最勤） |
+| Agent 能力体验与走查 | `docs/development/agent-capability-playbook.md` |
 | 自动发布（GH Actions） | `docs/development/gh-actions-release.md` + `gh-actions-setup.md` |
 | 三区分离工作流 / 集成分支 | `docs/development/dev-workflow.md`、`integration-branch.md`（后者已停用） |
 | 架构总览 / 网络拓扑 / URL 规划 / 微前端设计 | `docs/architecture/技术架构.md`、`kedou-network-architecture.md`、`网关URL规划.md`、`micro-frontend-technical-design.md` |
@@ -183,20 +181,9 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 
 | # | 问题 | 影响 |
 |---|---|---|
-| 1 | `local-dev-setup.md` / `whistle-local-dev.md` 端口停留在 3000 系列、目录仍写 `admin-web` | 照抄会连错端口；应以本文 §2 为准 |
-| 2 | ~~`网关URL规划.md` / `health-check.sh` 写 auth=6001~~ → **已澄清（2026-09-19）**：并非笔误，是**端口双轨**——本机 6101、服务器 6001、prod 3001。已在本文 §2、`网关URL规划.md` 顶部、`health-check.sh` 头注释标注 | 已消除误判风险 |
-| 3 | `/api/upload` 实际反代到 **user-service**（`proxy.service.ts:87` 用 `userServiceUrl`），`UPLOAD_SERVICE_URL` 未被消费；upload-service 无 gateway 路由 | 上传链路与 README 表述不一致 |
-| 4 | knowledge-service 既无 `.env` 也无 `dist/`，且未登记 `scripts/modules.json` | pm2 直接失败；需 `cp .env.example .env` + `pnpm build` + 建库 |
-| 5 | 6011 / 6006 的本地启动与验证无文档 | 只能靠 `e2e-check.mjs` / `e2e-keys.sh` |
-| 6 | 无独立的「日志查看与排障」文档；本地与生产 pm2 日志路径差异未说明 | 排障靠口口相传 |
-| 7 | ~~`scripts/health-check.sh` 巡检漏了 ai-agent(6010)、upload(6008)、deploy-console(6200)~~ → **已修（2026-09-19）**：新增 `local` 目标（本机直连、不走 SSH、macOS 用 `lsof` 探测），端口表补齐 12 个服务；`dev` 回归通过 | 已修复 |
-| 8 | 仅 gateway 有真实 health 端点（本次新增 `/api/health`），其余服务靠端口探活 | 探活语义弱 |
-
----
-
-## 变更日志
-
-| 日期 | 变更 |
-|---|---|
-| 2026-09-19 | 首版：整合服务清单（端口/pm2/依赖/映射）+ 通用基础能力矩阵 + 脚本索引 + 文档地图 + 已知问题；gateway 新增 `/api/health`（`@Public()` 免鉴权） |
-| 2026-09-19 | 补 §0.1 AI/Agent 阅读顺序；澄清端口双轨（本机 auth 6101 / 服务器 6001 / prod 3001）；`scripts/health-check.sh` 新增 `local` 目标并补齐 ai-agent(6010)/upload(6008)/deploy-console(6200)，本机与 dev 回归全绿 |
+| 1 | `local-dev-setup.md` / `whistle-local-dev.md` 的端口与目录名落后于代码 | 照抄会连错端口；以本文 §2 为准 |
+| 2 | `/api/uploads/*` 实际反代到 **user-service**（`proxy.service.ts` 的 uploadProxy 用 `userServiceUrl`），`UPLOAD_SERVICE_URL` 未被消费；upload-service 无 gateway 路由 | 上传链路与 README 表述不一致 |
+| 3 | knowledge-service 未登记 `scripts/modules.json`，本地缺 `.env` 与 `dist/` | pm2 直接失败；需 `cp .env.example .env` + `pnpm build` + 建库 |
+| 4 | knowledge-service(6011) / mcp-gateway(6006) 的本地启动与验证无文档 | 只能靠 `e2e-check.mjs` / `e2e-keys.sh` |
+| 5 | 无独立的「日志查看与排障」文档；本地与生产 pm2 日志路径不同 | 排障靠口口相传 |
+| 6 | 仅 gateway 有真实 health 端点（`/health`、`/api/health`），其余服务只能端口探活 | 探活语义弱 |
