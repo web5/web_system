@@ -45,31 +45,43 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/PipelineEdit.vue'),
         meta: { title: '编辑流水线' },
       },
+      // ---- 微前端域 ----
       {
-        path: 'modules',
+        path: 'apps',
+        name: 'AppManager',
+        component: () => import('@/views/AppManager.vue'),
+        meta: { title: '应用管理' },
+      },
+      {
+        path: 'apps/:key',
+        name: 'AppDetail',
+        component: () => import('@/views/AppDetail.vue'),
+        meta: { title: '应用详情' },
+      },
+      {
+        path: 'environments',
+        name: 'EnvironmentManager',
+        component: () => import('@/views/EnvironmentManager.vue'),
+        meta: { title: '环境管理' },
+      },
+      {
+        path: 'environments/:envId',
+        name: 'EnvironmentDetail',
+        component: () => import('@/views/EnvironmentDetail.vue'),
+        meta: { title: '环境详情' },
+      },
+      // ---- API 网关域 ----
+      {
+        path: 'services',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),
-        meta: { title: '模块管理' },
+        meta: { title: '服务管理' },
       },
       {
-        // 新建模块：独立页（用户 2026-09-15：类型 → 目录 / publicPath / pm2 联动）
-        // 必须排在 modules/:key 之前，否则会被当成一个 key
-        path: 'modules/new',
-        name: 'ModuleCreate',
-        component: () => import('@/views/ModuleEdit.vue'),
-        meta: { title: '新建模块' },
-      },
-      {
-        path: 'modules/:key',
-        name: 'ModuleDetail',
-        component: () => import('@/views/ModuleDetail.vue'),
-        meta: { title: '模块详情' },
-      },
-      {
-        path: 'modules/:key/edit',
-        name: 'ModuleEdit',
-        component: () => import('@/views/ModuleEdit.vue'),
-        meta: { title: '编辑模块' },
+        path: 'services/:key',
+        name: 'ServiceDetail',
+        component: () => import('@/views/ServiceDetail.vue'),
+        meta: { title: '服务详情' },
       },
       {
         path: 'monitor',
