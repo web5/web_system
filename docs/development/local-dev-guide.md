@@ -3,6 +3,7 @@
 > **本文是本地开发的「总入口 / 索引」**：把「各服务怎么本地跑」与「通用基础能力的本地支持情况」收在一张表里，
 > 细节仍指向各专题文档，不复制它们的正文。
 > 适用：macOS 本机（`local.kedouai.com` + 发布目录 `~/web_system_release`）
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on（应用侧可改，约定见 `.codebuddy/references/doc-conventions.md`）
 
 ## 0 先读这一段（事实源与优先级）
 

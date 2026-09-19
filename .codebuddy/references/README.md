@@ -8,3 +8,4 @@
 | 项目上下文画像（结构 / 端口 / 技术栈 / 品牌常量 / 硬约束） | `../skills/rd-digital-agent/references/project-context.md` |
 | 工程侧文档（架构 / 开发 / 发布 / UI / 接口契约） | 仓库根 `README.md` 及 `docs/` |
 | **本地开发总索引**（各服务端口 / 依赖 / 探活、通用基础能力、脚本索引、文档地图） | `docs/development/local-dev-guide.md`（**AI 做本地开发相关任务先读它**） |
+| **文档写法约定 + 开关**（CHANGELOG / HISTORY_NOTE / FAQ_KEEP，应用侧可改） | `doc-conventions.md` |
