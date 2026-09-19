@@ -196,7 +196,7 @@ onMounted(async () => {
         :loading="loading"
         row-key="id"
         :pagination="{ pageSize: 20 }"
-        :locale="{ emptyText: '暂无键值配置。可将环境级参数（如 PUBLIC_URL / DB_HOST）以「环境级」新增；环境自身信息（公网地址/服务地址/服务器组）见「模块管理 → 模块详情 → 服务环境」' }"
+        :locale="{ emptyText: '暂无键值配置。可将环境级参数（如 PUBLIC_URL / DB_HOST）以「环境级」新增；环境自身信息（公网地址/各服务指向/目标主机）见「环境管理 → 环境详情」' }"
       >
         <a-table-column title="配置键" data-index="key" />
         <a-table-column title="值">
@@ -227,7 +227,7 @@ onMounted(async () => {
         发布/重启时按此合并后<b>强制覆盖</b>注入进程环境——这正是历史
         <code>PORT=6200</code> 污染的对策，<b>请勿在 shell 全局预设里写死 PORT 等变量</b>。<br />
         为某环境加配置：先用上方「环境」筛选，再点「新增配置」（作用域自动带出该环境）。<br />
-        环境自身信息（公网地址 / 各服务地址 / 服务器组）已迁移到<b>「模块管理 → 模块详情 → 服务环境」</b>。<br />
+        环境自身信息（公网地址 / 各服务指向 / 目标主机）见<b>「环境管理 → 环境详情」</b>。<br />
         密钥以 AES-256-GCM 加密存储，页面只显示掩码、不支持读取明文；修改密钥需重新输入真实值。
       </div>
     </a-card>

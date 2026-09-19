@@ -11,6 +11,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ProxyService } from './proxy.service';
+import { DynamicRouteService } from '../dynamic-route/dynamic-route.service';
 import { Public } from '../auth/public.decorator';
 import * as http from 'http';
 import * as url from 'url';
@@ -25,6 +26,8 @@ export class ProxyController {
   constructor(
     private proxyService: ProxyService,
     private configService: ConfigService,
+    // 双域重构 P2：DB 驱动路由（GATEWAY_DB_ROUTES=1 时启用；关闭时本类行为逐字节不变）
+    private dynamicRouteService: DynamicRouteService,
   ) {}
 
   // 精确匹配 /api/auth（无尾斜杠）
@@ -524,8 +527,34 @@ export class ProxyController {
     });
   }
 
+  /**
+   * 手动刷新 DB 路由缓存（FR-10.3）：规则改动后立即生效，不必等 60s TTL。
+   * 鉴权：`x-service-key` 必须匹配 GATEWAY_SERVICE_KEY / FINNEWS_SERVICE_KEY（未配置则拒绝）。
+   */
+  @Post('internal/gateway/reload')
+  reloadRoutes(@Req() req: Request, @Res() res: Response) {
+    const expected =
+      this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
+      this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
+      '';
+    if (!expected || req.headers['x-service-key'] !== expected) {
+      res.status(403).json({ code: 403, message: 'service_key 校验失败（未配置或与请求头不一致）' });
+      return;
+    }
+    this.dynamicRouteService.reload();
+    res.json({ code: 0, message: 'DB 路由缓存已刷新' });
+  }
+
+  /**
+   * 最终兜底：硬编码路由都没匹配的 `/api/*`。
+   *
+   * 双域重构 P2：先尝试 DB 路由（`deploy_service_routes`）；命中则转发/拒绝，
+   * **未命中保持原有 404 行为**（FR-10.2，双轨零破坏）。
+   */
   @All(':path(*)')
-  proxyApi(@Req() req: Request, @Res() res: Response) {
+  async proxyApi(@Req() req: Request, @Res() res: Response) {
+    const handled = await this.dynamicRouteService.tryHandle(req, res);
+    if (handled) return;
     res.status(404).json({ code: 404, message: `Unknown API route: ${req.method} ${req.path}` });
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
   pipelineRunsApi,
@@ -24,6 +24,7 @@ import {
 } from '@/components/pipeline/pipeline.stages'
 
 const router = useRouter()
+const route = useRoute()
 
 // ===== 状态 / 时间展示 =====
 const STEP_LABELS: Record<string, string> = {
@@ -195,7 +196,7 @@ async function toggle(t: PipelineTemplate) {
 function remove(t: PipelineTemplate) {
   Modal.confirm({
     title: '删除流水线',
-    content: `删除「${t.name}」？已提交的执行记录（实例）不受影响，仍可在发布中心查看。`,
+    content: `删除「${t.name}」？已提交的执行记录（实例）不受影响，仍可在本页「全部执行记录」中查看。`,
     okText: '删除',
     okType: 'danger',
     cancelText: '取消',
@@ -269,12 +270,14 @@ async function loadReleases() {
 }
 async function loadAvailTemplates() {
   try {
-    const all = await pipelinesApi.list(form.value.moduleKey)
-    // 一致性（同 PipelineSubmit）：一条流水线只属于一个环境，只给当前环境的候选
-    availTemplates.value = (all || []).filter((t: any) => !t.env || t.env === env.value)
-    // 行内「执行」带来的锁定流水线优先；否则自动选当前环境的第一条（用户 2026-09-17：
-    // 上下文已定时不需要再选一次流水线，只选分支 + commit）
-    if (!form.value.templateId) {
+    const all = (await pipelinesApi.list(form.value.moduleKey)) || []
+    // 双域重构后环境是**动态创建**的（envId 自增：1/2/3…），给每个新环境都建一条流水线不可维护。
+    // 因此模板只按**模块**绑定，环境是运行期参数：本环境绑定的模板优先排序，其余作为候选。
+    const score = (t: any) => (t.env === env.value ? 0 : !t.env ? 1 : 2)
+    availTemplates.value = [...all].sort((a: any, b: any) => score(a) - score(b))
+    // 当前选中的模板已不在候选里（切换环境/模块后）→ 重新选：行内锁定的优先，否则取排序第一条
+    const stillValid = availTemplates.value.some((t) => t.id === form.value.templateId)
+    if (!stillValid) {
       const lockId = lockTemplateId.value
       lockTemplateId.value = ''
       form.value.templateId = lockId || availTemplates.value[0]?.id || undefined
@@ -287,6 +290,8 @@ async function loadAvailTemplates() {
 function openSubmit(initKey?: string, fixedTplId?: string, tplEnv?: string) {
   form.value.moduleKey = initKey || availableModules.value[0]?.key || ''
   fixedTemplateId.value = fixedTplId || ''
+  // 模板绑定的环境 = 抽屉打开时的**默认环境**（可改）；只有它未变时才锁定模板
+  lockedTplEnv.value = tplEnv || ''
   fixedEnv.value = tplEnv || ''
   fixedModuleKey.value = fixedTplId ? (initKey || '') : ''
   if (fixedEnv.value) env.value = fixedEnv.value
@@ -382,13 +387,11 @@ function resetFilters() {
   fStatus.value = 'all'
   doSearch()
 }
-/** 环境筛选（用户 2026-09-15：方便快速定位 local / dev / prod 的记录） */
-const ENV_FILTERS = [
+/** 环境筛选：来自真实环境列表（含自建环境 1/2/3…），不再硬编码 local/dev/prod */
+const ENV_FILTERS = computed(() => [
   { value: 'all', label: '全部环境' },
-  { value: 'local', label: 'local' },
-  { value: 'dev', label: 'dev' },
-  { value: 'prod', label: 'prod' },
-]
+  ...environments.value.map((e) => ({ value: e.id, label: e.id })),
+])
 const STATUS_FILTERS = [
   { value: 'all', label: '全部状态' },
   { value: 'succeeded', label: '成功' },
@@ -400,12 +403,13 @@ const filteredRows = computed<PipelineRow[]>(() => {
   const f = appliedFilters.value
   return pipelineRows.value.filter((r) => {
     if (f.keyword) {
-      // 环境也进关键词（搜 "prod" 直接命中生产那几条）
+      // 环境也进关键词（搜 "prod" 直接命中最近发过生产的那几条）
       const hay =
-        `${r.module.name} ${r.tpl.name || ''} ${r.tpl.moduleKey || ''} ${r.module.key} ${(r.tpl as any).env || ''}`.toLowerCase()
+        `${r.module.name} ${r.tpl.name || ''} ${r.tpl.moduleKey || ''} ${r.module.key} ${r.latest?.env || ''}`.toLowerCase()
       if (!hay.includes(f.keyword)) return false
     }
-    if (f.env !== 'all' && ((r.tpl as any).env || '') !== f.env) return false
+    // 流水线已**不绑定环境**（环境是提交时的运行期参数）：按「最近一次执行所在环境」过滤
+    if (f.env !== 'all' && (r.latest?.env || '') !== f.env) return false
     if (f.module && r.module.key !== f.module) return false
     if (f.type === 'builtin' && !r.tpl.builtin) return false
     if (f.type === 'custom' && r.tpl.builtin) return false
@@ -428,12 +432,18 @@ function rowName(r: PipelineRow): string {
   return r.module.name
 }
 
-// 行内「执行」：打开发起抽屉并**锁定该流水线** —— 流水线已绑定 模块 × 环境，
-// 所以环境 / 模块 / 流水线三者都只读，用户只选 分支 + commit（用户 2026-09-17）
+// 行内「执行」：打开发起抽屉并预选该流水线 —— 模块与流水线锁定，
+// **环境只是默认值，可改**（双域重构后环境是运行期参数：envId 动态创建，不再为每个环境建流水线）
 const lockTemplateId = ref('')
 const fixedTemplateId = ref('')
 const fixedEnv = ref('')
+/** 被锁定模板所属的环境：环境被改动后解除模板锁定，允许另选模板 */
+const lockedTplEnv = ref('')
 const fixedModuleKey = ref('')
+/** 模板是否仍保持锁定：来自行内执行、且用户没有改环境（无 env 的模板视为环境无关） */
+const templateLocked = computed(
+  () => !!fixedTemplateId.value && (!lockedTplEnv.value || lockedTplEnv.value === env.value),
+)
 function executeTpl(r: PipelineRow) {
   lockTemplateId.value = r.tpl.id
   openSubmit(r.module.key, r.tpl.id, r.tpl.env || '')
@@ -452,7 +462,8 @@ function openReleaseForModule(m: ModuleCard) {
   openSubmit(m.module.key)
 }
 function gotoModuleDetail(m: any) {
-  router.push(`/modules/${m.key}`)
+  // 双域重构后：按类型跳到对应域的详情（后端服务 → 服务详情；应用 → 应用详情）
+  router.push(m?.type === 'backend' ? `/services/${m.key}` : `/apps/${m.key}`)
 }
 
 async function onEnvChange() {
@@ -726,6 +737,16 @@ onMounted(async () => {
   // 模块列表是卡片区数据源（moduleCards 按模块一卡）——缺失时页面恒为空态「暂无可发布模块」
   await Promise.all([refreshAll(), loadEnvironments(), loadModules()])
   if (hasRunning()) tick()
+
+  // 域详情页「部署」跳转过来：带 module + env（+ submit=1）直接打开发起抽屉
+  // （应用详情 / 服务详情是用户发起部署的自然入口，环境在此选定）
+  const q = route.query
+  const qModule = typeof q.module === 'string' ? q.module : undefined
+  const qEnv = typeof q.env === 'string' ? q.env : undefined
+  if (qModule || qEnv) {
+    if (qEnv && environments.value.some((e) => e.id === qEnv)) env.value = qEnv
+    openSubmit(qModule)
+  }
 })
 onUnmounted(stopPolling)
 </script>
@@ -734,8 +755,12 @@ onUnmounted(stopPolling)
   <div>
     <div class="page-header">
       <h2>发布流水线</h2>
-      <p>流水线 = 可复用的流程定义（校验 → 拉码 → 构建 → 投递 → 重启 → 写版本 → 切指针 → 探活 → 清理）。
-        每次发布 = 基于某条流水线执行一次，产生一条执行记录（实例）。点击流水线可查看其最近执行与全部历史。</p>
+      <p>
+        流水线 = 可复用的<b>流程定义</b>：节点可编排（如 拉取代码 → 构建 → 发布确认 → 发布），
+        节点内可挂 shell 脚本或平台工具（写版本 / 重启 / 探活…）。<br />
+        流水线<b>不绑定环境</b> —— 环境在发起发布时选择（含自建环境）；每次发布 = 执行一次并产生一条执行记录
+        （提交即快照当时的节点与命令）。点击流水线可查看节点编排与全部历史。
+      </p>
     </div>
 
     <!-- 筛选表单（五维度：关键词 / 模块 / 环境 / 类型 / 状态）+ 新建流水线 -->
@@ -823,8 +848,11 @@ onUnmounted(stopPolling)
             <div style="font-size: 12px; color: #bbb;">{{ typeLabel(record.module.type) }}</div>
           </template>
           <template v-else-if="column.key === 'env'">
-            <a-tag v-if="record.tpl.env" color="blue">{{ record.tpl.env }}</a-tag>
-            <span v-else style="color: #bbb; font-size: 12px;">不限</span>
+            <!-- 流水线不绑定环境：环境在提交时选（近期执行过一次则回显该环境，便于对账） -->
+            <a-tooltip :title="'流水线不绑定环境，提交时选择（含自建环境）'">
+              <a-tag v-if="record.latest?.env" color="blue">{{ record.latest.env }}</a-tag>
+              <span v-else style="color: #bbb; font-size: 12px;">运行时选</span>
+            </a-tooltip>
           </template>
           <template v-else-if="column.key === 'nodes'">
             <span style="color: #666; font-size: 12px;">{{ nodeSeqText(record.tpl) }}</span>
@@ -892,11 +920,14 @@ onUnmounted(stopPolling)
         <a-row :gutter="12">
           <a-col :span="12">
             <a-form-item label="环境" required>
-              <a-select v-model:value="env" :disabled="!!fixedEnv" @change="onEnvChange">
+              <a-select v-model:value="env" @change="onEnvChange">
                 <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
                   {{ e.name }}（{{ e.id }}）
                 </a-select-option>
               </a-select>
+              <div class="field-hint">
+                环境是运行期参数，可在此改（含自建环境 1/2/3…）；默认取所选流水线绑定的环境
+              </div>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -915,10 +946,10 @@ onUnmounted(stopPolling)
           </a-col>
         </a-row>
 
-        <a-form-item v-if="!fixedTemplateId" label="使用流水线" required>
+        <a-form-item v-if="!templateLocked" label="使用流水线" required>
           <a-select v-model:value="form.templateId" placeholder="选择流水线">
             <a-select-option v-for="t in availTemplates" :key="t.id" :value="t.id">
-              {{ t.name }}
+              {{ t.name }}<template v-if="t.env"> · {{ t.env }}</template>
               <template v-if="t.builtin">（默认）</template>
               <template v-if="t.approval === 'always'">（强制审批）</template>
               <template v-if="t.approval === 'never'">（免审批）</template>
@@ -929,6 +960,7 @@ onUnmounted(stopPolling)
           <a-tag color="blue">
             {{ availTemplates.find((t) => t.id === fixedTemplateId)?.name || '本流水线' }}
           </a-tag>
+          <span class="field-hint-inline">环境已改为 {{ env }}，将按同一流水线流程发布到该环境</span>
         </a-form-item>
 
         <a-row :gutter="12">
@@ -1229,6 +1261,17 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.field-hint {
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  margin-top: 4px;
+  line-height: 1.7;
+}
+.field-hint-inline {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+}
 .tpl-card {
   height: 100%;
 }
