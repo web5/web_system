@@ -276,6 +276,7 @@ packages/shared/src/api.ts
 
 | 主题 | 入口 |
 |---|---|
+| **本地开发总指南（服务清单 + 基础能力 + 脚本索引）** | [docs/development/local-dev-guide.md](./docs/development/local-dev-guide.md) |
 | 开发总指南 | [docs/development-guide.md](./docs/development-guide.md) |
 | 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
 | admin 微前端开发 | [docs/development/admin-dev.md](./docs/development/admin-dev.md) |

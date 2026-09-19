@@ -2,6 +2,12 @@
 
 > Gateway 路由设计 — 单端口统一处理前端 SPA、静态资源和 API 代理，以及 MCP 平台的 `/mcp`、`/api/finnews` 路由
 
+> ⚠️ **本文部分内容已落后于代码（2026-09-19 标注）**：
+> - 文中端口是**服务器视角**（auth :6001、ai-service :6003 承接 `/api/admin/*` 等）。**本机** auth 是 **6101**（本机 6001 被占用），prod 走 **3000 系列**。端口权威源：`ecosystem.config.cjs`（本机）/ `ecosystem.config.js`（服务器）。
+> - `finnews` 已更名 **content-hub**（6007）；`/api/dict/*`、`/api/admin/*` 现已指向 **system-service**；`system-service` 已暴露路由；upload-service 无 gateway 路由（`/api/uploads/*` 走 user-service）。
+> - **路由映射的唯一真相源是代码**：`servers/gateway/src/proxy/proxy.controller.ts`（本文表格为设计期快照，冲突时以代码为准）。
+> - 完整服务清单与本地开发索引：`docs/development/local-dev-guide.md`。
+
 ---
 
 ## 目录

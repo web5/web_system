@@ -4,6 +4,7 @@
 > - 现状：**12 个后端服务**，端口 **6000 系列**（gateway 6000 / auth 6101(本地) / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / knowledge 6011 / deploy-console 6200）。
 > - **推荐入口**：`./scripts/bootstrap.sh --env local`（建库 → 迁移 → 构建 → 启动 → seed → 验证，`--dry-run` 可预演）。
 > - 数据初始化清单（哪些库、哪些 seed 必须做）：`docs/development/from-zero-init-data.md`。
+> - **本地开发总索引**（各服务端口/依赖/探活、通用基础能力、脚本索引、文档地图）：`docs/development/local-dev-guide.md`。
 > - 发布目录机制与发布流程：`docs/development/local-release-runbook.md`。
 >
 > 以下内容保留作历史参考（`local-db.sh` 的使用方式仍然有效）。

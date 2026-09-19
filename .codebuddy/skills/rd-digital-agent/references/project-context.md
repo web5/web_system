@@ -27,7 +27,11 @@ web_system/
 | 部署 | pm2（进程名 `web-*`）+ Nginx + 自研发布平台 deploy-console |
 | 包管理 | pnpm workspace |
 
-**服务端口（真实值，勿用旧文档）**：gateway 6000 / auth 6101 / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / deploy-console 6200。
+**服务端口（真实值，勿用旧文档）**：gateway 6000 / auth 6101 / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / knowledge 6011 / deploy-console 6200。
+
+> ⚠️ **端口双轨**：上面是**本机**端口（auth=6101，因本机 6001 被其它项目占用）；**服务器** auth=6001，且 prod 走 3000 系列（gateway 3000 / auth 3001 …）。
+> 权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。巡检：`bash scripts/health-check.sh <local|dev|prod>`。
+> 本地开发总索引：`docs/development/local-dev-guide.md`。
 
 ## 风格与品牌常量
 
