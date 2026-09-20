@@ -29,6 +29,32 @@
 - 前端产物：`servers/gateway/public/static/modules/<key>/<version>/`，gateway manifest 切指针
 - 控制台：`https://local.kedouai.com/console/`（nginx → 6200；直连 `http://127.0.0.1:6200/console/`）
 
+### 1.1 三环境端口矩阵（必读：prod 是 3000 系）
+
+> **主机地址一律不落文档**：dev / prod 的机器地址看 deploy-console「服务器管理」里的
+> `<env>-default` 主机组（`web_system_deploy.deploy_servers`），本文只记端口。
+
+| 服务 | local（本机） | dev | prod |
+|---|---|---|---|
+| gateway | 6000 | 6000 | **3000** |
+| auth-service | **6101** | 6001 | **3001** |
+| user-service | 6002 | 6002 | **3002** |
+| ai-service | 6003 | 6003 | **3003** |
+| system-service | 6004 | 6004 | **3004** |
+| todo-service | 6005 | 6005 | **3005** |
+| mcp-gateway | 6006 | 6006 | 6006 |
+| content-hub | 6007 | 6007 | 6007 |
+| upload-service | 6008 | 6008 | 未运行 |
+| ai-agent | 6010 | 6010 | 未运行 |
+| knowledge-service | 6011 | 6011 | 未运行 |
+| deploy-console | 6200 | 6200 | 不在 prod 主机（运维堡垒机） |
+
+- **两个易踩的差异**：① auth-service 本机是 6101（6001 被他项目占用），dev/prod 是 6001；② **prod 走 3000 系**，与 `ecosystem.config.js` 声明的 6000 系**不一致**（prod 进程是历史手工启动的遗留），改 prod 端口前先 `pm2 env <id>` 看进程实际值，不要只看配置文件。
+- **两套"主机"语义别混用**：
+  - `deploy_servers.server_name`（`dev-default` / `prod-default`）+ `deploy_env_service_routes` → **发布 / SSH / 监控**用它解析目标机器（主机组名，可多台）。
+  - `deploy_service_envs.host_name` → **网关转发与探活**用，会被 `resolveUpstream` 直接拼成 `http://<hostName>:<port>`（`servers/gateway/src/dynamic-route/route-match.ts`），**必须填可解析地址**，填主机组名会解析失败。
+- 校验：`bash scripts/health-check.sh dev|prod`（走 SSH）；本机 `pm2 jlist`。
+
 ## 二、日常发布流程
 
 > ⚠️ **升级发布前先跑迁移**：`NODE_ENV=production` 下 TypeORM synchronize 关闭，
