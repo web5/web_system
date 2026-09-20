@@ -84,7 +84,7 @@
 | # | 议题 | 现状 | 需要你定 |
 |---|---|---|---|
 | **Q1** | `staging` 残留 | `deploy_service_envs` 有 9 行 `env_id=staging`（`staging-default`，无端口），但 `deploy_envs` 无 staging | 建议**删除这 9 行**（脏数据，前端永远看不到）。确认？ |
-| **Q2** | `finnews` | 三环境均未运行（不在 `ecosystem.config.cjs`，dev/prod 均无监听） | 建议**服务置停用**（`deploy_services.enabled=0`）并删掉三行空指向。确认？ |
+| **Q2** | `finnews` | 三环境均未运行（不在 `ecosystem.config.cjs`，dev/prod 均无监听） | ✅ **2026-09-20 已执行**：`deploy_services` 软删除（`deleted_at`+`enabled=0`），`deploy_modules` / `deploy_env_service_routes` / `deploy_environments` / `deploy_module_stage_commands` 中的 finnews 记录一并清理；网关 `/api/finnews/*` 通道已统一到 `/api/content-hub/*` |
 | **Q3** | `deploy-console` 的 prod 指向 | prod 机未监听 6200；记忆里 console 跑在堡垒机 `101.43.117.234`（本次 ssh 公钥被拒，未实测） | 堡垒机上 console 是否在跑、端口多少？确认后决定新增 `bastion-default` 主机组还是留"未配置" |
 | **Q4** | prod 缺的三个服务（ai-agent / knowledge-service / upload-service） | prod 机未监听 | 是"prod 确实不部署它们"（→ 保持未配置）还是"待上线"（→ 先留占位？） |
 | **Q5** | `deploy_services.default_port` | 13 个服务该列**全为空** | 按 Q19 不再依赖它。是否**清空语义**（保留列但弃用）或直接不管？建议保留列、代码不读 |
