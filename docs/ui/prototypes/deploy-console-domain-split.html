@@ -599,7 +599,7 @@
               <div class="step-title" onclick="openStep(1)"><span class="nm">拉取代码</span><span class="desc">拉取目标分支</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
                 <div class="task">
-                  <div class="task-node script" title="平台托管脚本（平台维护，不可改）" onclick="openTask('git')"><span class="seq">1</span><span class="tag">脚本</span><span class="name">git</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-node script" title="平台托管脚本（平台维护，不可改）" onclick="openTask('git')"><span class="seq">1</span><span class="tag">任务</span><span class="name">git</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                   <div class="task-acts">
                     <div class="act-node" title="校验 REPO_URL 与 origin 一致、回显来源、分支与 commit 可达" onclick="openAction('git',0)"><span class="tag">脚本</span><span class="name">校验代码来源与分支</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                     <div class="act-node" title="fetch + checkout 目标分支，HEAD 自证" onclick="openAction('git',1)"><span class="tag">脚本</span><span class="name">检出目标分支并自证</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
@@ -613,7 +613,7 @@
               <div class="step-title" onclick="openStep(2)"><span class="nm">构建</span><span class="desc">打包微模块产物</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
                 <div class="task">
-                  <div class="task-node script" title="微前端产物构建（平台托管）" onclick="openTask('build')"><span class="seq">2</span><span class="tag">脚本</span><span class="name">build</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-node script" title="微前端产物构建（平台托管）" onclick="openTask('build')"><span class="seq">2</span><span class="tag">任务</span><span class="name">build</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                   <div class="task-acts">
                     <div class="act-node" title="pnpm install --frozen-lockfile + vite build，产物落 dist/" onclick="openAction('build',0)"><span class="tag">脚本</span><span class="name">vite build · 打包微模块产物</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                   </div>
@@ -625,7 +625,7 @@
             <div class="step-col" data-step="3">
               <div class="step-title" onclick="openStep(3)"><span class="nm">发布确认</span><span class="desc">人工审批门禁</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
-                <div class="task-node approval" title="审批人：运维" onclick="openTask('approve')"><span class="seq">3</span><span class="tag">审核</span><span class="name">审批门禁</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task-node approval" title="审批人：运维" onclick="openTask('approve')"><span class="seq">3</span><span class="tag">任务</span><span class="name">审批门禁</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               </div>
             </div>
 
@@ -656,7 +656,7 @@
               <div class="step-title" onclick="openStep(5)"><span class="nm">通知</span><span class="desc">发布结果通知</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
                 <div class="task">
-                  <div class="task-node script" title="curl 通知回调（条件：仅生产环境执行）" onclick="openTask('notify')"><span class="seq">5</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">notify</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-node script" title="curl 通知回调（条件：仅生产环境执行）" onclick="openTask('notify')"><span class="seq">5</span><span class="tag">任务</span><span class="ifb">if</span><span class="name">notify</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                   <div class="task-acts">
                     <div class="act-node" title="shell 脚本：curl 调用通知接口（仅 DEPLOY_ENV == prod 执行）" onclick="openAction('notify',0)"><span class="tag">脚本</span><span class="name">curl · 发布结果回调</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
                   </div>
