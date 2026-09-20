@@ -8,6 +8,7 @@ import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-templa
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { EnvsService } from '../envs/envs.service';
+import { AppsService } from '../apps/apps.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -200,6 +201,8 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: PIPELINE_BUILTIN_STEPS, useValue: {} },
       // 环境校验（双域重构：提交时按环境表校验 envId）→ 本 spec 放行任意环境
       { provide: EnvsService, useValue: { existsEnv: async () => true } },
+      // 部署动作（发布成功后衔接；本 spec 关注审批，故只记录不校验）
+      { provide: AppsService, useValue: { switchVersion: jest.fn(async () => ({ appKey: 'x', envId: '1' })) } },
     ],
   }).compile();
 

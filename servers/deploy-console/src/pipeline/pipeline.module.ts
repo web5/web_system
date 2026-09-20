@@ -40,6 +40,8 @@ import { ArtifactStoreModule } from '../artifact/artifact-store.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 import { EnvsModule } from '../envs/envs.module';
+// 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
+import { AppsModule } from '../apps/apps.module';
 
 @Module({
   imports: [
@@ -85,6 +87,8 @@ import { EnvsModule } from '../envs/envs.module';
     RemoteDeliveryModule,
     // 环境域（提交时按环境表校验 envId，替代硬编码白名单）
     EnvsModule,
+    // 部署动作：前端切指针（AppsService.switchVersion）
+    AppsModule,
   ],
   controllers: [PipelineController, PipelineVarController],
   providers: [
