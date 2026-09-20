@@ -272,6 +272,79 @@ describe('resolveStageVars（阶段命令变量）', () => {
     const v = resolveStageVars({ env: 'dev', moduleKey: 'admin', releaseWorkspace: ws });
     expect(v.WS_SAFE_DELETE).toBe('mv');
   });
+
+  describe('P0 配置中心全量注入（2026-09-20）', () => {
+    const base = { env: 'local', moduleKey: 'admin', releaseWorkspace: ws, commitId: 'abc1234' };
+
+    it('配置中心的自定义键会注入脚本变量（此前只有 PORT 生效）', () => {
+      const v = resolveStageVars({
+        ...base,
+        config: { ARTIFACT_SUBPATH: 'servers/gateway/public/static/modules/admin' },
+      });
+      expect(v.ARTIFACT_SUBPATH).toBe('servers/gateway/public/static/modules/admin');
+    });
+
+    it('配置可覆盖内置同名键（内置作为兜底）', () => {
+      expect(resolveStageVars({ ...base, config: { ENTRY_FILE: 'main.js' } }).ENTRY_FILE).toBe('main.js');
+      expect(resolveStageVars(base).ENTRY_FILE).toBe('index.js');
+    });
+
+    it('保护键不可被配置覆盖（平台语义真相源）', () => {
+      const v = resolveStageVars({
+        ...base,
+        config: { COMMIT_ID: 'hacked', MODULE_KEY: 'other', DEPLOY_ENV: 'prod', RELEASE_DIR: '/tmp' },
+      });
+      expect(v.COMMIT_ID).toBe('abc1234');
+      expect(v.MODULE_KEY).toBe('admin');
+      expect(v.DEPLOY_ENV).toBe('local');
+      expect(v.RELEASE_DIR).toBe(ws);
+    });
+
+    it('configInject=false 时回退旧行为（配置中心只影响 PORT）', () => {
+      const v = resolveStageVars({ ...base, config: { PORT: '6010', ARTIFACT_SUBPATH: 'x' }, configInject: false });
+      expect(v.PORT).toBe('6010');
+      expect(v.ARTIFACT_SUBPATH).toBeUndefined();
+    });
+
+    it('PORT 仍保持「配置中心 > pm2 实际进程」的优先级', () => {
+      expect(resolveStageVars({ ...base, config: { PORT: '6010' }, pm2Port: '6200' }).PORT).toBe('6010');
+    });
+  });
+
+  describe('P3 pm2 入口 / 工作目录可配（2026-09-20）', () => {
+    const be = {
+      env: 'local',
+      moduleKey: 'gateway',
+      moduleType: 'backend',
+      dir: 'gateway',
+      releaseWorkspace: ws,
+    };
+
+    it('PM2_SCRIPT 缺省 dist/main.js（历史行为不变）', () => {
+      expect(resolveStageVars(be).PM2_SCRIPT).toBe('dist/main.js');
+    });
+
+    it('服务管理配了 pm2Script 则用配置值', () => {
+      expect(resolveStageVars({ ...be, pm2Script: 'dist/src/main.js' }).PM2_SCRIPT).toBe('dist/src/main.js');
+    });
+
+    it('PM2_CWD 缺省为 servers/<dir>（后端）/ apps/<dir>（前端）', () => {
+      expect(resolveStageVars(be).PM2_CWD).toBe(path.join(ws, 'servers', 'gateway'));
+      expect(resolveStageVars({ ...be, moduleType: 'micro-frontend' }).PM2_CWD).toBe(
+        path.join(ws, 'apps', 'gateway'),
+      );
+    });
+
+    it('配了 deployRoot 时 PM2_CWD 跟随部署根', () => {
+      expect(resolveStageVars({ ...be, deployRoot: 'servers/gateway' }).PM2_CWD).toBe(
+        path.join(ws, 'servers/gateway'),
+      );
+    });
+
+    it('PM2_SCRIPT 可被配置中心覆盖（非保护键）', () => {
+      expect(resolveStageVars({ ...be, config: { PM2_SCRIPT: 'dist/other.js' } }).PM2_SCRIPT).toBe('dist/other.js');
+    });
+  });
 });
 
 describe('M2 部署目标推导（模块自持 deployRoot，环境只分层）', () => {
