@@ -1,22 +1,29 @@
 #!/usr/bin/env bash
 # ============================================================
 # health-check.sh — 服务健康巡检（兼容 bash 3.2）
-# 用法：./scripts/health-check.sh <dev|prod>
-# 检查：进程端口 / 健康接口 / DB 连接 / MCP 端点
+# 用法：./scripts/health-check.sh <local|dev|prod>
+#   local = 本机（不走 SSH；端口以仓库根 ecosystem.config.cjs 为准，auth=6101）
+#   dev   = 远程 dev（/data/web_system，6000 系列，auth=6001）
+#   prod  = 远程 prod（/data/web_system，3000 系列，auth=3001）
+# 检查：进程端口 / 健康接口 / MCP 端点 / AI 链路探活
+#
+# ⚠️ 端口双轨：auth 本机 6101（本机 6001 被其它项目占用），服务器 6001/3001。
+#    改端口前先确认目标环境，别把服务器的 6001 当成笔误。
 # ============================================================
 set -uo pipefail
 
 TARGET="${1:-dev}"
 case "$TARGET" in
-  dev)  SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-dev";  PORT_BASE=6000 ;;
-  prod) SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-prod"; PORT_BASE=3000 ;;
-  *) echo "用法: $0 <dev|prod>"; exit 1 ;;
+  local) SSH="eval"; SERVER_ROOT="${HOME}/web_system_release/servers"; PORT_BASE=6000; AUTH_PORT=6101 ;;
+  dev)   SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-dev";  SERVER_ROOT="/data/web_system/servers"; PORT_BASE=6000; AUTH_PORT=$((PORT_BASE+1)) ;;
+  prod)  SSH="ssh -o ConnectTimeout=10 -o BatchMode=yes kedou-prod"; SERVER_ROOT="/data/web_system/servers"; PORT_BASE=3000; AUTH_PORT=$((PORT_BASE+1)) ;;
+  *) echo "用法: $0 <local|dev|prod>"; exit 1 ;;
 esac
 
 port_of() { # $1=service_name -> port
   case "$1" in
     gateway) echo $((PORT_BASE+0)) ;;
-    auth)    echo $((PORT_BASE+1)) ;;
+    auth)    echo "$AUTH_PORT" ;;
     user)    echo $((PORT_BASE+2)) ;;
     ai)      echo $((PORT_BASE+3)) ;;
     system)  echo $((PORT_BASE+4)) ;;
@@ -24,16 +31,31 @@ port_of() { # $1=service_name -> port
     mcp-gateway) echo 6006 ;;
     content-hub) echo 6007 ;;
     knowledge) echo 6011 ;;
+    # 以下三项端口与 PORT_BASE 无关（本机与 dev 一致，均为固定值）
+    ai-agent) echo 6010 ;;
+    upload) echo 6008 ;;
+    deploy-console) echo 6200 ;;
   esac
 }
 
+port_up() { # $1=port → 0=监听中；远程用 ss，本机用 lsof（macOS 无 ss）
+  local p="$1"
+  if [ "$SSH" = "eval" ]; then
+    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    $SSH "ss -tln 2>/dev/null | grep -q ':$p '" 2>/dev/null
+  fi
+}
+
 SERVICES="gateway auth user ai system todo mcp-gateway content-hub knowledge"
+# ai-agent / upload / deploy-console：prod 端口规划未确认，只在 local|dev 巡检
+[ "$TARGET" != "prod" ] && SERVICES="$SERVICES ai-agent upload deploy-console"
 
 echo "===== 健康巡检：$TARGET ====="
 echo "--- 端口监听 ---"
 for name in $SERVICES; do
   port=$(port_of "$name")
-  if $SSH "ss -tln 2>/dev/null | grep -q ':$port '" 2>/dev/null; then
+  if port_up "$port"; then
     echo "  [OK] $name :$port"
   else
     echo "  [FAIL] $name :$port 未监听"
@@ -48,7 +70,7 @@ $SSH "curl -s -o /dev/null -w 'portal/: HTTP %{http_code}\n' --max-time 5 http:/
 echo "--- MCP 端点（initialize）---"
 # key 优先取 mcp-gateway 自身 .env（配置单源后的真相源）；回退 pm2 进程环境（兼容未迁移的环境）
 # 注：pm2 pid 在部分环境返回空/失效 pid，直接用它会拿不到 key 而静默跳过整段探活
-KEY=$($SSH "grep -m1 '^MCP_CLIENT_KEY=' /data/web_system/servers/mcp-gateway/.env 2>/dev/null | cut -d= -f2-" 2>/dev/null)
+KEY=$($SSH "grep -m1 '^MCP_CLIENT_KEY=' $SERVER_ROOT/mcp-gateway/.env 2>/dev/null | cut -d= -f2-" 2>/dev/null)
 if [ -z "$KEY" ]; then
   KEY=$($SSH 'PID=$(pm2 pid mcp-gateway 2>/dev/null); [ -n "$PID" ] && tr "\0" "\n" < /proc/$PID/environ 2>/dev/null | grep "^MCP_CLIENT_KEY=" | cut -d= -f2-')
 fi
@@ -82,7 +104,7 @@ if [ -n "$KEY" ]; then
       echo "  [OK] knowledge_list: ${R:0:60}" ;;
   esac
   # ai-agent 侧是否配置了 MCP 网关（缺失 → MCP 工具不会注册，运行时才报「工具未注册」）
-  AGENT_MCP_URL=$($SSH "grep -m1 '^MCP_GATEWAY_URL=' /data/web_system/servers/ai-agent/.env 2>/dev/null | cut -d= -f2-" 2>/dev/null)
+  AGENT_MCP_URL=$($SSH "grep -m1 '^MCP_GATEWAY_URL=' $SERVER_ROOT/ai-agent/.env 2>/dev/null | cut -d= -f2-" 2>/dev/null)
   if [ -n "$AGENT_MCP_URL" ]; then
     echo "  [OK] ai-agent MCP_GATEWAY_URL=$AGENT_MCP_URL"
   else

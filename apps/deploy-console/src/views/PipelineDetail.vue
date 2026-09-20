@@ -860,7 +860,8 @@ onUnmounted(stopPolling)
           <div style="color: #666;">
             {{ tpl.description || '（无说明）' }}
             <div style="margin-top: 6px; font-size: 12px; color: #999;">
-              活动步骤 {{ stepList({ steps: tpl.steps || null, status: 'succeeded' } as any).length }}/9 ·
+              <!-- 节点数不再硬编码（历史是固定九阶段，现在是可编排节点：v5 nodes → steps → 九阶段回退） -->
+              {{ tpl.nodes?.length || stepList({ steps: tpl.steps || null, status: 'succeeded' } as any).length }} 个节点 ·
               探活失败{{ tpl.rollbackOnFailure === 'none' ? '不回滚' : '自动回滚' }} · 投递默认{{
                 tpl.defaultTarget === 'auto' ? '自动' : tpl.defaultTarget === 'local' ? '本机' : '远程'
               }}

@@ -18,9 +18,12 @@
     "paths": {
       "@/*": ["src/*"],
       "@web-system/shared": ["../../packages/shared/src/index.ts"],
-      "@web-system/shell-loader": ["../../packages/shell-loader/src/index.ts"]
+      "@web-system/shell-loader": ["../../packages/shell-loader/src/index.ts"],
+      "@web-system/ui/components/*": ["../../packages/ui/src/components/*"],
+      "@web-system/ui/composables/*": ["../../packages/ui/src/composables/*"]
     },
-    "types": ["node"]
+    // vite/client：共享 UI 组件（EnvSwitcher）用 import.meta.env.DEV 区分本地预览与生产
+    "types": ["node", "vite/client"]
   },
   "include": ["src/**/*", "src/**/*.vue"],
   "exclude": ["node_modules", "dist"]
