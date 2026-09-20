@@ -34,6 +34,7 @@ import { AgentConversationQueryService } from './agent-conversation-query.servic
 import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
 import { AgentSkillProvider } from '../skill/agent-skill-provider';
+import { IntentService } from './intent/intent.service';
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -150,6 +151,7 @@ const runnerProvider: Provider = {
     ContractBenchmarkTool,
     ContractConversationService,
     AgentConversationQueryService,
+    IntentService,
   ],
   controllers: [AgentController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],

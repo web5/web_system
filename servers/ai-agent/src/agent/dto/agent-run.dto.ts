@@ -1,8 +1,13 @@
 import { IsString, IsOptional, IsUUID, MaxLength } from 'class-validator';
 
 export class AgentRunDto {
+  /**
+   * 省略 / 传 'auto' = 由服务端意图路由决定（见 IntentService）。
+   * 显式传入（如 'contract-risk'）时行为与改动前完全一致 —— 向后兼容。
+   */
+  @IsOptional()
   @IsString({ message: 'agentId 必须是字符串' })
-  agentId: string;
+  agentId?: string;
 
   @IsString({ message: 'userInput 必须是字符串' })
   @MaxLength(8000, { message: 'userInput 过长（上限 8000 字符）' })
