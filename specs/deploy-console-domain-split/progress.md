@@ -266,6 +266,7 @@ cd apps/deploy-console && npx vue-tsc --noEmit
 | 日期 | 变更 |
 |---|---|
 | 2026-09-18 | 初稿：P0 完成 + P1 主体（环境域 / 应用域 / 投递激活 / 前端三页接线）与 V4–V7 证据 |
+| 2026-09-20 | 原型稿交互定稿 + 方案文档同步（M15 预研）：框架改「顶部一级+左侧二级」导航、整稿亮色；画布定稿三层实体「步骤→任务→动作」（动作=脚本，write-version 脚本化；任务头 tag「任务」、动作块紧贴圆角 2px）；抽屉两态（任务总览/单动作聚焦）无保存；保存/取消/删除上移页头按钮组。`specs/pipeline-step-task/design.md` 全量同步：四层→三层模型、新增 `deploy_pipeline_actions` 表、service 操作脚本化迁移映射、验收 V1–V8 |
 | 2026-09-20 | 节点「环境分支」可编辑（M14）：每环境一段脚本 → 拼装单一执行体，未配环境 fail-fast；踩坑：只传 envBranches 时 upsert 会清空 actions（丢 write-version），已修为「启用分支时保留已有操作」 |
 | 2026-09-20 | p13 流水线配置完善（本机库）：配置中心 `REPO_URL` + git 来源校验；admin 两线合并为一条，release 按 `$DEPLOY_ENV` 分支（local=cp / 其他=scp）；补 `actions.code` 与 `command` 双写（执行体真相源） |
 | 2026-09-20 | 移除「产物投递激活」链路：`app-artifact.service.ts`、`POST /api/apps/:key/publish`、`PublishAppDto`、`UploadExecutor.publishToEnvDir` 与 `PIPELINE_APP_ENV_DIR` 开关全部删除（`entry-pointer.ts` 保留给切换/回滚）；投递改由**按环境区分的流水线脚本**承担——新建「admin 本地发布」线（`tpl-1789875044581-vrnfbh1`，key `admin-local`）release 节点为本机 cp，dev 线仍为 scp；实测该线 `env=local` 发布成功（产物落 `modules/admin/admin-local/<commit>`）。同步修正 `EnvsModule` / `ServicesModule` 漏注册 `DeployHostEntity` 的 DI 缺陷 |
