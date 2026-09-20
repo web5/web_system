@@ -39,8 +39,6 @@ import { ReleaseGitModule } from '../git/release-git.module';
 import { ArtifactStoreModule } from '../artifact/artifact-store.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
-// 双域重构 P3：upload 执行体在开启 PIPELINE_APP_ENV_DIR 时调用应用域「投递激活」原语
-import { AppsModule } from '../apps/apps.module';
 import { EnvsModule } from '../envs/envs.module';
 
 @Module({
@@ -85,8 +83,6 @@ import { EnvsModule } from '../envs/envs.module';
     ReleaseRegistryModule,
     // 远程投递（upload remote 执行体）
     RemoteDeliveryModule,
-    // 应用域（upload 执行体的环境目录投递：AppArtifactService）
-    AppsModule,
     // 环境域（提交时按环境表校验 envId，替代硬编码白名单）
     EnvsModule,
   ],

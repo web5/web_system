@@ -27,8 +27,8 @@
 |---|---|---|
 | 环境域 | `src/envs/`（站点 + 环境 + 环境详情服务指向） | **V4 ✅** |
 | 应用域 | `src/apps/`（应用 + 挂载路由 + 版本矩阵 + 切换/回滚） | **V6 ✅ / V7 ✅** |
-| 产物投递激活 | `src/apps/app-artifact.service.ts` + `entry-pointer.ts` | **V5 ✅** |
-| 单测 | `entry-pointer.spec.ts`(8) + `app-artifact.service.spec.ts`(7) | ✅ 15/15 通过 |
+| 产物投递激活 | **已于 2026-09-20 移除**：`app-artifact.service.ts`（`publishLocal`）、`POST /api/apps/:key/publish`、`UploadExecutor` 的环境目录分支（含 `PIPELINE_APP_ENV_DIR` 开关）全部删除；`entry-pointer.ts` **保留**，供切换/回滚改写指针 | 见「变更日志」 |
+| 单测 | `entry-pointer.spec.ts`(8)（`app-artifact.service.spec.ts` 随能力一并删除） | ✅ 8/8 通过 |
 | 前端接线 | `api/index.ts` 新增 `envsApi` / `appsApi`；`EnvironmentManager.vue`、`AppManager.vue`、`AppDetail.vue`、`EnvironmentDetail.vue` 去 mock | ✅ `vue-tsc --noEmit` 零错误 |
 | 文档对齐 | `design.md` §4 REST 表改为实际路径（`/api/apps`、`/api/envs`）并标注实现状态 | ✅ |
 
@@ -37,7 +37,7 @@
 | 判据 | 证据 |
 |---|---|
 | **V4** 新建环境得到自增 envId | `POST /api/envs {name,siteKey}` 连建两次 → `envId=1`、`envId=2`；`DELETE /api/envs/dev` → `400 内置环境 dev 不可删除`；`GET /api/envs/resolve?envId=999` → `{"envId":"dev"}`（回退） |
-| **V5** 发布后 `/<key>/<envId>/index.js` 可加载 | `POST /api/apps/admin/publish {envId:"1",version:"e2e1"}` → 产物落 `<ws>/servers/gateway/public/static/modules/admin/1/e2e1/`，指针 `admin/1/index.js` 内容为 A′ 两行；`curl http://localhost:6000/static/modules/admin/1/index.js` → `200 application/javascript`；`.../1/e2e1/index.js` → `200` + 真实产物内容 |
+| **V5** 发布后 `/<key>/<envId>/index.js` 可加载 | ⚠️ **历史证据，接口已下线**（2026-09-20 随 `publishLocal` 一并删除）：当时 `POST /api/apps/admin/publish {envId:"1",version:"e2e1"}` → 产物落 `<ws>/servers/gateway/public/static/modules/admin/1/e2e1/`，指针 `admin/1/index.js` 内容为 A′ 两行；`curl http://localhost:6000/static/modules/admin/1/index.js` → `200 application/javascript`。**现今改由流水线投递 + `POST /api/apps/:key/switch` 切指针** |
 | **V6** 切换版本只改指针且刷新生效 | `POST /api/apps/admin/switch {envId:"1",version:"v2"}`：指针文件 `v1→v2` 改写，`v1` 版本目录原封不动；版本表 `currentVersion=v2 / previousVersion=v1`；`POST /api/apps/admin/rollback {envId:"1"}` 回滚成功 |
 | **V7** 删除环境被占用时阻断 | `DELETE /api/envs/1` → `400 仍有 1 个应用在该环境有部署记录：admin。请先清理后再删除。` |
 | 单测 | `npx jest src/apps/` → 15 passed；`npx vue-tsc --noEmit` → 无输出（零错误） |
@@ -47,7 +47,7 @@
 | 项 | 说明 |
 |---|---|
 | 服务管理相关页面 | 属 **P2**（API 网关域），`ServiceManager.vue` / `ServiceDetail.vue` 仍为 mock |
-| 流水线调用「投递激活」原语 | P1 已交付原语（API + 单测 + 端到端），**流水线接线放 P3**：避免在 `moduleKey` 尚未切换为 `targetRef` 时改动共享流水线，破坏 `web_system_release` 运行实例 |
+| 流水线调用「投递激活」原语 | **已关闭**（2026-09-20）：原语与流水线接线一并删除。原因：模板 `release` 节点被 DB 里的 shell 命令接管，内置 `UploadExecutor` 永不执行，开关形同虚设；且本地/远程投递已由**按环境区分的流水线**承担（本机线=cp、dev/prod 线=scp） |
 | 旧表退役 | P4（`deploy_modules` / `deploy_deployments` / `deploy_env_service_routes` / `deploy_servers` / `deploy_environments`） |
 
 ---
@@ -105,7 +105,7 @@
 | shell 按 envId 加载 | ✅ 已完成 | `apps/shell/src/main.ts`：解析 env → 注册 `byEnv[envId]` 模块（固定入口，不含版本）→ 请求带 `x-env-id`；`byEnv` 缺失时回落旧 `modules` 结构 |
 | 环境解析共享（防三处漂移） | ✅ 已完成 | `packages/ui/src/composables/env.ts`：`localStorage > defaultEnv > dev`，与网关侧 `route-match.resolveEnvId` 同语义；单测 8/8（含「环境被删后残留旧值必须回退」） |
 | EnvSwitcher 接真实环境 + 审计 | ✅ 已完成 | 挂件读 `manifest.envs`（`switchable=false` 不渲染）；切换写 `localStorage['kedou.env']` → 上报 `POST /console/api/envs/switch-log`（**最多等 800ms，不阻断切换**）→ 整页重载 |
-| 流水线调用「投递激活」原语 | ✅ 已完成 | `UploadExecutor` 在本地投递成功后追加 `AppArtifactService.publishLocal`（**`PIPELINE_APP_ENV_DIR=1` 开关，默认关闭**）；单测 6/6（开关未开不调用 / 归一化纯 commit / 远程不投 / 非应用域跳过 / 其它失败抛错）。带开关启动 console 无 DI 错误 |
+| 流水线调用「投递激活」原语 | ⛔ 已移除（2026-09-20） | 原实现为 `UploadExecutor` 追加 `AppArtifactService.publishLocal`（`PIPELINE_APP_ENV_DIR=1` 开关）。实测结论：模板 `release` 节点的 shell 命令优先，内置执行体不执行 → 开关对带壳命令模板无效；且对 `deployMode=site-version` 的应用会误抛错。现**按环境区分流水线脚本**实现投递（本机线 cp / 远程线 scp），原语、开关、接口全部删除 |
 | **构建发布 / 部署 语义分离** | ✅ 已完成 | 用户 2026-09-19 定稿：**构建发布 = 流水线**（拉码 → 构建 → 上传产物，**不动进程**）；**部署 = 独立动作**（重启进程 + 探活，**不重新构建**）。后端 `POST /api/services/:key/deploy {envId}`（`ServicesService.deploy` + `restartLocal`）；前端 `servicesApi.deploy`，部署 tab 每行三个动作（构建发布 / 部署 / 探活），文案改为「上传后不会自动生效」 |
 | **旧表读取源切换**（M9 前置） | ✅ 已完成 | `ModuleRegistryService` 改为**双域适配层**：主源 = `deploy_services` + `deploy_apps`（`kind→type` 映射：micro-frontend→micro-frontend；shell/mini-app/spa→frontend；service→backend，与 `modules.json` 三值域一致），旧 `deploy_modules` 降级为**兜底补漏**。写路径（旧 `/modules` controller）已删 |
 | 真实流水线发布复验 | 待做 | 需一次完整流水线（build→upload→activate→verify）验证产物落盘到 `<key>/<envId>/<commit>/`；与 T1 复验点同批做（避免手造文件造成的假阳性） |
@@ -192,9 +192,9 @@ curl -X POST -H 'x-service-key: testkey' http://localhost:6099/api/internal/gate
 # 共享 env helper 单测
 cd packages/ui && npx jest
 
-# 起临时 console（流水线接环境目录投递开关）
+# 起临时 console（环境目录投递开关已于 2026-09-20 移除，勿再带 PIPELINE_APP_ENV_DIR）
 cd servers/deploy-console && npm run build
-PORT=6299 PIPELINE_APP_ENV_DIR=1 node dist/main.js
+PORT=6299 node dist/main.js
 
 # 起临时验证实例（release 实例在 6200，勿冲突）
 cd servers/deploy-console && npm run build
@@ -241,3 +241,4 @@ cd apps/deploy-console && npx vue-tsc --noEmit
 | 日期 | 变更 |
 |---|---|
 | 2026-09-18 | 初稿：P0 完成 + P1 主体（环境域 / 应用域 / 投递激活 / 前端三页接线）与 V4–V7 证据 |
+| 2026-09-20 | 移除「产物投递激活」链路：`app-artifact.service.ts`、`POST /api/apps/:key/publish`、`PublishAppDto`、`UploadExecutor.publishToEnvDir` 与 `PIPELINE_APP_ENV_DIR` 开关全部删除（`entry-pointer.ts` 保留给切换/回滚）；投递改由**按环境区分的流水线脚本**承担——新建「admin 本地发布」线（`tpl-1789875044581-vrnfbh1`，key `admin-local`）release 节点为本机 cp，dev 线仍为 scp；实测该线 `env=local` 发布成功（产物落 `modules/admin/admin-local/<commit>`）。同步修正 `EnvsModule` / `ServicesModule` 漏注册 `DeployHostEntity` 的 DI 缺陷 |

@@ -5,14 +5,12 @@ import { DeployAppRouteEntity } from '../entities/deploy-app-route.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { AppsService } from './apps.service';
-import { AppArtifactService } from './app-artifact.service';
 import { AppsController } from './apps.controller';
 import { EnvsModule } from '../envs/envs.module';
 import { AuditModule } from '../audit/audit.module';
 
 /**
- * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）+
- * 产物投递激活（`<key>/<envId>/<version>/` → 改指针）。
+ * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
  * 依赖 EnvsModule 校验环境存在性（环境是加载维度，应用必须落在某个环境上）。
  */
 @Module({
@@ -28,7 +26,7 @@ import { AuditModule } from '../audit/audit.module';
     AuditModule,
   ],
   controllers: [AppsController],
-  providers: [AppsService, AppArtifactService],
-  exports: [AppsService, AppArtifactService],
+  providers: [AppsService],
+  exports: [AppsService],
 })
 export class AppsModule {}

@@ -133,18 +133,6 @@ export class AppRouteDto {
   enabled?: boolean;
 }
 
-/** 投递并激活到某环境的某版本（构建产物取 apps/<repoDir>/dist） */
-export class PublishAppDto {
-  @IsString()
-  @Length(1, 64)
-  envId: string;
-
-  @IsString()
-  @Length(1, 64)
-  @Matches(/^[A-Za-z0-9._-]+$/, { message: '版本标签只允许字母/数字/._-' })
-  version: string;
-}
-
 /** 切换版本（不重新构建，只改指针） */
 export class SwitchEnvVersionDto {
   @IsString()

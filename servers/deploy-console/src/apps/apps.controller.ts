@@ -2,13 +2,11 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } fro
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AppsService } from './apps.service';
-import { AppArtifactService } from './app-artifact.service';
 import { AuditService } from '../audit/audit.service';
 import { CurrentUser } from '../common/decorators';
 import {
   AppRouteDto,
   CreateAppDto,
-  PublishAppDto,
   RollbackVersionDto,
   SwitchEnvVersionDto,
   UpdateAppDto,
@@ -34,7 +32,6 @@ import {
 export class AppsController {
   constructor(
     private readonly appsService: AppsService,
-    private readonly artifactService: AppArtifactService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -185,23 +182,6 @@ export class AppsController {
   @ApiOperation({ summary: '某环境的可选版本（切换弹窗用）' })
   listVersions(@Param('key') key: string, @Query('envId') envId: string) {
     return this.appsService.listVersions(key, envId);
-  }
-
-  @Post(':key/publish')
-  @ApiOperation({
-    summary: '投递并激活：<key>/<envId>/<version>/ + 改写入口指针（产物取 apps/<repoDir>/dist）',
-  })
-  async publish(@Param('key') key: string, @Body() dto: PublishAppDto, @CurrentUser() user: any) {
-    const res = await this.artifactService.publishLocal(key, dto.envId, dto.version, user?.username);
-    await this.auditService.log({
-      user: user?.username || 'unknown',
-      action: 'app.publish',
-      env: dto.envId,
-      component: key,
-      status: 'success',
-      detail: `投递版本 ${res.version}（上一版本 ${res.previousVersion ?? '-'}）→ ${res.entryUrl}`,
-    });
-    return res;
   }
 
   @Post(':key/switch')
