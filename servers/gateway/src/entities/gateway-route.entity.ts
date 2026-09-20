@@ -12,14 +12,14 @@ export class GatewayRouteEntity extends BigIntEntity {
   id: number;
 
   @Index({ unique: true })
-  @Column({ type: 'varchar', length: 64, comment: '路由内部编码，如 auth/users/ai/mcp/finnews' })
+  @Column({ type: 'varchar', length: 64, comment: '路由内部编码，如 auth/users/ai/mcp/content-hub' })
   routeCode: string;
 
   @Column({ type: 'varchar', length: 64, comment: '匹配路径前缀，如 /api/auth' })
   pathPrefix: string;
 
   /** 上游服务标识，用于关联配置中的目标地址 */
-  @Column({ type: 'varchar', length: 32, comment: '上游服务 auth/user/ai/system/todo/upload/mcp/finnews' })
+  @Column({ type: 'varchar', length: 32, comment: '上游服务 auth/user/ai/system/todo/upload/mcp/content-hub' })
   targetService: string;
 
   /** 显式上游地址，填了则覆盖环境变量中的 *_SERVICE_URL；NULL 表示用默认 */
@@ -37,7 +37,7 @@ export class GatewayRouteEntity extends BigIntEntity {
   @Column({ type: 'int', unsigned: true, default: 30000, comment: '代理超时（毫秒）' })
   timeoutMs: number;
 
-  /** passthrough 透传（下游自校验）/ service_key 网关校验 FINNEWS_SERVICE_KEY */
+  /** passthrough 透传（下游自校验）/ service_key 网关校验 CONTENT_HUB_SERVICE_KEY（兼容旧名 FINNEWS_SERVICE_KEY） */
   @Column({ type: 'varchar', length: 16, default: 'passthrough', comment: '网关鉴权模式 passthrough/service_key' })
   authMode: 'passthrough' | 'service_key';
 

@@ -276,6 +276,7 @@ packages/shared/src/api.ts
 
 | 主题 | 入口 |
 |---|---|
+| **本地开发总指南（服务清单 + 基础能力 + 脚本索引）** | [docs/development/local-dev-guide.md](./docs/development/local-dev-guide.md) |
 | 开发总指南 | [docs/development-guide.md](./docs/development-guide.md) |
 | 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
 | admin 微前端开发 | [docs/development/admin-dev.md](./docs/development/admin-dev.md) |
@@ -283,8 +284,6 @@ packages/shared/src/api.ts
 | 发布流水线设计 | [docs/development/deploy-pipeline-dev.md](./docs/development/deploy-pipeline-dev.md) |
 | Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
 | Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
-| CI 门禁与红绿线 | [docs/development/ai-native-sdlc-ci-deployment.md](./docs/development/ai-native-sdlc-ci-deployment.md) |
-| 跨工具 Agent 装配（设计方案，未实施） | [docs/development/cross-tool-agent-context-design.md](./docs/development/cross-tool-agent-context-design.md) |
 
 ---
 
