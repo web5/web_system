@@ -25,6 +25,7 @@ import { PermissionBroker } from './permission-broker';
 import { AgentConversationQueryService } from './agent-conversation-query.service';
 import { ListConversationsDto } from './dto/conversation-query.dto';
 import { ContractConversationService } from '../contract/contract-conversation.service';
+import { IntentService } from './intent/intent.service';
 
 @ApiTags('AI Agent')
 @Controller('agent')
@@ -40,6 +41,7 @@ export class AgentController {
     private readonly permissionBroker: PermissionBroker,
     private readonly contractConversationService: ContractConversationService,
     private readonly conversationQueryService: AgentConversationQueryService,
+    private readonly intentService: IntentService,
   ) {}
 
   /**
@@ -136,7 +138,7 @@ export class AgentController {
     const user = (req as any).user;
     const userId = String(user?.id ?? '');
     this.logger.log(
-      `收到 agent/run 请求: agentId=${dto.agentId} userId=${userId} inputLen=${(dto.userInput || '').length}`,
+      `收到 agent/run 请求: agentId=${dto.agentId ?? '(auto)'} userId=${userId} inputLen=${(dto.userInput || '').length}`,
     );
     if (!userId) {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
@@ -167,8 +169,41 @@ export class AgentController {
     let tools: string[] | null = null;
     let model: string | null = null;
     let agentVersion: number | null = null;
+
+    // ===== 意图路由：把「客户端传死的 agentId」变成「服务端解析出来的」 =====
+    // 不传 / 传 'auto' → 服务端分类；显式传值 → 原样使用（向后兼容，一行都不用改）。
+    // 时序要求：intent 事件必须早于任何 token（前端据此渲染 agent 徽标、排查误判）。
+    const intent = await this.intentService.resolve({
+      agentId: dto.agentId,
+      userInput: dto.userInput,
+      conversationId: dto.conversationId,
+      userId,
+    });
+    const resolvedAgentId = intent.agentId;
+    this.logger.log(
+      `意图路由: ${dto.agentId ?? '(auto)'} → ${resolvedAgentId}` +
+        ` (via=${intent.via} conf=${intent.confidence} switched=${intent.switched})`,
+    );
+    res.write(
+      `data: ${JSON.stringify({
+        type: 'intent',
+        intent: {
+          agentId: resolvedAgentId,
+          agentName: this.agentRegistry.has(resolvedAgentId)
+            ? this.agentRegistry.get(resolvedAgentId).name
+            : undefined,
+          confidence: intent.confidence,
+          via: intent.via,
+          switched: intent.switched,
+          previousAgentId: intent.previousAgentId,
+        },
+      })}\n\n`,
+    );
+
     try {
-      const def = this.agentRegistry.get(dto.agentId);
+      // 【易漏点】取定义快照要用**解析后**的 id，不是 dto.agentId ——
+      // 否则 auto 时 get('auto') 抛错被 catch 吞掉，systemPrompt 快照为空，埋点静默降级。
+      const def = this.agentRegistry.get(resolvedAgentId);
       agentName = def?.name ?? null;
       systemPrompt = def?.systemPrompt ?? '';
       tools = def?.tools ?? null;
@@ -193,7 +228,7 @@ export class AgentController {
 
       const stream = this.agentRunner.stream(
         {
-          agentId: dto.agentId,
+          agentId: resolvedAgentId,
           userInput: dto.userInput,
           conversationId: dto.conversationId,
           // 调试时可临时覆盖模型（仅本次运行）
@@ -239,7 +274,8 @@ export class AgentController {
     // 异步把 run 推送到 ai-service 统一落库（admin 调试用）
     this.runPusher
       .push({
-        agentId: dto.agentId,
+        // 埋点同样用解析后的 id，否则 agent_log 会写进 'auto'
+        agentId: resolvedAgentId,
         agentName,
         userId,
         conversationId: conversationIdFromEngine,
@@ -262,7 +298,7 @@ export class AgentController {
     // 合同风险场景：分析 final 若为结构化报告 → 落 report 快照（独立于摘要压缩，保证历史可回放）。
     // 追问文本无法解析成报告 → 服务内 no-op，天然不覆盖既有快照。
     if (
-      dto.agentId === 'contract-risk' &&
+      resolvedAgentId === 'contract-risk' &&
       conversationIdFromEngine &&
       finalAnswer &&
       !errorMessage
