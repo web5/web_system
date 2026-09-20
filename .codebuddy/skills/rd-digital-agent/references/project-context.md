@@ -1,6 +1,6 @@
 # 项目上下文 · web_system
 
-> 本文件把通用数字人模板对齐到本仓库真实信息。**属于项目专属文件**：`scripts/sync-agent-kit.sh` 同步时排除，勿被上游覆盖。
+> 本文件把通用数字人模板对齐到本仓库真实信息。**属于项目专属文件**，上游通用技能同步时不得覆盖（原同步脚本已于 2026-09-18 删除，现为约定）。
 > 权威文件是 `.codebuddy/CODEBUDDY.md`（项目总入口）与 `docs/development-guide.md`；本文件只保留「数字人开工时最需要的那几屏」。
 
 ## 资料/项目结构
@@ -12,7 +12,7 @@ web_system/
 ├── packages/    共享包：shared types shell-loader ui agent-core kedou-agent mcp-core
 ├── docs/        人读文档（架构 / 开发 / UI / 产品 / 发布）
 ├── scripts/     构建 / 启动 / 验证 / 发布脚本
-└── .codebuddy/  数字人体系（agent-kit 能力源 + skills 运行源 + rules 触发 + 本入口 CODEBUDDY.md）
+└── .codebuddy/  数字人体系（skills 技能实体 + agent-kit 总则/红线/方法论 + rules 触发 + 本入口 CODEBUDDY.md）
 ```
 
 ## 领域与工具栈
@@ -27,7 +27,11 @@ web_system/
 | 部署 | pm2（进程名 `web-*`）+ Nginx + 自研发布平台 deploy-console |
 | 包管理 | pnpm workspace |
 
-**服务端口（真实值，勿用旧文档）**：gateway 6000 / auth 6101 / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / deploy-console 6200。
+**服务端口（真实值，勿用旧文档）**：gateway 6000 / auth 6101 / user 6002 / ai 6003 / system 6004 / todo 6005 / mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / knowledge 6011 / deploy-console 6200。
+
+> ⚠️ **端口双轨**：上面是**本机**端口（auth=6101，因本机 6001 被其它项目占用）；**服务器** auth=6001，且 prod 走 3000 系列（gateway 3000 / auth 3001 …）。
+> 权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。巡检：`bash scripts/health-check.sh <local|dev|prod>`。
+> 本地开发总索引：`docs/development/local-dev-guide.md`。
 
 ## 风格与品牌常量
 

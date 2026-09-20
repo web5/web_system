@@ -228,11 +228,14 @@ export class PipelineTemplateService {
   }
 
   /**
-   * 提交解析：
+   * 提交解析（**双域重构后：环境是运行期参数**）：
    * - 显式 id → 校验「全局流水线 或 属于该模块的专属流水线」且启用；
-   * - 未传 id → 优先按 **模块 × 环境** 找启用的流水线（用户 2026-09-17：从模块发起时
-   *   上下文已定，不该要求再选一次流水线）；传了 env 才做这层匹配（兼容旧调用）；
-   * - 仍无 → 全局流水线（没有就直接报错，不再懒建内置默认）。
+   * - 未传 id → ① 先按 **模块 × 环境** 精确匹配（用户 2026-09-17 的快速路径）；
+   *             ② 再按 **模块** 匹配（**新环境不再要求单独建流水线**：envId 由用户自建
+   *                （1/2/3…），为每个环境复制一份流水线不可维护）；
+   *             ③ 最后回落全局流水线（没有就明确报错，不懒建内置默认）。
+   *
+   * 注：模板的 `env` 语义降级为「默认环境」，运行实例的 `env` 才是投递目标与产物目录的真相源。
    */
   async resolveForSubmit(
     moduleKey: string,
@@ -241,17 +244,24 @@ export class PipelineTemplateService {
   ): Promise<DeployPipelineTemplateEntity> {
     if (!pipelineId) {
       if (env) {
-        const candidates = await this.repo.find({
+        const exact = await this.repo.find({
           where: { moduleKey, env, enabled: true },
           order: { builtin: 'DESC', createdAt: 'ASC' },
         });
-        if (candidates.length) return candidates[0];
+        if (exact.length) return exact[0];
       }
+      // 模块级回落：环境没有专属流水线时，复用该模块已有流水线（改哪条 env 由本次提交决定）
+      const byModule = await this.repo.find({
+        where: { moduleKey, enabled: true },
+        order: { builtin: 'DESC', createdAt: 'ASC' },
+      });
+      if (byModule.length) return byModule[0];
+
       const global = await this.findGlobal();
       if (!global) {
         throw new BadRequestException(
           env
-            ? `模块 ${moduleKey} 在 ${env} 环境没有可用流水线，也没有全局默认流水线；请先在「流水线管理」创建`
+            ? `模块 ${moduleKey} 没有可用流水线（${env} 环境也无专属流水线），也没有全局默认流水线；请先在「流水线管理」创建`
             : '未指定流水线，且当前没有全局默认流水线；请在提交时显式选择一条流水线',
         );
       }

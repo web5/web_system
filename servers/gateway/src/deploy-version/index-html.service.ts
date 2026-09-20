@@ -7,9 +7,15 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import { DeployDeploymentEntity } from './deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-module.entity';
 import { DeployCanaryRuleEntity } from './deploy-canary-rule.entity';
-
-/** gateway 托管前端静态文件的根目录 */
-const PUBLIC_ROOT = join(__dirname, '..', '..', 'public');
+import { IsNull } from 'typeorm';
+import {
+  DeployAppEntity,
+  DeployAppEnvVersionEntity,
+  DeployEnvEntity,
+  DeploySiteEntity,
+} from '../dynamic-route/entities';
+// P2（2026-09-20）：静态根改为可配（STATIC_PUBLIC_ROOT），不配时与历史行为一致
+import { PUBLIC_ROOT } from '../static/public-root';
 
 interface VersionCache {
   value: string | undefined;
@@ -54,11 +60,47 @@ export class IndexHtmlService {
     private moduleRepo: Repository<DeployModuleEntity>,
     @InjectRepository(DeployCanaryRuleEntity, 'deploy')
     private canaryRepo: Repository<DeployCanaryRuleEntity>,
+    // 双域重构 P3：manifest 的站点 / 环境 / 应用 / 版本指针维度（只读）
+    @InjectRepository(DeploySiteEntity, 'deploy')
+    private siteRepo: Repository<DeploySiteEntity>,
+    @InjectRepository(DeployEnvEntity, 'deploy')
+    private envRepo: Repository<DeployEnvEntity>,
+    @InjectRepository(DeployAppEntity, 'deploy')
+    private appRepo: Repository<DeployAppEntity>,
+    @InjectRepository(DeployAppEnvVersionEntity, 'deploy')
+    private appVersionRepo: Repository<DeployAppEnvVersionEntity>,
   ) {}
 
   /** 当前环境 ID（来自配置 DEPLOY_ENV_ID，缺省 dev） */
   private get envId(): string {
     return this.configService.get('DEPLOY_ENV_ID') || 'dev';
+  }
+
+  /** 是否已打印过读取源（启动后只记一次，避免刷日志） */
+  private loggedReadSource = false;
+
+  /**
+   * **M8 双读开关**（回退能力，R7）。
+   *
+   * `DEPLOY_LEGACY_READ=1`（或 `true`）时 manifest **只从旧表** `deploy_modules` +
+   * `deploy_deployments` 组装 —— 双域新表（sites/envs/apps/app_env_versions）即使损坏、
+   * 未迁移或被 DROP，外壳仍能照旧加载。
+   * **默认关闭**（`0`/未设置）→ 走新表。
+   */
+  private get legacyRead(): boolean {
+    const raw = String(this.configService.get('DEPLOY_LEGACY_READ') ?? '')
+      .trim()
+      .toLowerCase();
+    const on = raw === '1' || raw === 'true';
+    if (!this.loggedReadSource) {
+      this.loggedReadSource = true;
+      this.logger.log(
+        on
+          ? 'manifest 读取源 = LEGACY（DEPLOY_LEGACY_READ=1：只读 deploy_modules / deploy_deployments）'
+          : 'manifest 读取源 = NEW（deploy_sites / deploy_envs / deploy_apps / deploy_app_env_versions）',
+      );
+    }
+    return on;
   }
 
   /**
@@ -74,10 +116,139 @@ export class IndexHtmlService {
       return this.injectHead(html, meta);
     }
 
-    // 基座：注入模块清单
-    const manifest = await this.resolveModulesManifest(this.envId, req);
+    // 基座：注入模块清单（新结构 envs/byEnv；与 /__manifest__ 端点同一来源）
+    const manifest = await this.buildManifest(req);
     const meta = `<script id="__MODULES_MANIFEST__">window.__MODULES_MANIFEST__=${JSON.stringify(manifest)};</script>`;
     return this.injectHead(html, meta);
+  }
+
+  /**
+   * 组装模块清单（**唯一来源**：注入 shell 的 HTML 与 /__manifest__ 端点都走这里）。
+   *
+   * 新结构（双域重构 P3）：
+   * - `site` / `defaultEnv` / `switchable`：由请求 Host 匹配 `deploy_sites`
+   * - `envs`：该站点下可切换的环境（挂件列表）
+   * - `byEnv`：**每个环境 → 各应用的固定入口** `/static/modules/<appKey>/<envId>/index.js`
+   *   （入口不含版本 → 切换版本只改磁盘指针，manifest 无需变化，R5）
+   * - 兼容期字段 `env` / `modules` / `canary` 始终保留，供未升级客户端回落
+   *
+   * 未匹配到站点（localhost / IP 直连）→ 只返回旧结构，行为与改造前一致。
+   *
+   * **M8**：`DEPLOY_LEGACY_READ=1` 时短路到旧表读取源（见 `legacyRead`），新表完全不参与。
+   * `source` 字段仅为排障标注（`new` / `legacy` / `new:nosite`），前端不依赖。
+   */
+  async buildManifest(req?: any): Promise<Record<string, any>> {
+    const legacyEnv = this.envId;
+    const legacy = await this.resolveModulesManifest(legacyEnv, req);
+
+    // M8 回退：旧表为唯一读取源
+    if (this.legacyRead) return this.buildLegacyManifest(legacyEnv, legacy);
+
+    try {
+      const site = await this.resolveSite(req);
+      if (!site) {
+        return {
+          ...legacy,
+          site: null,
+          defaultEnv: legacyEnv,
+          switchable: false,
+          envs: [],
+          byEnv: {},
+          source: 'new:nosite',
+        };
+      }
+
+      const [envs, apps, versions] = await Promise.all([
+        this.envRepo.find({
+          where: { siteKey: site.key, enabled: true },
+          order: { sort: 'ASC', envId: 'ASC' },
+        }),
+        this.appRepo.find({ where: { deletedAt: IsNull(), enabled: true } }),
+        this.appVersionRepo.find(),
+      ]);
+
+      const currentOf = new Map<string, string | null>();
+      for (const v of versions) currentOf.set(`${v.appKey}@${v.envId}`, v.currentVersion);
+
+      const byEnv: Record<string, Record<string, { entry: string; css: string | null }>> = {};
+      for (const e of envs) {
+        const entries: Record<string, { entry: string; css: string | null }> = {};
+        for (const app of apps) {
+          // 基座（site-version）不纳入 env 切换（Q107）
+          if (app.deployMode !== 'env-dir') continue;
+          if (!currentOf.get(`${app.key}@${e.envId}`)) continue;
+          const cssRel = `/static/modules/${app.key}/${e.envId}/index.css`;
+          entries[app.key] = {
+            entry: `/static/modules/${app.key}/${e.envId}/index.js`,
+            // 样式指针只在产物含 index.css 时被写入，按磁盘存在性给出（避免前端引 404）
+            css: existsSync(join(PUBLIC_ROOT, 'static/modules', app.key, e.envId, 'index.css'))
+              ? cssRel
+              : null,
+          };
+        }
+        byEnv[e.envId] = entries;
+      }
+
+      return {
+        site: site.key,
+        defaultEnv: site.defaultEnvId || legacyEnv,
+        switchable: !!site.switchable,
+        envs: envs.map((e) => ({ id: e.envId, name: e.name, isProd: e.isProd })),
+        byEnv,
+        // 兼容期字段（未升级客户端回落）
+        env: legacyEnv,
+        modules: legacy.modules,
+        canary: legacy.canary,
+        source: 'new',
+      };
+    } catch (e) {
+      this.logger.warn(`manifest 新结构组装失败，回落旧结构：${(e as Error).message}`);
+      return { ...legacy, site: null, defaultEnv: legacyEnv, switchable: false, envs: [], byEnv: {}, source: 'new:error' };
+    }
+  }
+
+  /**
+   * **旧表读取源**（M8 回退路径，`DEPLOY_LEGACY_READ=1` 时使用）。
+   *
+   * 只读 `deploy_modules` + `deploy_deployments`，但**输出与新格式同构**
+   * （`site`/`defaultEnv`/`switchable`/`envs`/`byEnv` + 兼容字段）——
+   * 这样 shell 与 EnvSwitcher 无需分支，改一个环境变量即可整体回退。
+   *
+   * 差异：旧模型没有站点/多环境概念，故 `envs` 只有当前环境、`switchable=false`；
+   * 入口是**版本目录**（`/static/modules/<key>/<version>/index.js`），不是 envId 指针层级。
+   */
+  private buildLegacyManifest(envId: string, legacy: ModulesManifest): Record<string, any> {
+    const byEnv: Record<string, Record<string, { entry: string; css: string | null }>> = {
+      [envId]: {},
+    };
+    for (const m of legacy.modules) {
+      byEnv[envId][m.name] = { entry: m.entry, css: m.css };
+    }
+    return {
+      site: null,
+      defaultEnv: envId,
+      switchable: false,
+      envs: [{ id: envId, name: envId, isProd: envId === 'prod' }],
+      byEnv,
+      // 兼容期字段
+      env: envId,
+      modules: legacy.modules,
+      canary: legacy.canary,
+      source: 'legacy',
+    };
+  }
+
+  /** 站点解析：显式 `?site=` 优先，其次按 Host 匹配（忽略端口、大小写不敏感） */
+  private async resolveSite(req?: any): Promise<DeploySiteEntity | null> {
+    const siteKey = req?.query?.site;
+    if (siteKey) return this.siteRepo.findOne({ where: { key: String(siteKey) } });
+    const host = String(req?.headers?.host || '')
+      .split(':')[0]
+      .trim()
+      .toLowerCase();
+    if (!host) return null;
+    const all = await this.siteRepo.find();
+    return all.find((s) => s.host.toLowerCase() === host) || null;
   }
 
   /** 查所有 enabled micro-frontend 模块的当前版本，拼成 manifest（供 /__manifest__ 端点直返） */
