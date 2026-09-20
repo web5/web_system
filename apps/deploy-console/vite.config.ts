@@ -18,15 +18,8 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      /**
-       * 后端目标默认 `localhost:6200`（本机常驻 console）。
-       *
-       * 用 `CONSOLE_API_TARGET` 可指向**工作区自己编译的后端**（例如 `PORT=6299 node dist/main.js`
-       * 起的实例）——否则前端是新代码、后端还是旧发布产物，会出现「Cannot GET /api/apps」
-       * 这类"前端有页面、后端没接口"的假故障（双域重构开发期高频踩到）。
-       */
       '/console/api': {
-        target: process.env.CONSOLE_API_TARGET || 'http://localhost:6200',
+        target: 'http://localhost:6200',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/console/, ''),
       },

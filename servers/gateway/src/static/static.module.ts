@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
-import { PUBLIC_ROOT } from './public-root';
 
 /**
  * 静态资源 + SPA 回退。
@@ -32,8 +31,7 @@ import { PUBLIC_ROOT } from './public-root';
 @Module({
   imports: [
     ServeStaticModule.forRoot({
-      // P2（2026-09-20）：静态根可配（STATIC_PUBLIC_ROOT），缺省回落 public
-      rootPath: PUBLIC_ROOT,
+      rootPath: join(__dirname, '..', '..', 'public'),
       /** 只对无扩展名路径渲染 index.html（前端路由交给基座处理，静态资源缺失则 404） */
       renderPath: /^\/[^.]*$/,
       serveStaticOptions: {

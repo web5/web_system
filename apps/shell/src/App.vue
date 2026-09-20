@@ -1,8 +1,6 @@
 <template>
   <a-config-provider :locale="zhCN" :theme="antdThemeLight">
     <router-view />
-    <!-- 环境切换挂件：基座职责，渲染在 portal / admin 等模块之上（prod 站点不渲染） -->
-    <EnvSwitcher />
   </a-config-provider>
 </template>
 
@@ -12,6 +10,4 @@
 // 2026-09-03 shell 视觉统一：antd 主题走 @web-system/ui antdThemeLight（品牌橙，浅色 canonical）
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import { antdThemeLight } from '@web-system/ui';
-// 环境切换挂件改用共享组件（shell 与 micro-app 共用，见 packages/ui/src/components/EnvSwitcher.vue）
-import EnvSwitcher from '@web-system/ui/components/EnvSwitcher.vue';
 </script>

@@ -45,9 +45,6 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
       '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
       '@web-system/shell-loader': resolve(__dirname, '../../packages/shell-loader/src/index.ts'),
-      // 共享 UI 组件/组合式函数源码直引（同 admin / deploy-console：@web-system/ui 走 dist 且流水线不构建它）
-      '@web-system/ui/components': resolve(__dirname, '../../packages/ui/src/components'),
-      '@web-system/ui/composables': resolve(__dirname, '../../packages/ui/src/composables'),
     },
   },
   server: {

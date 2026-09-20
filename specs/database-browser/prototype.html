@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>数据浏览器 · 原型稿 v1.0</title>
+<style>
+/* ── Token（镜像 packages/ui/src/tokens.ts · roles.light）───────────── */
+:root {
+  --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
+  --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
+  --ws-text-primary:#171717; --ws-text-secondary:#525252;
+  --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
+  --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
+  --ws-brand-50:#FFF7ED; --ws-brand-100:#FFEDD5; --ws-brand-300:#FDBA74;
+  --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-700:#C2410C;
+  --ws-success-100:#EAF6EC; --ws-success-500:#398E4A;
+  --ws-warning-100:#FEF3DC; --ws-warning-500:#F5A623;
+  --ws-error-100:#FCEBEC;  --ws-error-500:#E5484D;
+  --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+  --ws-font-size-h1:32px; --ws-font-size-h2:24px; --ws-font-size-h3:18px;
+  --ws-font-size-h4:16px; --ws-font-size-base:14px; --ws-font-size-caption:12px;
+  --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --ws-space-4:4px; --ws-space-8:8px; --ws-space-12:12px;
+  --ws-space-16:16px; --ws-space-24:24px; --ws-space-32:32px;
+}
+[data-theme='dark'] {
+  --ws-bg-page:#0A0A0A; --ws-bg-surface:#1A1A1A; --ws-bg-elevated:#242424;
+  --ws-bg-subtle:#111111; --ws-bg-hover:#2A2A2A; --ws-bg-active:#333333;
+  --ws-text-primary:#EDEDED; --ws-text-secondary:#A3A3A3;
+  --ws-text-tertiary:#737373; --ws-text-disabled:#525252;
+  --ws-border:#2A2A2A; --ws-border-subtle:#333333;
+  --ws-brand-50:#33220F; --ws-brand-100:#33220F; --ws-brand-500:#FB923C; --ws-brand-700:#FB923C;
+  --ws-success-100:#16301C; --ws-warning-100:#332A14; --ws-error-100:#3A1F21;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--ws-bg-page); color: var(--ws-text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: var(--ws-font-size-base);
+}
+.ws-hairline { box-shadow: 0 0 0 1px var(--ws-border); border-radius: var(--ws-radius-lg); }
+.ws-mono { font-family: var(--ws-font-mono); font-size: 13px; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ── 外框：模拟 admin 后台 ─────────────────────────────── */
+.mock { display: flex; min-height: 100vh; }
+.sider {
+  width: 200px; flex-shrink: 0; background: var(--ws-bg-surface);
+  border-right: 1px solid var(--ws-border-subtle); padding: var(--ws-space-16) var(--ws-space-8);
+}
+.brand { display: flex; align-items: center; gap: var(--ws-space-8); padding: 0 var(--ws-space-8) var(--ws-space-16); font-weight: 600; }
+.brand-dot { width: 22px; height: 22px; border-radius: var(--ws-radius-sm); background: var(--ws-brand-500); }
+.menu-item {
+  padding: 9px var(--ws-space-12); border-radius: var(--ws-radius-sm);
+  color: var(--ws-text-secondary); cursor: default; font-size: var(--ws-font-size-base);
+  display: flex; align-items: center; gap: var(--ws-space-8);
+}
+.menu-item:hover { background: var(--ws-bg-hover); }
+.menu-item.active { background: var(--ws-brand-50); color: var(--ws-brand-700); font-weight: 500; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  height: 56px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--ws-space-24); background: var(--ws-bg-surface);
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+.crumb { color: var(--ws-text-tertiary); font-size: var(--ws-font-size-caption); }
+.role-switch { display: flex; align-items: center; gap: var(--ws-space-8); font-size: var(--ws-font-size-caption); }
+.role-switch select, .theme-btn {
+  font: inherit; padding: 5px var(--ws-space-8); border-radius: var(--ws-radius-sm);
+  border: 1px solid var(--ws-border); background: var(--ws-bg-surface);
+  color: var(--ws-text-primary); cursor: pointer;
+}
+.theme-btn:hover { background: var(--ws-bg-hover); }
+.content { padding: var(--ws-space-24); flex: 1; }
+
+/* ── 页头 ─────────────────────────────────────────────── */
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--ws-space-24); }
+.page-title { font-size: var(--ws-font-size-h2); font-weight: 600; line-height: 1.3; }
+.page-subtitle { color: var(--ws-text-tertiary); font-size: var(--ws-font-size-base); margin-top: var(--ws-space-4); }
+.btn {
+  font: inherit; padding: 7px var(--ws-space-16); border-radius: var(--ws-radius-sm);
+  border: 1px solid var(--ws-border); background: var(--ws-bg-surface);
+  color: var(--ws-text-primary); cursor: pointer;
+}
+.btn:hover { background: var(--ws-bg-hover); }
+.btn:active { background: var(--ws-bg-active); }
+
+/* ── Tabs ─────────────────────────────────────────────── */
+.tabs { display: flex; gap: var(--ws-space-24); border-bottom: 1px solid var(--ws-border-subtle); margin-bottom: var(--ws-space-16); }
+.tab {
+  padding: var(--ws-space-8) 0; color: var(--ws-text-secondary); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab.active { color: var(--ws-brand-700); border-bottom-color: var(--ws-brand-500); font-weight: 500; }
+.tab-locked { opacity: .45; cursor: not-allowed; }
+.pane { display: none; }
+.pane.active { display: block; }
+
+/* ── 浏览区：左右分栏 ──────────────────────────────────── */
+.browse { display: grid; grid-template-columns: 260px 1fr; gap: var(--ws-space-16); align-items: start; }
+.panel { background: var(--ws-bg-surface); }
+.panel-title {
+  padding: var(--ws-space-12) var(--ws-space-16); font-weight: 500;
+  border-bottom: 1px solid var(--ws-border-subtle); display: flex; justify-content: space-between; align-items: center;
+}
+.panel-body { padding: var(--ws-space-12); }
+.search {
+  width: 100%; font: inherit; padding: 7px var(--ws-space-8); margin-bottom: var(--ws-space-8);
+  border: 1px solid var(--ws-border); border-radius: var(--ws-radius-sm);
+  background: var(--ws-bg-surface); color: var(--ws-text-primary);
+}
+.tbl-list { max-height: 460px; overflow-y: auto; }
+.tbl-item {
+  padding: 7px var(--ws-space-8); border-radius: var(--ws-radius-sm); cursor: pointer;
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--ws-space-8);
+}
+.tbl-item:hover { background: var(--ws-bg-hover); }
+.tbl-item.selected { background: var(--ws-brand-50); color: var(--ws-brand-700); }
+.tbl-name { font-family: var(--ws-font-mono); font-size: 13px; }
+.tbl-rows { font-size: var(--ws-font-size-caption); color: var(--ws-text-tertiary); }
+.tbl-item.selected .tbl-rows { color: var(--ws-brand-700); }
+
+/* ── 右栏次级 Tab（卡片级，size=small）────────────────── */
+.panel-head {
+  padding: 0 var(--ws-space-16); display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+.panel-title-name { font-weight: 500; }
+.sub-tabs { display: flex; gap: var(--ws-space-16); }
+.sub-tab {
+  padding: var(--ws-space-8) 0; font-size: 13px; color: var(--ws-text-secondary);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.sub-tab:hover { color: var(--ws-text-primary); }
+.sub-tab.active { color: var(--ws-brand-700); border-bottom-color: var(--ws-brand-500); font-weight: 500; }
+.sub-tab .tnum { color: var(--ws-text-tertiary); margin-left: var(--ws-space-4); }
+.sub-tab.active .tnum { color: var(--ws-brand-700); }
+.sub-pane { display: none; }
+.sub-pane.active { display: block; }
+
+/* ── 表格 ─────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  text-align: left; padding: var(--ws-space-8) var(--ws-space-12); font-weight: 500;
+  color: var(--ws-text-secondary); background: var(--ws-bg-subtle);
+  border-bottom: 1px solid var(--ws-border-subtle); white-space: nowrap;
+}
+tbody td {
+  padding: var(--ws-space-8) var(--ws-space-12); border-bottom: 1px solid var(--ws-border-subtle);
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+tbody tr:hover { background: var(--ws-bg-hover); }
+.null { color: var(--ws-text-tertiary); font-style: italic; }
+.tag {
+  display: inline-block; padding: 1px 6px; border-radius: var(--ws-radius-sm);
+  font-size: 11px; line-height: 18px; margin-left: var(--ws-space-4);
+}
+.tag-hidden { color: var(--ws-error-500); background: var(--ws-error-100); }
+.tag-masked { color: var(--ws-warning-500); background: var(--ws-warning-100); }
+.tag-pri   { color: var(--ws-brand-700); background: var(--ws-brand-50); }
+.tag-sensitive { color: var(--ws-error-500); background: var(--ws-error-100); }
+.table-wrap { overflow-x: auto; }
+.pager { display: flex; justify-content: flex-end; align-items: center; gap: var(--ws-space-8); padding: var(--ws-space-12) var(--ws-space-16); color: var(--ws-text-tertiary); font-size: var(--ws-font-size-caption); }
+.pager button { font: inherit; padding: 3px var(--ws-space-8); border: 1px solid var(--ws-border); background: var(--ws-bg-surface); color: var(--ws-text-primary); border-radius: var(--ws-radius-sm); cursor: pointer; }
+.pager button[disabled] { color: var(--ws-text-disabled); cursor: not-allowed; }
+
+/* ── SQL 控制台 ───────────────────────────────────────── */
+.alert {
+  padding: var(--ws-space-12) var(--ws-space-16); border-radius: var(--ws-radius-md);
+  background: var(--ws-bg-subtle); border: 1px solid var(--ws-border-subtle);
+  color: var(--ws-text-secondary); margin-bottom: var(--ws-space-16); font-size: 13px;
+}
+.alert b { color: var(--ws-text-primary); }
+.sql-editor {
+  width: 100%; min-height: 96px; font-family: var(--ws-font-mono); font-size: 13px; line-height: 1.6;
+  padding: var(--ws-space-12); border: 1px solid var(--ws-border); border-radius: var(--ws-radius-md);
+  background: var(--ws-bg-surface); color: var(--ws-text-primary); resize: vertical;
+}
+.sql-bar { display: flex; align-items: center; gap: var(--ws-space-12); margin: var(--ws-space-12) 0 var(--ws-space-24); }
+.btn-primary { background: var(--ws-brand-500); border-color: var(--ws-brand-500); color: #fff; }
+.btn-primary:hover { background: var(--ws-brand-600); border-color: var(--ws-brand-600); }
+.sql-meta { color: var(--ws-text-tertiary); font-size: var(--ws-font-size-caption); }
+.result-head { display: flex; align-items: baseline; gap: var(--ws-space-12); margin-bottom: var(--ws-space-8); }
+.result-title { font-weight: 500; }
+
+/* ── 无权限遮罩 ───────────────────────────────────────── */
+.denied { padding: var(--ws-space-32); text-align: center; color: var(--ws-text-tertiary); }
+.empty { padding: var(--ws-space-32); text-align: center; color: var(--ws-text-tertiary); }
+.note {
+  margin-top: var(--ws-space-24); padding: var(--ws-space-12) var(--ws-space-16);
+  border-radius: var(--ws-radius-md); background: var(--ws-bg-subtle);
+  color: var(--ws-text-tertiary); font-size: var(--ws-font-size-caption); line-height: 1.7;
+}
+</style>
+</head>
+<body>
+<div class="mock">
+  <!-- 侧边栏（模拟） -->
+  <aside class="sider">
+    <div class="brand"><span class="brand-dot"></span><span>科豆 AI</span></div>
+    <div class="menu-item">工作台</div>
+    <div class="menu-item">变变管理</div>
+    <div class="menu-item">用户管理</div>
+    <div class="menu-item">系统设置</div>
+    <div class="menu-item">MCP 管理</div>
+    <div class="menu-item active">数据浏览</div>
+  </aside>
+
+  <div class="main">
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <span class="crumb">首页 / 数据浏览</span>
+      <div class="role-switch">
+        <label>当前角色</label>
+        <select id="roleSel">
+          <option value="super_admin">super_admin</option>
+          <option value="admin" selected>admin</option>
+          <option value="editor">editor</option>
+          <option value="viewer">viewer</option>
+        </select>
+        <button class="theme-btn" id="themeBtn">切换暗色</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- 页头 -->
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">数据浏览</h1>
+          <p class="page-subtitle">查看 web_system 业务库的表结构与数据，只读</p>
+        </div>
+        <button class="btn">刷新</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" data-pane="browse">数据浏览</div>
+        <div class="tab" data-pane="sql" id="sqlTab">SQL 控制台</div>
+      </div>
+
+      <!-- Tab 1 · 数据浏览 -->
+      <div class="pane active" id="pane-browse">
+        <div class="browse">
+          <!-- 左：表列表 -->
+          <section class="panel ws-hairline">
+            <div class="panel-title">数据表 <span class="tbl-rows">128 张</span></div>
+            <div class="panel-body">
+              <input class="search" id="tblSearch" placeholder="搜索表名或注释" />
+              <div class="tbl-list" id="tblList"></div>
+            </div>
+          </section>
+
+          <!-- 右：Tab 切换（数据 / 表结构） -->
+          <section class="panel ws-hairline">
+            <div class="panel-head">
+              <span class="ws-mono panel-title-name" id="curTable">users</span>
+              <div class="sub-tabs">
+                <div class="sub-tab active" data-sub="data">数据 <span class="tnum" id="tabRows">12,480</span></div>
+                <div class="sub-tab" data-sub="schema">表结构 <span class="tnum" id="tabCols">9</span></div>
+              </div>
+            </div>
+
+            <!-- 数据 Tab（默认选中） -->
+            <div class="sub-pane active" id="subpane-data">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr id="dataHead"></tr></thead>
+                  <tbody id="dataRows"></tbody>
+                </table>
+              </div>
+              <div class="pager">
+                <button disabled>上一页</button>
+                <span class="tnum" id="pageInfo">第 1 / 250 页</span>
+                <button>下一页</button>
+              </div>
+            </div>
+
+            <!-- 表结构 Tab -->
+            <div class="sub-pane" id="subpane-schema">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>字段</th><th>类型</th><th>可空</th><th>键</th><th>注释</th></tr></thead>
+                  <tbody id="schemaRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Tab 2 · SQL 控制台 -->
+      <div class="pane" id="pane-sql">
+        <div id="sqlBody">
+          <div class="alert">
+            仅允许单条 <b>SELECT</b> 语句，自动附加 <b>LIMIT 200</b>；禁止 <b>INSERT / UPDATE / DELETE / DROP</b> 等写操作；
+            数据库账号本身为<b>只读</b>；每次执行均写入操作日志。
+          </div>
+          <textarea class="sql-editor" id="sqlInput">SELECT id, username, phone, created_at
+FROM users
+WHERE enabled = 1
+ORDER BY created_at DESC</textarea>
+          <div class="sql-bar">
+            <button class="btn btn-primary" id="runBtn">执行</button>
+            <span class="sql-meta">⌘ / Ctrl + Enter 执行</span>
+          </div>
+          <div class="result-head">
+            <span class="result-title">查询结果</span>
+            <span class="sql-meta tnum" id="sqlMeta">返回 3 行 · 42 ms</span>
+          </div>
+          <div class="panel ws-hairline">
+            <div class="table-wrap">
+              <table>
+                <thead><tr id="sqlHead"></tr></thead>
+                <tbody id="sqlRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="panel ws-hairline denied" id="sqlDenied" style="display:none;">
+          当前角色（<span class="ws-mono" id="deniedRole">admin</span>）无「执行只读 SQL」权限<br />
+          <span style="font-size:12px;">该 Tab 仅对 super_admin 渲染</span>
+        </div>
+      </div>
+
+      <div class="note">
+        原型说明：本稿为静态交互原型（非真实数据）。切换右上角角色可预览权限差异 ——
+        <b>super_admin</b> 可见 SQL 控制台与敏感表；<b>admin / editor</b> 仅可浏览（脱敏）；<b>viewer</b> 无入口（跳转 403）。<br />
+        右栏「数据 / 表结构」为<b>卡片级 Tab</b>（尺寸小于页面级 Tab 以区分层级），
+        <b>切换左栏的表时保持当前 Tab 不变</b>，便于连续对比多张表的结构。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── 模拟数据 ─────────────────────────────────────────── */
+const TABLES = [
+  { name:'users',            rows:12480, sensitive:false },
+  { name:'user_profiles',    rows:11902, sensitive:false },
+  { name:'bianbian_works',   rows:34210, sensitive:false },
+  { name:'bianbian_materials',rows:486,  sensitive:false },
+  { name:'ai_tasks',         rows:88420, sensitive:false },
+  { name:'ai_conversations', rows:15230, sensitive:false },
+  { name:'system_configs',   rows:64,    sensitive:false },
+  { name:'operation_logs',   rows:210944,sensitive:false },
+  { name:'user_credentials', rows:12480, sensitive:true  },
+  { name:'payment_orders',   rows:9821,  sensitive:true  },
+];
+
+const SCHEMA = {
+  users: [
+    { name:'id',          type:'int(11)',      nullable:false, key:'PRI', comment:'主键' },
+    { name:'username',    type:'varchar(64)',  nullable:false, key:'',    comment:'用户名' },
+    { name:'password',    type:'varchar(255)', nullable:false, key:'',    comment:'密码哈希', sensitive:'hidden' },
+    { name:'phone',       type:'varchar(20)',  nullable:true,  key:'UNI', comment:'手机号',   sensitive:'masked' },
+    { name:'openid',      type:'varchar(64)',  nullable:true,  key:'UNI', comment:'微信 openid', sensitive:'masked' },
+    { name:'email',       type:'varchar(128)', nullable:true,  key:'',    comment:'邮箱',     sensitive:'masked' },
+    { name:'role',        type:'varchar(32)',  nullable:false, key:'',    comment:'角色' },
+    { name:'enabled',     type:'tinyint(1)',   nullable:false, key:'',    comment:'是否启用' },
+    { name:'created_at',  type:'datetime',     nullable:false, key:'MUL', comment:'创建时间' },
+  ],
+  ai_tasks: [
+    { name:'id',          type:'int(11)',      nullable:false, key:'PRI', comment:'主键' },
+    { name:'task_type',   type:'varchar(32)',  nullable:false, key:'MUL', comment:'任务类型' },
+    { name:'user_id',     type:'int(11)',      nullable:false, key:'MUL', comment:'发起用户' },
+    { name:'status',      type:'varchar(16)',  nullable:false, key:'',    comment:'pending/running/success/failed' },
+    { name:'prompt',      type:'text',         nullable:true,  key:'',    comment:'原始提示词' },
+    { name:'result_url',  type:'varchar(512)', nullable:true,  key:'',    comment:'结果地址' },
+    { name:'error_msg',   type:'text',         nullable:true,  key:'',    comment:'失败原因' },
+    { name:'elapsed_ms',  type:'int(11)',      nullable:true,  key:'',    comment:'耗时' },
+    { name:'created_at',  type:'datetime',     nullable:false, key:'MUL', comment:'创建时间' },
+  ],
+  bianbian_works: [
+    { name:'id',          type:'int(11)',      nullable:false, key:'PRI', comment:'主键' },
+    { name:'user_id',     type:'int(11)',      nullable:false, key:'MUL', comment:'作者' },
+    { name:'title',       type:'varchar(128)', nullable:true,  key:'',    comment:'作品名' },
+    { name:'image_url',   type:'varchar(512)', nullable:false, key:'',    comment:'作品图' },
+    { name:'material_id', type:'int(11)',      nullable:true,  key:'MUL', comment:'素材' },
+    { name:'is_public',   type:'tinyint(1)',   nullable:false, key:'',    comment:'是否公开' },
+    { name:'like_count',  type:'int(11)',      nullable:false, key:'',    comment:'点赞数' },
+    { name:'created_at',  type:'datetime',     nullable:false, key:'MUL', comment:'创建时间' },
+  ],
+};
+
+/* 演示用行数据：users 有真实样例，其余表显示占位（原型不接真实库） */
+const ROWS_BY_TABLE = {
+  users: null,
+  ai_tasks: [
+    { id:90021, task_type:'image_generate', user_id:10231, status:'success', prompt:'一只穿着宇航服的橘猫，站在火星表面，卡通风格', result_url:'/api/uploads/ai/2026/09/0a3f91c2.png', error_msg:null, elapsed_ms:8420, created_at:'2026-09-04 10:02:11' },
+    { id:90022, task_type:'chat',           user_id:10230, status:'failed',  prompt:'帮我写一首关于春天的诗',                        result_url:null,                                error_msg:'upstream timeout after 30000ms', elapsed_ms:30001, created_at:'2026-09-04 10:01:47' },
+    { id:90023, task_type:'transform',      user_id:10228, status:'running', prompt:'把这张画变成 3D 角色',                          result_url:null,                                error_msg:null, elapsed_ms:null, created_at:'2026-09-04 10:00:03' },
+  ],
+  bianbian_works: [
+    { id:55012, user_id:10231, title:'太空橘猫',   image_url:'/api/uploads/bianbian/2026/09/7c1e220a.png', material_id:12, is_public:1, like_count:328, created_at:'2026-09-03 21:14:52' },
+    { id:55011, user_id:10230, title:'会飞的鲸鱼', image_url:'/api/uploads/bianbian/2026/09/b93d77f1.png', material_id:48, is_public:0, like_count:15,  created_at:'2026-09-03 19:40:08' },
+    { id:55010, user_id:10228, title:'机械小恐龙', image_url:'/api/uploads/bianbian/2026/09/22af0c65.png', material_id:7,  is_public:1, like_count:96,  created_at:'2026-09-03 16:22:31' },
+  ],
+};
+
+const ROWS = [
+  { id:10231, username:'kevin_zhang', password:'***', phone:'138****8888', openid:'oX9k****2fQ', email:'k***@example.com', role:'admin', enabled:1, created_at:'2026-09-01 14:22:07' },
+  { id:10230, username:'amy_wang',    password:'***', phone:'159****2043', openid:'oP2m****8Zx', email:'a***@example.com', role:'editor',enabled:1, created_at:'2026-09-01 11:05:33' },
+  { id:10229, username:'li_ming',     password:'***', phone:null,          openid:null,          email:null,               role:'viewer',enabled:0, created_at:'2026-08-31 22:47:19' },
+  { id:10228, username:'super_geek',  password:'***', phone:'186****7712', openid:'oLq1****9Tt', email:'g***@example.com', role:'super_admin', enabled:1, created_at:'2026-08-30 09:11:52' },
+];
+
+const PERMS = {
+  super_admin: ['database:view','database:query'],
+  admin:       ['database:view'],
+  editor:      ['database:view'],
+  viewer:      [],
+};
+
+let currentRole = 'admin';
+let currentTable = 'users';
+
+const $ = (s) => document.querySelector(s);
+const fmtRows = (n) => n >= 10000 ? (n/10000).toFixed(1) + 'w' : String(n);
+
+/* ── 渲染：表列表 ─────────────────────────────────────── */
+function renderTables() {
+  const kw = $('#tblSearch').value.trim().toLowerCase();
+  const canSeeSensitive = PERMS[currentRole].includes('database:query');
+  const list = TABLES.filter(t =>
+    (!t.sensitive || canSeeSensitive) &&
+    (!kw || t.name.toLowerCase().includes(kw))
+  );
+  $('#tblList').innerHTML = list.length
+    ? list.map(t => `
+      <div class="tbl-item ${t.name === currentTable ? 'selected' : ''}" data-table="${t.name}">
+        <span class="tbl-name">${t.name}${t.sensitive ? '<span class="tag tag-sensitive">敏感</span>' : ''}</span>
+        <span class="tbl-rows tnum">${fmtRows(t.rows)}</span>
+      </div>`).join('')
+    : `<div class="empty">未匹配到表，调整关键词试试</div>`;
+
+  document.querySelectorAll('.tbl-item').forEach(el => {
+    el.onclick = () => { currentTable = el.dataset.table; renderTables(); renderSchema(); };
+  });
+}
+
+/* ── 渲染：表结构 ─────────────────────────────────────── */
+function renderSchema() {
+  const cols = SCHEMA[currentTable] || SCHEMA.users;
+  const meta = TABLES.find(t => t.name === currentTable);
+  $('#curTable').textContent = currentTable;
+  $('#tabCols').textContent = cols.length;
+  $('#tabRows').textContent = meta ? meta.rows.toLocaleString() : '0';
+  $('#pageInfo').textContent = '第 1 / ' + (meta ? Math.ceil(meta.rows / 50).toLocaleString() : 1) + ' 页';
+  $('#schemaRows').innerHTML = cols.map(c => `
+    <tr>
+      <td class="ws-mono">${c.name}${
+        c.sensitive === 'hidden' ? '<span class="tag tag-hidden">完全隐藏</span>' :
+        c.sensitive === 'masked' ? '<span class="tag tag-masked">打码</span>' : ''}</td>
+      <td class="ws-mono">${c.type}</td>
+      <td>${c.nullable ? '是' : '否'}</td>
+      <td>${c.key ? `<span class="tag tag-pri">${c.key}</span>` : '<span class="null">—</span>'}</td>
+      <td style="color:var(--ws-text-secondary)">${c.comment}</td>
+    </tr>`).join('');
+  renderData(cols);
+}
+
+/* ── 渲染：数据表格 ───────────────────────────────────── */
+function renderData(cols) {
+  const rows = ROWS_BY_TABLE[currentTable] ?? ROWS;   // 未定义样例的表回落 users
+  $('#dataHead').innerHTML = cols.map(c =>
+    `<th>${c.name}${
+      c.sensitive === 'hidden' ? '<span class="tag tag-hidden">隐藏</span>' :
+      c.sensitive === 'masked' ? '<span class="tag tag-masked">打码</span>' : ''}</th>`).join('');
+  $('#dataRows').innerHTML = rows.map(r => '<tr>' + cols.map(c => {
+    const v = r[c.name];
+    if (v === null || v === undefined) return `<td class="null">NULL</td>`;
+    const mono = /(_id|^id$|_at|created|updated)/.test(c.name);
+    return `<td class="${mono ? 'ws-mono' : ''} ${typeof v === 'number' ? 'tnum' : ''}">${v}</td>`;
+  }).join('') + '</tr>').join('');
+}
+
+/* ── 渲染：SQL 结果 ───────────────────────────────────── */
+function renderSqlResult() {
+  const cols = ['id','username','phone','created_at'];
+  const data = ROWS.slice(0, 3).map(r => ({ id:r.id, username:r.username, phone:r.phone, created_at:r.created_at }));
+  $('#sqlHead').innerHTML = cols.map(c => `<th>${c}${c === 'phone' ? '<span class="tag tag-masked">打码</span>' : ''}</th>`).join('');
+  $('#sqlRows').innerHTML = data.map(r => '<tr>' + cols.map(c => {
+    const v = r[c];
+    if (v === null) return `<td class="null">NULL</td>`;
+    const mono = /(_id|^id$|_at)/.test(c);
+    return `<td class="${mono ? 'ws-mono' : ''} ${typeof v === 'number' ? 'tnum' : ''}">${v}</td>`;
+  }).join('') + '</tr>').join('');
+}
+
+/* ── 角色切换 ─────────────────────────────────────────── */
+function applyRole() {
+  const canQuery = PERMS[currentRole].includes('database:query');
+  const canView  = PERMS[currentRole].includes('database:view');
+  $('#sqlTab').classList.toggle('tab-locked', !canQuery);
+  $('#sqlBody').style.display   = canQuery ? 'block' : 'none';
+  $('#sqlDenied').style.display = canQuery ? 'none'  : 'block';
+  $('#deniedRole').textContent  = currentRole;
+  if (!canView) {
+    document.querySelector('.content').innerHTML =
+      '<div class="panel ws-hairline denied">403 · 当前角色（' + currentRole + '）无「查看业务数据」权限</div>';
+    return;
+  }
+  renderTables();
+}
+
+$('#roleSel').onchange = (e) => { currentRole = e.target.value; location.reload(); };
+$('#tblSearch').oninput = renderTables;
+/* 右栏次级 Tab：数据 / 表结构（切表时保持当前 Tab） */
+document.querySelectorAll('.sub-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sub-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('#subpane-' + tab.dataset.sub).classList.add('active');
+  };
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    if (tab.classList.contains('tab-locked')) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('#pane-' + tab.dataset.pane).classList.add('active');
+  };
+});
+
+$('#runBtn').onclick = () => {
+  const btn = $('#runBtn');
+  if (btn.disabled) return;                       // 防重复提交
+  btn.disabled = true; btn.textContent = '执行中…';
+  setTimeout(() => {
+    renderSqlResult();
+    $('#sqlMeta').textContent = '返回 3 行 · 42 ms';
+    btn.disabled = false; btn.textContent = '执行';
+  }, 420);
+};
+
+$('#themeBtn').onclick = () => {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  $('#themeBtn').textContent = dark ? '切换暗色' : '切换亮色';
+};
+
+renderSchema();
+renderSqlResult();
+applyRole();
+</script>
+</body>
+</html>

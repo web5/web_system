@@ -2,7 +2,7 @@
 
 > 评测对象：`contract-risk` Agent（servers/ai-agent/src/contract/），含 4 工具
 > （contract-cleaner / contract-rule / contract-irr / contract-benchmark）+ 报告快照链路。
-> 方法论对齐：上游 ai-agent-kit `references/eval-framework.md`（L4 端到端质量评测 · 任务卡法）—— `https://github.com/web5/ai-agent-kit`。
+> 方法论对齐：`.codebuddy/agent-kit/references/eval-framework.md`（L4 端到端质量评测 · 任务卡法）。
 > 状态：**样本已定稿（fixtures/，7 份）+ checker 判定已实现（零 token 单测 17 例通过）**；
 > run-eval 真实装配（连 LLM）待做。
 
@@ -127,5 +127,5 @@ npx ts-node -P tsconfig.json e2e/contract-risk/run-eval.ts --round 001 --model d
 - Agent 定义：`servers/ai-agent/src/contract/agents/contract-risk.agent.ts`
 - 报告解析：`servers/ai-agent/src/contract/contract-report.parser.ts`
 - IRR/标准库：`packages/shared/src/contract/`
-- 评测方法论：上游 ai-agent-kit `references/eval-framework.md`（`https://github.com/web5/ai-agent-kit`）
-- 报告落盘：就地落 `e2e/contract-risk/reports/`（本仓库不再有统一评测报告区）。
+- 评测方法论：`.codebuddy/agent-kit/references/eval-framework.md`
+- kit-gate 约定：改动 `.codebuddy/skills/`、agent-kit 行为定义才触发；**业务 agent 评测不触发 kit-gate**，报告就地落 `e2e/contract-risk/reports/`（本仓库不再有统一评测报告区）。
