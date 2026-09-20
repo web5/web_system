@@ -171,53 +171,29 @@ curl -X POST http://127.0.0.1:6200/api/pipelines \
 | 前端 | 切入口指针 `<key>/<envId>/index.js`（两行 A′ 写法） |
 | 后端 | 版本目录 → dist + 重启 + 探活 |
 
-本地已打通自动衔接：发布成功后自动部署（`PIPELINE_AUTO_DEPLOY=1`，**仅 `local`**；dev/prod 行为不变）。
-日志出现 `[deploy] 部署生效完成：<key>@local → <版本>` 即生效；
-部署失败只写 `result.deploy` 与日志，**不改变发布结果**（部署是独立动作，可重试）。
-设计见 `specs/pipeline-deploy-action/design.md`。
-
-⚠️ **两个前提**
-1. 节点脚本要**按环境区分**（模板脚本默认不分环境，直接发 local 可能执行 dev 的远程 scp 脚本）
-2. 本地脚本须投到 env-dir 布局 `<key>/<envId>/<版本>/`，否则部署切指针会报「版本产物不存在」（这是预期报错，用于暴露布局不一致）
-
-#### 前端（admin / portal）
-
-本地环境加载的是**指针**，不是版本目录：`/__manifest__?site=local` →
-`byEnv.local.admin.entry = /static/modules/admin/local/index.js`（§3.1）。
+**部署不是流水线内置动作**。流水线只负责构建并发布；部署由**流水线脚本或控制台**显式调用
+对应域的接口完成。系统不做域归属判断 —— 哪个模块是应用（切指针）、哪个是服务（重启），
+是运维知识，见 `deploy-target-knowledge.md`。
 
 ```bash
-# 1) 构建：必须是微前端模式（--mode mf），普通 npm run build 产出的是 SPA，shell 加载不了
-cd ~/workspace/web_system/apps/admin
-RELEASE_TAG=<短hash> MF_FORMAT=system npx vite build --mode mf
-
-# 2) 产物放进本地环境的版本目录
-DST=~/web_system_release/servers/gateway/public/static/modules/admin/local/$RELEASE_TAG
-mkdir -p "$DST" && cp -R dist/. "$DST/"
-
-# 3) 切指针（走 API 会同步更新版本表；也可直接改 local/index.js 两行 export）
+# 应用（前端 admin / portal）：切入口指针
 curl -X POST http://127.0.0.1:6200/api/apps/admin/switch \
   -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
-  -d "{\"envId\":\"local\",\"version\":\"$RELEASE_TAG\"}"
+  -d "{\"envId\":\"local\",\"version\":\"$VER\"}"
 
-# 4) 浏览器硬刷新 Cmd/Ctrl+Shift+R（入口 no-cache，但分包带 hash）
+# 服务（后端 gateway / system / auth…）：重启 + 探活
+curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
+  -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
+  -d '{"envId":"local"}'
 ```
 
-#### 后端（gateway / system / auth…）
+或在控制台操作：「应用 → 环境 → 切换版本」「服务 → 部署」。
 
-```bash
-# 1) 构建
-cd ~/workspace/web_system/servers/gateway && npm run build
+⚠️ **前提**：本地脚本须把产物投到 `<key>/<envId>/<版本>/`，否则切指针会报
+「版本产物不存在」（这是预期报错，用于暴露布局不一致，不做静默降级）。
 
-# 2) 同步到运行位置（后端服务 cwd 在发布目录，见 §2）
-cp -R dist/. ~/web_system_release/servers/gateway/dist/
-
-# 3) 干净 env 重启（delete + start，不用 restart/--update-env），并校验端口归属
-P=$(pm2 pid web-gateway); for p in $(lsof -tiTCP:6000 -sTCP:LISTEN); do [ "$p" != "$P" ] && kill -9 $p; done
-cd ~/web_system_release/servers/gateway && pm2 delete web-gateway
-pm2 start dist/main.js --name web-gateway --cwd ~/web_system_release/servers/gateway
-sleep 8 && [ "$(pm2 pid web-gateway)" = "$(lsof -tiTCP:6000 -sTCP:LISTEN | head -1)" ] && echo OK
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:6000/api/health   # 期望 200
-```
+> 前端构建须用微前端模式（`vite build --mode mf`）；普通 `npm run build` 产出的是 SPA，
+> shell 加载不了。流水线里的 build 脚本已经是 mf 模式。
 
 #### 不生效时，按这个顺序查
 
