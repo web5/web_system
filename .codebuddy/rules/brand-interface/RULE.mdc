@@ -1,0 +1,33 @@
+---
+description: 品牌端 UI 实现规则（portal / kedou-ai-minigram）。任务涉及新建/修改小程序页面、品牌端 Vue 页面、组件、WXML/WXSS/Vue 外观、颜色/Token、交互、布局时使用。补 ui-interface/RULE.mdc（DR-5）留下的规则真空；动作门顺序与 kit-sop-enforcement 设计对齐。
+alwaysApply: false
+enabled: true
+updatedAt: 2026-09-20T00:00:00.000Z
+---
+
+# 品牌端 UI 实现规则（portal / kedou-ai-minigram）
+
+> 与 `ui-interface/RULE.mdc` 并列：那条只管 admin 系（deploy-console / admin / mcp-admin）；
+> 品牌端（portal / kedou-ai-minigram）由本规则覆盖 —— 补 DR-5 的规则真空。
+> 动作门与机器强制（L3 hook）设计见 `specs/kit-sop-enforcement/design.md` §3。
+
+## 动作门（顺序不可跳）
+
+1. 原型优先：先改 `apps/<app>/prototype/index.html`（或 `docs/ui/prototypes/**`）+ 同步页面规格 `specs/**/page-spec*.md`
+2. 交互质检：过 `ux-prototype-designer/references/ux-review-checklist.md` 独立交互质检
+3. **用户确认 ← 缺此不得写落地代码**（人审节点）
+4. 落码（WXML / WXSS / Vue）
+
+## 最小禁项
+
+- 禁裸 hex（除原型 `:root` / `app.wxss` token 层）；色值走 `--brand-*` 等 token（`apps/kedou-ai-minigram/app.wxss` 已声明浅色设计 token）
+- 禁 emoji 图标（用 SVG / tabler）
+- 平台原生能力（原生导航栏自绘、分享、支付）不得伪装已实现，须占位 + 标注真机语义
+- 产品主色：品牌橙 `#F97316`；文本 / 选中态用深档 `#C2410C`（对比度 5.4:1，过 AA）
+- 字重只用 400 / 500 / 600
+
+## 生效提示
+
+- 新建 / 修改本规则后需**新开会话**生效。
+- 验证：向 AI 询问"当前应用了哪些规则"。
+- 手动引用：对话中 `@brand-interface`。

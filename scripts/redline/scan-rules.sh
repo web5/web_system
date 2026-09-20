@@ -140,6 +140,38 @@ check_cred_line() {
   fi
 }
 
+# ---- R9 UI 结构变更须同行原型/规格（文件级 · warning 级）----
+# 触发：diff 内 ① apps/*/pages/** 新增文件；或 ② app.json 的 pages/tabBar 段变化
+# 判据：同 diff 须同时出现通行证路径：apps/*/prototype/** / docs/ui/prototypes/** / specs/**/page-spec*.md
+# 不命中 → 报 warning（--strict 升级为 error）。设计：specs/kit-sop-enforcement/design.md §3.5
+check_r9() {
+  local range="$1" st path ia=0
+  local -a new_pages=() passport=()
+  while IFS=$'\t' read -r st path; do
+    [ -n "${path:-}" ] || continue
+    case "$st" in
+      A*) case "$path" in apps/*/pages/*) new_pages+=("$path") ;; esac ;;
+    esac
+    case "$path" in
+      */prototype/*|docs/ui/prototypes/*|*/page-spec*.md) passport+=("$path") ;;
+    esac
+  done < <(git diff --name-status --no-renames "$range" -- 2>/dev/null)
+  # app.json 信息架构（pages / tabBar 段）变化
+  local ia_files
+  ia_files="$(git diff --name-only --no-renames "$range" -- 'app.json' 'apps/*/app.json' 2>/dev/null)"
+  if [ -n "$ia_files" ]; then
+    if git diff -U0 --no-color "$range" -- 'app.json' 'apps/*/app.json' 2>/dev/null \
+       | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE '"(pages|tabBar)"'; then
+      ia=1
+    fi
+  fi
+  [ ${#new_pages[@]} -eq 0 ] && [ "$ia" = "0" ] && return 0
+  [ ${#passport[@]} -gt 0 ] && return 0
+  local loc="app.json 信息架构(pages/tabBar)变化"
+  [ ${#new_pages[@]} -gt 0 ] && loc="新增 UI 页面 ${#new_pages[@]} 个"
+  add_warn "R9" "UI 结构变更未经原型/规格" "$loc" "须同 diff 含 apps/*/prototype/** 或 specs/**/page-spec*.md（见 specs/kit-sop-enforcement/design.md）"
+}
+
 # ---- 单行检查封装（文件+行号+内容）----
 check_one_line() {
   local file="$1" line="$2" content="$3"
@@ -153,6 +185,7 @@ check_one_line() {
 scan_diff_range() {
   local range="$1" diff_text dl add cur_file=""
   local -a pending=()
+  check_r9 "$range"   # R9：文件级 UI 结构门禁（warning 级，先于行扫描）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do

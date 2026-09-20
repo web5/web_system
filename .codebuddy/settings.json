@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_in_file|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-ui-prototype-gate.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_in_file|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-mark-proto-touched.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

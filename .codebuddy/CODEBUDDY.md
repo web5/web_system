@@ -1,6 +1,8 @@
 # 科豆 AI · 项目入口
 
-> 本文是 **CodeBuddy / AI 常驻加载的项目总入口**，只说明入口：**① 工程（§1）② AI 技能与规则（§2、§3）③ 维护约定（§4）**。
+> 本文是 **CodeBuddy / AI 常驻加载的项目总入口**，只说明入口：**① 工程（§1）② AI 技能与规则（§2、§2.5、§3）③ 维护约定（§4）**。
+
+> ⚠️ **动手前先看 §2.5 动作门**：改 UI 源码前必须先过原型（有机器强制）。
 
 ## 1 工程
 
@@ -11,6 +13,25 @@
 - **AI 技能继承 `.codebuddy/agent-kit/`** —— 需要的技能从这里找。
 - 技能文件：能力源 `.codebuddy/agent-kit/skills/<name>/SKILL.md` → 运行源 `.codebuddy/skills/<name>/SKILL.md`（IDE 实际加载的是运行源，它是能力源的镜像；`be-developer` / `fe-developer` 是项目专属，只在运行源）。
 - 技能涉及的**规范与项目上下文** → `.codebuddy/skills/`、`.codebuddy/rules/`、`.codebuddy/references/`。
+
+## 2.5 动作门（不可跳，且与用户措辞无关）
+
+> 设计：`specs/kit-sop-enforcement/design.md` §3.2。本门有机器强制（`.codebuddy/settings.json` PreToolUse hook，L3）；应急出口 `UI_GATE=off`，豁免记「微调豁免」一行即可。
+
+凡本次改动涉及下列任一路径 —— **无论用户如何表达（含「间距高了」「太丑」「隐藏掉」这类微调措辞）**：
+
+- `apps/*/pages/**`、`apps/*/components/**`、`packages/ui/**`、`app.json`
+- 任何 `*.wxml` / `*.wxss` / `*.vue` 的界面文件
+
+必须按序执行，**不得跳步**：
+
+1. 先改原型稿（`apps/*/prototype/index.html` 或 `docs/ui/prototypes/**`）+ 同步页面规格（`specs/**/page-spec*.md`）
+2. 过 `ux-prototype-designer` 的独立交互质检（`references/ux-review-checklist.md`）
+3. **用户确认原型** ← 人审节点，缺此步不得落码
+4. 才编辑落地代码（WXML/WXSS/Vue）
+
+例外：纯后端 / 非 UI 文件改动不受本门约束。
+豁免：确属纯视觉微调（如仅调间距）时，在原型或 page-spec 中记一行「微调豁免」即可通行。
 
 ## 3 agent 安全
 
