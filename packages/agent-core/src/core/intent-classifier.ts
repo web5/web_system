@@ -33,7 +33,7 @@ export interface ClassifyOptions {
 
 /** L2 规则表：覆盖约 70–80% 日常输入，命中即返回，零成本 */
 const RULE_TABLE: Array<{ agentId: string; kw: RegExp; confidence: number }> = [
-  { agentId: 'translate', kw: /(翻译|翻成|译成|用(英|日|德|法|韩)文?怎么说|英文怎么讲)/, confidence: 0.92 },
+  { agentId: 'translate', kw: /(翻译|翻成|译成|(英|日|韩|法|德|俄|西)语?怎么(说|讲)|英文怎么讲)/, confidence: 0.92 },
   { agentId: 'horoscope', kw: /(星座|运势|星盘|塔罗|八字|生肖|上升星座|水逆)/, confidence: 0.93 },
   { agentId: 'tool', kw: /(查一下|帮我算|汇率|天气|快递|股价|今天几号|单位换算)/, confidence: 0.88 },
   { agentId: 'baike', kw: /(是什么|为什么|原理|如何工作|介绍一下|区别是|科普)/, confidence: 0.8 },
@@ -72,8 +72,20 @@ export class IntentClassifier {
     if (at && o.candidates.includes(at[1])) {
       return { agentId: at[1], confidence: 1, via: 'explicit' };
     }
-    // L1-b 会话锁定：不做每轮重分类（否则人格割裂 + 追问被切走 + 成本翻倍）
+    // L1-b 会话锁定：先查规则表 —— 高置信规则命中**其他** agent 时允许切走
+    //（如锁定的情感陪聊里突然问「英语怎么说」）；未命中则沿用锁定（零成本、不调 LLM）。
+    // ⚠️ 不能在这里直接短路返回 locked：那样话题切换永远失效，
+    //    与实现方案 §9「已锁定 baike 时说『帮我翻一下』应切到 translate」的用例矛盾。
     if (o.lockedAgentId && o.candidates.includes(o.lockedAgentId)) {
+      for (const r of RULE_TABLE) {
+        if (
+          r.agentId !== o.lockedAgentId &&
+          r.kw.test(userInput) &&
+          o.candidates.includes(r.agentId)
+        ) {
+          return { agentId: r.agentId, confidence: r.confidence, via: 'rule' };
+        }
+      }
       return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
     }
     // L2 规则
