@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   DeployEndpointEntity,
   DeployEnvEntity,
+  DeployHostEntity,
   DeployServiceEntity,
   DeployServiceEnvEntity,
   DeployServiceRouteEntity,
@@ -27,6 +28,7 @@ import { DynamicRouteService } from './dynamic-route.service';
         DeployEndpointEntity,
         DeployEnvEntity,
         DeploySiteEntity,
+        DeployHostEntity,
       ],
       'deploy',
     ),

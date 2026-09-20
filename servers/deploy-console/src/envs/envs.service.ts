@@ -6,6 +6,7 @@ import { DeployEnvEntity } from '../entities/deploy-env.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { DeployServiceEntity } from '../entities/deploy-service.entity';
+import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { CreateEnvDto, UpdateEnvDto, UpdateServiceRouteDto } from './dto';
 
 /** 内置保留字（不可作为用户创建的自增 ID 冲突源） */
@@ -52,6 +53,8 @@ export class EnvsService implements OnModuleInit {
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
     @InjectRepository(DeployServiceEntity)
     private readonly serviceRepo: Repository<DeployServiceEntity>,
+    @InjectRepository(DeployHostEntity)
+    private readonly hostRepo: Repository<DeployHostEntity>,
   ) {}
 
   /** 启动时幂等种子：站点 + 内置环境（迁移脚本 M2/M3 的运行时等价物） */
@@ -251,17 +254,30 @@ export class EnvsService implements OnModuleInit {
       this.serviceEnvRepo.find({ where: { envId } }),
     ]);
     const byKey = new Map(routes.map((r) => [r.serviceKey, r]));
+    // 主机组名 → 地址：一次性解析，避免 N+1
+    const hostNames = [...new Set(routes.map((r) => r.hostName).filter((n): n is string => !!n))];
+    const hosts = hostNames.length
+      ? await this.hostRepo.find({ where: { name: In(hostNames) } })
+      : [];
+    const addrByName = new Map(hosts.filter((h) => h.enabled).map((h) => [h.name, h.host]));
+
     return {
       env,
       items: services.map((s) => {
         const r = byKey.get(s.key);
+        const hostName = r?.hostName ?? null;
+        // Q19：端口**不继承** defaultPort，未填即未配置（缺端口 = 配置错误，不静默回落）
+        const port = r?.port ?? null;
         return {
           serviceKey: s.key,
           serviceName: s.name,
           kind: s.kind,
-          configured: !!r,
-          hostName: r?.hostName ?? null,
-          port: r?.port ?? s.defaultPort ?? null,
+          /** 主机组名与端口**都齐**才算已配置 */
+          configured: !!hostName && !!port,
+          hostName,
+          /** 主机组解析出的可解析地址（供前端展示「组名 ≠ 地址」） */
+          hostAddress: hostName ? addrByName.get(hostName) ?? null : null,
+          port,
           upstreamUrl: r?.upstreamUrl ?? null,
           replicas: r?.replicas ?? 1,
           runtime: r?.runtime ?? null,
@@ -272,20 +288,43 @@ export class EnvsService implements OnModuleInit {
     };
   }
 
-  /** 更新某服务在该环境的指向（主机必填 —— B4 防静默回落 localhost） */
+  /**
+   * 更新某服务在该环境的指向
+   *
+   * - `hostName` = 主机**组名**，必须在「主机管理」已登记且启用（Q17 方案 D / Q20：不登记就报错）
+   * - `port` **必填**（Q19：不继承服务默认端口，按该环境实际启动端口填）
+   */
   async updateServiceRoute(envId: string, serviceKey: string, dto: UpdateServiceRouteDto) {
     await this.getEnv(envId);
     const svc = await this.serviceRepo.findOne({ where: { key: serviceKey } });
     if (!svc) throw new NotFoundException(`服务不存在：${serviceKey}`);
-    if (!dto.hostName?.trim()) {
+
+    const hostName = dto.hostName?.trim();
+    if (!hostName) {
       throw new BadRequestException('目标主机必填（不允许静默回落到本机）');
+    }
+    const host = await this.hostRepo.findOne({ where: { name: hostName } });
+    if (!host) {
+      throw new BadRequestException(
+        `主机组 ${hostName} 未在「主机管理」登记，请先在「基础设施 → 主机管理」登记后再配置指向`,
+      );
+    }
+    if (!host.enabled) {
+      throw new BadRequestException(`主机组 ${hostName} 已停用，请先启用或换一个主机组`);
     }
 
     let row = await this.serviceEnvRepo.findOne({ where: { serviceKey, envId } });
     if (!row) {
       row = this.serviceEnvRepo.create({ serviceKey, envId, replicas: 1, status: 'active' });
     }
-    row.hostName = dto.hostName.trim();
+    row.hostName = hostName;
+    // 端口必填：新建时必须给；已存在行若仍未填端口，本次也一并要求补齐
+    const nextPort = dto.port ?? row.port;
+    if (!nextPort) {
+      throw new BadRequestException(
+        `端口必填：请按 ${serviceKey} 在环境 ${envId} 的实际启动端口填写（不继承服务默认端口）`,
+      );
+    }
     if (dto.port !== undefined) row.port = dto.port;
     if (dto.upstreamUrl !== undefined) row.upstreamUrl = dto.upstreamUrl || null;
     if (dto.replicas !== undefined) row.replicas = dto.replicas;

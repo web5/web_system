@@ -100,20 +100,27 @@ export function rewritePath(reqPath: string, rule: Pick<RouteRule, 'stripPrefix'
 }
 
 /**
- * 解析上游地址：显式覆盖 > 环境指向（upstreamUrl > host:port > host）> null
- * null = 未配置指向 → 调用方必须 fail-fast，**不得回落本机**（B4）。
+ * 解析上游地址：显式覆盖 > 环境指向（upstreamUrl > 主机解析地址:端口）> null
+ *
+ * Q17 方案 D：`hostName` 是主机**组名**，地址由 `hostAddress`（`deploy_hosts.host`）给出；
+ * 组名未登记（hostAddress 为空）→ 视为未配置，**不把组名当主机名拼**。
+ * Q19：端口不继承服务默认值，缺端口即配置错误。
+ * null = 未配置 → 调用方必须 fail-fast，**不得回落本机**（B4）。
  */
 export function resolveUpstream(
   rule: Pick<RouteRule, 'upstreamOverride'>,
   binding: { upstreamUrl?: string | null; hostName?: string | null; port?: number | null } | null,
-  defaultPort?: number | null,
+  hostAddressByName: ReadonlyMap<string, string>,
 ): string | null {
   if (rule.upstreamOverride) return rule.upstreamOverride;
   if (!binding) return null;
   if (binding.upstreamUrl) return binding.upstreamUrl;
   if (!binding.hostName) return null;
-  const port = binding.port ?? defaultPort ?? null;
-  return port ? `http://${binding.hostName}:${port}` : `http://${binding.hostName}`;
+  const hostAddress = hostAddressByName.get(binding.hostName);
+  if (!hostAddress) return null;
+  // 缺端口 = 配置不完整：不静默回落 80 端口
+  if (!binding.port) return null;
+  return `http://${hostAddress}:${binding.port}`;
 }
 
 /** 环境解析：请求头 > Host 站点默认 > dev（回退，Q1） */

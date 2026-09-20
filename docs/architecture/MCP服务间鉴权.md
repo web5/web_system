@@ -23,12 +23,12 @@ MCP 平台由三个部分组成：
 |------|------|------|
 | `mcp-gateway` | MCP 工具网关：聚合/分发各微服务的 MCP 工具，对 WorkBuddy 暴露 streamable-http 端点 | 6006 |
 | `gateway` | 统一 API 网关：`/api/*` 代理到各微服务 | 6000 |
-| `finnews` | 财经资讯微服务（第一个接入的业务） | 6007 |
+| `content-hub` | 内容中枢：承载财经资讯能力（:6007；原名 finnews，已无独立进程） | 6007 |
 
-调用链路中，存在**服务间调用**：mcp-gateway 需要调用 finnews 的 REST 接口。有两种方式：
+调用链路中，存在**服务间调用**：mcp-gateway 需要调用 content-hub 的 REST 接口。有两种方式：
 
 1. **直连**：mcp-gateway → `http://127.0.0.1:6007`（本机内网，不对外）
-2. **经 gateway 代理**：mcp-gateway → `https://dev.kedouai.com/api/finnews/*` → gateway → finnews
+2. **经 gateway 代理**：mcp-gateway → `https://dev.kedouai.com/api/finnews/*` → gateway → content-hub
 
 采用方式 2 后，服务间调用需要**鉴权**，防止未授权方直接访问 `/api/finnews`。
 
@@ -54,7 +54,7 @@ gateway (:6000)
     │ /api/finnews 路由 + 鉴权
     │ pathRewrite ^/api/finnews → ''
     ▼
-finnews (:6007) /api/market-pulse
+content-hub (:6007) /api/market-pulse
 ```
 
 **关键路由：**
@@ -64,7 +64,7 @@ finnews (:6007) /api/market-pulse
 | `/mcp` | mcp-gateway | 聚合所有启用模块工具 |
 | `/mcp/:module` | mcp-gateway | 只暴露指定模块（按 `code_key`），如 `/mcp/finnews` |
 | `/api/mcp/*` | gateway 代理 | mcp-admin 管理接口 |
-| `/api/finnews/*` | gateway 代理 | finnews 微服务（需鉴权） |
+| `/api/finnews/*` | gateway 代理 | content-hub 的财经资讯接口（需鉴权；通道名沿用 finnews） |
 | `/mcp-admin/` | gateway 托管 | mcp-admin 前端 SPA |
 
 ---

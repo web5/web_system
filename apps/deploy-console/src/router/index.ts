@@ -83,6 +83,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ServiceDetail.vue'),
         meta: { title: '服务详情' },
       },
+      // ---- 基础设施 ----
+      {
+        path: 'hosts',
+        name: 'HostManager',
+        component: () => import('@/views/HostManager.vue'),
+        meta: { title: '主机管理' },
+      },
       {
         path: 'monitor',
         name: 'ServiceMonitor',
