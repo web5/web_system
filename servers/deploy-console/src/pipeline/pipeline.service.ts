@@ -29,6 +29,8 @@ import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-templa
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { EnvsService } from '../envs/envs.service';
 import { AppsService } from '../apps/apps.service';
+import * as jwt from 'jsonwebtoken';
+import { TargetResolver } from '../target/target-resolver.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -450,6 +452,8 @@ export class PipelineService {
     private readonly envsService: EnvsService,
     // 应用域：部署动作（前端切指针）
     private readonly appsService: AppsService,
+    // 域归属判断（apps / servers）：决定部署走「应用切指针」还是「服务部署接口」
+    private readonly targetResolver: TargetResolver,
   ) {}
 
   /**
@@ -1724,13 +1728,14 @@ export class PipelineService {
     const version = toCommitId(p.versionTag);
     if (!version) return;
 
-    const mod = await this.moduleRegistry.get(p.moduleKey).catch(() => null);
+    // 域归属：TargetResolver 给出 rootDir（apps=应用 / servers=服务）。
+    // 不依赖 moduleType —— 它从未写入流水线实体，用它判断必然误判成应用。
+    const target = await this.targetResolver.resolve(p.moduleKey).catch(() => null);
     try {
-      if (mod?.type === 'backend') {
-        // 后端：构建产物已在 servers/<dir>/dist（运行位置），重启即生效
-        const def = this.builtinSteps['restart'];
-        if (!def?.run) throw new Error('restart 执行体未注册');
-        await def.run(this.buildStepContext(p, 'deploy', uploadTarget));
+      if (target?.rootDir === 'servers') {
+        // 后端服务：部署（重启 + 探活）由「服务管理」的接口负责，
+        // 流水线只负责构建并发布代码，不自己实现重启（避免两套重启姿势）。
+        await this.callServiceDeploy(p.moduleKey, p.env);
       } else {
         // 前端（env-dir）：切入口指针
         await this.appsService.switchVersion(p.moduleKey, p.env, version, p.operator ?? undefined);
@@ -1743,6 +1748,32 @@ export class PipelineService {
       p.logs = [...(p.logs ?? []), `[deploy] 部署失败：${msg}`];
     }
     await this.save(p);
+  }
+
+  /**
+   * 调用「服务管理」的部署接口完成后端生效：`POST /api/services/:key/deploy`。
+   *
+   * 职责边界（用户 2026-09-20）：**流水线只负责构建并发布代码**，
+   * 部署（重启进程 + 探活）是 API 网关 / 服务管理域的接口能力。
+   * 这里通过接口调用，不在流水线内部直接依赖服务模块。
+   */
+  private async callServiceDeploy(key: string, envId: string): Promise<void> {
+    const base = this.configService.get<string>('CONSOLE_URL') || 'http://127.0.0.1:6200';
+    const secret = this.configService.get<string>('JWT_SECRET') || '';
+    if (!secret) throw new Error('缺少 JWT_SECRET，无法调用部署接口');
+    const token = jwt.sign(
+      { sub: 'pipeline', username: 'pipeline', roles: ['admin'], systems: ['deploy'], type: 'access' },
+      secret,
+      { expiresIn: '5m' },
+    );
+    const res = await fetch(`${base}/api/services/${encodeURIComponent(key)}/deploy`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ envId }),
+    });
+    if (!res.ok) {
+      throw new Error(`部署接口返回 ${res.status}：${(await res.text()).slice(0, 200)}`);
+    }
   }
 
   private async syncPermissionPoints(p: DeployPipelineEntity): Promise<void> {

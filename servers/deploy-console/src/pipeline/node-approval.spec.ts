@@ -9,6 +9,7 @@ import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { EnvsService } from '../envs/envs.service';
 import { AppsService } from '../apps/apps.service';
+import { TargetResolver } from '../target/target-resolver.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -203,6 +204,7 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: EnvsService, useValue: { existsEnv: async () => true } },
       // 部署动作（发布成功后衔接；本 spec 关注审批，故只记录不校验）
       { provide: AppsService, useValue: { switchVersion: jest.fn(async () => ({ appKey: 'x', envId: '1' })) } },
+      { provide: TargetResolver, useValue: { resolve: jest.fn(async () => ({ rootDir: 'apps' })) } },
     ],
   }).compile();
 

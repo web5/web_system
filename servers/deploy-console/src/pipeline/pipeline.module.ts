@@ -42,6 +42,8 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 import { EnvsModule } from '../envs/envs.module';
 // 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
 import { AppsModule } from '../apps/apps.module';
+// 部署动作：域归属判断（apps / servers），不依赖 moduleType
+import { TargetModule } from '../target/target.module';
 
 @Module({
   imports: [
@@ -89,6 +91,8 @@ import { AppsModule } from '../apps/apps.module';
     EnvsModule,
     // 部署动作：前端切指针（AppsService.switchVersion）
     AppsModule,
+    // 部署动作：域归属判断（TargetResolver）
+    TargetModule,
   ],
   controllers: [PipelineController, PipelineVarController],
   providers: [
