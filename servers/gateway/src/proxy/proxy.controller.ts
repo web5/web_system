@@ -442,20 +442,10 @@ export class ProxyController {
     return this.proxyService.getMcpProxy()(req, res);
   }
 
-  // 财经通道（/api/finnews/* → content-hub:6007）
-  // 服务间鉴权：验证 Authorization: Bearer $FINNEWS_SERVICE_KEY
+  // 内容中枢通道（/api/content-hub/* → content-hub:6007）
+  // 财经资讯与内容管道共用此通道（历史上另有 /api/finnews/*，已统一到本通道）
+  // 服务间鉴权：验证 Authorization: Bearer $CONTENT_HUB_SERVICE_KEY（兼容旧名 FINNEWS_SERVICE_KEY）
   // 注意：必须放在 @All(':path(*)') 通配之前，否则被通配兜底 404
-  @All('finnews')
-  proxyFinnewsExact(@Req() req: Request, @Res() res: Response) {
-    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
-  }
-
-  @All('finnews/:path(*)')
-  proxyFinnewsWildcard(@Req() req: Request, @Res() res: Response) {
-    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
-  }
-
-  // 内容管道通道（/api/content-hub/* → content-hub:6007）
   @All('content-hub')
   proxyContentHubExact(@Req() req: Request, @Res() res: Response) {
     return this.checkServiceAuthAndProxy(req, res, this.proxyService.getContentProxy());
@@ -468,7 +458,10 @@ export class ProxyController {
 
   /** 验证服务间 Bearer Token，通过后转发到指定 proxy */
   private checkServiceAuthAndProxy(req: Request, res: Response, proxy: any): Promise<void> | void {
-    const expected = this.configService.get<string>('FINNEWS_SERVICE_KEY');
+    // 新名优先、旧名兼容：环境配置还没同步到新名时，不会静默失去鉴权
+    const expected =
+      this.configService.get<string>('CONTENT_HUB_SERVICE_KEY') ||
+      this.configService.get<string>('FINNEWS_SERVICE_KEY');
     if (expected) {
       const auth = req.headers['authorization'];
       if (auth !== `Bearer ${expected}`) {
@@ -529,12 +522,14 @@ export class ProxyController {
 
   /**
    * 手动刷新 DB 路由缓存（FR-10.3）：规则改动后立即生效，不必等 60s TTL。
-   * 鉴权：`x-service-key` 必须匹配 GATEWAY_SERVICE_KEY / FINNEWS_SERVICE_KEY（未配置则拒绝）。
+   * 鉴权：`x-service-key` 必须匹配 GATEWAY_SERVICE_KEY / CONTENT_HUB_SERVICE_KEY
+   * （旧名 FINNEWS_SERVICE_KEY 兼容读取；三者都未配置则拒绝）。
    */
   @Post('internal/gateway/reload')
   reloadRoutes(@Req() req: Request, @Res() res: Response) {
     const expected =
       this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
+      this.configService.get<string>('CONTENT_HUB_SERVICE_KEY') ||
       this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
       '';
     if (!expected || req.headers['x-service-key'] !== expected) {

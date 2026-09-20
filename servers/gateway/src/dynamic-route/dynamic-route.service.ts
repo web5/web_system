@@ -250,6 +250,7 @@ export class DynamicRouteService implements OnModuleInit {
     } else if (resolution.rule.authMode === 'service_key') {
       const expected =
         this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
+        this.configService.get<string>('CONTENT_HUB_SERVICE_KEY') ||
         this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
         '';
       if (!expected || req.headers['x-service-key'] !== expected) {

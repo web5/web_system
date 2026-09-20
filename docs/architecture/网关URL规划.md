@@ -1,6 +1,6 @@
 # 网关 URL 规划
 
-> Gateway 路由设计 — 单端口统一处理前端 SPA、静态资源和 API 代理，以及 MCP 平台的 `/mcp`、`/api/finnews` 路由
+> Gateway 路由设计 — 单端口统一处理前端 SPA、静态资源和 API 代理，以及 MCP 平台的 `/mcp`、内容中枢的 `/api/content-hub` 路由
 
 > ⚠️ **本文是设计期快照，路由映射以代码为真相源**：`servers/gateway/src/proxy/proxy.controller.ts`。
 > **端口视角**：本文按**服务器**写（auth :6001）；**本机** auth 是 6101，prod 走 3000 系列。权威源：`ecosystem.config.cjs`（本机）/ `ecosystem.config.js`（服务器）。
@@ -27,7 +27,7 @@ Gateway（端口 6000）是应用层唯一入口，统一处理全部请求：
 |------|----------|----------|------|
 | 📦 静态资源 | 带扩展名 (.js/.css/.svg) | `ServeStaticModule` | `StaticModule` |
 | 🔄 API 代理 | `/api/*` | `ProxyModule` | `ProxyModule` |
-| 🔀 MCP 代理 | `/api/mcp/*`、`/api/finnews/*` | 代理到 mcp-gateway / content-hub（含鉴权） | `ProxyModule` |
+| 🔀 MCP 代理 | `/api/mcp/*`、`/api/content-hub/*` | 代理到 mcp-gateway / content-hub（含鉴权） | `ProxyModule` |
 | 🌐 SPA 回退 | 无后缀 GET | Express 中间件 → `index.html` | main.ts |
 | 🔧 前端托管 | `/portal/`、`/admin/`、`/mcp-admin/` | `ServeStaticModule` | `StaticModule` |
 | 📚 接口文档 | `/docs`、`/swagger` | SwaggerModule | `SwaggerDocsModule` |
@@ -46,7 +46,7 @@ Gateway（端口 6000）是应用层唯一入口，统一处理全部请求：
 ```
 请求进入 Gateway (:6000)
     │
-    ├── /api/finnews/*  → 鉴权 → finnews(:6007)
+    ├── /api/content-hub/* → 鉴权 → content-hub(:6007)
     ├── /api/mcp/*      → mcp-gateway(:6006) 管理接口
     ├── /api/auth|users|ai|admin|todos|upload/* → 各微服务
     │
@@ -145,13 +145,14 @@ app.use((req, res, next) => {
 | `/api/todos*` | — | todo-service (:6005) | `/api` → `` |
 | `/api/upload*` | — | user-service (:6002) | `/api` → `` |
 | `/api/mcp/*` | `GET /api/mcp/modules` | mcp-gateway (:6006) | `/api/mcp` → `/api` |
-| `/api/finnews/*` | `GET /api/finnews/api/market-pulse` | finnews (:6007) | `/api/finnews` → `` |
+| `/api/content-hub/*` | `GET /api/content-hub/api/market-pulse` | content-hub (:6007) | `/api/content-hub` → `` |
 | `/api/uploads/*` | — | user-service (:6002) | `/api` → `` |
 | `/api/*`（兜底） | — | — | 返回 404 |
 
 > **注意**：
-> - `/api/finnews` 和 `/api/mcp` 必须放在 `/api/:path(*)` 兜底之前注册
-> - `/api/finnews` 带服务间鉴权（`checkServiceAuthAndProxy` 验 Bearer）
+> - `/api/content-hub` 和 `/api/mcp` 必须放在 `/api/:path(*)` 兜底之前注册
+> - `/api/content-hub` 带服务间鉴权（`checkServiceAuthAndProxy` 验 Bearer）
+> - 财经资讯与内容管道共用 `/api/content-hub`（历史前缀 `/api/finnews` 已统一到本前缀）
 > - `system-service`（:6004）有 proxy 实例但暂未暴露路由
 
 ### 4.2 ProxyService 配置
@@ -214,10 +215,10 @@ location ~ ^/api/mcp(/.*)?$ {
 
 **环境部署与测试约定（重要）**：
 
-| 环境 | 服务器 | mcp-gateway | finnews 数据 | 说明 |
-|------|--------|-------------|--------------|------|
-| DEV | {{DEV_HOST}} | :6006 | 本机 finnews(:6007) | 开发/验证环境，承载 `/api/mcp` 后端与 mcp-admin 页面 |
-| PROD | {{PROD_HOST}} | :6006 | **跨机调 DEV** `https://dev.kedouai.com/api/finnews`（Bearer） | 现网正式端点 `kedouai.com/mcp/finnews` |
+| 环境 | 服务器 | mcp-gateway | content-hub 数据 | 说明 |
+|------|--------|-------------|-----------------|------|
+| DEV | {{DEV_HOST}} | :6006 | 本机 content-hub(:6007) | 开发/验证环境，承载 `/api/mcp` 后端与 mcp-admin 页面 |
+| PROD | {{PROD_HOST}} | :6006 | **跨机调 DEV** `https://dev.kedouai.com/api/content-hub`（Bearer） | 现网正式端点 `kedouai.com/mcp/finnews` |
 
 > ⚠️ 测试发邮件（apply 验证码）时必须标注来源环境：`/api/mcp/keys/apply` 走公网时由 **DEV** 发信；PROD 的 SMTP 已同配置但现网 `/mcp` 端点不涉及发信。两环境的 `MCP_CLIENT_KEY`/`MCP_ADMIN_KEY`/`SMTP_*` 保持同值，key 双环境通用。
 > E2E 测试脚本：`servers/mcp-gateway/test/e2e-keys.sh [dev|prod] [--public]`，输出自动带 `[DEV]`/`[PROD]` 环境前缀。
@@ -263,7 +264,7 @@ location / {
 | 路由 | 说明 |
 |------|------|
 | `/api/mcp/*` | 代理到 mcp-gateway 管理接口（`/api/mcp/modules` → `/api/modules`） |
-| `/api/finnews/*` | 代理到 finnews（含服务间鉴权） |
+| `/api/content-hub/*` | 代理到 content-hub（含服务间鉴权；财经资讯与内容管道共用） |
 | `/portal/`、`/admin/`、`/mcp-admin/` | 托管三个前端 SPA（ServeStaticModule） |
 
 ---
@@ -291,7 +292,7 @@ export class AppModule {}
 **ProxyController 内路由注册顺序**（`@All(':path(*)')` 兜底必须在最后）：
 
 ```
-auth → users → ai → admin → bianbian → todos → upload → mcp → finnews
+auth → users → ai → admin → bianbian → todos → upload → mcp → content-hub
   → uploads/bianbian → uploads → :path(*)（兜底 404）
 ```
 

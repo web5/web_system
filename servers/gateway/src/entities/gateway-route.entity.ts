@@ -37,7 +37,7 @@ export class GatewayRouteEntity extends BigIntEntity {
   @Column({ type: 'int', unsigned: true, default: 30000, comment: '代理超时（毫秒）' })
   timeoutMs: number;
 
-  /** passthrough 透传（下游自校验）/ service_key 网关校验 FINNEWS_SERVICE_KEY */
+  /** passthrough 透传（下游自校验）/ service_key 网关校验 CONTENT_HUB_SERVICE_KEY（兼容旧名 FINNEWS_SERVICE_KEY） */
   @Column({ type: 'varchar', length: 16, default: 'passthrough', comment: '网关鉴权模式 passthrough/service_key' })
   authMode: 'passthrough' | 'service_key';
 

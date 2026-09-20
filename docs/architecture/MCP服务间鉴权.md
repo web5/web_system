@@ -28,9 +28,9 @@ MCP 平台由三个部分组成：
 调用链路中，存在**服务间调用**：mcp-gateway 需要调用 content-hub 的 REST 接口。有两种方式：
 
 1. **直连**：mcp-gateway → `http://127.0.0.1:6007`（本机内网，不对外）
-2. **经 gateway 代理**：mcp-gateway → `https://dev.kedouai.com/api/finnews/*` → gateway → content-hub
+2. **经 gateway 代理**：mcp-gateway → `https://dev.kedouai.com/api/content-hub/*` → gateway → content-hub
 
-采用方式 2 后，服务间调用需要**鉴权**，防止未授权方直接访问 `/api/finnews`。
+采用方式 2 后，服务间调用需要**鉴权**，防止未授权方直接访问 `/api/content-hub`。
 
 ---
 
@@ -47,12 +47,12 @@ mcp-gateway (:6006)
     │ createModuleTransport("finnews")
     │ 声明式 HTTP 模块（base_url + auth）
     ▼
-https://dev.kedouai.com/api/finnews/api/market-pulse
+https://dev.kedouai.com/api/content-hub/api/market-pulse
     │ nginx 转发
     ▼
 gateway (:6000)
-    │ /api/finnews 路由 + 鉴权
-    │ pathRewrite ^/api/finnews → ''
+    │ /api/content-hub 路由 + 鉴权
+    │ pathRewrite ^/api/content-hub → ''
     ▼
 content-hub (:6007) /api/market-pulse
 ```
@@ -64,7 +64,7 @@ content-hub (:6007) /api/market-pulse
 | `/mcp` | mcp-gateway | 聚合所有启用模块工具 |
 | `/mcp/:module` | mcp-gateway | 只暴露指定模块（按 `code_key`），如 `/mcp/finnews` |
 | `/api/mcp/*` | gateway 代理 | mcp-admin 管理接口 |
-| `/api/finnews/*` | gateway 代理 | content-hub 的财经资讯接口（需鉴权；通道名沿用 finnews） |
+| `/api/content-hub/*` | gateway 代理 | content-hub 对外唯一通道（财经资讯 + 内容管道，需鉴权） |
 | `/mcp-admin/` | gateway 托管 | mcp-admin 前端 SPA |
 
 ---
@@ -87,9 +87,10 @@ mcp-gateway                                gateway
     │    Authorization: Bearer <key>         │
     │ ────────────────────────────────────▶  │
     │                                       │ ③ checkServiceAuthAndProxy
-    │                                       │    读 FINNEWS_SERVICE_KEY
+    │                                       │    读 CONTENT_HUB_SERVICE_KEY
+    │                                       │    （旧名 FINNEWS_SERVICE_KEY 兼容）
     │                                       │    比对 header 是否全等
-    │                                       │    相等 → 转发 finnews
+    │                                       │    相等 → 转发 content-hub
     │                                       │    不等 → 401
 ```
 
@@ -97,15 +98,15 @@ mcp-gateway                                gateway
 
 | 环节 | 文件 | 逻辑 |
 |------|------|------|
-| 密钥注入 | `ecosystem.config.js` | gateway / mcp-gateway 的 env 块注入 `FINNEWS_SERVICE_KEY` |
+| 密钥注入 | `ecosystem.config.js` | gateway / mcp-gateway 的 env 块注入 `CONTENT_HUB_SERVICE_KEY`（同时注入旧名 `FINNEWS_SERVICE_KEY` 以兼容未同步的配置） |
 | seed 写库 | `servers/mcp-gateway/src/mcp/mcp.service.ts` | `FINNEWS_SERVICE_AUTH_TYPE=bearer` + `FINNEWS_SERVICE_AUTH_CONFIG={"token":...}` |
 | 自动加头 | `packages/mcp-core/src/http-adapter.ts:68` | `auth.type === 'bearer'` → `Authorization: Bearer ${auth.token}` |
 | 验证 | `servers/gateway/src/proxy/proxy.controller.ts` | `checkServiceAuthAndProxy` 比对 `Bearer ${expected}` |
 
 ### 3.4 密钥管理
 
-- 密钥存在 `.env.production` 的 `FINNEWS_SERVICE_KEY`（64 位 hex）
-- 通过 `ecosystem.config.js` 的 `process.env.FINNEWS_SERVICE_KEY` 注入两个服务
+- 密钥存在 `.env.production` 的 `CONTENT_HUB_SERVICE_KEY`（64 位 hex）
+- 通过 `ecosystem.config.js` 的 `process.env.CONTENT_HUB_SERVICE_KEY` 注入两个服务；旧名 `FINNEWS_SERVICE_KEY` 仍被读取，用于兼容尚未同步的配置
 - 两边读同一个值，天然一致
 
 ### 3.5 优缺点
@@ -177,7 +178,7 @@ mcp-gateway 启动
 **验证（每次调用）：**
 
 ```
-mcp-gateway 调 /api/finnews，带 Authorization: Bearer <JWT>
+mcp-gateway 调 /api/content-hub，带 Authorization: Bearer <JWT>
   → gateway 验 JWT 签名 + exp
   → 校验 aud=gateway、scope 含 finnews
   → 查 Redis 黑名单（可选，用于吊销）
@@ -241,7 +242,7 @@ mcp-gateway 调 /api/finnews，带 Authorization: Bearer <JWT>
 
 **改造触发条件**（满足其一即可启动阶段 2）：
 
-1. 接入第二个需要服务间调用的微服务（不只 finnews）
+1. 接入第二个需要服务间调用的微服务（不只 content-hub）
 2. 需要区分不同 MCP 客户端身份（不只 WorkBuddy）
 3. 出现密钥泄漏风险，需要吊销能力
 4. 需要审计「谁在何时调了什么工具」

@@ -95,7 +95,7 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | `/api/admin/*`（兜底）、`/api/dict/*` | system-service |
 | `/api/todos*` | todo-service |
 | `/api/mcp/*` → rewrite 成 `/api/*` | mcp-gateway |
-| `/api/finnews/*`、`/api/content-hub/*`（Bearer `FINNEWS_SERVICE_KEY`） | content-hub |
+| `/api/content-hub/*`（Bearer `CONTENT_HUB_SERVICE_KEY`，兼容旧名 `FINNEWS_SERVICE_KEY`） | content-hub（财经资讯 + 内容管道） |
 | `/api/knowledge/*` | knowledge-service |
 | `/api/uploads/bianbian/*` → ai-service；`/api/uploads/*` → **user-service** | ⚠️ 见 §6 已知问题 |
 | `/api/*` 兜底 | DB 动态路由（`deploy_service_routes`），未命中 → 404 `Unknown API route` |
