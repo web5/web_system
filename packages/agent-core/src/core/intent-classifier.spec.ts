@@ -28,11 +28,19 @@ describe('IntentClassifier', () => {
     expect(r.via).toBe('explicit');
   });
 
-  it('L1-b 会话锁定：追问不重分类（核心用例）', async () => {
+  it('L1-b 会话锁定：规则未命中的追问不重分类（核心用例）', async () => {
     const c = new IntentClassifier(fakeClient(''), 500, 'general');
     const r = await c.classify('那用日语呢', { candidates: CANDIDATES, lockedAgentId: 'translate' });
     expect(r.agentId).toBe('translate');
     expect(r.via).toBe('locked');
+  });
+
+  it('会话锁定时高置信规则命中其他 agent → 允许切走（locked 不短路）', async () => {
+    const c = new IntentClassifier(fakeClient(''), 500, 'general');
+    const r = await c.classify('英语怎么说', { candidates: CANDIDATES, lockedAgentId: 'emotion' });
+    expect(r.agentId).toBe('translate');
+    expect(r.via).toBe('rule');
+    expect(r.confidence).toBeGreaterThanOrEqual(0.88);
   });
 
   it('L3 LLM 返回带 ```json 围栏也能解析', async () => {
