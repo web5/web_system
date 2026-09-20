@@ -199,6 +199,8 @@ export interface ModuleSnapshot {
   deployRoot?: string;
   /** 默认产物路径（相对版本目录；M2） */
   defaultArtifactPath?: string;
+  /** pm2 入口脚本（相对部署根；P3，缺省 dist/main.js） */
+  pm2Script?: string | null;
 }
 
 /** 阶段变量解析入参（纯函数入参，便于单测） */
@@ -215,6 +217,8 @@ export interface StageVarsInput {
   deployRoot?: string;
   /** 模块默认产物路径（相对版本目录；M2） */
   defaultArtifactPath?: string;
+  /** pm2 入口脚本（相对部署根；P3，缺省 dist/main.js） */
+  pm2Script?: string | null;
   dir?: string;
   pm2?: string;
   publicPath?: string;
@@ -241,7 +245,30 @@ export interface StageVarsInput {
    * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
    */
   platformScriptsDir?: string;
+  /**
+   * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
+   * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
+   */
+  configInject?: boolean;
 }
+
+/**
+ * 保护键：平台语义真相源，**不允许被配置中心覆盖**。
+ *
+ * 被覆盖会直接导致「发到哪个环境 / 发的是哪个模块 / 发的是哪个版本」失真
+ * （例：`COMMIT_ID` 被改 = 发错版本且版本表写脏），故在此硬约束。
+ * 注：流水线变量（模板级）的覆盖属存量行为，暂不约束，后续专项收敛。
+ */
+export const PROTECTED_STAGE_KEYS: readonly string[] = [
+  'DEPLOY_ENV',
+  'MODULE_KEY',
+  'MODULE_TYPE',
+  'MODULE_DIR',
+  'COMMIT_ID',
+  'BRANCH',
+  'STAGE',
+  'RELEASE_DIR',
+];
 
 /**
  * 解析阶段命令可用的环境变量（v4 M1，纯函数便于单测）。
@@ -267,7 +294,7 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const ws = i.releaseWorkspace;
   const port = cfg.PORT || (i.pm2Port != null ? String(i.pm2Port) : '');
 
-  return {
+  const base: Record<string, string> = {
     DEPLOY_ENV: i.env || '',
     MODULE_KEY: i.moduleKey,
     MODULE_TYPE: type,
@@ -279,6 +306,12 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 进程与端口：显式解析，不做候选名猜测
     PM2_NAME: i.pm2 || `web-${i.moduleKey}`,
     PORT: port,
+    // P3（2026-09-20）：pm2 入口与工作目录可配（服务管理维护；空 → 历史缺省值）
+    PM2_SCRIPT: i.pm2Script || 'dist/main.js',
+    // 未配 deployRoot 时按模块目录回落（deployRootAbs 空值返回工作区根，故不能直接 ||）
+    PM2_CWD: i.deployRoot
+      ? deployRootAbs(ws, i.deployRoot)
+      : path.join(ws, type === 'backend' ? 'servers' : 'apps', dir),
     // 静态资源（publicPath 接线）
     PUBLIC_PATH: publicPath,
     ENTRY_FILE: entry,
@@ -296,9 +329,21 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
     WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
-    // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
-    ...pipelineVars,
   };
+
+  // P0（2026-09-20）：配置中心全量注入。
+  // 此前整包只用了 cfg.PORT，导致配置中心形同虚设 —— 部署路径、入口文件等只能
+  // 写死在模板级变量（且模板变量不区分环境）。开启后配置中心的值可覆盖内置同名键
+  // （内置作为兜底），保护键除外。PIPELINE_CONFIG_INJECT=false 可整体关闭回退。
+  if (i.configInject !== false) {
+    for (const [k, v] of Object.entries(cfg)) {
+      if (PROTECTED_STAGE_KEYS.includes(k)) continue;
+      base[k] = v;
+    }
+  }
+
+  // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
+  return { ...base, ...pipelineVars };
 }
 
 /** 流水线挂起（等审批）时的状态值（节点级审批，design D8 / R2） */
@@ -1808,6 +1853,7 @@ export class PipelineService {
       dir: mod?.dir,
       deployRoot: mod?.deployRoot,
       defaultArtifactPath: mod?.defaultArtifactPath,
+      pm2Script: mod?.pm2Script,
       pm2: mod?.pm2,
       publicPath: mod?.publicPath,
       entry: mod?.entry,
@@ -1816,6 +1862,8 @@ export class PipelineService {
       stage,
       releaseWorkspace: this.releaseWorkspace,
       config: inject,
+      // P0：配置中心全量注入开关（默认开；置 false 回退到「配置中心只影响 PORT」的旧行为）
+      configInject: this.configService.get<string>('PIPELINE_CONFIG_INJECT') !== 'false',
       pm2Port,
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
