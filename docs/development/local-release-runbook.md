@@ -68,24 +68,45 @@
 > 幂等（已应用记在目标库 `schema_migrations`），详见 `DEPLOYMENT.md §一·6`。
 > 存量库首次接入：`--baseline-through 0006_dict_tables.sql`。
 
-### 2.1 发布工具（deploy-console）自身 —— 传统发布
+### 2.1 发布工具（deploy-console）自身 —— 本地研发发布
 
 deploy-console 是发布工具自身，**不能走流水线**（`stageRestart` 会 restart 执行者导致自杀式中断）。
 
+**源 = 当前工作区**：在工作区构建 → 复制 dist 到发布目录（发布目录只作运行位置）→ 重启。
+（2026-09-20 定稿：此前脚本默认在**发布目录**构建，而发布目录通常停在 `master`，
+在 feature 分支开发时改动永远进不了产物 —— 表现是「改了不生效」且无任何报错。）
+
 ```bash
-# 发布目录构建
-cd ~/web_system_release/servers/deploy-console && npx --no-install nest build
-# 重启（干净环境，避免 PORT 等变量污染）
-PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:<nodeBin> pm2 restart web-deploy-console --update-env
-# 旧链路（2026-09-08 已废弃，勿用）：POST /api/deploy/deploy —— deploy.sh 体系，
-# 已知缺陷：无 micro-frontend 分支（必然 exit 1）、版本表写错库。发布统一走 POST /api/pipelines。
+# 一键（推荐，仓库根执行）
+./scripts/publish-deploy-console.sh
+
+# 只重启（刚刚构建过，不想重新构建）
+./scripts/publish-deploy-console.sh --skip-build
+
+# 发布已合入 master 的版本：切回旧路径（在发布目录同步分支并就地构建）
+./scripts/publish-deploy-console.sh --from-release --branch master
+
+# 预演
+DRY_RUN=1 ./scripts/publish-deploy-console.sh
 ```
 
-> **一键脚本（推荐）**：`./scripts/publish-deploy-console.sh`（仓库根执行）——
-> 自动完成「release 同步(ff-only) → 后端 nest build → 前端 vite build → 孤儿进程清理
-> + 干净 env 重启（6200 一致性校验，见 §4.3/§4.4）→ pm2 save → 健康复检」，
-> 内置端口/环境变量全部铁律，一次授权跑完。
-> 参数：`--skip-sync`（跳过同步）/ `--skip-health`（跳过复检）；环境变量 `DRY_RUN=1` 预览、`RELEASE_DIR=` 覆盖发布目录。
+脚本内建步骤与铁律（一次授权跑完）：
+
+| 步骤 | 内容 |
+|---|---|
+| 源信息 | 打印工作区分支/HEAD/未提交数（产物来自工作区，未提交改动也会进产物） |
+| 构建 | 工作区 `servers/deploy-console` 后端 + `apps/deploy-console` 前端 |
+| 复制 | 两份 dist → 发布目录对应位置 |
+| 重启 | 干净 env + 孤儿进程铁律：6200 占用者必须 == pm2 pid（见 §4.3/§4.6） |
+| 崩溃检测 | 重启后采样 `restarts`，5s 内增长即判定启动即崩，打印日志并 fail-fast |
+| 固化 | `pm2 save` |
+| 复检 | `/console/` 200 **且** `/api/apps` 存活（200/401；000=后端没起来） |
+
+参数：`--skip-build` / `--skip-health` / `--from-release` / `--branch <b>`；
+环境变量 `DRY_RUN=1` 预览、`RELEASE_DIR=` 覆盖发布目录。
+
+> 旧链路（2026-09-08 已废弃，勿用）：`POST /api/deploy/deploy` —— deploy.sh 体系，
+> 已知缺陷：无 micro-frontend 分支（必然 exit 1）、版本表写错库。发布统一走 `POST /api/pipelines`。
 
 ### 2.2 其余模块 —— 发布流水线
 
@@ -204,6 +225,39 @@ pm2 save
 
 - ⚠️ `pm2 start ecosystem.config.cjs --only a --only b ...` **不生效**（`--only` 只认一个值，多余参数被忽略且静默失败）→ 逐个 start。
 - ⚠️ 清理后**未重启的服务不会自动重新监听**（它们此前一直处于"online 但不 listen"状态），必须逐个 `delete + start`。
+
+### 4.7 构建源错位 —— 发布工具自身「改了不生效」的静默坑（2026-09-20 亲历）
+
+**现象**：改了 deploy-console 代码，跑发布脚本、重启都成功，页面行为不变，**且没有任何报错**。
+
+**根因**：脚本默认在**发布目录** `~/web_system_release` 构建，而发布目录通常停在 `master`；
+开发改动在工作区的 feature 分支 → 构建的是发布目录的旧代码，分支改动永远进不去产物。
+
+**对策**（已内建进 `scripts/publish-deploy-console.sh`）：
+发布工具自身**源 = 工作区**（工作区构建 → 复制 dist 到发布目录，发布目录只作运行位置）。
+需发布已合入 master 的版本时才用 `--from-release`。
+
+**自检**：脚本会打印「源 = 工作区（分支 X @ HEAD，未提交 N 项）」，源不对一眼可见。
+
+### 4.8 进程在、服务废了 —— 启动即崩（2026-09-20 亲历）
+
+**现象**：pm2 显示 `online`、端口有监听，但接口返回 `000`（连接失败）；进程在秒级反复重启。
+
+**根因**：DI 缺注册（如 `EnvsService` 注入 `DeployHostEntity` 但 `EnvsModule.forFeature` 没注册它）、
+配置错误等导致 `bootstrap` 抛错 —— **端口可能在抛错前已 listen**，所以"端口探活"骗得过。
+
+**识别**（唯一可靠手段是看 restarts 是否增长）：
+```bash
+pm2 jlist | python3 -c "
+import sys,json
+for p in json.load(sys.stdin):
+    if p['name']=='web-deploy-console': print('restarts=',p['pm2_env'].get('restart_time'))"
+sleep 5   # 再取一次，增长了就是启动即崩
+pm2 logs web-deploy-console --lines 40 --nostream
+```
+
+**对策**：`scripts/publish-deploy-console.sh` 已内建崩溃循环检测（采样 restarts + 打印日志 + fail-fast），
+健康复检也要求 `/api/apps` 有响应（200/401），不再是只看 `/console/` 200。
 - 2026-09-11 实测：本机曾盘 **84 个** release node 进程（pm2 只管 12 个，最老的活到 9/9），其中 7 个服务的端口由孤儿进程服务；清理后 84 → 12，端口归属 12/12 对齐，`pm2 list` 重启计数全部归零。
 
 **防复发**：① 新服务先在 `ecosystem.config.cjs` 登记；② 重启一律 `delete + start`（不用 `restart --update-env`，见 §4.3）；③ 发版/重启后跑一次本节「识别」脚本。
