@@ -12,10 +12,25 @@ export type StreamEventType =
   | 'summary'
   | 'final'
   | 'error'
-  | 'permission_request';
+  | 'permission_request'
+  /** 意图路由决策结果：必须是本轮第一个事件（早于任何 token） */
+  | 'intent';
 
 export interface StreamEvent {
   type: StreamEventType;
+  /**
+   * intent 事件专用：路由决策结果。
+   * 客户端据此渲染 agent 徽标 / 排查误判；服务端须在第一个 token 之前推送。
+   */
+  intent?: {
+    agentId: string;
+    agentName?: string;
+    /** 0~1 */
+    confidence: number;
+    via: 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
+    switched?: boolean;
+    previousAgentId?: string;
+  };
   content?: string;
   name?: string;
   args?: unknown;

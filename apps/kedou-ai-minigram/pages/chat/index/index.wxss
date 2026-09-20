@@ -1,0 +1,397 @@
+/* ===== 科豆 AI - 通用对话页（tab 1） ===== */
+page {
+  background: var(--page-bg);
+}
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--page-bg);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--page-bg);
+  box-sizing: border-box;
+  padding: 20rpx 32rpx;
+  /* 底部吸底输入栏留白（本页无 tabBar，故不叠加 tabBar 高度） */
+  padding-bottom: calc(170rpx + env(safe-area-inset-bottom));
+}
+
+/* 消息列表：占满吸底输入栏之上的空间，内部自滚 */
+.chat-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 24rpx;
+  box-sizing: border-box;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: .3; }
+  50% { opacity: 1; }
+}
+
+.chat-msg {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+  align-items: flex-start;
+}
+.chat-msg:last-child { margin-bottom: 0; }
+
+.msg-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  font-weight: 700;
+  margin-top: 4rpx;
+}
+.chat-msg.ai .msg-avatar {
+  background: var(--brand-50);
+  color: var(--brand);
+}
+.chat-msg.user .msg-avatar {
+  /* 去掉实心橙块（用户反馈突兀）：与 AI 头像同族，靠头像内文字区分身份 */
+  background: var(--brand-50);
+  color: var(--brand);
+}
+
+.msg-bubble {
+  flex: 1;
+  background: var(--card);
+  border-radius: 16rpx;
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+  color: var(--t1);
+  line-height: 1.6;
+  word-break: break-all;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, .04);
+}
+.chat-msg.user .msg-bubble {
+  background: var(--brand-50);
+}
+.msg-text {
+  font-size: 26rpx;
+  color: inherit;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+/* 今日一句（首条 AI 消息的引用块） */
+.msg-quote-k {
+  font-size: 21rpx;
+  color: var(--brand);
+  margin-bottom: 8rpx;
+}
+.msg-quote-en {
+  margin-top: 10rpx;
+  font-size: 23rpx;
+  color: var(--t3);
+  line-height: 1.6;
+}
+
+/* 长 AI 消息：默认折叠 5 行 + 展开更多 */
+.msg-bubble.collapsed .msg-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg-expand {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: var(--brand);
+  text-align: right;
+  line-height: 1.2;
+}
+.msg-expand:active { opacity: .7; }
+
+.msg-thinking {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  color: var(--t2);
+  font-size: 24rpx;
+}
+.thinking-dots { display: flex; gap: 6rpx; }
+.tdot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: blink 1.2s infinite;
+}
+.tdot:nth-child(2) { animation-delay: .2s; }
+.tdot:nth-child(3) { animation-delay: .4s; }
+
+/* 开场推荐问题 */
+.sugs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin-top: 8rpx;
+}
+.sug {
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: var(--brand);
+  background: var(--brand-50);
+  border-radius: 999rpx;
+  padding: 10rpx 24rpx;
+}
+.sug:active { opacity: .7; }
+
+/* ===== 底部吸底输入栏（一体化胶囊） ===== */
+.chat-input-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 12rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));
+}
+.chat-composer {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  background: var(--card);
+  border: 2rpx solid rgba(60, 60, 67, .08);
+  border-radius: 48rpx;
+  padding: 8rpx 10rpx 8rpx 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(31, 36, 46, .05);
+}
+.chat-plus {
+  flex: 0 0 60rpx;
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  background: var(--brand-50);
+  color: var(--brand);
+  font-size: 36rpx;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+.chat-plus:active { opacity: .7; }
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 26rpx;
+  color: var(--t1);
+  /* 行高与单行高度解耦：原 76rpx 行高是为了单行对齐按钮，但会让多行输入行距过大 */
+  line-height: 44rpx;
+  min-height: 44rpx;
+  max-height: 160rpx;
+  box-sizing: border-box;
+  width: auto;
+  align-self: center;
+}
+.chat-input-ph {
+  color: var(--t3);
+  line-height: 44rpx;
+}
+
+.chat-send {
+  flex: 0 0 76rpx;
+  width: 76rpx;
+  height: 76rpx;
+  min-width: 76rpx;
+  max-width: 76rpx;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  align-self: flex-end;
+  border-radius: 50%;
+  /* 与输入区「+」按钮同一语言（浅底 + 深橙字），不再用实心橙块；细边框保证可点辨识 */
+  background: var(--brand-50);
+  color: var(--brand);
+  border: 1rpx solid var(--brand-100);
+  font-size: 32rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  border: none;
+  margin: 0;
+  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, .28);
+  transition: background .2s ease, box-shadow .2s ease;
+}
+.chat-send::after { border: none; }
+.chat-send[disabled] {
+  background: #E8EAED;
+  color: #C3C8D0;
+  box-shadow: none;
+}
+
+/* ===== 自定义导航栏（navigationStyle: custom） =====
+ * 高度由页面注入：padding-top = 状态栏高，height = 状态栏 + 44px（微信标准内容高）。
+ * 三元素全部 absolute（与原型 navbar 同一套布局）：
+ *  - 标题全宽居中；
+ *  - 返回键贴左；
+ *  - 「新对话」定位在原生胶囊左侧 —— 胶囊宽 87px + 右边距 7px 全机型固定 → right: 102px，
+ *    不进 flex 流，避免被胶囊挤压成竖排。
+ */
+.nav {
+  position: relative;
+  flex: none;
+  background: var(--card);
+  border-bottom: 1rpx solid var(--line);
+}
+.nav-back {
+  position: absolute;
+  left: 8rpx;
+  bottom: 0;
+  width: 96rpx;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-back:active { opacity: .5; }
+/* CSS 画的 chevron：粗细 / 大小可控，比字符「‹」清晰得多 */
+.nav-back-arrow {
+  width: 20rpx;
+  height: 20rpx;
+  border-left: 4rpx solid var(--icon);
+  border-bottom: 4rpx solid var(--icon);
+  transform: rotate(45deg);
+  margin-left: 10rpx; /* 视觉重心校正：旋转 45° 后箭头几何中心偏右 */
+}
+.nav-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--t1);
+}
+.nav-act {
+  position: absolute;
+  right: 102px;
+  bottom: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 27rpx;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.nav-act:active { opacity: .6; }
+
+/* 「新建对话」icon：与 tabBar「对话」**同源**的圆润气泡 + 中心加号（原型方案 B，已确认）。
+   小程序 wxss 不支持内联 svg，故与 custom-tab-bar 一样用 base64 background-image 承载母形 ——
+   不用 CSS 描边另画一个「像但不同」的气泡（前一版就这么错的）。
+   配色 #8A90A0 = tabBar 未选中态（= --icon）；40rpx 略小于 tabBar 的 44rpx，符合导航层级。 */
+.nav-new-ic {
+  width: 40rpx;
+  height: 40rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 40rpx 40rpx;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAuNSAxMS42YzAgNC4yLTMuOCA3LjYtOC41IDcuNi0xIDAtMi0uMTUtMi45LS40NEw0IDIwLjVsMS43LTQuM0M0LjMgMTUgMy41IDEzLjQgMy41IDExLjZjMC00LjIgMy44LTcuNiA4LjUtNy42czguNSAzLjQgOC41IDcuNnoiLz48cGF0aCBkPSJNMTIgOC41djZNOSAxMS41aDYiLz48L3N2Zz4=");
+}
+
+/* ===== 意图路由徽标（本轮由哪个 agent 作答） ===== */
+.agent-badge-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16rpx;
+}
+.agent-badge {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--brand-50);
+  color: var(--brand);
+  font-size: 20rpx;
+}
+.agent-badge .ab-dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+/* ===== 气泡内失败态 ===== */
+.msg-fail {
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid var(--line);
+}
+.msg-fail .mf-t { font-size: 26rpx; font-weight: 600; color: var(--red); }
+.msg-fail .mf-r { margin-top: 6rpx; font-size: 22rpx; color: var(--t2); line-height: 1.6; }
+.msg-fail .mf-a { margin-top: 14rpx; display: flex; gap: 32rpx; }
+.msg-fail .mf-a text { font-size: 24rpx; color: var(--t2); }
+.msg-fail .mf-a .mf-retry { color: var(--brand-txt); font-weight: 500; }
+
+/* ===== 「+」菜单（底部弹层） ===== */
+.plus-mask {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: var(--mask);
+  z-index: 900;
+}
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  transform: translateY(110%);
+  transition: transform .26s cubic-bezier(.32, .72, 0, 1);
+  padding: 0 16rpx calc(16rpx + env(safe-area-inset-bottom));
+  z-index: 910;
+}
+.sheet.show { transform: translateY(0); }
+.sg {
+  background: var(--card);
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+.si {
+  height: 100rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  color: var(--t1);
+  border-bottom: 1rpx solid var(--line);
+}
+.si:last-child { border-bottom: none; }
+.si:active { background: rgba(60, 60, 67, .04); }
+.sc {
+  margin-top: 16rpx;
+  height: 100rpx;
+  border-radius: 24rpx;
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: var(--t1);
+}
+.sc:active { background: rgba(60, 60, 67, .04); }
