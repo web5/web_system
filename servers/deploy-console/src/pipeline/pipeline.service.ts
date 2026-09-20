@@ -13,7 +13,15 @@ import { Repository } from 'typeorm';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { STATIC_MODULES_REL, parseReleaseRef, toCommitId, defaultReleaseWorkspace } from './release-paths';
+import {
+  STATIC_MODULES_REL,
+  parseReleaseRef,
+  toCommitId,
+  defaultReleaseWorkspace,
+  artifactsDir,
+  deployRootAbs,
+  deployTargetAbs,
+} from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -186,6 +194,10 @@ export interface ModuleSnapshot {
   pm2?: string;
   publicPath?: string;
   entry?: string;
+  /** 部署根路径（相对发布目录根；M2） */
+  deployRoot?: string;
+  /** 默认产物路径（相对版本目录；M2） */
+  defaultArtifactPath?: string;
 }
 
 /** 阶段变量解析入参（纯函数入参，便于单测） */
@@ -198,6 +210,10 @@ export interface StageVarsInput {
    */
   pipelineVars?: Record<string, string>;
   moduleType?: string;
+  /** 模块部署根路径（相对发布目录根；M2） */
+  deployRoot?: string;
+  /** 模块默认产物路径（相对版本目录；M2） */
+  defaultArtifactPath?: string;
   dir?: string;
   pm2?: string;
   publicPath?: string;
@@ -267,6 +283,11 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     ENTRY_FILE: entry,
     BUILD_OUTPUT_DIR: path.join(ws, type === 'backend' ? 'servers' : 'apps', dir, 'dist'),
     ARTIFACT_DIR: path.join(ws, STATIC_MODULES_REL, publicPath, version),
+    // M2（2026-09-17）：新增「产物区 / 部署目标」推导 —— 模块自持 deployRoot，环境只分层。
+    // 只做**补充注入**，不覆盖 PUBLISH_PATH 等旧变量：旧模板行为完全不变（双轨，零破坏）。
+    ARTIFACTS_DIR: artifactsDir(ws, i.moduleKey, i.env || 'local', version),
+    DEPLOY_ROOT: deployRootAbs(ws, i.deployRoot),
+    DEPLOY_TARGET: deployTargetAbs(ws, i.deployRoot, i.defaultArtifactPath),
     // 探活与清理
     GATEWAY_URL: i.gatewayUrl || 'http://localhost:6000',
     GATEWAY_TTL_SEC: String(i.gatewayTtlSec ?? 10),
@@ -498,7 +519,8 @@ export class PipelineService {
 
     const id = this.generateId();
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
-    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.pipelineId);
+    // 提交解析带上 env：未显式选流水线时按「模块 × 环境」自动匹配（用户 2026-09-17）
+    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.pipelineId, dto.env);
     // 一致性（2026-09-15）：一条流水线只属于一个环境（按「模块 × 环境」拆），
     // 提交的环境必须与流水线的 env 相同 —— 否则会出现「env=dev 却跑 admin-local 流水线」
     // 这种环境/流水线错配的实例（投递目标、产物命名空间全跟着流水线走，错配很隐蔽）。
@@ -1775,6 +1797,8 @@ export class PipelineService {
       moduleKey: p.moduleKey,
       moduleType: mod?.type || p.moduleType,
       dir: mod?.dir,
+      deployRoot: mod?.deployRoot,
+      defaultArtifactPath: mod?.defaultArtifactPath,
       pm2: mod?.pm2,
       publicPath: mod?.publicPath,
       entry: mod?.entry,

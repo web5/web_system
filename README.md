@@ -1,10 +1,21 @@
 # 科豆 AI（web_system）
 
 全栈 monorepo —— 微前端基座 + 多个 NestJS 微服务 + 微信小程序 + 自研发布平台。
-一个仓库装三类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**数字人体系**（`.codebuddy/`）。
+一个仓库装四类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**知识库**（`raw/` → `wiki/`）、**数字人体系**（`.codebuddy/`）。
 
-> AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)；
+> AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)（工程文档一律从本 README 进）；
 > 完整开发指南见 [docs/development-guide.md](./docs/development-guide.md)。
+
+### 资产构成与知识库边界（`raw/` + `wiki/`）
+
+| 目录 | 内容 | 维护方式 |
+|---|---|---|
+| `raw/` | **外部**素材原文快照（文章 / 论文 / 推文 …） | AI 采集，**不可变** —— 只新增，不改写已落盘文件 |
+| `wiki/` | 由 `raw/` 编译出的知识文章 + `index.md` 全局索引 + `log.md` 操作日志 | AI 维护，人读与提问 |
+| `docs/` | **项目自产**文档（架构 / 开发 / UI / 产品 / 发布手册） | 人写，随代码演进 |
+
+- **边界判据**（只此一条）：**外部输入的编译结论** → `wiki/`；**本项目自产的东西** → `docs/`。项目自产文档不进 `wiki/`，外部素材原文不进 `docs/`。
+- 位置固定在**项目根**（`raw/` + `wiki/`）—— 数字人技能默认即此布局，故不改技能里的路径约定；两个目录**随仓库入库**，知识库才能跨会话累积。
 
 ---
 
@@ -29,7 +40,7 @@ web_system/
 │   ├── portal/               # 用户门户（微前端模块）
 │   ├── admin/                # 管理后台（微前端模块，路由 base = /admin/）
 │   ├── deploy-console/       # 运维控制台前端（独立 SPA，由 6200 后端 serve）
-│   └── mini-contract/        # 微信小程序·合同翻译官（原生 + TS）
+│   └── kedou-ai-minigram/        # 微信小程序·科豆 AI（原生 + TS）
 ├── servers/                  # 后端微服务（NestJS + TypeORM，每服务独立库）
 │   ├── gateway/              # API 反代 + 微前端基座 + 版本分发/灰度
 │   ├── auth-service/         # 认证（登录/JWT/微信）
@@ -58,7 +69,7 @@ web_system/
 └── ecosystem.config.cjs      # pm2 进程清单（web-*）
 ```
 
-> **小程序命名约定**：一个微信小程序 = 一个 `apps/mini-<业务>` 包（当前 `mini-contract` = 合同翻译官）。新增小程序时同步三处：① `rush.json` 登记 package；② `scripts/modules.json` 注册发布模块（`key` 与目录同名、`type=frontend`、`publicPath` 唯一）；③ 模块 key 由 `modules.json` 种子进发布平台 DB，如需改 key 走 `migrations/` 迁移（参考 `0005_rename_mini_app_to_mini_contract.sql`）。
+> **小程序命名约定**：一个微信小程序 = 一个 `apps/<小程序名>` 包（当前 `apps/kedou-ai-minigram` = 科豆 AI 小程序；2026-09 由 `apps/mini-contract`（合同翻译官）更名而来，不再沿用早先的 `mini-<业务>` 前缀）。新增小程序时同步三处：① `rush.json` 登记 package；② `scripts/modules.json` 注册发布模块（`key` 与目录同名、`type=frontend`、`publicPath` 唯一）；③ 模块 key 由 `modules.json` 种子进发布平台 DB，如需改 key 走 `migrations/` 迁移（参考 `0006_rename_mini_contract_to_kedou_ai_minigram.sql`）。
 
 ---
 
@@ -68,7 +79,7 @@ web_system/
 |---|---|---|
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Ant Design Vue 4.x | 微前端化：shell 基座 + `shell-loader` 动态加载模块 |
 | 后端 | NestJS 10 + TypeORM | MySQL（本地）/ PostgreSQL（生产），全部 TS strict |
-| 小程序 | 微信原生 + TS | `apps/mini-contract`（合同翻译官） |
+| 小程序 | 微信原生 + TS | `apps/kedou-ai-minigram`（科豆 AI） |
 | 共享 | pnpm workspace | 跨端配置统一收口 `@web-system/shared` |
 | 部署 | pm2 + Docker Compose + Nginx + 自研发布平台 | 见 §6 |
 
@@ -178,7 +189,7 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 ## 6 架构要点
 
 ```
-前端 apps/（shell 基座 + portal/admin 模块 + mini-contract 小程序 + deploy-console SPA）
+前端 apps/（shell 基座 + portal/admin 模块 + kedou-ai-minigram 小程序 + deploy-console SPA）
         │  shell-loader + window.__SHARED__ 共享依赖，按 __MODULES_MANIFEST__ 加载版本
 Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分发/灰度
 后端 servers/（12 个 NestJS 微服务，每服务独立库）
@@ -240,7 +251,7 @@ curl -s localhost:6000/__manifest__ # 确认 admin version=$P/$V
 
 ## 8 开发规范（工程铁律）
 
-> 完整版：`.codebuddy/references/coding-best-practices.md`
+> 完整版：`.codebuddy/rules/coding-best-practices.md`
 
 1. **同类修改必须扫全量**：改横切关注点前先 grep 所有服务（`enableCors` / `useGlobalFilters` / `console.`）。
 2. **跨端配置禁止拷贝**：统一收口 `packages/shared/src/` → `index.ts` re-export → 删各端本地拷贝。
@@ -273,6 +284,7 @@ packages/shared/src/api.ts
 | Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
 | Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
 | CI 门禁与红绿线 | [docs/development/ai-native-sdlc-ci-deployment.md](./docs/development/ai-native-sdlc-ci-deployment.md) |
+| 跨工具 Agent 装配（设计方案，未实施） | [docs/development/cross-tool-agent-context-design.md](./docs/development/cross-tool-agent-context-design.md) |
 
 ---
 

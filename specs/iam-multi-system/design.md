@@ -8,7 +8,7 @@
 
 | 项 | 现状 |
 |---|---|
-| 系统清单 | portal（C 端，含 mini-contract）／ admin（运营）／ deploy-console（运维） |
+| 系统清单 | portal（C 端，含 kedou-ai-minigram）／ admin（运营）／ deploy-console（运维） |
 | users 表 | **无 system 字段**；C 端与运营混存，只能靠 `mp_openid` / `oa_openid` 是否非空区分（用户名 `wx_` 前缀两种来源都用，不可靠） |
 | auth-service | `POST /auth/login`，**自己直连 users 表**校验；JWT payload `{sub:userId, username, roles, type}`；密钥 `JWT_SECRET`（与 gateway 同源，缺失即退出） |
 | deploy-console | **独立登录**：`.env` 的 `ADMIN_USER`/`ADMIN_PASS` 硬比对；JWT payload `{sub:username}`、无 roles、硬编码 `role:'admin'`；密钥有 `'deploy-console-secret-key-change-in-production'` 兜底；`ecosystem.config.js` **刻意不给它注入 JWT_SECRET** |

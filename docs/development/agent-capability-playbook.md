@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.0 |
+| 文档版本 | v1.8 |
 | 创建日期 | 2026-09-10 |
 | 校验环境 | macOS 本地 + pm2 `web-*` 全量 online + nginx `https://local.kedouai.com` |
 
@@ -22,6 +22,7 @@
 | 2026-09-11 | v1.5 | **「模型」页整体下线**（清单/价格统一在「字典管理 · 大模型清单」维护），§4 去掉该入口；§7 增坑 13（admin 内部跳转不能手写 `/admin` 前缀，router base 已含，重复会 404） | AI |
 | 2026-09-11 | v1.6 | 收尾下线（过渡期结束）：单价迁入字典 `llm_models`（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
 | 2026-09-15 | v1.7 | 全量补齐 11 个后端微服务接口契约文档：新增 `scripts/gen-api-design.mjs`（从 Swagger 注解自动提取，含 DTO 字段级 schema，最多 2 层嵌套），生成 `specs/<svc>/api-design.md`；§相关文档索引 / §8.1 / §8.2 增加 api-design 索引指针与重生成命令 | AI |
+| 2026-09-18 | v1.8 | 项目入口 `.codebuddy/CODEBUDDY.md` 改为导航式（工程事实下沉到单事实源）：原文「微前端发布四步」的引用（当时指向 `.codebuddy/CODEBUDDY.md`）改指 `docs/development/admin-dev.md` §一·C（共两处） | AI |
 
 ---
 
@@ -48,7 +49,7 @@ knowledge:view  knowledge:manage
 | 链路 | 路径 | 经过 Agent 编排？ |
 |---|---|---|
 | portal AI 助手 `/portal/chat` | `/api/ai/*` | ❌ 纯 LLM 对话 |
-| admin Playground / mini-contract 合同 | `/api/ai-agent/*` | ✅ ReAct 编排 |
+| admin Playground / kedou-ai-minigram 合同 | `/api/ai-agent/*` | ✅ ReAct 编排 |
 
 ---
 
@@ -56,7 +57,7 @@ knowledge:view  knowledge:manage
 
 ```
 ┌─ 体验层 ───────────────────────────────────────────────────────┐
-│ admin「Agents」菜单 8 页 │ portal /chat │ mini-contract │ kedou-agent CLI │
+│ admin「Agents」菜单 8 页 │ portal /chat │ kedou-ai-minigram │ kedou-agent CLI │
 └────────────────────────────────────────────────────────────────┘
         │  /api/*  统一经 gateway:6000 反代，前端不直连后端
 ┌─ 管控层 · servers/ai-service:6003 ──────────────────────────────┐
@@ -104,7 +105,7 @@ https://local.kedouai.com/admin/           # nginx 集成（推荐，需 sudo ~/
 bash scripts/start-frontend.sh             # 或 dev server：admin 5174 / portal 5173
 ```
 
-> **admin / portal 是微前端模块**，改完前端源码必须走「构建 → 拷贝 → 更新版本表 → 等缓存」四步才生效，否则浏览器仍加载旧产物。详见 [`.codebuddy/CODEBUDDY.md`](../../.codebuddy/CODEBUDDY.md) §4.1。
+> **admin / portal 是微前端模块**，改完前端源码必须走「构建 → 拷贝 → 更新版本表 → 等缓存」四步才生效，否则浏览器仍加载旧产物。详见 [`admin-dev.md`](./admin-dev.md) §一·C。
 > 微前端之间没有 agent 专属模块 —— agent 能力全部承载在 **admin 模块内部**。
 
 ---
@@ -139,7 +140,7 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 
 | 方法 | 外部路径 | 权限 | 用途 |
 |---|---|---|---|
-| POST | `/api/ai-agent/agent/run` | 登录 | **C 端 SSE 运行**（mini-contract 在用） |
+| POST | `/api/ai-agent/agent/run` | 登录 | **C 端 SSE 运行**（kedou-ai-minigram 在用） |
 | POST | `/api/ai-agent/agent/admin-run` | `agents:debug` | Playground 调试运行，额外返回定义快照 |
 | GET | `/api/ai-agent/agent/models` | `agents:debug` | 已注册模型 + 可用性 |
 | POST | `/api/ai-agent/agent/permission/:requestId` | 登录 | 危险工具二次确认 `{approve}` |
@@ -233,14 +234,14 @@ gateway 侧 `^/api/ai-agent` → 剥前缀 → `/agent/*`。
 
 > 📌 菜单「运行记录」指向 `/agents`（概览页），真正的 run 列表需**从概览页点进某个 agent**。
 > 📌 **原「模型」页已下线**（v1.5）：模型清单与价格的唯一维护入口是「字典管理 · 大模型清单」（字段定义走独立页面、记录走抽屉），不再是独立菜单。
-> 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/mini-contract/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
+> 📌 全仓库直接打 `/api/ai-agent` 的前端只有 2 处：`AgentPlayground.vue`（3 个）和 `apps/kedou-ai-minigram/services/{contract,ocr}-api.ts`。排查时优先看这两个文件。
 
 **门户与小程序入口**
 
 | 入口 | 位置 | 走的链路 |
 |---|---|---|
 | AI 助手 | `/portal/chat`，导航栏「AI 助手」触发器在 `AppNavbar.vue` | `/api/ai/*`（**不经过 agent 编排**，源码注释标注为「保留旧页面兼容」） |
-| 合同风险 / OCR | `apps/mini-contract` | `/api/ai-agent/*`（真编排） |
+| 合同风险 / OCR | `apps/kedou-ai-minigram` | `/api/ai-agent/*`（真编排） |
 
 ---
 
@@ -283,7 +284,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 
 ## 7. 坑与易混淆点（按踩坑频率排序）
 
-1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 mini-contract 才走 `/api/ai-agent/*`。报问题时先分清。
+1. **前后链路混淆** —— portal `/chat` 走 `/api/ai/*` 不经编排；admin playground 与 kedou-ai-minigram 才走 `/api/ai-agent/*`。报问题时先分清。
 2. **菜单看不见** —— 100% 是权限。到 `/admin/settings/roles` 补 §0 的权限码；忘记密码 `bash scripts/local-up.sh --seed`（admin / admin123）。
    ⚠️ **新增权限码后菜单仍不出现**：权限是"双读"——后端各服务鉴权读**代码常量**（`ROLE_PERMISSIONS`），前端菜单读 **DB**（`/api/permissions/my`）。而权限点是 `PermissionService.seed()` 在 user-service 启动时才写进 DB 的，所以加了新码只重启后端服务，会出现"接口调得通、菜单不出现"。
    **处理**：**发布流水线收尾会自动同步一次**（`PIPELINE_PERM_SYNC`，默认开，失败只告警不阻断发布），所以正常走发布流程无需人工干预。若是没走流水线（手工改代码/临时调试），按下面来：
@@ -293,7 +294,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
    ①②③ 等价（都执行 `seed()`，全量覆盖内置角色权限），但只有 ①② 不需要重启服务。
    **页面会主动提示**：「角色权限」页顶部在代码声明与 DB 不一致时出现黄色告警（缺失/多余权限点 + 内置角色差集），点「立即同步」即可 —— 不用等别人告诉你"菜单没出来"。
    **审计**：每次同步都会落一条 `sync_permission` 操作日志（operator 为 `pipeline:<提交人>` 或页面用户名），在「操作日志」页可查。
-3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `.codebuddy/CODEBUDDY.md` §4.1。
+3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `docs/development/admin-dev.md` §一·C。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
 5. **「数字人」≠ 产品功能** —— `.codebuddy/agent-kit/` 是给 AI 用的开发侧方法论（11 skill + 5 红线），没有前端页面。面向用户的概念统一叫 Agent。
 6. **`.codebuddy/agent-kit/` 是副本，运行时加载 `.codebuddy/skills/`**，两者不互通，CI 同步不会更新运行时行为。`scripts/sync-agent-kit.sh` 补这段：默认 dry-run 报 diff，`--mirror` 覆盖副本，**永不自动覆盖运行源**（会丢 fe/be 项目专属路由）。

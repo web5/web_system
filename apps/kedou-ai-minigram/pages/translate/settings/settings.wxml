@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="sec-t">默认参数</view>
+  <view class="list">
+    <view class="r" bindtap="pickSrc"><text>默认源语言</text><text class="v">{{srcLang}} ›</text></view>
+    <view class="r" bindtap="pickTgt"><text>默认目标语言</text><text class="v">{{tgtLang}} ›</text></view>
+    <view class="r" bindtap="pickRegister"><text>默认语气</text><text class="v">{{register}} ›</text></view>
+    <view class="r" bindtap="pickStyle"><text>默认风格</text><text class="v">{{style}} ›</text></view>
+  </view>
+
+  <view class="sec-t">术语与历史</view>
+  <view class="list">
+    <view class="r" bindtap="goGlossary"><text>个人术语库</text><text class="v">12 条 ›</text></view>
+    <view class="r" bindtap="toggleStream"><text>逐字流式输出</text><text class="v">{{stream ? '已开启' : '已关闭'}} ›</text></view>
+    <view class="r" bindtap="pickAccent"><text>朗读发音</text><text class="v">{{accent}} ›</text></view>
+    <view class="r" bindtap="clearHistory"><text>清空翻译历史</text><text class="v">›</text></view>
+  </view>
+
+  <view class="foot">这里的设置只影响「翻译」功能</view>
+</view>

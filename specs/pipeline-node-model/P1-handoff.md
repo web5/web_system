@@ -66,8 +66,8 @@
 
 ### 3.2 其余模块的投递路径未逐个验证
 
-48 条里只有 `admin`、`mcp-gateway` 真跑过。`mini-contract` 的构建是 `node scripts/upload.js`（上传小程序），
-它现在的 `PUBLISH_PATH` 是按「前端类」给的 `static/modules/mini-contract`，**可能需要改**。
+48 条里只有 `admin`、`mcp-gateway` 真跑过。`kedou-ai-minigram` 的构建是 `node scripts/upload.js`（上传小程序），
+它现在的 `PUBLISH_PATH` 是按「前端类」给的 `static/modules/kedou-ai-minigram`，**可能需要改**。
 
 ### 3.3 历史技术债（未做，不影响当前）
 
