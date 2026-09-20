@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>deploy-console 双域重构 · 交互原型 v3（控制台 + 产品页环境切换）</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#0a0a0c;min-height:100vh;padding:24px 20px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:20px;
+  }
+  .proto-head{width:1280px;color:#e5e5e5;}
+  .proto-head h1{font-size:18px;font-weight:600;margin-bottom:6px;}
+  .proto-head .sub{font-size:12px;color:#8b8b90;line-height:1.8;}
+  .proto-head .sub b{color:#fb923c;font-weight:600;}
+
+  /* =========================================================
+     形态 A：deploy-console（真实深色控制台壳：侧栏 #0F0F12 + 顶栏 #161618）
+     ========================================================= */
+  .dc-desktop{
+    width:1280px;height:820px;border-radius:14px;overflow:hidden;position:relative;
+    background:#0f0f12;border:1px solid #2a2a2e;box-shadow:0 24px 70px rgba(0,0,0,.55);
+    display:flex;
+  }
+  .dc-sider{width:220px;background:#0f0f12;border-right:1px solid #2a2a2e;
+    display:flex;flex-direction:column;flex-shrink:0;overflow:auto;padding-bottom:10px;}
+  .dc-logo{height:56px;display:flex;align-items:center;gap:9px;padding:0 16px;
+    border-bottom:1px solid #1f1f23;flex-shrink:0;}
+  .dc-logo .lt{color:#f5a623;font-size:15px;font-weight:700;letter-spacing:.2px;}
+  .dc-menu{padding:8px 8px 0;}
+  .dc-item{padding:9px 12px;border-radius:8px;color:#a3a3a3;font-size:13px;cursor:pointer;
+    display:flex;align-items:center;gap:9px;margin-bottom:2px;border-radius:6px;}
+  .dc-item:hover{background:rgba(255,255,255,.06);color:#ededed;}
+  .dc-item.active{background:rgba(249,115,22,.18);color:#fb923c;font-weight:600;}
+  .dc-item .ic{width:15px;height:15px;flex-shrink:0;opacity:.9;}
+  .dc-item .ic svg{width:100%;height:100%;}
+  .dc-group{font-size:11px;color:#6b6b70;font-weight:600;padding:14px 12px 6px;letter-spacing:.5px;
+    display:flex;align-items:center;gap:7px;}
+  .dc-group .ic{width:14px;height:14px;}
+  .dc-group .ic svg{width:100%;height:100%;}
+  .dc-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#101013;}
+  .dc-header{height:56px;background:#161618;border-bottom:1px solid #2a2a2e;flex-shrink:0;
+    display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
+  .dc-header .title{color:#f5f5f5;font-size:15px;font-weight:600;}
+  .dc-header .user{display:flex;align-items:center;gap:9px;padding:5px 11px 5px 5px;border-radius:10px;cursor:pointer;}
+  .dc-header .user:hover{background:rgba(255,255,255,.06);}
+  .dc-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#F97316,#f5a623);
+    color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+  .dc-header .un{color:#a3a3a3;font-size:13px;}
+  .dc-content{flex:1;overflow:auto;padding:20px 22px;
+    background:radial-gradient(900px 480px at 88% -12%, rgba(249,115,22,.10), transparent 62%),#101013;}
+  .dc-content .screen{display:none;}
+  .dc-content .screen.active{display:block;animation:fd .2s ease;}
+  @keyframes fd{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  /* console 深色组件 */
+  .dc-page-head{margin-bottom:14px;}
+  .dc-page-head h1{font-size:19px;font-weight:600;color:#f5f5f5;}
+  .dc-page-head .sub{font-size:12px;color:#8b8b90;margin-top:4px;}
+  .dc-row{display:flex;align-items:center;gap:8px;}
+  .dc-spacer{flex:1;}
+  .dc-card{background:rgba(255,255,255,.035);border:1px solid #26262a;border-radius:14px;
+    padding:16px;margin-bottom:14px;}
+  .dc-card .ct{font-size:12px;color:#6b6b70;font-weight:600;margin-bottom:10px;}
+  .dc-content table{width:100%;border-collapse:collapse;font-size:13px;}
+  .dc-content th{text-align:left;color:#6b6b70;font-weight:600;font-size:12px;padding:8px 10px;
+    border-bottom:1px solid #26262a;white-space:nowrap;}
+  .dc-content td{padding:9px 10px;border-bottom:1px solid #1f1f23;color:#d4d4d8;vertical-align:middle;}
+  .dc-content tbody tr:hover{background:rgba(255,255,255,.03);}
+  .dc-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;}
+  .dc-num{font-variant-numeric:tabular-nums;}
+  .dc-muted{color:#6b6b70;font-size:12px;}
+  .dc-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap;}
+  .dc-badge.neutral{background:rgba(255,255,255,.08);color:#a3a3a3;}
+  .dc-badge.primary{background:rgba(249,115,22,.18);color:#fb923c;}
+  .dc-badge.ok{background:rgba(46,158,91,.2);color:#4ade80;}
+  .dc-badge.err{background:rgba(229,72,77,.2);color:#f87171;}
+  .dc-badge.warn{background:rgba(232,131,58,.2);color:#fbbf24;}
+  .dc-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .dc-btn{background:rgba(255,255,255,.07);color:#d4d4d8;border:1px solid #2f2f34;
+    border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;font-weight:500;}
+  .dc-btn:hover{background:rgba(255,255,255,.12);}
+  .dc-btn.primary{background:#F97316;color:#fff;border-color:#F97316;}
+  .dc-btn.primary:hover{background:#EA6A0A;}
+  .dc-btn[disabled]{opacity:.4;cursor:not-allowed;}
+  .dc-btn.link{background:none;border:none;color:#fb923c;padding:5px 6px;}
+  .dc-sw{width:30px;height:17px;border-radius:20px;background:#3a3a40;position:relative;cursor:pointer;display:inline-block;}
+  .dc-sw.on{background:#F97316;}
+  .dc-sw::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:left .15s;}
+  .dc-sw.on::after{left:15px;}
+  .dc-seg{display:inline-flex;border:1px solid #2f2f34;border-radius:8px;overflow:hidden;}
+  .dc-seg span{padding:5px 12px;font-size:12px;color:#a3a3a3;cursor:pointer;background:rgba(255,255,255,.03);}
+  .dc-seg span.on{background:rgba(249,115,22,.18);color:#fb923c;font-weight:600;}
+  .dc-search{border:1px solid #2f2f34;border-radius:8px;padding:6px 10px;font-size:12px;
+    background:rgba(255,255,255,.04);color:#a3a3a3;min-width:170px;}
+  .dc-tabs{display:flex;gap:2px;border-bottom:1px solid #26262a;margin-bottom:14px;}
+  .dc-tabs .t2{padding:8px 14px;font-size:13px;color:#a3a3a3;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .dc-tabs .t2.active{color:#fb923c;font-weight:600;border-bottom-color:#fb923c;}
+  .dc-kv{display:grid;grid-template-columns:130px 1fr;gap:7px 14px;font-size:13px;color:#d4d4d8;}
+  .dc-kv .k{color:#6b6b70;}
+  .dc-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .dc-mini{background:rgba(255,255,255,.04);border:1px solid #26262a;border-radius:10px;padding:13px;}
+  .dc-mini .mt{font-size:11px;color:#6b6b70;margin-bottom:6px;font-weight:600;}
+  .dc-mini .mv{font-size:16px;font-weight:600;color:#f5f5f5;}
+  .dc-alert{background:rgba(232,131,58,.12);border:1px solid rgba(232,131,58,.45);color:#e5e5e5;
+    border-radius:10px;padding:9px 12px;font-size:12px;margin-bottom:12px;}
+  .dc-alert .at{font-weight:600;color:#fbbf24;}
+  .dc-crumb{font-size:12px;color:#6b6b70;margin-bottom:6px;}
+  .dc-crumb a{color:#8b8b90;cursor:pointer;}
+  .dc-ph{color:#55555a;}
+
+  /* =========================================================
+     形态 B：admin 产品页（浅色壳）+ 环境切换挂件
+     ========================================================= */
+  .ad-desktop{width:1280px;height:760px;border-radius:14px;overflow:hidden;position:relative;
+    background:#f5f7fa;border:1px solid #d8dde5;box-shadow:0 24px 70px rgba(0,0,0,.45);display:flex;}
+  .ad-sider{width:210px;background:#fff;border-right:1px solid #e8ebf0;flex-shrink:0;display:flex;flex-direction:column;}
+  .ad-sider-head{height:56px;display:flex;align-items:center;gap:9px;padding:0 16px;}
+  .ad-logo-dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#FF8C42,#f5a623);}
+  .ad-logo-t{color:#FF8C42;font-size:15px;font-weight:700;}
+  .ad-menu{padding:4px 8px;}
+  .ad-item{padding:9px 12px;border-radius:8px;color:#5b6372;font-size:13px;cursor:pointer;margin-bottom:2px;}
+  .ad-item:hover{background:#f5f7fa;}
+  .ad-item.active{background:linear-gradient(90deg,rgba(255,140,66,.15),rgba(255,140,66,.04));color:#FF8C42;font-weight:600;}
+  .ad-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .ad-header{height:56px;background:#fff;border-bottom:1px solid #e8ebf0;flex-shrink:0;
+    display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
+  .ad-crumb{font-size:13px;color:#9aa1ad;}
+  .ad-crumb b{color:#1a1f2e;font-weight:500;}
+  .ad-user{display:flex;align-items:center;gap:8px;font-size:13px;color:#5b6372;}
+  .ad-user .av{width:28px;height:28px;border-radius:50%;background:#FF8C42;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+  .ad-content{flex:1;overflow:auto;padding:18px 22px;}
+  .ad-content .screen{display:none;}
+  .ad-content .screen.active{display:block;}
+  .ad-page-head h1{font-size:19px;font-weight:600;color:#1a1f2e;}
+  .ad-page-head .sub{font-size:12px;color:#5b6372;margin-top:4px;margin-bottom:14px;}
+  .ad-card{background:#fff;border:1px solid #e8ebf0;border-radius:14px;padding:16px;margin-bottom:14px;
+    box-shadow:0 2px 12px rgba(20,30,50,.05);}
+  .ad-card .ct{font-size:12px;color:#9aa1ad;font-weight:600;margin-bottom:10px;}
+  .ad-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+  .ad-kpi{background:#fff;border:1px solid #e8ebf0;border-radius:14px;padding:14px;}
+  .ad-kpi .kt{font-size:12px;color:#9aa1ad;margin-bottom:6px;}
+  .ad-kpi .kv{font-size:20px;font-weight:600;color:#1a1f2e;}
+  .ad-kpi .kd{font-size:11px;color:#9aa1ad;margin-top:4px;}
+  .ad-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .ad-table th{text-align:left;color:#9aa1ad;font-weight:600;font-size:12px;padding:8px 10px;border-bottom:1px solid #e8ebf0;}
+  .ad-table td{padding:9px 10px;border-bottom:1px solid #f0f2f6;color:#1a1f2e;}
+  .ad-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;}
+  .ad-badge.ok{background:#E7F5EC;color:#2E9E5B;}
+  .ad-badge.neutral{background:#f5f7fa;color:#5b6372;border:1px solid #e8ebf0;}
+
+  /* 环境切换挂件（产品页右下角，常驻可折叠） */
+  .env-widget{position:absolute;right:18px;bottom:18px;z-index:40;display:flex;flex-direction:column;
+    align-items:flex-end;gap:8px;}
+  .env-pill{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e8ebf0;
+    border-radius:22px;padding:7px 14px 7px 11px;box-shadow:0 6px 22px rgba(20,30,50,.14);
+    cursor:pointer;font-size:12px;color:#5b6372;user-select:none;}
+  .env-pill:hover{border-color:#ffd0ab;box-shadow:0 6px 22px rgba(255,140,66,.22);}
+  .env-pill .dotc{width:8px;height:8px;border-radius:50%;background:#FF8C42;}
+  .env-pill .en{color:#FF8C42;font-weight:700;font-size:13px;}
+  .env-pill .caret{color:#9aa1ad;font-size:10px;}
+  .env-panel{background:#fff;border:1px solid #e8ebf0;border-radius:12px;width:230px;overflow:hidden;
+    box-shadow:0 12px 36px rgba(20,30,50,.18);display:none;}
+  .env-panel.show{display:block;animation:fd .16s ease;}
+  .env-panel .ph{padding:9px 13px;font-size:11px;color:#9aa1ad;font-weight:600;border-bottom:1px solid #f0f2f6;}
+  .env-opt{padding:9px 13px;font-size:13px;color:#5b6372;cursor:pointer;display:flex;
+    align-items:center;justify-content:space-between;}
+  .env-opt:hover{background:#f5f7fa;}
+  .env-opt.on{background:#FFF1E7;color:#FF8C42;font-weight:600;}
+  .env-opt .oid{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#9aa1ad;}
+  .env-opt.on .oid{color:#FF8C42;}
+  .env-panel .pf{padding:8px 13px;font-size:11px;color:#9aa1ad;border-top:1px solid #f0f2f6;line-height:1.6;}
+  .env-panel .pf b{color:#FF8C42;}
+  /* 环境多（几十个）时的应对：搜索 + 常用置顶 + 限高滚动 + 分组 */
+  .env-search{padding:8px 10px;border-bottom:1px solid #f0f2f6;}
+  .env-search input{width:100%;border:1px solid #e8ebf0;border-radius:8px;padding:7px 10px;
+    font-size:12px;outline:none;color:#1a1f2e;background:#fff;}
+  .env-search input:focus{border-color:#ffd0ab;}
+  .env-list{max-height:288px;overflow:auto;}
+  .env-sec{padding:8px 13px 4px;font-size:11px;color:#9aa1ad;font-weight:600;
+    position:sticky;top:0;background:#fff;}
+  .env-empty{padding:20px;text-align:center;font-size:12px;color:#9aa1ad;}
+
+  /* 大弹窗选择器：覆盖当前页面，容纳几十个环境；每行 **ID 前置** 避免重名选错 */
+  .env-modal{position:absolute;inset:0;background:rgba(20,30,50,.42);backdrop-filter:blur(2px);
+    z-index:70;display:none;align-items:center;justify-content:center;}
+  .env-modal.show{display:flex;animation:fd .16s ease;}
+  .env-dialog{width:680px;max-height:620px;background:#fff;border-radius:16px;overflow:hidden;
+    box-shadow:0 24px 70px rgba(20,30,50,.32);display:flex;flex-direction:column;}
+  .env-dialog-head{padding:17px 22px 13px;border-bottom:1px solid #f0f2f6;display:flex;
+    align-items:center;justify-content:space-between;}
+  .env-dialog-head h3{font-size:16px;font-weight:600;color:#1a1f2e;}
+  .env-dialog-head .hd-right{display:flex;align-items:center;gap:12px;}
+  .env-dialog-head .cur{font-size:12px;color:#9aa1ad;}
+  .env-dialog-head .cur b{color:#FF8C42;font-family:ui-monospace,Menlo,monospace;}
+  .env-dialog-head .close{width:28px;height:28px;border-radius:8px;border:1px solid #e8ebf0;
+    background:#fff;color:#9aa1ad;cursor:pointer;font-size:13px;line-height:1;padding:0;}
+  .env-dialog-head .close:hover{color:#FF8C42;border-color:#ffd0ab;}
+  .env-dialog-search{padding:12px 22px;border-bottom:1px solid #f0f2f6;}
+  .env-dialog-search input{width:100%;border:1px solid #e8ebf0;border-radius:10px;padding:10px 14px;
+    font-size:13px;outline:none;color:#1a1f2e;background:#fff;}
+  .env-dialog-search input:focus{border-color:#ffd0ab;box-shadow:0 0 0 3px rgba(255,140,66,.10);}
+  .env-dialog-list{flex:1;overflow:auto;padding:6px 12px 12px;}
+  .em-head{display:grid;grid-template-columns:74px 1fr 64px 52px;gap:10px;padding:6px 10px;
+    font-size:11px;color:#9aa1ad;font-weight:600;}
+  .em-row{display:grid;grid-template-columns:74px 1fr 64px 52px;align-items:center;gap:10px;
+    padding:9px 10px;border-radius:9px;cursor:pointer;font-size:13px;color:#5b6372;}
+  .em-row:hover{background:#f5f7fa;}
+  .em-row.on{background:#FFF1E7;}
+  .em-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:600;
+    color:#1a1f2e;background:#f5f7fa;border:1px solid #e8ebf0;border-radius:6px;padding:2px 7px;
+    text-align:center;overflow:hidden;text-overflow:ellipsis;}
+  .em-row.on .em-id{color:#fff;background:#FF8C42;border-color:#FF8C42;}
+  .em-name{color:#5b6372;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .em-row.on .em-name{color:#FF8C42;font-weight:600;}
+  .em-site{font-size:11px;color:#9aa1ad;text-align:center;}
+  .em-cur{font-size:11px;color:#FF8C42;font-weight:600;text-align:right;}
+  .env-dialog-foot{padding:12px 22px;border-top:1px solid #f0f2f6;display:flex;
+    align-items:center;justify-content:space-between;font-size:12px;color:#9aa1ad;}
+  .env-dialog-foot a{color:#FF8C42;cursor:pointer;}
+
+  /* 切换时的加载反馈 */
+  .env-loading{position:absolute;inset:0;background:rgba(255,255,255,.78);backdrop-filter:blur(2px);
+    z-index:60;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+  .env-loading.show{display:flex;}
+  .env-loading .spin{width:30px;height:30px;border-radius:50%;border:3px solid #ffd0ab;border-top-color:#FF8C42;
+    animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .env-loading .lt{font-size:13px;color:#1a1f2e;font-weight:600;}
+  .env-loading .ls{font-size:12px;color:#9aa1ad;font-family:ui-monospace,Menlo,monospace;}
+  .env-loading .ls2{font-size:11px;color:#b8bec8;margin-top:4px;}
+  .ad-envtip{display:inline-flex;align-items:center;gap:6px;background:#FFF1E7;color:#FF8C42;
+    border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-left:8px;}
+</style>
+</head>
+<body>
+
+<div class="proto-head">
+  <h1>deploy-console 双域重构 · 交互原型 v3</h1>
+  <div class="sub">
+    上半：<b>部署控制台</b>（贴合现有 console 深色壳：侧栏 #0F0F12 + 顶栏 #161618，菜单按「微前端 / API 网关」分域）。<br>
+    下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。
+  </div>
+</div>
+
+<!-- =========================================================
+     形态 A：部署控制台
+     ========================================================= -->
+<div class="dc-desktop">
+  <div class="dc-sider">
+    <div class="dc-logo">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="7" fill="#001529"/>
+        <path d="M16 6 L25 11 V21 L16 26 L7 21 V11 Z" stroke="#F5A623" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+        <path d="M16 10.6 L21.6 13.8 V20.2 L16 23.4 L10.4 20.2 V13.8 Z" fill="#F5A623"/>
+      </svg>
+      <span class="lt">Beehive</span>
+    </div>
+    <div class="dc-menu">
+      <div class="dc-item" id="nav-dashboard" onclick="dc('dashboard','仪表盘')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>仪表盘
+      </div>
+
+      <div class="dc-group">微前端</div>
+      <div class="dc-item active" id="nav-apps" onclick="dc('apps','应用管理')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>应用管理
+      </div>
+      <div class="dc-item" id="nav-envs" onclick="dc('envs','环境管理')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18"/></svg></span>环境管理
+      </div>
+
+      <div class="dc-group">API 网关</div>
+      <div class="dc-item" id="nav-services" onclick="dc('services','服务管理')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="8" height="6" rx="1"/><rect x="14" y="4" width="8" height="6" rx="1"/><rect x="8" y="14" width="8" height="6" rx="1"/></svg></span>服务管理
+      </div>
+
+      <div class="dc-group">流水线管理</div>
+      <div class="dc-item" id="nav-pipelines" onclick="dc('pipelines','流水线列表')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h6M14 6h6M4 12h6M14 12h6M4 18h6M14 18h6"/></svg></span>流水线列表
+      </div>
+      <div class="dc-item" onclick="dc('generic','灰度管理')">灰度管理</div>
+      <div class="dc-item" onclick="dc('generic','自助诊断')">自助诊断</div>
+      <div class="dc-item" onclick="dc('generic','工具目录')">工具目录</div>
+
+      <div class="dc-group">基础设施</div>
+      <div class="dc-item" id="nav-hosts" onclick="dc('hosts','主机管理')">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="8" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/></svg></span>主机管理
+      </div>
+      <div class="dc-item" onclick="dc('generic','服务监控')">服务监控</div>
+      <div class="dc-item" onclick="dc('generic','审计日志')">审计日志</div>
+      <div class="dc-item" onclick="dc('generic','通知中心')">通知中心</div>
+      <div class="dc-item" onclick="dc('generic','配置中心')">配置中心</div>
+      <div class="dc-item" onclick="dc('generic','系统设置')">系统设置</div>
+    </div>
+  </div>
+
+  <div class="dc-main">
+    <div class="dc-header">
+      <span class="title" id="dcTitle">应用管理</span>
+      <span class="user"><span class="dc-avatar">A</span><span class="un">admin</span></span>
+    </div>
+    <div class="dc-content">
+
+      <!-- 应用列表 -->
+      <div class="screen active" id="dc-apps">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>应用管理</h1><div class="sub">微前端应用与子模块，按产品特性管理；发布与版本在详情页按环境操作。</div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="openModal('m-newapp')">新建应用</button>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-row" style="margin-bottom:12px;">
+            <div class="dc-seg"><span class="on">全部</span><span>基座</span><span>微前端</span><span>独立应用</span><span>小程序</span></div>
+            <input class="dc-search" placeholder="搜索 key / 名称">
+            <div class="dc-spacer"></div>
+            <span class="dc-muted">共 5 个应用</span>
+          </div>
+          <table>
+            <thead><tr><th>应用</th><th>类型</th><th>仓库目录</th><th>dev</th><th>1</th><th>prod</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="dc-mono">shell</span> <span class="dc-muted">基座</span></td><td><span class="dc-badge neutral">基座</span></td><td class="dc-mono">apps/shell</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+              <tr><td><span class="dc-mono">portal</span> <span class="dc-muted">变变门户</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/portal</td><td class="dc-mono">7c1e9a</td><td class="dc-mono">b21f04</td><td class="dc-mono">7c1e9a</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+              <tr><td><span class="dc-mono">admin</span> <span class="dc-muted">管理后台</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin</td><td class="dc-mono">3b8f10</td><td class="dc-mono">d4e5f6</td><td class="dc-mono">3b8f10</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+              <tr><td><span class="dc-muted">└</span> <span class="dc-mono">admin-iam</span> <span class="dc-muted">权限中心（子模块）</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin-iam</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+              <tr><td><span class="dc-mono">mini-contract</span> <span class="dc-muted">合同小程序</span></td><td><span class="dc-badge neutral">小程序</span></td><td class="dc-mono">apps/mini-contract</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+            </tbody>
+          </table>
+          <div class="dc-muted" style="margin-top:10px;">版本列按环境展示（dev / 1 联调 / prod）；表头即 envId，与产物目录 <span class="dc-mono">/static/modules/&lt;appKey&gt;/&lt;envId&gt;/</span> 对应。</div>
+        </div>
+      </div>
+
+      <!-- 应用详情 -->
+      <div class="screen" id="dc-appdetail">
+        <div class="dc-crumb"><a onclick="dc('apps','应用管理')">应用管理</a> / <span class="dc-mono">admin</span></div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1><span class="dc-mono">admin</span> <span class="dc-badge neutral">微前端</span></h1>
+              <div class="sub">管理后台 · <span class="dc-mono">apps/admin</span></div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="toast('已创建流水线运行：admin → dev')">部署</button>
+          </div>
+        </div>
+        <div class="dc-tabs">
+          <div class="t2 active" id="t-app-1" onclick="pane('app',1)">概览</div>
+          <div class="t2" id="t-app-2" onclick="pane('app',2)">路由</div>
+          <div class="t2" id="t-app-3" onclick="pane('app',3)">环境</div>
+          <div class="t2" id="t-app-4" onclick="pane('app',4)">部署</div>
+        </div>
+        <div id="pane-app-1">
+          <div class="dc-card"><div class="ct">基本信息</div>
+            <div class="dc-kv">
+              <div class="k">key</div><div class="dc-mono">admin（创建后不可改）</div>
+              <div class="k">名称</div><div>管理后台</div>
+              <div class="k">类型</div><div>微前端</div>
+              <div class="k">父应用</div><div class="dc-muted">无</div>
+              <div class="k">仓库目录</div><div class="dc-mono">apps/admin</div>
+              <div class="k">入口</div><div class="dc-mono">index.js</div>
+            </div>
+          </div>
+        </div>
+        <div id="pane-app-2" style="display:none;">
+          <div class="dc-card"><div class="ct">shell 挂载路由</div>
+            <table>
+              <thead><tr><th>挂载路径</th><th>激活规则</th><th>需鉴权</th><th>排序</th><th>启用</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td class="dc-mono">/admin</td><td class="dc-mono">/admin</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td class="dc-num">10</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="openModal('m-del')">删除</button></td></tr>
+                <tr><td class="dc-mono">/admin-iam</td><td class="dc-mono">/admin-iam</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td class="dc-num">20</td><td><span class="dc-sw" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="openModal('m-del')">删除</button></td></tr>
+              </tbody>
+            </table>
+            <div class="dc-row" style="margin-top:12px;"><button class="dc-btn">新增挂载</button><div class="dc-spacer"></div><button class="dc-btn primary" onclick="toast('已保存路由变更，需到「部署」发布后生效')">保存路由变更</button></div>
+          </div>
+        </div>
+        <div id="pane-app-3" style="display:none;">
+          <div class="dc-card"><div class="ct">应用 × 环境</div>
+            <table>
+              <thead><tr><th>环境</th><th>入口 URL</th><th>资源基址</th><th>shell 暴露</th></tr></thead>
+              <tbody>
+                <tr><td class="dc-mono">dev</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/dev/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td class="dc-mono">1</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/1/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td class="dc-mono">prod</td><td class="dc-mono">https://portal.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/prod/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pane-app-4" style="display:none;">
+          <div class="dc-card"><div class="ct">各环境当前版本</div>
+            <table>
+              <thead><tr><th>环境</th><th>当前版本</th><th>发布时间</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:02</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">1</td><td class="dc-mono">d4e5f6</td><td class="dc-num">09-18 09:12</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">prod</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-15 12:20</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 环境管理（微前端域） -->
+      <div class="screen" id="dc-envs">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>环境管理</h1><div class="sub">微前端加载环境：每个环境一个产物目录，用户在产品页面用切换插件选择加载哪个环境。</div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="openModal('m-newenv')">新建环境</button>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-row" style="margin-bottom:12px;">
+            <div class="dc-seg"><span class="on">全部</span><span>dev</span><span>local</span><span>prod</span></div>
+            <input class="dc-search" placeholder="搜索环境 ID / 名称">
+            <div class="dc-spacer"></div>
+            <span class="dc-muted">共 24 个环境 · 每页 20</span>
+          </div>
+          <table>
+            <thead><tr><th>环境 ID（目录名）</th><th>名称</th><th>站点</th><th>类型</th><th>排序</th><th>内置</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="dc-mono">dev</td><td>主开发环境</td><td><span class="dc-badge neutral">dev</span></td><td><span class="dc-badge neutral">开发</span></td><td class="dc-num">1</td><td><span class="dc-badge neutral">内置</span></td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" disabled title="内置环境不可删除">删除</button></td></tr>
+              <tr><td class="dc-mono">1</td><td>联调环境</td><td><span class="dc-badge neutral">dev</span></td><td><span class="dc-badge neutral">开发</span></td><td class="dc-num">2</td><td><span class="dc-muted">--</span></td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="openModal('m-delenv')">删除</button></td></tr>
+              <tr><td class="dc-mono">2</td><td>灰度验证</td><td><span class="dc-badge neutral">dev</span></td><td><span class="dc-badge neutral">开发</span></td><td class="dc-num">3</td><td><span class="dc-muted">--</span></td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="openModal('m-delenv')">删除</button></td></tr>
+              <tr><td class="dc-mono">local</td><td>本机</td><td><span class="dc-badge neutral">local</span></td><td><span class="dc-badge neutral">本地</span></td><td class="dc-num">1</td><td><span class="dc-badge neutral">内置</span></td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" disabled title="内置环境不可删除">删除</button></td></tr>
+              <tr><td class="dc-mono">prod</td><td>生产环境</td><td><span class="dc-badge neutral">prod</span></td><td><span class="dc-badge primary">生产</span></td><td class="dc-num">1</td><td><span class="dc-badge neutral">内置</span></td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" disabled title="内置环境不可删除">删除</button></td></tr>
+            </tbody>
+          </table>
+          <div class="dc-muted" style="margin-top:10px;">环境 ID 系统自增（内置 dev/local/prod 为保留字）；prod 唯一；请求的 envId 找不到时回退 dev。<br>环境达几十个时：按站点分段 + 搜索 + 分页；产品页切换插件内同样支持搜索与常用置顶（「常用 / 全部环境」两组）。</div>
+        </div>
+        <div class="dc-card"><div class="ct">切换插件生效链路</div>
+          <div class="dc-kv">
+            <div class="k">1. 用户选择</div><div>产品页右下角挂件选环境 → 写入 <span class="dc-mono">localStorage['kedou.env']</span></div>
+            <div class="k">2. 页面重载</div><div>shell 读取 envId（找不到回退 <span class="dc-mono">dev</span>）</div>
+            <div class="k">3. 加载产物</div><div><span class="dc-mono">/static/modules/&lt;appKey&gt;/&lt;envId&gt;/index.js</span></div>
+            <div class="k">4. prod 站点</div><div>不渲染挂件（<span class="dc-mono">switchable=false</span>）</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 服务列表 -->
+      <div class="screen" id="dc-services">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>服务管理</h1><div class="sub">API 网关背后的后端服务；点击服务进入接口列表。</div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="openModal('m-newsvc')">新建服务</button>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-row" style="margin-bottom:12px;">
+            <div class="dc-seg"><span class="on">全部</span><span>网关</span><span>业务服务</span><span>MCP</span></div>
+            <input class="dc-search" placeholder="搜索 key / 名称">
+            <div class="dc-spacer"></div>
+            <span class="dc-muted">共 12 个服务</span>
+          </div>
+          <table>
+            <thead><tr><th>服务</th><th>类型</th><th>仓库目录</th><th>端口</th><th>探活</th><th>local</th><th>dev</th><th>prod</th><th>接口数</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="dc-mono">gateway</span> <span class="dc-muted">API 网关</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/gateway</td><td class="dc-mono dc-num">6000</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td class="dc-num">18</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">auth-service</span> <span class="dc-muted">认证服务</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/auth-service</td><td class="dc-mono dc-num">6101</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td class="dc-num">24</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">user-service</span> <span class="dc-muted">用户服务</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/user-service</td><td class="dc-mono dc-num">6002</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td class="dc-num">16</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">ai-service</span> <span class="dc-muted">AI 服务</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/ai-service</td><td class="dc-mono dc-num">6003</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#f87171"></span></td><td class="dc-num">31</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">ai-agent</span> <span class="dc-muted">Agent 运行时</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/ai-agent</td><td class="dc-mono dc-num">6010</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#55555a"></span></td><td class="dc-num">12</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">mcp-gateway</span> <span class="dc-muted">MCP 网关</span></td><td><span class="dc-badge neutral">mcp</span></td><td class="dc-mono">servers/mcp-gateway</td><td class="dc-mono dc-num">6006</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td class="dc-num">9</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+              <tr><td><span class="dc-mono">deploy-console</span> <span class="dc-muted">发布控制台</span></td><td><span class="dc-badge neutral">nest</span></td><td class="dc-mono">servers/deploy-console</td><td class="dc-mono dc-num">6200</td><td class="dc-mono">/health</td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td><span class="dc-dot" style="background:#4ade80"></span></td><td class="dc-num">42</td><td><button class="dc-btn link" onclick="dc('svcdetail','auth-service · 服务详情')">详情</button></td></tr>
+            </tbody>
+          </table>
+          <div class="dc-muted" style="margin-top:10px;">健康点只编码状态（绿=健康 / 红=异常 / 灰=未知）；类型与枚举一律中性徽标（R1-1）。</div>
+        </div>
+      </div>
+
+      <!-- 服务详情（默认接口） -->
+      <div class="screen" id="dc-svcdetail">
+        <div class="dc-crumb"><a onclick="dc('services','服务管理')">服务管理</a> / <span class="dc-mono">auth-service</span></div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1><span class="dc-mono">auth-service</span> <span class="dc-badge neutral">nest</span></h1>
+              <div class="sub">认证服务 · <span class="dc-mono">servers/auth-service</span> · <span class="dc-mono">/health</span></div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="toast('已创建流水线运行：auth-service → dev')">部署</button>
+          </div>
+        </div>
+        <div class="dc-tabs">
+          <div class="t2 active" id="t-svc-1" onclick="pane('svc',1)">接口</div>
+          <div class="t2" id="t-svc-2" onclick="pane('svc',2)">概览</div>
+          <div class="t2" id="t-svc-3" onclick="pane('svc',3)">网关路由</div>
+          <div class="t2" id="t-svc-4" onclick="pane('svc',4)">环境</div>
+          <div class="t2" id="t-svc-5" onclick="pane('svc',5)">部署</div>
+        </div>
+        <div id="pane-svc-1">
+          <div class="dc-card"><div class="ct">接口清单（方法 + 路径）</div>
+            <div class="dc-row" style="margin-bottom:12px;">
+              <div class="dc-seg"><span class="on">全部</span><span>GET</span><span>POST</span><span>PUT</span><span>DELETE</span><span>ALL</span></div>
+              <input class="dc-search" placeholder="搜索路径 / 摘要">
+              <div class="dc-spacer"></div>
+              <button class="dc-btn" onclick="toast('导入结果：新增 3 / 补全 5 / 跳过 16')">导入</button>
+              <button class="dc-btn primary">新增接口</button>
+            </div>
+            <table>
+              <thead><tr><th>方法</th><th>路径模式</th><th>摘要</th><th>鉴权模式</th><th>权限码</th><th>限流</th><th>来源</th><th>启用</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dc-badge neutral">POST</span></td><td class="dc-mono">/api/auth/login</td><td>账号密码登录</td><td>jwt</td><td class="dc-ph">--</td><td class="dc-num">60</td><td>manual</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td><span class="dc-badge neutral">GET</span></td><td class="dc-mono">/api/auth/me</td><td>当前用户信息</td><td>jwt</td><td class="dc-mono">auth:me</td><td class="dc-ph">--</td><td>openapi</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td><span class="dc-badge neutral">POST</span></td><td class="dc-mono">/api/auth/wechat/<span style="color:#fb923c">:code</span></td><td>微信登录</td><td>passthrough</td><td class="dc-ph">--</td><td class="dc-num">30</td><td>openapi</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td><span class="dc-badge neutral">DELETE</span></td><td class="dc-mono">/api/auth/session/<span style="color:#fb923c">:id</span></td><td>注销会话</td><td>jwt</td><td class="dc-mono">auth:session:delete</td><td class="dc-ph">--</td><td>manual</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+              </tbody>
+            </table>
+            <div class="dc-muted" style="margin-top:10px;">此页只登记治理元数据，修改<b>不会</b>改变转发行为（FR-6.6）；导入按 serviceKey+method+pathPattern 幂等，只补全空字段。</div>
+          </div>
+        </div>
+        <div id="pane-svc-2" style="display:none;">
+          <div class="dc-card"><div class="ct">基本信息</div>
+            <div class="dc-kv">
+              <div class="k">key</div><div class="dc-mono">auth-service（创建后不可改）</div>
+              <div class="k">仓库目录</div><div class="dc-mono">servers/auth-service</div>
+              <div class="k">pm2 进程名</div><div class="dc-mono">web-auth</div>
+              <div class="k">默认端口</div><div class="dc-mono dc-num">6101</div>
+              <div class="k">未登记接口</div><div>放行（unknownPolicy = allow）</div>
+            </div>
+          </div>
+        </div>
+        <div id="pane-svc-3" style="display:none;">
+          <div class="dc-card"><div class="ct">网关转发规则</div>
+            <div class="dc-alert"><span class="at">优先级提示：</span>存在包含关系的前缀（/api 与 /api/auth），按优先级数值小者优先匹配。</div>
+            <table>
+              <thead><tr><th>环境</th><th>路径前缀</th><th>剥离</th><th>重写到</th><th>超时</th><th>鉴权</th><th>优先级</th><th>启用</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dc-badge neutral">全环境</span></td><td class="dc-mono">/api/auth</td><td class="dc-mono">^/api</td><td class="dc-mono">/api</td><td class="dc-num">30000</td><td>passthrough</td><td class="dc-num">10</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td><span class="dc-badge primary">dev</span></td><td class="dc-mono">/api/auth</td><td class="dc-mono">^/api</td><td class="dc-mono">/api</td><td class="dc-num">30000</td><td>passthrough</td><td class="dc-num">5</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pane-svc-4" style="display:none;">
+          <div class="dc-card"><div class="ct">服务 × 环境</div>
+            <table>
+              <thead><tr><th>环境</th><th>运行时</th><th>目标主机</th><th>端口</th><th>副本</th><th>启用</th></tr></thead>
+              <tbody>
+                <tr><td class="dc-mono">local</td><td>pm2</td><td class="dc-mono">server-local</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td class="dc-mono">dev</td><td>pm2</td><td class="dc-mono">server-dev</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr><td class="dc-mono">prod</td><td>pm2</td><td class="dc-mono">server-prod</td><td class="dc-mono dc-num">6101</td><td class="dc-num">2</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+              </tbody>
+            </table>
+            <div class="dc-muted" style="margin-top:8px;">后端服务的环境是"部署到哪里"（host/port），与微前端的加载环境是两套概念。</div>
+          </div>
+        </div>
+        <div id="pane-svc-5" style="display:none;">
+          <div class="dc-card"><div class="ct">部署记录</div>
+            <table>
+              <thead><tr><th>环境</th><th>版本</th><th>发布时间</th><th>健康</th><th>运行时实例</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td class="dc-mono">local</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:04</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-17 19:45</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">prod</td><td class="dc-mono">9f3d21</td><td class="dc-num">09-15 12:22</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+              </tbody>
+            </table>
+            <div class="dc-muted" style="margin-top:8px;">服务发布必走「构建 → 上传 → 重启 → 探活」，探活失败即判失败（FR-8.2）。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 主机管理 -->
+      <div class="screen" id="dc-hosts">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>主机管理</h1><div class="sub">部署目标主机与主机组，供服务环境引用。</div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="toast('新增主机')">新增主机</button>
+          </div>
+        </div>
+        <div class="dc-card">
+          <table>
+            <thead><tr><th>主机组</th><th>地址</th><th>SSH 用户</th><th>部署根目录</th><th>运行时</th><th>标签</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="dc-mono">server-local</td><td class="dc-mono">127.0.0.1</td><td class="dc-mono">geekwen</td><td class="dc-mono">~/web_system_release</td><td><span class="dc-badge neutral">pm2</span></td><td class="dc-muted">zone=local</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="toast('连接测试：通过')">测试</button></td></tr>
+              <tr><td class="dc-mono">server-dev</td><td class="dc-mono">175.27.189.123</td><td class="dc-mono">ubuntu</td><td class="dc-mono">/data/web_system</td><td><span class="dc-badge neutral">pm2</span></td><td class="dc-muted">zone=cn-gz</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="toast('连接测试：通过')">测试</button></td></tr>
+              <tr><td class="dc-mono">server-prod</td><td class="dc-mono">106.52.176.246</td><td class="dc-mono">ubuntu</td><td class="dc-mono">/data/web_system</td><td><span class="dc-badge neutral">pm2</span></td><td class="dc-muted">zone=cn-gz</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="toast('连接测试：通过')">测试</button></td></tr>
+              <tr><td class="dc-mono">bastion</td><td class="dc-mono">101.43.117.234</td><td class="dc-mono">ubuntu</td><td class="dc-mono">/workspace</td><td><span class="dc-badge neutral">docker</span></td><td class="dc-muted">zone=cn-gz</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="toast('连接测试：通过')">测试</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 流水线（不动） -->
+      <div class="screen" id="dc-pipelines">
+        <div class="dc-page-head"><h1>流水线列表</h1><div class="sub">本次重构不改变流水线页面与模型；仅目标选择器内部改用 targetRef。</div></div>
+        <div class="dc-card"><div class="ct">变化点</div>
+          <div class="dc-kv">
+            <div class="k">目标寻址</div><div><span class="dc-mono">app:admin</span> / <span class="dc-mono">svc:auth-service</span>（历史值 admin 自动兼容解析）</div>
+            <div class="k">执行分派</div><div>按域选择部署策略，页面与操作不变</div>
+            <div class="k">不改的部分</div><div>节点模型、变量、审批、灰度、诊断入口均不变</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 通用占位 -->
+      <div class="screen" id="dc-generic">
+        <div class="dc-page-head"><h1 id="dcGenericTitle">页面</h1><div class="sub">该页面不在本次双域重构范围内，沿用现有实现。</div></div>
+        <div class="dc-card"><div class="dc-muted">导航入口保留，页面内容与交互不变。</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     形态 B：admin 产品页 + 环境切换插件
+     ========================================================= -->
+<div class="ad-desktop">
+  <div class="ad-sider">
+    <div class="ad-sider-head">
+      <div class="ad-logo-dot"></div>
+      <span class="ad-logo-t">科豆 AI</span>
+    </div>
+    <div class="ad-menu">
+      <div class="ad-item active">工作台</div>
+      <div class="ad-item">变变管理</div>
+      <div class="ad-item">用户管理</div>
+      <div class="ad-item">系统设置</div>
+      <div class="ad-item">角色权限</div>
+      <div class="ad-item">字典管理</div>
+      <div class="ad-item">MCP 管理</div>
+      <div class="ad-item">数据浏览</div>
+      <div class="ad-item">Agents</div>
+    </div>
+  </div>
+
+  <div class="ad-main">
+    <div class="ad-header">
+      <div class="ad-crumb">首页 / <b>工作台</b>
+        <span class="ad-envtip" id="adEnvTip">当前环境 dev</span>
+      </div>
+      <div class="ad-user"><span>admin</span><span class="av">A</span></div>
+    </div>
+    <div class="ad-content">
+      <div class="ad-page-head"><h1>工作台</h1><div class="sub">admin 微前端模块（micro-app）· 由 shell 按当前环境加载产物</div></div>
+      <div class="ad-grid3">
+        <div class="ad-kpi"><div class="kt">今日活跃用户</div><div class="kv">1,284</div><div class="kd">较昨日 +6.2%</div></div>
+        <div class="ad-kpi"><div class="kt">订单数</div><div class="kv">326</div><div class="kd">较昨日 -1.4%</div></div>
+        <div class="ad-kpi"><div class="kt">AI 调用量</div><div class="kv">18,902</div><div class="kd">较昨日 +12.8%</div></div>
+      </div>
+      <div class="ad-card">
+        <div class="ct">最近操作</div>
+        <table class="ad-table">
+          <thead><tr><th>时间</th><th>操作人</th><th>操作</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>10:24</td><td>admin</td><td>更新用户 10231 权限</td><td><span class="ad-badge ok">成功</span></td></tr>
+            <tr><td>09:58</td><td>ops</td><td>导出订单报表</td><td><span class="ad-badge ok">成功</span></td></tr>
+            <tr><td>09:12</td><td>admin</td><td>发布 admin 到环境 1</td><td><span class="ad-badge ok">成功</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ad-card" style="background:#FFFBF7;border-color:#ffe0c7;">
+        <div class="ct" style="color:#FF8C42">微前端加载信息（调试可见）</div>
+        <div style="font-size:12px;color:#5b6372;line-height:1.9;">
+          当前环境：<b id="adEnvName" style="color:#FF8C42">dev</b>　·　
+          模块入口：<span class="dc-mono" id="adEntry" style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#1a1f2e;">/static/modules/admin/dev/index.js</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 环境切换挂件（常驻） -->
+  <div class="env-widget">
+    <div class="env-pill" onclick="openEnvModal()">
+      <span class="dotc"></span><span>环境</span><span class="en" id="envPillName">dev</span><span class="caret">切换</span>
+    </div>
+  </div>
+
+  <!-- 环境切换大弹窗（覆盖当前页面） -->
+  <div class="env-modal" id="envModal" onclick="if(event.target===this)closeEnvModal()">
+    <div class="env-dialog">
+      <div class="env-dialog-head">
+        <h3>切换加载环境</h3>
+        <div class="hd-right">
+          <span class="cur">当前 <b id="envModalCur">dev</b></span>
+          <button class="close" onclick="closeEnvModal()">✕</button>
+        </div>
+      </div>
+      <div class="env-dialog-search">
+        <input id="envSearch" placeholder="搜索环境 ID / 名称" oninput="filterEnv(this.value)">
+      </div>
+      <div class="env-dialog-list" id="envList"></div>
+      <div class="env-dialog-foot">
+        <span>共 <b id="envCount">24</b> 个环境 · 切换后写入 localStorage 并<b>整页重载</b>（location.reload()），确保模块与接口上下文一致</span>
+        <a onclick="closeEnvModal();dc('envs','环境管理')">在控制台管理环境</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 切换加载反馈（整页重载） -->
+  <div class="env-loading" id="envLoading">
+    <div class="spin"></div>
+    <div class="lt" id="envLoadingText">正在切换到环境 1…</div>
+    <div class="ls" id="envLoadingPath">/static/modules/admin/1/index.js</div>
+    <div class="ls2">切换环境会整页重新加载，避免 micro-app 代码与接口上下文新旧混杂</div>
+  </div>
+</div>
+
+<!-- 弹层 / Toast（控制台内） -->
+<div class="modal-mask" id="m-newapp" onclick="if(event.target===this)closeModal('m-newapp')">
+  <div class="modal">
+    <h3>新建应用</h3>
+    <div class="field" id="f-key"><label>key（创建后不可改）</label><input id="in-key" placeholder="如 admin-iam"><div class="msg">key 已存在</div></div>
+    <div class="field"><label>名称</label><input placeholder="如 权限中心"></div>
+    <div class="field"><label>类型</label><select><option>微前端</option><option>基座</option><option>独立应用</option><option>小程序</option></select></div>
+    <div class="field"><label>父应用（子模块可选）</label><select><option>无</option><option>admin</option><option>portal</option></select></div>
+    <div class="field"><label>仓库目录</label><input placeholder="apps/admin-iam"></div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-newapp')">取消</button><button class="btn-sm primary" onclick="submitApp()">创建</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-newenv" onclick="if(event.target===this)closeModal('m-newenv')">
+  <div class="modal">
+    <h3>新建环境</h3>
+    <div class="field"><label>环境 ID</label><input value="系统自增（将生成 3）" disabled></div>
+    <div class="field"><label>名称</label><input placeholder="如 联调环境"></div>
+    <div class="field"><label>归属站点</label><select><option>dev（dev.kedouai.com）</option><option>local（local.kedouai.com）</option></select></div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-newenv')">取消</button><button class="btn-sm primary" onclick="closeModal('m-newenv');toast('环境已创建，envId = 3')">创建</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-newsvc" onclick="if(event.target===this)closeModal('m-newsvc')">
+  <div class="modal">
+    <h3>新建服务</h3>
+    <div class="field"><label>key（创建后不可改）</label><input placeholder="如 pay-service"></div>
+    <div class="field"><label>名称</label><input placeholder="如 支付服务"></div>
+    <div class="field"><label>仓库目录</label><input placeholder="servers/pay-service"></div>
+    <div class="field"><label>默认端口</label><input placeholder="6012"></div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-newsvc')">取消</button><button class="btn-sm primary" onclick="closeModal('m-newsvc');toast('服务已创建')">创建</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-switch" onclick="if(event.target===this)closeModal('m-switch')">
+  <div class="modal">
+    <h3>切换版本</h3>
+    <div class="muted-txt">把 dev 的 admin 从 3b8f10 切到目标版本，用户刷新即加载新产物（index.js 为 no-cache）。</div>
+    <div class="field"><label>目标版本</label><select><option>d4e5f6 · 2026-09-18 09:12</option><option>7c1e9a · 2026-09-17 11:03</option></select></div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-switch')">取消</button><button class="btn-sm primary" onclick="closeModal('m-switch');toast('已切换：dev/admin → d4e5f6')">确认切换</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-rollback" onclick="if(event.target===this)closeModal('m-rollback')">
+  <div class="modal">
+    <h3>回滚</h3>
+    <div class="muted-txt">将回退到上一版本 9f3d21，覆盖该环境目录的产物。</div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-rollback')">取消</button><button class="btn-sm primary" onclick="closeModal('m-rollback');toast('已回滚')">确认回滚</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-del" onclick="if(event.target===this)closeModal('m-del')">
+  <div class="modal">
+    <h3>删除挂载路由</h3>
+    <div class="muted-txt">删除后 shell 不再加载该入口，已在跑的版本不受影响。</div>
+    <div class="modal-actions"><button class="btn-sm" onclick="closeModal('m-del')">取消</button><button class="btn-sm primary" onclick="closeModal('m-del');toast('已删除')">确认删除</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="m-delenv" onclick="if(event.target===this)closeModal('m-delenv')">
+  <div class="modal">
+    <h3>无法删除环境</h3>
+    <div class="muted-txt">仍有 3 条部署记录占用 envId=1：admin、portal、auth-service。请先清理后再删除。</div>
+    <div class="modal-actions"><button class="btn-sm primary" onclick="closeModal('m-delenv')">知道了</button></div>
+  </div>
+</div>
+
+<style>
+  /* 弹层样式（深色壳适配） */
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;
+    justify-content:center;z-index:90;padding:24px;}
+  .modal-mask.show{display:flex;}
+  .modal{background:#1a1a1e;border:1px solid #2f2f34;border-radius:14px;padding:20px;width:100%;
+    max-width:420px;color:#e5e5e5;}
+  .modal h3{font-size:15px;font-weight:600;margin-bottom:12px;}
+  .modal .muted-txt{font-size:12px;color:#8b8b90;margin-bottom:12px;line-height:1.7;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:#8b8b90;margin-bottom:5px;font-weight:600;}
+  .field input,.field select{width:100%;padding:9px 10px;border:1.5px solid #2f2f34;border-radius:8px;
+    font-size:13px;color:#e5e5e5;background:#131316;outline:none;}
+  .field input:focus{border-color:#F97316;}
+  .field.err input{border-color:#E5484D;}
+  .field .msg{font-size:11px;color:#f87171;margin-top:4px;display:none;}
+  .field.err .msg{display:block;}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+  .btn-sm{background:rgba(255,255,255,.07);color:#d4d4d8;border:1px solid #2f2f34;border-radius:7px;
+    padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500;}
+  .btn-sm.primary{background:#F97316;color:#fff;border-color:#F97316;}
+  .toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:rgba(0,0,0,.85);
+    color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;z-index:95;opacity:0;
+    pointer-events:none;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+</style>
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ===== 控制台：菜单 + 屏切换 ===== */
+  var DC_TITLE = {"apps":"应用管理","envs":"环境管理","services":"服务管理","hosts":"主机管理",
+                  "pipelines":"流水线列表","dashboard":"仪表盘"};
+  var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
+                "pipelines":"nav-pipelines","dashboard":"nav-dashboard"};
+  function dc(page, title){
+    document.querySelectorAll('.dc-content .screen').forEach(function(s){s.classList.remove('active');});
+    var el = document.getElementById('dc-'+page);
+    if(el) el.classList.add('active');
+    document.getElementById('dcTitle').textContent = title || DC_TITLE[page] || '页面';
+    document.querySelectorAll('.dc-sider .dc-item').forEach(function(i){i.classList.remove('active');});
+    if(page === 'appdetail'){ var n=document.getElementById('nav-apps'); if(n) n.classList.add('active'); }
+    else if(page === 'svcdetail'){ var n2=document.getElementById('nav-services'); if(n2) n2.classList.add('active'); }
+    else if(DC_NAV[page]){ var n3=document.getElementById(DC_NAV[page]); if(n3) n3.classList.add('active'); }
+    if(page === 'generic'){
+      document.getElementById('dcGenericTitle').textContent = title || '页面';
+    }
+  }
+  function pane(scope, n){
+    var map = {app:4, svc:5};
+    for(var i=1;i<=map[scope];i++){
+      var t = document.getElementById('t-'+scope+'-'+i);
+      var p = document.getElementById('pane-'+scope+'-'+i);
+      if(t) t.classList.toggle('active', i===n);
+      if(p) p.style.display = (i===n) ? '' : 'none';
+    }
+  }
+
+  /* ===== 产品页：环境切换插件（支持几十个环境） ===== */
+  var CURRENT_ENV = 'dev';
+  var ENVS = [
+    {id:'dev', name:'主开发环境', pin:true},
+    {id:'1',   name:'联调环境',   pin:true},
+    {id:'2',   name:'灰度验证',   pin:true},
+    {id:'3',   name:'支付联调'},
+    {id:'4',   name:'订单重构'},
+    {id:'5',   name:'用户中心改造'},
+    {id:'6',   name:'AI 模型切换'},
+    {id:'7',   name:'小程序联调'},
+    {id:'8',   name:'内容中枢调试'},
+    {id:'9',   name:'权限重构'},
+    {id:'10',  name:'知识库验证'},
+    {id:'11',  name:'报表需求'},
+    {id:'12',  name:'消息推送'},
+    {id:'13',  name:'会员体系'},
+    {id:'14',  name:'活动运营'},
+    {id:'15',  name:'数据迁移'},
+    {id:'16',  name:'性能优化'},
+    {id:'17',  name:'埋点验证'},
+    {id:'18',  name:'国际化'},
+    {id:'19',  name:'安全加固'},
+    {id:'20',  name:'移动端适配'},
+    {id:'21',  name:'搜索结果优化'},
+    {id:'22',  name:'音视频调试'},
+    {id:'23',  name:'风控验证'}
+  ];
+  function envItemHtml(e){
+    var on = (e.id === CURRENT_ENV) ? ' on' : '';
+    var cur = (e.id === CURRENT_ENV) ? '<span class="em-cur">当前</span>' : '<span></span>';
+    return '<div class="em-row' + on + '" data-id="' + e.id + '" '
+      + 'onclick="switchEnv(\'' + e.id + '\',\'' + e.name + '\')">'
+      + '<span class="em-id">' + e.id + '</span>'
+      + '<span class="em-name">' + e.name + '</span>'
+      + '<span class="em-site">' + (e.site || 'dev') + '</span>'
+      + cur + '</div>';
+  }
+  function renderEnvList(kw){
+    kw = (kw || '').trim().toLowerCase();
+    var list = ENVS.filter(function(e){
+      return !kw || e.id.toLowerCase().indexOf(kw) >= 0 || e.name.toLowerCase().indexOf(kw) >= 0;
+    });
+    var pinned = list.filter(function(e){ return e.pin; });
+    var rest = list.filter(function(e){ return !e.pin; });
+    var html = '';
+    if(pinned.length){
+      html += '<div class="env-sec">常用</div>' + pinned.map(envItemHtml).join('');
+    }
+    html += '<div class="env-sec">全部环境（' + list.length + '）</div>';
+    html += rest.length ? rest.map(envItemHtml).join('') : '<div class="env-empty">没有匹配的环境</div>';
+    document.getElementById('envList').innerHTML = html;
+    document.getElementById('envCount').textContent = ENVS.length;
+  }
+  function filterEnv(kw){ renderEnvList(kw); }
+  function openEnvModal(){
+    document.getElementById('envSearch').value = '';
+    renderEnvList('');
+    document.getElementById('envModalCur').textContent = CURRENT_ENV;
+    document.getElementById('envModal').classList.add('show');
+  }
+  function closeEnvModal(){ document.getElementById('envModal').classList.remove('show'); }
+  function switchEnv(envId, name){
+    if(envId === CURRENT_ENV){ closeEnvModal(); return; }
+    closeEnvModal();
+    // 真实实现：localStorage.setItem('kedou.env', envId) 后 location.reload()
+    // 原型在此模拟整页重载的过程与结果（不真的 reload，否则评审会丢上下文）
+    document.getElementById('envLoadingText').textContent = '已选 ' + name + '（envId=' + envId + '），正在重新加载页面…';
+    document.getElementById('envLoadingPath').textContent = 'location.reload() → /static/modules/*/' + envId + '/';
+    document.getElementById('envLoading').classList.add('show');
+    setTimeout(function(){
+      CURRENT_ENV = envId;
+      document.getElementById('envPillName').textContent = envId;
+      document.getElementById('envModalCur').textContent = envId;
+      document.querySelectorAll('.em-row').forEach(function(o){
+        o.classList.toggle('on', o.dataset.id === envId);
+      });
+      document.getElementById('adEnvTip').textContent = '当前环境 ' + envId + ' · ' + name;
+      document.getElementById('adEnvName').textContent = envId;
+      document.getElementById('adEntry').textContent = '/static/modules/admin/' + envId + '/index.js';
+      document.getElementById('envLoading').classList.remove('show');
+      toast('已整页重载，当前环境 ' + envId);
+    }, 1400);
+  }
+
+  /* ===== 弹层 / Toast ===== */
+  function openModal(id){document.getElementById(id).classList.add('show');}
+  function closeModal(id){document.getElementById(id).classList.remove('show');}
+  var toastTimer;
+  function toast(msg){
+    var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){el.classList.remove('show');},1700);
+  }
+  function submitApp(){
+    var v = document.getElementById('in-key').value.trim();
+    if(v === 'admin' || v === 'portal' || v === 'shell'){
+      document.getElementById('f-key').classList.add('err'); return;
+    }
+    document.getElementById('f-key').classList.remove('err');
+    closeModal('m-newapp'); toast('应用已创建');
+  }
+
+  /* 初始化环境切换列表（24 个环境演示） */
+  renderEnvList('');
+</script>
+</body>
+</html>

@@ -47,7 +47,7 @@ const GATEWAY_PREFIXES = {
   'todo-service': '/api/todos',
   'upload-service': '/api/upload',
   'mcp-gateway': '/api/mcp',
-  'content-hub': '/api/finnews, /api/content-hub',
+  'content-hub': '/api/content-hub',
   gateway: '(自身即网关)',
 };
 
@@ -69,7 +69,7 @@ const GATEWAY_ROUTES = [
   ['/api/uploads', 'user-service(静态)'],
   ['/api/uploads/bianbian', 'ai-service(静态)'],
   ['/api/mcp', 'mcp-gateway'],
-  ['/api/finnews, /api/content-hub', 'content-hub'],
+  ['/api/content-hub', 'content-hub'],
 ];
 
 const HTTP_METHODS = ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Sse', 'All', 'Options', 'Head'];

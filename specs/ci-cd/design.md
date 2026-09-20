@@ -2,7 +2,7 @@
 
 > 类型：design.md
 > 日期：2026-09-08
-> 关联：`specs/release-platform/design.md`（发布平台现状）· `docs/development/local-release-runbook.md`（运维现状）· `docs/development/ai-native-sdlc-ci-deployment.md`（CI 现状）
+> 关联：`specs/release-platform/design.md`（发布平台现状）· `docs/development/local-release-runbook.md`（运维现状）
 > 定位：本文件是 CI/CD 的单一事实源，只描述**目标态与落地路径**，不重复发布平台内部设计。
 
 ---
@@ -35,10 +35,8 @@
 
 | 层 | 能力 | 载体 | 状态 |
 |---|---|---|---|
-| CI 门禁 | 红线扫描 R1~R5 | `scripts/redline/scan-rules.sh` + pre-commit(`.githooks`) + `quality-gate.yml` | 可用 |
-| CI 门禁 | 改动包 build/test | `scripts/ci/changed-packages.sh` | 可用；**lint 档未挂载**（子包缺 ESLint flat config） |
+| CI 门禁 | 改动包 build/test | `scripts/ci/changed-packages.sh` + `quality-gate.yml` | 可用；**lint 档未挂载**（子包缺 ESLint flat config） |
 | CI 协作 | 自动建 PR | `auto-pr.yml` | 可用 |
-| CI 治理 | 数字人行为变更评测门禁 | `kit-gate.yml` | 可用 |
 | CD 引擎 | 九阶段流水线（步骤注册表驱动） | `servers/deploy-console/src/pipeline/` | 可用，已评审 |
 | CD 引擎 | 阶段/步骤命令数据化 | `deploy_module_stage_commands` | 可用（改命令即改行为） |
 | CD 引擎 | 版本写入 + 指针切换 | `registry/release-registry.service.ts` | 可用，语义真相源 |

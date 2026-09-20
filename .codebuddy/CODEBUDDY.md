@@ -1,23 +1,24 @@
 # 科豆 AI · 项目入口
 
-> 本文是 **CodeBuddy / AI 常驻加载的项目总入口**，只说明入口：**① 工程（§1）② AI 技能与规则（§2、§3）③ 维护约定（§4）**。
+> 本文是 **CodeBuddy / AI 常驻加载的项目总入口**，只说明入口：**① 工程（§1）② AI 协作（常驻指南 / 技能）（§2）③ AI 规则（§3）④ 维护约定（§4）**。
 
 ## 1 工程
 
 **项目工程文档 → 读仓库根 `README.md`**（架构 / 服务与端口 / 目录与脚本 / 启动与验证 / 发布部署 / UI 规范 / 接口契约 / CI 门禁 / 产品路由，都在那里及其索引里）。
 
-## 2 AI 技能
+## 2 AI 协作（常驻指南 + 技能）
 
-- **AI 技能继承 `.codebuddy/agent-kit/`** —— 需要的技能从这里找。
-- 技能文件：能力源 `.codebuddy/agent-kit/skills/<name>/SKILL.md` → 运行源 `.codebuddy/skills/<name>/SKILL.md`（IDE 实际加载的是运行源，它是能力源的镜像；`be-developer` / `fe-developer` 是项目专属，只在运行源）。
-- 技能涉及的**规范与项目上下文** → `.codebuddy/skills/`、`.codebuddy/rules/`、`.codebuddy/references/`。
+- **AI 协作资产继承上游 `https://github.com/web5/ai-agent-kit`** —— 常驻总则、红线、方法论都在上游仓库，本地不落副本。
+- **技能实体** → 只保留一份在 `.codebuddy/skills/`（工具实际扫描的路径）；通用技能不得在本地改写，项目专属只放 `be-developer`/`fe-developer` 与 `rd-digital-agent/references/project-context.md`。
+- **来源、取用方式与只读契约** → `.codebuddy/agent-kit/README.md`。
+- **项目专属**规范与上下文 → `.codebuddy/references/`。
 
-## 3 agent 安全
+## 3 AI 规则（含 agent 安全）
 
-- 只要与 agent 相关（含**工程的安全规则**）→ 放 **`.codebuddy/rules/`**，由 `.codebuddy/agent-kit/` 引用。
+- 只要与 agent 相关（含**工程的安全规则**）→ 放 **`.codebuddy/rules/`**（工具扫描加载）；通用红线在上游 `ai-agent-kit` 的 `rules/general/01–05`。
 
 ## 4 维护约定
 
-- **本文承载**：工程入口说明 + AI agent / skills / rules 的入口说明；不复制工程事实，也不展开能力内容。
-- **归属**：工程 → 仓库根 `README.md`；AI 技能 / 规则 / 上下文 → `.codebuddy/agent-kit/`、`.codebuddy/skills/`、`.codebuddy/rules/`、`.codebuddy/references/`。
-- **能力源唯一**：通用技能只在上游 `ai-agent-kit` 演进 → CI 进能力源 → `sync-agent-kit.sh --apply` 落运行源，运行源不得手改通用技能（S7 会拦）。
+- **本文承载**：工程入口说明 + AI 协作入口（常驻指南 / 技能 / 规则）说明；不复制工程事实，也不展开能力内容。
+- **归属**：工程 → 仓库根 `README.md`；AI 协作资产 → 上游 `ai-agent-kit`（本地只留来源声明与技能实体）；技能实体 / 规则 / 项目上下文 → `.codebuddy/skills/`、`.codebuddy/rules/`、`.codebuddy/references/`。
+- **能力源唯一**：通用技能只在上游 `ai-agent-kit` 演进；技能实体只有一份（`.codebuddy/skills/`），本地不得改写通用技能。
