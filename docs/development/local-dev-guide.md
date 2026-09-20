@@ -80,8 +80,9 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | knowledge-service | **6011** | `web-knowledge` | `dev` | **独立库 `web_system_knowledge`** + TokenHub embedding Key | `/api-docs` | ❌ |
 | deploy-console | **6200** | `web-deploy-console` | `start:dev`（无 `dev`） | MySQL(`web_system_deploy`) + SSH 私钥 + node 路径 | `/api/docs`（非 prod） | `/api/monitor/health`（需 JWT）、`/api/monitor/local/health` |
 
-> ⚠️ **端口双轨（别混）**：上表是**本机**端口。**服务器**上 auth=6001（本机 6001 被其它项目占用才改 6101），
-> 且 **prod 走 3000 系列**（gateway 3000 / auth 3001 …）。权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。
+> ⚠️ **端口三轨（别混）**：上表是**本机**端口。dev 的 auth=6001（本机 6001 被其它项目占用才改 6101），
+> **prod 走 3000 系列**（gateway 3000 / auth 3001 …）。三环境完整矩阵与「服务指向」语义见
+> `local-release-runbook.md` §1.1；权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。
 
 ### 2.1 `/api/*` → 服务映射（gateway 侧）
 
