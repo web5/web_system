@@ -28,9 +28,6 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { EnvsService } from '../envs/envs.service';
-import { AppsService } from '../apps/apps.service';
-import * as jwt from 'jsonwebtoken';
-import { TargetResolver } from '../target/target-resolver.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -450,10 +447,6 @@ export class PipelineService {
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
     // 环境域（双域重构：提交时按环境表校验 envId，替代硬编码白名单）
     private readonly envsService: EnvsService,
-    // 应用域：部署动作（前端切指针）
-    private readonly appsService: AppsService,
-    // 域归属判断（apps / servers）：决定部署走「应用切指针」还是「服务部署接口」
-    private readonly targetResolver: TargetResolver,
   ) {}
 
   /**
@@ -1339,8 +1332,6 @@ export class PipelineService {
         detail: `发布成功: ${p.env}/${p.moduleKey} → ${p.versionTag}（mode=${p.mode}, target=${uploadTarget}）`,
       });
       this.logger.log(`流水线完成: ${p.id} ${p.env}/${p.moduleKey} → ${p.versionTag}`);
-      // 部署动作（第二个流程动作；受开关 + env=local 约束，失败不影响发布结果）
-      await this.autoDeployAfterPublish(p, uploadTarget);
       // 发布成功后同步权限点（挂在这里的原因见方法注释；失败不影响发布结果）
       await this.syncPermissionPoints(p);
       void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
@@ -1704,78 +1695,6 @@ export class PipelineService {
    * 契约：**失败只告警不阻断**（权限同步不该让一次成功发布变成失败）；
    * 环境变量 `PIPELINE_PERM_SYNC=false` 可关闭。
    */
-  /**
-   * 部署动作 —— 发布部署整体的**第二个**流程动作
-   * （design: `specs/pipeline-deploy-action/design.md`）。
-   *
-   * 背景：流水线原本只完成「发布」（投递产物 + 写版本记录），产物并不会生效：
-   * 后端 `apply`/`restart` 被 `moduleType` 守卫跳过，前端没有切指针。
-   * 表现为流水线 succeeded 但页面/服务没变。
-   *
-   * 双重约束（用户 2026-09-20 定）：
-   *   ① 开关 `PIPELINE_AUTO_DEPLOY=1`（默认关闭）
-   *   ② 仅 `env === 'local'`；dev / prod 行为完全不变
-   *
-   * 失败语义：部署是独立动作，失败**不改变发布结果**（发布确实成功了），
-   * 只记 `result.deploy` 与日志，可重试。
-   */
-  private async autoDeployAfterPublish(
-    p: DeployPipelineEntity,
-    uploadTarget: 'local' | 'remote',
-  ): Promise<void> {
-    if (this.configService.get<string>('PIPELINE_AUTO_DEPLOY') !== '1') return;
-    if (p.env !== 'local') return;
-    const version = toCommitId(p.versionTag);
-    if (!version) return;
-
-    // 域归属：TargetResolver 给出 rootDir（apps=应用 / servers=服务）。
-    // 不依赖 moduleType —— 它从未写入流水线实体，用它判断必然误判成应用。
-    const target = await this.targetResolver.resolve(p.moduleKey).catch(() => null);
-    try {
-      if (target?.rootDir === 'servers') {
-        // 后端服务：部署（重启 + 探活）由「服务管理」的接口负责，
-        // 流水线只负责构建并发布代码，不自己实现重启（避免两套重启姿势）。
-        await this.callServiceDeploy(p.moduleKey, p.env);
-      } else {
-        // 前端（env-dir）：切入口指针
-        await this.appsService.switchVersion(p.moduleKey, p.env, version, p.operator ?? undefined);
-      }
-      p.result = { ...(p.result ?? {}), deploy: { ok: true, version } };
-      p.logs = [...(p.logs ?? []), `[deploy] 部署生效完成：${p.moduleKey}@${p.env} → ${version}`];
-    } catch (e) {
-      const msg = (e as Error).message || String(e);
-      p.result = { ...(p.result ?? {}), deploy: { ok: false, version, error: msg } };
-      p.logs = [...(p.logs ?? []), `[deploy] 部署失败：${msg}`];
-    }
-    await this.save(p);
-  }
-
-  /**
-   * 调用「服务管理」的部署接口完成后端生效：`POST /api/services/:key/deploy`。
-   *
-   * 职责边界（用户 2026-09-20）：**流水线只负责构建并发布代码**，
-   * 部署（重启进程 + 探活）是 API 网关 / 服务管理域的接口能力。
-   * 这里通过接口调用，不在流水线内部直接依赖服务模块。
-   */
-  private async callServiceDeploy(key: string, envId: string): Promise<void> {
-    const base = this.configService.get<string>('CONSOLE_URL') || 'http://127.0.0.1:6200';
-    const secret = this.configService.get<string>('JWT_SECRET') || '';
-    if (!secret) throw new Error('缺少 JWT_SECRET，无法调用部署接口');
-    const token = jwt.sign(
-      { sub: 'pipeline', username: 'pipeline', roles: ['admin'], systems: ['deploy'], type: 'access' },
-      secret,
-      { expiresIn: '5m' },
-    );
-    const res = await fetch(`${base}/api/services/${encodeURIComponent(key)}/deploy`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ envId }),
-    });
-    if (!res.ok) {
-      throw new Error(`部署接口返回 ${res.status}：${(await res.text()).slice(0, 200)}`);
-    }
-  }
-
   private async syncPermissionPoints(p: DeployPipelineEntity): Promise<void> {
     if ((this.configService.get<string>('PIPELINE_PERM_SYNC') ?? 'true') === 'false') {
       p.logs = [...(p.logs ?? []), '[perm-sync] 已按配置跳过权限同步（PIPELINE_PERM_SYNC=false）'];
