@@ -27,7 +27,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
-import { EnvsService } from '../envs/envs.service';
+
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -350,13 +350,19 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
 export const PIPELINE_AWAITING_APPROVAL = 'awaiting-approval';
 
 /**
- * 支持发布的环境。
+ * 环境说明（**知识，非系统约束**；2026-09-20 移除硬编码白名单）。
  *
- * `local` = 本机环境（gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）。
- * 它存在的意义：本地开发发布只投递本机产物，**不污染远程 dev 的指针**——
+ * 环境由用户在「环境管理」自建（envId 自增），或由流水线模板 / 配置声明，
+ * 引擎**不再校验** env 是否合法 —— 输入合法性由调用方（页面下拉 / AI 传参 / MCP）保证。
+ *
+ * 常见取值：`local`（本机，gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）、
+ * `dev` / `staging` / `prod`。
+ *
+ * `local` 的意义：本地开发发布只投递本机产物，**不污染远程 dev 的指针** ——
  * 否则远程 dev 的 gateway 会指向一个本地才有、远程没有的产物版本，导致 dev 页面 404。
+ *
+ * 清单与部署方式见 `docs/development/deploy-target-knowledge.md`。
  */
-export const SUPPORTED_ENVS: readonly string[] = ['local', 'dev', 'staging', 'prod'];
 
 export interface SubmitPipelineDto {
   env: string;
@@ -445,8 +451,6 @@ export class PipelineService {
     // 内置步骤注册表（executeStage 按步骤元数据数据驱动分派；执行体在各自 executor 内）
     @Inject(PIPELINE_BUILTIN_STEPS)
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
-    // 环境域（双域重构：提交时按环境表校验 envId，替代硬编码白名单）
-    private readonly envsService: EnvsService,
   ) {}
 
   /**
@@ -534,15 +538,8 @@ export class PipelineService {
     operator?: string,
   ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const mode: PipelineMode = dto.mode ?? 'direct';
-    // 环境校验（**双域重构 2026-09-19**）：环境改为用户在「环境管理」中**自建**（envId 自增 1/2/3…），
-    // 故以环境表为准；仅对历史内置环境（local/dev/staging/prod）保留白名单兜底，
-    // 避免"表里还没登记就提交"时把老环境的提交也拦掉。
-    const envKnown = await this.envsService.existsEnv(dto.env);
-    if (!envKnown && !SUPPORTED_ENVS.includes(dto.env)) {
-      throw new BadRequestException(
-        `未知环境: ${dto.env}（请在「环境管理」中先创建；内置 ${SUPPORTED_ENVS.join(' / ')} 可直接使用）`,
-      );
-    }
+    // 环境校验已移除（2026-09-20）：环境由用户在「环境管理」自建或由模板/配置声明，
+    // 引擎不再跨域依赖环境域做准入校验 —— 输入合法性由调用方保证（页面下拉 / AI 传参 / MCP）。
     // 防命令注入：branch / commit 会拼进发布目录的 git 命令，白名单收敛（禁空格/引号/分号/$ 等）
     const safeBranchRe = /^[A-Za-z0-9._/-]{1,128}$/;
     if (dto.branch && !safeBranchRe.test(dto.branch)) {

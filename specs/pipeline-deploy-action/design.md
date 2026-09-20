@@ -2,6 +2,12 @@
 
 > 建立：2026-09-20 ｜ 分支：`feat/deploy-console-domain-split` ｜ **仅 local 验证**
 > 配套：`specs/pipeline-env-scripts/design.md`、`docs/development/local-dev-guide.md §3.2`
+>
+> ⛔ **已废弃（2026-09-20，commit `c5ec6ad`）**：自动部署逻辑已移除。
+> 原因：「是应用还是服务」是**运维知识**，不该做成运行时的域归属判断塞进系统
+> （先后试过 `moduleType`、`TargetResolver` 两种分流，都不对）。
+> 系统只提供部署接口，由流水线脚本 / 控制台显式调用。
+> 保留本文仅作决策记录；现行做法见 `docs/development/deploy-target-knowledge.md`。
 
 ---
 
