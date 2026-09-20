@@ -594,12 +594,44 @@ export interface PipelineStepCommand {
   nodeKey: string
   command: string
   actions?: StageAction[] | null
+  /**
+   * 环境分支配置（envId → 该环境脚本）—— 已由「步骤任务」实体取代，仅兼容存量。
+   */
+  envBranches?: Record<string, string> | null
+  /** 步骤执行条件（gate）：不满足则跳过整个步骤；null/空 = 恒执行 */
+  condition?: string | null
   enabled: boolean
   /** 平台托管（locked）：接口拒写、页面只读（如 git） */
   locked?: boolean
   timeoutSec?: number | null
   updatedBy?: string | null
   updatedAt?: string | null
+}
+
+/** 步骤任务（分支）：步骤 1:N 任务，运行时按条件命中 */
+export interface StepBranch {
+  id?: string
+  name: string
+  label?: string | null
+  /** 匹配条件；null/空 = 默认任务（兜底） */
+  condition?: string | null
+  script: string
+  sort?: number
+}
+
+export const stepBranchApi = {
+  list: (templateId: string, nodeKey: string) =>
+    http.get(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`) as Promise<StepBranch[]>,
+
+  save: (templateId: string, nodeKey: string, branches: StepBranch[]) =>
+    http.put(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`, { branches }) as Promise<
+      StepBranch[]
+    >,
+
+  clear: (templateId: string, nodeKey: string) =>
+    http.delete(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`) as Promise<{
+      ok: boolean
+    }>,
 }
 
 export const pipelineStepApi = {
@@ -611,6 +643,10 @@ export const pipelineStepApi = {
         configured: boolean
         command: string | null
         actions: StageAction[]
+        /** 环境分支配置（envId → 脚本）；null = 未启用（已由步骤任务取代） */
+        envBranches?: Record<string, string> | null
+        /** 步骤执行条件（gate）；null/空 = 恒执行 */
+        condition?: string | null
         enabled: boolean
         locked: boolean
         timeoutSec: number | null
@@ -627,7 +663,15 @@ export const pipelineStepApi = {
   save: (
     templateId: string,
     nodeKey: string,
-    dto: { command?: string; timeoutSec?: number; actions?: StageAction[] },
+    dto: {
+      command?: string
+      timeoutSec?: number
+      actions?: StageAction[]
+      /** 环境分支（envId → 脚本）：非空=启用并生成执行体；null=关闭 */
+      envBranches?: Record<string, string> | null
+      /** 步骤执行条件（gate）：不满足则跳过整个步骤；null/空串=恒执行 */
+      condition?: string | null
+    },
   ) =>
     http.put(`/pipeline-templates/${templateId}/steps/${nodeKey}`, dto) as Promise<PipelineStepCommand>,
 
