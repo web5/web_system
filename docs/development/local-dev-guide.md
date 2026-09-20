@@ -141,6 +141,80 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 
 ---
 
+### 3.2 本地开发验证路径（改完怎么看到效果）
+
+> 2026-09-20 定稿。**不要用发布流水线做本地验证**：流水线面向 dev/prod，带审批与版本账本，
+> 用它做本地验证会很重，且容易演变成"每个模块建一条本地线"（已踩过，见 §6）。
+> 本地验证走下面的直连路径；发布到 dev/prod 才走流水线。
+
+| 改什么 | 在哪构建 | 产物去哪 | 怎么生效 |
+|---|---|---|---|
+| **deploy-console 自身** | 工作区 | 复制到发布目录 | `./scripts/publish-deploy-console.sh`（一键：构建→复制→重启→复检） |
+| **前端模块** admin / portal | 工作区 `apps/<m>` | 网关静态根 `static/modules/<key>/local/<版本>/` | 切指针 → 浏览器**硬刷新** |
+| **后端服务** gateway / system… | 工作区 `servers/<svc>` | 发布目录 `servers/<svc>/dist` | pm2 干净重启 + 端口归属校验 |
+
+#### 前端（admin / portal）
+
+本地环境加载的是**指针**，不是版本目录：`/__manifest__?site=local` →
+`byEnv.local.admin.entry = /static/modules/admin/local/index.js`（§3.1）。
+
+```bash
+# 1) 构建：必须是微前端模式（--mode mf），普通 npm run build 产出的是 SPA，shell 加载不了
+cd ~/workspace/web_system/apps/admin
+RELEASE_TAG=<短hash> MF_FORMAT=system npx vite build --mode mf
+
+# 2) 产物放进本地环境的版本目录
+DST=~/web_system_release/servers/gateway/public/static/modules/admin/local/$RELEASE_TAG
+mkdir -p "$DST" && cp -R dist/. "$DST/"
+
+# 3) 切指针（走 API 会同步更新版本表；也可直接改 local/index.js 两行 export）
+curl -X POST http://127.0.0.1:6200/api/apps/admin/switch \
+  -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
+  -d "{\"envId\":\"local\",\"version\":\"$RELEASE_TAG\"}"
+
+# 4) 浏览器硬刷新 Cmd/Ctrl+Shift+R（入口 no-cache，但分包带 hash）
+```
+
+#### 后端（gateway / system / auth…）
+
+```bash
+# 1) 构建
+cd ~/workspace/web_system/servers/gateway && npm run build
+
+# 2) 同步到运行位置（后端服务 cwd 在发布目录，见 §2）
+cp -R dist/. ~/web_system_release/servers/gateway/dist/
+
+# 3) 干净 env 重启（delete + start，不用 restart/--update-env），并校验端口归属
+P=$(pm2 pid web-gateway); for p in $(lsof -tiTCP:6000 -sTCP:LISTEN); do [ "$p" != "$P" ] && kill -9 $p; done
+cd ~/web_system_release/servers/gateway && pm2 delete web-gateway
+pm2 start dist/main.js --name web-gateway --cwd ~/web_system_release/servers/gateway
+sleep 8 && [ "$(pm2 pid web-gateway)" = "$(lsof -tiTCP:6000 -sTCP:LISTEN | head -1)" ] && echo OK
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:6000/api/health   # 期望 200
+```
+
+#### 不生效时，按这个顺序查
+
+1. **构建源错位**（最静默）：脚本若默认在发布目录构建，而发布目录通常停在 `master`，
+   工作区的分支改动永远进不去产物 —— 表现是"发布成功但行为没变"且无任何报错。先确认 cwd 与分支。
+2. **孤儿进程**（头号原因）：端口持有者 ≠ pm2 记录的 pid（runbook §4.6）。
+3. **启动即崩**：pm2 `online`、端口在听，但接口返回 `000`；看 `restarts` 是否 5 秒内增长（runbook §4.8）。
+4. **浏览器缓存**：入口 `index.js` 是 no-cache，分包带 hash；仍不生效就硬刷新。
+
+#### 配置化（P0–P3，2026-09-20）
+
+产物目录、pm2 入口、网关静态根**都可以配**，不必改代码：
+
+| 配置 | 作用 | 缺省 |
+|---|---|---|
+| `DEPLOY_ROOT` / `ARTIFACT_SUBPATH` | 模块部署位置 | 空 = 发布目录根 / 按类型推导 |
+| `PM2_SCRIPT` / `PM2_CWD` | 后端进程入口与工作目录 | `dist/main.js` / `servers/<dir>` |
+| `STATIC_PUBLIC_ROOT`（gateway） | 网关静态根 | `servers/gateway/public` |
+| `PIPELINE_CONFIG_INJECT=false` | 关掉配置中心注入（回退旧行为） | 默认开启 |
+
+设计见 `specs/config-driven-deploy/design.md`。
+
+---
+
 ## 4 一键脚本索引
 
 | 脚本 | 用途 |
