@@ -152,9 +152,6 @@
         </div>
       </a-layout-footer>
     </a-layout>
-
-    <!-- 环境切换挂件：被 shell 加载时由 shell 统一提供，此处不重复挂 -->
-    <EnvSwitcher v-if="!inShell" />
   </a-layout>
 </template>
 
@@ -166,10 +163,6 @@ import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
 import { message } from 'ant-design-vue';
-import EnvSwitcher from '@web-system/ui/components/EnvSwitcher.vue';
-
-/** 被 shell（基座）加载时，环境切换挂件由 shell 统一提供，模块内不重复挂载 */
-const inShell = typeof (window as any).__LOADER__ !== 'undefined';
 
 const router = useRouter();
 const route = useRoute();

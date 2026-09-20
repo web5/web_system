@@ -30,6 +30,7 @@ export class ProxyService implements OnModuleInit {
   private uploadStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private bianbianStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
+  private finnewsProxy!: ReturnType<typeof createProxyMiddleware>;
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentDefsProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -120,12 +121,22 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
-    // 内容中枢通道（/api/content-hub/* → content-hub:6007）—— 唯一入口
-    // 财经资讯与内容管道共用：剥掉 /api/content-hub 后即为 content-hub 的真实路由
-    //   - /api/content-hub/api/papers          → /api/papers（财经资讯，@Controller('api')）
-    //   - /api/content-hub/api/content/sources → /api/content/sources（内容管道，@Controller('api/content')）
-    // 历史上另有 /api/finnews/* 通道（同样指向 content-hub），已统一到本通道。
+    // 财经通道（/api/finnews/* → content-hub:6007）
+    // pathRewrite：/api/finnews/api/market-pulse → /api/market-pulse（finnews 模块 controller 是 @Controller('api')）
     // 鉴权在 proxy.controller.ts 的路由方法里手动验证 Bearer token
+    this.finnewsProxy = createProxyMiddleware({
+      target: this.contentHubServiceUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/finnews': '' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
+    // 内容管道通道（/api/content-hub/* → content-hub:6007）
+    // pathRewrite：/api/content-hub/api/content/sources → /api/content/sources（content controller 是 @Controller('api/content')）
     this.contentProxy = createProxyMiddleware({
       target: this.contentHubServiceUrl,
       changeOrigin: true,
@@ -176,6 +187,7 @@ export class ProxyService implements OnModuleInit {
   getKnowledgeProxy() { return this.knowledgeProxy; }
   getAgentRunsProxy() { return this.agentRunsProxy; }
   getAgentDefsProxy() { return this.agentDefsProxy; }
+  getFinnewsProxy() { return this.finnewsProxy; }
   getContentProxy() { return this.contentProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }
 

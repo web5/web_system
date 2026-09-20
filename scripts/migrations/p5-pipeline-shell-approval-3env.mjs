@@ -104,6 +104,7 @@ const MODULES = [
   { key: 'auth-service', localPath: `${HOME}/web_system_release/servers/auth-service`, remotePath: '/data/web_system/servers/auth-service' },
   { key: 'content-hub', localPath: `${HOME}/web_system_release/servers/content-hub`, remotePath: '/data/web_system/servers/content-hub' },
   { key: 'deploy-console', localPath: `${HOME}/web_system_release/servers/deploy-console`, remotePath: '/data/web_system/servers/deploy-console' },
+  { key: 'finnews', localPath: `${HOME}/web_system_release/servers/finnews`, remotePath: '/data/web_system/servers/finnews' },
   { key: 'system-service', localPath: `${HOME}/web_system_release/servers/system-service`, remotePath: '/data/web_system/servers/system-service' },
   { key: 'todo-service', localPath: `${HOME}/web_system_release/servers/todo-service`, remotePath: '/data/web_system/servers/todo-service' },
   { key: 'upload-service', localPath: `${HOME}/web_system_release/servers/upload-service`, remotePath: '/data/web_system/servers/upload-service' },

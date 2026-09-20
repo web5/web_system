@@ -99,13 +99,6 @@ export class DeployModuleEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '默认产物路径（相对版本目录）' })
   defaultArtifactPath?: string;
 
-  /**
-   * pm2 入口脚本（相对部署根，如 `dist/main.js`；P3 2026-09-20）。
-   * 为空时流水线变量 `PM2_SCRIPT` 回落到 `dist/main.js`（历史行为不变）。
-   */
-  @Column({ type: 'varchar', length: 255, nullable: true, comment: 'pm2 入口脚本' })
-  pm2Script?: string | null;
-
   /** 描述 */
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '描述' })
   description?: string;
