@@ -8,6 +8,7 @@ import { createProxyMiddleware, fixRequestBody, type RequestHandler } from 'http
 import {
   DeployEndpointEntity,
   DeployEnvEntity,
+  DeployHostEntity,
   DeployServiceEntity,
   DeployServiceEnvEntity,
   DeployServiceRouteEntity,
@@ -38,6 +39,8 @@ interface CacheShape {
   bindings: Map<string, DeployServiceEnvEntity>;
   /** serviceKey → 接口清单 */
   endpoints: Map<string, EndpointRule[]>;
+  /** 主机组名 → 可解析地址（Q17 方案 D：地址只在 deploy_hosts 维护） */
+  hostAddressByName: Map<string, string>;
   sites: { host: string; defaultEnvId: string }[];
   envIds: Set<string>;
 }
@@ -103,12 +106,13 @@ export class DynamicRouteService implements OnModuleInit {
     if (!force && this.cache && Date.now() - this.cache.loadedAt < ROUTE_CACHE_TTL_MS) {
       return this.cache;
     }
-    const [routes, services, bindings, endpoints, sites] = await Promise.all([
+    const [routes, services, bindings, endpoints, sites, hosts] = await Promise.all([
       this.deployDataSource.getRepository(DeployServiceRouteEntity).find({ where: { enabled: true } }),
       this.deployDataSource.getRepository(DeployServiceEntity).find(),
       this.deployDataSource.getRepository(DeployServiceEnvEntity).find(),
       this.deployDataSource.getRepository(DeployEndpointEntity).find({ where: { enabled: true } }),
       this.deployDataSource.getRepository(DeploySiteEntity).find(),
+      this.deployDataSource.getRepository(DeployHostEntity).find({ where: { enabled: true } }),
     ]);
 
     const serviceMap = new Map<string, { unknownPolicy: string; defaultPort: number | null }>();
@@ -140,6 +144,7 @@ export class DynamicRouteService implements OnModuleInit {
       services: serviceMap,
       bindings: bindingMap,
       endpoints: endpointMap,
+      hostAddressByName: new Map(hosts.map((h) => [h.name, h.host])),
       sites: sites.map((s) => ({ host: s.host, defaultEnvId: s.defaultEnvId })),
       envIds: new Set<string>(),
     };
@@ -175,12 +180,17 @@ export class DynamicRouteService implements OnModuleInit {
     }
 
     const binding = c.bindings.get(`${rule.serviceKey}@${envId}`) || null;
-    const upstream = resolveUpstream(rule, binding, svc?.defaultPort ?? null);
+    const upstream = resolveUpstream(rule, binding, c.hostAddressByName);
     if (!upstream) {
+      const reason = !binding?.hostName
+        ? `服务 ${rule.serviceKey} 在环境 ${envId} 未配置主机组指向`
+        : !c.hostAddressByName.has(binding.hostName)
+          ? `主机组 ${binding.hostName} 未在主机管理登记或已停用（服务 ${rule.serviceKey} @ ${envId}）`
+          : `服务 ${rule.serviceKey} 在环境 ${envId} 未配置端口`;
       return {
         kind: 'error',
         status: 502,
-        reason: `服务 ${rule.serviceKey} 在环境 ${envId} 未配置指向（host/port/upstreamUrl），拒绝回落本机`,
+        reason: `${reason}，拒绝回落本机`,
       };
     }
 

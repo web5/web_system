@@ -10,12 +10,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { DeployServiceEntity } from '../entities/deploy-service.entity';
 import { DeployServiceRouteEntity } from '../entities/deploy-service-route.entity';
 import { DeployEndpointEntity } from '../entities/deploy-endpoint.entity';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { DeployEnvEntity } from '../entities/deploy-env.entity';
+import { DeployHostEntity } from '../entities/deploy-host.entity';
 // 仅用于种子导入（迁移 M4/M6 的运行时等价物，P4 正式迁移后移除依赖）
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
@@ -74,6 +75,8 @@ export class ServicesService implements OnModuleInit {
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
     @InjectRepository(DeployEnvEntity)
     private readonly envRepo: Repository<DeployEnvEntity>,
+    @InjectRepository(DeployHostEntity)
+    private readonly hostRepo: Repository<DeployHostEntity>,
     @InjectRepository(DeployModuleEntity)
     private readonly legacyModuleRepo: Repository<DeployModuleEntity>,
     @InjectRepository(DeployEnvServiceRouteEntity)
@@ -231,8 +234,10 @@ export class ServicesService implements OnModuleInit {
         ...s,
         routeCount: routeMap.get(s.key)?.length ?? 0,
         endpointCount: endpointMap.get(s.key)?.length ?? 0,
-        // 已配置指向的环境（未配主机的环境不计入，避免"看起来配了其实是空指向"）
-        configuredEnvs: (envMap.get(s.key) || []).filter((e) => !!e.hostName).map((e) => e.envId),
+        // 已配置指向的环境（主机组与端口缺一不可，避免"看起来配了其实是空指向"）
+        configuredEnvs: (envMap.get(s.key) || [])
+          .filter((e) => !!e.hostName && !!e.port)
+          .map((e) => e.envId),
       })),
       total,
       page,
@@ -613,18 +618,29 @@ export class ServicesService implements OnModuleInit {
       this.serviceEnvRepo.find({ where: { serviceKey } }),
     ]);
     const byEnv = new Map(rows.map((r) => [r.envId, r]));
+    const hostNames = [...new Set(rows.map((r) => r.hostName).filter((n): n is string => !!n))];
+    const hosts = hostNames.length
+      ? await this.hostRepo.find({ where: { name: In(hostNames) } })
+      : [];
+    const addrByName = new Map(hosts.filter((h) => h.enabled).map((h) => [h.name, h.host]));
+
     return {
       service: svc,
       items: envs.map((e) => {
         const r = byEnv.get(e.envId);
+        const hostName = r?.hostName ?? null;
+        // Q19：端口不继承 defaultPort，未填即未配置
+        const port = r?.port ?? null;
         return {
           envId: e.envId,
           envName: e.name,
           siteKey: e.siteKey,
           isProd: e.isProd,
-          configured: !!r?.hostName,
-          hostName: r?.hostName ?? null,
-          port: r?.port ?? svc.defaultPort ?? null,
+          configured: !!hostName && !!port,
+          hostName,
+          /** 主机组解析出的可解析地址（转发/探活实际用它） */
+          hostAddress: hostName ? addrByName.get(hostName) ?? null : null,
+          port,
           upstreamUrl: r?.upstreamUrl ?? null,
           replicas: r?.replicas ?? 1,
           runtime: r?.runtime ?? null,
@@ -634,17 +650,33 @@ export class ServicesService implements OnModuleInit {
     };
   }
 
-  /** 解析该服务在某环境的目标地址（网关与探活共用） */
+  /**
+   * 解析该服务在某环境的目标地址（网关与探活共用）。
+   *
+   * Q17 方案 D：`hostName` 只是主机**组名**，地址须查 `deploy_hosts.host`；
+   * Q19：端口**不继承** `defaultPort`，缺端口即配置错误（fail-fast，不回落 80 端口）。
+   */
   private async resolveUpstream(serviceKey: string, envId: string) {
     const svc = await this.getService(serviceKey);
     const row = await this.serviceEnvRepo.findOne({ where: { serviceKey, envId } });
     if (row?.upstreamUrl) return { url: row.upstreamUrl, row, svc };
-    if (row?.hostName) {
-      const port = row.port ?? svc.defaultPort;
-      if (port) return { url: `http://${row.hostName}:${port}`, row, svc };
-      return { url: `http://${row.hostName}`, row, svc };
+    if (!row?.hostName) return { url: null, row, svc };
+
+    const host = await this.hostRepo.findOne({ where: { name: row.hostName } });
+    if (!host) {
+      throw new BadRequestException(
+        `主机组 ${row.hostName} 未在「主机管理」登记，无法解析 ${serviceKey} 在 ${envId} 的地址（不允许回落到本机）`,
+      );
     }
-    return { url: null, row, svc };
+    if (!host.enabled) {
+      throw new BadRequestException(`主机组 ${row.hostName} 已停用，无法解析 ${serviceKey} 在 ${envId} 的地址`);
+    }
+    if (!row.port) {
+      throw new BadRequestException(
+        `服务 ${serviceKey} 在环境 ${envId} 未配置端口，无法解析上游地址（端口不继承服务默认值，请到「环境详情 → 后端服务指向」补齐）`,
+      );
+    }
+    return { url: `http://${host.host}:${row.port}`, row, svc };
   }
 
   /**

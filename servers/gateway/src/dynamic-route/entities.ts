@@ -82,6 +82,27 @@ export class DeployServiceEnvEntity {
   status: string;
 }
 
+/**
+ * 主机（组）—— 服务环境指向的**地址来源**（Q17 方案 D）
+ *
+ * `deploy_service_envs.host_name` 存的是**组名**（引用键），
+ * 转发地址必须查本表的 `host`：IP 只在主机管理一处维护，换机器只改一处。
+ */
+@Entity('deploy_hosts')
+export class DeployHostEntity {
+  @PrimaryColumn({ type: 'varchar', length: 64 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 128 })
+  host: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  runtime: string;
+
+  @Column({ type: 'boolean', default: true })
+  enabled: boolean;
+}
+
 /** 服务（网关背后的后端） */
 @Entity('deploy_services')
 export class DeployServiceEntity {

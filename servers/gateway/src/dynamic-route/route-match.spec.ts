@@ -104,27 +104,43 @@ describe('dynamic-route 匹配语义', () => {
   });
 
   describe('resolveUpstream（没配就必须 fail-fast，不回落本机）', () => {
-    it('显式覆盖 > 环境 upstreamUrl > host:port > host', () => {
+    /** 主机组名 → 可解析地址（Q17 方案 D：地址只在 deploy_hosts 维护） */
+    const hosts = new Map([
+      ['dev-default', '175.27.189.123'],
+      ['prod-default', '106.52.176.246'],
+    ]);
+
+    it('显式覆盖 > 环境 upstreamUrl > 主机解析地址:端口', () => {
       expect(
-        resolveUpstream({ upstreamOverride: 'http://override:1' }, { hostName: 'h', port: 2 }),
+        resolveUpstream({ upstreamOverride: 'http://override:1' }, { hostName: 'dev-default', port: 2 }, hosts),
       ).toBe('http://override:1');
       expect(
-        resolveUpstream({ upstreamOverride: null }, { upstreamUrl: 'http://u:9', hostName: 'h', port: 2 }),
+        resolveUpstream(
+          { upstreamOverride: null },
+          { upstreamUrl: 'http://u:9', hostName: 'dev-default', port: 2 },
+          hosts,
+        ),
       ).toBe('http://u:9');
-      expect(resolveUpstream({ upstreamOverride: null }, { hostName: 'server-dev', port: 6005 })).toBe(
-        'http://server-dev:6005',
-      );
-      expect(resolveUpstream({ upstreamOverride: null }, { hostName: 'server-dev' }, 6005)).toBe(
-        'http://server-dev:6005',
-      );
-      expect(resolveUpstream({ upstreamOverride: null }, { hostName: 'server-dev', port: null }, null)).toBe(
-        'http://server-dev',
-      );
+      // 组名 → 真实地址（不得把组名当主机名拼成 http://dev-default:6010）
+      expect(
+        resolveUpstream({ upstreamOverride: null }, { hostName: 'dev-default', port: 6010 }, hosts),
+      ).toBe('http://175.27.189.123:6010');
+      expect(
+        resolveUpstream({ upstreamOverride: null }, { hostName: 'prod-default', port: 3001 }, hosts),
+      ).toBe('http://106.52.176.246:3001');
     });
 
-    it('无覆盖且无指向 → null（不得回落 localhost —— B4）', () => {
-      expect(resolveUpstream({ upstreamOverride: null }, null)).toBeNull();
-      expect(resolveUpstream({ upstreamOverride: null }, { hostName: null, port: 6005 })).toBeNull();
+    it('无覆盖且无指向 / 主机组未登记 / 缺端口 → null（不得回落 localhost —— B4）', () => {
+      expect(resolveUpstream({ upstreamOverride: null }, null, hosts)).toBeNull();
+      expect(resolveUpstream({ upstreamOverride: null }, { hostName: null, port: 6005 }, hosts)).toBeNull();
+      // 主机组未在主机管理登记
+      expect(
+        resolveUpstream({ upstreamOverride: null }, { hostName: 'ghost-default', port: 6005 }, hosts),
+      ).toBeNull();
+      // Q19：端口不继承、不回落 80
+      expect(
+        resolveUpstream({ upstreamOverride: null }, { hostName: 'dev-default', port: null }, hosts),
+      ).toBeNull();
     });
   });
 

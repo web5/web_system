@@ -70,6 +70,8 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
     };
     const serviceEnvRepo: any = { find: jest.fn(async () => []), findOne: jest.fn(async () => null) };
     const envRepo: any = { find: jest.fn(async () => []), findOne: jest.fn(async () => ({ envId: 'dev' })) };
+    // 主机管理（服务指向的地址来源；单测里不登记任何主机 → 解析应 fail-fast）
+    const hostRepo: any = { find: jest.fn(async () => []), findOne: jest.fn(async () => null) };
     const legacyModuleRepo: any = { find: jest.fn(async () => []) };
     const legacyRouteRepo: any = { find: jest.fn(async () => []) };
     const configService: any = { get: jest.fn(() => undefined) };
@@ -83,6 +85,7 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
       endpointRepo,
       serviceEnvRepo,
       envRepo,
+      hostRepo,
       legacyModuleRepo,
       legacyRouteRepo,
       configService,

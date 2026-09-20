@@ -913,13 +913,62 @@ export interface EnvServiceRouteRow {
   serviceName: string
   kind?: string
   configured: boolean
+  /** 主机**组名**（引用 deploy_hosts.name） */
   hostName: string | null
+  /** 主机组解析出的可解析地址（展示用，让「组名 ≠ 地址」可见） */
+  hostAddress?: string | null
   port: number | null
   upstreamUrl: string | null
   replicas: number
   runtime: 'pm2' | 'docker' | null
   healthPath?: string | null
   enabled: boolean
+}
+
+/* ========== 基础设施 · 主机管理 ========== */
+
+export type HostRuntime = 'pm2' | 'docker'
+
+/** 主机（组）：服务环境指向的地址来源 */
+export interface HostRow {
+  id: string
+  name: string
+  host: string
+  sshUser: string
+  sshKeyPath?: string | null
+  remoteDir: string
+  runtime: HostRuntime
+  labels?: Record<string, string> | null
+  enabled: boolean
+}
+
+export const hostsApi = {
+  /** 主机组列表（enabledOnly=true 供下拉只出可用项） */
+  list: (params?: { enabledOnly?: boolean }) =>
+    http.get('/hosts', { params: { enabledOnly: params?.enabledOnly ? '1' : undefined } }) as Promise<HostRow[]>,
+  get: (name: string) => http.get(`/hosts/${name}`) as Promise<HostRow>,
+  create: (dto: {
+    name: string
+    host: string
+    sshUser: string
+    sshKeyPath?: string
+    remoteDir: string
+    runtime?: HostRuntime
+    enabled?: boolean
+  }) => http.post('/hosts', dto) as Promise<HostRow>,
+  update: (
+    name: string,
+    dto: {
+      host?: string
+      sshUser?: string
+      sshKeyPath?: string | null
+      remoteDir?: string
+      runtime?: HostRuntime
+      enabled?: boolean
+    },
+  ) => http.put(`/hosts/${name}`, dto) as Promise<HostRow>,
+  remove: (name: string) =>
+    http.delete(`/hosts/${name}`) as Promise<{ removed: boolean; occupants: string[] }>,
 }
 
 export const envsApi = {
@@ -1158,8 +1207,12 @@ export interface ServiceEnvRow {
   envName: string
   siteKey: string
   isProd: boolean
+  /** 主机组名与端口都齐才算已配置 */
   configured: boolean
+  /** 主机**组名**（引用 deploy_hosts.name，不是地址） */
   hostName: string | null
+  /** 主机组解析出的可解析地址（转发/探活实际用它） */
+  hostAddress?: string | null
   port: number | null
   upstreamUrl: string | null
   replicas: number

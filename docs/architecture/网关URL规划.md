@@ -27,7 +27,7 @@ Gateway（端口 6000）是应用层唯一入口，统一处理全部请求：
 |------|----------|----------|------|
 | 📦 静态资源 | 带扩展名 (.js/.css/.svg) | `ServeStaticModule` | `StaticModule` |
 | 🔄 API 代理 | `/api/*` | `ProxyModule` | `ProxyModule` |
-| 🔀 MCP 代理 | `/api/mcp/*`、`/api/finnews/*` | 代理到 mcp-gateway / finnews（含鉴权） | `ProxyModule` |
+| 🔀 MCP 代理 | `/api/mcp/*`、`/api/finnews/*` | 代理到 mcp-gateway / content-hub（含鉴权） | `ProxyModule` |
 | 🌐 SPA 回退 | 无后缀 GET | Express 中间件 → `index.html` | main.ts |
 | 🔧 前端托管 | `/portal/`、`/admin/`、`/mcp-admin/` | `ServeStaticModule` | `StaticModule` |
 | 📚 接口文档 | `/docs`、`/swagger` | SwaggerModule | `SwaggerDocsModule` |

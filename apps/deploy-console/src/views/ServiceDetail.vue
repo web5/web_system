@@ -413,6 +413,15 @@ async function loadEnvs() {
   }
 }
 
+/** 跳到「环境详情 → 后端服务指向」并高亮本服务（编辑入口唯一，本页只读） */
+function gotoEnvConfig(envId: string) {
+  router.push({
+    name: 'EnvironmentDetail',
+    params: { envId },
+    query: { tab: 'backend', service: svcKey.value },
+  })
+}
+
 const probing = ref<string | null>(null)
 /** 正在部署的环境（同一时间只允许一个部署在跑） */
 const deploying = ref<string | null>(null)
@@ -641,7 +650,7 @@ onMounted(load)
                 <a-badge v-else status="warning" text="未配置" />
               </div>
               <div class="ec-ver ws-mono">
-                {{ e.upstreamUrl || (e.hostName ? `${e.hostName}:${e.port ?? '—'}` : '—') }}
+                {{ e.upstreamUrl || (e.hostAddress ? `${e.hostAddress}:${e.port ?? '—'}` : '—') }}
               </div>
               <div class="ec-meta">{{ e.envName }} · {{ e.runtime || '继承运行时' }}</div>
               <a-button
@@ -747,11 +756,17 @@ onMounted(load)
                 <span class="muted">{{ record.runtime || '继承' }}</span>
               </template>
               <template v-else-if="column.key === 'hostName'">
-                <span v-if="record.hostName" class="ws-mono">{{ record.hostName }}</span>
+                <div v-if="record.hostName">
+                  <span class="ws-mono">{{ record.hostName }}</span>
+                  <div class="sub-addr ws-mono">
+                    {{ record.hostAddress || '未登记主机' }}:{{ record.port ?? '—' }}
+                  </div>
+                </div>
                 <span v-else class="muted">—</span>
               </template>
               <template v-else-if="column.key === 'port'">
-                <span class="ws-mono ws-tabular">{{ record.port ?? '—' }}</span>
+                <span v-if="record.port" class="ws-mono ws-tabular">{{ record.port }}</span>
+                <span v-else class="muted">必填</span>
               </template>
               <template v-else-if="column.key === 'replicas'">
                 <span class="ws-tabular">{{ record.replicas }}</span>
@@ -766,14 +781,22 @@ onMounted(load)
                 <a-badge v-else status="default" :text="record.status" />
               </template>
               <template v-else-if="column.key === 'action'">
-                <a type="link" @click="probe(record.envId)">探活</a>
+                <a type="link" @click="gotoEnvConfig(record.envId)">配置指向</a>
+                <a-divider type="vertical" />
+                <a-tooltip
+                  v-if="!record.configured"
+                  title="未配置主机组或端口，探活与部署会 fail-fast（不回落本机）"
+                >
+                  <a type="link" class="link-disabled">探活</a>
+                </a-tooltip>
+                <a v-else type="link" @click="probe(record.envId)">探活</a>
               </template>
             </template>
           </a-table>
           <p class="hint">
-            各环境「指向」（主机 / 端口 / 上游 / 运行时）统一在
-            <a @click="router.push({ name: 'EnvironmentManager' })">环境管理 → 环境详情</a> 内维护；
-            未配置主机时探活与部署都会 fail-fast（不回落本机）。
+            本页<b>只读</b>：各环境「指向」（主机组 / 端口 / 上游 / 运行时）统一在
+            <a @click="router.push({ name: 'EnvironmentManager' })">环境管理 → 环境详情 → 后端服务指向</a>
+            内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。
           </p>
         </a-tab-pane>
 
@@ -798,7 +821,7 @@ onMounted(load)
               </template>
               <template v-else-if="column.key === 'target'">
                 <span v-if="record.configured" class="ws-mono">
-                  {{ record.upstreamUrl || `${record.hostName}:${record.port ?? '—'}` }}
+                  {{ record.upstreamUrl || `${record.hostAddress}:${record.port ?? '—'}` }}
                 </span>
                 <span v-else class="muted">未配置指向（部署会 fail-fast）</span>
               </template>
@@ -1050,6 +1073,16 @@ onMounted(load)
   margin-left: 8px;
   font-size: 12px;
   color: var(--ws-text-tertiary);
+}
+.sub-addr {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+}
+.link-disabled {
+  color: var(--ws-text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 .muted {
   color: var(--ws-text-tertiary);

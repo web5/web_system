@@ -17,6 +17,7 @@ import {
   ControlOutlined,
   GlobalOutlined,
   ApiOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -84,6 +85,7 @@ const DOMAINS: Domain[] = [
     label: '基础设施',
     icon: SettingOutlined,
     children: [
+      { key: '/hosts', label: '主机管理', icon: ClusterOutlined },
       { key: '/monitor', label: '服务监控', icon: MonitorOutlined },
       { key: '/audit', label: '审计日志', icon: AuditOutlined },
       { key: '/notifications', label: '通知中心', icon: BellOutlined },

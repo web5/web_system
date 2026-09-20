@@ -25,6 +25,7 @@ import { TargetModule } from './target/target.module';
 import { EnvsModule } from './envs/envs.module';
 import { AppsModule } from './apps/apps.module';
 import { ServicesModule } from './services/services.module';
+import { HostsModule } from './hosts/hosts.module';
 
 @Module({
   imports: [
@@ -115,6 +116,8 @@ import { ServicesModule } from './services/services.module';
     AppsModule,
     // 服务域（双域重构 P2：服务 + 转发规则 + 接口清单 + 环境指向）
     ServicesModule,
+    // 主机管理（双域重构：服务环境指向的地址来源，host_name 引用 deploy_hosts.name）
+    HostsModule,
   ],
 })
 export class AppModule {}

@@ -14,14 +14,24 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import { envsApi, type EnvRow, type EnvServiceRouteRow } from '@/api'
+import { envsApi, hostsApi, type EnvRow, type EnvServiceRouteRow, type HostRow } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
 const envId = computed(() => String(route.params.envId || ''))
 
-const activeTab = ref('basic')
+/** 深链支持：`?tab=backend&service=<svcKey>`（服务详情「配置指向」直达） */
+const activeTab = ref(String(route.query.tab || 'basic'))
+const highlightService = ref(String(route.query.service || ''))
 const loading = ref(false)
+
+/** 主机组（下拉选项；目标主机只能选已登记的组） */
+const hosts = ref<HostRow[]>([])
+const hostOptions = computed(() => hosts.value.map((h) => ({ label: `${h.name} · ${h.host}`, value: h.name })))
+function addressOf(name?: string | null): string {
+  if (!name) return ''
+  return hosts.value.find((h) => h.name === name)?.host || ''
+}
 
 /** 环境基本信息 */
 const envInfo = ref<EnvRow>({
@@ -40,12 +50,14 @@ const serviceRoutes = ref<EnvServiceRouteRow[]>([])
 async function load() {
   loading.value = true
   try {
-    const [env, routesRes] = await Promise.all([
+    const [env, routesRes, hostRows] = await Promise.all([
       envsApi.get(envId.value),
       envsApi.serviceRoutes(envId.value),
+      hostsApi.list(),
     ])
     envInfo.value = env
     serviceRoutes.value = routesRes.items || []
+    hosts.value = hostRows || []
   } catch (e: any) {
     message.error(e?.response?.data?.message || '加载环境信息失败')
   } finally {
@@ -62,10 +74,14 @@ const columns: TableColumnsType = [
   { title: '操作', key: 'action', width: 90 },
 ]
 
-/** 上游地址展示：显式 upstreamUrl 优先，否则由「主机 + 端口」推导 */
+/**
+ * 上游地址展示：显式 upstreamUrl 优先，否则由「主机解析地址 + 端口」推导。
+ * Q17 方案 D：地址来自 deploy_hosts，不是组名（组名不可解析）。
+ */
 function upstreamOf(row: EnvServiceRouteRow): string {
   if (row.upstreamUrl) return row.upstreamUrl
-  if (row.hostName && row.port) return `http://${row.hostName}:${row.port}`
+  const addr = row.hostAddress ?? addressOf(row.hostName)
+  if (addr && row.port) return `http://${addr}:${row.port}`
   return '—'
 }
 
@@ -118,15 +134,35 @@ function openEdit(row: EnvServiceRouteRow) {
   editOpen.value = true
 }
 
-/** 由主机 + 端口推导上游地址（用户可再手改） */
+/** 深链高亮：从服务详情「配置指向」跳来时定位到该行（不自动弹窗，避免弹窗套弹窗） */
+function rowClass(record: EnvServiceRouteRow): string {
+  return record.serviceKey === highlightService.value ? 'row-highlight' : ''
+}
+
+const upstreamPlaceholder = computed(() => {
+  const addr = addressOf(form.hostName)
+  return addr && form.port ? `http://${addr}:${form.port}` : 'http://<主机地址>:<端口>'
+})
+
+/** 由「主机解析地址 + 端口」推导上游地址（用户可再手改） */
 function syncUpstream() {
-  if (form.hostName && form.port) form.upstreamUrl = `http://${form.hostName}:${form.port}`
+  const addr = addressOf(form.hostName)
+  if (addr && form.port) form.upstreamUrl = `http://${addr}:${form.port}`
 }
 
 async function submitEdit() {
   if (!editing.value) return
   if (!form.hostName.trim()) {
     message.error('目标主机必填（不允许静默回落到本机）')
+    return
+  }
+  if (!addressOf(form.hostName)) {
+    message.error(`主机组 ${form.hostName} 未登记或已停用，请先在「基础设施 → 主机管理」登记`)
+    return
+  }
+  // Q19：端口必填，不继承服务默认端口
+  if (!form.port) {
+    message.error('端口必填：请按该服务在此环境的实际启动端口填写（不继承默认值）')
     return
   }
   saving.value = true
@@ -202,15 +238,18 @@ onMounted(load)
 
         <!-- 后端服务指向 -->
         <a-tab-pane key="backend" tab="后端服务指向">
-          <p class="hint hint-top">
-            该环境下 API 网关把请求转发到哪个服务地址。修改后该环境的前端请求立即指向新地址（网关缓存 ≤60s 生效）。
-          </p>
+          <a-alert type="info" show-icon style="margin-bottom: 12px">
+            <template #message>
+              目标主机填的是「主机组名」（来自主机管理），转发地址由主机组解析得出；端口按该服务在此环境的<b>实际启动端口</b>填写，<b>不继承</b>服务默认端口。
+            </template>
+          </a-alert>
           <a-table
             :columns="columns"
             :data-source="serviceRoutes"
             row-key="serviceKey"
             size="middle"
             :pagination="false"
+            :row-class-name="rowClass"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'serviceKey'">
@@ -222,11 +261,17 @@ onMounted(load)
                 <span class="ws-mono" :class="{ muted: !record.configured }">{{ upstreamOf(record) }}</span>
               </template>
               <template v-else-if="column.key === 'hostName'">
-                <span v-if="record.hostName" class="ws-mono">{{ record.hostName }}</span>
+                <div v-if="record.hostName">
+                  <span class="ws-mono">{{ record.hostName }}</span>
+                  <div class="sub-addr ws-mono">
+                    {{ record.hostAddress ?? (addressOf(record.hostName) || '未登记主机') }}
+                  </div>
+                </div>
                 <span v-else class="muted">—</span>
               </template>
               <template v-else-if="column.key === 'port'">
-                <span class="ws-mono ws-tabular">{{ record.port ?? '—' }}</span>
+                <span v-if="record.port" class="ws-mono ws-tabular">{{ record.port }}</span>
+                <span v-else class="muted">必填</span>
               </template>
               <template v-else-if="column.key === 'enabled'">
                 <a-switch
@@ -258,16 +303,26 @@ onMounted(load)
       @cancel="editOpen = false"
     >
       <a-form layout="vertical" style="margin-top: 8px">
-        <a-form-item label="目标主机" required>
-          <a-input v-model:value="form.hostName" placeholder="如 server-dev / 175.27.189.123" @blur="syncUpstream" />
-          <div class="field-hint">必填：未配置主机时部署会 fail-fast，不允许静默回落到本机</div>
+        <a-form-item label="目标主机（主机组）" required>
+          <a-select
+            v-model:value="form.hostName"
+            :options="hostOptions"
+            show-search
+            option-filter-prop="label"
+            placeholder="选择已登记的主机组"
+            @change="syncUpstream"
+          />
+          <div class="field-hint">
+            只允许选择「基础设施 → 主机管理」中已登记的主机组（组名是引用键，改地址去主机管理改）
+          </div>
         </a-form-item>
-        <a-form-item label="端口">
+        <a-form-item label="端口" required>
           <a-input-number v-model:value="form.port" :min="1" :max="65535" style="width: 100%" @blur="syncUpstream" />
+          <div class="field-hint">按该服务在此环境的实际启动端口填写，不继承服务默认端口</div>
         </a-form-item>
         <a-form-item label="上游地址">
-          <a-input v-model:value="form.upstreamUrl" placeholder="http://server-dev:6101" />
-          <div class="field-hint">留空则用「主机 + 端口」自动拼装</div>
+          <a-input v-model:value="form.upstreamUrl" :placeholder="upstreamPlaceholder" />
+          <div class="field-hint">留空则用「主机解析地址 + 端口」自动拼装</div>
         </a-form-item>
         <a-form-item label="运行时">
           <a-select v-model:value="form.runtime" allow-clear placeholder="继承主机/环境默认">
@@ -339,6 +394,14 @@ onMounted(load)
 }
 .muted {
   color: var(--ws-text-tertiary);
+}
+.sub-addr {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+}
+:deep(.row-highlight) > td {
+  background: var(--ws-brand-100, #fff2e8);
 }
 .hint {
   margin: 10px 0 0;

@@ -66,7 +66,7 @@ pnpm dev        # → http://localhost:5173/portal/
 用本地 nginx 托管前端构建产物、反代 `/api`，与生产架构一致。适合联调微前端 / 验证部署形态。
 
 ### 前置
-1. 后端服务已启动：gateway(6000) auth(6001) user(6002) ai(6003) system(6004) todo(6005) mcp-gateway(6006) finnews(6007) upload(6008)
+1. 后端服务已启动：gateway(6000) auth(6001) user(6002) ai(6003) system(6004) todo(6005) mcp-gateway(6006) content-hub(6007) upload(6008)
 2. 前端已构建：`cd apps/admin && npx vite build`（及 portal/mcp-admin 按需）
 
 ### nginx 配置引入（已配置好，无需重复做）
