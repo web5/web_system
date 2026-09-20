@@ -5,6 +5,7 @@ import { DeployEnvEntity } from '../entities/deploy-env.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { DeployServiceEntity } from '../entities/deploy-service.entity';
+import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { EnvsService } from './envs.service';
 import { EnvsController } from './envs.controller';
 import { AuditModule } from '../audit/audit.module';
@@ -20,6 +21,8 @@ import { AuditModule } from '../audit/audit.module';
       DeployAppEnvVersionEntity,
       DeployServiceEnvEntity,
       DeployServiceEntity,
+      // 环境详情里的主机指向（EnvsService.hostRepo 依赖）
+      DeployHostEntity,
     ]),
     AuditModule,
   ],

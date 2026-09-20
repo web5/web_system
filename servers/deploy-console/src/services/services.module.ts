@@ -8,6 +8,7 @@ import { DeployEnvEntity } from '../entities/deploy-env.entity';
 // 种子导入用（迁移 M4/M6-lite，P4 正式迁移后解耦）
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
+import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { ServicesService } from './services.service';
 import { ServicesController } from './services.controller';
 import { AuditModule } from '../audit/audit.module';
@@ -27,6 +28,8 @@ import { ShellModule } from '../shell/shell.module';
       DeployEnvEntity,
       DeployModuleEntity,
       DeployEnvServiceRouteEntity,
+      // 服务×环境的主机指向（ServicesService.hostRepo 依赖）
+      DeployHostEntity,
     ]),
     AuditModule,
     // 部署动作所需：pm2 进程名单解析 + 命令执行（与流水线 restart 同链路）
