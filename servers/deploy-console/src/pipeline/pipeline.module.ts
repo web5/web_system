@@ -39,7 +39,6 @@ import { ReleaseGitModule } from '../git/release-git.module';
 import { ArtifactStoreModule } from '../artifact/artifact-store.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
-import { EnvsModule } from '../envs/envs.module';
 // 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
 
 @Module({
@@ -84,8 +83,6 @@ import { EnvsModule } from '../envs/envs.module';
     ReleaseRegistryModule,
     // 远程投递（upload remote 执行体）
     RemoteDeliveryModule,
-    // 环境域（提交时按环境表校验 envId，替代硬编码白名单）
-    EnvsModule,
   ],
   controllers: [PipelineController, PipelineVarController],
   providers: [
