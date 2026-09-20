@@ -67,7 +67,7 @@ export class EnvironmentService implements OnModuleInit {
       'system-service': '127.0.0.1:6004',
       'todo-service': '127.0.0.1:6005',
       'mcp-gateway': '127.0.0.1:6006',
-      'content-hub': '127.0.0.1:6007',
+      finnews: '127.0.0.1:6007',
       'upload-service': '127.0.0.1:6008',
       'deploy-console': '127.0.0.1:6200',
     };

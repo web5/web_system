@@ -6,7 +6,7 @@
 
 ## 网关访问前缀
 
-本服务经 gateway 暴露的外部前缀：/api/content-hub（财经资讯与内容管道共用；历史前缀 /api/finnews 已统一到本前缀）
+本服务经 gateway 暴露的外部前缀：/api/finnews, /api/content-hub
 
 > 例：若外部前缀为 `/api/auth`、某接口注册路径为 `/auth/login`，则外部可调用路径为 `/api/auth/login`；若注册路径首段已含外部前缀（如 `/ai/agent`），则直接拼接为 `/api/ai/agent`。具体映射以 gateway 的 ProxyController 路由为准。
 

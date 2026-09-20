@@ -92,9 +92,7 @@ module.exports = {
         TODO_SERVICE_URL: 'http://127.0.0.1:6005',
         MCP_GATEWAY_URL: 'http://127.0.0.1:6006',
         CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6007',
-        // 服务间鉴权（mcp-gateway → gateway 调 /api/content-hub 时必须带此 Bearer）
-        // 新名 CONTENT_HUB_SERVICE_KEY 优先，旧名 FINNEWS_SERVICE_KEY 兼容（gateway 两个都读）
-        CONTENT_HUB_SERVICE_KEY: process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '',
+        // 服务间鉴权（mcp-gateway → gateway 调 /api/finnews 时必须带此 Bearer）
         FINNEWS_SERVICE_KEY: process.env.FINNEWS_SERVICE_KEY || '',
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6000',
         CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://portal.kedouai.com,https://admin.kedouai.com',
@@ -212,7 +210,7 @@ module.exports = {
         ...baseDbConfig,
         SYSTEM_SERVICE_URL,
         // 财经资讯微服务（content-hub 内模块）：默认同机直连 :6007（Node fetch 对 gateway 代理端口有 bad port 问题）
-        // 如需经 gateway 代理，可用环境变量覆盖 FINNEWS_SERVICE_URL=http://127.0.0.1:6000/api/content-hub + AUTH_TYPE=bearer
+        // 如需经 gateway 代理，可用环境变量覆盖 FINNEWS_SERVICE_URL=http://127.0.0.1:6000/api/finnews + AUTH_TYPE=bearer
         FINNEWS_SERVICE_URL: process.env.FINNEWS_SERVICE_URL || 'http://127.0.0.1:6007',
         FINNEWS_SERVICE_AUTH_TYPE: process.env.FINNEWS_SERVICE_AUTH_TYPE || '',
         FINNEWS_SERVICE_AUTH_CONFIG: process.env.FINNEWS_SERVICE_AUTH_CONFIG || '',

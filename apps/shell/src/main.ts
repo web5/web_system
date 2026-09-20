@@ -14,8 +14,6 @@ import type { ModuleContext } from '@web-system/shared';
 import { setupAntdAll } from './antd-all';
 import { saveAuth, clearAuth } from './auth-storage';
 import { startVersionCheck } from './version-check';
-// 环境（加载维度）共享逻辑：解析规则与 gateway/EnvSwitcher 完全一致（R4）
-import { readManifest, resolveEnvId, ENV_HEADER } from '@web-system/ui/composables/env';
 // UI 规范：语义 token + 全局基础样式（2026-09-03 shell 视觉统一；css 子路径直指 ui src）
 import '@web-system/ui/tokens.css';
 import '@web-system/ui/theme.css';
@@ -41,13 +39,6 @@ import '@web-system/ui/theme.css';
 };
 (window as any).__MODULES__ = (window as any).__MODULES__ || {};
 
-// ---- 环境（加载维度）：必须早于 loader 注册与请求拦截器 ----
-// 解析规则与 gateway / EnvSwitcher 完全一致（composables/env）：
-// localStorage（挂件选择）> 站点 defaultEnv > 'dev'（Q1 回退）
-const manifest = readManifest();
-const envId = resolveEnvId(manifest);
-console.log('[shell] manifest:', manifest, '→ env:', envId);
-
 // pinia + router
 const pinia = createPinia();
 const router: Router = createRouter({
@@ -72,8 +63,6 @@ const http = axios.create({ baseURL: '/api', timeout: 30000 });
 http.interceptors.request.use((cfg) => {
   const token = localStorage.getItem('token');
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
-  // 环境随请求透传：gateway 据此把请求转发到该环境的后端指向（前端产物与后端上游必须同源）
-  cfg.headers[ENV_HEADER] = envId;
   return cfg;
 });
 
@@ -191,7 +180,7 @@ const ctx: ModuleContext = {
   pinia,
   axios: http,
   eventBus,
-  env: envId,
+  env: (window as any).__MODULES_MANIFEST__?.env || 'dev',
   user,
   container: document.body,
 };
@@ -199,43 +188,13 @@ const ctx: ModuleContext = {
 // loader 实例（提前挂到 window，供 ModuleContainer 组件在 onMounted 里调用 mount）
 const loader = new MicroFrontendLoader(ctx);
 (window as any).__LOADER__ = loader;
-
-/**
- * 按环境注册模块：**加载 `<appKey>/<envId>/index.js`（固定入口，不含版本）**。
- * 切换版本只改写该指针，manifest 无需变化（R5）。
- * byEnv 缺失（旧 gateway）时回落到 `modules` 旧结构，行为不变。
- */
-const moduleManifests = buildModuleManifests(manifest, envId);
-if (moduleManifests.length) {
-  loader.register(moduleManifests);
-  console.log(
-    '[shell] registered modules (env=' + envId + '):',
-    moduleManifests.map((m: any) => m.name),
-  );
-} else if (manifest.modules?.length) {
-  loader.register(manifest.modules as any);
-  console.log('[shell] 回落到旧 modules 结构:', manifest.modules.map((m: any) => m.name));
+const manifest = (window as any).__MODULES_MANIFEST__;
+console.log('[shell] manifest:', manifest);
+if (manifest?.modules?.length) {
+  loader.register(manifest.modules);
+  console.log('[shell] registered modules:', manifest.modules.map((m: any) => m.name));
 } else {
   console.warn('[shell] manifest 为空，检查 gateway 是否注入 __MODULES_MANIFEST__');
-}
-
-/** 由 byEnv 组装模块清单（兼容 `string` 与 `{ entry, css }` 两种形态） */
-function buildModuleManifests(m: ReturnType<typeof readManifest>, env: string): any[] {
-  const byEnv = m.byEnv?.[env];
-  if (!byEnv) return [];
-  return Object.entries(byEnv).map(([name, raw]) => {
-    const entry = typeof raw === 'string' ? raw : (raw as any)?.entry;
-    const css = typeof raw === 'string' ? null : ((raw as any)?.css ?? null);
-    if (!entry) return null;
-    return {
-      name,
-      // 固定入口不含版本：version 只用于日志/调试标注（切换版本不需改 manifest）
-      version: `env:${env}`,
-      entry,
-      css,
-      assetsBase: `/static/modules/${name}/${env}/`,
-    };
-  }).filter(Boolean) as any[];
 }
 
 // 登录校验守卫：未登录跳 /login

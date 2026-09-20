@@ -208,7 +208,7 @@ function legacyToNodes(): TemplateNode[] {
     ? (tpl.value!.steps as string[])
     : ['check', 'pull', 'build', 'upload', 'restart', 'verify', 'cleanup']
   // 终态：git 是普通 shell 节点；version/pointer 不再生成（写版本 = 发布节点的 service action，
-  // 切指针 = 应用详情里的部署/切换版本动作）
+  // 切指针 = 模块管理里的部署动作）
   const nodes: TemplateNode[] = [{ kind: 'shell', key: 'git', label: '拉取代码' }]
   for (const s of base) {
     if (s === 'pull' || s === 'git' || s === 'version' || s === 'pointer') continue

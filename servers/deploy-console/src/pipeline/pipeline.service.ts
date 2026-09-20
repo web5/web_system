@@ -27,7 +27,6 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
-
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -199,8 +198,6 @@ export interface ModuleSnapshot {
   deployRoot?: string;
   /** 默认产物路径（相对版本目录；M2） */
   defaultArtifactPath?: string;
-  /** pm2 入口脚本（相对部署根；P3，缺省 dist/main.js） */
-  pm2Script?: string | null;
 }
 
 /** 阶段变量解析入参（纯函数入参，便于单测） */
@@ -217,8 +214,6 @@ export interface StageVarsInput {
   deployRoot?: string;
   /** 模块默认产物路径（相对版本目录；M2） */
   defaultArtifactPath?: string;
-  /** pm2 入口脚本（相对部署根；P3，缺省 dist/main.js） */
-  pm2Script?: string | null;
   dir?: string;
   pm2?: string;
   publicPath?: string;
@@ -245,30 +240,7 @@ export interface StageVarsInput {
    * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
    */
   platformScriptsDir?: string;
-  /**
-   * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
-   * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
-   */
-  configInject?: boolean;
 }
-
-/**
- * 保护键：平台语义真相源，**不允许被配置中心覆盖**。
- *
- * 被覆盖会直接导致「发到哪个环境 / 发的是哪个模块 / 发的是哪个版本」失真
- * （例：`COMMIT_ID` 被改 = 发错版本且版本表写脏），故在此硬约束。
- * 注：流水线变量（模板级）的覆盖属存量行为，暂不约束，后续专项收敛。
- */
-export const PROTECTED_STAGE_KEYS: readonly string[] = [
-  'DEPLOY_ENV',
-  'MODULE_KEY',
-  'MODULE_TYPE',
-  'MODULE_DIR',
-  'COMMIT_ID',
-  'BRANCH',
-  'STAGE',
-  'RELEASE_DIR',
-];
 
 /**
  * 解析阶段命令可用的环境变量（v4 M1，纯函数便于单测）。
@@ -294,7 +266,7 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const ws = i.releaseWorkspace;
   const port = cfg.PORT || (i.pm2Port != null ? String(i.pm2Port) : '');
 
-  const base: Record<string, string> = {
+  return {
     DEPLOY_ENV: i.env || '',
     MODULE_KEY: i.moduleKey,
     MODULE_TYPE: type,
@@ -306,12 +278,6 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 进程与端口：显式解析，不做候选名猜测
     PM2_NAME: i.pm2 || `web-${i.moduleKey}`,
     PORT: port,
-    // P3（2026-09-20）：pm2 入口与工作目录可配（服务管理维护；空 → 历史缺省值）
-    PM2_SCRIPT: i.pm2Script || 'dist/main.js',
-    // 未配 deployRoot 时按模块目录回落（deployRootAbs 空值返回工作区根，故不能直接 ||）
-    PM2_CWD: i.deployRoot
-      ? deployRootAbs(ws, i.deployRoot)
-      : path.join(ws, type === 'backend' ? 'servers' : 'apps', dir),
     // 静态资源（publicPath 接线）
     PUBLIC_PATH: publicPath,
     ENTRY_FILE: entry,
@@ -329,40 +295,22 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
     WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
+    // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
+    ...pipelineVars,
   };
-
-  // P0（2026-09-20）：配置中心全量注入。
-  // 此前整包只用了 cfg.PORT，导致配置中心形同虚设 —— 部署路径、入口文件等只能
-  // 写死在模板级变量（且模板变量不区分环境）。开启后配置中心的值可覆盖内置同名键
-  // （内置作为兜底），保护键除外。PIPELINE_CONFIG_INJECT=false 可整体关闭回退。
-  if (i.configInject !== false) {
-    for (const [k, v] of Object.entries(cfg)) {
-      if (PROTECTED_STAGE_KEYS.includes(k)) continue;
-      base[k] = v;
-    }
-  }
-
-  // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
-  return { ...base, ...pipelineVars };
 }
 
 /** 流水线挂起（等审批）时的状态值（节点级审批，design D8 / R2） */
 export const PIPELINE_AWAITING_APPROVAL = 'awaiting-approval';
 
 /**
- * 环境说明（**知识，非系统约束**；2026-09-20 移除硬编码白名单）。
+ * 支持发布的环境。
  *
- * 环境由用户在「环境管理」自建（envId 自增），或由流水线模板 / 配置声明，
- * 引擎**不再校验** env 是否合法 —— 输入合法性由调用方（页面下拉 / AI 传参 / MCP）保证。
- *
- * 常见取值：`local`（本机，gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）、
- * `dev` / `staging` / `prod`。
- *
- * `local` 的意义：本地开发发布只投递本机产物，**不污染远程 dev 的指针** ——
+ * `local` = 本机环境（gateway 以 DEPLOY_ENV_ID=local 启动，读独立的一套版本指针）。
+ * 它存在的意义：本地开发发布只投递本机产物，**不污染远程 dev 的指针**——
  * 否则远程 dev 的 gateway 会指向一个本地才有、远程没有的产物版本，导致 dev 页面 404。
- *
- * 清单与部署方式见 `docs/development/deploy-target-knowledge.md`。
  */
+export const SUPPORTED_ENVS: readonly string[] = ['local', 'dev', 'staging', 'prod'];
 
 export interface SubmitPipelineDto {
   env: string;
@@ -538,8 +486,11 @@ export class PipelineService {
     operator?: string,
   ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const mode: PipelineMode = dto.mode ?? 'direct';
-    // 环境校验已移除（2026-09-20）：环境由用户在「环境管理」自建或由模板/配置声明，
-    // 引擎不再跨域依赖环境域做准入校验 —— 输入合法性由调用方保证（页面下拉 / AI 传参 / MCP）。
+    if (!SUPPORTED_ENVS.includes(dto.env)) {
+      throw new BadRequestException(
+        `不支持的环境: ${dto.env}（支持 ${SUPPORTED_ENVS.join(' / ')}）`,
+      );
+    }
     // 防命令注入：branch / commit 会拼进发布目录的 git 命令，白名单收敛（禁空格/引号/分号/$ 等）
     const safeBranchRe = /^[A-Za-z0-9._/-]{1,128}$/;
     if (dto.branch && !safeBranchRe.test(dto.branch)) {
@@ -570,15 +521,13 @@ export class PipelineService {
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
     // 提交解析带上 env：未显式选流水线时按「模块 × 环境」自动匹配（用户 2026-09-17）
     const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.pipelineId, dto.env);
-    // 环境一致性（**2026-09-19 双域重构调整**）：
-    // 环境改为**运行期参数**（envId 由用户在环境管理里自建：1/2/3…），模板只定义流程，
-    // 其 `env` 降级为「默认环境」。故不再因「模板默认环境 ≠ 本次目标环境」而拒绝提交 ——
-    // 运行实例的 `env` 才是投递目标与产物目录（`<key>/<envId>/`）的真相源。
-    // 保留一条日志便于排查"选错流水线"的情况。
+    // 一致性（2026-09-15）：一条流水线只属于一个环境（按「模块 × 环境」拆），
+    // 提交的环境必须与流水线的 env 相同 —— 否则会出现「env=dev 却跑 admin-local 流水线」
+    // 这种环境/流水线错配的实例（投递目标、产物命名空间全跟着流水线走，错配很隐蔽）。
     const tplEnv = (tpl as { env?: string | null }).env;
     if (tplEnv && tplEnv !== dto.env) {
-      this.logger.warn(
-        `模板「${tpl.name}」默认环境为 ${tplEnv}，本次发布到 ${dto.env}（按运行 env 执行流程）`,
+      throw new BadRequestException(
+        `流水线「${tpl.name}」属于环境 ${tplEnv}，与提交的目标环境 ${dto.env} 不一致；请改选 ${dto.env} 环境下的流水线`,
       );
     }
     // 发布前把平台托管脚本（git）同步到该模板：保证运行期一定拿到与代码一致的最新脚本
@@ -1850,7 +1799,6 @@ export class PipelineService {
       dir: mod?.dir,
       deployRoot: mod?.deployRoot,
       defaultArtifactPath: mod?.defaultArtifactPath,
-      pm2Script: mod?.pm2Script,
       pm2: mod?.pm2,
       publicPath: mod?.publicPath,
       entry: mod?.entry,
@@ -1859,8 +1807,6 @@ export class PipelineService {
       stage,
       releaseWorkspace: this.releaseWorkspace,
       config: inject,
-      // P0：配置中心全量注入开关（默认开；置 false 回退到「配置中心只影响 PORT」的旧行为）
-      configInject: this.configService.get<string>('PIPELINE_CONFIG_INJECT') !== 'false',
       pm2Port,
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),

@@ -3,11 +3,10 @@
 > **定位**：web_system 项目 Agent 体系的**唯一速查入口** —— 讲清「有哪些能力 / 各自在哪 / 怎么亲手验一遍」。
 > **适用**：新同学上手、迭代后回归验证、向他人演示。
 > **维护约定**：见 [§8 维护约定](#8-维护约定)。**只要本文覆盖范围内的源码发生变化，必须同步修订本文并追加变更日志。**
-> **开关（例外）**：CHANGELOG=**on**（本文按既有约定保留变更日志）· HISTORY_NOTE=off · FAQ_KEEP=on —— 应用侧可改，约定见 `.codebuddy/references/doc-conventions.md`。
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.12 |
+| 文档版本 | v1.8 |
 | 创建日期 | 2026-09-10 |
 | 校验环境 | macOS 本地 + pm2 `web-*` 全量 online + nginx `https://local.kedouai.com` |
 
@@ -24,10 +23,6 @@
 | 2026-09-11 | v1.6 | 收尾下线（过渡期结束）：单价迁入字典 `llm_models`（新增 `input_price_per1k`/`output_price_per1k`/`currency` 字段定义，`ensureBuiltin` 改为逐字段补缺）；删 ai-service `/api/admin/model-pricing` 接口与网关路由、权限码 `agents:cost:view`；`model_pricing` 表停用留档；§0 权限清单、§3.3、§3.4、§4、§5 路线③ 同步 | AI |
 | 2026-09-15 | v1.7 | 全量补齐 11 个后端微服务接口契约文档：新增 `scripts/gen-api-design.mjs`（从 Swagger 注解自动提取，含 DTO 字段级 schema，最多 2 层嵌套），生成 `specs/<svc>/api-design.md`；§相关文档索引 / §8.1 / §8.2 增加 api-design 索引指针与重生成命令 | AI |
 | 2026-09-18 | v1.8 | 项目入口 `.codebuddy/CODEBUDDY.md` 改为导航式（工程事实下沉到单事实源）：原文「微前端发布四步」的引用（当时指向 `.codebuddy/CODEBUDDY.md`）改指 `docs/development/admin-dev.md` §一·C（共两处） | AI |
-| 2026-09-18 | v1.9 | 红线扫描与 kit 结构守护整体下线：删 `scripts/redline/`、`scripts/sync-agent-kit.sh`、`.githooks/`、`kit-gate.yml` 及七条 npm script；「能力源与运行源一致」改为约定；§7 易混淆点 6 同步改写 | AI |
-| 2026-09-18 | v1.10 | 去重：删 `.codebuddy/agent-kit/skills/`（14 个与 `.codebuddy/skills/` 逐字节相同的副本），技能实体只保留一份；agent-kit 仅留 `AGENT.md` + `rules/general/` + `references/`，来源由上游 GitHub URL 声明；§7 易混淆点 6 / 相关文档索引同步 | AI |
-| 2026-09-18 | v1.11 | 清理已下线机制的本地文件与内容：删 `docs/development/{ai-native-sdlc-ci-deployment,ai-native-sdlc-playbook,cross-tool-agent-context-design}.md`、根目录 6 个站点快照与 `printsql.cjs`、2 个空目录；同步移除 README 文档地图、§相关文档索引、`specs/ci-cd/设计` 表行、`quality-gate.yml`/`changed-packages.sh` 注释里的引用；§7 易混淆点 6 改为只述现状（去掉已下线叙事） | AI |
-| 2026-09-19 | v1.12 | agent-kit 去内容化：删本地 `AGENT.md`/`rules/general/`/`references/`（18 文件），`.codebuddy/agent-kit/` 只留来源声明；方法论与配线引用统一指向上游 `https://github.com/web5/ai-agent-kit`（CODEBUDDY §2/§4、`.codebuddy/references/README.md`、contract-risk README、be/fe-developer 技能卡、§相关文档索引）；§7 易混淆点 5/6 同步 | AI |
 
 ---
 
@@ -301,8 +296,8 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
    **审计**：每次同步都会落一条 `sync_permission` 操作日志（operator 为 `pipeline:<提交人>` 或页面用户名），在「操作日志」页可查。
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `docs/development/admin-dev.md` §一·C。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
-5. **「数字人」≠ 产品功能** —— AI 协作方法论（常驻总则 / 5 条红线 / 技能）是给 AI 用的开发侧资产，没有前端页面。面向用户的概念统一叫 Agent。
-6. **技能实体只有一份**：`.codebuddy/skills/`（工具实际扫描加载）。约定：通用技能只在上游 `https://github.com/web5/ai-agent-kit` 演进，本地不得改写；项目专属只放 `be-developer`/`fe-developer` 与 `rd-digital-agent/references/project-context.md`。`.codebuddy/agent-kit/` 只留来源声明，内容（常驻总则 / 红线 / 方法论）在上游仓库。
+5. **「数字人」≠ 产品功能** —— `.codebuddy/agent-kit/` 是给 AI 用的开发侧方法论（11 skill + 5 红线），没有前端页面。面向用户的概念统一叫 Agent。
+6. **`.codebuddy/agent-kit/` 是副本，运行时加载 `.codebuddy/skills/`**，两者不互通，CI 同步不会更新运行时行为。`scripts/sync-agent-kit.sh` 补这段：默认 dry-run 报 diff，`--mirror` 覆盖副本，**永不自动覆盖运行源**（会丢 fe/be 项目专属路由）。
 7. **`ai-agent` / `knowledge-service` 未注册到 `scripts/modules.json`** —— 虽跑在 pm2 且有网关路由，但不在发布流水线和微前端清单里，deploy-console 管不到。
 8. **`DeepseekClient` 已下线** —— `README.md` 未同步，`dist/` 有残留，以 `src/` 为准。
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
@@ -377,5 +372,6 @@ ls packages/agent-core/src/tools/coding/
 | 合同场景端到端评测 | [`servers/ai-agent/e2e/contract-risk/`](../../servers/ai-agent/e2e/contract-risk) |
 | 本地发布运维手册 | [`docs/development/local-release-runbook.md`](local-release-runbook.md) |
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
-| 评测框架（L1~L4） | 上游 ai-agent-kit `references/eval-framework.md`（`https://github.com/web5/ai-agent-kit`） |
+| 评测框架（L1~L4） | [`.codebuddy/agent-kit/references/eval-framework.md`](../../.codebuddy/agent-kit/references/eval-framework.md) |
+| 跨工具 Agent 上下文装配（AGENTS.md / Claude Code / Codex / Cursor） | [`docs/development/cross-tool-agent-context-design.md`](cross-tool-agent-context-design.md) |
 | **各后端服务接口契约（自动生成 · AI 自进化接口真相源）** | `specs/<svc>/api-design.md`：`deploy-console`（手写，分 `pipeline-node-model/` 与 `deploy-console/` 两份）、`auth-service`、`user-service`、`ai-service`、`ai-agent`、`system-service`、`todo-service`、`mcp-gateway`、`knowledge-service`、`content-hub`、`upload-service`、`gateway`；重生成脚本 [`scripts/gen-api-design.mjs`](../../scripts/gen-api-design.mjs) |

@@ -1,0 +1,721 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
+import {
+  moduleApi,
+  deployApi,
+  environmentApi,
+  serverApi,
+  stageCommandApi,
+  pipelineRunsApi,
+  pipelinesApi,
+  type StageAction,
+  type ModuleEnvRow,
+} from '@/api'
+import PipelineSubmit from '@/components/PipelineSubmit.vue'
+import StageActionsEditor from '@/components/pipeline/StageActionsEditor.vue'
+
+const route = useRoute()
+const router = useRouter()
+const moduleKey = computed(() => String(route.params.key || ''))
+
+const moduleInfo = ref<any>(null)
+const moduleLoading = ref(false)
+
+const data = ref<{
+  environments: any[]
+  versionHistory: any[]
+} | null>(null)
+const dataLoading = ref(false)
+
+// ===== 版本列表 / 环境部署 =====
+// 部署 = 调用改指针接口（把环境指向所选版本）；基本不会失败，本期不自动验证 → 人工确认，
+// 后续接 AI 验证 agent 时用「AI 验证」按钮下发验证任务。
+const envOptions = computed(() => (data.value?.environments || []).map((e: any) => e.envId))
+const versionOptions = computed(() =>
+  [...new Set((data.value?.versionHistory || []).map((v: any) => v.versionTag))],
+)
+const deployModal = ref({
+  open: false,
+  env: '',
+  versionTag: '',
+  /** 从版本行进来固定版本选环境；从环境行进来固定环境选版本 */
+  fixed: null as 'env' | 'version' | null,
+})
+const deploying = ref(false)
+function openDeployVersion(versionTag: string) {
+  deployModal.value = {
+    open: true,
+    env: envOptions.value[0] || '',
+    versionTag,
+    fixed: 'version',
+  }
+}
+function openDeployEnv(envId: string) {
+  deployModal.value = {
+    open: true,
+    env: envId,
+    versionTag: versionOptions.value[0] || '',
+    fixed: 'env',
+  }
+}
+async function doDeploy() {
+  const d = deployModal.value
+  if (!d.env || !d.versionTag) {
+    message.warning('请选择环境与版本')
+    return
+  }
+  deploying.value = true
+  try {
+    await deployApi.deployVersion(moduleKey.value, d.env, d.versionTag)
+    message.success(`已部署 ${d.env} → ${d.versionTag}（已改指针，请人工确认）`)
+    deployModal.value.open = false
+    await loadDeployments()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '部署失败')
+  } finally {
+    deploying.value = false
+  }
+}
+/** AI 验证：按版本下发验证任务（agent 未接入前只占位） */
+function aiVerify(versionTag: string) {
+  message.info(`AI 验证：${versionTag} 的验证任务待下发（agent 未接入）`)
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  backend: '后端服务',
+  frontend: '前端模块',
+  'micro-frontend': '微前端模块',
+  'mini-app': '小程序',
+}
+
+const SOURCE_LABELS: Record<string, { label: string; color: string; tip: string }> = {
+  // 模块已配置 shell（真相源在 DB）
+  configured: { label: '模块脚本', color: 'blue', tip: '本模块在「阶段命令」表中自定义了 shell，发布时执行' },
+  // 流程内置兜底（未配置）
+  builtin: { label: '流程内置', color: 'default', tip: '未配置 shell，将由流水线内置逻辑兜底' },
+  // 必填阶段未配置（=发布终止）
+  'required-unset': {
+    label: '必填·未配置',
+    color: 'red',
+    tip: 'build 阶段必须配置 shell，未配置 = 发布立即终止',
+  },
+  // 语义真相源（不允许用户改）
+  semantic: { label: '语义真相源', color: 'purple', tip: '由流水线固定执行（version/pointer），不允许改' },
+}
+
+// 后端模块 → 后台 tab，前端模块 → 前端 tab
+const showBackendTab = computed(() => moduleInfo.value?.type === 'backend')
+const showFrontendTab = computed(() =>
+  ['frontend', 'micro-frontend', 'mini-app'].includes(moduleInfo.value?.type),
+)
+/** 环境 Tab：所有已知类型都展示（backend 改地址，前端类看访问地址） */
+const showEnvTab = computed(() => showBackendTab.value || showFrontendTab.value)
+// R6：模块不再持有命令，「发布脚本」tab 已移除（命令归流水线节点所有）
+// 默认激活的 tab
+const activeTab = ref<string>('')
+
+// 默认展开哪几个阶段：build/release/verify 等常调的核心阶段默认展开，让运维不用挨个点
+const expandedStages = ref<Record<string, boolean>>({})
+function toggleStep(stage: string) {
+  expandedStages.value[stage] = !expandedStages.value[stage]
+}
+
+// ===== 发布脚本（9 阶段流水线视图） =====
+type ScriptViewItem = {
+  stage: string
+  source: 'configured' | 'builtin' | 'required-unset' | 'semantic'
+  command: string | null
+  enabled: boolean
+  timeoutSec: number | null
+  updatedAt: string | null
+  updatedBy: string | null
+  title: string
+  builtin: string
+  commandMode: 'base' | 'required' | 'override' | 'none'
+  /** v4 多操作；单命令形态后端已包装成 1 个操作 */
+  actions?: StageAction[]
+}
+const scriptView = ref<ScriptViewItem[]>([])
+const scriptLoading = ref(false)
+async function loadScriptView() {
+  // R6：脚本视图已随「发布脚本」tab 移除，此函数保留签名但不再加载
+  return
+  try {
+    scriptView.value = await stageCommandApi.scriptView(moduleKey.value)
+    // 默认展开核心阶段（build/pull/verify）；让运维一进 Tab 就能看到「最重要的命令」
+    // 而不必挨个点击。其余阶段按需展开。
+    expandedStages.value = {
+      pull: true,
+      build: true,
+      verify: true,
+      cleanup: true,
+    }
+  } catch {
+    // 静默：脚本视图是只读辅助，挂了不阻断模块详情
+  } finally {
+    scriptLoading.value = false
+  }
+}
+function copyCmd(cmd: string) {
+  // navigator.clipboard 在 https/local 才可用；可用范围外回退提示
+  if (navigator.clipboard) {
+    navigator.clipboard
+      .writeText(cmd)
+      .then(() => message.success('已复制'))
+      .catch(() => message.warning('复制失败，请手动选择'))
+  } else {
+    message.warning('当前环境不支持剪贴板，请手动选择')
+  }
+}
+
+async function loadModule() {
+  moduleLoading.value = true
+  try {
+    moduleInfo.value = await moduleApi.get(moduleKey.value)
+    activeTab.value = showBackendTab.value ? 'backend' : 'frontend'
+  } catch {
+    message.error('加载模块详情失败')
+  } finally {
+    moduleLoading.value = false
+  }
+}
+
+async function loadDeployments() {
+  dataLoading.value = true
+  try {
+    data.value = await deployApi.moduleDeployments(moduleKey.value)
+  } catch {
+    message.error('加载部署数据失败')
+  } finally {
+    dataLoading.value = false
+  }
+}
+
+// ===== 发起发布（按流水线：构建 + 投递 + 切指针 + 探活） =====
+const publishOpen = ref(false)
+function openPublish() {
+  publishOpen.value = true
+}
+async function onPublished() {
+  await loadDeployments()
+}
+
+/**
+ * 回滚 = **秒级切回某个历史版本**（不重新构建）：
+ *  - 后台模块：把该版本目录落地到 dist 并重启 pm2
+ *  - 前台模块：只改指针（网关按指针读版本目录）
+ * 以前这里是「以该版本 commit 重新跑一次流水线」，很重且要等构建；改走
+ * POST /deploy/rollback-version（T2，2026-09-15）。
+ */
+const rollbacking = ref(false)
+async function doRollback(row: any) {
+  rollbacking.value = true
+  try {
+    const r = await deployApi.rollbackVersion({
+      env: row.env,
+      moduleKey: moduleKey.value,
+      to: row.versionTag,
+      confirm: row.env === 'prod',
+    })
+    message.success(`已回滚：${r.from} → ${r.to}（后台模块已落地并重启，前台模块已切指针）`)
+    await loadDeployments()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '回滚失败')
+  } finally {
+    rollbacking.value = false
+  }
+}
+
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return '—'
+  const dt = new Date(d)
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString('zh-CN')
+}
+
+// ===== 本模块的环境（1:N：环境归属模块）=====
+// backend：服务地址可编辑 + 服务器组；前端类：无服务地址，展示访问地址（publicUrl + publicPath）
+const svcLoading = ref(false)
+const envList = ref<ModuleEnvRow[]>([])
+const serverNameOptions = ref<string[]>([])
+
+async function loadServiceEnv() {
+  svcLoading.value = true
+  try {
+    envList.value = await environmentApi.listByModule(moduleKey.value)
+    if (moduleInfo.value?.type === 'backend') {
+      const servers = await serverApi.listServers()
+      serverNameOptions.value = Array.from(new Set(servers.map((s: any) => s.serverName)))
+    }
+  } catch {
+    message.error('加载模块环境失败')
+  } finally {
+    svcLoading.value = false
+  }
+}
+
+function svcEnvName(envId: string): string {
+  const e = envList.value.find((x) => x.id === envId)
+  return e ? `${e.name}（${e.id}）` : envId
+}
+
+function envPublicUrl(envId: string): string {
+  return envList.value.find((x) => x.id === envId)?.publicUrl || '—'
+}
+
+function envBuiltin(envId: string): boolean {
+  return !!envList.value.find((x) => x.id === envId)?.builtin
+}
+
+/** 前端类模块的访问地址：环境公网地址 + 模块 publicPath（如 https://dev.kedouai.com/admin/） */
+function envAccessUrl(envId: string): string {
+  const publicUrl = envList.value.find((x) => x.id === envId)?.publicUrl
+  if (!publicUrl) return '—'
+  const p = moduleInfo.value?.publicPath
+  if (!p) return publicUrl
+  return `${publicUrl.replace(/\/$/, '')}/${p.replace(/^\//, '').replace(/\/$/, '')}/`
+}
+
+function envCurrentVersion(envId: string): string {
+  return (
+    (data.value?.environments || []).find((e: any) => e.envId === envId)?.currentVersion || '—'
+  )
+}
+
+async function saveAddress(envRow: ModuleEnvRow, val: string) {
+  const trimmed = (val || '').trim()
+  try {
+    await environmentApi.update(moduleKey.value, envRow.id, { address: trimmed || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 地址`)
+    envRow.address = trimmed
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '保存地址失败')
+  }
+}
+
+async function saveServerName(envRow: ModuleEnvRow, val: string) {
+  try {
+    await environmentApi.update(moduleKey.value, envRow.id, { serverName: val || undefined })
+    message.success(`已更新 ${moduleKey.value}@${envRow.id} 服务器组`)
+    envRow.serverName = val || ''
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '保存服务器组失败')
+  }
+}
+
+// ===== 阶段命令编辑（v4 多操作，复用共享编辑器 StageActionsEditor） =====
+/** 正在编辑的阶段（空 = 未编辑） */
+const editStage = ref('')
+/** 正在编辑的阶段项（传给共享编辑器，由其维护 draft/保存/校验） */
+const editItem = ref<ScriptViewItem | null>(null)
+
+function startEdit(item: ScriptViewItem) {
+  if (item.source === 'semantic') {
+    message.warning('version / pointer 是发布语义真相源，不可编辑')
+    return
+  }
+  editStage.value = item.stage
+  editItem.value = item
+}
+
+function cancelEdit() {
+  editStage.value = ''
+  editItem.value = null
+}
+
+async function onEditorSaved() {
+  cancelEdit()
+  await loadScriptView()
+}
+
+onMounted(async () => {
+  await loadModule()
+  await loadServiceEnv()
+  await loadDeployments()
+  // 脚本视图：依赖 moduleInfo.type（决定 showScriptTab），故放最后加载
+  await loadScriptView()
+})
+</script>
+
+<template>
+  <div>
+    <div class="page-header" style="display: flex; align-items: center; gap: 12px;">
+      <a-button type="link" @click="router.back()">← 返回</a-button>
+      <h2 style="margin: 0;">模块详情</h2>
+      <a-tag v-if="moduleInfo" color="blue">{{ moduleInfo.key }}</a-tag>
+      <a-tag v-if="moduleInfo?.builtin" color="gold">内置</a-tag>
+    </div>
+
+    <!-- 模块元信息 -->
+    <a-card v-if="moduleInfo" :loading="moduleLoading" style="margin-bottom: 16px;">
+      <a-descriptions :column="3" size="small" bordered>
+        <a-descriptions-item label="名称">{{ moduleInfo.name }}</a-descriptions-item>
+        <a-descriptions-item label="类型">
+          <a-tag>{{ TYPE_LABELS[moduleInfo.type] || moduleInfo.type }}</a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="代码目录">{{ moduleInfo.dir }}</a-descriptions-item>
+        <a-descriptions-item label="默认部署环境">
+          {{ moduleInfo.defaultEnv || '—' }}
+        </a-descriptions-item>
+        <a-descriptions-item v-if="moduleInfo.pm2" label="pm2 进程">{{ moduleInfo.pm2 }}</a-descriptions-item>
+        <a-descriptions-item v-if="moduleInfo.publicPath" label="publicPath">{{ moduleInfo.publicPath }}</a-descriptions-item>
+        <a-descriptions-item v-if="moduleInfo.buildCmd" label="buildCmd">{{ moduleInfo.buildCmd }}</a-descriptions-item>
+        <a-descriptions-item label="启用">
+          <a-tag :color="moduleInfo.enabled !== false ? 'green' : 'default'">
+            {{ moduleInfo.enabled !== false ? '启用' : '禁用' }}
+          </a-tag>
+        </a-descriptions-item>
+      </a-descriptions>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <a-button type="primary" @click="openPublish">发起发布</a-button>
+        <a-button @click="router.push({ name: 'ModuleEdit', params: { key: moduleKey } })">
+          编辑模块
+        </a-button>
+        <span style="color: #999; font-size: 12px;">
+          按流水线发布：git 拉取 → 构建 → 投递 → 切指针 → 探活；需要先 commit &amp; push
+        </span>
+      </div>
+    </a-card>
+
+    <!-- 前端 / 后台 tab
+         作为「卡片内的一行工具栏」呈现（小号 tabs + 底部细分隔线），与 ServiceManager /
+         CanaryCenter 等页面一致；此前 tabs 裸放在卡片 body 里，tab 栏像"野孩子"一样漂浮、
+         与下方内容缺少分隔 -->
+    <a-card v-if="moduleInfo" :loading="dataLoading">
+      <!-- R6 提示：模块不再持有命令。
+           注意必须放在 a-tabs **外面** —— antd 的 tabs 内容区是 flex 行，
+           非 a-tab-pane 的直接子元素会被当作 flex item 挤压成窄条（曾把本提示
+           压成一列竖排文字）。 -->
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 16px;"
+        message="本模块不再持有构建/投递命令（R6）：命令已归流水线节点所有。"
+      >
+        <template #description>
+          <router-link :to="{ name: 'PipelineCenter' }">查看流水线 →</router-link>
+        </template>
+      </a-alert>
+
+      <a-tabs
+        v-if="showBackendTab || showFrontendTab"
+        v-model:active-key="activeTab"
+        size="small"
+        class="md-tabbar"
+      >
+        <!-- 后台 tab -->
+        <a-tab-pane v-if="showBackendTab" key="backend" tab="后台">
+          <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
+          <a-table
+            :columns="[
+              { title: '环境', dataIndex: 'envId', key: 'envId', width: 120 },
+              { title: '当前版本', dataIndex: 'currentVersion', key: 'currentVersion' },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '部署时间', dataIndex: 'deployedAt', key: 'deployedAt', width: 180 },
+              { title: '部署人', dataIndex: 'deployedBy', key: 'deployedBy', width: 120 },
+            ]"
+            :data-source="data?.environments || []"
+            :pagination="false"
+            row-key="envId"
+            size="small"
+            :locale="{ emptyText: '该模块在所有环境均未部署' }"
+          />
+
+          <h3 style="margin: 24px 0 12px; font-size: 15px;">版本历史（可回滚）</h3>
+          <a-table
+            :columns="[
+              { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 200 },
+              { title: '环境', dataIndex: 'env', key: 'env', width: 100 },
+              { title: 'git commit', dataIndex: 'gitCommit', key: 'gitCommit', width: 140 },
+              { title: '发布时间', dataIndex: 'releasedAt', key: 'releasedAt', width: 180 },
+              { title: '发布人', dataIndex: 'releasedBy', key: 'releasedBy', width: 120 },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '操作', key: 'action', width: 100 },
+            ]"
+            :data-source="data?.versionHistory || []"
+            :pagination="{ pageSize: 10 }"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '暂无版本历史' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
+              <template v-else-if="column.key === 'action'">
+                <a-popconfirm
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
+                  cancel-text="取消"
+                  :ok-button-props="{ loading: rollbacking }"
+                  @confirm="doRollback(record)"
+                >
+                  <a-button type="link" size="small">回滚到此版本</a-button>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
+        <!-- 模块环境 tab（1:N：环境归属模块；backend 可改地址/服务器组，前端类展示访问地址） -->
+        <a-tab-pane v-if="showEnvTab" key="service-env" tab="服务环境">
+          <a-card :loading="svcLoading" :bordered="false" size="small">
+            <p style="color: #666; margin-bottom: 12px;">
+              <b>本模块</b>的环境（环境归属模块：一个模块多个环境，dev/prod 每模块各一份）。
+              环境公网地址只读，服务地址与服务器组可就地编辑；环境的增删在「模块管理 → 环境管理」。
+            </p>
+            <a-table
+              :columns="[
+                { title: '环境', dataIndex: 'id', key: 'id', width: 180 },
+                { title: '环境公网地址', key: 'publicUrl', width: 200 },
+                ...(showBackendTab
+                  ? [
+                      { title: '服务地址（ip:端口）', key: 'address', width: 320 },
+                      { title: '服务器组', key: 'serverName', width: 220 },
+                    ]
+                  : [{ title: '访问地址', key: 'accessUrl', width: 320 }]),
+                { title: '当前版本', key: 'currentVersion', width: 160 },
+              ]"
+              :data-source="envList"
+              :pagination="false"
+              :row-key="(r: any) => r.id"
+              size="small"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'id'">
+                  {{ record.name }}（{{ record.id }}）
+                  <a-tag v-if="record.builtin" color="blue" style="margin-left: 4px;">内置</a-tag>
+                </template>
+                <template v-else-if="column.key === 'publicUrl'">
+                  {{ record.publicUrl || '—' }}
+                </template>
+                <template v-else-if="column.key === 'address'">
+                  <a-input
+                    :value="record.address"
+                    placeholder="如 127.0.0.1:6000 或 dev.kedouai.com"
+                    style="width: 280px;"
+                    @press-enter="(e: any) => saveAddress(record, e.target.value)"
+                    @blur="(e: any) => { const v = e.target.value; if (v !== (record.address || '')) saveAddress(record, v) }"
+                  />
+                </template>
+                <template v-else-if="column.key === 'serverName'">
+                  <a-select
+                    :value="record.serverName || undefined"
+                    placeholder="选择服务器组"
+                    allow-clear
+                    style="width: 200px;"
+                    @change="(v: any) => saveServerName(record, v || '')"
+                  >
+                    <a-select-option v-for="n in serverNameOptions" :key="n" :value="n">
+                      {{ n }}
+                    </a-select-option>
+                  </a-select>
+                </template>
+                <template v-else-if="column.key === 'accessUrl'">
+                  <span class="ws-mono">{{ envAccessUrl(record.id) }}</span>
+                </template>
+                <template v-else-if="column.key === 'currentVersion'">
+                  <span class="ws-mono">{{ envCurrentVersion(record.id) }}</span>
+                </template>
+              </template>
+            </a-table>
+          </a-card>
+        </a-tab-pane>
+
+        <!-- 前端 tab -->
+        <a-tab-pane v-if="showFrontendTab" key="frontend" tab="前端">
+          <h3 style="margin-bottom: 12px; font-size: 15px;">当前部署（环境 × 版本）</h3>
+          <a-table
+            :columns="[
+              { title: '环境', dataIndex: 'envId', key: 'envId', width: 120 },
+              { title: '当前版本', dataIndex: 'currentVersion', key: 'currentVersion' },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '部署时间', dataIndex: 'deployedAt', key: 'deployedAt', width: 180 },
+              { title: '部署人', dataIndex: 'deployedBy', key: 'deployedBy', width: 120 },
+            ]"
+            :data-source="data?.environments || []"
+            :pagination="false"
+            row-key="envId"
+            size="small"
+            :locale="{ emptyText: '该模块在所有环境均未部署' }"
+          />
+
+          <h3 style="margin: 24px 0 12px; font-size: 15px;">版本历史（可回滚）</h3>
+          <a-table
+            :columns="[
+              { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 200 },
+              { title: '环境', dataIndex: 'env', key: 'env', width: 100 },
+              { title: 'git commit', dataIndex: 'gitCommit', key: 'gitCommit', width: 140 },
+              { title: '发布时间', dataIndex: 'releasedAt', key: 'releasedAt', width: 180 },
+              { title: '发布人', dataIndex: 'releasedBy', key: 'releasedBy', width: 120 },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '操作', key: 'action', width: 100 },
+            ]"
+            :data-source="data?.versionHistory || []"
+            :pagination="{ pageSize: 10 }"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '暂无版本历史' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'releasedAt'">{{ fmtDate(record.releasedAt) }}</template>
+              <template v-else-if="column.key === 'action'">
+                <a-popconfirm
+                  :title="`回滚到 ${record.versionTag}？（后台模块会落地并重启服务，前台模块只切指针，不重新构建）`"
+                  ok-text="回滚到此版本"
+                  cancel-text="取消"
+                  :ok-button-props="{ loading: rollbacking }"
+                  @confirm="doRollback(record)"
+                >
+                  <a-button type="link" size="small">回滚到此版本</a-button>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
+        <!-- 版本列表：流水线「发布」节点产出；可对某一版本直接部署或下发 AI 验证 -->
+        <a-tab-pane key="versions" tab="版本列表">
+          <p style="color: #666; margin-bottom: 12px;">
+            版本由流水线「发布」节点（上传文件 + 调写版本接口）产出。点「部署」<b>弹窗选目标环境</b>；「AI 验证」对该版本下发验证任务。
+          </p>
+          <a-table
+            :columns="[
+              { title: '版本', dataIndex: 'versionTag', key: 'versionTag', width: 200 },
+              { title: '来源任务', dataIndex: 'taskId', key: 'taskId', width: 160 },
+              { title: '发布时间', dataIndex: 'releasedAt', key: 'releasedAt', width: 180 },
+              { title: '发布人', dataIndex: 'releasedBy', key: 'releasedBy', width: 120 },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+              { title: '操作', key: 'action', width: 170 },
+            ]"
+            :data-source="data?.versionHistory || []"
+            :pagination="{ pageSize: 10 }"
+            row-key="id"
+            size="small"
+            :locale="{ emptyText: '该模块还没有版本记录' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'versionTag'">
+                <span style="font-family: monospace;">{{ record.versionTag }}</span>
+              </template>
+              <template v-else-if="column.key === 'releasedAt'">
+                {{ record.releasedAt ? String(record.releasedAt).slice(0, 19).replace('T', ' ') : '—' }}
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-space size="small">
+                  <a-button type="link" size="small" @click="openDeployVersion(record.versionTag)">部署</a-button>
+                  <a-button type="link" size="small" @click="aiVerify(record.versionTag)">AI 验证</a-button>
+                </a-space>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
+        <!-- 环境部署：部署 = 调用改指针接口；本期人工验证 -->
+        <a-tab-pane key="deploy" tab="环境部署">
+          <!-- R6 提示统一放在卡片顶部（a-tabs 之外），此处不再重复 -->
+          <p style="color: #666; margin-bottom: 12px;">
+            部署 = <b>调用改指针接口</b>把环境指向所选版本；基本不会失败，<b>本期不自动验证</b>（人工确认），后续接 AI 验证 agent。
+          </p>
+          <a-table
+            :columns="[
+              { title: '环境', dataIndex: 'envId', key: 'envId', width: 140 },
+              { title: '当前版本', dataIndex: 'currentVersion', key: 'currentVersion' },
+              { title: '部署时间', dataIndex: 'deployedAt', key: 'deployedAt', width: 180 },
+              { title: '验证', key: 'verify', width: 90 },
+              { title: '操作', key: 'action', width: 130 },
+            ]"
+            :data-source="data?.environments || []"
+            :pagination="false"
+            row-key="envId"
+            size="small"
+            :locale="{ emptyText: '该模块还没有环境部署记录' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'deployedAt'">
+                {{ record.deployedAt ? String(record.deployedAt).slice(0, 19).replace('T', ' ') : '—' }}
+              </template>
+              <template v-else-if="column.key === 'verify'">
+                <a-tag color="default">人工</a-tag>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-button type="link" size="small" @click="openDeployEnv(record.envId)">部署版本</a-button>
+              </template>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
+        <!-- 阶段命令 tab（每模块每阶段一条 shell，DB 为唯一真相源） -->
+        <!--
+          「发布脚本」Tab：展示本模块 9 阶段实际命令——
+            - 已配置 = 显示 shell（可复制）+ 模块脚本标记
+            - 未配置走流程内置 = 显示 builtin 说明 + 流程内置标记
+            - build 必填未配置 = 红色「必填·未配置」（发布将失败）
+            - version/pointer = 紫色「语义真相源」（不可改）
+          让运维不用点进每条流水线就明白「我现在发布这个模块实际会发生什么」。
+        -->
+        <a-empty v-if="!showBackendTab && !showFrontendTab" description="该模块类型暂不支持版本管理" />
+      </a-tabs>
+      <a-empty v-else description="该模块类型暂不支持版本管理" />
+    </a-card>
+
+    <!-- 部署版本弹窗（版本行进来：版本固定选环境；环境行进来：环境固定选版本） -->
+    <a-modal
+      :open="deployModal.open"
+      title="部署版本"
+      :confirm-loading="deploying"
+      ok-text="确定部署"
+      cancel-text="取消"
+      @ok="doDeploy"
+      @cancel="deployModal.open = false"
+    >
+      <p style="color: #666; margin-bottom: 12px;">
+        模块 <b>{{ moduleKey }}</b> · 部署 = 调用改指针接口，不跑探活，部署后请人工确认。
+      </p>
+      <a-form layout="vertical">
+        <a-form-item label="目标环境">
+          <a-select v-model:value="deployModal.env" :disabled="deployModal.fixed === 'env'">
+            <a-select-option v-for="e in envOptions" :key="e" :value="e">{{ e }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="版本（来自流水线构建产物）">
+          <a-select v-model:value="deployModal.versionTag" :disabled="deployModal.fixed === 'version'">
+            <a-select-option v-for="v in versionOptions" :key="v" :value="v">{{ v }}</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <!-- 发起发布抽屉（按流水线：构建+投递+切指针+探活） -->
+    <PipelineSubmit
+      v-model:open="publishOpen"
+      :initial-env="moduleInfo?.defaultEnv || undefined"
+      :initial-module-key="moduleKey"
+      @submitted="onPublished"
+    />
+  </div>
+</template>
+
+<style scoped>
+/* 卡片内工具栏式 tabs（与 ServiceManager 的「卡片内一行工具栏」约定一致）：
+   - 小号尺寸，降低 tab 栏的视觉重量
+   - 去掉 antd 默认的 nav 下边距，改为一条细分隔线，避免 tab 栏"漂浮"、与内容无分隔
+   - 用 :deep() 穿透到 antd 生成的内部结构（scoped 样式默认到不了） */
+.md-tabbar {
+  margin-bottom: 16px;
+}
+.md-tabbar :deep(.ant-tabs-nav) {
+  margin-bottom: 0;
+  /* tab 栏一律居左：antd 的 tabs 内容区是 flex 行，一旦有人往里塞非 a-tab-pane 子元素，
+     它会作为 flex item 抢占宽度、把 nav 挤到中间（历史 bug），这里显式兜底左对齐 */
+  justify-content: flex-start;
+}
+.md-tabbar :deep(.ant-tabs-nav-wrap) {
+  flex: none;
+}
+.md-tabbar :deep(.ant-tabs-nav-list) {
+  margin-right: auto;
+}
+.md-tabbar :deep(.ant-tabs-nav::before) {
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+</style>
