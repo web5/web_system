@@ -74,6 +74,8 @@
 - **A 导出原码**：在那个会话的文件面板里把 `/workspace/mp-platform` 导出 zip → 拖进工作区。→ 我做代码审查 → 并入 `servers/mp-platform`（改造 package.json/tsconfig 接 `file:../../packages/shared`、补 `.env.example`、ecosystem 端口 6100、模块与库登记）→ 接 CI → 出「文档声称 vs 代码实际」对账。
 - **B 按文档重写 M0**（AI 倾向此项）：范围 = 5 个实现文件（`crypto.service` / `ticket.service` / `component-token.service` / `authorizer.service` / `event.controller`）+ 7 张表 DDL + `verify:crypto` 边界测试。收益：在仓、可 review、可上 CI，消除"影子资产"；代价：原"已实测通过"结论作废，需重跑验证。
 
+> ⚠️ **A / B 两条路都绕不开的前置：第三方平台凭据尚未就位。** 本机凭据仓 `~/env_config/wechat-mp.env` 目前只有**公众号/小程序**的 `WECHAT_MP_{APPID,APPSECRET}`、`WECHAT_MP_MINI_{APPID,AppSecret}`；M0 需要的 **`component_appid` / `component_appsecret` / `EncodingAESKey` / `verify_token` 四项缺失**，需从微信开放平台第三方平台后台取，建议新建 `~/env_config/wechat-thirdparty.env`。详见 `specs/mp-platform/design.md` §3.2。
+
 ### 2.2 T5 · 待确认（4 + 3 条）
 
 | 来源 | 问题 | 建议 |
@@ -123,6 +125,99 @@ D1 并入 monorepo（`servers/mp-platform` + `apps/mp-admin` 微前端子模块�
 3. **T1 执行迁移**（5 分钟的事，批准即可，顺手把改名彻底收尾）；
 4. T6 / T7 / T8 按余力排。
 
+> **每项的具体做法、命令与推荐选项见 §6「逐项执行建议」** —— 拍板时可直接按推荐值勾选，除非有相反意见。
+
+---
+
+## 6. 逐项执行建议（可直接照做）
+
+### T1 · 执行 0006 迁移
+
+**在哪执行**：本机**没有 mysql 客户端**，且发布库账号有来源 IP 限制（历史记录：限堡垒机）→ 建议在**堡垒机 `101.43.117.234`** 上执行（它与 dev console 共用这套库）。连接参数取该机上 `servers/deploy-console/.env` 的 `MYSQL_HOST/PORT/USER/PASSWORD/DB`（`DB` 应为 `web_system_deploy`）。
+
+```bash
+# 0) 改名前状态：应看到 1 行 key='mini-contract'（type=frontend）
+mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+  -e "SELECT \`key\`,name,dir,type FROM deploy_modules WHERE \`key\`='mini-contract';"
+
+# 1) 备份（失败可整表恢复）
+mysqldump -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+  > /tmp/web_system_deploy_before_0006.sql
+
+# 2) 执行（仓库 migrations/0006_rename_mini_contract_to_kedou_ai_minigram.sql）
+mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" < <仓库>/migrations/0006_*.sql
+
+# 3) 校验（SQL 文件末尾注释里有一组 SELECT，全部应为 0 行 / 1 行新 key）
+# 4) 清内存缓存
+pm2 restart web-deploy-console web-gateway
+```
+
+- **若报 `Access denied`**：不是 SQL 问题，是执行机 IP 未在云 MySQL 白名单。
+- **回滚**：纯 UPDATE 语句，用第 1 步备份恢复即可；该模块当前停用，风险低。
+
+### T2 · M0 源码去向（判定 + 两条路的做法）
+
+- **判定**：那个会话还能打开吗？能 → **A**；打不开或确认沙箱已回收 → **B**。
+- **A（导出原码）**：会话文件面板 → 选中 `/workspace/mp-platform` → 导出 zip → 拖进工作区。随后我做：代码审查（重点核 §5.2 三个加解密细节 / ticket 双写 / refresh_token 是否真回写）→ 并入 `servers/mp-platform` → 适配 monorepo（package.json 加 `file:../../packages/shared`、tsconfig 继承、`.env.example`、`ecosystem.config.cjs` 加 `web-mp-platform` 端口 6100、`scripts/modules.json` 加 backend 条目）→ 接 CI。
+- **B（重写 M0）**：待写 = `src/modules/wechat/component/{crypto,ticket,component-token}.service.ts`、`.../authorizer/authorizer.service.ts`、`.../component/event.controller.ts`、`wechat-http.service.ts`（统一客户端 + 重试）、`schema/001_init.sql`（7 表）、`scripts/verify-crypto.ts`；验收 = `pnpm verify:crypto` 覆盖 16/32 字节块边界、中文、真实 XML payload。
+- **共同前置**：补第三方平台凭据（见 §2.1 提示）——**没有这四项，A/B 都跑不起来**。
+
+### T3 · 应用侧 5 项拍板（推荐值）
+
+| # | 推荐 | 理由 |
+|---|---|---|
+| Q1 | 按原型改 **对话 / 发现 / 我的** | 原型与四份方案一致；翻译/评估是"用完即走"，不该占一级入口 |
+| Q2 | 翻译**复用 `agent/run`**（配一个 `translate` agent） | 已有 SSE/会话/埋点/重试，后端零新增接口；前端走 `agent-stream.ts` 工厂参数化 |
+| Q3 | **浅色为基线**（导航白底黑字、tabBar 选中 `#C2410C`），暗色列入 v2 | 原型本体是浅色（`--page-bg:#F7F4F0`）；现有 `app.wxss` 暗色与 `app.json` 蓝导航自相矛盾，必须先收敛；暗色需 `darkmode: true` + `theme.json`，属独立成本 |
+| Q4 | 留 `pages/assess/*`；`contract/*` 只保留 chat 能力 | assess 是新骨架，`contract/*` 8 页属历史，避免双份演进 |
+| Q5 | 先出**合规口径**再配 agent | 星座/命理在生成式 AI 备案口径上敏感，prompt 需内置免责声明；这是 M4 硬前置 |
+
+### T4 · 骨架收口建议顺序
+
+沿用 `apps/kedou-ai-minigram/docs/实现方案-三Tab骨架.html` §4 的 8 步：
+设计变量层（改浅色 token）→ `app.json` 换 tabBar/导航 → 新建 `pages/chat`（抄 `contract/chat`，去掉合同上下文）→ 新建 `pages/discover`（两张能力卡）→ 改写 `welcome`（Hello. + 今日一句 + 开始对话）→ 改写 `mine`（设置收敛）→ `services/agent-stream.ts` 参数化（依赖后端，可后置）→ 冒烟（`tsc --noEmit` + 三 tab 可切 + 欢迎页 `switchTab` 不可后退）。
+
+> 与 `产品规划分析与实现方案-梳理.md` §5 的 M0 一致，两处互为引用。
+
+### T5 · 平台侧待确认（推荐值）
+
+| 问题 | 推荐 |
+|---|---|
+| M0 并入方式 | **整目录搬入 + 全量代码审查**（不要"重写后再对照"） |
+| 字段级加密工具落点 | `packages/platform-kit`（与 audit/notify 同处），不要塞进 `shared` |
+| 库名 | 保持 `mp_platform`（M0 若已建库）；未建则用 `web_system_mp` 同族命名 |
+| 「人工放行提审」审批关卡 | 一期不设（复用 IAM `system=deploy` + 审计留痕） |
+| `qrcode` 返回形态 | **落盘 + 返回 `{ url }` 相对路径**（与仓库「图片必须落盘 + DB 存相对路径」一致，前端 `<image>` 直用可缓存） |
+| 列表分页结构 | 统一 `{ items, total, page, pageSize }` |
+| 提审接口超时 | 改「提交即返回 + 轮询步骤」；微信偶发 >30s，同步等待会拖垮前端 |
+
+### T6 · RAG 语料重灌
+
+```bash
+# ingest 按 checksum 幂等：不先删，旧失败记录会被跳过（看起来像"改了没用"）
+mysql ... web_system_knowledge -e "DELETE FROM knowledge_docs;"
+node scripts/self-knowledge/load.mjs
+# 成功标志 ok(ready, chunks=N)；失败看 knowledge_docs.error 字段
+```
+
+### T7 · 分支收尾
+
+- 已合并：`feature/kedou-ai-minigram`（PR #87 已 merged，squash 合并）。
+- 建议**先保留**到下次从 master 全量同步确认无遗漏，再清理：
+
+```bash
+git push origin --delete feature/kedou-ai-minigram   # 确认无遗漏后执行
+git branch -d feature/kedou-ai-minigram
+```
+
+- 后续新工作**一律从 master 拉新分支**。注意：本仓库 auto-pr 只对 `feature/*` / `fix/*` 自动建 PR；`docs/*` 分支需手动建 PR（本次 #104 即如此）。
+
+### T8 · legacy 页面清理（独立一期）
+
+- 范围：`pages/{index, draw, records, scan, bianbian×5, contract×8}`（28 页里 16 页）。
+- 前置评估：`utils/CanvasEngine*.ts`（4 个）、`utils/Brush.ts`、`utils/{History,Layer,shapes,catmullRom}.ts` 的连带引用；确认 `pages/index/index` 是否仍是启动页（现启动页是 `pages/welcome/index/index`，它可能是死页）。
+- 验收：`app.json` 页面数 28 → 12 左右；`tsc --noEmit` + 微信开发者工具编译无新增错误。
+
 ---
 
 ## 变更日志
@@ -130,3 +225,4 @@ D1 并入 monorepo（`servers/mp-platform` + `apps/mp-admin` 微前端子模块�
 | 日期 | 变更 |
 |---|---|
 | 2026-09-20 | 初版：从 09-17~09-20 会话沉淀 8 项待办（T1–T8）、mp-platform 决策与待确认清单、M0 源码排查结论、已完成对照表 |
+| 2026-09-20 | 追加 §6「逐项执行建议」：T1 迁移执行命令（含备份/校验/清缓存、IP 白名单坑）、T2 判定与 A/B 做法 + 凭据前置、T3 五项推荐值、T4 收口顺序、T5 七条推荐值、T6 重灌命令、T7 清理命令与分支约定、T8 范围与验收；修正 `~/env_config` 的定位（凭据仓，非笔记目录） |
