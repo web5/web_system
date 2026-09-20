@@ -78,6 +78,27 @@ export class DeployModuleEntity {
   @Column({ type: 'boolean', default: false, comment: '是否基座 shell' })
   isShell?: boolean;
 
+  /**
+   * 部署根路径（**相对发布目录根**，如 `servers/gateway`）。
+   *
+   * 设计见 specs/deploy-console/artifact-path-and-deploy-model.md（M1，2026-09-17）：
+   * 部署位置是**模块的自有属性**，环境不参与路径决策 —— 于是同一条流水线可以跑多个环境，
+   * 也不必再为每个环境配 3 套 PUBLISH_PATH / HOST / USER 变量。
+   *
+   * - 后台：`servers/<dir>` → 部署时把选中产物落到 `<deployRoot>/dist` 并重启
+   * - 前端类：`<gateway 静态根>/<publicPath>` → 部署即切指针（产物路径就是版本目录）
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '部署根路径（相对发布目录根）' })
+  deployRoot?: string;
+
+  /**
+   * 部署时**默认选中的产物路径**（相对版本目录，如 `dist/`）。
+   * 一个版本可能有多个产物候选（dist/、static/、sql/…），部署前由用户确认；
+   * 确认后可记住为默认值，下次自动预选。为空表示需要每次确认。
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '默认产物路径（相对版本目录）' })
+  defaultArtifactPath?: string;
+
   /** 描述 */
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '描述' })
   description?: string;

@@ -228,18 +228,31 @@ export class PipelineTemplateService {
   }
 
   /**
-   * 提交解析：显式 id → 校验「全局流水线 或 属于该模块的专属流水线」且启用；
-   * 未传 → 全局流水线（**没有就直接报错，不再懒建内置默认**）。
+   * 提交解析：
+   * - 显式 id → 校验「全局流水线 或 属于该模块的专属流水线」且启用；
+   * - 未传 id → 优先按 **模块 × 环境** 找启用的流水线（用户 2026-09-17：从模块发起时
+   *   上下文已定，不该要求再选一次流水线）；传了 env 才做这层匹配（兼容旧调用）；
+   * - 仍无 → 全局流水线（没有就直接报错，不再懒建内置默认）。
    */
   async resolveForSubmit(
     moduleKey: string,
-    templateId?: string,
+    pipelineId?: string,
+    env?: string,
   ): Promise<DeployPipelineTemplateEntity> {
-    if (!templateId) {
+    if (!pipelineId) {
+      if (env) {
+        const candidates = await this.repo.find({
+          where: { moduleKey, env, enabled: true },
+          order: { builtin: 'DESC', createdAt: 'ASC' },
+        });
+        if (candidates.length) return candidates[0];
+      }
       const global = await this.findGlobal();
       if (!global) {
         throw new BadRequestException(
-          '未指定流水线，且当前没有全局默认流水线；请在提交时显式选择一条流水线',
+          env
+            ? `模块 ${moduleKey} 在 ${env} 环境没有可用流水线，也没有全局默认流水线；请先在「流水线管理」创建`
+            : '未指定流水线，且当前没有全局默认流水线；请在提交时显式选择一条流水线',
         );
       }
       if (!global.enabled) {
@@ -247,9 +260,9 @@ export class PipelineTemplateService {
       }
       return global;
     }
-    const tpl = await this.get(templateId);
+    const tpl = await this.get(pipelineId);
     if (tpl.moduleKey !== GLOBAL_TEMPLATE && tpl.moduleKey !== moduleKey) {
-      throw new BadRequestException(`模板 ${templateId} 不可用于模块 ${moduleKey}（仅全局或该模块专属）`);
+      throw new BadRequestException(`模板 ${pipelineId} 不可用于模块 ${moduleKey}（仅全局或该模块专属）`);
     }
     if (!tpl.enabled) {
       throw new BadRequestException(`模板「${tpl.name}」已停用，请启用或改选其他模板`);

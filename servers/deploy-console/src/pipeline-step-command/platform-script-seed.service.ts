@@ -61,15 +61,15 @@ export class PlatformScriptSeedService implements OnModuleInit {
    * 同步单个模板的平台脚本（幂等）+ 初始化可编辑默认脚本。
    * @returns true=有写入（内容或锁定位发生变化）
    */
-  async seedForTemplate(templateId: string): Promise<boolean> {
+  async seedForTemplate(pipelineId: string): Promise<boolean> {
     let wrote = false;
     for (const item of PLATFORM_STEP_SCRIPTS) {
       const script = getPlatformStepScript(item.nodeKey);
-      const row = await this.repo.findOne({ where: { templateId, nodeKey: item.nodeKey } });
+      const row = await this.repo.findOne({ where: { pipelineId, nodeKey: item.nodeKey } });
       if (row?.locked && row.command === script && row.enabled) continue;
 
       const next =
-        row ?? this.repo.create({ templateId, nodeKey: item.nodeKey, command: '', enabled: true });
+        row ?? this.repo.create({ pipelineId, nodeKey: item.nodeKey, command: '', enabled: true });
       next.command = script;
       next.actions = null;
       next.locked = true;
@@ -78,7 +78,7 @@ export class PlatformScriptSeedService implements OnModuleInit {
       await this.repo.save(next);
       wrote = true;
     }
-    if (await this.ensureEditableDefaults(templateId)) wrote = true;
+    if (await this.ensureEditableDefaults(pipelineId)) wrote = true;
     return wrote;
   }
 
@@ -91,14 +91,14 @@ export class PlatformScriptSeedService implements OnModuleInit {
    * - 已有行且被平台锁过（历史数据）→ **解锁，保留现内容**（不拿代码覆盖运维的改动）；
    * - 已有行且已解锁 → 什么都不做（用户改过的脚本永不被冲掉）。
    */
-  async ensureEditableDefaults(templateId: string): Promise<boolean> {
+  async ensureEditableDefaults(pipelineId: string): Promise<boolean> {
     let wrote = false;
     for (const item of DEFAULT_STEP_SCRIPTS) {
-      const row = await this.repo.findOne({ where: { templateId, nodeKey: item.nodeKey } });
+      const row = await this.repo.findOne({ where: { pipelineId, nodeKey: item.nodeKey } });
       if (!row) {
         await this.repo.save(
           this.repo.create({
-            templateId,
+            pipelineId,
             nodeKey: item.nodeKey,
             command: getDefaultStepScript(item.nodeKey),
             actions: null,

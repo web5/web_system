@@ -31,11 +31,11 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
     repo = {
       rows: [] as any[],
       findOne: jest.fn(async ({ where }: any) =>
-        repo.rows.find((r) => r.templateId === where.templateId && r.nodeKey === where.nodeKey) ?? null,
+        repo.rows.find((r) => r.pipelineId === where.pipelineId && r.nodeKey === where.nodeKey) ?? null,
       ),
       create: jest.fn((o: any) => ({ ...o })),
       save: jest.fn(async (r: any) => {
-        const i = repo.rows.findIndex((x) => x.templateId === r.templateId && x.nodeKey === r.nodeKey);
+        const i = repo.rows.findIndex((x) => x.pipelineId === r.pipelineId && x.nodeKey === r.nodeKey);
         if (i >= 0) repo.rows[i] = r;
         else repo.rows.push(r);
         return r;
@@ -53,7 +53,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
 
     for (const item of PLATFORM_STEP_SCRIPTS) {
       expect(repo.rows.find((r) => r.nodeKey === item.nodeKey)).toMatchObject({
-        templateId: 't1',
+        pipelineId: 't1',
         locked: true,
         enabled: true,
         updatedBy: 'system',
@@ -61,7 +61,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
     }
     // git 是默认脚本（可编辑），不是托管
     const git = repo.rows.find((r) => r.nodeKey === 'git');
-    expect(git).toMatchObject({ templateId: 't1', locked: false, enabled: true });
+    expect(git).toMatchObject({ pipelineId: 't1', locked: false, enabled: true });
     expect(git.command).toBe(GIT_DEFAULT());
   });
 
@@ -91,7 +91,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
 
   it('git 存量 locked=true 行 → 解锁并**保留现内容**（把 git 交还运维）', async () => {
     repo.rows.push({
-      templateId: 't1',
+      pipelineId: 't1',
       nodeKey: 'git',
       command: '#!/usr/bin/env bash\n# 老的平台托管脚本',
       locked: true,
@@ -128,7 +128,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
   });
 
   it('存量托管行（locked=false）→ 补上锁定位与正文', async () => {
-    repo.rows.push({ templateId: 't1', nodeKey: 'verify', command: '旧脚本', locked: false, enabled: false });
+    repo.rows.push({ pipelineId: 't1', nodeKey: 'verify', command: '旧脚本', locked: false, enabled: false });
 
     const wrote = await svc.seedForTemplate('t1');
     expect(wrote).toBe(true);
@@ -142,7 +142,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
   it('seedAll 遍历全部模板（新模板不会漏）', async () => {
     const changed = await svc.seedAll();
     expect(changed).toBe(2);
-    expect([...new Set(repo.rows.map((r) => r.templateId))].sort()).toEqual(['t1', 't2']);
+    expect([...new Set(repo.rows.map((r) => r.pipelineId))].sort()).toEqual(['t1', 't2']);
     expect(repo.rows).toHaveLength(2 * TOTAL());
   });
 });
