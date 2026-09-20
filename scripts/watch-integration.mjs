@@ -60,12 +60,12 @@ const FOLLOW_MASTER = !hasFlag('--no-follow-master');
 /**
  * 本地不参与自动发布的模块：
  * - `finnews`：模块注册表里有、但仓库里没有对应目录（构建阶段 `spawn bash ENOENT`）；
- * - `mini-contract`：其 build 命令是上传微信小程序（需微信密钥，本地没有）。
+ * - `kedou-ai-minigram`：其 build 命令是上传微信小程序（需微信密钥，本地没有）。
  * 两者在本地必然失败，留在列表里只会每轮刷告警。用 `--skip-modules a,b` 覆盖。
  */
 const SKIP_MODULES = new Set(
   (
-    getArg('--skip-modules', process.env.WATCH_SKIP_MODULES || 'finnews,mini-contract') || ''
+    getArg('--skip-modules', process.env.WATCH_SKIP_MODULES || 'finnews,kedou-ai-minigram') || ''
   )
     .split(',')
     .map((s) => s.trim())

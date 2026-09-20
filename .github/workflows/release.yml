@@ -61,8 +61,8 @@ jobs:
         env:
           INPUT_ENV: ${{ github.event.inputs.env }}
           INPUT_MODULES: ${{ github.event.inputs.modules }}
-          # 本地无法发布的模块：mini-contract 的 build 命令是上传微信小程序（需微信密钥）
-          SKIP_MODULES: mini-contract
+          # 本地无法发布的模块：kedou-ai-minigram 的 build 命令是上传微信小程序（需微信密钥）
+          SKIP_MODULES: kedou-ai-minigram
         run: |
           set -euo pipefail
           ENV="${INPUT_ENV:-local}"
