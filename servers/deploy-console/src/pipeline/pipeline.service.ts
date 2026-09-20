@@ -28,6 +28,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { EnvsService } from '../envs/envs.service';
+import { AppsService } from '../apps/apps.service';
 import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
@@ -447,6 +448,8 @@ export class PipelineService {
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
     // 环境域（双域重构：提交时按环境表校验 envId，替代硬编码白名单）
     private readonly envsService: EnvsService,
+    // 应用域：部署动作（前端切指针）
+    private readonly appsService: AppsService,
   ) {}
 
   /**
@@ -1332,6 +1335,8 @@ export class PipelineService {
         detail: `发布成功: ${p.env}/${p.moduleKey} → ${p.versionTag}（mode=${p.mode}, target=${uploadTarget}）`,
       });
       this.logger.log(`流水线完成: ${p.id} ${p.env}/${p.moduleKey} → ${p.versionTag}`);
+      // 部署动作（第二个流程动作；受开关 + env=local 约束，失败不影响发布结果）
+      await this.autoDeployAfterPublish(p, uploadTarget);
       // 发布成功后同步权限点（挂在这里的原因见方法注释；失败不影响发布结果）
       await this.syncPermissionPoints(p);
       void this.notifyPipelineEvent(p, 'pipeline.succeeded', 'success', '发布成功');
@@ -1695,6 +1700,51 @@ export class PipelineService {
    * 契约：**失败只告警不阻断**（权限同步不该让一次成功发布变成失败）；
    * 环境变量 `PIPELINE_PERM_SYNC=false` 可关闭。
    */
+  /**
+   * 部署动作 —— 发布部署整体的**第二个**流程动作
+   * （design: `specs/pipeline-deploy-action/design.md`）。
+   *
+   * 背景：流水线原本只完成「发布」（投递产物 + 写版本记录），产物并不会生效：
+   * 后端 `apply`/`restart` 被 `moduleType` 守卫跳过，前端没有切指针。
+   * 表现为流水线 succeeded 但页面/服务没变。
+   *
+   * 双重约束（用户 2026-09-20 定）：
+   *   ① 开关 `PIPELINE_AUTO_DEPLOY=1`（默认关闭）
+   *   ② 仅 `env === 'local'`；dev / prod 行为完全不变
+   *
+   * 失败语义：部署是独立动作，失败**不改变发布结果**（发布确实成功了），
+   * 只记 `result.deploy` 与日志，可重试。
+   */
+  private async autoDeployAfterPublish(
+    p: DeployPipelineEntity,
+    uploadTarget: 'local' | 'remote',
+  ): Promise<void> {
+    if (this.configService.get<string>('PIPELINE_AUTO_DEPLOY') !== '1') return;
+    if (p.env !== 'local') return;
+    const version = toCommitId(p.versionTag);
+    if (!version) return;
+
+    const mod = await this.moduleRegistry.get(p.moduleKey).catch(() => null);
+    try {
+      if (mod?.type === 'backend') {
+        // 后端：构建产物已在 servers/<dir>/dist（运行位置），重启即生效
+        const def = this.builtinSteps['restart'];
+        if (!def?.run) throw new Error('restart 执行体未注册');
+        await def.run(this.buildStepContext(p, 'deploy', uploadTarget));
+      } else {
+        // 前端（env-dir）：切入口指针
+        await this.appsService.switchVersion(p.moduleKey, p.env, version, p.operator ?? undefined);
+      }
+      p.result = { ...(p.result ?? {}), deploy: { ok: true, version } };
+      p.logs = [...(p.logs ?? []), `[deploy] 部署生效完成：${p.moduleKey}@${p.env} → ${version}`];
+    } catch (e) {
+      const msg = (e as Error).message || String(e);
+      p.result = { ...(p.result ?? {}), deploy: { ok: false, version, error: msg } };
+      p.logs = [...(p.logs ?? []), `[deploy] 部署失败：${msg}`];
+    }
+    await this.save(p);
+  }
+
   private async syncPermissionPoints(p: DeployPipelineEntity): Promise<void> {
     if ((this.configService.get<string>('PIPELINE_PERM_SYNC') ?? 'true') === 'false') {
       p.logs = [...(p.logs ?? []), '[perm-sync] 已按配置跳过权限同步（PIPELINE_PERM_SYNC=false）'];

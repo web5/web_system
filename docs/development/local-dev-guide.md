@@ -143,15 +143,42 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 
 ### 3.2 本地开发验证路径（改完怎么看到效果）
 
-> 2026-09-20 定稿。**不要用发布流水线做本地验证**：流水线面向 dev/prod，带审批与版本账本，
-> 用它做本地验证会很重，且容易演变成"每个模块建一条本地线"（已踩过，见 §6）。
-> 本地验证走下面的直连路径；发布到 dev/prod 才走流水线。
+> 2026-09-20 定稿（用户口径）：
+> **deploy-console 自身不走流水线**（它是发布工具，restart 会自杀式中断）→ 走专用脚本；
+> **其他模块（admin / portal / gateway …）的本地验证走发布流水线**，提交 `env=local` 即可。
+> 流水线支持多环境 = 支持按环境（分支）使用不同脚本，见 `specs/pipeline-env-scripts/design.md`。
 
-| 改什么 | 在哪构建 | 产物去哪 | 怎么生效 |
-|---|---|---|---|
-| **deploy-console 自身** | 工作区 | 复制到发布目录 | `./scripts/publish-deploy-console.sh`（一键：构建→复制→重启→复检） |
-| **前端模块** admin / portal | 工作区 `apps/<m>` | 网关静态根 `static/modules/<key>/local/<版本>/` | 切指针 → 浏览器**硬刷新** |
-| **后端服务** gateway / system… | 工作区 `servers/<svc>` | 发布目录 `servers/<svc>/dist` | pm2 干净重启 + 端口归属校验 |
+| 改什么 | 验证路径 |
+|---|---|
+| **deploy-console 自身** | `./scripts/publish-deploy-console.sh`（工作区构建→复制→重启→复检） |
+| **其他模块**（前端 + 后端） | 发布流水线：提交 `{"env":"local","moduleKey":"<key>",...}` → 审批 → 生效 → 页面硬刷新 |
+
+#### 用流水线做本地验证
+
+```bash
+curl -X POST http://127.0.0.1:6200/api/pipelines \
+  -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
+  -d '{"env":"local","moduleKey":"admin","branch":"<你的分支>","mode":"direct"}'
+# 轮询 GET /api/pipelines/:jobId；遇 gate 节点需审批：POST /api/pipelines/:id/approve
+```
+
+#### 部署：发布之后的第二个动作
+
+流水线跑完只完成**发布**（投递产物 + 写版本记录），**还要部署才会生效**：
+
+| 类型 | 部署动作 |
+|---|---|
+| 前端 | 切入口指针 `<key>/<envId>/index.js`（两行 A′ 写法） |
+| 后端 | 版本目录 → dist + 重启 + 探活 |
+
+本地已打通自动衔接：发布成功后自动部署（`PIPELINE_AUTO_DEPLOY=1`，**仅 `local`**；dev/prod 行为不变）。
+日志出现 `[deploy] 部署生效完成：<key>@local → <版本>` 即生效；
+部署失败只写 `result.deploy` 与日志，**不改变发布结果**（部署是独立动作，可重试）。
+设计见 `specs/pipeline-deploy-action/design.md`。
+
+⚠️ **两个前提**
+1. 节点脚本要**按环境区分**（模板脚本默认不分环境，直接发 local 可能执行 dev 的远程 scp 脚本）
+2. 本地脚本须投到 env-dir 布局 `<key>/<envId>/<版本>/`，否则部署切指针会报「版本产物不存在」（这是预期报错，用于暴露布局不一致）
 
 #### 前端（admin / portal）
 
