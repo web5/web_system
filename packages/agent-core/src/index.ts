@@ -38,6 +38,12 @@ export type {
 
 // 引擎
 export { AgentEngine } from './core/agent-engine';
+export { IntentClassifier } from './core/intent-classifier';
+export type {
+  IntentResult,
+  IntentVia,
+  ClassifyOptions,
+} from './core/intent-classifier';
 export { AgentRunner } from './core/agent-runner';
 export { resolveAgentCapabilities } from './core/capability-resolver';
 export type { ResolvedAgentCapabilities } from './core/capability-resolver';
