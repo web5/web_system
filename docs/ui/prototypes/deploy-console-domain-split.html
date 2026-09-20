@@ -598,7 +598,13 @@
             <div class="step-col" data-step="1">
               <div class="step-title" onclick="openStep(1)"><span class="nm">拉取代码</span><span class="desc">拉取目标分支</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
-                <div class="task-node script" title="平台托管 · 校验+检出" onclick="openTask('git')"><span class="seq">1</span><span class="tag">脚本</span><span class="name">git</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task">
+                  <div class="task-node script" title="平台托管脚本（平台维护，不可改）" onclick="openTask('git')"><span class="seq">1</span><span class="tag">脚本</span><span class="name">git</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-acts">
+                    <div class="act-node" title="校验 REPO_URL 与 origin 一致、回显来源、分支与 commit 可达" onclick="openAction('git',0)"><span class="tag">脚本</span><span class="name">校验代码来源与分支</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                    <div class="act-node" title="fetch + checkout 目标分支，HEAD 自证" onclick="openAction('git',1)"><span class="tag">脚本</span><span class="name">检出目标分支并自证</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -606,7 +612,12 @@
             <div class="step-col" data-step="2">
               <div class="step-title" onclick="openStep(2)"><span class="nm">构建</span><span class="desc">打包微模块产物</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
-                <div class="task-node script" title="vite build" onclick="openTask('build')"><span class="seq">2</span><span class="tag">脚本</span><span class="name">build</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task">
+                  <div class="task-node script" title="微前端产物构建（平台托管）" onclick="openTask('build')"><span class="seq">2</span><span class="tag">脚本</span><span class="name">build</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-acts">
+                    <div class="act-node" title="pnpm install --frozen-lockfile + vite build，产物落 dist/" onclick="openAction('build',0)"><span class="tag">脚本</span><span class="name">vite build · 打包微模块产物</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 平台托管动作不可删除')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -644,7 +655,12 @@
             <div class="step-col" data-step="5">
               <div class="step-title" onclick="openStep(5)"><span class="nm">通知</span><span class="desc">发布结果通知</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
-                <div class="task-node script" title="curl 通知回调" onclick="openTask('notify')"><span class="seq">5</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">notify</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task">
+                  <div class="task-node script" title="curl 通知回调（条件：仅生产环境执行）" onclick="openTask('notify')"><span class="seq">5</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">notify</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-acts">
+                    <div class="act-node" title="shell 脚本：curl 调用通知接口（仅 DEPLOY_ENV == prod 执行）" onclick="openAction('notify',0)"><span class="tag">脚本</span><span class="name">curl · 发布结果回调</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -657,14 +673,31 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
-      </div>
 
-      <!-- 通用占位 -->
+      <!-- 通用模块（按一级域动态渲染交互骨架：工具栏 + 列表 + 行操作） -->
       <div class="screen" id="dc-generic">
-        <div class="dc-page-head"><h1 id="dcGenericTitle">页面</h1><div class="sub">该页面不在本次双域重构范围内，沿用现有实现。</div></div>
-        <div class="dc-card"><div class="dc-muted">导航入口保留，页面内容与交互不变。</div></div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1 id="dcGenericTitle">页面</h1><div class="sub" id="dcGenericSub"></div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn" onclick="toast('[原型] 放弃未保存的修改')">取消</button>
+            <button class="dc-btn" disabled title="存在进行中的任务，不可删除" style="color:#E5484D;">删除</button>
+            <button class="dc-btn primary" onclick="toast('[原型] 已保存')">保存</button>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-row" style="margin-bottom:12px;">
+            <div class="dc-seg"><span class="on">全部</span><span>启用</span><span>停用</span></div>
+            <input class="dc-search" placeholder="搜索">
+            <div class="dc-spacer"></div>
+            <button class="dc-btn primary" onclick="toast('[原型] 新建（当前模块）')">新建</button>
+          </div>
+          <table>
+            <thead id="dcGenericHead"></thead>
+            <tbody id="dcGenericBody"></tbody>
+          </table>
+          <div class="dc-muted" style="margin-top:10px;" id="dcGenericNote"></div>
+        </div>
       </div>
 
     </div>
@@ -1070,6 +1103,71 @@ body{background:#e8ecf1;}
     });
     document.getElementById('dcSubMenu').innerHTML = h || '<div class="dc-muted" style="padding:12px;">—</div>';
   }
+  /* 通用模块交互骨架：各模块点进去有统一的 列表+行操作 交互（沿用 dc 组件） */
+  var GENERIC_TPL = {
+    '灰度管理':{sub:'按模块配置灰度发布策略：比例 / 指定用户 / 指定环境',note:'灰度比例在发布详情页也可按环境临时调整。',
+      cols:['策略','模块','范围','比例','状态','操作'],
+      rows:[['auth-灰度','admin','指定用户','10%','<span class="dc-badge ok">运行中</span>','编辑|暂停'],
+            ['new-home','home','全量','100%','<span class="dc-badge neutral">已结束</span>','编辑|删除'],
+            ['mcp-beta','mcp-admin','dev 环境','50%','<span class="dc-badge warn">观察中</span>','编辑|暂停']]},
+    '自助诊断':{sub:'发布失败一键自检：来源校验 / 构建日志 / 目标机连通性',note:'诊断动作只读，不影响运行中的流水线。',
+      cols:['时间','流水线','检查项','结果','耗时','操作'],
+      rows:[['09-20 11:02','admin 发布','代码来源校验','<span class="dc-badge ok">通过</span>','0.8s','详情'],
+            ['09-20 10:47','auth 发布','目标机探活','<span class="dc-badge err">失败</span>','3.1s','详情|重试'],
+            ['09-19 18:20','gateway 发布','构建产物完整性','<span class="dc-badge ok">通过</span>','1.2s','详情']]},
+    '工具目录':{sub:'跨模块可复用的平台动作：写版本记录 / 通知回调 / 探活等（均以 shell 脚本实现）',note:'动作均以脚本实现；调用平台能力 = 脚本内调用平台接口。',
+      cols:['动作','类型','调用方式','引用流水线','状态','操作'],
+      rows:[['write-version','脚本','平台接口','admin/auth/gateway','<span class="dc-badge ok">启用</span>','查看|编辑'],
+            ['notify-callback','脚本','外部 Webhook','admin','<span class="dc-badge ok">启用</span>','查看|编辑'],
+            ['health-probe','脚本','平台接口','全部后端线','<span class="dc-badge neutral">停用</span>','查看|启用']]},
+    '服务监控':{sub:'各服务实例健康与资源占用',note:'数据 30s 刷新；探活失败连续 3 次触发告警。',
+      cols:['服务','实例','CPU','内存','探活','操作'],
+      rows:[['gateway','web-gateway-1','12%','412MB','<span class="dc-badge ok">通过</span>','日志|重启'],
+            ['auth-service','web-auth-1','8%','298MB','<span class="dc-badge ok">通过</span>','日志|重启'],
+            ['ai-service','web-ai-1','46%','1.2GB','<span class="dc-badge err">失败</span>','日志|重启']]},
+    '审计日志':{sub:'控制台关键操作留痕：保存 / 删除 / 发布 / 审批',note:'保留 180 天；导出走工单审批。',
+      cols:['时间','操作人','动作','对象','结果'],
+      rows:[['09-20 11:30','admin','保存流水线','admin 发布','<span class="dc-badge ok">成功</span>'],
+            ['09-20 10:12','ops','审批通过','admin 发布 #102','<span class="dc-badge ok">成功</span>'],
+            ['09-19 22:41','admin','删除环境变量','auth 发布 / RETRY_TIMES','<span class="dc-badge err">失败</span>']]},
+    '通知中心':{sub:'发布结果 / 审批待办 / 告警的通知渠道配置',note:'渠道级开关与人员订阅在行内配置。',
+      cols:['渠道','事件','接收人','状态','操作'],
+      rows:[['企业微信','发布成功/失败','运维群','<span class="dc-badge ok">启用</span>','编辑|停用'],
+            ['邮件','审批待办','审批人','<span class="dc-badge ok">启用</span>','编辑|停用'],
+            ['短信','探活告警','值班表','<span class="dc-badge neutral">停用</span>','编辑|启用']]},
+    '配置中心':{sub:'流水线运行期变量与平台级配置（REPO_URL 等）',note:'global / env / module 三级作用域；流水线脚本可直接引用。',
+      cols:['KEY','作用域','值','更新人','操作'],
+      rows:[['REPO_URL','global','git@github.com:web5/web_system.git','p13','编辑|历史'],
+            ['NOTIFY_WEBHOOK','env:prod','https://hook.example/xxx','admin','编辑|历史'],
+            ['PUBLISH_PATH','env:dev','/data/web_system/servers/gateway/public/static','ops','编辑|历史']]},
+    '系统设置':{sub:'控制台基础设置：登录 / 权限 / 备份',note:'修改后即时生效，敏感操作需二次验证。',
+      cols:['设置项','当前值','说明','操作'],
+      rows:[['会话有效期','8h','登录态过期时间','编辑'],
+            ['备份策略','每日 02:00','deploy 库全量备份','编辑'],
+            ['双因素验证','<span class="dc-badge neutral">关闭</span>','删除类操作二次验证','编辑|启用']]}
+  };
+  function renderGeneric(title){
+    var tpl = GENERIC_TPL[title];
+    document.getElementById('dcGenericTitle').textContent = title;
+    document.getElementById('dcGenericSub').textContent = tpl ? tpl.sub : '该页面不在本次双域重构范围内，沿用现有实现。';
+    document.getElementById('dcGenericNote').textContent = tpl ? ('※ ' + tpl.note) : '导航入口保留，页面内容与交互不变。';
+    document.getElementById('dcGenericHead').innerHTML = tpl
+      ? '<tr>' + tpl.cols.map(function(c){return '<th>'+c+'</th>';}).join('') + '</tr>'
+      : '';
+    document.getElementById('dcGenericBody').innerHTML = tpl
+      ? tpl.rows.map(function(r){
+          var tds = r.map(function(cell,i){
+            if(i === r.length-1 && cell.indexOf('|') > -1){
+              return '<td>' + cell.split('|').map(function(a){
+                return '<button class="dc-btn link" onclick="toast(\'[原型] '+title+' · '+a+'\')">'+a+'</button>';
+              }).join('') + '</td>';
+            }
+            return '<td>'+cell+'</td>';
+          }).join('');
+          return '<tr>'+tds+'</tr>';
+        }).join('')
+      : '<tr><td colspan="6" class="dc-muted">导航入口保留，页面内容与交互不变。</td></tr>';
+  }
   /* 顶部一级切换：左侧二级更新 + 进组内首页 */
   function switchDomain(domain){
     renderSide(domain);
@@ -1095,7 +1193,7 @@ body{background:#e8ecf1;}
       });
     }
     if(page === 'generic'){
-      document.getElementById('dcGenericTitle').textContent = title || '页面';
+      renderGeneric(title || '页面');
     }
     // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
     if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
@@ -1337,7 +1435,14 @@ body{background:#e8ecf1;}
       {name:'write-version · 写版本记录',script:VERSION_ACT}]},
     'dev':{cond:null,acts:[
       {name:'打包上传到远程主机',script:'#!/usr/bin/env bash\nset -euo pipefail\nVER="${COMMIT_ID##*/}"\ntar -C "$(dirname "$SRC")" -czf "/tmp/${MODULE_KEY}-${VER}.tgz" "$(basename "$SRC")"\nscp "/tmp/${MODULE_KEY}-${VER}.tgz" "${PUBLISH_HOST}:${PUBLISH_PATH}/${VER}.tgz"'},
-      {name:'write-version · 写版本记录',script:VERSION_ACT}]}
+      {name:'write-version · 写版本记录',script:VERSION_ACT}]},
+    'git':{cond:null,managed:true,acts:[
+      {name:'校验代码来源与分支',script:'# 平台托管：REPO_URL 与 origin 一致性校验 + 来源回显 + 分支/commit 可达\n# 期望 REPO_URL: ${REPO_URL}\n# 实际 origin : $(git -C "$RELEASE_DIR" remote get-url origin)\n# 分支        : ${BRANCH}  →  commit: ${COMMIT_ID}'},
+      {name:'检出目标分支并自证',script:'# 平台托管：fetch 全部引用 + checkout 目标分支 + HEAD 自证\ngit -C "$RELEASE_DIR" fetch origin "+refs/heads/*:refs/remotes/origin/*"\ngit -C "$RELEASE_DIR" checkout -q "$BRANCH"\ngit -C "$RELEASE_DIR" rev-parse --short=7 HEAD'}]},
+    'build':{cond:null,managed:true,acts:[
+      {name:'vite build · 打包微模块产物',script:'# 平台托管：微前端产物构建\npnpm install --frozen-lockfile\npnpm --filter "@kedou/module-${MODULE_KEY}" build\n# 产物目录: ${SRC}（dist/）'}]},
+    'notify':{cond:'DEPLOY_ENV == prod',acts:[
+      {name:'curl · 发布结果回调',script:'#!/usr/bin/env bash\n# 仅生产环境执行（任务条件 DEPLOY_ENV == prod）\ncurl -sf -X POST "${NOTIFY_WEBHOOK}" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"module":"${MODULE_KEY}","env":"${ENV_ID}","version":"${VER}","status":"${PIPELINE_STATUS}"}\''}]}
   };
   function escA(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
   /* 任务总览视图（点任务头）：任务名 + 动作列表 + 任务级 tab（条件/环境变量） */
