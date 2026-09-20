@@ -36,14 +36,33 @@
   .dc-item.active{background:rgba(249,115,22,.18);color:#fb923c;font-weight:600;}
   .dc-item .ic{width:15px;height:15px;flex-shrink:0;opacity:.9;}
   .dc-item .ic svg{width:100%;height:100%;}
-  .dc-group{font-size:11px;color:#6b6b70;font-weight:600;padding:14px 12px 6px;letter-spacing:.5px;
-    display:flex;align-items:center;gap:7px;}
-  .dc-group .ic{width:14px;height:14px;}
-  .dc-group .ic svg{width:100%;height:100%;}
+  /* 一级菜单（可折叠域）：点击展开/收起二级 */
+  .dc-group{font-size:12px;color:#5b6372;font-weight:600;padding:9px 10px;letter-spacing:.3px;
+    display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;border-radius:6px;
+    margin-top:6px;transition:background .15s,color .15s;}
+  .dc-group:hover{background:#eef1f6;color:#1a1f2e;}
+  .dc-group .chev{margin-left:auto;display:flex;color:#9aa1ad;transition:transform .15s;}
+  .dc-group .chev svg{width:13px;height:13px;}
+  .dc-sub .dc-items{display:flex;flex-direction:column;margin-top:2px;}
+  .dc-sub.collapsed .dc-items{display:none;}
+  .dc-sub.collapsed .dc-group .chev{transform:rotate(-90deg);}
+  /* 二级菜单：缩进一级 */
+  .dc-sub .dc-item{margin-left:14px;width:calc(100% - 14px);}
   .dc-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#101013;}
-  .dc-header{height:56px;background:#161618;border-bottom:1px solid #2a2a2e;flex-shrink:0;
-    display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
-  .dc-header .title{color:#f5f5f5;font-size:15px;font-weight:600;}
+  .dc-header{height:52px;background:#161618;border-bottom:1px solid #2a2a2e;flex-shrink:0;
+    display:flex;align-items:stretch;justify-content:space-between;padding:0 18px;}
+  /* 顶部一级菜单（横排 tab） */
+  .dc-topnav{display:flex;align-items:stretch;gap:2px;height:100%;}
+  .dc-topnav .tn{display:flex;align-items:center;padding:0 16px;font-size:13px;color:#5b6372;
+    cursor:pointer;border-bottom:2px solid transparent;position:relative;user-select:none;
+    transition:color .15s;}
+  .dc-topnav .tn:hover{color:#1a1f2e;}
+  .dc-topnav .tn.active{color:#EA6A0A;font-weight:600;border-bottom-color:#EA6A0A;}
+  /* 侧栏二级菜单：小圆点 + 缩进 */
+  .dc-menu{padding:10px 10px 0;}
+  .dc-menu .dc-item{padding-left:10px;}
+  .dc-menu .dc-item::before{content:'';width:5px;height:5px;border-radius:50%;
+    background:#c8cfd9;flex-shrink:0;}
   .dc-header .user{display:flex;align-items:center;gap:9px;padding:5px 11px 5px 5px;border-radius:10px;cursor:pointer;}
   .dc-header .user:hover{background:rgba(255,255,255,.06);}
   .dc-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#F97316,#f5a623);
@@ -259,47 +278,19 @@
       </svg>
       <span class="lt">Beehive</span>
     </div>
-    <div class="dc-menu">
-      <div class="dc-item" id="nav-dashboard" onclick="dc('dashboard','仪表盘')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>仪表盘
-      </div>
-
-      <div class="dc-group">微前端</div>
-      <div class="dc-item active" id="nav-apps" onclick="dc('apps','应用管理')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>应用管理
-      </div>
-      <div class="dc-item" id="nav-envs" onclick="dc('envs','环境管理')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18"/></svg></span>环境管理
-      </div>
-
-      <div class="dc-group">API 网关</div>
-      <div class="dc-item" id="nav-services" onclick="dc('services','服务管理')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="8" height="6" rx="1"/><rect x="14" y="4" width="8" height="6" rx="1"/><rect x="8" y="14" width="8" height="6" rx="1"/></svg></span>服务管理
-      </div>
-
-      <div class="dc-group">流水线管理</div>
-      <div class="dc-item" id="nav-pipelines" onclick="dc('pipelines','流水线列表')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h6M14 6h6M4 12h6M14 12h6M4 18h6M14 18h6"/></svg></span>流水线列表
-      </div>
-      <div class="dc-item" onclick="dc('generic','灰度管理')">灰度管理</div>
-      <div class="dc-item" onclick="dc('generic','自助诊断')">自助诊断</div>
-      <div class="dc-item" onclick="dc('generic','工具目录')">工具目录</div>
-
-      <div class="dc-group">基础设施</div>
-      <div class="dc-item" id="nav-hosts" onclick="dc('hosts','主机管理')">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="8" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/></svg></span>主机管理
-      </div>
-      <div class="dc-item" onclick="dc('generic','服务监控')">服务监控</div>
-      <div class="dc-item" onclick="dc('generic','审计日志')">审计日志</div>
-      <div class="dc-item" onclick="dc('generic','通知中心')">通知中心</div>
-      <div class="dc-item" onclick="dc('generic','配置中心')">配置中心</div>
-      <div class="dc-item" onclick="dc('generic','系统设置')">系统设置</div>
-    </div>
+    <div class="dc-menu" id="dcSubMenu"><!-- 二级菜单：随顶部一级切换动态渲染 --></div>
   </div>
 
   <div class="dc-main">
     <div class="dc-header">
-      <span class="title" id="dcTitle">应用管理</span>
+      <!-- 一级菜单（顶部横排）：切换域，左侧二级菜单随之更新 -->
+      <div class="dc-topnav">
+        <span class="tn" data-key="dashboard" onclick="switchDomain('dashboard')">仪表盘</span>
+        <span class="tn active" data-key="apps" onclick="switchDomain('apps')">微前端</span>
+        <span class="tn" data-key="svcs" onclick="switchDomain('svcs')">API 网关</span>
+        <span class="tn" data-key="pl" onclick="switchDomain('pl')">流水线管理</span>
+        <span class="tn" data-key="infra" onclick="switchDomain('infra')">基础设施</span>
+      </div>
       <span class="user"><span class="dc-avatar">A</span><span class="un">admin</span></span>
     </div>
     <div class="dc-content">
@@ -585,14 +576,89 @@
 
       <!-- 流水线（不动） -->
       <div class="screen" id="dc-pipelines">
-        <div class="dc-page-head"><h1>流水线列表</h1><div class="sub">本次重构不改变流水线页面与模型；仅目标选择器内部改用 targetRef。</div></div>
-        <div class="dc-card"><div class="ct">变化点</div>
-          <div class="dc-kv">
-            <div class="k">目标寻址</div><div><span class="dc-mono">app:admin</span> / <span class="dc-mono">svc:auth-service</span>（历史值 admin 自动兼容解析）</div>
-            <div class="k">执行分派</div><div>按域选择部署策略，页面与操作不变</div>
-            <div class="k">不改的部分</div><div>节点模型、变量、审批、灰度、诊断入口均不变</div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>流水线编辑 · admin 发布</h1><div class="sub">步骤（名称+介绍，不连线）→ 任务（脚本/审核，箭头串联，＋添加步骤）；多任务步骤分叉进入。模型见 specs/pipeline-step-task/design.md。</div></div>
+            <div class="dc-spacer"></div>
+            <button class="dc-btn" onclick="toast('[原型] 放弃未保存的修改，回到上一次保存的状态')">取消</button>
+            <button class="dc-btn" disabled title="流水线存在进行中的运行，不可删除" style="color:#E5484D;">删除</button>
+            <button class="dc-btn primary" onclick="toast('流水线已保存（步骤 / 任务 / 动作 / 条件 / 变量）')">保存</button>
           </div>
         </div>
+      <div class="canvas">
+        <div class="canvas-head">
+          <span class="t">流程编排<span class="hint">左→右 · 连线由节点坐标绘制</span></span>
+        </div>
+
+        <div class="canvas-body">
+          <svg class="wires" id="wires"></svg>
+          <div class="pipeline" id="pipeline">
+
+            <!-- 步骤 1 -->
+            <div class="step-col" data-step="1">
+              <div class="step-title" onclick="openStep(1)"><span class="nm">拉取代码</span><span class="desc">拉取目标分支</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              <div class="tasks">
+                <div class="task-node script" title="平台托管 · 校验+检出" onclick="openTask('git')"><span class="seq">1</span><span class="tag">脚本</span><span class="name">git</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              </div>
+            </div>
+
+            <!-- 步骤 2 -->
+            <div class="step-col" data-step="2">
+              <div class="step-title" onclick="openStep(2)"><span class="nm">构建</span><span class="desc">打包微模块产物</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              <div class="tasks">
+                <div class="task-node script" title="vite build" onclick="openTask('build')"><span class="seq">2</span><span class="tag">脚本</span><span class="name">build</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              </div>
+            </div>
+
+            <!-- 步骤 3 -->
+            <div class="step-col" data-step="3">
+              <div class="step-title" onclick="openStep(3)"><span class="nm">发布确认</span><span class="desc">人工审批门禁</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              <div class="tasks">
+                <div class="task-node approval" title="审批人：运维" onclick="openTask('approve')"><span class="seq">3</span><span class="tag">审核</span><span class="name">审批门禁</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              </div>
+            </div>
+
+            <!-- 步骤 4：发布（多任务） -->
+            <div class="step-col" data-step="4">
+              <div class="step-title" onclick="openStep(4)"><span class="nm">发布</span><span class="desc">投递产物到目标机</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              <div class="tasks">
+                <!-- 任务 = 任务头 + 动作列（动作按顺序紧贴任务头；动作都是 shell 脚本） -->
+                <div class="task">
+                  <div class="task-node script" title="本机 cp（条件 DEPLOY_ENV == local）" onclick="openTask('local')"><span class="seq">4-1</span><span class="tag">任务</span><span class="ifb">if</span><span class="name">local</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-acts">
+                    <div class="act-node" title="脚本：发布文件到目标位置（点击编辑该动作）" onclick="openAction('local',0)"><span class="tag">脚本</span><span class="name">发布文件到目标位置</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                    <div class="act-node" title="shell 脚本：调用平台接口写入版本记录（非内置工具）" onclick="openAction('local',1)"><span class="tag">脚本</span><span class="name">write-version · 写版本记录</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  </div>
+                </div>
+                <div class="task">
+                  <div class="task-node script" title="scp 远程（默认任务）" onclick="openTask('dev')"><span class="seq">4-2</span><span class="tag">任务</span><span class="def">默认</span><span class="name">dev</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="task-acts">
+                    <div class="act-node" title="脚本：打包上传到远程主机（点击编辑该动作）" onclick="openAction('dev',0)"><span class="tag">脚本</span><span class="name">打包上传到远程主机</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                    <div class="act-node" title="shell 脚本：调用平台接口写入版本记录（非内置工具）" onclick="openAction('dev',1)"><span class="tag">脚本</span><span class="name">write-version · 写版本记录</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 步骤 5 -->
+            <div class="step-col" data-step="5">
+              <div class="step-title" onclick="openStep(5)"><span class="nm">通知</span><span class="desc">发布结果通知</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              <div class="tasks">
+                <div class="task-node script" title="curl 通知回调" onclick="openTask('notify')"><span class="seq">5</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">notify</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="legend">
+          上行步骤标题（<b>不连线</b>）；下行任务箭头串联，连线中间「<b>＋</b>」= 添加步骤。
+          多任务步骤：水平线拐下分叉，箭头指向每个任务（local 条件 / dev 默认）。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
       </div>
 
       <!-- 通用占位 -->
@@ -791,6 +857,180 @@
     color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;z-index:95;opacity:0;
     pointer-events:none;transition:opacity .2s;}
   .toast.show{opacity:1;}
+
+/* ===== 流水线编排（步骤/任务画布，来自 pipeline-env-branch-canvas v7） ===== */
+/* 全局亮色 token（整稿默认亮色；画布/抽屉/弹窗统一引用） */
+:root{
+  --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+  --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+  --danger:#E5484D; --danger-soft:#FDEBEC; --ok:#2E9E5B; --ok-soft:#E7F5EC;
+  --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+  --shadow:0 2px 12px rgba(20,30,50,.06); --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+
+/* ===== 亮色主题覆盖：console 壳与公共组件（原深色硬编码 → 对齐 admin 浅色体系） ===== */
+body{background:#e8ecf1;}
+.proto-head{color:#1a1f2e;}
+.proto-head .sub{color:#5b6372;}
+.dc-desktop{background:#f5f7fa;border-color:#e2e6ec;box-shadow:0 24px 70px rgba(20,30,50,.14);}
+.dc-sider{background:#fff;border-right-color:#e8ebf0;}
+.dc-logo{border-bottom-color:#f0f2f6;}
+.dc-item{color:#5b6372;}
+.dc-item:hover{background:#eef1f6;color:#1a1f2e;}
+.dc-item.active{background:#FFF1E7;color:#EA6A0A;}
+.dc-item:hover .ic{color:#EA6A0A;}
+.dc-main{background:#f5f7fa;}
+.dc-header{background:#fff;border-bottom-color:#e8ebf0;}
+.dc-header .title{color:#1a1f2e;}
+.dc-header .user:hover{background:#eef1f6;}
+.dc-header .un{color:#5b6372;}
+.dc-content{background:radial-gradient(900px 480px at 88% -12%, rgba(249,115,22,.05), transparent 62%),#f5f7fa;}
+.dc-page-head h1{color:#1a1f2e;}
+.dc-page-head .sub{color:#9aa1ad;}
+.dc-card{background:#fff;border-color:#e8ebf0;box-shadow:0 2px 12px rgba(20,30,50,.05);}
+.dc-card .ct{color:#9aa1ad;}
+.dc-content th{color:#9aa1ad;border-bottom-color:#e8ebf0;}
+.dc-content td{color:#1a1f2e;border-bottom-color:#f0f2f6;}
+.dc-content tbody tr:hover{background:#f8fafc;}
+.dc-muted{color:#9aa1ad;}
+.dc-badge.neutral{background:#f5f7fa;color:#5b6372;border:1px solid #e8ebf0;}
+.dc-badge.primary{background:#FFF1E7;color:#EA6A0A;}
+.dc-badge.ok{background:#E7F5EC;color:#2E9E5B;}
+.dc-badge.err{background:#FDEBEC;color:#E5484D;}
+.dc-badge.warn{background:#FEF4E0;color:#b45309;}
+.dc-btn{background:#fff;color:#1a1f2e;border-color:#d8dde5;}
+.dc-btn:hover{background:#f5f7fa;}
+.dc-btn.link{background:none;border:none;color:#EA6A0A;}
+.dc-sw{background:#d8dde5;}
+.dc-seg{border-color:#d8dde5;}
+.dc-seg span{color:#5b6372;background:#fff;}
+.dc-seg span.on{background:#FFF1E7;color:#EA6A0A;}
+.dc-search{border-color:#d8dde5;background:#fff;color:#1a1f2e;}
+.dc-tabs{border-bottom-color:#e8ebf0;}
+.dc-tabs .t2{color:#5b6372;}
+.dc-tabs .t2.active{color:#EA6A0A;border-bottom-color:#EA6A0A;}
+.dc-kv{color:#1a1f2e;}
+.dc-kv .k{color:#9aa1ad;}
+.dc-mini{background:#fff;border-color:#e8ebf0;}
+.dc-mini .mt{color:#9aa1ad;}
+.dc-mini .mv{color:#1a1f2e;}
+.dc-alert{background:#FFF7ED;border-color:#FDBA74;color:#7c2d12;}
+.dc-alert .at{color:#b45309;}
+.dc-crumb{color:#9aa1ad;}
+.dc-crumb a{color:#5b6372;}
+.dc-ph{color:#c0c7d1;}
+.modal{background:#fff;border-color:#e8ebf0;color:#1a1f2e;box-shadow:0 24px 70px rgba(20,30,50,.25);}
+.field label{color:#5b6372;}
+.field input,.field select{border-color:#d8dde5;color:#1a1f2e;background:#fff;}
+.btn-sm{background:#fff;color:#1a1f2e;border-color:#d8dde5;}
+/* ===== 画布：布局与连线分离 =====
+     布局只管把步骤列横向排开；连线由 JS 测量节点坐标后用 SVG 绘制，
+     因此线永远精确贴合节点，加/删任务自动重算。 */
+  .canvas{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:8px 20px 20px;overflow-x:auto;}
+  .canvas-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .canvas-head .t{font-size:13px;font-weight:600;color:var(--text);}
+  .canvas-head .hint{font-size:12px;color:var(--text-3);margin-left:8px;font-weight:400;}
+  /* 画布层宽度跟随实际内容（列可能横向溢出滚动区），连线层才不会画一半被裁 */
+  .canvas-body{position:relative;width:max-content;min-width:100%;}
+  .wires{position:absolute;top:0;left:0;pointer-events:none;z-index:1;}
+
+  .pipeline{display:flex;align-items:flex-start;gap:76px;padding:16px 24px;}
+  .step-col{display:flex;flex-direction:column;align-items:stretch;gap:10px;flex-shrink:0;}
+  /* 任务等宽（列内最宽元素），内容整体左对齐 */
+  .tasks{display:flex;flex-direction:column;width:100%;}
+  /* 任务 = 任务头 + 动作列（动作直接在画布展示；动作块紧贴、整体圆角 2px） */
+  .task{display:flex;flex-direction:column;width:100%;}
+  .task + .task{margin-top:14px;}
+  .task-acts{border:1px solid var(--border);border-radius:2px;overflow:hidden;
+    margin-top:-1px;background:var(--card);}
+  .act-node{position:relative;display:flex;align-items:center;gap:6px;padding:4px 9px;cursor:pointer;
+    white-space:nowrap;width:100%;border-bottom:1px solid var(--border);
+    transition:background .15s;}
+  .act-node:last-child{border-bottom:none;}
+  .act-node:hover{background:var(--primary-soft);}
+  .act-node .tag{font-size:9px;font-weight:600;padding:1px 6px;border-radius:2px;flex-shrink:0;
+    color:var(--primary);background:var(--primary-soft);border:1px solid var(--border);}
+  .act-node .name{font-size:11px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;
+    font-family:var(--mono);font-size:10.5px;}
+  .act-node:hover .name{color:var(--text);}
+  .step-title{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:var(--card);border:1px solid var(--border);border-radius:2px;padding:6px 16px;
+    cursor:pointer;min-width:140px;}
+  .step-title:hover{border-color:var(--primary);}
+  .step-title .nm{font-size:13px;font-weight:600;color:var(--text);}
+  .step-title .desc{font-size:11px;color:var(--text-3);max-width:160px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;}
+  .del-btn{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:50%;
+    background:var(--card);border:1px solid var(--border);color:var(--text-3);cursor:pointer;
+    display:none;align-items:center;justify-content:center;padding:0;z-index:2;}
+  .del-btn svg{width:12px;height:12px;}
+  .del-btn:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .step-title:hover .del-btn,.task-node:hover .del-btn,.act-node:hover .del-btn{display:flex;}
+
+  .task-node{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:8px;
+    background:var(--card);border:1px solid var(--border);border-radius:2px;
+    padding:7px 14px;cursor:pointer;white-space:nowrap;width:100%;
+    transition:border-color .15s, background .15s;}
+  .task-node:hover{border-color:var(--primary);background:var(--primary-soft);}
+  .task-node .tag{font-size:10px;font-weight:600;padding:1px 7px;border-radius:6px;border:1px solid var(--border);
+    color:var(--text-2);background:var(--bg);flex-shrink:0;}
+  .task-node.script .tag{color:var(--primary);border-color:var(--primary);background:var(--primary-soft);}
+  .task-node.approval .tag{color:var(--ok);border-color:var(--ok);background:var(--ok-soft);}
+  .task-node .name{font-size:13px;font-weight:600;color:var(--text);}
+  /* 同步骤任务之间的额外间隙（上下任务不贴在一起） */
+  .task-node + .task-node{margin-top:10px;}
+  .task-node .ifb{font-size:9px;font-weight:700;color:#fff;background:var(--primary);padding:1px 5px;
+    border-radius:6px;font-family:var(--mono);flex-shrink:0;}
+  .task-node .def{font-size:10px;color:var(--text-3);border:1px solid var(--border);
+    border-radius:20px;padding:1px 8px;flex-shrink:0;}
+  /* 序号：左侧竖条色块，上下铺满节点（负 margin 抵消节点 padding） */
+  .task-node .seq{align-self:stretch;display:flex;align-items:center;
+    font-size:13px;font-weight:700;color:var(--text-2);background:var(--bg);
+    border-right:1px solid var(--border);border-radius:2px 0 0 2px;
+    padding:0 10px;margin:-7px 2px -7px -14px;font-family:var(--mono);flex-shrink:0;}
+
+  /* 连线层上的＋号（添加步骤）：JS 定位到主轴中点 */
+  .add-node{position:absolute;width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--primary);
+    color:var(--primary);background:var(--card);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;padding:0;transform:translate(-50%,-50%);z-index:3;}
+  .add-node svg{width:12px;height:12px;}
+  .add-node:hover{background:var(--primary-soft);}
+  .legend{margin-top:14px;font-size:12px;color:var(--text-3);line-height:1.9;}
+
+  /* ===== 抽屉 ===== */
+  .drawer-mask{position:fixed;inset:0;background:rgba(20,30,50,.35);display:none;z-index:40;}
+  .drawer-mask.show{display:block;}
+  .drawer{position:fixed;top:0;right:-520px;width:500px;height:100vh;background:var(--card);
+    box-shadow:-8px 0 32px rgba(20,30,50,.15);z-index:41;transition:right .25s ease;display:flex;flex-direction:column;}
+  .drawer.show{right:0;}
+  .drawer-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .drawer-head .t{font-size:15px;font-weight:700;color:var(--text);}
+  .drawer-head .x{cursor:pointer;color:var(--text-3);font-size:18px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px;}
+  .drawer-head .x:hover{background:var(--bg);color:var(--text);}
+  .drawer-tabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--border);}
+  .dtab{padding:10px 14px;font-size:13px;font-weight:600;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;}
+  .dtab.active{color:var(--primary);border-bottom-color:var(--primary);}
+  .drawer-body{flex:1;overflow:auto;padding:16px 20px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:13px;color:var(--text-2);margin-bottom:6px;font-weight:600;}
+  .field input,.field textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+    font-size:13px;color:var(--text);background:var(--card);outline:none;}
+  .field input:focus,.field textarea:focus{border-color:var(--primary);}
+  .field textarea{font-family:var(--mono);font-size:12px;min-height:150px;line-height:1.7;}
+  .doc-block{font-size:12px;color:var(--text-2);line-height:2;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+  .doc-block b{color:var(--text);}
+  .doc-block code{font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px;}
+  .cond-note{font-size:12px;color:var(--text-2);background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.8;}
+  .cond-note b{color:var(--text);}
+  .tool-row{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+  .tool-row .tname{font-size:13px;font-weight:600;color:var(--text);}
+  .tool-row .tdesc{font-size:11px;color:var(--text-3);flex:1;}
+  .tool-row .del{font-size:12px;color:var(--danger);cursor:pointer;padding:2px 8px;border-radius:6px;}
+  .drawer-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+  .btn{border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+  .btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border);}
+  .btn-primary{background:var(--primary);color:#fff;}
 </style>
 <div class="toast" id="toast"></div>
 
@@ -800,18 +1040,65 @@
                   "pipelines":"流水线列表","dashboard":"仪表盘"};
   var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
                 "pipelines":"nav-pipelines","dashboard":"nav-dashboard"};
+  /* 两级导航：一级（顶部）→ 二级（左侧，动态渲染） */
+  var DC_MENU = [
+    {key:'dashboard', label:'仪表盘',     items:[{page:'dashboard',label:'仪表盘',id:'nav-dashboard'}]},
+    {key:'apps',      label:'微前端',     items:[{page:'apps',label:'应用管理',id:'nav-apps'},{page:'envs',label:'环境管理',id:'nav-envs'}]},
+    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'}]},
+    {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},
+                                                  {page:'generic',title:'灰度管理',label:'灰度管理'},
+                                                  {page:'generic',title:'自助诊断',label:'自助诊断'},
+                                                  {page:'generic',title:'工具目录',label:'工具目录'}]},
+    {key:'infra',     label:'基础设施',   items:[{page:'hosts',label:'主机管理',id:'nav-hosts'},
+                                                  {page:'generic',title:'服务监控',label:'服务监控'},
+                                                  {page:'generic',title:'审计日志',label:'审计日志'},
+                                                  {page:'generic',title:'通知中心',label:'通知中心'},
+                                                  {page:'generic',title:'配置中心',label:'配置中心'},
+                                                  {page:'generic',title:'系统设置',label:'系统设置'}]}
+  ];
+  /* 页面 → 所属一级（顶部 tab 高亮） */
+  var DC_PAGE_DOMAIN = {"dashboard":"dashboard","apps":"apps","envs":"apps","appdetail":"apps",
+                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","hosts":"infra"};
+  function dcFindDomain(key){ for(var i=0;i<DC_MENU.length;i++){ if(DC_MENU[i].key===key) return DC_MENU[i]; } return null; }
+  /* 渲染左侧二级菜单（跟随顶部一级） */
+  function renderSide(domain){
+    var grp = dcFindDomain(domain); if(!grp) return;
+    var h = '';
+    (grp.items||[]).forEach(function(it){
+      h += '<div class="dc-item"'+(it.id?' id="'+it.id+'"':'')
+        + ' onclick="dc(\''+it.page+'\',\''+(it.title||it.label)+'\')">'+it.label+'</div>';
+    });
+    document.getElementById('dcSubMenu').innerHTML = h || '<div class="dc-muted" style="padding:12px;">—</div>';
+  }
+  /* 顶部一级切换：左侧二级更新 + 进组内首页 */
+  function switchDomain(domain){
+    renderSide(domain);
+    var grp = dcFindDomain(domain); if(!grp || !grp.items.length) return;
+    var first = grp.items[0];
+    dc(first.page, first.title || first.label);
+  }
+  /* 初始化：默认进「微前端」域（HTML 中 dc-apps 屏默认 active） */
+  renderSide('apps');
   function dc(page, title){
     document.querySelectorAll('.dc-content .screen').forEach(function(s){s.classList.remove('active');});
     var el = document.getElementById('dc-'+page);
     if(el) el.classList.add('active');
-    document.getElementById('dcTitle').textContent = title || DC_TITLE[page] || '页面';
     document.querySelectorAll('.dc-sider .dc-item').forEach(function(i){i.classList.remove('active');});
     if(page === 'appdetail'){ var n=document.getElementById('nav-apps'); if(n) n.classList.add('active'); }
     else if(page === 'svcdetail'){ var n2=document.getElementById('nav-services'); if(n2) n2.classList.add('active'); }
     else if(DC_NAV[page]){ var n3=document.getElementById(DC_NAV[page]); if(n3) n3.classList.add('active'); }
+    // 顶部一级 tab 跟随高亮（generic 页保持当前域）
+    var dom = DC_PAGE_DOMAIN[page];
+    if(dom){
+      document.querySelectorAll('.dc-topnav .tn').forEach(function(t){
+        t.classList.toggle('active', t.getAttribute('data-key') === dom);
+      });
+    }
     if(page === 'generic'){
       document.getElementById('dcGenericTitle').textContent = title || '页面';
     }
+    // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
+    if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
   }
   function pane(scope, n){
     var map = {app:4, svc:5};
@@ -927,6 +1214,169 @@
 
   /* 初始化环境切换列表（24 个环境演示） */
   renderEnvList('');
+</script>
+<!-- 抽屉 -->
+<div class="drawer-mask" id="mask" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head"><span class="t" id="drawerTitle">步骤 · 拉取代码</span><span class="x" onclick="closeDrawer()">✕</span></div>
+
+  <div class="drawer-body" id="pane-step">
+    <div class="field"><label>步骤名称</label><input value="拉取代码"></div>
+    <div class="field"><label>介绍</label><textarea style="min-height:80px;font-family:inherit;">从远程仓库拉取目标分支代码</textarea></div>
+    <div class="cond-note">步骤只是分组容器，不承载脚本与执行条件；脚本与高级配置在<b>任务</b>里设置。</div>
+  </div>
+
+  <div id="pane-task" style="display:none;flex:1;flex-direction:column;min-height:0;">
+    <div class="drawer-tabs" id="taskTabs">
+      <span class="dtab active" id="t1" onclick="ttab('1')">任务</span>
+      <span class="dtab" id="t2" onclick="ttab('2')">高级</span>
+      <span class="dtab" id="t3" onclick="ttab('3')">环境变量</span>
+    </div>
+    <!-- 任务/动作视图（动态渲染）：点任务头 = 任务总览；点动作卡 = 只展示该动作配置 -->
+    <div class="drawer-body" id="pane-task-1"></div>
+    <div class="drawer-body" id="pane-task-2" style="display:none;">
+      <div class="cond-note">条件满足 → 执行该任务；不满足 → 跳过。无条件的任务恒执行；发布这类多选一用互斥条件。</div>
+      <div class="field"><label>表达式</label><input value="DEPLOY_ENV == local" style="font-family:var(--mono);font-size:12px;" placeholder="如 DEPLOY_ENV == prod"></div>
+      <div class="doc-block">
+        <div><b>语法</b>：<code>KEY == 值</code> / <code>KEY != 值</code>，多条件用 <code>&amp;&amp;</code>；含空格的值用引号包裹。</div>
+        <div><b>变量</b>：<code>DEPLOY_ENV</code> <code>MODULE_KEY</code> <code>MODULE_TYPE</code> <code>BRANCH</code> <code>COMMIT_ID</code>、流水线变量与配置中心值。</div>
+        <div><b>示例</b>：<code>DEPLOY_ENV == prod</code>　<code>DEPLOY_ENV != local &amp;&amp; MODULE_TYPE == backend</code></div>
+      </div>
+    </div>
+    <div class="drawer-body" id="pane-task-3" style="display:none;">
+      <div class="cond-note" style="margin-bottom:10px;">任务级环境变量：执行该任务脚本时注入进程，可在脚本里用 <code style="font-family:var(--mono);">$KEY</code> 引用。</div>
+      <div class="field">
+        <div class="tool-row"><span class="tname">RETRY_TIMES</span><span class="tdesc">重试次数</span><span class="del" onclick="toast('[原型] 删除变量')">删除</span></div>
+        <div class="tool-row"><span class="tname">PUBLISH_PATH</span><span class="tdesc">投递根目录</span><span class="del" onclick="toast('[原型] 删除变量')">删除</span></div>
+        <button class="btn btn-ghost" style="font-size:12px;" onclick="toast('[原型] 添加 key=value')">＋ 添加变量</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ===== 连线：测量节点坐标 → SVG 绘制（与布局解耦，永远对齐） ===== */
+  var NS='http://www.w3.org/2000/svg';
+  var COLOR='#F97316'; // SVG presentation attribute 不支持 CSS 变量，直接用色值
+
+  function center(el, wrap){
+    var r=el.getBoundingClientRect(), w=wrap.getBoundingClientRect();
+    return {x:r.left-w.left, y:r.top-w.top, w:r.width, h:r.height,
+            cx:r.left-w.left+r.width/2, cy:r.top-w.top+r.height/2,
+            right:r.right-w.left, left:r.left-w.left};
+  }
+  function seg(x1,y1,x2,y2){
+    var p=document.createElementNS(NS,'path');
+    p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
+    p.setAttribute('stroke',COLOR);p.setAttribute('stroke-width','2.5');
+    p.setAttribute('fill','none');p.setAttribute('opacity','.9');
+    document.getElementById('wires').appendChild(p);
+  }
+  function chevron(x,y){ // 空心箭头：尖点精确落在目标节点左缘，尺寸加大保证清晰
+    var p=document.createElementNS(NS,'path');
+    p.setAttribute('d','M'+(x-9)+' '+(y-8)+' L'+x+' '+y+' L'+(x-9)+' '+(y+8));
+    p.setAttribute('stroke',COLOR);p.setAttribute('stroke-width','3');
+    p.setAttribute('fill','none');p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');
+    document.getElementById('wires').appendChild(p);
+  }
+  function draw(){
+    var wrap=document.querySelector('.canvas-body');
+    var svg=document.getElementById('wires');
+    var pr=wrap.getBoundingClientRect();
+    // SVG 尺寸取「画布层实际内容宽高」（列横向溢出滚动区时，可视宽度会小于内容宽度导致线被裁）
+    var pl=document.getElementById('pipeline').getBoundingClientRect();
+    svg.setAttribute('width',Math.ceil(Math.max(pr.width,pl.width))+40);
+    svg.setAttribute('height',Math.ceil(Math.max(pr.height,pl.height))+20);
+    svg.innerHTML='';
+    // 清掉旧的＋号
+    document.querySelectorAll('.add-node').forEach(function(n){n.remove();});
+    var cols=document.querySelectorAll('.step-col');
+    for(var i=0;i<cols.length-1;i++){
+      var from=cols[i].querySelector('.task-node');
+      var tos=[...cols[i+1].querySelectorAll('.task-node')];
+      if(!from||!tos.length)continue;
+      var f=center(from,wrap);
+      var midX=(f.right + center(tos[0],wrap).left)/2;
+      seg(f.right,f.cy,midX,f.cy);                 // 主线：源任务右缘 → 中点
+      var btn=document.createElement('button');    // ＋号：添加步骤
+      btn.className='add-node';btn.title='添加步骤';
+      btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
+      btn.style.left=midX+'px';btn.style.top=f.cy+'px';
+      btn.onclick=function(){toast('[原型] 添加步骤');};
+      wrap.appendChild(btn);
+      var sameLine=tos.length===1 && Math.abs(center(tos[0],wrap).cy-f.cy)<1;
+      if(sameLine){
+        var t0=center(tos[0],wrap);
+        seg(midX,f.cy,t0.left,f.cy);chevron(t0.left,f.cy);   // 直线 + 箭头（箭尖精确顶住节点左缘）
+      }else{
+        var ys=tos.map(function(t){return center(t,wrap).cy;});
+        var top=Math.min.apply(null,[f.cy].concat(ys));
+        var bot=Math.max.apply(null,[f.cy].concat(ys));
+        seg(midX,top,midX,bot);                              // 分叉竖线（从主线拐下）
+        tos.forEach(function(t){
+          var c=center(t,wrap);
+          seg(midX,c.cy,c.left,c.cy);chevron(c.left,c.cy); // 分支线 + 箭头顶住任务
+        });
+      }
+    }
+  }
+  window.addEventListener('load',function(){draw();setTimeout(draw,120);setTimeout(draw,400);});
+  window.addEventListener('resize',draw);
+
+  /* ===== 抽屉 ===== */
+  function openStep(i){var names={1:'拉取代码',2:'构建',3:'发布确认',4:'发布',5:'通知'};
+    document.getElementById('drawerTitle').textContent='步骤 · '+names[i];
+    document.getElementById('pane-step').style.display='';
+    document.getElementById('pane-task').style.display='none';
+    document.getElementById('mask').classList.add('show');document.getElementById('drawer').classList.add('show');}
+  /* 任务数据（原型演示）：动作 = 有序 shell 脚本列表（写版本记录也是脚本，只是脚本里调平台接口） */
+  var VERSION_ACT='#!/usr/bin/env bash\n# 写版本记录：脚本内调用平台接口（非内置工具）\ncurl -sf -X POST "${CONSOLE_API}/api/pipelines/versions" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"module":"${MODULE_KEY}","env":"${ENV_ID}","version":"${VER}"}\'';
+  var TASKS={
+    'local':{cond:'DEPLOY_ENV == local',acts:[
+      {name:'发布文件到目标位置',script:'#!/usr/bin/env bash\nset -euo pipefail\nVER="${COMMIT_ID##*/}"\nDST="${RELEASE_DIR}/../modules/${MODULE_KEY}/${ENV_ID}/${VER}"\ncp -R "$SRC"/. "$DST"/'},
+      {name:'write-version · 写版本记录',script:VERSION_ACT}]},
+    'dev':{cond:null,acts:[
+      {name:'打包上传到远程主机',script:'#!/usr/bin/env bash\nset -euo pipefail\nVER="${COMMIT_ID##*/}"\ntar -C "$(dirname "$SRC")" -czf "/tmp/${MODULE_KEY}-${VER}.tgz" "$(basename "$SRC")"\nscp "/tmp/${MODULE_KEY}-${VER}.tgz" "${PUBLISH_HOST}:${PUBLISH_PATH}/${VER}.tgz"'},
+      {name:'write-version · 写版本记录',script:VERSION_ACT}]}
+  };
+  function escA(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+  /* 任务总览视图（点任务头）：任务名 + 动作列表 + 任务级 tab（条件/环境变量） */
+  function openTask(name){
+    var t=TASKS[name];if(!t)return;
+    var h='<div class="field"><label>任务名</label><input value="'+escA(name)+'"></div>';
+    h+='<div class="field"><label>动作（按顺序执行，点击进入单个动作）</label>';
+    t.acts.forEach(function(a,i){
+      h+='<div class="tool-row" style="cursor:pointer;" onclick="openAction(\''+name+'\','+i+')"><span class="tname">'+escA(a.name)+'</span><span class="tdesc">脚本</span><span class="del">编辑</span></div>';
+    });
+    h+='<button class="btn btn-ghost" style="font-size:12px;" onclick="toast(\'[原型] 添加动作（脚本）\')">＋ 添加动作</button></div>';
+    document.getElementById('pane-task-1').innerHTML=h;
+    document.getElementById('taskTabs').style.display='';
+    document.getElementById('drawerTitle').textContent='任务 · '+name;
+    document.getElementById('pane-step').style.display='none';
+    document.getElementById('pane-task').style.display='flex';
+    ttab('1');showDrawer();
+  }
+  /* 单动作视图（点画布动作卡）：只展示当前动作的配置 */
+  function openAction(name,idx){
+    var t=TASKS[name];if(!t||!t.acts[idx])return;
+    var a=t.acts[idx];
+    document.getElementById('pane-task-1').innerHTML=
+      '<div class="cond-note" style="margin-bottom:10px;">任务 '+escA(name)+' · 动作 '+(idx+1)+'/'+t.acts.length+' —— 动作都是 shell 脚本，按顺序执行（写版本记录也是脚本，脚本内调用平台接口）。删除动作在画布动作卡上操作。</div>'
+      +'<div class="field"><label>动作名</label><input value="'+escA(a.name)+'"></div>'
+      +'<div class="field"><label>脚本</label><textarea spellcheck="false" style="min-height:170px;">'+escA(a.script)+'</textarea></div>';
+    document.getElementById('taskTabs').style.display='none';
+    document.getElementById('drawerTitle').textContent=name+' · '+a.name;
+    document.getElementById('pane-step').style.display='none';
+    document.getElementById('pane-task').style.display='flex';
+    showDrawer();
+  }
+  function showDrawer(){document.getElementById('mask').classList.add('show');document.getElementById('drawer').classList.add('show');}
+  function ttab(n){['t1','t2','t3'].forEach(function(id,i){document.getElementById(id).classList.toggle('active',(i+1)===+n);});
+    document.getElementById('pane-task-1').style.display=n==='1'?'':'none';
+    document.getElementById('pane-task-2').style.display=n==='2'?'':'none';
+    document.getElementById('pane-task-3').style.display=n==='3'?'':'none';}
+  function closeDrawer(){document.getElementById('mask').classList.remove('show');document.getElementById('drawer').classList.remove('show');}
+
 </script>
 </body>
 </html>
