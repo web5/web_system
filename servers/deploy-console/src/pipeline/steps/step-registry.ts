@@ -4,6 +4,7 @@ import { CheckExecutor } from './check.executor';
 import { PullExecutor } from './pull.executor';
 import { UploadExecutor } from './upload.executor';
 import { RestartExecutor } from './restart.executor';
+import { ApplyExecutor } from './apply.executor';
 import { VersionExecutor } from './version.executor';
 import { PointerExecutor } from './pointer.executor';
 import { VerifyExecutor } from './verify.executor';
@@ -17,6 +18,8 @@ export interface BuiltinExecutors {
   pull: PullExecutor;
   upload: UploadExecutor;
   restart: RestartExecutor;
+  /** 后台模块部署生效（版本目录 → dist + 重启 + 切指针），方案 A 2026-09-17 */
+  apply: ApplyExecutor;
   version: VersionExecutor;
   pointer: PointerExecutor;
   verify: VerifyExecutor;
@@ -63,6 +66,16 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       commandMode: 'override',
       skip: (p) => skipReuseArtifact(p) || p.moduleType !== 'backend',
       run: (ctx) => ex.restart.run(ctx),
+    },
+    apply: {
+      category: 'deploy',
+      // 纯内置（与其他 service action 的 none 语义一致）：流水线不该用命令覆盖「如何生效」，
+      // 否则又会长出五花八门的重启姿势。
+      commandMode: 'none',
+      // 只对后台模块有意义：前端类是「切指针即生效」（pointer 步骤），没有 dist 要落地；
+      // 复用产物（reuseArtifact）时不重新生效。
+      skip: (p) => skipReuseArtifact(p) || p.moduleType !== 'backend',
+      run: (ctx) => ex.apply.run(ctx),
     },
     version: {
       category: 'semantic',

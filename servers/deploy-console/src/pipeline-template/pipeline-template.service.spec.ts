@@ -374,4 +374,19 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
       expect(ids).not.toContain('m-default');
     });
   });
+
+  it('未传 id 但传了 env → 先按模块×环境匹配（找不到才落全局兜底）', async () => {
+    repo.find.mockResolvedValue([{ id: 'tpl-gateway-local', moduleKey: 'gateway', env: 'local', enabled: true }]);
+    const tpl = await service.resolveForSubmit('gateway', undefined, 'local');
+    expect(tpl.id).toBe('tpl-gateway-local');
+    expect(repo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('模块×环境无匹配 → 回落全局；全局也没有 → 报错文案含模块与环境', async () => {
+    repo.find.mockResolvedValue([]);
+    repo.findOne.mockResolvedValue(null);
+    await expect(service.resolveForSubmit('gateway', undefined, 'local')).rejects.toThrow(
+      /gateway 在 local 环境没有可用流水线/,
+    );
+  });
 });

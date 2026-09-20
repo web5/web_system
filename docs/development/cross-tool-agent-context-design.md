@@ -2,7 +2,7 @@
 
 > 定位：把「项目总入口 + 技能体系」从 CodeBuddy 专属路径解耦为**单一真相源 + 各工具薄适配层**，使同一套 `.codebuddy/agent-kit/` 能力在 Claude Code / Codex / Cursor 等工具下同样可加载。
 > 本文是**设计方案 spec**：先评审、后实施；评审通过前**不改动现有结构**。
-> 配套：`.codebuddy/CODEBUDDY.md` §3.7（挂载关系）、`docs/development/agent-capability-playbook.md`（Agent 能力手册）、`scripts/redline/check-kit-structure.sh`（结构守护）。
+> 配套：`.codebuddy/CODEBUDDY.md` §2（AI 技能入口）、`docs/development/agent-capability-playbook.md`（Agent 能力手册）、`scripts/redline/check-kit-structure.sh`（结构守护）。
 >
 > 变更日志：
 > - 2026-09-11：初稿。现状基线 + 各工具加载机制事实核对 + 三方案对比 + 目标态装配 + 影响清单 + 验证判据表 V1…Vn。
@@ -26,7 +26,7 @@
 
 | 项 | 现状 | 影响 |
 |---|---|---|
-| 工具专属入口 | `.codebuddy/CODEBUDDY.md`（448 行 / ~30 KB，v2 五段式） | 仅 CodeBuddy 加载；其他工具无入口 |
+| 工具专属入口 | `.codebuddy/CODEBUDDY.md`（导航式：只说明入口 —— 工程 → 仓库根 `README.md`；AI 技能/规则 → `.codebuddy/{agent-kit,skills,rules,references}`） | 仅 CodeBuddy 加载；其他工具无入口 |
 | 能力源 | `.codebuddy/agent-kit/`（AGENT.md + skills 14 + rules/general 5 + references 11） | **纯 Markdown，本身与工具无关**，是可直接复用的资产 |
 | 运行源 | `.codebuddy/skills/`（19 个 SKILL.md = 镜像 14 + 项目专属 be/fe-developer） | 同上；frontmatter 字段：`name/description/version/rationale/checks/loads` |
 | 触发规则 | `.codebuddy/rules/ui-interface/RULE.mdc`（frontmatter：`description/alwaysApply/enabled/updatedAt`） | 与 Cursor `.mdc` 字段同源，具备直接搬运条件 |
@@ -159,11 +159,11 @@
 | 5 | Cursor UI 规则 | `.cursor/rules/ui-interface.mdc` | 软链 | 无 |
 | 6 | Claude 技能 | `.claude/skills` | 软链 | **待实测**：目录扫描是否跟随软链；不跟随则改 C 方案 |
 | 7 | 结构守护 | `scripts/redline/check-kit-structure.sh` | 改（+S9） | CI 行为变化，需同步 `.github/workflows/kit-gate.yml` 触发路径 |
-| 8 | 入口索引 | `.codebuddy/CODEBUDDY.md`（→AGENTS.md）附录 B + 维护约定 | 改 | 不改则文档失真（与本方案 §4 目标态对齐） |
+| 8 | 入口索引 | `.codebuddy/CODEBUDDY.md`（→AGENTS.md）§2 + §4 维护契约 | 改 | 不改则文档失真（与本方案 §4 目标态对齐） |
 | 9 | 能力手册 | `docs/development/agent-capability-playbook.md` | 改 | 项目要求：Agent 能力变更必须同步该手册（§8 维护约定） |
-| 10 | 挂载关系图 | `.codebuddy/CODEBUDDY.md` §3.7 | 改 | 与第 8 项同批 |
+| 10 | 挂载关系图 | `.codebuddy/CODEBUDDY.md` §2（AI 技能入口） | 改 | 与第 8 项同批 |
 | 11 | 忽略规则 | `.gitignore` | 改 | 防个人配置误入库 |
-| 12 | 文档挂位 | 本文档 | — | 评审通过后需挂入 `.codebuddy/CODEBUDDY.md` 附录 A 文档地图（否则将被遗忘） |
+| 12 | 文档挂位 | 本文档 | — | 评审通过后需挂入仓库根 `README.md` §9 文档地图（否则将被遗忘） |
 
 **不动的东西（明确边界）**：`.codebuddy/agent-kit/`（能力源）、`.codebuddy/skills/`（运行源）、`.codebuddy/rules/`、`scripts/sync-agent-kit.sh` 的同步契约、S1~S7 守护语义。
 
@@ -245,9 +245,9 @@
 
 | # | 动作 | 状态 | 说明 |
 |---|---|---|---|
-| B1 | `.codebuddy/CODEBUDDY.md` **§1.5 详细说明入口**追加本文档 | ✅ 已完成（2026-09-11） | 标注「设计方案，待评审，尚未实施」 |
-| B2 | `.codebuddy/CODEBUDDY.md` **附录 A 文档地图** `docs/development/` 行追加 | ✅ 已完成（2026-09-11） | — |
+| B1 | 文档挂位：**仓库根 `README.md` §9 文档地图** 已含本文档 | ✅ 已完成（2026-09-11 挂 CODEBUDDY.md §1.5；2026-09-18 随入口精简归位到仓库根 README） | 标注「设计方案，待评审，尚未实施」 |
+| B2 | 文档挂位：**仓库根 `README.md` §9 文档地图** 追加本文档行 | ✅ 已完成（2026-09-11 挂 CODEBUDDY.md 附录 A；2026-09-18 归位到仓库根 README） | — |
 | B3 | `docs/development/agent-capability-playbook.md`「附：相关文档索引」追加本文档 | ✅ 已完成（2026-09-11） | — |
-| B4 | `.codebuddy/CODEBUDDY.md` **§3.7 技能/规则挂载关系**补跨工具入口层 | ⏳ 待 **P0 实施后**执行 | §3.7 描述**现状**装配；本文档尚未实施，提前改会造成文档失真 |
+| B4 | `.codebuddy/CODEBUDDY.md` **§2 AI 技能入口**补跨工具入口层 | ⏳ 待 **P0 实施后**执行 | §2 描述**现状**装配；本文档尚未实施，提前改会造成文档失真 |
 | B5 | `docs/development/agent-capability-playbook.md` §8.1 对照表新增「改入口装配 / 新增工具适配 → 更新本文档」 | ⏳ 待 **P1 实施后**执行 | 与 B4 同理，属实施后的维护约定 |
-| B6 | `.codebuddy/CODEBUDDY.md` **附录 B（.codebuddy 结构图）**补根目录入口文件（`AGENTS.md` / `CLAUDE.md` / `.cursor/`） | ⏳ 待 **P0 实施后**执行 | 同上 |
+| B6 | 仓库根 `README.md` **§2 项目结构**补根目录入口文件（`AGENTS.md` / `CLAUDE.md` / `.cursor/`） | ⏳ 待 **P0 实施后**执行 | 同上（入口结构图不再放 CODEBUDDY.md） |

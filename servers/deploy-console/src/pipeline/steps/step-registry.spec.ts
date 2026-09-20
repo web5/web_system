@@ -11,6 +11,7 @@ describe('step-registry（内置步骤配置化声明）', () => {
       pull: { run: jest.fn() },
       upload: { run: jest.fn() },
       restart: { run: jest.fn() },
+      apply: { run: jest.fn() },
       version: { run: jest.fn() },
       pointer: { run: jest.fn() },
       verify: { run: jest.fn() },
@@ -21,15 +22,16 @@ describe('step-registry（内置步骤配置化声明）', () => {
   const p = (over: Record<string, unknown> = {}) =>
     ({ moduleType: undefined, reuseArtifact: false, skipVerify: false, ...over }) as never;
 
-  it('九步骤齐全，category 与 commandMode 正确', () => {
+  it('十步骤齐全，category 与 commandMode 正确', () => {
     expect(Object.keys(registry).sort()).toEqual(
-      ['build', 'check', 'cleanup', 'pointer', 'pull', 'restart', 'upload', 'verify', 'version'],
+      ['apply', 'build', 'check', 'cleanup', 'pointer', 'pull', 'restart', 'upload', 'verify', 'version'],
     );
     expect(registry.check).toMatchObject({ category: 'semantic', commandMode: 'base' });
     expect(registry.pull).toMatchObject({ category: 'code', commandMode: 'override' });
     expect(registry.build).toMatchObject({ category: 'build', commandMode: 'required' });
     expect(registry.upload).toMatchObject({ category: 'deploy', commandMode: 'override' });
     expect(registry.restart).toMatchObject({ category: 'deploy', commandMode: 'override' });
+    expect(registry.apply).toMatchObject({ category: 'deploy', commandMode: 'none' });
     expect(registry.version).toMatchObject({ category: 'semantic', commandMode: 'none' });
     expect(registry.pointer).toMatchObject({ category: 'semantic', commandMode: 'none' });
     expect(registry.verify).toMatchObject({ category: 'probe', commandMode: 'override' });
@@ -47,18 +49,25 @@ describe('step-registry（内置步骤配置化声明）', () => {
       }
     });
 
-    it('后端模块：upload/pointer 跳过，restart 执行', () => {
+    it('后端模块：upload/pointer 跳过，restart/apply 执行', () => {
       const backend = p({ moduleType: 'backend' });
       expect(registry.upload.skip!(backend)).toBe(true);
       expect(registry.pointer.skip!(backend)).toBe(true);
       expect(registry.restart.skip!(backend)).toBe(false);
+      expect(registry.apply.skip!(backend)).toBe(false);
     });
 
-    it('前端模块：restart 跳过，upload/pointer 执行', () => {
+    it('前端模块：restart/apply 跳过，upload/pointer 执行', () => {
       const fe = p({ moduleType: 'micro-frontend' });
       expect(registry.restart.skip!(fe)).toBe(true);
+      // 前端类没有 dist 要落地：切指针即生效，apply 对它无意义
+      expect(registry.apply.skip!(fe)).toBe(true);
       expect(registry.upload.skip!(fe)).toBe(false);
       expect(registry.pointer.skip!(fe)).toBe(false);
+    });
+
+    it('复用产物时 apply 也跳过（不重复生效一次旧版本）', () => {
+      expect(registry.apply.skip!(p({ moduleType: 'backend', reuseArtifact: true }))).toBe(true);
     });
 
     it('快线（skipVerify）跳过 verify', () => {

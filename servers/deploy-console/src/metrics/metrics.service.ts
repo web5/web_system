@@ -87,7 +87,7 @@ export const DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /**
  * 发布度量服务。
  *
- * 数据源就是 `deploy_pipelines`——流水线本就已完整记录 status / stage / 起止时间，
+ * 数据源就是 `deploy_pipeline_runs`——流水线本就已完整记录 status / stage / 起止时间，
  * 因此**不需要任何额外的埋点或采集**，聚合即可（索引已覆盖 env / module_key / status / start_time）。
  */
 @Injectable()
@@ -131,7 +131,7 @@ export class MetricsService {
          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
          SUM(CASE WHEN status IN ('pending','running') THEN 1 ELSE 0 END) AS running,
          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
-       FROM deploy_pipelines ${sql}`,
+       FROM deploy_pipeline_runs ${sql}`,
       params,
     );
     const r = rows?.[0] ?? {};
@@ -141,7 +141,7 @@ export class MetricsService {
     // 时长只统计成功发布：失败发布往往很快中断，其时长没有参考意义
     const durs = await this.repo.query(
       `SELECT (end_time - start_time) / 1000 AS d
-       FROM deploy_pipelines
+       FROM deploy_pipeline_runs
        ${sql ? `${sql} AND` : 'WHERE'} status = 'succeeded' AND end_time IS NOT NULL`,
       params,
     );
@@ -169,7 +169,7 @@ export class MetricsService {
       `SELECT FROM_UNIXTIME(start_time / 1000, '%Y-%m-%d') AS date,
               SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
               SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
-       FROM deploy_pipelines ${sql}
+       FROM deploy_pipeline_runs ${sql}
        GROUP BY date ORDER BY date ASC`,
       params,
     );
@@ -185,7 +185,7 @@ export class MetricsService {
     const { sql, params } = this.buildWhere(q);
     const rows = await this.repo.query(
       `SELECT COALESCE(stage, '(未知)') AS stage, COUNT(*) AS count
-       FROM deploy_pipelines
+       FROM deploy_pipeline_runs
        ${sql ? `${sql} AND` : 'WHERE'} status = 'failed'
        GROUP BY stage ORDER BY count DESC`,
       params,
@@ -201,7 +201,7 @@ export class MetricsService {
     const safeLimit = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(Number(limit), 100) : 10;
     const rows = await this.repo.query(
       `SELECT module_key AS moduleKey, COUNT(*) AS count
-       FROM deploy_pipelines ${sql}
+       FROM deploy_pipeline_runs ${sql}
        GROUP BY module_key ORDER BY count DESC LIMIT ${safeLimit}`,
       params,
     );
@@ -243,7 +243,7 @@ export class MetricsService {
     const rows = await this.repo.query(
       `SELECT id, module_key AS moduleKey, env, version_tag AS versionTag, stage, error,
               start_time AS startTime, end_time AS endTime, operator
-       FROM deploy_pipelines
+       FROM deploy_pipeline_runs
        WHERE ${conds.join(' AND ')}
        ORDER BY start_time DESC
        LIMIT ${safeLimit}`,

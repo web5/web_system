@@ -13,7 +13,15 @@ import { Repository } from 'typeorm';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { STATIC_MODULES_REL, parseReleaseRef, toCommitId, defaultReleaseWorkspace } from './release-paths';
+import {
+  STATIC_MODULES_REL,
+  parseReleaseRef,
+  toCommitId,
+  defaultReleaseWorkspace,
+  artifactsDir,
+  deployRootAbs,
+  deployTargetAbs,
+} from './release-paths';
 import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -95,6 +103,26 @@ export function resolveStageCwd(ws: string, moduleType?: string, dir?: string): 
 }
 
 /**
+ * 删除构建产物目录（**纯函数，便于单测**；P0-2，2026-09-17）。
+ *
+ * 根因事故：后台服务 tsconfig 开 `incremental`，`dist` 被清理后只剩 `tsconfig.tsbuildinfo`
+ * → tsc 判定"已是最新"只更新 tsbuildinfo、不产出 JS → 版本目录空壳 → 落地后服务变砖。
+ * 构建前删掉整个产物目录即可保证全量重编。
+ *
+ * 失败不抛错：清理只是预防手段，落地环节还有 `assertArtifactUsable()` 兜底。
+ */
+export function cleanBuildOutputDir(outDir?: string): { cleaned: boolean; error?: string } {
+  if (!outDir) return { cleaned: false };
+  try {
+    if (!fs.existsSync(outDir)) return { cleaned: false };
+    fs.rmSync(outDir, { recursive: true, force: true });
+    return { cleaned: true };
+  } catch (e) {
+    return { cleaned: false, error: (e as Error).message };
+  }
+}
+
+/**
  * 执行记录「删除」状态门禁（纯函数，防回归测试）。
  *
  * 删除 = 纯清理记录（不动版本指针/产物），仅终态（成功/失败/取消）可删；
@@ -166,6 +194,10 @@ export interface ModuleSnapshot {
   pm2?: string;
   publicPath?: string;
   entry?: string;
+  /** 部署根路径（相对发布目录根；M2） */
+  deployRoot?: string;
+  /** 默认产物路径（相对版本目录；M2） */
+  defaultArtifactPath?: string;
 }
 
 /** 阶段变量解析入参（纯函数入参，便于单测） */
@@ -178,6 +210,10 @@ export interface StageVarsInput {
    */
   pipelineVars?: Record<string, string>;
   moduleType?: string;
+  /** 模块部署根路径（相对发布目录根；M2） */
+  deployRoot?: string;
+  /** 模块默认产物路径（相对版本目录；M2） */
+  defaultArtifactPath?: string;
   dir?: string;
   pm2?: string;
   publicPath?: string;
@@ -247,6 +283,11 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     ENTRY_FILE: entry,
     BUILD_OUTPUT_DIR: path.join(ws, type === 'backend' ? 'servers' : 'apps', dir, 'dist'),
     ARTIFACT_DIR: path.join(ws, STATIC_MODULES_REL, publicPath, version),
+    // M2（2026-09-17）：新增「产物区 / 部署目标」推导 —— 模块自持 deployRoot，环境只分层。
+    // 只做**补充注入**，不覆盖 PUBLISH_PATH 等旧变量：旧模板行为完全不变（双轨，零破坏）。
+    ARTIFACTS_DIR: artifactsDir(ws, i.moduleKey, i.env || 'local', version),
+    DEPLOY_ROOT: deployRootAbs(ws, i.deployRoot),
+    DEPLOY_TARGET: deployTargetAbs(ws, i.deployRoot, i.defaultArtifactPath),
     // 探活与清理
     GATEWAY_URL: i.gatewayUrl || 'http://localhost:6000',
     GATEWAY_TTL_SEC: String(i.gatewayTtlSec ?? 10),
@@ -288,7 +329,7 @@ export interface SubmitPipelineDto {
   /** @deprecated 等价于 commitId，兼容旧调用 */
   versionTag?: string;
   /** 流水线模板 ID（不传 = 模块默认模板，兼容旧调用/MCP） */
-  templateId?: string;
+  pipelineId?: string;
   /** 投递目标：local=本机静态目录；remote=SSH 到服务器。默认自动判定 */
   target?: 'local' | 'remote';
   /** 灰度规则（mode=grayscale 时必填）：{ type:'percent'|'user-list'|'header', ... } */
@@ -478,7 +519,8 @@ export class PipelineService {
 
     const id = this.generateId();
     // 流水线模板：不传默认走模块 builtin 默认（旧调用/MCP 兼容）；实例落模板快照
-    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.templateId);
+    // 提交解析带上 env：未显式选流水线时按「模块 × 环境」自动匹配（用户 2026-09-17）
+    const tpl = await this.templates.resolveForSubmit(dto.moduleKey, dto.pipelineId, dto.env);
     // 一致性（2026-09-15）：一条流水线只属于一个环境（按「模块 × 环境」拆），
     // 提交的环境必须与流水线的 env 相同 —— 否则会出现「env=dev 却跑 admin-local 流水线」
     // 这种环境/流水线错配的实例（投递目标、产物命名空间全跟着流水线走，错配很隐蔽）。
@@ -530,7 +572,7 @@ export class PipelineService {
       gitBranch: dto.branch || 'master',
       mode,
       // 模板快照：模板后续修改/删除不影响已提交实例
-      templateId: tpl.id,
+      pipelineId: tpl.id,
       templateName: tpl.name,
       // R6 版本身份：流水线 key 快照（产物落盘 modules/<module>/<key>/<commit>/）
       templateKey: (tpl as { key?: string }).key ?? undefined,
@@ -613,35 +655,35 @@ export class PipelineService {
     env?: string,
     moduleKey?: string,
     limit = 20,
-    templateId?: string,
+    pipelineId?: string,
   ): Promise<DeployPipelineEntity[]> {
     const where: Record<string, unknown> = {};
     if (env) where.env = env;
     if (moduleKey) where.moduleKey = moduleKey;
-    if (templateId) where.templateId = templateId;
+    if (pipelineId) where.pipelineId = pipelineId;
     return this.pipelineRepo.find({ where, order: { startTime: 'DESC' }, take: limit });
   }
 
   /**
    * 各流水线模板的运行摘要：总次数 / 成功次数 / 最近一次执行。
    *
-   * 兼容历史实例：全局默认模板（moduleKey='*'）懒建之前的提交没有 templateId 快照，
+   * 兼容历史实例：全局默认模板（moduleKey='*'）懒建之前的提交没有 pipelineId 快照，
    * 按 moduleKey 归属到该模块的内置默认模板（或全局默认兜底），使其在按模板维度的
    * 首页概览中可见（design V5：历史 NULL 实例显示为「默认」）。
    */
   async listTemplateSummaries(
-    templateIds?: string[],
+    pipelineIds?: string[],
   ): Promise<Record<string, { total: number; ok: number; latest: DeployPipelineEntity | null }>> {
     const qb = this.pipelineRepo.createQueryBuilder('p').orderBy('p.startTime', 'DESC').take(1000);
-    if (templateIds && templateIds.length) {
+    if (pipelineIds && pipelineIds.length) {
       // 显式指定模板：只统计这些模板的实例（含它们懒建前也归属不到的历史，忽略）
-      qb.andWhere('p.templateId IN (:...ids)', { ids: templateIds });
+      qb.andWhere('p.pipelineId IN (:...ids)', { ids: pipelineIds });
     }
     const rows = await qb.getMany();
 
     // 全量概览时才需要做 NULL 归属：moduleKey → 内置默认模板（模块专属优先，'*' 兜底）
     let builtinByModule = new Map<string, string>();
-    if (!templateIds || !templateIds.length) {
+    if (!pipelineIds || !pipelineIds.length) {
       const builtins = await this.templateRepo.find({ where: { builtin: true } });
       for (const t of builtins) {
         if (!builtinByModule.has(t.moduleKey)) builtinByModule.set(t.moduleKey, t.id);
@@ -653,7 +695,7 @@ export class PipelineService {
     for (const p of rows) {
       // 历史实例无模板快照 → 归属模块内置默认（或全局默认）；两者皆无则跳过（不应发生）
       const key =
-        p.templateId ?? builtinByModule.get(p.moduleKey) ?? globalDefaultId;
+        p.pipelineId ?? builtinByModule.get(p.moduleKey) ?? globalDefaultId;
       if (!key) continue;
       const item = out[key] || (out[key] = { total: 0, ok: 0, latest: null });
       item.total += 1;
@@ -749,7 +791,7 @@ export class PipelineService {
       commitId: p.gitCommit ?? (p.versionTag ? parseReleaseRef(p.versionTag).version : undefined),
       grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
       target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
-      templateId: p.templateId ?? undefined,
+      pipelineId: p.pipelineId ?? undefined,
     };
     return this.submit(dto, operator || p.operator);
   }
@@ -1689,12 +1731,38 @@ export class PipelineService {
 
   /**
    * 执行某阶段的流水线节点命令（R6：从模块级切换到流水线级）。
-   * 读 `deploy_pipeline_step_commands(templateId, nodeKey)` 而非 `deploy_module_stage_commands(moduleKey, stage)`。
+   * 读 `deploy_pipeline_step_commands(pipelineId, nodeKey)` 而非 `deploy_module_stage_commands(moduleKey, stage)`。
    *
    * @param nodeKey       DB 里的节点 key（查找命令用；git 恒为 `'git'`，legacy 拉码也读它）
    * @param progressStage 进度/日志/结果文件沿用执行计划里的阶段名（legacy 为 `'pull'`，v5 为节点 key）
    * @returns true=已配置命令且执行成功；false=未配置命令（调用方走内置逻辑或 fail-fast）
    */
+  /**
+   * 构建前清空产物目录（P0-2，2026-09-17）。
+   *
+   * 根因事故（09-15）：后台服务 `tsconfig.json` 开了 `"incremental": true`，
+   * 而 `dist` 曾被清理过、只留下 `tsconfig.tsbuildinfo` → 再次 `tsc` 读到 tsbuildinfo
+   * 判定「已是最新」，**只更新 tsbuildinfo、不产出 JS** → 版本目录是空壳 →
+   * 落地到 `dist` 后服务缺入口直接变砖（守门见 `deploy.service.assertArtifactUsable()`）。
+   *
+   * 处置：build 节点执行前把 `BUILD_OUTPUT_DIR` 整个删掉，保证每次都是全量构建
+   * （前端 vite 默认也会 emptyOutDir，删了对它无副作用）。
+   * 清理失败**不阻断**构建 —— 落地环节还有守卫兜底。
+   */
+  private async cleanBuildOutput(p: DeployPipelineEntity, outDir?: string): Promise<void> {
+    if (!outDir) return;
+    const r = cleanBuildOutputDir(outDir);
+    if (r.cleaned) {
+      p.logs = [
+        ...(p.logs ?? []),
+        `[build] 已清空产物目录 ${outDir}（避免 tsc incremental 复用残留 tsbuildinfo 导致不产出）`,
+      ];
+      await this.save(p);
+    } else if (r.error) {
+      p.logs = [...(p.logs ?? []), `[build] 清空产物目录失败（忽略，继续构建）：${r.error}`];
+    }
+  }
+
   private async runStageCommand(
     p: DeployPipelineEntity,
     nodeKey: string,
@@ -1705,11 +1773,11 @@ export class PipelineService {
     uploadTarget: 'local' | 'remote' = 'local',
   ): Promise<boolean> {
     const stage = progressStage;
-    const acts = await this.stepCommands.resolveActions(p.templateId!, nodeKey);
+    const acts = await this.stepCommands.resolveActions(p.pipelineId!, nodeKey);
     if (!acts.length) return false;
 
     this.assertNotCancelled(p);
-    await this.enterStage(p, stage as any, `执行节点命令: ${p.templateName || p.templateId}/${nodeKey}`);
+    await this.enterStage(p, stage as any, `执行节点命令: ${p.templateName || p.pipelineId}/${nodeKey}`);
 
     let mod: ModuleSnapshot | null = null;
     try {
@@ -1729,6 +1797,8 @@ export class PipelineService {
       moduleKey: p.moduleKey,
       moduleType: mod?.type || p.moduleType,
       dir: mod?.dir,
+      deployRoot: mod?.deployRoot,
+      defaultArtifactPath: mod?.defaultArtifactPath,
       pm2: mod?.pm2,
       publicPath: mod?.publicPath,
       entry: mod?.entry,
@@ -1743,8 +1813,11 @@ export class PipelineService {
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       platformScriptsDir: platformScriptsDir(),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
-      pipelineVars: await this.pipelineVars.resolve(p.templateId),
+      pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });
+    // P0-2（2026-09-17）：构建前清空产物目录 —— 详见 cleanBuildOutput() 注释
+    if (nodeKey === 'build') await this.cleanBuildOutput(p, env.BUILD_OUTPUT_DIR);
+
     // 平台自调用凭据：发布节点脚本要「调用写版本接口」（脚本里无用户 JWT）
     // 见 deploy/internal-release.controller.ts —— 走 x-internal-key 内部密钥
     // 默认地址：console 自身监听端口（PLATFORM_PORT，缺省 6200）

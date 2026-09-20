@@ -51,6 +51,6 @@ version: 1.0.0
 | 文档 | 何时加载 |
 |------|---------|
 | CODEBUDDY.md（开发规则 / AI 编程规范 / 部署铁律 / 微前端四步 / 提交铁律） | 任何后端任务（常驻） |
-| `.codebuddy/references/coding-best-practices.md` | 编码细则 |
+| `.codebuddy/rules/coding-best-practices.md` | 编码细则 |
 | `docs/development/local-release-runbook.md` / `deploy-pipeline-dev.md` / `admin-dev.md` | 发布/流水线/提 PR |
 | be-dev-common（ai-agent-kit `references/be-dev-common.md`） | 通用工程质量规则 |
