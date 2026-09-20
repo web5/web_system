@@ -34,8 +34,10 @@ describe('部署动作（发布成功后的第二个流程动作）', () => {
     restartRun = jest.fn(async () => undefined);
     svc = Object.create(PipelineService.prototype);
     svc.configService = { get: (k: string) => flags[k] };
-    svc.moduleRegistry = { get: async () => ({ key: 'admin', type: 'micro-frontend' }) };
     svc.appsService = { switchVersion };
+    // 默认：域归属 = 应用（前端）
+    svc.targetResolver = { resolve: jest.fn(async () => ({ rootDir: 'apps' })) };
+    svc.callServiceDeploy = jest.fn(async () => undefined);
     svc.builtinSteps = { restart: { run: restartRun } };
     svc.buildStepContext = () => ({}) as never;
     svc.save = jest.fn(async () => undefined);
@@ -68,11 +70,11 @@ describe('部署动作（发布成功后的第二个流程动作）', () => {
     expect(p.logs?.some((l) => l.includes('部署生效完成'))).toBe(true);
   });
 
-  it('④ local + 后端：走 restart 执行体，不切指针', async () => {
+  it('④ local + 服务域（rootDir=servers）：调服务管理的部署接口，不切指针', async () => {
     flags.PIPELINE_AUTO_DEPLOY = '1';
-    svc.moduleRegistry = { get: async () => ({ key: 'gateway', type: 'backend' }) };
+    svc.targetResolver = { resolve: jest.fn(async () => ({ rootDir: 'servers' })) };
     await run(pipe({ moduleKey: 'gateway' }));
-    expect(restartRun).toHaveBeenCalled();
+    expect(svc.callServiceDeploy).toHaveBeenCalledWith('gateway', 'local');
     expect(switchVersion).not.toHaveBeenCalled();
   });
 
