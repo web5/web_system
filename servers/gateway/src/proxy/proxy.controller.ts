@@ -11,7 +11,6 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ProxyService } from './proxy.service';
-import { DynamicRouteService } from '../dynamic-route/dynamic-route.service';
 import { Public } from '../auth/public.decorator';
 import * as http from 'http';
 import * as url from 'url';
@@ -26,8 +25,6 @@ export class ProxyController {
   constructor(
     private proxyService: ProxyService,
     private configService: ConfigService,
-    // 双域重构 P2：DB 驱动路由（GATEWAY_DB_ROUTES=1 时启用；关闭时本类行为逐字节不变）
-    private dynamicRouteService: DynamicRouteService,
   ) {}
 
   // 精确匹配 /api/auth（无尾斜杠）
@@ -442,10 +439,20 @@ export class ProxyController {
     return this.proxyService.getMcpProxy()(req, res);
   }
 
-  // 内容中枢通道（/api/content-hub/* → content-hub:6007）
-  // 财经资讯与内容管道共用此通道（历史上另有 /api/finnews/*，已统一到本通道）
-  // 服务间鉴权：验证 Authorization: Bearer $CONTENT_HUB_SERVICE_KEY（兼容旧名 FINNEWS_SERVICE_KEY）
+  // 财经通道（/api/finnews/* → content-hub:6007）
+  // 服务间鉴权：验证 Authorization: Bearer $FINNEWS_SERVICE_KEY
   // 注意：必须放在 @All(':path(*)') 通配之前，否则被通配兜底 404
+  @All('finnews')
+  proxyFinnewsExact(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
+  }
+
+  @All('finnews/:path(*)')
+  proxyFinnewsWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.checkServiceAuthAndProxy(req, res, this.proxyService.getFinnewsProxy());
+  }
+
+  // 内容管道通道（/api/content-hub/* → content-hub:6007）
   @All('content-hub')
   proxyContentHubExact(@Req() req: Request, @Res() res: Response) {
     return this.checkServiceAuthAndProxy(req, res, this.proxyService.getContentProxy());
@@ -458,10 +465,7 @@ export class ProxyController {
 
   /** 验证服务间 Bearer Token，通过后转发到指定 proxy */
   private checkServiceAuthAndProxy(req: Request, res: Response, proxy: any): Promise<void> | void {
-    // 新名优先、旧名兼容：环境配置还没同步到新名时，不会静默失去鉴权
-    const expected =
-      this.configService.get<string>('CONTENT_HUB_SERVICE_KEY') ||
-      this.configService.get<string>('FINNEWS_SERVICE_KEY');
+    const expected = this.configService.get<string>('FINNEWS_SERVICE_KEY');
     if (expected) {
       const auth = req.headers['authorization'];
       if (auth !== `Bearer ${expected}`) {
@@ -520,36 +524,8 @@ export class ProxyController {
     });
   }
 
-  /**
-   * 手动刷新 DB 路由缓存（FR-10.3）：规则改动后立即生效，不必等 60s TTL。
-   * 鉴权：`x-service-key` 必须匹配 GATEWAY_SERVICE_KEY / CONTENT_HUB_SERVICE_KEY
-   * （旧名 FINNEWS_SERVICE_KEY 兼容读取；三者都未配置则拒绝）。
-   */
-  @Post('internal/gateway/reload')
-  reloadRoutes(@Req() req: Request, @Res() res: Response) {
-    const expected =
-      this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
-      this.configService.get<string>('CONTENT_HUB_SERVICE_KEY') ||
-      this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
-      '';
-    if (!expected || req.headers['x-service-key'] !== expected) {
-      res.status(403).json({ code: 403, message: 'service_key 校验失败（未配置或与请求头不一致）' });
-      return;
-    }
-    this.dynamicRouteService.reload();
-    res.json({ code: 0, message: 'DB 路由缓存已刷新' });
-  }
-
-  /**
-   * 最终兜底：硬编码路由都没匹配的 `/api/*`。
-   *
-   * 双域重构 P2：先尝试 DB 路由（`deploy_service_routes`）；命中则转发/拒绝，
-   * **未命中保持原有 404 行为**（FR-10.2，双轨零破坏）。
-   */
   @All(':path(*)')
-  async proxyApi(@Req() req: Request, @Res() res: Response) {
-    const handled = await this.dynamicRouteService.tryHandle(req, res);
-    if (handled) return;
+  proxyApi(@Req() req: Request, @Res() res: Response) {
     res.status(404).json({ code: 404, message: `Unknown API route: ${req.method} ${req.path}` });
   }
 }

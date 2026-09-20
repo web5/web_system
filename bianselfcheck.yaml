@@ -1,0 +1,107 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - navigation [ref=e6]:
+      - generic [ref=e7]:
+        - link "科豆 AI 变变 · AI 拼贴变身" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic [ref=e16]:
+            - generic [ref=e17]: 科豆 AI
+            - generic [ref=e18]: 变变 · AI 拼贴变身
+        - generic [ref=e19]:
+          - link "首页" [ref=e20] [cursor=pointer]:
+            - /url: /
+          - link "变变" [ref=e21] [cursor=pointer]:
+            - /url: /bianbian
+          - link "画板" [ref=e22] [cursor=pointer]:
+            - /url: /draw
+          - link "AI 助手" [ref=e23] [cursor=pointer]:
+            - /url: /chat
+          - link "Todo" [ref=e24] [cursor=pointer]:
+            - /url: /todo
+        - link "登录" [ref=e26] [cursor=pointer]:
+          - /url: /login?redirect=/
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - link "科豆 AI 变变 · AI 拼贴变身" [ref=e29] [cursor=pointer]:
+            - /url: /
+            - img [ref=e30]
+            - generic [ref=e36]:
+              - generic [ref=e37]: 科豆 AI
+              - generic [ref=e38]: 变变 · AI 拼贴变身
+          - button [ref=e39] [cursor=pointer]:
+            - img [ref=e40]
+        - generic [ref=e43]:
+          - link "首页" [ref=e44] [cursor=pointer]:
+            - /url: /
+          - link "变变" [ref=e45] [cursor=pointer]:
+            - /url: /bianbian
+          - link "画板" [ref=e46] [cursor=pointer]:
+            - /url: /draw
+          - link "AI 助手" [ref=e47] [cursor=pointer]:
+            - /url: /chat
+          - link "Todo" [ref=e48] [cursor=pointer]:
+            - /url: /todo
+        - link "登录" [ref=e50] [cursor=pointer]:
+          - /url: /login?redirect=/
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]: 新品上线 · 免费体验中
+        - heading "把孩子的想象力 变成看得见的角色" [level=1] [ref=e56]:
+          - text: 把孩子的想象力
+          - text: 变成看得见的角色
+        - paragraph [ref=e57]:
+          - text: 基于孩子的涂鸦，AI 魔法把它变成可爱的3D角色。
+          - text: 每个孩子，都是造物主力。
+        - generic [ref=e58]:
+          - link "体验变变" [ref=e59] [cursor=pointer]:
+            - /url: /bianbian
+          - link "创意画板" [ref=e60] [cursor=pointer]:
+            - /url: /draw
+        - paragraph [ref=e61]: PC端体验更好哦，扫码在手机上使用 ↗
+      - generic [ref=e63]:
+        - generic [ref=e64]: 微信扫码体验
+        - img "变变小程序码" [ref=e66]
+        - generic [ref=e67]:
+          - paragraph [ref=e68]: 微信小程序「变变」
+          - paragraph [ref=e69]: 把孩子的涂鸦变成可爱3D角色
+        - generic [ref=e70]:
+          - generic [ref=e71]: 实时变身
+          - generic [ref=e72]: 免费体验
+    - generic [ref=e74]:
+      - heading "变变，怎么玩？" [level=2] [ref=e75]
+      - paragraph [ref=e76]: 三步，让孩子的涂鸦变成专属3D角色
+      - generic [ref=e77]:
+        - generic [ref=e78]:
+          - generic [ref=e79]: "1"
+          - heading "画一画 / 拼一拼" [level=3] [ref=e80]
+          - paragraph [ref=e81]: 打开画板，拖拽素材拼贴，也可以随手涂鸦
+        - generic [ref=e82]:
+          - generic [ref=e83]: "2"
+          - heading "点「变变」" [level=3] [ref=e84]
+          - paragraph [ref=e85]: AI 魔法启动，几秒钟变成3D角色
+        - generic [ref=e86]:
+          - generic [ref=e87]: "3"
+          - heading "保存 & 分享" [level=3] [ref=e88]
+          - paragraph [ref=e89]: 原画 vs 角色对比展示，一键保存到相册
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - heading "创意画板" [level=2] [ref=e93]
+        - paragraph [ref=e94]:
+          - text: 不只是变变——你也可以用画板自由创作。
+          - text: 丰富的素材库，简单的涂鸦工具，让孩子随时随地释放创造力。
+        - link "打开画板" [ref=e95] [cursor=pointer]:
+          - /url: /draw
+      - generic [ref=e98]: 画板预览
+  - contentinfo [ref=e99]:
+    - generic [ref=e100]:
+      - paragraph [ref=e101]: Copyright © 2023 - 2026 kedouai.com. All Rights Reserved. 一个橙子 版权所有
+      - paragraph [ref=e102]:
+        - text: 备案号：
+        - link "粤ICP备2021031984号" [ref=e103] [cursor=pointer]:
+          - /url: https://beian.miit.gov.cn/
+        - text: "|"
+        - link "公安备案号：44030902002737号" [ref=e104] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44030902002737
+          - img [ref=e105]
+          - text: 公安备案号：44030902002737号

@@ -39,7 +39,6 @@ import { ReleaseGitModule } from '../git/release-git.module';
 import { ArtifactStoreModule } from '../artifact/artifact-store.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
-// 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
 
 @Module({
   imports: [

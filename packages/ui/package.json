@@ -12,13 +12,11 @@
     },
     "./tokens.css": "./src/tokens.css",
     "./theme.css": "./src/theme.css",
-    "./components/*": "./src/components/*",
-    "./composables/*": "./src/composables/*"
+    "./components/*": "./src/components/*"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "jest"
+    "dev": "tsc --watch"
   },
   "dependencies": {
     "ant-design-vue": "^4.2.0",

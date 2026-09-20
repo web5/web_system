@@ -382,19 +382,11 @@ describe('PipelineTemplateService（全局化：流水线不跟模块走）', ()
     expect(repo.findOne).not.toHaveBeenCalled();
   });
 
-  it('模块×环境无匹配 → **回落该模块已有流水线**（新环境不再要求单独建流水线）', async () => {
-    repo.find
-      .mockResolvedValueOnce([]) // 模块 × 环境：无
-      .mockResolvedValueOnce([{ id: 'tpl-gateway-dev', moduleKey: 'gateway', env: 'dev', enabled: true }]);
-    const tpl = await service.resolveForSubmit('gateway', undefined, '3');
-    expect(tpl.id).toBe('tpl-gateway-dev');
-  });
-
-  it('模块级也没有 → 回落全局；全局也没有 → 报错文案含模块与环境', async () => {
+  it('模块×环境无匹配 → 回落全局；全局也没有 → 报错文案含模块与环境', async () => {
     repo.find.mockResolvedValue([]);
     repo.findOne.mockResolvedValue(null);
     await expect(service.resolveForSubmit('gateway', undefined, 'local')).rejects.toThrow(
-      /模块 gateway 没有可用流水线（local 环境也无专属流水线）/,
+      /gateway 在 local 环境没有可用流水线/,
     );
   });
 });
