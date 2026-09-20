@@ -43,6 +43,18 @@ export class DeployAppEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: 'publicPath' })
   publicPath?: string | null;
 
+  /**
+   * 部署根（相对发布目录根，M2 / P1 2026-09-20）。
+   * 空 = 发布目录根本身（旧行为：由模板变量 PUBLISH_PATH 决定）。
+   * 与 `defaultArtifactPath` 一起决定流水线变量 `DEPLOY_TARGET`。
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '部署根（相对发布目录）' })
+  deployRoot?: string | null;
+
+  /** 默认产物路径（相对部署根；M2 / P1） */
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: '默认产物路径（相对部署根）' })
+  defaultArtifactPath?: string | null;
+
   /** 共享依赖清单 */
   @Column({ type: 'json', nullable: true, comment: 'externals' })
   externals?: string[] | null;

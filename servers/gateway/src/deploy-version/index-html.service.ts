@@ -14,9 +14,8 @@ import {
   DeployEnvEntity,
   DeploySiteEntity,
 } from '../dynamic-route/entities';
-
-/** gateway 托管前端静态文件的根目录 */
-const PUBLIC_ROOT = join(__dirname, '..', '..', 'public');
+// P2（2026-09-20）：静态根改为可配（STATIC_PUBLIC_ROOT），不配时与历史行为一致
+import { PUBLIC_ROOT } from '../static/public-root';
 
 interface VersionCache {
   value: string | undefined;

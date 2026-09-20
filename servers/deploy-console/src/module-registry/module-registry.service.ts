@@ -107,6 +107,9 @@ function fromApp(a: DeployAppEntity): DeployModuleEntity {
     pm2: null,
     publicPath: a.publicPath ?? null,
     buildCmd: null,
+    // P1（2026-09-20）：部署位置随应用走 —— 透出后流水线 `DEPLOY_TARGET` 才有值
+    deployRoot: a.deployRoot ?? null,
+    defaultArtifactPath: a.defaultArtifactPath ?? null,
     builtin: !!a.builtin,
     enabled: !!a.enabled,
   } as unknown as DeployModuleEntity;
@@ -122,6 +125,11 @@ function fromService(s: DeployServiceEntity): DeployModuleEntity {
     pm2: s.pm2Name ?? null,
     publicPath: null,
     buildCmd: null,
+    // P1（2026-09-20）：部署位置随服务走
+    deployRoot: s.deployRoot ?? null,
+    defaultArtifactPath: s.defaultArtifactPath ?? null,
+    // P3：pm2 入口脚本（空 → 流水线回落 dist/main.js）
+    pm2Script: s.pm2Script ?? null,
     builtin: !!s.builtin,
     enabled: !!s.enabled,
   } as unknown as DeployModuleEntity;
