@@ -141,6 +141,8 @@
 | M1–M3（建表 / 站点 / 环境种子） | ✅ | 由 `synchronize` + `EnvsService.ensureBuiltin` 承担 |
 | M6（服务指向） | ✅ | 由 `ServicesService.ensureSeeded` 承担（旧 `deploy_env_service_routes` → `deploy_service_envs`） |
 | **M12**（同模块多环境流水线合并为 1 条） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p12-merge-module-pipelines.mjs`：每模块保留 1 条（优先 env=dev），`env` 置 NULL（环境无关）、名称去环境后缀；冗余模板连同 `deploy_pipeline_step_commands` / `deploy_pipeline_vars` 一并清理。**48 → 16 条**（清理 160 行节点命令 + 64 行变量），复跑幂等 |
+| **M14**（节点「环境分支」可编辑） | ✅ 已完成 | 设计 `specs/pipeline-env-branch/design.md`：每环境一段脚本，保存时拼装成单一执行体（同步写 `command` 与 `actions[shell].code`），未配置脚本的环境 fail-fast。纯函数 `pipeline/steps/env-branch.ts`(8 单测) + service/controller 接线 + 前端 `EnvBranchEditor.vue`；`admin 发布` 的 release 已落 `local`（本机 cp）/ `dev`（远程 scp）两段 |
+| **M13**（流水线配置完善：git URL 显式化 + 发布节点按环境分支 + admin 线合并） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p13-pipeline-release-config.mjs`（设计 `specs/pipeline-release-config/design.md`）：① 配置中心 global 写入 `REPO_URL`（`git@github.com:web5/web_system.git`）；② 16 条流水线 git 脚本加「origin 与 REPO_URL 一致性校验 + 回显」；③ admin 两条线合并为「admin 发布」一条，release 脚本改 `case $DEPLOY_ENV`（local=本机 cp / 其他=scp），删除 `admin-local` 模板。**复跑幂等**（配置 0 / git 0 / release 0） |
 | **M8**（gateway 双读开关 `DEPLOY_LEGACY_READ` / 默认切新） | ✅ 已完成 | `IndexHtmlService.buildManifest`（唯一来源）加开关：`DEPLOY_LEGACY_READ=1` → 短路 `buildLegacyManifest()`，只从 `deploy_modules` + `deploy_deployments` 组装，**输出与新格式同构**（`site/defaultEnv/switchable/envs/byEnv`），前端无需分支即可整体回退。启动打一条读取源日志；返回体带 `source`（`new` / `new:nosite` / `new:error` / `legacy`）便于排障 |
 | M9（旧表 DROP + 旧页面清理） | ⏸️ 半成品（有明确阻塞） | 已完成：① `/modules` CRUD controller 删除；② `ModuleRegistry` 读源切新表；③ 旧页面 `ModuleDetail/ModuleEdit` 早已不存在。**阻塞见下方 M9 阻塞清单** |
 
@@ -158,6 +160,29 @@ manifest：byEnv.dev = { admin: …, portal: … }   ← 迁移后的入口进�
                 /static/modules/admin/local/3679b51/index.js   → 200
 基座（site-version，不参与迁移）：/static/modules/shell/shell-local/8009883/index.html → 200（未受影响）
 ```
+
+### p13 配置完善验证证据（本机库）
+
+```
+迁移首次：配置 +1 / git 脚本 17 / release 改写 1 / 删除 admin-local（5 行节点命令）
+复跑：配置 0 / git 0 / release 0（admin-local 已不存在）        ← 重跑零差异
+库内：pipelines=16；admin 恰好 1 条（env=NULL）；git 含 REPO_URL 校验 16 条
+      config_items: scope=global, key=REPO_URL, value=git@github.com:web5/web_system.git
+单测：npx jest src/pipeline/step-scripts.spec.ts src/pipeline-step-command/ → 23 passed
+
+V3 来源拦截：REPO_URL 临时改为 wrong-repo → 提交 admin/local
+   → [git] origin=git@github.com:web5/web_system.git
+   → [stderr] [git] 代码来源不符: 期望 ...wrong-repo 实际 ...web_system → status=failed（停在 git，未构建）
+V4 本机投递：恢复 REPO_URL → 提交 admin/local（审批后）
+   → status=succeeded；日志含 [release] local delivery
+   → 产物 ~/web_system_release/servers/gateway/public/static/modules/admin/local/76fd02a/
+   → curl https://local.kedouai.com/static/modules/admin/local/76fd02a/index.js → 200 application/javascript
+```
+
+> 踩坑（2026-09-20）：节点**执行体在 `actions` 列**（`pickStepActions`：actions 非空取 `actions[].code`，
+> 为空才回落 `command` 列）。p13 首版只改 `command` 列 → 页面显示已生效、执行仍是旧 scp 脚本，
+> 一次 `env=local` 验证发布把产物投到了 dev 机（`modules/admin/admin-dev/76fd02a`，未切指针，dev 页面不受影响）。
+> 修正：release 的 `actions[shell].code` 与 `command` 列同步写入。
 
 ### p12 流水线合并验证证据
 
@@ -241,4 +266,6 @@ cd apps/deploy-console && npx vue-tsc --noEmit
 | 日期 | 变更 |
 |---|---|
 | 2026-09-18 | 初稿：P0 完成 + P1 主体（环境域 / 应用域 / 投递激活 / 前端三页接线）与 V4–V7 证据 |
+| 2026-09-20 | 节点「环境分支」可编辑（M14）：每环境一段脚本 → 拼装单一执行体，未配环境 fail-fast；踩坑：只传 envBranches 时 upsert 会清空 actions（丢 write-version），已修为「启用分支时保留已有操作」 |
+| 2026-09-20 | p13 流水线配置完善（本机库）：配置中心 `REPO_URL` + git 来源校验；admin 两线合并为一条，release 按 `$DEPLOY_ENV` 分支（local=cp / 其他=scp）；补 `actions.code` 与 `command` 双写（执行体真相源） |
 | 2026-09-20 | 移除「产物投递激活」链路：`app-artifact.service.ts`、`POST /api/apps/:key/publish`、`PublishAppDto`、`UploadExecutor.publishToEnvDir` 与 `PIPELINE_APP_ENV_DIR` 开关全部删除（`entry-pointer.ts` 保留给切换/回滚）；投递改由**按环境区分的流水线脚本**承担——新建「admin 本地发布」线（`tpl-1789875044581-vrnfbh1`，key `admin-local`）release 节点为本机 cp，dev 线仍为 scp；实测该线 `env=local` 发布成功（产物落 `modules/admin/admin-local/<commit>`）。同步修正 `EnvsModule` / `ServicesModule` 漏注册 `DeployHostEntity` 的 DI 缺陷 |

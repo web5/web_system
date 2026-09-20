@@ -32,6 +32,10 @@ import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { PipelineStepCommandService } from '../pipeline-step-command/pipeline-step-command.service';
+import { StepBranchService } from '../pipeline-step-command/step-branch.service';
+// 步骤执行条件 / 步骤任务匹配条件：同一套表达式引擎（specs/pipeline-step-branch/design.md §2）
+import { evalCondition } from './steps/condition';
+import { pickStepBranch } from './steps/step-branch';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
 import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
@@ -421,6 +425,8 @@ export class PipelineService {
     private readonly auditService: AuditService,
     private readonly stageCommands: StageCommandService,
     private readonly stepCommands: PipelineStepCommandService,
+    // 步骤任务（分支）：步骤 1:N 任务，运行时按条件命中（specs/pipeline-step-branch/design.md）
+    private readonly stepBranches: StepBranchService,
     private readonly configs: ConfigCenterService,
     private readonly releaseLock: ReleaseLockService,
     private readonly notifications: NotificationService,
@@ -1869,6 +1875,43 @@ export class PipelineService {
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });
+    // ── 步骤执行条件（gate）：不满足 → 跳过整个步骤，流程继续 ──
+    // 变量在此处已解析完整（内置变量 + 流水线变量 + 配置中心），与任务匹配条件同一引擎。
+    const stepRow = await this.stepCommands.getRow(p.pipelineId!, nodeKey);
+    const gate = String(stepRow?.condition ?? '').trim();
+    if (gate) {
+      const pass = evalCondition(gate, env);
+      if (!pass) {
+        p.logs = [...(p.logs ?? []), `[${stage}] 执行条件不满足（${gate}），已跳过`];
+        await this.save(p);
+        return true; // 跳过 ≠ 失败：流程继续下一节点
+      }
+      p.logs = [...(p.logs ?? []), `[${stage}] 执行条件满足（${gate}）`];
+    }
+
+    // ── 步骤任务（分支）：命中第一个条件为真的任务，无命中用默认任务 ──
+    // 关键：只替换 shell 执行体的脚本，节点内其余 service 操作（如 write-version）照常执行，
+    // 否则"走了分支"会把写版本这类平台能力绕过去。
+    let runActs = acts;
+    const branches = await this.stepBranches.list(p.pipelineId!, nodeKey);
+    if (branches.length) {
+      const pick = pickStepBranch(branches, env);
+      if (!pick.ok) {
+        p.logs = [...(p.logs ?? []), `[${stage}] ${pick.reason}`];
+        await this.save(p);
+        throw new Error(`步骤 ${nodeKey}：${pick.reason}`);
+      }
+      const code = pick.branch.script;
+      p.logs = [
+        ...(p.logs ?? []),
+        `[${stage}] 命中步骤任务 ${pick.branch.name}` +
+          (pick.fallback ? '（默认任务）' : pick.matched ? `（条件 ${pick.matched}）` : ''),
+      ];
+      runActs = acts.some((a) => a.type === 'shell')
+        ? acts.map((a) => (a.type === 'shell' ? { ...a, code } : a))
+        : [{ id: 'b1', type: 'shell' as const, name: pick.branch.name, code }, ...acts];
+    }
+
     // P0-2（2026-09-17）：构建前清空产物目录 —— 详见 cleanBuildOutput() 注释
     if (nodeKey === 'build') await this.cleanBuildOutput(p, env.BUILD_OUTPUT_DIR);
 
@@ -1879,7 +1922,7 @@ export class PipelineService {
     env.WS_PLATFORM_API =
       this.configService.get<string>('PLATFORM_API_BASE') || `http://127.0.0.1:${platformPort}/api`;
     env.WS_INTERNAL_KEY = this.configService.get<string>('INTERNAL_API_KEY') || '';
-    p.logs = [...(p.logs ?? []), `[${stage}] 共 ${acts.length} 个操作`];
+    p.logs = [...(p.logs ?? []), `[${stage}] 共 ${runActs.length} 个操作`];
     await this.save(p);
 
     // 命令必须在模块目录下执行：默认模板依赖 cwd 定位 tsconfig / 产物目录
@@ -1898,7 +1941,7 @@ export class PipelineService {
     // 逐操作顺序执行（语义见 steps/action-sequence.ts：失败即停 / continueOnError 放行 / 结果回传）
     const outcome = await runActionSequence({
       stage,
-      actions: acts,
+      actions: runActs,
       // 配置中心值强制覆盖（PORT 等已参与上方变量解析，此处保证其余配置也注入进程）
       baseEnv: { ...env, ...inject },
       resultFile,

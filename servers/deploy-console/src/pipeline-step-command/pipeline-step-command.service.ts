@@ -10,6 +10,10 @@ import {
   StepAction,
 } from '../entities/deploy-pipeline-step-command.entity';
 import { PLATFORM_RESERVED, isWritableStageKey } from '../pipeline-template/template-node';
+// 环境分支：把「每环境一段脚本」拼装成单一执行体（纯函数，见 specs/pipeline-env-branch/design.md）
+import { buildEnvBranchScript } from '../pipeline/steps/env-branch';
+// 步骤执行条件（gate）与步骤任务共用一套表达式引擎（specs/pipeline-step-branch/design.md §2）
+import { validateCondition } from '../pipeline/steps/condition';
 
 /** 从一行记录取出要执行的操作序列（纯函数，复用 v4 pickActions 语义） */
 export function pickStepActions(row: {
@@ -113,6 +117,14 @@ export class PipelineStepCommandService {
     updatedBy?: string,
     timeoutSec?: number,
     actions?: StepAction[],
+    /**
+     * 环境分支配置（envId → 脚本）。
+     * 传非空对象 = 启用环境分支（脚本由它拼装，覆盖 command/actions[shell].code）；
+     * 传 null = 关闭环境分支（回到单一脚本形态）；不传 = 不改动。
+     */
+    envBranches?: Record<string, string> | null,
+    /** 步骤执行条件（gate）：语法校验后落库；空串/null = 恒执行 */
+    condition?: string | null,
   ): Promise<DeployPipelineStepCommandEntity> {
     if (!isWritableStageKey(nodeKey)) {
       throw new BadRequestException(
@@ -121,6 +133,34 @@ export class PipelineStepCommandService {
     }
     await this.assertNotLocked(pipelineId, nodeKey);
 
+    // 步骤执行条件（gate）：语法不过 → 400（运行期不再判错，避免"配了才发现不生效"）
+    if (condition !== undefined && condition !== null && String(condition).trim()) {
+      const check = validateCondition(condition);
+      if (!check.ok) {
+        throw new BadRequestException(`执行条件非法：${check.reason}`);
+      }
+    }
+
+    // 环境分支：逐段校验 → 拼装单一执行体（未配置的环境落 fail-fast 分支）
+    let generated: string | null = null;
+    if (envBranches && Object.keys(envBranches).length) {
+      for (const [env, code] of Object.entries(envBranches)) {
+        try {
+          this.validate(code);
+        } catch (e) {
+          throw new BadRequestException(
+            `环境 ${env} 的脚本语法错误：${(e as Error).message?.replace(/^shell 语法错误：/, '')}`,
+          );
+        }
+      }
+      try {
+        generated = buildEnvBranchScript(envBranches).script;
+      } catch (e) {
+        throw new BadRequestException((e as Error).message);
+      }
+      this.validate(generated);
+    }
+
     const hasActions = !!(actions && actions.length);
     if (hasActions) {
       const errs = validateStepActions(actions!);
@@ -128,6 +168,11 @@ export class PipelineStepCommandService {
       for (const a of actions!) {
         if (a.type === 'shell' && a.code?.trim()) this.validate(a.code);
       }
+    } else if (generated) {
+      // 环境分支形态：执行体由分支配置拼装，command 入参可为空（且会被覆盖）
+    } else if (envBranches === null || condition !== undefined) {
+      // 仅关闭环境分支 / 仅更新执行条件：command 未传时保留现有脚本，不做覆盖
+      if (command?.trim()) this.validate(command);
     } else {
       if (!command?.trim()) {
         throw new BadRequestException('命令不能为空');
@@ -135,10 +180,12 @@ export class PipelineStepCommandService {
       this.validate(command);
     }
 
+    // command 未传且本次是「生成 / 关闭 / 改条件」时，保留库里既有脚本，不置空
+    const keepCommand = !command?.trim() && (!!generated || envBranches === null || condition !== undefined);
     let row = await this.repo.findOne({ where: { pipelineId, nodeKey } });
     if (!row) {
       row = this.repo.create({ pipelineId, nodeKey, command: command?.trim() || '', enabled: true });
-    } else {
+    } else if (!keepCommand) {
       row.command = command?.trim() || '';
       row.enabled = true;
     }
@@ -146,8 +193,34 @@ export class PipelineStepCommandService {
       row.actions = actions!;
       const firstShell = actions!.find((a) => a.type === 'shell' && a.code?.trim());
       row.command = firstShell?.code?.trim() ?? '';
-    } else if (row.actions?.length) {
+    } else if (
+      !generated &&
+      envBranches === null &&
+      condition === undefined &&
+      row.actions?.length
+    ) {
+      // 仅「单一脚本形态」才清空多操作（避免 command 与 actions 双真相源）。
+      // 以下三种情况**必须保留**原有操作（如 write-version），否则平台能力会被悄悄绕过去：
+      //   ① 启用环境分支（generated 非空）
+      //   ② 仅关闭环境分支（envBranches === null）
+      //   ③ 仅更新执行条件（condition !== undefined）
       row.actions = null;
+    }
+    if (generated) {
+      // 执行体真相源在 actions[shell].code（pickStepActions 优先取 actions），command 列同步写入
+      row.command = generated;
+      row.envBranches = envBranches!;
+      if (row.actions?.length) {
+        row.actions = row.actions.map((a) =>
+          a && a.type === 'shell' ? { ...a, code: generated! } : a,
+        );
+      }
+    } else if (envBranches === null) {
+      // 关闭环境分支：回到单一脚本形态（当前 command / actions 保持不变）
+      row.envBranches = null;
+    }
+    if (condition !== undefined) {
+      row.condition = condition === null || !String(condition).trim() ? null : String(condition).trim();
     }
     row.updatedBy = updatedBy;
     if (timeoutSec !== undefined) row.timeoutSec = timeoutSec;
