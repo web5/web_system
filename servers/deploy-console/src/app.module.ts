@@ -21,6 +21,11 @@ import { PipelineStepCommandModule } from './pipeline-step-command/pipeline-step
 import { ToolCatalogModule } from './tool-catalog/tool-catalog.module';
 import { ReleaseGitModule } from './git/release-git.module';
 import { ReleaseHookModule } from './hook/release-hook.module';
+import { TargetModule } from './target/target.module';
+import { EnvsModule } from './envs/envs.module';
+import { AppsModule } from './apps/apps.module';
+import { ServicesModule } from './services/services.module';
+import { HostsModule } from './hosts/hosts.module';
 
 @Module({
   imports: [
@@ -103,6 +108,16 @@ import { ReleaseHookModule } from './hook/release-hook.module';
     ReleaseGitModule,
     // CI/CD 发布触发（POST /api/hooks/release：HMAC 签名 + deliveryId 幂等）
     ReleaseHookModule,
+    // 跨域目标解析（双域重构 P0：app:<key> / svc:<key> + 历史值兜底解析）
+    TargetModule,
+    // 环境域（双域重构 P1：站点 + 环境 envId 自增 + 后端服务指向）
+    EnvsModule,
+    // 应用域（双域重构 P1：应用 + 挂载路由 + 版本指针/入口指针）
+    AppsModule,
+    // 服务域（双域重构 P2：服务 + 转发规则 + 接口清单 + 环境指向）
+    ServicesModule,
+    // 主机管理（双域重构：服务环境指向的地址来源，host_name 引用 deploy_hosts.name）
+    HostsModule,
   ],
 })
 export class AppModule {}

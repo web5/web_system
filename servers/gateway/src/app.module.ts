@@ -19,6 +19,17 @@ import { DeployDeploymentEntity } from './deploy-version/deploy-deployment.entit
 import { DeployModuleEntity } from './deploy-version/deploy-module.entity';
 import { DeployCanaryRuleEntity } from './deploy-version/deploy-canary-rule.entity';
 import { DeployVersionModule } from './deploy-version/deploy-version.module';
+// 双域重构 P2：DB 驱动路由的只读实体（由 ProxyModule → DynamicRouteModule 使用）
+import {
+  DeployAppEntity,
+  DeployAppEnvVersionEntity,
+  DeployEndpointEntity,
+  DeployEnvEntity,
+  DeployServiceEntity,
+  DeployServiceEnvEntity,
+  DeployServiceRouteEntity,
+  DeploySiteEntity,
+} from './dynamic-route/entities';
 
 @Module({
   imports: [
@@ -71,7 +82,21 @@ import { DeployVersionModule } from './deploy-version/deploy-version.module';
         username: cfg.get('DEPLOY_DB_USER', 'root'),
         password: cfg.get('DEPLOY_DB_PASSWORD', ''),
         database: cfg.get('DEPLOY_DB_NAME', 'web_system_deploy'),
-        entities: [DeployDeploymentEntity, DeployModuleEntity, DeployCanaryRuleEntity],
+        entities: [
+          DeployDeploymentEntity,
+          DeployModuleEntity,
+          DeployCanaryRuleEntity,
+          // 双域重构 P2：转发规则 / 服务指向 / 接口清单 / 环境 / 站点（只读）
+          DeployServiceRouteEntity,
+          DeployServiceEnvEntity,
+          DeployServiceEntity,
+          DeployEndpointEntity,
+          DeployEnvEntity,
+          DeploySiteEntity,
+          // 双域重构 P3：应用 / 应用×环境版本指针（manifest 的 envs/byEnv，只读）
+          DeployAppEntity,
+          DeployAppEnvVersionEntity,
+        ],
         // gateway 是只读消费者，绝不自动建表
         synchronize: false,
         charset: 'utf8mb4',

@@ -1,397 +1,387 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+/**
+ * 服务管理（API 网关域）
+ *
+ * 服务 = 网关背后的后端进程/容器。**点服务进入「接口清单」**（详情默认页签）。
+ * 设计依据：specs/deploy-console-domain-split/page-spec.md §3 / design.md v2 §2.3
+ * 数据来源：`GET/POST /api/services`（双域重构 P2 已接通）
+ *
+ * 说明：健康状态**不伪造** —— 列表展示"已配置指向的环境"，探活按需手动触发（逐环境）。
+ */
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
-import { moduleApi, environmentApi } from '@/api'
-import EnvManagerPanel from '@/components/EnvManagerPanel.vue'
+import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
+import { servicesApi, type ServiceRow, type ServiceKind } from '@/api'
 
 const router = useRouter()
 
-// ============ 类型定义 ============
-// 类型标签统一中性呈现（Geist 克制：颜色只编码"状态/是否内置"两类语义）
-const TYPE_OPTIONS = [
-  { value: 'backend', label: '后端服务（pm2 部署）' },
-  { value: 'frontend', label: '前端模块（打包到网关）' },
-  { value: 'micro-frontend', label: '微前端模块（shell 加载）' },
-  { value: 'mini-app', label: '小程序' },
-] as const
+const KINDS: { value: string; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'nest', label: '业务服务' },
+  { value: 'express', label: 'Express' },
+  { value: 'mcp', label: 'MCP' },
+  { value: 'static', label: '静态' },
+]
 
-function typeLabel(type: string): string {
-  return TYPE_OPTIONS.find((t) => t.value === type)?.label || type
+function kindLabel(kind: string): string {
+  return KINDS.find((k) => k.value === kind)?.label || kind
 }
 
-// ============ 模块列表 ============
-const moduleList = ref<any[]>([])
-const moduleLoading = ref(false)
-const activeType = ref<string>('all')
+const list = ref<ServiceRow[]>([])
+const total = ref(0)
+const loading = ref(false)
+const keyword = ref('')
+const activeKind = ref('all')
+const page = ref(1)
+const PAGE_SIZE = 50
+const probing = ref<string | null>(null)
 
-const moduleFormVisible = ref(false)
-const moduleSaving = ref(false)
-const editingKey = ref('')
+const columns: TableColumnsType = [
+  { title: '服务', key: 'key', width: 220 },
+  { title: '类型', key: 'kind', width: 100 },
+  { title: '仓库目录', key: 'repoDir', width: 170 },
+  { title: '端口', key: 'defaultPort', width: 90, align: 'right' },
+  { title: '探活路径', key: 'healthPath', width: 110 },
+  { title: '已配指向的环境', key: 'envs' },
+  { title: '接口数', key: 'endpointCount', width: 90, align: 'right' },
+  { title: '网关路由', key: 'routeCount', width: 90, align: 'right' },
+  { title: '操作', key: 'action', width: 160 },
+]
 
-const envs = ref<any[]>([])
-/** 环境管理面板（原独立菜单页已并入此处）：环境归属模块，需先选模块 */
-const envPanelOpen = ref(false)
-const envPanelModule = ref<string>('')
-function openEnvPanel(moduleKey?: string) {
-  envPanelModule.value = moduleKey || envPanelModule.value || moduleList.value[0]?.key || ''
-  envPanelOpen.value = true
+async function load() {
+  loading.value = true
+  try {
+    const res = await servicesApi.list({
+      kind: activeKind.value === 'all' ? undefined : activeKind.value,
+      q: keyword.value.trim() || undefined,
+      page: page.value,
+      pageSize: PAGE_SIZE,
+    })
+    list.value = res.items
+    total.value = res.total
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '加载服务列表失败')
+  } finally {
+    loading.value = false
+  }
 }
-const moduleForm = reactive({
+
+function reloadFromFirstPage() {
+  page.value = 1
+  load()
+}
+
+function onPageChange(p: number) {
+  page.value = p
+  load()
+}
+
+function goDetail(key: string) {
+  router.push({ name: 'ServiceDetail', params: { key } })
+}
+
+/** 逐环境手动探活（未配置主机时后端明确报错，不回落本机） */
+async function probe(row: ServiceRow, envId: string) {
+  probing.value = `${row.key}@${envId}`
+  try {
+    const res = await servicesApi.health(row.key, envId)
+    if (res.ok) {
+      message.success(`${row.key} @ ${envId} 健康（${res.status}，${res.latencyMs}ms）→ ${res.target}`)
+    } else {
+      message.error(
+        `${row.key} @ ${envId} 探活失败：${res.error || `HTTP ${res.status}`}（${res.target}）`,
+      )
+    }
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '探活失败')
+  } finally {
+    probing.value = null
+  }
+}
+
+/** 部署：跳「发布流水线」发起抽屉；环境默认取该服务已配指向的第一个环境 */
+function deploy(row: ServiceRow) {
+  if (row.deployChannel === 'legacy') {
+    message.warning('该服务走传统发布通道（legacy），不由流水线托管')
+    return
+  }
+  router.push({
+    name: 'PipelineCenter',
+    query: { module: row.key, env: row.configuredEnvs?.[0] || 'dev' },
+  })
+}
+
+// ---------- 新建服务（key 创建后不可改） ----------
+const formOpen = ref(false)
+const saving = ref(false)
+const form = reactive({
   key: '',
   name: '',
-  type: 'backend' as 'backend' | 'frontend' | 'micro-frontend' | 'mini-app',
-  dir: '',
-  pm2: '',
-  publicPath: '',
-  buildCmd: '',
-  defaultEnv: '',
-  enabled: true,
+  kind: 'nest' as ServiceKind,
+  repoDir: '',
+  pm2Name: '',
+  healthPath: '/health',
 })
 
-async function loadModules() {
-  moduleLoading.value = true
+const keyValid = computed(() => /^[a-z0-9][a-z0-9_-]{1,63}$/.test(form.key))
+const canSubmit = computed(
+  () => keyValid.value && !!form.name.trim() && !!form.repoDir.trim() && !saving.value,
+)
+
+function openCreate() {
+  form.key = ''
+  form.name = ''
+  form.kind = 'nest'
+  form.repoDir = ''
+  form.pm2Name = ''
+  form.healthPath = '/health'
+  formOpen.value = true
+}
+
+function onKeyInput() {
+  if (!form.repoDir || /^[a-z0-9_-]*$/.test(form.key)) form.repoDir = form.key
+  if (!form.pm2Name || form.pm2Name === `web-`) form.pm2Name = `web-${form.key}`
+}
+
+async function submitCreate() {
+  if (!canSubmit.value) return
+  saving.value = true
   try {
-    moduleList.value = await moduleApi.list()
-  } catch {
-    message.error('加载模块列表失败')
-  } finally {
-    moduleLoading.value = false
-  }
-}
-
-async function loadEnvs() {
-  try {
-    envs.value = await environmentApi.list()
-  } catch {
-    envs.value = []
-  }
-}
-
-function resetModuleForm() {
-  Object.assign(moduleForm, {
-    key: '',
-    name: '',
-    type: 'backend' as const,
-    dir: '',
-    pm2: '',
-    publicPath: '',
-    buildCmd: '',
-    defaultEnv: '',
-    enabled: true,
-  })
-}
-
-/**
- * 新建模块：进**独立页面** /modules/new（用户 2026-09-15：编辑/新建都不要弹窗）。
- * 页面里按「类型」联动代码目录 / publicPath / pm2（见 ModuleEdit 的 create 模式）。
- */
-function openModuleCreate() {
-  router.push({ name: 'ModuleCreate' })
-}
-
-function openModuleEdit(m: any) {
-  editingKey.value = m.key
-  Object.assign(moduleForm, {
-    key: m.key,
-    name: m.name || '',
-    type: m.type || 'backend',
-    dir: m.dir || '',
-    pm2: m.pm2 || '',
-    publicPath: m.publicPath || '',
-    buildCmd: m.buildCmd || '',
-    defaultEnv: m.defaultEnv || '',
-    enabled: m.enabled !== false,
-  })
-  moduleFormVisible.value = true
-}
-
-async function submitModuleForm() {
-  if (!moduleForm.key || !moduleForm.name) {
-    message.error('模块 key 和名称必填')
-    return
-  }
-  moduleSaving.value = true
-  try {
-    const dto: any = {
-      key: moduleForm.key.trim(),
-      name: moduleForm.name.trim(),
-      type: moduleForm.type,
-      dir: moduleForm.dir.trim() || `servers/${moduleForm.key.trim()}`,
-      pm2: moduleForm.pm2.trim() || undefined,
-      publicPath: moduleForm.publicPath.trim() || undefined,
-      buildCmd: moduleForm.buildCmd.trim() || undefined,
-      defaultEnv: moduleForm.defaultEnv || undefined,
-      enabled: moduleForm.enabled,
-    }
-    if (editingKey.value) {
-      await moduleApi.update(editingKey.value, dto)
-      message.success('模块已更新')
-    } else {
-      await moduleApi.create(dto)
-      message.success('模块已创建')
-    }
-    moduleFormVisible.value = false
-    await loadModules()
+    const svc = await servicesApi.create({
+      key: form.key,
+      name: form.name.trim(),
+      kind: form.kind,
+      repoDir: form.repoDir.trim(),
+      pm2Name: form.pm2Name.trim() || undefined,
+      healthPath: form.healthPath.trim() || undefined,
+    })
+    formOpen.value = false
+    message.success(`服务 ${svc.key} 已创建`)
+    await load()
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存失败')
+    message.error(e?.response?.data?.message || '创建失败')
   } finally {
-    moduleSaving.value = false
+    saving.value = false
   }
 }
 
-function removeModule(m: any) {
-  if (m.builtin) {
-    message.warn('内置模块不可删除')
-    return
-  }
-  Modal.confirm({
-    title: '确认删除',
-    content: `确认删除模块 ${m.name}（${m.key}）吗？`,
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk: async () => {
-      try {
-        await moduleApi.remove(m.key)
-        message.success('已删除')
-        await loadModules()
-      } catch (err: any) {
-        message.error(err?.response?.data?.message || '删除失败')
-      }
-    },
-  })
-}
-
-const filteredModules = computed(() => {
-  if (activeType.value === 'all') return moduleList.value
-  return moduleList.value.filter((m: any) => m.type === activeType.value)
-})
-
-onMounted(() => {
-  void loadModules()
-  void loadEnvs()
-})
+onMounted(load)
 </script>
 
 <template>
-  <div>
-    <div class="page-header">
-      <h2>模块管理</h2>
-      <p>模块注册表是发布系统的「模块元数据」真相源。后端模块（pm2 部署）、前端模块、微前端模块、小程序均在此登记。点击「详情」查看并管理该模块前端/后台的部署版本与环境。</p>
-      <p style="color: var(--ws-text-tertiary);">环境的增删与公网地址/服务地址，点右上「环境管理」维护（原独立菜单页已并入此处）。</p>
-      <p style="color: var(--ws-text-tertiary);">启动时若表为空，会从 <code class="ws-mono">scripts/modules.json</code> 种子导入（标记为 builtin）。builtin 不可删除，可改字段。</p>
+  <div class="svc-page">
+    <div class="page-head">
+      <div>
+        <h1>服务管理</h1>
+        <p class="sub">
+          API 网关背后的后端服务；点击服务进入接口清单，网关路由与环境指向在各页签内管理。
+        </p>
+      </div>
+      <a-button type="primary" @click="openCreate">新建服务</a-button>
     </div>
 
-    <a-card class="svc-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <a-tabs v-model:activeKey="activeType" size="small">
-          <a-tab-pane key="all" :tab="`全部 (${moduleList.length})`" />
-          <a-tab-pane
-            v-for="t in TYPE_OPTIONS"
-            :key="t.value"
-            :tab="`${typeLabel(t.value)} (${moduleList.filter((m: any) => m.type === t.value).length})`"
-          />
-        </a-tabs>
-        <a-space>
-          <a-button @click="openEnvPanel()">环境管理</a-button>
-          <a-button type="primary" @click="openModuleCreate">新建模块</a-button>
-        </a-space>
+    <a-card :bordered="false" class="panel">
+      <div class="filters">
+        <a-radio-group v-model:value="activeKind" button-style="solid" @change="reloadFromFirstPage">
+          <a-radio-button v-for="k in KINDS" :key="k.value" :value="k.value">{{ k.label }}</a-radio-button>
+        </a-radio-group>
+        <a-input-search
+          v-model:value="keyword"
+          placeholder="搜索 key / 名称"
+          style="width: 240px"
+          allow-clear
+          @search="reloadFromFirstPage"
+        />
+        <span class="count">共 {{ total }} 个服务</span>
       </div>
 
       <a-table
-        :columns="[
-          { title: 'key', dataIndex: 'key', key: 'key', width: 180 },
-          { title: '名称', dataIndex: 'name', key: 'name', width: 180 },
-          { title: '类型', dataIndex: 'type', key: 'type', width: 200 },
-          { title: '目录', dataIndex: 'dir', key: 'dir' },
-          { title: 'pm2 / publicPath', key: 'meta', width: 200 },
-          { title: '默认环境', key: 'defaultEnv', width: 100 },
-          { title: '状态', key: 'status', width: 100 },
-          { title: '操作', key: 'action', width: 200 },
-        ]"
-        :data-source="filteredModules"
-        :loading="moduleLoading"
-        :pagination="false"
+        :columns="columns"
+        :data-source="list"
+        :loading="loading"
         row-key="key"
-        size="small"
+        size="middle"
+        :pagination="{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total,
+          showSizeChanger: false,
+          showTotal: (t: number) => `共 ${t} 个服务`,
+        }"
+        @change="(p: any) => onPageChange(p.current)"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'key'">
-            <span class="ws-mono">{{ record.key }}</span>
+            <a @click="goDetail(record.key)">
+              <span class="ws-mono">{{ record.key }}</span>
+            </a>
+            <span class="name">{{ record.name }}</span>
+            <a-tag v-if="record.deployChannel === 'legacy'" class="tag-legacy">传统通道</a-tag>
           </template>
-          <template v-else-if="column.key === 'type'">
-            <a-tag class="svc-type">{{ typeLabel(record.type) }}</a-tag>
-            <a-tag v-if="record.builtin" class="svc-builtin" style="margin-left: 4px;">内置</a-tag>
+          <template v-else-if="column.key === 'kind'">
+            <a-tag>{{ kindLabel(record.kind) }}</a-tag>
           </template>
-          <template v-else-if="column.key === 'dir'">
-            <span class="ws-mono">{{ record.dir }}</span>
+          <template v-else-if="column.key === 'repoDir'">
+            <span class="ws-mono">servers/{{ record.repoDir }}</span>
           </template>
-          <template v-else-if="column.key === 'meta'">
-            <span v-if="record.pm2" style="margin-right: 8px;" class="ws-mono">pm2={{ record.pm2 }}</span>
-            <span v-if="record.publicPath" class="ws-mono">pub={{ record.publicPath }}</span>
+          <template v-else-if="column.key === 'defaultPort'">
+            <span class="ws-mono ws-tabular">{{ record.defaultPort ?? '—' }}</span>
           </template>
-          <template v-else-if="column.key === 'defaultEnv'">
-            <span v-if="record.defaultEnv" class="ws-mono">{{ record.defaultEnv }}</span>
-            <span v-else class="svc-dash">—</span>
+          <template v-else-if="column.key === 'healthPath'">
+            <span class="ws-mono">{{ record.healthPath }}</span>
           </template>
-          <template v-else-if="column.key === 'status'">
-            <a-tag :class="record.enabled !== false ? 'svc-status-on' : 'svc-status-off'">
-              {{ record.enabled !== false ? '启用' : '禁用' }}
-            </a-tag>
+          <template v-else-if="column.key === 'envs'">
+            <span v-if="!record.configuredEnvs?.length" class="muted">未配置指向</span>
+            <template v-else>
+              <a
+                v-for="e in record.configuredEnvs"
+                :key="e"
+                class="env-chip"
+                @click="probe(record, e)"
+              >
+                <a-tag :color="probing === `${record.key}@${e}` ? 'processing' : undefined">{{ e }}</a-tag>
+              </a>
+            </template>
+          </template>
+          <template v-else-if="column.key === 'endpointCount'">
+            <a @click="goDetail(record.key)">
+              <span class="ws-tabular">{{ record.endpointCount ?? 0 }}</span>
+            </a>
+          </template>
+          <template v-else-if="column.key === 'routeCount'">
+            <span class="ws-tabular">{{ record.routeCount ?? 0 }}</span>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" size="small" @click="$router.push(`/modules/${record.key}`)">详情</a-button>
-            <a-button type="link" size="small" @click="openModuleEdit(record)">编辑</a-button>
-            <a-button type="link" size="small" danger :disabled="record.builtin" @click="removeModule(record)">删除</a-button>
+            <a type="link" @click="goDetail(record.key)">详情</a>
+            <a type="link" @click="probe(record, 'dev')">探活</a>
+            <a type="link" :disabled="record.deployChannel === 'legacy'" @click="deploy(record)">部署</a>
           </template>
         </template>
       </a-table>
+
+      <p class="hint">
+        健康状态不伪造：列表显示「已配指向的环境」，点环境徽标即对该环境探活（未配置主机时明确报错，不回落本机）。
+      </p>
     </a-card>
 
     <a-modal
-      :title="editingKey ? `编辑模块 ${editingKey}` : '新建模块'"
-      v-model:open="moduleFormVisible"
-      :footer="null"
-      :destroy-on-close="true"
-      width="640px"
+      :open="formOpen"
+      title="新建服务"
+      :confirm-loading="saving"
+      ok-text="创建"
+      cancel-text="取消"
+      :ok-button-props="{ disabled: !canSubmit }"
+      @ok="submitCreate"
+      @cancel="formOpen = false"
     >
-      <a-form layout="vertical">
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="模块 key（唯一，不可改）">
-              <a-input v-model:value="moduleForm.key" :disabled="!!editingKey" placeholder="如 auth-service" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="名称">
-              <a-input v-model:value="moduleForm.name" placeholder="如 认证服务" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="类型">
-              <a-select v-model:value="moduleForm.type">
-                <a-select-option v-for="t in TYPE_OPTIONS" :key="t.value" :value="t.value">
-                  {{ t.label }}
-                </a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="代码目录（相对仓库根）">
-              <a-input v-model:value="moduleForm.dir" placeholder="servers/auth-service" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="pm2 进程名（后端用）">
-              <a-input v-model:value="moduleForm.pm2" placeholder="如 auth-service" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="publicPath（前端模块挂载路径）">
-              <a-input v-model:value="moduleForm.publicPath" placeholder="如 /auth-service/" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-        <a-form-item label="buildCmd（前端模块构建命令）">
-          <a-input v-model:value="moduleForm.buildCmd" placeholder="如 cd apps/auth-service && pnpm build" />
+      <a-form layout="vertical" style="margin-top: 8px">
+        <a-form-item label="服务 key" required>
+          <a-input v-model:value="form.key" placeholder="如 todo-service" :maxlength="64" @input="onKeyInput" />
+          <div class="field-hint">
+            小写字母/数字/下划线/中划线；<strong>创建后不可修改</strong>（网关路由与流水线历史都按 key 关联）
+          </div>
+          <div v-if="form.key && !keyValid" class="field-error">key 需以字母或数字开头，长度 2–64</div>
         </a-form-item>
-        <a-form-item label="默认部署环境（发布/监控/诊断默认选中该模块时用它）">
-          <a-select
-            v-model:value="moduleForm.defaultEnv"
-            allow-clear
-            placeholder="未设置（按页面默认）"
-            style="width: 240px;"
-          >
-            <a-select-option v-for="e in envs" :key="e.id" :value="e.id">
-              {{ e.name }}（{{ e.id }}）
-            </a-select-option>
+        <a-form-item label="名称" required>
+          <a-input v-model:value="form.name" placeholder="如 待办服务" :maxlength="32" />
+        </a-form-item>
+        <a-form-item label="类型">
+          <a-select v-model:value="form.kind">
+            <a-select-option value="nest">NestJS 业务服务</a-select-option>
+            <a-select-option value="express">Express</a-select-option>
+            <a-select-option value="mcp">MCP 网关</a-select-option>
+            <a-select-option value="static">静态服务</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="启用">
-          <a-switch v-model:checked="moduleForm.enabled" />
+        <a-form-item label="仓库目录" required>
+          <a-input v-model:value="form.repoDir" placeholder="如 todo-service" :maxlength="64" />
+          <div class="field-hint">对应 servers/&lt;目录&gt;</div>
         </a-form-item>
-        <div style="margin-top: 8px;">
-          <a-button type="primary" :loading="moduleSaving" @click="submitModuleForm">{{ editingKey ? '保存' : '创建' }}</a-button>
-          <a-button style="margin-left: 8px;" @click="moduleFormVisible = false">取消</a-button>
-        </div>
+        <a-form-item label="pm2 进程名">
+          <a-input v-model:value="form.pm2Name" placeholder="如 web-todo" :maxlength="64" />
+        </a-form-item>
+        <a-form-item label="探活路径">
+          <a-input v-model:value="form.healthPath" placeholder="/health" :maxlength="128" />
+        </a-form-item>
       </a-form>
     </a-modal>
-
-    <!-- 环境管理：原独立菜单页已并入模块管理，环境增删改在这里（变更后刷新模块表单的环境下拉） -->
-    <a-drawer
-      v-model:open="envPanelOpen"
-      title="环境管理"
-      width="960"
-      placement="right"
-      :destroy-on-close="true"
-    >
-      <a-form-item label="模块（环境归属于模块，切换模块看它的环境）">
-        <a-select
-          v-model:value="envPanelModule"
-          show-search
-          option-filter-prop="label"
-          style="max-width: 360px;"
-          :options="moduleList.map((m: any) => ({ value: m.key, label: `${m.name}（${m.key}）` }))"
-        />
-      </a-form-item>
-      <EnvManagerPanel
-        v-if="envPanelModule"
-        :module-key="envPanelModule"
-        @changed="loadEnvs"
-      />
-    </a-drawer>
   </div>
 </template>
 
 <style scoped>
-/* 试点页 token 化样式：颜色一律引用 @web-system/ui 语义变量（P0-4/5.2） */
-.svc-card {
-  border: none;
-  border-radius: var(--ws-radius-lg);
-  /* shadow-as-border（Geist 技法）：细边框随层级平滑，替代默认实线 border */
-  box-shadow: 0 0 0 1px var(--ws-border);
+.svc-page {
+  padding: 4px 4px 24px;
 }
-
-/* 类型标签：中性低饱和（克制：颜色只编码状态/内置两类语义） */
-.svc-type {
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.page-head h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ws-text-primary);
+  margin: 0 0 4px;
+}
+.page-head .sub {
+  margin: 0;
+  font-size: 12px;
   color: var(--ws-text-secondary);
-  background: var(--ws-bg-subtle);
-  border: 1px solid var(--ws-border-subtle);
 }
-
-/* 内置徽标：品牌橙 tint（light 底用浅橙 / dark 用深棕底） */
-.svc-builtin {
-  color: var(--ws-brand-700);
-  background: var(--ws-brand-50);
-  border: 1px solid var(--ws-brand-100);
+.panel {
+  border-radius: var(--ws-radius-lg);
+  box-shadow: var(--ws-shadow-card, 0 2px 12px rgba(20, 30, 50, 0.06));
 }
-
-/* 状态标签：启用 = success 语义；禁用 = 中性 */
-.svc-status-on {
-  color: var(--ws-success-500);
-  background: var(--ws-success-100);
-  border: 1px solid var(--ws-success-100);
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-
-.svc-status-off {
+.filters .count {
+  margin-left: auto;
+  font-size: 12px;
   color: var(--ws-text-tertiary);
-  background: var(--ws-bg-subtle);
-  border: 1px solid var(--ws-border-subtle);
 }
-
-.svc-dash {
-  color: var(--ws-text-disabled);
-  font-size: var(--ws-font-size-caption);
+.ws-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
-
-:global([data-theme='dark']) .svc-builtin {
-  color: var(--ws-brand-300);
-  background: var(--ws-brand-900);
-  border-color: var(--ws-brand-800);
+.ws-tabular {
+  font-variant-numeric: tabular-nums;
+}
+.name {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+}
+.tag-legacy {
+  margin-left: 6px;
+}
+.env-chip {
+  cursor: pointer;
+}
+.muted {
+  color: var(--ws-text-tertiary);
+}
+.hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  line-height: 1.8;
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  margin-top: 4px;
+  line-height: 1.7;
+}
+.field-error {
+  font-size: 12px;
+  color: var(--ws-color-error, #d4380d);
+  margin-top: 4px;
 }
 </style>
