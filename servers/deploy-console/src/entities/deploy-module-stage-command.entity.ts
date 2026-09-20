@@ -64,7 +64,8 @@ export const DEFAULT_BUILD_TEMPLATE: Record<string, string> = {
   backend: 'npx tsc -p tsconfig.json',
   frontend: 'npx vite build',
   'micro-frontend': 'npx vite build --mode mf',
-  'mini-app': 'npx vite build',
+  // 小程序：构建 = 用 miniprogram-ci 上传到微信（产物不在本地、无静态投递、无 pm2 重启）
+  'mini-app': 'node scripts/upload.js',
 };
 
 /**

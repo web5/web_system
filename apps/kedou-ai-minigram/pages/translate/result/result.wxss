@@ -1,0 +1,21 @@
+.page { min-height: 100vh; background: #F2F4F8; padding: 24rpx 32rpx 40rpx; }
+.srcbox { background: #fff; border-radius: 24rpx; padding: 22rpx 26rpx; }
+.k { display: block; font-size: 22rpx; color: #C0C6D0; margin-bottom: 8rpx; }
+.v { font-size: 26rpx; color: #6B7280; }
+.res { margin-top: 20rpx; background: #fff; border-radius: 24rpx; padding: 30rpx; border-left: 6rpx solid #1E6FFF; }
+.tags { display: flex; align-items: center; margin-bottom: 18rpx; }
+.tag { font-size: 20rpx; background: #1E6FFF; color: #fff; padding: 4rpx 12rpx; border-radius: 8rpx; }
+.meta { font-size: 21rpx; color: #C0C6D0; margin-left: 12rpx; }
+.txt { font-size: 32rpx; line-height: 1.75; }
+.ops { display: flex; margin-top: 26rpx; padding-top: 22rpx; border-top: 1rpx solid #EEF0F4; }
+.ops text { flex: 1; text-align: center; font-size: 24rpx; color: #6B7280; }
+.fold { margin-top: 20rpx; background: #fff; border-radius: 24rpx; overflow: hidden; }
+.h { display: flex; justify-content: space-between; padding: 26rpx 28rpx; font-size: 26rpx; }
+.act { color: #1E6FFF; font-size: 24rpx; }
+.c { padding: 0 28rpx 26rpx; }
+.m { margin-bottom: 22rpx; }
+.vip { margin-top: 20rpx; background: #FFF2E6; border-radius: 24rpx; padding: 24rpx 28rpx; color: #F97316; font-size: 25rpx; display: flex; justify-content: space-between; }
+.rowbtn { display: flex; margin-top: 24rpx; }
+.rowbtn view { flex: 1; height: 84rpx; border-radius: 42rpx; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 27rpx; margin-right: 18rpx; }
+.rowbtn view:last-child { margin-right: 0; }
+.ai { margin-top: 28rpx; font-size: 21rpx; color: #C0C6D0; text-align: center; }

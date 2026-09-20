@@ -1,0 +1,30 @@
+.page { min-height: 100vh; background: #F2F4F8; padding-bottom: 32rpx; }
+.hero { padding: 52rpx 44rpx 44rpx; background: linear-gradient(135deg, #1E6FFF, #0B4FD1); color: #fff; }
+.brand { display: flex; align-items: center; font-size: 26rpx; opacity: .92; }
+.mark { width: 52rpx; height: 52rpx; border-radius: 16rpx; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; margin-right: 18rpx; }
+.title { margin-top: 32rpx; font-size: 50rpx; font-weight: 600; }
+.sub { margin-top: 10rpx; font-size: 26rpx; opacity: .88; }
+.main { margin: -28rpx 32rpx 0; background: #fff; border-radius: 32rpx; padding: 36rpx; box-shadow: 0 8rpx 24rpx rgba(20,40,90,.1); }
+.panel { font-size: 34rpx; font-weight: 600; text-align: center; }
+.desc { font-size: 24rpx; color: #9AA1AD; text-align: center; margin: 8rpx 0 32rpx; }
+.entry { display: flex; }
+.e { flex: 1; background: #F2F4F8; border-radius: 28rpx; padding: 30rpx 26rpx; }
+.e:first-child { margin-right: 22rpx; }
+.ic { width: 68rpx; height: 68rpx; border-radius: 20rpx; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 30rpx; margin-bottom: 18rpx; }
+.ic-tr { background: #1E6FFF; }
+.ic-as { background: #F97316; }
+.n { font-size: 29rpx; font-weight: 600; }
+.d { font-size: 23rpx; color: #9AA1AD; margin-top: 6rpx; }
+.recent { padding: 36rpx 32rpx 0; }
+.sec-t { font-size: 25rpx; color: #6B7280; display: flex; justify-content: space-between; }
+.em { font-size: 23rpx; color: #C0C6D0; }
+.it { display: flex; align-items: center; background: #fff; border-radius: 22rpx; padding: 22rpx 26rpx; margin-top: 14rpx; }
+.tag { font-size: 20rpx; padding: 4rpx 12rpx; border-radius: 8rpx; margin-right: 20rpx; }
+.tr { background: #EAF1FF; color: #1E6FFF; }
+.as { background: #FFF2E6; color: #F97316; }
+.tt { flex: 1; font-size: 26rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tm { font-size: 22rpx; color: #C0C6D0; }
+.empty { text-align: center; color: #C0C6D0; font-size: 24rpx; padding: 40rpx 0; }
+.foot { padding: 40rpx 32rpx 0; }
+.btn-ghost { height: 92rpx; border-radius: 46rpx; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+.claim { margin-top: 24rpx; font-size: 21rpx; color: #C0C6D0; text-align: center; line-height: 1.8; }

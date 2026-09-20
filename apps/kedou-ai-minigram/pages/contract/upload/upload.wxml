@@ -1,0 +1,54 @@
+<!-- 科豆 AI - 上传页（按 v5 原型稿还原） -->
+<view class="page">
+  <!-- 拍照 / 相册 双大按钮 -->
+  <view class="up-actions">
+    <view class="up-act" bindtap="takePhoto" hover-class="up-act-hover">
+      <view class="ua-ic">📷</view>
+      <view class="ua-t">拍照识别</view>
+      <view class="ua-d">拍合同页面，自动 OCR</view>
+    </view>
+    <view class="up-act" bindtap="chooseAlbum" hover-class="up-act-hover">
+      <view class="ua-ic">🖼️</view>
+      <view class="ua-t">相册选择</view>
+      <view class="ua-d">从相册选合同照片</view>
+    </view>
+  </view>
+
+  <view class="up-or">— 或 粘贴 / 手输合同文字 —</view>
+
+  <!-- 粘贴 / 手输 -->
+  <textarea
+    class="up-text"
+    placeholder="把合同里的关键条款粘贴到这里…（可用下方示例自动填入）"
+    placeholder-class="up-text-ph"
+    value="{{contractText}}"
+    bindinput="onInput"
+    maxlength="8000"
+  ></textarea>
+
+  <!-- 示例合同（点一下自动填入并选好场景） -->
+  <view class="up-samples">
+    <view class="sl">示例合同（点一下自动填入）</view>
+    <view class="samples">
+      <view class="sample" data-key="loan" bindtap="useSample">消费贷</view>
+      <view class="sample" data-key="car" bindtap="useSample">购车融资租赁</view>
+      <view class="sample" data-key="insurance" bindtap="useSample">医疗保险</view>
+    </view>
+  </view>
+
+  <!-- 场景（不选则自动识别） -->
+  <view class="up-scene">
+    <view class="sl">合同场景（不选则自动识别）</view>
+    <view class="scene-chips">
+      <view class="scene-chip {{scene === '' ? 'active' : ''}}" data-scene="" bindtap="onSceneChange">自动识别</view>
+      <view class="scene-chip {{scene === 'consumer-loan' ? 'active' : ''}}" data-scene="consumer-loan" bindtap="onSceneChange">消费贷</view>
+      <view class="scene-chip {{scene === 'car-finance' ? 'active' : ''}}" data-scene="car-finance" bindtap="onSceneChange">购车</view>
+      <view class="scene-chip {{scene === 'medical-insurance' ? 'active' : ''}}" data-scene="medical-insurance" bindtap="onSceneChange">保险</view>
+    </view>
+  </view>
+
+  <button class="btn-primary" bindtap="startAnalyze" loading="{{analyzing}}" disabled="{{analyzing || ocring}}">
+    开始 AI 体检
+  </button>
+  <view class="up-note">内容仅用于本次解读 · 可随时删除 · 不用于模型训练</view>
+</view>

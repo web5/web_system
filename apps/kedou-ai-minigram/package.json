@@ -1,0 +1,26 @@
+{
+  "name": "@web-system/kedou-ai-minigram",
+  "version": "1.0.0",
+  "description": "科豆 AI 小程序（kedou-ai-minigram · WeChat Mini Program）",
+  "main": "app.ts",
+  "scripts": {
+    "dev": "echo 'Mini app development'",
+    "build": "echo 'Mini app build'",
+    "preview": "node scripts/preview.js",
+    "upload": "node scripts/upload.js",
+    "test": "jest tests --config tests/jest.config.js",
+    "test:watch": "jest tests --config tests/jest.config.js --watch"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.9.2",
+    "@types/wechat-miniprogram": "^3.4.10",
+    "@web-system/shared": "workspace:*",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "miniprogram-automator": "^0.12.1",
+    "miniprogram-ci": "^2.1.6",
+    "miniprogram-simulate": "^1.6.1",
+    "ts-jest": "^29.4.11"
+  }
+}

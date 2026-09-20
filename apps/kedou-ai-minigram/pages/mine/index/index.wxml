@@ -1,0 +1,35 @@
+<view class="page">
+  <view class="profile" bindtap="goProfile">
+    <view class="avatar">橙</view>
+    <view class="info">
+      <view class="n">{{nickname}}</view>
+      <view class="d">{{realName}} · {{phone}}</view>
+    </view>
+    <text class="arw">›</text>
+  </view>
+
+  <view class="vip" bindtap="goVip">
+    <view class="a">专业版</view>
+    <view class="b">深度润色 · 术语库 · 合同不限次评估</view>
+  </view>
+
+  <view class="list">
+    <view class="r" bindtap="goAppSettings"><text>小程序设置</text><text class="v">›</text></view>
+    <view class="r" bindtap="goTrSettings"><text>翻译设置</text><text class="v">›</text></view>
+    <view class="r" bindtap="goAsSettings"><text>合同评估设置</text><text class="v">›</text></view>
+  </view>
+
+  <view class="list">
+    <view class="r" bindtap="goHistory"><text>我的翻译</text><text class="v">128 条 ›</text></view>
+    <view class="r" bindtap="goContracts"><text>我的合同</text><text class="v">12 份 ›</text></view>
+    <view class="r" bindtap="clearCache"><text>清除缓存</text><text class="v">24.6MB ›</text></view>
+  </view>
+
+  <view class="list">
+    <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
+    <view class="r" bindtap="goAbout"><text>关于科豆 AI</text><text class="v">v1.0.0 ›</text></view>
+  </view>
+
+  <view class="foot">本服务使用生成式人工智能<text decode="{{true}}">
+</text>已依法完成大模型与算法备案</view>
+</view>

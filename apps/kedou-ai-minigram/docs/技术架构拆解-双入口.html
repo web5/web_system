@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术架构拆解 · 主对话 vs 发现 | 科豆 AI</title>
+<style>
+  :root{
+    --brand:#F97316; --brand-soft:#FFF2E6; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#E4F6F2;
+    --ink:#1A1D23; --ink-2:#4A5261; --ink-3:#7B8494;
+    --line:#E8E4DE; --page:#F7F4F0; --card:#FFFFFF;
+    --code-bg:#FBFAF8; --ok:#0E9B8C; --warn:#C2410C; --bad:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);
+       font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:56px 28px 100px}
+  header{margin-bottom:38px;padding-bottom:26px;border-bottom:2px solid var(--ink)}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-txt);font-weight:700}
+  h1{font-size:31px;line-height:1.32;margin:12px 0 14px;letter-spacing:-.4px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--ink-3)}
+  .meta b{color:var(--ink-2);font-weight:600}
+  h2{font-size:21px;margin:52px 0 8px;letter-spacing:-.2px;padding-top:6px}
+  h2 .n{display:inline-block;min-width:30px;color:var(--brand);font-variant-numeric:tabular-nums}
+  h2 + .sub{color:var(--ink-3);font-size:13.5px;margin:0 0 20px}
+  h3{font-size:16px;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;margin:22px 0 8px;color:var(--ink-2);font-weight:600}
+  p{margin:11px 0}
+  ul,ol{margin:11px 0;padding-left:22px}
+  li{margin:5px 0}
+  code{font:13px/1.5 "SF Mono",Menlo,Consolas,monospace;background:var(--code-bg);
+       border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--brand-txt)}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-left:2px solid var(--brand);
+      border-radius:8px;padding:14px 16px;overflow-x:auto;margin:14px 0;font-size:12.5px;line-height:1.62}
+  pre code{background:none;border:none;padding:0;color:var(--ink);font-size:12.5px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;background:var(--card);
+        border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  th{background:#FBF9F7;text-align:left;padding:10px 13px;font-weight:600;font-size:12.5px;
+     color:var(--ink-2);border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:10px 13px;border-bottom:1px solid #F1EDE8;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .callout{border-radius:10px;padding:14px 17px;margin:18px 0;font-size:14px;line-height:1.7}
+  .callout .t{display:block;font-weight:700;margin-bottom:5px;font-size:13.5px}
+  .warn{background:#FFF6EE;border:1px solid #FBD9BC;color:#7C3A0F}
+  .warn .t{color:var(--warn)}
+  .ok{background:var(--accent-soft);border:1px solid #B9E4DC}
+  .ok .t{color:var(--accent)}
+  .info{background:#F4F7FB;border:1px solid #D9E3F0;color:#2A3F5F}
+  .info .t{color:#2A3F5F}
+  .path{font:12.5px/1.5 "SF Mono",Menlo,monospace;color:var(--ink-2);background:#F2EFEA;
+        border-radius:4px;padding:1px 6px;display:inline-block}
+  .tag{display:inline-block;font-size:11.5px;padding:1.5px 8px;border-radius:20px;
+       font-weight:600;vertical-align:middle;white-space:nowrap}
+  .t-ok{background:var(--accent-soft);color:var(--accent)}
+  .t-no{background:#FDECEA;color:var(--bad)}
+  .t-p0{background:#FDECEA;color:var(--bad)}
+  .t-p1{background:#FFF6EE;color:var(--warn)}
+  .t-p2{background:#F1F3F6;color:var(--ink-2)}
+  .t-new{background:var(--brand-soft);color:var(--brand-txt)}
+
+  /* ===== 分层架构图 ===== */
+  .arch{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin:20px 0}
+  .layer{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:start;
+         padding:12px 0;border-bottom:1px dashed #EFEBE5}
+  .layer:last-child{border-bottom:none}
+  .layer .ln{font-size:12px;font-weight:700;color:var(--ink-3);text-align:right;padding-top:4px;letter-spacing:.02em}
+  .boxes{display:flex;flex-wrap:wrap;gap:8px}
+  .box{font-size:12.5px;padding:7px 11px;border-radius:7px;border:1px solid var(--line);
+       background:#FCFBF9;line-height:1.45}
+  .box b{display:block;font-size:13px;margin-bottom:1px}
+  .box span{color:var(--ink-3);font-size:11.5px}
+  .box.orange{background:var(--brand-soft);border-color:#FBD9BC}
+  .box.orange b{color:var(--brand-txt)}
+  .box.teal{background:var(--accent-soft);border-color:#B9E4DC}
+  .box.teal b{color:var(--accent)}
+  .box.ghost{background:#F6F5F3;border-style:dashed;color:var(--ink-2)}
+  .box.ghost b{color:var(--ink-2)}
+
+  /* ===== 双泳道对比 ===== */
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}
+  @media (max-width:760px){ .lanes{grid-template-columns:1fr} }
+  .lane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .lane.a{border-top:3px solid var(--brand)}
+  .lane.b{border-top:3px solid var(--accent)}
+  .lane h4{margin:0 0 4px;font-size:15px}
+  .lane .who{font-size:12px;color:var(--ink-3);margin:0 0 12px}
+  .step{display:flex;gap:9px;padding:6px 0;border-bottom:1px dashed #F2EFEA;font-size:13px;line-height:1.6}
+  .step:last-child{border-bottom:none}
+  .step .i{flex:0 0 20px;height:20px;border-radius:50%;background:#F2EFEA;color:var(--ink-2);
+           font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .lane.a .step .i{background:var(--brand-soft);color:var(--brand-txt)}
+  .lane.b .step .i{background:var(--accent-soft);color:var(--accent)}
+  .step .x f{font-style:normal}
+  .cost{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-3)}
+  .cost b{color:var(--ink-2)}
+
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="kicker">科豆 AI · 小程序</span>
+  <h1>技术架构拆解：主对话 与 发现</h1>
+  <div class="meta">
+    <span><b>2026-09-15</b></span>
+    <span>代码基线 <b>~/web_system_release</b>（ai-agent 运行面 · ai-service 配置面 · agent-core · mcp-gateway）</span>
+    <span>配套：<b>架构设计</b> · <b>意图识别实现方案</b></span>
+  </div>
+</header>
+
+<div class="callout ok">
+  <span class="t">一句话结论</span>
+  两个入口<b>共用同一条执行链路</b>（同一个接口、同一套 agent 引擎、同一套 SSE 与会话），
+  差别只在<b>「agentId 由谁决定」</b>这一点上：<br>
+  <b>发现</b> = 用户点卡片，意图<b>已知</b> → 前端显式传 <code>agentId</code>，后端零分类、零延迟；<br>
+  <b>主对话</b> = 只有一个输入框，意图<b>未知</b> → 后端加一层意图识别，先路由再执行。<br>
+  <b>所以「发现」是可以先上线、且不依赖意图识别的完整多 agent 架构</b>；意图识别只为主对话服务，两者并行不阻塞。
+</div>
+
+<h2>服务职责边界（重要修正）</h2>
+<p class="sub">后端不是「一个 ai-service」，而是配置面 + 运行面两个服务分工</p>
+
+<table>
+  <tr><th style="width:110px"></th><th>ai-service（3003）</th><th>ai-agent（6010）</th></tr>
+  <tr><td><b>角色</b></td><td><b>配置面 + 数据面</b></td><td><b>运行面</b></td></tr>
+  <tr><td><b>网关前缀</b></td><td><code>/api/ai/*</code> · <code>/api/agent-defs/*</code> · <code>/api/agent-runs/*</code></td><td><code>/api/ai-agent/*</code></td></tr>
+  <tr><td><b>管什么</b></td><td>agent 定义（systemPrompt / capabilities / version）、skill 正文、run 记录落库、通用 chat/image/tts</td><td><b>agent 执行（SSE）</b>、会话存储、MCP 客户端、skill provider、合同工具、权限 broker、OCR、模型目录</td></tr>
+  <tr><td><b>关键接口</b></td><td><code>GET /internal/agent-definitions</code>（供拉取）<br><code>POST /internal/agent-runs</code>（收埋点）<br><code>@Controller('admin/agent-defs')</code></td><td><code>POST /agent/run</code><br><code>GET /agent/conversations</code><br><code>POST /agent/permission/:id</code></td></tr>
+</table>
+
+<p><b>数据流</b>：ai-service 存定义 → ai-agent 定时轮询（<code>agent-def-sync</code>）拉 <code>published + enabled</code>
+→ 本地 <code>AgentRegistry.upsert()</code> 热更新 → 执行 → run 记录 push 回 ai-service 落库。</p>
+
+<div class="callout warn">
+  <span class="t">⚠️ 由此修正三处（此前文档写在了 ai-service 上，是错的）</span>
+  1. <b>意图识别与 IntentService 落在 ai-agent</b>（运行面），不是 ai-service<br>
+  2. <b>会话锁定的表是 ai-agent 侧的 <code>agent_conversations</code></b>，不是 ai-service 的 <code>conversations</code><br>
+  3. C 端应用清单接口加在 <b>ai-service</b>（配置面出清单），执行仍走 ai-agent —— 两者由网关分流，不冲突
+</div>
+
+<h2><span class="n">1</span>两个入口的本质差异</h2>
+<p class="sub">不是「两个页面」，是两种意图确定性的工程解法</p>
+
+<table>
+  <tr><th style="width:130px">维度</th><th>主对话（Chat tab）</th><th>发现（Discover tab）</th></tr>
+  <tr><td><b>意图来源</b></td><td>未知 —— 用户只给一句话</td><td>已知 —— 用户点了某张应用卡</td></tr>
+  <tr><td><b>agentId 谁定</b></td><td>后端分类（<code>auto</code>）</td><td>前端显式传值</td></tr>
+  <tr><td><b>路由开销</b></td><td>0–400ms（规则层约 0，LLM 层 150–400ms）</td><td><b>0</b> —— 天然绕过分类</td></tr>
+  <tr><td><b>是否需要兜底</b></td><td>需要，且 <code>general</code> 是 P0 安全阀</td><td>不需要 —— 用户已明确选择</td></tr>
+  <tr><td><b>会话内能否切 agent</b></td><td>能，且<b>应该</b>切（话题变了）</td><td><b>不应</b>切（用户就在这个应用里）</td></tr>
+  <tr><td><b>UI 形态</b></td><td>单一通用对话壳</td><td>可通用壳，也可专属 UI（翻译双语卡 / 合同报告）</td></tr>
+  <tr><td><b>依赖后端改动</b></td><td>需新建 IntentService + 分类器 + migration</td><td>几乎<b>零后端改动</b>，只缺一个应用清单接口</td></tr>
+  <tr><td><b>可独立上线</b></td><td>否，依赖 agent 全配好</td><td><b>是</b> —— 配一个 agent 就能上一个应用</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="t">⚠️ 一个反直觉的点：两条链路的「会话切换策略」是相反的</span>
+  主对话要做<b>切换检测</b>（话题变了要换 agent），发现页要做<b>切换免疫</b>。
+  举例：在翻译应用里说「再正式一点」——这句话本身像通用改写请求，若走切换检测会被判到 <code>general</code>，
+  翻译官就「丢了」。所以发现页进入的会话必须<b>锁定 agentId 且关闭意图重分类</b>，
+  只有用户显式 <code>@其它应用</code> 才切。这个对称性不提前设计，上线后必然出 bug。
+</div>
+
+<h2><span class="n">2</span>全景分层架构</h2>
+<p class="sub">灰色虚线 = 需要新建的部分</p>
+
+<div class="arch">
+  <div class="layer">
+    <div class="ln">入口层<br>小程序</div>
+    <div class="boxes">
+      <div class="box orange"><b>对话 tab</b><span>通用输入框 · 意图未知</span></div>
+      <div class="box orange"><b>发现 tab</b><span>应用卡片 · 意图已知</span></div>
+      <div class="box"><b>我的 tab</b><span>设置 · 历史 · 会员</span></div>
+    </div>
+  </div>
+  <div class="layer">
+    <div class="ln">网关层</div>
+    <div class="boxes">
+      <div class="box"><b>gateway</b><span>/api/* 按前缀分流</span></div>
+      <div class="box orange"><b>ai-agent · 6010</b><span>运行面 · @Controller('agent')</span></div>
+      <div class="box teal"><b>ai-service · 3003</b><span>配置面 · 定义 / 技能 / 埋点</span></div>
+    </div>
+  </div>
+  <div class="layer">
+    <div class="ln">路由层</div>
+    <div class="boxes">
+      <div class="box ghost"><b>IntentService</b><span>新增 · 落 ai-agent · 仅主对话经过</span></div>
+      <div class="box"><b>AgentRunDto.agentId</b><span>显式值 → 直接命中，不分类</span></div>
+    </div>
+  </div>
+  <div class="layer">
+    <div class="ln">执行层<br>agent-core</div>
+    <div class="boxes">
+      <div class="box teal"><b>AgentRegistry</b><span>DB 热同步，publish 即生效</span></div>
+      <div class="box teal"><b>AgentRunner</b><span>SSE 流式 · 多步 · 记忆压缩</span></div>
+      <div class="box teal"><b>CapabilityResolver</b><span>tool / mcp / skill 统一解析</span></div>
+    </div>
+  </div>
+  <div class="layer">
+    <div class="ln">能力层</div>
+    <div class="boxes">
+      <div class="box"><b>内置 tools</b><span>agent_definitions.tools</span></div>
+      <div class="box"><b>skills</b><span>skill-loader · admin/skills</span></div>
+      <div class="box"><b>MCP</b><span>mcp-gateway · mcp:模块/工具</span></div>
+      <div class="box"><b>LLM</b><span>ClientRegistry · 多厂商</span></div>
+    </div>
+  </div>
+  <div class="layer">
+    <div class="ln">数据层</div>
+    <div class="boxes">
+      <div class="box"><b>agent_definitions</b><span>定义 · 版本 · 能力（ai-service）</span></div>
+      <div class="box"><b>agent_conversations</b><span>会话 · 记忆（ai-agent）</span></div>
+      <div class="box"><b>agent_runs</b><span>埋点 · 计费</span></div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">3</span>两条链路并排时序</h2>
+<p class="sub">差别集中在第 2 步，其余完全一致</p>
+
+<div class="lanes">
+  <div class="lane a">
+    <h4>链路 A · 主对话（隐式路由）</h4>
+    <p class="who">入口：Chat tab，只有一个输入框</p>
+    <div class="step"><span class="i">1</span><span>用户在输入框说话，前端不传 <code>agentId</code>（或传 <code>'auto'</code>），带上 <code>conversationId</code></span></div>
+    <div class="step"><span class="i">2</span><span><b>后端 IntentService 解析意图</b>：显式 &gt; 会话锁定 &gt; 关键词规则 &gt; 小模型分类 &gt; <code>general</code> 兜底</span></div>
+    <div class="step"><span class="i">3</span><span>SSE 先推 <code>{type:'intent',agentId,confidence,via}</code> —— 必须在第一个 token 之前</span></div>
+    <div class="step"><span class="i">4</span><span>AgentRegistry 取定义 → AgentRunner 执行 → token 流</span></div>
+    <div class="step"><span class="i">5</span><span><code>final</code> 带 conversationId；<code>agent_id</code> 与判定流水写回会话</span></div>
+    <div class="cost"><b>新增成本：</b>分类延迟 0–400ms · 约 100–200 token/次（flash 档）· 需 migration · 需 general 兜底</div>
+  </div>
+
+  <div class="lane b">
+    <h4>链路 B · 发现（显式直达）</h4>
+    <p class="who">入口：Discover tab，点应用卡片</p>
+    <div class="step"><span class="i">1</span><span>前端从应用清单拿到 <code>agentId</code>，进入应用页（通用壳或专属 UI）</span></div>
+    <div class="step"><span class="i">2</span><span><b>跳过分类</b> —— 请求体里直接带 <code>agentId:'translate'</code>，后端老行为完全不变</span></div>
+    <div class="step"><span class="i">3</span><span>可选推 <code>{type:'intent',via:'explicit'}</code>，仅用于前端显示徽标，非必需</span></div>
+    <div class="step"><span class="i">4</span><span>AgentRegistry 取定义 → AgentRunner 执行 → token 流（<b>与 A 完全同一条</b>）</span></div>
+    <div class="step"><span class="i">5</span><span><code>final</code> 带 conversationId；会话锁定该 agent，<b>关闭意图重分类</b></span></div>
+    <div class="cost"><b>新增成本：</b>0 延迟 · 0 token · 后端几乎零改动（只缺一个 C 端清单接口）</div>
+  </div>
+</div>
+
+<h2><span class="n">4</span>共享什么、各改什么</h2>
+<p class="sub">这张表是排期的依据</p>
+
+<table>
+  <tr><th style="width:150px">模块</th><th style="width:88px">状态</th><th>说明</th></tr>
+  <tr><td><code>POST /ai/agent/run</code></td><td><span class="tag t-ok">共用</span></td><td>唯一入口，两条链路都走它。<code>agentId</code> 本来就是入参，显式传值 = 零改动</td></tr>
+  <tr><td>AgentRegistry</td><td><span class="tag t-ok">共用</span></td><td>DB 热同步，后台 publish 即生效，两条链路共享同一份定义</td></tr>
+  <tr><td>AgentRunner / SSE</td><td><span class="tag t-ok">共用</span></td><td>流式、多步、工具调用、记忆压缩，全部复用</td></tr>
+  <tr><td>CapabilityResolver</td><td><span class="tag t-ok">共用</span></td><td>tool / mcp / skill 三类能力统一解析</td></tr>
+  <tr><td>会话与记忆</td><td><span class="tag t-ok">共用</span></td><td><code>conversationId</code> 持久化 + compaction</td></tr>
+  <tr><td>埋点与计费</td><td><span class="tag t-ok">共用</span></td><td><code>agent_runs</code> 落库，结构一致</td></tr>
+  <tr><td colspan="3" style="background:#FCFBF9;font-weight:600;color:var(--ink-2)">— 以下为差异部分 —</td></tr>
+  <tr><td>IntentService + 分类器</td><td><span class="tag t-p0">主对话专用</span></td><td>新增 <code>intent-classifier.ts</code> + <code>intent.service.ts</code>。发现页<b>不需要</b></td></tr>
+  <tr><td><code>StreamEventType:'intent'</code></td><td><span class="tag t-p1">主对话必需</span></td><td>发现页可选复用（用来显示徽标），不影响主流程</td></tr>
+  <tr><td><code>agent_conversations.agent_id</code></td><td><span class="tag t-p0">两条都要</span></td><td>主对话用于锁定；发现页用于「切换免疫」+ 按应用筛选历史</td></tr>
+  <tr><td>C 端应用清单接口</td><td><span class="tag t-p0">发现页专用</span></td><td><b>当前不存在</b> —— <code>admin/agent-defs</code> 是管理端，C 端调不了</td></tr>
+  <tr><td>agent 展示元数据</td><td><span class="tag t-p0">发现页专用</span></td><td><b>当前不存在</b> —— 表里没有 icon / 描述 / 分类 / 排序 / 是否上架</td></tr>
+  <tr><td>应用前端页面</td><td><span class="tag t-p1">发现页专用</span></td><td>通用对话壳（0 成本）或专属 UI（每个应用单独开发）</td></tr>
+</table>
+
+<h2><span class="n">5</span>数据模型：两个必须加的字段</h2>
+
+<h3>5.1 <code>agent_definitions.entry</code> —— 发现页的应用卡片元数据</h3>
+<p>现在这张表只有<b>运行</b>需要的字段（prompt / model / capabilities），<b>完全没有展示</b>需要的字段。
+发现页要「数据驱动渲染」而不是写死卡片，就必须补一列：</p>
+
+<pre><code>-- migrations/0010（与本轮会话锁定同一条，尚未上线，可合并）
+ALTER TABLE agent_definitions
+  ADD COLUMN entry JSON NULL COMMENT '发现页展示元数据' AFTER enabled;
+
+/*
+  entry 结构：
+  {
+    "visible": true,              // 是否在发现页展示
+    "icon": "translate",          // 图标 key，前端映射
+    "title": "语言翻译官",
+    "desc": "中英日德，给你得体表达",
+    "category": "tool",           // 分组：chat/tool/life/knowledge
+    "sort": 10,
+    "ui": "custom",               // 'chat' 通用对话壳 | 'custom' 专属 UI
+    "route": "pages/translate/index/index",   // ui=custom 时的页面路径
+    "suggestions": ["把这段翻译成商务英语", "..."],  // 开场示例问题
+    "inputMode": ["text", "image"]            // 支持的输入形态
+  }
+*/</code></pre>
+
+<div class="callout info">
+  <span class="t">为什么用 JSON 而不是加 8 个列</span>
+  展示元数据会持续变（以后加「是否会员专属」「是否需要联网」「示例对话」……），
+  加列每次都要出 migration；<code>JSON</code> 一列解决，且和表上已有的 <code>capabilities</code> / <code>skills</code> / <code>memory</code> 保持一致的写法。
+</div>
+
+<h3>5.2 <code>agent_conversations.agent_id</code> + <code>intent_history</code></h3>
+<pre><code>-- 主对话：会话锁定（避免每轮重分类导致人格割裂）
+ALTER TABLE agent_conversations
+  ADD COLUMN agent_id VARCHAR(64) NULL COMMENT '锁定的 agent',
+  ADD COLUMN intent_history JSON NULL COMMENT '判定流水，可回溯误判',
+  ADD INDEX idx_conv_agent (agent_id);</code></pre>
+<p>发现页同样受益：带了 <code>agent_id</code> 才能做「我的翻译 128 条」这种按应用筛选的历史列表
+（原型里 <code>p-mine</code> 已经有这个入口，现在后端撑不起来）。</p>
+
+<h2><span class="n">6</span>需要新增的接口</h2>
+<p class="sub">整个后端只缺 1 个必需接口，其余 2 个可选</p>
+
+<table>
+  <tr><th style="width:210px">接口</th><th style="width:72px">优先级</th><th>说明</th></tr>
+  <tr>
+    <td><code>GET /ai/agents</code></td><td><span class="tag t-p0">P0</span></td>
+    <td><span class="tag t-new">新增</span> C 端只读应用清单。只返回 <code>enabled=1 AND status='published' AND entry-&gt;&gt;'$.visible'=1</code>，
+        字段仅限展示用（id / title / desc / icon / category / sort / ui / suggestions），<b>绝不返回 systemPrompt</b></td>
+  </tr>
+  <tr>
+    <td><code>GET /ai/conversations?agentId=</code></td><td><span class="tag t-p1">P1</span></td>
+    <td>现有接口加一个可选筛选参数，撑起「我的翻译 / 我的合同」这类按应用的历史</td>
+  </tr>
+  <tr>
+    <td><code>POST /ai/agent/run</code> 兼容</td><td><span class="tag t-p0">P0</span></td>
+    <td>只需给 <code>AgentRunDto.agentId</code> 加 <code>@IsOptional()</code>，显式传值的老调用一行都不用改</td>
+  </tr>
+</table>
+
+<div class="callout warn">
+  <span class="t">⚠️ 别让 C 端复用 admin/agent-defs</span>
+  <span class="path">servers/ai-service/src/agent-def/agent-def.controller.ts:21</span> 的 <code>@Controller('admin/agent-defs')</code>
+  是管理端域，带权限校验且返回全量字段（<b>含 systemPrompt</b>）。
+  让小程序直接调 = 提示词泄露。<code>GET /ai/agents</code> 必须是独立接口 + 字段白名单。
+</div>
+
+<h2><span class="n">7</span>关键决策：应用用「通用壳」还是「专属 UI」</h2>
+<p class="sub">这条决定发现页的开发成本量级</p>
+
+<table>
+  <tr><th style="width:180px">形态</th><th>做法</th><th>成本</th><th>适合</th></tr>
+  <tr>
+    <td><b>通用对话壳</b><br><code>entry.ui = 'chat'</code></td>
+    <td>所有应用共用一个聊天页，只换 <code>agentId</code>、标题、图标、开场示例</td>
+    <td><b>0 前端成本</b> —— 配一个 agent 就上一个应用</td>
+    <td>情感陪聊、百科科普、性格星座时运</td>
+  </tr>
+  <tr>
+    <td><b>专属 UI</b><br><code>entry.ui = 'custom'</code></td>
+    <td>独立页面 + 定制输入输出（翻译的双语对照卡、合同的评估报告）</td>
+    <td>每个应用 1–3 人日</td>
+    <td>语言翻译、合同评估（<b>已经有现成页面</b>）</td>
+  </tr>
+</table>
+
+<div class="callout ok">
+  <span class="t">建议：默认通用壳，只对「输出有结构」的应用做专属 UI</span>
+  判断标准很简单 —— <b>如果答案是一段话，用通用壳；如果答案是一张卡/一份报告，做专属 UI。</b><br>
+  现有 <span class="path">pages/translate/index/index</span> 和 <span class="path">pages/contract/chat/chat</span> 已经是 custom 形态，
+  直接挂上去即可，不用重写。新配的 4 个 agent（陪聊 / 百科 / 星座 / 工具）全部走通用壳，<b>当天就能上线</b>。
+</div>
+
+<h2><span class="n">8</span>小程序前端结构</h2>
+<p class="sub">发现页必须由接口驱动，不能写死卡片</p>
+
+<pre><code>tabBar（三 tab）
+├── 对话  pages/chat/index/index        ← 通用壳，agentId 不传 / 'auto'
+├── 发现  pages/discover/index/index    ← GET /ai/agents 驱动渲染
+│         ├── ui='chat'   → navigateTo(pages/chat, { agentId, title })
+│         └── ui='custom' → navigateTo(entry.route, { agentId })
+└── 我的  pages/mine/index/index        ← 设置 · 历史 · 会员
+
+// 发现页渲染逻辑（伪代码）
+onShow() {
+  const apps = await getAgents();              // GET /ai/agents
+  this.setData({ groups: groupBy(apps, 'category') });
+}
+
+onTapApp(e) {
+  const { agentId, ui, route, title } = e.currentTarget.dataset;
+  if (ui === 'custom') {
+    wx.navigateTo({ url: `${route}?agentId=${agentId}&title=${title}` });
+  } else {
+    wx.navigateTo({ url: `/pages/chat/index/index?agentId=${agentId}&title=${title}` });
+  }
+}</code></pre>
+
+<p>要点：</p>
+<ul>
+  <li><b>发现页不写死卡片</b> —— 后台新增一个 agent 并勾 <code>visible</code>，小程序刷新即出现，不用发版。</li>
+  <li><b>通用壳复用同一个页面</b> —— <code>pages/chat</code> 用 <code>options.agentId</code> 区分是「主对话」还是「某应用」，
+      有值 = 显式模式（锁 agent、不重分类），无值 = 主对话模式（走意图路由）。</li>
+  <li><b>专属 UI 页面也复用同一条请求管线</b> —— 只是 UI 不同，底层都是 <code>agent/run</code> + SSE。</li>
+</ul>
+
+<h2><span class="n">9</span>会话归属与隔离</h2>
+<p class="sub">⚠️ 这条不拍板，上线后历史列表会串味</p>
+
+<p>加了 <code>agent_id</code> 之后，一个现实问题：用户在「语言翻译官」里的 128 条记录，
+要不要出现在主对话的历史列表里？三个选项：</p>
+
+<table>
+  <tr><th style="width:150px">方案</th><th>行为</th><th>取舍</th></tr>
+  <tr><td><b>A 完全隔离</b><br><span class="tag t-p1">推荐</span></td>
+    <td>发现页的应用会话进「我的 → 各应用历史」，主对话列表只显示经由主对话产生的会话</td>
+    <td>心智最清晰：应用是工具，对话是聊天。缺点是同一话题的记录分两处</td></tr>
+  <tr><td><b>B 全合并</b></td><td>所有会话进同一个列表，用 agent 徽标区分</td>
+    <td>实现最省事，但主对话会被工具性记录淹没（翻译 100 条把聊天挤走）</td></tr>
+  <tr><td><b>C 合并 + 筛选</b></td><td>默认显示主对话，顶部提供「全部 / 翻译 / 合同」筛选</td>
+    <td>折中，需多做一套筛选 UI</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="t">⚠️ 需要你拍板</span>
+  我倾向 <b>A</b>：原型里「我的」页已经把「我的翻译 128 条」单独列出来了，说明你心里本来就是隔离的心智。
+  但这条影响列表接口和 UI，定了我才能写死。
+</div>
+
+<h2><span class="n">10</span>落地拆分：两条线可并行</h2>
+
+<table>
+  <tr><th style="width:44px">#</th><th style="width:290px">任务</th><th style="width:78px">依赖</th><th>产出</th></tr>
+  <tr><td>1</td><td>后台配 6 个 agent（含 <code>general</code> 兜底）</td><td>无</td><td>DB 记录 + systemPrompt + capabilities</td></tr>
+  <tr><td>2</td><td><code>agent_definitions.entry</code> 字段 + migration 0010</td><td>无</td><td>应用可配置展示元数据</td></tr>
+  <tr><td>3</td><td><code>GET /ai/agents</code> C 端清单接口</td><td>2</td><td>发现页数据来源</td></tr>
+  <tr><td>4</td><td><b>发现页上线</b>（清单渲染 + 通用壳 + 挂现有两个专属页）</td><td>1,3</td><td><b>可独立交付</b>，4 个新应用零前端成本</td></tr>
+  <tr><td>5</td><td><code>AgentRunDto.agentId</code> 加 <code>@IsOptional()</code></td><td>无</td><td>为 auto 铺路（一行）</td></tr>
+  <tr><td>6</td><td>IntentService + 分类器 + <code>'intent'</code> 事件</td><td>1,5</td><td>主对话具备路由能力</td></tr>
+  <tr><td>7</td><td><code>agent_conversations.agent_id</code> + 会话锁定 + 切换免疫</td><td>6</td><td>主对话人格稳定；发现页不串味</td></tr>
+  <tr><td>8</td><td><b>主对话灰度上线</b>（<code>INTENT_ROUTING_ENABLED</code> 默认关）</td><td>6,7</td><td>配好后开开关</td></tr>
+</table>
+
+<div class="callout ok">
+  <span class="t">排期上的好消息</span>
+  <b>第 1–4 步是一条完整可交付的线</b>（发现页多应用），完全不依赖第 6–8 步的意图识别。
+  也就是说：即使意图识别延后，<b>「发现」这一半的多 agent 架构也能先跑起来、先验证</b>。
+  反过来不成立 —— 主对话必须等 agent 全配好才能开灰度。
+</div>
+
+<h2><span class="n">11</span>未决 / 需要拍板</h2>
+<table>
+  <tr><th style="width:230px">问题</th><th style="width:74px">阻塞</th><th>我的建议</th></tr>
+  <tr><td>会话归属（第 9 节 A/B/C）</td><td><span class="tag t-p1">P1</span></td><td>选 A 完全隔离，与原型「我的翻译」入口一致</td></tr>
+  <tr><td>哪些应用做专属 UI</td><td><span class="tag t-p1">P1</span></td><td>只有翻译、合同评估做（已有页面），其余通用壳</td></tr>
+  <tr><td>星座时运的合规口径</td><td><span class="tag t-p0">P0</span></td><td>命理/占卜类敏感，prompt 内置免责声明，<b>先确认再做</b></td></tr>
+  <tr><td><code>entry.icon</code> 用图标字体还是图片 URL</td><td><span class="tag t-p2">P2</span></td><td>先用 key + 前端映射，省一套资源托管</td></tr>
+  <tr><td>应用是否需要「会员专属」标记</td><td><span class="tag t-p2">P2</span></td><td><code>entry</code> 是 JSON，以后加字段即可，现在不做</td></tr>
+</table>
+
+<footer>
+  配套文档：<code>多Agent意图路由-架构设计.{html,md}</code> · <code>意图识别-实现方案.{html,md}</code><br>
+  代码基线：<code>~/web_system_release</code>（servers/ai-agent 运行面 · servers/ai-service 配置面 · packages/agent-core · servers/mcp-gateway）
+</footer>
+
+</div>
+</body>
+</html>

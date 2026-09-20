@@ -38,7 +38,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         用户层                               │
-│                 微信小程序 (mini-contract)                   │
+│                 微信小程序 (kedou-ai-minigram)                   │
 └──────────────────────┬──────────────────────────────────────┘
                        │ HTTPS
                        ▼
@@ -618,7 +618,7 @@ pnpm run start:dev
 
 3. **启动小程序**
 - 打开微信开发者工具
-- 导入项目：`{{WORKSPACE_DIR}}/apps/mini-contract`
+- 导入项目：`{{WORKSPACE_DIR}}/apps/kedou-ai-minigram`
 - 配置 AppID：`wxe7635bce95e7cff0`
 
 ### 生产环境
