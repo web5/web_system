@@ -1649,15 +1649,26 @@ export class PipelineService {
     if (result.status === 'succeeded') {
       p.status = 'succeeded';
       p.endTime = Date.now();
-      // 版本指针与旧链语义一致：发布成功即切指针（写当前版本 = 本次发布版本）
-      await this.registry.setPointer({
-        env: p.env,
-        moduleKey: p.moduleKey,
-        currentVersion: p.versionTag!,
-        deployedBy: p.operator || 'unknown',
-        taskId: p.id,
-      });
-      p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${p.versionTag}`];
+      // 版本指针语义分域（用户 2026-09-21 反馈）：
+      //   微前端/前端 = 发布即切指针（gateway 按 envId/<version> 加载产物）；
+      //   后端服务 = 发布只到「产物+版本记录」，**不切指针**——部署是独立动作
+      //   （服务详情「部署」Tab 选版本 → deployVersion 落 dist+重启+探活），
+      //   让「已上传但未重启」成为可见中间态（ServiceDetail 部署 Tab 的设计约定）。
+      if (p.moduleType !== 'backend') {
+        await this.registry.setPointer({
+          env: p.env,
+          moduleKey: p.moduleKey,
+          currentVersion: p.versionTag!,
+          deployedBy: p.operator || 'unknown',
+          taskId: p.id,
+        });
+        p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${p.versionTag}`];
+      } else {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[orchestration] 发布完成（产物+版本记录就绪，未改指向）——到「服务详情 → 部署」执行部署后生效`,
+        ];
+      }
     } else if (result.status === 'aborted' || this.cancelled.has(p.id)) {
       p.status = 'cancelled';
       p.endTime = Date.now();
