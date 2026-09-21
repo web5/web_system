@@ -1629,6 +1629,12 @@ export class PipelineService {
         log: (line) => {
           p.logs = [...(p.logs ?? []), line];
         },
+        // 任务级状态落库（specs/pipeline-task-status/design.md §3）：
+        // 状态变化即 save（每任务约 2 次写库），前端详情页画布据此高亮走过的路径。
+        onTaskStatus: async (step, task, status) => {
+          p.taskStates = { ...(p.taskStates ?? {}), [`${step.id}/${task.id}`]: status };
+          await this.save(p);
+        },
         shouldAbort: () => this.cancelled.has(p.id),
       },
       resumeAfter ? { skipThroughStep: resumeAfter } : undefined,
