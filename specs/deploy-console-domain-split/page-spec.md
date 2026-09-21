@@ -388,6 +388,26 @@
 - 涉及 Token：`--ws-brand-100`（行高亮）、`--ws-text-tertiary`（副行小字）
 - 交互影响：补「保存中防重复提交」「主机未登记 → 400 明确报错」两格
 
+---
+
+## 10. 补充规格 · 时间显示口径统一（2026-09-21）
+
+> 触发：用户在看「应用详情 → 部署」时发现发布时间比系统时间**早 8 小时**。
+> 排查结论：**DB 侧无偏差**（本地 MySQL `@@time_zone=SYSTEM`（CST），`deploy_app_env_versions.deployed_at` 与 `NOW()` 同秒；全库 259 个时间列扫描无「未来时间」）；
+> 偏差出在**前端渲染** —— 后端 `Date` 经 JSON 序列化为 ISO 字符串（UTC，如 `2026-09-21T10:49:17.000Z`），页面**原样输出**，未做本地化。
+
+**缺陷点（本次修复）**：`apps/deploy-console/src/views/AppDetail.vue` 两处直接渲染 `deployedAt`
+
+1. 概览 Tab · 环境卡片 meta：`{{ e.deployedAt ? e.deployedAt : '尚未发布' }}`
+2. 部署 Tab ·「发布时间」列：`{{ record.deployedAt || '—' }}`
+
+**口径（与本页原型部署 Tab 的 `09-18 10:02` 一致）**：所有面向用户的时间一律**本地时区格式化后展示**，禁止直接输出后端原始时间串（ISO/UTC 或裸 datetime）。
+
+- 统一格式：`YYYY-MM-DD HH:mm:ss`（dayjs）；表格单元格沿用 `.ws-tabular`
+- 毫秒时间戳字段（`startTime` / `endTime`）沿用既有 `formatTime`（dayjs）口径，不改
+- 涉及 Token：无（仅文本内容）；复用既有 `.ws-tabular`
+- 影响面复核：仅 `AppDetail.vue` 命中；`AuditLog` / `Dashboard` / `NotificationCenter` / `CanaryCenter` / `VersionDeploy` / `PipelineCenter` / `PipelineDetail` 均为 dayjs 或 `new Date()` 本地化，无同类问题
+
 ### 9.3 前置依赖 · 主机管理 `/hosts`（最小版）
 
 - §6 已有完整规格；本期只落地**最小集**，够支撑上面两个页面：
