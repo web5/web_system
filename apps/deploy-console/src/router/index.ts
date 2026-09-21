@@ -70,12 +70,26 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/EnvironmentDetail.vue'),
         meta: { title: '环境详情' },
       },
+      {
+        // 版本部署（微前端域）：选已有版本直接部署，与发布流水线解耦
+        path: 'deploys/micro',
+        name: 'VersionDeployMicro',
+        component: () => import('@/views/VersionDeploy.vue'),
+        meta: { title: '版本部署' },
+      },
       // ---- API 网关域 ----
       {
         path: 'services',
         name: 'ServiceManager',
         component: () => import('@/views/ServiceManager.vue'),
         meta: { title: '服务管理' },
+      },
+      {
+        // 版本部署（API 网关域）：与 /deploys/micro 共用组件，按 route.params.domain 区分
+        path: 'deploys/backend',
+        name: 'VersionDeployBackend',
+        component: () => import('@/views/VersionDeploy.vue'),
+        meta: { title: '版本部署' },
       },
       {
         path: 'services/:key',

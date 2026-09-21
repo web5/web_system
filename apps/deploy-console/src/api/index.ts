@@ -90,6 +90,26 @@ export const deployApi = {
       to: string
       status: string
     }>,
+  /**
+   * 列出发布版本记录（deploy_versions，按 releasedAt 倒序）。
+   * 「版本部署」抽屉的版本列表数据源（含分支/commit/发布人元信息）。
+   */
+  versions: (env?: string, component?: string) =>
+    http.get('/deploy/versions', { params: { env, component } }) as Promise<
+      {
+        id: string
+        env: string
+        component: string
+        versionTag: string
+        gitCommit?: string
+        gitBranch?: string
+        releasedBy?: string
+        releasedAt: string
+        taskId?: string
+        status: string
+        note?: string
+      }[]
+    >,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string
