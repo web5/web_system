@@ -311,12 +311,9 @@ function drawWires() {
 
 <template>
   <div class="orch-editor">
-    <!-- 页头按钮组：取消 / 删除（步骤级，走画布）/ 保存（整条流水线） -->
+    <!-- 保存/取消统一在页面页头（与基本信息共用一组按钮），画布内不再重复 -->
     <div class="orch-head">
-      <span class="hint">步骤（名称+介绍，不连线）→ 任务（箭头串联、多任务分叉）→ 动作（脚本，紧贴任务头）</span>
-      <div class="spacer" />
-      <a-button @click="cancelEdit" :disabled="!dirty">取消</a-button>
-      <a-button type="primary" :loading="saving" @click="save">保存</a-button>
+      <span class="hint">步骤（名称+介绍，不连线）→ 任务（箭头串联、多任务分叉）→ 动作（脚本，紧贴任务头）。修改后点页面右上「保存」。</span>
     </div>
 
     <a-spin :spinning="loading">
