@@ -11,6 +11,12 @@ updatedAt: 2026-09-21T00:00:00.000Z
 > 品牌端（portal / kedou-ai-minigram）由本规则覆盖 —— 补 DR-5 的规则真空。
 > 动作门与机器强制（L3 hook）设计见 `specs/kit-sop-enforcement/design.md` §3。
 
+## 触发范围（本规则的路径判定，与 PreToolUse hook 判定一致）
+
+- `apps/kedou-ai-minigram/**` 的页面 / 组件 / `app.json` / `*.wxml` / `*.wxss`
+- `apps/portal/**` 的 `.vue` 界面文件
+- 真相源：`specs/kit-sop-enforcement/design.md` §3.2（hook 判定若与此不一致，以设计文档为准并回来修本清单）
+
 ## 动作门（顺序不可跳）
 
 1. 原型优先：先改 `apps/<app>/prototype/index.html`（或 `docs/ui/prototypes/**`）+ 同步页面规格 `specs/**/page-spec*.md`

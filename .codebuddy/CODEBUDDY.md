@@ -20,26 +20,19 @@
 
 ## 2.5 动作门（不可跳，且与用户措辞无关）
 
-> 设计：`specs/kit-sop-enforcement/design.md` §3.2。本门有机器强制（`.codebuddy/settings.json` PreToolUse hook，L3）；应急出口 `UI_GATE=off`，豁免记「微调豁免」一行即可。
-
-凡本次改动涉及下列任一路径 —— **无论用户如何表达（含「间距高了」「太丑」「隐藏掉」这类微调措辞）**：
-
-- `apps/*/pages/**`、`apps/*/components/**`、`packages/ui/**`、`app.json`
-- 任何 `*.wxml` / `*.wxss` / `*.vue` 的界面文件
+凡本次改动是 **UI 源码**（品牌端小程序页面/组件/界面文件、admin 系 Vue 界面）——**无论用户如何表达（含「间距高了」「太丑」「隐藏掉」这类微调措辞）**：
 
 必须按序执行，**不得跳步**：
 
-1. 先改原型稿（`apps/*/prototype/index.html` 或 `docs/ui/prototypes/**`）+ 同步页面规格（`specs/**/page-spec*.md`）
-   - **原型稿必须整合进该产品模块既有的整体原型稿**（先识别模块归属，不另起孤立 HTML；对比稿拍板后收敛回整体原型，细则见 `@brand-interface` 规则「原型整合约定」）
-2. 过 `ux-prototype-designer` 的独立交互质检（`references/ux-review-checklist.md`）
+1. **原型先行**：先改原型稿 + 同步页面规格；原型必须**整合进该产品模块既有的整体原型稿**（先识别模块归属，不另起孤立 HTML）——细则见 `@brand-interface`「原型整合约定」，admin 系见 `@ui-interface`
+2. 过 `ux-prototype-designer` 技能的**独立交互质检**
 3. **用户确认原型** ← 人审节点，缺此步不得落码
-4. 把原型/规格**单独 commit**（不得与 UI 源码混在同一 commit），记下其 sha ← 用户已确认的机器凭证
-5. 才编辑落地代码（WXML/WXSS/Vue）；该 UI commit 的 message 必须带一行 `Proto: <sha>`
+4. 原型/规格**单独 commit**（不得与 UI 源码混在同一 commit），记下其 sha ← 用户已确认的机器凭证
+5. 才落码；该 UI commit 的 message 必须带一行 `Proto: <sha>`
 
-> 第 4/5 步由 `.githooks/commit-msg` 强制，CI 红线 R10 兜底（详见 `specs/kit-sop-enforcement/design.md` §3.8）。
-
-例外：纯后端 / 非 UI 文件改动不受本门约束。
-豁免：确属纯视觉微调（如仅调间距）时，在原型或 page-spec 中记一行「微调豁免」即可通行；批量机械改动/紧急修复用 `UI_GATE=off`。
+- **机器强制与应急出口**：本门有 hook 强制与 CI 红线兜底（设计与实现见 `specs/kit-sop-enforcement/design.md`）；应急出口 `UI_GATE=off`。
+- 例外：纯后端 / 非 UI 文件改动不受本门约束；豁免：确属纯视觉微调（如仅调间距）在原型或规格记一行「微调豁免」即可通行。
+- 本节只规定**顺序与语义**；触发路径清单、原型/规格/质检清单的文件位置、hook 配置等细节一律在对应规则与设计文档中检索，不在本文复制。
 
 ## 3 agent 安全
 
