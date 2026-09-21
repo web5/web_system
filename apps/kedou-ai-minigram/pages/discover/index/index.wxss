@@ -1,0 +1,87 @@
+/* ===== 科豆 AI - 发现页（tab 2） ===== */
+page {
+  background: var(--page-bg);
+}
+
+.page {
+  min-height: 100vh;
+  background: var(--page-bg);
+  /* 自定义 tabBar 不占原生层，页面需自行留出底部空间，否则内容被它盖住 */
+  padding: 24rpx 32rpx calc(150rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.sec-t {
+  font-size: 25rpx;
+  color: var(--t2);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 8rpx 4rpx 16rpx;
+}
+.sec-t.mt { margin-top: 40rpx; }
+.sec-t .em { font-size: 22rpx; color: var(--t3); }
+
+/* 能力卡 */
+.cap {
+  display: flex;
+  align-items: center;
+  background: var(--card);
+  border-radius: 24rpx;
+  padding: 28rpx 26rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(20, 30, 60, .04);
+}
+.cap:active { opacity: .75; }
+
+.ic {
+  flex: 0 0 76rpx;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 22rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand-txt);
+  margin-right: 22rpx;
+}
+.ic.t { background: var(--brand-soft); color: var(--brand-txt); }
+.ic.c { background: var(--accent-soft); color: var(--accent); }
+
+.tx { flex: 1; min-width: 0; }
+.tx .b {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--t1);
+}
+.tx .e {
+  font-size: 23rpx;
+  color: var(--t3);
+  margin-top: 6rpx;
+}
+
+.go { font-size: 34rpx; color: var(--t3); margin-left: 12rpx; }
+
+/* 即将上线 */
+.cap.soon { opacity: .6; }
+.cap.soon .ic { background: rgba(60, 60, 67, .06); color: var(--t3); }
+.tag {
+  font-size: 20rpx;
+  color: var(--t3);
+  background: rgba(60, 60, 67, .06);
+  border-radius: 8rpx;
+  padding: 4rpx 12rpx;
+  margin-left: 12rpx;
+  flex-shrink: 0;
+}
+
+.foot {
+  margin-top: 48rpx;
+  font-size: 22rpx;
+  color: var(--t3);
+  text-align: center;
+  line-height: 1.8;
+}

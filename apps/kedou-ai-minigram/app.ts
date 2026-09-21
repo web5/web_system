@@ -1,5 +1,20 @@
 import { login, isLoggedIn } from './services/auth';
 
+/**
+ * 后端地址按运行环境切换：
+ * - 开发者工具：local.kedouai.com（本机 hosts → nginx → gateway）
+ * - 真机（预览/体验版/远程调试）：dev 环境公网网关（DNS → nginx SSL → dev gateway）。
+ *   走 https + 正式域名，真机无需开「开发调试」跳域名校验。
+ *   ⚠️ 小程序正式上线前需在微信公众平台把 dev.kedouai.com 加入 request 合法域名（或体验版勾选「不校验合法域名」）。
+ */
+const IS_DEVTOOLS = (() => {
+  try {
+    return wx.getSystemInfoSync().platform === 'devtools';
+  } catch {
+    return false;
+  }
+})();
+
 App<IAppOption>({
   onLaunch() {
     // 把 apiBase 同步落到 storage，供后续请求绕过 wx.getApp 直接读，
@@ -26,7 +41,7 @@ App<IAppOption>({
     userInfo: null,
     token: '',
     refreshToken: '',
-    apiBase: 'http://local.kedouai.com',
+    apiBase: IS_DEVTOOLS ? 'http://local.kedouai.com' : 'https://dev.kedouai.com',
     bianbianOrigin: undefined,
     bianbianDesc: undefined,
     bianbianResult: undefined,

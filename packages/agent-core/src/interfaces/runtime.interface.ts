@@ -41,6 +41,14 @@ export interface StreamEvent {
    * 客户端据此调用确认接口（approve/reject），服务端挂起工具执行直到确认。
    */
   requestId?: string;
+  /**
+   * card 事件专用载荷：结构化卡片。
+   * kind 区分卡片类型（一期 'music'），其余字段随 kind 扩展。
+   */
+  card?: {
+    kind: string;
+    [key: string]: unknown;
+  };
   /** 本轮对话累计的 token 消耗（final/error 事件携带，来自大模型返回的 usage） */
   usage?: {
     promptTokens: number;

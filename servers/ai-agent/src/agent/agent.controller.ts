@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -89,6 +90,24 @@ export class AgentController {
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
     };
+  }
+
+  /** 删除会话（仅会话所属用户；不可恢复，前端有二次确认） */
+  @Delete('conversations/:id')
+  @ApiOperation({ summary: '删除我的 Agent 对话' })
+  async deleteConversation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: Request,
+  ) {
+    const userId = String((req as any).user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    const ok = await this.conversationQueryService.deleteConversation(userId, id);
+    if (!ok) {
+      throw new NotFoundException('对话不存在');
+    }
+    return { ok: true };
   }
 
   /** Agent 运行（C 端，SSE 流式，含工具调用过程） */
@@ -247,6 +266,18 @@ export class AgentController {
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+        // 结构化卡片：把 present-music-card 的工具结果转成 card 事件下发前端。
+        // 引擎只认识通用 tool_result，卡片语义在这里收口；steps 仍记原始 tool_result
+        // （内容即卡片 JSON），历史回看据此还原卡片而不退化成文本。
+        if (event.type === 'tool_result' && event.name === 'present-music-card' && event.content) {
+          try {
+            const card = JSON.parse(event.content);
+            res.write(`data: ${JSON.stringify({ type: 'card', card, step: event.step })}\n\n`);
+          } catch {
+            this.logger.warn('歌曲卡片载荷解析失败，跳过 card 事件');
+          }
+        }
         // content_delta / reasoning_delta 是逐字增量（可能上千条），只透传前端用于逐字渲染，
         // 不落库 steps（避免 agent-runs 表被污染/膨胀）
         if (event.type !== 'content_delta' && event.type !== 'reasoning_delta') {

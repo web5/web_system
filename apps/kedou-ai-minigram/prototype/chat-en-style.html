@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kedou-ai-minigram · 普通对话英文回复排版方案</title>
+<style>
+  :root {
+    --stage: #ECE8E3;
+    --nav-bg: #FFFFFF;
+    --page-bg: #F7F4F0; --card: #FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand: #F97316; --brand-50: #FFF7ED; --brand-100: #FFEDD5; --brand-txt: #EA580C;
+    --accent: #0E9B8C; --accent-soft: #E4F6F2;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--stage); color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-size: 14px; line-height: 1.6; padding: 20px 12px 48px;
+  }
+  .head { text-align: center; margin-bottom: 18px; }
+  .head h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .head p { margin: 0; font-size: 12px; color: var(--t2); }
+
+  .stage { display: flex; gap: 28px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+  .col { width: 330px; }
+  .col-t { text-align: center; margin-bottom: 10px; }
+  .col-t b { font-size: 14px; font-weight: 600; }
+  .col-t span { display: block; font-size: 11.5px; color: var(--t2); margin-top: 2px; }
+  .col-t .rec { color: var(--brand-txt); }
+
+  /* ---------- 手机壳（简化版，375 宽） ---------- */
+  .phone {
+    width: 330px; height: 640px; background: var(--page-bg); border-radius: 40px;
+    position: relative; overflow: hidden; box-shadow: 0 16px 44px rgba(20,30,60,.16);
+    border: 1px solid var(--line); display: flex; flex-direction: column; margin: 0 auto;
+  }
+  .navbar { height: 44px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--nav-bg); border-bottom: .5px solid var(--line); font-size: 16px; font-weight: 600; }
+  .body { flex: 1; overflow-y: auto; padding: 12px 14px 16px; }
+  .body::-webkit-scrollbar { width: 0; }
+
+  /* ---------- 消息基础（与落地页 chat/index 同构） ---------- */
+  .msg { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+  .msg.user { flex-direction: row-reverse; }
+  .avatar {
+    width: 24px; height: 24px; border-radius: 50%; flex: none;
+    background: var(--brand-50); color: var(--brand);
+    display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+    margin-top: 2px;
+  }
+  .bubble {
+    flex: 1; background: var(--card); border-radius: 8px; padding: 9px 10px;
+    font-size: 13px; color: var(--t1); line-height: 1.6; word-break: break-all;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  }
+  .msg.user .bubble { flex: 0 1 auto; max-width: 78%; background: var(--brand-50); }
+
+  /* 今日一句引用（既有元素，各方案一致） */
+  .quote-k { font-size: 10.5px; color: var(--brand); margin-bottom: 4px; }
+  .quote-en { margin-top: 5px; font-size: 11.5px; color: var(--t3); line-height: 1.6; }
+
+  /* 意图徽标 */
+  .agent-badge-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
+  .agent-badge {
+    display: flex; align-items: center; gap: 3px; padding: 3px 9px; border-radius: 999px;
+    background: var(--brand-50); color: var(--brand); font-size: 10px;
+  }
+  .agent-badge i { width: 4px; height: 4px; border-radius: 50%; background: var(--brand); }
+
+  /* ============ 现状：纯文本 ============ */
+  .as-is { font-size: 13px; }
+
+  /* ============ 方案 A：译文卡片气泡 ============ */
+  .en-card { padding: 0; overflow: hidden; }
+  .en-card .head-row { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
+  .en-card .tag {
+    font-size: 10px; color: #fff; background: var(--brand); border-radius: 4px;
+    padding: 1px 6px; font-weight: 500; flex: none;
+  }
+  .en-card .meta { font-size: 11px; color: var(--t3); }
+  .en-card .en-main { padding: 8px 12px 12px; font-size: 16px; font-weight: 600; line-height: 1.5; color: var(--t1); }
+  .en-card .note {
+    padding: 8px 12px; border-top: .5px solid var(--line);
+    font-size: 12px; color: var(--t2); line-height: 1.6;
+  }
+  .en-card .ops { display: flex; border-top: .5px solid var(--line); }
+  .en-card .ops span {
+    flex: 1; text-align: center; padding: 8px 0; font-size: 12px; color: var(--t2);
+  }
+  .en-card .ops span + span { border-left: .5px solid var(--line); }
+  .en-card .ops span:active { background: rgba(60,60,67,.04); }
+
+  /* ============ 方案 B：轻量双层排版 ============ */
+  .en-lite .en-line { font-size: 15.5px; font-weight: 500; line-height: 1.55; color: var(--t1); margin-bottom: 4px; }
+  .en-lite .cn-line { font-size: 12px; color: var(--t2); line-height: 1.6; }
+
+  /* ============ 方案 C：橙线引读块 ============ */
+  .en-quote-block {
+    background: var(--brand-50); border-left: 3px solid var(--brand); border-radius: 0 8px 8px 0;
+    padding: 8px 10px; margin-bottom: 6px;
+    font-size: 15px; font-weight: 500; line-height: 1.55; color: var(--t1);
+  }
+  .en-quote-cn { font-size: 12px; color: var(--t2); line-height: 1.6; }
+
+  .foot-note { margin-top: 8px; font-size: 10px; color: var(--t3); text-align: center; }
+  .badge { display:inline-block; font-size:10px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 6px; margin-left: 4px; }
+
+  /* ---------- 流式时序补充 ---------- */
+  .section-t { text-align: center; margin: 44px 0 14px; }
+  .section-t h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .section-t p { margin: 0; font-size: 12px; color: var(--t2); }
+  /* 流式：翻译中动点 */
+  .typing { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--t2); }
+  .tdots { display: flex; gap: 3px; }
+  .tdot { width: 4px; height: 4px; border-radius: 50%; background: var(--brand); animation: blink 1.2s infinite; }
+  .tdot:nth-child(2) { animation-delay: .2s; }
+  .tdot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity:.3 } 50% { opacity:1 } }
+  /* 流式中：英文主文区 + 光标 */
+  .caret { display: inline-block; width: 2px; height: 15px; background: var(--brand); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+  /* 操作行禁用态 */
+  .ops.dis span { color: var(--t3); }
+  /* 骨架：未到达区域的占位条 */
+  .sk { height: 9px; border-radius: 4px; background: rgba(60,60,67,.07); }
+  .sk.w60 { width: 60%; }
+  .stage-note { font-size: 11.5px; color: var(--t2); text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>普通对话 · 英文回复排版方案</h1>
+    <p>场景：「谢谢你，英语怎么说」在主对话中路由到翻译官，回复含英文。对照现状给 3 个方案 · kedou-ai-minigram</p>
+  </div>
+
+  <div class="stage">
+    <!-- ============ 现状 ============ -->
+    <div class="col">
+      <div class="col-t"><b>现状（基线）</b><span>英文与中文解释挤在同一段纯文本里，无层级</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble as-is">Thank you. 更正式用 Thank you, 口语随意用 Thanks。</div>
+          </div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">再正式一点怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble as-is">Thank you very much. 其中 very much 加强感谢程度，商务邮件与正式场合更常用。</div>
+          </div>
+          <div class="foot-note">↑ 英文混在一行里折行，读感差</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 方案 A ============ -->
+    <div class="col">
+      <div class="col-t"><b>方案 A · 译文卡片气泡 <span class="rec">（推荐）</span></b><span>英文主视觉 + 说明分层 + 操作行，对齐翻译官结果卡语言</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-card">
+              <div class="head-row"><span class="tag">推荐译文</span><span class="meta">中文 → 英语</span></div>
+              <div class="en-main">Thank you.</div>
+              <div class="ops"><span>复制</span><span>朗读</span><span>收藏</span></div>
+            </div>
+          </div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">再正式一点怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-card">
+              <div class="head-row"><span class="tag">推荐译文</span><span class="meta">中文 → 英语</span></div>
+              <div class="en-main">Thank you very much.</div>
+              <div class="note">very much 加强感谢程度，商务邮件与正式场合更常用。</div>
+              <div class="ops"><span>复制</span><span>朗读</span><span>收藏</span></div>
+            </div>
+          </div>
+          <div class="foot-note">仅「翻译官作答」时套用；流式中仍为普通文本，完成后切换</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 方案 B ============ -->
+    <div class="col">
+      <div class="col-t"><b>方案 B · 轻量双层排版</b><span>不加卡片与操作行，只分两层：英文大一号 / 中文注释小一号</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-lite">
+              <div class="en-line">Thank you.</div>
+              <div class="cn-line">更正式用 Thank you，口语随意用 Thanks。</div>
+            </div>
+          </div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">再正式一点怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-lite">
+              <div class="en-line">Thank you very much.</div>
+              <div class="cn-line">very much 加强感谢程度，商务邮件与正式场合更常用。</div>
+            </div>
+          </div>
+          <div class="foot-note">改动最小，所有含英文的回复都能安全套用</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 方案 C ============ -->
+    <div class="col">
+      <div class="col-t"><b>方案 C · 橙线引读块</b><span>英文放品牌浅底块 + 左侧橙条，视觉强调最强</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble">
+              <div class="en-quote-block">Thank you.</div>
+              <div class="en-quote-cn">更正式用 Thank you，口语随意用 Thanks。</div>
+            </div>
+          </div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">再正式一点怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble">
+              <div class="en-quote-block">Thank you very much.</div>
+              <div class="en-quote-cn">very much 加强感谢程度，商务邮件与正式场合更常用。</div>
+            </div>
+          </div>
+          <div class="foot-note">强调感强，但浅底块在白气泡内易显「块中块」</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-t">
+    <h2>方案 A 的流式时序（消除等待焦虑）</h2>
+    <p>T0 收到 intent → T1 英文逐字流入 → T2 完成：卡片骨架先到位，用户不等「一坨纯文本」；<br />操作行 T2 才出现（流式期不占位）；方向 meta 由提问关键词推断，推断不出只留 tag</p>
+  </div>
+
+  <div class="stage">
+    <!-- T0 -->
+    <div class="col">
+      <div class="col-t"><b>T0 · 收到 intent（约 0.3s）</b><span>卡片头 + 主文区「翻译中」动点先铺出来；操作行此时不占位</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你的帮助，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-card">
+              <div class="head-row"><span class="tag">推荐译文</span><span class="meta">中文 → 英语</span></div>
+              <div class="en-main">
+                <div class="typing">翻译中<div class="tdots"><i class="tdot"></i><i class="tdot"></i><i class="tdot"></i></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="stage-note">卡片形态 + 来源徽标先到位 → 用户知道「已接手、正在翻」</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- T1 -->
+    <div class="col">
+      <div class="col-t"><b>T1 · 英文逐字流入</b><span>大字区逐字填充 + 品牌色光标，中文注解仍为占位条；操作行仍未出现</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你的帮助，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-card">
+              <div class="head-row"><span class="tag">推荐译文</span><span class="meta">中文 → 英语</span></div>
+              <div class="en-main">Thank you for your help<i class="caret"></i></div>
+              <div class="note"><div class="sk w60"></div></div>
+            </div>
+          </div>
+          <div class="stage-note">英文先读得，注解区用占位条避免卡片高度跳动</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- T2 -->
+    <div class="col">
+      <div class="col-t"><b>T2 · 完成</b><span>注解区填入，操作行出现且可点（复制/朗读/收藏）</span></div>
+      <div class="phone">
+        <div class="navbar">科豆 AI</div>
+        <div class="body">
+          <div class="agent-badge-wrap"><div class="agent-badge"><i></i>语言翻译官 作答</div></div>
+          <div class="msg user"><div class="avatar">我</div><div class="bubble">谢谢你的帮助，英语怎么说</div></div>
+          <div class="msg ai">
+            <div class="avatar">豆</div>
+            <div class="bubble en-card">
+              <div class="head-row"><span class="tag">推荐译文</span><span class="meta">中文 → 英语</span></div>
+              <div class="en-main">Thank you for your help.</div>
+              <div class="note">for your help 点明感谢对象，商务邮件与正式场合均适用。</div>
+              <div class="ops"><span>复制</span><span>朗读</span><span>收藏</span></div>
+            </div>
+          </div>
+          <div class="stage-note">操作行启用；长按气泡仍可复制整段原文</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

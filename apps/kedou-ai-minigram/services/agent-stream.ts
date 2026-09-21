@@ -88,8 +88,24 @@ export interface StreamEvent {
     | 'final'
     | 'error'
     /** 批次 5：意图路由判定结果，服务端在本轮第一个事件推送 */
-    | 'intent';
+    | 'intent'
+    /** 结构化卡片（一期：歌曲推荐卡片 kind=music），由工具结果转换后补发 */
+    | 'card';
   content?: string;
+  /** card 事件专用载荷：{ kind, provider, songs, keyword } */
+  card?: {
+    kind: string;
+    provider?: {
+      code: string;
+      name: string;
+      appId?: string | null;
+      entryType: string;
+      path?: string | null;
+      ready: boolean;
+    };
+    songs?: Array<{ title: string; artist?: string; reason?: string }>;
+    keyword?: string;
+  };
   name?: string;
   conversationId?: string;
   /** intent 事件专用（批次 5） */

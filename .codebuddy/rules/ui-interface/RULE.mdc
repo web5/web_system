@@ -2,13 +2,19 @@
 description: UI 界面实现规范（admin 系）。任务涉及新建/修改 Vue 页面、admin/deploy-console/mcp-admin 界面、antd 组件外观、颜色/Token、hover、布局、交互、CSS 覆盖时使用。细则本体在 docs/ui/，本规则只负责触发与动作顺序。
 alwaysApply: false
 enabled: true
-updatedAt: 2026-09-03T00:00:00.000Z
+updatedAt: 2026-09-21T00:00:00.000Z
 ---
 
 # UI 界面实现规则（导航 + 动作门）
 
 > 单事实源：先读 `docs/ui/README.md`（读取地图）定位最小文档集，细则在 docs/ui/ 各文档；本规则**不复制数值与细则**（防双份漂移），只规定"触发 + 动作顺序 + 最小禁项"。
 > 适用：deploy-console / admin / mcp-admin / 内部工具端。portal / kedou-ai-minigram 品牌端不适用（DR-5）。
+
+## 触发范围（本规则的路径判定，与 PreToolUse hook 判定一致）
+
+- `apps/admin/**`、`apps/deploy-console/**`、`apps/mcp-admin/**` 的 `.vue` 界面文件
+- `packages/ui/**`
+- 真相源：`specs/kit-sop-enforcement/design.md` §3.2（hook 判定若与此不一致，以设计文档为准并回来修本清单）
 
 ## 动作门（顺序不可跳）
 
@@ -19,6 +25,7 @@ updatedAt: 2026-09-03T00:00:00.000Z
 5. 覆盖 antd 外观或"改了不生效" → 读 `docs/ui/css-override-rules.md`（覆盖优先级 + 四问 + 排查五步）。
 6. 写完后按 `design.md` §5 自检（grep 裸色/!important、双主题过目、截图基线），修正记录追加到 `docs/ui/geist-token-评审记录.md`（只追加不覆盖）。
 7. **批量整改先出清单**：若为规则升格后的批量整改（≥2 文件 / 跨页面 / 跨端），先列《整改影响清单》（文件 / 改动 / 风险 / 优先级）给负责人确认，**不得直接开改**（design.md §5-7，R6 教训）。
+8. 落码提交时：UI 源码须与已确认的原型/规格配对 —— 原型或规格先**单独 commit**，其后的 UI commit 带 `Proto: <sha>` trailer（`commit-msg` hook 强制 + CI R10 兜底，见 `specs/kit-sop-enforcement/design.md` §3.8）。
 
 ## 核心约束精要（来不及翻 docs 时的最小禁项）
 

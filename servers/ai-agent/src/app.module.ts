@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { AgentModule } from './agent/agent.module';
 import { OcrModule } from './ocr/ocr.module';
 import { McpModule } from './mcp/mcp.module';
+import { MusicModule } from './music/music.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { McpModule } from './mcp/mcp.module';
     AgentModule,
     OcrModule,
     McpModule,
+    MusicModule,
   ],
 })
 export class AppModule {}

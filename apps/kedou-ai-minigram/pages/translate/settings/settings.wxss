@@ -1,7 +1,0 @@
-.page { min-height: 100vh; background: #F2F4F8; padding: 24rpx 32rpx 40rpx; }
-.sec-t { font-size: 25rpx; color: #6B7280; margin: 8rpx 0 16rpx; }
-.list { background: #fff; border-radius: 24rpx; overflow: hidden; margin-bottom: 32rpx; }
-.r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid #EEF0F4; font-size: 28rpx; }
-.r:last-child { border-bottom: none; }
-.v { color: #9AA1AD; font-size: 26rpx; }
-.foot { font-size: 22rpx; color: #C0C6D0; text-align: center; margin-top: 20rpx; }

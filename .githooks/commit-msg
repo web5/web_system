@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# commit-msg — UI 源码 commit 须携带 Proto 凭证（v1.1 · 方案 B）
+# 由 git 通过 core.hooksPath=.githooks 自动调用；由 install-git-hooks.sh 激活。
+# 为什么放 commit-msg：pre-commit 拿不到 commit message，无法校验 trailer。
+# 规则见 scripts/redline/check-commit-msg.sh（§3.8）。
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -n "$ROOT" ] || exit 0
+
+# 应急出口：UI_GATE=off 跳过本门（批量机械改动 / 紧急修复）
+[ "${UI_GATE:-}" = "off" ] && exit 0
+
+exec bash "$ROOT/scripts/redline/check-commit-msg.sh" "$1"

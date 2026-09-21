@@ -1,0 +1,65 @@
+/* 翻译结果页
+ * 色值一律走 app.wxss 的设计 token（与全站品牌橙一致）。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.srcbox { background: var(--card); border-radius: 24rpx; padding: 22rpx 26rpx; }
+.k { display: block; font-size: 22rpx; color: var(--t3); margin-bottom: 8rpx; }
+.v { font-size: 26rpx; color: var(--t2); }
+.res { margin-top: 20rpx; background: var(--card); border-radius: 24rpx; padding: 30rpx; border-left: 6rpx solid var(--brand); }
+.tags { display: flex; align-items: center; margin-bottom: 18rpx; }
+.tag { font-size: 20rpx; background: var(--brand); color: #fff; padding: 4rpx 12rpx; border-radius: 8rpx; }
+.meta { font-size: 21rpx; color: var(--t3); margin-left: 12rpx; }
+.txt { font-size: 32rpx; line-height: 1.75; color: var(--t1); }
+.ops { display: flex; margin-top: 26rpx; padding-top: 22rpx; border-top: 1rpx solid var(--line); }
+.ops text { flex: 1; text-align: center; font-size: 24rpx; color: var(--t2); }
+/* 朗读播放中：品牌色高亮，按钮本身就是「进行中」反馈 */
+.ops text.op-on { color: var(--brand-txt); font-weight: 500; }
+/* 转发 button：伪装成操作行文字（open-type=share 必须用 button 元素） */
+.ops .op-share {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  line-height: inherit;
+  font-size: 24rpx;
+  color: var(--t2);
+  font-weight: 400;
+}
+.ops .op-share::after { border: none; }
+.ops .op-share:active { opacity: .7; }
+
+/* 转发缩略图离屏 canvas：不占布局（绘制用） */
+.share-canvas {
+  position: fixed;
+  left: -9999rpx;
+  top: 0;
+  width: 500px;
+  height: 400px;
+}
+.fold { margin-top: 20rpx; background: var(--card); border-radius: 24rpx; overflow: hidden; }
+.h { display: flex; justify-content: space-between; padding: 26rpx 28rpx; font-size: 26rpx; color: var(--t1); }
+.act { color: var(--brand-txt); font-size: 24rpx; }
+.c { padding: 0 28rpx 26rpx; }
+.m { margin-bottom: 22rpx; }
+.vip { margin-top: 20rpx; background: var(--brand-soft); border-radius: 24rpx; padding: 24rpx 28rpx; color: var(--brand-txt); font-size: 25rpx; display: flex; justify-content: space-between; }
+.rowbtn { display: flex; margin-top: 24rpx; }
+.rowbtn view { flex: 1; height: 84rpx; border-radius: 42rpx; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 27rpx; margin-right: 18rpx; }
+.rowbtn view:last-child { margin-right: 0; }
+.ai { margin-top: 28rpx; font-size: 21rpx; color: var(--t3); text-align: center; }
+
+/* ---------- 翻译中 · 中间态 ---------- */
+.typing { display: flex; align-items: center; gap: 10rpx; font-size: 30rpx; color: var(--t2); }
+.tdots { display: inline-flex; gap: 6rpx; }
+.tdot { width: 10rpx; height: 10rpx; border-radius: 50%; background: var(--brand-txt); animation: blinkdot 1.2s infinite; }
+.tdot:nth-child(2) { animation-delay: .2s; }
+.tdot:nth-child(3) { animation-delay: .4s; }
+@keyframes blinkdot { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* ---------- 失败态 ---------- */
+.failbox { padding: 8rpx 0 4rpx; }
+.failbox .ft { font-size: 30rpx; font-weight: 600; color: var(--red); }
+.failbox .fr { margin-top: 10rpx; font-size: 25rpx; color: var(--t2); line-height: 1.65; }
+.failbox .fa { margin-top: 24rpx; display: flex; gap: 40rpx; }
+.failbox .fa text { font-size: 27rpx; color: var(--t2); }
+.failbox .retry { color: var(--brand-txt); font-weight: 500; }

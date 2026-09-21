@@ -17,6 +17,7 @@ import {
   Menu,
   MenuItem,
   MenuDivider,
+  Modal,
   ConfigProvider,
   App,
 } from 'ant-design-vue';
@@ -34,6 +35,7 @@ const components = [
   RadioGroup, RadioButton, Slider,
   Tabs, TabPane,
   Dropdown, Menu, MenuItem, MenuDivider,
+  Modal,
   ConfigProvider,
   App,
 ];
