@@ -13,6 +13,8 @@ import { spawn, exec, execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as http from 'http';
+import * as https from 'https';
 import { Client } from 'ssh2';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
@@ -22,6 +24,8 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { CommandService } from '../shell/command.service';
 import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
+// 应用域：env-dir 应用的「部署」= 切 env 入口指针（与流水线激活同一实现）
+import { AppsService } from '../apps/apps.service';
 
 /**
  * 任务状态枚举
@@ -76,6 +80,8 @@ export class DeployService {
     private readonly serverService: ServerService,
     private readonly stageCommands: StageCommandService,
     private readonly commands: CommandService,
+    // env-dir 应用（微前端）的「部署」= 切 env 入口指针，走应用域同一实现
+    private readonly appsService: AppsService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -269,10 +275,42 @@ export class DeployService {
     env: string;
     versionTag: string;
     operator?: string;
-  }): Promise<{ env: string; moduleKey: string; versionTag: string }> {
+  }): Promise<{
+    env: string;
+    moduleKey: string;
+    versionTag: string;
+    mode: 'env-dir' | 'legacy';
+    from?: string | null;
+    unchanged?: boolean;
+  }> {
     if (!input?.moduleKey?.trim()) throw new Error('部署失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('部署失败: env 必填');
     if (!input?.versionTag?.trim()) throw new Error('部署失败: versionTag 必填');
+
+    // env-dir 应用（微前端）：加载路径是 **env 入口指针**（`<key>/<envId>/index.js`）+
+    // `deploy_app_env_versions`，**不是** `deploy_deployments`。
+    // 历史上这里无条件写 `deploy_deployments` → 对 portal/admin 点「部署」等于空转
+    // （指针写进了没人读的表，页面照旧）。现按 deployMode 分流，与流水线激活走同一实现
+    // （`specs/app-artifact-env-dir/design.md` §4.1）。
+    const app = await this.appsService.findAppOrNull(input.moduleKey);
+    if (app && app.deployMode === 'env-dir') {
+      const r = await this.appsService.switchVersion(
+        input.moduleKey,
+        input.env,
+        input.versionTag,
+        input.operator,
+      );
+      this.logger.log(`已切 env 入口指针: ${input.env}/${input.moduleKey} ${r.from ?? '-'} -> ${r.to}`);
+      return {
+        env: input.env,
+        moduleKey: input.moduleKey,
+        versionTag: r.to,
+        mode: 'env-dir',
+        from: r.from,
+        unchanged: !!r.unchanged,
+      };
+    }
+
     // 顺序（2026-09-15 修正）：**先落地生效，再改指针** ——
     // 落地失败时指针保持原值，不会出现「指针指向没生效的版本」这种撕裂状态。
     await this.applyBackendVersion(input);
@@ -289,7 +327,81 @@ export class DeployService {
       ['envId', 'moduleKey'],
     );
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
-    return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag };
+
+    // site-version 前端（基座 shell / 小程序）：**这个指针就是它们的加载路径** ——
+    // gateway 按 `getCurrentVersion(envId,'shell')` 决定加载哪个版本目录的 index.html，
+    // 而该值有 10s TTL 缓存，不通知就会「部署了但页面没变」。
+    if (app && app.deployMode === 'site-version') {
+      await this.notifyGatewayRefreshCache(`${input.env}/${input.moduleKey} -> ${input.versionTag}`);
+    }
+
+    return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag, mode: 'legacy' };
+  }
+
+  /**
+   * 通知 gateway 立即失效模块版本缓存（best-effort）。
+   *
+   * 为什么必须通知：`IndexHtmlService.versionCache`（TTL 10s）决定基座加载哪个版本目录的
+   * `index.html`，而指针是这里写的 —— gateway 感知不到变更。
+   * 失败只告警不抛错：部署本身已成功，最多 10s 缓存自然过期。
+   */
+  private async notifyGatewayRefreshCache(reason: string): Promise<void> {
+    const base = this.configService.get<string>('GATEWAY_INTERNAL_URL') || '';
+    const key =
+      this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
+      this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
+      '';
+    if (!base || !key) {
+      this.logger.warn(
+        `未配置 GATEWAY_INTERNAL_URL / GATEWAY_SERVICE_KEY，跳过 gateway 缓存刷新（${reason}；最多 10s 后自然生效）`,
+      );
+      return;
+    }
+    try {
+      await this.postNoBody(`${base.replace(/\/+$/, '')}/api/internal/gateway/reload`, key);
+      this.logger.log(`已通知 gateway 刷新缓存（${reason}）`);
+    } catch (e) {
+      this.logger.warn(
+        `gateway 缓存刷新失败（${reason}）：${(e as Error).message}（最多 10s 后自然生效）`,
+      );
+    }
+  }
+
+  /**
+   * 发一个无 body 的 POST（仅用 Node `http`/`https`，**刻意不用全局 fetch**）。
+   *
+   * 为什么不用 fetch：Node 的 fetch 走 undici，按 WHATWG 规范**拒连「bad port」**，
+   * 而本地 gateway 端口 6000 正在黑名单里 → 一律表现为 `fetch failed`（与网络无关，极易误判）。
+   */
+  private postNoBody(urlStr: string, serviceKey: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let u: URL;
+      try {
+        u = new URL(urlStr);
+      } catch {
+        reject(new Error(`URL 非法：${urlStr}`));
+        return;
+      }
+      const client = u.protocol === 'https:' ? https : http;
+      const req = client.request(
+        {
+          method: 'POST',
+          hostname: u.hostname,
+          port: u.port || (u.protocol === 'https:' ? 443 : 80),
+          path: `${u.pathname}${u.search}`,
+          headers: { 'x-service-key': serviceKey, 'content-length': 0 },
+        },
+        (res) => {
+          const code = res.statusCode || 0;
+          res.resume(); // 丢弃响应体，释放连接
+          if (code >= 200 && code < 300) resolve();
+          else reject(new Error(`HTTP ${code}`));
+        },
+      );
+      req.on('error', (e) => reject(e));
+      req.setTimeout(5000, () => req.destroy(new Error('请求超时（5s）')));
+      req.end();
+    });
   }
 
   /**
