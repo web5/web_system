@@ -161,6 +161,18 @@
   body[data-theme="dark"] .res { box-shadow: 0 8px 22px rgba(0,0,0,.3); }
   body[data-theme="dark"] .vipcard { background: linear-gradient(120deg, #C2410C 0%, #9A3412 100%); }
 
+  /* ---------- 对话页 · 翻译官作答的推荐译文卡片（与 pages/translate/result 同语言） ---------- */
+  .msg .bub.en-card { padding: 0; overflow: hidden; }
+  .en-card .ec-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
+  .en-card .ec-tag { font-size: 10px; color: #fff; background: var(--brand); border-radius: 3px; padding: 1px 6px; font-weight: 500; flex: none; }
+  .en-card .ec-meta { font-size: 11px; color: var(--t3); }
+  .en-card .ec-main { padding: 8px 12px 12px; font-size: 16px; font-weight: 600; line-height: 1.5; color: var(--t1); }
+  .en-card .ec-note { padding: 8px 12px; border-top: .5px solid var(--line); font-size: 12px; color: var(--t2); line-height: 1.6; }
+  .en-card .ec-ops { display: flex; border-top: .5px solid var(--line); }
+  .en-card .ec-ops u { flex: 1; text-align: center; padding: 9px 0; font-size: 12px; color: var(--t2); }
+  .en-card .ec-ops u + u { border-left: .5px solid var(--line); }
+  .en-card .ec-ops u.fwd { color: var(--brand-txt); font-weight: 500; }
+
   /* ---------- 对话页 ---------- */
   .msgs { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 6px; }
   .msgs::-webkit-scrollbar { width: 0; }
@@ -489,6 +501,24 @@
             <span onclick="ask('帮我翻一句话')">帮我翻一句话</span>
             <span onclick="ask('看看合同风险')">看看合同风险</span>
             <span onclick="ask('今天该做什么')">今天该做什么</span>
+          </div>
+          <!-- 翻译官作答示例：推荐译文卡片（完成态，操作行含「转发」，与结果页同一交互） -->
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-main">Thank you for your help.</div>
+                <div class="ec-note">for your help 点明感谢对象，商务邮件与正式场合均适用。</div>
+                <div class="ec-ops">
+                  <u onclick="wxToast('已复制')">复制</u>
+                  <u onclick="wxToast('朗读中…')">朗读</u>
+                  <u onclick="wxToast('已收进生词本')">收藏</u>
+                  <u class="fwd" onclick="showForward()">转发</u>
+                </div>
+              </div>
+              <div class="meta">语言翻译官 作答 · 09:42</div>
+            </div>
           </div>
         </div>
         <div class="composer">
