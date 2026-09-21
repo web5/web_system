@@ -75,9 +75,6 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
     const legacyModuleRepo: any = { find: jest.fn(async () => []) };
     const legacyRouteRepo: any = { find: jest.fn(async () => []) };
     const configService: any = { get: jest.fn(() => undefined) };
-    // 部署动作依赖（本机 pm2 + 命令执行），单测中不实际重启
-    const pm2Probe: any = jest.fn() as any;
-    const command: any = jest.fn() as any;
 
     svc = new ServicesService(
       serviceRepo,
@@ -89,8 +86,6 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
       legacyModuleRepo,
       legacyRouteRepo,
       configService,
-      pm2Probe,
-      command,
     );
   });
 
