@@ -18,6 +18,7 @@ import {
   GlobalOutlined,
   ApiOutlined,
   ClusterOutlined,
+  RocketOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -61,13 +62,17 @@ const DOMAINS: Domain[] = [
     children: [
       { key: '/apps', label: '应用管理', icon: AppstoreOutlined },
       { key: '/environments', label: '环境管理', icon: GlobalOutlined },
+      { key: '/deploys/micro', label: '版本部署', icon: RocketOutlined },
     ],
   },
   {
     key: 'gateway',
     label: 'API 网关',
     icon: ApiOutlined,
-    children: [{ key: '/services', label: '服务管理', icon: ApiOutlined }],
+    children: [
+      { key: '/services', label: '服务管理', icon: ApiOutlined },
+      { key: '/deploys/backend', label: '版本部署', icon: RocketOutlined },
+    ],
   },
   {
     key: 'pipeline',

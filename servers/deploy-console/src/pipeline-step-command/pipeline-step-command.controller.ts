@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PipelineStepCommandService, pickStepActions } from './pipeline-step-command.service';
 import { CurrentUser } from '../common/decorators';
 import { StepAction } from '../entities/deploy-pipeline-step-command.entity';
+import { StepBranchService, type StepBranchInput } from './step-branch.service';
 import { AuditService } from '../audit/audit.service';
 
 /**
@@ -27,6 +28,7 @@ import { AuditService } from '../audit/audit.service';
 export class PipelineStepCommandController {
   constructor(
     private readonly stepCommands: PipelineStepCommandService,
+    private readonly stepBranches: StepBranchService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -40,6 +42,8 @@ export class PipelineStepCommandController {
       configured: !!r.command,
       command: r.command,
       actions: r.actions ?? [],
+      // 环境分支配置（envId → 脚本）；非空 = 该节点按环境分叉，脚本由它生成
+      envBranches: r.envBranches ?? null,
       enabled: r.enabled,
       // 平台托管（locked）：页面据此渲染为只读，不给编辑入口
       locked: !!r.locked,
@@ -71,12 +75,33 @@ export class PipelineStepCommandController {
   async save(
     @Param('id') id: string,
     @Param('nodeKey') nodeKey: string,
-    @Body() body: { command?: string; timeoutSec?: number; actions?: StepAction[] },
+    @Body()
+    body: {
+      command?: string;
+      timeoutSec?: number;
+      actions?: StepAction[];
+      /** 环境分支（envId → 脚本）：非空=启用并生成执行体；null=关闭 */
+      envBranches?: Record<string, string> | null;
+      /** 步骤执行条件（gate）：不满足则跳过整个步骤；空串/null = 恒执行 */
+      condition?: string | null;
+    },
     @CurrentUser() user: any,
   ) {
     const hasActions = Array.isArray(body?.actions) && body.actions.length > 0;
-    if (!hasActions && (!body || typeof body.command !== 'string' || !body.command.trim())) {
-      throw new BadRequestException('缺少 command 字段（或提供 actions 多操作）');
+    const hasBranches = !!body?.envBranches && Object.keys(body.envBranches).length > 0;
+    const hasCondition = typeof body?.condition === 'string' || body?.condition === null;
+    // 传 null = 关闭（清空）该配置：这类请求不要求同时带 command
+    const closingBranches = body?.envBranches === null;
+    if (
+      !hasActions &&
+      !hasBranches &&
+      !hasCondition &&
+      !closingBranches &&
+      (!body || typeof body.command !== 'string' || !body.command.trim())
+    ) {
+      throw new BadRequestException(
+        '缺少 command 字段（或提供 actions 多操作 / envBranches 环境分支 / condition 执行条件）',
+      );
     }
     const beforeRow = await this.stepCommands.getRow(id, nodeKey);
     const before = beforeRow ? JSON.stringify(pickStepActions(beforeRow)) : null;
@@ -87,6 +112,9 @@ export class PipelineStepCommandController {
       user?.username,
       body.timeoutSec,
       body.actions,
+      // 注意：null = 关闭（清空配置），不能用 ?? 兜底成 undefined（否则 service 无法区分「不传」与「关闭」）
+      body.envBranches === null ? null : body.envBranches,
+      body.condition === null ? null : body.condition,
     );
     const after = JSON.stringify(pickStepActions(saved));
     const clip = (s: string | null) => (s && s.length > 1000 ? `${s.slice(0, 1000)}…` : s);
@@ -95,16 +123,82 @@ export class PipelineStepCommandController {
       action: before === null ? 'pipeline-step-command.create' : 'pipeline-step-command.update',
       component: id,
       status: 'success',
-      detail: `保存流水线 ${id} 节点 ${nodeKey} ${hasActions ? `多操作（${body.actions!.length} 个）` : '命令'}`,
+      detail: `保存流水线 ${id} 节点 ${nodeKey} ${
+        hasBranches
+          ? `环境分支（${Object.keys(body.envBranches!).join('、')}）`
+          : hasActions
+            ? `多操作（${body.actions!.length} 个）`
+            : '命令'
+      }`,
       changes: [
         {
-          field: hasActions ? `${nodeKey}.actions` : `${nodeKey}.command`,
-          before: clip(before),
-          after: clip(after),
+          field: hasBranches
+            ? `${nodeKey}.envBranches`
+            : hasActions
+              ? `${nodeKey}.actions`
+              : `${nodeKey}.command`,
+          before: clip(hasBranches ? JSON.stringify(beforeRow?.envBranches ?? null) : before),
+          after: clip(hasBranches ? JSON.stringify(saved.envBranches ?? null) : after),
         },
       ],
     });
     return saved;
+  }
+
+  @Get(':id/steps/:nodeKey/branches')
+  @ApiOperation({ summary: '某步骤的任务（分支）列表：条件 + 脚本，按匹配顺序' })
+  async listBranches(@Param('id') id: string, @Param('nodeKey') nodeKey: string) {
+    return this.stepBranches.list(id, nodeKey);
+  }
+
+  @Put(':id/steps/:nodeKey/branches')
+  @ApiOperation({
+    summary: '全量保存步骤任务（空数组=清空，回落单一执行体）；保存前 bash -n + 条件校验',
+  })
+  async saveBranches(
+    @Param('id') id: string,
+    @Param('nodeKey') nodeKey: string,
+    @Body() body: { branches: StepBranchInput[] },
+    @CurrentUser() user: any,
+  ) {
+    if (!Array.isArray(body?.branches)) {
+      throw new BadRequestException('缺少 branches 数组（清空请传空数组）');
+    }
+    const before = await this.stepBranches.list(id, nodeKey);
+    const saved = await this.stepBranches.saveAll(id, nodeKey, body.branches, user?.username);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'pipeline-step-branch.save',
+      component: id,
+      status: 'success',
+      detail: `保存流水线 ${id} 步骤 ${nodeKey} 的任务：${saved.map((b) => b.name).join('、') || '（清空）'}`,
+      changes: [
+        {
+          field: `${nodeKey}.branches`,
+          before: JSON.stringify(before.map((b) => ({ name: b.name, condition: b.condition }))),
+          after: JSON.stringify(saved.map((b) => ({ name: b.name, condition: b.condition }))),
+        },
+      ],
+    });
+    return saved;
+  }
+
+  @Delete(':id/steps/:nodeKey/branches')
+  @ApiOperation({ summary: '清空步骤任务（回落到节点单一执行体）' })
+  async clearBranches(
+    @Param('id') id: string,
+    @Param('nodeKey') nodeKey: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.stepBranches.clear(id, nodeKey);
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'pipeline-step-branch.clear',
+      component: id,
+      status: 'success',
+      detail: `清空流水线 ${id} 步骤 ${nodeKey} 的任务`,
+    });
+    return { ok: true };
   }
 
   @Delete(':id/steps/:nodeKey')

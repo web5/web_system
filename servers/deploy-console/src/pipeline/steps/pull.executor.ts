@@ -18,6 +18,12 @@ import { StepContext } from './step.types';
  * 因此抽到拉码之后一次执行（在 pnpm install 之后、模块 build 之前）。
  * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
  */
+/**
+ * 共享包清单只收 shared/types 两个**被 main 指向 dist 的全局公共依赖**。
+ * ⚠️ 模块级依赖（如 @web-system/ui）**不进这份清单**（2026-09-21 用户定）：
+ * 依赖谁、要不要先构建，是**模块自己的事** → 写在各自流水线 build 节点脚本里
+ * （deploy_pipeline_step_commands，页面可编辑）；工厂内置清单会随依赖增长越收越耦合。
+ */
 const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
 
 /**
@@ -63,7 +69,15 @@ export class PullExecutor {
         ctx.log('依赖安装完成');
       }
     } catch (e) {
-      ctx.log(`[warn] 依赖同步失败: ${(e as Error).message}`);
+      // ⚠️ 依赖同步失败是后续构建失败的高频根因（2026-09-21 portal 实测）：
+      // workspace 包（@web-system/*）的 node_modules 链接缺失 → vite resolve 失败，
+      // 表象是「Rollup failed to resolve import "@web-system/ui/tokens.css"」这类误导性报错。
+      // 失败不阻断（历史兼容），但日志必须醒目指向根因。
+      ctx.log(
+        `[warn] 依赖同步失败: ${(e as Error).message} —— workspace 包链接可能缺失，` +
+          `后续模块构建大概率报 resolve 失败；请在发布目录手工 pnpm install 后重试`,
+      );
+      this.logger.warn(`依赖同步失败（${ctx.pipeline.moduleKey}）: ${(e as Error).message}`);
     }
 
     // 共享 workspace 包预构建：流水级一次（admin/portal shell 等所有依赖方共用 dist）
