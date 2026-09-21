@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream } from '@/api/agent';
 import { useConversationStore } from '@/stores/conversations';
@@ -158,6 +158,7 @@ function newChat() {
   controller?.abort();
   controller = null;
   sending.value = false;
+  store.setRunning(false);
   store.startNew();
   convId.value = null;
   loadedId.value = null;
@@ -194,6 +195,7 @@ function send(text: string) {
   // 取响应式代理（不能直接改 push 前的原始对象，否则不触发更新）
   const reply = messages.value[messages.value.length - 1];
   sending.value = true;
+  store.setRunning(true);
   nextTick(scrollToBottom);
 
   controller = runAgentStream(
@@ -211,6 +213,7 @@ function send(text: string) {
       onDone(conversationId) {
         reply.streaming = false;
         sending.value = false;
+        store.setRunning(false);
         controller = null;
         if (conversationId) {
           convId.value = conversationId;
@@ -224,6 +227,7 @@ function send(text: string) {
         reply.streaming = false;
         reply.failed = true;
         sending.value = false;
+        store.setRunning(false);
         controller = null;
         message.error(err.message || '生成失败，请重试');
       },
@@ -235,6 +239,7 @@ function stop() {
   controller?.abort();
   controller = null;
   sending.value = false;
+  store.setRunning(false);
   const last = messages.value[messages.value.length - 1];
   if (last?.role === 'assistant') {
     last.streaming = false;
@@ -278,6 +283,13 @@ watch(
 onMounted(() => {
   if (store.currentId) void loadConversation(store.currentId);
   else if (store.items.length === 0) void store.load();
+});
+
+// 离开页面时中断未完成的流，并解除「生成中」锁（否则删除入口会一直禁用）
+onBeforeUnmount(() => {
+  controller?.abort();
+  controller = null;
+  store.setRunning(false);
 });
 </script>
 

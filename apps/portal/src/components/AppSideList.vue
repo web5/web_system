@@ -8,8 +8,16 @@
       </button>
     </div>
 
+    <!-- 未登录：欢迎页是公开页，左栏给出登录出口 -->
+    <div v-if="!userStore.isLoggedIn" class="side-empty">
+      <span class="empty-icon"><app-icon name="inbox" size="lg" /></span>
+      <p class="empty-title">登录后同步记录</p>
+      <p class="empty-desc">登录后可查看历史会话</p>
+      <button type="button" class="btn-primary-sm" @click="authGate.openAuth()">登录 / 注册</button>
+    </div>
+
     <!-- 加载中：骨架屏 -->
-    <div v-if="store.loading" class="side-body">
+    <div v-else-if="store.loading" class="side-body">
       <div v-for="n in 4" :key="n" class="skel-item">
         <span class="skel skel-title" />
         <span class="skel skel-sub" />
@@ -34,25 +42,41 @@
 
     <!-- 列表：统一会话流，不按类型隔离 -->
     <div v-else class="side-body">
-      <button
+      <div
         v-for="item in store.items"
         :key="item.id"
-        type="button"
-        class="list-item"
+        class="list-row"
         :class="{ 'is-active': store.currentId === item.id }"
-        @click="pick(item.id)"
       >
-        <span class="item-title">{{ displayTitle(item) }}</span>
-        <span class="item-sub">{{ formatRelativeTime(item.updatedAt) }}</span>
-      </button>
+        <button type="button" class="list-item" @click="pick(item.id)">
+          <span class="item-title">{{ displayTitle(item) }}</span>
+          <span class="item-sub">{{ formatRelativeTime(item.updatedAt) }}</span>
+        </button>
+        <!-- 生成中的会话禁止删除：tooltip 说明原因 -->
+        <button
+          v-if="store.running && store.currentId === item.id"
+          type="button"
+          class="row-del"
+          title="任务进行中，完成后可删除"
+          disabled
+        >
+          <app-icon name="x" />
+        </button>
+        <button v-else type="button" class="row-del" title="删除会话" @click="confirmDelete(item)">
+          <app-icon name="x" />
+        </button>
+      </div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router';
+import { Modal, message } from 'ant-design-vue';
 import type { ConversationSummary } from '@/api/agent';
 import { useConversationStore } from '@/stores/conversations';
+import { useUserStore } from '@/stores/user';
+import { useAuthGateStore } from '@/stores/authGate';
 import { formatRelativeTime } from '@/utils/time';
 import AppIcon from './AppIcon.vue';
 
@@ -61,6 +85,8 @@ defineProps<{ title: string }>();
 const route = useRoute();
 const router = useRouter();
 const store = useConversationStore();
+const userStore = useUserStore();
+const authGate = useAuthGateStore();
 
 /** 无标题会话（后端异步生成标题）→ 用占位文案，不显示空白行 */
 function displayTitle(item: ConversationSummary): string {
@@ -78,8 +104,29 @@ function pick(id: string) {
 }
 
 function createNew() {
-  store.startNew();
-  void ensureChatRoute();
+  authGate.ensureAuth(() => {
+    store.startNew();
+    void ensureChatRoute();
+  });
+}
+
+/** 破坏性操作：二次确认后才调删除 */
+function confirmDelete(item: ConversationSummary) {
+  Modal.confirm({
+    title: '删除会话',
+    content: `「${displayTitle(item)}」删除后该会话记录不可恢复，确定删除？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        await store.remove(item.id);
+        message.success('已删除');
+      } catch {
+        message.error('删除失败，请重试');
+      }
+    },
+  });
 }
 </script>
 
@@ -114,27 +161,32 @@ function createNew() {
   padding: 0 8px 12px;
 }
 
+.list-row {
+  position: relative;
+  margin-bottom: 2px;
+  border-radius: var(--ws-radius-md);
+}
+
+.list-row:hover {
+  background: var(--ws-bg-hover);
+}
+
+.list-row.is-active {
+  background: var(--ws-brand-50);
+}
+
 .list-item {
   display: block;
   width: 100%;
   text-align: left;
   padding: 8px 12px;
-  margin-bottom: 2px;
   border-radius: var(--ws-radius-md);
   background: transparent;
-  transition: background 0.15s ease;
-}
-
-.list-item:hover {
-  background: var(--ws-bg-hover);
-}
-
-.list-item.is-active {
-  background: var(--ws-brand-50);
 }
 
 .item-title {
   display: block;
+  padding-right: 24px;
   font-size: 13px;
   font-weight: 500;
   color: var(--ws-text-primary);
@@ -143,7 +195,7 @@ function createNew() {
   text-overflow: ellipsis;
 }
 
-.list-item.is-active .item-title {
+.list-row.is-active .item-title {
   color: var(--ws-brand-700);
   font-weight: 600;
 }
@@ -153,6 +205,35 @@ function createNew() {
   margin-top: 2px;
   font-size: 12px;
   color: var(--ws-text-tertiary);
+}
+
+.row-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ws-radius-sm);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-text-tertiary);
+  background: transparent;
+}
+
+.list-row:hover .row-del {
+  display: inline-flex;
+}
+
+.row-del:hover:not(:disabled) {
+  background: var(--ws-bg-active);
+  color: var(--ws-error-500);
+}
+
+.row-del:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  display: inline-flex;
 }
 
 /* ===== 空态 / 错误态 ===== */
@@ -247,5 +328,9 @@ function createNew() {
   color: var(--ws-brand-50);
   font-size: 13px;
   font-weight: 500;
+}
+
+.btn-primary-sm:hover {
+  background: var(--ws-brand-600);
 }
 </style>

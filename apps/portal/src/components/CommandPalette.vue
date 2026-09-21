@@ -1,7 +1,8 @@
 <template>
-  <teleport to="body">
-    <div v-if="open" class="mask" @click.self="emit('close')">
-      <div class="palette" @keydown="onKeydown">
+  <!-- 不用 teleport：微前端模式下 CSS 会被加 [data-module] 前缀，
+       teleport 到 body 会脱离模块容器导致样式失效；fixed 定位不依赖 DOM 位置 -->
+  <div v-if="open" class="mask" @click.self="emit('close')">
+    <div class="palette" @keydown="onKeydown">
         <input
           ref="inputRef"
           v-model="keyword"
@@ -33,8 +34,7 @@
           <span>Esc 关闭</span>
         </div>
       </div>
-    </div>
-  </teleport>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -44,10 +44,13 @@ import { message } from 'ant-design-vue';
 import { NAV_ITEMS } from '@/config/nav';
 import type { IconName } from '@/config/icons';
 import { useConversationStore } from '@/stores/conversations';
+import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from './AppIcon.vue';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+
+const authGate = useAuthGateStore();
 
 interface Command {
   key: string;
@@ -84,8 +87,10 @@ const commands = computed<Command[]>(() => [
     label: '新建对话',
     icon: 'plus' as IconName,
     action: () => {
-      store.startNew();
-      router.push('/chat');
+      authGate.ensureAuth(() => {
+        store.startNew();
+        router.push('/chat');
+      });
     },
   },
   {

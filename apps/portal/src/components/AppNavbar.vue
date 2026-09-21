@@ -26,7 +26,7 @@
         <kbd>{{ cmdHint }}</kbd>
       </button>
 
-      <a-dropdown :trigger="['click']" placement="bottomRight">
+      <a-dropdown v-if="userStore.isLoggedIn" :trigger="['click']" placement="bottomRight">
         <button type="button" class="avatar" :title="userName">
           {{ avatarText }}
         </button>
@@ -42,6 +42,7 @@
           </a-menu>
         </template>
       </a-dropdown>
+      <button v-else type="button" class="login-btn" @click="authGate.openAuth()">登录</button>
     </div>
   </header>
 </template>
@@ -52,6 +53,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Modal } from 'ant-design-vue';
 import { NAV_ITEMS, matchNavItem } from '@/config/nav';
 import { useUserStore } from '@/stores/user';
+import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits<{ (e: 'open-command'): void }>();
@@ -59,6 +61,7 @@ const emit = defineEmits<{ (e: 'open-command'): void }>();
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const authGate = useAuthGateStore();
 
 /** ⌘ 在 Mac、Ctrl 在其它平台：只影响提示文案，键位两个都监听 */
 const cmdHint = computed(() =>
@@ -70,8 +73,8 @@ const activeKey = computed(() => matchNavItem(route.path)?.key ?? null);
 const userName = computed(() => userStore.userInfo?.username || '未登录');
 
 const avatarText = computed(() => {
-  const name = userName.value;
-  return name === '未登录' ? '游' : name.slice(0, 1).toUpperCase();
+  const name = userStore.userInfo?.username || '';
+  return (name || 'U').slice(0, 1).toUpperCase();
 });
 
 function go(path: string) {
@@ -216,6 +219,22 @@ function handleLogout() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 未登录：顶栏给登录入口（弹窗，不跳整页） */
+.login-btn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--ws-radius-md);
+  background: var(--ws-brand-500);
+  color: var(--ws-brand-50);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.login-btn:hover {
+  background: var(--ws-brand-600);
 }
 
 .menu-row {

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -89,6 +90,24 @@ export class AgentController {
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
     };
+  }
+
+  /** 删除会话（仅会话所属用户；不可恢复，前端有二次确认） */
+  @Delete('conversations/:id')
+  @ApiOperation({ summary: '删除我的 Agent 对话' })
+  async deleteConversation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: Request,
+  ) {
+    const userId = String((req as any).user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    const ok = await this.conversationQueryService.deleteConversation(userId, id);
+    if (!ok) {
+      throw new NotFoundException('对话不存在');
+    }
+    return { ok: true };
   }
 
   /** Agent 运行（C 端，SSE 流式，含工具调用过程） */

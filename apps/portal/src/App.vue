@@ -17,6 +17,8 @@
       </div>
 
       <command-palette :open="commandOpen" @close="commandOpen = false" />
+      <!-- 公开欢迎页的互动触发的登录/注册弹窗（登录成功后续跑挂起动作） -->
+      <auth-modal />
     </a-app>
   </a-config-provider>
 </template>
@@ -29,9 +31,11 @@ import AppNavbar from '@/components/AppNavbar.vue';
 import AppSideList from '@/components/AppSideList.vue';
 import AppContextPanel from '@/components/AppContextPanel.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
+import AuthModal from '@/components/AuthModal.vue';
 import { matchNavItem } from '@/config/nav';
 import { BRAND } from '@/config/theme';
 import { useUserStore } from '@/stores/user';
+import { useAuthGateStore } from '@/stores/authGate';
 import { useConversationStore } from '@/stores/conversations';
 
 const theme = {
@@ -48,6 +52,7 @@ const theme = {
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const authGate = useAuthGateStore();
 const conversationStore = useConversationStore();
 
 const commandOpen = ref(false);
@@ -72,8 +77,10 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.key.toLowerCase() === 'n') {
     e.preventDefault();
-    conversationStore.startNew();
-    void router.push('/chat');
+    authGate.ensureAuth(() => {
+      conversationStore.startNew();
+      void router.push('/chat');
+    });
     return;
   }
   if (e.key === '/') {
@@ -91,11 +98,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
 });
 
-// 登录后（含刷新恢复 token）拉取会话列表；未登录时左栏由路由守卫挡在登录页
+// 登录后（含弹窗登录、刷新恢复 token）拉取会话列表；退出登录清空本地会话态
 watch(
   () => userStore.isLoggedIn,
   (ok) => {
     if (ok) void conversationStore.load();
+    else conversationStore.clear();
   },
   { immediate: true },
 );

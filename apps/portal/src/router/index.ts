@@ -25,12 +25,11 @@ function isTokenExpired(token: string): boolean {
 }
 
 const routes = [
-  // ===== 工作台（三栏外壳）：起始页为登录后默认落地页 =====
+  // ===== 工作台（三栏外壳）：欢迎页为公开页，互动时弹登录/注册（page-spec §0） =====
   {
     path: '/',
     name: 'Welcome',
     component: () => import('../views/Welcome.vue'),
-    meta: { requiresAuth: true },
   },
   {
     path: '/chat',
