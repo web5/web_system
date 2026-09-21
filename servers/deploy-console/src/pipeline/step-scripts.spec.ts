@@ -41,6 +41,14 @@ describe('脚本清单与正文 step-scripts', () => {
     expect(() => execSync(`bash -n "${file}"`, { stdio: 'pipe' })).not.toThrow();
   });
 
+  it('git 默认脚本校验代码来源：REPO_URL 非空时 origin 必须一致（防改错 origin 照常构建）', () => {
+    const s = getDefaultStepScript('git');
+    expect(s).toContain('REPO_URL');
+    expect(s).toContain('代码来源不符');
+    // 未配置 REPO_URL 时必须放行（现状行为零破坏）
+    expect(s).toContain('[ -n "${REPO_URL:-}" ]');
+  });
+
   it('git 默认脚本四道 fail-fast 校验齐备（origin / 分支 / commit 可达 / HEAD 自证）', () => {
     const s = getDefaultStepScript('git');
     expect(s).toContain('git remote get-url origin');

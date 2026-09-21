@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PipelineItem } from '@/api'
+import type { PipelineItem, OrchestrationStep, OrchestrationTask, TaskRunStatus } from '@/api'
 import {
   stepList,
   stepState,
@@ -18,6 +18,75 @@ const emit = defineEmits<{
   (e: 'stageClick', stage: string): void
   (e: 'commandClick', stage: string): void
 }>()
+
+/* ========== 编排画布模式（specs/pipeline-task-status/design.md §4） ========== */
+
+/**
+ * 新引擎实例（orchestration 快照非空）：渲染与编辑页同构的只读画布，
+ * 任务级状态来自后端落库的 taskStates；走过路径绿色高亮。
+ */
+const orch = computed(() => props.instance.orchestration ?? null)
+const hasTaskStates = computed(
+  () => !!props.instance.taskStates && Object.keys(props.instance.taskStates).length > 0,
+)
+
+type AggState = 'succeeded' | 'failed' | 'running' | 'awaiting' | 'skipped' | 'cancelled' | 'none'
+
+const TASK_STATE_TEXT: Record<string, string> = {
+  succeeded: '完成',
+  running: '执行中',
+  failed: '失败',
+  skipped: '跳过',
+  awaiting: '待审批',
+  cancelled: '已取消',
+  '': '未执行',
+}
+
+/** 任务状态：有落库直读；无落库的历史实例按整体状态粗粒度兜底 */
+function taskStateOf(step: OrchestrationStep, task: OrchestrationTask): TaskRunStatus | '' {
+  if (hasTaskStates.value) return props.instance.taskStates?.[`${step.id}/${task.id}`] || ''
+  return coarseTaskState(step)
+}
+
+/**
+ * 粗粒度兜底（taskStates 落库前的历史新引擎实例）：
+ * 整体 succeeded → 全绿；awaiting-approval → 挂起步骤前绿、挂起处橙；其余不给状态（灰）。
+ */
+function coarseTaskState(step: OrchestrationStep): TaskRunStatus | '' {
+  const st = props.instance.status
+  if (st === 'succeeded') return 'succeeded'
+  if (st === 'awaiting-approval') {
+    const steps = orch.value ?? []
+    const hangIdx = steps.findIndex((s) => s.name === props.instance.stage)
+    const myIdx = steps.findIndex((s) => s.id === step.id)
+    if (hangIdx < 0 || myIdx < 0) return ''
+    return myIdx < hangIdx ? 'succeeded' : myIdx === hangIdx ? 'awaiting' : ''
+  }
+  return ''
+}
+
+/** 步骤聚合状态（单一状态源 = 任务状态；任一失败 → 失败，见 design §4.2） */
+function stepAgg(step: OrchestrationStep): AggState {
+  const states = (step.tasks ?? [])
+    .map((t) => taskStateOf(step, t))
+    .filter(Boolean) as TaskRunStatus[]
+  if (!states.length) return 'none'
+  if (states.includes('failed')) return 'failed'
+  if (states.includes('cancelled')) return 'cancelled'
+  if (states.includes('running')) return 'running'
+  if (states.includes('awaiting')) return 'awaiting'
+  if (states.some((s) => s === 'succeeded')) return 'succeeded'
+  if (states.every((s) => s === 'skipped')) return 'skipped'
+  return 'none'
+}
+
+/** 步骤间箭头：前一步骤终态成功 → 绿（走过路径高亮） */
+function arrowGreen(i: number): boolean {
+  if (i <= 0 || !orch.value) return false
+  return stepAgg(orch.value[i - 1]) === 'succeeded'
+}
+
+/* ========== 时间线模式（legacy / v5 nodes 实例，保持原样） ========== */
 
 /** 流程节点 = 实例活动阶段列表（含快照子集） */
 const nodes = computed(() => stepList(props.instance))
@@ -80,14 +149,47 @@ function isWatchdog(s: string) {
         <span v-if="instance.templateName" style="color: #888; font-size: 12px;">
           流水线 · {{ instance.templateName }}
         </span>
+        <span
+          v-if="orch && !hasTaskStates"
+          class="coarse-hint"
+          title="该实例早于任务级状态落库上线，只能按整体结果粗略着色"
+        >无任务级执行记录，按整体结果着色</span>
       </div>
       <span v-if="isLive(instance) && instance.progress?.message" class="flow-message">
         {{ instance.progress.message }}
       </span>
     </div>
 
-    <!-- 步骤连线图 -->
-    <div class="flow-track">
+    <!-- 编排画布（新引擎实例）：步骤 → 任务分叉，走过路径绿色高亮 -->
+    <div v-if="orch?.length" class="orch-canvas">
+      <template v-for="(s, i) in orch" :key="s.id">
+        <div v-if="i > 0" class="orch-arrow" :class="{ green: arrowGreen(i) }"></div>
+        <div class="orch-cell">
+          <div class="orch-step" :class="`st-${stepAgg(s)}`" @click="emit('stageClick', s.name)">
+            <span class="seq">{{ i + 1 }}</span>
+            <span class="name">{{ s.name }}</span>
+            <span class="cmd-link" title="查看该步骤发布命令" @click.stop="emit('commandClick', s.name)">命令</span>
+          </div>
+          <div v-if="(s.tasks ?? []).length" class="orch-tasks">
+            <div
+              v-for="t in s.tasks"
+              :key="t.id"
+              class="orch-task"
+              :class="`st-${taskStateOf(s, t)}`"
+              @click="emit('stageClick', s.name)"
+            >
+              <span class="tname">{{ t.name }}</span>
+              <span v-if="t.kind === 'approval'" class="tag t-approval">审批</span>
+              <span v-if="t.condition" class="tag t-cond" :title="`条件：${t.condition}`">条件</span>
+              <span class="tstate">{{ TASK_STATE_TEXT[taskStateOf(s, t)] }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 时间线（legacy / v5 nodes 实例，保持原有展示） -->
+    <div v-else class="flow-track">
       <div
         v-for="(s, i) in nodes"
         :key="s"
@@ -127,11 +229,21 @@ function isWatchdog(s: string) {
     </div>
 
     <div class="flow-foot">
-      <i class="legend-dot" style="background:#52c41a;" /><span>完成</span>
-      <i class="legend-dot" style="background:#1677ff;" /><span>执行中</span>
-      <i class="legend-dot" style="background:#ff4d4f;" /><span>失败</span>
-      <i class="legend-dot" style="background:#fff; border:1px solid #d9d9d9;" /><span>等待</span>
-      <span style="color:#999; margin-left:12px;">点击节点查看阶段说明 · 点「命令」查看该阶段发布命令</span>
+      <template v-if="orch?.length">
+        <i class="legend-dot" style="background: var(--ws-success-500);" /><span>完成</span>
+        <i class="legend-dot" style="background: var(--ws-brand-500);" /><span>执行中</span>
+        <i class="legend-dot" style="background: var(--ws-error-500);" /><span>失败</span>
+        <i class="legend-dot" style="background: var(--ws-warning-500);" /><span>待审批</span>
+        <i class="legend-dot legend-skip" /><span>跳过</span>
+        <i class="legend-dot" style="background: var(--ws-border); border: 1px solid var(--ws-border);" /><span>未执行</span>
+      </template>
+      <template v-else>
+        <i class="legend-dot" style="background:#52c41a;" /><span>完成</span>
+        <i class="legend-dot" style="background:#1677ff;" /><span>执行中</span>
+        <i class="legend-dot" style="background:#ff4d4f;" /><span>失败</span>
+        <i class="legend-dot" style="background:#fff; border:1px solid #d9d9d9;" /><span>等待</span>
+      </template>
+      <span style="color:#999; margin-left:12px;">点击节点/任务查看阶段说明 · 点「命令」查看该步骤发布命令</span>
     </div>
   </div>
 </template>
@@ -158,6 +270,208 @@ function isWatchdog(s: string) {
   border-radius: 4px;
   padding: 2px 8px;
 }
+.coarse-hint {
+  font-size: 11px;
+  color: var(--ws-text-tertiary);
+  border: 1px dashed var(--ws-border);
+  border-radius: 3px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+
+/* ===== 编排画布（与编辑页画布同构的只读版） ===== */
+.orch-canvas {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 8px 4px 4px;
+}
+.orch-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+/* 步骤间箭头（走过路径变绿） */
+.orch-arrow {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 2px;
+  margin-top: 18px;
+  background: var(--ws-border);
+}
+.orch-arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  border-left: 6px solid var(--ws-border);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.orch-arrow.green {
+  background: var(--ws-success-500);
+}
+.orch-arrow.green::after {
+  border-left-color: var(--ws-success-500);
+}
+/* 步骤卡 */
+.orch-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--ws-border);
+  border-radius: 6px;
+  background: var(--ws-bg-surface);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.orch-step:hover {
+  border-color: var(--ws-brand-400);
+}
+.orch-step .seq {
+  font-family: var(--ws-font-mono, monospace);
+  font-size: 11px;
+  color: var(--ws-text-tertiary);
+}
+.orch-step .name {
+  font-weight: 500;
+  color: var(--ws-text-primary);
+}
+.orch-step .cmd-link {
+  font-size: 11px;
+  line-height: 16px;
+}
+/* 任务分叉（结构对齐编辑页 branch-nodes，只读） */
+.orch-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  margin-top: 6px;
+  padding-left: 16px;
+}
+.orch-tasks::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -6px;
+  bottom: 6px;
+  border-left: 2px solid var(--ws-border);
+}
+.orch-task {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: 5px;
+  background: var(--ws-bg-surface);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.orch-task::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  background: var(--ws-border);
+}
+.orch-task .tname {
+  color: var(--ws-text-secondary);
+}
+.orch-task .tstate {
+  color: var(--ws-text-tertiary);
+}
+.orch-task .tag {
+  font-size: 10px;
+  line-height: 15px;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.tag.t-approval {
+  color: #722ed1;
+  background: #f9f0ff;
+}
+.tag.t-cond {
+  color: var(--ws-brand-600);
+  background: var(--ws-brand-100);
+}
+
+/* 状态着色（token 单源，dark 主题自动适配） */
+.orch-step.st-succeeded,
+.orch-task.st-succeeded {
+  border-color: var(--ws-success-500);
+  background: var(--ws-success-100);
+}
+.orch-step.st-succeeded .name,
+.orch-task.st-succeeded .tname {
+  color: var(--ws-success-500);
+}
+.orch-step.st-running {
+  border-color: var(--ws-brand-500);
+  animation: orch-breathe 1.6s ease-in-out infinite;
+}
+.orch-task.st-running {
+  border-color: var(--ws-brand-500);
+}
+.orch-task.st-running .tstate,
+.orch-step.st-running .name {
+  color: var(--ws-brand-500);
+}
+@keyframes orch-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.25); }
+  50% { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0); }
+}
+.orch-step.st-failed,
+.orch-task.st-failed {
+  border-color: var(--ws-error-500);
+  background: var(--ws-error-100);
+}
+.orch-step.st-failed .name,
+.orch-task.st-failed .tname,
+.orch-task.st-failed .tstate {
+  color: var(--ws-error-500);
+}
+.orch-step.st-awaiting,
+.orch-task.st-awaiting {
+  border-color: var(--ws-warning-500);
+  background: var(--ws-warning-100);
+}
+.orch-task.st-awaiting .tstate,
+.orch-step.st-awaiting .name {
+  color: var(--ws-warning-500);
+}
+.orch-step.st-skipped,
+.orch-task.st-skipped {
+  border-style: dashed;
+  opacity: 0.75;
+}
+.orch-step.st-cancelled,
+.orch-task.st-cancelled {
+  border-style: dashed;
+  opacity: 0.75;
+}
+.orch-step.st-none,
+.orch-task.st-none {
+  /* 未执行：默认灰边框（不额外着色） */
+}
+.orch-task.st-none,
+.orch-task.st- {
+  /* 无状态（未到/未记录）：弱化 */
+  opacity: 0.85;
+}
+
+/* ===== 时间线（原样式保持） ===== */
 .flow-track {
   display: flex;
   align-items: flex-start;
@@ -296,5 +610,9 @@ function isWatchdog(s: string) {
   height: 8px;
   border-radius: 50%;
   margin-left: 8px;
+}
+.legend-skip {
+  background: var(--ws-bg-surface);
+  border: 1px dashed var(--ws-border);
 }
 </style>

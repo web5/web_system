@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>deploy-console · 版本部署原型 v1（独立部署界面，与发布流水线解耦）</title>
+<style>
+  /* ============ 设计 Token（admin 系，主橙 DR-3） ============ */
+  :root{
+    --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
+    --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
+    --danger:#E5484D; --danger-soft:#FDEBEC;
+    --warn:#E8833A;  --warn-soft:#FFF3E6;
+    --ok:#2E9E5B;    --ok-soft:#E7F5EC;
+    --info:#2563EB;  --info-soft:#EBF2FF;
+    --border:#E8EBF0; --radius:14px; --radius-sm:10px;
+    --shadow:0 2px 12px rgba(20,30,50,.06);
+    --gap:8px;
+    --bg-hover:#F2F4F7;
+    --mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:#E9EDF3;display:flex;justify-content:center;align-items:flex-start;
+    min-height:100vh;padding:20px;gap:24px;
+  }
+  .mono{font-family:var(--mono);letter-spacing:.2px;}
+
+  /* ============ 桌面壳（admin/deploy-console） ============ */
+  .desktop{width:1180px;height:780px;background:var(--bg);border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--border);
+    display:flex;flex-shrink:0;position:relative;}
+  .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:16px 12px;overflow:auto;}
+  .sidebar .logo{font-size:15px;font-weight:700;color:var(--text);padding:8px 10px 4px;}
+  .sidebar .logo-sub{font-size:11px;color:var(--text-3);padding:0 10px 14px;}
+  .side-group{font-size:11px;color:var(--text-3);font-weight:600;padding:12px 10px 6px;letter-spacing:.5px;}
+  .side-item{padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;
+    cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:10px;transition:background .15s;}
+  .side-item:hover{background:var(--bg-hover);}
+  .side-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600;}
+  .side-item .ic{width:16px;height:16px;flex-shrink:0;}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:52px;background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 20px;font-size:15px;font-weight:600;color:var(--text);
+    justify-content:space-between;flex-shrink:0;}
+  .topbar .sub{font-size:12px;color:var(--text-3);font-weight:400;margin-left:8px;}
+  .topbar .actions{display:flex;align-items:center;gap:12px;}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--primary-soft);color:var(--primary);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;}
+  .ghost-btn{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:8px;
+    padding:5px 12px;font-size:12.5px;cursor:pointer;transition:all .15s;}
+  .ghost-btn:hover{color:var(--text);border-color:var(--text-3);}
+  .content{flex:1;overflow:auto;padding:20px;}
+  .content .screen{display:none;}
+  .content .screen.active{display:block;animation:fadeIn .2s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  /* ============ 页头 / 筛选 / 表格 ============ */
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+  .page-head h1{font-size:22px;font-weight:600;color:var(--text);}
+  .page-head .cap{font-size:13px;color:var(--text-2);margin-top:4px;}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:16px;margin-bottom:16px;border:1px solid var(--border);}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+  .tab{padding:8px 16px;font-size:13.5px;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;
+    transition:color .15s;display:flex;align-items:center;gap:6px;}
+  .tab:hover{color:var(--text);}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:12px;color:var(--text-3);font-weight:600;text-align:left;padding:8px 12px;
+    border-bottom:1px solid var(--border);white-space:nowrap;}
+  td{font-size:13px;color:var(--text);padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr{transition:background .15s;}
+  tbody tr:hover{background:var(--bg-hover);}
+  tr.just-deployed td{background:var(--ok-soft) !important;}
+  .mod-name{font-weight:600;}
+  .mod-key{font-size:11.5px;color:var(--text-3);}
+  .tag{font-size:11.5px;padding:2px 8px;border-radius:20px;font-weight:600;display:inline-block;white-space:nowrap;}
+  .tag.primary{color:var(--primary);background:var(--primary-soft);}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);}
+  .tag.info{color:var(--info);background:var(--info-soft);}
+  .tag.gray{color:var(--text-2);background:var(--bg-hover);}
+  .link-btn{color:var(--primary);font-size:13px;cursor:pointer;background:none;border:none;padding:0;
+    font-weight:600;}
+  .link-btn:hover{color:var(--primary-dark);}
+  .link-btn[disabled]{color:var(--text-3);cursor:not-allowed;font-weight:400;}
+  .opt-sep{color:var(--border);margin:0 8px;}
+  .note-strip{font-size:12px;color:var(--text-3);margin-top:10px;display:flex;gap:6px;align-items:center;}
+  .demo-strip{background:var(--info-soft);color:var(--info);font-size:12px;border-radius:8px;
+    padding:6px 10px;margin-bottom:12px;display:flex;gap:6px;align-items:center;}
+
+  /* ============ 抽屉 ============ */
+  .drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;z-index:40;}
+  .drawer-mask.show{display:block;}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:460px;background:var(--card);
+    border-left:1px solid var(--border);display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform .22s ease;z-index:41;}
+  .drawer.show{transform:none;}
+  .drawer-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;
+    justify-content:space-between;align-items:center;}
+  .drawer-head .t{font-size:15px;font-weight:600;color:var(--text);}
+  .drawer-head .d{font-size:12px;color:var(--text-3);margin-top:3px;}
+  .close-x{width:28px;height:28px;border:none;background:none;color:var(--text-3);cursor:pointer;
+    border-radius:8px;font-size:16px;line-height:1;}
+  .close-x:hover{background:var(--bg-hover);color:var(--text);}
+  .drawer-body{flex:1;overflow:auto;padding:16px 20px;}
+  .cur-box{background:var(--bg-hover);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;
+    font-size:12.5px;color:var(--text-2);display:flex;align-items:center;gap:8px;}
+  .ver-list{display:flex;flex-direction:column;gap:8px;}
+  .ver-item{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;cursor:pointer;
+    display:flex;align-items:flex-start;gap:10px;transition:all .15s;}
+  .ver-item:hover{border-color:var(--primary);background:var(--primary-soft);}
+  .ver-item.sel{border-color:var(--primary);background:var(--primary-soft);}
+  .ver-item.cur-item{cursor:not-allowed;opacity:.62;}
+  .ver-item.cur-item:hover{border-color:var(--border);background:none;}
+  .radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--text-3);flex-shrink:0;
+    margin-top:2px;display:flex;align-items:center;justify-content:center;}
+  .ver-item.sel .radio{border-color:var(--primary);}
+  .ver-item.sel .radio::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary);}
+  .ver-main{flex:1;min-width:0;}
+  .ver-tag-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ver-tag{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);}
+  .ver-meta{font-size:12px;color:var(--text-3);margin-top:4px;}
+  .drawer-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;}
+  .btn{border:none;border-radius:8px;padding:8px 18px;font-size:13.5px;font-weight:600;cursor:pointer;
+    transition:all .15s;display:flex;align-items:center;gap:8px;}
+  .btn.default{background:var(--card);border:1px solid var(--border);color:var(--text-2);}
+  .btn.default:hover{color:var(--text);border-color:var(--text-3);}
+  .btn.primary{background:var(--primary);color:#fff;}
+  .btn.primary:hover{background:var(--primary-dark);}
+  .btn.primary[disabled]{opacity:.5;cursor:not-allowed;}
+  .btn.danger{background:var(--danger);color:#fff;}
+  .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;
+    animation:rot .7s linear infinite;}
+  @keyframes rot{to{transform:rotate(360deg);}}
+
+  /* 抽屉内空态/错误态 */
+  .drawer-empty{text-align:center;padding:48px 16px;color:var(--text-3);}
+  .drawer-empty .ic,.drawer-err .ic{width:44px;height:44px;margin:0 auto 12px;color:var(--text-3);opacity:.6;}
+  .drawer-empty .h{font-size:13.5px;color:var(--text-2);font-weight:600;margin-bottom:6px;}
+  .drawer-empty .p{font-size:12.5px;line-height:1.7;}
+  .drawer-err{text-align:center;padding:40px 16px;color:var(--text-3);}
+  .drawer-err .h{font-size:13.5px;color:var(--danger);font-weight:600;margin-bottom:6px;}
+
+  /* ============ 弹窗 / Toast ============ */
+  .modal-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;
+    align-items:center;justify-content:center;z-index:55;padding:24px;}
+  .modal-mask.show{display:flex;}
+  .modal{background:var(--card);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;
+    animation:fadeIn .18s ease;}
+  .modal .mt{font-size:15px;font-weight:600;color:var(--text);margin-bottom:12px;display:flex;gap:8px;align-items:center;}
+  .modal .mc{font-size:13px;color:var(--text-2);line-height:1.8;}
+  .modal .mc b{color:var(--text);}
+  .modal .mc .warn-line{display:flex;gap:8px;background:var(--warn-soft);color:var(--warn);
+    border-radius:8px;padding:8px 10px;margin-top:10px;font-size:12.5px;line-height:1.7;align-items:flex-start;}
+  .modal .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;}
+  .toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);
+    background:rgba(0,0,0,.82);color:#fff;padding:9px 18px;border-radius:10px;font-size:13px;
+    z-index:70;opacity:0;pointer-events:none;transition:opacity .2s;display:flex;gap:8px;align-items:center;}
+  .toast.show{opacity:1;}
+
+  /* ============ 应用详情演示屏 ============ */
+  .detail-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .detail-head h1{font-size:20px;font-weight:600;}
+  .crumb{font-size:12px;color:var(--text-3);margin-bottom:10px;}
+  .crumb a{color:var(--info);cursor:pointer;text-decoration:none;}
+  .desc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+  .desc-cell{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;}
+  .desc-cell .k{font-size:11.5px;color:var(--text-3);margin-bottom:4px;}
+  .desc-cell .v{font-size:13px;color:var(--text);font-weight:500;}
+
+  /* 侧边注释（原型说明） */
+  .proto-note{width:300px;flex-shrink:0;font-size:13px;color:var(--text-2);line-height:1.8;
+    align-self:flex-start;position:sticky;top:20px;}
+  .proto-note h3{font-size:14px;color:var(--text);margin-bottom:10px;}
+  .proto-note .box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);}
+  .proto-note .box h4{font-size:12.5px;color:var(--text);margin-bottom:8px;font-weight:600;}
+  .proto-note ul{padding-left:16px;}
+  .proto-note li{margin-bottom:5px;font-size:12.5px;}
+  .proto-note .k{color:var(--primary);font-weight:600;}
+  .proto-note .todo{color:var(--warn);}
+</style>
+</head>
+<body>
+
+<div class="desktop">
+  <!-- ============ 侧边栏（双域导航，对齐 MainLayout 真实结构） ============ -->
+  <aside class="sidebar">
+    <div class="logo">发布控制台</div>
+    <div class="logo-sub">deploy-console</div>
+
+    <div class="side-group">微前端</div>
+    <div class="side-item" data-nav="apps">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      应用管理
+    </div>
+    <div class="side-item" data-nav="out">环境管理</div>
+    <div class="side-item active" data-nav="deploy-micro" id="nav-micro">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg></span>
+      版本部署
+    </div>
+
+    <div class="side-group">API 网关</div>
+    <div class="side-item" data-nav="out">服务管理</div>
+    <div class="side-item" data-nav="deploy-backend" id="nav-backend">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg></span>
+      版本部署
+    </div>
+
+    <div class="side-group">流水线</div>
+    <div class="side-item" data-nav="out">流水线列表</div>
+    <div class="side-item" data-nav="out">灰度管理</div>
+
+    <div class="side-group">基础设施</div>
+    <div class="side-item" data-nav="out">审计日志</div>
+    <div class="side-item" data-nav="out">配置中心</div>
+  </aside>
+
+  <div class="main">
+    <!-- ============ 顶栏 ============ -->
+    <div class="topbar">
+      <span>版本部署<span class="sub" id="topbar-sub">微前端模块 · 与发布流水线解耦</span></span>
+      <div class="actions">
+        <button class="ghost-btn" onclick="openAbout()">本稿说明</button>
+        <div class="avatar">G</div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============ 屏 1：版本部署（主界面） ============ -->
+      <div class="screen active" id="screen-deploy">
+        <div class="page-head">
+          <div>
+            <h1>版本部署</h1>
+            <div class="cap">选择已有发布版本直接部署到目标环境；构建与发布走「流水线」，部署不依赖流水线</div>
+          </div>
+        </div>
+
+        <div class="demo-strip" id="demo-strip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span>演示提示：local 环境下 mcp-admin 为<b>空态</b>、portal 为<b>错误态</b>（重试可恢复），供评审交互分支</span>
+        </div>
+
+        <div class="card">
+          <!-- 环境 tabs（页面主导筛选维度，互斥 ≤5 → tabs） -->
+          <div class="tabs" id="env-tabs">
+            <div class="tab active" data-env="dev">dev</div>
+            <div class="tab" data-env="local">local</div>
+            <div class="tab" data-env="prod">prod</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width:200px;">模块</th>
+                <th style="width:100px;">类型</th>
+                <th style="width:190px;">当前版本</th>
+                <th style="width:150px;">发布时间</th>
+                <th style="width:100px;">发布人</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="mod-tbody"><!-- JS 渲染 --></tbody>
+          </table>
+
+          <div class="note-strip">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span id="note-strip-text">前端/微前端模块部署 = 切换版本指针，刷新页面即生效，不触碰任何进程；版本来自发布流水线写入的版本记录</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 屏 2：应用管理 → 应用详情（入口改造示意） ============ -->
+      <div class="screen" id="screen-app">
+        <div class="crumb"><a onclick="nav('deploy-micro')">应用管理</a> / admin</div>
+        <div class="detail-head">
+          <div>
+            <h1>管理后台（admin）</h1>
+            <div class="cap" style="font-size:12.5px;color:var(--text-3);margin-top:4px;">微前端应用 · 挂载 /admin</div>
+          </div>
+        </div>
+
+        <div class="desc-grid">
+          <div class="desc-cell"><div class="k">部署模式</div><div class="v">站点 + 版本</div></div>
+          <div class="desc-cell"><div class="k">产物路径</div><div class="v mono" style="font-size:12px;">/static/modules/admin/&lt;version&gt;/</div></div>
+          <div class="desc-cell"><div class="k">路由数</div><div class="v">3</div></div>
+          <div class="desc-cell"><div class="k">最近发布</div><div class="v">09-20 14:32</div></div>
+        </div>
+
+        <div class="card">
+          <div class="tabs">
+            <div class="tab">概览</div>
+            <div class="tab">路由</div>
+            <div class="tab active">部署</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:190px;">环境</th>
+                <th style="width:170px;">当前版本</th>
+                <th style="width:170px;">上一版本</th>
+                <th style="width:160px;">发布时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>dev</td>
+                <td class="mono">20260920-3f2a1b8</td>
+                <td class="mono">20260919-c4d5e6f</td>
+                <td>2026-09-20 14:32</td>
+                <td>
+                  <button class="link-btn" onclick="openDrawer('micro','admin','dev')">部署</button>
+                  <span class="opt-sep">|</span>
+                  <button class="link-btn" onclick="toast('回滚入口保持现状（回到上一版本）')">回滚</button>
+                  <span class="opt-sep">|</span>
+                  <button class="link-btn" onclick="toast('跳转发布流水线发起发布（构建新版本）')">去发布</button>
+                </td>
+              </tr>
+              <tr>
+                <td>local</td>
+                <td class="mono">20260920-3f2a1b8</td>
+                <td class="mono">—</td>
+                <td>2026-09-20 14:32</td>
+                <td>
+                  <button class="link-btn" onclick="openDrawer('micro','admin','local')">部署</button>
+                  <span class="opt-sep">|</span>
+                  <button class="link-btn" onclick="toast('回滚入口保持现状')">回滚</button>
+                  <span class="opt-sep">|</span>
+                  <button class="link-btn" onclick="toast('跳转发布流水线发起发布')">去发布</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="note-strip">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>入口改造：原「部署」跳转发布流水线 → 现改为在本页打开<b style="color:var(--text-2);">选版本部署抽屉</b>（与「版本部署」页同一交互）</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 部署抽屉 ============ -->
+  <div class="drawer-mask" id="drawer-mask" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="t" id="drawer-title">部署 admin 到 dev</div>
+        <div class="d" id="drawer-sub">从下方版本记录中选择一个版本部署</div>
+      </div>
+      <button class="close-x" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"><!-- JS 渲染 --></div>
+    <div class="drawer-foot" id="drawer-foot" style="display:none;">
+      <button class="btn default" onclick="closeDrawer()">取消</button>
+      <button class="btn primary" id="btn-deploy" onclick="onDeployClick()">部署到 dev</button>
+    </div>
+  </div>
+
+  <!-- ============ 二次确认弹窗 ============ -->
+  <div class="modal-mask" id="confirm-mask">
+    <div class="modal">
+      <div class="mt">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--warn);"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span id="confirm-title">确认部署</span>
+      </div>
+      <div class="mc" id="confirm-body"></div>
+      <div class="mf">
+        <button class="btn default" onclick="closeConfirm()">取消</button>
+        <button class="btn primary" id="btn-confirm" onclick="doDeploy()">确认部署</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 本稿说明弹窗 ============ -->
+  <div class="modal-mask" id="about-mask" onclick="closeAbout()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="mt"><span>原型说明 · 设计决策记录</span></div>
+      <div class="mc">
+        <b>目标端</b>：桌面 Web（deploy-console 管理台，admin 系规范，主橙 #F97316）<br><br>
+        <b>核心决策</b>：<br>
+        1. 部署与发布流水线<b>解耦</b>：独立「版本部署」界面，选已有版本直接部署，不进流水线执行记录；<br>
+        2. 前端/微前端 = 切版本指针（复用现有 switchVersion / deployVersion 改指针能力）；<br>
+        3. 后端服务 = 换产物目录 + 重启 pm2（复用现有 deployVersion 的 applyBackendVersion），确认弹窗写明中断后果；<br>
+        4. 环境为页面主导筛选维度 → tabs；版本选择在抽屉内 radio 列表。<br><br>
+        <b style="color:var(--warn);">待拍板</b>：<br>
+        ① 导航归属：微前端/API 网关两域各挂「版本部署」入口（本稿画法） vs 单独一级域；<br>
+        ② 应用详情「部署」按钮从跳流水线改为本抽屉（本稿屏 2 示意）是否一并改。
+      </div>
+      <div class="mf"><button class="btn default" onclick="closeAbout()">关闭</button></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- ============ 侧边评审注释（非界面部分） ============ -->
+<aside class="proto-note">
+  <div class="box">
+    <h3>这是什么稿</h3>
+    <ul>
+      <li><span class="k">需求</span>：微前端/API 网关服务的「部署」不再跳发布流水线，单独界面选已有发布版本直接部署。</li>
+      <li><span class="k">数据</span>：版本列表来自 deploy_versions（流水线发布时写入）；部署动作走现有改指针接口。</li>
+    </ul>
+  </div>
+  <div class="box">
+    <h3>评审动线（按顺序点）</h3>
+    <ul>
+      <li>1. 表格行点「<span class="k">部署</span>」→ 打开版本抽屉</li>
+      <li>2. 选版本 → 「部署到 dev」→ 二次确认 → loading → 成功 toast + 当前版本更新</li>
+      <li>3. 左侧切「<span class="k">API 网关 · 版本部署</span>」→ 后端服务部署（确认弹窗含重启警告）</li>
+      <li>4. 环境 tab 切「<span class="k">local</span>」→ mcp-admin 空态 / portal 错误态</li>
+      <li>5. 左侧「<span class="k">应用管理</span>」→ 应用详情「部署」按钮入口改造示意</li>
+    </ul>
+  </div>
+  <div class="box">
+    <h3>待确认项</h3>
+    <ul>
+      <li class="todo">① 导航归属：双域入口 vs 独立一级域</li>
+      <li class="todo">② 应用详情「部署」入口是否一并改</li>
+      <li class="todo">③ 后端服务「选版本直接部署」是否开放（涉及重启）</li>
+    </ul>
+  </div>
+</aside>
+
+<script>
+/* ================= 数据（演示数据，对齐真实模块名/表结构字段） ================= */
+const MODULES = {
+  micro: {
+    dev: [
+      { key:'admin',     name:'管理后台',   cur:'20260920-3f2a1b8', time:'2026-09-20 14:32', by:'geekwen' },
+      { key:'portal',    name:'门户站点',   cur:'20260919-c4d5e6f', time:'2026-09-19 18:05', by:'geekwen' },
+      { key:'mcp-admin', name:'MCP 管理台', cur:'20260918-9a8b7c6', time:'2026-09-18 11:47', by:'lin' },
+    ],
+    local: [
+      { key:'admin',     name:'管理后台',   cur:'20260920-3f2a1b8', time:'2026-09-20 14:32', by:'geekwen' },
+      { key:'portal',    name:'门户站点',   cur:null, time:'—', by:'—' },            // 错误态演示
+      { key:'mcp-admin', name:'MCP 管理台', cur:null, time:'—', by:'—' },            // 空态演示
+    ],
+    prod: [
+      { key:'admin',     name:'管理后台',   cur:'20260918-9a8b7c6', time:'2026-09-18 11:47', by:'geekwen' },
+      { key:'portal',    name:'门户站点',   cur:'20260918-9a8b7c6', time:'2026-09-18 11:47', by:'geekwen' },
+    ],
+  },
+  backend: {
+    dev: [
+      { key:'auth',      name:'认证服务',   cur:'20260921-8d1e2f3', time:'2026-09-21 09:15', by:'geekwen' },
+      { key:'system',    name:'系统服务',   cur:'20260920-5b6c7d8', time:'2026-09-20 16:40', by:'geekwen' },
+      { key:'todo',      name:'待办服务',   cur:'20260917-2e3f4a5', time:'2026-09-17 10:22', by:'lin' },
+    ],
+    local: [
+      { key:'auth',      name:'认证服务',   cur:'20260921-8d1e2f3', time:'2026-09-21 09:15', by:'geekwen' },
+      { key:'system',    name:'系统服务',   cur:'20260920-5b6c7d8', time:'2026-09-20 16:40', by:'geekwen' },
+    ],
+    prod: [
+      { key:'auth',      name:'认证服务',   cur:'20260918-4a5b6c7', time:'2026-09-18 11:47', by:'geekwen' },
+    ],
+  },
+};
+
+/* 每个模块的版本记录（deploy_versions 语义：tag / 分支 / commit / 时间 / 发布人） */
+const VERSIONS = {
+  'micro:admin:dev': [
+    { tag:'20260921-e7f3a91', branch:'main',  commit:'e7f3a91', time:'2026-09-21 10:12', by:'geekwen' },
+    { tag:'20260920-3f2a1b8', branch:'main',  commit:'3f2a1b8', time:'2026-09-20 14:32', by:'geekwen', current:true },
+    { tag:'20260919-c4d5e6f', branch:'main',  commit:'c4d5e6f', time:'2026-09-19 18:05', by:'geekwen' },
+    { tag:'20260918-9a8b7c6', branch:'feat/x',commit:'9a8b7c6', time:'2026-09-18 11:47', by:'lin' },
+  ],
+  'micro:admin:local': [
+    { tag:'20260920-3f2a1b8', branch:'main', commit:'3f2a1b8', time:'2026-09-20 14:32', by:'geekwen', current:true },
+    { tag:'20260919-c4d5e6f', branch:'main', commit:'c4d5e6f', time:'2026-09-19 18:05', by:'geekwen' },
+  ],
+  'micro:portal:dev': [
+    { tag:'20260919-c4d5e6f', branch:'main', commit:'c4d5e6f', time:'2026-09-19 18:05', by:'geekwen', current:true },
+    { tag:'20260918-9a8b7c6', branch:'main', commit:'9a8b7c6', time:'2026-09-18 11:47', by:'lin' },
+  ],
+  'micro:mcp-admin:dev': [
+    { tag:'20260918-9a8b7c6', branch:'feat/mcp-console', commit:'9a8b7c6', time:'2026-09-18 11:47', by:'lin', current:true },
+  ],
+  'micro:admin:prod': [
+    { tag:'20260918-9a8b7c6', branch:'main', commit:'9a8b7c6', time:'2026-09-18 11:47', by:'geekwen', current:true },
+  ],
+  'micro:portal:prod': [
+    { tag:'20260918-9a8b7c6', branch:'main', commit:'9a8b7c6', time:'2026-09-18 11:47', by:'geekwen', current:true },
+  ],
+  'backend:auth:dev': [
+    { tag:'20260921-8d1e2f3', branch:'main', commit:'8d1e2f3', time:'2026-09-21 09:15', by:'geekwen', current:true },
+    { tag:'20260920-5b6c7d8', branch:'main', commit:'5b6c7d8', time:'2026-09-20 09:40', by:'geekwen' },
+  ],
+  'backend:system:dev': [
+    { tag:'20260920-5b6c7d8', branch:'main', commit:'5b6c7d8', time:'2026-09-20 16:40', by:'geekwen', current:true },
+    { tag:'20260919-1a2b3c4', branch:'main', commit:'1a2b3c4', time:'2026-09-19 15:20', by:'lin' },
+  ],
+  'backend:todo:dev': [
+    { tag:'20260917-2e3f4a5', branch:'main', commit:'2e3f4a5', time:'2026-09-17 10:22', by:'lin', current:true },
+    { tag:'20260915-7g8h9i0', branch:'main', commit:'7g8h9i0', time:'2026-09-15 14:05', by:'lin' },
+  ],
+  'backend:auth:local': [
+    { tag:'20260921-8d1e2f3', branch:'main', commit:'8d1e2f3', time:'2026-09-21 09:15', by:'geekwen', current:true },
+  ],
+  'backend:system:local': [
+    { tag:'20260920-5b6c7d8', branch:'main', commit:'5b6c7d8', time:'2026-09-20 16:40', by:'geekwen', current:true },
+  ],
+  'backend:auth:prod': [
+    { tag:'20260918-4a5b6c7', branch:'main', commit:'4a5b6c7', time:'2026-09-18 11:47', by:'geekwen', current:true },
+  ],
+};
+
+/* 演示分支：local@portal 报加载错误（重试恢复）、local@mcp-admin 无版本 */
+const ERR_KEYS = ['micro:portal:local'];
+const EMPTY_KEYS = ['micro:mcp-admin:local'];
+
+/* ================= 状态 ================= */
+let curDomain = 'micro';     // micro | backend
+let curEnv = 'dev';
+let drawerCtx = null;        // { domain, moduleKey, env, selected }
+let deploying = false;
+
+/* ================= 渲染 ================= */
+function renderTable(justDeployedKey){
+  const rows = MODULES[curDomain][curEnv] || [];
+  const tbody = document.getElementById('mod-tbody');
+  tbody.innerHTML = rows.map(m => `
+    <tr class="${m.key===justDeployedKey?'just-deployed':''}">
+      <td><div class="mod-name">${m.name}</div><div class="mod-key mono">${m.key}</div></td>
+      <td>${curDomain==='micro' ? '<span class="tag info">微前端</span>' : '<span class="tag gray">后端服务</span>'}</td>
+      <td>${m.cur ? `<span class="mono">${m.cur}</span>` : '<span style="color:var(--text-3);">—</span>'}</td>
+      <td>${m.cur ? m.time : '—'}</td>
+      <td>${m.cur ? m.by : '—'}</td>
+      <td><button class="link-btn" onclick="openDrawer('${curDomain}','${m.key}','${curEnv}')">部署</button></td>
+    </tr>`).join('');
+}
+
+function renderEnvTabs(){
+  const tabs = document.getElementById('env-tabs');
+  const envs = ['dev','local','prod'];
+  tabs.innerHTML = envs.map(e =>
+    `<div class="tab ${e===curEnv?'active':''}" data-env="${e}" onclick="switchEnv('${e}')">${e}</div>`).join('');
+  const showDemo = curDomain==='micro' && curEnv==='local';
+  document.getElementById('demo-strip').style.display = showDemo ? 'flex' : 'none';
+}
+
+function switchEnv(env){
+  curEnv = env; renderEnvTabs(); renderTable();
+}
+
+function renderPageMeta(){
+  document.getElementById('topbar-sub').textContent =
+    curDomain==='micro' ? '微前端模块 · 与发布流水线解耦' : '后端服务 · 与发布流水线解耦';
+  document.getElementById('note-strip-text').textContent = curDomain==='micro'
+    ? '前端/微前端模块部署 = 切换版本指针，刷新页面即生效，不触碰任何进程；版本来自发布流水线写入的版本记录'
+    : '后端服务部署 = 替换版本产物目录并重启 pm2 进程，服务将短暂中断；版本来自发布流水线写入的版本记录';
+}
+
+/* ================= 抽屉 ================= */
+function verKey(domain,key,env){ return `${domain}:${key}:${env}`; }
+
+function openDrawer(domain, moduleKey, env){
+  const mod = MODULES[domain][env].find(m=>m.key===moduleKey);
+  drawerCtx = { domain, moduleKey, env, selected:null };
+  document.getElementById('drawer-title').textContent =
+    `部署 ${mod ? mod.name : moduleKey}（${moduleKey}）到 ${env}`;
+  document.getElementById('btn-deploy').textContent = `部署到 ${env}`;
+  document.getElementById('drawer-mask').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+  renderDrawerBody('loading');
+  setTimeout(()=>renderDrawerBody('ready'), 500);   // 模拟加载时序
+}
+
+function renderDrawerBody(phase){
+  const { domain, moduleKey, env } = drawerCtx;
+  const body = document.getElementById('drawer-body');
+  const foot = document.getElementById('drawer-foot');
+  const key = verKey(domain,moduleKey,env);
+  const mod = MODULES[domain][env].find(m=>m.key===moduleKey);
+
+  if(phase==='loading'){
+    foot.style.display='none';
+    body.innerHTML = `<div class="drawer-empty" style="padding-top:80px;">
+      <div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--primary);
+        border-radius:50%;margin:0 auto 16px;animation:rot .7s linear infinite;"></div>
+      <div class="p">加载版本记录中…</div></div>`;
+    return;
+  }
+
+  // 错误态（可重试）
+  if(ERR_KEYS.includes(key)){
+    foot.style.display='none';
+    body.innerHTML = `<div class="drawer-err">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+      <div class="h">版本记录加载失败</div>
+      <div class="p" style="font-size:12.5px;margin-bottom:14px;">网络或服务异常，请重试</div>
+      <button class="btn default" onclick="retryLoad()">重试</button></div>`;
+    return;
+  }
+
+  // 空态（原因 + 出路）
+  if(EMPTY_KEYS.includes(key) || !(VERSIONS[key] && VERSIONS[key].length)){
+    foot.style.display='none';
+    body.innerHTML = `<div class="drawer-empty">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+      <div class="h">暂无发布版本</div>
+      <div class="p">该模块在 ${env} 环境还没有任何版本记录。<br>先去发布流水线发布一次，产出可部署的版本。</div>
+      <button class="btn primary" style="margin:16px auto 0;" onclick="toast('跳转发布流水线（发起发布）')">去发布流水线</button></div>`;
+    return;
+  }
+
+  // 版本列表（radio；当前版本置灰不可选）
+  const vers = VERSIONS[key];
+  foot.style.display='flex';
+  body.innerHTML = `
+    <div class="cur-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      当前版本：<b class="mono" style="color:var(--text);">${mod && mod.cur ? mod.cur : '—'}</b>
+    </div>
+    <div class="ver-list">
+      ${vers.map(v=>`
+        <div class="ver-item ${v.current?'cur-item':''}" onclick="${v.current?'':`selectVer('${v.tag}')`}">
+          <div class="radio"></div>
+          <div class="ver-main">
+            <div class="ver-tag-line">
+              <span class="ver-tag">${v.tag}</span>
+              ${v.current?'<span class="tag ok">当前</span>':''}
+            </div>
+            <div class="ver-meta">${v.branch} · <span class="mono">${v.commit}</span> · ${v.time} · ${v.by}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  updateDeployBtn();
+}
+
+function retryLoad(){
+  renderDrawerBody('loading');
+  const key = verKey(drawerCtx.domain,drawerCtx.moduleKey,drawerCtx.env);
+  setTimeout(()=>{
+    const i = ERR_KEYS.indexOf(key);
+    if(i>=0) ERR_KEYS.splice(i,1);           // 重试成功
+    renderDrawerBody('ready');
+  }, 600);
+}
+
+function selectVer(tag){
+  drawerCtx.selected = tag;
+  document.querySelectorAll('#drawer-body .ver-item').forEach(el=>{
+    el.classList.toggle('sel', el.querySelector('.ver-tag').textContent===tag);
+  });
+  updateDeployBtn();
+}
+
+function updateDeployBtn(){
+  const btn = document.getElementById('btn-deploy');
+  const ok = !!drawerCtx.selected;
+  btn.disabled = !ok;
+  btn.innerHTML = ok ? `部署到 ${drawerCtx.env}` : `部署到 ${drawerCtx.env}（先选版本）`;
+}
+
+function closeDrawer(){
+  document.getElementById('drawer-mask').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+}
+
+/* ================= 确认 + 部署 ================= */
+function onDeployClick(){
+  const { domain, moduleKey, env, selected } = drawerCtx;
+  const mod = MODULES[domain][env].find(m=>m.key===moduleKey);
+  const from = mod && mod.cur ? mod.cur : '—';
+  const body = document.getElementById('confirm-body');
+  if(domain==='micro'){
+    body.innerHTML = `将把 <b>${env} / ${mod?mod.name:moduleKey}（${moduleKey}）</b>的版本<br>
+      从 <b class="mono">${from}</b> 切换到 <b class="mono">${selected}</b>。<br><br>
+      前端模块仅切换版本指针，用户刷新页面即加载新版本，不影响任何运行中进程。`;
+  } else {
+    body.innerHTML = `将把 <b>${env} / ${mod?mod.name:moduleKey}（${moduleKey}）</b>的版本<br>
+      从 <b class="mono">${from}</b> 切换到 <b class="mono">${selected}</b>。<br>
+      <div class="warn-line">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:3px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span>后端服务部署将替换产物目录并<b>重启 pm2 进程</b>，服务预计中断 3~5 秒，请避开业务高峰操作。</span>
+      </div>`;
+  }
+  document.getElementById('confirm-mask').classList.add('show');
+}
+
+function closeConfirm(){
+  if(!deploying) document.getElementById('confirm-mask').classList.remove('show');
+}
+
+function doDeploy(){
+  const btn = document.getElementById('btn-confirm');
+  deploying = true;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spin"></span> 部署中…`;
+  setTimeout(()=>{
+    const { domain, moduleKey, env, selected } = drawerCtx;
+    const mod = MODULES[domain][env].find(m=>m.key===moduleKey);
+    if(mod){ mod.cur = selected; mod.time = '刚刚'; mod.by = 'geekwen'; }
+    // 版本列表的 current 标记同步
+    const vers = VERSIONS[verKey(domain,moduleKey,env)];
+    if(vers) vers.forEach(v=>v.current = (v.tag===selected));
+    deploying = false;
+    btn.disabled = false; btn.textContent = '确认部署';
+    document.getElementById('confirm-mask').classList.remove('show');
+    closeDrawer();
+    if(document.getElementById('screen-deploy').classList.contains('active')){
+      renderTable(moduleKey);
+    }
+    toast(`${env} / ${moduleKey} 已部署到 ${selected}`, true);
+  }, 1000);
+}
+
+/* ================= 导航 ================= */
+function nav(target){
+  document.querySelectorAll('.side-item').forEach(el=>el.classList.remove('active'));
+  if(target==='deploy-micro'){
+    curDomain='micro';
+    document.getElementById('nav-micro').classList.add('active');
+    showScreen('deploy');
+    renderEnvTabs(); renderTable(); renderPageMeta();
+  } else if(target==='deploy-backend'){
+    curDomain='backend';
+    document.getElementById('nav-backend').classList.add('active');
+    showScreen('deploy');
+    curEnv='dev';
+    renderEnvTabs(); renderTable(); renderPageMeta();
+  } else if(target==='apps'){
+    showScreen('app');
+  }
+}
+function showScreen(id){
+  document.querySelectorAll('.content .screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+id).classList.add('active');
+}
+document.querySelectorAll('.side-item[data-nav]').forEach(el=>{
+  el.addEventListener('click',()=>{
+    const t = el.dataset.nav;
+    if(t==='out'){ toast('该页面不在本次原型范围'); return; }
+    nav(t);
+  });
+});
+
+/* ================= Toast / About ================= */
+let toastTimer=null;
+function toast(msg, okIcon){
+  const t = document.getElementById('toast');
+  t.innerHTML = (okIcon
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7BD3A0" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>'
+    : '') + `<span>${msg}</span>`;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function openAbout(){ document.getElementById('about-mask').classList.add('show'); }
+function closeAbout(){ document.getElementById('about-mask').classList.remove('show'); }
+
+/* ================= 初始化 ================= */
+renderEnvTabs(); renderTable(); renderPageMeta();
+</script>
+</body>
+</html>

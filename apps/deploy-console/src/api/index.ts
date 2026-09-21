@@ -90,6 +90,26 @@ export const deployApi = {
       to: string
       status: string
     }>,
+  /**
+   * 列出发布版本记录（deploy_versions，按 releasedAt 倒序）。
+   * 「版本部署」抽屉的版本列表数据源（含分支/commit/发布人元信息）。
+   */
+  versions: (env?: string, component?: string) =>
+    http.get('/deploy/versions', { params: { env, component } }) as Promise<
+      {
+        id: string
+        env: string
+        component: string
+        versionTag: string
+        gitCommit?: string
+        gitBranch?: string
+        releasedBy?: string
+        releasedAt: string
+        taskId?: string
+        status: string
+        note?: string
+      }[]
+    >,
   moduleDeployments: (moduleKey: string) =>
     http.get(`/deploy/module-deployments/${moduleKey}`) as Promise<{
       moduleKey: string
@@ -397,6 +417,9 @@ export interface ApproverUser {
   roles: string[]
 }
 
+/** 任务级执行状态（镜像自 servers/deploy-console/src/pipeline-orchestration/orchestration-engine.ts） */
+export type TaskRunStatus = 'running' | 'succeeded' | 'failed' | 'skipped' | 'awaiting' | 'cancelled'
+
 export interface PipelineItem {
   id: string
   env: string
@@ -423,6 +446,14 @@ export interface PipelineItem {
   steps?: string[] | null
   /** v5 节点快照：null=legacy（steps 语义）；platform+script */
   nodes?: TemplateNode[] | null
+  /**
+   * 编排快照（新引擎实例）：步骤→任务→动作整树；null=旧链路（nodes/legacy）。
+   * 详情页画布据此渲染与编辑页同构的只读流程图（specs/pipeline-task-status/design.md）。
+   * 引擎快照内 id 必有值（编辑器类型里 id 可选是新建态语义）。
+   */
+  orchestration?: OrchestrationStep[] | null
+  /** 任务级执行状态（key=`${step.id}/${task.id}`）；null=未记录（旧实例） */
+  taskStates?: Record<string, TaskRunStatus> | null
   rollbackOnFailure?: 'previous' | 'none'
   stage?: string
   progress?: { current: number; total: number; message?: string }
@@ -468,6 +499,12 @@ export function commitOf(versionTag: string): string {
 }
 
 export const pipelineRunsApi = {
+  /** 按分支列最近提交（origin/<branch> git log；提交发布时选 commit，留空=最新） */
+  branchCommits: (branch: string, limit = 20) =>
+    http.get(`/pipelines/branch-commits`, { params: { branch, limit } }) as Promise<
+      { hash: string; short: string; subject: string; author: string; date: string }[]
+    >,
+
   submit: (dto: {
     env: string
     moduleKey: string
@@ -485,7 +522,7 @@ export const pipelineRunsApi = {
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
 
-  list: (params?: { env?: string; moduleKey?: string; templateId?: string; limit?: number }) =>
+  list: (params?: { env?: string; moduleKey?: string; pipelineId?: string; limit?: number }) =>
     http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
 
   get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,
@@ -594,12 +631,98 @@ export interface PipelineStepCommand {
   nodeKey: string
   command: string
   actions?: StageAction[] | null
+  /**
+   * 环境分支配置（envId → 该环境脚本）—— 已由「步骤任务」实体取代，仅兼容存量。
+   */
+  envBranches?: Record<string, string> | null
+  /** 步骤执行条件（gate）：不满足则跳过整个步骤；null/空 = 恒执行 */
+  condition?: string | null
   enabled: boolean
   /** 平台托管（locked）：接口拒写、页面只读（如 git） */
   locked?: boolean
   timeoutSec?: number | null
   updatedBy?: string | null
   updatedAt?: string | null
+}
+
+/** 步骤任务（分支）：步骤 1:N 任务，运行时按条件命中 */
+export interface StepBranch {
+  id?: string
+  name: string
+  label?: string | null
+  /** 匹配条件；null/空 = 默认任务（兜底） */
+  condition?: string | null
+  script: string
+  sort?: number
+}
+
+export const stepBranchApi = {
+  list: (templateId: string, nodeKey: string) =>
+    http.get(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`) as Promise<StepBranch[]>,
+
+  save: (templateId: string, nodeKey: string, branches: StepBranch[]) =>
+    http.put(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`, { branches }) as Promise<
+      StepBranch[]
+    >,
+
+  clear: (templateId: string, nodeKey: string) =>
+    http.delete(`/pipeline-templates/${templateId}/steps/${nodeKey}/branches`) as Promise<{
+      ok: boolean
+    }>,
+}
+
+/**
+ * 编排新模型：步骤 → 任务 → 动作（specs/pipeline-step-task/design.md）。
+ * 动作一律 shell 脚本；调用平台能力（写版本记录）= 脚本内调平台工具。
+ */
+export interface OrchestrationAction {
+  id?: string
+  name: string
+  script: string
+  /** 平台托管动作（git/build）：不可删除、不可改名 */
+  managed?: boolean
+  sort?: number
+  enabled?: boolean
+}
+
+export interface OrchestrationTask {
+  id?: string
+  kind: 'script' | 'approval'
+  name: string
+  /** 执行条件；空 = 恒执行（多选一用互斥条件，不提供默认兜底） */
+  condition?: string | null
+  env?: Record<string, string> | null
+  approval?: { approvers: string[]; timeoutSec?: number; timeoutAction?: 'skip' | 'fail'; onReject?: 'fail' | 'skip' } | null
+  sort?: number
+  enabled?: boolean
+  actions?: OrchestrationAction[]
+}
+
+export interface OrchestrationStep {
+  id?: string
+  name: string
+  description?: string | null
+  sort?: number
+  enabled?: boolean
+  tasks?: OrchestrationTask[]
+}
+
+export const orchestrationApi = {
+  /** 整树：步骤（含任务，任务含动作）；空数组 = 该流水线未迁移新模型（走旧画布） */
+  getTree: (pipelineId: string) =>
+    http.get(`/pipelines/${pipelineId}/steps`) as Promise<OrchestrationStep[]>,
+
+  /** 步骤全量保存（带 id = 更新可改名，任务保留；不带 = 新建；空数组=清空） */
+  saveSteps: (pipelineId: string, steps: { id?: string; name: string; description?: string | null; sort?: number; enabled?: boolean }[]) =>
+    http.put(`/pipelines/${pipelineId}/steps`, { steps }) as Promise<OrchestrationStep[]>,
+
+  /** 某步骤任务全量保存（含各自动作）；managed 动作不可删/不可改名 */
+  saveTasks: (pipelineId: string, stepId: string, tasks: OrchestrationTask[]) =>
+    http.put(`/pipelines/${pipelineId}/steps/${stepId}/tasks`, { tasks }) as Promise<OrchestrationStep[]>,
+
+  /** 删除步骤（级联任务与动作） */
+  deleteStep: (pipelineId: string, stepId: string) =>
+    http.delete(`/pipelines/${pipelineId}/steps/${stepId}`) as Promise<{ deleted: string }>,
 }
 
 export const pipelineStepApi = {
@@ -611,6 +734,10 @@ export const pipelineStepApi = {
         configured: boolean
         command: string | null
         actions: StageAction[]
+        /** 环境分支配置（envId → 脚本）；null = 未启用（已由步骤任务取代） */
+        envBranches?: Record<string, string> | null
+        /** 步骤执行条件（gate）；null/空 = 恒执行 */
+        condition?: string | null
         enabled: boolean
         locked: boolean
         timeoutSec: number | null
@@ -627,7 +754,15 @@ export const pipelineStepApi = {
   save: (
     templateId: string,
     nodeKey: string,
-    dto: { command?: string; timeoutSec?: number; actions?: StageAction[] },
+    dto: {
+      command?: string
+      timeoutSec?: number
+      actions?: StageAction[]
+      /** 环境分支（envId → 脚本）：非空=启用并生成执行体；null=关闭 */
+      envBranches?: Record<string, string> | null
+      /** 步骤执行条件（gate）：不满足则跳过整个步骤；null/空串=恒执行 */
+      condition?: string | null
+    },
   ) =>
     http.put(`/pipeline-templates/${templateId}/steps/${nodeKey}`, dto) as Promise<PipelineStepCommand>,
 

@@ -7,15 +7,23 @@ import {
   pipelineStepApi,
   pipelineVarApi,
   pipelineRunsApi,
+  stepBranchApi,
   deployApi,
+  orchestrationApi,
   type PipelineTemplate,
   type PipelineVar,
   type TemplateNode,
+  type StepBranch,
+  type StageAction,
   PLATFORM_NODE_KEYS,
 } from '@/api'
 import UserSelect from '@web-system/ui/components/UserSelect.vue'
 import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
+import OrchestrationEditor from '@/components/pipeline/OrchestrationEditor.vue'
+import VariableScopePanel from '@/components/pipeline/VariableScopePanel.vue'
+import StepBranchEditor from '@/components/pipeline/StepBranchEditor.vue'
+import StepConditionEditor from '@/components/pipeline/StepConditionEditor.vue'
 import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
 import VarReferenceTable from '@/components/pipeline/VarReferenceTable.vue'
 import { isShellNode, nodeDisplayName } from '@/components/pipeline/pipeline.stages'
@@ -70,6 +78,95 @@ const ENV_OPTIONS = [
 const nodeDraft = ref<TemplateNode[]>([])
 const selNodeKey = ref('')
 const editingItem = ref<EditorItem | null>(null)
+/** 当前选中节点的执行条件（gate）；null = 恒执行 */
+const nodeCondition = ref<string | null>(null)
+/** 当前选中节点的步骤任务列表 */
+const nodeBranches = ref<StepBranch[]>([])
+/** 全部节点的步骤任务（画布分叉展示的数据源：nodeKey → 任务列表） */
+const branchMap = ref<Record<string, StepBranch[]>>({})
+/** 全部节点的执行条件（gate）：nodeKey → 条件表达式 */
+const conditionMap = ref<Record<string, string>>({})
+/** 各节点命令行原始信息（画布执行摘要用） */
+const stepRows = ref<Record<string, { command: string | null; actions: StageAction[]; locked: boolean }>>({})
+
+/** service 工具名 → 中文能力名（画布摘要用；与后端 resolveServiceStep 对应） */
+const TOOL_LABELS: Record<string, string> = {
+  'write-version': '写版本',
+  restart: '重启服务',
+  verify: '探活验证',
+  upload: '上传产物',
+  pointer: '切指针',
+}
+
+/**
+ * 画布「执行摘要」：上面是步骤名，下面是这步真正执行的内容。
+ * 优先级：步骤任务数 > 多操作名 > 脚本首条有效命令 > 平台托管 / 未配置。
+ */
+function execSummary(key: string, isApproval: boolean): { text: string; kind: 'task' | 'ops' | 'cmd' | 'platform' | 'approval' | 'none' } {
+  const tasks = branchTasks(key)
+  if (tasks.length) return { text: `${tasks.length} 个执行任务`, kind: 'task' }
+  if (isApproval) return { text: '审批门禁', kind: 'approval' }
+  const row = stepRows.value[key]
+  if (!row) return { text: '未配置脚本', kind: 'none' }
+  if (row.locked) return { text: '平台托管脚本', kind: 'platform' }
+  const acts = (row.actions ?? []).filter((a) => a && a.enabled !== false)
+  if (acts.length) {
+    const names = acts.map((a) => (a.type === 'service' ? TOOL_LABELS[a.tool ?? ''] || a.tool || a.name : a.name || '脚本'))
+    return { text: names.join(' · '), kind: 'ops' }
+  }
+  const cmd = String(row.command ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l && !l.startsWith('#'))
+  if (cmd) return { text: cmd.length > 44 ? cmd.slice(0, 44) + '…' : cmd, kind: 'cmd' }
+  return { text: '未配置脚本', kind: 'none' }
+}
+
+/** 拉取各节点的步骤任务与执行条件（画布分叉展示用） */
+async function refreshBranchMap() {
+  if (!tplId.value) return
+  try {
+    const rows = await pipelineStepApi.list(tplId.value)
+    const conds: Record<string, string> = {}
+    const map: Record<string, StepBranch[]> = {}
+    const steps: Record<string, { command: string | null; actions: StageAction[]; locked: boolean }> = {}
+    for (const r of rows) {
+      if (r.condition) conds[r.nodeKey] = r.condition
+      steps[r.nodeKey] = r
+    }
+    stepRows.value = steps
+    // 任务列表逐节点取（接口是「步骤 × 任务」），失败不影响画布
+    await Promise.all(
+      rows.map(async (r) => {
+        try {
+          const list = await stepBranchApi.list(tplId.value as string, r.nodeKey)
+          if (list?.length) map[r.nodeKey] = list
+        } catch {
+          /* 忽略 */
+        }
+      }),
+    )
+    branchMap.value = map
+    conditionMap.value = conds
+  } catch {
+    /* 分叉展示是增强能力，拉取失败不影响画布 */
+  }
+}
+/** 画布上某节点已配置的步骤任务 */
+function branchTasks(key: string): StepBranch[] {
+  return branchMap.value[key] || []
+}
+/** 任务在画布上的展示名：任务名 + （默认） */
+function branchText(b: StepBranch): string {
+  return String(b.condition ?? '').trim() ? b.name : `${b.name}（默认）`
+}
+/** 点分叉支线 → 打开该节点的抽屉（环境分支编辑器在其中） */
+function openBranchEditor(key: string) {
+  selNodeKey.value = key
+  drawerTab.value = 'node'
+  drawerOpen.value = true
+  void loadNodeScript(key)
+}
 const dragKey = ref('')
 const dropSide = ref<'l' | 'r'>('r')
 let justDragged = false
@@ -195,7 +292,7 @@ async function load() {
     selNodeKey.value = ''
     editingItem.value = null
     dirty.value = false
-    await loadVars()
+    await Promise.all([loadVars(), refreshBranchMap()])
   } catch {
     message.error('加载流水线失败')
   } finally {
@@ -249,6 +346,13 @@ async function loadNodeScript(key: string) {
   }
   try {
     const row = await pipelineStepApi.get(tplId.value, key)
+    // 步骤执行条件（gate）与步骤任务：画布分叉 + 抽屉编辑的数据源
+    nodeCondition.value = (row as { condition?: string | null } | null)?.condition ?? null
+    try {
+      nodeBranches.value = await stepBranchApi.list(tplId.value, key)
+    } catch {
+      nodeBranches.value = []
+    }
     editingItem.value = {
       stage: key,
       source: row?.command?.trim() || row?.actions?.length ? 'configured' : 'required-unset',
@@ -427,6 +531,10 @@ async function save() {
       await load()
     } else {
       await pipelinesApi.update(tplId.value, dto)
+      // 编排树（新三层模型）：画布有未保存修改 → 一并由页头保存触发（单一保存入口）
+      if (hasOrchestration.value && orchEditorRef.value?.dirty) {
+        await orchEditorRef.value.save()
+      }
       dirty.value = false
       message.success('流水线已保存')
       const keepKey = selNodeKey.value
@@ -490,6 +598,19 @@ async function loadVars() {
   }
 }
 
+/** 编排新模型（步骤→任务→动作）：新表有数据 → flow tab 用三层画布（specs/pipeline-step-task） */
+const hasOrchestration = ref(false)
+const orchEditorRef = ref<{ save: () => Promise<void>; dirty: boolean } | null>(null)
+async function detectOrchestration() {
+  if (!tplId.value) { hasOrchestration.value = false; return }
+  try {
+    const tree = await orchestrationApi.getTree(tplId.value)
+    hasOrchestration.value = Array.isArray(tree) && tree.length > 0
+  } catch {
+    hasOrchestration.value = false
+  }
+}
+
 const insertVar = (v: string) => {
   const item = editingItem.value
   if (!item?.actions?.length) { message.warning('请先添加一个 shell 操作'); return }
@@ -497,7 +618,7 @@ const insertVar = (v: string) => {
   if (shell) { shell.code = (shell.code || '') + v; dirty.value = true }
 }
 
-onMounted(() => { void load() })
+onMounted(() => { void load(); void detectOrchestration() })
 </script>
 
 <template>
@@ -531,10 +652,9 @@ onMounted(() => { void load() })
         <a-card size="small">
           <div class="info-grid">
             <div class="info-field">
-              <label>流水线名</label>
+              <label>流水线名{{ isCreate ? '' : ' · 可修改' }}</label>
               <a-input
                 v-model:value="metaDraft.name"
-                :disabled="!isCreate"
                 style="width: 220px;"
                 @change="dirty = true"
               />
@@ -584,15 +704,21 @@ onMounted(() => { void load() })
               <span class="mono-text">${'{'}DEPLOY_HOST{'}'}</span>）。
               <b>审批（审批人 / 超时 / 拒绝后）在「发布确认」节点的抽屉里配置</b>、
               <b>失败自动回滚在节点上标 watchdog</b> —— 都在流水线各节点里设置，不放在基本信息。
-              <span v-if="!isCreate">编辑态的基本信息（名 / key / 模块 / 环境）锁定不可改。</span>
+              <span v-if="!isCreate">编辑态：<b>流水线名称可改</b>（保存即生效）；key / 模块 / 环境锁定——它们是产物路径与执行语义的一部分，改了等于新建一条。</span>
             </template>
           </a-alert>
         </a-card>
       </a-tab-pane>
 
-      <!-- Tab 2：流程编排 -->
+      <!-- Tab 2：流程编排（双轨：新表有数据 → 三层画布；否则旧节点画布） -->
       <a-tab-pane key="flow" tab="流程编排">
-        <a-card size="small">
+        <OrchestrationEditor
+          v-if="hasOrchestration && tplId"
+          ref="orchEditorRef"
+          :pipeline-id="tplId"
+          @dirty="(v: boolean) => (dirty = v)"
+        />
+        <a-card v-else size="small">
       <template #title>
         流程编排
         <span class="muted-text" style="margin-left: 8px;">节点可增删、拖拽排序；点节点在右侧抽屉配置脚本</span>
@@ -606,21 +732,52 @@ onMounted(() => { void load() })
             <div class="flow-arrow"></div>
             <button class="flow-plus">+</button>
           </div>
-          <div
-            class="flow-node"
-            :class="{ watch: n.watchdog, sel: selNodeKey === n.key, approval: n.kind === 'approval' }"
-            :draggable="isShellNode(n)"
-            @click="onNodeClick(n.key)"
-            @dragstart="onDragStart(n.key, $event)"
-            @dragend="onDragEnd"
-            @dragover="onDragOver($event)"
-            @drop="onDrop(n.key, $event)"
-          >
-            <span class="flow-seq">{{ i + 1 }}</span>
-            <span v-if="n.watchdog" class="watchdog-badge">wd</span>
-            <button v-if="isShellNode(n)" class="node-del" @click.stop="askDeleteNode(n.key)">×</button>
-            <span class="flow-name">{{ nodeDisplayName(n) }}</span>
-            <span class="flow-key">{{ n.kind === 'approval' ? '审批' : n.key }}</span>
+          <div class="flow-cell">
+            <div
+              class="flow-node"
+              :class="{ watch: n.watchdog, sel: selNodeKey === n.key, approval: n.kind === 'approval' }"
+              :draggable="isShellNode(n)"
+              @click="onNodeClick(n.key)"
+              @dragstart="onDragStart(n.key, $event)"
+              @dragend="onDragEnd"
+              @dragover="onDragOver($event)"
+              @drop="onDrop(n.key, $event)"
+            >
+              <span class="flow-seq">{{ i + 1 }}</span>
+              <span v-if="n.watchdog" class="watchdog-badge">wd</span>
+              <button v-if="isShellNode(n)" class="node-del" @click.stop="askDeleteNode(n.key)">×</button>
+              <span class="flow-name">{{ nodeDisplayName(n) }}</span>
+              <span class="flow-key">{{ n.kind === 'approval' ? '审批' : n.key }}</span>
+            </div>
+            <!-- 执行摘要：上面是步骤名，下面是这步真正执行的内容（无任务时显示脚本/操作摘要） -->
+            <div
+              v-if="!(isShellNode(n) && branchTasks(n.key).length)"
+              class="exec-summary"
+              :class="{ none: execSummary(n.key, n.kind === 'approval').kind === 'none' }"
+              :title="`${nodeDisplayName(n)} 执行内容 — 点击配置`"
+              @click.stop="onNodeClick(n.key)"
+            >
+              {{ execSummary(n.key, n.kind === 'approval').text }}
+            </div>
+            <!-- 步骤任务：已配置的任务在节点下方分叉展示；点击进抽屉编辑 -->
+            <template v-if="isShellNode(n) && branchTasks(n.key).length">
+              <div class="branch-connector"></div>
+              <div class="branch-nodes">
+                <div
+                  v-for="b in branchTasks(n.key)"
+                  :key="b.name"
+                  class="flow-node branch-node"
+                  :class="{ sel: selNodeKey === n.key }"
+                  :title="`${nodeDisplayName(n)} · 任务 ${b.name}${b.condition ? `（条件 ${b.condition}）` : '（默认）'} — 点击编辑`"
+                  @click.stop="openBranchEditor(n.key)"
+                >
+                  <span class="flow-name">{{ nodeDisplayName(n) }} {{ branchText(b) }}</span>
+                </div>
+                <div class="flow-node branch-node add" title="新增步骤任务" @click.stop="openBranchEditor(n.key)">
+                  <span class="flow-name">+ 任务</span>
+                </div>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -644,7 +801,12 @@ onMounted(() => { void load() })
           <div v-if="isCreate" class="empty-hint" style="padding: 24px 0; text-align: center;">
             新建态：先「创建」流水线，再回来配变量
           </div>
-          <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+          <template v-else>
+            <!-- 变量全景：内置 / 配置中心生效项 + 优先级说明（流水线变量在下方面板维护） -->
+            <VariableScopePanel :env="metaDraft.env" :module-key="metaDraft.moduleKey" />
+            <a-divider style="margin: 12px 0 14px;"><span class="muted-text">流水线变量（可增删改）</span></a-divider>
+            <PipelineVarPanel :template-id="tplId" :vars="vars" @changed="loadVars" />
+          </template>
         </a-card>
       </a-tab-pane>
     </a-tabs>
@@ -762,6 +924,17 @@ onMounted(() => { void load() })
               @cancel="closeDrawer"
             />
             <a-empty v-else :description="`读取 ${selectedNode.key} 命令中…`" />
+
+            <!-- 步骤任务（可选）：步骤 1:N 任务，运行时按条件命中 -->
+            <a-divider style="margin: 16px 0 4px;">步骤任务（可选）</a-divider>
+            <StepBranchEditor
+              v-if="editingItem && selectedNode?.kind === 'shell'"
+              :template-id="tplId"
+              :node-key="selectedNode.key"
+              :branches="nodeBranches"
+              :locked="!!editingItem.locked"
+              @saved="() => { if (selNodeKey) { void loadNodeScript(selNodeKey); void refreshBranchMap() } }"
+            />
           </div>
         </template>
         <div v-else class="empty-hint">
@@ -769,10 +942,31 @@ onMounted(() => { void load() })
         </div>
       </a-tab-pane>
 
-      <!-- Tab 2：变量（本条流水线，可增删改）—— 与编辑页「变量」Tab 共用一个组件 -->
+      <!-- Tab 2：高级 —— 步骤执行条件（gate） -->
+      <a-tab-pane key="advanced" tab="高级">
+        <template v-if="selectedNode?.kind === 'shell' && tplId">
+          <div class="muted-text" style="margin-bottom: 8px;">
+            执行条件决定这个步骤<b>是否执行</b>（与「步骤任务」决定<b>跑哪段脚本</b>是两件事）。
+          </div>
+          <StepConditionEditor
+            :template-id="tplId"
+            :node-key="selectedNode.key"
+            :condition="nodeCondition"
+            :locked="!!editingItem?.locked"
+            @saved="() => { if (selNodeKey) { void loadNodeScript(selNodeKey); void refreshBranchMap() } }"
+          />
+        </template>
+        <div v-else class="empty-hint">仅 shell 步骤可配执行条件</div>
+      </a-tab-pane>
+
+      <!-- Tab 3：变量（本条流水线，可增删改）—— 与编辑页「变量」Tab 共用一个组件 -->
       <a-tab-pane key="vars" tab="变量">
         <div v-if="isCreate" class="empty-hint">新建态：先「创建」流水线，再配变量</div>
-        <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+        <template v-else>
+          <VariableScopePanel :env="metaDraft.env" :module-key="metaDraft.moduleKey" />
+          <a-divider style="margin: 12px 0 14px;"><span class="muted-text">流水线变量（可增删改）</span></a-divider>
+          <PipelineVarPanel :template-id="tplId" :vars="vars" @changed="loadVars" />
+        </template>
       </a-tab-pane>
 
       <!-- Tab 3：参数（只读，写脚本时查阅）—— 与编辑页「参数」Tab 共用一个组件 -->
@@ -807,6 +1001,28 @@ onMounted(() => { void load() })
 
 /* 流程画布 */
 .flow-canvas { display: flex; align-items: center; overflow-x: auto; padding: 14px 4px; min-height: 80px; }
+.flow-cell { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+/* 执行摘要：节点名在上、执行内容在下（与分支块同层级的只读展示） */
+.exec-summary { margin-top: 8px; max-width: 190px; padding: 5px 10px; text-align: center;
+  font-size: 11px; color: var(--ws-text-tertiary); background: var(--ws-bg-surface);
+  border: 1px dashed var(--ws-border); border-radius: 6px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--ws-font-mono); transition: border-color .15s, color .15s; }
+.exec-summary:hover { border-color: var(--ws-brand-500); color: var(--ws-text-secondary); }
+.exec-summary.none { border-style: solid; opacity: .7; }
+/* 步骤任务分叉：垂直干线（主色）+ 分支节点行，主干节点保持同一水平线 */
+.branch-connector { width: 0; height: 16px; border-left: 2px solid var(--ws-brand-500); opacity: .45; }
+.branch-nodes { display: flex; flex-direction: column; gap: 8px; align-items: stretch; position: relative; padding-left: 18px; }
+/* 干线贯穿分支列左侧；每个分支一条肘形短线接入 */
+.branch-nodes::before { content: ""; position: absolute; left: 0; top: -2px; bottom: 12px;
+  border-left: 2px solid var(--ws-brand-500); opacity: .45; }
+.branch-nodes .branch-node::before { content: ""; position: absolute; left: -18px; top: 50%;
+  width: 18px; height: 2px; background: var(--ws-brand-500); opacity: .45; }
+.flow-node.branch-node { position: relative; min-width: 132px; padding: 5px 12px;
+  border-style: dashed; border-width: 1px; text-align: left; }
+.flow-node.branch-node .flow-name { font-size: 12px; font-weight: 500; color: var(--ws-text-secondary); }
+.flow-node.branch-node.add { border-color: var(--ws-text-tertiary); background: transparent; }
+.flow-node.branch-node.add .flow-name { color: var(--ws-text-tertiary); font-weight: 400; }
 .flow-node { position: relative; min-width: 100px; padding: 8px 12px; border: 1.5px solid var(--ws-border);
   border-radius: 10px; background: var(--ws-bg-surface); cursor: pointer; flex-shrink: 0; text-align: center;
   transition: all .15s; user-select: none; }

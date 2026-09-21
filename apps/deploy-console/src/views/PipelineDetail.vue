@@ -121,7 +121,9 @@ async function loadTpl() {
 async function loadHistory(limit = 200) {
   loading.value = true
   try {
-    history.value = await pipelineRunsApi.list({ templateId: tplId.value, limit })
+    // 后端过滤参数是 pipelineId（运行实体上的模板快照字段），传 templateId 会被忽略，
+    // 导致返回全局最新记录、详情页默认选中其他流水线的执行
+    history.value = await pipelineRunsApi.list({ pipelineId: tplId.value, limit })
   } catch {
     message.error('加载执行记录失败')
   } finally {

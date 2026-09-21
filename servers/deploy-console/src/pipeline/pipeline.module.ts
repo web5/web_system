@@ -27,6 +27,8 @@ import { AuditModule } from '../audit/audit.module';
 import { DeployModule } from '../deploy/deploy.module';
 import { StageCommandModule } from '../stage-command/stage-command.module';
 import { PipelineStepCommandModule } from '../pipeline-step-command/pipeline-step-command.module';
+// 编排新模型（步骤→任务→动作）：提交时快照整树，run() 分派到新引擎
+import { PipelineOrchestrationModule } from '../pipeline-orchestration/pipeline-orchestration.module';
 import { ConfigCenterModule } from '../config/config.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -59,6 +61,7 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     StageCommandModule,
     // 流水线节点命令（R6 新真相源：流水线 × 节点 key）
     PipelineStepCommandModule,
+    PipelineOrchestrationModule,
     // 配置中心（发布/重启时按作用域合并并强制覆盖注入进程环境）
     ConfigCenterModule,
     // 发布锁（同一模块×环境串行化，避免并发覆盖版本指针）

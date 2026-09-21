@@ -71,6 +71,42 @@ export class DeployPipelineStepCommandEntity {
   @Column({ type: 'json', nullable: true, comment: '节点内多操作（v4），为空回退 command' })
   actions?: StepAction[] | null;
 
+  /**
+   * 环境分支配置：`{ [envId]: 该环境的脚本 }`（specs/pipeline-env-branch/design.md §3.1）。
+   *
+   * 非空 = 该节点启用环境分支：保存时由它**拼装**出单一执行体，同时写入
+   * `command` 与 `actions[shell].code`（执行体真相源在后者，见 pickStepActions）。
+   * 因此页面手改脚本会在下次保存时被覆盖 —— 编辑入口只有「环境分支」。
+   *
+   * 未配置脚本的环境 → 拼装结果里落 fail-fast 分支（不做静默回落）。
+   *
+   * @deprecated 已由「步骤任务」实体取代（specs/pipeline-step-branch/design.md）：
+   * 分支改为独立表 `deploy_pipeline_step_branches`，本列保留仅为兼容存量数据，
+   * 迁移 p15 会把它落成任务行并置空。新代码不要再读它。
+   */
+  @Column({
+    name: 'env_branches',
+    type: 'json',
+    nullable: true,
+    comment: '（已废弃，迁移 p15 后为空）环境分支配置',
+  })
+  envBranches?: Record<string, string> | null;
+
+  /**
+   * 步骤执行条件（gate）。
+   *
+   * 语法见 `steps/condition.ts`：`KEY == VALUE [&& KEY == VALUE]`，与步骤任务的匹配条件同一引擎。
+   * 空 = 恒执行；求值为 false → **跳过整个步骤**（日志记「执行条件不满足，已跳过」），流程继续；
+   * 表达式非法 → 该步骤失败。
+   */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    comment: '步骤执行条件；不满足则跳过整个步骤',
+  })
+  condition?: string | null;
+
   @Column({ type: 'boolean', default: true, comment: '是否启用' })
   enabled: boolean;
 

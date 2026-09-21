@@ -35,6 +35,15 @@ export class PipelineController {
     return this.pipelineService.submit(body, user?.username);
   }
 
+  /** 注意：声明在 @Get(':id') 之前，避免 branch-commits 被当成 id 吞掉 */
+  @Get('branch-commits')
+  @ApiOperation({ summary: '按分支列最近提交（提交发布时选择 commit；留空=最新）' })
+  @ApiQuery({ name: 'branch', required: true, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listBranchCommits(@Query('branch') branch: string, @Query('limit') limit?: string) {
+    return this.pipelineService.listBranchCommits(branch, limit ? Number(limit) : 20);
+  }
+
   @Get()
   @ApiOperation({ summary: '流水线列表' })
   @ApiQuery({ name: 'env', required: false, type: String })
