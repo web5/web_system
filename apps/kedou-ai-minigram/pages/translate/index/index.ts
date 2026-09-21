@@ -1,7 +1,7 @@
 // 翻译主页（tab）
-// TODO: 接入服务端 /api/translate（SSE 流式），不要在小程序里直接放 API Key
-// TODO: 翻译接口待接入（服务端 /api/translate，SSE 流式）
-// 注意：不要在小程序端直接放 API Key
+// 链路：本页只负责拼装参数 → 结果页用 services/agent-stream 的 createAgentApi('translate')
+// 发起 SSE 流式请求；「翻译中」中间态与失败态都由结果页承载（与原型状态矩阵一致）。
+// API Key 只在服务端，不会进小程序。
 
 Page({
   data: {
@@ -89,23 +89,21 @@ Page({
     wx.navigateTo({ url: '/pages/translate/history/history' });
   },
 
-  async doTranslate() {
+  doTranslate() {
     const text = this.data.input.trim();
     if (!text) return wx.showToast({ title: '先输入内容', icon: 'none' });
     if (this.data.srcLang === this.data.tgtLang) {
       return wx.showToast({ title: '源语言和目标语言不能相同', icon: 'none' });
     }
-    wx.showLoading({ title: '翻译中…' });
-    try {
-      // TODO: const res = await request({ url: "/api/translate", method: "POST", data: {...} })
-      const res = null;
-      wx.hideLoading();
-      // TODO: 结果落本地缓存后跳转结果页
-      wx.navigateTo({ url: '/pages/translate/result/result' });
-      void res;
-    } catch (err) {
-      wx.hideLoading();
-      wx.showToast({ title: '翻译失败，请重试', icon: 'none' });
-    }
+    // 参数经 storage 交给结果页（原文较长，不适合放 URL 参数）；
+    // 结果页自己发起流式请求，中间态与失败态都落在那一页
+    wx.setStorageSync('kd_translate_params', {
+      srcLang: this.data.srcLang,
+      tgtLang: this.data.tgtLang,
+      register: this.data.register,
+      style: this.data.style,
+      text,
+    });
+    wx.navigateTo({ url: '/pages/translate/result/result' });
   },
 });

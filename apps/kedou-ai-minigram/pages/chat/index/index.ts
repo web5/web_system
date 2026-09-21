@@ -15,9 +15,16 @@ import { createAgentApi } from '../../../services/agent-stream';
 import { RESUME_CONV_KEY } from '../../../utils/conversation';
 import { parseAgentError } from '../../../utils/agent-error';
 import { ensureLogin } from '../../../services/auth';
+import {
+  buildTranslateCardView,
+  inferTranslateDirection,
+} from '../../../utils/translate-parse';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
+
+/** 需要按「翻译卡片」承载的 agent（与 SSE intent 的 agentId 对齐） */
+const CARD_AGENT_IDS = ['translate'];
 
 interface ChatMsg {
   role: 'user' | 'ai';
@@ -36,6 +43,14 @@ interface ChatMsg {
   failReason?: string;
   /** 失败错误码：用于区分处理（如 401 自动登录并重试） */
   failCode?: string;
+  /** 由翻译官作答 → 用「推荐译文卡片」承载（含流式阶段，见 sendWith） */
+  card?: boolean;
+  /** 卡片英文主文 */
+  enMain?: string;
+  /** 卡片中文注解（无则空串，不渲染注解区） */
+  note?: string;
+  /** 卡片方向 meta（如「中文 → 英语」）；推断不出为空，只留 tag */
+  meta?: string;
 }
 
 /** 开场推荐问题（写死；批次 4 改由 GET /ai/agents 的 entry.suggestions 驱动） */
@@ -74,12 +89,6 @@ Page({
    */
   _runId: 0,
 
-  /**
-   * 当前会话是否经由「对话记录 / 欢迎页最近对话」载入（resumeIfNeeded 置位）。
-   * 返回键据此决定回**来源列表页**还是欢迎页。
-   */
-  _resumed: false,
-
   onLoad() {
     this.initNavBar();
     const quote = getDailyQuote();
@@ -116,16 +125,11 @@ Page({
   },
 
   /**
-   * 顶部返回 icon：按**来源**返回 ——
-   * - 从「对话记录」/「欢迎页最近对话」载入的会话 → 回到来源列表页；
-   * - 正常从欢迎页进入的对话 → 回欢迎页（redirectTo 避免页面栈累积）。
+   * 顶部返回 icon：**统一回欢迎页** ——
+   * 无论本次会话是从「开始对话」、记录页点一条、还是欢迎页卡片进入的，返回都回欢迎页。
+   * （记录页自己有原生返回可以退回，不需要对话页代劳）
    */
   goBack() {
-    if (this._resumed) {
-      this._resumed = false;
-      wx.navigateTo({ url: '/pages/chat/history/history' });
-      return;
-    }
     wx.redirectTo({ url: '/pages/welcome/index/index' });
   },
 
@@ -155,8 +159,6 @@ Page({
 
     // 作废在途回调：切会话后，旧会话的流式回包不该再写入
     this._runId += 1;
-    // 标记来源：返回键回「对话记录」而非欢迎页
-    this._resumed = true;
     // 不弹全屏 loading：历史会话载入若偏慢，全屏「载入中」会让人以为页面卡住 / 元素缺失。
     // 改为静默载入 —— 先回到对话页（导航栏完整可用），数据到了再填充，失败才提示。
     try {
@@ -197,8 +199,6 @@ Page({
   newChat() {
     // 作废在途回调：新一轮开始后，上一轮的 delta / reply / error 不再写 data
     this._runId += 1;
-    // 新会话从欢迎页来：返回键回欢迎页
-    this._resumed = false;
     const quote = getDailyQuote();
     this.setData({
       conversationId: '',
@@ -301,13 +301,32 @@ Page({
     if (this.data.sending) return;
 
     const aiId = `ai-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-    const replaceAiText = (next: string, done: boolean) => {
+    /** 本轮累积的原文（未切分）：卡片视图每次由它重算，保证流式 → 完成平滑过渡 */
+    let raw = '';
+    /** 本轮是否由翻译官作答 → 卡片承载（intent 事件到达后置位，早于任何正文） */
+    let isCard = false;
+
+    const patchAi = (patch: Partial<ChatMsg>) => {
       this.setData({
         chatMessages: this.data.chatMessages.map((m: ChatMsg) =>
-          m._id === aiId ? { ...m, text: next, streaming: !done } : m,
+          m._id === aiId ? { ...m, ...patch } : m,
         ),
       });
       this.scrollToBottom();
+    };
+
+    /**
+     * 写入本轮正文：卡片态额外填 enMain / note，纯文本态只更新 text。
+     * 流式与完成态共用 buildTranslateCardView，不出现排版跳变。
+     */
+    const writeAiText = (next: string, done: boolean) => {
+      raw = next;
+      if (isCard) {
+        const view = buildTranslateCardView(raw);
+        patchAi({ text: view.text, enMain: view.main, note: view.note, streaming: !done });
+        return;
+      }
+      patchAi({ text: next, streaming: !done });
     };
 
     this.setData({
@@ -339,19 +358,32 @@ Page({
           }
           // intent 事件（本轮第一个事件）：记录由哪个 agent 作答
           if (e.type === 'intent' && e.intent) {
+            const agentId = e.intent.agentId || '';
             this.setData({
-              currentAgent: { id: e.intent.agentId, name: e.intent.agentName || '' },
+              currentAgent: { id: agentId, name: e.intent.agentName || '' },
             });
+            // 翻译官作答 → 立刻铺出卡片骨架（T0：卡片头 + 「翻译中」先到位，消除等待焦虑）
+            if (CARD_AGENT_IDS.indexOf(agentId) >= 0) {
+              isCard = true;
+              const view = buildTranslateCardView(raw);
+              patchAi({
+                card: true,
+                // 方向由本轮提问推断；推断不出为空 → 只留 tag，不留空白
+                meta: inferTranslateDirection(question),
+                text: view.text,
+                enMain: view.main,
+                note: view.note,
+              });
+            }
           }
         },
         onDelta: (delta) => {
           if (runId !== this._runId) return;
-          const cur = this.data.chatMessages.find((m: ChatMsg) => m._id === aiId);
-          replaceAiText(((cur?.text as string) || '') + delta, false);
+          writeAiText(raw + delta, false);
         },
         onReply: (text) => {
           if (runId !== this._runId) return;
-          replaceAiText(text || '抱歉，暂时没有回复。', true);
+          writeAiText(text || '抱歉，暂时没有回复。', true);
           this.setData({ sending: false });
         },
         onError: (err) => {
@@ -430,6 +462,32 @@ Page({
       chatMessages: this.data.chatMessages.filter((_: ChatMsg, i: number) => i !== idx),
       copyIdx: -1,
     });
+  },
+
+  /**
+   * 卡片操作行（仅完成态渲染）：复制英文主文。
+   * 没有主文时退回整段正文，避免点了没反应。
+   */
+  onCardCopy(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    const msg = this.data.chatMessages[idx];
+    if (!msg) return;
+    const text = msg.enMain || msg.text || '';
+    if (!text) return;
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '已复制', icon: 'none' }),
+    });
+  },
+
+  /** 卡片操作行：朗读（平台能力待实现，占位不伪装） */
+  onCardSpeak() {
+    wx.showToast({ title: '朗读开发中', icon: 'none' });
+  },
+
+  /** 卡片操作行：收藏（与翻译结果页一致，占位不伪装） */
+  onCardFav() {
+    wx.showToast({ title: '已收进生词本', icon: 'none' });
   },
 
   /** 切换 AI 长消息展开/收起 */

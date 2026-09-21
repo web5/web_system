@@ -1,11 +1,13 @@
-.page { min-height: 100vh; background: #F2F4F8; padding: 24rpx 32rpx 40rpx; }
-.profile { display: flex; align-items: center; background: #fff; border-radius: 24rpx; padding: 30rpx 28rpx; }
-.avatar { width: 96rpx; height: 96rpx; border-radius: 50%; background: linear-gradient(135deg, #1E6FFF, #5B94FF); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 34rpx; font-weight: 600; }
+/* 个人信息页
+ * 色值一律走 app.wxss 的设计 token。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.profile { display: flex; align-items: center; background: var(--card); border-radius: 24rpx; padding: 30rpx 28rpx; }
+.avatar { width: 96rpx; height: 96rpx; border-radius: 50%; background: linear-gradient(135deg, var(--brand-400), var(--brand-600)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 34rpx; font-weight: 600; }
 .info { margin-left: 24rpx; }
-.n { font-size: 32rpx; font-weight: 500; }
-.d { font-size: 24rpx; color: #C0C6D0; margin-top: 4rpx; }
-.list { background: #fff; border-radius: 24rpx; overflow: hidden; margin-top: 20rpx; }
-.r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid #EEF0F4; font-size: 28rpx; }
+.n { font-size: 32rpx; font-weight: 500; color: var(--t1); }
+.d { font-size: 24rpx; color: var(--t3); margin-top: 4rpx; }
+.list { background: var(--card); border-radius: 24rpx; overflow: hidden; margin-top: 20rpx; }
+.r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
 .r:last-child { border-bottom: none; }
-.v { color: #9AA1AD; font-size: 26rpx; }
-.foot { font-size: 22rpx; color: #C0C6D0; text-align: center; margin-top: 20rpx; }
+.v { color: var(--t3); font-size: 26rpx; }
+.foot { font-size: 22rpx; color: var(--t3); text-align: center; margin-top: 20rpx; }

@@ -7,31 +7,7 @@
 //   入参：【源语言】/【目标语言】/【语气】/【风格】/【原文】
 //   出参：【推荐译文】/【直译对照】/【委婉版】/【语气要点】
 import { createAgentApi } from '../../../services/agent-stream';
-
-/** 出参四段标题（顺序即渲染顺序） */
-const SECTION_TITLES = ['推荐译文', '直译对照', '委婉版', '语气要点'];
-
-/** 按标题切分 agent 输出；一个标题都没命中时返回空对象 */
-function parseSections(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  const marks: Array<{ key: string; start: number }> = [];
-  for (const t of SECTION_TITLES) {
-    const idx = text.indexOf(`【${t}】`);
-    if (idx >= 0) marks.push({ key: t, start: idx });
-  }
-  marks.sort((a, b) => a.start - b.start);
-  for (let i = 0; i < marks.length; i++) {
-    const from = marks[i].start + `【${marks[i].key}】`.length;
-    const to = i + 1 < marks.length ? marks[i + 1].start : text.length;
-    out[marks[i].key] = text.slice(from, to).trim();
-  }
-  return out;
-}
-
-/** 流式过程中还没凑齐四段时，去掉标题直接展示已收到的正文 */
-function stripTitles(text: string): string {
-  return text.replace(/【[^】]*】/g, '').trim();
-}
+import { parseSections, stripTitles } from '../../../utils/translate-parse';
 
 Page({
   data: {

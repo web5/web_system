@@ -136,6 +136,91 @@ page {
   word-break: break-all;
 }
 
+/* ===== 推荐译文卡片（翻译官作答，与 pages/translate/result 同一语言） =====
+ * 气泡内承载，卡片自身无外边距：由气泡 padding 提供呼吸感。
+ * 三态：T0 头 + 翻译中；T1 英文 + 光标 + 注解占位条；T2 注解 + 操作行。
+ */
+.msg-bubble.is-card { padding: 0; overflow: hidden; }
+.ec-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 20rpx 0;
+}
+.ec-tag {
+  flex: none;
+  font-size: 20rpx;
+  font-weight: 500;
+  color: #fff;
+  background: var(--brand);
+  border-radius: 6rpx;
+  padding: 2rpx 10rpx;
+  line-height: 1.4;
+}
+.ec-meta { font-size: 22rpx; color: var(--t3); }
+
+/* 英文主文：卡片的主视觉，比正文字号高一档 */
+.ec-main {
+  padding: 10rpx 20rpx 18rpx;
+  font-size: 31rpx;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--t1);
+  word-break: break-word;
+}
+/* 流式光标：跟随文字末尾，表明还在出字 */
+.ec-caret {
+  display: inline-block;
+  width: 3rpx;
+  height: 28rpx;
+  background: var(--brand);
+  vertical-align: -3rpx;
+  margin-left: 4rpx;
+  animation: blink 1s steps(1) infinite;
+}
+
+.ec-note {
+  padding: 14rpx 20rpx;
+  border-top: 1rpx solid var(--line);
+  font-size: 24rpx;
+  color: var(--t2);
+  line-height: 1.6;
+  /* 多段注解（直译对照 / 委婉版 / 语气要点）按行保留换行 */
+  white-space: pre-wrap;
+}
+/* 注解占位条：流式中撑住高度，避免注解到达时卡片抽动 */
+.ec-sk {
+  width: 60%;
+  height: 20rpx;
+  border-radius: 6rpx;
+  background: rgba(60, 60, 67, .07);
+}
+
+.ec-ops { display: flex; border-top: 1rpx solid var(--line); }
+.ec-op {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  font-size: 24rpx;
+  color: var(--t2);
+}
+.ec-op + .ec-op { border-left: 1rpx solid var(--line); }
+.ec-op:active { background: rgba(60, 60, 67, .04); }
+
+/* T0：「翻译中」+ 品牌色动点（复用既有 blink 动画） */
+.ec-typing {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 20rpx 18rpx;
+  font-size: 24rpx;
+  color: var(--t2);
+}
+.ec-dots { display: flex; gap: 6rpx; }
+.ec-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: var(--brand); animation: blink 1.2s infinite; }
+.ec-dot:nth-child(2) { animation-delay: .2s; }
+.ec-dot:nth-child(3) { animation-delay: .4s; }
+
 /* 今日一句（首条 AI 消息的引用块） */
 .msg-quote-k {
   font-size: 21rpx;
