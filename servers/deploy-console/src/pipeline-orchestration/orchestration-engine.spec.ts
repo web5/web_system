@@ -34,6 +34,7 @@ interface Harness {
   logs: string[];
   approvalResult: 'approved' | 'rejected' | 'timeout';
   failOn: string | null;
+  lastTaskEnv: Record<string, string>;
 }
 function harness(vars: Record<string, string> = { DEPLOY_ENV: 'local' }): Harness {
   const h: Harness = {
@@ -41,13 +42,15 @@ function harness(vars: Record<string, string> = { DEPLOY_ENV: 'local' }): Harnes
     logs: [],
     approvalResult: 'approved',
     failOn: null,
+    lastTaskEnv: {},
     ctx: {
       vars,
       baseEnv: { CONSOLE_API: 'http://x' },
       log: (line) => h.logs.push(line),
-      runScript: async (a: EngineAction) => {
+      runScript: async (a: EngineAction, _base: Record<string, string>, taskEnv: Record<string, string>) => {
         if (h.failOn === a.name) throw new Error('boom');
         h.ran.push(a.name);
+        h.lastTaskEnv = taskEnv;
       },
       waitApproval: async () => h.approvalResult,
     },
@@ -189,17 +192,12 @@ describe('runOrchestration（执行引擎）', () => {
     expect(r.failedAt).toBe('并行步 / B');
   });
 
-  it('env 合成：任务级 env 覆盖 baseEnv', async () => {
+  it('env 合成：任务级 env 以独立参数传给 runScript（调用方惰性重组）', async () => {
     const h = harness();
-    const seen: Record<string, string>[] = [];
-    h.ctx.runScript = async (_a, env) => {
-      seen.push(env);
-    };
     const task = scriptTask('t', ['x']);
     task.env = { CONSOLE_API: 'http://override', EXTRA: '1' };
     await runOrchestration([step('s', [task])], h.ctx);
-    expect(seen[0].CONSOLE_API).toBe('http://override');
-    expect(seen[0].EXTRA).toBe('1');
+    expect(h.lastTaskEnv).toEqual({ CONSOLE_API: 'http://override', EXTRA: '1' });
   });
 
   it('停用的步骤与任务被跳过；无任务步骤（分组占位）合法通过', async () => {
@@ -230,5 +228,47 @@ describe('runOrchestration（执行引擎）', () => {
     const tree = [step('s1', [scriptTask('t', ['a'])]), step('s2', [scriptTask('t', ['b'])])];
     const r = await runOrchestration(tree, h.ctx);
     expect(r.status).toBe('aborted');
+  });
+
+  it('skipThroughStep：挂起恢复时跳过已完成步骤（含锚点步骤）', async () => {
+    const h = harness();
+    const tree = [
+      step('拉取代码', [scriptTask('git', ['a'])]),
+      step('发布确认', [approvalTask('门禁', { approvers: ['ops'] })]),
+      step('发布', [scriptTask('local', ['b'])]),
+    ];
+    const r = await runOrchestration(tree, h.ctx, { skipThroughStep: '发布确认' });
+    expect(r.status).toBe('succeeded');
+    expect(h.ran).toEqual(['b']); // 拉取代码被跳过（已完成）
+    expect(h.logs.some((l) => l.includes('拉取代码') && l.includes('跳过'))).toBe(true);
+  });
+
+  it('waitApproval 抛挂起信号异常（PipelineSuspended）→ 引擎原样透传，不判失败', async () => {
+    const h = harness();
+    const suspended = Object.assign(new Error('挂起'), { name: 'PipelineSuspended' });
+    h.ctx.waitApproval = async () => {
+      throw suspended;
+    };
+    const tree = [step('发布确认', [approvalTask('门禁', { approvers: ['ops'] })])];
+    await expect(runOrchestration(tree, h.ctx)).rejects.toBe(suspended);
+  });
+
+  it('afterTask：任务成功后回调；收尾抛错则任务失败', async () => {
+    const h = harness();
+    const seen: string[] = [];
+    h.ctx.afterTask = async (_s, t) => {
+      seen.push(t.name);
+    };
+    const tree = [step('拉取代码', [scriptTask('git', ['a'])])];
+    await runOrchestration(tree, h.ctx);
+    expect(seen).toEqual(['git']);
+
+    const h2 = harness();
+    h2.ctx.afterTask = async () => {
+      throw new Error('commit 回填失败');
+    };
+    const r2 = await runOrchestration(tree, h2.ctx);
+    expect(r2.status).toBe('failed');
+    expect(r2.error).toContain('收尾失败');
   });
 });
