@@ -408,6 +408,31 @@
 - 涉及 Token：无（仅文本内容）；复用既有 `.ws-tabular`
 - 影响面复核：仅 `AppDetail.vue` 命中；`AuditLog` / `Dashboard` / `NotificationCenter` / `CanaryCenter` / `VersionDeploy` / `PipelineCenter` / `PipelineDetail` 均为 dayjs 或 `new Date()` 本地化，无同类问题
 
+### 10.1 追加（2026-09-21 同日）：bigint 毫秒时间戳必须先转「数值」再格式化
+
+> 触发：用户看流水线列表「最近执行」，红框时间是 `04-20 10:05:04` / `04-01 14:58:09` / `03-17 15:00:00` —— 而实际发布时间就在今天。
+
+**现象 vs 期望**：页面显示 `04-20 10:05:04`，期望 `2026-09-21 18:49:17`（`MM-DD` 格式把错误的年份 **1797** 藏住了，肉眼只像"4 月"）。
+
+**根因（已实测复现）**：`deploy_pipeline_runs.start_time` 是 **bigint** 毫秒时间戳，经 TypeORM/mysql2 → JSON 到前端是**字符串**（`"1789987757654"`）。`dayjs("1789987757654")` 命中 dayjs 的字符串解析分支，按 `YYYYMMDDHHmmss` 误解析：
+
+| 真实值（毫秒） | 传 number（正确） | 传 string（现状，错） |
+|---|---|---|
+| `1789987757654` | 2026-09-21 18:49:17 | **1797-04-20 10:05:04** |
+| `1789978962589` | 2026-09-21 16:22:42 | **1797-04-01 14:58:09** |
+| `1789977387000` | 2026-09-21 15:56:27 | **1797-03-17 15:00:00** |
+
+（三个真实值逐一对应截图三行 —— 根因确认。）
+
+**新增判据**：任何 bigint 毫秒时间戳，在**格式化和比较之前**必须先 `Number()` 归一；禁止把可能为字符串的时间戳直接交给 `dayjs()` / `new Date()`。
+
+- 修复点：
+  1. `apps/deploy-console/src/components/pipeline/pipeline.stages.ts` —— `formatTime` / `formatTimeShort` / `durationMs`（共用，PipelineDetail、StageCommandDrawer 一并受益）
+  2. `apps/deploy-console/src/views/PipelineCenter.vue` —— 本地 `formatTime` + `latest.startTime` 比较（字符串字典序比较虽在同长度下等价，仍显式归一）
+  3. `apps/deploy-console/src/views/Dashboard.vue` —— 失败列表时间（该接口后端已 `Number()` 归一，属同口径下游对齐，避免 `new Date(字符串)` 变 Invalid Date）
+- 说明：减法/排序因 JS `ToNumber` 隐式转换原本侥幸正确（截图里排序结果是对的），故本次只修**显示**，不动排序语义
+- 涉及 Token：无
+
 ### 9.3 前置依赖 · 主机管理 `/hosts`（最小版）
 
 - §6 已有完整规格；本期只落地**最小集**，够支撑上面两个页面：
