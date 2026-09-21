@@ -1487,13 +1487,13 @@ body{background:#e8ecf1;}
     for(var i=0;i<vers.length;i++){ if(vers[i].cur){ cur = vers[i].tag; break; } }
     document.getElementById('vdFoot').style.display = 'flex';
     document.getElementById('vdBody').innerHTML =
-      '<div class="vd-cur">当前版本：<b>'+(cur||'—')+'</b></div>'
+      '<div class="vd-cur">当前版本：<b>'+(cur||'—')+'</b><span style="color:var(--text-3);font-size:12px;margin-left:10px;">所有版本（含当前）均可选中部署；部署当前版本时系统会提示「已是该版本」。</span></div>'
       + vers.map(function(v){
           var isCur = (v.tag === cur);
           var meta = c.src==='deploy'
             ? (v.br||'—')+' · '+(v.time||'—')+' · '+(v.by||'—')
             : '磁盘版本目录 · /static/modules/'+c.key+'/'+c.env+'/'+v.tag+'/';
-          return '<div class="vd-ver'+(isCur?' cur':'')+'" onclick="'+(isCur?'':'vdSelect(\''+v.tag+'\')')+'">'
+          return '<div class="vd-ver'+(isCur?' cur':'')+'" onclick="vdSelect(\''+v.tag+'\')">'
             + '<span class="vd-radio"></span>'
             + '<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:8px;">'
             + '<span class="tag">'+v.tag+'</span>'

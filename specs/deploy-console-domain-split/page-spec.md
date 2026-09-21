@@ -142,6 +142,7 @@
 | 部署 | 行内「部署」 | 带该环境发起发布（写 `taskId`） | 否 | 刷新 |
 | 切换版本 | 行内「切换版本」 | **弹窗选目标版本**（下拉：`版本 · 时间 · 发布人`，排除当前版本）→ 确认 | 是（影响该环境加载版本） | 刷新 |
 | 回滚 | 行内「回滚」 | **弹窗选回滚到的版本**（下拉，**默认预选上一版本**）→ 确认 | 是（覆盖该环境目录产物） | 刷新 |
+| 部署抽屉（选版本部署） | 行内「部署」/ 页头「部署」 | 版本列表**含当前版本且均可选中**（当前版本带「当前」徽标）；选中当前版本部署 → 后端幂等，toast「已是该版本，无需切换」| 否（幂等） | 刷新。变更：2026-09-21——原「当前版本禁选」在唯一版本即当前版本时导致抽屉无可点项（用户反馈）|
 
 - 空态："尚无部署记录，点「发布」发起首次部署"
 
@@ -386,6 +387,51 @@
   6. Tab 顶新增一行 `a-alert` 说明：「主机组名引用『主机管理』，转发地址由主机解析得出；端口按该环境实际启动端口填写，不继承」
 - 涉及 Token：`--ws-brand-100`（行高亮）、`--ws-text-tertiary`（副行小字）
 - 交互影响：补「保存中防重复提交」「主机未登记 → 400 明确报错」两格
+
+---
+
+## 10. 补充规格 · 时间显示口径统一（2026-09-21）
+
+> 触发：用户在看「应用详情 → 部署」时发现发布时间比系统时间**早 8 小时**。
+> 排查结论：**DB 侧无偏差**（本地 MySQL `@@time_zone=SYSTEM`（CST），`deploy_app_env_versions.deployed_at` 与 `NOW()` 同秒；全库 259 个时间列扫描无「未来时间」）；
+> 偏差出在**前端渲染** —— 后端 `Date` 经 JSON 序列化为 ISO 字符串（UTC，如 `2026-09-21T10:49:17.000Z`），页面**原样输出**，未做本地化。
+
+**缺陷点（本次修复）**：`apps/deploy-console/src/views/AppDetail.vue` 两处直接渲染 `deployedAt`
+
+1. 概览 Tab · 环境卡片 meta：`{{ e.deployedAt ? e.deployedAt : '尚未发布' }}`
+2. 部署 Tab ·「发布时间」列：`{{ record.deployedAt || '—' }}`
+
+**口径（与本页原型部署 Tab 的 `09-18 10:02` 一致）**：所有面向用户的时间一律**本地时区格式化后展示**，禁止直接输出后端原始时间串（ISO/UTC 或裸 datetime）。
+
+- 统一格式：`YYYY-MM-DD HH:mm:ss`（dayjs）；表格单元格沿用 `.ws-tabular`
+- 毫秒时间戳字段（`startTime` / `endTime`）沿用既有 `formatTime`（dayjs）口径，不改
+- 涉及 Token：无（仅文本内容）；复用既有 `.ws-tabular`
+- 影响面复核：仅 `AppDetail.vue` 命中；`AuditLog` / `Dashboard` / `NotificationCenter` / `CanaryCenter` / `VersionDeploy` / `PipelineCenter` / `PipelineDetail` 均为 dayjs 或 `new Date()` 本地化，无同类问题
+
+### 10.1 追加（2026-09-21 同日）：bigint 毫秒时间戳必须先转「数值」再格式化
+
+> 触发：用户看流水线列表「最近执行」，红框时间是 `04-20 10:05:04` / `04-01 14:58:09` / `03-17 15:00:00` —— 而实际发布时间就在今天。
+
+**现象 vs 期望**：页面显示 `04-20 10:05:04`，期望 `2026-09-21 18:49:17`（`MM-DD` 格式把错误的年份 **1797** 藏住了，肉眼只像"4 月"）。
+
+**根因（已实测复现）**：`deploy_pipeline_runs.start_time` 是 **bigint** 毫秒时间戳，经 TypeORM/mysql2 → JSON 到前端是**字符串**（`"1789987757654"`）。`dayjs("1789987757654")` 命中 dayjs 的字符串解析分支，按 `YYYYMMDDHHmmss` 误解析：
+
+| 真实值（毫秒） | 传 number（正确） | 传 string（现状，错） |
+|---|---|---|
+| `1789987757654` | 2026-09-21 18:49:17 | **1797-04-20 10:05:04** |
+| `1789978962589` | 2026-09-21 16:22:42 | **1797-04-01 14:58:09** |
+| `1789977387000` | 2026-09-21 15:56:27 | **1797-03-17 15:00:00** |
+
+（三个真实值逐一对应截图三行 —— 根因确认。）
+
+**新增判据**：任何 bigint 毫秒时间戳，在**格式化和比较之前**必须先 `Number()` 归一；禁止把可能为字符串的时间戳直接交给 `dayjs()` / `new Date()`。
+
+- 修复点：
+  1. `apps/deploy-console/src/components/pipeline/pipeline.stages.ts` —— `formatTime` / `formatTimeShort` / `durationMs`（共用，PipelineDetail、StageCommandDrawer 一并受益）
+  2. `apps/deploy-console/src/views/PipelineCenter.vue` —— 本地 `formatTime` + `latest.startTime` 比较（字符串字典序比较虽在同长度下等价，仍显式归一）
+  3. `apps/deploy-console/src/views/Dashboard.vue` —— 失败列表时间（该接口后端已 `Number()` 归一，属同口径下游对齐，避免 `new Date(字符串)` 变 Invalid Date）
+- 说明：减法/排序因 JS `ToNumber` 隐式转换原本侥幸正确（截图里排序结果是对的），故本次只修**显示**，不动排序语义
+- 涉及 Token：无
 
 ### 9.3 前置依赖 · 主机管理 `/hosts`（最小版）
 
