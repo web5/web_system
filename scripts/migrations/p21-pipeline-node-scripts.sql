@@ -1,4 +1,18 @@
-#!/usr/bin/env bash
+-- ===========================================================
+-- P21: 流水线节点脚本初始化（平台不再分发脚本）
+--
+-- 背景（2026-09-21）：平台侧删除了「随 console 分发的脚本」机制
+--   （WS_PLATFORM_SCRIPTS_DIR / step-scripts.ts / PlatformScriptSeedService / pipeline/scripts/*）；
+--   动作脚本一律 curl 调平台内部接口（`/api/internal/release/{versions,pointer}`，x-internal-key 鉴权）。
+-- 本脚本两个用途：
+--   ① 新环境初始化：给所有模板补 git 节点的默认脚本（仅当为空时填，不覆盖运维已有脚本）；
+--   ② 存量迁移：把 write-version 动作从「调平台分发的 .mjs」改为 curl 调接口。
+-- 幂等：可重复执行。执行库：web_system_deploy
+-- ===========================================================
+
+-- ① git 节点默认脚本（空值才填；运维改过的不动）
+UPDATE deploy_pipeline_step_commands
+SET command = '#!/usr/bin/env bash
 # 阶段：git（platform 节点 · 平台托管，locked=true，页面只读）
 # 依赖变量：RELEASE_DIR / BRANCH / COMMIT_ID / MODULE_* / WS_SAFE_DELETE
 # 约束：机器无关 —— 只依赖「本机自身」变量，禁止引用 REMOTE_*（那是发起端概念）
@@ -68,3 +82,34 @@ fi
 git clean -fd
 
 echo "[git] 就绪 HEAD=$(git rev-parse --short HEAD) branch=$(git rev-parse --abbrev-ref HEAD)"
+',
+    updated_by = 'p21',
+    updated_at = NOW()
+WHERE node_key = 'git' AND (command IS NULL OR command = '');
+
+-- ② write-version 动作：改为 curl 调平台接口（旧正文引用已删除的平台工具）
+UPDATE deploy_pipeline_actions
+SET script = '#!/usr/bin/env bash
+# 发布流水线 · write-version（写版本记录）：直连平台接口，不依赖平台分发的脚本
+#
+# 2026-09-21 起平台不再分发脚本（原实现是调用平台分发的 write-version.mjs）：
+# 动作脚本一律用 curl 调平台内部接口（x-internal-key 鉴权）。
+set -euo pipefail
+: "${CONSOLE_API:?缺少 CONSOLE_API（平台未注入，检查 resolveStageVars）}"
+: "${CONSOLE_TOKEN:?缺少 CONSOLE_TOKEN（平台未注入）}"
+: "${MODULE_KEY:?缺少 MODULE_KEY}" "${DEPLOY_ENV:?缺少 DEPLOY_ENV}" "${COMMIT_ID:?缺少 COMMIT_ID}"
+
+curl -sf -X POST "${CONSOLE_API}/internal/release/versions" \\
+  -H "Content-Type: application/json" \\
+  -H "x-internal-key: ${CONSOLE_TOKEN}" \\
+  -d "{\\"moduleKey\\":\\"${MODULE_KEY}\\",\\"env\\":\\"${DEPLOY_ENV}\\",\\"versionTag\\":\\"${COMMIT_ID}\\",\\"gitBranch\\":\\"${BRANCH}\\",\\"operator\\":\\"pipeline-script\\"}" \\
+  >/dev/null \\
+  || { echo "[write-version] 写版本失败：${CONSOLE_API}/internal/release/versions（检查 CONSOLE_API / CONSOLE_TOKEN）" >&2; exit 1; }
+
+echo "[write-version] 版本记录已写入: ${DEPLOY_ENV}/${MODULE_KEY}@${COMMIT_ID}"
+',
+    updated_by = 'p21',
+    updated_at = NOW()
+WHERE name LIKE 'write-version%';
+
+SELECT 'p21-pipeline-node-scripts done' AS note;

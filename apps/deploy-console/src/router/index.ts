@@ -85,13 +85,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '服务管理' },
       },
       {
-        // 版本部署（API 网关域）：与 /deploys/micro 共用组件，按 route.params.domain 区分
-        path: 'deploys/backend',
-        name: 'VersionDeployBackend',
-        component: () => import('@/views/VersionDeploy.vue'),
-        meta: { title: '版本部署' },
-      },
-      {
         path: 'services/:key',
         name: 'ServiceDetail',
         component: () => import('@/views/ServiceDetail.vue'),

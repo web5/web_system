@@ -6,7 +6,6 @@ import { AuditService } from '../audit/audit.service';
 import { CurrentUser } from '../common/decorators';
 import {
   CreateServiceDto,
-  DeployServiceDto,
   EndpointDto,
   ImportEndpointsDto,
   ProbeHealthDto,
@@ -26,6 +25,10 @@ import {
  * - `PUT/DELETE /api/services/:key/endpoints/:id`     改 / 删接口
  * - `GET        /api/services/:key/envs`              各环境运行时与主机（只读）
  * - `POST       /api/services/:key/health`            手动探活
+ *
+ * ⚠️ `POST /api/services/:key/deploy`（重启 + 探活）已于 2026-09-21 下线：
+ * 后端「发布即生效」改由流水线的 restart / verify action 承担
+ * （见 `specs/pipeline-restart-verify-as-action/design.md`），控制台不再需要独立的部署动作。
  */
 @ApiTags('API 网关 · 服务')
 @ApiBearerAuth()
@@ -280,23 +283,4 @@ export class ServicesController {
     return this.servicesService.probeHealth(key, dto.envId || 'dev');
   }
 
-  @Post(':key/deploy')
-  @ApiOperation({
-    summary: '部署某环境：重启进程 + 探活（与「构建发布」分离，不重新构建）',
-  })
-  async deploy(@Param('key') key: string, @Body() dto: DeployServiceDto, @CurrentUser() user: any) {
-    const res = await this.servicesService.deploy(key, dto.envId);
-    await this.auditService.log({
-      user: user?.username || 'unknown',
-      action: 'service.deploy',
-      env: dto.envId,
-      component: key,
-      status: res.ok ? 'success' : 'failed',
-      detail:
-        `部署 ${dto.envId}：重启 ${res.restarted ?? '未执行'}` +
-        `${res.restartNote ? `（${res.restartNote}）` : ''}` +
-        `，探活 ${res.health.ok ? `${res.health.status} ${res.health.latencyMs}ms` : `失败 ${res.health.error || res.health.status}`}`,
-    });
-    return res;
-  }
 }

@@ -20,9 +20,6 @@ import { DeployHostEntity } from '../entities/deploy-host.entity';
 // 仅用于种子导入（迁移 M4/M6 的运行时等价物，P4 正式迁移后移除依赖）
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
-import { Pm2ProbeService } from '../pm2/pm2-probe.service';
-import { CommandService } from '../shell/command.service';
-import { defaultReleaseWorkspace } from '../pipeline/release-paths';
 import {
   CreateServiceDto,
   ENDPOINT_AUTH_MODES,
@@ -82,9 +79,6 @@ export class ServicesService implements OnModuleInit {
     @InjectRepository(DeployEnvServiceRouteEntity)
     private readonly legacyRouteRepo: Repository<DeployEnvServiceRouteEntity>,
     private readonly configService: ConfigService,
-    // 部署动作（重启）：复用流水线同款 pm2 探针与命令执行器，保证两条链路行为一致
-    private readonly pm2Probe: Pm2ProbeService,
-    private readonly command: CommandService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -714,77 +708,4 @@ export class ServicesService implements OnModuleInit {
     }
   }
 
-  /**
-   * **部署动作**（2026-09-19 定稿：与「构建发布」**分离**）。
-   *
-   * - **构建发布** = 流水线：拉码 → 构建 → 上传产物（**不动进程、不生效**）
-   * - **部署**     = 本动作：重启进程 + 探活（**不重新构建**，也永不写应用侧版本指针）
-   *
-   * 这样「产物已上传但仍跑旧代码」是**可读的中间态**（部署 tab 显示已发布待部署），
-   * 而不是"以为发了其实没生效"。
-   *
-   * 未配置指向 → fail-fast（B4：不允许回落到本机）。
-   */
-  async deploy(serviceKey: string, envId: string) {
-    const { url, svc, row } = await this.resolveUpstream(serviceKey, envId);
-    if (!url) {
-      throw new BadRequestException(
-        `服务 ${serviceKey} 在环境 ${envId} 未配置目标主机，无法部署（不允许回落到本机）`,
-      );
-    }
-
-    const restart = this.restartLocal(serviceKey, svc.pm2Name);
-    const health = await this.probeHealth(serviceKey, envId);
-
-    return {
-      serviceKey,
-      envId,
-      upstreamUrl: url,
-      target: health.target,
-      restarted: restart.restarted,
-      restartNote: restart.reason,
-      health: { ok: health.ok, status: health.status, latencyMs: health.latencyMs, error: health.error },
-      ok: !!restart.restarted && health.ok,
-    };
-  }
-
-  /**
-   * 本机 pm2 重启（与 `RestartExecutor` 同一套名单解析 / 命令，行为一致）。
-   * 进程不在本机 pm2 纳管范围内时**明确返回原因** —— 远程重启暂不支持，
-   * 避免"点了部署、什么都没发生"。
-   */
-  private restartLocal(
-    serviceKey: string,
-    pm2Name?: string | null,
-  ): { restarted: string | null; reason: string | null } {
-    const candidates = this.pm2Probe.resolvePm2Names(serviceKey, pm2Name ?? undefined);
-    let names: string[];
-    try {
-      const exists = new Set(this.pm2Probe.listProcesses().map((a) => a.name));
-      names = candidates.filter((n) => exists.has(n));
-    } catch (e) {
-      return {
-        restarted: null,
-        reason: `读取本机 pm2 进程失败：${(e as Error).message.slice(0, 200)}`,
-      };
-    }
-    if (!names.length) {
-      return {
-        restarted: null,
-        reason: `本机 pm2 未纳管该服务（尝试 ${candidates.join(' / ')}）；远程主机部署请走流水线`,
-      };
-    }
-
-    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace();
-    try {
-      this.command.exec(`"${this.command.pm2Bin()}" restart ${names[0]} --update-env`, ws, {}, 60_000);
-      return { restarted: names[0], reason: null };
-    } catch (e) {
-      // 重启命令异常 ≠ 部署失败：交给后续探活兜底判定（同 RestartExecutor 取舍）
-      return {
-        restarted: names[0],
-        reason: `重启命令异常/超时（以探活结果为准）：${(e as Error).message.slice(0, 200)}`,
-      };
-    }
-  }
 }

@@ -14,8 +14,6 @@ import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import {
   servicesApi,
-  deployApi,
-  pipelineRunsApi,
   type ServiceRow,
   type ServiceRouteRow,
   type EndpointRow,
@@ -425,8 +423,6 @@ function gotoEnvConfig(envId: string) {
 }
 
 const probing = ref<string | null>(null)
-/** 正在部署的环境（同一时间只允许一个部署在跑） */
-const deploying = ref<string | null>(null)
 async function probe(envId: string) {
   probing.value = envId
   try {
@@ -446,8 +442,9 @@ async function probe(envId: string) {
 // ---------- 构建发布（流水线）vs 部署（重启 + 探活）----------
 
 /**
- * **构建发布 = 走流水线**：拉码 → 构建 → 上传产物（**不动进程**）。
- * 产物上传后仍需在本页执行「部署」，新代码才会生效。
+ * **构建发布 = 走流水线**：拉码 → 构建 → 投递产物 →
+ * 后端由 restart / verify 两个 action 落地生效（探活通过后才切指针）；前端切指针即生效。
+ * 自 2026-09-21 起控制台不再有独立的「部署」动作。
  */
 function publish(envId?: string) {
   if (service.value?.deployChannel === 'legacy') {
@@ -455,59 +452,6 @@ function publish(envId?: string) {
     return
   }
   router.push({ name: 'PipelineCenter', query: { module: svcKey.value, env: envId || 'dev' } })
-}
-
-/**
- * **部署 = 重启 + 探活**（不重新构建）：
- * 让该环境已上传的产物真正生效。探活失败即判失败；远程主机若不在本机 pm2 纳管，
- * 服务端会返回明确原因（不会「点了没反应」）。
- */
-/**
- * 部署 = 选版本 → 改指向（deployVersion：落 dist + 重启 + 写指针）→ 探活。
- * 版本列表 = 该模块在该环境的磁盘产物（流水线「构建发布」上传的），默认选中最新。
- * 用户 2026-09-21：部署时才修改指向，且部署时选择版本。
- */
-const deployModal = ref(false)
-const deployEnvId = ref('')
-const deployVersionSel = ref<string | undefined>(undefined)
-const deployVersions = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
-
-async function deploy(envId: string) {
-  deployEnvId.value = envId
-  deployVersions.value = []
-  deployVersionSel.value = undefined
-  deployModal.value = true
-  try {
-    deployVersions.value = await pipelineRunsApi.releases(envId, svcKey.value)
-    deployVersionSel.value = deployVersions.value[0]?.versionTag
-  } catch {
-    deployVersions.value = []
-  }
-}
-
-async function confirmDeploy() {
-  if (!deployVersionSel.value) {
-    message.warning('请选择要部署的版本')
-    return
-  }
-  deploying.value = deployEnvId.value
-  try {
-    await deployApi.deployVersion(svcKey.value, deployEnvId.value, deployVersionSel.value)
-    let health = '探活未执行'
-    try {
-      const res = await servicesApi.health(svcKey.value, deployEnvId.value)
-      health = res.ok ? `探活通过（${res.latencyMs}ms）` : `探活失败：${res.error || res.status}`
-    } catch {
-      health = '探活请求失败'
-    }
-    message.success(`已部署并指向 ${deployVersionSel.value} → ${health}`)
-    deployModal.value = false
-    await loadEnvs()
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '部署失败')
-  } finally {
-    deploying.value = null
-  }
 }
 
 async function load() {
@@ -834,8 +778,7 @@ onMounted(load)
               { title: '环境', key: 'envId', width: 150 },
               { title: '目标', key: 'target' },
               { title: '运行时', key: 'runtime', width: 120 },
-              { title: '状态', key: 'status', width: 130 },
-              { title: '操作', key: 'action', width: 140 },
+              { title: '操作', key: 'action', width: 180 },
             ]"
             :data-source="svcEnvs"
             row-key="envId"
@@ -850,66 +793,22 @@ onMounted(load)
                 <span v-if="record.configured" class="ws-mono">
                   {{ record.upstreamUrl || `${record.hostAddress}:${record.port ?? '—'}` }}
                 </span>
-                <span v-else class="muted">未配置指向（部署会 fail-fast）</span>
+                <span v-else class="muted">未配置指向</span>
               </template>
               <template v-else-if="column.key === 'runtime'">
                 <span class="muted">{{ record.runtime || '继承' }}</span>
               </template>
-              <template v-else-if="column.key === 'status'">
-                <a-badge v-if="!record.configured" status="warning" text="未配置" />
-                <a-badge v-else status="default" text="待部署" />
-              </template>
               <template v-else-if="column.key === 'action'">
                 <a type="link" @click="publish(record.envId)">构建发布</a>
-                <a-divider type="vertical" />
-                <a
-                  type="link"
-                  :disabled="!record.configured || deploying !== null"
-                  @click="deploy(record.envId)"
-                >
-                  {{ deploying === record.envId ? '部署中…' : '部署' }}
-                </a>
-                <!-- 部署 = 选版本 → 改指向（落 dist + 重启 + 写指针）→ 探活 -->
-                <a-modal
-                  v-model:open="deployModal"
-                  :title="`部署 · ${deployEnvId}（选择版本并修改指向）`"
-                  :confirm-loading="deploying !== null"
-                  ok-text="部署（修改指向）"
-                  @ok="confirmDeploy"
-                >
-                  <div v-if="!deployVersions.length" class="muted" style="padding: 8px 0;">
-                    未取到该环境已上传的版本——先执行「构建发布」上传产物，再回来部署。
-                  </div>
-                  <template v-else>
-                    <div style="margin-bottom: 8px;">
-                      选择要部署的版本（默认最新上传）：
-                    </div>
-                    <a-radio-group v-model:value="deployVersionSel" style="display: block;">
-                      <a-radio
-                        v-for="v in deployVersions"
-                        :key="v.versionTag"
-                        :value="v.versionTag"
-                        style="display: block; padding: 6px 0;"
-                      >
-                        <span class="ws-mono">{{ v.versionTag }}</span>
-                        <span v-if="v.note" class="muted"> · {{ v.note }}</span>
-                      </a-radio>
-                    </a-radio-group>
-                    <div class="muted" style="font-size: 12px;">
-                      部署 = 把所选版本落地为当前运行版本（改指向）并重启进程，随后自动探活确认。
-                    </div>
-                  </template>
-                </a-modal>
                 <a-divider type="vertical" />
                 <a type="link" @click="probe(record.envId)">探活</a>
               </template>
             </template>
           </a-table>
           <p class="hint">
-            <b>构建发布走流水线</b>（拉码 → 构建 → 上传产物，<b>不动进程</b>），产物上传后<b>不会自动生效</b>；
-            <b>部署是独立动作</b>（重启进程 + 探活），探活失败即判失败。<br />
-            两者分离，是为了让「已上传但未重启」成为<b>可见的中间态</b>，而不是"以为发了其实还在跑旧代码"。
-            服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
+            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/
+            verify（探活通过后切指针）直接生效，<b>前端切指针即生效</b> —— 流水线跑完即上线。<br />
+            验证不通过则指针不前进，旧版本继续对外服务；服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
           </p>
         </a-tab-pane>
       </a-tabs>

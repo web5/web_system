@@ -14,11 +14,9 @@ import { PipelineVarController } from './pipeline-var.controller';
 import { CheckExecutor } from './steps/check.executor';
 import { PullExecutor } from './steps/pull.executor';
 import { UploadExecutor } from './steps/upload.executor';
-import { RestartExecutor } from './steps/restart.executor';
 import { ApplyExecutor } from './steps/apply.executor';
 import { VersionExecutor } from './steps/version.executor';
 import { PointerExecutor } from './steps/pointer.executor';
-import { VerifyExecutor } from './steps/verify.executor';
 import { CleanupExecutor } from './steps/cleanup.executor';
 import { PIPELINE_BUILTIN_STEPS, buildBuiltinSteps, BuiltinExecutors } from './steps/step-registry';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
@@ -95,11 +93,9 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     CheckExecutor,
     PullExecutor,
     UploadExecutor,
-    RestartExecutor,
     ApplyExecutor,
     VersionExecutor,
     PointerExecutor,
-    VerifyExecutor,
     CleanupExecutor,
     // 步骤注册表：按步骤元数据（category/commandMode/守卫/执行体）组装，engine 数据驱动分派
     {
@@ -108,23 +104,19 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
         check: CheckExecutor,
         pull: PullExecutor,
         upload: UploadExecutor,
-        restart: RestartExecutor,
         apply: ApplyExecutor,
         version: VersionExecutor,
         pointer: PointerExecutor,
-        verify: VerifyExecutor,
         cleanup: CleanupExecutor,
       ) =>
-        buildBuiltinSteps({ check, pull, upload, restart, apply, version, pointer, verify, cleanup } as BuiltinExecutors),
+        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup } as BuiltinExecutors),
       inject: [
         CheckExecutor,
         PullExecutor,
         UploadExecutor,
-        RestartExecutor,
         ApplyExecutor,
         VersionExecutor,
         PointerExecutor,
-        VerifyExecutor,
         CleanupExecutor,
       ],
     },

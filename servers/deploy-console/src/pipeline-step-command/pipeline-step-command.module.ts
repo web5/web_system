@@ -5,7 +5,6 @@ import { DeployPipelineStepBranchEntity } from '../entities/deploy-pipeline-step
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { PipelineStepCommandService } from './pipeline-step-command.service';
 import { PipelineStepCommandController } from './pipeline-step-command.controller';
-import { PlatformScriptSeedService } from './platform-script-seed.service';
 import { StepBranchService } from './step-branch.service';
 import { AuditModule } from '../audit/audit.module';
 
@@ -20,7 +19,7 @@ import { AuditModule } from '../audit/audit.module';
     AuditModule,
   ],
   controllers: [PipelineStepCommandController],
-  providers: [PipelineStepCommandService, PlatformScriptSeedService, StepBranchService],
-  exports: [PipelineStepCommandService, PlatformScriptSeedService, StepBranchService],
+  providers: [PipelineStepCommandService, StepBranchService],
+  exports: [PipelineStepCommandService, StepBranchService],
 })
 export class PipelineStepCommandModule {}
