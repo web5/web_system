@@ -10,6 +10,7 @@
  * - 同一 run 内已加载技能去重（Set），重复调用返回提示，避免 token 浪费
  */
 import { AgentDefinition } from '../interfaces/agent.interface';
+import { AGENT_ERROR_CODES, withCode } from './agent-errors';
 import { resolveAgentCapabilities } from './capability-resolver';
 import {
   TelemetryPort,
@@ -171,16 +172,18 @@ export class AgentEngine {
           }
         }
       } catch (error) {
-        this.logger.error(`Agent ${agent.id} 模型调用失败: ${(error as Error).message}`);
+        const detail = `模型调用失败: ${(error as Error).message}`;
+        this.logger.error(`Agent ${agent.id} ${detail}`);
+        // 带错误码：客户端按码查表给提示，技术原文只进 run 落库
         yield {
           type: 'error',
-          content: `模型调用失败: ${(error as Error).message}`,
+          content: withCode(AGENT_ERROR_CODES.MODEL_ERROR, detail),
           usage: usageOf(accPrompt, accCompletion),
         };
         this.emit('onRunEnd', {
           runId,
           status: 'error',
-          error: `模型调用失败: ${(error as Error).message}`,
+          error: withCode(AGENT_ERROR_CODES.MODEL_ERROR, detail),
           durationMs: Date.now() - runStartAt,
           totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
           ts: Date.now(),
@@ -188,11 +191,14 @@ export class AgentEngine {
         return;
       }
       if (!resp) {
-        yield { type: 'error', content: '模型未返回结果' };
+        yield {
+          type: 'error',
+          content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, '模型未返回结果'),
+        };
         this.emit('onRunEnd', {
           runId,
           status: 'error',
-          error: '模型未返回结果',
+          error: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, '模型未返回结果'),
           durationMs: Date.now() - runStartAt,
           totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
           ts: Date.now(),
@@ -211,6 +217,23 @@ export class AgentEngine {
           step,
           ts: Date.now(),
         });
+      }
+
+      // ⚠️ 模型返回了空内容且没有工具调用 = 本轮失败。
+      // 以前会照常 push 进记忆，导致会话里留下 content:"" 的 assistant 记录 ——
+      // 既污染后续上下文，前端历史载入时还会渲染出一个空气泡。这里直接判失败返回。
+      if (!resp.content && (!resp.toolCalls || resp.toolCalls.length === 0)) {
+        const detail = '模型返回了空结果';
+        yield { type: 'error', content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail) };
+        this.emit('onRunEnd', {
+          runId,
+          status: 'error',
+          error: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail),
+          durationMs: Date.now() - runStartAt,
+          totalTokens: usageOf(accPrompt, accCompletion).totalTokens,
+          ts: Date.now(),
+        });
+        return;
       }
 
       messages.push(resp.assistantMessage);

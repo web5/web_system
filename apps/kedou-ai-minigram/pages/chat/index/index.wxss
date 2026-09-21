@@ -59,6 +59,10 @@ page {
   background: var(--brand-50);
   color: var(--brand);
 }
+.chat-msg.user {
+  /* 经典 IM 布局：我的消息整行反转（头像到右、气泡右对齐），AI 保持左侧 */
+  flex-direction: row-reverse;
+}
 .chat-msg.user .msg-avatar {
   /* 去掉实心橙块（用户反馈突兀）：与 AI 头像同族，靠头像内文字区分身份 */
   background: var(--brand-50);
@@ -75,10 +79,56 @@ page {
   line-height: 1.6;
   word-break: break-all;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, .04);
+  /* 复制入口浮层的定位基准 */
+  position: relative;
 }
 .chat-msg.user .msg-bubble {
   background: var(--brand-50);
+  /* 不占满：自适应内容宽度并靠右；上限 78% 防长文本顶满 */
+  flex: 0 1 auto;
+  max-width: 78%;
 }
+
+/* ===== 长按复制入口（气泡内右下角，不遮正文） ===== */
+.msg-copy {
+  position: absolute;
+  right: 10rpx;
+  bottom: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--brand-50);
+  color: var(--brand);
+  font-size: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, .06);
+}
+.msg-copy .mc-ic {
+  position: relative;
+  width: 20rpx;
+  height: 20rpx;
+  border: 2.5rpx solid currentColor;
+  border-radius: 4rpx;
+  flex-shrink: 0;
+}
+/* 后一个矩形压住前一个的左上角 = 复制图标 */
+.msg-copy .mc-ic::after {
+  content: '';
+  position: absolute;
+  left: -7rpx;
+  top: -7rpx;
+  width: 20rpx;
+  height: 20rpx;
+  border: 2.5rpx solid currentColor;
+  border-radius: 4rpx;
+  background: var(--brand-50);
+}
+/* 失败且无内容时的占位提示：占位但不抢眼，避免气泡空白 */
+.msg-text.msg-empty {
+  color: var(--t3);
+}
+
 .msg-text {
   font-size: 26rpx;
   color: inherit;
@@ -197,10 +247,9 @@ page {
   margin: 0;
   font-size: 26rpx;
   color: var(--t1);
-  /* 行高与单行高度解耦：原 76rpx 行高是为了单行对齐按钮，但会让多行输入行距过大 */
+  /* 单行输入：回车 / 键盘「发送」= 直接发送，回车不再插入换行（用户要求） */
+  height: 44rpx;
   line-height: 44rpx;
-  min-height: 44rpx;
-  max-height: 160rpx;
   box-sizing: border-box;
   width: auto;
   align-self: center;
@@ -261,7 +310,8 @@ page {
   position: absolute;
   left: 8rpx;
   bottom: 0;
-  width: 96rpx;
+  /* 热区 8~64rpx：与右侧列表图标紧邻，两图标视觉间隙收窄到约 50rpx（原 ~82rpx） */
+  width: 56rpx;
   height: 44px;
   display: flex;
   align-items: center;
@@ -275,7 +325,28 @@ page {
   border-left: 4rpx solid var(--icon);
   border-bottom: 4rpx solid var(--icon);
   transform: rotate(45deg);
-  margin-left: 10rpx; /* 视觉重心校正：旋转 45° 后箭头几何中心偏右 */
+  margin-left: 6rpx; /* 视觉重心校正：旋转 45° 后箭头几何中心偏右 */
+}
+
+/* 「对话记录」入口：紧邻返回键（返回键占 8~64rpx），间隙按原型收窄约一半 */
+.nav-hist {
+  position: absolute;
+  left: 64rpx;
+  bottom: 0;
+  width: 56rpx;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-hist:active { opacity: .6; }
+.nav-hist-ic {
+  width: 40rpx;
+  height: 40rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 40rpx 40rpx;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSA2aDExTTkgMTJoMTFNOSAxOGgxMSIvPjxwYXRoIGQ9Ik01IDZoLjAxTTUgMTJoLjAxTTUgMThoLjAxIi8+PC9zdmc+");
 }
 .nav-title {
   position: absolute;
