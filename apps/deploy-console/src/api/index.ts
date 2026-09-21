@@ -397,6 +397,9 @@ export interface ApproverUser {
   roles: string[]
 }
 
+/** 任务级执行状态（镜像自 servers/deploy-console/src/pipeline-orchestration/orchestration-engine.ts） */
+export type TaskRunStatus = 'running' | 'succeeded' | 'failed' | 'skipped' | 'awaiting' | 'cancelled'
+
 export interface PipelineItem {
   id: string
   env: string
@@ -423,6 +426,14 @@ export interface PipelineItem {
   steps?: string[] | null
   /** v5 节点快照：null=legacy（steps 语义）；platform+script */
   nodes?: TemplateNode[] | null
+  /**
+   * 编排快照（新引擎实例）：步骤→任务→动作整树；null=旧链路（nodes/legacy）。
+   * 详情页画布据此渲染与编辑页同构的只读流程图（specs/pipeline-task-status/design.md）。
+   * 引擎快照内 id 必有值（编辑器类型里 id 可选是新建态语义）。
+   */
+  orchestration?: OrchestrationStep[] | null
+  /** 任务级执行状态（key=`${step.id}/${task.id}`）；null=未记录（旧实例） */
+  taskStates?: Record<string, TaskRunStatus> | null
   rollbackOnFailure?: 'previous' | 'none'
   stage?: string
   progress?: { current: number; total: number; message?: string }
@@ -491,7 +502,7 @@ export const pipelineRunsApi = {
     confirm?: boolean
   }) => http.post('/pipelines', dto) as Promise<{ jobId: string; status: string }>,
 
-  list: (params?: { env?: string; moduleKey?: string; templateId?: string; limit?: number }) =>
+  list: (params?: { env?: string; moduleKey?: string; pipelineId?: string; limit?: number }) =>
     http.get('/pipelines', { params: params ?? {} }) as Promise<PipelineItem[]>,
 
   get: (id: string) => http.get(`/pipelines/${id}`) as Promise<PipelineItem>,

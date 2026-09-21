@@ -158,6 +158,15 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'json', nullable: true, comment: '编排快照（步骤/任务/动作；null=旧链路）' })
   orchestration?: import('../pipeline-orchestration/orchestration-engine').EngineStep[] | null;
 
+  /**
+   * 任务级执行状态（specs/pipeline-task-status/design.md）。
+   * key = `${step.id}/${task.id}`（orchestration 快照内稳定标识）；
+   * 步骤级状态不落库，由前端从任务状态聚合（单一状态源，防漂移）。
+   * null = 未记录（改动前的新引擎实例 / 旧链路）。
+   */
+  @Column({ type: 'json', nullable: true, comment: '任务级执行状态（key=stepId/taskId；null=未记录）' })
+  taskStates?: Record<string, import('../pipeline-orchestration/orchestration-engine').TaskRunStatus> | null;
+
   /** 失败自动回滚开关快照（previous/none） */
   @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚快照' })
   rollbackOnFailure?: string;

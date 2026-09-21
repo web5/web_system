@@ -50,6 +50,18 @@ export interface EngineAction {
   enabled?: boolean;
 }
 
+/**
+ * 任务级执行状态（specs/pipeline-task-status/design.md §1）。
+ * 由引擎在任务生命周期各时机上报，调用方落库到运行实例 taskStates。
+ */
+export type TaskRunStatus =
+  | 'running' // 已开始执行（shell 动作循环前 / 审批等待前）
+  | 'succeeded' // 成功（含审批任务通过）
+  | 'failed' // 失败（含审批被拒/超时按 fail 处置）
+  | 'skipped' // 条件未命中 / 任务停用 / 审批按 skip 处置
+  | 'awaiting' // 审批挂起中（恢复后按结果覆写）
+  | 'cancelled'; // 取消信号命中
+
 export interface EngineContext {
   /** 条件求值变量（DEPLOY_ENV / MODULE_KEY / BRANCH…） */
   vars: ConditionVars;
@@ -71,6 +83,12 @@ export interface EngineContext {
   afterTask?: (step: EngineStep, task: EngineTask) => Promise<void>;
   /** 日志输出（调用方负责写入运行实例 logs） */
   log: (line: string) => void;
+  /**
+   * 任务级状态上报（specs/pipeline-task-status/design.md §2）。
+   * 回调异常不吞执行主流程（引擎侧 catch 只当无事发生）；
+   * 状态丢失只影响详情页展示，不影响发布。
+   */
+  onTaskStatus?: (step: EngineStep, task: EngineTask, status: TaskRunStatus) => void | Promise<void>;
   /** 取消检查（每步/每任务前调用一次）；true = 立即中止 */
   shouldAbort?: () => boolean;
 }
@@ -93,6 +111,21 @@ export interface EngineResult {
 /** 挂起信号异常名（与主服务的 PipelineSuspended 对齐：引擎不吞挂起） */
 const SUSPENDED_NAME = 'PipelineSuspended';
 
+/** 状态上报安全包装：回调异常不吞执行主流程（§2 规则） */
+async function report(
+  ctx: EngineContext,
+  step: EngineStep,
+  task: EngineTask,
+  status: TaskRunStatus,
+): Promise<void> {
+  if (!ctx.onTaskStatus) return;
+  try {
+    await ctx.onTaskStatus(step, task, status);
+  } catch {
+    /* 状态落库失败只影响展示，不影响发布 */
+  }
+}
+
 /**
  * 执行整棵编排树。任何失败立即返回（步骤内并行任务通过 Promise.all 语义整体失败）；
  * waitApproval 抛出的挂起信号异常原样透传给调用方（由主服务置 awaiting-approval 态）。
@@ -113,10 +146,15 @@ export async function runOrchestration(
       if (step.enabled === false) {
         ctx.log(`[step] ${step.name} 已停用，跳过`);
         continue;
-      }
-      if (ctx.shouldAbort?.()) return { status: 'aborted', failedAt: step.name };
+      }      if (ctx.shouldAbort?.()) return { status: 'aborted', failedAt: step.name };
 
-      const tasks = (step.tasks ?? []).filter((t) => t.enabled !== false);
+      const tasks = (step.tasks ?? []).filter((t) => {
+        if (t.enabled === false) {
+          report(ctx, step, t, 'skipped'); // fire-and-forget：状态上报失败不影响执行
+          return false;
+        }
+        return true;
+      });
       if (!tasks.length) {
         ctx.log(`[step] ${step.name} 无任务（分组占位），跳过`);
         continue;
@@ -138,7 +176,10 @@ export async function runOrchestration(
           return { status: 'failed', failedAt: label, error: (e as Error).message };
         }
         if (hit) toRun.push(task);
-        else ctx.log(`[task] ${label} 条件不满足（${task.condition.trim()}），已跳过`);
+        else {
+          ctx.log(`[task] ${label} 条件不满足（${task.condition.trim()}），已跳过`);
+          await report(ctx, step, task, 'skipped');
+        }
       }
 
       if (!toRun.length) {
@@ -176,30 +217,41 @@ export async function runOrchestration(
 /** 单任务执行；返回 null = 成功，字符串 = 失败原因（语义化，供定位） */
 async function runTask(step: EngineStep, task: EngineTask, ctx: EngineContext): Promise<string | null> {
   const label = `${step.name} / ${task.name}`;
-  if (ctx.shouldAbort?.()) return CANCELED;
+  if (ctx.shouldAbort?.()) {
+    await report(ctx, step, task, 'cancelled');
+    return CANCELED;
+  }
 
   if (task.kind === 'approval') {
+    await report(ctx, step, task, 'awaiting');
     ctx.log(`[task] ${label} 等待审批（审批人：${(task.approval?.approvers ?? []).join('、') || '未配置'}）`);
     const outcome = await ctx.waitApproval(task);
     if (outcome === 'approved') {
       ctx.log(`[task] ${label} 审批通过`);
+      await report(ctx, step, task, 'succeeded');
       return null;
     }
     if (outcome === 'timeout') {
       const action = task.approval?.timeoutAction ?? 'fail';
       ctx.log(`[task] ${label} 审批超时，按配置${action === 'fail' ? '失败' : '跳过'}`);
+      await report(ctx, step, task, action === 'fail' ? 'failed' : 'skipped');
       return action === 'fail' ? '审批超时' : null;
     }
     // rejected
     const action = task.approval?.onReject ?? 'fail';
     ctx.log(`[task] ${label} 审批拒绝，按配置${action === 'fail' ? '失败' : '跳过'}`);
+    await report(ctx, step, task, action === 'fail' ? 'failed' : 'skipped');
     return action === 'fail' ? '审批被拒绝' : null;
   }
 
   // script：动作严格串行，任一失败即断
   const actions = (task.actions ?? []).filter((a) => a.enabled !== false);
-  if (!actions.length) return '脚本任务没有可执行的动作';
+  if (!actions.length) {
+    await report(ctx, step, task, 'failed');
+    return '脚本任务没有可执行的动作';
+  }
   const taskEnv = task.env ?? {};
+  await report(ctx, step, task, 'running');
   for (const action of actions) {
     ctx.log(`[action] ${label} / ${action.name} 开始执行`);
     try {
@@ -208,6 +260,7 @@ async function runTask(step: EngineStep, task: EngineTask, ctx: EngineContext): 
     } catch (e) {
       const msg = (e as Error).message;
       ctx.log(`[action] ${label} / ${action.name} 执行失败：${msg}`);
+      await report(ctx, step, task, 'failed');
       return `动作「${action.name}」失败：${msg}（后续动作已停止）`;
     }
   }
@@ -217,8 +270,10 @@ async function runTask(step: EngineStep, task: EngineTask, ctx: EngineContext): 
       await ctx.afterTask(step, task);
     } catch (e) {
       ctx.log(`[task] ${label} 平台收尾失败：${(e as Error).message}`);
+      await report(ctx, step, task, 'failed');
       return `平台收尾失败：${(e as Error).message}`;
     }
   }
+  await report(ctx, step, task, 'succeeded');
   return null;
 }
