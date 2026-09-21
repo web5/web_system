@@ -634,6 +634,60 @@ export const stepBranchApi = {
     }>,
 }
 
+/**
+ * 编排新模型：步骤 → 任务 → 动作（specs/pipeline-step-task/design.md）。
+ * 动作一律 shell 脚本；调用平台能力（写版本记录）= 脚本内调平台工具。
+ */
+export interface OrchestrationAction {
+  id?: string
+  name: string
+  script: string
+  /** 平台托管动作（git/build）：不可删除、不可改名 */
+  managed?: boolean
+  sort?: number
+  enabled?: boolean
+}
+
+export interface OrchestrationTask {
+  id?: string
+  kind: 'script' | 'approval'
+  name: string
+  /** 执行条件；空 = 恒执行（多选一用互斥条件，不提供默认兜底） */
+  condition?: string | null
+  env?: Record<string, string> | null
+  approval?: { approvers: string[]; timeoutSec?: number; timeoutAction?: 'skip' | 'fail'; onReject?: 'fail' | 'skip' } | null
+  sort?: number
+  enabled?: boolean
+  actions?: OrchestrationAction[]
+}
+
+export interface OrchestrationStep {
+  id?: string
+  name: string
+  description?: string | null
+  sort?: number
+  enabled?: boolean
+  tasks?: OrchestrationTask[]
+}
+
+export const orchestrationApi = {
+  /** 整树：步骤（含任务，任务含动作）；空数组 = 该流水线未迁移新模型（走旧画布） */
+  getTree: (pipelineId: string) =>
+    http.get(`/pipelines/${pipelineId}/steps`) as Promise<OrchestrationStep[]>,
+
+  /** 步骤全量保存（名称/介绍/排序；按名 upsert，任务不动） */
+  saveSteps: (pipelineId: string, steps: { name: string; description?: string | null; sort?: number; enabled?: boolean }[]) =>
+    http.put(`/pipelines/${pipelineId}/steps`, { steps }) as Promise<OrchestrationStep[]>,
+
+  /** 某步骤任务全量保存（含各自动作）；managed 动作不可删/不可改名 */
+  saveTasks: (pipelineId: string, stepId: string, tasks: OrchestrationTask[]) =>
+    http.put(`/pipelines/${pipelineId}/steps/${stepId}/tasks`, { tasks }) as Promise<OrchestrationStep[]>,
+
+  /** 删除步骤（级联任务与动作） */
+  deleteStep: (pipelineId: string, stepId: string) =>
+    http.delete(`/pipelines/${pipelineId}/steps/${stepId}`) as Promise<{ deleted: string }>,
+}
+
 export const pipelineStepApi = {
   /** 某流水线各节点命令 */
   list: (templateId: string) =>

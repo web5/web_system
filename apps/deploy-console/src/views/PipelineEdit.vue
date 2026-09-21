@@ -9,6 +9,7 @@ import {
   pipelineRunsApi,
   stepBranchApi,
   deployApi,
+  orchestrationApi,
   type PipelineTemplate,
   type PipelineVar,
   type TemplateNode,
@@ -19,6 +20,7 @@ import {
 import UserSelect from '@web-system/ui/components/UserSelect.vue'
 import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
+import OrchestrationEditor from '@/components/pipeline/OrchestrationEditor.vue'
 import StepBranchEditor from '@/components/pipeline/StepBranchEditor.vue'
 import StepConditionEditor from '@/components/pipeline/StepConditionEditor.vue'
 import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
@@ -591,6 +593,18 @@ async function loadVars() {
   }
 }
 
+/** 编排新模型（步骤→任务→动作）：新表有数据 → flow tab 用三层画布（specs/pipeline-step-task） */
+const hasOrchestration = ref(false)
+async function detectOrchestration() {
+  if (!tplId.value) { hasOrchestration.value = false; return }
+  try {
+    const tree = await orchestrationApi.getTree(tplId.value)
+    hasOrchestration.value = Array.isArray(tree) && tree.length > 0
+  } catch {
+    hasOrchestration.value = false
+  }
+}
+
 const insertVar = (v: string) => {
   const item = editingItem.value
   if (!item?.actions?.length) { message.warning('请先添加一个 shell 操作'); return }
@@ -598,7 +612,7 @@ const insertVar = (v: string) => {
   if (shell) { shell.code = (shell.code || '') + v; dirty.value = true }
 }
 
-onMounted(() => { void load() })
+onMounted(() => { void load(); void detectOrchestration() })
 </script>
 
 <template>
@@ -691,9 +705,14 @@ onMounted(() => { void load() })
         </a-card>
       </a-tab-pane>
 
-      <!-- Tab 2：流程编排 -->
+      <!-- Tab 2：流程编排（双轨：新表有数据 → 三层画布；否则旧节点画布） -->
       <a-tab-pane key="flow" tab="流程编排">
-        <a-card size="small">
+        <OrchestrationEditor
+          v-if="hasOrchestration && tplId"
+          :pipeline-id="tplId"
+          @dirty="(v: boolean) => (dirty = v)"
+        />
+        <a-card v-else size="small">
       <template #title>
         流程编排
         <span class="muted-text" style="margin-left: 8px;">节点可增删、拖拽排序；点节点在右侧抽屉配置脚本</span>
