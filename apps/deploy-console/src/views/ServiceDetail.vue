@@ -14,6 +14,8 @@ import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import {
   servicesApi,
+  deployApi,
+  pipelineRunsApi,
   type ServiceRow,
   type ServiceRouteRow,
   type EndpointRow,
@@ -460,21 +462,46 @@ function publish(envId?: string) {
  * 让该环境已上传的产物真正生效。探活失败即判失败；远程主机若不在本机 pm2 纳管，
  * 服务端会返回明确原因（不会「点了没反应」）。
  */
+/**
+ * 部署 = 选版本 → 改指向（deployVersion：落 dist + 重启 + 写指针）→ 探活。
+ * 版本列表 = 该模块在该环境的磁盘产物（流水线「构建发布」上传的），默认选中最新。
+ * 用户 2026-09-21：部署时才修改指向，且部署时选择版本。
+ */
+const deployModal = ref(false)
+const deployEnvId = ref('')
+const deployVersionSel = ref<string | undefined>(undefined)
+const deployVersions = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
+
 async function deploy(envId: string) {
-  deploying.value = envId
+  deployEnvId.value = envId
+  deployVersions.value = []
+  deployVersionSel.value = undefined
+  deployModal.value = true
   try {
-    const res = await servicesApi.deploy(svcKey.value, envId)
-    if (res.ok) {
-      message.success(
-        `部署完成：${res.restarted} 已重启，探活 ${res.health.status}（${res.health.latencyMs}ms）`,
-      )
-    } else if (res.restarted) {
-      message.warning(
-        `已重启 ${res.restarted}，但探活失败：${res.health.error || `HTTP ${res.health.status}`}`,
-      )
-    } else {
-      message.warning(`未执行重启：${res.restartNote || '未知原因'}`)
+    deployVersions.value = await pipelineRunsApi.releases(envId, svcKey.value)
+    deployVersionSel.value = deployVersions.value[0]?.versionTag
+  } catch {
+    deployVersions.value = []
+  }
+}
+
+async function confirmDeploy() {
+  if (!deployVersionSel.value) {
+    message.warning('请选择要部署的版本')
+    return
+  }
+  deploying.value = deployEnvId.value
+  try {
+    await deployApi.deployVersion(svcKey.value, deployEnvId.value, deployVersionSel.value)
+    let health = '探活未执行'
+    try {
+      const res = await servicesApi.health(svcKey.value, deployEnvId.value)
+      health = res.ok ? `探活通过（${res.latencyMs}ms）` : `探活失败：${res.error || res.status}`
+    } catch {
+      health = '探活请求失败'
     }
+    message.success(`已部署并指向 ${deployVersionSel.value} → ${health}`)
+    deployModal.value = false
     await loadEnvs()
   } catch (e: any) {
     message.error(e?.response?.data?.message || '部署失败')
@@ -842,6 +869,37 @@ onMounted(load)
                 >
                   {{ deploying === record.envId ? '部署中…' : '部署' }}
                 </a>
+                <!-- 部署 = 选版本 → 改指向（落 dist + 重启 + 写指针）→ 探活 -->
+                <a-modal
+                  v-model:open="deployModal"
+                  :title="`部署 · ${deployEnvId}（选择版本并修改指向）`"
+                  :confirm-loading="deploying !== null"
+                  ok-text="部署（修改指向）"
+                  @ok="confirmDeploy"
+                >
+                  <div v-if="!deployVersions.length" class="muted" style="padding: 8px 0;">
+                    未取到该环境已上传的版本——先执行「构建发布」上传产物，再回来部署。
+                  </div>
+                  <template v-else>
+                    <div style="margin-bottom: 8px;">
+                      选择要部署的版本（默认最新上传）：
+                    </div>
+                    <a-radio-group v-model:value="deployVersionSel" style="display: block;">
+                      <a-radio
+                        v-for="v in deployVersions"
+                        :key="v.versionTag"
+                        :value="v.versionTag"
+                        style="display: block; padding: 6px 0;"
+                      >
+                        <span class="ws-mono">{{ v.versionTag }}</span>
+                        <span v-if="v.note" class="muted"> · {{ v.note }}</span>
+                      </a-radio>
+                    </a-radio-group>
+                    <div class="muted" style="font-size: 12px;">
+                      部署 = 把所选版本落地为当前运行版本（改指向）并重启进程，随后自动探活确认。
+                    </div>
+                  </template>
+                </a-modal>
                 <a-divider type="vertical" />
                 <a type="link" @click="probe(record.envId)">探活</a>
               </template>
