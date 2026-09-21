@@ -21,6 +21,7 @@ import UserSelect from '@web-system/ui/components/UserSelect.vue'
 import type { UserSelectLoadResult } from '@web-system/ui/components/UserSelect.types'
 import StageActionsEditor, { type EditorItem } from '@/components/pipeline/StageActionsEditor.vue'
 import OrchestrationEditor from '@/components/pipeline/OrchestrationEditor.vue'
+import VariableScopePanel from '@/components/pipeline/VariableScopePanel.vue'
 import StepBranchEditor from '@/components/pipeline/StepBranchEditor.vue'
 import StepConditionEditor from '@/components/pipeline/StepConditionEditor.vue'
 import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
@@ -795,7 +796,12 @@ onMounted(() => { void load(); void detectOrchestration() })
           <div v-if="isCreate" class="empty-hint" style="padding: 24px 0; text-align: center;">
             新建态：先「创建」流水线，再回来配变量
           </div>
-          <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+          <template v-else>
+            <!-- 变量全景：内置 / 配置中心生效项 + 优先级说明（流水线变量在下方面板维护） -->
+            <VariableScopePanel :env="metaDraft.env" :module-key="metaDraft.moduleKey" />
+            <a-divider style="margin: 12px 0 14px;"><span class="muted-text">流水线变量（可增删改）</span></a-divider>
+            <PipelineVarPanel :template-id="tplId" :vars="vars" @changed="loadVars" />
+          </template>
         </a-card>
       </a-tab-pane>
     </a-tabs>
@@ -951,7 +957,11 @@ onMounted(() => { void load(); void detectOrchestration() })
       <!-- Tab 3：变量（本条流水线，可增删改）—— 与编辑页「变量」Tab 共用一个组件 -->
       <a-tab-pane key="vars" tab="变量">
         <div v-if="isCreate" class="empty-hint">新建态：先「创建」流水线，再配变量</div>
-        <PipelineVarPanel v-else :template-id="tplId" :vars="vars" @changed="loadVars" />
+        <template v-else>
+          <VariableScopePanel :env="metaDraft.env" :module-key="metaDraft.moduleKey" />
+          <a-divider style="margin: 12px 0 14px;"><span class="muted-text">流水线变量（可增删改）</span></a-divider>
+          <PipelineVarPanel :template-id="tplId" :vars="vars" @changed="loadVars" />
+        </template>
       </a-tab-pane>
 
       <!-- Tab 3：参数（只读，写脚本时查阅）—— 与编辑页「参数」Tab 共用一个组件 -->

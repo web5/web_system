@@ -105,6 +105,49 @@ function openTask(step: OrchestrationStep, task: OrchestrationTask) {
   drawerMode.value = 'task'
   drawerTab.value = 'task'
   drawerOpen.value = true
+  syncEnvDrafts(task)
+}
+
+// ── 任务级环境变量（KEY 可改名：以 draft 暂存，blur/回车提交重建对象保证响应性） ──
+const envKeyDrafts = ref<Record<string, string>>({})
+function syncEnvDrafts(task: OrchestrationTask) {
+  envKeyDrafts.value = Object.fromEntries(Object.keys(task.env ?? {}).map((k) => [k, k]))
+}
+function addEnvKey(task: OrchestrationTask) {
+  const next = { ...(task.env ?? {}) }
+  let name = `KEY_${Object.keys(next).length + 1}`
+  while (name in next) name = `_${name}`
+  next[name] = ''
+  task.env = next
+  envKeyDrafts.value = { ...envKeyDrafts.value, [name]: name }
+  markDirty()
+}
+function removeEnvKey(task: OrchestrationTask, oldKey: string) {
+  const next = { ...(task.env ?? {}) }
+  delete next[oldKey]
+  task.env = next
+  delete envKeyDrafts.value[oldKey]
+  markDirty()
+}
+function commitEnvKey(task: OrchestrationTask, oldKey: string) {
+  const newKey = (envKeyDrafts.value[oldKey] ?? '').trim()
+  if (!newKey || newKey === oldKey) {
+    envKeyDrafts.value[oldKey] = oldKey
+    return
+  }
+  if (task.env && newKey in task.env) {
+    message.warning(`变量键重复：${newKey}`)
+    envKeyDrafts.value[oldKey] = oldKey
+    return
+  }
+  const next: Record<string, string> = {}
+  for (const [k, v] of Object.entries(task.env ?? {})) next[k === oldKey ? newKey : k] = v
+  task.env = next
+  const drafts = { ...envKeyDrafts.value }
+  delete drafts[oldKey]
+  drafts[newKey] = newKey
+  envKeyDrafts.value = drafts
+  markDirty()
 }
 function openAction(step: OrchestrationStep, task: OrchestrationTask, action: OrchestrationAction) {
   curStep.value = step
@@ -352,14 +395,25 @@ function drawWires() {
             <div class="field-note small">语法：KEY == 值 / KEY != 值，多条件 &amp;&amp;；变量：DEPLOY_ENV / MODULE_KEY / MODULE_TYPE / BRANCH / COMMIT_ID 及流水线变量。</div>
           </a-tab-pane>
           <a-tab-pane v-if="curTask.kind === 'script'" key="env" tab="环境变量">
-            <div class="field-note">任务级环境变量：执行该任务的全部动作时注入，可覆盖配置中心同名键。</div>
-            <a-empty v-if="!Object.keys(curTask.env ?? {}).length" description="暂无任务级变量" />
-            <div v-for="(v, k) in curTask.env ?? {}" :key="k" class="env-row">
-              <span class="k mono">{{ k }}</span>
-              <a-input v-model:value="(curTask.env ??= {})[k]" class="mono" size="small" />
-              <a @click="delete (curTask.env ?? {})[k]">删除</a>
+            <div class="field-note">
+              <b>任务级环境变量</b>：只在执行<b>该任务的动作</b>时注入，<b>优先级最高</b>——
+              可覆盖配置中心 / 流水线变量 / 内置同名键。脚本里 <code>${'{KEY}'}</code> 引用。
             </div>
-            <a-button size="small" @click="(curTask.env ??= {})['NEW_KEY'] = ''">＋ 添加变量</a-button>
+            <div v-for="(v, k) in curTask.env ?? {}" :key="k" class="env-row">
+              <a-input
+                :value="envKeyDrafts[k] ?? k"
+                class="mono"
+                size="small"
+                placeholder="KEY"
+                style="width: 38%;"
+                @change="(e: any) => (envKeyDrafts[k] = e.target.value)"
+                @blur="commitEnvKey(curTask, k)"
+                @press-enter="commitEnvKey(curTask, k)"
+              />
+              <a-input v-model:value="curTask.env![k]" class="mono" size="small" placeholder="值" style="flex: 1;" />
+              <a style="color: var(--ws-error-500); font-size: 12px;" @click="removeEnvKey(curTask, k)">删除</a>
+            </div>
+            <a-button size="small" @click="addEnvKey(curTask)">＋ 添加变量</a-button>
           </a-tab-pane>
         </a-tabs>
       </template>
