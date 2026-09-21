@@ -117,6 +117,15 @@ export class AgentEngine {
       }
     }
 
+    // 1.5 用户级长期记忆（口味档案）：跨会话生效，与 conversationId 无关。
+    // 放在历史摘要之后、用户消息之前——离用户意图最近，权重最高。
+    if (this.memory.loadProfile) {
+      const profile = await this.memory.loadProfile(userId);
+      if (profile) {
+        historyMessages = [...historyMessages, { role: 'system', content: profile }];
+      }
+    }
+
     // 2. 归一能力声明：工具名 + 技能目录统一来自 capabilities（无则回退旧字段）
     const resolved = resolveAgentCapabilities(agent);
     const hasSkills = !!this.skillLoader && resolved.skills.length > 0;

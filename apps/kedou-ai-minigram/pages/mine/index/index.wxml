@@ -15,6 +15,14 @@
     <view class="b">深度润色 · 术语库 · 合同不限次评估</view>
   </view>
 
+  <!-- AI 记忆：用户级、跨会话；口味只是第一个类目，后续可复用该分组 -->
+  <view class="sec-t">AI 记忆<text class="em">跨会话生效</text></view>
+  <view class="list">
+    <view class="r" bindtap="goTaste">
+      <text class="nm">音乐口味</text><text class="v">{{tasteSummary}} ›</text>
+    </view>
+  </view>
+
   <view class="sec-t">应用设置<text class="em">各管各的</text></view>
   <view class="list">
     <view class="r" bindtap="goTrSettings">

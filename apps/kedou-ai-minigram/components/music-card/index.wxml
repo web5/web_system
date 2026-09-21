@@ -1,0 +1,25 @@
+<!-- 歌曲推荐卡片：结构由后端 card 事件驱动，平台名来自 provider 配置（不写死） -->
+<view class="mcard" wx:if="{{songs.length}}">
+  <view class="mc-head">
+    <text class="mc-tag">为你推荐</text>
+    <text class="mc-sub">共 {{songs.length}} 首</text>
+  </view>
+
+  <view class="mc-song" wx:for="{{songs}}" wx:key="index">
+    <view class="mc-t">
+      <text class="mc-title">{{item.title}}</text>
+      <text class="mc-artist">{{item.artist}}</text>
+    </view>
+    <text class="mc-why" wx:if="{{item.reason}}">{{item.reason}}</text>
+  </view>
+
+  <view class="mc-ops">
+    <view class="mc-op" bindtap="onSwap">换一批</view>
+    <view class="mc-op" bindtap="onDislike">不感兴趣</view>
+    <view class="mc-main" bindtap="onPlay">{{btnText}}</view>
+  </view>
+
+  <view class="mc-note" wx:if="{{provider}}">
+    跳转后在 {{provider.name}} 搜索并播放，本小程序不提供音频播放
+  </view>
+</view>

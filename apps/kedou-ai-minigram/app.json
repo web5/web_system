@@ -14,6 +14,7 @@
     "pages/mine/index/index",
     "pages/mine/profile/profile",
     "pages/mine/settings/settings",
+    "pages/mine/taste/index",
     "pages/contract/index/index",
     "pages/contract/upload/upload",
     "pages/contract/analyzing/analyzing",

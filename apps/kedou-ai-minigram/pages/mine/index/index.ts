@@ -7,6 +7,8 @@
  * 计数（trCount / asCount / chatCount）骨架期留空，不显示假数字；
  * 批次 4/5 接真后填充。
  */
+import { getMusicTaste, tasteSummary } from '../../../services/user-taste';
+
 Page({
   data: {
     nickname: '橙子哥哥',
@@ -17,12 +19,22 @@ Page({
     asCount: '',
     chatCount: '',
     cacheSize: '24.6MB',
+    /** 音乐口味摘要（前 3 个标签；无则「未设置」） */
+    tasteSummary: '未设置',
   },
 
   /** 登记当前 tab（自定义 tabBar 据此渲染并高亮；对话页则隐藏） */
   onShow() {
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/mine/index/index', selected: 2 });
+    // 口味摘要：轻量读一次，失败保持「未设置」不打扰
+    void getMusicTaste().then((t) => {
+      this.setData({ tasteSummary: tasteSummary(t) });
+    });
+  },
+
+  goTaste() {
+    wx.navigateTo({ url: '/pages/mine/taste/index' });
   },
 
   goProfile() { wx.navigateTo({ url: '/pages/mine/profile/profile' }); },
