@@ -1,7 +1,9 @@
 import {
   buildTranslateCardView,
   inferTranslateDirection,
+  looksLikeTranslateReply,
   parseSections,
+  splitSpeakChunks,
 } from '../utils/translate-parse';
 
 describe('buildTranslateCardView', () => {
@@ -51,5 +53,60 @@ describe('inferTranslateDirection', () => {
 
   it('推断不出语种返回空串（不留空白 meta）', () => {
     expect(inferTranslateDirection('帮我润色一下这句话')).toBe('');
+  });
+});
+
+describe('splitSpeakChunks（流式朗读切块）', () => {
+  it('多句文本：首句单独成块（最快出声），其余合并到上限内', () => {
+    const chunks = splitSpeakChunks('Thank you very much. It is my pleasure to help you today.');
+    expect(chunks[0]).toBe('Thank you very much.');
+    // 所有块都在上限内
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(110);
+    // 拼回原文（空格归一后）
+    expect(chunks.join(' ').replace(/\s+/g, ' ')).toBe(
+      'Thank you very much. It is my pleasure to help you today.',
+    );
+  });
+
+  it('单句短文本 → 一块', () => {
+    expect(splitSpeakChunks('Thank you.')).toEqual(['Thank you.']);
+  });
+
+  it('超长单句在空格处硬切，不切碎单词', () => {
+    const long = 'word '.repeat(60).trim(); // 300 字符无句读
+    const chunks = splitSpeakChunks(long);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) {
+      expect(c.length).toBeLessThanOrEqual(110);
+      // 不出现半个单词（首尾都不是把 word 切成两半）
+      expect(c.startsWith('word')).toBe(true);
+      expect(c.endsWith('word') || c.endsWith(' ')).toBe(true);
+    }
+  });
+
+  it('空文本 → 空数组', () => {
+    expect(splitSpeakChunks('  ')).toEqual([]);
+  });
+});
+
+describe('looksLikeTranslateReply（历史消息启发式）', () => {
+  it('含【推荐译文】标记 → 命中', () => {
+    expect(looksLikeTranslateReply('【推荐译文】Thank you.\n【语气要点】…')).toBe(true);
+  });
+
+  it('英文开头 + 中文说明 → 命中（翻译官典型形态）', () => {
+    expect(looksLikeTranslateReply('Thank you. 更正式用 Thank you。')).toBe(true);
+  });
+
+  it('纯中文回复 → 不命中（普通 agent 回答）', () => {
+    expect(looksLikeTranslateReply('这句话的意思是谢谢你。')).toBe(false);
+  });
+
+  it('纯英文 → 不命中（闲聊/代码形态，不做卡片）', () => {
+    expect(looksLikeTranslateReply('Nice to meet you. Have a good day!')).toBe(false);
+  });
+
+  it('空串 → 不命中', () => {
+    expect(looksLikeTranslateReply('')).toBe(false);
   });
 });

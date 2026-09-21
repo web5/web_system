@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kedou-ai-minigram · 原型总入口</title>
+<style>
+  :root {
+    --stage: #ECE8E3;
+    --card: #FFFFFF;
+    --page-bg: #F7F4F0;
+    --line: rgba(60,60,67,.12);
+    --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand: #F97316; --brand-soft: #FFF2E6; --brand-txt: #EA580C;
+    --green: #12A150; --green-soft: #E7F7EE;
+    --amber: #D98200; --amber-soft: #FFF6E5; --amber-deep: #78350F;
+    --radius: 12px; --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--stage); color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-size: 14px; line-height: 1.6;
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+
+  .top { flex: none; padding: 14px 20px 12px; border-bottom: .5px solid var(--line); background: var(--card); }
+  .top h1 { font-size: 15px; font-weight: 600; margin: 0 0 3px; }
+  .top p { margin: 0; font-size: 12px; color: var(--t2); }
+  .top p b { color: var(--brand-txt); font-weight: 500; }
+  .top .open { font-size: 12px; color: var(--brand-txt); text-decoration: none; }
+
+  .wrap { flex: 1; display: flex; gap: 16px; padding: 16px 20px 20px; min-height: 0; }
+
+  .nav { width: 300px; flex: none; position: sticky; top: 12px; align-self: flex-start; max-height: calc(100vh - 28px); overflow-y: auto; }
+  .nav::-webkit-scrollbar { width: 0; }
+  .grp { margin-bottom: 14px; }
+  .grp .gt { font-size: 11.5px; color: var(--t3); padding: 0 2px 7px; letter-spacing: .3px; }
+  .it {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 11px; border-radius: var(--radius-sm);
+    background: var(--card); border: .5px solid var(--line); margin-bottom: 7px; cursor: pointer;
+  }
+  .it:hover { border-color: rgba(249,115,22,.45); }
+  .it.on { background: var(--brand-soft); border-color: var(--brand); }
+  .it .no {
+    flex: none; width: 24px; height: 24px; border-radius: 6px; background: var(--page-bg);
+    color: var(--t2); font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .it.on .no { background: var(--brand); color: #fff; }
+  .it .tx { flex: 1; min-width: 0; }
+  .it .tx b { display: block; font-size: 13px; font-weight: 500; color: var(--t1); }
+  .it.on .tx b { color: var(--brand-txt); }
+  .it .tx span { display: block; font-size: 11.5px; color: var(--t2); margin-top: 1px; }
+  .it .tx .st {
+    display: inline-block; margin-top: 6px; font-size: 10.5px; padding: 2px 7px; border-radius: 4px;
+    background: var(--page-bg); color: var(--t2);
+  }
+  .it .tx .st.now { background: var(--brand-soft); color: var(--brand-txt); }
+  .it .tx .st.done { background: var(--green-soft); color: var(--green); }
+  .it .tx .st.pend { background: var(--amber-soft); color: var(--amber-deep); }
+
+  .stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .bar {
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 12px; background: var(--card); border: .5px solid var(--line);
+    border-radius: var(--radius) var(--radius) 0 0; font-size: 12.5px; color: var(--t2);
+    position: sticky; top: 0; z-index: 2;
+  }
+  .bar b { color: var(--t1); font-weight: 500; }
+  .bar a { color: var(--brand-txt); text-decoration: none; font-size: 12px; }
+  .frame { height: 900px; /* 初值；加载后由 JS 按稿子内容自适应，避免手机壳 / tabBar 被压扁 */
+           background: var(--card); border: .5px solid var(--line); border-top: none;
+           border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
+  .frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+  .foot { flex: none; padding: 0 20px 14px; font-size: 11px; color: var(--t3); }
+  @media (max-width: 900px) { .nav { width: 220px; } }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>kedou-ai-minigram · 原型总入口</h1>
+  <p>左侧切换各功能页面原型稿 · 右侧为可点击稿本体 · <b>改码前先过原型</b>（动作门第 3 步：原型经确认后才落地代码）</p>
+</div>
+
+<div class="wrap">
+  <aside class="nav" id="nav">
+    <div class="grp">
+      <div class="gt">一 · 主交互稿（可点击 · 手机壳内）</div>
+      <div class="it on" data-src="index.html" data-name="主骨架原型" data-note="三 Tab + 二级页 + 状态矩阵">
+        <span class="no">01</span>
+        <div class="tx">
+          <b>主骨架原型</b>
+          <span>欢迎页 + 对话 / 发现 / 我的，翻译与合同评估 11 个二级页</span>
+          <span class="st now">现行主稿</span>
+        </div>
+      </div>
+      <div class="it" data-src="music-taste.html" data-name="音乐推荐卡片 + 口味记忆" data-note="对话页卡片 / AI 记忆 / 口味页">
+        <span class="no">02</span>
+        <div class="tx">
+          <b>歌曲推荐卡片 + 音乐口味记忆</b>
+          <span>对话页音乐卡片 · 我的页「AI 记忆」分组 · 音乐口味页（方案 B 扁平列表）</span>
+          <span class="st pend">已定案 · 独立稿（不并入主稿）</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="gt">二 · 方案对比稿（多方案并排 · 04/05/06 已归档至 archive/）</div>
+      <div class="it" data-src="chat-en-style.html" data-name="对话英文回复排版" data-note="现状 + A/B/C + 流式 T0/T1/T2">
+        <span class="no">03</span>
+        <div class="tx">
+          <b>对话英文回复排版</b>
+          <span>聊天里问翻译时的译文卡片气泡，含流式三态与失败态</span>
+          <span class="st done">方案 A 已采纳并落码</span>
+        </div>
+      </div>
+      <div class="it" data-src="archive/entry-design.html" data-name="欢迎页入口方案 A–E" data-note="五套入口形态对比 · archive">
+        <span class="no">04</span>
+        <div class="tx">
+          <b>欢迎页入口方案 A–E</b>
+          <span>双色磁贴 / Clay 立体 / 主次分明 / 极简线条 / 双列磁贴</span>
+          <span class="st">已归档 · 备查</span>
+        </div>
+      </div>
+      <div class="it" data-src="archive/entry-icons.html" data-name="入口 icon 变体 F1–F4" data-note="并排圆标 / 图标加标题 / 加箭头 / 并排大图标 · archive">
+        <span class="no">05</span>
+        <div class="tx">
+          <b>入口 icon 变体 F1–F4</b>
+          <span>欢迎页入口的 icon 与标题组合对比</span>
+          <span class="st">已归档 · 备查</span>
+        </div>
+      </div>
+      <div class="it" data-src="archive/quote-design.html" data-name="今日一句 · Q1–Q6" data-note="无卡纯排版 / 对话开场 / 杂志日期 / 英文主视觉 / 整屏渐变 / 输入框开场 · archive">
+        <span class="no">06</span>
+        <div class="tx">
+          <b>「今日一句」六个方向 Q1–Q6</b>
+          <span>欢迎页与对话首条共用的引文排版</span>
+          <span class="st">已归档 · 备查</span>
+        </div>
+      </div>
+      <div class="it" data-src="quote-border.html" data-name="引文边框 G0–G4" data-note="现状 / 纯净卡 / 发丝线 / 大引号 / 极细橙线">
+        <span class="no">07</span>
+        <div class="tx">
+          <b>引文边框处理 G0–G4</b>
+          <span>今日一句卡片的边框与底色四个改法</span>
+          <span class="st done">G1 去边框纯净卡已采纳</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="gt">三 · 架构 / 方案文档（docs/ · 非页面原型）</div>
+      <div class="it" data-src="../docs/实现方案-三Tab骨架.html" data-name="实现方案 · 三 Tab 骨架" data-note="前端落地层">
+        <span class="no">08</span>
+        <div class="tx"><b>实现方案 · 三 Tab 骨架</b><span>前端落地层方案说明</span><span class="st">文档</span></div>
+      </div>
+      <div class="it" data-src="../docs/技术架构拆解-双入口.html" data-name="技术架构拆解 · 双入口" data-note="架构层">
+        <span class="no">09</span>
+        <div class="tx"><b>技术架构拆解 · 双入口</b><span>架构层方案说明</span><span class="st">文档</span></div>
+      </div>
+      <div class="it" data-src="../docs/多Agent意图路由-架构设计.html" data-name="多 Agent 意图路由 · 架构设计" data-note="决策层">
+        <span class="no">10</span>
+        <div class="tx"><b>多 Agent 意图路由 · 架构设计</b><span>决策层方案说明</span><span class="st">文档</span></div>
+      </div>
+      <div class="it" data-src="../docs/意图识别-实现方案.html" data-name="意图识别 · 实现方案" data-note="代码层">
+        <span class="no">11</span>
+        <div class="tx"><b>意图识别 · 实现方案</b><span>代码层方案说明</span><span class="st">文档</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <div class="bar">
+      <span>当前：<b id="curName">主骨架原型</b> · <span id="curNote">三 Tab + 二级页 + 状态矩阵</span></span>
+      <a id="openNew" href="index.html" target="_blank" rel="noopener">在新标签打开 ↗</a>
+    </div>
+    <div class="frame"><iframe id="frame" src="index.html" title="原型稿"></iframe></div>
+  </div>
+</div>
+
+<div class="foot">
+  页面规格书：<code>specs/kedou-ai-minigram/page-spec-chat-en-style.md</code> · <code>specs/music-recommend/page-spec.md</code> · 实施清单 <code>specs/kedou-ai-minigram/tasks.md</code>
+</div>
+
+<script>
+(function () {
+  var items = document.querySelectorAll('.nav .it');
+  var frame = document.getElementById('frame');
+  var curName = document.getElementById('curName');
+  var curNote = document.getElementById('curNote');
+  var openNew = document.getElementById('openNew');
+
+  function pick(el) {
+    Array.prototype.forEach.call(items, function (i) { i.classList.toggle('on', i === el); });
+    var src = el.getAttribute('data-src');
+    frame.src = src;
+    curName.textContent = el.getAttribute('data-name');
+    curNote.textContent = el.getAttribute('data-note');
+    openNew.setAttribute('href', src);
+    if (history.replaceState) { history.replaceState(null, '', '#' + src); }
+  }
+
+  Array.prototype.forEach.call(items, function (el) {
+    el.onclick = function () { pick(el); };
+  });
+
+  /* iframe 高度自适应稿子内容：原型稿按整页滚动布局，固定矮 iframe 会把手机壳 / tabBar 压扁。
+     同源（http :8722）可直接读 contentDocument；file:// 直开读不到时回退 900px。 */
+  function fit() {
+    var h = 900;
+    try {
+      var doc = frame.contentDocument;
+      if (doc && doc.documentElement) {
+        h = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+      }
+    } catch (e) { /* file:// 跨源读不到，走回退 */ }
+    frame.parentElement.style.height = (h > 300 ? h : 900) + 'px';
+  }
+  frame.addEventListener('load', fit);
+  window.addEventListener('resize', fit);
+
+  // 支持 #xxx.html 直接定位（如 hub.html#music-taste.html）
+  var hash = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+  if (hash) {
+    Array.prototype.forEach.call(items, function (el) {
+      if (el.getAttribute('data-src') === hash) { pick(el); }
+    });
+  }
+})();
+</script>
+</body>
+</html>
