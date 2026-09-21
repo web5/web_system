@@ -647,10 +647,9 @@ onMounted(() => { void load(); void detectOrchestration() })
         <a-card size="small">
           <div class="info-grid">
             <div class="info-field">
-              <label>流水线名</label>
+              <label>流水线名{{ isCreate ? '' : ' · 可修改' }}</label>
               <a-input
                 v-model:value="metaDraft.name"
-                :disabled="!isCreate"
                 style="width: 220px;"
                 @change="dirty = true"
               />
@@ -700,7 +699,7 @@ onMounted(() => { void load(); void detectOrchestration() })
               <span class="mono-text">${'{'}DEPLOY_HOST{'}'}</span>）。
               <b>审批（审批人 / 超时 / 拒绝后）在「发布确认」节点的抽屉里配置</b>、
               <b>失败自动回滚在节点上标 watchdog</b> —— 都在流水线各节点里设置，不放在基本信息。
-              <span v-if="!isCreate">编辑态的基本信息（名 / key / 模块 / 环境）锁定不可改。</span>
+              <span v-if="!isCreate">编辑态：<b>流水线名称可改</b>（保存即生效）；key / 模块 / 环境锁定——它们是产物路径与执行语义的一部分，改了等于新建一条。</span>
             </template>
           </a-alert>
         </a-card>
