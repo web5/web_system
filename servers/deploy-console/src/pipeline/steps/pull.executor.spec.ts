@@ -54,11 +54,11 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     return { ctx, logs, p };
   }
 
-  it('拉取代码后立即预构建共享包 @web-system/shared 与 @web-system/types', async () => {
+  it('拉取代码后立即预构建共享包 @web-system/shared、types 与 ui', async () => {
     const { ctx, logs } = makeCtx();
     await executor.run(ctx);
 
-    // 两次 pnpm --filter ... build 调用都到位
+    // 三次 pnpm --filter ... build 调用都到位（ui 于 2026-09-21 纳入：portal tokens.css resolve 失败教训）
     expect(cmd.exec).toHaveBeenCalledWith(
       expect.stringContaining('--filter @web-system/shared build'),
       '/tmp/ws',
@@ -67,11 +67,16 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
       expect.stringContaining('--filter @web-system/types build'),
       '/tmp/ws',
     );
+    expect(cmd.exec).toHaveBeenCalledWith(
+      expect.stringContaining('--filter @web-system/ui build'),
+      '/tmp/ws',
+    );
 
     // 流水线日志里能看到「预构建共享包」字样
     expect(logs.some((l) => l.includes('预构建共享包'))).toBe(true);
     expect(logs.some((l) => l.includes('@web-system/shared'))).toBe(true);
     expect(logs.some((l) => l.includes('@web-system/types'))).toBe(true);
+    expect(logs.some((l) => l.includes('@web-system/ui'))).toBe(true);
   });
 
   it('任一共享包预构建失败不阻断（继续后续操作）', async () => {
