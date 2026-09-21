@@ -32,6 +32,8 @@ export interface TaskInput {
 }
 
 export interface StepInput {
+  /** 已有步骤的 id：带 id = 更新（可改名，任务保留）；不带 = 新建 */
+  id?: string;
   name: string;
   description?: string | null;
   sort?: number;

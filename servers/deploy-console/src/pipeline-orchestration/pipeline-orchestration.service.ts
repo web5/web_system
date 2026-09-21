@@ -91,15 +91,31 @@ export class PipelineOrchestrationService {
     );
     if (errs.length) throw new BadRequestException(errs.join('；'));
 
+    // 树读取在事务提交后执行（事务回调内用非事务 repo 会读不到未提交数据）；
+    // 改名撞其他步骤名（DB 唯一键）转 400，不给用户看 500
+    try {
+      await this.runSaveSteps(pipelineId, steps, user);
+    } catch (e) {
+      const msg = (e as { code?: string; message?: string })?.message ?? '';
+      if ((e as { code?: string })?.code === 'ER_DUP_ENTRY' || msg.includes('Duplicate')) {
+        throw new BadRequestException(`步骤名重复（${steps.map((s) => s.name).join('、')}）：改名不能与其他步骤同名`);
+      }
+      throw e;
+    }
+    return this.getTree(pipelineId);
+  }
+
+  private async runSaveSteps(pipelineId: string, steps: StepInput[], user?: string) {
     await this.dataSource.transaction(async (em) => {
-      // 按名称 upsert：同名步骤仅更新元数据（保留 id —— 任务挂在 stepId 上，全删会失联）；
-      // 提交中不存在的旧步骤 → 删除（级联任务与动作）；空数组 = 清空全部。
+      // 按 id upsert：带 id 的步骤更新元数据（**可改名，任务保留** —— 任务挂在 stepId 上）；
+      // 不带 id 的按名新建；库中有而提交没有（按 id）→ 删除（级联任务与动作）；空数组 = 清空。
+      // 注意不能按名 upsert：改名会被当成「删旧建新」→ 任务全部丢失（已实测踩坑）。
       const oldSteps = await em.find(DeployPipelineStepEntity, { where: { pipelineId } });
-      const oldByName = new Map(oldSteps.map((s) => [s.name, s]));
-      const submittedNames = new Set(steps.map((s) => s.name.trim()));
+      const oldById = new Map(oldSteps.map((s) => [s.id, s]));
+      const submittedIds = new Set(steps.map((s) => s.id).filter(Boolean));
 
       for (const old of oldSteps) {
-        if (!submittedNames.has(old.name)) {
+        if (!submittedIds.has(old.id)) {
           const oldTasks = await em.find(DeployPipelineTaskEntity, { where: { stepId: old.id } });
           if (oldTasks.length) {
             await em.delete(DeployPipelineActionEntity, {
@@ -114,12 +130,12 @@ export class PipelineOrchestrationService {
       for (let i = 0; i < steps.length; i++) {
         const s = steps[i];
         const name = s.name.trim();
-        const exists = oldByName.get(name);
-        if (exists) {
+        if (s.id && oldById.has(s.id)) {
           await em.update(
             DeployPipelineStepEntity,
-            { id: exists.id },
+            { id: s.id },
             {
+              name,
               description: s.description?.trim() || null,
               sort: s.sort ?? i,
               enabled: s.enabled ?? true,
@@ -128,7 +144,7 @@ export class PipelineOrchestrationService {
           );
         } else {
           await em.insert(DeployPipelineStepEntity, {
-            id: crypto.randomUUID(),
+            id: s.id && !oldById.has(s.id) ? s.id : crypto.randomUUID(),
             pipelineId,
             name,
             description: s.description?.trim() || null,
@@ -139,11 +155,7 @@ export class PipelineOrchestrationService {
         }
       }
     });
-    // 树读取在事务提交后执行（事务回调内用非事务 repo 会读不到未提交数据）
-    return this.getTree(pipelineId);
   }
-
-  /** 某步骤的任务全量保存（含各自动作）；managed 动作不可删/不可改名 */
   async saveTasks(pipelineId: string, stepId: string, tasks: TaskInput[], user?: string) {
     const step = await this.stepsRepo.findOne({ where: { id: stepId, pipelineId } });
     if (!step) throw new NotFoundException('步骤不存在');
@@ -158,19 +170,14 @@ export class PipelineOrchestrationService {
       ? await this.actionsRepo.find({ where: { taskId: In(oldTaskIds) } })
       : [];
     const managedOld = oldActions.filter((a) => a.managed);
-    // 托管动作的稳定键 = 「所属任务名 / 动作名」（任务全量替换后 id 会变）
-    const oldManagedKeys = new Set(
-      managedOld.map((m) => {
-        const owner = oldTasks.find((t) => t.id === m.taskId)?.name;
-        return `${owner}/${m.name}`;
-      }),
-    );
-    const submittedTasks = new Map(tasks.map((t) => [t.name, t]));
-    for (const key of oldManagedKeys) {
-      const [ownerName, actionName] = key.split('/');
-      const next = ownerName ? submittedTasks.get(ownerName) : undefined;
-      if (!next?.actions?.some((a) => a.name === actionName)) {
-        throw new BadRequestException(`平台托管动作不可删除: ${ownerName} / ${actionName}`);
+    // 托管保护按「动作名」（步骤范围内）：任务改名合法（托管动作随任务保留）；
+    // 托管动作自身不可删除、不可改名 —— 提交里找不到同名托管动作即拒绝。
+    // （按「任务名/动作名」组合键会让任务改名被误判为删除托管动作，已实测踩坑。）
+    const oldManagedNames = new Set(managedOld.map((m) => m.name));
+    for (const name of oldManagedNames) {
+      const kept = tasks.some((t) => t.actions?.some((a) => a.name === name));
+      if (!kept) {
+        throw new BadRequestException(`平台托管动作不可删除或不可改名: ${name}`);
       }
     }
 
@@ -198,8 +205,8 @@ export class PipelineOrchestrationService {
           const actions = t.actions ?? [];
           for (let j = 0; j < actions.length; j++) {
             const a = actions[j];
-            // managed 只能由「库中已托管」或平台流程产生，前端传值不作为唯一依据但予以保留
-            const wasManaged = oldManagedKeys.has(`${t.name}/${a.name}`) || a.managed === true;
+            // managed 以库中已托管为准（本步骤范围按动作名），前端传值仅新建托管时生效
+            const wasManaged = oldManagedNames.has(a.name) || a.managed === true;
             await em.insert(DeployPipelineActionEntity, {
               id: crypto.randomUUID(),
               taskId,

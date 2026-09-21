@@ -177,12 +177,19 @@ async function save() {
   try {
     const saved = await orchestrationApi.saveSteps(
       props.pipelineId,
-      steps.value.map((s, i) => ({ name: s.name, description: s.description ?? null, sort: s.sort ?? i, enabled: s.enabled ?? true })),
+      steps.value.map((s, i) => ({
+        // 带 id = 更新（可改名，任务保留）；不带 = 新建
+        ...(s.id ? { id: s.id } : {}),
+        name: s.name,
+        description: s.description ?? null,
+        sort: s.sort ?? i,
+        enabled: s.enabled ?? true,
+      })),
     )
-    for (let i = 0; i < saved.length; i++) {
-      const local = steps.value[i]
-      const remote = saved[i]
-      if (remote.id && (local.tasks ?? []).length) {
+    // 按 id 配对（saved 按 sort 排序，与本地顺序可能不一致；按索引配对会把任务存错步骤）
+    for (const local of steps.value) {
+      const remote = saved.find((s) => s.id === local.id) ?? saved.find((s) => s.name === local.name)
+      if (remote?.id && (local.tasks ?? []).length) {
         await orchestrationApi.saveTasks(props.pipelineId, remote.id, local.tasks ?? [])
       }
     }
