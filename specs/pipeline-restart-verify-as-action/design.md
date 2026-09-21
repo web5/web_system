@@ -633,3 +633,22 @@ log "验证通过: $MODULE_KEY"
   与服务详情页的部署按钮/选版本弹窗；脚本侧改由 `/api/internal/release/{versions,pointer}` 承担。
   （待办：服务详情页剩余文案「部署 / 待部署」建议随后统一为「发布生效」口径。）
 - `node-approval.spec.ts` 与 `PipelineService` 依赖漂移导致的既有单测失败（本次未触碰）。
+
+### 7.6 后续批次（2026-09-21 当日）：平台脚本分发机制整体移除
+
+用户口径（追加）：**平台不提供脚本**，这类逻辑全部从平台删除；需要初始化流水线脚本就放到 SQL 初始化脚本。
+
+| 删除项 | 说明 |
+|---|---|
+| `pipeline/step-scripts.ts` + `.spec.ts` | 托管清单 + 默认脚本读取 |
+| `pipeline-step-command/platform-script-seed.service.ts` + `.spec.ts` | 启动 / 提交时的脚本 seed |
+| `pipeline/scripts/git-step.sh`、`write-version.mjs` | 随 console 分发的脚本 |
+| `WS_PLATFORM_SCRIPTS_DIR` 注入 | `resolveStageVars` 不再下发；`nest-cli.json` 不再拷贝脚本资产 |
+| `PlatformScriptSeedService` 依赖 | `pipeline.service` / `pipeline-template.service` / module 一并移除 |
+
+新增：**`scripts/migrations/p21-pipeline-node-scripts.sql`**（幂等）——
+① 新环境初始化：给所有模板补 git 节点默认脚本（仅空值才填，不覆盖运维改动）；
+② 存量迁移：`write-version` 动作改为 curl 调 `/api/internal/release/versions`（不再依赖平台分发的 `.mjs`）。
+
+验证：todo-service @ local（jobId `1789996664527-2a0hg8k`）走通
+`投递 → write-version(curl) → restart → verify 切指针`；库内 `WS_PLATFORM_SCRIPTS_DIR` 引用为 0。

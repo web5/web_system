@@ -119,6 +119,12 @@ curl -sS -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 / `CONSOLE_API` / `CONSOLE_TOKEN`（后两者供脚本 curl 调平台内部接口：`/api/internal/release/{versions,pointer}`，
 `x-internal-key` 鉴权）。
 
+> **平台不再分发脚本**（2026-09-21）：`WS_PLATFORM_SCRIPTS_DIR`、`step-scripts.ts`、
+> `PlatformScriptSeedService` 与 `pipeline/scripts/*`（含 `git-step.sh`、`write-version.mjs`）均已删除
+> —— 动作脚本存在 DB、由运维在页面维护；**新环境的初始脚本用
+> `scripts/migrations/p21-pipeline-node-scripts.sql` 预置**（幂等：空值才填 + 存量 write-version 迁移）。
+> 脚本需要平台能力时一律 **curl 调平台接口**（`/api/internal/release/*`），不再调用平台分发的文件。
+
 ---
 
 ## 4. 维护约定
