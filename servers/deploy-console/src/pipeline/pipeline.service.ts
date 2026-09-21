@@ -1267,19 +1267,23 @@ export class PipelineService {
    * 看不到刚 push 的提交。此接口从发布目录 git 拉 origin/<branch> 最近 N 条提交供选择；
    * 留空 = 分支最新（原语义不变）。
    */
-  async listBranchCommits(branch: string, limit = 20) {
-    // 分支名白名单：防注入（拼进 git 命令）
-    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
-      throw new BadRequestException(`分支名不合法: ${branch}`);
-    }
-    const n = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+  /** 分支提交缓存（SWR）：`<branch>:<n>` → 结果 + 写入时刻；进程内、重启即失效 */
+  private readonly commitCache = new Map<
+    string,
+    { at: number; rows: Array<{ hash: string; short: string; subject: string; author: string; date: string }> }
+  >();
+  /** 正在后台 fetch 的分支键（同一分支只跑一次，避免连点堆请求） */
+  private readonly commitRefreshing = new Set<string>();
+
+  /** 缓存新鲜期：期内直接命中；过期后仍先返回旧值，由后台刷新补新（见 listBranchCommits） */
+  private static readonly COMMIT_CACHE_TTL_MS = 60_000;
+
+  /**
+   * 读本地 `origin/<branch>` 的最近提交（**不 fetch**，毫秒级）。
+   * 分支不存在 / 发布目录未就绪 → 空数组（前端留「留空=最新」兜底）。
+   */
+  private readBranchCommits(branch: string, n: number) {
     try {
-      // 先 fetch 保证 origin/<branch> 最新；离线/无权限时静默降级用本地引用
-      try {
-        this.command.exec(`git fetch origin ${branch} --quiet`, this.releaseWorkspace);
-      } catch {
-        /* 忽略 fetch 失败 */
-      }
       const out = this.command.exec(
         `git log origin/${branch} -n ${n} --pretty=format:%H%x09%h%x09%s%x09%an%x09%ar`,
         this.releaseWorkspace,
@@ -1292,8 +1296,53 @@ export class PipelineService {
           return { hash, short, subject, author, date };
         });
     } catch {
-      return []; // 分支不存在 / 仓库未就绪：空列表，前端留「留空=最新」兜底
+      return [];
     }
+  }
+
+  /**
+   * 按分支列最近提交（提交发布时选 commit 用）。
+   *
+   * 用户 2026-09-21 反馈：提交抽屉的 Commit 下拉只列「历史发布版本（磁盘产物）」，
+   * 看不到刚 push 的提交。此接口从发布目录 git 拉 origin/<branch> 最近 N 条提交供选择；
+   * 留空 = 分支最新（原语义不变）。
+   *
+   * ⚠️ 2026-09-21 优化（切换分支时级联明显卡顿）：原实现**每次请求都同步
+   * `git fetch origin <branch>`**，网络往返（公司网/远端慢时 1–3s）直接压在
+   * 「分支 → Commit 候选」的联动上。现改为 **stale-while-revalidate**：
+   *   ① 先读**本地引用**（`git log origin/<branch>`，毫秒级）立即返回；
+   *   ② 同时后台 `git fetch` 刷新缓存，**下一次**请求（或 60s 后过期）即拿到最新
+   *      —— 刚 push 的提交最迟在切换/重开抽屉时出现，不再阻塞任何一次交互。
+   * 缓存按 `<branch>:<n>` 键控、进程内有效；连点同一分支只发一次 fetch。
+   */
+  async listBranchCommits(branch: string, limit = 20) {
+    // 分支名白名单：防注入（拼进 git 命令）
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
+      throw new BadRequestException(`分支名不合法: ${branch}`);
+    }
+    const n = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+    const key = `${branch}:${n}`;
+
+    // 后台刷新：**必须用异步 exec**（同步 execSync 会把 4s 的 fetch 压在事件循环里，
+    // 期间所有请求排队 —— 这正是首版 SWR 仍然慢的原因）。
+    if (!this.commitRefreshing.has(key)) {
+      this.commitRefreshing.add(key);
+      void this.command
+        .execAsync(`git fetch origin ${branch} --quiet`, this.releaseWorkspace, {}, 15_000)
+        .then(() => {
+          const rows = this.readBranchCommits(branch, n);
+          if (rows.length) this.commitCache.set(key, { at: Date.now(), rows });
+        })
+        .catch(() => undefined)
+        .finally(() => this.commitRefreshing.delete(key));
+    }
+
+    const hit = this.commitCache.get(key);
+    if (hit && Date.now() - hit.at < PipelineService.COMMIT_CACHE_TTL_MS) return hit.rows;
+
+    const rows = this.readBranchCommits(branch, n);
+    this.commitCache.set(key, { at: Date.now(), rows });
+    return rows;
   }
 
   private async run(
