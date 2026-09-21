@@ -373,7 +373,7 @@ function drawWires() {
 .orch-head .hint { font-size: 12px; color: var(--ws-text-secondary); }
 .spacer { flex: 1; }
 
-.orch-canvas { border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 16px 16px; background: var(--ws-bg-card, #fff); overflow-x: auto; }
+.orch-canvas { border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 16px 16px; background: var(--ws-bg-surface); overflow-x: auto; }
 .canvas-body { position: relative; width: max-content; min-width: 100%; }
 .wires { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 .pipeline { display: flex; align-items: flex-start; gap: 72px; padding: 14px 20px; }
@@ -381,70 +381,71 @@ function drawWires() {
 
 /* 步骤标题（上行，互不连线） */
 .step-title { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 14px; min-width: 130px;
-  background: var(--ws-bg-card, #fff); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; }
-.step-title:hover { border-color: var(--ws-primary); }
-.step-title .nm { font-size: 13px; font-weight: 600; color: var(--ws-text); }
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; }
+.step-title:hover { border-color: var(--ws-brand-500); }
+.step-title .nm { font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
 .step-title .desc { font-size: 11px; color: var(--ws-text-tertiary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 任务与动作 */
 .tasks { display: flex; flex-direction: column; width: 100%; gap: 6px; }
 .task { display: flex; flex-direction: column; width: 100%; }
 .task-node { position: relative; display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 12px;
-  background: var(--ws-bg-card, #fff); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; white-space: nowrap; }
-.task-node:hover { border-color: var(--ws-primary); }
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; white-space: nowrap; }
+.task-node:hover { border-color: var(--ws-brand-500); }
 .task-node .seq { align-self: stretch; display: flex; align-items: center; padding: 0 8px; margin: -6px 2px -6px -12px;
   font-family: var(--ws-font-mono, monospace); font-size: 13px; font-weight: 700; color: var(--ws-text-secondary);
-  background: var(--ws-bg, #f5f7fa); border-right: 1px solid var(--ws-border); border-radius: 2px 0 0 2px; }
+  background: var(--ws-bg-surface); border-right: 1px solid var(--ws-border); border-radius: 2px 0 0 2px; }
 .task-node .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--ws-border);
-  color: var(--ws-text-secondary); background: var(--ws-bg, #f5f7fa); }
-.task-node.approval .tag { color: var(--ws-success, #2e9e5b); border-color: var(--ws-success, #2e9e5b); }
-.task-node .ifb { font-size: 9px; font-weight: 700; color: #fff; background: var(--ws-primary); padding: 1px 5px; border-radius: 6px; font-family: var(--ws-font-mono, monospace); }
-.task-node .tname { font-size: 13px; font-weight: 600; color: var(--ws-text); }
+  color: var(--ws-text-secondary); background: var(--ws-bg-surface); }
+.task-node.approval .tag { color: var(--ws-success-500); border-color: var(--ws-success-500); }
+.task-node .ifb { font-size: 9px; font-weight: 700; color: #fff; background: var(--ws-brand-500); padding: 1px 5px; border-radius: 6px; font-family: var(--ws-font-mono, monospace); }
+.task-node .tname { font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
 .task-node .del, .act-node .del { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--ws-bg-card, #fff); border: 1px solid var(--ws-border); color: var(--ws-text-tertiary); cursor: pointer;
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); color: var(--ws-text-tertiary); cursor: pointer;
   display: none; align-items: center; justify-content: center; font-size: 11px; line-height: 1; padding: 0; z-index: 2; }
 .task-node:hover .del, .act-node:hover .del { display: flex; }
-.task-node .del:hover, .act-node .del:hover { background: var(--ws-error, #e5484d); border-color: var(--ws-error, #e5484d); color: #fff; }
+.task-node .del:hover, .act-node .del:hover { background: var(--ws-error-500); border-color: var(--ws-error-500); color: #fff; }
 .act-node .del:disabled { cursor: not-allowed; opacity: .4; }
 
 /* 动作块：紧贴任务头（共享边框组，圆角 2px） */
-.task-acts { border: 1px solid var(--ws-border); border-radius: 2px; overflow: hidden; margin-top: -1px; background: var(--ws-bg-card, #fff); }
+.task-acts { border: 1px solid var(--ws-border); border-radius: 2px; overflow: hidden; margin-top: -1px; background: var(--ws-bg-surface); }
 .act-node { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 9px; cursor: pointer; white-space: nowrap; width: 100%;
   border-bottom: 1px solid var(--ws-border); }
 .act-node:last-child { border-bottom: none; }
-.act-node:hover { background: var(--ws-bg, #f5f7fa); }
-.act-node .atag { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 2px; color: var(--ws-primary);
-  background: var(--ws-bg, #f5f7fa); border: 1px solid var(--ws-border); flex-shrink: 0; }
+.act-node:hover { background: var(--ws-bg-surface); }
+.act-node .atag { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 2px; color: var(--ws-brand-500);
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); flex-shrink: 0; }
 .act-node .aname { font-size: 11px; color: var(--ws-text-secondary); font-family: var(--ws-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
 
 .add-task { align-self: flex-start; font-size: 12px; color: var(--ws-text-tertiary); background: none; border: 1px dashed var(--ws-border);
   border-radius: 2px; padding: 3px 10px; cursor: pointer; }
-.add-task:hover { color: var(--ws-primary); border-color: var(--ws-primary); }
-.add-step { flex-shrink: 0; align-self: center; font-size: 13px; color: var(--ws-text-tertiary); background: none;
-  border: 1px dashed var(--ws-border); border-radius: 2px; padding: 6px 14px; cursor: pointer; }
-.add-step:hover { color: var(--ws-primary); border-color: var(--ws-primary); }
+.add-task:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
+.add-step { flex-shrink: 0; align-self: center; font-size: 13px; font-weight: 600; color: var(--ws-text-tertiary);
+  background: var(--ws-bg-surface); border: 1.5px dashed var(--ws-border); border-radius: 2px;
+  padding: 10px 18px; cursor: pointer; transition: color .15s, border-color .15s; }
+.add-step:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
 
 .empty { padding: 40px; text-align: center; color: var(--ws-text-tertiary); font-size: 13px; }
 
 /* 抽屉字段 */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 13px; color: var(--ws-text-secondary); margin-bottom: 6px; font-weight: 600; }
-.field-note { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg, #f5f7fa); border-radius: 8px; padding: 10px 12px; line-height: 1.8; margin-bottom: 12px; }
+.field-note { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg-surface); border-radius: 8px; padding: 10px 12px; line-height: 1.8; margin-bottom: 12px; }
 .field-note.small { background: none; padding: 0 0 6px; }
 .mono { font-family: var(--ws-font-mono, monospace); }
 .act-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ws-border); border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; cursor: pointer; }
-.act-row:hover { border-color: var(--ws-primary); }
-.act-row .go { margin-left: auto; font-size: 12px; color: var(--ws-primary); }
+.act-row:hover { border-color: var(--ws-brand-500); }
+.act-row .go { margin-left: auto; font-size: 12px; color: var(--ws-brand-500); }
 .env-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.env-row .k { font-size: 12px; color: var(--ws-text); }
-.env-row a { font-size: 12px; color: var(--ws-error, #e5484d); }
+.env-row .k { font-size: 12px; color: var(--ws-text-primary); }
+.env-row a { font-size: 12px; color: var(--ws-error-500); }
 </style>
 
 <!-- 非 scoped：连线中点＋号是命令式创建的元素，吃不到 scoped data-v 属性 -->
 <style>
 .orch-canvas .wire-plus { position: absolute; width: 20px; height: 20px; border-radius: 50%;
-  border: 1.5px dashed var(--ws-primary); color: var(--ws-primary); background: var(--ws-bg-card, #fff);
+  border: 1.5px dashed var(--ws-brand-500); color: var(--ws-brand-500); background: var(--ws-bg-surface);
   display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
   transform: translate(-50%, -50%); z-index: 3; font-size: 12px; }
-.orch-canvas .wire-plus:hover { border-style: solid; background: var(--ws-primary); color: #fff; }
+.orch-canvas .wire-plus:hover { border-style: solid; background: var(--ws-brand-500); color: #fff; }
 </style>
