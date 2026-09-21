@@ -555,7 +555,7 @@
                   <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
                   <td class="dc-muted">按主机+端口拼装</td>
                   <td><span class="dc-badge ok">启用</span></td>
-                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → local → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-local:6101 … 通过')">探活</button></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('local')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → local → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-local:6101 … 通过')">探活</button></td>
                 </tr>
                 <tr>
                   <td><span class="dc-mono">dev</span> <span class="dc-muted">开发环境</span></td>
@@ -564,7 +564,7 @@
                   <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
                   <td class="dc-mono">http://10.0.0.12:6101</td>
                   <td><span class="dc-badge ok">启用</span></td>
-                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → dev → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-dev:6101 … 通过')">探活</button></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('dev')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → dev → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-dev:6101 … 通过')">探活</button></td>
                 </tr>
                 <tr>
                   <td><span class="dc-mono">prod</span> <span class="dc-muted">生产环境</span> <span class="dc-badge primary">生产</span></td>
@@ -573,7 +573,7 @@
                   <td class="dc-mono dc-num">6101</td><td class="dc-num">2</td>
                   <td class="dc-muted">按主机+端口拼装</td>
                   <td><span class="dc-badge ok">启用</span></td>
-                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → prod → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-prod:6101 … 通过')">探活</button></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('prod')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → prod → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-prod:6101 … 通过')">探活</button></td>
                 </tr>
                 <tr>
                   <td><span class="dc-mono">qa</span> <span class="dc-muted">测试环境</span></td>
@@ -582,7 +582,7 @@
                   <td class="dc-muted">必填</td><td class="dc-num">1</td>
                   <td class="dc-muted">按主机+端口拼装</td>
                   <td><span class="dc-badge neutral">未配置</span></td>
-                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → qa → 后端服务指向')">配置指向</button><button class="dc-btn link" style="opacity:.4;cursor:not-allowed" onclick="toast('未配置主机组或端口，探活会 fail-fast（不回落本机）')">探活</button></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('qa')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → qa → 后端服务指向')">配置指向</button><button class="dc-btn link" style="opacity:.4;cursor:not-allowed" onclick="toast('未配置主机组或端口，探活会 fail-fast（不回落本机）')">探活</button></td>
                 </tr>
               </tbody>
             </table>
@@ -916,11 +916,19 @@
   <div class="drawer-body">
     <div class="field">
       <label>环境</label>
-      <select>
-        <option>开发环境（dev）</option>
-        <option>本地环境（local）</option>
-        <option>生产环境（prod）</option>
-      </select>
+      <!-- 两种态（用户 2026-09-21）：行内「构建发布」进来 → 锁定该行环境并**禁用**；页头「构建发布」进来 → 可选 -->
+      <div id="f-submit-env-locked" style="display:none;">
+        <input id="f-submit-env-name" value="local" readonly style="background:var(--bg);color:var(--text-3);cursor:not-allowed;">
+        <div class="dc-muted" style="margin-top:6px;">由所点击的<b>环境行</b>决定，不可修改（避免误发到其它环境）</div>
+      </div>
+      <div id="f-submit-env-pick">
+        <select>
+          <option>本地环境（local）</option>
+          <option>开发环境（dev）</option>
+          <option>生产环境（prod）</option>
+        </select>
+        <div class="dc-muted" style="margin-top:6px;">从页头发起：环境可选（默认第一个环境）；点行内「构建发布」则锁定该行环境</div>
+      </div>
     </div>
     <div class="field">
       <label>模块（发起自当前服务，不可改）</label>
@@ -1427,7 +1435,16 @@ body{background:#e8ecf1;}
     clearTimeout(toastTimer); toastTimer=setTimeout(function(){el.classList.remove('show');},1700);
   }
   /* ===== 服务详情页「构建发布」：原地开抽屉，**不改路由**（用户 2026-09-21） ===== */
-  function openSubmitDrawer(){
+  var SUBMIT_ENV_LABEL = { local:'本地环境（local）', dev:'开发环境（dev）', prod:'生产环境（prod）', qa:'测试环境（qa）' };
+  /**
+   * @param envId 非空 = 从「环境与发布」表格某行点进来 → 环境**锁定并禁用**（改不了）；
+   *              空 = 从页头「构建发布」进来 → 环境可选（默认第一个环境）。
+   */
+  function openSubmitDrawer(envId){
+    var locked = !!envId;
+    document.getElementById('f-submit-env-locked').style.display = locked ? 'block' : 'none';
+    document.getElementById('f-submit-env-pick').style.display = locked ? 'none' : 'block';
+    if (locked) document.getElementById('f-submit-env-name').value = SUBMIT_ENV_LABEL[envId] || envId;
     document.getElementById('d-submit-mask').classList.add('show');
     document.getElementById('d-submit').classList.add('show');
   }
