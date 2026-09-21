@@ -21,6 +21,7 @@ import {
   stepState as stageStepState,
   APPROVAL_STATUSES,
   isApprovalPending,
+  toMs,
 } from '@/components/pipeline/pipeline.stages'
 
 const router = useRouter()
@@ -57,12 +58,15 @@ function statusColor(status: string) {
 function statusText(status: string) {
   return stageStatusText(status)
 }
-function formatTime(ts?: number) {
-  return ts ? dayjs(ts).format('MM-DD HH:mm:ss') : '—'
+// bigint 时间戳到前端是字符串，必须先 Number 归一（否则 dayjs 误解析成 1797 年，规格 §10.1）
+function formatTime(ts?: number | string) {
+  const n = toMs(ts)
+  return n ? dayjs(n).format('MM-DD HH:mm:ss') : '—'
 }
 function durationMs(p: PipelineItem) {
-  if (!p.endTime) return Date.now() - p.startTime
-  return p.endTime - p.startTime
+  const start = toMs(p.startTime)
+  const end = toMs(p.endTime)
+  return end ? end - start : Date.now() - start
 }
 
 // ===== 流水线（流程定义）列表 =====
@@ -343,7 +347,7 @@ const moduleCards = computed<ModuleCard[]>(() =>
       const s = summaryMap.value[t.id]
       total += s?.total || 0
       ok += s?.ok || 0
-      if (s?.latest && (!latest || s.latest.startTime > latest.startTime)) {
+      if (s?.latest && (!latest || toMs(s.latest.startTime) > toMs(latest.startTime))) {
         latest = s.latest
       }
     }
@@ -442,7 +446,7 @@ const filteredRows = computed<PipelineRow[]>(() => {
   })
   // 默认排序（规格 §10）：最近执行时间倒序（最新在上），从未执行（无实例）的统一置尾；
   // 时间相同或均无实例时保持「模块 × 流水线」原序 —— Array#sort 稳定，刷新不跳行。
-  rows.sort((a, b) => (b.latest?.startTime || 0) - (a.latest?.startTime || 0))
+  rows.sort((a, b) => toMs(b.latest?.startTime) - toMs(a.latest?.startTime))
   return rows
 })
 /** 流水线展示名：默认 = 模块名；流水线名非空且与模块名不同时追加「 · 流水线名」 */
