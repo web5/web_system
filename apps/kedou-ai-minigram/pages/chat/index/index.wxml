@@ -44,29 +44,87 @@
       >
         <view class="msg-avatar">{{item.role === 'ai' ? '豆' : '我'}}</view>
         <view
-          class="msg-bubble {{item.text.length > 140 && !expandMap[idx] ? 'collapsed' : ''}}"
+          class="msg-bubble {{(item.card || item.musicCard) ? 'is-card' : (item.text.length > 140 && !expandMap[idx] ? 'collapsed' : '')}}"
         >
           <!-- AI 首条：今日一句（与欢迎页同文案，形成连续感） -->
           <view wx:if="{{item.daily}}" class="msg-quote-k">今日一句</view>
 
-          <!-- 流式等待中：思考占位 -->
-          <view wx:if="{{item.streaming && !item.text}}" class="msg-thinking">
-            <text>正在思考</text>
-            <view class="thinking-dots">
-              <view class="tdot"></view><view class="tdot"></view><view class="tdot"></view>
+          <!--
+            翻译官作答 → 推荐译文卡片（与 pages/translate/result 同一设计语言）。
+            三态：T0 只有卡片头 + 「翻译中」；T1 英文逐字流入 + 光标；T2 注解 + 操作行。
+            操作行仅 T2 渲染（流式期不占位）。
+          -->
+          <block wx:if="{{item.card}}">
+            <view class="ec-head">
+              <text class="ec-tag">推荐译文</text>
+              <text wx:if="{{item.meta}}" class="ec-meta">{{item.meta}}</text>
             </view>
-          </view>
 
-          <!-- 长按复制：仅对已有正文的气泡生效（流式中 / 空气泡不弹） -->
-          <view
-            wx:elif="{{item.text}}"
-            class="msg-text"
-            data-idx="{{idx}}"
-            bindlongpress="onLongPressMsg"
-          >{{item.text}}</view>
-          <!-- 失败且没有内容：气泡内给友好提示，不留一片空白 -->
-          <view wx:elif="{{item.failed}}" class="msg-text msg-empty">{{item.failReason}}</view>
-          <view wx:if="{{item.en}}" class="msg-quote-en">{{item.en}}</view>
+            <view wx:if="{{item.streaming && !item.enMain}}" class="ec-typing">
+              <text>翻译中</text>
+              <view class="ec-dots">
+                <view class="ec-dot"></view><view class="ec-dot"></view><view class="ec-dot"></view>
+              </view>
+            </view>
+            <view
+              wx:elif="{{item.enMain}}"
+              class="ec-main"
+              data-idx="{{idx}}"
+              bindlongpress="onLongPressMsg"
+            >{{item.enMain}}<text wx:if="{{item.streaming}}" class="ec-caret"></text></view>
+
+            <view wx:if="{{item.note}}" class="ec-note">{{item.note}}</view>
+            <!-- 流式期注解占位条：撑住高度，避免注解到达时卡片抽动 -->
+            <view wx:elif="{{item.streaming && item.enMain}}" class="ec-note"><view class="ec-sk"></view></view>
+
+            <view wx:if="{{!item.streaming && item.enMain}}" class="ec-ops">
+              <text class="ec-op" data-idx="{{idx}}" catchtap="onCardCopy">复制</text>
+              <text class="ec-op {{speakPlayingIdx === idx ? 'is-speaking' : ''}}" data-idx="{{idx}}" catchtap="onCardSpeak">{{speakLoadingIdx === idx ? '请稍候…' : (speakPlayingIdx === idx ? '停止' : '朗读')}}</text>
+              <text class="ec-op" catchtap="onCardFav">收藏</text>
+              <!-- 转发：button 才能拉起微信原生转发面板；bindtap 先记录分享哪条卡 -->
+              <button class="ec-op ec-share" open-type="share" plain data-idx="{{idx}}" bindtap="onShareTap">转发</button>
+            </view>
+          </block>
+
+          <!-- 歌曲推荐卡片：SSE card 事件（kind=music）渲染；主按钮跳转由 provider 配置决定 -->
+          <block wx:elif="{{item.musicCard}}">
+            <music-card
+              card="{{item.musicCard}}"
+              bind:swap="onMusicSwap"
+              bind:dislike="onMusicDislike"
+            />
+          </block>
+
+          <!-- 非翻译官回复：原有纯文本渲染 -->
+          <block wx:else>
+            <!-- 流式等待中：思考占位 -->
+            <view wx:if="{{item.streaming && !item.text}}" class="msg-thinking">
+              <text>正在思考</text>
+              <view class="thinking-dots">
+                <view class="tdot"></view><view class="tdot"></view><view class="tdot"></view>
+              </view>
+            </view>
+
+            <!-- 长按复制：仅对已有正文的气泡生效（流式中 / 空气泡不弹） -->
+            <view
+              wx:elif="{{item.text}}"
+              class="msg-text"
+              data-idx="{{idx}}"
+              bindlongpress="onLongPressMsg"
+            >{{item.text}}</view>
+            <!-- 失败且没有内容：气泡内给友好提示，不留一片空白 -->
+            <view wx:elif="{{item.failed}}" class="msg-text msg-empty">{{item.failReason}}</view>
+            <view wx:if="{{item.en}}" class="msg-quote-en">{{item.en}}</view>
+
+            <view
+              wx:if="{{item.text.length > 140}}"
+              class="msg-expand"
+              catchtap="onToggleExpand"
+              data-idx="{{idx}}"
+            >
+              {{expandMap[idx] ? '收起 ▲' : '展开更多 ▼'}}
+            </view>
+          </block>
 
           <!-- 长按后出现的复制入口（气泡内右下角，避免遮住正文） -->
           <view
@@ -87,15 +145,6 @@
               <text class="mf-retry" data-idx="{{idx}}" bindtap="onRetryMsg">重试</text>
               <text data-idx="{{idx}}" bindtap="onDropMsg">删除这一轮</text>
             </view>
-          </view>
-
-          <view
-            wx:if="{{item.text.length > 140}}"
-            class="msg-expand"
-            catchtap="onToggleExpand"
-            data-idx="{{idx}}"
-          >
-            {{expandMap[idx] ? '收起 ▲' : '展开更多 ▼'}}
           </view>
         </view>
       </view>

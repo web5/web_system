@@ -10,6 +10,7 @@ import {
   StoredMessage,
 } from '@kedouai/agent-core';
 import { AgentConversation } from './agent-conversation.entity';
+import { MusicService } from '../../music/music.service';
 
 /**
  * 数据库版对话记忆：实现 ConversationMemoryPort，落库到 agent_conversations。
@@ -28,7 +29,26 @@ export class DbConversationMemory implements ConversationMemoryPort {
     @InjectRepository(AgentConversation)
     private readonly repo: Repository<AgentConversation>,
     private readonly compaction: Compaction,
+    private readonly music: MusicService,
   ) {}
+
+  /**
+   * 用户级长期记忆：把口味档案渲染成一段 system 文本供引擎注入。
+   * 读失败不影响主链路（口味是增强项，不是功能依赖）。
+   */
+  async loadProfile(userId: string): Promise<string | null> {
+    try {
+      const taste = await this.music.getTaste(userId);
+      const text = MusicService.formatForPrompt(taste);
+      if (text) {
+        this.logger.log(`注入用户口味档案: userId=${userId}`);
+      }
+      return text;
+    } catch (error) {
+      this.logger.warn(`读取用户口味档案失败，跳过注入: ${(error as Error).message}`);
+      return null;
+    }
+  }
 
   async load(
     userId: string,

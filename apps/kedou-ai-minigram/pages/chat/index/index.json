@@ -1,0 +1,6 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "music-card": "/components/music-card/index"
+  }
+}

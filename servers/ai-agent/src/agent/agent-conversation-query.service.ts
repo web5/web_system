@@ -53,4 +53,13 @@ export class AgentConversationQueryService {
   async getConversation(userId: string, conversationId: string): Promise<AgentConversation | null> {
     return this.repo.findOne({ where: { id: conversationId, userId } });
   }
+
+  /**
+   * 删除会话：仅会话所属用户可删（带 userId 条件，防止删到他人会话）。
+   * 他人会话 / 不存在统一按 0 行处理（controller 转 404），不泄露存在性。
+   */
+  async deleteConversation(userId: string, conversationId: string): Promise<boolean> {
+    const result = await this.repo.delete({ id: conversationId, userId });
+    return (result.affected ?? 0) > 0;
+  }
 }

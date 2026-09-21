@@ -1,0 +1,47 @@
+<!-- 科豆 AI · 发现（tab 2）：能力市场 -->
+<!-- 骨架期卡片写死；批次 4 改由 GET /ai/agents 的 entry 元数据驱动渲染 -->
+<view class="page">
+  <view class="sec-t">AI 能力<text class="em">点开即用</text></view>
+
+  <view class="cap" bindtap="openTranslate">
+    <view class="ic t">译</view>
+    <view class="tx">
+      <view class="b">语言翻译官</view>
+      <view class="e">中英日德 · 三版输出 + 语气点评</view>
+    </view>
+    <text class="go">›</text>
+  </view>
+
+  <view class="cap" bindtap="openAssess">
+    <view class="ic c">同</view>
+    <view class="tx">
+      <view class="b">合同评估</view>
+      <view class="e">风险识别 · 逐条修改建议</view>
+    </view>
+    <text class="go">›</text>
+  </view>
+
+  <view class="sec-t mt">即将上线</view>
+
+  <view class="cap soon" bindtap="onSoon" data-name="论文速读">
+    <view class="ic">文</view>
+    <view class="tx">
+      <view class="b">论文速读</view>
+      <view class="e">arXiv 每日精选 · 中英双语摘要</view>
+    </view>
+    <text class="tag">敬请期待</text>
+  </view>
+
+  <view class="cap soon" bindtap="onSoon" data-name="文案改写">
+    <view class="ic">写</view>
+    <view class="tx">
+      <view class="b">文案改写</view>
+      <view class="e">小红书 / 独立站 · 多平台语气适配</view>
+    </view>
+    <text class="tag">敬请期待</text>
+  </view>
+
+  <view class="foot">新能力会持续加在这里，设置统一收在「我的」</view>
+  <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
+已依法完成大模型与算法备案</view>
+</view>

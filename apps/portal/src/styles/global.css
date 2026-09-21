@@ -1,91 +1,50 @@
-/* ===== 变变 — Warm Orange Theme ===== */
+/* =============================================================
+ * portal — 全局样式（P1 主题收敛）
+ *
+ * 语义 token（--ws-brand-* / --ws-bg-* / --ws-text-* / --ws-border / --ws-radius-* …）
+ * 由 `@web-system/ui/tokens.css` 提供，在 `lifecycle.ts` / `main-standalone.ts` 中
+ * **先于本文件**引入；portal 主色由 #FF8C42 收敛到 --ws-brand-500（#F97316），
+ * 与小程序、admin 系同源。
+ *
+ * 本文件只保留两类内容：① 三栏外壳尺寸变量 ② 遗留页面的工具类（已 token 化）。
+ * 新写样式一律引用 token 名，禁止裸 hex。
+ * ============================================================= */
 
 :root {
-  /* Brand orange */
-  --color-brand-50:  #FFF8F0;
-  --color-brand-100: #FFEDD5;
-  --color-brand-200: #FED7AA;
-  --color-brand-400: #FFB347;
-  --color-brand-500: #FF8C42;
-  --color-brand-600: #E67E2A;
-  --color-brand-700: #C2691A;
-
-  /* Ant Design overrides */
-  --ant-color-primary: var(--color-brand-500);
-  --ant-color-primary-hover: var(--color-brand-600);
-  --ant-color-primary-active: var(--color-brand-700);
-  --ant-color-primary-bg: rgba(255,140,66,0.08);
-  --ant-color-primary-bg-hover: rgba(255,140,66,0.15);
-  --ant-color-primary-border: var(--color-brand-500);
-  --ant-color-primary-text: var(--color-brand-500);
-
-  /* Surface layers — warm light */
-  --surface-0: #FFFBF5;
-  --surface-1: #FFF8F0;
-  --surface-2: #FFFFFF;
-  --surface-3: #FFEDE0;
-  --surface-4: #FFF3E8;
-
-  /* Text */
-  --text-primary:   #333333;
-  --text-secondary: #666666;
-  --text-tertiary:  #888888;
-  --text-disabled:  #BBBBBB;
-
-  /* Border */
-  --border-subtle:  rgba(255,140,66,0.08);
-  --border-default: rgba(255,140,66,0.15);
-
-  /* Shadows */
-  --shadow-card: 0 4px 24px rgba(255,140,66,0.06);
-  --shadow-glow: 0 0 24px rgba(255,140,66,0.08);
+  /* 三栏尺寸（page-spec §1） */
+  --topbar-h: 56px;
+  --sidelist-w: 240px;
+  --ctx-w: 360px;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, sans-serif;
-  background: var(--surface-0);
-  color: var(--text-primary);
-  min-height: 100vh;
-}
-
-#app {
-  min-height: 100vh;
-}
-
-/* ===== Cards ===== */
+/* ===== 遗留工具类：变变 / 画板 / 相册等降级页面仍在用 ===== */
 .course-card,
 .feature-item,
 .setting-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card);
-  transition: all .3s ease;
+  background: var(--ws-bg-surface);
+  border: 1px solid var(--ws-border-subtle);
+  border-radius: var(--ws-radius-lg);
+  box-shadow: var(--ws-shadow-card);
+  transition: all 0.3s ease;
 }
+
 .course-card:hover,
 .feature-item:hover {
-  border-color: var(--color-brand-500);
-  box-shadow: var(--shadow-card), var(--shadow-glow);
+  border-color: var(--ws-brand-500);
+  box-shadow: var(--ws-shadow-card), 0 0 24px rgba(249, 115, 22, 0.12);
   transform: translateY(-2px);
 }
 
-/* ===== Buttons ===== */
 .btn-orange {
-  background: var(--color-brand-500) !important;
-  border-color: var(--color-brand-500) !important;
-  color: #fff !important;
-}
-.btn-orange:hover {
-  background: var(--color-brand-600) !important;
+  background: var(--ws-brand-500) !important;
+  border-color: var(--ws-brand-500) !important;
+  color: var(--ws-brand-50) !important;
 }
 
-/* Orange badge */
+.btn-orange:hover {
+  background: var(--ws-brand-600) !important;
+}
+
 .orange-bg {
-  background: var(--color-brand-500);
+  background: var(--ws-brand-500);
 }
