@@ -7,11 +7,12 @@
  * 设计依据：specs/deploy-console-domain-split/page-spec.md §2
  * 数据来源：`GET /api/apps/:key`、`/apps/:key/envs`、`/apps/:key/versions`、`switch`、`rollback`
  */
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import { appsApi, type AppRow, type AppRouteRow, type AppEnvVersionRow } from '@/api'
+import VersionDeployDrawer, { type DrawerVersion } from '@/components/VersionDeployDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -129,11 +130,70 @@ const deployColumns: TableColumnsType = [
 ]
 
 /**
- * 部署：跳到「发布流水线」并打开发起抽屉（模块 + 环境已预选）。
- * 环境是运行期参数（可在抽屉里改），流水线负责 build → upload → activate（写 envId 目录 + 改指针）。
+ * 部署：打开选版本部署抽屉（与「版本部署」页同一交互；不跳发布流水线）。
+ * 应用域数据源：版本 = 磁盘版本目录（GET /apps/:key/versions），
+ * 部署 = POST /apps/:key/switch-version（含产物存在守卫 + 入口指针写入）。
  */
 function goDeploy(envId?: string) {
-  router.push({ name: 'PipelineCenter', query: { module: appKey.value, env: envId || 'dev' } })
+  drawerEnv.value = envId || deployRows.value[0]?.envId || 'dev'
+  drawerOpen.value = true
+}
+
+// ---------- 选版本部署抽屉（应用域数据源） ----------
+const drawerOpen = ref(false)
+const drawerEnv = ref('')
+const drawerLoading = ref(false)
+const drawerError = ref<string | null>(null)
+const drawerVersions = ref<DrawerVersion[]>([])
+const drawerCurrent = ref<string | null>(null)
+const deploying = ref(false)
+
+/** 环境选项 = 本应用已配置的环境行（envId × envName） */
+const drawerEnvs = computed(() =>
+  deployRows.value.map((e) => ({ id: e.envId, name: e.envName || e.envId })),
+)
+
+async function loadDrawerVersions() {
+  if (!appKey.value || !drawerEnv.value) return
+  drawerLoading.value = true
+  drawerError.value = null
+  drawerVersions.value = []
+  try {
+    const res = await appsApi.versions(appKey.value, drawerEnv.value)
+    drawerCurrent.value = res.currentVersion
+    drawerVersions.value = (res.availableVersions || []).map((v) => ({
+      tag: v.ref,
+      meta: v.isPrevious ? '上一版本 · 磁盘版本目录' : '磁盘版本目录',
+      isCurrent: v.isCurrent || v.ref === res.currentVersion,
+    }))
+  } catch (e: any) {
+    drawerError.value = e?.response?.data?.message || '网络或服务异常，请重试'
+  } finally {
+    drawerLoading.value = false
+  }
+}
+
+// 抽屉打开或目标环境变化 → 加载该环境可选版本
+watch([drawerOpen, drawerEnv], ([open]) => {
+  if (open) loadDrawerVersions()
+})
+
+async function onDeploy(version: string) {
+  deploying.value = true
+  try {
+    const res = await appsApi.switchVersion(appKey.value, { envId: drawerEnv.value, version })
+    message.success(
+      res.unchanged
+        ? `${res.envId} 已是 ${res.to}，无需切换`
+        : `${res.envId} 已从 ${res.from ?? '-'} 切换到 ${res.to}（刷新页面生效）`,
+    )
+    drawerOpen.value = false
+    await load()
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '部署失败')
+  } finally {
+    deploying.value = false
+  }
 }
 
 // ---------- 切换版本（只改指针，不重新构建） ----------
@@ -472,6 +532,23 @@ onMounted(load)
       </a-form>
       <p class="modal-hint">回滚只改写入口指针指向该版本（版本目录保留，无需重新构建）。</p>
     </a-modal>
+
+    <!-- 选版本部署抽屉（应用域数据源：磁盘版本目录 + switch-version） -->
+    <VersionDeployDrawer
+      v-model:open="drawerOpen"
+      v-model:env="drawerEnv"
+      :module-name="app?.name || appKey"
+      :module-key="appKey"
+      :envs="drawerEnvs"
+      :loading="drawerLoading"
+      :load-error="drawerError"
+      :versions="drawerVersions"
+      :current-version="drawerCurrent"
+      :deploying="deploying"
+      :backend="false"
+      @retry="loadDrawerVersions"
+      @deploy="onDeploy"
+    />
   </div>
 </template>
 

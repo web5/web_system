@@ -100,14 +100,14 @@ async function probe(row: ServiceRow, envId: string) {
   }
 }
 
-/** 部署：跳「发布流水线」发起抽屉；环境默认取该服务已配指向的第一个环境 */
+/** 部署：跳「版本部署」（API 网关域）并预选该服务直接打开选版本抽屉；构建新版本走「发布流水线」 */
 function deploy(row: ServiceRow) {
   if (row.deployChannel === 'legacy') {
     message.warning('该服务走传统发布通道（legacy），不由流水线托管')
     return
   }
   router.push({
-    name: 'PipelineCenter',
+    name: 'VersionDeployBackend',
     query: { module: row.key, env: row.configuredEnvs?.[0] || 'dev' },
   })
 }
