@@ -46,4 +46,4 @@
 ## 原型稿
 
 - 状态：**需要（用户已确认）** → `apps/kedou-ai-minigram/prototype/music-taste.html` + `specs/music-recommend/page-spec.md`
-- 门禁：原型与规格已过用户确认，落地编码完成；**待办**：原型/规格单独 commit 取 sha，落地 commit 的 message 带 `Proto: <sha>`
+- 门禁：原型与规格已过用户确认并**单独 commit** → `e426a1f`；落地 commit `0745b29` 的 message 已带 `Proto: e426a1f`
