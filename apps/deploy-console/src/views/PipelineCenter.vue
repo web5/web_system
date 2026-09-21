@@ -251,16 +251,43 @@ const branchCommits = ref<{ hash: string; short: string; subject: string; author
 const loadingCommits = ref(false)
 const availTemplates = ref<PipelineTemplate[]>([])
 
+/**
+ * 分支提交内存缓存（切回已看过的分支秒显；后端另有 SWR 缓存，这里省掉一次往返）。
+ * key = 分支名。
+ */
+const commitCache = new Map<string, typeof branchCommits.value>()
+/** 请求序号：分支快速连点时，只有最后一次的响应能落到界面（防旧响应覆盖新分支的列表） */
+let commitSeq = 0
+
+/**
+ * 加载「分支最近提交」。
+ *
+ * 2026-09-21 优化（切换分支级联卡顿）：后端改为「秒回本地引用 + 后台 fetch」（见
+ * `PipelineService.listBranchCommits`），前端这里配合三件事 ——
+ * ① 竞态保护：连点分支时旧响应不覆盖新列表；② 分支级内存缓存：切回秒显；
+ * ③ 首次（无缓存）拿到本地引用后 1.5s 补取一次，把后台 fetch 到的最新提交自动补上。
+ */
 async function loadBranchCommits() {
   const branch = (form.value.branch || 'master').trim()
   if (!branch || !form.value.moduleKey) { branchCommits.value = []; return }
-  loadingCommits.value = true
+  const seq = ++commitSeq
+  const cached = commitCache.get(branch)
+  // 命中缓存先渲染（不闪 loading），随后仍静默刷新
+  branchCommits.value = cached ?? []
+  loadingCommits.value = !cached
   try {
-    branchCommits.value = await pipelineRunsApi.branchCommits(branch, 20)
+    const rows = await pipelineRunsApi.branchCommits(branch, 20)
+    if (seq !== commitSeq) return // 已被更晚的分支请求取代
+    branchCommits.value = rows
+    commitCache.set(branch, rows)
+    if (!cached) {
+      // 首次返回的是本地引用：补取一次（此时后台 fetch 已完成）让「刚 push 的提交」自动出现
+      setTimeout(() => { if (seq === commitSeq) void loadBranchCommits() }, 1500)
+    }
   } catch {
-    branchCommits.value = []
+    if (seq === commitSeq && !cached) branchCommits.value = []
   } finally {
-    loadingCommits.value = false
+    if (seq === commitSeq) loadingCommits.value = false
   }
 }
 

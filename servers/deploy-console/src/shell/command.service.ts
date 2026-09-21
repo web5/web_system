@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { execSync } from 'child_process';
+import { exec as execCallback, execSync } from 'child_process';
 import * as path from 'path';
 
 /** 子进程 PATH 补充目录（pm2/npx/pnpm/nohup 拉起的进程 PATH 可能极不完整） */
@@ -68,6 +68,37 @@ export class CommandService {
       encoding: 'utf-8',
       env: buildChildEnv(extraEnv, this.nodeBinDir()),
       timeout: timeoutMs,
+    });
+  }
+
+  /**
+   * 异步执行命令（**不阻塞事件循环**）：给「后台刷新」类任务用（典型：`git fetch`）。
+   *
+   * 为什么必须有它：Node 是单线程，同步 `exec` 用在请求路径上会把这段网络等待
+   * **压在事件循环里**，期间所有 HTTP 请求排队 —— 2026-09-21 分支提交 SWR 优化时
+   * 就是踩了这个坑（`git fetch origin master` 实测 4.3s，接口跟着变 4.7s）。
+   *
+   * 契约：**不抛错**，返回 `{ ok, stdout, stderr }`，由调用方决定降级策略。
+   */
+  execAsync(
+    cmd: string,
+    cwd: string,
+    extraEnv: Record<string, string> = {},
+    timeoutMs = 0,
+  ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+    return new Promise((resolve) => {
+      execCallback(
+        cmd,
+        {
+          cwd,
+          encoding: 'utf-8',
+          env: buildChildEnv(extraEnv, this.nodeBinDir()),
+          timeout: timeoutMs,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+        (err, stdout, stderr) =>
+          resolve({ ok: !err, stdout: stdout ?? '', stderr: stderr ?? '' }),
+      );
     });
   }
 }
