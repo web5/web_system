@@ -307,59 +307,6 @@ export const auditApi = {
     }>,
 }
 
-/* ========== Servers（服务器组 + 环境服务路由） ========== */
-export const serverApi = {
-  listServers: (serverName?: string) =>
-    http.get('/servers', { params: serverName ? { serverName } : {} }) as Promise<
-      {
-        id: string
-        serverName: string
-        host: string
-        sshUser: string
-        sshKeyPath?: string
-        remoteDir: string
-        createdAt: string
-      }[]
-    >,
-  createServer: (dto: {
-    serverName: string
-    host: string
-    sshUser: string
-    sshKeyPath?: string
-    remoteDir: string
-  }) => http.post('/servers', dto) as Promise<any>,
-  removeServer: (id: string) => http.delete(`/servers/${id}`) as Promise<any>,
-
-  listRoutes: (env?: string) =>
-    http.get('/env-service-routes', { params: env ? { env } : {} }) as Promise<
-      {
-        id: string
-        envId: string
-        serviceName: string
-        serverName: string
-        port?: number
-        createdAt: string
-      }[]
-    >,
-  createRoute: (dto: { envId: string; serviceName: string; serverName: string; port?: number }) =>
-    http.post('/env-service-routes', dto) as Promise<any>,
-  removeRoute: (id: string) => http.delete(`/env-service-routes/${id}`) as Promise<any>,
-
-  serviceOverview: () =>
-    http.get('/env-service-routes/overview') as Promise<
-      {
-        serviceName: string
-        serviceType: string
-        environments: {
-          envId: string
-          address: string
-          serverName: string
-          port?: number
-        }[]
-      }[]
-    >,
-}
-
 /* ========== Pipelines（发布流水线） ========== */
 
 /**
@@ -934,6 +881,445 @@ export const systemSettingsApi = {
     http.get('/system-settings/approval-envs') as Promise<{ envs: string }>,
   updateApprovalEnvs: (envs: string) =>
     http.put('/system-settings/approval-envs', { envs }) as Promise<{ ok: boolean }>,
+}
+
+/* ========== 微前端域 · 环境（站点 + envId） ========== */
+
+/** 站点（入口域名） */
+export interface SiteRow {
+  key: string
+  host: string
+  name: string
+  defaultEnvId: string
+  switchable: boolean
+  enabled: boolean
+}
+
+/** 环境（envId 即产物目录名） */
+export interface EnvRow {
+  envId: string
+  name: string
+  siteKey: string
+  isProd: boolean
+  builtin: boolean
+  sort: number
+  enabled: boolean
+  createdAt?: string
+}
+
+/** 环境详情里的「后端服务指向」行 */
+export interface EnvServiceRouteRow {
+  serviceKey: string
+  serviceName: string
+  kind?: string
+  configured: boolean
+  /** 主机**组名**（引用 deploy_hosts.name） */
+  hostName: string | null
+  /** 主机组解析出的可解析地址（展示用，让「组名 ≠ 地址」可见） */
+  hostAddress?: string | null
+  port: number | null
+  upstreamUrl: string | null
+  replicas: number
+  runtime: 'pm2' | 'docker' | null
+  healthPath?: string | null
+  enabled: boolean
+}
+
+/* ========== 基础设施 · 主机管理 ========== */
+
+export type HostRuntime = 'pm2' | 'docker'
+
+/** 主机（组）：服务环境指向的地址来源 */
+export interface HostRow {
+  id: string
+  name: string
+  host: string
+  sshUser: string
+  sshKeyPath?: string | null
+  remoteDir: string
+  runtime: HostRuntime
+  labels?: Record<string, string> | null
+  enabled: boolean
+}
+
+export const hostsApi = {
+  /** 主机组列表（enabledOnly=true 供下拉只出可用项） */
+  list: (params?: { enabledOnly?: boolean }) =>
+    http.get('/hosts', { params: { enabledOnly: params?.enabledOnly ? '1' : undefined } }) as Promise<HostRow[]>,
+  get: (name: string) => http.get(`/hosts/${name}`) as Promise<HostRow>,
+  create: (dto: {
+    name: string
+    host: string
+    sshUser: string
+    sshKeyPath?: string
+    remoteDir: string
+    runtime?: HostRuntime
+    enabled?: boolean
+  }) => http.post('/hosts', dto) as Promise<HostRow>,
+  update: (
+    name: string,
+    dto: {
+      host?: string
+      sshUser?: string
+      sshKeyPath?: string | null
+      remoteDir?: string
+      runtime?: HostRuntime
+      enabled?: boolean
+    },
+  ) => http.put(`/hosts/${name}`, dto) as Promise<HostRow>,
+  remove: (name: string) =>
+    http.delete(`/hosts/${name}`) as Promise<{ removed: boolean; occupants: string[] }>,
+}
+
+export const envsApi = {
+  /** 站点列表（local/dev/prod） */
+  sites: () => http.get('/envs/sites') as Promise<SiteRow[]>,
+  /** 环境列表（站点筛选 + 关键字 + 分页） */
+  list: (params?: { siteKey?: string; q?: string; page?: number; pageSize?: number }) =>
+    http.get('/envs', { params }) as Promise<{
+      items: EnvRow[]
+      total: number
+      page: number
+      pageSize: number
+    }>,
+  get: (envId: string) => http.get(`/envs/${envId}`) as Promise<EnvRow>,
+  /** 新建环境：envId 由后端自增，前端只传名称 + 站点 */
+  create: (dto: { name: string; siteKey: string }) => http.post('/envs', dto) as Promise<EnvRow>,
+  update: (envId: string, dto: { name?: string; sort?: number; enabled?: boolean }) =>
+    http.put(`/envs/${envId}`, dto) as Promise<EnvRow>,
+  remove: (envId: string) =>
+    http.delete(`/envs/${envId}`) as Promise<{ removed: boolean; occupants: string[] }>,
+  /** 运行时解析（找不到回退 dev） */
+  resolve: (envId?: string) =>
+    http.get('/envs/resolve', { params: { envId } }) as Promise<{ envId: string }>,
+  /** 该环境的后端服务指向 */
+  serviceRoutes: (envId: string) =>
+    http.get(`/envs/${envId}/service-routes`) as Promise<{ env: EnvRow; items: EnvServiceRouteRow[] }>,
+  /** 改某服务在该环境的指向（主机必填） */
+  updateServiceRoute: (
+    envId: string,
+    serviceKey: string,
+    dto: {
+      hostName: string
+      port?: number
+      upstreamUrl?: string
+      replicas?: number
+      runtime?: 'pm2' | 'docker'
+      healthPath?: string
+      enabled?: boolean
+    },
+  ) => http.put(`/envs/${envId}/service-routes/${serviceKey}`, dto) as Promise<EnvServiceRouteRow>,
+  /** 环境切换审计上报（不阻断切换） */
+  switchLog: (dto: { envId: string; siteKey?: string }) =>
+    http.post('/envs/switch-log', dto) as Promise<{ ok: boolean }>,
+}
+
+/* ========== 微前端域 · 应用 ========== */
+
+export type AppKind = 'shell' | 'micro-frontend' | 'spa' | 'mini-app'
+export type AppDeployMode = 'env-dir' | 'site-version'
+
+/** shell 挂载路由 */
+export interface AppRouteRow {
+  id: string
+  appKey: string
+  mountPath: string
+  activeRule: string
+  requireAuth: boolean
+  sort: number
+  enabled: boolean
+}
+
+/** 应用 × 环境版本行 */
+export interface AppEnvVersionRow {
+  envId: string
+  envName?: string
+  siteKey?: string
+  isProd?: boolean
+  currentVersion: string | null
+  previousVersion?: string | null
+  status?: string
+  deployedAt?: string | null
+  deployedBy?: string | null
+  /** 磁盘指针实际指向（与 DB 不一致可用于排查） */
+  pointerVersion?: string | null
+  availableVersions?: string[]
+  entryUrl?: string
+}
+
+export interface AppRow {
+  key: string
+  name: string
+  kind: AppKind
+  parentKey?: string | null
+  repoDir: string
+  entry?: string | null
+  publicPath?: string | null
+  externals?: string[] | null
+  deployMode: AppDeployMode
+  description?: string | null
+  builtin?: boolean
+  enabled: boolean
+  envVersions?: AppEnvVersionRow[]
+}
+
+export const appsApi = {
+  meta: () => http.get('/apps/meta') as Promise<{ kinds: AppKind[]; deployModes: AppDeployMode[] }>,
+  list: (params?: {
+    kind?: string
+    q?: string
+    parentKey?: string
+    page?: number
+    pageSize?: number
+    includeDeleted?: string
+  }) =>
+    http.get('/apps', { params }) as Promise<{
+      items: AppRow[]
+      total: number
+      page: number
+      pageSize: number
+    }>,
+  get: (key: string) =>
+    http.get(`/apps/${key}`) as Promise<AppRow & { routes: AppRouteRow[]; envVersions: AppEnvVersionRow[] }>,
+  create: (dto: {
+    key: string
+    name: string
+    kind?: AppKind
+    parentKey?: string
+    repoDir: string
+    entry?: string
+    publicPath?: string
+    externals?: string[]
+    description?: string
+  }) => http.post('/apps', dto) as Promise<AppRow>,
+  update: (key: string, dto: Record<string, unknown>) =>
+    http.put(`/apps/${key}`, dto) as Promise<AppRow>,
+  remove: (key: string) =>
+    http.delete(`/apps/${key}`) as Promise<{ removed: boolean; activeEnvs: string[] }>,
+
+  routes: (key: string) => http.get(`/apps/${key}/routes`) as Promise<AppRouteRow[]>,
+  createRoute: (
+    key: string,
+    dto: { mountPath: string; activeRule?: string; requireAuth?: boolean; sort?: number; enabled?: boolean },
+  ) => http.post(`/apps/${key}/routes`, dto) as Promise<AppRouteRow>,
+  updateRoute: (key: string, id: string, dto: Record<string, unknown>) =>
+    http.put(`/apps/${key}/routes/${id}`, dto) as Promise<AppRouteRow>,
+  removeRoute: (key: string, id: string) =>
+    http.delete(`/apps/${key}/routes/${id}`) as Promise<{ removed: boolean }>,
+
+  /** 环境 × 版本矩阵 */
+  envs: (key: string) =>
+    http.get(`/apps/${key}/envs`) as Promise<{ app: AppRow; items: AppEnvVersionRow[] }>,
+  /** 某环境可选版本（切换弹窗用） */
+  versions: (key: string, envId: string) =>
+    http.get(`/apps/${key}/versions`, { params: { envId } }) as Promise<{
+      appKey: string
+      envId: string
+      currentVersion: string | null
+      previousVersion: string | null
+      availableVersions: { ref: string; isCurrent: boolean; isPrevious: boolean }[]
+    }>,
+  /** 切换版本（只改指针，不重新构建） */
+  switchVersion: (key: string, dto: { envId: string; version: string }) =>
+    http.post(`/apps/${key}/switch`, dto) as Promise<{
+      appKey: string
+      envId: string
+      from: string | null
+      to: string
+      unchanged?: boolean
+    }>,
+  /** 回滚（不传 version 回到上一版本） */
+  rollback: (key: string, dto: { envId: string; version?: string }) =>
+    http.post(`/apps/${key}/rollback`, dto) as Promise<{
+      appKey: string
+      envId: string
+      from: string | null
+      to: string
+    }>,
+}
+
+/* ========== API 网关域 · 服务 ========== */
+
+export type ServiceKind = 'nest' | 'express' | 'mcp' | 'static'
+export type EndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'ALL'
+export type EndpointAuthMode = 'inherit' | 'passthrough' | 'jwt' | 'service_key' | 'none'
+export type RouteAuthMode = 'passthrough' | 'service_key' | 'jwt'
+
+/** 服务（含列表页聚合计数） */
+export interface ServiceRow {
+  key: string
+  name: string
+  kind: ServiceKind
+  repoDir: string
+  pm2Name?: string | null
+  defaultPort?: number | null
+  healthPath: string
+  unknownPolicy: 'allow' | 'deny'
+  deployChannel: 'managed' | 'legacy'
+  description?: string | null
+  builtin?: boolean
+  enabled: boolean
+  routeCount?: number
+  endpointCount?: number
+  configuredEnvs?: string[]
+  routes?: ServiceRouteRow[]
+  endpoints?: EndpointRow[]
+  envs?: ServiceEnvRow[]
+}
+
+/** 网关转发规则（前缀级） */
+export interface ServiceRouteRow {
+  id: string
+  serviceKey: string
+  envId?: string | null
+  pathPrefix: string
+  stripPrefix?: string | null
+  rewriteTo?: string | null
+  upstreamOverride?: string | null
+  timeoutMs: number
+  authMode: RouteAuthMode
+  priority: number
+  enabled: boolean
+  /** 前缀包含关系告警（不阻断；提示需要关注匹配优先级） */
+  warnings?: { pathPrefix: string; priority: number; relation: 'shorter' | 'longer' }[]
+}
+
+/** 接口（方法 + 路径级） */
+export interface EndpointRow {
+  id: string
+  serviceKey: string
+  method: EndpointMethod
+  pathPattern: string
+  code?: string | null
+  summary?: string | null
+  authMode: EndpointAuthMode
+  permissionCode?: string | null
+  rateLimitPerMin?: number | null
+  timeoutMs?: number | null
+  deprecated: boolean
+  source: 'manual' | 'openapi' | 'scan'
+  enabled: boolean
+}
+
+/** 服务 × 环境（只读；编辑入口在环境详情） */
+export interface ServiceEnvRow {
+  envId: string
+  envName: string
+  siteKey: string
+  isProd: boolean
+  /** 主机组名与端口都齐才算已配置 */
+  configured: boolean
+  /** 主机**组名**（引用 deploy_hosts.name，不是地址） */
+  hostName: string | null
+  /** 主机组解析出的可解析地址（转发/探活实际用它） */
+  hostAddress?: string | null
+  port: number | null
+  upstreamUrl: string | null
+  replicas: number
+  runtime: 'pm2' | 'docker' | null
+  status: string
+}
+
+export const servicesApi = {
+  meta: () =>
+    http.get('/services/meta') as Promise<{
+      kinds: ServiceKind[]
+      methods: EndpointMethod[]
+      endpointAuthModes: EndpointAuthMode[]
+      routeAuthModes: RouteAuthMode[]
+    }>,
+  list: (params?: { q?: string; kind?: string; page?: number; pageSize?: number }) =>
+    http.get('/services', { params }) as Promise<{
+      items: ServiceRow[]
+      total: number
+      page: number
+      pageSize: number
+    }>,
+  get: (key: string) => http.get(`/services/${key}`) as Promise<ServiceRow>,
+  create: (dto: {
+    key: string
+    name: string
+    kind?: ServiceKind
+    repoDir: string
+    pm2Name?: string
+    defaultPort?: number
+    healthPath?: string
+    unknownPolicy?: 'allow' | 'deny'
+    deployChannel?: 'managed' | 'legacy'
+    description?: string
+  }) => http.post('/services', dto) as Promise<ServiceRow>,
+  update: (key: string, dto: Record<string, unknown>) =>
+    http.put(`/services/${key}`, dto) as Promise<ServiceRow>,
+  remove: (key: string) => http.delete(`/services/${key}`) as Promise<{ removed: boolean }>,
+
+  // 转发规则
+  routes: (key: string, envId?: string) =>
+    http.get(`/services/${key}/routes`, { params: { envId } }) as Promise<ServiceRouteRow[]>,
+  createRoute: (key: string, dto: Record<string, unknown>) =>
+    http.post(`/services/${key}/routes`, dto) as Promise<ServiceRouteRow>,
+  updateRoute: (key: string, id: string, dto: Record<string, unknown>) =>
+    http.put(`/services/${key}/routes/${id}`, dto) as Promise<ServiceRouteRow>,
+  removeRoute: (key: string, id: string) =>
+    http.delete(`/services/${key}/routes/${id}`) as Promise<{ removed: boolean }>,
+
+  // 接口清单
+  endpoints: (
+    key: string,
+    params?: { method?: string; q?: string; deprecated?: string; page?: number; pageSize?: number },
+  ) =>
+    http.get(`/services/${key}/endpoints`, { params }) as Promise<{
+      items: EndpointRow[]
+      total: number
+      page: number
+      pageSize: number
+    }>,
+  createEndpoint: (key: string, dto: Record<string, unknown>) =>
+    http.post(`/services/${key}/endpoints`, dto) as Promise<EndpointRow>,
+  updateEndpoint: (key: string, id: string, dto: Record<string, unknown>) =>
+    http.put(`/services/${key}/endpoints/${id}`, dto) as Promise<EndpointRow>,
+  removeEndpoint: (key: string, id: string) =>
+    http.delete(`/services/${key}/endpoints/${id}`) as Promise<{ removed: boolean }>,
+  /** 批量导入（UPSERT 只补空字段，不覆盖人工配置） */
+  importEndpoints: (
+    key: string,
+    dto: { source?: 'manual' | 'openapi' | 'scan'; items: Record<string, unknown>[] },
+  ) =>
+    http.post(`/services/${key}/endpoints/import`, dto) as Promise<{
+      total: number
+      created: number
+      filled: number
+      skipped: number
+      details: { key: string; action: 'created' | 'filled' | 'skipped'; fields?: string[] }[]
+    }>,
+
+  // 环境指向（只读）与探活
+  envs: (key: string) =>
+    http.get(`/services/${key}/envs`) as Promise<{ service: ServiceRow; items: ServiceEnvRow[] }>,
+  health: (key: string, envId: string) =>
+    http.post(`/services/${key}/health`, { envId }) as Promise<{
+      ok: boolean
+      status: number
+      target: string
+      latencyMs: number
+      error?: string
+    }>,
+
+  /**
+   * 部署某环境（**与构建发布分离**）：重启进程 + 探活。
+   * 「构建发布」走流水线（拉码 → 构建 → 上传产物，不动进程），部署才让新产物生效。
+   */
+  deploy: (key: string, envId: string) =>
+    http.post(`/services/${key}/deploy`, { envId }) as Promise<{
+      serviceKey: string
+      envId: string
+      upstreamUrl: string
+      target: string
+      /** 已重启的 pm2 进程名；null = 未执行（如本机 pm2 未纳管） */
+      restarted: string | null
+      restartNote: string | null
+      health: { ok: boolean; status: number; latencyMs: number; error?: string }
+      ok: boolean
+    }>,
 }
 
 export default http

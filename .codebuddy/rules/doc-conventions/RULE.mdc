@@ -1,0 +1,36 @@
+---
+description: 文档写法约定（CHANGELOG / HISTORY_NOTE / FAQ_KEEP 开关）。任务涉及新建或修改 docs/ 与 .codebuddy/ 下的文档、追加变更日志、写「已修复 / 已澄清 / 之前是 X 现在是 Y」类说明时使用。细则本体在 .codebuddy/references/doc-conventions.md，本规则只负责触发与动作顺序。
+alwaysApply: false
+enabled: true
+updatedAt: 2026-09-19T00:00:00.000Z
+---
+
+# 文档写法规则（开关驱动）
+
+> **应用侧 = 读/写这些文档的 Agent**（不是 deploy-console 的「应用」实体，也不是最终用户）。
+> 单事实源：`.codebuddy/references/doc-conventions.md`。本规则不复制细则，只规定"触发 + 动作顺序 + 最小禁项"。
+
+## 动作门（顺序不可跳）
+
+1. 打开目标文档，**先读顶部开关行**：`> 开关：CHANGELOG=… · HISTORY_NOTE=… · FAQ_KEEP=…`
+2. 按开关决定写法：
+   - `CHANGELOG=off` → 文末**不**追加变更日志；`on` → 每次修订追加一行（日期 + 摘要）。
+   - `HISTORY_NOTE=off` → **不**写「已修复 / 已澄清 / 之前是 X 现在是 Y」，内容过时直接改条目，不留痕迹。
+   - `FAQ_KEEP=on` → 保留常见问题段落（可含「（已修复）」标注）；`off` → 沉淀到「最佳实践」类文档。
+3. **文档没有开关行** → 按默认值执行：`CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on`，并顺手补上开关行。
+4. 修改开关值 = 直接改文档顶部那一行，**不需要改别处**。
+5. 新建文档时，顶部必须带开关行 + 一句话定位。
+
+## 核心约束精要（来不及翻细则时的最小禁项）
+
+- 只写**当前事实与怎么做**：端口 / 路由 / 服务清单以代码为真相源（`ecosystem.config.cjs`、`ecosystem.config.js`、`servers/gateway/src/proxy/proxy.controller.ts`）。
+- 禁 `~~删除线~~` 旧条目 + 「已修复（某日）」这类沿革叙述（除非该文档 `HISTORY_NOTE=on`）。
+- 禁在总索引文档里复制专题文档正文，只做导航。
+- 禁给新文档加「首版 / 建立于 / 变更日志」章节（默认 `CHANGELOG=off`）。
+- **例外**：`docs/development/agent-capability-playbook.md` 为 `CHANGELOG=on`，修订它必须追加变更日志。
+
+## 生效提示
+
+- 新建/修改本规则后需**新开会话**生效。
+- 验证：向 AI 询问"当前应用了哪些规则"。
+- 手动引用：对话中 `@doc-conventions`。

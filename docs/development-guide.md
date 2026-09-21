@@ -2,6 +2,8 @@
 
 > 本文档面向本地开发与日常使用，覆盖技术架构、环境准备、启动、开发流程、发布系统、测试验证与常见问题。
 > 关联：`docs/architecture/release-system-design.md`（发布系统设计）、`docs/architecture/micro-frontend-technical-design.md`（微前端技术设计）。
+> **本地开发索引（各服务端口/依赖/探活、通用基础能力、一键脚本、专题文档地图）→ [docs/development/local-dev-guide.md](./development/local-dev-guide.md)**。
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on（应用侧可改，约定见 `.codebuddy/references/doc-conventions.md`）
 > 最近同步：2026-09-14 — 服务 10→12（新增 ai-agent:6010 / knowledge-service:6011，finnews 更名 content-hub:6007）；数据库统一腾讯云 MySQL 8.0.30-txsql（utf8mb4_0900_ai_ci）；前端补 mini-app；共享包补 agent-core/kedou-agent。
 
 ---
@@ -220,6 +222,14 @@ bash scripts/dev-verify.sh              # 全部（DB + 单测 + 集成 + 健康
 bash scripts/dev-verify.sh --unit       # 仅单元测试
 bash scripts/dev-verify.sh --integ      # 仅集成测试
 bash scripts/dev-verify.sh --health     # 仅服务健康/登录自检
+```
+
+### 7.1-b 服务巡检（比 dev-verify 更快，20 秒出结果）
+
+```bash
+bash scripts/health-check.sh local   # 本机：12 服务端口 + gateway 接口 + MCP initialize + AI 链路
+bash scripts/health-check.sh dev      # 远程 dev（SSH，auth=6001）
+bash scripts/health-check.sh prod     # 远程 prod（SSH，3000 系列）
 ```
 
 ### 7.2 单元测试（deploy-console）

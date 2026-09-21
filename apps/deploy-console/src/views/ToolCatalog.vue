@@ -138,7 +138,7 @@ onMounted(load)
   <div>
     <div class="page-header">
       <h2>工具目录</h2>
-      <p>平台可用能力单元：service = 内置执行器（探活/回滚/写版本/切指针等，与流水线步骤对应）；shell = 外部 CLI</p>
+      <p>平台可用能力单元：service = 内置执行器（写版本 / 重启 / 探活 / 回滚…），在流水线节点内以「工具」操作被调用；shell = 外部 CLI</p>
     </div>
 
     <a-card style="margin-bottom: 16px;">

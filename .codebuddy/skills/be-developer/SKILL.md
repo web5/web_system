@@ -8,7 +8,7 @@ version: 1.0.0
 
 ## 职责
 
-把后端任务按 web_system 工程架构落地：架构前置审查 → 影响面定位 → 安全/质量铁律自查 → 超时与数据层核对 → 联调发布。通用后端工程质量按 `be-dev-common`（ai-agent-kit `references/be-dev-common.md`）执行，本卡只写 web_system 特有部分。
+把后端任务按 web_system 工程架构落地：架构前置审查 → 影响面定位 → 安全/质量铁律自查 → 超时与数据层核对 → 联调发布。通用后端工程质量按 `be-dev-common`（上游 ai-agent-kit `references/be-dev-common.md`，见 `https://github.com/web5/ai-agent-kit`）执行，本卡只写 web_system 特有部分。
 
 ## 触发条件
 
@@ -53,4 +53,4 @@ version: 1.0.0
 | CODEBUDDY.md（开发规则 / AI 编程规范 / 部署铁律 / 微前端四步 / 提交铁律） | 任何后端任务（常驻） |
 | `.codebuddy/rules/coding-best-practices.md` | 编码细则 |
 | `docs/development/local-release-runbook.md` / `deploy-pipeline-dev.md` / `admin-dev.md` | 发布/流水线/提 PR |
-| be-dev-common（ai-agent-kit `references/be-dev-common.md`） | 通用工程质量规则 |
+| be-dev-common（上游 ai-agent-kit `references/be-dev-common.md`） | 通用工程质量规则 |
