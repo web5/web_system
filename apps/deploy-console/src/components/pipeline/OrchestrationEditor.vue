@@ -478,9 +478,10 @@ function drawWires() {
 .add-task { align-self: flex-start; font-size: 12px; color: var(--ws-text-tertiary); background: none; border: 1px dashed var(--ws-border);
   border-radius: 2px; padding: 3px 10px; cursor: pointer; }
 .add-task:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
-.add-step { flex-shrink: 0; align-self: center; font-size: 13px; font-weight: 600; color: var(--ws-text-tertiary);
-  background: var(--ws-bg-surface); border: 1.5px dashed var(--ws-border); border-radius: 2px;
-  padding: 10px 18px; cursor: pointer; transition: color .15s, border-color .15s; }
+/* 与第一个任务同行：顶部对齐 + 下移到任务行中线（步骤标题高 ~42px + 间距） */
+.add-step { flex-shrink: 0; align-self: flex-start; margin-top: 50px; font-size: 13px; font-weight: 600;
+  color: var(--ws-text-tertiary); background: var(--ws-bg-surface); border: 1.5px dashed var(--ws-border);
+  border-radius: 2px; padding: 10px 18px; cursor: pointer; transition: color .15s, border-color .15s; }
 .add-step:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
 
 .empty { padding: 40px; text-align: center; color: var(--ws-text-tertiary); font-size: 13px; }
