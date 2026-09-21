@@ -16,12 +16,12 @@ Page({
 
   /** 语言翻译官（专属 UI，已存在） */
   openTranslate() {
-    wx.navigateTo({ url: '/pages/translate/index/index' });
+    wx.navigateTo({ url: '/packageTranslate/pages/translate/index/index' });
   },
 
   /** 合同评估（专属 UI，已存在） */
   openAssess() {
-    wx.navigateTo({ url: '/pages/assess/index/index' });
+    wx.navigateTo({ url: '/packageAssess/pages/assess/index/index' });
   },
 
   /** 即将上线的能力 */

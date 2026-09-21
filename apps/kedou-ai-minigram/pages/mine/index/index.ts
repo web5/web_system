@@ -39,9 +39,9 @@ Page({
 
   goProfile() { wx.navigateTo({ url: '/pages/mine/profile/profile' }); },
   goAppSettings() { wx.navigateTo({ url: '/pages/mine/settings/settings' }); },
-  goTrSettings() { wx.navigateTo({ url: '/pages/translate/settings/settings' }); },
-  goAsSettings() { wx.navigateTo({ url: '/pages/assess/settings/settings' }); },
-  goHistory() { wx.navigateTo({ url: '/pages/translate/history/history' }); },
+  goTrSettings() { wx.navigateTo({ url: '/packageTranslate/pages/translate/settings/settings' }); },
+  goAsSettings() { wx.navigateTo({ url: '/packageAssess/pages/assess/settings/settings' }); },
+  goHistory() { wx.navigateTo({ url: '/packageTranslate/pages/translate/history/history' }); },
 
   goVip() { wx.showToast({ title: '会员功能开发中', icon: 'none' }); },
   goContracts() { wx.showToast({ title: '我的合同开发中', icon: 'none' }); },

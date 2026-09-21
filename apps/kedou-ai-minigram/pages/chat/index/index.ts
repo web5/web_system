@@ -671,7 +671,7 @@ Page({
     return {
       title: text || '科豆 AI',
       path: text
-        ? `/pages/translate/result/result?fwd=${encodeURIComponent(text)}`
+        ? `/packageTranslate/pages/translate/result/result?fwd=${encodeURIComponent(text)}`
         : '/pages/welcome/index/index',
     };
   },
