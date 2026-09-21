@@ -242,7 +242,23 @@ const form = ref({
 })
 /** 可发布版本候选：versionTag=完整引用（展示用），commit=纯短哈希（提交用） */
 const releases = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
+/** 分支最近提交（git log origin/<branch>）：提交抽屉的 Commit 候选——历史版本下拉里看不到刚 push 的提交（用户 2026-09-21 反馈） */
+const branchCommits = ref<{ hash: string; short: string; subject: string; author: string; date: string }[]>([])
+const loadingCommits = ref(false)
 const availTemplates = ref<PipelineTemplate[]>([])
+
+async function loadBranchCommits() {
+  const branch = (form.value.branch || 'master').trim()
+  if (!branch || !form.value.moduleKey) { branchCommits.value = []; return }
+  loadingCommits.value = true
+  try {
+    branchCommits.value = await pipelineRunsApi.branchCommits(branch, 20)
+  } catch {
+    branchCommits.value = []
+  } finally {
+    loadingCommits.value = false
+  }
+}
 
 async function loadEnvironments() {
   try {
@@ -304,7 +320,7 @@ function openSubmit(initKey?: string, fixedTplId?: string, tplEnv?: string) {
     if (!form.value.moduleKey && availableModules.value.length) {
       form.value.moduleKey = availableModules.value[0].key
     }
-    return Promise.all([loadReleases(), loadAvailTemplates()])
+    return Promise.all([loadReleases(), loadAvailTemplates(), loadBranchCommits()])
   })
 }
 // ===== 按模块查看（一模块一卡） =====
@@ -476,7 +492,13 @@ async function onModuleChange() {
   }
   // 灰度仅对前端/微前端（gateway resolveCanary 作用于页面静态资源）；后端服务只支持全量
   if (mod && mod.type === 'backend') form.value.mode = 'direct'
-  await Promise.all([loadReleases(), loadAvailTemplates()])
+  await Promise.all([loadReleases(), loadAvailTemplates(), loadBranchCommits()])
+}
+
+/** Commit 候选过滤：分支提交匹配短哈希/说明/作者，历史版本匹配 versionTag（show-search 输入短哈希直达） */
+function filterCommitOption(input: string, option: any) {
+  const text = `${option.value ?? ''} ${option.title ?? ''}`.toLowerCase()
+  return text.includes(input.trim().toLowerCase())
 }
 
 /** 当前所选模块是否支持灰度（后端服务不支持） */
@@ -967,19 +989,32 @@ onUnmounted(stopPolling)
           <a-col :span="12">
             <a-form-item label="分支">
               <!-- 分支下拉（origin/*），避免手输写错；见 BranchSelect 组件头注释 -->
-              <BranchSelect v-model="form.branch" :module-key="form.moduleKey" />
+              <BranchSelect v-model="form.branch" :module-key="form.moduleKey" @update:model-value="loadBranchCommits" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
             <a-form-item label="Commit（留空=分支最新提交）">
               <a-select
                 v-model:value="form.commitId"
+                show-search
                 allow-clear
-                placeholder="留空=最新"
+                :loading="loadingCommits"
+                placeholder="留空=最新；可从分支提交列表选，或输入短哈希"
+                :filter-option="filterCommitOption"
               >
-                <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
-                  {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
-                </a-select-option>
+                <a-select-opt-group label="分支最近提交（刚 push 的在这里）">
+                  <a-select-option v-for="c in branchCommits" :key="c.hash" :value="c.short" :title="c.subject">
+                    {{ c.short }} · {{ c.subject }}<span class="opt-meta">（{{ c.author }} · {{ c.date }}）</span>
+                  </a-select-option>
+                  <a-select-option v-if="!branchCommits.length" :value="'__none__'" disabled>
+                    {{ loadingCommits ? '加载分支提交中…' : '未取到分支提交（仍可留空=最新，或直接输入短哈希）' }}
+                  </a-select-option>
+                </a-select-opt-group>
+                <a-select-opt-group v-if="releases.length" label="历史发布版本（产物已存在，可复用跳过构建）">
+                  <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
+                    {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
+                  </a-select-option>
+                </a-select-opt-group>
               </a-select>
             </a-form-item>
           </a-col>

@@ -1243,6 +1243,42 @@ export class PipelineService {
    *   审批节点挂起后由 `approve()` 传入；空 = 从头执行。
    *   挂起态持久化在实例 `stage`（= 当前节点 key）上，服务重启后也能据此续跑（design R2）。
    */
+  /**
+   * 按分支列最近提交（提交发布时选 commit 用）。
+   *
+   * 用户 2026-09-21 反馈：提交抽屉的 Commit 下拉只列「历史发布版本（磁盘产物）」，
+   * 看不到刚 push 的提交。此接口从发布目录 git 拉 origin/<branch> 最近 N 条提交供选择；
+   * 留空 = 分支最新（原语义不变）。
+   */
+  async listBranchCommits(branch: string, limit = 20) {
+    // 分支名白名单：防注入（拼进 git 命令）
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
+      throw new BadRequestException(`分支名不合法: ${branch}`);
+    }
+    const n = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+    try {
+      // 先 fetch 保证 origin/<branch> 最新；离线/无权限时静默降级用本地引用
+      try {
+        this.command.exec(`git fetch origin ${branch} --quiet`, this.releaseWorkspace);
+      } catch {
+        /* 忽略 fetch 失败 */
+      }
+      const out = this.command.exec(
+        `git log origin/${branch} -n ${n} --pretty=format:%H%x09%h%x09%s%x09%an%x09%ar`,
+        this.releaseWorkspace,
+      );
+      return out
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const [hash, short, subject, author, date] = line.split('\t');
+          return { hash, short, subject, author, date };
+        });
+    } catch {
+      return []; // 分支不存在 / 仓库未就绪：空列表，前端留「留空=最新」兜底
+    }
+  }
+
   private async run(
     p: DeployPipelineEntity,
     target?: 'local' | 'remote',
