@@ -311,6 +311,24 @@ export class IndexHtmlService {
     }
   }
 
+  /**
+   * 立即失效模块版本缓存（部署/切换后由写入方调用，避免等 TTL 自然过期）。
+   *
+   * 为什么需要显式通知：`versionCache` 服务的两类读取都由**外部写入**的
+   * `deploy_deployments` 指针决定 —— ① 基座（shell）加载哪个版本目录的 `index.html`
+   * （`getCurrentVersion(envId,'shell')`）；② 未匹配站点回落的 legacy `modules` 字段。
+   * 指针由控制台「部署」或流水线写入，gateway 感知不到，只能由写入方通知。
+   * 不通知的后果：最多 `versionTtl`（10s）内仍加载旧版本 —— 表现为「部署了但页面没变」。
+   *
+   * @returns 被清掉的缓存条目数（便于调用方/日志确认真的清了）
+   */
+  clearVersionCache(): number {
+    const n = this.versionCache.size;
+    this.versionCache.clear();
+    if (n) this.logger.log(`版本缓存已失效：${n} 条`);
+    return n;
+  }
+
   /** 查询部署库当前版本（TTL 缓存） */
   private async getCurrentVersion(envId: string, moduleKey: string): Promise<string | undefined> {
     const key = `${envId}:${moduleKey}`;

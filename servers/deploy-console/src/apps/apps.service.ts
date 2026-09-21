@@ -179,6 +179,15 @@ export class AppsService implements OnModuleInit {
     return app;
   }
 
+  /**
+   * 容忍缺失的查询（返回 null）。
+   * 用途：内部发布接口要判断「这个 moduleKey 是否属应用域（env-dir）」——
+   * 后端服务不在应用域，不能因为查不到就抛错。
+   */
+  async findAppOrNull(key: string): Promise<DeployAppEntity | null> {
+    return this.appRepo.findOne({ where: { key, deletedAt: IsNull() } });
+  }
+
   /** 应用详情（含挂载路由 + 各环境版本） */
   async getAppDetail(key: string) {
     const app = await this.getApp(key);
