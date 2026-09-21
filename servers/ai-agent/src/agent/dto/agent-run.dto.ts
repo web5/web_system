@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsIn, MaxLength } from 'class-validator';
 
 export class AgentRunDto {
   /**
@@ -22,4 +22,12 @@ export class AgentRunDto {
   @IsString({ message: 'model 必须是字符串' })
   @MaxLength(64, { message: 'model 过长' })
   model?: string;
+
+  /**
+   * 会话来源：主对话**不传**（默认 chat）；工具页（翻译 / 合同评估）传 'tool'。
+   * 标记后该会话不会出现在「对话记录」列表 —— 工具页各有各的历史入口。
+   */
+  @IsOptional()
+  @IsIn(['chat', 'tool'], { message: 'source 只能是 chat 或 tool' })
+  source?: 'chat' | 'tool';
 }
