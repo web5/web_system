@@ -150,6 +150,14 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'json', nullable: true, comment: 'v5 节点快照（null=legacy）' })
   nodes?: import('../pipeline-template/template-node').TemplateNode[] | null;
 
+  /**
+   * 编排快照（新三层模型，specs/pipeline-step-task/design.md）：步骤→任务→动作整树。
+   * 非空 = 该实例走新引擎（runOrchestration）；null = 旧链路（nodes/legacy）。
+   * 提交时从 deploy_pipeline_steps 固化，模板后续改动不影响进行中的实例。
+   */
+  @Column({ type: 'json', nullable: true, comment: '编排快照（步骤/任务/动作；null=旧链路）' })
+  orchestration?: import('../pipeline-orchestration/orchestration-engine').EngineStep[] | null;
+
   /** 失败自动回滚开关快照（previous/none） */
   @Column({ type: 'varchar', length: 8, default: 'previous', comment: '失败自动回滚快照' })
   rollbackOnFailure?: string;

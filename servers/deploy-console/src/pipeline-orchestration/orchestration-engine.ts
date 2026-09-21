@@ -55,29 +55,61 @@ export interface EngineContext {
   vars: ConditionVars;
   /** 动作进程基础环境（内置 + 流水线变量 + 配置中心注入）；任务级 env 在其上覆盖 */
   baseEnv: Record<string, string>;
-  /** 执行一段脚本；抛错 = 动作失败（错误信息进日志） */
-  runScript: (action: EngineAction, env: Record<string, string>) => Promise<void>;
-  /** 等待一次人工审批；返回处置结果 */
+  /**
+   * 执行一段脚本；抛错 = 动作失败（错误信息进日志）。
+   * baseEnv = 引擎启动时的基础环境（可能已过期，如 versionTag 回填前组装）；
+   * taskEnv = 任务级覆盖增量。**调用方应惰性重组环境**（取回填后的最新值）再叠 taskEnv。
+   */
+  runScript: (
+    action: EngineAction,
+    baseEnv: Record<string, string>,
+    taskEnv: Record<string, string>,
+  ) => Promise<void>;
+  /** 等待一次人工审批；返回处置结果。挂起实现可抛挂起信号异常（引擎原样透传） */
   waitApproval: (task: EngineTask) => Promise<'approved' | 'rejected' | 'timeout'>;
+  /** 任务成功后的平台收尾（如 git 任务回填实际 commit） */
+  afterTask?: (step: EngineStep, task: EngineTask) => Promise<void>;
   /** 日志输出（调用方负责写入运行实例 logs） */
   log: (line: string) => void;
   /** 取消检查（每步/每任务前调用一次）；true = 立即中止 */
   shouldAbort?: () => boolean;
 }
 
+export interface EngineOptions {
+  /**
+   * 挂起恢复：跳过该步骤（含）之前的所有步骤 —— 审批通过后
+   * 「已完成的 shell 步骤不重跑」，从下一个步骤继续。
+   */
+  skipThroughStep?: string;
+}
+
 export interface EngineResult {
-  status: 'succeeded' | 'failed' | 'aborted';
-  /** 失败定位：步骤名 / 任务名（含拒绝/超时原因） */
+  status: 'succeeded' | 'failed' | 'aborted' | 'suspended';
+  /** 失败/挂起定位：步骤名 / 任务名 */
   failedAt?: string;
   error?: string;
 }
 
+/** 挂起信号异常名（与主服务的 PipelineSuspended 对齐：引擎不吞挂起） */
+const SUSPENDED_NAME = 'PipelineSuspended';
+
 /**
- * 执行整棵编排树。任何失败立即返回（步骤内并行任务通过 Promise.all 语义整体失败）。
+ * 执行整棵编排树。任何失败立即返回（步骤内并行任务通过 Promise.all 语义整体失败）；
+ * waitApproval 抛出的挂起信号异常原样透传给调用方（由主服务置 awaiting-approval 态）。
  */
-export async function runOrchestration(steps: EngineStep[], ctx: EngineContext): Promise<EngineResult> {
+export async function runOrchestration(
+  steps: EngineStep[],
+  ctx: EngineContext,
+  opts?: EngineOptions,
+): Promise<EngineResult> {
   try {
+    let skipping = !!opts?.skipThroughStep;
     for (const step of steps) {
+      if (skipping) {
+        ctx.log(`[step] ${step.name} 已完成（挂起恢复），跳过`);
+        if (step.name === opts!.skipThroughStep) skipping = false;
+        continue;
+      }
       if (step.enabled === false) {
         ctx.log(`[step] ${step.name} 已停用，跳过`);
         continue;
@@ -135,6 +167,8 @@ export async function runOrchestration(steps: EngineStep[], ctx: EngineContext):
     }
     return { status: 'succeeded' };
   } catch (e) {
+    // 挂起信号（审批挂起）不是失败 —— 原样透传给主服务置 awaiting-approval
+    if ((e as { name?: string })?.name === SUSPENDED_NAME) throw e;
     return { status: 'failed', error: (e as Error).message };
   }
 }
@@ -165,16 +199,25 @@ async function runTask(step: EngineStep, task: EngineTask, ctx: EngineContext): 
   // script：动作严格串行，任一失败即断
   const actions = (task.actions ?? []).filter((a) => a.enabled !== false);
   if (!actions.length) return '脚本任务没有可执行的动作';
-  const env = { ...ctx.baseEnv, ...(task.env ?? {}) };
+  const taskEnv = task.env ?? {};
   for (const action of actions) {
     ctx.log(`[action] ${label} / ${action.name} 开始执行`);
     try {
-      await ctx.runScript(action, env);
+      await ctx.runScript(action, ctx.baseEnv, taskEnv);
       ctx.log(`[action] ${label} / ${action.name} 执行成功`);
     } catch (e) {
       const msg = (e as Error).message;
       ctx.log(`[action] ${label} / ${action.name} 执行失败：${msg}`);
       return `动作「${action.name}」失败：${msg}（后续动作已停止）`;
+    }
+  }
+  // 任务成功后的平台收尾（如 git 任务回填实际 commit；失败同样视为任务失败）
+  if (ctx.afterTask) {
+    try {
+      await ctx.afterTask(step, task);
+    } catch (e) {
+      ctx.log(`[task] ${label} 平台收尾失败：${(e as Error).message}`);
+      return `平台收尾失败：${(e as Error).message}`;
     }
   }
   return null;

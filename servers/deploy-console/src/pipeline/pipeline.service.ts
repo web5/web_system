@@ -77,6 +77,10 @@ import { BuiltinStepDef, StepContext } from './steps/step.types';
 import { platformScriptsDir } from './step-scripts';
 // v5 节点执行策略（纯函数：check 恒内置 / git 支持 DB 脚本 / version·pointer 纯内置）
 import { planNodeExec } from './steps/node-exec-plan';
+// 编排新模型（步骤→任务→动作）：快照与执行引擎（specs/pipeline-step-task/design.md）
+import { PipelineOrchestrationService } from '../pipeline-orchestration/pipeline-orchestration.service';
+import { runOrchestration, type EngineStep } from '../pipeline-orchestration/orchestration-engine';
+import type { ConditionVars } from './steps/condition';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { runActionSequence } from './steps/action-sequence';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
@@ -433,6 +437,8 @@ export class PipelineService {
     private readonly deployService: DeployService,
     // 审批门禁：需审批环境的提交进入 pending-approval，审批通过后才执行
     private readonly approvals: ApprovalService,
+    // 编排新模型（步骤→任务→动作）：提交时快照整树（specs/pipeline-step-task/design.md）
+    private readonly orchestration: PipelineOrchestrationService,
     // 可审批人：按权限码 deploy:pipeline:approve 从 user-service 拉（方案 B，弱绑定 + 降级放行）
     private readonly approvers: ApproverService,
     // 流水线模板：提交解析模板并落实例快照（不传默认=模块 builtin 默认）
@@ -616,6 +622,9 @@ export class PipelineService {
       (tpl as { approvers?: string[] | null }).approvers,
     );
     const plan = nodesSnapshot ? resolveNodeRunPlan(nodesSnapshot) : null;
+    // 编排快照（新三层模型）：新表有步骤 → 整树固化进实例，run() 分派到新引擎；
+    // 空树（未迁移的流水线）→ null 走旧链路（nodes/legacy），迁移期双链并存。
+    const orchTree = await this.orchestration.getTree(tpl.id);
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -635,6 +644,7 @@ export class PipelineService {
       templateKey: (tpl as { key?: string }).key ?? undefined,
       steps: tpl.steps ?? null,
       nodes: nodesSnapshot,
+      orchestration: orchTree.length ? (orchTree as unknown as EngineStep[]) : null,
       skipVerify: !!tpl.skipVerify,
       rollbackOnFailure: tpl.rollbackOnFailure ?? 'previous',
       runTarget,
@@ -1278,6 +1288,14 @@ export class PipelineService {
       p.status = 'running';
       await this.save(p);
 
+      // ── 编排新模式（步骤→任务→动作）：实例带 orchestration 快照 → 走新引擎 ──
+      // 与旧链路（nodes/legacy）并存，迁移期以「新表是否有数据」为分派依据（P3）。
+      // 放在 try 内：审批挂起信号（PipelineSuspended）由本方法的 catch 统一处置。
+      if (Array.isArray(p.orchestration) && p.orchestration.length) {
+        await this.runOrchestrationMode(p, opts?.resumeAfter ?? null);
+        return;
+      }
+
       // 执行计划 = 实例快照：nodes（v5 platform+script）优先，null=legacy（steps 子集 → 全九阶段）
       const plan = resolveRunStages(p);
       const activeStages = plan.keys;
@@ -1474,6 +1492,148 @@ export class PipelineService {
    * engine 只负责：查表 → 守卫跳过 → 命令覆盖优先级（base/override/required/none）→ 构造 ctx 调执行体。
    * 步骤"怎么做"全部在独立 executor（steps/*.executor.ts）中，各自注入所需 service 工具。
    */
+  /**
+   * 编排新模式执行体（specs/pipeline-step-task/design.md §3）：步骤 → 任务 → 动作。
+   *
+   * 分派条件：实例带 orchestration 快照（提交时新表有步骤）。
+   * 挂起：审核任务经 approvals.createNode 建单后抛 PipelineSuspended（nodeKey=步骤名），
+   *       由 run() 的 catch 置 awaiting-approval；approve() 恢复时 resumeAfter=步骤名 →
+   *       skipThroughStep 跳过已完成步骤，已执行的动作不重跑。
+   */
+  private async runOrchestrationMode(p: DeployPipelineEntity, resumeAfter: string | null): Promise<void> {
+    const tree = p.orchestration as EngineStep[];
+
+    // 变量与动作环境：与旧链路 runStageCommand 同一套合成（内置 + 流水线变量 + 配置中心 + 保护版本）。
+    // 惰性组装（每动作一次）：git 任务回填 versionTag 后 COMMIT_ID/ARTIFACT_DIR 等必须取到新值
+    //（旧链按节点组装 env，一次性快照会让首个构建动作拿到空的 COMMIT_ID —— 已实测踩坑）。
+    type ModLike = {
+      type?: string | null;
+      dir?: string | null;
+      deployRoot?: string | null;
+      defaultArtifactPath?: string | null;
+      pm2Script?: string | null;
+      pm2?: string | null;
+      publicPath?: string | null;
+      entry?: string | null;
+    };
+    let mod: ModLike | null = null;
+    try {
+      mod = await this.moduleRegistry.get(p.moduleKey);
+    } catch {
+      /* 模块未登记时变量走兜底 */
+    }
+    const buildBaseEnv = async (): Promise<Record<string, string>> => {
+      const inject = await this.resolveInjectEnv(p);
+      const env = resolveStageVars({
+        env: p.env,
+        moduleKey: p.moduleKey,
+        moduleType: mod?.type || p.moduleType,
+        dir: mod?.dir ?? undefined,
+        deployRoot: mod?.deployRoot ?? undefined,
+        defaultArtifactPath: mod?.defaultArtifactPath ?? undefined,
+        pm2Script: mod?.pm2Script ?? undefined,
+        pm2: mod?.pm2 ?? undefined,
+        publicPath: mod?.publicPath ?? undefined,
+        entry: mod?.entry ?? undefined,
+        branch: p.gitBranch,
+        commitId: p.versionTag,
+        stage: 'orchestration',
+        releaseWorkspace: this.releaseWorkspace,
+        config: inject,
+        configInject: this.configService.get<string>('PIPELINE_CONFIG_INJECT') !== 'false',
+        pm2Port: inject.PORT ? undefined : this.lookupPm2Port(mod?.pm2 ?? undefined, p.moduleKey),
+        protectedVersions: await this.resolveProtectedVersions(p),
+        gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
+        safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
+        platformScriptsDir: platformScriptsDir(),
+        pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
+      });
+      return { ...env, ...inject };
+    };
+    const baseEnv = await buildBaseEnv();
+
+    const total = tree.length;
+    let current = 0;
+    const result = await runOrchestration(
+      tree,
+      {
+        vars: baseEnv as unknown as ConditionVars,
+        baseEnv,
+        runScript: async (action, _baseEnv, taskEnv) => {
+          // 惰性重组：取回填后的 COMMIT_ID 等最新值（git afterTask 之后）再叠任务级 env
+          const fresh = { ...(await buildBaseEnv()), ...taskEnv };
+          const code = await this.runShell(action.script, fresh, p);
+          if (code !== 0) throw new Error(`exit ${code}`);
+        },
+        afterTask: async (_step, task) => {
+          // git 任务平台收尾：把拉码结果（实际 commit）回填实例（旧链 resolveGitIdentity 同款）
+          if (task.name === 'git') await this.resolveGitIdentity(p);
+        },
+        waitApproval: async (task) => {
+          const step = tree.find((s) => (s.tasks ?? []).some((t) => t.id === task.id));
+          const stepName = step?.name ?? task.name;
+          const approval = await this.approvals.createNode({
+            pipelineId: p.id,
+            nodeKey: stepName,
+            nodeLabel: `${stepName} · ${task.name}`,
+            env: p.env,
+            moduleKey: p.moduleKey,
+            mode: p.mode,
+            gitBranch: p.gitBranch,
+            commitId: p.versionTag,
+            operator: p.operator || 'unknown',
+          });
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stepName}] ${task.name}：已挂起等待审批（审批单 ${approval.id}）`,
+          ];
+          await this.save(p);
+          throw new PipelineSuspended(stepName, approval.id, task.name);
+        },
+        log: (line) => {
+          p.logs = [...(p.logs ?? []), line];
+        },
+        shouldAbort: () => this.cancelled.has(p.id),
+      },
+      resumeAfter ? { skipThroughStep: resumeAfter } : undefined,
+    );
+
+    p.progress = {
+      current: total,
+      total,
+      message: result.status === 'succeeded' ? '发布完成' : `发布${result.status === 'aborted' ? '已取消' : '失败'}`,
+    };
+    p.logs = [
+      ...(p.logs ?? []),
+      result.status === 'succeeded'
+        ? '[orchestration] 全部步骤执行完成'
+        : `[orchestration] 终止: ${result.status} @ ${result.failedAt ?? '-'} ${result.error ?? ''}`.trim(),
+    ];
+
+    if (result.status === 'succeeded') {
+      p.status = 'succeeded';
+      p.endTime = Date.now();
+      // 版本指针与旧链语义一致：发布成功即切指针（写当前版本 = 本次发布版本）
+      await this.registry.setPointer({
+        env: p.env,
+        moduleKey: p.moduleKey,
+        currentVersion: p.versionTag!,
+        deployedBy: p.operator || 'unknown',
+        taskId: p.id,
+      });
+      p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${p.versionTag}`];
+    } else if (result.status === 'aborted' || this.cancelled.has(p.id)) {
+      p.status = 'cancelled';
+      p.endTime = Date.now();
+    } else {
+      p.status = 'failed';
+      p.error = `步骤「${result.failedAt ?? '-'}」${result.error ?? '执行失败'}`;
+      p.progress.message = `失败: ${p.error}`;
+      p.endTime = Date.now();
+    }
+    await this.save(p);
+  }
+
   private async executeStage(
     p: DeployPipelineEntity,
     stage: string,
