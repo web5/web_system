@@ -1052,24 +1052,63 @@ export class DeployService {
     const home = process.env.HOME || '';
     const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
     const dir = mod.dir || input.moduleKey;
+    const sshConfig = await this.getSshConfig(input.env);
+    const remoteDir = `${this.getWebSystemDir()}/servers/${dir}`;
+    // 远端版本目录（发布流水线的远程投递已放好，用户 2026-09-21：产物跟着环境走，类似 admin）
+    const remoteVerDir = `${remoteDir}/${input.versionTag}`;
+    const stamp = Date.now();
+    const cands = Array.from(
+      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
+    );
+    const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
+    const rollbackCmd = `if [ ! -d '${remoteDir}/dist' ] && [ -d '${remoteDir}/dist.bak-${stamp}' ]; then mv '${remoteDir}/dist.bak-${stamp}' '${remoteDir}/dist'; fi`;
+
+    // ── 优先：远端版本目录就地换 dist（发布已投递到目标机，部署不再回传本机） ──
+    let hasRemote = false;
+    try {
+      const probe = await this.sshRun(
+        sshConfig,
+        `test -d '${remoteVerDir}' && ls -A '${remoteVerDir}' | grep -v '\\.tsbuildinfo$' | head -1`,
+        input.env,
+      );
+      hasRemote = probe.trim().length > 0;
+    } catch {
+      hasRemote = false;
+    }
+    if (hasRemote) {
+      const cmd =
+        `set -e; mkdir -p '${remoteDir}'; ` +
+        `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
+        `cp -R '${remoteVerDir}' '${remoteDir}/dist'; ` +
+        `(${pm2Chain}) || echo "[warn] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）"`;
+      try {
+        await this.sshRun(sshConfig, cmd, input.env);
+        this.logger.log(`远程落地完成（远端版本目录就地）: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
+        return;
+      } catch (e) {
+        try {
+          await this.sshRun(sshConfig, rollbackCmd, input.env);
+        } catch {
+          /* 恢复失败也只能告警 */
+        }
+        throw new Error(`远程部署失败（${input.env}）：${(e as Error).message}`);
+      }
+    }
+
+    // ── 回落：远端没有版本目录 → 从本机版本目录打包上传（兼容历史发布） ──
     const src = path.join(ws, 'servers', dir, input.versionTag);
     if (!fs.existsSync(src)) {
-      throw new Error(`部署失败：找不到版本目录 ${src}（先跑该模块的发布流水线）`);
+      throw new Error(
+        `部署失败：本机与远端都找不到版本目录（本机 ${src}；远端 ${remoteVerDir}）——` +
+          `先跑该模块的发布流水线（注意：发布按环境分支，dev 发布会直接投递到目标机）`,
+      );
     }
     // 同上：远端也是「存在 ≠ 有内容」，打包前先守卫，别把空目录 tar 到远端 dist
     this.assertArtifactUsable(src, input.versionTag);
 
     const tgz = path.join(os.tmpdir(), `deploy-${input.moduleKey}-${Date.now()}.tar.gz`);
     execSync(`tar czf "${tgz}" -C "${src}" .`, { stdio: 'ignore' });
-
-    const sshConfig = await this.getSshConfig(input.env);
-    const remoteDir = `${this.getWebSystemDir()}/servers/${dir}`;
     const remoteTmp = `/tmp/${path.basename(tgz)}`;
-    const stamp = Date.now();
-    const cands = Array.from(
-      new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
-    );
-    const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
     const cmd =
       `set -e; mkdir -p '${remoteDir}'; ` +
       `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
@@ -1079,14 +1118,10 @@ export class DeployService {
     try {
       await this.sshUpload(sshConfig, tgz, remoteTmp);
       await this.sshRun(sshConfig, cmd, input.env);
-      this.logger.log(`远程落地完成: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
+      this.logger.log(`远程落地完成（本机中转）: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
     } catch (e) {
       try {
-        await this.sshRun(
-          sshConfig,
-          `if [ ! -d '${remoteDir}/dist' ] && [ -d '${remoteDir}/dist.bak-${stamp}' ]; then mv '${remoteDir}/dist.bak-${stamp}' '${remoteDir}/dist'; fi`,
-          input.env,
-        );
+        await this.sshRun(sshConfig, rollbackCmd, input.env);
       } catch {
         /* 恢复失败也只能告警：现场信息更重要 */
       }

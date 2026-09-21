@@ -21,6 +21,16 @@ git remote get-url origin >/dev/null 2>&1 || {
   echo "[git] 未配置 origin: $RELEASE_DIR（git remote -v 自检；如需容忍本地仓库请调整脚本）" >&2
   exit 1
 }
+ORIGIN_URL="$(git remote get-url origin)"
+echo "[git] origin=$ORIGIN_URL"
+
+# ①-2 代码来源自证：配置中心 REPO_URL（global）非空时，origin 必须与之完全一致
+#      存在意义：历史高危场景 = 发布目录 origin 被改错后照常构建，代码来源在流水线里不可见
+if [ -n "${REPO_URL:-}" ] && [ "$ORIGIN_URL" != "$REPO_URL" ]; then
+  echo "[git] 代码来源不符: 期望 $REPO_URL 实际 $ORIGIN_URL" >&2
+  echo "[git] 处置：核对配置中心 REPO_URL，或修正发布目录的 origin" >&2
+  exit 1
+fi
 
 # ② 取回全部引用（失败即失败：离线/无凭证不允许用旧代码继续构建）
 echo "[git] fetch --all --prune --tags"

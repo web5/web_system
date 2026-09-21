@@ -4,6 +4,6 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "assets": ["pipeline/scripts/*.sh"]
+    "assets": ["pipeline/scripts/*.sh", "pipeline/scripts/*.mjs"]
   }
 }
