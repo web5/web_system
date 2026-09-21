@@ -1439,22 +1439,8 @@ export const servicesApi = {
       error?: string
     }>,
 
-  /**
-   * 部署某环境（**与构建发布分离**）：重启进程 + 探活。
-   * 「构建发布」走流水线（拉码 → 构建 → 上传产物，不动进程），部署才让新产物生效。
-   */
-  deploy: (key: string, envId: string) =>
-    http.post(`/services/${key}/deploy`, { envId }) as Promise<{
-      serviceKey: string
-      envId: string
-      upstreamUrl: string
-      target: string
-      /** 已重启的 pm2 进程名；null = 未执行（如本机 pm2 未纳管） */
-      restarted: string | null
-      restartNote: string | null
-      health: { ok: boolean; status: number; latencyMs: number; error?: string }
-      ok: boolean
-    }>,
+  // ⚠️ 原 `deploy`（POST /services/:key/deploy，重启 + 探活）已于 2026-09-21 下线：
+  // 后端「发布即生效」由流水线的 restart / verify action 承担，控制台不再需要独立部署动作。
 }
 
 export default http
