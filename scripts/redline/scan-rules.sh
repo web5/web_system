@@ -288,8 +288,10 @@ scan_diff_range() {
         ;;
     esac
   done <<< "$diff_text"
+  # bash 3.2（macOS 自带）在 set -u 下展开空数组会报 unbound variable；
+  # 只改非代码文件时 diff_text 为空 → pending 为空 → 原本会阻断正常提交。
   local rec file content
-  for rec in "${pending[@]}"; do
+  for rec in ${pending[@]+"${pending[@]}"}; do
     file="${rec%%|*}"; content="${rec#*|}"
     check_one_line "$file" "" "$content"
   done
