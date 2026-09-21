@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>科豆 AI · 欢迎页「今日一句」· 六个方向</title>
+<style>
+  :root {
+    --nav-bg:#FFFFFF; --nav-text:#000;
+    --page-bg:#F7F4F0; --card:#FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1:#10131A; --t2:rgba(60,60,67,.72); --t3:rgba(60,60,67,.34);
+    --brand:#F97316; --brand-deep:#EA6A0B; --brand-soft:#FFE7D1; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#D6F1EB;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+  }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; }
+  html,body { margin:0; padding:0; }
+  body { background:#EDEAE5; color:var(--t1); padding:28px 28px 40px;
+         font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif; line-height:1.6; }
+  .head { text-align:center; margin-bottom:24px; }
+  .head h1 { font-size:19px; font-weight:700; margin:0 0 6px; letter-spacing:-.2px; }
+  .head p { margin:0; font-size:12.5px; color:rgba(60,60,67,.62); }
+  .head p b { color:var(--brand-txt); font-weight:500; }
+  .grid { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+
+  .col { width:390px; flex:none; }
+  .cap { text-align:center; margin-bottom:12px; }
+  .cap b { font-size:14px; font-weight:600; }
+  .cap span { display:block; font-size:11.5px; color:rgba(60,60,67,.55); margin-top:2px; }
+
+  .phone { width:390px; height:812px; background:var(--page-bg); border-radius:46px;
+           position:relative; overflow:hidden; box-shadow:var(--shadow); border:1px solid var(--line);
+           display:flex; flex-direction:column; }
+  .wxbar { height:44px; flex:none; display:flex; align-items:flex-end; justify-content:space-between; padding:0 18px 5px; font-size:13px; font-weight:600; }
+  .wxbar .sig { display:flex; gap:3px; align-items:flex-end; height:11px; }
+  .wxbar .sig i { width:3px; background:var(--t1); border-radius:1px; display:block; }
+  .wxbar .bat { width:25px; height:12px; border:1px solid var(--t1); border-radius:3.5px; position:relative; opacity:.9; }
+  .wxbar .bat::after { content:""; position:absolute; inset:1.5px; width:70%; background:var(--t1); border-radius:1.5px; }
+  .navbar { height:44px; flex:none; position:relative; display:flex; align-items:center; justify-content:center; background:var(--nav-bg); border-bottom:.5px solid var(--line); }
+  .navbar .title { font-size:17px; font-weight:600; }
+  .capsule { position:absolute; right:7px; width:87px; height:32px; border-radius:16px; background:rgba(255,255,255,.86); border:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-around; }
+  .capsule .dots { display:flex; gap:2.5px; }
+  .capsule .dots i { width:4px; height:4px; border-radius:50%; background:var(--nav-text); display:block; }
+  .capsule .circle { width:17px; height:17px; border:1.4px solid var(--nav-text); border-radius:50%; position:relative; }
+  .capsule .circle::after { content:""; position:absolute; left:50%; top:50%; width:2.2px; height:5.5px; border-radius:1px; background:var(--nav-text); transform:translate(-50%,-62%); }
+  .capsule .sep { width:.5px; height:18px; background:rgba(0,0,0,.08); }
+
+  .screen { flex:1; display:flex; flex-direction:column; padding:0 28px 24px; overflow:hidden; position:relative; }
+  .w-group { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .w-hello { font-size:54px; font-weight:600; line-height:1; letter-spacing:-1.8px; }
+  .w-hello i { font-style:normal; color:var(--brand); }
+  .w-sub { margin-top:15px; font-size:13.5px; color:var(--t3); letter-spacing:.3px; }
+  .w-foot { padding-top:20px; position:relative; z-index:2; }
+  .claim { font-size:10.5px; color:var(--t3); line-height:1.8; text-align:center; margin-top:14px; }
+  .w-btn { height:46px; border-radius:23px; background:var(--brand); color:#fff; font-size:15px; font-weight:600;
+           display:flex; align-items:center; justify-content:center; letter-spacing:.3px; box-shadow:0 6px 18px rgba(249,115,22,.28); }
+
+  /* 共用的引文排版基线 */
+  .cn { color:var(--t1); }
+  .en { color:var(--t3); }
+
+  /* ============ Q1｜无卡 · 纯排版 ============ */
+  .Q1 .quote { margin-top:46px; }
+  .Q1 .date { font-size:11px; color:var(--t3); letter-spacing:1.2px; }
+  .Q1 .cn { margin-top:15px; font-size:21px; line-height:1.66; letter-spacing:-.1px; }
+  .Q1 .en { margin-top:17px; font-size:12.5px; line-height:1.78; }
+
+  /* ============ Q2｜对话开场（气泡） ============ */
+  .Q2 .quote { margin-top:34px; display:flex; gap:9px; }
+  .Q2 .av { width:30px; height:30px; border-radius:50%; flex:none; margin-top:3px;
+            background:linear-gradient(140deg,#F97316,#E8620A); color:#fff; font-size:12.5px; font-weight:600;
+            display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(249,115,22,.26); }
+  .Q2 .bub { background:var(--card); border-radius:4px 14px 14px 14px; padding:13px 15px;
+             box-shadow:0 2px 10px rgba(20,30,60,.06); }
+  .Q2 .cn { font-size:14.5px; line-height:1.72; }
+  .Q2 .en { margin-top:9px; font-size:12px; line-height:1.7; padding-top:9px; border-top:.5px solid var(--line); }
+
+  /* ============ Q3｜杂志日期 ============ */
+  .Q3 .quote { margin-top:42px; padding-top:15px; border-top:1px solid rgba(60,60,67,.28); }
+  .Q3 .meta { display:flex; justify-content:space-between; font-size:10px; letter-spacing:1.4px;
+              color:var(--t3); font-weight:500; }
+  .Q3 .cn { margin-top:16px; font-size:20px; line-height:1.66; letter-spacing:-.1px; }
+  .Q3 .en { margin-top:18px; font-size:12px; line-height:1.8; letter-spacing:.1px; }
+
+  /* ============ Q4｜英文主视觉 ============ */
+  .Q4 .quote { margin-top:44px; }
+  .Q4 .en { font-size:23px; line-height:1.42; letter-spacing:-.4px; color:var(--t1); }
+  .Q4 .cn { margin-top:22px; font-size:13px; line-height:1.75; color:rgba(60,60,67,.52); padding-left:12px;
+            border-left:1.5px solid rgba(249,115,22,.32); }
+
+  /* ============ Q5｜整屏渐变浮字 ============ */
+  .Q5 { background:linear-gradient(168deg,#FFFBF7 0%,#FFEFDF 56%,#FFE2CA 100%); }
+  .Q5 .quote { margin-top:44px; }
+  .Q5 .cn { font-size:21px; line-height:1.66; letter-spacing:-.1px; font-weight:500; }
+  .Q5 .en { margin-top:16px; font-size:12.5px; line-height:1.78; color:rgba(146,64,14,.55); }
+  .Q5 .w-btn { background:#10131A; box-shadow:0 8px 22px rgba(70,40,10,.22); }
+  .Q5 .claim { color:rgba(120,60,20,.42); }
+
+  /* ============ Q6｜输入框开场（去掉大按钮） ============ */
+  .Q6 .input { display:flex; align-items:center; gap:10px; height:48px; border-radius:24px;
+               background:var(--card); border:1px solid rgba(60,60,67,.10); padding:0 6px 0 18px;
+               box-shadow:0 2px 10px rgba(20,30,60,.05); }
+  .Q6 .input .ph { flex:1; font-size:14.5px; color:var(--t3); letter-spacing:.2px; }
+  .Q6 .input .go { width:36px; height:36px; border-radius:50%; background:var(--brand); flex:none;
+                   display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(249,115,22,.3); }
+  .Q6 .input .go svg { width:17px; height:17px; fill:none; stroke:#fff; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .Q6 .quote { margin-top:44px; }
+  .Q6 .cn { font-size:21px; line-height:1.66; letter-spacing:-.1px; }
+
+  @media (max-width: 880px) {
+    .grid { gap:24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>欢迎页「今日一句」· 六个方向</h1>
+  <p>同一个 <b>Hello.</b> 主视觉与底部按钮，只换引文区的呈现方式</p>
+</div>
+
+<div class="grid">
+
+  <!-- ============ Q1 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q1｜无卡 · 纯排版</b><span>去掉容器与标签，靠字号和颜色分层</span></div>
+    <div class="phone Q1">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="date">9月15日</div>
+            <div class="cn">我们无法决定风的方向，<br>但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind,<br>but we can adjust the sails.</div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="w-btn">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Q2 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q2｜对话开场</b><span>欢迎页即对话空状态，不再有第二套 UI</span></div>
+    <div class="phone Q2">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="av">豆</div>
+            <div class="bub">
+              <div class="cn">我们无法决定风的方向，但可以调整帆的角度。</div>
+              <div class="en">We cannot direct the wind, but we can adjust the sails.</div>
+            </div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="w-btn">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Q3 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q3｜杂志日期</b><span>用事实（日期）替代「今日一句」这个命名</span></div>
+    <div class="phone Q3">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="meta"><span>2026.09.15</span><span>MON</span></div>
+            <div class="cn">我们无法决定风的方向，<br>但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind,<br>but we can adjust the sails.</div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="w-btn">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Q4 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q4｜英文主视觉</b><span>双语主次反转，顺带暗示翻译能力</span></div>
+    <div class="phone Q4">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="en">We cannot direct the wind, but we can adjust the sails.</div>
+            <div class="cn">我们无法决定风的方向，但可以调整帆的角度。</div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="w-btn">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Q5 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q5｜整屏渐变浮字</b><span>用整屏渐变替代白卡，字直接浮在底色上</span></div>
+    <div class="phone Q5">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar" style="background:transparent; border-bottom-color:rgba(60,60,67,.08)"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="cn">我们无法决定风的方向，但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind,<br>but we can adjust the sails.</div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="w-btn">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Q6 ============ -->
+  <div class="col">
+    <div class="cap"><b>Q6｜输入框开场</b><span>去掉橙色大按钮，「开始对话」变成一个真实输入框</span></div>
+    <div class="phone Q6">
+      <div class="wxbar"><span>18:19</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><div class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></div></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          <div class="quote">
+            <div class="cn">我们无法决定风的方向，<br>但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind,<br>but we can adjust the sails.</div>
+          </div>
+        </div>
+        <div class="w-foot">
+          <div class="input">
+            <span class="ph">说点什么…</span>
+            <span class="go"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
+          </div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

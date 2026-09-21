@@ -1,7 +1,8 @@
-import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Query, BadRequestException, Logger, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { Request } from 'express';
 import { Public } from '../auth/public.decorator';
 import { DeployDeploymentEntity } from './deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-module.entity';
@@ -13,10 +14,15 @@ import { ConfigService } from '@nestjs/config';
  * 微前端基座 / 外部系统通过 GET /__version__?module=<key>
  * 获取「当前环境某模块」的线上版本与资源加载信息，
  * 按返回的 assetBase 远程加载对应版本目录的 JS。
+ *
+ * `__manifest__` 只做透传：组装逻辑统一在 `IndexHtmlService.buildManifest`，
+ * 保证「注入 shell 的 HTML」与「接口返回」是同一份数据（双域重构 P3）。
  */
 @ApiTags('版本')
 @Controller()
 export class VersionController {
+  private readonly logger = new Logger(VersionController.name);
+
   constructor(
     private configService: ConfigService,
     private indexHtmlService: IndexHtmlService,
@@ -53,12 +59,19 @@ export class VersionController {
     };
   }
 
+  /**
+   * 模块清单（基座 / CI 用）。
+   *
+   * 双域重构 P3：按 Host 匹配站点返回 `envs` + `byEnv`（每个环境加载哪个固定入口），
+   * 同时保留旧字段（`env` / `modules` / `canary`）供未升级客户端回落（FR-10.1 兼容期）。
+   * 未匹配站点（localhost / IP 直连）→ 只返回旧结构，行为不变。
+   *
+   * 组装在 `IndexHtmlService.buildManifest`（与注入 shell 的 HTML 同源）。
+   */
   @Public()
   @Get('__manifest__')
-  @ApiOperation({ summary: '查询当前环境完整模块清单（基座调试/CI 用）' })
-  async manifest(): Promise<any> {
-    // 复用 IndexHtmlService 的清单解析（不注入 HTML，直接返回 JSON）
-    const envId = this.configService.get('DEPLOY_ENV_ID') || 'dev';
-    return this.indexHtmlService.resolveModulesManifest(envId);
+  @ApiOperation({ summary: '查询当前站点/环境的完整模块清单（基座调试/CI 用）' })
+  async manifest(@Req() req: Request): Promise<any> {
+    return this.indexHtmlService.buildManifest(req);
   }
 }

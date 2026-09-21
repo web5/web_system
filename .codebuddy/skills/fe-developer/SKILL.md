@@ -8,7 +8,7 @@ version: 1.0.0
 
 ## 职责
 
-把 UI 任务按 web_system 规范落地：类型判定 → 规格书确认 → 编码 → 自检 → （微前端产物四步）。通用前端工程质量按 `fe-dev-common`（ai-agent-kit `references/fe-dev-common.md`）执行，本卡只写 web_system 特有部分。
+把 UI 任务按 web_system 规范落地：类型判定 → 规格书确认 → 编码 → 自检 → （微前端产物四步）。通用前端工程质量按 `fe-dev-common`（上游 ai-agent-kit `references/fe-dev-common.md`，见 `https://github.com/web5/ai-agent-kit`）执行，本卡只写 web_system 特有部分。
 
 ## 触发条件
 
@@ -28,7 +28,7 @@ version: 1.0.0
 
 ## 原型稿生成（prototype）
 
-原型稿是需求对齐用的可点击交互 HTML，是**沟通产物，不是最终代码**。通用方法论（定义与分层 / 触发决策 / 单文件约束 / Token 方法 / 交互模式库概念 / 页面类型最小结构 / 通用评审清单 / 不做什么）统一按 **fe-prototype-common**（ai-agent-kit `references/fe-prototype-common.md`）执行；**本卡只写 web_system 特有装配**，骨架与数值以 `docs/ui/prototype-scaffold.html` 为准，不在此复制细则。
+原型稿是需求对齐用的可点击交互 HTML，是**沟通产物，不是最终代码**。通用方法论（定义与分层 / 触发决策 / 单文件约束 / Token 方法 / 交互模式库概念 / 页面类型最小结构 / 通用评审清单 / 不做什么）统一按 **fe-prototype-common**（上游 ai-agent-kit `references/fe-prototype-common.md`）执行；**本卡只写 web_system 特有装配**，骨架与数值以 `docs/ui/prototype-scaffold.html` 为准，不在此复制细则。
 
 ### 1. 何时生成
 
@@ -117,5 +117,5 @@ version: 1.0.0
 | `docs/ui/prototype-scaffold.html` | **生成原型稿的基础骨架（移动端+桌面端双形态、Token、交互模式库）** |
 | `docs/products/合同翻译官/合同翻译官_原型_v3_风险信号.html` | 移动端原型范例（复制参考） |
 | `docs/analysis/合同翻译官/合同翻译官_原型_v4_升级版.html` | 移动端原型范例（进阶交互参考） |
-| fe-dev-common（ai-agent-kit `references/fe-dev-common.md`） | 通用工程质量规则 |
-| fe-prototype-common（ai-agent-kit `references/fe-prototype-common.md`） | **原型稿通用方法论**（分层/触发/Token 方法/交互模式/评审清单）；本卡「原型稿生成」节为 web_system 装配 |
+| fe-dev-common（上游 ai-agent-kit `references/fe-dev-common.md`） | 通用工程质量规则 |
+| fe-prototype-common（上游 ai-agent-kit `references/fe-prototype-common.md`） | **原型稿通用方法论**（分层/触发/Token 方法/交互模式/评审清单）；本卡「原型稿生成」节为 web_system 装配 |

@@ -12,12 +12,36 @@
 | **发布源** | `~/workspace/web_system`（只留 master） | 合并后从这里构建发布 | ❌ 不要在上面开发/切分支改代码 |
 | **影子库** | MySQL `web_system_deploy_shadow` | 演练数据库改动 | ❌ 不要把应用指到它上面跑 |
 
-## 2. 日常步骤
+## 2. 分支命名规范（与 CI 强相关）
+
+> 2026-09-20 定：统一用 `feature/*` / `fix/*`。原因是 `.github/workflows/auto-pr.yml`
+> **只匹配这两个前缀**自动建 PR 到 master，用错前缀就得手动建。
+
+| 前缀 | 用途 | push 后自动建 PR 到 master |
+|---|---|---|
+| `feature/*` | 新功能 / 重构 | ✅ 自动 |
+| `fix/*` | 缺陷修复 | ✅ 自动 |
+| `feature/test` | **本地集成分支**（各功能 PR 的 base，见 `integration-branch.md`） | ❌ 刻意排除（避免噪音 PR） |
+| `chore/*` `docs/*` `refactor/*` 等 | 杂项 / 文档 / 纯重构 | ❌ 不自动，需手动建 PR |
+
+规则：
+
+```bash
+git checkout -B feature/my-work master    # ✅ 从 master 拉，小写 + 连字符
+git checkout -B fix/login-500 master      # ✅ 修缺陷
+git checkout -B feat/my-work master       # ❌ 不要用 feat/：不匹配 auto-pr，得手动建 PR
+```
+
+- 分支名只用**小写字母、数字、连字符**（例：`feature/deploy-console-domain-split`）
+- 集成分支 `feature/test` 的用法与自动发布见 `integration-branch.md`、`gh-actions-release.md`
+- 手动建 PR：`gh pr create --base master --head <分支>`（token 在根 `.env` 的 `GITHUB_PR_TOKEN`）
+
+## 3. 日常步骤
 
 ```bash
 # ① 开发：在 worktree 里建分支
 cd ~/workspace/web_system_dev
-git checkout -B feat/xxx master
+git checkout -B feature/xxx master
 
 # ② 自测（只跑受影响的套件，最后再全量）
 cd servers/deploy-console && npx jest src/<受影响的目录>
@@ -35,7 +59,7 @@ node scripts/db-shadow.mjs status                                   # 对比
 cd ~/workspace/web_system && git pull --ff-only && ./scripts/publish-deploy-console.sh
 ```
 
-## 3. 真机验证要申请窗口
+## 4. 真机验证要申请窗口
 
 下面这些会**真的重启服务或改真数据**，做之前先跟用户约时间，不要随手执行：
 
@@ -43,7 +67,7 @@ cd ~/workspace/web_system && git pull --ff-only && ./scripts/publish-deploy-cons
 - 数据库 `RENAME` / `UPDATE` / 删表
 - 跑完整发布流水线（会经过审批挂起，且会替换线上 dist）
 
-## 4. worktree 初始化备忘
+## 5. worktree 初始化备忘
 
 新 worktree 首次使用需要：
 
@@ -54,7 +78,7 @@ pnpm --filter @web-system/shared build  # 内部包产物，否则 jest 报 TS23
 pnpm --filter @web-system/ui build      # 同上（前端 vue-tsc 报 TS2307: '@web-system/ui'）
 ```
 
-## 5. 收尾
+## 6. 收尾
 
 - 交付前 `git status` 必须干净（临时脚本用完即删，不要留在仓库里）
 - 迁移类脚本必须**幂等可重跑**，并在脚本头部写清回滚方式

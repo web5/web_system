@@ -148,4 +148,4 @@
 | `/api/uploads` | user-service(静态) |
 | `/api/uploads/bianbian` | ai-service(静态) |
 | `/api/mcp` | mcp-gateway |
-| `/api/finnews, /api/content-hub` | content-hub |
+| `/api/content-hub` | content-hub |

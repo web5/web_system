@@ -1,104 +1,136 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { Repository, IsNull } from 'typeorm';
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
-import { ModuleDto } from '../common/dto';
-import { EnvironmentService } from '../environment/environment.service';
+import { DeployAppEntity } from '../entities/deploy-app.entity';
+import { DeployServiceEntity } from '../entities/deploy-service.entity';
 
 /**
- * 模块注册表服务。
- * - 启动时若空表，从 scripts/modules.json 种子导入（标记 builtin）
- * - CRUD：模块是一等公民，可动态增删（内置模块不可删）
+ * 模块注册表服务（**双域适配层**）。
+ *
+ * ## 语义
+ * 运行期流水线 / 发布链路一律通过本服务按 key 取「模块」元数据
+ * （`dir` 决定构建产物路径、`type` 决定 front/back 分流、`pm2` 决定重启进程名）。
+ *
+ * ## 读取源（M9 前置，2026-09-19 切换）
+ * - **主源 = 双域新表**：`deploy_services`（后端）+ `deploy_apps`（前端），
+ *   由 M4-lite / ServicesService 的幂等种子保证与旧 `deploy_modules` 同 key、同目录。
+ * - **兜底 = 旧表**：新表未涵盖的 key 仍回落到 `deploy_modules`，
+ *   保证**未迁移/临时新增**的模块零遗漏。旧表 DROP 后本兜底自然空转。
+ *
+ * 这样 `deploy_modules` 由「唯一真相源」降级为「兼容兜底」，为 M9 drop 解锁。
  */
 @Injectable()
-export class ModuleRegistryService implements OnModuleInit {
+export class ModuleRegistryService {
   private readonly logger = new Logger(ModuleRegistryService.name);
 
   constructor(
     @InjectRepository(DeployModuleEntity)
     private readonly moduleRepo: Repository<DeployModuleEntity>,
-    private readonly environmentService: EnvironmentService,
+    @InjectRepository(DeployAppEntity)
+    private readonly appRepo: Repository<DeployAppEntity>,
+    @InjectRepository(DeployServiceEntity)
+    private readonly serviceRepo: Repository<DeployServiceEntity>,
   ) {}
 
-  /** 仓库根目录（deploy-console 的上两级） */
-  private getWebSystemDir(): string {
-    return process.cwd().replace(/\/servers\/deploy-console.*$/, '');
+  /** 全部模块：新表（服务 + 应用）优先，旧表补漏，按 key 排序（旧行为一致） */
+  async list(): Promise<DeployModuleEntity[]> {
+    const [services, apps, legacy] = await Promise.all([
+      this.serviceRepo.find({ where: { deletedAt: IsNull() } }),
+      this.appRepo.find({ where: { deletedAt: IsNull() } }),
+      this.legacyFind(),
+    ]);
+
+    const rows: DeployModuleEntity[] = [
+      ...services.map((s) => fromService(s)),
+      ...apps.map((a) => fromApp(a)),
+    ];
+    const seen = new Set(rows.map((r) => r.key));
+    for (const m of legacy) if (!seen.has(m.key)) rows.push(m);
+
+    return rows.sort((a, b) => a.key.localeCompare(b.key));
   }
 
-  async onModuleInit() {
-    const count = await this.moduleRepo.count();
-    if (count > 0) return;
-    const file = join(this.getWebSystemDir(), 'scripts', 'modules.json');
-    if (!existsSync(file)) {
-      this.logger.warn('未找到 scripts/modules.json，跳过模块种子');
-      return;
-    }
-    try {
-      const seed = JSON.parse(readFileSync(file, 'utf-8')) as any[];
-      const rows = seed.map((m) =>
-        this.moduleRepo.create({
-          key: m.key,
-          name: m.name,
-          type: m.type,
-          dir: m.dir,
-          pm2: m.pm2 ?? null,
-          publicPath: m.publicPath ?? null,
-          buildCmd: m.buildCmd ?? null,
-          builtin: true,
-          enabled: true,
-        }),
-      );
-      await this.moduleRepo.save(rows);
-      this.logger.log(`模块注册表种子导入完成: ${rows.length} 个模块`);
-      // 种子模块也要有环境（EnvironmentService.onModuleInit 先于本文件执行，此时模块表为空）
-      for (const m of rows) {
-        try {
-          await this.environmentService.ensureModuleEnvs(m.key);
-        } catch (e: any) {
-          this.logger.warn(`模块 ${m.key} 补建内置环境失败: ${e?.message}`);
-        }
-      }
-    } catch (e) {
-      this.logger.error(`模块种子导入失败: ${e.message}`);
-    }
-  }
-
-  list(): Promise<DeployModuleEntity[]> {
-    return this.moduleRepo.find({ order: { key: 'ASC' } });
-  }
-
+  /**
+   * 按 key 取模块：新表优先，旧表兜底，都没有才抛错。
+   *
+   * ⚠️ 错误文案 `模块不存在: <key>` 被下游识别（`.message.includes('模块不存在')`），不可改。
+   */
   async get(key: string): Promise<DeployModuleEntity> {
-    const m = await this.moduleRepo.findOne({ where: { key } });
-    if (!m) throw new Error(`模块不存在: ${key}`);
-    return m;
-  }
+    const svc = await this.serviceRepo.findOne({ where: { key, deletedAt: IsNull() } });
+    if (svc) return fromService(svc);
 
-  async create(dto: ModuleDto): Promise<DeployModuleEntity> {
-    const exists = await this.moduleRepo.findOne({ where: { key: dto.key } });
-    if (exists) throw new Error(`模块 key 已存在: ${dto.key}`);
-    const m = await this.moduleRepo.save(this.moduleRepo.create({ ...dto, builtin: false }));
-    // 环境归属模块（1:N）：新模块立刻补齐 dev/prod 内置环境（Q3），失败不阻断建模块
-    try {
-      await this.environmentService.ensureModuleEnvs(m.key);
-    } catch (e: any) {
-      this.logger.warn(`模块 ${m.key} 补建内置环境失败: ${e?.message}`);
+    const app = await this.appRepo.findOne({ where: { key, deletedAt: IsNull() } });
+    if (app) return fromApp(app);
+
+    const legacy = await this.moduleRepo.findOne({ where: { key } });
+    if (legacy) {
+      this.logger.debug(`模块 ${key} 命中旧表兜底（尚未迁入双域新表）`);
+      return legacy;
     }
-    return m;
+
+    throw new Error(`模块不存在: ${key}`);
   }
 
-  async update(key: string, dto: Partial<ModuleDto>): Promise<DeployModuleEntity> {
-    const m = await this.get(key);
-    // key 不可改（版本/部署记录按 key 关联）
-    const { key: _ignored, ...rest } = dto as any;
-    Object.assign(m, rest);
-    return this.moduleRepo.save(m);
+  /** 旧表兜底读取（旧表 DROP 后返回空数组，不抛错 —— 见 list 中的同样处理） */
+  private async legacyFind(): Promise<DeployModuleEntity[]> {
+    try {
+      return await this.moduleRepo.find({ order: { key: 'ASC' } });
+    } catch (e) {
+      // 旧表已 DROP（M9 完成态）：兜底自然空转，主源独立可用
+      this.logger.debug(`旧表兜底读取跳过：${(e as Error).message}`);
+      return [];
+    }
   }
+}
 
-  async remove(key: string): Promise<void> {
-    const m = await this.get(key);
-    if (m.builtin) throw new Error(`内置模块不可删除: ${key}`);
-    await this.moduleRepo.delete(m.id);
-  }
+/**
+ * `deploy_apps.kind` → 旧 `deploy_modules.type` 值域。
+ *
+ * ⚠️ 值域必须落在 `backend` / `frontend` / `micro-frontend` 三者内 ——
+ * 下游按这三个值分支（`BUILD_OUTPUT_DIR` 取 servers/app、微前端分流判断等）。
+ * 依据 `scripts/modules.json`：`shell` 与 `mini-contract` 旧 type 均为 `frontend`。
+ */
+function appKindToType(kind: string): 'frontend' | 'micro-frontend' {
+  return kind === 'micro-frontend' ? 'micro-frontend' : 'frontend';
+}
+
+/** 应用（微前端域）→ 旧模块形态（无 pm2：前端由 nginx 静态伺服，不跑进程） */
+function fromApp(a: DeployAppEntity): DeployModuleEntity {
+  // `as unknown as` 是刻意的：新表是 key 主键、无自增 id，这里产出的是**兼容 shape**，
+  // 仅供流水线取元数据（dir/type/pm2/…）使用，不会作为实体回写。
+  return {
+    key: a.key,
+    name: a.name,
+    type: appKindToType(a.kind),
+    dir: a.repoDir,
+    pm2: null,
+    publicPath: a.publicPath ?? null,
+    buildCmd: null,
+    // P1（2026-09-20）：部署位置随应用走 —— 透出后流水线 `DEPLOY_TARGET` 才有值
+    deployRoot: a.deployRoot ?? null,
+    defaultArtifactPath: a.defaultArtifactPath ?? null,
+    builtin: !!a.builtin,
+    enabled: !!a.enabled,
+  } as unknown as DeployModuleEntity;
+}
+
+/** 服务（网关域）→ 旧模块形态（type 恒为 backend，pm2 进程名来自 pm2Name） */
+function fromService(s: DeployServiceEntity): DeployModuleEntity {
+  return {
+    key: s.key,
+    name: s.name,
+    type: 'backend',
+    dir: s.repoDir,
+    pm2: s.pm2Name ?? null,
+    publicPath: null,
+    buildCmd: null,
+    // P1（2026-09-20）：部署位置随服务走
+    deployRoot: s.deployRoot ?? null,
+    defaultArtifactPath: s.defaultArtifactPath ?? null,
+    // P3：pm2 入口脚本（空 → 流水线回落 dist/main.js）
+    pm2Script: s.pm2Script ?? null,
+    builtin: !!s.builtin,
+    enabled: !!s.enabled,
+  } as unknown as DeployModuleEntity;
 }
