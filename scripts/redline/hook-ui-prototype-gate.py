@@ -1,144 +1,90 @@
 #!/usr/bin/env python3
 # ============================================================
-# hook-ui-prototype-gate.py — PreToolUse 硬阻断（L3）
+# hook-ui-prototype-gate.py — PreToolUse 硬阻断（L3 · v1.1）
 #
-# 设计：specs/kit-sop-enforcement/design.md §3.4
-# 职责：本地写 UI 源码前，必须先动过原型/页面规格；否则 deny。
+# 设计：specs/kit-sop-enforcement/design.md §3.4 / §3.4.1 ②③
+# 职责：本地写 UI 源码前，须先动过原型/页面规格（per-session 通行证），
+#       且 UI 文件所属 app 必须在通行证记录的 app 集合内（跨端不放行）。
+#       放行时输出 additionalContext 提醒（约束下一步意图）。
 # 路径判定挂在「改动对象」而非「用户措辞」（§3.1）。
 # 无第三方依赖。失败一律 fail-open（exit 0），绝不阻断正常 IDE 会话。
 # ============================================================
 import json
 import os
 import sys
-import time
 
-MARKER_REL = ".codebuddy/.state/proto-touched"
-TTL_HOURS = 8
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
-# 受门禁约束的「UI 源码」集合（§3.1）。
-# 说明：fnmatch 的 * 跨 / 匹配，故 apps/*/pages/* 覆盖 pages 全部深度。
-UI_PATH_GLOBS = [
-    "apps/*/pages/*",
-    "apps/*/src/*.vue",
-    "apps/*/components/*",
-    "packages/ui/*",
-    "apps/*/app.json",
-    "app.json",
-]
-UI_EXTS = (".wxml", ".wxss", ".vue")
+try:
+    import ui_gate_common as C
+except Exception:
+    sys.exit(0)  # fail-open
 
-WRITE_TOOLS = {
-    "write_to_file", "replace_in_file", "Write", "Edit", "MultiEdit",
-}
-
-
-def log(msg):
-    sys.stderr.write(msg + "\n")
-
-
-def project_root(payload):
-    v = os.environ.get("CODEBUDDY_PROJECT_DIR")
-    if v and os.path.isdir(v):
-        return os.path.realpath(v)
-    cwd = payload.get("cwd")
-    if cwd and os.path.isdir(cwd):
-        return os.path.realpath(cwd)
-    return os.path.realpath(os.getcwd())
-
-
-def to_rel(path, root):
-    path = os.path.realpath(path)
-    if path.startswith(root + os.sep):
-        return path[len(root) + 1:]
-    return path
-
-
-def is_ui_source(rel):
-    rel = rel.replace(os.sep, "/")
-    if rel.endswith(UI_EXTS):
-        return True
-    import fnmatch
-    for pat in UI_PATH_GLOBS:
-        if fnmatch.fnmatch(rel, pat):
-            return True
-    return False
-
-
-def marker_fresh(root):
-    p = os.path.join(root, MARKER_REL)
-    if not os.path.isfile(p):
-        return False
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        ts = float(data.get("ts", 0))
-    except Exception:
-        return False
-    return (time.time() - ts) <= TTL_HOURS * 3600
+GATE_MSG = (
+    '本次会话尚未修改原型/页面规格。请先改 '
+    'apps/<app>/prototype/index.html 或 specs/**/page-spec*.md，'
+    '过 ux-review-checklist 并取得用户确认；'
+    '纯视觉微调请在原型里记一行「微调豁免」。'
+)
+CROSS_MSG = (
+    '通行证属于 app [{seen}]，本次要改的是 app [{want}] —— 跨端改动不被放行。'
+    '请先为该 app 更新其原型/页面规格，或记一行「微调豁免」。'
+)
 
 
 def main():
-    raw = sys.stdin.read()
-    try:
-        payload = json.loads(raw) if raw.strip() else {}
-    except Exception:
-        return 0  # fail-open
-
-    tool_name = payload.get("tool_name", "")
-    if tool_name not in WRITE_TOOLS:
+    payload = C.read_payload()
+    tool_name = payload.get('tool_name', '') or ''
+    if tool_name not in C.WRITE_TOOLS:
         return 0
 
-    root = project_root(payload)
-    ti = payload.get("tool_input") or {}
-    path = (ti.get("filePath") or ti.get("file_path") or ti.get("path") or "").strip()
-    if not path:
-        # MultiEdit / 批量工具可能把路径放在 edits[] 下
-        edits = ti.get("edits") or []
-        if isinstance(edits, list):
-            for e in edits:
-                if isinstance(e, dict) and e.get("file_path"):
-                    path = e["file_path"]
-                    break
+    root = C.project_root(payload)
+    session_id = payload.get('session_id', '') or ''
+    ti = payload.get('tool_input') or {}
+    path = C.extract_path(ti)
     if not path:
         return 0
 
-    try:
-        rel = to_rel(path, root)
-    except Exception:
-        rel = path
-
-    if not is_ui_source(rel):
+    rel = C.to_rel(path, root)
+    if not C.is_ui_source(rel):
         return 0  # 非 UI 文件：零摩擦
 
-    # 豁免出口 1：环境变量
-    if (os.environ.get("UI_GATE", "") or "").lower() == "off":
+    if C.exempt_by_env():
+        C.audit(root, 'allow-env-off', tool_name, rel, session_id, {})
         return 0
 
-    # 豁免出口 2：本会话已动过原型（标记文件新鲜）
-    if marker_fresh(root):
+    data = C.load_marker(root, session_id)
+    if not C.marker_fresh(data):
+        C.deny(GATE_MSG)
+        C.audit(root, 'deny', tool_name, rel, session_id, {'reason': 'no-fresh-marker'})
         return 0
 
-    out = {
-        "continue": False,
-        "stopReason": "UI 改动须先过原型",
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                "本次会话尚未修改原型/页面规格。请先改 "
-                "apps/<app>/prototype/index.html 或 specs/**/page-spec*.md，"
-                "过 ux-review-checklist 并取得用户确认；"
-                "纯视觉微调请在原型里记一行「微调豁免」。"
-            ),
-        },
-    }
-    sys.stdout.write(json.dumps(out, ensure_ascii=False))
+    apps = list(data.get('apps') or [])
+    want = C.app_of(rel)
+    # apps 为空 = 通行证来自 docs/ui/prototypes 或 specs/**（全局），不限端
+    if apps and want and want not in apps:
+        C.deny(CROSS_MSG.format(seen=','.join(apps), want=want),
+               stop_reason='跨端改动不被放行')
+        C.audit(root, 'deny', tool_name, rel, session_id, {'reason': 'cross-app', 'apps': apps})
+        return 0
+
+    proto_hint = (data.get('proto_files') or ['apps/<app>/prototype/index.html'])[0]
+    text = (
+        '你正在改 UI 源码 ' + rel + '，本会话通行证来自 ' + proto_hint + '。'
+        '若本次改动的形态未在原型中体现，请先更新原型并再取用户确认；'
+        '纯视觉微调请在原型或 page-spec 里记一行「微调豁免」。'
+        '提交时：UI commit 的 message 须带 Proto: <原型 commit sha>（§3.8 方案 B）。'
+    )
+    C.allow_with_context(text)
+    C.audit(root, 'allow', tool_name, rel, session_id, {'apps': apps})
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         sys.exit(main())
     except Exception as e:
-        log("hook-ui-prototype-gate error (fail-open): %s" % e)
+        sys.stderr.write('hook-ui-prototype-gate error (fail-open): %s%s' % (e, chr(10)))
         sys.exit(0)

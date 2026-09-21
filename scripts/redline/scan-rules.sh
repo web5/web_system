@@ -172,6 +172,93 @@ check_r9() {
   add_warn "R9" "UI 结构变更未经原型/规格" "$loc" "须同 diff 含 apps/*/prototype/** 或 specs/**/page-spec*.md（见 specs/kit-sop-enforcement/design.md）"
 }
 
+is_ui_file() {
+  case "$1" in
+    *.wxml|*.wxss|*.vue) return 0 ;;
+    apps/*/pages/*) return 0 ;;
+    apps/*/components/*) return 0 ;;
+    apps/*/src/*.vue) return 0 ;;
+    packages/ui/*) return 0 ;;
+    app.json|apps/*/app.json) return 0 ;;
+  esac
+  return 1
+}
+
+is_passport_file() {
+  case "$1" in
+    */prototype/*|docs/ui/prototypes/*|*/page-spec*.md|page-spec*.md) return 0 ;;
+  esac
+  return 1
+}
+
+# ---- R9b 既有 UI 改动须同行原型/豁免（文件级 · warning 级）----
+# 补 R9 的覆盖缺口：R9 只卡新增页面与信息架构，改既有交互/样式一行不报（§3.5.1）。
+# 阈值：UI 文件改动累计行数 >= 5，或 diff 含结构标签（<view / <template / <block）。
+# 豁免：同 range 内 commit message 带 `Micro-exempt: <理由>`。
+R9B_LINE_THRESHOLD="${R9B_LINE_THRESHOLD:-5}"
+check_r9b() {
+  local range="$1" st path passport=0
+  local -a ui_files=()
+  while IFS=$'\t' read -r st path; do
+    [ -n "${path:-}" ] || continue
+    case "$st" in A*) continue ;; esac          # 新增页面由 R9 管
+    if is_ui_file "$path"; then ui_files+=("$path"); fi
+    if is_passport_file "$path"; then passport=1; fi
+  done < <(git diff --name-status --no-renames "$range" -- 2>/dev/null)
+
+  [ ${#ui_files[@]} -eq 0 ] && return 0
+  [ "$passport" = "1" ] && return 0
+
+  local lines=0 struct=0
+  lines="$(git diff --numstat --no-renames "$range" -- "${ui_files[@]}" 2>/dev/null | awk '{a+=$1+$2} END{print a+0}')"
+  if git diff -U0 --no-color "$range" -- "${ui_files[@]}" 2>/dev/null \
+     | grep -E '^\+' | grep -qE '<(view|template|block)'; then
+    struct=1
+  fi
+  [ "${lines:-0}" -lt "$R9B_LINE_THRESHOLD" ] && [ "$struct" = "0" ] && return 0
+
+  if git log --format=%B "$range" 2>/dev/null | grep -qE '^Micro-exempt:'; then
+    return 0
+  fi
+  add_warn "R9b" "既有 UI 改动无同行原型/豁免" "${#ui_files[@]} 个文件 / ${lines} 行" "须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）"
+}
+
+# ---- R10 UI commit 须带 Proto 凭证（commit 级 · warning 级）----
+# 方案 B 的 CI 兜底：本地可被 --no-verify 绕过，故这里再验一次（§3.8）。
+check_r10() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c f sha isui
+  for c in "${commits[@]}"; do
+    isui=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if is_ui_file "$f"; then isui=1; break; fi
+    done < <(git show --name-only --format= "$c" 2>/dev/null)
+    [ "$isui" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    # 「微调豁免」语义与 R9b 保持一致：纯视觉微调在 commit 层同样被认，避免两套口径制造摩擦
+    if printf '%s' "$body" | grep -qE '^Micro-exempt:'; then
+      continue
+    fi
+
+    sha="$(printf '%s' "$body" | grep -E '^Proto:[[:space:]]*[0-9a-fA-F]{7,40}' | head -n 1 | awk '{print $2}')"
+    if [ -z "$sha" ]; then
+      add_warn "R10" "UI commit 缺 Proto 凭证" "$(git log -1 --format=%s "$c")" "UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）"
+      continue
+    fi
+    if ! git merge-base --is-ancestor "$sha" "$c^" 2>/dev/null; then
+      add_warn "R10" "UI commit 的 Proto 指向非祖先" "$sha" "Proto 必须指向已落库的原型/规格 commit（§3.8）"
+    fi
+  done
+}
+
 # ---- 单行检查封装（文件+行号+内容）----
 check_one_line() {
   local file="$1" line="$2" content="$3"
@@ -186,6 +273,8 @@ scan_diff_range() {
   local range="$1" diff_text dl add cur_file=""
   local -a pending=()
   check_r9 "$range"   # R9：文件级 UI 结构门禁（warning 级，先于行扫描）
+  check_r9b "$range"  # R9b：既有 UI 改动门禁（补 R9 覆盖缺口）
+  check_r10 "$range"  # R10：UI commit 的 Proto 凭证（方案 B CI 兜底）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do
