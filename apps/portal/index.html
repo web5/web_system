@@ -5,24 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="科豆 AI · 儿童创造力平台 - 旗下产品「变变」AI 拼贴变身 3D 角色" />
-    <meta name="theme-color" content="#FF8C42" />
+    <meta name="theme-color" content="#F97316" />
     <meta name="color-scheme" content="light" />
     <title>科豆 AI · 儿童创造力平台</title>
     <!-- 关键资源 DNS 预解析 + 预连接 -->
     <link rel="preconnect" href="https://dev.kedouai.com" crossorigin />
     <link rel="dns-prefetch" href="https://dev.kedouai.com" />
-    <!-- 关键内联 CSS：避免白屏/黑屏闪烁 -->
+    <!-- 关键内联 CSS：避免白屏/黑屏闪烁（token 加载前的首屏基线，值与 @web-system/ui/tokens.css 对齐：
+         --ws-bg-page #FAFAFA / --ws-text-primary #171717 / --ws-font-sans） -->
     <style>
       html, body {
         margin: 0;
         padding: 0;
-        background-color: #FFF8F0;
-        color: #333333;
-        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+        background-color: #FAFAFA;
+        color: #171717;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
       }
       #app {
         min-height: 100vh;
-        background-color: #FFF8F0;
+        background-color: #FAFAFA;
       }
     </style>
   </head>

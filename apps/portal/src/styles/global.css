@@ -6,9 +6,33 @@
  * **先于本文件**引入；portal 主色由 #FF8C42 收敛到 --ws-brand-500（#F97316），
  * 与小程序、admin 系同源。
  *
- * 本文件只保留两类内容：① 三栏外壳尺寸变量 ② 遗留页面的工具类（已 token 化）。
+ * 本文件只保留两类内容：① 基础 reset ② 三栏外壳尺寸变量 ③ 遗留页面的工具类（已 token 化）。
  * 新写样式一律引用 token 名，禁止裸 hex。
  * ============================================================= */
+
+/* ===== 基础 reset：补齐 @web-system/ui/theme.css 未覆盖的表单元素 =====
+ * theme.css 只有 `*` 盒模型 + html/body 基线，没有重置 <button>。
+ * 浏览器 UA 对 button 默认给「2px outset 边框 + 不继承字体 + ButtonFace 底色」，
+ * 于是所有没走 antd 的原生按钮（+ 新建 / 换一句 / 会话列表行 / 开始对话 …）
+ * 都会带上系统方框与系统字体 —— 与原型 prototype/index.html 的 reset 对齐。
+ */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
 
 :root {
   /* 三栏尺寸（page-spec §1） */
