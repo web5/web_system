@@ -260,7 +260,7 @@
 <div class="proto-head">
   <h1>deploy-console 双域重构 · 交互原型 v4</h1>
   <div class="sub">
-    上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：微前端/API 网关双域各挂入口，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
+    上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：<s>微前端/API 网关双域各挂入口</s> → <b>2026-09-21 对齐落地：只挂微前端域 <code>/deploys/micro</code></b>，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
     下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。
   </div>
 </div>
@@ -337,10 +337,11 @@
           </div>
         </div>
         <div class="dc-tabs">
+          <!-- 2026-09-21 对齐落地（AppDetail.vue）：**3 个 Tab** —— 原「环境」Tab 不存在
+               （环境由「环境管理」统一维护；「部署」Tab 已按环境展示版本） -->
           <div class="t2 active" id="t-app-1" onclick="pane('app',1)">概览</div>
           <div class="t2" id="t-app-2" onclick="pane('app',2)">路由</div>
-          <div class="t2" id="t-app-3" onclick="pane('app',3)">环境</div>
-          <div class="t2" id="t-app-4" onclick="pane('app',4)">部署</div>
+          <div class="t2" id="t-app-3" onclick="pane('app',3)">部署</div>
         </div>
         <div id="pane-app-1">
           <div class="dc-card"><div class="ct">基本信息</div>
@@ -366,26 +367,15 @@
             <div class="dc-row" style="margin-top:12px;"><button class="dc-btn">新增挂载</button><div class="dc-spacer"></div><button class="dc-btn primary" onclick="toast('已保存路由变更，需到「部署」发布后生效')">保存路由变更</button></div>
           </div>
         </div>
+        <!-- Tab 3 · 部署（2026-09-21 对齐落地：原「环境」Tab 已删，本表即原 pane-app-4） -->
         <div id="pane-app-3" style="display:none;">
-          <div class="dc-card"><div class="ct">应用 × 环境</div>
-            <table>
-              <thead><tr><th>环境</th><th>入口 URL</th><th>资源基址</th><th>shell 暴露</th></tr></thead>
-              <tbody>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/dev/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">1</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/1/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">https://portal.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/prod/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div id="pane-app-4" style="display:none;">
           <div class="dc-card"><div class="ct">各环境当前版本</div>
             <table>
               <thead><tr><th>环境</th><th>当前版本</th><th>发布时间</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:02</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">1</td><td class="dc-mono">d4e5f6</td><td class="dc-num">09-18 09:12</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-15 12:20</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:02</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','dev')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">1</td><td class="dc-mono">d4e5f6</td><td class="dc-num">09-18 09:12</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','1')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">prod</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-15 12:20</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','prod')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
               </tbody>
             </table>
           </div>
@@ -430,7 +420,7 @@
         </div>
       </div>
 
-      <!-- 版本部署（微前端 / API 网关双域共用，与发布流水线解耦） -->
+      <!-- 版本部署（**仅微前端域** `/deploys/micro`；2026-09-21 对齐落地，API 网关域无此入口） -->
       <div class="screen" id="dc-vdeploy">
         <div class="dc-page-head">
           <div class="dc-row">

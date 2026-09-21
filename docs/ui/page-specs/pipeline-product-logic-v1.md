@@ -46,9 +46,10 @@
 
 ## 1. Full · 编辑流水线（`PipelineEdit.vue`）
 
-> **导航归属（用户 2026-09-14 确认）**：流水线列表 / 流水线变量 / 编辑流水线 / 流水线详情
-> 四个入口收进侧边栏父菜单 **「流水线管理」**（可折叠子菜单），不再平铺 ——
-> 实现时 `deploy-console` 的 `MainLayout.vue` 菜单要同步调整为该结构。
+> **导航归属（用户 2026-09-14 确认；2026-09-21 核对：未采纳）**：原计划把 流水线列表 / 流水线变量 /
+> 编辑流水线 / 流水线详情 收进侧边栏父菜单 **「流水线管理」**（可折叠）。
+> **落地实际：`MainLayout.vue` 侧栏为平铺四项** —— 流水线列表 / 灰度管理 / 自助诊断 / 工具目录；
+> **没有「流水线变量」页**（变量在编辑页「变量」Tab）；「编辑流水线」「流水线详情」由列表行内进入。
 
 - 页面类型：详情页（分区信息块 + 关联列表）
 - 参照页：`PipelineDetail.vue`；原型 `release-platform-v10-pipeline-edit-page.html`
@@ -126,14 +127,14 @@
 | 项 | 配置中心（`ConfigCenter.vue`） | 流水线变量（新增） |
 |---|---|---|
 | 管什么 | 服务/模块的运行配置（global/env/module） | 流水线用的变量（**global + pipeline** 两级） |
-| 入口 | 配置中心页 | **流水线管理 → 流水线变量** |
+| 入口 | 配置中心页 | ~~流水线管理 → 流水线变量~~ → **落地：编辑流水线页「变量」Tab**（无独立变量页） |
 | 存储 | `config_items` | **新表 `deploy_pipeline_vars`**（不复用 config_items） |
 
 ### 2.2 两级作用域
 | 作用域 | 含义 | 典型键 | 存放处 |
 |---|---|---|---|
-| `global` | 所有流水线共用；跨流水线一致的值 | `PUBLISH_HOST`、`SSH_KEY` | 变量页 Tab「全局变量」 |
-| `pipeline` | 挂在**某一条流水线**上，可覆盖同名全局键 | `PUBLISH_PATH`、`BUILD_CMD` | 变量页 Tab「流水线变量」（选流水线）+ 编辑流水线页也会带出 |
+| `global` | 所有流水线共用；跨流水线一致的值 | `PUBLISH_HOST`、`SSH_KEY` | 落地：编辑页「变量」Tab 的 `global` 作用域 |
+| `pipeline` | 挂在**某一条流水线**上，可覆盖同名全局键 | `PUBLISH_PATH`、`BUILD_CMD` | 落地：编辑页「变量」Tab 的 `pipeline` 作用域（无独立变量页） |
 
 > 「流水线」= 发布流程定义（当前落在 `deploy_pipeline_templates` 表 / `pipeline-templates` API，历史上叫“模板”，实体上就是流水线本身）。
 > **不存在第三层模板**，`scope` 的取值因此是 `global | pipeline`，**没有 `template`**。
@@ -238,7 +239,7 @@
 | 3 | 发布参数变量化后旧脚本是否同步改 | **同步改**：脚本一律引用 `${PUBLISH_PATH}` 等变量，不再写死默认值（否则"改变量不生效"） |
 | 4 | `onReject=rollback` 是否置灰禁用 | **不接受禁用** → **本期实现**：拒绝且 `onReject=rollback` 时执行回滚（见 §8） |
 | 5 | 是否出可点击 HTML 原型 | **出**：由 `ux-prototype-designer` 产出，过目后再写代码 |
-| 6 | 侧边栏菜单结构 | 流水线列表 / 流水线变量 / 编辑流水线 / 流水线详情 收进父菜单 **「流水线管理」**，`MainLayout.vue` 同批调整 |
+| 6 | 侧边栏菜单结构 | 原决策：收进父菜单 **「流水线管理」**；**落地（2026-09-21 核对）：未采纳 —— 侧栏平铺「流水线列表 / 灰度管理 / 自助诊断 / 工具目录」，且无「流水线变量」页** |
 
 ## 9. 流水线边界调整（用户 2026-09-14 确认）
 
@@ -255,7 +256,11 @@
 - **切指针与验证不再是流水线节点**：部署 = 调用改指针接口，归「模块管理 → 环境部署」；
   **本期不做自动探活验证**，部署后人工确认；后续接 AI 验证 agent，在该子模块加「AI 验证」按钮下发验证任务
 
-### 9.2 模块管理（新页面组，三子模块）
+### 9.2 模块管理（新页面组，三子模块）—— ⚠️ 2026-09-21 核对：**未落地**
+
+> **落地实际**：`/modules*` 已下线，改由**双域重构**取代 —— 微前端域「应用管理 `/apps`」+
+> 「环境管理 `/environments`」+「版本部署 `/deploys/micro`」；API 网关域「服务管理 `/services`」。
+> 本节仅作设计过程记录，**不要再当落地依据**。
 
 承接被移出的动作，按「一个模块」视角组织：
 
@@ -293,7 +298,7 @@
 
 ## 10. Quick · 流水线列表默认排序（用户 2026-09-21 提出）
 
-- 页面/组件：`apps/deploy-console/src/views/PipelineCenter.vue`（流水线记录表格，路由 `#/pipelines`）
+- 页面/组件：`apps/deploy-console/src/views/PipelineCenter.vue`（流水线记录表格，路由 `/console/pipelines`；history 模式，非 `#/`）
 - 改动：列表**默认按最近一次执行时间倒序**（`latest.startTime` 降序，最新在最上）；**从未执行**（无实例）的流水线统一排在末尾。
 - 保持：筛选条（关键词 / 模块 / 环境 / 类型 / 状态）与分页（15 条）不变；**不新增排序控件**，只改默认顺序。
 - 排序稳定性：时间相同时（或均无实例）按现有顺序（模块 × 流水线）稳定排列，避免每次刷新跳行。
@@ -322,7 +327,7 @@
 ## 12. 服务详情页「构建发布」就地发起（用户 2026-09-21 提出）
 
 - 页面/组件：`apps/deploy-console/src/views/ServiceDetail.vue`（页头「构建发布」+「环境与发布」tab 行内按钮）
-- 现状（问题）：点「构建发布」执行 `router.push({ name: 'PipelineCenter', query: { module, env } })`，
+- 现状（问题，**已于 2026-09-21 修复**）：原实现点「构建发布」执行 `router.push({ name: 'PipelineCenter', query: { module, env } })`，
   跳到流水线页后由 `PipelineCenter.onMounted` 读 query 打开「发起发布」抽屉 —— 用户被**带离当前服务上下文**。
 - 目标（用户原话）：「这里点击构建发布，会出来抽屉，但是不要跳到流水线页面去」→
   **原地打开同一个「发起发布」抽屉**，路由不变；提交成功后停留原页（Toast 反馈）。
@@ -340,6 +345,7 @@
 - 涉及 Token：无（复用现有抽屉与表单样式）
 - 原型：`docs/ui/prototypes/deploy-console-domain-split.html`（服务详情屏「构建发布」→ 原地抽屉，含打开/关闭/提交三步）
 - 门禁：UI 动作门 —— 交互变更（非纯视觉微调），原型 + 规格先行，**人审确认后**再落码
-- 实现提示（待确认）：抽屉当前内联在 `PipelineCenter.vue`（约 140 行模板 + 一批仅抽屉用的状态）。
-  建议抽为共用组件 `components/pipeline/PipelineSubmitDrawer.vue`，由 `PipelineCenter`（模块可选）与
-  `ServiceDetail`（模块锁定）共用，避免第三份实现。
+- **实现结果（2026-09-21 已发布）**：抽屉抽为共用组件 `components/pipeline/PipelineSubmitDrawer.vue`
+  （锁定参数：`fixedModuleKey` / `initialModuleKey` / `fixedTemplateId` + `fixedTemplateEnv` / `defaultEnv` + `lockEnv`），
+  由 `ServiceDetail`（原地打开、模块锁定、行内锁环境）与 `PipelineCenter`（模块预选或锁定、流水线可锁）共用。
+  原型/规格 commit `016309d`，落地 commit `cacaf34`（message 含 `Proto: 016309d`）。
