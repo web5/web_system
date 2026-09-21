@@ -316,3 +316,26 @@
 - 涉及 Token：无（仅位置调整，颜色沿用 `--ws-border/--ws-text-tertiary/--ws-error-500`）
 - 原型：`docs/ui/prototypes/pipeline-env-branch-canvas.html`（动作行补入原型 + 文件头「微调豁免」记录）
 - 门禁：按 UI 动作门「纯视觉微调」豁免路径（原型内记一行豁免说明，未走原型先行人审）
+
+---
+
+## 12. 服务详情页「构建发布」就地发起（用户 2026-09-21 提出）
+
+- 页面/组件：`apps/deploy-console/src/views/ServiceDetail.vue`（页头「构建发布」+「环境与发布」tab 行内按钮）
+- 现状（问题）：点「构建发布」执行 `router.push({ name: 'PipelineCenter', query: { module, env } })`，
+  跳到流水线页后由 `PipelineCenter.onMounted` 读 query 打开「发起发布」抽屉 —— 用户被**带离当前服务上下文**。
+- 目标（用户原话）：「这里点击构建发布，会出来抽屉，但是不要跳到流水线页面去」→
+  **原地打开同一个「发起发布」抽屉**，路由不变；提交成功后停留原页（Toast 反馈）。
+- 交互规格：
+  - 入口：页头「构建发布」（默认环境 = 该服务可发布环境的第一项）；行内「构建发布」同义
+    （环境 = 该行 `envId`，进抽屉后不可改）。
+  - 抽屉字段与流水线页的「发起发布」**完全一致**（环境 / 模块 / 使用流水线 / 分支 / Commit / 模式 /
+    灰度规则 / 投递提示）；差异仅一处：**模块锁定为当前服务**（只读展示，不允许改选）。
+  - 打开 / 关闭 / 提交**都不改变路由**；关闭后回到服务详情页原状态（tab 与滚动位置不变）。
+  - 失败态：提交失败在抽屉内报错且**不关抽屉**，可在原抽屉直接重试。
+- 涉及 Token：无（复用现有抽屉与表单样式）
+- 原型：`docs/ui/prototypes/deploy-console-domain-split.html`（服务详情屏「构建发布」→ 原地抽屉，含打开/关闭/提交三步）
+- 门禁：UI 动作门 —— 交互变更（非纯视觉微调），原型 + 规格先行，**人审确认后**再落码
+- 实现提示（待确认）：抽屉当前内联在 `PipelineCenter.vue`（约 140 行模板 + 一批仅抽屉用的状态）。
+  建议抽为共用组件 `components/pipeline/PipelineSubmitDrawer.vue`，由 `PipelineCenter`（模块可选）与
+  `ServiceDetail`（模块锁定）共用，避免第三份实现。
