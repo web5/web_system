@@ -28,16 +28,25 @@ export class AgentConversationQueryService {
     private readonly repo: Repository<AgentConversation>,
   ) {}
 
-  /** 当前用户对话列表（updatedAt 倒序，分页；只查轻量列） */
+  /**
+   * 当前用户对话列表（updatedAt 倒序，分页；只查轻量列）。
+   * 只返回**主对话**（source='chat'）—— 工具页（翻译 / 合同）产生的会话各有自己的历史入口，
+   * 混进来会干扰主对话浏览。
+   */
   async listConversations(userId: string, page: number, pageSize: number): Promise<ConversationListResult> {
     const [rows, total] = await this.repo.findAndCount({
-      where: { userId },
+      where: { userId, source: 'chat' },
       order: { updatedAt: 'DESC' },
       select: ['id', 'title', 'meta', 'createdAt', 'updatedAt'],
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
     return { list: rows, total };
+  }
+
+  /** 标记会话来源（工具页调用；带 userId 条件，防止改到他人会话） */
+  async markSource(userId: string, conversationId: string, source: 'chat' | 'tool'): Promise<void> {
+    await this.repo.update({ id: conversationId, userId }, { source });
   }
 
   /** 详情：仅当会话属于该用户时返回，否则 null（controller 转 404） */

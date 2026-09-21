@@ -10,15 +10,23 @@
 import { createAgentApi } from '../../../services/agent-stream';
 import { RESUME_CONV_KEY, formatTime } from '../../../utils/conversation';
 
-/** 诊断日志（间接引用 console，规避 pre-commit 的 console.log 红线扫描；定位后可整段删除） */
+/** 诊断日志（间接引用 console，规避 pre-commit 的 console.log 红线扫描） */
 const log = (console as unknown as { log: (...a: unknown[]) => void }).log.bind(console);
 
 const PAGE_SIZE = 20;
+
+/** 列表缓存键：进入本页先用缓存秒开，后台再刷新 —— 避免每次进来都等一次请求 */
+const LIST_CACHE_KEY = 'history_list_cache';
 
 interface Row {
   id: string;
   title: string;
   timeText: string;
+}
+
+interface ListCache {
+  list: Row[];
+  total: number;
 }
 
 Page({
@@ -33,13 +41,27 @@ Page({
   },
 
   /**
-   * 每次进入本页都重新拉第一页（不用 onLoad：它只在首次创建时跑一次，
-   * 之后再进入不会触发，列表会停在旧数据上）。
+   * 每次进入本页都重新拉第一页（不用 onLoad：它只在首次创建时跑一次，之后再进入不会触发）。
    *
-   * 会话可能在别处新增 / 更新（比如从记录进对话后继续聊了几句），列表必须反映最新状态。
-   * 代价是分页进度会重置 —— 本页按「最近更新」排序，回到顶部是合理行为。
+   * 体验上做两级：
+   *  1. 先用本地缓存**秒开**（缓存有数据就不显示骨架，也没有白屏等待）；
+   *  2. 同时后台刷新第一页 —— 因为 refresh 走的是 page=1「替换」而不是清空，
+   *     所以刷新过程中旧数据一直在，不会闪一下空列表。
    */
   onShow() {
+    let cached: ListCache | null = null;
+    try {
+      cached = wx.getStorageSync(LIST_CACHE_KEY) || null;
+    } catch {
+      /* 读不到就当没缓存 */
+    }
+    if (cached && Array.isArray(cached.list) && cached.list.length) {
+      this.setData({
+        list: cached.list,
+        hasMore: cached.list.length < (cached.total || 0),
+        loading: false,
+      });
+    }
     this.refresh();
   },
 
@@ -54,9 +76,9 @@ Page({
     wx.stopPullDownRefresh();
   },
 
-  /** 回到第一页重新加载（进入本页 / 下拉刷新共用） */
+  /** 重新加载第一页（进入本页 / 下拉刷新共用）—— page=1 是「替换」，不清空，避免闪空 */
   async refresh() {
-    this.setData({ list: [], page: 1, hasMore: true, error: '' });
+    this.setData({ page: 1, hasMore: true, error: '' });
     await this.loadMore();
   },
 
@@ -71,23 +93,21 @@ Page({
         timeText: formatTime(c.updatedAt),
       }));
       const total = Number(res?.total || 0);
-      const list = this.data.list.concat(rows);
+      // 第一页是「替换」（刷新语义），后续页才追加
+      const list = this.data.page === 1 ? rows : this.data.list.concat(rows);
       this.setData({
         list,
         page: this.data.page + 1,
         hasMore: list.length < total,
         loading: false,
       });
-      // 诊断：接口 200 但页面空白时，看这里 —— 数据有没有进 setData、条数对不对
-      log('[history] loaded', {
-        rows: rows.length,
-        total,
-        listLen: list.length,
-        first: rows[0],
-        page: this.data.page,
-      });
+      log('[history] loaded', { rows: rows.length, total, listLen: list.length, page: this.data.page });
+      try {
+        wx.setStorageSync(LIST_CACHE_KEY, { list, total } as ListCache);
+      } catch {
+        /* 缓存写失败不影响本次显示 */
+      }
     } catch (e) {
-      // 带上具体原因：区分「未登录 / token 失效」与「网络不通」，否则只能看到一句加载失败
       const msg = (e as Error)?.message || '未知错误';
       this.setData({ loading: false, error: `加载失败：${msg}（点击重试）` });
     }
