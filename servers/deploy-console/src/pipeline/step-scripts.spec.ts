@@ -12,16 +12,14 @@ import {
  *
  * 背景（2026-09-15 用户决定）：**git 不再是平台托管节点** —— 拉取代码是普通 shell 节点，
  * 脚本存在 DB、页面可编辑，git 的登录/密钥/权限归「git 信息维护层」。
- * 于是这里锁死两条边界：
- *  ① 托管清单（随代码同步、接口拒写）**只剩 restart / verify**，git 不在其中；
- *  ② git 作为「默认脚本」仍要可读、语法正确、四道 fail-fast 校验齐备（新建流水线时的初始值）。
+ *
+ * 2026-09-21（`specs/pipeline-restart-verify-as-action/design.md`）：**restart / verify 也退出托管**
+ * —— 下沉为发布流水线里的 DB action 脚本，托管清单因此为空；git 仍是「默认脚本」，
+ * 要求可读、语法正确、四道 fail-fast 校验齐备（新建流水线时的初始值）。
  */
 describe('脚本清单与正文 step-scripts', () => {
-  it('平台托管清单只剩 restart / verify（git 已交还运维）', () => {
-    const keys = PLATFORM_STEP_SCRIPTS.map((s) => s.nodeKey);
-    expect(keys).not.toContain('git');
-    expect(keys).toEqual(expect.arrayContaining(['restart', 'verify']));
-    for (const k of keys) expect(getPlatformStepScript(k).length).toBeGreaterThan(50);
+  it('平台托管清单为空：restart / verify 已下沉为 DB action（护栏）', () => {
+    expect(PLATFORM_STEP_SCRIPTS).toHaveLength(0);
   });
 
   it('git 在默认脚本清单里，正文可读且足够完整', () => {

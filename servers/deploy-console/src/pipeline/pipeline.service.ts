@@ -249,10 +249,22 @@ export interface StageVarsInput {
   /** 删除策略：mv=改名到临时目录（规避批量删除审批）/ rm=直接删除 */
   safeDelete?: 'mv' | 'rm';
   /**
-   * 平台脚本目录（随 console 分发的实现脚本，如 restart-backend.sh）。
-   * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
+   * 平台脚本目录（随 console 分发的实现脚本，如 write-version.mjs）。
+   * 不下发则脚本找不到平台工具 —— 它们是平台能力，不该依赖发布分支。
    */
   platformScriptsDir?: string;
+  /**
+   * 发布平台自身的 API 基址（`http://127.0.0.1:<console PORT>/api`），注入为 `CONSOLE_API`。
+   *
+   * 用途：动作脚本用 **curl 调平台内部接口**（如写版本 / 切指针），而不是直连数据库或
+   * 依赖 `*.mjs` 平台工具 —— 见 `specs/pipeline-restart-verify-as-action/design.md` §2.4。
+   */
+  consoleApi?: string;
+  /**
+   * 脚本调用平台内部接口的凭据（`INTERNAL_API_KEY`），注入为 `CONSOLE_TOKEN`，
+   * 通过 `x-internal-key` 头鉴权（与 `/api/internal/release/*` 一致）。
+   */
+  consoleToken?: string;
   /**
    * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
    * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
@@ -276,6 +288,10 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   'BRANCH',
   'STAGE',
   'RELEASE_DIR',
+  // 平台凭据：脚本 curl 调平台内部接口用。被配置中心/流水线变量覆盖会导致
+  // 「脚本调用 401」或「脚本指向别的 console」这类难以定位的发布失败。
+  'CONSOLE_API',
+  'CONSOLE_TOKEN',
 ];
 
 /**
@@ -337,6 +353,10 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
     WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
+    // 平台自身接口 + 凭据：动作脚本用 `curl $CONSOLE_API/internal/release/*`
+    // 调平台（写版本 / 切指针），脚本自包含、不直连数据库
+    CONSOLE_API: i.consoleApi ?? '',
+    CONSOLE_TOKEN: i.consoleToken ?? '',
   };
 
   // P0（2026-09-20）：配置中心全量注入。
@@ -464,6 +484,17 @@ export class PipelineService {
     @Inject(PIPELINE_BUILTIN_STEPS)
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
   ) {}
+
+  /**
+   * 平台自身 API 基址（注入给动作脚本的 `CONSOLE_API`）。
+   *
+   * 用 127.0.0.1 而非 localhost：本机服务只监听 IPv4，localhost 解析到 IPv6 时连不上
+   * （历史踩坑：Node fetch 访问 :6000 直接被拒）。
+   */
+  private consoleApiBase(): string {
+    const port = this.configService.get<string>('PORT') || '6200';
+    return `http://127.0.0.1:${port}/api`;
+  }
 
   /**
    * 发布目录（RELEASE_WORKSPACE）：
@@ -1582,6 +1613,8 @@ export class PipelineService {
         gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
         safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
         platformScriptsDir: platformScriptsDir(),
+        consoleApi: this.consoleApiBase(),
+        consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
         pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
       });
       return { ...env, ...inject };
@@ -2085,6 +2118,8 @@ export class PipelineService {
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       platformScriptsDir: platformScriptsDir(),
+      consoleApi: this.consoleApiBase(),
+      consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });
