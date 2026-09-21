@@ -19,13 +19,12 @@ import { StepContext } from './step.types';
  * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
  */
 /**
- * 共享包清单。`@web-system/ui` 于 2026-09-21 纳入：portal 发布构建报
- * `Rollup failed to resolve import "@web-system/ui/tokens.css"` —— ui 包 dist 未构建
- * （且当时 node_modules 缺 ui 的 workspace 链接，见 afterSync 的依赖同步告警）。
- * ui 的 `tokens.css` / `theme.css` 是源文件直出（package.json exports 指向 src/），
- * 构建（tsc）主要产出 JS 主入口；放流水线级与 shared/types 同一竞态考量。
+ * 共享包清单只收 shared/types 两个**被 main 指向 dist 的全局公共依赖**。
+ * ⚠️ 模块级依赖（如 @web-system/ui）**不进这份清单**（2026-09-21 用户定）：
+ * 依赖谁、要不要先构建，是**模块自己的事** → 写在各自流水线 build 节点脚本里
+ * （deploy_pipeline_step_commands，页面可编辑）；工厂内置清单会随依赖增长越收越耦合。
  */
-const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types', '@web-system/ui'];
+const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
 
 /**
  * pull 内置步骤执行体（category=code）——「拉码」的回退实现。
