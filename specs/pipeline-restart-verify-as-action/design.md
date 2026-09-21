@@ -628,5 +628,8 @@ log "验证通过: $MODULE_KEY"
 
 - **云库（dev / 堡垒机共用）未同步**：那边模板的 restart / verify 与 build 动作仍是旧状态；
   同步前不要在云库 console 上用流水线发后端模块（会停在旧行为或构建失败）。
-- 控制台「服务详情 → 部署」入口尚未下线（后端接口按 Q2 保留为应急手段）。
+- 控制台「服务详情 → 部署」入口**已于同日下线**（提交 `95382c2`）：删除
+  `POST /api/services/:key/deploy`、`ServicesService.deploy/restartLocal`、前端 `servicesApi.deploy`
+  与服务详情页的部署按钮/选版本弹窗；脚本侧改由 `/api/internal/release/{versions,pointer}` 承担。
+  （待办：服务详情页剩余文案「部署 / 待部署」建议随后统一为「发布生效」口径。）
 - `node-approval.spec.ts` 与 `PipelineService` 依赖漂移导致的既有单测失败（本次未触碰）。
