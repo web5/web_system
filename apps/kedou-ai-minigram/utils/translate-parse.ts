@@ -67,6 +67,99 @@ export function buildTranslateCardView(raw: string): CardView {
   return { main, note, text };
 }
 
+/**
+ * 历史消息的「翻译官回复」启发式补判（后端 getConversation 不回传 intent）。
+ *
+ * 判定标准（满足全部三条才套卡片，宁缺勿滥）：
+ * 1. 含段落标记【推荐译文】—— 契约出参，最可靠；
+ * 2. 或：以拉丁句子开头（首个非空字符是英文字母），且其后出现中文说明；
+ *    —— 翻译官的典型形态「Thank you. 更正式用 …」。
+ * 纯中文回复、纯英文闲聊、代码块等都不命中，保持纯文本。
+ */
+export function looksLikeTranslateReply(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.indexOf('【推荐译文】') >= 0) return true;
+  // 句首是英文字母 + 后面有中文（说明层）
+  if (!/^[A-Za-z]/.test(t)) return false;
+  const idx = t.search(/[\u4e00-\u9fa5]/);
+  if (idx < 0) return false; // 纯英文：不是翻译回复形态
+  return /[A-Za-z]{2,}/.test(t.slice(0, idx));
+}
+
+/** 句末标点（中英）：流式朗读的切分点 */
+const SENTENCE_END = '.!?;。！？；…';
+
+/** 单块文本上限（腾讯云 TTS 单次 150 字符，留余量） */
+const SPEAK_CHUNK_MAX = 110;
+
+/**
+ * 文本 → 朗读块序列（流式朗读用）。
+ * 按句末标点切句；**首句单独成块**（首块越短，用户越快听到声音），
+ * 其余句子合并到不超过上限；超长单句在**空格处**硬切（不切碎单词）。
+ */
+export function splitSpeakChunks(text: string): string[] {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return [];
+
+  // 1) 切句：句末标点处断开（不用正则 lookbehind —— iOS JSCore 旧版本不支持）
+  const sentences: string[] = [];
+  let buf = '';
+  for (const ch of t) {
+    buf += ch;
+    if (SENTENCE_END.indexOf(ch) >= 0) {
+      const s = buf.trim();
+      if (s) sentences.push(s);
+      buf = '';
+    }
+  }
+  if (buf.trim()) sentences.push(buf.trim());
+  if (!sentences.length) return [];
+
+  const chunks: string[] = [];
+  /** 超长单句在空格处硬切成 ≤ 上限的小块 */
+  const pushSentence = (s: string) => {
+    let seg = s;
+    while (seg.length > SPEAK_CHUNK_MAX) {
+      let cut = seg.lastIndexOf(' ', SPEAK_CHUNK_MAX);
+      if (cut < SPEAK_CHUNK_MAX * 0.5) cut = SPEAK_CHUNK_MAX; // 前半段没有空格：只能硬切
+      const piece = seg.slice(0, cut).trim();
+      if (piece) chunks.push(piece);
+      seg = seg.slice(cut).trim();
+    }
+    if (seg) chunks.push(seg);
+  };
+
+  // 2) 首句单独成块：首播等待 ≈ 首句的合成时间
+  pushSentence(sentences[0]);
+
+  // 3) 其余句子合并（≤ 上限，减少请求次数）
+  let cur = '';
+  for (let i = 1; i < sentences.length; i++) {
+    const s = sentences[i];
+    if (s.length > SPEAK_CHUNK_MAX) {
+      if (cur) {
+        chunks.push(cur);
+        cur = '';
+      }
+      pushSentence(s);
+      continue;
+    }
+    if (!cur) {
+      cur = s;
+    } else if (cur.length + 1 + s.length <= SPEAK_CHUNK_MAX) {
+      cur = `${cur} ${s}`;
+    } else {
+      chunks.push(cur);
+      cur = s;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
 /** 首个中文字（含中日韩标点）出现处切一刀：前面是英文主句，后面是中文说明 */
 function splitLeadingLatin(text: string): { main: string; note: string } {
   const t = (text || '').trim();
