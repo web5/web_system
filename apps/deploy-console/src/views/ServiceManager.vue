@@ -100,18 +100,6 @@ async function probe(row: ServiceRow, envId: string) {
   }
 }
 
-/** 部署：跳「版本部署」（API 网关域）并预选该服务直接打开选版本抽屉；构建新版本走「发布流水线」 */
-function deploy(row: ServiceRow) {
-  if (row.deployChannel === 'legacy') {
-    message.warning('该服务走传统发布通道（legacy），不由流水线托管')
-    return
-  }
-  router.push({
-    name: 'VersionDeployBackend',
-    query: { module: row.key, env: row.configuredEnvs?.[0] || 'dev' },
-  })
-}
-
 // ---------- 新建服务（key 创建后不可改） ----------
 const formOpen = ref(false)
 const saving = ref(false)
@@ -254,8 +242,8 @@ onMounted(load)
           </template>
           <template v-else-if="column.key === 'action'">
             <a type="link" @click="goDetail(record.key)">详情</a>
+            <a-divider type="vertical" />
             <a type="link" @click="probe(record, 'dev')">探活</a>
-            <a type="link" :disabled="record.deployChannel === 'legacy'" @click="deploy(record)">部署</a>
           </template>
         </template>
       </a-table>
