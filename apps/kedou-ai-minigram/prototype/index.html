@@ -181,9 +181,9 @@
   .sugs span:active { background: var(--brand-soft); color: var(--brand-txt); }
   .composer { flex: none; display: flex; align-items: center; gap: 9px; padding: 9px 14px 12px; background: var(--nav-bg); border-top: .5px solid var(--line); }
   .composer .plus { width: 32px; height: 32px; border-radius: 50%; background: var(--page-bg); display: flex; align-items: center; justify-content: center; font-size: 19px; color: var(--t2); flex: none; cursor: pointer; }
-  /* 输入区用 textarea：原型必须能真实反映「多行换行行距」（行高与单行高度解耦） */
-  .composer textarea { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
-  .composer textarea::placeholder { color: var(--t3); }
+  /* 输入区为单行 input（与真机一致）：回车 / 键盘「发送」直接发送，回车不再换行 */
+  .composer input { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
+  .composer input::placeholder { color: var(--t3); }
   .composer .send { width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: var(--card); display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; cursor: pointer; transition: background .18s; }
   .composer .send.on { background: var(--brand); color: #fff; }
 
@@ -335,6 +335,12 @@
   .ctrls { display: flex; gap: 9px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
   .ctrls button { font-family: inherit; font-size: 12.5px; color: var(--t2); background: var(--card); border: .5px solid var(--line); border-radius: 10px; padding: 8px 16px; cursor: pointer; }
   .ctrls button.on { color: var(--brand); border-color: var(--brand); }
+  /* 意图路由徽标：标出本轮由哪个 agent 作答（与小程序 currentAgent 一致） */
+  .agent-badge { display:flex; align-items:center; justify-content:center; gap:5px; margin:0 auto 12px; width:fit-content; padding:4px 11px; border-radius:999px; background:var(--brand-50); color:var(--brand); font-size:10.5px; }
+  .agent-badge .ab-dot { width:5px; height:5px; border-radius:50%; background:var(--brand); }
+  /* 载入历史会话时的占位气泡 */
+  .bub.loading { color: var(--t3); }
+
   /* 骨架占位：最近对话「加载中」的占位条。用 --t3 token 做脉冲，不引入裸 hex */
   .sk {
     background: var(--t3);
@@ -364,6 +370,8 @@
   <div style="margin-top:12px;font-size:12.5px;color:var(--t2);line-height:1.9">
     <b>演示入口</b>（点击直接看状态矩阵；对话正常发送也会先经过「正在思考」）：
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showChatFail('send')">对话 · 发送失败</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showIntentBadge('语言翻译官')">意图徽标</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showLoadingBubble()">载入占位</u> ·
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showChatFail('stream')">对话 · 回复中断</u> ·
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showTranslateFail()">翻译 · 失败态</u>
     <div style="margin-top:8px;color:var(--t2)">
@@ -396,6 +404,7 @@
     <div style="font-size:11.5px;color:var(--t2);margin-top:8px">
       对话页右上角当前用的就是 <b>B</b>（18px）。大小按返回箭头等量调整后仍偏小的，可在 C 与 B 之间定。
     </div>
+    <div style="margin-top:12px;font-size:12px"><a href="hub.html" style="color:var(--brand-txt);text-decoration:none">← 原型总入口（hub.html）· 各功能页面原型稿索引</a></div>
   </div>
 </div>
 
@@ -471,9 +480,7 @@
             <div class="av">豆</div>
             <div class="bd">
               <div class="bub">
-                <span class="daily">今日一句</span>
-                我们无法决定风的方向，但可以调整帆的角度。
-                <span class="en">We cannot direct the wind, but we can adjust the sails.</span>
+                科豆 AI · 体验不一样的 AI
               </div>
               <div class="meta">内容由 AI 生成 · 09:41</div>
             </div>
@@ -486,7 +493,7 @@
         </div>
         <div class="composer">
           <div class="plus" onclick="openPlusMenu()">+</div>
-          <textarea id="cinp" rows="1" placeholder="问问科豆…" oninput="onType()"></textarea>
+          <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter'){event.preventDefault();send();}" />
           <div class="send" id="sendBtn" onclick="send()">↑</div>
         </div>
       </div>
@@ -643,6 +650,7 @@
             <u onclick="wxToast('已复制到剪贴板')">复制</u>
             <u onclick="wxToast('朗读：TTS 合成中')">朗读</u>
             <u onclick="wxToast('已收进生词本')">收藏</u>
+            <u onclick="showForward()">转发</u>
             <u onclick="showAction()">更多</u>
           </div>
         </div>
@@ -974,6 +982,8 @@ var cur = { src: '中文', tgt: '英语', reg: '正式', sty: '完整', tab: 'ch
 
 /* 对话演示回复 */
 var DAILY = { cn: '我们无法决定风的方向，但可以调整帆的角度。', en: 'We cannot direct the wind, but we can adjust the sails.' };
+/** 新会话首屏的统一欢迎语（替代「今日一句」：用户还没开始对话时，给一句稳定的招呼） */
+var WELCOME_GREETING = '科豆 AI · 体验不一样的 AI';
 var REPLY = {
   '帮我翻一句话': { cn: '直接把要翻的内容发给我就行。如果要三版译文和语气点评，去「发现」页用「语言翻译官」——支持中英日德，还会告诉你哪句更得体、哪句容易冒犯人。', en: '' },
   '看看合同风险': { cn: '把合同文本粘贴过来我先扫一遍。完整流程在「发现」页的「合同评估」：上传后按条款逐条标出高风险点，并给出可直接改的建议文案。', en: '' },
@@ -1019,6 +1029,23 @@ function showPicker(title, opts, curVal) {
 var ACTION_HTML = ['复制译文', '加入生词本', '生成分享图', '举报'];
 function showAction() {
   openSheet('译文操作', ACTION_HTML.map(function (o) { return { label: o }; }), function (v) { wxToast(v + '（演示）'); });
+}
+
+/* ---------- 转发（极简文本式卡片） ----------
+ * 真机：button open-type="share" 拉起微信原生转发面板；卡片标题=译文、缩略图=白底译文。
+ * 原型演示：sheet 模拟「选择一个聊天」→ toast 说明好友视角卡片 + 落地。
+ * 卡片底部「小程序名」灰字为微信强制展示（原型以提示语说明，不伪装可去除）。
+ */
+function showForward() {
+  var text = ($('rNatural').textContent || '').trim();
+  if (!text) { wxToast('译文未就绪，不能转发'); return; }
+  openSheet('选择一个聊天', [
+    { label: '张同学' },
+    { label: '李老师' },
+    { label: 'AI 学习群' },
+  ], function (v) {
+    wxToast('已发给 ' + v + '：卡片标题即译文「' + (text.length > 20 ? text.slice(0, 20) + '…' : text) + '」，缩略图白底显译文，好友不点开即可读');
+  });
 }
 
 /* ---------- 对话输入区「+」菜单 ----------
@@ -1277,10 +1304,14 @@ function typeIn(el, text, en) {
     }
   }, 18);
 }
+function showIntentBadge(name){var m=$('msgs');var b=document.createElement('div');b.className='agent-badge';b.innerHTML='<span class="ab-dot"></span>'+name+' 作答';m.insertBefore(b,m.firstChild);}
+function showLoadingBubble(){var m=$('msgs');var d=document.createElement('div');d.className='msg ai';d.innerHTML='<div class="av">豆</div><div class="bd"><div class="bub loading">正在载入…</div></div>';m.appendChild(d);m.scrollTop=m.scrollHeight;}
+
 function newChat() {
+  // 新会话首屏 = 统一欢迎语（不再是「今日一句」）：用户没开始对话时，先给一句稳定的招呼
   $('msgs').innerHTML =
     '<div class="msg ai"><div class="av">豆</div><div class="bd">' +
-    '<div class="bub"><span class="daily">今日一句</span>' + DAILY.cn + '<span class="en">' + DAILY.en + '</span></div>' +
+    '<div class="bub">' + WELCOME_GREETING + '</div>' +
     '<div class="meta">内容由 AI 生成 · ' + now() + '</div></div></div>' +
     '<div class="sugs" id="sugs">' +
     '<span onclick="ask(\'帮我翻一句话\')">帮我翻一句话</span>' +
