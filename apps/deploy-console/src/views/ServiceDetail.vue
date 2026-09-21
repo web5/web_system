@@ -399,7 +399,7 @@ const envColumns: TableColumnsType = [
   { title: '目标主机', key: 'hostName', width: 160 },
   { title: '端口', key: 'port', width: 90, align: 'right' },
   { title: '副本', key: 'replicas', width: 70, align: 'right' },
-  { title: '上游覆盖', key: 'upstreamUrl' },
+  { title: '上游覆盖', key: 'upstreamUrl', width: 170 },
   { title: '状态', key: 'status', width: 110 },
   // 三个入口（构建发布 | 配置指向 | 探活）要在一行内显示，故列宽不能太小
   { title: '操作', key: 'action', width: 230 },
