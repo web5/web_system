@@ -571,10 +571,8 @@ onMounted(load)
           </a-table>
 
           <p class="hint">
-            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 →
-            <b>后端由流水线的 restart（落地 + 干净重启）/ verify（探活通过后切指针）直接生效</b>，
-            <b>前端切指针即生效</b> —— 自 2026-09-21 起控制台不再需要单独的「部署」动作。<br />
-            验证不通过则指针不前进，旧版本继续对外服务；服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
+            此页只登记治理元数据（鉴权 / 权限码 / 限流 / 摘要），修改<b>不会</b>改变转发行为；
+            导入按 <code>serviceKey + method + pathPattern</code> 幂等，<b>只补空字段、不覆盖人工配置</b>。
           </p>
         </a-tab-pane>
 
@@ -780,8 +778,7 @@ onMounted(load)
               { title: '环境', key: 'envId', width: 150 },
               { title: '目标', key: 'target' },
               { title: '运行时', key: 'runtime', width: 120 },
-              { title: '状态', key: 'status', width: 130 },
-              { title: '操作', key: 'action', width: 140 },
+              { title: '操作', key: 'action', width: 180 },
             ]"
             :data-source="svcEnvs"
             row-key="envId"
@@ -796,28 +793,22 @@ onMounted(load)
                 <span v-if="record.configured" class="ws-mono">
                   {{ record.upstreamUrl || `${record.hostAddress}:${record.port ?? '—'}` }}
                 </span>
-                <span v-else class="muted">未配置指向（部署会 fail-fast）</span>
+                <span v-else class="muted">未配置指向</span>
               </template>
               <template v-else-if="column.key === 'runtime'">
                 <span class="muted">{{ record.runtime || '继承' }}</span>
               </template>
-              <template v-else-if="column.key === 'status'">
-                <a-badge v-if="!record.configured" status="warning" text="未配置" />
-                <a-badge v-else status="default" text="待部署" />
-              </template>
               <template v-else-if="column.key === 'action'">
                 <a type="link" @click="publish(record.envId)">构建发布</a>
-                <a-divider type="vertical" />
                 <a-divider type="vertical" />
                 <a type="link" @click="probe(record.envId)">探活</a>
               </template>
             </template>
           </a-table>
           <p class="hint">
-            <b>构建发布走流水线</b>（拉码 → 构建 → 上传产物，<b>不动进程</b>），产物上传后<b>不会自动生效</b>；
-            <b>部署是独立动作</b>（重启进程 + 探活），探活失败即判失败。<br />
-            两者分离，是为了让「已上传但未重启」成为<b>可见的中间态</b>，而不是"以为发了其实还在跑旧代码"。
-            服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
+            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/
+            verify（探活通过后切指针）直接生效，<b>前端切指针即生效</b> —— 流水线跑完即上线。<br />
+            验证不通过则指针不前进，旧版本继续对外服务；服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
           </p>
         </a-tab-pane>
       </a-tabs>
