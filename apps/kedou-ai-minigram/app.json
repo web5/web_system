@@ -1,53 +1,86 @@
 {
   "pages": [
     "pages/welcome/index/index",
-    "pages/translate/index/index",
-    "pages/translate/result/result",
-    "pages/translate/settings/settings",
-    "pages/translate/history/history",
-    "pages/assess/index/index",
-    "pages/assess/result/result",
-    "pages/assess/settings/settings",
+    "pages/chat/index/index",
+    "pages/chat/history/history",
+    "pages/discover/index/index",
     "pages/mine/index/index",
     "pages/mine/profile/profile",
     "pages/mine/settings/settings",
-    "pages/contract/index/index",
-    "pages/contract/upload/upload",
-    "pages/contract/analyzing/analyzing",
-    "pages/contract/assistant/assistant",
-    "pages/contract/result/result",
-    "pages/contract/chat/chat",
-    "pages/contract/history/history",
-    "pages/contract/mine/mine",
-    "pages/index/index",
-    "pages/draw/draw",
-    "pages/records/records",
-    "pages/scan/scan",
-    "pages/bianbian/index/index",
-    "pages/bianbian/create/create",
-    "pages/bianbian/transform/transform",
-    "pages/bianbian/result/result",
-    "pages/bianbian/history/history"
+    "pages/mine/taste/index"
   ],
+  "subpackages": [
+    {
+      "root": "packageTranslate",
+      "pages": [
+        "pages/translate/index/index",
+        "pages/translate/result/result",
+        "pages/translate/settings/settings",
+        "pages/translate/history/history"
+      ]
+    },
+    {
+      "root": "packageAssess",
+      "pages": [
+        "pages/assess/index/index",
+        "pages/assess/result/result",
+        "pages/assess/settings/settings"
+      ]
+    },
+    {
+      "root": "packageContract",
+      "pages": [
+        "pages/contract/index/index",
+        "pages/contract/upload/upload",
+        "pages/contract/analyzing/analyzing",
+        "pages/contract/assistant/assistant",
+        "pages/contract/result/result",
+        "pages/contract/chat/chat",
+        "pages/contract/history/history",
+        "pages/contract/mine/mine"
+      ]
+    },
+    {
+      "root": "packageBianbian",
+      "pages": [
+        "pages/bianbian/index/index",
+        "pages/bianbian/create/create",
+        "pages/bianbian/transform/transform",
+        "pages/bianbian/result/result",
+        "pages/bianbian/history/history"
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/discover/index/index": {
+      "network": "all",
+      "packages": ["packageTranslate", "packageAssess", "packageContract"]
+    },
+    "pages/mine/index/index": {
+      "network": "all",
+      "packages": ["packageTranslate"]
+    }
+  },
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#1E6FFF",
+    "navigationBarBackgroundColor": "#FFFFFF",
     "navigationBarTitleText": "科豆 AI",
-    "navigationBarTextStyle": "white"
+    "navigationBarTextStyle": "black"
   },
   "tabBar": {
-    "color": "#9AA1AD",
-    "selectedColor": "#1E6FFF",
+    "custom": true,
+    "color": "#8A90A0",
+    "selectedColor": "#EA580C",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "black",
     "list": [
       {
-        "pagePath": "pages/translate/index/index",
-        "text": "翻译"
+        "pagePath": "pages/chat/index/index",
+        "text": "对话"
       },
       {
-        "pagePath": "pages/assess/index/index",
-        "text": "合同评估"
+        "pagePath": "pages/discover/index/index",
+        "text": "发现"
       },
       {
         "pagePath": "pages/mine/index/index",

@@ -1,0 +1,89 @@
+/* 歌曲推荐卡片：色值一律走 app.wxss 的 token，不写裸 hex */
+.mcard {
+  width: 100%;
+  background: var(--card);
+  border-radius: 24rpx;
+  border: 1rpx solid var(--line);
+  overflow: hidden;
+}
+
+.mc-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 28rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+.mc-tag {
+  font-size: 22rpx;
+  color: var(--brand-txt);
+  background: var(--brand-soft);
+  padding: 6rpx 16rpx;
+  border-radius: 16rpx;
+}
+.mc-sub { font-size: 23rpx; color: var(--t3); }
+
+.mc-song {
+  padding: 20rpx 28rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+.mc-song:last-of-type { border-bottom: none; }
+
+.mc-t {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.mc-title {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--t1);
+}
+.mc-artist {
+  font-size: 25rpx;
+  color: var(--t2);
+  flex: none;
+}
+.mc-why {
+  display: block;
+  font-size: 24rpx;
+  color: var(--t2);
+  margin-top: 4rpx;
+}
+
+.mc-ops {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx 28rpx;
+  border-top: 1rpx solid var(--line);
+}
+.mc-op {
+  flex: none;
+  font-size: 25rpx;
+  color: var(--t2);
+  padding: 12rpx 20rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid var(--line);
+}
+.mc-op:active { opacity: .7; }
+.mc-main {
+  flex: 1;
+  height: 68rpx;
+  border-radius: 34rpx;
+  background: var(--brand);
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mc-main:active { opacity: .88; }
+
+.mc-note {
+  font-size: 21rpx;
+  color: var(--t3);
+  padding: 0 28rpx 20rpx;
+}

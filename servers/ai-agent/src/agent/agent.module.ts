@@ -34,6 +34,11 @@ import { AgentConversationQueryService } from './agent-conversation-query.servic
 import { PermissionBroker } from './permission-broker';
 import { SkillModule } from '../skill/skill.module';
 import { AgentSkillProvider } from '../skill/agent-skill-provider';
+import { IntentService } from './intent/intent.service';
+import { MusicModule } from '../music/music.module';
+import { ListMusicProvidersTool } from '../music/tools/list-music-providers.tool';
+import { PresentMusicCardTool } from '../music/tools/present-music-card.tool';
+import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -127,7 +132,12 @@ const runnerProvider: Provider = {
 };
 
 @Module({
-  imports: [McpModule, SkillModule, TypeOrmModule.forFeature([AgentConversation])],
+  imports: [
+    McpModule,
+    SkillModule,
+    MusicModule,
+    TypeOrmModule.forFeature([AgentConversation]),
+  ],
   providers: [
     clientRegistryProvider,
     toolRegistryProvider,
@@ -150,6 +160,7 @@ const runnerProvider: Provider = {
     ContractBenchmarkTool,
     ContractConversationService,
     AgentConversationQueryService,
+    IntentService,
   ],
   controllers: [AgentController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],
@@ -168,6 +179,9 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     private readonly agentDefSync: AgentDefSyncService,
     private readonly modelCatalog: ModelCatalogService,
     private readonly webSearchTool: WebSearchTool,
+    private readonly listMusicProvidersTool: ListMusicProvidersTool,
+    private readonly presentMusicCardTool: PresentMusicCardTool,
+    private readonly saveMusicTasteTool: SaveMusicTasteTool,
   ) {}
 
   onModuleInit(): void {
@@ -177,6 +191,11 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     this.toolRegistry.register(this.contractRuleTool);
     this.toolRegistry.register(this.contractIrrTool);
     this.toolRegistry.register(this.contractBenchmarkTool);
+
+    // 音乐推荐：渠道查询 / 歌曲卡片 / 口味记忆（卡片事件由 controller 补发）
+    this.toolRegistry.register(this.listMusicProvidersTool);
+    this.toolRegistry.register(this.presentMusicCardTool);
+    this.toolRegistry.register(this.saveMusicTasteTool);
 
     // Agent 定义（含 contract-risk / deploy）由 DB 唯一事实源提供：AgentDefSyncService
     // 启动即拉取 ai-service 的 published 定义 upsert 到注册表，并按其 capabilities 懒注册

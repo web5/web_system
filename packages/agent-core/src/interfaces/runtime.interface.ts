@@ -12,10 +12,25 @@ export type StreamEventType =
   | 'summary'
   | 'final'
   | 'error'
-  | 'permission_request';
+  | 'permission_request'
+  /** 意图路由决策结果：必须是本轮第一个事件（早于任何 token） */
+  | 'intent';
 
 export interface StreamEvent {
   type: StreamEventType;
+  /**
+   * intent 事件专用：路由决策结果。
+   * 客户端据此渲染 agent 徽标 / 排查误判；服务端须在第一个 token 之前推送。
+   */
+  intent?: {
+    agentId: string;
+    agentName?: string;
+    /** 0~1 */
+    confidence: number;
+    via: 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
+    switched?: boolean;
+    previousAgentId?: string;
+  };
   content?: string;
   name?: string;
   args?: unknown;
@@ -26,6 +41,14 @@ export interface StreamEvent {
    * 客户端据此调用确认接口（approve/reject），服务端挂起工具执行直到确认。
    */
   requestId?: string;
+  /**
+   * card 事件专用载荷：结构化卡片。
+   * kind 区分卡片类型（一期 'music'），其余字段随 kind 扩展。
+   */
+  card?: {
+    kind: string;
+    [key: string]: unknown;
+  };
   /** 本轮对话累计的 token 消耗（final/error 事件携带，来自大模型返回的 usage） */
   usage?: {
     promptTokens: number;

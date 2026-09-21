@@ -1,0 +1,51 @@
+<!-- 音乐口味页（扁平列表）：喜欢=橙，不想听=红并带前缀 -->
+<view class="page">
+  <view class="loading" wx:if="{{loading}}">载入中…</view>
+
+  <block wx:if="{{!loading && !empty}}">
+    <view class="grp">
+      <view class="gh">
+        <text>全部标签</text>
+        <text class="tip">AI 自动归类，红色为不想听</text>
+      </view>
+      <view class="tags">
+        <view class="tag {{item.dislike ? 'dis' : ''}}" wx:for="{{tags}}" wx:key="index">
+          <text class="pre" wx:if="{{item.dislike}}">不想听</text>
+          <text class="lb">{{item.label}}</text>
+          <view class="x" data-idx="{{index}}" bindtap="onRemove" aria-label="删除">
+            <view class="x1"></view>
+            <view class="x2"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="grp">
+      <view class="gh"><text>手动补充</text></view>
+      <view class="add">
+        <input
+          class="ipt {{err ? 'err' : ''}}"
+          placeholder="例如：爵士 / 陈奕迅 / 睡前"
+          value="{{inputVal}}"
+          maxlength="12"
+          bindinput="onInput"
+          confirm-type="done"
+          bindconfirm="onAdd"
+        />
+        <view class="btn-a" bindtap="onAdd">添加</view>
+      </view>
+      <view class="ferr" wx:if="{{err}}">{{err}}</view>
+    </view>
+
+    <view class="danger" bindtap="onClear">清空口味记忆</view>
+    <view class="foot">口味由 AI 在对话中自动积累，也可在此手动调整
+只用于音乐推荐，不用于其他用途</view>
+  </block>
+
+  <view class="empty" wx:if="{{!loading && empty}}">
+    <view class="ico"><view class="ico-note"></view></view>
+    <view class="e1">还没记住你的口味</view>
+    <view class="e2">在对话里告诉 AI 喜欢什么、不想听什么，它会自动记下</view>
+    <view class="go" bindtap="goChat">去对话里说说</view>
+  </view>
+</view>

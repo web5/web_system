@@ -1,30 +1,130 @@
-.page { min-height: 100vh; background: #F2F4F8; padding-bottom: 32rpx; }
-.hero { padding: 52rpx 44rpx 44rpx; background: linear-gradient(135deg, #1E6FFF, #0B4FD1); color: #fff; }
-.brand { display: flex; align-items: center; font-size: 26rpx; opacity: .92; }
-.mark { width: 52rpx; height: 52rpx; border-radius: 16rpx; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; margin-right: 18rpx; }
-.title { margin-top: 32rpx; font-size: 50rpx; font-weight: 600; }
-.sub { margin-top: 10rpx; font-size: 26rpx; opacity: .88; }
-.main { margin: -28rpx 32rpx 0; background: #fff; border-radius: 32rpx; padding: 36rpx; box-shadow: 0 8rpx 24rpx rgba(20,40,90,.1); }
-.panel { font-size: 34rpx; font-weight: 600; text-align: center; }
-.desc { font-size: 24rpx; color: #9AA1AD; text-align: center; margin: 8rpx 0 32rpx; }
-.entry { display: flex; }
-.e { flex: 1; background: #F2F4F8; border-radius: 28rpx; padding: 30rpx 26rpx; }
-.e:first-child { margin-right: 22rpx; }
-.ic { width: 68rpx; height: 68rpx; border-radius: 20rpx; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 30rpx; margin-bottom: 18rpx; }
-.ic-tr { background: #1E6FFF; }
-.ic-as { background: #F97316; }
-.n { font-size: 29rpx; font-weight: 600; }
-.d { font-size: 23rpx; color: #9AA1AD; margin-top: 6rpx; }
-.recent { padding: 36rpx 32rpx 0; }
-.sec-t { font-size: 25rpx; color: #6B7280; display: flex; justify-content: space-between; }
-.em { font-size: 23rpx; color: #C0C6D0; }
-.it { display: flex; align-items: center; background: #fff; border-radius: 22rpx; padding: 22rpx 26rpx; margin-top: 14rpx; }
-.tag { font-size: 20rpx; padding: 4rpx 12rpx; border-radius: 8rpx; margin-right: 20rpx; }
-.tr { background: #EAF1FF; color: #1E6FFF; }
-.as { background: #FFF2E6; color: #F97316; }
-.tt { flex: 1; font-size: 26rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tm { font-size: 22rpx; color: #C0C6D0; }
-.empty { text-align: center; color: #C0C6D0; font-size: 24rpx; padding: 40rpx 0; }
-.foot { padding: 40rpx 32rpx 0; }
-.btn-ghost { height: 92rpx; border-radius: 46rpx; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
-.claim { margin-top: 24rpx; font-size: 21rpx; color: #C0C6D0; text-align: center; line-height: 1.8; }
+/* ===== 科豆 AI - 欢迎页（启动页，非 tab） ===== */
+page {
+  background: var(--page-bg);
+}
+
+.page {
+  min-height: 100vh;
+  background: var(--page-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* 手动挂载的自定义 tabBar 不占原生层，页面需自行留出底部空间 */
+  padding: 140rpx 48rpx calc(150rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.w-hello {
+  font-size: 88rpx;
+  font-weight: 600;
+  letter-spacing: -2rpx;
+  color: var(--t1);
+  line-height: 1.2;
+}
+.w-hello .dot { color: var(--brand); }
+
+.w-sub {
+  margin-top: 14rpx;
+  font-size: 27rpx;
+  color: var(--t3);
+}
+
+/* 今日一句（与对话页首条同文案，来自 utils/daily.ts） */
+.w-quote {
+  margin-top: 64rpx;
+  background: var(--card);
+  border-radius: 28rpx;
+  padding: 34rpx 32rpx;
+  box-shadow: 0 8rpx 28rpx rgba(20, 30, 60, .06);
+}
+.w-quote .k {
+  font-size: 22rpx;
+  color: var(--brand-txt);
+  margin-bottom: 14rpx;
+}
+.w-quote .cn {
+  font-size: 32rpx;
+  color: var(--t1);
+  line-height: 1.65;
+}
+/* 最近对话：欢迎页的会话快捷入口（点卡片进入对应会话） */
+.w-recent {
+  margin-top: 28rpx;
+}
+.wr-t {
+  font-size: 22rpx;
+  color: var(--t3);
+  margin-bottom: 12rpx;
+}
+.wr-item {
+  background: var(--card);
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 12rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, .04);
+}
+.wr-item:active { background: var(--brand-50); }
+.wr-q {
+  font-size: 26rpx;
+  color: var(--t1);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 骨架占位条：最近对话加载中（pulse 动画；色值用 --t3 token，不引入裸 hex） */
+.sk {
+  background: var(--t3);
+  border-radius: 6rpx;
+  animation: sk-pulse 1.3s ease-in-out infinite;
+}
+.sk-t { width: 54%; height: 22rpx; }
+.sk-c1 { width: 100%; height: 24rpx; margin-top: 14rpx; }
+.sk-c2 { width: 76%; height: 24rpx; margin-top: 10rpx; }
+.sk-m { width: 26%; height: 18rpx; margin-top: 14rpx; }
+@keyframes sk-pulse {
+  0%, 100% { opacity: .5; }
+  50% { opacity: .9; }
+}
+
+/* 最近一条对话的内容截取（次要层级：标题在上、内容居中、时间在下） */
+.wr-c {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--t2);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wr-m {
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: var(--t3);
+}
+
+.w-quote .en {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: var(--t3);
+  line-height: 1.6;
+}
+
+.btn {
+  height: 96rpx;
+  border-radius: 48rpx;
+  background: var(--brand);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  box-shadow: 0 8rpx 24rpx rgba(249, 115, 22, .28);
+}
+.btn:active { opacity: .85; }
+
+.w-foot .claim { margin-top: 26rpx; }

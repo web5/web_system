@@ -96,3 +96,6 @@ servers/ai-service/.agent-cli.config.json
 
 # 集成分支自动发布 watcher 的本地状态文件
 .watch-integration.state
+
+# CodeBuddy hook 运行时状态（UI 原型门禁标记，非源码）
+.codebuddy/.state/

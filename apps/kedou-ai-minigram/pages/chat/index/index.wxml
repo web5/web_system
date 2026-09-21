@@ -1,0 +1,213 @@
+<!-- 科豆 AI · 通用对话（tab 1，主界面 · 沉浸式，无 tabBar） -->
+<!-- 主对话：agentId 固定传 'auto'，由服务端 IntentService 意图路由决定交给哪个 agent；
+     路由结果通过 SSE 首个 intent 事件下发，前端在消息区顶部显示 agent 徽标。 -->
+<view class="wrap">
+  <!--
+    自定义导航栏（index.json: navigationStyle = custom）
+    对话页隐藏 tabBar 后，返回 icon 负责回到欢迎页；右侧「新对话」需避让原生胶囊。
+  -->
+  <view
+    class="nav"
+    style="padding-top:{{statusBarHeight}}px;height:{{navHeight}}px;box-sizing:border-box"
+  >
+    <!-- 标题放最前：absolute 布局下后出现的兄弟在上层，保证返回键 / 新对话可点 -->
+    <view class="nav-title">科豆 AI</view>
+    <view class="nav-back" bindtap="goBack"><view class="nav-back-arrow"></view></view>
+    <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
+    <view class="nav-hist" bindtap="openHistory" aria-label="对话记录"><view class="nav-hist-ic"></view></view>
+    <view class="nav-act" bindtap="newChat" aria-label="新建对话"><view class="nav-new-ic"></view></view>
+  </view>
+
+  <view class="page">
+    <scroll-view
+      class="chat-box"
+      scroll-y="{{true}}"
+      scroll-into-view="{{scrollIntoId}}"
+      scroll-with-animation="{{true}}"
+      enhanced="{{true}}"
+      show-scrollbar="{{false}}"
+      bindtap="closeCopyMenu"
+    >
+      <!-- 意图路由徽标：标出本轮由哪个 agent 作答（路由错了用户一眼可见，也是排查误判的第一现场） -->
+      <view wx:if="{{currentAgent && currentAgent.id !== 'general'}}" class="agent-badge-wrap">
+        <view class="agent-badge">
+          <view class="ab-dot"></view>
+          <text class="ab-t">{{currentAgent.name || currentAgent.id}} 作答</text>
+        </view>
+      </view>
+
+      <view
+        wx:for="{{chatMessages}}"
+        wx:key="index"
+        wx:for-index="idx"
+        class="chat-msg {{item.role}}"
+      >
+        <view class="msg-avatar">{{item.role === 'ai' ? '豆' : '我'}}</view>
+        <view
+          class="msg-bubble {{(item.card || item.musicCard) ? 'is-card' : (item.text.length > 140 && !expandMap[idx] ? 'collapsed' : '')}}"
+        >
+          <!-- AI 首条：今日一句（与欢迎页同文案，形成连续感） -->
+          <view wx:if="{{item.daily}}" class="msg-quote-k">今日一句</view>
+
+          <!--
+            翻译官作答 → 推荐译文卡片（与 pages/translate/result 同一设计语言）。
+            三态：T0 只有卡片头 + 「翻译中」；T1 英文逐字流入 + 光标；T2 注解 + 操作行。
+            操作行仅 T2 渲染（流式期不占位）。
+          -->
+          <block wx:if="{{item.card}}">
+            <view class="ec-head">
+              <text class="ec-tag">推荐译文</text>
+              <text wx:if="{{item.meta}}" class="ec-meta">{{item.meta}}</text>
+            </view>
+
+            <view wx:if="{{item.streaming && !item.enMain}}" class="ec-typing">
+              <text>翻译中</text>
+              <view class="ec-dots">
+                <view class="ec-dot"></view><view class="ec-dot"></view><view class="ec-dot"></view>
+              </view>
+            </view>
+            <view
+              wx:elif="{{item.enMain}}"
+              class="ec-main"
+              data-idx="{{idx}}"
+              bindlongpress="onLongPressMsg"
+            >{{item.enMain}}<text wx:if="{{item.streaming}}" class="ec-caret"></text></view>
+
+            <view wx:if="{{item.note}}" class="ec-note">{{item.note}}</view>
+            <!-- 流式期注解占位条：撑住高度，避免注解到达时卡片抽动 -->
+            <view wx:elif="{{item.streaming && item.enMain}}" class="ec-note"><view class="ec-sk"></view></view>
+
+            <view wx:if="{{!item.streaming && item.enMain}}" class="ec-ops">
+              <text class="ec-op" data-idx="{{idx}}" catchtap="onCardCopy">复制</text>
+              <text class="ec-op {{speakPlayingIdx === idx ? 'is-speaking' : ''}}" data-idx="{{idx}}" catchtap="onCardSpeak">{{speakLoadingIdx === idx ? '请稍候…' : (speakPlayingIdx === idx ? '停止' : '朗读')}}</text>
+              <text class="ec-op" catchtap="onCardFav">收藏</text>
+              <!-- 转发：button 才能拉起微信原生转发面板；bindtap 先记录分享哪条卡 -->
+              <button class="ec-op ec-share" open-type="share" plain data-idx="{{idx}}" bindtap="onShareTap">转发</button>
+            </view>
+          </block>
+
+          <!-- 歌曲推荐卡片：SSE card 事件（kind=music）渲染；主按钮跳转由 provider 配置决定 -->
+          <block wx:elif="{{item.musicCard}}">
+            <music-card
+              card="{{item.musicCard}}"
+              bind:swap="onMusicSwap"
+              bind:dislike="onMusicDislike"
+            />
+          </block>
+
+          <!-- 非翻译官回复：原有纯文本渲染 -->
+          <block wx:else>
+            <!-- 流式等待中：思考占位 -->
+            <view wx:if="{{item.streaming && !item.text}}" class="msg-thinking">
+              <text>正在思考</text>
+              <view class="thinking-dots">
+                <view class="tdot"></view><view class="tdot"></view><view class="tdot"></view>
+              </view>
+            </view>
+
+            <!-- 长按复制：仅对已有正文的气泡生效（流式中 / 空气泡不弹） -->
+            <view
+              wx:elif="{{item.text}}"
+              class="msg-text"
+              data-idx="{{idx}}"
+              bindlongpress="onLongPressMsg"
+            >{{item.text}}</view>
+            <!-- 失败且没有内容：气泡内给友好提示，不留一片空白 -->
+            <view wx:elif="{{item.failed}}" class="msg-text msg-empty">{{item.failReason}}</view>
+            <view wx:if="{{item.en}}" class="msg-quote-en">{{item.en}}</view>
+
+            <view
+              wx:if="{{item.text.length > 140}}"
+              class="msg-expand"
+              catchtap="onToggleExpand"
+              data-idx="{{idx}}"
+            >
+              {{expandMap[idx] ? '收起 ▲' : '展开更多 ▼'}}
+            </view>
+          </block>
+
+          <!-- 长按后出现的复制入口（气泡内右下角，避免遮住正文） -->
+          <view
+            wx:if="{{copyIdx === idx}}"
+            class="msg-copy"
+            catchtap="onCopyMsg"
+            data-idx="{{idx}}"
+          >
+            <view class="mc-ic"></view>
+            <text class="mc-t">复制</text>
+          </view>
+
+          <!-- 失败态：已收到的部分保留在上，下面标出中断并给「重试 / 删除这一轮」 -->
+          <view wx:if="{{item.failed}}" class="msg-fail">
+            <view class="mf-t">{{item.text ? '回复中断' : '发送失败'}}</view>
+            <view class="mf-r">{{item.failReason}}</view>
+            <view class="mf-a">
+              <text class="mf-retry" data-idx="{{idx}}" bindtap="onRetryMsg">重试</text>
+              <text data-idx="{{idx}}" bindtap="onDropMsg">删除这一轮</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 开场推荐问题（发送后收起；批次 4 改由 entry.suggestions 驱动） -->
+      <view wx:if="{{suggestions.length}}" class="sugs">
+        <view
+          wx:for="{{suggestions}}"
+          wx:key="*this"
+          class="sug"
+          data-q="{{item}}"
+          bindtap="onTapSug"
+        >{{item}}</view>
+      </view>
+
+      <!-- 滚动锚点：scroll-into-view 命中它即滚到底 -->
+      <view id="msg-bottom"></view>
+    </scroll-view>
+  </view>
+</view>
+
+<!-- 底部吸底输入栏 -->
+<view class="chat-input-bar">
+  <view class="chat-composer">
+    <view class="chat-plus" bindtap="openPlus">+</view>
+    <!--
+      单行 input（而非 textarea）：移动端回车 / 键盘右下角「发送」= 直接发送，
+      回车不再插入换行（用户要求）。confirm-type="send" 让键盘按钮显示「发送」。
+    -->
+    <input
+      class="chat-input"
+      placeholder="问问科豆…"
+      placeholder-class="chat-input-ph"
+      value="{{input}}"
+      maxlength="200"
+      cursor-spacing="20"
+      confirm-type="send"
+      confirm-hold="{{false}}"
+      bindinput="onInput"
+      bindconfirm="onConfirm"
+      disabled="{{sending}}"
+    />
+    <button
+      class="chat-send"
+      bindtap="send"
+      disabled="{{sending || !input}}"
+      aria-label="发送"
+    >
+      {{sending ? '…' : '↑'}}
+    </button>
+  </view>
+</view>
+
+<!--
+  「+」菜单：对话页无 tabBar，「发现能力 / 我的」由此承接，
+  保证三个 tab 两两可达（交互质检的入口闭环项）。
+-->
+<view class="plus-mask" wx:if="{{showPlus}}" bindtap="closePlus"></view>
+<view class="sheet {{showPlus ? 'show' : ''}}">
+  <view class="sg">
+    <view class="si" data-key="image" bindtap="onPlusItem">图片</view>
+    <view class="si" data-key="camera" bindtap="onPlusItem">拍照</view>
+    <view class="si" data-key="file" bindtap="onPlusItem">文件</view>
+  </view>
+  <view class="sc" bindtap="closePlus">取消</view>
+</view>
