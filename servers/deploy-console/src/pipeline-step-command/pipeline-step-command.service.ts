@@ -239,7 +239,7 @@ export class PipelineStepCommandService {
    * 为什么既有保留字又要这一层：`git` 本身已被 `isWritableStageKey` 挡在 upsert 之外，
    * 但 **remove 原先没有守卫**（可以整行删掉，拉码直接失效），且未来若要托管非保留字节点
    * （如某个平台脚本节点）也需要通用机制。平台脚本的写入通道只有一条：
-   * `PlatformScriptSeedService`（随代码同步）——"谁能改发布语义基线"要有唯一答案。
+   * SQL 初始化脚本（一次性预置）——"谁能改发布语义基线"要有唯一答案：运维在页面上改，平台不覆盖。
    */
   private async assertNotLocked(pipelineId: string, nodeKey: string): Promise<void> {
     const row = await this.repo.findOne({ where: { pipelineId, nodeKey } });

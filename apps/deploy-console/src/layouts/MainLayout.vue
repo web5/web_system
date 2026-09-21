@@ -71,7 +71,6 @@ const DOMAINS: Domain[] = [
     icon: ApiOutlined,
     children: [
       { key: '/services', label: '服务管理', icon: ApiOutlined },
-      { key: '/deploys/backend', label: '版本部署', icon: RocketOutlined },
     ],
   },
   {

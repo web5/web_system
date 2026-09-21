@@ -2,7 +2,9 @@
 /**
  * 版本部署（独立部署界面，与发布流水线解耦）
  *
- * 双域共用：路由 /deploys/micro（微前端域）/deploys/backend（API 网关域）。
+ * 现仅服务**微前端域**（路由 /deploys/micro）——API 网关域的「版本部署」入口已于
+ * 2026-09-21 下线（后端由发布流水线的 restart / verify action 直接生效）。
+ * 组件内仍保留双域参数（backend 分支现不可达），如需彻底清理可另行处理。
  * 表格 = 模块清单 + 最近一次部署摘要（环境维度收进部署抽屉，环境可数十个）。
  * 设计依据：specs/version-deploy/page-spec.md + design.md（已确认原型
  * docs/ui/prototypes/deploy-console-domain-split.html v4）
