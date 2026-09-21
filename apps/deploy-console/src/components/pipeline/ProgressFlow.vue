@@ -289,16 +289,20 @@ function isWatchdog(s: string) {
 .orch-cell {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* 2026-09-21：stretch（原 center）—— 步骤卡撑满 cell，卡片边缘贴合 cell 边界。
+     原先卡片居中，cell 比卡片宽时两侧留白 13~29px，把连线切断（用户反馈「连接线没拼接好」）。
+     卡片内容仍居中，见 .orch-step 的 justify-content。 */
+  align-items: stretch;
   flex-shrink: 0;
 }
-/* 步骤间箭头（走过路径变绿） */
+/* 步骤间箭头（走过路径变绿）：贴 cell 边界；卡片撑满 cell 后两端恰好接上卡片边缘 */
 .orch-arrow {
   position: relative;
   flex-shrink: 0;
   width: 28px;
   height: 2px;
-  margin-top: 18px;
+  /* 对齐步骤卡垂直中线：卡片高 33（padding 6+6 + 行高 18 + border 3）→ 中线 16.5，线高 2 → 顶部 15.5 */
+  margin-top: 15.5px;
   background: var(--ws-border);
 }
 .orch-arrow::after {
@@ -321,6 +325,7 @@ function isWatchdog(s: string) {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: center; /* 卡片撑满 cell 后内容仍居中（2026-09-21） */
   gap: 6px;
   padding: 6px 12px;
   border: 1.5px solid var(--ws-border);
