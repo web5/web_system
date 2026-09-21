@@ -329,7 +329,7 @@
     <div class="wxdlg" id="wxdlg">
       <div class="bd">
         <div class="h">即将跳转「QQ音乐」小程序</div>
-        <div class="p">将搜索并播放 <b id="dlgSong">七里香</b></div>
+        <div class="p">歌名 <b id="dlgSong">七里香</b> 已复制，进入后粘贴搜索</div>
       </div>
       <div class="ft">
         <div id="dlgCancel">取消</div>
@@ -508,6 +508,11 @@
     renderTaste(); syncSummary(); swap();
     toast('已记下：少推 ' + s.ar);
   };
+  /**
+   * 主按钮：先把歌名写进剪贴板（S1 只能到 QQ音乐首页，无法直达歌曲），
+   * 再走「appId → shortLink 兜底」的跳转链路；两者都失败才提示。
+   * 真机约束：必须由用户点击触发；微信会插确认弹窗，用户取消须静默。
+   */
   $('btnPlay').onclick = function () {
     $('dlgSong').textContent = SETS[setIdx][0].t;
     showMask(true); $('wxdlg').classList.add('show');
