@@ -531,6 +531,10 @@ async function save() {
       await load()
     } else {
       await pipelinesApi.update(tplId.value, dto)
+      // 编排树（新三层模型）：画布有未保存修改 → 一并由页头保存触发（单一保存入口）
+      if (hasOrchestration.value && orchEditorRef.value?.dirty) {
+        await orchEditorRef.value.save()
+      }
       dirty.value = false
       message.success('流水线已保存')
       const keepKey = selNodeKey.value
@@ -596,6 +600,7 @@ async function loadVars() {
 
 /** 编排新模型（步骤→任务→动作）：新表有数据 → flow tab 用三层画布（specs/pipeline-step-task） */
 const hasOrchestration = ref(false)
+const orchEditorRef = ref<{ save: () => Promise<void>; dirty: boolean } | null>(null)
 async function detectOrchestration() {
   if (!tplId.value) { hasOrchestration.value = false; return }
   try {
@@ -709,6 +714,7 @@ onMounted(() => { void load(); void detectOrchestration() })
       <a-tab-pane key="flow" tab="流程编排">
         <OrchestrationEditor
           v-if="hasOrchestration && tplId"
+          ref="orchEditorRef"
           :pipeline-id="tplId"
           @dirty="(v: boolean) => (dirty = v)"
         />
