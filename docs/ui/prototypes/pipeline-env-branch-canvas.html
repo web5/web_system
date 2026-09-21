@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>流水线 · 步骤/任务 模型 · 交互原型 v7（测量式连线）</title>
+<!--
+  === 微调豁免 · 2026-09-21 ===
+  范围：画布「动作行」的删除按钮定位（纯视觉微调，不改交互、不改信息架构）。
+  现象：用户反馈「action 这里的删除 icon 被遮挡了」。
+  原因：动作行容器 .task-acts 为「共享边框组」设了 overflow:hidden，而删除按钮沿用
+        「卡片右上角外侧」的通用写法（top:-8px; right:-8px），越界 8px 被裁掉 → 悬停时被遮挡。
+  处置：动作行删除按钮改为**行内右侧垂直居中**（top:50%; right:5px; transform:translateY(-50%)），
+        行内用 padding-right 预留按钮位、.aname 加 flex:1/min-width:0 保证超长名省略号正常；
+        任务卡删除按钮保持原外侧位置（.task-node 无 overflow 裁剪，外侧点击区更好按）。
+  落地：apps/deploy-console/src/components/pipeline/OrchestrationEditor.vue
+-->
 <style>
   :root{
     --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
@@ -102,6 +113,23 @@
     font-size:13px;font-weight:700;color:var(--text-2);background:var(--bg);
     border-right:1px solid var(--border);border-radius:9px 0 0 9px;
     padding:0 10px;margin:-7px 2px -7px -14px;font-family:var(--mono);flex-shrink:0;}
+
+  /* 动作行：紧贴任务卡下方（画布上直接可见，不必进抽屉）；2026-09-21 补入原型 */
+  .task-acts{border:1px solid var(--border);border-top:none;background:var(--card);
+    border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow:hidden;}
+  .act-node{position:relative;display:flex;align-items:center;gap:6px;padding:5px 26px 5px 10px;
+    border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;}
+  .act-node:last-child{border-bottom:none;}
+  .act-node:hover{background:var(--bg);}
+  .act-node .atag{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;color:var(--primary);
+    border:1px solid var(--border);background:var(--card);flex-shrink:0;}
+  .act-node .aname{font-size:11px;color:var(--text-2);font-family:var(--mono);flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;}
+  /* 动作行删除按钮：**行内右侧垂直居中** —— 卡片右上角外侧的写法（top:-8px/right:-8px）
+     会被 .task-acts 的 overflow:hidden 裁掉（用户 2026-09-21 反馈「删除 icon 被遮挡」） */
+  .act-node .del-btn{top:50%;right:5px;transform:translateY(-50%);width:15px;height:15px;}
+  .act-node .del-btn svg{width:9px;height:9px;}
+  .act-node:hover .del-btn{display:flex;}
 
   /* 连线层上的＋号（添加步骤）：JS 定位到主轴中点 */
   .add-node{position:absolute;width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--primary);
@@ -238,7 +266,14 @@
               <div class="step-title" onclick="openStep(4)"><span class="nm">发布</span><span class="desc">投递产物到目标机</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
                 <div class="task-node script" title="本机 cp（条件 DEPLOY_ENV == local）" onclick="openTask('local')"><span class="seq">4-1</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">local</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task-acts">
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：投递产物')"><span class="atag">脚本</span><span class="aname">投递产物</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                </div>
                 <div class="task-node script" title="scp 远程（默认任务）" onclick="openTask('dev')"><span class="seq">4-2</span><span class="tag">脚本</span><span class="def">默认</span><span class="name">dev</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task-acts">
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：投递产物')"><span class="atag">脚本</span><span class="aname">投递产物</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：write-version · 写版本记录')"><span class="atag">脚本</span><span class="aname">write-version · 写版本记录</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                </div>
               </div>
             </div>
 

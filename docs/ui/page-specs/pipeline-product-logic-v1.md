@@ -300,3 +300,19 @@
 - 涉及 Token：**无**（仅数据顺序，不改视觉）
 - 交互影响：无新增/破坏性操作；「最近执行」列为「从未执行」的行集中在列表底部。
 - 原型：`docs/ui/prototypes/release-platform-v13-pipeline-product-logic.html`（列表屏行序已按倒序调整 + note 标注规则）
+
+---
+
+## 11. 画布动作行删除按钮可见性（用户 2026-09-21 提出）
+
+- 页面/组件：`apps/deploy-console/src/components/pipeline/OrchestrationEditor.vue`（流水线详情「流程编排」Tab）
+- 现象：动作行（`脚本 · 投递产物` 等）悬停时，删除按钮看不见 / 被遮挡。
+- 原因：动作行容器 `.task-acts` 为「共享边框组」设了 `overflow: hidden`；删除按钮沿用
+  「卡片右上角外侧」的通用写法（`top:-8px; right:-8px`），越界 8px 正好被裁掉。
+- 处置（**纯视觉微调，交互与信息架构不变**）：
+  - 动作行删除按钮改**行内右侧垂直居中**（`top:50%; right:5px; transform:translateY(-50%)`），
+    行内 `padding-right` 预留按钮位；`.aname` 补 `flex:1; min-width:0`，保证超长动作名省略号正常；
+  - 任务卡删除按钮**保持原外侧位置**（`.task-node` 无 `overflow` 裁剪，外侧点击区更大更好按）。
+- 涉及 Token：无（仅位置调整，颜色沿用 `--ws-border/--ws-text-tertiary/--ws-error-500`）
+- 原型：`docs/ui/prototypes/pipeline-env-branch-canvas.html`（动作行补入原型 + 文件头「微调豁免」记录）
+- 门禁：按 UI 动作门「纯视觉微调」豁免路径（原型内记一行豁免说明，未走原型先行人审）
