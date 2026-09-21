@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 /**
- * 平台托管脚本（`deploy_pipeline_step_commands.locked=true` 的正文来源）。
+ * 平台托管脚本 / 默认脚本的正文来源（`deploy_pipeline_step_commands`）。
  *
  * 为什么放代码而不是 SQL 迁移：
  * - **两端一致**：脚本随 console 版本走，本机与 dev 机各自启动时幂等同步，不会出现
@@ -10,36 +10,28 @@ import { join } from 'path';
  * - **可校验**：脚本是真实 `.sh` 文件，可 `bash -n` 做语法校验（见 spec）；
  * - **可重置**：平台托管语义 = 代码是真相源，手工改库会在下次启动/提交时被重置。
  *
- * 落盘方式：`nest-cli.json` 已把 `pipeline/scripts/*.sh` 作为构建资产拷贝到 dist，
+ * 落盘方式：`nest-cli.json` 已把 `pipeline/scripts/*` 作为构建资产拷贝到 dist，
  * 运行期与测试期（ts-jest）都用 `__dirname/scripts/<name>` 读取。
  */
 
 /** git 拉取脚本文件名（`src/pipeline/scripts/git-step.sh`） */
 export const GIT_STEP_SCRIPT_FILE = 'git-step.sh';
-/** restart 阶段脚本文件名（`src/pipeline/scripts/restart-step.sh`） */
-export const RESTART_STEP_SCRIPT_FILE = 'restart-step.sh';
-/** verify 阶段脚本文件名（`src/pipeline/scripts/verify-step.sh`） */
-export const VERIFY_STEP_SCRIPT_FILE = 'verify-step.sh';
 
 /**
  * 平台托管脚本清单：`nodeKey` 固定为 v5 platform 节点名。
  *
- * restart / verify 自 2026-09-14 起纳入托管。此前它们是 `locked=0` 的用户自配节点，
- * 内容只存在 DB —— 换机器 / 重置库 / 另一端 console 都会与 master 的脚本漂移
- * （正是注释里点名的"SQL 迁移漏跑导致两台机器脚本不同"）。
- * 纳入后：随 console 版本幂等同步到各环境，页面只读，可 `bash -n` 校验。
+ * **2026-09-21 起为空**（用户决定，见 `specs/pipeline-restart-verify-as-action/design.md`）：
+ * restart / verify 原先由本清单托管（代码是真相源、启动/提交时覆盖 DB、页面只读），
+ * 但它们同时又是「孤儿命令」——模板里没有对应节点，从不执行；真正让服务生效的是
+ * 控制台「部署」接口里的平台代码。现按要求把这两个动作**下沉为发布流水线里的 DB action 脚本**
+ * （可用 `CONSOLE_API` + `CONSOLE_TOKEN` 调 `/api/internal/release/*` 写版本/切指针），
+ * 代码不再托管、不再覆盖 DB。
  *
- * 两者都只做「委托」——实现留在仓库 `scripts/pipeline/` 下随业务代码走，
- * 改实现不必动库，改「调用谁」才动库。
- *
- * ⚠️ **git 自 2026-09-15 起不在托管清单里**（用户决定）：拉取代码是普通 shell 节点，
- * 脚本存在 DB、页面可编辑；git 的登录 / 密钥 / 权限归「git 信息维护层」，流水线不关心。
- * 新建流水线时的初始正文见 `DEFAULT_STEP_SCRIPTS`（写入一次，之后代码不再覆盖）。
+ * 机制保留：将来若要重新托管某个节点的脚本，往本清单加一条 + 放一个 `.sh` 即可
+ * （`PlatformScriptSeedService` 是数据驱动的，清单为空时它什么都不做）。
  */
-export const PLATFORM_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: string; label: string }> = [
-  { nodeKey: 'restart', file: RESTART_STEP_SCRIPT_FILE, label: '重启服务（平台托管）' },
-  { nodeKey: 'verify', file: VERIFY_STEP_SCRIPT_FILE, label: '部署验证（平台托管）' },
-];
+export const PLATFORM_STEP_SCRIPTS: ReadonlyArray<{ nodeKey: string; file: string; label: string }> =
+  [];
 
 /**
  * **默认节点脚本**（一次性初始值，不是平台托管）。
@@ -61,9 +53,9 @@ export function getDefaultStepScript(nodeKey: string): string {
 /**
  * 平台脚本目录（运行期绝对路径）。
  *
- * 供 `restart-step.sh` / `verify-step.sh` 定位随 console 分发的实现脚本
- * （引擎通过 `WS_PLATFORM_SCRIPTS_DIR` 变量注入）—— 实现收归 console 后，
- * 流水线不再依赖发布分支里的 `scripts/pipeline/*.sh`。
+ * 供动作脚本定位随 console 分发的平台**工具**（如 `write-version.mjs`）
+ * —— 引擎通过 `WS_PLATFORM_SCRIPTS_DIR` 变量注入，脚本只「调用工具」，
+ * 业务实现（重启、探活）不在这里，而在 DB action 脚本正文里。
  */
 export function platformScriptsDir(): string {
   return join(__dirname, 'scripts');

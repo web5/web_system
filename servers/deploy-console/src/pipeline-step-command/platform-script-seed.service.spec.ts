@@ -1,6 +1,5 @@
 import { PlatformScriptSeedService } from './platform-script-seed.service';
 import {
-  getPlatformStepScript,
   getDefaultStepScript,
   PLATFORM_STEP_SCRIPTS,
   DEFAULT_STEP_SCRIPTS,
@@ -10,9 +9,13 @@ import {
  * 平台托管脚本同步 + 默认脚本初始化的防回归测试。
  *
  * 两套语义刻意相反（用户 2026-09-15）：
- *  - **托管**（restart / verify）：代码是真相源，启动/提交时同步，内容变化会覆盖，`locked=true` 接口拒写；
- *  - **默认**（git）：只在不存在时写入一次（`locked=false`），此后运维在页面上改，代码**不再覆盖**；
- *    历史被锁过的行要**解锁但保留内容**（不拿代码冲掉运维的改动）。
+ *  - **托管**（`PLATFORM_STEP_SCRIPTS`）：代码是真相源，启动/提交时同步，内容变化会覆盖，`locked=true` 接口拒写；
+ *  - **默认**（`DEFAULT_STEP_SCRIPTS`，git）：只在不存在时写入一次（`locked=false`），此后运维在页面上改，
+ *    代码**不再覆盖**；历史被锁过的行要**解锁但保留内容**。
+ *
+ * 2026-09-21 变更（`specs/pipeline-restart-verify-as-action/design.md`）：
+ * restart / verify 已从托管清单移除（下沉为发布流水线里的 DB action），故新增两条护栏 ——
+ * 清单必须为空、seed 不再产出 restart/verify 行（防止有人把托管机制加回来时无人察觉）。
  */
 describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化）', () => {
   let repo: {
@@ -25,6 +28,7 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
   let templates: { rows: Array<{ id: string }>; find: jest.Mock };
   let svc: PlatformScriptSeedService;
   const GIT_DEFAULT = () => getDefaultStepScript('git');
+  /** 当前应写入的节点行数：托管清单 + 默认清单 */
   const TOTAL = () => PLATFORM_STEP_SCRIPTS.length + DEFAULT_STEP_SCRIPTS.length;
 
   beforeEach(() => {
@@ -46,38 +50,21 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
     svc = new PlatformScriptSeedService(repo as never, templates as never);
   });
 
-  it('无记录 → 托管节点建 locked=true，git 建 locked=false 的默认脚本', async () => {
+  it('托管清单为空：restart / verify 已下沉为发布流水线里的 DB action', () => {
+    expect(PLATFORM_STEP_SCRIPTS).toHaveLength(0);
+  });
+
+  it('无记录 → 只建默认脚本（git，locked=false），不再产出 restart/verify 托管行', async () => {
     const wrote = await svc.seedForTemplate('t1');
     expect(wrote).toBe(true);
     expect(repo.rows).toHaveLength(TOTAL());
+    expect(repo.rows.map((r) => r.nodeKey)).toEqual(['git']);
+    expect(repo.rows.find((r) => r.nodeKey === 'restart')).toBeUndefined();
+    expect(repo.rows.find((r) => r.nodeKey === 'verify')).toBeUndefined();
 
-    for (const item of PLATFORM_STEP_SCRIPTS) {
-      expect(repo.rows.find((r) => r.nodeKey === item.nodeKey)).toMatchObject({
-        pipelineId: 't1',
-        locked: true,
-        enabled: true,
-        updatedBy: 'system',
-      });
-    }
-    // git 是默认脚本（可编辑），不是托管
     const git = repo.rows.find((r) => r.nodeKey === 'git');
     expect(git).toMatchObject({ pipelineId: 't1', locked: false, enabled: true });
     expect(git.command).toBe(GIT_DEFAULT());
-  });
-
-  /**
-   * restart / verify 只做「委托」，实现留在仓库 scripts/pipeline/ 下随业务代码走。
-   */
-  it('restart / verify 托管，正文委托到仓库内的版本化脚本', async () => {
-    await svc.seedForTemplate('t1');
-    for (const nodeKey of ['restart', 'verify']) {
-      const row = repo.rows.find((r) => r.nodeKey === nodeKey);
-      expect(row).toBeTruthy();
-      expect(row.locked).toBe(true);
-      expect(row.command).toBe(getPlatformStepScript(nodeKey));
-      expect(row.command).toContain('scripts/pipeline/');
-      expect(row.command).toContain('exec bash');
-    }
   });
 
   it('git 已存在且已解锁 → **不覆盖**（运维改过的脚本永不被冲掉）', async () => {
@@ -105,6 +92,21 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
     expect(git.command).toBe('#!/usr/bin/env bash\n# 老的平台托管脚本');
   });
 
+  it('restart / verify 存量托管行：平台不再触碰（内容归运维）', async () => {
+    repo.rows.push(
+      { pipelineId: 't1', nodeKey: 'restart', command: '# 运维自己的重启脚本', locked: true, enabled: true },
+      { pipelineId: 't1', nodeKey: 'verify', command: '# 运维自己的探活脚本', locked: true, enabled: true },
+    );
+
+    await svc.seedForTemplate('t1');
+    const restart = repo.rows.find((r) => r.nodeKey === 'restart');
+    const verify = repo.rows.find((r) => r.nodeKey === 'verify');
+    expect(restart.command).toBe('# 运维自己的重启脚本');
+    expect(verify.command).toBe('# 运维自己的探活脚本');
+    // 平台不再"锁定"它们（托管语义已撤），但仍不覆盖内容
+    expect(restart.locked).toBe(true);
+  });
+
   it('全部一致 → 不写库（幂等，避免每次启动都 UPDATE）', async () => {
     await svc.seedForTemplate('t1');
     const saveCalls = repo.save.mock.calls.length;
@@ -112,31 +114,6 @@ describe('PlatformScriptSeedService（平台托管同步 + 默认脚本初始化
     const wrote = await svc.seedForTemplate('t1');
     expect(wrote).toBe(false);
     expect(repo.save.mock.calls.length).toBe(saveCalls);
-  });
-
-  it('托管脚本内容变化 → 覆盖（restart/verify 仍是代码说了算）', async () => {
-    await svc.seedForTemplate('t1');
-    const restart = repo.rows.find((r) => r.nodeKey === 'restart');
-    restart.command = '# 被人改坏了';
-
-    const wrote = await svc.seedForTemplate('t1');
-    expect(wrote).toBe(true);
-    expect(repo.rows.find((r) => r.nodeKey === 'restart').command).toBe(
-      getPlatformStepScript('restart'),
-    );
-    expect(repo.rows.find((r) => r.nodeKey === 'restart').locked).toBe(true);
-  });
-
-  it('存量托管行（locked=false）→ 补上锁定位与正文', async () => {
-    repo.rows.push({ pipelineId: 't1', nodeKey: 'verify', command: '旧脚本', locked: false, enabled: false });
-
-    const wrote = await svc.seedForTemplate('t1');
-    expect(wrote).toBe(true);
-    expect(repo.rows.find((r) => r.nodeKey === 'verify')).toMatchObject({
-      locked: true,
-      enabled: true,
-      command: getPlatformStepScript('verify'),
-    });
   });
 
   it('seedAll 遍历全部模板（新模板不会漏）', async () => {

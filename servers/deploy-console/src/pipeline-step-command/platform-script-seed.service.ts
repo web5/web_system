@@ -13,7 +13,11 @@ import {
 /**
  * 平台托管脚本同步（`locked=true` 的节点命令）+ 默认脚本初始化。
  *
- * 设计取舍：**代码是真相源，DB 只是存放介质**（仅对 `PLATFORM_STEP_SCRIPTS`：restart / verify）
+ * 设计取舍：**代码是真相源，DB 只是存放介质**（仅对 `PLATFORM_STEP_SCRIPTS` 清单内的节点）
+ *
+ * ⚠️ 2026-09-21：该清单已**清空** —— restart / verify 下沉为发布流水线里的 DB action
+ * （脚本正文归运维，可用 `CONSOLE_API` / `CONSOLE_TOKEN` 调 `/api/internal/release/*`）。
+ * 见 `specs/pipeline-restart-verify-as-action/design.md`。机制保留：清单非空时本服务照旧同步。
  * - 启动时全量同步 → 页面/接口都能看到当前脚本，两端（本机 / dev）随版本自动一致；
  * - 提交发布时按模板同步一次（见 `PipelineService.submit`）→ 新模板/改过库的模板也不会漏；
  * - 手工 SQL 改过脚本？下次启动/提交会被重置 —— 这正是"平台托管"的语义，也是重置手段。
@@ -39,7 +43,7 @@ export class PlatformScriptSeedService implements OnModuleInit {
     try {
       const changed = await this.seedAll();
       if (changed) {
-        this.logger.log(`平台托管脚本已同步：restart / verify（${changed} 个模板有变更）`);
+        this.logger.log(`平台托管脚本已同步（${changed} 个模板有变更）`);
       }
     } catch (e) {
       // 种子失败不阻断启动（发布时还会再同步一次），但必须留痕
