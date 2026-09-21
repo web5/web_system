@@ -108,7 +108,7 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
             wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
             // 延迟跳转到首页触发重新登录
             setTimeout(() => {
-              wx.reLaunch({ url: '/pages/index/index' });
+              wx.reLaunch({ url: '/pages/welcome/index/index' });
             }, 1500);
           }
           reject(res);
