@@ -13,6 +13,8 @@
     <!-- 标题放最前：absolute 布局下后出现的兄弟在上层，保证返回键 / 新对话可点 -->
     <view class="nav-title">科豆 AI</view>
     <view class="nav-back" bindtap="goBack"><view class="nav-back-arrow"></view></view>
+    <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
+    <view class="nav-hist" bindtap="openHistory" aria-label="对话记录"><view class="nav-hist-ic"></view></view>
     <view class="nav-act" bindtap="newChat" aria-label="新建对话"><view class="nav-new-ic"></view></view>
   </view>
 
@@ -24,6 +26,7 @@
       scroll-with-animation="{{true}}"
       enhanced="{{true}}"
       show-scrollbar="{{false}}"
+      bindtap="closeCopyMenu"
     >
       <!-- 意图路由徽标：标出本轮由哪个 agent 作答（路由错了用户一眼可见，也是排查误判的第一现场） -->
       <view wx:if="{{currentAgent && currentAgent.id !== 'general'}}" class="agent-badge-wrap">
@@ -54,8 +57,27 @@
             </view>
           </view>
 
-          <view wx:else class="msg-text">{{item.text}}</view>
+          <!-- 长按复制：仅对已有正文的气泡生效（流式中 / 空气泡不弹） -->
+          <view
+            wx:elif="{{item.text}}"
+            class="msg-text"
+            data-idx="{{idx}}"
+            bindlongpress="onLongPressMsg"
+          >{{item.text}}</view>
+          <!-- 失败且没有内容：气泡内给友好提示，不留一片空白 -->
+          <view wx:elif="{{item.failed}}" class="msg-text msg-empty">{{item.failReason}}</view>
           <view wx:if="{{item.en}}" class="msg-quote-en">{{item.en}}</view>
+
+          <!-- 长按后出现的复制入口（气泡内右下角，避免遮住正文） -->
+          <view
+            wx:if="{{copyIdx === idx}}"
+            class="msg-copy"
+            catchtap="onCopyMsg"
+            data-idx="{{idx}}"
+          >
+            <view class="mc-ic"></view>
+            <text class="mc-t">复制</text>
+          </view>
 
           <!-- 失败态：已收到的部分保留在上，下面标出中断并给「重试 / 删除这一轮」 -->
           <view wx:if="{{item.failed}}" class="msg-fail">
@@ -99,18 +121,23 @@
 <view class="chat-input-bar">
   <view class="chat-composer">
     <view class="chat-plus" bindtap="openPlus">+</view>
-    <textarea
+    <!--
+      单行 input（而非 textarea）：移动端回车 / 键盘右下角「发送」= 直接发送，
+      回车不再插入换行（用户要求）。confirm-type="send" 让键盘按钮显示「发送」。
+    -->
+    <input
       class="chat-input"
       placeholder="问问科豆…"
       placeholder-class="chat-input-ph"
       value="{{input}}"
-      auto-height
       maxlength="200"
       cursor-spacing="20"
-      show-confirm-bar="{{false}}"
+      confirm-type="send"
+      confirm-hold="{{false}}"
       bindinput="onInput"
+      bindconfirm="onConfirm"
       disabled="{{sending}}"
-    ></textarea>
+    />
     <button
       class="chat-send"
       bindtap="send"
