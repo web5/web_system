@@ -173,6 +173,27 @@
   .en-card .ec-ops u + u { border-left: .5px solid var(--line); }
   .en-card .ec-ops u.fwd { color: var(--brand-txt); font-weight: 500; }
 
+  /* ---------- 转发演示：好友视角（微信聊天壳）+ 极简文本卡片 ---------- */
+  .wxchat { background: #EDEDED; border-radius: 10px; padding: 12px; }
+  .wxm { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+  .wxm:last-child { margin-bottom: 0; }
+  .wxm .wav { width: 30px; height: 30px; border-radius: 5px; color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .wxm .wtxt { background: #fff; border-radius: 6px; padding: 8px 10px; font-size: 13px; max-width: 65%; }
+  .mini-card { width: 200px; background: #fff; border-radius: 6px; overflow: hidden; border: .5px solid rgba(0,0,0,.06); cursor: pointer; }
+  .mini-card .mc-body { padding: 10px 11px; font-size: 14px; color: var(--t1); line-height: 1.5; }
+  .mini-card .mc-foot { padding: 0 11px 9px; font-size: 10px; color: var(--t3); }
+  .fwd-note { margin-top: 14px; font-size: 11.5px; color: var(--t2); line-height: 1.7; }
+  .fwd-note b { color: var(--brand-txt); font-weight: 500; }
+
+  /* ---------- 转发落地页（好友点卡片进入，只看译文） ---------- */
+  .fwd-res { margin-top: 0; border-left: none; }
+  .fwd-from { margin-top: 12px; font-size: 11px; color: var(--t3); text-align: center; }
+  .fwd-cta { margin-top: 16px; height: 46px; border-radius: 23px; background: var(--brand); color: #fff; font-size: 15px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  /* ---------- 翻译卡片流式两态（T0 翻译中 / T1 逐字 + 光标，原 chat-en-style 稿整合） ---------- */
+  .en-card .ec-typing { display: flex; align-items: center; gap: 6px; padding: 10px 12px 12px; font-size: 12px; color: var(--t2); }
+  .en-card .ec-caret { display: inline-block; width: 2px; height: 15px; background: var(--brand); vertical-align: -2px; margin-left: 3px; animation: blinkdot 1s steps(1) infinite; }
+
   /* ---------- 对话页 ---------- */
   .msgs { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 6px; }
   .msgs::-webkit-scrollbar { width: 0; }
@@ -502,7 +523,28 @@
             <span onclick="ask('看看合同风险')">看看合同风险</span>
             <span onclick="ask('今天该做什么')">今天该做什么</span>
           </div>
-          <!-- 翻译官作答示例：推荐译文卡片（完成态，操作行含「转发」，与结果页同一交互） -->
+          <!-- 翻译官作答示例：流式两态 + 完成态（操作行含「转发」，与结果页同一交互） -->
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-typing">翻译中<span class="tdots"><i></i><i></i><i></i></span></div>
+              </div>
+              <div class="meta">T0 · 收到 intent，卡片骨架先到位（操作行不占位）</div>
+            </div>
+          </div>
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-main">Thank you for your<span class="ec-caret"></span></div>
+                <div class="ec-note" style="color:var(--t3)">…</div>
+              </div>
+              <div class="meta">T1 · 英文逐字流入 + 品牌色光标</div>
+            </div>
+          </div>
           <div class="msg ai">
             <div class="av">豆</div>
             <div class="bd">
@@ -514,10 +556,10 @@
                   <u onclick="wxToast('已复制')">复制</u>
                   <u onclick="wxToast('朗读中…')">朗读</u>
                   <u onclick="wxToast('已收进生词本')">收藏</u>
-                  <u class="fwd" onclick="showForward()">转发</u>
+                  <u class="fwd" onclick="showForward('Thank you for your help.')">转发</u>
                 </div>
               </div>
-              <div class="meta">语言翻译官 作答 · 09:42</div>
+              <div class="meta">T2 · 完成：操作行出现，含转发 · 语言翻译官 作答</div>
             </div>
           </div>
         </div>
@@ -698,6 +740,49 @@
           <div onclick="wxToast('生成分享卡：canvas 出图 + 小程序码')">生成分享卡</div>
         </div>
         <div class="ai-note">内容由 AI 生成，仅供参考</div>
+      </div>
+
+      <!-- ================= 二级页：转发演示 · 好友视角（微信聊天壳） =================
+        真机：转发面板为微信原生 UI，此处为模拟壳；卡片底部「小程序名」灰字为微信强制展示。 -->
+      <div class="page sub" id="p-wx-fwd">
+        <div class="wxchat">
+          <div class="wxm">
+            <div class="wav" style="background:#7BBF6A">张</div>
+            <div class="wtxt">在吗，帮我看句英文</div>
+          </div>
+          <div class="wxm" style="flex-direction: row-reverse;">
+            <div class="wav" style="background:linear-gradient(140deg,#F97316,#E8620A)">豆</div>
+            <div class="mini-card" onclick="navigateTo('p-tr-fwd', '翻译 · 来自好友分享')">
+              <div class="mc-body" id="fwdCardText">Thank you for your help.</div>
+              <div class="mc-foot">科豆翻译官</div>
+            </div>
+          </div>
+          <div class="wxm">
+            <div class="wav" style="background:#7BBF6A">张</div>
+            <div class="wtxt">挺地道的，直接拿去用</div>
+          </div>
+        </div>
+        <div class="fwd-note">
+          <b>极简文本式卡片</b>：标题即译文、缩略图白底显译文 —— 好友<b>不点开即可读完整译文</b>，观感接近一条消息。<br />
+          卡片底部「科豆翻译官」灰字为微信强制展示（来源小程序名，去不掉）。<br />
+          点击右侧卡片 → 演示好友落地页。
+        </div>
+      </div>
+
+      <!-- ================= 二级页：转发落地页（好友只看译文） ================= -->
+      <div class="page sub" id="p-tr-fwd">
+        <div class="res fwd-res">
+          <div class="tags"><i>译文</i><span id="fwdText">Thank you for your help.</span></div>
+          <div class="txt" id="fwdNatural">Thank you for your help.</div>
+          <div class="ops">
+            <u onclick="wxToast('已复制到剪贴板')">复制</u>
+            <u onclick="wxToast('朗读：TTS 合成中')">朗读</u>
+            <u onclick="wxToast('已收进生词本')">收藏</u>
+          </div>
+        </div>
+        <div class="fwd-from">来自好友分享 · 科豆翻译官</div>
+        <div class="fwd-cta" onclick="goBack();openApp('translate')">我也要翻译</div>
+        <div class="ai-note">落地只展示译文：无原文卡、无提问、不重翻；超长译文截断 + 「去翻译完整版」</div>
       </div>
 
       <!-- ================= 二级页：翻译失败态 ================= -->
@@ -1066,15 +1151,19 @@ function showAction() {
  * 原型演示：sheet 模拟「选择一个聊天」→ toast 说明好友视角卡片 + 落地。
  * 卡片底部「小程序名」灰字为微信强制展示（原型以提示语说明，不伪装可去除）。
  */
-function showForward() {
-  var text = ($('rNatural').textContent || '').trim();
-  if (!text) { wxToast('译文未就绪，不能转发'); return; }
+function showForward(text) {
+  var t = String(text || $('rNatural').textContent || '').trim();
+  if (!t) { wxToast('译文未就绪，不能转发'); return; }
   openSheet('选择一个聊天', [
     { label: '张同学' },
     { label: '李老师' },
     { label: 'AI 学习群' },
   ], function (v) {
-    wxToast('已发给 ' + v + '：卡片标题即译文「' + (text.length > 20 ? text.slice(0, 20) + '…' : text) + '」，缩略图白底显译文，好友不点开即可读');
+    // 同步转发文本到好友视角卡片与落地页，再进入微信聊天演示
+    $('fwdCardText').textContent = t;
+    $('fwdText').textContent = '中文 → 英语';
+    $('fwdNatural').textContent = t;
+    navigateTo('p-wx-fwd', '微信 · 已发给 ' + v);
   });
 }
 
