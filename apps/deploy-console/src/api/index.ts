@@ -468,6 +468,12 @@ export function commitOf(versionTag: string): string {
 }
 
 export const pipelineRunsApi = {
+  /** 按分支列最近提交（origin/<branch> git log；提交发布时选 commit，留空=最新） */
+  branchCommits: (branch: string, limit = 20) =>
+    http.get(`/pipelines/branch-commits`, { params: { branch, limit } }) as Promise<
+      { hash: string; short: string; subject: string; author: string; date: string }[]
+    >,
+
   submit: (dto: {
     env: string
     moduleKey: string
