@@ -2,16 +2,17 @@
 /**
  * 服务详情（API 网关域）
  *
- * Tab：**接口（默认）** / 概览 / 网关路由 / 环境 / 部署
+ * Tab：**接口（默认）** / 概览 / 网关路由 / **环境与发布**（2026-09-21 由原「环境」+「部署」合并）
  * - 接口：方法 + 路径级治理元数据（鉴权 / 权限码 / 限流 / 来源），改动**不影响转发行为**
  * - 网关路由：转发规则（前缀 / 剥离 / 重写 / 超时 / 优先级），环境级覆盖 + 前缀包含告警
- * - 环境：各环境运行时与目标主机（**只读**；编辑入口在「环境管理 → 环境详情」）
+ * - 环境与发布：各环境运行时 / 目标主机（**只读**）+ 行内「构建发布 | 配置指向 | 探活」
  * 设计依据：specs/deploy-console-domain-split/page-spec.md §4 / design.md v2 §2.3
  */
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
+import PipelineSubmitDrawer from '@/components/pipeline/PipelineSubmitDrawer.vue'
 import {
   servicesApi,
   type ServiceRow,
@@ -446,13 +447,25 @@ async function probe(envId: string) {
  * **构建发布 = 走流水线**：拉码 → 构建 → 投递产物 →
  * 后端由 restart / verify 两个 action 落地生效（探活通过后才切指针）；前端切指针即生效。
  * 自 2026-09-21 起控制台不再有独立的「部署」动作。
+ *
+ * 2026-09-21 改（用户反馈「点击构建发布会出来抽屉，但是不要跳到流水线页面去」）：
+ * 原实现 `router.push('/pipelines?module=&env=')` 把用户带离当前服务上下文 —— 现改为
+ * **原地打开共用抽屉 `PipelineSubmitDrawer`**，路由不变；模块锁定为当前服务。
+ * 行内进入（带 envId）时环境**锁定并禁用**（见规格 §12）。
  */
+const submitOpen = ref(false)
+const submitEnv = ref('')
+/** 行内进入 → true：环境下拉锁定不可改；页头进入 → false：环境可选 */
+const submitLockEnv = ref(false)
+
 function publish(envId?: string) {
   if (service.value?.deployChannel === 'legacy') {
     message.warning('该服务走传统发布通道（legacy），不由流水线托管')
     return
   }
-  router.push({ name: 'PipelineCenter', query: { module: svcKey.value, env: envId || 'dev' } })
+  submitEnv.value = envId || ''
+  submitLockEnv.value = !!envId
+  submitOpen.value = true
 }
 
 async function load() {
@@ -778,6 +791,16 @@ onMounted(load)
 
       </a-tabs>
     </a-card>
+
+    <!-- 发起发布抽屉（共用组件）：原地打开、**不跳转**流水线页（用户 2026-09-21）；
+         模块锁定为当前服务；行内「构建发布」进入时环境锁定为该行 envId 并禁用 -->
+    <PipelineSubmitDrawer
+      v-model:open="submitOpen"
+      :fixed-module-key="svcKey"
+      :default-env="submitEnv"
+      :lock-env="submitLockEnv"
+      @submitted="load"
+    />
 
     <!-- 新增 / 编辑接口 -->
     <a-modal
