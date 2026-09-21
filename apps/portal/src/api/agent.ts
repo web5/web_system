@@ -114,6 +114,11 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
   return (await request.get(`${CONVERSATIONS_URL}/${id}`)) as ConversationDetail;
 }
 
+/** 删除会话（不可恢复；调用方须先二次确认，他人 / 不存在后端统一 404） */
+export async function deleteConversation(id: string): Promise<void> {
+  await request.delete(`${CONVERSATIONS_URL}/${id}`);
+}
+
 /* ==================== SSE ==================== */
 
 /**

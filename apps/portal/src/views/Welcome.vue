@@ -32,10 +32,12 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { dayIndex, getDailyQuote, nextQuote, type DailyQuote } from '@/config/daily';
 import { useConversationStore } from '@/stores/conversations';
+import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from '@/components/AppIcon.vue';
 
 const router = useRouter();
 const store = useConversationStore();
+const authGate = useAuthGateStore();
 
 const index = ref(dayIndex());
 const quote = ref<DailyQuote>(getDailyQuote());
@@ -46,10 +48,12 @@ function changeQuote() {
   quote.value = next.quote;
 }
 
-/** 开始对话：开启新会话（左栏不选中任何记录） */
+/** 开始对话：开启新会话（左栏不选中任何记录）；未登录先弹登录/注册，成功后续跑 */
 function startChat() {
-  store.startNew();
-  router.push('/chat');
+  authGate.ensureAuth(() => {
+    store.startNew();
+    router.push('/chat');
+  });
 }
 </script>
 
