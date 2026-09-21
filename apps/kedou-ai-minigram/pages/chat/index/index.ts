@@ -10,7 +10,6 @@
  *
  * ⚠️ 硬约束：`conversationId` 必须**每轮回传**，否则每轮都被当成新会话（上下文断 + 重复分类）。
  */
-import { getDailyQuote } from '../../../utils/daily';
 import { createAgentApi } from '../../../services/agent-stream';
 import { RESUME_CONV_KEY } from '../../../utils/conversation';
 import { parseAgentError } from '../../../utils/agent-error';
@@ -18,13 +17,30 @@ import { ensureLogin } from '../../../services/auth';
 import {
   buildTranslateCardView,
   inferTranslateDirection,
+  looksLikeTranslateReply,
 } from '../../../utils/translate-parse';
+import { speakText, stopSpeak, onSpeakState } from '../../../services/tts';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
 
 /** 需要按「翻译卡片」承载的 agent（与 SSE intent 的 agentId 对齐） */
 const CARD_AGENT_IDS = ['translate'];
+
+/** 歌曲卡片载荷（与 services/agent-stream.ts 的 StreamEvent.card 同构） */
+interface MusicCardPayload {
+  kind: string;
+  provider?: {
+    code: string;
+    name: string;
+    appId?: string | null;
+    entryType: string;
+    path?: string | null;
+    ready: boolean;
+  };
+  songs?: Array<{ title: string; artist?: string; reason?: string }>;
+  keyword?: string;
+}
 
 interface ChatMsg {
   role: 'user' | 'ai';
@@ -37,6 +53,8 @@ interface ChatMsg {
   _id?: string;
   /** 正在接收增量（显示流式态） */
   streaming?: boolean;
+  /** 载入历史会话时的占位消息（「正在载入…」） */
+  loading?: boolean;
   /** 本条失败（网络 / HTTP / 服务端 error）；保留已收到的部分，UI 给「重试 / 删除这一轮」 */
   failed?: boolean;
   /** 失败原因：给用户看的友好提示（不是技术原文） */
@@ -45,6 +63,11 @@ interface ChatMsg {
   failCode?: string;
   /** 由翻译官作答 → 用「推荐译文卡片」承载（含流式阶段，见 sendWith） */
   card?: boolean;
+  /**
+   * 歌曲推荐卡片（SSE `card` 事件 kind=music）。
+   * ⚠️ 不能复用上面的 card 布尔值 —— 它已被「推荐译文卡片」占用。
+   */
+  musicCard?: MusicCardPayload | null;
   /** 卡片英文主文 */
   enMain?: string;
   /** 卡片中文注解（无则空串，不渲染注解区） */
@@ -53,8 +76,63 @@ interface ChatMsg {
   meta?: string;
 }
 
+/**
+ * 新会话首屏的统一欢迎语。
+ * 不再是「今日一句」—— 用户还没开始对话时，给一句稳定的招呼即可（今日一句保留在欢迎页展示）。
+ */
+const WELCOME_GREETING = '科豆 AI · 体验不一样的 AI';
+
+/** 历史会话详情缓存前缀：按会话 id 缓存，第二次进入同一会话秒开 */
+const CONV_CACHE_PREFIX = 'conv_detail_';
+
+/** 载入历史会话时最多渲染的条数：长会话只取最近这些，避免一次性渲染过多 */
+const RECENT_MSG_LIMIT = 50;
+
 /** 开场推荐问题（写死；批次 4 改由 GET /ai/agents 的 entry.suggestions 驱动） */
 const OPENING_SUGGESTIONS = ['帮我翻一句话', '看看合同风险', '今天该做什么'];
+
+/**
+ * 历史消息的翻译卡片启发式补判（缓存与网络刷新共用，幂等：已打 card 标记的不重算）。
+ *
+ * 后端 getConversation 不回传 intent，只能从文本形态识别（utils/translate-parse 的
+ * looksLikeTranslateReply：含【推荐译文】标记，或「英文开头 + 中文说明」形态）。
+ * 方向 meta 用其前面最近一条用户提问推断 —— 找不到对应提问就不显示（不猜）。
+ */
+/** 尝试把 tool 消息内容解析成歌曲卡片；不是卡片返回 null（历史回看据此还原，不退化为文本） */
+function tryParseMusicCard(content: unknown): MusicCardPayload | null {
+  if (typeof content !== 'string' || !content) return null;
+  try {
+    const obj = JSON.parse(content);
+    if (!obj || obj.kind !== 'music' || !Array.isArray(obj.songs) || !obj.songs.length) return null;
+    return obj as MusicCardPayload;
+  } catch {
+    return null;
+  }
+}
+
+function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
+  let lastUserText = '';
+  return msgs.map((m) => {
+    if (m.role === 'user') {
+      lastUserText = m.text;
+      return m;
+    }
+    // 已是卡片（新缓存）或不像翻译回复：原样返回
+    if (m.card || !looksLikeTranslateReply(m.text)) return m;
+    const view = buildTranslateCardView(m.text);
+    const out: ChatMsg = {
+      ...m,
+      card: true,
+      text: view.text,
+      enMain: view.main,
+      note: view.note,
+      meta: inferTranslateDirection(lastUserText),
+    };
+    // 消费掉提问：连续多条 AI 消息时，后面那条没有对应提问，meta 不再沿用
+    lastUserText = '';
+    return out;
+  });
+}
 
 Page({
   data: {
@@ -80,6 +158,10 @@ Page({
     currentAgent: null as null | { id: string; name: string },
     /** 长按后展开复制入口的气泡下标；-1 = 无 */
     copyIdx: -1,
+    /** 朗读按钮态：正在合成音频的消息下标；-1 = 无 */
+    speakLoadingIdx: -1,
+    /** 朗读按钮态：正在播放的消息下标；-1 = 无（再点一次 = 停止） */
+    speakPlayingIdx: -1,
   },
 
   /**
@@ -89,11 +171,20 @@ Page({
    */
   _runId: 0,
 
+  /** 本次转发针对的消息下标（onShareTap 记录，onShareAppMessage 消费） */
+  _shareIdx: -1,
+
+  /** 朗读状态订阅的退订函数（onUnload 时调用） */
+  _offSpeakState: null as null | (() => void),
+
   onLoad() {
     this.initNavBar();
-    const quote = getDailyQuote();
     this.setData({
-      chatMessages: [{ role: 'ai', text: quote.cn, en: quote.en, daily: true }],
+      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
+    });
+    // 播放结束 / 停止时清除按钮「停止」态（合成中由 await 时序管理）
+    this._offSpeakState = onSpeakState((s) => {
+      if (!s) this.setData({ speakPlayingIdx: -1 });
     });
   },
 
@@ -159,54 +250,92 @@ Page({
 
     // 作废在途回调：切会话后，旧会话的流式回包不该再写入
     this._runId += 1;
-    // 不弹全屏 loading：历史会话载入若偏慢，全屏「载入中」会让人以为页面卡住 / 元素缺失。
-    // 改为静默载入 —— 先回到对话页（导航栏完整可用），数据到了再填充，失败才提示。
+
+    // ① 缓存命中 → 立即渲染（秒开），随后再后台静默刷新
+    let cached: ChatMsg[] | null = null;
+    try {
+      cached = wx.getStorageSync(CONV_CACHE_PREFIX + id) || null;
+    } catch {
+      /* 读不到就走网络 */
+    }
+    if (Array.isArray(cached) && cached.length) {
+      this.applyResumed(id, cached);
+    } else {
+      // ② 未命中 → 先给占位气泡（不用全屏 loading：它会盖住导航栏、也像卡住）
+      this.setData({
+        conversationId: id,
+        chatMessages: [{ role: 'ai', text: '正在载入…', _id: 'h-loading', loading: true }],
+        sending: false,
+        input: '',
+        suggestions: [],
+        copyIdx: -1,
+        currentAgent: null,
+      });
+    }
+
     try {
       const detail = await createAgentApi(CHAT_AGENT_ID).getConversation(id);
       const raw: any[] = Array.isArray(detail?.messages) ? detail.messages : [];
       // 只渲染 user / assistant；tool 过程消息不进对话流（与后端一致）
-      const msgs: ChatMsg[] = raw
-        .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
-        .map((m) => ({
-          role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai',
-          text: String(m.content || ''),
-          _id: `h-${Math.random().toString(36).slice(2)}`,
-        }));
-      this.setData({
-        conversationId: id,
-        chatMessages: msgs.length
-          ? msgs
-          : [{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }],
-        sending: false,
-        input: '',
-        expandMap: {},
-        suggestions: [],
-        copyIdx: -1,
-        // 历史会话的 agent 归属不在列表接口里（产品决策：不展示），故不清空不清算
-        currentAgent: null,
-      });
-      // 可见反馈：与原型 resumeConv 的 toast 对齐，同时用于判断「载入这一步到底跑没跑」
-      wx.showToast({ title: '已载入会话', icon: 'none' });
-      // 从二级页返回后重新校正导航栏尺寸：避免残留状态导致返回键错位 / 不可见
-      this.initNavBar();
-      this.scrollToBottom();
+      const all: ChatMsg[] = raw
+        .filter((m) => m && (m.role === 'user' || m.role === 'assistant' || m.role === 'tool'))
+        .map((m) => {
+          // tool 消息只有一种要渲染：歌曲卡片（present-music-card 的结果，内容即卡片 JSON）。
+          // 其余工具过程消息不进对话流（与后端一致），避免历史里冒出原始 JSON。
+          const card = m.role === 'tool' ? tryParseMusicCard(m.content) : null;
+          return {
+            role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai',
+            text: card ? '' : String(m.content || ''),
+            musicCard: card,
+            _id: `h-${Math.random().toString(36).slice(2)}`,
+          };
+        })
+        // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
+        .filter((m) => m.musicCard || m.text || m.role === 'user');
+      // ③ 长会话只取最近 N 条，避免一次性渲染过多
+      const msgs = all.length > RECENT_MSG_LIMIT ? all.slice(-RECENT_MSG_LIMIT) : all;
+      try {
+        wx.setStorageSync(CONV_CACHE_PREFIX + id, msgs);
+      } catch {
+        /* 缓存写失败不影响本次显示 */
+      }
+      this.applyResumed(id, msgs);
     } catch {
       wx.showToast({ title: '载入会话失败', icon: 'none' });
     }
+  },
+
+  /** 渲染载回的历史会话（缓存命中与网络刷新共用） */
+  applyResumed(id: string, msgs: ChatMsg[]) {
+    this.setData({
+      conversationId: id,
+      chatMessages: msgs.length
+        ? decorateHistoryCards(msgs)
+        : [{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }],
+      sending: false,
+      input: '',
+      expandMap: {},
+      suggestions: [],
+      copyIdx: -1,
+      // 历史会话的 agent 归属不在列表接口里（产品决策：不展示）
+      currentAgent: null,
+    });
+    // 从二级页返回后重新校正导航栏尺寸：避免残留状态导致返回键错位 / 不可见
+    this.initNavBar();
+    this.scrollToBottom();
   },
 
   /** 新对话：清空当前会话，重新注入今日一句 */
   newChat() {
     // 作废在途回调：新一轮开始后，上一轮的 delta / reply / error 不再写 data
     this._runId += 1;
-    const quote = getDailyQuote();
     this.setData({
       conversationId: '',
       sending: false,
       input: '',
       expandMap: {},
       suggestions: OPENING_SUGGESTIONS as string[],
-      chatMessages: [{ role: 'ai', text: quote.cn, en: quote.en, daily: true }],
+      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
       copyIdx: -1,
@@ -243,6 +372,12 @@ Page({
   onUnload() {
     // 页面销毁：作废在途回调，避免 setData 打到已销毁实例
     this._runId += 1;
+    // 离开页面停掉朗读，避免音频在后台继续响
+    stopSpeak();
+    if (this._offSpeakState) {
+      this._offSpeakState();
+      this._offSpeakState = null;
+    }
   },
 
   onInput(e: any) {
@@ -280,6 +415,19 @@ Page({
   /** 点消息区空白处：收起复制入口 */
   closeCopyMenu() {
     if (this.data.copyIdx >= 0) this.setData({ copyIdx: -1 });
+  },
+
+  /**
+   * 卡片「换一批 / 不感兴趣」：当作新一轮对话发出。
+   * 不自己造推荐逻辑 —— 排序与口味都由 Agent 侧按口味档案决定。
+   */
+  onMusicSwap() {
+    if (this.data.sending) return;
+    this.sendWith('换一批');
+  },
+  onMusicDislike() {
+    if (this.data.sending) return;
+    this.sendWith('不感兴趣，换一批');
   },
 
   /** 点击开场推荐问题：直接发送 */
@@ -480,14 +628,52 @@ Page({
     });
   },
 
-  /** 卡片操作行：朗读（平台能力待实现，占位不伪装） */
-  onCardSpeak() {
-    wx.showToast({ title: '朗读开发中', icon: 'none' });
+  /**
+   * 卡片操作行：朗读英文主文 —— 走后端 TTS（gateway /api/ai/tts/speak → ai-service 腾讯云 TTS）。
+   * 等待期不做全屏 loading：按钮内联切换「合成中…」，命中本地缓存则直接播放（无等待）。
+   * 再点一次 = 停止播放（由 speakText 内部判定）。
+   */
+  async onCardSpeak(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    const msg = this.data.chatMessages[idx];
+    const text = msg?.enMain || msg?.text || '';
+    if (!text) return;
+    // 再点一次 = 停止（speakText 内部判定，直接返回，无需 loading 态）
+    if (this.data.speakPlayingIdx === idx) {
+      this.setData({ speakPlayingIdx: -1 });
+      await speakText(text);
+      return;
+    }
+    this.setData({ speakLoadingIdx: idx, speakPlayingIdx: -1 });
+    const ok = await speakText(text);
+    this.setData({ speakLoadingIdx: -1, speakPlayingIdx: ok ? idx : -1 });
   },
 
   /** 卡片操作行：收藏（与翻译结果页一致，占位不伪装） */
   onCardFav() {
     wx.showToast({ title: '已收进生词本', icon: 'none' });
+  },
+
+  /**
+   * 转发（极简文本式，与翻译结果页同一交互）：
+   * 微信不向 onShareAppMessage 传触发来源，故 bindtap 先记录分享哪条卡。
+   */
+  onShareTap(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    this._shareIdx = Number.isNaN(idx) ? -1 : idx;
+  },
+
+  /** 分享内容：当前卡的英文主文；落地走翻译结果页（好友只看译文） */
+  onShareAppMessage() {
+    const idx = (this as any)._shareIdx;
+    const msg = this.data.chatMessages[idx];
+    const text = String(msg?.enMain || msg?.text || '').trim();
+    return {
+      title: text || '科豆 AI',
+      path: text
+        ? `/pages/translate/result/result?fwd=${encodeURIComponent(text)}`
+        : '/pages/welcome/index/index',
+    };
   },
 
   /** 切换 AI 长消息展开/收起 */
