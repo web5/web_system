@@ -1,0 +1,9 @@
+/* 翻译设置页
+ * 色值一律走 app.wxss 的设计 token。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.sec-t { font-size: 25rpx; color: var(--t2); margin: 8rpx 0 16rpx; }
+.list { background: var(--card); border-radius: 24rpx; overflow: hidden; margin-bottom: 32rpx; }
+.r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
+.r:last-child { border-bottom: none; }
+.v { color: var(--t3); font-size: 26rpx; }
+.foot { font-size: 22rpx; color: var(--t3); text-align: center; margin-top: 20rpx; }

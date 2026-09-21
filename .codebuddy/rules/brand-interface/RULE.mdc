@@ -1,0 +1,49 @@
+---
+description: 品牌端 UI 实现规则（portal / kedou-ai-minigram）。任务涉及新建/修改小程序页面、品牌端 Vue 页面、组件、WXML/WXSS/Vue 外观、颜色/Token、交互、布局时使用。补 ui-interface/RULE.mdc（DR-5）留下的规则真空；动作门顺序与 kit-sop-enforcement 设计对齐。
+alwaysApply: false
+enabled: true
+updatedAt: 2026-09-21T00:00:00.000Z
+---
+
+# 品牌端 UI 实现规则（portal / kedou-ai-minigram）
+
+> 与 `ui-interface/RULE.mdc` 并列：那条只管 admin 系（deploy-console / admin / mcp-admin）；
+> 品牌端（portal / kedou-ai-minigram）由本规则覆盖 —— 补 DR-5 的规则真空。
+> 动作门与机器强制（L3 hook）设计见 `specs/kit-sop-enforcement/design.md` §3。
+
+## 触发范围（本规则的路径判定，与 PreToolUse hook 判定一致）
+
+- `apps/kedou-ai-minigram/**` 的页面 / 组件 / `app.json` / `*.wxml` / `*.wxss`
+- `apps/portal/**` 的 `.vue` 界面文件
+- 真相源：`specs/kit-sop-enforcement/design.md` §3.2（hook 判定若与此不一致，以设计文档为准并回来修本清单）
+
+## 动作门（顺序不可跳）
+
+1. 原型优先：先改 `apps/<app>/prototype/index.html`（或 `docs/ui/prototypes/**`）+ 同步页面规格 `specs/**/page-spec*.md`
+2. 交互质检：过 `ux-prototype-designer/references/ux-review-checklist.md` 独立交互质检
+3. **用户确认 ← 缺此不得写落地代码**（人审节点）
+4. 原型/规格**单独 commit**，记下 sha；随后 UI commit 的 message 带 `Proto: <sha>`（`commit-msg` hook 强制，见 `specs/kit-sop-enforcement/design.md` §3.8）
+5. 落码（WXML / WXSS / Vue）
+
+### 原型整合约定（动作门第 1 步细则，不可跳）
+
+- **同一产品模块的 UI 改动，原型必须整合进该模块既有的整体原型稿**（如 `apps/kedou-ai-minigram/prototype/index.html` 的对应屏 / 子页），不允许另起孤立 HTML 交付 —— 用户要在**一份稿里**看全产品形态，散稿无法评审整体一致性。
+- **动手前先识别产品模块归属**：改动落在哪个 app / 哪组页面，就进哪个整体原型；识别不清（跨模块 / 新模块）先向用户确认归属再动手。
+- 独立 HTML 只允许两种例外，且须在页面规格里登记去向（规格与整体原型双向可索引）：
+  - **方案对比稿**（A/B/C 多方案并排供拍板）：拍板后**收敛进整体原型**再走 3~5 步，对比稿留档不删；
+  - **尚无整体原型的新模块**首建稿：后续该模块整体原型建立后并入。
+- 对话中说「出一个原型稿 / 交互稿」= 默认指整合进整体原型稿，不另起新文件。
+
+## 最小禁项
+
+- 禁裸 hex（除原型 `:root` / `app.wxss` token 层）；色值走 `--brand-*` 等 token（`apps/kedou-ai-minigram/app.wxss` 已声明浅色设计 token）
+- 禁 emoji 图标（用 SVG / tabler）
+- 平台原生能力（原生导航栏自绘、分享、支付）不得伪装已实现，须占位 + 标注真机语义
+- 产品主色：品牌橙 `#F97316`；文本 / 选中态用深档 `#C2410C`（对比度 5.4:1，过 AA）
+- 字重只用 400 / 500 / 600
+
+## 生效提示
+
+- 新建 / 修改本规则后需**新开会话**生效。
+- 验证：向 AI 询问"当前应用了哪些规则"。
+- 手动引用：对话中 `@brand-interface`。

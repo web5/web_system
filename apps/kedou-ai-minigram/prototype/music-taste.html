@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>科豆 AI 小程序 · 汇总交互稿 · 歌曲推荐卡片 + 音乐口味记忆</title>
+<style>
+  :root {
+    --stage: #ECE8E3;
+    --nav-bg: #FFFFFF; --nav-text: #000000;
+    --page-bg: #F7F4F0; --card: #FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand: #F97316; --brand-soft: #FFF2E6; --brand-deep: #E8620A; --brand-txt: #EA580C;
+    --accent: #0E9B8C; --accent-soft: #E4F6F2;
+    --green: #12A150; --green-soft: #E7F7EE;
+    --amber: #D98200; --amber-soft: #FFF6E5;
+    --danger: #E5484D; --danger-soft: #FDECEC;
+    --capsule: rgba(255,255,255,.86); --capsule-bd: rgba(0,0,0,.08);
+    --tab-bg: #FFFFFF; --tab-off: #8A90A0;
+    --mask: rgba(0,0,0,.45); --sheet: #FFFFFF; --sheet-gap: #F2F2F7;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+    --gap: 8px; --radius: 12px; --radius-sm: 8px;
+    --on-brand: #FFFFFF;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--stage); color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-size: 14px; line-height: 1.6; min-height: 100vh; padding: 20px 12px 40px;
+  }
+  .head { text-align: center; margin-bottom: 14px; }
+  .head h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .head p { margin: 0; font-size: 12px; color: var(--t2); }
+  .head p b { color: var(--brand-txt); font-weight: 500; }
+  .stage { display: flex; gap: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+
+  /* ---------- 原型导航（壳外工具层，≠ 小程序页面） ---------- */
+  .hubnav { width: 268px; flex: none; background: var(--card); border: .5px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .hubnav .hn-t { font-size: 12.5px; color: var(--t2); padding: 0 2px 8px; }
+  .hubnav .hn-i { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); cursor: pointer; }
+  .hubnav .hn-i:hover { background: var(--page-bg); }
+  .hubnav .hn-i.on { background: var(--brand-soft); }
+  .hubnav .hn-i.on .ht { color: var(--brand-txt); }
+  .hubnav .hn-no { flex: none; width: 24px; height: 24px; border-radius: 6px; background: var(--page-bg); color: var(--t2); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .hubnav .hn-i.on .hn-no { background: var(--brand); color: var(--on-brand); }
+  .hubnav .ht { font-size: 13px; font-weight: 500; color: var(--t1); }
+  .hubnav .hd { font-size: 11.5px; color: var(--t2); margin-top: 1px; }
+  .hubnav .hn-f { font-size: 11px; color: var(--t3); border-top: .5px solid var(--line); margin-top: 8px; padding-top: 8px; line-height: 1.8; }
+  .note { max-width: 390px; margin: 0 auto 16px; font-size: 11.5px; color: var(--t2); background: var(--card); border: .5px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+  .note b { color: var(--t1); font-weight: 600; }
+
+  /* ---------- 小程序壳（与 prototype/index.html 同源） ---------- */
+  .phone {
+    width: 390px; height: 812px; max-height: calc(100vh - 130px); flex: none;
+    background: var(--page-bg); border-radius: 50px; position: relative; overflow: hidden;
+    box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; flex-direction: column;
+  }
+  .wxbar { height: 44px; flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 5px; font-size: 13px; font-weight: 600; }
+  .wxbar .bat { width: 25px; height: 12px; border: 1px solid var(--t1); border-radius: 3.5px; position: relative; opacity: .9; }
+  .wxbar .bat::after { content: ""; position: absolute; inset: 1.5px; width: 70%; background: var(--t1); border-radius: 1.5px; }
+  .navbar { height: 44px; flex: none; position: relative; display: flex; align-items: center; justify-content: center; background: var(--nav-bg); border-bottom: .5px solid var(--line); z-index: 12; }
+  .navbar .title { font-size: 17px; font-weight: 600; color: var(--nav-text); }
+  .navbar .back { position: absolute; left: 12px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .navbar .back svg { width: 11px; height: 18px; fill: none; stroke: var(--t1); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .navbar.has-back .back { opacity: 1; pointer-events: auto; }
+  .capsule { position: absolute; right: 7px; width: 87px; height: 32px; border-radius: 16px; background: var(--capsule); border: .5px solid var(--capsule-bd); display: flex; align-items: center; justify-content: space-around; backdrop-filter: blur(8px); }
+  .capsule .dots { display: flex; gap: 2.5px; }
+  .capsule .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--nav-text); display: block; }
+  .capsule .circle { width: 17px; height: 17px; border: 1.4px solid var(--nav-text); border-radius: 50%; position: relative; }
+  .capsule .circle::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2.2px; height: 5.5px; border-radius: 1px; background: var(--nav-text); transform: translate(-50%, -62%); }
+  .capsule .sep { width: .5px; height: 18px; background: var(--capsule-bd); }
+
+  .stack { flex: 1; position: relative; overflow: hidden; }
+  .page { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 22px; background: var(--page-bg); transition: transform .26s cubic-bezier(.32,.72,0,1), opacity .26s; }
+  .page::-webkit-scrollbar { width: 0; }
+  .page.tab { display: none; }
+  .page.tab.active { display: block; }
+  #p-chat.active { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .page.sub { transform: translateX(100%); opacity: 0; pointer-events: none; z-index: 8; }
+  .page.sub.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+  .tabbar { flex: none; height: 56px; background: var(--tab-bg); border-top: .5px solid var(--line); display: flex; align-items: center; padding-bottom: 6px; z-index: 10; }
+  .tabbar .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10.5px; color: var(--tab-off); cursor: pointer; }
+  .tabbar .tb svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .tabbar .tb.on { color: var(--brand-txt); }
+  .tabbar .tb.proto { opacity: .75; }
+
+  /* ---------- 通用组件（各模块共用） ---------- */
+  .sec-t { font-size: 12.5px; color: var(--t2); margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .sec-t em { font-style: normal; font-size: 11.5px; color: var(--t3); }
+  .list { background: var(--card); border-radius: var(--radius); overflow: hidden; }
+  .list .r { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-bottom: .5px solid var(--line); font-size: 14px; cursor: pointer; }
+  .list .r:last-child { border-bottom: none; }
+  .list .r .nm { flex: 1; text-align: left; color: var(--t1); }
+  .list .r .v { color: var(--t2); font-size: 13px; }
+  .list .r .arw { color: var(--t3); font-size: 15px; margin-left: 8px; }
+  .foot { margin-top: 20px; font-size: 10.5px; color: var(--t3); text-align: center; line-height: 1.9; }
+
+  /* ---------- 对话页 ---------- */
+  .chat-box { flex: 1; overflow-y: auto; padding: 12px 16px 8px; }
+  .chat-box::-webkit-scrollbar { width: 0; }
+  .msg { display: flex; gap: 8px; margin-bottom: 16px; }
+  .msg.me { flex-direction: row-reverse; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; font-weight: 500; }
+  .msg.me .avatar { background: var(--accent-soft); color: var(--accent); }
+  .bubble { max-width: 274px; background: var(--card); border-radius: var(--radius); padding: 12px 14px; font-size: 14px; color: var(--t1); }
+  .msg.me .bubble { background: var(--brand); color: var(--on-brand); }
+  .meta { font-size: 10.5px; color: var(--t3); margin: -10px 0 16px 38px; }
+
+  /* ---------- 音乐卡片 ---------- */
+  .mcard { width: 274px; background: var(--card); border-radius: var(--radius); border: .5px solid var(--line); overflow: hidden; }
+  .mc-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: .5px solid var(--line); }
+  .mc-head .tag { font-size: 11px; color: var(--brand-txt); background: var(--brand-soft); padding: 3px 8px; border-radius: var(--radius-sm); }
+  .mc-head .sub { font-size: 11.5px; color: var(--t3); }
+  .mc-song { padding: 10px 14px; border-bottom: .5px solid var(--line); }
+  .mc-song:last-of-type { border-bottom: none; }
+  .mc-song .t { font-size: 14px; font-weight: 500; color: var(--t1); display: flex; justify-content: space-between; gap: 8px; }
+  .mc-song .t .ar { font-weight: 400; font-size: 12.5px; color: var(--t2); flex: none; }
+  .mc-song .why { font-size: 12px; color: var(--t2); margin-top: 2px; }
+  .mc-ops { display: flex; gap: 8px; padding: 10px 14px; border-top: .5px solid var(--line); }
+  .mc-op { flex: none; font-size: 12.5px; color: var(--t2); padding: 6px 10px; border-radius: var(--radius-sm); border: .5px solid var(--line); cursor: pointer; }
+  .mc-main { flex: 1; height: 34px; border-radius: 17px; background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+  .mc-main:active { transform: scale(.985); }
+  .mc-main svg { width: 15px; height: 15px; fill: none; stroke: var(--on-brand); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .mc-note { padding: 0 14px 10px; font-size: 10.5px; color: var(--t3); }
+  .sk { background: linear-gradient(90deg, rgba(60,60,67,.06), rgba(60,60,67,.12), rgba(60,60,67,.06)); border-radius: 6px; height: 12px; animation: sh 1.1s infinite; }
+  @keyframes sh { 0% { background-position: -60px 0; } 100% { background-position: 160px 0; } }
+  .mcard.loading .sk.w70 { width: 70%; } .mcard.loading .sk.w45 { width: 45%; margin-top: 8px; }
+
+  /* ---------- 输入栏 ---------- */
+  .composer { flex: none; display: flex; gap: 8px; padding: 8px 16px 16px; background: var(--page-bg); }
+  .composer .ipt { flex: 1; height: 40px; border-radius: 20px; background: var(--card); border: .5px solid var(--line); padding: 0 14px; font-size: 14px; color: var(--t1); display: flex; align-items: center; }
+  .composer .send { width: 40px; height: 40px; border-radius: 20px; background: var(--brand); color: var(--on-brand); display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; }
+
+  /* ---------- 口味页（方案 B · 扁平列表） ---------- */
+  .grp { background: var(--card); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
+  .grp .gh { font-size: 12.5px; color: var(--t2); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .grp .gh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-txt); }
+  .tag-item.dis { background: var(--danger-soft); color: var(--danger); }
+  .tag-item .pre { font-size: 10.5px; opacity: .7; }
+  .tag-item .x { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: .75; }
+  .tag-item .x svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .add { display: flex; gap: 8px; margin-top: 12px; }
+  .add input { flex: 1; height: 36px; border-radius: var(--radius-sm); border: .5px solid var(--line); background: var(--page-bg); padding: 0 12px; font-size: 13px; color: var(--t1); outline: none; }
+  .add input.err { border-color: var(--danger); }
+  .add .btn-a { flex: none; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-txt); font-size: 13px; display: flex; align-items: center; cursor: pointer; }
+  .ferr { font-size: 11.5px; color: var(--danger); margin-top: 6px; display: none; }
+  .ferr.show { display: block; }
+  .empty { text-align: center; padding: 40px 20px; }
+  .empty .ico { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 22px; background: var(--brand-soft); display: flex; align-items: center; justify-content: center; }
+  .empty .ico svg { width: 22px; height: 22px; fill: none; stroke: var(--brand-txt); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .empty .t1x { font-size: 14px; color: var(--t1); }
+  .empty .t2x { font-size: 12.5px; color: var(--t2); margin-top: 6px; }
+  .empty .go { margin-top: 16px; display: inline-flex; height: 36px; padding: 0 16px; border-radius: 18px; background: var(--brand); color: var(--on-brand); font-size: 13px; align-items: center; cursor: pointer; }
+  .danger-btn { margin-top: 16px; height: 44px; border-radius: var(--radius); border: .5px solid var(--line); background: var(--card); color: var(--danger); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  /* ---------- 弹层 / Toast ---------- */
+  .mask { position: absolute; inset: 0; background: var(--mask); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+  .mask.show { opacity: 1; pointer-events: auto; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--sheet); border-radius: 16px 16px 0 0; padding: 8px; transform: translateY(110%); transition: transform .26s cubic-bezier(.32,.72,0,1); z-index: 21; }
+  .sheet.show { transform: translateY(0); }
+  .sheet .sg { background: var(--sheet); border-radius: var(--radius); overflow: hidden; }
+  .sheet .si { padding: 14px; text-align: center; font-size: 15px; border-bottom: .5px solid var(--line); cursor: pointer; }
+  .sheet .si:last-child { border-bottom: none; }
+  .sheet .si.danger { color: var(--danger); }
+  .sheet .si .d { font-size: 11.5px; color: var(--t3); margin-top: 2px; }
+  .sheet .sc { margin-top: 8px; height: 48px; border-radius: var(--radius); background: var(--sheet); display: flex; align-items: center; justify-content: center; font-size: 15px; cursor: pointer; }
+  /* 平台原生能力占位：微信跳转确认弹窗 */
+  .wxdlg { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%) scale(.9); width: 280px; background: var(--card); border-radius: 14px; z-index: 22; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; overflow: hidden; }
+  .wxdlg.show { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+  .wxdlg .bd { padding: 20px 18px 16px; text-align: center; }
+  .wxdlg .h { font-size: 16px; font-weight: 500; color: var(--t1); }
+  .wxdlg .p { font-size: 13px; color: var(--t2); margin-top: 8px; }
+  .wxdlg .p b { color: var(--t1); font-weight: 500; }
+  .wxdlg .ft { display: flex; border-top: .5px solid var(--line); }
+  .wxdlg .ft div { flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 15px; cursor: pointer; }
+  .wxdlg .ft .ok { color: var(--brand-txt); border-left: .5px solid var(--line); }
+  .toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); background: rgba(0,0,0,.78); color: var(--on-brand); font-size: 12.5px; padding: 10px 16px; border-radius: 8px; z-index: 30; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 300px; text-align: center; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>歌曲推荐卡片 + 音乐口味记忆 · 汇总交互稿</h1>
+  <p>目标端：<b>微信小程序</b>　·　左侧「功能模块」为<b>壳外原型导航</b>（看稿工具，非产品页面）；TabBar 保持产品真实三项</p>
+  <p style="margin-top:8px;font-size:12px"><a href="hub.html" style="color:var(--brand-txt);text-decoration:none">← 原型总入口（hub.html）· 各功能页面原型稿索引</a></p>
+</div>
+
+<div class="note">
+  <b>已定案</b>：口味入口挂「AI 记忆」新分组（可复用）· 卡片保留「换一批 / 不感兴趣」· 口味页采用<b>方案 B 扁平列表</b>（方案 A 三类分组未采纳）· 一期只上 QQ音乐 · 跳转确认弹窗为平台原生占位（真机由微信弹出）。
+</div>
+
+<div class="stage">
+  <!-- 原型导航：位于小程序壳之外，是「看稿工具」，不出现在产品里 -->
+  <aside class="hubnav">
+    <div class="hn-t">本次功能模块（点选切换）</div>
+    <div class="hn-i on" data-go="tab:p-chat">
+      <span class="hn-no">01</span>
+      <div><div class="ht">对话页 · 音乐卡片</div>
+      <div class="hd">推荐卡片 + 换一批 / 不感兴趣 / 跳转 QQ音乐</div></div>
+    </div>
+    <div class="hn-i" data-go="tab:p-mine">
+      <span class="hn-no">02</span>
+      <div><div class="ht">我的页 · AI 记忆入口</div>
+      <div class="hd">新分组「AI 记忆」→ 音乐口味行 + 摘要</div></div>
+    </div>
+    <div class="hn-i" data-go="sub:p-taste">
+      <span class="hn-no">03</span>
+      <div><div class="ht">音乐口味页</div>
+      <div class="hd">扁平标签列表 · 增删 / 补充 / 清空 / 空态</div></div>
+    </div>
+    <div class="hn-f">
+      壳与组件全模块共用：导航栏 / 胶囊 / TabBar / 列表行 / chip 标签 / 卡片 / 底部弹层 / Toast。<br>
+      TabBar 保持产品真实三项（对话 / 发现 / 我的），导航不占用其中任何一项。
+    </div>
+  </aside>
+
+  <div class="phone">
+    <div class="wxbar"><span>9:41</span><span class="bat"></span></div>
+
+    <div class="navbar" id="nav">
+      <div class="back" id="back" aria-label="返回">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </div>
+      <div class="title" id="nav-title">科豆 AI</div>
+      <div class="capsule" aria-label="胶囊按钮占位">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="sep"></span>
+        <span class="circle"></span>
+      </div>
+    </div>
+
+    <div class="stack">
+      <!-- ========== 01 对话页 ========== -->
+      <div class="page tab active" id="p-chat">
+        <div class="chat-box" id="chatBox">
+          <div class="msg">
+            <div class="avatar">豆</div>
+            <div class="bubble">你好，我是科豆 AI，有什么可以帮你的吗？</div>
+          </div>
+          <div class="meta">内容由 AI 生成 · 12:14</div>
+          <div class="msg me">
+            <div class="avatar">我</div>
+            <div class="bubble">来点安静的</div>
+          </div>
+          <div class="msg">
+            <div class="avatar">豆</div>
+            <div class="bubble">这几首安静的，适合你现在的状态。</div>
+          </div>
+          <!-- 音乐卡片：由 SSE card 事件渲染；等待期显示骨架 -->
+          <div class="msg">
+            <div class="avatar">豆</div>
+            <div class="mcard" id="mcard">
+              <div class="mc-head">
+                <span class="tag">为你推荐</span>
+                <span class="sub">按你的口味 · 安静</span>
+              </div>
+              <div id="mcardBody"></div>
+              <div class="mc-ops">
+                <div class="mc-op" id="btnSwap">换一批</div>
+                <div class="mc-op" id="btnDislike">不感兴趣</div>
+                <div class="mc-main" id="btnPlay">
+                  <svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></svg>
+                  去 QQ音乐听
+                </div>
+              </div>
+              <div class="mc-note">跳转后在 QQ音乐搜索并播放，本小程序不提供音频播放</div>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="ipt" id="ipt">问问科豆…</div>
+          <div class="send" id="btnSend" aria-label="发送">↑</div>
+        </div>
+      </div>
+
+      <!-- ========== 发现页（本次范围外，仅保证入口可达） ========== -->
+      <div class="page tab" id="p-discover">
+        <div class="sec-t">本次范围外</div>
+        <div class="list"><div class="r"><span class="nm">发现页不在本次原型范围内</span><span class="arw">›</span></div></div>
+        <div class="foot">保留入口，仅为保证 Tab 两两可达</div>
+      </div>
+
+      <!-- ========== 02 我的页 ========== -->
+      <div class="page tab" id="p-mine">
+        <div class="sec-t">AI 记忆<em>跨会话生效</em></div>
+        <div class="list">
+          <div class="r" id="goTaste">
+            <span class="nm">音乐口味</span>
+            <span class="v" id="tasteSummary">民谣 · 周杰伦 · 安静</span>
+            <span class="arw">›</span>
+          </div>
+        </div>
+        <div class="sec-t">我的数据</div>
+        <div class="list">
+          <div class="r"><span class="nm">对话记录</span><span class="v">128 条</span><span class="arw">›</span></div>
+        </div>
+        <div class="foot">本服务使用生成式人工智能<br>已依法完成大模型与算法备案</div>
+      </div>
+
+      <!-- ========== 03 音乐口味页（方案 B · 扁平列表，二级页） ========== -->
+      <div class="page sub" id="p-taste">
+        <div id="tasteBody"></div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tb on" data-tab="p-chat">
+        <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-5A8 8 0 1 1 21 12z"/></svg>
+        <span>对话</span>
+      </div>
+      <div class="tb" data-tab="p-discover">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 5-5 2 2-5z"/></svg>
+        <span>发现</span>
+      </div>
+      <div class="tb" data-tab="p-mine">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5S20 17 20 21"/></svg>
+        <span>我的</span>
+      </div>
+    </div>
+
+    <!-- 平台原生能力占位：微信跳转确认弹窗 -->
+    <div class="mask" id="mask"></div>
+    <div class="wxdlg" id="wxdlg">
+      <div class="bd">
+        <div class="h">即将跳转「QQ音乐」小程序</div>
+        <div class="p">歌名 <b id="dlgSong">七里香</b> 已复制，进入后粘贴搜索</div>
+      </div>
+      <div class="ft">
+        <div id="dlgCancel">取消</div>
+        <div class="ok" id="dlgOk">允许</div>
+      </div>
+    </div>
+    <!-- 破坏性操作二次确认 -->
+    <div class="sheet" id="sheet">
+      <div class="sg">
+        <div class="si danger" id="doClear">清空口味记忆<div class="d">AI 将不再按你的口味推荐，可随时重新积累</div></div>
+      </div>
+      <div class="sc" id="sheetCancel">取消</div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+  /* ---------- 数据（与 user_taste_profiles.data 同构） ---------- */
+  var SETS = [
+    [
+      { t: '七里香', ar: '周杰伦', why: '你提过喜欢他，这首慢板最稳' },
+      { t: '平凡之路', ar: '朴树', why: '安静但有推进感，适合独处' },
+      { t: '成都', ar: '赵雷', why: '民谣底噪，不抢注意力' }
+    ],
+    [
+      { t: '晴天', ar: '周杰伦', why: '同一歌手，节奏更轻' },
+      { t: '那些花儿', ar: '朴树', why: '温柔的吉他扫弦' },
+      { t: '理想三旬', ar: '陈鸿宇', why: '低声线，适合夜里' }
+    ],
+    [
+      { t: '稻香', ar: '周杰伦', why: '偏暖一点，还是安静向' },
+      { t: '南山南', ar: '马頔', why: '民谣叙事，情绪平缓' },
+      { t: '陀螺', ar: '万晓利', why: '纯吉他，几乎无鼓点' }
+    ]
+  ];
+  var setIdx = 0;
+  var tasteMode = 'b'; // 方案 B：扁平列表（方案 A 三类分组未采纳，见 page-spec §4）
+  var taste = {
+    likes: { genres: ['民谣'], artists: ['周杰伦'], moods: ['安静'] },
+    dislikes: { genres: ['摇滚'], artists: [] }
+  };
+
+  /* ---------- 工具 ---------- */
+  function $(id) { return document.getElementById(id); }
+  var toastTimer;
+  function toast(msg) {
+    var el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 1900);
+  }
+  function showMask(on) { $('mask').classList.toggle('show', !!on); }
+
+  /* ---------- 卡片渲染 ---------- */
+  function renderCard(list) {
+    var html = '';
+    list.forEach(function (s) {
+      html += '<div class="mc-song"><div class="t">' + s.t + '<span class="ar">' + s.ar +
+        '</span></div><div class="why">' + s.why + '</div></div>';
+    });
+    $('mcardBody').innerHTML = html;
+  }
+  function renderLoading() {
+    $('mcard').classList.add('loading');
+    $('mcardBody').innerHTML =
+      '<div class="mc-song"><div class="sk w70"></div><div class="sk w45"></div></div>' +
+      '<div class="mc-song"><div class="sk w70"></div><div class="sk w45"></div></div>' +
+      '<div class="mc-song"><div class="sk w70"></div><div class="sk w45"></div></div>';
+  }
+  function swap() {
+    renderLoading();
+    $('btnSwap').style.pointerEvents = 'none';
+    setTimeout(function () {
+      setIdx = (setIdx + 1) % SETS.length;
+      $('mcard').classList.remove('loading');
+      renderCard(SETS[setIdx]);
+      $('btnSwap').style.pointerEvents = 'auto';
+    }, 900);
+  }
+  renderCard(SETS[0]);
+
+  /* ---------- 口味页渲染（A/B） ---------- */
+  function likeCount() { return taste.likes.genres.length + taste.likes.artists.length + taste.likes.moods.length; }
+  function dislikeCount() { return taste.dislikes.genres.length + taste.dislikes.artists.length; }
+
+  function tagHtml(v, kind, i, dis, pre) {
+    return '<span class="tag-item' + (dis ? ' dis' : '') + '">' + (pre ? '<span class="pre">' + pre + '</span>' : '') + v +
+      '<span class="x" data-kind="' + kind + '" data-i="' + i + '" aria-label="删除">' +
+      '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span>';
+  }
+
+  function renderTaste() {
+    var total = likeCount() + dislikeCount();
+    if (total === 0) {
+      $('tasteBody').innerHTML =
+        '<div class="empty">' +
+        '<div class="ico"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></div>' +
+        '<div class="t1x">还没记住你的口味</div>' +
+        '<div class="t2x">在对话里告诉 AI 喜欢什么、不想听什么，它会自动记下</div>' +
+        '<div class="go" id="emptyGo">去对话里说说</div></div>';
+      $('emptyGo').onclick = function () { switchTab('p-chat'); };
+      $('tasteSummary').textContent = '未设置';
+      return;
+    }
+
+    var html = '';
+    if (tasteMode === 'a') {
+      /* 方案 A：三类分组 */
+      html += '<div class="grp"><div class="gh">喜欢的风格</div><div class="tags">' +
+        taste.likes.genres.map(function (v, i) { return tagHtml(v, 'lg', i, false); }).join('') + '</div></div>';
+      html += '<div class="grp"><div class="gh">喜欢的歌手</div><div class="tags">' +
+        taste.likes.artists.map(function (v, i) { return tagHtml(v, 'la', i, false); }).join('') + '</div></div>';
+      html += '<div class="grp"><div class="gh">喜欢的场景</div><div class="tags">' +
+        taste.likes.moods.map(function (v, i) { return tagHtml(v, 'lm', i, false); }).join('') + '</div></div>';
+      if (dislikeCount()) {
+        html += '<div class="grp"><div class="gh">不想听</div><div class="tags">' +
+          taste.dislikes.genres.map(function (v, i) { return tagHtml(v, 'dg', i, true); }).join('') +
+          taste.dislikes.artists.map(function (v, i) { return tagHtml(v, 'da', i, true); }).join('') + '</div></div>';
+      }
+      html += addBlock('填到当前分类（默认「喜欢的风格」）');
+    } else {
+      /* 方案 B：扁平列表 */
+      var all = [];
+      taste.likes.genres.forEach(function (v, i) { all.push(tagHtml(v, 'lg', i, false)); });
+      taste.likes.artists.forEach(function (v, i) { all.push(tagHtml(v, 'la', i, false)); });
+      taste.likes.moods.forEach(function (v, i) { all.push(tagHtml(v, 'lm', i, false)); });
+      taste.dislikes.genres.forEach(function (v, i) { all.push(tagHtml(v, 'dg', i, true, '不想听')); });
+      taste.dislikes.artists.forEach(function (v, i) { all.push(tagHtml(v, 'da', i, true, '不想听')); });
+      html += '<div class="grp"><div class="gh">全部标签<em style="font-style:normal;color:var(--t3);margin-left:auto">AI 自动归类，红色为不想听</em></div><div class="tags">' + all.join('') + '</div></div>';
+      html += addBlock('自动归入风格 / 歌手 / 场景');
+    }
+
+    html += '<div class="danger-btn" id="btnClear">清空口味记忆</div>';
+    html += '<div class="foot">口味由 AI 在对话中自动积累，也可在此手动调整<br>只用于音乐推荐，不用于其他用途</div>';
+    $('tasteBody').innerHTML = html;
+
+    Array.prototype.forEach.call(document.querySelectorAll('.tag-item .x'), function (el) {
+      el.onclick = function () {
+        var kind = el.getAttribute('data-kind'), i = +el.getAttribute('data-i');
+        var m = { lg: taste.likes.genres, la: taste.likes.artists, lm: taste.likes.moods,
+          dg: taste.dislikes.genres, da: taste.dislikes.artists }[kind];
+        var removed = m.splice(i, 1)[0];
+        renderTaste(); syncSummary();
+        toast('已移除：' + removed);
+      };
+    });
+    $('btnAdd').onclick = addTag;
+    $('tagInput').onkeydown = function (e) { if (e.key === 'Enter') addTag(); };
+    $('btnClear').onclick = function () { showMask(true); $('sheet').classList.add('show'); };
+  }
+  function addBlock(ph) {
+    return '<div class="grp"><div class="gh">手动补充</div>' +
+      '<div class="add"><input id="tagInput" placeholder="' + ph + '，例如：爵士" />' +
+      '<div class="btn-a" id="btnAdd">添加</div></div>' +
+      '<div class="ferr" id="tagErr">请输入口味关键词，不超过 12 个字</div></div>';
+  }
+  function addTag() {
+    var ipt = $('tagInput'), v = (ipt.value || '').trim();
+    if (!v || v.length > 12) { ipt.classList.add('err'); $('tagErr').classList.add('show'); return; }
+    ipt.classList.remove('err'); $('tagErr').classList.remove('show');
+    if (tasteMode === 'a') { taste.likes.genres.push(v); }
+    else { taste.likes.moods.push(v); } /* 扁平：先入场景池，AI 归类 */
+    renderTaste(); syncSummary(); toast('已添加：' + v);
+  }
+  function syncSummary() {
+    var all = taste.likes.genres.concat(taste.likes.artists, taste.likes.moods);
+    $('tasteSummary').textContent = all.length ? all.slice(0, 3).join(' · ') : '未设置';
+  }
+  renderTaste(); syncSummary();
+
+  /* ---------- 卡片操作 ---------- */
+  $('btnSwap').onclick = swap;
+  $('btnDislike').onclick = function () {
+    var s = SETS[setIdx][0];
+    if (taste.dislikes.artists.indexOf(s.ar) < 0) taste.dislikes.artists.push(s.ar);
+    renderTaste(); syncSummary(); swap();
+    toast('已记下：少推 ' + s.ar);
+  };
+  /**
+   * 主按钮：先把歌名写进剪贴板（S1 只能到 QQ音乐首页，无法直达歌曲），
+   * 再走「appId → shortLink 兜底」的跳转链路；两者都失败才提示。
+   * 真机约束：必须由用户点击触发；微信会插确认弹窗，用户取消须静默。
+   */
+  $('btnPlay').onclick = function () {
+    $('dlgSong').textContent = SETS[setIdx][0].t;
+    showMask(true); $('wxdlg').classList.add('show');
+  };
+  $('dlgCancel').onclick = function () { $('wxdlg').classList.remove('show'); showMask(false); };
+  $('dlgOk').onclick = function () {
+    $('wxdlg').classList.remove('show'); showMask(false);
+    setTimeout(function () {
+      toast('[小程序] 真机将跳转 QQ音乐搜索《' + SETS[setIdx][0].t + '》，本稿仅为占位');
+    }, 200);
+  };
+
+  /* ---------- 清空二次确认 ---------- */
+  $('sheetCancel').onclick = function () { $('sheet').classList.remove('show'); showMask(false); };
+  $('mask').onclick = function () {
+    $('sheet').classList.remove('show'); $('wxdlg').classList.remove('show'); showMask(false);
+  };
+  $('doClear').onclick = function () {
+    taste = { likes: { genres: [], artists: [], moods: [] }, dislikes: { genres: [], artists: [] } };
+    $('sheet').classList.remove('show'); showMask(false);
+    renderTaste(); syncSummary(); toast('已清空口味记忆');
+  };
+
+  /* ---------- 导航 ---------- */
+  var TITLES = { 'p-chat': '科豆 AI', 'p-discover': '发现', 'p-mine': '我的', 'p-taste': '音乐口味' };
+  function switchTab(id) {
+    Array.prototype.forEach.call(document.querySelectorAll('.page.tab'), function (p) {
+      p.classList.toggle('active', p.id === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (t) {
+      t.classList.toggle('on', t.getAttribute('data-tab') === id);
+    });
+    closeSub(true);
+    $('nav-title').textContent = TITLES[id] || '科豆 AI';
+  }
+  function openSub(id, title) {
+    $(id).classList.add('open');
+    $('nav').classList.add('has-back');
+    $('nav-title').textContent = title;
+  }
+  function closeSub(silent) {
+    Array.prototype.forEach.call(document.querySelectorAll('.page.sub'), function (p) { p.classList.remove('open'); });
+    $('nav').classList.remove('has-back');
+    if (!silent) return;
+    var cur = document.querySelector('.page.tab.active');
+    if (cur) $('nav-title').textContent = TITLES[cur.id] || '科豆 AI';
+  }
+  $('back').onclick = function () { closeSub(false); };
+  Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (t) {
+    t.onclick = function () { switchTab(t.getAttribute('data-tab')); };
+  });
+  /* 壳外原型导航：切模块时同步高亮（导航本身不属于小程序页面） */
+  Array.prototype.forEach.call(document.querySelectorAll('.hubnav .hn-i'), function (c) {
+    c.onclick = function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.hubnav .hn-i'), function (d) {
+        d.classList.toggle('on', d === c);
+      });
+      var go = c.getAttribute('data-go').split(':');
+      if (go[0] === 'tab') switchTab(go[1]);
+      else openSub(go[1], TITLES[go[1]] || '');
+    };
+  });
+  $('goTaste').onclick = function () { openSub('p-taste', '音乐口味'); };
+  $('btnSend').onclick = function () { swap(); toast('已发送（演示：重新推荐一批）'); };
+</script>
+</body>
+</html>

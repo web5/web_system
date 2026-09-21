@@ -1,497 +1,251 @@
 <template>
-  <nav class="app-navbar">
-    <div class="nav-inner">
-      <!-- Logo：科豆 AI（主品牌）+ 变变（子产品标识） -->
-      <router-link to="/" class="nav-brand">
-        <div class="brand-logo">
-          <svg viewBox="0 0 210 110" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="210" height="110" rx="55" fill="#f97316"/>
-            <path d="M 105 18 C 127 18, 139 34, 139 60 C 139 90, 121 102, 105 102 C 87 102, 71 88, 71 60 C 71 32, 87 18, 105 18 Z" fill="white"/>
-            <circle cx="105" cy="60" r="9" fill="#f97316"/>
-            <circle cx="105" cy="58" r="3.5" fill="#FDE68A"/>
-            <path d="M 105 18 Q 105 10, 105 7" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-            <circle cx="105" cy="6" r="3.5" fill="white"/>
-          </svg>
-        </div>
-        <div class="brand-text">
-          <span class="brand-name">科豆 AI</span>
-          <span class="brand-sub">变变 · AI 拼贴变身</span>
-        </div>
-      </router-link>
+  <header class="topbar">
+    <router-link to="/" class="brand" title="回到开始页">
+      <span class="brand-mark"><app-icon name="spark" /></span>
+      <span class="brand-name">科豆 AI</span>
+    </router-link>
 
-      <!-- 汉堡按钮（移动端） -->
-      <button class="hamburger" @click="menuOpen = !menuOpen" :class="{ open: menuOpen }">
-        <span></span><span></span><span></span>
+    <!-- 一级导航：配置化（src/config/nav.ts），「我的」不在此处 -->
+    <nav class="topnav">
+      <router-link
+        v-for="item in NAV_ITEMS"
+        :key="item.key"
+        :to="item.to"
+        class="topnav-item"
+        :class="{ 'is-active': activeKey === item.key }"
+      >
+        <app-icon :name="item.icon" />
+        <span>{{ item.label }}</span>
+      </router-link>
+    </nav>
+
+    <div class="topbar-right">
+      <button type="button" class="cmd-entry" @click="emit('open-command')">
+        <app-icon name="search" />
+        <span class="cmd-entry-text">搜索或执行命令</span>
+        <kbd>{{ cmdHint }}</kbd>
       </button>
 
-      <!-- 导航链接（桌面端） -->
-      <div class="nav-links">
-        <router-link to="/" class="nav-link" exact-active-class="active">首页</router-link>
-        <router-link to="/bianbian" class="nav-link" active-class="active">变变</router-link>
-        <router-link to="/draw" class="nav-link" active-class="active">画板</router-link>
-        <router-link to="/chat" class="nav-link" active-class="active">AI 助手</router-link>
-        <router-link to="/todo" class="nav-link" active-class="active">Todo</router-link>
-        <router-link to="/tools" class="nav-link" active-class="active">工具箱</router-link>
-      </div>
-
-      <!-- 用户信息（桌面端） -->
-      <div class="nav-right">
-        <template v-if="userStore.isLoggedIn">
-          <a-dropdown>
-            <span class="nav-user">
-              <span class="user-avatar">
-                <img :src="avatarSrc" class="avatar-img" />
-              </span>
-              <span class="user-name">{{ userStore.userInfo?.username }}</span>
-              <DownOutlined class="user-arrow" />
-            </span>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item key="profile" @click="goToProfile">
-                  <UserOutlined /> 个人中心
-                </a-menu-item>
-                <a-menu-divider />
-                <a-menu-item key="logout" @click="handleLogout">
-                  <LogoutOutlined /> 退出登录
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </template>
-        <router-link v-else :to="`/login?redirect=${$route.path}`" class="btn-login">登录</router-link>
-      </div>
-    </div>
-
-    <!-- 移动端遮罩 -->
-    <div class="mobile-overlay" :class="{ open: menuOpen }" @click="menuOpen = false"></div>
-
-    <!-- 移动端侧边栏 -->
-    <div class="mobile-drawer" :class="{ open: menuOpen }">
-      <div class="mobile-drawer-header">
-        <router-link to="/" class="mobile-drawer-brand" @click="menuOpen = false">
-          <svg viewBox="0 0 210 110" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="210" height="110" rx="55" fill="#f97316"/>
-            <path d="M 105 18 C 127 18, 139 34, 139 60 C 139 90, 121 102, 105 102 C 87 102, 71 88, 71 60 C 71 32, 87 18, 105 18 Z" fill="white"/>
-            <circle cx="105" cy="60" r="9" fill="#f97316"/>
-            <circle cx="105" cy="58" r="3.5" fill="#FDE68A"/>
-            <path d="M 105 18 Q 105 10, 105 7" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-            <circle cx="105" cy="6" r="3.5" fill="white"/>
-          </svg>
-          <div class="brand-text">
-            <span class="brand-name">科豆 AI</span>
-            <span class="brand-sub">变变 · AI 拼贴变身</span>
-          </div>
-        </router-link>
-        <button class="mobile-close-btn" @click="menuOpen = false">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+      <a-dropdown v-if="userStore.isLoggedIn" :trigger="['click']" placement="bottomRight">
+        <button type="button" class="avatar" :title="userName">
+          {{ avatarText }}
         </button>
-      </div>
-
-      <div class="mobile-links">
-        <router-link to="/" class="mobile-link" exact-active-class="active" @click="menuOpen = false">首页</router-link>
-        <router-link to="/bianbian" class="mobile-link" active-class="active" @click="menuOpen = false">变变</router-link>
-        <router-link to="/draw" class="mobile-link" active-class="active" @click="menuOpen = false">画板</router-link>
-        <router-link to="/chat" class="mobile-link" active-class="active" @click="menuOpen = false">AI 助手</router-link>
-        <router-link to="/todo" class="mobile-link" active-class="active" @click="menuOpen = false">Todo</router-link>
-        <router-link to="/tools" class="mobile-link" active-class="active" @click="menuOpen = false">工具箱</router-link>
-      </div>
-
-      <div class="mobile-user">
-        <template v-if="userStore.isLoggedIn">
-          <a-dropdown :trigger="['click']">
-            <span class="nav-user">
-              <span class="user-avatar">
-                <img :src="avatarSrc" class="avatar-img" />
-              </span>
-              <span class="user-name">{{ userStore.userInfo?.username }}</span>
-              <DownOutlined class="user-arrow" />
-            </span>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item key="profile" @click="goToProfileAndCloseDrawer">
-                  <UserOutlined /> 个人中心
-                </a-menu-item>
-                <a-menu-divider />
-                <a-menu-item key="logout" @click="handleLogout">
-                  <LogoutOutlined /> 退出登录
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
+        <template #overlay>
+          <a-menu>
+            <a-menu-item key="profile" @click="go('/profile')">
+              <span class="menu-row"><app-icon name="user" />我的</span>
+            </a-menu-item>
+            <a-menu-divider />
+            <a-menu-item key="logout" @click="handleLogout">
+              <span class="menu-row"><app-icon name="logout" />退出登录</span>
+            </a-menu-item>
+          </a-menu>
         </template>
-        <router-link v-else :to="`/login?redirect=${$route.path}`" class="btn-login" @click="menuOpen = false">登录</router-link>
-      </div>
+      </a-dropdown>
+      <button v-else type="button" class="login-btn" @click="authGate.openAuth()">登录</button>
     </div>
-  </nav>
+  </header>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { message } from 'ant-design-vue';
-import { UserOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons-vue';
+import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { Modal } from 'ant-design-vue';
+import { NAV_ITEMS, matchNavItem } from '@/config/nav';
 import { useUserStore } from '@/stores/user';
+import { useAuthGateStore } from '@/stores/authGate';
+import AppIcon from './AppIcon.vue';
 
-const router = useRouter();
+const emit = defineEmits<{ (e: 'open-command'): void }>();
+
 const route = useRoute();
+const router = useRouter();
 const userStore = useUserStore();
-const menuOpen = ref(false);
+const authGate = useAuthGateStore();
 
-const avatarSrc = computed(() => {
-  const info = userStore.userInfo;
-  if (info?.avatar) return info.avatar;
-  return info?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+/** ⌘ 在 Mac、Ctrl 在其它平台：只影响提示文案，键位两个都监听 */
+const cmdHint = computed(() =>
+  /Mac|iPhone|iPad/i.test(navigator.userAgent || '') ? '⌘K' : 'Ctrl K',
+);
+
+const activeKey = computed(() => matchNavItem(route.path)?.key ?? null);
+
+const userName = computed(() => userStore.userInfo?.username || '未登录');
+
+const avatarText = computed(() => {
+  const name = userStore.userInfo?.username || '';
+  return (name || 'U').slice(0, 1).toUpperCase();
 });
 
-function goToProfile() {
-  router.push('/profile');
-}
-
-function goToProfileAndCloseDrawer() {
-  menuOpen.value = false;
-  router.push('/profile');
+function go(path: string) {
+  router.push(path);
 }
 
 function handleLogout() {
-  userStore.logout();
-  message.success('已退出登录');
-  menuOpen.value = false;
-  router.push(route.path);
+  Modal.confirm({
+    title: '退出登录',
+    content: '退出后需要重新登录，确定退出吗？',
+    okText: '退出登录',
+    cancelText: '取消',
+    onOk() {
+      userStore.logout();
+      router.push('/login');
+    },
+  });
 }
 </script>
 
 <style scoped>
-.app-navbar {
-  background: #FFFFFF;
-  border-bottom: 1px solid #EEEEEE;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.nav-inner {
-  max-width: 1200px;
-  margin: 0 auto;
+.topbar {
+  flex: 0 0 var(--topbar-h);
+  height: var(--topbar-h);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  height: 64px;
+  gap: 16px;
+  padding: 0 16px;
+  background: var(--ws-bg-surface);
+  border-bottom: 1px solid var(--ws-border);
+  z-index: 20;
 }
 
-/* ===== Logo ===== */
-.nav-brand {
-  display: flex;
+/* ===== 品牌（点击回开始页） ===== */
+.brand {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-decoration: none;
-  flex-shrink: 0;
+  color: var(--ws-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  flex: 0 0 auto;
 }
 
-.brand-logo {
-  width: 36px;
-  height: 19px;
-  display: flex;
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ws-radius-md);
+  background: var(--ws-brand-500);
+  color: var(--ws-brand-50);
+  display: inline-flex;
   align-items: center;
-}
-
-.brand-logo svg {
-  width: 100%;
-  height: 100%;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-  gap: 2px;
+  justify-content: center;
 }
 
 .brand-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #333;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.02em;
 }
 
-.brand-sub {
-  font-size: 10px;
-  color: #999;
-  font-weight: 500;
-  letter-spacing: 0.2px;
-}
-
-/* ===== 导航链接 ===== */
-.nav-links {
+/* ===== 一级导航 ===== */
+.topnav {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-width: 0;
 }
 
-.nav-link {
-  color: #666;
-  text-decoration: none;
+.topnav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--ws-radius-md);
+  color: var(--ws-text-secondary);
   font-size: 14px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  transition: all 0.2s;
   font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.nav-link:hover {
-  color: #FF8C42;
-  background: #FFF8F0;
+.topnav-item:hover {
+  background: var(--ws-bg-hover);
+  color: var(--ws-text-primary);
 }
 
-/* 用 :deep 提升特异性，并使用 router-link 自动添加的 active 类 */
-.nav-link:deep(.active),
-.nav-link.active {
-  color: #FF8C42;
-  background: #FFF8F0;
+.topnav-item.is-active {
+  background: var(--ws-brand-50);
+  color: var(--ws-brand-700);
   font-weight: 600;
 }
 
-/* ===== 用户区域 ===== */
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.nav-user {
+/* ===== 右侧 ===== */
+.topbar-right {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background 0.2s;
 }
 
-.nav-user:hover { background: #f5f5f5; }
-
-.user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #FF8C42;
-  color: white;
-  display: flex;
+.cmd-entry {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-md);
+  background: var(--ws-bg-subtle);
+  color: var(--ws-text-secondary);
+  font-size: 13px;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.cmd-entry:hover {
+  border-color: var(--ws-brand-500);
+  color: var(--ws-brand-700);
 }
 
-.avatar-icon {
-  width: 16px;
-  height: 16px;
-  color: white;
+.cmd-entry-text {
+  white-space: nowrap;
 }
 
-.user-name {
-  font-size: 14px;
-  color: #333;
-  font-weight: 500;
+.cmd-entry kbd {
+  font: inherit;
+  color: var(--ws-text-tertiary);
 }
 
-.user-arrow {
-  font-size: 10px;
-  color: #999;
-  margin-left: -2px;
-  transition: transform 0.2s;
-}
-
-.nav-user:hover .user-arrow { color: #FF8C42; }
-
-.btn-login {
-  padding: 6px 16px;
-  background: #FF8C42;
-  color: #FFFFFF;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: background 0.2s;
-}
-
-.btn-login:hover { background: #e67e3a; }
-
-/* ===== 汉堡按钮 ===== */
-.hamburger {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  width: 36px;
-  height: 36px;
-  padding: 6px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.hamburger:hover { background: #f5f5f5; }
-
-.hamburger span {
-  display: block;
-  width: 20px;
-  height: 2px;
-  background: #333;
-  border-radius: 2px;
-  transition: all 0.3s;
-}
-
-.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.hamburger.open span:nth-child(2) { opacity: 0; }
-.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-
-/* ===== 移动端侧边栏 ===== */
-.mobile-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.4);
-  z-index: 199;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.mobile-overlay.open {
-  display: block;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.mobile-drawer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 280px;
-  max-width: 80vw;
-  background: #FFFFFF;
-  z-index: 200;
-  transform: translateX(-100%);
-  transition: transform 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-
-.mobile-drawer.open {
-  transform: translateX(0);
-}
-
-.mobile-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #EEEEEE;
-}
-
-.mobile-drawer-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-
-.mobile-drawer-brand svg {
+.avatar {
   width: 32px;
-  height: auto;
-  flex-shrink: 0;
-}
-
-.mobile-drawer-brand .brand-name {
-  font-size: 16px;
-}
-
-.mobile-drawer-brand .brand-sub {
-  font-size: 10px;
-}
-
-.mobile-close-btn {
-  background: none;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--ws-brand-200);
+  background: var(--ws-brand-50);
+  color: var(--ws-brand-700);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.mobile-close-btn:hover { background: #f5f5f5; }
-
-.mobile-links {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.mobile-link {
-  color: #666;
-  text-decoration: none;
-  font-size: 15px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* 未登录：顶栏给登录入口（弹窗，不跳整页） */
+.login-btn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--ws-radius-md);
+  background: var(--ws-brand-500);
+  color: var(--ws-brand-50);
+  font-size: 13px;
   font-weight: 500;
+  transition: background 0.15s ease;
 }
 
-.mobile-link:hover {
-  color: #FF8C42;
-  background: #FFF8F0;
+.login-btn:hover {
+  background: var(--ws-brand-600);
 }
 
-.mobile-link:deep(.active),
-.mobile-link.active {
-  color: #FF8C42;
-  background: #FFF8F0;
-  font-weight: 600;
-}
-
-.mobile-user {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid #EEEEEE;
-  display: flex;
+.menu-row {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
 }
 
-/* ===== 响应式 ===== */
-@media (max-width: 768px) {
-  .nav-inner { padding: 0 12px; }
-  .nav-links { display: none; }
-  .nav-right { display: none; }
-  .hamburger { display: flex; }
-  .brand-sub { display: none; } /* 移动端隐藏副标题 */
-}
-
-@media (max-width: 480px) {
-  .brand-text { display: none; }
+@media (max-width: 1024px) {
+  .cmd-entry-text {
+    display: none;
+  }
 }
 </style>

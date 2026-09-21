@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "科豆 AI",
-  "usingComponents": {}
+  "usingComponents": {
+    "custom-tab-bar": "/custom-tab-bar/index"
+  }
 }

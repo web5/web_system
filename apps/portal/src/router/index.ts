@@ -25,11 +25,75 @@ function isTokenExpired(token: string): boolean {
 }
 
 const routes = [
+  // ===== 工作台（三栏外壳）：欢迎页为公开页，互动时弹登录/注册（page-spec §0） =====
   {
     path: '/',
-    name: 'Home',
-    component: () => import('../views/Home.vue'),
+    name: 'Welcome',
+    component: () => import('../views/Welcome.vue'),
   },
+  {
+    path: '/chat',
+    name: 'AiChat',
+    component: () => import('../views/AiChat.vue'),
+    meta: { requiresAuth: true },
+  },
+  // P1 占位态：顶栏可达、不留死链，页面内容在 P2 / P3 填充
+  {
+    path: '/discover',
+    name: 'Discover',
+    component: () => import('../views/Discover.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/translate',
+    name: 'Translate',
+    component: () => import('../views/Translate.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/contract',
+    name: 'Contract',
+    component: () => import('../views/Contract.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/lab',
+    name: 'Lab',
+    component: () => import('../views/Lab.vue'),
+    meta: { requiresAuth: true },
+  },
+  // 实验室入口（design §2.2）：原路由保留可用，实验室页内以卡片列出
+  {
+    path: '/lab/bianbian',
+    name: 'LabBianbian',
+    component: () => import('../views/Create.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/lab/draw',
+    name: 'LabDraw',
+    component: () => import('../views/Draw.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/lab/album',
+    name: 'LabAlbum',
+    component: () => import('../views/Album.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/lab/todo',
+    name: 'LabTodo',
+    component: () => import('../views/Todo.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/lab/tools',
+    name: 'LabTools',
+    component: () => import('../views/tools/ToolsHome.vue'),
+    meta: { requiresAuth: true },
+  },
+  // ===== 旧路由（变变 / 画板 / Todo / 工具箱）：降级但保留，兼容外链与流程内跳转 =====
   {
     path: '/bianbian',
     name: 'Create',
@@ -54,13 +118,7 @@ const routes = [
     component: () => import('../views/History.vue'),
     meta: { requiresAuth: true },
   },
-  // 保留旧页面兼容
-  {
-    path: '/chat',
-    name: 'AiChat',
-    component: () => import('../views/AiChat.vue'),
-    meta: { requiresAuth: true },
-  },
+  // 保留旧页面兼容（/chat 已上移到工作台路由段）
   {
     path: '/draw',
     name: 'Draw',

@@ -1,0 +1,22 @@
+/* 翻译主页
+ * 色值一律走 app.wxss 的设计 token（品牌橙 + 中性灰），不再散写硬编码色。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.langbar { display: flex; align-items: center; background: var(--card); border-radius: 24rpx; padding: 26rpx 28rpx; }
+.side { flex: 1; text-align: center; font-size: 30rpx; font-weight: 500; color: var(--t1); }
+.arw { font-size: 20rpx; color: var(--t3); margin-left: 8rpx; }
+.sw { width: 60rpx; height: 60rpx; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); display: flex; align-items: center; justify-content: center; }
+.inp { width: 100%; min-height: 200rpx; background: var(--card); border-radius: 24rpx; padding: 26rpx 28rpx; margin-top: 20rpx; font-size: 30rpx; line-height: 1.7; color: var(--t1); }
+.counter { text-align: right; font-size: 22rpx; color: var(--t3); margin-top: 10rpx; }
+.notice { display: flex; align-items: center; background: var(--brand-soft); border-radius: 20rpx; padding: 18rpx 24rpx; margin-top: 20rpx; }
+.txt { flex: 1; font-size: 25rpx; color: var(--t2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.act { font-size: 25rpx; color: var(--brand-txt); margin-left: 16rpx; }
+.sec-t { font-size: 25rpx; color: var(--t2); margin: 32rpx 0 16rpx; }
+.chips { white-space: nowrap; }
+.chip { display: inline-block; font-size: 25rpx; padding: 12rpx 26rpx; border-radius: 16rpx; background: var(--card); color: var(--t2); margin-right: 14rpx; }
+.chip.on { background: var(--brand); color: #fff; }
+.grid3 { display: flex; margin-top: 30rpx; }
+.g { flex: 1; background: var(--card); border-radius: 24rpx; padding: 22rpx 0; text-align: center; font-size: 23rpx; color: var(--t2); margin-right: 18rpx; }
+.g:last-child { margin-right: 0; }
+.btn { height: 92rpx; border-radius: 46rpx; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 32rpx; margin-top: 36rpx; }
+.btn.dis { opacity: .35; }
+.sample { font-size: 26rpx; color: var(--t2); background: var(--card); border-radius: 20rpx; padding: 20rpx 26rpx; margin-bottom: 12rpx; }

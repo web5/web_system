@@ -1,7 +1,19 @@
 {
   "description": "科豆 AI 小程序",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      { "type": "folder", "value": "docs" },
+      { "type": "folder", "value": "prototype" },
+      { "type": "folder", "value": "tests" },
+      { "type": "folder", "value": "scripts" },
+      { "type": "folder", "value": "typings" },
+      { "type": "folder", "value": "node_modules" },
+      { "type": "file", "value": "tsconfig.json" },
+      { "type": "file", "value": "package.json" },
+      { "type": "file", "value": "package-lock.json" },
+      { "type": "file", "value": "jest.config.js" },
+      { "type": "file", "value": "project.private.config.json" }
+    ],
     "include": []
   },
   "setting": {

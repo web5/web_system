@@ -1,6 +1,10 @@
-/* ===== 科豆 AI — Dark Cinema Orange Theme (Mini-App) ===== */
+/* ===== 科豆 AI — 设计 Token 层（浅色，同源 prototype/index.html） =====
+ * 一期只做浅色（Q3 已拍板），原型暗色套为「未来态」，本期不声明 darkmode。
+ * 新增页面一律从这里取色，禁止硬编码色值。
+ */
 
 page {
+  /* ---- 品牌 ---- */
   --brand-50:  #FFF7ED;
   --brand-100: #FFEDD5;
   --brand-400: #FB923C;
@@ -8,19 +12,54 @@ page {
   --brand-600: #EA580C;
   --brand-700: #C2410C;
 
-  --surface-0: #000000;
-  --surface-1: #0A0A0D;
-  --surface-2: #0C0C0D;
-  --surface-3: #111115;
+  --brand:      #F97316;
+  --brand-deep: #E8620A;
+  --brand-soft: #FFF2E6;
+  /* 文本 / 选中态用深档：纯品牌橙白底对比度仅 2.9:1，此档 5.4:1 才过 AA */
+  --brand-txt:  #EA580C; /* 文本/选中态：取色阶 600 档。规范深档 #C2410C 偏暗偏「橘红」，用户反馈突兀；#EA580C 白底 4.9:1 仍过 AA */
 
-  --text-primary:   #F8FAFC;
-  --text-secondary: #CBD5E1;
-  --text-tertiary:  #94A3B8;
+  /* ---- 强调色 ---- */
+  --accent:      #0E9B8C;
+  --accent-soft: #E4F6F2;
 
-  --border-subtle: rgba(249,115,22,0.15);
+  /* ---- 语义色 ---- */
+  --green: #12A150; --green-soft: #E7F7EE;
+  --amber: #D98200; --amber-soft: #FFF6E5;
+  --red:   #E5484D; --red-soft:   #FDECEC;
 
-  background: var(--surface-0);
+  /* ---- 表面与文字 ---- */
+  --page-bg: #F7F4F0;
+  --card:    #FFFFFF;
+  --line:    rgba(60, 60, 67, .12);
+  --t1: #10131A;
+  --t2: rgba(60, 60, 67, .62);
+  --t3: rgba(60, 60, 67, .34);
+  --icon: #8A90A0; /* 图标常态色 = app.json tabBar 未选中色；导航栏 icon 跟随它，不参与品牌橙 */
+
+  /* ---- 其他 ---- */
+  --mask: rgba(0, 0, 0, .45);
+  --shadow: 0 20rpx 56rpx rgba(20, 30, 60, .18);
+
+  /* ---- 过渡映射（旧暗色名 → 浅色值，随批次 6 legacy 清理一并移除） ---- */
+  --surface-0: #F7F4F0;
+  --surface-1: #FFFFFF;
+  --surface-2: #F2F2F7;
+  --surface-3: #FFFFFF;
+  --text-primary:   #10131A;
+  --text-secondary: rgba(60, 60, 67, .62);
+  --text-tertiary:  rgba(60, 60, 67, .34);
+  --border-subtle:  rgba(60, 60, 67, .12);
+
+  background: var(--page-bg);
   min-height: 100vh;
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--t1);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 全局合规声明（各页底部文案保持一致） */
+.claim {
+  font-size: 21rpx;
+  color: var(--t3);
+  text-align: center;
+  line-height: 1.8;
 }

@@ -49,4 +49,30 @@ export class AgentConversation extends AbstractEntity {
   /** 对话卡片元信息：scene / danger / warn / ok（从 report 冗余，避免列表解析全量 JSON） */
   @Column({ type: 'json', nullable: true, comment: '对话卡片元信息' })
   meta: unknown;
+
+  /**
+   * 当前会话锁定的 agentId（意图路由）。
+   * NULL = 未锁定（首轮或开关关闭），此时按正常分类流程走。
+   * 一旦锁定，后续轮次沿用（via='locked'），零成本且不重分类。
+   */
+  @Index()
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '当前会话锁定的 agentId' })
+  agentId: string | null;
+
+  /** 意图判定流水：[{agentId, via, ts}] —— 便于回溯误判与统计触发比例 */
+  @Column({ type: 'json', nullable: true, comment: '意图判定流水' })
+  intentHistory: Array<{ agentId: string; via: string; ts: string }> | null;
+
+  /**
+   * 会话来源：chat = 主对话（意图路由）；tool = 工具页（翻译 / 合同评估）。
+   * 只有 chat 会进「对话记录」列表 —— 工具页各有各的历史入口，混进来会干扰主对话浏览。
+   */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: 'chat',
+    comment: '会话来源：chat=主对话 / tool=工具页',
+  })
+  source: string;
 }

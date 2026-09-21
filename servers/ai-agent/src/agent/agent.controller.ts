@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -16,7 +17,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response, Request } from 'express';
-import { AgentRunner, AgentRegistry, ClientRegistry, StreamEvent } from '@kedouai/agent-core';
+import {
+  AgentRunner,
+  AgentRegistry,
+  ClientRegistry,
+  StreamEvent,
+  withCode,
+  classifyError,
+} from '@kedouai/agent-core';
 import { AgentRunDto } from './dto/agent-run.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionGuard, RequirePermission } from '@web-system/shared';
@@ -25,6 +33,7 @@ import { PermissionBroker } from './permission-broker';
 import { AgentConversationQueryService } from './agent-conversation-query.service';
 import { ListConversationsDto } from './dto/conversation-query.dto';
 import { ContractConversationService } from '../contract/contract-conversation.service';
+import { IntentService } from './intent/intent.service';
 
 @ApiTags('AI Agent')
 @Controller('agent')
@@ -40,6 +49,7 @@ export class AgentController {
     private readonly permissionBroker: PermissionBroker,
     private readonly contractConversationService: ContractConversationService,
     private readonly conversationQueryService: AgentConversationQueryService,
+    private readonly intentService: IntentService,
   ) {}
 
   /**
@@ -80,6 +90,24 @@ export class AgentController {
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
     };
+  }
+
+  /** 删除会话（仅会话所属用户；不可恢复，前端有二次确认） */
+  @Delete('conversations/:id')
+  @ApiOperation({ summary: '删除我的 Agent 对话' })
+  async deleteConversation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Req() req: Request,
+  ) {
+    const userId = String((req as any).user?.id ?? '');
+    if (!userId) {
+      throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
+    }
+    const ok = await this.conversationQueryService.deleteConversation(userId, id);
+    if (!ok) {
+      throw new NotFoundException('对话不存在');
+    }
+    return { ok: true };
   }
 
   /** Agent 运行（C 端，SSE 流式，含工具调用过程） */
@@ -136,7 +164,7 @@ export class AgentController {
     const user = (req as any).user;
     const userId = String(user?.id ?? '');
     this.logger.log(
-      `收到 agent/run 请求: agentId=${dto.agentId} userId=${userId} inputLen=${(dto.userInput || '').length}`,
+      `收到 agent/run 请求: agentId=${dto.agentId ?? '(auto)'} userId=${userId} inputLen=${(dto.userInput || '').length}`,
     );
     if (!userId) {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
@@ -167,8 +195,41 @@ export class AgentController {
     let tools: string[] | null = null;
     let model: string | null = null;
     let agentVersion: number | null = null;
+
+    // ===== 意图路由：把「客户端传死的 agentId」变成「服务端解析出来的」 =====
+    // 不传 / 传 'auto' → 服务端分类；显式传值 → 原样使用（向后兼容，一行都不用改）。
+    // 时序要求：intent 事件必须早于任何 token（前端据此渲染 agent 徽标、排查误判）。
+    const intent = await this.intentService.resolve({
+      agentId: dto.agentId,
+      userInput: dto.userInput,
+      conversationId: dto.conversationId,
+      userId,
+    });
+    const resolvedAgentId = intent.agentId;
+    this.logger.log(
+      `意图路由: ${dto.agentId ?? '(auto)'} → ${resolvedAgentId}` +
+        ` (via=${intent.via} conf=${intent.confidence} switched=${intent.switched})`,
+    );
+    res.write(
+      `data: ${JSON.stringify({
+        type: 'intent',
+        intent: {
+          agentId: resolvedAgentId,
+          agentName: this.agentRegistry.has(resolvedAgentId)
+            ? this.agentRegistry.get(resolvedAgentId).name
+            : undefined,
+          confidence: intent.confidence,
+          via: intent.via,
+          switched: intent.switched,
+          previousAgentId: intent.previousAgentId,
+        },
+      })}\n\n`,
+    );
+
     try {
-      const def = this.agentRegistry.get(dto.agentId);
+      // 【易漏点】取定义快照要用**解析后**的 id，不是 dto.agentId ——
+      // 否则 auto 时 get('auto') 抛错被 catch 吞掉，systemPrompt 快照为空，埋点静默降级。
+      const def = this.agentRegistry.get(resolvedAgentId);
       agentName = def?.name ?? null;
       systemPrompt = def?.systemPrompt ?? '';
       tools = def?.tools ?? null;
@@ -193,7 +254,7 @@ export class AgentController {
 
       const stream = this.agentRunner.stream(
         {
-          agentId: dto.agentId,
+          agentId: resolvedAgentId,
           userInput: dto.userInput,
           conversationId: dto.conversationId,
           // 调试时可临时覆盖模型（仅本次运行）
@@ -205,6 +266,18 @@ export class AgentController {
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+        // 结构化卡片：把 present-music-card 的工具结果转成 card 事件下发前端。
+        // 引擎只认识通用 tool_result，卡片语义在这里收口；steps 仍记原始 tool_result
+        // （内容即卡片 JSON），历史回看据此还原卡片而不退化成文本。
+        if (event.type === 'tool_result' && event.name === 'present-music-card' && event.content) {
+          try {
+            const card = JSON.parse(event.content);
+            res.write(`data: ${JSON.stringify({ type: 'card', card, step: event.step })}\n\n`);
+          } catch {
+            this.logger.warn('歌曲卡片载荷解析失败，跳过 card 事件');
+          }
+        }
         // content_delta / reasoning_delta 是逐字增量（可能上千条），只透传前端用于逐字渲染，
         // 不落库 steps（避免 agent-runs 表被污染/膨胀）
         if (event.type !== 'content_delta' && event.type !== 'reasoning_delta') {
@@ -226,9 +299,11 @@ export class AgentController {
         }
       }
     } catch (error) {
-      const msg = (error as Error).message || 'Agent 运行失败';
+      const raw = (error as Error).message || 'Agent 运行失败';
+      // 带错误码下发：客户端按码查表给提示；技术原文照旧进 run 落库供排查
+      const msg = withCode(classifyError(error), raw);
       errorMessage = msg;
-      this.logger.error(`Agent run error: ${msg}`);
+      this.logger.error(`Agent run error: ${raw}`);
       const errPayload = JSON.stringify({ type: 'error', content: msg });
       res.write(`data: ${errPayload}\n\n`);
       steps.push({ type: 'error', content: msg, ts: Date.now() });
@@ -236,10 +311,18 @@ export class AgentController {
 
     res.end();
 
+    // 工具页（翻译 / 合同评估）产生的会话标记 source='tool' → 不出现在主对话记录列表
+    if (dto.source === 'tool' && conversationIdFromEngine) {
+      this.conversationQueryService.markSource(userId, conversationIdFromEngine, 'tool').catch(() => {
+        /* 标记失败不影响本次对话结果 */
+      });
+    }
+
     // 异步把 run 推送到 ai-service 统一落库（admin 调试用）
     this.runPusher
       .push({
-        agentId: dto.agentId,
+        // 埋点同样用解析后的 id，否则 agent_log 会写进 'auto'
+        agentId: resolvedAgentId,
         agentName,
         userId,
         conversationId: conversationIdFromEngine,
@@ -262,7 +345,7 @@ export class AgentController {
     // 合同风险场景：分析 final 若为结构化报告 → 落 report 快照（独立于摘要压缩，保证历史可回放）。
     // 追问文本无法解析成报告 → 服务内 no-op，天然不覆盖既有快照。
     if (
-      dto.agentId === 'contract-risk' &&
+      resolvedAgentId === 'contract-risk' &&
       conversationIdFromEngine &&
       finalAnswer &&
       !errorMessage

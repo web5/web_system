@@ -2,6 +2,7 @@ import { DbConversationMemory } from './db-conversation-memory';
 import { AgentConversation } from './agent-conversation.entity';
 import { Compaction, ChatMessage, AgentMemoryConfig } from '@kedouai/agent-core';
 import { Repository } from 'typeorm';
+import { MusicService } from '../../music/music.service';
 
 /**
  * DbConversationMemory 持久化行为单测：
@@ -39,7 +40,13 @@ describe('DbConversationMemory', () => {
         msgs.filter((m) => m.role !== 'system'),
       ),
     } as unknown as Compaction;
-    const mem = new DbConversationMemory(repo, compaction);
+    const music = {
+      getTaste: jest.fn().mockResolvedValue({
+        likes: { genres: [], artists: [], moods: [] },
+        dislikes: { genres: [], artists: [] },
+      }),
+    } as unknown as MusicService;
+    const mem = new DbConversationMemory(repo, compaction, music as never);
     return { repo, compaction, mem };
   }
 
