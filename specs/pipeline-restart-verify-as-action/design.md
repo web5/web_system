@@ -1,6 +1,6 @@
 # 后端 restart / verify 下沉为「发布流水线 action」
 
-> 建立：2026-09-21 ｜ 状态：**待评审**（评审通过后实施）
+> 建立：2026-09-21 ｜ 状态：**已实施（local）并在本地验证通过**（dev / prod 待后续批次）
 > 相关：`specs/pipeline-node-model/design.md`、`specs/pipeline-step-task/design.md`、`specs/pipeline-env-scripts/design.md`、`specs/pipeline-deploy-action/`、`docs/development/deploy-target-knowledge.md`
 > 决策来源（2026-09-21 用户口径）：
 > ① 后端 `restart` / `verify` **分别是 action，放在发布流水线里**；控制台 API 那套「部署」不再需要；
@@ -582,3 +582,51 @@ fi
 
 log "验证通过: $MODULE_KEY"
 ```
+
+---
+
+## 7. 实施结果与验证证据（2026-09-21，local）
+
+### 7.1 代码（提交 `20d1380`）
+
+| 改动 | 文件 |
+|---|---|
+| 注入 `CONSOLE_API` / `CONSOLE_TOKEN`（并加入保护键，不被配置中心覆盖） | `pipeline/pipeline.service.ts` |
+| 新增 `POST /api/internal/release/pointer`（`x-internal-key` 鉴权） | `deploy/internal-release.controller.ts`、`deploy/deploy.module.ts` |
+| 托管清单清空（restart / verify 退出托管） | `pipeline/step-scripts.ts`、`pipeline-step-command/platform-script-seed.service.ts` |
+| 删除内置执行体与委托脚本 | `pipeline/steps/{restart,verify}.executor.ts`、`pipeline/scripts/{restart,verify}-{backend,step}.sh` |
+| 注册表 / 工具表同步 | `pipeline/steps/step-registry.ts`、`service-tools.ts`、`pipeline.module.ts` |
+
+### 7.2 数据（本地 `web_system_deploy`）
+
+- 11 个后端模板的「发布 / local」任务追加 `restart` / `verify` 两个 action（sort=2/3）；
+- 删除 16 个模板的 32 行孤儿 `deploy_pipeline_step_commands`（restart / verify 托管行）；
+- 顺带修复：7 个后端模板的 build 动作原为裸 `npx tsc -p tsconfig.json`（缺 `cd`，必然失败）
+  → 改为 `cd "$RELEASE_DIR/servers/$MODULE_DIR"` + `npm run build`；
+- 备份（可回滚）：`/tmp/backup-step-commands.json`、`/tmp/backup-build-actions.json`。
+
+### 7.3 验证（todo-service @ local，jobId `1789995823365-3z95qh1`）
+
+| 判据 | 结果 |
+|---|---|
+| 流水线终态 | succeeded（发布节点含 restart / verify 两个动作） |
+| restart 日志 | `[restart] 已重建 web-todo：进程环境仅 PATH/HOME/PORT，依赖配置由 …/.env 提供` |
+| verify 日志 | `服务在线: web-todo` → `端口探活 6005: 健康` → `验证通过并已切指针: local/todo-service → todo-service-dev/20d1380` |
+| 指针 | `deploy_deployments(local, todo-service) = todo-service-dev/20d1380` |
+| 落地 | `diff -rq dist <版本目录>` 一致 |
+| 进程 / 端口 | 6005 持有者 pid == `pm2 web-todo` 的 pid |
+| 失败不切指针 | 同版本首次发布因脚本缺陷 exit 1（restart 阶段）→ verify 未执行、指针未变 |
+
+### 7.4 踩坑（已固化到 `docs/development/deploy-target-knowledge.md` §3.1）
+
+1. **动作脚本的 cwd = 发布目录根**，必须自己 `cd`（否则 `TS5058: tsconfig.json 不存在` /
+   `Could not resolve entry module "index.html"`）。
+2. **console 的 bash 为单字节 locale**：`$VAR` 后紧跟中文会被并入变量名
+   （`NAME\xef: unbound variable`，脚本实际跑成功却 exit 1）→ 一律写 `${VAR}（中文…）`。
+
+### 7.5 遗留（待办）
+
+- **云库（dev / 堡垒机共用）未同步**：那边模板的 restart / verify 与 build 动作仍是旧状态；
+  同步前不要在云库 console 上用流水线发后端模块（会停在旧行为或构建失败）。
+- 控制台「服务详情 → 部署」入口尚未下线（后端接口按 Q2 保留为应急手段）。
+- `node-approval.spec.ts` 与 `PipelineService` 依赖漂移导致的既有单测失败（本次未触碰）。

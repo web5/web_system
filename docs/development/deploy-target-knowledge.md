@@ -32,6 +32,20 @@
 
 **接口**：`POST /api/apps/:key/switch` `{ envId, version }`（另有 `/rollback`）
 
+### 1.1 基座（shell）构建动作约定 —— 换环境重踩点
+
+基座按**版本目录**加载：产物投 `static/modules/shell/<pipelineKey>/<commit>/`，指针值就是
+`<pipelineKey>/<commit>`（gateway `resolveShellHtmlFile()` 按指针拼路径读 index.html）。
+因此它的 build 动作必须满足两条，缺一即「构建过了但页面不对」：
+
+| 必须 | 原因 | 缺失症状 |
+|---|---|---|
+| `cd "$RELEASE_DIR/apps/$MODULE_DIR"` | 平台默认 cwd 是发布目录根，而基座入口是 `apps/shell/index.html` | `Could not resolve entry module "index.html"`（构建直接失败） |
+| `RELEASE_TAG="$COMMIT_ID"`（完整引用，如 `shell-dev/7787826`） | `apps/shell/vite.config.ts` 用 `releaseTag` 决定 vite `base` | base 回落 `/shell/`（覆盖式发布时代的旧目录）→ 产物内资源路径与投递目录不一致 |
+
+env-dir 类（admin / portal）**不需要**这条：它们的 base 由 `scripts/vite-micro-frontend.mjs`
+的 `resolveMfBase()` 统一处理，且入口指针固定不含版本。
+
 ---
 
 ## 2. 服务域（`deploy_services`）—— 部署 = 重启 + 探活
@@ -52,6 +66,25 @@
 | `deploy-console` | nest | `web-deploy-console` | **legacy**（传统发布，不走流水线） |
 
 **接口**：`POST /api/services/:key/deploy` `{ envId }`（重启进程 + 探活；未配目标主机会 fail-fast）
+—— **2026-09-21 起不再是发布必需路径**，仅作应急/回滚手段（见 §2.1）。
+
+### 2.1 后端「发布即生效」：restart / verify 是 action（2026-09-21 起）
+
+后端服务的 restart / verify **不由平台代码实现**，而是发布节点里的两个 **DB action 脚本**
+（`deploy_pipeline_actions`，每次提交流水线时快照执行）：
+
+```
+发布 / local（task）
+  ├─ 发布（投递产物 → servers/<dir>/<pipelineKey>/<commit>/）
+  ├─ write-version · 写版本记录
+  ├─ restart · 落地并重启（版本目录 → dist + 依赖校验 fail-fast + pm2 干净重启）
+  └─ verify · 部署验证（pm2 online → 端口 TCP →（MCP 相关）AI 链路 → 通过后切指针）
+```
+
+- **「验证不通过 ⇒ 指针不前进」**：restart 失败即终止（后续动作不执行），旧版本继续对外服务；
+  verify 全通过后才调 `POST /api/internal/release/pointer` 切指针。
+- 因此流水线跑完即生效，**不需要**再去控制台点「服务详情 → 部署」。
+- `deploy-console` 自身不在其中（走传统发布；在流水线里重启自己会自杀式中断）。
 
 ---
 
@@ -72,6 +105,19 @@ curl -sS -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 ```
 
 也可在控制台操作：「应用 → 环境 → 切换版本」「服务 → 部署」。
+
+### 3.1 动作脚本两条硬约定（本次踩坑固化）
+
+1. **必须自己 `cd`**：动作进程的 cwd 是**发布目录根**，不会自动进模块目录。
+   症状：前端 `Could not resolve entry module "index.html"`；后端 `TS5058: The specified path does not exist: 'tsconfig.json'`。
+2. **`$VAR` 后不要紧跟非 ASCII 字符**：console 执行脚本的 bash 处于**单字节 locale**，
+   多字节字符会被并入变量名 —— 症状 `NAME\xef: unbound variable`（脚本明明跑成功了却 exit 1）。
+   一律写 `${VAR}（中文…）`，或让变量后面接 ASCII / 空格。
+
+平台注入给动作脚本的变量：`RELEASE_DIR` / `MODULE_KEY` / `MODULE_DIR` / `MODULE_TYPE` / `COMMIT_ID`
+/ `DEPLOY_ENV` / `BRANCH` / `PM2_NAME` / `PM2_SCRIPT` / `PM2_CWD` / `PORT` / `PUBLIC_PATH` / `BUILD_OUTPUT_DIR`
+/ `CONSOLE_API` / `CONSOLE_TOKEN`（后两者供脚本 curl 调平台内部接口：`/api/internal/release/{versions,pointer}`，
+`x-internal-key` 鉴权）。
 
 ---
 
