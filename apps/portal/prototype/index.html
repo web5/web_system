@@ -27,7 +27,7 @@ input,textarea{font:inherit;color:inherit}
 /* ── 顶栏 ── */
 .topbar{height:var(--top-h);flex:0 0 var(--top-h);display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line);z-index:20}
 .brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:16px}
-.brand .mark{width:28px;height:28px;border-radius:8px;background:var(--brand);display:grid;place-items:center}
+.brand .mark{display:grid;place-items:center}
 .topbar .spacer{flex:1}
 .topnav{display:flex;gap:4px;flex:1;justify-content:center}
 .topnav button{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--r-sm);color:var(--t2);font-weight:500}
@@ -85,24 +85,105 @@ input,textarea{font:inherit;color:inherit}
 .chip.on{border-color:var(--brand);background:var(--brand-weak);color:var(--brand-strong);font-weight:500}
 .ico{width:16px;height:16px;flex:0 0 16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .ico.lg{width:20px;height:20px;flex:0 0 20px}
-/* ── 对话 ── */
-.msgs{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:24px}
-.msg{display:flex;gap:12px;max-width:760px;margin:0 auto;width:100%}
-.msg.me{flex-direction:row-reverse}
-.msg .who{width:28px;height:28px;border-radius:8px;flex:0 0 28px;display:grid;place-items:center;font-size:12px;font-weight:600}
-.msg.ai .who{background:var(--brand-weak);color:var(--brand-strong)}
-.msg.me .who{background:var(--neutral-chip);color:var(--t2)}
-.bub{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px;font-size:14px}
-.msg.me .bub{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
-.bub .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--t3)}
-.msg.me .bub .hd{color:var(--on-brand-mute)}
-.bub .acts{display:flex;gap:4px;margin-top:8px;opacity:0;transition:opacity .12s}
-.msg:hover .bub .acts{opacity:1}
-.msg.me .bub .acts .btn.ghost{color:var(--on-brand-mute)}
-.composer{flex:0 0 auto;border-top:1px solid var(--line);background:var(--card);padding:16px 24px}
-.composer .box{border:1px solid var(--line-strong);border-radius:var(--r-md);padding:12px;background:var(--card);max-width:760px;margin:0 auto}
+/* ── 对话：结构化回答排版（v2 · 2026-09-21 重设：AI 去气泡，靠排版分层） ── */
+/* 对话中栏 v4（2026-09-21 第五轮反馈）：消息 + 输入 = 同一个浅暖大面板（一体）；
+   AI 回答反转为白底卡片浮在面板上，输入框同为白底——同一层级语言；
+   标题行留在面板外的白底区 */
+.chatframe{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--card);padding:0 32px}
+.chead{width:100%;display:flex;align-items:center;gap:8px;padding:4px 0 12px}
+.chead h1{font-size:18px;font-weight:600;color:var(--t1);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.chatpanel{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--page-bg);border-radius:var(--r-lg);overflow:hidden}
+.thread{flex:1;overflow:auto;padding:20px 24px 8px}
+.thread-inner{max-width:720px;margin:0 auto}
+/* AI 回答块：白底卡片（浮在浅暖面板上） */
+.acard{background:var(--card);border-radius:var(--r-md);padding:16px 20px;max-width:660px}
+.daysep{display:flex;align-items:center;gap:8px;margin:24px 0 0}
+.daysep span{font-size:12px;color:var(--t3);font-weight:500}
+.daysep i{flex:1;height:1px;background:var(--line)}
+/* 一轮 = 一条用户消息 + 紧随的 AI 回答；轮内 16px、轮间 32px */
+.turn{display:flex;flex-direction:column;gap:12px;margin-bottom:24px}
+.turn:last-child{margin-bottom:8px}
+/* 注意：行容器用 .mrow —— 「我的」页列表行已占用 .row，避免样式互噬 */
+.mrow{display:flex;gap:12px;align-items:flex-start}
+.mrow.me{flex-direction:row-reverse}
+.av{width:32px;height:32px;border-radius:10px;flex:0 0 32px;display:grid;place-items:center;font-size:12px;font-weight:600;margin-top:2px}
+.mrow.ai .av{background:var(--brand-weak);color:var(--brand-strong)}
+.mrow.me .av{background:var(--neutral-chip);color:var(--t2)}
+.col{flex:1;min-width:0;display:flex;flex-direction:column}
+.mrow.me .col{align-items:flex-end}
+/* 用户：唯一气泡形态，右对齐，限宽 78% */
+.ubub{max-width:78%;background:var(--brand);color:var(--on-brand);border-radius:16px 16px 4px 16px;padding:8px 16px;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+/* AI：无边框无底色，靠排版分层（结论 → 论据 → 法条 → 行动） */
+.ameta{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--t3)}
+.ans{font-size:14.5px;line-height:1.8;color:var(--t1)}
+.ans p{margin:0 0 16px}
+.ans p:last-child{margin-bottom:0}
+.ans .lead{font-size:15px;font-weight:500}
+.ans b{font-weight:600}
+.ans h4{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:24px 0 8px}
+.ans h4::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--brand);flex:0 0 3px}
+.ans ol{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px}
+.ans ol li{display:flex;gap:8px;align-items:flex-start}
+.ans ol .n{width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--brand-weak);color:var(--brand-strong);font-size:12px;font-weight:600;display:grid;place-items:center;margin-top:4px}
+.ans .law{margin:0 0 16px;padding:8px 16px;border-left:3px solid var(--brand);background:var(--brand-weak);border-radius:0 8px 8px 0;font-size:13px;line-height:1.75;color:var(--t2)}
+.ans .law b{display:block;font-size:12px;font-weight:600;color:var(--brand-strong);margin-bottom:2px}
+.ans .cmp{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+.ans .cmp th{background:var(--page-bg);font-size:12px;font-weight:600;color:var(--t3);text-align:left;padding:8px 16px;white-space:nowrap}
+.ans .cmp td{padding:8px 16px;border-top:1px solid var(--line);vertical-align:top;color:var(--t2)}
+.ans .cmp td.v{color:var(--brand-strong);font-weight:500}
+.ans .copybox{margin:0 0 16px;border:1px solid var(--brand-line);border-radius:var(--r-md);background:var(--brand-weak);overflow:hidden}
+.ans .copybox .hd{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--brand-line);font-size:12px;font-weight:600;color:var(--brand-strong)}
+.ans .copybox .bd{padding:16px;font-size:14px;line-height:1.85;color:var(--t1);white-space:pre-wrap}
+/* 来源 / 下一步建议 */
+.srcs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.src{display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 12px;border:1px solid var(--brand-line);background:var(--card);border-radius:12px;font-size:12px;color:var(--brand-strong)}
+.src:hover{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.sugs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.sug{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 16px;border:1px solid var(--brand-line);background:var(--card);border-radius:16px;font-size:13px;font-weight:500;color:var(--brand-strong)}
+.sug:hover{background:var(--brand-weak)}
+/* 消息操作条：高度占位固定，hover 显形不跳动 */
+.acts{display:flex;align-items:center;gap:4px;margin-top:8px;height:24px;opacity:0;transition:opacity .12s}
+.mrow:hover .acts{opacity:1}
+.mrow.me .acts{justify-content:flex-end}
+.acts button{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:6px;font-size:12px;color:var(--t3)}
+.acts button:hover{background:var(--page-bg);color:var(--brand-strong)}
+.acts .tm{font-size:12px;color:var(--t4);margin-right:2px}
+.answering{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--t3)}
+/* 长回答折叠：PC 约 5 行（≈220 字）收起，文案对齐小程序「展开更多 ▼ / 收起 ▲」 */
+/* 长回答折叠 v2：按块截断（不切断元素）+ 底部渐隐，替代行数 clamp（会拦腰切断法条/列表块） */
+.foldfade{position:relative;max-height:230px;overflow:hidden}
+.foldfade::after{content:"";position:absolute;left:0;right:0;bottom:0;height:64px;background:linear-gradient(rgba(255,255,255,0),var(--card))}
+.foldbtn{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:500;color:var(--brand-strong);margin-top:8px}
+.foldbtn:hover{text-decoration:underline}
+/* 翻译卡片（对齐小程序 chat 页内嵌卡片：推荐译文 + 方向 + 主文 + 注解折叠 + 操作行） */
+.tcard{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card);margin-bottom:8px;max-width:660px}
+.tcard .hd{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line)}
+.tcard .bd{padding:16px}
+.tcard .main{font-size:16px;font-weight:600;line-height:1.7;color:var(--t1)}
+.tcard .caret{display:inline-block;width:2px;height:16px;background:var(--brand);vertical-align:-3px;animation:caret 1s steps(2) infinite;margin-left:2px}
+@keyframes caret{0%,50%{opacity:1}51%,100%{opacity:0}}
+.tcard .foldh{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--t2);cursor:pointer}
+.tcard .foldh:hover{background:var(--page-bg)}
+.tcard .foldh .act{margin-left:auto;color:var(--brand-strong);font-weight:500;flex:0 0 auto}
+.tcard .note{padding:0 16px 16px;font-size:13px;line-height:1.9;color:var(--t2);white-space:pre-line}
+.tcard .ops{display:flex;gap:8px;padding:8px 16px;border-top:1px solid var(--line)}
+/* 音乐卡片（对齐小程序 components/music-card） */
+.mcard{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card);margin-bottom:8px;max-width:520px}
+.mcard .hd{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600}
+.mcard .hd .n{font-size:12px;font-weight:400;color:var(--t3)}
+.mcard .song{padding:16px;border-bottom:1px solid var(--line)}
+.mcard .song .t{font-size:14px;font-weight:600}
+.mcard .song .a{font-size:12px;color:var(--t3);margin-top:2px}
+.mcard .song .w{font-size:12px;color:var(--t2);margin-top:8px}
+.mcard .ops{display:flex;gap:8px;padding:8px 16px;border-top:1px solid var(--line)}
+.mcard .ft{padding:8px 16px;font-size:12px;color:var(--t4);border-top:1px solid var(--line)}
+.composer{flex:0 0 auto;padding:8px 24px 16px}
+/* 输入块：白底（与 AI 回答卡同层级语言），坐在浅暖面板底部 */
+.composer .box{border:1px solid var(--line-strong);border-radius:var(--r-md);padding:12px;background:var(--card);max-width:720px;margin:0 auto;transition:border-color .15s ease}
+.composer .box:focus-within{border-color:var(--brand)}
 .composer textarea{width:100%;border:0;outline:none;resize:none;min-height:56px;background:transparent}
-.composer .row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.composer .crow{display:flex;align-items:center;gap:8px;margin-top:8px}
+.composer .crow .spacer{flex:1}
 .composer .hint{font-size:12px;color:var(--t3)}
 .thinking{display:inline-flex;gap:4px;align-items:center}
 .thinking i{width:6px;height:6px;border-radius:50%;background:var(--brand);animation:b 1.2s infinite}
@@ -114,6 +195,65 @@ input,textarea{font:inherit;color:inherit}
 .examples{display:flex;flex-direction:column;gap:8px;max-width:480px;margin:0 auto}
 .examples button{text-align:left;padding:12px 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--card);font-size:14px;color:var(--t1)}
 .examples button:hover{border-color:var(--brand);color:var(--brand-strong)}
+/* ── 翻译工作台（对齐小程序 packageTranslate 四页合一） ── */
+.trmeta{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;color:var(--t3)}
+.tonebox{margin-top:16px;padding:8px 16px;background:var(--page-bg);border-radius:var(--r-sm);font-size:12px;line-height:1.75;color:var(--t2)}
+.tonebox b{display:block;font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px}
+.tracts{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.claim{font-size:12px;color:var(--t4);margin-top:16px}
+.langrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.langsel{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 16px;border:1px solid var(--line-strong);border-radius:16px;background:var(--card);font-size:13px;font-weight:500}
+.swap{width:32px;height:32px;flex:0 0 32px;border-radius:50%;border:1px solid var(--line-strong);background:var(--card);display:grid;place-items:center;color:var(--t2)}
+.swap:hover{border-color:var(--brand);color:var(--brand-strong)}
+.chiprow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chiprow .lb{font-size:12px;color:var(--t3);flex:0 0 auto}
+.samples{margin-top:16px}
+.samples .lb{font-size:12px;color:var(--t3);margin-bottom:8px}
+.samples button{display:block;width:100%;text-align:left;padding:8px 16px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);font-size:13px;color:var(--t2);margin-bottom:8px}
+.samples button:hover{border-color:var(--brand);color:var(--brand-strong)}
+/* ── 合翻（对齐小程序 packageContract 八页合一 + packageAssess 的导出 / 设置） ── */
+.hero{padding:32px;text-align:center;border-radius:var(--r-lg);background:var(--brand-weak);border:1px solid var(--brand-line);margin-bottom:24px}
+.hero h2{font-size:24px;font-weight:600;margin-bottom:8px}
+.hero p{font-size:14px;color:var(--t2);max-width:520px;margin:0 auto}
+.entries{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.entry{padding:20px;cursor:pointer;text-align:left}
+.entry h3{font-size:16px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.entry p{font-size:13px;color:var(--t2)}
+.entry:hover{border-color:var(--brand);box-shadow:var(--sh-2)}
+.riskgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.riskcard{padding:16px}
+.riskcard h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.riskcard p{font-size:12px;color:var(--t3);line-height:1.7}
+.kn{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kn div{padding:16px;text-align:center}
+.kn .v{font-size:20px;font-weight:600;color:var(--t1)}
+.kn .l{font-size:12px;color:var(--t3);margin-top:4px}
+.sigitem{border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:8px;background:var(--card);overflow:hidden}
+.sigitem .s-hd{display:flex;align-items:center;gap:8px;padding:16px;cursor:pointer}
+.sigitem .s-hd:hover{background:var(--page-bg)}
+.sigitem .lv{width:20px;height:20px;flex:0 0 20px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--on-brand)}
+.sigitem .lv.danger{background:var(--danger)} .sigitem .lv.warn{background:var(--warn)} .sigitem .lv.ok{background:var(--ok)}
+.sigitem .ttl{flex:1;font-size:14px;font-weight:500}
+.sigitem .s-bd{padding:0 16px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--t2);line-height:1.8}
+.blk{margin-top:16px}
+.blk .h{font-size:12px;font-weight:600;color:var(--t1);margin-bottom:4px}
+.blk ol{list-style:decimal;padding-left:20px;margin:0;font-size:13px}
+.blk ol li{margin-bottom:4px}
+.law2{padding:8px 16px;border-left:3px solid var(--brand);background:var(--brand-weak);border-radius:0 var(--r-sm) var(--r-sm) 0;margin-top:8px;font-size:13px}
+.askwrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ask{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border:1px solid var(--brand-line);background:var(--card);border-radius:14px;font-size:12px;color:var(--brand-strong)}
+.ask:hover{background:var(--brand-weak)}
+.rightitem{border:1px solid var(--line);border-radius:var(--r-md);padding:16px;margin-bottom:8px;background:var(--card)}
+.amt{font-size:14px;font-weight:600;color:var(--brand-strong)}
+.stage{display:inline-flex;height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:600;background:var(--brand-weak);color:var(--brand-strong)}
+.askcard{padding:20px;display:flex;align-items:center;gap:16px;background:var(--brand-weak);border-color:var(--brand-line)}
+.plan{display:flex;flex-direction:column;gap:8px;font-size:13px}
+.plan .st{display:flex;align-items:center;gap:8px}
+.plan .st .i{flex:0 0 16px;display:grid;place-items:center}
+.plan .st.run{color:var(--brand-strong);font-weight:500}
+.plan .st.done{color:var(--ok)}
+.plan .st.wait,.plan .st.skip{color:var(--t3)}
+.thinkbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);font-size:13px;color:var(--t2);margin-bottom:16px}
 /* ── 发现 ── */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 .agent{padding:20px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:.15s}
@@ -177,21 +317,22 @@ input,textarea{font:inherit;color:inherit}
 .palette .it.on,.palette .it:hover{background:var(--brand-weak);color:var(--brand-strong)}
 .palette .grp{font-size:12px;color:var(--t3);padding:8px 12px 4px;font-weight:600}
 .toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:var(--ink);color:var(--on-brand);padding:10px 20px;border-radius:var(--r-sm);font-size:13px;z-index:200;box-shadow:var(--sh-2)}
-/* ── 原型控制（非产品界面） ── */
-.proto{position:fixed;right:16px;bottom:16px;z-index:300;background:var(--ink);color:var(--ink-fg);border-radius:var(--r-md);padding:12px 16px;font-size:12px;box-shadow:var(--sh-3);width:236px}
-.proto .t{font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between}
+/* ── 原型控制（非产品界面）：固定底部居中的紧凑横条，说明默认收起（2026-09-21 反馈：不再悬浮遮挡右侧内容） ── */
+.proto{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:300;background:var(--ink);color:var(--ink-fg);border-radius:var(--r-md);padding:8px 14px;font-size:12px;box-shadow:var(--sh-3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px)}
+.proto .t{font-weight:600;display:flex;gap:6px;align-items:baseline;white-space:nowrap}
 .proto .t em{font-style:normal;color:var(--t4);font-weight:400}
-.proto .r{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.proto button{background:var(--ink-2);color:var(--ink-fg);border-radius:6px;padding:4px 8px;font-size:11px;border:1px solid var(--ink-3)}
+.proto .r{display:flex;gap:6px}
+.proto button{background:var(--ink-2);color:var(--ink-fg);border-radius:6px;padding:4px 8px;font-size:11px;border:1px solid var(--ink-3);white-space:nowrap}
 .proto button:hover{background:var(--brand);border-color:var(--brand)}
 .proto button.on{background:var(--brand);border-color:var(--brand)}
-.proto .note{margin-top:8px;color:var(--t4);line-height:1.5}
+.proto .note{display:none;position:absolute;bottom:calc(100% + 8px);left:0;right:0;background:var(--ink);border-radius:var(--r-md);padding:12px 16px;box-shadow:var(--sh-3);color:var(--t4);line-height:1.6;max-height:60vh;overflow:auto}
+.proto.open .note{display:block}
 </style>
 </head>
 <body>
 <div class="shell">
   <header class="topbar">
-    <button class="brand" style="cursor:pointer" onclick="go('welcome')" title="回到开始页"><span class="mark"><svg class="ico" viewBox="0 0 24 24" style="color:var(--on-brand)"><path d="M12 3l2.2 5.6L20 11l-5.8 2.4L12 19l-2.2-5.6L4 11l5.8-2.4z"/></svg></span>科豆 AI</button>
+    <button class="brand" style="cursor:pointer" onclick="go('welcome')" title="回到开始页"><span class="mark"><svg viewBox="0 0 210 110" width="32" height="17" aria-label="科豆 AI"><rect width="210" height="110" rx="55" fill="#F97316"/><path d="M 105 18 C 127 18, 139 34, 139 60 C 139 90, 121 102, 105 102 C 87 102, 71 88, 71 60 C 71 32, 87 18, 105 18 Z" fill="white"/><circle cx="105" cy="60" r="9" fill="#F97316"/><circle cx="105" cy="58" r="3.5" fill="#FDE68A"/><path d="M 105 18 Q 105 10, 105 7" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/><circle cx="105" cy="6" r="3.5" fill="white"/></svg></span>科豆 AI</button>
     <nav class="topnav" id="topnav"></nav>
     <button class="kbd" onclick="openCmd()"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>搜索或执行命令 <span style="color:var(--t4)">⌘K</span></button>
     <button class="avatar" onclick="openMenu()" title="账号菜单">李</button>
@@ -206,18 +347,25 @@ input,textarea{font:inherit;color:inherit}
   </div>
 </div>
 
-<div class="proto">
-  <div class="t"><span>原型演示控制</span><em>非产品界面</em></div>
+<div class="proto" id="protoBar">
+  <div class="t"><span>原型演示</span><em>非产品界面</em></div>
   <div class="r">
     <button id="pk" onclick="toggle('loading')">加载态</button>
     <button id="pe" onclick="toggle('empty')">空态</button>
     <button id="pf" onclick="toggle('error')">错误态</button>
+    <button onclick="demo('tcard')">翻译卡片</button>
+    <button onclick="demo('mcard')">音乐卡片</button>
     <button onclick="resetAll()">重置</button>
   </div>
+  <button onclick="document.getElementById('protoBar').classList.toggle('open')">说明 ▲</button>
   <div class="note">目标端：桌面 Web（1440×900）· 中保真可点击<br>
   状态开关作用于列表区与当前工作区。<br>
+  <b style="color:var(--brand)">翻译 / 合翻（2026-09-21）：</b>交互对齐小程序 —— 翻译取 packageTranslate（输入 / 结果 / 历史 / 设置四页合一），合翻取 packageContract（首页 → 上传 → 分析中 → 报告八页合一），导出报告取 packageAssess；PC 增强：左右并排对照、拖拽上传、可取消体检。<b>术语库右栏已移除</b>（无数据源无接口；右栏仅剩合翻原文对照）。<br>
+  <b style="color:var(--brand)">对话排版 v2（2026-09-21）：</b>AI 侧去气泡，改为<b>结构化回答</b>（结论先行 / 小标题 / 有序列表 / 法条引用 / 对比表 / 可复制文案 / 来源 chip / 下一步建议）；用户侧保留<b>唯一气泡</b>形态；消息流限宽 720、轮内 16 / 轮间 32、操作条固定占位。<br>
   <b style="color:var(--brand)">P1 落码范围：</b>发现 / 翻译 / 合翻三页为<b>占位态</b>（顶栏可达、不留死链），页面内容 P2 / P3 填充。<br>
   <b style="color:var(--brand)">P1 补充（2026-09-21 确认）：</b>开始页为公开页，未登录点「开始对话」弹登录 / 注册弹窗（复用 LoginPanel）；会话删除补后端 DELETE /agent/conversations/:id。<br>
+  <b style="color:var(--brand)">已拍板（2026-09-21）：</b><b>Q9</b> 长回答<b>折叠</b>（PC 5 行 ≈ 220 字，文案「展开更多 ▼ / 收起 ▲」，卡片不折叠）；识别为<b>翻译</b>→ 翻译卡片（推荐译文 + 方向 + 注解折叠 + 复制/朗读/收藏），识别为<b>音乐</b>→ 音乐卡片（歌单 + 换一批 / 不感兴趣 / 去渠道听）——均对齐小程序。<b>Q10</b> 对话侧<b>不做来源 / 查看原文</b>（合翻报告侧保留原文联动）。<br>
+  <b style="color:var(--brand)">已拍板：</b><b>Q11</b> PDF / Word 解析<b>本轮不支持</b>——合翻上传仅<b>图片 OCR + 粘贴文本</b>（对齐小程序）。<br>
   <b style="color:var(--brand)">待确认：</b>Q1 原文定位字段 · Q2 上传方式 · Q3 能力数据源 · Q4 会话隔离 · Q5 会员占位 · Q6 实验室去留 · Q7 每日一句数据来源 · Q8 长文本识别</div>
 </div>
 
@@ -261,7 +409,13 @@ const QUOTES = [
 
 const S = {
   view:'welcome', sid:'c1', qi:0, ck:false, ctxOpen:true, cmd:null, cmdIdx:0,
-  step:'upload', trTab:'natural', trDone:true, sig:null, sending:false, msgs:null,
+  /* 合翻：home → upload → analyzing → result（对齐小程序 packageContract 八页合一） */
+  step:'home', sig:null,
+  /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
+  trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
+  /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
+  exp:{}, cardOpen:{},
+  sending:false, msgs:null,
   mode:{loading:false, empty:false, error:false}
 };
 
@@ -280,7 +434,7 @@ const NAV = [
   {k:'contract', n:'合翻', i:I.doc},
   {k:'lab', n:'实验室', i:I.flask}
 ];
-const LIST_TITLE = {welcome:'最近对话', chat:'会话', discover:'能力', translate:'会话', contract:'会话', profile:'账号', lab:'实验功能'};
+const LIST_TITLE = {welcome:'最近对话', chat:'会话', discover:'能力', translate:'翻译记录', contract:'体检记录', profile:'账号', lab:'实验功能'};
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
@@ -309,7 +463,10 @@ function renderList(){
 function listFor(v){
   if(v==='welcome') return Object.keys(SESS).map(k=>({id:k,t:SESS[k].t,s:SESS[k].a+' · '+SESS[k].time,dot:SESS[k].dot}));
   // Q4 已拍板：会话不按类型隔离，统一一个会话流；agentId=auto 由后端自动识别意图
-  if(v==='chat'||v==='translate'||v==='contract') return Object.keys(SESS).map(k=>({id:k,t:SESS[k].t,s:SESS[k].a+' · '+SESS[k].time,dot:SESS[k].dot}));
+  if(v==='chat') return Object.keys(SESS).map(k=>({id:k,t:SESS[k].t,s:SESS[k].a+' · '+SESS[k].time,dot:SESS[k].dot}));
+  // 工具页（翻译 / 合翻）走 source=tool，记录不进主会话流：左栏显示各自记录（字段对齐小程序历史页）
+  if(v==='translate') return [{id:'t1',t:'这个报价我们再商量商量…',s:'10:24 · 中→英'},{id:'t2',t:'麻烦尽快确认一下，我们这边等着排产。',s:'昨天 · 中→英'},{id:'t3',t:'实在抱歉，这批货可能要晚两天到。',s:'3 天前 · 中→英'}];
+  if(v==='contract') return [{id:'k1',t:'合同体检 · 房屋租赁',s:'10:24 · 完成',dot:'hi'},{id:'k2',t:'合同体检 · 买卖合同',s:'昨天 · 完成',dot:'mid'},{id:'k3',t:'合同体检 · 服务协议',s:'上周 · 完成'}];
   if(v==='discover') return [{id:'a1',t:'语言翻译官',s:'已启用'},{id:'a2',t:'合同翻译官',s:'已启用'},{id:'a3',t:'论文速读',s:'敬请期待'}];
   if(v==='lab') return [{id:'l1',t:'秀秀',s:'实验性'},{id:'l2',t:'创意画板',s:'实验性'},{id:'l3',t:'我的相册',s:'实验性'},{id:'l4',t:'在线工具箱',s:'实验性'}];
   if(v==='profile') return [{id:'p1',t:'账号资料',s:'李工'},{id:'p2',t:'应用设置',s:'翻译 / 合同'},{id:'p3',t:'我的数据',s:'3 类记录'}];
@@ -353,33 +510,151 @@ function workWelcome(){
   '</div>';
 }
 
+/* 默认会话：AI 侧用 blocks 结构化（p 段落 / h 小标题 / ol 有序 / law 法条 /
+   cmp 对比表 / copybox 可复制文案 / srcs 来源 / sugs 下一步），不再塞进气泡 */
+const DEFAULT_MSGS = [
+  {who:'me', txt:'我租的房子合同里写了租金每年递增，但没写递增上限，这样签有风险吗？', time:'10:24'},
+  {who:'ai', agent:'合同翻译官', time:'10:24', blocks:[
+    {t:'p', lead:true, v:'有风险，但条款本身不是无效——风险在于<b>你把定价权交给了房东，且没有上限</b>。'},
+    {t:'p', v:'原文是「递增比例由甲方于每年度开始前 30 日书面通知乙方，乙方不得异议」：每年涨多少由房东单方决定，你只能接受；真发生争议，也很难主张调整。'},
+    {t:'h', v:'建议争取两处修改'},
+    {t:'ol', items:[
+      '<b>写死递增上限</b>：不超过上一年度租金的 5%，或锚定 CPI；',
+      '<b>删掉「乙方不得异议」</b>：改成「双方协商一致」，保留谈判空间。'
+    ]},
+    {t:'law', src:'《民法典》第 510 条', v:'合同生效后，当事人就价款或者报酬等内容没有约定或者约定不明确的，可以协议补充；不能达成补充协议的，按照合同相关条款或者交易习惯确定。<br>实务上，租金递增条款若未设上限，法院通常会结合当地租金水平与合同剩余期限综合判断，但这套判断要等到争议发生后才启动——签约时把上限写死，成本远低于事后举证。'},
+    {t:'p', v:'如果你已经签了字，也还有退路：先按现状履约并保留全部付款凭证，等对方提出涨租时再以「未约定上限」为由要求重新协商；协商不成可援引上述条文请求按市场价确定。只是这条路要付出时间与举证成本——能改条款就别走到这一步。'},
+    {t:'sugs', items:['起草一段可直接发给房东的修改意见','看看押金与解约条款还有没有坑']}
+  ]},
+  {who:'me', txt:'如果房东不同意改呢？', time:'10:26'},
+  {who:'ai', agent:'合同翻译官', time:'10:26', blocks:[
+    {t:'p', lead:true, v:'那就先别硬签——把风险换算成可量化的成本，再决定签不签。'},
+    {t:'cmp', head:['退路','你要做的让步','残留风险'], rows:[
+      ['把上限写进补充协议（如 5%）','几乎无','低'],
+      ['缩短租期到 1 年，续签需重新协商','放弃长期租期稳定','中'],
+      ['维持原条款，留存支付与交接凭证','接受租金长期不确定','高']
+    ]},
+    {t:'p', v:'「短期租约 + 补充协议」是最常见的折中；如果房东连补充协议都不签，说明后续争议概率不低，建议换房。'},
+    {t:'law', src:'《民法典》第 585 条', v:'约定的违约金过分高于造成的损失的，人民法院或者仲裁机构可以根据当事人的请求予以适当减少。'}
+  ]}
+];
+
+function renderBlocks(bs){
+  return (bs||[]).map(b=>{
+    if(b.t==='p') return '<p'+(b.lead?' class="lead"':'')+'>'+b.v+'</p>';
+    if(b.t==='h') return '<h4>'+esc(b.v)+'</h4>';
+    if(b.t==='ol') return '<ol>'+b.items.map((it,i)=>'<li><span class="n">'+(i+1)+'</span><span>'+it+'</span></li>').join('')+'</ol>';
+    if(b.t==='law') return '<div class="law"><b>'+esc(b.src)+'</b>'+b.v+'</div>';
+    if(b.t==='cmp') return '<table class="cmp"><thead><tr>'+b.head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
+      b.rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td class="v">'+esc(r[1])+'</td><td>'+esc(r[2])+'</td></tr>').join('')+'</tbody></table>';
+    if(b.t==='copybox') return '<div class="copybox"><div class="hd"><span>'+esc(b.title)+'</span><span style="flex:1"></span>'+
+      '<button class="btn ghost sm" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button></div><div class="bd">'+esc(b.v)+'</div></div>';
+    /* 识别为翻译 → 翻译卡片（对齐小程序 chat 页内嵌卡片；注解默认收起） */
+    if(b.t==='tcard') return '<div class="tcard">'+
+      '<div class="hd"><span class="tag brand">推荐译文</span><span style="font-size:12px;color:var(--t3)">'+esc(b.dir)+'</span></div>'+
+      '<div class="bd"><div class="main">'+esc(b.main)+(b.streaming?'<span class="caret"></span>':'')+'</div></div>'+
+      (b.note?'<div class="foldh" onclick="S.cardOpen[\''+b.id+'\']=!S.cardOpen[\''+b.id+'\'];render()">'+
+        '<span>直译对照 · 委婉版 · 语气要点</span><span class="act">'+(S.cardOpen[b.id]?'收起':'展开')+'</span></div>'+
+        (S.cardOpen[b.id]?'<div class="note">'+esc(b.note)+'</div>':'') : (b.streaming?'<div class="foldh"><span>正在生成注解…</span></div>':''))+
+      (b.streaming?'':'<div class="ops"><button class="btn ghost sm" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
+        '<button class="btn ghost sm" onclick="toast(\'朗读：请稍候…\')">朗读</button>'+
+        '<button class="btn ghost sm" onclick="toast(\'已收进生词本\')">收藏</button></div>')+
+      '</div>';
+    /* 识别为音乐 → 音乐卡片（对齐小程序 components/music-card） */
+    if(b.t==='mcard') return '<div class="mcard">'+
+      '<div class="hd">为你推荐<span class="n">共 '+b.songs.length+' 首</span></div>'+
+      b.songs.map(s=>'<div class="song"><div class="t">'+esc(s.title)+'</div>'+
+        '<div class="a">'+esc(s.artist||'')+'</div>'+
+        (s.reason?'<div class="w">'+esc(s.reason)+'</div>':'')+'</div>').join('')+
+      '<div class="ops"><button class="btn ghost sm" onclick="toast(\'换一批\')">换一批</button>'+
+      '<button class="btn ghost sm" onclick="toast(\'不感兴趣，换一批\')">不感兴趣</button>'+
+      '<button class="btn pri sm" onclick="toast(\'跳转 '+esc(b.provider)+' 搜索「'+esc(b.keyword)+'」\')">'+(b.ready?'去 '+esc(b.provider)+'听':'去听')+'</button></div>'+
+      '<div class="ft">跳转后在 '+esc(b.provider)+' 搜索并播放，本站不提供音频播放</div></div>';
+    if(b.t==='srcs') return '<div class="srcs">'+b.items.map(s=>'<button class="src" onclick="toast(\'已定位到第 '+s.k+' 条\')">'+SVG(I.doc)+esc(s.t)+'</button>').join('')+'</div>';
+    if(b.t==='sugs') return '<div class="sugs">'+b.items.map(s=>'<button class="sug" onclick="send(\''+String(s).replace(/'/g,"\\'")+'\')">'+esc(s)+SVG(I.right)+'</button>').join('')+'</div>';
+    return '';
+  }).join('');
+}
+function msgMe(m){
+  return '<div class="mrow me"><div class="av">李</div><div class="col"><div class="ubub">'+esc(m.txt)+'</div>'+
+    '<div class="acts"><span class="tm">'+(m.time?esc(m.time):'')+'</span>'+
+    '<button onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button></div></div></div>';
+}
+/* 折叠截断：按块边界取前若干块（累计约 90 字止），绝不把法条 / 列表块切一半 */
+function foldCut(bs){
+  let n=0, out=[];
+  for(const b of bs){
+    out.push(b);
+    const len=(b.v?String(b.v).replace(/<[^>]+>/g,'').length:0)+((b.items||[]).join('').length);
+    if(b.t==='p'||b.t==='ol'||b.t==='law') n+=len;
+    if(n>=90) break;
+  }
+  return out;
+}
+function msgAi(m){
+  const bs = m.blocks||[];
+  const hasCard = bs.some(b=>b.t==='tcard'||b.t==='mcard');
+  // Q9 拍板：长回答折叠（卡片不折叠，与小程序一致）；阈值 PC 160 字（按块截断 + 渐隐）
+  const plainLen = bs.filter(b=>b.t==='p').map(b=>b.v).join('').length;
+  const fold = !hasCard && bs.length>2 && plainLen>160;
+  const open = !!S.exp[m.id];
+  // AI 回答整体收进浅暖底色块（acard）：元信息在块内首行，正文结构化排版，折叠按钮在块内底部
+  return '<div class="mrow ai"><div class="av">AI</div><div class="col">'+
+    '<div class="acard">'+
+    '<div class="ameta"><span class="tag brand">'+esc(m.agent||'助手')+'</span>'+(m.time?'<span>'+esc(m.time)+'</span>':'')+
+    (m.stopped?'<span class="tag">已停止</span>':'')+'</div>'+
+    '<div class="ans'+(fold&&!open?' foldfade':'')+'">'+renderBlocks(fold&&!open?foldCut(bs):bs)+'</div>'+
+    (fold?'<button class="foldbtn" onclick="S.exp[\''+m.id+'\']=!S.exp[\''+m.id+'\'];render()">'+(open?'收起 ▲':'展开更多 ▼')+'</button>':'')+
+    '</div>'+
+    '<div class="acts">'+
+    '<button onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
+    '<button onclick="toast(\'已重新生成\')">重新生成</button></div></div></div>';
+}
+/* 一轮 = 一条用户消息 + 紧随其后的 AI 回答（连续追问的追加回答归同一轮） */
+function renderTurns(msgs){
+  let html='', buf=[];
+  const flush=()=>{ if(buf.length){ html+='<div class="turn">'+buf.join('')+'</div>'; buf=[]; } };
+  msgs.forEach(m=>{ if(m.who==='me'){ flush(); buf=[msgMe(m)]; } else buf.push(msgAi(m)); });
+  flush();
+  return html;
+}
+function chatComposer(){
+  return '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，⌘Enter 发送"></textarea>'+
+    '<div class="crow"><button class="btn ghost sm" title="上传合同 / 图片（P2 支持）" onclick="toast(\'上传文件：P2 支持\')">'+SVG(I.up)+'附件</button>'+
+    '<span class="hint">⌘Enter 发送 · ⌘K 命令面板</span><span class="spacer"></span>'+
+    (S.sending?'<button class="btn sm" onclick="stopGen()">停止</button>':'<button class="btn sm pri" onclick="send(document.getElementById(\'ta\').value)">'+SVG(I.arrow)+'发送</button>')+
+    '</div></div></div>';
+}
 function workChat(){
   const s = SESS[S.sid]||{t:'新对话',a:'通用助手'};
-  const msgs = S.msgs || [
-    {who:'me', txt:'我租的房子合同里写了租金每年递增，但没写递增上限，这样签有风险吗？'},
-    {who:'ai', agent:'合同翻译官', txt:'有风险。条款只约定"递增比例由甲方通知、乙方不得异议"，等于把定价权单方给了房东，且未设上限——法律上并非当然无效，但一旦发生争议，你很难主张调整。<br><br>建议争取两处修改：<br>1. 明确递增上限（如不超过上一年度的 5%，或锚定 CPI）；<br>2. 删除"乙方不得异议"，改为双方协商一致的机制。<br><br>需要我按这个思路起草一段修改建议吗？', src:['租金及支付方式 · 5.2']}
-  ];
-  let body;
+  // 标题行在面板外（白底区）；消息 + 输入同处一个浅暖大面板（2026-09-21 第五轮反馈）
+  const head = '<div class="chead"><h1>'+esc(s.t)+'</h1><span class="tag brand">'+esc(s.a)+'</span>'+
+    '<span style="flex:1"></span><button class="btn sm pri" onclick="newChat()">新对话</button></div>';
   if(!S.msgs && S.mode.empty){
-    body = '<div class="welcome"><h2>你好，李工</h2><p>描述你的问题，或直接选择一项能力开始</p><div class="examples">'+
+    return '<div class="chatframe">'+ head +
+      '<div class="chatpanel"><div class="thread"><div class="thread-inner">'+
+      '<div class="welcome"><h2>你好，李工</h2><p>描述你的问题，或直接选择一个示例开始</p><div class="examples">'+
       ['帮我看看这份租赁合同有什么风险','把这段产品文案翻译成商务英语','解释一下竞业限制条款的有效条件'].map(q=>
-      '<button onclick="send(\''+q+'\')">'+esc(q)+'</button>').join('')+'</div></div>';
-  } else {
-    body = '<div class="msgs">' + msgs.map((m,i)=>{
-      if(m.who==='me') return '<div class="msg me"><div class="who">李</div><div><div class="bub">'+esc(m.txt)+'</div><div class="acts" style="opacity:.6"><button class="btn ghost sm" onclick="toast(\'已复制\')">复制</button></div></div></div>';
-      return '<div class="msg ai"><div class="who">AI</div><div><div class="bub"><div class="hd"><span class="tag brand">'+esc(m.agent)+'</span></div>'+m.txt+
-        '<div class="acts">'+ (m.src?'<button class="btn ghost sm" onclick="toast(\'已定位到原文 5.2\')">查看原文</button>':'') +'<button class="btn ghost sm" onclick="toast(\'已复制\')">复制</button><button class="btn ghost sm" onclick="toast(\'已重新生成\')">重新生成</button></div></div></div></div>';
-    }).join('') + (S.sending?'<div class="msg ai"><div class="who">AI</div><div><div class="bub"><span class="thinking"><i></i><i></i><i></i></span></div></div></div>':'') + '</div>';
+      '<button onclick="send(\''+q+'\')">'+esc(q)+'</button>').join('')+'</div></div></div></div>'+
+      chatComposer()+'</div></div>';
   }
-  const composer = '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，⌘Enter 发送"></textarea>'+
-    '<div class="row"><span class="hint">⌘Enter 发送 · ⌘K 命令面板</span><span class="spacer" style="flex:1"></span>'+
-    (S.sending?'<button class="btn sm" onclick="stopGen()">停止</button>':'<button class="btn sm pri" onclick="send(document.getElementById(\'ta\').value)">发送</button>')+'</div></div></div>';
-  return hd(s.t, '<span class="tag brand">'+esc(s.a)+'</span>', '<button class="btn pri" onclick="newChat()">新对话</button>') + body + composer;
+  // 给消息补 id：折叠态与卡片展开态按下标之外的稳定 key 记录
+  const msgs = (S.msgs || DEFAULT_MSGS).map((m,i)=>m.id?m:Object.assign({},m,{id:'m'+i}));
+  return '<div class="chatframe">'+ head +
+    '<div class="chatpanel">'+
+    '<div class="thread"><div class="thread-inner">'+
+    renderTurns(msgs)+
+    (S.sending?'<div class="turn"><div class="mrow ai"><div class="av">AI</div><div class="col"><div class="acard"><div class="answering"><span class="thinking"><i></i><i></i><i></i></span>正在思考…</div></div></div></div></div>':'')+
+    /* 日期分隔线放同日消息组底部（2026-09-21 拍板）：标记「上面这些是今天的」 */
+    '<div class="daysep"><span>今天</span><i></i></div>'+
+    '</div></div>'+
+    chatComposer()+
+    '</div></div>';
 }
 
 function workDiscover(){
   const cards = [
-    {n:'语言翻译官', d:'三版译文对照 + 语气点评，支持 12 种语言与术语库', ic:I.lang, on:true},
+    {n:'语言翻译官', d:'三版译文对照 + 语气点评，支持 12 种语言', ic:I.lang, on:true},
     {n:'合同翻译官', d:'上传合同自动识别风险信号、法律依据与可争取权益', ic:I.doc, on:true},
     {n:'论文速读', d:'上传论文，提取核心结论与方法', ic:I.search, on:false},
     {n:'文案改写', d:'按平台与受众重写营销文案', ic:I.grid, on:false}
@@ -390,80 +665,203 @@ function workDiscover(){
     '<span>'+(c.on?'开始使用 '+SVG(I.right):'—')+'</span></div></div>').join('')+'</div></div>';
 }
 
+const TR_TONES = ['正式','商务','日常','学术','轻松'];
+const TR_STYLES = ['完整','简洁','有说服力'];
+const TR_SAMPLES = ['这个报价我们再商量商量，下周给你答复。','麻烦尽快确认一下，我们这边等着排产。','实在抱歉，这批货可能要晚两天到。'];
+const TR_OUT = {
+  recommend:'Thank you for your continued support. Regarding the delivery date stipulated in Article 3 of the contract, we would like to request an extension to the 15th of next month. The reason is a delay in raw material delivery from our upstream supplier; we are currently arranging expedited production.',
+  literal:'Thank your company for the support to this cooperation. About the delivery time agreed in Article 3 of the contract, our side hopes to postpone to the 15th of next month. The reason is that the raw material delivery of the upstream supplier has been delayed, and we are presently coordinating rush production.',
+  polite:'We truly appreciate your continued support and partnership. With respect to the delivery date set out in Article 3, we would kindly request a brief extension to the 15th of next month. This is due to an unforeseen delay in raw material supply from our upstream vendor — we are actively arranging expedited production to minimise any impact on your schedule.',
+  tone:'自然版最贴合商务邮件惯例；委婉版补上了原因说明与影响控制，适合对方已有不满情绪时使用。'
+};
+
+/* 翻译工作台：对齐小程序 packageTranslate（输入 / 结果 / 历史 / 设置 四页合一）
+   PC 增强：左输入右结果并排（小程序是上下）；三版对照用 Tab（小程序窄屏是折叠） */
 function workTranslate(){
   const src = '感谢贵司对本次合作的支持。关于合同第三条约定的交付时间，我方希望可以顺延至下月十五号，原因是上游供应商的原材料交付出现了延迟，目前正在协调加急生产。';
-  const OUT = {
-    natural:'Thank you for your continued support. Regarding the delivery date stipulated in Article 3 of the contract, we would like to request an extension to the 15th of next month. The reason is a delay in raw material delivery from our upstream supplier; we are currently arranging expedited production.',
-    literal:'Thank your company for the support to this cooperation. About the delivery time agreed in Article 3 of the contract, our side hopes to postpone to the 15th of next month. The reason is that the raw material delivery of the upstream supplier has been delayed, and we are presently coordinating rush production.',
-    polite:'We truly appreciate your continued support and partnership. With respect to the delivery date set out in Article 3, we would kindly request a brief extension to the 15th of next month. This is due to an unforeseen delay in raw material supply from our upstream vendor — we are actively arranging expedited production to minimise any impact on your schedule.'
-  };
-  const tabs = [['natural','自然版'],['literal','直译版'],['polite','委婉版']];
-  const right = S.mode.loading ? '<div class="skel" style="width:90%"></div>'.repeat(4)
-    : (S.trDone ? '<div class="tabs">'+tabs.map(t=>'<button class="'+(S.trTab===t[0]?'on':'')+'" onclick="S.trTab=\''+t[0]+'\';render()">'+t[1]+'</button>').join('')+'</div><div style="font-size:14px;line-height:1.9">'+esc(OUT[S.trTab])+
-      '</div><div style="margin-top:16px;padding:12px;background:var(--page-bg);border-radius:8px;font-size:12px;color:var(--t2)"><b style="font-weight:600">语气点评：</b>自然版最贴合商务邮件惯例；委婉版补上了原因说明与影响控制，适合对方已有不满情绪时使用。</div>'
-      : '<div class="empty" style="padding:48px 0"><h3>输入内容开始翻译</h3></div>');
-  return hd('翻译工作台', '<span class="tag">中 → 英</span><span>商务正式</span>', '<button class="btn" onclick="toast(\'已保存偏好\')">偏好设置</button><button class="btn pri" onclick="S.trDone=true;render();toast(\'翻译完成\')">开始翻译</button>') +
+  const tabs = [['recommend','推荐译文'],['literal','直译对照'],['polite','委婉版']];
+  let right;
+  if(S.trState==='loading'){
+    right = '<div style="display:flex;align-items:center;gap:8px;color:var(--brand-strong);font-size:13px;margin-bottom:16px"><span class="thinking"><i></i><i></i><i></i></span>翻译中</div>'+
+      '<div class="skel" style="width:95%"></div>'.repeat(4);
+  } else if(S.trState==='fail'){
+    right = '<div class="card err" style="padding:24px;text-align:center"><div style="margin:0 auto 8px;width:24px">'+SVG(I.warn,1)+'</div>'+
+      '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px">翻译失败</h3>'+
+      '<p style="font-size:13px;color:var(--t2);margin-bottom:16px">网络不太顺畅，请检查网络后重试</p>'+
+      '<div style="display:flex;gap:8px;justify-content:center"><button class="btn sm pri" onclick="S.trState=\'loading\';render();setTimeout(()=>{S.trState=\'done\';render();},1000)">重试</button>'+
+      '<button class="btn sm" onclick="S.trState=\'idle\';render()">返回</button></div></div>';
+  } else if(S.trState==='done'){
+    const readBtn = S.trRead===null ? '<button class="btn ghost sm" onclick="S.trRead=\'loading\';render()">朗读</button>'
+      : S.trRead==='loading' ? '<button class="btn ghost sm" disabled>请稍候…</button>'
+      : '<button class="btn ghost sm" onclick="S.trRead=null;render();toast(\'朗读已中断\')">停止</button>';
+    right = '<div class="trmeta"><span class="tag brand">推荐</span><span>'+S.trTone+' · '+S.trStyle+' · 中文 → 英语</span></div>'+
+      '<div class="tabs">'+tabs.map(t=>'<button class="'+(S.trTab===t[0]?'on':'')+'" onclick="S.trTab=\''+t[0]+'\';render()">'+t[1]+'</button>').join('')+'</div>'+
+      '<div style="font-size:14px;line-height:1.9">'+esc(TR_OUT[S.trTab])+'</div>'+
+      '<div class="tonebox"><b>语气要点</b>'+TR_OUT.tone+'</div>'+
+      '<div class="tracts"><button class="btn ghost sm" onclick="toast(\'已复制到剪贴板\')">'+SVG(I.copy)+'复制</button>'+readBtn+
+      '<button class="btn ghost sm" onclick="toast(\'已收进生词本\')">收藏</button>'+
+      '<button class="btn ghost sm" onclick="toast(\'更多：复制译文 / 加入生词本 / 生成分享图 / 举报\')">更多</button></div>'+
+      '<div style="display:flex;gap:8px;margin-top:16px"><button class="btn sm" onclick="S.trState=\'loading\';render();setTimeout(()=>{S.trState=\'done\';render();},1000)">重新翻译</button></div>'+
+      '<div class="claim">内容由 AI 生成，仅供参考</div>';
+  } else {
+    right = '<div class="empty" style="padding:48px 0"><div class="ic">'+SVG(I.lang,1)+'</div><h3>输入内容开始翻译</h3><p>左侧输入后点「开始翻译」</p></div>';
+  }
+  const left = '<div class="langrow"><span class="langsel">中文</span>'+
+      '<button class="swap" title="对调语言方向" onclick="toast(\'已对调语言方向\')">'+SVG(I.right)+'</button><span class="langsel">英语</span></div>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;font-weight:600">源文本</span>'+
+      '<span style="flex:1"></span><span style="font-size:12px;color:var(--t3)">'+src.length+' / 500</span></div>'+
+    '<textarea class="ta">'+esc(src)+'</textarea>'+
+    '<div class="chiprow" style="margin-top:16px"><span class="lb">语气</span>'+
+      TR_TONES.map(c=>'<button class="chip'+(S.trTone===c?' on':'')+'" onclick="S.trTone=\''+c+'\';render()">'+c+'</button>').join('')+'</div>'+
+    '<div class="chiprow" style="margin-top:8px"><span class="lb">风格</span>'+
+      TR_STYLES.map(c=>'<button class="chip'+(S.trStyle===c?' on':'')+'" onclick="S.trStyle=\''+c+'\';render()">'+c+'</button>').join('')+'</div>'+
+    '<div class="samples"><div class="lb">不知道怎么开口？试试这些</div>'+
+      TR_SAMPLES.map(q=>'<button onclick="toast(\'已填入示例：'+esc(q.slice(0,8))+'…\')">'+esc(q)+'</button>').join('')+'</div>';
+  return hd('翻译工作台', '<span class="tag">中文 → 英语</span><span>'+S.trTone+' · '+S.trStyle+'</span>',
+      '<button class="btn" onclick="toast(\'偏好设置：默认语言 / 语气 / 风格 · 朗读发音\')">偏好设置</button>'+
+      '<button class="btn pri" onclick="S.trState=\'loading\';render();setTimeout(()=>{S.trState=\'done\';render();toast(\'翻译完成\')},1000)">开始翻译</button>') +
     '<div class="pane" style="display:flex;flex-direction:column;height:100%"><div class="two">'+
-      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;font-weight:600">源文本</span><span class="spacer" style="flex:1"></span><span style="font-size:12px;color:var(--t3)">'+src.length+' / 500</span></div>'+
-      '<textarea class="ta">'+esc(src)+'</textarea>'+
-      '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+['商务正式','简洁','口语','保留敬语'].map((c,i)=>'<button class="chip'+(i===0?' on':'')+'" onclick="this.classList.toggle(\'on\')">'+c+'</button>').join('')+'</div></div>'+
-      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;font-weight:600">译文对照</span><span class="spacer" style="flex:1"></span>'+
-      (S.trDone?'<button class="btn ghost sm" onclick="toast(\'已复制译文\')">复制</button><button class="btn ghost sm" onclick="toast(\'已开始朗读\')">朗读</button>':'')+'</div>'+
+      '<div>'+left+'</div>'+
+      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="font-size:13px;font-weight:600">译文</span></div>'+
       '<div class="card" style="padding:16px;min-height:220px">'+right+'</div></div>'+
     '</div></div>';
 }
 
+/* 合翻数据：字段对齐小程序 ContractSignal / ContractRight / OptimizeItem */
 const SIGS = [
-  {id:'s1', lv:'hi', t:'租金递增未设上限', d:'条款约定递增比例由甲方单方通知且"乙方不得异议"，未设任何上限，租金长期处于不确定状态。', law:'《民法典》第 510 条：价款约定不明确的，按订立合同时履行地的市场价格履行。', span:'5.2'},
-  {id:'s2', lv:'hi', t:'逾期违约金过高', d:'按当月租金每日 5% 计收，折合年化约 1825%，远超实际损失，可请求法院或仲裁机构适当减少。', law:'《民法典》第 585 条：违约金过分高于造成的损失的，可请求予以适当减少。', span:'5.3'},
-  {id:'s3', lv:'mid', t:'押金退还条件模糊', d:'"房屋损耗赔偿金由甲方核定"未约定核定标准与争议处理机制，退租时容易被单方扣减。', law:'《民法典》第 509 条：当事人应按约定全面履行义务，遵循诚信原则。', span:'7.2'},
-  {id:'s4', lv:'mid', t:'提前解约违约金过高', d:'提前解约需付 3 个月租金违约金，与剩余租期无关，短期退租成本畸高。', law:'《民法典》第 585 条（同上）。', span:'9.1'}
+  {id:'s1', lv:'danger', t:'租金递增未设上限', span:'5.2',
+   plain:'条款约定递增比例由甲方单方通知且"乙方不得异议"，未设任何上限，租金长期处于不确定状态。',
+   law:'《民法典》', article:'第 510 条', quote:'价款或者报酬约定不明确的，可以协议补充；不能达成补充协议的，按照合同相关条款或者交易习惯确定。',
+   actions:['要求写入递增上限（不超过上一年度 5%，或锚定 CPI）','删除"乙方不得异议"，改为双方协商一致'],
+   term:'没写上限，等于把每年涨多少的决定权完全交给房东。',
+   asks:['这个条款可以要求改吗？','房东不同意改怎么办？']},
+  {id:'s2', lv:'danger', t:'逾期违约金过高', span:'5.3',
+   plain:'按当月租金每日 5% 计收，折合年化约 1825%，远超实际损失，可请求法院或仲裁机构适当减少。',
+   law:'《民法典》', article:'第 585 条', quote:'约定的违约金过分高于造成的损失的，人民法院或者仲裁机构可以根据当事人的请求予以适当减少。',
+   actions:['书面提出调整至日 0.5% 以内','保留每次付款凭证，避免被主张逾期'],
+   term:'违约金的作用是补偿损失，不是惩罚；畸高部分法律不支持。',
+   asks:['多少比例算合理？','已经付过的能要回来吗？']},
+  {id:'s3', lv:'warn', t:'押金退还条件模糊', span:'7.2',
+   plain:'"房屋损耗赔偿金由甲方核定"未约定核定标准与争议处理机制，退租时容易被单方扣减。',
+   law:'《民法典》', article:'第 509 条', quote:'当事人应当按照约定全面履行自己的义务，遵循诚信原则。',
+   actions:['入住与退租各拍一次交接照片与水电表','要求损耗赔偿须双方确认或第三方评估'],
+   term:'"由甲方核定"意味着退不退、退多少都由房东说了算。',
+   asks:['押金被扣了怎么维权？']},
+  {id:'s4', lv:'warn', t:'提前解约违约金过高', span:'9.1',
+   plain:'提前解约需付 3 个月租金违约金，与剩余租期无关，短期退租成本畸高。',
+   law:'《民法典》', article:'第 585 条', quote:'违约金过分高于造成的损失的，可请求予以适当减少。',
+   actions:['争取按剩余租期比例计算','约定可转租以替代违约金'],
+   term:'住 1 个月退租也要赔 3 个月，成本与实际损失不匹配。',
+   asks:['能不能改成按剩余租期算？']}
 ];
+const RIGHTS = [
+  {t:'押金全额退还', d:'退租结清后应全额无息退还，甲方不得单方核定损耗金额。', amount:'¥25,500', law:'《民法典》第 509 条',
+   actions:['入住与退租各拍一次交接照片','要求损耗赔偿须双方确认或第三方评估']},
+  {t:'逾期违约金下调', d:'日 5% 折合年化 1825%，可主张下调至日 0.5% 以内。', amount:'≈ ¥2,550 / 月', law:'《民法典》第 585 条',
+   actions:['书面提出调整并留存回执','每次付款保留凭证']},
+  {t:'提前解约成本', d:'可争取由 3 个月租金降至 1 个月，或与剩余租期挂钩。', amount:'¥8,500', law:'《民法典》第 585 条',
+   actions:['协商按剩余租期比例计算','争取转租权作为替代方案']}
+];
+const OPTIMIZE = [
+  {stage:'成交前', t:'把递增上限写进补充协议', plain:'签约前是议价能力最强的时点：要求书面明确上限，并删除"不得异议"。', actions:['起草补充协议条款','要求对方书面确认']},
+  {stage:'成交后', t:'留证，为押金退还做准备', plain:'每次付款留凭证，入住与退租各拍一次交接照片与水电表。', actions:['建立合同资料文件夹','退租前 30 日书面提醒']},
+  {stage:'长期', t:'续签前主动复核条款', plain:'续签前 60 日提出条款复核，避免自动续约沿用旧条款。', actions:['设置续签提醒']}
+];
+const KEY_NUMBERS = [['月租金','¥8,500'],['押金','¥25,500'],['逾期日违约金','5%'],['建议递增上限','5% / 年']];
+/* 执行步骤：对齐小程序 analyzing 页 EXEC_PLAN（含 skipped 态） */
+const PLAN = [['清洗合同文本','done'],['扫描法定风险信号','done'],['测算真实年化利率','skip'],['对比市场基准','run'],['生成体检报告','wait']];
+
+/* 合翻：home → upload → analyzing → result（对齐小程序 packageContract 八页合一；
+   导出报告取自 packageAssess，小程序真链路没有） */
 function workContract(){
-  if(S.step==='upload') return hd('合翻（合同翻译官）', '<span class="tag">第 1 步 / 共 3 步</span>', '') +
-    '<div class="pane"><div class="steps"><div class="s done"><span class="n">'+SVG(I.check)+'</span>选择方式</div>'+SVG(I.right)+'<div class="s on"><span class="n">2</span>上传合同</div>'+SVG(I.right)+'<div class="s"><span class="n">3</span>查看报告</div></div>'+
-    '<div class="drop"><div style="margin-bottom:12px;color:var(--brand-strong)">'+SVG(I.up,1)+'</div>'+
+  const STEPS = (cur)=>'<div class="steps">'+
+    [['选择方式',1],['上传合同',2],['查看报告',3]].map(s=>
+      '<div class="s'+(s[1]<cur?' done':s[1]===cur?' on':'')+'"><span class="n">'+(s[1]<cur?SVG(I.check):s[1])+'</span>'+s[0]+'</div>'
+    ).join(SVG(I.right))+'</div>';
+  if(S.step==='home') return hd('合翻（合同翻译官）', '<span class="tag brand">签字前，先查一查</span>', '') +
+    '<div class="pane">'+
+    '<div class="hero"><div style="margin-bottom:8px;color:var(--brand-strong);display:grid;place-items:center">'+SVG(I.shield,1)+'</div>'+
+      '<h2>签字前，先查一查</h2><p>上传合同，AI 帮你翻译成大白话，找出风险点，还能帮你把权益争取回来</p></div>'+
+    '<div class="entries">'+
+      '<div class="card entry" onclick="S.step=\'upload\';render()"><h3>'+SVG(I.up,1)+'上传合同，立即体检</h3>'+
+        '<p>支持 图片 / 粘贴文本 · 自动识别合同类型</p></div>'+
+      '<div class="card entry" onclick="toast(\'对话式体检：P2（小程序已实现，PC 待排期）\')"><h3>'+SVG(I.chat,1)+'与 AI 对话，直接体检</h3>'+
+        '<p>粘贴合同文字或上传照片 · 像聊天一样出报告</p></div>'+
+    '</div>'+
+    '<div class="sec"><h3>能查什么风险？</h3><div class="riskgrid">'+
+      [['消费贷 / 购车贷款','真实年化利率 · 砍头息 · 违约金'],['保险条款','保障责任 · 免责 · 等待期'],
+       ['租房合同','押金 · 违约金 · 维修责任'],['其他合同','格式条款 · 强制搭售']].map(c=>
+      '<div class="card riskcard"><h4>'+c[0]+'</h4><p>'+c[1]+'</p></div>').join('')+'</div></div>'+
+    '<div class="claim">仅用于理解合同、识别风险，不构成法律 / 理财 / 投资建议。重大决策请咨询持牌专业人士。</div>'+
+    '</div>';
+  if(S.step==='upload') return hd('上传合同', '<span class="tag">第 1 步 / 共 3 步</span>', '') +
+    '<div class="pane">'+ STEPS(2) +
+    '<div class="drop"><div style="margin-bottom:12px;color:var(--brand-strong);display:grid;place-items:center">'+SVG(I.up,1)+'</div>'+
     '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px">上传需要体检的合同</h3>'+
-    '<p style="color:var(--t2);font-size:13px;margin-bottom:16px">拖拽 PDF / Word / 图片到此处，或点击选择 / 直接粘贴文本（不超过 8000 字）</p>'+
-    '<div style="display:flex;gap:8px;justify-content:center"><button class="btn" onclick="toast(\'选择文件\')">选择文件</button><button class="btn" onclick="toast(\'已载入示例：房屋租赁合同\');S.step=\'analyzing\';render()">使用示例合同</button>'+
-    '<button class="btn pri" onclick="S.step=\'analyzing\';render();setTimeout(()=>{S.step=\'result\';render();},1800)">开始体检</button></div></div>'+
-    '<div style="display:flex;gap:6px;margin-top:16px;justify-content:center;flex-wrap:wrap">'+['房屋租赁','劳动合同','买卖合同','服务协议'].map((c,i)=>'<button class="chip'+(i===0?' on':'')+'" onclick="this.classList.toggle(\'on\')">'+c+'</button>').join('')+'</div></div>';
-  if(S.step==='analyzing') return hd('合翻（合同翻译官）', '<span class="tag">第 2 步 / 共 3 步</span>', '') +
-    '<div class="pane"><div class="steps"><div class="s done"><span class="n">'+SVG(I.check)+'</span>选择方式</div>'+SVG(I.right)+'<div class="s done"><span class="n">'+SVG(I.check)+'</span>上传合同</div>'+SVG(I.right)+'<div class="s on"><span class="n">3</span>查看报告</div></div>'+
-    '<div class="card" style="padding:32px;max-width:560px;margin:0 auto;text-align:center">'+
-    '<div style="margin-bottom:16px"><span class="thinking"><i></i><i></i><i></i></span></div>'+
-    '<h3 style="font-size:16px;font-weight:600;margin-bottom:8px">正在识别合同条款</h3>'+
-    '<p style="color:var(--t2);font-size:13px;margin-bottom:16px">已提取 4 个章节，正在逐条比对风险规则</p>'+
-    '<div style="text-align:left;display:flex;flex-direction:column;gap:8px;font-size:13px">'+
-    [['识别合同类型','done'],['拆分章节与条款','done'],['比对风险规则库','run'],['生成权益建议','wait']].map(t=>
-      '<div style="display:flex;align-items:center;gap:8px;color:'+(t[1]==='run'?'var(--brand-strong)':t[1]==='done'?'var(--ok)':'var(--t3)')+'">'+
-      (t[1]==='done'?SVG(I.check):t[1]==='run'?'<span class="thinking"><i></i><i></i><i></i></span>':'<span class="dot"></span>')+t[0]+'</div>').join('')+'</div>'+
-    '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">'+
-    '<button class="btn sm" onclick="if(confirm(\'取消后本次识别将中止，已上传的合同不会保存。确定取消吗？\')){S.step=\'upload\';render();}">取消体检</button>'+
-    '<button class="btn sm" onclick="toast(\'完整思考链：已匹配 12 条风险规则\')">查看完整思考</button></div></div></div>';
-  // result
-  const rights = [['押金退还','25,500 元，退租结清后应全额无息退还'],['逾期违约金','可主张下调至日 0.5% 以内'],['提前解约','可争取由 3 个月降至 1 个月租金']];
-  return hd('房屋租赁协议 · 体检报告', '<span class="tag">已完成</span><span>2026-09-21 10:24</span>',
-      '<button class="btn ghost" onclick="S.step=\'upload\';S.sig=null;render()">'+SVG(I.left)+'重新体检</button>'+
-      '<button class="btn" onclick="toast(\'已导出 PDF\')">'+SVG(I.dl)+'导出报告</button><button class="btn pri" onclick="toast(\'已切换到追问\')">继续追问</button>') +
+    '<p style="color:var(--t2);font-size:13px;margin-bottom:8px">拖拽<b>图片</b>到此处，或点击选择 / 直接粘贴文本（不超过 8000 字）</p>'+
+    '<p style="font-size:12px;color:var(--t3);margin-bottom:16px">图片走 OCR 识别（对齐小程序）；<b>PDF / Word 解析本轮不支持</b>（Q11 拍板）</p>'+
+    '<div style="display:flex;gap:8px;justify-content:center"><button class="btn" onclick="toast(\'选择文件\')">选择文件</button>'+
+    '<button class="btn" onclick="toast(\'已载入示例：房屋租赁合同\')">使用示例合同</button>'+
+    '<button class="btn pri" onclick="S.step=\'analyzing\';render();setTimeout(()=>{S.step=\'result\';render();},1800)">开始 AI 体检</button></div></div>'+
+    '<div class="chiprow" style="justify-content:center;margin-top:16px"><span class="lb">合同场景（不选则自动识别）</span>'+
+      ['自动识别','房屋租赁','劳动合同','买卖合同'].map((c,i)=>'<button class="chip'+(i===1?' on':'')+'" onclick="this.classList.toggle(\'on\')">'+c+'</button>').join('')+'</div>'+
+    '<div class="claim">内容仅用于本次解读 · 可随时删除 · 不用于模型训练</div></div>';
+  if(S.step==='analyzing') return hd('AI 合同解读中', '<span class="tag">第 2 步 / 共 3 步</span>', '') +
+    '<div class="pane">'+ STEPS(3) +
+    '<div class="card" style="padding:32px;max-width:600px;margin:0 auto;text-align:center">'+
+    '<div style="margin-bottom:16px;display:grid;place-items:center"><span class="thinking"><i></i><i></i><i></i></span></div>'+
+    '<h3 style="font-size:16px;font-weight:600;margin-bottom:8px">正在为你体检合同</h3>'+
+    '<p style="color:var(--t2);font-size:13px;margin-bottom:16px">AI 正在写报告，已生成 328 字…</p>'+
+    '<div class="thinkbar">'+SVG(I.spark)+'<span style="flex:1;text-align:left">AI 已完成思考</span>'+
+      '<span class="tag ok">完成</span><button class="btn ghost sm" onclick="toast(\'AI 思考过程：已匹配 12 条风险规则\')">查看完整思考 ›</button></div>'+
+    '<div class="plan" style="text-align:left">'+PLAN.map(p=>
+      '<div class="st '+p[1]+'"><span class="i">'+(p[1]==='done'?SVG(I.check):p[1]==='run'?'<span class="thinking"><i></i><i></i><i></i></span>':p[1]==='skip'?'—':'○')+'</span>'+
+      p[0]+'<span style="flex:1"></span><span style="font-size:12px">'+(p[1]==='done'?'完成':p[1]==='run'?'进行中…':p[1]==='skip'?'已跳过':'待执行')+'</span></div>').join('')+'</div>'+
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:24px">'+
+    "<button class=\"btn sm\" onclick=\"if(confirm('取消后本次识别将中止，已上传的合同不会保存。确定取消吗？')){S.step='upload';render();}\">取消体检</button>"+
+    '<button class="btn sm" onclick="toast(\'AI 思考过程：已匹配 12 条风险规则\')">查看完整思考</button></div></div></div>';
+  // result：报告页
+  const dangerN = SIGS.filter(s=>s.lv==='danger').length, warnN = SIGS.filter(s=>s.lv==='warn').length;
+  return hd('房屋租赁协议 · 体检报告', '<span class="tag ok">体检完成</span><span>2026-09-21 10:24</span>',
+      '<button class="btn ghost" onclick="S.step=\'home\';S.sig=null;render()">'+SVG(I.left)+'回到首页</button>'+
+      '<button class="btn" onclick="toast(\'已导出 PDF\')">'+SVG(I.dl)+'导出报告</button>'+
+      '<button class="btn pri" onclick="toast(\'已进入追问，基于本次合同上下文回答\')">继续追问</button>') +
     '<div class="pane">'+
     '<div class="card" style="padding:20px;margin-bottom:16px;display:flex;align-items:center;gap:24px">'+
       '<div class="score"><div class="ring"><span>62</span></div><div><div style="font-size:16px;font-weight:600">健康指数 · 中等风险</div>'+
-      '<div style="font-size:13px;color:var(--t2);margin-top:2px">发现 2 项高风险、2 项中风险，建议就租金递增与违约金条款重新协商后再签署。</div></div></div></div>'+
-    '<div class="sec"><h3>风险信号（4）</h3>'+SIGS.map(s=>
-      '<div class="sig'+(S.sig===s.id?' on':'')+'" onclick="S.sig=\''+s.id+'\';render()">'+
-      '<div class="hd"><span class="tag '+(s.lv==='hi'?'hi':'mid')+'">'+(s.lv==='hi'?'高风险':'中风险')+'</span><h4>'+s.t+'</h4><span style="font-size:12px;color:var(--t3)">第 '+s.span+' 条</span></div>'+
-      '<div style="font-size:13px;color:var(--t2)">'+s.d+'</div>'+
-      '<div class="law">'+s.law+'</div>'+
-      (S.sig===s.id?'<div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm pri" onclick="event.stopPropagation();toast(\'已生成 3 步操作建议\')">3 步操作建议</button><button class="btn sm" onclick="event.stopPropagation();toast(\'已发起追问\')">就此追问</button></div>':'')+
+      '<div style="font-size:13px;color:var(--t2);margin-top:2px">发现 '+dangerN+' 项高风险、'+warnN+' 项中风险，建议就租金递增与违约金条款重新协商后再签署。</div></div></div></div>'+
+    '<div class="card" style="padding:16px;margin-bottom:16px"><div class="sec" style="margin:0"><h3 style="margin-bottom:8px">一句话结论</h3>'+
+      '<div style="font-size:14px;line-height:1.8">这份合同整体可用，但<b>租金递增与逾期违约金两处对你明显不利</b>，建议在补充协议里写死递增上限并把违约金降到日 0.5% 以内，再签字。</div></div></div>'+
+    '<div class="kn">'+KEY_NUMBERS.map(k=>'<div class="card"><div class="v">'+k[1]+'</div><div class="l">'+k[0]+'</div></div>').join('')+'</div>'+
+    '<div class="sec"><h3>风险信号（'+SIGS.length+' 项）</h3>'+SIGS.map(s=>
+      '<div class="sigitem"><div class="s-hd" onclick="S.sig=(S.sig===s.id?null:s.id);render()">'+
+      '<span class="lv '+s.lv+'">'+(s.lv==='danger'?'!':s.lv==='warn'?'?':'✓')+'</span>'+
+      '<span class="ttl">'+esc(s.t)+'</span><span style="font-size:12px;color:var(--t3)">第 '+s.span+' 条</span>'+
+      '<button class="btn ghost sm" onclick="event.stopPropagation();S.sig=(S.sig===s.id?null:s.id);render()">'+(S.sig===s.id?'收起':'展开')+'</button></div>'+
+      (S.sig===s.id?'<div class="s-bd"><div style="padding-top:16px">'+esc(s.plain)+'</div>'+
+        '<div class="law2"><b style="font-weight:600">'+esc(s.law+' '+s.article)+'</b><br>'+esc(s.quote)+'</div>'+
+        '<div class="blk"><div class="h">你可以怎么做</div><ol>'+s.actions.map(a=>'<li>'+esc(a)+'</li>').join('')+'</ol></div>'+
+        '<div class="blk"><div class="h">这是什么意思</div>'+esc(s.term)+'</div>'+
+        '<div class="blk"><div class="h">追问</div><div class="askwrap">'+
+          s.asks.map(q=>'<button class="ask" onclick="event.stopPropagation();toast(\'已发起追问：'+esc(q.slice(0,6))+'…\')">追问：'+esc(q)+'</button>').join('')+
+        '</div></div></div>':'')+
       '</div>').join('')+'</div>'+
-    '<div class="sec"><h3>我的权益（可争取）</h3><div class="rows">'+rights.map(r=>
-      '<div class="row">'+SVG(I.shield)+'<div class="t">'+r[0]+'</div><div class="v">'+r[1]+'</div></div>').join('')+'</div></div>'+
-    '<div class="sec"><h3>权益最大化</h3><div class="card" style="padding:16px;font-size:13px;color:var(--t2);line-height:1.9">'+
-      '<b style="color:var(--t1);font-weight:600">成交前：</b>要求书面明确租金递增上限，并删除"乙方不得异议"。<br>'+
-      '<b style="color:var(--t1);font-weight:600">成交后：</b>留存每次租金支付凭证与房屋交接照片，作为押金退还依据。<br>'+
-      '<b style="color:var(--t1);font-weight:600">长期：</b>续签前 60 日主动提出条款复核，避免自动续约沿用旧条款。</div></div>'+
-    '<div style="font-size:12px;color:var(--t4);border-top:1px solid var(--line);padding-top:12px">本报告由 AI 生成，仅供决策参考，不构成法律意见。签署前建议咨询专业律师。</div></div>';
+    '<div class="sec"><h3>我的权益（'+RIGHTS.length+' 条可主张）</h3>'+RIGHTS.map(r=>
+      '<div class="rightitem"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:600;flex:1">'+SVG(I.shield)+esc(r.t)+'</span>'+
+      '<span class="amt">可争取 '+esc(r.amount)+'</span></div>'+
+      '<div style="font-size:13px;color:var(--t2);margin-top:8px">'+esc(r.d)+'</div>'+
+      '<div class="law2">'+esc(r.law)+'</div>'+
+      '<div class="blk"><div class="h">你可以这样做</div><ol>'+r.actions.map(a=>'<li>'+esc(a)+'</li>').join('')+'</ol></div></div>').join('')+'</div>'+
+    '<div class="sec"><h3>怎么把权益最大化（'+OPTIMIZE.length+' 个关键时机）</h3>'+OPTIMIZE.map(o=>
+      '<div class="rightitem"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+      '<span class="stage">'+o.stage+'</span><span style="font-size:14px;font-weight:600">'+esc(o.t)+'</span></div>'+
+      '<div style="font-size:13px;color:var(--t2)">'+esc(o.plain)+'</div>'+
+      '<div class="blk"><div class="h">你可以这样做</div><ol>'+o.actions.map(a=>'<li>'+esc(a)+'</li>').join('')+'</ol></div></div>').join('')+'</div>'+
+    '<div class="card askcard" style="margin-bottom:16px">'+SVG(I.chat,1)+
+      '<div style="flex:1"><div style="font-size:14px;font-weight:600">有疑问？继续追问 AI</div>'+
+      '<div style="font-size:13px;color:var(--t2);margin-top:2px">基于本次合同上下文回答 · 进入对话界面，向 AI 追问任何条款问题</div></div>'+
+      '<button class="btn pri sm" onclick="toast(\'已进入追问，基于本次合同上下文回答\')">追问 '+SVG(I.right)+'</button></div>'+
+    '<div class="claim">本报告由 AI 生成，仅供决策参考，不构成法律意见。签署前建议咨询专业律师。</div></div>';
 }
 
 function workProfile(){
@@ -515,12 +913,7 @@ function renderCtx(){
       mark('7.2','7.2 合同终止且乙方结清全部费用后，甲方于 30 个工作日内将押金无息退还乙方。甲方有权从押金中扣除乙方未结清的费用及房屋损耗赔偿金，具体金额由甲方核定。')+'</p>'+
       '<p><b>第九条 合同解除</b><br>'+mark('9.1','9.1 乙方提前解除合同的，应提前 60 日书面通知甲方，并向甲方支付相当于 3 个月租金的违约金。')+'</p></div>';
     if(cur) inner = '<div style="margin-bottom:12px;padding:10px 12px;background:var(--brand-weak);border-radius:8px;font-size:12px;color:var(--brand-strong)">已定位：第 '+cur.span+' 条 · '+cur.t+'</div>'+inner;
-  // 右栏仅在合翻报告（原文对照）与翻译（术语库）展示；欢迎页/对话页不占位（2026-09-21 用户反馈）
-  } else if(S.view==='translate'){
-    title='术语库';
-    inner = '<div class="rows">'+[['违约金','liquidated damages'],['押金','security deposit'],['不可抗力','force majeure']].map(t=>
-      '<div class="row"><div class="t">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('')+'</div>'+
-      '<div class="ctx-empty">可在偏好设置中维护术语库</div>';
+  // 右栏仅合翻报告（原文对照）展示；术语库已移除（2026-09-21：无数据源无接口，小程序侧也只是占位）
   } else {
     // 该视图没有上下文内容：右栏整体不占位（非留白），中栏自动扩展
     return '';
@@ -534,19 +927,45 @@ function mark(id,txt){
 }
 
 /* ── 行为 ── */
-function go(v){ S.view=v; S.sig=null; render(); if(v==='contract') S.step=S.step||'result'; }
+function go(v){ S.view=v; S.sig=null; render(); }
 function pick(id){ S.sid=id; const s=SESS[id]; if(s){ if(s.k==='contract'){S.view='contract';S.step='result';} if(s.k==='translate') S.view='translate'; if(s.k==='chat'){S.view='chat';S.mode.empty=false;} } render(); }
 function newTask(){ if(S.view==='contract'){S.step='upload';render();return;} if(S.view==='welcome'){newChat();return;} toast('已新建'+(LIST_TITLE[S.view]||'任务')); }
 function newChat(){ S.view='chat'; S.msgs=null; S.mode.empty=false; toast('已开启新对话'); render(); }
 function send(t){
   if(!t||!t.trim()){toast('请输入内容');return;}
   S.mode.empty=false;
-  const cur = S.msgs || [{who:'me',txt:'我租的房子合同里写了租金每年递增，但没写递增上限，这样签有风险吗？'},{who:'ai',agent:'合同翻译官',txt:'有风险。条款只约定"递增比例由甲方通知、乙方不得异议"，等于把定价权单方给了房东，且未设上限——法律上并非当然无效，但一旦发生争议，你很难主张调整。<br><br>建议争取两处修改：<br>1. 明确递增上限（如不超过上一年度的 5%，或锚定 CPI）；<br>2. 删除"乙方不得异议"，改为双方协商一致的机制。<br><br>需要我按这个思路起草一段修改建议吗？',src:['5.2']}];
-  S.msgs = cur.concat([{who:'me',txt:t}]);
+  const cur = S.msgs || DEFAULT_MSGS;
+  S.msgs = cur.concat([{who:'me',txt:t,time:'刚刚'}]);
   S.sending = true; render();
-  setTimeout(()=>{ S.sending=false; S.msgs = S.msgs.concat([{who:'ai',agent:'合同翻译官',txt:'按你的问题，我建议先确认两件事：一是当地是否有租金指导价的规范性文件可援引；二是这份合同是否已实际履行。若尚未签署，可直接要求加入递增上限条款；若已签署，可依据《民法典》第 585 条主张违约金过高部分无效。需要我起草一段可直接发给对方的修改意见吗？'}]); render(); },1200);
+  setTimeout(()=>{ S.sending=false; S.msgs = S.msgs.concat([{who:'ai',agent:'合同翻译官',time:'刚刚',blocks:[
+    {t:'p', lead:true, v:'可以这样发——语气留余地，但把上限写进文字里：'},
+    {t:'copybox', title:'可直接复制 · 发给房东', v:'张哥好，合同我看了，其他条款没问题。只有第 5.2 条想跟您商量一下：租金逐年递增我理解，但希望能加一个上限，比如每年不超过上一年度的 5%。这样我心里有数，也不用每年重新算一次。如果可以，我这两天就把合同签了。'},
+    {t:'p', v:'对方若只在微信里口头答应，记得把这句修改<b>写进补充协议</b>或留存聊天记录——口头承诺在争议时很难举证。'}
+  ]}]); render(); },1200);
 }
 function stopGen(){ S.sending=false; toast('已停止生成'); render(); }
+/* 卡片演示（Q9 拍板）：识别为翻译 → 翻译卡片；识别为音乐 → 音乐卡片；均对齐小程序实现 */
+function demo(kind){
+  S.view='chat'; S.mode.empty=false;
+  const base = (S.msgs || DEFAULT_MSGS.map((m,i)=>Object.assign({},m,{id:'m'+i})));
+  if(kind==='tcard'){
+    S.msgs = base.concat([
+      {id:'u_t', who:'me', txt:'帮我把这句话翻成商务英语：这个报价我们再商量商量，下周给你答复。', time:'刚刚'},
+      {id:'a_t', who:'ai', agent:'语言翻译官', time:'刚刚', blocks:[{t:'tcard', id:'a_t', dir:'中文 → 英语',
+        main:'We would like to discuss this quote a bit further, and we will get back to you next week.',
+        note:'直译对照：We will discuss this quotation again, and give you a reply next week.\n委婉版：Could we take a little more time on this quote? We would like to come back to you early next week.\n语气要点：商务场合用 “get back to you” 最自然；加 “a bit further” 比直接拒绝更留余地。'}]}
+    ]);
+  } else {
+    S.msgs = base.concat([
+      {id:'u_m', who:'me', txt:'推荐几首适合深夜写代码的歌', time:'刚刚'},
+      {id:'a_m', who:'ai', agent:'通用助手', time:'刚刚', blocks:[{t:'mcard', provider:'QQ音乐', ready:true, keyword:'深夜 写代码',
+        songs:[{title:'Weightless', artist:'Marconi Union', reason:'节奏接近静息心率，长时间循环不打断专注'},
+               {title:'Nightfall', artist:'Ólafur Arnalds', reason:'钢琴 + 弦乐，情绪平稳但有推进感'},
+               {title:'Music for Airports', artist:'Brian Eno', reason:'环境音奠基作，适合当背景垫底'}]}]}
+    ]);
+  }
+  render();
+}
 function confirmExit(){ if(confirm('退出后将需要重新登录，确定退出吗？')) toast('已退出登录'); }
 function openMenu(){
   const old=document.getElementById('umenu'); if(old){ old.remove(); return; }
@@ -562,7 +981,7 @@ function openMenu(){
 function confirmClear(){ if(confirm('清除缓存将删除本地临时文件（12.4 MB），不会删除你的对话记录与体检报告。确定清除吗？')) toast('缓存已清除'); }
 function toast(t){ const d=document.createElement('div'); d.className='toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),1600); }
 function toggle(m){ S.mode[m]=!S.mode[m]; ['loading','empty','error'].forEach(k=>{if(k!==m)S.mode[k]=false;}); document.getElementById('pk').classList.toggle('on',S.mode.loading); document.getElementById('pe').classList.toggle('on',S.mode.empty); document.getElementById('pf').classList.toggle('on',S.mode.error); render(); }
-function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='result'; S.sig=null; S.trDone=true; S.msgs=null; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
 
 /* ── ⌘K ── */
 const CMDS = [
