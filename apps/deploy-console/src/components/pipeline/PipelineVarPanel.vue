@@ -186,7 +186,8 @@ function removeVar(v: PipelineVar) {
     </a-table>
 
     <div class="muted-text" style="margin-top: 10px;">
-      变量属于本条流水线（不单独成页）；密钥只写入不回显，留空保存 = 不更新。
+      变量属于本条流水线，动作脚本里 <code>${'{KEY}'}</code> 引用；优先级高于配置中心、低于任务级 env。
+      密钥只写入不回显，留空保存 = 不更新。
     </div>
   </div>
 </template>
