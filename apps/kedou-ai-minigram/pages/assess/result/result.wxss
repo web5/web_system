@@ -1,22 +1,25 @@
-.page { min-height: 100vh; background: #F2F4F8; padding: 24rpx 32rpx 40rpx; }
-.score { display: flex; align-items: center; background: #fff; border-radius: 28rpx; padding: 32rpx; }
-.ring { width: 148rpx; height: 148rpx; border-radius: 50%; background: conic-gradient(#D98200 0 62%, #EEF0F4 62% 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.ring .n { font-size: 44rpx; font-weight: 600; color: #D98200; }
-.ring .l { font-size: 18rpx; color: #C0C6D0; }
+/* 合同评估结果页
+ * 色值走设计 token：琥珀 = 关注分，红/琥珀/绿 = 风险等级，品牌橙 = 可追问入口。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.score { display: flex; align-items: center; background: var(--card); border-radius: 28rpx; padding: 32rpx; }
+/* 62% 为示例分数，接真后应改由 style 绑定传入 */
+.ring { width: 148rpx; height: 148rpx; border-radius: 50%; background: conic-gradient(var(--amber) 0 62%, var(--line) 62% 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring .n { font-size: 44rpx; font-weight: 600; color: var(--amber); }
+.ring .l { font-size: 18rpx; color: var(--t3); }
 .info { flex: 1; margin-left: 30rpx; }
-.lv { font-size: 31rpx; font-weight: 600; color: #D98200; }
-.d { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; line-height: 1.6; }
-.sec-t { font-size: 25rpx; color: #6B7280; margin: 32rpx 0 16rpx; }
-.risk { background: #fff; border-radius: 24rpx; padding: 26rpx 28rpx; margin-bottom: 16rpx; }
+.lv { font-size: 31rpx; font-weight: 600; color: var(--amber); }
+.d { font-size: 24rpx; color: var(--t2); margin-top: 6rpx; line-height: 1.6; }
+.sec-t { font-size: 25rpx; color: var(--t2); margin: 32rpx 0 16rpx; }
+.risk { background: var(--card); border-radius: 24rpx; padding: 26rpx 28rpx; margin-bottom: 16rpx; }
 .rh { display: flex; align-items: center; margin-bottom: 12rpx; }
 .badge { font-size: 20rpx; padding: 4rpx 12rpx; border-radius: 8rpx; margin-right: 12rpx; }
-.high { background: #FDECEC; color: #E5484D; }
-.mid { background: #FFF6E5; color: #D98200; }
-.low { background: #E7F7EE; color: #12A150; }
-.b { font-size: 27rpx; font-weight: 500; flex: 1; }
-.rc { font-size: 25rpx; color: #6B7280; line-height: 1.7; }
-.rf { font-size: 23rpx; color: #1E6FFF; margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid #EEF0F4; }
+.high { background: var(--red-soft); color: var(--red); }
+.mid { background: var(--amber-soft); color: var(--amber); }
+.low { background: var(--green-soft); color: var(--green); }
+.b { font-size: 27rpx; font-weight: 500; flex: 1; color: var(--t1); }
+.rc { font-size: 25rpx; color: var(--t2); line-height: 1.7; }
+.rf { font-size: 23rpx; color: var(--brand-txt); margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid var(--line); }
 .rowbtn { display: flex; margin-top: 24rpx; }
-.rowbtn view { flex: 1; height: 84rpx; border-radius: 42rpx; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 27rpx; margin-right: 18rpx; }
+.rowbtn view { flex: 1; height: 84rpx; border-radius: 42rpx; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 27rpx; color: var(--t1); margin-right: 18rpx; }
 .rowbtn view:last-child { margin-right: 0; }
-.ai { margin-top: 28rpx; font-size: 21rpx; color: #C0C6D0; text-align: center; }
+.ai { margin-top: 28rpx; font-size: 21rpx; color: var(--t3); text-align: center; }

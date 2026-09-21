@@ -1,0 +1,15 @@
+<!-- 自定义 tabBar（app.json: tabBar.custom = true）
+     图标为线性图标，与原型 prototype/index.html 同源；对话页不渲染（沉浸式）。 -->
+<view class="tabbar" wx:if="{{!hidden}}">
+  <view
+    class="tb {{selected === index ? 'on' : ''}}"
+    wx:for="{{list}}"
+    wx:key="pagePath"
+    data-path="{{item.pagePath}}"
+    data-index="{{index}}"
+    bindtap="onSwitch"
+  >
+    <view class="tb-ic tb-ic-{{item.key}}"></view>
+    <view class="tb-t">{{item.text}}</view>
+  </view>
+</view>

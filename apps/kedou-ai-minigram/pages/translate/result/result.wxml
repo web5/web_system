@@ -6,13 +6,32 @@
 
   <view class="res">
     <view class="tags"><text class="tag">推荐</text><text class="meta">{{meta}}</text></view>
-    <view class="txt">{{natural}}</view>
-    <view class="ops">
-      <text bindtap="copy">复制</text>
-      <text bindtap="speak">朗读</text>
-      <text bindtap="fav">收藏</text>
-      <text bindtap="more">更多</text>
+
+    <!-- 失败态：明确原因 + 唯一恢复入口（重试）；原文不丢，仍显示在上方卡片 -->
+    <view wx:if="{{failed}}" class="failbox">
+      <view class="ft">翻译失败</view>
+      <view class="fr">{{failReason}}</view>
+      <view class="fa">
+        <text class="retry" bindtap="retry">重试</text>
+        <text bindtap="goBack">返回</text>
+      </view>
     </view>
+
+    <!-- 中间态：首个流式分片到达前显示「翻译中」动点 -->
+    <view wx:elif="{{loading}}" class="typing">
+      <text>翻译中</text>
+      <view class="tdots"><view class="tdot"></view><view class="tdot"></view><view class="tdot"></view></view>
+    </view>
+
+    <block wx:else>
+      <view class="txt">{{natural}}</view>
+      <view class="ops">
+        <text bindtap="copy">复制</text>
+        <text bindtap="speak">朗读</text>
+        <text bindtap="fav">收藏</text>
+        <text bindtap="more">更多</text>
+      </view>
+    </block>
   </view>
 
   <view class="fold">
