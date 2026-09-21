@@ -632,7 +632,11 @@ log "验证通过: $MODULE_KEY"
   `POST /api/services/:key/deploy`、`ServicesService.deploy/restartLocal`、前端 `servicesApi.deploy`
   与服务详情页的部署按钮/选版本弹窗；脚本侧改由 `/api/internal/release/{versions,pointer}` 承担。
   （待办：服务详情页剩余文案「部署 / 待部署」建议随后统一为「发布生效」口径。）
-- `node-approval.spec.ts` 与 `PipelineService` 依赖漂移导致的既有单测失败（本次未触碰）。
+- ~~`node-approval.spec.ts` 与 `PipelineService` 依赖漂移导致的既有单测失败~~ → **已修**（同日）：
+  补齐 `stepCommands.getRow`、`StepBranchService.list`、`PipelineOrchestrationService` 等桩后 8/8 通过
+  （全量 45 suites / 474 tests）。**结论：该 spec 的桩陈旧，不是引擎回归** ——
+  `runStageCommand` 新增了「步骤执行条件 / 步骤分支」读取，旧桩缺这两个方法，
+  第一个节点就抛 `getRow is not a function`，流水线 failed，于是「应挂起」的断言失败。
 
 ### 7.6 后续批次（2026-09-21 当日）：平台脚本分发机制整体移除
 
