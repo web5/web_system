@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>deploy-console 双域重构 · 交互原型 v3（控制台 + 产品页环境切换）</title>
+<title>deploy-console 双域重构 · 交互原型 v4（控制台 + 产品页环境切换 + 版本部署）</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{
@@ -258,9 +258,9 @@
 <body>
 
 <div class="proto-head">
-  <h1>deploy-console 双域重构 · 交互原型 v3</h1>
+  <h1>deploy-console 双域重构 · 交互原型 v4</h1>
   <div class="sub">
-    上半：<b>部署控制台</b>（贴合现有 console 深色壳：侧栏 #0F0F12 + 顶栏 #161618，菜单按「微前端 / API 网关」分域）。<br>
+    上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：微前端/API 网关双域各挂入口，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
     下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。
   </div>
 </div>
@@ -314,11 +314,11 @@
           <table>
             <thead><tr><th>应用</th><th>类型</th><th>仓库目录</th><th>dev</th><th>1</th><th>prod</th><th>启用</th><th>操作</th></tr></thead>
             <tbody>
-              <tr><td><span class="dc-mono">shell</span> <span class="dc-muted">基座</span></td><td><span class="dc-badge neutral">基座</span></td><td class="dc-mono">apps/shell</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
-              <tr><td><span class="dc-mono">portal</span> <span class="dc-muted">变变门户</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/portal</td><td class="dc-mono">7c1e9a</td><td class="dc-mono">b21f04</td><td class="dc-mono">7c1e9a</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
-              <tr><td><span class="dc-mono">admin</span> <span class="dc-muted">管理后台</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin</td><td class="dc-mono">3b8f10</td><td class="dc-mono">d4e5f6</td><td class="dc-mono">3b8f10</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
-              <tr><td><span class="dc-muted">└</span> <span class="dc-mono">admin-iam</span> <span class="dc-muted">权限中心（子模块）</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin-iam</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
-              <tr><td><span class="dc-mono">mini-contract</span> <span class="dc-muted">合同小程序</span></td><td><span class="dc-badge neutral">小程序</span></td><td class="dc-mono">apps/mini-contract</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link">部署</button></td></tr>
+              <tr><td><span class="dc-mono">shell</span> <span class="dc-muted">基座</span></td><td><span class="dc-badge neutral">基座</span></td><td class="dc-mono">apps/shell</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td class="dc-mono">9f3d21</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','shell','dev')">部署</button></td></tr>
+              <tr><td><span class="dc-mono">portal</span> <span class="dc-muted">变变门户</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/portal</td><td class="dc-mono">7c1e9a</td><td class="dc-mono">b21f04</td><td class="dc-mono">7c1e9a</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','portal','dev')">部署</button></td></tr>
+              <tr><td><span class="dc-mono">admin</span> <span class="dc-muted">管理后台</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin</td><td class="dc-mono">3b8f10</td><td class="dc-mono">d4e5f6</td><td class="dc-mono">3b8f10</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','dev')">部署</button></td></tr>
+              <tr><td><span class="dc-muted">└</span> <span class="dc-mono">admin-iam</span> <span class="dc-muted">权限中心（子模块）</span></td><td><span class="dc-badge neutral">微前端</span></td><td class="dc-mono">apps/admin-iam</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin-iam','dev')">部署</button></td></tr>
+              <tr><td><span class="dc-mono">mini-contract</span> <span class="dc-muted">合同小程序</span></td><td><span class="dc-badge neutral">小程序</span></td><td class="dc-mono">apps/mini-contract</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td class="dc-mono ph">--</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="dc('appdetail','admin · 应用详情')">详情</button><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','mini-contract','dev')">部署</button></td></tr>
             </tbody>
           </table>
           <div class="dc-muted" style="margin-top:10px;">版本列按环境展示（dev / 1 联调 / prod）；表头即 envId，与产物目录 <span class="dc-mono">/static/modules/&lt;appKey&gt;/&lt;envId&gt;/</span> 对应。</div>
@@ -333,7 +333,7 @@
             <div><h1><span class="dc-mono">admin</span> <span class="dc-badge neutral">微前端</span></h1>
               <div class="sub">管理后台 · <span class="dc-mono">apps/admin</span></div></div>
             <div class="dc-spacer"></div>
-            <button class="dc-btn primary" onclick="toast('已创建流水线运行：admin → dev')">部署</button>
+            <button class="dc-btn primary" onclick="vdOpenDrawer('app','apps','admin','dev')">部署</button>
           </div>
         </div>
         <div class="dc-tabs">
@@ -427,6 +427,22 @@
             <div class="k">3. 加载产物</div><div><span class="dc-mono">/static/modules/&lt;appKey&gt;/&lt;envId&gt;/index.js</span></div>
             <div class="k">4. prod 站点</div><div>不渲染挂件（<span class="dc-mono">switchable=false</span>）</div>
           </div>
+        </div>
+      </div>
+
+      <!-- 版本部署（微前端 / API 网关双域共用，与发布流水线解耦） -->
+      <div class="screen" id="dc-vdeploy">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>版本部署</h1><div class="sub" id="vdSub"></div></div>
+          </div>
+        </div>
+        <div class="dc-card">
+          <table>
+            <thead><tr><th>模块</th><th>最近部署版本</th><th>环境</th><th>发布时间</th><th>发布人</th><th>操作</th></tr></thead>
+            <tbody id="vdTbody"></tbody>
+          </table>
+          <div class="dc-muted" style="margin-top:10px;" id="vdNote"></div>
         </div>
       </div>
 
@@ -897,6 +913,7 @@
   --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
   --bg:#F5F7FA; --card:#FFFFFF; --text:#1A1F2E; --text-2:#5B6372; --text-3:#9AA1AD;
   --danger:#E5484D; --danger-soft:#FDEBEC; --ok:#2E9E5B; --ok-soft:#E7F5EC;
+  --warn:#E8833A; --warn-soft:#FFF3E6;
   --border:#E8EBF0; --radius:14px; --radius-sm:10px;
   --shadow:0 2px 12px rgba(20,30,50,.06); --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
 }
@@ -1064,20 +1081,53 @@ body{background:#e8ecf1;}
   .btn{border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;}
   .btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border);}
   .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
+
+  /* ===== 版本部署抽屉（vd-*） ===== */
+  .vd-cur{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text-2);}
+  .vd-cur b{font-family:var(--mono);color:var(--text);}
+  .vd-ver{display:flex;align-items:flex-start;gap:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+    padding:12px;cursor:pointer;margin-bottom:8px;transition:all .15s;}
+  .vd-ver:hover{border-color:var(--primary);background:var(--primary-soft);}
+  .vd-ver.sel{border-color:var(--primary);background:var(--primary-soft);}
+  .vd-ver.cur{cursor:not-allowed;opacity:.6;}
+  .vd-ver.cur:hover{border-color:var(--border);background:none;}
+  .vd-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--text-3);flex-shrink:0;margin-top:1px;
+    display:flex;align-items:center;justify-content:center;}
+  .vd-ver.sel .vd-radio{border-color:var(--primary);}
+  .vd-ver.sel .vd-radio::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--primary);}
+  .vd-ver .tag{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);}
+  .vd-ver .meta{font-size:12px;color:var(--text-3);margin-top:4px;}
+  .vd-state{text-align:center;padding:36px 16px;color:var(--text-3);font-size:13px;line-height:1.9;}
+  .vd-state .h{font-size:14px;font-weight:600;color:var(--text-2);margin-bottom:6px;}
+  .vd-warn{display:flex;gap:8px;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;
+    margin-top:10px;font-size:12.5px;line-height:1.7;align-items:flex-start;text-align:left;}
+  .vd-spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;
+    border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;}
+  /* 抽屉内环境选择条 */
+  .vd-envbar{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);
+    background:var(--bg);flex-shrink:0;}
+  .vd-envbar label{font-size:12.5px;color:var(--text-2);font-weight:600;flex-shrink:0;}
+  .vd-envbar select{border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;
+    color:var(--text);background:var(--card);outline:none;min-width:150px;cursor:pointer;}
+  .vd-envbar select:focus{border-color:var(--primary);}
 </style>
 <div class="toast" id="toast"></div>
 
 <script>
   /* ===== 控制台：菜单 + 屏切换 ===== */
   var DC_TITLE = {"apps":"应用管理","envs":"环境管理","services":"服务管理","hosts":"主机管理",
-                  "pipelines":"流水线列表","dashboard":"仪表盘"};
+                  "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署"};
   var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
-                "pipelines":"nav-pipelines","dashboard":"nav-dashboard"};
+                "pipelines":"nav-pipelines","dashboard":"nav-dashboard","vdeploy":"nav-vdeploy"};
   /* 两级导航：一级（顶部）→ 二级（左侧，动态渲染） */
   var DC_MENU = [
     {key:'dashboard', label:'仪表盘',     items:[{page:'dashboard',label:'仪表盘',id:'nav-dashboard'}]},
-    {key:'apps',      label:'微前端',     items:[{page:'apps',label:'应用管理',id:'nav-apps'},{page:'envs',label:'环境管理',id:'nav-envs'}]},
-    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'}]},
+    {key:'apps',      label:'微前端',     items:[{page:'apps',label:'应用管理',id:'nav-apps'},{page:'envs',label:'环境管理',id:'nav-envs'},
+                                                 {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('apps')"}]},
+    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'},
+                                                 {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('svcs')"}]},
     {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},
                                                   {page:'generic',title:'灰度管理',label:'灰度管理'},
                                                   {page:'generic',title:'自助诊断',label:'自助诊断'},
@@ -1098,8 +1148,9 @@ body{background:#e8ecf1;}
     var grp = dcFindDomain(domain); if(!grp) return;
     var h = '';
     (grp.items||[]).forEach(function(it){
+      var click = it.fn ? it.fn : ("dc('"+it.page+"','"+(it.title||it.label)+"')");
       h += '<div class="dc-item"'+(it.id?' id="'+it.id+'"':'')
-        + ' onclick="dc(\''+it.page+'\',\''+(it.title||it.label)+'\')">'+it.label+'</div>';
+        + ' onclick="'+click+'">'+it.label+'</div>';
     });
     document.getElementById('dcSubMenu').innerHTML = h || '<div class="dc-muted" style="padding:12px;">—</div>';
   }
@@ -1310,6 +1361,207 @@ body{background:#e8ecf1;}
     closeModal('m-newapp'); toast('应用已创建');
   }
 
+  /* ===== 版本部署（vd-*）：与发布流水线解耦的独立部署 =====
+     两个数据源（对应真实两套指针机制，design.md §2.1 裁决）：
+     - src='deploy'（版本部署页）：版本记录来自 deploy_versions（流水线写入），部署 = POST /deploy/modules/:k/envs/:env/deploy
+       （前端=切 deploy_deployments 指针；后端=换产物目录 + pm2 重启）
+     - src='app'（应用管理/应用详情入口）：版本来自磁盘版本目录（listEnvVersions），部署 = POST /apps/:key/switch-version
+  */
+  var VD = { domain:'apps', sel:null, deploying:false, ctx:null };
+  var VD_ERR = ['deploy:portal:local'];   /* 错误态演示（重试恢复） */
+  /* 页面表格 = 模块清单 + 最近一次部署摘要（latest；环境维度收进抽屉，环境可数十个） */
+  var VD_MODS = {
+    apps: {
+      list: [
+        {key:'shell',name:'微前端基座 Shell',latest:{env:'dev',tag:'20260920-9f3d21',time:'09-20 11:30',by:'geekwen'}},
+        {key:'portal',name:'门户 Portal',latest:{env:'dev',tag:'20260919-7c1e9a',time:'09-19 18:05',by:'geekwen'}},
+        {key:'admin',name:'管理后台 Admin',latest:{env:'dev',tag:'20260920-3b8f10',time:'09-20 14:32',by:'geekwen'}},
+        {key:'mcp-admin',name:'MCP 管理台',latest:{env:'dev',tag:'20260918-d4e5f6',time:'09-18 11:47',by:'lin'}}
+      ]
+    },
+    svcs: {
+      list: [
+        {key:'gateway',name:'API 网关',latest:{env:'dev',tag:'20260921-8d1e2f3',time:'09-21 09:15',by:'geekwen'}},
+        {key:'auth-service',name:'认证服务',latest:{env:'dev',tag:'20260921-8d1e2f3',time:'09-21 09:15',by:'geekwen'}},
+        {key:'system-service',name:'系统服务',latest:{env:'dev',tag:'20260920-5b6c7d8',time:'09-20 16:40',by:'geekwen'}},
+        {key:'todo-service',name:'待办服务',latest:{env:'dev',tag:'20260917-2e3f4a5',time:'09-17 10:22',by:'lin'}}
+      ]
+    }
+  };
+  /* 版本记录：deploy 域 = deploy_versions（tag/branch/commit/time/by）；app 域 = 磁盘版本目录（ref/isCurrent） */
+  var VD_VERS = {
+    'deploy:shell:dev':      [ {tag:'20260920-9f3d21',br:'main',time:'09-20 11:30',by:'geekwen',cur:true}, {tag:'20260918-71c2a3',br:'main',time:'09-18 11:47',by:'geekwen'} ],
+    'deploy:portal:dev':     [ {tag:'20260919-7c1e9a',br:'main',time:'09-19 18:05',by:'geekwen',cur:true}, {tag:'20260918-71c2a3',br:'main',time:'09-18 11:47',by:'geekwen'} ],
+    'deploy:admin:dev':      [ {tag:'20260921-e7f3a91',br:'feature/x',time:'09-21 10:12',by:'geekwen'}, {tag:'20260920-3b8f10',br:'main',time:'09-20 14:32',by:'geekwen',cur:true},
+                              {tag:'20260919-c4d5e6f',br:'main',time:'09-19 18:05',by:'geekwen'}, {tag:'20260918-9a8b7c6',br:'feat/mcp',time:'09-18 11:47',by:'lin'} ],
+    'deploy:mcp-admin:dev':  [ {tag:'20260918-d4e5f6',br:'feat/mcp-console',time:'09-18 11:47',by:'lin',cur:true} ],
+    'deploy:shell:local':    [ {tag:'20260920-9f3d21',br:'main',time:'09-20 11:30',by:'geekwen',cur:true} ],
+    'deploy:admin:local':    [ {tag:'20260920-3b8f10',br:'main',time:'09-20 14:32',by:'geekwen',cur:true}, {tag:'20260919-c4d5e6f',br:'main',time:'09-19 18:05',by:'geekwen'} ],
+    'deploy:portal:local':   [],
+    'deploy:mcp-admin:local':[],
+    'deploy:shell:prod':     [ {tag:'20260918-71c2a3',br:'master',time:'09-18 11:47',by:'geekwen',cur:true} ],
+    'deploy:portal:prod':    [ {tag:'20260918-71c2a3',br:'master',time:'09-18 11:47',by:'geekwen',cur:true} ],
+    'deploy:gateway:dev':    [ {tag:'20260921-8d1e2f3',br:'main',time:'09-21 09:15',by:'geekwen',cur:true}, {tag:'20260920-5b6c7d8',br:'main',time:'09-20 09:40',by:'geekwen'} ],
+    'deploy:auth-service:dev': [ {tag:'20260921-8d1e2f3',br:'main',time:'09-21 09:15',by:'geekwen',cur:true}, {tag:'20260920-5b6c7d8',br:'main',time:'09-20 09:40',by:'geekwen'} ],
+    'deploy:system-service:dev': [ {tag:'20260920-5b6c7d8',br:'main',time:'09-20 16:40',by:'geekwen',cur:true}, {tag:'20260919-1a2b3c4',br:'main',time:'09-19 15:20',by:'lin'} ],
+    'deploy:todo-service:dev':  [ {tag:'20260917-2e3f4a5',br:'main',time:'09-17 10:22',by:'lin',cur:true}, {tag:'20260915-7g8h9i0',br:'main',time:'09-15 14:05',by:'lin'} ],
+    'deploy:auth-service:local': [ {tag:'20260921-8d1e2f3',br:'main',time:'09-21 09:15',by:'geekwen',cur:true} ],
+    'deploy:system-service:local': [ {tag:'20260920-5b6c7d8',br:'main',time:'09-20 16:40',by:'geekwen',cur:true} ],
+    'deploy:gateway:prod':   [ {tag:'20260918-4a5b6c7',br:'master',time:'09-18 11:47',by:'geekwen',cur:true} ],
+    'app:shell:dev':         [ {tag:'9f3d21',cur:true}, {tag:'71c2a3'} ],
+    'app:portal:dev':        [ {tag:'7c1e9a',cur:true}, {tag:'b21f04'}, {tag:'71c2a3'} ],
+    'app:admin:dev':         [ {tag:'3b8f10',cur:true}, {tag:'d4e5f6'}, {tag:'71c2a3'} ],
+    'app:admin-iam:dev':     [],
+    'app:mini-contract:dev': []
+  };
+  function vdOpen(domain){
+    VD.domain = domain;
+    DC_PAGE_DOMAIN['vdeploy'] = domain;
+    document.getElementById('vdSub').textContent = domain==='apps'
+      ? '微前端模块 · 选择已有发布版本直接部署（切版本指针），构建与发布走「流水线」'
+      : '后端服务 · 选择已有发布版本直接部署（换产物目录 + 重启 pm2），构建与发布走「流水线」';
+    document.getElementById('vdNote').textContent = domain==='apps'
+      ? '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择（环境可数十个，支持下拉搜索）。前端/微前端部署 = 切换版本指针，刷新页面即生效，不触碰任何进程。'
+      : '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择。后端服务部署 = 替换版本产物目录并重启 pm2 进程，服务将短暂中断。';
+    vdRenderTable();
+    dc('vdeploy','版本部署');
+  }
+  function vdRenderTable(){
+    var list = VD_MODS[VD.domain].list||[];
+    document.getElementById('vdTbody').innerHTML = list.map(function(m){
+      var lt = m.latest;
+      return '<tr><td><span style="font-weight:600;">'+m.name+'</span> <span class="dc-mono dc-muted">'+m.key+'</span></td>'
+        + '<td>'+(lt?'<span class="dc-mono">'+lt.tag+'</span>':'<span class="dc-muted">—</span>')+'</td>'
+        + '<td>'+(lt?'<span class="dc-badge neutral">'+lt.env+'</span>':'—')+'</td>'
+        + '<td class="dc-num">'+(lt?lt.time:'—')+'</td>'
+        + '<td>'+(lt?lt.by:'—')+'</td>'
+        + '<td><button class="dc-btn link" onclick="vdOpenDrawer(\'deploy\',\''+VD.domain+'\',\''+m.key+'\',\''+(lt?lt.env:'dev')+'\')">部署</button></td></tr>';
+    }).join('');
+  }
+  function vdKey(c){ return c.src+':'+c.key+':'+c.env; }
+  function vdFindMod(domain, key){
+    var list = (VD_MODS[domain]&&VD_MODS[domain].list)||[];
+    for(var i=0;i<list.length;i++){ if(list[i].key===key) return list[i]; }
+    return null;
+  }
+  function vdOpenDrawer(src, domain, key, env){
+    VD.ctx = { src:src, domain:domain, key:key, env:env }; VD.sel = null;
+    var m = vdFindMod(domain, key);
+    document.getElementById('vdTitle').textContent = '部署 '+(m?m.name:key);
+    /* 环境选择：默认入口环境，抽屉内可切换（真实实现 options 来自环境列表，可能数十个，带搜索） */
+    var sel = document.getElementById('vdEnvSel');
+    sel.innerHTML = ['dev','local','prod'].map(function(e){
+      return '<option value="'+e+'"'+(e===env?' selected':'')+'>'+e+'</option>';
+    }).join('');
+    document.getElementById('vd-mask').classList.add('show');
+    document.getElementById('vd-drawer').classList.add('show');
+    document.getElementById('vdFoot').style.display = 'none';
+    vdLoadBody();
+  }
+  /** 抽屉内切换目标环境：清空已选版本，重新加载该环境的版本记录 */
+  function vdDrawerEnv(env){
+    if(!VD.ctx || env === VD.ctx.env) return;
+    VD.ctx.env = env; VD.sel = null;
+    vdLoadBody();
+  }
+  function vdLoadBody(){
+    document.getElementById('vdFoot').style.display = 'none';
+    document.getElementById('vdBody').innerHTML = '<div class="vd-state"><div style="width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;margin:0 auto 14px;animation:spin .7s linear infinite;"></div>加载版本记录中…</div>';
+    setTimeout(function(){ vdRenderBody(); }, 500);
+  }
+  function vdRenderBody(){
+    var c = VD.ctx, key = vdKey(c);
+    var m = vdFindMod(c.domain, c.key);
+    if(VD_ERR.indexOf(key) >= 0){
+      document.getElementById('vdFoot').style.display = 'none';
+      document.getElementById('vdBody').innerHTML = '<div class="vd-state"><div class="h" style="color:var(--danger);">版本记录加载失败</div>网络或服务异常，请重试<br><button class="btn btn-ghost" style="margin-top:14px;" onclick="vdRetry()">重试</button></div>';
+      return;
+    }
+    var vers = VD_VERS[key]||[];
+    if(!vers.length){
+      document.getElementById('vdFoot').style.display = 'none';
+      document.getElementById('vdBody').innerHTML = '<div class="vd-state"><div class="h">暂无发布版本</div>该模块在 '+c.env+' 环境还没有任何版本记录。<br>先去发布流水线发布一次，产出可部署的版本。<br><button class="btn btn-primary" style="margin:16px auto 0;" onclick="vdGoPipeline()">去发布流水线</button></div>';
+      return;
+    }
+    var cur = null;
+    for(var i=0;i<vers.length;i++){ if(vers[i].cur){ cur = vers[i].tag; break; } }
+    document.getElementById('vdFoot').style.display = 'flex';
+    document.getElementById('vdBody').innerHTML =
+      '<div class="vd-cur">当前版本：<b>'+(cur||'—')+'</b></div>'
+      + vers.map(function(v){
+          var isCur = (v.tag === cur);
+          var meta = c.src==='deploy'
+            ? (v.br||'—')+' · '+(v.time||'—')+' · '+(v.by||'—')
+            : '磁盘版本目录 · /static/modules/'+c.key+'/'+c.env+'/'+v.tag+'/';
+          return '<div class="vd-ver'+(isCur?' cur':'')+'" onclick="'+(isCur?'':'vdSelect(\''+v.tag+'\')')+'">'
+            + '<span class="vd-radio"></span>'
+            + '<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:8px;">'
+            + '<span class="tag">'+v.tag+'</span>'
+            + (isCur?'<span class="dc-badge ok">当前</span>':'')+'</div>'
+            + '<div class="meta">'+meta+'</div></div></div>';
+        }).join('');
+    vdBtnState();
+  }
+  function vdRetry(){
+    var key = vdKey(VD.ctx);
+    var i = VD_ERR.indexOf(key);
+    if(i>=0) VD_ERR.splice(i,1);
+    document.getElementById('vdBody').innerHTML = '<div class="vd-state"><div style="width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;margin:0 auto 14px;animation:spin .7s linear infinite;"></div>加载版本记录中…</div>';
+    setTimeout(vdRenderBody, 600);
+  }
+  function vdGoPipeline(){ vdClose(); switchDomain('pl'); }
+  function vdSelect(tag){
+    VD.sel = tag;
+    document.querySelectorAll('#vdBody .vd-ver').forEach(function(el){
+      el.classList.toggle('sel', el.querySelector('.tag').textContent === tag);
+    });
+    vdBtnState();
+  }
+  function vdBtnState(){
+    var btn = document.getElementById('vdBtn');
+    btn.textContent = VD.sel ? ('部署到 '+VD.ctx.env) : ('部署到 '+VD.ctx.env+'（先选版本）');
+    btn.disabled = !VD.sel;
+  }  function vdClose(){
+    document.getElementById('vd-mask').classList.remove('show');
+    document.getElementById('vd-drawer').classList.remove('show');
+  }
+  function vdConfirmOpen(){
+    var c = VD.ctx;
+    var vers = VD_VERS[vdKey(c)]||[], from = '—';
+    for(var i=0;i<vers.length;i++){ if(vers[i].cur){ from = vers[i].tag; break; } }
+    var head = '将把 <b style="color:var(--text);">'+c.env+' / '+c.key+'</b> 的版本从 <b style="color:var(--text);font-family:var(--mono);">'+from+'</b> 切换到 <b style="color:var(--text);font-family:var(--mono);">'+VD.sel+'</b>。<br>';
+    var tail;
+    if(c.src==='app' || (c.src==='deploy' && c.domain==='apps')){
+      tail = c.src==='app'
+        ? '仅切换入口指针与版本表（switch-version），用户刷新页面即加载新版本，不影响运行中进程。'
+        : '仅切换版本指针（deploy_deployments），用户刷新页面即加载新版本，不影响运行中进程。';
+    } else {
+      tail = '<div class="vd-warn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:3px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>后端服务部署将替换产物目录并<b>重启 pm2 进程</b>，服务预计中断 3~5 秒，请避开业务高峰操作。</span></div>';
+    }
+    document.getElementById('vdConfirmBody').innerHTML = head + tail;
+    document.getElementById('vd-confirm').classList.add('show');
+  }
+  function vdConfirmClose(){
+    if(!VD.deploying) document.getElementById('vd-confirm').classList.remove('show');
+  }
+  function vdDoDeploy(){
+    VD.deploying = true;
+    var btn = document.getElementById('vdConfirmBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="vd-spin"></span> 部署中…';
+    setTimeout(function(){
+      var c = VD.ctx;
+      (VD_VERS[vdKey(c)]||[]).forEach(function(v){ v.cur = (v.tag===VD.sel); });
+      var m = vdFindMod(c.domain, c.key);
+      if(m){ m.latest = { env:c.env, tag:VD.sel, time:'刚刚', by:'geekwen' }; }
+      VD.deploying = false;
+      btn.disabled = false; btn.textContent = '确认部署';
+      document.getElementById('vd-confirm').classList.remove('show');
+      vdClose();
+      if(document.getElementById('dc-vdeploy').classList.contains('active')) vdRenderTable();
+      toast(c.env+' / '+c.key+' 已部署到 '+VD.sel);
+    }, 1000);
+  }
+
   /* 初始化环境切换列表（24 个环境演示） */
   renderEnvList('');
 </script>
@@ -1348,6 +1600,41 @@ body{background:#e8ecf1;}
         <div class="tool-row"><span class="tname">PUBLISH_PATH</span><span class="tdesc">投递根目录</span><span class="del" onclick="toast('[原型] 删除变量')">删除</span></div>
         <button class="btn btn-ghost" style="font-size:12px;" onclick="toast('[原型] 添加 key=value')">＋ 添加变量</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 版本部署抽屉（vd-*，与发布流水线解耦的独立部署动作） -->
+<div class="drawer-mask" id="vd-mask" onclick="vdClose()"></div>
+<div class="drawer" id="vd-drawer">
+  <div class="drawer-head">
+    <div>
+      <span class="t" id="vdTitle">部署</span>
+      <div style="font-size:12px;color:var(--text-3);margin-top:3px;">从版本记录中选择一个版本部署</div>
+    </div>
+    <span class="x" onclick="vdClose()">✕</span>
+  </div>
+  <!-- 环境选择（部署目标环境，可在抽屉内切换；版本列表随环境重新加载） -->
+  <div class="vd-envbar">
+    <label>目标环境</label>
+    <select id="vdEnvSel" onchange="vdDrawerEnv(this.value)"></select>
+    <span class="dc-muted">环境可能数十个（含自建），真实实现支持下拉搜索；切换后重新加载版本记录</span>
+  </div>
+  <div class="drawer-body" id="vdBody"></div>
+  <div class="drawer-foot" id="vdFoot" style="display:none;">
+    <button class="btn btn-ghost" onclick="vdClose()">取消</button>
+    <button class="btn btn-primary" id="vdBtn" onclick="vdConfirmOpen()">部署</button>
+  </div>
+</div>
+
+<!-- 版本部署二次确认 -->
+<div class="modal-mask" id="vd-confirm" onclick="if(event.target===this)vdConfirmClose()">
+  <div class="modal">
+    <h3>确认部署</h3>
+    <div class="muted-txt" id="vdConfirmBody"></div>
+    <div class="modal-actions">
+      <button class="btn-sm" onclick="vdConfirmClose()">取消</button>
+      <button class="btn-sm primary" id="vdConfirmBtn" onclick="vdDoDeploy()">确认部署</button>
     </div>
   </div>
 </div>
