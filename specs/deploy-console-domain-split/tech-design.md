@@ -202,12 +202,12 @@ M1 建表 → M2 站点种子 → M3 环境种子 → M4 应用/服务导入
 
 ### 3.4 前端接线（已就绪部分不再改）
 
-| 页面 | 待替换的 mock |
-|---|---|
-| `EnvironmentManager` / `EnvironmentDetail` | 环境列表、后端服务指向 |
-| `AppManager` / `AppDetail` | 应用列表（现在用 `moduleApi` 过滤）、版本列表（现在硬编码 4 条） |
-| `ServiceManager` / `ServiceDetail` | 服务列表、接口清单、网关路由 |
-| `EnvSwitcher` | `envs` 来自 manifest（去掉 dev 兜底） |
+| 页面 | 原「待替换 mock」 | 落地状态（2026-09-21 核对） |
+|---|---|---|
+| `EnvironmentManager` / `EnvironmentDetail` | 环境列表、后端服务指向 | ✅ 已接真实 API |
+| `AppManager` / `AppDetail` | 应用列表、版本列表 | ✅ 已接真实 API |
+| `ServiceManager` / `ServiceDetail` | 服务列表、接口清单、网关路由 | ✅ 已接真实 API |
+| `EnvSwitcher` | `envs` 来自 manifest（去掉 dev 兜底） | ✅ 已接 manifest |
 
 ---
 
@@ -272,7 +272,8 @@ M1 建表 → M2 站点种子 → M3 环境种子 → M4 应用/服务导入
 > ✅ **已确认（2026-09-19）**：**不保留**「一环境一条流水线」的强绑定。
 > 备选方案（新建环境时自动克隆该模块流水线）已否决 —— 会产生 `环境数 × 模块数` 条流水线。
 > 前端相应改动：发起抽屉里**环境可改**（默认取模板绑定环境）、模板下拉按「本环境优先」排序、
-> 环境筛选来自真实环境表；应用/服务详情的「部署」直接带 `module + env` 跳转到发起抽屉。
+> 环境筛选来自真实环境表；**服务详情「构建发布」原地打开共用抽屉 `PipelineSubmitDrawer`（不跳转，2026-09-21）**，
+> 应用详情「部署」打开「选版本部署」抽屉（`VersionDeployDrawer`）。
 | **P3** 运行时接线 | gateway manifest 改 `envs/byEnv`；shell 按 envId 加载；EnvSwitcher 接真实 envs + 审计 | V11 挂件列出真实环境；V12 切换后整页重载并加载对应目录；V13 后端指向随 envId 切换 |
 | **P4** 迁移与退役 | 数据迁移 M1–M8、双读观察、旧表 DROP（M9）、旧页面清理 | V14 迁移幂等（重跑无差异）；V15 流水线历史记录零丢失；V16 关闭开关后行为与迁移前一致 |
 

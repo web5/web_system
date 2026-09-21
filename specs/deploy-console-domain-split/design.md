@@ -249,7 +249,7 @@ servers/gateway/public/static/modules/
 | POST | `/api/apps/:key/publish` | `{ envId, version }` 投递并激活：写 `<key>/<envId>/<version>/` + 改指针 | ✅ |
 | POST | `/api/apps/:key/switch` | `{ envId, version }` 切换版本（**只改指针、不重建**） | ✅ |
 | POST | `/api/apps/:key/rollback` | `{ envId, version? }` 回滚（默认 previousVersion） | ✅ |
-| POST | `/api/apps/:key/deploy` | `{ envId }` 触发流水线 | 待 P3（流水线接线） |
+| POST | `/api/apps/:key/deploy` | `{ envId }` 触发流水线 | **未实现**（2026-09-21 核对：应用域用 `switch`/`rollback`；发起构建发布走 `POST /pipelines`） |
 
 > 实现说明（2026-09-18）：`publish` 的产物源目录由 `apps/<repoDir>/dist` **推导**，
 > 不接受调用方传路径（避免任意目录拷贝）。流水线接线后由流水线调用同一「落盘 + 激活」原语。
@@ -266,8 +266,8 @@ servers/gateway/public/static/modules/
 | GET/POST/PUT/DELETE | `/api/services/:key/endpoints` | 接口清单（方法/关键字/废弃筛选 + 分页） | ✅ |
 | POST | `/api/services/:key/endpoints/import` | 批量导入（UPSERT，只补空字段） | ✅ |
 | POST | `/api/services/:key/health` | 手动探活（未配置主机时明确报错） | ✅ |
-| GET | `/api/services/:key/deployments` | 部署记录 | 待 P3（接流水线） |
-| POST | `/api/services/:key/deploy` | `{ envId }` | 待 P3 |
+| GET | `/api/services/:key/deployments` | 部署记录 | **不做**（2026-09-21：控制台无独立「部署记录」屏） |
+| POST | `/api/services/:key/deploy` | `{ envId }` | **已移除**（部署并入流水线 restart/verify；服务详情「环境与发布」= 只读指向 + 构建发布/配置指向/探活） |
 
 ### 4.4 gateway 内部契约
 
