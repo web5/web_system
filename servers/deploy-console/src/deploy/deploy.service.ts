@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as http from 'http';
 import * as https from 'https';
+import * as crypto from 'crypto';
 import { Client } from 'ssh2';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
@@ -26,6 +27,13 @@ import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 // 应用域：env-dir 应用的「部署」= 切 env 入口指针（与流水线激活同一实现）
 import { AppsService } from '../apps/apps.service';
+import { AuditService } from '../audit/audit.service';
+// 配置中心（**与 @nestjs/config 的 ConfigService 重名，故别名导入**）：
+// 把解析结果下发给服务进程（写 `<svc>/.env.generated`），见 specs/service-config-delivery/
+import {
+  ConfigService as ConfigCenterService,
+  renderGeneratedEnvFile,
+} from '../config/config.service';
 
 /**
  * 任务状态枚举
@@ -82,6 +90,10 @@ export class DeployService {
     private readonly commands: CommandService,
     // env-dir 应用（微前端）的「部署」= 切 env 入口指针，走应用域同一实现
     private readonly appsService: AppsService,
+    // 配置中心：部署前把解析结果下发给服务进程（写 .env.generated），见 writeGeneratedEnv()
+    private readonly configCenter: ConfigCenterService,
+    // 下发审计（只记「下发了哪些键 + 内容 hash」，绝不记明文）
+    private readonly audit: AuditService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -332,7 +344,10 @@ export class DeployService {
     // gateway 按 `getCurrentVersion(envId,'shell')` 决定加载哪个版本目录的 index.html，
     // 而该值有 10s TTL 缓存，不通知就会「部署了但页面没变」。
     if (app && app.deployMode === 'site-version') {
-      await this.notifyGatewayRefreshCache(`${input.env}/${input.moduleKey} -> ${input.versionTag}`);
+      await this.notifyGatewayRefreshCache(
+        `${input.env}/${input.moduleKey} -> ${input.versionTag}`,
+        input.env,
+      );
     }
 
     return { env: input.env, moduleKey: input.moduleKey, versionTag: input.versionTag, mode: 'legacy' };
@@ -345,12 +360,9 @@ export class DeployService {
    * `index.html`，而指针是这里写的 —— gateway 感知不到变更。
    * 失败只告警不抛错：部署本身已成功，最多 10s 缓存自然过期。
    */
-  private async notifyGatewayRefreshCache(reason: string): Promise<void> {
+  private async notifyGatewayRefreshCache(reason: string, envId?: string): Promise<void> {
     const base = this.configService.get<string>('GATEWAY_INTERNAL_URL') || '';
-    const key =
-      this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
-      this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
-      '';
+    const key = await this.gatewayServiceKey(envId);
     if (!base || !key) {
       this.logger.warn(
         `未配置 GATEWAY_INTERNAL_URL / GATEWAY_SERVICE_KEY，跳过 gateway 缓存刷新（${reason}；最多 10s 后自然生效）`,
@@ -364,6 +376,29 @@ export class DeployService {
       this.logger.warn(
         `gateway 缓存刷新失败（${reason}）：${(e as Error).message}（最多 10s 后自然生效）`,
       );
+    }
+  }
+
+  /**
+   * 取调用 gateway 内部接口的凭据：**配置中心优先（单一权威源），取不到才回落 `.env`**。
+   *
+   * 为什么控制台自身走「直接查」而不是「下发 `.env.generated`」：
+   * 控制台的重启是**自杀式中断**的（不走流水线，见 `docs/development/local-release-runbook.md`），
+   * 给自己下发再重启自己 = 把一次普通部署变成一次自我中断（`specs/service-config-delivery/design.md` §4.0）。
+   * 它本就持有 `CONFIG_MASTER_KEY`，随时可解密 → 直接查、零文件、零重启。
+   */
+  private async gatewayServiceKey(envId?: string): Promise<string> {
+    const fromEnv =
+      this.configService.get<string>('GATEWAY_SERVICE_KEY') ||
+      this.configService.get<string>('FINNEWS_SERVICE_KEY') ||
+      '';
+    if (!envId) return fromEnv;
+    try {
+      const cfg = await this.configCenter.resolveForProcess(envId, 'deploy-console');
+      return cfg.GATEWAY_SERVICE_KEY || fromEnv;
+    } catch (e) {
+      this.logger.warn(`从配置中心取 GATEWAY_SERVICE_KEY 失败，回落到 .env：${(e as Error).message}`);
+      return fromEnv;
     }
   }
 
@@ -465,7 +500,9 @@ export class DeployService {
 
     const home = process.env.HOME || '';
     if (input.env !== 'local') {
-      // 远程（dev / prod）：版本目录在**远端**（由远程投递流水线放好），走 SSH 换 dist + 重启
+      // 远程（dev / prod）：版本目录在**远端**（由远程投递流水线放好），走 SSH 换 dist + 重启。
+      // 注：配置下发（.env.generated）P0 仅覆盖本地；远程机只能靠手工 `.env`
+      //（`specs/service-config-delivery/design.md` §7 分期）。
       await this.applyBackendRemote(input, mod);
       return;
     }
@@ -474,6 +511,11 @@ export class DeployService {
     const dir = mod.dir || input.moduleKey;
     const src = path.join(ws, 'servers', dir, input.versionTag);
     const dst = path.join(ws, 'servers', dir, 'dist');
+
+    // 配置下发（P0-2）：**先下发、再落地/重启** —— 保证「重启即读到新值」。
+    // 下发出错直接抛错中止部署（不改指针），避免「以为换了配置其实没换」，
+    // 也避免「产物已换、进程还跑旧配置」的撕裂状态（见 specs/service-config-delivery/design.md §4.3）。
+    await this.writeGeneratedEnv(input.env, input.moduleKey);
 
     if (!fs.existsSync(src)) {
       // 兜底（T2）：版本目录被清掉时，用最近的 dist 备份恢复 —— 回滚旧版本时很可能遇到
@@ -557,6 +599,108 @@ export class DeployService {
       }
     }
     this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
+  }
+
+  /**
+   * **把配置中心的解析结果下发给服务进程**：写 `<RELEASE_WORKSPACE>/servers/<dir>/.env.generated`。
+   *
+   * 背景（`specs/service-config-delivery/design.md`）：配置中心此前只能注入**流水线脚本 env**，
+   * 到不了服务进程 —— 服务间凭据只能散落在各机 `.env`（多副本、无审计、无环境分层）。
+   * 本方法补上「送到进程」这最后一跳：服务侧 `ConfigModule.envFilePath` 把该文件排在 `.env` 之前，
+   * **重启即读到配置中心的值**（不需要服务启动期反向依赖平台）。
+   *
+   * 约定：
+   * - 只对**后端服务**（`servers/<dir>/`）下发；前端/微前端没有 `.env` 语义，跳过；
+   * - **按需**（design Q1）：该「环境 × 服务」在配置中心没有 `module` 级条目就跳过，不落盘；
+   * - 保留键（引导/基础设施/平台键）永不下发，见 `RESERVED_LOCAL_KEYS`；
+   * - 只写配置中心里真实存在的键（不全量覆盖 `.env`，避免「下发文件悄悄改掉人工配置」）；
+   * - 上一版备份 `.env.generated.bak-<ts>`（留最近 3 份）；删掉下发文件即完全回退；
+   * - 审计只记「下发了哪些键 + 内容 hash」，**绝不记明文**；
+   * - 写文件失败**抛错**（调用方据此不重启 / 不改指针，见 applyBackendVersion）。
+   *
+   * @returns 下发结果；跳过（非后端服务 / 无 module 条目 / 无键可下发）时返回 null
+   */
+  async writeGeneratedEnv(
+    envId: string,
+    moduleKey: string,
+  ): Promise<{ path: string; keys: string[]; hash: string } | null> {
+    let mod: { type?: string; dir?: string } | null = null;
+    try {
+      mod = (await this.moduleRegistry.get(moduleKey)) as any;
+    } catch {
+      mod = null;
+    }
+    if (!mod || mod.type !== 'backend') {
+      this.logger.log(`跳过配置下发：${moduleKey} 不是后端服务（无服务进程 .env）`);
+      return null;
+    }
+
+    // 按需下发（Q1）：没有 module 级条目 = 该服务没在配置中心声明需要配置
+    const onDemand = await this.configCenter.hasModuleScope(envId, moduleKey);
+    if (!onDemand) {
+      this.logger.log(`跳过配置下发：配置中心无 ${envId}/${moduleKey} 的 module 级条目`);
+      return null;
+    }
+
+    const items = await this.configCenter.dispatchPayload(envId, moduleKey);
+    if (!items.length) {
+      this.logger.log(`跳过配置下发：${envId}/${moduleKey} 无可下发的键（保留键已过滤）`);
+      return null;
+    }
+
+    const home = process.env.HOME || '';
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = path.join(ws, 'servers', mod.dir || moduleKey);
+    const target = path.join(dir, '.env.generated');
+
+    const text = renderGeneratedEnvFile(items, { envId, serviceKey: moduleKey });
+    fs.mkdirSync(dir, { recursive: true });
+    this.backupGeneratedEnv(target);
+    // 直接以 0600 建文件（内容含密钥明文：只给服务进程自己读）
+    fs.writeFileSync(target, text, { encoding: 'utf-8', mode: 0o600 });
+    try {
+      fs.chmodSync(target, 0o600);
+    } catch {
+      /* 权限设置失败不阻断（已用 mode 建文件） */
+    }
+
+    const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+    const keys = items.map((i) => i.key);
+    this.logger.log(`已下发配置: ${target}（${keys.length} 个键，sha256=${hash}）`);
+    await this.audit.log({
+      action: 'config.dispatch',
+      env: envId,
+      component: moduleKey,
+      status: 'success',
+      detail: JSON.stringify({ path: target, keys, hash }),
+    });
+    return { path: target, keys, hash };
+  }
+
+  /**
+   * 备份上一版 `.env.generated` 为 `.env.generated.bak-<ts>`，只留最近 3 份。
+   * 用 rename 而不是 copy：写完新文件后旧文件即失效，留着反而混淆。
+   */
+  private backupGeneratedEnv(target: string): void {
+    if (!fs.existsSync(target)) return;
+    try {
+      fs.renameSync(target, `${target}.bak-${Date.now()}`);
+    } catch (e) {
+      this.logger.warn(`下发文件备份失败（继续覆盖）: ${(e as Error).message}`);
+    }
+    try {
+      const dir = path.dirname(target);
+      const name = path.basename(target);
+      const baks = fs
+        .readdirSync(dir)
+        .filter((f) => f.startsWith(`${name}.bak-`))
+        .sort();
+      for (const old of baks.slice(0, Math.max(0, baks.length - 3))) {
+        fs.rmSync(path.join(dir, old), { force: true });
+      }
+    } catch {
+      /* 备份清理失败不影响下发 */
+    }
   }
 
   /**

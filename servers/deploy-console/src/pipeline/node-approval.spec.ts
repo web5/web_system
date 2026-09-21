@@ -131,7 +131,12 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
     // 步骤执行条件（gate）：runStageCommand 会读它，本 spec 不涉及 → 无条件（null）
     getRow: jest.fn(async () => null),
   };
+  // 配置中心：脚本注入走 resolveForScriptsDetailed（**不含密钥**，见 specs/service-config-delivery）
   const configs = { resolve: jest.fn(async () => ({})) };
+  (configs as any).resolveForScriptsDetailed = jest.fn(async () => ({
+    config: {},
+    excludedSecrets: [],
+  }));
   const moduleRegistry = { get: jest.fn(async () => ({ type: 'backend', dir: 'x', pm2: 'web-x' })) };
   const canary = { list: jest.fn(async () => []) };
   const pm2Probe = { listProcesses: jest.fn(() => []) };

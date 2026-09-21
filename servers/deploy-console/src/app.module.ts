@@ -35,7 +35,9 @@ import { HostsModule } from './hosts/hosts.module';
       isGlobal: true,
       // 显式指定配置路径：统一读本服务目录 servers/deploy-console/.env
       // （不再依赖 cwd 的根 .env，避免换目录启动就读不到配置）
-      envFilePath: [resolve(__dirname, '../.env')],
+      // .env.generated 在前：平台下发优先（控制台自身「直接查」配置中心，不下发自己，
+      // 该文件是为「将来给控制台下发别的配置」预留的，见 specs/service-config-delivery/design.md §4.0）
+      envFilePath: [resolve(__dirname, '../.env.generated'), resolve(__dirname, '../.env')],
     }),
     // MySQL 数据库连接（腾讯云/本机，凭据见 .env 的 MYSQL_*）
     TypeOrmModule.forRootAsync({

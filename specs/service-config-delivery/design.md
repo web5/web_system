@@ -223,6 +223,22 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 > 第 7 条为什么**不用 `global`**：global 会被下发给**所有**服务，等于把只该给两方的密钥铺到每个服务的
 > `.env` 里。`module`（按服务）+ 「按需下发」才是一致的。控制台那条它自己「直接查」，不下发。
 
+**落地状态（本地 P0 已实施，锚点）**：
+
+| 条 | 落地位置 |
+|---|---|
+| 1 | `config/config.service.ts`：`RESERVED_LOCAL_KEYS` / `isReservedLocalKey()` / `resolveForScripts()` / `resolveForScriptsDetailed()` / `resolveForProcess()` / `dispatchPayload()` / `hasModuleScope()` / `renderGeneratedEnvFile()` / `escapeEnvValue()` |
+| 2 | `pipeline/pipeline.service.ts` `resolveInjectEnv()`（改用 `resolveForScriptsDetailed()`，日志含「已排除 N 个密钥项」） |
+| 3 | `deploy/deploy.service.ts` `writeGeneratedEnv()` + `backupGeneratedEnv()`，接线在 `applyBackendVersion()`（先下发、后落地/重启） |
+| 4 | **未实施**（P1）：`GET internal/config/dispatch/:serviceKey` 内部接口 |
+| 5 / 6 | `gateway/src/app.module.ts`、`deploy-console/src/app.module.ts` 的 `envFilePath`（下发文件在前） |
+| 7 | `config_items` 已建 `local/deploy-console` 与 `local/gateway` 两条 `module` 级 `GATEWAY_SERVICE_KEY`（`is_secret=1`，密文落库）；控制台侧 `gatewayServiceKey()` 先查配置中心、取不到回落 `.env`，gateway 侧靠下发得到 |
+
+本地运维状态（`env=local`）：发布目录 `servers/gateway/.env.generated` 已按下发规则生成（0600，密钥来自 `module:local/gateway`）；
+`.env` 里为 `app-artifact-env-dir` 临时新增的 `GATEWAY_SERVICE_KEY` 已从 gateway 与 console 两处撤掉
+（gateway 保留 `FINNEWS_SERVICE_KEY` 作删文件后的回落，console 改为直接查配置中心）；
+`POST /api/internal/gateway/reload` 的 V1 / V2 已实测通过（下发值 201、`.env` 旧值 403；删下发文件后回到 `.env` 值）。
+
 ## 11. 复现与验证命令（本地）
 
 ```bash
