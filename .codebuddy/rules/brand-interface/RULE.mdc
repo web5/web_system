@@ -2,7 +2,7 @@
 description: 品牌端 UI 实现规则（portal / kedou-ai-minigram）。任务涉及新建/修改小程序页面、品牌端 Vue 页面、组件、WXML/WXSS/Vue 外观、颜色/Token、交互、布局时使用。补 ui-interface/RULE.mdc（DR-5）留下的规则真空；动作门顺序与 kit-sop-enforcement 设计对齐。
 alwaysApply: false
 enabled: true
-updatedAt: 2026-09-20T00:00:00.000Z
+updatedAt: 2026-09-21T00:00:00.000Z
 ---
 
 # 品牌端 UI 实现规则（portal / kedou-ai-minigram）
@@ -16,7 +16,17 @@ updatedAt: 2026-09-20T00:00:00.000Z
 1. 原型优先：先改 `apps/<app>/prototype/index.html`（或 `docs/ui/prototypes/**`）+ 同步页面规格 `specs/**/page-spec*.md`
 2. 交互质检：过 `ux-prototype-designer/references/ux-review-checklist.md` 独立交互质检
 3. **用户确认 ← 缺此不得写落地代码**（人审节点）
-4. 落码（WXML / WXSS / Vue）
+4. 原型/规格**单独 commit**，记下 sha；随后 UI commit 的 message 带 `Proto: <sha>`（`commit-msg` hook 强制，见 `specs/kit-sop-enforcement/design.md` §3.8）
+5. 落码（WXML / WXSS / Vue）
+
+### 原型整合约定（动作门第 1 步细则，不可跳）
+
+- **同一产品模块的 UI 改动，原型必须整合进该模块既有的整体原型稿**（如 `apps/kedou-ai-minigram/prototype/index.html` 的对应屏 / 子页），不允许另起孤立 HTML 交付 —— 用户要在**一份稿里**看全产品形态，散稿无法评审整体一致性。
+- **动手前先识别产品模块归属**：改动落在哪个 app / 哪组页面，就进哪个整体原型；识别不清（跨模块 / 新模块）先向用户确认归属再动手。
+- 独立 HTML 只允许两种例外，且须在页面规格里登记去向（规格与整体原型双向可索引）：
+  - **方案对比稿**（A/B/C 多方案并排供拍板）：拍板后**收敛进整体原型**再走 3~5 步，对比稿留档不删；
+  - **尚无整体原型的新模块**首建稿：后续该模块整体原型建立后并入。
+- 对话中说「出一个原型稿 / 交互稿」= 默认指整合进整体原型稿，不另起新文件。
 
 ## 最小禁项
 

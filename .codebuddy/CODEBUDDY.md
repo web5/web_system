@@ -26,12 +26,16 @@
 必须按序执行，**不得跳步**：
 
 1. 先改原型稿（`apps/*/prototype/index.html` 或 `docs/ui/prototypes/**`）+ 同步页面规格（`specs/**/page-spec*.md`）
+   - **原型稿必须整合进该产品模块既有的整体原型稿**（先识别模块归属，不另起孤立 HTML；对比稿拍板后收敛回整体原型，细则见 `@brand-interface` 规则「原型整合约定」）
 2. 过 `ux-prototype-designer` 的独立交互质检（`references/ux-review-checklist.md`）
 3. **用户确认原型** ← 人审节点，缺此步不得落码
-4. 才编辑落地代码（WXML/WXSS/Vue）
+4. 把原型/规格**单独 commit**（不得与 UI 源码混在同一 commit），记下其 sha ← 用户已确认的机器凭证
+5. 才编辑落地代码（WXML/WXSS/Vue）；该 UI commit 的 message 必须带一行 `Proto: <sha>`
+
+> 第 4/5 步由 `.githooks/commit-msg` 强制，CI 红线 R10 兜底（详见 `specs/kit-sop-enforcement/design.md` §3.8）。
 
 例外：纯后端 / 非 UI 文件改动不受本门约束。
-豁免：确属纯视觉微调（如仅调间距）时，在原型或 page-spec 中记一行「微调豁免」即可通行。
+豁免：确属纯视觉微调（如仅调间距）时，在原型或 page-spec 中记一行「微调豁免」即可通行；批量机械改动/紧急修复用 `UI_GATE=off`。
 
 ## 3 agent 安全
 
