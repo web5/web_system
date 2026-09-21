@@ -18,7 +18,14 @@ import { StepContext } from './step.types';
  * 因此抽到拉码之后一次执行（在 pnpm install 之后、模块 build 之前）。
  * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
  */
-const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
+/**
+ * 共享包清单。`@web-system/ui` 于 2026-09-21 纳入：portal 发布构建报
+ * `Rollup failed to resolve import "@web-system/ui/tokens.css"` —— ui 包 dist 未构建
+ * （且当时 node_modules 缺 ui 的 workspace 链接，见 afterSync 的依赖同步告警）。
+ * ui 的 `tokens.css` / `theme.css` 是源文件直出（package.json exports 指向 src/），
+ * 构建（tsc）主要产出 JS 主入口；放流水线级与 shared/types 同一竞态考量。
+ */
+const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types', '@web-system/ui'];
 
 /**
  * pull 内置步骤执行体（category=code）——「拉码」的回退实现。
@@ -63,7 +70,15 @@ export class PullExecutor {
         ctx.log('依赖安装完成');
       }
     } catch (e) {
-      ctx.log(`[warn] 依赖同步失败: ${(e as Error).message}`);
+      // ⚠️ 依赖同步失败是后续构建失败的高频根因（2026-09-21 portal 实测）：
+      // workspace 包（@web-system/*）的 node_modules 链接缺失 → vite resolve 失败，
+      // 表象是「Rollup failed to resolve import "@web-system/ui/tokens.css"」这类误导性报错。
+      // 失败不阻断（历史兼容），但日志必须醒目指向根因。
+      ctx.log(
+        `[warn] 依赖同步失败: ${(e as Error).message} —— workspace 包链接可能缺失，` +
+          `后续模块构建大概率报 resolve 失败；请在发布目录手工 pnpm install 后重试`,
+      );
+      this.logger.warn(`依赖同步失败（${ctx.pipeline.moduleKey}）: ${(e as Error).message}`);
     }
 
     // 共享 workspace 包预构建：流水级一次（admin/portal shell 等所有依赖方共用 dist）
