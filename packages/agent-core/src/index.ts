@@ -39,6 +39,8 @@ export type {
 // 引擎
 export { AgentEngine } from './core/agent-engine';
 export { IntentClassifier } from './core/intent-classifier';
+export { AGENT_ERROR_CODES, withCode, classifyError } from './core/agent-errors';
+export type { AgentErrorCode } from './core/agent-errors';
 export type {
   IntentResult,
   IntentVia,
