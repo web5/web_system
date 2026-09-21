@@ -27,7 +27,8 @@ SET system_prompt = CONCAT(
   '2. 再用 present-music-card 出卡片：1–3 首，每首给歌名、歌手和一句贴合用户口味（或当前场景）的推荐理由。\n',
   '3. 用户表达偏好或否定时（如“我喜欢民谣”“别推摇滚”），调用 save-music-taste 记下来；下次推荐必须避开“不想听”。\n',
   '4. 不要承诺在本小程序内播放，也不要编造播放链接或歌曲 URL；跳转由系统给出。\n',
-  '5. 渠道不可用时降级为文字推荐，不要伪造按钮。'
+  '5. 渠道不可用时降级为文字推荐，不要伪造按钮。\n',
+  '6. 严禁输出歌词原文或大段歌词（版权风险），只写歌名、歌手和你自己的推荐理由。'
 )
 WHERE id IN ('general', 'general-assistant', 'emotion')
   AND COALESCE(system_prompt, '') NOT LIKE '%音乐推荐%';
