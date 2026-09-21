@@ -417,7 +417,7 @@ const STATUS_FILTERS = [
 ]
 const filteredRows = computed<PipelineRow[]>(() => {
   const f = appliedFilters.value
-  return pipelineRows.value.filter((r) => {
+  const rows = pipelineRows.value.filter((r) => {
     if (f.keyword) {
       // 环境也进关键词（搜 "prod" 直接命中最近发过生产的那几条）
       const hay =
@@ -440,6 +440,10 @@ const filteredRows = computed<PipelineRow[]>(() => {
     }
     return true
   })
+  // 默认排序（规格 §10）：最近执行时间倒序（最新在上），从未执行（无实例）的统一置尾；
+  // 时间相同或均无实例时保持「模块 × 流水线」原序 —— Array#sort 稳定，刷新不跳行。
+  rows.sort((a, b) => (b.latest?.startTime || 0) - (a.latest?.startTime || 0))
+  return rows
 })
 /** 流水线展示名：默认 = 模块名；流水线名非空且与模块名不同时追加「 · 流水线名」 */
 function rowName(r: PipelineRow): string {
