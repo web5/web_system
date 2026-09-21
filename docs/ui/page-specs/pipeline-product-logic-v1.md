@@ -288,3 +288,15 @@
   2. 基线 == 本次目标 → 记日志「本次尚未改动线上版本，无需回滚」并按 `abort` 终止；
   3. 否则调 `deployService.startRollback(env, prevVersion, operator, moduleKey)`，等结果，写日志与审计。
 - 终态：无论哪种，流水线最终为 `failed`（拒绝 ≠ 成功），回滚结果写进日志与审计明细。
+
+---
+
+## 10. Quick · 流水线列表默认排序（用户 2026-09-21 提出）
+
+- 页面/组件：`apps/deploy-console/src/views/PipelineCenter.vue`（流水线记录表格，路由 `#/pipelines`）
+- 改动：列表**默认按最近一次执行时间倒序**（`latest.startTime` 降序，最新在最上）；**从未执行**（无实例）的流水线统一排在末尾。
+- 保持：筛选条（关键词 / 模块 / 环境 / 类型 / 状态）与分页（15 条）不变；**不新增排序控件**，只改默认顺序。
+- 排序稳定性：时间相同时（或均无实例）按现有顺序（模块 × 流水线）稳定排列，避免每次刷新跳行。
+- 涉及 Token：**无**（仅数据顺序，不改视觉）
+- 交互影响：无新增/破坏性操作；「最近执行」列为「从未执行」的行集中在列表底部。
+- 原型：`docs/ui/prototypes/release-platform-v13-pipeline-product-logic.html`（列表屏行序已按倒序调整 + note 标注规则）
