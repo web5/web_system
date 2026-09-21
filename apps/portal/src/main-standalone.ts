@@ -5,6 +5,9 @@ import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
+// 与 lifecycle.ts 同序：ui token → ui 基础样式 → portal 自有样式
+import '@web-system/ui/tokens.css';
+import '@web-system/ui/theme.css';
 import './styles/global.css';
 
 const app = createApp(App);

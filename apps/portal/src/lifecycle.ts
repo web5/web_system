@@ -6,7 +6,10 @@ import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
-// 全局样式（含 CSS 变量），微前端模式也必须引入
+// UI 规范：语义 token + 全局基础样式（@web-system/ui 的 tokens/theme 直指 src，不走 dist）
+// 顺序要求：先 token 与基础样式，再 portal 自有 global.css
+import '@web-system/ui/tokens.css';
+import '@web-system/ui/theme.css';
 import './styles/global.css';
 
 /**
