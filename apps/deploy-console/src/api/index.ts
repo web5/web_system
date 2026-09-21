@@ -675,8 +675,8 @@ export const orchestrationApi = {
   getTree: (pipelineId: string) =>
     http.get(`/pipelines/${pipelineId}/steps`) as Promise<OrchestrationStep[]>,
 
-  /** 步骤全量保存（名称/介绍/排序；按名 upsert，任务不动） */
-  saveSteps: (pipelineId: string, steps: { name: string; description?: string | null; sort?: number; enabled?: boolean }[]) =>
+  /** 步骤全量保存（带 id = 更新可改名，任务保留；不带 = 新建；空数组=清空） */
+  saveSteps: (pipelineId: string, steps: { id?: string; name: string; description?: string | null; sort?: number; enabled?: boolean }[]) =>
     http.put(`/pipelines/${pipelineId}/steps`, { steps }) as Promise<OrchestrationStep[]>,
 
   /** 某步骤任务全量保存（含各自动作）；managed 动作不可删/不可改名 */
