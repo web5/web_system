@@ -25,7 +25,7 @@
 | **D2** | 审计/告警/审核/通知 | **复用，不建第二套** | 复用方式见 §0.4；「微信提审 ≠ 平台审批」需澄清 |
 | **D3** | 多租户 | **不引入 `tenant_id`** | 定位内部平台；归属改用 `mp_app.owner`；见 §1 |
 | **D4** | 权限 | **不新增 `mp:*` 权限域** | 复用统一 IAM 的 `system` 粒度（`deploy`），不加权限码；见 §3.1 |
-| **D5** | 密钥管理 | **统一为各服务 `.env`** | 废弃上游的 `~/env_config/`（本机该目录只是笔记，非密钥仓） |
+| **D5** | 密钥管理 | **服务运行配置统一为各服务 `.env`**；`~/env_config/` 继续承担**跨服务凭据仓**，两者职责不同、不混用 | 上游「统一 `~/env_config/`」指的是密钥集中存放；本仓库口径：运行配置进 `servers/<svc>/.env`，机器/账号/第三方凭据留 `~/env_config/*.env` |
 | **D6** | 前端形态 | **admin 系微前端子模块**（非独立 SPA） | 走 shell + `packages/ui` tokens；路由 `/mp-admin/` |
 | **D7** | 自有小程序发布通道 | **复用 mp-platform 的 M4（密钥模式）** | deploy-console 侧不重复实现；仅保留模块登记现状 |
 
@@ -59,7 +59,7 @@ apps/mp-admin/          前端微前端子模块 Vue3 + AntD + @web-system/ui
 | # | 上游写法 | 本稿口径 | 原因 |
 |---|---|---|---|
 | 1 | 前端为独立 Vue3 SPA | `apps/mp-admin` 微前端子模块 | 决策 D6 |
-| 2 | 密钥统一 `~/env_config/` | 各服务 `servers/mp-platform/.env` | 决策 D5；本机 `~/env_config/` 实为笔记目录 |
+| 2 | 密钥统一 `~/env_config/` | 运行配置进 `servers/mp-platform/.env`；跨服务凭据仍留 `~/env_config/*.env` | 决策 D5；`ENV_CONFIG_DIR`（服务器 `/data/env_config`）是既有约定，两处职责不同 |
 | 3 | 未提 API 鉴权 | 复用统一 IAM JWT + `system` 粒度（不加权限码） | 决策 D4 |
 | 4 | M3 含「`tenant_id` 全链路」 | 本期不做，改 `mp_app.owner` | 决策 D3，见 §1 |
 | 5 | API 直接暴露 `/api/*` | `/api/mp/*` 经 gateway 反代 | 仓库铁律：前端不直连后端 |
@@ -142,6 +142,8 @@ apps/mp-admin/          前端微前端子模块 Vue3 + AntD + @web-system/ui
 - `FIELD_ENCRYPT_KEY`：用于**字段级加密**（`component_verify_ticket`、`authorizer_refresh_token` 等落库值）。生成：`openssl rand -hex 32`。
 - ⚠️ 仓库**目前没有字段级加密实现**（全仓 grep 零命中）→ 这是新增的安全横切，需一并定义：① 加解密工具位置（建议 `packages/platform-kit` 或 shared）② 轮换流程 ③ **丢失即不可恢复**的运维预案（密钥丢了所有授权需要重新扫码授权）。
 - 接口**绝不返回**私钥/refresh_token 原文（字段白名单）。
+
+> ⚠️ **待补凭据（A/B 两条路都绕不开）**：M0 需要第三方平台的 `component_appid` / `component_appsecret` / `EncodingAESKey` / `verify_token` 四项。本机凭据仓 `~/env_config/wechat-mp.env` 目前只有**公众号/小程序**的 `WECHAT_MP_{APPID,APPSECRET}` 与 `WECHAT_MP_MINI_{APPID,AppSecret}`，**第三方平台这四项缺失** → 建议新增 `~/env_config/wechat-thirdparty.env`（从微信开放平台第三方平台后台取），再由 `servers/mp-platform/.env` 引用。
 
 ### 3.3 微信回调 `/wx/component/event`
 
