@@ -44,7 +44,7 @@
       >
         <view class="msg-avatar">{{item.role === 'ai' ? '豆' : '我'}}</view>
         <view
-          class="msg-bubble {{item.card ? 'is-card' : (item.text.length > 140 && !expandMap[idx] ? 'collapsed' : '')}}"
+          class="msg-bubble {{(item.card || item.musicCard) ? 'is-card' : (item.text.length > 140 && !expandMap[idx] ? 'collapsed' : '')}}"
         >
           <!-- AI 首条：今日一句（与欢迎页同文案，形成连续感） -->
           <view wx:if="{{item.daily}}" class="msg-quote-k">今日一句</view>
@@ -79,9 +79,18 @@
 
             <view wx:if="{{!item.streaming && item.enMain}}" class="ec-ops">
               <text class="ec-op" data-idx="{{idx}}" catchtap="onCardCopy">复制</text>
-              <text class="ec-op" catchtap="onCardSpeak">朗读</text>
+              <text class="ec-op {{speakPlayingIdx === idx ? 'is-speaking' : ''}}" data-idx="{{idx}}" catchtap="onCardSpeak">{{speakLoadingIdx === idx ? '请稍候…' : (speakPlayingIdx === idx ? '停止' : '朗读')}}</text>
               <text class="ec-op" catchtap="onCardFav">收藏</text>
             </view>
+          </block>
+
+          <!-- 歌曲推荐卡片：SSE card 事件（kind=music）渲染；主按钮跳转由 provider 配置决定 -->
+          <block wx:elif="{{item.musicCard}}">
+            <music-card
+              card="{{item.musicCard}}"
+              bind:swap="onMusicSwap"
+              bind:dislike="onMusicDislike"
+            />
           </block>
 
           <!-- 非翻译官回复：原有纯文本渲染 -->

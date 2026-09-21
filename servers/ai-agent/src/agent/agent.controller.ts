@@ -247,6 +247,18 @@ export class AgentController {
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+        // 结构化卡片：把 present-music-card 的工具结果转成 card 事件下发前端。
+        // 引擎只认识通用 tool_result，卡片语义在这里收口；steps 仍记原始 tool_result
+        // （内容即卡片 JSON），历史回看据此还原卡片而不退化成文本。
+        if (event.type === 'tool_result' && event.name === 'present-music-card' && event.content) {
+          try {
+            const card = JSON.parse(event.content);
+            res.write(`data: ${JSON.stringify({ type: 'card', card, step: event.step })}\n\n`);
+          } catch {
+            this.logger.warn('歌曲卡片载荷解析失败，跳过 card 事件');
+          }
+        }
         // content_delta / reasoning_delta 是逐字增量（可能上千条），只透传前端用于逐字渲染，
         // 不落库 steps（避免 agent-runs 表被污染/膨胀）
         if (event.type !== 'content_delta' && event.type !== 'reasoning_delta') {
