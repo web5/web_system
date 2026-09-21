@@ -167,7 +167,7 @@ function onDeployClick() {
           :key="v.tag"
           class="ver-item"
           :class="{ sel: selected === v.tag, cur: v.isCurrent }"
-          @click="!v.isCurrent && !deploying && (selected = v.tag)"
+          @click="!deploying && (selected = v.tag)"
         >
           <span class="radio-dot" />
           <div class="ver-main">
