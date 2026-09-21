@@ -709,7 +709,7 @@ onMounted(load)
         </a-tab-pane>
 
         <!-- 环境 -->
-        <a-tab-pane key="envs" tab="环境">
+        <a-tab-pane key="envs" tab="环境与发布">
           <a-table
             :columns="envColumns"
             :data-source="svcEnvs"
@@ -752,11 +752,13 @@ onMounted(load)
                 <a-badge v-else status="default" :text="record.status" />
               </template>
               <template v-else-if="column.key === 'action'">
+                <a type="link" @click="publish(record.envId)">构建发布</a>
+                <a-divider type="vertical" />
                 <a type="link" @click="gotoEnvConfig(record.envId)">配置指向</a>
                 <a-divider type="vertical" />
                 <a-tooltip
                   v-if="!record.configured"
-                  title="未配置主机组或端口，探活与部署会 fail-fast（不回落本机）"
+                  title="未配置主机组或端口，探活会 fail-fast（不回落本机）"
                 >
                   <a type="link" class="link-disabled">探活</a>
                 </a-tooltip>
@@ -765,52 +767,14 @@ onMounted(load)
             </template>
           </a-table>
           <p class="hint">
-            本页<b>只读</b>：各环境「指向」（主机组 / 端口 / 上游 / 运行时）统一在
+            各环境「指向」（主机组 / 端口 / 上游 / 运行时）为<b>只读</b>，统一在
             <a @click="router.push({ name: 'EnvironmentManager' })">环境管理 → 环境详情 → 后端服务指向</a>
-            内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。
+            内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。<br />
+            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/
+            verify（探活通过后切指针）直接生效 —— <b>流水线跑完即上线</b>，控制台不再有单独的部署动作。
           </p>
         </a-tab-pane>
 
-        <!-- 部署 -->
-        <a-tab-pane key="deploy" tab="部署">
-          <a-table
-            :columns="[
-              { title: '环境', key: 'envId', width: 150 },
-              { title: '目标', key: 'target' },
-              { title: '运行时', key: 'runtime', width: 120 },
-              { title: '操作', key: 'action', width: 180 },
-            ]"
-            :data-source="svcEnvs"
-            row-key="envId"
-            size="middle"
-            :pagination="false"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'envId'">
-                <span class="ws-mono">{{ record.envId }}</span>
-              </template>
-              <template v-else-if="column.key === 'target'">
-                <span v-if="record.configured" class="ws-mono">
-                  {{ record.upstreamUrl || `${record.hostAddress}:${record.port ?? '—'}` }}
-                </span>
-                <span v-else class="muted">未配置指向</span>
-              </template>
-              <template v-else-if="column.key === 'runtime'">
-                <span class="muted">{{ record.runtime || '继承' }}</span>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a type="link" @click="publish(record.envId)">构建发布</a>
-                <a-divider type="vertical" />
-                <a type="link" @click="probe(record.envId)">探活</a>
-              </template>
-            </template>
-          </a-table>
-          <p class="hint">
-            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/
-            verify（探活通过后切指针）直接生效，<b>前端切指针即生效</b> —— 流水线跑完即上线。<br />
-            验证不通过则指针不前进，旧版本继续对外服务；服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
-          </p>
-        </a-tab-pane>
       </a-tabs>
     </a-card>
 
