@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-session-start.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "write_to_file|replace_in_file|Write|Edit|MultiEdit",
@@ -7,6 +19,16 @@
           {
             "type": "command",
             "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-ui-prototype-gate.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "execute_command|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-shell-ui-gate.py\"",
             "timeout": 10
           }
         ]

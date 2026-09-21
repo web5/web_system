@@ -31,11 +31,22 @@ esac
 # 从仓库根执行，保证相对路径正确
 cd "$TOP"
 
-[ -f "$HOOKS_DIR/pre-commit" ] || { echo "缺少 $HOOKS_DIR/pre-commit，无法安装" >&2; exit 1; }
-chmod +x "$HOOKS_DIR/pre-commit"
+[ -d "$HOOKS_DIR" ] || { echo "缺少目录 $HOOKS_DIR，无法安装" >&2; exit 1; }
+
+# 安装目录下全部 hook 脚本（v1.1 起不止 pre-commit：新增 commit-msg 方案 B 校验）
+INSTALLED=""
+for f in "$HOOKS_DIR"/*; do
+  [ -f "$f" ] || continue
+  case "$(basename "$f")" in *.md|*.sample) continue ;; esac
+  chmod +x "$f"
+  INSTALLED="$INSTALLED $(basename "$f")"
+done
+[ -n "$INSTALLED" ] || { echo "目录 $HOOKS_DIR 内没有可安装的 hook 脚本" >&2; exit 1; }
 
 git config core.hooksPath "$HOOKS_DIR"
 echo "✓ 已启用 git hooks: $HOOKS_DIR"
 echo "  (core.hooksPath=$(git config core.hooksPath))"
-echo "  下次 git commit 会自动执行 pre-commit 红线检查。"
+echo "  已安装：$INSTALLED"
+echo "  pre-commit  = 红线扫描（R1~R8 / R9）"
+echo "  commit-msg  = UI 源码须带 Proto: <sha> 凭证（specs/kit-sop-enforcement/design.md §3.8）"
 echo "  提示：执行 bash scripts/redline/install-git-hooks.sh -d 可查看当前配置。"
