@@ -17,6 +17,8 @@ import { StageCommandModule } from '../stage-command/stage-command.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 // 内部发布接口的「env-dir 应用激活」（写磁盘入口指针 + 应用环境版本表）复用应用域
 import { AppsModule } from '../apps/apps.module';
+// 配置中心：部署前把解析结果下发给服务进程（写 .env.generated），见 DeployService.writeGeneratedEnv
+import { ConfigCenterModule } from '../config/config.module';
 
 /**
  * 部署管理模块
@@ -32,6 +34,8 @@ import { AppsModule } from '../apps/apps.module';
     StageCommandModule,
     ReleaseRegistryModule,
     AppsModule,
+    // 配置中心（下发配置到服务 .env.generated）
+    ConfigCenterModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),
   ],
   controllers: [DeployController, InternalReleaseController],

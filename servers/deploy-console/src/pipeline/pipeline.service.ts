@@ -2050,13 +2050,23 @@ export class PipelineService {
    *
    * 合并后的键**强制覆盖**既有环境（历史 `PORT=6200` 污染的对策）。
    * 解析失败只告警不阻断——配置中心是增强能力，不该让整个发布失败。
+   *
+   * ⚠️ 走 `resolveForScripts`（**跳过 `is_secret=1` 的项**）：脚本 env 里不出现密钥。
+   * 密钥要到达服务进程，走「下发 `.env.generated`」这条链路
+   * （`specs/service-config-delivery/design.md` §4.4 / §10-3），不是塞进脚本环境。
    */
   private async resolveInjectEnv(p: DeployPipelineEntity): Promise<Record<string, string>> {
     try {
-      const cfg = await this.configs.resolve(p.env, p.moduleKey);
+      const { config: cfg, excludedSecrets } = await this.configs.resolveForScriptsDetailed(
+        p.env,
+        p.moduleKey,
+      );
       const keys = Object.keys(cfg);
-      if (keys.length) {
-        p.logs = [...(p.logs ?? []), `[config] 注入 ${keys.length} 项配置（强制覆盖）`];
+      if (keys.length || excludedSecrets.length) {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[config] 注入 ${keys.length} 项配置（强制覆盖），已排除 ${excludedSecrets.length} 个密钥项`,
+        ];
         await this.save(p);
       }
       return cfg;
