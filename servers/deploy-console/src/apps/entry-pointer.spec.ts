@@ -13,9 +13,10 @@ import {
 /**
  * 入口指针单测（P1 · 验收判据 V6 的机器可执行部分）
  *
- * 锁定 T1 定稿写法 A'（两行：命名导出 + default 双透传）：
- * `export *` 不透传 default（P0 验证结论），少写第二行会让 shell-loader 的
- * ① `mod.default` 路径失效 —— 属静默回归，故用断言锁死。
+ * 锁定 T1 定稿写法 A' 的 **System.register 版**（命名导出 + default 双透传）：
+ * 产物是 SystemJS（`MF_FORMAT=system`），指针若写成原生 ESM，`System.import()`
+ * 会在解析阶段抛 `Unexpected token 'export'`（2026-09-21 门户加载失败事故）——
+ * 属整模块白屏级回归，故用断言锁死写法，同时锁死 `readEnvEntryPointer` 的解析兼容。
  */
 describe('entry-pointer（入口指针 T1 定稿 A′）', () => {
   let ws: string;
@@ -34,10 +35,23 @@ describe('entry-pointer（入口指针 T1 定稿 A′）', () => {
     if (withCss) fs.writeFileSync(path.join(dir, 'index.css'), `.v{content:'${version}'}`);
   };
 
-  it('指针内容为两行（命名导出 + default），锁定 A′ 写法', () => {
+  it('指针内容为 System.register（命名导出 + default 双透传），锁定 A′ 写法', () => {
     expect(entryPointerJs('1a2b3c4')).toBe(
-      "export * from './1a2b3c4/index.js';\nexport { default } from './1a2b3c4/index.js';\n",
+      "System.register(['./1a2b3c4/index.js'], function (_export) {\n" +
+        "  'use strict';\n" +
+        '  return {\n' +
+        '    setters: [function (m) { _export(m); }],\n' +
+        '    execute: function () {}\n' +
+        '  };\n' +
+        '});\n',
     );
+  });
+
+  it('指针内容必须是 System.register（原生 ESM 写法在 SystemJS 下整模块加载失败）', () => {
+    const js = entryPointerJs('1a2b3c4');
+    expect(js.startsWith('System.register(')).toBe(true);
+    expect(js).not.toContain('export * from');
+    expect(js).not.toContain('export { default } from');
   });
 
   it('写入后读回指向当前版本（切换版本 = 只改指针）', () => {

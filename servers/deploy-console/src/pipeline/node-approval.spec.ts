@@ -26,7 +26,6 @@ import { SHELL_RUNNER, ShellRunRequest } from '../shell/shell-runner';
 import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { ReleaseGitService } from '../git/release-git.service';
-import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { PipelineService, PIPELINE_AWAITING_APPROVAL } from './pipeline.service';
 import { PipelineVarService } from './pipeline-var.service';
@@ -195,7 +194,6 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: ArtifactStoreService, useValue: {} },
       { provide: ReleaseRegistryService, useValue: {} },
       { provide: ReleaseGitService, useValue: {} },
-      { provide: PlatformScriptSeedService, useValue: {} },
       { provide: PIPELINE_BUILTIN_STEPS, useValue: {} },
     ],
   }).compile();

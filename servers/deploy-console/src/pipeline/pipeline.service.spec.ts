@@ -254,20 +254,6 @@ describe('resolveStageVars（阶段命令变量）', () => {
     expect(v.WS_SAFE_DELETE).toBe('rm -rf');
   });
 
-  it('WS_PLATFORM_SCRIPTS_DIR：随 console 分发的实现脚本目录（restart/verify 不再依赖发布分支）', () => {
-    const v = resolveStageVars({
-      env: 'local',
-      moduleKey: 'ai-agent',
-      releaseWorkspace: ws,
-      platformScriptsDir: '/console/dist/pipeline/scripts',
-    });
-    expect(v.WS_PLATFORM_SCRIPTS_DIR).toBe('/console/dist/pipeline/scripts');
-    // 未注入时为空串而非 undefined（bash 里 ${VAR:?} 才能显式报错）
-    expect(
-      resolveStageVars({ env: 'local', moduleKey: 'x', releaseWorkspace: ws }).WS_PLATFORM_SCRIPTS_DIR,
-    ).toBe('');
-  });
-
   it('删除策略缺省为 mv（规避批量删除审批，不写死在平台代码里）', () => {
     const v = resolveStageVars({ env: 'dev', moduleKey: 'admin', releaseWorkspace: ws });
     expect(v.WS_SAFE_DELETE).toBe('mv');
