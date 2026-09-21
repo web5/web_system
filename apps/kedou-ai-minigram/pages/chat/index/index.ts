@@ -12,6 +12,9 @@
  */
 import { getDailyQuote } from '../../../utils/daily';
 import { createAgentApi } from '../../../services/agent-stream';
+import { RESUME_CONV_KEY } from '../../../utils/conversation';
+import { parseAgentError } from '../../../utils/agent-error';
+import { ensureLogin } from '../../../services/auth';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
@@ -29,8 +32,10 @@ interface ChatMsg {
   streaming?: boolean;
   /** 本条失败（网络 / HTTP / 服务端 error）；保留已收到的部分，UI 给「重试 / 删除这一轮」 */
   failed?: boolean;
-  /** 失败原因（展示给用户，不吞错） */
+  /** 失败原因：给用户看的友好提示（不是技术原文） */
   failReason?: string;
+  /** 失败错误码：用于区分处理（如 401 自动登录并重试） */
+  failCode?: string;
 }
 
 /** 开场推荐问题（写死；批次 4 改由 GET /ai/agents 的 entry.suggestions 驱动） */
@@ -58,6 +63,8 @@ Page({
      * 路由错了用户能一眼看出「是谁在答」，也是排查误判的第一现场。
      */
     currentAgent: null as null | { id: string; name: string },
+    /** 长按后展开复制入口的气泡下标；-1 = 无 */
+    copyIdx: -1,
   },
 
   /**
@@ -66,6 +73,12 @@ Page({
    * 避免 unmount 或新开对话后旧回调继续 setData。
    */
   _runId: 0,
+
+  /**
+   * 当前会话是否经由「对话记录 / 欢迎页最近对话」载入（resumeIfNeeded 置位）。
+   * 返回键据此决定回**来源列表页**还是欢迎页。
+   */
+  _resumed: false,
 
   onLoad() {
     this.initNavBar();
@@ -82,6 +95,8 @@ Page({
   onShow() {
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/chat/index/index', selected: 0 });
+    // 从「对话记录」点某条记录返回时，载入该会话
+    this.resumeIfNeeded();
   },
 
   /**
@@ -100,15 +115,90 @@ Page({
     }
   },
 
-  /** 顶部返回 icon：回到欢迎页（redirectTo 避免页面栈累积） */
+  /**
+   * 顶部返回 icon：按**来源**返回 ——
+   * - 从「对话记录」/「欢迎页最近对话」载入的会话 → 回到来源列表页；
+   * - 正常从欢迎页进入的对话 → 回欢迎页（redirectTo 避免页面栈累积）。
+   */
   goBack() {
+    if (this._resumed) {
+      this._resumed = false;
+      wx.navigateTo({ url: '/pages/chat/history/history' });
+      return;
+    }
     wx.redirectTo({ url: '/pages/welcome/index/index' });
+  },
+
+  /** 导航栏「列表」icon：打开对话记录 */
+  openHistory() {
+    wx.navigateTo({ url: '/pages/chat/history/history' });
+  },
+
+  /**
+   * 从「对话记录」点某条记录返回时载入该会话。
+   * 对话页是 tabBar 页（navigateTo 到不了、switchTab 不能带参数），
+   * 因此历史页把 conversationId 写进 storage，由这里读取后拉详情渲染。
+   */
+  async resumeIfNeeded() {
+    let id = '';
+    try {
+      id = wx.getStorageSync(RESUME_CONV_KEY) || '';
+    } catch {
+      return;
+    }
+    if (!id) return;
+    try {
+      wx.removeStorageSync(RESUME_CONV_KEY);
+    } catch {
+      /* 清不掉也不阻塞 */
+    }
+
+    // 作废在途回调：切会话后，旧会话的流式回包不该再写入
+    this._runId += 1;
+    // 标记来源：返回键回「对话记录」而非欢迎页
+    this._resumed = true;
+    // 不弹全屏 loading：历史会话载入若偏慢，全屏「载入中」会让人以为页面卡住 / 元素缺失。
+    // 改为静默载入 —— 先回到对话页（导航栏完整可用），数据到了再填充，失败才提示。
+    try {
+      const detail = await createAgentApi(CHAT_AGENT_ID).getConversation(id);
+      const raw: any[] = Array.isArray(detail?.messages) ? detail.messages : [];
+      // 只渲染 user / assistant；tool 过程消息不进对话流（与后端一致）
+      const msgs: ChatMsg[] = raw
+        .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+        .map((m) => ({
+          role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai',
+          text: String(m.content || ''),
+          _id: `h-${Math.random().toString(36).slice(2)}`,
+        }));
+      this.setData({
+        conversationId: id,
+        chatMessages: msgs.length
+          ? msgs
+          : [{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }],
+        sending: false,
+        input: '',
+        expandMap: {},
+        suggestions: [],
+        copyIdx: -1,
+        // 历史会话的 agent 归属不在列表接口里（产品决策：不展示），故不清空不清算
+        currentAgent: null,
+      });
+      // 可见反馈：与原型 resumeConv 的 toast 对齐，同时用于判断「载入这一步到底跑没跑」
+      wx.showToast({ title: '已载入会话', icon: 'none' });
+      // 从二级页返回后重新校正导航栏尺寸：避免残留状态导致返回键错位 / 不可见
+      this.initNavBar();
+      this.scrollToBottom();
+    } catch {
+      wx.showToast({ title: '载入会话失败', icon: 'none' });
+    }
   },
 
   /** 新对话：清空当前会话，重新注入今日一句 */
   newChat() {
     // 作废在途回调：新一轮开始后，上一轮的 delta / reply / error 不再写 data
     this._runId += 1;
+    // 新会话从欢迎页来：返回键回欢迎页
+    this._resumed = false;
     const quote = getDailyQuote();
     this.setData({
       conversationId: '',
@@ -119,6 +209,7 @@ Page({
       chatMessages: [{ role: 'ai', text: quote.cn, en: quote.en, daily: true }],
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
+      copyIdx: -1,
     });
     this.scrollToBottom();
   },
@@ -158,6 +249,39 @@ Page({
     this.setData({ input: e.detail.value });
   },
 
+  /**
+   * 键盘右下角「发送」/ 回车：直接发送。
+   * 输入区是单行 input（confirm-type="send"），回车**不会**插入换行。
+   */
+  onConfirm() {
+    this.send();
+  },
+
+  /** 长按气泡：在该气泡内展开「复制」入口（空气泡 / 流式中不响应） */
+  onLongPressMsg(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    const msg = this.data.chatMessages[idx];
+    if (!msg || !msg.text) return;
+    this.setData({ copyIdx: idx });
+  },
+
+  /** 点「复制」：写入系统剪贴板 */
+  onCopyMsg(e: any) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    const text = this.data.chatMessages[idx]?.text || '';
+    this.setData({ copyIdx: -1 });
+    if (!text) return;
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '已复制', icon: 'none' }),
+    });
+  },
+
+  /** 点消息区空白处：收起复制入口 */
+  closeCopyMenu() {
+    if (this.data.copyIdx >= 0) this.setData({ copyIdx: -1 });
+  },
+
   /** 点击开场推荐问题：直接发送 */
   onTapSug(e: any) {
     const q = String(e.currentTarget.dataset.q || '').trim();
@@ -195,6 +319,7 @@ Page({
       input: '',
       sending: true,
       suggestions: [],
+      copyIdx: -1,
     });
     this.scrollToBottom();
 
@@ -233,17 +358,47 @@ Page({
           if (runId !== this._runId) return;
           // 失败不清空：保留已收到的部分正文，只把这一条标记为失败
           //（流式中途断是最常见形态，丢掉已读内容等于让用户白等）
+          // 错误码 → 用户提示：技术原文不再直接透传（规范见 utils/agent-error.ts）
+          const info = parseAgentError(err?.message || '');
           this.setData({
             chatMessages: this.data.chatMessages.map((m: ChatMsg) =>
               m._id === aiId
-                ? { ...m, failed: true, failReason: err?.message || '网络连接不稳定', streaming: false }
+                ? { ...m, failed: true, failReason: info.tip, failCode: info.code, streaming: false }
                 : m,
             ),
             sending: false,
           });
+          // 登录过期：静默重新登录后自动重发这一轮（用户只需等一下，不用手动点重试）
+          if (info.code === 'AUTH_EXPIRED') this.reloginAndRetry(question, aiId);
         },
       },
     );
+  },
+
+  /**
+   * 401（登录过期）：静默重新登录 —— 微信 `wx.login` 不需要用户操作，
+   * 所以这里只弹一个「正在登录…」，成功就关掉并**自动重发这一轮**。
+   * 用户感知：等一下，问题自动又发出去了，不用手动点重试。
+   */
+  async reloginAndRetry(question: string, aiId: string) {
+    wx.showLoading({ title: '正在登录…', mask: false });
+    try {
+      const ok = await ensureLogin();
+      wx.hideLoading();
+      if (!ok) {
+        wx.showToast({ title: '登录失败，请稍后重试', icon: 'none' });
+        return;
+      }
+      // 丢掉那条失败气泡，重新发一次
+      this.setData({
+        chatMessages: this.data.chatMessages.filter((m: ChatMsg) => m._id !== aiId),
+        copyIdx: -1,
+      });
+      this.sendWith(question);
+    } catch {
+      wx.hideLoading();
+      wx.showToast({ title: '登录失败，请稍后重试', icon: 'none' });
+    }
   },
 
   /**
@@ -263,7 +418,7 @@ Page({
       }
     }
     if (!question) return;
-    this.setData({ chatMessages: msgs.slice(0, idx) });
+    this.setData({ chatMessages: msgs.slice(0, idx), copyIdx: -1 });
     this.sendWith(question);
   },
 
@@ -271,7 +426,10 @@ Page({
   onDropMsg(e: any) {
     const idx = Number(e.currentTarget.dataset.idx);
     if (Number.isNaN(idx)) return;
-    this.setData({ chatMessages: this.data.chatMessages.filter((_: ChatMsg, i: number) => i !== idx) });
+    this.setData({
+      chatMessages: this.data.chatMessages.filter((_: ChatMsg, i: number) => i !== idx),
+      copyIdx: -1,
+    });
   },
 
   /** 切换 AI 长消息展开/收起 */
@@ -288,6 +446,9 @@ Page({
    */
   scrollToBottom() {
     this.setData({ scrollIntoId: '' });
-    setTimeout(() => this.setData({ scrollIntoId: 'msg-bottom' }), 30);
+    // 两次延时：载入历史会话时可能有几十条消息，首次 setData 后视图未必渲染完，
+    // 只设一次锚点会打空（表现为「停在顶部」）。第二次作为兜底补位。
+    setTimeout(() => this.setData({ scrollIntoId: 'msg-bottom' }), 50);
+    setTimeout(() => this.setData({ scrollIntoId: 'msg-bottom' }), 260);
   },
 });

@@ -1,43 +1,45 @@
-<!-- 欢迎页（启动页 / 非 tab 页，不显示 tabBar） -->
+<!-- 科豆 AI · 欢迎页（启动页，非 tab 页）
+     手动引入自定义 tabBar：本页是进入「发现 / 我的」的枢纽。
+     对话页才是沉浸式（隐藏 tabBar），其顶部返回 icon 回到本页。 -->
 <view class="page">
-  <view class="hero">
-    <view class="brand">
-      <view class="mark">科</view>
-      <text>科豆 AI · kedou-ai-minigram</text>
-    </view>
-    <view class="title">欢迎进入科豆 AI</view>
-    <view class="sub">科豆 AI · 体验不一样的 AI</view>
-  </view>
+  <view class="w-group">
+    <view class="w-hello">Hello<text class="dot">.</text></view>
+    <view class="w-sub">科豆 AI · 体验不一样的 AI</view>
 
-  <view class="main">
-    <view class="panel">今天想先做什么？</view>
-    <view class="desc">两个能力共用一个账号，数据各自独立</view>
-    <view class="entry">
-      <view class="e" bindtap="goTranslate">
-        <view class="ic ic-tr">译</view>
-        <view class="n">AI 翻译</view>
-        <view class="d">中英日德 · 得体表达</view>
-      </view>
-      <view class="e" bindtap="goAssess">
-        <view class="ic ic-as">同</view>
-        <view class="n">合同评估</view>
-        <view class="d">风险识别 · 条款解读</view>
+    <view class="w-quote">
+      <view class="k">今日一句</view>
+      <view class="cn">{{quote.cn}}</view>
+      <view class="en">{{quote.en}}</view>
+    </view>
+
+    <!-- 最近对话 · 加载中：骨架占位（尺寸对齐真实卡片，切换时不跳动） -->
+    <view wx:if="{{recentLoading}}" class="w-recent">
+      <view class="wr-t">最近对话</view>
+      <view class="wr-item">
+        <view class="sk sk-t"></view>
+        <view class="sk sk-c1"></view>
+        <view class="sk sk-c2"></view>
+        <view class="sk sk-m"></view>
       </view>
     </view>
-  </view>
 
-  <view class="recent">
-    <view class="sec-t">最近使用<text class="em">仅本机保留 30 天</text></view>
-    <view class="it" wx:for="{{recent}}" wx:key="id" bindtap="openRecent" data-type="{{item.type}}">
-      <text class="tag {{item.type === 'translate' ? 'tr' : 'as'}}">{{item.type === 'translate' ? '翻译' : '评估'}}</text>
-      <text class="tt">{{item.title}}</text>
-      <text class="tm">{{item.time}}</text>
+    <!-- 最近对话 · 加载完成：只展示最近一次会话的最近一条对话，点击进入并聚焦到最新一条 -->
+    <view wx:elif="{{recent}}" class="w-recent">
+      <view class="wr-t">最近对话</view>
+      <view class="wr-item" data-id="{{recent.id}}" bindtap="openConv">
+        <view class="wr-q">{{recent.title}}</view>
+        <view wx:if="{{recent.preview}}" class="wr-c">{{recent.preview}}</view>
+        <view class="wr-m">{{recent.timeText}}</view>
+      </view>
     </view>
-    <view class="empty" wx:if="{{recent.length === 0}}">暂无记录</view>
   </view>
 
-  <view class="foot">
-    <view class="btn-ghost" bindtap="goTranslate">进入主界面</view>
-    <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见</view>
+  <view class="w-foot">
+    <view class="btn" bindtap="startChat">开始对话</view>
+    <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
+已依法完成大模型与算法备案</view>
   </view>
 </view>
+
+<!-- 自定义 tabBar：非 tab 页框架不会自动注入，这里手动挂载 -->
+<custom-tab-bar id="tabbar" />

@@ -16,7 +16,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response, Request } from 'express';
-import { AgentRunner, AgentRegistry, ClientRegistry, StreamEvent } from '@kedouai/agent-core';
+import {
+  AgentRunner,
+  AgentRegistry,
+  ClientRegistry,
+  StreamEvent,
+  withCode,
+  classifyError,
+} from '@kedouai/agent-core';
 import { AgentRunDto } from './dto/agent-run.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionGuard, RequirePermission } from '@web-system/shared';
@@ -261,9 +268,11 @@ export class AgentController {
         }
       }
     } catch (error) {
-      const msg = (error as Error).message || 'Agent 运行失败';
+      const raw = (error as Error).message || 'Agent 运行失败';
+      // 带错误码下发：客户端按码查表给提示；技术原文照旧进 run 落库供排查
+      const msg = withCode(classifyError(error), raw);
       errorMessage = msg;
-      this.logger.error(`Agent run error: ${msg}`);
+      this.logger.error(`Agent run error: ${raw}`);
       const errPayload = JSON.stringify({ type: 'error', content: msg });
       res.write(`data: ${errPayload}\n\n`);
       steps.push({ type: 'error', content: msg, ts: Date.now() });

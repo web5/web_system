@@ -1,0 +1,29 @@
+<!-- 对话记录（由对话页导航栏「列表」icon 进入） -->
+<view class="page">
+  <!-- 加载中且还没有数据：骨架占位（首次进入 / 点击重试），避免一片空白 -->
+  <view wx:if="{{loading && !list.length}}" class="list">
+    <view wx:for="{{skeletonRows}}" wx:key="*this" class="row">
+      <view class="sk sk-t"></view>
+      <view class="sk sk-m"></view>
+    </view>
+  </view>
+
+  <view wx:if="{{list.length}}" class="list">
+    <view
+      wx:for="{{list}}"
+      wx:key="id"
+      class="row"
+      data-id="{{item.id}}"
+      bindtap="onTapConv"
+    >
+      <view class="row-t">{{item.title}}</view>
+      <view class="row-m">{{item.timeText}}</view>
+    </view>
+  </view>
+
+  <!-- 分页状态：加载中 / 没有更多 / 空列表 / 失败 -->
+  <view wx:if="{{loading && list.length}}" class="tip">加载中…</view>
+  <view wx:elif="{{!hasMore && list.length}}" class="tip">没有更多了</view>
+  <view wx:elif="{{!loading && !list.length && !error}}" class="empty">还没有对话记录</view>
+  <view wx:if="{{error}}" class="tip err" bindtap="loadMore">{{error}}</view>
+</view>
