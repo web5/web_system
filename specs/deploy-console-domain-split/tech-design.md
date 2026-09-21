@@ -1,5 +1,6 @@
 # 技术方案 · deploy-console 双域重构（微前端 / API 网关）
 
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 状态：**待评审**（2026-09-18）
 > 上游：`requirements.md` v1.1（需求·EARS） / `design.md` v2（模型·契约） / `page-spec.md` v1.3（页面） / `review-01-requirements.md`（Q101–Q112 确认）
 > 本文定位：**实现方案**（改哪些文件、关键算法、分期与验收），模型与契约以 `design.md` v2 为准，不重复
@@ -83,32 +84,45 @@
 | C | nginx 内部重写（指针落到 nginx 配置或符号链接） | 前端零感知 | 需 nginx 感知版本变化（reload 配置），运维复杂度高 |
 | D（兜底） | manifest 直接给**版本化 entry**（不做指针），切换版本后靠 `?env=` 绕过缓存 | 实现最简单 | 偏离 Q105-B 决策；manifest 缓存需更短 TTL |
 
-**P0 验证结论（2026-09-18，已验证 ✅）**：
+**P0 验证结论**：
 
 | 项 | 结果 |
 |---|---|
-| ESM 语义 | ✅ `export * from` 可透传 `mount` / `unmount` / `bootstrap` 命名导出 |
-| ⚠️ **发现** | ❌ **`export *` 不透传 `default`**（验证输出 `default: undefined`） |
-| loader 兼容性 | ✅ `shell-loader.resolveLifecycle` 按序尝试 ①`mod.default` → ②命名空间 `mod`（**命名导出**）→ ③`window.__MODULES__[name]` 全局兜底 → **命名导出路径可用** |
-| 产物导出形态 | ✅ 现有产物（`apps/admin/src/lifecycle.ts`）**同时**提供命名导出与 `export default { bootstrap, mount, unmount }` |
+| 指针语法 | ❌ 原生 ESM 的 `export * from` 在 **SystemJS 解析阶段**即抛 `Unexpected token 'export'`，文件体不执行 |
+| 连带影响 | loader 的 ③ `window.__MODULES__[name]` 全局兜底**同时失效**（指针没跑起来 → 产物未被加载），System / UMD 两条路径都失败，整模块白屏 |
+| ESM 语义（本架构不适用，仅备查） | `export *` 不透传 `default`（实测输出 `default: undefined`） |
+| 产物导出形态 | ✅ 现有产物（`apps/admin/src/lifecycle.ts`）**同时**提供命名导出与 `export default { bootstrap, mount, unmount }`（`preserveEntrySignatures: 'strict'` 保持开启） |
 
-**定稿：写法 A'（两行，命名导出 + default 都透传）**
+**定稿：写法 A′（System.register 版，命名导出 + default 双透传）**
 
 ```js
 // 发布时生成：/<appKey>/<envId>/index.js
-export * from './<version>/index.js';
-export { default } from './<version>/index.js';
+System.register(['./<version>/index.js'], function (_export) {
+  'use strict';
+  return {
+    setters: [function (m) { _export(m); }],
+    execute: function () {}
+  };
+});
 ```
 
-- **前提**：产物同时保留命名导出与 `default`（现有构建已满足，`preserveEntrySignatures` 需保持开启）
-- **兜底**：即使 re-export 失效，loader 的 ③（`window.__MODULES__`）仍可拿到 lifecycle（产物本体已被执行）
-- **复验点**：**P1 首次真实发布**时用**构建产物**（非手造文件）再验一次 → 纳入 V5 验收判据
+- **前提**：产物以 `MF_FORMAT=system` 构建（`scripts/deploy.sh` / `scripts/deploy-local.sh`），
+  `packages/shell-loader` 只走 `System.import()`（失败才回退 UMD 经典脚本）
+- **复验点**：用**真实发布产物**（非手造文件）在浏览器验证 ——
+  `await window.__LOADER__.preload(['portal','admin'])` 后 `debug().loaded` 含目标模块，
+  且 `typeof window.__MODULES__.<name>.mount === 'function'`
+- **关联约束**：env-dir 应用的**构建产品线段必须等于 envId**，否则「构建 base / 投递目录 / 指针目录」三者对不上 → `specs/app-artifact-env-dir/design.md`
 
-**实现落位（2026-09-18，P1）**：
-- 指针生成/读回/版本列举：`servers/deploy-console/src/apps/entry-pointer.ts`（单测 `entry-pointer.spec.ts` 锁定 A′ 两行写法）
-- 投递激活（写 `<key>/<envId>/<version>/` → 改指针 → 更新指针表）：`src/apps/app-artifact.service.ts`（单测 + `POST /api/apps/:key/publish` 端到端）
+**实现落位（P1）**：
+- 指针生成/读回/版本列举：`servers/deploy-console/src/apps/entry-pointer.ts`
+  （单测 `entry-pointer.spec.ts` 锁定写法；`readEnvEntryPointer` 兼容新旧两种指针）
+- 投递：**由流水线脚本按环境承担**（本机线 cp / dev 线 scp）；console 侧只有
+  `POST /api/apps/:key/switch`、`/:key/rollback` 负责改写指针（不重建产物）
 - 指针表：`deploy_app_env_versions`；磁盘指针：`<key>/<envId>/index.js`（`no-cache`）
 - 版本保留清理（T2）沿用既有 `ArtifactStoreService.cleanup`（5 版 / 最短 24h），P4 迁移时对齐 env 层级
+- **未接线**：发布成功后不自动切指针 —— `PointerExecutor` 只写旧表 `deploy_deployments`，
+  env-dir 指针需手动 `POST /api/apps/:key/switch`；与「产品线段须等于 envId」一并见
+  `specs/app-artifact-env-dir/design.md`
 
 ### 2.2 版本保留与清理（T2）
 
