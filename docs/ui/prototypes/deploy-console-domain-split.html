@@ -491,11 +491,11 @@
           </div>
         </div>
         <div class="dc-tabs">
+          <!-- 2026-09-21 对齐落地：原「环境」「部署」两 tab 合并为「环境与发布」一个（ServiceDetail.vue key=envs） -->
           <div class="t2 active" id="t-svc-1" onclick="pane('svc',1)">接口</div>
           <div class="t2" id="t-svc-2" onclick="pane('svc',2)">概览</div>
           <div class="t2" id="t-svc-3" onclick="pane('svc',3)">网关路由</div>
-          <div class="t2" id="t-svc-4" onclick="pane('svc',4)">环境</div>
-          <div class="t2" id="t-svc-5" onclick="pane('svc',5)">部署</div>
+          <div class="t2" id="t-svc-4" onclick="pane('svc',4)">环境与发布</div>
         </div>
         <div id="pane-svc-1">
           <div class="dc-card"><div class="ct">接口清单（方法 + 路径）</div>
@@ -542,29 +542,52 @@
           </div>
         </div>
         <div id="pane-svc-4" style="display:none;">
-          <div class="dc-card"><div class="ct">服务 × 环境</div>
+          <!-- 2026-09-21 对齐落地（ServiceDetail.vue key=envs）：表格列 + 三个行内动作 + 只读指向说明；
+               原「部署记录」屏已删 —— 控制台不再有独立「部署」动作，发布即落地（restart/verify 在流水线里） -->
+          <div class="dc-card"><div class="ct">环境与发布</div>
             <table>
-              <thead><tr><th>环境</th><th>运行时</th><th>目标主机</th><th>端口</th><th>副本</th><th>启用</th></tr></thead>
+              <thead><tr><th>环境</th><th>运行时</th><th>目标主机</th><th>端口</th><th>副本</th><th>上游覆盖</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
-                <tr><td class="dc-mono">local</td><td>pm2</td><td class="dc-mono">server-local</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">dev</td><td>pm2</td><td class="dc-mono">server-dev</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">prod</td><td>pm2</td><td class="dc-mono">server-prod</td><td class="dc-mono dc-num">6101</td><td class="dc-num">2</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr>
+                  <td><span class="dc-mono">local</span> <span class="dc-muted">本地环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-local</span><div class="dc-muted dc-mono">127.0.0.1:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → local → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-local:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">dev</span> <span class="dc-muted">开发环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-dev</span><div class="dc-muted dc-mono">10.0.0.12:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
+                  <td class="dc-mono">http://10.0.0.12:6101</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → dev → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-dev:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">prod</span> <span class="dc-muted">生产环境</span> <span class="dc-badge primary">生产</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-prod</span><div class="dc-muted dc-mono">10.0.1.20:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">2</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → prod → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-prod:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">qa</span> <span class="dc-muted">测试环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td class="dc-muted">—</td>
+                  <td class="dc-muted">必填</td><td class="dc-num">1</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge neutral">未配置</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer()">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → qa → 后端服务指向')">配置指向</button><button class="dc-btn link" style="opacity:.4;cursor:not-allowed" onclick="toast('未配置主机组或端口，探活会 fail-fast（不回落本机）')">探活</button></td>
+                </tr>
               </tbody>
             </table>
-            <div class="dc-muted" style="margin-top:8px;">后端服务的环境是"部署到哪里"（host/port），与微前端的加载环境是两套概念。</div>
-          </div>
-        </div>
-        <div id="pane-svc-5" style="display:none;">
-          <div class="dc-card"><div class="ct">部署记录</div>
-            <table>
-              <thead><tr><th>环境</th><th>版本</th><th>发布时间</th><th>健康</th><th>运行时实例</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td class="dc-mono">local</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:04</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-17 19:45</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">9f3d21</td><td class="dc-num">09-15 12:22</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-              </tbody>
-            </table>
-            <div class="dc-muted" style="margin-top:8px;">服务发布必走「构建 → 上传 → 重启 → 探活」，探活失败即判失败（FR-8.2）。</div>
+            <div class="dc-muted" style="margin-top:10px;">各环境「指向」（主机组 / 端口 / 上游 / 运行时）为<b>只读</b>，统一在<a onclick="toast('[原型] 跳转：环境管理 → 环境详情 → 后端服务指向')">环境管理 → 环境详情 → 后端服务指向</a>内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。<br>
+              <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/ verify（探活通过后切指针）直接生效 —— <b>流水线跑完即上线</b>，控制台不再有单独的部署动作。</div>
           </div>
         </div>
       </div>
@@ -1176,8 +1199,9 @@ body{background:#e8ecf1;}
     {key:'dashboard', label:'仪表盘',     items:[{page:'dashboard',label:'仪表盘',id:'nav-dashboard'}]},
     {key:'apps',      label:'微前端',     items:[{page:'apps',label:'应用管理',id:'nav-apps'},{page:'envs',label:'环境管理',id:'nav-envs'},
                                                  {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('apps')"}]},
-    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'},
-                                                 {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('svcs')"}]},
+    // 2026-09-21 对齐落地（MainLayout.vue）：API 网关域**只有「服务管理」** ——
+    // 「版本部署」（选已有版本直接部署）只挂在**微前端**域（/deploys/micro）
+    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'}]},
     {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},
                                                   {page:'generic',title:'灰度管理',label:'灰度管理'},
                                                   {page:'generic',title:'自助诊断',label:'自助诊断'},
