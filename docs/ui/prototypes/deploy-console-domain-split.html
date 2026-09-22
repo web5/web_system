@@ -261,7 +261,9 @@
   <h1>deploy-console 双域重构 · 交互原型 v4</h1>
   <div class="sub">
     上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：<s>微前端/API 网关双域各挂入口</s> → <b>2026-09-21 对齐落地：只挂微前端域 <code>/deploys/micro</code></b>，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
-    下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。
+    下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。<br>
+    2026-09-22 新增屏：<b>流水线详情 · 执行流程</b>（紧凑步骤卡 + 任务行连线 + skipped 灰色，用户 2026-09-22 标注）——
+    <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button>
   </div>
 </div>
 
@@ -705,6 +707,63 @@
     </div>
 
       <!-- 通用模块（按一级域动态渲染交互骨架：工具栏 + 列表 + 行操作） -->
+      <!-- 流水线详情 · 执行流程（2026-09-22 新增屏：紧凑步骤卡 + 任务行连线 + skipped 灰色；
+           交互与编辑页同构 —— 上排步骤卡不连线，下排任务卡箭头串联 + 多任务分叉） -->
+      <div class="screen" id="dc-rundetail">
+        <div class="dc-crumb"><a onclick="dc('pipelines','流水线列表')">流水线列表</a> / <b>gateway 发布</b> / 执行流程</div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>gateway 发布 <span class="dc-badge neutral" style="margin-left:6px;">免审批</span></h1>
+              <div class="sub">流水线详情 · 执行流程（只读画布 · 与编辑页同构的两行结构）</div></div>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-tabs" style="border-bottom:1px solid var(--border);">
+            <div class="t2 active">执行流程</div><div class="t2" style="color:var(--text-3)">历史记录</div>
+            <div class="t2" style="color:var(--text-3)">参数</div><div class="t2" style="color:var(--text-3)">变量</div>
+          </div>
+          <div class="dc-row" style="margin:12px 0;">
+            <span class="dc-mono">#5095-xbgvrqq</span>
+            <span class="dc-badge ok">成功</span>
+            <span class="dc-muted">local / gateway · feature/deploy-console-domain-split@f952534 · ci:cli-verify</span>
+          </div>
+          <div class="run-canvas" id="runCanvas">
+            <svg class="run-wires" id="runWires"></svg>
+            <div class="run-row">
+              <div class="run-col"><div class="run-step st-ok"><span class="seq">1</span><span class="nm">拉取代码</span><span class="cmd">命令</span></div></div>
+              <div class="run-col"><div class="run-step st-ok"><span class="seq">2</span><span class="nm">构建</span><span class="cmd">命令</span></div></div>
+              <div class="run-col"><div class="run-step st-ok"><span class="seq">3</span><span class="nm">发布确认</span><span class="cmd">命令</span></div></div>
+              <div class="run-col"><div class="run-step st-ok"><span class="seq">4</span><span class="nm">发布</span><span class="cmd">命令</span></div></div>
+            </div>
+            <div class="run-row">
+              <div class="run-col"><div class="run-task st-ok"><span class="tn">git</span><span class="ts">完成</span></div></div>
+              <div class="run-col"><div class="run-task st-ok"><span class="tn">build</span><span class="ts">完成</span></div></div>
+              <div class="run-col"><div class="run-task st-ok"><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div></div>
+              <div class="run-col">
+                <div class="run-task st-ok"><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
+                <div class="run-task st-skip"><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="run-legend">
+            <span class="dot" style="background:#398E4A"></span>完成
+            <span class="dot" style="background:var(--primary)"></span>执行中
+            <span class="dot" style="background:var(--danger)"></span>失败
+            <span class="dot" style="background:#f5a623"></span>待审批
+            <span class="dot skip"></span>跳过（灰）
+            <span class="dot plain"></span>未执行
+            <span class="dc-muted" style="margin-left:10px;">dev 未被执行（条件不满足）→ 按「跳过 = 灰色」表达，不复用成功色</span>
+          </div>
+        </div>
+        <div class="dc-muted" style="margin-top:10px;">
+          说明（2026-09-22）：本屏为「流水线详情 · 执行流程」新交互稿 ——
+          ① 步骤卡紧凑化（seq / 名称 / 命令，高度 ≈ 任务卡 2 倍，字号 12px）；
+          ② 连线 = 任务行 SVG 测量（主线在前一列任务中线、列间分叉、箭头指向每个任务中线），与编辑页同构；
+          ③ skipped（未被执行）用**灰色**，不再复用成功色。
+          确认后按此落码 <code>apps/deploy-console/src/components/pipeline/ProgressFlow.vue</code>。
+        </div>
+      </div>
+
       <div class="screen" id="dc-generic">
         <div class="dc-page-head">
           <div class="dc-row">
@@ -979,6 +1038,35 @@
     color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;z-index:95;opacity:0;
     pointer-events:none;transition:opacity .2s;}
   .toast.show{opacity:1;}
+  /* ===== 流水线详情 · 执行流程（run-*，2026-09-22 新增屏） ===== */
+  .run-canvas{position:relative;overflow-x:auto;padding:10px 6px;}
+  .run-wires{position:absolute;top:0;left:0;pointer-events:none;}
+  .run-row{display:flex;align-items:flex-start;gap:44px;padding:4px 8px;position:relative;}
+  .run-col{display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:104px;}
+  /* 步骤卡：紧凑（seq / 名称 / 命令，两行，字号 12px —— 用户反馈「标题太大，不协调」） */
+  .run-step{display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 10px;min-width:96px;
+    border:1.5px solid var(--border);border-radius:4px;background:var(--card);cursor:pointer;}
+  .run-step .seq{font-size:10px;color:var(--text-3);font-family:var(--mono);}
+  .run-step .nm{font-size:12px;font-weight:600;color:var(--text);}
+  .run-step .cmd{font-size:10px;line-height:14px;color:var(--primary);}
+  /* 任务卡：单行小卡 */
+  .run-task{display:flex;align-items:center;gap:6px;width:100%;padding:3px 8px;
+    border:1px solid var(--border);border-radius:3px;background:var(--card);font-size:11px;}
+  .run-task .tn{color:var(--text-2);}
+  .run-task .ts{color:var(--text-3);margin-left:auto;}
+  .run-task .tagc{font-size:9px;line-height:14px;padding:0 4px;border:1px solid var(--border);border-radius:3px;color:var(--primary);}
+  /* 状态色：完成=绿；跳过（未执行）=**灰**（2026-09-22 用户反馈：dev 没执行应该是灰色） */
+  .run-step.st-ok,.run-task.st-ok{border-color:#398E4A;background:#E7F5EC;}
+  .run-step.st-ok .nm,.run-task.st-ok .tn{color:#398E4A;}
+  .run-task.st-skip{border-color:var(--border);background:var(--bg);opacity:.85;}
+  .run-task.st-skip .tn,.run-task.st-skip .ts{color:var(--text-3);}
+  .run-legend{display:flex;align-items:center;gap:5px;margin-top:14px;padding-top:10px;
+    border-top:1px dashed var(--border);font-size:11px;color:var(--text-3);flex-wrap:wrap;}
+  .run-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:8px;}
+  .run-legend .dot.skip{background:var(--bg);border:1px dashed var(--border);}
+  .run-legend .dot.plain{background:var(--card);border:1px solid var(--border);}
+
+
 
 /* ===== 流水线编排（步骤/任务画布，来自 pipeline-env-branch-canvas v7） ===== */
 /* 全局亮色 token（整稿默认亮色；画布/抽屉/弹窗统一引用） */
@@ -1196,7 +1284,7 @@ body{background:#e8ecf1;}
 <script>
   /* ===== 控制台：菜单 + 屏切换 ===== */
   var DC_TITLE = {"apps":"应用管理","envs":"环境管理","services":"服务管理","hosts":"主机管理",
-                  "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署"};
+                  "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署","rundetail":"流水线详情"};
   var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
                 "pipelines":"nav-pipelines","dashboard":"nav-dashboard","vdeploy":"nav-vdeploy"};
   /* 两级导航：一级（顶部）→ 二级（左侧，动态渲染） */
@@ -1207,7 +1295,7 @@ body{background:#e8ecf1;}
     // 2026-09-21 对齐落地（MainLayout.vue）：API 网关域**只有「服务管理」** ——
     // 「版本部署」（选已有版本直接部署）只挂在**微前端**域（/deploys/micro）
     {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'}]},
-    {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},
+    {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},{page:'rundetail',label:'流水线详情'},
                                                   {page:'generic',title:'灰度管理',label:'灰度管理'},
                                                   {page:'generic',title:'自助诊断',label:'自助诊断'},
                                                   {page:'generic',title:'工具目录',label:'工具目录'}]},
@@ -1220,7 +1308,7 @@ body{background:#e8ecf1;}
   ];
   /* 页面 → 所属一级（顶部 tab 高亮） */
   var DC_PAGE_DOMAIN = {"dashboard":"dashboard","apps":"apps","envs":"apps","appdetail":"apps",
-                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","hosts":"infra"};
+                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","rundetail":"pl","hosts":"infra"};
   function dcFindDomain(key){ for(var i=0;i<DC_MENU.length;i++){ if(DC_MENU[i].key===key) return DC_MENU[i]; } return null; }
   /* 渲染左侧二级菜单（跟随顶部一级） */
   function renderSide(domain){
@@ -1327,6 +1415,7 @@ body{background:#e8ecf1;}
     }
     // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
     if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
+    if(page === 'rundetail'){ setTimeout(drawRunWires, 30); setTimeout(drawRunWires, 200); }
   }
   function pane(scope, n){
     var map = {app:4, svc:5};
@@ -1453,6 +1542,47 @@ body{background:#e8ecf1;}
     closeSubmitDrawer();
     toast('已提交：auth-service → dev（流水线 auth-service 发布）');
   }
+
+  /* ===== 流水线详情 · 执行流程：SVG 测量连线（与编辑页 drawWires 同构） ===== */
+  function runSeg(svg,x1,y1,x2,y2,ok){
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
+    p.setAttribute('stroke-width','2.5'); p.setAttribute('fill','none');
+    p.style.stroke = ok ? '#398E4A' : 'var(--border)';
+    svg.appendChild(p);
+  }
+  function runChev(svg,x,y,ok){
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d','M'+(x-9)+' '+(y-8)+' L'+x+' '+y+' L'+(x-9)+' '+(y+8));
+    p.setAttribute('stroke-width','3'); p.setAttribute('fill','none');
+    p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round');
+    p.style.stroke = ok ? '#398E4A' : 'var(--border)';
+    svg.appendChild(p);
+  }
+  function drawRunWires(){
+    var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
+    if(!cv||!svg) return;
+    var rows=cv.querySelectorAll('.run-row'); var taskRow=rows[1];
+    if(!taskRow) return;
+    var cols=[].slice.call(taskRow.querySelectorAll('.run-col'));
+    var wr=cv.getBoundingClientRect();
+    svg.setAttribute('width',Math.ceil(cv.scrollWidth)); svg.setAttribute('height',Math.ceil(cv.scrollHeight));
+    svg.innerHTML='';
+    for(var i=0;i<cols.length-1;i++){
+      var ft=cols[i].querySelectorAll('.run-task'); var tt=cols[i+1].querySelectorAll('.run-task');
+      if(!ft.length||!tt.length) continue;
+      var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
+      var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2; var ok=true;
+      runSeg(svg,f.r,f.cy,mx,f.cy,ok);
+      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,ok); runChev(svg,t0.l,f.cy,ok); }
+      else{
+        var ys=[].map.call(tt,function(t){return ctr(t).cy;});
+        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),ok);
+        [].forEach.call(tt,function(t){var c=ctr(t);runSeg(svg,mx,c.cy,c.l,c.cy,ok);runChev(svg,c.l,c.cy,ok);});
+      }
+    }
+  }
+
   function submitApp(){
     var v = document.getElementById('in-key').value.trim();
     if(v === 'admin' || v === 'portal' || v === 'shell'){
