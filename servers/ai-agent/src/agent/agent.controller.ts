@@ -14,6 +14,7 @@ import {
   HttpStatus,
   NotFoundException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response, Request } from 'express';
@@ -34,6 +35,7 @@ import { AgentConversationQueryService } from './agent-conversation-query.servic
 import { ListConversationsDto } from './dto/conversation-query.dto';
 import { ContractConversationService } from '../contract/contract-conversation.service';
 import { IntentService } from './intent/intent.service';
+import { PostRunHook, POST_RUN_HOOKS } from './post-run-hook';
 
 @ApiTags('AI Agent')
 @Controller('agent')
@@ -50,6 +52,7 @@ export class AgentController {
     private readonly contractConversationService: ContractConversationService,
     private readonly conversationQueryService: AgentConversationQueryService,
     private readonly intentService: IntentService,
+    @Inject(POST_RUN_HOOKS) private readonly postRunHooks: PostRunHook[],
   ) {}
 
   /**
@@ -310,6 +313,22 @@ export class AgentController {
     }
 
     res.end();
+
+    // 对话结束后置钩子（fire-and-forget，不阻塞响应）：用户记忆更新等插件
+    for (const hook of this.postRunHooks) {
+      hook
+        .trigger({
+          userId,
+          conversationId: conversationIdFromEngine,
+          userInput: dto.userInput,
+          finalAnswer,
+          steps,
+          source: dto.source === 'tool' ? 'tool' : 'chat',
+        })
+        .catch(() => {
+          /* 后置钩子失败不影响对话结果 */
+        });
+    }
 
     // 工具页（翻译 / 合同评估）产生的会话标记 source='tool' → 不出现在主对话记录列表
     if (dto.source === 'tool' && conversationIdFromEngine) {

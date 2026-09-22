@@ -83,6 +83,9 @@ input,textarea{font:inherit;color:inherit}
 .tag.brand{background:var(--brand-weak);color:var(--brand-strong)}
 .chip{height:28px;padding:0 12px;border-radius:14px;border:1px solid var(--line-strong);background:var(--card);font-size:13px;color:var(--t2)}
 .chip.on{border-color:var(--brand);background:var(--brand-weak);color:var(--brand-strong);font-weight:500}
+.chip.bad{border-color:var(--danger);background:var(--hi-bg);color:var(--hi-fg);font-weight:500}
+.inp{height:32px;flex:1;min-width:0;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--card);font-size:13px;color:var(--t1)}
+.inp:focus{border-color:var(--brand);outline:none}
 .ico{width:16px;height:16px;flex:0 0 16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .ico.lg{width:20px;height:20px;flex:0 0 20px}
 /* ── 对话：结构化回答排版（v2 · 2026-09-21 重设：AI 去气泡，靠排版分层） ── */
@@ -134,6 +137,13 @@ input,textarea{font:inherit;color:inherit}
 .ans .copybox{margin:0 0 16px;border:1px solid var(--brand-line);border-radius:var(--r-md);background:var(--brand-weak);overflow:hidden}
 .ans .copybox .hd{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--brand-line);font-size:12px;font-weight:600;color:var(--brand-strong)}
 .ans .copybox .bd{padding:16px;font-size:14px;line-height:1.85;color:var(--t1);white-space:pre-wrap}
+/* markdown 代码块（``` 围栏）：弱底等宽块，头行 = 语言标签 + 复制；长行横向滚动不换行 */
+.ans .codeblk{margin:0 0 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--page-bg);overflow:hidden}
+.ans .codeblk .hd{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--t3)}
+.ans .codeblk .hd b{font-weight:600;color:var(--t2);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.ans .codeblk .hd .cp{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)}
+.ans .codeblk .hd .cp:hover{color:var(--brand-strong)}
+.ans .codeblk pre{margin:0;padding:12px 16px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.7;color:var(--t1);white-space:pre}
 /* 来源 / 下一步建议 */
 .srcs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 .src{display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 12px;border:1px solid var(--brand-line);background:var(--card);border-radius:12px;font-size:12px;color:var(--brand-strong)}
@@ -355,6 +365,7 @@ input,textarea{font:inherit;color:inherit}
     <button id="pf" onclick="toggle('error')">错误态</button>
     <button onclick="demo('tcard')">翻译卡片</button>
     <button onclick="demo('mcard')">音乐卡片</button>
+    <button onclick="demo('code')">代码块</button>
     <button onclick="resetAll()">重置</button>
   </div>
   <button onclick="document.getElementById('protoBar').classList.toggle('open')">说明 ▲</button>
@@ -364,7 +375,9 @@ input,textarea{font:inherit;color:inherit}
   <b style="color:var(--brand)">对话排版 v2（2026-09-21）：</b>AI 侧去气泡，改为<b>结构化回答</b>（结论先行 / 小标题 / 有序列表 / 法条引用 / 对比表 / 可复制文案 / 来源 chip / 下一步建议）；用户侧保留<b>唯一气泡</b>形态；消息流限宽 720、轮内 16 / 轮间 32、操作条固定占位。<br>
   <b style="color:var(--brand)">P1 落码范围：</b>发现 / 翻译 / 合翻三页为<b>占位态</b>（顶栏可达、不留死链），页面内容 P2 / P3 填充。<br>
   <b style="color:var(--brand)">P1 补充（2026-09-21 确认）：</b>开始页为公开页，未登录点「开始对话」弹登录 / 注册弹窗（复用 LoginPanel）；会话删除补后端 DELETE /agent/conversations/:id。<br>
-  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>日期分隔线<b>仅跨天会话显示</b>（单天会话无线——「今天」线是冗余），跨天时放消息组末尾标注最后活动日期（今天 / 昨天 / MM-DD）。<br>
+  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>日期分隔线<b>只在有日期 gap 处显示</b>且标注<b>具体日期</b>（如「9月21日」，不用「今天/昨天」相对词）——相邻消息跨天时在边界插一条线；单天会话无线、最后一轮末尾也无线。原型演示数据同天，故无跨天线。<br>
+  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>「我的」页新增<b>AI 记忆</b>分组（音乐口味 / 用户记忆）+ 「我的数据」新增<b>生词本</b>，各带二级页（口味标签 + 手动补充 + 清空；记忆按分类分组 + 单条删除；生词本卡片 + 单条移出 + <b>复制 / 朗读</b>）——对齐小程序 p-taste / p-memory / p-glossary，后端 user-service 已就绪。<br>
+  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>普通对话 AI 最终结果<b>支持语音朗读</b>（操作条加「朗读」）；<b>思考内容不播</b>——只读最终正文。<b>朗读走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色）</b>，替代浏览器 Web Speech；翻译卡朗读同走后端 TTS、音乐卡不播。按钮三态：合成中「请稍候…」→ 播放中「停止」→ 结束复位「朗读」。<br>
   <b style="color:var(--brand)">已拍板（2026-09-21）：</b><b>Q9</b> 长回答<b>折叠</b>（PC 5 行 ≈ 220 字，文案「展开更多 ▼ / 收起 ▲」，卡片不折叠）；识别为<b>翻译</b>→ 翻译卡片（推荐译文 + 方向 + 注解折叠 + 复制/朗读/收藏），识别为<b>音乐</b>→ 音乐卡片（歌单 + 换一批 / 不感兴趣 / 去渠道听）——均对齐小程序。<b>Q10</b> 对话侧<b>不做来源 / 查看原文</b>（合翻报告侧保留原文联动）。<br>
   <b style="color:var(--brand)">已拍板：</b><b>Q11</b> PDF / Word 解析<b>本轮不支持</b>——合翻上传仅<b>图片 OCR + 粘贴文本</b>（对齐小程序）。<br>
   <b style="color:var(--brand)">待确认：</b>Q1 原文定位字段 · Q2 上传方式 · Q3 能力数据源 · Q4 会话隔离 · Q5 会员占位 · Q6 实验室去留 · Q7 每日一句数据来源 · Q8 长文本识别</div>
@@ -380,6 +393,7 @@ const I = {
   lang:'<path d="M4 5h11"/><path d="M9 3v2c0 4-2.5 7-5 8"/><path d="M6.5 10c0 3 2 6 5.5 7"/><path d="M13 20l4-9 4 9"/><path d="M14.5 16.5h5"/>',
   doc:'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>',
   copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>',
+  vol:'<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/>',
   check:'<path d="M20 6L9 17l-5-5"/>',
   warn:'<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   right:'<path d="M9 18l6-6-6-6"/>',
@@ -417,6 +431,8 @@ const S = {
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
   exp:{}, cardOpen:{},
   sending:false, msgs:null,
+  /* 我的：AI 记忆 + 生词本二级页（对齐小程序 p-taste / p-memory / p-glossary） */
+  profileTab:'main',
   mode:{loading:false, empty:false, error:false}
 };
 
@@ -546,6 +562,7 @@ function renderBlocks(bs){
     if(b.t==='h') return '<h4>'+esc(b.v)+'</h4>';
     if(b.t==='ol') return '<ol>'+b.items.map((it,i)=>'<li><span class="n">'+(i+1)+'</span><span>'+it+'</span></li>').join('')+'</ol>';
     if(b.t==='law') return '<div class="law"><b>'+esc(b.src)+'</b>'+b.v+'</div>';
+    if(b.t==='code') return '<div class="codeblk"><div class="hd"><b>'+esc(b.lang||'code')+'</b><button class="cp" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button></div><pre>'+esc(b.v)+'</pre></div>';
     if(b.t==='cmp') return '<table class="cmp"><thead><tr>'+b.head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
       b.rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td class="v">'+esc(r[1])+'</td><td>'+esc(r[2])+'</td></tr>').join('')+'</tbody></table>';
     if(b.t==='copybox') return '<div class="copybox"><div class="hd"><span>'+esc(b.title)+'</span><span style="flex:1"></span>'+
@@ -585,9 +602,11 @@ function msgMe(m){
 function foldCut(bs){
   let n=0, out=[];
   for(const b of bs){
-    out.push(b);
     const len=(b.v?String(b.v).replace(/<[^>]+>/g,'').length:0)+((b.items||[]).join('').length);
-    if(b.t==='p'||b.t==='ol'||b.t==='law') n+=len;
+    // 超长代码块不进折叠预览（整块不可切，防折叠态吞屏）；展开后完整可见
+    if(b.t==='code' && len>90) break;
+    out.push(b);
+    if(b.t==='p'||b.t==='ol'||b.t==='law'||b.t==='code') n+=len;
     if(n>=90) break;
   }
   return out;
@@ -596,7 +615,8 @@ function msgAi(m){
   const bs = m.blocks||[];
   const hasCard = bs.some(b=>b.t==='tcard'||b.t==='mcard');
   // Q9 拍板：长回答折叠（卡片不折叠，与小程序一致）；阈值 PC 160 字（按块截断 + 渐隐）
-  const plainLen = bs.filter(b=>b.t==='p').map(b=>b.v).join('').length;
+  // 折叠触发与截断同源：p + code 计长（代码块长度参与触发判定）
+  const plainLen = bs.filter(b=>b.t==='p'||b.t==='code').map(b=>String(b.v).replace(/<[^>]+>/g,'')).join('').length;
   const fold = !hasCard && bs.length>2 && plainLen>160;
   const open = !!S.exp[m.id];
   // AI 回答整体收进浅暖底色块（acard）：元信息在块内首行，正文结构化排版，折叠按钮在块内底部
@@ -609,6 +629,7 @@ function msgAi(m){
     '</div>'+
     '<div class="acts">'+
     '<button onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
+    (hasCard?'':'<button onclick="toast(\'已开始朗读 AI 最终结果（思考内容不播）\')">'+SVG(I.vol)+'朗读</button>')+
     '<button onclick="toast(\'已重新生成\')">重新生成</button></div></div></div>';
 }
 /* 一轮 = 一条用户消息 + 紧随其后的 AI 回答（连续追问的追加回答归同一轮） */
@@ -620,9 +641,9 @@ function renderTurns(msgs){
   return html;
 }
 function chatComposer(){
-  return '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，⌘Enter 发送"></textarea>'+
+  return '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，Enter 发送"></textarea>'+
     '<div class="crow"><button class="btn ghost sm" title="上传合同 / 图片（P2 支持）" onclick="toast(\'上传文件：P2 支持\')">'+SVG(I.up)+'附件</button>'+
-    '<span class="hint">⌘Enter 发送 · ⌘K 命令面板</span><span class="spacer"></span>'+
+    '<span class="hint">Enter 发送 · Shift+Enter 换行</span><span class="spacer"></span>'+
     (S.sending?'<button class="btn sm" onclick="stopGen()">停止</button>':'<button class="btn sm pri" onclick="send(document.getElementById(\'ta\').value)">'+SVG(I.arrow)+'发送</button>')+
     '</div></div></div>';
 }
@@ -866,6 +887,9 @@ function workContract(){
 }
 
 function workProfile(){
+  if(S.profileTab==='taste') return workTaste();
+  if(S.profileTab==='memory') return workMemory();
+  if(S.profileTab==='glossary') return workGlossary();
   return hd('我的', '<span class="tag">个人账号</span>', '') + '<div class="pane">'+
     '<div class="card" style="padding:20px;display:flex;align-items:center;gap:16px;margin-bottom:24px">'+
       '<div style="width:56px;height:56px;border-radius:50%;background:var(--brand-weak);color:var(--brand-strong);display:grid;place-items:center;font-size:20px;font-weight:600">李</div>'+
@@ -875,18 +899,75 @@ function workProfile(){
       '<span style="color:var(--brand-strong);display:grid;place-items:center">'+SVG(I.spark,1)+'</span>'+
       '<div style="flex:1"><div style="font-size:14px;font-weight:600">科豆专业版</div><div style="font-size:12px;color:var(--t3)">更高额度与专属能力 · 会员功能开发中</div></div>'+
       '<button class="btn sm" onclick="toast(\'会员功能开发中，敬请期待\')">了解详情</button></div>'+
+    '<div class="sec"><h3>AI 记忆</h3><div class="rows">'+
+      row(I.spark,'音乐口味','已记录 4 个口味',null,"S.profileTab='taste';render()")+
+      row(I.user,'用户记忆','3 条',null,"S.profileTab='memory';render()")+'</div></div>'+
     '<div class="sec"><h3>应用设置</h3><div class="rows">'+
       row(I.lang,'翻译偏好','默认 中 → 英 · 商务正式')+row(I.doc,'合同体检偏好','严格度 标准 · 中国大陆法域')+'</div></div>'+
     '<div class="sec"><h3>通用</h3><div class="rows">'+
       row(I.clock,'通知','开启')+row(I.inbox,'清除缓存','12.4 MB','clear')+'</div></div>'+
     '<div class="sec"><h3>我的数据</h3><div class="rows">'+
+      row(I.doc,'生词本','2 条',null,"S.profileTab='glossary';render()")+
       row(I.chat,'对话记录','36 条')+row(I.lang,'翻译记录','12 条')+row(I.doc,'体检记录','4 份')+'</div></div>'+
     '<div class="sec"><h3>其他</h3><div class="rows">'+
       row(I.shield,'用户协议与隐私政策','')+row(I.warn,'退出登录','',true)+'</div></div></div>';
 }
-function row(ic,t,v,danger){
-  const act = danger===true ? 'confirmExit()' : danger==='clear' ? 'confirmClear()' : "toast('"+t+"')";
+function row(ic,t,v,danger,action){
+  const act = action || (danger===true ? 'confirmExit()' : danger==='clear' ? 'confirmClear()' : "toast('"+t+"')");
   return '<div class="row" onclick="'+act+'">'+SVG(ic)+'<div class="t">'+t+'</div><div class="v">'+v+'</div>'+SVG(I.right)+'</div>';
+}
+/* ── 我的：AI 记忆 + 生词本（对齐小程序 p-taste / p-memory / p-glossary） ── */
+const TASTE_DATA = { likes:['轻音乐','钢琴','民谣'], dislikes:['重金属'] };
+const MEMORY_DATA = [
+  {id:1, cat:'偏好', v:'喜欢节奏舒缓的轻音乐，适合写代码时听'},
+  {id:2, cat:'事实', v:'正在租房，合同涉及租金逐年递增条款'},
+  {id:3, cat:'习惯', v:'工作日晚 10 点后处理合同与翻译事务'},
+];
+const GLOSSARY_DATA = [
+  {id:1, en:'We would like to discuss this quote a bit further.', src:'这个报价我们再商量商量。', note:'直译对照：We will discuss this quotation again.', meta:'正式 · 中文→英语'},
+  {id:2, en:'Could you confirm as soon as possible?', src:'麻烦尽快确认一下。', note:'委婉版：We would appreciate your prompt confirmation.', meta:'商务 · 中文→英语'},
+];
+function backProfile(){ S.profileTab='main'; render(); }
+function workTaste(){
+  return hd('音乐口味', '<span class="tag">AI 记忆</span>', '<button class="btn" onclick="backProfile()">'+SVG(I.left)+'返回</button>')+
+  '<div class="pane">'+
+    '<div class="thinkbar">'+SVG(I.spark)+'AI 自动归类 · 红色为不想听</div>'+
+    '<div class="card" style="padding:20px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">'+
+        TASTE_DATA.likes.map(t=>'<span class="chip on" style="cursor:default">'+esc(t)+'<button class="btn ghost sm" style="margin-left:4px" onclick="toast(\'已移除口味 '+esc(t)+'\')">'+SVG(I.x)+'</button></span>').join('')+
+        TASTE_DATA.dislikes.map(t=>'<span class="chip bad" style="cursor:default">不想听 '+esc(t)+'<button class="btn ghost sm" style="margin-left:4px" onclick="toast(\'已移除口味 '+esc(t)+'\')">'+SVG(I.x)+'</button></span>').join('')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:16px">'+
+        '<input class="inp" placeholder="手动补充口味（≤12 字）" style="flex:1" onkeydown="if(event.key===\'Enter\')toast(\'已添加口味\')">'+
+        '<button class="btn sm" onclick="toast(\'已添加口味\')">添加</button></div>'+
+      '<button class="btn sm" style="color:var(--danger)" onclick="toast(\'已清空口味记忆\')">清空口味记忆</button>'+
+    '</div></div>';
+}
+function workMemory(){
+  const groups = ['事实','偏好','习惯'].map(cat=>({cat, items: MEMORY_DATA.filter(m=>m.cat===cat)}));
+  return hd('用户记忆', '<span class="tag">AI 记忆</span>', '<button class="btn" onclick="backProfile()">'+SVG(I.left)+'返回</button>')+
+  '<div class="pane">'+
+    '<div class="thinkbar">'+SVG(I.spark)+'AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，可单条删除</div>'+
+    groups.map(g=>g.items.length?'<div class="sec"><h3>'+g.cat+' <em style="font-style:normal;color:var(--t3);font-weight:400">'+g.items.length+' 条</em></h3><div class="rows">'+
+      g.items.map(m=>'<div class="row" style="cursor:default"><div class="t" style="flex:1">'+esc(m.v)+'</div><button class="btn ghost sm" onclick="toast(\'已删除该记忆\')">'+SVG(I.x)+'</button></div>').join('')+
+    '</div></div>':'').join('')+
+    '<div class="claim">记忆由 AI 自动提炼，仅供本账号使用</div></div>';
+}
+function workGlossary(){
+  return hd('生词本', '<span class="tag">我的数据</span>', '<button class="btn" onclick="backProfile()">'+SVG(I.left)+'返回</button>')+
+  '<div class="pane">'+
+    '<div class="thinkbar">'+SVG(I.doc)+'你收藏的译文会一直保留在这里，即使原对话删除</div>'+
+    GLOSSARY_DATA.map(g=>'<div class="card" style="padding:16px;margin-bottom:8px;position:relative">'+
+      '<div style="font-size:16px;font-weight:600;line-height:1.6;margin-bottom:4px;padding-right:28px">'+esc(g.en)+'</div>'+
+      '<div style="font-size:13px;color:var(--t2)">'+esc(g.src)+'</div>'+
+      (g.note?'<div style="font-size:12px;color:var(--t3);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">'+esc(g.note)+'</div>':'')+
+      '<div style="font-size:12px;color:var(--t3);margin-top:8px">'+esc(g.meta)+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">'+
+        '<button class="btn ghost sm" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
+        '<button class="btn ghost sm" onclick="toast(\'已开始朗读（后端 TTS）\')">'+SVG(I.vol)+'朗读</button>'+
+      '</div>'+
+      '<button class="btn ghost sm" style="position:absolute;top:12px;right:12px" onclick="toast(\'已移出收藏\')">'+SVG(I.x)+'</button>'+
+    '</div>').join('')+'</div>';
 }
 function workLab(){
   const groups = [
@@ -949,7 +1030,17 @@ function stopGen(){ S.sending=false; toast('已停止生成'); render(); }
 function demo(kind){
   S.view='chat'; S.mode.empty=false;
   const base = (S.msgs || DEFAULT_MSGS.map((m,i)=>Object.assign({},m,{id:'m'+i})));
-  if(kind==='tcard'){
+  if(kind==='code'){
+    S.msgs = base.concat([
+      {id:'u_c', who:'me', txt:'用 JS 写一个快速排序', time:'刚刚'},
+      {id:'a_c', who:'ai', agent:'通用助手', time:'刚刚', blocks:[
+        {t:'p', lead:true, v:'快速排序（Quicksort）：选基准分区，再递归排序左右两段。'},
+        {t:'code', lang:'js', v:'function quickSort(arr) {\n  if (arr.length <= 1) return arr;\n  const pivot = arr[arr.length - 1]; // 选最后一个元素为基准\n  const left = [], right = [];\n  for (let i = 0; i < arr.length - 1; i++) {\n    (arr[i] < pivot ? left : right).push(arr[i]);\n  }\n  return [...quickSort(left), pivot, ...quickSort(right)];\n}'},
+        {t:'p', v:'原地分区（更省内存）版本：空间复杂度从 O(n) 降到 O(log n) 递归栈，适合大数组。'},
+        {t:'code', lang:'js', v:'function quickSortInPlace(arr, low = 0, high = arr.length - 1) {\n  if (low < high) {\n    const p = partition(arr, low, high);\n    quickSortInPlace(arr, low, p - 1);\n    quickSortInPlace(arr, p + 1, high);\n  }\n  return arr;\n}\n\nfunction partition(arr, low, high) {\n  const pivot = arr[high];\n  let i = low - 1;\n  for (let j = low; j < high; j++) {\n    if (arr[j] < pivot) { i++; [arr[i], arr[j]] = [arr[j], arr[i]]; }\n  }\n  [arr[i + 1], arr[high]] = [arr[high], arr[i + 1]];\n  return i + 1;\n}'}
+      ]}
+    ]);
+  } else if(kind==='tcard'){
     S.msgs = base.concat([
       {id:'u_t', who:'me', txt:'帮我把这句话翻成商务英语：这个报价我们再商量商量，下周给你答复。', time:'刚刚'},
       {id:'a_t', who:'ai', agent:'语言翻译官', time:'刚刚', blocks:[{t:'tcard', id:'a_t', dir:'中文 → 英语',

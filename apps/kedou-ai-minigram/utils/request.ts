@@ -64,6 +64,20 @@ export function clearToken(): void {
   wx.removeStorageSync(REFRESH_TOKEN_KEY);
 }
 
+/**
+ * 登录确保器：由 services/auth.ts 在模块加载时注入（见 setLoginEnsurer 调用处）。
+ * 这里用「注入钩子」而非直接 import auth.ts，是为了打破 request↔auth 的循环依赖：
+ * auth.ts import 本文件的 setToken 等，本文件若再 import auth.ts 会成环。
+ */
+type LoginEnsurer = () => Promise<boolean>;
+
+let loginEnsurer: LoginEnsurer | null = null;
+
+/** 注入登录确保器（services/auth.ts 调用一次） */
+export function setLoginEnsurer(fn: LoginEnsurer): void {
+  loginEnsurer = fn;
+}
+
 interface RequestOptions {
   url: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -76,11 +90,17 @@ interface RequestOptions {
 }
 
 /** 通用请求方法 */
-export function request<T = any>(options: RequestOptions): Promise<T> {
+export async function request<T = any>(options: RequestOptions): Promise<T> {
   // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
   const baseUrl = getApiBase();
   if (!baseUrl) {
-    return Promise.reject(new Error('应用未初始化，请稍后重试或重启小程序'));
+    throw new Error('应用未初始化，请稍后重试或重启小程序');
+  }
+
+  // 首次启动时 App.onLaunch 的 autoLogin 是异步的，首屏页面请求可能早于登录完成；
+  // 无 token 时先「确保登录」再发请求，避免发出无 token 请求 → 401 → 误触发掉线。
+  if (!getToken() && loginEnsurer) {
+    await loginEnsurer();
   }
   const token = getToken();
 
@@ -102,7 +122,11 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
         if (res.statusCode === 200) {
           resolve(res.data as T);
         } else if (res.statusCode === 401) {
-          clearToken();
+          // 仅当「本次请求携带的 token」仍等于当前存储的 token 才清除：
+          // 防止登录完成前发出的旧请求在登录后返回 401，把刚写入的新 token 误清（启动竞态）。
+          if (token && token === getToken()) {
+            clearToken();
+          }
           if (!options.silent) {
             // 触发全局 401 事件
             wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });

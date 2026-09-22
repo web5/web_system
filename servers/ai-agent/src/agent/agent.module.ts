@@ -39,6 +39,8 @@ import { MusicModule } from '../music/music.module';
 import { ListMusicProvidersTool } from '../music/tools/list-music-providers.tool';
 import { PresentMusicCardTool } from '../music/tools/present-music-card.tool';
 import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
+import { UserMemoryUpdateHook } from './user-memory-update.hook';
+import { POST_RUN_HOOKS, PostRunHook } from './post-run-hook';
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -131,6 +133,13 @@ const runnerProvider: Provider = {
   inject: [AgentEngine],
 };
 
+/** 对话结束后置钩子列表（fire-and-forget 插件；用户记忆更新是第一个，后续增删只需改这里） */
+const postRunHooksProvider: Provider = {
+  provide: POST_RUN_HOOKS,
+  useFactory: (memoryHook: UserMemoryUpdateHook): PostRunHook[] => [memoryHook],
+  inject: [UserMemoryUpdateHook],
+};
+
 @Module({
   imports: [
     McpModule,
@@ -161,6 +170,8 @@ const runnerProvider: Provider = {
     ContractConversationService,
     AgentConversationQueryService,
     IntentService,
+    UserMemoryUpdateHook,
+    postRunHooksProvider,
   ],
   controllers: [AgentController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],

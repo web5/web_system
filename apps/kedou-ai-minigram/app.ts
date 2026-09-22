@@ -1,4 +1,4 @@
-import { login, isLoggedIn } from './services/auth';
+import { ensureLogin, isLoggedIn } from './services/auth';
 
 /**
  * 后端地址按运行环境切换：
@@ -30,11 +30,8 @@ App<IAppOption>({
     if (isLoggedIn()) {
       return;
     }
-    try {
-      await login();
-    } catch (err) {
-      // 登录失败静默处理，用户可重试
-    }
+    // 走 ensureLogin（单例）：与首屏请求触发的登录共用同一次，避免并发重复 wx.login
+    await ensureLogin();
   },
 
   globalData: {
