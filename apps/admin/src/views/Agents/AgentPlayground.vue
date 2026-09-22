@@ -485,7 +485,9 @@ function logEvent(ev: any, label: string) {
 function exportLogs() {
   const payload = {
     conversationId: conversationId.value || '(no-conv)',
-    user: userStore.user?.username || '(unknown)',
+    // 用户 store 暴露的是 userInfo（此前写 user 一直是不存在的字段，
+    // 导致导出日志里的用户名恒为 (unknown)，且因可选链不报错、难以察觉）
+    user: userStore.userInfo?.username || '(unknown)',
     exportedAt: new Date().toISOString(),
     events: events.map((e) => ({ ...e })),
     messages: messages.map((m) => ({ ...m })),
