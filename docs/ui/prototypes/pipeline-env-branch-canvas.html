@@ -33,6 +33,16 @@
   处置：前端展示兜底 —— 实例终态 succeeded 时，落库残留的 awaiting/running 按 succeeded
         展示（整体成功与「审批仍挂起」不可能并存）；后端根修（审批通过回写任务状态）另册。
   落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue taskStateOf()
+
+  === 微调豁免（四）· 2026-09-22 ===
+  范围：详情页只读画布的**任务分叉对齐**（纯视觉，不改交互）。
+  现象：用户反馈「连接线还是没对准」，并指认对齐方式应参照编辑页。
+  差异（实测）：编辑页任务卡与步骤卡**同宽左对齐**（`.task-node{width:100%}`）；
+        详情页任务分叉用了「缩进 16px + 左竖线 + 横线」的树状画法（`.orch-tasks{padding-left:16px}`），
+        local/dev 任务卡比步骤卡错开 16px。
+  处置：对齐编辑页 —— 去掉缩进（任务卡与步骤卡同宽左对齐），分叉竖线贴 cell 左缘
+        （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
 -->
 <style>
   :root{
