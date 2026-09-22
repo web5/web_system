@@ -230,8 +230,8 @@ interface ChatMsg {
   streaming?: boolean;
   stopped?: boolean;
   failed?: boolean;
-  /** 消息时间戳（B6：历史回放按天分段日期线用；实时消息前端打的本地时间，刷新以后端为准） */
-  ts?: number;
+  /** 消息时间戳（B6，必填；实时消息前端打本地时间，刷新以后端为准） */
+  ts: number;
 }
 
 const EXAMPLES = [
@@ -325,7 +325,7 @@ function relDay(d: Date): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
-const dayKeyOf = (ts?: number): string => (ts ? new Date(ts).toDateString() : '');
+const dayKeyOf = (ts: number): string => new Date(ts).toDateString();
 
 interface Turn {
   key: string;
@@ -349,11 +349,11 @@ const turns = computed<Turn[]>(() => {
     }
   });
 
-  // 日期线：取每轮首条带 ts 的消息为轮日期；相邻轮跨天（或最后一轮）→ 该轮末尾插线（B6）
+  // 日期线：轮日期取首条消息 ts；相邻轮跨天（或最后一轮）→ 该轮末尾插线（B6）
   out.forEach((t) => {
-    const withTs = t.msgs.find((m) => m.ts);
-    t.dayKey = withTs ? dayKeyOf(withTs.ts) : '';
-    t.dayLabel = withTs ? relDay(new Date(withTs.ts as number)) : '';
+    const firstTs = t.msgs[0].ts;
+    t.dayKey = dayKeyOf(firstTs);
+    t.dayLabel = relDay(new Date(firstTs));
   });
   out.forEach((t, i) => {
     const nextKey = out[i + 1]?.dayKey;
@@ -486,13 +486,14 @@ function send(text: string) {
   if (!content || sending.value) return;
 
   input.value = '';
-  messages.value.push({ id: uid(), role: 'user', content });
+  messages.value.push({ id: uid(), role: 'user', content, ts: Date.now() });
   const reply: ChatMsg = {
     id: uid(),
     role: 'assistant',
     content: '',
     streaming: true,
     musicCard: null,
+    ts: Date.now(),
   };
   messages.value.push(reply);
   sending.value = true;
