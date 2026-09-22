@@ -620,9 +620,9 @@ function renderTurns(msgs){
   return html;
 }
 function chatComposer(){
-  return '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，⌘Enter 发送"></textarea>'+
+  return '<div class="composer"><div class="box"><textarea id="ta" placeholder="描述你的问题，Enter 发送"></textarea>'+
     '<div class="crow"><button class="btn ghost sm" title="上传合同 / 图片（P2 支持）" onclick="toast(\'上传文件：P2 支持\')">'+SVG(I.up)+'附件</button>'+
-    '<span class="hint">⌘Enter 发送 · ⌘K 命令面板</span><span class="spacer"></span>'+
+    '<span class="hint">Enter 发送 · Shift+Enter 换行</span><span class="spacer"></span>'+
     (S.sending?'<button class="btn sm" onclick="stopGen()">停止</button>':'<button class="btn sm pri" onclick="send(document.getElementById(\'ta\').value)">'+SVG(I.arrow)+'发送</button>')+
     '</div></div></div>';
 }
