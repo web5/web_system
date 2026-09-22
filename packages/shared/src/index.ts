@@ -1,7 +1,12 @@
 export { API_TIMEOUT } from './api';
 
 // 后端服务地址默认值（唯一真相源，禁止各服务自行硬编码端口）
-export { SERVICE_URL_DEFAULTS, REQUIRED_SERVICE_URLS_IN_PROD } from './services';
+export {
+  SERVICE_URL_DEFAULTS,
+  REQUIRED_SERVICE_URLS_IN_PROD,
+  missingRequiredServiceUrls,
+  serviceUrlFailFastHint,
+} from './services';
 
 // 跨平台存储路径解析（上传根目录等，唯一实现，禁止各服务自行拼路径）
 export {
