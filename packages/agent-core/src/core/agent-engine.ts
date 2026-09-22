@@ -111,7 +111,7 @@ export class AgentEngine {
       historyMessages = loaded.messages;
       if (loaded.summary) {
         historyMessages = [
-          { role: 'system', content: `[对话历史摘要]\n${loaded.summary}` },
+          { role: 'system', content: `[对话历史摘要]\n${loaded.summary}`, ts: Date.now() },
           ...historyMessages,
         ];
       }
@@ -122,7 +122,7 @@ export class AgentEngine {
     if (this.memory.loadProfile) {
       const profile = await this.memory.loadProfile(userId);
       if (profile) {
-        historyMessages = [...historyMessages, { role: 'system', content: profile }];
+        historyMessages = [...historyMessages, { role: 'system', content: profile, ts: Date.now() }];
       }
     }
 
@@ -135,7 +135,7 @@ export class AgentEngine {
       if (catalog) systemPrompt = `${systemPrompt}\n${catalog}`;
     }
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPrompt, ts: Date.now() },
       ...historyMessages,
       { role: 'user', content: input.userInput, ts: Date.now() },
     ];

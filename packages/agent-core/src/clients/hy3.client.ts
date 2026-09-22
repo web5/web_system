@@ -152,6 +152,7 @@ export class Hy3Client extends BaseAiClient {
         role: 'assistant',
         content: message.content ?? '',
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        ts: Date.now(),
       };
 
       // OpenAI 标准 usage：{ prompt_tokens, completion_tokens, total_tokens }
@@ -288,6 +289,7 @@ export class Hy3Client extends BaseAiClient {
       role: 'assistant',
       content,
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      ts: Date.now(),
     };
     yield {
       type: 'done',

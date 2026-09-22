@@ -9,6 +9,6 @@ export interface StoredMessage {
   content: string;
   toolCallId?: string;
   name?: string;
-  /** 消息写入时间戳（ms）。历史旧数据可能无此字段，消费方需兼容降级。 */
-  ts?: number;
+  /** 消息写入时间戳（ms）——必填（B6）。 */
+  ts: number;
 }

@@ -99,8 +99,8 @@ export class IntentClassifier {
       const raw = await this.withTimeout(
         this.client.chat(
           [
-            { role: 'system', content: CLASSIFY_PROMPT },
-            { role: 'user', content: userInput.slice(0, 500) },
+            { role: 'system', content: CLASSIFY_PROMPT, ts: Date.now() },
+            { role: 'user', content: userInput.slice(0, 500), ts: Date.now() },
           ],
           { temperature: 0, maxTokens: 60 },
         ),
