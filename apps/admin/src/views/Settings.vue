@@ -4,7 +4,7 @@
     <div class="settings-header">
       <div class="settings-header-left">
         <h2 class="settings-title">系统设置</h2>
-        <p class="settings-subtitle">管理平台全局配置，包括站点信息、安全策略、通知与存储</p>
+        <p class="settings-subtitle">管理平台全局配置，包括站点信息、安全策略与通知</p>
       </div>
     </div>
 
@@ -171,47 +171,6 @@
           </div>
         </a-tab-pane>
 
-        <a-tab-pane key="storage" tab="存储配置">
-          <div class="tab-content">
-            <div class="section-card">
-              <div class="section-title">
-                <CloudOutlined class="section-icon" />
-                <span>文件存储</span>
-              </div>
-              <a-form layout="vertical" class="settings-form">
-                <a-form-item label="存储方式">
-                  <a-radio-group v-model:value="storage.type">
-                    <a-radio value="local">本地存储</a-radio>
-                    <a-radio value="aliyun">阿里云 OSS</a-radio>
-                    <a-radio value="tencent">腾讯 COS</a-radio>
-                  </a-radio-group>
-                </a-form-item>
-                <template v-if="storage.type !== 'local'">
-                  <a-form-item label="Bucket">
-                    <a-input v-model:value="storage.bucket" placeholder="bucket-name" size="large" />
-                  </a-form-item>
-                  <a-form-item label="Region">
-                    <a-input v-model:value="storage.region" placeholder="oss-cn-hangzhou" size="large" />
-                  </a-form-item>
-                  <a-form-item label="AccessKey">
-                    <a-input v-model:value="storage.accessKey" placeholder="AccessKey ID" size="large" />
-                  </a-form-item>
-                  <a-form-item label="SecretKey">
-                    <a-input-password v-model:value="storage.secretKey" placeholder="AccessKey Secret" size="large" />
-                  </a-form-item>
-                </template>
-                <a-form-item label="上传大小限制">
-                  <a-input-number v-model:value="storage.maxUploadMB" :min="1" :max="100" size="large" style="width: 100px" />
-                  <span class="unit-text">MB</span>
-                </a-form-item>
-                <div class="form-actions">
-                  <a-button type="primary" size="large" :loading="savingStorage" @click="saveStorage">保存修改</a-button>
-                </div>
-              </a-form>
-            </div>
-          </div>
-        </a-tab-pane>
-
         <a-tab-pane key="quota" tab="使用配额">
           <div class="tab-content">
             <div class="section-card">
@@ -278,7 +237,7 @@ import type { Dayjs } from 'dayjs';
 import type { Ref } from 'vue';
 import {
   AppstoreOutlined, ControlOutlined, SafetyCertificateOutlined,
-  MailOutlined, CloudOutlined, FileSearchOutlined, ThunderboltOutlined,
+  MailOutlined, FileSearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import { getSettings, updateSettings, getLogs } from '@/api/settings';
 import { fetchDictItems } from '@/api/dict';
@@ -301,7 +260,6 @@ const savingBasic = ref(false);
 const savingFeatures = ref(false);
 const savingSecurity = ref(false);
 const savingNotify = ref(false);
-const savingStorage = ref(false);
 const savingQuota = ref(false);
 
 const KEY = {
@@ -313,7 +271,9 @@ const KEY = {
   lockThreshold: 'security_lock_threshold', lockMinutes: 'security_lock_minutes', tokenExpireDays: 'security_token_expire_days',
   smtpHost: 'notify_smtp_host', smtpPort: 'notify_smtp_port', smtpEncryption: 'notify_smtp_encryption',
   smtpFrom: 'notify_smtp_from', smtpPass: 'notify_smtp_pass',
-  storageType: 'storage_type', storageBucket: 'storage_bucket', storageRegion: 'storage_region', maxUploadMB: 'storage_max_upload_mb',
+  // 存储配置（storage_type / storage_bucket / storage_region / storage_max_upload_mb）已于 2026-09-22 移除：
+  // 它从未被任何后端读取、配置表也无值；上传根目录改由 deploy-console「系统设置 → 存储配置」承载
+  // （见 specs/backend-consolidation/page-spec-storage-config.md §admin 侧处理）
   dailyTransformLimit: 'bianbian_daily_transform_limit',
 };
 
@@ -341,12 +301,6 @@ const saveNotify = () => doSave({
   [KEY.smtpEncryption]: notify.smtp.encryption, [KEY.smtpFrom]: notify.smtp.from, [KEY.smtpPass]: notify.smtp.pass,
 }, savingNotify);
 const testEmail = () => message.info('测试邮件已发送，请查收');
-
-const storage = reactive({ type: 'local', bucket: '', region: '', accessKey: '', secretKey: '', maxUploadMB: 10 });
-const saveStorage = () => doSave({
-  [KEY.storageType]: storage.type, [KEY.storageBucket]: storage.bucket,
-  [KEY.storageRegion]: storage.region, [KEY.maxUploadMB]: String(storage.maxUploadMB),
-}, savingStorage);
 
 const quota = reactive({ dailyTransformLimit: 3 });
 const saveQuota = () => doSave({
@@ -423,10 +377,6 @@ onMounted(async () => {
     if (cfg[KEY.smtpEncryption]) notify.smtp.encryption = cfg[KEY.smtpEncryption];
     if (cfg[KEY.smtpFrom]) notify.smtp.from = cfg[KEY.smtpFrom];
     if (cfg[KEY.smtpPass]) notify.smtp.pass = cfg[KEY.smtpPass];
-    if (cfg[KEY.storageType]) storage.type = cfg[KEY.storageType];
-    if (cfg[KEY.storageBucket]) storage.bucket = cfg[KEY.storageBucket];
-    if (cfg[KEY.storageRegion]) storage.region = cfg[KEY.storageRegion];
-    if (cfg[KEY.maxUploadMB]) storage.maxUploadMB = parseInt(cfg[KEY.maxUploadMB]);
     if (cfg[KEY.dailyTransformLimit]) quota.dailyTransformLimit = parseInt(cfg[KEY.dailyTransformLimit]);
   } catch { /* server may not be ready */ }
   searchLogs();
