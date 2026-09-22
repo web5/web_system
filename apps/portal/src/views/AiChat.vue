@@ -145,8 +145,8 @@
               </div>
             </div>
 
-            <!-- 日期分隔线：同日消息组底部（2026-09-21 拍板） -->
-            <div v-if="messages.length" class="daysep"><span>今天</span><i /></div>
+            <!-- 日期分隔线：仅跨天会话显示（单天会话无线），标注最后活动日期 -->
+            <div v-if="dayLabel" class="daysep"><span>{{ dayLabel }}</span><i /></div>
           </template>
         </div>
       </div>
@@ -248,6 +248,8 @@ const convId = ref<string | null>(null);
 const loadedId = ref<string | null>(null);
 const agentBadge = ref('');
 const detailError = ref(false);
+/** 当前会话时间范围（历史回放时从详情写入，用于跨天日期线判定） */
+const convRange = ref<{ start: string; end: string } | null>(null);
 /** 正在朗读的消息 id（翻译卡片 TTS，本地 Web Speech） */
 const reading = ref<string | null>(null);
 
@@ -310,6 +312,26 @@ function shownBlocks(m: ChatMsg): AnswerBlock[] {
 }
 
 /* ===== 轮次（一轮 = 用户消息 + 紧随的 AI 回答） ===== */
+
+/** 日期线标签：仅跨天会话非空；单天会话返回空串（不渲染线，2026-09-22 拍板） */
+const dayLabel = computed(() => {
+  if (!convRange.value) return '';
+  const s = new Date(convRange.value.start);
+  const e = new Date(convRange.value.end);
+  if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) return '';
+  if (s.toDateString() === e.toDateString()) return '';
+  return relDay(e);
+});
+
+function relDay(d: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((today.getTime() - that.getTime()) / 86400000);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '昨天';
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
 
 const turns = computed(() => {
   const out: { key: string; msgs: ChatMsg[] }[] = [];
@@ -386,6 +408,7 @@ function newChat() {
   loadedId.value = null;
   messages.value = [];
   agentBadge.value = '';
+  convRange.value = null;
   input.value = '';
   Object.keys(expanded).forEach((k) => delete expanded[k]);
   Object.keys(noteOpen).forEach((k) => delete noteOpen[k]);
@@ -403,6 +426,7 @@ async function loadConversation(id: string) {
     const detail = await getConversation(id);
     convId.value = id;
     loadedId.value = id;
+    convRange.value = { start: detail.createdAt, end: detail.updatedAt };
     const msgs: ChatMsg[] = [];
     let pendingCard: MusicCardPayload | null = null;
     (detail.messages || []).forEach((m) => {
