@@ -145,7 +145,8 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 | A1 | ✅（#120） | `packages/shared/src/storage-path.ts` + `.spec.ts` |
 | A2 | ✅ 本轮 | `servers/system-service/src/storage/{storage.service,storage.controller,internal-storage.controller,storage.dto,storage.module}.ts`；权限点 `storage:browse`（`packages/types`，**仅 super_admin**，admin 已显式排除） |
 | A3 | ✅ 本轮 | `servers/upload-service/src/storage/upload-dir.ts`、`src/upload/{upload-root,upload-root.token,upload-multer,internal-uploads.controller}.ts`、`dto/store-upload.dto.ts`；`upload.service.ts`（分类改复数、单一 Multer 实现、`storeBuffer`）、`main.ts`（静态根取进程生效值） |
-| A4~A8 | ⬜ 未做 | — |
+| A4 | ✅ 本轮 | `servers/gateway/src/proxy/proxy.service.ts`（`uploadProxy` / `uploadStaticProxy` 目标切 upload-service、变变「先新后旧」兜底、`UPLOAD_SERVICE_URL` 默认值改 `SERVICE_URL_DEFAULTS.upload`）+ `proxy.controller.ts` + `proxy.service.spec.ts`（真 HTTP 验证，6 例） |
+| A5~A8 | ⬜ 未做 | — |
 
 实现说明（与上文措辞的差异，均为刻意的）：
 
@@ -159,7 +160,13 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 3. **保存时允许自动创建目录**：`PUT /admin/settings/storage` 先 `mkdir -p` 再探测可写性；
    纯校验接口 `POST …/validate` 不创建、只回报「不存在」。否则「指向一块新挂的盘」这个最常见诉求无法完成。
 4. **A3 与 A4 必须同批发布**：A3 让 upload-service 写到统一根（默认 `~/web_system/uploads`），
-   而 gateway 的 `/api/upload*` 与 `/api/uploads/*` **目前仍指向 user-service**；只发 A3 会让新文件 404。
+   A4 把 gateway 的 `/api/upload*` 与 `/api/uploads/*` 切到它。两者在**同一个 PR** 里，
+   但**发布时也必须一起发** —— 只发 A3 或只发 A4 都会让上传链路断一段。
+5. **变变图片走「先新后旧」兜底（A4 的关键细节）**：新文件在统一根（upload-service 出静态），
+   历史文件只在 ai-service 本机，而两者 URL 形状相同（§1.6）。
+   实现：`/api/uploads/bianbian/*` 的主目标是 upload-service，用 `selfHandleResponse: true`
+   拦下上游 404 → 再问 ai-service；命中新文件时不会触碰历史服务。该兜底路由**长期保留**，
+   不随 A7 删除；将来单独一轮「变变历史文件迁移」才可能退役。
 5. **`upload_files.category` 数据口径不动**：磁盘分类改复数（`avatars`），落库仍是历史值 `avatar`，
    避免新旧数据割裂（磁盘目录名 ≠ DB 分类值，是有意的）。
 6. 本地已把 `storage.upload_dir` 显式写为 `<home>/web_system/uploads`（走 `checkStorageDir` + `setUploadDir`，
@@ -409,8 +416,8 @@ MCP 客户端 token 与用户 token 共用同一吊销机制（30s 缓存），�
 
 > 依赖关系：D2 依赖 C 的吊销机制（至少要能在 30s 内让一把令牌失效）；A8 依赖 A3 的 `internal/uploads/store`。
 
-> 进度：**B、D0、A1、A2、A3 已完成**；C1、D1 / D2 待做；A4 / A5 / A8 与 A6（需过 UI 门）在后。
-> ⚠️ A3 与 A4 有**发布耦合**：upload-service 已写统一根，gateway 路由未切时会 404（见 §1.7 落地状态说明 4）。
+> 进度：**B、D0、A1、A2、A3、A4 已完成**；C1、D1 / D2 待做；A5 / A8 与 A6（需过 UI 门）在后。
+> ⚠️ A3 与 A4 有**发布耦合**：两者已在同一 PR，但发布时也必须一起发（见 §1.7 落地状态说明 4）。
 
 ---
 

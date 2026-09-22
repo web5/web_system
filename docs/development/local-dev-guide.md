@@ -97,7 +97,8 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | `/api/mcp/*` → rewrite 成 `/api/*` | mcp-gateway |
 | `/api/content-hub/*`（Bearer `CONTENT_HUB_SERVICE_KEY`，兼容旧名 `FINNEWS_SERVICE_KEY`） | content-hub（财经资讯 + 内容管道） |
 | `/api/knowledge/*` | knowledge-service |
-| `/api/uploads/bianbian/*` → ai-service；`/api/uploads/*` → **user-service** | ⚠️ 见 §6 已知问题 |
+| `/api/upload*`（上传操作）与 `/api/uploads/*`（静态） | upload-service（6008） |
+| `/api/uploads/bianbian/*` | 先 upload-service（新文件，统一根）→ 404 才回落 ai-service（**历史文件兜底，长期保留**，见 `specs/backend-consolidation/design.md` §1.6） |
 | `/api/*` 兜底 | DB 动态路由（`deploy_service_routes`），未命中 → 404 `Unknown API route` |
 
 > `/mcp`、`/console/` **不经 gateway**，由 nginx 直连 6006 / 6200。
@@ -278,8 +279,8 @@ curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 
 | # | 问题 | 影响 |
 |---|---|---|
-| 1 | `local-dev-setup.md` / `whistle-local-dev.md` 的端口与目录名落后于代码 | 照抄会连错端口；以本文 §2 为准 |
-| 2 | `/api/uploads/*` 实际反代到 **user-service**（`proxy.service.ts` 的 uploadProxy 用 `userServiceUrl`），`UPLOAD_SERVICE_URL` 未被消费；upload-service 无 gateway 路由 | 上传链路与 README 表述不一致。**加剧**：A3 已把 upload-service 的落盘改到统一根（`~/web_system/uploads`），而路由仍指向 user-service → **A4 未切之前，经 gateway 的新上传文件会 404**（直连 6008 正常）。A3 与 A4 必须同批发布 |
+| 1 | `local-dev-setup.md` / `whistle-local-dev.md` 的端口与目录名落后于代码；根 `.env.example` 的 `*_SERVICE_URL` 仍是旧「3000 系」方案（含 `UPLOAD_SERVICE_URL=3010`，正确是 6008） | 照抄会连错端口；以本文 §2 与 `packages/shared/src/services.ts` 为准 |
+| 2 | ~~`/api/uploads/*` 实际反代到 user-service~~ | **已解决（A4）**：`/api/upload*` 与 `/api/uploads/*` 已切到 upload-service，`UPLOAD_SERVICE_URL` 默认值改为 `SERVICE_URL_DEFAULTS.upload`；变变图片走「先 upload-service → 404 再回落 ai-service 历史文件」。**遗留**：user-service 的上传端点与 `/uploads` 静态仍在（兼容期，A7 删） |
 | 3 | knowledge-service 未登记 `scripts/modules.json`，本地缺 `.env` 与 `dist/` | pm2 直接失败；需 `cp .env.example .env` + `pnpm build` + 建库 |
 | 4 | knowledge-service(6011) / mcp-gateway(6006) 的本地启动与验证无文档 | 只能靠 `e2e-check.mjs` / `e2e-keys.sh` |
 | 5 | 无独立的「日志查看与排障」文档；本地与生产 pm2 日志路径不同 | 排障靠口口相传 |
