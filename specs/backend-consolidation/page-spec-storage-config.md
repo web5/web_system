@@ -74,3 +74,30 @@ GET  /internal/storage/path（×2：system-service 权威值 / upload-service �
 2. **保存后是否提供重启入口**：原型仅提示不含入口（待拍板，见质检记录 §一.1）。
 3. **谁可改目录**：现为 `settings:edit`（admin 可改）。是否收紧为仅 super_admin 待定。
 4. **目录树懒加载的规模**：后端单层上限 200 条 + 深度 5 层；a-tree 需按层加载，勿一次性拉全树。
+
+### admin 侧处理（A6 配套：删掉重复且未接线的存储设置）
+
+**背景**：`apps/admin` 的「系统设置」有 `storage` tab（存储方式 local/OSS、Bucket、Region、AccessKey/SecretKey、
+上传大小限制）。核查后确认它是**未接线的空壳**：这些键（`storage_type` / `storage_bucket` / `storage_region` /
+`storage_access_key*` / `storage_max_upload_mb`）在全仓 `servers/`、`packages/` **零引用**，配置表里**零值**；
+真正生效的上传限制来自 upload-service 的 `CATEGORIES` 代码常量。
+
+**决策（2026-09-22，用户）**：去掉 admin 侧的「存储配置」，真正生效的「上传根目录」统一由
+**deploy-console 系统设置**（本规格）承载，避免两处都能改存储却只有一处生效。
+
+**删除范围**（`apps/admin/src/views/Settings.vue`）
+| 项 | 说明 |
+|---|---|
+| `<a-tab-pane key="storage" tab="存储配置">` 整块 | 含存储方式单选、OSS 字段（bucket/region/AK/SK）、上传大小限制 |
+| `KEY` 映射里的 `storageType/storageBucket/storageRegion/maxUploadMB` | 连同 `storage` reactive 对象、回填与提交逻辑 |
+| 页头副标题 | 现为「…包括站点信息、安全策略、通知与存储」→ 去掉「与存储」 |
+| 保存时的键 | 提交 payload 不再带上述键（避免继续往配置表写死键） |
+
+**不做的事**
+1. **不清库**：配置表里若曾有这些键（本机为零条），保留不动 —— 清理属数据操作，收益低、误删风险高。
+2. 不迁移「上传大小限制」到新页面：它当前是代码常量；将来若要可配，另立需求（不要顺手挂到本轮页面上）。
+
+**验证要点**：admin「系统设置」不再出现存储 tab；其余 tab（基本信息/安全/通知）保存后配置表键不变；
+`storage.upload_dir` 只在 deploy-console 页面可改。
+
+
