@@ -111,7 +111,7 @@ export class AgentEngine {
       historyMessages = loaded.messages;
       if (loaded.summary) {
         historyMessages = [
-          { role: 'system', content: `[对话历史摘要]\n${loaded.summary}` },
+          { role: 'system', content: `[对话历史摘要]\n${loaded.summary}`, ts: Date.now() },
           ...historyMessages,
         ];
       }
@@ -122,7 +122,7 @@ export class AgentEngine {
     if (this.memory.loadProfile) {
       const profile = await this.memory.loadProfile(userId);
       if (profile) {
-        historyMessages = [...historyMessages, { role: 'system', content: profile }];
+        historyMessages = [...historyMessages, { role: 'system', content: profile, ts: Date.now() }];
       }
     }
 
@@ -135,9 +135,9 @@ export class AgentEngine {
       if (catalog) systemPrompt = `${systemPrompt}\n${catalog}`;
     }
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPrompt, ts: Date.now() },
       ...historyMessages,
-      { role: 'user', content: input.userInput },
+      { role: 'user', content: input.userInput, ts: Date.now() },
     ];
 
     // 3. 工具 schema（挂技能时追加 load_skill）
@@ -245,7 +245,7 @@ export class AgentEngine {
         return;
       }
 
-      messages.push(resp.assistantMessage);
+      messages.push({ ...resp.assistantMessage, ts: Date.now() });
 
       // 4. 无工具调用 -> 最终回答（落库记忆）
       if (!resp.toolCalls || resp.toolCalls.length === 0) {
@@ -331,6 +331,7 @@ export class AgentEngine {
           role: 'tool',
           content: result.success ? result.content : `工具执行失败: ${result.error ?? '未知错误'}`,
           toolCallId: call.id,
+          ts: Date.now(),
         });
       }
     }
@@ -371,14 +372,14 @@ export class AgentEngine {
     if (!code) {
       const msg = 'load_skill 需要参数 code（技能标识）';
       events.push({ type: 'tool_result', name: call.name, content: msg, step });
-      messages.push({ role: 'tool', content: msg, toolCallId: call.id });
+      messages.push({ role: 'tool', content: msg, toolCallId: call.id, ts: Date.now() });
       return events;
     }
 
     if (this.loadedSkills.has(code)) {
       const msg = `技能 ${code} 已在本次运行中加载，无需重复调用。`;
       events.push({ type: 'tool_result', name: call.name, content: msg, step });
-      messages.push({ role: 'tool', content: msg, toolCallId: call.id });
+      messages.push({ role: 'tool', content: msg, toolCallId: call.id, ts: Date.now() });
       return events;
     }
 
@@ -386,7 +387,7 @@ export class AgentEngine {
     if (!skill) {
       const msg = `技能 ${code} 不存在或未挂载，请从已挂载技能列表中选择。`;
       events.push({ type: 'tool_result', name: call.name, content: msg, step });
-      messages.push({ role: 'tool', content: msg, toolCallId: call.id });
+      messages.push({ role: 'tool', content: msg, toolCallId: call.id, ts: Date.now() });
       return events;
     }
 
@@ -394,7 +395,7 @@ export class AgentEngine {
     events.push({ type: 'skill_load', name: code, content: skill.name, step });
     const loadedMsg = `技能「${skill.name}」完整规范：\n${skill.content}`;
     events.push({ type: 'tool_result', name: call.name, content: loadedMsg, step });
-    messages.push({ role: 'tool', content: loadedMsg, toolCallId: call.id });
+    messages.push({ role: 'tool', content: loadedMsg, toolCallId: call.id, ts: Date.now() });
     return events;
   }
 
