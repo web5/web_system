@@ -211,3 +211,29 @@ export function plainLength(blocks: AnswerBlock[]): number {
     .join('')
     .length;
 }
+
+/**
+ * 翻译四段契约解析（翻译工作台用）：把 agent 输出按
+ * 【推荐译文】/【直译对照】/【委婉版】/【语气要点】切分为独立字段。
+ * 一个标题都没命中时返回空对象（对齐小程序 utils/translate-parse.ts parseSections）。
+ */
+export function parseSections(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const marks: Array<{ key: string; start: number }> = [];
+  for (const t of TRANSLATE_SECTION_TITLES) {
+    const idx = text.indexOf(`【${t}】`);
+    if (idx >= 0) marks.push({ key: t, start: idx });
+  }
+  marks.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < marks.length; i++) {
+    const from = marks[i].start + `【${marks[i].key}】`.length;
+    const to = i + 1 < marks.length ? marks[i + 1].start : text.length;
+    out[marks[i].key] = text.slice(from, to).trim();
+  }
+  return out;
+}
+
+/** 流式过程中还没凑齐段落时，去掉【标题】直接展示已收到的正文（对齐小程序 stripTitles） */
+export function stripTitles(text: string): string {
+  return (text || '').replace(/【[^】]*】/g, '').trim();
+}

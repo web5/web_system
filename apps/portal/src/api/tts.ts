@@ -17,6 +17,35 @@ export async function requestTts(text: string): Promise<Blob> {
   return data;
 }
 
+/** 全局音频播放器（单例：新的播放顶掉旧的，与小程序 services/tts.ts 同一语义） */
+let currentAudio: HTMLAudioElement | null = null;
+
+/** 停止播放：中断当前音频并复位 */
+export function stopTts(): void {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+}
+
+/** 播放 mp3 Blob；结束 / 出错 / 被 stopTts 替换时 resolve */
+export function playTtsBlob(blob: Blob): Promise<void> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+    const done = () => {
+      if (currentAudio === audio) currentAudio = null;
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    audio.onended = done;
+    audio.onerror = done;
+    audio.play().catch(done);
+  });
+}
+
 /** 分句切块：句末标点断开，再按 MAX_CHUNK 合并/硬切（对齐小程序 splitSpeakChunks） */
 export function splitChunks(text: string, max = MAX_CHUNK): string[] {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
