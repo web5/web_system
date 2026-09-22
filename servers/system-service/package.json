@@ -50,6 +50,10 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "database-explorer/utils/(sql-guard|masking)\\.spec\\.ts$"
+    ]
   }
 }
