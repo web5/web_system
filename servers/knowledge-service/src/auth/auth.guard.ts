@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 /**
  * AuthGuard — 调用 auth-service /auth/verify 校验 JWT 并填 req.user
@@ -23,7 +24,7 @@ export class AuthGuard implements CanActivate {
   ) {
     this.authServiceUrl = this.configService.get(
       'AUTH_SERVICE_URL',
-      'http://localhost:6001',
+      SERVICE_URL_DEFAULTS.auth,
     );
   }
 
