@@ -159,7 +159,7 @@
           <textarea
             v-model="input"
             class="composer-input"
-            placeholder="描述你的问题，⌘Enter 发送"
+            placeholder="描述你的问题，Enter 发送"
             @keydown="onKeydown"
           />
           <div class="crow">
@@ -171,7 +171,7 @@
             >
               <app-icon name="doc" />
             </button>
-            <span class="hint">⌘Enter 发送 · ⌘K 命令面板</span>
+            <span class="hint">Enter 发送 · Shift+Enter 换行</span>
             <span class="spacer" />
             <button v-if="sending" type="button" class="btn-stop" @click="stop">
               <app-icon name="stop" /><span>停止</span>
@@ -567,7 +567,8 @@ function retryMsg(id: string) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+  // Enter 直接发送（2026-09-22 拍板）；Shift+Enter 换行；中文输入法选词态不触发
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send(input.value);
   }
