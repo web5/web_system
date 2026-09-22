@@ -22,13 +22,15 @@ P2 要产出的，就是上面这两件事的方案：**分发（到哪、怎么
 
 | 项 | 值 |
 |---|---|
-| 读取位置 | `servers/deploy-console/src/config/config-crypto.ts` → `masterKey()`，只读 `process.env.CONFIG_MASTER_KEY` |
+| 读取位置 | `servers/deploy-console/src/config/config-crypto.ts` → `masterKey()`：优先 `process.env.CONFIG_MASTER_KEY`，其次 `CONFIG_MASTER_KEY_FILE`（默认 `/etc/web-system/config-master.key`）；两者同时存在会校验一致性，不一致即抛错 |
 | 支持的形态 | base64（44 字符）/ 64 位 hex / 任意字符串（scrypt 派生 32 字节）；非法长度直接抛错 |
 | 谁在用 | 目前**只有 deploy-console**：它是唯一读写 `config_items` 的服务（其他服务靠「下发 `.env.generated`」拿到明文，不需要主密钥） |
-| 存储位置 | `servers/deploy-console/.env`（`env=local` 与堡垒机部署目录各一份，**人工维护**） |
+| 存储位置 | 过渡态：各机 `servers/deploy-console/.env`；目标态：机器本地 0600 密钥文件（`scripts/publish-deploy-console.sh` 只注入**文件路径** `CONFIG_MASTER_KEY_FILE`） |
 | 消费的数据 | `config_items.value` 里 `is_secret=1` 的行（密文形如 `iv:authTag:ciphertext`，base64） |
 | 现状边界 | `service-config-delivery/design.md` §6 明确写了：多机分发**不在该设计范围**，建议「由部署机密钥文件/环境注入，不要塞进配置中心」 |
-| 相关坑 | `CONFIG_MASTER_KEY` 缺失/不对时，**报错发生在"读密钥那一刻"**（解密时），不是启动时 → 换机器漏配会静默到"某次读配置才炸" |
+| 启动自检 | `src/config/config-self-check.service.ts`：启动时抽样解一条 `is_secret` 行；失败 `FATAL` + `exit(1)`（pm2 置 errored、流水线 verify 探活失败）；配置库不可达只告警；库里无密钥项放行 |
+| 一致性工具 | `scripts/verify-config-master-key.mjs`（只读，可离线）：密钥来源/指纹、keyId 分布、老格式计数、items 与快照抽样解密；退出码 `0` 全绿 / `2` 有密文解不开 / `3` 密钥缺失 |
+| 相关坑 | 密钥错在**启动期**暴露（日志 `FATAL 主密钥与本库不匹配`），排查入口见 `docs/development/local-release-runbook.md` §2.4 与 §4.9 |
 
 ## 3. 待确认项（新会话里逐条问清再定稿）
 

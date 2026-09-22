@@ -129,6 +129,16 @@ step "产物就位 → 前端入口 ${NEW_INDEX:-（未取到）}"
 # restart 后旧进程不释放端口 → 新进程 EADDRINUSE 反复崩溃，对外仍是旧孤儿。
 # 故用确定性重建：先放掉端口 → delete → start。
 CLEAN_PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$(dirname "$(command -v node)")"
+
+# 主密钥：只注入**文件路径**，不注入值 —— 值会落到 pm2_env / dump.pm2，并被 `ps e` 读到（违反 K2）。
+# 见 specs/config-master-key-distribution/design.md §5.1 / Q7。勿改用 `pm2 startOrRestart --update-env`。
+KEY_FILE="${CONFIG_MASTER_KEY_FILE:-/etc/web-system/config-master.key}"
+KEY_ENV_OPT=""
+if [ -f "$KEY_FILE" ]; then
+  KEY_ENV_OPT="CONFIG_MASTER_KEY_FILE=$KEY_FILE"
+else
+  warn "未找到主密钥文件 ${KEY_FILE}：本次沿用 .env 的 CONFIG_MASTER_KEY（过渡态，建议尽快 provision）"
+fi
 pm2_pid() { "$PM2_BIN" pid web-deploy-console 2>/dev/null || true; }
 pm2_field() {
   "$PM2_BIN" jlist 2>/dev/null | python3 -c "
@@ -156,8 +166,8 @@ restart_console() {
 
   dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} delete web-deploy-console)" \
     || (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" delete web-deploy-console >/dev/null 2>&1) || true
-  dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} start dist/main.js --name web-deploy-console --cwd ${RELEASE_DIR}/servers/deploy-console)" \
-    || { (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" start dist/main.js --name web-deploy-console --cwd "$RELEASE_DIR/servers/deploy-console" >/dev/null 2>&1) || err "pm2 start 失败"; }
+  dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${KEY_ENV_OPT} ${PM2_BIN} start dist/main.js --name web-deploy-console --cwd ${RELEASE_DIR}/servers/deploy-console)" \
+    || { (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" $KEY_ENV_OPT "$PM2_BIN" start dist/main.js --name web-deploy-console --cwd "$RELEASE_DIR/servers/deploy-console" >/dev/null 2>&1) || err "pm2 start 失败"; }
   sleep 6
 }
 

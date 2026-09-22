@@ -138,6 +138,8 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
   "$PM2" start dist/main.js --name "$NAME" --cwd "$SVC_DIR"
 ```
 
+- **只改 console 的启动脚本**：主密钥只有 deploy-console 需要（其他服务靠下发 `.env.generated` 拿明文），
+  所以不动流水线里其他服务的 `restart` 脚本（DB `deploy_pipeline_step_commands`），避免扩大改动面；
 - 与铁律一致：仍然 `env -i` 白名单，只多放行**一个路径变量**；
 - `app.module.ts:34-41` 的 dotenv **不覆盖已有 `process.env`** → 过渡期"注入 + `.env` 并存"时以注入为准，可平滑切换；
 - 过渡顺序：先加注入并确认自检通过 → 再把各机 `.env` 里的 `CONFIG_MASTER_KEY` 行注释掉 → 最后删除（回退 = 反向操作）。
@@ -310,6 +312,8 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 | **P2b 在线轮换** | ① 密钥环（`CONFIG_ACTIVE_KEY_ID` + `*_OLD`）；② `reencryptSecrets()` + `POST /api/config/secrets/reencrypt`（含快照，compare-and-set）；③ `@RequireSuperAdmin()` + `config:secret:rotate`；④ 审计埋点；⑤ 域 L 完整演练 K4/K5 | 双钥并行期可随时停；回退 = active/`ring` 调回可用组合（密文保留现状） |
 | **P3 换库/拆域（已备好，按需触发）** | 文档 `specs/config-master-key-distribution/domain-split-guide.md` + 脚本 `scripts/master-key-domain-split.mjs` **本轮先交付**，待 prod 换库时执行；其后才是云 KMS/Secrets Manager、systemd `LoadCredential=`、按环境分钥 | 脚本默认 `--dry-run`，写入前备份目标库，`--apply` 才动数据;目标库可从影子表恢复 |
 | **P4 未来（不在本轮）** | 云 KMS/Secrets Manager；迁 systemd 时用 `LoadCredential=`（凭据进 `/run/credentials/<unit>/`，**天然不进 env**，比 `EnvironmentFile` 更安全）；按环境分钥（前置：先定义 `global` 行的归属） | — |
+
+> 当前进度：**P0 已落地并在域 L 验证通过**（自检就绪 / 错钥 exit(1) / `verify` 退出码 0）；P1、P2a、P2b、P3 未开始。
 
 > 依赖顺序：**P0 → P1**（文件与注入通道）→ **P2a**（格式统一，一次性停机）→ **P2b**（密钥环才有意义）。
 > P0/P1 不动密文格式，可在 P2a 之前独立上线；**P2a 必须先于 P2b**（轮换的重加密依赖新格式，混做则回退不清）。
