@@ -34,6 +34,8 @@ export class InMemoryConversationMemory implements ConversationMemoryPort {
         role: m.role,
         content: m.content,
         ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
+        ...(m.name ? { name: m.name } : {}),
+        ts: m.ts,
       })),
     };
   }

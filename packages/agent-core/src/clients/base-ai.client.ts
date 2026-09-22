@@ -42,6 +42,11 @@ export interface ChatMessage {
   toolCallId?: string;
   toolCalls?: ToolCall[];
   name?: string;
+  /**
+   * 消息写入时间戳（ms）——必填（B6），仅用于历史回放按时间分段（如日期线），
+   * 不进入模型请求体（各 client 走 toApiMessage 白名单，不会携带该字段）。
+   */
+  ts: number;
 }
 
 /** 大模型返回的 token 消耗（OpenAI 标准 usage 字段） */

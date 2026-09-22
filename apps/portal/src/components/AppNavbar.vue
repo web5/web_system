@@ -1,7 +1,9 @@
 <template>
   <header class="topbar">
     <router-link to="/" class="brand" title="回到开始页">
-      <span class="brand-mark"><app-icon name="spark" /></span>
+      <span class="brand-mark">
+        <img src="/portal/logo.svg" alt="科豆 AI" width="32" height="17" />
+      </span>
       <span class="brand-name">科豆 AI</span>
     </router-link>
 
@@ -121,14 +123,12 @@ function handleLogout() {
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--ws-radius-md);
-  background: var(--ws-brand-500);
-  color: var(--ws-brand-50);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+}
+
+.brand-mark img {
+  display: block;
 }
 
 .brand-name {
