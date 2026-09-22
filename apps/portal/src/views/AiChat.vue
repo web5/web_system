@@ -315,13 +315,8 @@ function shownBlocks(m: ChatMsg): AnswerBlock[] {
 
 /* ===== 轮次（一轮 = 用户消息 + 紧随的 AI 回答） ===== */
 
+/** 日期线文案：具体日期（M月D日），不用「今天 / 昨天」相对词（2026-09-22 拍板） */
 function relDay(d: Date): string {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round((today.getTime() - that.getTime()) / 86400000);
-  if (diff === 0) return '今天';
-  if (diff === 1) return '昨天';
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
@@ -349,7 +344,7 @@ const turns = computed<Turn[]>(() => {
     }
   });
 
-  // 日期线：轮日期取首条消息 ts；相邻轮跨天（或最后一轮）→ 该轮末尾插线（B6）
+  // 日期线：轮日期取首条消息 ts；仅当与下一轮跨天（存在日期 gap）时在该轮末尾插线（2026-09-22 拍板）
   out.forEach((t) => {
     const firstTs = t.msgs[0].ts;
     t.dayKey = dayKeyOf(firstTs);
@@ -357,7 +352,7 @@ const turns = computed<Turn[]>(() => {
   });
   out.forEach((t, i) => {
     const nextKey = out[i + 1]?.dayKey;
-    t.showSep = !!t.dayKey && (i === out.length - 1 || (!!nextKey && nextKey !== t.dayKey));
+    t.showSep = !!t.dayKey && !!nextKey && nextKey !== t.dayKey;
   });
   return out;
 });
