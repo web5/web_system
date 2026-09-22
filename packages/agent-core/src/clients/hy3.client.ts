@@ -1,7 +1,7 @@
 /**
  * Hy3 客户端（腾讯混元 Turbo，Tencent MaaS TokenHub），原生 fetch 版。
  */
-import { BaseAiClient, ChatMessage, ChatOptions, StreamChunk, ToolCallSchema, ToolCall, ChatWithToolsResult, StreamToolEvent, parseJsonToolCall } from './base-ai.client';
+import { BaseAiClient, type ChatMessage, type ChatOptions, type StreamChunk, type ToolCallSchema, type ToolCall, type ChatWithToolsResult, type StreamToolEvent, parseJsonToolCall } from './base-ai.client';
 import { Logger } from '../lib/logger';
 import { API_TIMEOUT } from '../lib/timeout';
 import { postJson, streamSse } from '../lib/fetch-http';
