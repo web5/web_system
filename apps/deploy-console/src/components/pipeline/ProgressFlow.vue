@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { PipelineItem, OrchestrationStep, OrchestrationTask, TaskRunStatus } from '@/api'
 import {
   stepList,
@@ -87,11 +87,84 @@ function stepAgg(step: OrchestrationStep): AggState {
   return 'none'
 }
 
-/** 步骤间箭头：前一步骤终态成功 → 绿（走过路径高亮） */
-function arrowGreen(i: number): boolean {
-  if (i <= 0 || !orch.value) return false
-  return stepAgg(orch.value[i - 1]) === 'succeeded'
+/* ── 连线：与编辑页 OrchestrationEditor 同构的 SVG 测量式连线 ──
+ * 原型稿 pipeline-env-branch-canvas.html：连线画在**任务行** —— 主线从前一列任务中线引出，
+ * 列间分叉竖线，横线 + 箭头指向下一列每个任务的中线；走过路径（前一步骤聚合成功）绿色高亮。
+ * 2026-09-22：按原型稿把详情页从「步骤卡间 CSS 短线」改成此结构（用户反馈连线始终没对准）。 */
+const canvasBody = ref<HTMLElement | null>(null)
+const wires = ref<SVGSVGElement | null>(null)
+
+function center(el: Element, wrap: Element) {
+  const r = el.getBoundingClientRect()
+  const w = wrap.getBoundingClientRect()
+  return { right: r.right - w.left, left: r.left - w.left, cy: r.top - w.top + r.height / 2 }
 }
+function seg(x1: number, y1: number, x2: number, y2: number, ok: boolean) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p.setAttribute('d', `M${x1} ${y1} L${x2} ${y2}`)
+  p.setAttribute('stroke-width', '2.5')
+  p.setAttribute('fill', 'none')
+  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
+  wires.value?.appendChild(p)
+}
+function chevron(x: number, y: number, ok: boolean) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p.setAttribute('d', `M${x - 9} ${y - 8} L${x} ${y} L${x - 9} ${y + 8}`)
+  p.setAttribute('stroke-width', '3')
+  p.setAttribute('fill', 'none')
+  p.setAttribute('stroke-linecap', 'round')
+  p.setAttribute('stroke-linejoin', 'round')
+  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
+  wires.value?.appendChild(p)
+}
+function drawWires() {
+  const wrap = canvasBody.value
+  const svg = wires.value
+  if (!wrap || !svg) return
+  // 只取**任务行**的列（两行结构里步骤行也用 .orch-col，但连线只画在任务行）
+  const taskRow = wrap.querySelector('.orch-row-tasks')
+  const cols = taskRow ? [...taskRow.querySelectorAll('.orch-col')] : []
+  if (cols.length < 2) {
+    svg.innerHTML = ''
+    return
+  }
+  svg.setAttribute('width', String(Math.ceil(wrap.scrollWidth) + 40))
+  svg.setAttribute('height', String(Math.ceil(wrap.scrollHeight) + 20))
+  svg.innerHTML = ''
+  for (let i = 0; i < cols.length - 1; i++) {
+    const fromTasks = [...cols[i].querySelectorAll('.orch-task')]
+    const toTasks = [...cols[i + 1].querySelectorAll('.orch-task')]
+    if (!fromTasks.length || !toTasks.length) continue
+    const from = fromTasks[0] // 与编辑页一致：前列第一个任务的中线引出主线
+    const ok = !!orch.value && stepAgg(orch.value[i]) === 'succeeded'
+    const f = center(from, wrap)
+    const t0 = center(toTasks[0], wrap)
+    const midX = (f.right + t0.left) / 2
+    seg(f.right, f.cy, midX, f.cy, ok)
+    const sameLine = toTasks.length === 1 && Math.abs(center(toTasks[0], wrap).cy - f.cy) < 1
+    if (sameLine) {
+      seg(midX, f.cy, t0.left, f.cy, ok)
+      chevron(t0.left, f.cy, ok)
+    } else {
+      const ys = toTasks.map((t) => center(t, wrap).cy)
+      seg(midX, Math.min(f.cy, ...ys), midX, Math.max(f.cy, ...ys), ok)
+      for (const t of toTasks) {
+        const c = center(t, wrap)
+        seg(midX, c.cy, c.left, c.cy, ok)
+        chevron(c.left, c.cy, ok)
+      }
+    }
+  }
+}
+watch(
+  () => props.instance,
+  () => nextTick(drawWires),
+)
+onMounted(() => {
+  nextTick(drawWires)
+  window.addEventListener('resize', drawWires)
+})
+onUnmounted(() => window.removeEventListener('resize', drawWires))
 
 /* ========== 时间线模式（legacy / v5 nodes 实例，保持原样） ========== */
 
@@ -167,19 +240,24 @@ function isWatchdog(s: string) {
       </span>
     </div>
 
-    <!-- 编排画布（新引擎实例）：步骤 → 任务分叉，走过路径绿色高亮 -->
+    <!-- 编排画布（新引擎实例，与编辑页同构的两行结构）：上排步骤卡（不连线）、
+         下排任务卡箭头串联 + 多任务分叉；连线 = SVG 测量（任务卡中线），走过路径绿色高亮 -->
     <div v-if="orch?.length" class="orch-canvas">
-      <template v-for="(s, i) in orch" :key="s.id">
-        <div v-if="i > 0" class="orch-arrow" :class="{ green: arrowGreen(i) }"></div>
-        <div class="orch-cell">
-          <div class="orch-step" :class="`st-${stepAgg(s)}`" @click="emit('stageClick', s.name)">
-            <span class="seq">{{ i + 1 }}</span>
-            <span class="name">{{ s.name }}</span>
-            <span class="cmd-link" title="查看该步骤发布命令" @click.stop="emit('commandClick', s.name)">命令</span>
+      <div class="canvas-body" ref="canvasBody">
+        <svg class="wires" ref="wires"></svg>
+        <div class="orch-row">
+          <div v-for="(s, i) in orch" :key="s.id" class="orch-col">
+            <div class="orch-step" :class="`st-${stepAgg(s)}`" @click="emit('stageClick', s.name)">
+              <span class="seq">{{ i + 1 }}</span>
+              <span class="name">{{ s.name }}</span>
+              <span class="cmd-link" title="查看该步骤发布命令" @click.stop="emit('commandClick', s.name)">命令</span>
+            </div>
           </div>
-          <div v-if="(s.tasks ?? []).length" class="orch-tasks">
+        </div>
+        <div class="orch-row orch-row-tasks">
+          <div v-for="s in orch" :key="'t-' + s.id" class="orch-col">
             <div
-              v-for="t in s.tasks"
+              v-for="t in s.tasks ?? []"
               :key="t.id"
               class="orch-task"
               :class="`st-${taskStateOf(s, t)}`"
@@ -192,7 +270,7 @@ function isWatchdog(s: string) {
             </div>
           </div>
         </div>
-      </template>
+      </div>
     </div>
 
     <!-- 时间线（legacy / v5 nodes 实例，保持原有展示） -->
@@ -286,59 +364,46 @@ function isWatchdog(s: string) {
   line-height: 18px;
 }
 
-/* ===== 编排画布（与编辑页画布同构的只读版） ===== */
+/* ===== 编排画布（与编辑页同构的两行结构：上排步骤卡 / 下排任务卡，SVG 测量连线） ===== */
 .orch-canvas {
-  display: flex;
-  align-items: flex-start;
   overflow-x: auto;
   padding: 8px 4px 4px;
 }
-.orch-cell {
+.canvas-body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+.wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.orch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 44px;
+  padding: 4px 10px;
+}
+.orch-col {
   display: flex;
   flex-direction: column;
-  /* 2026-09-21：stretch（原 center）—— 步骤卡撑满 cell，卡片边缘贴合 cell 边界。
-     原先卡片居中，cell 比卡片宽时两侧留白 13~29px，把连线切断（用户反馈「连接线没拼接好」）。
-     卡片内容仍居中，见 .orch-step 的 justify-content。 */
-  align-items: stretch;
-  flex-shrink: 0;
-}
-/* 步骤间箭头（走过路径变绿）：贴 cell 边界；卡片撑满 cell 后两端恰好接上卡片边缘 */
-.orch-arrow {
-  position: relative;
-  flex-shrink: 0;
-  width: 28px;
-  height: 2px;
-  /* 对齐步骤卡垂直中线：卡片高 33（padding 6+6 + 行高 18 + border 3）→ 中线 16.5，线高 2 → 顶部 15.5 */
-  margin-top: 15.5px;
-  background: var(--ws-border);
-}
-.orch-arrow::after {
-  content: '';
-  position: absolute;
-  right: -1px;
-  top: -3px;
-  border-left: 6px solid var(--ws-border);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-}
-.orch-arrow.green {
-  background: var(--ws-success-500);
-}
-.orch-arrow.green::after {
-  border-left-color: var(--ws-success-500);
-}
-/* 步骤卡 */
-.orch-step {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center; /* 卡片撑满 cell 后内容仍居中（2026-09-21） */
   gap: 6px;
-  padding: 6px 12px;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+/* 步骤卡（上排，编辑页式垂直排版；不参与连线 —— 连线画在任务行） */
+.orch-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 14px;
+  min-width: 120px;
   border: 1.5px solid var(--ws-border);
-  border-radius: 6px;
+  border-radius: 2px;
   background: var(--ws-bg-surface);
-  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.15s, background 0.15s;
@@ -352,39 +417,22 @@ function isWatchdog(s: string) {
   color: var(--ws-text-tertiary);
 }
 .orch-step .name {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ws-text-primary);
 }
 .orch-step .cmd-link {
   font-size: 11px;
   line-height: 16px;
 }
-/* 任务分叉（2026-09-22 对齐编辑页：任务卡与步骤卡**同宽左对齐**，不再缩进 ——
-   原「缩进 16px + 左竖线 + 横线」的树状画法让任务卡比步骤卡错开 16px，用户反馈没对准。
-   分叉竖线贴 cell 左缘，与卡片/任务卡左边缘重合，在任务卡间隙中可见，横线随之删除） */
-.orch-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-  margin-top: 6px;
-}
-.orch-tasks::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: -6px;
-  bottom: 6px;
-  border-left: 2px solid var(--ws-border);
-}
+/* 任务卡（下排，列内同宽左对齐；连线由 SVG 画在任务卡中线） */
 .orch-task {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
+  width: 100%;
+  padding: 4px 10px;
   border: 1px solid var(--ws-border);
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--ws-bg-surface);
   font-size: 11px;
   cursor: pointer;
