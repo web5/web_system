@@ -124,7 +124,7 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | **数据库** | ✅ 本地 MySQL | 库：`web_system`（主）、`web_system_deploy`（发布平台）、`web_system_knowledge`（RAG）、`ai_agent` |
 | **迁移** | ✅ 双轨 | 开发态靠 TypeORM `synchronize`（`NODE_ENV !== 'production'` 为真；gateway 的 deploy 连接恒 false、deploy-console 恒 true）；正式迁移走 `bash scripts/apply-migrations.sh local`（幂等，记录落 `schema_migrations`，支持 `DRY_RUN=1`） |
 | **日志** | ⚠️ 本地走 pm2 默认路径 | 本地 `ecosystem.config.cjs` **未配 `out_file/error_file`** → `~/.pm2/logs/<name>-*.log`；查看 `pm2 logs <name> --lines 200`。生产 `ecosystem.config.js` 才写 `logs/<svc>-{out,error,combined}.log` |
-| **上传 / 静态资源** | ✅ | 落盘 `servers/upload-service/uploads/<category>/`（avatars/drawing/bianbian/general，启动自动建目录）；对外 `/api/uploads/<cat>/<file>`；`/materials/*` 由 gateway SPA 白名单放行 |
+| **上传 / 静态资源** | ✅ | 落盘**统一根** `<storage.upload_dir>/<category>/`（默认 `~/web_system/uploads`；分类 avatars/drawing/bianbian/general，按需建子目录）。根目录在 upload-service **启动时**解析：system-service 配置 → `STORAGE_UPLOAD_DIR` → 默认；不可写则**拒绝启动**（不静默回落 cwd）。改配置后需重启 upload-service。服务间写入口 `POST /internal/uploads/store`（`x-internal-key`）。对外 URL 契约不变 `/api/uploads/<cat>/<file>`；`/materials/*` 由 gateway SPA 白名单放行。见 `specs/backend-consolidation/design.md` §1 |
 | **Redis** | ⚠️ 非必需但建议起 | 仅 auth-service 真依赖（登出 token 黑名单），Redis 不可用时**放行**并有内存兜底；`scripts/local-db.sh` 一并拉起 6379 |
 | **MCP / 知识库** | ⚠️ 能跑但无文档 | 两者已在 pm2 托管，**均未登记 `scripts/modules.json`**（流水线管不到）。验证：`servers/mcp-gateway/test/e2e-keys.sh dev`、`servers/knowledge-service/scripts/e2e-check.mjs` |
 | **微前端（admin/portal）** | ✅ 四步铁律 | 见 `docs/development/admin-dev.md` §一·C：构建 → 拷贝 → 改版本表（`web_system_deploy.deploy_deployments`）→ 等 10s 缓存 / 重启。**纯看页面直接访问 `https://local.kedouai.com/admin/`，不需要起 vite dev** |
@@ -279,7 +279,7 @@ curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 | # | 问题 | 影响 |
 |---|---|---|
 | 1 | `local-dev-setup.md` / `whistle-local-dev.md` 的端口与目录名落后于代码 | 照抄会连错端口；以本文 §2 为准 |
-| 2 | `/api/uploads/*` 实际反代到 **user-service**（`proxy.service.ts` 的 uploadProxy 用 `userServiceUrl`），`UPLOAD_SERVICE_URL` 未被消费；upload-service 无 gateway 路由 | 上传链路与 README 表述不一致 |
+| 2 | `/api/uploads/*` 实际反代到 **user-service**（`proxy.service.ts` 的 uploadProxy 用 `userServiceUrl`），`UPLOAD_SERVICE_URL` 未被消费；upload-service 无 gateway 路由 | 上传链路与 README 表述不一致。**加剧**：A3 已把 upload-service 的落盘改到统一根（`~/web_system/uploads`），而路由仍指向 user-service → **A4 未切之前，经 gateway 的新上传文件会 404**（直连 6008 正常）。A3 与 A4 必须同批发布 |
 | 3 | knowledge-service 未登记 `scripts/modules.json`，本地缺 `.env` 与 `dist/` | pm2 直接失败；需 `cp .env.example .env` + `pnpm build` + 建库 |
 | 4 | knowledge-service(6011) / mcp-gateway(6006) 的本地启动与验证无文档 | 只能靠 `e2e-check.mjs` / `e2e-keys.sh` |
 | 5 | 无独立的「日志查看与排障」文档；本地与生产 pm2 日志路径不同 | 排障靠口口相传 |
