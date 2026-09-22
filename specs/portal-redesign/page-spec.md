@@ -3,6 +3,10 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 版本：v0.1（草案，待批注）｜配套：`design.md`（先读它）
 > 覆盖：P1 三栏外壳 + 对话工作台（Full 模板）；P2–P4 页面用简版，落码前各自补 Full
+>
+> **2026-09-22 落码开始**：原型 commit `d43117b`（2026-09-21 用户确认定稿）。
+> 本批落 AiChat v4（面板一体化 + blocks + 折叠 + 翻译卡 + 音乐卡 + card 分支自补）；
+> 翻译 / 合翻按 §3 顶部分期仍为占位路由。UI commit 须带 `Proto: d43117b`。
 
 ---
 
