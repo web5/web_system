@@ -47,8 +47,8 @@ export class Compaction {
     try {
       const content = await client.chat(
         [
-          { role: 'system', content: SUMMARY_PROMPT },
-          { role: 'user', content: userPrompt },
+          { role: 'system', content: SUMMARY_PROMPT, ts: Date.now() },
+          { role: 'user', content: userPrompt, ts: Date.now() },
         ],
         { temperature: 0.2, maxTokens: 800 },
       );
@@ -68,6 +68,7 @@ export class Compaction {
         content: m.content,
         ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
         ...(m.name ? { name: m.name } : {}),
+        ts: m.ts,
       }));
   }
 }
