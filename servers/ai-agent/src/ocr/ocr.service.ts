@@ -136,8 +136,8 @@ export class OcrService {
       const model = this.clientRegistry.getOrFallback('deepseek-v4-flash');
       const cleaned = await model.chat(
         [
-          { role: 'system', content: CLEANER_SYSTEM_PROMPT },
-          { role: 'user', content: `请清洗以下合同 OCR 文本：\n\n${rawText}` },
+          { role: 'system', content: CLEANER_SYSTEM_PROMPT, ts: Date.now() },
+          { role: 'user', content: `请清洗以下合同 OCR 文本：\n\n${rawText}`, ts: Date.now() },
         ],
         { temperature: 0.2, maxTokens: 3000 },
       );

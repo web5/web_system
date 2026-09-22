@@ -21,8 +21,8 @@ describe('DbConversationMemory', () => {
   function makeMessages(count: number): ChatMessage[] {
     const msgs: ChatMessage[] = [];
     for (let i = 0; i < count; i++) {
-      msgs.push({ role: 'user', content: `消息 ${i}` });
-      msgs.push({ role: 'assistant', content: `回复 ${i}` });
+      msgs.push({ role: 'user', content: `消息 ${i}`, ts: Date.now() });
+      msgs.push({ role: 'assistant', content: `回复 ${i}`, ts: Date.now() });
     }
     return msgs;
   }
@@ -56,8 +56,8 @@ describe('DbConversationMemory', () => {
       'u1',
       undefined,
       [
-        { role: 'system', content: 'system prompt' },
-        { role: 'user', content: '【合同场景】消费贷款\n【合同内容】甲方借乙方十万元……' },
+        { role: 'system', content: 'system prompt', ts: Date.now() },
+        { role: 'user', content: '【合同场景】消费贷款\n【合同内容】甲方借乙方十万元……', ts: Date.now() },
       ],
       config,
     );
@@ -67,7 +67,7 @@ describe('DbConversationMemory', () => {
 
   it('新建会话：save 对象不携带 report/meta（避免插入空快照干扰后续更新）', async () => {
     const { repo, mem } = setup(null);
-    await mem.persist('u1', undefined, [{ role: 'user', content: '你好' }], config);
+    await mem.persist('u1', undefined, [{ role: 'user', content: '你好', ts: Date.now() }], config);
     const saved = (repo.save as jest.Mock).mock.calls[0][0];
     expect(saved).not.toHaveProperty('report');
     expect(saved).not.toHaveProperty('meta');
@@ -86,7 +86,7 @@ describe('DbConversationMemory', () => {
     await mem.persist(
       'u1',
       'conv-1',
-      [{ role: 'user', content: '新的一轮追问' }],
+      [{ role: 'user', content: '新的一轮追问', ts: Date.now() }],
       config,
     );
     const saved = (repo.save as jest.Mock).mock.calls[0][0];
