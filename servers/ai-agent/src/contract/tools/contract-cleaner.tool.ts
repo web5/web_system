@@ -72,8 +72,8 @@ export class ContractCleanerTool implements ToolDefinition {
     try {
       const cleaned = await model.chat(
         [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `请清洗以下合同 OCR 文本：\n\n${rawText}` },
+          { role: 'system', content: systemPrompt, ts: Date.now() },
+          { role: 'user', content: `请清洗以下合同 OCR 文本：\n\n${rawText}`, ts: Date.now() },
         ],
         { temperature: 0.2, maxTokens: 3000 },
       );
