@@ -10,6 +10,7 @@ import * as path from 'path';
 import {
   isWithinRoot,
   resolveStoragePath,
+  SERVICE_URL_DEFAULTS,
   StoragePathError,
 } from '@web-system/shared';
 import { SettingsService } from '../settings/settings.service';
@@ -26,6 +27,12 @@ export const STORAGE_ALLOWED_ROOTS_ENV = 'STORAGE_ALLOWED_ROOTS';
 export const STORAGE_UPLOAD_DIR_ENV = 'STORAGE_UPLOAD_DIR';
 /** 跨平台默认上传根：`~/web_system/uploads` */
 export const DEFAULT_UPLOAD_DIR = path.join(os.homedir(), 'web_system', 'uploads');
+/** 上传服务地址（读它的「本进程实际生效目录」用；缺省取 SERVICE_URL_DEFAULTS.upload） */
+export const UPLOAD_SERVICE_URL_ENV = 'UPLOAD_SERVICE_URL';
+/** 服务间内部密钥（调用 upload-service 内部接口用） */
+export const INTERNAL_API_KEY_ENV = 'INTERNAL_API_KEY';
+/** 查 upload-service 生效目录的超时（ms）—— 它慢/挂了不能拖住本接口 */
+export const EFFECTIVE_FETCH_TIMEOUT_MS = 2000;
 
 /* ── 目录浏览的规模限制（design §1.5）───────────────────────────── */
 
@@ -42,6 +49,20 @@ export type UploadDirSource = 'system_configs' | 'env' | 'default';
 export interface ConfiguredUploadDir {
   path: string;
   source: UploadDirSource;
+}
+
+/**
+ * upload-service **本进程实际生效**的上传目录（启动时采纳的内存值）。
+ *
+ * 与 {@link ConfiguredUploadDir}（权威配置值）成对使用：
+ * 「已保存未重启」期间两者不同 —— 页面正是靠这一对做「待生效 / 当前生效」的对比。
+ */
+export interface EffectiveUploadDir {
+  path: string;
+  /** upload-service 自报的来源（`system_service` / `env` / `default`） */
+  source?: string;
+  /** upload-service 的启动时间（ISO），用于判断「这个值是不是重启后生效的」 */
+  startedAt?: string;
 }
 
 export interface StorageDirCheck {
@@ -134,6 +155,62 @@ export class StorageService {
   /** 目录浏览是否开启（默认开；`storage.browse_enabled=0` 关闭） */
   async isBrowseEnabled(): Promise<boolean> {
     return this.settings.getBoolean(STORAGE_BROWSE_ENABLED_KEY, true);
+  }
+
+  /**
+   * 读 upload-service **本进程实际生效**的上传目录（启动时采纳的内存值）。
+   *
+   * 为什么由 system-service 代问：前端不能持内部密钥、也不该直连服务内部接口；
+   * 而「当前生效 vs 待生效」的对比必须两个值都拿得到
+   * （拍板口径见 `specs/backend-consolidation/page-spec-storage-config.md` 第 4 项）。
+   *
+   * 失败（未配密钥 / 服务未启动 / 超时 / 非 2xx / 形状不对）**一律返回 null**：
+   * 它是增强信息，拿不到就不展示，绝不让「读配置」跟着失败。
+   */
+  async fetchEffectiveUploadDir(
+    options: {
+      baseUrl?: string;
+      internalKey?: string;
+      timeoutMs?: number;
+      fetchImpl?: typeof fetch;
+      env?: Record<string, string | undefined>;
+    } = {},
+  ): Promise<EffectiveUploadDir | null> {
+    const env = options.env ?? process.env;
+    const configuredBase = options.baseUrl ?? (env[UPLOAD_SERVICE_URL_ENV] || '').trim();
+    const base = (configuredBase || SERVICE_URL_DEFAULTS.upload).replace(/\/+$/, '');
+    const key = (options.internalKey ?? (env[INTERNAL_API_KEY_ENV] || '')).trim();
+    if (!key) {
+      // 没配内部密钥就别打这个接口（必然 401，白等一次超时）
+      return null;
+    }
+
+    const timeoutMs = options.timeoutMs ?? EFFECTIVE_FETCH_TIMEOUT_MS;
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetchImpl(`${base}/internal/storage/path`, {
+        headers: { 'x-internal-key': key },
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        data?: { path?: string; source?: string; startedAt?: string };
+      };
+      const effectivePath = (body?.data?.path || '').trim();
+      if (!effectivePath) return null;
+      return {
+        path: effectivePath,
+        source: body?.data?.source,
+        startedAt: body?.data?.startedAt,
+      };
+    } catch {
+      // 超时 / 连接失败 / JSON 解析失败：按「取不到」处理，由前端降级展示
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

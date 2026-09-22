@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { ROLE_PERMISSIONS } from '@web-system/types';
 import { RequirePermission } from '../auth/decorators';
 import { OperationLogsService } from '../operation-logs/operation-logs.service';
 import { StorageDirDto } from './storage.dto';
@@ -18,6 +19,14 @@ import {
   StorageService,
   STORAGE_UPLOAD_DIR_ENV,
 } from './storage.service';
+
+/** 当前请求的登录用户是否持有某权限码（口径与 PermissionsGuard 一致：按角色展开） */
+function hasPermission(req: Request, code: string): boolean {
+  const roles = (req as Request & { user?: { roles?: string[] } }).user?.roles ?? [];
+  return roles.some((role) =>
+    ((ROLE_PERMISSIONS as Record<string, string[]>)[role] ?? []).includes(code),
+  );
+}
 
 /** 从请求里取审计用的操作者与来源 IP（不引入新依赖，够用即可） */
 function auditContext(req: Request): { operator: string; ip: string } {
@@ -50,17 +59,31 @@ export class StorageController {
 
   @Get()
   @RequirePermission('settings:view')
-  @ApiOperation({ summary: '读取存储配置（权威值 + 来源）' })
-  async getConfig() {
+  @ApiOperation({ summary: '读取存储配置（权威值 + 当前生效值 + 来源）' })
+  async getConfig(@Req() req: Request) {
     const configured = await this.storage.resolveConfiguredUploadDir();
+    // 当前生效值：由本服务代问 upload-service（前端不持内部密钥、不直连内部接口）。
+    // 取不到就是 null —— 页面降级为「只展示权威值 + 重启提示」，不影响读配置。
+    const effective = await this.storage.fetchEffectiveUploadDir();
     return {
       code: 0,
       data: {
-        /** 权威配置值（upload-service 下次启动会采纳它） */
+        /** 权威配置值（upload-service 下次启动会采纳它）＝「待生效目录」 */
         uploadDir: configured.path,
         /** 这个值从哪来：system_configs / env / default */
         source: configured.source,
+        /** upload-service **本进程实际生效**的目录（内存值）；取不到为 null ＝「当前生效目录」 */
+        effectivePath: effective?.path ?? null,
+        effectiveSource: effective?.source ?? null,
+        effectiveStartedAt: effective?.startedAt ?? null,
         browseEnabled: await this.storage.isBrowseEnabled(),
+        /**
+         * 当前用户能否浏览服务器目录（`storage:browse`，仅 super_admin）。
+         *
+         * 为什么由后端算：控制台的登录态只带单一 `role`，前端拿不到权限码集合；
+         * 让前端自己判断角色字符串会把「谁能浏览」的口径复制一份出去（易漂移）。
+         */
+        canBrowse: hasPermission(req, 'storage:browse'),
         defaultDir: DEFAULT_UPLOAD_DIR,
         /** 环境变量是否在兜底（展示用，避免运维误以为「改了配置中心却没生效」） */
         envOverride: Boolean((process.env[STORAGE_UPLOAD_DIR_ENV] || '').trim()),
