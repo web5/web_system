@@ -476,12 +476,12 @@ export class ProxyController {
     return proxy(req, res);
   }
 
-  /** AI 生成的变变图片静态资源（/api/uploads/bianbian/* → ai-service）
-   *  必须在通用 /api/uploads/* 之前注册，确保优先级高于 user-service 代理 */
+  /** 变变图片静态资源（/api/uploads/bianbian/* → upload-service，404 再回落 ai-service 历史文件）
+   *  必须在通用 /api/uploads/* 之前注册，否则被通用静态代理接走 */
   // 精确匹配 /api/uploads/bianbian（无尾斜杠）
   @All('uploads/bianbian')
   proxyUploadsBianbianExact(@Req() req: Request, @Res() res: Response) {
-    return this.proxyService.getBianbianStaticProxy()(req, res, (e?: Error) => {
+    return this.proxyService.proxyBianbianStatic(req, res, (e?: Error) => {
       if (e) {
         this.logger.error(`Bianbian 图片代理错误: ${e.message}`);
       }
@@ -492,7 +492,7 @@ export class ProxyController {
   // 通配 /api/uploads/bianbian/:path(*)
   @All('uploads/bianbian/:path(*)')
   proxyUploadsBianbianWildcard(@Req() req: Request, @Res() res: Response) {
-    return this.proxyService.getBianbianStaticProxy()(req, res, (e?: Error) => {
+    return this.proxyService.proxyBianbianStatic(req, res, (e?: Error) => {
       if (e) {
         this.logger.error(`Bianbian 图片代理错误: ${e.message}`);
       }
@@ -500,7 +500,7 @@ export class ProxyController {
     });
   }
 
-  /** 上传文件的静态资源访问（/api/uploads/* → user-service） */
+  /** 上传文件的静态资源访问（/api/uploads/* → upload-service，A4 起） */
   // 精确匹配 /api/uploads（无尾斜杠）
   @All('uploads')
   proxyUploadStaticExact(@Req() req: Request, @Res() res: Response) {
