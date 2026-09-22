@@ -54,6 +54,11 @@ loads: references/（见文末「共享参考文档」表）
   │                                         ↓ 产出原型稿 → 过独立交互质检 → 人确认
   │                                      skills/rd-plan（回填 page-spec）→ rd-execute → rd-review
   │
+  ├─ 评审设计 / 把关设计 / 视觉走查 / 落码后一致性 ──→ skills/design-reviewer
+  │     （条件分派：项目装配了该技能才走；未装配则本分支不生效，不视为"未定义分派"）
+  │                                         ↓ 出设计评审报告（阻塞/重要/建议 + 反例 + 判据编号）
+  │                                      回流给被审角色重做；**裁决权在人**，评审不替代人拍板
+  │
   ├─ 报错 / 测试失败 / 意外行为 ───────→ skills/systematic-debugging
   │                                         ↓ 根因修复后
   │                                      `rd-execute` 完成验证门（对照 V1…Vn）
@@ -85,6 +90,7 @@ loads: references/（见文末「共享参考文档」表）
 | 流水线 | `rd-execute` | 逐项实现（TDD 迭代-校验）+ 收尾完成验证门（对照同一份 V1…Vn；完成声明 = 验证证据） |
 | 流水线 | `rd-review` | 自检产物质量（实现者自查） |
 | 设计 | `ux-prototype-designer` | 需求/方案 → 可点击交互 HTML 原型稿；独立交互质检（`ux-review-checklist.md`） |
+| 设计评审 | `design-reviewer`（项目可选装配） | 设计侧**独立第三方评审**：盲审（先读判据后看稿、不采信生产者自辩），按项目设计基线条目评审产品设计 / 交互 / 视觉；三关口 D1 设计输入 / D2 原型规格 / D3 实现一致性。不出稿、不改码，只出报告并回流 |
 | 测试 | `test-verification` | 独立第三方盲测验证（按需求 spec 验收判据构造反例打产物），对开发/需求质疑 |
 | 调试 | `systematic-debugging` | 四阶段根因分析，禁止报错即改 |
 | 重构 | `incremental-refactoring` | 测试保护下小步重构 |
@@ -101,12 +107,17 @@ loads: references/（见文末「共享参考文档」表）
    → `requirement-translation` 产出需求 spec（EARS 验收判据 / 反例 / 待确认），作为下游开发与测试质疑、验证的基准
 1. **产品方案评审**（做不做对的事）—— 需求 spec / 产品方案
    → `references/product-review-checklist.md`（AI 自查）→ 人在「设计确认」复核
-2. **UX 交互质检**（交互设计合不合格）—— 原型稿 / 交互方案
-   → `ux-prototype-designer` 产出原型稿时过 `skills/ux-prototype-designer/references/ux-review-checklist.md`（信息架构 / 任务流 / 状态矩阵 / 可用性）；与产品价值确认相互独立，互不替代
-3. **技术方案评审**（怎么实现）—— design.md / 选型 / 架构
+2. **设计输入评审 · D1**（这个需求该不该长这样）—— 方案定稿后、原型开画前
+   → 项目装配 `design-reviewer` 时，评信息架构 / 任务模型 / 形态选型；仅中大型 UI 方案触发，属**软约束**
+3. **UX 交互质检**（交互设计合不合格）—— 原型稿 / 交互方案
+   → `ux-prototype-designer` 产出原型稿时过 `skills/ux-prototype-designer/references/ux-review-checklist.md`（信息架构 / 任务流 / 状态矩阵 / 可用性）—— 这是**出稿下限**（生产者自过）
+   → 交人确认前，再由 `design-reviewer` 过一次**独立设计评审 · D2**（盲审：先读判据、后看稿，不采信生产者自辩）；**两者互不替代**（下限 vs 第三方复审）
+4. **技术方案评审**（怎么实现）—— design.md / 选型 / 架构
    → `tech-review/references/review-checklist.md`（AI 自查，配合 tech-review 技能）
-4. **代码评审**（实现自查）—— 执行完成后 → `rd-review`（实现者自查）
-5. **测试验证**（独立第三方盲测）—— 代码评审后、人审前
+5. **代码评审**（实现自查）—— 执行完成后 → `rd-review`（实现者自查）
+6. **实现一致性评审 · D3**（实现是否忠于已确认设计）—— 落码后、人审前
+   → 项目装配 `design-reviewer` 时，比对原型锚点 / 可机检条目 / 截图并置，出报告并回流开发（"原型与落地两张皮"此前无人拦）
+7. **测试验证**（独立第三方盲测）—— 代码评审后、人审前
    → `test-verification` 按需求 spec 验收判据盲测产物，对开发结果质疑、对需求判据缺失质疑；与开发者自证（`rd-execute` 完成验证门）互补不替代
 
 底层思考工具：`rd-plan/references/thinking-checklist.md`（苏格拉底辨证 / 第一性原理 / 芒格）——评审前自问、评审时复核答案质量。
@@ -126,6 +137,10 @@ loads: references/（见文末「共享参考文档」表）
 | 开发→需求 | rd-execute | requirement-translation | 需求不可落地 / 歧义 / 反例缺失 | 重转需求 spec |
 | 测试→开发 | test-verification | rd-execute | 产物未满足验收判据（可复现反例） | 交开发修复，测试不改码 |
 | 测试→需求 | test-verification | requirement-translation | 验收判据缺失 / 不可测 | 补判据 |
+| 设计→原型 | `design-reviewer` | `ux-prototype-designer` | 原型阻塞项（反例 + 判据编号） | **退回重出**，评审不代改 |
+| 设计→需求 | `design-reviewer` | `requirement-translation` | 需求未定义交互却要求脑补 / 判据不可审 | 补判据 |
+| 设计→开发 | `design-reviewer` | `rd-execute` | D3 实现漂移项 | 交开发修复，评审不改码 |
+| 原型→设计 | `ux-prototype-designer` | `design-reviewer` | 判据不可实现 / 与目标端平台冲突 | 复核判据 |
 
 要点：
 - 所有质疑须以**具体反例 + 必然失败清单 + 严重级 + 是否阻塞**呈现，禁止"感觉不对"式主观否定（呼应 thinking-checklist 辨证纪律）。
