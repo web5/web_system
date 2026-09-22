@@ -729,17 +729,22 @@
           </div>
           <div class="run-canvas" id="runCanvas">
             <svg class="run-wires" id="runWires"></svg>
-            <div class="run-row">
-              <div class="run-col"><div class="run-step st-ok"><span class="seq">1</span><span class="nm">拉取代码</span><span class="cmd">命令</span></div></div>
-              <div class="run-col"><div class="run-step st-ok"><span class="seq">2</span><span class="nm">构建</span><span class="cmd">命令</span></div></div>
-              <div class="run-col"><div class="run-step st-ok"><span class="seq">3</span><span class="nm">发布确认</span><span class="cmd">命令</span></div></div>
-              <div class="run-col"><div class="run-step st-ok"><span class="seq">4</span><span class="nm">发布</span><span class="cmd">命令</span></div></div>
-            </div>
-            <div class="run-row">
-              <div class="run-col"><div class="run-task st-ok"><span class="tn">git</span><span class="ts">完成</span></div></div>
-              <div class="run-col"><div class="run-task st-ok"><span class="tn">build</span><span class="ts">完成</span></div></div>
-              <div class="run-col"><div class="run-task st-ok"><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div></div>
+            <!-- 一列 = 步骤卡 + 该列任务卡；grid 列宽 = max(两者) → 步骤卡与任务卡天然同宽（2026-09-22） -->
+            <div class="run-grid">
               <div class="run-col">
+                <div class="run-step st-ok"><span class="seq">1</span><span class="nm">拉取代码</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="tn">git</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step st-ok"><span class="seq">2</span><span class="nm">构建</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="tn">build</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step st-ok"><span class="seq">3</span><span class="nm">发布确认</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step st-ok"><span class="seq">4</span><span class="nm">发布</span><span class="cmd">命令</span></div>
                 <div class="run-task st-ok"><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
                 <div class="run-task st-skip"><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
               </div>
@@ -1041,11 +1046,12 @@
   /* ===== 流水线详情 · 执行流程（run-*，2026-09-22 新增屏） ===== */
   .run-canvas{position:relative;overflow-x:auto;padding:10px 6px;}
   .run-wires{position:absolute;top:0;left:0;pointer-events:none;}
-  .run-row{display:flex;align-items:flex-start;gap:44px;padding:4px 8px;position:relative;}
-  .run-col{display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:104px;}
+  .run-grid{display:inline-grid;grid-auto-flow:column;gap:6px 44px;padding:4px 8px;position:relative;}
+  /* stretch：步骤卡与任务卡**同列同宽**（2026-09-22 用户反馈「标题和下面的任务宽度不一致」） */
+  .run-col{display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:104px;align-items:stretch;}
   /* 步骤标题卡：**中性**（白底灰边深字、名称 13px —— 用户 2026-09-22 要求对比编辑页：
      编辑页 step-title 不整卡染成功色；执行状态由任务卡与连线表达，步骤卡不重复染色） */
-  .run-step{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 14px;min-width:110px;
+  .run-step{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 14px;width:100%;
     border:1px solid var(--border);border-radius:4px;background:var(--card);cursor:pointer;}
   .run-step .seq{font-size:10px;color:var(--text-3);font-family:var(--mono);}
   .run-step .nm{font-size:13px;font-weight:600;color:var(--text);}
@@ -1563,9 +1569,7 @@ body{background:#e8ecf1;}
   function drawRunWires(){
     var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
     if(!cv||!svg) return;
-    var rows=cv.querySelectorAll('.run-row'); var taskRow=rows[1];
-    if(!taskRow) return;
-    var cols=[].slice.call(taskRow.querySelectorAll('.run-col'));
+    var cols=[].slice.call(cv.querySelectorAll('.run-col'));
     var wr=cv.getBoundingClientRect();
     svg.setAttribute('width',Math.ceil(cv.scrollWidth)); svg.setAttribute('height',Math.ceil(cv.scrollHeight));
     svg.innerHTML='';
