@@ -24,6 +24,15 @@
   处置：步骤卡**撑满 cell**（`align-items:stretch` + 内容居中）→ 卡片边缘贴合 cell 边界，线自然接上；
         箭头 `margin-top` 18 → 15.5，对齐卡片中线。
   落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
+
+  === 微调豁免（三）· 2026-09-22 ===
+  范围：详情页只读画布的**连线着色规则**修正（状态展示 bug，非新交互）。
+  现象：用户反馈「后面该变绿的连接线，没变绿」。
+  实测：实例整体已 succeeded，但落库 taskStates 里审批任务停留在 awaiting
+        （审批通过后引擎未回写）→ 步骤聚合为 awaiting → 该步骤之后的连线保持灰色。
+  处置：前端展示兜底 —— 实例终态 succeeded 时，落库残留的 awaiting/running 按 succeeded
+        展示（整体成功与「审批仍挂起」不可能并存）；后端根修（审批通过回写任务状态）另册。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue taskStateOf()
 -->
 <style>
   :root{

@@ -349,3 +349,18 @@
   （锁定参数：`fixedModuleKey` / `initialModuleKey` / `fixedTemplateId` + `fixedTemplateEnv` / `defaultEnv` + `lockEnv`），
   由 `ServiceDetail`（原地打开、模块锁定、行内锁环境）与 `PipelineCenter`（模块预选或锁定、流水线可锁）共用。
   原型/规格 commit `016309d`，落地 commit `cacaf34`（message 含 `Proto: 016309d`）。
+
+---
+
+## 13. 执行流程只读画布 · 连线着色的终态归一（用户 2026-09-22 反馈）
+
+- 页面/组件：`apps/deploy-console/src/components/pipeline/ProgressFlow.vue`（`taskStateOf`）
+- 现象：实例整体 `succeeded`，但「发布确认」审批任务在 `taskStates` 落库中停留在 `awaiting`
+  （审批通过后引擎未回写）→ 步骤聚合为 `awaiting` → `arrowGreen` 判 false，
+  **该变绿的连线保持灰色**（实测实例 `1789989422330-qwdieji`：`74859461…/672ed331… = awaiting`）。
+- 规则（前端展示兜底）：**实例终态为 `succeeded` 时，`taskStates` 中残留的 `awaiting` / `running`
+  一律按 `succeeded` 展示** —— 整体成功与「审批仍挂起 / 仍在执行」不可能并存，落库值属过期中间态。
+- 后端根修（另册，不在本次范围）：审批通过 / 实例进入终态时回写任务状态
+  （`awaiting → succeeded`），让 `taskStates` 自洽。
+- 原型：`docs/ui/prototypes/pipeline-env-branch-canvas.html` 头部「微调豁免（三）」记录。
+
