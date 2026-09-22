@@ -2,7 +2,7 @@
 
 > 配套：`design.md`（§0 速览 / §4 设计 / §10 落位 / §11 验证 / §12 坑）｜ 分支：`feature/deploy-console-domain-split` ｜ 仅本地（local）验证
 
-> 状态：**P0-1 ~ P0-4 的代码与数据已落地**（文件级锚点见 `design.md` §10「落地状态」表）；P1 / P2 未做。
+> 状态：**P0-1 ~ P0-4 与 P1 的代码与数据已落地**（文件级锚点见 `design.md` §10「落地状态」表）；P2（主密钥多机分发）未做。
 
 ## 开工前（5 分钟）
 
@@ -55,11 +55,11 @@
 
 **验收**：控制台手动「部署」shell → 日志出现「已通知 gateway 刷新缓存」；gateway 日志出现「版本缓存已失效」。
 
-## P1 · 流水线脚本接入下发（可选，时机统一用）
+## P1 · 流水线脚本接入下发（已实施：`scripts/migrations/p25-restart-config-dispatch.mjs`）
 
-- [ ] `config.controller.ts` 加 `@Public()` + `x-internal-key` 的 `GET internal/config/dispatch/:serviceKey?envId=`
-- [ ] `restart` 相关脚本：在重启前 `curl` 该接口写入 `.env.generated`，**写失败即 fail-fast**
-- [ ] 脚本输出一律 ASCII（console 的 bash 是单字节 locale）
+- [x] `config.controller.ts` 加 `@Public()` + `x-internal-key` 的 `GET internal/dispatch/:serviceKey?envId=`（`200` 正文 / `204` 无 module 级条目 / `401`）
+- [x] `restart` 动作脚本（DB，11 个后端模板）：重启前 `curl` 该接口写 `.env.generated`，**失败即 fail-fast（不落地、不重启）**；改前 `bash -n` 自检
+- [x] 仅 `DEPLOY_ENV=local` 生效（首批范围只到本地，dev/prod 行为不变）；脚本输出 ASCII
 
 **回退**：恢复脚本原文（迁移脚本备份）。
 

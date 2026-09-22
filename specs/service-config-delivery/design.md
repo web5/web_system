@@ -165,7 +165,7 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 | `config_items` | 无（已有 `is_secret` / `scope` / `env_id` / `module_key`） |
 | `ConfigService` | 新增 `resolveForScripts()` / `resolveForProcess()`；`resolve()` 保留兼容 |
 | `PipelineService.resolveStageVars` | 改用 `resolveForScripts()`（密钥不入脚本 env） |
-| 新接口 | `GET /api/config/dispatch/:serviceKey?envId=` → 返回可下发的键值（内部鉴权 `x-internal-key`，供脚本/平台使用） |
+| 新接口 | `GET /api/config/internal/dispatch/:serviceKey?envId=` → `200` 返回可下发的 env 正文（`text/plain`）、`204` 表示无 `module` 级条目（按需跳过）、`401` 鉴权失败；内部鉴权 `x-internal-key`（脚本侧 = `CONSOLE_TOKEN`），供流水线动作脚本落盘 |
 | 下发实现 | 平台侧写文件（0600）+ 备份上一版为 `.env.generated.bak-<ts>`（保留最近 3 份） |
 | `app.module.ts`（gateway / deploy-console） | `envFilePath` 数组加一项 |
 
@@ -183,8 +183,8 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 
 | 阶段 | 内容 | 回退 |
 |---|---|---|
-| **P0** | ① `resolveForScripts/ForProcess` 拆分 + 脚本注入排除密钥；② `envFilePath` 加下发文件；③ 平台侧下发实现 + 部署动作接线；④ `GATEWAY_SERVICE_KEY` 迁到配置中心（global，isSecret） | 删 `.env.generated`；`PIPELINE_CONFIG_INJECT=false` 可整体关脚本注入 |
-| **P1** | 流水线 `restart` 脚本接入下发（脚本化时机统一） | 恢复脚本原文（备份可回退） |
+| **P0** | ① `resolveForScripts/ForProcess` 拆分 + 脚本注入排除密钥；② `envFilePath` 加下发文件；③ 平台侧下发实现 + 部署动作接线；④ `GATEWAY_SERVICE_KEY` 迁到配置中心（module，isSecret） | 删 `.env.generated`；`PIPELINE_CONFIG_INJECT=false` 可整体关脚本注入 |
+| **P1（已实施）** | 流水线 `restart` 动作（DB 脚本）接入下发：`curl` 内部接口 → 写 `.env.generated` → **失败即中止发布**；**仅 `DEPLOY_ENV=local` 生效**（首批范围只到本地，dev/prod 脚本行为不变）。落地：`scripts/migrations/p25-restart-config-dispatch.mjs` + `config.controller.ts` 的 `internal/dispatch` | `ROLLBACK=1 node scripts/migrations/p25-restart-config-dispatch.mjs`（按标记删段，恢复原文） |
 | **P2** | `CONFIG_MASTER_KEY` 的多机分发方案（独立小设计） | — |
 
 ## 8. 验收判据（本地）
@@ -215,7 +215,7 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 | 1 | `servers/deploy-console/src/config/config.service.ts` | 新增常量 `RESERVED_LOCAL_KEYS`（`CONFIG_MASTER_KEY`、`MYSQL_*`、`PM2_*` 等）；新增 `resolveForScripts(envId, moduleKey)`（= 现有 `resolve` 但**过滤 `isSecret`**）；新增 `resolveForProcess(envId, serviceKey)`（语义化命名，含明文）；新增 `dispatchPayload(envId, serviceKey)` → `{ key, value, scope }[]`（带来源作用域，供下发文件写注释） | 单测：`is_secret` 项只出现在 `resolveForProcess`，`resolveForScripts` 里没有 |
 | 2 | `pipeline.service.ts:2056`（`resolveInjectEnv`） | `this.configs.resolve(...)` → `this.configs.resolveForScripts(...)`；`:2059` 的日志补一句「已排除 N 个密钥项」 | 发布脚本里 dump env，看不到 `HY3_API_KEY` |
 | 3 | `servers/deploy-console/src/deploy/deploy.service.ts` | 新增 `writeGeneratedEnv(envId, moduleKey)`：`dispatchPayload` → 渲染 `<RELEASE_WORKSPACE>/servers/<dir>/.env.generated`（0600；头部注释写生成时间 + 每个键的来源）→ 备份上一版为 `.env.generated.bak-<ts>`（留 3 份）；挂到「部署/重启服务」路径，**下发失败不重启** | §11 |
-| 4 | `servers/deploy-console/src/config/config.controller.ts` | （**P1** 才需要）新增 `@Public()` + `x-internal-key` 校验的 `GET internal/config/dispatch/:serviceKey?envId=`，返回纯文本 env 内容 | `curl` 校验 403/200 |
+| 4 | `servers/deploy-console/src/config/config.controller.ts` | `@Public()` + `x-internal-key`（`common/internal-key.ts`）的 `GET internal/dispatch/:serviceKey?envId=`：`200` 纯文本 env 正文 / `204` 无 module 级条目 / `401` 鉴权失败 | `curl` 校验 401/400/204/200 |
 | 5 | `servers/gateway/src/app.module.ts:38-40` | `envFilePath: [ path.resolve(__dirname, '../.env.generated'), path.resolve(__dirname, '../.env') ]`（**下发文件在前**） | V1 / V2 |
 | 6 | `servers/deploy-console/src/app.module.ts:38` | 同上（为了后续给控制台下发别的配置；P0 可先不改） | 同上 |
 | 7 | 配置中心数据（`config_items`） | `GATEWAY_SERVICE_KEY` 按**消费方各配一条 `module` 作用域条目**：`local/deploy-console` 与 `local/gateway`（值相同），`is_secret=1` | 列表页显示掩码；`resolveForProcess` 拿到明文 |
@@ -223,21 +223,22 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 > 第 7 条为什么**不用 `global`**：global 会被下发给**所有**服务，等于把只该给两方的密钥铺到每个服务的
 > `.env` 里。`module`（按服务）+ 「按需下发」才是一致的。控制台那条它自己「直接查」，不下发。
 
-**落地状态（本地 P0 已实施，锚点）**：
+**落地状态（P0 + P1 已实施，锚点）**：
 
 | 条 | 落地位置 |
 |---|---|
 | 1 | `config/config.service.ts`：`RESERVED_LOCAL_KEYS` / `isReservedLocalKey()` / `resolveForScripts()` / `resolveForScriptsDetailed()` / `resolveForProcess()` / `dispatchPayload()` / `hasModuleScope()` / `renderGeneratedEnvFile()` / `escapeEnvValue()` |
 | 2 | `pipeline/pipeline.service.ts` `resolveInjectEnv()`（改用 `resolveForScriptsDetailed()`，日志含「已排除 N 个密钥项」） |
 | 3 | `deploy/deploy.service.ts` `writeGeneratedEnv()` + `backupGeneratedEnv()`，接线在 `applyBackendVersion()`（先下发、后落地/重启） |
-| 4 | **未实施**（P1）：`GET internal/config/dispatch/:serviceKey` 内部接口 |
+| 4 | `config/config.controller.ts` 的 `GET internal/dispatch/:serviceKey?envId=`（鉴权实现抽到 `common/internal-key.ts`，与 `internal/release` 共用） |
 | 5 / 6 | `gateway/src/app.module.ts`、`deploy-console/src/app.module.ts` 的 `envFilePath`（下发文件在前） |
 | 7 | `config_items` 已建 `local/deploy-console` 与 `local/gateway` 两条 `module` 级 `GATEWAY_SERVICE_KEY`（`is_secret=1`，密文落库）；控制台侧 `gatewayServiceKey()` 先查配置中心、取不到回落 `.env`，gateway 侧靠下发得到 |
+| P1 | 11 个后端模板的 `restart`（后端）动作脚本由 `scripts/migrations/p25-restart-config-dispatch.mjs` 插入「配置下发段」（仅 `DEPLOY_ENV=local`，`200` 落盘 / `204` 跳过 / 其它 fail-fast 不落地不重启） |
 
-本地运维状态（`env=local`）：发布目录 `servers/gateway/.env.generated` 已按下发规则生成（0600，密钥来自 `module:local/gateway`）；
-`.env` 里为 `app-artifact-env-dir` 临时新增的 `GATEWAY_SERVICE_KEY` 已从 gateway 与 console 两处撤掉
-（gateway 保留 `FINNEWS_SERVICE_KEY` 作删文件后的回落，console 改为直接查配置中心）；
-`POST /api/internal/gateway/reload` 的 V1 / V2 已实测通过（下发值 201、`.env` 旧值 403；删下发文件后回到 `.env` 值）。
+本地实测（2026-09-22）：`POST /api/internal/gateway/reload` 的 V1 / V2 通过（下发值 201、`.env` 旧值 403；删下发文件即回退）；
+正式发布（流水线 `jobId 1790003565095-xbgvrqq`）日志出现 `[config] 注入 1 项配置（强制覆盖），已排除 1 个密钥项`（V3）；
+`restart` 动作脚本用引擎注入的变量手工执行通过：`[restart] 配置已下发: …/.env.generated` → 落地 → `pm2` 重建 → 端口 6000 健康；
+错 `CONSOLE_TOKEN` 时退出码 1 且未落地未重启；`DEPLOY_ENV=dev` 时跳过下发。
 
 ## 11. 复现与验证命令（本地）
 

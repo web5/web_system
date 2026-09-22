@@ -224,7 +224,8 @@ curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 
 | 项 | 口径 |
 |---|---|
-| 触发 | 控制台「部署/重启服务」（`DeployService.applyBackendVersion`，**仅 `env=local`**）；下发失败即中止部署（不重启、指针不推进） |
+| 触发 ①（正式发布） | 流水线 `restart`（后端）动作脚本：`curl $CONSOLE_API/config/internal/dispatch/<模块>?envId=<环境>`（`x-internal-key: $CONSOLE_TOKEN`）→ 写 `.env.generated`。**仅 `DEPLOY_ENV=local` 生效**；`200` 落盘 / `204` 无 module 级条目则跳过 / 其它**fail-fast（不落地、不重启）**。脚本段由 `scripts/migrations/p25-restart-config-dispatch.mjs` 注入（`ROLLBACK=1` 可回退） |
+| 触发 ②（控制台动作） | 控制台「部署/重启服务」（`DeployService.applyBackendVersion`）：先下发、后落地/重启，下发失败即中止（不重启、指针不推进） |
 | 范围 | 只下发**后端服务**，且该「环境 × 服务」在配置中心有 `module` 级条目（按需） |
 | 过滤 | `CONFIG_MASTER_KEY` / `INTERNAL_API_KEY` / `MYSQL_*` / `REDIS_*` / `PM2_*` / `PATH` / `HOME` / `CONSOLE_*` 永不下发 |
 | 备份 | 旧版改名 `.env.generated.bak-<ts>`，留最近 3 份 |
