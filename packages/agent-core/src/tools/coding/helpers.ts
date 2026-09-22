@@ -2,7 +2,7 @@
  * coding 工具共享辅助：忽略目录、路径安全、schema 构造。
  */
 import * as path from 'path';
-import { ToolSchema } from '../../interfaces/tool.interface';
+import { type ToolSchema } from '../../interfaces/tool.interface';
 
 /** 默认忽略目录（避免扫描 node_modules/.git 等） */
 const IGNORED_DIRS = ['node_modules', '.git', '.svn', 'dist', '.next', 'build', '.cache'];

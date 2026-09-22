@@ -12,7 +12,7 @@
  *   agent.skills 也被禁用。
  * - 无 capabilities：向后兼容，原样回退 tools / skills 旧字段。
  */
-import { AgentDefinition, CapabilityRef, SkillRef } from '../interfaces/agent.interface';
+import { type AgentDefinition, type CapabilityRef, type SkillRef } from '../interfaces/agent.interface';
 
 export interface ResolvedAgentCapabilities {
   /** 可直接喂给 ToolRegistry.toSchemas / execute 的工具名（tool=ref；mcp=ref 短名） */

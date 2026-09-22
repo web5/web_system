@@ -3,7 +3,7 @@
  */
 import { randomUUID } from 'crypto';
 import { AgentEngine } from './agent-engine';
-import { StreamEvent, RunInput } from '../interfaces/runtime.interface';
+import { type StreamEvent, type RunInput } from '../interfaces/runtime.interface';
 
 export class AgentRunner {
   constructor(private readonly engine: AgentEngine) {}

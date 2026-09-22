@@ -3,9 +3,9 @@
  * 摘要模型跟随用户所选（不硬编码 hy3）。
  */
 import { ClientRegistry } from '../registry/client.registry';
-import { BaseAiClient, ChatMessage } from '../clients/base-ai.client';
-import { AgentMemoryConfig } from '../interfaces/agent.interface';
-import { StoredMessage } from './stored-message';
+import { BaseAiClient, type ChatMessage } from '../clients/base-ai.client';
+import { type AgentMemoryConfig } from '../interfaces/agent.interface';
+import { type StoredMessage } from './stored-message';
 import { Logger } from '../lib/logger';
 
 const SUMMARY_PROMPT = `你是一个对话摘要助手。请将下面的对话历史压缩为一段简洁中文摘要，保留：关键事实、用户偏好、未完成任务、以及任何对后续对话重要的上下文。不要编造信息，不要输出摘要以外的解释。`;
