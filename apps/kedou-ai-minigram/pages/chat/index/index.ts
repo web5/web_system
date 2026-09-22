@@ -20,6 +20,7 @@ import {
   looksLikeTranslateReply,
 } from '../../../utils/translate-parse';
 import { speakText, stopSpeak, onSpeakState } from '../../../services/tts';
+import { collectGlossary } from '../../../services/glossary';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
@@ -649,9 +650,24 @@ Page({
     this.setData({ speakLoadingIdx: -1, speakPlayingIdx: ok ? idx : -1 });
   },
 
-  /** 卡片操作行：收藏（与翻译结果页一致，占位不伪装） */
-  onCardFav() {
-    wx.showToast({ title: '已收进生词本', icon: 'none' });
+  /** 卡片操作行：收藏当前翻译卡片的英文主文（幂等） */
+  onCardFav(e: any) {
+    const idx = Number(e?.currentTarget?.dataset?.idx);
+    const msg = this.data.chatMessages[idx];
+    const enMain = String(msg?.enMain || '').trim();
+    if (!enMain) return;
+    void collectGlossary({
+      sourceType: 'chat',
+      enMain,
+      note: msg?.note,
+      meta: { direction: 'zh2en' },
+    })
+      .then((r) => {
+        wx.showToast({ title: r.created ? '已收进生词本' : '已在生词本', icon: 'none' });
+      })
+      .catch(() => {
+        wx.showToast({ title: '收藏失败，请重试', icon: 'none' });
+      });
   },
 
   /**

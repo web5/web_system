@@ -1,0 +1,28 @@
+<!-- 用户记忆页：按事实/偏好/习惯分组，单条删除 -->
+<view class="page">
+  <view class="tip">AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，跨会话记住。可单条删除。</view>
+  <view class="loading" wx:if="{{loading}}">载入中…</view>
+
+  <block wx:if="{{!loading && !empty}}">
+    <block wx:for="{{groups}}" wx:key="category" wx:for-item="g">
+      <view class="sec-t">{{g.title}}<text class="em">{{g.items.length}} 条</text></view>
+      <view class="list">
+        <view class="mi" wx:for="{{g.items}}" wx:key="id" wx:for-item="m">
+          <view class="c">{{m.content}}</view>
+          <view class="x" data-id="{{m.id}}" bindtap="onRemove" aria-label="删除">
+            <view class="x1"></view>
+            <view class="x2"></view>
+          </view>
+        </view>
+      </view>
+    </block>
+    <view class="foot">记忆仅自己可见，随时可删</view>
+  </block>
+
+  <view class="empty" wx:if="{{!loading && empty}}">
+    <view class="ico"><view class="ico-note"></view></view>
+    <view class="e1">还没有记忆</view>
+    <view class="e2">去对话里聊聊，AI 会慢慢记住你</view>
+    <view class="go" bindtap="goChat">去对话里聊聊</view>
+  </view>
+</view>

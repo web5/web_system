@@ -9,6 +9,7 @@
 import { createAgentApi } from '../../../../services/agent-stream';
 import { parseSections, stripTitles } from '../../../../utils/translate-parse';
 import { speakText, stopSpeak, onSpeakState } from '../../../../services/tts';
+import { collectGlossary } from '../../../../services/glossary';
 
 Page({
   data: {
@@ -176,7 +177,22 @@ Page({
   },
 
   fav() {
-    wx.showToast({ title: '已收进生词本', icon: 'none' });
+    const enMain = String(this.data.natural || '').trim();
+    if (!enMain) return;
+    const p = (this._params || {}) as Record<string, string>;
+    void collectGlossary({
+      sourceType: 'translate',
+      sourceText: this.data.source,
+      enMain,
+      note: this.data.notes,
+      meta: { tone: p.register, direction: 'zh2en' },
+    })
+      .then((r) => {
+        wx.showToast({ title: r.created ? '已收进生词本' : '已在生词本', icon: 'none' });
+      })
+      .catch(() => {
+        wx.showToast({ title: '收藏失败，请重试', icon: 'none' });
+      });
   },
 
   more() {

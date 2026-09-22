@@ -8,6 +8,8 @@
  * 批次 4/5 接真后填充。
  */
 import { getMusicTaste, tasteSummary } from '../../../services/user-taste';
+import { listMemory } from '../../../services/user-memory';
+import { listGlossary } from '../../../services/glossary';
 
 Page({
   data: {
@@ -21,6 +23,10 @@ Page({
     cacheSize: '24.6MB',
     /** 音乐口味摘要（前 3 个标签；无则「未设置」） */
     tasteSummary: '未设置',
+    /** 用户记忆条数摘要 */
+    memorySummary: '0 条',
+    /** 生词本条数摘要 */
+    glossarySummary: '0 条',
   },
 
   /** 登记当前 tab（自定义 tabBar 据此渲染并高亮；对话页则隐藏） */
@@ -31,10 +37,25 @@ Page({
     void getMusicTaste().then((t) => {
       this.setData({ tasteSummary: tasteSummary(t) });
     });
+    // 用户记忆 / 生词本摘要：只取总数（pageSize=1），失败保持 0 条不打扰
+    void listMemory(1, 1).then((r) => {
+      this.setData({ memorySummary: (r.total || 0) + ' 条' });
+    });
+    void listGlossary(1, 1).then((r) => {
+      this.setData({ glossarySummary: (r.total || 0) + ' 条' });
+    });
   },
 
   goTaste() {
     wx.navigateTo({ url: '/pages/mine/taste/index' });
+  },
+
+  goMemory() {
+    wx.navigateTo({ url: '/pages/mine/memory/index' });
+  },
+
+  goGlossary() {
+    wx.navigateTo({ url: '/pages/mine/glossary/index' });
   },
 
   goProfile() { wx.navigateTo({ url: '/pages/mine/profile/profile' }); },

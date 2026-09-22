@@ -1,0 +1,26 @@
+<!-- 生词本：译文快照卡片（英文 + 原文 + 注解 + meta），点 × 删除 -->
+<view class="page">
+  <view class="tip">你收藏的译文会一直保留在这里，即使原对话删除。</view>
+  <view class="loading" wx:if="{{loading}}">载入中…</view>
+
+  <block wx:if="{{!loading && !empty}}">
+    <view class="gi" wx:for="{{items}}" wx:key="id">
+      <view class="en">{{item.enMain}}</view>
+      <view class="src" wx:if="{{item.sourceText}}">{{item.sourceText}}</view>
+      <view class="note" wx:if="{{item.note}}">{{item.note}}</view>
+      <view class="meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+      <view class="x" data-id="{{item.id}}" bindtap="onRemove" aria-label="删除">
+        <view class="x1"></view>
+        <view class="x2"></view>
+      </view>
+    </view>
+    <view class="foot">点右上角 × 删除收藏</view>
+  </block>
+
+  <view class="empty" wx:if="{{!loading && empty}}">
+    <view class="ico"><view class="ico-note"></view></view>
+    <view class="e1">还没有收藏</view>
+    <view class="e2">在翻译卡片或翻译结果页点「收藏」</view>
+    <view class="go" bindtap="goTranslate">去翻译</view>
+  </view>
+</view>
