@@ -138,6 +138,14 @@
                     <button v-if="m.content" type="button" class="act" @click="copy(m.content)">
                       <app-icon name="copy" />复制
                     </button>
+                    <button
+                      v-if="m.role === 'assistant' && m.content && !m.musicCard && !isTcard(m) && !m.streaming"
+                      type="button"
+                      class="act"
+                      @click="speak(m.id, speakableText(blocksMap[m.id]))"
+                    >
+                      <app-icon name="volume" />{{ reading === m.id ? '停止' : '朗读' }}
+                    </button>
                     <button v-if="m.role === 'assistant'" type="button" class="act" @click="retryMsg(m.id)">
                       重新生成
                     </button>
@@ -401,6 +409,20 @@ function speak(mId: string, text: string) {
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
   reading.value = mId;
+}
+
+/** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读） */
+function speakableText(blocks: AnswerBlock[]): string {
+  return blocks
+    .filter((b) => b.t !== 'tcard')
+    .map((b) => {
+      if (b.t === 'p' || b.t === 'h') return stripInline(b.v);
+      if (b.t === 'ol' || b.t === 'ul') return b.items.map((it) => stripInline(it)).join('。');
+      if (b.t === 'law') return `${b.src}，${stripInline(b.v)}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join('。');
 }
 
 /** 音乐卡「换一批 / 不感兴趣」：当新一轮对话发出（排序交给 agent 口味档案） */
