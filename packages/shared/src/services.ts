@@ -47,3 +47,32 @@ export const SERVICE_URL_DEFAULTS = {
  * 其余端口本机与 dev/prod 一致，静默走默认值不会连错机器。
  */
 export const REQUIRED_SERVICE_URLS_IN_PROD: readonly string[] = ['AUTH_SERVICE_URL'] as const;
+
+/**
+ * 生产环境「必需服务地址」的漏配清单（空数组 = 通过）。
+ *
+ * 只对 `NODE_ENV=production` 生效：本地 / 本地发布目录的默认值可用（auth=6101），
+ * 而 dev/prod 的口径不同（auth=6001）——**静默走默认值会连错机器**，故生产必须显式配。
+ *
+ * 纯函数：不读全局、不退出；日志与 `process.exit(1)` 由调用方（各服务 bootstrap）负责，
+ * 这样三 OS / 各服务都好测，也不会让 shared 变成有副作用的模块。
+ *
+ * @param get     读配置的函数（各服务传 `cfg.get` 或 `process.env` 读取器）
+ * @param nodeEnv 当前 NODE_ENV（默认取 process.env，便于单测注入）
+ */
+export function missingRequiredServiceUrls(
+  get: (key: string) => string | undefined,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): string[] {
+  if (nodeEnv !== 'production') return [];
+  return REQUIRED_SERVICE_URLS_IN_PROD.filter((key) => !String(get(key) ?? '').trim());
+}
+
+/** 缺关键服务地址时的统一文案（措辞不漂移，且直接给出修复动作） */
+export function serviceUrlFailFastHint(missing: readonly string[]): string {
+  return (
+    `生产环境缺少必需的服务地址：${missing.join(' / ')} —— ` +
+    '这些地址在 dev/prod 与本地口径不同（如 AUTH_SERVICE_URL：dev/prod=6001、本机=6101），' +
+    '不能静默走默认值（会连错机器）。请在 .env 显式设置后重启。'
+  );
+}
