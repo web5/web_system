@@ -1068,9 +1068,11 @@
   .run-task .tn{color:var(--text-2);}
   .run-task .ts{color:var(--text-3);margin-left:auto;}
   .run-task .tagc{font-size:9px;line-height:14px;padding:0 4px;border:1px solid var(--border);border-radius:3px;color:var(--primary);}
-  /* 状态色：完成=绿；跳过（未执行）=**灰**（2026-09-22 用户反馈：dev 没执行应该是灰色） */
-  .run-task.st-ok{border-color:#398E4A;background:#E7F5EC;}
-  .run-task.st-ok .tn{color:#398E4A;}
+  /* 状态色（2026-09-22 四次修订）：**绿色只填充序号竖条背景**（数字反白），
+     任务卡其他区域不改背景色（白底），边框保留状态色；跳过 = 灰（含序号条）；
+     步骤标题卡保持中性（与编辑页一致） */
+  .run-task.st-ok{border-color:#398E4A;}
+  .run-task.st-ok .rseq{background:#398E4A;color:#fff;border-right-color:#398E4A;}
   .run-task.st-skip{border-color:var(--border);background:var(--bg);opacity:.85;}
   .run-task.st-skip .tn,.run-task.st-skip .ts{color:var(--text-3);}
   .run-legend{display:flex;align-items:center;gap:5px;margin-top:14px;padding-top:10px;
