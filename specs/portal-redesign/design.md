@@ -158,7 +158,7 @@
 | B3 | 合同 signal 补原文片段定位字段（如 `excerpt`），并在报告快照中保存合同原文 | P3 双栏联动（可选增强） | 不补则 PC 端长期用关键词回查；补了小程序端也可受益（向后兼容新字段） |
 | B4 | 开启意图路由（`agentId=auto`，小程序规划第 3 批 M4，开关默认关） | P1 对话/统一会话 | 6 个 agent 配置 + 合规口径通过后才可开 |
 | B5 | agent 展示名同步：能力「合同体检官」定名**「合同翻译官」（简称「合翻」）**，需同步 `agent_definitions` 展示名与 agent 提示词口径（2026-09-21 命名拍板） | P2 发现页 / P3 合翻 | 小程序端是否同步改名另行确认 |
-| B6 | **消息级时间戳**：`agent_conversations.messages` 里的 `StoredMessage` 补 `ts` 字段（user/assistant/tool 各自写入时间） | P1 对话回放 | 用于跨天会话按天精确分段日期线（当前前端只能按「会话 createdAt/updatedAt 是否同天」在末尾放一条线；要像微信「每天一组、组间插线」需消息 ts）。存量数据无 ts，可空、前端兼容降级；小程序端历史回放同样受益 |
+| B6 | **消息级时间戳**：`agent_conversations.messages` 里的 `StoredMessage` 补 `ts` 字段（user/assistant/tool 各自写入时间，**必填**） | P1 对话回放 | 用于跨天会话按天精确分段日期线（要像微信「每天一组、组间插线」需消息 ts）。**不做向后兼容**：存量无 ts 数据用一次性迁移脚本 `scripts/migrate-message-ts.mjs` 回填（用会话 createdAt 近似，发布时执行一次，幂等）；小程序端历史回放同样受益 |
 
 ## 7. 本轮明确不做
 
