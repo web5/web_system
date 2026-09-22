@@ -9,7 +9,7 @@
  *   5. 小程序存储 Token，标记登录成功
  */
 
-import { getToken, setToken, clearToken } from '../utils/request';
+import { getToken, setToken, clearToken, setLoginEnsurer } from '../utils/request';
 
 const AUTH_API = '/api/auth/miniprogram-login';
 
@@ -70,14 +70,26 @@ export async function login(): Promise<void> {
 }
 
 /**
- * 确保已登录（用于需要登录态的页面）
+ * 确保已登录（用于需要登录态的页面）。
+ *
+ * 单例化：并发调用（如 App.onLaunch 的 autoLogin 与首屏页面请求同时触发）只会发一次登录，
+ * 避免重复 wx.login 换 code 造成浪费；成功/失败后重置，允许下次重试。
  */
-export async function ensureLogin(): Promise<boolean> {
-  if (isLoggedIn()) return true;
-  try {
-    await login();
-    return true;
-  } catch {
-    return false;
+let loginPromise: Promise<boolean> | null = null;
+
+export function ensureLogin(): Promise<boolean> {
+  if (isLoggedIn()) return Promise.resolve(true);
+  if (!loginPromise) {
+    loginPromise = login()
+      .then(() => true)
+      .catch(() => false)
+      .finally(() => {
+        loginPromise = null;
+      });
   }
+  return loginPromise;
 }
+
+// 注入到 request 层：request.ts 不直接 import 本文件（会形成 request↔auth 循环依赖），
+// 而是通过此钩子让「无 token 的请求」在发出前先走 ensureLogin。
+setLoginEnsurer(ensureLogin);
