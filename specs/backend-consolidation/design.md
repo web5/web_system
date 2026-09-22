@@ -138,6 +138,51 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 | A7 | 兼容期后删除 user-service 上传端点与 static serve；**保留** gateway 的 bianbian 特例路由作历史文件只读兜底（不删） | 收口完成 | A5 验证通过 |
 | A8 | ai-service 生成图改为调 `internal/uploads/store` 落盘，去掉本地路径依赖 | 存储单点 | A3 |
 
+**落地状态（2026-09-22）**
+
+| 任务 | 状态 | 落点 |
+|---|---|---|
+| A1 | ✅（#120） | `packages/shared/src/storage-path.ts` + `.spec.ts` |
+| A2 | ✅ 本轮 | `servers/system-service/src/storage/{storage.service,storage.controller,internal-storage.controller,storage.dto,storage.module}.ts`；权限点 `storage:browse`（`packages/types`，**仅 super_admin**，admin 已显式排除） |
+| A3 | ✅ 本轮 | `servers/upload-service/src/storage/upload-dir.ts`、`src/upload/{upload-root,upload-root.token,upload-multer,internal-uploads.controller}.ts`、`dto/store-upload.dto.ts`；`upload.service.ts`（分类改复数、单一 Multer 实现、`storeBuffer`）、`main.ts`（静态根取进程生效值） |
+| A4 | ✅ 本轮 | `servers/gateway/src/proxy/proxy.service.ts`（`uploadProxy` / `uploadStaticProxy` 目标切 upload-service、变变「先新后旧」兜底、`UPLOAD_SERVICE_URL` 默认值改 `SERVICE_URL_DEFAULTS.upload`）+ `proxy.controller.ts` + `proxy.service.spec.ts`（真 HTTP 验证，6 例） |
+| A5~A8 | ⬜ 未做 | — |
+
+实现说明（与上文措辞的差异，均为刻意的）：
+
+1. **允许根白名单只保留一个环境变量** `STORAGE_ALLOWED_ROOTS`（逗号分隔，追加在用户家目录之后），
+   同时约束「上传目录解析」与「目录浏览范围」。§1.5 里的 `STORAGE_BROWSE_ROOTS` 不再单独引入 ——
+   两个几乎同义的旋钮只会让人配错一个还以为生效了。
+2. **`GET /internal/storage/path` 两侧都有，但语义必须拆开**（§1.2 末尾那句在原措辞里是混的）：
+   - **system-service**：返回**权威配置值** + 它的来源（`system_configs` / `env` / `default`）；
+   - **upload-service**：返回**本进程实际生效值**（启动时采纳的内存值）+ 上游来源与启动时间。
+   「当前生效 / 待生效」双值就是分别取这两个（A6 页面用）。
+3. **保存时允许自动创建目录**：`PUT /admin/settings/storage` 先 `mkdir -p` 再探测可写性；
+   纯校验接口 `POST …/validate` 不创建、只回报「不存在」。否则「指向一块新挂的盘」这个最常见诉求无法完成。
+4. **A3 与 A4 必须同批发布**：A3 让 upload-service 写到统一根（默认 `~/web_system/uploads`），
+   A4 把 gateway 的 `/api/upload*` 与 `/api/uploads/*` 切到它。两者在**同一个 PR** 里，
+   但**发布时也必须一起发** —— 只发 A3 或只发 A4 都会让上传链路断一段。
+5. **变变图片走「先新后旧」兜底（A4 的关键细节）**：新文件在统一根（upload-service 出静态），
+   历史文件只在 ai-service 本机，而两者 URL 形状相同（§1.6）。
+   实现：`/api/uploads/bianbian/*` 的主目标是 upload-service，用 `selfHandleResponse: true`
+   拦下上游 404 → 再问 ai-service；命中新文件时不会触碰历史服务。该兜底路由**长期保留**，
+   不随 A7 删除；将来单独一轮「变变历史文件迁移」才可能退役。
+5. **`upload_files.category` 数据口径不动**：磁盘分类改复数（`avatars`），落库仍是历史值 `avatar`，
+   避免新旧数据割裂（磁盘目录名 ≠ DB 分类值，是有意的）。
+6. 本地已把 `storage.upload_dir` 显式写为 `<home>/web_system/uploads`（走 `checkStorageDir` + `setUploadDir`，
+   留审计）；`.env` 里历史的 `UPLOAD_DIR=uploads` 在启动时告警并忽略（不再读取）。
+
+验证证据（本地）：
+
+- 单测：system-service `src/storage` 19 例、upload-service 30 例全绿；`scripts/ci/changed-packages.sh master`
+  对 `packages/types` / `system-service` / `upload-service` 三包 build+test 全过。
+- 端到端（临时实例 16004 / 16008，不占用线上端口）：
+  `GET /internal/storage/path` 两侧语义正确、无 key / 错 key 均 401；
+  upload-service 启动日志 `上传根目录: /Users/geekwen/web_system/uploads（来源 system_service，其来源：配置表 storage.upload_dir）`；
+  `POST /internal/uploads/store`（multipart 与 JSON base64 两种传法）返回 `/api/uploads/bianbian/…`，
+  文件与 `upload_files` 行都落在统一根；`GET /uploads/bianbian/<file>` 200；静态服务根 = 进程生效值；
+  fail-fast 两条路径（env 越界 / 目录不可创建）退出码 1 并打印明确原因。
+
 ---
 
 ## 2 议题 B：服务地址默认值收口（auth 6001 → 6101）
@@ -370,6 +415,9 @@ MCP 客户端 token 与用户 token 共用同一吊销机制（30s 缓存），�
 | P4 | A7（删除兼容端点与特例路由）、D7 / D8（可选 webhook、`MCP_CLIENT_KEY` 退役） | D8 涉及 Client 管理页时需走 UI 门 |
 
 > 依赖关系：D2 依赖 C 的吊销机制（至少要能在 30s 内让一把令牌失效）；A8 依赖 A3 的 `internal/uploads/store`。
+
+> 进度：**B、D0、A1、A2、A3、A4 已完成**；C1、D1 / D2 待做；A5 / A8 与 A6（需过 UI 门）在后。
+> ⚠️ A3 与 A4 有**发布耦合**：两者已在同一 PR，但发布时也必须一起发（见 §1.7 落地状态说明 4）。
 
 ---
 

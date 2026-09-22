@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createProxyMiddleware, Options, fixRequestBody } from 'http-proxy-middleware';
+import type { IncomingMessage, ServerResponse } from 'http';
 import { API_TIMEOUT, SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 @Injectable()
@@ -29,6 +30,7 @@ export class ProxyService implements OnModuleInit {
   private uploadProxy!: ReturnType<typeof createProxyMiddleware>;
   private uploadStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private bianbianStaticProxy!: ReturnType<typeof createProxyMiddleware>;
+  private bianbianLegacyStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -45,8 +47,10 @@ export class ProxyService implements OnModuleInit {
     this.aiAgentServiceUrl = this.configService.get('AI_AGENT_SERVICE_URL', SERVICE_URL_DEFAULTS.aiAgent);
     this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', SERVICE_URL_DEFAULTS.system);
     this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', SERVICE_URL_DEFAULTS.todo);
-    // 上传仍回落 user-service（历史行为）：upload-service 承接见议题 A，届时改为 SERVICE_URL_DEFAULTS.upload
-    this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
+    // 上传回落 upload-service（6008）：A4 起 /api/upload* 与 /api/uploads/* 都指向它 ——
+    // 上传收口后 user-service 不再持有 uploads/（见 specs/backend-consolidation §1.6）。
+    // 注：此前默认值是 userServiceUrl（历史行为），显式配了 UPLOAD_SERVICE_URL 的部署不受影响。
+    this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', SERVICE_URL_DEFAULTS.upload);
     this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', SERVICE_URL_DEFAULTS.mcpGateway);
     this.contentHubServiceUrl = this.configService.get('CONTENT_HUB_SERVICE_URL', SERVICE_URL_DEFAULTS.contentHub);
     this.knowledgeServiceUrl = this.configService.get('KNOWLEDGE_SERVICE_URL', SERVICE_URL_DEFAULTS.knowledge);
@@ -84,23 +88,59 @@ export class ProxyService implements OnModuleInit {
     this.todoProxy = this.createProxy(this.todoServiceUrl, '^/api');
 
     // 上传（API 操作，非文件访问）— 统一 pathRewrite 模式
-    this.uploadProxy = this.createProxy(this.userServiceUrl, '^/api');
+    this.uploadProxy = this.createProxy(this.uploadServiceUrl, '^/api');
 
-    // 上传文件静态访问（/api/uploads/* → user-service / upload-service）
-    // 需要剥掉 /api 前缀，因为后端静态文件挂载在 /uploads 而非 /api/uploads
-    // 指向 user-service：用户头像通过 user-service 上传并保存到 user-service 的 uploads/ 目录
-    // 即使 upload-service 未运行，单个微服务也可托管所有 /api/uploads/* 静态文件
+    // 上传文件静态访问（/api/uploads/* → upload-service）
+    // 需要剥掉 /api 前缀，因为后端静态文件挂载在 /uploads 而非 /api/uploads。
+    // 指向 upload-service 是 A4 的核心：文件写在它的统一上传根（默认 ~/web_system/uploads），
+    // 静态服务也由它提供 —— 不再依赖 user-service 的同名目录。
     this.uploadStaticProxy = createProxyMiddleware({
-      target: this.userServiceUrl,
+      target: this.uploadServiceUrl,
       changeOrigin: true,
       timeout: 10_000,
       pathRewrite: { '^/api': '' },
       on: { error: this.boundErrorHandler },
     });
 
-    // AI 生成图片静态访问（/api/uploads/bianbian/* → ai-service）
-    // 先于通用 /api/uploads/* 匹配，将变变图片请求路由到 ai-service
+    // 变变图片（/api/uploads/bianbian/*）：**先 upload-service（新文件），404 再回落 ai-service（历史文件）**
+    //
+    // 为什么需要这条链：A3 之后新生成的变变图片落在统一上传根（upload-service 出静态），
+    // 而历史文件只存在于 ai-service 本机 —— 两者 URL 形状完全一样（`/api/uploads/bianbian/<file>`），
+    // 只能靠「先新后旧」的顺序区分。这条兜底路由按设计长期保留（design §1.6），
+    // 不随 A7 删除；等将来单独一轮「变变历史文件迁移」才可能退役。
+    //
+    // 实现要点：selfHandleResponse=true（否则中间件会把上游 404 直接写给客户端，
+    // 就没机会回落了），因此非 404 的响应由下面的 proxyRes 手动回写。
     this.bianbianStaticProxy = createProxyMiddleware({
+      target: this.uploadServiceUrl,
+      changeOrigin: true,
+      timeout: 10_000,
+      pathRewrite: { '^/api': '' },
+      selfHandleResponse: true,
+      on: {
+        // http-proxy-middleware v3 把 on.* 的参数声明成 unknown，这里显式收窄（不做类型体操，直接用 node 类型）
+        proxyRes: (proxyResRaw, reqRaw, resRaw) => {
+          const proxyRes = proxyResRaw as IncomingMessage;
+          const req = reqRaw as IncomingMessage;
+          const res = resRaw as ServerResponse;
+          if (proxyRes.statusCode === 404) {
+            proxyRes.resume(); // 丢弃上游 404（别把它写出去），改问历史文件服务
+            this.fallbackBianbianToLegacy(req, res);
+            return;
+          }
+          // 正常响应：selfHandleResponse 下中间件不再代劳，这里手动回写
+          res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        },
+        error: (err, reqRaw, resRaw) => {
+          this.logger.warn(`[bianbian] 主目标（upload-service）代理失败: ${err.message}`);
+          this.fallbackBianbianToLegacy(reqRaw as IncomingMessage, resRaw as ServerResponse);
+        },
+      },
+    });
+
+    // 变变历史文件（只在 ai-service 本机，A8 之前它自己也仍往本地落盘）
+    this.bianbianLegacyStaticProxy = createProxyMiddleware({
       target: this.aiServiceUrl,
       changeOrigin: true,
       timeout: 10_000,
@@ -172,7 +212,45 @@ export class ProxyService implements OnModuleInit {
   getTodoProxy() { return this.todoProxy; }
   getUploadProxy() { return this.uploadProxy; }
   getUploadStaticProxy() { return this.uploadStaticProxy; }
-  getBianbianStaticProxy() { return this.bianbianStaticProxy; }
+
+  /**
+   * 变变图片：**先问 upload-service（新文件），仅在 404 时回落 ai-service（历史文件）**。
+   *
+   * 典型 404 由 `on.proxyRes` 捕获（`selfHandleResponse` 下才能拦下来），
+   * 连接层错误由 `on.error` 捕获；两者都走同一条回落路径（每个请求只回落一次）。
+   */
+  proxyBianbianStatic(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next?: (e?: Error) => void,
+  ): void {
+    this.bianbianStaticProxy(req, res, (e?: Error) => {
+      this.fallbackBianbianToLegacy(req, res, next, e ? `主目标错误：${e.message}` : '主目标未处理');
+    });
+  }
+
+  /**
+   * 回落到 ai-service 的历史变变文件服务。
+   *
+   * `req` 上打标记而不是用实例状态：proxy 是单例、请求是并发的，
+   * 落一次就够 —— 否则「两边都 404」会变成两次回落/重复写响应。
+   */
+  private fallbackBianbianToLegacy(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next?: (e?: Error) => void,
+    reason?: string,
+  ): void {
+    const marked = req as IncomingMessage & { __bianbianFellBack?: boolean };
+    if (marked.__bianbianFellBack || res.headersSent) return;
+    marked.__bianbianFellBack = true;
+    if (reason) this.logger.warn(`[bianbian] 回落历史文件服务（${reason}）`);
+    if (next) {
+      this.bianbianLegacyStaticProxy(req, res, next);
+      return;
+    }
+    this.bianbianLegacyStaticProxy(req, res);
+  }
   getMcpProxy() { return this.mcpProxy; }
   getKnowledgeProxy() { return this.knowledgeProxy; }
   getAgentRunsProxy() { return this.agentRunsProxy; }

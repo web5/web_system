@@ -5,8 +5,7 @@ import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as path from 'path';
-import * as fs from 'fs';
+import { getUploadRoot } from './upload/upload-root';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -33,11 +32,10 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
-  // 确保上传根目录存在
-  const uploadsRoot = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsRoot)) {
-    fs.mkdirSync(uploadsRoot, { recursive: true });
-  }
+  // 上传根目录：启动期由 UploadModule 的 UPLOAD_ROOT provider 解析并自检
+  // （系统配置 storage.upload_dir → env STORAGE_UPLOAD_DIR → ~/web_system/uploads），
+  // 这里只取**本进程实际生效**的值做静态服务 —— 不再用 process.cwd()/uploads 另拼一份
+  const uploadsRoot = getUploadRoot();
 
   // 静态文件服务（提供上传文件的访问）
   app.useStaticAssets(uploadsRoot, {
@@ -66,6 +64,7 @@ async function bootstrap() {
   await app.listen(port);
   const logger = new Logger('UploadService');
   logger.log(`Upload Service is running on: http://localhost:${port}`);
+  logger.log(`上传根目录（本进程生效）: ${uploadsRoot}`);
   logger.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();

@@ -8,7 +8,7 @@
  * /internal/skills/:code 拉取 SKILL.md 全文（带缓存）。
  * 目录（toCatalog）按当前 Agent 的 skills 动态生成，不做全局状态。
  */
-import { Skill, SkillRef } from '../interfaces/agent.interface';
+import { type Skill, type SkillRef } from '../interfaces/agent.interface';
 
 export interface SkillProvider {
   /** 按 code 加载技能全文（不存在返回 null） */

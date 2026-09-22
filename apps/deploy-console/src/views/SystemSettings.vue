@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { systemSettingsApi } from '@/api'
 import { message } from 'ant-design-vue'
+// 存储配置（A6）：上传根目录的查看与修改（属 system-service，见组件内注释）
+import StorageConfigCard from '@/components/StorageConfigCard.vue'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -77,7 +79,8 @@ onMounted(() => {
   <div>
     <a-card title="通知渠道配置" :loading="loading">
       <template #extra>
-        <a-button type="primary" :loading="saving" @click="save">保存</a-button>
+        <!-- 非 primary：本页的主操作是「存储配置」的保存（一屏一个 primary） -->
+        <a-button :loading="saving" @click="save">保存</a-button>
       </template>
 
       <a-form layout="vertical" style="max-width: 640px;">
@@ -117,7 +120,7 @@ onMounted(() => {
 
     <a-card title="审批门禁（发布前人工确认）" style="margin-top: 16px;" :loading="loadingApproval">
       <template #extra>
-        <a-button type="primary" :loading="savingApproval" @click="saveApproval">保存</a-button>
+        <a-button :loading="savingApproval" @click="saveApproval">保存</a-button>
       </template>
 
       <a-form layout="vertical" style="max-width: 640px;">
@@ -133,6 +136,9 @@ onMounted(() => {
         </template>
       </a-alert>
     </a-card>
+
+    <!-- 存储配置（A6）：上传根目录（配置项 storage.upload_dir）；保存后需重启 upload-service 生效 -->
+    <StorageConfigCard />
 
     <a-card title="接入提示" style="margin-top: 16px;">
       <p style="color: #888; margin-bottom: 4px;">

@@ -9,24 +9,24 @@
  * - 模型判断需要时调 load_skill(code) → 返回 SKILL.md 全文作为 tool_result
  * - 同一 run 内已加载技能去重（Set），重复调用返回提示，避免 token 浪费
  */
-import { AgentDefinition } from '../interfaces/agent.interface';
+import { type AgentDefinition } from '../interfaces/agent.interface';
 import { AGENT_ERROR_CODES, withCode } from './agent-errors';
 import { resolveAgentCapabilities } from './capability-resolver';
 import {
-  TelemetryPort,
-  TelemetryRunStart,
-  TelemetryLlmSpan,
-  TelemetryToolSpan,
-  TelemetrySkillLoad,
-  TelemetryRunEnd,
+  type TelemetryPort,
+  type TelemetryRunStart,
+  type TelemetryLlmSpan,
+  type TelemetryToolSpan,
+  type TelemetrySkillLoad,
+  type TelemetryRunEnd,
 } from '../interfaces/telemetry.interface';
-import { StreamEvent, RunInput } from '../interfaces/runtime.interface';
+import { type StreamEvent, type RunInput } from '../interfaces/runtime.interface';
 import { ToolRegistry } from '../registry/tool.registry';
 import { AgentRegistry } from '../registry/agent.registry';
 import { ClientRegistry } from '../registry/client.registry';
-import { ConversationMemoryPort } from '../memory/memory-port';
-import { ChatMessage, ToolCall, ChatWithToolsResult } from '../clients/base-ai.client';
-import { ToolSchema } from '../interfaces/tool.interface';
+import { type ConversationMemoryPort } from '../memory/memory-port';
+import { type ChatMessage, type ToolCall, type ChatWithToolsResult } from '../clients/base-ai.client';
+import { type ToolSchema } from '../interfaces/tool.interface';
 import { SkillLoader } from '../skills/skill-loader';
 import { Logger } from '../lib/logger';
 

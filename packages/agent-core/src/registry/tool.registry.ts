@@ -8,7 +8,7 @@
  * lazy 机制用于"MCP 等远程工具"，避免启动时全量拉取所有远程工具，
  * 按需拉起即可（符合 agent-core 插件化演进方向）。
  */
-import { ToolDefinition, ToolSchema, ToolContext, ToolResult } from '../interfaces/tool.interface';
+import { type ToolDefinition, type ToolSchema, type ToolContext, type ToolResult } from '../interfaces/tool.interface';
 import { Logger } from '../lib/logger';
 
 export class ToolRegistry {

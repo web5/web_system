@@ -8,32 +8,47 @@ const http = axios.create({
   timeout: 30000,
 })
 
-// 请求拦截器：添加 Authorization 头
-http.interceptors.request.use(
-  (config) => {
-    const authStore = useAuthStore()
-    if (authStore.token) {
-      config.headers.Authorization = `Bearer ${authStore.token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error),
-)
+/**
+ * 直连网关的第二实例（baseURL `/api`）：用于访问**其它服务**的接口。
+ *
+ * 控制台自身接口在 `/console/api`（走自己的后端 6200）；而本页要读写的存储配置属于
+ * **system-service**（`/api/admin/settings/storage`，经 gateway 路由），
+ * 不能挂在 `/console/api` 前缀下。与 admin 端同一做法（admin 的 request 就是 baseURL `/api`）。
+ */
+const sysHttp = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+})
 
-// 响应拦截器：处理 401
-http.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    const isLoginRequest = error.config?.url?.endsWith('/auth/login')
-    if (error.response?.status === 401 && !isLoginRequest) {
+// 两个实例共用鉴权与 401 处理（口径只有一份，避免两处漂移）
+for (const instance of [http, sysHttp]) {
+  // 请求拦截器：添加 Authorization 头
+  instance.interceptors.request.use(
+    (config) => {
       const authStore = useAuthStore()
-      authStore.logout()
-      message.error('登录已过期，请重新登录')
-      router.push('/login')
-    }
-    return Promise.reject(error)
-  },
-)
+      if (authStore.token) {
+        config.headers.Authorization = `Bearer ${authStore.token}`
+      }
+      return config
+    },
+    (error) => Promise.reject(error),
+  )
+
+  // 响应拦截器：处理 401
+  instance.interceptors.response.use(
+    (response) => response.data,
+    (error) => {
+      const isLoginRequest = error.config?.url?.endsWith('/auth/login')
+      if (error.response?.status === 401 && !isLoginRequest) {
+        const authStore = useAuthStore()
+        authStore.logout()
+        message.error('登录已过期，请重新登录')
+        router.push('/login')
+      }
+      return Promise.reject(error)
+    },
+  )
+}
 
 /* ========== Auth ========== */
 export const authApi = {
@@ -1016,6 +1031,93 @@ export const systemSettingsApi = {
     http.get('/system-settings/approval-envs') as Promise<{ envs: string }>,
   updateApprovalEnvs: (envs: string) =>
     http.put('/system-settings/approval-envs', { envs }) as Promise<{ ok: boolean }>,
+}
+
+/* ========== 存储配置（A6）—— 属 system-service，经网关 /api/admin/settings/storage ========== */
+
+/** 存储配置读取结果（权威值 = 待生效；effective* = upload-service 当前生效值） */
+export interface StorageConfig {
+  /** 权威配置值（upload-service 下次启动采纳）＝「待生效目录」 */
+  uploadDir: string
+  source: 'system_configs' | 'env' | 'default'
+  /** upload-service 本进程实际生效目录（内存值）；取不到为 null */
+  effectivePath: string | null
+  effectiveSource: string | null
+  effectiveStartedAt: string | null
+  browseEnabled: boolean
+  /** 当前用户能否浏览服务器目录（`storage:browse`，仅 super_admin）；由后端判定 */
+  canBrowse: boolean
+  defaultDir: string
+  envOverride: boolean
+  allowedRoots: string[]
+  restartHint: string
+}
+
+/** 保存前校验结果 */
+export interface StorageDirCheck {
+  ok: boolean
+  resolvedPath: string | null
+  exists: boolean
+  isDirectory: boolean
+  writable: boolean
+  /** 剩余可用空间（字节）；取不到为 null */
+  freeSpace: number | null
+  created: boolean
+  /** 失败时的稳定错误码，如 UPLOAD_DIR_OUT_OF_SCOPE */
+  code?: string
+  message: string
+}
+
+export interface StorageBrowseEntry {
+  name: string
+  path: string
+  /** 符号链接（解链后越界会被后端跳过） */
+  symlink: boolean
+}
+
+export interface StorageBrowseResult {
+  path: string
+  root: string
+  parent: string | null
+  depth: number
+  /** 只包含目录，不含文件 */
+  entries: StorageBrowseEntry[]
+  truncated: boolean
+}
+
+export interface StorageSaveResult {
+  uploadDir: string
+  previousDir: string
+  check: StorageDirCheck
+  restartRequired: boolean
+  message: string
+}
+
+/**
+ * 解包 system-service 的统一响应信封 `{ code, data }`。
+ *
+ * 注意：axios 响应拦截器（两个实例共用）已剥掉 axios 层（返回 `response.data`），
+ * 所以这里拿到的是**业务信封**本身 —— 这些接口属 system-service，其 body 是
+ * `{ code, data }`（与控制台自身后端「直接返回载荷」的风格不同），必须再取一层 `data`。
+ */
+function unwrapBody<T>(p: Promise<any>): Promise<T> {
+  return p.then((body: any) => (body && typeof body === 'object' && 'data' in body ? body.data : body)) as Promise<T>
+}
+
+export const storageSettingsApi = {
+  /** 读配置（权威值 + 当前生效值 + 能否浏览） */
+  get: () => unwrapBody<StorageConfig>(sysHttp.get('/admin/settings/storage')),
+  /** 保存前校验（不落库、不创建目录） */
+  validate: (uploadDir: string) =>
+    unwrapBody<StorageDirCheck>(sysHttp.post('/admin/settings/storage/validate', { uploadDir })),
+  /** 保存（不存在会自动创建；返回 restartRequired=true） */
+  save: (uploadDir: string) =>
+    unwrapBody<StorageSaveResult>(sysHttp.put('/admin/settings/storage', { uploadDir })),
+  /** 列目录（只列目录；非 super_admin → 403） */
+  browse: (path?: string) =>
+    unwrapBody<StorageBrowseResult>(
+      sysHttp.get('/admin/settings/storage/browse', { params: path ? { path } : {} }),
+    ),
 }
 
 /* ========== 微前端域 · 环境（站点 + envId） ========== */

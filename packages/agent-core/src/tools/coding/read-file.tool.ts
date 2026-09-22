@@ -3,7 +3,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../../interfaces/tool.interface';
+import { type ToolDefinition, type ToolContext, type ToolResult, type ToolSchema, type ToolParameter } from '../../interfaces/tool.interface';
 import { resolveWithinCwd } from './helpers';
 
 const MAX_BYTES = 64 * 1024;
