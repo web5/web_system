@@ -44,7 +44,14 @@ const TASK_STATE_TEXT: Record<string, string> = {
 
 /** 任务状态：有落库直读；无落库的历史实例按整体状态粗粒度兜底 */
 function taskStateOf(step: OrchestrationStep, task: OrchestrationTask): TaskRunStatus | '' {
-  if (hasTaskStates.value) return props.instance.taskStates?.[`${step.id}/${task.id}`] || ''
+  const raw = props.instance.taskStates?.[`${step.id}/${task.id}`] || ''
+  // 终态归一（2026-09-22，规格 §13）：实例整体已 succeeded 时，落库残留的 awaiting/running
+  // 是过期中间态（如审批通过后引擎未回写任务状态）—— 整体成功与「审批仍挂起」不可能并存。
+  // 按原值展示会让步骤聚合为 awaiting，导致「该变绿的连线」保持灰色。
+  if (props.instance.status === 'succeeded' && (raw === 'awaiting' || raw === 'running')) {
+    return 'succeeded'
+  }
+  if (hasTaskStates.value) return raw
   return coarseTaskState(step)
 }
 
