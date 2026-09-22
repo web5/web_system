@@ -1,0 +1,95 @@
+/* 生词本页：色值走 app.wxss token，间距取 8 的倍数（rpx 双倍） */
+page { background: var(--page-bg); }
+
+.page {
+  min-height: 100vh;
+  background: var(--page-bg);
+  padding: 24rpx 32rpx calc(64rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.tip {
+  background: var(--brand-soft);
+  color: var(--brand-txt);
+  font-size: 24rpx;
+  border-radius: 24rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 24rpx;
+  line-height: 1.7;
+}
+
+.loading { padding: 80rpx 0; text-align: center; font-size: 26rpx; color: var(--t3); }
+
+.gi {
+  position: relative;
+  background: var(--card);
+  border-radius: 24rpx;
+  padding: 28rpx 64rpx 28rpx 28rpx;
+  margin-bottom: 20rpx;
+}
+.gi .en { font-size: 30rpx; font-weight: 600; color: var(--t1); }
+.gi .src { font-size: 25rpx; color: var(--t2); margin-top: 8rpx; }
+.gi .note {
+  font-size: 24rpx;
+  color: var(--t2);
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed var(--line);
+}
+.gi .meta { font-size: 22rpx; color: var(--brand-txt); margin-top: 12rpx; }
+.gi .x {
+  position: absolute;
+  top: 28rpx;
+  right: 28rpx;
+  width: 32rpx;
+  height: 32rpx;
+  opacity: .55;
+  color: var(--t3);
+}
+
+.x1, .x2 {
+  position: absolute;
+  left: 4rpx;
+  top: 15rpx;
+  width: 24rpx;
+  height: 2rpx;
+  background: currentColor;
+  border-radius: 1rpx;
+}
+.x1 { transform: rotate(45deg); }
+.x2 { transform: rotate(-45deg); }
+
+.foot { margin-top: 40rpx; font-size: 21rpx; color: var(--t3); text-align: center; }
+
+.empty { padding: 120rpx 40rpx; text-align: center; }
+.ico {
+  width: 88rpx;
+  height: 88rpx;
+  margin: 0 auto 24rpx;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ico-note {
+  width: 44rpx;
+  height: 44rpx;
+  border-left: 6rpx solid var(--brand-txt);
+  border-right: 6rpx solid var(--brand-txt);
+  border-radius: 4rpx;
+}
+.e1 { font-size: 28rpx; color: var(--t1); }
+.e2 { font-size: 25rpx; color: var(--t2); margin-top: 12rpx; }
+.go {
+  margin-top: 32rpx;
+  display: inline-flex;
+  height: 72rpx;
+  padding: 0 32rpx;
+  border-radius: 36rpx;
+  background: var(--brand);
+  color: #fff;
+  font-size: 26rpx;
+  align-items: center;
+}
+.go:active { opacity: .88; }

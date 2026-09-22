@@ -21,6 +21,9 @@
     <view class="r" bindtap="goTaste">
       <text class="nm">音乐口味</text><text class="v">{{tasteSummary}} ›</text>
     </view>
+    <view class="r" bindtap="goMemory">
+      <text class="nm">用户记忆</text><text class="v">{{memorySummary}} ›</text>
+    </view>
   </view>
 
   <view class="sec-t">应用设置<text class="em">各管各的</text></view>
@@ -42,6 +45,9 @@
 
   <view class="sec-t">我的数据</view>
   <view class="list">
+    <view class="r" bindtap="goGlossary">
+      <text>生词本</text><text class="v">{{glossarySummary}} ›</text>
+    </view>
     <view class="r" bindtap="goHistory">
       <text>我的翻译</text><text class="v">{{trCount ? trCount + ' 条' : ''}} ›</text>
     </view>

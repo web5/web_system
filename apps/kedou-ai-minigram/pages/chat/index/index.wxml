@@ -80,7 +80,7 @@
             <view wx:if="{{!item.streaming && item.enMain}}" class="ec-ops">
               <text class="ec-op" data-idx="{{idx}}" catchtap="onCardCopy">复制</text>
               <text class="ec-op {{speakPlayingIdx === idx ? 'is-speaking' : ''}}" data-idx="{{idx}}" catchtap="onCardSpeak">{{speakLoadingIdx === idx ? '请稍候…' : (speakPlayingIdx === idx ? '停止' : '朗读')}}</text>
-              <text class="ec-op" catchtap="onCardFav">收藏</text>
+              <text class="ec-op" data-idx="{{idx}}" catchtap="onCardFav">收藏</text>
               <!-- 转发：button 才能拉起微信原生转发面板；bindtap 先记录分享哪条卡 -->
               <button class="ec-op ec-share" open-type="share" plain data-idx="{{idx}}" bindtap="onShareTap">转发</button>
             </view>
