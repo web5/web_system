@@ -1578,7 +1578,10 @@ body{background:#e8ecf1;}
       if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,ok); runChev(svg,t0.l,f.cy,ok); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),ok);
+        /* 分叉**竖线**同样按目标分支状态着色：分支里存在 skipped（未执行）→ 整段灰
+         * （用户 2026-09-22：竖线也要灰 —— 分叉里有没执行的分支，主干绿着不协调） */
+        var vok = ok && ![].some.call(tt,function(t){return t.classList.contains('st-skip');});
+        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vok);
         /* 支线按**目标任务状态**着色：skipped（未执行）→ 灰（用户 2026-09-22：dev 没执行，线不该绿） */
         [].forEach.call(tt,function(t){
           var c=ctr(t); var tok=!t.classList.contains('st-skip');
