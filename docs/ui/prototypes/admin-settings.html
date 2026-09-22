@@ -9,6 +9,8 @@
   admin 系统设置 · 交互原型（2026-09-22）
   · 目标端：桌面 Web（admin 管理后台，亮色）
   · 本次范围：**移除「存储配置」tab**（未接线空壳），并把页头副标题里的「与存储」去掉
+  · 页面真实 tab 序（apps/admin/src/views/Settings.vue，2026-09-22 核对）：
+    基本信息 / 功能开关 / 安全策略 / 通知配置 / **存储配置（本次删除）** / 使用配额 / 操作日志
   · 依据：specs/backend-consolidation/design.md 议题 A6 + page-spec-storage-config.md「admin 侧处理」
   · 复核口径：storage_type / storage_bucket / storage_region / storage_access_key* /
     storage_max_upload_mb 在后端零引用、配置表零值；真正生效的上传限制是
@@ -156,6 +158,14 @@
   .st-exception .t{font-size:15px;font-weight:600;margin-bottom:8px;}
   .st-exception .d{font-size:13px;color:var(--ws-text-secondary);line-height:1.8;margin-bottom:18px;}
 
+  /* 操作日志：筛选条 + 表格 */
+  .st-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .st-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .st-table th{text-align:left;color:var(--ws-text-tertiary);font-weight:600;font-size:12px;
+    padding:8px 10px;border-bottom:1px solid var(--ws-border);white-space:nowrap;}
+  .st-table td{padding:9px 10px;border-bottom:1px solid var(--ws-border-subtle);color:var(--ws-text-primary);}
+  .st-table tbody tr:hover{background:var(--ws-bg-hover);}
+
   .st-toast{position:fixed;left:50%;top:22px;transform:translate(-50%,-14px);opacity:0;pointer-events:none;
     background:var(--ws-text-primary);color:var(--ws-bg-surface);font-size:13px;padding:9px 16px;
     border-radius:var(--ws-radius-lg);transition:opacity .2s,transform .2s;z-index:9;}
@@ -169,7 +179,8 @@
   <div class="sub">
     目标端：<b>桌面 Web</b>（admin 管理后台 · 亮色）｜本次范围：<b>删除「存储配置」tab</b>（未接线的空壳）
     ｜依据：<code>specs/backend-consolidation/page-spec-storage-config.md</code> §admin 侧处理<br>
-    右上「[原型] 变更对照」= 移除前 / 移除后 切换；「[原型] 状态演示」= 走查状态矩阵。两者仅原型用，落地不保留。
+    页面按落地还原：共 <b>7 个 tab</b>（基本信息 / 功能开关 / 安全策略 / 通知配置 / <s>存储配置</s> / 使用配额 / 操作日志），
+    删除后为 6 个。右上「[原型] 变更对照」= 移除前 / 移除后 切换；「[原型] 状态演示」= 走查状态矩阵。两者仅原型用，落地不保留。
   </div>
 </div>
 
@@ -231,8 +242,10 @@
     siteName:'科豆 AI',
     saving:null
   };
+  /* 落地真实 tab 序（apps/admin/src/views/Settings.vue）：移除「存储配置」后应为 6 个 */
   var AS_TABS = [
-    ['basic','基本信息'],['features','功能开关'],['security','安全策略'],['notify','通知配置']
+    ['basic','基本信息'],['features','功能开关'],['security','安全策略'],
+    ['notify','通知配置'],['quota','使用配额'],['logs','操作日志']
   ];
   var AS_STATES = [['normal','正常'],['saving','保存中'],['invalid','校验失败'],['noperm','无权限']];
   var AS_CMP = [['after','移除后（目标）'],['before','移除前（对照）']];
@@ -243,6 +256,8 @@
   var ICON_MAIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
   var ICON_CLOUD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.6A4 4 0 0 1 17 18z"/></svg>';
   var ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+  var ICON_BOLT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
+  var ICON_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
 
   function toast(msg){
     var el=document.getElementById('stToast');
@@ -306,6 +321,8 @@
     if(AS.tab==='features') return asFeatures();
     if(AS.tab==='security') return asSecurity();
     if(AS.tab==='notify')   return asNotify();
+    if(AS.tab==='quota')    return asQuota();
+    if(AS.tab==='logs')     return asLogs();
     if(AS.tab==='storage')  return asStorageLegacy();
     return asBasic();
   }
@@ -363,14 +380,51 @@
   /* 「移除前」对照视图：展示即将删除的 tab 内容（只读对照，不参与落地） */
   function asStorageLegacy(){
     return '<div class="st-note warn"><span>本次将<strong>删除</strong>下面这一整块（仅「移除前」对照可见）：'
-      + '它写的配置键在后端<b>零引用</b>、配置表<b>零值</b>，属未接线的空壳。</span></div>'
+      + '它写的配置键在后端<b>零引用</b>、配置表<b>零值</b>；且 AccessKey / SecretKey 两个字段<b>连保存都没接线</b>'
+      + '（KEY 映射里只有 type / bucket / region / max_upload_mb）。</span></div>'
       + '<div class="st-card" style="opacity:.72"><div class="ct"><span class="ic">'+ICON_CLOUD+'</span>文件存储'
       + '<span class="st-badge warn">本次删除</span></div>'
       + asField('存储方式','<div class="st-checks"><label class="st-check"><input type="radio" name="stype" checked>本地存储</label>'
-        + '<label class="st-check"><input type="radio" name="stype">对象存储（OSS）</label></div>')
+        + '<label class="st-check"><input type="radio" name="stype">阿里云 OSS</label>'
+        + '<label class="st-check"><input type="radio" name="stype">腾讯 COS</label></div>')
+      + asField('Bucket','<input class="st-input mono" placeholder="bucket-name">')
+      + asField('Region','<input class="st-input mono" placeholder="oss-cn-hangzhou">')
+      + asField('AccessKey','<input class="st-input mono" placeholder="AccessKey ID">')
+      + asField('SecretKey','<input class="st-input mono" type="password" placeholder="AccessKey Secret">')
       + asField('上传大小限制','<div class="st-inline"><input class="st-num" value="10"><span class="st-unit">MB</span></div>')
-      + '<div style="font-size:12px;color:var(--ws-text-secondary)">（对象存储分支另有 Bucket / Region / AccessKey / SecretKey 字段）</div>'
+      + '<div style="font-size:12px;color:var(--ws-text-tertiary)">（Bucket / Region / AccessKey / SecretKey 仅在「存储方式 ≠ 本地」时出现）</div>'
       + '</div>';
+  }
+  /* 使用配额：变变每日次数（与落地同字段同文案） */
+  function asQuota(){
+    return '<div class="st-card"><div class="ct"><span class="ic">'+ICON_BOLT+'</span>变变每日次数</div>'
+      + asField('普通用户每日变身次数','<div class="st-inline"><input class="st-num" value="3"><span class="st-unit">次/天</span></div>'
+        + '<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:6px;">设为 0 表示不限制普通用户；admin 用户始终不限制</div>')
+      + '<div class="st-actions"><button class="st-btn primary" onclick="asSave(\'quota\')">保存修改</button></div></div>';
+  }
+  /* 操作日志：筛选（日期范围 / 操作人 / 类型来自字典）+ 表格 + 分页 */
+  function asLogs(){
+    var rows=[
+      ['2026-09-22 16:20','admin','update_storage_dir','/Users/geekwen/web_system/uploads → …'],
+      ['2026-09-22 15:41','admin','update_setting','批量更新 3 项配置'],
+      ['2026-09-21 22:41','ops','delete_env_var','auth 发布 / RETRY_TIMES'],
+      ['2026-09-21 18:02','admin','save_pipeline','gateway 发布（env=local）']
+    ];
+    var h='<div class="st-card"><div class="ct"><span class="ic">'+ICON_SEARCH+'</span>操作记录'
+      + '<span class="hint">类型下拉来自字典 operation_log_type</span></div>'
+      + '<div class="st-filters">'
+      +   '<input class="st-input" style="max-width:230px" value="2026-09-14 ~ 2026-09-22" readonly>'
+      +   '<input class="st-input" style="max-width:140px" placeholder="操作人">'
+      +   '<input class="st-input" style="max-width:160px" value="全部类型" readonly>'
+      +   '<button class="st-btn primary" onclick="toast(\'[原型] 已按条件查询\')">查询</button>'
+      + '</div>'
+      + '<table class="st-table"><thead><tr><th>时间</th><th>操作人</th><th>类型</th><th>操作目标</th></tr></thead><tbody>'
+      + rows.map(function(r){
+          return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>';
+        }).join('')
+      + '</tbody></table>'
+      + '<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">共 128 条 · 每页 20 条</div></div>';
+    return h;
   }
   function asRender(){
     asSegs();

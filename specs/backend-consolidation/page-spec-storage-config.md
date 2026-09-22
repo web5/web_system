@@ -85,13 +85,17 @@ GET  /internal/storage/path（×2：system-service 权威值 / upload-service �
 **决策（2026-09-22，用户）**：去掉 admin 侧的「存储配置」，真正生效的「上传根目录」统一由
 **deploy-console 系统设置**（本规格）承载，避免两处都能改存储却只有一处生效。
 
-**删除范围**（`apps/admin/src/views/Settings.vue`）
+**删除范围**（`apps/admin/src/views/Settings.vue`；该页实际共 7 个 tab，删除后 6 个）
 | 项 | 说明 |
 |---|---|
-| `<a-tab-pane key="storage" tab="存储配置">` 整块 | 含存储方式单选、OSS 字段（bucket/region/AK/SK）、上传大小限制 |
-| `KEY` 映射里的 `storageType/storageBucket/storageRegion/maxUploadMB` | 连同 `storage` reactive 对象、回填与提交逻辑 |
+| `<a-tab-pane key="storage" tab="存储配置">` 整块 | 存储方式（本地 / 阿里云 OSS / 腾讯 COS）、Bucket / Region / AccessKey / SecretKey、上传大小限制 |
+| `KEY` 映射里的 `storageType/storageBucket/storageRegion/maxUploadMB` | 连同 `storage` reactive 对象、`saveStorage`、`savingStorage`、加载回填分支 |
+| `CloudOutlined` 图标 import | 仅该 tab 使用，随删 |
 | 页头副标题 | 现为「…包括站点信息、安全策略、通知与存储」→ 去掉「与存储」 |
 | 保存时的键 | 提交 payload 不再带上述键（避免继续往配置表写死键） |
+
+> 补充证据：**AccessKey / SecretKey 收集后并未保存**（`KEY` 映射里没有对应项）——
+> 该表单连「自我一致」都做不到，进一步说明它是未接线的空壳。
 
 **不做的事**
 1. **不清库**：配置表里若曾有这些键（本机为零条），保留不动 —— 清理属数据操作，收益低、误删风险高。
