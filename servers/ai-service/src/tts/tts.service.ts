@@ -4,10 +4,10 @@ import * as tencentcloud from 'tencentcloud-sdk-nodejs';
 
 const TtsClient = tencentcloud.tts.v20190823.Client;
 
-/** 腾讯云 TTS 英文发音人 */
+/** 腾讯云 TTS 音色（603007 邻家女孩：超自然大模型音色，支持中英混读） */
 const EN_VOICES: Record<string, number> = {
-  female: 603007, // 邻家女孩（聊天女声 · 超自然大模型音色）
-  male: 502007, // 智小虎（聊天童声 · 超自然大模型音色）
+  female: 603007, // 邻家女孩（聊天女声 · 超自然大模型音色 · 中英混读）
+  male: 502007, // 智小虎（聊天童声 · 超自然大模型音色 · 中英混读）
 };
 
 @Injectable()
@@ -53,6 +53,8 @@ export class TtsService {
     }
 
     try {
+      // 603007 邻家女孩支持中英混读：PrimaryLanguage 按文本是否含中文选择主语言（1=中文 2=英文）
+      const primaryLanguage = /[\u4e00-\u9fff]/.test(text) ? 1 : 2;
       const response = await this.client.TextToVoice({
         Text: text,
         SessionId: '',
@@ -61,7 +63,7 @@ export class TtsService {
         SampleRate: 16000,
         Speed: options?.speed ?? 0,
         Volume: options?.volume ?? 5,
-        PrimaryLanguage: 2,
+        PrimaryLanguage: primaryLanguage,
       });
 
       if (!response.Audio) {

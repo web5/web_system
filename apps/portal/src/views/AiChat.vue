@@ -107,7 +107,7 @@
                           <div v-if="!m.streaming" class="tc-ops">
                             <button type="button" class="act" @click="copy(b.main)">复制</button>
                             <button type="button" class="act" @click="speak(m.id, b.main)">
-                              {{ reading === m.id ? '停止' : '朗读' }}
+                              {{ speakLabel(m.id) }}
                             </button>
                             <button type="button" class="act" @click="collectWord">收藏</button>
                           </div>
@@ -144,7 +144,7 @@
                       class="act"
                       @click="speak(m.id, speakableText(blocksMap[m.id]))"
                     >
-                      <app-icon name="volume" />{{ reading === m.id ? '停止' : '朗读' }}
+                      <app-icon name="volume" />{{ speakLabel(m.id) }}
                     </button>
                     <button v-if="m.role === 'assistant'" type="button" class="act" @click="retryMsg(m.id)">
                       重新生成
@@ -204,6 +204,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
+import { requestTts, splitChunks } from '@/api/tts';
 import {
   parseAnswer,
   foldCut,
@@ -260,8 +261,8 @@ const convId = ref<string | null>(null);
 const loadedId = ref<string | null>(null);
 const agentBadge = ref('');
 const detailError = ref(false);
-/** 正在朗读的消息 id（翻译卡片 TTS，本地 Web Speech） */
-const reading = ref<string | null>(null);
+/** 正在朗读状态：id = 消息 id，phase = loading（合成中）/ playing（播放中）；null = 空闲 */
+const reading = ref<{ id: string; phase: 'loading' | 'playing' } | null>(null);
 
 /** 折叠展开态 / 翻译卡注解展开态（本地状态，不持久化） */
 const expanded = reactive<Record<string, boolean>>({});
@@ -392,23 +393,69 @@ function onAttach() {
 }
 
 /** 翻译卡片朗读：Web Speech 本地实现（后端 TTS 接口留给正文朗读排期） */
-function speak(mId: string, text: string) {
-  if (!('speechSynthesis' in window)) {
-    message.info('当前浏览器不支持朗读');
+let audioEl: HTMLAudioElement | null = null;
+
+/** 停止朗读：中断当前 Audio、复位状态 */
+function stopTts() {
+  if (audioEl) {
+    audioEl.pause();
+    audioEl.src = '';
+    audioEl = null;
+  }
+  reading.value = null;
+}
+
+/** 朗读：走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色），分句逐段合成播放 */
+async function speak(mId: string, text: string) {
+  const t = (text || '').trim();
+  if (!t) return;
+  // 同一段正在播 → 停止
+  if (reading.value?.id === mId) {
+    stopTts();
     return;
   }
-  if (reading.value) {
-    window.speechSynthesis.cancel();
-    reading.value = null;
-    return;
+  stopTts(); // 顶掉上一个朗读
+
+  const chunks = splitChunks(t);
+  if (!chunks.length) return;
+
+  reading.value = { id: mId, phase: 'loading' };
+  try {
+    for (const chunk of chunks) {
+      if (reading.value?.id !== mId) return; // 中途被停止 / 被顶掉
+      const blob = await requestTts(chunk);
+      if (reading.value?.id !== mId) return;
+      reading.value = { id: mId, phase: 'playing' };
+      await playBlob(blob);
+    }
+  } catch {
+    if (reading.value?.id === mId) message.error('朗读失败，请重试');
+  } finally {
+    if (reading.value?.id === mId) reading.value = null;
   }
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = /^[A-Za-z]/.test(text) ? 'en-US' : 'zh-CN';
-  u.onend = () => (reading.value = null);
-  u.onerror = () => (reading.value = null);
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
-  reading.value = mId;
+}
+
+/** 播放 mp3 Blob；结束 / 出错 / 被替换时 resolve */
+function playBlob(blob: Blob): Promise<void> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioEl = audio;
+    const done = () => {
+      if (audioEl === audio) audioEl = null;
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    audio.onended = done;
+    audio.onerror = done;
+    audio.play().catch(done);
+  });
+}
+
+/** 朗读按钮文案：合成中「请稍候…」/ 播放中「停止」/ 空闲「朗读」 */
+function speakLabel(mId: string): string {
+  if (reading.value?.id !== mId) return '朗读';
+  return reading.value.phase === 'loading' ? '请稍候…' : '停止';
 }
 
 /** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读） */
@@ -616,7 +663,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   controller?.abort();
   controller = null;
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  stopTts();
   store.setRunning(false);
 });
 </script>
