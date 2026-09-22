@@ -1054,17 +1054,18 @@
   /* 步骤标题卡：**中性**（白底灰边深字、名称 13px —— 用户 2026-09-22 要求对比编辑页：
      编辑页 step-title 不整卡染成功色；执行状态由任务卡与连线表达，步骤卡不重复染色） */
   .run-step{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 14px;width:100%;
-    border:1px solid var(--border);border-radius:4px;background:var(--card);cursor:pointer;}
+    border:1px solid var(--border);border-radius:2px;background:var(--card);cursor:pointer;}
   .run-step .seq{font-size:10px;color:var(--text-3);font-family:var(--mono);}
   .run-step .nm{font-size:13px;font-weight:600;color:var(--text);}
   .run-step .cmd{font-size:10px;line-height:14px;color:var(--primary);}
   /* 任务卡：单行小卡 */
   .run-task{display:flex;align-items:center;gap:6px;width:100%;padding:3px 8px;
-    border:1px solid var(--border);border-radius:3px;background:var(--card);font-size:11px;}
-  /* 序号：任务卡左侧竖条色块（对齐编辑页 task-node .seq） */
+    border:1px solid var(--border);border-radius:2px;background:var(--card);font-size:11px;}
+  /* 序号：任务卡左侧竖条色块（对齐编辑页 task-node .seq；负 margin 抵消任务卡 padding ——
+     2026-09-22 用户反馈「绿色填充有些空隙」：填充要顶到卡边） */
   .run-task .rseq{align-self:stretch;display:flex;align-items:center;padding:0 8px;margin:-3px 6px -3px -8px;
     font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text-2);
-    background:var(--bg);border-right:1px solid var(--border);border-radius:3px 0 0 3px;}
+    background:var(--bg);border-right:1px solid var(--border);border-radius:1px 0 0 1px;}
   .run-task .tn{color:var(--text-2);}
   .run-task .ts{color:var(--text-3);margin-left:auto;}
   .run-task .tagc{font-size:9px;line-height:14px;padding:0 4px;border:1px solid var(--border);border-radius:3px;color:var(--primary);}
