@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 /**
  * AuthGuard — 调用 auth-service 验证 JWT 令牌
@@ -17,7 +18,7 @@ export class AuthGuard implements CanActivate {
   constructor(private configService: ConfigService) {
     this.authServiceUrl = this.configService.get(
       'AUTH_SERVICE_URL',
-      'http://localhost:6001',
+      SERVICE_URL_DEFAULTS.auth,
     );
   }
 

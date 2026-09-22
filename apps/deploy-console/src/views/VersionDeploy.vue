@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * 版本部署（独立部署界面，与发布流水线解耦）
+ * 版本部署（微前端域，路由 /deploys/micro）
  *
- * 双域共用：路由 /deploys/micro（微前端域）/deploys/backend（API 网关域）。
+ * 2026-09-21：API 网关域的「版本部署」入口与其 backend 分支已下线
+ * （后端由发布流水线的 restart / verify action 直接生效），本页只处理前端 / 微前端模块。
  * 表格 = 模块清单 + 最近一次部署摘要（环境维度收进部署抽屉，环境可数十个）。
  * 设计依据：specs/version-deploy/page-spec.md + design.md（已确认原型
  * docs/ui/prototypes/deploy-console-domain-split.html v4）
  * 数据来源：GET /deploy/modules（type 过滤）、/deploy/module-deployments/:key
  * （取 deployedAt 最新一条作「最近部署」）、/deploy/versions?env=&component=（抽屉）、
- * POST /deploy/modules/:k/envs/:env/deploy（部署动作，后端服务自动换 dist + 重启 pm2）。
+ * POST /deploy/modules/:k/envs/:env/deploy（部署动作 = 切换版本指针）。
  */
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
@@ -19,14 +20,8 @@ import VersionDeployDrawer, { type DrawerEnv, type DrawerVersion } from '@/compo
 
 const route = useRoute()
 
-type Domain = 'micro' | 'backend'
-const domain = computed<Domain>(() => (route.params.domain === 'backend' ? 'backend' : 'micro'))
-
-/** micro 域取前端/微前端模块；backend 域取后端服务 */
-const TYPE_FILTER: Record<Domain, (t: string) => boolean> = {
-  micro: (t) => t === 'micro-frontend' || t === 'frontend',
-  backend: (t) => t === 'backend',
-}
+/** 本页只处理前端 / 微前端模块（后端服务走发布流水线，不在此处部署） */
+const isFrontendModule = (t: string) => t === 'micro-frontend' || t === 'frontend'
 
 interface ModuleRow {
   key: string
@@ -38,17 +33,10 @@ interface ModuleRow {
 const loading = ref(false)
 const modules = ref<ModuleRow[]>([])
 
-const DOMAIN_META: Record<Domain, { sub: string; note: string }> = {
-  micro: {
-    sub: '微前端模块 · 选择已有发布版本直接部署（切版本指针），构建与发布走「流水线」',
-    note: '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择（环境可数十个，支持下拉搜索）。前端/微前端部署 = 切换版本指针，刷新页面即生效，不触碰任何进程。',
-  },
-  backend: {
-    sub: '后端服务 · 选择已有发布版本直接部署（换产物目录 + 重启 pm2），构建与发布走「流水线」',
-    note: '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择。后端服务部署 = 替换版本产物目录并重启 pm2 进程，服务将短暂中断。',
-  },
+const META = {
+  sub: '微前端模块 · 选择已有发布版本直接部署（切版本指针），构建与发布走「流水线」',
+  note: '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择（环境可数十个，支持下拉搜索）。前端/微前端部署 = 切换版本指针，刷新页面即生效，不触碰任何进程。',
 }
-const meta = computed(() => DOMAIN_META[domain.value])
 
 const columns: TableColumnsType = [
   { title: '模块', key: 'module', width: 240 },
@@ -71,7 +59,7 @@ async function load() {
   loading.value = true
   modules.value = []
   try {
-    const list = (await deployApi.modules()).filter((m) => TYPE_FILTER[domain.value](m.type))
+    const list = (await deployApi.modules()).filter((m) => isFrontendModule(m.type))
     const rows = await Promise.all(
       list.map(async (m) => {
         let latest: ModuleRow['latest'] = null
@@ -177,11 +165,6 @@ async function onDeploy(versionTag: string) {
   }
 }
 
-watch(domain, () => {
-  drawerOpen.value = false
-  load()
-})
-
 // 抽屉打开或目标环境变化 → 加载该环境版本记录（含打开同环境的场景）
 watch([drawerOpen, drawerEnv], ([open]) => {
   if (open && drawerModule.value) loadDrawerVersions()
@@ -209,7 +192,7 @@ onMounted(async () => {
     <div class="page-head">
       <div>
         <h1>版本部署</h1>
-        <p class="sub">{{ meta.sub }}</p>
+        <p class="sub">{{ META.sub }}</p>
       </div>
     </div>
 
@@ -251,7 +234,7 @@ onMounted(async () => {
           <a-empty description="暂无可部署模块：模块清单来自发布模块注册表，请先在模块注册表登记" />
         </template>
       </a-table>
-      <p class="hint">{{ meta.note }}</p>
+      <p class="hint">{{ META.note }}</p>
     </a-card>
 
     <VersionDeployDrawer
@@ -265,7 +248,6 @@ onMounted(async () => {
       :versions="drawerVersions"
       :current-version="drawerCurrent"
       :deploying="deploying"
-      :backend="domain === 'backend'"
       @retry="loadDrawerVersions"
       @deploy="onDeploy"
     />

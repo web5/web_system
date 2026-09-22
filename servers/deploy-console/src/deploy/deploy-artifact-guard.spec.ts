@@ -19,6 +19,9 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { ServerService } from '../server/server.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { CommandService } from '../shell/command.service';
+import { AuditService } from '../audit/audit.service';
+import { ConfigService as ConfigCenterService } from '../config/config.service';
+import { AppsService } from '../apps/apps.service';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -68,6 +71,13 @@ describe('DeployService 产物守卫', () => {
           provide: CommandService,
           useValue: { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') },
         },
+        // 配置下发（P0-2）：本 spec 只关心产物守卫，「无 module 级条目」→ 跳过下发
+        {
+          provide: ConfigCenterService,
+          useValue: { hasModuleScope: jest.fn().mockResolvedValue(false), dispatchPayload: jest.fn() },
+        },
+        { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);

@@ -16,13 +16,30 @@ import { moduleArtifactsRoot } from '../pipeline/release-paths';
  *       index.js  index.css  assets/*
  * ```
  *
- * 入口指针写法 **A'（两行）**：`export *` 不透传 `default`（P0 验证结论），
- * 故同时透传命名导出与 default，兼容 shell-loader 的 lifecycle 解析顺序。
+ * 入口指针写法 **A'（System.register 版）**：命名导出 + `default` 双透传。
+ *
+ * ⚠️ 必须写成 System.register，**不能**用原生 ESM 的 `export * from`：
+ * 微前端产物统一以 `MF_FORMAT=system` 构建（`scripts/deploy.sh` / `deploy-local.sh`），
+ * 消费方 `packages/shell-loader` 只走 `System.import()`（失败才回退 UMD 经典脚本）。
+ * 原生 `export` 语法会在 **SystemJS 解析阶段**直接抛 `Unexpected token 'export'`，
+ * 文件体从未执行 —— 连 loader 的 ③ `window.__MODULES__[name]` 全局兜底也一并失效
+ * （指针文件根本没跑起来，产物自然也没被加载）。
+ *
+ * 依据：systemjs 6.15.1 实测（ESM 指针 THROW / 本写法 PASS 且 `default.mount` 可用）
+ * 与 2026-09-21 `local.kedouai.com` 门户加载失败事故（`portal@env:local`）。
  */
 
-/** T1 定稿 A'：命名导出 + default 双透传（单测锁定，勿改） */
+/** T1 定稿 A' 的 SystemJS 等价写法（单测锁定，勿改） */
 export function entryPointerJs(version: string): string {
-  return `export * from './${version}/index.js';\nexport { default } from './${version}/index.js';\n`;
+  return (
+    `System.register(['./${version}/index.js'], function (_export) {\n` +
+    `  'use strict';\n` +
+    `  return {\n` +
+    `    setters: [function (m) { _export(m); }],\n` +
+    `    execute: function () {}\n` +
+    `  };\n` +
+    `});\n`
+  );
 }
 
 /** 样式入口指针（版本目录存在 index.css 时才写） */
@@ -112,7 +129,8 @@ export function readEnvEntryPointer(
   const file = path.join(envArtifactsDir(releaseWorkspace, appKey, envId), 'index.js');
   if (!fs.existsSync(file)) return null;
   const content = fs.readFileSync(file, 'utf-8');
-  const m = content.match(/from\s+'\.\/(.+?)\/index\.js'/);
+  // 兼容两种历史写法：System.register(['./<v>/index.js'], …) 与旧 ESM 的 from './<v>/index.js'
+  const m = content.match(/'\.\/(.+?)\/index\.js'/);
   return m ? m[1] : null;
 }
 

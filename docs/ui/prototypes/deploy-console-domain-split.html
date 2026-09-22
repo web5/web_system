@@ -260,8 +260,10 @@
 <div class="proto-head">
   <h1>deploy-console 双域重构 · 交互原型 v4</h1>
   <div class="sub">
-    上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：微前端/API 网关双域各挂入口，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
-    下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。
+    上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：<s>微前端/API 网关双域各挂入口</s> → <b>2026-09-21 对齐落地：只挂微前端域 <code>/deploys/micro</code></b>，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
+    下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。<br>
+    2026-09-22 新增屏：<b>流水线详情 · 执行流程</b>（紧凑步骤卡 + 任务行连线 + skipped 灰色，用户 2026-09-22 标注）——
+    <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button>
   </div>
 </div>
 
@@ -337,10 +339,11 @@
           </div>
         </div>
         <div class="dc-tabs">
+          <!-- 2026-09-21 对齐落地（AppDetail.vue）：**3 个 Tab** —— 原「环境」Tab 不存在
+               （环境由「环境管理」统一维护；「部署」Tab 已按环境展示版本） -->
           <div class="t2 active" id="t-app-1" onclick="pane('app',1)">概览</div>
           <div class="t2" id="t-app-2" onclick="pane('app',2)">路由</div>
-          <div class="t2" id="t-app-3" onclick="pane('app',3)">环境</div>
-          <div class="t2" id="t-app-4" onclick="pane('app',4)">部署</div>
+          <div class="t2" id="t-app-3" onclick="pane('app',3)">部署</div>
         </div>
         <div id="pane-app-1">
           <div class="dc-card"><div class="ct">基本信息</div>
@@ -366,26 +369,15 @@
             <div class="dc-row" style="margin-top:12px;"><button class="dc-btn">新增挂载</button><div class="dc-spacer"></div><button class="dc-btn primary" onclick="toast('已保存路由变更，需到「部署」发布后生效')">保存路由变更</button></div>
           </div>
         </div>
+        <!-- Tab 3 · 部署（2026-09-21 对齐落地：原「环境」Tab 已删，本表即原 pane-app-4） -->
         <div id="pane-app-3" style="display:none;">
-          <div class="dc-card"><div class="ct">应用 × 环境</div>
-            <table>
-              <thead><tr><th>环境</th><th>入口 URL</th><th>资源基址</th><th>shell 暴露</th></tr></thead>
-              <tbody>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/dev/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">1</td><td class="dc-mono">https://dev.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/1/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">https://portal.kedouai.com/admin/</td><td class="dc-mono">/static/modules/admin/prod/</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div id="pane-app-4" style="display:none;">
           <div class="dc-card"><div class="ct">各环境当前版本</div>
             <table>
               <thead><tr><th>环境</th><th>当前版本</th><th>发布时间</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:02</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">1</td><td class="dc-mono">d4e5f6</td><td class="dc-num">09-18 09:12</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-15 12:20</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:02</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','dev')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">1</td><td class="dc-mono">d4e5f6</td><td class="dc-num">09-18 09:12</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','1')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
+                <tr><td class="dc-mono">prod</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-15 12:20</td><td><span class="dc-badge ok">已部署</span></td><td><button class="dc-btn link" onclick="vdOpenDrawer('app','apps','admin','prod')">部署</button><button class="dc-btn link" onclick="openModal('m-switch')">切换版本</button><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
               </tbody>
             </table>
           </div>
@@ -430,7 +422,7 @@
         </div>
       </div>
 
-      <!-- 版本部署（微前端 / API 网关双域共用，与发布流水线解耦） -->
+      <!-- 版本部署（**仅微前端域** `/deploys/micro`；2026-09-21 对齐落地，API 网关域无此入口） -->
       <div class="screen" id="dc-vdeploy">
         <div class="dc-page-head">
           <div class="dc-row">
@@ -486,15 +478,16 @@
             <div><h1><span class="dc-mono">auth-service</span> <span class="dc-badge neutral">nest</span></h1>
               <div class="sub">认证服务 · <span class="dc-mono">servers/auth-service</span> · <span class="dc-mono">/health</span></div></div>
             <div class="dc-spacer"></div>
-            <button class="dc-btn primary" onclick="toast('已创建流水线运行：auth-service → dev')">部署</button>
+            <!-- 构建发布：**原地**打开「发起发布」抽屉（用户 2026-09-21：不要再跳到流水线页） -->
+            <button class="dc-btn primary" onclick="openSubmitDrawer()">构建发布</button>
           </div>
         </div>
         <div class="dc-tabs">
+          <!-- 2026-09-21 对齐落地：原「环境」「部署」两 tab 合并为「环境与发布」一个（ServiceDetail.vue key=envs） -->
           <div class="t2 active" id="t-svc-1" onclick="pane('svc',1)">接口</div>
           <div class="t2" id="t-svc-2" onclick="pane('svc',2)">概览</div>
           <div class="t2" id="t-svc-3" onclick="pane('svc',3)">网关路由</div>
-          <div class="t2" id="t-svc-4" onclick="pane('svc',4)">环境</div>
-          <div class="t2" id="t-svc-5" onclick="pane('svc',5)">部署</div>
+          <div class="t2" id="t-svc-4" onclick="pane('svc',4)">环境与发布</div>
         </div>
         <div id="pane-svc-1">
           <div class="dc-card"><div class="ct">接口清单（方法 + 路径）</div>
@@ -541,29 +534,52 @@
           </div>
         </div>
         <div id="pane-svc-4" style="display:none;">
-          <div class="dc-card"><div class="ct">服务 × 环境</div>
+          <!-- 2026-09-21 对齐落地（ServiceDetail.vue key=envs）：表格列 + 三个行内动作 + 只读指向说明；
+               原「部署记录」屏已删 —— 控制台不再有独立「部署」动作，发布即落地（restart/verify 在流水线里） -->
+          <div class="dc-card"><div class="ct">环境与发布</div>
             <table>
-              <thead><tr><th>环境</th><th>运行时</th><th>目标主机</th><th>端口</th><th>副本</th><th>启用</th></tr></thead>
+              <thead><tr><th>环境</th><th>运行时</th><th>目标主机</th><th>端口</th><th>副本</th><th>上游覆盖</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
-                <tr><td class="dc-mono">local</td><td>pm2</td><td class="dc-mono">server-local</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">dev</td><td>pm2</td><td class="dc-mono">server-dev</td><td class="dc-mono dc-num">6101</td><td class="dc-num">1</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
-                <tr><td class="dc-mono">prod</td><td>pm2</td><td class="dc-mono">server-prod</td><td class="dc-mono dc-num">6101</td><td class="dc-num">2</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td></tr>
+                <tr>
+                  <td><span class="dc-mono">local</span> <span class="dc-muted">本地环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-local</span><div class="dc-muted dc-mono">127.0.0.1:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('local')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → local → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-local:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">dev</span> <span class="dc-muted">开发环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-dev</span><div class="dc-muted dc-mono">10.0.0.12:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">1</td>
+                  <td class="dc-mono">http://10.0.0.12:6101</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('dev')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → dev → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-dev:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">prod</span> <span class="dc-muted">生产环境</span> <span class="dc-badge primary">生产</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td><span class="dc-mono">server-prod</span><div class="dc-muted dc-mono">10.0.1.20:6101</div></td>
+                  <td class="dc-mono dc-num">6101</td><td class="dc-num">2</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge ok">启用</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('prod')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → prod → 后端服务指向')">配置指向</button><button class="dc-btn link" onclick="toast('探活 server-prod:6101 … 通过')">探活</button></td>
+                </tr>
+                <tr>
+                  <td><span class="dc-mono">qa</span> <span class="dc-muted">测试环境</span></td>
+                  <td class="dc-muted">继承</td>
+                  <td class="dc-muted">—</td>
+                  <td class="dc-muted">必填</td><td class="dc-num">1</td>
+                  <td class="dc-muted">按主机+端口拼装</td>
+                  <td><span class="dc-badge neutral">未配置</span></td>
+                  <td><button class="dc-btn link" onclick="openSubmitDrawer('qa')">构建发布</button><button class="dc-btn link" onclick="toast('跳转：环境管理 → qa → 后端服务指向')">配置指向</button><button class="dc-btn link" style="opacity:.4;cursor:not-allowed" onclick="toast('未配置主机组或端口，探活会 fail-fast（不回落本机）')">探活</button></td>
+                </tr>
               </tbody>
             </table>
-            <div class="dc-muted" style="margin-top:8px;">后端服务的环境是"部署到哪里"（host/port），与微前端的加载环境是两套概念。</div>
-          </div>
-        </div>
-        <div id="pane-svc-5" style="display:none;">
-          <div class="dc-card"><div class="ct">部署记录</div>
-            <table>
-              <thead><tr><th>环境</th><th>版本</th><th>发布时间</th><th>健康</th><th>运行时实例</th><th>操作</th></tr></thead>
-              <tbody>
-                <tr><td class="dc-mono">local</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-18 10:04</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">dev</td><td class="dc-mono">3b8f10</td><td class="dc-num">09-17 19:45</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-                <tr><td class="dc-mono">prod</td><td class="dc-mono">9f3d21</td><td class="dc-num">09-15 12:22</td><td><span class="dc-badge ok">通过</span></td><td class="dc-mono">web-auth</td><td><button class="dc-btn link" onclick="openModal('m-rollback')">回滚</button></td></tr>
-              </tbody>
-            </table>
-            <div class="dc-muted" style="margin-top:8px;">服务发布必走「构建 → 上传 → 重启 → 探活」，探活失败即判失败（FR-8.2）。</div>
+            <div class="dc-muted" style="margin-top:10px;">各环境「指向」（主机组 / 端口 / 上游 / 运行时）为<b>只读</b>，统一在<a onclick="toast('[原型] 跳转：环境管理 → 环境详情 → 后端服务指向')">环境管理 → 环境详情 → 后端服务指向</a>内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。<br>
+              <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/ verify（探活通过后切指针）直接生效 —— <b>流水线跑完即上线</b>，控制台不再有单独的部署动作。</div>
           </div>
         </div>
       </div>
@@ -691,6 +707,70 @@
     </div>
 
       <!-- 通用模块（按一级域动态渲染交互骨架：工具栏 + 列表 + 行操作） -->
+      <!-- 流水线详情 · 执行流程（2026-09-22 新增屏：紧凑步骤卡 + 任务行连线 + skipped 灰色；
+           交互与编辑页同构 —— 上排步骤卡不连线，下排任务卡箭头串联 + 多任务分叉） -->
+      <div class="screen" id="dc-rundetail">
+        <div class="dc-crumb"><a onclick="dc('pipelines','流水线列表')">流水线列表</a> / <b>gateway 发布</b> / 执行流程</div>
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>gateway 发布 <span class="dc-badge neutral" style="margin-left:6px;">免审批</span></h1>
+              <div class="sub">流水线详情 · 执行流程（只读画布 · 与编辑页同构的两行结构）</div></div>
+          </div>
+        </div>
+        <div class="dc-card">
+          <div class="dc-tabs" style="border-bottom:1px solid var(--border);">
+            <div class="t2 active">执行流程</div><div class="t2" style="color:var(--text-3)">历史记录</div>
+            <div class="t2" style="color:var(--text-3)">参数</div><div class="t2" style="color:var(--text-3)">变量</div>
+          </div>
+          <div class="dc-row" style="margin:12px 0;">
+            <span class="dc-mono">#5095-xbgvrqq</span>
+            <span class="dc-badge ok">成功</span>
+            <span class="dc-muted">local / gateway · feature/deploy-console-domain-split@f952534 · ci:cli-verify</span>
+          </div>
+          <div class="run-canvas" id="runCanvas">
+            <svg class="run-wires" id="runWires"></svg>
+            <!-- 一列 = 步骤卡 + 该列任务卡；grid 列宽 = max(两者) → 同列同宽（2026-09-22）。
+                 序号**在任务卡左侧竖条**（与编辑页 task-node .seq 一致；多任务 = 4-1 / 4-2），
+                 步骤标题不放数字（编辑页 step-title 即无序号，用户 2026-09-22 指正） -->
+            <div class="run-grid">
+              <div class="run-col">
+                <div class="run-step"><span class="nm">拉取代码</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">1</span><span class="tn">git</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step"><span class="nm">构建</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">2</span><span class="tn">build</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step"><span class="nm">发布确认</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">3</span><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div>
+              </div>
+              <div class="run-col">
+                <div class="run-step"><span class="nm">发布</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">4-1</span><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
+                <div class="run-task st-skip"><span class="rseq">4-2</span><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="run-legend">
+            <span class="dot" style="background:#398E4A"></span>完成
+            <span class="dot" style="background:var(--primary)"></span>执行中
+            <span class="dot" style="background:var(--danger)"></span>失败
+            <span class="dot" style="background:#f5a623"></span>待审批
+            <span class="dot skip"></span>跳过（灰）
+            <span class="dot plain"></span>未执行
+            <span class="dc-muted" style="margin-left:10px;">dev 未被执行（条件不满足）→ 按「跳过 = 灰色」表达，不复用成功色</span>
+          </div>
+        </div>
+        <div class="dc-muted" style="margin-top:10px;">
+          说明（2026-09-22）：本屏为「流水线详情 · 执行流程」新交互稿 ——
+          ① 步骤卡紧凑化（seq / 名称 / 命令，高度 ≈ 任务卡 2 倍，字号 12px）；
+          ② 连线 = 任务行 SVG 测量（主线在前一列任务中线、列间分叉、箭头指向每个任务中线），与编辑页同构；
+          ③ skipped（未被执行）用**灰色**，不再复用成功色。
+          确认后按此落码 <code>apps/deploy-console/src/components/pipeline/ProgressFlow.vue</code>。
+        </div>
+      </div>
+
       <div class="screen" id="dc-generic">
         <div class="dc-page-head">
           <div class="dc-row">
@@ -881,6 +961,65 @@
   </div>
 </div>
 
+<!--
+  发起发布抽屉（2026-09-21）：从**服务详情页**右上角「构建发布」就地打开。
+  与流水线页的「发起发布」抽屉是**同一个抽屉**（字段一致），差异只有一处：模块锁定为当前服务。
+  关键：打开 / 关闭 / 提交**都不改变路由** —— 不跳转到流水线页，停留原页 + Toast 反馈。
+-->
+<div class="drawer-mask" id="d-submit-mask" onclick="closeSubmitDrawer()"></div>
+<div class="drawer" id="d-submit" style="width:560px;">
+  <div class="drawer-head"><span class="t">发起发布</span><span class="x" onclick="closeSubmitDrawer()">×</span></div>
+  <div class="drawer-body">
+    <div class="field">
+      <label>环境</label>
+      <!-- 两种态（用户 2026-09-21）：行内「构建发布」进来 → 锁定该行环境并**禁用**；页头「构建发布」进来 → 可选 -->
+      <div id="f-submit-env-locked" style="display:none;">
+        <!-- 用户 2026-09-21：锁定态**保持 select 外观但点不动**（disabled） -->
+        <select id="f-submit-env-name" disabled>
+          <option value="本地环境（local）">本地环境（local）</option>
+          <option value="开发环境（dev）">开发环境（dev）</option>
+          <option value="生产环境（prod）">生产环境（prod）</option>
+          <option value="测试环境（qa）">测试环境（qa）</option>
+        </select>
+        <div class="dc-muted" style="margin-top:6px;">由所点击的<b>环境行</b>决定，不可修改（避免误发到其它环境）</div>
+      </div>
+      <div id="f-submit-env-pick">
+        <select>
+          <option>本地环境（local）</option>
+          <option>开发环境（dev）</option>
+          <option>生产环境（prod）</option>
+        </select>
+        <div class="dc-muted" style="margin-top:6px;">从页头发起：环境可选（默认第一个环境）；点行内「构建发布」则锁定该行环境</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>模块（发起自当前服务，不可改）</label>
+      <input value="auth-service" readonly style="background:var(--bg);color:var(--text-3);">
+    </div>
+    <div class="field">
+      <label>使用流水线</label>
+      <select><option>auth-service 发布（默认）</option></select>
+    </div>
+    <div class="field">
+      <label>分支</label>
+      <select><option>master</option><option>feature/contract-risk-ai</option></select>
+    </div>
+    <div class="field">
+      <label>Commit（留空=分支最新提交）</label>
+      <input placeholder="留空=最新；可从分支提交列表选，或输入短哈希">
+    </div>
+    <div class="field">
+      <label>模式</label>
+      <div class="dc-seg" style="display:inline-flex;"><span class="on">全量</span><span>灰度</span></div>
+    </div>
+    <div class="cond-note">产物投递由系统自动决定：测试环境(local/dev)=本机，正式发布按配置投递到生产服务器。发布基于<b>远程仓库分支 + commit</b>，请先 commit &amp; push 再发布。</div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost" onclick="closeSubmitDrawer()">取消</button>
+    <button class="btn btn-primary" onclick="submitFromService()">提交发布</button>
+  </div>
+</div>
+
 <style>
   /* 弹层样式（深色壳适配） */
   .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;
@@ -906,6 +1045,44 @@
     color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;z-index:95;opacity:0;
     pointer-events:none;transition:opacity .2s;}
   .toast.show{opacity:1;}
+  /* ===== 流水线详情 · 执行流程（run-*，2026-09-22 新增屏） ===== */
+  .run-canvas{position:relative;overflow-x:auto;padding:10px 6px;}
+  .run-wires{position:absolute;top:0;left:0;pointer-events:none;}
+  .run-grid{display:inline-grid;grid-auto-flow:column;gap:6px 44px;padding:4px 8px;position:relative;}
+  /* stretch：步骤卡与任务卡**同列同宽**（2026-09-22 用户反馈「标题和下面的任务宽度不一致」） */
+  .run-col{display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:104px;align-items:stretch;}
+  /* 步骤标题卡：**中性**（白底灰边深字、名称 13px —— 用户 2026-09-22 要求对比编辑页：
+     编辑页 step-title 不整卡染成功色；执行状态由任务卡与连线表达，步骤卡不重复染色） */
+  .run-step{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 14px;width:100%;
+    border:1px solid var(--border);border-radius:2px;background:var(--card);cursor:pointer;}
+  .run-step .seq{font-size:10px;color:var(--text-3);font-family:var(--mono);}
+  .run-step .nm{font-size:13px;font-weight:600;color:var(--text);}
+  .run-step .cmd{font-size:10px;line-height:14px;color:var(--primary);}
+  /* 任务卡：单行小卡 */
+  .run-task{display:flex;align-items:center;gap:6px;width:100%;padding:3px 8px;
+    border:1px solid var(--border);border-radius:2px;background:var(--card);font-size:11px;}
+  /* 序号：任务卡左侧竖条色块（对齐编辑页 task-node .seq；负 margin 抵消任务卡 padding ——
+     2026-09-22 用户反馈「绿色填充有些空隙」：填充要顶到卡边） */
+  .run-task .rseq{align-self:stretch;display:flex;align-items:center;padding:0 8px;margin:-3px 6px -3px -8px;
+    font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text-2);
+    background:var(--bg);border-right:1px solid var(--border);border-radius:1px 0 0 1px;}
+  .run-task .tn{color:var(--text-2);}
+  .run-task .ts{color:var(--text-3);margin-left:auto;}
+  .run-task .tagc{font-size:9px;line-height:14px;padding:0 4px;border:1px solid var(--border);border-radius:3px;color:var(--primary);}
+  /* 状态色（2026-09-22 四次修订）：**绿色只填充序号竖条背景**（数字反白），
+     任务卡其他区域不改背景色（白底），边框保留状态色；跳过 = 灰（含序号条）；
+     步骤标题卡保持中性（与编辑页一致） */
+  .run-task.st-ok{border-color:#398E4A;}
+  .run-task.st-ok .rseq{background:#398E4A;color:#fff;border-right-color:#398E4A;}
+  .run-task.st-skip{border-color:var(--border);background:var(--bg);opacity:.85;}
+  .run-task.st-skip .tn,.run-task.st-skip .ts{color:var(--text-3);}
+  .run-legend{display:flex;align-items:center;gap:5px;margin-top:14px;padding-top:10px;
+    border-top:1px dashed var(--border);font-size:11px;color:var(--text-3);flex-wrap:wrap;}
+  .run-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:8px;}
+  .run-legend .dot.skip{background:var(--bg);border:1px dashed var(--border);}
+  .run-legend .dot.plain{background:var(--card);border:1px solid var(--border);}
+
+
 
 /* ===== 流水线编排（步骤/任务画布，来自 pipeline-env-branch-canvas v7） ===== */
 /* 全局亮色 token（整稿默认亮色；画布/抽屉/弹窗统一引用） */
@@ -1067,6 +1244,11 @@ body{background:#e8ecf1;}
   .field input,.field textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
     font-size:13px;color:var(--text);background:var(--card);outline:none;}
   .field input:focus,.field textarea:focus{border-color:var(--primary);}
+  .field select{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+    font-size:13px;color:var(--text);background:var(--card);outline:none;}
+  .field select:focus{border-color:var(--primary);}
+  .field select:disabled{background:var(--bg);color:var(--text-3);cursor:not-allowed;}
+  .field input[readonly]{cursor:not-allowed;}
   .field textarea{font-family:var(--mono);font-size:12px;min-height:150px;line-height:1.7;}
   .doc-block{font-size:12px;color:var(--text-2);line-height:2;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
   .doc-block b{color:var(--text);}
@@ -1118,7 +1300,7 @@ body{background:#e8ecf1;}
 <script>
   /* ===== 控制台：菜单 + 屏切换 ===== */
   var DC_TITLE = {"apps":"应用管理","envs":"环境管理","services":"服务管理","hosts":"主机管理",
-                  "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署"};
+                  "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署","rundetail":"流水线详情"};
   var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
                 "pipelines":"nav-pipelines","dashboard":"nav-dashboard","vdeploy":"nav-vdeploy"};
   /* 两级导航：一级（顶部）→ 二级（左侧，动态渲染） */
@@ -1126,9 +1308,10 @@ body{background:#e8ecf1;}
     {key:'dashboard', label:'仪表盘',     items:[{page:'dashboard',label:'仪表盘',id:'nav-dashboard'}]},
     {key:'apps',      label:'微前端',     items:[{page:'apps',label:'应用管理',id:'nav-apps'},{page:'envs',label:'环境管理',id:'nav-envs'},
                                                  {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('apps')"}]},
-    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'},
-                                                 {page:'vdeploy',label:'版本部署',title:'版本部署',id:'nav-vdeploy',fn:"vdOpen('svcs')"}]},
-    {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},
+    // 2026-09-21 对齐落地（MainLayout.vue）：API 网关域**只有「服务管理」** ——
+    // 「版本部署」（选已有版本直接部署）只挂在**微前端**域（/deploys/micro）
+    {key:'svcs',      label:'API 网关',   items:[{page:'services',label:'服务管理',id:'nav-services'}]},
+    {key:'pl',        label:'流水线管理', items:[{page:'pipelines',label:'流水线列表',id:'nav-pipelines'},{page:'rundetail',label:'流水线详情'},
                                                   {page:'generic',title:'灰度管理',label:'灰度管理'},
                                                   {page:'generic',title:'自助诊断',label:'自助诊断'},
                                                   {page:'generic',title:'工具目录',label:'工具目录'}]},
@@ -1141,7 +1324,7 @@ body{background:#e8ecf1;}
   ];
   /* 页面 → 所属一级（顶部 tab 高亮） */
   var DC_PAGE_DOMAIN = {"dashboard":"dashboard","apps":"apps","envs":"apps","appdetail":"apps",
-                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","hosts":"infra"};
+                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","rundetail":"pl","hosts":"infra"};
   function dcFindDomain(key){ for(var i=0;i<DC_MENU.length;i++){ if(DC_MENU[i].key===key) return DC_MENU[i]; } return null; }
   /* 渲染左侧二级菜单（跟随顶部一级） */
   function renderSide(domain){
@@ -1248,6 +1431,7 @@ body{background:#e8ecf1;}
     }
     // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
     if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
+    if(page === 'rundetail'){ setTimeout(drawRunWires, 30); setTimeout(drawRunWires, 200); }
   }
   function pane(scope, n){
     var map = {app:4, svc:5};
@@ -1352,6 +1536,74 @@ body{background:#e8ecf1;}
     var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
     clearTimeout(toastTimer); toastTimer=setTimeout(function(){el.classList.remove('show');},1700);
   }
+  /* ===== 服务详情页「构建发布」：原地开抽屉，**不改路由**（用户 2026-09-21） ===== */
+  var SUBMIT_ENV_LABEL = { local:'本地环境（local）', dev:'开发环境（dev）', prod:'生产环境（prod）', qa:'测试环境（qa）' };
+  /**
+   * @param envId 非空 = 从「环境与发布」表格某行点进来 → 环境**锁定并禁用**（改不了）；
+   *              空 = 从页头「构建发布」进来 → 环境可选（默认第一个环境）。
+   */
+  function openSubmitDrawer(envId){
+    var locked = !!envId;
+    document.getElementById('f-submit-env-locked').style.display = locked ? 'block' : 'none';
+    document.getElementById('f-submit-env-pick').style.display = locked ? 'none' : 'block';
+    if (locked) document.getElementById('f-submit-env-name').value = SUBMIT_ENV_LABEL[envId] || envId;
+    document.getElementById('d-submit-mask').classList.add('show');
+    document.getElementById('d-submit').classList.add('show');
+  }
+  function closeSubmitDrawer(){
+    document.getElementById('d-submit-mask').classList.remove('show');
+    document.getElementById('d-submit').classList.remove('show');
+  }
+  function submitFromService(){
+    closeSubmitDrawer();
+    toast('已提交：auth-service → dev（流水线 auth-service 发布）');
+  }
+
+  /* ===== 流水线详情 · 执行流程：SVG 测量连线（与编辑页 drawWires 同构） ===== */
+  function runSeg(svg,x1,y1,x2,y2,ok){
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
+    p.setAttribute('stroke-width','2.5'); p.setAttribute('fill','none');
+    p.style.stroke = ok ? '#398E4A' : 'var(--border)';
+    svg.appendChild(p);
+  }
+  function runChev(svg,x,y,ok){
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d','M'+(x-9)+' '+(y-8)+' L'+x+' '+y+' L'+(x-9)+' '+(y+8));
+    p.setAttribute('stroke-width','3'); p.setAttribute('fill','none');
+    p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round');
+    p.style.stroke = ok ? '#398E4A' : 'var(--border)';
+    svg.appendChild(p);
+  }
+  function drawRunWires(){
+    var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
+    if(!cv||!svg) return;
+    var cols=[].slice.call(cv.querySelectorAll('.run-col'));
+    var wr=cv.getBoundingClientRect();
+    svg.setAttribute('width',Math.ceil(cv.scrollWidth)); svg.setAttribute('height',Math.ceil(cv.scrollHeight));
+    svg.innerHTML='';
+    for(var i=0;i<cols.length-1;i++){
+      var ft=cols[i].querySelectorAll('.run-task'); var tt=cols[i+1].querySelectorAll('.run-task');
+      if(!ft.length||!tt.length) continue;
+      var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
+      var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2; var ok=true;
+      runSeg(svg,f.r,f.cy,mx,f.cy,ok);
+      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,ok); runChev(svg,t0.l,f.cy,ok); }
+      else{
+        var ys=[].map.call(tt,function(t){return ctr(t).cy;});
+        /* 分叉**竖线**同样按目标分支状态着色：分支里存在 skipped（未执行）→ 整段灰
+         * （用户 2026-09-22：竖线也要灰 —— 分叉里有没执行的分支，主干绿着不协调） */
+        var vok = ok && ![].some.call(tt,function(t){return t.classList.contains('st-skip');});
+        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vok);
+        /* 支线按**目标任务状态**着色：skipped（未执行）→ 灰（用户 2026-09-22：dev 没执行，线不该绿） */
+        [].forEach.call(tt,function(t){
+          var c=ctr(t); var tok=!t.classList.contains('st-skip');
+          runSeg(svg,mx,c.cy,c.l,c.cy,tok); runChev(svg,c.l,c.cy,tok);
+        });
+      }
+    }
+  }
+
   function submitApp(){
     var v = document.getElementById('in-key').value.trim();
     if(v === 'admin' || v === 'portal' || v === 'shell'){
@@ -1487,13 +1739,13 @@ body{background:#e8ecf1;}
     for(var i=0;i<vers.length;i++){ if(vers[i].cur){ cur = vers[i].tag; break; } }
     document.getElementById('vdFoot').style.display = 'flex';
     document.getElementById('vdBody').innerHTML =
-      '<div class="vd-cur">当前版本：<b>'+(cur||'—')+'</b></div>'
+      '<div class="vd-cur">当前版本：<b>'+(cur||'—')+'</b><span style="color:var(--text-3);font-size:12px;margin-left:10px;">所有版本（含当前）均可选中部署；部署当前版本时系统会提示「已是该版本」。</span></div>'
       + vers.map(function(v){
           var isCur = (v.tag === cur);
           var meta = c.src==='deploy'
             ? (v.br||'—')+' · '+(v.time||'—')+' · '+(v.by||'—')
             : '磁盘版本目录 · /static/modules/'+c.key+'/'+c.env+'/'+v.tag+'/';
-          return '<div class="vd-ver'+(isCur?' cur':'')+'" onclick="'+(isCur?'':'vdSelect(\''+v.tag+'\')')+'">'
+          return '<div class="vd-ver'+(isCur?' cur':'')+'" onclick="vdSelect(\''+v.tag+'\')">'
             + '<span class="vd-radio"></span>'
             + '<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:8px;">'
             + '<span class="tag">'+v.tag+'</span>'

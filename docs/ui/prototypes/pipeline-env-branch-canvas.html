@@ -4,6 +4,46 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>流水线 · 步骤/任务 模型 · 交互原型 v7（测量式连线）</title>
+<!--
+  === 微调豁免 · 2026-09-21 ===
+  范围：画布「动作行」的删除按钮定位（纯视觉微调，不改交互、不改信息架构）。
+  现象：用户反馈「action 这里的删除 icon 被遮挡了」。
+  原因：动作行容器 .task-acts 为「共享边框组」设了 overflow:hidden，而删除按钮沿用
+        「卡片右上角外侧」的通用写法（top:-8px; right:-8px），越界 8px 被裁掉 → 悬停时被遮挡。
+  处置：动作行删除按钮改为**行内右侧垂直居中**（top:50%; right:5px; transform:translateY(-50%)），
+        行内用 padding-right 预留按钮位、.aname 加 flex:1/min-width:0 保证超长名省略号正常；
+        任务卡删除按钮保持原外侧位置（.task-node 无 overflow 裁剪，外侧点击区更好按）。
+  落地：apps/deploy-console/src/components/pipeline/OrchestrationEditor.vue
+
+  === 微调豁免（二）· 2026-09-21 ===
+  范围：**流水线详情页「执行流程」只读画布**（ProgressFlow.vue 编排模式）的连线拼接（纯视觉，不改交互）。
+  现象：用户反馈「详情页的连接线没拼接好」。
+  原因（实测）：相邻 cell 的步骤卡被 `align-items:center` 居中 → 卡片两侧留白 13~29px，
+        而连线 `.orch-arrow`（28px，贴 cell 边界）与卡片边缘因此断开；且箭头 `margin-top:18px`
+        比卡片垂直中线（16.5px）低 2px。
+  处置：步骤卡**撑满 cell**（`align-items:stretch` + 内容居中）→ 卡片边缘贴合 cell 边界，线自然接上；
+        箭头 `margin-top` 18 → 15.5，对齐卡片中线。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
+
+  === 微调豁免（三）· 2026-09-22 ===
+  范围：详情页只读画布的**连线着色规则**修正（状态展示 bug，非新交互）。
+  现象：用户反馈「后面该变绿的连接线，没变绿」。
+  实测：实例整体已 succeeded，但落库 taskStates 里审批任务停留在 awaiting
+        （审批通过后引擎未回写）→ 步骤聚合为 awaiting → 该步骤之后的连线保持灰色。
+  处置：前端展示兜底 —— 实例终态 succeeded 时，落库残留的 awaiting/running 按 succeeded
+        展示（整体成功与「审批仍挂起」不可能并存）；后端根修（审批通过回写任务状态）另册。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue taskStateOf()
+
+  === 微调豁免（四）· 2026-09-22 ===
+  范围：详情页只读画布的**任务分叉对齐**（纯视觉，不改交互）。
+  现象：用户反馈「连接线还是没对准」，并指认对齐方式应参照编辑页。
+  差异（实测）：编辑页任务卡与步骤卡**同宽左对齐**（`.task-node{width:100%}`）；
+        详情页任务分叉用了「缩进 16px + 左竖线 + 横线」的树状画法（`.orch-tasks{padding-left:16px}`），
+        local/dev 任务卡比步骤卡错开 16px。
+  处置：对齐编辑页 —— 去掉缩进（任务卡与步骤卡同宽左对齐），分叉竖线贴 cell 左缘
+        （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
+-->
 <style>
   :root{
     --primary:#F97316; --primary-dark:#EA6A0A; --primary-soft:#FFF1E7;
@@ -102,6 +142,23 @@
     font-size:13px;font-weight:700;color:var(--text-2);background:var(--bg);
     border-right:1px solid var(--border);border-radius:9px 0 0 9px;
     padding:0 10px;margin:-7px 2px -7px -14px;font-family:var(--mono);flex-shrink:0;}
+
+  /* 动作行：紧贴任务卡下方（画布上直接可见，不必进抽屉）；2026-09-21 补入原型 */
+  .task-acts{border:1px solid var(--border);border-top:none;background:var(--card);
+    border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow:hidden;}
+  .act-node{position:relative;display:flex;align-items:center;gap:6px;padding:5px 26px 5px 10px;
+    border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;}
+  .act-node:last-child{border-bottom:none;}
+  .act-node:hover{background:var(--bg);}
+  .act-node .atag{font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;color:var(--primary);
+    border:1px solid var(--border);background:var(--card);flex-shrink:0;}
+  .act-node .aname{font-size:11px;color:var(--text-2);font-family:var(--mono);flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;}
+  /* 动作行删除按钮：**行内右侧垂直居中** —— 卡片右上角外侧的写法（top:-8px/right:-8px）
+     会被 .task-acts 的 overflow:hidden 裁掉（用户 2026-09-21 反馈「删除 icon 被遮挡」） */
+  .act-node .del-btn{top:50%;right:5px;transform:translateY(-50%);width:15px;height:15px;}
+  .act-node .del-btn svg{width:9px;height:9px;}
+  .act-node:hover .del-btn{display:flex;}
 
   /* 连线层上的＋号（添加步骤）：JS 定位到主轴中点 */
   .add-node{position:absolute;width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--primary);
@@ -238,7 +295,14 @@
               <div class="step-title" onclick="openStep(4)"><span class="nm">发布</span><span class="desc">投递产物到目标机</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除步骤')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
               <div class="tasks">
                 <div class="task-node script" title="本机 cp（条件 DEPLOY_ENV == local）" onclick="openTask('local')"><span class="seq">4-1</span><span class="tag">脚本</span><span class="ifb">if</span><span class="name">local</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task-acts">
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：投递产物')"><span class="atag">脚本</span><span class="aname">投递产物</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                </div>
                 <div class="task-node script" title="scp 远程（默认任务）" onclick="openTask('dev')"><span class="seq">4-2</span><span class="tag">脚本</span><span class="def">默认</span><span class="name">dev</span><button class="del-btn" onclick="event.stopPropagation();toast('[原型] 删除任务')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                <div class="task-acts">
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：投递产物')"><span class="atag">脚本</span><span class="aname">投递产物</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                  <div class="act-node" title="脚本：点击编辑该动作" onclick="toast('[原型] 编辑动作：write-version · 写版本记录')"><span class="atag">脚本</span><span class="aname">write-version · 写版本记录</span><button class="del-btn" title="删除动作" onclick="event.stopPropagation();toast('[原型] 删除动作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+                </div>
               </div>
             </div>
 

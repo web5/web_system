@@ -2,20 +2,19 @@
 /**
  * 服务详情（API 网关域）
  *
- * Tab：**接口（默认）** / 概览 / 网关路由 / 环境 / 部署
+ * Tab：**接口（默认）** / 概览 / 网关路由 / **环境与发布**（2026-09-21 由原「环境」+「部署」合并）
  * - 接口：方法 + 路径级治理元数据（鉴权 / 权限码 / 限流 / 来源），改动**不影响转发行为**
  * - 网关路由：转发规则（前缀 / 剥离 / 重写 / 超时 / 优先级），环境级覆盖 + 前缀包含告警
- * - 环境：各环境运行时与目标主机（**只读**；编辑入口在「环境管理 → 环境详情」）
+ * - 环境与发布：各环境运行时 / 目标主机（**只读**）+ 行内「构建发布 | 配置指向 | 探活」
  * 设计依据：specs/deploy-console-domain-split/page-spec.md §4 / design.md v2 §2.3
  */
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
+import PipelineSubmitDrawer from '@/components/pipeline/PipelineSubmitDrawer.vue'
 import {
   servicesApi,
-  deployApi,
-  pipelineRunsApi,
   type ServiceRow,
   type ServiceRouteRow,
   type EndpointRow,
@@ -401,9 +400,10 @@ const envColumns: TableColumnsType = [
   { title: '目标主机', key: 'hostName', width: 160 },
   { title: '端口', key: 'port', width: 90, align: 'right' },
   { title: '副本', key: 'replicas', width: 70, align: 'right' },
-  { title: '上游覆盖', key: 'upstreamUrl' },
+  { title: '上游覆盖', key: 'upstreamUrl', width: 170 },
   { title: '状态', key: 'status', width: 110 },
-  { title: '操作', key: 'action', width: 100 },
+  // 三个入口（构建发布 | 配置指向 | 探活）要在一行内显示，故列宽不能太小
+  { title: '操作', key: 'action', width: 230 },
 ]
 
 async function loadEnvs() {
@@ -425,8 +425,6 @@ function gotoEnvConfig(envId: string) {
 }
 
 const probing = ref<string | null>(null)
-/** 正在部署的环境（同一时间只允许一个部署在跑） */
-const deploying = ref<string | null>(null)
 async function probe(envId: string) {
   probing.value = envId
   try {
@@ -446,68 +444,28 @@ async function probe(envId: string) {
 // ---------- 构建发布（流水线）vs 部署（重启 + 探活）----------
 
 /**
- * **构建发布 = 走流水线**：拉码 → 构建 → 上传产物（**不动进程**）。
- * 产物上传后仍需在本页执行「部署」，新代码才会生效。
+ * **构建发布 = 走流水线**：拉码 → 构建 → 投递产物 →
+ * 后端由 restart / verify 两个 action 落地生效（探活通过后才切指针）；前端切指针即生效。
+ * 自 2026-09-21 起控制台不再有独立的「部署」动作。
+ *
+ * 2026-09-21 改（用户反馈「点击构建发布会出来抽屉，但是不要跳到流水线页面去」）：
+ * 原实现 `router.push('/pipelines?module=&env=')` 把用户带离当前服务上下文 —— 现改为
+ * **原地打开共用抽屉 `PipelineSubmitDrawer`**，路由不变；模块锁定为当前服务。
+ * 行内进入（带 envId）时环境**锁定并禁用**（见规格 §12）。
  */
+const submitOpen = ref(false)
+const submitEnv = ref('')
+/** 行内进入 → true：环境下拉锁定不可改；页头进入 → false：环境可选 */
+const submitLockEnv = ref(false)
+
 function publish(envId?: string) {
   if (service.value?.deployChannel === 'legacy') {
     message.warning('该服务走传统发布通道（legacy），不由流水线托管')
     return
   }
-  router.push({ name: 'PipelineCenter', query: { module: svcKey.value, env: envId || 'dev' } })
-}
-
-/**
- * **部署 = 重启 + 探活**（不重新构建）：
- * 让该环境已上传的产物真正生效。探活失败即判失败；远程主机若不在本机 pm2 纳管，
- * 服务端会返回明确原因（不会「点了没反应」）。
- */
-/**
- * 部署 = 选版本 → 改指向（deployVersion：落 dist + 重启 + 写指针）→ 探活。
- * 版本列表 = 该模块在该环境的磁盘产物（流水线「构建发布」上传的），默认选中最新。
- * 用户 2026-09-21：部署时才修改指向，且部署时选择版本。
- */
-const deployModal = ref(false)
-const deployEnvId = ref('')
-const deployVersionSel = ref<string | undefined>(undefined)
-const deployVersions = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
-
-async function deploy(envId: string) {
-  deployEnvId.value = envId
-  deployVersions.value = []
-  deployVersionSel.value = undefined
-  deployModal.value = true
-  try {
-    deployVersions.value = await pipelineRunsApi.releases(envId, svcKey.value)
-    deployVersionSel.value = deployVersions.value[0]?.versionTag
-  } catch {
-    deployVersions.value = []
-  }
-}
-
-async function confirmDeploy() {
-  if (!deployVersionSel.value) {
-    message.warning('请选择要部署的版本')
-    return
-  }
-  deploying.value = deployEnvId.value
-  try {
-    await deployApi.deployVersion(svcKey.value, deployEnvId.value, deployVersionSel.value)
-    let health = '探活未执行'
-    try {
-      const res = await servicesApi.health(svcKey.value, deployEnvId.value)
-      health = res.ok ? `探活通过（${res.latencyMs}ms）` : `探活失败：${res.error || res.status}`
-    } catch {
-      health = '探活请求失败'
-    }
-    message.success(`已部署并指向 ${deployVersionSel.value} → ${health}`)
-    deployModal.value = false
-    await loadEnvs()
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '部署失败')
-  } finally {
-    deploying.value = null
-  }
+  submitEnv.value = envId || ''
+  submitLockEnv.value = !!envId
+  submitOpen.value = true
 }
 
 async function load() {
@@ -765,7 +723,7 @@ onMounted(load)
         </a-tab-pane>
 
         <!-- 环境 -->
-        <a-tab-pane key="envs" tab="环境">
+        <a-tab-pane key="envs" tab="环境与发布">
           <a-table
             :columns="envColumns"
             :data-source="svcEnvs"
@@ -808,11 +766,13 @@ onMounted(load)
                 <a-badge v-else status="default" :text="record.status" />
               </template>
               <template v-else-if="column.key === 'action'">
+                <a type="link" @click="publish(record.envId)">构建发布</a>
+                <a-divider type="vertical" />
                 <a type="link" @click="gotoEnvConfig(record.envId)">配置指向</a>
                 <a-divider type="vertical" />
                 <a-tooltip
                   v-if="!record.configured"
-                  title="未配置主机组或端口，探活与部署会 fail-fast（不回落本机）"
+                  title="未配置主机组或端口，探活会 fail-fast（不回落本机）"
                 >
                   <a type="link" class="link-disabled">探活</a>
                 </a-tooltip>
@@ -821,99 +781,26 @@ onMounted(load)
             </template>
           </a-table>
           <p class="hint">
-            本页<b>只读</b>：各环境「指向」（主机组 / 端口 / 上游 / 运行时）统一在
+            各环境「指向」（主机组 / 端口 / 上游 / 运行时）为<b>只读</b>，统一在
             <a @click="router.push({ name: 'EnvironmentManager' })">环境管理 → 环境详情 → 后端服务指向</a>
-            内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。
+            内维护（点行内「配置指向」直达该环境）；主机组名与地址在「基础设施 → 主机管理」登记。<br />
+            <b>构建发布走流水线</b>：拉码 → 构建 → 投递产物 → 后端由 restart（落地 + 干净重启）/
+            verify（探活通过后切指针）直接生效 —— <b>流水线跑完即上线</b>，控制台不再有单独的部署动作。
           </p>
         </a-tab-pane>
 
-        <!-- 部署 -->
-        <a-tab-pane key="deploy" tab="部署">
-          <a-table
-            :columns="[
-              { title: '环境', key: 'envId', width: 150 },
-              { title: '目标', key: 'target' },
-              { title: '运行时', key: 'runtime', width: 120 },
-              { title: '状态', key: 'status', width: 130 },
-              { title: '操作', key: 'action', width: 140 },
-            ]"
-            :data-source="svcEnvs"
-            row-key="envId"
-            size="middle"
-            :pagination="false"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'envId'">
-                <span class="ws-mono">{{ record.envId }}</span>
-              </template>
-              <template v-else-if="column.key === 'target'">
-                <span v-if="record.configured" class="ws-mono">
-                  {{ record.upstreamUrl || `${record.hostAddress}:${record.port ?? '—'}` }}
-                </span>
-                <span v-else class="muted">未配置指向（部署会 fail-fast）</span>
-              </template>
-              <template v-else-if="column.key === 'runtime'">
-                <span class="muted">{{ record.runtime || '继承' }}</span>
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <a-badge v-if="!record.configured" status="warning" text="未配置" />
-                <a-badge v-else status="default" text="待部署" />
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a type="link" @click="publish(record.envId)">构建发布</a>
-                <a-divider type="vertical" />
-                <a
-                  type="link"
-                  :disabled="!record.configured || deploying !== null"
-                  @click="deploy(record.envId)"
-                >
-                  {{ deploying === record.envId ? '部署中…' : '部署' }}
-                </a>
-                <!-- 部署 = 选版本 → 改指向（落 dist + 重启 + 写指针）→ 探活 -->
-                <a-modal
-                  v-model:open="deployModal"
-                  :title="`部署 · ${deployEnvId}（选择版本并修改指向）`"
-                  :confirm-loading="deploying !== null"
-                  ok-text="部署（修改指向）"
-                  @ok="confirmDeploy"
-                >
-                  <div v-if="!deployVersions.length" class="muted" style="padding: 8px 0;">
-                    未取到该环境已上传的版本——先执行「构建发布」上传产物，再回来部署。
-                  </div>
-                  <template v-else>
-                    <div style="margin-bottom: 8px;">
-                      选择要部署的版本（默认最新上传）：
-                    </div>
-                    <a-radio-group v-model:value="deployVersionSel" style="display: block;">
-                      <a-radio
-                        v-for="v in deployVersions"
-                        :key="v.versionTag"
-                        :value="v.versionTag"
-                        style="display: block; padding: 6px 0;"
-                      >
-                        <span class="ws-mono">{{ v.versionTag }}</span>
-                        <span v-if="v.note" class="muted"> · {{ v.note }}</span>
-                      </a-radio>
-                    </a-radio-group>
-                    <div class="muted" style="font-size: 12px;">
-                      部署 = 把所选版本落地为当前运行版本（改指向）并重启进程，随后自动探活确认。
-                    </div>
-                  </template>
-                </a-modal>
-                <a-divider type="vertical" />
-                <a type="link" @click="probe(record.envId)">探活</a>
-              </template>
-            </template>
-          </a-table>
-          <p class="hint">
-            <b>构建发布走流水线</b>（拉码 → 构建 → 上传产物，<b>不动进程</b>），产物上传后<b>不会自动生效</b>；
-            <b>部署是独立动作</b>（重启进程 + 探活），探活失败即判失败。<br />
-            两者分离，是为了让「已上传但未重启」成为<b>可见的中间态</b>，而不是"以为发了其实还在跑旧代码"。
-            服务侧<b>永不写应用侧版本指针</b>（那是微前端域的事）。
-          </p>
-        </a-tab-pane>
       </a-tabs>
     </a-card>
+
+    <!-- 发起发布抽屉（共用组件）：原地打开、**不跳转**流水线页（用户 2026-09-21）；
+         模块锁定为当前服务；行内「构建发布」进入时环境锁定为该行 envId 并禁用 -->
+    <PipelineSubmitDrawer
+      v-model:open="submitOpen"
+      :fixed-module-key="svcKey"
+      :default-env="submitEnv"
+      :lock-env="submitLockEnv"
+      @submitted="load"
+    />
 
     <!-- 新增 / 编辑接口 -->
     <a-modal

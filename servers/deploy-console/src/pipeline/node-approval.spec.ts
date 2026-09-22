@@ -11,6 +11,8 @@ import { CanaryService } from '../canary/canary.service';
 import { AuditService } from '../audit/audit.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { PipelineStepCommandService } from '../pipeline-step-command/pipeline-step-command.service';
+import { StepBranchService } from '../pipeline-step-command/step-branch.service';
+import { PipelineOrchestrationService } from '../pipeline-orchestration/pipeline-orchestration.service';
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { NotificationService } from '../notification/notification.service';
@@ -26,7 +28,6 @@ import { SHELL_RUNNER, ShellRunRequest } from '../shell/shell-runner';
 import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { ReleaseGitService } from '../git/release-git.service';
-import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { PipelineService, PIPELINE_AWAITING_APPROVAL } from './pipeline.service';
 import { PipelineVarService } from './pipeline-var.service';
@@ -127,8 +128,15 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
     resolveActions: jest.fn(async (_tplId: string, nodeKey: string) =>
       nodeKey === 'g' ? [] : [act('a1', `echo ${nodeKey}`)],
     ),
+    // 步骤执行条件（gate）：runStageCommand 会读它，本 spec 不涉及 → 无条件（null）
+    getRow: jest.fn(async () => null),
   };
+  // 配置中心：脚本注入走 resolveForScriptsDetailed（**不含密钥**，见 specs/service-config-delivery）
   const configs = { resolve: jest.fn(async () => ({})) };
+  (configs as any).resolveForScriptsDetailed = jest.fn(async () => ({
+    config: {},
+    excludedSecrets: [],
+  }));
   const moduleRegistry = { get: jest.fn(async () => ({ type: 'backend', dir: 'x', pm2: 'web-x' })) };
   const canary = { list: jest.fn(async () => []) };
   const pm2Probe = { listProcesses: jest.fn(() => []) };
@@ -172,6 +180,9 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: AuditService, useValue: audit },
       { provide: StageCommandService, useValue: {} },
       { provide: PipelineStepCommandService, useValue: stepCommands },
+      // 步骤分支（步骤 1:N 任务按条件命中）：本 spec 不涉及 → 无分支
+      { provide: StepBranchService, useValue: { list: async () => [] } },
+      { provide: PipelineOrchestrationService, useValue: {} },
       { provide: ConfigCenterService, useValue: configs },
       { provide: ReleaseLockService, useValue: { acquire: async () => true, release: async () => undefined } },
       { provide: NotificationService, useValue: notify },
@@ -195,7 +206,6 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: ArtifactStoreService, useValue: {} },
       { provide: ReleaseRegistryService, useValue: {} },
       { provide: ReleaseGitService, useValue: {} },
-      { provide: PlatformScriptSeedService, useValue: {} },
       { provide: PIPELINE_BUILTIN_STEPS, useValue: {} },
     ],
   }).compile();
@@ -215,7 +225,6 @@ describe('approval 节点：挂起与恢复（P0 核心）', () => {
   it('V1 执行到 approval 节点 ⇒ 建节点级审批单 + 挂起，后续节点不执行', async () => {
     const ctx = await setup();
     await runPipeline(ctx);
-
     expect(ctx.p.status).toBe(PIPELINE_AWAITING_APPROVAL);
     // 恢复锚点 = 被挂起的节点
     expect(ctx.p.stage).toBe('g');

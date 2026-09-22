@@ -13,6 +13,7 @@ import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import { appsApi, type AppRow, type AppRouteRow, type AppEnvVersionRow } from '@/api'
 import VersionDeployDrawer, { type DrawerVersion } from '@/components/VersionDeployDrawer.vue'
+import dayjs from 'dayjs'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +32,14 @@ const KIND_LABEL: Record<string, string> = {
   'mini-app': '小程序',
 }
 const kindLabel = computed(() => KIND_LABEL[app.value?.kind || ''] || app.value?.kind || '-')
+
+/**
+ * 时间展示口径（规格 §10）：后端 Date 经 JSON 是 ISO(UTC)，必须本地化后再上屏，
+ * 不能原样渲染（原样输出会显示 UTC，比本地时间早 8 小时）。
+ */
+function fmtTime(s?: string | null): string {
+  return s ? dayjs(s).format('YYYY-MM-DD HH:mm:ss') : '—'
+}
 
 async function load() {
   loading.value = true
@@ -360,7 +369,7 @@ onMounted(load)
               </div>
               <div class="ec-ver ws-mono">{{ e.currentVersion || '—' }}</div>
               <div class="ec-meta">
-                {{ e.deployedAt ? e.deployedAt : '尚未发布' }}
+                {{ e.deployedAt ? fmtTime(e.deployedAt) : '尚未发布' }}
                 <template v-if="e.deployedBy"> · {{ e.deployedBy }}</template>
               </div>
             </div>
@@ -432,7 +441,7 @@ onMounted(load)
                 <span class="ws-mono muted">{{ record.previousVersion || '—' }}</span>
               </template>
               <template v-else-if="column.key === 'deployedAt'">
-                <span class="ws-tabular">{{ record.deployedAt || '—' }}</span>
+                <span class="ws-tabular">{{ record.deployedAt ? fmtTime(record.deployedAt) : '—' }}</span>
               </template>
               <template v-else-if="column.key === 'deployedBy'">
                 <span>{{ record.deployedBy || '—' }}</span>

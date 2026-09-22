@@ -20,10 +20,12 @@ updatedAt: 2026-09-21T00:00:00.000Z
 ## 动作门（顺序不可跳）
 
 1. 原型优先：先改 `apps/<app>/prototype/index.html`（或 `docs/ui/prototypes/**`）+ 同步页面规格 `specs/**/page-spec*.md`
-2. 交互质检：过 `ux-prototype-designer/references/ux-review-checklist.md` 独立交互质检
-3. **用户确认 ← 缺此不得写落地代码**（人审节点）
-4. 原型/规格**单独 commit**，记下 sha；随后 UI commit 的 message 带 `Proto: <sha>`（`commit-msg` hook 强制，见 `specs/kit-sop-enforcement/design.md` §3.8）
-5. 落码（WXML / WXSS / Vue）
+2. 交互质检：过 `ux-prototype-designer/references/ux-review-checklist.md` 独立交互质检（出稿下限）
+3. **D2 设计评审（交人确认前）**：交 `design-reviewer` 盲审 → 报告落盘 `docs/ui/reviews/<topic>-<YYYYMMDD>.md`（头部 `阻塞: N`）→ **阻塞项清零才可交用户确认**（判据源：`docs/ui/design-system.md` 品牌端分区；方案：`specs/design-reviewer/design.md`）
+4. **用户确认 ← 缺此不得写落地代码**（人审节点）
+5. 原型/规格**单独 commit**，记下 sha；随后 UI commit 的 message 带 `Proto: <sha>` **并带 `Design: pass`**（`commit-msg` hook 强制 + CI R10 / **R11（error）** 兜底）
+6. 落码（WXML / WXSS / Vue）
+7. **D3 实现一致性评审（落码后、提交前）**：比对原型锚点 `data-dr` + 可机检条目 + 截图并置，报告落盘；阻塞项清零才可提交。存量未回填锚点标注「跳过比对」，不判为漂移（方案 §3.7.1）
 
 ### 原型整合约定（动作门第 1 步细则，不可跳）
 
@@ -39,7 +41,8 @@ updatedAt: 2026-09-21T00:00:00.000Z
 - 禁裸 hex（除原型 `:root` / `app.wxss` token 层）；色值走 `--brand-*` 等 token（`apps/kedou-ai-minigram/app.wxss` 已声明浅色设计 token）
 - 禁 emoji 图标（用 SVG / tabler）
 - 平台原生能力（原生导航栏自绘、分享、支付）不得伪装已实现，须占位 + 标注真机语义
-- 产品主色：品牌橙 `#F97316`；文本 / 选中态用深档 `#C2410C`（对比度 5.4:1，过 AA）
+- 产品主色：品牌橙 `#F97316`；文本 / 选中态用深档 `#EA580C`（即 `--brand-txt`，白底 4.9:1，过 AA）
+  - ⚠️ 订正（2026-09-22 用户确认）：本条曾写 `#C2410C`（5.4:1），与代码 `apps/kedou-ai-minigram/app.wxss` 的 `--brand-txt: #EA580C` 不一致；**以代码为准**（#C2410C 偏橘红、观感突兀）。改 token 值须同步本条
 - 字重只用 400 / 500 / 600
 
 ## 生效提示

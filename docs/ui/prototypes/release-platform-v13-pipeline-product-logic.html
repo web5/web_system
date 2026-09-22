@@ -3,8 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>运维控制台 · 流水线产品逻辑 v13（原型）</title>
+<title>运维控制台 · 流水线产品逻辑 v13（原型 · 历史稿）</title>
 <!--
+  ⚠️ 历史稿（2026-09-14~15 产出，2026-09-21 巡检标注）：本稿的侧栏「流水线管理」父菜单、
+  「模块管理」三子模块、编辑页无 Tab、模板弹窗 chips 等设计**均未采纳或已被双域重构取代**。
+  当前有效原型：`deploy-console-domain-split.html`、`pipeline-env-branch-canvas.html`（见本目录 README.md）。
+  本文件仅作设计过程记录，**不要作为落地对照源**。
+
   目标端：桌面 Web（deploy-console 运维后台）
   对应规格：docs/ui/page-specs/pipeline-product-logic-v1.md
   本稿用于确认 4 处改动：
@@ -228,22 +233,11 @@
           <table>
             <thead><tr><th style="width:170px;">流水线</th><th style="width:90px;">模块</th><th style="width:70px;">环境</th><th>节点序列</th><th style="width:160px;">最近实例</th><th style="width:130px;">操作</th></tr></thead>
             <tbody>
+              <!-- 行序 = 默认排序：最近实例时间倒序（最新在上；从未执行的排最后） -->
               <tr>
                 <td><b>admin 本地发布</b></td><td class="mono">admin</td><td><span class="tag gray">local</span></td>
                 <td class="muted">拉取代码 → 构建 → 发布确认 → 发布</td>
                 <td><span class="mono">1789367327647</span><br><span class="tag warn">节点待审批</span></td>
-                <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
-              </tr>
-              <tr>
-                <td><b>admin dev 发布</b></td><td class="mono">admin</td><td><span class="tag gray">dev</span></td>
-                <td class="muted">拉取代码 → 构建 → 发布确认 → 发布</td>
-                <td><span class="mono">1789184000000</span><br><span class="tag ok">成功</span></td>
-                <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
-              </tr>
-              <tr>
-                <td><b>admin prod 发布</b></td><td class="mono">admin</td><td><span class="tag gray">prod</span></td>
-                <td class="muted">拉取代码 → 构建 → 发布确认 → 发布</td>
-                <td><span class="mono">1789010000000</span><br><span class="tag ok">成功</span></td>
                 <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
               </tr>
               <tr>
@@ -264,9 +258,21 @@
                 <td><span class="mono">1789200000000</span><br><span class="tag ok">成功</span></td>
                 <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
               </tr>
+              <tr>
+                <td><b>admin dev 发布</b></td><td class="mono">admin</td><td><span class="tag gray">dev</span></td>
+                <td class="muted">拉取代码 → 构建 → 发布确认 → 发布</td>
+                <td><span class="mono">1789184000000</span><br><span class="tag ok">成功</span></td>
+                <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
+              </tr>
+              <tr>
+                <td><b>admin prod 发布</b></td><td class="mono">admin</td><td><span class="tag gray">prod</span></td>
+                <td class="muted">拉取代码 → 构建 → 发布确认 → 发布</td>
+                <td><span class="mono">1789010000000</span><br><span class="tag ok">成功</span></td>
+                <td><div class="row"><button class="btn ghost sm" onclick="go('edit')">编辑</button><button class="btn ghost sm" onclick="go('detail')">详情</button></div></td>
+              </tr>
             </tbody>
           </table>
-          <div class="note">一屏列出<b>所有模块</b>的流水线：一个模块默认 3 条（local / dev / prod），缺的用「+ 新建流水线」补；节点编排与变量都在「编辑流水线」里维护。</div>
+          <div class="note">默认按<b>最近实例时间倒序</b>排放（最新在上；从未执行的排最后）；一屏列出<b>所有模块</b>的流水线：一个模块默认 3 条（local / dev / prod），缺的用「+ 新建流水线」补；节点编排与变量都在「编辑流水线」里维护。</div>
         </div>
 
         <div class="card">

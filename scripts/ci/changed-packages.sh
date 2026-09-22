@@ -77,9 +77,15 @@ for dir in $changed_dirs; do
   fi
 
   # R7 test（先跑后 tail，避免管道吞退出码）
+  #
+  # `--passWithNoTests`（2026-09-22）：存量现实是多个服务还没写测试
+  # （user / todo / ai-service 无 spec 文件 → jest「No tests found」退出 1；
+  #  system-service 有空 suite）——jest 默认把「没有测试」也判失败，会让**任何改动这些包的 PR 必然红**，
+  # 与改动内容无关（同 lint 档那次的性质）。这里只放宽「没有测试可跑」，
+  # **不掩盖真失败**：有 spec 但断言失败、或 suite 跑不起来，仍会红。
   if has test; then
-    echo "→ pnpm test -- --runInBand"
-    if (cd "$dir" && pnpm test -- --runInBand >/tmp/ws-test-$$.log 2>&1); then
+    echo "→ pnpm test -- --runInBand --passWithNoTests"
+    if (cd "$dir" && pnpm test -- --runInBand --passWithNoTests >/tmp/ws-test-$$.log 2>&1); then
       tail -20 /tmp/ws-test-$$.log || true
       echo "  ✓ test 通过"
     else

@@ -4,6 +4,11 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigItemEntity } from '../entities/config-item.entity';
 import { ConfigSnapshotEntity } from '../entities/config-snapshot.entity';
 import { ConfigService } from './config.service';
+import {
+  escapeEnvValue,
+  isReservedLocalKey,
+  renderGeneratedEnvFile,
+} from './config.service';
 import { decryptSecret, encryptSecret, SECRET_MASK } from './config-crypto';
 
 /** 64 位 hex 主密钥（仅测试用） */
@@ -25,6 +30,7 @@ describe('ConfigService（配置中心）', () => {
       create: jest.fn(),
       save: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
     };
     snapRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() };
 
@@ -90,6 +96,115 @@ describe('ConfigService（配置中心）', () => {
       ]);
       const cfg = await service.resolve('dev', 'auth');
       expect(cfg.DB_PASSWORD).toBe('topsecret');
+    });
+  });
+
+  /**
+   * P0-1（`specs/service-config-delivery/design.md` §4.4）：
+   * 「配置解析按用途拆分」—— 密钥只能出现在**下发给进程**的路径上，
+   * **绝不能进流水线脚本 env**（否则等于把加密存储换成每次执行都摊在环境变量里）。
+   */
+  describe('P0-1 按用途解析（密钥隔离）', () => {
+    const ROWS = () => [
+      { scope: 'global', key: 'REPO_URL', value: 'git@github.com:web5/web_system.git', isSecret: false },
+      { scope: 'env', envId: 'local', key: 'PORT', value: '6010', isSecret: false },
+      {
+        scope: 'module',
+        envId: 'local',
+        moduleKey: 'gateway',
+        key: 'GATEWAY_SERVICE_KEY',
+        value: encryptSecret('svc-key-123'),
+        isSecret: true,
+      },
+    ];
+
+    it('resolveForScripts 不含密钥（V3），resolveForProcess 含明文', async () => {
+      itemRepo.find.mockResolvedValue(ROWS());
+
+      const forScripts = await service.resolveForScripts('local', 'gateway');
+      expect(forScripts.PORT).toBe('6010');
+      expect(forScripts).not.toHaveProperty('GATEWAY_SERVICE_KEY');
+
+      const forProcess = await service.resolveForProcess('local', 'gateway');
+      expect(forProcess.GATEWAY_SERVICE_KEY).toBe('svc-key-123');
+    });
+
+    it('resolveForScriptsDetailed 回报被排除的密钥键（发布日志「已排除 N 个密钥项」）', async () => {
+      itemRepo.find.mockResolvedValue(ROWS());
+      const r = await service.resolveForScriptsDetailed('local', 'gateway');
+      expect(r.excludedSecrets).toEqual(['GATEWAY_SERVICE_KEY']);
+      expect(Object.keys(r.config).sort()).toEqual(['PORT', 'REPO_URL']);
+    });
+
+    it('dispatchPayload 带来源作用域，并过滤保留键（引导/基础设施/平台键）', async () => {
+      itemRepo.find.mockResolvedValue([
+        ...ROWS(),
+        { scope: 'global', key: 'CONFIG_MASTER_KEY', value: 'master', isSecret: true },
+        {
+          scope: 'module',
+          envId: 'local',
+          moduleKey: 'gateway',
+          key: 'MYSQL_PASSWORD',
+          value: 'pwd',
+          isSecret: false,
+        },
+        {
+          scope: 'module',
+          envId: 'local',
+          moduleKey: 'gateway',
+          key: 'PM2_NAME',
+          value: 'web-gateway',
+          isSecret: false,
+        },
+      ]);
+
+      const items = await service.dispatchPayload('local', 'gateway');
+      expect(items.map((i) => i.key).sort()).toEqual(['GATEWAY_SERVICE_KEY', 'PORT', 'REPO_URL']);
+
+      const secret = items.find((i) => i.key === 'GATEWAY_SERVICE_KEY');
+      expect(secret?.value).toBe('svc-key-123');
+      expect(secret?.scope).toBe('module:local/gateway');
+      expect(items.find((i) => i.key === 'PORT')?.scope).toBe('env:local');
+      expect(items.find((i) => i.key === 'REPO_URL')?.scope).toBe('global');
+    });
+
+    it('hasModuleScope：按需下发的判据（design Q1）', async () => {
+      itemRepo.count.mockResolvedValue(1);
+      await expect(service.hasModuleScope('local', 'gateway')).resolves.toBe(true);
+      itemRepo.count.mockResolvedValue(0);
+      await expect(service.hasModuleScope('local', 'gateway')).resolves.toBe(false);
+    });
+  });
+
+  describe('renderGeneratedEnvFile（下发文件渲染）', () => {
+    it('头部写来源/环境/回退说明，逐键标来源作用域', () => {
+      const text = renderGeneratedEnvFile(
+        [
+          { key: 'PORT', value: '6010', scope: 'env:local' },
+          { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:local/gateway' },
+        ],
+        { envId: 'local', serviceKey: 'gateway', generatedAt: new Date('2026-09-21T00:00:00Z') },
+      );
+      expect(text).toContain('# 服务: gateway    环境: local');
+      expect(text).toContain('# 生成时间: 2026-09-21T00:00:00.000Z');
+      expect(text).toContain('# [env:local]\nPORT=6010');
+      expect(text).toContain('# [module:local/gateway]\nGATEWAY_SERVICE_KEY=svc-key-123');
+      expect(text).toContain('删除本文件 + 重启服务');
+    });
+
+    it('含空格/引号/换行的值转义（不会把 .env.generated 写坏）', () => {
+      expect(escapeEnvValue('plain-key-123')).toBe('plain-key-123');
+      expect(escapeEnvValue('a b')).toBe('"a b"');
+      expect(escapeEnvValue('a"b')).toBe('"a\\"b"');
+      expect(escapeEnvValue('a\nb')).toBe('"a\\nb"');
+      expect(escapeEnvValue('')).toBe('""');
+    });
+
+    it('保留键判定支持前缀通配', () => {
+      expect(isReservedLocalKey('CONFIG_MASTER_KEY')).toBe(true);
+      expect(isReservedLocalKey('MYSQL_PASSWORD')).toBe(true);
+      expect(isReservedLocalKey('PM2_SCRIPT')).toBe(true);
+      expect(isReservedLocalKey('GATEWAY_SERVICE_KEY')).toBe(false);
     });
   });
 

@@ -12,7 +12,11 @@ import { HealthModule } from './health/health.module';
 import { MiniScanModule } from './mini-scan/mini-scan.module';
 import { SwaggerDocsModule } from './swagger-docs/swagger-docs.module';
 import { ApiDocsModule } from './api-docs/api-docs.module';
-import { SnakeNamingStrategy } from '@web-system/shared';
+import {
+  SnakeNamingStrategy,
+  missingRequiredServiceUrls,
+  serviceUrlFailFastHint,
+} from '@web-system/shared';
 import { GatewayRouteEntity } from './entities/gateway-route.entity';
 import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
 import { DeployDeploymentEntity } from './deploy-version/deploy-deployment.entity';
@@ -36,6 +40,10 @@ import {
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
+        // 平台下发（配置中心 → .env.generated，由控制台「部署」写入；删文件即回退到 .env）
+        // ⚠️ 必须排在 .env **之前**：@nestjs/config 先出现者优先
+        //（见 specs/service-config-delivery/design.md §4.1）
+        path.resolve(__dirname, '../.env.generated'),
         path.resolve(__dirname, '../.env'),   // servers/gateway/.env（兼容 dist/src 运行）
       ],
     }),
@@ -132,5 +140,16 @@ export class AppModule implements OnModuleInit {
       process.exit(1);
     }
     this.logger.log('JWT_SECRET 校验通过');
+
+    // 生产环境必需服务地址 fail-fast（specs/backend-consolidation §2.3 B4）：
+    // dev/prod 的地址口径与本地不同（AUTH_SERVICE_URL：dev/prod=6001、本机=6101），
+    // 静默走默认值会连错机器 —— 生产必须显式配，缺了直接拒绝启动。
+    const missingServiceUrls = missingRequiredServiceUrls((key) =>
+      this.configService.get<string>(key),
+    );
+    if (missingServiceUrls.length) {
+      this.logger.error(serviceUrlFailFastHint(missingServiceUrls));
+      process.exit(1);
+    }
   }
 }

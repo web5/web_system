@@ -107,6 +107,39 @@ else
   bad "V20 settings.json 接线完整" "文件不存在"
 fi
 
+# V21 设计评审门禁接线完整（R11 挂进 scan-rules.sh；commit-msg 校验 Design trailer）
+miss=""
+grep -q 'check_r11 ' "$BIN/scan-rules.sh" || miss="$miss check_r11"
+grep -q 'DESIGN_ANCHOR_MODE' "$BIN/scan-rules.sh" || miss="$miss DESIGN_ANCHOR_MODE"
+grep -q 'DESIGN_ANCHOR_SCOPE' "$BIN/scan-rules.sh" || miss="$miss DESIGN_ANCHOR_SCOPE(分批)"
+grep -q 'Design:' "$BIN/check-commit-msg.sh" || miss="$miss Design-trailer"
+if [ -z "$miss" ]; then ok "V21 设计评审门禁接线完整"
+else bad "V21 设计评审门禁接线完整" "缺：${miss# }"; fi
+
+# V22 锚点比对默认 off（存量回填完成前不阻断，§3.7.1）
+if grep -qE '^DESIGN_ANCHOR_MODE="\$\{DESIGN_ANCHOR_MODE:-off\}"' "$BIN/scan-rules.sh"; then
+  ok "V22 锚点比对默认 off（未回填不阻断）"
+else bad "V22 锚点比对默认 off（未回填不阻断）" "默认值不是 off"; fi
+
+# V23 锚点扫描器可用，且未回填时输出 SKIP（未回填 ≠ 已漂移）
+if [ -f "$BIN/scan-design-drift.py" ]; then
+  out=$(python3 "$BIN/scan-design-drift.py" anchors HEAD 2>/dev/null)
+  lv=$(printf '%s' "$out" | head -n 1 | cut -f1)
+  case "$lv" in
+    SKIP|INFO|MISSING|EXTRA|"") ok "V23 锚点扫描器可用（首行级别：${lv}）" ;;
+    *) bad "V23 锚点扫描器可用" "未知输出级别：${lv}" ;;
+  esac
+else bad "V23 锚点扫描器可用" "scan-design-drift.py 不存在"; fi
+
+# V24 kit 同源守门接线（通用骨架 + R12 + 保护清单 + 已挂主流程）
+miss=""
+grep -q 'check_sync_pair' "$BIN/scan-rules.sh" || miss="$miss check_sync_pair"
+grep -q 'check_r12' "$BIN/scan-rules.sh" || miss="$miss check_r12"
+grep -q 'project-context.md' "$BIN/scan-rules.sh" || miss="$miss 保护清单"
+grep -q 'check_r12  ' "$BIN/scan-rules.sh" || grep -q 'check_r12$' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+if [ -z "$miss" ]; then ok "V24 kit 同源守门接线完整（含保护清单）"
+else bad "V24 kit 同源守门接线完整（含保护清单）" "缺：${miss# }"; fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"

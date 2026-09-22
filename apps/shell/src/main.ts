@@ -262,5 +262,6 @@ import 'ant-design-vue/dist/reset.css';
 
 app.mount('#app');
 
-// 新版本探测：服务端 version.json 与构建时版本不一致 → 右下角提示"点击刷新"
+// 新版本探测：服务端 shell 指针（/__version__?module=shell）与构建时版本不一致
+// → 右下角提示"点击刷新"（旧版固定路径 version.json 仅作兜底，见 version-check.ts）
 startVersionCheck();
