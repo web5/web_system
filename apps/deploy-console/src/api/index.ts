@@ -1093,20 +1093,31 @@ export interface StorageSaveResult {
   message: string
 }
 
+/**
+ * 解包 system-service 的统一响应信封 `{ code, data }`。
+ *
+ * 注意：axios 响应拦截器（两个实例共用）已剥掉 axios 层（返回 `response.data`），
+ * 所以这里拿到的是**业务信封**本身 —— 这些接口属 system-service，其 body 是
+ * `{ code, data }`（与控制台自身后端「直接返回载荷」的风格不同），必须再取一层 `data`。
+ */
+function unwrapBody<T>(p: Promise<any>): Promise<T> {
+  return p.then((body: any) => (body && typeof body === 'object' && 'data' in body ? body.data : body)) as Promise<T>
+}
+
 export const storageSettingsApi = {
   /** 读配置（权威值 + 当前生效值 + 能否浏览） */
-  get: () => sysHttp.get('/admin/settings/storage') as unknown as Promise<StorageConfig>,
+  get: () => unwrapBody<StorageConfig>(sysHttp.get('/admin/settings/storage')),
   /** 保存前校验（不落库、不创建目录） */
   validate: (uploadDir: string) =>
-    sysHttp.post('/admin/settings/storage/validate', { uploadDir }) as unknown as Promise<StorageDirCheck>,
+    unwrapBody<StorageDirCheck>(sysHttp.post('/admin/settings/storage/validate', { uploadDir })),
   /** 保存（不存在会自动创建；返回 restartRequired=true） */
   save: (uploadDir: string) =>
-    sysHttp.put('/admin/settings/storage', { uploadDir }) as unknown as Promise<StorageSaveResult>,
+    unwrapBody<StorageSaveResult>(sysHttp.put('/admin/settings/storage', { uploadDir })),
   /** 列目录（只列目录；非 super_admin → 403） */
   browse: (path?: string) =>
-    sysHttp.get('/admin/settings/storage/browse', {
-      params: path ? { path } : {},
-    }) as unknown as Promise<StorageBrowseResult>,
+    unwrapBody<StorageBrowseResult>(
+      sysHttp.get('/admin/settings/storage/browse', { params: path ? { path } : {} }),
+    ),
 }
 
 /* ========== 微前端域 · 环境（站点 + envId） ========== */
