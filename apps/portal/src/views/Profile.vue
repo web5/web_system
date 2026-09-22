@@ -41,6 +41,42 @@
       </div>
 
       <div class="profile-card info-card">
+        <div class="card-title">AI 记忆</div>
+        <div class="quick-actions">
+          <div class="quick-action-item" @click="$router.push('/profile/taste')">
+            <div class="qa-icon taste"><app-icon name="music" size="lg" /></div>
+            <div class="qa-info">
+              <p class="qa-name">音乐口味</p>
+              <p class="qa-desc">{{ tasteSummary }}</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="quick-action-item" @click="$router.push('/profile/memory')">
+            <div class="qa-icon memory"><app-icon name="spark" size="lg" /></div>
+            <div class="qa-info">
+              <p class="qa-name">用户记忆</p>
+              <p class="qa-desc">{{ memoryCount }} 条</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-card info-card">
+        <div class="card-title">我的数据</div>
+        <div class="quick-actions">
+          <div class="quick-action-item" @click="$router.push('/profile/glossary')">
+            <div class="qa-icon glossary"><app-icon name="doc" size="lg" /></div>
+            <div class="qa-info">
+              <p class="qa-name">生词本</p>
+              <p class="qa-desc">{{ glossaryCount }} 条</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-card info-card">
         <div class="card-title">基本信息</div>
         <div class="form-section">
           <div class="form-row">
@@ -134,10 +170,18 @@ import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile, uploadAvatar, applyApiKey, verifyApiKey, getMyApiKeys, revokeMyApiKey } from '@/api/user';
 import type { ApiKeyItem } from '@/api/user';
+import AppIcon from '@/components/AppIcon.vue';
+import { listGlossary } from '@/api/glossary';
+import { listMemory } from '@/api/user-memory';
+import { getMusicTaste, tasteSummary as tasteSummaryOf } from '@/api/user-taste';
 
 const userStore = useUserStore();
 const uploading = ref(false);
 const saving = ref(false);
+/** AI 记忆 / 生词本摘要（失败保持默认不打扰） */
+const tasteSummary = ref('未设置');
+const memoryCount = ref(0);
+const glossaryCount = ref(0);
 
 const avatarSrc = computed(() => {
   const info = userStore.userInfo;
@@ -156,7 +200,29 @@ const formData = reactive({
 onMounted(() => {
   loadUserInfo();
   loadMyKeys();
+  loadMine();
 });
+
+async function loadMine() {
+  try {
+    const t = await getMusicTaste();
+    tasteSummary.value = tasteSummaryOf(t);
+  } catch {
+    /* 保持未设置 */
+  }
+  try {
+    const r = await listMemory(1, 1);
+    memoryCount.value = r.total || 0;
+  } catch {
+    /* 保持 0 */
+  }
+  try {
+    const r = await listGlossary(1, 1);
+    glossaryCount.value = r.total || 0;
+  } catch {
+    /* 保持 0 */
+  }
+}
 
 function loadUserInfo() {
   const info = userStore.userInfo;
@@ -463,6 +529,13 @@ async function onRevokeKey(id: number) {
 .qa-icon.album {
   background: linear-gradient(135deg, #FFE0CC, #FFD4B8);
   color: #FF8C42;
+}
+
+.qa-icon.taste,
+.qa-icon.memory,
+.qa-icon.glossary {
+  background: var(--ws-brand-50);
+  color: var(--ws-brand-500);
 }
 
 .qa-info {

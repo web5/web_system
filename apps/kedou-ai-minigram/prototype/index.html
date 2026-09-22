@@ -117,6 +117,30 @@
   .list .r .sic.c { background: linear-gradient(140deg, #12B5A4, #0E9B8C); }
   .list .r .nm { flex: 1; text-align: left; color: var(--t1); }
   .foot { margin-top: 20px; font-size: 10.5px; color: var(--t3); text-align: center; line-height: 1.9; }
+
+  /* ---------- AI 记忆 / 生词本（本次新增） ---------- */
+  .note-tip { background: var(--brand-soft); color: var(--brand-txt); font-size: 12px; border-radius: 12px; padding: 10px 12px; margin: 4px 0 12px; line-height: 1.7; }
+  .tagbox { display: flex; flex-wrap: wrap; gap: 8px; background: var(--card); border-radius: 12px; padding: 14px; }
+  .tag-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--brand-soft); color: var(--brand-txt); }
+  .tag-item.dis { background: var(--red-soft); color: var(--red); }
+  .tag-item i, .mem-item i, .gloss-item i { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: .55; flex: none; }
+  .tag-item i svg, .mem-item i svg, .gloss-item i svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .addrow { display: flex; gap: 8px; align-items: center; }
+  .addrow input { flex: 1; height: 36px; border-radius: 8px; border: .5px solid var(--line); background: var(--page-bg); padding: 0 12px; font-size: 13px; color: var(--t1); outline: none; }
+  .addbtn { flex: none; height: 36px; padding: 0 14px; border-radius: 8px; background: var(--brand-soft); color: var(--brand-txt); font-size: 13px; display: inline-flex; align-items: center; cursor: pointer; }
+  .danger-btn { margin-top: 16px; height: 44px; border-radius: 12px; border: .5px solid var(--line); background: var(--card); color: var(--red); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .mem-item { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: .5px solid var(--line); }
+  .mem-item:last-child { border-bottom: none; }
+  .mem-item .m-c { flex: 1; font-size: 14px; color: var(--t1); }
+  .gloss-item { position: relative; background: var(--card); border-radius: 12px; padding: 14px 40px 14px 14px; margin-bottom: 10px; }
+  .gloss-item .g-en { font-size: 15px; font-weight: 600; color: var(--t1); }
+  .gloss-item .g-src { font-size: 13px; color: var(--t2); margin-top: 4px; }
+  .gloss-item .g-note { font-size: 12px; color: var(--t2); margin-top: 8px; padding-top: 8px; border-top: .5px dashed var(--line); }
+  .gloss-item .g-meta { font-size: 11px; color: var(--brand-txt); margin-top: 6px; }
+  .gloss-item i { position: absolute; top: 12px; right: 12px; }
+  .empty-box { text-align: center; padding: 48px 20px; }
+  .empty-box .e-t { font-size: 14px; color: var(--t1); }
+  .empty-box .e-d { font-size: 12.5px; color: var(--t2); margin-top: 6px; }
   .ai-note { margin-top: 14px; font-size: 10.5px; color: var(--t3); text-align: center; }
 
   /* ---------- 失败态 ---------- */
@@ -626,6 +650,16 @@
           <div class="b">深度润色 · 术语库 · 合同不限次评估</div>
         </div>
 
+        <div class="sec-t">AI 记忆<em>AI 在对话中自动积累</em></div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-taste', '音乐口味')">
+            <span class="nm">音乐口味</span><span class="v" id="tasteSummary">民谣 · 周杰伦 · 安静 ›</span>
+          </div>
+          <div class="r" onclick="navigateTo('p-memory', '用户记忆')">
+            <span class="nm">用户记忆</span><span class="v" id="memorySummary">3 条 ›</span>
+          </div>
+        </div>
+
         <div class="sec-t">应用设置<em>各管各的</em></div>
         <div class="list">
           <div class="r" onclick="navigateTo('p-tr-settings', '语言翻译官设置')">
@@ -647,6 +681,7 @@
 
         <div class="sec-t">我的数据</div>
         <div class="list">
+          <div class="r" onclick="navigateTo('p-glossary', '生词本')">生词本<span class="v" id="glossarySummary">8 条 ›</span></div>
           <div class="r" onclick="navigateTo('p-tr-history', '翻译历史')">我的翻译<span class="v">128 条 ›</span></div>
           <div class="r" onclick="wxToast('我的合同')">我的合同<span class="v">12 份 ›</span></div>
           <div class="r" onclick="wxToast('对话记录仅本机保留 30 天')">对话记录<span class="v">46 条 ›</span></div>
@@ -964,6 +999,81 @@
         <div class="foot">这里的设置只影响「合同评估」</div>
       </div>
 
+      <!-- ================= 二级页：音乐口味（AI 记忆） ================= -->
+      <div class="page sub" id="p-taste">
+        <div class="sec-t" style="margin-top:4px">全部标签<em>AI 自动归类 · 红色为不想听</em></div>
+        <div class="tagbox" id="tasteTags">
+          <span class="tag-item">民谣<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item">周杰伦<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item">安静<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item dis">不想听：摇滚<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+        </div>
+        <div class="empty-box" id="tasteEmpty" style="display:none">
+          <div class="e-t">还没记住你的口味</div>
+          <div class="e-d">在对话里告诉 AI 喜欢什么、不想听什么，它会自动记下</div>
+        </div>
+        <div class="sec-t">手动补充</div>
+        <div class="cell addrow">
+          <input id="tasteInput" placeholder="补充口味，例如：爵士" />
+          <span class="addbtn" id="tasteAdd">添加</span>
+        </div>
+        <div class="danger-btn" onclick="confirmClearTaste()">清空口味记忆</div>
+        <div class="foot">口味由 AI 在对话中自动积累，也可在此手动调整<br>只用于音乐推荐，不用于其他用途</div>
+      </div>
+
+      <!-- ================= 二级页：用户记忆（AI 记忆） ================= -->
+      <div class="page sub" id="p-memory">
+        <div class="note-tip">AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，跨会话记住。可单条删除。</div>
+        <div class="empty-box" id="memEmpty" style="display:none">
+          <div class="e-t">还没有记忆</div>
+          <div class="e-d">去对话里聊聊，AI 会慢慢记住你</div>
+        </div>
+        <div class="sec-t">事实<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">你在备考雅思，目标 7 分</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="sec-t">偏好<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">偏好正式、商务语气</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="sec-t">习惯<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">习惯在晚上集中处理工作</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="foot">记忆仅自己可见，随时可删</div>
+      </div>
+
+      <!-- ================= 二级页：生词本（收藏） ================= -->
+      <div class="page sub" id="p-glossary">
+        <div class="note-tip">你收藏的译文会一直保留在这里，即使原对话删除。</div>
+        <div class="empty-box" id="glossEmpty" style="display:none">
+          <div class="e-t">还没有收藏</div>
+          <div class="e-d">在翻译卡片或翻译结果页点「收藏」</div>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">Thank you for your help.</div>
+          <div class="g-src">非常感谢你的帮助</div>
+          <div class="g-note">for your help 点明感谢对象，商务邮件常用</div>
+          <div class="g-meta">正式 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">Could you elaborate on that?</div>
+          <div class="g-src">你能详细说说吗</div>
+          <div class="g-note">elaborate 比 explain 更正式，会议/邮件常用</div>
+          <div class="g-meta">商务 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">I look forward to hearing from you.</div>
+          <div class="g-src">期待你的回复</div>
+          <div class="g-note">邮件结尾高频句式</div>
+          <div class="g-meta">正式 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="foot">点 × 删除收藏</div>
+      </div>
+
       <div class="page sub" id="p-mine-profile">
         <div class="profile" style="cursor:default">
           <div class="avatar">橙</div>
@@ -1261,8 +1371,54 @@ var TAB_TITLE = { chat: '科豆 AI', discover: '发现', mine: '我的' };
 var SUB_TITLE = {
   'p-translate': '语言翻译官', 'p-tr-result': '翻译结果', 'p-tr-history': '翻译历史', 'p-tr-settings': '语言翻译官设置',
   'p-assess': '合同评估', 'p-as-result': '评估报告', 'p-as-settings': '合同评估设置',
-  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置'
+  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置',
+  'p-taste': '音乐口味', 'p-memory': '用户记忆', 'p-glossary': '生词本'
 };
+
+/* ---------- AI 记忆 / 生词本：删除 + 补充 + 摘要（原型演示） ---------- */
+function refreshSummary() {
+  var memCount = document.querySelectorAll('#p-memory .mem-item').length;
+  var glossCount = document.querySelectorAll('#p-glossary .gloss-item').length;
+  var tasteCount = document.querySelectorAll('#tasteTags .tag-item:not(.dis)').length;
+  $('memorySummary').textContent = memCount + ' 条 ›';
+  $('glossarySummary').textContent = glossCount + ' 条 ›';
+  $('tasteSummary').textContent = tasteCount ? '已记录 ' + tasteCount + ' 个口味 ›' : '未设置 ›';
+  $('memEmpty').style.display = memCount ? 'none' : 'block';
+  $('glossEmpty').style.display = glossCount ? 'none' : 'block';
+  $('tasteEmpty').style.display = document.querySelectorAll('#tasteTags .tag-item').length ? 'none' : 'block';
+}
+function confirmClearTaste() {
+  openSheet('清空口味记忆', [{ label: '确认清空（AI 将不再按你的口味推荐）' }], function () {
+    Array.prototype.forEach.call(document.querySelectorAll('#tasteTags .tag-item'), function (el) { el.remove(); });
+    refreshSummary();
+    wxToast('已清空口味记忆');
+  });
+}
+function bindDelItem(selector, toastText) {
+  Array.prototype.forEach.call(document.querySelectorAll(selector), function (el) {
+    el.onclick = function () {
+      el.closest('.mem-item, .gloss-item, .tag-item').remove();
+      refreshSummary();
+      wxToast(toastText);
+    };
+  });
+}
+bindDelItem('#p-memory .mem-item [data-del]', '已删除这条记忆');
+bindDelItem('#p-glossary .gloss-item [data-del]', '已移出收藏');
+bindDelItem('#tasteTags .tag-item [data-x]', '已移除该口味');
+$('tasteAdd').onclick = function () {
+  var v = ($('tasteInput').value || '').trim();
+  if (!v) { wxToast('请输入口味关键词'); return; }
+  $('tasteInput').value = '';
+  var el = document.createElement('span');
+  el.className = 'tag-item';
+  el.innerHTML = v + '<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>';
+  $('tasteTags').appendChild(el);
+  el.querySelector('[data-x]').onclick = function () { el.remove(); refreshSummary(); wxToast('已移除该口味'); };
+  refreshSummary();
+  wxToast('已添加：' + v);
+};
+refreshSummary();
 /* 二级页右上角的动作 */
 var SUB_ACT = {
   'p-translate': { text: '设置', fn: function () { navigateTo('p-tr-settings', '语言翻译官设置'); } },

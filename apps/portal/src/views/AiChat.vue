@@ -92,6 +92,7 @@
                           </li>
                         </ul>
                         <div v-else-if="b.t === 'law'" class="law"><b>{{ b.src }}</b>{{ stripInline(b.v) }}</div>
+                        <answer-code v-else-if="b.t === 'code'" :lang="b.lang" :code="b.v" />
                         <!-- 翻译卡片（agentId=translate 四段契约） -->
                         <div v-else-if="b.t === 'tcard'" class="tcard">
                           <div class="tc-hd">
@@ -107,9 +108,9 @@
                           <div v-if="!m.streaming" class="tc-ops">
                             <button type="button" class="act" @click="copy(b.main)">复制</button>
                             <button type="button" class="act" @click="speak(m.id, b.main)">
-                              {{ reading === m.id ? '停止' : '朗读' }}
+                              {{ speakLabel(m.id) }}
                             </button>
-                            <button type="button" class="act" @click="collectWord">收藏</button>
+                            <button type="button" class="act" @click="collectWord(b)">收藏</button>
                           </div>
                         </div>
                       </template>
@@ -138,6 +139,14 @@
                     <button v-if="m.content" type="button" class="act" @click="copy(m.content)">
                       <app-icon name="copy" />复制
                     </button>
+                    <button
+                      v-if="m.role === 'assistant' && m.content && !m.musicCard && !isTcard(m) && !m.streaming"
+                      type="button"
+                      class="act"
+                      @click="speak(m.id, speakableText(blocksMap[m.id]))"
+                    >
+                      <app-icon name="volume" />{{ speakLabel(m.id) }}
+                    </button>
                     <button v-if="m.role === 'assistant'" type="button" class="act" @click="retryMsg(m.id)">
                       重新生成
                     </button>
@@ -159,7 +168,7 @@
           <textarea
             v-model="input"
             class="composer-input"
-            placeholder="描述你的问题，⌘Enter 发送"
+            placeholder="描述你的问题，Enter 发送"
             @keydown="onKeydown"
           />
           <div class="crow">
@@ -171,7 +180,7 @@
             >
               <app-icon name="doc" />
             </button>
-            <span class="hint">⌘Enter 发送 · ⌘K 命令面板</span>
+            <span class="hint">Enter 发送 · Shift+Enter 换行</span>
             <span class="spacer" />
             <button v-if="sending" type="button" class="btn-stop" @click="stop">
               <app-icon name="stop" /><span>停止</span>
@@ -196,6 +205,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
+import { requestTts, splitChunks } from '@/api/tts';
+import { collectGlossary } from '@/api/glossary';
 import {
   parseAnswer,
   foldCut,
@@ -209,6 +220,7 @@ import { useConversationStore } from '@/stores/conversations';
 import { useUserStore } from '@/stores/user';
 import AppIcon from '@/components/AppIcon.vue';
 import MusicCard from '@/components/MusicCard.vue';
+import AnswerCode from '@/components/AnswerCode.vue';
 
 /**
  * 对话工作台 v4（原型 d43117b）：
@@ -252,8 +264,8 @@ const convId = ref<string | null>(null);
 const loadedId = ref<string | null>(null);
 const agentBadge = ref('');
 const detailError = ref(false);
-/** 正在朗读的消息 id（翻译卡片 TTS，本地 Web Speech） */
-const reading = ref<string | null>(null);
+/** 正在朗读状态：id = 消息 id，phase = loading（合成中）/ playing（播放中）；null = 空闲 */
+const reading = ref<{ id: string; phase: 'loading' | 'playing' } | null>(null);
 
 /** 折叠展开态 / 翻译卡注解展开态（本地状态，不持久化） */
 const expanded = reactive<Record<string, boolean>>({});
@@ -315,13 +327,8 @@ function shownBlocks(m: ChatMsg): AnswerBlock[] {
 
 /* ===== 轮次（一轮 = 用户消息 + 紧随的 AI 回答） ===== */
 
+/** 日期线文案：具体日期（M月D日），不用「今天 / 昨天」相对词（2026-09-22 拍板） */
 function relDay(d: Date): string {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round((today.getTime() - that.getTime()) / 86400000);
-  if (diff === 0) return '今天';
-  if (diff === 1) return '昨天';
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
@@ -349,7 +356,7 @@ const turns = computed<Turn[]>(() => {
     }
   });
 
-  // 日期线：轮日期取首条消息 ts；相邻轮跨天（或最后一轮）→ 该轮末尾插线（B6）
+  // 日期线：轮日期取首条消息 ts；仅当与下一轮跨天（存在日期 gap）时在该轮末尾插线（2026-09-22 拍板）
   out.forEach((t) => {
     const firstTs = t.msgs[0].ts;
     t.dayKey = dayKeyOf(firstTs);
@@ -357,7 +364,7 @@ const turns = computed<Turn[]>(() => {
   });
   out.forEach((t, i) => {
     const nextKey = out[i + 1]?.dayKey;
-    t.showSep = !!t.dayKey && (i === out.length - 1 || (!!nextKey && nextKey !== t.dayKey));
+    t.showSep = !!t.dayKey && !!nextKey && nextKey !== t.dayKey;
   });
   return out;
 });
@@ -380,8 +387,19 @@ async function copy(text: string) {
   }
 }
 
-function collectWord() {
-  message.success('已收进生词本');
+async function collectWord(b: { main: string; note: string }) {
+  try {
+    await collectGlossary({
+      sourceType: 'chat',
+      enMain: b.main,
+      note: b.note || undefined,
+      meta: { direction: 'zh2en' },
+      conversationId: convId.value || undefined,
+    });
+    message.success('已收进生词本');
+  } catch {
+    message.error('收藏失败，请重试');
+  }
 }
 
 function onAttach() {
@@ -389,23 +407,84 @@ function onAttach() {
 }
 
 /** 翻译卡片朗读：Web Speech 本地实现（后端 TTS 接口留给正文朗读排期） */
-function speak(mId: string, text: string) {
-  if (!('speechSynthesis' in window)) {
-    message.info('当前浏览器不支持朗读');
+let audioEl: HTMLAudioElement | null = null;
+
+/** 停止朗读：中断当前 Audio、复位状态 */
+function stopTts() {
+  if (audioEl) {
+    audioEl.pause();
+    audioEl.src = '';
+    audioEl = null;
+  }
+  reading.value = null;
+}
+
+/** 朗读：走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色），分句逐段合成播放 */
+async function speak(mId: string, text: string) {
+  const t = (text || '').trim();
+  if (!t) return;
+  // 同一段正在播 → 停止
+  if (reading.value?.id === mId) {
+    stopTts();
     return;
   }
-  if (reading.value) {
-    window.speechSynthesis.cancel();
-    reading.value = null;
-    return;
+  stopTts(); // 顶掉上一个朗读
+
+  const chunks = splitChunks(t);
+  if (!chunks.length) return;
+
+  reading.value = { id: mId, phase: 'loading' };
+  try {
+    for (const chunk of chunks) {
+      if (reading.value?.id !== mId) return; // 中途被停止 / 被顶掉
+      const blob = await requestTts(chunk);
+      if (reading.value?.id !== mId) return;
+      reading.value = { id: mId, phase: 'playing' };
+      await playBlob(blob);
+    }
+  } catch {
+    if (reading.value?.id === mId) message.error('朗读失败，请重试');
+  } finally {
+    if (reading.value?.id === mId) reading.value = null;
   }
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = /^[A-Za-z]/.test(text) ? 'en-US' : 'zh-CN';
-  u.onend = () => (reading.value = null);
-  u.onerror = () => (reading.value = null);
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
-  reading.value = mId;
+}
+
+/** 播放 mp3 Blob；结束 / 出错 / 被替换时 resolve */
+function playBlob(blob: Blob): Promise<void> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioEl = audio;
+    const done = () => {
+      if (audioEl === audio) audioEl = null;
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    audio.onended = done;
+    audio.onerror = done;
+    audio.play().catch(done);
+  });
+}
+
+/** 朗读按钮文案：合成中「请稍候…」/ 播放中「停止」/ 空闲「朗读」 */
+function speakLabel(mId: string): string {
+  if (reading.value?.id !== mId) return '朗读';
+  return reading.value.phase === 'loading' ? '请稍候…' : '停止';
+}
+
+/** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读）；代码块跳过（读代码无意义） */
+function speakableText(blocks: AnswerBlock[]): string {
+  return blocks
+    .filter((b) => b.t !== 'tcard')
+    .map((b) => {
+      if (b.t === 'p' || b.t === 'h') return stripInline(b.v);
+      if (b.t === 'ol' || b.t === 'ul') return b.items.map((it) => stripInline(it)).join('。');
+      if (b.t === 'law') return `${b.src}，${stripInline(b.v)}`;
+      if (b.t === 'code') return '';
+      return '';
+    })
+    .filter(Boolean)
+    .join('。');
 }
 
 /** 音乐卡「换一批 / 不感兴趣」：当新一轮对话发出（排序交给 agent 口味档案） */
@@ -572,7 +651,8 @@ function retryMsg(id: string) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+  // Enter 直接发送（2026-09-22 拍板）；Shift+Enter 换行；中文输入法选词态不触发
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send(input.value);
   }
@@ -598,7 +678,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   controller?.abort();
   controller = null;
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  stopTts();
   store.setRunning(false);
 });
 </script>

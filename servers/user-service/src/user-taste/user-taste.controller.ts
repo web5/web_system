@@ -11,25 +11,26 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
-import { MusicService } from './music.service';
+import { UserTasteService } from './user-taste.service';
 
 /**
- * 用户口味档案读写（小程序「我的 → AI 记忆 → 音乐口味」）。
- * 与 Agent 侧的 save_music_taste 同源同一张表：这里给用户看和改，那边给 AI 写。
+ * 用户口味档案读写（个人中心「AI 记忆 → 音乐口味」），迁自 ai-agent。
+ * 与 AI 侧 save_music_taste 同源同一张表：这里给用户看和改，那边（internal）给 AI 写。
  */
 @ApiTags('用户口味')
 @Controller('user-taste')
 @UseGuards(AuthGuard)
+@ApiBearerAuth()
 export class UserTasteController {
-  constructor(private readonly music: MusicService) {}
+  constructor(private readonly taste: UserTasteService) {}
 
   @Get(':namespace')
   @ApiOperation({ summary: '读取我的口味档案' })
   async get(@Param('namespace') namespace: string, @Req() req: Request) {
     const userId = userIdOf(req);
-    return { namespace, taste: await this.music.getTaste(userId, namespace) };
+    return { namespace, taste: await this.taste.getTaste(userId, namespace) };
   }
 
   @Put(':namespace')
@@ -41,11 +42,10 @@ export class UserTasteController {
   ) {
     const userId = userIdOf(req);
     const patch = (body?.taste ?? body ?? {}) as Record<string, unknown>;
-    const taste = await this.music.mergeTaste(userId, patch as never, namespace);
+    const taste = await this.taste.mergeTaste(userId, patch as never, namespace);
     return { namespace, taste };
   }
 
-  /** 删除单个标签：口味页 chip 上的 ×（整包覆盖删除不了，只能按值移除） */
   @Delete(':namespace/tag')
   @ApiOperation({ summary: '删除口味档案中的指定标签' })
   async removeTag(
@@ -55,7 +55,7 @@ export class UserTasteController {
   ) {
     const userId = userIdOf(req);
     const patch = (body?.taste ?? body ?? {}) as Record<string, unknown>;
-    const taste = await this.music.removeTaste(userId, patch as never, namespace);
+    const taste = await this.taste.removeTaste(userId, patch as never, namespace);
     return { namespace, taste };
   }
 
@@ -63,7 +63,7 @@ export class UserTasteController {
   @ApiOperation({ summary: '清空我的口味档案' })
   async clear(@Param('namespace') namespace: string, @Req() req: Request) {
     const userId = userIdOf(req);
-    return { namespace, taste: await this.music.clearTaste(userId, namespace) };
+    return { namespace, taste: await this.taste.clearTaste(userId, namespace) };
   }
 }
 
