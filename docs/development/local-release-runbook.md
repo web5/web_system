@@ -4,6 +4,8 @@
 > 发布动作走**发布流水线**（deploy-console `deploy_pipelines`），`deploy-console` 自身走**传统发布**。
 > 发布基于 git 拉取（发布目录按「分支 + commit」从远程仓库拉代码构建），不基于当前工作区。
 
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
+
 ## 一、服务运行拓扑
 
 发布目录：`{{RELEASE_DIR}}`（**工程约定日常驻留 `feature/test`**；发布时由流水线 pull 阶段 `git checkout -B <branch> origin/<branch>` 临时切到目标分支，发布结束后可切回。prod 发布强制 master 分支）
@@ -126,6 +128,23 @@ curl -X POST http://127.0.0.1:6200/api/pipelines \
 ### 2.3 前端发布
 
 `admin` / `portal` 走流水线（micro-frontend）：`vite build --mode mf` → 投递 → 切指针 → manifest 验证（等 gateway TTL 10s）。
+
+### 2.4 主密钥（CONFIG_MASTER_KEY）—— 只注入文件路径
+
+配置中心里 `is_secret=1` 的项用 `CONFIG_MASTER_KEY` 解密。**它必须与目标部署库同域**：
+机器连哪个部署库，就用那把钥（换了部署库必须换钥，见 `specs/config-master-key-distribution/design.md` §2）。
+**只有 deploy-console 需要它**（其他服务靠下发 `.env.generated` 拿明文），所以注入只改 console 的启动脚本。
+
+| 动作 | 命令 / 判据 |
+|---|---|
+| 建密钥文件（0600，值不进 shell 历史） | `mkdir -p ~/.config/web-system && chmod 700 ~/.config/web-system`<br>`read -rs KEY && printf '%s' "$KEY" > ~/.config/web-system/config-master.key && unset KEY`<br>`chmod 600 ~/.config/web-system/config-master.key` |
+| 一致性自检（只读，可离线） | `node scripts/verify-config-master-key.mjs` —— 退出码 `0` 密钥↔库一致；`2` 有密文解不开；`3` 密钥缺失/不可用 |
+| 启动期自检（服务内） | 启动日志 `[ConfigSelfCheck] 主密钥就绪 fp=<指纹> source=<env\|file> 抽样可解=1/1`；不匹配则 `FATAL` + 进程退出（pm2 置 errored，流水线 verify 探活失败） |
+| 注入方式 | `scripts/publish-deploy-console.sh` 注入 `CONFIG_MASTER_KEY_FILE=<路径>`；**不注入密钥值**（值会进 pm2_env / `dump.pm2`，并被 `ps e` 读到） |
+| 回退 | 撤掉注入与文件，回到 `.env` 的 `CONFIG_MASTER_KEY` 值（代码两者都支持；同时存在时校验必须一致，不一致启动即报错） |
+
+- **多机一致性**：连同一个部署库的各机，启动日志 `fp=` 必须相同；不同即有人用了另一把钥。
+- 密钥文件默认路径 `/etc/web-system/config-master.key`，可用 `CONFIG_MASTER_KEY_FILE` 覆盖（本地演练常用 `~/.config/web-system/config-master.key`）。
 
 ## 三、环境初始化 / 迁移（新机器照做）
 
@@ -261,6 +280,14 @@ pm2 logs web-deploy-console --lines 40 --nostream
 - 2026-09-11 实测：本机曾盘 **84 个** release node 进程（pm2 只管 12 个，最老的活到 9/9），其中 7 个服务的端口由孤儿进程服务；清理后 84 → 12，端口归属 12/12 对齐，`pm2 list` 重启计数全部归零。
 
 **防复发**：① 新服务先在 `ecosystem.config.cjs` 登记；② 重启一律 `delete + start`（不用 `restart --update-env`，见 §4.3）；③ 发版/重启后跑一次本节「识别」脚本。
+
+### 4.9 主密钥与库不同域 —— console「启动即退出」
+
+现象：`pm2 logs web-deploy-console` 出现 `FATAL 主密钥与本库不匹配…` 后进程退出（pm2 反复重启直至 errored），
+发布流水线 verify 探活失败。原因：本机密钥不是加密该部署库密文的那把（换库没换钥、拿了另一环境的钥、文件与 `.env` 各配了一个值）。
+
+处置：① `node scripts/verify-config-master-key.mjs` 看是"密钥不可用"还是"有密文解不开"；
+② 确认本机连的部署库属于哪个域（§2.4）；③ 换库/拆域按 `specs/config-master-key-distribution/domain-split-guide.md` 处理。
 
 ## 五、验证清单
 
