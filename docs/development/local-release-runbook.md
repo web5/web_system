@@ -142,14 +142,25 @@ curl -X POST http://127.0.0.1:6200/api/pipelines \
 
 | 动作 | 命令 / 判据 |
 |---|---|
-| 建密钥文件（0600，值不进 shell 历史） | `mkdir -p ~/.config/web-system && chmod 700 ~/.config/web-system`<br>`read -rs KEY && printf '%s' "$KEY" > ~/.config/web-system/config-master.key && unset KEY`<br>`chmod 600 ~/.config/web-system/config-master.key` |
+| 投递密钥到本机（0600 + 备份 + 指纹） | `scripts/provision-master-key.sh --from <user>@<同域既有机器>:<path>`（新域/演练用 `--gen`；交互粘贴用 `--from-stdin`；`--file` 换路径；`--dry-run` 预演）。密钥值**永不作为命令行参数** |
 | 一致性自检（只读，可离线） | `node scripts/verify-config-master-key.mjs` —— 退出码 `0` 密钥↔库一致；`2` 有密文解不开；`3` 密钥缺失/不可用 |
 | 启动期自检（服务内） | 启动日志 `[ConfigSelfCheck] 主密钥就绪 fp=<指纹> source=<env\|file> 抽样可解=1/1`；不匹配则 `FATAL` + 进程退出（pm2 置 errored，流水线 verify 探活失败） |
 | 注入方式 | `scripts/publish-deploy-console.sh` 注入 `CONFIG_MASTER_KEY_FILE=<路径>`；**不注入密钥值**（值会进 pm2_env / `dump.pm2`，并被 `ps e` 读到） |
 | 回退 | 撤掉注入与文件，回到 `.env` 的 `CONFIG_MASTER_KEY` 值（代码两者都支持；同时存在时校验必须一致，不一致启动即报错） |
 
-- **多机一致性**：连同一个部署库的各机，启动日志 `fp=` 必须相同；不同即有人用了另一把钥。
+- **多机一致性**：连同一个部署库的各机，启动日志 `fp=` 必须相同；不同即有人用了另一把钥。`provision-master-key.sh` 结束会直接打印指纹，与既有机器比对即可。
 - 密钥文件默认路径 `/etc/web-system/config-master.key`，可用 `CONFIG_MASTER_KEY_FILE` 覆盖（本地演练常用 `~/.config/web-system/config-master.key`）。
+
+**新机器上线清单（照打勾）**
+
+| # | 步骤 | 通过判据 |
+|---|---|---|
+| 1 | 确认部署库归属（本地库 / 云库） | `servers/deploy-console/.env` 的 `MYSQL_HOST` 指向预期实例 |
+| 2 | `scripts/provision-master-key.sh --from <同域机器>:<path>` | 文件 0600、属主 = pm2 启动用户；**指纹 = 同域既有机器** |
+| 3 | `node scripts/verify-config-master-key.mjs` | 退出码 `0`（抽样全可解） |
+| 4 | 启动 console：`./scripts/publish-deploy-console.sh --skip-build` | 启动日志出现 `[ConfigSelfCheck] 主密钥就绪 … 抽样可解=1/1` |
+| 5 | 注释/删除该机 `.env` 的 `CONFIG_MASTER_KEY` 行后重启 | 自检仍通过（注入的文件路径优先） |
+| 6 | 确认回退路径 | `.bak-<ts>` 存在；恢复该文件后自检通过 |
 
 ## 三、环境初始化 / 迁移（新机器照做）
 

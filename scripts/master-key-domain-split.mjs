@@ -27,7 +27,7 @@
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,20 +55,34 @@ function die(msg, code = 1) {
   process.exit(code);
 }
 
+/** 支持 `--k=v` 与 `--k v` 两种写法（帮助里用的是后者）；无值即布尔开关 */
 function parseArgs(argv) {
   const out = {};
-  for (const raw of argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const raw = argv[i];
     if (!raw.startsWith('--')) continue;
     const body = raw.slice(2);
     const eq = body.indexOf('=');
-    if (eq === -1) out[body] = true;
-    else out[body.slice(0, eq)] = body.slice(eq + 1);
+    if (eq !== -1) {
+      out[body.slice(0, eq)] = body.slice(eq + 1);
+    } else {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        out[body] = next;
+        i += 1;
+      } else {
+        out[body] = true;
+      }
+    }
   }
   return out;
 }
 
 /** 读 env 文件 → { 键: 值 }（不注入 process.env，避免污染） */
 function loadEnvFile(file) {
+  if (!existsSync(file)) {
+    die(`读不到 env 文件 ${file} —— --src-env / --dst-env 必须指向存在且可读的文件（别用占位路径）`);
+  }
   const txt = readFileSync(file, 'utf8');
   const o = {};
   for (const line of txt.split(/\r?\n/)) {
@@ -228,8 +242,17 @@ log(`目标域: ${dstConf.host}:${dstConf.port}/${dstConf.database}  指纹=${fi
 if (fingerprint(srcKey) === fingerprint(dstKey)) log('⚠️  两把钥指纹相同：这不是"换域"，只是复制。确认是否真的需要迁移。');
 log(`模式 : ${dryRun ? 'DRY-RUN（只读）' : 'APPLY（会写目标库）'}\n`);
 
-const src = await mysql.createConnection(srcConf);
-const dst = await mysql.createConnection(dstConf);
+let src;
+let dst;
+try {
+  src = await mysql.createConnection(srcConf);
+  dst = await mysql.createConnection(dstConf);
+} catch (e) {
+  die(
+    `连接失败：${e.message}（源 ${srcConf.host}:${srcConf.port}/${srcConf.database}；` +
+      `目标 ${dstConf.host}:${dstConf.port}/${dstConf.database}）`,
+  );
+}
 
 try {
   // ---------- 回退分支 ----------
