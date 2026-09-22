@@ -2,11 +2,11 @@
  * 内存版对话记忆（CLI / 测试用，不依赖数据库）。
  * 可选接入 Compaction 做摘要压缩，行为对齐 DB 版。
  */
-import { ConversationMemoryPort } from './memory-port';
+import { type ConversationMemoryPort } from './memory-port';
 import { Compaction } from './compaction';
-import { AgentMemoryConfig } from '../interfaces/agent.interface';
-import { StoredMessage } from './stored-message';
-import { ChatMessage } from '../clients/base-ai.client';
+import { type AgentMemoryConfig } from '../interfaces/agent.interface';
+import { type StoredMessage } from './stored-message';
+import { type ChatMessage } from '../clients/base-ai.client';
 import { Logger } from '../lib/logger';
 
 interface MemoryStore {

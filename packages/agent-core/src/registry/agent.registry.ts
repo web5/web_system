@@ -1,7 +1,7 @@
 /**
  * Agent 定义注册中心。
  */
-import { AgentDefinition } from '../interfaces/agent.interface';
+import { type AgentDefinition } from '../interfaces/agent.interface';
 
 export class AgentRegistry {
   private readonly agents = new Map<string, AgentDefinition>();
