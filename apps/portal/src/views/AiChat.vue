@@ -200,6 +200,7 @@ import {
   plainLength,
   boldSegs,
   stripInline,
+  looksLikeTranslateReply,
   type AnswerBlock,
 } from '@/utils/answer-parse';
 import { useConversationStore } from '@/stores/conversations';
@@ -390,16 +391,50 @@ function newChat() {
   Object.keys(noteOpen).forEach((k) => delete noteOpen[k]);
 }
 
-/** 载入历史会话（统一会话流：不区分类型） */
+/**
+ * 载入历史会话（统一会话流：不区分类型）。
+ * 历史消息没有 intent 事件——卡片按小程序 decorateHistoryCards 口径还原：
+ * - role=tool 消息内容即音乐卡 JSON（present-music-card 工具产出）→ 挂到紧随的 assistant；
+ * - assistant 文本命中 looksLikeTranslateReply → 补判为翻译回复（翻译卡片 + 语言翻译官徽标）。
+ */
 async function loadConversation(id: string) {
   detailError.value = false;
   try {
     const detail = await getConversation(id);
     convId.value = id;
     loadedId.value = id;
-    messages.value = (detail.messages || [])
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ id: uid(), role: m.role as 'user' | 'assistant', content: m.content }));
+    const msgs: ChatMsg[] = [];
+    let pendingCard: MusicCardPayload | null = null;
+    (detail.messages || []).forEach((m) => {
+      if (m.role === 'user') {
+        msgs.push({ id: uid(), role: 'user', content: m.content });
+        return;
+      }
+      if (m.role === 'tool') {
+        try {
+          const card = typeof m.content === 'string' ? (JSON.parse(m.content) as MusicCardPayload) : null;
+          if (card && card.kind === 'music' && Array.isArray(card.songs) && card.songs.length) {
+            pendingCard = card;
+          }
+        } catch {
+          // 非 JSON 的 tool 消息（其他工具结果）忽略
+        }
+        return;
+      }
+      // assistant：引擎落库的中间占位（空 content）跳过，不消费挂起的卡片
+      if (m.role === 'assistant' && !(m.content || '').trim()) return;
+      const isTranslate = looksLikeTranslateReply(m.content);
+      msgs.push({
+        id: uid(),
+        role: 'assistant',
+        content: m.content,
+        agentName: isTranslate ? '语言翻译官' : '',
+        agentId: isTranslate ? 'translate' : undefined,
+        musicCard: pendingCard,
+      });
+      pendingCard = null;
+    });
+    messages.value = msgs;
     agentBadge.value = '';
     nextTick(scrollToBottom);
   } catch {

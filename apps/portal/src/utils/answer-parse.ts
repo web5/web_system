@@ -191,6 +191,18 @@ export function foldCut(blocks: AnswerBlock[]): AnswerBlock[] {
   return out;
 }
 
+/**
+ * 历史回放补判（对齐小程序 looksLikeTranslateReply）：
+ * 历史消息没有 intent 事件，按文本特征补判翻译回复——
+ * 含【推荐译文】四段契约，或「以英文字母开头且后面出现中文」（切拉丁兜底的典型形态）。
+ */
+export function looksLikeTranslateReply(text: string): boolean {
+  if (!text) return false;
+  if (text.includes('【推荐译文】')) return true;
+  const t = text.trim();
+  return /^[A-Za-z]/.test(t) && /[\u4e00-\u9fff]/.test(t);
+}
+
 /** 纯文本字数（折叠阈值判定用；不含 tcard） */
 export function plainLength(blocks: AnswerBlock[]): number {
   return blocks
