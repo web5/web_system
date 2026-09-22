@@ -22,13 +22,13 @@ const conn = await mysql.createConnection({
 });
 
 const [rows] = await conn.query(
-  'SELECT id, createdAt, messages FROM agent_conversations',
+  'SELECT id, created_at, messages FROM agent_conversations',
 );
 
 let updated = 0;
 for (const row of rows) {
   const msgs = Array.isArray(row.messages) ? row.messages : [];
-  const fallback = new Date(row.createdAt).getTime();
+  const fallback = new Date(row.created_at).getTime();
   let changed = false;
   for (const m of msgs) {
     if (typeof m.ts !== 'number' || !Number.isFinite(m.ts)) {
