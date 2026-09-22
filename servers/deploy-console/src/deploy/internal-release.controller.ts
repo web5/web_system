@@ -1,13 +1,7 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Req,
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Controller, Post, Body, Req, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
+import { assertInternalKey } from '../common/internal-key';
 import { DeployService } from './deploy.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { AppsService } from '../apps/apps.service';
@@ -44,16 +38,9 @@ export class InternalReleaseController {
     private readonly appsService: AppsService,
   ) {}
 
-  /** 校验内部密钥（与 INTERNAL_API_KEY 一致）；不一致一律 401 */
+  /** 校验内部密钥（与 INTERNAL_API_KEY 一致）；不一致一律 401（实现见 common/internal-key） */
   private assertInternalKey(req: any): void {
-    const expected = process.env.INTERNAL_API_KEY || '';
-    const got = String(req?.headers?.['x-internal-key'] ?? '');
-    if (!expected) {
-      throw new UnauthorizedException('服务未配置 INTERNAL_API_KEY，内部接口不可用');
-    }
-    if (got !== expected) {
-      throw new UnauthorizedException('x-internal-key 不正确');
-    }
+    assertInternalKey(req);
   }
 
   @Post('versions')
