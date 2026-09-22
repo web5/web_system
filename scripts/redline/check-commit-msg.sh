@@ -78,10 +78,14 @@ fi
 
 # 3) 只含原型/规格 → 放行（已由上面 has_ui=0 覆盖）
 
+# 3.5) 微调豁免：与 CI 的 R9b / R10 / R11 同口径（设计：specs/kit-sop-enforcement/design.md §3.5.1）
+#      本地若认、CI 若不认（或反之），"记了豁免还是报错"会成为新的摩擦源。
+if grep -qE '^Micro-exempt:' "$MSG"; then exit 0; fi
+
 # 4) 含 UI 源码 → 须带 Proto 凭证
 sha="$(grep -E '^Proto:[[:space:]]*[0-9a-fA-F]{7,40}' "$MSG" | head -n 1 | awk '{print $2}' | tr -d '\r')"
 if [ -z "$sha" ]; then
-  err "$CM 拒绝：本次改动含 UI 源码（$ui_sample），但 commit message 缺 Proto 凭证。"
+  err "$CM 拒绝：本次改动含 UI 源码（${ui_sample}），但 commit message 缺 Proto 凭证。"
   err "  请在 message 末尾加一行：Proto: <原型/规格 commit 的 sha>"
   err "  （§2.5 动作门：原型/规格先单独 commit 并经用户确认；详见 specs/kit-sop-enforcement/design.md §3.8）"
   exit 1
@@ -108,6 +112,22 @@ done < <(git show --name-only --format= "$sha" 2>/dev/null)
 
 if [ "$found" -ne 1 ]; then
   err "$CM 拒绝：Proto: $sha 未改动任何原型/规格文件（apps/*/prototype/**、docs/ui/prototypes/**、specs/**/page-spec*.md）。"
+  exit 1
+fi
+
+# 5) 设计评审凭证 Design（error 级 · specs/design-reviewer/design.md §3.7）
+#    UI commit 须带 `Design: pass`，表示 D3 实现一致性评审已过且阻塞项清零。
+dval="$(grep -E '^Design:[[:space:]]*[^[:space:]]+' "$MSG" | head -n 1 | sed -E 's/^Design:[[:space:]]*//' | tr -d '\r')"
+if [ -z "$dval" ]; then
+  err "$CM 拒绝：本次改动含 UI 源码（${ui_sample}），但 commit message 缺 Design 凭证。"
+  err "  请在 message 末尾加一行：Design: pass"
+  err "  （D3 实现一致性评审已过、报告阻塞项清零；纯视觉微调改走 Micro-exempt: <理由>）"
+  err "  （见 specs/design-reviewer/design.md §3.7；CI R11 为 error 级兜底）"
+  exit 1
+fi
+if [ "$dval" != "pass" ]; then
+  err "$CM 拒绝：UI commit 的 Design 凭证须为 pass，实际为：$dval"
+  err "  报告路径（Design: docs/ui/reviews/<topic>-<date>.md）应挂在原型/规格 commit 上，不挂在 UI commit 上。"
   exit 1
 fi
 

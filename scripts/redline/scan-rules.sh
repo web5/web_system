@@ -259,6 +259,100 @@ check_r10() {
   done
 }
 
+# ---- R11 设计评审凭证（commit 级 · error 级）----
+# 设计：specs/design-reviewer/design.md §3.7（2026-09-22 拍板：直接 error，不设 warning 观察期）
+# 判据：① 含 UI 源码的 commit 须带 `Design: pass`；② 报告头部 `阻塞: N` 须为 0
+# 作用域：仅对含 UI 源码 / 原型规格的 commit 生效，纯后端 PR 零摩擦
+# 豁免：`Micro-exempt:` 与 R9b / R10 同口径（避免"记了豁免还报错"的新摩擦）
+check_r11() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c f body dval n isui
+  for c in "${commits[@]}"; do
+    isui=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if is_ui_file "$f"; then isui=1; break; fi
+    done < <(git show --name-only --format= "$c" 2>/dev/null)
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    dval="$(printf '%s' "$body" | grep -E '^Design:[[:space:]]*[^[:space:]]+' | head -n 1 | sed -E 's/^Design:[[:space:]]*//' | tr -d '\r')"
+
+    if [ "$isui" -eq 0 ]; then
+      # 原型/规格 commit：若带 Design: <报告路径>，校验报告存在且阻塞清零
+      [ -z "$dval" ] && continue
+      [ "$dval" = "pass" ] && continue
+      if ! git cat-file -e "$c:$dval" 2>/dev/null; then
+        add_err "R11" "Design 凭证指向的报告不存在" "$dval" "报告须落盘 docs/ui/reviews/*.md 并与原型/规格同 commit（§3.7）"
+        continue
+      fi
+      n="$(git show "$c:$dval" 2>/dev/null | grep -E '^阻塞:[[:space:]]*[0-9]+' | head -n 1 | grep -oE '[0-9]+' | head -n 1)"
+      if [ "${n:-0}" -gt 0 ]; then
+        add_err "R11" "设计评审阻塞项未清零" "${dval}（阻塞: ${n}）" "报告头部 阻塞: N 且 N>0 不得进入实现（§3.7）"
+      fi
+      continue
+    fi
+
+    if printf '%s' "$body" | grep -qE '^Micro-exempt:'; then
+      continue
+    fi
+    if [ -z "$dval" ]; then
+      add_err "R11" "UI commit 缺设计评审凭证" "$(git log -1 --format=%s "$c")" "UI 源码 commit 的 message 须带 Design: pass（D3 已过）；纯视觉微调走 Micro-exempt: <理由>（§3.7）"
+      continue
+    fi
+    if [ "$dval" != "pass" ]; then
+      add_err "R11" "UI commit 的 Design 凭证非 pass" "$dval" "UI commit 须写 Design: pass；报告路径应挂在原型/规格 commit 上（§3.7）"
+    fi
+  done
+}
+
+# ---- R11b 原型锚点漂移（diff 级 · 受 DESIGN_ANCHOR_MODE 控制）----
+# off（默认，存量回填前）→ 跳过；warn → 提示；strict → error
+# 存量回填分批推进：docs/ui/anchor-backlog.md（§3.7.1；Q4 批次序、Q5 单批先 warn 再 strict）
+# 「未回填 ≠ 已漂移」：原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规
+#   off     全部跳过（默认，存量回填前）
+#   warn    全部提示
+#   strict  全部 error
+#   scoped  DESIGN_ANCHOR_SCOPE 内的 app → error，其余 → warn（按批次推进用，Q5）
+DESIGN_ANCHOR_MODE="${DESIGN_ANCHOR_MODE:-off}"
+DESIGN_ANCHOR_SCOPE="${DESIGN_ANCHOR_SCOPE:-}"
+check_r11b() {
+  local range="$1"
+  [ "$DESIGN_ANCHOR_MODE" = "off" ] && return 0
+  local py="$TOP/scripts/redline/scan-design-drift.py"
+  [ -f "$py" ] || return 0
+  local out lvl rule loc msg sev app
+  out="$(python3 "$py" anchors "$range" 2>/dev/null)"
+  [ -n "$out" ] || return 0
+  while IFS=$'\t' read -r lvl rule loc msg; do
+    [ -n "${lvl:-}" ] || continue
+    case "$lvl" in
+      MISSING|EXTRA)
+        sev=warn
+        if [ "$DESIGN_ANCHOR_MODE" = "strict" ]; then
+          sev=err
+        elif [ "$DESIGN_ANCHOR_MODE" = "scoped" ] && [ -n "$DESIGN_ANCHOR_SCOPE" ]; then
+          app="${loc%% *}"   # loc 形如 "<app> · <key>"
+          case ",${DESIGN_ANCHOR_SCOPE}," in
+            *",${app},"*) sev=err ;;
+          esac
+        fi
+        if [ "$sev" = "err" ]; then
+          add_err "$rule" "原型锚点漂移（${lvl}）" "$loc" "$msg"
+        else
+          add_warn "$rule" "原型锚点漂移（${lvl}）" "$loc" "$msg"
+        fi ;;
+    esac
+  done <<EOF
+$out
+EOF
+}
+
 # ---- 单行检查封装（文件+行号+内容）----
 check_one_line() {
   local file="$1" line="$2" content="$3"
@@ -275,6 +369,8 @@ scan_diff_range() {
   check_r9 "$range"   # R9：文件级 UI 结构门禁（warning 级，先于行扫描）
   check_r9b "$range"  # R9b：既有 UI 改动门禁（补 R9 覆盖缺口）
   check_r10 "$range"  # R10：UI commit 的 Proto 凭证（方案 B CI 兜底）
+  check_r11 "$range"  # R11：设计评审凭证（error 级 · specs/design-reviewer/design.md §3.7）
+  check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do
