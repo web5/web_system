@@ -729,24 +729,26 @@
           </div>
           <div class="run-canvas" id="runCanvas">
             <svg class="run-wires" id="runWires"></svg>
-            <!-- 一列 = 步骤卡 + 该列任务卡；grid 列宽 = max(两者) → 步骤卡与任务卡天然同宽（2026-09-22） -->
+            <!-- 一列 = 步骤卡 + 该列任务卡；grid 列宽 = max(两者) → 同列同宽（2026-09-22）。
+                 序号**在任务卡左侧竖条**（与编辑页 task-node .seq 一致；多任务 = 4-1 / 4-2），
+                 步骤标题不放数字（编辑页 step-title 即无序号，用户 2026-09-22 指正） -->
             <div class="run-grid">
               <div class="run-col">
-                <div class="run-step st-ok"><span class="seq">1</span><span class="nm">拉取代码</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="tn">git</span><span class="ts">完成</span></div>
+                <div class="run-step"><span class="nm">拉取代码</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">1</span><span class="tn">git</span><span class="ts">完成</span></div>
               </div>
               <div class="run-col">
-                <div class="run-step st-ok"><span class="seq">2</span><span class="nm">构建</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="tn">build</span><span class="ts">完成</span></div>
+                <div class="run-step"><span class="nm">构建</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">2</span><span class="tn">build</span><span class="ts">完成</span></div>
               </div>
               <div class="run-col">
-                <div class="run-step st-ok"><span class="seq">3</span><span class="nm">发布确认</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div>
+                <div class="run-step"><span class="nm">发布确认</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">3</span><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div>
               </div>
               <div class="run-col">
-                <div class="run-step st-ok"><span class="seq">4</span><span class="nm">发布</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
-                <div class="run-task st-skip"><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
+                <div class="run-step"><span class="nm">发布</span><span class="cmd">命令</span></div>
+                <div class="run-task st-ok"><span class="rseq">4-1</span><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
+                <div class="run-task st-skip"><span class="rseq">4-2</span><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
               </div>
             </div>
           </div>
@@ -1059,6 +1061,10 @@
   /* 任务卡：单行小卡 */
   .run-task{display:flex;align-items:center;gap:6px;width:100%;padding:3px 8px;
     border:1px solid var(--border);border-radius:3px;background:var(--card);font-size:11px;}
+  /* 序号：任务卡左侧竖条色块（对齐编辑页 task-node .seq） */
+  .run-task .rseq{align-self:stretch;display:flex;align-items:center;padding:0 8px;margin:-3px 6px -3px -8px;
+    font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text-2);
+    background:var(--bg);border-right:1px solid var(--border);border-radius:3px 0 0 3px;}
   .run-task .tn{color:var(--text-2);}
   .run-task .ts{color:var(--text-3);margin-left:auto;}
   .run-task .tagc{font-size:9px;line-height:14px;padding:0 4px;border:1px solid var(--border);border-radius:3px;color:var(--primary);}
