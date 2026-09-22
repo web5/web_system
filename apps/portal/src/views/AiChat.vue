@@ -32,8 +32,9 @@
           </div>
 
           <template v-else>
-            <!-- 一轮 = 一条用户消息 + 紧随的 AI 回答 -->
-            <div v-for="turn in turns" :key="turn.key" class="turn">
+            <!-- 一轮 = 一条用户消息 + 紧随的 AI 回答；跨天轮末尾插日期线 -->
+            <template v-for="turn in turns" :key="turn.key">
+              <div class="turn">
               <div
                 v-for="m in turn.msgs"
                 :key="m.id"
@@ -143,10 +144,11 @@
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
 
-            <!-- 日期分隔线：仅跨天会话显示（单天会话无线），标注最后活动日期 -->
-            <div v-if="dayLabel" class="daysep"><span>{{ dayLabel }}</span><i /></div>
+              <!-- 日期分隔线：仅跨天轮末尾显示（B6，按消息 ts 精确分段） -->
+              <div v-if="turn.showSep" class="daysep"><span>{{ turn.dayLabel }}</span><i /></div>
+            </template>
           </template>
         </div>
       </div>
@@ -228,6 +230,8 @@ interface ChatMsg {
   streaming?: boolean;
   stopped?: boolean;
   failed?: boolean;
+  /** 消息时间戳（B6：历史回放按天分段日期线用；实时消息前端打的本地时间，刷新以后端为准） */
+  ts?: number;
 }
 
 const EXAMPLES = [
@@ -248,8 +252,6 @@ const convId = ref<string | null>(null);
 const loadedId = ref<string | null>(null);
 const agentBadge = ref('');
 const detailError = ref(false);
-/** 当前会话时间范围（历史回放时从详情写入，用于跨天日期线判定） */
-const convRange = ref<{ start: string; end: string } | null>(null);
 /** 正在朗读的消息 id（翻译卡片 TTS，本地 Web Speech） */
 const reading = ref<string | null>(null);
 
@@ -313,16 +315,6 @@ function shownBlocks(m: ChatMsg): AnswerBlock[] {
 
 /* ===== 轮次（一轮 = 用户消息 + 紧随的 AI 回答） ===== */
 
-/** 日期线标签：仅跨天会话非空；单天会话返回空串（不渲染线，2026-09-22 拍板） */
-const dayLabel = computed(() => {
-  if (!convRange.value) return '';
-  const s = new Date(convRange.value.start);
-  const e = new Date(convRange.value.end);
-  if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) return '';
-  if (s.toDateString() === e.toDateString()) return '';
-  return relDay(e);
-});
-
 function relDay(d: Date): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -333,16 +325,39 @@ function relDay(d: Date): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
-const turns = computed(() => {
-  const out: { key: string; msgs: ChatMsg[] }[] = [];
+const dayKeyOf = (ts?: number): string => (ts ? new Date(ts).toDateString() : '');
+
+interface Turn {
+  key: string;
+  msgs: ChatMsg[];
+  /** 轮日期（取轮内首条带 ts 的消息的 toDateString，无 ts 为空串） */
+  dayKey: string;
+  /** 日期线：仅当该轮有 ts 且与下一轮跨天（或为最后一轮）时显示 */
+  showSep: boolean;
+  dayLabel: string;
+}
+
+const turns = computed<Turn[]>(() => {
+  const out: Turn[] = [];
   messages.value.forEach((m) => {
     if (m.role === 'user') {
-      out.push({ key: m.id, msgs: [m] });
+      out.push({ key: m.id, msgs: [m], dayKey: '', showSep: false, dayLabel: '' });
     } else if (out.length) {
       out[out.length - 1].msgs.push(m);
     } else {
-      out.push({ key: m.id, msgs: [m] });
+      out.push({ key: m.id, msgs: [m], dayKey: '', showSep: false, dayLabel: '' });
     }
+  });
+
+  // 日期线：取每轮首条带 ts 的消息为轮日期；相邻轮跨天（或最后一轮）→ 该轮末尾插线（B6）
+  out.forEach((t) => {
+    const withTs = t.msgs.find((m) => m.ts);
+    t.dayKey = withTs ? dayKeyOf(withTs.ts) : '';
+    t.dayLabel = withTs ? relDay(new Date(withTs.ts as number)) : '';
+  });
+  out.forEach((t, i) => {
+    const nextKey = out[i + 1]?.dayKey;
+    t.showSep = !!t.dayKey && (i === out.length - 1 || (!!nextKey && nextKey !== t.dayKey));
   });
   return out;
 });
@@ -408,7 +423,6 @@ function newChat() {
   loadedId.value = null;
   messages.value = [];
   agentBadge.value = '';
-  convRange.value = null;
   input.value = '';
   Object.keys(expanded).forEach((k) => delete expanded[k]);
   Object.keys(noteOpen).forEach((k) => delete noteOpen[k]);
@@ -426,12 +440,11 @@ async function loadConversation(id: string) {
     const detail = await getConversation(id);
     convId.value = id;
     loadedId.value = id;
-    convRange.value = { start: detail.createdAt, end: detail.updatedAt };
     const msgs: ChatMsg[] = [];
     let pendingCard: MusicCardPayload | null = null;
     (detail.messages || []).forEach((m) => {
       if (m.role === 'user') {
-        msgs.push({ id: uid(), role: 'user', content: m.content });
+        msgs.push({ id: uid(), role: 'user', content: m.content, ts: m.ts });
         return;
       }
       if (m.role === 'tool') {
@@ -455,6 +468,7 @@ async function loadConversation(id: string) {
         agentName: isTranslate ? '语言翻译官' : '',
         agentId: isTranslate ? 'translate' : undefined,
         musicCard: pendingCard,
+        ts: m.ts,
       });
       pendingCard = null;
     });
