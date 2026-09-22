@@ -11,6 +11,7 @@
 | `deploy-console-domain-split.html` | deploy-console 控制台（微前端域 / API 网关域）+ 产品页环境切换 + **系统设置 / 存储配置（A6）** | 双域重构主原型。2026-09-21 对齐落地：API 网关域只有「服务管理」、服务详情 4 Tab（接口/概览/网关路由/环境与发布）、行内「构建发布」原地开抽屉且环境锁定禁用。**2026-09-22 增量（A6）**：「系统设置」从占位 generic 屏升级为真实屏（通知与审批按 `SystemSettings.vue` 还原 + 新增「存储配置」区块：双值展示 / 目录树与手填 / 校验前置 / 待重启提示）；新增样式引 `--ws-*` token（对齐 `packages/ui/src/tokens.ts` **roles.light**，与 #107 起的整稿亮色口径一致） |
 | `pipeline-env-branch-canvas.html` | 流水线编辑 · 步骤/任务画布 | 对应 `OrchestrationEditor.vue`（步骤 → 任务 → 动作模型）。2026-09-21 补入动作行并修复删除按钮遮挡 |
 | `deploy-console-version-deploy.html` | 版本部署（微前端域 `/deploys/micro`） | 对应 `VersionDeploy.vue` + `VersionDeployDrawer.vue` |
+| `admin-settings.html` | admin「系统设置」（A6：移除「存储配置」tab） | 2026-09-22 新建。admin 目录下原本无原型；含「[原型] 变更对照」移除前/后切换，目标态为 4 tab（基本信息/功能开关/安全策略/通知配置）+ 副标题去掉「与存储」 |
 
 ## 二、历史稿（设计过程记录，**不要作为落地对照**）
 

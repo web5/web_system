@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>admin 系统设置 · 交互原型（A6：移除「存储配置」tab）</title>
+<!--
+  ============================================================
+  admin 系统设置 · 交互原型（2026-09-22）
+  · 目标端：桌面 Web（admin 管理后台，亮色）
+  · 本次范围：**移除「存储配置」tab**（未接线空壳），并把页头副标题里的「与存储」去掉
+  · 依据：specs/backend-consolidation/design.md 议题 A6 + page-spec-storage-config.md「admin 侧处理」
+  · 复核口径：storage_type / storage_bucket / storage_region / storage_access_key* /
+    storage_max_upload_mb 在后端零引用、配置表零值；真正生效的上传限制是
+    upload-service 的 CATEGORIES 代码常量。上传根目录统一由 deploy-console 系统设置管理
+    （原型见 deploy-console-domain-split.html → 系统设置）。
+  · 本文件为**沟通产物**：零依赖单文件、浏览器双击即开；右上「[原型]」控件仅供走查，落地不保留
+  ============================================================
+-->
+<style>
+  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（design-system G1：色值只引 token） */
+  :root{
+    --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
+    --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
+    --ws-text-primary:#171717; --ws-text-secondary:#525252; --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
+    --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
+    --ws-input-bg:#FFFFFF; --ws-input-border:#E5E5E5; --ws-input-placeholder:#A3A3A3;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
+    --ws-accent:#FF8C42;                /* 品牌端强调色（admin 侧栏选中/logo，见 apps/admin BasicLayout） */
+    --ws-accent-soft:rgba(255,140,66,.15);
+    --ws-on-brand:#FFFFFF;
+    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC;
+    --ws-warn:#F5A623; --ws-warn-soft:#FEF3DC;
+    --ws-danger:#E5484D; --ws-danger-soft:#FCEBEC;
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:var(--ws-bg-page);min-height:100vh;padding:24px 20px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--ws-text-primary);
+  }
+  .proto-head{width:1280px;}
+  .proto-head h1{font-size:18px;font-weight:600;margin-bottom:6px;}
+  .proto-head .sub{font-size:12px;color:var(--ws-text-secondary);line-height:1.8;}
+  .proto-head .sub b{color:var(--ws-brand-600);font-weight:600;}
+
+  /* ===== 桌面壳（侧栏 + 顶栏 + 内容区）===== */
+  .ad-desktop{width:1280px;height:780px;border-radius:14px;overflow:hidden;position:relative;
+    background:var(--ws-bg-surface);border:1px solid var(--ws-border);box-shadow:0 24px 70px rgba(20,30,50,.14);
+    display:flex;}
+  .ad-sider{width:210px;background:var(--ws-bg-surface);border-right:1px solid var(--ws-border);
+    flex-shrink:0;display:flex;flex-direction:column;}
+  .ad-sider-head{height:56px;display:flex;align-items:center;gap:9px;padding:0 16px;}
+  .ad-logo-dot{width:22px;height:22px;border-radius:var(--ws-radius-md);background:linear-gradient(135deg,var(--ws-accent),var(--ws-warn));}
+  .ad-logo-t{color:var(--ws-accent);font-size:15px;font-weight:700;}
+  .ad-menu{padding:4px 8px;}
+  .ad-item{padding:9px 12px;border-radius:var(--ws-radius-lg);color:var(--ws-text-secondary);font-size:13px;cursor:pointer;margin-bottom:2px;}
+  .ad-item:hover{background:var(--ws-bg-hover);}
+  .ad-item.active{background:linear-gradient(90deg,var(--ws-accent-soft),rgba(255,140,66,.04));
+    color:var(--ws-accent);font-weight:600;}
+  .ad-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .ad-header{height:56px;background:var(--ws-bg-surface);border-bottom:1px solid var(--ws-border);
+    flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
+  .ad-crumb{font-size:13px;color:var(--ws-text-tertiary);}
+  .ad-crumb b{color:var(--ws-text-primary);font-weight:500;}
+  .ad-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ws-text-secondary);}
+  .ad-user .av{width:28px;height:28px;border-radius:50%;background:var(--ws-accent);color:var(--ws-on-brand);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+  .ad-content{flex:1;overflow:auto;padding:18px 22px;background:var(--ws-bg-page);}
+
+  /* ===== 系统设置页 ===== */
+  .st-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+  .st-head h2{font-size:19px;font-weight:600;}
+  .st-head .sub{font-size:12px;color:var(--ws-text-secondary);margin-top:4px;}
+  .st-demobar{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;}
+  .st-demobar-label{font-size:11px;color:var(--ws-text-tertiary);}
+  .st-seg{display:inline-flex;border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);overflow:hidden;}
+  .st-seg button{background:var(--ws-bg-surface);border:none;color:var(--ws-text-secondary);font-size:12px;
+    padding:5px 10px;cursor:pointer;white-space:nowrap;}
+  .st-seg button+button{border-left:1px solid var(--ws-border);}
+  .st-seg button.on{background:var(--ws-brand-soft);color:var(--ws-brand-600);font-weight:600;}
+
+  .st-note{display:flex;gap:8px;align-items:flex-start;border-radius:var(--ws-radius-md);padding:9px 12px;
+    font-size:12px;line-height:1.7;margin-bottom:12px;}
+  .st-note.info{background:var(--ws-brand-soft);color:var(--ws-brand-600);border:1px solid rgba(249,115,22,.25);}
+  .st-note.warn{background:var(--ws-warn-soft);color:#8a5a00;border:1px solid rgba(245,166,35,.3);}
+  .st-note .k{font-family:var(--ws-font-mono);}
+
+  .st-tabs{display:flex;gap:2px;border-bottom:1px solid var(--ws-border);margin-bottom:14px;}
+  .st-tabs .t2{padding:8px 14px;font-size:13px;color:var(--ws-text-secondary);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px;background:none;border-top:none;border-left:none;border-right:none;}
+  .st-tabs .t2.active{color:var(--ws-brand-600);font-weight:600;border-bottom-color:var(--ws-brand-600);}
+  .st-tabs .t2.gone{color:var(--ws-text-disabled);text-decoration:line-through;cursor:not-allowed;}
+
+  .st-card{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:14px;
+    padding:16px;margin-bottom:14px;box-shadow:var(--ws-shadow-card);}
+  .st-card .ct{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .st-card .ct .hint{font-size:12px;font-weight:400;color:var(--ws-text-tertiary);}
+  .st-card .ct .ic{width:16px;height:16px;color:var(--ws-brand-600);}
+  .st-card .ct .ic svg{width:100%;height:100%;}
+  .st-field{margin-bottom:14px;max-width:520px;}
+  .st-label{display:block;font-size:12px;color:var(--ws-text-secondary);margin-bottom:6px;}
+  .st-input{width:100%;border:1px solid var(--ws-input-border);border-radius:var(--ws-radius-md);
+    background:var(--ws-input-bg);color:var(--ws-text-primary);font-size:13px;padding:7px 10px;outline:none;}
+  .st-input:focus{border-color:var(--ws-brand-500);}
+  .st-input.err{border-color:var(--ws-danger);}
+  .st-input::placeholder{color:var(--ws-input-placeholder);}
+  .st-input.mono{font-family:var(--ws-font-mono);font-size:12px;}
+  .st-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:520px;}
+  .st-err-text{font-size:12px;color:var(--ws-danger);margin-top:6px;display:none;}
+  .st-err-text.show{display:block;}
+  .st-unit{font-size:12px;color:var(--ws-text-tertiary);margin-left:6px;}
+  .st-inline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ws-text-secondary);flex-wrap:wrap;}
+  .st-num{width:104px;border:1px solid var(--ws-input-border);border-radius:var(--ws-radius-md);
+    background:var(--ws-input-bg);color:var(--ws-text-primary);font-size:13px;padding:7px 10px;outline:none;}
+  .st-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ws-text-primary);margin-right:18px;cursor:pointer;}
+  .st-check input{width:14px;height:14px;accent-color:var(--ws-brand-500);}
+  .st-checks{display:flex;flex-wrap:wrap;gap:6px 0;}
+  .st-divider{height:1px;background:var(--ws-border-subtle);margin:16px 0;max-width:520px;}
+  .st-switch-list{display:flex;flex-direction:column;gap:4px;max-width:620px;}
+  .st-switch-item{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:11px 12px;border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-lg);}
+  .st-switch-item:hover{background:var(--ws-bg-hover);}
+  .st-switch-info{display:flex;flex-direction:column;gap:3px;}
+  .st-switch-label{font-size:13px;color:var(--ws-text-primary);}
+  .st-switch-desc{font-size:12px;color:var(--ws-text-tertiary);}
+  .st-sw{width:38px;height:20px;border-radius:9999px;background:var(--ws-text-disabled);position:relative;cursor:pointer;
+    border:none;flex-shrink:0;transition:background .15s;}
+  .st-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+    background:var(--ws-bg-surface);transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.2);}
+  .st-sw.on{background:var(--ws-brand-500);}
+  .st-sw.on::after{left:20px;}
+  .st-actions{display:flex;align-items:center;gap:10px;margin-top:4px;}
+  .st-btn{background:var(--ws-bg-surface);color:var(--ws-text-primary);border:1px solid var(--ws-input-border);
+    border-radius:var(--ws-radius-md);padding:6px 14px;font-size:13px;cursor:pointer;}
+  .st-btn:hover{background:var(--ws-bg-hover);}
+  .st-btn.primary{background:var(--ws-brand-500);border-color:var(--ws-brand-500);color:var(--ws-on-brand);font-weight:600;}
+  .st-btn.primary:hover{background:var(--ws-brand-600);}
+  .st-btn[disabled]{opacity:.55;cursor:not-allowed;}
+  .st-badge{font-size:11px;padding:2px 8px;border-radius:9999px;font-weight:600;white-space:nowrap;}
+  .st-badge.ok{background:var(--ws-ok-soft);color:var(--ws-ok);}
+  .st-badge.warn{background:var(--ws-warn-soft);color:#8a5a00;}
+  .st-badge.err{background:var(--ws-danger-soft);color:var(--ws-danger);}
+  .st-badge.neutral{background:var(--ws-bg-subtle);color:var(--ws-text-secondary);}
+  .st-skel{padding:6px 0;}
+  .st-skel i{display:block;height:10px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-active);margin-bottom:10px;}
+  .st-skel i:nth-child(2){width:74%;} .st-skel i:nth-child(3){width:52%;}
+  /* 无权限例外页 */
+  .st-exception{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:14px;
+    padding:56px 24px;text-align:center;box-shadow:var(--ws-shadow-card);}
+  .st-exception .ic{width:44px;height:44px;margin:0 auto 14px;color:var(--ws-text-disabled);}
+  .st-exception .ic svg{width:100%;height:100%;}
+  .st-exception .t{font-size:15px;font-weight:600;margin-bottom:8px;}
+  .st-exception .d{font-size:13px;color:var(--ws-text-secondary);line-height:1.8;margin-bottom:18px;}
+
+  .st-toast{position:fixed;left:50%;top:22px;transform:translate(-50%,-14px);opacity:0;pointer-events:none;
+    background:var(--ws-text-primary);color:var(--ws-bg-surface);font-size:13px;padding:9px 16px;
+    border-radius:var(--ws-radius-lg);transition:opacity .2s,transform .2s;z-index:9;}
+  .st-toast.show{opacity:1;transform:translate(-50%,0);}
+</style>
+</head>
+<body>
+
+<div class="proto-head">
+  <h1>admin 系统设置 · 交互原型（A6：移除「存储配置」tab）</h1>
+  <div class="sub">
+    目标端：<b>桌面 Web</b>（admin 管理后台 · 亮色）｜本次范围：<b>删除「存储配置」tab</b>（未接线的空壳）
+    ｜依据：<code>specs/backend-consolidation/page-spec-storage-config.md</code> §admin 侧处理<br>
+    右上「[原型] 变更对照」= 移除前 / 移除后 切换；「[原型] 状态演示」= 走查状态矩阵。两者仅原型用，落地不保留。
+  </div>
+</div>
+
+<div class="ad-desktop">
+  <div class="ad-sider">
+    <div class="ad-sider-head">
+      <div class="ad-logo-dot"></div>
+      <span class="ad-logo-t">科豆 AI</span>
+    </div>
+    <div class="ad-menu">
+      <div class="ad-item">工作台</div>
+      <div class="ad-item">变变管理</div>
+      <div class="ad-item">用户管理</div>
+      <div class="ad-item active">系统设置</div>
+      <div class="ad-item">角色权限</div>
+      <div class="ad-item">字典管理</div>
+      <div class="ad-item">MCP 管理</div>
+      <div class="ad-item">数据浏览</div>
+      <div class="ad-item">Agents</div>
+    </div>
+  </div>
+
+  <div class="ad-main">
+    <div class="ad-header">
+      <div class="ad-crumb">首页 / <b>系统设置</b></div>
+      <div class="ad-user"><span class="av">管</span><span>admin</span></div>
+    </div>
+
+    <div class="ad-content">
+      <div class="st-head">
+        <div>
+          <h2>系统设置</h2>
+          <!-- 副标题：本次去掉「与存储」（存储设置改由 deploy-console 承载） -->
+          <div class="sub" id="stSubtitle">管理平台全局配置，包括站点信息、安全策略与通知</div>
+        </div>
+        <div class="st-demobar">
+          <span class="st-demobar-label">[原型] 状态演示</span>
+          <div class="st-seg" id="stStateSeg"></div>
+          <span class="st-demobar-label" style="margin-left:6px;">[原型] 变更对照</span>
+          <div class="st-seg" id="stCmpSeg"></div>
+        </div>
+      </div>
+
+      <div id="stBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="st-toast" id="stToast"></div>
+
+<script>
+  /* =========================================================
+     admin 系统设置原型脚本（数据为模拟；仅用于走查交互与状态）
+     ========================================================= */
+  var AS = {
+    tab:'basic',
+    state:'normal',          /* normal | saving | invalid | noperm */
+    cmp:'after',              /* after（移除后，落地目标） | before（移除前，对照） */
+    siteName:'科豆 AI',
+    saving:null
+  };
+  var AS_TABS = [
+    ['basic','基本信息'],['features','功能开关'],['security','安全策略'],['notify','通知配置']
+  ];
+  var AS_STATES = [['normal','正常'],['saving','保存中'],['invalid','校验失败'],['noperm','无权限']];
+  var AS_CMP = [['after','移除后（目标）'],['before','移除前（对照）']];
+
+  var ICON_APPSTORE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>';
+  var ICON_SWITCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>';
+  var ICON_SAFETY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>';
+  var ICON_MAIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
+  var ICON_CLOUD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.6A4 4 0 0 1 17 18z"/></svg>';
+  var ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+
+  function toast(msg){
+    var el=document.getElementById('stToast');
+    el.textContent=msg; el.classList.add('show');
+    clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.remove('show'); },1600);
+  }
+  function asState(s){ AS.state=s; if(s!=='invalid') AS.siteName='科豆 AI'; asRender(); }
+  function asCmp(m){ AS.cmp=m; if(m==='before' && AS.tab==='storage') AS.tab='storage'; asRender(); }
+  function asTab(k){ if(AS.state==='noperm') return; AS.tab=k; asRender(); }
+  function asSave(which){
+    if(!AS.siteName.trim()){
+      AS.state='invalid'; asRender(); toast('站点名称不能为空'); return;
+    }
+    AS.saving=which; AS.state='saving'; asRender();
+    setTimeout(function(){ AS.saving=null; AS.state='normal'; asRender(); toast('已保存（配置项写入 system_configs）'); },800);
+  }
+  function asTestMail(){
+    if(!document.getElementById('smtpHost') || !document.getElementById('smtpHost').value.trim()){
+      toast('请先填写 SMTP 服务器'); return;
+    }
+    AS.saving='mail'; asRender();
+    setTimeout(function(){ AS.saving=null; asRender(); toast('测试邮件已发送到 admin@kedouai.com'); },900);
+  }
+  function asSwitch(i){ var b=document.getElementById('sw'+i); b.classList.toggle('on'); }
+  function asSegs(){
+    document.getElementById('stStateSeg').innerHTML = AS_STATES.map(function(s){
+      return '<button class="'+(AS.state===s[0]?'on':'')+'" onclick="asState(\''+s[0]+'\')">'+s[1]+'</button>';
+    }).join('');
+    document.getElementById('stCmpSeg').innerHTML = AS_CMP.map(function(c){
+      return '<button class="'+(AS.cmp===c[0]?'on':'')+'" onclick="asCmp(\''+c[0]+'\')">'+c[1]+'</button>';
+    }).join('');
+  }
+  function asTabsHtml(){
+    var h = '<div class="st-tabs">';
+    AS_TABS.forEach(function(t){
+      h += '<button class="t2 '+(AS.tab===t[0]&&AS.state!=='noperm'?'active':'')+'" '+(AS.state==='noperm'?'disabled':'')
+        + ' onclick="asTab(\''+t[0]+'\')">'+t[1]+'</button>';
+    });
+    if(AS.cmp==='before'){
+      h += '<button class="t2 gone" title="本次将删除">存储配置</button>';
+    }
+    return h + '</div>';
+  }
+  function asField(label,inner,errText){
+    return '<div class="st-field"><label class="st-label">'+label+'</label>'+inner
+      + (errText ? '<div class="st-err-text '+(AS.state==='invalid'?'show':'')+'">'+errText+'</div>' : '')
+      + '</div>';
+  }
+  function asBodyHtml(){
+    if(AS.state==='noperm'){
+      return '<div class="st-exception"><div class="ic">'+ICON_LOCK+'</div>'
+        + '<div class="t">无权访问系统设置</div>'
+        + '<div class="d">当前账号缺少 <span style="font-family:var(--ws-font-mono)">settings:view</span> 权限，'
+        + '无法查看或修改平台配置。<br>如需访问，请联系超管在「角色权限」中授予。</div>'
+        + '<button class="st-btn primary" onclick="toast(\'[原型] 返回工作台\')">返回工作台</button></div>';
+    }
+    if(AS.state==='saving'){
+      return '<div class="st-card"><div class="st-skel"><i></i><i></i><i></i></div>'
+        + '<div style="font-size:12px;color:var(--ws-text-tertiary)">正在保存…（按钮 loading 期间禁止重复提交）</div></div>';
+    }
+    if(AS.tab==='features') return asFeatures();
+    if(AS.tab==='security') return asSecurity();
+    if(AS.tab==='notify')   return asNotify();
+    if(AS.tab==='storage')  return asStorageLegacy();
+    return asBasic();
+  }
+  function asBasic(){
+    return '<div class="st-card"><div class="ct"><span class="ic">'+ICON_APPSTORE+'</span>站点信息</div>'
+      + asField('站点名称','<input class="st-input'+(AS.state==='invalid'?' err':'')+'" value="'+AS.siteName+'" placeholder="科豆 AI">','站点名称不能为空')
+      + asField('站点描述','<input class="st-input" value="科豆 AI 少儿教育平台" placeholder="科豆 AI 少儿教育平台">')
+      + asField('联系邮箱','<input class="st-input" value="admin@kedouai.com" placeholder="admin@kedouai.com">')
+      + '<div class="st-actions"><button class="st-btn primary" onclick="asSave(\'basic\')">保存修改</button>'
+      + '<button class="st-btn" onclick="toast(\'[原型] 已恢复默认值（未保存）\')">恢复默认</button></div></div>';
+  }
+  function asFeatures(){
+    var items=[['微信扫码登录','允许用户通过微信公众号扫码登录',true],
+               ['账号密码登录','允许用户使用用户名和密码登录',true],
+               ['用户自助注册','允许新用户自行注册账号',false],
+               ['小程序端入口','开放微信小程序端访问入口',true],
+               ['评论功能','允许用户对内容进行评论',true]];
+    var h='<div class="st-card"><div class="ct"><span class="ic">'+ICON_SWITCH+'</span>功能模块</div><div class="st-switch-list">';
+    items.forEach(function(it,i){
+      h+='<div class="st-switch-item"><div class="st-switch-info"><span class="st-switch-label">'+it[0]+'</span>'
+        +'<span class="st-switch-desc">'+it[1]+'</span></div>'
+        +'<button class="st-sw '+(it[2]?'on':'')+'" id="sw'+i+'" onclick="asSwitch('+i+')" aria-label="'+it[0]+'"></button></div>';
+    });
+    h+='</div><div class="st-actions" style="margin-top:14px;"><button class="st-btn primary" onclick="asSave(\'features\')">保存修改</button></div></div>';
+    return h;
+  }
+  function asSecurity(){
+    return '<div class="st-card"><div class="ct"><span class="ic">'+ICON_SAFETY+'</span>密码与登录安全</div>'
+      + asField('密码最小长度','<div class="st-inline"><input class="st-num" value="8"><span class="st-unit">位</span>'
+        + '<span style="color:var(--ws-text-tertiary);font-size:12px">（范围 4~32）</span></div>')
+      + asField('密码复杂度要求','<div class="st-checks">'
+        + '<label class="st-check"><input type="checkbox" checked>须包含数字</label>'
+        + '<label class="st-check"><input type="checkbox" checked>须包含大写字母</label>'
+        + '<label class="st-check"><input type="checkbox">须包含特殊字符</label></div>')
+      + '<div class="st-divider"></div>'
+      + asField('登录失败锁定','<div class="st-inline">连续失败<input class="st-num" value="5"><span class="st-unit">次后锁定</span></div>')
+      + asField('锁定时间','<div class="st-inline"><input class="st-num" value="15"><span class="st-unit">分钟</span></div>')
+      + '<div class="st-divider"></div>'
+      + asField('登录有效期','<div class="st-inline"><input class="st-num" value="7"><span class="st-unit">天</span></div>')
+      + '<div class="st-actions"><button class="st-btn primary" onclick="asSave(\'security\')">保存修改</button></div></div>';
+  }
+  function asNotify(){
+    return '<div class="st-card"><div class="ct"><span class="ic">'+ICON_MAIL+'</span>邮件通知 (SMTP)</div>'
+      + asField('SMTP 服务器','<input class="st-input mono" id="smtpHost" value="smtp.qq.com" placeholder="smtp.qq.com">')
+      + '<div class="st-row2">'
+      +   asField('端口','<input class="st-num" style="width:100%" value="465">')
+      +   asField('加密方式','<input class="st-input" value="SSL">')
+      + '</div>'
+      + asField('发件人邮箱','<input class="st-input" value="admin@kedouai.com" placeholder="admin@kedouai.com">')
+      + asField('授权码','<input class="st-input mono" type="password" value="password-placeholder" placeholder="SMTP 授权码">')
+      + '<div class="st-actions"><button class="st-btn" '+(AS.saving==='mail'?'disabled':'')+' onclick="asTestMail()">'
+      +   (AS.saving==='mail'?'发送中…':'发送测试邮件')+'</button>'
+      + '<button class="st-btn primary" onclick="asSave(\'notify\')">保存修改</button></div></div>';
+  }
+  /* 「移除前」对照视图：展示即将删除的 tab 内容（只读对照，不参与落地） */
+  function asStorageLegacy(){
+    return '<div class="st-note warn"><span>本次将<strong>删除</strong>下面这一整块（仅「移除前」对照可见）：'
+      + '它写的配置键在后端<b>零引用</b>、配置表<b>零值</b>，属未接线的空壳。</span></div>'
+      + '<div class="st-card" style="opacity:.72"><div class="ct"><span class="ic">'+ICON_CLOUD+'</span>文件存储'
+      + '<span class="st-badge warn">本次删除</span></div>'
+      + asField('存储方式','<div class="st-checks"><label class="st-check"><input type="radio" name="stype" checked>本地存储</label>'
+        + '<label class="st-check"><input type="radio" name="stype">对象存储（OSS）</label></div>')
+      + asField('上传大小限制','<div class="st-inline"><input class="st-num" value="10"><span class="st-unit">MB</span></div>')
+      + '<div style="font-size:12px;color:var(--ws-text-secondary)">（对象存储分支另有 Bucket / Region / AccessKey / SecretKey 字段）</div>'
+      + '</div>';
+  }
+  function asRender(){
+    asSegs();
+    document.getElementById('stSubtitle').textContent = AS.cmp==='before'
+      ? '管理平台全局配置，包括站点信息、安全策略、通知与存储'
+      : '管理平台全局配置，包括站点信息、安全策略与通知';
+    var h = asTabsHtml();
+    if(AS.cmp==='before'){
+      h += '<div class="st-note info"><span>[原型] 当前是<b>移除前</b>对照：多一个「存储配置」tab。切到「移除后」即为本次落地目标。</span></div>';
+    } else {
+      h += '<div class="st-note info"><span>[原型] 本次变更：移除「存储配置」tab（未接线空壳）；'
+        + '上传根目录统一由 <b>deploy-console → 系统设置 → 存储配置</b> 管理。</span></div>';
+    }
+    h += asBodyHtml();
+    document.getElementById('stBody').innerHTML = h;
+  }
+  asRender();
+</script>
+</body>
+</html>

@@ -100,4 +100,10 @@ GET  /internal/storage/path（×2：system-service 权威值 / upload-service �
 **验证要点**：admin「系统设置」不再出现存储 tab；其余 tab（基本信息/安全/通知）保存后配置表键不变；
 `storage.upload_dir` 只在 deploy-console 页面可改。
 
+**原型稿**（2026-09-22 补，UI 门要求）：`docs/ui/prototypes/admin-settings.html`
+- 单文件桌面 Web 壳（admin 亮色），含「[原型] 变更对照：移除前 / 移除后」切换 —— 移除前多一个
+  「存储配置」tab（划线标注「本次删除」）并展示其内容作为对照；移除后即本次落地目标。
+- 页头副标题：**`管理平台全局配置，包括站点信息、安全策略与通知`**（去掉原句末的「与存储」）。
+- 质检与实跑证据见 `docs/ui/prototypes/deploy-console-settings-storage-质检记录.md` §附。
+
 
