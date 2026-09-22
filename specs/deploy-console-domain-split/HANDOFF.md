@@ -3,6 +3,10 @@
 > 分支：`feat/deploy-console-domain-split`（基于 master）
 > 建立：2026-09-19 ｜ 前置阅读：`design.md`（模型与接口）→ `tech-design.md`（分期与技术取舍）→ `progress.md`（已完成证据）
 > 本文只回答三件事：**现在到哪了 / 接下来按什么顺序做 / 怎么验证与回退**。
+>
+> ⚠️ **快照文档（2026-09-19 建立，2026-09-21 复核）**：文中部分机制此后已变更或移除
+> （如 `POST /api/services/:key/deploy` 部署动作、`PIPELINE_APP_ENV_DIR` 投递激活开关）——
+> **最新状态以 `progress.md` 与代码为准**，本文仅作交接背景。
 
 ---
 
@@ -36,7 +40,7 @@
 | 转发规则（前缀级）+ 接口清单（UPSERT 只补空字段） | V8 |
 | 服务×环境指向 + 手动探活（未配主机 fail-fast） | `src/envs/` 的 `service-routes` |
 | DB 驱动转发 + 未登记接口策略 | V9/V10。`servers/gateway/src/dynamic-route/`（单测 18） |
-| **部署动作（重启 + 探活，与构建发布分离）** | `POST /api/services/:key/deploy`；`ServicesService.deploy()` |
+| **部署动作（重启 + 探活，与构建发布分离）** | ~~`POST /api/services/:key/deploy`；`ServicesService.deploy()`~~ → **2026-09-21 已移除**（部署并入流水线 restart/verify；服务详情无独立部署动作） |
 
 ### 1.3 gateway 运行时 / 迁移
 
@@ -55,7 +59,7 @@
 
 | 开关 | 默认 | release 当前值 | 含义 |
 |---|---|---|---|
-| `PIPELINE_APP_ENV_DIR` | **关** | 未设置 | 开=流水线投递后追加「写 envId 目录 + 改指针」。**未开 → 产物仍写旧布局 `<key>/<version>/`** |
+| `PIPELINE_APP_ENV_DIR` | ~~**关**~~ | ~~未设置~~ | **⛔ 2026-09-20 已移除**（原语、开关、接口全部删除）；现按环境区分流水线脚本（本机 cp / 远程 scp）投递 |
 | `GATEWAY_DB_ROUTES` | **关** | 未设置 | 开=`deploy_service_routes` 参与转发。未开=网关走硬编码路由（双轨零破坏，符合预期） |
 | `DEPLOY_LEGACY_READ` | 关（=走新表） | 未设置 | 开=manifest 只从旧表读（回退通道）。**默认关闭即"走新表"，是想要的状态** |
 

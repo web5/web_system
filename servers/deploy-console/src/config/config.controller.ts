@@ -7,13 +7,18 @@ import {
   Body,
   Query,
   Param,
+  Req,
+  Res,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { ConfigService, UpsertConfigDto } from './config.service';
+import type { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { ConfigService, UpsertConfigDto, renderGeneratedEnvFile } from './config.service';
 import { SECRET_UNRECORDED } from './config-crypto';
 import { ConfigScope } from '../entities/config-item.entity';
 import { CurrentUser } from '../common/decorators';
+import { assertInternalKey } from '../common/internal-key';
+import { Public } from '../auth/public.decorator';
 import { AuditService } from '../audit/audit.service';
 
 /**
@@ -39,6 +44,49 @@ export class ConfigController {
     @Query('moduleKey') moduleKey?: string,
   ) {
     return this.configService.list(scope, envId, moduleKey);
+  }
+
+  /**
+   * 内部：返回**可下发的 env 文本**，供流水线 `restart` 动作脚本落盘 `.env.generated`。
+   *
+   * 为什么脚本自己去取（而不是平台代写）：restart 动作是 **DB 脚本**，跑在发布机本地；
+   * 只有控制台持有 `CONFIG_MASTER_KEY` 与配置中心连接，故脚本 `curl` 本机控制台即可
+   * （`CONSOLE_API` / `CONSOLE_TOKEN` 由引擎注入）—— 参见
+   * `specs/service-config-delivery/design.md` §4.3 第 2 条 / §7 P1。
+   *
+   * 语义与 `DeployService.writeGeneratedEnv` 一致（按需 / 过滤保留键 / 带来源作用域注释）：
+   * - `200` text/plain：有可下发的键（内容即为 `.env.generated` 正文）
+   * - `204`：该「环境 × 服务」没有 `module` 级条目，或没有可下发的键 → 脚本保留现状
+   * - `401`：`x-internal-key` 不正确 / 服务未配置 `INTERNAL_API_KEY`
+   */
+  @Public()
+  @ApiHeader({ name: 'x-internal-key', description: '内部服务密钥（脚本侧 CONSOLE_TOKEN）' })
+  @Get('internal/dispatch/:serviceKey')
+  @ApiOperation({ summary: '内部：配置下发内容（纯文本 env，x-internal-key 鉴权）' })
+  async dispatch(
+    @Param('serviceKey') serviceKey: string,
+    @Query('envId') envId: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    assertInternalKey(req);
+    const env = String(envId || '').trim();
+    const key = String(serviceKey || '').trim();
+    if (!env) throw new BadRequestException('envId 必填');
+    if (!key) throw new BadRequestException('serviceKey 必填');
+
+    // 按需：没有 module 级条目 = 该服务没在配置中心声明需要配置 → 不下发（免得凭空落盘）
+    if (!(await this.configService.hasModuleScope(env, key))) {
+      return res.status(204).end();
+    }
+    const items = await this.configService.dispatchPayload(env, key);
+    if (!items.length) {
+      return res.status(204).end();
+    }
+    return res
+      .status(200)
+      .type('text/plain; charset=utf-8')
+      .send(renderGeneratedEnvFile(items, { envId: env, serviceKey: key }));
   }
 
   @Put('items')
