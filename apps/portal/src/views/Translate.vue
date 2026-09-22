@@ -125,6 +125,7 @@
 import { onBeforeUnmount, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { runAgentStream } from '@/api/agent';
+import { collectGlossary } from '@/api/glossary';
 import { requestTts, splitChunks, playTtsBlob, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
@@ -230,8 +231,21 @@ async function speak() {
   }
 }
 
-function fav() {
-  message.success('已收进生词本');
+async function fav() {
+  const main = (sections.value['推荐译文'] || '').trim();
+  if (!main) return;
+  try {
+    await collectGlossary({
+      sourceType: 'translate',
+      sourceText: source.value || undefined,
+      enMain: main,
+      note: sections.value['语气要点'] || undefined,
+      meta: { tone: tone.value, direction: 'zh2en' },
+    });
+    message.success('已收进生词本');
+  } catch {
+    message.error('收藏失败，请重试');
+  }
 }
 
 function prefs() {
