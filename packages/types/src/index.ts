@@ -170,6 +170,18 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   'system:dict:view':   { code: 'system:dict:view',   name: '查看字典维表', group: 'settings', type: 'menu' },
   'system:dict:manage': { code: 'system:dict:manage', name: '维护字典维表', group: 'settings' },
   /**
+   * 浏览服务器存储目录（system-service `GET /admin/settings/storage/browse`）。
+   *
+   * 为什么与 `database:query` 同档（仅 super_admin）：列目录本质是把**服务器文件系统结构**
+   * 暴露给登录用户，属于比「改设置」更高的信息权限。admin 侧不授予，需要时显式加白名单。
+   * 见 `specs/backend-consolidation/design.md` §1.5。
+   */
+  'storage:browse': {
+    code: 'storage:browse',
+    name: '浏览服务器存储目录',
+    group: 'settings',
+  },
+  /**
    * 发布审批（deploy-console 流水线 approval 节点）。
    *
    * 为什么要有独立权限码：审批是"放行一次生产变更"的动作，不能谁都能批。
@@ -188,8 +200,11 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   // 超管：全部权限（唯一持有 database:query —— 可执行只读 SQL、看敏感表与明文）
   super_admin: Object.keys(PERMISSIONS),
-  // admin：可浏览业务数据，但不可执行任意 SQL
-  admin: Object.keys(PERMISSIONS).filter((p) => p !== 'database:query'),
+  // admin：可浏览业务数据，但不可执行任意 SQL；也不可浏览服务器目录结构
+  // （storage:browse 与 database:query 同档：都是「看见本不该看见的机器内部信息」）
+  admin: Object.keys(PERMISSIONS).filter(
+    (p) => p !== 'database:query' && p !== 'storage:browse',
+  ),
   editor: [
     'dashboard:view', 'users:view', 'settings:view', 'logs:view',
     'bianbian:view', 'bianbian:manage',

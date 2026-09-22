@@ -2,7 +2,7 @@
  * 联网搜索工具（通用互联网搜索，插件式 Provider）。
  * 默认依赖 SearchProviderRegistry 中已注册且已配 key 的 provider（默认 Bing）。
  */
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../interfaces/tool.interface';
+import { type ToolDefinition, type ToolContext, type ToolResult, type ToolSchema, type ToolParameter } from '../interfaces/tool.interface';
 import { SearchProviderRegistry } from './registry';
 
 export class WebSearchTool implements ToolDefinition {

@@ -211,7 +211,6 @@ export function plainLength(blocks: AnswerBlock[]): number {
     .join('')
     .length;
 }
-
 /**
  * 翻译四段契约解析（翻译工作台用）：把 agent 输出按
  * 【推荐译文】/【直译对照】/【委婉版】/【语气要点】切分为独立字段。

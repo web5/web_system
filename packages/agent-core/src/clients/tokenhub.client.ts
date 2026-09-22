@@ -11,13 +11,13 @@
  */
 import {
   BaseAiClient,
-  ChatMessage,
-  ChatOptions,
-  StreamChunk,
-  ToolCallSchema,
-  ToolCall,
-  ChatWithToolsResult,
-  StreamToolEvent,
+  type ChatMessage,
+  type ChatOptions,
+  type StreamChunk,
+  type ToolCallSchema,
+  type ToolCall,
+  type ChatWithToolsResult,
+  type StreamToolEvent,
   parseJsonToolCall,
 } from './base-ai.client';
 import { Logger } from '../lib/logger';

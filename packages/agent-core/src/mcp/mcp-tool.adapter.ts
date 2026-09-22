@@ -8,12 +8,12 @@
  * 实际的 MCP 调用由注入的 executor 回调完成（由 ai-agent 等服务层实现 HTTP/MCP 通信）。
  */
 import {
-  ToolDefinition,
-  ToolContext,
-  ToolResult,
-  ToolSchema,
-  ToolParameter,
-  ToolParamType,
+  type ToolDefinition,
+  type ToolContext,
+  type ToolResult,
+  type ToolSchema,
+  type ToolParameter,
+  type ToolParamType,
 } from '../interfaces/tool.interface';
 
 /** MCP 工具参数的字段定义（与 MCP inputSchema JSON-Schema 对齐） */

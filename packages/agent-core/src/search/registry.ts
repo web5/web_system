@@ -1,7 +1,7 @@
 /**
  * 搜索 Provider 注册中心：注册 / 优先级 / 选择。
  */
-import { SearchProvider } from './provider.interface';
+import { type SearchProvider } from './provider.interface';
 import { Logger } from '../lib/logger';
 
 export class SearchProviderRegistry {

@@ -5,6 +5,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
+      // ⚠️ 这里别名到 agent-core 的**源码**（省掉先构建它），代价是它会被本项目的
+      // compilerOptions 检查 —— @vue/tsconfig 开了 verbatimModuleSyntax，所以
+      // agent-core 里只能用 type-only 导入（`import { type X }`），否则 admin 的
+      // vue-tsc / build 会报 TS1484。历史上正是这里漏了，导致 admin 基线 94 处报错
+      // （2026-09-22 修复）。只指向它的 const/interface 时务必带 type 前缀。
       "@kedouai/agent-core": ["../../packages/agent-core/src/index.ts"],
       "@web-system/ui/components/*": ["../../packages/ui/src/components/*"]
     },
