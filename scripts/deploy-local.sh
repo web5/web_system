@@ -39,6 +39,7 @@ web-user:6002:user-service:@web-system/user-service
 web-ai:6003:ai-service:@web-system/ai-service
 web-ai-agent:6010:ai-agent:@web-system/ai-agent
 web-system:6004:system-service:@web-system/system-service
+web-upload:6008:upload-service:@web-system/upload-service
 web-mcp-gateway:6006:mcp-gateway:@web-system/mcp-gateway
 web-content-hub:6007:content-hub:@web-system/content-hub
 web-knowledge:6011:knowledge-service:@web-system/knowledge-service
