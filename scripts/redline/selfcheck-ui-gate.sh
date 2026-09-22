@@ -131,6 +131,15 @@ if [ -f "$BIN/scan-design-drift.py" ]; then
   esac
 else bad "V23 锚点扫描器可用" "scan-design-drift.py 不存在"; fi
 
+# V24 kit 同源守门接线（通用骨架 + R12 + 保护清单 + 已挂主流程）
+miss=""
+grep -q 'check_sync_pair' "$BIN/scan-rules.sh" || miss="$miss check_sync_pair"
+grep -q 'check_r12' "$BIN/scan-rules.sh" || miss="$miss check_r12"
+grep -q 'project-context.md' "$BIN/scan-rules.sh" || miss="$miss 保护清单"
+grep -q 'check_r12  ' "$BIN/scan-rules.sh" || grep -q 'check_r12$' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+if [ -z "$miss" ]; then ok "V24 kit 同源守门接线完整（含保护清单）"
+else bad "V24 kit 同源守门接线完整（含保护清单）" "缺：${miss# }"; fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"
