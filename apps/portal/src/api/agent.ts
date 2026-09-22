@@ -25,6 +25,24 @@ export interface AgentIntent {
   previousAgentId?: string;
 }
 
+/**
+ * 结构化卡片载荷（一期：音乐推荐卡 kind=music）。
+ * 与小程序 `services/agent-stream.ts` 的 card 载荷、后端 `present-music-card` 工具输出对齐。
+ */
+export interface MusicCardPayload {
+  kind: string;
+  provider?: {
+    code: string;
+    name: string;
+    appId?: string | null;
+    entryType: string;
+    path?: string | null;
+    ready: boolean;
+  };
+  songs?: Array<{ title: string; artist?: string; reason?: string }>;
+  keyword?: string;
+}
+
 /** SSE 事件（类型集合与 agent-core StreamEvent 对齐，新增类型向前兼容） */
 export interface AgentStreamEvent {
   type:
@@ -44,6 +62,7 @@ export interface AgentStreamEvent {
   name?: string;
   conversationId?: string;
   intent?: AgentIntent;
+  card?: MusicCardPayload;
   requestId?: string;
 }
 
