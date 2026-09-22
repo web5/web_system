@@ -2,7 +2,7 @@
  * Bing Web Search Provider（默认内置）。
  * 需用户配置 BING_SEARCH_API_KEY（Azure Bing Search 或 微软新 Bing Search API）。
  */
-import { SearchProvider, SearchResult } from '../provider.interface';
+import { type SearchProvider, type SearchResult } from '../provider.interface';
 
 const BING_ENDPOINT = 'https://api.bing.microsoft.com/v7.0/search';
 

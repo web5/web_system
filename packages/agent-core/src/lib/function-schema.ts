@@ -5,7 +5,7 @@
  * 发给模型的 function schema，避免各工具手工复制 properties 造成的漂移，
  * 并让 enum/嵌套信息真正到达模型（约束取值、降低自由发挥）。
  */
-import { JsonSchemaProperty, ToolParameter, ToolSchema } from '../interfaces/tool.interface';
+import { type JsonSchemaProperty, type ToolParameter, type ToolSchema } from '../interfaces/tool.interface';
 
 /** 递归把一个 ToolParameter 转成 JSON-Schema 属性 */
 function toProperty(param: ToolParameter): JsonSchemaProperty {
