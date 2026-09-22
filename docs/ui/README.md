@@ -9,6 +9,7 @@
 | 档 | 文档 | 职责 | 何时读 |
 |---|---|---|---|
 | ★ 必读（总纲） | `design.md` | 判断层：页面类型模板 / 布局铁律 / 交互矩阵 / 视觉约束 / 生成后自检 | 任何 UI 任务 |
+| ★ 必读（判据源） | `design-system.md` | **跨端设计基线**：评审与出稿共用的判据条目（层级 / 密度 / 间距 / 色彩语义 / 文案 / 状态矩阵 / 端差异 / 反模式） | 设计评审、UI 出稿、验收判断 |
 | 必读（生成前） | `page-spec-template.md` | 页面规格书模板（Full / Quick） | 新页面 / 大改 / 小改，写码前填 |
 | 必读（原型生成） | `prototype-scaffold.html` | 原型稿基础骨架：移动端 `.phone` + 桌面端 `.desktop` 双形态、`:root` Token、交互模式库（go/modal/toast/toggle…） | 生成可点击交互稿时复制骨架 |
 | 按需 | `color-reference.md` | 颜色定义点地图（8 类位置 + hover 阶梯 + 例外登记） | 改色 / 加色 / hover |
@@ -33,6 +34,8 @@
 | 加新 Token / 改数值 | `packages/ui/src/tokens.ts`（代码事实源）→ 同步 `tokens.css`；裁决查 `archive/geist-token-需求文档.md` §9 DR |
 | 评审规则溯源 | `geist-token-评审记录.md`（R1/R2/R3…） |
 | 完成一个 UI 任务后 | `design.md` §5 自检 + 修正记录追加到 `geist-token-评审记录.md` |
+| **设计评审（交人确认前，D2）** | `design-system.md`（判据条目）+ `.codebuddy/skills/design-reviewer/`（清单 + 报告模板）→ 报告落 `reviews/*.md` |
+| **落码后一致性评审（D3）** | `design-system.md` §3.2（锚点 `data-dr`）+ `baselines/`（截图并置）+ `anchor-backlog.md`（存量回填，P1） |
 
 ## 3. 事实源与防漂移同步责任
 
@@ -42,6 +45,7 @@
 | `design.md`（判断条目） | `.codebuddy/rules/ui-interface/RULE.mdc` | RULE 精要是 design 摘要；**改 design 必同步 RULE** |
 | `color-reference.md` §4 例外表 | `css-override-rules.md` §7 现状登记 | 例外以 color-reference §4 为准；登记仅快照 |
 | `geist-token-评审记录.md`（回流） | `design.md`（升格规则） | 同一问题第 2 次出现 → 升格入 design，评审记录只追加 |
+| `design-system.md`（判据条目） | 两条端 rules 的「最小禁项」+ `design.md` | 判据变更必同步端规则精要；端规则是摘要，**不另立判据**；数值一律不进 design-system |
 | `docs/ui/`（全部） | **禁止向外复制数值/细则** | 业务代码只引 `--ws-*` / `uiTokens`；新色先入 tokens 再引用 |
 
 ## 4. 文档读取架构决策
