@@ -8,7 +8,7 @@
 
 | 文件 | 覆盖范围 | 说明 |
 |---|---|---|
-| `deploy-console-domain-split.html` | deploy-console 控制台（微前端域 / API 网关域）+ 产品页环境切换 | 双域重构主原型。2026-09-21 对齐落地：API 网关域只有「服务管理」、服务详情 4 Tab（接口/概览/网关路由/环境与发布）、行内「构建发布」原地开抽屉且环境锁定禁用 |
+| `deploy-console-domain-split.html` | deploy-console 控制台（微前端域 / API 网关域）+ 产品页环境切换 + **系统设置 / 存储配置（A6）** | 双域重构主原型。2026-09-21 对齐落地：API 网关域只有「服务管理」、服务详情 4 Tab（接口/概览/网关路由/环境与发布）、行内「构建发布」原地开抽屉且环境锁定禁用。**2026-09-22 增量（A6）**：「系统设置」从占位 generic 屏升级为真实屏（通知与审批按 `SystemSettings.vue` 还原 + 新增「存储配置」区块：双值展示 / 目录树与手填 / 校验前置 / 待重启提示）；新增样式改引 `--ws-*` token（对齐 `packages/ui/src/tokens.ts` roles.dark） |
 | `pipeline-env-branch-canvas.html` | 流水线编辑 · 步骤/任务画布 | 对应 `OrchestrationEditor.vue`（步骤 → 任务 → 动作模型）。2026-09-21 补入动作行并修复删除按钮遮挡 |
 | `deploy-console-version-deploy.html` | 版本部署（微前端域 `/deploys/micro`） | 对应 `VersionDeploy.vue` + `VersionDeployDrawer.vue` |
 
@@ -25,6 +25,7 @@
 
 - `release-platform-v13-质检记录.md`
 - `deploy-console-version-deploy-质检记录.md`
+- `deploy-console-settings-storage-质检记录.md`（2026-09-22，A6 系统设置 / 存储配置；含设计决策、逐条质检结论、浏览器实跑证据）
 
 ## 四、维护约定
 

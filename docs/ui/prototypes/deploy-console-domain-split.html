@@ -796,6 +796,59 @@
         </div>
       </div>
 
+      <!-- =========================================================
+           A6 存储配置（2026-09-22）：系统设置从占位 generic 屏升级为真实屏
+           · 现有字段与落地一致（apps/deploy-console/src/views/SystemSettings.vue：Webhook / 需审批环境）
+           · 新增「存储配置」区块（specs/backend-consolidation/design.md §1.2 / §1.4 / §1.5）
+           · 右上「[原型] 状态演示」用于走查状态矩阵，非产品功能
+           ========================================================= -->
+      <div class="screen" id="dc-settings">
+        <div class="st-page-head">
+          <div class="dc-row">
+            <div>
+              <h1>系统设置</h1>
+              <div class="st-sub">控制台基础参数与平台存储配置；上传根目录改动后需重启 upload-service 生效</div>
+            </div>
+            <div class="dc-spacer"></div>
+            <div class="st-demobar">
+              <span class="st-demobar-label">[原型] 状态演示</span>
+              <div class="st-seg" id="stStateSeg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="st-card">
+          <div class="st-ct">通知与审批 <span class="st-hint">现有字段，落点 SystemSettings.vue</span></div>
+          <div class="st-field" style="margin-top:12px;">
+            <label class="st-label">通用 Webhook URL</label>
+            <input class="st-input mono" value="https://hook.example.com/ws/deploy">
+            <div class="st-help">发布成功/失败事件推送地址；留空表示不推送。</div>
+          </div>
+          <div class="st-field">
+            <label class="st-label">企业微信机器人 Webhook URL</label>
+            <input class="st-input mono" value="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=693a91f6-7xxx">
+          </div>
+          <div class="st-field">
+            <label class="st-label">需要审批的环境</label>
+            <input class="st-input" value="prod">
+            <div class="st-help">逗号分隔；默认仅 prod 需要人工审批。</div>
+          </div>
+          <div class="dc-row">
+            <div class="dc-spacer"></div>
+            <button class="st-btn" onclick="toast('[原型] 通知与审批设置已保存')">保存</button>
+          </div>
+        </div>
+
+        <div class="st-card">
+          <div class="dc-row">
+            <div class="st-ct">存储配置 <span class="st-hint">上传根目录 · 配置项 storage.upload_dir</span></div>
+            <div class="dc-spacer"></div>
+            <span id="stStatusBadge"></span>
+          </div>
+          <div id="stBody" style="margin-top:12px;"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1294,6 +1347,89 @@ body{background:#e8ecf1;}
   .vd-envbar select{border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;
     color:var(--text);background:var(--card);outline:none;min-width:150px;cursor:pointer;}
   .vd-envbar select:focus{border-color:var(--primary);}
+
+  /* =========================================================
+     A6 存储配置（2026-09-22）：新增样式一律引 token
+     —— token 名与值对齐 packages/ui/src/tokens.ts 的 roles.dark
+        （本文件上半部分是旧稿遗留的裸 hex，按需分批迁移，不在本次全量重写）
+     ========================================================= */
+  :root{
+    --ws-bg-page:#0A0A0A; --ws-bg-surface:#1A1A1A; --ws-bg-elevated:#242424;
+    --ws-bg-subtle:#111111; --ws-bg-hover:#2A2A2A; --ws-bg-active:#333333;
+    --ws-text-primary:#EDEDED; --ws-text-secondary:#A3A3A3; --ws-text-tertiary:#737373; --ws-text-disabled:#525252;
+    --ws-border:#2A2A2A; --ws-border-subtle:#333333;
+    --ws-input-bg:#1A1A1A; --ws-input-border:#2A2A2A; --ws-input-placeholder:#737373;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#33220F;
+    --ws-ok:#4CAA5E; --ws-ok-soft:#16301C;
+    --ws-warn:#F5A623; --ws-warn-soft:#332A14;
+    --ws-danger:#F2555A; --ws-danger-soft:#3A1F21;
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.35);
+    --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  .st-page-head h1{font-size:19px;font-weight:600;color:var(--ws-text-primary);}
+  .st-sub{font-size:12px;color:var(--ws-text-tertiary);margin-top:4px;line-height:1.7;}
+  .st-card{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    box-shadow:var(--ws-shadow-card);padding:16px;margin-bottom:16px;}
+  .st-ct{font-size:13px;font-weight:600;color:var(--ws-text-primary);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .st-hint{font-size:12px;font-weight:400;color:var(--ws-text-tertiary);}
+  .st-field{margin-bottom:12px;}
+  .st-label{display:block;font-size:12px;color:var(--ws-text-secondary);margin-bottom:6px;}
+  .st-input{width:100%;border:1px solid var(--ws-input-border);border-radius:var(--ws-radius-md);
+    background:var(--ws-input-bg);color:var(--ws-text-primary);font-size:13px;padding:7px 10px;outline:none;}
+  .st-input:focus{border-color:var(--ws-brand-500);}
+  .st-input::placeholder{color:var(--ws-input-placeholder);}
+  .st-input.mono{font-family:var(--ws-font-mono);font-size:12px;}
+  .st-help{font-size:12px;color:var(--ws-text-tertiary);margin-top:6px;line-height:1.7;}
+  .st-btn{background:var(--ws-bg-hover);color:var(--ws-text-primary);border:1px solid var(--ws-border-subtle);
+    border-radius:var(--ws-radius-md);padding:5px 12px;font-size:12px;cursor:pointer;}
+  .st-btn:hover{background:var(--ws-bg-active);}
+  .st-btn.primary{background:var(--ws-brand-500);border-color:var(--ws-brand-500);color:var(--ws-bg-page);font-weight:600;}
+  .st-btn.primary:hover{background:var(--ws-brand-600);}
+  .st-btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .st-btn.link{background:none;border:none;color:var(--ws-brand-400);padding:5px 6px;}
+  .st-badge{font-size:11px;padding:2px 8px;border-radius:9999px;font-weight:600;white-space:nowrap;}
+  .st-badge.ok{background:var(--ws-ok-soft);color:var(--ws-ok);}
+  .st-badge.warn{background:var(--ws-warn-soft);color:var(--ws-warn);}
+  .st-badge.err{background:var(--ws-danger-soft);color:var(--ws-danger);}
+  .st-badge.neutral{background:var(--ws-bg-hover);color:var(--ws-text-secondary);}
+  .st-seg{display:inline-flex;border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-lg);overflow:hidden;}
+  .st-seg button{background:var(--ws-bg-subtle);border:none;color:var(--ws-text-secondary);font-size:12px;
+    padding:5px 10px;cursor:pointer;white-space:nowrap;}
+  .st-seg button.on{background:var(--ws-brand-soft);color:var(--ws-brand-400);font-weight:600;}
+  .st-seg button[disabled]{opacity:.45;cursor:not-allowed;}
+  .st-kv{display:grid;grid-template-columns:96px 1fr;gap:8px 14px;font-size:13px;align-items:center;}
+  .st-kv dt{color:var(--ws-text-tertiary);font-size:12px;}
+  .st-kv dd{color:var(--ws-text-primary);word-break:break-all;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .st-mono{font-family:var(--ws-font-mono);font-size:12px;}
+  .st-path{background:var(--ws-bg-subtle);border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);
+    padding:7px 10px;font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-primary);word-break:break-all;}
+  .st-alert{display:flex;gap:8px;align-items:flex-start;border-radius:var(--ws-radius-md);padding:9px 12px;
+    font-size:12px;line-height:1.7;margin-bottom:12px;}
+  .st-alert.warn{background:var(--ws-warn-soft);color:var(--ws-warn);}
+  .st-alert.err{background:var(--ws-danger-soft);color:var(--ws-danger);}
+  .st-alert.info{background:var(--ws-brand-soft);color:var(--ws-brand-400);}
+  .st-alert.ok{background:var(--ws-ok-soft);color:var(--ws-ok);}
+  .st-tree{border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);overflow:hidden;margin-top:8px;}
+  .st-tree-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--ws-bg-subtle);
+    border-bottom:1px solid var(--ws-border);font-size:12px;color:var(--ws-text-secondary);flex-wrap:wrap;}
+  .st-crumb{font-family:var(--ws-font-mono);color:var(--ws-text-primary);}
+  .st-tree-body{max-height:200px;overflow:auto;}
+  .st-tree-row{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:13px;color:var(--ws-text-primary);
+    cursor:pointer;border-bottom:1px solid var(--ws-border-subtle);}
+  .st-tree-row:last-child{border-bottom:none;}
+  .st-tree-row:hover{background:var(--ws-bg-hover);}
+  .st-tree-row .ic{width:14px;height:14px;color:var(--ws-text-tertiary);flex-shrink:0;}
+  .st-tree-row .ic svg{width:100%;height:100%;}
+  .st-tree-row .go{margin-left:auto;font-size:12px;color:var(--ws-brand-400);}
+  .st-empty{padding:18px 12px;text-align:center;color:var(--ws-text-tertiary);font-size:12px;line-height:1.8;}
+  .st-skel{padding:10px;}
+  .st-skel i{display:block;height:9px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-hover);margin-bottom:8px;}
+  .st-skel i:nth-child(2){width:72%;} .st-skel i:nth-child(3){width:54%;}
+  .st-check{border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);padding:10px 12px;margin-top:10px;}
+  .st-check .t{font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .st-demobar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .st-demobar-label{font-size:11px;color:var(--ws-text-tertiary);}
 </style>
 <div class="toast" id="toast"></div>
 
@@ -1302,7 +1438,8 @@ body{background:#e8ecf1;}
   var DC_TITLE = {"apps":"应用管理","envs":"环境管理","services":"服务管理","hosts":"主机管理",
                   "pipelines":"流水线列表","dashboard":"仪表盘","vdeploy":"版本部署","rundetail":"流水线详情"};
   var DC_NAV = {"apps":"nav-apps","envs":"nav-envs","services":"nav-services","hosts":"nav-hosts",
-                "pipelines":"nav-pipelines","dashboard":"nav-dashboard","vdeploy":"nav-vdeploy"};
+                "pipelines":"nav-pipelines","dashboard":"nav-dashboard","vdeploy":"nav-vdeploy",
+                "settings":"nav-settings"};
   /* 两级导航：一级（顶部）→ 二级（左侧，动态渲染） */
   var DC_MENU = [
     {key:'dashboard', label:'仪表盘',     items:[{page:'dashboard',label:'仪表盘',id:'nav-dashboard'}]},
@@ -1320,11 +1457,13 @@ body{background:#e8ecf1;}
                                                   {page:'generic',title:'审计日志',label:'审计日志'},
                                                   {page:'generic',title:'通知中心',label:'通知中心'},
                                                   {page:'generic',title:'配置中心',label:'配置中心'},
-                                                  {page:'generic',title:'系统设置',label:'系统设置'}]}
+                                                  // 2026-09-22：系统设置升级为真实屏（含存储配置区块，见 A6）
+                                                  {page:'settings',label:'系统设置',id:'nav-settings'}]}
   ];
   /* 页面 → 所属一级（顶部 tab 高亮） */
   var DC_PAGE_DOMAIN = {"dashboard":"dashboard","apps":"apps","envs":"apps","appdetail":"apps",
-                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","rundetail":"pl","hosts":"infra"};
+                        "services":"svcs","svcdetail":"svcs","pipelines":"pl","rundetail":"pl",
+                        "hosts":"infra","settings":"infra"};
   function dcFindDomain(key){ for(var i=0;i<DC_MENU.length;i++){ if(DC_MENU[i].key===key) return DC_MENU[i]; } return null; }
   /* 渲染左侧二级菜单（跟随顶部一级） */
   function renderSide(domain){
@@ -1374,11 +1513,7 @@ body{background:#e8ecf1;}
       rows:[['REPO_URL','global','git@github.com:web5/web_system.git','p13','编辑|历史'],
             ['NOTIFY_WEBHOOK','env:prod','https://hook.example/xxx','admin','编辑|历史'],
             ['PUBLISH_PATH','env:dev','/data/web_system/servers/gateway/public/static','ops','编辑|历史']]},
-    '系统设置':{sub:'控制台基础设置：登录 / 权限 / 备份',note:'修改后即时生效，敏感操作需二次验证。',
-      cols:['设置项','当前值','说明','操作'],
-      rows:[['会话有效期','8h','登录态过期时间','编辑'],
-            ['备份策略','每日 02:00','deploy 库全量备份','编辑'],
-            ['双因素验证','<span class="dc-badge neutral">关闭</span>','删除类操作二次验证','编辑|启用']]}
+    // '系统设置' 已从占位屏升级为真实屏（见 dc-settings 与下方 st* 原型脚本，A6）
   };
   function renderGeneric(title){
     var tpl = GENERIC_TPL[title];
@@ -1429,6 +1564,8 @@ body{background:#e8ecf1;}
     if(page === 'generic'){
       renderGeneric(title || '页面');
     }
+    // 系统设置（A6）：每次进入重绘存储配置卡（演示状态可能已被切换）
+    if(page === 'settings'){ stRender(); }
     // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
     if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
     if(page === 'rundetail'){ setTimeout(drawRunWires, 30); setTimeout(drawRunWires, 200); }
@@ -2020,6 +2157,213 @@ body{background:#e8ecf1;}
     document.getElementById('pane-task-2').style.display=n==='2'?'':'none';
     document.getElementById('pane-task-3').style.display=n==='3'?'':'none';}
   function closeDrawer(){document.getElementById('mask').classList.remove('show');document.getElementById('drawer').classList.remove('show');}
+
+  /* =========================================================
+     A6 存储配置（原型 · 2026-09-22）
+     数据为模拟；状态与文案对齐 specs/backend-consolidation/design.md §1.2 / §1.4 / §1.5
+     与真实接口：GET/PUT /api/admin/settings/storage、POST .../validate、GET .../browse
+     ========================================================= */
+  var ST_DEFAULT_DIR = '/Users/geekwen/web_system/uploads';
+  var ST = {
+    state:'normal',
+    effective:{path:'/Users/geekwen/web_system/uploads', source:'system_service', origin:'配置表 storage.upload_dir', startedAt:'2026-09-22 14:58'},
+    pending:ST_DEFAULT_DIR,      /* 待保存值（手动输入框的值） */
+    savedPending:null,           /* 已保存、但 upload-service 尚未重启的值 */
+    browseEnabled:true, isSuperAdmin:true, mode:'tree',
+    cwd:'/Users/geekwen',
+    check:null, loading:false, treeLoading:false, truncated:false
+  };
+  /* 原型专用：状态演示（非产品功能） */
+  var ST_STATE_LIST = [
+    ['normal','正常'],['dirty','已保存待重启'],['noperm','非超管'],['browseOff','浏览关闭'],
+    ['checkFail','校验失败'],['notfound','目录不存在'],['emptyDir','空目录'],['truncated','超量截断'],['loading','加载中']
+  ];
+  /* 模拟目录树（只含目录，文件不出现 —— 与「只列目录」约束一致） */
+  var ST_FS = {
+    '/Users/geekwen':[['web_system','dir'],['data','dir'],['Documents','dir'],['Downloads','dir'],['Library','dir'],['.ssh','dir']],
+    '/Users/geekwen/web_system':[['uploads','dir'],['uploads-archive','dir'],['releases','dir'],['uploads-old','link']],
+    '/Users/geekwen/web_system/uploads':[['avatars','dir'],['drawing','dir'],['bianbian','dir'],['general','dir']],
+    '/Users/geekwen/data':[['uploads','dir'],['backup','dir']],
+    '/Users/geekwen/data/uploads':[],
+    '/Users/geekwen/data/backup':[['2026-09-21','dir'],['2026-09-20','dir']]
+  };
+  var ST_ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  var ST_ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';
+
+  function stSetState(s){
+    ST.state = s; ST.check = null; ST.treeLoading = false; ST.truncated = (s === 'truncated');
+    ST.isSuperAdmin = (s !== 'noperm');
+    ST.browseEnabled = (s !== 'browseOff');
+    ST.mode = (ST.isSuperAdmin && ST.browseEnabled) ? 'tree' : 'manual';
+    ST.savedPending = null; ST.pending = ST_DEFAULT_DIR; ST.cwd = '/Users/geekwen';
+    if(s === 'dirty'){ ST.savedPending = '/Users/geekwen/data/uploads'; ST.pending = ST.savedPending; ST.mode = 'manual'; }
+    if(s === 'checkFail'){ ST.pending = '/Volumes/backup/uploads'; ST.mode = 'manual'; }
+    if(s === 'notfound'){ ST.pending = '/Users/geekwen/data/uploads-2026'; ST.mode = 'manual'; }
+    if(s === 'emptyDir'){ ST.cwd = '/Users/geekwen/data/uploads'; }
+    stRender();
+  }
+  function stRenderSeg(){
+    var seg = document.getElementById('stStateSeg'); if(!seg) return;
+    seg.innerHTML = ST_STATE_LIST.map(function(s){
+      return '<button class="'+(ST.state===s[0]?'on':'')+'" onclick="stSetState(\''+s[0]+'\')">'+s[1]+'</button>';
+    }).join('');
+  }
+  function stRender(){
+    stRenderSeg();
+    var badge = document.getElementById('stStatusBadge');
+    var body = document.getElementById('stBody');
+    if(!badge || !body) return;
+    var dirty = !!(ST.savedPending && ST.savedPending !== ST.effective.path);
+    badge.innerHTML = dirty
+      ? '<span class="st-badge warn">待重启生效</span>'
+      : '<span class="st-badge ok">已生效</span>';
+
+    if(ST.loading){
+      body.innerHTML = '<div class="st-skel"><i></i><i></i><i></i></div><div class="st-help">正在读取 / 校验…</div>';
+      return;
+    }
+
+    var h = '';
+    /* 双值：当前生效（upload-service 内存值） vs 待生效（权威配置值） */
+    h += '<dl class="st-kv">'
+      +  '<dt>当前生效目录</dt><dd><span class="st-path" style="flex:1;">'+ST.effective.path+'</span>'
+      +    '<span class="st-badge neutral">'+ST.effective.source+'</span></dd>'
+      +  '<dt>待生效目录</dt><dd><span class="st-path" style="flex:1;">'+(ST.savedPending||ST.pending)+'</span>'
+      +    (dirty?'<span class="st-badge warn">重启后生效</span>':'<span class="st-badge ok">与当前一致</span>')+'</dd>'
+      +  '<dt>权威来源</dt><dd class="st-help" style="margin:0;">'+ST.effective.origin
+      +    '（upload-service 启动于 '+ST.effective.startedAt+'）</dd>'
+      +  '</dl>';
+    if(dirty){
+      h += '<div class="st-alert warn" style="margin-top:12px;">已保存但尚未生效：upload-service 只在<strong>启动时</strong>读取该配置，'
+        +  '需重启后才切换目录（不做运行时热切换）。</div>';
+    }
+    if(!ST.isSuperAdmin){
+      h += '<div class="st-alert info" style="margin-top:12px;">目录树浏览需要 <span class="st-mono">super_admin</span>'
+        +  '（权限点 <span class="st-mono">storage:browse</span>）：当前账号不可浏览服务器目录，请用文本输入。</div>';
+    } else if(!ST.browseEnabled){
+      h += '<div class="st-alert info" style="margin-top:12px;">目录浏览已关闭（配置项 '
+        +  '<span class="st-mono">storage.browse_enabled=0</span>），请用文本输入。</div>';
+    }
+    h += '<div class="dc-row" style="margin-top:12px;gap:8px;">'
+      +  '<span class="st-label" style="margin:0;">选择方式</span>'
+      +  '<div class="st-seg">'
+      +    '<button class="'+(ST.mode==='tree'?'on':'')+'" '+((ST.isSuperAdmin&&ST.browseEnabled)?'':'disabled')
+      +      ' onclick="stMode(\'tree\')">目录树选择</button>'
+      +    '<button class="'+(ST.mode==='manual'?'on':'')+'" onclick="stMode(\'manual\')">手动输入</button>'
+      +  '</div>'
+      +  '<div class="dc-spacer"></div>'
+      +  '<button class="st-btn link" onclick="stUseDefault()">使用默认目录</button>'
+      +  '</div>';
+    h += (ST.mode === 'tree') ? stTreeHtml() : stManualHtml();
+    if(ST.check) h += stCheckHtml(ST.check);
+    h += '<div class="dc-row" style="margin-top:14px;">'
+      +  '<span class="st-help" style="margin:0;">'+(stCanSave()
+            ? '校验通过，可保存（保存后仍需重启 upload-service）'
+            : '保存前需先通过校验：路径越界 / 不可写会被拒绝，目录不存在会自动创建')
+      +  '</span>'
+      +  '<div class="dc-spacer"></div>'
+      +  '<button class="st-btn primary" '+(stCanSave()?'':'disabled')+' onclick="stSave()">保存</button>'
+      +  '</div>';
+    body.innerHTML = h;
+  }
+  function stTreeHtml(){
+    if(ST.treeLoading){
+      return '<div class="st-tree"><div class="st-tree-head">读取目录…</div><div class="st-skel"><i></i><i></i><i></i></div></div>';
+    }
+    var rows = ST_FS[ST.cwd] || [];
+    var html = '<div class="st-tree"><div class="st-tree-head">'
+      + '<span>浏览范围</span><span class="st-crumb">'+ST.cwd+'</span><div style="flex:1;"></div>'
+      + (ST.cwd !== '/Users/geekwen' ? '<button class="st-btn link" onclick="stBrowse(stParent())">上一级</button>' : '')
+      + '<button class="st-btn" onclick="stPick(\''+ST.cwd+'\')">使用此目录</button>'
+      + '</div><div class="st-tree-body">';
+    if(!rows.length){
+      html += '<div class="st-empty">该目录下没有子目录<br>可点右上「使用此目录」，或在手动输入里补子路径</div>';
+    } else {
+      rows.forEach(function(d){
+        html += '<div class="st-tree-row" onclick="stBrowse(\''+ST.cwd+'/'+d[0]+'\')">'
+          + '<span class="ic">'+(d[1]==='link'?ST_ICON_LINK:ST_ICON_FOLDER)+'</span>'
+          + '<span>'+d[0]+'</span>'
+          + (d[1]==='link' ? '<span class="st-badge neutral">符号链接</span>' : '')
+          + '<span class="go">进入</span></div>';
+      });
+    }
+    html += '</div>';
+    if(ST.truncated) html += '<div class="st-tree-head" style="border-top:1px solid var(--ws-border);border-bottom:none;">'
+      + '仅显示前 200 项（按名称排序），其余已截断</div>';
+    html += '<div class="st-tree-head" style="border-top:1px solid var(--ws-border);border-bottom:none;">'
+      + '只列出目录，不展示文件内容；解链后越界的符号链接会被跳过</div>';
+    return html + '</div>';
+  }
+  function stManualHtml(){
+    return '<div style="margin-top:12px;">'
+      + '<label class="st-label">上传根目录（绝对路径，支持 ~ 开头）</label>'
+      + '<div class="dc-row" style="gap:8px;">'
+      +   '<input id="stInput" class="st-input mono" value="'+ST.pending+'" placeholder="~/web_system/uploads">'
+      +   '<button class="st-btn" onclick="stValidate()">校验</button>'
+      + '</div>'
+      + '<div class="st-help">允许根：/Users/geekwen；指向数据盘等其它位置需在部署侧配白名单 '
+      +   '<span class="st-mono">STORAGE_ALLOWED_ROOTS</span>。</div>'
+      + '</div>';
+  }
+  function stCheckHtml(c){
+    return '<div class="st-check">'
+      + '<div class="t">校验结果 <span class="st-badge '+(c.ok?'ok':'err')+'">'+(c.ok?'通过':'未通过')+'</span>'
+      +   (c.code ? '<span class="st-mono">'+c.code+'</span>' : '') + '</div>'
+      + '<dl class="st-kv">'
+      +   (c.resolvedPath ? '<dt>解析结果</dt><dd><span class="st-mono">'+c.resolvedPath+'</span></dd>' : '')
+      +   '<dt>存在 / 可写</dt><dd>'+(c.exists?'存在':'不存在')+' · '+(c.writable?'可写':'不可写')+'</dd>'
+      +   (c.freeSpace ? '<dt>剩余空间</dt><dd>'+c.freeSpace+'</dd>' : '')
+      + '</dl>'
+      + '<div class="st-alert '+(c.ok?'ok':(c.code?'err':'warn'))+'" style="margin:10px 0 0;">'+c.message+'</div>'
+      + '</div>';
+  }
+  /* 「目录不存在」是允许保存的（PUT 会自动 mkdir -p）；越界 / 不可写 / 非目录一律禁止 */
+  function stCanSave(){
+    if(!ST.check) return false;
+    if(ST.check.ok) return true;
+    return !ST.check.code && ST.check.message.indexOf('目录不存在') === 0;
+  }
+  function stMode(m){
+    if(m === 'tree' && !(ST.isSuperAdmin && ST.browseEnabled)){ toast('目录浏览不可用：权限或开关限制'); return; }
+    ST.mode = m; stRender();
+  }
+  function stParent(){ var p = ST.cwd.split('/'); p.pop(); return p.join('/') || '/Users/geekwen'; }
+  function stBrowse(p){
+    if(ST_FS[p] === undefined){ toast('该目录不在演示数据内'); return; }
+    ST.treeLoading = true; stRender();
+    setTimeout(function(){ ST.cwd = p; ST.treeLoading = false; stRender(); }, 320);
+  }
+  function stPick(p){ ST.pending = p; ST.check = null; toast('已选择 '+p+'（尚未保存）'); stRender(); }
+  function stUseDefault(){ ST.pending = ST_DEFAULT_DIR; ST.check = null; toast('已填入默认目录 '+ST_DEFAULT_DIR); stRender(); }
+  function stValidate(){
+    var el = document.getElementById('stInput');
+    if(el && el.value.trim()) ST.pending = el.value.trim();
+    var v = ST.pending;
+    ST.loading = true; ST.check = null; stRender();
+    setTimeout(function(){ ST.loading = false; ST.check = stFakeCheck(v); stRender(); }, 500);
+  }
+  /* 模拟后端真实响应形状（见 servers/system-service/src/storage/storage.service.ts） */
+  function stFakeCheck(p){
+    if(p.indexOf('/Volumes') === 0){
+      return {ok:false, resolvedPath:null, exists:false, writable:false, code:'UPLOAD_DIR_OUT_OF_SCOPE',
+        message:'存储路径越界：必须位于允许根之下（/Users/geekwen），实际解析为 '+p};
+    }
+    if(p === '/Users/geekwen/data/uploads-2026'){
+      return {ok:false, resolvedPath:p, exists:false, writable:false,
+        message:'目录不存在：'+p+'（可直接保存，保存时会自动创建）'};
+    }
+    return {ok:true, resolvedPath:p, exists:true, writable:true, freeSpace:'666.5 GB', message:'可写，剩余 666.5 GB'};
+  }
+  function stSave(){
+    if(!stCanSave()){ toast('请先通过校验再保存'); return; }
+    var v = ST.pending;
+    ST.loading = true; stRender();
+    setTimeout(function(){
+      ST.loading = false; ST.savedPending = v; ST.state = 'dirty';
+      toast('已保存，将在 upload-service 重启后生效');
+      stRender();
+    }, 600);
+  }
 
 </script>
 </body>
