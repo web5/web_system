@@ -63,11 +63,10 @@ export const NAV_ITEMS: NavItem[] = [
     label: '翻译',
     to: '/translate',
     icon: 'lang',
-    sideList: true,
-    listTitle: '会话',
-    // P2 翻译工作台启用术语库面板后打开
+    // 翻译工作台（P2 落码）：纯中栏工作台；左栏「翻译记录」待后端 tool 记录列表接口（B 待办）就绪后再开
+    sideList: false,
+    listTitle: '翻译记录',
     context: false,
-    soon: true,
   },
   {
     key: 'contract',

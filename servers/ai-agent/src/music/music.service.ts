@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
 import { MusicProvider } from './music-provider.entity';
-import { UserTasteProfile } from './user-taste-profile.entity';
 
-/** 口味数据结构（一期 music；前端扁平展示，后端按三类存） */
+/** 口味数据结构（一期 music；与 user-service 的 user-taste 同结构） */
 export interface TasteData {
   likes: { genres: string[]; artists: string[]; moods: string[] };
   dislikes: { genres: string[]; artists: string[] };
@@ -16,8 +17,6 @@ export const EMPTY_TASTE: TasteData = {
   dislikes: { genres: [], artists: [] },
 };
 
-/** 单类标签上限：防止无限积累污染 prompt */
-const TAG_LIMIT = 20;
 /** appid 未真机确认时的占位值 */
 const PLACEHOLDER_PREFIX = 'PENDING';
 
@@ -32,16 +31,26 @@ export interface MusicProviderDto {
   ready: boolean;
 }
 
+/**
+ * 音乐推荐能力。
+ * - provider（渠道）仍本地读 ai-agent 库（music_providers 表）。
+ * - 口味（user_taste_profiles）已迁到 user-service，本类通过 internal 接口代理读写。
+ *   方法签名不变，故 SaveMusicTasteTool / DbConversationMemory.loadProfile 无需改动。
+ */
 @Injectable()
 export class MusicService {
   private readonly logger = new Logger(MusicService.name);
+  private readonly userServiceUrl: string;
+  private readonly serviceKey: string;
 
   constructor(
     @InjectRepository(MusicProvider)
     private readonly providerRepo: Repository<MusicProvider>,
-    @InjectRepository(UserTasteProfile)
-    private readonly tasteRepo: Repository<UserTasteProfile>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.userServiceUrl = this.configService.get<string>('USER_SERVICE_URL', SERVICE_URL_DEFAULTS.user);
+    this.serviceKey = this.configService.get<string>('USER_SERVICE_KEY', '');
+  }
 
   /** 已启用渠道（sort 升序），供工具下发给 Agent */
   async listProviders(): Promise<MusicProviderDto[]> {
@@ -60,10 +69,7 @@ export class MusicService {
     }));
   }
 
-  /**
-   * 取一个可用渠道：指定 code 优先（须已启用），否则取 sort 最小的已启用渠道。
-   * 全部不可用时返回 null → 调用方降级，不抛错。
-   */
+  /** 取一个可用渠道：指定 code 优先（须已启用），否则取 sort 最小；全部不可用返回 null */
   async resolveProvider(code?: string): Promise<MusicProvider | null> {
     if (code) {
       const hit = await this.providerRepo.findOne({ where: { code, enabled: true } });
@@ -88,77 +94,26 @@ export class MusicService {
     return provider.searchTemplate.replace('{keyword}', encodeURIComponent(keyword));
   }
 
-  /** 读取口味档案；不存在返回空结构（不落库，避免读操作写库） */
+  /** 读取口味档案（经 user-service internal；失败返回空结构，不阻塞） */
   async getTaste(userId: string, namespace = 'music'): Promise<TasteData> {
-    const row = await this.tasteRepo.findOne({ where: { userId, namespace } });
-    if (!row || !row.data) return structuredClone(EMPTY_TASTE);
-    return this.normalize(row.data);
+    try {
+      const data = await this.callInternal<{ taste?: TasteData }>(
+        `/internal/user-taste/get?userId=${encodeURIComponent(userId)}&namespace=${encodeURIComponent(namespace)}`,
+      );
+      return data?.taste ?? structuredClone(EMPTY_TASTE);
+    } catch (e) {
+      this.logger.warn(`读取用户口味失败，返回空结构: ${(e as Error).message}`);
+      return structuredClone(EMPTY_TASTE);
+    }
   }
 
-  /**
-   * 合并写入口味档案（增量 merge，去重 + 上限截断）。
-   * patch 里未出现的分组保持原值；数组做并集而非覆盖。
-   */
+  /** 合并写入口味档案（经 user-service internal） */
   async mergeTaste(userId: string, patch: Partial<TasteData>, namespace = 'music'): Promise<TasteData> {
-    const current = await this.getTaste(userId, namespace);
-    const next: TasteData = {
-      likes: {
-        genres: mergeList(current.likes.genres, patch.likes?.genres),
-        artists: mergeList(current.likes.artists, patch.likes?.artists),
-        moods: mergeList(current.likes.moods, patch.likes?.moods),
-      },
-      dislikes: {
-        genres: mergeList(current.dislikes.genres, patch.dislikes?.genres),
-        artists: mergeList(current.dislikes.artists, patch.dislikes?.artists),
-      },
-      note: patch.note ?? current.note,
-    };
-
-    let row = await this.tasteRepo.findOne({ where: { userId, namespace } });
-    if (!row) {
-      row = this.tasteRepo.create({ userId, namespace, data: next });
-    } else {
-      row.data = next;
-    }
-    await this.tasteRepo.save(row);
-    return next;
-  }
-
-  /**
-   * 移除指定标签（口味页单个标签的 ×）。
-   * 与 mergeTaste 反向：只做差集，不新增；未命中的标签静默忽略。
-   */
-  async removeTaste(userId: string, patch: Partial<TasteData>, namespace = 'music'): Promise<TasteData> {
-    const current = await this.getTaste(userId, namespace);
-    const next: TasteData = {
-      likes: {
-        genres: subtractList(current.likes.genres, patch.likes?.genres),
-        artists: subtractList(current.likes.artists, patch.likes?.artists),
-        moods: subtractList(current.likes.moods, patch.likes?.moods),
-      },
-      dislikes: {
-        genres: subtractList(current.dislikes.genres, patch.dislikes?.genres),
-        artists: subtractList(current.dislikes.artists, patch.dislikes?.artists),
-      },
-      note: current.note,
-    };
-
-    const row = await this.tasteRepo.findOne({ where: { userId, namespace } });
-    if (row) {
-      row.data = next;
-      await this.tasteRepo.save(row);
-    }
-    return next;
-  }
-
-  /** 清空某个偏好域（口味页「清空口味记忆」） */
-  async clearTaste(userId: string, namespace = 'music'): Promise<TasteData> {
-    const row = await this.tasteRepo.findOne({ where: { userId, namespace } });
-    const empty = structuredClone(EMPTY_TASTE);
-    if (!row) return empty;
-    row.data = empty;
-    await this.tasteRepo.save(row);
-    return empty;
+    const data = await this.callInternal<{ taste?: TasteData }>('/internal/user-taste/merge', {
+      method: 'POST',
+      body: JSON.stringify({ userId, namespace, patch }),
+    });
+    return data?.taste ?? structuredClone(EMPTY_TASTE);
   }
 
   /** 把口味渲染进 prompt 的文本块；无内容返回 null（不注入空档案） */
@@ -180,47 +135,21 @@ export class MusicService {
     return `[用户口味档案]\n${parts.join('\n')}`;
   }
 
-  /** 兜底：脏数据/旧结构也不让下游崩 */
-  private normalize(raw: unknown): TasteData {
-    const src = (raw ?? {}) as Record<string, any>;
-    const likes = (src.likes ?? {}) as Record<string, unknown>;
-    const dislikes = (src.dislikes ?? {}) as Record<string, unknown>;
-    return {
-      likes: {
-        genres: toStrArray(likes.genres),
-        artists: toStrArray(likes.artists),
-        moods: toStrArray(likes.moods),
+  /** 统一调 user-service internal 接口，解 TransformInterceptor 的 { code, data } 包装 */
+  private async callInternal<T>(path: string, init?: RequestInit): Promise<T> {
+    const url = `${this.userServiceUrl.replace(/\/$/, '')}${path}`;
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-service-key': this.serviceKey,
+        ...(init?.headers ?? {}),
       },
-      dislikes: {
-        genres: toStrArray(dislikes.genres),
-        artists: toStrArray(dislikes.artists),
-      },
-      note: typeof src.note === 'string' ? src.note : undefined,
-    };
+    });
+    if (!res.ok) {
+      throw new Error(`user-service internal ${path} 返回 ${res.status}`);
+    }
+    const body = (await res.json()) as { code?: number; data?: unknown };
+    return (body?.data ?? body) as T;
   }
-}
-
-function mergeList(current: string[], incoming?: unknown): string[] {
-  const add = toStrArray(incoming);
-  if (!add.length) return current;
-  const merged: string[] = [...current];
-  for (const v of add) {
-    if (!merged.includes(v)) merged.push(v);
-  }
-  return merged.slice(0, TAG_LIMIT);
-}
-
-function subtractList(current: string[], outgoing?: unknown): string[] {
-  const drop = toStrArray(outgoing);
-  if (!drop.length) return current;
-  return current.filter((v) => !drop.includes(v));
-}
-
-function toStrArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .filter((x): x is string => typeof x === 'string')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, TAG_LIMIT);
 }

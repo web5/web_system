@@ -7,7 +7,9 @@
     "pages/mine/index/index",
     "pages/mine/profile/profile",
     "pages/mine/settings/settings",
-    "pages/mine/taste/index"
+    "pages/mine/taste/index",
+    "pages/mine/memory/index",
+    "pages/mine/glossary/index"
   ],
   "subpackages": [
     {

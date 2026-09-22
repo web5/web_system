@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': resolve(__dirname, 'src'),
         '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
+        '@web-system/agent-message': resolve(__dirname, '../../packages/agent-message/src/index.ts'),
       },
     },
     server: {
