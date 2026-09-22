@@ -92,6 +92,7 @@
                           </li>
                         </ul>
                         <div v-else-if="b.t === 'law'" class="law"><b>{{ b.src }}</b>{{ stripInline(b.v) }}</div>
+                        <answer-code v-else-if="b.t === 'code'" :lang="b.lang" :code="b.v" />
                         <!-- 翻译卡片（agentId=translate 四段契约） -->
                         <div v-else-if="b.t === 'tcard'" class="tcard">
                           <div class="tc-hd">
@@ -109,7 +110,7 @@
                             <button type="button" class="act" @click="speak(m.id, b.main)">
                               {{ speakLabel(m.id) }}
                             </button>
-                            <button type="button" class="act" @click="collectWord">收藏</button>
+                            <button type="button" class="act" @click="collectWord(b)">收藏</button>
                           </div>
                         </div>
                       </template>
@@ -205,6 +206,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
 import { requestTts, splitChunks } from '@/api/tts';
+import { collectGlossary } from '@/api/glossary';
 import {
   parseAnswer,
   foldCut,
@@ -218,6 +220,7 @@ import { useConversationStore } from '@/stores/conversations';
 import { useUserStore } from '@/stores/user';
 import AppIcon from '@/components/AppIcon.vue';
 import MusicCard from '@/components/MusicCard.vue';
+import AnswerCode from '@/components/AnswerCode.vue';
 
 /**
  * 对话工作台 v4（原型 d43117b）：
@@ -384,8 +387,19 @@ async function copy(text: string) {
   }
 }
 
-function collectWord() {
-  message.success('已收进生词本');
+async function collectWord(b: { main: string; note: string }) {
+  try {
+    await collectGlossary({
+      sourceType: 'chat',
+      enMain: b.main,
+      note: b.note || undefined,
+      meta: { direction: 'zh2en' },
+      conversationId: convId.value || undefined,
+    });
+    message.success('已收进生词本');
+  } catch {
+    message.error('收藏失败，请重试');
+  }
 }
 
 function onAttach() {
@@ -458,7 +472,7 @@ function speakLabel(mId: string): string {
   return reading.value.phase === 'loading' ? '请稍候…' : '停止';
 }
 
-/** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读） */
+/** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读）；代码块跳过（读代码无意义） */
 function speakableText(blocks: AnswerBlock[]): string {
   return blocks
     .filter((b) => b.t !== 'tcard')
@@ -466,6 +480,7 @@ function speakableText(blocks: AnswerBlock[]): string {
       if (b.t === 'p' || b.t === 'h') return stripInline(b.v);
       if (b.t === 'ol' || b.t === 'ul') return b.items.map((it) => stripInline(it)).join('。');
       if (b.t === 'law') return `${b.src}，${stripInline(b.v)}`;
+      if (b.t === 'code') return '';
       return '';
     })
     .filter(Boolean)

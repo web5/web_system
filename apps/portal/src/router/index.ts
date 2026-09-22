@@ -136,6 +136,25 @@ const routes = [
     component: () => import('../views/Profile.vue'),
     meta: { requiresAuth: true },
   },
+  // 我的 · AI 记忆 / 生词本 二级页
+  {
+    path: '/profile/glossary',
+    name: 'Glossary',
+    component: () => import('../views/Glossary.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile/memory',
+    name: 'Memory',
+    component: () => import('../views/Memory.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile/taste',
+    name: 'Taste',
+    component: () => import('../views/Taste.vue'),
+    meta: { requiresAuth: true },
+  },
   {
     path: '/album',
     name: 'Album',
