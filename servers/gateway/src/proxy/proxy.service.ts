@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createProxyMiddleware, Options, fixRequestBody } from 'http-proxy-middleware';
-import { API_TIMEOUT } from '@web-system/shared';
+import { API_TIMEOUT, SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 @Injectable()
 export class ProxyService implements OnModuleInit {
@@ -39,16 +39,17 @@ export class ProxyService implements OnModuleInit {
   private readonly boundErrorHandler: (err: Error, req: any, res: any) => void;
 
   constructor(private configService: ConfigService) {
-    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', 'http://localhost:6001');
-    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', 'http://localhost:6002');
-    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', 'http://localhost:6003');
-    this.aiAgentServiceUrl = this.configService.get('AI_AGENT_SERVICE_URL', 'http://localhost:6010');
-    this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', 'http://localhost:6004');
-    this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', 'http://localhost:6005');
+    this.authServiceUrl = this.configService.get('AUTH_SERVICE_URL', SERVICE_URL_DEFAULTS.auth);
+    this.userServiceUrl = this.configService.get('USER_SERVICE_URL', SERVICE_URL_DEFAULTS.user);
+    this.aiServiceUrl = this.configService.get('AI_SERVICE_URL', SERVICE_URL_DEFAULTS.ai);
+    this.aiAgentServiceUrl = this.configService.get('AI_AGENT_SERVICE_URL', SERVICE_URL_DEFAULTS.aiAgent);
+    this.systemServiceUrl = this.configService.get('SYSTEM_SERVICE_URL', SERVICE_URL_DEFAULTS.system);
+    this.todoServiceUrl = this.configService.get('TODO_SERVICE_URL', SERVICE_URL_DEFAULTS.todo);
+    // 上传仍回落 user-service（历史行为）：upload-service 承接见议题 A，届时改为 SERVICE_URL_DEFAULTS.upload
     this.uploadServiceUrl = this.configService.get('UPLOAD_SERVICE_URL', this.userServiceUrl);
-    this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', 'http://localhost:6006');
-    this.contentHubServiceUrl = this.configService.get('CONTENT_HUB_SERVICE_URL', 'http://localhost:6007');
-    this.knowledgeServiceUrl = this.configService.get('KNOWLEDGE_SERVICE_URL', 'http://localhost:6011');
+    this.mcpGatewayUrl = this.configService.get('MCP_GATEWAY_URL', SERVICE_URL_DEFAULTS.mcpGateway);
+    this.contentHubServiceUrl = this.configService.get('CONTENT_HUB_SERVICE_URL', SERVICE_URL_DEFAULTS.contentHub);
+    this.knowledgeServiceUrl = this.configService.get('KNOWLEDGE_SERVICE_URL', SERVICE_URL_DEFAULTS.knowledge);
 
     this.boundErrorHandler = (err, _req, res) => {
       this.logger.error(`代理请求失败: ${err.message}`);
