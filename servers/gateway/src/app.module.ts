@@ -36,6 +36,10 @@ import {
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
+        // 平台下发（配置中心 → .env.generated，由控制台「部署」写入；删文件即回退到 .env）
+        // ⚠️ 必须排在 .env **之前**：@nestjs/config 先出现者优先
+        //（见 specs/service-config-delivery/design.md §4.1）
+        path.resolve(__dirname, '../.env.generated'),
         path.resolve(__dirname, '../.env'),   // servers/gateway/.env（兼容 dist/src 运行）
       ],
     }),

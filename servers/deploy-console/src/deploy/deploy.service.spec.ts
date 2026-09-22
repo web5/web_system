@@ -13,6 +13,19 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { CommandService } from '../shell/command.service';
+import { AuditService } from '../audit/audit.service';
+import { ConfigService as ConfigCenterService } from '../config/config.service';
+import { AppsService } from '../apps/apps.service';
+
+/** 配置中心桩：默认「无 module 级条目」→ 既有用例走「跳过下发」路径，行为不变 */
+const noDispatchConfigCenter = () => ({
+  hasModuleScope: jest.fn().mockResolvedValue(false),
+  dispatchPayload: jest.fn().mockResolvedValue([]),
+  resolveForProcess: jest.fn().mockResolvedValue({}),
+});
+
+/** 审计桩（下发只记「键 + hash」，不记明文） */
+const auditStub = () => ({ log: jest.fn().mockResolvedValue(undefined) });
 
 // ssh2 全程 mock：远程部署测试不能真的连机器
 jest.mock('ssh2', () => {
@@ -72,6 +85,10 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
           provide: CommandService,
           useValue: { pm2Bin: jest.fn(() => 'pm2'), exec: jest.fn(() => '') },
         },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: auditStub() },
+        // env-dir 应用查表（本 spec 模块均非应用 → 返回 null，走 legacy 分支）
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);
@@ -177,6 +194,10 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
         },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: auditStub() },
+        // env-dir 应用查表（本 spec 模块均非应用 → 返回 null，走 legacy 分支）
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);
@@ -298,6 +319,10 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: auditStub() },
+        // env-dir 应用查表（本 spec 模块均非应用 → 返回 null，走 legacy 分支）
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);
@@ -372,6 +397,10 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: auditStub() },
+        // env-dir 应用查表（本 spec 模块均非应用 → 返回 null，走 legacy 分支）
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);
@@ -461,6 +490,10 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: auditStub() },
+        // env-dir 应用查表（本 spec 模块均非应用 → 返回 null，走 legacy 分支）
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     service = module.get(DeployService);
@@ -480,5 +513,139 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
     await expect(
       service.rollbackVersion({ moduleKey: 'mcp-gateway', env: 'local', to: 'mcp-gateway-local/B' }),
     ).rejects.toThrow(/就是当前版本/);
+  });
+});
+
+/**
+ * P0-2 配置下发（`specs/service-config-delivery/design.md` §4 / §10-3）：
+ * 部署前把配置中心的解析结果写进 `<svc>/.env.generated`（0600，带来源注释，旧版备份），
+ * **下发失败即中止部署**（不落地、不重启、指针不改）。
+ */
+describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () => {
+  let service: DeployService;
+  let workspace: string;
+  let configCenter: { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+  let audit: { log: jest.Mock };
+  let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
+  let deploymentRepo: { upsert: jest.Mock; find: jest.Mock };
+  let moduleRegistry: { get: jest.Mock };
+
+  const svcDir = () => path.join(workspace, 'servers/mcp-gateway');
+  const generated = () => path.join(svcDir(), '.env.generated');
+
+  beforeEach(async () => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-'));
+    fs.mkdirSync(path.join(svcDir(), 'mcp-gateway-local/abc1234'), { recursive: true });
+    fs.writeFileSync(path.join(svcDir(), 'mcp-gateway-local/abc1234/main.js'), '// new');
+    fs.mkdirSync(path.join(svcDir(), 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(svcDir(), 'dist/main.js'), '// old');
+
+    configCenter = {
+      hasModuleScope: jest.fn().mockResolvedValue(true),
+      dispatchPayload: jest.fn().mockResolvedValue([
+        { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:local/mcp-gateway' },
+        { key: 'PORT', value: '6010', scope: 'env:local' },
+      ]),
+    };
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
+    commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
+    deploymentRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+    moduleRegistry = {
+      get: jest.fn().mockResolvedValue({
+        key: 'mcp-gateway',
+        type: 'backend',
+        dir: 'mcp-gateway',
+        pm2: 'web-mcp-gateway',
+      }),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        DeployService,
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
+        },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn(), find: jest.fn() } },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        { provide: ModuleRegistryService, useValue: moduleRegistry },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: commands },
+        { provide: ConfigCenterService, useValue: configCenter },
+        { provide: AuditService, useValue: audit },
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  it('部署前写下发文件：0600、带来源注释、旧版备份、审计不含明文', async () => {
+    fs.writeFileSync(generated(), '# old\nOLD_KEY=1\n');
+
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+
+    const text = fs.readFileSync(generated(), 'utf-8');
+    expect(text).toContain('GATEWAY_SERVICE_KEY=svc-key-123');
+    expect(text).toContain('PORT=6010');
+    expect(text).toContain('# [module:local/mcp-gateway]');
+    expect(text).toContain('# [env:local]');
+    expect(text).toContain('删除本文件 + 重启服务');
+    expect(fs.statSync(generated()).mode & 0o777).toBe(0o600);
+
+    const baks = fs.readdirSync(svcDir()).filter((f) => f.startsWith('.env.generated.bak-'));
+    expect(baks.length).toBe(1);
+    expect(fs.readFileSync(path.join(svcDir(), baks[0]), 'utf-8')).toBe('# old\nOLD_KEY=1\n');
+
+    // 审计只记「下发了哪些键 + 内容 hash」，绝不记明文
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    const detail = String(audit.log.mock.calls[0][0].detail);
+    expect(detail).toContain('GATEWAY_SERVICE_KEY');
+    expect(detail).not.toContain('svc-key-123');
+
+    // 下发之后才重启
+    expect(commands.exec).toHaveBeenCalled();
+  });
+
+  it('下发失败 → 中止部署：不重启、不落地、指针不改', async () => {
+    configCenter.dispatchPayload.mockRejectedValue(new Error('db down'));
+
+    await expect(
+      service.deployVersion({
+        moduleKey: 'mcp-gateway',
+        env: 'local',
+        versionTag: 'mcp-gateway-local/abc1234',
+      }),
+    ).rejects.toThrow(/db down/);
+
+    expect(commands.exec).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(svcDir(), 'dist/main.js'), 'utf-8')).toBe('// old');
+    expect(deploymentRepo.upsert).not.toHaveBeenCalled();
+  });
+
+  it('无 module 级条目 → 按需跳过（不落盘），照常落地 + 重启', async () => {
+    configCenter.hasModuleScope.mockResolvedValue(false);
+
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'local',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+
+    expect(fs.existsSync(generated())).toBe(false);
+    expect(fs.readFileSync(path.join(svcDir(), 'dist/main.js'), 'utf-8')).toBe('// new');
+    expect(commands.exec).toHaveBeenCalled();
+  });
+
+  it('非后端服务（前端/微前端）不下发', async () => {
+    moduleRegistry.get.mockResolvedValue({ key: 'admin', type: 'micro-frontend', dir: 'admin' });
+    await expect(service.writeGeneratedEnv('local', 'admin')).resolves.toBeNull();
+    expect(configCenter.dispatchPayload).not.toHaveBeenCalled();
   });
 });

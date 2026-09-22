@@ -12,6 +12,7 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ProxyService } from './proxy.service';
 import { DynamicRouteService } from '../dynamic-route/dynamic-route.service';
+import { IndexHtmlService } from '../deploy-version/index-html.service';
 import { Public } from '../auth/public.decorator';
 import * as http from 'http';
 import * as url from 'url';
@@ -28,6 +29,8 @@ export class ProxyController {
     private configService: ConfigService,
     // 双域重构 P2：DB 驱动路由（GATEWAY_DB_ROUTES=1 时启用；关闭时本类行为逐字节不变）
     private dynamicRouteService: DynamicRouteService,
+    // 版本缓存失效（部署后由控制台调用，见 reloadRoutes）
+    private indexHtmlService: IndexHtmlService,
   ) {}
 
   // 精确匹配 /api/auth（无尾斜杠）
@@ -521,7 +524,13 @@ export class ProxyController {
   }
 
   /**
-   * 手动刷新 DB 路由缓存（FR-10.3）：规则改动后立即生效，不必等 60s TTL。
+   * 刷新网关缓存：DB 路由缓存（FR-10.3）+ 模块版本缓存。
+   *
+   * 版本缓存为什么也要在这里清：`IndexHtmlService.versionCache`（TTL 10s）决定
+   * 「基座加载哪个版本目录的 `index.html`」以及非站点回落的 legacy `modules` 字段，
+   * 而指针（`deploy_deployments`）是控制台「部署」/ 流水线写入的 ——
+   * 不显式通知的话，部署完最多 10s 内仍加载旧版本（表现为「部署了但页面没变」）。
+   *
    * 鉴权：`x-service-key` 必须匹配 GATEWAY_SERVICE_KEY / CONTENT_HUB_SERVICE_KEY
    * （旧名 FINNEWS_SERVICE_KEY 兼容读取；三者都未配置则拒绝）。
    */
@@ -537,7 +546,12 @@ export class ProxyController {
       return;
     }
     this.dynamicRouteService.reload();
-    res.json({ code: 0, message: 'DB 路由缓存已刷新' });
+    const versionEntries = this.indexHtmlService.clearVersionCache();
+    res.json({
+      code: 0,
+      message: 'DB 路由缓存 + 模块版本缓存已刷新',
+      versionCacheCleared: versionEntries,
+    });
   }
 
   /**
