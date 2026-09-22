@@ -1,5 +1,8 @@
 export { API_TIMEOUT } from './api';
 
+// 后端服务地址默认值（唯一真相源，禁止各服务自行硬编码端口）
+export { SERVICE_URL_DEFAULTS, REQUIRED_SERVICE_URLS_IN_PROD } from './services';
+
 // 合同翻译官 — 共享类型 / IRR / 法定标准库
 export * from './contract';
 
