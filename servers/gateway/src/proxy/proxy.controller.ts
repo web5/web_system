@@ -70,6 +70,45 @@ export class ProxyController {
     return this.proxyService.getUserProxy()(req, res);
   }
 
+  // 生词本 / 收藏（/api/glossary → user-service）
+  // 精确匹配 /api/glossary（无尾斜杠）
+  @All('glossary')
+  proxyGlossaryExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 通配 /api/glossary/:path(*)
+  @All('glossary/:path(*)')
+  proxyGlossaryWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 用户记忆（/api/user-memory → user-service）
+  // 精确匹配 /api/user-memory（无尾斜杠）
+  @All('user-memory')
+  proxyUserMemoryExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 通配 /api/user-memory/:path(*)
+  @All('user-memory/:path(*)')
+  proxyUserMemoryWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 用户口味（/api/user-taste → user-service，迁自 ai-agent）
+  // 精确匹配 /api/user-taste（无尾斜杠）
+  @All('user-taste')
+  proxyUserTasteExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
+  // 通配 /api/user-taste/:path(*)
+  @All('user-taste/:path(*)')
+  proxyUserTasteWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getUserProxy()(req, res);
+  }
+
   // SSE 流式对话 — 用原生 http 转发，避免 http-proxy-middleware 缓冲问题
   @Post('ai/chat/stream')
   @Header('Content-Type', 'text/event-stream')

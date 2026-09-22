@@ -18,7 +18,7 @@ export const EMPTY_TASTE: TasteData = {
   dislikes: { genres: [], artists: [] },
 };
 
-const BASE = '/api/ai-agent/user-taste/music';
+const BASE = '/api/user-taste/music';
 
 interface TasteResp {
   namespace?: string;

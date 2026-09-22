@@ -7,12 +7,19 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { PermissionModule } from './permission/permission.module';
+import { GlossaryModule } from './glossary/glossary.module';
+import { UserMemoryModule } from './memory/user-memory.module';
+import { UserTasteModule } from './user-taste/user-taste.module';
+import { InternalModule } from './internal/internal.module';
 import { User } from './user/user.entity';
 import { McpApiKeyEntity } from './api-key/entities/mcp-api-key.entity';
 import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
 import { PermissionEntity } from './permission/entities/permission.entity';
 import { RoleEntity } from './permission/entities/role.entity';
 import { RolePermissionEntity } from './permission/entities/role-permission.entity';
+import { GlossaryEntryEntity } from './glossary/glossary-entry.entity';
+import { UserMemoryEntity } from './memory/user-memory.entity';
+import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
 
 @Module({
   imports: [
@@ -26,7 +33,7 @@ import { RolePermissionEntity } from './permission/entities/role-permission.enti
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'postgres');
-        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity];
+        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity, GlossaryEntryEntity, UserMemoryEntity, UserTasteProfileEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql',
@@ -68,6 +75,10 @@ import { RolePermissionEntity } from './permission/entities/role-permission.enti
     AuthModule,
     ApiKeyModule,
     PermissionModule,
+    GlossaryModule,
+    UserMemoryModule,
+    UserTasteModule,
+    InternalModule,
   ],
 })
 export class AppModule {}
