@@ -12,11 +12,12 @@ describe('AgentConversationQueryService', () => {
     return { repo, svc };
   }
 
-  it('list：固定 userId 过滤 + updatedAt 倒序 + 轻量列 select + 分页', async () => {
+  it('list：固定 userId + source=chat 过滤 + updatedAt 倒序 + 轻量列 select + 分页', async () => {
     const { repo, svc } = setup();
     await svc.listConversations('u1', 2, 10);
     expect(repo.findAndCount).toHaveBeenCalledWith({
-      where: { userId: 'u1' },
+      // source='chat'：只返回主对话，工具页（翻译/合同）会话不进主列表（30d9b1f 起的行为）
+      where: { userId: 'u1', source: 'chat' },
       order: { updatedAt: 'DESC' },
       select: ['id', 'title', 'meta', 'createdAt', 'updatedAt'],
       skip: 10,

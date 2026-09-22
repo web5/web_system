@@ -1,3 +1,7 @@
+// ⚠️ 本文件用 Node 内置 test runner（`node:test`）编写，**不经 jest 运行**：
+//    jest 会判「Your test suite must contain at least one test」→ 已在 package.json 的
+//    `testPathIgnorePatterns` 中排除（2026-09-22）。它当前也**不可直接执行**（Node 20 不能跑 .ts，
+//    需要 tsx / Node 22+ type-stripping）。待办：迁到 jest（或给 test 脚本配 tsx）后去掉排除。
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {

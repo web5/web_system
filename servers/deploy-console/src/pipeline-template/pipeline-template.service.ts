@@ -12,7 +12,6 @@ import {
   TemplateTarget,
 } from '../entities/deploy-pipeline-template.entity';
 import { PIPELINE_STAGES } from '../entities/deploy-pipeline.entity';
-import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 import { normalizeNodes, isV5NodesEnabled, legacyStepsToNodes, TemplateNode } from './template-node';
 
 export const DEFAULT_TEMPLATE_NAME = '默认';
@@ -179,7 +178,6 @@ export class PipelineTemplateService {
     @InjectRepository(DeployPipelineTemplateEntity)
     private readonly repo: Repository<DeployPipelineTemplateEntity>,
     /** 新建流水线时写入可编辑节点的默认脚本（git） */
-    private readonly stepSeed: PlatformScriptSeedService,
   ) {}
 
   private assertApproval(a?: TemplateApproval): void {
@@ -375,13 +373,8 @@ export class PipelineTemplateService {
       createdBy,
     });
     const saved = await this.repo.save(row);
-    // 新流水线的 git 节点要立刻有「可编辑的默认脚本」，否则页面点开是空的
-    // （git 已是普通 shell 节点，不再由平台托管脚本 seed —— 见 step-scripts.ts）
-    try {
-      await this.stepSeed.ensureEditableDefaults(saved.id);
-    } catch {
-      // 默认脚本初始化失败不阻断创建（下次启动 seedAll 会补）
-    }
+    // 新流水线的节点脚本初始值由 **SQL 初始化脚本**预置（见 scripts/migrations/p21），
+    // 平台不再在创建时 seed —— 用户 2026-09-21：平台不提供脚本，脚本归 DB / 运维。
     return saved;
   }
 

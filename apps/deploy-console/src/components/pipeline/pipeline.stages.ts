@@ -78,8 +78,19 @@ export function statusText(status: string): string {
   return map[status] || status
 }
 
-export function formatTime(ts?: number): string {
-  return ts ? dayjs(ts).format('YYYY-MM-DD HH:mm:ss') : '—'
+/**
+ * bigint 毫秒时间戳经 TypeORM/JSON 到前端是**字符串**（如 `"1789987757654"`），
+ * 直接交给 dayjs 会被当作 `YYYYMMDDHHmmss` 误解析（实测 → `1797-04-20 10:05:04`）。
+ * 故格式化/比较前一律 Number 归一（规格 specs/deploy-console-domain-split/page-spec.md §10.1）。
+ */
+export function toMs(ts?: number | string | null): number {
+  const n = Number(ts)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+export function formatTime(ts?: number | string): string {
+  const n = toMs(ts)
+  return n ? dayjs(n).format('YYYY-MM-DD HH:mm:ss') : '—'
 }
 
 /**
@@ -263,13 +274,15 @@ export function legacyToNodes(opts: {
   return nodes
 }
 
-export function formatTimeShort(ts?: number): string {
-  return ts ? dayjs(ts).format('MM-DD HH:mm:ss') : '—'
+export function formatTimeShort(ts?: number | string): string {
+  const n = toMs(ts)
+  return n ? dayjs(n).format('MM-DD HH:mm:ss') : '—'
 }
 
 export function durationMs(p: PipelineItem): number {
-  if (!p.endTime) return Date.now() - p.startTime
-  return p.endTime - p.startTime
+  const start = toMs(p.startTime)
+  const end = toMs(p.endTime)
+  return end ? end - start : Date.now() - start
 }
 
 /** 实例实际活动阶段列表（v5 nodes → steps 子集 → 全量九阶段） */

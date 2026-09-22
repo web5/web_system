@@ -20,12 +20,14 @@ updatedAt: 2026-09-21T00:00:00.000Z
 
 1. 读 `docs/ui/README.md`（读取地图）→ 按「任务 × 最小文档集」定位；新页面必读 `docs/ui/design.md`（判断层：类型模板/布局铁律/交互矩阵）。
 2. 按 `docs/ui/page-spec-template.md` 填**页面规格书**（新页 Full / 小改 Quick）。
-3. **规格书先给用户过目确认，确认后才写码**（禁止跳过直接实现）。
-4. 涉及颜色/加色/hover → 读 `docs/ui/color-reference.md`（颜色定义点地图：8 类位置 + hover 阶梯，禁自行发明色）。
-5. 覆盖 antd 外观或"改了不生效" → 读 `docs/ui/css-override-rules.md`（覆盖优先级 + 四问 + 排查五步）。
-6. 写完后按 `design.md` §5 自检（grep 裸色/!important、双主题过目、截图基线），修正记录追加到 `docs/ui/geist-token-评审记录.md`（只追加不覆盖）。
-7. **批量整改先出清单**：若为规则升格后的批量整改（≥2 文件 / 跨页面 / 跨端），先列《整改影响清单》（文件 / 改动 / 风险 / 优先级）给负责人确认，**不得直接开改**（design.md §5-7，R6 教训）。
-8. 落码提交时：UI 源码须与已确认的原型/规格配对 —— 原型或规格先**单独 commit**，其后的 UI commit 带 `Proto: <sha>` trailer（`commit-msg` hook 强制 + CI R10 兜底，见 `specs/kit-sop-enforcement/design.md` §3.8）。
+3. **D2 设计评审（交人确认前）**：交 `design-reviewer` 盲审规格书/原型 → 报告落盘 `docs/ui/reviews/<topic>-<YYYYMMDD>.md`（头部 `阻塞: N`）→ **阻塞项清零才可交用户确认**（判据源：`docs/ui/design-system.md`；方案：`specs/design-reviewer/design.md`）。
+4. **规格书先给用户过目确认，确认后才写码**（禁止跳过直接实现）。
+5. 涉及颜色/加色/hover → 读 `docs/ui/color-reference.md`（颜色定义点地图：8 类位置 + hover 阶梯，禁自行发明色）。
+6. 覆盖 antd 外观或"改了不生效" → 读 `docs/ui/css-override-rules.md`（覆盖优先级 + 四问 + 排查五步）。
+7. 写完后按 `design.md` §5 自检（grep 裸色/!important、双主题过目、截图基线），修正记录追加到 `docs/ui/geist-token-评审记录.md`（只追加不覆盖）。
+8. **D3 实现一致性评审（落码后、提交前）**：比对原型锚点 `data-dr` + 可机检条目 + 截图并置（`docs/ui/baselines/`），报告落盘；阻塞项清零才可提交。存量页面尚未回填锚点时标注「跳过比对」，不判为漂移（方案 §3.7.1）。
+9. **批量整改先出清单**：若为规则升格后的批量整改（≥2 文件 / 跨页面 / 跨端），先列《整改影响清单》（文件 / 改动 / 风险 / 优先级）给负责人确认，**不得直接开改**（design.md §5-7，R6 教训）。
+10. 落码提交时：UI 源码须与已确认的原型/规格配对 —— 原型或规格先**单独 commit**，其后的 UI commit 带 `Proto: <sha>` trailer **并带 `Design: pass`**（`commit-msg` hook 强制 + CI R10 / **R11（error）** 兜底，见 `specs/kit-sop-enforcement/design.md` §3.8 与 `specs/design-reviewer/design.md` §3.7）。
 
 ## 核心约束精要（来不及翻 docs 时的最小禁项）
 

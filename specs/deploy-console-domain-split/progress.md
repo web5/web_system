@@ -1,5 +1,6 @@
 # 双域重构 · 实施进度与验证证据
 
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 分支：`feat/deploy-console-domain-split`
 > 分期依据：`tech-design.md` §6（P0 模型 → P1 微前端域 → P2 网关域 → P3 运行时接线 → P4 迁移退役）
 > 规则：完成声明必须附**可复现证据**（命令 / 文件 / HTTP 结果），不接受"应该没问题"。
@@ -132,6 +133,70 @@
 
 ---
 
+## 门户加载失败事故与 env-dir 对齐修复（2026-09-21）
+
+| 现象 | 根因 | 处理 | 验证 |
+|---|---|---|---|
+| `local.kedouai.com` 门户整模块加载失败：`System: Unexpected token 'export'` + `UMD: 模块 portal@env:local 未暴露 lifecycle（缺 mount）: /static/modules/portal/local/index.js` | ① **入口指针写成原生 ESM**，而产物是 `MF_FORMAT=system`：`System.import()` 在解析阶段即抛 `Unexpected token 'export'`，文件体不执行 → loader 的 ③ `window.__MODULES__` 兜底**一并失效**（System/UMD 两条路径都失败）。② **portal 的构建产品线段是 `portal-dev` ≠ envId `local`**，`byEnv` 走 `<key>/<envId>/` → 结构性无法满足 | ① `entry-pointer.ts` 指针改 `System.register`、`readEnvEntryPointer` 兼容新旧写法、单测补锁定；p11 迁移脚本同步。② 按 envId 口径重建并落位 `portal/local/20d1380`、`admin/local/20d1380`，写 System.register 指针 + 样式指针，同步 `deploy_app_env_versions` | 单测 9/9；systemjs 6.15.1 实测（ESM 指针 THROW / System.register PASS）；浏览器 `loader.loaded=[portal,admin]`、`window.__MODULES__.{portal,admin}.mount` 均为 function、portal 实际 mount 渲染 8842B 真实 DOM、控制台 **0 错 0 警** |
+
+> **约束沉淀**（详见 `specs/app-artifact-env-dir/design.md` §2）：env-dir 应用有三条硬约束 ——
+> ① 指针必须 System.register（加载器只认 SystemJS/UMD）；② 构建 `base` 被烘成绝对路径且含「产品线段」；
+> ③ 指针/版本目录只认 `<key>/<envId>/`。推论：**产品线段必须等于 envId**，否则三者对不上。
+>
+> **按方案 A 落地**（2026-09-21，`specs/app-artifact-env-dir/design.md` §4/§5）：
+> `scripts/migrations/p22-app-env-dir-artifact.mjs` 改流水线 DB 脚本 —— 构建动作在 local 用
+> `RELEASE_TAG=<DEPLOY_ENV>/<纯commit>`（dev/prod 不变），local 投递落
+> `modules/<PUBLIC_PATH>/<DEPLOY_ENV>/<纯commit>/` 并改写 env 入口指针（System.register），
+> 另落一份 legacy 兼容副本使「未匹配站点」不 404。首跑 4 条动作、复跑零差异；投递脚本沙箱实跑通过。
+> 剩余：G3 的 DB 侧（`deploy_app_env_versions` 同步，`PointerExecutor` 只写旧表 —— 不影响加载，
+> 只影响控制台版本矩阵显示）、dev/prod 是否同口径（待定）。
+>
+> **历史记录瘦身 + 兼容下线**（2026-09-21，`scripts/migrations/p23-cleanup-history.mjs`）：
+> 用户定「历史构建产物不再考虑兼容」。DB：流水线运行 53→10、审批 47→9、版本记录 257→19，
+> 遗留 `_bak_*` 表 DROP 10 张（261 行）；磁盘：`modules/` 下历史产物目录共 130 个移入
+> `/tmp/p23-trash-*`，只留指针指向的版本（`portal/local/20d1380`、`admin/local/20d1380`、
+> `portal/dev/b2b6d4a`、`shell/shell-dev/16865ad`）；同时移除 `p22` 落的 legacy 兼容副本段，
+> 并把最后 1 个残留 ESM 指针（`portal/dev/index.js`）转为 System.register。
+> 回滚：DB 行 dump 在 `/tmp/p23-db-backup-*.json`，磁盘产物可直接从垃圾站改回。
+>
+> ⚠️ 该脚本首版有两处误伤（已修，第 3 次执行才正确）：① 保留判断只比对一层目录，
+> `shell/shell-dev/16865ad` 保住了自己却没保住父目录 `shell/shell-dev` → 整个 shell 被移走
+> （站点 404），改为**前缀匹配**；② 遍历了 `modules/` 下**所有**目录，而 `deploy_apps` 只认识 4 个应用，
+> 其余（gateway / todo-service / …）的子目录被整批移走，改为**应用白名单**。
+> 两次均从垃圾站全量恢复后重跑，最终浏览器回归通过（`loaded=[portal,admin]`、控制台 0 错 0 警）。
+> 教训：批量清理必须先「白名单 + 前缀匹配」并 DRY_RUN 打印待删清单。
+>
+> **G3 收口：env-dir 应用激活收敛到平台一处**（2026-09-21，`specs/app-artifact-env-dir/design.md` §4.1）：
+> 脚本不再自拼 `System.register` 指针文本（两处实现必然漂移 —— 第一次故障正是平台侧写法错），
+> 改为投递完成后调 `POST /api/internal/release/pointer`；该接口对 `deploy_mode='env-dir'` 的应用走
+> **应用域激活**：校验产物存在（fail-fast）→ `writeEnvEntryPointer` 写磁盘指针 →
+> upsert `deploy_app_env_versions`（current/previous）。改动：`InternalReleaseController`（+env-dir 分支、
+> 注入 `AppsService`）、`DeployModule`（导入 `AppsModule`）、`AppsService.findAppOrNull`、
+> `scripts/migrations/p24-app-pointer-via-platform.mjs`（改 2 条 local 投递动作，幂等）。
+> 已验证：幂等 / 401 / 不存在版本 fail-fast 400 / 真实切换时磁盘指针与版本表同时更新 / 浏览器回归通过。
+> **缓存结论**：本路径无缓存（控制台读表与磁盘指针都是直连）；gateway 的 10s 版本缓存读的是旧表，
+> env-dir 加载路径不吃它 —— 无需额外失效。
+>
+> **site-version（shell / 小程序）口径与「部署」分流**（2026-09-21，`specs/app-artifact-env-dir/design.md` §4.2）：
+> 排查 `shell` 发布链路后确认 —— shell 与 portal/admin 的发布脚本**形状相同**（投递产物 + write-version），
+> 但**不写加载指针**；shell 的加载指针是 `deploy_deployments`（gateway `getCurrentVersion(envId,'shell')`
+> 决定加载哪个版本目录的 index.html），由控制台「部署」写入。修复两项：
+> ① `DeployService.deployVersion` 过去**无条件**写 `deploy_deployments` → 对 portal/admin 是**空转**
+> （它们的加载路径是 env 指针，不读这张表，表现为「部署成功但页面没变」）；现按 `deployMode` 分流
+> （env-dir → `AppsService.switchVersion`；site-version → legacy 指针 + 清缓存）。
+> ② gateway `versionCache`（TTL 10s）失效通路：扩展 `/api/internal/gateway/reload` 一并清版本缓存
+> （响应回报 `versionCacheCleared`），控制台在 site-version 部署后 best-effort 调用；
+> 配置补 `GATEWAY_SERVICE_KEY`（gateway 与 console 两侧一致，沿用 gateway 原 FINNEWS 值）。
+> 实测：console `已通知 gateway 刷新缓存` → gateway 同刻 `版本缓存已失效：3 条`。
+> 踩坑：**不能用 Node 全局 `fetch`** 调 6000（undici 按 WHATWG 拒连 bad port，表现为与网络无关的
+> `fetch failed`）—— 改用 Node `http` 模块。未对齐项：shell 的**发布**仍不自动切指针（见 spec §7 Q6）。
+>
+> console 侧已生效：`deploy-console` 于 2026-09-21 21:13 按「工作区构建 → 复制 dist → 干净重启」重发，
+> 运行实例（pid 75948，21:13:43 启动）加载的 `dist/apps/entry-pointer.js` 内为 System.register 写法
+> （旧 `export * from` 写法残留 0 处）—— 从 UI「切换版本」不再会写回 ESM 指针。
+
+---
+
 ## P4 · 迁移（进行中）
 
 | 步骤 | 状态 | 说明 / 验证 |
@@ -141,6 +206,7 @@
 | M1–M3（建表 / 站点 / 环境种子） | ✅ | 由 `synchronize` + `EnvsService.ensureBuiltin` 承担 |
 | M6（服务指向） | ✅ | 由 `ServicesService.ensureSeeded` 承担（旧 `deploy_env_service_routes` → `deploy_service_envs`） |
 | **M12**（同模块多环境流水线合并为 1 条） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p12-merge-module-pipelines.mjs`：每模块保留 1 条（优先 env=dev），`env` 置 NULL（环境无关）、名称去环境后缀；冗余模板连同 `deploy_pipeline_step_commands` / `deploy_pipeline_vars` 一并清理。**48 → 16 条**（清理 160 行节点命令 + 64 行变量），复跑幂等 |
+| **M21**（微前端发布落盘路径修复 p20） | ✅ 已完成 | 事故：门户加载失败（`portal@portal-dev/65c00a9` 404）。根因：网关按指针值直出 `/static/modules/<key>/<currentVersion>/index.js`，而 release 落盘与指针值不一致——portal/shell/mini-contract 无条件远程直投（local 发布投到远程机、本机无产物）；admin 落 `modules/<key>/<ENV_ID>/<commit>`（指针是 `<流水线key>/<commit>`）。修复：4 条微前端线按环境分支（local 落本机 `modules/<PUBLIC_PATH>/<COMMIT_ID>` 与指针值逐段一致；dev 保持远程 scp）；admin 复制补齐历史产物路径。**验证**：重新发布 portal/local → 产物落位 + 指针一致 + 网关直出 200；admin/portal 四环境指针路径全部 FS✓HTTP200；根页 200（shell 正常）|
 | **M20**（旧链路数据退役 p17） | ✅ 已完成 | `scripts/migrations/p17-retire-legacy-tables.mjs`：RENAME 归档（库内 _bak 惯例，可回退）——step_commands(90 行，含废弃列 env_branches) / step_branches(2 行) → `_bak_20260921`；前置校验新表有数据防断粮。**退役后回归全绿**：admin/local 新引擎全链路（提交→审批挂起/恢复→执行→版本+指针落库 30d9b1f）不依赖旧表；旧表由 synchronize 重建为空表、seed 服务回写 48 行平台脚本（代码兼容层保留，新链不读，下批删代码） |
 | **M19**（编排新模型 P4：前端三层画布） | ✅ 已完成 | `OrchestrationEditor.vue`（对接 /console/api/pipelines/:id/steps 整树接口）：步骤→任务→动作三层画布（测量式 SVG 连线、分叉/箭头/中点＋插入步骤、动作块紧贴任务头圆角 2px、任务 tag「任务」/动作 tag「脚本」、hover × 删除、managed 动作禁删）；两态抽屉（任务总览/单动作，无保存无删除）；页头按钮组（取消/保存；删除走画布与删除流水线）。PipelineEdit「流程编排」tab 双轨：新表有数据→新画布，否则旧节点画布。**实测**（浏览器+截图基线 docs/ui/baselines/deploy-console-pipeline-edit-orchestration-after.png）：admin 发布树正确渲染（4 步骤/5 任务/6 动作、分叉连线、if 徽标）；踩坑：命令式创建的连线＋号吃不到 scoped CSS（改非 scoped 样式块） |
 | **M18**（编排新模型 P3：迁移 + 主链路接入） | ✅ 已完成 | ① 引擎增强：挂起恢复 skipThroughStep / afterTask 平台收尾 / PipelineSuspended 透传；runScript 改传 baseEnv+taskEnv 两段（调用方惰性重组——一次性快照会让 build 拿到回填前的空 COMMIT_ID，已实测踩坑）。② 接入主 run()：实例 orchestration 快照列（新表有数据→新引擎，否则旧链路并存）；提交时 getTree 固化；审批经 approvals.createNode + PipelineSuspended 挂起，approve 恢复跳过已完成步骤；成功 setPointer。③ write-version 动作脚本化：平台工具 write-version.mjs（直连部署库，随 console assets 分发）。④ p16 迁移（幂等）：16 条流水线 → 64 步骤/65 任务/66 动作；旧默认分支补互斥条件（`DEPLOY_ENV != local`）——旧「兜底」≠新「恒执行」，不补会让 local 发布时 dev 分支并行执行（已实测踩坑）。**端到端（admin/env=local）**：快照→git→build→审批挂起→恢复跳过已完成→local 命中（投递+write-version 串行）→dev 条件跳过→版本记录+指针落库，全绿 |

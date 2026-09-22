@@ -3,26 +3,30 @@ import { BuiltinStepDef } from './step.types';
 import { CheckExecutor } from './check.executor';
 import { PullExecutor } from './pull.executor';
 import { UploadExecutor } from './upload.executor';
-import { RestartExecutor } from './restart.executor';
 import { ApplyExecutor } from './apply.executor';
 import { VersionExecutor } from './version.executor';
 import { PointerExecutor } from './pointer.executor';
-import { VerifyExecutor } from './verify.executor';
 import { CleanupExecutor } from './cleanup.executor';
 
 /** 内置步骤注册表的 DI token（engine 注入聚合后的 Record） */
 export const PIPELINE_BUILTIN_STEPS = 'PIPELINE_BUILTIN_STEPS';
 
+/**
+ * 内置步骤执行体集合。
+ *
+ * ⚠️ **2026-09-21 移除 `restart` / `verify`**（用户决定，见
+ * `specs/pipeline-restart-verify-as-action/design.md`）：这两个能力原先由平台代码实现，
+ * 但模板里根本没有对应节点（孤儿），重启/探活实际发生在控制台「部署」接口里。
+ * 现按「发布动作一律脚本」的口径下沉为**发布流水线里的 DB action**，代码侧不再承担。
+ */
 export interface BuiltinExecutors {
   check: CheckExecutor;
   pull: PullExecutor;
   upload: UploadExecutor;
-  restart: RestartExecutor;
   /** 后台模块部署生效（版本目录 → dist + 重启 + 切指针），方案 A 2026-09-17 */
   apply: ApplyExecutor;
   version: VersionExecutor;
   pointer: PointerExecutor;
-  verify: VerifyExecutor;
   cleanup: CleanupExecutor;
 }
 
@@ -61,12 +65,6 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       skip: (p) => skipReuseArtifact(p) || p.moduleType === 'backend',
       run: (ctx) => ex.upload.run(ctx),
     },
-    restart: {
-      category: 'deploy',
-      commandMode: 'override',
-      skip: (p) => skipReuseArtifact(p) || p.moduleType !== 'backend',
-      run: (ctx) => ex.restart.run(ctx),
-    },
     apply: {
       category: 'deploy',
       // 纯内置（与其他 service action 的 none 语义一致）：流水线不该用命令覆盖「如何生效」，
@@ -87,12 +85,6 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       commandMode: 'none', // 切指针/灰度规则：发布语义真相源
       skip: (p) => p.moduleType === 'backend',
       run: (ctx) => ex.pointer.run(ctx),
-    },
-    verify: {
-      category: 'probe',
-      commandMode: 'override',
-      skip: (p) => !!p.skipVerify, // 快线：跳过探活与失败自动回滚
-      run: (ctx) => ex.verify.run(ctx),
     },
     cleanup: {
       category: 'cleanup',

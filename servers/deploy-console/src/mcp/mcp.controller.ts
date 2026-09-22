@@ -46,6 +46,26 @@ export class McpController {
     return req?.mcpOperator || 'unknown';
   }
 
+  /**
+   * 取流水线并校验归属：只有**提交者本人**能查询/操作自己的流水线。
+   *
+   * 缺陷背景：`GET /api/mcp/pipeline/:jobId`、`cancel`、`promote` 原先都不校验归属，
+   * 任何持有有效 MCP Key 的人拿到 jobId 就能读到别人的流水线详情与日志（含 env /
+   * moduleKey / result）。对外开放给第三方 AI agent 平台前必须补上 ——
+   * 见 `specs/backend-consolidation/design.md` §4 的 D0。
+   *
+   * 安全约定：归属不符抛 **404 而非 403**。用状态码回答「jobId 是否存在」本身也是信息泄露。
+   *
+   * 注：本校验只覆盖 MCP 通道；控制台 `/api/pipelines/*` 走 JWT 与角色权限，行为不变。
+   */
+  private async ownedPipeline(jobId: string, req: any) {
+    const p = await this.pipelineService.get(jobId);
+    if (p.operator !== this.operator(req)) {
+      throw new NotFoundException(`流水线不存在: ${jobId}`);
+    }
+    return p;
+  }
+
   // ── 发布流水线 ──
 
   @Post('pipeline')
@@ -70,9 +90,9 @@ export class McpController {
   }
 
   @Get('pipeline/:jobId')
-  @ApiOperation({ summary: '查询流水线状态/进度/日志' })
-  async getPipeline(@Param('jobId') jobId: string) {
-    const p = await this.pipelineService.get(jobId);
+  @ApiOperation({ summary: '查询流水线状态/进度/日志（仅流水线提交者本人可见）' })
+  async getPipeline(@Param('jobId') jobId: string, @Req() req: any) {
+    const p = await this.ownedPipeline(jobId, req);
     return {
       jobId: p.id,
       env: p.env,
@@ -94,12 +114,14 @@ export class McpController {
   @Post('pipeline/:jobId/cancel')
   @ApiOperation({ summary: '取消流水线（幂等）' })
   async cancelPipeline(@Param('jobId') jobId: string, @Req() req: any) {
+    await this.ownedPipeline(jobId, req);
     return this.pipelineService.cancel(jobId, this.operator(req));
   }
 
   @Post('pipeline/:jobId/promote')
   @ApiOperation({ summary: '灰度转全量' })
   async promote(@Param('jobId') jobId: string, @Req() req: any) {
+    await this.ownedPipeline(jobId, req);
     return this.pipelineService.promote(jobId, this.operator(req));
   }
 

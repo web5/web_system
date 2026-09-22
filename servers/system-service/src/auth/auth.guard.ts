@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from './decorators';
+import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 /**
  * AuthGuard — 调用 auth-service 验证 JWT 令牌
@@ -30,14 +31,16 @@ export class AuthGuard implements CanActivate {
     // auth-service 地址，由各环境通过 AUTH_SERVICE_URL 显式指定。端口约定：
     //   - 本地：6101（本机 6001 被其它项目占用，见 servers/auth-service/.env）
     //   - dev/prod：6001（见 ecosystem.config.js 与 .env.production.example）
-    // 此处默认值仅作兜底，与 user-service / ai-service / todo-service 的守卫保持一致。
+    // 默认值取自 @web-system/shared 的 SERVICE_URL_DEFAULTS.auth（唯一真相源），
+    // 与 user-service / ai-service / todo-service 的守卫保持一致 —— 此前这里硬编码
+    // 127.0.0.1:6001，与注释声明的「本地 6101」自相矛盾。
     //
     // ⚠️ 必须把「空字符串」视为未配置：pm2 / 环境变量可能注入空串，
     //    而 configService.get(key, default) 只在 key 未定义时才用 default，
     //    拿到空串会执行 fetch('') 直接失败，最终被误报成 401「认证服务不可用」
     //    （2026-09-11 dev 环境事故：字典管理 / 数据浏览等页面全量 401）。
     const configured = (this.configService.get<string>('AUTH_SERVICE_URL') || '').trim();
-    this.authServiceUrl = (configured || 'http://127.0.0.1:6001').replace(/\/+$/, '');
+    this.authServiceUrl = (configured || SERVICE_URL_DEFAULTS.auth).replace(/\/+$/, '');
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

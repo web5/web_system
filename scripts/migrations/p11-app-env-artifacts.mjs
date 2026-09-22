@@ -63,9 +63,21 @@ function toCommitId(ref) {
   return i < 0 ? v : v.slice(i + 1) || v;
 }
 
-/** 入口指针（T1 定稿 A′：命名导出 + default 双透传 —— `export *` 不透传 default） */
+/**
+ * 入口指针（T1 定稿 A′ 的 System.register 版：命名导出 + default 双透传）。
+ *
+ * ⚠️ 不能用原生 ESM `export * from`：产物以 `MF_FORMAT=system` 构建，消费方
+ * `packages/shell-loader` 走 `System.import()`，原生 `export` 会在解析阶段抛
+ * `Unexpected token 'export'` → 整模块加载失败（2026-09-21 门户事故）。
+ */
 const pointerJs = (version) =>
-  `export * from './${version}/index.js';\nexport { default } from './${version}/index.js';\n`;
+  `System.register(['./${version}/index.js'], function (_export) {\n` +
+  `  'use strict';\n` +
+  `  return {\n` +
+  `    setters: [function (m) { _export(m); }],\n` +
+  `    execute: function () {}\n` +
+  `  };\n` +
+  `});\n`;
 const pointerCss = (version) => `@import url('./${version}/index.css');\n`;
 
 try {

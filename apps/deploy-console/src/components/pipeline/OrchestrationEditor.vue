@@ -458,22 +458,30 @@ function drawWires() {
 .task-node.approval .tag { color: var(--ws-success-500); border-color: var(--ws-success-500); }
 .task-node .ifb { font-size: 9px; font-weight: 700; color: #fff; background: var(--ws-brand-500); padding: 1px 5px; border-radius: 6px; font-family: var(--ws-font-mono, monospace); }
 .task-node .tname { font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
-.task-node .del, .act-node .del { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%;
+.task-node .del, .act-node .del { position: absolute; width: 18px; height: 18px; border-radius: 50%;
   background: var(--ws-bg-surface); border: 1px solid var(--ws-border); color: var(--ws-text-tertiary); cursor: pointer;
   display: none; align-items: center; justify-content: center; font-size: 11px; line-height: 1; padding: 0; z-index: 2; }
+/* 任务卡删除：右上角**外侧**（.task-node 无 overflow 裁剪，外凸点击区更好按） */
+.task-node .del { top: -8px; right: -8px; }
+/* 动作行删除：**行内**右侧垂直居中。
+   ⚠️ 2026-09-21 用户反馈「action 这里的删除 icon 被遮挡了」：动作行容器 .task-acts 为共享
+   边框组设了 overflow:hidden，沿用外侧写法（top:-8px;right:-8px）越界 8px 会被直接裁掉。
+   改行内定位后不再越界；行内已用 padding-right 预留按钮位（见 .act-node）。 */
+.act-node .del { top: 50%; right: 4px; transform: translateY(-50%); }
 .task-node:hover .del, .act-node:hover .del { display: flex; }
 .task-node .del:hover, .act-node .del:hover { background: var(--ws-error-500); border-color: var(--ws-error-500); color: #fff; }
 .act-node .del:disabled { cursor: not-allowed; opacity: .4; }
 
 /* 动作块：紧贴任务头（共享边框组，圆角 2px） */
 .task-acts { border: 1px solid var(--ws-border); border-radius: 2px; overflow: hidden; margin-top: -1px; background: var(--ws-bg-surface); }
-.act-node { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 9px; cursor: pointer; white-space: nowrap; width: 100%;
+.act-node { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 26px 4px 9px; cursor: pointer; white-space: nowrap; width: 100%;
   border-bottom: 1px solid var(--ws-border); }
 .act-node:last-child { border-bottom: none; }
 .act-node:hover { background: var(--ws-bg-surface); }
 .act-node .atag { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 2px; color: var(--ws-brand-500);
   background: var(--ws-bg-surface); border: 1px solid var(--ws-border); flex-shrink: 0; }
-.act-node .aname { font-size: 11px; color: var(--ws-text-secondary); font-family: var(--ws-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
+/* flex:1 + min-width:0：超长动作名在预留的按钮位前正确省略（否则会顶到删除按钮下面） */
+.act-node .aname { flex: 1; min-width: 0; font-size: 11px; color: var(--ws-text-secondary); font-family: var(--ws-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
 
 .add-task { align-self: flex-start; font-size: 12px; color: var(--ws-text-tertiary); background: none; border: 1px dashed var(--ws-border);
   border-radius: 2px; padding: 3px 10px; cursor: pointer; }

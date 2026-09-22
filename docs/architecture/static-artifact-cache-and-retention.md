@@ -106,7 +106,7 @@ export function isContentAddressed(filePath: string): boolean {
 ### 3.2 兜底缺失（放大故障）
 
 - 前端无「动态 import 失败」的可视化兜底（§5 方案 C）；
-- shell 的版本探测只比对 `shell/version.json`，**不覆盖模块版本**（§5 方案 D）。
+- shell 的版本探测当时只比对固定路径 `shell/version.json`，**不覆盖模块版本**（模块侧见 §5 方案 D，现已实现）。
 
 ## 4 现状盘点
 
@@ -200,12 +200,18 @@ export function isContentAddressed(filePath: string): boolean {
 2. `window.addEventListener('unhandledrejection')` 兜底动态 import 失败；
 3. shell 的 `ModuleContainer` 已有 `renderMountError`，把「挂载成功但首屏导航失败」也纳入（等 router 就绪后再判定）。
 
-### 方案 D（P1）：模块版本变化提示
+### 方案 D（P1）：模块版本变化提示（已实现）
 
-`apps/shell/src/version-check.ts` 目前只比对 `/shell/version.json`。建议同时轮询 `/__manifest__`，与页面内 `window.__MODULES_MANIFEST__` 比对：
+`apps/shell/src/version-check.ts` 同时轮询 `/__manifest__`，与页面内 `window.__MODULES_MANIFEST__` 比对：
 
 - 任一模块 `version` 变化 → 复用现有右下角「发现新版本，点击刷新」横幅；
 - 这样即便产物被清理，用户也能在**首次失败前**收到提示，而不是白屏。
+
+探测源（2026-09-21 修正）：shell 改为「指针 + 版本目录」发布后（产物落 `static/modules/shell/<产品线段>/<commit>/`，
+由 `deploy_deployments(env, 'shell').current_version` 决定 gateway 渲染哪份 HTML），
+`public/shell/version.json` 是覆盖式发布时代的遗留文件、不再随发布更新 —— 继续比对它会恒判"有新版本"且刷新无效。
+现改为比对服务端指针 `/__version__?module=shell`（与 gateway 渲染同源，比对时只取版本号末段），
+固定路径文件降级为指针不可用时的兜底。
 
 ### 方案 E（P2，可选演进）：入口也带 hash
 

@@ -12,7 +12,8 @@ import {
   type PipelineTemplate,
 } from '@/api'
 import dayjs from 'dayjs'
-import BranchSelect from '@/components/BranchSelect.vue'
+// 发起发布抽屉已抽为共用组件（服务详情页也用它，原地打开不跳页）
+import PipelineSubmitDrawer from '@/components/pipeline/PipelineSubmitDrawer.vue'
 // 流水线的编辑 / 新建走独立页面（PipelineEdit），列表页不再有新建/编辑弹窗，
 // 因此这里不再需要 UserSelect（人员选择器已挪到编辑页的「基本信息」里）。
 import {
@@ -21,6 +22,7 @@ import {
   stepState as stageStepState,
   APPROVAL_STATUSES,
   isApprovalPending,
+  toMs,
 } from '@/components/pipeline/pipeline.stages'
 
 const router = useRouter()
@@ -57,12 +59,15 @@ function statusColor(status: string) {
 function statusText(status: string) {
   return stageStatusText(status)
 }
-function formatTime(ts?: number) {
-  return ts ? dayjs(ts).format('MM-DD HH:mm:ss') : '—'
+// bigint 时间戳到前端是字符串，必须先 Number 归一（否则 dayjs 误解析成 1797 年，规格 §10.1）
+function formatTime(ts?: number | string) {
+  const n = toMs(ts)
+  return n ? dayjs(n).format('MM-DD HH:mm:ss') : '—'
 }
 function durationMs(p: PipelineItem) {
-  if (!p.endTime) return Date.now() - p.startTime
-  return p.endTime - p.startTime
+  const start = toMs(p.startTime)
+  const end = toMs(p.endTime)
+  return end ? end - start : Date.now() - start
 }
 
 // ===== 流水线（流程定义）列表 =====
@@ -212,10 +217,21 @@ function remove(t: PipelineTemplate) {
   })
 }
 
-// ===== 发起发布（抽屉内提交：选模块 + 本流水线/任意流水线 + 分支/commit） =====
+// ===== 发起发布：抽屉已抽为共用组件 PipelineSubmitDrawer（2026-09-21）
+//     页面只负责「用哪些锁定参数打开它」+「提交成功后刷新自己」 =====
 const submitOpen = ref(false)
-const submitting = ref(false)
-const env = ref('dev')
+/** 锁定模块（行内「执行」/ 由调用方决定） */
+const submitFixedModule = ref('')
+/** 预选但不锁定（卡片「提交」预填该模块，用户可改） */
+const submitInitialModule = ref('')
+/** 锁定流水线模板（行内「执行」） */
+const submitFixedTemplate = ref('')
+/** 模板绑定环境：环境改了即解除模板锁定 */
+const submitFixedEnv = ref('')
+/** 打开时的默认环境 */
+const submitDefaultEnv = ref('')
+
+// ===== 模块 / 环境（页面卡片区与筛选条的数据源）=====
 const environments = ref<{ id: string; name: string }[]>([])
 interface ModuleItem {
   key: string
@@ -228,44 +244,10 @@ const modules = ref<ModuleItem[]>([])
 const availableModules = computed(() =>
   modules.value.filter((m) => ['micro-frontend', 'frontend', 'backend'].includes(m.type)),
 )
-const form = ref({
-  moduleKey: '',
-  branch: 'master',
-  commitId: undefined as string | undefined,
-  mode: 'direct' as 'direct' | 'grayscale',
-  grayscaleType: 'percent' as 'percent' | 'user-list' | 'header',
-  percentValue: 10,
-  userIds: '',
-  headerKey: 'x-canary',
-  headerValues: 'on',
-  templateId: undefined as string | undefined,
-})
-/** 可发布版本候选：versionTag=完整引用（展示用），commit=纯短哈希（提交用） */
-const releases = ref<{ versionTag: string; commit?: string; note?: string }[]>([])
-/** 分支最近提交（git log origin/<branch>）：提交抽屉的 Commit 候选——历史版本下拉里看不到刚 push 的提交（用户 2026-09-21 反馈） */
-const branchCommits = ref<{ hash: string; short: string; subject: string; author: string; date: string }[]>([])
-const loadingCommits = ref(false)
-const availTemplates = ref<PipelineTemplate[]>([])
-
-async function loadBranchCommits() {
-  const branch = (form.value.branch || 'master').trim()
-  if (!branch || !form.value.moduleKey) { branchCommits.value = []; return }
-  loadingCommits.value = true
-  try {
-    branchCommits.value = await pipelineRunsApi.branchCommits(branch, 20)
-  } catch {
-    branchCommits.value = []
-  } finally {
-    loadingCommits.value = false
-  }
-}
 
 async function loadEnvironments() {
   try {
     environments.value = await environmentApi.list()
-    if (!environments.value.find((e) => e.id === env.value)) {
-      env.value = environments.value[0]?.id || 'dev'
-    }
   } catch {
     message.error('加载环境列表失败')
   }
@@ -277,51 +259,27 @@ async function loadModules() {
     message.error('加载模块列表失败')
   }
 }
-async function loadReleases() {
-  try {
-    releases.value = await pipelineRunsApi.releases(env.value, form.value.moduleKey)
-  } catch {
-    releases.value = []
-  }
-}
-async function loadAvailTemplates() {
-  try {
-    const all = (await pipelinesApi.list(form.value.moduleKey)) || []
-    // 双域重构后环境是**动态创建**的（envId 自增：1/2/3…），给每个新环境都建一条流水线不可维护。
-    // 因此模板只按**模块**绑定，环境是运行期参数：本环境绑定的模板优先排序，其余作为候选。
-    const score = (t: any) => (t.env === env.value ? 0 : !t.env ? 1 : 2)
-    availTemplates.value = [...all].sort((a: any, b: any) => score(a) - score(b))
-    // 当前选中的模板已不在候选里（切换环境/模块后）→ 重新选：行内锁定的优先，否则取排序第一条
-    const stillValid = availTemplates.value.some((t) => t.id === form.value.templateId)
-    if (!stillValid) {
-      const lockId = lockTemplateId.value
-      lockTemplateId.value = ''
-      form.value.templateId = lockId || availTemplates.value[0]?.id || undefined
-    }
-  } catch (e: any) {
-    availTemplates.value = []
-    message.error(e?.response?.data?.message || '加载流水线列表失败')
-  }
-}
+/**
+ * 打开「发起发布」抽屉（共用组件 `PipelineSubmitDrawer`）。
+ *
+ * 三种来源复用同一个函数（与原内联实现语义一致）：
+ *  - 卡片「提交发布」：`openSubmit(moduleKey)` —— 模块**预选不锁定**，流水线与环境自由选；
+ *  - 行内「执行」：`openSubmit(moduleKey, tplId, tplEnv)` —— 模块与流水线**锁定**，环境只是默认值（可改）；
+ *  - query 入口（域详情页跳转来的历史路径）：`openSubmit(moduleKey, undefined, env)`。
+ */
 function openSubmit(initKey?: string, fixedTplId?: string, tplEnv?: string) {
-  form.value.moduleKey = initKey || availableModules.value[0]?.key || ''
-  fixedTemplateId.value = fixedTplId || ''
-  // 模板绑定的环境 = 抽屉打开时的**默认环境**（可改）；只有它未变时才锁定模板
-  lockedTplEnv.value = tplEnv || ''
-  fixedEnv.value = tplEnv || ''
-  fixedModuleKey.value = fixedTplId ? (initKey || '') : ''
-  if (fixedEnv.value) env.value = fixedEnv.value
-  form.value.templateId = fixedTplId || undefined
-  form.value.branch = 'master'
-  form.value.commitId = undefined
-  form.value.mode = 'direct'
+  submitFixedTemplate.value = fixedTplId || ''
+  submitFixedModule.value = fixedTplId ? (initKey || '') : ''
+  submitInitialModule.value = fixedTplId ? '' : (initKey || '')
+  submitFixedEnv.value = tplEnv || ''
+  submitDefaultEnv.value = tplEnv || ''
   submitOpen.value = true
-  void loadModules().then(() => {
-    if (!form.value.moduleKey && availableModules.value.length) {
-      form.value.moduleKey = availableModules.value[0].key
-    }
-    return Promise.all([loadReleases(), loadAvailTemplates(), loadBranchCommits()])
-  })
+}
+
+/** 抽屉提交成功：刷新列表与概况（抽屉内部已自行关闭） */
+function onSubmitted() {
+  void refreshAll()
+  tick()
 }
 // ===== 按模块查看（一模块一卡） =====
 interface ModuleCard {
@@ -343,7 +301,7 @@ const moduleCards = computed<ModuleCard[]>(() =>
       const s = summaryMap.value[t.id]
       total += s?.total || 0
       ok += s?.ok || 0
-      if (s?.latest && (!latest || s.latest.startTime > latest.startTime)) {
+      if (s?.latest && (!latest || toMs(s.latest.startTime) > toMs(latest.startTime))) {
         latest = s.latest
       }
     }
@@ -417,7 +375,7 @@ const STATUS_FILTERS = [
 ]
 const filteredRows = computed<PipelineRow[]>(() => {
   const f = appliedFilters.value
-  return pipelineRows.value.filter((r) => {
+  const rows = pipelineRows.value.filter((r) => {
     if (f.keyword) {
       // 环境也进关键词（搜 "prod" 直接命中最近发过生产的那几条）
       const hay =
@@ -440,6 +398,10 @@ const filteredRows = computed<PipelineRow[]>(() => {
     }
     return true
   })
+  // 默认排序（规格 §10）：最近执行时间倒序（最新在上），从未执行（无实例）的统一置尾；
+  // 时间相同或均无实例时保持「模块 × 流水线」原序 —— Array#sort 稳定，刷新不跳行。
+  rows.sort((a, b) => toMs(b.latest?.startTime) - toMs(a.latest?.startTime))
+  return rows
 })
 /** 流水线展示名：默认 = 模块名；流水线名非空且与模块名不同时追加「 · 流水线名」 */
 function rowName(r: PipelineRow): string {
@@ -448,20 +410,9 @@ function rowName(r: PipelineRow): string {
   return r.module.name
 }
 
-// 行内「执行」：打开发起抽屉并预选该流水线 —— 模块与流水线锁定，
+// 行内「执行」：打开发起抽屉并锁定该流水线 —— 模块与流水线锁定，
 // **环境只是默认值，可改**（双域重构后环境是运行期参数：envId 动态创建，不再为每个环境建流水线）
-const lockTemplateId = ref('')
-const fixedTemplateId = ref('')
-const fixedEnv = ref('')
-/** 被锁定模板所属的环境：环境被改动后解除模板锁定，允许另选模板 */
-const lockedTplEnv = ref('')
-const fixedModuleKey = ref('')
-/** 模板是否仍保持锁定：来自行内执行、且用户没有改环境（无 env 的模板视为环境无关） */
-const templateLocked = computed(
-  () => !!fixedTemplateId.value && (!lockedTplEnv.value || lockedTplEnv.value === env.value),
-)
 function executeTpl(r: PipelineRow) {
-  lockTemplateId.value = r.tpl.id
   openSubmit(r.module.key, r.tpl.id, r.tpl.env || '')
 }
 function gotoPipelineDetail(r: PipelineRow) {
@@ -482,103 +433,9 @@ function gotoModuleDetail(m: any) {
   router.push(m?.type === 'backend' ? `/services/${m.key}` : `/apps/${m.key}`)
 }
 
-async function onEnvChange() {
-  await Promise.all([loadReleases(), loadAvailTemplates()])
-}
-async function onModuleChange() {
-  const mod = modules.value.find((m) => m.key === form.value.moduleKey)
-  if (mod?.defaultEnv && environments.value.some((e) => e.id === mod.defaultEnv)) {
-    env.value = mod.defaultEnv
-  }
-  // 灰度仅对前端/微前端（gateway resolveCanary 作用于页面静态资源）；后端服务只支持全量
-  if (mod && mod.type === 'backend') form.value.mode = 'direct'
-  await Promise.all([loadReleases(), loadAvailTemplates(), loadBranchCommits()])
-}
-
-/** Commit 候选过滤：分支提交匹配短哈希/说明/作者，历史版本匹配 versionTag（show-search 输入短哈希直达） */
-function filterCommitOption(input: string, option: any) {
-  const text = `${option.value ?? ''} ${option.title ?? ''}`.toLowerCase()
-  return text.includes(input.trim().toLowerCase())
-}
-
-/** 当前所选模块是否支持灰度（后端服务不支持） */
-const canGrayscale = computed(() => {
-  const m = modules.value.find((x) => x.key === form.value.moduleKey)
-  return !!m && m.type !== 'backend'
-})
-function buildGrayscaleRule(): Record<string, unknown> | undefined {
-  if (form.value.mode !== 'grayscale') return undefined
-  if (form.value.grayscaleType === 'percent') {
-    return { type: 'percent', value: Number(form.value.percentValue) }
-  }
-  if (form.value.grayscaleType === 'user-list') {
-    const ids = form.value.userIds.split(/[,\s]+/).filter(Boolean)
-    if (!ids.length) throw new Error('灰度用户名单不能为空')
-    return { type: 'user-list', userIds: ids }
-  }
-  const values = form.value.headerValues.split(/[,\s]+/).filter(Boolean)
-  if (!values.length) throw new Error('灰度请求头取值不能为空')
-  return { type: 'header', key: form.value.headerKey, values }
-}
-function doSubmit(confirm: boolean) {
-  submitting.value = true
-  const run = async () => {
-    try {
-      const rule = buildGrayscaleRule()
-      const res = await pipelineRunsApi.submit({
-        env: env.value,
-        moduleKey: form.value.moduleKey,
-        branch: form.value.branch || 'master',
-        commitId: form.value.commitId || undefined,
-        mode: form.value.mode,
-        grayscaleRule: rule,
-        templateId: form.value.templateId || undefined,
-        confirm,
-      })
-      if ((res as any).status === 'pending-approval') {
-        message.info(`已提交审批（${res.jobId}），审批通过后将自动发布`)
-      } else {
-        message.success(`已提交: ${res.jobId}`)
-      }
-      submitOpen.value = false
-      await refreshAll()
-      tick()
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || e?.message || '提交流水线失败')
-    } finally {
-      submitting.value = false
-    }
-  }
-  void run()
-}
-function handleSubmit() {
-  if (!form.value.moduleKey) {
-    message.warning('请选择要发布的模块')
-    return
-  }
-  if (!form.value.templateId) {
-    message.warning('请选择要使用的流水线')
-    return
-  }
-  const isProd = env.value === 'prod'
-  const desc = `按「${
-    availTemplates.value.find((t) => t.id === form.value.templateId)?.name || '流水线'
-  }」发布 ${form.value.moduleKey} 到 ${env.value}（分支 ${form.value.branch}${
-    form.value.commitId ? ` @ ${form.value.commitId}` : ' 最新'
-  }）`
-  if (isProd) {
-    Modal.confirm({
-      title: '确认发布到生产环境',
-      content: `${desc}。生产发布需审批：提交后将进入「待审批」状态，审批通过才会执行。确认提交？`,
-      okText: '提交审批',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => doSubmit(true),
-    })
-    return
-  }
-  doSubmit(false)
-}
+// 抽屉联动 / 灰度规则 / Commit 过滤等（原 onEnvChange、onModuleChange、filterCommitOption、
+// canGrayscale、buildGrayscaleRule）已随抽屉一起搬入共用组件 PipelineSubmitDrawer（2026-09-21）。
+// 提交（doSubmit / handleSubmit，含 prod 二次确认）已随抽屉一起搬入 PipelineSubmitDrawer。
 
 // ===== 全部执行记录（全局浏览，含早期未关联流水线快照的实例） =====
 const plOpen = ref(false)
@@ -766,8 +623,8 @@ onMounted(async () => {
   const qModule = typeof q.module === 'string' ? q.module : undefined
   const qEnv = typeof q.env === 'string' ? q.env : undefined
   if (qModule || qEnv) {
-    if (qEnv && environments.value.some((e) => e.id === qEnv)) env.value = qEnv
-    openSubmit(qModule)
+    // 环境默认值直接交给抽屉（组件内部会校验该环境是否存在并回落）
+    openSubmit(qModule, undefined, qEnv || '')
   }
 })
 onUnmounted(stopPolling)
@@ -930,147 +787,18 @@ onUnmounted(stopPolling)
       </div>
     </a-modal>
 
-    <!-- 发起发布抽屉 -->
-    <a-drawer
-      :open="submitOpen"
-      title="发起发布"
-      placement="right"
-      :width="720"
-      @close="submitOpen = false"
-    >
-      <a-form layout="vertical">
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="环境" required>
-              <a-select v-model:value="env" @change="onEnvChange">
-                <a-select-option v-for="e in environments" :key="e.id" :value="e.id">
-                  {{ e.name }}（{{ e.id }}）
-                </a-select-option>
-              </a-select>
-              <div class="field-hint">
-                环境是运行期参数，可在此改（含自建环境 1/2/3…）；默认取所选流水线绑定的环境
-              </div>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="模块（后端/前端/微前端均可走流水线发布）" required>
-              <a-select
-                v-model:value="form.moduleKey"
-                placeholder="选择模块"
-                :disabled="!!fixedModuleKey"
-                @change="onModuleChange"
-              >
-                <a-select-option v-for="m in availableModules" :key="m.key" :value="m.key">
-                  {{ m.name }}（{{ m.key }}）
-                </a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-form-item v-if="!templateLocked" label="使用流水线" required>
-          <a-select v-model:value="form.templateId" placeholder="选择流水线">
-            <a-select-option v-for="t in availTemplates" :key="t.id" :value="t.id">
-              {{ t.name }}<template v-if="t.env"> · {{ t.env }}</template>
-              <template v-if="t.builtin">（默认）</template>
-              <template v-if="t.approval === 'always'">（强制审批）</template>
-              <template v-if="t.approval === 'never'">（免审批）</template>
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-else label="使用流水线">
-          <a-tag color="blue">
-            {{ availTemplates.find((t) => t.id === fixedTemplateId)?.name || '本流水线' }}
-          </a-tag>
-          <span class="field-hint-inline">环境已改为 {{ env }}，将按同一流水线流程发布到该环境</span>
-        </a-form-item>
-
-        <a-row :gutter="12">
-          <a-col :span="12">
-            <a-form-item label="分支">
-              <!-- 分支下拉（origin/*），避免手输写错；见 BranchSelect 组件头注释 -->
-              <BranchSelect v-model="form.branch" :module-key="form.moduleKey" @update:model-value="loadBranchCommits" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="Commit（留空=分支最新提交）">
-              <a-select
-                v-model:value="form.commitId"
-                show-search
-                allow-clear
-                :loading="loadingCommits"
-                placeholder="留空=最新；可从分支提交列表选，或输入短哈希"
-                :filter-option="filterCommitOption"
-              >
-                <a-select-opt-group label="分支最近提交（刚 push 的在这里）">
-                  <a-select-option v-for="c in branchCommits" :key="c.hash" :value="c.short" :title="c.subject">
-                    {{ c.short }} · {{ c.subject }}<span class="opt-meta">（{{ c.author }} · {{ c.date }}）</span>
-                  </a-select-option>
-                  <a-select-option v-if="!branchCommits.length" :value="'__none__'" disabled>
-                    {{ loadingCommits ? '加载分支提交中…' : '未取到分支提交（仍可留空=最新，或直接输入短哈希）' }}
-                  </a-select-option>
-                </a-select-opt-group>
-                <a-select-opt-group v-if="releases.length" label="历史发布版本（产物已存在，可复用跳过构建）">
-                  <a-select-option v-for="r in releases" :key="r.versionTag" :value="r.commit || r.versionTag">
-                    {{ r.versionTag }}{{ r.note ? ` · ${r.note}` : '' }}
-                  </a-select-option>
-                </a-select-opt-group>
-              </a-select>
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-form-item v-if="canGrayscale" label="模式">
-          <a-radio-group v-model:value="form.mode">
-            <a-radio value="direct">全量</a-radio>
-            <a-radio value="grayscale">灰度</a-radio>
-          </a-radio-group>
-        </a-form-item>
-
-        <a-form-item v-if="form.mode === 'grayscale'" label="灰度规则">
-          <a-space wrap>
-            <a-select v-model:value="form.grayscaleType" style="width: 130px;">
-              <a-select-option value="percent">百分比</a-select-option>
-              <a-select-option value="user-list">用户名单</a-select-option>
-              <a-select-option value="header">请求头</a-select-option>
-            </a-select>
-            <a-input-number
-              v-if="form.grayscaleType === 'percent'"
-              v-model:value="form.percentValue"
-              :min="1"
-              :max="100"
-              addon-after="%"
-            />
-            <a-input
-              v-if="form.grayscaleType === 'user-list'"
-              v-model:value="form.userIds"
-              placeholder="用户 ID，逗号分隔"
-              style="width: 260px;"
-            />
-            <template v-if="form.grayscaleType === 'header'">
-              <a-input v-model:value="form.headerKey" placeholder="请求头名" style="width: 140px;" />
-              <a-input v-model:value="form.headerValues" placeholder="取值，逗号分隔" style="width: 140px;" />
-            </template>
-          </a-space>
-        </a-form-item>
-
-        <a-alert
-          type="info"
-          show-icon
-          style="margin-bottom: 12px;"
-          message="产物投递由系统自动决定：测试环境(local/dev)=本机，正式发布按配置投递到生产服务器。发布基于远程仓库分支 + commit（隔离发布目录 git 拉取），请先 commit & push 再发布"
-        />
-        <a-button
-          type="primary"
-          :loading="submitting"
-          :danger="env === 'prod'"
-          block
-          @click="handleSubmit"
-        >
-          提交{{ env === 'prod' ? '（生产，需审批）' : '发布' }}
-        </a-button>
-      </a-form>
-    </a-drawer>
+    <!-- 发起发布抽屉（共用组件 PipelineSubmitDrawer）：三处入口复用 ——
+         流水线页卡片「提交发布」/ 表格行内「执行」，以及服务详情页「构建发布」（原地打开，不跳页）。
+         锁定参数由调用方按入口传入（模块/流水线/环境）。 -->
+    <PipelineSubmitDrawer
+      v-model:open="submitOpen"
+      :fixed-module-key="submitFixedModule"
+      :initial-module-key="submitInitialModule"
+      :fixed-template-id="submitFixedTemplate"
+      :fixed-template-env="submitFixedEnv"
+      :default-env="submitDefaultEnv"
+      @submitted="onSubmitted"
+    />
 
     <!-- 全部执行记录抽屉（全局浏览；流水线归属见流水线详情页历史） -->
     <a-drawer

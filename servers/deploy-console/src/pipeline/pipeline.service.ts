@@ -37,7 +37,6 @@ import { StepBranchService } from '../pipeline-step-command/step-branch.service'
 import { evalCondition } from './steps/condition';
 import { pickStepBranch } from './steps/step-branch';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
-import { PlatformScriptSeedService } from '../pipeline-step-command/platform-script-seed.service';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
@@ -74,7 +73,6 @@ import { ReleaseGitService } from '../git/release-git.service';
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
 // 平台托管脚本（正文 + 随 console 分发的脚本目录）
-import { platformScriptsDir } from './step-scripts';
 // v5 节点执行策略（纯函数：check 恒内置 / git 支持 DB 脚本 / version·pointer 纯内置）
 import { planNodeExec } from './steps/node-exec-plan';
 // 编排新模型（步骤→任务→动作）：快照与执行引擎（specs/pipeline-step-task/design.md）
@@ -249,10 +247,17 @@ export interface StageVarsInput {
   /** 删除策略：mv=改名到临时目录（规避批量删除审批）/ rm=直接删除 */
   safeDelete?: 'mv' | 'rm';
   /**
-   * 平台脚本目录（随 console 分发的实现脚本，如 restart-backend.sh）。
-   * 不下发则 restart/verify 阶段拿不到实现 —— 它们是平台能力，不该依赖发布分支。
+   * 发布平台自身的 API 基址（`http://127.0.0.1:<console PORT>/api`），注入为 `CONSOLE_API`。
+   *
+   * 用途：动作脚本用 **curl 调平台内部接口**（如写版本 / 切指针），而不是直连数据库或
+   * 依赖 `*.mjs` 平台工具 —— 见 `specs/pipeline-restart-verify-as-action/design.md` §2.4。
    */
-  platformScriptsDir?: string;
+  consoleApi?: string;
+  /**
+   * 脚本调用平台内部接口的凭据（`INTERNAL_API_KEY`），注入为 `CONSOLE_TOKEN`，
+   * 通过 `x-internal-key` 头鉴权（与 `/api/internal/release/*` 一致）。
+   */
+  consoleToken?: string;
   /**
    * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
    * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
@@ -276,6 +281,10 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   'BRANCH',
   'STAGE',
   'RELEASE_DIR',
+  // 平台凭据：脚本 curl 调平台内部接口用。被配置中心/流水线变量覆盖会导致
+  // 「脚本调用 401」或「脚本指向别的 console」这类难以定位的发布失败。
+  'CONSOLE_API',
+  'CONSOLE_TOKEN',
 ];
 
 /**
@@ -336,7 +345,10 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     KEEP_VERSIONS: String(i.keepVersions ?? 5),
     PROTECTED_VERSIONS: (i.protectedVersions ?? []).join(' '),
     WS_SAFE_DELETE: i.safeDelete === 'rm' ? 'rm -rf' : 'mv',
-    WS_PLATFORM_SCRIPTS_DIR: i.platformScriptsDir ?? '',
+    // 平台自身接口 + 凭据：动作脚本用 `curl $CONSOLE_API/internal/release/*`
+    // 调平台（写版本 / 切指针），脚本自包含、不直连数据库
+    CONSOLE_API: i.consoleApi ?? '',
+    CONSOLE_TOKEN: i.consoleToken ?? '',
   };
 
   // P0（2026-09-20）：配置中心全量注入。
@@ -459,11 +471,21 @@ export class PipelineService {
     // 发布目录 git 工具（拉码后读实际 HEAD 回填版本，并做入参一致性断言）
     private readonly git: ReleaseGitService,
     // 平台托管脚本同步（发布前保证该模板的 git 脚本是最新版本）
-    private readonly platformScripts: PlatformScriptSeedService,
     // 内置步骤注册表（executeStage 按步骤元数据数据驱动分派；执行体在各自 executor 内）
     @Inject(PIPELINE_BUILTIN_STEPS)
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
   ) {}
+
+  /**
+   * 平台自身 API 基址（注入给动作脚本的 `CONSOLE_API`）。
+   *
+   * 用 127.0.0.1 而非 localhost：本机服务只监听 IPv4，localhost 解析到 IPv6 时连不上
+   * （历史踩坑：Node fetch 访问 :6000 直接被拒）。
+   */
+  private consoleApiBase(): string {
+    const port = this.configService.get<string>('PORT') || '6200';
+    return `http://127.0.0.1:${port}/api`;
+  }
 
   /**
    * 发布目录（RELEASE_WORKSPACE）：
@@ -593,11 +615,6 @@ export class PipelineService {
         `模板「${tpl.name}」默认环境为 ${tplEnv}，本次发布到 ${dto.env}（按运行 env 执行流程）`,
       );
     }
-    // 发布前把平台托管脚本（git）同步到该模板：保证运行期一定拿到与代码一致的最新脚本
-    // （幂等；模板新建/被改过都不会漏。失败不阻断提交——拉码阶段还有内置回退）
-    await this.platformScripts.seedForTemplate(tpl.id).catch((e) => {
-      this.logger.warn(`平台托管脚本同步失败（模板 ${tpl.id}）: ${(e as Error).message}`);
-    });
     // 审批门禁：模板策略覆盖环境规则（always/never），inherit 沿用环境（默认 prod）
     const needsApproval = needsApprovalForTemplate(
       tpl,
@@ -1250,19 +1267,23 @@ export class PipelineService {
    * 看不到刚 push 的提交。此接口从发布目录 git 拉 origin/<branch> 最近 N 条提交供选择；
    * 留空 = 分支最新（原语义不变）。
    */
-  async listBranchCommits(branch: string, limit = 20) {
-    // 分支名白名单：防注入（拼进 git 命令）
-    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
-      throw new BadRequestException(`分支名不合法: ${branch}`);
-    }
-    const n = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+  /** 分支提交缓存（SWR）：`<branch>:<n>` → 结果 + 写入时刻；进程内、重启即失效 */
+  private readonly commitCache = new Map<
+    string,
+    { at: number; rows: Array<{ hash: string; short: string; subject: string; author: string; date: string }> }
+  >();
+  /** 正在后台 fetch 的分支键（同一分支只跑一次，避免连点堆请求） */
+  private readonly commitRefreshing = new Set<string>();
+
+  /** 缓存新鲜期：期内直接命中；过期后仍先返回旧值，由后台刷新补新（见 listBranchCommits） */
+  private static readonly COMMIT_CACHE_TTL_MS = 60_000;
+
+  /**
+   * 读本地 `origin/<branch>` 的最近提交（**不 fetch**，毫秒级）。
+   * 分支不存在 / 发布目录未就绪 → 空数组（前端留「留空=最新」兜底）。
+   */
+  private readBranchCommits(branch: string, n: number) {
     try {
-      // 先 fetch 保证 origin/<branch> 最新；离线/无权限时静默降级用本地引用
-      try {
-        this.command.exec(`git fetch origin ${branch} --quiet`, this.releaseWorkspace);
-      } catch {
-        /* 忽略 fetch 失败 */
-      }
       const out = this.command.exec(
         `git log origin/${branch} -n ${n} --pretty=format:%H%x09%h%x09%s%x09%an%x09%ar`,
         this.releaseWorkspace,
@@ -1275,8 +1296,53 @@ export class PipelineService {
           return { hash, short, subject, author, date };
         });
     } catch {
-      return []; // 分支不存在 / 仓库未就绪：空列表，前端留「留空=最新」兜底
+      return [];
     }
+  }
+
+  /**
+   * 按分支列最近提交（提交发布时选 commit 用）。
+   *
+   * 用户 2026-09-21 反馈：提交抽屉的 Commit 下拉只列「历史发布版本（磁盘产物）」，
+   * 看不到刚 push 的提交。此接口从发布目录 git 拉 origin/<branch> 最近 N 条提交供选择；
+   * 留空 = 分支最新（原语义不变）。
+   *
+   * ⚠️ 2026-09-21 优化（切换分支时级联明显卡顿）：原实现**每次请求都同步
+   * `git fetch origin <branch>`**，网络往返（公司网/远端慢时 1–3s）直接压在
+   * 「分支 → Commit 候选」的联动上。现改为 **stale-while-revalidate**：
+   *   ① 先读**本地引用**（`git log origin/<branch>`，毫秒级）立即返回；
+   *   ② 同时后台 `git fetch` 刷新缓存，**下一次**请求（或 60s 后过期）即拿到最新
+   *      —— 刚 push 的提交最迟在切换/重开抽屉时出现，不再阻塞任何一次交互。
+   * 缓存按 `<branch>:<n>` 键控、进程内有效；连点同一分支只发一次 fetch。
+   */
+  async listBranchCommits(branch: string, limit = 20) {
+    // 分支名白名单：防注入（拼进 git 命令）
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
+      throw new BadRequestException(`分支名不合法: ${branch}`);
+    }
+    const n = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+    const key = `${branch}:${n}`;
+
+    // 后台刷新：**必须用异步 exec**（同步 execSync 会把 4s 的 fetch 压在事件循环里，
+    // 期间所有请求排队 —— 这正是首版 SWR 仍然慢的原因）。
+    if (!this.commitRefreshing.has(key)) {
+      this.commitRefreshing.add(key);
+      void this.command
+        .execAsync(`git fetch origin ${branch} --quiet`, this.releaseWorkspace, {}, 15_000)
+        .then(() => {
+          const rows = this.readBranchCommits(branch, n);
+          if (rows.length) this.commitCache.set(key, { at: Date.now(), rows });
+        })
+        .catch(() => undefined)
+        .finally(() => this.commitRefreshing.delete(key));
+    }
+
+    const hit = this.commitCache.get(key);
+    if (hit && Date.now() - hit.at < PipelineService.COMMIT_CACHE_TTL_MS) return hit.rows;
+
+    const rows = this.readBranchCommits(branch, n);
+    this.commitCache.set(key, { at: Date.now(), rows });
+    return rows;
   }
 
   private async run(
@@ -1581,7 +1647,8 @@ export class PipelineService {
         protectedVersions: await this.resolveProtectedVersions(p),
         gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
         safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
-        platformScriptsDir: platformScriptsDir(),
+        consoleApi: this.consoleApiBase(),
+        consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
         pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
       });
       return { ...env, ...inject };
@@ -1983,13 +2050,23 @@ export class PipelineService {
    *
    * 合并后的键**强制覆盖**既有环境（历史 `PORT=6200` 污染的对策）。
    * 解析失败只告警不阻断——配置中心是增强能力，不该让整个发布失败。
+   *
+   * ⚠️ 走 `resolveForScripts`（**跳过 `is_secret=1` 的项**）：脚本 env 里不出现密钥。
+   * 密钥要到达服务进程，走「下发 `.env.generated`」这条链路
+   * （`specs/service-config-delivery/design.md` §4.4 / §10-3），不是塞进脚本环境。
    */
   private async resolveInjectEnv(p: DeployPipelineEntity): Promise<Record<string, string>> {
     try {
-      const cfg = await this.configs.resolve(p.env, p.moduleKey);
+      const { config: cfg, excludedSecrets } = await this.configs.resolveForScriptsDetailed(
+        p.env,
+        p.moduleKey,
+      );
       const keys = Object.keys(cfg);
-      if (keys.length) {
-        p.logs = [...(p.logs ?? []), `[config] 注入 ${keys.length} 项配置（强制覆盖）`];
+      if (keys.length || excludedSecrets.length) {
+        p.logs = [
+          ...(p.logs ?? []),
+          `[config] 注入 ${keys.length} 项配置（强制覆盖），已排除 ${excludedSecrets.length} 个密钥项`,
+        ];
         await this.save(p);
       }
       return cfg;
@@ -2084,7 +2161,8 @@ export class PipelineService {
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
-      platformScriptsDir: platformScriptsDir(),
+      consoleApi: this.consoleApiBase(),
+      consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { PipelineItem, OrchestrationStep, OrchestrationTask, TaskRunStatus } from '@/api'
 import {
   stepList,
@@ -44,7 +44,14 @@ const TASK_STATE_TEXT: Record<string, string> = {
 
 /** 任务状态：有落库直读；无落库的历史实例按整体状态粗粒度兜底 */
 function taskStateOf(step: OrchestrationStep, task: OrchestrationTask): TaskRunStatus | '' {
-  if (hasTaskStates.value) return props.instance.taskStates?.[`${step.id}/${task.id}`] || ''
+  const raw = props.instance.taskStates?.[`${step.id}/${task.id}`] || ''
+  // 终态归一（2026-09-22，规格 §13）：实例整体已 succeeded 时，落库残留的 awaiting/running
+  // 是过期中间态（如审批通过后引擎未回写任务状态）—— 整体成功与「审批仍挂起」不可能并存。
+  // 按原值展示会让步骤聚合为 awaiting，导致「该变绿的连线」保持灰色。
+  if (props.instance.status === 'succeeded' && (raw === 'awaiting' || raw === 'running')) {
+    return 'succeeded'
+  }
+  if (hasTaskStates.value) return raw
   return coarseTaskState(step)
 }
 
@@ -80,11 +87,93 @@ function stepAgg(step: OrchestrationStep): AggState {
   return 'none'
 }
 
-/** 步骤间箭头：前一步骤终态成功 → 绿（走过路径高亮） */
-function arrowGreen(i: number): boolean {
-  if (i <= 0 || !orch.value) return false
-  return stepAgg(orch.value[i - 1]) === 'succeeded'
+/* ── 连线：与编辑页 OrchestrationEditor 同构的 SVG 测量式连线 ──
+ * 原型稿 pipeline-env-branch-canvas.html：连线画在**任务行** —— 主线从前一列任务中线引出，
+ * 列间分叉竖线，横线 + 箭头指向下一列每个任务的中线；走过路径（前一步骤聚合成功）绿色高亮。
+ * 2026-09-22：按原型稿把详情页从「步骤卡间 CSS 短线」改成此结构（用户反馈连线始终没对准）。 */
+const canvasBody = ref<HTMLElement | null>(null)
+const wires = ref<SVGSVGElement | null>(null)
+
+function center(el: Element, wrap: Element) {
+  const r = el.getBoundingClientRect()
+  const w = wrap.getBoundingClientRect()
+  return { right: r.right - w.left, left: r.left - w.left, cy: r.top - w.top + r.height / 2 }
 }
+function seg(x1: number, y1: number, x2: number, y2: number, ok: boolean) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p.setAttribute('d', `M${x1} ${y1} L${x2} ${y2}`)
+  p.setAttribute('stroke-width', '2.5')
+  p.setAttribute('fill', 'none')
+  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
+  wires.value?.appendChild(p)
+}
+function chevron(x: number, y: number, ok: boolean) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p.setAttribute('d', `M${x - 9} ${y - 8} L${x} ${y} L${x - 9} ${y + 8}`)
+  p.setAttribute('stroke-width', '3')
+  p.setAttribute('fill', 'none')
+  p.setAttribute('stroke-linecap', 'round')
+  p.setAttribute('stroke-linejoin', 'round')
+  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
+  wires.value?.appendChild(p)
+}
+/** 任务序号（编辑页同款算法）：单任务步骤 = 步骤号；多任务 = 步骤号-任务号 */
+function taskSeq(stepIdx: number, taskIdx: number, step: OrchestrationStep): string {
+  const n = (step.tasks ?? []).length
+  return n > 1 ? `${stepIdx + 1}-${taskIdx + 1}` : String(stepIdx + 1)
+}
+
+function drawWires() {
+  const wrap = canvasBody.value
+  const svg = wires.value
+  if (!wrap || !svg) return
+  // 单 grid：一列 = 步骤卡 + 该列任务卡（原型 baa40e5）；连线只画在任务卡之间
+  const cols = [...wrap.querySelectorAll('.orch-col')]
+  if (cols.length < 2) {
+    svg.innerHTML = ''
+    return
+  }
+  svg.setAttribute('width', String(Math.ceil(wrap.scrollWidth) + 40))
+  svg.setAttribute('height', String(Math.ceil(wrap.scrollHeight) + 20))
+  svg.innerHTML = ''
+  for (let i = 0; i < cols.length - 1; i++) {
+    const fromTasks = [...cols[i].querySelectorAll('.orch-task')]
+    const toTasks = [...cols[i + 1].querySelectorAll('.orch-task')]
+    if (!fromTasks.length || !toTasks.length) continue
+    const from = fromTasks[0] // 与编辑页一致：前列第一个任务的中线引出主线
+    const ok = !!orch.value && stepAgg(orch.value[i]) === 'succeeded'
+    const f = center(from, wrap)
+    const t0 = center(toTasks[0], wrap)
+    const midX = (f.right + t0.left) / 2
+    seg(f.right, f.cy, midX, f.cy, ok)
+    const sameLine = toTasks.length === 1 && Math.abs(center(toTasks[0], wrap).cy - f.cy) < 1
+    if (sameLine) {
+      seg(midX, f.cy, t0.left, f.cy, ok)
+      chevron(t0.left, f.cy, ok)
+    } else {
+      const ys = toTasks.map((t) => center(t, wrap).cy)
+      // 分叉竖线：目标分支里存在 skipped（未执行）→ 整段灰（原型规则，用户 2026-09-22）
+      const vok = ok && !toTasks.some((t) => t.classList.contains('st-skipped'))
+      seg(midX, Math.min(f.cy, ...ys), midX, Math.max(f.cy, ...ys), vok)
+      // 支线按目标任务状态着色：succeeded → 绿；skipped → 灰
+      for (const t of toTasks) {
+        const c = center(t, wrap)
+        const tok = !t.classList.contains('st-skipped')
+        seg(midX, c.cy, c.left, c.cy, tok)
+        chevron(c.left, c.cy, tok)
+      }
+    }
+  }
+}
+watch(
+  () => props.instance,
+  () => nextTick(drawWires),
+)
+onMounted(() => {
+  nextTick(drawWires)
+  window.addEventListener('resize', drawWires)
+})
+onUnmounted(() => window.removeEventListener('resize', drawWires))
 
 /* ========== 时间线模式（legacy / v5 nodes 实例，保持原样） ========== */
 
@@ -160,24 +249,27 @@ function isWatchdog(s: string) {
       </span>
     </div>
 
-    <!-- 编排画布（新引擎实例）：步骤 → 任务分叉，走过路径绿色高亮 -->
+    <!-- 编排画布（新引擎实例，与编辑页同构 · 原型 baa40e5）：单 grid 一列 = 步骤卡 + 该列
+         任务卡（同列同宽）；步骤标题卡中性（无序号，编辑页 step-title 即如此）；序号在
+         任务卡左侧竖条（编辑页 task-node .seq 同款，状态色填充顶到卡边）；连线 = SVG 测量
+         （任务卡中线），主线按前一步骤聚合状态、支线/竖线按目标任务状态（skipped → 灰） -->
     <div v-if="orch?.length" class="orch-canvas">
-      <template v-for="(s, i) in orch" :key="s.id">
-        <div v-if="i > 0" class="orch-arrow" :class="{ green: arrowGreen(i) }"></div>
-        <div class="orch-cell">
-          <div class="orch-step" :class="`st-${stepAgg(s)}`" @click="emit('stageClick', s.name)">
-            <span class="seq">{{ i + 1 }}</span>
-            <span class="name">{{ s.name }}</span>
-            <span class="cmd-link" title="查看该步骤发布命令" @click.stop="emit('commandClick', s.name)">命令</span>
-          </div>
-          <div v-if="(s.tasks ?? []).length" class="orch-tasks">
+      <div class="canvas-body" ref="canvasBody">
+        <svg class="wires" ref="wires"></svg>
+        <div class="orch-grid">
+          <div v-for="(s, i) in orch" :key="s.id" class="orch-col">
+            <div class="orch-step" @click="emit('stageClick', s.name)">
+              <span class="name">{{ s.name }}</span>
+              <span class="cmd-link" title="查看该步骤发布命令" @click.stop="emit('commandClick', s.name)">命令</span>
+            </div>
             <div
-              v-for="t in s.tasks"
+              v-for="(t, ti) in s.tasks ?? []"
               :key="t.id"
               class="orch-task"
               :class="`st-${taskStateOf(s, t)}`"
               @click="emit('stageClick', s.name)"
             >
+              <span class="rseq">{{ taskSeq(i, ti, s) }}</span>
               <span class="tname">{{ t.name }}</span>
               <span v-if="t.kind === 'approval'" class="tag t-approval">审批</span>
               <span v-if="t.condition" class="tag t-cond" :title="`条件：${t.condition}`">条件</span>
@@ -185,7 +277,7 @@ function isWatchdog(s: string) {
             </div>
           </div>
         </div>
-      </template>
+      </div>
     </div>
 
     <!-- 时间线（legacy / v5 nodes 实例，保持原有展示） -->
@@ -279,54 +371,49 @@ function isWatchdog(s: string) {
   line-height: 18px;
 }
 
-/* ===== 编排画布（与编辑页画布同构的只读版） ===== */
+/* ===== 编排画布（与编辑页同构的两行结构：上排步骤卡 / 下排任务卡，SVG 测量连线） ===== */
 .orch-canvas {
-  display: flex;
-  align-items: flex-start;
   overflow-x: auto;
   padding: 8px 4px 4px;
 }
-.orch-cell {
+.canvas-body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+.wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+/* 单 grid：一列 = 步骤卡 + 该列任务卡，列宽取 max(两者) → 同列同宽（原型 baa40e5） */
+.orch-grid {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 6px 44px;
+  padding: 4px 10px;
+}
+.orch-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 104px;
+  align-items: stretch;
+}
+/* 步骤标题卡：**中性**（白底灰边深字、名称 13px —— 编辑页 step-title 即如此，无序号；
+   执行状态由任务卡与连线表达，不整卡染色） */
+.orch-step {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex-shrink: 0;
-}
-/* 步骤间箭头（走过路径变绿） */
-.orch-arrow {
-  position: relative;
-  flex-shrink: 0;
-  width: 28px;
-  height: 2px;
-  margin-top: 18px;
-  background: var(--ws-border);
-}
-.orch-arrow::after {
-  content: '';
-  position: absolute;
-  right: -1px;
-  top: -3px;
-  border-left: 6px solid var(--ws-border);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-}
-.orch-arrow.green {
-  background: var(--ws-success-500);
-}
-.orch-arrow.green::after {
-  border-left-color: var(--ws-success-500);
-}
-/* 步骤卡 */
-.orch-step {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1.5px solid var(--ws-border);
-  border-radius: 6px;
+  gap: 2px;
+  padding: 5px 14px;
+  width: 100%;
+  border: 1px solid var(--ws-border);
+  border-radius: 2px;
   background: var(--ws-bg-surface);
-  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.15s, background 0.15s;
@@ -334,63 +421,50 @@ function isWatchdog(s: string) {
 .orch-step:hover {
   border-color: var(--ws-brand-400);
 }
-.orch-step .seq {
-  font-family: var(--ws-font-mono, monospace);
-  font-size: 11px;
-  color: var(--ws-text-tertiary);
-}
 .orch-step .name {
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--ws-text-primary);
 }
 .orch-step .cmd-link {
   font-size: 11px;
   line-height: 16px;
 }
-/* 任务分叉（结构对齐编辑页 branch-nodes，只读） */
-.orch-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-  margin-top: 6px;
-  padding-left: 16px;
-}
-.orch-tasks::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: -6px;
-  bottom: 6px;
-  border-left: 2px solid var(--ws-border);
-}
+/* 任务卡：序号在左侧竖条（编辑页 task-node .seq 同款；负 margin 抵消卡 padding，
+   状态色填充顶到卡边） */
 .orch-task {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 3px 10px;
   border: 1px solid var(--ws-border);
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--ws-bg-surface);
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
 }
-.orch-task::before {
-  content: '';
-  position: absolute;
-  left: -16px;
-  top: 50%;
-  width: 16px;
-  height: 2px;
-  background: var(--ws-border);
+.orch-task .rseq {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  margin: -3px 6px -3px -10px;
+  font-family: var(--ws-font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ws-text-secondary);
+  background: var(--ws-bg-subtle);
+  border-right: 1px solid var(--ws-border);
+  border-radius: 1px 0 0 1px;
 }
 .orch-task .tname {
   color: var(--ws-text-secondary);
 }
 .orch-task .tstate {
   color: var(--ws-text-tertiary);
+  margin-left: auto;
 }
 .orch-task .tag {
   font-size: 10px;
@@ -407,63 +481,69 @@ function isWatchdog(s: string) {
   background: var(--ws-brand-100);
 }
 
-/* 状态着色（token 单源，dark 主题自动适配） */
-.orch-step.st-succeeded,
+/* 状态着色（原型 baa40e5）：**状态色只填充序号竖条背景**（数字反白）+ 边框，
+   任务卡其他区域不改背景色；skipped = 灰（含序号条）；token 单源，dark 自适配 */
 .orch-task.st-succeeded {
   border-color: var(--ws-success-500);
-  background: var(--ws-success-100);
 }
-.orch-step.st-succeeded .name,
-.orch-task.st-succeeded .tname {
-  color: var(--ws-success-500);
-}
-.orch-step.st-running {
-  border-color: var(--ws-brand-500);
-  animation: orch-breathe 1.6s ease-in-out infinite;
+.orch-task.st-succeeded .rseq {
+  background: var(--ws-success-500);
+  color: #fff;
+  border-right-color: var(--ws-success-500);
 }
 .orch-task.st-running {
   border-color: var(--ws-brand-500);
 }
-.orch-task.st-running .tstate,
-.orch-step.st-running .name {
+.orch-task.st-running .rseq {
+  background: var(--ws-brand-500);
+  color: #fff;
+  border-right-color: var(--ws-brand-500);
+}
+.orch-task.st-running .tstate {
   color: var(--ws-brand-500);
 }
 @keyframes orch-breathe {
   0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.25); }
   50% { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0); }
 }
-.orch-step.st-failed,
+.orch-task.st-running {
+  animation: orch-breathe 1.6s ease-in-out infinite;
+}
 .orch-task.st-failed {
   border-color: var(--ws-error-500);
-  background: var(--ws-error-100);
 }
-.orch-step.st-failed .name,
+.orch-task.st-failed .rseq {
+  background: var(--ws-error-500);
+  color: #fff;
+  border-right-color: var(--ws-error-500);
+}
 .orch-task.st-failed .tname,
 .orch-task.st-failed .tstate {
   color: var(--ws-error-500);
 }
-.orch-step.st-awaiting,
 .orch-task.st-awaiting {
   border-color: var(--ws-warning-500);
-  background: var(--ws-warning-100);
 }
-.orch-task.st-awaiting .tstate,
-.orch-step.st-awaiting .name {
+.orch-task.st-awaiting .rseq {
+  background: var(--ws-warning-500);
+  color: #fff;
+  border-right-color: var(--ws-warning-500);
+}
+.orch-task.st-awaiting .tstate {
   color: var(--ws-warning-500);
 }
-.orch-step.st-skipped,
-.orch-task.st-skipped {
-  border-style: dashed;
-  opacity: 0.75;
-}
-.orch-step.st-cancelled,
+/* 跳过/取消：整卡弱灰（含序号条），不复用成功色 */
+.orch-task.st-skipped,
 .orch-task.st-cancelled {
-  border-style: dashed;
-  opacity: 0.75;
+  border-color: var(--ws-border);
+  background: var(--ws-bg-subtle);
+  opacity: 0.85;
 }
-.orch-step.st-none,
-.orch-task.st-none {
-  /* 未执行：默认灰边框（不额外着色） */
+.orch-task.st-skipped .tname,
+.orch-task.st-skipped .tstate,
+.orch-task.st-cancelled .tname,
+.orch-task.st-cancelled .tstate {
+  color: var(--ws-text-tertiary);
 }
 .orch-task.st-none,
 .orch-task.st- {

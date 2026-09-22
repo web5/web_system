@@ -26,9 +26,11 @@
 
 1. **原型先行**：先改原型稿 + 同步页面规格；原型必须**整合进该产品模块既有的整体原型稿**（先识别模块归属，不另起孤立 HTML）——细则见 `@brand-interface`「原型整合约定」，admin 系见 `@ui-interface`
 2. 过 `ux-prototype-designer` 技能的**独立交互质检**
-3. **用户确认原型** ← 人审节点，缺此步不得落码
-4. 原型/规格**单独 commit**（不得与 UI 源码混在同一 commit），记下其 sha ← 用户已确认的机器凭证
-5. 才落码；该 UI commit 的 message 必须带一行 `Proto: <sha>`
+3. **设计评审（D2）**：交 `design-reviewer` 盲审（判据源 `docs/ui/design-system.md`），报告落盘 `docs/ui/reviews/*.md`，**阻塞项清零** ← 交人确认前
+4. **用户确认原型** ← 人审节点，缺此步不得落码
+5. 原型/规格**单独 commit**（不得与 UI 源码混在同一 commit），记下其 sha ← 用户已确认的机器凭证
+6. 才落码；该 UI commit 的 message 必须带一行 `Proto: <sha>`，并带 `Design: pass`（CI R11 error 兜底）
+7. **实现一致性评审（D3）**：落码后比对原型锚点 `data-dr` 与截图并置，报告落盘
 
 - **机器强制与应急出口**：本门有 hook 强制与 CI 红线兜底（设计与实现见 `specs/kit-sop-enforcement/design.md`）；应急出口 `UI_GATE=off`。
 - 例外：纯后端 / 非 UI 文件改动不受本门约束；豁免：确属纯视觉微调（如仅调间距）在原型或规格记一行「微调豁免」即可通行。

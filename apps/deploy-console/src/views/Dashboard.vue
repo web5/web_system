@@ -58,8 +58,8 @@ async function loadRecentActions() {
   }
 }
 
-// 格式化时间
-function formatTime(ts: string) {
+// 格式化时间（入参可能是 ISO 字符串或毫秒时间戳；毫秒一律先 Number 归一，规格 §10.1）
+function formatTime(ts: string | number) {
   return dayjs(ts).format('YYYY-MM-DD HH:mm:ss')
 }
 
@@ -280,7 +280,7 @@ onMounted(() => {
         <a-table :data-source="failures" row-key="id" size="small" :pagination="{ pageSize: 8 }">
           <a-table-column title="时间">
             <template #default="{ record }">
-              {{ formatTime(new Date(record.startTime).toISOString()) }}
+              {{ formatTime(Number(record.startTime)) }}
             </template>
           </a-table-column>
           <a-table-column title="模块" data-index="moduleKey" />
