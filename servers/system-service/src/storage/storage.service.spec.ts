@@ -226,4 +226,106 @@ describe('StorageService（A2：存储配置读写 / 校验 / 安全目录浏览
       });
     });
   });
+
+  /**
+   * 拍板第 4 项：`GET /api/admin/settings/storage` 要能拿到「当前生效目录」。
+   * 前端不持内部密钥，所以由 system-service 代问 upload-service 的 `/internal/storage/path`；
+   * **取不到一律降级为 null**（它是增强信息，不能拖垮读配置）。
+   */
+  describe('fetchEffectiveUploadDir：代问 upload-service 的当前生效值', () => {
+    const okFetch = (payload: unknown) =>
+      jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => payload,
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+
+    it('取到 → 返回 path/source/startedAt，并带上 x-internal-key', async () => {
+      const fetchImpl = okFetch({
+        code: 0,
+        data: {
+          path: '/Users/geekwen/web_system/uploads',
+          source: 'system_service',
+          startedAt: '2026-09-22T06:58:02.791Z',
+        },
+      });
+
+      const r = await service.fetchEffectiveUploadDir({
+        baseUrl: 'http://127.0.0.1:6008/',
+        internalKey: 'k',
+        fetchImpl,
+      });
+
+      expect(r).toEqual({
+        path: '/Users/geekwen/web_system/uploads',
+        source: 'system_service',
+        startedAt: '2026-09-22T06:58:02.791Z',
+      });
+      expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:6008/internal/storage/path', {
+        headers: { 'x-internal-key': 'k' },
+        signal: expect.anything(),
+      });
+    });
+
+    it('未配内部密钥 → 直接返回 null（不发请求）', async () => {
+      const fetchImpl = okFetch({ data: { path: '/x' } });
+      const r = await service.fetchEffectiveUploadDir({
+        internalKey: '',
+        env: {},
+        fetchImpl,
+      });
+      expect(r).toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('服务返回非 2xx（401/500）→ null', async () => {
+      const fetchImpl = jest.fn(async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+      await expect(
+        service.fetchEffectiveUploadDir({ internalKey: 'k', fetchImpl }),
+      ).resolves.toBeNull();
+    });
+
+    it('连接失败 / 超时 → null（降级，不抛）', async () => {
+      const fetchImpl = jest.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      }) as unknown as jest.MockedFunction<typeof fetch>;
+      await expect(
+        service.fetchEffectiveUploadDir({ internalKey: 'k', fetchImpl }),
+      ).resolves.toBeNull();
+
+      const abortImpl = jest.fn(
+        async (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise((_res, rej) => {
+            init?.signal?.addEventListener('abort', () => {
+              const e = new Error('aborted');
+              e.name = 'AbortError';
+              rej(e);
+            });
+          }),
+      ) as unknown as jest.MockedFunction<typeof fetch>;
+      await expect(
+        service.fetchEffectiveUploadDir({ internalKey: 'k', timeoutMs: 10, fetchImpl: abortImpl }),
+      ).resolves.toBeNull();
+    });
+
+    it('响应形状不对（无 path）→ null', async () => {
+      const fetchImpl = okFetch({ code: 0, data: {} });
+      await expect(
+        service.fetchEffectiveUploadDir({ internalKey: 'k', fetchImpl }),
+      ).resolves.toBeNull();
+    });
+
+    it('未配 UPLOAD_SERVICE_URL 时回落 SERVICE_URL_DEFAULTS.upload', async () => {
+      const fetchImpl = okFetch({ data: { path: '/x' } });
+      await service.fetchEffectiveUploadDir({ internalKey: 'k', env: {}, fetchImpl });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'http://localhost:6008/internal/storage/path',
+        expect.anything(),
+      );
+    });
+  });
 });
