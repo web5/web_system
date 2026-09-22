@@ -5,7 +5,7 @@ import { ChatMessage } from '../clients/base-ai.client';
 
 const config: AgentMemoryConfig = { compactionThreshold: 4, keepRecent: 2, enabled: true };
 function msg(role: ChatMessage['role'], content: string): ChatMessage {
-  return { role, content };
+  return { role, content, ts: Date.now() };
 }
 
 describe('InMemoryConversationMemory', () => {

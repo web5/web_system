@@ -129,6 +129,7 @@ export class TokenHubClient extends BaseAiClient {
         role: 'assistant',
         content: message.content ?? '',
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        ts: Date.now(),
       };
       const usage = data.usage;
       this.logger.log(
@@ -278,6 +279,7 @@ export class TokenHubClient extends BaseAiClient {
       role: 'assistant',
       content,
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      ts: Date.now(),
     };
     this.logger.log(
       `[tokenhub] ${this.modelId} stream-done: finish=${finishReason} contentLen=${content.length} toolCalls=${toolCalls.length} usage=${JSON.stringify(lastUsage ?? null)}`,

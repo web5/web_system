@@ -70,7 +70,7 @@ describe('AgentEngine (agent-core)', () => {
         content: '你好',
         toolCalls: [],
         assistantMessage: { role: 'assistant', content: '你好' },
-      } as ChatWithToolsResult),
+      } as unknown as ChatWithToolsResult),
     );
     clientRegistry.getOrFallback.mockReturnValue(client as any);
 
@@ -92,12 +92,12 @@ describe('AgentEngine (agent-core)', () => {
           content: '',
           toolCalls: [firstCall],
           assistantMessage: { role: 'assistant', content: '', toolCalls: [firstCall] },
-        } as ChatWithToolsResult)
+        } as unknown as ChatWithToolsResult)
         .mockResolvedValueOnce({
           content: '结果是 2',
           toolCalls: [],
           assistantMessage: { role: 'assistant', content: '结果是 2' },
-        } as ChatWithToolsResult),
+        } as unknown as ChatWithToolsResult),
     );
     clientRegistry.getOrFallback.mockReturnValue(client as any);
     toolRegistry.execute.mockResolvedValue({ success: true, content: '2' });
@@ -119,7 +119,7 @@ describe('AgentEngine (agent-core)', () => {
         content: '',
         toolCalls: [call],
         assistantMessage: { role: 'assistant', content: '', toolCalls: [call] },
-      } as ChatWithToolsResult),
+      } as unknown as ChatWithToolsResult),
     );
     clientRegistry.getOrFallback.mockReturnValue(client as any);
     toolRegistry.execute.mockResolvedValue({ success: true, content: '1' });
@@ -140,7 +140,7 @@ describe('AgentEngine (agent-core)', () => {
           toolCalls: [],
           assistantMessage: { role: 'assistant', content: '你好' },
           usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-        } as ChatWithToolsResult),
+        } as unknown as ChatWithToolsResult),
       );
       clientRegistry.getOrFallback.mockReturnValue(client as any);
 
@@ -178,12 +178,12 @@ describe('AgentEngine (agent-core)', () => {
             content: '',
             toolCalls: [call],
             assistantMessage: { role: 'assistant', content: '', toolCalls: [call] },
-          } as ChatWithToolsResult)
+          } as unknown as ChatWithToolsResult)
           .mockResolvedValueOnce({
             content: 'ok',
             toolCalls: [],
             assistantMessage: { role: 'assistant', content: 'ok' },
-          } as ChatWithToolsResult),
+          } as unknown as ChatWithToolsResult),
       );
       clientRegistry.getOrFallback.mockReturnValue(client as any);
       toolRegistry.execute.mockResolvedValue({ success: false, content: '', error: '工具爆炸' });
