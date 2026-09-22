@@ -4,7 +4,7 @@
  * 采用腾讯云 API 3.0 标准 TC3-HMAC-SHA256 签名（手写实现，保持 agent-core 零运行时依赖）。
  * 需配置：TENCENT_SECRET_ID / TENCENT_SECRET_KEY。
  */
-import { SearchProvider, SearchResult } from '../provider.interface';
+import { type SearchProvider, type SearchResult } from '../provider.interface';
 
 const WSA_HOST = 'wsa.tencentcloudapi.com';
 const WSA_SERVICE = 'wsa';

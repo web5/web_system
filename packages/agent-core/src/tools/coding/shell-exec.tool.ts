@@ -8,7 +8,7 @@
  */
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { ToolDefinition, ToolContext, ToolResult, ToolSchema, ToolParameter } from '../../interfaces/tool.interface';
+import { type ToolDefinition, type ToolContext, type ToolResult, type ToolSchema, type ToolParameter } from '../../interfaces/tool.interface';
 
 const execFileAsync = promisify(execFile);
 
