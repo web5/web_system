@@ -277,9 +277,14 @@ const title = computed(() => {
 
 const blocksMap = computed(() => {
   const map: Record<string, AnswerBlock[]> = {};
+  let lastQuestion = '';
   messages.value.forEach((m) => {
+    if (m.role === 'user') {
+      lastQuestion = m.content;
+      return;
+    }
     if (m.role === 'assistant' && !m.musicCard) {
-      map[m.id] = parseAnswer(m.content, { agentId: m.agentId });
+      map[m.id] = parseAnswer(m.content, { agentId: m.agentId, question: lastQuestion });
     }
   });
   return map;

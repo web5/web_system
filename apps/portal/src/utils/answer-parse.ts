@@ -43,6 +43,8 @@ const TRANSLATE_SECTION_TITLES = ['推荐译文', '直译对照', '委婉版', '
 export interface ParseOptions {
   /** 意图路由结果（intent.agentId），translate 时优先走翻译卡片 */
   agentId?: string;
+  /** 该轮用户提问（推断翻译方向文案用） */
+  question?: string;
 }
 
 export function parseAnswer(raw: string, opts: ParseOptions = {}): AnswerBlock[] {
@@ -51,7 +53,7 @@ export function parseAnswer(raw: string, opts: ParseOptions = {}): AnswerBlock[]
 
   // 翻译四段契约：【推荐译文】…【直译对照】…【委婉版】…【语气要点】…
   if (opts.agentId === 'translate' || text.includes('【推荐译文】')) {
-    const card = parseTranslateCard(text);
+    const card = parseTranslateCard(text, opts.agentId, opts.question);
     if (card) return [card];
   }
 
@@ -109,10 +111,13 @@ export function parseAnswer(raw: string, opts: ParseOptions = {}): AnswerBlock[]
 }
 
 /**
- * 翻译四段解析（对齐小程序 parseSections，但不做「首英文段」猜测——
- * 契约由 agent 提示词保证，命中不了就返回 null 走普通段落，不猜不留白）。
+ * 翻译卡片解析：
+ * - 优先命中四段契约（对齐小程序 parseSections，由 agent 提示词保证）；
+ * - 未命中四段时（后端未按契约输出/纯译文一句），对齐小程序 `splitLeadingLatin` 兜底：
+ *   回复以拉丁字母开头时，在首个 CJK 字符/中文标点处切一刀——前段为译文主文、后段为注解；
+ *   首字符非拉丁字母则整段进主文（不猜、不留白）。
  */
-function parseTranslateCard(text: string): AnswerBlock | null {
+function parseTranslateCard(text: string, agentId?: string, question?: string): AnswerBlock | null {
   const secs: Partial<Record<(typeof TRANSLATE_SECTION_TITLES)[number], string>> = {};
   TRANSLATE_SECTION_TITLES.forEach((title, i) => {
     const marker = `【${title}】`;
@@ -131,12 +136,42 @@ function parseTranslateCard(text: string): AnswerBlock | null {
   });
 
   const main = secs['推荐译文'];
-  if (!main) return null;
-  const note = (['直译对照', '委婉版', '语气要点'] as const)
-    .filter((k) => secs[k])
-    .map((k) => `${k}：${secs[k]}`)
-    .join('\n');
-  return { t: 'tcard', dir: '翻译结果', main, note };
+  if (main) {
+    const note = (['直译对照', '委婉版', '语气要点'] as const)
+      .filter((k) => secs[k])
+      .map((k) => `${k}：${secs[k]}`)
+      .join('\n');
+    return { t: 'tcard', dir: inferDirection(question), main, note };
+  }
+
+  // 兜底：仅当意图确为 translate（历史消息也可能带【推荐译文】被上面命中）
+  if (agentId !== 'translate') return null;
+  return splitLeadingLatin(text, question);
+}
+
+/** 对齐小程序 splitLeadingLatin：首个 CJK 字符/中文标点前为拉丁主文 */
+function splitLeadingLatin(text: string, question?: string): AnswerBlock {
+  const firstCjk = text.search(/[\u4e00-\u9fff\u3001-\u303f\uff00-\uffef，。；：！？、…]/);
+  const startsLatin = /^[A-Za-z]/.test(text.trim());
+  if (!startsLatin || firstCjk <= 0) {
+    return { t: 'tcard', dir: inferDirection(question), main: text.trim(), note: '' };
+  }
+  return {
+    t: 'tcard',
+    dir: inferDirection(question),
+    main: text.slice(0, firstCjk).trim(),
+    note: text.slice(firstCjk).trim(),
+  };
+}
+
+/** 从提问推断方向文案（对齐小程序 inferTranslateDirection 的规则口径，推断不出给通用文案） */
+function inferDirection(question?: string): string {
+  if (!question) return '翻译结果';
+  if (/(翻译|译)成.{0,6}英(语|文)/.test(question) || /英(语|文)怎么(说|讲)/.test(question)) return '中文 → 英语';
+  if (/(翻译|译)成.{0,6}日(语|文|本)/.test(question)) return '中文 → 日语';
+  if (/(翻译|译)成.{0,6}德(语|文)/.test(question)) return '中文 → 德语';
+  if (/(翻译|译)成.{0,6}中(文|语)/.test(question)) return '英语 → 中文';
+  return '翻译结果';
 }
 
 /**
