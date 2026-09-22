@@ -359,14 +359,15 @@ function isWatchdog(s: string) {
   font-size: 11px;
   line-height: 16px;
 }
-/* 任务分叉（结构对齐编辑页 branch-nodes，只读） */
+/* 任务分叉（2026-09-22 对齐编辑页：任务卡与步骤卡**同宽左对齐**，不再缩进 ——
+   原「缩进 16px + 左竖线 + 横线」的树状画法让任务卡比步骤卡错开 16px，用户反馈没对准。
+   分叉竖线贴 cell 左缘，与卡片/任务卡左边缘重合，在任务卡间隙中可见，横线随之删除） */
 .orch-tasks {
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
   margin-top: 6px;
-  padding-left: 16px;
 }
 .orch-tasks::before {
   content: '';
@@ -388,15 +389,6 @@ function isWatchdog(s: string) {
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
-}
-.orch-task::before {
-  content: '';
-  position: absolute;
-  left: -16px;
-  top: 50%;
-  width: 16px;
-  height: 2px;
-  background: var(--ws-border);
 }
 .orch-task .tname {
   color: var(--ws-text-secondary);
