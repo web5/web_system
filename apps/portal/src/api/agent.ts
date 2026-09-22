@@ -104,8 +104,8 @@ export interface StoredChatMessage {
   content: string;
   name?: string;
   type?: 'text' | 'report';
-  /** 消息写入时间戳（ms，B6）；历史旧数据可能缺失 */
-  ts?: number;
+  /** 消息写入时间戳（ms，B6，必填） */
+  ts: number;
 }
 
 export interface ConversationDetail {
