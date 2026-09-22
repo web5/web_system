@@ -353,6 +353,45 @@ $out
 EOF
 }
 
+# ---- 通用骨架：两处应同源的路径比对（可复用）----
+# 用法：check_sync_pair <规则号> <说明> <源> <目标> <排除项...>
+# 语义：以源为准 —— ① 目标有此文件但内容不同 → 漂移；② 目标缺失 → 未同步。
+#       排除项按「相对路径包含匹配」跳过（项目专属 / 下游定制，永不覆盖）。
+# 级别：warning（--strict 下 error），并**打印建议修复命令**——报警自带处方，无需额外 apply 脚本。
+# 同源守门家族：R9/R9b/R10（原型同行）、R11（设计评审凭证）、R12（kit 同源）共用本套机制。
+check_sync_pair() {
+  local rule="$1" desc="$2" src="$3" dst="$4"; shift 4
+  local -a excl=("$@")
+  [ -d "$src" ] || return 0
+  local rel f x skip
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    rel="${f#$src/}"
+    skip=0
+    for x in ${excl[@]+"${excl[@]}"}; do
+      case "$rel" in *"$x"*) skip=1; break ;; esac
+    done
+    [ "$skip" -eq 1 ] && continue
+    if [ ! -e "$dst/$rel" ]; then
+      add_warn "$rule" "${desc}（目标缺失，未同步）" "$rel" "建议：mkdir -p \"$(dirname "$dst/$rel")\" && cp \"$src/$rel\" \"$dst/$rel\""
+    elif [ -f "$dst/$rel" ] && ! cmp -s "$f" "$dst/$rel"; then
+      add_warn "$rule" "${desc}（内容漂移）" "$rel" "建议：cp \"$src/$rel\" \"$dst/$rel\""
+    fi
+  done < <(find "$src" -type f -print 2>/dev/null)
+  return 0
+}
+
+# ---- R12 kit 能力源 ↔ 运行源 同源守门 ----
+# 背景：上游 ai-agent-kit 经 sync-to-target 只写 .codebuddy/agent-kit/（能力源），
+#       而 IDE 加载的是 .codebuddy/skills/（运行源），中间缺 apply → 漂移（#117/#118 即此坑）。
+# 保护清单：项目专属技能（只在运行源）与下游定制文件（同步时永不覆盖）跳过比对。
+check_r12() {
+  check_sync_pair "R12" "kit 能力源与运行源漂移" \
+    ".codebuddy/agent-kit/skills" ".codebuddy/skills" \
+    "be-developer" "fe-developer" "design-reviewer" \
+    "rd-digital-agent/references/project-context.md"
+}
+
 # ---- 单行检查封装（文件+行号+内容）----
 check_one_line() {
   local file="$1" line="$2" content="$3"
@@ -371,6 +410,7 @@ scan_diff_range() {
   check_r10 "$range"  # R10：UI commit 的 Proto 凭证（方案 B CI 兜底）
   check_r11 "$range"  # R11：设计评审凭证（error 级 · specs/design-reviewer/design.md §3.7）
   check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
+  check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do
