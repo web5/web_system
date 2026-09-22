@@ -313,7 +313,9 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 | **P3 换库/拆域（已备好，按需触发）** | 文档 `specs/config-master-key-distribution/domain-split-guide.md` + 脚本 `scripts/master-key-domain-split.mjs` **本轮先交付**，待 prod 换库时执行；其后才是云 KMS/Secrets Manager、systemd `LoadCredential=`、按环境分钥 | 脚本默认 `--dry-run`，写入前备份目标库，`--apply` 才动数据;目标库可从影子表恢复 |
 | **P4 未来（不在本轮）** | 云 KMS/Secrets Manager；迁 systemd 时用 `LoadCredential=`（凭据进 `/run/credentials/<unit>/`，**天然不进 env**，比 `EnvironmentFile` 更安全）；按环境分钥（前置：先定义 `global` 行的归属） | — |
 
-> 当前进度：**P0 已落地并在域 L 验证通过**（自检就绪 / 错钥 exit(1) / `verify` 退出码 0）；P1、P2a、P2b、P3 未开始。
+> 当前进度：**P0 已落地并在域 L 验证通过**（自检就绪 / 错钥 exit(1) / `verify` 退出码 0）；
+> **P1 的脚本与清单已落地**（`scripts/provision-master-key.sh` + runbook §2.4 新机清单），待域 C（堡垒机/dev）实测；
+> P2a、P2b、P3 未开始。
 
 > 依赖顺序：**P0 → P1**（文件与注入通道）→ **P2a**（格式统一，一次性停机）→ **P2b**（密钥环才有意义）。
 > P0/P1 不动密文格式，可在 P2a 之前独立上线；**P2a 必须先于 P2b**（轮换的重加密依赖新格式，混做则回退不清）。

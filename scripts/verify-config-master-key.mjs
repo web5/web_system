@@ -31,14 +31,25 @@ const KEY_LEN = 32;
 const DERIVE_SALT = 'deploy-console-config';
 const DEFAULT_KEY_FILE = '/etc/web-system/config-master.key';
 
+/** 支持 `--k=v` 与 `--k v` 两种写法（帮助里用的是后者）；无值即布尔开关 */
 function parseArgs(argv) {
   const out = {};
-  for (const raw of argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const raw = argv[i];
     if (!raw.startsWith('--')) continue;
     const body = raw.slice(2);
     const eq = body.indexOf('=');
-    if (eq === -1) out[body] = true;
-    else out[body.slice(0, eq)] = body.slice(eq + 1);
+    if (eq !== -1) {
+      out[body.slice(0, eq)] = body.slice(eq + 1);
+    } else {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        out[body] = next;
+        i += 1;
+      } else {
+        out[body] = true;
+      }
+    }
   }
   return out;
 }
@@ -97,9 +108,10 @@ if (args.help) {
   console.log(`
 主密钥一致性自检（只读，不改任何数据）
 
-  --env-file <file>   部署库 env（默认 servers/deploy-console/.env）
-  --key-file <file>   主密钥文件（默认 /etc/web-system/config-master.key，或 env CONFIG_MASTER_KEY)
-  --sample <n>        快照抽样条数（默认 20）
+  --env-file <file>      部署库 env（默认 servers/deploy-console/.env）
+  --key-file <file>      主密钥文件（默认 /etc/web-system/config-master.key，或 env CONFIG_MASTER_KEY）
+  --sample <n>           快照抽样条数（默认 20）
+  --fingerprint-only     只解析密钥并打印来源 + 指纹，不连库（供 provision 脚本复用）
 
 退出码：0 全绿 ｜ 2 有不可解密的密文 ｜ 3 密钥缺失/不可用
 `);
@@ -145,6 +157,9 @@ try {
 console.log(`密钥来源 : ${keySource}`);
 console.log(`密钥指纹 : ${fingerprint(key)}`);
 
+// 只报指纹（provision 脚本用它回显"投递到位的是哪把钥"，不连库、不读数据）
+if (args['fingerprint-only']) process.exit(0);
+
 // ---------- ② 连库 ----------
 const mysql = (() => {
   try {
@@ -168,7 +183,13 @@ const conf = {
 };
 console.log(`部署库   : ${conf.host}:${conf.port}/${conf.database}（env 文件 ${path.relative(ROOT, envFile)}）`);
 
-const conn = await mysql.createConnection(conf);
+let conn;
+try {
+  conn = await mysql.createConnection(conf);
+} catch (e) {
+  console.error(`✗ 连接部署库失败：${e.message}（${conf.host}:${conf.port}/${conf.database}）`);
+  process.exit(3);
+}
 
 try {
   // ---------- ③ config_items ----------
