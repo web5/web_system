@@ -11,6 +11,7 @@ import { SettingsModule } from './settings/settings.module';
 import { OperationLogsModule } from './operation-logs/operation-logs.module';
 import { BianbianAdminModule } from './bianbian-admin/bianbian-admin.module';
 import { DictModule } from './dict/dict.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -79,6 +80,8 @@ import { DictModule } from './dict/dict.module';
     BianbianAdminModule,
     DatabaseExplorerModule,
     DictModule,
+    // 存储配置（上传根目录读写 / 校验 / 安全目录浏览，见 specs/backend-consolidation §1）
+    StorageModule,
   ],
   providers: [
     // 顺序敏感：AuthGuard 先注入 request.user，PermissionsGuard 再读 user.roles
