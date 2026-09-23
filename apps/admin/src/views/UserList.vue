@@ -508,7 +508,7 @@ function handleMenuAction(key: string, record: User) {
 }
 .mini-stat {
   display: flex; align-items: center; gap: 14px;
-  padding: 16px 20px; border-radius: 4px;
+  padding: 16px 20px; border-radius: var(--r-card);
   background: linear-gradient(135deg, rgba(255,140,66,.06) 0%, rgba(255,140,66,.02) 100%);
   border: 1px solid rgba(255,140,66,.08);
   transition: all .25s;
@@ -519,7 +519,7 @@ function handleMenuAction(key: string, record: User) {
   transform: translateY(-1px);
 }
 .mini-stat-icon {
-  width: 42px; height: 42px; border-radius: 4px;
+  width: 42px; height: 42px; border-radius: var(--r-chip);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; color: #FF8C42; background: rgba(255,140,66,.12);
   flex-shrink: 0;
@@ -543,7 +543,7 @@ function handleMenuAction(key: string, record: User) {
   padding: 12px 16px;
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
   border: 1px solid var(--card-border);
-  border-radius: 4px;
+  border-radius: var(--r-card);
 }
 .search-input {
   max-width: 360px;
@@ -554,7 +554,7 @@ function handleMenuAction(key: string, record: User) {
 }
 .search-input :deep(.ant-input::placeholder) { color: var(--input-placeholder); }
 .search-input :deep(.ant-input-affix-wrapper) {
-  background: var(--input-bg); border-color: var(--input-border); border-radius: 4px;
+  background: var(--input-bg); border-color: var(--input-border); border-radius: var(--r-control);
 }
 .search-input :deep(.ant-input-affix-wrapper:hover),
 .search-input :deep(.ant-input-affix-wrapper:focus),
@@ -567,7 +567,7 @@ function handleMenuAction(key: string, record: User) {
 /* 表格区域 */
 .table-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
-  border: 1px solid var(--card-border); border-radius: 4px;
+  border: 1px solid var(--card-border); border-radius: var(--r-card);
   padding: 8px;
   overflow: hidden;
 }
@@ -611,7 +611,7 @@ function handleMenuAction(key: string, record: User) {
   text-align: center; margin-bottom: 28px; padding-top: 8px;
 }
 .modal-icon-wrap {
-  width: 56px; height: 56px; border-radius: 4px;
+  width: 56px; height: 56px; border-radius: var(--r-chip);
   display: flex; align-items: center; justify-content: center;
   font-size: 24px; color: #FF8C42;
   background: linear-gradient(135deg, rgba(255,140,66,.15), rgba(255,140,66,.06));

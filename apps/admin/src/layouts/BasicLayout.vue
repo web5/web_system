@@ -261,7 +261,7 @@ const handleLogout = async () => {
 
 .collapse-toggle {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 4px;
+  width: 28px; height: 28px; border-radius: var(--r-control);
   border: 1px solid var(--border-light); background: var(--input-bg);
   color: var(--text-tertiary); cursor: pointer; font-size: 12px;
   transition: all .2s; padding: 0; flex-shrink: 0;
@@ -309,7 +309,7 @@ const handleLogout = async () => {
 
 .theme-toggle {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 4px;
+  width: 34px; height: 34px; border-radius: var(--r-control);
   border: 1px solid var(--border-light); background: var(--input-bg);
   color: var(--text-tertiary); cursor: pointer;
   transition: all .2s; padding: 0; flex-shrink: 0;
