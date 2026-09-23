@@ -73,11 +73,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: '合翻',
     to: '/contract',
     icon: 'doc',
-    sideList: true,
-    listTitle: '会话',
-    // P3 合翻报告启用原文对照面板后打开
-    context: false,
-    soon: true,
+    // 左栏「体检记录」依赖 listConversations 的 source=tool 过滤（B 待办，与翻译记录同一项），未就绪前不显示
+    sideList: false,
+    listTitle: '体检记录',
+    // P3：报告步由页面注入「合同原文」面板，非报告步不注入 → 右栏整体不占位
+    context: true,
   },
   {
     key: 'lab',
