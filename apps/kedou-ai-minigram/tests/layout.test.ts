@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // tests/layout.test.ts
 // 横屏布局 TDD 测试 — BDD 风格（类似 Superpowers/Jasmine）
 
