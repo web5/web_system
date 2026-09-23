@@ -223,8 +223,8 @@ T3/T4 若不改页面模板（只改 `api/tts.ts` / `services/tts.ts` / `utils/*
 
 | # | 阻塞 | 现状 | 需谁解决 |
 |---|---|---|---|
-| 1 | `AppId`（流式握手必填，非 SecretId/Key） | 仓库无任何 `TENCENT_APP_ID` 配置 | 用户：腾讯云控制台 → API 密钥管理页取 AppId，配进 `servers/ai-service/.env` |
-| 2 | 音色 603007 是否支持流式 | 文档未明列（并发条款提及"超自然大模型音色 10 路"，暗示支持） | 拿到 AppId 后用直连脚本实测（10 行代码即可判定，错误码 10001 即不支持） |
+| 1 | ~~`AppId`（流式握手必填）~~ | 已解决：AppId 已入本机凭据仓 `~/env_config/tencent.env` 的 `tts/ocr` 段，并配进运行时的 `servers/ai-service/.env`（`TENCENT_APP_ID`）。**dev/prod 机器的 `servers/ai-service/.env` 尚未配置**，未配置时端侧自动回退整段方案 | — |
+| 2 | ~~音色 603007 是否支持流式~~ | 已解决：直连实测通过（首包 653ms，无 10001） | — |
 | 3 | gateway 无 WS 依赖 | `@nestjs/websockets` / `ws` 均未安装 | 实现时新增依赖 |
 | 4 | ai-service 无 ws 依赖 | 未安装（根 `node_modules/ws` 为传递依赖，不可依赖） | 实现时显式声明 |
 | 5 | 并发额度 10 路 | 超自然音色上限低，多用户并发朗读可能 10002 | 需限流/排队；量大需商务提额 |
