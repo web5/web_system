@@ -30,7 +30,9 @@ GATE_MSG = (
 )
 CROSS_MSG = (
     '通行证属于 app [{seen}]，本次要改的是 app [{want}] —— 跨端改动不被放行。'
-    '请先为该 app 更新其原型/页面规格，或记一行「微调豁免」。'
+    '三条通路：① 为该 app 更新 apps/<app>/prototype/**；'
+    '② 在全局原型（docs/ui/prototypes/**、specs/**/page-spec*.md）里覆盖该端形态；'
+    '③ 记一行「微调豁免」。'
 )
 
 
@@ -63,11 +65,16 @@ def main():
 
     apps = list(data.get('apps') or [])
     want = C.app_of(rel)
-    # apps 为空 = 通行证来自 docs/ui/prototypes 或 specs/**（全局），不限端
-    if apps and want and want not in apps:
+    # 不限端的两条通路：
+    #   ① apps 为空 —— 本会话只动过全局通行证（docs/ui/prototypes、specs/**）
+    #   ② global=True —— 本会话动过全局通行证（sticky：即使同时动过某 app 的原型也不设端限制）
+    # 依据：全局通行证的语义就是「不限端」；admin / deploy-console 无 apps/<app>/prototype 目录、
+    #       其原型长期放在 docs/ui/prototypes，故 ② 是它们唯一的正常通路。
+    if apps and want and want not in apps and not data.get('global'):
         C.deny(CROSS_MSG.format(seen=','.join(apps), want=want),
                stop_reason='跨端改动不被放行')
-        C.audit(root, 'deny', tool_name, rel, session_id, {'reason': 'cross-app', 'apps': apps})
+        C.audit(root, 'deny', tool_name, rel, session_id,
+                {'reason': 'cross-app', 'apps': apps, 'global': bool(data.get('global'))})
         return 0
 
     proto_hint = (data.get('proto_files') or ['apps/<app>/prototype/index.html'])[0]
