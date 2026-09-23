@@ -108,9 +108,13 @@ export async function speakText(text: string): Promise<boolean> {
   playingText = t;
   emitState({ text: t, phase: 'loading' });
 
+  // 所有块并发发起：剩余块的合成与首块同时进行，首块播完时剩余已就绪 —— 消除块间空档。
+  // （串行发请求的等待 = 剩余块合成时间 − 首块音频时长，实测会差出 0~3s 的静音。）
+  const pending = chunks.map((c) => ensureAudioFile(c).catch(() => null));
+
   // 只等首块（缓存命中则瞬间）：成功开播后立即返回，余下交给后台流水线。
   // ⚠️ 不能等整段播完再返回 —— 页面 await 后会重设播放态，把「播完置闲」的回调覆盖掉。
-  const firstPath = await ensureAudioFile(chunks[0]);
+  const firstPath = await pending[0];
   if (runSeq !== myRun) return true; // 等待期间被停止 / 被新朗读顶掉
   if (!firstPath) {
     playingText = '';
@@ -119,32 +123,28 @@ export async function speakText(text: string): Promise<boolean> {
     return false;
   }
   emitState({ text: t, phase: 'playing' });
-  void playThrough(chunks, firstPath, myRun);
+  void playThrough(pending, firstPath, myRun);
   return true;
 }
 
 /**
- * 后台播放流水线：从首块起逐块播放，并在播放期间预取下一块。
+ * 后台播放流水线：从首块起逐块播放。
+ * 各块的合成请求已由调用方并发发起（pending），这里只按序接结果播放。
  * 中途被停止（runSeq 变化）静默退出；自然结束 / 出错收尾时复位状态。
  */
 async function playThrough(
-  chunks: string[],
+  pending: Array<Promise<string | null>>,
   firstPath: string,
   myRun: number,
 ): Promise<void> {
   let filePath: string | null = firstPath;
-  let next: Promise<string | null> | null = null;
 
-  for (let i = 0; i < chunks.length; i++) {
+  for (let i = 0; i < pending.length; i++) {
     if (runSeq !== myRun) return;
     if (filePath === null) {
       // 首块由调用方处理过；这里必然是中途块失败（已在播，标中断即可）
       wx.showToast({ title: '朗读已中断', icon: 'none' });
       break;
-    }
-    // 预取下一块（不 await：与本块播放并行）
-    if (i + 1 < chunks.length) {
-      next = ensureAudioFile(chunks[i + 1]).catch(() => null);
     }
 
     const result = await playFileAndWait(filePath);
@@ -154,11 +154,8 @@ async function playThrough(
       break;
     }
 
-    // 接预取好的下一块
-    if (next) {
-      filePath = await next;
-      next = null;
-    }
+    // 接已并发发起的下一块（首块播放期间就在合成，通常已就绪）
+    filePath = i + 1 < pending.length ? await pending[i + 1] : null;
   }
 
   // 收尾：自然播完（或中断/出错）→ 复位播放态，页面按钮恢复「朗读」
