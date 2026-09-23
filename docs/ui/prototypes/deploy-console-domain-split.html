@@ -790,6 +790,7 @@
           特例与兜底：目标列<b>单任务</b>且与进入侧任务同高 → 无 L2/L3，L1 直接接到任务卡 + 箭头（色 = 目标任务）；
           进入侧任务低于全部目标行 → 竖线末段补画并归最后一个分支；任一侧无任务卡 → 不画线；
           线型一律实线 2.5px；虚线只用于任务卡边框表达「跳过」。
+          <b>绘制层序</b>：交叉/交叠处<b>彩色（深色）画在灰色（浅色）上面</b> —— 落笔先灰后彩。
         </div>
         <div class="dc-muted" style="margin-top:8px;">
           <b>任务的六种状态</b>（taskStates 落库，`ProgressFlow.vue` taskStateOf）：
@@ -1929,22 +1930,26 @@ body{background:var(--ws-border-subtle);}
     svg.innerHTML='';
     var sc=RUN_SCENES[runScene];
     var wire=function(st){return RUN_WIRE[st]||'var(--border)';};
+    /* 绘制收集：先算好所有线段（几何 + 颜色），再统一落笔 ——
+     * 落笔顺序 = 浅色（灰）先画、彩色（深色）后画（用户 2026-09-23：交叉处深色画在浅色上面） */
+    var jobs=[];
+    var segJob=function(x1,y1,x2,y2,c){jobs.push({t:'s',a:[x1,y1,x2,y2,c]});};
+    var chevJob=function(x,y,c){jobs.push({t:'c',a:[x,y,c]});};
     for(var i=0;i<cols.length-1;i++){
       var ft=cols[i].querySelectorAll('.run-task'); var tt=cols[i+1].querySelectorAll('.run-task');
       if(!ft.length||!tt.length) continue;
       var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
       var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2;
       /* 边的颜色 = 目标（下一个）节点的状态（用户 2026-09-23 定稿：a→b 看 b、a→c 看 c）。
-       * 共享段（L1+L2）= 目标列步骤的**聚合**状态色（有成功分支时成功覆盖跳过/失败等，
-       * 聚合规则与步骤卡边框同源）；支线（L3+L4）= 各目标任务自身状态色。
-       * 即 S0（4-1 成功、4-2 跳过）：3→4-1 主干绿，4-2 后半折线灰。 */
+       * L1 出口横段 = 目标列**聚合**状态色（成功覆盖，与步骤卡边框同源）；
+       * L2 竖线按转折点分段、L3/L4 支线箭头 = 各目标任务自身状态色。 */
       var agg=runAgg(sc.steps[i+1]);
       var mc=wire(agg);
-      runSeg(svg,f.r,f.cy,mx,f.cy,mc);
-      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,mc); runChev(svg,t0.l,f.cy,mc); }
+      segJob(f.r,f.cy,mx,f.cy,mc);
+      if(tt.length===1){ segJob(mx,f.cy,t0.l,f.cy,mc); chevJob(t0.l,f.cy,mc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        /* L2 竖线按**转折点**分段（用户 2026-09-23）：每个目标任务的行中线是一个转折点，
+        /* L2 竖线按**转折点**分段：每个目标任务的行中线是一个转折点，
          * 第 k 段竖线（上一转折点 → 第 k 个任务行中线）属于第 k 条分支 → 颜色 = 该任务状态。
          * 支线从自己那个转折点横出，所以「成功 + 跳过」时：4-1 支线绿、竖线那一段（属 4-2）灰。
          * 进入侧任务低于全部目标行时（f.cy 更低），末段补画并归最后一个分支。 */
@@ -1952,16 +1957,24 @@ body{background:var(--ws-border-subtle);}
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t);
           var wc=wire(sc.steps[i+1].ts[ti].st);
-          if(c.cy>prev+0.5){ runSeg(svg,mx,prev,mx,c.cy,wc); }
+          if(c.cy>prev+0.5){ segJob(mx,prev,mx,c.cy,wc); }
           prev=Math.max(prev,c.cy);
         });
-        if(f.cy>prev+0.5){ runSeg(svg,mx,prev,mx,f.cy,wire(sc.steps[i+1].ts[ys.length-1].st)); }
+        if(f.cy>prev+0.5){ segJob(mx,prev,mx,f.cy,wire(sc.steps[i+1].ts[ys.length-1].st)); }
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
-          runSeg(svg,mx,c.cy,c.l,c.cy,wc); runChev(svg,c.l,c.cy,wc);
+          segJob(mx,c.cy,c.l,c.cy,wc); chevJob(c.l,c.cy,wc);
         });
       }
     }
+    /* 落笔：灰色（--border，跳过/未执行）先画，彩色（深色）后画 —— 交叉处深色盖浅色 */
+    var paint=function(j){
+      if(j.t==='s'){ runSeg.apply(null,[svg].concat(j.a)); }
+      else{ runChev.apply(null,[svg].concat(j.a)); }
+    };
+    var isGray=function(j){return j.a[j.a.length-1]==='var(--border)';};
+    jobs.filter(isGray).forEach(paint);
+    jobs.filter(function(j){return !isGray(j);}).forEach(paint);
   }
 
   function submitApp(){
