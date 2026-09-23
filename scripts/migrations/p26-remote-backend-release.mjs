@@ -115,16 +115,40 @@ then
 fi
 
 echo "[restart-remote] 远端失败 → 回滚 dist 并重启旧版本" >&2
-rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' bash -s" <<'EOS' || true
+# 回滚要点（2026-09-23 实测教训，两条都踩过）：
+#   ① 只「pm2 restart」不够：目标机出现过 restart 后仍不监听，必须能退回**干净启动**
+#      （delete + start，用 pm2 记录里的 script/cwd）；
+#   ② 必须打印远端 pm2 错误日志尾部，否则排查很费时（本次真因：新产物在 production
+#      下要求 .env 显式配 AUTH_SERVICE_URL —— fail-fast 设计如此，是 .env 缺配置）。
+rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' SCRIPT='\${SCRIPT}' bash -s" <<'EOS' || true
 set -uo pipefail
 cd "\$SVC" || exit 1
 LAST="\$(ls -1dt dist.bak-* 2>/dev/null | head -1)"
 if [ -n "\$LAST" ]; then rm -rf dist && mv "\$LAST" dist && echo "[restart-remote] 已回滚 dist ← \$LAST"; fi
-for cand in "\$NAME" "\$FB"; do
-  if pm2 describe "\$cand" >/dev/null 2>&1; then pm2 restart "\$cand" >/dev/null 2>&1 && echo "[restart-remote] 已重启 \$cand"; break; fi
+RESOLVED=""
+for cand in "\$NAME" "\$FB"; do pm2 describe "\$cand" >/dev/null 2>&1 && { RESOLVED="\$cand"; break; }; done
+RESOLVED="\${RESOLVED:-\$NAME}"
+pm2 delete "\$RESOLVED" >/dev/null 2>&1 || true
+pm2 start "\$SCRIPT" --name "\$RESOLVED" --cwd "\$SVC" >/dev/null 2>&1 || echo "[restart-remote] [WARN] pm2 start 失败：\$RESOLVED" >&2
+pm2 save >/dev/null 2>&1 || true
+st=""
+for _ in \$(seq 1 10); do
+  st="\$(pm2 jlist 2>/dev/null | RESOLVED="\$RESOLVED" python3 -c '
+import sys, json, os
+try:
+    procs = {p["name"]: (p.get("pm2_env") or {}).get("status") for p in json.load(sys.stdin)}
+except Exception:
+    sys.exit(0)
+print(procs.get(os.environ["RESOLVED"], ""))
+' 2>/dev/null)"
+  [ "\$st" = "online" ] && break
+  sleep 2
 done
+echo "[restart-remote] 回滚后进程状态：\${RESOLVED} = \${st:-未知}"
+echo "[restart-remote] --- 远端 pm2 错误日志尾部（排查用）---"
+tail -15 "\$HOME/.pm2/logs/\${RESOLVED}-error.log" 2>/dev/null || true
 EOS
-die "远端落地/重启失败：\${MODULE_KEY}@\${COMMIT_ID}（已尝试回滚，请查目标机 pm2 日志）"
+die "远端落地/重启失败：\${MODULE_KEY}@\${COMMIT_ID}（已回滚 dist，见上方远端状态与日志）"
 `;
 
 const VERIFY_SCRIPT = `#!/usr/bin/env bash
@@ -147,12 +171,13 @@ RKEY="\${PUBLISH_KEY:-\$HOME/.ssh/id_ed25519_servers}"
 SVC="\${PUBLISH_PATH}"
 NAME="\${PM2_NAME:-web-\${MODULE_KEY}}"
 FB="\${MODULE_KEY}"
+SCRIPT="\${PM2_SCRIPT:-dist/main.js}"
 PORT="\${PORT:-}"
 TRIES="\${REMOTE_ONLINE_WAIT_TRIES:-15}"   # 15 × 2s = 30s
 # 同 restart：ssh 必须走函数，不能用带引号的变量拼接
 rssh() { ssh -i "\${RKEY}" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "\$@"; }
 
-rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' PORT='\${PORT}' TRIES='\${TRIES}' bash -s" <<'EOS'
+if rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' PORT='\${PORT}' TRIES='\${TRIES}' bash -s" <<'EOS'
 set -uo pipefail
 vdie() { echo "[verify-remote] \$*" >&2; exit 1; }
 RESOLVED=""
@@ -188,7 +213,45 @@ else
   echo "[verify-remote] [WARN] PORT 未解析，降级为进程状态验证"
 fi
 EOS
-echo "[verify-remote] 验证通过：\${MODULE_KEY}@\${COMMIT_ID}"
+then
+  echo "[verify-remote] 验证通过：\${MODULE_KEY}@\${COMMIT_ID}"
+  exit 0
+fi
+
+# 验证失败 = 新产物不可用：**必须回滚 dist 并重启旧版本**，否则目标机会停在崩溃循环上
+# （2026-09-23 实测：verify 若不回滚，服务会一直 crash-loop、端口无监听）。
+# 注意：这里必须检查 ssh 的退出码 —— 早期版本忘了检查，端口探活失败却打印"验证通过"。
+echo "[verify-remote] 验证未通过 → 回滚 dist 并重启旧版本" >&2
+rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' SCRIPT='\${SCRIPT}' bash -s" <<'EOS' || true
+set -uo pipefail
+cd "\$SVC" || exit 1
+LAST="\$(ls -1dt dist.bak-* 2>/dev/null | head -1)"
+if [ -n "\$LAST" ]; then rm -rf dist && mv "\$LAST" dist && echo "[verify-remote] 已回滚 dist ← \$LAST"; fi
+RESOLVED=""
+for cand in "\$NAME" "\$FB"; do pm2 describe "\$cand" >/dev/null 2>&1 && { RESOLVED="\$cand"; break; }; done
+RESOLVED="\${RESOLVED:-\$NAME}"
+pm2 delete "\$RESOLVED" >/dev/null 2>&1 || true
+pm2 start "\$SCRIPT" --name "\$RESOLVED" --cwd "\$SVC" >/dev/null 2>&1 || echo "[verify-remote] [WARN] pm2 start 失败：\$RESOLVED" >&2
+pm2 save >/dev/null 2>&1 || true
+st=""
+for _ in \$(seq 1 10); do
+  st="\$(pm2 jlist 2>/dev/null | RESOLVED="\$RESOLVED" python3 -c '
+import sys, json, os
+try:
+    procs = {p["name"]: (p.get("pm2_env") or {}).get("status") for p in json.load(sys.stdin)}
+except Exception:
+    sys.exit(0)
+print(procs.get(os.environ["RESOLVED"], ""))
+' 2>/dev/null)"
+  [ "\$st" = "online" ] && break
+  sleep 2
+done
+echo "[verify-remote] 回滚后进程状态：\${RESOLVED} = \${st:-未知}"
+echo "[verify-remote] --- 远端 pm2 错误日志尾部（排查用）---"
+tail -15 "\$HOME/.pm2/logs/\${RESOLVED}-error.log" 2>/dev/null || true
+EOS
+echo "[verify-remote] 失败：\${MODULE_KEY}@\${COMMIT_ID}（已回滚 dist，版本指针不前进）" >&2
+exit 1
 `;
 
 /** 语法自检：坏脚本一次等于该模块发不上去（与流水线编辑器保存时同口径） */
