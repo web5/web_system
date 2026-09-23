@@ -1,5 +1,5 @@
 import request from './request';
-import type { UserInfo, UiRadiusStyle } from '@web-system/types';
+import type { UserInfo } from '@web-system/types';
 
 export interface UserListParams {
   page?: number;
@@ -46,8 +46,11 @@ export function updateUserProfile(data: Partial<UserInfo>): Promise<UserInfo> {
  * 复用既有 `PUT /users/me`，不新增接口；服务端按浅合并写入，故只传变更的档位即可。
  * 口径：specs/radius-style-dual/page-spec-pref-sync.md §3.2
  */
-export function updateUiPreferences(preferences: { radiusStyle?: UiRadiusStyle }): Promise<UserInfo> {
-  return request.put('/users/me', { preferences });
+export function updateUiPreferences(preferences: {
+  radiusStyle?: 'soft' | 'crisp' | 'sharp';
+}): Promise<UserInfo> {
+  // silent：界面偏好是「本地乐观应用 + 后台同步」，失败只记日志、不回滚也不弹错（规格 §5 / AC7）
+  return request.put('/users/me', { preferences }, { silent: true });
 }
 
 /**

@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { updateUiPreferences } from '@/api/user';
-import type { UiRadiusStyle } from '@web-system/types';
 
 /**
  * 界面偏好（用户级）。
@@ -13,8 +12,12 @@ import type { UiRadiusStyle } from '@web-system/types';
  * 口径来源：specs/radius-style-dual/page-spec.md §3；原型 docs/ui/prototypes/radius-style-dual.html
  * 注意：尺寸档与语义档的覆盖必须落在**同一元素**（html）上，故组件内不得再挂 data-radius。
  */
-/** 圆角风格三档（与 packages/shared 的 UiRadiusStyle 同源，避免各写一份） */
-export type RadiusStyle = UiRadiusStyle;
+/**
+ * 圆角风格三档：soft 柔和（默认）/ crisp 清爽 / sharp 直角。
+ * 与 packages/shared 的 UiRadiusStyle 取值一致（此处本地声明：本包 TS 解析不到 @web-system/types，
+ * 见 specs/radius-style-dual/page-spec-pref-sync.md §5.2）。
+ */
+export type RadiusStyle = 'soft' | 'crisp' | 'sharp';
 
 export const DEFAULT_RADIUS_STYLE: RadiusStyle = 'soft';
 

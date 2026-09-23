@@ -1,4 +1,4 @@
-import { get, put } from './request';
+import { get, request } from './request';
 
 /**
  * 圆角风格偏好（品牌端小程序）。
@@ -65,7 +65,13 @@ function isRadius(v: unknown): v is RadiusStyle {
  * 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.2 / §5
  */
 function pushToServer(style: RadiusStyle): void {
-  put<WrappedMe>('/users/me', { preferences: { radiusStyle: style } }).catch((err: unknown) => {
+  // silent：本地乐观应用 + 后台同步，失败只记日志、不弹 toast、不回滚（规格 §5 / AC7）
+  request<WrappedMe>({
+    url: '/users/me',
+    method: 'PUT',
+    data: { preferences: { radiusStyle: style } },
+    silent: true,
+  }).catch((err: unknown) => {
     console.warn('[appearance] 界面偏好上报失败，已保留本地值', err);
   });
 }
