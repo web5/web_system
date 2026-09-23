@@ -461,7 +461,7 @@ function startDragElement(e: MouseEvent | TouchEvent, el: CanvasElement) {
   e.preventDefault();
 }
 
-function startResize(e: MouseEvent | TouchEvent, el: CanvasElement, corner: string) {
+function startResize(e: MouseEvent | TouchEvent, el: CanvasElement, _corner: string) {
   resizing = el;
   elemStartScale = el.scale;
   const pos = getEventPos(e);
