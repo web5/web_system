@@ -263,7 +263,10 @@
     上半：<b>部署控制台</b>（贴合现有 console 壳，菜单按「微前端 / API 网关」分域；v4 新增 <b>版本部署</b>：<s>微前端/API 网关双域各挂入口</s> → <b>2026-09-21 对齐落地：只挂微前端域 <code>/deploys/micro</code></b>，选已有版本直接部署，与发布流水线解耦；应用详情「部署」改为打开选版本抽屉）。<br>
     下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。<br>
     2026-09-22 新增屏：<b>流水线详情 · 执行流程</b>（紧凑步骤卡 + 任务行连线 + skipped 灰色，用户 2026-09-22 标注）——
-    <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button>
+    <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button><br>
+    2026-09-23：执行流程屏内新增 <b>场景切换</b>（成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败 / 执行中），演示
+    <b>连线着色规则 v2 提案（待拍板）</b> —— 起因是真实实例「4-2 执行成功，但分叉整段还是灰」（v1 规则：分支里存在 skipped → 整段竖线灰）。
+    方案：<code>specs/pipeline-flow-color/design.md</code>；页面规格：<code>docs/ui/page-specs/pipeline-product-logic-v1.md</code> §15。
   </div>
 </div>
 
@@ -723,34 +726,26 @@
             <div class="t2" style="color:var(--text-3)">参数</div><div class="t2" style="color:var(--text-3)">变量</div>
           </div>
           <div class="dc-row" style="margin:12px 0;">
-            <span class="dc-mono">#5095-xbgvrqq</span>
-            <span class="dc-badge ok">成功</span>
-            <span class="dc-muted">local / gateway · feature/deploy-console-domain-split@f952534 · ci:cli-verify</span>
+            <span class="dc-mono" id="runInstId">#5095-xbgvrqq</span>
+            <span class="dc-badge ok" id="runInstBadge">成功</span>
+            <span class="dc-muted" id="runInstMeta">local / gateway · feature/deploy-console-domain-split@f952534 · ci:cli-verify</span>
+          </div>
+          <!-- 场景切换（2026-09-23 加：同一屏内对比不同运行状态下连线的着色，规则 v2 提案待拍板） -->
+          <div class="run-scenes" id="runScenes" style="margin:0 12px 10px;">
+            <span class="dc-muted" style="margin-right:2px;">场景：</span>
+            <button class="sc active" data-sc="s0" onclick="setRunScene('s0')">成功 · 4-2 跳过</button>
+            <button class="sc" data-sc="s2" onclick="setRunScene('s2')">成功 · 4-2 完成</button>
+            <button class="sc" data-sc="s1" onclick="setRunScene('s1')">运行中 · 停在审批</button>
+            <button class="sc" data-sc="s3" onclick="setRunScene('s3')">失败 · 4-2 失败</button>
+            <button class="sc" data-sc="s4" onclick="setRunScene('s4')">执行中 · 4-2 运行</button>
           </div>
           <div class="run-canvas" id="runCanvas">
             <svg class="run-wires" id="runWires"></svg>
             <!-- 一列 = 步骤卡 + 该列任务卡；grid 列宽 = max(两者) → 同列同宽（2026-09-22）。
                  序号**在任务卡左侧竖条**（与编辑页 task-node .seq 一致；多任务 = 4-1 / 4-2），
-                 步骤标题不放数字（编辑页 step-title 即无序号，用户 2026-09-22 指正） -->
-            <div class="run-grid">
-              <div class="run-col">
-                <div class="run-step"><span class="nm">拉取代码</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="rseq">1</span><span class="tn">git</span><span class="ts">完成</span></div>
-              </div>
-              <div class="run-col">
-                <div class="run-step"><span class="nm">构建</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="rseq">2</span><span class="tn">build</span><span class="ts">完成</span></div>
-              </div>
-              <div class="run-col">
-                <div class="run-step"><span class="nm">发布确认</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="rseq">3</span><span class="tn">发布确认·审批</span><span class="tagc">审批</span><span class="ts">完成</span></div>
-              </div>
-              <div class="run-col">
-                <div class="run-step"><span class="nm">发布</span><span class="cmd">命令</span></div>
-                <div class="run-task st-ok"><span class="rseq">4-1</span><span class="tn">local</span><span class="tagc">条件</span><span class="ts">完成</span></div>
-                <div class="run-task st-skip"><span class="rseq">4-2</span><span class="tn">dev</span><span class="tagc">条件</span><span class="ts">跳过</span></div>
-              </div>
-            </div>
+                 步骤标题不放数字（编辑页 step-title 即无序号，用户 2026-09-22 指正）。
+                 2026-09-23：网格改为按场景数据渲染（见 RUN_SCENES），便于对比连线着色 -->
+            <div class="run-grid" id="runGrid"></div>
           </div>
           <div class="run-legend">
             <span class="dot" style="background:var(--ws-ok)"></span>完成
@@ -759,15 +754,20 @@
             <span class="dot" style="background:var(--ws-warn)"></span>待审批
             <span class="dot skip"></span>跳过（灰）
             <span class="dot plain"></span>未执行
-            <span class="dc-muted" style="margin-left:10px;">dev 未被执行（条件不满足）→ 按「跳过 = 灰色」表达，不复用成功色</span>
+            <span class="dc-muted" style="margin-left:10px;">任务卡：绿色只填序号竖条（数字反白）、卡片白底；连线着色见下方 v2 提案</span>
           </div>
         </div>
         <div class="dc-muted" style="margin-top:10px;">
-          说明（2026-09-22）：本屏为「流水线详情 · 执行流程」新交互稿 ——
-          ① 步骤卡紧凑化（seq / 名称 / 命令，高度 ≈ 任务卡 2 倍，字号 12px）；
-          ② 连线 = 任务行 SVG 测量（主线在前一列任务中线、列间分叉、箭头指向每个任务中线），与编辑页同构；
-          ③ skipped（未被执行）用**灰色**，不再复用成功色。
-          确认后按此落码 <code>apps/deploy-console/src/components/pipeline/ProgressFlow.vue</code>。
+          <b>结构（2026-09-22 已确认）</b>：① 步骤卡紧凑化（名称 / 命令，无序号）；② 连线 = 任务行 SVG 测量
+          （主线在前一列任务中线、列间分叉竖线、箭头指向每个任务中线），与编辑页同构；③ 跳过 = 灰色，不复用成功色。<br>
+          <b>连线着色 v2 提案（2026-09-23 · 待拍板）</b>：
+          主线横线 = 进入侧步骤聚合完成 → 绿；
+          分叉竖线 = 进入侧完成<b>且分叉已到达（任一分支有状态）</b> → 绿（<b>v1 的「分支里存在 skipped → 整段灰」会把 4-2 的成功路拖灰，即「4-2 成功了还是灰」这次反馈</b>）；
+          支线箭头 = 跟目标任务自身状态：完成 → <code>--ws-ok</code> / 失败 → <code>--danger</code> / 执行中 → <code>--primary</code> /
+          待审批 → <code>--ws-warn</code> / 跳过 · 未执行 → <code>--border</code>。<br>
+          <b>待拍板</b>：① 竖线规则 ② 失败支线标红 ③ 执行中/待审批支线着色 ④ 已取消颜色 —— 方案见
+          <code>specs/pipeline-flow-color/design.md</code>。确认后按此落码
+          <code>apps/deploy-console/src/components/pipeline/ProgressFlow.vue</code> 的 <code>drawWires()</code>。
         </div>
       </div>
 
@@ -1147,6 +1147,22 @@
   .run-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:8px;}
   .run-legend .dot.skip{background:var(--bg);border:1px dashed var(--border);}
   .run-legend .dot.plain{background:var(--card);border:1px solid var(--border);}
+  /* 2026-09-23 状态补齐（连线着色规则 v2 提案 · 待拍板，见 specs/pipeline-flow-color/design.md）：
+     失败=红 / 执行中=品牌色 / 待审批=warn / 未执行=灰（沿用「绿只填序号竖条、卡片白底」的既有口径） */
+  .run-task.st-fail{border-color:var(--danger);}
+  .run-task.st-fail .rseq{background:var(--danger);color:var(--ws-on-brand);border-right-color:var(--danger);}
+  .run-task.st-run{border-color:var(--primary);}
+  .run-task.st-run .rseq{background:var(--primary);color:var(--ws-on-brand);border-right-color:var(--primary);}
+  .run-task.st-await{border-color:var(--ws-warn);}
+  .run-task.st-await .rseq{background:var(--ws-warn);color:var(--ws-on-brand);border-right-color:var(--ws-warn);}
+  .run-task.st-none{border-color:var(--border);}
+  .run-task.st-none .tn,.run-task.st-none .ts{color:var(--text-3);}
+  /* 场景切换（同屏内对比不同运行状态下的连线着色） */
+  .run-scenes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .run-scenes .sc{font-size:12px;padding:3px 10px;border:1px solid var(--border);border-radius:var(--ws-radius-pill);
+    background:var(--card);color:var(--text-2);cursor:pointer;white-space:nowrap;}
+  .run-scenes .sc.active{background:var(--ws-brand-soft);color:var(--ws-brand-600);
+    border-color:var(--ws-brand-500);font-weight:600;}
 
 
 
@@ -1607,7 +1623,8 @@ body{background:var(--ws-border-subtle);}
     if(page === 'settings'){ stRender(); }
     // 流水线屏：隐藏状态下坐标全为 0，切屏显示后必须重测重绘连线
     if(page === 'pipelines'){ setTimeout(draw, 30); setTimeout(draw, 200); }
-    if(page === 'rundetail'){ setTimeout(drawRunWires, 30); setTimeout(drawRunWires, 200); }
+    // 2026-09-23：进入执行流程屏时先按当前场景渲染网格，再画连线（网格已改为数据驱动）
+    if(page === 'rundetail'){ renderRunGrid(); setTimeout(drawRunWires, 30); setTimeout(drawRunWires, 200); }
   }
   function pane(scope, n){
     var map = {app:4, svc:5};
@@ -1736,21 +1753,104 @@ body{background:var(--ws-border-subtle);}
   }
 
   /* ===== 流水线详情 · 执行流程：SVG 测量连线（与编辑页 drawWires 同构） ===== */
-  function runSeg(svg,x1,y1,x2,y2,ok){
+  /* 2026-09-23：入参由「是否走过（布尔）」改为**颜色 token**，以便支线按任务状态着色（红/品牌色/warn） */
+  function runSeg(svg,x1,y1,x2,y2,color){
     var p=document.createElementNS('http://www.w3.org/2000/svg','path');
     p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
     p.setAttribute('stroke-width','2.5'); p.setAttribute('fill','none');
-    p.style.stroke = ok ? 'var(--ws-ok)' : 'var(--border)';
+    p.style.stroke = color || 'var(--border)';
     svg.appendChild(p);
   }
-  function runChev(svg,x,y,ok){
+  function runChev(svg,x,y,color){
     var p=document.createElementNS('http://www.w3.org/2000/svg','path');
     p.setAttribute('d','M'+(x-9)+' '+(y-8)+' L'+x+' '+y+' L'+(x-9)+' '+(y+8));
     p.setAttribute('stroke-width','3'); p.setAttribute('fill','none');
     p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round');
-    p.style.stroke = ok ? 'var(--ws-ok)' : 'var(--border)';
+    p.style.stroke = color || 'var(--border)';
     svg.appendChild(p);
   }
+  /* ===== 执行流程 · 运行场景（2026-09-23 加：同屏切换对比连线着色，规则 v2 提案待拍板） =====
+   * st 取值与 ProgressFlow.vue 的任务状态对应：ok/fail/run/await/skip/none（none = 未执行、无落库记录）
+   * 方案：specs/pipeline-flow-color/design.md */
+  var RUN_SCENES={
+    s0:{inst:'成功',meta:'local / gateway · feature/deploy-console-domain-split@f952534 · ci:cli-verify',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'skip',tag:'条件'}]}
+    ]},
+    s2:{inst:'成功',meta:'dev / auth-service · auth-service-dev/69faa6e · ci:agent-manual（真实实例 #3373 形态）',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'ok',tag:'条件'}]}
+    ]},
+    s1:{inst:'运行中',meta:'dev / auth-service · auth-service-dev/69faa6e · ci:agent-manual（停在发布确认）',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'await',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'none',tag:'条件'},{n:'dev',st:'none',tag:'条件'}]}
+    ]},
+    s3:{inst:'失败',meta:'dev / auth-service · 步骤「发布 / dev」动作「verify」失败：exit 1',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'fail',tag:'条件'}]}
+    ]},
+    s4:{inst:'运行中',meta:'dev / auth-service · 正在执行「发布 / dev」',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'run',tag:'条件'}]}
+    ]}
+  };
+  var RUN_ST_TEXT={ok:'完成',fail:'失败',run:'执行中',await:'待审批',skip:'跳过',none:'未执行'};
+  var RUN_WIRE={ok:'var(--ws-ok)',fail:'var(--danger)',run:'var(--primary)',await:'var(--ws-warn)'};
+  var runScene='s0';
+  function runAgg(step){
+    var sts=step.ts.map(function(t){return t.st;});
+    if(sts.indexOf('fail')>=0) return 'fail';
+    if(sts.indexOf('run')>=0) return 'run';
+    if(sts.indexOf('await')>=0) return 'await';
+    if(sts.indexOf('ok')>=0) return 'ok';
+    if(sts.indexOf('skip')>=0) return 'skip';
+    return 'none';
+  }
+  function setRunScene(k){
+    runScene=k;
+    [].forEach.call(document.querySelectorAll('#runScenes .sc'),function(b){
+      b.classList.toggle('active',b.getAttribute('data-sc')===k);});
+    var sc=RUN_SCENES[k];
+    var badge=document.getElementById('runInstBadge');
+    badge.textContent=sc.inst;
+    badge.className='dc-badge '+(sc.inst==='成功'?'ok':(sc.inst==='失败'?'err':'warn'));
+    document.getElementById('runInstMeta').textContent=sc.meta;
+    renderRunGrid();
+    setTimeout(drawRunWires,20);
+  }
+  function renderRunGrid(){
+    var grid=document.getElementById('runGrid');
+    if(!grid) return;
+    var sc=RUN_SCENES[runScene];
+    var html='';
+    sc.steps.forEach(function(s,si){
+      var multi=s.ts.length>1;
+      html+='<div class="run-col"><div class="run-step"><span class="nm">'+s.nm+'</span>'
+        +'<span class="cmd">命令</span></div>';
+      s.ts.forEach(function(t,ti){
+        var seq=multi?(si+1)+'-'+(ti+1):String(si+1);
+        html+='<div class="run-task st-'+t.st+'"><span class="rseq">'+seq+'</span>'
+          +'<span class="tn">'+t.n+'</span>'
+          +(t.tag?'<span class="tagc">'+t.tag+'</span>':'')
+          +'<span class="ts">'+RUN_ST_TEXT[t.st]+'</span></div>';
+      });
+      html+='</div>';
+    });
+    grid.innerHTML=html;
+  }
+
+  /* 连线着色（v2 提案 · 待拍板）：
+   * 主线 = 进入侧步骤聚合完成；竖线 = 进入侧完成且分叉已到达（任一分支有状态）；支线 = 跟目标任务自身状态 */
   function drawRunWires(){
     var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
     if(!cv||!svg) return;
@@ -1758,23 +1858,29 @@ body{background:var(--ws-border-subtle);}
     var wr=cv.getBoundingClientRect();
     svg.setAttribute('width',Math.ceil(cv.scrollWidth)); svg.setAttribute('height',Math.ceil(cv.scrollHeight));
     svg.innerHTML='';
+    var sc=RUN_SCENES[runScene];
+    var wire=function(st){return RUN_WIRE[st]||'var(--border)';};
     for(var i=0;i<cols.length-1;i++){
       var ft=cols[i].querySelectorAll('.run-task'); var tt=cols[i+1].querySelectorAll('.run-task');
       if(!ft.length||!tt.length) continue;
       var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
-      var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2; var ok=true;
-      runSeg(svg,f.r,f.cy,mx,f.cy,ok);
-      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,ok); runChev(svg,t0.l,f.cy,ok); }
+      var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2;
+      var ok=runAgg(sc.steps[i])==='ok';
+      var okc=ok?'var(--ws-ok)':'var(--border)';
+      runSeg(svg,f.r,f.cy,mx,f.cy,okc);
+      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,okc); runChev(svg,t0.l,f.cy,okc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        /* 分叉**竖线**同样按目标分支状态着色：分支里存在 skipped（未执行）→ 整段灰
-         * （用户 2026-09-22：竖线也要灰 —— 分叉里有没执行的分支，主干绿着不协调） */
-        var vok = ok && ![].some.call(tt,function(t){return t.classList.contains('st-skip');});
-        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vok);
-        /* 支线按**目标任务状态**着色：skipped（未执行）→ 灰（用户 2026-09-22：dev 没执行，线不该绿） */
-        [].forEach.call(tt,function(t){
-          var c=ctr(t); var tok=!t.classList.contains('st-skip');
-          runSeg(svg,mx,c.cy,c.l,c.cy,tok); runChev(svg,c.l,c.cy,tok);
+        /* 分叉竖线：进入侧完成 且 分叉已到达（任一分支有状态）→ 绿
+         * （v1 是「分支里存在 skipped → 整段灰」，会把命中分支的成功路拖灰） */
+        var reached=sc.steps[i+1].ts.some(function(t){return t.st!=='none';});
+        var vok=ok&&reached;
+        var vc=vok?'var(--ws-ok)':'var(--border)';
+        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vc);
+        /* 支线按目标任务自身状态着色：ok 绿 / fail 红 / run 品牌色 / await warn / skip·none 灰 */
+        [].forEach.call(tt,function(t,ti){
+          var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
+          runSeg(svg,mx,c.cy,c.l,c.cy,wc); runChev(svg,c.l,c.cy,wc);
         });
       }
     }

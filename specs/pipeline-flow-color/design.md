@@ -1,9 +1,11 @@
 # 流水线详情页 · 运行态连线着色规则 v2（设计稿 · 待确认）
 
 > 状态：**提案，待用户拍板**。确认前不改实现代码。
-> 原型演示：`docs/ui/prototypes/pipeline-env-branch-canvas.html` →「**详情页 · 执行流程** · 连线着色规则」区块
-> （四场景可切换；演示的是**详情页只读画布**——步骤卡带「命令」链接、任务卡只有
-> 序号竖条/名称/审批·条件小标/状态文字，无删除按钮与动作行；同文件上方画布为编辑页，连线结构同构）。
+> 原型演示：**`docs/ui/prototypes/deploy-console-domain-split.html`** → 屏 `dc-rundetail`
+> 「流水线详情 · 执行流程」（侧栏进入或页头「▶ 打开新屏」），屏内**场景切换**五个场景可点：
+> 成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败·4-2 失败 / 执行中·4-2 运行。
+> 页面规格：`docs/ui/page-specs/pipeline-product-logic-v1.md` §15（§14 是 v1 规则的来源）。
+> 归属提醒：`pipeline-env-branch-canvas.html` 是**编辑页**原型，本议题（详情页只读画布）不落在那里。
 
 ## 0 背景与目标
 
@@ -33,8 +35,8 @@ awaiting / skipped / cancelled / 未执行`''`）。步骤聚合规则不变（�
 | 分叉竖线 | 进入侧 succeeded **且分叉已到达（任一目标任务状态非空）** | 绿 `--ok`，否则灰 |
 | 支线横线 + 箭头 | 跟**目标任务自身状态**：succeeded | 绿 `--ok` |
 | | failed | 红 `--danger`（v1 为灰，提案升级，待拍板） |
-| | running | 蓝 `--info`（新增 token，待拍板） |
-| | awaiting | 橙 `--primary`（同「待审批」徽标色，待拍板） |
+| | running | 品牌色 `--primary`（沿用原型图例「执行中」的色，不新增 token） |
+| | awaiting | `--ws-warn`（沿用原型图例「待审批」的色） |
 | | skipped / cancelled / 未执行 | 灰 `--border` |
 
 核心变化：

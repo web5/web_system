@@ -396,3 +396,26 @@
   - **skipped（跳过）= 灰色**：边框 `--border` / 底 `--bg` / 文字 `--text-3` / opacity .85，不复用成功系；图例同步加「跳过（灰）」。
 - 确认后按原型落码；着色规则（终态归一）沿用 §13。
 
+## 15. 连线着色规则 v2 提案（用户 2026-09-23 反馈 · 原型待确认）
+
+- 页面/组件：`apps/deploy-console/src/components/pipeline/ProgressFlow.vue` 的 `drawWires()`（只改着色判定，不改布局/结构）
+- 反馈（真实实例 `3373-zlsrbhp`）：发布步骤 4-1 local 条件未命中（跳过）、**4-2 dev 执行成功**，
+  但分叉竖线整段仍是灰的 → 「4-2 执行成功了，怎么还是灰色」。
+  根因 = §14 的竖线规则「分支里存在 skipped → 整段竖线灰」：跳过的分支把真实走通的分支拖灰。
+  （叠加此前另一处：支线判据「非 skipped 即绿」→ 未执行的任务箭头提前变绿，已按同规则改数据判定。）
+- 原型（`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`，**待用户确认**）：
+  新增**场景切换**（成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败·4-2 失败 / 执行中·4-2 运行），
+  网格改为按场景数据渲染，连线按下列 v2 规则着色：
+
+| 元件 | 条件 | 颜色 |
+|---|---|---|
+| 主线横线 | 进入侧步骤聚合 succeeded | `--ws-ok` 绿，否则 `--border` 灰 |
+| 分叉竖线 | 进入侧 succeeded **且分叉已到达（任一分支有状态）** | `--ws-ok` 绿，否则灰 |
+| 支线（横线 + 箭头） | 跟目标任务自身状态：succeeded / failed / running / awaiting / skipped·未执行 | 绿 `--ws-ok` / 红 `--danger` / 品牌色 `--primary` / `--ws-warn` / 灰 `--border` |
+
+- 与 §14 的差异：① 竖线「无 skipped 才绿」→「分叉已到达即绿」；② 支线「非 skipped 即绿」→「按目标任务状态着色」；
+  ③ 新增 failed 红、running 品牌色、awaiting warn（原一律灰）。
+- 任务卡状态色沿用 §14 口径（绿只填序号竖条、卡片白底）；新增 `st-fail` / `st-run` / `st-await` / `st-none` 四类态。
+- **待拍板**（`specs/pipeline-flow-color/design.md` §5）：① 竖线规则 ② 失败支线标红 ③ 执行中/待审批支线着色 ④ 已取消颜色 ⑤ 步骤卡是否随聚合状态着色边框。
+- 确认后一次落码，并按场景矩阵做实现一致性比对。
+
