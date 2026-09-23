@@ -128,12 +128,21 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
 });
 
-// 登录后（含弹窗登录、刷新恢复 token）拉取会话列表；退出登录清空本地会话态
+/**
+ * 登录后（含弹窗登录、刷新恢复 token）拉取会话列表；退出登录清空本地会话态。
+ * 范围跟随当前导航项（工具页取自己的记录），避免先拉一份 chat 再被覆盖。
+ */
 watch(
   () => userStore.isLoggedIn,
   (ok) => {
-    if (ok) void conversationStore.load();
-    else conversationStore.clear();
+    if (ok) {
+      void conversationStore.syncScope({
+        source: navItem.value?.listSource,
+        agentId: navItem.value?.listAgentId,
+      });
+    } else {
+      conversationStore.clear();
+    }
   },
   { immediate: true },
 );
