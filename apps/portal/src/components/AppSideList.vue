@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Modal, message } from 'ant-design-vue';
 import type { ConversationSummary } from '@/api/agent';
@@ -114,10 +114,18 @@ import { formatRelativeTime } from '@/utils/time';
 import { CAPABILITIES, type Capability } from '@/config/capabilities';
 import AppIcon from './AppIcon.vue';
 
-withDefaults(defineProps<{ title: string; showList?: boolean; caps?: boolean }>(), {
-  showList: true,
-  caps: false,
-});
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    showList?: boolean;
+    caps?: boolean;
+    /** 记录来源：chat=主对话（默认）/ tool=工具页 */
+    source?: 'chat' | 'tool';
+    /** 记录按能力过滤（translate / contract-risk） */
+    agentId?: string;
+  }>(),
+  { showList: true, caps: false },
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -153,6 +161,19 @@ function displayTitle(item: ConversationSummary): string {
   return item.title?.trim() || '新对话';
 }
 
+/** 工具页记录（翻译 / 合翻）：点记录 = 在当前能力页载入该次结果（URL 带 ?id=，可分享） */
+const isToolScope = computed(() => props.source === 'tool');
+
+/** 左栏上半区按视图范围拉记录：切到不同能力才重取 */
+watch(
+  () => [props.showList, props.source, props.agentId],
+  () => {
+    if (!props.showList) return;
+    void store.syncScope({ source: props.source, agentId: props.agentId });
+  },
+  { immediate: true },
+);
+
 /** 从欢迎页 / 其他页点列表 → 先落到对话工作台，再切换会话 */
 async function ensureChatRoute() {
   if (route.path !== '/chat') await router.push('/chat');
@@ -160,12 +181,21 @@ async function ensureChatRoute() {
 
 function pick(id: string) {
   store.select(id);
+  if (isToolScope.value) {
+    void router.push({ path: route.path, query: { id } });
+    return;
+  }
   void ensureChatRoute();
 }
 
 function createNew() {
   authGate.ensureAuth(() => {
     store.startNew();
+    if (isToolScope.value) {
+      // 工具页「新建」= 回到该能力工作台空态（不跳对话）
+      void router.push({ path: route.path, query: {} });
+      return;
+    }
     void ensureChatRoute();
   });
 }

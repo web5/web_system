@@ -14,6 +14,8 @@
             :title="navItem.listTitle"
             :show-list="!!navItem?.sideList"
             :caps="!!navItem?.caps"
+            :source="navItem?.listSource"
+            :agent-id="navItem?.listAgentId"
           />
           <main class="app-work">
             <router-view />

@@ -122,11 +122,12 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { runAgentStream } from '@/api/agent';
+import { getConversation, runAgentStream } from '@/api/agent';
 import { collectGlossary } from '@/api/glossary';
-import { splitSpeakParts, speakSequence, stopTts } from '@/api/tts';
+import { speak as speakText, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -151,6 +152,41 @@ const tab = ref<'推荐译文' | '直译对照' | '委婉版'>('推荐译文');
 const reading = ref(false);
 
 let controller: AbortController | null = null;
+
+const route = useRoute();
+
+/** 记录回放（左栏「翻译记录」点进来）：末条 assistant 消息 → 三版对照，首条 user 消息回填原文 */
+async function loadRecord(id: string) {
+  try {
+    const detail = await getConversation(id);
+    const msgs = detail.messages ?? [];
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const hit = /【原文】([\s\S]*)$/.exec(firstUser?.content || '');
+    if (hit) source.value = hit[1].trim();
+    const lastAi = [...msgs].reverse().find((m) => m.role === 'assistant');
+    sections.value = parseSections(lastAi?.content || '');
+    tab.value = '推荐译文';
+    state.value = sections.value['推荐译文'] ? 'done' : 'idle';
+  } catch {
+    message.error('记录加载失败，请重试');
+  }
+}
+
+onMounted(() => {
+  const id = route.query.id;
+  if (typeof id === 'string' && id) void loadRecord(id);
+});
+
+/** URL 上的 ?id= 被清掉（新建）→ 回到空态 */
+watch(
+  () => route.query.id,
+  (id) => {
+    if (!id) {
+      sections.value = {};
+      state.value = 'idle';
+    }
+  },
+);
 
 function swapLang() {
   const a = srcLang.value;
@@ -218,8 +254,8 @@ async function speak() {
   }
   reading.value = true;
   try {
-    // 「首句 + 剩余整段」两块：首句 ~2s 出声，剩余块在首句播放期间预取
-    await speakSequence(splitSpeakParts(text), { isActive: () => reading.value });
+    // 流式优先（连贯无接缝），不可用自动回退整段
+    await speakText(text, { isActive: () => reading.value });
   } catch {
     if (reading.value) message.error('朗读失败，请重试');
   } finally {
