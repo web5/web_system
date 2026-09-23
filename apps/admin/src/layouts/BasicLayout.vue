@@ -256,7 +256,7 @@ const handleLogout = async () => {
   cursor: pointer;
 }
 .sider-logo:hover { opacity: .85; }
-.sider-logo-img { border-radius: 4px; flex-shrink: 0; }
+.sider-logo-img { border-radius: var(--r-chip); flex-shrink: 0; }
 .logo-text { color: #FF8C42; font-size: 16px; font-weight: 700; white-space: nowrap; }
 
 .collapse-toggle {
@@ -321,7 +321,7 @@ const handleLogout = async () => {
 
 .user-name {
   display: flex; align-items: center; gap: 8px; cursor: pointer;
-  padding: 4px 12px 4px 4px; border-radius: 4px;
+  padding: 4px 12px 4px 4px; border-radius: var(--r-chip);
   transition: background .2s;
 }
 .user-name:hover { background: rgba(255,140,66,.12); }
