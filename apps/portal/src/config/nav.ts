@@ -24,9 +24,18 @@ export interface NavItem {
   listTitle: string;
   /** 右栏：是否渲染上下文面板 */
   context: boolean;
+  /**
+   * 顶栏是否展示（2026-09-23 顶栏收口：翻译 / 合翻收进「发现」，顶栏不占位）。
+   * 缺省 = true；false 时顶栏不渲染本项，高亮落到 `parent`。
+   */
+  topLevel?: boolean;
+  /** 顶栏不展示时的高亮归属（进入能力页时顶栏亮「发现」） */
+  parent?: NavKey;
   /** 建设中：跳转后页面为占位态 */
   soon?: boolean;
 }
+
+
 
 export const NAV_ITEMS: NavItem[] = [
   {
@@ -56,7 +65,6 @@ export const NAV_ITEMS: NavItem[] = [
     sideList: false,
     listTitle: '能力',
     context: false,
-    soon: true,
   },
   {
     key: 'translate',
@@ -67,6 +75,9 @@ export const NAV_ITEMS: NavItem[] = [
     sideList: false,
     listTitle: '翻译记录',
     context: false,
+    // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
+    topLevel: false,
+    parent: 'discover',
   },
   {
     key: 'contract',
@@ -78,6 +89,9 @@ export const NAV_ITEMS: NavItem[] = [
     listTitle: '体检记录',
     // P3：报告步由页面注入「合同原文」面板，非报告步不注入 → 右栏整体不占位
     context: true,
+    // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
+    topLevel: false,
+    parent: 'discover',
   },
   {
     key: 'lab',
@@ -89,6 +103,18 @@ export const NAV_ITEMS: NavItem[] = [
     context: false,
   },
 ];
+
+/** 顶栏渲染项：收进其它入口的能力页（翻译 / 合翻）不在其中 */
+export const TOP_NAV_ITEMS: NavItem[] = NAV_ITEMS.filter((i) => i.topLevel !== false);
+
+/**
+ * 顶栏高亮项：命中页不在顶栏时（翻译 / 合翻）高亮落回 `parent`（「发现」）。
+ * 未命中任何导航项（如 `/login`、`/profile`）返回 null。
+ */
+export function matchTopNavKey(path: string): NavKey | null {
+  const item = matchNavItem(path);
+  return item ? item.parent ?? item.key : null;
+}
 
 /**
  * 按当前路径匹配一级导航项。

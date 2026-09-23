@@ -7,10 +7,11 @@
       <span class="brand-name">科豆 AI</span>
     </router-link>
 
-    <!-- 一级导航：配置化（src/config/nav.ts），「我的」不在此处 -->
+    <!-- 一级导航：配置化（src/config/nav.ts），「我的」不在此处；
+         翻译 / 合翻不在顶栏（收进发现），其页面高亮落回「发现」 -->
     <nav class="topnav">
       <router-link
-        v-for="item in NAV_ITEMS"
+        v-for="item in TOP_NAV_ITEMS"
         :key="item.key"
         :to="item.to"
         class="topnav-item"
@@ -53,7 +54,7 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Modal } from 'ant-design-vue';
-import { NAV_ITEMS, matchNavItem } from '@/config/nav';
+import { TOP_NAV_ITEMS, matchTopNavKey } from '@/config/nav';
 import { useUserStore } from '@/stores/user';
 import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from './AppIcon.vue';
@@ -70,7 +71,8 @@ const cmdHint = computed(() =>
   /Mac|iPhone|iPad/i.test(navigator.userAgent || '') ? '⌘K' : 'Ctrl K',
 );
 
-const activeKey = computed(() => matchNavItem(route.path)?.key ?? null);
+/** 顶栏高亮：能力页（翻译 / 合翻）不在顶栏，高亮归「发现」 */
+const activeKey = computed(() => matchTopNavKey(route.path));
 
 const userName = computed(() => userStore.userInfo?.username || '未登录');
 
