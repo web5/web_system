@@ -55,6 +55,23 @@ describe('AgentConversationQueryService', () => {
     expect(result).toEqual({ list: [{ id: 'c1' }], total: 1 });
   });
 
+  it('markSource：source=tool 时一并把显式 agentId 落库（工具记录按能力过滤靠它）', async () => {
+    const repo = { update: jest.fn() } as unknown as Repository<AgentConversation>;
+    const svc = new AgentConversationQueryService(repo);
+    await svc.markSource('u1', 'conv-1', 'tool', 'translate');
+    expect(repo.update).toHaveBeenCalledWith({ id: 'conv-1', userId: 'u1' }, {
+      source: 'tool',
+      agentId: 'translate',
+    });
+  });
+
+  it('markSource：agentId 为空 → 只改 source（不写空值）', async () => {
+    const repo = { update: jest.fn() } as unknown as Repository<AgentConversation>;
+    const svc = new AgentConversationQueryService(repo);
+    await svc.markSource('u1', 'conv-1', 'tool', '  ');
+    expect(repo.update).toHaveBeenCalledWith({ id: 'conv-1', userId: 'u1' }, { source: 'tool' });
+  });
+
   it('detail：按 {id,userId} 查询（防止越权读他人会话）', async () => {
     const { repo, svc } = setup();
     await svc.getConversation('u1', 'conv-1');
