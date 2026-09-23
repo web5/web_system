@@ -109,7 +109,7 @@ function onScroll(e: Event) {
 <style scoped>
 .run-logs {
   border: 1px solid #1e1e1e;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   overflow: hidden;
 }
 .log-toolbar {

@@ -350,7 +350,7 @@ async function saveDraft() {
   gap: 8px;
   padding: 8px 12px;
   background: #fafafa;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
   border: 1px solid #f0f0f0;
   border-bottom: none;
 }
@@ -361,7 +361,7 @@ async function saveDraft() {
   flex-wrap: wrap;
   padding: 12px;
   border: 1px solid #f0f0f0;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--r-card) var(--r-card);
   background: #fff;
 }
 .op-list {
@@ -372,7 +372,7 @@ async function saveDraft() {
   display: flex;
   align-items: center;
   border: 1px solid #f0f0f0;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 6px 8px;
   margin-bottom: 6px;
   cursor: pointer;

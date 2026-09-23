@@ -170,15 +170,15 @@ async function clearAll() {
 
 <style scoped>
 .step-branch { margin-top: 12px; }
-.branch-row { border: 1px solid var(--ws-border); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+.branch-row { border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: 10px; margin-bottom: 10px; }
 .branch-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.tag-default { font-size: 11px; color: var(--ws-text-tertiary); border: 1px solid var(--ws-border); border-radius: 20px; padding: 1px 8px; }
+.tag-default { font-size: 11px; color: var(--ws-text-tertiary); border: 1px solid var(--ws-border); border-radius: var(--r-pill); padding: 1px 8px; }
 .branch-code { font-family: var(--ws-font-mono); font-size: 12px; }
 .branch-doc { font-size: 12px; color: var(--ws-text-secondary); line-height: 2;
-  border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+  border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: 8px 12px; margin-bottom: 10px; }
 .branch-doc b { color: var(--ws-text-primary); }
 .branch-doc code { font-family: var(--ws-font-mono); background: var(--ws-bg-hover);
-  border: 1px solid var(--ws-border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  border: 1px solid var(--ws-border); border-radius: var(--r-chip); padding: 1px 5px; font-size: 11px; }
 .branch-ops { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hint-warn { font-size: 12px; color: var(--ws-warning-600, var(--ws-text-tertiary)); }
 </style>

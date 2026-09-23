@@ -1005,7 +1005,7 @@ onMounted(() => { void load(); void detectOrchestration() })
 /* 执行摘要：节点名在上、执行内容在下（与分支块同层级的只读展示） */
 .exec-summary { margin-top: 8px; max-width: 190px; padding: 5px 10px; text-align: center;
   font-size: 11px; color: var(--ws-text-tertiary); background: var(--ws-bg-surface);
-  border: 1px dashed var(--ws-border); border-radius: 6px; cursor: pointer;
+  border: 1px dashed var(--ws-border); border-radius: var(--r-card); cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: var(--ws-font-mono); transition: border-color .15s, color .15s; }
 .exec-summary:hover { border-color: var(--ws-brand-500); color: var(--ws-text-secondary); }
@@ -1024,7 +1024,7 @@ onMounted(() => { void load(); void detectOrchestration() })
 .flow-node.branch-node.add { border-color: var(--ws-text-tertiary); background: transparent; }
 .flow-node.branch-node.add .flow-name { color: var(--ws-text-tertiary); font-weight: 400; }
 .flow-node { position: relative; min-width: 100px; padding: 8px 12px; border: 1.5px solid var(--ws-border);
-  border-radius: 10px; background: var(--ws-bg-surface); cursor: pointer; flex-shrink: 0; text-align: center;
+  border-radius: var(--r-card); background: var(--ws-bg-surface); cursor: pointer; flex-shrink: 0; text-align: center;
   transition: all .15s; user-select: none; }
 .flow-node:hover { border-color: var(--ws-brand-500); transform: translateY(-1px); }
 .flow-node.sel { border-color: var(--ws-brand-500); background: var(--ws-brand-50); }
@@ -1037,7 +1037,7 @@ onMounted(() => { void load(); void detectOrchestration() })
   background: var(--ws-bg-surface); border: 1.5px solid var(--ws-border); font-size: 10px; font-weight: 700;
   color: var(--ws-text-tertiary); display: flex; align-items: center; justify-content: center; }
 .watchdog-badge { position: absolute; bottom: -8px; left: -8px; font-size: 10px; background: var(--ws-warning-500);
-  color: #fff; border-radius: 8px; padding: 0 5px; font-weight: 600; }
+  color: #fff; border-radius: var(--r-chip); padding: 0 5px; font-weight: 600; }
 .flow-slot { position: relative; width: 40px; height: 2px; flex-shrink: 0; display: flex; align-items: center; cursor: pointer; }
 .flow-arrow { width: 40px; height: 2px; background: var(--ws-gray-300); }
 .flow-plus { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--ws-bg-surface);
@@ -1058,6 +1058,6 @@ onMounted(() => { void load(); void detectOrchestration() })
 /* 变量表单与 chips */
 .var-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .var-chip { font-size: 11px; background: var(--ws-bg-subtle); color: var(--ws-text-secondary);
-  border-radius: 4px; padding: 2px 8px; cursor: pointer; font-family: var(--ws-font-mono); }
+  border-radius: var(--r-chip); padding: 2px 8px; cursor: pointer; font-family: var(--ws-font-mono); }
 .var-chip:hover { background: var(--ws-brand-50); color: var(--ws-brand-500); }
 </style>
