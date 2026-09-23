@@ -51,6 +51,7 @@ const components = [
 
 export function setupAntd(app: App) {
   components.forEach(comp => app.use(comp));
-  app.use(message);
+  // message 是 MessageApi（无 install），app.use(message) 会在运行时告警且类型不合法，
+  // 组件内直接 import { message } from '@/plugins/antd' 使用即可（与 admin 口径一致）。
   message.config({ maxCount: 3 });
 }
