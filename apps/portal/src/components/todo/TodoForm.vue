@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { defineProps, defineEmits, reactive, watch, computed } from 'vue';
-import type { Todo, CreateTodoDto, UpdateTodoDto, TodoCategory } from '@/types/todo';
+import type { Todo, CreateTodoDto, UpdateTodoDto, TodoCategory, TodoPriority } from '@/types/todo';
 
 const props = defineProps<{
   visible: boolean;
@@ -99,13 +99,14 @@ watch(() => props.todo, (todo) => {
   }
 }, { immediate: true });
 
-const priorityOptions = [
+// 显式标注联合类型：否则 value 会被推断为 string，赋给 TodoPriority / TodoCategory 字段时报 TS2322/2345
+const priorityOptions: Array<{ label: string; value: TodoPriority }> = [
   { label: '高', value: 'high' },
   { label: '中', value: 'medium' },
   { label: '低', value: 'low' },
 ];
 
-const categoryOptions = [
+const categoryOptions: Array<{ label: string; value: TodoCategory }> = [
   { label: '创意', value: 'creative' },
   { label: '学习', value: 'study' },
   { label: '运动', value: 'sport' },

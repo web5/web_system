@@ -224,7 +224,7 @@ async function generateQrcode() {
     let canvas: HTMLCanvasElement | null = null;
     for (let i = 0; i < 3; i++) {
       await nextTick();
-      canvas = canvasRef.value;
+      canvas = canvasRef.value ?? null;
       if (canvas) break;
       await new Promise((r) => setTimeout(r, 100));
     }
