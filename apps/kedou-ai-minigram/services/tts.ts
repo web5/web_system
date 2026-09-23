@@ -23,6 +23,10 @@ import { getToken } from '../utils/request';
 import { splitSpeakParts } from '../utils/translate-parse';
 
 const TTS_URL = '/api/ai/tts/speak';
+/** 流式合成（P1）：chunked 下发 pcm，端侧边收边播 */
+const TTS_STREAM_URL = '/api/ai/tts/stream';
+/** 流式 pcm 采样率（与服务端 SampleRate=16000 对齐） */
+const STREAM_SAMPLE_RATE = 16000;
 
 /** 整段朗读的文本上限（分块后每块 ≤110；总量限幅控制合成耗时与流量） */
 const MAX_TEXT_LEN = 600;
@@ -38,6 +42,21 @@ let audio: WechatMiniprogram.InnerAudioContext | null = null;
 let playingText = '';
 /** 正在合成 / 播放的状态（null = 空闲） */
 let speakState: SpeakState | null = null;
+
+/**
+ * 流式播放用的 WebAudio 上下文（小程序无 MSE、也无浏览器 AudioContext，
+ * 用 `wx.createWebAudioContext()` 直接播 pcm）。
+ * 类型定义不完整，这里按 any 用。
+ */
+let waCtx: any = null;
+/** 排队中的音源 */
+let waSources: any[] = [];
+/** 下一个音源的起始时间：保证分片间精确到采样点衔接（零间隙） */
+let waNextTime = 0;
+/** 流式请求任务（停止时 abort） */
+let streamTask: WechatMiniprogram.RequestTask | null = null;
+/** 流式播完检测计时器 */
+let streamEndTimer: ReturnType<typeof setTimeout> | null = null;
 /** 播放中的等待者（stopSpeak 时统一唤醒，避免 destroy 后回调不触发卡死流水线） */
 const activeWaiters = new Set<() => void>();
 
@@ -68,6 +87,7 @@ export function stopSpeak(): void {
   runSeq += 1;
   activeWaiters.forEach((wake) => wake());
   activeWaiters.clear();
+  stopWebAudio();
   if (audio) {
     try {
       audio.stop();
@@ -107,6 +127,16 @@ export async function speakText(text: string): Promise<boolean> {
   const myRun = runSeq;
   playingText = t;
   emitState({ text: t, phase: 'loading' });
+
+  // 优先流式（P1）：首包约 0.5s 出声，且是同一条连续音频流 —— 没有块间接缝。
+  // 不可用（未配 AppId / 基础库不支持 enableChunked / 被停止）时回退整段方案。
+  const streamed = await tryStreamSpeak(t, myRun);
+  if (runSeq !== myRun) return true;
+  if (streamed) {
+    emitState({ text: t, phase: 'playing' });
+    return true;
+  }
+  stopWebAudio(); // 流式未成立，清掉残留状态再走整段
 
   // 所有块并发发起：剩余块的合成与首块同时进行，首块播完时剩余已就绪 —— 消除块间空档。
   // （串行发请求的等待 = 剩余块合成时间 − 首块音频时长，实测会差出 0~3s 的静音。）
@@ -351,6 +381,178 @@ function fileExists(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * 流式朗读（P1）：`wx.request` 开启 `enableChunked` 分块接收 pcm，
+ * 每收到一片就用 WebAudio 排队播放 —— 首包到达即出声，分片间零间隙。
+ *
+ * @returns true 已开播；false 流式不可用（调用方应回退整段方案）
+ */
+async function tryStreamSpeak(text: string, myRun: number): Promise<boolean> {
+  const baseUrl = getApiBase();
+  const token = getToken();
+  if (!baseUrl) return false;
+
+  const ctx = ensureWebAudio();
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const settle = (ok: boolean) => {
+      if (!settled) {
+        settled = true;
+        resolve(ok);
+      }
+    };
+    let carry: Uint8Array | null = null; // pcm 双字节对齐，跨分片的单字节先攒着
+
+    const task = wx.request({
+      url: `${baseUrl}${TTS_STREAM_URL}`,
+      method: 'GET',
+      data: { text, codec: 'pcm' },
+      responseType: 'arraybuffer',
+      enableChunked: true,
+      // 分片传输总时长可能超过整段音频时长，给足超时
+      timeout: 60000,
+      header: {
+        // 与 requestTtsAudio 一致：开发者工具对 gzip 响应解析失败，强制明文
+        'Accept-Encoding': 'identity',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      success: (res) => {
+        // 正常音频流：整段收完后排队播完再复位按钮
+        if (res.statusCode === 200) {
+          scheduleStreamEnd(myRun);
+          return;
+        }
+        settle(false);
+      },
+      fail: () => settle(false),
+    });
+
+    streamTask = task;
+
+    task.onChunkReceived((chunk: { data: ArrayBuffer }) => {
+      if (runSeq !== myRun) return;
+      const raw = chunk?.data;
+      if (!raw || !raw.byteLength) return;
+
+      // 首字节是 '{' → 是 JSON 错误体（如 4010 未授权），不是音频：中止并回退
+      if (new Uint8Array(raw.slice(0, 1))[0] === 0x7b) {
+        try {
+          task.abort();
+        } catch {
+          /* 忽略 */
+        }
+        settle(false);
+        return;
+      }
+
+      let bytes = new Uint8Array(raw);
+      if (carry && carry.length) {
+        const merged = new Uint8Array(carry.length + bytes.length);
+        merged.set(carry);
+        merged.set(bytes, carry.length);
+        bytes = merged;
+        carry = null;
+      }
+      const odd = bytes.length % 2;
+      if (odd) {
+        carry = bytes.subarray(bytes.length - odd);
+        bytes = bytes.subarray(0, bytes.length - odd);
+      }
+      if (!bytes.length) return;
+
+      // 复制一份，保证 Int16Array 的 byteOffset 为 0
+      const aligned = bytes.slice();
+      playPcmChunk(ctx, new Int16Array(aligned.buffer));
+      settle(true); // 首个分片已开播
+    });
+  });
+}
+
+/** 取（或新建）WebAudio 上下文 */
+function ensureWebAudio(): any {
+  if (!waCtx) {
+    waCtx = wx.createWebAudioContext();
+    waNextTime = 0;
+  }
+  if (waCtx.state === 'suspended' && waCtx.resume) {
+    waCtx.resume();
+  }
+  return waCtx;
+}
+
+/**
+ * 播一个 pcm 分片：接在上一分片结束的时间点上，分片间零间隙。
+ * AudioBuffer 自带 sampleRate（16k），WebAudio 播放时自动重采样到上下文采样率。
+ */
+function playPcmChunk(ctx: any, pcm: Int16Array): void {
+  const buffer = ctx.createBuffer(1, pcm.length, STREAM_SAMPLE_RATE);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+
+  const startAt = Math.max(waNextTime, ctx.currentTime || 0);
+  source.start(startAt);
+  waNextTime = startAt + buffer.duration;
+
+  waSources.push(source);
+  source.onended(() => {
+    const i = waSources.indexOf(source);
+    if (i >= 0) waSources.splice(i, 1);
+  });
+}
+
+/** 停止流式播放：abort 请求、停掉所有音源、释放上下文 */
+function stopWebAudio(): void {
+  if (streamEndTimer) {
+    clearTimeout(streamEndTimer);
+    streamEndTimer = null;
+  }
+  if (streamTask) {
+    try {
+      streamTask.abort();
+    } catch {
+      /* 忽略 */
+    }
+    streamTask = null;
+  }
+  waSources.forEach((s) => {
+    try {
+      s.stop();
+    } catch {
+      /* 已结束：忽略 */
+    }
+  });
+  waSources = [];
+  if (waCtx) {
+    try {
+      if (waCtx.close) waCtx.close();
+    } catch {
+      /* 忽略 */
+    }
+    waCtx = null;
+  }
+  waNextTime = 0;
+}
+
+/** 流式收完后：等排队的分片播完再复位按钮态 */
+function scheduleStreamEnd(myRun: number): void {
+  const check = () => {
+    if (runSeq !== myRun) return;
+    if (waSources.length === 0) {
+      playingText = '';
+      if (speakState) emitState(null);
+      streamEndTimer = null;
+      return;
+    }
+    streamEndTimer = setTimeout(check, 300);
+  };
+  streamEndTimer = setTimeout(check, 300);
 }
 
 /** 缓存淘汰：超过上限删最旧的（失败静默，不影响播放） */
