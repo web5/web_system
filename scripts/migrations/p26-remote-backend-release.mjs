@@ -79,11 +79,13 @@ VER="\${PUBLISH_PATH}/\${COMMIT_ID}"
 NAME="\${PM2_NAME:-web-\${MODULE_KEY}}"
 FB="\${MODULE_KEY}"
 SCRIPT="\${PM2_SCRIPT:-dist/main.js}"
-SSH="ssh -i \${RKEY} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes"
+# 注意：必须是**函数**而不是变量 —— 写成 SSH="ssh -i ..." 再 "\\$SSH" host 的话，
+# bash 会把整串当一个命令名，报 "No such file or directory"（2026-09-23 实际踩到）。
+rssh() { ssh -i "\${RKEY}" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "\$@"; }
 die() { echo "[restart-remote] \$*" >&2; exit 1; }
 
 # ── 远端：守卫 → 备份 → 落地 → 解析进程名 → 重启 ──
-if "\$SSH" "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' VER='\${VER}' SCRIPT='\${SCRIPT}' bash -s" <<'EOS'
+if rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' VER='\${VER}' SCRIPT='\${SCRIPT}' bash -s" <<'EOS'
 set -uo pipefail
 rdie() { echo "[restart-remote] \$*" >&2; exit 1; }
 [ -d "\$VER" ] || rdie "远端版本目录不存在：\$VER（投递节点是否成功）"
@@ -113,7 +115,7 @@ then
 fi
 
 echo "[restart-remote] 远端失败 → 回滚 dist 并重启旧版本" >&2
-"\$SSH" "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' bash -s" <<'EOS' || true
+rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' SVC='\${SVC}' bash -s" <<'EOS' || true
 set -uo pipefail
 cd "\$SVC" || exit 1
 LAST="\$(ls -1dt dist.bak-* 2>/dev/null | head -1)"
@@ -147,9 +149,10 @@ NAME="\${PM2_NAME:-web-\${MODULE_KEY}}"
 FB="\${MODULE_KEY}"
 PORT="\${PORT:-}"
 TRIES="\${REMOTE_ONLINE_WAIT_TRIES:-15}"   # 15 × 2s = 30s
-SSH="ssh -i \${RKEY} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes"
+# 同 restart：ssh 必须走函数，不能用带引号的变量拼接
+rssh() { ssh -i "\${RKEY}" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "\$@"; }
 
-"\$SSH" "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' PORT='\${PORT}' TRIES='\${TRIES}' bash -s" <<'EOS'
+rssh "\${RUSER}@\${PUBLISH_HOST}" "NAME='\${NAME}' FB='\${FB}' PORT='\${PORT}' TRIES='\${TRIES}' bash -s" <<'EOS'
 set -uo pipefail
 vdie() { echo "[verify-remote] \$*" >&2; exit 1; }
 RESOLVED=""
