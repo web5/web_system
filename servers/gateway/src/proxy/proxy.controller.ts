@@ -3,6 +3,7 @@ import {
   All,
   Req,
   Res,
+  Get,
   Post,
   Header,
   Logger,
@@ -334,6 +335,81 @@ export class ProxyController {
     });
 
     proxyReq.write(body);
+    proxyReq.end();
+  }
+
+  // TTS 流式语音合成 — chunked 透传（端侧边收边播，禁止缓冲）
+  @Get('ai/tts/stream')
+  proxyAiTtsStream(@Req() req: Request, @Res() res: Response) {
+    const aiUrl = this.proxyService.getAiServiceUrl();
+    const parsedUrl = url.parse(aiUrl);
+    const query = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?') + 1) : '';
+
+    const options: http.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: `/ai/tts/stream${query ? `?${query}` : ''}`,
+      method: 'GET',
+      headers: {
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization as string } : {}),
+      },
+      // socket 空闲超时：流式持续有数据不会触发；仅兜住握手迟迟不返回的情况
+      timeout: API_TIMEOUT.GATEWAY.TTS,
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      const statusCode = proxyRes.statusCode || 200;
+      const contentType = proxyRes.headers['content-type'] || '';
+
+      if (contentType.startsWith('audio/')) {
+        res.writeHead(statusCode, {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-store',
+          // 禁止 nginx 缓冲：否则流式被攒成整包，边收边播失效
+          'X-Accel-Buffering': 'no',
+        });
+        proxyRes.on('data', (chunk: Buffer) => {
+          if (!res.write(chunk)) proxyRes.pause(); // 背压：消费者追上再继续
+        });
+        res.on('drain', () => proxyRes.resume());
+        proxyRes.on('end', () => res.end());
+      } else {
+        let errorBody = '';
+        proxyRes.on('data', (chunk: Buffer) => {
+          errorBody += chunk.toString();
+        });
+        proxyRes.on('end', () => {
+          try {
+            res.status(statusCode).json(JSON.parse(errorBody));
+          } catch {
+            res.status(502).json({ code: 502, message: 'TTS stream service error' });
+          }
+        });
+      }
+    });
+
+    req.on('close', () => {
+      proxyReq.destroy();
+    });
+
+    proxyReq.on('error', (err) => {
+      this.logger.error(`TTS stream proxy error: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(502).json({ code: 502, message: 'TTS stream service unavailable' });
+      } else {
+        res.end();
+      }
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      if (!res.headersSent) {
+        res.status(504).json({ code: 504, message: 'TTS stream service timeout' });
+      } else {
+        res.end();
+      }
+    });
+
     proxyReq.end();
   }
 

@@ -19,6 +19,7 @@
     "lint:ci": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
   "dependencies": {
+    "@kedouai/agent-core": "workspace:*",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.3.0",
@@ -27,7 +28,6 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.0",
     "@web-system/shared": "workspace:*",
-    "@kedouai/agent-core": "workspace:*",
     "adm-zip": "^0.5.16",
     "axios": "^1.6.0",
     "class-transformer": "^0.5.1",
@@ -36,7 +36,8 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "tencentcloud-sdk-nodejs": "^4.1.275",
-    "typeorm": "^0.3.17"
+    "typeorm": "^0.3.17",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
@@ -45,6 +46,7 @@
     "@types/express": "^4.17.17",
     "@types/jest": "^29.5.2",
     "@types/node": "^20.3.1",
+    "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.42.0",

@@ -41,7 +41,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { listGlossary, removeGlossary, type GlossaryItem } from '@/api/glossary';
-import { requestTts, splitChunks, playTtsBlob, stopTts } from '@/api/tts';
+import { speak as speakText, stopTts } from '@/api/tts';
 import AppIcon from '@/components/AppIcon.vue';
 
 const router = useRouter();
@@ -88,12 +88,8 @@ async function speak(id: number, text: string) {
   }
   reading.value = id;
   try {
-    for (const chunk of splitChunks(text)) {
-      if (reading.value !== id) return;
-      const blob = await requestTts(chunk);
-      if (reading.value !== id) return;
-      await playTtsBlob(blob);
-    }
+    // 流式优先（连贯无接缝），不可用自动回退整段
+    await speakText(text, { isActive: () => reading.value === id });
   } catch {
     if (reading.value === id) message.error('朗读失败，请重试');
   } finally {

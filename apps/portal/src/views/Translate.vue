@@ -126,7 +126,7 @@ import { onBeforeUnmount, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { runAgentStream } from '@/api/agent';
 import { collectGlossary } from '@/api/glossary';
-import { requestTts, splitChunks, playTtsBlob, stopTts } from '@/api/tts';
+import { splitSpeakParts, speakSequence, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -218,12 +218,8 @@ async function speak() {
   }
   reading.value = true;
   try {
-    for (const chunk of splitChunks(text)) {
-      if (!reading.value) return;
-      const blob = await requestTts(chunk);
-      if (!reading.value) return;
-      await playTtsBlob(blob);
-    }
+    // 「首句 + 剩余整段」两块：首句 ~2s 出声，剩余块在首句播放期间预取
+    await speakSequence(splitSpeakParts(text), { isActive: () => reading.value });
   } catch {
     if (reading.value) message.error('朗读失败，请重试');
   } finally {
