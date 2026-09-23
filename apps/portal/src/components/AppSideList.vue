@@ -78,7 +78,7 @@
     <div v-if="caps" class="side-caps" :class="{ solo: !showList }">
       <div class="caps-hd">能力</div>
       <button
-        v-for="c in CAPABILITIES"
+        v-for="c in shownCaps"
         :key="c.name"
         type="button"
         class="cap-item"
@@ -90,6 +90,11 @@
         <app-icon v-if="isCurrent(c)" name="check" />
         <span v-else-if="!c.enabled" class="cap-tag">敬请期待</span>
       </button>
+      <!-- 更多：就地展开（含敬请期待项），与「查看全部能力」（跳发现）职责分开 -->
+      <button v-if="restCount > 0" type="button" class="cap-more" @click="capsMore = !capsMore">
+        {{ capsMore ? '收起' : `更多 ${restCount} 项` }}
+        <app-icon :name="capsMore ? 'up' : 'down'" />
+      </button>
       <button type="button" class="cap-all" @click="router.push('/discover')">
         查看全部能力<app-icon name="right" />
       </button>
@@ -98,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Modal, message } from 'ant-design-vue';
 import type { ConversationSummary } from '@/api/agent';
@@ -119,7 +125,14 @@ const store = useConversationStore();
 const userStore = useUserStore();
 const authGate = useAuthGateStore();
 
-/* ===== 下半区·能力 ===== */
+/* ===== 底部·能力面板 ===== */
+
+/** 默认只展示 2 项已启用能力（面板高度固定，不压记录区）；展开时显示全部（含敬请期待） */
+const BRIEF_CAPS = CAPABILITIES.filter((c) => c.enabled).slice(0, 2);
+
+const capsMore = ref(false);
+const shownCaps = computed(() => (capsMore.value ? CAPABILITIES : BRIEF_CAPS));
+const restCount = computed(() => CAPABILITIES.length - BRIEF_CAPS.length);
 
 /** 当前所在能力页（能力条目高亮 ✓） */
 function isCurrent(c: Capability): boolean {
@@ -208,18 +221,17 @@ function confirmDelete(item: ConversationSummary) {
   padding: 0 8px 12px;
 }
 
-/* ===== 下半区·能力（少部分高度；记录区不可用时占满左栏） ===== */
+/* ===== 底部·能力面板（高度固定、钉在底部，不随列表滚动、不压记录区空态） ===== */
 .side-caps {
   flex: 0 0 auto;
-  max-height: 34%;
-  overflow-y: auto;
+  margin-top: auto;
   border-top: 1px solid var(--ws-border);
   padding: 8px;
 }
 
+/* 记录区不可用（翻译 / 合翻，待 source=tool 接口）：面板从顶部开始，不留悬空块 */
 .side-caps.solo {
-  flex: 1;
-  max-height: none;
+  margin-top: 0;
   border-top: none;
 }
 
@@ -275,6 +287,23 @@ function confirmDelete(item: ConversationSummary) {
 .cap-tag {
   font-size: 11px;
   color: var(--ws-text-tertiary);
+}
+
+.cap-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--ws-radius-md);
+  font-size: 12px;
+  color: var(--ws-text-secondary);
+}
+
+.cap-more:hover {
+  background: var(--ws-bg-hover);
+  color: var(--ws-brand-700);
 }
 
 .cap-all {
