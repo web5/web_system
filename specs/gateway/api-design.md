@@ -90,13 +90,13 @@
 - 入参：Query:module
 
 ### GET /api/__manifest__
-- 说明：查询当前环境完整模块清单（基座调试/CI 用）
+- 说明：查询当前站点/环境的完整模块清单（基座调试/CI 用）
 - 鉴权：未显式标注（按服务鉴权策略）
 
 
 ## HealthController（`HealthController` → 注册路径基 `/`）
 
-### GET /api/health
+### GET /api/
 - 鉴权：未显式标注（按服务鉴权策略）
 
 

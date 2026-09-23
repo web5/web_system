@@ -10,8 +10,17 @@
     --nav-bg: #FFFFFF; --nav-text: #000000;
     --page-bg: #F7F4F0; --card: #FFFFFF;
     --line: rgba(60,60,67,.12);
+    --code-bg:#1C1E26; --code-hd:#16181F; --code-text:#E2E8F0; --code-hd-text:#A5ACBA;
+    --text-body:#3F3F46; --text-strong:#18181B;
+    /* 新规范阶梯（design-system E11/E13/G12，2026-09-22）：落码同步到 app.wxss token 层 */
+    --leading-tight:1.25; --leading-snug:1.4; --leading-normal:1.6; --leading-relaxed:1.75;
+    --tracking-tight:-0.02em; --tracking-normal:0; --tracking-wide:0.02em;
+    --duration-fast:150ms; --duration-base:200ms; --duration-slow:300ms;
+    --ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+    --control-sm:24px; --control-md:32px; --control-lg:40px;
+    --icon-inline:16px; --icon-action:20px; --icon-feature:24px;
     --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
-    --brand: #F97316; --brand-soft: #FFF2E6; --brand-deep: #E8620A; --brand-txt: #EA580C;
+    --brand: #F97316; --brand-50: #FFF7ED; --brand-soft: #FFF2E6; --brand-deep: #E8620A; --brand-txt: #EA580C;
     --accent: #0E9B8C; --accent-soft: #E4F6F2;
     --orange: #F97316; --orange-soft: #FFF2E6;
     --green: #12A150; --green-soft: #E7F7EE;
@@ -27,8 +36,10 @@
     --nav-bg: #1A1C24; --nav-text: #FFFFFF;
     --page-bg: #0B0D12; --card: #171A22;
     --line: rgba(255,255,255,.10);
+    --code-bg:#17181D; --code-hd:#121318; --code-text:#D4D4D8; --code-hd-text:#8B90A0;
+    --text-body:#D4D4D8; --text-strong:#F4F4F5;
     --t1: #FFFFFF; --t2: rgba(235,235,245,.60); --t3: rgba(235,235,245,.32);
-    --brand: #FF9F45; --brand-soft: #3A2414; --brand-deep: #FFC08A; --brand-txt: #FFB27A;
+    --brand: #FF9F45; --brand-50: #3A2414; --brand-soft: #3A2414; --brand-deep: #FFC08A; --brand-txt: #FFB27A;
     --accent: #4ECDC4; --accent-soft: #14332F;
     --orange: #F97316; --orange-soft: #3A2414;
     --green: #3DBE77; --green-soft: #10301F;
@@ -226,10 +237,30 @@
   .msg.me { flex-direction: row-reverse; }
   .msg.me .av { background: var(--line); color: var(--t2); }
   .msg .bd { max-width: 78%; }
-  .msg .bub { background: var(--card); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 14.5px; line-height: 1.78; color: var(--t1); }
+  .msg .bub { background: var(--card); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 14px; line-height: var(--leading-relaxed); color: var(--text-body); }
+  /* 焦点态（G11）+ 动效（G12）：统一 150ms ease-out 微交互 */
+  :focus-visible { outline: none; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55); }
+  u[onclick], .msg .bub .blk-code .chd .cp { transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out); }
   .msg.me .bub { background: var(--brand); color: #fff; border-radius: 14px 4px 14px 14px; }
   .msg .bub .daily { display: inline-block; font-size: 10px; color: var(--brand-txt); background: var(--brand-soft); border-radius: 4px; padding: 2px 6px; margin-bottom: 7px; letter-spacing: .4px; }
   .msg .bub .en { display: block; margin-top: 7px; font-size: 12.5px; line-height: 1.7; font-style: italic; color: var(--t3); }
+  /* —— AI 回答 blocks 渲染（视觉对齐 portal AiChat 的 .ans，同一套 blocks 设计语言）—— */
+  .msg .bub .blk-p { margin: 0 0 16px; }
+  .msg .bub .blk-p:last-child { margin-bottom: 0; }
+  .msg .bub .blk-p.lead { font-size: 14.5px; font-weight: 500; color: var(--text-strong); }
+  .msg .bub .blk-h { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; margin: 24px 0 8px; color: var(--text-strong); letter-spacing: var(--tracking-tight); }
+  .msg .bub .blk-h::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: var(--brand); flex: 0 0 3px; }
+  .msg .bub .blk-ol { margin: 0 0 16px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .msg .bub .blk-ol li { display: flex; gap: 10px; align-items: flex-start; }
+  .msg .bub .blk-ol li .n { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); font-size: 12px; font-weight: 600; display: grid; place-items: center; margin-top: 4px; }
+  .msg .bub .blk-law { margin: 0 0 16px; padding: 8px 16px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 4px 4px 0; font-size: 13px; line-height: var(--leading-relaxed); color: var(--t2); }
+  .msg .bub .blk-law b { display: block; font-size: 12px; font-weight: 600; color: var(--brand-txt); margin-bottom: 2px; }
+  .msg .bub .blk-code { margin: 0 0 16px; border-radius: 6px; background: var(--code-bg); overflow: hidden; }
+  .msg .bub .blk-code .chd { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--code-hd); }
+  .msg .bub .blk-code .chd b { font-weight: 600; font-size: 12px; letter-spacing: .3px; color: var(--code-hd-text); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .msg .bub .blk-code .chd .cp { margin-left: auto; color: var(--code-hd-text); }
+  /* 12.5px = 字阶例外（代码块专用，等宽场景惯例），已在 specs/agent-message-extract/page-spec.md 登记 */
+  .msg .bub .blk-code pre { margin: 0; padding: 12px 16px; overflow-x: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: var(--leading-relaxed); color: var(--code-text); white-space: pre; }
   .msg.me .bub .en { color: rgba(255,255,255,.8); }
   .msg .meta { margin-top: 5px; font-size: 10px; color: var(--t3); }
   .msg.me .meta { text-align: right; }
@@ -430,7 +461,8 @@
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showIntentBadge('语言翻译官')">意图徽标</u> ·
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showLoadingBubble()">载入占位</u> ·
     <u style="color:var(--brand-txt);cursor:pointer" onclick="showChatFail('stream')">对话 · 回复中断</u> ·
-    <u style="color:var(--brand-txt);cursor:pointer" onclick="showTranslateFail()">翻译 · 失败态</u>
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showTranslateFail()">翻译 · 失败态</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showBlocksDemo()">对话 · markdown 代码块（blocks 渲染）</u>
     <div style="margin-top:8px;color:var(--t2)">
       <b>平台原生能力（原型不模拟，标注真机语义）</b>：<br>
       ① 输入框<b>回车 / 键盘「发送」= 直接发送</b>，回车不再换行 —— 真机用 <code>input</code> 单行 +
@@ -1234,6 +1266,8 @@ function closeAll() {
   $('capMenu').classList.remove('show');
   $('mask').onclick = closeAll;
 }
+/** 演示入口通用：把视口滚到手机壳（入口在页首文档区，手机壳在页面下方） */
+function revealPhone() { $('phone').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
 /* ---------- ActionSheet ---------- */
 function openSheet(title, items, onPick) {
@@ -1294,10 +1328,12 @@ function openPlusMenu() {
 /* ---------- 翻译失败态（原型演示） ---------- */
 /** 真实场景由服务端 error 事件或 HTTP 错误触发；这里做演示入口便于评审状态矩阵 */
 function showTranslateFail(reason) {
+  enterTab('discover');
   $('fSrc').textContent = $('inp').value.trim() || '这个报价我们再商量商量…';
   $('fSrcLang').textContent = cur.src || '中文';
   $('failReason').textContent = reason || '网络连接不稳定，请求没能送达';
   navigateTo('p-tr-fail', '翻译失败');
+  revealPhone();
 }
 /** 重试：保留原文重新发起（演示为回到成功结果页） */
 function retryTranslate() {
@@ -1317,7 +1353,7 @@ function retryTranslate() {
  */
 function showChatFail(kind) {
   closeAll();
-  if (cur.tab !== 'chat') switchTab('chat');
+  enterTab('chat');
   var box = $('msgs');
   var el = document.createElement('div');
   el.className = 'msg ai';
@@ -1341,6 +1377,7 @@ function showChatFail(kind) {
   }
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
+  revealPhone();
 }
 /** 重试：重发这一轮（演示为原地恢复成成功态） */
 function retryChat(u) {
@@ -1355,6 +1392,41 @@ function retryChat(u) {
 function dropChat(u) {
   var msg = u.parentNode.parentNode.parentNode.parentNode;
   if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+}
+
+/* ---------- AI 回答 blocks 渲染（markdown 代码块）演示 ----------
+ * 对应方案：agent 纯文本 → parseAnswer 解析为 blocks（p/h/ol/law/code），
+ * 小程序 chat 页 WXML 按块类型渲染（复用 @web-system/agent-message 解析层）。
+ */
+function showBlocksDemo() {
+  closeAll();
+  /* enterTab：退欢迎覆盖层 + 切到对话屏（初始是欢迎态且 cur.tab 已是 chat，
+     单纯 switchTab 条件判断会跳过 → 消息插到覆盖层下面，看起来「点了没反应」） */
+  enterTab('chat');
+  var box = $('msgs');
+  var u = document.createElement('div');
+  u.className = 'msg me';
+  u.innerHTML = '<div class="av">我</div><div class="bd"><div class="bub">帮我写一个 JS 防抖函数</div></div>';
+  box.appendChild(u);
+  var a = document.createElement('div');
+  a.className = 'msg ai';
+  a.innerHTML =
+    '<div class="av">豆</div>' +
+    '<div class="bd"><div class="bub">' +
+    '<p class="blk-p lead">防抖函数把高频触发合并成一次执行，核心是「清旧定时器 → 重新计时」。</p>' +
+    '<div class="blk-code"><div class="chd"><b>js</b><span class="cp">复制</span></div>' +
+    '<pre>function debounce(fn, wait = 300) {\n  let timer = null;\n  return function (...args) {\n    clearTimeout(timer);\n    timer = setTimeout(() =&gt; fn.apply(this, args), wait);\n  };\n}</pre></div>' +
+    '<div class="blk-h">注意两点</div>' +
+    '<div class="blk-ol">' +
+    '<li><span class="n">1</span><span><b>定时器放闭包</b>，避免全局污染；</span></li>' +
+    '<li><span class="n">2</span><span>组件卸载时 <b>clearTimeout</b>，防内存泄漏。</span></li>' +
+    '</div>' +
+    '<div class="blk-law"><b>《民法典》第 510 条</b>合同生效后，当事人就价款等内容没有约定或约定不明确的，可以协议补充。</div>' +
+    '</div><div class="meta">内容由 AI 生成 · ' + now() + '</div></div>';
+  box.appendChild(a);
+  box.scrollTop = box.scrollHeight;
+  /* 演示入口在页首文档区，手机壳在页面下方：把视口滚到手机壳，插入的消息立刻可见 */
+  $('phone').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 /* ---------- 胶囊菜单 ---------- */
@@ -1579,8 +1651,8 @@ function typeIn(el, text, en) {
     }
   }, 18);
 }
-function showIntentBadge(name){var m=$('msgs');var b=document.createElement('div');b.className='agent-badge';b.innerHTML='<span class="ab-dot"></span>'+name+' 作答';m.insertBefore(b,m.firstChild);}
-function showLoadingBubble(){var m=$('msgs');var d=document.createElement('div');d.className='msg ai';d.innerHTML='<div class="av">豆</div><div class="bd"><div class="bub loading">正在载入…</div></div>';m.appendChild(d);m.scrollTop=m.scrollHeight;}
+function showIntentBadge(name){enterTab('chat');var m=$('msgs');var b=document.createElement('div');b.className='agent-badge';b.innerHTML='<span class="ab-dot"></span>'+name+' 作答';m.insertBefore(b,m.firstChild);revealPhone();}
+function showLoadingBubble(){enterTab('chat');var m=$('msgs');var d=document.createElement('div');d.className='msg ai';d.innerHTML='<div class="av">豆</div><div class="bd"><div class="bub loading">正在载入…</div></div>';m.appendChild(d);m.scrollTop=m.scrollHeight;revealPhone();}
 
 function newChat() {
   // 新会话首屏 = 统一欢迎语（不再是「今日一句」）：用户没开始对话时，先给一句稳定的招呼
