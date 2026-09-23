@@ -5,7 +5,7 @@ import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
-import { useUiPrefsStore } from '@/stores/ui-prefs';
+import { useUiPrefsStore, bindUserPrefsSync } from '@/stores/ui-prefs';
 // 与 lifecycle.ts 同序：ui token → ui 基础样式 → portal 自有样式
 import '@web-system/ui/tokens.css';
 import '@web-system/ui/theme.css';
@@ -22,7 +22,8 @@ app.use(pinia);
 // pinia persist 插件已自动从 localStorage 恢复状态，无需手动 initFromStorage
 const userStore = useUserStore(pinia);
 // 圆角风格偏好：与 lifecycle.ts 一致，挂载前写到根元素属性（减少首屏跳变）
-useUiPrefsStore(pinia).init();
+const uiPrefs = useUiPrefsStore(pinia);
+uiPrefs.init();
 
 app.use(router);
 setupAntd(app);
@@ -34,5 +35,7 @@ app.config.errorHandler = (err, _instance, info) => {
 
 app.mount('#app');
 
-// 挂载后异步获取用户信息（非阻塞）
-userStore.fetchUserInfo();
+// 界面偏好跟账号走：绑定 userInfo.preferences → uiPrefs 的收敛。
+// vite dev 等「不走 module mount」的入口必须显式注册，否则 AC2（换设备登录收敛）会失效。
+// 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.1
+bindUserPrefsSync(userStore, uiPrefs);

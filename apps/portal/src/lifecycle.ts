@@ -1,12 +1,12 @@
 import type { ModuleContext, ModuleLifecycle } from '@web-system/shared';
-import { createApp, watch, type App as VueApp, type WatchStopHandle } from 'vue';
+import { createApp, type App as VueApp, type WatchStopHandle } from 'vue';
 import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
-import { useUiPrefsStore } from '@/stores/ui-prefs';
+import { useUiPrefsStore, bindUserPrefsSync } from '@/stores/ui-prefs';
 // UI 规范：语义 token + 全局基础样式（@web-system/ui 的 tokens/theme 直指 src，不走 dist）
 // 顺序要求：先 token 与基础样式，再 portal 自有 global.css
 import '@web-system/ui/tokens.css';
@@ -50,18 +50,12 @@ export const mount: ModuleLifecycle['mount'] = async (ctx: ModuleContext, contai
 
   app.mount(container);
 
-  // 挂载后异步获取用户信息（非阻塞）
+  // 挂载后异步获取用户信息（非阻塞）+ 绑定偏好跟账号走。
+  // 抽到 ui-prefs.bindUserPrefsSync：与 main-standalone 共用同一份实现，
+  // 避免「走 module mount 的会话能收敛、走独立 SPA 的不能收敛」漂移。
   try {
     const userStore = useUserStore(pinia);
-    // 界面偏好跟账号走：userInfo 到位后以**服务端为准**收敛本地（含「挂载之后才登录」的场景）。
-    // 未登录（userInfo 为空）与请求失败一律保持本地值，不打扰用户。
-    // 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.1
-    stopPrefSync = watch(
-      () => userStore.userInfo?.preferences,
-      (prefs) => uiPrefs.syncFromServer(prefs),
-      { immediate: true },
-    );
-    void userStore.fetchUserInfo?.().catch(() => undefined);
+    stopPrefSync = bindUserPrefsSync(userStore, uiPrefs);
   } catch { /* ignore */ }
 };
 

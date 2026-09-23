@@ -389,3 +389,9 @@
 **第四批（D+E：未使用变量与库 API 漂移）**：
 - D｜`Create.vue`：`touchMoved` / `resizeCorner` 只写不读（TS6133 ×2）→ 删除声明与全部写入点（3+2 处），**逻辑零变化**（原值从未被读取）。
 - E｜库 API 漂移 ×5：`SqlFormatter` 的 `indent` 选项在 **sql-formatter 15.8** 已移除 → 改用 `tabWidth`（保持"缩进宽度"语义，`tab` 退化为默认 2）；`Uglify` 的 `result.error` 在 **terser 5.49** 不存在（出错是**抛异常**）→ 删除该判断，交由已有 try/catch 处理；`TransformData` 补可选字段 `originalImageUrl`（客户端已在用、后端按需返回）。
+
+**素材接口取值缺陷（2026-09-23 已修）**：`Create.vue` 的素材面板此前**恒为空**。
+- 后端 `servers/ai-service/src/bianbian/bianbian.controller.ts:102` 明确 `return { code: 0, data: materials }`；
+- 而 portal 响应拦截器会把 `{ code, data }` **解包**（`api/request.ts`），运行时 `res` 已是素材数组本体；
+- 原代码 `if (res.code === 0 && Array.isArray(res.data))` 因此**恒为 false** → `materials.value` 永不赋值 → 素材面板空。
+- 修法：按解包后语义改为 `if (Array.isArray(res))` 并 `res.map(...)`（等价于恢复既有设计行为，无新增/改版元素）。
