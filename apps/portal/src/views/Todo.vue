@@ -114,11 +114,11 @@ async function fetchTodos() {
   try {
     const res = await getTodoList(filters);
     if (filters.page === 1) {
-      todos.value = res.data.items;
+      todos.value = res.items;
     } else {
-      todos.value.push(...res.data.items);
+      todos.value.push(...res.items);
     }
-    hasMore.value = todos.value.length < res.data.total;
+    hasMore.value = todos.value.length < res.total;
   } catch (err) {
     message.error('获取任务列表失败');
   } finally {
