@@ -44,5 +44,7 @@ export class Conversation extends UuidEntity {
     content: string;
     toolCallId?: string;
     name?: string;
+    /** 消息写入时间戳（ms）——存的是 ChatMessage，实际带 ts；老数据可能缺失 */
+    ts?: number;
   }> | null;
 }

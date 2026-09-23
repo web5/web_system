@@ -2,7 +2,7 @@
   <header class="topbar">
     <router-link to="/" class="brand" title="回到开始页">
       <span class="brand-mark">
-        <img src="/portal/logo.svg" alt="科豆 AI" width="32" height="17" />
+        <img :src="logoUrl" alt="科豆 AI" width="32" height="17" />
       </span>
       <span class="brand-name">科豆 AI</span>
     </router-link>
@@ -59,6 +59,13 @@ import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits<{ (e: 'open-command'): void }>();
+
+/**
+ * logo 路径跟随构建 base：standalone 模式 base=/portal/，微前端模式
+ * base=/static/modules/portal/<env>/<版本>/ —— 写死 /portal/ 会让 MF 构建直接失败
+ * （rollup 无法解析绝对路径），且部署后 logo 404。
+ */
+const logoUrl = `${import.meta.env.BASE_URL}logo.svg`;
 
 const route = useRoute();
 const router = useRouter();

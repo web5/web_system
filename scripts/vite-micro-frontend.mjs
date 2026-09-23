@@ -112,6 +112,12 @@ export function microFrontendConfig(opts) {
       alias: {
         '@': resolve(process.cwd(), 'src'),
         '@web-system/shared': resolve(process.cwd(), '../../packages/shared/src/index.ts'),
+        // 与 standalone 模式（apps/*/vite.config.ts）同口径：该包未在 portal 的
+        // package.json 声明，靠 alias 指到源码；MF 缺这条会 rollup 解析失败。
+        '@web-system/agent-message': resolve(
+          process.cwd(),
+          '../../packages/agent-message/src/index.ts',
+        ),
       },
     },
     // system 格式：普通 build + rollup format=system，支持 code-splitting（所有 chunk 均为 System.register）

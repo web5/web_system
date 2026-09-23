@@ -90,74 +90,42 @@ export function looksLikeTranslateReply(text: string): boolean {
 /** 句末标点（中英）：流式朗读的切分点 */
 const SENTENCE_END = '.!?;。！？；…';
 
-/** 单块文本上限（腾讯云 TTS 单次 150 字符，留余量） */
-const SPEAK_CHUNK_MAX = 110;
+/**
+ * 首句单块上限：控制首播等待 ≈ 首句合成时间（实测 110 字符约 2s）。
+ * ⚠️ 这不是腾讯云的单次上限 —— 单次实测为「英文 ≥499 / 中文 ≥150」，
+ * 剩余整段交给服务端一次合成即可，端侧不再按 110 把长句切碎。
+ */
+const SPEAK_FIRST_MAX = 110;
 
 /**
- * 文本 → 朗读块序列（流式朗读用）。
- * 按句末标点切句；**首句单独成块**（首块越短，用户越快听到声音），
- * 其余句子合并到不超过上限；超长单句在**空格处**硬切（不切碎单词）。
+ * 文本 → 朗读块序列：**首句单独成块**（首播快），其余整段作为一块交给服务端。
+ *
+ * 服务端 `TtsService.textToSpeechLong` 对剩余整段做一次合成（语调连贯），
+ * 只有超出单次上限时才按句切片并发拼接 —— 因此长英文不再被切成多个残句，
+ * 接缝最多 1 处且落在句末标点处（specs/tts-continuity/design.md）。
  */
-export function splitSpeakChunks(text: string): string[] {
+export function splitSpeakParts(text: string): string[] {
   const t = String(text || '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!t) return [];
 
-  // 1) 切句：句末标点处断开（不用正则 lookbehind —— iOS JSCore 旧版本不支持）
-  const sentences: string[] = [];
-  let buf = '';
-  for (const ch of t) {
-    buf += ch;
-    if (SENTENCE_END.indexOf(ch) >= 0) {
-      const s = buf.trim();
-      if (s) sentences.push(s);
-      buf = '';
+  // 首句：句末标点处断开；单句超上限则在空格处截（不切碎单词）
+  let cut = -1;
+  for (let i = 0; i < t.length; i++) {
+    if (SENTENCE_END.indexOf(t[i]) >= 0) {
+      cut = i + 1;
+      break;
     }
   }
-  if (buf.trim()) sentences.push(buf.trim());
-  if (!sentences.length) return [];
-
-  const chunks: string[] = [];
-  /** 超长单句在空格处硬切成 ≤ 上限的小块 */
-  const pushSentence = (s: string) => {
-    let seg = s;
-    while (seg.length > SPEAK_CHUNK_MAX) {
-      let cut = seg.lastIndexOf(' ', SPEAK_CHUNK_MAX);
-      if (cut < SPEAK_CHUNK_MAX * 0.5) cut = SPEAK_CHUNK_MAX; // 前半段没有空格：只能硬切
-      const piece = seg.slice(0, cut).trim();
-      if (piece) chunks.push(piece);
-      seg = seg.slice(cut).trim();
-    }
-    if (seg) chunks.push(seg);
-  };
-
-  // 2) 首句单独成块：首播等待 ≈ 首句的合成时间
-  pushSentence(sentences[0]);
-
-  // 3) 其余句子合并（≤ 上限，减少请求次数）
-  let cur = '';
-  for (let i = 1; i < sentences.length; i++) {
-    const s = sentences[i];
-    if (s.length > SPEAK_CHUNK_MAX) {
-      if (cur) {
-        chunks.push(cur);
-        cur = '';
-      }
-      pushSentence(s);
-      continue;
-    }
-    if (!cur) {
-      cur = s;
-    } else if (cur.length + 1 + s.length <= SPEAK_CHUNK_MAX) {
-      cur = `${cur} ${s}`;
-    } else {
-      chunks.push(cur);
-      cur = s;
-    }
+  let first = cut > 0 ? t.slice(0, cut).trim() : t;
+  if (first.length > SPEAK_FIRST_MAX) {
+    const spaceCut = first.lastIndexOf(' ', SPEAK_FIRST_MAX);
+    first = first.slice(0, spaceCut > SPEAK_FIRST_MAX * 0.5 ? spaceCut : SPEAK_FIRST_MAX).trim();
   }
-  if (cur) chunks.push(cur);
-  return chunks;
+
+  const rest = t.slice(first.length).trim();
+  return rest ? [first, rest] : [first];
 }
 
 /** 首个中文字（含中日韩标点）出现处切一刀：前面是英文主句，后面是中文说明 */
