@@ -448,11 +448,11 @@ function drawWires() {
 .tasks { display: flex; flex-direction: column; width: 100%; gap: 6px; }
 .task { display: flex; flex-direction: column; width: 100%; }
 .task-node { position: relative; display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 12px;
-  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); cursor: pointer; white-space: nowrap; }
 .task-node:hover { border-color: var(--ws-brand-500); }
 .task-node .seq { align-self: stretch; display: flex; align-items: center; padding: 0 8px; margin: -6px 2px -6px -12px;
   font-family: var(--ws-font-mono, monospace); font-size: 13px; font-weight: 700; color: var(--ws-text-secondary);
-  background: var(--ws-bg-surface); border-right: 1px solid var(--ws-border); border-radius: var(--r-chip) 0 0 2px; }
+  background: var(--ws-bg-surface); border-right: 1px solid var(--ws-border); border-radius: var(--r-chip) 0 0 var(--r-chip); }
 .task-node .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-chip); border: 1px solid var(--ws-border);
   color: var(--ws-text-secondary); background: var(--ws-bg-surface); }
 .task-node.approval .tag { color: var(--ws-success-500); border-color: var(--ws-success-500); }
