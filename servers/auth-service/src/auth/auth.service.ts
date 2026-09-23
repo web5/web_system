@@ -205,6 +205,7 @@ export class AuthService {
     id: number; username: string; email?: string; avatar?: string;
     nickname?: string; phone?: string; gender?: 'male' | 'female' | 'unknown';
     roles: string[];
+    preferences?: User['preferences'];
   }> {
     try {
       // 检查是否在黑名单中
@@ -228,6 +229,9 @@ export class AuthService {
         phone: user.phone,
         gender: user.gender,
         roles: user.roles || ['user'],
+        // 透出界面偏好 —— portal / 小程序据此做「服务端为准」的收敛（specs/radius-style-dual/page-spec-pref-sync.md §4 AC2）。
+        // 不存在时为 undefined，前端 syncFromServer 据此判定为「用户从未设置过」并保持本地值。
+        preferences: user.preferences,
       };
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
@@ -306,6 +310,9 @@ export class AuthService {
         phone: user.phone,
         gender: user.gender,
         roles: user.roles || ['user'],
+        // 登录响应一并带回偏好（与 verifyToken 对齐），便于登录完成瞬间触发收敛，
+        // 无需再单独调 /auth/verify。口径：specs/radius-style-dual/page-spec-pref-sync.md §4.1
+        preferences: user.preferences,
       },
     };
   }

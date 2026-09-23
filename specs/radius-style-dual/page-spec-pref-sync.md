@@ -193,3 +193,41 @@ app.ts onLaunch → autoLogin() 成功后
 - 处置：按 Vite alias 补齐 portal 的 `paths`（`shared` / `agent-message` / `types` → 各包 `src/index.ts`）；并补构建 `packages/agent-message`（此前**从未构建过**，无 dist）。
 - 效果：`answer-parse` / `Translate.vue` 的 `parseSections`、`AiChat.vue` 的 `parseAnswer / foldCut / plainLength / boldSegs`、`@web-system/types` 相关报错**全部消除**。
 - ⚠️ 副作用（重要）：解析恢复正确后，portal 的 `vue-tsc` 由 ~18 个错误变为 **60 个**。多出来的是**此前被 `any` 掩盖的真实类型错误**（`ImportMeta.env` 未声明 vite/client 类型、`TodoPriority` 字面量赋值、`AxiosResponse.code` 等），**非本次引入**；`vite build` 不做类型检查，故不影响构建与运行。
+
+### 5.3 实施期 AC2 的两层盲区（2026-09-23 已修）
+
+AC2「换设备登录 → 页面圆角自动收敛为服务端保存的档位」首批 AC1/AC4/AC5/AC7 验收通过后仍不通过的根本原因，端到端是两个独立层面的缺陷叠加：
+
+#### ① 服务端盲区：`auth-service` /auth/verify 与 /auth/login 未透出 preferences
+
+- `servers/auth-service/src/auth/auth.service.ts` 的 `verifyToken()` 与 `generateToken()` **手写返回字段**，漏掉 `preferences`。
+- 即便 `users.preferences` 列在 B 一期已经加好、写入与读出都正常，portal 任何路径都拿不到。
+- 修法：在两处手动 join 的 user 对象里加 `preferences: user.preferences`，类型签名同步加 `preferences?: User['preferences']`。
+
+#### ② 前端盲区：`fetchUserInfo` 短路 + main-standalone 未注册 watcher
+
+- `apps/portal/src/stores/user.ts` 的 `fetchUserInfo()` 头两行 `if (!token.value || userInfo.value) return` —— 已登录但 userInfo 已有值的场景被短路，**新设备登录无法刷新**。
+- vite dev（standalone SPA）入口 `apps/portal/src/main-standalone.ts` 启动后只调 `userStore.fetchUserInfo()`，**未注册** `userInfo.preferences → uiPrefs.syncFromServer` 的 watch。lifecycle.ts 才有。
+- 修法：
+  - `user.ts` 去掉 `|| userInfo.value` 短路；fetchUserInfo 的契约改为「已登录就发一次」——支持「服务端为准」覆盖 hydrate 出的本地脏数据。
+  - `stores/ui-prefs.ts` 新增 `bindUserPrefsSync(userStore, uiPrefs)` 公共函数（duck-typing 注入 userStore，避开与 user-store 的循环依赖），统一 `watch + immediate + fetchUserInfo`。
+  - `lifecycle.ts` 内联 watcher 替换为 `bindUserPrefsSync` 调用；`main-standalone.ts` 启动末尾同样调 `bindUserPrefsSync`。两条入口从此共用一份实现，无行为漂移。
+
+#### 验收（实测）
+
+```bash
+# 1) 注册账号 → 登录响应 preferences=null（符合 AC6：新用户零变化）
+curl -X POST https://local.kedouai.com/api/auth/register -d '{"username":"radiusAC2","password":"radiusAC2@2026","email":"r@t.local"}'
+# → user.preferences === null（JSON 序列化省略字段）
+
+# 2) PUT preferences=sharp → DB 写入
+curl -X PUT  https://local.kedouai.com/api/users/me -H "Authorization: Bearer $T" \
+  -H "Content-Type: application/json" -d '{"preferences":{"radiusStyle":"sharp"}}'
+# → code:200, data.preferences.radiusStyle === "sharp"
+
+# 3) /auth/verify 回读偏好（**修复前为空**；修复后带回 ↓）
+curl -H "Authorization: Bearer $T" https://local.kedouai.com/api/auth/verify
+# → data.preferences === { radiusStyle: "sharp" }
+```
+
+结论：修完后 `main-standalone` 入口在 vite dev / hydration 后立即调 `bindUserPrefsSync`，触发 `userStore.fetchUserInfo()`，拿到新 `userInfo.preferences`，watcher 触发 `syncFromServer` → `setRadiusStyle('sharp', { silent: true })` → DOM `<html data-radius="sharp">` —— 这就是 AC2 完整链路。
