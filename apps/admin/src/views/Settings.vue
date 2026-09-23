@@ -454,7 +454,7 @@ onMounted(async () => {
 .tab-content { max-width: 680px; }
 .section-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
-  border: 1px solid var(--card-border); border-radius: 4px; padding: 28px 32px;
+  border: 1px solid var(--card-border); border-radius: var(--r-card); padding: 28px 32px;
 }
 .section-title {
   display: flex; align-items: center; gap: 10px;
@@ -469,7 +469,7 @@ onMounted(async () => {
 .settings-form :deep(.ant-form-item-label > label) { color: var(--text-tertiary); font-size: 13px; }
 .settings-form :deep(.ant-input), .settings-form :deep(.ant-input-affix-wrapper), .settings-form :deep(.ant-input-number), .settings-form :deep(.ant-select-selector) {
   background: var(--input-bg) !important; border-color: var(--input-border) !important; color: var(--input-text);
-  border-radius: 4px;
+  border-radius: var(--r-control);
 }
 .settings-form :deep(.ant-input::placeholder), .settings-form :deep(.ant-select-selection-placeholder) { color: var(--input-placeholder); }
 .settings-form :deep(.ant-input:hover), .settings-form :deep(.ant-input-affix-wrapper:hover), .settings-form :deep(.ant-input-number:hover), .settings-form :deep(.ant-select:hover .ant-select-selector) {

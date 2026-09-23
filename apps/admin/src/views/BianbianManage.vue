@@ -437,7 +437,7 @@ onMounted(async () => {
 .page-header-icon {
   width: 44px;
   height: 44px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   background: linear-gradient(135deg, rgba(255,140,66,.15), rgba(255,140,66,.05));
   display: flex;
   align-items: center;
@@ -475,7 +475,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   cursor: pointer;
   background: var(--tab-bg);
   border: 1px solid var(--tab-border);
@@ -512,7 +512,7 @@ onMounted(async () => {
   color: var(--text-muted);
   background: var(--tab-count-bg);
   padding: 1px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   font-weight: 500;
 }
 .category-tab.active .cat-count {
@@ -533,7 +533,7 @@ onMounted(async () => {
 .search-input :deep(.ant-input) {
   background: var(--input-bg) !important;
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: var(--r-control);
   color: var(--text-body);
 }
 .search-input :deep(.ant-input:focus) {
@@ -568,7 +568,7 @@ onMounted(async () => {
 .material-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
   border: 1px solid var(--card-border);
-  border-radius: 4px;
+  border-radius: var(--r-card);
   overflow: hidden;
   transition: all .25s;
   position: relative;
@@ -613,7 +613,7 @@ onMounted(async () => {
 .color-swatch {
   width: 64px;
   height: 64px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   border: 2px solid var(--border-light);
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
@@ -640,7 +640,7 @@ onMounted(async () => {
 .card-source {
   font-size: 11px;
   padding: 1px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   font-weight: 500;
 }
 .card-source.system {
@@ -666,7 +666,7 @@ onMounted(async () => {
   color: var(--text-muted);
   background: var(--tag-bg);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
 }
 
 /* 悬停操作层 */
@@ -683,7 +683,7 @@ onMounted(async () => {
   opacity: 0;
   transition: opacity .2s;
   background: var(--overlay-bg);
-  border-radius: 4px;
+  border-radius: var(--r-card);
 }
 .material-card:hover .card-overlay {
   opacity: 1;
@@ -693,14 +693,14 @@ onMounted(async () => {
   gap: 4px;
   background: var(--overlay-action-bg);
   border: 1px solid var(--border-light);
-  border-radius: 4px;
+  border-radius: var(--r-control);
   padding: 4px;
 }
 .action-btn {
   width: 32px;
   height: 32px;
   color: var(--text-tertiary);
-  border-radius: 4px;
+  border-radius: var(--r-control);
   transition: all .15s;
 }
 .action-btn:hover {
@@ -748,7 +748,7 @@ onMounted(async () => {
   background: var(--input-bg);
   border: 1px solid var(--input-border);
   color: var(--text-body);
-  border-radius: 4px;
+  border-radius: var(--r-control);
 }
 .material-modal :deep(.ant-input:focus) {
   border-color: #FF8C42;
@@ -757,7 +757,7 @@ onMounted(async () => {
 .material-modal :deep(.ant-select-selector) {
   background: var(--input-bg) !important;
   border: 1px solid var(--input-border) !important;
-  border-radius: 4px !important;
+  border-radius: var(--r-control) !important;
 }
 .material-modal :deep(.ant-select-focused .ant-select-selector) {
   border-color: #FF8C42 !important;
@@ -770,7 +770,7 @@ onMounted(async () => {
   width: 100%;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: var(--r-control);
 }
 .preview-hint {
   margin-top: 6px;

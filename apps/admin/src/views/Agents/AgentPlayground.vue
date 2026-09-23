@@ -843,7 +843,7 @@ onMounted(() => {
   margin-top: 8px;
   gap: 12px;
   background: #f5f5f7;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   padding: 8px;
   overflow: hidden;
 }
@@ -856,7 +856,7 @@ onMounted(() => {
   flex-direction: column;
   background: #fff;
   border: 1px solid #e8e8e8;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
@@ -886,7 +886,7 @@ onMounted(() => {
 .avatar.assistant { background: #52c41a; color: #fff; }
 .bubble {
   max-width: 78%;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   padding: 8px 12px;
   position: relative;
 }
@@ -920,7 +920,7 @@ onMounted(() => {
 .proc-card {
   margin: 6px 0 6px 36px;
   max-width: 78%;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   border: 1px solid #e6e8eb;
   background: #fafbfc;
   font-size: 12px;
@@ -938,8 +938,8 @@ onMounted(() => {
 }
 .proc-icon { font-size: 13px; }
 .proc-title { flex: 1; color: #4a5560; }
-.proc-title code { background: #eef1f4; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #4a5560; }
-.proc-step { font-size: 10px; color: #99a0a8; padding: 1px 6px; background: #eef1f4; border-radius: 8px; }
+.proc-title code { background: #eef1f4; padding: 1px 5px; border-radius: var(--r-chip); font-size: 11px; color: #4a5560; }
+.proc-step { font-size: 10px; color: #99a0a8; padding: 1px 6px; background: #eef1f4; border-radius: var(--r-chip); }
 .proc-toggle { color: #99a0a8; font-size: 10px; width: 12px; text-align: center; }
 .proc-body { padding: 0 10px 8px; border-top: 1px dashed #e6e8eb; }
 .proc-block { margin-top: 6px; }
@@ -952,7 +952,7 @@ onMounted(() => {
   color: #2d3748;
   background: #fff;
   border: 1px solid #eef1f4;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 6px 8px;
   max-height: 320px;
   overflow: auto;
@@ -991,7 +991,7 @@ onMounted(() => {
   display: none;
   background: #fff;
   border: 1px solid #f0f0f0;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   padding: 0 2px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
@@ -1039,7 +1039,7 @@ onMounted(() => {
 }
 .input-box {
   border: 1px solid #d9d9d9;
-  border-radius: 10px;
+  border-radius: var(--r-control);
   background: #fff;
   padding: 8px 12px;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -1072,7 +1072,7 @@ onMounted(() => {
   flex-shrink: 0;
   background: #fff;
   border: 1px solid #e8e8e8;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
@@ -1094,7 +1094,7 @@ onMounted(() => {
 .evt-type {
   display: inline-block;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   font-size: 10px;
   font-weight: 700;
   color: #fff;
@@ -1116,7 +1116,7 @@ onMounted(() => {
   padding: 6px 8px;
   background: #fff;
   border: 1px solid #f0f0f0;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   font-family: monospace;
   font-size: 11px;
   line-height: 1.5;
