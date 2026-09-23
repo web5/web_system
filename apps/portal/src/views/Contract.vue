@@ -412,9 +412,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
-import { runAgentStream } from '@/api/agent';
+import { getConversation, runAgentStream } from '@/api/agent';
 import { readFileAsBase64, recognizeOcr } from '@/api/ocr';
 import {
   healthScore,
@@ -478,6 +479,7 @@ const askRef = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const ctx = useContextPanel();
+const route = useRoute();
 
 let controller: ReturnType<typeof runAgentStream> | null = null;
 let askController: ReturnType<typeof runAgentStream> | null = null;
@@ -516,6 +518,48 @@ const activeKeyword = computed(() => {
   const sig = report.value.signals.find((s) => s.id === expandedId.value);
   return sig ? pickKeyword(sig.signalTitle, text.value) : '';
 });
+
+/* ==================== 记录回放（左栏「体检记录」点进来） ==================== */
+
+/**
+ * 载入一次历史体检：优先用会话的 report 快照，没有则从末条 assistant 消息解析。
+ * 回放失败保持工作台可用（不吞错、不进半张报告）。
+ */
+async function loadRecord(id: string) {
+  try {
+    const detail = await getConversation(id);
+    conversationId.value = id;
+    const msgs = detail.messages ?? [];
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const hit = /【合同内容】\s*\n?([\s\S]*?)(?:\n\n请|$)/.exec(firstUser?.content || '');
+    if (hit) text.value = hit[1].trim();
+    const snapshot = detail.report;
+    if (snapshot) {
+      report.value = parseContractReport(
+        typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot),
+      );
+    } else {
+      const lastAi = [...msgs].reverse().find((m) => m.role === 'assistant');
+      report.value = parseContractReport(lastAi?.content || '');
+    }
+    step.value = 'result';
+  } catch {
+    message.error('记录加载失败，请重试');
+  }
+}
+
+onMounted(() => {
+  const id = route.query.id;
+  if (typeof id === 'string' && id) void loadRecord(id);
+});
+
+/** URL 上的 ?id= 被清掉（新建 / 回到首页）→ 退出回放态 */
+watch(
+  () => route.query.id,
+  (id) => {
+    if (!id && step.value === 'result') backHome();
+  },
+);
 
 /* ==================== 上传 ==================== */
 

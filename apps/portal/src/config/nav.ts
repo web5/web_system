@@ -33,6 +33,10 @@ export interface NavItem {
   parent?: NavKey;
   /** 左栏下半区是否展示「能力」（换能力 / 回发现的出口，2026-09-23） */
   caps?: boolean;
+  /** 左栏上半记录来源：chat=主对话（默认）/ tool=工具页（2026-09-23） */
+  listSource?: 'chat' | 'tool';
+  /** 左栏上半记录按能力过滤（translate / contract-risk） */
+  listAgentId?: string;
   /** 建设中：跳转后页面为占位态 */
   soon?: boolean;
 }
@@ -75,9 +79,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: '翻译',
     to: '/translate',
     icon: 'lang',
-    // 翻译工作台（P2 落码）：纯中栏工作台；左栏「翻译记录」待后端 tool 记录列表接口（B 待办）就绪后再开
-    sideList: false,
+    // 翻译工作台（P2 落码）：纯中栏工作台；左栏「翻译记录」2026-09-23 开启（后端已支持 source/agentId 过滤）
+    sideList: true,
     listTitle: '翻译记录',
+    listSource: 'tool',
+    listAgentId: 'translate',
     context: false,
     caps: true,
     // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
@@ -89,9 +95,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: '合翻',
     to: '/contract',
     icon: 'doc',
-    // 左栏「体检记录」依赖 listConversations 的 source=tool 过滤（B 待办，与翻译记录同一项），未就绪前不显示
-    sideList: false,
+    // 左栏「体检记录」2026-09-23 开启（source=tool & agentId=contract-risk）
+    sideList: true,
     listTitle: '体检记录',
+    listSource: 'tool',
+    listAgentId: 'contract-risk',
     caps: true,
     // P3：报告步由页面注入「合同原文」面板，非报告步不注入 → 右栏整体不占位
     context: true,
