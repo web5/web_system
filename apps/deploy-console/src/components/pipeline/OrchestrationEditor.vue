@@ -234,7 +234,8 @@ defineExpose({ save, dirty })
 // 本组件只给中性色（定义态无运行状态）+ 用 onMidpoint 摆放「＋」插入按钮。
 const wires = ref<SVGSVGElement | null>(null)
 const canvasBody = ref<HTMLElement | null>(null)
-const WIRE_NEUTRAL = 'var(--primary)' // 定义态中性色（原硬编码 #F97316，改用 token）
+const WIRE_NEUTRAL = '#F97316' // 定义态中性色。注意：不能用 var(--primary) —— 该变量不在
+// 本画布 SVG 的作用域内，style.stroke 解析失败会回退成 none（线整体不可见，2026-09-23 实测）
 
 function drawWires() {
   const wrap = canvasBody.value
