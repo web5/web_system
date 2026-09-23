@@ -739,6 +739,9 @@
             <button class="sc" data-sc="s1" onclick="setRunScene('s1')">运行中 · 停在审批</button>
             <button class="sc" data-sc="s3" onclick="setRunScene('s3')">失败 · 4-2 失败</button>
             <button class="sc" data-sc="s4" onclick="setRunScene('s4')">执行中 · 4-2 运行</button>
+            <button class="sc" data-sc="s5" onclick="setRunScene('s5')">双分支都成功</button>
+            <button class="sc" data-sc="s6" onclick="setRunScene('s6')">三分支 · 成功/跳过/失败</button>
+            <button class="sc" data-sc="s7" onclick="setRunScene('s7')">三分支 · 成功/跳过/执行中</button>
           </div>
           <div class="run-canvas" id="runCanvas">
             <svg class="run-wires" id="runWires"></svg>
@@ -768,22 +771,25 @@
         <table class="rule-tbl">
           <tr><th>段</th><th>几何（怎么画）</th><th>归属（看谁的状态）</th><th>颜色</th></tr>
           <tr><td><b>L1</b> 主线横线</td><td>从进入侧列<b>首个任务卡</b>右侧中点 → 水平到分叉 X（mx = 两列中点）</td>
-            <td><b>目标列步骤的聚合状态</b>（该列所有分支的合并：有成功分支时<b>成功覆盖</b>跳过/失败等，
+            <td><b>目标列步骤的聚合状态</b>（该列所有分支的合并：有成功分支时<b>成功覆盖</b>跳过等，
               聚合规则与步骤卡边框同源）—— <b>边的颜色 = 目标（下一个）节点的颜色</b>（a→b 看 b、a→c 看 c）</td>
-            <td rowspan="2">聚合状态：<b>完成</b> → <span class="cg">绿</span> / <b>执行中</b> → <span class="cg">品牌色</span> /
-              <b>失败</b> → <span class="cg">红</span> / <b>待审批</b> → <span class="cg">橙</span> /
-              <b>跳过 · 未进入</b> → <span class="cg">灰</span><br>（支线颜色 = 各目标任务自身，见 L3/L4）</td></tr>
-          <tr><td><b>L2</b> 分叉竖线</td><td>目标列多任务时才有：mx 处，从最高任务行中线 → 最低任务行中线</td>
-            <td>同 L1（目标列聚合）</td></tr>
-          <tr><td><b>L3</b> 支线横线</td><td>mx → 每个目标任务卡左缘中点（每任务一条）</td>
+            <td>聚合：<b>完成</b> → <span class="cg">绿</span> / <b>失败</b> → <span class="cg">红</span> /
+              <b>执行中</b> → <span class="cg">品牌色</span> / <b>待审批</b> → <span class="cg">橙</span> /
+              <b>跳过 · 未进入</b> → <span class="cg">灰</span></td></tr>
+          <tr><td><b>L2</b> 分叉竖线</td><td>mx 处<b>按转折点分段</b>：每个任务行中线是一个转折点，
+            第 k 段 = 上一转折点 → 第 k 个任务行中线（该段折线通往第 k 条分支）</td>
+            <td>各段归<b>该段通往的目标任务</b>（<u>不是</u>聚合 —— 所以「成功 + 跳过」时竖线那段是灰的）</td>
+            <td>同 L3/L4：该段目标任务的自身状态色</td></tr>
+          <tr><td><b>L3</b> 支线横线</td><td>mx → 每个目标任务卡左缘中点（每任务一条，从自己的转折点横出）</td>
             <td rowspan="2">该目标任务自身</td>
             <td rowspan="2">完成 → <span class="cg">绿</span> / 失败 → <span class="cg">红</span> / 执行中 → <span class="cg">品牌色</span> /
               待审批 → <span class="cg">橙</span> / 跳过 · 未执行 → <span class="cg">灰</span></td></tr>
           <tr><td><b>L4</b> 箭头</td><td>支线末端的 chevron，尖点落在任务卡左缘</td></tr>
         </table>
         <div class="dc-muted" style="margin-top:6px;">
-          特例：目标列<b>单任务</b>且与进入侧任务同高 → 无 L2/L3，L1 直接接到任务卡 + 箭头（色同 L1）。
-          任一侧无任务卡 → 不画线。线型一律实线 2.5px；虚线只用于任务卡边框表达「跳过」。
+          特例与兜底：目标列<b>单任务</b>且与进入侧任务同高 → 无 L2/L3，L1 直接接到任务卡 + 箭头（色 = 目标任务）；
+          进入侧任务低于全部目标行 → 竖线末段补画并归最后一个分支；任一侧无任务卡 → 不画线；
+          线型一律实线 2.5px；虚线只用于任务卡边框表达「跳过」。
         </div>
         <div class="dc-muted" style="margin-top:8px;">
           <b>任务的六种状态</b>（taskStates 落库，`ProgressFlow.vue` taskStateOf）：
@@ -1834,6 +1840,25 @@ body{background:var(--ws-border-subtle);}
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
       {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'run',def:true}]}
+    ]},
+    /* 补全状态组合（覆盖「每种状态都能从容绘制」）：双分支都成功；成功+失败；三分支混合 */
+    s5:{inst:'成功',meta:'local+dev 双分支都执行成功',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'ok',def:true}]}
+    ]},
+    s6:{inst:'失败',meta:'local 成功、dev 跳过、prod 失败（三分支混合）',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'skip',def:true},{n:'prod',st:'fail',tag:'条件'}]}
+    ]},
+    s7:{inst:'运行中',meta:'三分支：local 完成、dev 跳过、prod 执行中',steps:[
+      {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
+      {nm:'构建',ts:[{n:'build',st:'ok'}]},
+      {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
+      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'skip',def:true},{n:'prod',st:'run',tag:'条件'}]}
     ]}
   };
   var RUN_ST_TEXT={ok:'完成',fail:'失败',run:'执行中',await:'待审批',skip:'跳过',none:'未执行'};
@@ -1919,7 +1944,18 @@ body{background:var(--ws-border-subtle);}
       if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,mc); runChev(svg,t0.l,f.cy,mc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),mc);
+        /* L2 竖线按**转折点**分段（用户 2026-09-23）：每个目标任务的行中线是一个转折点，
+         * 第 k 段竖线（上一转折点 → 第 k 个任务行中线）属于第 k 条分支 → 颜色 = 该任务状态。
+         * 支线从自己那个转折点横出，所以「成功 + 跳过」时：4-1 支线绿、竖线那一段（属 4-2）灰。
+         * 进入侧任务低于全部目标行时（f.cy 更低），末段补画并归最后一个分支。 */
+        var prev=Math.min(f.cy,ys[0]);
+        [].forEach.call(tt,function(t,ti){
+          var c=ctr(t);
+          var wc=wire(sc.steps[i+1].ts[ti].st);
+          if(c.cy>prev+0.5){ runSeg(svg,mx,prev,mx,c.cy,wc); }
+          prev=Math.max(prev,c.cy);
+        });
+        if(f.cy>prev+0.5){ runSeg(svg,mx,prev,mx,f.cy,wire(sc.steps[i+1].ts[ys.length-1].st)); }
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
           runSeg(svg,mx,c.cy,c.l,c.cy,wc); runChev(svg,c.l,c.cy,wc);
