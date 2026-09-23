@@ -175,10 +175,7 @@ async function minifyCode() {
 
     const result = await minify({ 'input.js': input.value }, terserOpts);
 
-    if (result.error) {
-      error.value = `压缩错误: ${result.error.message}`;
-      return;
-    }
+    // terser 5 的 minify() 出错时**抛出异常**（不再返回 result.error），由外层 try/catch 统一处理
 
     output.value = result.code || '';
 
