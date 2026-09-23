@@ -304,3 +304,50 @@
 |---|---|---|---|
 
 
+
+## InternalStorageController（`InternalStorageController` → 注册路径基 `internal/storage`）
+
+### GET /api/internal/storage/path
+- 说明：读取权威上传根目录（含来源）
+- 鉴权：未显式标注（按服务鉴权策略）
+
+
+## StorageController（`StorageController` → 注册路径基 `admin/settings/storage`）
+
+### GET /api/admin/settings/storage/
+- 说明：读取存储配置（权威值 + 当前生效值 + 来源）
+- 鉴权：未显式标注（按服务鉴权策略）
+
+### PUT /api/admin/settings/storage/
+- 说明：保存上传根目录（写前校验，不存在则创建）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(StorageDirDto)
+
+**字段定义**
+
+##### Body 对象 `StorageDirDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| uploadDir | string | 是(默认) |  |
+
+
+### POST /api/admin/settings/storage/validate
+- 说明：校验上传根目录（只校验，不保存、不创建）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(StorageDirDto)
+
+**字段定义**
+
+##### Body 对象 `StorageDirDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| uploadDir | string | 是(默认) |  |
+
+
+### GET /api/admin/settings/storage/browse
+- 说明：列出允许根内的目录（只列目录；仅 super_admin）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Query:path
+

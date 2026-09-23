@@ -30,10 +30,17 @@
 |---|---|---|---|
 | page | number | 是(默认) |  |
 | pageSize | number | 是(默认) |  |
+| source | 'chat' | 'tool' | 是(默认) |  |
+| agentId | string | 否 |  |
 
 
 ### GET /api/agent/conversations/:id
 - 说明：Agent 对话详情（报告快照 + 消息序列）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Param:id
+
+### DELETE /api/agent/conversations/:id
+- 说明：删除我的 Agent 对话
 - 鉴权：未显式标注（按服务鉴权策略）
 - 入参：Param:id
 
@@ -48,10 +55,11 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| agentId | string | 是(默认) |  |
+| agentId | string | 否 |  |
 | userInput | string | 是(默认) |  |
 | conversationId | string | 否 |  |
 | model | string | 否 |  |
+| source | 'chat' | 'tool' | 否 |  |
 
 
 ### POST /api/agent/admin-run
@@ -65,10 +73,11 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| agentId | string | 是(默认) |  |
+| agentId | string | 否 |  |
 | userInput | string | 是(默认) |  |
 | conversationId | string | 否 |  |
 | model | string | 否 |  |
+| source | 'chat' | 'tool' | 否 |  |
 
 
 ### GET /api/agent/models
