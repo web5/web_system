@@ -301,12 +301,10 @@ let touchDragItem: MaterialItem | null = null;
 let touchGhostEl: HTMLElement | null = null;
 let touchStartX = 0;
 let touchStartY = 0;
-let touchMoved = false;
 
 function onMaterialTouchStart(e: TouchEvent, item: MaterialItem) {
   const touch = e.touches[0];
   touchDragItem = item;
-  touchMoved = false;
   touchStartX = touch.clientX;
   touchStartY = touch.clientY;
 
@@ -354,7 +352,6 @@ function onTouchDragMove(e: TouchEvent) {
   const dx = touch.clientX - touchStartX;
   const dy = touch.clientY - touchStartY;
   if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-    touchMoved = true;
     dragItemId.value = touchDragItem?.id || null;
   }
 
@@ -447,7 +444,6 @@ const canvasAreaRef = ref<HTMLElement | null>(null);
 const canvasInnerRef = ref<HTMLElement | null>(null);
 let dragging: CanvasElement | null = null;
 let resizing: CanvasElement | null = null;
-let resizeCorner: string = '';
 let dragStartX = 0;
 let dragStartY = 0;
 let elemStartX = 0;
@@ -467,7 +463,6 @@ function startDragElement(e: MouseEvent | TouchEvent, el: CanvasElement) {
 
 function startResize(e: MouseEvent | TouchEvent, el: CanvasElement, corner: string) {
   resizing = el;
-  resizeCorner = corner;
   elemStartScale = el.scale;
   const pos = getEventPos(e);
   dragStartX = pos.x;
