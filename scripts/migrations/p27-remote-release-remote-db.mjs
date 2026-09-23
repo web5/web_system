@@ -103,8 +103,14 @@ BASE="\${BASE%/}"
 
 const WV_SCRIPT = `${header('write-version')}
 # ── 写版本记录（该环境的库）──
+# 版本 ref 口径与产物目录一致：微前端/env-dir 用**纯 commit**（控制台按 modules/<key>/<envId>/<ref> 列版本），
+# 后端沿用平台既有 <流水线key>/<commit> 形态。
+case "\${MODULE_TYPE:-}" in
+  micro-frontend|frontend) TAG="\${COMMIT_ID##*/}" ;;
+  *) TAG="\${COMMIT_ID}" ;;
+esac
 BODY="\$(printf '{"moduleKey":"%s","versionTag":"%s","env":"%s","gitCommit":"%s","gitBranch":"%s","operator":"pipeline-script"}' \\
-  "\${MODULE_KEY}" "\${COMMIT_ID}" "\${DEPLOY_ENV}" "\${COMMIT_ID##*/}" "\${BRANCH:-}")"
+  "\${MODULE_KEY}" "\${TAG}" "\${DEPLOY_ENV}" "\${COMMIT_ID##*/}" "\${BRANCH:-}")"
 RESP="\$(curl -sS -m 20 -X POST "\${BASE}/internal/release/versions" \\
   -H 'content-type: application/json' -H "x-internal-key: \${TOKEN}" -d "\${BODY}" -w '\\n%{http_code}' 2>&1)" || true
 CODE="\$(printf '%s' "\${RESP}" | tail -1)"
@@ -244,10 +250,11 @@ async function main() {
     for (const mod of [...BACKENDS, ...FRONTENDS]) {
       const [rows] = await conn.query(
         'SELECT a.name, a.sort, a.enabled FROM deploy_pipeline_actions a JOIN deploy_pipeline_tasks t ON t.id = a.task_id ' +
-          'JOIN deploy_pipeline_steps s ON s.id = t.step_id WHERE s.pipeline_id = ? AND t.name = ? ORDER BY a.sort',
-        [`tpl-${mod}-dev`, 'dev'],
+          "JOIN deploy_pipeline_steps s ON s.id = t.step_id WHERE s.pipeline_id = ? AND t.name IN ('dev','dev-1') ORDER BY a.sort",
+        [`tpl-${mod}-dev`],
       );
-      console.log(`  ${mod}: ${rows.map((r) => `${r.name}${Number(r.enabled) ? '' : '(停用)'}`).join(' → ')}`);
+      const shown = rows.filter((r, i, arr) => arr.findIndex((x) => x.name === r.name) === i);
+      console.log(`  ${mod}: ${shown.map((r) => `${r.name}${Number(r.enabled) ? '' : '(停用)'}`).join(' → ')}`);
     }
   }
 
