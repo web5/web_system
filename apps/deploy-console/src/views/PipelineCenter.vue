@@ -944,7 +944,7 @@ onUnmounted(stopPolling)
           />
         </div>
         <div
-          style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
+          style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: var(--r-card);
                  font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 60vh; overflow: auto;"
         >{{ (logRecord.logs || []).join('\n') || '（无日志）' }}</div>
       </template>
@@ -998,7 +998,7 @@ onUnmounted(stopPolling)
           <a-button size="small" type="link" @click="copyCmd(cmdModalItem.command)">复制</a-button>
         </div>
         <pre
-          style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
+          style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: var(--r-card);
                  font-family: monospace; font-size: 12px; white-space: pre-wrap;
                  max-height: 360px; overflow: auto; margin: 0;"
         >{{ cmdModalItem.command }}</pre>

@@ -94,12 +94,12 @@ async function save() {
 .cond-row .lbl { font-size: 12px; color: var(--ws-text-secondary); width: 56px; flex-shrink: 0; }
 .mono { font-family: var(--ws-font-mono); font-size: 12px; }
 .cond-doc { font-size: 12px; color: var(--ws-text-secondary); line-height: 2;
-  border: 1px solid var(--ws-border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: 10px 12px; margin-bottom: 10px; }
 .cond-doc b { color: var(--ws-text-primary); }
 .cond-doc code { font-family: var(--ws-font-mono); background: var(--ws-bg-hover);
-  border: 1px solid var(--ws-border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  border: 1px solid var(--ws-border); border-radius: var(--r-chip); padding: 1px 5px; font-size: 11px; }
 .cond-note { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg-hover);
-  border-radius: 8px; padding: 10px 12px; line-height: 1.8; }
+  border-radius: var(--r-card); padding: 10px 12px; line-height: 1.8; }
 .cond-note b { color: var(--ws-text-primary); }
 .cond-ops { margin-top: 12px; }
 </style>

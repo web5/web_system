@@ -174,7 +174,7 @@ function copyCmd(cmd: string) {
               <a-button size="small" type="link" @click="copyCmd(item.command!)">复制</a-button>
             </div>
             <pre
-              style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px;
+              style="background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: var(--r-card);
                      font-family: monospace; font-size: 12px; white-space: pre-wrap;
                      max-height: 50vh; overflow: auto; margin: 0;"
             >{{ item.command }}</pre>
@@ -315,7 +315,7 @@ function copyCmd(cmd: string) {
 /* 操作级日志分段（v4 多操作） */
 .op-log-panel {
   background: #1e1e1e;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 8px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;

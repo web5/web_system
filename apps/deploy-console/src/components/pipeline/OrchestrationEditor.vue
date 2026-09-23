@@ -431,7 +431,7 @@ function drawWires() {
 .orch-head .hint { font-size: 12px; color: var(--ws-text-secondary); }
 .spacer { flex: 1; }
 
-.orch-canvas { border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 16px 16px; background: var(--ws-bg-surface); overflow-x: auto; }
+.orch-canvas { border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: 8px 16px 16px; background: var(--ws-bg-surface); overflow-x: auto; }
 .canvas-body { position: relative; width: max-content; min-width: 100%; }
 .wires { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 .pipeline { display: flex; align-items: flex-start; gap: 72px; padding: 14px 20px; }
@@ -439,7 +439,7 @@ function drawWires() {
 
 /* 步骤标题（上行，互不连线） */
 .step-title { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 14px; min-width: 130px;
-  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: 2px; cursor: pointer; }
+  background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); cursor: pointer; }
 .step-title:hover { border-color: var(--ws-brand-500); }
 .step-title .nm { font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
 .step-title .desc { font-size: 11px; color: var(--ws-text-tertiary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -452,11 +452,11 @@ function drawWires() {
 .task-node:hover { border-color: var(--ws-brand-500); }
 .task-node .seq { align-self: stretch; display: flex; align-items: center; padding: 0 8px; margin: -6px 2px -6px -12px;
   font-family: var(--ws-font-mono, monospace); font-size: 13px; font-weight: 700; color: var(--ws-text-secondary);
-  background: var(--ws-bg-surface); border-right: 1px solid var(--ws-border); border-radius: 2px 0 0 2px; }
-.task-node .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--ws-border);
+  background: var(--ws-bg-surface); border-right: 1px solid var(--ws-border); border-radius: var(--r-chip) 0 0 2px; }
+.task-node .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-chip); border: 1px solid var(--ws-border);
   color: var(--ws-text-secondary); background: var(--ws-bg-surface); }
 .task-node.approval .tag { color: var(--ws-success-500); border-color: var(--ws-success-500); }
-.task-node .ifb { font-size: 9px; font-weight: 700; color: #fff; background: var(--ws-brand-500); padding: 1px 5px; border-radius: 6px; font-family: var(--ws-font-mono, monospace); }
+.task-node .ifb { font-size: 9px; font-weight: 700; color: #fff; background: var(--ws-brand-500); padding: 1px 5px; border-radius: var(--r-chip); font-family: var(--ws-font-mono, monospace); }
 .task-node .tname { font-size: 13px; font-weight: 600; color: var(--ws-text-primary); }
 .task-node .del, .act-node .del { position: absolute; width: 18px; height: 18px; border-radius: 50%;
   background: var(--ws-bg-surface); border: 1px solid var(--ws-border); color: var(--ws-text-tertiary); cursor: pointer;
@@ -473,23 +473,23 @@ function drawWires() {
 .act-node .del:disabled { cursor: not-allowed; opacity: .4; }
 
 /* 动作块：紧贴任务头（共享边框组，圆角 2px） */
-.task-acts { border: 1px solid var(--ws-border); border-radius: 2px; overflow: hidden; margin-top: -1px; background: var(--ws-bg-surface); }
+.task-acts { border: 1px solid var(--ws-border); border-radius: var(--r-card); overflow: hidden; margin-top: -1px; background: var(--ws-bg-surface); }
 .act-node { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 26px 4px 9px; cursor: pointer; white-space: nowrap; width: 100%;
   border-bottom: 1px solid var(--ws-border); }
 .act-node:last-child { border-bottom: none; }
 .act-node:hover { background: var(--ws-bg-surface); }
-.act-node .atag { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 2px; color: var(--ws-brand-500);
+.act-node .atag { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-chip); color: var(--ws-brand-500);
   background: var(--ws-bg-surface); border: 1px solid var(--ws-border); flex-shrink: 0; }
 /* flex:1 + min-width:0：超长动作名在预留的按钮位前正确省略（否则会顶到删除按钮下面） */
 .act-node .aname { flex: 1; min-width: 0; font-size: 11px; color: var(--ws-text-secondary); font-family: var(--ws-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
 
 .add-task { align-self: flex-start; font-size: 12px; color: var(--ws-text-tertiary); background: none; border: 1px dashed var(--ws-border);
-  border-radius: 2px; padding: 3px 10px; cursor: pointer; }
+  border-radius: var(--r-control); padding: 3px 10px; cursor: pointer; }
 .add-task:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
 /* 与第一个任务同行：顶部对齐 + 下移到任务行中线（步骤标题高 ~42px + 间距） */
 .add-step { flex-shrink: 0; align-self: flex-start; margin-top: 50px; font-size: 13px; font-weight: 600;
   color: var(--ws-text-tertiary); background: var(--ws-bg-surface); border: 1.5px dashed var(--ws-border);
-  border-radius: 2px; padding: 10px 18px; cursor: pointer; transition: color .15s, border-color .15s; }
+  border-radius: var(--r-control); padding: 10px 18px; cursor: pointer; transition: color .15s, border-color .15s; }
 .add-step:hover { color: var(--ws-brand-500); border-color: var(--ws-brand-500); }
 
 .empty { padding: 40px; text-align: center; color: var(--ws-text-tertiary); font-size: 13px; }
@@ -497,10 +497,10 @@ function drawWires() {
 /* 抽屉字段 */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 13px; color: var(--ws-text-secondary); margin-bottom: 6px; font-weight: 600; }
-.field-note { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg-surface); border-radius: 8px; padding: 10px 12px; line-height: 1.8; margin-bottom: 12px; }
+.field-note { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg-surface); border-radius: var(--r-card); padding: 10px 12px; line-height: 1.8; margin-bottom: 12px; }
 .field-note.small { background: none; padding: 0 0 6px; }
 .mono { font-family: var(--ws-font-mono, monospace); }
-.act-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ws-border); border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; cursor: pointer; }
+.act-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: 7px 10px; margin-bottom: 8px; cursor: pointer; }
 .act-row:hover { border-color: var(--ws-brand-500); }
 .act-row .go { margin-left: auto; font-size: 12px; color: var(--ws-brand-500); }
 .env-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
