@@ -9,6 +9,23 @@ import { BigIntEntity } from './abstract.entity';
  * 物理表名：users（snake_case 由命名策略保证列名，如 mp_openid / oa_openid）。
  * 可空字段的 TS 类型沿用原定义（string，非 string|null），以兼容现有 DTO 返回类型。
  */
+/** 圆角风格三档（口径：specs/radius-style-dual/page-spec.md） */
+export type UiRadiusStyle = 'soft' | 'crisp' | 'sharp';
+
+/** 界面偏好档位白名单（服务端校验与两端取值共用，禁止各写一份） */
+export const UI_RADIUS_STYLES: UiRadiusStyle[] = ['soft', 'crisp', 'sharp'];
+
+/**
+ * 界面偏好（跟账号走）。
+ *
+ * 同步范围：portal / 小程序（用户端）；admin 系为内部工具，保持各端本地独立。
+ * 口径：specs/radius-style-dual/page-spec-pref-sync.md
+ */
+export interface UserPreferences {
+  /** 圆角风格：soft 柔和（默认）/ crisp 清爽 / sharp 直角 */
+  radiusStyle?: UiRadiusStyle;
+}
+
 @Entity('users')
 export class User extends BigIntEntity {
   @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true, comment: '用户 ID' })
@@ -68,4 +85,14 @@ export class User extends BigIntEntity {
   /** 个人每日变身次数限制，NULL 表示使用全局默认 */
   @Column({ type: 'int', nullable: true, name: 'daily_transform_limit', comment: '每日变身次数上限，NULL=全局默认' })
   dailyTransformLimit: number | null;
+
+  /**
+   * 界面偏好（跟账号走）：当前仅圆角风格。
+   *
+   * 生产环境 `synchronize: false`，新增列不会自动创建，需手工 DDL：
+   * `ALTER TABLE users ADD COLUMN preferences json NULL COMMENT '界面偏好（跟账号走）';`
+   * 口径：specs/radius-style-dual/page-spec-pref-sync.md §9
+   */
+  @Column({ type: 'json', nullable: true, comment: '界面偏好（跟账号走）' })
+  preferences?: UserPreferences | null;
 }
