@@ -25,6 +25,30 @@ describe('AgentConversationQueryService', () => {
     });
   });
 
+  it('list：source=tool → 只返回工具页会话（2026-09-23）', async () => {
+    const { repo, svc } = setup();
+    await svc.listConversations('u1', 1, 20, 'tool');
+    expect(repo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', source: 'tool' } }),
+    );
+  });
+
+  it('list：source=tool + agentId → 按能力过滤（翻译 / 合翻各取各的）', async () => {
+    const { repo, svc } = setup();
+    await svc.listConversations('u1', 1, 20, 'tool', 'contract-risk');
+    expect(repo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', source: 'tool', agentId: 'contract-risk' } }),
+    );
+  });
+
+  it('list：agentId 为空串 → 不拼该条件（等价于只按 source 过滤）', async () => {
+    const { repo, svc } = setup();
+    await svc.listConversations('u1', 1, 20, 'tool', '   ');
+    expect(repo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', source: 'tool' } }),
+    );
+  });
+
   it('list：返回 {list, total}', async () => {
     const { svc } = setup();
     const result = await svc.listConversations('u1', 1, 20);

@@ -30,12 +30,26 @@ export class AgentConversationQueryService {
 
   /**
    * 当前用户对话列表（updatedAt 倒序，分页；只查轻量列）。
-   * 只返回**主对话**（source='chat'）—— 工具页（翻译 / 合同）产生的会话各有自己的历史入口，
-   * 混进来会干扰主对话浏览。
+   *
+   * source / agentId（2026-09-23，见 specs/conversation-source-filter/design.md）：
+   * - 默认 `source='chat'` —— 只返回主对话，工具页（翻译 / 合同）会话各有自己的历史入口，
+   *   混进来会干扰主对话浏览（既有行为不变）
+   * - 工具页传 `source='tool' + agentId='translate'|'contract-risk'`，各取各的记录
    */
-  async listConversations(userId: string, page: number, pageSize: number): Promise<ConversationListResult> {
+  async listConversations(
+    userId: string,
+    page: number,
+    pageSize: number,
+    source: 'chat' | 'tool' = 'chat',
+    agentId?: string,
+  ): Promise<ConversationListResult> {
+    const agentIdFilter = agentId?.trim();
     const [rows, total] = await this.repo.findAndCount({
-      where: { userId, source: 'chat' },
+      where: {
+        userId,
+        source,
+        ...(agentIdFilter ? { agentId: agentIdFilter } : {}),
+      },
       order: { updatedAt: 'DESC' },
       select: ['id', 'title', 'meta', 'createdAt', 'updatedAt'],
       skip: (page - 1) * pageSize,

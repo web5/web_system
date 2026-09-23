@@ -66,7 +66,13 @@ export class AgentController {
     if (!userId) {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
     }
-    return this.conversationQueryService.listConversations(userId, query.page, query.pageSize);
+    return this.conversationQueryService.listConversations(
+      userId,
+      query.page,
+      query.pageSize,
+      query.source,
+      query.agentId,
+    );
   }
 
   /** 对话详情（含报告快照与消息序列）：仅会话所属用户可读，他人会话统一 404 */
