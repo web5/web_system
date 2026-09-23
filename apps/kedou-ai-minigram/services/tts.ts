@@ -394,16 +394,29 @@ async function tryStreamSpeak(text: string, myRun: number): Promise<boolean> {
   const token = getToken();
   if (!baseUrl) return false;
 
-  const ctx = ensureWebAudio();
-
   return new Promise<boolean>((resolve) => {
     let settled = false;
+    let firstChunkTimer: ReturnType<typeof setTimeout> | null = null;
     const settle = (ok: boolean) => {
-      if (!settled) {
-        settled = true;
-        resolve(ok);
+      if (settled) return;
+      settled = true;
+      if (firstChunkTimer) {
+        clearTimeout(firstChunkTimer);
+        firstChunkTimer = null;
       }
+      resolve(ok);
     };
+
+    // WebAudio 不可用（低版本基础库）：立即回退 —— 不能让 Promise 悬着，
+    // 否则页面的 await speakText 永远不返回，按钮卡在「请稍候…」
+    let ctx: any = null;
+    try {
+      ctx = ensureWebAudio();
+    } catch {
+      settle(false);
+      return;
+    }
+
     let carry: Uint8Array | null = null; // pcm 双字节对齐，跨分片的单字节先攒着
 
     const task = wx.request({
@@ -420,20 +433,37 @@ async function tryStreamSpeak(text: string, myRun: number): Promise<boolean> {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       success: (res) => {
-        // 正常音频流：整段收完后排队播完再复位按钮
-        if (res.statusCode === 200) {
-          scheduleStreamEnd(myRun);
+        if (res.statusCode !== 200) {
+          settle(false);
           return;
         }
-        settle(false);
+        // 流结束但一片未收（空响应）→ 视为不可用，回退整段；否则排队播完再复位
+        if (!settled) settle(false);
+        scheduleStreamEnd(myRun);
       },
       fail: () => settle(false),
     });
 
     streamTask = task;
 
+    // 首片超时兜底：基础库不支持 enableChunked 时 onChunkReceived 永不触发，
+    // Promise 会永远 pending（页面按钮卡「请稍候…」）—— 超时则中止并回退整段
+    firstChunkTimer = setTimeout(() => {
+      if (settled) return;
+      try {
+        task.abort();
+      } catch {
+        /* 忽略 */
+      }
+      settle(false);
+    }, 8000);
+
     task.onChunkReceived((chunk: { data: ArrayBuffer }) => {
-      if (runSeq !== myRun) return;
+      // 被停止 / 被新朗读顶掉：也要 settle，否则 Promise 悬起、页面按钮卡死
+      if (runSeq !== myRun) {
+        settle(false);
+        return;
+      }
       const raw = chunk?.data;
       if (!raw || !raw.byteLength) return;
 
