@@ -1,5 +1,5 @@
 import { ensureLogin, isLoggedIn } from './services/auth';
-import { currentClass } from './utils/appearance';
+import { currentClass, applyFromServer } from './utils/appearance';
 
 /**
  * 后端地址按运行环境切换：
@@ -23,7 +23,17 @@ App<IAppOption>({
     try {
       wx.setStorageSync('api_base', this.globalData.apiBase);
     } catch {}
-    this.autoLogin();
+    // 界面偏好跟账号走：登录态就绪后以服务端为准收敛本地。
+    // 未登录 / 断网一律保持本地值，不打扰用户。
+    // 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.2
+    void (async () => {
+      try {
+        await this.autoLogin();
+        if (isLoggedIn()) await applyFromServer();
+      } catch {
+        // 保持本地值
+      }
+    })();
   },
 
   /** 圆角风格：当前页面根节点应叠加的 class（各页 onShow 调用，口径 specs/radius-style-dual §4.2） */

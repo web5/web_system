@@ -1,3 +1,5 @@
+import { get, put } from './request';
+
 /**
  * 圆角风格偏好（品牌端小程序）。
  *
@@ -41,7 +43,44 @@ export function labelOf(style: RadiusStyle = currentStyle()): string {
   return hit ? hit.label : '柔和';
 }
 
-/** 写入偏好（页面切换后由调用方自行刷新 class） */
-export function setStyle(style: RadiusStyle): void {
+/** 写入偏好（页面切换后由调用方自行刷新 class）；默认同时上报服务端 */
+export function setStyle(style: RadiusStyle, options?: { silent?: boolean }): void {
   wx.setStorageSync(STORAGE_KEY, style);
+  if (!options?.silent) pushToServer(style);
+}
+
+/** 服务端响应对齐 user-service 的 TransformInterceptor：{ code, data, message } */
+interface WrappedMe {
+  data?: { preferences?: { radiusStyle?: string } | null } | null;
+}
+
+/** 服务端返回值校验（非法值一律忽略，保持本地） */
+function isRadius(v: unknown): v is RadiusStyle {
+  return v === 'soft' || v === 'crisp' || v === 'sharp';
+}
+
+/**
+ * 上报到服务端（跟账号同步）。
+ * 失败只记日志：**不回滚已应用的本地值、不打扰用户**，下次启动以服务端为准收敛。
+ * 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.2 / §5
+ */
+function pushToServer(style: RadiusStyle): void {
+  put<WrappedMe>('/users/me', { preferences: { radiusStyle: style } }).catch((err: unknown) => {
+    console.warn('[appearance] 界面偏好上报失败，已保留本地值', err);
+  });
+}
+
+/**
+ * 跟账号同步：以**服务端为准**收敛本地（登录后由 app.ts 调用）。
+ * 服务端为空（用户从未设置过）⇒ 保持本地值，不覆盖；未登录 / 断网 ⇒ 保持本地值。
+ */
+export async function applyFromServer(): Promise<void> {
+  try {
+    const res = await get<WrappedMe>('/users/me');
+    const server = res?.data?.preferences?.radiusStyle;
+    if (!isRadius(server) || server === currentStyle()) return;
+    setStyle(server, { silent: true });
+  } catch (err) {
+    console.warn('[appearance] 界面偏好同步失败，已保留本地值', err);
+  }
 }

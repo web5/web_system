@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, MinLength, MaxLength, IsEmail, IsOptional, IsNumber } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsEmail, IsOptional, IsNumber, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { UserPreferencesDto } from './user-preferences.dto';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ description: '用户名', example: 'newname' })
@@ -53,4 +55,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsNumber()
   dailyTransformLimit?: number | null;
+
+  @ApiPropertyOptional({ description: '界面偏好（跟账号走，当前仅圆角风格）', type: () => UserPreferencesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UserPreferencesDto)
+  preferences?: UserPreferencesDto;
 }

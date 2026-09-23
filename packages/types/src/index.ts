@@ -41,6 +41,9 @@ export type Gender = 'male' | 'female' | 'unknown';
 /**
  * 前端使用的用户信息（API 返回格式，精简敏感字段）
  */
+/** 界面偏好档位：圆角风格（口径 specs/radius-style-dual/page-spec-pref-sync.md） */
+export type UiRadiusStyle = 'soft' | 'crisp' | 'sharp';
+
 export interface UserInfo extends Pick<User, 'id' | 'username'> {
   email?: string;
   avatar?: string;
@@ -53,6 +56,8 @@ export interface UserInfo extends Pick<User, 'id' | 'username'> {
   enabled?: boolean;
   /** 个人每日变身次数限制，null=使用全局默认 */
   dailyTransformLimit?: number | null;
+  /** 界面偏好（跟账号走，当前仅圆角风格；null/缺省=用户从未设置过） */
+  preferences?: { radiusStyle?: UiRadiusStyle } | null;
   createdAt?: string;
   updatedAt?: string;
 }
