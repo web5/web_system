@@ -126,6 +126,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream } from '@/api/agent';
+import { useConversationStore } from '@/stores/conversations';
 import { collectGlossary } from '@/api/glossary';
 import { speak as speakText, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
@@ -154,6 +155,7 @@ const reading = ref(false);
 let controller: AbortController | null = null;
 
 const route = useRoute();
+const store = useConversationStore();
 
 /** 记录回放（左栏「翻译记录」点进来）：末条 assistant 消息 → 三版对照，首条 user 消息回填原文 */
 async function loadRecord(id: string) {
@@ -223,6 +225,8 @@ function translate() {
       onDone() {
         state.value = 'done';
         controller = null;
+        // 刷新左栏「翻译记录」：本次工具会话已落库（后端异步标 source/agentId，故放在流结束后刷）
+        void store.load({ source: 'tool', agentId: 'translate' });
       },
       onError(err) {
         state.value = 'fail';
