@@ -161,3 +161,14 @@ app.ts onLaunch → autoLogin() 成功后
 1. **列名 `preferences`** 是否可接受（备选：`ui_preferences`，语义更窄、更不易被误用为通用配置桶）？
 2. **登出是否清理本地偏好**：本规格取「不清理」。若希望登出即复位为默认「柔和」，需改 §5。
 3. **是否需要「已同步」提示**：本规格为静默同步（零 UI 改动）。若要在设置项旁显示同步状态，则属 UI 改动 → 走原型门。
+
+### 5.1 实施期发现的阻塞缺陷（2026-09-23 已修）
+
+**portal 的圆角选择器长期没有渲染出来** —— 这解释了「portal 好像没办法用户修改」的真因（不是登录墙）。
+
+- 现象：`apps/portal/src/plugins/antd.ts` 注册的是**子组件** `RadioGroup` / `RadioButton`，而**父组件 `Radio` 从未注册**。
+- 机理：ant-design-vue **4.2.6** 中 `RadioGroup` / `RadioButton` **没有 `install` 方法**，`app.use(comp)` 对无 install 的对象**静默无效** → 模板里的 `<a-radio-group>` 变成未解析标签、**整块不渲染**。
+- 证据（实测）：浏览器中 `.ant-radio-group` 数量 = **0**、页面残留裸 `<a-radio-group>`；Node 侧 `RadioGroup.install === undefined`、`Radio.install === function`。
+- 同类静默失效（同一注册列表内，均无 install）：`FormItem` / `InputPassword` / `TabPane` / `MenuItem` / `MenuDivider` —— 这些属"子组件"，按 admin 既有口径应由父组件 install 自动注册，无需（也无法）单独注册。
+- 修法：改为注册父组件 `Radio`（其 install 自动注册 `ARadioGroup` / `ARadioButton`），并补上缺失的 `Alert`（「我的」页 API Key 区块在用），与 `apps/admin/src/plugins/antd.ts` 的既有口径对齐。
+- 影响面：portal 全站 `<a-radio-group>` 类控件（此前凡使用处均不渲染）；**不改变任何已确认的视觉设计** —— 原型 `docs/ui/prototypes/radius-style-dual.html` 中的三档选择器即目标形态，本次是让实现与已审原型一致。
