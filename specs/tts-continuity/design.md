@@ -243,3 +243,13 @@ P2 的目标（消除等待与不连贯）已由 P1 达成：首包 466ms 且全
 | P2-a 长文本异步合成 | 云 API `CreateTtsTask` + 轮询/回调，离线产出音频 | 只需 SecretId/Key（**无需 AppId**） | 适合批量离线（术语库/收藏朗读），不适合即时交互 |
 | P2-b 对话式 TTS（TRTC） | 首包 ~300ms，客户端 SDK 接入 | TRTC SDK、账号开通 | 延迟最优，但接入模型与现有 HTTP 链路差异大 |
 | P2-c 端侧预热（成本换体验） | 卡片渲染完成即后台合成并缓存，用户点朗读时秒播 | 现有接口即可 | 见效最快；代价是**没点的也会产生合成费用与并发**，需限制（仅最新 1 条、仅 ≤600 字符） |
+
+## 12 遗留与后续任务
+
+| # | 事项 | 当前影响 | 处理时机 |
+|---|---|---|---|
+| 1 | dev / prod 的 `servers/ai-service/.env` 未配 `TENCENT_APP_ID` | 流式不可用，自动回退整段（能听，无接缝优化） | 下次发布 dev/prod 时一并配 |
+| 2 | 小程序版本未上传（代码已就绪） | 线上小程序仍是旧版 | 开发者工具上传时 |
+| 3 | TTS 端点错误响应用 HTTP 200 包装（body 为 `{"code":4010,...}`） | 端侧需按 body 判定失败；现有 `isJsonResponse` 已兜底 | 服务错误响应风格统一时 |
+| 4 | 小程序 WebAudio 的 `AudioBufferSourceNode` 无 `onended` | 现用「开播延迟 + 时长」定时器移除音源 | 官方补齐 API 后可简化 |
+| 5 | `~/env_config/tencent.env` 的 tts/ocr 段密钥 | 预防性（该段曾在会话中被明文输出） | 下次凭据维护时轮换，并同步 `servers/ai-service/.env`、`servers/ai-agent/.env` |
