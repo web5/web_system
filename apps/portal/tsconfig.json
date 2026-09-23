@@ -20,9 +20,9 @@
     // 但依赖需在 package.json 声明才会被链接；此处兜底，避免 node_modules 未安装/陈旧时 tsc、vue-tsc 报 Cannot find module。
     "paths": {
       "@/*": ["src/*"],
-      "@web-system/shared": ["../../packages/shared/src/index.ts"],
-      "@web-system/agent-message": ["../../packages/agent-message/src/index.ts"],
-      "@web-system/types": ["../../packages/types/src/index.ts"]
+      "@web-system/shared": ["../../packages/shared"],
+      "@web-system/agent-message": ["../../packages/agent-message"],
+      "@web-system/types": ["../../packages/types"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
