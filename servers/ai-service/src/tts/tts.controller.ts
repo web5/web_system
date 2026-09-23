@@ -8,6 +8,8 @@ interface SpeakDto {
   text: string;
   voiceType?: number;
   speed?: number;
+  /** 整段合成（默认 true）：超长文本由服务端切片并发合成后拼接为单个 mp3 */
+  long?: boolean;
 }
 
 @ApiTags('语音合成')
@@ -28,10 +30,10 @@ export class TtsController {
     }
 
     try {
-      const audioBuffer = await this.ttsService.textToSpeech(text, {
-        voiceType,
-        speed,
-      });
+      const audioBuffer =
+        body.long === false
+          ? await this.ttsService.textToSpeech(text, { voiceType, speed })
+          : await this.ttsService.textToSpeechLong(text, { voiceType, speed });
 
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Content-Length', audioBuffer.length);
