@@ -472,7 +472,7 @@ function confirmDelete(item: ConversationSummary) {
 .skel {
   display: block;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--r-chip);
   background: linear-gradient(90deg, var(--ws-bg-subtle), var(--ws-bg-hover), var(--ws-bg-subtle));
   background-size: 200% 100%;
   animation: skel 1.2s infinite;

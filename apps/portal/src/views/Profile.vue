@@ -424,7 +424,7 @@ async function onRevokeKey(id: number) {
 
 .profile-card {
   background: white;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 20px;
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -486,7 +486,7 @@ async function onRevokeKey(id: number) {
   padding: 8px 16px;
   background: #FF8C42;
   color: white;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -538,13 +538,13 @@ async function onRevokeKey(id: number) {
   background: #fff8f2;
   margin: 0 -20px;
   padding: 14px 20px;
-  border-radius: 8px;
+  border-radius: var(--r-card);
 }
 
 .qa-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -612,7 +612,7 @@ async function onRevokeKey(id: number) {
   width: 100%;
   padding: 10px 12px;
   border: 2px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   color: #333;
   background: white;
@@ -644,7 +644,7 @@ async function onRevokeKey(id: number) {
   background: #FF8C42;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -715,7 +715,7 @@ async function onRevokeKey(id: number) {
 .key-status {
   margin-left: 8px;
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   font-size: 11px;
 }
 
@@ -755,7 +755,7 @@ async function onRevokeKey(id: number) {
 .key-value {
   background: #f8f8f8;
   border: 1px dashed #e0e0e0;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   padding: 10px 12px;
   font-family: monospace;
   font-size: 12px;
