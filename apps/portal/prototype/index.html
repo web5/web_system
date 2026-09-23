@@ -63,6 +63,8 @@ input,textarea{font:inherit;color:inherit}
 .cap-item.on .n{color:var(--brand-strong);font-weight:600}
 .cap-item.dis{color:var(--t4)}
 .cap-item.dis .n{color:var(--t4)}
+.cap-more{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;padding:6px 8px;font-size:12px;color:var(--t2);cursor:pointer}
+.cap-more:hover{background:var(--page-bg);color:var(--brand-strong)}
 .cap-all{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:4px;padding:6px 8px;border-top:1px solid var(--line);font-size:12px;color:var(--brand-strong);cursor:pointer}
 .lst-item{padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;margin-bottom:2px}
 .lst-item:hover{background:var(--page-bg)}
@@ -460,6 +462,8 @@ const S = {
   step:'home', sig:null, ctext:'', ocring:false, noReport:false,
   /* 能力切换器浮层开关（C 端做法：像模型/场景切换器，不是 admin 面包屑） */
   cs:false,
+  /* 左栏底部能力面板：默认只展示 2 项，「更多」就地展开（含敬请期待项） */
+  capsMore:false,
   /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
   trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
@@ -555,14 +559,19 @@ const CAPS = [
    顶栏收口后能力页要有回路；位置放左栏下半区，不做页头面包屑 / 返回按钮——太 admin） */
 function renderCaps(){
   if(S.view==='discover'||S.view==='lab'||S.view==='profile') return '';
-  // 默认只展示 2 项已启用能力（面板高度固定）；其余不展开，收进底部「更多 N 项 · 查看全部」
-  const shown = CAPS.filter(c=>c.v).slice(0,2);
-  const more = CAPS.length - shown.length;
+  // 默认只展示 2 项已启用能力（面板高度固定）；其余收在「更多 N 项」里**就地展开**（不跳发现）
+  const brief = CAPS.filter(c=>c.v).slice(0,2);
+  const shown = S.capsMore ? CAPS : brief;
+  const more = CAPS.length - brief.length;
   return '<div class="caps-hd">能力</div>'+
-    shown.map(c=>'<div class="cap-item'+(S.view===c.v?' on':'')+'" onclick="go(\''+c.v+'\')">'+SVG(c.ic)+
-      '<span class="n">'+c.n+'</span>'+(S.view===c.v?SVG(I.check):'')+'</div>').join('')+
-    '<div class="cap-all" title="去发现页看全部能力" onclick="go(\'discover\')">'+
-      (more?'更多 '+more+' 项 · ':'')+'查看全部 '+SVG(I.right)+'</div>';
+    shown.map(c=>c.v
+      ? '<div class="cap-item'+(S.view===c.v?' on':'')+'" onclick="go(\''+c.v+'\')">'+SVG(c.ic)+
+        '<span class="n">'+c.n+'</span>'+(S.view===c.v?SVG(I.check):'')+'</div>'
+      : '<div class="cap-item dis" onclick="toast(\'该能力尚未开放\')">'+SVG(c.ic)+
+        '<span class="n">'+c.n+'</span><span class="tag">敬请期待</span></div>').join('')+
+    (more>0 ? '<div class="cap-more" onclick="S.capsMore=!S.capsMore;render()">'+
+      (S.capsMore?'收起':'更多 '+more+' 项')+SVG(S.capsMore?I.up:I.down)+'</div>' : '')+
+    '<div class="cap-all" title="去发现页看全部能力" onclick="go(\'discover\')">查看全部能力 '+SVG(I.right)+'</div>';
 }
 function hd(title, sub, ops){
   return '<div class="work-hd"><div><h1>'+esc(title)+'</h1>'+(sub?'<div style="font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;margin-top:2px">'+sub+'</div>':'')+'</div><span class="spacer"></span>'+(ops||'')+'</div>';
@@ -1178,7 +1187,7 @@ function toggle(m){ S.mode[m]=!S.mode[m]; ['loading','empty','error'].forEach(k=
 /* 合翻两态演示入口：失败态 / 报告空态（P3，规格 §3.3 状态矩阵） */
 function demoFail(){ S.view='contract'; S.step='fail'; render(); }
 function demoNoReport(){ S.view='contract'; S.step='result'; S.sig=null; S.noReport=true; render(); }
-function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; S.capsMore=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
 
 /* ── ⌘K ── */
 const CMDS = [
