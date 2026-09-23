@@ -40,6 +40,7 @@ updatedAt: 2026-09-21T00:00:00.000Z
 - 主操作 primary ≤1；破坏性操作必二次确认（文案含后果）；空态 = 原因 + 出路；数字列 tabular-nums、代码/端口/ID 用 `.ws-mono`。
 - 页面类型先判定（design.md §1），禁止自创布局骨架。
 - dark 主题不是"调暗"：新写样式 light/dark 都要过目，禁漏变量回退。
+- 正文与强调分离：长文正文用 `--ws-text-body`，`--ws-text-primary` 只用于标题/强调；代码块统一 `--ws-code-*` 深色方案（三端同值）；行高/字距、动效（150–300ms）、focus-visible、控件/图标阶梯一律取 tokens 对应档（design-system E10–E13 / F6 / G10–G12）。
 
 ## 生效提示
 

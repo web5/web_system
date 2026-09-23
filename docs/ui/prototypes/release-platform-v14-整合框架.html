@@ -20,7 +20,7 @@
     --ws-success-500:#2E9E5B; --ws-success-100:#E7F5EC;
     --ws-warning-500:#E8833A; --ws-warning-100:#FFF3E6;
     --ws-error-500:#E5484D;   --ws-error-100:#FDEBEC;
-    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px; --ws-radius-pill:9999px;
     --ws-shadow-card:0 2px 12px rgba(20,30,50,.06);
     --ws-font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
   }
@@ -2453,7 +2453,7 @@ function renderModEdit(){
   document.getElementById('modCfgBodyE').innerHTML=modFields(m).map(function(p){
     var ro=(p[0]==='模块 key'||p[0]==='类型');
     return '<tr><td class="muted">'+p[0]+'</td><td><input value="'+p[1]+'"'+(ro?' disabled':'')+
-      ' style="width:100%;padding:6px 8px;border:1px solid var(--ws-border);border-radius:6px;font-family:var(--ws-mono);font-size:12px"></td></tr>';
+      ' style="width:100%;padding:6px 8px;border:1px solid var(--ws-border);border-radius:6px;font-family:var(--ws-font-mono);font-size:12px"></td></tr>';
   }).join('');
   document.getElementById('verBodyE').innerHTML=verRowsHtml(false);
   document.getElementById('envBodyE').innerHTML=envRowsHtml();

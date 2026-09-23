@@ -92,7 +92,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { format, dialect as sqlDialects } from 'sql-formatter';
+import { format } from 'sql-formatter';
 
 const input = ref('');
 const output = ref('');

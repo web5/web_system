@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>admin Agents · 对话调试（Agent Playground）· blocks 渲染原型</title>
+<!--
+  ============================================================
+  admin Agents 模块 · 原型（P4 批次首屏：Agent Playground 对话调试）
+  · 目标端：桌面 Web（admin 管理后台，亮色）
+  · 壳样板：复用 admin-settings.html 的桌面壳（侧栏 210px + 顶栏 56px，token 对齐 roles.light）
+  · 本次范围：AI 回答内容从纯文本 pre-wrap 升级为 blocks 渲染
+    （p/lead · h · ol/ul · law · code · tcard，解析复用 @web-system/agent-message）
+  · code 块视觉（2026-09-22 二轮修订）：**深色代码块**（浅色页面里的深底，Notion/ChatGPT 同款语言），
+    替换纯灰底；新增 token --ws-code-bg/--ws-code-hd/--ws-code-text/--ws-code-hd-text
+    （**待入 packages/ui/src/tokens.ts + tokens.css，light/dark 双主题同步**）
+  · 其余 Agents 页面（概览/观测/能力资产/知识集合/检索调试/对话记录/Run 详情/定义管理/技能库）
+    属 P4 后续批次，侧栏仅作可达占位
+  · 本文件为沟通产物：零依赖单文件、浏览器双击即开
+  ============================================================
+-->
+<style>
+  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（design-system G1：色值只引 token） */
+  :root{
+    --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
+    --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
+    --ws-text-primary:#171717; --ws-text-secondary:#525252; --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
+    --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
+    --ws-accent:#FF8C42; --ws-accent-soft:rgba(255,140,66,.15);
+    --ws-on-brand:#FFFFFF;
+    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC;
+    --ws-danger:#E5484D;
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    /* 以下与 packages/ui/src/tokens.ts（+ tokens.css）同值；原型侧同步定义，落地代码引用包内 token */
+    --ws-code-bg:#1C1E26; --ws-code-hd:#16181F; --ws-code-text:#E2E8F0; --ws-code-hd-text:#A5ACBA;
+    --ws-text-body:#3F3F46; --ws-text-strong:#18181B;
+    --ws-leading-tight:1.25; --ws-leading-snug:1.4; --ws-leading-normal:1.6; --ws-leading-relaxed:1.75;
+    --ws-tracking-tight:-0.02em; --ws-tracking-normal:0; --ws-tracking-wide:0.02em;
+    --ws-duration-fast:150ms; --ws-duration-base:200ms; --ws-duration-slow:300ms;
+    --ws-ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+    --ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);
+    --ws-control-sm:24px; --ws-control-md:32px; --ws-control-lg:40px;
+    --ws-icon-inline:16px; --ws-icon-action:20px; --ws-icon-feature:24px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  /* 焦点态（G11）：键盘 Tab 可见；鼠标点击不显 ring */
+  :focus-visible{outline:none;box-shadow:var(--ws-focus-ring);}
+  /* 动效（G12）：统一 150ms ease-out 微交互 */
+  .ad-item,.pg-agent,.pg-dbg,.proc .ph,.hd .cp{
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),
+               color var(--ws-duration-fast) var(--ws-ease-out),
+               border-color var(--ws-duration-fast) var(--ws-ease-out);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:var(--ws-bg-page);min-height:100vh;padding:24px 20px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--ws-text-primary);
+  }
+  .proto-head{width:1280px;}
+  .proto-head h1{font-size:18px;font-weight:600;margin-bottom:6px;}
+  .proto-head .sub{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);}
+  .proto-head .sub b{color:var(--ws-brand-600);font-weight:600;}
+
+  /* ===== 桌面壳（侧栏 + 顶栏 + 内容区）===== */
+  .ad-desktop{width:1280px;height:800px;border-radius:14px;overflow:hidden;position:relative;
+    background:var(--ws-bg-surface);border:1px solid var(--ws-border);box-shadow:0 24px 70px rgba(20,30,50,.14);
+    display:flex;}
+  .ad-sider{width:210px;background:var(--ws-bg-surface);border-right:1px solid var(--ws-border);
+    flex-shrink:0;display:flex;flex-direction:column;}
+  .ad-sider-head{height:56px;display:flex;align-items:center;gap:9px;padding:0 16px;}
+  .ad-logo-dot{width:22px;height:22px;border-radius:var(--ws-radius-md);background:linear-gradient(135deg,var(--ws-accent),var(--ws-brand-600));}
+  .ad-logo-t{color:var(--ws-accent);font-size:15px;font-weight:700;}
+  .ad-menu{padding:4px 8px;overflow:auto;flex:1;}
+  .ad-group{font-size:11px;color:var(--ws-text-tertiary);padding:10px 12px 4px;}
+  .ad-item{padding:8px 12px;border-radius:var(--ws-radius-lg);color:var(--ws-text-secondary);font-size:13px;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:8px;}
+  .ad-item:hover{background:var(--ws-bg-hover);}
+  .ad-item.active{background:linear-gradient(90deg,var(--ws-accent-soft),rgba(255,140,66,.04));
+    color:var(--ws-accent);font-weight:600;}
+  .ad-sub{padding-left:26px;font-size:12.5px;}
+  .ad-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .ad-header{height:56px;background:var(--ws-bg-surface);border-bottom:1px solid var(--ws-border);
+    display:flex;align-items:center;padding:0 22px;gap:8px;flex-shrink:0;}
+  .ad-crumb{font-size:13px;color:var(--ws-text-tertiary);}
+  .ad-crumb b{color:var(--ws-text-primary);font-weight:500;}
+  .ad-content{flex:1;overflow:auto;padding:18px 22px;background:var(--ws-bg-page);}
+
+  /* ===== Agent Playground ===== */
+  .pg-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .pg-agent{display:inline-flex;align-items:center;gap:8px;height:var(--ws-control-md);padding:0 12px;
+    border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);background:var(--ws-bg-surface);font-size:13px;}
+  .pg-agent svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-text-tertiary);stroke-width:1.5;}
+  .pg-agent b{font-weight:500;}
+  .pg-agent .caret{font-size:10px;color:var(--ws-text-tertiary);}
+  .pg-spacer{flex:1;}
+  .pg-run{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ws-ok);}
+  .pg-dbg{display:inline-flex;align-items:center;height:var(--ws-control-md);padding:0 12px;border:1px solid var(--ws-accent);
+    color:var(--ws-brand-600);border-radius:var(--ws-radius-md);font-size:13px;background:var(--ws-bg-surface);}
+
+  .pg-chat{border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);background:var(--ws-bg-surface);
+    padding:20px;min-height:560px;}
+  .turn{margin-bottom:22px;}
+  .turn:last-child{margin-bottom:0;}
+  .bubble-wrap{display:flex;gap:10px;margin-bottom:10px;}
+  .bubble-wrap.me{justify-content:flex-end;}
+  .avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
+  .avatar.user{background:var(--ws-accent);color:var(--ws-on-brand);}
+  .avatar.ai{background:var(--ws-ok);color:#fff;}
+  .bubble{max-width:76%;border-radius:var(--ws-radius-lg);padding:10px 14px;}
+  .bubble.user{background:var(--ws-accent);color:var(--ws-on-brand);font-size:14px;line-height:var(--ws-leading-relaxed);border-top-right-radius:2px;}
+  .bubble.ai{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:8px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .bubble-meta{display:flex;gap:8px;align-items:center;margin-bottom:4px;font-size:11px;color:var(--ws-text-tertiary);}
+  .src-tag{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:var(--ws-radius-sm);font-size:10px;background:var(--ws-ok-soft);color:var(--ws-ok);}
+
+  /* —— AI 回答 blocks（视觉对齐 portal AiChat 的 .ans）—— */
+  .ans{font-size:14px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-body);}
+  .ans p{margin:0 0 16px;}
+  .ans p:last-child{margin-bottom:0;}
+  .ans p.lead{font-size:14.5px;font-weight:500;color:var(--ws-text-strong);}
+  .ans h4{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:24px 0 8px;
+    color:var(--ws-text-strong);letter-spacing:var(--ws-tracking-tight);}
+  .ans h4::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--ws-brand-500);flex:0 0 3px;}
+  .ans ol{margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
+  .ans ol li{display:flex;gap:10px;align-items:flex-start;}
+  .ans ol li .n{width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--ws-brand-soft);color:var(--ws-brand-600);font-size:12px;font-weight:600;display:grid;place-items:center;margin-top:4px;}
+  .ans strong{font-weight:600;color:var(--ws-text-strong);}
+
+  /* —— code 块：深色方案（三端统一，对齐 portal AnswerCode）—— */
+  .ans .codeblk{margin:0 0 16px;border-radius:var(--ws-radius-md);background:var(--ws-code-bg);overflow:hidden;}
+  .ans .codeblk .hd{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--ws-code-hd);}
+  .ans .codeblk .hd .lang{font-weight:600;font-size:12px;color:var(--ws-code-hd-text);font-family:var(--ws-font-mono);letter-spacing:.3px;}
+  .ans .codeblk .hd .cp{margin-left:auto;font-size:12px;color:var(--ws-code-hd-text);background:none;border:none;cursor:pointer;font-family:inherit;}
+  .ans .codeblk .hd .cp:hover{color:var(--ws-brand-400);}
+  /* 12.5px = 字阶例外（代码块专用，等宽场景惯例），已在 specs/agent-message-extract/page-spec.md 登记 */
+  .ans .codeblk pre{margin:0;padding:12px 16px;overflow-x:auto;font-family:var(--ws-font-mono);font-size:12.5px;line-height:var(--ws-leading-relaxed);color:var(--ws-code-text);white-space:pre;}
+
+  /* —— law 法条 —— */
+  .ans .law{margin:0 0 16px;padding:8px 16px;border-left:3px solid var(--ws-brand-500);background:var(--ws-brand-soft);
+    border-radius:0 var(--ws-radius-sm) var(--ws-radius-sm) 0;font-size:13px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-secondary);}
+  .ans .law b{display:block;font-size:12px;font-weight:600;color:var(--ws-brand-600);margin-bottom:2px;}
+
+  /* —— 过程卡片（现状保留）—— */
+  .proc{margin:6px 0 6px 40px;max-width:76%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);
+    background:var(--ws-bg-surface);overflow:hidden;font-size:12px;}
+  .proc .ph{display:flex;align-items:center;gap:7px;padding:6px 10px;color:var(--ws-text-secondary);}
+  .proc .ph svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-text-tertiary);stroke-width:1.5;}
+  .proc .ph code{font-family:var(--ws-font-mono);font-size:11px;background:var(--ws-bg-subtle);padding:1px 5px;border-radius:3px;}
+  .proc .pb{padding:6px 10px;border-top:1px dashed var(--ws-border-subtle);font-family:var(--ws-font-mono);
+    font-size:11px;color:var(--ws-text-tertiary);white-space:pre-wrap;}
+  .cursor{display:inline-block;color:var(--ws-brand-500);animation:blink 1s step-start infinite;}
+  @keyframes blink{50%{opacity:0;}}
+</style>
+</head>
+<body>
+<div class="proto-head">
+  <h1>admin Agents · 对话调试（Agent Playground）· AI 回答 blocks 渲染</h1>
+  <div class="sub">
+    改动边界：只改 <b>AI 回答（assistant 消息）的内容渲染</b> —— content 经 <b>@web-system/agent-message</b> 的
+    <code>parseAnswer</code> 解析为 blocks（p/lead · h · ol · law · code · tcard）按块渲染；用户气泡 / 过程卡片 / Debugger 面板保持不变。
+    code 块为<b>深色方案</b>（浅色页面里的深底代码块，Notion / ChatGPT 同款语言），三端（portal / admin / 小程序）统一。
+    现状为纯文本 pre-wrap 直出（``` 围栏原文可见）。
+  </div>
+</div>
+
+<div class="ad-desktop">
+  <!-- 侧栏（Agents 选中，子项仅 Playground 为本轮真实屏） -->
+  <aside class="ad-sider">
+    <div class="ad-sider-head"><span class="ad-logo-dot"></span><span class="ad-logo-t">科豆管理</span></div>
+    <nav class="ad-menu">
+      <div class="ad-item">工作台</div>
+      <div class="ad-item">用户管理</div>
+      <div class="ad-item">系统设置</div>
+      <div class="ad-group">Agents</div>
+      <div class="ad-item">概览</div>
+      <div class="ad-item ad-sub active">对话调试 Playground</div>
+      <div class="ad-item ad-sub">观测</div>
+      <div class="ad-item ad-sub">对话记录</div>
+      <div class="ad-item ad-sub">定义管理</div>
+      <div class="ad-item ad-sub">技能库</div>
+      <div class="ad-item">MCP 管理</div>
+    </nav>
+  </aside>
+
+  <div class="ad-main">
+    <header class="ad-header">
+      <span class="ad-crumb">Agents / <b>对话调试 Playground</b></span>
+    </header>
+
+    <main class="ad-content">
+      <div class="pg-toolbar">
+        <span class="pg-agent">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12.5" r="0.5"/><circle cx="15" cy="12.5" r="0.5"/></svg>
+          <b>通用助手</b><span class="caret">▾</span>
+        </span>
+        <span class="pg-spacer"></span>
+        <span class="pg-run"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>已完成 · 基于工具</span>
+        <span class="pg-dbg">Debugger (12)</span>
+      </div>
+
+      <div class="pg-chat">
+        <!-- 轮一：代码块 -->
+        <div class="turn">
+          <div class="bubble-wrap me">
+            <div class="bubble user">帮我写一个 JS 防抖函数</div>
+            <div class="avatar user">我</div>
+          </div>
+
+          <div class="proc">
+            <div class="ph">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              调用工具 · <code>web-search</code><span style="margin-left:auto;color:var(--ws-text-tertiary)">step 1 · 0.8s</span>
+            </div>
+            <div class="pb">{ "query": "JS debounce best practice" }</div>
+          </div>
+
+          <div class="bubble-wrap">
+            <div class="avatar ai">AI</div>
+            <div class="bubble ai">
+              <div class="bubble-meta"><span class="src-tag">基于工具</span><span>通用助手</span><span>17:42</span></div>
+              <div class="ans">
+                <p class="lead">防抖函数把高频触发合并成一次执行，核心是「清旧定时器 → 重新计时」。</p>
+                <div class="codeblk">
+                  <div class="hd"><span class="lang">js</span><button class="cp" type="button">复制</button></div>
+                  <pre>function debounce(fn, wait = 300) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() =&gt; fn.apply(this, args), wait);
+  };
+}</pre>
+                </div>
+                <h4>注意两点</h4>
+                <ol>
+                  <li><span class="n">1</span><span><strong>定时器放闭包</strong>，避免全局污染；</span></li>
+                  <li><span class="n">2</span><span>组件卸载时 <strong>clearTimeout</strong>，防内存泄漏。</span></li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 轮二：法条 + 列表 -->
+        <div class="turn">
+          <div class="bubble-wrap me">
+            <div class="bubble user">合同里「租金每年递增但没上限」有风险吗？</div>
+            <div class="avatar user">我</div>
+          </div>
+          <div class="bubble-wrap">
+            <div class="avatar ai">AI</div>
+            <div class="bubble ai">
+              <div class="bubble-meta"><span class="src-tag">AI 直答</span><span>通用助手</span><span>17:44</span></div>
+              <div class="ans">
+                <p class="lead">有风险，条款本身不无效——风险在于 <strong>你把定价权交给了房东，且没有上限</strong>。</p>
+                <div class="law"><b>《民法典》第 510 条</b>合同生效后，当事人就价款等内容没有约定或约定不明确的，可以协议补充；不能达成补充协议的，按照合同相关条款或者交易习惯确定。</div>
+                <h4>建议争取两处修改</h4>
+                <ol>
+                  <li><span class="n">1</span><span><strong>写死递增上限</strong>：不超过上一年度租金的 5%，或锚定 CPI；</span></li>
+                  <li><span class="n">2</span><span><strong>删掉「乙方不得异议」</strong>：改成「双方协商一致」，保留谈判空间。</span></li>
+                </ol>
+                <p>如果房东连补充协议都不签，说明后续争议概率不低，建议换房。<span class="cursor">▍</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

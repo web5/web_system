@@ -191,6 +191,36 @@ is_passport_file() {
   return 1
 }
 
+# 契约与数据变更面（R13）——这类故障编译能过、测试能过、线上才炸
+# 收窄原则：**宁窄勿宽**。实测把 packages/agent-core/*（整个 SDK）纳入后，其内部实现改动
+#   （如 type-only 导入修正）也被判为契约变更 → 摩擦过大 → 门禁会被关掉（kit-sop-enforcement §3.7）。
+#   待「契约登记文件」落盘（SSE 事件 / MCP 工具 / 权限码的单一真相源）后，再把协议文件明确纳入。
+R13_LINE_THRESHOLD="${R13_LINE_THRESHOLD:-5}"
+is_contract_file() {
+  case "$1" in
+    scripts/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险）
+    packages/types/*) return 0 ;;                   # 共享常量：权限码 / 事件类型 / 枚举
+    servers/mcp-gateway/src/*/tools/*) return 0 ;;  # MCP 工具注册
+    servers/*/src/*/*.controller.ts) return 0 ;;    # 对外接口（另受 R13_LINE_THRESHOLD 约束）
+    servers/*/src/*/*.controller.js) return 0 ;;
+  esac
+  return 1
+}
+
+# 发布与环境面（R14）——测试通过不等于能上线
+is_release_file() {
+  case "$1" in
+    ecosystem.config.cjs|ecosystem.config.js) return 0 ;;   # 服务与端口真相源
+    servers/*/.env|servers/*/.env.*) return 0 ;;            # 服务配置源
+    scripts/.env.deploy|scripts/.env.deploy.*) return 0 ;;
+    scripts/pipeline/*) return 0 ;;
+    scripts/publish-*.sh|scripts/deploy-*.sh|scripts/bootstrap.sh) return 0 ;;
+    servers/deploy-console/src/pipeline/*) return 0 ;;      # 流水线 restart/verify 真身
+    .github/workflows/*) return 0 ;;                        # 门禁自身
+  esac
+  return 1
+}
+
 # ---- R9b 既有 UI 改动须同行原型/豁免（文件级 · warning 级）----
 # 补 R9 的覆盖缺口：R9 只卡新增页面与信息架构，改既有交互/样式一行不报（§3.5.1）。
 # 阈值：UI 文件改动累计行数 >= 5，或 diff 含结构标签（<view / <template / <block）。
@@ -381,6 +411,79 @@ check_sync_pair() {
   return 0
 }
 
+# ---- 评审凭证校验（供 R13 / R14 复用）----
+# 用法：_trailer_check_one <规则号> <trailer 名> <说明> <commit> <message>
+# 语义：命中改动面的 commit 须带 `<Trailer>: pass`（或报告路径）；
+#       指向报告时校验报告存在且头部 `阻塞: N` 为 0。
+# 豁免：`Micro-exempt:` 与 R9b / R10 / R11 同口径（避免"记了豁免还报错"的新摩擦）
+# 级别：warning（--strict 下 error）；Q3 拍板 error 后把两处 add_warn 改 add_err
+_trailer_check_one() {
+  local rule="$1" trailer="$2" desc="$3" c="$4" body="$5"
+  local tval n
+  tval="$(printf '%s' "$body" | grep -E "^${trailer}:[[:space:]]*[^[:space:]]+" | head -n 1 | sed -E "s/^${trailer}:[[:space:]]*//" | tr -d '\r')"
+  if [ -z "$tval" ]; then
+    add_warn "$rule" "${desc} commit 缺评审凭证" "$(git log -1 --format=%s "$c")" "message 须带 ${trailer}: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）"
+    return 0
+  fi
+  [ "$tval" = "pass" ] && return 0
+
+  if ! git cat-file -e "$c:$tval" 2>/dev/null; then
+    add_warn "$rule" "${trailer} 凭证指向的报告不存在" "$tval" "报告须随该 commit 落盘"
+    return 0
+  fi
+  n="$(git show "$c:$tval" 2>/dev/null | grep -E '^阻塞:[[:space:]]*[0-9]+' | head -n 1 | grep -oE '[0-9]+' | head -n 1)"
+  if [ "${n:-0}" -gt 0 ]; then
+    add_warn "$rule" "${desc}评审阻塞项未清零" "${tval}（阻塞: ${n}）" "报告头部 阻塞: N 且 N>0 不得放行"
+  fi
+  return 0
+}
+
+# ---- R13 契约与数据变更评审凭证 · R14 发布与环境评审凭证（commit 级）----
+# 设计：specs/rd-process-model/design.md §3.7
+# R13 触发面：is_contract_file（迁移 / packages/types / MCP 工具 / 对外控制器）
+#            控制器类另受 R13_LINE_THRESHOLD 行数约束（防一行微调也报）
+# R14 触发面：is_release_file（ecosystem / 服务 .env / 流水线脚本 / CI workflow）
+#            判据源 docs/development/release-review-checklist.md
+# 性能：两个面共用一次遍历 —— 各自遍历会让 commit 级 git 调用翻倍（range 较大时明显卡顿）
+check_r13_r14() {
+  local range="$1"
+  local -a commits=()
+  # --no-merges：merge commit 不是真实改动，纳入只会制造噪音
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c f body hit_c hit_r lines_c add del
+  for c in "${commits[@]}"; do
+    hit_c=0; hit_r=0; lines_c=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if is_contract_file "$f"; then hit_c=1; fi
+      if is_release_file "$f"; then hit_r=1; fi
+    done < <(git show --name-only --format= "$c" 2>/dev/null)
+    [ "$hit_c" -eq 0 ] && [ "$hit_r" -eq 0 ] && continue
+
+    # 契约面：未达行数阈值视为微调，不强制评审（与 R9b 同策略，防噪音）
+    if [ "$hit_c" -eq 1 ]; then
+      while IFS=$'\t' read -r add del f; do
+        [ -n "$f" ] || continue
+        is_contract_file "$f" || continue
+        case "${add:-}" in *[!0-9]*) continue ;; esac   # 二进制文件 numstat 为 `-`
+        case "${del:-}" in *[!0-9]*) continue ;; esac
+        lines_c=$(( lines_c + add + del ))
+      done < <(git show --numstat --format= "$c" 2>/dev/null)
+      [ "$lines_c" -lt "$R13_LINE_THRESHOLD" ] && hit_c=0
+    fi
+    [ "$hit_c" -eq 0 ] && [ "$hit_r" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
+    [ "$hit_c" -eq 1 ] && _trailer_check_one "R13" "Contract" "契约与数据变更" "$c" "$body"
+    [ "$hit_r" -eq 1 ] && _trailer_check_one "R14" "Release" "发布与环境变更" "$c" "$body"
+  done
+}
+
 # ---- R12 kit 能力源 ↔ 运行源 同源守门 ----
 # 背景：上游 ai-agent-kit 经 sync-to-target 只写 .codebuddy/agent-kit/（能力源），
 #       而 IDE 加载的是 .codebuddy/skills/（运行源），中间缺 apply → 漂移（#117/#118 即此坑）。
@@ -410,6 +513,7 @@ scan_diff_range() {
   check_r10 "$range"  # R10：UI commit 的 Proto 凭证（方案 B CI 兜底）
   check_r11 "$range"  # R11：设计评审凭证（error 级 · specs/design-reviewer/design.md §3.7）
   check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
+  check_r13_r14 "$range" # R13/R14：契约与数据变更 / 发布与环境 评审凭证（一次遍历，specs/rd-process-model §3.7）
   check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0

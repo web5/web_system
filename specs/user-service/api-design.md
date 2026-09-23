@@ -47,6 +47,115 @@
 - 入参：Body:dto
 
 
+## GlossaryController（`GlossaryController` → 注册路径基 `glossary`）
+
+### POST /api/glossary/
+- 说明：收藏一条译文（幂等）
+- 鉴权：Bearer JWT
+- 入参：Body:dto(CreateGlossaryDto)
+
+**字段定义**
+
+##### Body 对象 `CreateGlossaryDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| sourceType | 'chat' | 'translate' | 是(默认) | 来源 |
+| sourceText | string | 否 |  |
+| enMain | string | 是(默认) | 英文译文主文 |
+| note | string | 否 |  |
+| meta | Record<string, unknown> | 否 |  |
+| conversationId | string | 否 |  |
+
+
+### GET /api/glossary/
+- 说明：我的收藏列表（分页）
+- 鉴权：Bearer JWT
+
+### DELETE /api/glossary/:id
+- 说明：删除一条收藏
+- 鉴权：Bearer JWT
+- 入参：Param:id
+
+
+## InternalController（`InternalController` → 注册路径基 `internal`）
+
+### POST /api/internal/user-memory/upsert
+- 说明：AI 异步写入用户记忆（upsert/remove）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(UpsertMemoryDto)
+
+**字段定义**
+
+##### Body 对象 `UpsertMemoryDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| userId | string | 是(默认) |  |
+| items | UpsertMemoryItemDto[] | 是(默认) |  |
+| sourceConversationId | string | 否 |  |
+
+###### UpsertMemoryDto.items → `UpsertMemoryItemDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| category | string | 是(默认) |  |
+| content | string | 是(默认) |  |
+| confidence | number | 否 |  |
+| action | 'add' | 'remove' | 否 |  |
+
+
+
+### POST /api/internal/user-taste/merge
+- 说明：AI 增量写入用户口味（merge）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(MergeTasteDto)
+
+**字段定义**
+
+##### Body 对象 `MergeTasteDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| userId | string | 是(默认) |  |
+| namespace | string | 否 |  |
+| patch | Record<string, unknown> | 是(默认) |  |
+
+
+### POST /api/internal/user-taste/remove
+- 说明：AI 移除用户口味标签（差集）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(MergeTasteDto)
+
+**字段定义**
+
+##### Body 对象 `MergeTasteDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| userId | string | 是(默认) |  |
+| namespace | string | 否 |  |
+| patch | Record<string, unknown> | 是(默认) |  |
+
+
+### GET /api/internal/user-taste/get
+- 说明：AI 读取用户口味（注入 prompt 用）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Query:userId
+
+
+## UserMemoryController（`UserMemoryController` → 注册路径基 `user-memory`）
+
+### GET /api/user-memory/
+- 说明：我的记忆列表（分页）
+- 鉴权：Bearer JWT
+
+### DELETE /api/user-memory/:id
+- 说明：删除一条记忆
+- 鉴权：Bearer JWT
+- 入参：Param:id
+
+
 ## InternalPermissionController（`InternalPermissionController` → 注册路径基 `internal`）
 
 ### POST /api/internal/roles/permissions
@@ -194,4 +303,27 @@
 - 说明：删除用户
 - 鉴权：Bearer JWT
 - 入参：Param:id
+
+
+## UserTasteController（`UserTasteController` → 注册路径基 `user-taste`）
+
+### GET /api/user-taste/:namespace
+- 说明：读取我的口味档案
+- 鉴权：Bearer JWT
+- 入参：Param:namespace
+
+### PUT /api/user-taste/:namespace
+- 说明：增量更新我的口味档案
+- 鉴权：Bearer JWT
+- 入参：Param:namespace、Body:body
+
+### DELETE /api/user-taste/:namespace/tag
+- 说明：删除口味档案中的指定标签
+- 鉴权：Bearer JWT
+- 入参：Param:namespace、Body:body
+
+### DELETE /api/user-taste/:namespace
+- 说明：清空我的口味档案
+- 鉴权：Bearer JWT
+- 入参：Param:namespace
 

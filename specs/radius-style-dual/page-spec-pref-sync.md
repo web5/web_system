@@ -187,3 +187,9 @@ app.ts onLaunch → autoLogin() 成功后
 - 现象：`apps/portal` 下 4 个文件（`stores/ui-prefs.ts` / `stores/user.ts` / `api/user.ts` / `api/auth.ts`）导入 `@web-system/types` 时 vue-tsc 报 `Cannot find module`。
 - 证据：`node_modules/@web-system/types` 软链不存在（工作区未链接该包）；运行时由 Vite 侧解析，故应用行为正常。
 - 处置：本次**不新增**同类导入（偏好相关类型各端本地声明，取值与 `packages/shared` 一致）；列为待修项（补工作区链接或给 portal 加 tsconfig paths）。
+
+**② 修复（2026-09-23）**：根因是**本仓未使用 npm workspaces**（`node_modules/@web-system` 目录都不存在，各包无软链），且 portal 的 `tsconfig.json` 只有 `@/*` 映射 —— 因此所有 `@web-system/*` 在 tsc / vue-tsc 下都解析不到（只有 Vite 侧 alias 能解析，运行时正常）。
+
+- 处置：按 Vite alias 补齐 portal 的 `paths`（`shared` / `agent-message` / `types` → 各包 `src/index.ts`）；并补构建 `packages/agent-message`（此前**从未构建过**，无 dist）。
+- 效果：`answer-parse` / `Translate.vue` 的 `parseSections`、`AiChat.vue` 的 `parseAnswer / foldCut / plainLength / boldSegs`、`@web-system/types` 相关报错**全部消除**。
+- ⚠️ 副作用（重要）：解析恢复正确后，portal 的 `vue-tsc` 由 ~18 个错误变为 **60 个**。多出来的是**此前被 `any` 掩盖的真实类型错误**（`ImportMeta.env` 未声明 vite/client 类型、`TodoPriority` 字面量赋值、`AxiosResponse.code` 等），**非本次引入**；`vite build` 不做类型检查，故不影响构建与运行。
