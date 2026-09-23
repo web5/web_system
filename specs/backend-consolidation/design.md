@@ -242,7 +242,7 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 
 | 阶段 | 内容 | 风险 |
 |---|---|---|
-| C1 | 抽出 `@web-system/shared` 的统一 JWT guard（参数化 `AuthMode`），各服务改为引用；**行为完全不变**（仍是远程 verify） | 低，纯结构收敛，可单服务灰度 |
+| C1 | 抽出 `@web-system/shared` 的统一 JWT guard（参数化 `AuthMode`），各服务改为引用；**行为完全不变**（仍是远程 verify） | 低，纯结构收敛，可单服务灰度 | 🟡 **灰度中**：`packages/shared/src/auth/unified-auth.ts` + `todo-service` 首个接入（其余 7 个服务后续逐个迁） |
 | C2 | guard 增加 `local` 模式（本地验签 + 30s 吊销缓存），用 `AUTH_MODE=local|verify` 双轨运行，逐服务切换 | 中，需灰度 + 对照验证 |
 | C3 | 全量切 `local`，`/auth/verify` 降级为兼容端点（保留一个发布周期后下线） | 中，取决于前端刷新令牌改造 |
 
@@ -431,7 +431,17 @@ MCP 客户端 token 与用户 token 共用同一吊销机制（30s 缓存），�
 
 > 依赖关系：D2 依赖 C 的吊销机制（至少要能在 30s 内让一把令牌失效）；A8 依赖 A3 的 `internal/uploads/store`。
 
-> 进度：**B、D0、A1、A2、A3、A4、A5 已完成**；C1、D1 / D2 待做；A8 与 A6（需过 UI 门）在后。
+> 进度：**B、D0、A1、A2、A3、A4、A5 已完成**；**C1 灰度中**（shared 助手已落地，todo-service 首个接入，其余 7 服务待迁）；D1 / D2 待做；A8 与 A6（需过 UI 门）在后。
+>
+> C1 的收敛方式（与"直接把 guard 塞进共享包"的区别）：
+> - 共享包**只出纯函数助手**（`verifyRemoteToken` / `resolveAuthServiceUrl` / `extractBearerToken`），
+>   **不抛 `UnauthorizedException`、不注入 `Reflector`** —— 避免 pnpm 隔离下 `@nestjs/common` /
+>   `@nestjs/core` 双实例导致 HTTP 异常退化成 500、DI token 不匹配（与既有
+>   `auth/permission.guard.ts` 同约定）。
+> - 各服务保留一层**薄 guard**负责抛 401 与文案 → **行为完全不变**。
+> - 两处刻意改进（只在异常配置下触发）：`AUTH_SERVICE_URL` **空串回落默认值**（旧写法会
+>   `fetch('')` 被误报成"认证服务不可用"，2026-09-11 dev 事故同源）、远程校验加 **8s 超时**。
+
 > ⚠️ A3 与 A4 有**发布耦合**：两者已在同一 PR，但发布时也必须一起发（见 §1.7 落地状态说明 4）。
 
 ---
