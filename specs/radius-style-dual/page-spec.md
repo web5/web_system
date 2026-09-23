@@ -143,6 +143,7 @@
 6. **pill 策略**：`--r-pill` **恒 9999px**，三档都不变（圆是形状语义、非圆角风格；开关轨道须圆头）。直角档下「矩形全直角 + 胶囊仍圆」的反差按此执行；若要收窄 pill 请在落码前提出。
 7. **antd 派生档**：`antd-theme.ts` 落码时**显式**给 `borderRadius` / `borderRadiusLG` / `borderRadiusSM`（按当前档取语义档），避免组件内派生值不自洽。
 8. **判据源同步**：`design-system.md` G7 改为「圆角取**语义档**（chip/control/card/pill），风格由用户偏好统一决定」；并同步 `ui-interface/RULE.mdc` 与 `brand-interface/RULE.mdc` 最小禁项精要。
+9. **UI 门禁通路修正（2026-09-23，随本需求一并处理）**：admin / deploy-console **无** `apps/<app>/prototype/` 目录，其原型长期位于 `docs/ui/prototypes/**`（属**全局通行证**）。但门禁的 `apps` 集合是累加的——本会话一旦动过某 app 的原型，`docs/ui/prototypes/**` 的"不限端"语义就失效，导致 admin 系 `.vue` 永远被拒。已修正：`hook-mark-proto-touched.py` 记录 sticky `global` 标记，`hook-ui-prototype-gate.py` 在 `global=True` 时不做 app 匹配。此修正使「全局原型覆盖多端」的既有设计意图真正生效。
 
 ## 8. 实施顺序（落码阶段，须先过人审）
 
