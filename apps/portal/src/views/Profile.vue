@@ -190,6 +190,7 @@ import { listGlossary } from '@/api/glossary';
 import { listMemory } from '@/api/user-memory';
 import { getMusicTaste, tasteSummary as tasteSummaryOf } from '@/api/user-taste';
 import { useUiPrefsStore, RADIUS_STYLE_OPTIONS, type RadiusStyle } from '@/stores/ui-prefs';
+import type { UserInfo } from '@web-system/types';
 
 const userStore = useUserStore();
 const uiPrefs = useUiPrefsStore();
@@ -290,7 +291,7 @@ async function handleAvatarUpload(file: File) {
       throw new Error('上传响应缺少头像 URL');
     }
     userStore.setUserInfo({
-      ...userStore.userInfo,
+      ...(userStore.userInfo as UserInfo),
       avatar: avatarUrl,
     });
     message.success('头像上传成功');
@@ -311,7 +312,7 @@ async function handleSave() {
       gender: formData.gender,
     });
     userStore.setUserInfo({
-      ...userStore.userInfo,
+      ...(userStore.userInfo as UserInfo),
       email: formData.email,
       nickname: formData.nickname,
       phone: formData.phone,
