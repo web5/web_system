@@ -381,3 +381,5 @@
 | canvas 空值类型 | 1 | `canvasRef.value ?? null` |
 
 待续 13 处：`Create.vue` 未使用变量 ×2 与 `AxiosResponse.code` ×1、`Profile.vue` 的 `UserInfo` ×2、`Todo.vue` 的 `ApiResponse.items/total` ×3、`SqlFormatter` 的 `indent` ×2、`Uglify` 的 `MinifyOutput.error` ×2、`Transform` 的 `originalImageUrl` ×1。
+
+**第二批（B：分页/接口取值）**：`Todo.vue` 原按 `res.data.items` 取值 —— 既触发 TS2339，也是**运行时隐患**（响应拦截器已解包 `{code,data}`，`res.data` 为空）。已按既有列表接口约定（`const { list } = await ...`）改为 `res.items` / `res.total`，并把 `api/todo.ts#getTodoList` 返回类型声明为解包后的分页体。另：`Create.vue` 素材接口仅做**类型对齐**（`res.code`/`res.data` 语义未动），**疑似遗留问题**（若该接口实际被解包，`res.code` 恒为 undefined、素材永不加载）待确认返回体后处理。
