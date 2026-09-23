@@ -77,6 +77,21 @@
       </div>
 
       <div class="profile-card info-card">
+        <div class="card-title">偏好</div>
+        <div class="form-section">
+          <div class="form-row">
+            <label>圆角风格</label>
+            <a-radio-group v-model:value="radiusStyle" button-style="solid">
+              <a-radio-button value="soft">柔和</a-radio-button>
+              <a-radio-button value="crisp">清爽</a-radio-button>
+              <a-radio-button value="sharp">直角</a-radio-button>
+            </a-radio-group>
+            <p class="form-hint">{{ radiusDesc }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-card info-card">
         <div class="card-title">基本信息</div>
         <div class="form-section">
           <div class="form-row">
@@ -174,8 +189,18 @@ import AppIcon from '@/components/AppIcon.vue';
 import { listGlossary } from '@/api/glossary';
 import { listMemory } from '@/api/user-memory';
 import { getMusicTaste, tasteSummary as tasteSummaryOf } from '@/api/user-taste';
+import { useUiPrefsStore, RADIUS_STYLE_OPTIONS, type RadiusStyle } from '@/stores/ui-prefs';
 
 const userStore = useUserStore();
+const uiPrefs = useUiPrefsStore();
+/** 圆角风格：读写都经 store —— setter 会同步把偏好写到根元素属性 */
+const radiusStyle = computed<RadiusStyle>({
+  get: () => uiPrefs.radiusStyle,
+  set: (v) => uiPrefs.setRadiusStyle(v),
+});
+const radiusDesc = computed(
+  () => RADIUS_STYLE_OPTIONS.find((o) => o.value === uiPrefs.radiusStyle)?.desc ?? '',
+);
 const uploading = ref(false);
 const saving = ref(false);
 /** AI 记忆 / 生词本摘要（失败保持默认不打扰） */
@@ -573,6 +598,14 @@ async function onRevokeKey(id: number) {
   font-size: 13px;
   color: #666;
   font-weight: 500;
+}
+
+/* 偏好设置项的说明文案（走语义 token，避免新增裸色值） */
+.form-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  line-height: 1.5;
 }
 
 .form-input {

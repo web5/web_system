@@ -41,23 +41,38 @@ import AppSideList from '@/components/AppSideList.vue';
 import AppContextPanel from '@/components/AppContextPanel.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import AuthModal from '@/components/AuthModal.vue';
+import { uiTokens, type UiRadiusStyle } from '@web-system/ui';
 import { matchNavItem } from '@/config/nav';
 import { BRAND } from '@/config/theme';
 import { useUserStore } from '@/stores/user';
+import { useUiPrefsStore } from '@/stores/ui-prefs';
 import { useAuthGateStore } from '@/stores/authGate';
 import { useConversationStore } from '@/stores/conversations';
 import { useContextPanel } from '@/stores/context';
 
-const theme = {
-  token: {
-    colorPrimary: BRAND[500],
-    colorLink: BRAND[500],
-    borderRadius: 8,
-    colorBgContainer: '#FFFFFF',
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif",
-  },
-};
+const uiPrefs = useUiPrefsStore();
+
+/**
+ * antd 圆角按用户偏好三档取值（soft 4/6/8 · crisp 2/2/4 · sharp 0/0/2）。
+ * 只覆盖圆角相关 token，其余保持 portal 原有覆盖 —— 避免引入非圆角的视觉变化。
+ * 注：基础档由原硬编码 8 收敛为 control 档（6），与 admin 系口径一致（已登记，见规格 §4.1）。
+ */
+const theme = computed(() => {
+  // 兜底：持久化数据可能被污染为非法值（store 未做校验）→ 回退柔和档，避免 theme 计算抛错
+  const r = uiTokens.radiusStyle[uiPrefs.radiusStyle as UiRadiusStyle] ?? uiTokens.radiusStyle.soft;
+  return {
+    token: {
+      colorPrimary: BRAND[500],
+      colorLink: BRAND[500],
+      borderRadius: r.control,
+      borderRadiusLG: r.card,
+      borderRadiusSM: r.chip,
+      colorBgContainer: '#FFFFFF',
+      fontFamily:
+        "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif",
+    },
+  };
+});
 
 const route = useRoute();
 const router = useRouter();
