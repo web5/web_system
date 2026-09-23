@@ -295,7 +295,7 @@ onMounted(reload);
 .raw-block {
   background: #1e1e1e;
   color: #d4d4d4;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 16px;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;

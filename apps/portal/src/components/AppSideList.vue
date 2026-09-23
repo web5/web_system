@@ -1,5 +1,7 @@
 <template>
   <aside class="side">
+    <!-- 上半区：记录列表（翻译 / 合翻等记录接口未就绪的视图不渲染，避免空壳） -->
+    <template v-if="showList">
     <div class="side-head">
       <span class="side-title">{{ title }}</span>
       <button type="button" class="btn-ghost" @click="createNew">
@@ -67,10 +69,41 @@
         </button>
       </div>
     </div>
+    </template>
+
+    <!--
+      下半区：能力（2026-09-23 反馈）——能力页的「换能力 / 回发现」出口放这里，
+      不做页头面包屑或「返回」按钮（太 admin）。记录区不可用时（solo）占满左栏。
+    -->
+    <div v-if="caps" class="side-caps" :class="{ solo: !showList }">
+      <div class="caps-hd">能力</div>
+      <button
+        v-for="c in shownCaps"
+        :key="c.name"
+        type="button"
+        class="cap-item"
+        :class="{ on: isCurrent(c), dis: !c.enabled }"
+        @click="onCap(c)"
+      >
+        <app-icon :name="c.icon" />
+        <span class="cap-name">{{ c.name }}</span>
+        <app-icon v-if="isCurrent(c)" name="check" />
+        <span v-else-if="!c.enabled" class="cap-tag">敬请期待</span>
+      </button>
+      <!-- 更多：就地展开（含敬请期待项），与「查看全部能力」（跳发现）职责分开 -->
+      <button v-if="restCount > 0" type="button" class="cap-more" @click="capsMore = !capsMore">
+        {{ capsMore ? '收起' : `更多 ${restCount} 项` }}
+        <app-icon :name="capsMore ? 'up' : 'down'" />
+      </button>
+      <button type="button" class="cap-all" @click="router.push('/discover')">
+        查看全部能力<app-icon name="right" />
+      </button>
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Modal, message } from 'ant-design-vue';
 import type { ConversationSummary } from '@/api/agent';
@@ -78,9 +111,21 @@ import { useConversationStore } from '@/stores/conversations';
 import { useUserStore } from '@/stores/user';
 import { useAuthGateStore } from '@/stores/authGate';
 import { formatRelativeTime } from '@/utils/time';
+import { CAPABILITIES, type Capability } from '@/config/capabilities';
 import AppIcon from './AppIcon.vue';
 
-defineProps<{ title: string }>();
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    showList?: boolean;
+    caps?: boolean;
+    /** 记录来源：chat=主对话（默认）/ tool=工具页 */
+    source?: 'chat' | 'tool';
+    /** 记录按能力过滤（translate / contract-risk） */
+    agentId?: string;
+  }>(),
+  { showList: true, caps: false },
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -88,10 +133,46 @@ const store = useConversationStore();
 const userStore = useUserStore();
 const authGate = useAuthGateStore();
 
+/* ===== 底部·能力面板 ===== */
+
+/** 默认只展示 2 项已启用能力（面板高度固定，不压记录区）；展开时显示全部（含敬请期待） */
+const BRIEF_CAPS = CAPABILITIES.filter((c) => c.enabled).slice(0, 2);
+
+const capsMore = ref(false);
+const shownCaps = computed(() => (capsMore.value ? CAPABILITIES : BRIEF_CAPS));
+const restCount = computed(() => CAPABILITIES.length - BRIEF_CAPS.length);
+
+/** 当前所在能力页（能力条目高亮 ✓） */
+function isCurrent(c: Capability): boolean {
+  return !!c.enabled && route.path === c.to;
+}
+
+/** 已启用 → 切到该能力；未开放 → 可点但给明确反馈（不做灰字死卡） */
+function onCap(c: Capability) {
+  if (!c.enabled) {
+    message.info('该能力尚未开放');
+    return;
+  }
+  void router.push(c.to);
+}
+
 /** 无标题会话（后端异步生成标题）→ 用占位文案，不显示空白行 */
 function displayTitle(item: ConversationSummary): string {
   return item.title?.trim() || '新对话';
 }
+
+/** 工具页记录（翻译 / 合翻）：点记录 = 在当前能力页载入该次结果（URL 带 ?id=，可分享） */
+const isToolScope = computed(() => props.source === 'tool');
+
+/** 左栏上半区按视图范围拉记录：切到不同能力才重取 */
+watch(
+  () => [props.showList, props.source, props.agentId],
+  () => {
+    if (!props.showList) return;
+    void store.syncScope({ source: props.source, agentId: props.agentId });
+  },
+  { immediate: true },
+);
 
 /** 从欢迎页 / 其他页点列表 → 先落到对话工作台，再切换会话 */
 async function ensureChatRoute() {
@@ -100,12 +181,21 @@ async function ensureChatRoute() {
 
 function pick(id: string) {
   store.select(id);
+  if (isToolScope.value) {
+    void router.push({ path: route.path, query: { id } });
+    return;
+  }
   void ensureChatRoute();
 }
 
 function createNew() {
   authGate.ensureAuth(() => {
     store.startNew();
+    if (isToolScope.value) {
+      // 工具页「新建」= 回到该能力工作台空态（不跳对话）
+      void router.push({ path: route.path, query: {} });
+      return;
+    }
     void ensureChatRoute();
   });
 }
@@ -159,6 +249,108 @@ function confirmDelete(item: ConversationSummary) {
   flex: 1;
   overflow-y: auto;
   padding: 0 8px 12px;
+}
+
+/* ===== 底部·能力面板（高度固定、钉在底部，不随列表滚动、不压记录区空态） ===== */
+.side-caps {
+  flex: 0 0 auto;
+  margin-top: auto;
+  border-top: 1px solid var(--ws-border);
+  padding: 8px;
+}
+
+/* 记录区不可用（翻译 / 合翻，待 source=tool 接口）：面板从顶部开始，不留悬空块 */
+.side-caps.solo {
+  margin-top: 0;
+  border-top: none;
+}
+
+.caps-hd {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ws-text-tertiary);
+  letter-spacing: 0.02em;
+  padding: 0 4px 6px;
+}
+
+.cap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 2px;
+  border-radius: var(--ws-radius-md);
+  color: var(--ws-text-secondary);
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+}
+
+.cap-item:hover {
+  background: var(--ws-bg-hover);
+}
+
+.cap-item.on {
+  background: var(--ws-brand-50);
+}
+
+.cap-item.on .cap-name {
+  color: var(--ws-brand-700);
+  font-weight: 600;
+}
+
+.cap-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--ws-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cap-item.dis .cap-name,
+.cap-item.dis {
+  color: var(--ws-text-tertiary);
+}
+
+.cap-tag {
+  font-size: 11px;
+  color: var(--ws-text-tertiary);
+}
+
+.cap-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--ws-radius-md);
+  font-size: 12px;
+  color: var(--ws-text-secondary);
+}
+
+.cap-more:hover {
+  background: var(--ws-bg-hover);
+  color: var(--ws-brand-700);
+}
+
+.cap-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--ws-border);
+  font-size: 12px;
+  color: var(--ws-brand-600);
+}
+
+.cap-all:hover {
+  color: var(--ws-brand-700);
 }
 
 .list-row {
@@ -280,7 +472,7 @@ function confirmDelete(item: ConversationSummary) {
 .skel {
   display: block;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--r-chip);
   background: linear-gradient(90deg, var(--ws-bg-subtle), var(--ws-bg-hover), var(--ws-bg-subtle));
   background-size: 200% 100%;
   animation: skel 1.2s infinite;

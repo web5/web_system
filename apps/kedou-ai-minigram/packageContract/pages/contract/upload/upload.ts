@@ -31,7 +31,14 @@ const SAMPLE_SCENE: Record<string, string> = {
 };
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     contractText: '',
     analyzing: false,
     scene: '',

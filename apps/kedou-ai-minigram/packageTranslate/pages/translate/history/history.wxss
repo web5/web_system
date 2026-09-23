@@ -1,7 +1,7 @@
 /* 翻译历史页
  * 色值一律走 app.wxss 的设计 token。 */
 .page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
-.list { background: var(--card); border-radius: 24rpx; overflow: hidden; }
+.list { background: var(--card); border-radius: var(--r-card); overflow: hidden; }
 .r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
 .r:last-child { border-bottom: none; }
 .v { color: var(--t3); font-size: 26rpx; }

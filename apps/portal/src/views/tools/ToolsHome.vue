@@ -107,7 +107,7 @@ const tools = [
   width: 60px;
   height: 4px;
   background: linear-gradient(90deg, #FF8C42, #FFB347);
-  border-radius: 4px;
+  border-radius: var(--r-chip);
 }
 
 /* 工具网格 */
@@ -119,7 +119,7 @@ const tools = [
 
 .tool-card {
   background: #ffffff;
-  border-radius: 24px;
+  border-radius: var(--r-card);
   padding: 1.8rem 1.2rem 1.5rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.02);
   transition: all 0.25s ease;
@@ -160,7 +160,7 @@ const tools = [
   width: 68px;
   height: 68px;
   background: #fff7ed;
-  border-radius: 18px;
+  border-radius: var(--r-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,7 +184,7 @@ const tools = [
   font-size: 0.7rem;
   font-weight: 500;
   padding: 0.2rem 0.7rem;
-  border-radius: 30px;
+  border-radius: var(--r-pill);
   background: #f1f5f9;
   color: #475569;
   margin-top: 0.4rem;
@@ -198,7 +198,7 @@ const tools = [
   font-size: 0.7rem;
   font-weight: 500;
   padding: 0.2rem 0.7rem;
-  border-radius: 30px;
+  border-radius: var(--r-pill);
   margin-top: 0.3rem;
 }
 

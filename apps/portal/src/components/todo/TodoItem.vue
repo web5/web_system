@@ -85,7 +85,7 @@ function isOverdue(dateStr: string) {
 <style scoped>
 .todo-item {
   background: white;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 16px;
   margin: 12px 16px;
   display: flex;
@@ -129,7 +129,7 @@ function isOverdue(dateStr: string) {
 
 .todo-category, .todo-priority {
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   background: #FFF8F0;
   color: #FF8C42;
 }
@@ -147,7 +147,7 @@ function isOverdue(dateStr: string) {
   border: none;
   cursor: pointer;
   padding: 6px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   display: flex;
   align-items: center;
   justify-content: center;

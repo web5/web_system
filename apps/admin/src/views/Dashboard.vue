@@ -173,13 +173,13 @@ onMounted(async () => {
 /* 统计卡片 */
 .dash-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
-  border: 1px solid var(--card-border); border-radius: 4px;
+  border: 1px solid var(--card-border); border-radius: var(--r-card);
   padding: 20px 24px; transition: all .25s;
 }
 .dash-card:hover { transform: translateY(-2px); border-color: var(--card-border-hover); }
 .dash-card-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .dash-card-icon {
-  width: 40px; height: 40px; border-radius: 4px;
+  width: 40px; height: 40px; border-radius: var(--r-chip);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
 }
@@ -194,7 +194,7 @@ onMounted(async () => {
 /* 区块卡片 */
 .section-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
-  border: 1px solid var(--card-border); border-radius: 4px;
+  border: 1px solid var(--card-border); border-radius: var(--r-card);
   padding: 24px;
 }
 .section-card-header {

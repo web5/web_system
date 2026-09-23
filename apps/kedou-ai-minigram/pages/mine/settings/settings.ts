@@ -1,6 +1,19 @@
 // 小程序通用设置（影响全局）
+import * as appearance from '../../../utils/appearance';
+
 Page({
+  onShow() {
+    // 圆角风格：本页即偏好入口，根节点 class 与设置项文案都按本地存储刷新
+    const cls = appearance.currentClass();
+    const label = appearance.labelOf();
+    if (cls !== this.data.radiusClass || label !== this.data.radiusText) {
+      this.setData({ radiusClass: cls, radiusText: label });
+    }
+  },
+
   data: {
+    radiusClass: '',
+    radiusText: appearance.labelOf(),
     themeText: '跟随系统',
     fontSize: '标准',
     notify: true,
@@ -23,6 +36,21 @@ Page({
       itemList: ['小', '标准', '大'],
       success: (res: any) => {
         this.setData({ fontSize: ['小', '标准', '大'][res.tapIndex] });
+      },
+      fail: () => undefined,
+    });
+  },
+
+  /** 圆角风格：柔和 / 清爽 / 直角 —— 写入本地存储并立即刷新本页根节点 class */
+  pickRadius() {
+    const labels = appearance.STYLE_OPTIONS.map((o) => o.label);
+    wx.showActionSheet({
+      itemList: labels,
+      success: (res: any) => {
+        const opt = appearance.STYLE_OPTIONS[res.tapIndex];
+        if (!opt) return;
+        appearance.setStyle(opt.value);
+        this.setData({ radiusText: opt.label, radiusClass: appearance.currentClass() });
       },
       fail: () => undefined,
     });

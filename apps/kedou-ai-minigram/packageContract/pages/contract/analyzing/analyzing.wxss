@@ -154,7 +154,7 @@ page {
   margin-top: 48rpx;
   background: #F7F8FA;
   border: 1rpx solid #E8EBF0;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   padding: 24rpx;
 }
 .streaming-head {
@@ -201,7 +201,7 @@ page {
   align-items: center;
   gap: 12rpx;
   padding: 14rpx 22rpx;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   font-size: 24rpx;
   transition: background .25s, color .25s, border-color .25s;
   background: #F2F3F5;
@@ -243,7 +243,7 @@ page {
   margin: 10rpx 0 20rpx;
   background: #F7F8FA;
   border: 1rpx solid #E8EBF0;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   overflow: hidden;
   transition: background .25s, border-color .25s;
 }
@@ -276,7 +276,7 @@ page {
   color: #1E6FFF;
   background: #fff;
   border: 1rpx solid #C9DFFF;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   padding: 6rpx 16rpx;
   font-weight: 600;
 }
@@ -304,7 +304,7 @@ page {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-radius: 32rpx 32rpx 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
   padding: 28rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   animation: sheetUp .22s ease;

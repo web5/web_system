@@ -67,7 +67,7 @@ const { label, hint, go } = useSafeReturn();
   background: #f97316;
   color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-family: inherit;
   font-weight: 500;

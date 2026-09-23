@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="langbar">
     <view class="side" bindtap="pickSrc">{{srcLang}}<text class="arw">▾</text></view>
     <view class="sw" bindtap="swap">⇄</view>

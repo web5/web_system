@@ -56,7 +56,14 @@ let _mid = 0;
 const nextId = (): number => ++_mid;
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     messages: [{ id: nextId(), role: 'ai', kind: 'text', text: AI_GREETING }] as Msg[],
     input: '',
     sending: false,

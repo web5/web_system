@@ -41,6 +41,19 @@ export function updateUserProfile(data: Partial<UserInfo>): Promise<UserInfo> {
 }
 
 /**
+ * 上报界面偏好（跟账号走）。
+ *
+ * 复用既有 `PUT /users/me`，不新增接口；服务端按浅合并写入，故只传变更的档位即可。
+ * 口径：specs/radius-style-dual/page-spec-pref-sync.md §3.2
+ */
+export function updateUiPreferences(preferences: {
+  radiusStyle?: 'soft' | 'crisp' | 'sharp';
+}): Promise<UserInfo> {
+  // silent：界面偏好是「本地乐观应用 + 后台同步」，失败只记日志、不回滚也不弹错（规格 §5 / AC7）
+  return request.put('/users/me', { preferences }, { silent: true });
+}
+
+/**
  * 上传头像
  */
 export function uploadAvatar(formData: FormData): Promise<{ avatarUrl: string }> {

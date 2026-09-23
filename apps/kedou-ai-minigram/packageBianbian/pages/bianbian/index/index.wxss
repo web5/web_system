@@ -52,7 +52,7 @@
   width: 100%;
   padding: 48rpx 32rpx;
   margin-bottom: 24rpx;
-  border-radius: 28rpx;
+  border-radius: var(--r-card);
   background: #FFFFFF;
   box-shadow: 0 8rpx 32rpx rgba(255, 140, 66, 0.06);
   transition: transform 0.15s;
@@ -88,7 +88,7 @@
   padding: 20rpx 28rpx;
   margin-top: 8rpx;
   background: rgba(255, 140, 66, 0.06);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   border: 2rpx solid rgba(255, 140, 66, 0.1);
 }
 

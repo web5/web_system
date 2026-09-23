@@ -12,7 +12,14 @@ let progressTimer: ReturnType<typeof setInterval> | null = null;
 let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     originImage: '',
     status: 'loading' as 'loading' | 'success' | 'failed',
     progress: 0,

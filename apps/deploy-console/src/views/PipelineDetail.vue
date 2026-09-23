@@ -905,7 +905,7 @@ onUnmounted(stopPolling)
               <!-- 摘要条：正在看哪个实例 -->
               <div
                 style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-                       background: #fafafa; border: 1px solid #f0f0f0; border-radius: 6px;
+                       background: #fafafa; border: 1px solid #f0f0f0; border-radius: var(--r-card);
                        padding: 8px 12px; margin-bottom: 12px; font-size: 13px;"
               >
                 <span style="color: #1677ff; font-family: monospace; cursor: pointer;" title="点击复制实例 ID" @click="copyRunId(selectedRun)">
@@ -1475,7 +1475,7 @@ onUnmounted(stopPolling)
   min-width: 108px;
   padding: 8px 12px 9px;
   border: 1.5px solid #d9d9d9;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   background: #fff;
   cursor: pointer;
   text-align: center;
@@ -1572,7 +1572,7 @@ onUnmounted(stopPolling)
   font-size: 10px;
   background: #e8833a;
   color: #fff;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   padding: 1px 6px;
   font-weight: 600;
 }

@@ -116,10 +116,10 @@ async function loadCfg() {
 
 <style scoped>
 .prio { font-size: 12px; color: var(--ws-text-secondary); background: var(--ws-bg); border: 1px solid var(--ws-border);
-  border-radius: 8px; padding: 10px 12px; line-height: 2; margin-bottom: 14px; }
-.prio .lv { background: var(--ws-brand-50); color: var(--ws-brand-500); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+  border-radius: var(--r-card); padding: 10px 12px; line-height: 2; margin-bottom: 14px; }
+.prio .lv { background: var(--ws-brand-50); color: var(--ws-brand-500); border-radius: var(--r-chip); padding: 1px 6px; font-weight: 600; }
 .prio code { font-family: var(--ws-font-mono); background: var(--ws-bg-surface); border: 1px solid var(--ws-border);
-  border-radius: 4px; padding: 0 4px; font-size: 11px; }
+  border-radius: var(--r-chip); padding: 0 4px; font-size: 11px; }
 .sec { margin-bottom: 18px; }
 .sec-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .sec-head b { font-size: 13px; color: var(--ws-text-primary); }

@@ -253,7 +253,7 @@ onMounted(loadList);
   gap: 6px;
   padding: 10px 0;
   border: 1.5px solid #eee;
-  border-radius: 14px;
+  border-radius: var(--r-control);
   background: white;
   color: #888;
   font-size: 14px;
@@ -279,7 +279,7 @@ onMounted(loadList);
   height: 20px;
   line-height: 20px;
   text-align: center;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   background: #f5f5f5;
   color: #999;
 }
@@ -335,7 +335,7 @@ onMounted(loadList);
   background: linear-gradient(135deg, #FF8C42, #FFB347);
   color: white;
   border: none;
-  border-radius: 24px;
+  border-radius: var(--r-pill);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -356,7 +356,7 @@ onMounted(loadList);
 
 .album-item {
   position: relative;
-  border-radius: 16px;
+  border-radius: var(--r-card);
   overflow: hidden;
   background: white;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -399,7 +399,7 @@ onMounted(loadList);
   font-size: 11px;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   pointer-events: none;
 }
 
@@ -449,7 +449,7 @@ onMounted(loadList);
 .preview-card {
   position: relative;
   background: white;
-  border-radius: 20px;
+  border-radius: var(--r-card);
   overflow: hidden;
   max-width: 480px;
   width: 100%;
@@ -513,7 +513,7 @@ onMounted(loadList);
   justify-content: center;
   gap: 6px;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: var(--r-control);
   border: 1px solid #eee;
   background: #f9f9f9;
   color: #666;

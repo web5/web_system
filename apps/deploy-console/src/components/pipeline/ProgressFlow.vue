@@ -343,7 +343,7 @@ function isWatchdog(s: string) {
 <style scoped>
 .progress-flow {
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   padding: 16px 16px 10px;
   background: #fff;
 }
@@ -359,14 +359,14 @@ function isWatchdog(s: string) {
   color: #1677ff;
   font-size: 12px;
   background: #e6f4ff;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   padding: 2px 8px;
 }
 .coarse-hint {
   font-size: 11px;
   color: var(--ws-text-tertiary);
   border: 1px dashed var(--ws-border);
-  border-radius: 3px;
+  border-radius: var(--r-chip);
   padding: 0 6px;
   line-height: 18px;
 }
@@ -412,7 +412,7 @@ function isWatchdog(s: string) {
   padding: 5px 14px;
   width: 100%;
   border: 1px solid var(--ws-border);
-  border-radius: 2px;
+  border-radius: var(--r-card);
   background: var(--ws-bg-surface);
   cursor: pointer;
   white-space: nowrap;
@@ -439,7 +439,7 @@ function isWatchdog(s: string) {
   width: 100%;
   padding: 3px 10px;
   border: 1px solid var(--ws-border);
-  border-radius: 2px;
+  border-radius: var(--r-card);
   background: var(--ws-bg-surface);
   font-size: 11px;
   cursor: pointer;
@@ -457,7 +457,7 @@ function isWatchdog(s: string) {
   color: var(--ws-text-secondary);
   background: var(--ws-bg-subtle);
   border-right: 1px solid var(--ws-border);
-  border-radius: 1px 0 0 1px;
+  border-radius: var(--r-chip) 0 0 var(--r-chip);
 }
 .orch-task .tname {
   color: var(--ws-text-secondary);
@@ -469,7 +469,7 @@ function isWatchdog(s: string) {
 .orch-task .tag {
   font-size: 10px;
   line-height: 15px;
-  border-radius: 3px;
+  border-radius: var(--r-chip);
   padding: 0 4px;
 }
 .tag.t-approval {
@@ -647,7 +647,7 @@ function isWatchdog(s: string) {
   font-size: 11px;
   color: #1677ff;
   background: #e6f4ff;
-  border-radius: 3px;
+  border-radius: var(--r-chip);
   padding: 0 4px;
   line-height: 16px;
   cursor: pointer;
@@ -656,7 +656,7 @@ function isWatchdog(s: string) {
 .mini-tag {
   font-size: 10px;
   line-height: 16px;
-  border-radius: 3px;
+  border-radius: var(--r-chip);
   padding: 0 4px;
   white-space: nowrap;
 }

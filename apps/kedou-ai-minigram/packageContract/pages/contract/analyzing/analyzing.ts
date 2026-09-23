@@ -21,7 +21,14 @@ const EXEC_PLAN = [
 ];
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     /** 动态子标题（sub）：思考中/执行中/报告字数 */
     thinkingText: '正在读取合同内容…',
     /** 执行步骤骨架：思考完成（首个 tool_call）后才出现 */

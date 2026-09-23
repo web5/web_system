@@ -134,7 +134,7 @@
   padding: 6px 14px;
   background: rgba(255, 140, 66, 0.1);
   border: 1px solid rgba(255, 140, 66, 0.15);
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   font-size: 13px;
   color: #FF8C42;
   font-weight: 500;
@@ -178,7 +178,7 @@
 
 .hero-btn {
   padding: 14px 28px;
-  border-radius: 24px;
+  border-radius: var(--r-pill);
   font-size: 15px;
   font-weight: 600;
   text-decoration: none;
@@ -225,7 +225,7 @@
 .scan-card {
   width: 280px;
   background: #fff;
-  border-radius: 20px;
+  border-radius: var(--r-card);
   padding: 24px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(255, 140, 66, 0.08);
@@ -244,7 +244,7 @@
   height: 160px;
   margin: 0 auto 16px;
   background: #f5f5f5;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -254,7 +254,7 @@
   width: 160px;
   height: 160px;
   display: block;
-  border-radius: 8px;
+  border-radius: var(--r-card);
 }
 
 .scan-info {
@@ -284,7 +284,7 @@
 .feature-tag {
   padding: 4px 10px;
   background: rgba(255, 140, 66, 0.08);
-  border-radius: 12px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   color: #FF8C42;
 }
@@ -324,7 +324,7 @@
 .step-card {
   background: #FFFBF5;
   border: 1px solid rgba(255, 140, 66, 0.1);
-  border-radius: 20px;
+  border-radius: var(--r-card);
   padding: 32px 24px;
   text-align: center;
   transition: all 0.2s;
@@ -402,7 +402,7 @@
   background: #fff;
   color: #FF8C42;
   border: 1.5px solid #FF8C42;
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
@@ -422,7 +422,7 @@
 .preview-card {
   aspect-ratio: 4/3;
   background: #fff;
-  border-radius: 20px;
+  border-radius: var(--r-card);
   border: 2px dashed rgba(255, 140, 66, 0.2);
   display: flex;
   align-items: center;

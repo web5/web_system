@@ -30,6 +30,7 @@ function formatTime(ts: number): string {
 
 Page({
   data: {
+    radiusClass: "",
     list: [] as HistoryItemDisplay[],
     multiSelectMode: false,
     selectedIds: [] as string[],
@@ -39,6 +40,10 @@ Page({
   },
 
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     this.loadHistory();
   },
 

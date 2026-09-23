@@ -90,6 +90,17 @@ export async function tryRefreshToken(): Promise<{ accessToken: string; refreshT
   }
 }
 
+/**
+ * per-request 静默开关。
+ * silent=true 时，失败只走调用方自己的日志，不弹全局错误提示 ——
+ * 用于「本地乐观应用 + 后台同步」类调用（如界面偏好上报，失败不回滚也不打扰用户）。
+ */
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    silent?: boolean;
+  }
+}
+
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -103,7 +114,7 @@ request.interceptors.response.use(
     return body;
   },
   async (error) => {
-    const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean; silent?: boolean };
 
     if (error.response) {
       const { status, data } = error.response;
@@ -134,10 +145,10 @@ request.interceptors.response.use(
           const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
           router.push(`/login${redirectPath}`);
         }
-      } else {
+      } else if (!config.silent) {
         message.error(data?.message || '请求失败');
       }
-    } else {
+    } else if (!config.silent) {
       message.error('网络错误，请检查网络连接');
     }
 

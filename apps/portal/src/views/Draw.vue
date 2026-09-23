@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
   font-size: 14px;
   cursor: pointer;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   transition: all 0.2s;
 }
 .back-btn:hover {
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 10px 28px;
   border: 1px solid rgba(255, 140, 66, 0.12);
-  border-radius: 12px;
+  border-radius: var(--r-control);
   background: #fff;
   color: #888;
   font-size: 15px;
@@ -645,7 +645,7 @@ onBeforeUnmount(() => {
 .toolbar {
   background: #fff;
   border: 1px solid rgba(255, 140, 66, 0.1);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   padding: 16px 20px;
   margin-bottom: 16px;
   display: flex;
@@ -668,7 +668,7 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 32px;
   border: 1px solid rgba(255, 140, 66, 0.15);
-  border-radius: 6px;
+  border-radius: var(--r-control);
   cursor: pointer;
   background: #fff;
 }
@@ -691,7 +691,7 @@ onBeforeUnmount(() => {
 }
 .canvas-container {
   background: #fff;
-  border-radius: 14px;
+  border-radius: var(--r-card);
   padding: 20px;
   border: 1px solid rgba(255, 140, 66, 0.08);
   box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
@@ -702,7 +702,7 @@ canvas {
   width: 100%;
   height: 100%;
   border: 1px solid #f0e8e0;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   cursor: crosshair;
 }
 
@@ -717,7 +717,7 @@ canvas {
 .gen-panel {
   background: #fff;
   border: 1px solid rgba(255, 140, 66, 0.1);
-  border-radius: 16px;
+  border-radius: var(--r-card);
   padding: 24px;
   margin-bottom: 20px;
   box-shadow: 0 2px 12px rgba(255, 140, 66, 0.04);
@@ -745,7 +745,7 @@ canvas {
   flex: 1;
   background: #FFFBF5;
   border: 1px solid rgba(255, 140, 66, 0.12);
-  border-radius: 14px;
+  border-radius: var(--r-control);
   padding: 14px 18px;
   color: #333;
   font-size: 15px;
@@ -766,7 +766,7 @@ canvas {
   width: 48px;
   height: 48px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r-control);
   background: linear-gradient(135deg, #FF8C42, #FFB347);
   color: #fff;
   font-size: 15px;
@@ -815,7 +815,7 @@ canvas {
   padding: 6px 14px;
   background: #FFFBF5;
   border: 1px solid rgba(255, 140, 66, 0.08);
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   font-size: 13px;
   color: #888;
   cursor: pointer;
@@ -831,7 +831,7 @@ canvas {
 .gen-result-area {
   background: #fff;
   border: 1px solid rgba(255, 140, 66, 0.1);
-  border-radius: 16px;
+  border-radius: var(--r-card);
   min-height: 300px;
   display: flex;
   align-items: center;
@@ -912,7 +912,7 @@ canvas {
 }
 .result-image-wrapper {
   position: relative;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   overflow: hidden;
   margin-bottom: 16px;
   border: 1px solid rgba(255, 140, 66, 0.1);
@@ -945,7 +945,7 @@ canvas {
 .overlay-btn {
   padding: 10px 20px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
+  border-radius: var(--r-control);
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   font-size: 14px;
@@ -1013,7 +1013,7 @@ canvas {
   gap: 10px;
 }
 .history-item {
-  border-radius: 10px;
+  border-radius: var(--r-card);
   overflow: hidden;
   border: 1px solid rgba(255, 140, 66, 0.08);
   cursor: pointer;

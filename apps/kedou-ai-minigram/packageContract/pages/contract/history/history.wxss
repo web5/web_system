@@ -16,7 +16,7 @@ page {
 }
 .hist-item {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   padding: 24rpx;
   display: flex;
   align-items: center;
@@ -26,7 +26,7 @@ page {
 .hist-ic {
   width: 64rpx;
   height: 64rpx;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   background: #EAF2FF;
   display: flex;
   align-items: center;
@@ -57,7 +57,7 @@ page {
   font-size: 22rpx;
   font-weight: 600;
   padding: 8rpx 16rpx;
-  border-radius: 20rpx;
+  border-radius: var(--r-chip);
 }
 .hist-stat.danger {
   background: #FDEBEC;

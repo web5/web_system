@@ -223,7 +223,7 @@ onBeforeUnmount(() => stopTts());
   gap: 4px;
   height: 26px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   font-size: 12px;
   color: var(--ws-text-tertiary);
 }

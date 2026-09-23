@@ -256,12 +256,12 @@ const handleLogout = async () => {
   cursor: pointer;
 }
 .sider-logo:hover { opacity: .85; }
-.sider-logo-img { border-radius: 4px; flex-shrink: 0; }
+.sider-logo-img { border-radius: var(--r-chip); flex-shrink: 0; }
 .logo-text { color: #FF8C42; font-size: 16px; font-weight: 700; white-space: nowrap; }
 
 .collapse-toggle {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 4px;
+  width: 28px; height: 28px; border-radius: var(--r-control);
   border: 1px solid var(--border-light); background: var(--input-bg);
   color: var(--text-tertiary); cursor: pointer; font-size: 12px;
   transition: all .2s; padding: 0; flex-shrink: 0;
@@ -309,7 +309,7 @@ const handleLogout = async () => {
 
 .theme-toggle {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 4px;
+  width: 34px; height: 34px; border-radius: var(--r-control);
   border: 1px solid var(--border-light); background: var(--input-bg);
   color: var(--text-tertiary); cursor: pointer;
   transition: all .2s; padding: 0; flex-shrink: 0;
@@ -321,7 +321,7 @@ const handleLogout = async () => {
 
 .user-name {
   display: flex; align-items: center; gap: 8px; cursor: pointer;
-  padding: 4px 12px 4px 4px; border-radius: 4px;
+  padding: 4px 12px 4px 4px; border-radius: var(--r-chip);
   transition: background .2s;
 }
 .user-name:hover { background: rgba(255,140,66,.12); }

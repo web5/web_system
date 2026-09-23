@@ -192,6 +192,37 @@
           </div>
         </a-tab-pane>
 
+        <a-tab-pane key="appearance" tab="外观">
+          <div class="tab-content">
+            <div class="section-card">
+              <div class="section-title">
+                <BgColorsOutlined class="section-icon" />
+                <span>外观</span>
+              </div>
+              <a-form layout="vertical" class="settings-form">
+                <a-form-item label="圆角风格">
+                  <a-radio-group
+                    :value="themeStore.radiusStyle"
+                    button-style="solid"
+                    @change="onRadiusChange"
+                  >
+                    <a-radio-button v-for="o in RADIUS_OPTIONS" :key="o.value" :value="o.value">
+                      {{ o.label }}
+                    </a-radio-button>
+                  </a-radio-group>
+                  <p class="form-hint">{{ radiusDesc }}</p>
+                </a-form-item>
+                <a-form-item label="深色模式">
+                  <div class="appearance-row">
+                    <a-switch :checked="themeStore.isDark" @change="() => themeStore.toggleTheme()" />
+                    <span class="form-hint">顶栏的快捷开关与本项指向同一状态，切换后即时生效。</span>
+                  </div>
+                </a-form-item>
+              </a-form>
+            </div>
+          </div>
+        </a-tab-pane>
+
         <a-tab-pane key="logs" tab="操作日志">
           <div class="tab-content">
             <div class="section-card">
@@ -231,16 +262,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import type { Dayjs } from 'dayjs';
 import type { Ref } from 'vue';
 import {
   AppstoreOutlined, ControlOutlined, SafetyCertificateOutlined,
-  MailOutlined, FileSearchOutlined, ThunderboltOutlined,
+  MailOutlined, FileSearchOutlined, ThunderboltOutlined, BgColorsOutlined,
 } from '@ant-design/icons-vue';
 import { getSettings, updateSettings, getLogs } from '@/api/settings';
 import { fetchDictItems } from '@/api/dict';
+import { useThemeStore, RADIUS_OPTIONS } from '@/stores/theme';
 
 /** 操作日志类型下拉来自字典 operation_log_type（写入端与筛选共用同一取值） */
 const logTypeOptions = ref<Array<{ value: string; label: string }>>([]);
@@ -253,6 +285,15 @@ async function loadLogTypeOptions(): Promise<void> {
   } catch {
     /* 字典不可用时保持空下拉，仍可按操作人/时间查询 */
   }
+}
+
+/** 外观 Tab：圆角风格（用户偏好三档）+ 深色模式（与顶栏快捷开关同一 store，不产生第二份状态） */
+const themeStore = useThemeStore();
+const radiusDesc = computed(
+  () => RADIUS_OPTIONS.find((o) => o.value === themeStore.radiusStyle)?.desc ?? '',
+);
+function onRadiusChange(e: any) {
+  themeStore.setRadiusStyle(e.target.value);
 }
 
 const tab = ref('basic');
@@ -413,7 +454,7 @@ onMounted(async () => {
 .tab-content { max-width: 680px; }
 .section-card {
   background: linear-gradient(135deg, var(--card-bg-start) 0%, var(--card-bg-end) 100%);
-  border: 1px solid var(--card-border); border-radius: 4px; padding: 28px 32px;
+  border: 1px solid var(--card-border); border-radius: var(--r-card); padding: 28px 32px;
 }
 .section-title {
   display: flex; align-items: center; gap: 10px;
@@ -428,7 +469,7 @@ onMounted(async () => {
 .settings-form :deep(.ant-form-item-label > label) { color: var(--text-tertiary); font-size: 13px; }
 .settings-form :deep(.ant-input), .settings-form :deep(.ant-input-affix-wrapper), .settings-form :deep(.ant-input-number), .settings-form :deep(.ant-select-selector) {
   background: var(--input-bg) !important; border-color: var(--input-border) !important; color: var(--input-text);
-  border-radius: 4px;
+  border-radius: var(--r-control);
 }
 .settings-form :deep(.ant-input::placeholder), .settings-form :deep(.ant-select-selection-placeholder) { color: var(--input-placeholder); }
 .settings-form :deep(.ant-input:hover), .settings-form :deep(.ant-input-affix-wrapper:hover), .settings-form :deep(.ant-input-number:hover), .settings-form :deep(.ant-select:hover .ant-select-selector) {
@@ -443,6 +484,20 @@ onMounted(async () => {
 .unit-text { margin-left: 8px; color: var(--text-muted); font-size: 13px; }
 .inline-label { color: var(--text-secondary); font-size: 13px; }
 .section-divider { margin: 24px 0 !important; }
+
+/* 外观 Tab：圆角风格说明文案 + 深色模式行 */
+.form-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.appearance-row .form-hint { margin: 0; }
 
 .form-actions {
   display: flex; gap: 12px; margin-top: 16px;

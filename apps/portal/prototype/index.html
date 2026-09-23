@@ -9,6 +9,15 @@
   --brand:#F97316; --brand-strong:#C2410C; --brand-weak:#FFF7ED; --brand-line:#FED7AA;
   --accent:#0E9B8C; --ok:#16A34A; --warn:#D97706; --danger:#DC2626;
   --page-bg:#F7F4F0; --card:#FFFFFF; --line:rgba(60,60,67,.12); --line-strong:rgba(60,60,67,.2);
+  --code-bg:#1C1E26; --code-hd:#16181F; --code-text:#E2E8F0; --code-hd-text:#A5ACBA;
+  --text-body:#3F3F46; --text-strong:#18181B;
+  /* 新规范阶梯（design-system E11/E13/G12，2026-09-22）：落码同步到端内 token 层 */
+  --leading-tight:1.25; --leading-snug:1.4; --leading-normal:1.6; --leading-relaxed:1.75;
+  --tracking-tight:-0.02em; --tracking-normal:0; --tracking-wide:0.02em;
+  --duration-fast:150ms; --duration-base:200ms; --duration-slow:300ms;
+  --ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+  --control-sm:24px; --control-md:32px; --control-lg:40px;
+  --icon-inline:16px; --icon-action:20px; --icon-feature:24px;
   --on-brand:#FFFFFF; --on-brand-mute:#FFE3D1; --neutral-chip:#E7E5E4;
   --hi-bg:#FEE2E2; --hi-fg:#B91C1C; --mid-bg:#FEF3C7; --mid-fg:#B45309; --ok-bg:#DCFCE7; --ok-fg:#15803D;
   --err-bg:#FEF2F2; --err-line:#FECACA; --hl-bg:#FDE68A; --hl-fg:#92400E;
@@ -42,6 +51,21 @@ input,textarea{font:inherit;color:inherit}
 .nav-list-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px}
 .nav-list-hd .t{font-size:12px;color:var(--t3);font-weight:600;letter-spacing:.02em}
 .lst{flex:1;overflow:auto;padding:0 8px 12px}
+/* 左栏底部·能力：高度固定（默认 2 项 + 底部入口）、钉在底部（margin-top:auto），
+   不随记录列表滚动、不压空态；多余能力不展开，统一收到「更多 N 项 · 查看全部」 */
+.caps{flex:0 0 auto;margin-top:auto;border-top:1px solid var(--line);padding:8px}
+.caps.solo{margin-top:0}
+.caps-hd{font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.02em;padding:0 4px 6px}
+.cap-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r-sm);cursor:pointer;margin-bottom:2px}
+.cap-item:hover{background:var(--page-bg)}
+.cap-item .n{font-size:13px;color:var(--t1);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cap-item.on{background:var(--brand-weak)}
+.cap-item.on .n{color:var(--brand-strong);font-weight:600}
+.cap-item.dis{color:var(--t4)}
+.cap-item.dis .n{color:var(--t4)}
+.cap-more{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;padding:6px 8px;font-size:12px;color:var(--t2);cursor:pointer}
+.cap-more:hover{background:var(--page-bg);color:var(--brand-strong)}
+.cap-all{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:4px;padding:6px 8px;border-top:1px solid var(--line);font-size:12px;color:var(--brand-strong);cursor:pointer}
 .lst-item{padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;margin-bottom:2px}
 .lst-item:hover{background:var(--page-bg)}
 .lst-item.on{background:var(--brand-weak)}
@@ -118,17 +142,20 @@ input,textarea{font:inherit;color:inherit}
 .ubub{max-width:78%;background:var(--brand);color:var(--on-brand);border-radius:16px 16px 4px 16px;padding:8px 16px;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
 /* AI：无边框无底色，靠排版分层（结论 → 论据 → 法条 → 行动） */
 .ameta{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--t3)}
-.ans{font-size:14.5px;line-height:1.8;color:var(--t1)}
+/* 焦点态（G11）+ 动效（G12）：统一 150ms ease-out 微交互 */
+:focus-visible{outline:none;box-shadow:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249,115,22,.55)}
+u[onclick],.ans .codeblk .hd .cp,.act{transition:color var(--duration-fast) var(--ease-out),background var(--duration-fast) var(--ease-out)}
+.ans{font-size:14px;line-height:var(--leading-relaxed);color:var(--text-body)}
 .ans p{margin:0 0 16px}
 .ans p:last-child{margin-bottom:0}
-.ans .lead{font-size:15px;font-weight:500}
-.ans b{font-weight:600}
-.ans h4{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:24px 0 8px}
+.ans .lead{font-size:14.5px;font-weight:500;color:var(--text-strong)}
+.ans b{font-weight:600;color:var(--text-strong)}
+.ans h4{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:24px 0 8px;color:var(--text-strong);letter-spacing:var(--tracking-tight)}
 .ans h4::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--brand);flex:0 0 3px}
 .ans ol{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px}
 .ans ol li{display:flex;gap:8px;align-items:flex-start}
 .ans ol .n{width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--brand-weak);color:var(--brand-strong);font-size:12px;font-weight:600;display:grid;place-items:center;margin-top:4px}
-.ans .law{margin:0 0 16px;padding:8px 16px;border-left:3px solid var(--brand);background:var(--brand-weak);border-radius:0 8px 8px 0;font-size:13px;line-height:1.75;color:var(--t2)}
+.ans .law{margin:0 0 16px;padding:8px 16px;border-left:3px solid var(--brand);background:var(--brand-weak);border-radius:0 8px 8px 0;font-size:13px;line-height:var(--leading-relaxed);color:var(--t2)}
 .ans .law b{display:block;font-size:12px;font-weight:600;color:var(--brand-strong);margin-bottom:2px}
 .ans .cmp{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
 .ans .cmp th{background:var(--page-bg);font-size:12px;font-weight:600;color:var(--t3);text-align:left;padding:8px 16px;white-space:nowrap}
@@ -137,13 +164,14 @@ input,textarea{font:inherit;color:inherit}
 .ans .copybox{margin:0 0 16px;border:1px solid var(--brand-line);border-radius:var(--r-md);background:var(--brand-weak);overflow:hidden}
 .ans .copybox .hd{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--brand-line);font-size:12px;font-weight:600;color:var(--brand-strong)}
 .ans .copybox .bd{padding:16px;font-size:14px;line-height:1.85;color:var(--t1);white-space:pre-wrap}
-/* markdown 代码块（``` 围栏）：弱底等宽块，头行 = 语言标签 + 复制；长行横向滚动不换行 */
-.ans .codeblk{margin:0 0 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--page-bg);overflow:hidden}
-.ans .codeblk .hd{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--t3)}
-.ans .codeblk .hd b{font-weight:600;color:var(--t2);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.ans .codeblk .hd .cp{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)}
-.ans .codeblk .hd .cp:hover{color:var(--brand-strong)}
-.ans .codeblk pre{margin:0;padding:12px 16px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.7;color:var(--t1);white-space:pre}
+/* markdown 代码块（``` 围栏）：深色代码块（浅色页面里的深底，Notion/ChatGPT 同款），头行 = 语言标签 + 复制；长行横向滚动不换行 */
+.ans .codeblk{margin:0 0 16px;border-radius:var(--r-md);background:var(--code-bg);overflow:hidden}
+.ans .codeblk .hd{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--code-hd)}
+.ans .codeblk .hd b{font-weight:600;font-size:12px;letter-spacing:.3px;color:var(--code-hd-text);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.ans .codeblk .hd .cp{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--code-hd-text)}
+.ans .codeblk .hd .cp:hover{color:var(--brand)}
+/* 12.5px = 字阶例外（代码块专用，等宽场景惯例），已在 specs/agent-message-extract/page-spec.md 登记 */
+.ans .codeblk pre{margin:0;padding:12px 16px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:var(--leading-relaxed);color:var(--code-text);white-space:pre}
 /* 来源 / 下一步建议 */
 .srcs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 .src{display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 12px;border:1px solid var(--brand-line);background:var(--card);border-radius:12px;font-size:12px;color:var(--brand-strong)}
@@ -351,6 +379,8 @@ input,textarea{font:inherit;color:inherit}
     <aside class="nav" id="navSide">
       <div class="nav-list-hd"><span class="t" id="lstTitle">会话</span><button class="btn ghost sm" onclick="newTask()">+ 新建</button></div>
       <div class="lst" id="navList"></div>
+      <!-- 左栏下半区：能力（少部分高度）——切换能力 + 「查看全部能力」= 回发现 -->
+      <div class="caps" id="sideCaps"></div>
     </aside>
     <main class="work" id="work"></main>
     <div id="ctxSlot"></div>
@@ -366,6 +396,8 @@ input,textarea{font:inherit;color:inherit}
     <button onclick="demo('tcard')">翻译卡片</button>
     <button onclick="demo('mcard')">音乐卡片</button>
     <button onclick="demo('code')">代码块</button>
+    <button onclick="demoFail()">体检失败</button>
+    <button onclick="demoNoReport()">报告空态</button>
     <button onclick="resetAll()">重置</button>
   </div>
   <button onclick="document.getElementById('protoBar').classList.toggle('open')">说明 ▲</button>
@@ -398,6 +430,7 @@ const I = {
   warn:'<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   right:'<path d="M9 18l6-6-6-6"/>',
   left:'<path d="M15 18l-6-6 6-6"/>',
+  down:'<path d="M6 9l6 6 6-6"/>',
   up:'<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>',
   dl:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
@@ -425,7 +458,12 @@ const QUOTES = [
 const S = {
   view:'welcome', sid:'c1', qi:0, ck:false, ctxOpen:true, cmd:null, cmdIdx:0,
   /* 合翻：home → upload → analyzing → result（对齐小程序 packageContract 八页合一） */
-  step:'home', sig:null,
+  /* ctext=合同文本（OCR 回填 / 粘贴共用）· ocring=OCR 中 · noReport=报告空态（P3 演示） */
+  step:'home', sig:null, ctext:'', ocring:false, noReport:false,
+  /* 能力切换器浮层开关（C 端做法：像模型/场景切换器，不是 admin 面包屑） */
+  cs:false,
+  /* 左栏底部能力面板：默认只展示 2 项，「更多」就地展开（含敬请期待项） */
+  capsMore:false,
   /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
   trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
@@ -443,26 +481,32 @@ const SESS = {
   c4:{t:'供应商合同风险复查', a:'合同翻译官', time:'上周', dot:'mid', k:'contract'}
 };
 
+/* 顶栏只留「开始 / 对话 / 发现 / 实验室」（2026-09-23 反馈：顶栏太多）；
+   翻译 / 合翻收进「发现」能力卡片，顶栏不占位但高亮归「发现」 */
 const NAV = [
   {k:'welcome', n:'开始', i:I.home},
   {k:'chat', n:'对话', i:I.chat},
   {k:'discover', n:'发现', i:I.grid},
-  {k:'translate', n:'翻译', i:I.lang},
-  {k:'contract', n:'合翻', i:I.doc},
   {k:'lab', n:'实验室', i:I.flask}
 ];
+/* 顶栏未列出的能力页：顶栏高亮落到 parent 上（进入 /translate、/contract 时「发现」亮） */
+const NAV_PARENT = {translate:'discover', contract:'discover'};
 const LIST_TITLE = {welcome:'最近对话', chat:'会话', discover:'能力', translate:'翻译记录', contract:'体检记录', profile:'账号', lab:'实验功能'};
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
 function render(){
   // 顶部一级导航（2026-09-21 反馈：菜单上移顶栏，左栏只留记录列表）
+  // 2026-09-23：翻译 / 合翻收进发现，顶栏不占位，但高亮落到 parent（进入能力页时「发现」亮）
+  const act = NAV_PARENT[S.view] || S.view;
   document.getElementById('topnav').innerHTML = NAV.map(n=>
-    '<button class="'+(S.view===n.k?'on':'')+'" onclick="go(\''+n.k+'\')">'+SVG(n.i)+n.n+'</button>').join('');
+    '<button class="'+(act===n.k?'on':'')+'" onclick="go(\''+n.k+'\')">'+SVG(n.i)+n.n+'</button>').join('');
   // 左栏仅在有记录/信息语义的视图显示；入口网格视图（发现/实验室）隐藏，避免与中栏卡片重复
   document.getElementById('navSide').style.display = (S.view==='discover'||S.view==='lab')?'none':'flex';
   document.getElementById('lstTitle').textContent = LIST_TITLE[S.view]||'列表';
   document.getElementById('navList').innerHTML = renderList();
+  // 左栏下半区：能力（发现 / 实验室本身是能力网格，不再重复挂）
+  document.getElementById('sideCaps').innerHTML = renderCaps();
   // 工作区
   document.getElementById('work').innerHTML = renderWork();
   // 右栏
@@ -503,6 +547,31 @@ function renderWork(){
   if(v==='profile') return workProfile();
   if(v==='lab') return workLab();
   return '';
+}
+/* 能力清单（与发现页卡片同源，数据写死归因 Q3 / 后端 B2） */
+const CAPS = [
+  {n:'语言翻译官', d:'三版译文对照 · 语气点评', ic:I.lang, v:'translate'},
+  {n:'合同翻译官', d:'合同风险 · 权益 · 大白话', ic:I.doc, v:'contract'},
+  {n:'论文速读', d:'上传论文，提取核心结论', ic:I.search, v:''},
+  {n:'文案改写', d:'按平台与受众重写文案', ic:I.grid, v:''}
+];
+/* 左栏下半区·能力：既是「换能力」的入口，也是回发现的唯一出口（2026-09-23 反馈：
+   顶栏收口后能力页要有回路；位置放左栏下半区，不做页头面包屑 / 返回按钮——太 admin） */
+function renderCaps(){
+  if(S.view==='discover'||S.view==='lab'||S.view==='profile') return '';
+  // 默认只展示 2 项已启用能力（面板高度固定）；其余收在「更多 N 项」里**就地展开**（不跳发现）
+  const brief = CAPS.filter(c=>c.v).slice(0,2);
+  const shown = S.capsMore ? CAPS : brief;
+  const more = CAPS.length - brief.length;
+  return '<div class="caps-hd">能力</div>'+
+    shown.map(c=>c.v
+      ? '<div class="cap-item'+(S.view===c.v?' on':'')+'" onclick="go(\''+c.v+'\')">'+SVG(c.ic)+
+        '<span class="n">'+c.n+'</span>'+(S.view===c.v?SVG(I.check):'')+'</div>'
+      : '<div class="cap-item dis" onclick="toast(\'该能力尚未开放\')">'+SVG(c.ic)+
+        '<span class="n">'+c.n+'</span><span class="tag">敬请期待</span></div>').join('')+
+    (more>0 ? '<div class="cap-more" onclick="S.capsMore=!S.capsMore;render()">'+
+      (S.capsMore?'收起':'更多 '+more+' 项')+SVG(S.capsMore?I.up:I.down)+'</div>' : '')+
+    '<div class="cap-all" title="去发现页看全部能力" onclick="go(\'discover\')">查看全部能力 '+SVG(I.right)+'</div>';
 }
 function hd(title, sub, ops){
   return '<div class="work-hd"><div><h1>'+esc(title)+'</h1>'+(sub?'<div style="font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;margin-top:2px">'+sub+'</div>':'')+'</div><span class="spacer"></span>'+(ops||'')+'</div>';
@@ -790,6 +859,14 @@ const OPTIMIZE = [
   {stage:'长期', t:'续签前主动复核条款', plain:'续签前 60 日提出条款复核，避免自动续约沿用旧条款。', actions:['设置续签提醒']}
 ];
 const KEY_NUMBERS = [['月租金','¥8,500'],['押金','¥25,500'],['逾期日违约金','5%'],['建议递增上限','5% / 年']];
+/* 示例合同：与 SIGS / KEY_NUMBERS / RIGHTS 同源（条款编号对得上），用于 OCR 回填与「使用示例合同」 */
+const CONTRACT_SAMPLE = '房屋租赁合同\n'+
+'甲方（出租方）：王某　乙方（承租方）：李某\n'+
+'第一条 房屋基本情况：甲方将位于 XX 市 XX 区 XX 路 88 号 2 单元 501 室的房屋出租给乙方使用，建筑面积 68 平方米。\n'+
+'第二条 租赁期限：自 2026 年 10 月 1 日起至 2028 年 9 月 30 日止，共计 24 个月。\n'+
+'第五条 租金及支付方式：5.1 乙方应于每月 5 日前向甲方支付当月租金人民币 8,500 元。5.2 租金递增比例由甲方于每年度开始前 30 日书面通知乙方，乙方不得异议。5.3 乙方逾期支付租金的，每逾期一日按当月租金的 5% 向甲方支付违约金。\n'+
+'第七条 押金：乙方于签约时支付押金人民币 25,500 元；7.2 退租时房屋损耗赔偿金由甲方核定，从押金中扣除。\n'+
+'第九条 提前解约：9.1 租赁期内乙方提前退租的，应向甲方支付相当于 3 个月租金的违约金。';
 /* 执行步骤：对齐小程序 analyzing 页 EXEC_PLAN（含 skipped 态） */
 const PLAN = [['清洗合同文本','done'],['扫描法定风险信号','done'],['测算真实年化利率','skip'],['对比市场基准','run'],['生成体检报告','wait']];
 
@@ -818,13 +895,28 @@ function workContract(){
     '</div>';
   if(S.step==='upload') return hd('上传合同', '<span class="tag">第 1 步 / 共 3 步</span>', '') +
     '<div class="pane">'+ STEPS(2) +
-    '<div class="drop"><div style="margin-bottom:12px;color:var(--brand-strong);display:grid;place-items:center">'+SVG(I.up,1)+'</div>'+
-    '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px">上传需要体检的合同</h3>'+
-    '<p style="color:var(--t2);font-size:13px;margin-bottom:8px">拖拽<b>图片</b>到此处，或点击选择 / 直接粘贴文本（不超过 8000 字）</p>'+
-    '<p style="font-size:12px;color:var(--t3);margin-bottom:16px">图片走 OCR 识别（对齐小程序）；<b>PDF / Word 解析本轮不支持</b>（Q11 拍板）</p>'+
-    '<div style="display:flex;gap:8px;justify-content:center"><button class="btn" onclick="toast(\'选择文件\')">选择文件</button>'+
-    '<button class="btn" onclick="toast(\'已载入示例：房屋租赁合同\')">使用示例合同</button>'+
-    '<button class="btn pri" onclick="S.step=\'analyzing\';render();setTimeout(()=>{S.step=\'result\';render();},1800)">开始 AI 体检</button></div></div>'+
+    /* OCR 中：图片识别是异步的，必须给用户可见进度（不能点了没反应） */
+    (S.ocring
+      ? '<div class="drop"><div style="margin-bottom:12px;display:grid;place-items:center"><span class="thinking"><i></i><i></i><i></i></span></div>'+
+        '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px">正在识别图片文字…</h3>'+
+        '<p style="color:var(--t2);font-size:13px">OCR 约需几秒，识别结果会填入下方文本框，可再手工修改</p></div>'
+      : '<div class="drop"><div style="margin-bottom:12px;color:var(--brand-strong);display:grid;place-items:center">'+SVG(I.up,1)+'</div>'+
+        '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px">上传需要体检的合同</h3>'+
+        '<p style="color:var(--t2);font-size:13px;margin-bottom:8px">拖拽<b>图片</b>到此处，或点击选择 / 直接在下方粘贴文本（不超过 8000 字）</p>'+
+        '<p style="font-size:12px;color:var(--t3);margin-bottom:16px">图片走 OCR 识别（对齐小程序）；<b>PDF / Word 解析本轮不支持</b>（Q11 拍板）</p>'+
+        '<div style="display:flex;gap:8px;justify-content:center">'+
+          '<button class="btn" onclick="S.ocring=true;render();setTimeout(()=>{S.ocring=false;S.ctext=CONTRACT_SAMPLE;render();},1400)">选择图片（OCR）</button>'+
+          '<button class="btn" onclick="S.ctext=CONTRACT_SAMPLE;render()">使用示例合同</button>'+
+          '<button class="btn pri" id="cstart"'+(S.ctext.trim()?'':' disabled')+' onclick="if(!S.ctext.trim())return;S.step=\'analyzing\';render();setTimeout(()=>{S.step=\'result\';render();},1800)">开始 AI 体检</button>'+
+        '</div></div>')+
+    /* 粘贴文本区：与小程序同口径的第二条输入路径，OCR 结果也落到这里（可改） */
+    '<div class="card" style="padding:12px;margin-top:16px">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="lb">合同文本</span>'+
+        '<span style="flex:1"></span><span id="ccnt" style="font-size:12px;color:var(--t3)">'+(S.ctext||'').length+' / 8000</span></div>'+
+      '<textarea class="ta" style="min-height:180px" maxlength="8000" spellcheck="false" '+
+        'placeholder="把合同文字粘贴到这里；也可先选图片做 OCR，结果会填进来" '+
+        'oninput="S.ctext=event.target.value;document.getElementById(\'ccnt\').textContent=S.ctext.length+\' / 8000\';var b=document.getElementById(\'cstart\');if(b)b.disabled=!S.ctext.trim()">'+esc(S.ctext||'')+'</textarea>'+
+    '</div>'+
     '<div class="chiprow" style="justify-content:center;margin-top:16px"><span class="lb">合同场景（不选则自动识别）</span>'+
       ['自动识别','房屋租赁','劳动合同','买卖合同'].map((c,i)=>'<button class="chip'+(i===1?' on':'')+'" onclick="this.classList.toggle(\'on\')">'+c+'</button>').join('')+'</div>'+
     '<div class="claim">内容仅用于本次解读 · 可随时删除 · 不用于模型训练</div></div>';
@@ -842,6 +934,25 @@ function workContract(){
     '<div style="display:flex;gap:8px;justify-content:center;margin-top:24px">'+
     "<button class=\"btn sm\" onclick=\"if(confirm('取消后本次识别将中止，已上传的合同不会保存。确定取消吗？')){S.step='upload';render();}\">取消体检</button>"+
     '<button class="btn sm" onclick="toast(\'AI 思考过程：已匹配 12 条风险规则\')">查看完整思考</button></div></div></div>';
+  /* 体检失败：PC 长任务必须有失败分支——原文不能丢，重试 / 返回都要给出路 */
+  if(S.step==='fail') return hd('合同体检未完成', '<span class="tag hi">未完成</span>', '') +
+    '<div class="pane">'+ STEPS(3) +
+    '<div class="card" style="padding:32px;max-width:600px;margin:0 auto;text-align:center">'+
+    '<div style="margin-bottom:12px;display:grid;place-items:center;color:var(--danger)">'+SVG(I.warn,1)+'</div>'+
+    '<h3 style="font-size:16px;font-weight:600;margin-bottom:8px">这次体检没跑完</h3>'+
+    '<p style="color:var(--t2);font-size:13px;margin-bottom:16px">AI 生成报告时中断（网络波动或模型超时）。合同文本还在，可直接重试。</p>'+
+    '<div style="display:flex;gap:8px;justify-content:center">'+
+      '<button class="btn" onclick="S.step=\'upload\';render()">返回修改</button>'+
+      '<button class="btn pri" onclick="S.step=\'analyzing\';render();setTimeout(()=>{S.step=\'result\';render();},1800)">重试体检</button>'+
+    '</div></div>'+
+    '<div class="claim">合同文本不会丢失，重试不重复消耗次数</div></div>';
+  /* 报告空态：解析不出结构化结果时不能渲染半张报告 */
+  if(S.step==='result' && S.noReport) return hd('合同体检报告', '<span class="tag">无数据</span>',
+      '<button class="btn ghost" onclick="S.step=\'home\';S.sig=null;S.noReport=false;render()">回到首页</button>') +
+    '<div class="pane"><div class="card"><div class="empty"><div class="ic" style="color:var(--brand-strong)">'+SVG(I.doc,1)+'</div>'+
+    '<h3>暂无报告数据</h3><p>这次没能解析出风险结论，换一份更完整的合同文本再试一次</p>'+
+    '<button class="btn pri sm" onclick="S.noReport=false;S.step=\'upload\';render()">重新体检</button>'+
+    '</div></div></div>';
   // result：报告页
   const dangerN = SIGS.filter(s=>s.lv==='danger').length, warnN = SIGS.filter(s=>s.lv==='warn').length;
   return hd('房屋租赁协议 · 体检报告', '<span class="tag ok">体检完成</span><span>2026-09-21 10:24</span>',
@@ -1073,7 +1184,10 @@ function openMenu(){
 function confirmClear(){ if(confirm('清除缓存将删除本地临时文件（12.4 MB），不会删除你的对话记录与体检报告。确定清除吗？')) toast('缓存已清除'); }
 function toast(t){ const d=document.createElement('div'); d.className='toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),1600); }
 function toggle(m){ S.mode[m]=!S.mode[m]; ['loading','empty','error'].forEach(k=>{if(k!==m)S.mode[k]=false;}); document.getElementById('pk').classList.toggle('on',S.mode.loading); document.getElementById('pe').classList.toggle('on',S.mode.empty); document.getElementById('pf').classList.toggle('on',S.mode.error); render(); }
-function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+/* 合翻两态演示入口：失败态 / 报告空态（P3，规格 §3.3 状态矩阵） */
+function demoFail(){ S.view='contract'; S.step='fail'; render(); }
+function demoNoReport(){ S.view='contract'; S.step='result'; S.sig=null; S.noReport=true; render(); }
+function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; S.capsMore=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
 
 /* ── ⌘K ── */
 const CMDS = [

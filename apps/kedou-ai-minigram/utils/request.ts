@@ -139,12 +139,12 @@ export async function request<T = any>(options: RequestOptions): Promise<T> {
         } else {
           const data = res.data as any;
           const msg = data?.message || `请求失败 (${res.statusCode})`;
-          wx.showToast({ title: msg, icon: 'none' });
+          if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
           reject(res);
         }
       },
       fail(err) {
-        wx.showToast({ title: '网络请求失败', icon: 'none' });
+        if (!options.silent) wx.showToast({ title: '网络请求失败', icon: 'none' });
         reject(err);
       },
     });

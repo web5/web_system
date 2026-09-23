@@ -140,7 +140,7 @@ onMounted(reload);
 .scene-count {
   background: #f0f0f0;
   color: #999;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   padding: 0 8px;
   font-size: 12px;
   font-weight: 400;

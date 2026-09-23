@@ -1,6 +1,6 @@
 <!-- 科豆 AI · 我的（tab 3）：设置收敛为分组 -->
 <!-- 会话归属按「完全隔离」口径：各应用历史 与 主对话记录 分列，不混成一个列表 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="profile" bindtap="goProfile">
     <view class="avatar">豆</view>
     <view class="info">

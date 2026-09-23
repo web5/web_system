@@ -5,6 +5,7 @@ import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
+import { useUiPrefsStore } from '@/stores/ui-prefs';
 // 与 lifecycle.ts 同序：ui token → ui 基础样式 → portal 自有样式
 import '@web-system/ui/tokens.css';
 import '@web-system/ui/theme.css';
@@ -20,6 +21,8 @@ app.use(pinia);
 
 // pinia persist 插件已自动从 localStorage 恢复状态，无需手动 initFromStorage
 const userStore = useUserStore(pinia);
+// 圆角风格偏好：与 lifecycle.ts 一致，挂载前写到根元素属性（减少首屏跳变）
+useUiPrefsStore(pinia).init();
 
 app.use(router);
 setupAntd(app);

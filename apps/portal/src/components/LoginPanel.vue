@@ -307,7 +307,7 @@ const handleRegister = async () => {
   width: 420px;
   padding: 36px 32px 32px;
   background: #fff;
-  border-radius: 18px;
+  border-radius: var(--r-card);
   box-shadow:
     0 4px 6px rgba(255, 140, 66, 0.06),
     0 20px 60px rgba(255, 140, 66, 0.08);
@@ -345,10 +345,10 @@ const handleRegister = async () => {
   display: inline-flex; width: 52px; height: 52px;
   align-items: center; justify-content: center; margin-bottom: 10px;
   background: transparent;
-  border-radius: 12px;
+  border-radius: var(--r-card);
 }
 .brand-logo {
-  border-radius: 12px;
+  border-radius: var(--r-card);
 }
 .brand-name {
   font-size: 24px; font-weight: 700; color: #333;
@@ -364,7 +364,7 @@ const handleRegister = async () => {
 }
 .tab-btn {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 9px 0; border: 2px solid #f0f0f0; border-radius: 12px;
+  padding: 9px 0; border: 2px solid #f0f0f0; border-radius: var(--r-control);
   background: #fafafa; color: #666; font-size: 14px; font-weight: 500;
   cursor: pointer; transition: all 0.25s ease; outline: none; font-family: inherit;
 }
@@ -381,10 +381,10 @@ const handleRegister = async () => {
 /* ====== 扫码面板 ====== */
 .qrcode-panel { display: flex; flex-direction: column; align-items: center; }
 .qrcode-frame {
-  padding: 12px; background: #fff; border-radius: 14px; line-height: 0;
+  padding: 12px; background: #fff; border-radius: var(--r-card); line-height: 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06), inset 0 0 0 4px rgba(249,115,22,0.08);
 }
-.qrcode-canvas { border-radius: 8px; display: block; }
+.qrcode-canvas { border-radius: var(--r-card); display: block; }
 .qrcode-info { text-align: center; margin-top: 14px; }
 .qrcode-tip { font-size: 15px; color: #333; font-weight: 600; margin: 0; }
 .qrcode-expire { font-size: 12px; color: #bbb; margin: 4px 0 0 0; }
@@ -412,7 +412,7 @@ const handleRegister = async () => {
 .oauth-title { font-size: 18px; font-weight: 600; color: #1a1a2e; margin: 0 0 6px 0; }
 .oauth-desc { font-size: 13px; color: #999; margin: 0 0 22px 0; text-align: center; line-height: 1.5; }
 .oauth-btn {
-  height: 46px; border-radius: 12px; font-size: 16px; font-weight: 600;
+  height: 46px; border-radius: var(--r-control); font-size: 16px; font-weight: 600;
   background: #07c160 !important; border-color: #07c160 !important; color: #fff !important;
   box-shadow: 0 4px 16px rgba(7,193,96,0.35); transition: all 0.3s;
 }
@@ -426,7 +426,7 @@ const handleRegister = async () => {
 .account-panel { padding: 0 2px; }
 .login-form { margin-top: 4px; }
 .submit-btn {
-  height: 44px; border-radius: 12px; font-size: 16px; font-weight: 600;
+  height: 44px; border-radius: var(--r-control); font-size: 16px; font-weight: 600;
   background: #FF8C42 !important;
   border: none !important; box-shadow: 0 4px 14px rgba(255,140,66,0.3);
   transition: box-shadow 0.3s;
@@ -458,6 +458,6 @@ const handleRegister = async () => {
 }
 .login-card :deep(.ant-input-prefix) { color: #FF8C42; }
 .login-card :deep(.ant-input-affix-wrapper),
-.login-card :deep(.ant-input) { border-radius: 12px !important; }
-.login-card :deep(.ant-btn) { border-radius: 12px; }
+.login-card :deep(.ant-input) { border-radius: var(--r-control) !important; }
+.login-card :deep(.ant-btn) { border-radius: var(--r-control); }
 </style>

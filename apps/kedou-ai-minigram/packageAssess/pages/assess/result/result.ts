@@ -1,6 +1,13 @@
 // 合同评估结果页
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     score: 62,
     level: '中等风险',
     summary: '共识别 7 处风险点：2 高 · 3 中 · 2 低，建议重点处理付款与违约条款',

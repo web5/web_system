@@ -1,7 +1,7 @@
 <!-- 科豆 AI · 欢迎页（启动页，非 tab 页）
      手动引入自定义 tabBar：本页是进入「发现 / 我的」的枢纽。
      对话页才是沉浸式（隐藏 tabBar），其顶部返回 icon 回到本页。 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="w-group">
     <view class="w-hello">Hello<text class="dot">.</text></view>
     <view class="w-sub">科豆 AI · 体验不一样的 AI</view>

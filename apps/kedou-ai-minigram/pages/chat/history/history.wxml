@@ -1,5 +1,5 @@
 <!-- 对话记录（由对话页导航栏「列表」icon 进入） -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 加载中且还没有数据：骨架占位（首次进入 / 点击重试），避免一片空白 -->
   <view wx:if="{{loading && !list.length}}" class="list">
     <view wx:for="{{skeletonRows}}" wx:key="*this" class="row">
