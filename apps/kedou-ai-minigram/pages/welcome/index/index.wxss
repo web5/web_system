@@ -33,7 +33,7 @@ page {
 .w-quote {
   margin-top: 64rpx;
   background: var(--card);
-  border-radius: 28rpx;
+  border-radius: var(--r-card);
   padding: 34rpx 32rpx;
   box-shadow: 0 8rpx 28rpx rgba(20, 30, 60, .06);
 }
@@ -58,7 +58,7 @@ page {
 }
 .wr-item {
   background: var(--card);
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 20rpx 24rpx;
   margin-bottom: 12rpx;
   box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, .04);
@@ -76,7 +76,7 @@ page {
 /* 骨架占位条：最近对话加载中（pulse 动画；色值用 --t3 token，不引入裸 hex） */
 .sk {
   background: var(--t3);
-  border-radius: 6rpx;
+  border-radius: var(--r-chip);
   animation: sk-pulse 1.3s ease-in-out infinite;
 }
 .sk-t { width: 54%; height: 22rpx; }
@@ -115,7 +115,7 @@ page {
 
 .btn {
   height: 96rpx;
-  border-radius: 48rpx;
+  border-radius: var(--r-pill);
   background: var(--brand);
   color: #fff;
   display: flex;
