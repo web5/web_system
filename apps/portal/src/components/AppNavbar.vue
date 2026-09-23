@@ -219,7 +219,7 @@ function handleLogout() {
 .avatar {
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--ws-brand-200);
   background: var(--ws-brand-50);
   color: var(--ws-brand-700);
