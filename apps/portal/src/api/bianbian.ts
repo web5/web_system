@@ -16,6 +16,11 @@ export interface TransformData {
   status: string;
   processingTimeMs: number;
   remainingToday: number;
+  /**
+   * 原画临时图片 URL（短链，避免 localStorage 溢出）。
+   * Transform.vue 会优先用它回填原画，后端按需返回，故为可选。
+   */
+  originalImageUrl?: string;
 }
 
 export interface TransformResponse {

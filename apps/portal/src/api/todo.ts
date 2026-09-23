@@ -1,9 +1,16 @@
 import request from './request';
 import type { Todo, CreateTodoDto, UpdateTodoDto, QueryTodoParams, TodoStats, ApiResponse, PaginatedResponse } from '@/types/todo';
 
-/** 获取任务列表 */
-export function getTodoList(params: QueryTodoParams) {
-  return request.get<ApiResponse<PaginatedResponse<Todo>>>('/todos', { params });
+/**
+ * 获取任务列表。
+ *
+ * ⚠️ 响应拦截器已解包 `{ code, data }`（见 api/request.ts），运行时拿到的是 data 本体，
+ * 故返回类型直接声明为分页体，与 Glossary / Memory 等列表接口的消费方式一致（`const { items } = await ...`）。
+ */
+export function getTodoList(params: QueryTodoParams): Promise<PaginatedResponse<Todo>> {
+  return request.get<PaginatedResponse<Todo>>('/todos', { params }) as unknown as Promise<
+    PaginatedResponse<Todo>
+  >;
 }
 
 /** 获取任务详情 */
