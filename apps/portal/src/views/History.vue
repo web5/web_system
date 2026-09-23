@@ -282,7 +282,7 @@ function saveHistory() {
 .empty-btn {
   padding: 14px 36px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--r-control);
   background: linear-gradient(135deg, #FF8C42, #FFB347);
   color: #fff;
   font-size: 16px;
@@ -303,7 +303,7 @@ function saveHistory() {
 }
 
 .hs-card {
-  border-radius: 14px;
+  border-radius: var(--r-card);
   overflow: hidden;
   background: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -399,7 +399,7 @@ function saveHistory() {
 .del-btn {
   padding: 10px 24px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r-control);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -448,7 +448,7 @@ function saveHistory() {
 .view-img {
   max-width: 90%;
   max-height: 65%;
-  border-radius: 16px;
+  border-radius: var(--r-card);
   object-fit: contain;
 }
 
@@ -461,7 +461,7 @@ function saveHistory() {
 .va-btn {
   padding: 12px 32px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--r-control);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -501,7 +501,7 @@ function saveHistory() {
   }
 
   .hs-card {
-    border-radius: 16px;
+    border-radius: var(--r-card);
   }
 
   .card-meta {

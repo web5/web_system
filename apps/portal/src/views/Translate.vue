@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 16px;
   border: 1px solid var(--ws-border);
-  border-radius: 16px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 13px;
   font-weight: 500;
@@ -489,7 +489,7 @@ onBeforeUnmount(() => {
   height: 26px;
   padding: 0 12px;
   border: 1px solid var(--ws-border);
-  border-radius: 13px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 12px;
   color: var(--ws-text-secondary);
@@ -682,7 +682,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   height: 26px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   font-size: 12px;
   color: var(--ws-text-tertiary);
 }

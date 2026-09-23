@@ -757,7 +757,7 @@ onBeforeUnmount(() => {
 .av {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   flex: 0 0 32px;
   display: inline-flex;
   align-items: center;
@@ -793,7 +793,7 @@ onBeforeUnmount(() => {
   max-width: 78%;
   background: var(--ws-brand-500);
   color: var(--ws-brand-50);
-  border-radius: 16px 16px 4px 16px;
+  border-radius: var(--r-card) var(--r-card) var(--r-chip) var(--r-card);
   padding: 8px 16px;
   font-size: 14px;
   line-height: 1.75;
@@ -855,7 +855,7 @@ onBeforeUnmount(() => {
   content: '';
   width: 3px;
   height: 14px;
-  border-radius: 2px;
+  border-radius: var(--r-chip);
   background: var(--ws-brand-500);
   flex: 0 0 3px;
 }

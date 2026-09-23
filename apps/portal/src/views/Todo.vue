@@ -220,7 +220,7 @@ onMounted(() => {
 .filter-select, .filter-search {
   padding: 8px 12px;
   border: 2px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   background: white;
   min-width: 120px;

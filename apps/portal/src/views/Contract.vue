@@ -1172,7 +1172,7 @@ onBeforeUnmount(() => {
   height: 26px;
   padding: 0 12px;
   border: 1px solid var(--ws-border);
-  border-radius: 13px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 12px;
   color: var(--ws-text-secondary);
@@ -1229,7 +1229,7 @@ onBeforeUnmount(() => {
 .tag {
   height: 22px;
   padding: 0 8px;
-  border-radius: 11px;
+  border-radius: var(--r-chip);
   font-size: 12px;
   font-weight: 500;
   display: inline-flex;
@@ -1518,7 +1518,7 @@ onBeforeUnmount(() => {
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--ws-border);
-  border-radius: 13px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 12px;
   color: var(--ws-text-secondary);
@@ -1569,7 +1569,7 @@ onBeforeUnmount(() => {
 .stage {
   height: 22px;
   padding: 0 8px;
-  border-radius: 11px;
+  border-radius: var(--r-chip);
   font-size: 12px;
   font-weight: 500;
   background: var(--ws-brand-50);
