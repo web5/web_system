@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'node:crypto';
-import WebSocket from 'ws';
+// ⚠️ 必须用 namespace import：本服务 tsconfig 只有 allowSyntheticDefaultImports（不发
+// __importDefault 包装），写成 `import WebSocket from 'ws'` 会在运行时得到
+// `ws_1.default is not a constructor`。
+import * as WebSocket from 'ws';
 
 /**
  * 腾讯云流式文本语音合成（WebSocket）——边合成边下发，端侧边收边播。
