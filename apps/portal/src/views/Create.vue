@@ -147,15 +147,13 @@ const materials = ref<MaterialItem[]>([]);
 
 async function loadMaterials() {
   try {
-    // 响应拦截器已解包 `{ code, data }`，此处仅做类型对齐（运行时语义保持不变）。
-    // ⚠️ 疑似遗留问题：若该接口实际被解包，则 res.code 恒为 undefined、素材将永不加载 —— 待确认返回体后另行处理。
-    const res = (await request.get('/bianbian/materials')) as unknown as {
-      code?: number;
-      data?: unknown;
-    };
-    if (res.code === 0 && Array.isArray(res.data)) {
+    // 后端 bianbian.controller 明确 `return { code: 0, data: materials }`；
+    // 而响应拦截器会解包 { code, data } → 运行时拿到的是**素材数组本体**。
+    // 故这里按数组判断（原写法 `res.code === 0 && Array.isArray(res.data)` 恒为 false，素材永不加载）。
+    const res = (await request.get('/bianbian/materials')) as unknown as unknown[];
+    if (Array.isArray(res)) {
       // 将后端素材映射为前端统一格式（支持 emoji 和 color 类型）
-      materials.value = res.data.map((m: any) => ({
+      materials.value = (res as any[]).map((m: any) => ({
         id: m.id,
         name: m.name,
         category: m.category,
