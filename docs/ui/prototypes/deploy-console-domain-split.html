@@ -761,16 +761,27 @@
         <div class="dc-muted" style="margin-top:10px;">
           <b>结构（2026-09-22 已确认）</b>：① 步骤卡紧凑化（名称 / 命令，无序号）；② 连线 = 任务行 SVG 测量
           （主线在前一列任务中线、列间分叉竖线、箭头指向每个任务中线），与编辑页同构；③ 跳过 = 灰色，不复用成功色。<br>
-          <b>连线着色规则 v2（2026-09-23 · 竖线规则已拍板，其余待拍板）</b> —— 连线分三段，各看各的状态源：
+          <b>连线绘制定义（2026-09-23 · 唯一判据源）</b> —— 相邻两列之间的一条连接由 <b>4 段</b>构成，
+          每段有明确的几何与状态归属（实现见本文件 <code>drawRunWires()</code>，方案见
+          <code>specs/pipeline-flow-color/design.md</code> §2.5）：
         </div>
         <table class="rule-tbl">
-          <tr><th>连线元件</th><th>看谁的状态</th><th>状态 → 颜色</th></tr>
-          <tr><td>主线横线<br>（步骤 → 步骤）</td><td>进入侧（前一列）步骤的聚合状态</td><td>该步骤所有任务<b>完成</b> → <span class="cg">绿</span>；否则 <span class="cg">灰</span></td></tr>
-          <tr><td>分叉竖线</td><td>进入侧步骤 + 有没有<b>执行并成功</b>的分支</td><td>进入侧完成 且 存在「完成」分支 → <span class="cg">绿</span>；
-            执行中 / 失败 / 全部跳过 / 未进入 → <span class="cg">灰</span></td></tr>
-          <tr><td>支线横线 + 箭头<br>（竖线 → 任务卡）</td><td>该目标任务自身</td><td>完成 → <span class="cg">绿</span> / 失败 → <span class="cg">红</span> /
-            执行中 → <span class="cg">品牌色</span> / 待审批 → <span class="cg">橙</span> / 跳过 · 未执行 → <span class="cg">灰</span></td></tr>
+          <tr><th>段</th><th>几何（怎么画）</th><th>归属（看谁的状态）</th><th>颜色</th></tr>
+          <tr><td><b>L1</b> 主线横线</td><td>从进入侧列<b>首个任务卡</b>右侧中点 → 水平到分叉 X（mx = 两列中点）</td>
+            <td>进入侧（前一列）步骤的聚合状态</td><td>聚合 = 完成 → <span class="cg">绿</span>；否则 <span class="cg">灰</span></td></tr>
+          <tr><td><b>L2</b> 分叉竖线</td><td>目标列多任务时才有：mx 处，从最高任务行中线 → 最低任务行中线</td>
+            <td><b>主路径分支</b>（无条件/默认任务，本例 <code>dev</code>；<code>local</code> 是条件旁路，不进主干）</td>
+            <td>进入侧完成 且 主路径分支<b>执行并成功</b> → <span class="cg">绿</span>；<br>跳过 / 失败 / 执行中 / 未进入 → <span class="cg">灰</span></td></tr>
+          <tr><td><b>L3</b> 支线横线</td><td>mx → 每个目标任务卡左缘中点（每任务一条）</td>
+            <td rowspan="2">该目标任务自身</td>
+            <td rowspan="2">完成 → <span class="cg">绿</span> / 失败 → <span class="cg">红</span> / 执行中 → <span class="cg">品牌色</span> /
+              待审批 → <span class="cg">橙</span> / 跳过 · 未执行 → <span class="cg">灰</span></td></tr>
+          <tr><td><b>L4</b> 箭头</td><td>支线末端的 chevron，尖点落在任务卡左缘</td></tr>
         </table>
+        <div class="dc-muted" style="margin-top:6px;">
+          特例：目标列<b>单任务</b>且与进入侧任务同高 → 无 L2/L3，L1 直接接到任务卡 + 箭头（色同 L1）。
+          任一侧无任务卡 → 不画线。线型一律实线 2.5px；虚线只用于任务卡边框表达「跳过」。
+        </div>
         <div class="dc-muted" style="margin-top:8px;">
           <b>任务的六种状态</b>（taskStates 落库，`ProgressFlow.vue` taskStateOf）：
           ① <b>完成</b>（执行成功，含审批通过）② <b>失败</b>（动作失败 / 审批拒绝）③ <b>执行中</b>（已开始未结束）
@@ -1795,31 +1806,31 @@ body{background:var(--ws-border-subtle);}
       {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
-      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'skip',tag:'条件'}]}
+      {nm:'发布',ts:[{n:'local',st:'ok',tag:'条件'},{n:'dev',st:'skip',def:true}]}
     ]},
     s2:{inst:'成功',meta:'dev / auth-service · auth-service-dev/69faa6e · ci:agent-manual（真实实例 #3373 形态）',steps:[
       {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
-      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'ok',tag:'条件'}]}
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'ok',def:true}]}
     ]},
     s1:{inst:'运行中',meta:'dev / auth-service · auth-service-dev/69faa6e · ci:agent-manual（停在发布确认）',steps:[
       {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'await',tag:'审批'}]},
-      {nm:'发布',ts:[{n:'local',st:'none',tag:'条件'},{n:'dev',st:'none',tag:'条件'}]}
+      {nm:'发布',ts:[{n:'local',st:'none',tag:'条件'},{n:'dev',st:'none',def:true}]}
     ]},
     s3:{inst:'失败',meta:'dev / auth-service · 步骤「发布 / dev」动作「verify」失败：exit 1',steps:[
       {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
-      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'fail',tag:'条件'}]}
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'fail',def:true}]}
     ]},
     s4:{inst:'运行中',meta:'dev / auth-service · 正在执行「发布 / dev」',steps:[
       {nm:'拉取代码',ts:[{n:'git',st:'ok'}]},
       {nm:'构建',ts:[{n:'build',st:'ok'}]},
       {nm:'发布确认',ts:[{n:'发布确认·审批',st:'ok',tag:'审批'}]},
-      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'run',tag:'条件'}]}
+      {nm:'发布',ts:[{n:'local',st:'skip',tag:'条件'},{n:'dev',st:'run',def:true}]}
     ]}
   };
   var RUN_ST_TEXT={ok:'完成',fail:'失败',run:'执行中',await:'待审批',skip:'跳过',none:'未执行'};
@@ -1867,8 +1878,25 @@ body{background:var(--ws-border-subtle);}
     grid.innerHTML=html;
   }
 
-  /* 连线着色（v2 提案 · 待拍板）：
-   * 主线 = 进入侧步骤聚合完成；竖线 = 进入侧完成且分叉已到达（任一分支有状态）；支线 = 跟目标任务自身状态 */
+  /* ================= 连线绘制定义（唯一判据源 · 见 specs/pipeline-flow-color/design.md §2.5） =================
+   * 相邻两列之间的一条连接由 4 段构成，每段有明确的几何与状态归属：
+   *   L1 主线横线 —— 从「进入侧列 首个任务卡」右侧中点，水平延伸到分叉 X（mx = 两列中点）。
+   *      归属：进入侧步骤（聚合）。聚合 = 完成 → 绿，否则 → 灰。
+   *   L2 分叉竖线 —— 目标列有多个任务时才有：mx 处，从最高任务行中线到最低任务行中线。
+   *      归属：**主路径分支**（= 默认/无条件任务；本例 dev。local 是条件分支，属旁路）。
+   *      主路径分支执行并成功 → 绿；其余（跳过 / 失败 / 执行中 / 未进入）→ 灰。
+   *      判据：L1 绿（进入侧完成）且 主路径分支成功。
+   *   L3 支线横线 —— mx 到每个目标任务卡左缘中点，每个任务一条。
+   *   L4 箭头 —— 支线末端 chevron，尖点落在任务卡左缘。
+   *      归属：目标任务自身。完成→绿 / 失败→红 / 执行中→品牌色 / 待审批→warn / 跳过·未执行→灰。
+   * 特例（sameLine）：目标列单任务且与进入侧任务同高 → 无 L2/L3，L1 直接接到目标卡 + L4 箭头，色同 L1。
+   * 不画：任一侧无任务卡；线型：一律实线 2.5px（虚线仅用于任务卡边框表达「跳过」）。
+   */
+  function runMainBranch(step){
+    /* 主路径分支 = 无条件（默认）任务；一列全是条件任务时取最后一个 */
+    var defs=step.ts.filter(function(t){return t.def;});
+    return defs.length?defs[defs.length-1]:step.ts[step.ts.length-1];
+  }
   function drawRunWires(){
     var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
     if(!cv||!svg) return;
@@ -1883,19 +1911,19 @@ body{background:var(--ws-border-subtle);}
       if(!ft.length||!tt.length) continue;
       var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
       var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2;
+      /* L1：归进入侧步骤 */
       var ok=runAgg(sc.steps[i])==='ok';
       var okc=ok?'var(--ws-ok)':'var(--border)';
       runSeg(svg,f.r,f.cy,mx,f.cy,okc);
       if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,okc); runChev(svg,t0.l,f.cy,okc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        /* 分叉竖线（用户 2026-09-23 拍板）：进入侧完成 且 **存在执行并成功的分支** → 绿；
-         * 执行中 / 失败 / 全部跳过 / 未进入 → 灰（"执行了并成功了才是绿色"） */
-        var passed=sc.steps[i+1].ts.some(function(t){return t.st==='ok';});
-        var vok=ok&&passed;
+        /* L2：归主路径分支（dev）—— 主干走通才绿，条件分支（local）的成败不进主干 */
+        var main=runMainBranch(sc.steps[i+1]);
+        var vok=ok&&main.st==='ok';
         var vc=vok?'var(--ws-ok)':'var(--border)';
         runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vc);
-        /* 支线按目标任务自身状态着色：ok 绿 / fail 红 / run 品牌色 / await warn / skip·none 灰 */
+        /* L3 + L4：归目标任务自身 */
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
           runSeg(svg,mx,c.cy,c.l,c.cy,wc); runChev(svg,c.l,c.cy,wc);
