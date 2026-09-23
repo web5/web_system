@@ -1,8 +1,9 @@
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="sec-t">外观</view>
   <view class="list">
     <view class="r" bindtap="toggleTheme"><text>深色模式</text><text class="v">{{themeText}} ›</text></view>
     <view class="r" bindtap="pickFont"><text>字体大小</text><text class="v">{{fontSize}} ›</text></view>
+    <view class="r" bindtap="pickRadius"><text>圆角风格</text><text class="v">{{radiusText}} ›</text></view>
   </view>
 
   <view class="sec-t">通知与隐私</view>

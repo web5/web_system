@@ -72,7 +72,7 @@ function goBack() {
   padding: 10px 24px;
   background: #FF8C42;
   color: #FFFFFF;
-  border-radius: 16px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
@@ -86,7 +86,7 @@ function goBack() {
   background: #FFF8F0;
   color: #FF8C42;
   border: 1px solid rgba(255, 140, 66, 0.3);
-  border-radius: 16px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;

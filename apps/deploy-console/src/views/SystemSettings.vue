@@ -4,6 +4,13 @@ import { systemSettingsApi } from '@/api'
 import { message } from 'ant-design-vue'
 // 存储配置（A6）：上传根目录的查看与修改（属 system-service，见组件内注释）
 import StorageConfigCard from '@/components/StorageConfigCard.vue'
+// 外观（2026-09-23）：圆角风格用户偏好三档（口径 specs/radius-style-dual §4.4）
+import { radiusStyle, setRadiusStyle, RADIUS_OPTIONS } from '@/composables/useAppearance'
+
+/** 外观：圆角风格切换（与 App.vue 共用同一偏好单例）；说明文案与原型一致，故为静态三档全列 */
+function onRadiusChange(e: any) {
+  setRadiusStyle(e.target.value)
+}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -137,6 +144,25 @@ onMounted(() => {
       </a-alert>
     </a-card>
 
+    <!-- 外观（2026-09-23）：圆角风格用户偏好三档（口径 specs/radius-style-dual §4.4） -->
+    <a-card title="外观" style="margin-top: 16px;">
+      <div class="appearance-row">
+        <span class="appearance-label">圆角风格</span>
+        <a-radio-group :value="radiusStyle" button-style="solid" @change="onRadiusChange">
+          <a-radio-button v-for="o in RADIUS_OPTIONS" :key="o.value" :value="o.value">
+            {{ o.label }}
+          </a-radio-button>
+        </a-radio-group>
+      </div>
+      <p class="appearance-hint">
+        柔和：圆角更大更圆润（默认）；清爽：更小更利落；直角：无圆角。切换后全站立即生效（含 antd 组件）。
+      </p>
+      <div class="appearance-row" style="margin-top: 12px;">
+        <span class="appearance-label">深色模式</span>
+      </div>
+      <p class="appearance-hint">外壳固定深色（sider / header 反白面板），不随主题变化；本页仅提供圆角偏好。</p>
+    </a-card>
+
     <!-- 存储配置（A6）：上传根目录（配置项 storage.upload_dir）；保存后需重启 upload-service 生效 -->
     <StorageConfigCard />
 
@@ -147,3 +173,23 @@ onMounted(() => {
     </a-card>
   </div>
 </template>
+
+<style scoped>
+/* 外观卡片：圆角风格说明（走语义 token，无裸色值） */
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.appearance-label {
+  font-size: 13px;
+  color: var(--ws-text-secondary);
+}
+.appearance-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  line-height: 1.5;
+}
+</style>

@@ -558,7 +558,7 @@ onMounted(() => {
 .tag-off {
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   font-weight: 600;
 }
 .tag-builtin {

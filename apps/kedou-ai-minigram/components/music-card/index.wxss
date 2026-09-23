@@ -2,7 +2,7 @@
 .mcard {
   width: 100%;
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   border: 1rpx solid var(--line);
   overflow: hidden;
 }
@@ -19,7 +19,7 @@
   color: var(--brand-txt);
   background: var(--brand-soft);
   padding: 6rpx 16rpx;
-  border-radius: 16rpx;
+  border-radius: var(--r-chip);
 }
 .mc-sub { font-size: 23rpx; color: var(--t3); }
 
@@ -64,14 +64,14 @@
   font-size: 25rpx;
   color: var(--t2);
   padding: 12rpx 20rpx;
-  border-radius: 16rpx;
+  border-radius: var(--r-control);
   border: 1rpx solid var(--line);
 }
 .mc-op:active { opacity: .7; }
 .mc-main {
   flex: 1;
   height: 68rpx;
-  border-radius: 34rpx;
+  border-radius: var(--r-pill);
   background: var(--brand);
   color: #fff;
   font-size: 26rpx;

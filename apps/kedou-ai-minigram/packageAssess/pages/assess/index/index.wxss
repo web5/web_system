@@ -1,19 +1,19 @@
 /* 合同评估主页
  * 色值一律走 app.wxss 的设计 token（品牌橙 + 中性灰），不再散写硬编码色。 */
 .page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
-.upload { background: var(--card); border-radius: 28rpx; padding: 40rpx 32rpx; text-align: center; border: 2rpx dashed var(--line); }
+.upload { background: var(--card); border-radius: var(--r-card); padding: 40rpx 32rpx; text-align: center; border: 2rpx dashed var(--line); }
 .t { font-size: 29rpx; font-weight: 500; color: var(--t1); }
 .d { font-size: 23rpx; color: var(--t3); margin-top: 6rpx; }
 .urow { display: flex; margin-top: 22rpx; }
-.urow view { flex: 1; height: 80rpx; border-radius: 40rpx; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 25rpx; color: var(--t2); margin-right: 18rpx; }
+.urow view { flex: 1; height: 80rpx; border-radius: var(--r-pill); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 25rpx; color: var(--t2); margin-right: 18rpx; }
 .urow view:last-child { margin-right: 0; }
 .sec-t { font-size: 25rpx; color: var(--t2); margin: 32rpx 0 16rpx; display: flex; justify-content: space-between; }
 .em { font-size: 23rpx; color: var(--t3); }
 .chips { white-space: nowrap; }
-.chip { display: inline-block; font-size: 25rpx; padding: 12rpx 26rpx; border-radius: 16rpx; background: var(--card); color: var(--t2); margin-right: 14rpx; }
+.chip { display: inline-block; font-size: 25rpx; padding: 12rpx 26rpx; border-radius: var(--r-chip); background: var(--card); color: var(--t2); margin-right: 14rpx; }
 .chip.on { background: var(--brand); color: #fff; }
-.btn { height: 92rpx; border-radius: 46rpx; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 32rpx; margin-top: 36rpx; }
-.list { background: var(--card); border-radius: 24rpx; overflow: hidden; }
+.btn { height: 92rpx; border-radius: var(--r-pill); background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 32rpx; margin-top: 36rpx; }
+.list { background: var(--card); border-radius: var(--r-card); overflow: hidden; }
 .r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
 .r:last-child { border-bottom: none; }
 .v { color: var(--t3); font-size: 26rpx; }

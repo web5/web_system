@@ -22,7 +22,8 @@ export * from './contract';
 
 // 统一数据模型基础件（规范业务表设计）
 export { AbstractEntity, BigIntEntity, UuidEntity } from './entities/abstract.entity';
-export { User } from './entities/user.entity';
+export { User, UI_RADIUS_STYLES } from './entities/user.entity';
+export type { UiRadiusStyle, UserPreferences } from './entities/user.entity';
 
 // IAM 一期：系统维度（归属判定 / 归一化，唯一真相源）
 export {

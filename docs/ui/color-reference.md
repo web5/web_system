@@ -50,6 +50,7 @@ hover 色**只有两类来源**，不得自行发明深浅：
 | 深色侧栏 selected | `rgba(249, 115, 22, 0.18)`（MainLayout） | 同上 | ✅ R4 升 `--dc-panel-menu-selected` |
 | 深色侧栏/顶栏容器与文字 | `#0F0F12`/`#161618`/`#a3a3a3`/`#ededed`（style.scss/App.vue/MainLayout） | 同上 | ✅ R4 升 `--dc-panel-*` 一组（遵循 css-override §3 app 局部 `--app-*` 规则） |
 | Beehive logo 品牌色 | `#001529` / `#F5A623`（MainLayout svg） | 品牌图标例外（style.scss 头注释） | 保留登记（图标专属，不参与主题） |
+| admin favicon 品牌色 | 透明底 / 豆 `#F97316`（brand.500）/ 眼 `#FFFFFF` / 高光 `#FDE68A`（`apps/admin/public/favicon.svg` + 基座同款） | 品牌图标例外（同上） | 保留登记（图标专属，不参与主题） |
 | 头像阴影 | `rgba(249, 115, 22, 0.25)`（MainLayout） | 品牌橙 alpha | 进 tokens.shadow 或 --ws-brand-500 透明引用 |
 | 登录页渐变 | `#1a1a2e→#0f3460` 深蓝（R1 观察） | 登录页例外 | 单独裁决（R1 观察项，未定） |
 | 图表/echarts 色板 | Dashboard 内（R1 观察） | 例外 | P2 灰度评审定色板 |

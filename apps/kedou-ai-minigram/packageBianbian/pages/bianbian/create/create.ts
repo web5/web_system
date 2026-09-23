@@ -31,7 +31,14 @@ interface TouchPoint {
 }
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     categories: MATERIAL_CATEGORIES as Array<{ id: string; name: string; icon: string }>,
     activeCategory: 'all',
     filteredMaterials: [] as MaterialItem[],

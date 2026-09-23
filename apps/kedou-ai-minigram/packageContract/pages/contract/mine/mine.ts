@@ -2,7 +2,14 @@
  * 科豆 AI - 我的
  */
 Page({
-  data: {},
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
+  data: {
+    radiusClass: "",},
 
   goHome() {
     wx.reLaunch({ url: '/packageContract/pages/contract/index/index' });

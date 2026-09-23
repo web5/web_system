@@ -1,5 +1,5 @@
 <!-- 变变创作页 v2 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 顶部栏 -->
   <view class="top-bar">
     <view class="btn-back" bindtap="goBack">

@@ -9,6 +9,7 @@ import { ref, computed } from 'vue';
 import {
   listConversations,
   deleteConversation,
+  type ConversationScope,
   type ConversationSummary,
 } from '@/api/agent';
 
@@ -20,22 +21,49 @@ export const useConversationStore = defineStore('portal-conversations', () => {
   const currentId = ref<string | null>(null);
   /** 有生成中的任务（对话流式进行中）：删除会话入口禁用，避免删到正在写入的会话 */
   const running = ref(false);
+  /** 当前列表所属范围（source|agentId）：切到不同能力的页面时才重拉 */
+  const scopeKey = ref('');
+  /** 在飞的列表请求（非响应式）：供 syncScope 等待后再判断范围 */
+  let inflight: Promise<void> | null = null;
 
   const isEmpty = computed(() => !loading.value && items.value.length === 0);
 
-  /** 拉取会话列表。并发调用由 loading 闸门拦掉（左栏与页面同时初始化时只发一次） */
-  async function load(): Promise<void> {
-    if (loading.value) return;
-    loading.value = true;
-    error.value = null;
-    try {
-      const res = await listConversations();
-      items.value = res.list;
-    } catch (err) {
-      error.value = (err as Error)?.message || '会话列表加载失败';
-    } finally {
-      loading.value = false;
-    }
+  function keyOf(scope: ConversationScope): string {
+    return `${scope.source ?? 'chat'}|${scope.agentId ?? ''}`;
+  }
+
+  /** 拉取会话列表。已有请求在飞时复用它的 promise（调用方可 await，不会丢请求） */
+  async function load(scope: ConversationScope = {}): Promise<void> {
+    if (loading.value && inflight) return inflight;
+    const task = (async () => {
+      loading.value = true;
+      error.value = null;
+      try {
+        const res = await listConversations(1, 50, scope);
+        items.value = res.list;
+        scopeKey.value = keyOf(scope);
+      } catch (err) {
+        error.value = (err as Error)?.message || '会话列表加载失败';
+      } finally {
+        loading.value = false;
+        inflight = null;
+      }
+    })();
+    inflight = task;
+    return task;
+  }
+
+  /**
+   * 按视图范围同步列表：同范围不重复拉（切页不闪），换范围才重取。
+   *
+   * 关键：先等在飞的请求落地再判断范围 —— 否则刷新工具页时会被 App.vue 先发起的
+   * chat 请求挡掉（loading 闸门），左栏停在主对话记录上（2026-09-23 实测 bug）。
+   */
+  async function syncScope(scope: ConversationScope = {}): Promise<void> {
+    if (inflight) await inflight;
+    // scopeKey 只在拉取成功后写入 → 空列表也不会反复重拉，失败则会重试
+    if (keyOf(scope) === scopeKey.value) return;
+    await load(scope);
   }
 
   function select(id: string): void {
@@ -57,6 +85,8 @@ export const useConversationStore = defineStore('portal-conversations', () => {
     currentId.value = null;
     error.value = null;
     running.value = false;
+    scopeKey.value = '';
+    inflight = null;
   }
 
   /** 本地把会话顶到列表最前（首轮完成后调用，省一次整表重拉） */
@@ -88,6 +118,6 @@ export const useConversationStore = defineStore('portal-conversations', () => {
 
   return {
     items, loading, error, currentId, running, isEmpty,
-    load, select, startNew, setRunning, clear, touch, remove, titleOf,
+    load, syncScope, select, startNew, setRunning, clear, touch, remove, titleOf,
   };
 });

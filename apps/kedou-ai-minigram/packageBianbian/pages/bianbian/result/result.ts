@@ -5,7 +5,14 @@ import { getDailyTransformCount } from '../../../../services/bianbian-storage';
 import { DAILY_TRANSFORM_LIMIT, STORAGE_KEYS } from '../../../../utils/bianbian-constants';
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     originImage: '',
     aiImage: '',
     canRetry: true,

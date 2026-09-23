@@ -256,7 +256,7 @@ onMounted(() => {
           <div style="font-weight: 600; margin-bottom: 4px; font-size: 13px;">{{ c.field }}</div>
           <div style="display: flex; gap: 8px; align-items: flex-start;">
             <div
-              style="flex: 1; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;
+              style="flex: 1; background: #fff1f0; border: 1px solid #ffa39e; border-radius: var(--r-card);
                      padding: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
                      word-break: break-all; max-height: 220px; overflow: auto;"
             >
@@ -264,7 +264,7 @@ onMounted(() => {
             </div>
             <span style="color: #aaa; margin-top: 8px;">→</span>
             <div
-              style="flex: 1; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px;
+              style="flex: 1; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: var(--r-card);
                      padding: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
                      word-break: break-all; max-height: 220px; overflow: auto;"
             >

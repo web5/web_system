@@ -62,7 +62,7 @@
 .side-img-wrap {
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   overflow: hidden;
   background: #FFF;
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
@@ -109,7 +109,7 @@
   align-items: center;
   justify-content: center;
   height: 88rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   border: none;
   font-size: 28rpx;
   gap: 10rpx;

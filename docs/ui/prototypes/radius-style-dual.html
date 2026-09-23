@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-radius="soft">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>圆角双风格 · 外观偏好原型（柔和 / 清爽）</title>
+<style>
+  /* ===================== 一、Token 定义层（G1 豁免区，唯一的字面色值出处） ===================== */
+  :root {
+    /* 色板（照 packages/ui/src/tokens.css） */
+    --ws-brand-50:#FFF7ED; --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-700:#C2410C;
+    --ws-bg-page:#F7F7F8; --ws-bg-surface:#FFFFFF; --ws-bg-subtle:#FAFAFA; --ws-bg-active:#EDEDEF;
+    --ws-border:#E5E7EB; --ws-border-strong:#D4D4D8;
+    --ws-text-primary:#18181B; --ws-text-secondary:#52525B; --ws-text-tertiary:#A1A1AA;
+    --ws-text-inverse:#FFFFFF;
+    --ws-success:#12A150; --ws-success-100:#E7F7EE;
+    --ws-warn-100:#FEF3DC; --ws-warn-700:#B45309;
+    /* 阴影 / 焦点 / 动效 */
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    --ws-shadow-pop:0 8px 28px rgba(20,30,50,.16);
+    --ws-shadow-seg:0 1px 2px rgba(0,0,0,.08);
+    --ws-focus-ring:0 0 0 3px rgba(249,115,22,.35);
+    --ws-duration-fast:150ms; --ws-ease-out:cubic-bezier(.16,1,.3,1);
+    /* 演示台局部：deploy-console 固定深色外壳（端 token，非业务裸值） */
+    --dc-bg:#161618; --dc-surface:#1F1F23; --dc-surface-2:#26262B;
+    --dc-border:#333338; --dc-text:#EDEDED; --dc-text-2:#A1A1AA; --dc-text-3:#71717A;
+    /* 字阶（caption/sm/base/h4）：本稿全部字号取值限于此阶梯，无阶外值 */
+    --fs-caption:12px; --fs-sm:13px; --fs-base:14px; --fs-h4:16px; --fs-h3:20px;
+    /* 间距阶梯（4 的倍数） */
+    --sp-4:4px; --sp-8:8px; --sp-12:12px; --sp-16:16px; --sp-24:24px; --sp-32:32px;
+
+    /* ===== 语义圆角档（本次新增） =====
+       chip    : 标签 / 徽标 / 小色块 / 微角
+       control : 输入框 / 按钮 / 选择器 / 下拉 / 分段控件
+       card    : 卡片 / 面板 / 弹窗 / 抽屉 / 列表 / 表格
+       pill    : 胶囊按钮 / 开关轨道 / 圆形（风格无关）
+       真源：packages/ui/src/tokens.css（↔ tokens.ts） */
+    --r-pill: 9999px;
+  }
+
+  /* ===================== 二、双风格：直接覆盖「尺寸档」值 =====================
+     两端基线的圆角阶梯为 4/6/8px（品牌端落地 8/12/16rpx），
+     见 specs/ui-prototype-token-alignment/整改影响清单.md §7.3（负责人已确认 2026-09-23）。 */
+  :root,
+  [data-radius="soft"]                      { --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px; }  /* 柔和（默认） */
+  [data-radius="crisp"]      { --ws-radius-sm:2px; --ws-radius-md:2px; --ws-radius-lg:4px; }  /* 清爽 */
+  [data-radius="sharp"] { --ws-radius-sm:0px; --ws-radius-md:0px; --ws-radius-lg:2px; }  /* 直角 */
+
+  /* 业务层语义别名 —— 必须与「尺寸档覆盖」声明在**同一元素**上。
+     坑：自定义属性的 var() 在「声明处」解析。只在 :root 声明 --r-control:var(--ws-radius-md)，
+     那么中间容器覆盖 --ws-radius-md 时别名不会跟随（别名已在 :root 定值为 6px）。
+     故每个覆盖块都重声明一次别名；落地时尺寸档与别名同在 html 上，一次即可。 */
+  :root,
+  [data-radius="soft"]                      { --r-chip:var(--ws-radius-sm); --r-control:var(--ws-radius-md); --r-card:var(--ws-radius-lg);
+                               --r-control-inner:max(0px, calc(var(--r-control) - 2px)); }
+  [data-radius="crisp"]      { --r-chip:2px; --r-control:2px; --r-card:4px; --r-control-inner:0px; }
+  [data-radius="sharp"] { --r-chip:0px; --r-control:0px; --r-card:2px; --r-control-inner:0px; }
+
+  /* ===================== 三、演示台外壳 ===================== */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: var(--sp-32); background: var(--ws-bg-page);
+    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Helvetica Neue",sans-serif;
+    color: var(--ws-text-primary); font-size: var(--fs-base); line-height: 1.6;
+  }
+  :focus-visible { outline: none; box-shadow: var(--ws-focus-ring); border-radius: var(--r-control); }
+  h1 { font-size: var(--fs-h3); font-weight: 600; margin: 0 0 var(--sp-8); letter-spacing: -.01em; }
+  h2 { font-size: var(--fs-h4); font-weight: 600; margin: 0; }
+  .lead { margin: 0 0 var(--sp-24); color: var(--ws-text-secondary); font-size: var(--fs-sm); max-width: 920px; }
+  .sec { margin-bottom: var(--sp-32); }
+  .sec-hd { display: flex; align-items: baseline; gap: var(--sp-12); margin-bottom: var(--sp-16); padding-bottom: var(--sp-12); border-bottom: 1px solid var(--ws-border); }
+  .sec-hd .no { font-size: var(--fs-caption); font-weight: 600; color: var(--ws-brand-600); letter-spacing: .04em; }
+  .sec-hd p { margin: 0; font-size: var(--fs-caption); color: var(--ws-text-tertiary); }
+
+  .topbar { display: flex; align-items: center; gap: var(--sp-16); flex-wrap: wrap; margin-bottom: var(--sp-24); }
+  .modesw { display: inline-flex; padding: var(--sp-4); gap: var(--sp-4); background: var(--ws-bg-active); border-radius: var(--r-control); }
+  .modesw button {
+    border: 0; cursor: pointer; font-family: inherit; font-size: var(--fs-sm); padding: 6px var(--sp-16);
+    color: var(--ws-text-secondary); background: transparent; border-radius: var(--r-control-inner);
+    transition: background var(--ws-duration-fast) var(--ws-ease-out), color var(--ws-duration-fast) var(--ws-ease-out);
+  }
+  .modesw button.on { background: var(--ws-bg-surface); color: var(--ws-text-primary); font-weight: 500; box-shadow: var(--ws-shadow-seg); }
+  .hint { font-size: var(--fs-caption); color: var(--ws-text-tertiary); }
+
+  /* ===================== 四、对照表 ===================== */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--ws-bg-surface);
+    border: 1px solid var(--ws-border); border-radius: var(--r-card); overflow: hidden; font-size: var(--fs-sm); }
+  th, td { text-align: left; padding: var(--sp-12) var(--sp-16); border-bottom: 1px solid var(--ws-border); vertical-align: top; }
+  th { background: var(--ws-bg-subtle); font-weight: 600; font-size: var(--fs-caption); color: var(--ws-text-secondary); letter-spacing: .02em; }
+  tr:last-child td { border-bottom: 0; }
+  td code { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size: var(--fs-caption);
+    background: var(--ws-bg-subtle); border: 1px solid var(--ws-border); border-radius: var(--r-chip); padding: 1px 6px; }
+  .v-crisp { color: var(--ws-brand-700); font-weight: 600; }
+  .swatch { display: inline-block; width: 32px; height: 20px; border: 1.5px solid var(--ws-text-secondary); margin-right: var(--sp-8); vertical-align: -5px; }
+  .swatch.s { border-radius: var(--ws-radius-md); }
+  .swatch.c { border-radius: 2px; border-color: var(--ws-brand-600); }
+  .excl { color: var(--ws-text-tertiary); font-size: var(--fs-caption); }
+
+  /* ===================== 五、并排对比 ===================== */
+  .compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-16); }
+  @media (max-width: 980px) { .compare { grid-template-columns: 1fr; } }
+  .col { background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: var(--sp-16); }
+  .col-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-16); padding-bottom: var(--sp-12); border-bottom: 1px dashed var(--ws-border); }
+  .col-hd b { font-size: var(--fs-base); }
+  .col-hd .tag { font-size: var(--fs-caption); padding: 2px var(--sp-8); border-radius: var(--r-chip); background: var(--ws-brand-50); color: var(--ws-brand-700); font-weight: 600; }
+  .col-hd .tag.plain { background: var(--ws-bg-subtle); color: var(--ws-text-tertiary); }
+
+  .row { margin-bottom: var(--sp-16); }
+  .row:last-child { margin-bottom: 0; }
+  .row-lb { font-size: var(--fs-caption); color: var(--ws-text-tertiary); margin-bottom: var(--sp-8); letter-spacing: .02em; }
+  .inline { display: flex; align-items: center; gap: var(--sp-8); flex-wrap: wrap; }
+
+  .btn { font-family: inherit; font-size: var(--fs-sm); height: 32px; padding: 0 var(--sp-16); cursor: pointer;
+    border-radius: var(--r-control); border: 1px solid transparent; display: inline-flex; align-items: center; gap: var(--sp-8); }
+  .btn-pri { background: var(--ws-brand-500); color: var(--ws-text-inverse); font-weight: 500; }
+  .btn-sec { background: var(--ws-bg-surface); color: var(--ws-text-primary); border-color: var(--ws-border-strong); }
+  .btn-txt { background: transparent; color: var(--ws-text-secondary); }
+  .btn-pill { border-radius: var(--r-pill); }
+
+  .input, .select { font-family: inherit; font-size: var(--fs-sm); height: 32px; padding: 0 var(--sp-12); width: 100%;
+    border: 1px solid var(--ws-border-strong); border-radius: var(--r-control); background: var(--ws-bg-surface); color: var(--ws-text-primary); outline: none; }
+  .input::placeholder { color: var(--ws-text-tertiary); }
+
+  .seg { display: inline-flex; padding: 2px; background: var(--ws-bg-subtle); border: 1px solid var(--ws-border); border-radius: var(--r-control); }
+  .seg span { font-size: var(--fs-caption); padding: var(--sp-4) var(--sp-12); border-radius: var(--r-control-inner); color: var(--ws-text-secondary); cursor: pointer; }
+  .seg span.on { background: var(--ws-brand-500); color: var(--ws-text-inverse); font-weight: 500; }
+
+  .card { background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); box-shadow: var(--ws-shadow-card); overflow: hidden; }
+  .card-hd { padding: var(--sp-12) var(--sp-16); border-bottom: 1px solid var(--ws-border); font-size: var(--fs-sm); font-weight: 600; }
+  .card-bd { padding: var(--sp-12) var(--sp-16); font-size: var(--fs-sm); color: var(--ws-text-secondary); }
+  .card-ft { padding: var(--sp-8) var(--sp-16); border-top: 1px solid var(--ws-border); background: var(--ws-bg-subtle); display: flex; justify-content: flex-end; gap: var(--sp-8); }
+
+  .chip { display: inline-flex; align-items: center; gap: var(--sp-4); font-size: var(--fs-caption); padding: 2px var(--sp-8);
+    border-radius: var(--r-chip); background: var(--ws-brand-50); color: var(--ws-brand-700); font-weight: 500; }
+  .chip.gray { background: var(--ws-bg-subtle); color: var(--ws-text-secondary); }
+  .chip.ok { background: var(--ws-success-100); color: var(--ws-success); }
+  /* 开关：轨道与圆钮都是圆形语义 → 归 --r-pill（非 control），整体风格无关 */
+  .switch { width: 40px; height: 20px; border-radius: var(--r-pill); background: var(--ws-success); position: relative; display: inline-block; }
+  .switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: var(--r-pill); background: var(--ws-bg-surface); }
+
+  .list { border: 1px solid var(--ws-border); border-radius: var(--r-card); background: var(--ws-bg-surface); overflow: hidden; }
+  .list .li { display: flex; align-items: center; gap: var(--sp-12); padding: var(--sp-12) var(--sp-16); border-bottom: 1px solid var(--ws-border); font-size: var(--fs-sm); }
+  .list .li:last-child { border-bottom: 0; }
+  .li .av { width: 32px; height: 32px; border-radius: 50%; background: var(--ws-brand-50); color: var(--ws-brand-600); display: flex; align-items: center; justify-content: center; font-size: var(--fs-caption); font-weight: 600; flex: none; }
+  .li .tx { flex: 1; min-width: 0; }
+  .li .tx b { display: block; font-size: var(--fs-sm); font-weight: 500; }
+  .li .tx span { font-size: var(--fs-caption); color: var(--ws-text-tertiary); }
+  .li .go { color: var(--ws-text-tertiary); font-size: var(--fs-h4); }
+  .li .val { font-size: var(--fs-sm); color: var(--ws-text-tertiary); }
+
+  .dlg { width: 100%; max-width: 280px; background: var(--ws-bg-surface); border-radius: var(--r-card); box-shadow: var(--ws-shadow-pop); overflow: hidden; }
+  .dlg .db { padding: var(--sp-16); }
+  .dlg .db b { font-size: var(--fs-base); }
+  .dlg .db p { margin: var(--sp-8) 0 0; font-size: var(--fs-sm); color: var(--ws-text-secondary); }
+  .dlg .df { display: flex; border-top: 1px solid var(--ws-border); }
+  .dlg .df span { flex: 1; text-align: center; padding: var(--sp-8) 0; font-size: var(--fs-sm); cursor: pointer; }
+  .dlg .df span + span { border-left: 1px solid var(--ws-border); color: var(--ws-brand-600); font-weight: 500; }
+
+  /* ===================== 六、四端设置项形态 ===================== */
+  .ends { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-16); }
+  @media (max-width: 1120px) { .ends { grid-template-columns: repeat(2, 1fr); } }
+  .end { background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); overflow: hidden; }
+  .end-hd { padding: var(--sp-8) var(--sp-12); background: var(--ws-bg-subtle); border-bottom: 1px solid var(--ws-border);
+    font-size: var(--fs-caption); font-weight: 600; color: var(--ws-text-secondary); letter-spacing: .02em; display: flex; justify-content: space-between; gap: var(--sp-8); }
+  .end-hd em { font-style: normal; color: var(--ws-text-tertiary); font-weight: 400; }
+  .end-bd { padding: var(--sp-12); }
+
+  .p-card { border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: var(--sp-12); background: var(--ws-bg-surface); }
+  .p-title { font-size: var(--fs-sm); font-weight: 600; padding-bottom: var(--sp-8); margin-bottom: var(--sp-12); border-bottom: 1px solid var(--ws-border); }
+  .f-row { display: flex; align-items: center; gap: var(--sp-12); }
+  .f-row label { font-size: var(--fs-sm); color: var(--ws-text-secondary); flex: none; width: 64px; }
+  .f-hint { margin: var(--sp-8) 0 0 76px; font-size: var(--fs-caption); color: var(--ws-text-tertiary); line-height: 1.5; }
+
+  .tabbar { display: flex; gap: var(--sp-4); border-bottom: 1px solid var(--ws-border); margin-bottom: var(--sp-12); }
+  .tabbar span { font-size: var(--fs-caption); padding: 6px var(--sp-12); color: var(--ws-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabbar span.on { color: var(--ws-brand-600); border-bottom-color: var(--ws-brand-500); font-weight: 500; }
+  .panel { border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: var(--sp-12); }
+  .panel-title { font-size: var(--fs-sm); font-weight: 600; margin-bottom: var(--sp-12); }
+
+  .mp { background: var(--ws-bg-page); border-radius: var(--r-card); padding: var(--sp-12); }
+  .mp-sec { font-size: var(--fs-caption); color: var(--ws-text-tertiary); margin: 0 2px var(--sp-8); }
+  .mp-list { background: var(--ws-bg-surface); border-radius: var(--r-card); overflow: hidden; }
+  .mp-r { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-12); border-bottom: 1px solid var(--ws-border); font-size: var(--fs-sm); }
+  .mp-r:last-child { border-bottom: 0; }
+  .mp-r .v { color: var(--ws-text-tertiary); font-size: var(--fs-sm); }
+  .mp-r.new { background: var(--ws-brand-50); }
+  .badge-new { font-size: var(--fs-caption); background: var(--ws-brand-500); color: var(--ws-text-inverse); padding: 0 var(--sp-4); border-radius: var(--r-chip); margin-left: var(--sp-8); vertical-align: 1px; }
+
+  .dc { background: var(--dc-bg); border-radius: var(--r-card); padding: var(--sp-12); color: var(--dc-text); }
+  .dc-title { font-size: var(--fs-sm); font-weight: 600; margin-bottom: var(--sp-12); color: var(--dc-text); }
+  .dc-row { display: flex; align-items: center; gap: var(--sp-12); padding: var(--sp-8) var(--sp-12); background: var(--dc-surface); border-radius: var(--r-control); }
+  .dc-row label { font-size: var(--fs-sm); color: var(--dc-text-2); flex: none; width: 64px; }
+  .dc .seg { background: var(--dc-surface-2); border-color: var(--dc-border); }
+  .dc .seg span { color: var(--dc-text-2); }
+  .dc .seg span.on { background: var(--ws-brand-500); color: var(--ws-text-inverse); }
+  .dc .hint { color: var(--dc-text-3); }
+
+  /* ===================== 七、例外与实现要点 ===================== */
+  .ex { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-16); }
+  @media (max-width: 880px) { .ex { grid-template-columns: 1fr; } }
+  .ex-box { background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: var(--r-card); padding: var(--sp-16); }
+  .ex-box h3 { margin: 0 0 var(--sp-8); font-size: var(--fs-sm); font-weight: 600; }
+  .ex-box ul { margin: 0; padding-left: var(--sp-24); font-size: var(--fs-sm); color: var(--ws-text-secondary); line-height: 1.85; }
+  .ex-box code { font-family: ui-monospace,Menlo,Consolas,monospace; font-size: var(--fs-caption); background: var(--ws-bg-subtle); border: 1px solid var(--ws-border); border-radius: var(--r-chip); padding: 1px 6px; }
+  .warn { display: inline-block; font-size: var(--fs-caption); font-weight: 600; color: var(--ws-warn-700); background: var(--ws-warn-100); border-radius: var(--r-chip); padding: 1px 6px; margin-right: var(--sp-8); }
+</style>
+</head>
+<body>
+
+<h1>圆角双风格 · 外观偏好</h1>
+<p class="lead">
+  把「圆角」从尺寸档（sm/md/lg）收敛为<b>语义档</b>（chip / control / card / pill），数值由用户偏好决定。
+  柔和 = 现状默认（<b>零视觉变化</b>）；清爽 = 小圆角新档（2px）；直角 = 无圆角新档（0px）。三档都是用户可选的圆角风格。两端基线统一为 4 / 6 / 8px（品牌端落地 8 / 12 / 16rpx）。
+</p>
+
+<div class="topbar">
+  <span class="hint" style="font-weight:600;color:var(--ws-text-secondary)">整页风格</span>
+  <div class="modesw" id="modesw">
+    <button data-mode="soft" class="on">柔和</button>
+    <button data-mode="crisp">清爽</button>
+    <button data-mode="sharp">直角</button>
+  </div>
+  <span class="hint" id="curHint"></span>
+</div>
+
+<!-- ========== A. 元素 → 档 封闭映射 ========== -->
+<div class="sec">
+  <div class="sec-hd"><span class="no">A</span><h2>语义圆角档 · 元素封闭映射</h2><p>每个元素有且只有一个归属；未列出的元素视为「待确认」，不得自行归类</p></div>
+  <table>
+    <thead>
+      <tr><th style="width:16%">语义档</th><th style="width:34%">覆盖元素（封闭清单）</th><th style="width:25%">柔和（默认）</th><th style="width:25%">清爽 / 直角</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>--r-chip</code></td>
+        <td>标签、徽标、状态点外的微角、代码片段背景</td>
+        <td>4px <span class="excl">(8rpx)</span></td>
+        <td><span class="v-crisp">2px</span> / <span class="v-crisp">0px</span></td>
+      </tr>
+      <tr>
+        <td><code>--r-control</code></td>
+        <td>输入框、按钮、选择器、下拉、分段控件、日期选择、上传按钮</td>
+        <td>6px <span class="excl">(12rpx)</span></td>
+        <td><span class="v-crisp">2px</span> / <span class="v-crisp">0px</span></td>
+      </tr>
+      <tr>
+        <td><code>--r-card</code></td>
+        <td>卡片、面板、弹窗、抽屉、列表容器、表格容器、Popover/Dropdown 面板</td>
+        <td>8px <span class="excl">(16rpx)</span></td>
+        <td><span class="v-crisp">4px</span> / <span class="v-crisp">2px</span></td>
+      </tr>
+      <tr>
+        <td><code>--r-pill</code></td>
+        <td>胶囊按钮、<b>开关（轨道 + 圆钮）</b>、标签式筛选片</td>
+        <td colspan="2">9999px —— <b>风格无关</b>，两种风格都不变</td>
+      </tr>
+      <tr>
+        <td class="excl">不参与切换</td>
+        <td class="excl"><code>border-radius:50%</code>（头像、状态点、圆形图标）· <code>border-radius:0</code>（气泡贴边角、贴边抽屉）· 进度条/骨架条（待确认）</td>
+        <td colspan="2" class="excl">保持字面值，不受风格影响</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="hint" style="margin-top:var(--sp-12)">
+    机制：<code>&lt;html data-radius="soft|crisp|sharp"&gt;</code> 直接覆盖尺寸档 <code>--ws-radius-sm/md/lg</code> 的值，
+    语义档是它们的别名 —— 因此并行「新规范整改」把裸值换成的尺寸档引用，<b>自动获得风格切换能力、无需回改</b>。
+  </p>
+</div>
+
+<!-- ========== B. 组件并排对比 ========== -->
+<div class="sec">
+  <div class="sec-hd"><span class="no">B</span><h2>组件并排对比</h2><p>同一套组件、同一份标记，只有圆角变量不同</p></div>
+  <div class="compare">
+
+    <div class="col" data-radius="soft">
+      <div class="col-hd"><b>柔和</b><span class="tag plain">现状默认</span></div>
+
+      <div class="row">
+        <div class="row-lb">按钮 · 主 / 次 / 文字 / 胶囊</div>
+        <div class="inline">
+          <button class="btn btn-pri">保存</button>
+          <button class="btn btn-sec">取消</button>
+          <button class="btn btn-txt">更多</button>
+          <button class="btn btn-pri btn-pill">开始创作</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">输入框 / 选择器</div>
+        <input class="input" placeholder="请输入关键词" />
+        <div style="height:var(--sp-8)"></div>
+        <select class="select"><option>请选择分类</option></select>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">分段控件</div>
+        <div class="seg"><span class="on">柔和</span><span>清爽</span></div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">卡片 / 面板</div>
+        <div class="card">
+          <div class="card-hd">今日用量</div>
+          <div class="card-bd">已用 12 / 50 次，剩余 38 次</div>
+          <div class="card-ft"><button class="btn btn-sec">明细</button><button class="btn btn-pri">升级</button></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">标签 / 徽标 / 开关</div>
+        <div class="inline">
+          <span class="chip">新功能</span>
+          <span class="chip gray">草稿</span>
+          <span class="chip ok">已生效</span>
+          <span class="switch"></span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">列表行</div>
+        <div class="list">
+          <div class="li"><div class="av">科</div><div class="tx"><b>AI 记忆</b><span>已记录 8 条</span></div><span class="go">›</span></div>
+          <div class="li"><div class="av">豆</div><div class="tx"><b>音乐口味</b><span>民谣 · 周杰伦</span></div><span class="go">›</span></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">弹窗片段</div>
+        <div class="dlg">
+          <div class="db"><b>清空口味记忆？</b><p>清空后无法恢复，需重新积累。</p></div>
+          <div class="df"><span>取消</span><span>清空</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col" data-radius="crisp" id="crispCol">
+      <div class="col-hd"><b>清爽</b><span class="tag" id="crispTag">新档 · chip 2 / control 2 / card 4</span></div>
+
+      <div class="row">
+        <div class="row-lb">按钮 · 主 / 次 / 文字 / 胶囊</div>
+        <div class="inline">
+          <button class="btn btn-pri">保存</button>
+          <button class="btn btn-sec">取消</button>
+          <button class="btn btn-txt">更多</button>
+          <button class="btn btn-pri btn-pill">开始创作</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">输入框 / 选择器</div>
+        <input class="input" placeholder="请输入关键词" />
+        <div style="height:var(--sp-8)"></div>
+        <select class="select"><option>请选择分类</option></select>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">分段控件</div>
+        <div class="seg"><span>柔和</span><span class="on">清爽</span></div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">卡片 / 面板</div>
+        <div class="card">
+          <div class="card-hd">今日用量</div>
+          <div class="card-bd">已用 12 / 50 次，剩余 38 次</div>
+          <div class="card-ft"><button class="btn btn-sec">明细</button><button class="btn btn-pri">升级</button></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">标签 / 徽标 / 开关</div>
+        <div class="inline">
+          <span class="chip">新功能</span>
+          <span class="chip gray">草稿</span>
+          <span class="chip ok">已生效</span>
+          <span class="switch"></span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">列表行</div>
+        <div class="list">
+          <div class="li"><div class="av">科</div><div class="tx"><b>AI 记忆</b><span>已记录 8 条</span></div><span class="go">›</span></div>
+          <div class="li"><div class="av">豆</div><div class="tx"><b>音乐口味</b><span>民谣 · 周杰伦</span></div><span class="go">›</span></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-lb">弹窗片段</div>
+        <div class="dlg">
+          <div class="db"><b>清空口味记忆？</b><p>清空后无法恢复，需重新积累。</p></div>
+          <div class="df"><span>取消</span><span>清空</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== C. 四端设置项形态 ========== -->
+<div class="sec">
+  <div class="sec-hd"><span class="no">C</span><h2>四端设置入口形态</h2><p>同一偏好，各端按既有设置惯例落地</p></div>
+  <div class="ends" data-radius="crisp" id="endsArea">
+
+    <div class="end">
+      <div class="end-hd">portal · 我的<em>新增「偏好」卡片</em></div>
+      <div class="end-bd">
+        <div class="p-card">
+          <div class="p-title">偏好</div>
+          <div class="f-row">
+            <label>圆角风格</label>
+            <div class="seg"><span class="on">柔和</span><span>清爽</span><span>直角</span></div>
+          </div>
+          <p class="f-hint">柔和：圆角更大更圆润（默认）；清爽：更小更利落；直角：无圆角。切换后全站立即生效。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="end">
+      <div class="end-hd">admin · 系统设置<em>新增「外观」Tab</em></div>
+      <div class="end-bd">
+        <div class="tabbar">
+          <span>基本信息</span><span>功能开关</span><span>使用配额</span><span class="on">外观</span>
+        </div>
+        <div class="panel">
+          <div class="panel-title">圆角风格</div>
+          <div class="seg" style="margin-bottom:var(--sp-12)"><span class="on">柔和</span><span>清爽</span><span>直角</span></div>
+          <div class="row-lb" style="margin:0 0 var(--sp-12)">柔和：圆角更大更圆润（默认）；清爽：更小更利落；直角：无圆角。</div>
+          <div class="row-lb" style="margin-bottom:var(--sp-8)">深色模式</div>
+          <div class="inline">
+            <span class="switch"></span>
+            <span class="hint">顶栏快捷开关与本项指向同一状态</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="end">
+      <div class="end-hd">deploy-console · 系统设置<em>外观卡片（深色外壳）</em></div>
+      <div class="end-bd">
+        <div class="dc">
+          <div class="dc-title">外观</div>
+          <div class="dc-row">
+            <label>圆角风格</label>
+            <div class="seg"><span class="on">柔和</span><span>清爽</span></div>
+          </div>
+          <p class="hint" style="margin:var(--sp-8) 0 0">外壳固定深色不随主题变化，仅圆角随偏好切换</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="end">
+      <div class="end-hd">小程序 · 小程序设置<em>「外观」分区新增一行</em></div>
+      <div class="end-bd">
+        <div class="mp">
+          <div class="mp-sec">外观</div>
+          <div class="mp-list">
+            <div class="mp-r"><span>深色模式</span><span class="v">跟随系统 ›</span></div>
+            <div class="mp-r"><span>字体大小</span><span class="v">标准 ›</span></div>
+            <div class="mp-r new"><span>圆角风格<span class="badge-new">新</span></span><span class="v">柔和 ›</span></div>
+          </div>
+          <p class="hint" style="margin:var(--sp-8) 2px 0">点按弹出：柔和 / 清爽 / 直角（ActionSheet）</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== D. 例外与实现要点 ========== -->
+<div class="sec">
+  <div class="sec-hd"><span class="no">D</span><h2>例外与实现要点</h2><p>不纳入风格切换的部分，以及各端落地必须处理的坑</p></div>
+  <div class="ex">
+    <div class="ex-box">
+      <h3>不参与切换（固定值）</h3>
+      <ul>
+        <li><code>border-radius: 50%</code> —— 头像、状态点、圆形图标</li>
+        <li><code>border-radius: 0</code> —— 聊天气泡贴边角、贴边抽屉</li>
+        <li><code>--r-pill</code> —— 胶囊、开关（轨道 + 圆钮）</li>
+        <li>进度条 / 骨架条 —— <b>待确认</b>（暂按字面值，不归入 chip）</li>
+      </ul>
+    </div>
+    <div class="ex-box">
+      <h3>各端实现坑（必须处理）</h3>
+      <ul>
+        <li><span class="warn">admin</span>antd <code>borderRadius</code> 来自 <b>JS 常量</b>（<code>antd-theme.ts</code>），只改 CSS 变量 <b>不生效</b> → 必须同时改 <code>ConfigProvider themeConfig</code> 并 watch</li>
+        <li><span class="warn">小程序</span><code>page</code> 无法绑 class → 只能挂各页根 <code>&lt;view class="page {{radiusClass}}"&gt;</code>（30 处）；<code>app.wxss</code> 目前<b>无任何圆角 token</b>，需先建变量层</li>
+        <li><span class="warn">deploy-console</span>无偏好 store（仅被动读主题），需新建载体；外壳固定深色，仅圆角跟随</li>
+        <li><span class="warn">首帧</span>偏好由 JS 写入根属性，清爽用户首屏会以柔和渲染后跳变 → <code>index.html</code> 需内联预置属性</li>
+        <li><span class="warn">持久化</span>后端<b>无用户偏好接口</b> → 本期各端本地存储，跨端不同步</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  var modesw = document.getElementById("modesw");
+  var curHint = document.getElementById("curHint");
+  var endsArea = document.getElementById("endsArea");
+  var NAME = { soft: "柔和", crisp: "清爽", sharp: "直角" };
+  var VALS = { soft: "4 / 6 / 8", crisp: "2 / 2 / 4", sharp: "0 / 0 / 2" };
+
+  /* §B 第三列（直角）由第二列克隆生成：三列组件完全一致，只有圆角变量不同 */
+  (function buildSharpCol() {
+    var compare = document.querySelector(".compare");
+    var col = compare.children[1].cloneNode(true);
+    col.setAttribute("data-radius", "sharp");
+    col.removeAttribute("id");
+    col.querySelector(".col-hd b").textContent = "直角";
+    var tag = col.querySelector(".col-hd .tag");
+    tag.textContent = "新档 · " + VALS.sharp + "px";
+    tag.classList.remove("plain");
+    compare.appendChild(col);
+  })();
+
+  /* 实测值自证：直接读浏览器计算后的圆角 */
+  function measure() {
+    function cs(mode, sel) {
+      var el = document.querySelector(".col[data-radius=\"" + mode + "\"] " + sel);
+      return el ? getComputedStyle(el).borderTopLeftRadius : "?";
+    }
+    var btn = ["soft", "crisp", "sharp"].map(function (m) { return cs(m, ".btn-pri"); }).join(" → ");
+    var card = ["soft", "crisp", "sharp"].map(function (m) { return cs(m, ".card"); }).join(" → ");
+    return "　｜　实测按钮 " + btn + "　实测卡片 " + card;
+  }
+  function apply(mode) {
+    document.documentElement.setAttribute("data-radius", mode);
+    endsArea.setAttribute("data-radius", mode);
+    requestAnimationFrame(function () {
+      curHint.textContent = "整页切到「" + NAME[mode] + "」（sm/md/lg = " + VALS[mode] + "px）" + measure();
+    });
+  }
+  modesw.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    Array.prototype.forEach.call(modesw.children, function (x) { x.classList.toggle("on", x === b); });
+    apply(b.dataset.mode);
+  });
+  apply("soft");
+</script>
+</body>
+</html>

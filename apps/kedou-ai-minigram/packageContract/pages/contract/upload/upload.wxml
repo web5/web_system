@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 上传页（按 v5 原型稿还原） -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 拍照 / 相册 双大按钮 -->
   <view class="up-actions">
     <view class="up-act" bindtap="takePhoto" hover-class="up-act-hover">

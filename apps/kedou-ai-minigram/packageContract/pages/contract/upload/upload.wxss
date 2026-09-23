@@ -16,7 +16,7 @@ page {
   flex: 1;
   background: #fff;
   border: 3rpx dashed #1E6FFF;
-  border-radius: 32rpx;
+  border-radius: var(--r-card);
   padding: 36rpx 16rpx;
   text-align: center;
   box-sizing: border-box;
@@ -53,7 +53,7 @@ page {
   min-height: 236rpx;
   background: #fff;
   border: 3rpx solid #E8EBF0;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   padding: 24rpx;
   box-sizing: border-box;
   font-size: 24rpx;
@@ -82,7 +82,7 @@ page {
   color: #1E6FFF;
   background: #EAF2FF;
   border: 1rpx solid #C9DFFF;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   padding: 12rpx 24rpx;
 }
 
@@ -100,7 +100,7 @@ page {
   color: #5B6372;
   background: #fff;
   border: 3rpx solid #E8EBF0;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   padding: 12rpx 24rpx;
 }
 .scene-chip.active {
@@ -117,7 +117,7 @@ page {
   color: #fff;
   font-size: 30rpx;
   font-weight: 600;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   border: none;
   line-height: 2.2;
 }

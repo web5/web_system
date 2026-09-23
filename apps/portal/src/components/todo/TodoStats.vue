@@ -74,7 +74,7 @@ const props = defineProps<{
 
 .stat-card {
   background: white;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 16px;
   display: flex;
   align-items: center;
@@ -95,7 +95,7 @@ const props = defineProps<{
   align-items: center;
   justify-content: center;
   background: #FFF8F0;
-  border-radius: 4px;
+  border-radius: var(--r-card);
 }
 
 .stat-content {

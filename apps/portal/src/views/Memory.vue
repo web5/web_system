@@ -176,7 +176,7 @@ onMounted(() => void load());
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--r-chip);
   color: var(--ws-text-tertiary);
 }
 

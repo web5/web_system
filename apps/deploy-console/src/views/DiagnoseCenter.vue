@@ -206,7 +206,7 @@ onMounted(async () => {
             <pre
               v-if="portResult.lines.length"
               style="margin-top: 8px; background: #1e1e1e; color: #d4d4d4; padding: 10px;
-                     border-radius: 4px; font-size: 12px; max-height: 220px; overflow: auto;"
+                     border-radius: var(--r-card); font-size: 12px; max-height: 220px; overflow: auto;"
             >{{ portResult.lines.join('\n') }}</pre>
           </div>
         </a-card>
@@ -234,7 +234,7 @@ onMounted(async () => {
             <pre
               v-if="restartOutput"
               style="margin-top: 8px; background: #1e1e1e; color: #d4d4d4; padding: 10px;
-                     border-radius: 4px; font-size: 12px; max-height: 160px; overflow: auto;"
+                     border-radius: var(--r-card); font-size: 12px; max-height: 160px; overflow: auto;"
             >{{ restartOutput }}</pre>
           </template>
           <a-empty v-else description="请先选择服务" />
@@ -265,7 +265,7 @@ onMounted(async () => {
           <pre
             v-if="logResult?.logs.length"
             style="margin-top: 8px; background: #1e1e1e; color: #d4d4d4; padding: 10px;
-                   border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-all;
+                   border-radius: var(--r-card); font-size: 12px; white-space: pre-wrap; word-break: break-all;
                    max-height: 300px; overflow: auto;"
           >{{ logResult.logs.join('\n') }}</pre>
           <div v-if="logError" style="margin-top: 8px; color: #cf1322;">{{ logError }}</div>

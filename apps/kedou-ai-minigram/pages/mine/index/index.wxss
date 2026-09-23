@@ -15,7 +15,7 @@ page {
   display: flex;
   align-items: center;
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   padding: 30rpx 28rpx;
 }
 .profile:active { opacity: .8; }
@@ -39,7 +39,7 @@ page {
 .vip {
   margin-top: 20rpx;
   padding: 28rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   background: linear-gradient(120deg, var(--brand), var(--brand-deep));
   color: #fff;
 }
@@ -59,7 +59,7 @@ page {
 
 .list {
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   overflow: hidden;
 }
 .r {
@@ -79,7 +79,7 @@ page {
 .logout {
   margin-top: 36rpx;
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   padding: 28rpx;
   text-align: center;
   font-size: 28rpx;

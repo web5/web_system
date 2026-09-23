@@ -320,7 +320,7 @@ function onMaterialTouchStart(e: TouchEvent, item: MaterialItem) {
     ghost.appendChild(img);
   } else if (item.type === 'color') {
     const swatch = document.createElement('span');
-    swatch.style.cssText = `display:block;width:48px;height:48px;border-radius:10px;background:${item.content};border:2px solid rgba(0,0,0,0.08);`;
+    swatch.style.cssText = `display:block;width:48px;height:48px;border-radius:var(--r-chip);background:${item.content};border:2px solid rgba(0,0,0,0.08);`;
     ghost.appendChild(swatch);
   } else {
     ghost.textContent = item.content;
@@ -740,7 +740,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, #FF8C42, #FFB347);
   color: #fff;
   padding: 8px 20px;
-  border-radius: 16px;
+  border-radius: var(--r-control);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -772,7 +772,7 @@ onBeforeUnmount(() => {
 .tab-btn {
   padding: 8px 18px;
   border: none;
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   background: rgba(255, 140, 66, 0.06);
   color: #888;
   font-size: 14px;
@@ -811,7 +811,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 10px 12px;
   border: 1.5px solid rgba(255, 140, 66, 0.08);
-  border-radius: 16px;
+  border-radius: var(--r-card);
   background: #fff;
   cursor: grab;
   transition: all 0.2s;
@@ -848,7 +848,7 @@ onBeforeUnmount(() => {
 .material-color-swatch {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--r-chip);
   border: 1px solid rgba(0,0,0,0.06);
 }
 
@@ -863,7 +863,7 @@ onBeforeUnmount(() => {
   margin: 8px 16px;
   background: #fff;
   border: 2px dashed rgba(255, 140, 66, 0.12);
-  border-radius: 20px;
+  border-radius: var(--r-card);
   position: relative;
   overflow: hidden;
   touch-action: none;
@@ -937,7 +937,7 @@ onBeforeUnmount(() => {
   right: -6px;
   bottom: -6px;
   border: 2px solid #4ECDC4;
-  border-radius: 8px;
+  border-radius: var(--r-chip);
   pointer-events: none;
 }
 
@@ -1010,7 +1010,7 @@ onBeforeUnmount(() => {
   width: 100%;
   padding: 12px 16px;
   border: 1.5px solid rgba(255, 140, 66, 0.12);
-  border-radius: 14px;
+  border-radius: var(--r-control);
   font-size: 14px;
   color: #333;
   background: #fff;
@@ -1039,7 +1039,7 @@ onBeforeUnmount(() => {
   width: 60px;
   height: 60px;
   background: rgba(255, 255, 255, 0.9);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(78, 205, 196, 0.3);
   transition: none;
   will-change: left, top;
@@ -1064,7 +1064,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 14px 20px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--r-control);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -1180,7 +1180,7 @@ onBeforeUnmount(() => {
   .canvas-area {
     grid-area: canvas;
     margin: 12px 20px;
-    border-radius: 20px;
+    border-radius: var(--r-card);
     box-shadow: 0 4px 24px rgba(255, 140, 66, 0.06);
     min-height: 0;
   }

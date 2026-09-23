@@ -123,9 +123,27 @@ export interface ConversationListResult {
   total: number;
 }
 
-/** 会话列表（分页，updatedAt 倒序）。只声明 page/pageSize：后端 DTO 开了 forbidNonWhitelisted */
-export async function listConversations(page = 1, pageSize = 50): Promise<ConversationListResult> {
-  const res = await request.get(`${CONVERSATIONS_URL}?page=${page}&pageSize=${pageSize}`);
+/**
+ * 会话范围（2026-09-23，见 specs/conversation-source-filter/design.md）：
+ * 工具页（翻译 / 合翻）会话以 source=tool 落库，各按 agentId 取自己的记录。
+ */
+export interface ConversationScope {
+  /** chat = 主对话（后端默认）；tool = 工具页 */
+  source?: 'chat' | 'tool';
+  /** 能力标识：translate / contract-risk */
+  agentId?: string;
+}
+
+/** 会话列表（分页，updatedAt 倒序）。后端 DTO 开了 forbidNonWhitelisted，多余参数会被拒 */
+export async function listConversations(
+  page = 1,
+  pageSize = 50,
+  scope: ConversationScope = {},
+): Promise<ConversationListResult> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (scope.source) params.set('source', scope.source);
+  if (scope.agentId) params.set('agentId', scope.agentId);
+  const res = await request.get(`${CONVERSATIONS_URL}?${params.toString()}`);
   const body = (res ?? {}) as Partial<ConversationListResult>;
   return { list: body.list ?? [], total: body.total ?? 0 };
 }

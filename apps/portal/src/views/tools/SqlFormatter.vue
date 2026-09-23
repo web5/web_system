@@ -252,7 +252,7 @@ function downloadOutput() {
 .config-select {
   padding: 6px 12px;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   font-size: 13px;
   color: #333;
   background: #fff;
@@ -273,7 +273,7 @@ function downloadOutput() {
 
 .editor-panel {
   background: #fff;
-  border-radius: 16px;
+  border-radius: var(--r-card);
   border: 1px solid #f1f5f9;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -302,7 +302,7 @@ function downloadOutput() {
 .action-btn {
   background: none;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   padding: 4px 10px;
   font-size: 12px;
   color: #666;
@@ -351,7 +351,7 @@ function downloadOutput() {
   gap: 6px;
   padding: 10px 24px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 500;
   color: #555;
@@ -386,7 +386,7 @@ function downloadOutput() {
   padding: 12px 16px;
   background: #FEF2F2;
   border: 1px solid #FECACA;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   color: #DC2626;
   font-size: 13px;
   margin-top: 12px;
@@ -399,7 +399,7 @@ function downloadOutput() {
   padding: 12px 16px;
   background: #F0FDF4;
   border: 1px solid #BBF7D0;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   color: #16A34A;
   font-size: 13px;
   margin-top: 12px;

@@ -80,7 +80,13 @@ export class UserService {
 
   async update(id: string, userData: Partial<User>): Promise<User> {
     const user = await this.findById(id);
-    Object.assign(user, userData);
+    const { preferences, ...rest } = userData;
+    Object.assign(user, rest);
+    if (preferences !== undefined) {
+      // 界面偏好按「浅合并」写入：保留本次未提交的键，避免将来新增偏好项被整体覆盖。
+      // 口径：specs/radius-style-dual/page-spec-pref-sync.md §3.2
+      user.preferences = { ...(user.preferences ?? {}), ...preferences };
+    }
     return this.userRepository.save(user);
   }
 

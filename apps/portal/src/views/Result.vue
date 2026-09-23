@@ -273,7 +273,7 @@ function previewFull() {
   padding: 8px 24px;
   background: rgba(126, 217, 87, 0.1);
   border: 1px solid rgba(126, 217, 87, 0.2);
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   color: #5CB85C;
   font-size: 16px;
   font-weight: 700;
@@ -306,7 +306,7 @@ function previewFull() {
 .card-thumb {
   width: 140px;
   height: 140px;
-  border-radius: 20px;
+  border-radius: var(--r-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -394,7 +394,7 @@ function previewFull() {
   gap: 8px;
   padding: 14px 24px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--r-control);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -473,7 +473,7 @@ function previewFull() {
 .rs-tip {
   background: rgba(255, 140, 66, 0.05);
   border: 1px solid rgba(255, 140, 66, 0.08);
-  border-radius: 12px;
+  border-radius: var(--r-card);
   padding: 12px 16px;
   font-size: 13px;
   color: #999;
@@ -516,7 +516,7 @@ function previewFull() {
 .preview-img {
   max-width: 90%;
   max-height: 80%;
-  border-radius: 16px;
+  border-radius: var(--r-card);
   object-fit: contain;
 }
 
@@ -554,7 +554,7 @@ function previewFull() {
   .card-thumb {
     width: 280px;
     height: 280px;
-    border-radius: 28px;
+    border-radius: var(--r-card);
   }
 
   .rs-description {

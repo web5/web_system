@@ -38,7 +38,7 @@
 .btn-go {
   padding: 24rpx 64rpx;
   background: linear-gradient(135deg, #FF8C42, #FF6B35);
-  border-radius: 48rpx;
+  border-radius: var(--r-pill);
   font-size: 30rpx;
   color: #FFF;
   font-weight: 600;
@@ -129,7 +129,7 @@
   position: relative;
   width: calc((100% - 24rpx) / 3);
   aspect-ratio: 1;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   overflow: hidden;
   background: #FFF;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -201,7 +201,7 @@
 .preview-sheet {
   width: 100%;
   background: #FFF;
-  border-radius: 32rpx 32rpx 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
   padding: 40rpx 32rpx 32rpx;
   padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
   display: flex;
@@ -218,7 +218,7 @@
 .preview-img {
   width: 90%;
   aspect-ratio: 1;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   background: #FFF8F0;
   margin-bottom: 32rpx;
 }
@@ -233,7 +233,7 @@
 .preview-btn {
   flex: 1;
   height: 88rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   border: none;
   font-size: 28rpx;
   font-weight: 600;
@@ -256,7 +256,7 @@
 .preview-close {
   width: 100%;
   height: 88rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   border: none;
   font-size: 28rpx;
   color: #888;

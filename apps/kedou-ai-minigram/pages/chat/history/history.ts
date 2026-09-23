@@ -31,6 +31,7 @@ interface ListCache {
 
 Page({
   data: {
+    radiusClass: "",
     list: [] as Row[],
     /** 骨架循环的数据源：WXML 里用数组字面量在部分基础库上会导致整页渲染失败，改放 data */
     skeletonRows: [1, 2, 3, 4, 5],
@@ -49,6 +50,10 @@ Page({
    *     所以刷新过程中旧数据一直在，不会闪一下空列表。
    */
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     let cached: ListCache | null = null;
     try {
       cached = wx.getStorageSync(LIST_CACHE_KEY) || null;

@@ -58,12 +58,18 @@ def main():
     apps = list(data.get('apps') or [])
     proto_files = list(data.get('proto_files') or [])
     hashes = dict(data.get('sha256') or {})
+    is_global = bool(data.get('global'))
 
     # 具体到 app 的原型（apps/<app>/prototype/**）→ 记 app 边界；
-    # docs/ui/prototypes、specs/**/page-spec*.md 为全局通行证（apps 保持为空 = 不限制端）
+    # docs/ui/prototypes、specs/**/page-spec*.md 为**全局通行证**（不限制端）。
+    # ⚠️ apps 是累加集合：本会话一旦也动过某 app 的原型，光靠「apps 为空」已无法表达全局语义
+    #    （admin 系的原型长期放在 docs/ui/prototypes，无 apps/<app>/prototype 目录，会因此永远被拒）。
+    #    故这里额外记一个 sticky 标记 global=True：本会话出现过任一全局通行证即不限端。
     app = C.app_of(rel)
     if app and app not in apps:
         apps.append(app)
+    if not app:
+        is_global = True
     if C.is_passport(rel) and rel not in proto_files:
         proto_files.append(rel)
         h = sha256_file(abs_path)
@@ -76,6 +82,7 @@ def main():
         'apps': apps,
         'proto_files': proto_files,
         'sha256': hashes,
+        'global': is_global,
         'source': 'exempt' if by_exempt else 'prototype',
     }
     C.save_marker(root, session_id, info)
