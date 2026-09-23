@@ -457,7 +457,7 @@ function isWatchdog(s: string) {
   color: var(--ws-text-secondary);
   background: var(--ws-bg-subtle);
   border-right: 1px solid var(--ws-border);
-  border-radius: var(--r-chip) 0 0 1px;
+  border-radius: var(--r-chip) 0 0 var(--r-chip);
 }
 .orch-task .tname {
   color: var(--ws-text-secondary);
