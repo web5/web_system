@@ -1,7 +1,14 @@
 // 合同评估主页（tab）
 // TODO: 上传走 services/ocr-api.ts，评估走 services/contract-api.ts
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     types: ['采购', '劳动', '租赁', '服务', '保密', '借款'],
     contractType: '采购',
     risks: [

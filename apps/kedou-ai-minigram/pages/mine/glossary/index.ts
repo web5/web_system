@@ -13,12 +13,17 @@ interface GlossaryViewItem extends GlossaryItem {
 
 Page({
   data: {
+    radiusClass: "",
     loading: true,
     empty: false,
     items: [] as GlossaryViewItem[],
   },
 
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     void this.load();
   },
 

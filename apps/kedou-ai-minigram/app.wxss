@@ -36,6 +36,17 @@ page {
   --t3: rgba(60, 60, 67, .34);
   --icon: #8A90A0; /* 图标常态色 = app.json tabBar 未选中色；导航栏 icon 跟随它，不参与品牌橙 */
 
+  /* ---- 圆角语义档（业务层唯一引用入口） ---- */
+  /* 与 packages/ui 同口径，落地按 1px ≈ 2rpx：
+     柔和（默认）4/6/8px → 8/12/16rpx；清爽 2/2/4px → 4/4/8rpx；直角 0/0/2px → 0/0/4rpx。
+     切换靠各页根节点叠加 .radius-crisp / .radius-sharp（见文件末尾覆盖类）。 */
+  --r-chip: 8rpx;
+  --r-control: 12rpx;
+  --r-card: 16rpx;
+  --r-pill: 999rpx;
+  /* 派生内层（分段控件等）：control - 2px */
+  --r-control-inner: 8rpx;
+
   /* ---- 其他 ---- */
   --mask: rgba(0, 0, 0, .45);
   --shadow: 0 20rpx 56rpx rgba(20, 30, 60, .18);
@@ -62,4 +73,25 @@ page {
   color: var(--t3);
   text-align: center;
   line-height: 1.8;
+}
+
+/* ===== 圆角风格覆盖类（用户偏好：柔和 / 清爽 / 直角） =====
+ * 挂载点：各页根节点 `<view class="page {{radiusClass}}">`（小程序 `page` 元素无法绑 class）。
+ * 柔和 = 不叠加任何类（走 page 上的默认变量，零视觉变化）。
+ * radiusClass 由 utils/appearance.ts 计算、各页 onShow 经 getApp().radiusClassOf() 刷新。
+ * 口径：specs/radius-style-dual/page-spec.md §4.2
+ * ⚠️ 覆盖类必须同时给出语义档（--r-*）与派生值（--r-control-inner），保持与 tokens.css 同一约束。
+ */
+.radius-crisp {
+  --r-chip: 4rpx;
+  --r-control: 4rpx;
+  --r-card: 8rpx;
+  --r-control-inner: 0;
+}
+
+.radius-sharp {
+  --r-chip: 0;
+  --r-control: 0;
+  --r-card: 4rpx;
+  --r-control-inner: 0;
 }

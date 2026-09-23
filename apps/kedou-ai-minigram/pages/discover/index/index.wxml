@@ -1,6 +1,6 @@
 <!-- 科豆 AI · 发现（tab 2）：能力市场 -->
 <!-- 骨架期卡片写死；批次 4 改由 GET /ai/agents 的 entry 元数据驱动渲染 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="sec-t">AI 能力<text class="em">点开即用</text></view>
 
   <view class="cap" bindtap="openTranslate">

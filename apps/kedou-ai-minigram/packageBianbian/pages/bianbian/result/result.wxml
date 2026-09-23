@@ -1,5 +1,5 @@
 <!-- 变变结果页 v2 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 标题 -->
   <view class="header">
     <image class="header-emoji" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY4QzQyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgMjFoMTYiLz48cGF0aCBkPSJNMTIgMnYzIi8+PHBhdGggZD0iTTggNWwtMyA0IDQtMSAyIDMtMSA0IDUtMiAxIDUgMy02IDUgMi0yLTYgNC0yLTgtNC00LTFaIi8+PC9zdmc+" mode="aspectFit" />

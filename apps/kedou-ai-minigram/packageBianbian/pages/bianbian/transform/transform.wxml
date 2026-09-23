@@ -1,5 +1,5 @@
 <!-- 变变 AI 变身页 v2 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 状态：Loading -->
   <view wx:if="{{status === 'loading'}}" class="loading-wrap">
     <!-- 原画缩略图 -->

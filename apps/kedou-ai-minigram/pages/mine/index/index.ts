@@ -13,6 +13,7 @@ import { listGlossary } from '../../../services/glossary';
 
 Page({
   data: {
+    radiusClass: "",
     nickname: '橙子哥哥',
     realName: '已实名',
     phone: '138****6688',
@@ -31,6 +32,10 @@ Page({
 
   /** 登记当前 tab（自定义 tabBar 据此渲染并高亮；对话页则隐藏） */
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/mine/index/index', selected: 2 });
     // 口味摘要：轻量读一次，失败保持「未设置」不打扰

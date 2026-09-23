@@ -1,6 +1,6 @@
 <!-- 合同助手 - 对话式体检入口
      文字/图片 → 左侧 AI 流式输出报告气泡（带节流）→ 报告卡 + 查看完整报告按钮 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 对话消息流 -->
   <view class="msg-list">
     <view wx:for="{{messages}}" wx:key="id" class="chat-msg {{item.role}}">
