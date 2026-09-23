@@ -41,8 +41,21 @@
         详情页任务分叉用了「缩进 16px + 左竖线 + 横线」的树状画法（`.orch-tasks{padding-left:16px}`），
         local/dev 任务卡比步骤卡错开 16px。
   处置：对齐编辑页 —— 去掉缩进（任务卡与步骤卡同宽左对齐），分叉竖线贴 cell 左缘
-        （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
+       （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
   落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
+
+  === 微调豁免（五）· 2026-09-23 ===
+  范围：详情页只读画布的**连线着色时机**修正（状态展示 bug，非新交互、不改原型形态）。
+  现象：用户反馈「还没进入到下一个环节，箭头都是绿色了」——截图实例停在「发布确认 · 待审批」，
+       其后「发布」步骤的 4-1 local / 4-2 dev 两张任务卡都是「未执行」（灰），
+       但指向它们的支线横线 + 箭头已经绿色。
+  原因（实测）：支线判定写成了「目标不是 skipped 就是绿」（`!classList.contains('st-skipped')`），
+       而「未执行」的类名是 `st-`（空状态），既不等于 skipped 也不是 succeeded → 被误判为走过路径。
+       规格判据其实是「进入侧步骤聚合终态 succeeded 才变绿」（specs/pipeline-task-status/design.md §4.2）。
+  处置：连线着色一律以**数据状态**为准，不再用「非 skipped」这种反向判定 ——
+       · 主线横线 / 分叉竖线：进入侧（前一列）步骤聚合 === succeeded 才绿（竖线另要求目标分支无 skipped）；
+       · 支线横线 + 箭头：**仅该目标任务状态 === succeeded 才绿**，未执行 / 待审批 / 执行中 / 失败 / 跳过一律灰。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue drawWires()
 -->
 <style>
   :root{
