@@ -140,6 +140,19 @@ grep -q 'check_r12  ' "$BIN/scan-rules.sh" || grep -q 'check_r12$' "$BIN/scan-ru
 if [ -z "$miss" ]; then ok "V24 kit 同源守门接线完整（含保护清单）"
 else bad "V24 kit 同源守门接线完整（含保护清单）" "缺：${miss# }"; fi
 
+# V25 契约/发布评审门禁接线（R13/R14 + 两面判定 + 主流程挂载 + 收窄未回退）
+miss=""
+grep -q 'check_r13_r14' "$BIN/scan-rules.sh" || miss="$miss check_r13_r14"
+grep -q 'is_contract_file' "$BIN/scan-rules.sh" || miss="$miss is_contract_file"
+grep -q 'is_release_file' "$BIN/scan-rules.sh" || miss="$miss is_release_file"
+grep -q 'check_r13_r14  ' "$BIN/scan-rules.sh" || grep -q 'check_r13_r14 "' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+# 防回退：契约面曾误纳 packages/agent-core/* 整个 SDK，导致内部实现改动也报（摩擦过大）
+if grep -A10 '^is_contract_file' "$BIN/scan-rules.sh" | grep -q 'packages/agent-core'; then
+  miss="$miss 契约面回退为全SDK"
+fi
+if [ -z "$miss" ]; then ok "V25 契约/发布评审门禁接线完整（含收窄防回退）"
+else bad "V25 契约/发布评审门禁接线完整（含收窄防回退）" "缺：${miss# }"; fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"
