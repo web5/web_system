@@ -1,7 +1,8 @@
 # 后端远端（dev / prod）发布能力补齐
 
-> 建立：2026-09-23 ｜ 状态：**设计已评审（决策已拍板，2026-09-23）**，实施从 B1 开始
+> 建立：2026-09-23 ｜ 状态：**B1 / B2 已实施并在 dev 实证通过**（含受控回滚演练）；B3~B5 待做
 > 授权记录：Q1~Q5 按本文推荐执行；需要动目标机 / 库的操作已获授权（执行时会先打印将要变更的内容）
+> 实现：`scripts/migrations/p26-remote-backend-release.mjs`（PR #132）｜实证、事故与教训见 §11
 > 相关：`specs/pipeline-restart-verify-as-action/design.md`（本方案的前身与留白出处）、
 > `specs/pipeline-node-model/design.md`、`specs/pipeline-env-scripts/design.md`、
 > `specs/release-platform/design.md`、`docs/development/local-release-runbook.md`、
@@ -139,8 +140,8 @@
 ## 6. 分批实施（每批独立可验证、可回退）
 | 批 | 内容 | 验证 |
 |---|---|---|
-| B1 | 写 `restart（远端）` / `verify（远端）` 两条 action，**只挂 `system-service` 的 dev 分支** | 真实发布：succeeded 且目标机 `dist` 时间 = 本次、进程重启时间 = 本次、`/internal/storage/path` 200；再故意构造失败（如错误 pm2 名）验证「回滚 + 指针不动」。**B1 同时承担原 A 的验收**（dev 上 system-service 真正上线），因此不再单独做手工落地 |
-| B2 | 目标机依赖完整性：`git`（远端分支）+ `deps（远端）` | 在 dev 上从「仓库落后一版」状态发布，验证能自愈；观察耗时可接受 |
+| B1 | 写 `restart（远端）` / `verify（远端）` 两条 action，**只挂 `system-service` 的 dev 分支** | ✅ **已实施并实证**（2026-09-23）：真实发布 succeeded；目标机 `dist` 时间 = 本次、进程重启时间 = 本次、`/internal/storage/path` **200**、指针与运行版本一致。**B1 同时承担原 A 的验收**（dev 上 system-service 真正上线）。受控回滚演练见 §11.3 |
+| B2 | 目标机依赖完整性：`git` + `deps`（合并为一条 `sync（远端）`，按指纹短路） | ✅ **已实施并实证**（2026-09-23）：目标机仓库 `f05e12e → 3d5ce61`、`.env` 前置校验通过、首次重建 5 个包、第二次「指纹未变，跳过」；流水线内一次完整发布全链通过 |
 | B3 | 推广到其余后端模块（`gateway` / `upload-service` / `user-service` / `ai-service` / `todo-service` / `mcp-gateway` / `content-hub` / `ai-agent` / …），逐模块各发一次验证 | 每模块终态 succeeded + 探活通过 + 版本指针与进程一致 |
 | B4 | 导出**幂等迁移脚本**（`scripts/migrations/pXX-remote-backend-release.mjs`），供 dev / 堡垒机云库导入 | 在干净库上跑一遍，结果与本地库一致 |
 | B5 | 文档：`local-release-runbook.md` 补 dev/prod 发布流程与失败排查；`deploy-target-knowledge.md` 记目标机边界 | 文档可照做 |
@@ -179,3 +180,36 @@
 | Q5 | prod 是否同批做？ | **不同批**：本次只落 dev；prod（多机、3000 系端口、主密钥域）在 B1 完成后单独评审 |
 
 > 补充授权记录：本次在目标机上的手工动作（§9 清单）已获授权执行；B2 完成后按 §9 收敛并回退双轨。
+
+## 11. 实施进度与实证（2026-09-23）
+
+### 11.1 落地物
+| 物 | 位置 |
+|---|---|
+| 迁移（幂等，含 `bash -n` 自检 / `DRY_RUN` / `ROLLBACK` / 动库前打印将变更行） | `scripts/migrations/p26-remote-backend-release.mjs` |
+| 挂载结果（`tpl-system-service-dev` 的 `dev` 分支任务） | `发布(0) → write-version(1) → sync(5) → restart(11) → verify(21)` |
+| 模块范围可覆盖 | `MODULES=a,b,c node scripts/migrations/p26-remote-backend-release.mjs`（B3 用） |
+
+### 11.2 两次真实事故（都已修，教训写进脚本注释）
+| # | 事故 | 根因 | 修法 / 影响 |
+|---|---|---|---|
+| 1 | 首次发布 `restart（远端）` 立即 exit 1 | `SSH="ssh -i …"` 后用 `"$SSH" host` 调用 —— 带引号的变量被当成**一个命令名** | 改 `rssh()` 函数；**目标机零影响**（ssh 未连出，已核对） |
+| 2 | 第二次发布"succeeded"但服务 **crash-loop**（restarts 199、6004 无监听），且 `verify` 打印了"验证通过" | ① 目标机 `.env` 缺 `AUTH_SERVICE_URL`（master 起 production 强制 fail-fast，见 `packages/shared/src/services.ts:49`）→ 新产物启动即退；② `verify` **未检查 ssh 退出码**（会说谎）；③ 回滚只 `pm2 restart` 不够（实测须 `delete + start`） | ① 目标机 `.env` 补 `AUTH_SERVICE_URL=http://127.0.0.1:6001`（值取自该机 auth-service 的 PORT）；② `verify` 改为检查退出码 + **失败即回滚 dist 并重启旧版本**；③ 回滚加干净启动兜底 + 打印远端 pm2 日志尾部 |
+
+### 11.3 受控回滚演练（B2 收尾，已通过）
+流程：造一个"启动即崩"的版本目录 → 用落库后的 `restart` 脚本落地 → 用落库后的 `verify` 脚本判定。
+实测：
+- 坏版本落地后 `status=errored`、`restarts=18`、端口无监听（确认真的打坏了）；
+- `verify`：`进程未 online（status=errored，已等 30s）` → `验证未通过 → 回滚` → `已回滚 dist ← dist.bak-…` → `回滚后进程状态 = online` → 打印远端 pm2 日志 → **退出码 1**（平台侧由此保证"指针不前进"）；
+- 演练后清理，服务恢复 `restarts=0 / 6004 监听 / A2 200`。
+
+### 11.4 目标机 `.env` 前置变量（B2 已加自动校验；**B3 需逐模块补齐**）
+- 当前必需清单：`AUTH_SERVICE_URL`（dev/prod = `http://127.0.0.1:6001`；本机 = 6101）
+- `sync（远端）` 会在 `NODE_ENV=production` 时校验并在缺失时 **fail-fast（不换 dist、不重启）**；
+- B3 铺开时，**每个后端模块的 dev `.env` 都要先补齐**，否则会停在 `sync` 阶段（这是设计意图：宁可停在发布前，也不要"崩了再回滚"）。
+
+### 11.5 与 §9 手工痕迹的收敛关系
+- `packages/{shared,types}/dist` 的手工替换 **已被 `sync` 的自动重建取代**（指纹口径 = lock + 各包 src 与 package.json）；
+- 目标机仓库陈旧（`f05e12e`）**已由 `sync` 的 `fetch + reset --hard` 治好**；
+- 仍保留的手工项：`upload-service/.env` 的 `INTERNAL_API_KEY` / `STORAGE_ALLOWED_ROOTS` / `STORAGE_UPLOAD_DIR` —— 属 A3 的部署前置（不是 B 的范围），发 `upload-service` 前仍需；`system-service/.env` 的 `AUTH_SERVICE_URL` 属 11.4。
+
