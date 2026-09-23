@@ -31,6 +31,8 @@ export interface NavItem {
   topLevel?: boolean;
   /** 顶栏不展示时的高亮归属（进入能力页时顶栏亮「发现」） */
   parent?: NavKey;
+  /** 左栏下半区是否展示「能力」（换能力 / 回发现的出口，2026-09-23） */
+  caps?: boolean;
   /** 建设中：跳转后页面为占位态 */
   soon?: boolean;
 }
@@ -46,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
     sideList: true,
     listTitle: '最近对话',
     context: false,
+    caps: true,
   },
   {
     key: 'chat',
@@ -55,6 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
     sideList: true,
     listTitle: '会话',
     context: false,
+    caps: true,
   },
   {
     key: 'discover',
@@ -75,6 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
     sideList: false,
     listTitle: '翻译记录',
     context: false,
+    caps: true,
     // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
     topLevel: false,
     parent: 'discover',
@@ -87,6 +92,7 @@ export const NAV_ITEMS: NavItem[] = [
     // 左栏「体检记录」依赖 listConversations 的 source=tool 过滤（B 待办，与翻译记录同一项），未就绪前不显示
     sideList: false,
     listTitle: '体检记录',
+    caps: true,
     // P3：报告步由页面注入「合同原文」面板，非报告步不注入 → 右栏整体不占位
     context: true,
     // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
