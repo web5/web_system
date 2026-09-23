@@ -279,7 +279,7 @@ function goBack() {
 }
 
 .artwork-card {
-  border-radius: 12px;
+  border-radius: var(--r-card);
   overflow: hidden;
 }
 

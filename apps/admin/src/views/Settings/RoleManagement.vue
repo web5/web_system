@@ -319,7 +319,7 @@ onMounted(reload);
 }
 .role-item {
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   cursor: pointer;
   border: 1px solid transparent;
   margin-bottom: 6px;
@@ -350,7 +350,7 @@ onMounted(reload);
 .perm-group {
   margin-bottom: 20px;
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   padding: 12px 16px;
 }
 .perm-group-title {
@@ -378,7 +378,7 @@ onMounted(reload);
   display: flex;
   align-items: center;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   border: 1px solid #f0f0f0;
   cursor: pointer;
   transition: all .2s;

@@ -436,7 +436,7 @@ const keyColumns = [
 }
 .tool-card {
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 12px;
   margin-bottom: 12px;
   background: var(--surface-2);
@@ -455,7 +455,7 @@ const keyColumns = [
 .result {
   background: var(--surface-3);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 12px;
   max-height: 300px;
   overflow: auto;

@@ -163,7 +163,7 @@ onMounted(() => {
 <style scoped>
 .mcp-module {
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   padding: 12px 16px;
   margin-bottom: 12px;
 }
@@ -187,7 +187,7 @@ onMounted(() => {
 .mcp-tool-item {
   padding: 6px 8px;
   border: 1px solid #f0f0f0;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   cursor: pointer;
   transition: all .2s;
 }
@@ -212,7 +212,7 @@ onMounted(() => {
 .skill-item {
   padding: 10px 12px;
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  border-radius: var(--r-card);
   cursor: pointer;
   transition: all .2s;
 }
