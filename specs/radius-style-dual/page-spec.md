@@ -88,7 +88,7 @@
 | 交互 | 新增 `pickRadius()`，照 `pickFont()` 的 `wx.showActionSheet({itemList:['柔和','清爽','直角']})` 同构 |
 | **必须先补** | ① `app.wxss` 的 `page{}` token 段（现 L6–L57）**目前无任何圆角 token** → 先建 `--r-chip/--r-control/--r-card/--r-pill`（按 1px≈2rpx 换算）；② 覆盖类 `.page.radius-crisp{--r-chip:4rpx;--r-control:4rpx;--r-card:8rpx}` |
 | **根 class 绑定** | `page` 元素**无法绑定 class** → 各页根 `<view class="page {{radiusClass}}">` 绑定（**实测 30 处**）；`radiusClass` 由新建 `utils/appearance.ts`（读 storage）在 `onShow` 提供 |
-| 持久化 | `wx.setStorageSync('appearance_radius', 'soft'\|'crisp')` |
+| 持久化 | `wx.setStorageSync('appearance_radius', 'soft'\|'crisp'\|'sharp')`（缺省/非法值回退 `soft`） |
 | 例外 | 保留 `50%` 与 `border-radius:0`；`music-card` 等自定义组件可通过 CSS 变量继承 |
 
 ### 4.3 admin
