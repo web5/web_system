@@ -16,8 +16,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
-    // 与 vite.config.ts 的 resolve.alias 保持一致：本仓未使用 npm workspaces（node_modules/@web-system 无软链），
-    // 若只在 Vite 侧映射，tsc / vue-tsc 会报 Cannot find module。
+    // 与 vite.config.ts 的 resolve.alias 保持一致。本仓虽为 pnpm workspace（pnpm-workspace.yaml 含 packages/*），
+    // 但依赖需在 package.json 声明才会被链接；此处兜底，避免 node_modules 未安装/陈旧时 tsc、vue-tsc 报 Cannot find module。
     "paths": {
       "@/*": ["src/*"],
       "@web-system/shared": ["../../packages/shared/src/index.ts"],
