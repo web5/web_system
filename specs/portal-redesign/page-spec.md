@@ -385,3 +385,7 @@
 **第二批（B：分页/接口取值）**：`Todo.vue` 原按 `res.data.items` 取值 —— 既触发 TS2339，也是**运行时隐患**（响应拦截器已解包 `{code,data}`，`res.data` 为空）。已按既有列表接口约定（`const { list } = await ...`）改为 `res.items` / `res.total`，并把 `api/todo.ts#getTodoList` 返回类型声明为解包后的分页体。另：`Create.vue` 素材接口仅做**类型对齐**（`res.code`/`res.data` 语义未动），**疑似遗留问题**（若该接口实际被解包，`res.code` 恒为 undefined、素材永不加载）待确认返回体后处理。
 
 **第三批（C：UserInfo 展开基底）**：`Profile.vue` 的 `{ ...userStore.userInfo, ... }` 中，展开基底类型为 `UserInfo | null`，导致必填字段（`id`/`username`/`roles`）被推断为可选、无法赋给 `UserInfo`（TS2345 ×2）。修法：断言展开基底 `...(userStore.userInfo as UserInfo)` —— 展开 `null` 本就是空操作，**运行时零变化**。
+
+**第四批（D+E：未使用变量与库 API 漂移）**：
+- D｜`Create.vue`：`touchMoved` / `resizeCorner` 只写不读（TS6133 ×2）→ 删除声明与全部写入点（3+2 处），**逻辑零变化**（原值从未被读取）。
+- E｜库 API 漂移 ×5：`SqlFormatter` 的 `indent` 选项在 **sql-formatter 15.8** 已移除 → 改用 `tabWidth`（保持"缩进宽度"语义，`tab` 退化为默认 2）；`Uglify` 的 `result.error` 在 **terser 5.49** 不存在（出错是**抛异常**）→ 删除该判断，交由已有 try/catch 处理；`TransformData` 补可选字段 `originalImageUrl`（客户端已在用、后端按需返回）。
