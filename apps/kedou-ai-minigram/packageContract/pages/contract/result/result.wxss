@@ -21,7 +21,7 @@ page {
   color: #1E6FFF;
   background: #EAF2FF;
   padding: 8rpx 20rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-pill);
   font-weight: 600;
 }
 .result-date {
@@ -33,7 +33,7 @@ page {
 .score-box {
   margin: 24rpx 32rpx;
   background: linear-gradient(135deg, #E5484D, #F26A6E);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   padding: 36rpx;
   display: flex;
   flex-direction: column;
@@ -58,7 +58,7 @@ page {
 /* 卡片 */
 .card {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   margin: 0 32rpx 24rpx;
   padding: 28rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -99,7 +99,7 @@ page {
 }
 .signal {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   margin-bottom: 20rpx;
   overflow: hidden;
   border-left: 8rpx solid #E8EBF0;
@@ -124,7 +124,7 @@ page {
 .signal-lvl {
   width: 52rpx;
   height: 52rpx;
-  border-radius: 14rpx;
+  border-radius: var(--r-chip);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -193,7 +193,7 @@ page {
 }
 .legal-box {
   background: #EAF2FF;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 20rpx;
 }
 .law-name {
@@ -245,7 +245,7 @@ page {
 
 .term-box {
   background: #F7F8FA;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 20rpx;
 }
 .term-text {
@@ -259,7 +259,7 @@ page {
   margin: 24rpx 32rpx 0;
   background: #FFF3E6;
   border: 1rpx solid #FFD9B8;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 20rpx 24rpx;
 }
 .disclaimer-text {
@@ -271,7 +271,7 @@ page {
 /* 关键数字卡 */
 .keynum-card {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   margin: 0 32rpx 24rpx;
   padding: 28rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -286,7 +286,7 @@ page {
   flex: 1 1 40%;
   min-width: 40%;
   background: #F7F8FA;
-  border-radius: 14rpx;
+  border-radius: var(--r-card);
   padding: 18rpx 20rpx;
   display: flex;
   flex-direction: column;
@@ -308,7 +308,7 @@ page {
 }
 .right {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   margin-bottom: 20rpx;
   padding: 28rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -343,7 +343,7 @@ page {
 .right-amount {
   flex-shrink: 0;
   background: #E7F5EC;
-  border-radius: 14rpx;
+  border-radius: var(--r-chip);
   padding: 12rpx 20rpx;
   display: flex;
   flex-direction: column;
@@ -379,7 +379,7 @@ page {
   color: #fff;
   font-size: 30rpx;
   font-weight: 700;
-  border-radius: 40rpx;
+  border-radius: var(--r-pill);
   padding: 24rpx 0;
   border: none;
 }
@@ -411,7 +411,7 @@ page {
   align-items: center;
   justify-content: space-between;
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   padding: 28rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
   border: 1rpx solid #E8EBF0;
@@ -428,7 +428,7 @@ page {
   font-weight: 700;
   color: #1E6FFF;
   background: #EAF2FF;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   padding: 10rpx 20rpx;
   margin-left: 16rpx;
 }
@@ -451,7 +451,7 @@ page {
   margin: 0 32rpx 24rpx;
   background: linear-gradient(135deg, #EAF2FF, #E6F0FF);
   border: 1rpx solid #C9DFFF;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   padding: 28rpx;
 }
 .plan-head {
@@ -470,7 +470,7 @@ page {
   color: #1E6FFF;
   background: #fff;
   border: 1rpx solid #1E6FFF;
-  border-radius: 20rpx;
+  border-radius: var(--r-chip);
   padding: 4rpx 14rpx;
   font-weight: 700;
 }
@@ -486,7 +486,7 @@ page {
   color: #fff;
   background: #1E6FFF;
   padding: 8rpx 20rpx;
-  border-radius: 20rpx;
+  border-radius: var(--r-chip);
   flex-shrink: 0;
 }
 .plan-desc {
@@ -497,7 +497,7 @@ page {
 }
 .plan-risk {
   background: #fff;
-  border-radius: 14rpx;
+  border-radius: var(--r-card);
   padding: 16rpx 20rpx;
   margin-top: 8rpx;
   border: 1rpx solid #D9E8FF;
@@ -547,7 +547,7 @@ page {
 }
 .optimize {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: var(--r-card);
   margin-bottom: 20rpx;
   overflow: hidden;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -564,7 +564,7 @@ page {
   font-size: 22rpx;
   font-weight: 700;
   color: #fff;
-  border-radius: 10rpx;
+  border-radius: var(--r-chip);
   padding: 6rpx 16rpx;
 }
 .optimize-stage.s1 {
@@ -606,7 +606,7 @@ page {
   background: #EAF2FF;
   border: 1rpx solid #C9DFFF;
   padding: 10rpx 18rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-control);
   font-weight: 500;
 }
 .ask-btn-green {

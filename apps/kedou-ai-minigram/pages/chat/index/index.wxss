@@ -72,7 +72,7 @@ page {
 .msg-bubble {
   flex: 1;
   background: var(--card);
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 18rpx 20rpx;
   font-size: 26rpx;
   color: var(--t1);
@@ -98,7 +98,7 @@ page {
   align-items: center;
   gap: 8rpx;
   padding: 8rpx 18rpx;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   background: var(--brand-50);
   color: var(--brand);
   font-size: 20rpx;
@@ -109,7 +109,7 @@ page {
   width: 20rpx;
   height: 20rpx;
   border: 2.5rpx solid currentColor;
-  border-radius: 4rpx;
+  border-radius: var(--r-chip);
   flex-shrink: 0;
 }
 /* 后一个矩形压住前一个的左上角 = 复制图标 */
@@ -121,7 +121,7 @@ page {
   width: 20rpx;
   height: 20rpx;
   border: 2.5rpx solid currentColor;
-  border-radius: 4rpx;
+  border-radius: var(--r-chip);
   background: var(--brand-50);
 }
 /* 失败且无内容时的占位提示：占位但不抢眼，避免气泡空白 */
@@ -153,7 +153,7 @@ page {
   font-weight: 500;
   color: #fff;
   background: var(--brand);
-  border-radius: 6rpx;
+  border-radius: var(--r-chip);
   padding: 2rpx 10rpx;
   line-height: 1.4;
 }
@@ -192,7 +192,7 @@ page {
 .ec-sk {
   width: 60%;
   height: 20rpx;
-  border-radius: 6rpx;
+  border-radius: var(--r-chip);
   background: rgba(60, 60, 67, .07);
 }
 
@@ -299,7 +299,7 @@ page {
   line-height: 1.4;
   color: var(--brand);
   background: var(--brand-50);
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   padding: 10rpx 24rpx;
 }
 .sug:active { opacity: .7; }
@@ -321,7 +321,7 @@ page {
   gap: 14rpx;
   background: var(--card);
   border: 2rpx solid rgba(60, 60, 67, .08);
-  border-radius: 48rpx;
+  border-radius: var(--r-pill);
   padding: 8rpx 10rpx 8rpx 24rpx;
   box-shadow: 0 6rpx 20rpx rgba(31, 36, 46, .05);
 }
@@ -500,7 +500,7 @@ page {
   align-items: center;
   gap: 6rpx;
   padding: 6rpx 18rpx;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   background: var(--brand-50);
   color: var(--brand);
   font-size: 20rpx;
@@ -542,7 +542,7 @@ page {
 .sheet.show { transform: translateY(0); }
 .sg {
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   overflow: hidden;
 }
 .si {
@@ -559,7 +559,7 @@ page {
 .sc {
   margin-top: 16rpx;
   height: 100rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   background: var(--card);
   display: flex;
   align-items: center;
