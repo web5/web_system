@@ -212,10 +212,41 @@ dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）�
 - 原型八场景演示：`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`
 - 本地 release 已发布并实测：#3373（成功·命中 dev）绿主干 + 灰跳过支线；#1984（失败）红主干 + 橙审批边；编辑页中性橙连线 + 「＋」按钮
 
-### 8.5 待用户（本会话无法推进）
+### 8.5 本会话对 dev 的配置补齐（NEW 域生效所必需）
 
-1. dev 控制台 admin 密码 → A6 收尾
-2. LIGHTHOUSE SSH 用户/密钥
-3. 共用库处置口径（建议：先加"改 dev 业务库 = 改 prod"护栏，拆库排到正式运营前）
-4. dev 微前端指针走 NEW 域初始化还是切回 LEGACY（§8.2 衍生项）
-5. PR #147 的 quality-gate 需人工批准运行（PAT 无 `actions:write`）
+| 服务 | 配置 | 说明 |
+|---|---|---|
+| deploy-console | `RELEASE_WORKSPACE=/data/web_system` | 原先缺失 → 回落到 `~/web_system_release`（不存在）→ 版本产物检查必失败 |
+| gateway | `DEPLOY_DB_HOST/PORT/USER/NAME/PASSWORD` | 原先 `DEPLOY_DB_NAME=web_system`（业务库）→ 报 `Table 'web_system.deploy_sites' doesn't exist`；改为连控制台库 `web_system_deploy`（HOST 走云 MySQL，密码与 deploy-console 同源） |
+| 全局 | `/etc/web-system/config-master.key` | 见 §8.7 事故 |
+
+### 8.6 A6 已完成并验证（admin → 3d5ce61）
+
+- 调用 `POST /console/api/apps/admin/switch {envId:'dev', version:'3d5ce61'}`（**version 用裸 hash，不是 `admin-dev/3d5ce61`**）→ 201
+- `deploy_app_env_versions`：admin/dev = `3d5ce61`，status=deployed
+- 入口指针：`/static/modules/admin/dev/index.js` 内容为 `System.register(['./3d5ce61/index.js'], …)`
+- manifest：`source=new`、`defaultEnv=dev`、`byEnv.dev.admin.entry=/static/modules/admin/dev/index.js`
+
+⚠️ dev 登录凭据：控制台 `admin / deploy2026`（本会话验证可用）。
+
+### 8.7 事故：重启 dev 控制台 → 主密钥 FATAL 崩溃循环
+
+- 现象：`pm2 restart deploy-console` 后 `ConfigSelfCheck FATAL 主密钥不可用：缺少 CONFIG_MASTER_KEY，且 /etc/web-system/config-master.key 不存在`，restarts 飙升、站点 502。
+- 原因：主密钥**只在原进程环境里**（.env 也没有、默认密钥文件也没有），重启后丢失。
+- 修复：把本机 `servers/deploy-console/.env` 的 `CONFIG_MASTER_KEY` 写入 dev 的 `/etc/web-system/config-master.key`（`chmod 600`、`chown ubuntu`）→ 日志 `主密钥就绪 fp=b4ac6aab source=env+file 抽样可解=1/1`，服务恢复。
+- 教训：**重启远端控制台前先确认 `/etc/web-system/config-master.key` 已 provision**（或 .env 里有 `CONFIG_MASTER_KEY`），否则必崩。
+
+### 8.8 dev/prod 共用业务库 —— 处置：不拆库，先加护栏（用户授权"你直接处理"）
+
+护栏（写在此处作为后续所有 DB 操作的强制约束）：
+
+1. **任何对 dev 业务库的写 = 同时写 prod**（已复核：两边 `users=2`、`schema_migrations=12`）。
+2. 业务库写操作（迁移、seed、配置中心、`storage.upload_dir`）一律：先 `DRY_RUN=1` 预演 → 备份目标表 → 我（AI）不得自行执行，需用户确认。
+3. 迁移记账只做一次（不要 dev/prod 各跑一遍），且对照 `dev-env-config-inventory.md` §5 后再记。
+4. 控制台库 `web_system_deploy` 不共用（dev 专用、prod 未跑 deploy-console），风险等级低于业务库。
+5. 拆库排到正式运营前，作为独立项目处理。
+
+### 8.9 其它
+
+- LIGHTHOUSE（101.43.117.234）：`ssh -i ~/.ssh/id_ed25519_lighthouse ubuntu@…` 可用（凭据在 `~/env_config`）。
+- 本会话产出已发 PR #147（连线着色规则定稿 + 连线绘制抽公共 util）。
