@@ -296,6 +296,12 @@ step "产物就位 → 前端入口 ${NEW_INDEX:-（未取到）}"
 # restart 后旧进程不释放端口 → 新进程 EADDRINUSE 反复崩溃，对外仍是旧孤儿。
 # 故用确定性重建：先放掉端口 → delete → start。
 CLEAN_PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$(dirname "$(command -v node)")"
+# 真·干净 env：`env -i` 只显式保留必要项。
+# 此前只覆盖 PATH，当前 shell 里残留的变量（例如刚手工跑过动作脚本留下的 PORT=6001）
+# 会被 `pm2 start` 快照进进程环境 —— 而 @nestjs/config **不覆盖已存在的 process.env**，
+# 于是 .env 的 PORT=6200 被顶掉、服务去绑 6001（2026-09-23 实测 `EADDRINUSE :::6001`
+# 导致控制台起不来）。服务启动一律 `env -i`，只认 .env 与下面这两三个变量。
+CLEAN_ENV_CMD="env -i PATH=$CLEAN_PATH HOME=$HOME"
 
 # 主密钥：只注入**文件路径**，不注入值 —— 值会落到 pm2_env / dump.pm2，并被 `ps e` 读到（违反 K2）。
 # 见 specs/config-master-key-distribution/design.md §5.1 / Q7。勿改用 `pm2 startOrRestart --update-env`。
@@ -303,6 +309,7 @@ KEY_FILE="${CONFIG_MASTER_KEY_FILE:-/etc/web-system/config-master.key}"
 KEY_ENV_OPT=""
 if [ -f "$KEY_FILE" ]; then
   KEY_ENV_OPT="CONFIG_MASTER_KEY_FILE=$KEY_FILE"
+  CLEAN_ENV_CMD="$CLEAN_ENV_CMD CONFIG_MASTER_KEY_FILE=$KEY_FILE"
 else
   warn "未找到主密钥文件 ${KEY_FILE}：本次沿用 .env 的 CONFIG_MASTER_KEY（过渡态，建议尽快 provision）"
 fi
@@ -331,10 +338,10 @@ restart_console() {
   done
   sleep 1
 
-  dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${PM2_BIN} delete web-deploy-console)" \
-    || (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" "$PM2_BIN" delete web-deploy-console >/dev/null 2>&1) || true
-  dry "(cd ${RELEASE_DIR}/servers/deploy-console && env PATH=${CLEAN_PATH} ${KEY_ENV_OPT} ${PM2_BIN} start dist/main.js --name web-deploy-console --cwd ${RELEASE_DIR}/servers/deploy-console)" \
-    || { (cd "$RELEASE_DIR/servers/deploy-console" && env PATH="$CLEAN_PATH" $KEY_ENV_OPT "$PM2_BIN" start dist/main.js --name web-deploy-console --cwd "$RELEASE_DIR/servers/deploy-console" >/dev/null 2>&1) || err "pm2 start 失败"; }
+  dry "(cd ${RELEASE_DIR}/servers/deploy-console && ${CLEAN_ENV_CMD} ${PM2_BIN} delete web-deploy-console)" \
+    || (cd "$RELEASE_DIR/servers/deploy-console" && $CLEAN_ENV_CMD "$PM2_BIN" delete web-deploy-console >/dev/null 2>&1) || true
+  dry "(cd ${RELEASE_DIR}/servers/deploy-console && ${CLEAN_ENV_CMD} ${PM2_BIN} start dist/main.js --name web-deploy-console --cwd ${RELEASE_DIR}/servers/deploy-console)" \
+    || { (cd "$RELEASE_DIR/servers/deploy-console" && $CLEAN_ENV_CMD "$PM2_BIN" start dist/main.js --name web-deploy-console --cwd "$RELEASE_DIR/servers/deploy-console" >/dev/null 2>&1) || err "pm2 start 失败"; }
   sleep 6
 }
 

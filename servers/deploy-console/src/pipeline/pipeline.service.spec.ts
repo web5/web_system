@@ -7,6 +7,7 @@ import {
   resolveStageVars,
   resolveRunStages,
   isRollbackAnchor,
+  pickStagePort,
 } from './pipeline.service';
 
 /**
@@ -368,5 +369,74 @@ describe('M2 部署目标推导（模块自持 deployRoot，环境只分层）',
     expect(v.PUBLISH_PATH).toBe('/legacy/path');
     expect(v.ARTIFACTS_DIR).toBe('/ws/artifacts/gateway/dev/gateway-dev/abc1234');
     expect(v.DEPLOY_TARGET).toBe('/ws/servers/gateway/dist');
+  });
+});
+
+/**
+ * 端口取值链的防回归（2026-09-23 auth-service 发 dev 事故）。
+ *
+ * 事故链：`PORT` 链是「配置中心 → **编排者本机 pm2**」，而 pm2 只有本机语义
+ * （本机 auth=6101 / dev auth=6001），远端 verify 探到 6101 → 判失败 → 自动回滚 dist，
+ * 表现为「流水线失败但线上没变」。其它模块没暴露只因本机与 dev 端口恰好相同；
+ * prod 端口本就不同（auth=3001 / system=3004 / todo=3005）→ 必复现。
+ *
+ * 锁定的方向：**远端绝不取编排者本机 pm2 的端口**；取不到就留空 + 告警，
+ * 让脚本显式降级/报错，而不是拿一个"看起来有值但是错的"端口去探活。
+ */
+describe('pickStagePort（端口取值链 · 防"远端探错端口→假失败回滚"）', () => {
+  it('配置中心优先（保留历史 PORT 污染对策）', () => {
+    const r = pickStagePort({ env: 'dev', configPort: '6101', envPort: 6001, pm2Port: 6101 });
+    expect(r).toMatchObject({ port: '6101', source: 'config' });
+  });
+
+  it('远端：取目标环境登记端口（dev auth=6001），本机 pm2 的 6101 被忽略', () => {
+    const r = pickStagePort({ env: 'dev', envPort: 6001, pm2Port: 6101 });
+    expect(r.port).toBe('6001');
+    expect(r.source).toBe('env-registry');
+    expect(r.port).not.toBe('6101');
+  });
+
+  it('远端：环境未登记 → 空端口 + 告警，**绝不**回落本机 pm2', () => {
+    const r = pickStagePort({ env: 'dev', pm2Port: 6101 });
+    expect(r.port).toBe('');
+    expect(r.source).toBe('unresolved');
+    expect(r.warn).toContain('不回落编排者本机 pm2');
+    expect(r.port).not.toBe('6101');
+  });
+
+  it('local：仍允许本机 pm2 兜底（本机才有该语义）', () => {
+    const r = pickStagePort({ env: 'local', pm2Port: 6101 });
+    expect(r).toMatchObject({ port: '6101', source: 'local-pm2' });
+  });
+
+  it('prod 端口与 local 不同也解析正确（auth=3001 vs 本机 6101）', () => {
+    const r = pickStagePort({ env: 'prod', envPort: 3001, pm2Port: 6101 });
+    expect(r.port).toBe('3001');
+    expect(r.source).toBe('env-registry');
+  });
+
+  it('resolveStageVars：显式端口与来源被采信并注入 PORT_SOURCE', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'auth-service',
+      releaseWorkspace: '/ws',
+      port: '6001',
+      portSource: 'env-registry',
+    });
+    expect(v.PORT).toBe('6001');
+    expect(v.PORT_SOURCE).toBe('env-registry');
+  });
+
+  it('resolveStageVars：远端未解析（port 为空）时 PORT_SOURCE=unresolved，且不带任何本机端口', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'auth-service',
+      releaseWorkspace: '/ws',
+      port: '',
+      portSource: 'unresolved',
+      pm2Port: 6101, // 即使调用方误传本机端口，也不采用（port 显式给了空串）
+    });
+    expect(v.PORT).toBe('');
+    expect(v.PORT_SOURCE).toBe('unresolved');
   });
 });
