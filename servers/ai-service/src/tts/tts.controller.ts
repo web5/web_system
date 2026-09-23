@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Res, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, Res, HttpCode, HttpStatus, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TtsService } from './tts.service';
+import { TtsStreamService } from './tts-stream.service';
 import { AuthGuard } from '../auth/auth.guard';
 
 interface SpeakDto {
@@ -16,7 +17,12 @@ interface SpeakDto {
 @Controller('ai/tts')
 @UseGuards(AuthGuard)
 export class TtsController {
-  constructor(private readonly ttsService: TtsService) {}
+  private readonly logger = new Logger(TtsController.name);
+
+  constructor(
+    private readonly ttsService: TtsService,
+    private readonly ttsStreamService: TtsStreamService,
+  ) {}
 
   @Post('speak')
   @HttpCode(HttpStatus.OK)
@@ -45,6 +51,48 @@ export class TtsController {
         code: statusCode,
         message: error.message || '语音合成失败',
       });
+    }
+  }
+
+  /**
+   * 流式语音合成：把腾讯云 WS 分块下发的音频原样透传（chunked），
+   * 端侧边收边播 —— 首包约 0.6s 出声（实测），全程无块间接缝。
+   */
+  @Get('stream')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: '流式文字转语音（边合成边下发）' })
+  async stream(
+    @Query('text') text: string,
+    @Query('codec') codec: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (!text || text.trim().length === 0) {
+      res.status(400).json({ code: 400, message: 'text 参数不能为空' });
+      return;
+    }
+
+    const format: 'pcm' | 'mp3' = codec === 'mp3' ? 'mp3' : 'pcm';
+    res.setHeader('Content-Type', format === 'mp3' ? 'audio/mpeg' : 'audio/pcm; rate=16000');
+    res.setHeader('Cache-Control', 'no-store');
+    // 禁止 nginx 缓冲，否则流式被攒成整包，边收边播失效
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    try {
+      for await (const chunk of this.ttsStreamService.streamSpeech(text, { codec: format })) {
+        if (!res.write(chunk)) {
+          // 背压：等消费者追上再继续写
+          await new Promise<void>((resolve) => res.once('drain', resolve));
+        }
+      }
+      res.end();
+    } catch (error: any) {
+      this.logger.error(`TTS 流式合成失败: ${error.message}`);
+      if (!res.headersSent) {
+        const statusCode = error.message?.includes('未配置') ? 503 : 500;
+        res.status(statusCode).json({ code: statusCode, message: error.message || '流式语音合成失败' });
+      } else {
+        res.end(); // 已开始下发音频：只能截断，端侧按播放中断处理
+      }
     }
   }
 }
