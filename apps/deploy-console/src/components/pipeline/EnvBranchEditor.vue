@@ -184,7 +184,7 @@ async function save() {
 }
 .branch-row {
   border: 1px solid var(--ws-border);
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 10px;
   margin-bottom: 10px;
 }

@@ -1,6 +1,13 @@
 // 个人信息
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     nickname: '橙子哥哥',
     uid: '100238',
     joinedAt: '2026-03',

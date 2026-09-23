@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 结果页 -->
-<view class="page" wx:if="{{report}}">
+<view class="page {{radiusClass}}" wx:if="{{report}}">
   <!-- 结论区 -->
   <view class="result-head">
     <text class="result-tag">{{report.scene}}</text>
@@ -238,6 +238,6 @@
   <button class="home-btn" bindtap="goHome">回到首页</button>
 </view>
 
-<view class="empty" wx:else>
+<view class="empty {{radiusClass}}" wx:else>
   <text class="empty-text">暂无报告数据</text>
 </view>

@@ -7,17 +7,25 @@ import { uiTokens, type UiThemeMode } from './tokens';
  *   Card 边框=colorBorderSecondary、Modal 浮层=colorBgElevated），故以全局 token 为主。
  * - 组件级 token 仅类型支持的写 components（Layout/Menu）。
  * - dark = antdTheme('dark')，App 侧按 data-theme 调用。
- * - DR：主色 #F97316；圆角保持 4。
+ * - DR：主色 #F97316；DR-5（2026-09-22）：borderRadius 4 → 6（对齐 Geist 控件语言，与卡片 md 归一）。
+ * - 圆角风格（2026-09-23）：圆角由用户偏好三档决定（soft 柔和 / crisp 清爽 / sharp 直角），
+ *   取 tokens.radiusStyle 的 control / card / chip 分别映射 borderRadius / borderRadiusLG / borderRadiusSM。
  */
 const t = uiTokens;
 const SIDER_BG = '#0F0F12'; // 侧栏固定深色（R4 统一：原 #171717 与 style.scss 实际 #0F0F12 不一致漂移）
 const BRAND_BG_SOFT = 'rgba(249, 115, 22, 0.12)';
 
-export function antdTheme(mode: UiThemeMode = 'light'): ThemeConfig {
+/** 圆角风格（用户偏好）：soft 柔和（默认）· crisp 清爽 · sharp 直角 —— 与 tokens.radiusStyle 同源 */
+export type UiRadiusStyle = keyof typeof uiTokens.radiusStyle;
+
+export function antdTheme(mode: UiThemeMode = 'light', radiusStyle: UiRadiusStyle = 'soft'): ThemeConfig {
   const isDark = mode === 'dark';
   const gray = t.colors.gray[mode];
   const roles = t.roles[mode];
   const brand = t.colors.brand;
+  // 语义档映射：antd 基础档 = control（按钮/输入）、LG = card（卡片/弹窗）、SM = chip（标签）
+  // ⚠️ antd 的圆角来自 JS 常量而非 CSS 变量，故切风格时必须重建 themeConfig（见各端 App.vue）
+  const radius = t.radiusStyle[radiusStyle];
 
   return {
     token: {
@@ -68,7 +76,9 @@ export function antdTheme(mode: UiThemeMode = 'light'): ThemeConfig {
       controlItemBgActive: BRAND_BG_SOFT,
       boxShadow: t.shadow.card[mode],
       boxShadowSecondary: t.shadow.popover[mode],
-      borderRadius: t.radius.sm,
+      borderRadius: radius.control,
+      borderRadiusLG: radius.card,
+      borderRadiusSM: radius.chip,
       controlHeight: 32,
       fontFamily: t.font.sans,
       fontSize: t.font.size.base,

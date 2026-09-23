@@ -21,10 +21,11 @@ onMounted(() => {
 // 双层响应式会导致 Input 等组件的 component token（inputPaddingVerticalLG/fontSizeLG 等）
 // 派生失败，size="large" 的 padding/fontSize 不生效（高度塌成 24px）。
 // 2026-09-03 D 接入：使用 @web-system/ui 语义 antd 主题（uiTokens 全量组件 token）
-const themeConfig = shallowRef(antdTheme(themeStore.isDark ? 'dark' : 'light'));
+const themeConfig = shallowRef(antdTheme(themeStore.isDark ? 'dark' : 'light', themeStore.radiusStyle));
 
-watch(() => themeStore.isDark, () => {
-  themeConfig.value = antdTheme(themeStore.isDark ? 'dark' : 'light');
+// 圆角风格切换同样要重建 themeConfig：antd 的 borderRadius 来自 JS 常量而非 CSS 变量
+watch(() => [themeStore.isDark, themeStore.radiusStyle], () => {
+  themeConfig.value = antdTheme(themeStore.isDark ? 'dark' : 'light', themeStore.radiusStyle);
 });
 </script>
 

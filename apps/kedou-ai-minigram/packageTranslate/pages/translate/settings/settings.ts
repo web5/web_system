@@ -1,6 +1,13 @@
 // 翻译业务设置（只影响翻译功能）
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     srcLang: '中文',
     tgtLang: '英语',
     register: '正式',

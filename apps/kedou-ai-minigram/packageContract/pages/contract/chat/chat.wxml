@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 对话追问页 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 顶部提示 -->
   <view class="chat-head">
     <text class="chat-head-text">基于本次合同上下文回答</text>

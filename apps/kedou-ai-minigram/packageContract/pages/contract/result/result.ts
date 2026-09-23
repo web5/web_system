@@ -11,7 +11,14 @@ import type { ContractReport } from '../../../../services/contract-api';
 import { getContractConversation } from '../../../../services/contract-api';
 
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     report: null as ContractReport | null,
     signals: [] as Array<{ open: boolean }>,
     rights: [] as Array<{ open: boolean }>,

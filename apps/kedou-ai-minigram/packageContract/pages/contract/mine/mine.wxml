@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 我的 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="mine-head">
     <view class="avatar">
       <text class="avatar-text">盾</text>

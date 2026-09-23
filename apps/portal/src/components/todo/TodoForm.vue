@@ -140,7 +140,7 @@ function handleSubmit() {
 
 .todo-form {
   background: white;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
@@ -175,7 +175,7 @@ function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   transition: background 0.2s;
 }
 .close-btn:hover { background: #f5f5f5; }
@@ -197,7 +197,7 @@ function handleSubmit() {
   width: 100%;
   padding: 12px 16px;
   border: 2px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 16px;
   color: #333;
   transition: border-color 0.2s;
@@ -226,7 +226,7 @@ function handleSubmit() {
 .priority-btn, .category-btn {
   padding: 8px 16px;
   border: 2px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   background: white;
   cursor: pointer;
   font-size: 14px;
@@ -248,7 +248,7 @@ function handleSubmit() {
 .btn-cancel, .btn-submit {
   flex: 1;
   padding: 14px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;

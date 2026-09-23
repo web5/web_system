@@ -68,7 +68,7 @@ page {
 .msg-bubble {
   flex: 1;
   background: #fff;
-  border-radius: 16rpx;
+  border-radius: var(--r-card);
   padding: 18rpx 20rpx;
   font-size: 26rpx;
   color: #1A1F2E;
@@ -156,7 +156,7 @@ page {
   color: #1E6FFF;
   font-size: 24rpx;
   line-height: 1.4;
-  border-radius: 999rpx;
+  border-radius: var(--r-pill);
   padding: 10rpx 24rpx;
   margin-right: 14rpx;
 }
@@ -171,7 +171,7 @@ page {
   gap: 14rpx;
   background: #fff;
   border: 2rpx solid #EEF0F4;
-  border-radius: 48rpx;
+  border-radius: var(--r-pill);
   padding: 8rpx 10rpx 8rpx 32rpx;
   box-shadow: 0 6rpx 20rpx rgba(31, 36, 46, 0.05);
 }

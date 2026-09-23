@@ -7,6 +7,22 @@
     <link rel="apple-touch-icon" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>科豆 AI · 管理后台</title>
+    <!-- 主题与圆角偏好：首屏渲染前写入根属性，避免「先浅色/柔和后跳变」（AC6）
+         口径：specs/radius-style-dual/page-spec.md §4.3；与 stores/theme.ts 共用 theme-store -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('theme-store');
+          var s = raw ? (JSON.parse(raw) || {}) : {};
+          if (s.mode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+          if (s.radiusStyle === 'crisp' || s.radiusStyle === 'sharp') {
+            document.documentElement.setAttribute('data-radius', s.radiusStyle);
+          }
+        } catch (e) {
+          /* 忽略：默认浅色 + 柔和 */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

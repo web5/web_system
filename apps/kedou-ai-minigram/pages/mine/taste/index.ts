@@ -27,6 +27,7 @@ const TAG_MAX = 12;
 
 Page({
   data: {
+    radiusClass: "",
     loading: true,
     tags: [] as TagItem[],
     inputVal: '',
@@ -35,6 +36,10 @@ Page({
   },
 
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     void this.load();
   },
 

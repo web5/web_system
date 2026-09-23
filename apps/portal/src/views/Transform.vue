@@ -276,7 +276,7 @@ function handleCancel() {
 .preview-thumb {
   width: 120px;
   height: 120px;
-  border-radius: 24px;
+  border-radius: var(--r-card);
   background: #fff;
   border: 2px solid rgba(255, 140, 66, 0.15);
   display: flex;
@@ -354,7 +354,7 @@ function handleCancel() {
   width: 100%;
   height: 8px;
   background: rgba(255, 140, 66, 0.1);
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   overflow: hidden;
   margin-bottom: 8px;
 }
@@ -362,7 +362,7 @@ function handleCancel() {
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #FF8C42, #FFB347);
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   transition: width 0.5s ease;
 }
 
@@ -376,7 +376,7 @@ function handleCancel() {
 .fun-fact {
   background: rgba(255, 140, 66, 0.06);
   border: 1px solid rgba(255, 140, 66, 0.1);
-  border-radius: 16px;
+  border-radius: var(--r-card);
   padding: 16px 20px;
   margin-top: 8px;
   animation: fadeIn 0.5s ease;
@@ -463,7 +463,7 @@ function handleCancel() {
 .fail-btn {
   padding: 12px 28px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--r-control);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -507,7 +507,7 @@ function handleCancel() {
   .preview-thumb {
     width: 160px;
     height: 160px;
-    border-radius: 28px;
+    border-radius: var(--r-card);
   }
 
   .tf-status-area {

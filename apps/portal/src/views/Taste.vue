@@ -185,7 +185,7 @@ onMounted(() => void load());
   gap: 4px;
   height: 28px;
   padding: 0 8px 0 12px;
-  border-radius: 14px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--ws-border);
   background: var(--ws-bg-surface);
   font-size: 13px;

@@ -158,7 +158,7 @@ onMounted(load);
 .raw-block {
   background: #1e1e1e;
   color: #d4d4d4;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   padding: 16px;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12px;
@@ -192,7 +192,7 @@ onMounted(load);
 .step-content {
   background: #fafafa;
   border: 1px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 10px;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;
@@ -209,7 +209,7 @@ onMounted(load);
 .step-type-tag {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   font-size: 11px;
   font-weight: 600;
   font-family: monospace;

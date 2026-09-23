@@ -77,6 +77,21 @@
       </div>
 
       <div class="profile-card info-card">
+        <div class="card-title">偏好</div>
+        <div class="form-section">
+          <div class="form-row">
+            <label>圆角风格</label>
+            <a-radio-group v-model:value="radiusStyle" button-style="solid">
+              <a-radio-button value="soft">柔和</a-radio-button>
+              <a-radio-button value="crisp">清爽</a-radio-button>
+              <a-radio-button value="sharp">直角</a-radio-button>
+            </a-radio-group>
+            <p class="form-hint">{{ radiusDesc }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-card info-card">
         <div class="card-title">基本信息</div>
         <div class="form-section">
           <div class="form-row">
@@ -174,8 +189,18 @@ import AppIcon from '@/components/AppIcon.vue';
 import { listGlossary } from '@/api/glossary';
 import { listMemory } from '@/api/user-memory';
 import { getMusicTaste, tasteSummary as tasteSummaryOf } from '@/api/user-taste';
+import { useUiPrefsStore, RADIUS_STYLE_OPTIONS, type RadiusStyle } from '@/stores/ui-prefs';
 
 const userStore = useUserStore();
+const uiPrefs = useUiPrefsStore();
+/** 圆角风格：读写都经 store —— setter 会同步把偏好写到根元素属性 */
+const radiusStyle = computed<RadiusStyle>({
+  get: () => uiPrefs.radiusStyle,
+  set: (v) => uiPrefs.setRadiusStyle(v),
+});
+const radiusDesc = computed(
+  () => RADIUS_STYLE_OPTIONS.find((o) => o.value === uiPrefs.radiusStyle)?.desc ?? '',
+);
 const uploading = ref(false);
 const saving = ref(false);
 /** AI 记忆 / 生词本摘要（失败保持默认不打扰） */
@@ -399,7 +424,7 @@ async function onRevokeKey(id: number) {
 
 .profile-card {
   background: white;
-  border-radius: 4px;
+  border-radius: var(--r-card);
   padding: 20px;
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -461,7 +486,7 @@ async function onRevokeKey(id: number) {
   padding: 8px 16px;
   background: #FF8C42;
   color: white;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -513,13 +538,13 @@ async function onRevokeKey(id: number) {
   background: #fff8f2;
   margin: 0 -20px;
   padding: 14px 20px;
-  border-radius: 8px;
+  border-radius: var(--r-card);
 }
 
 .qa-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--r-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -575,11 +600,19 @@ async function onRevokeKey(id: number) {
   font-weight: 500;
 }
 
+/* 偏好设置项的说明文案（走语义 token，避免新增裸色值） */
+.form-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
+  line-height: 1.5;
+}
+
 .form-input {
   width: 100%;
   padding: 10px 12px;
   border: 2px solid #eee;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   color: #333;
   background: white;
@@ -611,7 +644,7 @@ async function onRevokeKey(id: number) {
   background: #FF8C42;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -682,7 +715,7 @@ async function onRevokeKey(id: number) {
 .key-status {
   margin-left: 8px;
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: var(--r-chip);
   font-size: 11px;
 }
 
@@ -722,7 +755,7 @@ async function onRevokeKey(id: number) {
 .key-value {
   background: #f8f8f8;
   border: 1px dashed #e0e0e0;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   padding: 10px 12px;
   font-family: monospace;
   font-size: 12px;

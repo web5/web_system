@@ -122,11 +122,13 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { runAgentStream } from '@/api/agent';
+import { getConversation, runAgentStream } from '@/api/agent';
+import { useConversationStore } from '@/stores/conversations';
 import { collectGlossary } from '@/api/glossary';
-import { splitSpeakParts, speakSequence, stopTts } from '@/api/tts';
+import { speakSequence, splitSpeakParts, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -151,6 +153,42 @@ const tab = ref<'推荐译文' | '直译对照' | '委婉版'>('推荐译文');
 const reading = ref(false);
 
 let controller: AbortController | null = null;
+
+const route = useRoute();
+const store = useConversationStore();
+
+/** 记录回放（左栏「翻译记录」点进来）：末条 assistant 消息 → 三版对照，首条 user 消息回填原文 */
+async function loadRecord(id: string) {
+  try {
+    const detail = await getConversation(id);
+    const msgs = detail.messages ?? [];
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const hit = /【原文】([\s\S]*)$/.exec(firstUser?.content || '');
+    if (hit) source.value = hit[1].trim();
+    const lastAi = [...msgs].reverse().find((m) => m.role === 'assistant');
+    sections.value = parseSections(lastAi?.content || '');
+    tab.value = '推荐译文';
+    state.value = sections.value['推荐译文'] ? 'done' : 'idle';
+  } catch {
+    message.error('记录加载失败，请重试');
+  }
+}
+
+onMounted(() => {
+  const id = route.query.id;
+  if (typeof id === 'string' && id) void loadRecord(id);
+});
+
+/** URL 上的 ?id= 被清掉（新建）→ 回到空态 */
+watch(
+  () => route.query.id,
+  (id) => {
+    if (!id) {
+      sections.value = {};
+      state.value = 'idle';
+    }
+  },
+);
 
 function swapLang() {
   const a = srcLang.value;
@@ -187,6 +225,8 @@ function translate() {
       onDone() {
         state.value = 'done';
         controller = null;
+        // 刷新左栏「翻译记录」：本次工具会话已落库（后端异步标 source/agentId，故放在流结束后刷）
+        void store.load({ source: 'tool', agentId: 'translate' });
       },
       onError(err) {
         state.value = 'fail';
@@ -219,6 +259,7 @@ async function speak() {
   reading.value = true;
   try {
     // 「首句 + 剩余整段」两块：首句 ~2s 出声，剩余块在首句播放期间预取
+    // （合并 PR #136 时采用 master 侧更优实现）
     await speakSequence(splitSpeakParts(text), { isActive: () => reading.value });
   } catch {
     if (reading.value) message.error('朗读失败，请重试');
@@ -389,7 +430,7 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 16px;
   border: 1px solid var(--ws-border);
-  border-radius: 16px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 13px;
   font-weight: 500;
@@ -449,7 +490,7 @@ onBeforeUnmount(() => {
   height: 26px;
   padding: 0 12px;
   border: 1px solid var(--ws-border);
-  border-radius: 13px;
+  border-radius: var(--r-pill);
   background: var(--ws-bg-surface);
   font-size: 12px;
   color: var(--ws-text-secondary);
@@ -642,7 +683,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   height: 26px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   font-size: 12px;
   color: var(--ws-text-tertiary);
 }

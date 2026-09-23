@@ -186,7 +186,7 @@ const handleRegister = async () => {
   width: 420px;
   padding: 40px 36px 36px;
   background: var(--login-box-bg);
-  border-radius: 4px;
+  border-radius: var(--r-card);
   box-shadow: var(--shadow-login);
 }
 

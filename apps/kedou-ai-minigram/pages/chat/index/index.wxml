@@ -1,7 +1,7 @@
 <!-- 科豆 AI · 通用对话（tab 1，主界面 · 沉浸式，无 tabBar） -->
 <!-- 主对话：agentId 固定传 'auto'，由服务端 IntentService 意图路由决定交给哪个 agent；
      路由结果通过 SSE 首个 intent 事件下发，前端在消息区顶部显示 agent 徽标。 -->
-<view class="wrap">
+<view class="wrap {{radiusClass}}">
   <!--
     自定义导航栏（index.json: navigationStyle = custom）
     对话页隐藏 tabBar 后，返回 icon 负责回到欢迎页；右侧「新对话」需避让原生胶囊。
