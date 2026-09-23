@@ -172,3 +172,18 @@ app.ts onLaunch → autoLogin() 成功后
 - 同类静默失效（同一注册列表内，均无 install）：`FormItem` / `InputPassword` / `TabPane` / `MenuItem` / `MenuDivider` —— 这些属"子组件"，按 admin 既有口径应由父组件 install 自动注册，无需（也无法）单独注册。
 - 修法：改为注册父组件 `Radio`（其 install 自动注册 `ARadioGroup` / `ARadioButton`），并补上缺失的 `Alert`（「我的」页 API Key 区块在用），与 `apps/admin/src/plugins/antd.ts` 的既有口径对齐。
 - 影响面：portal 全站 `<a-radio-group>` 类控件（此前凡使用处均不渲染）；**不改变任何已确认的视觉设计** —— 原型 `docs/ui/prototypes/radius-style-dual.html` 中的三档选择器即目标形态，本次是让实现与已审原型一致。
+
+### 5.2 实施期发现的两个次要缺陷（2026-09-23 已修）
+
+**① 上报失败会弹全局错误提示（违反 §6 AC7）**
+
+- 现象：后端返回 400 时，portal 弹出红色 toast「property preferences should not exist」。
+- 根因：`apps/portal/src/api/request.ts` 错误分支**无条件** `message.error(...)`；小程序 `utils/request.ts` 虽有 `silent` 选项，但「非 401 错误」与「网络失败」两个 toast 未判 `silent`。
+- 修法：portal 增加 per-request `silent` 开关（axios 模块增强 + 错误分支判定）；小程序把 `silent` 判定补齐到上述两处；两端偏好上报均改走静默请求。
+- 结果：满足 AC7 —— 上报失败**只记日志、不回滚、不打扰用户**。
+
+**② `@web-system/types` 在本包 TS 解析失败（既有问题，非本次引入）**
+
+- 现象：`apps/portal` 下 4 个文件（`stores/ui-prefs.ts` / `stores/user.ts` / `api/user.ts` / `api/auth.ts`）导入 `@web-system/types` 时 vue-tsc 报 `Cannot find module`。
+- 证据：`node_modules/@web-system/types` 软链不存在（工作区未链接该包）；运行时由 Vite 侧解析，故应用行为正常。
+- 处置：本次**不新增**同类导入（偏好相关类型各端本地声明，取值与 `packages/shared` 一致）；列为待修项（补工作区链接或给 portal 加 tsconfig paths）。
