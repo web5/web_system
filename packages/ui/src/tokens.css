@@ -60,6 +60,8 @@
   --ws-bg-hover: #F2F2F2;
   --ws-bg-active: #EBEBEB;
   --ws-text-primary: #171717;
+  --ws-text-body: #3F3F46;
+  --ws-text-strong: #18181B;
   --ws-text-secondary: #525252;
   --ws-text-tertiary: #A3A3A3;
   --ws-text-disabled: #D4D4D4;
@@ -81,6 +83,14 @@
   --ws-radius-lg: 8px;
   --ws-radius-pill: 9999px;
 
+  /* 圆角语义档（业务层唯一引用入口）：chip 标签 / control 控件 / card 卡片 / pill 胶囊（风格无关）
+     与尺寸档**同元素**声明 —— var() 在声明处解析，跨元素覆盖不传导（见文件下方风格覆盖块） */
+  --r-chip: var(--ws-radius-sm);
+  --r-control: var(--ws-radius-md);
+  --r-card: var(--ws-radius-lg);
+  --r-pill: 9999px;
+  --r-control-inner: max(0px, calc(var(--r-control) - 2px));
+
   --ws-space-4: 4px;
   --ws-space-8: 8px;
   --ws-space-12: 12px;
@@ -93,7 +103,7 @@
   --ws-shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
   --ws-shadow-avatar: 0 2px 6px rgba(249, 115, 22, 0.25);
 
-  --ws-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  --ws-font-sans: 'Geist Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --ws-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono',
     'Cascadia Code', Menlo, Consolas, monospace;
@@ -102,10 +112,35 @@
   --ws-font-size-h3: 18px;
   --ws-font-size-h4: 16px;
   --ws-font-size-base: 14px;
+  --ws-font-size-sm: 13px;
   --ws-font-size-caption: 12px;
   --ws-font-weight-regular: 400;
   --ws-font-weight-medium: 500;
   --ws-font-weight-semibold: 600;
+
+  /* ===== 行高 / 字距 / 动效 / 焦点 / 控件 / 图标 / 代码块（tokens.ts 新阶梯，2026-09-22） ===== */
+  --ws-leading-tight: 1.25;
+  --ws-leading-snug: 1.4;
+  --ws-leading-normal: 1.6;
+  --ws-leading-relaxed: 1.75;
+  --ws-tracking-tight: -0.02em;
+  --ws-tracking-normal: 0;
+  --ws-tracking-wide: 0.02em;
+  --ws-duration-fast: 150ms;
+  --ws-duration-base: 200ms;
+  --ws-duration-slow: 300ms;
+  --ws-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ws-focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);
+  --ws-control-sm: 24px;
+  --ws-control-md: 32px;
+  --ws-control-lg: 40px;
+  --ws-icon-inline: 16px;
+  --ws-icon-action: 20px;
+  --ws-icon-feature: 24px;
+  --ws-code-bg: #1C1E26;
+  --ws-code-hd: #16181F;
+  --ws-code-text: #E2E8F0;
+  --ws-code-hd-text: #A5ACBA;
 
   /* =============================================================
    * 兼容 alias（需求文档 7.1：过渡期保留全部旧变量名，勿删）
@@ -139,7 +174,7 @@
   --header-border: var(--ws-border-subtle);
   --text-heading: var(--ws-text-primary);
   --text-primary: var(--ws-text-primary);
-  --text-body: var(--ws-text-secondary);
+  --text-body: var(--ws-text-body);
   --text-secondary: var(--ws-text-secondary);
   --text-tertiary: var(--ws-text-tertiary);
   --text-muted: var(--ws-text-tertiary);
@@ -179,6 +214,35 @@
 }
 
 /* =============================================================
+ * 圆角风格（用户偏好）：柔和 soft（默认，= :root 值）· 清爽 crisp · 直角 sharp
+ * 挂在根元素：<html data-radius="crisp">；口令与三档取值见 tokens.ts radiusStyle
+ * 口径依据：specs/radius-style-dual/page-spec.md；原型 docs/ui/prototypes/radius-style-dual.html
+ *
+ * ⚠️ 尺寸档与语义档必须声明在**同一元素**上 —— var() 在声明处解析：
+ *    若只覆盖尺寸档、而语义档仍在 :root 定值，组件引用的语义档不会跟随（表现为"切了没变化"）。
+ * ⚠️ 组件/容器内不得再挂 data-radius（会让覆盖与别名分离到两个元素）。
+ * ============================================================= */
+[data-radius='crisp'] {
+  --ws-radius-sm: 2px;
+  --ws-radius-md: 2px;
+  --ws-radius-lg: 4px;
+  --r-chip: 2px;
+  --r-control: 2px;
+  --r-card: 4px;
+  --r-control-inner: 0px;
+}
+
+[data-radius='sharp'] {
+  --ws-radius-sm: 0px;
+  --ws-radius-md: 0px;
+  --ws-radius-lg: 2px;
+  --r-chip: 0px;
+  --r-control: 0px;
+  --r-card: 2px;
+  --r-control-inner: 0px;
+}
+
+/* =============================================================
  * 深色主题（DR-4：与 :root 的 ws-* key 集合一一对应，防遗漏回退 light 值）
  * 数值来源 tokens.ts（gray.dark / 语义.dark / roles.dark / shadow.dark）
  * 不变项（brand scale、radius、space、font）随 :root，无需重复。
@@ -211,6 +275,8 @@
   --ws-bg-hover: #2A2A2A;
   --ws-bg-active: #333333;
   --ws-text-primary: #EDEDED;
+  --ws-text-body: #D4D4D8;
+  --ws-text-strong: #F4F4F5;
   --ws-text-secondary: #A3A3A3;
   --ws-text-tertiary: #737373;
   --ws-text-disabled: #525252;
@@ -228,4 +294,10 @@
   --ws-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
   --ws-shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45);
   --ws-shadow-avatar: 0 2px 6px rgba(249, 115, 22, 0.35);
+
+  --ws-focus-ring: 0 0 0 2px #0A0A0A, 0 0 0 4px rgba(249, 115, 22, 0.65);
+  --ws-code-bg: #17181D;
+  --ws-code-hd: #121318;
+  --ws-code-text: #D4D4D8;
+  --ws-code-hd-text: #8B90A0;
 }
