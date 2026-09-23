@@ -241,12 +241,20 @@
   .scene-tab{border:1px solid var(--border);background:var(--card);color:var(--text-2);font-size:12px;
     padding:5px 12px;border-radius:8px;cursor:pointer;}
   .scene-tab.active{background:var(--primary-soft);color:var(--primary);border-color:var(--primary);font-weight:600;}
-  .run-step{cursor:default;}
+  /* 详情页步骤卡：名称 + 「命令」链接（编辑页是竖向居中 + 删除按钮，这里改横向） */
+  .run-step{flex-direction:row;align-items:center;justify-content:center;gap:8px;cursor:default;}
   .run-step.st-succeeded{border-color:var(--ok);}
   .run-step.st-failed{border-color:var(--danger);}
   .run-step.st-awaiting{border-color:var(--primary);}
   .run-step.st-running{border-color:var(--info);}
   .run-node{cursor:default;}
+  .run-node .tag.t-approval{color:var(--primary);border-color:var(--primary);background:var(--primary-soft);}
+  .run-node .tag.t-cond{color:var(--text-3);border-color:var(--border);background:var(--card);}
+  /* 详情页任务卡序号 = 状态色填充竖条（ProgressFlow.vue .rseq 同款） */
+  .run-node.st-succeeded .seq{background:var(--ok);color:#fff;border-right-color:var(--ok);}
+  .run-node.st-failed .seq{background:var(--danger);color:#fff;border-right-color:var(--danger);}
+  .run-node.st-running .seq{background:var(--info);color:#fff;border-right-color:var(--info);}
+  .run-node.st-awaiting .seq{background:var(--primary);color:#fff;border-right-color:var(--primary);}
   .run-node.st-succeeded{border-color:var(--ok);}
   .run-node.st-failed{border-color:var(--danger);}
   .run-node.st-awaiting{border-color:var(--primary);}
@@ -261,6 +269,14 @@
   .run-badge.b-skip{border-style:dashed;}
   .run-rule{line-height:1.9;}
   .run-rule b{color:var(--text);}
+  .view-tag{margin-top:16px;padding:10px 16px;background:var(--primary-soft);color:var(--primary-dark);
+    border:1px solid var(--primary);border-radius:10px;font-size:12px;line-height:1.6;}
+  .view-tag b{color:var(--text);}
+  .cmd-link{font-size:11px;color:var(--primary);cursor:pointer;margin-left:auto;flex-shrink:0;}
+  .cmd-link:hover{text-decoration:underline;}
+  .run-legend-dots{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;margin-right:12px;}
+  .rld{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:2px;}
+  .rld-skip{background:var(--card);border:1px dashed var(--text-3);}
 
 </style>
 </head>
@@ -366,10 +382,11 @@
         </div>
       </div>
 
-      <!-- 运行态 · 连线着色规则演示（specs/pipeline-flow-color/design.md · 待拍板，确认后才落码） -->
+      <!-- 详情页只读画布 · 连线着色规则演示（specs/pipeline-flow-color/design.md · 待拍板，确认后才落码） -->
+      <div class="view-tag">视图切换：<b>流水线详情页 › 执行流程</b>（只读画布 —— 无删除/无添加步骤/无动作行；上方那块画布是编辑页，两者连线结构同构）</div>
       <div class="canvas run-demo" id="runDemo">
         <div class="canvas-head">
-          <span class="t">运行态 · 连线着色规则（v2 提案 · <b>待拍板</b>）<span class="hint">方案：specs/pipeline-flow-color/design.md</span></span>
+          <span class="t">详情页 · 执行流程 · 连线着色规则（v2 提案 · <b>待拍板</b>）<span class="hint">方案：specs/pipeline-flow-color/design.md</span></span>
           <span class="scene-tabs">
             <button class="scene-tab active" id="tab-s1" onclick="setRunScene('s1')">运行中 · 停在发布确认</button>
             <button class="scene-tab" id="tab-s2" onclick="setRunScene('s2')">成功 · 命中 dev</button>
@@ -385,6 +402,14 @@
           <b>规则 v2（提案）</b>：主线横线 = 进入侧步骤聚合完成 → 绿；分叉竖线 = 进入侧完成<b>且分叉已到达（任一分支有状态）</b> → 绿
           （v1 的「无跳过分支才绿」会把 4-2 的成功路拖灰，即「4-2 成功了还是灰」这次反馈）；
           支线箭头跟目标任务：完成 → 绿 / 失败 → 红 / 执行中 → 蓝 / 待审批 → 橙 / 跳过 · 未执行 → 灰。<br>
+          <span class="run-legend-dots">
+            <i class="rld" style="background:var(--ok)"></i>完成
+            <i class="rld" style="background:var(--info)"></i>执行中
+            <i class="rld" style="background:var(--danger)"></i>失败
+            <i class="rld" style="background:var(--primary)"></i>待审批
+            <i class="rld rld-skip"></i>跳过
+            <i class="rld" style="background:var(--border)"></i>未执行
+          </span>
           <b>待拍板</b>：① 竖线规则 ② 失败支线标红 ③ 执行中/待审批着色 ④ 已取消颜色 —— 见 design.md §5。
         </div>
       </div>
@@ -615,18 +640,22 @@ cp -R "$SRC"/. "$DST"/</textarea>
     var host=document.getElementById('runPipeline');host.innerHTML='';
     sc.steps.forEach(function(s,si){
       var col=document.createElement('div');col.className='step-col';
+      /* 详情页形态：步骤卡 = 名称 + 「命令」链接（无序号、无删除按钮） */
       var t=document.createElement('div');t.className='step-title run-step st-'+runAgg(s);
-      t.innerHTML='<span class="nm">'+s.name+'</span>';
+      t.innerHTML='<span class="nm">'+s.name+'</span>'
+        +'<span class="cmd-link" onclick="toast(\'[原型] 查看该步骤发布命令\')">命令</span>';
       col.appendChild(t);
       var box=document.createElement('div');box.className='tasks';
+      /* 详情页形态：任务卡 = 序号竖条 + 名称 + 小标（审批/条件）+ 状态文字（右对齐，无删除按钮） */
       s.tasks.forEach(function(tk,ti){
         var n=document.createElement('div');n.className='task-node run-node st-'+(tk.st||'none');
         var seq=s.tasks.length>1?(si+1)+'-'+(ti+1):String(si+1);
         n.title=tk.kind==='approval'?'审批任务':(tk.cond?'条件任务':'默认任务');
+        var tag=tk.kind==='approval'?'<span class="tag t-approval">审批</span>'
+          :(tk.cond?'<span class="tag t-cond">条件</span>':'');
         n.innerHTML='<span class="seq">'+seq+'</span>'
-          +(tk.kind==='approval'?'<span class="tag">审核</span>':'<span class="tag">脚本</span>')
-          +(tk.cond?'<span class="ifb">if</span>':'')
           +'<span class="name">'+tk.name+'</span>'
+          +tag
           +'<span class="run-badge '+runBadgeCls(tk.st)+'">'+RUN_ST_TEXT[tk.st||'']+'</span>';
         box.appendChild(n);
       });
