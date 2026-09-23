@@ -6,6 +6,7 @@ import App from './App.vue';
 import router from './router';
 import { setupAntd } from '@/plugins/antd';
 import { useUserStore } from '@/stores/user';
+import { useUiPrefsStore } from '@/stores/ui-prefs';
 // UI 规范：语义 token + 全局基础样式（@web-system/ui 的 tokens/theme 直指 src，不走 dist）
 // 顺序要求：先 token 与基础样式，再 portal 自有 global.css
 import '@web-system/ui/tokens.css';
@@ -32,6 +33,8 @@ export const mount: ModuleLifecycle['mount'] = async (ctx: ModuleContext, contai
   const pinia = createPinia();
   pinia.use(piniaPluginPersistedstate);
   app.use(pinia);
+  // 圆角风格偏好：尽早写入根属性（驱动 tokens.css 的 [data-radius] 覆盖块），减少首屏跳变
+  useUiPrefsStore(pinia).init();
   app.use(router);  // portal 自己的 router（base /portal/）
   setupAntd(app);
 
@@ -54,6 +57,8 @@ export const mount: ModuleLifecycle['mount'] = async (ctx: ModuleContext, contai
 export const unmount: ModuleLifecycle['unmount'] = async (_ctx: ModuleContext) => {
   app?.unmount();
   app = null;
+  // 复位圆角偏好属性：卸载后不把偏好残留在宿主 <html> 上（多模块共存时不做仲裁，末次写入生效）
+  if (typeof document !== 'undefined') document.documentElement.removeAttribute('data-radius');
 };
 
 export default { bootstrap, mount, unmount };

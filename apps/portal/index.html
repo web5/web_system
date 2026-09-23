@@ -11,6 +11,21 @@
     <!-- 关键资源 DNS 预解析 + 预连接 -->
     <link rel="preconnect" href="https://dev.kedouai.com" crossorigin />
     <link rel="dns-prefetch" href="https://dev.kedouai.com" />
+    <!-- 圆角风格偏好：首屏渲染前写入根属性，避免「先柔和后跳变」（AC6）
+         口径：specs/radius-style-dual/page-spec.md §3；与 stores/ui-prefs.ts 共用 localStorage key -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('ui-prefs');
+          var style = raw ? (JSON.parse(raw) || {}).radiusStyle : null;
+          if (style === 'crisp' || style === 'sharp') {
+            document.documentElement.setAttribute('data-radius', style);
+          }
+        } catch (e) {
+          /* 忽略：默认柔和（不写属性即 :root 默认值） */
+        }
+      })();
+    </script>
     <!-- 关键内联 CSS：避免白屏/黑屏闪烁（token 加载前的首屏基线，值与 @web-system/ui/tokens.css 对齐：
          --ws-bg-page #FAFAFA / --ws-text-primary #171717 / --ws-font-sans） -->
     <style>
