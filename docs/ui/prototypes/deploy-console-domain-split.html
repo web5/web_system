@@ -790,6 +790,7 @@
           特例与兜底：目标列<b>单任务</b>且与进入侧任务同高 → 无 L2/L3，L1 直接接到任务卡 + 箭头（色 = 目标任务）；
           进入侧任务低于全部目标行 → 竖线末段补画并归最后一个分支；任一侧无任务卡 → 不画线；
           线型一律实线 2.5px；虚线只用于任务卡边框表达「跳过」。
+          <b>绘制质量</b>：坐标取整（消半像素发虚）、线帽 round、拐点补实心圆 r=1.5（色=该分支色，消 butt 直角缺口）。
           <b>绘制层序</b>：交叉/交叠处<b>彩色（深色）画在灰色（浅色）上面</b> —— 落笔先灰后彩。
         </div>
         <div class="dc-muted" style="margin-top:8px;">
@@ -1792,11 +1793,13 @@ body{background:var(--ws-border-subtle);}
   }
 
   /* ===== 流水线详情 · 执行流程：SVG 测量连线（与编辑页 drawWires 同构） ===== */
-  /* 2026-09-23：入参由「是否走过（布尔）」改为**颜色 token**，以便支线按任务状态着色（红/品牌色/warn） */
+  /* 2026-09-23：入参由「是否走过（布尔）」改为**颜色 token**，以便支线按任务状态着色（红/品牌色/warn）。
+   * 2026-09-23 二改：linecap round + 坐标取整（由调用方做）—— 消除拐角缺口与半像素锯齿 */
   function runSeg(svg,x1,y1,x2,y2,color){
     var p=document.createElementNS('http://www.w3.org/2000/svg','path');
     p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
     p.setAttribute('stroke-width','2.5'); p.setAttribute('fill','none');
+    p.setAttribute('stroke-linecap','round');
     p.style.stroke = color || 'var(--border)';
     svg.appendChild(p);
   }
@@ -1807,6 +1810,13 @@ body{background:var(--ws-border-subtle);}
     p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round');
     p.style.stroke = color || 'var(--border)';
     svg.appendChild(p);
+  }
+  /* 拐点补实心圆（r=线宽半价）：衔接横线/竖线/支线的接缝，消除 butt 线帽直角缺口 */
+  function runDot(svg,x,y,color){
+    var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r','1.5');
+    c.setAttribute('fill',color||'var(--border)'); c.setAttribute('stroke','none');
+    svg.appendChild(c);
   }
   /* ===== 执行流程 · 运行场景（2026-09-23 加：同屏切换对比连线着色，规则 v2 提案待拍板） =====
    * st 取值与 ProgressFlow.vue 的任务状态对应：ok/fail/run/await/skip/none（none = 未执行、无落库记录）
@@ -1910,15 +1920,15 @@ body{background:var(--ws-border-subtle);}
   /* ================= 连线绘制定义（唯一判据源 · 见 specs/pipeline-flow-color/design.md §2.5） =================
    * 相邻两列之间的一条连接由 4 段构成，每段有明确的几何与状态归属：
    *   L1 主线横线 —— 从「进入侧列 首个任务卡」右侧中点，水平延伸到分叉 X（mx = 两列中点）。
-   *      归属：进入侧步骤（聚合）。聚合 = 完成 → 绿，否则 → 灰。
-   *   L2 分叉竖线 —— 目标列有多个任务时才有：mx 处，从最高任务行中线到最低任务行中线。
-   *      归属：**主路径分支**（= 默认/无条件任务；本例 dev。local 是条件分支，属旁路）。
-   *      主路径分支执行并成功 → 绿；其余（跳过 / 失败 / 执行中 / 未进入）→ 灰。
-   *      判据：L1 绿（进入侧完成）且 主路径分支成功。
-   *   L3 支线横线 —— mx 到每个目标任务卡左缘中点，每个任务一条。
+   *      归属：目标列步骤的**聚合**状态（有成功分支时成功覆盖；与步骤卡边框同源）。
+   *   L2 分叉竖线 —— 按转折点分段：每个目标任务的行中线是一个转折点，
+   *      第 k 段（上一转折点 → 第 k 任务行中线）归第 k 条分支，颜色 = 该任务自身状态。
+   *   L3 支线横线 —— mx 到每个目标任务卡左缘中点，每个任务一条（从自己的转折点横出）。
    *   L4 箭头 —— 支线末端 chevron，尖点落在任务卡左缘。
    *      归属：目标任务自身。完成→绿 / 失败→红 / 执行中→品牌色 / 待审批→warn / 跳过·未执行→灰。
-   * 特例（sameLine）：目标列单任务且与进入侧任务同高 → 无 L2/L3，L1 直接接到目标卡 + L4 箭头，色同 L1。
+   * 绘制质量：坐标取整（避免半像素发虚）；线帽 round；拐点补实心圆（r=1.5，色=该分支色）消锯齿；
+   * 层序：灰（跳过/未执行）先画、彩色后画 —— 交叉处深色盖浅色。
+   * 特例（sameLine）：目标列单任务且与进入侧任务同高 → 无 L2/L3，L1 直接接到目标卡 + L4 箭头，色 = 目标任务。
    * 不画：任一侧无任务卡；线型：一律实线 2.5px（虚线仅用于任务卡边框表达「跳过」）。
    */
   function drawRunWires(){
@@ -1931,10 +1941,13 @@ body{background:var(--ws-border-subtle);}
     var sc=RUN_SCENES[runScene];
     var wire=function(st){return RUN_WIRE[st]||'var(--border)';};
     /* 绘制收集：先算好所有线段（几何 + 颜色），再统一落笔 ——
-     * 落笔顺序 = 浅色（灰）先画、彩色（深色）后画（用户 2026-09-23：交叉处深色画在浅色上面） */
+     * 落笔顺序 = 浅色（灰）先画、彩色（深色）后画（用户 2026-09-23：交叉处深色画在浅色上面）。
+     * 坐标一律取整（R）：测量产生的小数坐标会落在半像素上，视觉发虚/锯齿。 */
+    var R=function(v){return Math.round(v);};
     var jobs=[];
-    var segJob=function(x1,y1,x2,y2,c){jobs.push({t:'s',a:[x1,y1,x2,y2,c]});};
-    var chevJob=function(x,y,c){jobs.push({t:'c',a:[x,y,c]});};
+    var segJob=function(x1,y1,x2,y2,c){jobs.push({t:'s',a:[R(x1),R(y1),R(x2),R(y2),c]});};
+    var chevJob=function(x,y,c){jobs.push({t:'c',a:[R(x),R(y),c]});};
+    var dotJob=function(x,y,c){jobs.push({t:'d',a:[R(x),R(y),c]});};
     for(var i=0;i<cols.length-1;i++){
       var ft=cols[i].querySelectorAll('.run-task'); var tt=cols[i+1].querySelectorAll('.run-task');
       if(!ft.length||!tt.length) continue;
@@ -1958,9 +1971,11 @@ body{background:var(--ws-border-subtle);}
           var c=ctr(t);
           var wc=wire(sc.steps[i+1].ts[ti].st);
           if(c.cy>prev+0.5){ segJob(mx,prev,mx,c.cy,wc); }
+          /* 拐点补实心圆（色=该分支色）：衔接横线/竖线/支线接缝，消锯齿 */
+          dotJob(mx,c.cy,wc);
           prev=Math.max(prev,c.cy);
         });
-        if(f.cy>prev+0.5){ segJob(mx,prev,mx,f.cy,wire(sc.steps[i+1].ts[ys.length-1].st)); }
+        if(f.cy>prev+0.5){ var lc=wire(sc.steps[i+1].ts[ys.length-1].st); segJob(mx,prev,mx,f.cy,lc); dotJob(mx,f.cy,lc); }
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
           segJob(mx,c.cy,c.l,c.cy,wc); chevJob(c.l,c.cy,wc);
@@ -1970,7 +1985,8 @@ body{background:var(--ws-border-subtle);}
     /* 落笔：灰色（--border，跳过/未执行）先画，彩色（深色）后画 —— 交叉处深色盖浅色 */
     var paint=function(j){
       if(j.t==='s'){ runSeg.apply(null,[svg].concat(j.a)); }
-      else{ runChev.apply(null,[svg].concat(j.a)); }
+      else if(j.t==='c'){ runChev.apply(null,[svg].concat(j.a)); }
+      else{ runDot.apply(null,[svg].concat(j.a)); }
     };
     var isGray=function(j){return j.a[j.a.length-1]==='var(--border)';};
     jobs.filter(isGray).forEach(paint);
