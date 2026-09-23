@@ -495,7 +495,19 @@ async function tryStreamSpeak(text: string, myRun: number): Promise<boolean> {
 
       // 复制一份，保证 Int16Array 的 byteOffset 为 0
       const aligned = bytes.slice();
-      playPcmChunk(ctx, new Int16Array(aligned.buffer));
+      try {
+        playPcmChunk(ctx, new Int16Array(aligned.buffer));
+      } catch {
+        // WebAudio 能力缺失（创建 buffer / source 失败）：中止并回退整段，
+        // 避免 onChunkReceived 反复抛错且 Promise 悬起
+        try {
+          task.abort();
+        } catch {
+          /* 忽略 */
+        }
+        settle(false);
+        return;
+      }
       settle(true); // 首个分片已开播
     });
   });
@@ -531,10 +543,20 @@ function playPcmChunk(ctx: any, pcm: Int16Array): void {
   waNextTime = startAt + buffer.duration;
 
   waSources.push(source);
-  source.onended(() => {
+
+  // 小程序 WebAudio 的 AudioBufferSourceNode 未实现 onended（实测 TypeError）：
+  // 有则用，没有则按「开播延迟 + 时长」定时移除 —— 否则 waSources 永不清空，
+  // scheduleStreamEnd 判定不了「播完」，按钮永远不复位。
+  const removeSelf = () => {
     const i = waSources.indexOf(source);
     if (i >= 0) waSources.splice(i, 1);
-  });
+  };
+  if (typeof source.onended === 'function') {
+    source.onended(removeSelf);
+  } else {
+    const delayMs = Math.max(0, (startAt - (ctx.currentTime || 0) + buffer.duration) * 1000) + 60;
+    setTimeout(removeSelf, delayMs);
+  }
 }
 
 /** 停止流式播放：abort 请求、停掉所有音源、释放上下文 */
@@ -553,7 +575,7 @@ function stopWebAudio(): void {
   }
   waSources.forEach((s) => {
     try {
-      s.stop();
+      if (typeof s.stop === 'function') s.stop();
     } catch {
       /* 已结束：忽略 */
     }
