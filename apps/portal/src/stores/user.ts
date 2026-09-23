@@ -41,9 +41,17 @@ export const useUserStore = defineStore(
       userInfo.value = null;
     }
 
-    /** 已登录但 userInfo 为空时，从服务端获取用户信息 */
+    /**
+     * 拉取 / 刷新当前用户信息（已登录就发请求）。
+     *
+     * 不短路 userInfo 已经存在的情况 —— 跨设备 AC2 需要「服务端为准」的契约：
+     * 即便本地 hydrate 出旧 userInfo（如旧版的 username 但新版的 preferences），
+     * 也应以最新一次请求覆盖之，并触发下游 watcher 收敛 uiPrefs。
+     *
+     * 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.1 / AC2
+     */
     async function fetchUserInfo() {
-      if (!token.value || userInfo.value) return;
+      if (!token.value) return;
       try {
         const res: any = await request.get('/auth/verify');
         if (res.code === 200 && res.data) {

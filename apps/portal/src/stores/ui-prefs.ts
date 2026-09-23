@@ -1,6 +1,15 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch, type WatchStopHandle } from 'vue';
 import { updateUiPreferences } from '@/api/user';
+
+/**
+ * user-store 的最小接口（避免 ui-prefs 与 user-store 直接 import 形成循环依赖）。
+ * main-standalone 与 lifecycle 都注入同一份 useUserStore() 实例。
+ */
+export interface UserStoreLike {
+  readonly userInfo: { preferences?: { radiusStyle?: RadiusStyle } | null } | null;
+  fetchUserInfo?: () => Promise<unknown>;
+}
 
 /**
  * 界面偏好（用户级）。
@@ -81,3 +90,35 @@ export const useUiPrefsStore = defineStore(
     },
   },
 );
+
+/**
+ * 绑定「用户偏好同步」：监听 userInfo.preferences，一旦登录/拉到用户信息就以服务端为准收敛本地 uiPrefs。
+ *
+ * 同时主动调一次 `userStore.fetchUserInfo()`（已登录就拉一次，未登录直接失败静默），
+ * 确保 AC2「换设备登录 → 页面圆角立即随服务端收敛」对**每一种 mount 入口**都成立。
+ *
+ * 调用方：
+ * - `lifecycle.ts`：mount 时调，unmount 时把返回值作为 stopPrefSync 调一下即可清理
+ * - `main-standalone.ts`：启动时调，单页应用全程不需要停
+ *
+ * 为什么不直接 import useUserStore：避免 ui-prefs ↔ user-store 间形成循环依赖（user-store 也不会 import ui-prefs）。
+ * 改为 duck-typing 注入：调用方保证传的是 `useUserStore(pinia)` 的返回值。
+ *
+ * 口径：specs/radius-style-dual/page-spec-pref-sync.md §4.1 / AC2
+ */
+export function bindUserPrefsSync(
+  userStore: UserStoreLike,
+  uiPrefs: ReturnType<typeof useUiPrefsStore>,
+): WatchStopHandle {
+  // 同时监听 userInfo 整个引用变化与 preferences 字段变化——
+  // 用户信息和 preferences 是嵌套的，setUserInfo 整体替换 userInfo 也能触发；
+  // 已在 login 路径靠 LoginPanel.vue setUserInfo(res.user) 单次拉齐，该 watcher 即覆盖该场景。
+  const stop = watch(
+    () => (userStore.userInfo as { preferences?: { radiusStyle?: RadiusStyle } | null } | null)?.preferences,
+    (prefs) => uiPrefs.syncFromServer(prefs),
+    { immediate: true },
+  );
+  // 已登录就主动拉一次，确保即便 hydrate 时已经把旧 userInfo 持久化了，仍能拉到服务端的最新 preferences。
+  void userStore.fetchUserInfo?.().catch(() => undefined);
+  return stop;
+}
