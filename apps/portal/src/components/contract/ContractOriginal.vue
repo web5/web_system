@@ -80,7 +80,7 @@ watch(
 .hl {
   background: var(--ws-brand-50);
   color: var(--ws-brand-700);
-  border-radius: 2px;
+  border-radius: var(--r-chip);
   padding: 2px 0;
 }
 

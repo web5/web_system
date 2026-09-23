@@ -179,7 +179,7 @@ function onCardClick(c: Capability) {
 .tag {
   height: 22px;
   padding: 0 8px;
-  border-radius: 11px;
+  border-radius: var(--r-chip);
   font-size: 12px;
   font-weight: 500;
   background: var(--ws-bg-subtle);
