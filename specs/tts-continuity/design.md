@@ -127,3 +127,87 @@ T3/T4 若不改页面模板（只改 `api/tts.ts` / `services/tts.ts` / `utils/*
 | 700 字符整段 | 2 片（455 + 244）并发拼接，4.7s，拼接后首帧一致，远低于 gateway 15s |
 | 用户实测句（330 字符） | 切块数 5 → **2**（首句 58 + 剩余 271），271 < 480 → 服务端单次合成，无内部接缝 |
 | 小程序单测 | `tests/translate-parse.test.ts` 17/17 通过（含 `splitSpeakParts` 4 条） |
+
+## 9 业界方案调研（块间延迟 / 首包延迟）
+
+### 9.1 问题归类
+
+「后面的语音有点延迟」不是网络抖动，是**块间等待**：剩余块的合成要等首块返回后才发起，
+等待时长 = 剩余块合成时间 − 首块音频时长。首句 58 字符音频约 3~4s，剩余 271 字符合成实测
+0.6s~5.9s（腾讯云侧波动大），因此经常差出 0~3s 空档。合成耗时本身占大头，网络只占一小截。
+
+### 9.2 业界主流做法
+
+| 层次 | 做法 | 代表 |
+|---|---|---|
+| 流式合成（根治） | WebSocket 流式逐句/逐字合成，**首包延迟 300~400ms**，服务端按句合成并分块下发，天然无"整段等待"、语调连贯 | 腾讯云**流式文本语音合成**（WebSocket）、腾讯云**对话式 TTS**（TRTC，首包低至 300ms，推荐模型 flow_02_turbo）；火山引擎（<300ms）；阿里云 / 百度（WebSocket 流式）；Azure Speech（WebSocket v2 端点做文本流式输入降延迟） |
+| 长文本异步 | RESTful 异步任务（提交 → 轮询/回调取音频），适合离线预生成 | 腾讯云长文本语音合成 |
+| Web 端边下边播 | MediaSource Extensions：`SourceBuffer.appendBuffer` 把分片喂给 `<audio>`；配起音缓冲（jitter buffer 200~500ms）、淡入淡出、断连重连。也可用 Web Audio 解码 PCM 拼接 | MSE / Web Audio API 通行实践 |
+| 小程序端边下边播 | 无 MSE。`InnerAudioContext` 支持流式 src（远程 URL 边下边播，但**有实例数上限**，正是本次"停掉"的根因）；更灵活用 `wx.createWebAudioContext()` 喂 AudioBuffer 拼接 PCM | 微信官方能力 |
+| 编排 / 请求层 | 首块与后续块**并发发起**（不等首块返回）；卡片渲染即预热合成；HTTP/2 多路复用 + preconnect；结果缓存 | 各厂通用优化 |
+
+### 9.3 本项目三档路线
+
+| 档 | 做法 | 预期 | 代价 |
+|---|---|---|---|
+| **P0** | ① 首块与剩余块**并发发起**（现在剩余块等首块 RTT 后才请求）② 首块缩到首个逗号/从句（更快出声）③ 卡片渲染即后台预热合成 | 省掉一个 RTT，剩余块合成被首块播放完全掩盖，空档基本消失 | 仅端侧改动，服务端不动 |
+| **P1** | 服务端接腾讯云**流式文本语音合成**（WebSocket）→ gateway 加 SSE/chunked 流式通道 → 端侧边收边播（Web 用 MSE，小程序用 `createWebAudioContext`） | 首包 ~300ms 出声；长文本无整段等待；语调连贯 | 新增流式接口 + gateway 流式转发 + 超时模型改造；音色是否支持流式需先确认 |
+| **P2** | 换对话式 TTS（TRTC）/ 火山流式，或长文本异步 + 预生成 | 极致延迟 / 成本优化 | 换厂商或换音色，需业务确认音色一致性 |
+
+### 9.4 落地 P1 前必须确认
+
+1. 音色 603007 是否可用于流式 / 对话式接口（文档推荐模型 `flow_02_turbo` 支持中英日粤）—— 换音色会影响产品调性。
+2. 流式接口的计费与并发额度（与实时语音合成共用并发额度）。
+3. gateway 现有 TTS 转发是整包 `http.request`（`proxy.controller.ts`），需改为流式转发；`API_TIMEOUT.GATEWAY.TTS` 的一次性超时模型也要换成「首包超时 + 流空闲超时」。
+
+## 10 P1 设计：流式合成（腾讯云流式文本语音合成 WebSocket）
+
+### 10.1 官方协议要点（文档 product/1073/108595）
+
+| 项 | 值 |
+|---|---|
+| 端点 | `wss://tts.cloud.tencent.com/stream_wsv2?{params}` |
+| Action | `TextToStreamAudioWSv2` |
+| 必填参数 | `AppId`(整型) / `SecretId` / `Timestamp` / `Expired` / `SessionId` / `Codec` / `Signature` |
+| 签名 | 除 Signature 外参数**字典序**拼接 → `GETtts.cloud.tencent.com/stream_wsv2?{串}` → HMAC-SHA1(SecretKey) → base64 → **urlencode** |
+| 流程 | 握手 → 等 `ready=1` → 发 `ACTION_SYNTHESIS{data:文本}`（可多次）→ 收 **binary 音频帧** + text 事件帧 → 发 `ACTION_COMPLETE` → 收 `final=1` → 主动关闭 |
+| 音频 | `pcm`（默认）/ `mp3`；采样率 8000/16000/24000；16bit 单声道 |
+| 并发额度 | **超自然大模型音色 10 路**（与实时语音合成共用）；精品/大模型 20 路 |
+| 限制 | 单会话 ≤10000 字；10 分钟无输入则关闭；不支持 SSML；两次合成指令间隔 ≤10 分钟 |
+| 官方 SDK | 仅 Java / Python，**无 Node** → 需自研 WS 客户端（`ws`） |
+
+### 10.2 关键风险：英文断句
+
+服务端分割标点只列了全角 `。；？！`、半角 `; ? !` 与换行 —— **英文句点 `.` 不在列表内**。
+英文长句若不逐句发送，服务端会一直缓存、音频迟迟不出（文档明确"确保合成文本包含正确标点"）。
+→ 端侧必须**逐句发送**（每句一次 `ACTION_SYNTHESIS`，句末带标点），不能整段一把梭。
+
+### 10.3 架构
+
+1. `ai-service` 新增 `TtsStreamService`：连接腾讯云 WS，暴露「文本进 → 音频帧出」的 Node `Readable`；
+   内部按句发送 + 收齐后发 `ACTION_COMPLETE`；异常/超时关闭连接。
+2. `gateway` 新增流式通道：统一走 **WebSocket**（`@WebSocketGateway`，需新增 `@nestjs/websockets` + `ws`），
+   portal 与小程序共用一套；握手时带 JWT（小程序 `wx.connectSocket` 支持 header）。
+3. 端侧边收边播：
+   - portal：`pcm` → Web Audio 队列（`AudioBufferSourceNode` 排队，无间隙）；或 `mp3` → MSE `SourceBuffer`。
+   - 小程序：无 MSE。`pcm` → `wx.createWebAudioContext()` 手动填 `AudioBuffer`；
+     `InnerAudioContext` 虽支持流式 src 但有实例上限（本次"停掉"的根因），不作为主路径。
+4. 开关与降级：`TTS_MODE=chunked|stream`（服务端 env）；流式失败/未配置 → 自动回退现有整段链路。
+
+### 10.4 阻塞项（开工前必须解决）
+
+| # | 阻塞 | 现状 | 需谁解决 |
+|---|---|---|---|
+| 1 | `AppId`（流式握手必填，非 SecretId/Key） | 仓库无任何 `TENCENT_APP_ID` 配置 | 用户：腾讯云控制台 → API 密钥管理页取 AppId，配进 `servers/ai-service/.env` |
+| 2 | 音色 603007 是否支持流式 | 文档未明列（并发条款提及"超自然大模型音色 10 路"，暗示支持） | 拿到 AppId 后用直连脚本实测（10 行代码即可判定，错误码 10001 即不支持） |
+| 3 | gateway 无 WS 依赖 | `@nestjs/websockets` / `ws` 均未安装 | 实现时新增依赖 |
+| 4 | ai-service 无 ws 依赖 | 未安装（根 `node_modules/ws` 为传递依赖，不可依赖） | 实现时显式声明 |
+| 5 | 并发额度 10 路 | 超自然音色上限低，多用户并发朗读可能 10002 | 需限流/排队；量大需商务提额 |
+
+## 11 P2 设计：预生成 / 换引擎
+
+| 方案 | 落地形态 | 依赖 | 评价 |
+|---|---|---|---|
+| P2-a 长文本异步合成 | 云 API `CreateTtsTask` + 轮询/回调，离线产出音频 | 只需 SecretId/Key（**无需 AppId**） | 适合批量离线（术语库/收藏朗读），不适合即时交互 |
+| P2-b 对话式 TTS（TRTC） | 首包 ~300ms，客户端 SDK 接入 | TRTC SDK、账号开通 | 延迟最优，但接入模型与现有 HTTP 链路差异大 |
+| P2-c 端侧预热（成本换体验） | 卡片渲染完成即后台合成并缓存，用户点朗读时秒播 | 现有接口即可 | 见效最快；代价是**没点的也会产生合成费用与并发**，需限制（仅最新 1 条、仅 ≤600 字符） |
