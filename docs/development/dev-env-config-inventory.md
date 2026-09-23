@@ -20,15 +20,19 @@
 
 ## 1. 配置中心 `config_items`（控制台库 `web_system_deploy`）
 
-| 键（scope/env · module.key） | 本地（参照） | dev 写入前 | dev 现在 | 判定 / 动作 |
-|---|---|---|---|---|
-| `global/* · REPO_URL` | `git@github.com:web5/web_system.git` | 无 | **已写入**（同值） | ✅ 发布拉码用，非敏感，环境无关 |
-| `module/dev · <12 个服务>.AUTH_SERVICE_URL` | local 侧未写入（走 .env） | 无 | **已写入 `http://127.0.0.1:6001`**（12 条） | ✅ 平台**生产唯一必需键**（`REQUIRED_SERVICE_URLS_IN_PROD`）；dev 全服务 `NODE_ENV=production`，漏配会 fail-fast 退出 |
-| `module/local · ai-agent.HY3_API_KEY / TOKENHUB_API_KEY` | 有（secret） | — | — |  **secret：不复制**，dev 如需，从 dev 本机 `.env` 取或人工提供 |
-| `module/local · gateway.GATEWAY_SERVICE_KEY`、`deploy-console.GATEWAY_SERVICE_KEY` | 有（secret） | — | — | ⛔ 同上 |
-| 其余服务互调地址（`USER_SERVICE_URL` / `SYSTEM_SERVICE_URL` / `UPLOAD_SERVICE_URL` / …） | 本地走 .env | dev 各服务 `.env` 已配 | 未写入配置中心 | ⏸ **暂不搬**：12 个服务 × 多组地址一次性覆盖风险大；建议后续**按服务逐个**对账后再写 |
+| 键（scope/env · module.key） | 本地（参照） | dev 终态 | 判定 / 动作 |
+|---|---|---|---|
+| `global/* · REPO_URL` | `git@github.com:web5/web_system.git` | **已写入**（同值） | ✅ 发布拉码用，非敏感，环境无关 |
+| `module/dev · ai-agent.HY3_API_KEY` | 有（local，secret） | **已写入（同值）** | ✅ 「local 可复用」：同一批密钥，直接复用 local 的值 |
+| `module/dev · ai-agent.TOKENHUB_API_KEY` | 有（local，secret） | **已写入（同值）** | ✅ 同上 |
+| `module/dev · gateway.GATEWAY_SERVICE_KEY`、`deploy-console.GATEWAY_SERVICE_KEY` | 有（local，secret） | **已写入（同值）** | ✅ 同上 |
+| ~~`module/dev · <12 个服务>.AUTH_SERVICE_URL`~~ | — | **已删除**（先写后删） | ❌ **反面教材**：各服务 `.env` 本就有该键，而配置中心是**强制覆盖层** → 重复登记只会多一层维护点、且日后改端口要改两处。**结论：只登记真正需要跨环境集中管理的键**（本地原有那 4 个 + 环境无关的 global），不要按服务铺一遍 `.env` 里已有的键 |
+| 其余服务互调地址（`USER_SERVICE_URL` / `SYSTEM_SERVICE_URL` / …） | 本地走 .env | 未写入 | ⏸ 同上理：`.env` 已有的**不搬** |
 
-**本次写入校验**：`SELECT COUNT(*) FROM config_items` → dev 由 0 → **13**（1 global + 12 服务）。
+**终态校验**：dev `config_items` = **5 条**（`REPO_URL` global + 4 条 dev module），结构与 local 一致。
+> 口径修正（2026-09-23，用户指出）：**配置中心的判定标准不是"平台必需就写进去"**，
+> 而是「是否需要跨环境集中管理」。`AUTH_SERVICE_URL` 虽为生产必需键，但各服务 `.env` 已配且值与环境绑定，
+> 放配置中心反而制造双重来源 —— **不写**。
 
 ## 2. 系统设置 `system_settings`（控制台库）
 
@@ -38,6 +42,25 @@
 | `NOTIFY_WECOM_URL` | 已配企微机器人（**URL 含 key**） | 无 | **已写入**（89 字符，值不落文档/聊天） | ✅ 已确认写入；dev 的流水线/发布通知会发到该企微群 |
 
 ## 3. 服务-环境登记 `deploy_service_envs`（端口 / 主机组 / 上游）
+
+**⚠️ 先分清「两个库」**（本次踩过）：
+- **编排者库**（本机 `web_system_deploy`）= 流水线执行时读的那份（端口解析 `pickStagePort` 读它）；
+- **各环境控制台的库**（dev/prod 各自一份）= 该环境控制台 UI 展示与"从该控制台触发发布"时用。
+- 两份**要分别登记**：本机早就有 dev/prod 行，而 dev 控制台库是**空的** → 从 dev 控制台发布时端口解析会 `unresolved`。
+  本次已把本机的 dev(12)/prod(8) 行同步进 dev 控制台库。
+
+| 表 | 语义 | 本次动作 |
+|---|---|---|
+| `deploy_hosts` | 「主机管理」页（含 runtime/enabled），被 `deploy_service_envs.host_name` 引用 | dev 库补 **dev-default / prod-default** ✅ |
+| `deploy_servers` | 发布/SSH/监控用（`server_name`） | dev 库补 **dev-default / prod-default** ✅ |
+| `deploy_service_envs` | 服务×环境（端口/主机组/上游） | dev 库补 **dev 12 条 + prod 8 条** ✅（prod 那 8 条 = 实际在跑的 8 个服务，与主机侧一致） |
+| `deploy_env_service_routes` | 环境×服务→server_name 路由 | 本机只有 4 条 **staging 遗留**行，无 dev/prod → **不搬**，记录待确认 |
+| `deploy_envs` | 环境注册表（dev/local/prod） | dev 库本来就有 ✅ |
+
+**待补**：nginx/边缘那台（`dev.kedouai.com` → **42.194.200.69**，与 dev 主机 175.27.189.123 不同机）
+尚未登记 —— 需其 **SSH 用户 / 密钥 / 部署根目录**（`.env.deploy` 里的 `LIGHTHOUSE_*` 是**另一台空机** 101.43.117.234，无 nginx，不是它）。
+
+### 3.1 各环境服务端口（登记值 = 实际值，2026-09-23 实测）
 
 | 环境 | 后端模块登记覆盖 | 状态 |
 |---|---|---|
@@ -127,9 +150,10 @@ mysql -h $H -P ${P:-3306} -u $U $D -e "SELECT scope,env_id,module_key,\`key\`,LE
 
 ## 8. 遗留（需人工 / 后续）
 
-1. **迁移待定 3 条**：`0008_knowledge_tables` / `0010_pipeline_task_states` / `0012_music_recommend` —— 评审后决定"执行"还是"记账跳过"。
-2. **prod 迁移 baseline**：prod 同样是记账 0 行，需**单独**出对照表（不照抄 dev 结论）。
+1. **nginx/边缘机（42.194.200.69）的主机登记**：需其 SSH 用户 / 密钥 / 部署根目录（`.env.deploy` 里没有它）。
+2. **迁移待定 3 条**：`0008_knowledge_tables` / `0010_pipeline_task_states` / `0012_music_recommend` —— 评审后决定"执行"还是"记账跳过"；**prod 同样需要单独出对照表**（结果与 dev 一致，但别照抄）。
 3. **prod 的 upload-service**：有产物未运行、`.env` 空；若要上 prod 需定端口（建议 3008）+ 配 `.env` + 启动。
-4. 服务互调地址（`USER_SERVICE_URL` / `SYSTEM_SERVICE_URL` / …）是否逐服务搬进配置中心。
+4. `deploy_env_service_routes`：本机只有 staging 遗留行，dev/prod 是否需要登记待确认。
 5. dev 静态模块缺 `shell` 基座，确认门户是否需要。
-6. dev 控制台登录后的收尾：**A6 —— 「版本部署 → admin → `3d5ce61`」** 需人工点（指针切换不自动做）。
+6. dev 控制台收尾：**A6 —— 「版本部署 → admin → `3d5ce61`」**需人工点（指针切换不自动做）。
+7. 配置中心待补项（若确需跨环境集中管理）：`USER_SERVICE_URL` / `SYSTEM_SERVICE_URL` 等互调地址 —— **先判断是否真需要**（`.env` 已有则不写）。
