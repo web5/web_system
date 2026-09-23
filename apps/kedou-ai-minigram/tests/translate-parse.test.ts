@@ -3,7 +3,7 @@ import {
   inferTranslateDirection,
   looksLikeTranslateReply,
   parseSections,
-  splitSpeakChunks,
+  splitSpeakParts,
 } from '../utils/translate-parse';
 
 describe('buildTranslateCardView', () => {
@@ -56,36 +56,34 @@ describe('inferTranslateDirection', () => {
   });
 });
 
-describe('splitSpeakChunks（流式朗读切块）', () => {
-  it('多句文本：首句单独成块（最快出声），其余合并到上限内', () => {
-    const chunks = splitSpeakChunks('Thank you very much. It is my pleasure to help you today.');
-    expect(chunks[0]).toBe('Thank you very much.');
-    // 所有块都在上限内
-    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(110);
+describe('splitSpeakParts（流式朗读切块）', () => {
+  it('多句文本：首句单独成块（最快出声），其余整段作为一块（服务端一次合成）', () => {
+    const parts = splitSpeakParts('Thank you very much. It is my pleasure to help you today.');
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toBe('Thank you very much.');
     // 拼回原文（空格归一后）
-    expect(chunks.join(' ').replace(/\s+/g, ' ')).toBe(
+    expect(parts.join(' ').replace(/\s+/g, ' ')).toBe(
       'Thank you very much. It is my pleasure to help you today.',
     );
   });
 
   it('单句短文本 → 一块', () => {
-    expect(splitSpeakChunks('Thank you.')).toEqual(['Thank you.']);
+    expect(splitSpeakParts('Thank you.')).toEqual(['Thank you.']);
   });
 
-  it('超长单句在空格处硬切，不切碎单词', () => {
-    const long = 'word '.repeat(60).trim(); // 300 字符无句读
-    const chunks = splitSpeakChunks(long);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const c of chunks) {
-      expect(c.length).toBeLessThanOrEqual(110);
-      // 不出现半个单词（首尾都不是把 word 切成两半）
-      expect(c.startsWith('word')).toBe(true);
-      expect(c.endsWith('word') || c.endsWith(' ')).toBe(true);
-    }
+  it('超长无句读文本：首块在空格处截（不切碎单词），剩余整段交给服务端', () => {
+    const long = 'word '.repeat(60).trim(); // 299 字符无句读
+    const parts = splitSpeakParts(long);
+    expect(parts).toHaveLength(2);
+    expect(parts[0].length).toBeLessThanOrEqual(110);
+    expect(parts[0].startsWith('word')).toBe(true);
+    expect(parts[0].endsWith('word')).toBe(true); // 不出现半个单词
+    expect(parts[1].length).toBeGreaterThan(0);
+    expect(`${parts[0]} ${parts[1]}`).toBe(long);
   });
 
   it('空文本 → 空数组', () => {
-    expect(splitSpeakChunks('  ')).toEqual([]);
+    expect(splitSpeakParts('  ')).toEqual([]);
   });
 });
 
