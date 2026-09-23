@@ -26,6 +26,7 @@ import { DeployPipelineEntity, PIPELINE_STAGES, PipelineMode } from '../entities
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 
 import { CanaryService } from '../canary/canary.service';
@@ -235,7 +236,14 @@ export interface StageVarsInput {
   releaseWorkspace: string;
   /** 配置中心 resolve 结果（global → env → module，优先级最高） */
   config?: Record<string, string>;
-  /** pm2 进程实际 PORT：配置中心没有时的兜底 */
+  /**
+   * 已解析好的端口（调用方用 `pickStagePort` 走完整取值链后传入）。
+   * 传了就以它为准；未传则回落到 `config.PORT` → `pm2Port`（兼容旧调用与单测）。
+   */
+  port?: string;
+  /** 端口来源（注入为 `PORT_SOURCE`，排障用；见 `pickStagePort`） */
+  portSource?: PortSource;
+  /** pm2 进程实际 PORT：配置中心没有时的兜底（**仅 local 语义**） */
   pm2Port?: string | number;
   /** 受保护版本（当前版本 + 启用中的灰度版本），cleanup 用 */
   protectedVersions?: string[];
@@ -287,6 +295,58 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   'CONSOLE_TOKEN',
 ];
 
+/** 端口来源（注入为 `PORT_SOURCE`，脚本/排障据此判断该不该信任这个端口） */
+export type PortSource = 'config' | 'env-registry' | 'local-pm2' | 'unresolved';
+
+/**
+ * 端口取值链（纯函数，便于单测）。
+ *
+ * **2026-09-23 事故**（auth-service 发 dev）：原实现是「配置中心 → **编排者本机 pm2**」，
+ * 而 pm2 只有 **本机（local）** 语义 —— 本机 auth-service 跑 6101、dev 跑 6001
+ * （端口按环境登记在 `deploy_service_envs`），于是远端 verify 探错端口 → 判失败 →
+ * 自动回滚 dist（"发布成功但线上没变"）。其它模块当时没暴露，只因本机与 dev 端口恰好相同；
+ * **prod 的端口本就不同**（auth=3001 / system-service=3004 / todo-service=3005）→ 迟早复现。
+ *
+ * 取值链（高 → 低）：
+ *   1. 配置中心 `PORT`（保留：历史 `PORT=6200` 污染对策，也允许按环境显式覆盖）
+ *   2. **远端**（env !== 'local'）→ 目标环境的服务端口登记 `deploy_service_envs.port`
+ *   3. **仅 local** → 本机 pm2 实际进程端口（本机才有该语义）
+ *   4. 都没有 → 空串 + 告警：**远端绝不回落本机 pm2**（宁可让脚本显式降级/报错，
+ *      也不要拿本机端口去探远端服务）
+ */
+export function pickStagePort(i: {
+  env?: string;
+  configPort?: string;
+  envPort?: string | number | null;
+  pm2Port?: string | number | null;
+}): { port: string; source: PortSource; warn?: string } {
+  const env = i.env || 'local';
+  const cfg = String(i.configPort ?? '').trim();
+  if (cfg) return { port: cfg, source: 'config' };
+
+  if (env !== 'local') {
+    const p = String(i.envPort ?? '').trim();
+    if (p) return { port: p, source: 'env-registry' };
+    return {
+      port: '',
+      source: 'unresolved',
+      warn:
+        `环境 ${env} 未登记端口（deploy_service_envs）且配置中心无 PORT：` +
+        '本次**不回落编排者本机 pm2**（本机端口只对 local 有效）。' +
+        `请到「环境详情 → 服务指向」登记该服务在 ${env} 的端口后重发；` +
+        '在此之前远端脚本只能降级为进程状态验证（可能放过"起来了但端口不对"）。',
+    };
+  }
+
+  const pm2 = String(i.pm2Port ?? '').trim();
+  if (pm2) return { port: pm2, source: 'local-pm2' };
+  return {
+    port: '',
+    source: 'unresolved',
+    warn: '本机未解析出 PORT（配置中心未配，且 pm2 中找不到该进程的 PORT）—— 脚本会降级为进程状态验证',
+  };
+}
+
 /**
  * 解析阶段命令可用的环境变量（v4 M1，纯函数便于单测）。
  *
@@ -295,7 +355,7 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
  * （历史：`resolvePm2Names()` 猜 5 个候选取第一个、产物路径硬编码、入口文件写死 index.js）。
  * 这里把全部平台知识**显式下发为变量**，脚本直接引用即可：
  *
- * - 端口优先级：**配置中心 → pm2 实际进程**（配置中心是权威，历史 `PORT=6200` 污染对策）
+ * - 端口优先级：**配置中心 → 远端目标环境登记 / local 本机 pm2**（见 `pickStagePort`）
  * - `PUBLIC_PATH` 取自模块注册表 `publicPath`（该字段此前已存在但执行器从未读取），缺省回落 moduleKey
  * - `BUILD_OUTPUT_DIR`（构建产物，upload 的源）与 `ARTIFACT_DIR`（投递目标）拆开，避免同名歧义
  */
@@ -309,7 +369,13 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const entry = i.entry || 'index.js';
   const version = i.commitId || '';
   const ws = i.releaseWorkspace;
-  const port = cfg.PORT || (i.pm2Port != null ? String(i.pm2Port) : '');
+  // 端口：调用方（PipelineService.resolvePortVars）已按 pickStagePort 走完整链则直接采信；
+  // 未传则保持旧链（配置中心 → pm2），兼容旧调用与既有单测。
+  const pickedPort: { port: string; source: PortSource } =
+    i.port !== undefined
+      ? { port: i.port, source: i.portSource ?? 'unresolved' }
+      : pickStagePort({ env: i.env, configPort: cfg.PORT, pm2Port: i.pm2Port });
+  const port = pickedPort.port;
 
   const base: Record<string, string> = {
     DEPLOY_ENV: i.env || '',
@@ -323,6 +389,9 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 进程与端口：显式解析，不做候选名猜测
     PM2_NAME: i.pm2 || `web-${i.moduleKey}`,
     PORT: port,
+    // 端口来源（config / env-registry / local-pm2 / unresolved）：脚本可据此判定
+    // 该不该信任 PORT（例如远端 unresolved 时应显式报错而不是拿空端口去探活）
+    PORT_SOURCE: i.portSource ?? pickedPort.source,
     // P3（2026-09-20）：pm2 入口与工作目录可配（服务管理维护；空 → 历史缺省值）
     PM2_SCRIPT: i.pm2Script || 'dist/main.js',
     // 未配 deployRoot 时按模块目录回落（deployRootAbs 空值返回工作区根，故不能直接 ||）
@@ -474,7 +543,45 @@ export class PipelineService {
     // 内置步骤注册表（executeStage 按步骤元数据数据驱动分派；执行体在各自 executor 内）
     @Inject(PIPELINE_BUILTIN_STEPS)
     private readonly builtinSteps: Record<string, BuiltinStepDef>,
+    // 服务×环境登记（deploy_service_envs）：**远端**端口的真相源，见 pickStagePort
+    @InjectRepository(DeployServiceEnvEntity)
+    private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
   ) {}
+
+  /**
+   * 端口解析（唯一入口）：配置中心 → 远端环境登记 / local 本机 pm2。
+   * 事故背景与取值链见 `pickStagePort` 注释（2026-09-23 auth-service 发 dev 探错端口回滚）。
+   */
+  private async resolvePortVars(
+    envId: string,
+    moduleKey: string,
+    configPort?: string,
+    pm2Name?: string,
+  ): Promise<{ port: string; source: PortSource; warn?: string }> {
+    const envPort = await this.lookupEnvServicePort(moduleKey, envId);
+    // 本机 pm2 只对 local 有意义：远端**不查**本机进程，避免"拿本机端口探远端服务"
+    const pm2Port = envId === 'local' ? this.lookupPm2Port(pm2Name, moduleKey) : undefined;
+    const picked = pickStagePort({ env: envId, configPort, envPort, pm2Port });
+    if (picked.warn) this.logger.warn(`[port] ${moduleKey}@${envId}: ${picked.warn}`);
+    return picked;
+  }
+
+  /** 目标环境登记的服务端口（deploy_service_envs.port）；查不到返回 undefined（不抛错） */
+  private async lookupEnvServicePort(
+    moduleKey: string,
+    envId: string,
+  ): Promise<string | undefined> {
+    if (!envId || envId === 'local') return undefined;
+    try {
+      const row = await this.serviceEnvRepo.findOne({
+        where: { serviceKey: moduleKey, envId },
+      });
+      return row?.port != null ? String(row.port) : undefined;
+    } catch (e) {
+      this.logger.warn(`读取 ${envId}/${moduleKey} 端口登记失败（不阻断）: ${(e as Error).message}`);
+      return undefined;
+    }
+  }
 
   /**
    * 平台自身 API 基址（注入给动作脚本的 `CONSOLE_API`）。
@@ -1626,6 +1733,13 @@ export class PipelineService {
     }
     const buildBaseEnv = async (): Promise<Record<string, string>> => {
       const inject = await this.resolveInjectEnv(p);
+      // 端口：配置中心 → 远端环境登记 / local 本机 pm2（见 pickStagePort；远端不查本机进程）
+      const portPick = await this.resolvePortVars(
+        p.env,
+        p.moduleKey,
+        inject.PORT,
+        mod?.pm2 ?? undefined,
+      );
       const env = resolveStageVars({
         env: p.env,
         moduleKey: p.moduleKey,
@@ -1643,7 +1757,8 @@ export class PipelineService {
         releaseWorkspace: this.releaseWorkspace,
         config: inject,
         configInject: this.configService.get<string>('PIPELINE_CONFIG_INJECT') !== 'false',
-        pm2Port: inject.PORT ? undefined : this.lookupPm2Port(mod?.pm2 ?? undefined, p.moduleKey),
+        port: portPick.port,
+        portSource: portPick.source,
         protectedVersions: await this.resolveProtectedVersions(p),
         gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
         safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
@@ -2135,8 +2250,8 @@ export class PipelineService {
 
     // 配置中心（global → env → module 强制覆盖）
     const inject = await this.resolveInjectEnv(p);
-    // 端口兜底：配置中心没有时才读 pm2 实际进程（配置中心是权威，历史 PORT=6200 污染对策）
-    const pm2Port = inject.PORT ? undefined : this.lookupPm2Port(mod?.pm2, p.moduleKey);
+    // 端口：配置中心 → 远端环境登记 / local 本机 pm2（见 pickStagePort；远端不查本机进程）
+    const portPick = await this.resolvePortVars(p.env, p.moduleKey, inject.PORT, mod?.pm2);
     const protectedVersions = await this.resolveProtectedVersions(p);
 
     const env = resolveStageVars({
@@ -2157,7 +2272,8 @@ export class PipelineService {
       config: inject,
       // P0：配置中心全量注入开关（默认开；置 false 回退到「配置中心只影响 PORT」的旧行为）
       configInject: this.configService.get<string>('PIPELINE_CONFIG_INJECT') !== 'false',
-      pm2Port,
+      port: portPick.port,
+      portSource: portPick.source,
       protectedVersions,
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
