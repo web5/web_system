@@ -15,6 +15,30 @@
 - 鉴权标注：`public` = 标记 `@Public()`（免 JWT，但可能需服务间 Bearer Key）；`bearer` = 需 `Authorization: Bearer`；`custom` = 走指定 `@UseGuards`；空白 = 未显式标注，按服务鉴权策略。
 - 入参标注：`Param` = 路径参数；`Query` = 查询参数；`Body` = 请求体；`Headers` = 请求头。（已过滤 `@Req/@Res` 框架对象）
 
+## InternalUploadsController（`InternalUploadsController` → 注册路径基 `internal`）
+
+### POST /api/internal/uploads/store
+- 说明：服务间写入上传文件（返回与前台一致的 URL）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(StoreUploadDto)
+
+**字段定义**
+
+##### Body 对象 `StoreUploadDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| category | string | 是(默认) |  |
+| filename | string | 否 |  |
+| dataBase64 | string | 否 |  |
+| userId | string | 否 |  |
+
+
+### GET /api/internal/storage/path
+- 说明：读取本进程实际生效的上传根目录
+- 鉴权：未显式标注（按服务鉴权策略）
+
+
 ## UploadController（`UploadController` → 注册路径基 `upload`）
 
 ### GET /api/upload/categories
