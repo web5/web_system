@@ -265,7 +265,8 @@
     2026-09-22 新增屏：<b>流水线详情 · 执行流程</b>（紧凑步骤卡 + 任务行连线 + skipped 灰色，用户 2026-09-22 标注）——
     <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button><br>
     2026-09-23：执行流程屏内新增 <b>场景切换</b>（成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败 / 执行中），演示
-    <b>连线着色规则 v2 提案（待拍板）</b> —— 起因是真实实例「4-2 执行成功，但分叉整段还是灰」（v1 规则：分支里存在 skipped → 整段竖线灰）。
+    <b>连线着色规则 v2</b> —— 起因是两次真实反馈：「4-2 执行成功，但分叉整段还是灰」（v1：分支里存在 skipped → 整段竖线灰）与
+    「4-2 未执行，箭头却提前变绿」。竖线规则已拍板：<b>有分支执行并成功才绿</b>；屏内附三段连线 × 状态源 × 颜色的完整状态表。
     方案：<code>specs/pipeline-flow-color/design.md</code>；页面规格：<code>docs/ui/page-specs/pipeline-product-logic-v1.md</code> §15。
   </div>
 </div>
@@ -760,12 +761,22 @@
         <div class="dc-muted" style="margin-top:10px;">
           <b>结构（2026-09-22 已确认）</b>：① 步骤卡紧凑化（名称 / 命令，无序号）；② 连线 = 任务行 SVG 测量
           （主线在前一列任务中线、列间分叉竖线、箭头指向每个任务中线），与编辑页同构；③ 跳过 = 灰色，不复用成功色。<br>
-          <b>连线着色 v2 提案（2026-09-23 · 待拍板）</b>：
-          主线横线 = 进入侧步骤聚合完成 → 绿；
-          分叉竖线 = 进入侧完成<b>且分叉已到达（任一分支有状态）</b> → 绿（<b>v1 的「分支里存在 skipped → 整段灰」会把 4-2 的成功路拖灰，即「4-2 成功了还是灰」这次反馈</b>）；
-          支线箭头 = 跟目标任务自身状态：完成 → <code>--ws-ok</code> / 失败 → <code>--danger</code> / 执行中 → <code>--primary</code> /
-          待审批 → <code>--ws-warn</code> / 跳过 · 未执行 → <code>--border</code>。<br>
-          <b>待拍板</b>：① 竖线规则 ② 失败支线标红 ③ 执行中/待审批支线着色 ④ 已取消颜色 —— 方案见
+          <b>连线着色规则 v2（2026-09-23 · 竖线规则已拍板，其余待拍板）</b> —— 连线分三段，各看各的状态源：
+        </div>
+        <table class="rule-tbl">
+          <tr><th>连线元件</th><th>看谁的状态</th><th>状态 → 颜色</th></tr>
+          <tr><td>主线横线<br>（步骤 → 步骤）</td><td>进入侧（前一列）步骤的聚合状态</td><td>该步骤所有任务<b>完成</b> → <span class="cg">绿</span>；否则 <span class="cg">灰</span></td></tr>
+          <tr><td>分叉竖线</td><td>进入侧步骤 + 有没有<b>执行并成功</b>的分支</td><td>进入侧完成 且 存在「完成」分支 → <span class="cg">绿</span>；
+            执行中 / 失败 / 全部跳过 / 未进入 → <span class="cg">灰</span></td></tr>
+          <tr><td>支线横线 + 箭头<br>（竖线 → 任务卡）</td><td>该目标任务自身</td><td>完成 → <span class="cg">绿</span> / 失败 → <span class="cg">红</span> /
+            执行中 → <span class="cg">品牌色</span> / 待审批 → <span class="cg">橙</span> / 跳过 · 未执行 → <span class="cg">灰</span></td></tr>
+        </table>
+        <div class="dc-muted" style="margin-top:8px;">
+          <b>任务的六种状态</b>（taskStates 落库，`ProgressFlow.vue` taskStateOf）：
+          ① <b>完成</b>（执行成功，含审批通过）② <b>失败</b>（动作失败 / 审批拒绝）③ <b>执行中</b>（已开始未结束）
+          ④ <b>待审批</b>（审批挂起）⑤ <b>跳过</b>（条件不满足 / 停用 / 超时按跳过 —— 没有真正执行）
+          ⑥ <b>未执行</b>（还没轮到，无执行记录）。另有「已取消」（取消信号命中，按灰处理，待拍板④）。<br>
+          <b>待拍板</b>：② 失败支线标红 ③ 执行中/待审批支线着色 ④ 已取消颜色 —— 方案见
           <code>specs/pipeline-flow-color/design.md</code>。确认后按此落码
           <code>apps/deploy-console/src/components/pipeline/ProgressFlow.vue</code> 的 <code>drawWires()</code>。
         </div>
@@ -1163,6 +1174,13 @@
     background:var(--card);color:var(--text-2);cursor:pointer;white-space:nowrap;}
   .run-scenes .sc.active{background:var(--ws-brand-soft);color:var(--ws-brand-600);
     border-color:var(--ws-brand-500);font-weight:600;}
+  /* 着色规则状态表（2026-09-23）：三段连线 × 状态源 × 颜色 */
+  .rule-tbl{margin-top:6px;border-collapse:collapse;width:100%;font-size:12px;}
+  .rule-tbl th,.rule-tbl td{border:1px solid var(--border);padding:6px 10px;text-align:left;
+    vertical-align:top;line-height:1.6;color:var(--text-2);}
+  .rule-tbl th{background:var(--bg);color:var(--text);font-weight:600;white-space:nowrap;}
+  .rule-tbl code{font-family:var(--mono);font-size:11px;color:var(--text);}
+  .rule-tbl .cg{color:var(--text);font-weight:600;}
 
 
 
@@ -1871,10 +1889,10 @@ body{background:var(--ws-border-subtle);}
       if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,okc); runChev(svg,t0.l,f.cy,okc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        /* 分叉竖线：进入侧完成 且 分叉已到达（任一分支有状态）→ 绿
-         * （v1 是「分支里存在 skipped → 整段灰」，会把命中分支的成功路拖灰） */
-        var reached=sc.steps[i+1].ts.some(function(t){return t.st!=='none';});
-        var vok=ok&&reached;
+        /* 分叉竖线（用户 2026-09-23 拍板）：进入侧完成 且 **存在执行并成功的分支** → 绿；
+         * 执行中 / 失败 / 全部跳过 / 未进入 → 灰（"执行了并成功了才是绿色"） */
+        var passed=sc.steps[i+1].ts.some(function(t){return t.st==='ok';});
+        var vok=ok&&passed;
         var vc=vok?'var(--ws-ok)':'var(--border)';
         runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vc);
         /* 支线按目标任务自身状态着色：ok 绿 / fail 红 / run 品牌色 / await warn / skip·none 灰 */
