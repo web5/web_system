@@ -41,8 +41,21 @@
         详情页任务分叉用了「缩进 16px + 左竖线 + 横线」的树状画法（`.orch-tasks{padding-left:16px}`），
         local/dev 任务卡比步骤卡错开 16px。
   处置：对齐编辑页 —— 去掉缩进（任务卡与步骤卡同宽左对齐），分叉竖线贴 cell 左缘
-        （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
+       （与卡片/任务卡左边缘重合，在任务卡间隙中可见），删除横线（无空间也无必要）。
   落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue
+
+  === 微调豁免（五）· 2026-09-23 ===
+  范围：详情页只读画布的**连线着色时机**修正（状态展示 bug，非新交互、不改原型形态）。
+  现象：用户反馈「还没进入到下一个环节，箭头都是绿色了」——截图实例停在「发布确认 · 待审批」，
+       其后「发布」步骤的 4-1 local / 4-2 dev 两张任务卡都是「未执行」（灰），
+       但指向它们的支线横线 + 箭头已经绿色。
+  原因（实测）：支线判定写成了「目标不是 skipped 就是绿」（`!classList.contains('st-skipped')`），
+       而「未执行」的类名是 `st-`（空状态），既不等于 skipped 也不是 succeeded → 被误判为走过路径。
+       规格判据其实是「进入侧步骤聚合终态 succeeded 才变绿」（specs/pipeline-task-status/design.md §4.2）。
+  处置：连线着色一律以**数据状态**为准，不再用「非 skipped」这种反向判定 ——
+       · 主线横线 / 分叉竖线：进入侧（前一列）步骤聚合 === succeeded 才绿（竖线另要求目标分支无 skipped）；
+       · 支线横线 + 箭头：**仅该目标任务状态 === succeeded 才绿**，未执行 / 待审批 / 执行中 / 失败 / 跳过一律灰。
+  落地：apps/deploy-console/src/components/pipeline/ProgressFlow.vue drawWires()
 -->
 <style>
   :root{
@@ -219,6 +232,52 @@
   .toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;
     padding:10px 18px;border-radius:10px;font-size:13px;z-index:70;opacity:0;pointer-events:none;transition:opacity .2s;}
   .toast.show{opacity:1;}
+
+  /* ===== 运行态 · 连线着色规则演示（specs/pipeline-flow-color/design.md · 待拍板） ===== */
+  :root{ --info:#1677FF; }  /* 执行中 · 提案新增语义 token（待拍板） */
+  .run-demo{margin-top:16px;}
+  .run-demo .canvas-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  .scene-tabs{display:flex;gap:8px;flex-wrap:wrap;}
+  .scene-tab{border:1px solid var(--border);background:var(--card);color:var(--text-2);font-size:12px;
+    padding:5px 12px;border-radius:8px;cursor:pointer;}
+  .scene-tab.active{background:var(--primary-soft);color:var(--primary);border-color:var(--primary);font-weight:600;}
+  /* 详情页步骤卡：名称 + 「命令」链接（编辑页是竖向居中 + 删除按钮，这里改横向） */
+  .run-step{flex-direction:row;align-items:center;justify-content:center;gap:8px;cursor:default;}
+  .run-step.st-succeeded{border-color:var(--ok);}
+  .run-step.st-failed{border-color:var(--danger);}
+  .run-step.st-awaiting{border-color:var(--primary);}
+  .run-step.st-running{border-color:var(--info);}
+  .run-node{cursor:default;}
+  .run-node .tag.t-approval{color:var(--primary);border-color:var(--primary);background:var(--primary-soft);}
+  .run-node .tag.t-cond{color:var(--text-3);border-color:var(--border);background:var(--card);}
+  /* 详情页任务卡序号 = 状态色填充竖条（ProgressFlow.vue .rseq 同款） */
+  .run-node.st-succeeded .seq{background:var(--ok);color:#fff;border-right-color:var(--ok);}
+  .run-node.st-failed .seq{background:var(--danger);color:#fff;border-right-color:var(--danger);}
+  .run-node.st-running .seq{background:var(--info);color:#fff;border-right-color:var(--info);}
+  .run-node.st-awaiting .seq{background:var(--primary);color:#fff;border-right-color:var(--primary);}
+  .run-node.st-succeeded{border-color:var(--ok);}
+  .run-node.st-failed{border-color:var(--danger);}
+  .run-node.st-awaiting{border-color:var(--primary);}
+  .run-node.st-running{border-color:var(--info);}
+  .run-node.st-skipped{border-style:dashed;}
+  .run-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;border:1px solid var(--border);
+    color:var(--text-3);background:var(--card);flex-shrink:0;margin-left:auto;}
+  .run-badge.b-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-soft);}
+  .run-badge.b-fail{color:var(--danger);border-color:var(--danger);background:var(--danger-soft);}
+  .run-badge.b-run{color:var(--info);border-color:var(--info);}
+  .run-badge.b-await{color:var(--primary-dark);border-color:var(--primary);background:var(--primary-soft);}
+  .run-badge.b-skip{border-style:dashed;}
+  .run-rule{line-height:1.9;}
+  .run-rule b{color:var(--text);}
+  .view-tag{margin-top:16px;padding:10px 16px;background:var(--primary-soft);color:var(--primary-dark);
+    border:1px solid var(--primary);border-radius:10px;font-size:12px;line-height:1.6;}
+  .view-tag b{color:var(--text);}
+  .cmd-link{font-size:11px;color:var(--primary);cursor:pointer;margin-left:auto;flex-shrink:0;}
+  .cmd-link:hover{text-decoration:underline;}
+  .run-legend-dots{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;margin-right:12px;}
+  .rld{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:2px;}
+  .rld-skip{background:var(--card);border:1px dashed var(--text-3);}
+
 </style>
 </head>
 <body>
@@ -320,6 +379,38 @@
         <div class="legend">
           上行步骤标题（<b>不连线</b>）；下行任务箭头串联，连线中间「<b>＋</b>」= 添加步骤。
           多任务步骤：水平线拐下分叉，箭头指向每个任务（local 条件 / dev 默认）。
+        </div>
+      </div>
+
+      <!-- 详情页只读画布 · 连线着色规则演示（specs/pipeline-flow-color/design.md · 待拍板，确认后才落码） -->
+      <div class="view-tag">视图切换：<b>流水线详情页 › 执行流程</b>（只读画布 —— 无删除/无添加步骤/无动作行；上方那块画布是编辑页，两者连线结构同构）</div>
+      <div class="canvas run-demo" id="runDemo">
+        <div class="canvas-head">
+          <span class="t">详情页 · 执行流程 · 连线着色规则（v2 提案 · <b>待拍板</b>）<span class="hint">方案：specs/pipeline-flow-color/design.md</span></span>
+          <span class="scene-tabs">
+            <button class="scene-tab active" id="tab-s1" onclick="setRunScene('s1')">运行中 · 停在发布确认</button>
+            <button class="scene-tab" id="tab-s2" onclick="setRunScene('s2')">成功 · 命中 dev</button>
+            <button class="scene-tab" id="tab-s3" onclick="setRunScene('s3')">失败 · dev 动作失败</button>
+            <button class="scene-tab" id="tab-s4" onclick="setRunScene('s4')">执行中 · dev 运行中</button>
+          </span>
+        </div>
+        <div class="canvas-body">
+          <svg class="wires" id="runWires"></svg>
+          <div class="pipeline" id="runPipeline"></div>
+        </div>
+        <div class="legend run-rule" id="runLegend">
+          <b>规则 v2（提案）</b>：主线横线 = 进入侧步骤聚合完成 → 绿；分叉竖线 = 进入侧完成<b>且分叉已到达（任一分支有状态）</b> → 绿
+          （v1 的「无跳过分支才绿」会把 4-2 的成功路拖灰，即「4-2 成功了还是灰」这次反馈）；
+          支线箭头跟目标任务：完成 → 绿 / 失败 → 红 / 执行中 → 蓝 / 待审批 → 橙 / 跳过 · 未执行 → 灰。<br>
+          <span class="run-legend-dots">
+            <i class="rld" style="background:var(--ok)"></i>完成
+            <i class="rld" style="background:var(--info)"></i>执行中
+            <i class="rld" style="background:var(--danger)"></i>失败
+            <i class="rld" style="background:var(--primary)"></i>待审批
+            <i class="rld rld-skip"></i>跳过
+            <i class="rld" style="background:var(--border)"></i>未执行
+          </span>
+          <b>待拍板</b>：① 竖线规则 ② 失败支线标红 ③ 执行中/待审批着色 ④ 已取消颜色 —— 见 design.md §5。
         </div>
       </div>
     </div>
@@ -496,6 +587,136 @@ cp -R "$SRC"/. "$DST"/</textarea>
   var toastTimer;
   function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
     clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.classList.remove('show');},1600);}
+
+  /* ===== 运行态 · 连线着色规则演示（specs/pipeline-flow-color/design.md · 待拍板） =====
+   * 着色一律以数据状态为准；本演示的规则即确认后的实现规则（ProgressFlow.vue drawWires）。 */
+  var RUN_ST_TEXT={'succeeded':'完成','running':'执行中','failed':'失败','skipped':'跳过',
+    'awaiting':'待审批','cancelled':'已取消','':'未执行'};
+  var RUN_SCENES={
+    s1:{steps:[
+      {name:'拉取代码',tasks:[{name:'git',st:'succeeded'}]},
+      {name:'构建',tasks:[{name:'build',st:'succeeded'}]},
+      {name:'发布确认',tasks:[{name:'审批门禁',st:'awaiting',kind:'approval'}]},
+      {name:'发布',tasks:[{name:'local',st:'',cond:true},{name:'dev',st:'',def:true}]}
+    ]},
+    s2:{steps:[
+      {name:'拉取代码',tasks:[{name:'git',st:'succeeded'}]},
+      {name:'构建',tasks:[{name:'build',st:'succeeded'}]},
+      {name:'发布确认',tasks:[{name:'审批门禁',st:'succeeded',kind:'approval'}]},
+      {name:'发布',tasks:[{name:'local',st:'skipped',cond:true},{name:'dev',st:'succeeded',def:true}]}
+    ]},
+    s3:{steps:[
+      {name:'拉取代码',tasks:[{name:'git',st:'succeeded'}]},
+      {name:'构建',tasks:[{name:'build',st:'succeeded'}]},
+      {name:'发布确认',tasks:[{name:'审批门禁',st:'succeeded',kind:'approval'}]},
+      {name:'发布',tasks:[{name:'local',st:'skipped',cond:true},{name:'dev',st:'failed',def:true}]}
+    ]},
+    s4:{steps:[
+      {name:'拉取代码',tasks:[{name:'git',st:'succeeded'}]},
+      {name:'构建',tasks:[{name:'build',st:'succeeded'}]},
+      {name:'发布确认',tasks:[{name:'审批门禁',st:'succeeded',kind:'approval'}]},
+      {name:'发布',tasks:[{name:'local',st:'skipped',cond:true},{name:'dev',st:'running',def:true}]}
+    ]}
+  };
+  var runScene='s1';
+  var runDrawSeq=0;
+  function runToken(name){var v=getComputedStyle(document.documentElement).getPropertyValue(name).trim();return v||'#9AA1AD';}
+  function runAgg(step){var sts=step.tasks.map(function(t){return t.st;}).filter(Boolean);
+    if(!sts.length) return '';
+    if(sts.indexOf('failed')>=0) return 'failed';
+    if(sts.indexOf('cancelled')>=0) return 'cancelled';
+    if(sts.indexOf('running')>=0) return 'running';
+    if(sts.indexOf('awaiting')>=0) return 'awaiting';
+    if(sts.indexOf('succeeded')>=0) return 'succeeded';
+    return 'skipped';}
+  var RUN_WIRE={succeeded:'--ok',failed:'--danger',running:'--info',awaiting:'--primary'};
+  function runWireColor(st){return runToken(RUN_WIRE[st]||'--border');}
+  function runBadgeCls(st){return {succeeded:'b-ok',failed:'b-fail',running:'b-run',awaiting:'b-await',skipped:'b-skip'}[st]||'';}
+  function setRunScene(k){runScene=k;
+    ['s1','s2','s3','s4'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('active',x===k);});
+    renderRun();}
+  function renderRun(){
+    var sc=RUN_SCENES[runScene];
+    var host=document.getElementById('runPipeline');host.innerHTML='';
+    sc.steps.forEach(function(s,si){
+      var col=document.createElement('div');col.className='step-col';
+      /* 详情页形态：步骤卡 = 名称 + 「命令」链接（无序号、无删除按钮） */
+      var t=document.createElement('div');t.className='step-title run-step st-'+runAgg(s);
+      t.innerHTML='<span class="nm">'+s.name+'</span>'
+        +'<span class="cmd-link" onclick="toast(\'[原型] 查看该步骤发布命令\')">命令</span>';
+      col.appendChild(t);
+      var box=document.createElement('div');box.className='tasks';
+      /* 详情页形态：任务卡 = 序号竖条 + 名称 + 小标（审批/条件）+ 状态文字（右对齐，无删除按钮） */
+      s.tasks.forEach(function(tk,ti){
+        var n=document.createElement('div');n.className='task-node run-node st-'+(tk.st||'none');
+        var seq=s.tasks.length>1?(si+1)+'-'+(ti+1):String(si+1);
+        n.title=tk.kind==='approval'?'审批任务':(tk.cond?'条件任务':'默认任务');
+        var tag=tk.kind==='approval'?'<span class="tag t-approval">审批</span>'
+          :(tk.cond?'<span class="tag t-cond">条件</span>':'');
+        n.innerHTML='<span class="seq">'+seq+'</span>'
+          +'<span class="name">'+tk.name+'</span>'
+          +tag
+          +'<span class="run-badge '+runBadgeCls(tk.st)+'">'+RUN_ST_TEXT[tk.st||'']+'</span>';
+        box.appendChild(n);
+      });
+      col.appendChild(box);host.appendChild(col);
+    });
+    drawRunWires(sc);
+  }
+  function drawRunWires(sc){
+    var wrap=document.getElementById('runPipeline');
+    var svg=document.getElementById('runWires');
+    var box=wrap.closest('.canvas-body');
+    if(!wrap||!svg||!box) return;
+    var rBox=box.getBoundingClientRect();
+    function ctr(el){var r=el.getBoundingClientRect();
+      return {right:r.right-rBox.left,left:r.left-rBox.left,cy:r.top-rBox.top+r.height/2};}
+    function rseg(x1,y1,x2,y2,color){var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d','M'+x1+' '+y1+' L'+x2+' '+y2);
+      p.setAttribute('stroke',color);p.setAttribute('stroke-width','2.5');p.setAttribute('fill','none');
+      p.setAttribute('opacity','.9');svg.appendChild(p);}
+    function rchev(x,y,color){var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d','M'+(x-9)+' '+(y-8)+' L'+x+' '+y+' L'+(x-9)+' '+(y+8));
+      p.setAttribute('stroke',color);p.setAttribute('stroke-width','3');p.setAttribute('fill','none');
+      p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');svg.appendChild(p);}
+    var seq=++runDrawSeq;
+    requestAnimationFrame(function(){
+      if(seq!==runDrawSeq) return;  /* 只画最新一次（防连续切换场景时 rAF 叠加） */
+      svg.setAttribute('width',Math.ceil(box.scrollWidth)+40);
+      svg.setAttribute('height',Math.ceil(box.scrollHeight)+20);
+      svg.innerHTML='';
+      var cols=[...wrap.querySelectorAll('.step-col')];
+      for(var i=0;i<cols.length-1;i++){
+        var fromTasks=[...cols[i].querySelectorAll('.run-node')];
+        var toTasks=[...cols[i+1].querySelectorAll('.run-node')];
+        if(!fromTasks.length||!toTasks.length) continue;
+        /* 规则 v2：主线 = 进入侧步骤聚合完成；竖线 = 进入侧完成且分叉已到达（任一分支状态非空）；
+           支线 = 跟目标任务自身状态 */
+        var ok=runAgg(sc.steps[i])==='succeeded';
+        var from=ctr(fromTasks[0]),t0=ctr(toTasks[0]);
+        var midX=(from.right+t0.left)/2;
+        rseg(from.right,from.cy,midX,from.cy,ok?runToken('--ok'):runToken('--border'));
+        var sameLine=toTasks.length===1&&Math.abs(t0.cy-from.cy)<1;
+        if(sameLine){
+          rseg(midX,from.cy,t0.left,from.cy,ok?runToken('--ok'):runToken('--border'));
+          rchev(t0.left,from.cy,ok?runToken('--ok'):runToken('--border'));
+        }else{
+          var ys=toTasks.map(function(t){return ctr(t).cy;});
+          var reached=sc.steps[i+1].tasks.some(function(t){return !!t.st;});
+          var vok=ok&&reached;
+          rseg(midX,Math.min.apply(null,[from.cy].concat(ys)),midX,Math.max.apply(null,[from.cy].concat(ys)),vok?runToken('--ok'):runToken('--border'));
+          toTasks.forEach(function(t,ti){
+            var c=ctr(t);
+            var col=runWireColor(sc.steps[i+1].tasks[ti].st);
+            rseg(midX,c.cy,c.left,c.cy,col);
+            rchev(c.left,c.cy,col);
+          });
+        }
+      }
+    });
+  }
+  window.addEventListener('load',function(){renderRun();setTimeout(renderRun,120);setTimeout(renderRun,400);});
+  window.addEventListener('resize',renderRun);
 </script>
 </body>
 </html>
