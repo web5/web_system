@@ -9,6 +9,7 @@ import {
   statusText,
   isLive,
 } from './pipeline.stages'
+import { drawWires as drawPipelineWires, taskSeqNo } from '@/utils/pipelineWires'
 
 const props = defineProps<{
   instance: PipelineItem
@@ -87,94 +88,43 @@ function stepAgg(step: OrchestrationStep): AggState {
   return 'none'
 }
 
-/* ── 连线：与编辑页 OrchestrationEditor 同构的 SVG 测量式连线 ──
- * 原型稿 pipeline-env-branch-canvas.html：连线画在**任务行** —— 主线从前一列任务中线引出，
- * 列间分叉竖线，横线 + 箭头指向下一列每个任务的中线；走过路径（前一步骤聚合成功）绿色高亮。
- * 着色判据（2026-09-23 修，规格 pipeline-task-status §4.2）：主线 / 竖线看**进入侧步骤**
- * 是否终态 succeeded；支线看**目标任务自身**是否 succeeded —— 未到环节一律灰，不提前变绿。
- * 2026-09-22：按原型稿把详情页从「步骤卡间 CSS 短线」改成此结构（用户反馈连线始终没对准）。 */
+/* ── 连线：几何与落笔走公共 util（utils/pipelineWires.ts，与编辑页共用同一套规则） ──
+ * 规则判据源：specs/pipeline-flow-color/design.md §2.5 ——
+ *   L1 主线横线 = 目标列步骤**聚合**状态色（有成功分支时成功覆盖）
+ *   L2 分叉竖线 = **按转折点分段**，第 k 段归第 k 条分支（不归聚合）
+ *   L3 支线横线 + L4 箭头 = 各目标任务自身状态色
+ *   落笔：坐标取整 + 圆帽 + 拐点补圆；层序：中性色（灰）先画、彩色（深色）后画
+ * 本组件只负责把业务状态翻译成颜色（colorOf），不重复实现几何。 */
 const canvasBody = ref<HTMLElement | null>(null)
 const wires = ref<SVGSVGElement | null>(null)
 
-function center(el: Element, wrap: Element) {
-  const r = el.getBoundingClientRect()
-  const w = wrap.getBoundingClientRect()
-  return { right: r.right - w.left, left: r.left - w.left, cy: r.top - w.top + r.height / 2 }
+/** 状态 → 连线颜色 token（边的颜色 = 目标节点状态） */
+const WIRE_COLOR: Record<string, string> = {
+  succeeded: 'var(--ws-success-500)',
+  failed: 'var(--ws-error-500)',
+  running: 'var(--ws-brand-500)',
+  awaiting: 'var(--ws-warning-500)',
 }
-function seg(x1: number, y1: number, x2: number, y2: number, ok: boolean) {
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  p.setAttribute('d', `M${x1} ${y1} L${x2} ${y2}`)
-  p.setAttribute('stroke-width', '2.5')
-  p.setAttribute('fill', 'none')
-  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
-  wires.value?.appendChild(p)
-}
-function chevron(x: number, y: number, ok: boolean) {
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  p.setAttribute('d', `M${x - 9} ${y - 8} L${x} ${y} L${x - 9} ${y + 8}`)
-  p.setAttribute('stroke-width', '3')
-  p.setAttribute('fill', 'none')
-  p.setAttribute('stroke-linecap', 'round')
-  p.setAttribute('stroke-linejoin', 'round')
-  p.style.stroke = ok ? 'var(--ws-success-500)' : 'var(--ws-border)'
-  wires.value?.appendChild(p)
-}
-/** 任务序号（编辑页同款算法）：单任务步骤 = 步骤号；多任务 = 步骤号-任务号 */
-function taskSeq(stepIdx: number, taskIdx: number, step: OrchestrationStep): string {
-  const n = (step.tasks ?? []).length
-  return n > 1 ? `${stepIdx + 1}-${taskIdx + 1}` : String(stepIdx + 1)
+function wireColor(state: AggState | TaskRunStatus | ''): string {
+  return WIRE_COLOR[state] ?? 'var(--ws-border)'
 }
 
 function drawWires() {
-  const wrap = canvasBody.value
-  const svg = wires.value
-  if (!wrap || !svg) return
-  // 单 grid：一列 = 步骤卡 + 该列任务卡（原型 baa40e5）；连线只画在任务卡之间
-  const cols = [...wrap.querySelectorAll('.orch-col')]
-  if (cols.length < 2) {
-    svg.innerHTML = ''
-    return
-  }
-  svg.setAttribute('width', String(Math.ceil(wrap.scrollWidth) + 40))
-  svg.setAttribute('height', String(Math.ceil(wrap.scrollHeight) + 20))
-  svg.innerHTML = ''
-  for (let i = 0; i < cols.length - 1; i++) {
-    const fromTasks = [...cols[i].querySelectorAll('.orch-task')]
-    const toTasks = [...cols[i + 1].querySelectorAll('.orch-task')]
-    if (!fromTasks.length || !toTasks.length) continue
-    const from = fromTasks[0] // 与编辑页一致：前列第一个任务的中线引出主线
-    // 走过路径 = 进入侧（前一列）步骤聚合终态 succeeded（规格 pipeline-task-status §4.2）；
-    // 待审批 / 执行中 / 未执行都不算走过 → 灰。
-    const ok = !!orch.value && stepAgg(orch.value[i]) === 'succeeded'
-    const f = center(from, wrap)
-    const t0 = center(toTasks[0], wrap)
-    const midX = (f.right + t0.left) / 2
-    seg(f.right, f.cy, midX, f.cy, ok)
-    const sameLine = toTasks.length === 1 && Math.abs(center(toTasks[0], wrap).cy - f.cy) < 1
-    if (sameLine) {
-      seg(midX, f.cy, t0.left, f.cy, ok)
-      chevron(t0.left, f.cy, ok)
-    } else {
-      const ys = toTasks.map((t) => center(t, wrap).cy)
-      // 分叉竖线：进入侧走过、且目标分支里无 skipped，才整段绿（原型规则，用户 2026-09-22）
-      const vok = ok && !toTasks.some((t) => t.classList.contains('st-skipped'))
-      seg(midX, Math.min(f.cy, ...ys), midX, Math.max(f.cy, ...ys), vok)
-      // 支线（横线 + 箭头）按**目标任务自身状态**着色：仅 succeeded → 绿；
-      // 未执行 / 待审批 / 执行中 / 失败 / 跳过一律灰。
-      // 2026-09-23 修：此前写成「非 skipped 即绿」，而未执行的类是 `st-`（空状态）、
-      // 既不等于 skipped 也不是 succeeded → 尚未进入的环节箭头提前变绿。
-      const toStep = orch.value?.[i + 1]
-      toTasks.forEach((t, ti) => {
-        const c = center(t, wrap)
-        const tt = toStep?.tasks?.[ti]
-        // 快照与 DOM 数量不一致时（理论不发生）退化为按 DOM 状态类判断
-        const tok =
-          toStep && tt ? taskStateOf(toStep, tt) === 'succeeded' : t.classList.contains('st-succeeded')
-        seg(midX, c.cy, c.left, c.cy, tok)
-        chevron(c.left, c.cy, tok)
-      })
-    }
-  }
+  if (!canvasBody.value || !wires.value) return
+  drawPipelineWires<OrchestrationTask>({
+    wrap: canvasBody.value,
+    svg: wires.value,
+    colSelector: '.orch-col',
+    taskSelector: '.orch-task',
+    tasksOf: (toCol) => orch.value?.[toCol]?.tasks ?? [],
+    colorOf: ({ kind, toCol, taskIndex, tasks }) => {
+      const step = orch.value?.[toCol]
+      if (!step) return 'var(--ws-border)'
+      if (kind === 'main') return wireColor(stepAgg(step))
+      const t = tasks?.[taskIndex]
+      return wireColor(t ? taskStateOf(step, t) : '')
+    },
+  })
 }
 watch(
   () => props.instance,
@@ -281,7 +231,7 @@ function isWatchdog(s: string) {
               :class="`st-${taskStateOf(s, t)}`"
               @click="emit('stageClick', s.name)"
             >
-              <span class="rseq">{{ taskSeq(i, ti, s) }}</span>
+              <span class="rseq">{{ taskSeqNo(i, ti, (s.tasks ?? []).length) }}</span>
               <span class="tname">{{ t.name }}</span>
               <span v-if="t.kind === 'approval'" class="tag t-approval">审批</span>
               <span v-if="t.condition" class="tag t-cond" :title="`条件：${t.condition}`">条件</span>

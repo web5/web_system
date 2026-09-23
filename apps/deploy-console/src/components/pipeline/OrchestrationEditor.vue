@@ -10,7 +10,7 @@
  *  - 抽屉两态：任务总览（动作列表+条件/变量 tab）/ 单动作（动作名+脚本）
  *  - 删除走画布 hover ×；保存在页头按钮组（取消/删除/保存），抽屉无保存
  */
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   orchestrationApi,
@@ -18,6 +18,7 @@ import {
   type OrchestrationTask,
   type OrchestrationAction,
 } from '@/api'
+import { drawWires as drawPipelineWires, taskSeqNo, redrawOnResize } from '@/utils/pipelineWires'
 
 const props = defineProps<{ pipelineId: string }>()
 const emit = defineEmits<{ (e: 'dirty', v: boolean): void }>()
@@ -53,13 +54,17 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+// 2026-09-23：补 resize 监听（此前缺失 —— 改窗口尺寸后连线会错位）
+let stopResize: (() => void) | null = null
+onMounted(() => {
+  load()
+  stopResize = redrawOnResize(drawWires)
+})
+onUnmounted(() => {
+  stopResize?.()
+})
 
-// ── 编号：单任务步骤用步骤号；多任务用 步骤号-任务号 ──
-function taskSeq(stepIdx: number, taskIdx: number, step: OrchestrationStep): string {
-  const n = (step.tasks ?? []).length
-  return n > 1 ? `${stepIdx + 1}-${taskIdx + 1}` : String(stepIdx + 1)
-}
+// ── 编号：单任务步骤用步骤号；多任务用 步骤号-任务号（算法已抽到 util，与详情页共用）──
 
 // ── 画布编辑 ──
 function addStep() {
@@ -225,87 +230,40 @@ async function removePipelineStep(step: OrchestrationStep) {
 defineExpose({ save, dirty })
 
 // ── 连线（测量式：JS 量坐标 + SVG 绘制，与布局解耦 —— 原型定稿的关键技术决策） ──
+// 2026-09-23：几何与落笔抽到公共 util（与详情页 ProgressFlow 共用同一套规则），
+// 本组件只给中性色（定义态无运行状态）+ 用 onMidpoint 摆放「＋」插入按钮。
 const wires = ref<SVGSVGElement | null>(null)
 const canvasBody = ref<HTMLElement | null>(null)
-const COLOR = '#F97316' // SVG presentation attribute 不支持 CSS 变量（原型已验证），用主题主橙
+const WIRE_NEUTRAL = 'var(--primary)' // 定义态中性色（原硬编码 #F97316，改用 token）
 
-function center(el: Element, wrap: Element) {
-  const r = el.getBoundingClientRect()
-  const w = wrap.getBoundingClientRect()
-  return {
-    right: r.right - w.left,
-    left: r.left - w.left,
-    cy: r.top - w.top + r.height / 2,
-  }
-}
-function seg(x1: number, y1: number, x2: number, y2: number) {
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  p.setAttribute('d', `M${x1} ${y1} L${x2} ${y2}`)
-  p.setAttribute('stroke', COLOR)
-  p.setAttribute('stroke-width', '2.5')
-  p.setAttribute('fill', 'none')
-  p.setAttribute('opacity', '.9')
-  wires.value?.appendChild(p)
-}
-function chevron(x: number, y: number) {
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  p.setAttribute('d', `M${x - 9} ${y - 8} L${x} ${y} L${x - 9} ${y + 8}`)
-  p.setAttribute('stroke', COLOR)
-  p.setAttribute('stroke-width', '3')
-  p.setAttribute('fill', 'none')
-  p.setAttribute('stroke-linecap', 'round')
-  p.setAttribute('stroke-linejoin', 'round')
-  wires.value?.appendChild(p)
-}
 function drawWires() {
   const wrap = canvasBody.value
   const svg = wires.value
   if (!wrap || !svg) return
-  const cols = [...wrap.querySelectorAll('.step-col')] as HTMLElement[]
-  if (!cols.length) return
-  svg.setAttribute('width', String(Math.ceil(wrap.scrollWidth) + 40))
-  svg.setAttribute('height', String(Math.ceil(wrap.scrollHeight) + 20))
-  svg.innerHTML = ''
   // 清掉上一轮的连线中点＋号（否则重绘时残留叠加）
   wrap.querySelectorAll('.wire-plus').forEach((n) => n.remove())
-  for (let i = 0; i < cols.length - 1; i++) {
-    const from = cols[i].querySelector('.task-node')
-    const tos = [...cols[i + 1].querySelectorAll('.task-node')]
-    if (!from || !tos.length) continue
-    const f = center(from, wrap)
-    const t0 = center(tos[0], wrap)
-    const midX = (f.right + t0.left) / 2
-    seg(f.right, f.cy, midX, f.cy)
-    // 中点＋号（添加步骤）
-    const btn = document.createElement('button')
-    btn.className = 'wire-plus'
-    btn.title = '在此插入步骤'
-    btn.textContent = '＋'
-    btn.style.left = `${midX}px`
-    btn.style.top = `${f.cy}px`
-    btn.onclick = () => {
-      steps.value.splice(i + 1, 0, { name: `步骤${i + 2}`, description: '', tasks: [] })
-      markDirty()
-      nextTick(drawWires)
-    }
-    wrap.appendChild(btn)
-
-    const sameLine = tos.length === 1 && Math.abs(center(tos[0], wrap).cy - f.cy) < 1
-    if (sameLine) {
-      seg(midX, f.cy, t0.left, f.cy)
-      chevron(t0.left, f.cy)
-    } else {
-      const ys = tos.map((t) => center(t, wrap).cy)
-      const top = Math.min(f.cy, ...ys)
-      const bot = Math.max(f.cy, ...ys)
-      seg(midX, top, midX, bot)
-      for (const t of tos) {
-        const c = center(t, wrap)
-        seg(midX, c.cy, c.left, c.cy)
-        chevron(c.left, c.cy)
+  drawPipelineWires({
+    wrap,
+    svg,
+    colSelector: '.step-col',
+    taskSelector: '.task-node',
+    colorOf: () => WIRE_NEUTRAL,
+    // 中点＋号（插入步骤）—— 位置由 util 的主线中点回调给出
+    onMidpoint: (midX, cy, i) => {
+      const btn = document.createElement('button')
+      btn.className = 'wire-plus'
+      btn.title = '在此插入步骤'
+      btn.textContent = '＋'
+      btn.style.left = `${midX}px`
+      btn.style.top = `${cy}px`
+      btn.onclick = () => {
+        steps.value.splice(i + 1, 0, { name: `步骤${i + 2}`, description: '', tasks: [] })
+        markDirty()
+        nextTick(drawWires)
       }
-    }
-  }
+      wrap.appendChild(btn)
+    },
+  })
 }
 </script>
 
@@ -329,7 +287,7 @@ function drawWires() {
               <div class="tasks">
                 <div v-for="(task, ti) in step.tasks ?? []" :key="ti" class="task">
                   <div class="task-node" :class="{ approval: task.kind === 'approval' }" @click="openTask(step, task)">
-                    <span class="seq">{{ taskSeq(si, ti, step) }}</span>
+                    <span class="seq">{{ taskSeqNo(si, ti, (step.tasks ?? []).length) }}</span>
                     <span class="tag">任务</span>
                     <span v-if="task.condition" class="ifb" :title="`执行条件：${task.condition}`">if</span>
                     <span class="tname">{{ task.name }}</span>
