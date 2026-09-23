@@ -12,7 +12,7 @@ page { background: var(--page-bg); }
   background: var(--brand-soft);
   color: var(--brand-txt);
   font-size: 24rpx;
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   padding: 20rpx 24rpx;
   margin-bottom: 24rpx;
   line-height: 1.7;
@@ -23,7 +23,7 @@ page { background: var(--page-bg); }
 .gi {
   position: relative;
   background: var(--card);
-  border-radius: 24rpx;
+  border-radius: var(--r-card);
   padding: 28rpx 64rpx 28rpx 28rpx;
   margin-bottom: 20rpx;
 }
@@ -54,7 +54,7 @@ page { background: var(--page-bg); }
   width: 24rpx;
   height: 2rpx;
   background: currentColor;
-  border-radius: 1rpx;
+  border-radius: var(--r-chip);
 }
 .x1 { transform: rotate(45deg); }
 .x2 { transform: rotate(-45deg); }
@@ -77,7 +77,7 @@ page { background: var(--page-bg); }
   height: 44rpx;
   border-left: 6rpx solid var(--brand-txt);
   border-right: 6rpx solid var(--brand-txt);
-  border-radius: 4rpx;
+  border-radius: var(--r-chip);
 }
 .e1 { font-size: 28rpx; color: var(--t1); }
 .e2 { font-size: 25rpx; color: var(--t2); margin-top: 12rpx; }
@@ -86,7 +86,7 @@ page { background: var(--page-bg); }
   display: inline-flex;
   height: 72rpx;
   padding: 0 32rpx;
-  border-radius: 36rpx;
+  border-radius: var(--r-control);
   background: var(--brand);
   color: #fff;
   font-size: 26rpx;
