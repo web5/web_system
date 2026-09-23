@@ -5,6 +5,7 @@ import { DeployPipelineEntity } from '../entities/deploy-pipeline.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { CanaryService } from '../canary/canary.service';
@@ -173,6 +174,8 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: getRepositoryToken(DeployVersionEntity), useValue: {} },
       { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { findOne: async () => null } },
       { provide: getRepositoryToken(DeployPipelineTemplateEntity), useValue: {} },
+      // 服务×环境登记（远端端口真相源）：本 spec 关注审批挂起/恢复 → 查不到即空
+      { provide: getRepositoryToken(DeployServiceEnvEntity), useValue: { findOne: async () => null } },
       // 流水线变量：本 spec 关注审批挂起/恢复，变量不参与 → 空实现
       { provide: PipelineVarService, useValue: { resolve: async () => ({}) } },
       { provide: ModuleRegistryService, useValue: moduleRegistry },

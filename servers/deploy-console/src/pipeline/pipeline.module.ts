@@ -5,6 +5,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { DeployPipelineVarEntity } from '../entities/deploy-pipeline-var.entity';
+import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { PipelineService } from './pipeline.service';
 import { PipelineController } from './pipeline.controller';
 // 流水线变量（属于某条流水线；执行前解析注入节点脚本环境）
@@ -49,6 +50,8 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
       DeployDeploymentEntity,
       DeployPipelineTemplateEntity,
       DeployPipelineVarEntity,
+      // 服务×环境登记：**远端**端口解析的真相源（见 pipeline.service 的 pickStagePort）
+      DeployServiceEnvEntity,
     ]),
     ModuleRegistryModule,
     CanaryModule,

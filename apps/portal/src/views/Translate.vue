@@ -128,7 +128,7 @@ import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream } from '@/api/agent';
 import { useConversationStore } from '@/stores/conversations';
 import { collectGlossary } from '@/api/glossary';
-import { speak as speakText, stopTts } from '@/api/tts';
+import { speakSequence, splitSpeakParts, stopTts } from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -258,8 +258,9 @@ async function speak() {
   }
   reading.value = true;
   try {
-    // 流式优先（连贯无接缝），不可用自动回退整段
-    await speakText(text, { isActive: () => reading.value });
+    // 「首句 + 剩余整段」两块：首句 ~2s 出声，剩余块在首句播放期间预取
+    // （合并 PR #136 时采用 master 侧更优实现）
+    await speakSequence(splitSpeakParts(text), { isActive: () => reading.value });
   } catch {
     if (reading.value) message.error('朗读失败，请重试');
   } finally {
