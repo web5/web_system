@@ -768,12 +768,13 @@
         <table class="rule-tbl">
           <tr><th>段</th><th>几何（怎么画）</th><th>归属（看谁的状态）</th><th>颜色</th></tr>
           <tr><td><b>L1</b> 主线横线</td><td>从进入侧列<b>首个任务卡</b>右侧中点 → 水平到分叉 X（mx = 两列中点）</td>
-            <td>进入侧（前一列）步骤的聚合状态</td><td>聚合 = 完成 → <span class="cg">绿</span>；否则 <span class="cg">灰</span></td></tr>
+            <td><b>目标列步骤的聚合状态</b>（该列所有分支的合并：有成功分支时<b>成功覆盖</b>跳过/失败等，
+              聚合规则与步骤卡边框同源）—— <b>边的颜色 = 目标（下一个）节点的颜色</b>（a→b 看 b、a→c 看 c）</td>
+            <td rowspan="2">聚合状态：<b>完成</b> → <span class="cg">绿</span> / <b>执行中</b> → <span class="cg">品牌色</span> /
+              <b>失败</b> → <span class="cg">红</span> / <b>待审批</b> → <span class="cg">橙</span> /
+              <b>跳过 · 未进入</b> → <span class="cg">灰</span><br>（支线颜色 = 各目标任务自身，见 L3/L4）</td></tr>
           <tr><td><b>L2</b> 分叉竖线</td><td>目标列多任务时才有：mx 处，从最高任务行中线 → 最低任务行中线</td>
-            <td><b>主路径分支</b>（无条件/默认任务，本例 <code>dev</code>；<code>local</code> 是条件旁路，不进主干）</td>
-            <td>进入侧未完成 → <span class="cg">灰</span>；否则跟主路径分支状态：<b>完成</b> → <span class="cg">绿</span> /
-              <b>执行中</b> → <span class="cg">品牌色</span> / <b>失败</b> → <span class="cg">红</span> /
-              <b>跳过 · 未进入</b> → <span class="cg">灰</span></td></tr>
+            <td>同 L1（目标列聚合）</td></tr>
           <tr><td><b>L3</b> 支线横线</td><td>mx → 每个目标任务卡左缘中点（每任务一条）</td>
             <td rowspan="2">该目标任务自身</td>
             <td rowspan="2">完成 → <span class="cg">绿</span> / 失败 → <span class="cg">红</span> / 执行中 → <span class="cg">品牌色</span> /
@@ -1894,11 +1895,6 @@ body{background:var(--ws-border-subtle);}
    * 特例（sameLine）：目标列单任务且与进入侧任务同高 → 无 L2/L3，L1 直接接到目标卡 + L4 箭头，色同 L1。
    * 不画：任一侧无任务卡；线型：一律实线 2.5px（虚线仅用于任务卡边框表达「跳过」）。
    */
-  function runMainBranch(step){
-    /* 主路径分支 = 无条件（默认）任务；一列全是条件任务时取最后一个 */
-    var defs=step.ts.filter(function(t){return t.def;});
-    return defs.length?defs[defs.length-1]:step.ts[step.ts.length-1];
-  }
   function drawRunWires(){
     var cv=document.getElementById('runCanvas'); var svg=document.getElementById('runWires');
     if(!cv||!svg) return;
@@ -1913,19 +1909,17 @@ body{background:var(--ws-border-subtle);}
       if(!ft.length||!tt.length) continue;
       var ctr=function(el){var r=el.getBoundingClientRect();return {r:r.right-wr.left,l:r.left-wr.left,cy:r.top-wr.top+r.height/2};};
       var f=ctr(ft[0]); var t0=ctr(tt[0]); var mx=(f.r+t0.l)/2;
-      /* L1：归进入侧步骤 */
-      var ok=runAgg(sc.steps[i])==='ok';
-      var okc=ok?'var(--ws-ok)':'var(--border)';
-      runSeg(svg,f.r,f.cy,mx,f.cy,okc);
-      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,okc); runChev(svg,t0.l,f.cy,okc); }
+      /* 边的颜色 = 目标（下一个）节点的状态（用户 2026-09-23 定稿：a→b 看 b、a→c 看 c）。
+       * 共享段（L1+L2）= 目标列步骤的**聚合**状态色（有成功分支时成功覆盖跳过/失败等，
+       * 聚合规则与步骤卡边框同源）；支线（L3+L4）= 各目标任务自身状态色。
+       * 即 S0（4-1 成功、4-2 跳过）：3→4-1 主干绿，4-2 后半折线灰。 */
+      var agg=runAgg(sc.steps[i+1]);
+      var mc=wire(agg);
+      runSeg(svg,f.r,f.cy,mx,f.cy,mc);
+      if(tt.length===1){ runSeg(svg,mx,f.cy,t0.l,f.cy,mc); runChev(svg,t0.l,f.cy,mc); }
       else{
         var ys=[].map.call(tt,function(t){return ctr(t).cy;});
-        /* L2：归主路径分支（dev）—— 竖线 = 主路径分支自己的状态线（用户 2026-09-23）：
-         * dev 成功→绿 / 执行中→品牌色 / 失败→红 / 跳过·未进入→灰；进入侧未完成时整体灰 */
-        var main=runMainBranch(sc.steps[i+1]);
-        var vc=ok?wire(main.st):'var(--border)';
-        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),vc);
-        /* L3 + L4：归目标任务自身 */
+        runSeg(svg,mx,Math.min.apply(null,ys),mx,Math.max.apply(null,ys),mc);
         [].forEach.call(tt,function(t,ti){
           var c=ctr(t); var wc=wire(sc.steps[i+1].ts[ti].st);
           runSeg(svg,mx,c.cy,c.l,c.cy,wc); runChev(svg,c.l,c.cy,wc);
