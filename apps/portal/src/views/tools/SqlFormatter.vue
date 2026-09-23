@@ -133,7 +133,7 @@ function formatSQL() {
   try {
     output.value = format(input.value, {
       language: dialect.value as any,
-      indent: indentStyle.value,
+      tabWidth: Number(indentStyle.value) || 2, // sql-formatter 15 已移除 indent 选项，改用 tabWidth
     });
     showSuccess('美化成功 ✓');
   } catch (e: any) {
@@ -152,7 +152,7 @@ function minifySQL() {
     // 先格式化再移除多余空白行
     const formatted = format(input.value, {
       language: dialect.value as any,
-      indent: indentStyle.value,
+      tabWidth: Number(indentStyle.value) || 2, // sql-formatter 15 已移除 indent 选项，改用 tabWidth
     });
     output.value = formatted
       .split('\n')
