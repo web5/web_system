@@ -43,7 +43,7 @@ import { defineProps, defineEmits } from 'vue';
 import type { Todo } from '@/types/todo';
 
 const props = defineProps<{ todo: Todo }>();
-const emit = defineEmits<{
+defineEmits<{
   (e: 'click', todo: Todo): void;
   (e: 'toggle', todo: Todo): void;
   (e: 'edit', todo: Todo): void;
