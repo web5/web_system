@@ -12,7 +12,10 @@
           <main class="app-work">
             <router-view />
           </main>
-          <app-context-panel v-if="navItem?.context" :title="contextTitle" />
+          <!-- 右栏内容由页面注入（stores/context）：nav 只决定"这个视图要不要右栏" -->
+          <app-context-panel v-if="navItem?.context && ctxContent" :title="ctxContent.title">
+            <component :is="ctxContent.component" v-bind="ctxContent.props" />
+          </app-context-panel>
         </div>
       </div>
 
@@ -37,6 +40,7 @@ import { BRAND } from '@/config/theme';
 import { useUserStore } from '@/stores/user';
 import { useAuthGateStore } from '@/stores/authGate';
 import { useConversationStore } from '@/stores/conversations';
+import { useContextPanel } from '@/stores/context';
 
 const theme = {
   token: {
@@ -61,8 +65,11 @@ const commandOpen = ref(false);
 const isFullscreen = computed(() => route.path === '/login');
 const navItem = computed(() => matchNavItem(route.path));
 
-/** 右栏标题：仅翻译（术语库）与合翻（合同原文）启用，P2/P3 打开 context 后生效 */
-const contextTitle = computed(() => (navItem.value?.key === 'translate' ? '术语库' : '合同原文'));
+/**
+ * 右栏：页面经 store 注入标题与内容（合翻报告 = 合同原文；未注入时不占位）。
+ * 这里取 ref 本体绑定（`ctxContent`），模板才能自动解包 —— 嵌套在对象里的 ref 不会解包。
+ */
+const { content: ctxContent } = useContextPanel();
 
 function onKeydown(e: KeyboardEvent) {
   const mod = e.metaKey || e.ctrlKey;
