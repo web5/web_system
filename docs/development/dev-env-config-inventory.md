@@ -35,7 +35,7 @@
 | 键 | 本地 | dev 写入前 | dev 现在 | 判定 / 动作 |
 |---|---|---|---|---|
 | `NOTIFY_WEBHOOK_URL` | 空字符串 | 无 | **已写入（空值）** | ✅ 占位，空值不发通知，无副作用 |
-| `NOTIFY_WECOM_URL` | 已配企微机器人（**URL 含 key**） | 无 | 未写入 | ️ **待人工确认**：写入后 dev 的流水线通知会发到该企微群（用户可见噪音）；确认后从本机取值写入 |
+| `NOTIFY_WECOM_URL` | 已配企微机器人（**URL 含 key**） | 无 | **已写入**（89 字符，值不落文档/聊天） | ✅ 已确认写入；dev 的流水线/发布通知会发到该企微群 |
 
 ## 3. 服务-环境登记 `deploy_service_envs`（端口 / 主机组 / 上游）
 
@@ -43,7 +43,13 @@
 |---|---|---|
 | local | 11/11 | ✅ |
 | dev | 11/11 | ✅ |
-| prod | 8/11 —— **缺 `ai-agent` / `upload-service` / `deploy-console`** | ⚠️ **需人工提供端口号**；补齐后 `PORT_SOURCE=unresolved` 才能升级为硬失败 |
+| prod | 8 个**实际运行**的服务端口均已登记（`3000/3001/3002/3003/3004/3005` + `mcp-gateway 6006` + `content-hub 6007`） | ✅ 无需补 |
+| prod 的 `ai-agent` / `deploy-console` | **这两个服务在 prod 主机上根本不存在**（无目录、无进程） | ✅ 不是"缺登记"，是"未部署" → 不必登记 |
+| prod 的 `upload-service` | **有 `dist` 产物但未运行，且 `.env` 为空** |  若要上 prod：需先定端口（建议 `3008`，与 dev `6008` 对应）+ 配 `.env`（PORT / INTERNAL_API_KEY / JWT_SECRET / 存储）再启动 |
+
+> 查 prod 实际端口的正确姿势：`ps` 找到 `servers/<svc>/dist/main.js` 的 pid，再
+> `tr '\0' '\n' < /proc/<pid>/environ | grep -m1 '^PORT='` —— prod 是"历史手工启动的遗留"，
+> **`.env` 里大多没写 PORT**，只看配置文件会看错（runbook §1.1 已提示）。
 
 - 端口真相源即本表（发布探活读它）；配置中心 `PORT` 仅在需要覆盖时使用（曾在 dev 临时写过一条 auth PORT，**已删除**，回归本表）。
 
@@ -65,10 +71,23 @@
 | 仓库迁移文件 | `.sql` 30 个 + `.mjs` 26 个（控制台库） | — | 需逐条判定"其创建的对象在 dev 是否已存在" |
 
 **baseline 做法（务必先出对照表、再记账）**：
-1. 逐个迁移文件提取其创建的**表/列/索引**；
-2. 在 dev 库查该对象是否存在 → 存在标 `已应用`、不存在标 `待应用`；
+1. 逐个迁移文件提取其创建的**表/列/索引**（`grep -oiE "(create|alter|rename|drop) table ..."`）；
+2. 在 dev 库查该对象是否存在 → 全在标 `已应用`、有缺标 `待定`；
 3. **只写记账行，不执行任何 DDL**（这一步不改结构）；
-4. 标为"待应用"的迁移单独评审后决定是否执行（`apply-migrations.sh` 在无记账时**会把全部当待应用**，含 `0001_standardize_business_tables` 这类基线/重命名脚本，**切勿盲跑**）。
+4. 标为"待定"的迁移**不记账**，单独评审后再决定（记账即"以后不再执行"，记错会永久跳过它）。
+5. `apply-migrations.sh` 在记账为空时**会把全部当待应用**，含 `0001_standardize_business_tables`
+   这类基线/重命名脚本 → **切勿盲跑**（本表就是为了避免那次误跑）。
+
+**本次对照结果 + 已写入的 baseline（2026-09-23，dev 记账 0 → 12 行）**
+
+| 判定 | 迁移 | 说明 |
+|---|---|---|
+| ✅ 已记账 | `0001` `0002` `0003` `0004` `0006_dict_tables` `0007_baseline` `0009` `0010_conversation_intent_routing` `0011` + 无表级 DDL 的 `0005` `0006_rename` `0013` | 其对象在 dev 全部存在 |
+| ⏸ 未记账（待定） | `0008_knowledge_tables` | dev 缺 `knowledge_chunks / knowledge_collections / knowledge_docs`（dev 的 knowledge-service 在跑但表未建 → 需该领域确认后再决定是否执行） |
+| ⏸ 未记账（待定） | `0010_pipeline_task_states` | 它建的 `deploy_pipeline_runs` 在**业务库**里没有 —— 该表已随"域拆分"迁到 `web_system_deploy`，此迁移已过时（记账=以后不再执行，正合意；但需评审确认） |
+| ⏸ 未记账（待定） | `0012_music_recommend` | dev 缺 `music_providers / user_taste_profiles`（music-recommend 领域，未上 dev 则不应记账） |
+
+> prod 也是 `schema_migrations=0`（61 表），**同样需要先出对照表再记账**，别照抄 dev 的结论（对象集合可能不同）。
 
 ## 6. 基础设施（dev 主机）
 
@@ -108,8 +127,9 @@ mysql -h $H -P ${P:-3306} -u $U $D -e "SELECT scope,env_id,module_key,\`key\`,LE
 
 ## 8. 遗留（需人工 / 后续）
 
-1. `NOTIFY_WECOM_URL`：是否让 dev 也发企微通知（会进群）。
-2. prod 的 3 个端口：`ai-agent` / `upload-service` / `deploy-console`。
-3. 迁移账本 baseline：先出「对象存在性」对照表，评审后再记账（不动 DDL）。
-4. 服务互调地址是否逐服务搬进配置中心。
+1. **迁移待定 3 条**：`0008_knowledge_tables` / `0010_pipeline_task_states` / `0012_music_recommend` —— 评审后决定"执行"还是"记账跳过"。
+2. **prod 迁移 baseline**：prod 同样是记账 0 行，需**单独**出对照表（不照抄 dev 结论）。
+3. **prod 的 upload-service**：有产物未运行、`.env` 空；若要上 prod 需定端口（建议 3008）+ 配 `.env` + 启动。
+4. 服务互调地址（`USER_SERVICE_URL` / `SYSTEM_SERVICE_URL` / …）是否逐服务搬进配置中心。
 5. dev 静态模块缺 `shell` 基座，确认门户是否需要。
+6. dev 控制台登录后的收尾：**A6 —— 「版本部署 → admin → `3d5ce61`」** 需人工点（指针切换不自动做）。
