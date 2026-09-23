@@ -368,3 +368,16 @@
 - 间距：8 的倍数。
 - 一屏 primary 按钮 ≤ 1。
 - 所有异步流程必须有：加载中 / 空态 / 失败重试 三态。
+
+## 附：类型欠债清理（2026-09-23，PR #136）
+
+背景：`quality-gate` 的「改动包 build/test」**只检查 PR 改动的包**；本 PR 动了 portal，故 portal 既有类型欠债在此暴露（其他只改 servers 的 PR 不会触发）。本次清理**不改动任何交互与视觉**，只对齐类型：
+
+| 类别 | 处数 | 处置 |
+|---|---|---|
+| `import.meta.env` 未声明 | 3 | 补 `src/vite-env.d.ts`（`/// <reference types="vite/client" />`），采新增引用文件而非 tsconfig `types` 白名单，避免收窄全局类型 |
+| 未使用变量/导入 | 5 | `TodoItem.emit` / `TodoStats.props` 去掉赋值（保留 `defineEmits` / `defineProps` 声明，父组件监听与 props 契约不变）；`SqlFormatter` 移除已装版本不存在的 `dialect` 导出 |
+| 字面量联合类型 | 3 | `TodoForm` 的 `priorityOptions` / `categoryOptions` 显式标注 `TodoPriority` / `TodoCategory` |
+| canvas 空值类型 | 1 | `canvasRef.value ?? null` |
+
+待续 13 处：`Create.vue` 未使用变量 ×2 与 `AxiosResponse.code` ×1、`Profile.vue` 的 `UserInfo` ×2、`Todo.vue` 的 `ApiResponse.items/total` ×3、`SqlFormatter` 的 `indent` ×2、`Uglify` 的 `MinifyOutput.error` ×2、`Transform` 的 `originalImageUrl` ×1。
