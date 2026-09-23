@@ -70,7 +70,7 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | gateway | **6000** | `web-gateway` | `dev`/`start`/`build` | MySQL（主库 + `web_system_deploy` 只读）、`JWT_SECRET` | `/docs`、`/swagger` | ✅ `/health`、`/api/health`（免鉴权） |
 | auth-service | **6101**（非 6001） | `web-auth` | `dev`/`start`/`seed` | MySQL + **Redis** + 微信/公众号凭据 | `/docs` | ❌ 端口探活 |
 | user-service | **6002** | `web-user` | `dev` | MySQL + SMTP | `/docs` | ❌ |
-| ai-service | **6003** | `web-ai` | `start:dev`（无 `dev`） | MySQL + Redis + LLM Key + 腾讯云 Secret（TTS/OCR）+ 图片生成 Key | `/api-docs` | ❌ |
+| ai-service | **6003** | `web-ai` | `start:dev`（无 `dev`） | MySQL + Redis + LLM Key + 腾讯云 Secret（TTS/OCR；**流式 TTS 另需 `TENCENT_APP_ID`**）+ 图片生成 Key | `/api-docs` | ❌ |
 | system-service | **6004** | `web-system` | `dev`/`start` | MySQL（+可选只读账号） | `/docs` | ❌ |
 | todo-service | **6005** | `web-todo` | `dev`/`start` | MySQL + Redis | `/docs` | ❌ |
 | mcp-gateway | **6006** | `web-mcp-gateway` | `dev` | MySQL + LLM Key + SMTP + 服务间 Bearer | 无 | ❌（用 `/mcp` initialize 或 `test/e2e-keys.sh`） |
@@ -90,7 +90,7 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 |---|---|
 | `/api/auth*` | auth-service |
 | `/api/users`、`/api/keys`、`/api/admin/permissions`、`/api/admin/roles`、`/api/permissions/my` | user-service |
-| `/api/ai*`（含 `chat/stream`、`tts/speak` SSE）、`/api/admin/skills`、`/api/agent-runs`、`/api/agent-defs`、`/api/bianbian` | ai-service |
+| `/api/ai*`（含 `chat/stream`、`tts/speak`、**`tts/stream`（pcm 流式）**）、`/api/admin/skills`、`/api/agent-runs`、`/api/agent-defs`、`/api/bianbian` | ai-service |
 | `/api/ai-agent*`（含 `agent/run`、`agent/admin-run` SSE） | ai-agent |
 | `/api/admin/*`（兜底）、`/api/dict/*` | system-service |
 | `/api/todos*` | todo-service |

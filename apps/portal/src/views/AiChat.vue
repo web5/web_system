@@ -205,7 +205,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
-import { requestTts, splitChunks } from '@/api/tts';
+import { speak as speakText, stopTts as stopAudio } from '@/api/tts';
 import { collectGlossary } from '@/api/glossary';
 import {
   parseAnswer,
@@ -406,20 +406,16 @@ function onAttach() {
   message.info('上传文件：P2 支持');
 }
 
-/** 翻译卡片朗读：Web Speech 本地实现（后端 TTS 接口留给正文朗读排期） */
-let audioEl: HTMLAudioElement | null = null;
-
 /** 停止朗读：中断当前 Audio、复位状态 */
 function stopTts() {
-  if (audioEl) {
-    audioEl.pause();
-    audioEl.src = '';
-    audioEl = null;
-  }
+  stopAudio();
   reading.value = null;
 }
 
-/** 朗读：走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色），分句逐段合成播放 */
+/**
+ * 朗读：优先走流式（服务端一次连续合成、端侧边收边播，首包约 0.6s 且全程无接缝）；
+ * 流式不可用时自动回退整段方案（specs/tts-continuity/design.md §10）。
+ */
 async function speak(mId: string, text: string) {
   const t = (text || '').trim();
   if (!t) return;
@@ -430,40 +426,20 @@ async function speak(mId: string, text: string) {
   }
   stopTts(); // 顶掉上一个朗读
 
-  const chunks = splitChunks(t);
-  if (!chunks.length) return;
-
   reading.value = { id: mId, phase: 'loading' };
   try {
-    for (const chunk of chunks) {
-      if (reading.value?.id !== mId) return; // 中途被停止 / 被顶掉
-      const blob = await requestTts(chunk);
-      if (reading.value?.id !== mId) return;
-      reading.value = { id: mId, phase: 'playing' };
-      await playBlob(blob);
-    }
+    await speakText(t, {
+      // 中途被停止 / 被顶掉 → 流水线静默退出
+      isActive: () => reading.value?.id === mId,
+      onPhase: (phase) => {
+        if (reading.value?.id === mId) reading.value = { id: mId, phase };
+      },
+    });
   } catch {
     if (reading.value?.id === mId) message.error('朗读失败，请重试');
   } finally {
     if (reading.value?.id === mId) reading.value = null;
   }
-}
-
-/** 播放 mp3 Blob；结束 / 出错 / 被替换时 resolve */
-function playBlob(blob: Blob): Promise<void> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audioEl = audio;
-    const done = () => {
-      if (audioEl === audio) audioEl = null;
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    audio.onended = done;
-    audio.onerror = done;
-    audio.play().catch(done);
-  });
 }
 
 /** 朗读按钮文案：合成中「请稍候…」/ 播放中「停止」/ 空闲「朗读」 */
