@@ -46,40 +46,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
-import type { IconName } from '@/config/icons';
+import { CAPABILITIES, type Capability } from '@/config/capabilities';
 import AppIcon from '@/components/AppIcon.vue';
-
-interface Capability {
-  name: string;
-  desc: string;
-  icon: IconName;
-  /** 未开放的能力没有落地页 */
-  to: string;
-  enabled: boolean;
-}
-
-/**
- * 能力清单（Q3 已拍板：数据源写死）——后端 B2（agent_definitions 展示元数据 + C 端清单接口）
- * 就绪后再换成接口数据。已启用两项即发现页的落地工作台：翻译 = /translate、合翻 = /contract。
- */
-const CAPABILITIES: Capability[] = [
-  {
-    name: '语言翻译官',
-    desc: '三版译文对照 + 语气点评，支持 12 种语言',
-    icon: 'lang',
-    to: '/translate',
-    enabled: true,
-  },
-  {
-    name: '合同翻译官',
-    desc: '上传合同自动识别风险信号、法律依据与可争取权益',
-    icon: 'doc',
-    to: '/contract',
-    enabled: true,
-  },
-  { name: '论文速读', desc: '上传论文，提取核心结论与方法', icon: 'search', to: '', enabled: false },
-  { name: '文案改写', desc: '按平台与受众重写营销文案', icon: 'grid', to: '', enabled: false },
-];
 
 const router = useRouter();
 

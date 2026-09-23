@@ -8,7 +8,13 @@
       <div v-else class="app-shell">
         <app-navbar @open-command="commandOpen = true" />
         <div class="app-body">
-          <app-side-list v-if="navItem?.sideList" :title="navItem.listTitle" />
+          <!-- 左栏：上半记录列表（sideList）+ 下半能力区（caps），两者任一为真才渲染 -->
+          <app-side-list
+            v-if="navItem?.sideList || navItem?.caps"
+            :title="navItem.listTitle"
+            :show-list="!!navItem?.sideList"
+            :caps="!!navItem?.caps"
+          />
           <main class="app-work">
             <router-view />
           </main>

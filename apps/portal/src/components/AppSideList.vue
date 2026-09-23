@@ -1,5 +1,7 @@
 <template>
   <aside class="side">
+    <!-- 上半区：记录列表（翻译 / 合翻等记录接口未就绪的视图不渲染，避免空壳） -->
+    <template v-if="showList">
     <div class="side-head">
       <span class="side-title">{{ title }}</span>
       <button type="button" class="btn-ghost" @click="createNew">
@@ -67,6 +69,31 @@
         </button>
       </div>
     </div>
+    </template>
+
+    <!--
+      下半区：能力（2026-09-23 反馈）——能力页的「换能力 / 回发现」出口放这里，
+      不做页头面包屑或「返回」按钮（太 admin）。记录区不可用时（solo）占满左栏。
+    -->
+    <div v-if="caps" class="side-caps" :class="{ solo: !showList }">
+      <div class="caps-hd">能力</div>
+      <button
+        v-for="c in CAPABILITIES"
+        :key="c.name"
+        type="button"
+        class="cap-item"
+        :class="{ on: isCurrent(c), dis: !c.enabled }"
+        @click="onCap(c)"
+      >
+        <app-icon :name="c.icon" />
+        <span class="cap-name">{{ c.name }}</span>
+        <app-icon v-if="isCurrent(c)" name="check" />
+        <span v-else-if="!c.enabled" class="cap-tag">敬请期待</span>
+      </button>
+      <button type="button" class="cap-all" @click="router.push('/discover')">
+        查看全部能力<app-icon name="right" />
+      </button>
+    </div>
   </aside>
 </template>
 
@@ -78,15 +105,35 @@ import { useConversationStore } from '@/stores/conversations';
 import { useUserStore } from '@/stores/user';
 import { useAuthGateStore } from '@/stores/authGate';
 import { formatRelativeTime } from '@/utils/time';
+import { CAPABILITIES, type Capability } from '@/config/capabilities';
 import AppIcon from './AppIcon.vue';
 
-defineProps<{ title: string }>();
+withDefaults(defineProps<{ title: string; showList?: boolean; caps?: boolean }>(), {
+  showList: true,
+  caps: false,
+});
 
 const route = useRoute();
 const router = useRouter();
 const store = useConversationStore();
 const userStore = useUserStore();
 const authGate = useAuthGateStore();
+
+/* ===== 下半区·能力 ===== */
+
+/** 当前所在能力页（能力条目高亮 ✓） */
+function isCurrent(c: Capability): boolean {
+  return !!c.enabled && route.path === c.to;
+}
+
+/** 已启用 → 切到该能力；未开放 → 可点但给明确反馈（不做灰字死卡） */
+function onCap(c: Capability) {
+  if (!c.enabled) {
+    message.info('该能力尚未开放');
+    return;
+  }
+  void router.push(c.to);
+}
 
 /** 无标题会话（后端异步生成标题）→ 用占位文案，不显示空白行 */
 function displayTitle(item: ConversationSummary): string {
@@ -159,6 +206,92 @@ function confirmDelete(item: ConversationSummary) {
   flex: 1;
   overflow-y: auto;
   padding: 0 8px 12px;
+}
+
+/* ===== 下半区·能力（少部分高度；记录区不可用时占满左栏） ===== */
+.side-caps {
+  flex: 0 0 auto;
+  max-height: 34%;
+  overflow-y: auto;
+  border-top: 1px solid var(--ws-border);
+  padding: 8px;
+}
+
+.side-caps.solo {
+  flex: 1;
+  max-height: none;
+  border-top: none;
+}
+
+.caps-hd {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ws-text-tertiary);
+  letter-spacing: 0.02em;
+  padding: 0 4px 6px;
+}
+
+.cap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 2px;
+  border-radius: var(--ws-radius-md);
+  color: var(--ws-text-secondary);
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+}
+
+.cap-item:hover {
+  background: var(--ws-bg-hover);
+}
+
+.cap-item.on {
+  background: var(--ws-brand-50);
+}
+
+.cap-item.on .cap-name {
+  color: var(--ws-brand-700);
+  font-weight: 600;
+}
+
+.cap-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--ws-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cap-item.dis .cap-name,
+.cap-item.dis {
+  color: var(--ws-text-tertiary);
+}
+
+.cap-tag {
+  font-size: 11px;
+  color: var(--ws-text-tertiary);
+}
+
+.cap-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--ws-border);
+  font-size: 12px;
+  color: var(--ws-brand-600);
+}
+
+.cap-all:hover {
+  color: var(--ws-brand-700);
 }
 
 .list-row {
