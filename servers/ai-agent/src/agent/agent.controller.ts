@@ -336,11 +336,14 @@ export class AgentController {
         });
     }
 
-    // 工具页（翻译 / 合同评估）产生的会话标记 source='tool' → 不出现在主对话记录列表
+    // 工具页（翻译 / 合同评估）产生的会话标记 source='tool' → 不出现在主对话记录列表。
+    // 同时落库显式 agentId：工具页各取各的记录（左栏「翻译记录 / 体检记录」靠它过滤）。
     if (dto.source === 'tool' && conversationIdFromEngine) {
-      this.conversationQueryService.markSource(userId, conversationIdFromEngine, 'tool').catch(() => {
-        /* 标记失败不影响本次对话结果 */
-      });
+      this.conversationQueryService
+        .markSource(userId, conversationIdFromEngine, 'tool', dto.agentId)
+        .catch(() => {
+          /* 标记失败不影响本次对话结果 */
+        });
     }
 
     // 异步把 run 推送到 ai-service 统一落库（admin 调试用）

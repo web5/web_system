@@ -58,9 +58,24 @@ export class AgentConversationQueryService {
     return { list: rows, total };
   }
 
-  /** 标记会话来源（工具页调用；带 userId 条件，防止改到他人会话） */
-  async markSource(userId: string, conversationId: string, source: 'chat' | 'tool'): Promise<void> {
-    await this.repo.update({ id: conversationId, userId }, { source });
+  /**
+   * 标记会话来源（工具页调用；带 userId 条件，防止改到他人会话）。
+   *
+   * agentId（2026-09-23）：工具页是**显式指定** agent 的（translate / contract-risk），
+   * 但 `agent_id` 原本只有意图路由会写（默认关闭且只服务主对话），导致工具会话的
+   * agent_id 恒为 NULL，列表按能力过滤时全被滤掉。这里一并把显式 agentId 落库。
+   */
+  async markSource(
+    userId: string,
+    conversationId: string,
+    source: 'chat' | 'tool',
+    agentId?: string,
+  ): Promise<void> {
+    const agentIdValue = agentId?.trim();
+    await this.repo.update(
+      { id: conversationId, userId },
+      { source, ...(agentIdValue ? { agentId: agentIdValue } : {}) },
+    );
   }
 
   /** 详情：仅当会话属于该用户时返回，否则 null（controller 转 404） */
