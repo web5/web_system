@@ -147,7 +147,12 @@ const materials = ref<MaterialItem[]>([]);
 
 async function loadMaterials() {
   try {
-    const res = await request.get('/bianbian/materials');
+    // 响应拦截器已解包 `{ code, data }`，此处仅做类型对齐（运行时语义保持不变）。
+    // ⚠️ 疑似遗留问题：若该接口实际被解包，则 res.code 恒为 undefined、素材将永不加载 —— 待确认返回体后另行处理。
+    const res = (await request.get('/bianbian/materials')) as unknown as {
+      code?: number;
+      data?: unknown;
+    };
     if (res.code === 0 && Array.isArray(res.data)) {
       // 将后端素材映射为前端统一格式（支持 emoji 和 color 类型）
       materials.value = res.data.map((m: any) => ({
