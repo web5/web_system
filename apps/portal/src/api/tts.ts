@@ -95,20 +95,23 @@ export async function speakSequence(
   chunks: string[],
   opts: { isActive: () => boolean; onPhase?: (phase: 'loading' | 'playing') => void },
 ): Promise<void> {
-  let blob = await requestTts(chunks[0]);
+  // 所有块并发发起：剩余块的合成与首块同时进行，首块播完时剩余已就绪 —— 消除块间空档。
+  // （串行发请求的等待 = 剩余块合成时间 − 首块音频时长，实测会差出 0~3s 的静音。）
+  const pending = chunks.map((c) => requestTts(c).catch(() => null));
+
+  const first = await pending[0];
   if (!opts.isActive()) return;
+  if (!first) throw new Error('朗读失败，请重试');
   opts.onPhase?.('playing');
 
+  let blob: Blob = first;
   for (let i = 0; i < chunks.length; i++) {
-    // 预取下一块：与本块播放并行，播完即可无缝接上
-    const next = i + 1 < chunks.length ? requestTts(chunks[i + 1]).catch(() => null) : null;
-
     await playTtsBlob(blob);
     if (!opts.isActive()) return;
-    if (!next) return;
+    if (i + 1 >= chunks.length) return;
 
-    const pending = await next;
-    if (!pending) throw new Error('朗读失败，请重试');
-    blob = pending;
+    const next = await pending[i + 1];
+    if (!next) throw new Error('朗读失败，请重试');
+    blob = next;
   }
 }
