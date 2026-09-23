@@ -14,6 +14,8 @@ import type { ModuleContext } from '@web-system/shared';
 import { setupAntdAll } from './antd-all';
 import { saveAuth, clearAuth } from './auth-storage';
 import { startVersionCheck } from './version-check';
+// 页签图标按模块切换：admin / portal 同由基座 index.html 提供图标，不改写则两个标签页一模一样
+import { applyModuleBranding } from './module-branding';
 // 环境（加载维度）共享逻辑：解析规则与 gateway/EnvSwitcher 完全一致（R4）
 import { readManifest, resolveEnvId, ENV_HEADER } from '@web-system/ui/composables/env';
 // UI 规范：语义 token + 全局基础样式（2026-09-03 shell 视觉统一；css 子路径直指 ui src）
@@ -237,6 +239,11 @@ function buildModuleManifests(m: ReturnType<typeof readManifest>, env: string): 
     };
   }).filter(Boolean) as any[];
 }
+
+// 页签图标跟随模块：/admin/* → admin 图标，其余（含 /portal/*、/login）→ 基座默认图标
+router.afterEach((to) => {
+  applyModuleBranding((to.params.module as string) || '');
+});
 
 // 登录校验守卫：未登录跳 /login
 router.beforeEach((to, _from, next) => {

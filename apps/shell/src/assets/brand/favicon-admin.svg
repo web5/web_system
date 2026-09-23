@@ -1,10 +1,9 @@
 <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
-  <!-- 管理后台 favicon（与 portal 区分用）：portal = 品牌橙底 + 白豆（整块实底），
+  <!-- admin 模块页签图标（与 portal 区分）：portal = 品牌橙底 + 白豆（整块实底），
        admin = 透明底 + 品牌橙豆（不铺底色，页签栏底色直接透出来）。
        豆形取自品牌 logo，等比放大 1.5x 铺到 75% 画布（去掉底色后按原比例会显得过小）。
        色值：豆 #F97316（brand.500）/ 眼 #FFFFFF / 高光 #FDE68A；登记见 docs/ui/color-reference.md §4 品牌图标例外。
-       ⚠️ 同一份图标另存于 apps/shell/src/assets/brand/favicon-admin.svg（微前端基座按模块切换页签图标时用），
-          两处需保持同步。 -->
+       ⚠️ 与 apps/admin/public/favicon.svg 内容一致（后者供 admin 独立构建/直连访问时用），两处需保持同步。 -->
   <path d="M 48 6 C 69 6, 84 21, 84 48 C 84 78, 69 90, 48 90 C 27 90, 12 75, 12 48 C 12 21, 27 6, 48 6 Z" fill="#F97316"/>
   <circle cx="48" cy="48" r="12" fill="#FFFFFF"/>
   <circle cx="48" cy="46.5" r="4.5" fill="#FDE68A"/>
