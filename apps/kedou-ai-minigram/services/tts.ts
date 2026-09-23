@@ -5,8 +5,10 @@
  *       → ai-service `TtsService`（腾讯云 TTS，英文发音人）→ mp3 二进制。
  *
  * 流式体验（用户不等待整段合成）：
- *   文本按句切块（utils/translate-parse 的 splitSpeakChunks）→ 首块合成完立即开播，
- *   其余块在上一块播放期间后台预取 —— 等待时间 ≈ 首句合成（约 1s），
+ *   文本切成「首句 + 剩余整段」两块（utils/translate-parse 的 splitSpeakParts）→
+ *   首块合成完立即开播，第二块在首块播放期间后台预取 —— 等待时间 ≈ 首句合成（约 2s）。
+ *   腾讯云单次上限实测「英文 ≥499 / 中文 ≥150」，剩余整段由服务端一次合成（语调连贯），
+ *   接缝最多 1 处且落在句末标点处（specs/tts-continuity/design.md）。
  *   `speakText` 在首块开播后即返回（不等整段）。
  *
  * 反馈形态（不弹全屏 loading）：合成中 / 播放中通过 `onSpeakState` 推送，
@@ -18,7 +20,7 @@
  */
 import { getApiBase } from './agent-stream';
 import { getToken } from '../utils/request';
-import { splitSpeakChunks } from '../utils/translate-parse';
+import { splitSpeakParts } from '../utils/translate-parse';
 
 const TTS_URL = '/api/ai/tts/speak';
 
@@ -99,7 +101,7 @@ export async function speakText(text: string): Promise<boolean> {
 
   stopSpeak();
 
-  const chunks = splitSpeakChunks(t);
+  const chunks = splitSpeakParts(t);
   if (!chunks.length) return false;
 
   const myRun = runSeq;
@@ -187,6 +189,14 @@ function playFileAndWait(filePath: string): Promise<'ended' | 'error' | 'stopped
     activeWaiters.add(wake);
     const settle = (r: 'ended' | 'error') => {
       activeWaiters.delete(wake);
+      // 播完即释放：InnerAudioContext 实例数有上限，长期累积会让后续块播放失败
+      // 或 onEnded 不回调（表现为「读到一半停掉」）—— 每一块用完必须 destroy。
+      try {
+        ctx.destroy();
+      } catch {
+        /* 已销毁：忽略 */
+      }
+      if (audio === ctx) audio = null;
       resolve(r);
     };
     ctx.src = filePath;
