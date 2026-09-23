@@ -146,7 +146,22 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 | A2 | ✅ 本轮 | `servers/system-service/src/storage/{storage.service,storage.controller,internal-storage.controller,storage.dto,storage.module}.ts`；权限点 `storage:browse`（`packages/types`，**仅 super_admin**，admin 已显式排除） |
 | A3 | ✅ 本轮 | `servers/upload-service/src/storage/upload-dir.ts`、`src/upload/{upload-root,upload-root.token,upload-multer,internal-uploads.controller}.ts`、`dto/store-upload.dto.ts`；`upload.service.ts`（分类改复数、单一 Multer 实现、`storeBuffer`）、`main.ts`（静态根取进程生效值） |
 | A4 | ✅ 本轮 | `servers/gateway/src/proxy/proxy.service.ts`（`uploadProxy` / `uploadStaticProxy` 目标切 upload-service、变变「先新后旧」兜底、`UPLOAD_SERVICE_URL` 默认值改 `SERVICE_URL_DEFAULTS.upload`）+ `proxy.controller.ts` + `proxy.service.spec.ts`（真 HTTP 验证，6 例） |
-| A5~A8 | ⬜ 未做 | — |
+| A5 | ✅ 本轮（2026-09-23） | `scripts/migrate-uploads.mjs`（默认 DRY_RUN、幂等、不删源、`--apply`/`--prune` 分步）+ 内置灰度验证清单 |
+| A6~A8 | ⬜ 未做 | — |
+
+**A5 说明与实测**
+
+- 迁移目标目录**只认权威值**：`system-service` 的 `/internal/storage/path`（`system_configs['storage.upload_dir']`），
+  取不到就用 `--dst`；两者都没有**直接报错退出**（不猜目录 —— 猜错等于把文件搬到没人读的地方）。
+- 默认**零副作用**：`node scripts/migrate-uploads.mjs` 只扫描并出映射报告；
+  执行要 `--apply`，删源要再显式 `--prune`（且要求无"目标内容不同"的冲突项）。
+- 幂等：目标已存在且 size 一致（或 `--hash` 用 md5）即跳过。
+- 可选 `--update-db`：把 `users.avatar` 里仍指向旧路径的引用改写为 `/api/uploads/...`。
+- 本机预演实测：`servers/user-service/uploads/avatars` 有 2 个文件、统一根为 `~/web_system/uploads`、
+  判定 `copy` ×2 → **确认历史头像确实不在统一根**（切 A4 后会 404，A5 确有需要；
+  本机 `users.avatar` 为空，故无用户可见影响，属"孤儿文件"）。
+- dev 侧：`storage.upload_dir` 指向 `/data/web_system/uploads`，历史头像本就落在那里
+  → **已就地接管，dev 不需要跑迁移**；prod 是否需要在跑之前先按本脚本预演一次。
 
 实现说明（与上文措辞的差异，均为刻意的）：
 
@@ -227,7 +242,7 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 
 | 阶段 | 内容 | 风险 |
 |---|---|---|
-| C1 | 抽出 `@web-system/shared` 的统一 JWT guard（参数化 `AuthMode`），各服务改为引用；**行为完全不变**（仍是远程 verify） | 低，纯结构收敛，可单服务灰度 |
+| C1 | 抽出 `@web-system/shared` 的统一 JWT guard（参数化 `AuthMode`），各服务改为引用；**行为完全不变**（仍是远程 verify） | 低，纯结构收敛，可单服务灰度 | 🟡 **灰度中**：`packages/shared/src/auth/unified-auth.ts` + `todo-service` 首个接入（其余 7 个服务后续逐个迁） |
 | C2 | guard 增加 `local` 模式（本地验签 + 30s 吊销缓存），用 `AUTH_MODE=local|verify` 双轨运行，逐服务切换 | 中，需灰度 + 对照验证 |
 | C3 | 全量切 `local`，`/auth/verify` 降级为兼容端点（保留一个发布周期后下线） | 中，取决于前端刷新令牌改造 |
 
@@ -416,7 +431,17 @@ MCP 客户端 token 与用户 token 共用同一吊销机制（30s 缓存），�
 
 > 依赖关系：D2 依赖 C 的吊销机制（至少要能在 30s 内让一把令牌失效）；A8 依赖 A3 的 `internal/uploads/store`。
 
-> 进度：**B、D0、A1、A2、A3、A4 已完成**；C1、D1 / D2 待做；A5 / A8 与 A6（需过 UI 门）在后。
+> 进度：**B、D0、A1、A2、A3、A4、A5 已完成**；**C1 灰度中**（shared 助手已落地，todo-service 首个接入，其余 7 服务待迁）；D1 / D2 待做；A8 与 A6（需过 UI 门）在后。
+>
+> C1 的收敛方式（与"直接把 guard 塞进共享包"的区别）：
+> - 共享包**只出纯函数助手**（`verifyRemoteToken` / `resolveAuthServiceUrl` / `extractBearerToken`），
+>   **不抛 `UnauthorizedException`、不注入 `Reflector`** —— 避免 pnpm 隔离下 `@nestjs/common` /
+>   `@nestjs/core` 双实例导致 HTTP 异常退化成 500、DI token 不匹配（与既有
+>   `auth/permission.guard.ts` 同约定）。
+> - 各服务保留一层**薄 guard**负责抛 401 与文案 → **行为完全不变**。
+> - 两处刻意改进（只在异常配置下触发）：`AUTH_SERVICE_URL` **空串回落默认值**（旧写法会
+>   `fetch('')` 被误报成"认证服务不可用"，2026-09-11 dev 事故同源）、远程校验加 **8s 超时**。
+
 > ⚠️ A3 与 A4 有**发布耦合**：两者已在同一 PR，但发布时也必须一起发（见 §1.7 落地状态说明 4）。
 
 ---
