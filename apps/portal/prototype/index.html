@@ -51,6 +51,17 @@ input,textarea{font:inherit;color:inherit}
 .nav-list-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px}
 .nav-list-hd .t{font-size:12px;color:var(--t3);font-weight:600;letter-spacing:.02em}
 .lst{flex:1;overflow:auto;padding:0 8px 12px}
+/* 左栏下半区·能力：少部分高度（约 1/3），自带滚动，不与记录列表抢空间 */
+.caps{flex:0 0 auto;max-height:34%;overflow:auto;border-top:1px solid var(--line);padding:8px}
+.caps-hd{font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.02em;padding:0 4px 6px}
+.cap-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r-sm);cursor:pointer;margin-bottom:2px}
+.cap-item:hover{background:var(--page-bg)}
+.cap-item .n{font-size:13px;color:var(--t1);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cap-item.on{background:var(--brand-weak)}
+.cap-item.on .n{color:var(--brand-strong);font-weight:600}
+.cap-item.dis{color:var(--t4)}
+.cap-item.dis .n{color:var(--t4)}
+.cap-all{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;margin-top:4px;padding:6px 8px;border-top:1px solid var(--line);font-size:12px;color:var(--brand-strong);cursor:pointer}
 .lst-item{padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;margin-bottom:2px}
 .lst-item:hover{background:var(--page-bg)}
 .lst-item.on{background:var(--brand-weak)}
@@ -364,6 +375,8 @@ u[onclick],.ans .codeblk .hd .cp,.act{transition:color var(--duration-fast) var(
     <aside class="nav" id="navSide">
       <div class="nav-list-hd"><span class="t" id="lstTitle">会话</span><button class="btn ghost sm" onclick="newTask()">+ 新建</button></div>
       <div class="lst" id="navList"></div>
+      <!-- 左栏下半区：能力（少部分高度）——切换能力 + 「查看全部能力」= 回发现 -->
+      <div class="caps" id="sideCaps"></div>
     </aside>
     <main class="work" id="work"></main>
     <div id="ctxSlot"></div>
@@ -413,6 +426,7 @@ const I = {
   warn:'<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   right:'<path d="M9 18l6-6-6-6"/>',
   left:'<path d="M15 18l-6-6 6-6"/>',
+  down:'<path d="M6 9l6 6 6-6"/>',
   up:'<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>',
   dl:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
@@ -442,6 +456,8 @@ const S = {
   /* 合翻：home → upload → analyzing → result（对齐小程序 packageContract 八页合一） */
   /* ctext=合同文本（OCR 回填 / 粘贴共用）· ocring=OCR 中 · noReport=报告空态（P3 演示） */
   step:'home', sig:null, ctext:'', ocring:false, noReport:false,
+  /* 能力切换器浮层开关（C 端做法：像模型/场景切换器，不是 admin 面包屑） */
+  cs:false,
   /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
   trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
@@ -483,6 +499,8 @@ function render(){
   document.getElementById('navSide').style.display = (S.view==='discover'||S.view==='lab')?'none':'flex';
   document.getElementById('lstTitle').textContent = LIST_TITLE[S.view]||'列表';
   document.getElementById('navList').innerHTML = renderList();
+  // 左栏下半区：能力（发现 / 实验室本身是能力网格，不再重复挂）
+  document.getElementById('sideCaps').innerHTML = renderCaps();
   // 工作区
   document.getElementById('work').innerHTML = renderWork();
   // 右栏
@@ -523,6 +541,23 @@ function renderWork(){
   if(v==='profile') return workProfile();
   if(v==='lab') return workLab();
   return '';
+}
+/* 能力清单（与发现页卡片同源，数据写死归因 Q3 / 后端 B2） */
+const CAPS = [
+  {n:'语言翻译官', d:'三版译文对照 · 语气点评', ic:I.lang, v:'translate'},
+  {n:'合同翻译官', d:'合同风险 · 权益 · 大白话', ic:I.doc, v:'contract'},
+  {n:'论文速读', d:'上传论文，提取核心结论', ic:I.search, v:''},
+  {n:'文案改写', d:'按平台与受众重写文案', ic:I.grid, v:''}
+];
+/* 左栏下半区·能力：既是「换能力」的入口，也是回发现的唯一出口（2026-09-23 反馈：
+   顶栏收口后能力页要有回路；位置放左栏下半区，不做页头面包屑 / 返回按钮——太 admin） */
+function renderCaps(){
+  if(S.view==='discover'||S.view==='lab'||S.view==='profile') return '';
+  return '<div class="caps-hd">能力</div>'+
+    CAPS.map(c=>c.v
+      ? '<div class="cap-item'+(S.view===c.v?' on':'')+'" onclick="go(\''+c.v+'\')">'+SVG(c.ic)+'<span class="n">'+c.n+'</span>'+(S.view===c.v?SVG(I.check):'')+'</div>'
+      : '<div class="cap-item dis" onclick="toast(\'该能力尚未开放\')">'+SVG(c.ic)+'<span class="n">'+c.n+'</span><span class="tag">敬请期待</span></div>').join('')+
+    '<div class="cap-all" onclick="go(\'discover\')">查看全部能力 '+SVG(I.right)+'</div>';
 }
 function hd(title, sub, ops){
   return '<div class="work-hd"><div><h1>'+esc(title)+'</h1>'+(sub?'<div style="font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;margin-top:2px">'+sub+'</div>':'')+'</div><span class="spacer"></span>'+(ops||'')+'</div>';
@@ -1138,7 +1173,7 @@ function toggle(m){ S.mode[m]=!S.mode[m]; ['loading','empty','error'].forEach(k=
 /* 合翻两态演示入口：失败态 / 报告空态（P3，规格 §3.3 状态矩阵） */
 function demoFail(){ S.view='contract'; S.step='fail'; render(); }
 function demoNoReport(){ S.view='contract'; S.step='result'; S.sig=null; S.noReport=true; render(); }
-function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
 
 /* ── ⌘K ── */
 const CMDS = [
