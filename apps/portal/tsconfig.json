@@ -16,8 +16,13 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
+    // 与 vite.config.ts 的 resolve.alias 保持一致：本仓未使用 npm workspaces（node_modules/@web-system 无软链），
+    // 若只在 Vite 侧映射，tsc / vue-tsc 会报 Cannot find module。
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@web-system/shared": ["../../packages/shared/src/index.ts"],
+      "@web-system/agent-message": ["../../packages/agent-message/src/index.ts"],
+      "@web-system/types": ["../../packages/types/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
