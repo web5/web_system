@@ -53,6 +53,14 @@ export { SnakeNamingStrategy } from './naming/snake-naming.strategy';
 // 后端 RBAC 权限守卫（各微服务统一使用）
 export { PermissionGuard, RequirePermission, REQUIRED_PERMISSION_KEY } from './auth/permission.guard';
 
+// 统一认证助手（C1）：纯函数 + 可注入 fetch，401 与文案仍由各服务的薄 guard 抛
+export {
+  verifyRemoteToken,
+  resolveAuthServiceUrl,
+  extractBearerToken,
+} from './auth/unified-auth';
+export type { AuthMode, VerifyResult, RemoteAuthDeps } from './auth/unified-auth';
+
 import dayjs from 'dayjs';
 
 /**
