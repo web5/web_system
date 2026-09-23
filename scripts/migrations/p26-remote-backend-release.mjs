@@ -48,11 +48,136 @@ const DRY_RUN = !!process.env.DRY_RUN;
 const ROLLBACK = !!process.env.ROLLBACK;
 const mysql = require(path.join(root, 'node_modules/.pnpm/node_modules/mysql2/promise.js'));
 
-/** B1 范围：只挂 system-service；B3 扩到其余后端模块（各模板都已有 PUBLISH_* 变量） */
-const MODULES = ['system-service'];
+/**
+ * 作用模块：默认只挂 system-service（B1/B2 试点）；
+ * B3 推广时用 `MODULES=gateway,upload-service,... node scripts/migrations/p26-...mjs` 一次性铺开
+ * （各模板都已有 PUBLISH_* 变量）。
+ */
+const MODULES = (process.env.MODULES || 'system-service')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
+const SYNC_NAME = 'sync · 目标机代码与依赖（远端）';
 const RESTART_NAME = 'restart · 落地并重启（后端，远端）';
 const VERIFY_NAME = 'verify · 部署验证（后端，远端）';
+
+/**
+ * sync（远端）：目标机仓库对齐发布分支 + workspace 包按指纹重建 + `.env` 必需变量前置校验。
+ *
+ * 三条都来自 2026-09-23 的真实事故：
+ *   ① 流水线 git/build 节点只在**本机发布目录**跑，目标机仓库停在旧提交
+ *      → 新产物 require 新的包导出得到 undefined（实例：`SERVICE_URL_DEFAULTS.auth` → TypeError）；
+ *   ② 目标机 packages 下各包的 dist 不随发布重建，同样"新产物 + 旧依赖"；
+ *   ③ 新产物在 production 下要求 `.env` 显式配置服务地址（`AUTH_SERVICE_URL`），
+ *      缺失时启动即退、pm2 崩溃循环 —— 必须在**换 dist 之前** fail-fast。
+ */
+const SYNC_SCRIPT = `#!/usr/bin/env bash
+# 发布流水线 · sync（后端，远端）：目标机代码对齐 + 依赖重建（指纹短路）+ .env 前置校验。
+# 排在「发布」之后、「restart」之前：先让目标机环境与服务产物同源，再换 dist。
+#
+# 平台注入变量：MODULE_KEY / MODULE_DIR / MODULE_TYPE / BRANCH / COMMIT_ID / DEPLOY_ENV /
+#               PUBLISH_HOST / PUBLISH_USER / PUBLISH_KEY / PUBLISH_PATH
+# 可选：REMOTE_DEPS_PACKAGES（默认 "shared types mcp-core agent-core agent-message"）
+set -uo pipefail
+[ "\${MODULE_TYPE:-}" = "backend" ] || { echo "[sync-remote] 非后端模块，跳过"; exit 0; }
+if [ "\${DEPLOY_ENV:-}" = "local" ]; then
+  echo "[sync-remote] DEPLOY_ENV=local：local 分支不需要目标机同步，跳过"
+  exit 0
+fi
+: "\${PUBLISH_HOST:?缺少 PUBLISH_HOST}" "\${PUBLISH_PATH:?缺少 PUBLISH_PATH}" "\${BRANCH:?缺少 BRANCH}"
+
+RUSER="\${PUBLISH_USER:-ubuntu}"
+RKEY="\${PUBLISH_KEY:-\$HOME/.ssh/id_ed25519_servers}"
+# 目标机仓库根 = PUBLISH_PATH（.../servers/<dir>）向上两级
+RROOT="\$(dirname "\$(dirname "\${PUBLISH_PATH}")")"
+DIR="\${MODULE_DIR:-\${MODULE_KEY}}"
+PKGS="\${REMOTE_DEPS_PACKAGES:-shared types mcp-core agent-core agent-message}"
+# 生产必需变量（与 packages/shared/src/services.ts 的 REQUIRED_SERVICE_URLS_IN_PROD 对齐）
+REQ="\${REMOTE_REQUIRED_PROD_ENV:-AUTH_SERVICE_URL}"
+rssh() { ssh -i "\${RKEY}" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "\$@"; }
+
+FETCHTO="\${SYNC_FETCH_TIMEOUT:-300}"
+if rssh "\${RUSER}@\${PUBLISH_HOST}" "RROOT='\${RROOT}' BRANCH='\${BRANCH}' DIR='\${DIR}' PKGS='\${PKGS}' REQ='\${REQ}' FETCHTO='\${FETCHTO}' bash -s" <<'EOS'
+set -uo pipefail
+sdie() { echo "[sync-remote] \$*" >&2; exit 1; }
+cd "\$RROOT" || sdie "目标机仓库根不存在：\$RROOT"
+
+# ── ① 目标机代码对齐发布分支（不 clean：版本目录等未跟踪文件必须保留）──
+echo "[sync-remote] 目标机原状态：\$(git rev-parse --short HEAD 2>/dev/null) @ \$(git branch --show-current 2>/dev/null)"
+# git 远端加固（2026-09-23 实测：不加这几项会"看起来卡住"）：
+#   - GIT_TERMINAL_PROMPT=0：绝不交互提问 —— heredoc 已占用 stdin，一旦提问就是静默挂死
+#   - GIT_SSH_COMMAND：BatchMode + ConnectTimeout，宁可快失败也不要干等
+#   - timeout + --progress：给明确死线，并**保留进度输出**（否则日志长时间空着，误判为卡死）
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+T0=\$(date +%s)
+if ! timeout "\$FETCHTO" git fetch --prune --progress origin; then
+  sdie "git fetch 失败或超时（\${FETCHTO}s）—— 检查目标机 github 凭据与网络"
+fi
+echo "[sync-remote] fetch 完成（耗时 \$(( \$(date +%s) - T0 ))s）"
+git checkout -B "\$BRANCH" "origin/\$BRANCH" >/dev/null 2>&1 || sdie "git checkout -B \$BRANCH 失败"
+git reset --hard "origin/\$BRANCH" >/dev/null 2>&1 || sdie "git reset --hard 失败"
+echo "[sync-remote] 目标机代码已对齐：\$(git rev-parse --short HEAD) @ \$BRANCH（未 clean）"
+
+# ── ② .env 必需变量前置校验（production 才校验）──
+ENVF="\$RROOT/servers/\$DIR/.env"
+if [ -f "\$ENVF" ]; then
+  NENV="\$(sed -n 's/^NODE_ENV=//p' "\$ENVF" | head -1 | tr -d '\r')"
+  if [ "\$NENV" = "production" ]; then
+    for k in \$REQ; do
+      # 注意：这里必须写成 \${k}（JS 模板里是 \\\${k}），写成 \\\$k 会被 bash 当字面 \$ 而
+      # sed 永远匹配不到 → 假阴性（2026-09-23 实际踩到：明明配了却报"缺少必需变量"）
+      v="\$(grep -m1 "^\${k}=" "\$ENVF" | cut -d= -f2- | tr -d '\r')"
+      [ -n "\$v" ] || sdie "\$DIR/.env 缺少生产必需变量 \$k —— 新产物会启动即退（fail-fast）；请在目标机 .env 显式配置后重发（本次不换 dist、不重启）"
+    done
+    echo "[sync-remote] .env 必需变量校验通过：\$REQ"
+  else
+    echo "[sync-remote] NODE_ENV=\${NENV:-未设置}，跳过必需变量校验"
+  fi
+else
+  echo "[sync-remote] [WARN] 未找到 \$ENVF，跳过必需变量校验"
+fi
+
+# ── ③ workspace 包按指纹重建（指纹未变则跳过；服务运行时 require 这些包）──
+# 指纹口径 = lock + 各包 **src 与 package.json**。
+# 刻意不含 dist/、tsbuildinfo：它们是构建产物，算进去会导致"构建→指纹变→再构建"的自我触发
+#（2026-09-23 实际踩到：整目录 tar 让第二次运行仍判定变化）。
+FP_FILE="\$RROOT/.deps-fingerprint"
+SRC_PATHS=""
+for p in \$PKGS; do
+  [ -d "\$RROOT/packages/\$p/src" ] && SRC_PATHS="\$SRC_PATHS \$p/src"
+  [ -f "\$RROOT/packages/\$p/package.json" ] && SRC_PATHS="\$SRC_PATHS \$p/package.json"
+done
+FP="\$( { cat "\$RROOT/pnpm-lock.yaml" 2>/dev/null; tar -cf - -C "\$RROOT/packages" \$SRC_PATHS 2>/dev/null; } | md5sum | awk '{print \$1}' )"
+OLD="\$(cat "\$FP_FILE" 2>/dev/null || echo none)"
+if [ "\$FP" = "\$OLD" ]; then
+  echo "[sync-remote] 依赖指纹未变（\$FP），跳过包重建"
+else
+  echo "[sync-remote] 依赖指纹变化（\$OLD → \$FP），重建 workspace 包：\$PKGS"
+  for p in \$PKGS; do
+    [ -d "\$RROOT/packages/\$p" ] || { echo "[sync-remote] 跳过不存在的包：\$p"; continue; }
+    echo "[sync-remote] pnpm --filter ./packages/\$p build"
+    if ! pnpm --filter "./packages/\$p" build >"/tmp/deps-\$p.log" 2>&1; then
+      echo "[sync-remote] --- \$p 构建日志尾部 ---"
+      tail -15 "/tmp/deps-\$p.log" >&2 || true
+      sdie "workspace 包重建失败：\$p（未换 dist、未重启）"
+    fi
+  done
+  echo "\$FP" > "\$FP_FILE"
+  echo "[sync-remote] 包重建完成，指纹已写入 \$FP_FILE"
+fi
+EOS
+then
+  echo "[sync-remote] 目标机代码与依赖同步完成"
+  exit 0
+fi
+
+# 必须检查 ssh 退出码：早期版本忘了检查，远端 fail-fast 却仍打印"同步完成"
+# → 后面的 restart 会在「旧依赖 + 新产物」上撞车（2026-09-23 同类 bug 在 verify 上也出现过）。
+echo "[sync-remote] 失败：目标机代码/依赖同步未通过（见上方 [sync-remote] 输出）—— 本次不换 dist、不重启" >&2
+exit 1
+`;
 
 const RESTART_SCRIPT = `#!/usr/bin/env bash
 # 发布流水线 · restart（后端，远端）：目标机 版本目录 → dist + pm2 重启；失败回滚 dist。
@@ -274,7 +399,7 @@ async function main() {
   if (!DRY_RUN && !ROLLBACK) {
     console.log('将变更的行（按 Q4：动库前先打印）：');
     for (const m of MODULES) {
-      console.log(`  + ${m}: 新增/更新动作「${RESTART_NAME}」「${VERIFY_NAME}」`);
+      console.log(`  + ${m}: 新增/更新动作「${SYNC_NAME}」「${RESTART_NAME}」「${VERIFY_NAME}」`);
     }
     console.log('');
   }
@@ -310,51 +435,61 @@ async function main() {
     const [existing] = await conn.query('SELECT id, name, script, sort FROM deploy_pipeline_actions WHERE task_id = ?', [
       taskId,
     ]);
-    let baseSort = existing.reduce((mx, r) => Math.max(mx, Number(r.sort) || 0), 0);
 
-    for (const [name, script] of [
-      [RESTART_NAME, RESTART_SCRIPT],
-      [VERIFY_NAME, VERIFY_SCRIPT],
+    // 顺序固定：发布(0) → write-version(1) → sync(5) → restart(11) → verify(21)。
+    // sync 必须在 restart **之前**（先让目标机代码/依赖与服务产物同源，再换 dist）；
+    // 已存在的行若 sort 漂移也一并纠正，保证顺序语义不靠人工维护。
+    for (const [name, script, sort] of [
+      [SYNC_NAME, SYNC_SCRIPT, 5],
+      [RESTART_NAME, RESTART_SCRIPT, 11],
+      [VERIFY_NAME, VERIFY_SCRIPT, 21],
     ]) {
       assertBashSyntax(script, `${tpl}/${name}`);
       const cur = existing.find((r) => r.name === name);
       if (cur) {
-        if (cur.script === script) {
+        const drift = Number(cur.sort) !== sort;
+        if (cur.script === script && !drift) {
           console.log(`- ${tpl} / dev: 「${name}」已是最新，跳过`);
           skipped++;
           continue;
         }
-        console.log(`- ${tpl} / dev: 更新「${name}」正文`);
+        console.log(`- ${tpl} / dev: 更新「${name}」${drift ? `（sort ${cur.sort} → ${sort}）` : '正文'}`);
         changed++;
         if (!DRY_RUN) {
-          await conn.query('UPDATE deploy_pipeline_actions SET script = ?, updated_by = ?, updated_at = NOW() WHERE id = ?', [
-            script,
-            'p26',
-            cur.id,
-          ]);
+          await conn.query(
+            'UPDATE deploy_pipeline_actions SET script = ?, sort = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+            [script, sort, 'p26', cur.id],
+          );
         }
       } else {
-        baseSort += 10;
-        console.log(`- ${tpl} / dev: 新增「${name}」（sort=${baseSort}）`);
+        console.log(`- ${tpl} / dev: 新增「${name}」（sort=${sort}）`);
         changed++;
         if (!DRY_RUN) {
           await conn.query(
             'INSERT INTO deploy_pipeline_actions (id, task_id, name, script, managed, sort, enabled, updated_by, created_at, updated_at) ' +
               'VALUES (?, ?, ?, ?, 0, ?, 1, ?, NOW(), NOW())',
-            [crypto.randomUUID(), taskId, name, script, baseSort, 'p26'],
+            [crypto.randomUUID(), taskId, name, script, sort, 'p26'],
           );
         }
       }
     }
 
-    // 顺序提示：restart / verify 必须排在「发布」之后
+    // 顺序自检：发布 → sync → restart → verify（顺序错了会「先换 dist 再对齐依赖」，等于没修）
+    // DRY_RUN 下没写库，跳过该校验（否则会误报 sync=NaN）
+    if (DRY_RUN) continue;
     const [after] = await conn.query('SELECT name, sort FROM deploy_pipeline_actions WHERE task_id = ? ORDER BY sort', [
       taskId,
     ]);
+    const sortOf = (n) => Number(after.find((r) => r.name === n)?.sort ?? NaN);
     const release = after.find((r) => r.name === '发布' || r.name.startsWith('发布'));
-    const restart = after.find((r) => r.name === RESTART_NAME);
-    if (release && restart && Number(restart.sort) < Number(release.sort)) {
-      throw new Error(`${tpl}: restart 排在「发布」之前（sort ${restart.sort} < ${release.sort}），拒绝`);
+    const sSync = sortOf(SYNC_NAME);
+    const sRestart = sortOf(RESTART_NAME);
+    const sVerify = sortOf(VERIFY_NAME);
+    if (release && sRestart < Number(release.sort)) {
+      throw new Error(`${tpl}: restart 排在「发布」之前，拒绝`);
+    }
+    if (!(sSync < sRestart && sRestart < sVerify)) {
+      throw new Error(`${tpl}: 动作顺序不合法（sync=${sSync} restart=${sRestart} verify=${sVerify}），拒绝`);
     }
   }
 
