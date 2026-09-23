@@ -15,15 +15,30 @@
 #   6. 复检：/console/ 200 + /api/apps 存活 + 崩溃循环检测
 #
 # 用法：
-#   ./scripts/publish-deploy-console.sh                  # 工作区构建 → 复制 → 重启 → 复检
+#   ./scripts/publish-deploy-console.sh                  # 工作区构建 → 复制 → 重启 → 复检（本机）
+#   ./scripts/publish-deploy-console.sh --env dev        # 工作区构建 → 打包 → 远端备份换 dist → 远端重启 → 探活
+#   ./scripts/publish-deploy-console.sh --env dev --skip-build   # 已构建过：只走远端投递
 #   ./scripts/publish-deploy-console.sh --skip-build     # 已构建过：只复制 + 重启
 #   ./scripts/publish-deploy-console.sh --skip-health    # 跳过复检
 #   ./scripts/publish-deploy-console.sh --from-release   # 旧路径：在发布目录同步分支并构建
 #   ./scripts/publish-deploy-console.sh --from-release --branch master
 #
 # 环境变量：
-#   RELEASE_DIR  发布目录（运行位置，默认 ~/web_system_release）
+#   RELEASE_DIR  发布目录（运行位置，默认 ~/web_system_release；仅 --env local 用）
 #   DRY_RUN=1    只打印不执行
+#
+# --env dev|prod（远端）说明：
+#   控制台是发布工具自身，不能走流水线，远端升级只能传统发布。本脚本把
+#   「本机构建 → 打包 dist → scp → 远端备份 → 替换 → 重启 → 探活 → 失败自动回滚」
+#   固化成一条命令；并内建 2026-09-23 实测踩到的两个**远端前置条件**：
+#     ① 远端 servers/deploy-console/.env 必须有 JWT_SECRET（IAM 一期后无默认兜底，
+#        缺失 → 启动即抛 → pm2 崩溃循环（restarts 达 880））；
+#     ② 远端控制台库 deploy_pipelines 的 (module_key, name) 必须唯一
+#        （新唯一索引 uq_tpl_module_name）；历史空名行会让 TypeORM synchronize 失败，
+#        新进程起不来 —— 本脚本检测到即**先中止**并打印修法，不动线上。
+#
+#   目标机来源：scripts/.env.deploy 的 <ENV>_SERVER / _USER / _REMOTE_DIR / _PUBLIC_URL
+#   （_KEY 可选，仅部分环境配了）；远端 pm2 名按候选链 web-deploy-console → deploy-console 解析。
 # ============================================================
 set -uo pipefail
 
@@ -36,15 +51,19 @@ SKIP_BUILD=0
 SKIP_HEALTH=0
 FROM_RELEASE=0
 BRANCH_OPT=""
+ENV_OPT="local"
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build)  SKIP_BUILD=1; shift ;;
     --skip-health) SKIP_HEALTH=1; shift ;;
     --from-release) FROM_RELEASE=1; shift ;;
+    --env)         ENV_OPT="${2:-}"; [ -n "$ENV_OPT" ] || { echo "--env 缺少环境（local/dev/prod）" >&2; exit 2; }; shift 2 ;;
     --branch)      BRANCH_OPT="${2:-}"; [ -n "$BRANCH_OPT" ] || { echo "--branch 缺少分支名" >&2; exit 2; }; shift 2 ;;
-    *) echo "未知参数: ${1}（支持 --skip-build / --skip-health / --from-release / --branch <b>）" >&2; exit 2 ;;
+    *) echo "未知参数: ${1}（支持 --env <local|dev|prod> / --skip-build / --skip-health / --from-release / --branch <b>）" >&2; exit 2 ;;
   esac
 done
+case "$ENV_OPT" in local|dev|prod) : ;; *) echo "不支持的 --env: ${ENV_OPT}（支持 local/dev/prod）" >&2; exit 2 ;; esac
+FROM_RELEASE_ALLOWED="1"; [ "$ENV_OPT" = "local" ] || FROM_RELEASE_ALLOWED="0"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 step() { echo -e "${GREEN}[deploy-console]${NC} $1"; }
@@ -67,6 +86,61 @@ else
   step "源 = 工作区 ${ROOT}（分支 ${WS_BRANCH} @ ${WS_HEAD}，未提交 ${WS_DIRTY} 项）"
   step "运行位置 = ${RELEASE_DIR}"
   [ "$WS_DIRTY" = "0" ] || warn "工作区有 ${WS_DIRTY} 项未提交改动：产物来自工作区代码，未提交的改动也会进产物"
+fi
+
+# ---------- 0b. 远端（--env dev|prod）：目标机解析 + 前置条件 ----------
+R_SERVER=""; R_USER=""; R_DIR=""; R_URL=""; R_KEY=""; R_KEY_OPT=""; R_PM2=""
+rssh() { ssh $R_KEY_OPT -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$R_USER@$R_SERVER" "$@"; }
+rscp() { scp -q $R_KEY_OPT -o BatchMode=yes -o ConnectTimeout=10 "$@"; }
+
+if [ "$ENV_OPT" != "local" ]; then
+  [ "$FROM_RELEASE" != "1" ] || err "--env ${ENV_OPT} 不支持 --from-release（远端发布一律在工作区构建后投递产物）"
+  ENV_FILE="$ROOT/scripts/.env.deploy"
+  [ -f "$ENV_FILE" ] || err "缺少 ${ENV_FILE}（远端地址来源）"
+  set -a; . "$ENV_FILE"; set +a
+  ENV_UC="$(echo "$ENV_OPT" | tr '[:lower:]' '[:upper:]')"
+  eval "R_SERVER=\"\${${ENV_UC}_SERVER:-}\""
+  eval "R_USER=\"\${${ENV_UC}_USER:-}\""
+  eval "R_DIR=\"\${${ENV_UC}_REMOTE_DIR:-}\""
+  eval "R_URL=\"\${${ENV_UC}_PUBLIC_URL:-}\""
+  eval "R_KEY=\"\${${ENV_UC}_KEY:-}\""
+  [ -n "$R_SERVER" ] && [ -n "$R_USER" ] && [ -n "$R_DIR" ] \
+    || err "scripts/.env.deploy 缺少 ${ENV_UC}_SERVER / _USER / _REMOTE_DIR"
+  [ -z "$R_KEY" ] || [ -f "$R_KEY" ] || err "${ENV_UC}_KEY 指向的密钥文件不存在: $R_KEY"
+  [ -z "$R_KEY" ] || R_KEY_OPT="-i $R_KEY"
+  step "目标 = ${R_USER}@${R_SERVER}:${R_DIR}（env=${ENV_OPT}${R_URL:+，${R_URL}}）"
+
+  dry "SSH 连通性检查" || rssh "echo ok" >/dev/null 2>&1 || err "SSH 连不上 ${R_USER}@${R_SERVER}（需免密登录；确认 .env.deploy 与密钥）"
+  dry "远端目录检查" || rssh "test -f ${R_DIR}/servers/deploy-console/.env -a -d ${R_DIR}/apps/deploy-console" \
+    || err "远端缺 ${R_DIR}/servers/deploy-console/.env 或 ${R_DIR}/apps/deploy-console（先完成该环境初始化）"
+
+  # 前置 ①：JWT_SECRET（IAM 一期后无默认兜底；缺失 → 启动即抛 → pm2 崩溃循环，2026-09-23 实测）
+  if ! dry "检查远端 JWT_SECRET"; then
+    rssh "grep -q '^JWT_SECRET=' ${R_DIR}/servers/deploy-console/.env" || err "远端 ${ENV_OPT} 的 servers/deploy-console/.env 缺 JWT_SECRET：
+  控制台升级后会启动即崩（pm2 崩溃循环）。与同机 auth-service 同值补上（不打印值）：
+    ssh ${R_USER}@${R_SERVER} 'v=\$(grep -m1 \"^JWT_SECRET=\" ${R_DIR}/servers/auth-service/.env | cut -d= -f2-); printf \"JWT_SECRET=%s\\n\" \"\$v\" >> ${R_DIR}/servers/deploy-console/.env'"
+  fi
+
+  # 前置 ②：控制台库模板名唯一（新唯一索引 uq_tpl_module_name(moduleKey,name)；
+  #        历史空名行会让 TypeORM synchronize 失败 → 新进程起不来。检测到先中止，不动线上）
+  if ! dry "检查远端 deploy_pipelines 模板名唯一性"; then
+    DUP="$(rssh 'cd '"${R_DIR}"'/servers/deploy-console && \
+      H=$(grep -m1 "^MYSQL_HOST=" .env | cut -d= -f2-); P=$(grep -m1 "^MYSQL_PORT=" .env | cut -d= -f2-); \
+      U=$(grep -m1 "^MYSQL_USER=" .env | cut -d= -f2-); W=$(grep -m1 "^MYSQL_PASSWORD=" .env | cut -d= -f2-); D=$(grep -m1 "^MYSQL_DB=" .env | cut -d= -f2-); \
+      MYSQL_PWD="$W" mysql -h "$H" -P "${P:-3306}" -u "$U" "$D" -N -e \
+      "SELECT CONCAT(module_key,\" | \",IFNULL(name,\"NULL\"),\" | \",COUNT(*)) FROM deploy_pipelines GROUP BY module_key,name HAVING COUNT(*)>1"' 2>/dev/null | tr -d '\r')"
+    [ -z "$DUP" ] || err "远端控制台库存在同模块同名模板（新唯一索引会建不上 → 新进程起不来）：
+$(printf '%s\n' "$DUP" | sed 's/^/    /')
+  修法（先备份该表，再把空名回填为模块内唯一）：
+    ssh ${R_USER}@${R_SERVER} 'cd ${R_DIR}/servers/deploy-console && H=\$(grep -m1 \"^MYSQL_HOST=\" .env|cut -d= -f2-) && P=\$(grep -m1 \"^MYSQL_PORT=\" .env|cut -d= -f2-) && U=\$(grep -m1 \"^MYSQL_USER=\" .env|cut -d= -f2-) && W=\$(grep -m1 \"^MYSQL_PASSWORD=\" .env|cut -d= -f2-) && D=\$(grep -m1 \"^MYSQL_DB=\" .env|cut -d= -f2-) && MYSQL_PWD=\$W mysqldump -h \$H -u \$U \$D deploy_pipelines > /tmp/deploy_pipelines.bak.sql && MYSQL_PWD=\$W mysql -h \$H -P \${P:-3306} -u \$U \$D -e \"UPDATE deploy_pipelines p JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY module_key ORDER BY created_at,id) rn FROM deploy_pipelines WHERE name=\x27\x27) t ON t.id=p.id SET p.name=IF(t.rn=1,\x27默认\x27,CONCAT(\x27默认 #\x27,t.rn)) WHERE p.name=\x27\x27;\"'"
+  fi
+
+  # 远端 pm2 名（候选链：仓库 ecosystem 用 web-deploy-console，实测 dev 用短名 deploy-console）
+  R_PM2="$(rssh "pm2 jlist 2>/dev/null | python3 -c \"import sys,json
+ns=[p['name'] for p in json.load(sys.stdin)]
+print(next((n for n in ['web-deploy-console','deploy-console'] if n in ns), ''))\"" 2>/dev/null | tr -d '\r\n')"
+  [ -n "$R_PM2" ] || err "远端 pm2 里找不到控制台进程（web-deploy-console / deploy-console）"
+  step "远端 pm2 进程名 = ${R_PM2}"
 fi
 
 # ---------- 1. 构建 ----------
@@ -106,6 +180,99 @@ if [ "$SKIP_BUILD" != "1" ]; then
   fi
 else
   step "跳过构建（--skip-build）"
+fi
+
+# ---------- 1b. 远端发布（--env dev|prod）：打包 → 投递 → 备份替换 → 重启 → 探活 → 失败回滚 ----------
+remote_restarts() {
+  rssh "pm2 jlist 2>/dev/null | python3 -c \"
+import sys,json
+for p in json.load(sys.stdin):
+  if p['name']=='${R_PM2}': print(p['pm2_env'].get('restart_time',''))\"" 2>/dev/null | tr -d '\r\n'
+}
+
+rollback_remote() {
+  local BAK
+  BAK="$(rssh 'cat /tmp/dc-last-bak 2>/dev/null' 2>/dev/null | tr -d '\r\n')"
+  warn "回滚到发布前的 dist（dist.bak-${BAK:-未知}）..."
+  rssh "set -e; cd ${R_DIR}; TS=\$(cat /tmp/dc-last-bak); \
+    rm -rf servers/deploy-console/dist apps/deploy-console/dist; \
+    mv servers/deploy-console/dist.bak-\${TS} servers/deploy-console/dist; \
+    mv apps/deploy-console/dist.bak-\${TS} apps/deploy-console/dist; \
+    pm2 restart ${R_PM2} >/dev/null 2>&1; sleep 6; \
+    echo \"回滚后 /console/ = \$(curl -s -o /dev/null -w '%{http_code}' -m 6 http://127.0.0.1:6200/console/)\"" \
+    || err "回滚失败，请人工介入：ssh ${R_USER}@${R_SERVER}"
+}
+
+publish_remote() {
+  local TS PACK RES CODE API R1 R2
+  TS="$(date +%s)"; PACK="dc-dist-${TS}.tgz"
+  [ -f "$ROOT/servers/deploy-console/dist/main.js" ] || err "缺 servers/deploy-console/dist/main.js（先构建，或去掉 --skip-build）"
+  [ -f "$ROOT/apps/deploy-console/dist/index.html" ] || err "缺 apps/deploy-console/dist/index.html（先构建，或去掉 --skip-build）"
+
+  step "打包产物（后端 dist + 前端 dist）..."
+  # macOS(bsdtar) 默认写入 xattr/AppleDouble，远端 GNU tar 会刷一屏 "Ignoring unknown extended header"；
+  # 这里按平台能力关掉（不影响内容）。
+  local TAR_OPT=""
+  tar --no-xattrs -cf /dev/null /dev/null >/dev/null 2>&1 && TAR_OPT="--no-xattrs"
+  dry "tar ${TAR_OPT} czf /tmp/${PACK} -C ${ROOT} servers/deploy-console/dist apps/deploy-console/dist" \
+    || COPYFILE_DISABLE=1 tar $TAR_OPT -czf "/tmp/${PACK}" -C "$ROOT" servers/deploy-console/dist apps/deploy-console/dist || err "打包失败"
+
+  step "上传 → ${R_SERVER}:/tmp/${PACK} ..."
+  dry "scp /tmp/${PACK} → ${R_USER}@${R_SERVER}:/tmp/" \
+    || rscp "/tmp/${PACK}" "${R_USER}@${R_SERVER}:/tmp/" || err "上传失败"
+
+  step "远端备份现有 dist 并替换（备份 dist.bak-${TS}）..."
+  dry "远端备份 + 解包 + 清理旧备份（各留最近 2 份）" || rssh "set -e; cd ${R_DIR}; \
+    cp -a servers/deploy-console/dist servers/deploy-console/dist.bak-${TS}; \
+    cp -a apps/deploy-console/dist apps/deploy-console/dist.bak-${TS}; \
+    for d in servers/deploy-console apps/deploy-console; do \
+      ls -1dt \$d/dist.bak-* 2>/dev/null | tail -n +3 | xargs -r rm -rf; \
+    done; \
+    tar xzf /tmp/${PACK} -C ${R_DIR}; \
+    echo ${TS} > /tmp/dc-last-bak; \
+    rm -f /tmp/${PACK}" || err "远端替换失败（未重启，线上未变）"
+
+  step "远端重启 ${R_PM2} ..."
+  dry "pm2 restart ${R_PM2}" || rssh "pm2 restart ${R_PM2} >/dev/null 2>&1; sleep 3" || warn "远端重启调用失败（继续探活判定）"
+
+  if [ "$SKIP_HEALTH" = "1" ]; then
+    warn "跳过远端探活（--skip-health）：请自行确认 ${R_PM2} 状态"
+    return 0
+  fi
+
+  step "远端探活（/console/ 200 且 /api/apps 200|401；最多 100s）..."
+  RES="$(rssh 'c=000; for i in $(seq 1 25); do \
+      c=$(curl -s -o /dev/null -w "%{http_code}" -m 5 http://127.0.0.1:6200/console/ 2>/dev/null || echo 000); \
+      [ "$c" = "200" ] && break; sleep 4; done; \
+    a=$(curl -s -o /dev/null -w "%{http_code}" -m 6 http://127.0.0.1:6200/api/apps 2>/dev/null || echo 000); echo "$c $a"' 2>/dev/null | tr -d '\r')"
+  CODE="${RES%% *}"; API="${RES##* }"
+  step "远端 /console/ = ${CODE}，/api/apps = ${API}"
+
+  if [ "$CODE" = "200" ] && { [ "$API" = "200" ] || [ "$API" = "401" ]; }; then
+    # 崩溃循环检测：端口在、pm2 online，但进程秒级重启（DI 缺注册 / 配置错误 / 启动即抛）
+    R1="$(remote_restarts)"; sleep 5; R2="$(remote_restarts)"
+    if [ -n "$R2" ] && [ "$R1" != "$R2" ]; then
+      warn "远端进程 5s 内重启 ${R1}→${R2} 次（启动即崩），执行回滚..."
+      rollback_remote; return 1
+    fi
+    step "远端发布成功 ✓（pm2=${R_PM2}，restarts 稳定于 ${R2:-?}，发布前产物保留为 dist.bak-${TS}）"
+    if [ -n "$R_URL" ]; then
+      step "版本指针（${R_URL%/}）: $(curl -s -m 8 "${R_URL%/}/__manifest__" 2>/dev/null | tr -d '\n' | head -c 220)"
+    fi
+    return 0
+  fi
+
+  warn "远端探活未通过（/console/=${CODE} /api/apps=${API}）"
+  rssh "tail -30 ~/.pm2/logs/${R_PM2}-error.log 2>/dev/null | grep -vE '^\s+at ' | tail -12" 2>/dev/null || true
+  warn "已知成因：① 缺 JWT_SECRET；② 控制台库模板名重复（uq_tpl_module_name）；③ 其它启动期配置错误"
+  rollback_remote
+  return 1
+}
+
+if [ "$ENV_OPT" != "local" ]; then
+  publish_remote || err "远端发布失败（已尝试回滚到发布前版本）"
+  step "完成 ✓（env=${ENV_OPT}，源 ${WS_BRANCH} @ ${WS_HEAD}）"
+  exit 0
 fi
 
 # ---------- 2. 复制 dist 到运行位置 ----------
