@@ -457,3 +457,8 @@
 - 鉴权：未显式标注（按服务鉴权策略）
 - 入参：Body:body
 
+### GET /api/ai/tts/stream
+- 说明：流式文字转语音（边合成边下发）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Query:text、Query:codec
+

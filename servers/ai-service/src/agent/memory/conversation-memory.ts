@@ -29,6 +29,8 @@ export class ConversationMemory implements ConversationMemoryPort {
       content: m.content,
       ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
       ...(m.name ? { name: m.name } : {}),
+      // ChatMessage.ts 必填（历史回放日期线用）；老数据缺 ts 时回落到当前时间
+      ts: m.ts ?? Date.now(),
     }));
     return { summary: mem.summary, messages };
   }
