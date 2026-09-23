@@ -459,22 +459,26 @@ const SESS = {
   c4:{t:'供应商合同风险复查', a:'合同翻译官', time:'上周', dot:'mid', k:'contract'}
 };
 
+/* 顶栏只留「开始 / 对话 / 发现 / 实验室」（2026-09-23 反馈：顶栏太多）；
+   翻译 / 合翻收进「发现」能力卡片，顶栏不占位但高亮归「发现」 */
 const NAV = [
   {k:'welcome', n:'开始', i:I.home},
   {k:'chat', n:'对话', i:I.chat},
   {k:'discover', n:'发现', i:I.grid},
-  {k:'translate', n:'翻译', i:I.lang},
-  {k:'contract', n:'合翻', i:I.doc},
   {k:'lab', n:'实验室', i:I.flask}
 ];
+/* 顶栏未列出的能力页：顶栏高亮落到 parent 上（进入 /translate、/contract 时「发现」亮） */
+const NAV_PARENT = {translate:'discover', contract:'discover'};
 const LIST_TITLE = {welcome:'最近对话', chat:'会话', discover:'能力', translate:'翻译记录', contract:'体检记录', profile:'账号', lab:'实验功能'};
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
 function render(){
   // 顶部一级导航（2026-09-21 反馈：菜单上移顶栏，左栏只留记录列表）
+  // 2026-09-23：翻译 / 合翻收进发现，顶栏不占位，但高亮落到 parent（进入能力页时「发现」亮）
+  const act = NAV_PARENT[S.view] || S.view;
   document.getElementById('topnav').innerHTML = NAV.map(n=>
-    '<button class="'+(S.view===n.k?'on':'')+'" onclick="go(\''+n.k+'\')">'+SVG(n.i)+n.n+'</button>').join('');
+    '<button class="'+(act===n.k?'on':'')+'" onclick="go(\''+n.k+'\')">'+SVG(n.i)+n.n+'</button>').join('');
   // 左栏仅在有记录/信息语义的视图显示；入口网格视图（发现/实验室）隐藏，避免与中栏卡片重复
   document.getElementById('navSide').style.display = (S.view==='discover'||S.view==='lab')?'none':'flex';
   document.getElementById('lstTitle').textContent = LIST_TITLE[S.view]||'列表';
