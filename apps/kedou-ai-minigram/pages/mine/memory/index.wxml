@@ -1,5 +1,5 @@
 <!-- 用户记忆页：按事实/偏好/习惯分组，单条删除 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="tip">AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，跨会话记住。可单条删除。</view>
   <view class="loading" wx:if="{{loading}}">载入中…</view>
 

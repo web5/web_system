@@ -23,11 +23,16 @@ function formatTime(iso: string): string {
 
 Page({
   data: {
+    radiusClass: "",
     records: [] as HistoryRecord[],
     loading: false,
   },
 
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     this.loadRecords();
   },
 

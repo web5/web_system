@@ -137,6 +137,7 @@ function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
 
 Page({
   data: {
+    radiusClass: "",
     conversationId: '',
     chatMessages: [] as ChatMsg[],
     input: '',
@@ -194,6 +195,10 @@ Page({
    * 导航由「顶部返回 icon」与「输入区 + 菜单」承接。
    */
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/chat/index/index', selected: 0 });
     // 从「对话记录」点某条记录返回时，载入该会话

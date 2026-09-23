@@ -21,6 +21,7 @@ interface Recent {
 
 Page({
   data: {
+    radiusClass: "",
     quote: getDailyQuote(),
     /** 最近一次会话（最多展示一条）；null = 还没有任何会话 */
     recent: null as Recent | null,
@@ -34,6 +35,10 @@ Page({
    * selected = -1：tabBar 显示但不高亮任何一项。
    */
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     const tabBar = this.selectComponent('#tabbar') as any;
     if (tabBar) tabBar.setData({ currentPage: '/pages/welcome/index/index', selected: -1 });
     this.loadRecent();

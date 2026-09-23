@@ -1,4 +1,5 @@
 import { ensureLogin, isLoggedIn } from './services/auth';
+import { currentClass } from './utils/appearance';
 
 /**
  * 后端地址按运行环境切换：
@@ -23,6 +24,11 @@ App<IAppOption>({
       wx.setStorageSync('api_base', this.globalData.apiBase);
     } catch {}
     this.autoLogin();
+  },
+
+  /** 圆角风格：当前页面根节点应叠加的 class（各页 onShow 调用，口径 specs/radius-style-dual §4.2） */
+  radiusClassOf() {
+    return currentClass();
   },
 
   /** 启动时自动登录（已有 token 则跳过，避免覆盖本地测试 token） */

@@ -32,4 +32,6 @@ interface IAppOption {
     /** 变变：AI 生成结果 base64 */
     bianbianResult?: string;
   };
+  /** 圆角风格：当前页面根节点应叠加的 class（各页 onShow 调用；口径 specs/radius-style-dual §4.2） */
+  radiusClassOf(): string;
 }

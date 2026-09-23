@@ -3,7 +3,14 @@
  * 一键上传合同，AI 识别风险
  */
 Page({
-  data: {},
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
+  data: {
+    radiusClass: "",},
 
   goUpload() {
     wx.navigateTo({

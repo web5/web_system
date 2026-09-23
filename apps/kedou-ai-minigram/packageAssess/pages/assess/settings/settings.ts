@@ -1,6 +1,13 @@
 // 合同评估业务设置（只影响合同评估功能）
 Page({
+  onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+  },
+
   data: {
+    radiusClass: "",
     contractType: '采购',
     strict: '标准',
     riskCount: 2,

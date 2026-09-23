@@ -1,5 +1,5 @@
 <!-- 生词本：译文快照卡片（英文 + 原文 + 注解 + meta），点 × 删除 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <view class="tip">你收藏的译文会一直保留在这里，即使原对话删除。</view>
   <view class="loading" wx:if="{{loading}}">载入中…</view>
 

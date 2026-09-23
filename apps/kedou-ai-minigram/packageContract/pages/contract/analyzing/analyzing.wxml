@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 解读中 -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 转圈（唯一总 loading） -->
   <view class="ring-wrap">
     <view class="ring"></view>

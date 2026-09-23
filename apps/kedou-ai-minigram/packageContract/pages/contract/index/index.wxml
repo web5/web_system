@@ -1,5 +1,5 @@
 <!-- 科豆 AI - 首页（按 v5 原型稿还原：渐变品牌区 + 双入口卡 + 场景科普） -->
-<view class="page">
+<view class="page {{radiusClass}}">
   <!-- 品牌区 -->
   <view class="home-hero">
     <view class="home-logo">🛡️ 科豆 AI</view>

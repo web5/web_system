@@ -15,12 +15,17 @@ const CATEGORY_TITLE: Record<string, string> = {
 
 Page({
   data: {
+    radiusClass: "",
     loading: true,
     empty: false,
     groups: [] as Array<{ category: string; title: string; items: MemoryItem[] }>,
   },
 
   onShow() {
+    const __app = getApp<IAppOption>();
+    const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
+    if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+
     void this.load();
   },
 
