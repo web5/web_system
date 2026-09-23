@@ -168,3 +168,54 @@ mysqldump <db> <table> > ~/backups/<table>.bak-$(date +%Y%m%d-%H%M).sql
 > 相关文档：`docs/development/local-release-runbook.md`（发布与登录前置条件、事故 §4.10）、
 > `docs/development/dev-env-config-inventory.md`（配置对账表与判定规则）、
 > `specs/backend-consolidation/design.md`（A/C 系列任务表与进度行）。
+
+---
+
+## 8. 续作记录（2026-09-23 晚间 · 流水线连线议题）
+
+### 8.1 §0 自检结果（本会话实测）
+
+| 项 | 结果 |
+|---|---|
+| DEV 175.27.189.123 | ✅ SSH OK，13 个 pm2 进程，`dev.kedouai.com/console/` 200 |
+| PROD 106.52.176.246 | ✅ SSH OK |
+| LIGHTHOUSE 101.43.117.234 | ❌ `Permission denied (publickey)` —— 仍缺密钥/用户登记 |
+| 本机控制台 6200 | ✅ 200（6200 占用者 == pm2 pid） |
+| 开放 PR | #146（kedou-ai-minigram 文档）、#147（本议题） |
+
+### 8.2 A6 的真实根因（重要，别再只盯"指针没切"）
+
+已核实的事实链：
+
+1. A6 产物**已投递**：dev 磁盘 `servers/gateway/public/static/modules/admin/dev/3d5ce61/` 存在，公网 200。
+2. 版本记录**已写**：`deploy_versions` 有 `env=dev, component=admin, version_tag=admin-dev/3d5ce61`（active，09-23 14:08）。
+3. manifest 里 admin 仍是 `default/f05e12e`。
+4. **dev gateway 跑在 NEW 读取源**：日志 `manifest 读取源 = NEW（deploy_sites / deploy_envs / deploy_apps / deploy_app_env_versions）`；
+   而 `deploy_app_env_versions` **0 行**（NEW 域未初始化）→ 改 `deploy_deployments`（LEGACY 指针）**不生效**（本会话已试：改成 `admin-dev/3d5ce61` 后 manifest 无变化，重启 gateway 也无变化）。
+5. NEW 模式下固定入口 `/static/modules/admin/dev/index.js` 当前 **404**（磁盘指针也没换）。
+
+结论：**A6 必须走 dev 控制台 UI「版本部署 → admin → 3d5ce61 → 部署」**（会写 NEW 表 + 换磁盘指针）。
+卡点：dev 控制台登录 —— `admin/admin123` 直连 dev auth-service 是 **401**，且**不能重置密码**（业务库 dev/prod 共用，改 `users` 会同时影响 prod）。
+
+⚠️ 衍生影响：**dev 上所有微前端模块的版本切换目前都不生效**（portal 同样是 `default/f05e12e`），不是 admin 独有。要么初始化 NEW 域（sites/envs/apps/app_env_versions），要么把 dev gateway 切回 `DEPLOY_LEGACY_READ=1` —— 需用户决策。
+
+### 8.3 dev/prod 共用库（复核属实）
+
+dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）→ 同一实例。
+**任何对 dev 业务库的写都作用于 prod**。控制台库 `web_system_deploy` 只有 dev 行、prod 未跑 deploy-console → 控制台库不共用。
+（本会话仅做只读核对，未做任何写操作。）
+
+### 8.4 本议题产出（已发 PR #147）
+
+- 连线着色规则定稿：`specs/pipeline-flow-color/design.md` §2.5（边色 = 目标节点色；L2 竖线按转折点分段；层序灰先彩后；坐标取整 + 圆帽 + 拐点补圆）
+- 连线绘制抽公共 util：`specs/pipeline-wires-util/design.md` + `apps/deploy-console/src/utils/pipelineWires.ts`（编辑页/详情页共用）
+- 原型八场景演示：`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`
+- 本地 release 已发布并实测：#3373（成功·命中 dev）绿主干 + 灰跳过支线；#1984（失败）红主干 + 橙审批边；编辑页中性橙连线 + 「＋」按钮
+
+### 8.5 待用户（本会话无法推进）
+
+1. dev 控制台 admin 密码 → A6 收尾
+2. LIGHTHOUSE SSH 用户/密钥
+3. 共用库处置口径（建议：先加"改 dev 业务库 = 改 prod"护栏，拆库排到正式运营前）
+4. dev 微前端指针走 NEW 域初始化还是切回 LEGACY（§8.2 衍生项）
+5. PR #147 的 quality-gate 需人工批准运行（PAT 无 `actions:write`）
