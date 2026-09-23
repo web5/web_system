@@ -90,6 +90,8 @@ function stepAgg(step: OrchestrationStep): AggState {
 /* ── 连线：与编辑页 OrchestrationEditor 同构的 SVG 测量式连线 ──
  * 原型稿 pipeline-env-branch-canvas.html：连线画在**任务行** —— 主线从前一列任务中线引出，
  * 列间分叉竖线，横线 + 箭头指向下一列每个任务的中线；走过路径（前一步骤聚合成功）绿色高亮。
+ * 着色判据（2026-09-23 修，规格 pipeline-task-status §4.2）：主线 / 竖线看**进入侧步骤**
+ * 是否终态 succeeded；支线看**目标任务自身**是否 succeeded —— 未到环节一律灰，不提前变绿。
  * 2026-09-22：按原型稿把详情页从「步骤卡间 CSS 短线」改成此结构（用户反馈连线始终没对准）。 */
 const canvasBody = ref<HTMLElement | null>(null)
 const wires = ref<SVGSVGElement | null>(null)
@@ -141,6 +143,8 @@ function drawWires() {
     const toTasks = [...cols[i + 1].querySelectorAll('.orch-task')]
     if (!fromTasks.length || !toTasks.length) continue
     const from = fromTasks[0] // 与编辑页一致：前列第一个任务的中线引出主线
+    // 走过路径 = 进入侧（前一列）步骤聚合终态 succeeded（规格 pipeline-task-status §4.2）；
+    // 待审批 / 执行中 / 未执行都不算走过 → 灰。
     const ok = !!orch.value && stepAgg(orch.value[i]) === 'succeeded'
     const f = center(from, wrap)
     const t0 = center(toTasks[0], wrap)
@@ -152,16 +156,23 @@ function drawWires() {
       chevron(t0.left, f.cy, ok)
     } else {
       const ys = toTasks.map((t) => center(t, wrap).cy)
-      // 分叉竖线：目标分支里存在 skipped（未执行）→ 整段灰（原型规则，用户 2026-09-22）
+      // 分叉竖线：进入侧走过、且目标分支里无 skipped，才整段绿（原型规则，用户 2026-09-22）
       const vok = ok && !toTasks.some((t) => t.classList.contains('st-skipped'))
       seg(midX, Math.min(f.cy, ...ys), midX, Math.max(f.cy, ...ys), vok)
-      // 支线按目标任务状态着色：succeeded → 绿；skipped → 灰
-      for (const t of toTasks) {
+      // 支线（横线 + 箭头）按**目标任务自身状态**着色：仅 succeeded → 绿；
+      // 未执行 / 待审批 / 执行中 / 失败 / 跳过一律灰。
+      // 2026-09-23 修：此前写成「非 skipped 即绿」，而未执行的类是 `st-`（空状态）、
+      // 既不等于 skipped 也不是 succeeded → 尚未进入的环节箭头提前变绿。
+      const toStep = orch.value?.[i + 1]
+      toTasks.forEach((t, ti) => {
         const c = center(t, wrap)
-        const tok = !t.classList.contains('st-skipped')
+        const tt = toStep?.tasks?.[ti]
+        // 快照与 DOM 数量不一致时（理论不发生）退化为按 DOM 状态类判断
+        const tok =
+          toStep && tt ? taskStateOf(toStep, tt) === 'succeeded' : t.classList.contains('st-succeeded')
         seg(midX, c.cy, c.left, c.cy, tok)
         chevron(c.left, c.cy, tok)
-      }
+      })
     }
   }
 }
@@ -252,7 +263,8 @@ function isWatchdog(s: string) {
     <!-- 编排画布（新引擎实例，与编辑页同构 · 原型 baa40e5）：单 grid 一列 = 步骤卡 + 该列
          任务卡（同列同宽）；步骤标题卡中性（无序号，编辑页 step-title 即如此）；序号在
          任务卡左侧竖条（编辑页 task-node .seq 同款，状态色填充顶到卡边）；连线 = SVG 测量
-         （任务卡中线），主线按前一步骤聚合状态、支线/竖线按目标任务状态（skipped → 灰） -->
+         （任务卡中线），主线/竖线按进入侧步骤聚合状态、支线按目标任务自身状态
+         （仅 succeeded 绿，未执行/待审批/跳过一律灰） -->
     <div v-if="orch?.length" class="orch-canvas">
       <div class="canvas-body" ref="canvasBody">
         <svg class="wires" ref="wires"></svg>
