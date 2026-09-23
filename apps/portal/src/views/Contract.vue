@@ -416,6 +416,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import { getConversation, runAgentStream } from '@/api/agent';
+import { useConversationStore } from '@/stores/conversations';
 import { readFileAsBase64, recognizeOcr } from '@/api/ocr';
 import {
   healthScore,
@@ -480,6 +481,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
 
 const ctx = useContextPanel();
 const route = useRoute();
+const store = useConversationStore();
 
 let controller: ReturnType<typeof runAgentStream> | null = null;
 let askController: ReturnType<typeof runAgentStream> | null = null;
@@ -651,6 +653,8 @@ function startAnalyze() {
         report.value = parseContractReport(raw);
         step.value = 'result';
         controller = null;
+        // 刷新左栏「体检记录」：本次工具会话已落库（后端异步标 source/agentId，故放在流结束后刷）
+        void store.load({ source: 'tool', agentId: 'contract-risk' });
       },
       onError(err) {
         failMsg.value = err.message || '网络波动或模型超时';
