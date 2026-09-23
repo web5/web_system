@@ -205,7 +205,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
-import { splitSpeakParts, speakSequence, stopTts as stopAudio } from '@/api/tts';
+import { speak as speakText, stopTts as stopAudio } from '@/api/tts';
 import { collectGlossary } from '@/api/glossary';
 import {
   parseAnswer,
@@ -413,9 +413,8 @@ function stopTts() {
 }
 
 /**
- * 朗读：走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色）。
- * 切块为「首句 + 剩余整段」两块（specs/tts-continuity/design.md）：首句 ~2s 出声，
- * 剩余整段由服务端一次合成，接缝只落在句末标点处；后续块在上一块播放期间预取。
+ * 朗读：优先走流式（服务端一次连续合成、端侧边收边播，首包约 0.6s 且全程无接缝）；
+ * 流式不可用时自动回退整段方案（specs/tts-continuity/design.md §10）。
  */
 async function speak(mId: string, text: string) {
   const t = (text || '').trim();
@@ -427,12 +426,9 @@ async function speak(mId: string, text: string) {
   }
   stopTts(); // 顶掉上一个朗读
 
-  const chunks = splitSpeakParts(t);
-  if (!chunks.length) return;
-
   reading.value = { id: mId, phase: 'loading' };
   try {
-    await speakSequence(chunks, {
+    await speakText(t, {
       // 中途被停止 / 被顶掉 → 流水线静默退出
       isActive: () => reading.value?.id === mId,
       onPhase: (phase) => {
