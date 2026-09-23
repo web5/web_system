@@ -73,7 +73,12 @@
 | 交互 | `a-radio-group button-style="solid"`（与「基本信息-性别」行同款，portal 唯一在用的分段控件） |
 | 状态 | 新增偏好 store（Pinia + `persist` localStorage，照 `stores/user.ts` 的 `user-store` 模式），key 建议 `ui-prefs` |
 | 应用 | 根节点写 `data-radius`；portal **目前无任何主题层**，需新建写入器（启动 + 切换时） |
-| 样式 | 追加到 `Profile.vue` `<style scoped>` 末尾（现结束于第 739 行），仅新增 `.form-hint` |
+| 样式 | `Profile.vue` `<style scoped>` 新增 `.form-hint`（走 `var(--ws-text-tertiary)`，无裸色值） |
+| **antd 圆角** | `App.vue` 的 ConfigProvider `theme` 由硬编码常量改为 computed：按 `uiPrefs.radiusStyle` 取 `uiTokens.radiusStyle[...]` 的 control/card/chip → `borderRadius` / `borderRadiusLG` / `borderRadiusSM`（§4.3 同一坑）。**只覆盖圆角 token**，其余保持 portal 原有覆盖，避免引入非圆角视觉变化 |
+| **已登记视觉变化（AC2 例外）** | portal antd 基础圆角由硬编码 `8` **收敛为 control 档 `6`**（与 admin 系口径一致）。此为收敛目标带来的显式变化，非缺陷 |
+| **首屏预置（AC6）** | `apps/portal/index.html` `<head>` 内联脚本：样式生效前读 `localStorage['ui-prefs'].radiusStyle`，为 crisp/sharp 时写根属性（soft 不写 = 默认柔和） |
+| **入口一致性** | `lifecycle.ts`（微前端）与 `main-standalone.ts`（独立运行）**都**调用 `useUiPrefsStore(pinia).init()` |
+| **卸载复位** | `lifecycle.ts` `unmount()` 移除 `data-radius`：避免偏好残留在宿主 `<html>` 上影响其他模块。多模块共存时**不做仲裁**（各端接入时写各自值，末次写入生效） |
 
 ### 4.2 小程序（kedou-ai-minigram）
 
