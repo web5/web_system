@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
 import { SnakeNamingStrategy } from '@web-system/shared';
 import { McpModule } from './mcp/mcp.module';
+import { HealthModule } from './health/health.module';
 import { McpModuleEntity } from './mcp/entities/mcp-module.entity';
 import { McpToolEntity } from './mcp/entities/mcp-tool.entity';
 import { McpJobEntity } from './mcp/entities/mcp-job.entity';
@@ -46,6 +47,7 @@ import { McpJobEntity } from './mcp/entities/mcp-job.entity';
       },
     }),
     McpModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

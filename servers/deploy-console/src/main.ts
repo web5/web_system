@@ -38,8 +38,9 @@ async function bootstrap() {
   // 压缩响应
   app.use(compression());
 
-  // 全局前缀 /api
-  app.setGlobalPrefix('api');
+  // 全局前缀 /api；排除 /health —— 探活需与其它服务一致的裸路径
+  // （否则端点变成 /api/health，流水线 verify 与监控探活都要各写一套）
+  app.setGlobalPrefix('api', { exclude: ['health'] });
 
   // 请求体解析（支持 SSE 需要较大限制）
   app.use(json({ limit: '10mb' }));
