@@ -491,7 +491,7 @@ check_r13_r14() {
 check_r12() {
   check_sync_pair "R12" "kit 能力源与运行源漂移" \
     ".codebuddy/agent-kit/skills" ".codebuddy/skills" \
-    "be-developer" "fe-developer" "design-reviewer" \
+    "be-developer" "fe-developer" "design-reviewer" "release-reviewer" \
     "rd-digital-agent/references/project-context.md"
 }
 
