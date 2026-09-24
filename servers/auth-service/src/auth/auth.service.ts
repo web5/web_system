@@ -296,6 +296,24 @@ export class AuthService {
   }
 
   /**
+   * 按用户 id 重新签发凭证。
+   * 账号合并后必须重签：旧 token 的 sub 仍是被合并掉的账号，
+   * 不换凭证用户会「看不到自己的数据」（方案 §5.7.2）。
+   */
+  async generateTokenForUser(userId: number): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+    const user = await this.userService.findById(userId);
+    if (!user || user.status !== 'active') {
+      throw new UnauthorizedException('用户不存在或已被禁用');
+    }
+    const res = await this.generateToken(user);
+    return {
+      accessToken: res.accessToken,
+      refreshToken: res.refreshToken,
+      expiresIn: res.expiresIn,
+    };
+  }
+
+  /**
    * 内部端点用：token 是否可用（有效期 + 黑名单）。
    * gateway 与其它服务据此判断已登出的 token，避免各自直连 Redis 复制黑名单规则。
    */

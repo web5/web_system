@@ -35,11 +35,15 @@ export class MailService {
     return !!this.transporter;
   }
 
-  async sendCode(email: string, code: string): Promise<void> {
+  /** 通用发送（未配置 SMTP 抛 SMTP_NOT_CONFIGURED，调用方按 503 处理） */
+  async sendMail(input: { to: string; subject: string; text: string; html: string }): Promise<void> {
     if (!this.transporter) throw new Error('SMTP_NOT_CONFIGURED');
     const from = this.configService.get('SMTP_FROM', this.configService.get('SMTP_USER'));
-    await this.transporter.sendMail({
-      from,
+    await this.transporter.sendMail({ from, ...input });
+  }
+
+  async sendCode(email: string, code: string): Promise<void> {
+    return this.sendMail({
       to: email,
       subject: '科豆 AI — 你的 API Key 验证码',
       text: `你的验证码是 ${code}，10 分钟内有效。如非本人操作请忽略。`,
