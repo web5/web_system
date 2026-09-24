@@ -155,7 +155,7 @@ CREATE INDEX idx_conversations_updated_at ON conversations(updated_at DESC);
 ## API 接口设计
 
 ### 基础信息
-- **基础路径（小程序调用）**：`https://portal.kedouai.com/ai`
+- **基础路径（小程序调用）**：`https://kedouai.com/ai`
 - **基础路径（内部服务）**：`http://ai-service:3003`
 - **认证方式**：Bearer Token（JWT）
 
@@ -665,7 +665,7 @@ docker-compose up -d ai-service
 
 登录微信公众平台，在「开发」->「开发管理」->「开发设置」->「服务器域名」中添加：
 
-- request 合法域名：`https://portal.kedouai.com`
+- request 合法域名：`https://kedouai.com`
 
 ### 测试流程
 
@@ -678,7 +678,7 @@ pnpm run test
 2. **接口测试**
 ```bash
 # 使用 curl 测试
-curl -X POST https://portal.kedouai.com/ai/chat \
+curl -X POST https://kedouai.com/ai/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{"message": "你好"}'

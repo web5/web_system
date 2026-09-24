@@ -339,9 +339,11 @@ serverName（服务器组，指向多台服务器）
 **方案 A（推荐，当前即此）**：一环境一 gateway 实例。
 
 ```
-dev.kedouai.com    ──nginx──▶ gateway(dev)   .env DEPLOY_ENV_ID=dev
-portal.kedouai.com ──nginx──▶ gateway(prod)  .env DEPLOY_ENV_ID=prod
+dev.kedouai.com ──nginx──▶ gateway(dev)   .env DEPLOY_ENV_ID=dev
+kedouai.com      ──nginx──▶ gateway(prod)  .env DEPLOY_ENV_ID=prod
 ```
+
+> 域名约定：生产域名为 `kedouai.com`；`portal.kedouai.com` 已失效（不再解析），勿再使用。
 
 - 优点：环境彻底隔离、故障域独立、实现简单。
 - 缺点：每环境一套 gateway 进程。

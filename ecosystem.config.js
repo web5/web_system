@@ -97,7 +97,7 @@ module.exports = {
         CONTENT_HUB_SERVICE_KEY: process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '',
         FINNEWS_SERVICE_KEY: process.env.FINNEWS_SERVICE_KEY || '',
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6000',
-        CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://portal.kedouai.com,https://admin.kedouai.com',
+        CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://kedouai.com,https://admin.kedouai.com',
         JWT_SECRET,
       },
       error_file: `${logBase}/gateway-error.log`,
