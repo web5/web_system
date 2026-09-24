@@ -45,7 +45,7 @@ gateway 读 Host header → 匹配站点(site)
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | varchar(32) **PK** | `local` / `dev` / `prod` |
-| `host` | varchar(128) UNIQUE | 域名，如 `local.kedouai.com` / `dev.kedouai.com` / `portal.kedouai.com` |
+| `host` | varchar(128) UNIQUE | 域名，如 `local.kedouai.com` / `dev.kedouai.com` / `kedouai.com` |
 | `name` | varchar(64) | 展示名 |
 | `defaultEnvId` | varchar(64) | 该站点默认加载的环境 |
 | `switchable` | bool default false | 是否在页面上显示"环境切换插件" |

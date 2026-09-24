@@ -36,7 +36,7 @@ services:
       - AI_SERVICE_URL=http://ai-service:3003
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:3000}
       # 生产环境务必改为具体域名列表，禁止使用通配符 *
-      - CORS_ORIGINS=https://portal.kedouai.com,https://admin.kedouai.com,https://dev.kedouai.com
+      - CORS_ORIGINS=https://kedouai.com,https://admin.kedouai.com,https://dev.kedouai.com
     depends_on:
       - redis
     networks:

@@ -20,7 +20,8 @@ function esc(s) {
 
 const hostByEnv = {
   dev: '127.0.0.1',
-  prod: 'portal.kedouai.com',
+  // portal.kedouai.com 已失效（不再解析），生产统一使用 kedouai.com
+  prod: 'kedouai.com',
   staging: 'stage.kedouai.com',
 };
 
