@@ -4,7 +4,7 @@
 - 参照页：`apps/deploy-console/src/views/SystemSettings.vue`（现有「通知与审批」字段同屏）
 - 目标端：**桌面 Web**（deploy-console 深色控制台壳）
 - 需求一句话：让运维在控制台**看得见、选得准、改得动**「上传文件落在哪」——展示当前生效与待生效双值、用目录树或手填选定路径、保存前校验、并明确「重启 upload-service 才生效」。
-- 原型：`docs/ui/prototypes/deploy-console-domain-split.html` → `dc-settings` 屏；质检记录见 `docs/ui/prototypes/deploy-console-settings-storage-质检记录.md`
+- 原型：`docs/ui/prototypes/deploy-console-domain.html` → `dc-settings` 屏；质检记录见 `docs/ui/prototypes/deploy-console-settings-storage-质检记录.md`
 - 后端契约（已上线）：`specs/backend-consolidation/design.md` §1.2 / §1.4 / §1.5
 
 ### 页头

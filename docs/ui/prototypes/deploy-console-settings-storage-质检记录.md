@@ -1,6 +1,6 @@
 # 质检记录 · deploy-console「系统设置 / 存储配置」区块（A6）
 
-> 原型：`docs/ui/prototypes/deploy-console-domain-split.html` → `dc-settings` 屏（2026-09-22 增量）
+> 原型：`docs/ui/prototypes/deploy-console-domain.html` → `dc-settings` 屏（2026-09-22 增量）
 > 规格：`specs/backend-consolidation/page-spec-storage-config.md`
 > 需求与后端契约：`specs/backend-consolidation/design.md` §1.2 / §1.4 / §1.5（议题 A6）
 > 角色：`ux-prototype-designer`（原型 + 本记录）｜质检清单：`.codebuddy/skills/ux-prototype-designer/references/ux-review-checklist.md`

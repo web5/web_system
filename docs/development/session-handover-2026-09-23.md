@@ -220,7 +220,7 @@ dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）�
 
 - 连线着色规则定稿：`specs/pipeline-flow-color/design.md` §2.5（边色 = 目标节点色；L2 竖线按转折点分段；层序灰先彩后；坐标取整 + 圆帽 + 拐点补圆）
 - 连线绘制抽公共 util：`specs/pipeline-wires-util/design.md` + `apps/deploy-console/src/utils/pipelineWires.ts`（编辑页/详情页共用）
-- 原型八场景演示：`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`
+- 原型八场景演示：`docs/ui/prototypes/deploy-console-domain.html` 屏 `dc-rundetail`
 - 本地 release 已发布并实测：#3373（成功·命中 dev）绿主干 + 灰跳过支线；#1984（失败）红主干 + 橙审批边；编辑页中性橙连线 + 「＋」按钮
 
 ### 8.5 本会话对 dev 的配置补齐（NEW 域生效所必需）

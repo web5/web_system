@@ -2,7 +2,7 @@
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：发布流水线编排的**三层实体模型**重构方案 —— 取代「步骤=节点直接挂脚本」的旧模型。
-> 原型稿（UI 唯一真相源）：`docs/ui/prototypes/deploy-console-domain-split.html`（亮色框架：顶部一级 + 左侧二级导航；流水线画布：步骤 → 任务 → 动作）
+> 原型稿（UI 唯一真相源）：`docs/ui/prototypes/deploy-console-domain.html`（亮色框架：顶部一级 + 左侧二级导航；流水线画布：步骤 → 任务 → 动作）
 > 取代：`specs/pipeline-step-branch/design.md`、`specs/pipeline-env-branch/design.md`（历史稿，保留供对照）
 
 ---
@@ -152,7 +152,7 @@
 
 ---
 
-## 6 UI / 交互设计（与原型稿一致：`deploy-console-domain-split.html`）
+## 6 UI / 交互设计（与原型稿一致：`deploy-console-domain.html`）
 
 ### 6.0 框架（全局）
 

@@ -17,6 +17,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
+import { HostsService } from '../hosts/hosts.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { CommandService } from '../shell/command.service';
 import { AuditService } from '../audit/audit.service';
@@ -66,6 +67,7 @@ describe('DeployService 产物守卫', () => {
           },
         },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         {
           provide: CommandService,
