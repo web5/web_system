@@ -26,8 +26,15 @@ const isFrontendModule = (t: string) => t === 'micro-frontend' || t === 'fronten
 interface ModuleRow {
   key: string
   name: string
-  /** 最近一次部署（各环境 deployedAt 最新一条；null = 从未部署） */
-  latest: { envId: string; version: string; time: string; by: string } | null
+  /**
+   * 最近一次**发布**摘要（各环境 deploy_versions 里 releasedAt 最新一条；null = 从未发布）。
+   *
+   * 2026-09-24 修正：此前取的是 deploy_deployments 的 currentVersion（= **当前指针**），
+   * 与「最近发布」是两个语义 —— 发布后未切指针、或指针被回滚时两者不同，
+   * 页面会把指针冒充成「最近部署」。现在 version/time/by 一律取发布记录；
+   * pointer 单独带出，用于「已发布但未切换」的提示。
+   */
+  latest: { envId: string; version: string; time: string; by: string; pointer?: string } | null
 }
 
 const loading = ref(false)
@@ -35,17 +42,23 @@ const modules = ref<ModuleRow[]>([])
 
 const META = {
   sub: '微前端模块 · 选择已有发布版本直接部署（切版本指针），构建与发布走「流水线」',
-  note: '表格显示各模块最近一次部署；目标环境在「部署」抽屉内选择（环境可数十个，支持下拉搜索）。前端/微前端部署 = 切换版本指针，刷新页面即生效，不触碰任何进程。',
+  note: '表格显示各模块最近一次**发布**（流水线产物）；与当前指针不一致时会附注「当前指针」。目标环境在「部署」抽屉内选择（环境可数十个，支持下拉搜索）。前端/微前端部署 = 切换版本指针，刷新页面即生效，不触碰任何进程。',
 }
 
 const columns: TableColumnsType = [
   { title: '模块', key: 'module', width: 240 },
-  { title: '最近部署版本', key: 'version', width: 220 },
+  { title: '最近发布版本', key: 'version', width: 220 },
   { title: '环境', key: 'env', width: 110 },
   { title: '发布时间', key: 'time', width: 180 },
   { title: '发布人', key: 'by', width: 110 },
   { title: '操作', key: 'action', width: 100 },
 ]
+
+/** 最新发布版本 ≠ 当前指针（发布后尚未切指针，或指针被回滚） */
+function isPointerBehind(row: ModuleRow): boolean {
+  const p = row.latest?.pointer
+  return !!p && !!row.latest?.version && p !== row.latest.version
+}
 
 function fmtTime(s: string | null | undefined): string {
   if (!s) return ''
@@ -65,16 +78,25 @@ async function load() {
         let latest: ModuleRow['latest'] = null
         try {
           const dep = await deployApi.moduleDeployments(m.key)
+          // 主口径：按「最新发布」（latestRelease.releasedAt）排序取最新一条
           const cand = (dep.environments || [])
+            .filter((e) => e.latestRelease?.releasedAt)
+            .sort(
+              (a, b) => +new Date(b.latestRelease!.releasedAt!) - +new Date(a.latestRelease!.releasedAt!),
+            )
+          // 兜底：环境没有任何发布记录（历史数据）时，退回指针记录的 deployedAt
+          const fallback = (dep.environments || [])
             .filter((e) => e.deployedAt)
             .sort((a, b) => +new Date(b.deployedAt!) - +new Date(a.deployedAt!))
-          const top = cand[0]
+          const top = cand[0] || fallback[0]
           if (top) {
+            const rel = top.latestRelease
             latest = {
               envId: top.envId,
-              version: top.currentVersion || '',
-              time: fmtTime(top.deployedAt),
-              by: top.deployedBy || '',
+              version: rel?.versionTag || top.currentVersion || '',
+              time: fmtTime(rel?.releasedAt || top.deployedAt),
+              by: rel?.releasedBy || top.deployedBy || '',
+              pointer: top.currentVersion || '',
             }
           }
         } catch {
@@ -211,7 +233,11 @@ onMounted(async () => {
             <span class="ws-mono mod-key">{{ record.key }}</span>
           </template>
           <template v-else-if="column.key === 'version'">
-            <span v-if="record.latest" class="ws-mono">{{ record.latest.version || '—' }}</span>
+            <template v-if="record.latest">
+              <span class="ws-mono">{{ record.latest.version || '—' }}</span>
+              <!-- 已发布但未切换指针：把「当前指针」一并显形，避免把发布版本当成在跑版本 -->
+              <div v-if="isPointerBehind(record)" class="ptr-hint">当前指针：{{ record.latest!.pointer }}</div>
+            </template>
             <span v-else class="muted">—</span>
           </template>
           <template v-else-if="column.key === 'env'">
@@ -285,6 +311,12 @@ onMounted(async () => {
   margin-left: 8px;
 }
 .muted {
+  color: var(--ws-text-tertiary);
+}
+/* 发布版本与当前指针不一致时的副行提示 */
+.ptr-hint {
+  margin-top: 2px;
+  font-size: 11.5px;
   color: var(--ws-text-tertiary);
 }
 .hint {
