@@ -150,15 +150,18 @@
 
 | 改动面（可机检） | 必需评审 | 规则 | 级别 |
 |---|---|---|---|
-| `scripts/migrations/*.sql`、跨库变更 | S4.2 数据变更 + S8.1 发布 | **R13 + R14** | error |
-| `servers/*/.env`、`ecosystem.config.cjs`、端口 / 密钥 | S8.1 发布 | **R14** | error |
-| 新增/改对外接口、SSE 事件、MCP 工具、`packages/types`、权限码 | S4.2 契约 | **R13** | error |
+| `scripts/migrations/*`、跨库变更 | S4.2 数据变更 + S8.1 发布 | **R13 + R14** | warning → error（Q3） |
+| `servers/*/.env`、`ecosystem.config.cjs`、端口 / 密钥 | S8.1 发布 | **R14** | warning → error（Q3） |
+| 新增/改对外接口、MCP 工具、`packages/types`、权限码 | S4.2 契约 | **R13** | warning → error（Q3） |
 | `servers/**` 新增控制器 / 权限点 | S5.2 独立代码 | **R15** | warn → strict（P2） |
 | `apps/**` UI 源码 | S3.2 设计（D2/D3） | R11 / R11b | error |
 | 纯文档 / 脚本微调 | 无 | — | **零摩擦** |
 
+> 级别现状：R13/R14 落地为 **warning**（`--strict` 下 error），因 Q3（是否直接 error）未拍板。存量 commit 无 `Contract:` / `Release:` 凭证，直接 error 会让历史 PR 全红——转 error 需配套存量过渡策略。
+> 契约面已按实测**收窄**（移除 `packages/agent-core/*`）并对控制器加行数阈值 5，理由与防回退断言见 §7.3。
+
 **实现约束（沿用既有基建）**：
-- 新增 `check_r13` / `check_r14`（P2 加 `check_r15`）判定函数到 `scripts/redline/scan-rules.sh`，**不改调用方**；已被 `quality-gate.yml` job1 覆盖，**无需改 workflow**。
+- `scripts/redline/scan-rules.sh` 新增 `check_r13_r14`（两个面**共用一次遍历**，各自遍历会让 commit 级 git 调用翻倍）+ `_trailer_check_one` 单条校验，**不改调用方**；已被 `quality-gate.yml` job1 覆盖，**无需改 workflow**。
 - 报告沿用 `design-reviewer` 的机器可读头 `阻塞: N` / `重要: N`，复用 R11 的解析逻辑。
 - commit trailer 沿用既有风格：`Design:` / `Contract:` / `Release:`，值为 `pass` 或报告路径。
 - **`Micro-exempt: <理由>` 必须同时豁免 R9b / R10 / R11 / R13 / R14 / R15**——口径不一致会制造「记了豁免还报错」的新摩擦源。
@@ -187,12 +190,13 @@
 | W1 | 本 spec 定稿 | `specs/rd-process-model/design.md` | P0 |
 | W2-a | 发布判据源落盘 | `docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道） | P0 **✅ 已落** |
 | W2-b | 契约判据源落盘 | 契约登记文件（接口契约 + SSE 事件 + MCP 工具 + 权限码 + types 双构建） | P0 **⏸ 阻塞**：契约无单一真相源，见 §7.3 |
-| W3 | 新角色技能（项目专属，运行源） | `.codebuddy/skills/contract-reviewer/SKILL.md`、`.codebuddy/skills/release-reviewer/SKILL.md`（P2 加 `code-reviewer`），各带 `references/*-checklist.md` 与报告模板 | P1 |
+| W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**（`SKILL.md`，判据源外置到 `release-review-checklist.md`）；`contract-reviewer` **⏸ 待契约登记文件**；P2 加 `code-reviewer` | P1 |
 | W4 | 机检分派 | `scan-rules.sh` 的 `check_r13_r14`（一次遍历判两面）+ `is_contract_file` / `is_release_file`；P2 加 `check_r15` | P1 **✅ 已落**（warning 级，Q3 拍板后升 error） |
-| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `contract-reviewer` / `release-reviewer`（P2 加 `code-reviewer`） | P1（与 W3 同批，否则 CI 红） |
-| W6 | 自检断言 | `selfcheck-ui-gate.sh` 补 V4–V8、V10 断言 | P1 |
-| W7 | 常驻动作门增述 | `.codebuddy/CODEBUDDY.md` §2.5 + 两条端规则：补「改契约 / 改迁移 / 改环境配置 → 先过对应评审」 | P1 |
-| W8 | 手册同步 | `docs/development/agent-capability-playbook.md`（**CHANGELOG=on**，须追加变更日志一行） | P1 |
+| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` **✅ 已落**（实测 R12 零漂移）；`contract-reviewer` / `code-reviewer` 随后续角色同批 | P1 |
+| W6 | 自检断言 | `selfcheck-ui-gate.sh` 加 V25（R13/R14 接线 + 契约面收窄防回退）**✅ 已落**（PASS=18） | P1 |
+| W7 | 常驻动作门增述 | `.codebuddy/CODEBUDDY.md` §2.5.1 + 新建 `.codebuddy/rules/release-interface/RULE.mdc` **✅ 已落** | P1 |
+| W8 | 手册同步 | `agent-capability-playbook.md` v1.13：变更日志 + §7 易混淆点 6（项目专属清单与 R12 纪律）+ 附索引 **✅ 已落** | P1 |
+| W0 | auto-pr 残影 PR 治理 | `.github/workflows/auto-pr.yml` 排除长期分支（`feature/test` / `feature/kedou-ai-minigram`）**✅ 已落**（非原计划项，见 §7.4） | — |
 | W9 | 独立代码评审 | `code-reviewer` 技能 + R15（warn→strict） | P2 |
 | W10 | 运营回流 | 故障模式库 → 判据源回灌机制 | P3 |
 
@@ -286,6 +290,21 @@ W4 落码时实查：
 **待办**：先建**契约登记文件**（SSE 事件 / MCP 工具 / 权限码 / 接口清单的单一真相源），再以明确路径纳入契约面。这与「判据源先于角色、先于机检」同一纪律。
 
 **实测**：R13/R14 首跑于 `HEAD~6..HEAD` 命中 3 条，全部为真实改动（存储配置接口 / 控制器 / 部署脚本），**零误伤**。
+
+---
+
+### 7.4 附加项：auto-pr 残影 PR 治理（W0）
+
+**现象**：`feature/kedou-ai-minigram` 被自动建出 #130 —— 129 commits / 203 files / 12 个冲突文件。
+
+**根因两条**：
+
+1. `.github/workflows/auto-pr.yml` 只对 `feature/*`、`fix/*` 建 PR（已排除 `feature/test`），**长期集成分支不在排除内**；
+2. 幂等检查只查 `state: 'open'` 的 PR —— 同名 PR（#129）合并后再 push，会**再建一个新的**（残影）。
+
+**处置**：排除清单改为 JSON 数组（`feature/test` + `feature/kedou-ai-minigram`），并把两条成因写进 workflow 注释。
+
+**纪律**：长期 / 集成分支不自动建 PR；这类分支的改动应按主题拆成**短命分支**各自走 auto-pr，才可评审、可回滚。
 
 ---
 
