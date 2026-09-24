@@ -146,8 +146,9 @@ grep -q 'check_r13_r14' "$BIN/scan-rules.sh" || miss="$miss check_r13_r14"
 grep -q 'is_contract_file' "$BIN/scan-rules.sh" || miss="$miss is_contract_file"
 grep -q 'is_release_file' "$BIN/scan-rules.sh" || miss="$miss is_release_file"
 grep -q 'check_r13_r14  ' "$BIN/scan-rules.sh" || grep -q 'check_r13_r14 "' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
-# 防回退：契约面曾误纳 packages/agent-core/* 整个 SDK，导致内部实现改动也报（摩擦过大）
-if grep -A10 '^is_contract_file' "$BIN/scan-rules.sh" | grep -q 'packages/agent-core'; then
+# 防回退：不得把整个 SDK 纳入契约面（应限定到 interfaces 等明确路径）。只检测「全包通配」写法，
+# 否则会把合规的窄路径（packages/agent-core/src/interfaces/*）误判为回退。
+if grep -A12 '^is_contract_file' "$BIN/scan-rules.sh" | grep -qE 'packages/agent-core/\*\)'; then
   miss="$miss 契约面回退为全SDK"
 fi
 if [ -z "$miss" ]; then ok "V25 契约/发布评审门禁接线完整（含收窄防回退）"
@@ -162,6 +163,23 @@ if grep -rlsE 'scan-rules\.sh' .github/workflows/ 2>/dev/null | grep -q .; then
 else
   bad "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）" "无任何 workflow 引用 scan-rules.sh —— 红线规则失去 CI 兜底，本地 hook 可被 --no-verify 绕过"
 fi
+
+# V27 SSE 事件契约一致性机检接线（R16 + 扫描器 + 主流程挂载）
+miss=""
+grep -q 'check_r16' "$BIN/scan-rules.sh" || miss="$miss check_r16"
+[ -f "$BIN/check-sse-contract.py" ] || miss="$miss check-sse-contract.py"
+grep -q 'check_r16  ' "$BIN/scan-rules.sh" || grep -q 'check_r16$' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+if [ -z "$miss" ]; then ok "V27 SSE 契约一致性机检接线完整"
+else bad "V27 SSE 契约一致性机检接线完整" "缺：${miss# }"; fi
+
+# V28 contract-reviewer 角色接线（技能存在 + 已登记 R12 保护清单；两者必须同批）
+# 为什么必须同批：保护清单语义是「项目专属、只在运行源」，漏登记会让 R12 把新技能
+# 判成「能力源缺失」漂移 → CI 报错。这条断言把「同批纪律」变成可机检。
+miss=""
+[ -f .codebuddy/skills/contract-reviewer/SKILL.md ] || miss="$miss SKILL.md"
+grep -q 'contract-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
+if [ -z "$miss" ]; then ok "V28 contract-reviewer 角色接线完整"
+else bad "V28 contract-reviewer 角色接线完整" "缺：${miss# }"; fi
 
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
