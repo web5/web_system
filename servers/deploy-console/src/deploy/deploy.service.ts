@@ -797,10 +797,17 @@ export class DeployService {
     moduleKey: string;
     environments: Array<{
       envId: string;
+      /** 当前指针：最后一次**部署（切指针）动作**的结果，gateway manifest 的真相源 */
       currentVersion?: string;
       status?: string;
       deployedAt?: Date;
       deployedBy?: string;
+      /** 最新发布：deploy_versions 里该环境 releasedAt 最新一条（流水线产物，与指针是两回事） */
+      latestRelease?: {
+        versionTag?: string;
+        releasedAt?: Date;
+        releasedBy?: string;
+      };
     }>;
     versionHistory: DeployVersionEntity[];
   }> {
@@ -808,15 +815,35 @@ export class DeployService {
       this.deploymentRepo.find({ where: { moduleKey }, order: { envId: 'ASC' } }),
       this.versionRepo.find({ where: { component: moduleKey }, order: { releasedAt: 'DESC' }, take: 50 }),
     ]);
+
+    // 「最新发布」按环境取 releasedAt 最新一条（versions 已按 releasedAt DESC 排序，首个即最新）。
+    // 语义区分（2026-09-24 修正）：currentVersion 是**指针**（部署动作写的），latestRelease 是
+    // **流水线发布产物**。发布后未切指针、或指针被回滚时二者不同 —— 页面不能拿指针冒充「最近部署」。
+    const latestReleaseByEnv = new Map<string, DeployVersionEntity>();
+    for (const v of versions) {
+      if (!v.env || latestReleaseByEnv.has(v.env)) continue;
+      latestReleaseByEnv.set(v.env, v);
+    }
+
     return {
       moduleKey,
-      environments: deployments.map((d) => ({
-        envId: d.envId,
-        currentVersion: d.currentVersion,
-        status: d.status,
-        deployedAt: d.deployedAt,
-        deployedBy: d.deployedBy,
-      })),
+      environments: deployments.map((d) => {
+        const rel = latestReleaseByEnv.get(d.envId);
+        return {
+          envId: d.envId,
+          currentVersion: d.currentVersion,
+          status: d.status,
+          deployedAt: d.deployedAt,
+          deployedBy: d.deployedBy,
+          latestRelease: rel
+            ? {
+                versionTag: rel.versionTag,
+                releasedAt: rel.releasedAt,
+                releasedBy: rel.releasedBy,
+              }
+            : undefined,
+        };
+      }),
       versionHistory: versions,
     };
   }
