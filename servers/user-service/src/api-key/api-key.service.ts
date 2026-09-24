@@ -86,7 +86,8 @@ export class ApiKeyService {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new BadRequestException('邮箱格式不正确');
     }
-    if (!this.mail.enabled) {
+    // 环境变量缺失时会回退读 system_configs 的 notify_smtp_*（admin 通知设置）
+    if (!(await this.mail.isEnabled())) {
       throw new ForbiddenException('邮件服务未配置，暂不可申请');
     }
     const recent = await this.codeRepo.findOne({ where: { email }, order: { id: 'DESC' } });
