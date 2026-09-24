@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as path from 'path';
 import { UploadModule } from './upload/upload.module';
+import { HealthModule } from './health/health.module';
 import { SnakeNamingStrategy } from '@web-system/shared';
 
 @Module({
@@ -31,6 +32,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
       }),
     }),
     UploadModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

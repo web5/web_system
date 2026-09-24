@@ -214,7 +214,7 @@ D3 是最贵的一关，分两层，避免整关沦为不可回归的主观比�
 |---|---|---|
 | L1 常驻动作门 | `CODEBUDDY.md` §2.5 与两条端规则动作门增述：原型交人前过 D2、落码后过 D3 | 软 |
 | L3.5 commit trailer | 原型/规格 commit 带 `Design: <report-path>`；UI commit 在现有 `Proto: <sha>` 之外带 `Design: pass` | `commit-msg` 校验（warning） |
-| L4 CI **R11** | ① UI commit 缺 `Design:` trailer → 报「UI 改动未经设计评审」；② 报告头部 `阻塞: N` 且 N>0 → 报「设计评审阻塞项未清零」 | **error**（用户 2026-09-22 拍板，不设 warning 观察期）；接入 `scripts/redline/scan-rules.sh`（新增 `check_r11` 判定函数，不改调用方），已被 `quality-gate.yml` job1 覆盖，**无需改 workflow** |
+| L4 CI **R11** | ① UI commit 缺 `Design:` trailer → 报「UI 改动未经设计评审」；② 报告头部 `阻塞: N` 且 N>0 → 报「设计评审阻塞项未清零」 | **error**（用户 2026-09-22 拍板，不设 warning 观察期）；接入 `scripts/redline/scan-rules.sh`（新增 `check_r11` 判定函数，不改调用方），由 `quality-gate.yml` 的 `redline-scan` job 覆盖（2026-09-24 恢复） |
 | L5 自检 | `scripts/redline/selfcheck-ui-gate.sh` 补本方案 V 断言 | 防静默失效 |
 
 **作用域（防误伤）**：R11 仅在 diff **含 UI 源码**（沿用 §3.1 路径集合）时触发；纯后端 / 文档 / 脚本 PR 不受影响，零摩擦放行。

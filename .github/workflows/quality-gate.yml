@@ -1,9 +1,11 @@
-# quality-gate — PR 代码质量门禁（改动包 build/test）
+# quality-gate — PR 代码质量门禁（红线扫描 + 改动包 build/test）
 #
+#   redline-scan     : scripts/redline/scan-rules.sh 全量规则（R9–R14）扫 PR 范围
 #   changed-packages : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
 #
-# 2026-09-18：原 redline-scan job（scripts/redline/scan-rules.sh 红线扫描）随红线机制整体下线；
-#   本 workflow 只保留「改动包 build/test」。
+# 2026-09-18：redline-scan 曾随红线机制整体下线，本 workflow 只留「改动包 build/test」。
+# 2026-09-24：红线机制已回归（scripts/redline/ + PreToolUse hook + commit-msg），但该 job
+#   未跟着恢复 → R9–R14 全部失去 CI 兜底（本地 hook 可被 --no-verify 绕过）。本次恢复。
 # 职责分离：auto-pr.yml 只负责建 PR，本 workflow 负责检查。
 # 启用要求：master 分支保护开启，要求本 workflow 通过才可 merge。
 #
@@ -24,6 +26,28 @@ permissions:
   contents: read
 
 jobs:
+  redline-scan:
+    name: 红线扫描（R9–R14）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 扫描 PR 范围
+        run: |
+          # 用 merge-base 取分叉点：pull_request.base.sha 是 base 分支的**当前** HEAD，
+          # 未必是 head 的祖先；直接 `A..B` 会退化成「HEAD 的全部历史」（实测扫出 600+ 条
+          # 历史 commit，把 R10/R11/R13/R14 全部误报）。merge-base 才是 PR 的真实差异范围。
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$BASE" ] && git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1; then
+            BASE="$(git merge-base "$BASE" HEAD)"
+          else
+            BASE="$(git merge-base origin/master HEAD)"
+          fi
+          echo "扫描范围: ${BASE}..HEAD（$(git rev-list --count "${BASE}..HEAD") 个 commit）"
+          bash scripts/redline/scan-rules.sh diff "${BASE}..HEAD"
+
   changed-packages:
     name: 改动包 build/test
     runs-on: ubuntu-latest

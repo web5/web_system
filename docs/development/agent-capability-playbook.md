@@ -7,7 +7,7 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.12 |
+| 文档版本 | v1.13 |
 | 创建日期 | 2026-09-10 |
 | 校验环境 | macOS 本地 + pm2 `web-*` 全量 online + nginx `https://local.kedouai.com` |
 
@@ -28,6 +28,7 @@
 | 2026-09-18 | v1.10 | 去重：删 `.codebuddy/agent-kit/skills/`（14 个与 `.codebuddy/skills/` 逐字节相同的副本），技能实体只保留一份；agent-kit 仅留 `AGENT.md` + `rules/general/` + `references/`，来源由上游 GitHub URL 声明；§7 易混淆点 6 / 相关文档索引同步 | AI |
 | 2026-09-18 | v1.11 | 清理已下线机制的本地文件与内容：删 `docs/development/{ai-native-sdlc-ci-deployment,ai-native-sdlc-playbook,cross-tool-agent-context-design}.md`、根目录 6 个站点快照与 `printsql.cjs`、2 个空目录；同步移除 README 文档地图、§相关文档索引、`specs/ci-cd/设计` 表行、`quality-gate.yml`/`changed-packages.sh` 注释里的引用；§7 易混淆点 6 改为只述现状（去掉已下线叙事） | AI |
 | 2026-09-19 | v1.12 | agent-kit 去内容化：删本地 `AGENT.md`/`rules/general/`/`references/`（18 文件），`.codebuddy/agent-kit/` 只留来源声明；方法论与配线引用统一指向上游 `https://github.com/web5/ai-agent-kit`（CODEBUDDY §2/§4、`.codebuddy/references/README.md`、contract-risk README、be/fe-developer 技能卡、§相关文档索引）；§7 易混淆点 5/6 同步 | AI |
+| 2026-09-24 | v1.13 | 新增交付环节评审角色 `release-reviewer` 与发布动作门：`.codebuddy/skills/release-reviewer/`（判据源 `docs/development/release-review-checklist.md`）+ `.codebuddy/rules/release-interface/RULE.mdc` + `CODEBUDDY.md` §2.5.1（CI R14 拦截 `Release:` 凭证）；§7 易混淆点 6 补项目专属技能清单（含 `design-reviewer`/`release-reviewer`）与 R12 保护清单联动纪律；附索引挂「AI 编码流程与评审门禁」入口 | AI |
 
 ---
 
@@ -302,7 +303,8 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 3. **改了 admin 源码没生效** —— 微前端四步没走完，或版本表写错库。⚠️ 版本表在 **`web_system_deploy`** 库的 `deploy_deployments`，不是 `web_system`；且 gateway 有 **TTL 10s 版本缓存**（要等或 `pm2 restart web-gateway`）。详见 `docs/development/admin-dev.md` §一·C。
 4. **改了定义没生效** —— 忘了点 **publish**（保存草稿不生效），或没等满 30s 轮询周期（`AGENT_DEF_POLL_MS` 可调）。
 5. **「数字人」≠ 产品功能** —— AI 协作方法论（常驻总则 / 5 条红线 / 技能）是给 AI 用的开发侧资产，没有前端页面。面向用户的概念统一叫 Agent。
-6. **技能实体只有一份**：`.codebuddy/skills/`（工具实际扫描加载）。约定：通用技能只在上游 `https://github.com/web5/ai-agent-kit` 演进，本地不得改写；项目专属只放 `be-developer`/`fe-developer` 与 `rd-digital-agent/references/project-context.md`。`.codebuddy/agent-kit/` 只留来源声明，内容（常驻总则 / 红线 / 方法论）在上游仓库。
+6. **技能实体只有一份**：`.codebuddy/skills/`（工具实际扫描加载）。约定：通用技能只在上游 `https://github.com/web5/ai-agent-kit` 演进，本地不得改写；项目专属只放 `be-developer` / `fe-developer` / `design-reviewer` / `release-reviewer` 与 `rd-digital-agent/references/project-context.md`。`.codebuddy/agent-kit/` 只留来源声明，内容（常驻总则 / 红线 / 方法论）在上游仓库。
+   ⚠️ **新增项目专属技能必须同步登记 R12 保护清单**（`scripts/redline/scan-rules.sh` 的 `check_r12`），否则 CI 会报「能力源缺失」漂移；反过来，技能一旦上行到上游能力源，就要从保护清单移除，不然会掩盖真实漂移。
 7. **`ai-agent` / `knowledge-service` 未注册到 `scripts/modules.json`** —— 虽跑在 pm2 且有网关路由，但不在发布流水线和微前端清单里，deploy-console 管不到。
 8. **`DeepseekClient` 已下线** —— `README.md` 未同步，`dist/` 有残留，以 `src/` 为准。
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
@@ -377,5 +379,8 @@ ls packages/agent-core/src/tools/coding/
 | 合同场景端到端评测 | [`servers/ai-agent/e2e/contract-risk/`](../../servers/ai-agent/e2e/contract-risk) |
 | 本地发布运维手册 | [`docs/development/local-release-runbook.md`](local-release-runbook.md) |
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
+| 安全门禁基线（凭证 / 网络访问 / SSH / 数据库 / 审计 / 紧急响应） | [`docs/development/security-baseline.md`](security-baseline.md) |
 | 评测框架（L1~L4） | 上游 ai-agent-kit `references/eval-framework.md`（`https://github.com/web5/ai-agent-kit`） |
+| **AI 编码流程与评审门禁**（环节×角色 / hook 动作门 / 评审角色 / CI R9–R14） | 流程与角色 [`specs/rd-process-model/design.md`](../../specs/rd-process-model/design.md) · 机器强制 [`specs/kit-sop-enforcement/design.md`](../../specs/kit-sop-enforcement/design.md) · 设计评审 [`specs/design-reviewer/design.md`](../../specs/design-reviewer/design.md) · 发布判据 [`docs/development/release-review-checklist.md`](release-review-checklist.md) · 规则 [`.codebuddy/rules/release-interface/RULE.mdc`](../../.codebuddy/rules/release-interface/RULE.mdc) |
+| AI 编码门禁的实践复盘（对外技术文章稿） | [`docs/posts/ai-agent-gate.md`](../posts/ai-agent-gate.md) |
 | **各后端服务接口契约（自动生成 · AI 自进化接口真相源）** | `specs/<svc>/api-design.md`：`deploy-console`（手写，分 `pipeline-node-model/` 与 `deploy-console/` 两份）、`auth-service`、`user-service`、`ai-service`、`ai-agent`、`system-service`、`todo-service`、`mcp-gateway`、`knowledge-service`、`content-hub`、`upload-service`、`gateway`；重生成脚本 [`scripts/gen-api-design.mjs`](../../scripts/gen-api-design.mjs) |
