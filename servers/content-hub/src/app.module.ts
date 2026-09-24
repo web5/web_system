@@ -22,7 +22,7 @@ import { ContentMediaEntity } from './content/entities/content-media.entity';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [path.resolve(__dirname, '../.env')],
+      envFilePath: [ path.resolve(__dirname, '../.env.generated'),path.resolve(__dirname, '../.env')],
     }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
