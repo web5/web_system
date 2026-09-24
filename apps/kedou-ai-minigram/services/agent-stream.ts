@@ -13,7 +13,7 @@
  *
  * 链路：小程序 → gateway(/api/ai-agent/agent/run) → ai-agent(/agent/run) → agent-core
  */
-import { get, getToken } from '../utils/request';
+import { get, getToken, isLoggedOut } from '../utils/request';
 
 const AGENT_RUN_URL = '/api/ai-agent/agent/run';
 const CONVERSATIONS_URL = '/api/ai-agent/agent/conversations';
@@ -341,6 +341,11 @@ function requestAgentStream(
   options: AgentStreamOptions,
   handlers: AgentStreamHandlers,
 ): void {
+  // 登录墙兜底：本通道不走 request.ts，未登录（无 token 或主动退出）时直接失败，不发请求
+  if (!getToken() || isLoggedOut()) {
+    handlers.onError(new Error('请先登录'));
+    return;
+  }
   const baseUrl = getApiBase();
   const token = getToken();
   const requestUrl = `${baseUrl}${AGENT_RUN_URL}`;

@@ -13,7 +13,7 @@
 import { createAgentApi } from '../../../services/agent-stream';
 import { RESUME_CONV_KEY } from '../../../utils/conversation';
 import { parseAgentError } from '../../../utils/agent-error';
-import { ensureLogin } from '../../../services/auth';
+import { ensureLogin, isLoggedIn } from '../../../services/auth';
 import {
   buildTranslateCardView,
   inferTranslateDirection,
@@ -138,6 +138,8 @@ function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
 Page({
   data: {
     radiusClass: "",
+    /** 登录态：false 时整页只渲染登录引导卡（不载入会话、不发请求） */
+    loggedIn: true,
     conversationId: '',
     chatMessages: [] as ChatMsg[],
     input: '',
@@ -201,8 +203,20 @@ Page({
 
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/chat/index/index', selected: 0 });
+
+    const loggedIn = isLoggedIn();
+    this.setData({ loggedIn });
+    // 未登录：只渲染登录卡，不载入会话、不发起任何业务请求（判据第 8 条）
+    if (!loggedIn) return;
+
     // 从「对话记录」点某条记录返回时，载入该会话
     this.resumeIfNeeded();
+  },
+
+  /** 登录卡登录成功后回调：刷新本页 */
+  onLogged() {
+    this.setData({ loggedIn: isLoggedIn() });
+    this.onShow();
   },
 
   /**

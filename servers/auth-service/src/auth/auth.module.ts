@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { InternalAuthController } from './internal-auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { UserModule } from '../user/user.module';
@@ -22,7 +23,7 @@ import { QrcodeModule } from '../qrcode/qrcode.module';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, InternalAuthController],
   providers: [AuthService, JwtStrategy, LocalStrategy],
   exports: [AuthService],
 })

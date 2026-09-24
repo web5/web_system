@@ -10,13 +10,18 @@
 import { getMusicTaste, tasteSummary } from '../../../services/user-taste';
 import { listMemory } from '../../../services/user-memory';
 import { listGlossary } from '../../../services/glossary';
+import { isLoggedIn, logout } from '../../../services/auth';
+import { fetchProfile } from '../../../services/account';
 
 Page({
   data: {
     radiusClass: "",
+    /** 登录态：false 时整页渲染登录引导卡（不拉任何业务数据） */
+    loggedIn: true,
     nickname: '橙子哥哥',
     realName: '已实名',
-    phone: '138****6688',
+    /** 脱敏手机号；空 = 未绑定（禁止展示硬编码假数据） */
+    phone: '',
     /** 各应用 / 主对话的历史条数（空则不展示数字，避免假数据） */
     trCount: '',
     asCount: '',
@@ -38,6 +43,20 @@ Page({
 
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/mine/index/index', selected: 2 });
+
+    const loggedIn = isLoggedIn();
+    this.setData({ loggedIn });
+    // 未登录：只渲染登录卡，不发起任何业务请求（判据第 8 条）
+    if (!loggedIn) return;
+
+    // 账号信息：昵称 / 手机号（未绑定显示占位文案，不展示假数据）
+    void fetchProfile().then((info) => {
+      this.setData({
+        phone: info.phone || '未绑定手机号',
+        nickname: info.nickname || this.data.nickname,
+      });
+    });
+
     // 口味摘要：轻量读一次，失败保持「未设置」不打扰
     void getMusicTaste().then((t) => {
       this.setData({ tasteSummary: tasteSummary(t) });
@@ -73,9 +92,32 @@ Page({
   goContracts() { wx.showToast({ title: '我的合同开发中', icon: 'none' }); },
   goChats() { wx.showToast({ title: '对话记录开发中', icon: 'none' }); },
   onNotify() { wx.showToast({ title: '消息通知已开启', icon: 'none' }); },
-  goAgreement() { wx.showToast({ title: '协议页开发中', icon: 'none' }); },
+  goAgreement() { wx.navigateTo({ url: '/pages/mine/agreement/agreement' }); },
   goAbout() { wx.showToast({ title: '科豆 AI v1.0.0', icon: 'none' }); },
-  logout() { wx.showToast({ title: '退出登录开发中', icon: 'none' }); },
+
+  /** 退出登录：二次确认 → 服务端作废 + 本地清态 → 停在登录墙（不跳欢迎页） */
+  logout() {
+    wx.showModal({
+      title: '退出登录',
+      content: '退出后需要重新登录才能继续使用。服务端登录凭证会同时失效。',
+      confirmText: '退出',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return;
+        void (async () => {
+          await logout();
+          this.setData({ loggedIn: false });
+          wx.showToast({ title: '已退出登录', icon: 'none' });
+        })();
+      },
+    });
+  },
+
+  /** 登录卡登录成功后回调：刷新本页内容 */
+  onLogged() {
+    this.setData({ loggedIn: isLoggedIn() });
+    this.onShow();
+  },
 
   clearCache() {
     wx.showLoading({ title: '清理中…' });

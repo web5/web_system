@@ -7,10 +7,14 @@
  *   ui='chat'   → navigateTo('/pages/chat/index/index?agentId=…&title=…')
  * 届时本页 onShow 拉清单渲染即可，跳转逻辑见下方 openCustom。
  */
+import { isLoggedIn } from '../../../services/auth';
+
 Page({
   data: {
     /** 圆角风格：页面根节点叠加的 class（app.wxss 的 .radius-* 覆盖类驱动） */
     radiusClass: '',
+    /** 登录态：false 时整页只渲染登录引导卡 */
+    loggedIn: true,
   },
 
   /** 登记当前 tab（自定义 tabBar 据此渲染并高亮；对话页则隐藏） */
@@ -21,6 +25,14 @@ Page({
 
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/discover/index/index', selected: 1 });
+
+    const loggedIn = isLoggedIn();
+    if (loggedIn !== this.data.loggedIn) this.setData({ loggedIn });
+  },
+
+  /** 登录卡登录成功后回调：刷新本页 */
+  onLogged() {
+    this.setData({ loggedIn: isLoggedIn() });
   },
 
   /** 语言翻译官（专属 UI，已存在） */

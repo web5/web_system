@@ -6,6 +6,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ApiKeyModule } from './api-key/api-key.module';
+import { EmailModule } from './email/email.module';
 import { PermissionModule } from './permission/permission.module';
 import { GlossaryModule } from './glossary/glossary.module';
 import { UserMemoryModule } from './memory/user-memory.module';
@@ -75,6 +76,7 @@ import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
     UserModule,
     AuthModule,
     ApiKeyModule,
+    EmailModule,
     PermissionModule,
     GlossaryModule,
     UserMemoryModule,
