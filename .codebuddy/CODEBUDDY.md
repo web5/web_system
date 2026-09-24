@@ -50,6 +50,26 @@
 
 > 为什么与 UI 门并列：**测试通过不等于能上线**。部署阶段的高频故障（改的不在被加载的目录、配置源被会话污染、旧进程占端口、迁移落到默认库）全部无报错，且不属任何现有评审的覆盖范围。
 
+### 2.5.2 契约变更动作门（改一处会不会让消费方静默失效 · 与 UI 无关）
+
+凡改动命中契约面 —— **即使是纯后端改动、即使只有一行**：
+
+- `packages/types/**`（权限码 / 共享常量 / 枚举）
+- `packages/agent-core/src/interfaces/**`（协议：`StreamEventType` / `RunInput`）
+- `scripts/migrations/**`（数据 / 结构迁移）
+- `servers/mcp-gateway/src/*/tools/**`（MCP 工具注册）
+- `servers/*/src/*/*.controller.ts`（对外接口）
+
+按契约纪律执行：过 `docs/api/contracts.md` 判据 → 出评审报告（**破坏性变更须附消费方清单**）→ **阻塞项清零** → commit 带 `Contract: pass`（或报告路径；CI R13 拦截）。
+
+- 判据源：`docs/api/contracts.md`（C1 接口 / C2 SSE 事件 / C3 MCP 工具 / C4 权限码与常量 / C5 网关路由）
+- 承担角色：`contract-reviewer`（**不代改、不代登记**，只出报告并回流）
+- 一致性机检：**R16** —— 以 agent-core 的 `StreamEventType` 为真相源，比对各端手写联合 + import 型消费方的 `switch case`
+- 纯微调走 `Micro-exempt: <理由>`
+
+> 为什么与 UI 门并列：契约的破坏是**静默的**。`'card'` 未登记 → 小程序漏分支、音乐卡片实时不下发；删掉一个「以为没人用」的类型 → import 型消费方的 `switch case` 直接编译失败。两者都编译能过 / 测试能过，**只有专门查消费方才会暴露**。
+> **硬步骤**：删契约前必须查 **import 型**消费方（grep `from '<包名>'` 后看其 `switch case` / `=== 'xxx'`）——只看手写型会漏（2026-09-24 实测踩过）。
+
 ## 3 AI 规则（含 agent 安全）
 
 - 只要与 agent 相关（含**工程的安全规则**）→ 放 **`.codebuddy/rules/`**（工具扫描加载）；通用红线在上游 `ai-agent-kit` 的 `rules/general/01–05`。

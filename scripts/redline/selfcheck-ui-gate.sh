@@ -163,6 +163,15 @@ else
   bad "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）" "无任何 workflow 引用 scan-rules.sh —— 红线规则失去 CI 兜底，本地 hook 可被 --no-verify 绕过"
 fi
 
+# V28 contract-reviewer 角色接线（技能存在 + 已登记 R12 保护清单；两者必须同批）
+# 为什么必须同批：保护清单语义是「项目专属、只在运行源」，漏登记会让 R12 把新技能
+# 判成「能力源缺失」漂移 → CI 报错。这条断言把「同批纪律」变成可机检。
+miss=""
+[ -f .codebuddy/skills/contract-reviewer/SKILL.md ] || miss="$miss SKILL.md"
+grep -q 'contract-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
+if [ -z "$miss" ]; then ok "V28 contract-reviewer 角色接线完整"
+else bad "V28 contract-reviewer 角色接线完整" "缺：${miss# }"; fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"
