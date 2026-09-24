@@ -6,6 +6,7 @@ import axios from 'axios';
 import { QrcodeService } from './qrcode.service';
 import { QrcodeStore } from './qrcode.store';
 import { UserService } from '../user/user.service';
+import { User } from '../user/user.entity';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -13,9 +14,12 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 describe('QrcodeService', () => {
   let service: QrcodeService;
   let store: QrcodeStore;
-  let userService: jest.Mocked<Partial<UserService>>;
-  let jwtService: jest.Mocked<Partial<JwtService>>;
-  let configService: jest.Mocked<Partial<ConfigService>>;
+  // 不用 jest.Mocked<Partial<X>>：Partial 让成员变成可选，@types/jest 的 Mocked
+  // 只包装**必填**函数成员，可选成员会保留原始函数签名 → 拿不到 mockResolvedValue
+  // （依赖小版本漂移即翻车，CI 时红时绿）。这里改成必填类型 + 赋值处显式断言。
+  let userService: jest.Mocked<UserService>;
+  let jwtService: jest.Mocked<JwtService>;
+  let configService: jest.Mocked<ConfigService>;
 
   const mockUser = {
     id: 1,
@@ -33,7 +37,7 @@ describe('QrcodeService', () => {
     dailyTransformLimit: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as unknown as User;
 
   beforeEach(async () => {
     store = new QrcodeStore();
@@ -41,15 +45,15 @@ describe('QrcodeService', () => {
     userService = {
       findByMpOpenid: jest.fn(),
       createMpUser: jest.fn(),
-    };
+    } as unknown as jest.Mocked<UserService>;
 
     jwtService = {
       signAsync: jest.fn(),
-    };
+    } as unknown as jest.Mocked<JwtService>;
 
     configService = {
       get: jest.fn() as any,
-    };
+    } as unknown as jest.Mocked<ConfigService>;
     (configService.get as jest.Mock).mockImplementation((key: string, defaultValue?: any) => {
       const config: Record<string, any> = {
         MINI_PROGRAM_APP_ID: 'mp_appid',
