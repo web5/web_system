@@ -27,6 +27,7 @@ import { EnvsModule } from './envs/envs.module';
 import { AppsModule } from './apps/apps.module';
 import { ServicesModule } from './services/services.module';
 import { HostsModule } from './hosts/hosts.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -123,6 +124,7 @@ import { HostsModule } from './hosts/hosts.module';
     ServicesModule,
     // 主机管理（双域重构：服务环境指向的地址来源，host_name 引用 deploy_hosts.name）
     HostsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
