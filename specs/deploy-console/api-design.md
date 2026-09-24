@@ -97,6 +97,30 @@
 ### 5.9 `POST /monitor/local/pm2/restart?service=` — 重启本机服务（`service` 白名单，留审计）
 ### 5.10 `GET /monitor/local/port?port=` — 本机端口占用检测
 
+#### 取数口径（2026-09-24 起，契约评审：`docs/api/reviews/monitor-env-scope-20260924.md`）
+
+- **环境视角的 5.1–5.5：目标主机与地址来自「主机管理」**
+  `deploy_service_envs(env_id, service_key) → host_name` → `deploy_hosts(name).host / sshUser / sshKeyPath`。
+  旧表 `deploy_servers` 的 `<env>-default` 仅在发布侧作回退（前端模块尚未登记进 `deploy_service_envs`）。
+- **可管环境**：`managed_by` 为空（所有控制台可见）或等于本实例 `CONSOLE_INSTANCE`。
+  请求**不可管环境** → `502`（文案：`环境 <env> 在「主机管理」中没有可解析且归属本控制台的主机`）。
+- **SSH 私钥缺失**不再静默：抛 `502` 并给出主机 / 用户 / 密钥路径（此前是 `privateKey=undefined` 导致一片 timeout）。
+- **健康探活**：每台主机**只建一条 SSH 连接**，一条命令并行探完该主机所有端口；
+  探测目标先 `127.0.0.1:<port>/health`，`000` 再退 `host:<port>/health`；`execSsh` 超时 30s。
+- **`CONSOLE_INSTANCE` 为部署期必配项**：缺失即启动 FATAL（与 `CONFIG_MASTER_KEY` 同规格，不兜底）。
+
+### 5.11 `GET /monitor/envs` — 当前控制台可管的环境列表
+
+- 返回：`[{ id, name }]`；推导见上「可管环境」
+- 用途：替代前端硬编码的 `local/dev/prod` 页签（dev 控制台 → `dev/prod`；编排者本机控制台 → `local/dev/prod`）
+
+### 5.12 `GET /monitor/pm2/hosts?env=` — PM2 进程（**按主机分组**，逐台取数）
+
+- 返回：`[{ name, host, scope, runtime, ok, error?, tookMs, procs }]`
+  - `procs` 元素同 5.2（`name/pid/status/cpu/memory/uptime/restarts/port`）
+  - `ok=false` 时 `error` 为该主机的取数失败真因（SSH 连接失败 / 超时 / jlist 解析失败）
+- 单台失败不影响其它主机；**不可达主机的分组仍然返回**（不整块消失）
+
 ---
 
 ## 6. 审计日志 `audit`（AuditController → `audit`，仅控制台 JWT）
