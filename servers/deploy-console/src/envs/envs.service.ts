@@ -18,7 +18,7 @@ const FALLBACK_ENV_ID = 'dev';
 const BUILTIN_SITES = [
   { key: 'local', host: 'local.kedouai.com', name: '本机站点', defaultEnvId: 'local', switchable: true },
   { key: 'dev', host: 'dev.kedouai.com', name: '开发站点', defaultEnvId: 'dev', switchable: true },
-  { key: 'prod', host: 'portal.kedouai.com', name: '生产站点', defaultEnvId: 'prod', switchable: false },
+  { key: 'prod', host: 'kedouai.com', name: '生产站点', defaultEnvId: 'prod', switchable: false },
 ] as const;
 
 /** 内置环境种子（M3） */
