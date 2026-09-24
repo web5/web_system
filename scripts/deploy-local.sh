@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
 # ============================================================
-# deploy-local.sh — 本地开发环境一键部署（workspace → release）
+# deploy-local.sh — ⚠️ 已弃用 ⚠️ （参考 2026-09-23 与用户的口径决定）
 #
-# 背景（踩过的坑，勿删）：
+# 此前的用途是 workspace → release（~/web_system_release）的一键发布，
+# 用于本地联调，绕开 deploy-console 流水线。
+#
+# 后续口径：
+#   **所有发布（含本地 dev 验证）均走 deploy-console 流水线**——
+#   `POST /api/pipelines`，env=local，branch 指定。
+#   deploy-console 自身的源码构建/重启已脚本化（scripts/publish-deploy-console.sh），
+#   其余模块（admin/portal/gateway/ai-agent 等）一律流水线发布。
+#
+# 为什么不再维护本脚本：
+#   - deploy-local.sh 缺 mysql 凭证注入 / 缺 systemJS shim 同步写入 / 缺 release 端
+#     git 分支切换 —— 这些该由流水线统一兜底，本地脚本逐渐偏离流水线契约。
+#   - 它继续能跑（便于历史回归与一次性紧急发布），但默认会喊 deprecation，
+#     强制执行需显式 `DEPRECATED_DEPLOY_LOCAL_LEGACY=1`。
+#
+# 历史背景（踩过的坑，仍是 wiki 知识）：
 #   1) nginx /static/modules/ alias 指向 web_system_release，前端产物必须拷到 release，
 #      只拷 workspace 的 gateway/public 不会生效（浏览器加载 404）。
 #   2) pm2 启动的是 release/servers/<svc>/dist/main.js，后端服务同样跑在 release 副本，
@@ -10,18 +25,29 @@
 #   3) 端口可能被"孤儿残留进程"占用（非 pm2 管理的旧实例），导致 pm2 新进程无法监听、
 #      新代码永远进不来 —— 重启前必须清理端口上的非 pm2 进程。
 #   4) gateway 的 DEPLOY_ENV_ID=local，版本表要更新 env_id='local' 行（不是 dev 行）。
+#   5) 上游 pineline 跳过的同步动作（mysql 凭证、systemJS shim）需要手工补。
 #
-# 用法：
+# 用法（仍支持，仅作 escape hatch）：
 #   ./scripts/deploy-local.sh                 # 全量（前端 admin + 全部后端）
 #   ./scripts/deploy-local.sh admin           # 只发前端 admin
 #   ./scripts/deploy-local.sh ai-agent        # 只发 ai-agent
 #   ./scripts/deploy-local.sh admin ai-agent  # 组合
+#   DEPRECATED_DEPLOY_LOCAL_LEGACY=1 ./scripts/deploy-local.sh portal
+#     # ↑ 抑制下方的 deprecation 警告继续执行（推荐流水线走 console）
 #
 # 环境变量：
-#   DRY_RUN=1      只打印不执行
-#   SKIP_TEST=1    跳过部署后验证
-#   FORCE_CLEAN=1  清理端口上非 pm2 管理的残留进程（默认不清理，避免误杀）
+#   DRY_RUN=1                    只打印不执行
+#   SKIP_TEST=1                  跳过部署后验证
+#   FORCE_CLEAN=1                清理端口上非 pm2 管理的残留进程（默认不清理）
+#   DEPRECATED_DEPLOY_LOCAL_LEGACY=1   抑制 deprecation 警告（默认强制喊出）
 # ============================================================
+
+if [ "${DEPRECATED_DEPLOY_LOCAL_LEGACY:-0}" != "1" ]; then
+  echo "⚠️  scripts/deploy-local.sh 已弃用（2026-09-23 口径）。" >&2
+  echo "    后续发布（含本地 dev 验证）走 deploy-console 流水线（POST /api/pipelines, env=local）。" >&2
+  echo "    仍要跑请设置 DEPRECATED_DEPLOY_LOCAL_LEGACY=1 后重试。" >&2
+  exit 1
+fi
 set -euo pipefail
 
 WORKSPACE="${WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
