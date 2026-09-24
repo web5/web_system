@@ -253,6 +253,16 @@
   .env-loading .ls2{font-size:12px;color:var(--ws-text-tertiary);margin-top:4px;}
   .ad-envtip{display:inline-flex;align-items:center;gap:6px;background:var(--ws-brand-soft);color:var(--ws-brand-accent);
     border-radius:var(--ws-radius-pill);padding:3px 10px;font-size:12px;font-weight:600;margin-left:8px;}
+
+/* ===== 服务监控：PM2 按主机分组（2026-09-24） ===== */
+.mon-group{border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden;}
+.mon-group-head{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg-2,#fafafa);cursor:pointer;
+  font-size:12px;color:var(--text-2);border-bottom:1px solid var(--border);}
+.mon-group .caret{display:inline-block;width:12px;transition:transform .15s;}
+.mon-group.collapsed .caret{transform:rotate(-90deg);}
+.mon-group.collapsed .mon-group-body{display:none;}
+.mon-group-body{padding:0;}
+.mon-group-body table{margin:0;}
 </style>
 </head>
 <body>
@@ -264,6 +274,12 @@
     下半：<b>产品页面（admin）</b>—— <b>环境切换插件</b>的真实交互演示，点右下角挂件切换环境，观察 micro-app 重新加载。<br>
     2026-09-22 新增屏：<b>流水线详情 · 执行流程</b>（紧凑步骤卡 + 任务行连线 + skipped 灰色，用户 2026-09-22 标注）——
     <button class="dc-btn" style="vertical-align:middle;" onclick="dc('rundetail','gateway 发布 · 流水线详情')">▶ 打开新屏</button><br>
+    2026-09-24：新增屏 <b>基础设施 → 服务监控</b>（真实屏，替换原 generic 占位）——
+    <button class="dc-btn" style="vertical-align:middle;" onclick="switchDomain('infra');dc('monitor','服务监控')">▶ 打开新屏</button><br>
+    口径：页签来自「主机管理」（<code>deploy_hosts.managed_by</code> 决定哪份控制台能看哪台主机 → dev 控制台只有 DEV/PROD，本机控制台才有「本地」）；
+    PM2 <b>按主机分组</b>、逐台取数，不可达的主机分组<b>仍然出现</b>并给出真因；任一主机失败时页面顶部出现<b>诊断横幅</b>。
+    屏内 4 个场景可切换：① 单主机正常 ② 多主机·一台失败 ③ 全部失败 ④ 本机控制台视角。
+    方案：<code>docs/development/console-monitor-followups.md</code>；页面规格：<code>specs/deploy-console-domain-split/page-spec.md</code> §6.1。
     2026-09-23：执行流程屏内新增 <b>场景切换</b>（成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败 / 执行中），演示
     <b>连线着色规则 v2</b> —— 起因是两次真实反馈：「4-2 执行成功，但分叉整段还是灰」（v1：分支里存在 skipped → 整段竖线灰）与
     「4-2 未执行，箭头却提前变绿」。竖线规则已拍板：<b>有分支执行并成功才绿</b>；屏内附三段连线 × 状态源 × 颜色的完整状态表。
@@ -607,6 +623,115 @@
               <tr><td class="dc-mono">bastion</td><td class="dc-mono">101.43.117.234</td><td class="dc-mono">ubuntu</td><td class="dc-mono">/workspace</td><td><span class="dc-badge neutral">docker</span></td><td class="dc-muted">zone=cn-gz</td><td><span class="dc-sw on" onclick="this.classList.toggle('on')"></span></td><td><button class="dc-btn link" onclick="toast('连接测试：通过')">测试</button></td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 服务监控（2026-09-24 真实屏：页签来自主机管理 / PM2 按主机分组 / 顶部诊断横幅） -->
+      <div class="screen" id="dc-monitor">
+        <div class="dc-page-head">
+          <div class="dc-row">
+            <div><h1>服务监控</h1><div class="sub">按环境查看服务状态与 PM2 进程；页签来自「主机管理」里本控制台可管的主机。</div></div>
+            <div class="dc-spacer"></div>
+            <span class="dc-muted" style="font-size:12px;">自动刷新（10 秒）</span>
+            <span class="dc-sw on" data-dr="monitor-autorefresh" onclick="this.classList.toggle('on')"></span>
+            <button class="dc-btn" onclick="toast('已刷新')">手动刷新</button>
+          </div>
+        </div>
+
+        <!-- 场景切换：同一屏内对比四种真实形态 -->
+        <div class="run-scenes" style="margin:0 0 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <span class="dc-muted" style="margin-right:2px;">场景：</span>
+          <button class="sc active" data-sc="m1" onclick="setMonScene('m1')">① 单主机 · 全部正常</button>
+          <button class="sc" data-sc="m2" onclick="setMonScene('m2')">② 多主机 · 一台取数失败</button>
+          <button class="sc" data-sc="m3" onclick="setMonScene('m3')">③ 全部取数失败</button>
+          <button class="sc" data-sc="m4" onclick="setMonScene('m4')">④ 编排者本机控制台（含「本地」）</button>
+        </div>
+
+        <!-- 页签：由 GET /monitor/envs 下发；dev 控制台 = DEV/PROD，本机控制台 = 本地/DEV/PROD -->
+        <div class="dc-tabs" data-dr="monitor-tabs" style="border-bottom:1px solid var(--border);margin-bottom:12px;">
+          <div class="t2 active" id="monTabLocal" style="display:none;">本地</div>
+          <div class="t2 active" id="monTabDev">DEV</div>
+          <div class="t2" id="monTabProd" style="color:var(--text-3);">PROD</div>
+        </div>
+
+        <!-- 顶部诊断横幅：任一主机取数失败即出现（场景 ②③） -->
+        <div id="monBanner" data-dr="monitor-banner" style="display:none;border:1px solid var(--danger);background:#fff1f0;border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+          <div style="font-weight:600;color:var(--danger);margin-bottom:4px;">⚠ 有主机取数失败</div>
+          <div class="dc-mono" id="monBannerMsg" style="font-size:12px;color:var(--text-2);">
+            SSH 连接失败: All configured authentication methods failed —— 主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="dc-btn" onclick="toast('重新取数')">重试</button>
+            <button class="dc-btn link" onclick="dc('hosts','主机管理')">去主机管理检查</button>
+          </div>
+        </div>
+
+        <!-- 服务状态表（新增「主机」列） -->
+        <div class="dc-card" style="margin-bottom:16px;">
+          <div class="dc-row" style="margin-bottom:10px;"><h3 style="font-size:15px;">服务状态</h3><div class="dc-spacer"></div><span class="dc-muted" id="monHealthMeta" style="font-size:12px;">12 / 12 在线</span></div>
+          <table data-dr="monitor-health-table">
+            <thead><tr><th>服务</th><th>主机</th><th>地址</th><th>状态</th><th>响应</th><th>响应时间</th><th>操作</th></tr></thead>
+            <tbody id="monHealthBody">
+              <tr class="mon-hr" data-dev-h="dev-default" data-dev-a="175.27.189.123:6000" data-local-h="local-default" data-local-a="127.0.0.1:6000"><td class="dc-mono">gateway</td><td class="dc-mono mon-h"></td><td class="dc-mono mon-a"></td><td><span class="dc-badge ok">在线</span></td><td class="dc-mono">200</td><td class="dc-mono">12 ms</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+              <tr class="mon-hr" data-dev-h="dev-default" data-dev-a="175.27.189.123:6001" data-local-h="local-default" data-local-a="127.0.0.1:6101"><td class="dc-mono">auth-service</td><td class="dc-mono mon-h"></td><td class="dc-mono mon-a"></td><td><span class="dc-badge ok">在线</span></td><td class="dc-mono">404</td><td class="dc-mono">9 ms</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+              <tr class="mon-hr" data-dev-h="dev-default" data-dev-a="175.27.189.123:6002" data-local-h="local-default" data-local-a="127.0.0.1:6002"><td class="dc-mono">user-service</td><td class="dc-mono mon-h"></td><td class="dc-mono mon-a"></td><td><span class="dc-badge ok">在线</span></td><td class="dc-mono">404</td><td class="dc-mono">11 ms</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+              <tr id="monRowFail" style="display:none;"><td class="dc-mono">upload-service</td><td class="dc-mono" id="monFailHost">dev-b</td><td class="dc-mono">10.0.0.7:6008</td><td><span class="dc-badge err">离线</span></td><td class="dc-mono">timeout</td><td class="dc-mono">—</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- PM2 进程：按主机分组 -->
+        <div class="dc-card">
+          <div class="dc-row" style="margin-bottom:10px;"><h3 style="font-size:15px;">PM2 进程</h3><div class="dc-spacer"></div><span class="dc-muted" style="font-size:12px;">按主机分组，逐台取数</span></div>
+          <div data-dr="monitor-pm2-groups">
+
+            <!-- 分组 A（正常） -->
+            <div class="mon-group" id="monGroupA">
+              <div class="mon-group-head" onclick="this.parentNode.classList.toggle('collapsed')">
+                <span class="caret">▾</span>
+                <span class="dc-mono" style="font-weight:600;" id="monGroupNameA">dev-default</span>
+                <span class="dc-muted">·</span><span class="dc-mono" id="monGroupHostA">175.27.189.123</span>
+                <span class="dc-muted">·</span><span class="dc-badge neutral" id="monGroupRtA">pm2</span>
+                <span class="dc-muted">·</span><span id="monGroupCountA">13 个进程</span>
+                <span class="dc-muted">·</span><span class="dc-mono">取数 340 ms</span>
+              </div>
+              <div class="mon-group-body">
+                <table>
+                  <thead><tr><th>进程名</th><th>状态</th><th>CPU</th><th>内存</th><th>运行时间</th><th>重启</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td class="dc-mono">web-gateway</td><td><span class="dc-badge ok">online</span></td><td class="dc-mono">0.3%</td><td class="dc-mono">128 MB</td><td class="dc-mono">3天2小时</td><td class="dc-mono">0</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+                    <tr><td class="dc-mono">web-auth</td><td><span class="dc-badge ok">online</span></td><td class="dc-mono">0.1%</td><td class="dc-mono">96 MB</td><td class="dc-mono">3天2小时</td><td class="dc-mono">0</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+                    <tr><td class="dc-mono">web-user</td><td><span class="dc-badge ok">online</span></td><td class="dc-mono">0.2%</td><td class="dc-mono">104 MB</td><td class="dc-mono">1天7小时</td><td class="dc-mono">1</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 分组 B（取数失败；场景 ②③ 出现） -->
+            <div class="mon-group" id="monGroupB" style="display:none;">
+              <div class="mon-group-head" onclick="this.parentNode.classList.toggle('collapsed')">
+                <span class="caret">▾</span>
+                <span class="dc-mono" style="font-weight:600;">dev-b</span>
+                <span class="dc-muted">·</span><span class="dc-mono">10.0.0.7</span>
+                <span class="dc-muted">·</span><span class="dc-badge neutral">docker</span>
+                <span class="dc-muted">·</span><span style="color:var(--danger);">取数失败</span>
+              </div>
+              <div class="mon-group-body">
+                <div style="border:1px solid var(--danger);background:#fff1f0;border-radius:6px;padding:10px 12px;">
+                  <div style="font-weight:600;color:var(--danger);margin-bottom:4px;">⚠ SSH 连接失败: All configured authentication methods failed</div>
+                  <div class="dc-mono" style="font-size:12px;color:var(--text-2);">主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在</div>
+                  <div style="margin-top:8px;display:flex;gap:8px;">
+                    <button class="dc-btn" onclick="toast('重试该主机')">重试</button>
+                    <button class="dc-btn link" onclick="dc('hosts','主机管理')">去主机管理检查</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div class="dc-muted" style="margin-top:10px;font-size:12px;">
+            说明：分组头展示「主机组名 · 地址 · 运行时 · 进程数 · 取数耗时」；<b>不可达的主机分组仍然出现</b>（不整块消失），块内给出真因。
+          </div>
         </div>
       </div>
 
@@ -1548,7 +1673,8 @@ body{background:var(--ws-border-subtle);}
                                                   {page:'generic',title:'自助诊断',label:'自助诊断'},
                                                   {page:'generic',title:'工具目录',label:'工具目录'}]},
     {key:'infra',     label:'基础设施',   items:[{page:'hosts',label:'主机管理',id:'nav-hosts'},
-                                                  {page:'generic',title:'服务监控',label:'服务监控'},
+                                                  // 2026-09-24：服务监控升级为真实屏（页签来自主机管理 / PM2 按主机分组 / 顶部诊断横幅）
+                                                  {page:'monitor',label:'服务监控',id:'nav-monitor'},
                                                   {page:'generic',title:'审计日志',label:'审计日志'},
                                                   {page:'generic',title:'通知中心',label:'通知中心'},
                                                   {page:'generic',title:'配置中心',label:'配置中心'},
@@ -1558,7 +1684,7 @@ body{background:var(--ws-border-subtle);}
   /* 页面 → 所属一级（顶部 tab 高亮） */
   var DC_PAGE_DOMAIN = {"dashboard":"dashboard","apps":"apps","envs":"apps","appdetail":"apps",
                         "services":"svcs","svcdetail":"svcs","pipelines":"pl","rundetail":"pl",
-                        "hosts":"infra","settings":"infra"};
+                        "hosts":"infra","settings":"infra","monitor":"infra"};
   function dcFindDomain(key){ for(var i=0;i<DC_MENU.length;i++){ if(DC_MENU[i].key===key) return DC_MENU[i]; } return null; }
   /* 渲染左侧二级菜单（跟随顶部一级） */
   function renderSide(domain){
@@ -1588,11 +1714,7 @@ body{background:var(--ws-border-subtle);}
       rows:[['write-version','脚本','平台接口','admin/auth/gateway','<span class="dc-badge ok">启用</span>','查看|编辑'],
             ['notify-callback','脚本','外部 Webhook','admin','<span class="dc-badge ok">启用</span>','查看|编辑'],
             ['health-probe','脚本','平台接口','全部后端线','<span class="dc-badge neutral">停用</span>','查看|启用']]},
-    '服务监控':{sub:'各服务实例健康与资源占用',note:'数据 30s 刷新；探活失败连续 3 次触发告警。',
-      cols:['服务','实例','CPU','内存','探活','操作'],
-      rows:[['gateway','web-gateway-1','12%','412MB','<span class="dc-badge ok">通过</span>','日志|重启'],
-            ['auth-service','web-auth-1','8%','298MB','<span class="dc-badge ok">通过</span>','日志|重启'],
-            ['ai-service','web-ai-1','46%','1.2GB','<span class="dc-badge err">失败</span>','日志|重启']]},
+    // 2026-09-24：服务监控已升级为真实屏（dc-monitor），不再走 generic 骨架
     '审计日志':{sub:'控制台关键操作留痕：保存 / 删除 / 发布 / 审批',note:'保留 180 天；导出走工单审批。',
       cols:['时间','操作人','动作','对象','结果'],
       rows:[['09-20 11:30','admin','保存流水线','admin 发布','<span class="dc-badge ok">成功</span>'],
@@ -1641,6 +1763,55 @@ body{background:var(--ws-border-subtle);}
   }
   /* 初始化：默认进「微前端」域（HTML 中 dc-apps 屏默认 active） */
   renderSide('apps');
+  /* ===== 服务监控：场景切换（2026-09-24） ===== */
+  var MON_SCENES = {
+    /* ① dev 控制台，1 台主机，全部正常 */
+    m1:{ banner:false, failRow:false, groupB:false, localTab:false,
+         healthMeta:'12 / 12 在线', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'13 个进程'} },
+    /* ② 多主机：dev-default 正常 + dev-b 取数失败 */
+    m2:{ banner:true, failRow:true, groupB:true, localTab:false,
+         bannerMsg:'SSH 连接失败: All configured authentication methods failed —— 主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在',
+         healthMeta:'11 / 12 在线', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'13 个进程'} },
+    /* ③ 全部取数失败（原来的 dev 故障形态：页面一眼看出是 SSH 不通，不是服务挂了） */
+    m3:{ banner:true, failRow:true, groupB:false, localTab:false,
+         bannerMsg:'SSH 连接失败: All configured authentication methods failed —— 主机组 dev-default（175.27.189.123 / ubuntu），密钥 ~/.ssh/id_ed25519_servers 不存在',
+         healthMeta:'0 / 12 在线', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'取数失败'} },
+    /* ④ 编排者本机控制台：managed_by=orchestrator → 多一个「本地」页签 */
+    m4:{ banner:false, failRow:false, groupB:false, localTab:true,
+         healthMeta:'12 / 12 在线', gA:{name:'local-default',host:'127.0.0.1',rt:'pm2',count:'13 个进程'} }
+  };
+  function setMonScene(k){
+    var s = MON_SCENES[k]; if(!s) return;
+    document.querySelectorAll('#runScenes .sc, .run-scenes .sc').forEach(function(b){ b.classList.remove('active'); });
+    var btn = document.querySelector('.sc[data-sc="'+k+'"]'); if(btn) btn.classList.add('active');
+    var banner = document.getElementById('monBanner');
+    if(banner){ banner.style.display = s.banner ? '' : 'none';
+      var msg = document.getElementById('monBannerMsg'); if(msg && s.bannerMsg) msg.textContent = s.bannerMsg; }
+    var row = document.getElementById('monRowFail'); if(row) row.style.display = s.failRow ? '' : 'none';
+    var gB = document.getElementById('monGroupB'); if(gB) gB.style.display = s.groupB ? '' : 'none';
+    var tabLocal = document.getElementById('monTabLocal');
+    var tabDev = document.getElementById('monTabDev');
+    if(tabLocal){ tabLocal.style.display = s.localTab ? '' : 'none';
+      tabLocal.classList.toggle('active', !!s.localTab); }
+    if(tabDev) tabDev.classList.toggle('active', !s.localTab);
+    var meta = document.getElementById('monHealthMeta'); if(meta) meta.textContent = s.healthMeta;
+    /* 服务状态表的主机/地址列随场景（本机视角 = 127.0.0.1 + 6101 特例） */
+    var local = !!s.localTab;
+    document.querySelectorAll('#monHealthBody tr.mon-hr').forEach(function(tr){
+      var h = tr.querySelector('.mon-h'), a = tr.querySelector('.mon-a');
+      if(h) h.textContent = local ? tr.getAttribute('data-local-h') : tr.getAttribute('data-dev-h');
+      if(a) a.textContent = local ? tr.getAttribute('data-local-a') : tr.getAttribute('data-dev-a');
+    });
+    var failHost = document.getElementById('monFailHost');
+    if(failHost && local) failHost.textContent = 'local-default';
+    ['A'].forEach(function(x){
+      var n=document.getElementById('monGroupName'+x), h=document.getElementById('monGroupHost'+x),
+          c=document.getElementById('monGroupCount'+x), r=document.getElementById('monGroupRt'+x);
+      if(n) n.textContent=s.gA.name; if(h) h.textContent=s.gA.host;
+      if(c) c.textContent=s.gA.count; if(r) r.textContent=s.gA.rt;
+    });
+  }
+
   function dc(page, title){
     document.querySelectorAll('.dc-content .screen').forEach(function(s){s.classList.remove('active');});
     var el = document.getElementById('dc-'+page);

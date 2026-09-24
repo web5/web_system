@@ -343,7 +343,7 @@
   - 打开 / 关闭 / 提交**都不改变路由**；关闭后回到服务详情页原状态（tab 与滚动位置不变）。
   - 失败态：提交失败在抽屉内报错且**不关抽屉**，可在原抽屉直接重试。
 - 涉及 Token：无（复用现有抽屉与表单样式）
-- 原型：`docs/ui/prototypes/deploy-console-domain-split.html`（服务详情屏「构建发布」→ 原地抽屉，含打开/关闭/提交三步）
+- 原型：`docs/ui/prototypes/deploy-console-domain.html`（服务详情屏「构建发布」→ 原地抽屉，含打开/关闭/提交三步）
 - 门禁：UI 动作门 —— 交互变更（非纯视觉微调），原型 + 规格先行，**人审确认后**再落码
 - **实现结果（2026-09-21 已发布）**：抽屉抽为共用组件 `components/pipeline/PipelineSubmitDrawer.vue`
   （锁定参数：`fixedModuleKey` / `initialModuleKey` / `fixedTemplateId` + `fixedTemplateEnv` / `defaultEnv` + `lockEnv`），
@@ -376,7 +376,7 @@
 
 - 页面/组件：`apps/deploy-console/src/components/pipeline/ProgressFlow.vue`
 - 反馈：① 步骤卡「标题太大，不协调」（连线 OK 之后，整体画布元素比例失衡）；② dev 没执行应该是灰色（当前 `st-skipped` 复用了成功系虚线）。
-- 原型（**待用户确认**）：`docs/ui/prototypes/deploy-console-domain-split.html` 新增屏 `dc-rundetail`
+- 原型（**待用户确认**）：`docs/ui/prototypes/deploy-console-domain.html` 新增屏 `dc-rundetail`
   （流水线详情 · 执行流程；入口 = 侧栏「流水线管理 → 流水线详情」或页头「▶ 打开新屏」）：
   - 步骤标题卡**紧凑 + 中性**（2026-09-22 二次确认，对比编辑页）：seq / 名称 / 命令 两行、
     名称 13px、白底灰边深字 —— **不整卡染成功色**（编辑页 step-title 即中性，
@@ -403,7 +403,7 @@
   但分叉竖线整段仍是灰的 → 「4-2 执行成功了，怎么还是灰色」。
   根因 = §14 的竖线规则「分支里存在 skipped → 整段竖线灰」：跳过的分支把真实走通的分支拖灰。
   （叠加此前另一处：支线判据「非 skipped 即绿」→ 未执行的任务箭头提前变绿，已按同规则改数据判定。）
-- 原型（`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`，**待用户确认**）：
+- 原型（`docs/ui/prototypes/deploy-console-domain.html` 屏 `dc-rundetail`，**待用户确认**）：
   新增**场景切换**（成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败·4-2 失败 / 执行中·4-2 运行），
   网格改为按场景数据渲染，连线按下列 v2 规则着色：
 

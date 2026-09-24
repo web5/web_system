@@ -3,7 +3,7 @@
 > 版本：v1.0（待用户过目）｜ 2026-09-18
 > 输入：`./requirements.md`（FR-1~FR-10）+ `./design.md`（数据模型 + 接口契约）
 > 规范依据：`docs/ui/design.md`（判断层）、`docs/ui/page-spec-template.md`（Full 模板）
-> 原型稿：`docs/ui/prototypes/deploy-console-domain-split.html`
+> 原型稿：`docs/ui/prototypes/deploy-console-domain.html`
 > 适用端：deploy-console（admin 系，主橙 `--ws-brand-500` / DR-3）
 
 ---
@@ -335,6 +335,43 @@
 - 列：主机组名（`.ws-mono`）/ 地址（`.ws-mono`）/ SSH 用户 / 部署根目录（`.ws-mono`）/ 运行时（pm2|docker 中性 tag）/ 标签 / 启用 / 操作
 - 交互：新增/编辑（drawer）、删除（有服务环境引用时阻断并列出）、连接测试（loading → 结果）
 - 状态：空态"尚未登记主机，服务环境将无法配置目标机器"
+- **2026-09-24 增列**：`scope`（local / cloud / container，默认 cloud）与 `managedBy`（归属控制台实例；空 = 所有控制台可见）—— 服务监控的可管环境由这两列推导（见 §6.1）
+
+---
+
+## 6.1 页面规格 · 服务监控 `/monitor`（2026-09-24，替换原 generic 占位）
+
+- 页面类型：**环境视角的只读监控页**
+- 参照页：原 `ServiceMonitor.vue`；原型屏 `dc-monitor`（`docs/ui/prototypes/deploy-console-domain.html`，4 场景可切换）
+- 方案与事实：`docs/development/console-monitor-followups.md`
+
+**页签（数据来源 = 主机管理）**
+
+- 由 `GET /monitor/envs` 下发，**不再硬编码** local/dev/prod
+- 推导：环境 E 可管 ⇔ 有 `deploy_service_envs` 指向 E ∧ 其 `hostName` 在 `deploy_hosts` 解析到启用中的地址
+  ∧（`managedBy` 为空 ∨ `managedBy` = 本控制台 `CONSOLE_INSTANCE`）
+- 效果：dev 控制台 = DEV / PROD；编排者本机控制台 = 本地 / DEV / PROD
+
+**区块（自上而下）**
+
+1. **顶部诊断横幅**（`Alert` error）：任一主机取数失败即出现，文案含**真因**（主机组 / 地址 / SSH 用户 / 密钥路径 / 原始错误），操作「重试」「去主机管理检查」
+2. **服务状态表**：列 = 服务 / **主机** / 地址 / 状态 / 响应 / 响应时间 / 操作（查看日志）
+   - 不分组：行是「服务 × 主机 × 端口」，本来就跨主机；支持按主机筛选
+   - 取数失败的行带 `error`，状态「离线 / timeout」
+3. **PM2 进程 · 按主机分组**：环境内主机去重 → 逐台取 → 分组渲染
+   - 分组头：`主机组名 · 地址 · 运行时 · 进程数 · 取数耗时`（折叠面板，默认展开）
+   - **不可达的主机分组仍出现**，块内 `a-alert error` 给真因 + 「重试」「去主机管理检查」
+   - 只有 1 台主机时分组头保留但视觉弱化
+   - 接口 `GET /monitor/pm2/hosts?env=` → `{hosts:[{name,host,scope,runtime,ok,error?,tookMs,procs}]}`
+4. 页头右侧：自动刷新开关（10 秒）+ 手动刷新
+
+**状态与不可逆口径**
+
+- `CONSOLE_INSTANCE` **必配、无默认值**：缺失即启动 FATAL（与 `CONFIG_MASTER_KEY` 同规格）
+- 探活在**服务所在的那台主机**上发起，**每台主机只建一条 SSH 连接**（并发握手会被 sshd 拒）；
+  探测目标先 `127.0.0.1:port`，`000` 再退 `host:port`
+
+**涉及 Token**：`--ws-danger*`（横幅/失败分组）、`--ws-ok`（在线）、`--ws-text-tertiary`（分组头次要信息）
 
 ---
 

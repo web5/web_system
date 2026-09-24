@@ -2,7 +2,7 @@
 /**
  * 流水线编排画布（新三层模型：步骤 → 任务 → 动作）。
  *
- * UI 真相源：docs/ui/prototypes/deploy-console-domain-split.html（用户逐轮确认的画布形态）
+ * UI 真相源：docs/ui/prototypes/deploy-console-domain.html（用户逐轮确认的画布形态）
  * 模型：specs/pipeline-step-task/design.md §6
  *  - 上行步骤标题（互不连线）；下行任务卡（箭头串联，连线中点「＋」= 添加步骤）
  *  - 多任务步骤分叉进入；任务头下紧贴动作块（共享边框组，圆角 2px）

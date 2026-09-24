@@ -2,7 +2,7 @@
 /**
  * 存储配置卡片（A6）——「上传根目录」的查看与修改。
  *
- * 原型（已人审通过）：`docs/ui/prototypes/deploy-console-domain-split.html` → 系统设置 → 存储配置
+ * 原型（已人审通过）：`docs/ui/prototypes/deploy-console-domain.html` → 系统设置 → 存储配置
  * 后端契约（system-service）：`specs/backend-consolidation/page-spec-storage-config.md`
  *
  * 三条不可丢的语义：
