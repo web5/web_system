@@ -77,11 +77,11 @@ export class EnvironmentService implements OnModuleInit {
   private defaultProdAddress(moduleKey: string, type: string): string | undefined {
     if (type !== 'backend') return undefined;
     const map: Record<string, string> = {
-      gateway: 'portal.kedouai.com:3000',
-      'auth-service': 'portal.kedouai.com:3001',
-      'user-service': 'portal.kedouai.com:3002',
-      'ai-service': 'portal.kedouai.com:3003',
-      'system-service': 'portal.kedouai.com:3004',
+      gateway: 'kedouai.com:3000',
+      'auth-service': 'kedouai.com:3001',
+      'user-service': 'kedouai.com:3002',
+      'ai-service': 'kedouai.com:3003',
+      'system-service': 'kedouai.com:3004',
       'mcp-gateway': '127.0.0.1:6006',
     };
     return map[moduleKey];
@@ -109,7 +109,7 @@ export class EnvironmentService implements OnModuleInit {
       {
         id: 'prod',
         name: '生产环境',
-        publicUrl: 'https://portal.kedouai.com',
+        publicUrl: 'https://kedouai.com',
         address: this.defaultProdAddress(m.key, m.type),
       },
     ];
