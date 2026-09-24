@@ -96,6 +96,34 @@ export class EmailService {
   }
 
   /**
+   * 发送测试邮件（admin「系统设置 → 通知设置 → 发送测试邮件」）。
+   * 先强制重读配置，保证测的就是刚保存的那份。
+   */
+  async sendTestMail(to: string): Promise<{ message: string }> {
+    const target = String(to || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target)) {
+      throw new BadRequestException('收件邮箱格式不正确');
+    }
+    await this.mail.refresh();
+    if (!(await this.mail.isEnabled())) {
+      throw new HttpException('邮件服务暂不可用，请先保存 SMTP 配置', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    try {
+      await this.mail.sendMail({
+        to: target,
+        subject: '科豆 AI — 测试邮件',
+        text: '这是一封来自科豆 AI 系统设置的测试邮件，收到即表示邮件服务配置正确。',
+        html: `<p>这是一封来自科豆 AI 系统设置的测试邮件。</p>
+               <p style="color:#999">收到即表示邮件服务配置正确。</p>`,
+      });
+    } catch (err: any) {
+      this.logger.warn(`测试邮件发送失败: ${err?.message || err}`);
+      throw new HttpException('测试邮件发送失败，请检查 SMTP 配置', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return { message: `测试邮件已发送至 ${target}，请查收` };
+  }
+
+  /**
    * 校验并核销验证码（内部端点用）。
    * 单码最多校验 5 次，超过即作废；成功后置 used_at，不可复用。
    */

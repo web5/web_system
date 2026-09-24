@@ -80,6 +80,16 @@ export class MailService implements OnModuleInit {
     return !!(await this.resolve());
   }
 
+  /**
+   * 强制重读库配置（清缓存）。
+   * admin 保存「通知设置」后立即点「发送测试邮件」时用：否则会命中 60s 旧缓存，
+   * 测到的是保存前的配置（表象：刚配好却提示未配置）。
+   */
+  async refresh(): Promise<void> {
+    if (this.envTransporter) return;
+    await this.loadDbConfig(true);
+  }
+
   /** 通用发送（未配置抛 SMTP_NOT_CONFIGURED，调用方按 503 处理） */
   async sendMail(input: { to: string; subject: string; text: string; html: string }): Promise<void> {
     const resolved = await this.resolve();
