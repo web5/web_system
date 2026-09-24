@@ -307,9 +307,11 @@ export class MonitorService {
       // 输出格式：每行 "<serviceKey>|<httpCode>|<time_total>"
       // 主机内并行探测（子 shell & + wait）：串行会让 12 个 curl 累计超过 execSsh 的 10s 超时
       const pairs = items.map((s) => `${s.serviceKey}:${s.port}`).join(' ');
+      // 先探回环（命令就跑在这台机上，多数服务监听 127.0.0.1），连不上再探主机地址
       const command =
         `for sp in ${pairs}; do ( n="\${sp%%:*}"; p="\${sp##*:}"; ` +
-        `r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${host.host}:$p/ || echo "000:0"); ` +
+        `r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://127.0.0.1:$p/ || echo "000:0"); ` +
+        `if [ "$r" = "000:0" ]; then r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${host.host}:$p/ || echo "000:0"); fi; ` +
         `echo "$n|$r" ) & done; wait`;
       try {
         const output = await this.execSsh(this.sshConfigFor(host), command);
