@@ -1,5 +1,7 @@
 # 交接文档 · 2026-09-23（远端发布 / dev 基础设施）
 
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
+
 > 用途：让下一个会话**直接读这一份**就能接上，不需要翻聊天记录。
 > 读完后先用「§0 现状自检」跑一遍，确认环境事实仍然成立再动手。
 
@@ -80,17 +82,26 @@ gh pr list --state open --json number,headRefName,title --template '{{range .}}#
 
 ## 3. 待办（按优先级，标注阻塞者）
 
+> 最后更新 2026-09-24。✅ 行仅作归档，不再需要跟进。
+
 | 优先级 | 事项 | 说明 | 阻塞者 |
 |---|---|---|---|
-| **P0** | **A6 收尾**：dev 控制台 →「版本部署 → admin → `3d5ce61`」→ 部署 | admin 的 A6 产物已投递到 `modules/admin/dev/3d5ce61/`（公网 200、旧版有「存储配置」代码 / 新版 0 处已核对），**只差指针切换**；按用户口径指针切换**不自动做** | **用户点** |
-| **P0** | **dev/prod 共用库**的处置决策 | 是否要拆库？若不拆，需在文档与流程里明确"改 dev 业务库 = 改 prod" | **用户决策** |
-| P1 | **A8**：ai-service 生成图改调 `internal/uploads/store` 落盘 | 依赖 A3 已就绪；本轮未做（需通读 ai-service 图片落盘与路径消费点） | 我（下轮） |
-| P1 | **C1 剩余 7 个服务**接入统一助手 | user-service / ai-agent / ai-service / knowledge-service / system-service（remote）；gateway（本地 JwtService）/ upload-service（手写 HMAC）→ 属 `AuthMode.local`，需注入各自校验实现 | 我 |
-| P1 | **nginx 主机登记** | 42.194.200.69 的 SSH 用户 / 密钥 / 部署根目录，**未提供** | **用户提供** |
-| P2 | 迁移待定 3 条评审 | `0008_knowledge_tables`（dev/prod 均缺 knowledge 3 表）、`0010_pipeline_task_states`（`deploy_pipeline_runs` 已随域拆分迁到 `web_system_deploy`，该迁移过时）、`0012_music_recommend`（music 领域未上）→ 决定"执行"还是"记账跳过" | **用户/相关领域** |
-| P2 | prod 的 upload-service 是否部署 | 有产物未运行、.env 空；建议端口 3008、需配 .env（PORT/INTERNAL_API_KEY/JWT_SECRET/存储）后启动 | **用户决策** |
-| P3 | A7（删 user-service 上传端点与 static serve） | 依赖 A5 验证通过；bianbian 特例路由**保留**作只读兜底 | 依赖 P1 |
-| P3 | `deploy_env_service_routes` | 本机只有 staging 遗留行，dev/prod 是否需登记待确认 | 用户 |
+| ✅ | **A6**：dev admin → `3d5ce61` | 已完成并验证，见 §8.6 / §9.1 | — |
+| ✅ | dev portal 指针 | `7a6be04`，见 §9.1 | — |
+| ✅ | **dev/prod 共用库**处置决策 | 不拆库 + 5 条护栏，见 §8.8 | — |
+| ✅ | dev 历史产物清理 | 17 目录移入 `/tmp/modules-legacy-20260924/`，见 §9.2 | 待删（见下 P3） |
+| ✅ | **A8** ai-service 生成图落盘 | PR #148 合入；**dev 已验证通过**（评审 `docs/reviews/a8-ai-image-store-release.md`，阻塞 0）；prod 受阻 | prod upload-service |
+| **P1** | **prod 的 upload-service 上线** | 有产物未运行、`.env` 空、端口未登记。起服务后配 `UPLOAD_SERVICE_URL` 才能上 A8；未起前 prod 新生成图走回退（存远端 URL，功能可用但不符合收口目标） | **用户决策** |
+| **P1** | **C1 剩余 7 个服务**接入统一认证助手 | user-service / ai-agent / ai-service / knowledge-service / system-service（remote）；gateway（本地 JwtService）/ upload-service（手写 HMAC）→ 属 `AuthMode.local`，需注入各自校验实现 | 我 |
+| **P1** | **nginx 主机登记** | 42.194.200.69 缺 SSH 用户 / 密钥 / 部署根目录 | **用户提供** |
+| **P2** | **A7** 删 user-service 上传端点与 static serve | dev 侧已具备条件（`servers/user-service/uploads` 已空、迁移产物在统一根）；bianbian 特例路由**保留**作只读兜底 | 依赖 A5 prod 验证 |
+| **P2** | 迁移待定 3 条评审 | `0008_knowledge_tables`（dev/prod 均缺 knowledge 3 表）、`0010_pipeline_task_states`（已随域拆分迁到 `web_system_deploy`，过时）、`0012_music_recommend`（music 领域未上）→ 决定"执行"还是"记账跳过" | **用户/相关领域** |
+| **P2** | A5 迁移的 prod 侧核对 | dev 已执行（源目录已清空）；prod 是否需同样跑 `scripts/migrate-uploads.mjs` 未确认 | **用户决策** |
+| **P3** | 回收 `/tmp/modules-legacy-20260924`（108M） | 全量备份在 dev `~/backups/static-modules-20260924-0320.tgz`，随时可删 | 我（观察后） |
+| **P3** | ai-service `uploads/` 残留 4.0K | `/data/web_system/servers/ai-service/uploads` 仍有内容，确认是否可并入统一根 | 我 |
+| **P3** | `deploy_env_service_routes` | 本机只有 staging 遗留行，dev/prod 是否需登记待确认 | 用户 |
+
+**本轮已决策（不再讨论）**：dev 上 LEGACY 回退路径失效**接受**，不为它保留目录；禁止把 dev gateway 切回 `DEPLOY_LEGACY_READ=1`（§9.3）。
 
 ---
 
@@ -138,7 +149,7 @@ mysqldump <db> <table> > ~/backups/<table>.bak-$(date +%Y%m%d-%H%M).sql
 4. **迁移记账 = 以后不再执行**：宁可少记不可错记；`apply-migrations.sh` 在记账为空时会**把全部当待应用**（含 `0001_standardize_business_tables` 这类基线/重命名脚本）→ **切勿盲跑**，先出对照表。
 5. **远端探活端口不能来自编排者本机 pm2**：本机 6101 ≠ dev 6001 ≠ prod 3001。
 6. **远端控制台升级的 3 个前置**：`JWT_SECRET`（与同环境 auth-service 同源）、`AUTH_SERVICE_URL`（指向该环境实际端口）、auth-service 需 IAM 后版本（接受 `system` 参数）+ `users.systems` 列 + 运维账号归属 deploy。详见 runbook §3.1。
-7. **分支前缀**：`feature/*` / `fix/*` / `docs/*` 才会被 `auto-pr` 识别；`feat/*` 会 **skipped**（踩过）。
+7. **分支前缀**：只有 `feature/*` / `fix/*` 会被 `auto-pr` 识别（`feature/test` 例外，刻意排除）；`docs/*`、`feat/*` 一律 **skipped** —— 依据 `.github/workflows/auto-pr.yml` 的 `if` 条件。docs 分支需手动 `gh pr create`。
 8. **MySQL 幂等插入写法**：`INSERT ... SELECT ... WHERE NOT EXISTS (SELECT 1 FROM (SELECT 1) z WHERE EXISTS (SELECT 1 FROM <table> ...))`，否则同表既读又写会报错。
 9. **控制台错误文案会掩盖真因**：auth-service 非 2xx 一律显示「用户名或密码错误」→ 排障先直连 `POST 127.0.0.1:<auth端口>/auth/login -d '{"username":"__probe__","password":"__probe__123","system":"deploy"}'` 看真实状态码。
 
@@ -250,3 +261,32 @@ dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）�
 
 - LIGHTHOUSE（101.43.117.234）：`ssh -i ~/.ssh/id_ed25519_lighthouse ubuntu@…` 可用（凭据在 `~/env_config`）。
 - 本会话产出已发 PR #147（连线着色规则定稿 + 连线绘制抽公共 util）。
+
+---
+
+## 9. 续作记录（2026-09-24 · dev 微前端指针与产物清理）
+
+### 9.1 dev 微前端指针（admin / portal）
+
+- 读取规则：dev gateway 跑 **NEW 读取源**，只读 `modules/<appKey>/<envId>/<version>/index.js`（`servers/deploy-console/src/apps/entry-pointer.ts`）。改 `deploy_deployments` 对 dev 无效。
+- 切指针的唯一写入口：`POST /console/api/apps/<appKey>/switch {"envId":"dev","version":"<裸 hash>"}` —— **version 必须是裸 hash**（`7a6be04`），带前缀（`admin-dev/3d5ce61`）会指到不存在的目录。
+- dev 控制台凭据：`admin / deploy2026`。
+- 当前指针：`admin/dev = 3d5ce61`、`portal/dev = 7a6be04`，写入口 200，manifest `source=new`。
+- 故障模式：指针指向**未投递**的版本（如 `b2b6d4a`）→ `modules/<app>/dev/index.js` 不存在 → 404。发版后必须确认 `modules/<app>/dev/<hash>/` 真的落盘。
+
+### 9.2 dev 历史产物清理
+
+- 已把 `modules/` 下除 `<appKey>/dev/` 外的顶层目录（admin 9 个、portal 7 个，含 `default/`、`admin-dev/`、`portal-dev/`）移到 dev 的 `/tmp/modules-legacy-20260924/`（108M）；`modules/` 由 119M 降到 11M。
+- 全量备份：dev `~/backups/static-modules-20260924-0320.tgz`（3387 项）。
+- 回收空间需再执行 `rm -rf /tmp/modules-legacy-20260924`（备份已有，随时可删）。
+
+### 9.3 LEGACY 回退路径（已决策：接受失效）
+
+- LEGACY 读取源（`DEPLOY_LEGACY_READ=1`）读 `deploy_deployments` → 路径 `modules/<appKey>/default/<hash>/`，该目录已在 9.2 清理。
+- 决策（用户 2026-09-24）：**接受 dev 上 LEGACY 回退失效**，不为它保留目录。
+- 约束：**不要把 dev 的 gateway 切回 LEGACY 读取源**；需要回退时从 `static-modules-*.tgz` 恢复，或重新发版。
+
+### 9.4 其它
+
+- LIGHTHOUSE：`ssh -i ~/.ssh/id_ed25519_lighthouse`；§0 自检脚本用默认 key 会误报 `Permission denied`。
+- dev 控制台重启前须确认 `/etc/web-system/config-master.key` 已 provision（见 §8.7）。
