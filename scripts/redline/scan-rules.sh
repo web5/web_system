@@ -486,6 +486,42 @@ check_r13_r14() {
   done
 }
 
+# ---- R15 独立代码评审凭证（commit 级 · warning）----
+# 设计：specs/rd-process-model/design.md §3.7 · 判据源 docs/development/code-review-checklist.md
+# 触发面：**新增**对外接口（*.controller.ts / *.controller.js 为新增文件）——
+#   新增接口是最需要第三方评审的形态（越权 / 入参校验 / 错误处理语义 / 敏感信息泄露）。
+#   改动既有实现不触发（触发面宁可窄：本门主观性最强、成本最高）。
+# 判据：commit 须带 `Code: pass` 或 `Code: <报告路径>`；报告头部 `阻塞: N` 须为 0
+# 级别：warning（--strict 下 error），先观察误报再决定是否收紧
+check_r15() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c st f body hit
+  for c in "${commits[@]}"; do
+    hit=0
+    while IFS=$'\t' read -r st f; do
+      [ -n "${f:-}" ] || continue
+      case "$st" in
+        A*)
+          case "$f" in
+            */*.controller.ts|*/*.controller.js) hit=1 ;;
+          esac
+          ;;
+      esac
+    done < <(git show --name-status --format= "$c" 2>/dev/null)
+    [ "$hit" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
+    _trailer_check_one "R15" "Code" "新增对外接口" "$c" "$body"
+  done
+}
+
 # ---- R12 kit 能力源 ↔ 运行源 同源守门 ----
 # 背景：上游 ai-agent-kit 经 sync-to-target 只写 .codebuddy/agent-kit/（能力源），
 #       而 IDE 加载的是 .codebuddy/skills/（运行源），中间缺 apply → 漂移（#117/#118 即此坑）。
@@ -493,7 +529,7 @@ check_r13_r14() {
 check_r12() {
   check_sync_pair "R12" "kit 能力源与运行源漂移" \
     ".codebuddy/agent-kit/skills" ".codebuddy/skills" \
-    "be-developer" "fe-developer" "design-reviewer" "release-reviewer" "contract-reviewer" \
+    "be-developer" "fe-developer" "design-reviewer" "release-reviewer" "contract-reviewer" "code-reviewer" \
     "rd-digital-agent/references/project-context.md"
 }
 
@@ -538,6 +574,7 @@ scan_diff_range() {
   check_r11 "$range"  # R11：设计评审凭证（error 级 · specs/design-reviewer/design.md §3.7）
   check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
   check_r13_r14 "$range" # R13/R14：契约与数据变更 / 发布与环境 评审凭证（一次遍历，specs/rd-process-model §3.7）
+  check_r15 "$range"  # R15：新增对外接口的独立代码评审凭证（判据源 code-review-checklist.md）
   check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
   check_r16           # R16：SSE 事件契约一致性（消费方手写联合 ↔ agent-core 真相源，不依赖 range）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
