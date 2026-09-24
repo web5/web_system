@@ -23,7 +23,9 @@
 - 消费方只能**靠猜**有没有这个事件：小程序一度漏写 `type === 'card'` 分支，音乐卡片在实时推送里不出现（只在历史回放时才见）；
 - 任何一方改事件名 / 载荷形状，其他两方**静默失效**（编译能过、测试能过）。
 
-这就是「契约没有单一真相源」的代价。本文的作用是**把这类契约登记到一处**，让变更时知道要同步谁、让 CI（R13）能拦。
+这就是「契约没有单一真相源」的代价。本文的作用是**把这类契约登记到一处**，让变更时知道要同步谁、让 CI（R13 / R16）能拦。
+
+> 该漂移已于 2026-09-24 修复（见 §8 D1 / D2），并由 **R16** 守跨端一致性 —— **登记 + 机检**才是完整闭环；只登记不机检，下次仍会漂。
 
 ---
 
@@ -32,7 +34,7 @@
 | # | 契约 | 真相源（代码） | 派生 / 登记文档 | 机检 |
 |---|---|---|---|---|
 | **C1** | 对外 HTTP 接口 | 各服务 controller 的 Swagger 注解 | `specs/<svc>/api-design.md`（自动生成） | R13 |
-| **C2** | **SSE 事件类型** | `packages/agent-core/src/interfaces/runtime.interface.ts` | 本文 §3 | R13（协议文件待纳入，见 §8） |
+| **C2** | **SSE 事件类型** | `packages/agent-core/src/interfaces/runtime.interface.ts` | 本文 §3 | R13（`interfaces/*`）+ **R16（跨端一致性）** |
 | **C3** | MCP 工具 | `servers/mcp-gateway/src/mcp/mcp.service.ts` | 本文 §4（只登记约定，不复制清单） | R13 |
 | **C4** | 权限码 / 共享常量 | `packages/types/src/index.ts` | 本文 §5 | R13 |
 | **C5** | 网关路由 | `servers/gateway/src/proxy/proxy.controller.ts` | 本文 §6 | — |
@@ -76,8 +78,8 @@ node scripts/gen-api-design.mjs
 当前登记的 `type` 值（以代码为准，此处仅为索引）：
 
 ```
-token · content_delta · reasoning_delta · tool_call · tool_result
-skill_load · summary · final · error · permission_request · intent
+content_delta · reasoning_delta · tool_call · tool_result · skill_load
+summary · final · error · permission_request · intent · card
 ```
 
 查看真相：
@@ -86,13 +88,18 @@ skill_load · summary · final · error · permission_request · intent
 sed -n '/export type StreamEventType/,/^;/p' packages/agent-core/src/interfaces/runtime.interface.ts
 ```
 
-**已知漂移（2026-09-24 实测，见 §0）**：`'card'` 由服务端推送、被两个前端各自手写，但**未进 `StreamEventType`**。
+**已修复（2026-09-24）**：`'card'` 已补进 `StreamEventType`；`card.kind` 收敛为「已知值 `'music'` + 扩展位 `(string & {})`」。
+同时清理了两个**死类型**：`'token'`（agent-core，无生产者 / 无消费者）与 `'start'`（两端，本地合成事件误入契约）。
 
-**处置（待办）**：
+**一致性由机检守（CI R16）**：`scripts/redline/check-sse-contract.py` 以 `StreamEventType` 为真相源，比对各端手写联合：
 
-1. 把 `'card'` 补进 `StreamEventType`（含 `card.kind` 的取值联合）；
-2. 两个前端改为**从 `@kedouai/agent-core` 导入**类型，删掉各自手写的联合类型；
-3. 补一条机检：前端出现手写 SSE `type` 字面量联合 → 提示改用共享类型。
+| 级别 | 含义 |
+|---|---|
+| `MISSING` | 消费方缺真相源里的类型（新增事件后最容易漏） |
+| `EXTRA` | 消费方多出真相源没有的类型：手写联合里的死类型 / 本地事件混入契约，**或 import 型消费方的 `switch case` 用了已删类型**（admin `AgentPlayground.vue` 即此形态） |
+| `LOOSE` | 用裸 `\| string` 兜底（类型检查失效、已知值提示全丢）；应改为「已知联合 + `(string & {})`」 |
+
+**待办**：两端仍是手写复制（均未依赖 `@kedouai/agent-core`），import 化见 §8 D2。
 
 **特殊约束**：
 
@@ -195,7 +202,8 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 
 1. **先判影响面**：本次改的是 §1 表格里的哪一类？消费方有哪些（端 / 服务 / DB 绑定）？
 2. **先文档后实现**：接口类先落 `api-design.md`；SSE / 工具 / 权限类先在本文更新登记与约定。
-3. **机检会拦**：C1–C4 的改动面命中 **CI R13**，commit 须带 `Contract: pass`（或报告路径）；纯微调走 `Micro-exempt: <理由>`。
+3. **机检会报**：C1–C4 的改动面命中 **CI R13**（跨端一致性另由 **R16** 检查），commit 须带 `Contract: pass`（或报告路径）；纯微调走 `Micro-exempt: <理由>`。
+   > 级别现状：R13 / R16 均为 **warning** —— `quality-gate.yml` 调用 `scan-rules.sh diff` **不带 `--strict`**，因此 warning 只出现在日志里、**不阻断合并**。升为阻断需配套存量过渡（见 `specs/rd-process-model/design.md` §7.1 的 Q3 决议）。
 4. **DB 绑定晚于代码同步**：`agent_definitions.capabilities` / 字典 / 权限码的 DB 侧改动，必须在**运行代码已同步到发布目录之后**再做（先后顺序反了就是「绑定即故障」）。
 5. **破坏性变更写消费方清单**：谁在用、怎么迁移、保留多久。
 
@@ -205,11 +213,12 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 
 | # | 项 | 状态 |
 |---|---|---|
-| D1 | `'card'` 未进 `StreamEventType`（§0） | **待修**：补类型 + 前端改为导入共享类型 |
-| D2 | 两个前端各自手写 SSE `type` 联合 | **待修**：统一从 `@kedouai/agent-core` 导入 |
-| D3 | R13 契约面未含 `packages/agent-core` 协议文件 | **待办**：本文件落盘后，可把协议文件**按明确路径**纳入契约面（此前因「整个 SDK 太宽」被临时排除） |
+| D1 | `'card'` 未进 `StreamEventType` | **已修（2026-09-24）**：补进类型；`card.kind` 收敛为「已知值 `'music'` + 扩展位 `(string & {})`」（既给提示，又不破坏消费方编译） |
+| D2 | 两端各自手写 SSE `type` 联合 | **已对齐 + 已机检**：两端集合与真相源一致（删死类型 `'start'`、补 `skill_load` / `permission_request`），并由 **R16** 守一致性。**尚未 import 化**——两端均未依赖 `@kedouai/agent-core`，改为导入留作后续（`apps/admin` 已有依赖先例） |
+| D3 | R13 契约面未含协议文件 | **已修**：按明确路径纳入 `packages/agent-core/src/interfaces/*`（不再冒「整个 SDK 太宽」导致摩擦的风险） |
 | D4 | MCP 工具清单无自动生成物 | 可选：仿 `gen-api-design.mjs` 生成工具清单，减少人工核对 |
 | D5 | 各端 DTO 类型未共享 | 现状：接口类型由 `api-design.md` 描述，前端各自定义；是否抽共享类型待评估 |
+| D6 | 死类型清理 | `'token'`（无生产者；**其消费者 admin 的 `case 'token'` 已一并删除**——教训：删类型前必须查 **import 型**消费方，否则 `switch` case 会 TS2678 编译失败）与 `'start'`（两端手写联合里混入的本地事件）已于 2026-09-24 清理。**未清理**：`minigram/packageContract/pages/contract/{chat,assistant}.ts` 与 admin `evtTag` 里的 `'start'` 消费点——它们**无兜底**，删了若真有生产者会导致文案静默消失，故留待确认生产者后处理 |
 
 ---
 
@@ -221,8 +230,8 @@ ls specs/*/api-design.md
 
 # C2 SSE 事件类型
 sed -n '/export type StreamEventType/,/^;/p' packages/agent-core/src/interfaces/runtime.interface.ts
-# 漂移体检：前端是否在手写 SSE type 联合（D2）
-grep -rn "| 'card'\|| 'token'" apps/*/src apps/*/services 2>/dev/null
+# 跨端一致性（D2）：R16 已自动化，这是它的等价手动入口（无输出=一致）
+python3 scripts/redline/check-sse-contract.py
 
 # C3 MCP 工具
 grep -oE "name: '[a-z0-9_]+'" servers/mcp-gateway/src/mcp/mcp.service.ts | sort -u
