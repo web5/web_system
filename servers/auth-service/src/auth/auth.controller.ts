@@ -63,11 +63,14 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '登出' })
   @HttpCode(HttpStatus.OK)
-  async logout(@Headers('authorization') auth: string): Promise<void> {
-    const token = auth?.replace('Bearer ', '');
-    if (token) {
-      await this.authService.logout(token);
+  async logout(@Headers('authorization') auth: string): Promise<{ success: boolean }> {
+    // 无凭证直接 401：此前会「静默成功」，导致前端以为已登出而服务端并未作废
+    const token = auth?.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      throw new UnauthorizedException('缺少 Authorization 头');
     }
+    await this.authService.logout(token);
+    return { success: true };
   }
 
   @Get('verify')

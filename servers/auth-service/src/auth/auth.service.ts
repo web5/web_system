@@ -28,6 +28,9 @@ import type {
   MiniprogramLoginResponse,
 } from '@web-system/types';
 
+/** refresh token 有效期（与 generateToken 里 30d 保持一致）：登出黑名单 TTL 需覆盖它 */
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -182,6 +185,10 @@ export class AuthService {
    */
   async refreshToken(refreshToken: string): Promise<LoginResponse> {
     try {
+      // 登出时按 sid 一并作废 refresh：否则登出后仍可用旧 refresh 换新 access
+      if (await this.isTokenBlacklisted(refreshToken)) {
+        throw new UnauthorizedException('令牌已失效（已登出）');
+      }
       const payload = await this.jwtService.verifyAsync(refreshToken);
       const user = await this.userService.findById(payload.sub);
 
@@ -244,15 +251,22 @@ export class AuthService {
    */
   async logout(token: string): Promise<void> {
     try {
-      const payload = this.jwtService.decode(token) as { exp?: number } | null;
+      const payload = this.jwtService.decode(token) as { exp?: number; sid?: string } | null;
       if (!payload?.exp) return;
 
-      const ttl = payload.exp - Math.floor(Date.now() / 1000);
-      if (ttl <= 0) return;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const accessTtl = payload.exp - nowSec;
+      if (accessTtl <= 0) return;
 
+      // TTL 覆盖 refresh（30d）：一次登出要把同 sid 的 refresh 一起作废，
+      // 否则登出后旧 refresh 仍能换出新的 access token。
+      const ttl = Math.max(accessTtl, REFRESH_TOKEN_TTL_SECONDS);
       const hash = this.hashToken(token);
       await this.redis.set(`bl:${hash}`, '1', 'EX', ttl);
-      this.logger.debug(`Token 已加入黑名单，TTL=${ttl}s`);
+      if (payload.sid) {
+        await this.redis.set(`bl:sid:${payload.sid}`, '1', 'EX', ttl);
+      }
+      this.logger.debug(`Token 已加入黑名单，TTL=${ttl}s${payload.sid ? ' (含 sid)' : ''}`);
     } catch (err: any) {
       this.logger.warn(`登出黑名单写入失败: ${err.message}`);
     }
@@ -264,12 +278,38 @@ export class AuthService {
   async isTokenBlacklisted(token: string): Promise<boolean> {
     try {
       const hash = this.hashToken(token);
+      const sid = this.decodeSid(token);
+      if (sid) {
+        // 命中任一即失效：bl:<hash> 覆盖旧 token（无 sid），bl:sid:<sid> 一次登出作废 access + refresh
+        const [byHash, bySid] = await Promise.all([
+          this.redis.exists(`bl:${hash}`),
+          this.redis.exists(`bl:sid:${sid}`),
+        ]);
+        return byHash === 1 || bySid === 1;
+      }
       const exists = await this.redis.exists(`bl:${hash}`);
       return exists === 1;
     } catch (err: any) {
       this.logger.warn(`黑名单查询失败: ${err.message}`);
       return false;
     }
+  }
+
+  /**
+   * 内部端点用：token 是否可用（有效期 + 黑名单）。
+   * gateway 与其它服务据此判断已登出的 token，避免各自直连 Redis 复制黑名单规则。
+   */
+  async getTokenStatus(token: string): Promise<{ valid: boolean; reason?: string }> {
+    if (!token) return { valid: false, reason: 'invalid' };
+    try {
+      await this.jwtService.verifyAsync(token);
+    } catch {
+      return { valid: false, reason: 'expired' };
+    }
+    if (await this.isTokenBlacklisted(token)) {
+      return { valid: false, reason: 'blacklisted' };
+    }
+    return { valid: true };
   }
 
   /**
@@ -284,6 +324,8 @@ export class AuthService {
       username: user.username,
       roles: user.roles || ['user'],
       systems: resolvedSystems,
+      // 会话标识：access 与 refresh 共用，登出时按 sid 一次作废两者
+      sid: crypto.randomUUID(),
     };
 
     const accessToken = await this.jwtService.signAsync(
@@ -320,6 +362,16 @@ export class AuthService {
   /** 计算 token 的 SHA256 前 32 位作为 Redis key */
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex').slice(0, 32);
+  }
+
+  /** 取 token 里的会话标识（旧 token 无此字段，返回 undefined） */
+  private decodeSid(token: string): string | undefined {
+    try {
+      const payload = this.jwtService.decode(token) as { sid?: string } | null;
+      return payload?.sid;
+    } catch {
+      return undefined;
+    }
   }
 
   private parseExpiresIn(expiresIn: string): number {
