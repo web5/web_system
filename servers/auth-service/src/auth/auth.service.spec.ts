@@ -2,9 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { RedisService } from '@liaoliaots/nestjs-redis';
 import axios from 'axios';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
+import { User } from '../user/user.entity';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -15,10 +17,17 @@ jest.mock('bcryptjs', () => ({
 
 describe('AuthService', () => {
   let service: AuthService;
-  let userService: jest.Mocked<Partial<UserService>>;
-  let jwtService: jest.Mocked<Partial<JwtService>>;
-  let configService: jest.Mocked<Partial<ConfigService>>;
+  // 不用 jest.Mocked<Partial<X>>：Partial 让成员变成可选，@types/jest 的 Mocked
+  // 只包装**必填**函数成员，可选成员会保留原始函数签名 → 拿不到 mockResolvedValue
+  // （依赖小版本漂移即翻车，CI 时红时绿）。这里改成必填类型 + 赋值处显式断言。
+  let userService: jest.Mocked<UserService>;
+  let jwtService: jest.Mocked<JwtService>;
+  let configService: jest.Mocked<ConfigService>;
+  let redisService: jest.Mocked<RedisService>;
+  /** 默认 Redis 客户端替身（登出黑名单 set/exists 走它） */
+  let redisClient: { set: jest.Mock; exists: jest.Mock; get: jest.Mock };
 
+  // 测试夹具只覆盖断言用到的字段，用断言对齐 User 实体（逐字段补齐会随实体演进而腐化）
   const mockUser = {
     id: 1,
     username: 'test_user',
@@ -35,7 +44,7 @@ describe('AuthService', () => {
     dailyTransformLimit: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as unknown as User;
 
   const mockToken = 'mock.jwt.token';
   const mockRefreshToken = 'mock.refresh.token';
@@ -51,16 +60,21 @@ describe('AuthService', () => {
       createOaUser: jest.fn(),
       bindMpOpenid: jest.fn(),
       bindOaOpenid: jest.fn(),
-    };
+    } as unknown as jest.Mocked<UserService>;
 
     jwtService = {
       signAsync: jest.fn(),
       verifyAsync: jest.fn(),
-    };
+    } as unknown as jest.Mocked<JwtService>;
 
     configService = {
       get: jest.fn() as any,
-    };
+    } as unknown as jest.Mocked<ConfigService>;
+
+    redisClient = { set: jest.fn(), exists: jest.fn(), get: jest.fn() };
+    redisService = {
+      getOrThrow: jest.fn().mockReturnValue(redisClient),
+    } as unknown as jest.Mocked<RedisService>;
     (configService.get as jest.Mock).mockImplementation((key: string, defaultValue?: any) => {
       const config: Record<string, any> = {
         MINI_PROGRAM_APP_ID: 'mp_appid',
@@ -82,6 +96,7 @@ describe('AuthService', () => {
         { provide: UserService, useValue: userService },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
+        { provide: RedisService, useValue: redisService },
       ],
     }).compile();
 
