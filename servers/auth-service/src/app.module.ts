@@ -8,6 +8,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { QrcodeModule } from './qrcode/qrcode.module';
     AuthModule,
     UserModule,
     QrcodeModule,
+    HealthModule,
   ],
 })
 export class AppModule implements OnModuleInit {

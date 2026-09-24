@@ -8,6 +8,7 @@ import { AgentModule } from './agent/agent.module';
 import { OcrModule } from './ocr/ocr.module';
 import { McpModule } from './mcp/mcp.module';
 import { MusicModule } from './music/music.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { MusicModule } from './music/music.module';
     OcrModule,
     McpModule,
     MusicModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
