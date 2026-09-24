@@ -36,13 +36,16 @@ jobs:
 
       - name: 扫描 PR 范围
         run: |
+          # 用 merge-base 取分叉点：pull_request.base.sha 是 base 分支的**当前** HEAD，
+          # 未必是 head 的祖先；直接 `A..B` 会退化成「HEAD 的全部历史」（实测扫出 600+ 条
+          # 历史 commit，把 R10/R11/R13/R14 全部误报）。merge-base 才是 PR 的真实差异范围。
           BASE="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$BASE" ]; then
-            git fetch --no-tags origin "$BASE" --depth=1 >/dev/null 2>&1 || true
+          if [ -n "$BASE" ] && git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1; then
+            BASE="$(git merge-base "$BASE" HEAD)"
           else
-            BASE="origin/master"
+            BASE="$(git merge-base origin/master HEAD)"
           fi
-          echo "扫描范围: ${BASE}..HEAD"
+          echo "扫描范围: ${BASE}..HEAD（$(git rev-list --count "${BASE}..HEAD") 个 commit）"
           bash scripts/redline/scan-rules.sh diff "${BASE}..HEAD"
 
   changed-packages:
