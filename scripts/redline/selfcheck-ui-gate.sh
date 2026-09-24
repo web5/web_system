@@ -153,6 +153,16 @@ fi
 if [ -z "$miss" ]; then ok "V25 契约/发布评审门禁接线完整（含收窄防回退）"
 else bad "V25 契约/发布评审门禁接线完整（含收窄防回退）" "缺：${miss# }"; fi
 
+# V26 CI 兜底层接线（红线规则必须真的挂在 workflow 上）
+# 背景（2026-09-24）：redline-scan job 曾在 2026-09-18 随红线机制整体下线，而 9-20 机制回归时
+#   未跟着恢复 → R9–R14 全部失去 CI 兜底，仅剩可被 --no-verify 绕过的本地 hook。
+#   此前自检只查 hook/规则接线（静态读文件），查不出「CI 层其实是空的」，故补本断言。
+if grep -rlsE 'scan-rules\.sh' .github/workflows/ 2>/dev/null | grep -q .; then
+  ok "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）"
+else
+  bad "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）" "无任何 workflow 引用 scan-rules.sh —— 红线规则失去 CI 兜底，本地 hook 可被 --no-verify 绕过"
+fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"
