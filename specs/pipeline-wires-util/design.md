@@ -164,7 +164,7 @@ drawWires({
 ### 5.4 原型侧
 
 原型是单文件零依赖 HTML（双击可开），**不 import 运行时代码**。两份原型
-（`pipeline-env-branch-canvas.html`、`deploy-console-domain-split.html`）保持自包含，
+（`pipeline-env-branch-canvas.html`、`deploy-console-domain.html`）保持自包含，
 只在注释里标注「几何与着色规则与 `utils/pipelineWires.ts` 同步，改动需两边一致」。
 
 ## 6 待确认项
