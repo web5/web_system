@@ -161,7 +161,7 @@
 > 契约面已按实测**收窄**（移除 `packages/agent-core/*`）并对控制器加行数阈值 5，理由与防回退断言见 §7.3。
 
 **实现约束（沿用既有基建）**：
-- `scripts/redline/scan-rules.sh` 新增 `check_r13_r14`（两个面**共用一次遍历**，各自遍历会让 commit 级 git 调用翻倍）+ `_trailer_check_one` 单条校验，**不改调用方**；已被 `quality-gate.yml` job1 覆盖，**无需改 workflow**。
+- `scripts/redline/scan-rules.sh` 新增 `check_r13_r14`（两个面**共用一次遍历**，各自遍历会让 commit 级 git 调用翻倍）+ `_trailer_check_one` 单条校验，**不改调用方**；CI 接入 `quality-gate.yml` 的 `redline-scan` job（该 job 于 2026-09-24 恢复，缺口经过见 §7.5）。
 - 报告沿用 `design-reviewer` 的机器可读头 `阻塞: N` / `重要: N`，复用 R11 的解析逻辑。
 - commit trailer 沿用既有风格：`Design:` / `Contract:` / `Release:`，值为 `pass` 或报告路径。
 - **`Micro-exempt: <理由>` 必须同时豁免 R9b / R10 / R11 / R13 / R14 / R15**——口径不一致会制造「记了豁免还报错」的新摩擦源。
@@ -305,6 +305,35 @@ W4 落码时实查：
 **处置**：排除清单改为 JSON 数组（`feature/test` + `feature/kedou-ai-minigram`），并把两条成因写进 workflow 注释。
 
 **纪律**：长期 / 集成分支不自动建 PR；这类分支的改动应按主题拆成**短命分支**各自走 auto-pr，才可评审、可回滚。
+
+---
+
+### 7.5 已修复的缺口：CI 兜底层曾整层缺失（2026-09-24 发现并修复）
+
+**发现**：核对 PR #157 的 CI 检查列表时，发现 `quality-gate.yml` 里**只有 `changed-packages` 一个 job**。其文件头写着「2026-09-18：原 redline-scan job 随红线机制整体下线」——而 9-20 红线机制回归时，**该 job 没有跟着恢复**。
+
+**后果（严重）**：
+
+| 规则 | 设计意图 | 实际状态（修复前） |
+|---|---|---|
+| R9 / R9b / R10 | UI 原型门禁的 CI 兜底 | **不存在** |
+| R11（error 级） | 设计评审凭证 + 阻塞清零 | **不存在** |
+| R12 | kit 能力源 ↔ 运行源同源守门 | **不存在** |
+| R13 / R14 | 契约 / 发布评审凭证 | **不存在** |
+
+即：**整套门禁只剩本地层**（`PreToolUse` hook + `commit-msg`），`git commit --no-verify` + push 即可全部绕过。
+
+**为什么长期没被发现**：三份 spec（`kit-sop-enforcement` / `design-reviewer` / 本 spec）都写了「已被 `quality-gate.yml` job1 覆盖，**无需改 workflow**」——这句在 9-18 之前成立，之后变成**错误假设**，而没有任何检查能发现它。`selfcheck` 的 V20/V21/V25 只做**静态接线检查**（文件里有没有挂 hook / 函数），查不出「CI 层其实是空的」。
+
+**修复**（用户 2026-09-24 拍板 **B：按设计全量恢复，R11 保持 error**）：
+
+1. `quality-gate.yml` 加回 `redline-scan` job（扫 `base.sha..HEAD`，与 `changed-packages` 并列），文件头记录来由；
+2. `selfcheck` 加 **V26**：断言存在 workflow 调用 `scan-rules.sh` —— 让「CI 层掉线」变成**可机检**；
+3. 修正三份 spec 里 6 处错误假设。
+
+**代价**：R11 为 error 级，恢复后遵循度不足的存量 / 并行 PR 会变红（09-22 实测 `Design:` 覆盖 72%），需逐个补 trailer。
+
+**遗留**：原 S1–S7 结构守护（`check-kit-structure.sh` + `kit-gate.yml`）未随机制回归；其中 **S7（运行源漂移）语义已由 R12 承接**，S1–S6 暂无对应实现。
 
 ---
 
