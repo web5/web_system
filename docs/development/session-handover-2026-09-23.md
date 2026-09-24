@@ -80,28 +80,11 @@ gh pr list --state open --json number,headRefName,title --template '{{range .}}#
 
 ---
 
-## 3. 待办（按优先级，标注阻塞者）
+## 3. 待办
 
-> 最后更新 2026-09-24。✅ 行仅作归档，不再需要跟进。
+跟进清单已独立成文：**`docs/development/dev-todo-2026-09-24.md`**（A 阻塞中 / B 可推进 / C 已完成 / D 已决策）。
 
-| 优先级 | 事项 | 说明 | 阻塞者 |
-|---|---|---|---|
-| ✅ | **A6**：dev admin → `3d5ce61` | 已完成并验证，见 §8.6 / §9.1 | — |
-| ✅ | dev portal 指针 | `7a6be04`，见 §9.1 | — |
-| ✅ | **dev/prod 共用库**处置决策 | 不拆库 + 5 条护栏，见 §8.8 | — |
-| ✅ | dev 历史产物清理 | 17 目录移入 `/tmp/modules-legacy-20260924/`，见 §9.2 | 待删（见下 P3） |
-| ✅ | **A8** ai-service 生成图落盘 | PR #148 合入；**dev 已验证通过**（评审 `docs/reviews/a8-ai-image-store-release.md`，阻塞 0）；prod 受阻 | prod upload-service |
-| **P1** | **prod 的 upload-service 上线** | 有产物未运行、`.env` 空、端口未登记。起服务后配 `UPLOAD_SERVICE_URL` 才能上 A8；未起前 prod 新生成图走回退（存远端 URL，功能可用但不符合收口目标） | **用户决策** |
-| **P1** | **C1 剩余 7 个服务**接入统一认证助手 | user-service / ai-agent / ai-service / knowledge-service / system-service（remote）；gateway（本地 JwtService）/ upload-service（手写 HMAC）→ 属 `AuthMode.local`，需注入各自校验实现 | 我 |
-| **P1** | **nginx 主机登记** | 42.194.200.69 缺 SSH 用户 / 密钥 / 部署根目录 | **用户提供** |
-| **P2** | **A7** 删 user-service 上传端点与 static serve | dev 侧已具备条件（`servers/user-service/uploads` 已空、迁移产物在统一根）；bianbian 特例路由**保留**作只读兜底 | 依赖 A5 prod 验证 |
-| **P2** | 迁移待定 3 条评审 | `0008_knowledge_tables`（dev/prod 均缺 knowledge 3 表）、`0010_pipeline_task_states`（已随域拆分迁到 `web_system_deploy`，过时）、`0012_music_recommend`（music 领域未上）→ 决定"执行"还是"记账跳过" | **用户/相关领域** |
-| **P2** | A5 迁移的 prod 侧核对 | dev 已执行（源目录已清空）；prod 是否需同样跑 `scripts/migrate-uploads.mjs` 未确认 | **用户决策** |
-| **P3** | 回收 `/tmp/modules-legacy-20260924`（108M） | 全量备份在 dev `~/backups/static-modules-20260924-0320.tgz`，随时可删 | 我（观察后） |
-| **P3** | ai-service `uploads/` 残留 4.0K | `/data/web_system/servers/ai-service/uploads` 仍有内容，确认是否可并入统一根 | 我 |
-| **P3** | `deploy_env_service_routes` | 本机只有 staging 遗留行，dev/prod 是否需登记待确认 | 用户 |
-
-**本轮已决策（不再讨论）**：dev 上 LEGACY 回退路径失效**接受**，不为它保留目录；禁止把 dev gateway 切回 `DEPLOY_LEGACY_READ=1`（§9.3）。
+> 本文档不复制该清单，避免两份事实漂移。
 
 ---
 
