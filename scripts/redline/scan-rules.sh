@@ -416,7 +416,8 @@ check_sync_pair() {
 # 语义：命中改动面的 commit 须带 `<Trailer>: pass`（或报告路径）；
 #       指向报告时校验报告存在且头部 `阻塞: N` 为 0。
 # 豁免：`Micro-exempt:` 与 R9b / R10 / R11 同口径（避免"记了豁免还报错"的新摩擦）
-# 级别：warning（--strict 下 error）；Q3 拍板 error 后把两处 add_warn 改 add_err
+# 级别：warning（--strict 下 error）。Q3 已拍板（2026-09-24）保持 warning；
+#   如需转 error，把本函数内两处 add_warn 改 add_err，并配套存量 commit 过渡策略。
 _trailer_check_one() {
   local rule="$1" trailer="$2" desc="$3" c="$4" body="$5"
   local tval n
@@ -491,7 +492,7 @@ check_r13_r14() {
 check_r12() {
   check_sync_pair "R12" "kit 能力源与运行源漂移" \
     ".codebuddy/agent-kit/skills" ".codebuddy/skills" \
-    "be-developer" "fe-developer" "design-reviewer" \
+    "be-developer" "fe-developer" "design-reviewer" "release-reviewer" \
     "rd-digital-agent/references/project-context.md"
 }
 
