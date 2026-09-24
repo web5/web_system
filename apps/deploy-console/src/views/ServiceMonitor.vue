@@ -27,6 +27,8 @@ const loadingHealth = ref(false)
 const loadingPm2 = ref(false)
 /** 顶部诊断横幅：任一主机取数失败即出现（真因 + 恢复入口） */
 const bannerError = ref('')
+/** 展开中的分组（= 组名数组；数据到达后默认全部展开，见 page-spec §6.1 实现注意） */
+const activePanels = ref<string[]>([])
 
 // 自动刷新（失败时保留上次数据，不清空表格）
 const autoRefresh = ref(true)
@@ -73,6 +75,8 @@ async function loadPm2() {
   loadingPm2.value = true
   try {
     pm2Groups.value = await monitorApi.pm2Hosts(activeKey.value)
+    // 默认全部展开（activeKey 须绑定组名数组，占位 key 会导致面板懒加载不渲染）
+    activePanels.value = pm2Groups.value.map((g) => g.name)
     // 横幅取第一台失败主机的真因
     const failed = pm2Groups.value.find((g) => !g.ok)
     bannerError.value = failed
@@ -154,6 +158,11 @@ function pm2StatusTag(status: string) {
 function formatMemory(mb: number) {
   if (mb >= 1024) return (mb / 1024).toFixed(2) + ' GB'
   return mb.toFixed(0) + ' MB'
+}
+
+// 格式化响应时间（浮点精度串如 29.052000000000003 → 29.1）
+function fmtMs(v: number) {
+  return Number.isFinite(v) ? v.toFixed(1) : '0'
 }
 
 // 格式化运行时间
@@ -257,7 +266,7 @@ onUnmounted(() => {
               </a-tooltip>
             </template>
             <template v-if="column.key === 'responseTime'">
-              {{ record.responseTime }} ms
+              {{ fmtMs(record.responseTime) }} ms
             </template>
             <template v-if="column.key === 'action'">
               <a-button type="link" size="small" @click="viewLogs(record.service)">
@@ -270,15 +279,14 @@ onUnmounted(() => {
         <!-- PM2 进程：按主机分组，逐台取数 -->
         <h3 style="margin-bottom: 12px; font-size: 16px;">PM2 进程</h3>
         <a-collapse
+          v-model:activeKey="activePanels"
           :bordered="false"
-          default-active-key="all"
           style="background: transparent;"
           :class="{ 'mon-single': pm2Groups.length === 1 }"
         >
           <a-collapse-panel
             v-for="g in pm2Groups"
             :key="g.name"
-            :header="''"
           >
             <template #header>
               <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap;">
