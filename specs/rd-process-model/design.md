@@ -150,14 +150,14 @@
 
 | 改动面（可机检） | 必需评审 | 规则 | 级别 |
 |---|---|---|---|
-| `scripts/migrations/*`、跨库变更 | S4.2 数据变更 + S8.1 发布 | **R13 + R14** | warning → error（Q3） |
-| `servers/*/.env`、`ecosystem.config.cjs`、端口 / 密钥 | S8.1 发布 | **R14** | warning → error（Q3） |
-| 新增/改对外接口、MCP 工具、`packages/types`、权限码 | S4.2 契约 | **R13** | warning → error（Q3） |
+| `scripts/migrations/*`、跨库变更 | S4.2 数据变更 + S8.1 发布 | **R13 + R14** | warning（Q3 已拍板保持） |
+| `servers/*/.env`、`ecosystem.config.cjs`、端口 / 密钥 | S8.1 发布 | **R14** | warning（Q3 已拍板保持） |
+| 新增/改对外接口、MCP 工具、`packages/types`、权限码 | S4.2 契约 | **R13** | warning（Q3 已拍板保持） |
 | `servers/**` 新增控制器 / 权限点 | S5.2 独立代码 | **R15** | warn → strict（P2） |
 | `apps/**` UI 源码 | S3.2 设计（D2/D3） | R11 / R11b | error |
 | 纯文档 / 脚本微调 | 无 | — | **零摩擦** |
 
-> 级别现状：R13/R14 落地为 **warning**（`--strict` 下 error），因 Q3（是否直接 error）未拍板。存量 commit 无 `Contract:` / `Release:` 凭证，直接 error 会让历史 PR 全红——转 error 需配套存量过渡策略。
+> 级别：R13/R14 为 **warning**（`--strict` 下 error）。**Q3 已拍板（2026-09-24）：先保持 warning** —— 存量 commit 无 `Contract:` / `Release:` 凭证，直接 error 会让历史 PR 全红；待积累使用观察后，转 error 须配套存量过渡策略。
 > 契约面已按实测**收窄**（移除 `packages/agent-core/*`）并对控制器加行数阈值 5，理由与防回退断言见 §7.3。
 
 **实现约束（沿用既有基建）**：
@@ -191,7 +191,7 @@
 | W2-a | 发布判据源落盘 | `docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道） | P0 **✅ 已落** |
 | W2-b | 契约判据源落盘 | 契约登记文件（接口契约 + SSE 事件 + MCP 工具 + 权限码 + types 双构建） | P0 **⏸ 阻塞**：契约无单一真相源，见 §7.3 |
 | W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**（`SKILL.md`，判据源外置到 `release-review-checklist.md`）；`contract-reviewer` **⏸ 待契约登记文件**；P2 加 `code-reviewer` | P1 |
-| W4 | 机检分派 | `scan-rules.sh` 的 `check_r13_r14`（一次遍历判两面）+ `is_contract_file` / `is_release_file`；P2 加 `check_r15` | P1 **✅ 已落**（warning 级，Q3 拍板后升 error） |
+| W4 | 机检分派 | `scan-rules.sh` 的 `check_r13_r14`（一次遍历判两面）+ `is_contract_file` / `is_release_file`；P2 加 `check_r15` | P1 **✅ 已落**（warning 级，Q3 已拍板保持） |
 | W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` **✅ 已落**（实测 R12 零漂移）；`contract-reviewer` / `code-reviewer` 随后续角色同批 | P1 |
 | W6 | 自检断言 | `selfcheck-ui-gate.sh` 加 V25（R13/R14 接线 + 契约面收窄防回退）**✅ 已落**（PASS=18） | P1 |
 | W7 | 常驻动作门增述 | `.codebuddy/CODEBUDDY.md` §2.5.1 + 新建 `.codebuddy/rules/release-interface/RULE.mdc` **✅ 已落** | P1 |
@@ -257,13 +257,13 @@
 |---|---|---|
 | **Q1** | 三个新角色的归属 | **项目专属**：只在运行源 `.codebuddy/skills/`，判据源留在项目；暂不上行上游 |
 | **复用** | 其他项目复用 / 分层抽离 | **暂缓**：先看 P1 落地效果，效果好再按 §8 的路径分层上行 |
+| **Q3** | R13/R14 的级别 | **先保持 warning**（不升 error）——存量 commit 无 `Contract:` / `Release:` 凭证，直接 error 会让历史 PR 全红；先积累使用观察，转 error 须配套存量过渡策略 |
 
 ### 7.2 待确认（落码前需拍板）
 
 | # | 议题 | 建议 |
 |---|---|---|
 | Q2 | P1 先落哪两个 reviewer | 建议 `contract-reviewer` + `release-reviewer`（可机检、故障密度高）；`code-reviewer` 放 P2 |
-| Q3 | R13/R14 级别是否直接 error | 建议「是」（与 R11 同策略），但作用域严格限定在 §3.7 表内改动面 |
 | Q4 | S1.2 可行性会签由谁承担 | 建议 `tech-review` 的轻量前置档，不新增角色 |
 | Q5 | 上游 U1 是否本期就做 | 建议「做」，但**先做 U2 外置**再改链，否则撞 260 行上限 |
 
