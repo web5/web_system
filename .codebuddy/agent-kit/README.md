@@ -240,6 +240,7 @@ SYNC_TOKEN=xxx TARGET_REPOS="owner/repo-a,owner/repo-b#main" bash scripts/sync-t
 
 | 版本 | 日期 | 变更要点 |
 |---|---|---|
+| v1.9 | 2026-09-24 | **评审链改为「环节 × 角色」模型**：Hub 评审链从扁平 0–7 改为 S0–S9 环节，每环节内「生产者 / 自查（下限）/ 独立评审（第三方）」三者分离（**自查 ≠ 独立评审**），人审节点固定 4 个（需求定稿 / 方案与交付物确认 / 原型确认 / 放行上线）；子技能矩阵新增两个**项目可选装配**角色——`contract-reviewer`（契约变更评审：查消费方影响面，判「改一处会不会让消费方静默失效」）与 `release-reviewer`（交付评审：判「测试通过 ≠ 能上线」）；细节外置 `skills/rd-digital-agent/references/review-chain.md`（Hub 行数上限约束，SKILL.md 212 → 221 行）；同步 `references/digital-agent-profile.md` 的评审链描述与 `evals/cases/structure.md` 的节点编号引用（§5 → S7） |
 | v1.8 | 2026-09-11 | **纳入 Karpathy 第三件 `karpathy-llm-wiki`**：资产模型补第四项「资产维护型能力」（与三类资产正交，承载持久知识资产的 schema 与流程）；技能类型改由 frontmatter `kind` 显式声明，S8-1 据此取行数上限（取代按目录名硬编码）；S2 增技能资产类型校验；确立「技能可带可执行脚本」；`references/code-discipline.md` 补「适用边界」（来源 `karpathy-coding-rules-dami`）；`sync-to-target.sh` 去 `rm -rf`，改逐文件同步 + 保护清单 |
 | v1.7 | 2026-09-10 | **再设计为「一循环 + 三类资产」**：废除 `L1/L2/L3` 编号与 `kits/` 三个常驻 kit——产出纪律常驻 `AGENT.md`、工程纪律并入既有技能、来源论证降为人面（`references/methodology-design.md`）；设计论证不再出现在常驻层 |
 | v1.6 | 2026-09-10 | **移除「整体卸载」应急手段**：删除 `scripts/uninstall-superpowers.sh` 及回滚脚本，第二套编排技能的处理优先级收敛为 补齐判据字段 → 同域同名以 `rd-*` 为准 |
