@@ -198,8 +198,9 @@ export class MonitorService {
 
   /**
    * 健康检查
-   * 对各服务端口做连通性探测：只要能建立 HTTP 连接（任意状态码）即视为在线，
-   * 不再依赖各服务是否实现 /health 端点（仅 gateway 有，其他服务 404/302 会被误判为离线）。
+   * 对各服务探测 `GET /health`（各后端服务已统一提供免鉴权端点，见
+   * specs/backend-health-endpoint/design.md）。判活口径不变：只要能建立 HTTP 连接
+   * （任意状态码）即视为在线 —— 未升级的服务 /health 会返回 404，仍按在线计。
    * 端口按环境不同：dev=6000系, prod=3000系（mcp-gateway 特例为 6006）
    *
    * 探活在**单条 SSH 会话内**完成（远程侧用 shell 后台任务并行），而非每个服务一条 SSH 连接：
@@ -240,7 +241,7 @@ export class MonitorService {
     const command = `${targets
       .map(
         ({ name, url }) =>
-          `( r=$(curl -s -o /dev/null -w '%{http_code}:%{time_total}' --connect-timeout 3 --max-time 5 '${url}/') || r=000:0; printf '%s|%s\\n' '${name}' "$r" ) &`,
+          `( r=$(curl -s -o /dev/null -w '%{http_code}:%{time_total}' --connect-timeout 3 --max-time 5 '${url}/health') || r=000:0; printf '%s|%s\\n' '${name}' "$r" ) &`,
       )
       .join(' ')} wait`;
 
@@ -383,7 +384,7 @@ export class MonitorService {
       .filter((p) => p.port)
       .map(async (p): Promise<HealthCheck> => {
         const address = `127.0.0.1:${p.port}`;
-        const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${address}/ || echo "000:0"`;
+        const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 --max-time 5 http://${address}/health || echo "000:0"`;
         try {
           const output = this.execLocal(command);
           const [httpCode, responseTime] = output.trim().split(':');

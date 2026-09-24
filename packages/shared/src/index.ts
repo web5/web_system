@@ -61,6 +61,9 @@ export {
 } from './auth/unified-auth';
 export type { AuthMode, VerifyResult, RemoteAuthDeps } from './auth/unified-auth';
 
+// 免鉴权标记（探活 / CI hook 等公共端点使用；key 'isPublic' 与各服务薄 guard 一致）
+export { Public, IS_PUBLIC_KEY } from './auth/public.decorator';
+
 import dayjs from 'dayjs';
 
 /**
