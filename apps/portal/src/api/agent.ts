@@ -43,21 +43,26 @@ export interface MusicCardPayload {
   keyword?: string;
 }
 
-/** SSE 事件（类型集合与 agent-core StreamEvent 对齐，新增类型向前兼容） */
+/**
+ * SSE 事件（消费侧视图）。
+ * 契约真相源：`@kedouai/agent-core` 的 `StreamEventType`（登记见 `docs/api/contracts.md` C2）。
+ * 本类型须与之一致 —— 一致性由 `check-sse-contract`（CI R16）机检守。
+ */
 export interface AgentStreamEvent {
   type:
-    | 'start'
     | 'content_delta'
     | 'reasoning_delta'
     | 'tool_call'
     | 'tool_result'
+    | 'skill_load'
     | 'summary'
     | 'final'
     | 'error'
     | 'intent'
     | 'card'
     | 'permission_request'
-    | string;
+    /** 向前兼容：未知类型不报编译错。勿写成裸 `string`（会丢掉全部已知值提示） */
+    | (string & {});
   content?: string;
   name?: string;
   conversationId?: string;
