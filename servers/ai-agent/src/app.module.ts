@@ -14,7 +14,7 @@ import { HealthModule } from './health/health.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [path.resolve(__dirname, '../.env')],
+      envFilePath: [ path.resolve(__dirname, '../.env.generated'),path.resolve(__dirname, '../.env')],
     }),
 
     // 数据库模块：持久化 Agent 对话记忆（多轮追问上下文）

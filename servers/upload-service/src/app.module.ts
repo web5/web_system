@@ -12,7 +12,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
       isGlobal: true,
       // 显式指定配置路径：统一读本服务目录 servers/upload-service/.env
       // （不再依赖 cwd 的根 .env，避免换目录启动就读不到配置）
-      envFilePath: [path.resolve(__dirname, '../.env')],
+      envFilePath: [ path.resolve(__dirname, '../.env.generated'),path.resolve(__dirname, '../.env')],
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

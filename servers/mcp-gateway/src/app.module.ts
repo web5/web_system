@@ -13,7 +13,7 @@ import { McpJobEntity } from './mcp/entities/mcp-job.entity';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [path.resolve(__dirname, '../.env')],
+      envFilePath: [ path.resolve(__dirname, '../.env.generated'),path.resolve(__dirname, '../.env')],
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
