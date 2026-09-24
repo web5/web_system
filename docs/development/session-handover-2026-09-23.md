@@ -140,7 +140,7 @@ mysqldump <db> <table> > ~/backups/<table>.bak-$(date +%Y%m%d-%H%M).sql
 4. **迁移记账 = 以后不再执行**：宁可少记不可错记；`apply-migrations.sh` 在记账为空时会**把全部当待应用**（含 `0001_standardize_business_tables` 这类基线/重命名脚本）→ **切勿盲跑**，先出对照表。
 5. **远端探活端口不能来自编排者本机 pm2**：本机 6101 ≠ dev 6001 ≠ prod 3001。
 6. **远端控制台升级的 3 个前置**：`JWT_SECRET`（与同环境 auth-service 同源）、`AUTH_SERVICE_URL`（指向该环境实际端口）、auth-service 需 IAM 后版本（接受 `system` 参数）+ `users.systems` 列 + 运维账号归属 deploy。详见 runbook §3.1。
-7. **分支前缀**：`feature/*` / `fix/*` / `docs/*` 才会被 `auto-pr` 识别；`feat/*` 会 **skipped**（踩过）。
+7. **分支前缀**：只有 `feature/*` / `fix/*` 会被 `auto-pr` 识别（`feature/test` 例外，刻意排除）；`docs/*`、`feat/*` 一律 **skipped** —— 依据 `.github/workflows/auto-pr.yml` 的 `if` 条件。docs 分支需手动 `gh pr create`。
 8. **MySQL 幂等插入写法**：`INSERT ... SELECT ... WHERE NOT EXISTS (SELECT 1 FROM (SELECT 1) z WHERE EXISTS (SELECT 1 FROM <table> ...))`，否则同表既读又写会报错。
 9. **控制台错误文案会掩盖真因**：auth-service 非 2xx 一律显示「用户名或密码错误」→ 排障先直连 `POST 127.0.0.1:<auth端口>/auth/login -d '{"username":"__probe__","password":"__probe__123","system":"deploy"}'` 看真实状态码。
 
