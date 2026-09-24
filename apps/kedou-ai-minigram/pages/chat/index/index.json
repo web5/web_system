@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "music-card": "/components/music-card/index"
+    "music-card": "/components/music-card/index",
+    "login-gate": "/components/login-gate/index"
   }
 }

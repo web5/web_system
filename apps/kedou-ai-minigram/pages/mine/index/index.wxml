@@ -1,6 +1,10 @@
 <!-- 科豆 AI · 我的（tab 3）：设置收敛为分组 -->
 <!-- 会话归属按「完全隔离」口径：各应用历史 与 主对话记录 分列，不混成一个列表 -->
-<view class="page {{radiusClass}}">
+<view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
+  <!-- 未登录：整页只渲染登录引导卡（Q1 必须登录才可用），不发任何业务请求 -->
+  <login-gate wx:if="{{!loggedIn}}" desc="口味记忆、生词本与手机号都跟着账号走" bind:logged="onLogged" />
+
+  <block wx:if="{{loggedIn}}">
   <view class="profile" bindtap="goProfile">
     <view class="avatar">豆</view>
     <view class="info">
@@ -65,6 +69,7 @@
   </view>
 
   <view class="logout" bindtap="logout">退出登录</view>
+  </block>
 
   <view class="foot">本服务使用生成式人工智能
 已依法完成大模型与算法备案</view>

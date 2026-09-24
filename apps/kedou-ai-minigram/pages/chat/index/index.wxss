@@ -8,6 +8,13 @@ page {
   flex-direction: column;
   height: 100vh;
   background: var(--page-bg);
+  /* 登录引导卡是 absolute 铺满，父级需定位上下文 */
+  position: relative;
+}
+
+/* 未登录：锁滚动，登录墙不会被滚出视野 */
+.wrap.locked {
+  overflow: hidden;
 }
 
 .page {
