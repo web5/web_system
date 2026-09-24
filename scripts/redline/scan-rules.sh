@@ -200,6 +200,7 @@ is_contract_file() {
   case "$1" in
     scripts/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险）
     packages/types/*) return 0 ;;                   # 共享常量：权限码 / 事件类型 / 枚举
+    packages/agent-core/src/interfaces/*) return 0 ;;  # 协议契约（StreamEventType / RunInput）
     servers/mcp-gateway/src/*/tools/*) return 0 ;;  # MCP 工具注册
     servers/*/src/*/*.controller.ts) return 0 ;;    # 对外接口（另受 R13_LINE_THRESHOLD 约束）
     servers/*/src/*/*.controller.js) return 0 ;;
@@ -496,6 +497,28 @@ check_r12() {
     "rd-digital-agent/references/project-context.md"
 }
 
+# ---- R16 SSE 事件契约一致性（消费方手写联合 ↔ agent-core 真相源）----
+# 设计：specs/rd-process-model/design.md §3.7 · 判据源 docs/api/contracts.md C2
+# 背景：'card' 曾由服务端推送、被 portal 与小程序各自手写联合类型，而共享类型未登记 →
+#       消费方漏分支时没有任何检查能发现（2026-09-24）。手工对齐只解决当下，本规则解决复发。
+# 不依赖 range：比对当前文件内容，改动任一相关文件即触发。
+check_r16() {
+  local py="$TOP/scripts/redline/check-sse-contract.py"
+  [ -f "$py" ] || return 0
+  local out lvl rule loc msg
+  out="$(python3 "$py" 2>/dev/null)"
+  [ -n "$out" ] || return 0
+  while IFS=$'\t' read -r lvl rule loc msg; do
+    [ -n "${lvl:-}" ] || continue
+    case "$lvl" in
+      MISSING|EXTRA|LOOSE)
+        add_warn "${rule:-R16}" "$msg" "$loc" "契约真相源：packages/agent-core 的 StreamEventType（docs/api/contracts.md C2）" ;;
+    esac
+  done <<EOF
+$out
+EOF
+}
+
 # ---- 单行检查封装（文件+行号+内容）----
 check_one_line() {
   local file="$1" line="$2" content="$3"
@@ -516,6 +539,7 @@ scan_diff_range() {
   check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
   check_r13_r14 "$range" # R13/R14：契约与数据变更 / 发布与环境 评审凭证（一次遍历，specs/rd-process-model §3.7）
   check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
+  check_r16           # R16：SSE 事件契约一致性（消费方手写联合 ↔ agent-core 真相源，不依赖 range）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do
