@@ -556,13 +556,18 @@ export class MonitorService {
    * 将 pm2 jlist 原始进程转换为结构化 Pm2Process（本地/远端共用，消除两份漂移代码）
    */
   private toPm2Process(proc: RawPm2Process): Pm2Process {
+    // 单位标准化（2026-09-24）：monit.memory 是**字节**（前端按 MB 渲染）；
+    // pm_uptime 是**启动时间戳 ms**（前端按「运行秒数」渲染）——此前直传导致 157920 GB / 2 亿天
+    const uptimeSec = proc.pm2_env?.pm_uptime
+      ? Math.max(0, Math.floor((Date.now() - proc.pm2_env.pm_uptime) / 1000))
+      : 0;
     return {
       name: proc.name,
       pid: proc.pid || 0,
       status: proc.pm2_env?.status || 'unknown',
       cpu: proc.monit?.cpu || 0,
-      memory: proc.monit?.memory || 0,
-      uptime: proc.pm2_env?.pm_uptime || 0,
+      memory: proc.monit?.memory ? Math.round(proc.monit.memory / 1024 / 1024) : 0, // bytes → MB
+      uptime: uptimeSec,
       restarts: proc.pm2_env?.restart_time || 0,
       port: proc.pm2_env?.PORT || undefined,
     };
