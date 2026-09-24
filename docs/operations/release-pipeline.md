@@ -629,6 +629,21 @@ mysql -h<DB_PUBLIC_HOST> -P<DB_PORT> -u<DB_USER> <DB_NAME_DEPLOY> < /tmp/deploy-
 
 ---
 
+## 十、安全门禁（速查索引）
+
+> 完整的安全门禁规范（职责矩阵、变更流程、凭证落地、审计回滚、紧急响应）已抽取到独立文档：[`docs/development/security-baseline.md`](../development/security-baseline.md)。本节仅保留发布相关的快速索引，详细内容见该文档。
+
+### 发布涉及的门禁速查（详见 security-baseline.md §二）
+
+- **腾讯云安全组**：prod `6000-6007` TCP 入站放通（来源 `<SSL_PROXY_HOST>` + 公网）；旧端口 `3000-3004` 已删除
+- **SSH 访问控制**：发布人公钥已加入 prod `~/.ssh/authorized_keys` + 堡垒机白名单；私钥权限 600
+- **数据库访问控制**：云库 IP 白名单含 dev/prod 内网 IP + `<DB_USER>` 最小权限（无 DROP/CREATE/ALTER）
+- **凭证管理**：所有 SECRET_* 走 KMS / vault，**不进 .env / ecosystem.config.js / 仓库**
+
+发布前的完整门禁 checklist 见 [release-checklist.md K 段](./release-checklist.md#k-安全门禁每次发布必查)。
+
+---
+
 ## 附录 A：本规范制定时的踩坑时间线
 
 1. **dev 流水线配置不是最新**：local → dev 同步。
