@@ -216,15 +216,49 @@ export const moduleApi = {
 }
 
 /* ========== Monitor ========== */
+/** 可管环境（真相源 = 基础设施 → 主机管理） */
+export interface MonitorEnv {
+  id: string
+  name: string
+}
+
+/** PM2 按主机分组（每台独立取数，失败不影响其它主机） */
+export interface Pm2HostGroup {
+  name: string
+  host: string
+  scope: string
+  runtime: string
+  ok: boolean
+  error?: string
+  tookMs: number
+  procs: {
+    name: string
+    pid: number
+    status: string
+    cpu: number
+    memory: number
+    uptime: number
+    restarts: number
+    port?: number
+  }[]
+}
+
 export const monitorApi = {
+  /** 当前控制台可管的环境（页签来源，不再硬编码 local/dev/prod） */
+  envs: () => http.get('/monitor/envs') as Promise<MonitorEnv[]>,
+  /** PM2 进程（按主机分组） */
+  pm2Hosts: (env: string) =>
+    http.get('/monitor/pm2/hosts', { params: { env } }) as Promise<Pm2HostGroup[]>,
   health: (env: string) =>
     http.get('/monitor/health', { params: { env } }) as Promise<
       {
         service: string
         address: string
+        hostName?: string
         status: 'up' | 'down'
         response?: string
         responseTime: number
+        error?: string
       }[]
     >,
   pm2: (env: string) =>

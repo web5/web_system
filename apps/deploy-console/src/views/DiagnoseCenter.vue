@@ -31,13 +31,14 @@ const loadingPm2 = ref(false)
 
 async function loadTargets() {
   try {
-    const envs = await environmentApi.list()
+    // 环境列表与「服务监控」同源：来自主机管理（可管环境），本机作独立目标保留
+    const envs = await monitorApi.envs()
     targets.value = [
       { id: 'local', name: '本机', isLocal: true },
-      ...envs.map((e) => ({ id: e.id, name: e.name })),
+      ...envs.map((e) => ({ id: e.id, name: e.name || e.id })),
     ]
-  } catch {
-    message.error('加载目标失败')
+  } catch (e) {
+    message.error((e as Error).message || '加载目标失败')
   }
 }
 
