@@ -55,6 +55,11 @@
 - **两套"主机"语义别混用**：
   - `deploy_servers.server_name`（`dev-default` / `prod-default`）+ `deploy_env_service_routes` → **发布 / SSH / 监控**用它解析目标机器（主机组名，可多台）。
   - `deploy_service_envs.host_name` → **网关转发与探活**用，会被 `resolveUpstream` 直接拼成 `http://<hostName>:<port>`（`servers/gateway/src/dynamic-route/route-match.ts`），**必须填可解析地址**，填主机组名会解析失败。
+- **端口真相源（2026-09-23 定，重要）**：**远端（dev/prod）的端口取 `deploy_service_envs.port`，
+  绝不回落编排者本机的 pm2 端口**；配置中心 `PORT` 可显式覆盖；只有 `local` 才回落本机 pm2。
+  发布日志里会打印 `PORT_SOURCE`（`config` / `env-registry` / `local-pm2` / `unresolved`）说明端口从哪来。
+  事故背景：本机 auth=6101、dev=6001，旧逻辑拿本机 6101 去探远端 → verify 判失败 → **自动回滚 dist**，
+  表现为"流水线 failed 但线上没变"（详见 §3.1 第 6 条与 §4.10）。
 - 校验：`bash scripts/health-check.sh dev|prod`（走 SSH）；本机 `pm2 jlist`。
 
 ## 二、日常发布流程
@@ -161,6 +166,35 @@ node -e "require('fs').writeFileSync('.deploy-lock-hash', require('crypto').crea
 ```
 
 **本地环境初始化**（`env=local`）：见 `deploy-pipeline-dev.md` 第十章（`deploy_environments` 插入 local + 复制 dev 指针 + gateway `DEPLOY_ENV_ID=local`）。
+
+### 3.1 远端控制台（dev/prod）登录前置条件（IAM 一期后必做）
+
+控制台登录**代理给 auth-service**（`POST /auth/login` 带 `system=deploy`），不再自签令牌
+（见 `servers/deploy-console/src/auth/auth.service.ts`）。把控制台升级到 IAM 一期版本后，
+远端**缺下面任一项即登录不可用**，且前端文案会把真因掩盖成「用户名或密码错误」（见文末排障口诀）。
+
+| # | 前置条件 | 缺了会怎样 | 检查 / 修法（远端执行） |
+|---|---|---|---|
+| 1 | `servers/deploy-console/.env` 有 `JWT_SECRET`，**与同环境 auth-service 同源** | 启动即抛异常 → pm2 崩溃循环（dev 实测 restarts 880） | `grep -c '^JWT_SECRET=' <root>/servers/deploy-console/.env`；缺失时从**同机** auth-service `.env` 取值补上（只写文件，不打印值） |
+| 2 | 同一文件有 `AUTH_SERVICE_URL=<该环境 auth-service 实际地址>` | 代码缺省是 `http://127.0.0.1:6101`（**本机**端口）→ 远端必然连不上 →「认证服务不可用」 | dev 填 `http://127.0.0.1:6001`；prod 按 §1.1 端口矩阵填 |
+| 3 | 该环境的 auth-service 是 **IAM 一期之后**的版本（接受 `system` 参数） | 返回 400 `property system should not exist` → 控制台误报「用户名或密码错误」 | 直连探测（见下）：400 说"参数不认" = 版本太旧 → 发一版 auth-service 到该环境 |
+| 4 | 该环境库的 `users` 表有 `systems` 列（json，可空） | 新版 auth-service 查询报列不存在 | 先备份 `users`： `mysqldump <db> users > /tmp/users.bak.sql`；再 `ALTER TABLE users ADD COLUMN systems json NULL`（加性，可回滚） |
+| 5 | 运维账号归属 `deploy` 系统 | 登录被 403「该账号不属于运维控制台」 | 显式写 `users.systems=["admin","deploy"]`；或用户名落在 `LEGACY_OPS_USERNAMES`（现为 `["admin"]`，见 `packages/shared/src/user-systems.ts`）可免配。`roles` 为空不影响（控制台 `role` 默认 admin） |
+| 6 | 该服务在该环境登记了端口（`deploy_service_envs.port`） | 远端 verify **探错端口** → 判失败 → 自动回滚 dist | 控制台「环境详情 → 服务指向」登记端口；发布日志看 `PORT_SOURCE`（不登记时为 `unresolved`，此时只能告警、会降级为进程状态验证） |
+
+```bash
+# 直连探一次 auth-service 的登录契约（在第 3 条排障时用；密码随便填，只看状态码）
+curl -s -m 8 -X POST http://127.0.0.1:<auth端口>/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"__probe__","password":"__probe__123","system":"deploy"}' | head -c 200
+#   401 用户名或密码错误  → IAM 契约正常（版本够新）
+#   400 property system should not exist → 版本太旧，需发新版 auth-service
+#   403 ...不属于...        → 账号无 deploy 归属（第 5 条）
+```
+
+**排障口诀**：控制台把 auth-service 的**非 2xx 一律显示成「用户名或密码错误」**，
+所以看到这句**不等于口令错** —— 先用上面那条 curl 直连 auth-service 看真实状态码，
+再对照上表定位。相关事故与修复见 §4.10。
 
 ## 四、踩坑与规避（全部亲历，重要）
 
@@ -304,6 +338,29 @@ curl -s -o /dev/null -w "%{http_code}" https://local.kedouai.com/static/modules/
 # 控制台
 curl -s -o /dev/null -w "%{http_code}" https://local.kedouai.com/console/pipelines   # 200
 ```
+
+### 4.10 远端探活探错端口 → 假失败回滚；控制台登录不可用（2026-09-23 亲历）
+
+**现象（同一天连撞两次）**：
+1. auth-service 发 dev → 流水线 `failed`，但**线上 dist 被 verify 自动回滚**、服务还是旧版
+   （"发布失败但线上没变"，最容易误判成"没发出去"）；
+2. dev 控制台**登不进去**（「认证服务不可用，请稍后重试」）。
+
+**成因（两条独立）**：
+
+| # | 成因 | 修法 |
+|---|---|---|
+| 1 | `PORT` 取值链是「配置中心 → **编排者本机 pm2**」，而 pm2 只有 local 语义（本机 auth=6101、dev=6001）→ verify 拿 6101 探远端 → 判失败 → 回滚 dist | 端口改从**目标环境登记**解析（`pickStagePort`）：配置中心 → `deploy_service_envs.port`（远端）→ 仅 local 回落本机 pm2；远端取不到 → 空 + 告警 + `PORT_SOURCE=unresolved`，**绝不**用本机端口。prod 端口本就不同（auth=3001 / system=3004 / todo=3005），不修必复现 |
+| 2 | dev 控制台 `.env` 缺 `AUTH_SERVICE_URL`（缺省 6101 是本机端口）+ dev 的 auth-service 是 IAM 前版本（拒绝 `system` 参数）+ dev 库 `users` 缺 `systems` 列 | 见 §3.1 的 6 条前置条件；三者补齐后 dev 登录恢复 |
+
+**派生坑（同一天）**：`publish-deploy-console.sh` 自称"干净 env 重启"，实际只覆盖 `PATH`；
+若当前 shell 残留 `PORT`（例如刚手工跑过动作脚本），`pm2 start` 会把它快照进进程，
+而 `@nestjs/config` **不覆盖已存在的 process.env** → 服务去绑 6001 → `EADDRINUSE :::6001` 起不来。
+已改为 `env -i` 只保留 `PATH` / `HOME` / 主密钥路径。
+
+**另一条教训**：只给 Nest 服务加 `@InjectRepository` 而**没在模块的 `TypeOrmModule.forFeature` 注册**，
+单测（用 stub 提供仓储）**测不出来**，运行时才报 `...Repository at index [N]` 且服务起不来。
+新增注入后**必须真启动一次**。
 
 ## 六、关键结论（设计决策）
 
