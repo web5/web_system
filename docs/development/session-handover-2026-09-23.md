@@ -168,3 +168,85 @@ mysqldump <db> <table> > ~/backups/<table>.bak-$(date +%Y%m%d-%H%M).sql
 > 相关文档：`docs/development/local-release-runbook.md`（发布与登录前置条件、事故 §4.10）、
 > `docs/development/dev-env-config-inventory.md`（配置对账表与判定规则）、
 > `specs/backend-consolidation/design.md`（A/C 系列任务表与进度行）。
+
+---
+
+## 8. 续作记录（2026-09-23 晚间 · 流水线连线议题）
+
+### 8.1 §0 自检结果（本会话实测）
+
+| 项 | 结果 |
+|---|---|
+| DEV 175.27.189.123 | ✅ SSH OK，13 个 pm2 进程，`dev.kedouai.com/console/` 200 |
+| PROD 106.52.176.246 | ✅ SSH OK |
+| LIGHTHOUSE 101.43.117.234 | ❌ `Permission denied (publickey)` —— 仍缺密钥/用户登记 |
+| 本机控制台 6200 | ✅ 200（6200 占用者 == pm2 pid） |
+| 开放 PR | #146（kedou-ai-minigram 文档）、#147（本议题） |
+
+### 8.2 A6 的真实根因（重要，别再只盯"指针没切"）
+
+已核实的事实链：
+
+1. A6 产物**已投递**：dev 磁盘 `servers/gateway/public/static/modules/admin/dev/3d5ce61/` 存在，公网 200。
+2. 版本记录**已写**：`deploy_versions` 有 `env=dev, component=admin, version_tag=admin-dev/3d5ce61`（active，09-23 14:08）。
+3. manifest 里 admin 仍是 `default/f05e12e`。
+4. **dev gateway 跑在 NEW 读取源**：日志 `manifest 读取源 = NEW（deploy_sites / deploy_envs / deploy_apps / deploy_app_env_versions）`；
+   而 `deploy_app_env_versions` **0 行**（NEW 域未初始化）→ 改 `deploy_deployments`（LEGACY 指针）**不生效**（本会话已试：改成 `admin-dev/3d5ce61` 后 manifest 无变化，重启 gateway 也无变化）。
+5. NEW 模式下固定入口 `/static/modules/admin/dev/index.js` 当前 **404**（磁盘指针也没换）。
+
+结论：**A6 必须走 dev 控制台 UI「版本部署 → admin → 3d5ce61 → 部署」**（会写 NEW 表 + 换磁盘指针）。
+卡点：dev 控制台登录 —— `admin/admin123` 直连 dev auth-service 是 **401**，且**不能重置密码**（业务库 dev/prod 共用，改 `users` 会同时影响 prod）。
+
+⚠️ 衍生影响：**dev 上所有微前端模块的版本切换目前都不生效**（portal 同样是 `default/f05e12e`），不是 admin 独有。要么初始化 NEW 域（sites/envs/apps/app_env_versions），要么把 dev gateway 切回 `DEPLOY_LEGACY_READ=1` —— 需用户决策。
+
+### 8.3 dev/prod 共用库（复核属实）
+
+dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）→ 同一实例。
+**任何对 dev 业务库的写都作用于 prod**。控制台库 `web_system_deploy` 只有 dev 行、prod 未跑 deploy-console → 控制台库不共用。
+（本会话仅做只读核对，未做任何写操作。）
+
+### 8.4 本议题产出（已发 PR #147）
+
+- 连线着色规则定稿：`specs/pipeline-flow-color/design.md` §2.5（边色 = 目标节点色；L2 竖线按转折点分段；层序灰先彩后；坐标取整 + 圆帽 + 拐点补圆）
+- 连线绘制抽公共 util：`specs/pipeline-wires-util/design.md` + `apps/deploy-console/src/utils/pipelineWires.ts`（编辑页/详情页共用）
+- 原型八场景演示：`docs/ui/prototypes/deploy-console-domain-split.html` 屏 `dc-rundetail`
+- 本地 release 已发布并实测：#3373（成功·命中 dev）绿主干 + 灰跳过支线；#1984（失败）红主干 + 橙审批边；编辑页中性橙连线 + 「＋」按钮
+
+### 8.5 本会话对 dev 的配置补齐（NEW 域生效所必需）
+
+| 服务 | 配置 | 说明 |
+|---|---|---|
+| deploy-console | `RELEASE_WORKSPACE=/data/web_system` | 原先缺失 → 回落到 `~/web_system_release`（不存在）→ 版本产物检查必失败 |
+| gateway | `DEPLOY_DB_HOST/PORT/USER/NAME/PASSWORD` | 原先 `DEPLOY_DB_NAME=web_system`（业务库）→ 报 `Table 'web_system.deploy_sites' doesn't exist`；改为连控制台库 `web_system_deploy`（HOST 走云 MySQL，密码与 deploy-console 同源） |
+| 全局 | `/etc/web-system/config-master.key` | 见 §8.7 事故 |
+
+### 8.6 A6 已完成并验证（admin → 3d5ce61）
+
+- 调用 `POST /console/api/apps/admin/switch {envId:'dev', version:'3d5ce61'}`（**version 用裸 hash，不是 `admin-dev/3d5ce61`**）→ 201
+- `deploy_app_env_versions`：admin/dev = `3d5ce61`，status=deployed
+- 入口指针：`/static/modules/admin/dev/index.js` 内容为 `System.register(['./3d5ce61/index.js'], …)`
+- manifest：`source=new`、`defaultEnv=dev`、`byEnv.dev.admin.entry=/static/modules/admin/dev/index.js`
+
+⚠️ dev 登录凭据：控制台 `admin / deploy2026`（本会话验证可用）。
+
+### 8.7 事故：重启 dev 控制台 → 主密钥 FATAL 崩溃循环
+
+- 现象：`pm2 restart deploy-console` 后 `ConfigSelfCheck FATAL 主密钥不可用：缺少 CONFIG_MASTER_KEY，且 /etc/web-system/config-master.key 不存在`，restarts 飙升、站点 502。
+- 原因：主密钥**只在原进程环境里**（.env 也没有、默认密钥文件也没有），重启后丢失。
+- 修复：把本机 `servers/deploy-console/.env` 的 `CONFIG_MASTER_KEY` 写入 dev 的 `/etc/web-system/config-master.key`（`chmod 600`、`chown ubuntu`）→ 日志 `主密钥就绪 fp=b4ac6aab source=env+file 抽样可解=1/1`，服务恢复。
+- 教训：**重启远端控制台前先确认 `/etc/web-system/config-master.key` 已 provision**（或 .env 里有 `CONFIG_MASTER_KEY`），否则必崩。
+
+### 8.8 dev/prod 共用业务库 —— 处置：不拆库，先加护栏（用户授权"你直接处理"）
+
+护栏（写在此处作为后续所有 DB 操作的强制约束）：
+
+1. **任何对 dev 业务库的写 = 同时写 prod**（已复核：两边 `users=2`、`schema_migrations=12`）。
+2. 业务库写操作（迁移、seed、配置中心、`storage.upload_dir`）一律：先 `DRY_RUN=1` 预演 → 备份目标表 → 我（AI）不得自行执行，需用户确认。
+3. 迁移记账只做一次（不要 dev/prod 各跑一遍），且对照 `dev-env-config-inventory.md` §5 后再记。
+4. 控制台库 `web_system_deploy` 不共用（dev 专用、prod 未跑 deploy-console），风险等级低于业务库。
+5. 拆库排到正式运营前，作为独立项目处理。
+
+### 8.9 其它
+
+- LIGHTHOUSE（101.43.117.234）：`ssh -i ~/.ssh/id_ed25519_lighthouse ubuntu@…` 可用（凭据在 `~/env_config`）。
+- 本会话产出已发 PR #147（连线着色规则定稿 + 连线绘制抽公共 util）。
