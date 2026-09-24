@@ -6,11 +6,12 @@ import { BianbianRecord } from './entities/bianbian-record.entity';
 import { BianbianService } from './bianbian.service';
 import { BianbianController } from './bianbian.controller';
 import { ImageGenClient } from './image-gen.client';
+import { UploadStoreClient } from './upload-store.client';
 
 @Module({
   imports: [TypeOrmModule.forFeature([BianbianRecord]), HttpModule, ConfigModule],
   controllers: [BianbianController],
-  providers: [BianbianService, ImageGenClient],
+  providers: [BianbianService, ImageGenClient, UploadStoreClient],
   exports: [BianbianService],
 })
 export class BianbianModule {}
