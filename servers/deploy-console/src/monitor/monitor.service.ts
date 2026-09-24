@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { exec, execSync } from 'child_process';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Client } from 'ssh2';
@@ -188,6 +188,38 @@ export class MonitorService {
   }
 
   /**
+   * 在某台主机上执行命令：**执行方式由主机管理登记的 `scope` 决定**
+   * - `local` = 本机形态（编排者本机那种），走 execLocal，**不走 SSH**（本机通常没有 sshd）
+   * - `cloud` / `container` = 走 SSH
+   *
+   * 注意：这不是"目标 IP 等不等于自己"的运行时探测（那条口径已被否决），
+   * 而是主机管理里显式的业务登记 —— 与 release 侧 `env === 'local'` 同口径。
+   */
+  private execOnHost(host: DeployHostEntity, command: string, timeoutMs?: number): Promise<string> {
+    if (host.scope === 'local') {
+      // 异步：execSync 会阻塞 Node 事件循环，本机形态下"探活控制台自己"必然连不上（事件循环被自己堵死）
+      return this.execLocalAsync(command, timeoutMs ?? 10000);
+    }
+    return this.execSsh(this.sshConfigFor(host), command, timeoutMs);
+  }
+
+  /**
+   * 本机异步执行（Promise 封装）。
+   * 与 execLocal(execSync) 的区别：不阻塞事件循环 —— 监控要探活控制台自身时只能用异步版。
+   */
+  private execLocalAsync(command: string, timeoutMs = 10000): Promise<string> {
+    return new Promise((resolve, reject) => {
+      exec(command, { timeout: timeoutMs, encoding: 'utf8' }, (err, stdout) => {
+        if (err) {
+          if (stdout) return resolve(String(stdout));
+          return reject(new BadGatewayException(`本机命令执行失败: ${err.message}`));
+        }
+        resolve(String(stdout));
+      });
+    });
+  }
+
+  /**
    * 通过 SSH 执行命令（Promise 封装）
    * 默认超时 10 秒；批量探活等远程侧并行较长的命令可放宽
    */
@@ -262,7 +294,12 @@ export class MonitorService {
    * 执行 pm2 jlist 获取 JSON 格式的进程列表
    */
   async getPm2List(env: string): Promise<Pm2Process[]> {
-    const sshConfig = await this.getSshConfig(env);
+    // 本机形态的主机走本机执行（诊断页的「本机」与监控页的「本地」页签都依赖这条）
+    const { hosts } = await this.resolveEnvTargets(env);
+    if (hosts[0]?.scope === 'local') {
+      return this.getLocalPm2List();
+    }
+    const sshConfig = this.sshConfigFor(hosts[0]);
     const output = await this.execSsh(sshConfig, 'pm2 jlist');
 
     let rawList: RawPm2Process[];
@@ -350,10 +387,10 @@ export class MonitorService {
       let output: string;
       try {
         // 一次握手 + 远程侧并行（上界 ~10s：回环 + 主机地址两次尝试）+ 余量
-        output = await this.execSsh(this.sshConfigFor(host), command, 30000);
+        output = await this.execOnHost(host, command, 30000);
       } catch (e: any) {
-        // SSH 层故障：属「控制台连不上主机」，与「服务离线」区分开
-        this.logger.error(`环境 ${env} 主机 ${hostName} 探活 SSH 失败: ${e?.message || e}`);
+        // 传输层故障：属「控制台连不上主机」，与「服务离线」区分开
+        this.logger.error(`环境 ${env} 主机 ${hostName} 探活失败: ${e?.message || e}`);
         for (const s of items) {
           results.push({
             service: s.serviceKey,
@@ -449,7 +486,7 @@ export class MonitorService {
         procs: [] as Pm2Process[],
       };
       try {
-        const output = await this.execSsh(this.sshConfigFor(host), 'pm2 jlist');
+        const output = await this.execOnHost(host, 'pm2 jlist');
         const rawList = JSON.parse(output.trim()) as RawPm2Process[];
         group.procs = rawList.map((p) => this.toPm2Process(p));
         group.ok = true;
