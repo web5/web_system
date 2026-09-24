@@ -101,7 +101,7 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| gateway `__manifest__` 改 `envs/byEnv` | ✅ 已完成 | `GET /__manifest__?site=dev` → `site=dev / defaultEnv=dev / switchable=true / envs=[dev,1,2] / byEnv={dev:{admin},1:{admin},2:{}}`；`Host: portal.kedouai.com` → `site=prod / defaultEnv=prod / switchable=false / envs=[prod]`（prod 唯一且不可切换）；**未匹配站点（localhost）→ `site=null` + 仅旧字段**，行为不变 |
+| gateway `__manifest__` 改 `envs/byEnv` | ✅ 已完成 | `GET /__manifest__?site=dev` → `site=dev / defaultEnv=dev / switchable=true / envs=[dev,1,2] / byEnv={dev:{admin},1:{admin},2:{}}`；`Host: kedouai.com` → `site=prod / defaultEnv=prod / switchable=false / envs=[prod]`（prod 唯一且不可切换）；**未匹配站点（localhost）→ `site=null` + 仅旧字段**，行为不变 |
 | **注入 shell 的 manifest 同源**（关键收口） | ✅ 已完成 | 组装唯一来源 `IndexHtmlService.buildManifest(req)`，`/__manifest__` 端点与 `<script id="__MODULES_MANIFEST__">` **同一份数据**（已验证两者输出一致）。`byEnv` 值为 `{entry, css}`，`css` 按磁盘存在性给出（避免前端引 404） |
 | shell 按 envId 加载 | ✅ 已完成 | `apps/shell/src/main.ts`：解析 env → 注册 `byEnv[envId]` 模块（固定入口，不含版本）→ 请求带 `x-env-id`；`byEnv` 缺失时回落旧 `modules` 结构 |
 | 环境解析共享（防三处漂移） | ✅ 已完成 | `packages/ui/src/composables/env.ts`：`localStorage > defaultEnv > dev`，与网关侧 `route-match.resolveEnvId` 同语义；单测 8/8（含「环境被删后残留旧值必须回退」） |
