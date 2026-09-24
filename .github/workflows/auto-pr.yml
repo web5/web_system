@@ -2,11 +2,16 @@
 #
 # 触发：push 到任意非 master/main 分支时，自动创建 PR 到 master。
 # 幂等：若该分支已存在 PR，则跳过（不重复创建）。
-# 安全：使用 GitHub 内置 GITHUB_TOKEN（secrets 自动注入，不落地本地、不进仓库）。
-#
-# 权限：workflow 需要 pull-requests: write 才能创建 PR。
-# GITHUB_TOKEN 默认权限有限，若未开启则手动在仓库 Settings → Actions → General
-# 开启 "Workflow permissions: Read and write permissions"。
+# 凭据：优先用仓库 Secret `AUTO_PR_TOKEN`（PAT），未配置时回退内置 GITHUB_TOKEN。
+#   为什么必须用 PAT：**由 GITHUB_TOKEN 创建的事件不会触发后续 workflow**（GitHub 防递归机制），
+#   所以用 GITHUB_TOKEN 建的 PR，其 CI（quality-gate）会卡在 `action_required`，每次都要人工批准。
+#   改用 PAT 建 PR 后，PR 上的 workflow 会正常自动运行。
+#   配置：Settings → Secrets and variables → Actions → New repository secret
+#         名称 `AUTO_PR_TOKEN`，值 = 具备 pull_requests:write + contents:read 的 fine-grained PAT
+#         （与本地根 .env 的 GITHUB_PR_TOKEN 同一个即可）。
+# 权限：本 workflow 声明 pull-requests: write；PAT 自身权限以该 token 的配置为准。
+# 回退路径（未配 AUTO_PR_TOKEN）仍需在 Settings → Actions → General 开启
+# "Workflow permissions: Read and write permissions"。
 name: auto-pr
 
 on:
@@ -38,6 +43,8 @@ jobs:
         id: pr
         uses: actions/github-script@v7
         with:
+          # 优先 PAT（见文件头说明）；未配置该 secret 时回退 GITHUB_TOKEN（其 PR 的 CI 需人工批准）
+          github-token: ${{ secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const { repo, owner } = context.repo;
             const head = context.ref.replace(/^refs\/heads\//, '');
