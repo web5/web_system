@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import { BianbianRecord } from './entities/bianbian-record.entity';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { ImageGenClient } from './image-gen.client';
+import { UploadStoreClient } from './upload-store.client';
 import { TransformDto, TransformResponse } from './dto/transform.dto';
 
 /** 默认每日变身次数限制 */
@@ -35,6 +36,7 @@ export class BianbianService {
     private readonly imageGenClient: ImageGenClient,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly uploadStore: UploadStoreClient,
   ) {}
 
   /** 微服务地址（统一从 ConfigService 读取，兼容 localhost/Docker/生产环境） */
@@ -518,8 +520,11 @@ export class BianbianService {
   // ========== AI 生成图片落盘 ==========
 
   /**
-   * 下载 AI 生成的图片并保存到本地 /uploads/bianbian/ 目录
-   * 遵循最佳实践：AI 生成图片落盘到 /api/uploads/ 静态资源目录
+   * 下载 AI 生成的图片并落盘（A8：统一走 upload-service 的 internal/uploads/store）
+   *
+   * - 不再本地写盘，路径解析不扩散到本服务
+   * - 返回的 URL 契约与其它上传一致：`/api/uploads/bianbian/<file>`
+   * - 落盘失败（网络 / 401 / 超限 / 扩展名非法）→ 抛错由调用方降级为“存远端 URL”
    */
   private async downloadAndSaveImage(imageUrl: string, _recordId: string): Promise<string> {
     // 如果已经是本地路径，直接返回
@@ -527,17 +532,11 @@ export class BianbianService {
       return imageUrl;
     }
 
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'bianbian');
-    if (!fs.existsSync(uploadsDir)) {
-      await fs.promises.mkdir(uploadsDir, { recursive: true });
-    }
-
-    // 从 URL 推断扩展名
+    // 从 URL 推断扩展名（与 upload-service 的 bianbian 分类白名单一致）
     const urlExt = imageUrl.split('?')[0].split('.').pop()?.toLowerCase();
     const ext = urlExt && ['jpg', 'jpeg', 'png', 'webp'].includes(urlExt) ? urlExt : 'jpg';
     const normalizedExt = ext === 'jpeg' ? 'jpg' : ext;
     const filename = `bianbian-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${normalizedExt}`;
-    const filePath = path.join(uploadsDir, filename);
 
     // 下载图片
     const response = await firstValueFrom(
@@ -551,8 +550,12 @@ export class BianbianService {
       throw new Error(`下载图片失败: HTTP ${response.status}`);
     }
 
-    await fs.promises.writeFile(filePath, Buffer.from(response.data));
-
-    return `/api/uploads/bianbian/${filename}`;
+    const buffer = Buffer.from(response.data);
+    return this.uploadStore.storeImage({
+      category: 'bianbian',
+      filename,
+      buffer,
+      mimeType: `image/${normalizedExt === 'jpg' ? 'jpeg' : normalizedExt}`,
+    });
   }
 }
