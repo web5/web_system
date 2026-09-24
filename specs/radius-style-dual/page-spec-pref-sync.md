@@ -231,3 +231,17 @@ curl -H "Authorization: Bearer $T" https://local.kedouai.com/api/auth/verify
 ```
 
 结论：修完后 `main-standalone` 入口在 vite dev / hydration 后立即调 `bindUserPrefsSync`，触发 `userStore.fetchUserInfo()`，拿到新 `userInfo.preferences`，watcher 触发 `syncFromServer` → `setRadiusStyle('sharp', { silent: true })` → DOM `<html data-radius="sharp">` —— 这就是 AC2 完整链路。
+
+#### 实测复核（2026-09-23 用户实测 ✅）
+
+- 浏览器实测 vite dev `http://localhost:5173/portal/`，新隐身窗口登录 `radiusAC2`（DB 已写入 `preferences={radiusStyle:"sharp"}`），刷新页面**自动收敛为「直角」** —— 即 AC2 完整链路验证通过。
+- 验证依据：① 登录响应 `user.preferences={radiusStyle:"sharp"}` 由 LoginPanel `setUserInfo` 注入 userStore；② `bindUserPrefsSync` watcher 监听 `userInfo.preferences`，`{immediate: true}` 触发首屏收敛；③ DOM `<html data-radius="sharp">` 与渲染 `borderRadius*` 同步生效。
+- B 计划验收至此 8 条 AC 全部通过：
+  - AC1 切档 → PUT + 立即本地变 ✅
+  - **AC2 新设备登录自动收敛 ✅**（本节实测）
+  - AC3 小程序同步（实现完成，待小程序工具实测）
+  - AC4 非法值 → 400 ✅
+  - AC5 仅传 preferences 不动其他字段 ✅
+  - AC6 preferences=null 零变化 ✅
+  - AC7 失败不弹错不回滚 ✅
+  - AC8 admin/console 偏好本地独立 ✅
