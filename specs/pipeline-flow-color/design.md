@@ -1,7 +1,7 @@
 # 流水线详情页 · 运行态连线着色规则 v2（设计稿 · 待确认）
 
 > 状态：**提案，待用户拍板**。确认前不改实现代码。
-> 原型演示：**`docs/ui/prototypes/deploy-console-domain-split.html`** → 屏 `dc-rundetail`
+> 原型演示：**`docs/ui/prototypes/deploy-console-domain.html`** → 屏 `dc-rundetail`
 > 「流水线详情 · 执行流程」（侧栏进入或页头「▶ 打开新屏」），屏内**场景切换**五个场景可点：
 > 成功·4-2 跳过 / 成功·4-2 完成 / 运行中·停在审批 / 失败·4-2 失败 / 执行中·4-2 运行。
 > 页面规格：`docs/ui/page-specs/pipeline-product-logic-v1.md` §15（§14 是 v1 规则的来源）。
@@ -38,7 +38,7 @@ awaiting / skipped / cancelled / 未执行`''`）。步骤聚合规则不变（�
 ### 2.5 连线绘制定义（唯一判据源 · 2026-09-23）
 
 之前只在「颜色」上打补丁，没有定义连线本身怎么画、每段归谁 —— 这是几轮反馈互相矛盾的根源。
-定义如下（实现 = `ProgressFlow.vue drawWires()`，原型 = `deploy-console-domain-split.html`
+定义如下（实现 = `ProgressFlow.vue drawWires()`，原型 = `deploy-console-domain.html`
 屏 `dc-rundetail` 的同名函数）：
 
 **总纲：一条边的颜色 = 目标（下一个）节点的颜色，与源节点无关**（用户 2026-09-23 定稿：
