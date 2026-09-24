@@ -109,8 +109,8 @@ export function stopSpeak(): void {
 export async function speakText(text: string): Promise<boolean> {
   const t = String(text || '').trim();
   if (!t) return false;
-  // 登录墙兜底：本通道不走 request.ts，未登录（含主动退出）时不发起合成
-  if (isLoggedOut()) {
+  // 登录墙兜底：本通道不走 request.ts，未登录（无 token 或主动退出）时不发起合成
+  if (!getToken() || isLoggedOut()) {
     wx.showToast({ title: '请先登录', icon: 'none' });
     return false;
   }

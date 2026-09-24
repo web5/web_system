@@ -11,6 +11,7 @@ import { getMusicTaste, tasteSummary } from '../../../services/user-taste';
 import { listMemory } from '../../../services/user-memory';
 import { listGlossary } from '../../../services/glossary';
 import { isLoggedIn, logout } from '../../../services/auth';
+import { fetchProfile } from '../../../services/account';
 
 Page({
   data: {
@@ -19,7 +20,8 @@ Page({
     loggedIn: true,
     nickname: '橙子哥哥',
     realName: '已实名',
-    phone: '138****6688',
+    /** 脱敏手机号；空 = 未绑定（禁止展示硬编码假数据） */
+    phone: '',
     /** 各应用 / 主对话的历史条数（空则不展示数字，避免假数据） */
     trCount: '',
     asCount: '',
@@ -46,6 +48,14 @@ Page({
     this.setData({ loggedIn });
     // 未登录：只渲染登录卡，不发起任何业务请求（判据第 8 条）
     if (!loggedIn) return;
+
+    // 账号信息：昵称 / 手机号（未绑定显示占位文案，不展示假数据）
+    void fetchProfile().then((info) => {
+      this.setData({
+        phone: info.phone || '未绑定手机号',
+        nickname: info.nickname || this.data.nickname,
+      });
+    });
 
     // 口味摘要：轻量读一次，失败保持「未设置」不打扰
     void getMusicTaste().then((t) => {
@@ -82,7 +92,7 @@ Page({
   goContracts() { wx.showToast({ title: '我的合同开发中', icon: 'none' }); },
   goChats() { wx.showToast({ title: '对话记录开发中', icon: 'none' }); },
   onNotify() { wx.showToast({ title: '消息通知已开启', icon: 'none' }); },
-  goAgreement() { wx.showToast({ title: '协议页开发中', icon: 'none' }); },
+  goAgreement() { wx.navigateTo({ url: '/pages/mine/agreement/agreement' }); },
   goAbout() { wx.showToast({ title: '科豆 AI v1.0.0', icon: 'none' }); },
 
   /** 退出登录：二次确认 → 服务端作废 + 本地清态 → 停在登录墙（不跳欢迎页） */

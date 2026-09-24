@@ -10,4 +10,18 @@
 .r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
 .r:last-child { border-bottom: none; }
 .v { color: var(--t3); font-size: 26rpx; }
+/* 未绑定：值用品牌深档强调可点（--brand-txt 白底 4.9:1，满足可读） */
+.v.bind { color: var(--brand-txt); font-weight: 500; }
+
+/* 手机号行必须是 button（微信要求 getPhoneNumber 由 button 触发），
+   这里抹掉 button 默认样式，与相邻 .r 列表项视觉一致 */
+.phone-row {
+  width: 100%;
+  padding: 28rpx;
+  background: var(--card);
+  border-radius: 0;
+  border-bottom: 1rpx solid var(--line);
+  line-height: 1.4;
+}
+.phone-row::after { border: none; }
 .foot { font-size: 22rpx; color: var(--t3); text-align: center; margin-top: 20rpx; }
