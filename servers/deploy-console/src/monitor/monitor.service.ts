@@ -277,38 +277,80 @@ export class MonitorService {
   async healthCheck(env: string): Promise<HealthCheck[]> {
     // 服务 × 环境 → 主机组（deploy_hosts）+ 端口；探活在**该服务所在的那台主机**上发起
     const { hosts, services } = await this.resolveEnvTargets(env);
-    const hostByName = new Map(hosts.map((h) => [h.name, h]));
+
+    // 按主机归拢：**每台主机只建一条 SSH 连接**，一条命令把该主机上所有端口探完。
+    // （踩坑：早期实现是"每个服务一条 SSH"，12 条并发握手会被 sshd 拒掉 → Connection lost before handshake）
+    const byHost = new Map<string, typeof services>();
+    for (const s of services) {
+      if (!s.port) continue;
+      const list = byHost.get(s.hostName) || [];
+      list.push(s);
+      byHost.set(s.hostName, list);
+    }
 
     const results: HealthCheck[] = [];
-    const checks = services.map(async (service) => {
-      const row: HealthCheck = {
-        service: service.serviceKey,
-        address: service.address,
-        hostName: service.hostName,
-        status: 'down',
-        response: 'timeout',
-      };
-      const host = hostByName.get(service.hostName);
+    const perHost = [...byHost.entries()].map(async ([hostName, items]) => {
+      const host = hosts.find((h) => h.name === hostName);
       if (!host) {
-        row.error = `主机组 ${service.hostName} 不可用（未启用或不属于本控制台）`;
-        results.push(row);
+        for (const s of items) {
+          results.push({
+            service: s.serviceKey,
+            address: s.address,
+            hostName,
+            status: 'down',
+            response: 'timeout',
+            error: `主机组 ${hostName} 不可用（未启用或不属于本控制台）`,
+          });
+        }
         return;
       }
-      // 请求根路径：能拿到任何 HTTP 状态码说明端口在监听、服务进程存活；"000" 表示连接失败
-      const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${service.address}/ || echo "000:0"`;
+      // 输出格式：每行 "<serviceKey>|<httpCode>|<time_total>"
+      const pairs = items.map((s) => `${s.serviceKey}:${s.port}`).join(' ');
+      const command =
+        `for sp in ${pairs}; do n="\${sp%%:*}"; p="\${sp##*:}"; ` +
+        `r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${host.host}:$p/ || echo "000:0"); ` +
+        `echo "$n|$r"; done`;
       try {
         const output = await this.execSsh(this.sshConfigFor(host), command);
-        const [httpCode, responseTime] = output.trim().split(':');
-        row.status = httpCode !== '000' ? 'up' : 'down';
-        row.response = httpCode;
-        row.responseTime = parseFloat(responseTime) * 1000; // 转换为毫秒
+        const parsed = new Map<string, string>();
+        for (const line of output.trim().split('\n')) {
+          const [name, rest] = line.split('|');
+          if (name && rest) parsed.set(name.trim(), rest.trim());
+        }
+        for (const s of items) {
+          const raw = parsed.get(s.serviceKey);
+          const row: HealthCheck = {
+            service: s.serviceKey,
+            address: s.address,
+            hostName,
+            status: 'down',
+            response: 'timeout',
+          };
+          if (raw) {
+            const [httpCode, responseTime] = raw.split(':');
+            row.status = httpCode !== '000' ? 'up' : 'down';
+            row.response = httpCode;
+            row.responseTime = parseFloat(responseTime) * 1000; // 毫秒
+          } else {
+            row.error = `未取到探活结果（主机 ${host.host}）`;
+          }
+          results.push(row);
+        }
       } catch (e) {
-        row.error = (e as Error).message;
+        for (const s of items) {
+          results.push({
+            service: s.serviceKey,
+            address: s.address,
+            hostName,
+            status: 'down',
+            response: 'timeout',
+            error: (e as Error).message,
+          });
+        }
       }
-      results.push(row);
     });
 
-    await Promise.all(checks);
+    await Promise.all(perHost);
     return results;
   }
 
