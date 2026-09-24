@@ -181,6 +181,15 @@ grep -q 'contract-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
 if [ -z "$miss" ]; then ok "V28 contract-reviewer 角色接线完整"
 else bad "V28 contract-reviewer 角色接线完整" "缺：${miss# }"; fi
 
+# V29 code-reviewer 角色接线（技能 + R12 保护清单 + R15 判定与主流程挂载）
+miss=""
+[ -f .codebuddy/skills/code-reviewer/SKILL.md ] || miss="$miss SKILL.md"
+grep -q 'code-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
+grep -q 'check_r15' "$BIN/scan-rules.sh" || miss="$miss check_r15"
+grep -qE '^[[:space:]]*check_r15[[:space:]]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+if [ -z "$miss" ]; then ok "V29 code-reviewer 角色接线完整（含 R15 与保护清单）"
+else bad "V29 code-reviewer 角色接线完整（含 R15 与保护清单）" "缺：${miss# }"; fi
+
 echo
 echo "== 结果：PASS=$PASS FAIL=$FAIL =="
 echo "   备份目录（可删）：$BACKUP"
