@@ -353,9 +353,62 @@ ALTER TABLE `users` ADD COLUMN `merged_to` BIGINT UNSIGNED NULL COMMENT '合并�
 ### 5.7.6 验收要点
 
 - A 的会话 / 生词本 / 记忆 / 口味在合并后出现在 B 名下（用 B 登录 PC portal 与小程序均可见）。
-- 合并后旧 token 立即 401；新 token 的 `sub` = B.id，且 `/api/auth/verify` 返回 B 的手机号。
+- 合并后旧 token 立即 401；新 token 的 `sub` = B.id，且 `/api/auth/verify` 返回 B 的手机号/邮箱。
 - 重复内容不产生重复行（三张唯一键表无报错、无重复）。
 - A 账号 `status=inactive` 且 `merged_to=B.id`，再用同一微信 `wx.login` 登录落到 B（因 `mp_openid` 已挂在 B 上）。
+- 邮箱来源的合并（`bindSource='email'`）与手机号走同一套：同样重签凭证、同样留痕。
+
+### 5.8 R3 绑定邮箱（与手机号同批）
+
+邮箱与手机号**同为账号打通键**，因此复用同一套合并流程，只换「凭证获取方式」：手机号靠微信组件，邮箱靠验证码。
+
+#### 5.8.1 时序
+
+```
+个人信息页 邮箱「去绑定」→ 进入自绘绑定页 p-bind-email（非 wx.showModal：原生弹窗无输入框）
+  1) 输入邮箱 → 点「获取验证码」
+       → POST /api/users/email-code { email }   (user-service，复用 MailService.sendCode)
+          生成 6 位码 → 存 hash + 有效期 → 发送邮件 → 60s 重发倒计时
+  2) 输入 6 位验证码 → 提交
+       → POST /api/auth/bind-email { email, code }   (auth-service，Bearer)
+          校验 hash + 有效期 + 错误次数 → 查重 users.email
+          → 未冲突：写入 email，返回脱敏邮箱
+          → 冲突：409 EMAIL_ALREADY_BOUND → 二次确认 → confirmMerge 走 §5.7 合并（bindSource='email'）
+```
+
+#### 5.8.2 接口契约
+
+`POST /api/users/email-code`（user-service，需登录）
+
+| 项 | 内容 |
+|---|---|
+| 入参 | `{ email: string }` |
+| 200 | `{ sent: true, resendIn: 60 }` |
+| 400 `INVALID_EMAIL` | 格式错误（字段级提示） |
+| 429 `RATE_LIMITED` | 60s 内重发 / 单日超限 |
+| 503 `SMTP_NOT_CONFIGURED` | SMTP 未配置或发送失败 → 「邮件服务暂不可用，请稍后再试」 |
+
+`POST /api/auth/bind-email`（auth-service，Bearer）
+
+| 项 | 内容 |
+|---|---|
+| 入参 | `{ email: string, code: string, confirmMerge?: boolean }` |
+| 200 | `{ email: 'a***@example.com', boundAt }`；合并场景额外 `{ merged: true, accessToken, refreshToken }` |
+| 400 `INVALID_CODE` / `CODE_EXPIRED` / `TOO_MANY_ATTEMPTS` | 验证码错误 / 过期 / 连续错误超限（该码作废，需重取） |
+| 409 `EMAIL_ALREADY_BOUND` | 命中其他账号 → `{ conflict: true, canMerge: true, maskedEmail, hint }`，走 §5.7 合并 |
+| 401 `UNAUTHORIZED` | 未登录 → 引导登录 |
+
+#### 5.8.3 数据模型与复用
+
+- 新表 `email_verification_codes`（web_system 库）：`email` / `code_hash` / `expires_at` / `attempts` / `used` / `user_id` / `created_at` —— 结构参照 `mcp-key-code.entity.ts`，但独立建表（用途与生命周期不同）。
+- 验证码复用 `servers/user-service/src/api-key/api-key.service.ts:108-131` 的生成/过期/次数校验逻辑（抽象成公共方法，不复制）。
+- 邮件发送复用 `MailService.sendCode`（`SMTP_HOST/PORT/USER/PASS/FROM`，未配置则 503）。
+- `users.email` **已有 UNIQUE 索引**（`migrations/0007_baseline_tables.sql:455`），无需新建；冲突即走合并。
+
+#### 5.8.4 合并流程统一
+
+- 合并能力抽成公共逻辑，入参带 `bindSource: 'phone' | 'email'`；迁移表清单（§5.7.3）、去重策略、凭证重签、`merged_to` 留痕全部复用，**不为邮箱写第二套**。
+- 冲突弹窗文案随来源变化：手机号显示脱敏号，邮箱显示脱敏邮箱。
 
 ---
 
