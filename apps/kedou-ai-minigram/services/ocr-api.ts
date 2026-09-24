@@ -24,8 +24,8 @@ export function chooseAndRecognize(
   sourceType: 'camera' | 'album',
   options?: { onUploadStart?: () => void },
 ): Promise<OcrResult> {
-  // 登录墙兜底：本通道不走 request.ts，未登录（含主动退出）时不发起识别
-  if (isLoggedOut()) {
+  // 登录墙兜底：本通道不走 request.ts，未登录（无 token 或主动退出）时不发起识别
+  if (!getToken() || isLoggedOut()) {
     wx.showToast({ title: '请先登录', icon: 'none' });
     return Promise.reject(new Error('请先登录'));
   }

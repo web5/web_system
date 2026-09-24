@@ -9,11 +9,24 @@
 
   <view class="list">
     <view class="r" bindtap="editNickname"><text>昵称</text><text class="v">{{nickname}} ›</text></view>
-    <view class="r" bindtap="editPhone"><text>手机号</text><text class="v">{{phone}} ›</text></view>
-    <view class="r" bindtap="bindEmail"><text>邮箱</text><text class="v">{{email}} ›</text></view>
+
+    <!-- 手机号：微信手机号快速验证（原生组件，必须是 button） -->
+    <button
+      class="r phone-row"
+      open-type="getPhoneNumber"
+      bindgetphonenumber="onGetPhone"
+      hover-class="none"
+    >
+      <text>手机号</text>
+      <text class="v {{phone ? '' : 'bind'}}">{{phone || '未绑定'}} ›</text>
+    </button>
+
+    <!-- 邮箱：自绘绑定页（验证码需要输入框，原生弹窗无法承载） -->
+    <view class="r email-row" bindtap="onEmailTap"><text>邮箱</text><text class="v {{email ? '' : 'bind'}}">{{email || '未绑定'}} ›</text></view>
+
     <view class="r" bindtap="goVerify"><text>实名认证</text><text class="v">{{realName}} ›</text></view>
     <view class="r" bindtap="bindWechat"><text>微信账号</text><text class="v">已绑定 ›</text></view>
   </view>
 
-  <view class="foot">实名信息用于合同评估的合规留痕</view>
+  <view class="foot">实名信息用于合同评估的合规留痕<text wx:if="{{busy}}"> · 处理中…</text></view>
 </view>
