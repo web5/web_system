@@ -3,7 +3,6 @@
  */
 
 export type StreamEventType =
-  | 'token'
   | 'content_delta'
   | 'reasoning_delta'
   | 'tool_call'
@@ -13,8 +12,10 @@ export type StreamEventType =
   | 'final'
   | 'error'
   | 'permission_request'
-  /** 意图路由决策结果：必须是本轮第一个事件（早于任何 token） */
-  | 'intent';
+  /** 意图路由决策结果：必须是本轮第一个事件（早于任何 token 增量） */
+  | 'intent'
+  /** 结构化卡片：由工具结果转换后补发（kind 区分卡片类型，一期 'music'） */
+  | 'card';
 
 export interface StreamEvent {
   type: StreamEventType;
@@ -44,9 +45,11 @@ export interface StreamEvent {
   /**
    * card 事件专用载荷：结构化卡片。
    * kind 区分卡片类型（一期 'music'），其余字段随 kind 扩展。
+   * 契约：卡片类型与新增 kind 须在 `docs/api/contracts.md` C2 登记；
+   *       已知值给 IDE 提示，`(string & {})` 保留扩展位（新 kind 不破坏消费方编译）。
    */
   card?: {
-    kind: string;
+    kind: 'music' | (string & {});
     [key: string]: unknown;
   };
   /** 本轮对话累计的 token 消耗（final/error 事件携带，来自大模型返回的 usage） */
