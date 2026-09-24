@@ -645,17 +645,26 @@
           <button class="sc" data-sc="m2" onclick="setMonScene('m2')">② 多主机 · 一台取数失败</button>
           <button class="sc" data-sc="m3" onclick="setMonScene('m3')">③ 全部取数失败</button>
           <button class="sc" data-sc="m4" onclick="setMonScene('m4')">④ 编排者本机控制台（含「本地」）</button>
+          <button class="sc" data-sc="m5" onclick="setMonScene('m5')">⑤ 无可管环境（空态）</button>
+        </div>
+
+        <!-- 空态：/monitor/envs 为空（主机管理里没有归属本控制台的已启用主机） -->
+        <div class="dc-card" id="monEmpty" style="display:none;text-align:center;padding:48px 24px;">
+          <div style="font-weight:600;margin-bottom:6px;">暂无可管环境</div>
+          <div class="dc-muted" style="margin-bottom:4px;">「主机管理」里没有归属本控制台（CONSOLE_INSTANCE）且启用的主机，因此推导不出任何环境。</div>
+          <div class="dc-mono dc-muted" style="font-size:12px;margin-bottom:14px;">排查：基础设施 → 主机管理 → 确认主机的 启用 与 归属控制台（managed_by）</div>
+          <button class="dc-btn primary" onclick="dc('hosts','主机管理')">去主机管理登记</button>
         </div>
 
         <!-- 页签：由 GET /monitor/envs 下发；dev 控制台 = DEV/PROD，本机控制台 = 本地/DEV/PROD -->
-        <div class="dc-tabs" data-dr="monitor-tabs" style="border-bottom:1px solid var(--border);margin-bottom:12px;">
+        <div class="dc-tabs" id="monTabs" data-dr="monitor-tabs" style="border-bottom:1px solid var(--border);margin-bottom:12px;">
           <div class="t2 active" id="monTabLocal" style="display:none;">本地</div>
           <div class="t2 active" id="monTabDev">DEV</div>
           <div class="t2" id="monTabProd" style="color:var(--text-3);">PROD</div>
         </div>
 
         <!-- 顶部诊断横幅：任一主机取数失败即出现（场景 ②③） -->
-        <div id="monBanner" data-dr="monitor-banner" style="display:none;border:1px solid var(--danger);background:#fff1f0;border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+        <div id="monBanner" data-dr="monitor-banner" style="display:none;border:1px solid var(--danger);background:var(--ws-danger-soft);border-radius:6px;padding:10px 12px;margin-bottom:12px;">
           <div style="font-weight:600;color:var(--danger);margin-bottom:4px;">⚠ 有主机取数失败</div>
           <div class="dc-mono" id="monBannerMsg" style="font-size:12px;color:var(--text-2);">
             SSH 连接失败: All configured authentication methods failed —— 主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在
@@ -667,7 +676,7 @@
         </div>
 
         <!-- 服务状态表（新增「主机」列） -->
-        <div class="dc-card" style="margin-bottom:16px;">
+        <div class="dc-card" id="monHealthCard" style="margin-bottom:16px;">
           <div class="dc-row" style="margin-bottom:10px;"><h3 style="font-size:15px;">服务状态</h3><div class="dc-spacer"></div><span class="dc-muted" id="monHealthMeta" style="font-size:12px;">12 / 12 在线</span></div>
           <table data-dr="monitor-health-table">
             <thead><tr><th>服务</th><th>主机</th><th>地址</th><th>状态</th><th>响应</th><th>响应时间</th><th>操作</th></tr></thead>
@@ -681,7 +690,7 @@
         </div>
 
         <!-- PM2 进程：按主机分组 -->
-        <div class="dc-card">
+        <div class="dc-card" id="monPm2Card">
           <div class="dc-row" style="margin-bottom:10px;"><h3 style="font-size:15px;">PM2 进程</h3><div class="dc-spacer"></div><span class="dc-muted" style="font-size:12px;">按主机分组，逐台取数</span></div>
           <div data-dr="monitor-pm2-groups">
 
@@ -696,7 +705,11 @@
                 <span class="dc-muted">·</span><span class="dc-mono">取数 340 ms</span>
               </div>
               <div class="mon-group-body">
-                <table>
+                <div id="monGroupAAlert" style="display:none;border-bottom:1px solid var(--ws-danger);background:var(--ws-danger-soft);border-radius:0;padding:10px 12px;">
+                  <div style="font-weight:600;color:var(--ws-danger);margin-bottom:4px;">⚠ SSH 连接失败: All configured authentication methods failed</div>
+                  <div class="dc-mono" style="font-size:12px;color:var(--text-2);">主机组 dev-default（175.27.189.123 / ubuntu），密钥 ~/.ssh/id_ed25519_servers 不存在</div>
+                </div>
+                <table id="monGroupATable">
                   <thead><tr><th>进程名</th><th>状态</th><th>CPU</th><th>内存</th><th>运行时间</th><th>重启</th><th>操作</th></tr></thead>
                   <tbody>
                     <tr><td class="dc-mono">web-gateway</td><td><span class="dc-badge ok">online</span></td><td class="dc-mono">0.3%</td><td class="dc-mono">128 MB</td><td class="dc-mono">3天2小时</td><td class="dc-mono">0</td><td><button class="dc-btn link" onclick="toast('打开日志抽屉')">查看日志</button></td></tr>
@@ -717,7 +730,7 @@
                 <span class="dc-muted">·</span><span style="color:var(--danger);">取数失败</span>
               </div>
               <div class="mon-group-body">
-                <div style="border:1px solid var(--danger);background:#fff1f0;border-radius:6px;padding:10px 12px;">
+                <div style="border:1px solid var(--danger);background:var(--ws-danger-soft);border-radius:6px;padding:10px 12px;">
                   <div style="font-weight:600;color:var(--danger);margin-bottom:4px;">⚠ SSH 连接失败: All configured authentication methods failed</div>
                   <div class="dc-mono" style="font-size:12px;color:var(--text-2);">主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在</div>
                   <div style="margin-top:8px;display:flex;gap:8px;">
@@ -1773,22 +1786,35 @@ body{background:var(--ws-border-subtle);}
          bannerMsg:'SSH 连接失败: All configured authentication methods failed —— 主机组 dev-b（10.0.0.7 / ubuntu），密钥 /home/ubuntu/.ssh/id_ed25519_servers 不存在',
          healthMeta:'11 / 12 在线', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'13 个进程'} },
     /* ③ 全部取数失败（原来的 dev 故障形态：页面一眼看出是 SSH 不通，不是服务挂了） */
-    m3:{ banner:true, failRow:true, groupB:false, localTab:false,
+    m3:{ banner:true, failRow:true, groupB:false, localTab:false, gAAlert:true,
          bannerMsg:'SSH 连接失败: All configured authentication methods failed —— 主机组 dev-default（175.27.189.123 / ubuntu），密钥 ~/.ssh/id_ed25519_servers 不存在',
          healthMeta:'0 / 12 在线', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'取数失败'} },
     /* ④ 编排者本机控制台：managed_by=orchestrator → 多一个「本地」页签 */
     m4:{ banner:false, failRow:false, groupB:false, localTab:true,
-         healthMeta:'12 / 12 在线', gA:{name:'local-default',host:'127.0.0.1',rt:'pm2',count:'13 个进程'} }
+         healthMeta:'12 / 12 在线', gA:{name:'local-default',host:'127.0.0.1',rt:'pm2',count:'13 个进程'} },
+    /* ⑤ 空态：主机管理里没有归属本控制台的已启用主机 → /monitor/envs 为空 */
+    m5:{ banner:false, failRow:false, groupB:false, localTab:false, empty:true,
+         healthMeta:'—', gA:{name:'dev-default',host:'175.27.189.123',rt:'pm2',count:'13 个进程'} }
   };
   function setMonScene(k){
     var s = MON_SCENES[k]; if(!s) return;
     document.querySelectorAll('#runScenes .sc, .run-scenes .sc').forEach(function(b){ b.classList.remove('active'); });
     var btn = document.querySelector('.sc[data-sc="'+k+'"]'); if(btn) btn.classList.add('active');
+    /* 空态：整块内容换成引导（唯一恢复入口 = 去主机管理登记） */
+    var emptyEl = document.getElementById('monEmpty');
+    if(emptyEl) emptyEl.style.display = s.empty ? '' : 'none';
+    ['monTabs','monBanner','monHealthCard','monPm2Card'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = s.empty ? 'none' : (id === 'monBanner' ? (s.banner ? '' : 'none') : '');
+    });
     var banner = document.getElementById('monBanner');
     if(banner){ banner.style.display = s.banner ? '' : 'none';
       var msg = document.getElementById('monBannerMsg'); if(msg && s.bannerMsg) msg.textContent = s.bannerMsg; }
     var row = document.getElementById('monRowFail'); if(row) row.style.display = s.failRow ? '' : 'none';
     var gB = document.getElementById('monGroupB'); if(gB) gB.style.display = s.groupB ? '' : 'none';
+    var gAAlert = document.getElementById('monGroupAAlert'), gATable = document.getElementById('monGroupATable');
+    if(gAAlert) gAAlert.style.display = s.gAAlert ? '' : 'none';
+    if(gATable) gATable.style.display = s.gAAlert ? 'none' : '';
     var tabLocal = document.getElementById('monTabLocal');
     var tabDev = document.getElementById('monTabDev');
     if(tabLocal){ tabLocal.style.display = s.localTab ? '' : 'none';
