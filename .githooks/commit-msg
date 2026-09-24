@@ -11,4 +11,6 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 # 应急出口：UI_GATE=off 跳过本门（批量机械改动 / 紧急修复）
 [ "${UI_GATE:-}" = "off" ] && exit 0
 
-exec bash "$ROOT/scripts/redline/check-commit-msg.sh" "$1"
+# 传 $2（source）：merge 提交需被识别并豁免——否则合并进来的、早已走过凭证流程的
+# UI 文件会被当成「本次改动」稳定误报（2026-09-24 实测）。
+exec bash "$ROOT/scripts/redline/check-commit-msg.sh" "$1" "${2:-}"
