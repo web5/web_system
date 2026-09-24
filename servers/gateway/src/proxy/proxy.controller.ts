@@ -7,6 +7,7 @@ import {
   Post,
   Header,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
@@ -15,12 +16,15 @@ import { ProxyService } from './proxy.service';
 import { DynamicRouteService } from '../dynamic-route/dynamic-route.service';
 import { IndexHtmlService } from '../deploy-version/index-html.service';
 import { Public } from '../auth/public.decorator';
+import { TokenBlacklistGuard } from '../auth/token-blacklist.guard';
 import * as http from 'http';
 import * as url from 'url';
 import { API_TIMEOUT } from '@web-system/shared';
 
 @ApiExcludeController()
 @Public() // API 路由的认证由各后端微服务自行处理，Gateway 仅做代理转发
+// 登出后的 token 由本 Guard 拦下：否则各微服务不查黑名单，退出登录在服务端不生效
+@UseGuards(TokenBlacklistGuard)
 @Controller('api')
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);

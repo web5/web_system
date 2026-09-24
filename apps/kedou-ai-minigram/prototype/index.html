@@ -26,6 +26,7 @@
     --green: #12A150; --green-soft: #E7F7EE;
     --amber: #D98200; --amber-soft: #FFF6E5; --amber-deep: #78350F;
     --red: #E5484D; --red-soft: #FDECEC;
+    --on-brand: #FFFFFF;
     --capsule: rgba(255,255,255,.86); --capsule-bd: rgba(0,0,0,.08);
     --tab-bg: #FFFFFF; --tab-off: #8A90A0;
     --mask: rgba(0,0,0,.45); --sheet: #FFFFFF; --sheet-gap: #F2F2F7;
@@ -45,6 +46,7 @@
     --green: #3DBE77; --green-soft: #10301F;
     --amber: #E5A13B; --amber-soft: #33270E;
     --red: #FF6B6F; --red-soft: #3A1A1C;
+    --on-brand: #1A1005;
     --capsule: rgba(255,255,255,.10); --capsule-bd: rgba(255,255,255,.14);
     --tab-bg: #12141B; --tab-off: #6E7385;
     --mask: rgba(0,0,0,.62); --sheet: #1A1C24; --sheet-gap: #000000;
@@ -370,6 +372,38 @@
   .vipcard .b { font-size: 12px; opacity: .92; margin-top: 3px; }
   .logout { margin-top: 18px; text-align: center; font-size: 13.5px; color: var(--red); cursor: pointer; }
 
+  /* ---------- 账号：登录引导卡 / 原生弹窗模拟 ----------
+     真机语义：登录卡对应「未登录态整页拦截」（必须登录才可用，Q1 已拍板）；
+     .wxmodal 对应 wx.showModal 原生弹窗（退出确认 / 合并二次确认），原型只模拟形态与文案。 */
+  .gate { position: absolute; inset: 0; z-index: 22; background: var(--page-bg); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px; text-align: center; }
+  .gate.show { display: flex; }
+  .gate .g-ic { width: 56px; height: 56px; border-radius: 28px; background: var(--brand-soft); color: var(--brand-txt); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .gate .g-t { font-size: 16px; font-weight: 600; color: var(--t1); }
+  .gate .g-d { margin-top: 8px; font-size: 12.5px; color: var(--t2); line-height: var(--leading-normal); }
+  .g-btn { margin-top: 24px; width: 100%; max-width: 224px; height: var(--control-lg); border-radius: 20px; background: var(--brand); color: var(--on-brand); font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  /* 合规告知（协议链接）不取 --t3：灰档在 --page-bg 上仅 ~1.8:1，不可读（design-system G3） */
+  .gate .g-note { margin-top: 16px; font-size: 11px; color: var(--t2); line-height: var(--leading-normal); }
+  .gate .g-link { color: var(--t2); font-weight: 500; text-decoration: underline; cursor: pointer; }
+  .page.locked { overflow: hidden; } /* 未登录态锁滚动：登录墙不可被滚出视野 */
+  .wxmodal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96); width: 76%; background: var(--sheet); border-radius: 14px; z-index: 62; overflow: hidden; display: none; opacity: 0; transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
+  .wxmodal.show { display: block; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .wxmodal .m-t { padding: 20px 18px 0; font-size: 15.5px; font-weight: 600; color: var(--t1); text-align: center; }
+  .wxmodal .m-c { padding: 10px 18px 20px; font-size: 13px; color: var(--text-body); line-height: var(--leading-normal); text-align: center; }
+  .wxmodal .m-b { display: flex; border-top: 1px solid var(--line); }
+  .wxmodal .m-b div { flex: 1; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--t2); cursor: pointer; }
+  .wxmodal .m-b div + div { border-left: 1px solid var(--line); color: var(--brand-txt); font-weight: 500; }
+  .ph-bind { color: var(--brand-txt); font-weight: 500; cursor: pointer; }
+  .doc { background: var(--card); border-radius: 12px; padding: 14px; font-size: 12.5px; color: var(--text-body); line-height: var(--leading-relaxed); }
+  .doc p { margin: 0 0 8px; }
+  .doc p:last-child { margin-bottom: 0; }
+  .ei-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+  .ei { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 13.5px; color: var(--t1); }
+  .ei::placeholder { color: var(--t3); }
+  .ei-btn { flex: none; font-size: 12.5px; color: var(--brand-txt); font-weight: 500; cursor: pointer; }
+  .ei-btn.off { color: var(--t3); pointer-events: none; }
+  .err { min-height: 16px; margin: 6px 4px 0; font-size: 11.5px; color: var(--red); }
+  .g-btn.wide { margin: 24px auto 0; max-width: none; }
+
   /* ---------- tabBar ---------- */
   /* z-index 必须高于 .welcome(20)：欢迎页要显示 tabBar（作为进入「发现 / 我的」的枢纽），
      低了会被欢迎页覆盖层挡住 —— 视觉上还在，但点击被拦截。 */
@@ -564,6 +598,16 @@
 
       <!-- ================= 对话（tab 1，默认主界面） ================= -->
       <div class="page tab active" id="p-chat">
+        <!-- 未登录态：登录引导卡（Q1 已拍板「必须登录才可用」，整页拦截，不发业务请求） -->
+        <div class="gate" id="gate-chat" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">AI 对话、翻译与合翻都需要登录后使用</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
         <div class="msgs" id="msgs">
           <div class="msg ai">
             <div class="av">豆</div>
@@ -628,6 +672,15 @@
 
       <!-- ================= 发现（tab 2） ================= -->
       <div class="page tab" id="p-discover">
+        <div class="gate" id="gate-discover" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">发现页的能力与记录都关联你的账号</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
         <div class="sec-t" style="margin-top:4px">AI 能力<em>点开即用</em></div>
 
         <div class="cap" onclick="openApp('translate')">
@@ -669,11 +722,20 @@
 
       <!-- ================= 我的（tab 3） ================= -->
       <div class="page tab" id="p-mine">
+        <div class="gate" id="gate-mine" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">口味记忆、生词本与手机号都跟着账号走</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
         <div class="profile" onclick="navigateTo('p-mine-profile', '个人信息')">
           <div class="avatar">橙</div>
           <div style="flex:1">
             <div class="n">橙子哥哥</div>
-            <div class="d">已实名 · 138****6688</div>
+            <div class="d" id="mineSub">已实名 · 未绑定手机号</div>
           </div>
           <span style="color:var(--t3);font-size:13px">›</span>
         </div>
@@ -720,10 +782,10 @@
         </div>
 
         <div class="list" style="margin-top:10px">
-          <div class="r">用户协议与隐私政策<span>›</span></div>
-          <div class="r">关于科豆 AI<span class="v">v1.0.0 ›</span></div>
+          <div class="r" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">用户协议与隐私政策<span>›</span></div>
+          <div class="r" onclick="wxToast('关于科豆 AI')">关于科豆 AI<span class="v">v1.0.0 ›</span></div>
         </div>
-        <div class="logout" onclick="wxToast('退出登录')">退出登录</div>
+        <div class="logout" data-dr="logout-entry" onclick="askLogout()">退出登录</div>
         <div class="foot">
           本服务使用生成式人工智能<br>已依法完成大模型与算法备案
         </div>
@@ -1116,12 +1178,14 @@
         </div>
         <div class="list" style="margin-top:10px">
           <div class="r" onclick="wxToast('修改昵称')">昵称<span class="v">橙子哥哥 ›</span></div>
-          <div class="r" onclick="wxToast('更换手机号')">手机号<span class="v">138****6688 ›</span></div>
-          <div class="r" onclick="wxToast('绑定邮箱')">邮箱<span class="v">未绑定 ›</span></div>
+          <div class="r" id="phoneRow" data-dr="phone-row" onclick="onPhoneRow()">手机号<span class="v" id="phoneVal">未绑定 ›</span></div>
+          <div class="r" id="emailRow" data-dr="email-row" onclick="onEmailRow()">邮箱<span class="v" id="emailVal">未绑定 ›</span></div>
           <div class="r" onclick="wxToast('已实名认证')">实名认证<span class="v">已认证 ›</span></div>
           <div class="r" onclick="wxToast('已绑定微信')">微信账号<span class="v">已绑定 ›</span></div>
         </div>
-        <div class="foot">实名信息用于合同评估的合规留痕</div>
+        <div class="foot">实名信息用于合同评估的合规留痕<br>
+          <span class="g-link" onclick="demoQuota()">演示：额度不足</span> · <span class="g-link" onclick="demoBindFail()">演示：绑定失败</span>
+        </div>
       </div>
 
       <div class="page sub" id="p-mine-settings">
@@ -1140,9 +1204,58 @@
         <div class="list">
           <div class="r" onclick="wxToast('已清除 24.6MB 缓存')">清除缓存<span class="v">24.6MB ›</span></div>
           <div class="r" onclick="backWelcome()">返回欢迎页<span class="v">›</span></div>
-          <div class="r" onclick="wxToast('退出登录')">退出登录<span class="v">›</span></div>
+          <div class="r" data-dr="logout-entry" onclick="askLogout()">退出登录<span class="v">›</span></div>
         </div>
         <div class="foot">这里的设置影响整个小程序</div>
+      </div>
+
+      <!-- ================= 二级页：用户协议与隐私政策（M4，收手机号的合规前置） ================= -->
+      <div class="page sub" id="p-agreement" data-dr="agreement">
+        <div class="sec-t" style="margin-top:4px">我们收集什么</div>
+        <div class="doc">
+          <p><b>微信身份标识（openid）</b>：首次进入时通过 wx.login 静默获取，用于建立你的账号，不弹授权窗。</p>
+          <p><b>手机号</b>：仅在你主动点击「绑定手机号」并授权后，经微信手机号验证组件获取，用于<b>多端账号打通</b>。不绑定不影响任何功能使用。</p>
+          <p><b>对话与学习数据</b>：对话记录、生词本、口味记忆，保存在你的账号下。</p>
+        </div>
+        <div class="sec-t">手机号怎么用</div>
+        <div class="doc">
+          <p>仅作为账号打通的标识；接口与页面一律只展示脱敏号（138****6688）。</p>
+          <p>若该手机号已注册过科豆账号，会先征求你的同意，再把当前小程序的数据合并到那个账号 —— <b>合并不可撤销</b>。</p>
+        </div>
+        <div class="sec-t">你的控制权</div>
+        <div class="doc">
+          <p>可在「我的 → 个人信息」绑定或更换手机号，更换需重新微信授权。</p>
+          <p>可在「我的 → 小程序设置」退出登录：本地登录态清除，同时服务端凭证失效。</p>
+          <p>账号注销：<b>开发中</b>，上线后入口放在「小程序设置」。</p>
+        </div>
+        <div class="foot">文案待运营 / 法务确认（M4）<br>生效日期：____ 年 __ 月 __ 日</div>
+      </div>
+
+      <!-- ================= 二级页：绑定邮箱（R3，与手机号同为打通键） ================= -->
+      <div class="page sub" id="p-bind-email" data-dr="bind-email">
+        <div class="sec-t" style="margin-top:4px">绑定邮箱</div>
+        <div class="doc">
+          <p>邮箱与手机号一样用于<b>多端账号打通</b>。验证码发送到该邮箱，<b>仅服务端校验</b>，不下发到小程序。</p>
+        </div>
+        <div class="sec-t">邮箱</div>
+        <div class="list">
+          <div class="r ei-row">
+            <input class="ei" id="emailInput" type="text" placeholder="you@example.com" oninput="clearErr()" />
+            <span class="ei-btn" id="codeBtn" onclick="sendEmailCode()">获取验证码</span>
+          </div>
+        </div>
+        <div class="err" id="emailErr"></div>
+        <div class="sec-t">验证码</div>
+        <div class="list">
+          <div class="r ei-row">
+            <input class="ei" id="codeInput" type="text" placeholder="6 位数字" maxlength="6" oninput="clearErr()" />
+          </div>
+        </div>
+        <div class="g-btn wide" id="bindEmailBtn" onclick="submitEmailCode()">绑定邮箱</div>
+        <div class="foot">
+          真机：自绘页面（wx.showModal 无输入框）；60s 重发限频，连续错误 5 次该验证码作废<br>
+          演示：任意合法邮箱 + 6 位数字即可提交
+        </div>
       </div>
     </div>
 
@@ -1172,6 +1285,16 @@
     <div class="wx-toast" id="wxToast"></div>
     <div class="wx-loading" id="wxLoading"><span class="sp"></span><span id="wxLoadTxt">处理中…</span></div>
     <div class="mask" id="mask" onclick="closeAll()"></div>
+
+    <!-- 原生弹窗模拟：wx.showModal（退出确认 / 合并二次确认）。真机由微信渲染，原型只复刻形态与文案 -->
+    <div class="wxmodal" id="wxModal" data-dr="modal">
+      <div class="m-t" id="mTitle">标题</div>
+      <div class="m-c" id="mContent"></div>
+      <div class="m-b">
+        <div id="mCancel">取消</div>
+        <div id="mOk">确定</div>
+      </div>
+    </div>
     <div class="wx-sheet" id="wxSheet">
       <div class="grp2" id="sheetBody"></div>
       <div class="cancel" onclick="closeAll()">取消</div>
@@ -1207,6 +1330,17 @@
     <div class="n">
       <b>合规位</b><br>
       对话气泡下方、两个业务结果页、欢迎页底部均有 AI 声明；合同评估额外标注<b>不构成法律意见</b>。隐式水印在返回体 metadata 里，原型不体现。
+    </div>
+    <div class="n">
+      <b>⑥ 账号：退出 / 绑定手机号 / 合并（本次新增）</b><br>
+      <ul>
+        <li><b>退出登录</b>：我的页底部 或 小程序设置 → 原生确认弹窗 → 三 tab 全部切到<b>登录引导卡</b>（已拍板：必须登录才可用）</li>
+        <li><b>绑定手机号</b>：我的 → 个人信息 → 手机号「未绑定」→ 微信授权半屏 → 绑定成功显示脱敏号</li>
+        <li><b>合并路径</b>：授权后若号码已注册 → 二次确认「合并不可撤销」→ 合并成功并<b>重签凭证</b>（原型 toast 说明）</li>
+        <li><b>绑定邮箱</b>：我的 → 个人信息 → 邮箱「未绑定」→ 自绘绑定页（输入邮箱 → 获取验证码 → 60s 倒计时 → 填 6 位码）→ 命中已注册则走同一套合并</li>
+        <li><b>协议页</b>：我的 → 用户协议与隐私政策（收手机号的合规前置，文案待运营/法务）</li>
+      </ul>
+      演示开关在 JS 的 <code>requestPhone()</code> 里：<code>CONFLICT=true</code> 走合并路径，改 false 即直接绑定成功。
     </div>
   </div>
 </div>
@@ -1443,9 +1577,206 @@ var TAB_TITLE = { chat: '科豆 AI', discover: '发现', mine: '我的' };
 var SUB_TITLE = {
   'p-translate': '语言翻译官', 'p-tr-result': '翻译结果', 'p-tr-history': '翻译历史', 'p-tr-settings': '语言翻译官设置',
   'p-assess': '合同评估', 'p-as-result': '评估报告', 'p-as-settings': '合同评估设置',
-  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置',
+  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置', 'p-agreement': '用户协议与隐私政策',
+  'p-bind-email': '绑定邮箱',
   'p-taste': '音乐口味', 'p-memory': '用户记忆', 'p-glossary': '生词本'
 };
+
+/* ---------- 账号：登录态 / 退出 / 绑定手机号 / 合并 ----------
+ * 已拍板口径：Q1 必须登录才可用（未登录 = 登录墙，三 tab 全拦截）；Q15 = c 合并账号。
+ * 真机语义：wx.login 静默登录（无授权弹窗）；手机号走 button open-type="getPhoneNumber" 原生半屏；
+ *          wx.showModal 为微信原生弹窗，此处仅复刻形态与文案。
+ */
+var ACCOUNT = { loggedIn: true, phone: '', pendingPhone: '', email: '', pendingEmail: '', pendingSource: '', busy: false };
+
+function showModal(title, content, okText, onOk, onCancel) {
+  $('mTitle').textContent = title;
+  $('mContent').innerHTML = content;
+  $('mOk').textContent = okText || '确定';
+  $('mCancel').textContent = '取消';
+  $('mOk').onclick = function () { hideModal(); if (onOk) onOk(); };
+  $('mCancel').onclick = function () { hideModal(); if (onCancel) onCancel(); };
+  $('mask').classList.add('show');
+  /* 真机 wx.showModal 点蒙层不会关闭 —— 原型同口径：遮罩不关闭，
+     取消只能走「取消」按钮，保证 onCancel 必被执行（否则会留下解不开的进行中锁） */
+  $('mask').onclick = function () {};
+  $('wxModal').classList.add('show');
+}
+function hideModal() {
+  $('wxModal').classList.remove('show');
+  $('mask').classList.remove('show');
+  $('mask').onclick = closeAll;
+}
+function applyAccountState() {
+  var out = !ACCOUNT.loggedIn;
+  ['gate-chat', 'gate-discover', 'gate-mine'].forEach(function (id) {
+    $(id).classList.toggle('show', out);
+  });
+  /* 未登录：锁住三个 tab 的滚动，登录墙不被滚出视野（否则我的页能滚出内容与退出入口） */
+  ['p-chat', 'p-discover', 'p-mine'].forEach(function (id) {
+    $(id).classList.toggle('locked', out);
+  });
+  /* 未登录：收起导航栏的「新建对话」与「对话记录」入口（它们不在 .page 内，登录墙盖不到） */
+  if (out) { $('navbar').classList.remove('has-act'); $('navbar').classList.remove('has-hist'); }
+  else syncNavForAccount();
+  $('mineSub').textContent = ACCOUNT.phone ? '已实名 · ' + ACCOUNT.phone : '已实名 · 未绑定手机号';
+  $('phoneVal').textContent = ACCOUNT.phone ? ACCOUNT.phone + ' ›' : '未绑定 ›';
+  $('phoneVal').className = ACCOUNT.phone ? 'v' : 'v ph-bind';
+  $('emailVal').textContent = ACCOUNT.email ? ACCOUNT.email + ' ›' : '未绑定 ›';
+  $('emailVal').className = ACCOUNT.email ? 'v' : 'v ph-bind';
+}
+/** 登录态变化时同步导航栏入口：未登录一律不显示需要账号的入口（新建对话 / 对话记录） */
+function syncNavForAccount() {
+  if (!ACCOUNT.loggedIn) {
+    $('navbar').classList.remove('has-act');
+    $('navbar').classList.remove('has-hist');
+    return;
+  }
+  if (cur.tab === 'chat' && !cur.sub) {
+    $('navbar').classList.add('has-act');
+    $('navbar').classList.add('has-hist');
+  }
+}
+function askLogout() {
+  showModal('退出登录', '退出后需要重新登录才能继续使用。<br>服务端登录凭证会同时失效。', '退出', function () {
+    ACCOUNT.loggedIn = false;
+    applyAccountState();
+    if (cur.sub) goBack();
+    wxToast('已退出登录');
+  }, '取消');
+}
+function doLogin() {
+  wxLoading('登录中…');
+  setTimeout(function () {
+    hideLoading();
+    ACCOUNT.loggedIn = true;
+    applyAccountState();
+    wxToast('已登录');
+  }, 600);
+}
+function onPhoneRow() {
+  if (!ACCOUNT.loggedIn) { wxToast('请先登录'); return; }
+  if (ACCOUNT.phone) {
+    showModal('更换手机号', '更换需要重新微信授权，当前号码 ' + ACCOUNT.phone + ' <b>将被新号码替换</b>。', '更换', function () { requestPhone(); });
+  } else {
+    requestPhone();
+  }
+}
+/** 模拟微信手机号快速验证组件（原型用 modal 复刻原生半屏授权） */
+function requestPhone() {
+  if (ACCOUNT.busy) return; /* 重复提交锁：真机由后端 + 一次性 code 兜底 */
+  showModal('微信手机号授权', '微信将把你绑定的手机号提供给科豆 AI，仅用于账号打通。<br><span style="color:var(--t2)">真机：button open-type="getPhoneNumber" 拉起原生半屏；点「拒绝」= 静默返回，不提示</span>', '允许', function () {
+    ACCOUNT.busy = true;
+    wxLoading('绑定中…');
+    setTimeout(function () {
+      hideLoading();
+      /* 演示开关：CONFLICT=true 走「已注册 → 合并」路径，false 走直接绑定成功 */
+      var CONFLICT = true;
+      ACCOUNT.pendingPhone = '138****6688';
+      ACCOUNT.pendingSource = 'phone';
+      if (CONFLICT) {
+        showModal('该手机号已注册', '138****6688 已注册科豆账号。<br>绑定后会把当前小程序的对话、生词本与口味记忆<b>合并</b>到该账号，<b>合并不可撤销</b>。', '确认合并', function () {
+          doMerge('phone');
+        }, function () { ACCOUNT.busy = false; });
+      } else {
+        ACCOUNT.phone = ACCOUNT.pendingPhone;
+        ACCOUNT.busy = false;
+        applyAccountState();
+        wxToast('绑定成功');
+      }
+    }, 700);
+  });
+}
+/** 合并：手机号与邮箱共用同一套流程，仅 bindSource 不同（凭证重签、留痕、去重全部复用） */
+function doMerge(source) {
+  var src = source || ACCOUNT.pendingSource || 'phone';
+  wxLoading('合并中…');
+  setTimeout(function () {
+    hideLoading();
+    if (src === 'email') { ACCOUNT.email = ACCOUNT.pendingEmail; ACCOUNT.pendingEmail = ''; }
+    else { ACCOUNT.phone = ACCOUNT.pendingPhone; ACCOUNT.pendingPhone = ''; }
+    ACCOUNT.pendingSource = '';
+    ACCOUNT.busy = false;
+    applyAccountState();
+    if (cur.sub) goBack();
+    /* 真机：合并后凭证重签（sub = 目标账号），旧 token 立即失效 */
+    wxToast('已合并到该账号（凭证已重签）');
+  }, 900);
+}
+
+/* ---------- 绑定邮箱（R3）：与手机号同为打通键，冲突走同一套合并 ---------- */
+function onEmailRow() {
+  if (!ACCOUNT.loggedIn) { wxToast('请先登录'); return; }
+  if (ACCOUNT.email) {
+    showModal('更换邮箱', '更换需要重新验证新邮箱，当前 ' + ACCOUNT.email + ' <b>将被新邮箱替换</b>。', '更换', function () { openBindEmail(); });
+  } else {
+    openBindEmail();
+  }
+}
+function openBindEmail() {
+  $('emailInput').value = '';
+  $('codeInput').value = '';
+  clearErr();
+  $('codeBtn').textContent = '获取验证码';
+  $('codeBtn').classList.remove('off');
+  navigateTo('p-bind-email', '绑定邮箱');
+}
+function clearErr() { $('emailErr').textContent = ''; }
+function sendEmailCode() {
+  var v = ($('emailInput').value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { $('emailErr').textContent = '邮箱格式不正确，请检查'; return; }
+  clearErr();
+  var left = 60, btn = $('codeBtn');
+  btn.classList.add('off');
+  btn.textContent = left + 's 后重发';
+  var timer = setInterval(function () {
+    left -= 1;
+    if (left <= 0) { clearInterval(timer); btn.textContent = '获取验证码'; btn.classList.remove('off'); return; }
+    btn.textContent = left + 's 后重发';
+  }, 1000);
+  wxToast('验证码已发送至 ' + v);
+}
+function submitEmailCode() {
+  var email = ($('emailInput').value || '').trim();
+  var code = ($('codeInput').value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $('emailErr').textContent = '邮箱格式不正确，请检查'; return; }
+  if (!/^\d{6}$/.test(code)) { $('emailErr').textContent = '请输入 6 位数字验证码'; return; }
+  clearErr();
+  wxLoading('验证中…');
+  setTimeout(function () {
+    hideLoading();
+    /* 演示开关：CONFLICT=true 走「已注册 → 合并」，false 走直接绑定成功 */
+    var CONFLICT = true;
+    ACCOUNT.pendingEmail = maskEmail(email);
+    ACCOUNT.pendingSource = 'email';
+    if (CONFLICT) {
+      showModal('该邮箱已注册', ACCOUNT.pendingEmail + ' 已注册科豆账号。<br>绑定后会把当前小程序的数据<b>合并</b>到该账号，<b>合并不可撤销</b>。', '确认合并', function () {
+        doMerge('email');
+      }, function () { ACCOUNT.busy = false; });
+    } else {
+      ACCOUNT.email = ACCOUNT.pendingEmail;
+      ACCOUNT.pendingEmail = '';
+      ACCOUNT.pendingSource = '';
+      applyAccountState();
+      goBack();
+      wxToast('绑定成功');
+    }
+  }, 700);
+}
+/** 邮箱脱敏：a***@example.com —— 与手机号口径一致，只展示脱敏形式 */
+function maskEmail(e) {
+  var at = e.indexOf('@');
+  if (at <= 0) return e;
+  return e.slice(0, 1) + '***' + e.slice(at);
+}
+/* 异常分支演示：额度不足（errno 1400001）与绑定失败 —— 真机由组件与后端返回决定 */
+function demoQuota() {
+  wxToast('服务暂不可用，请稍后再试');
+}
+function demoBindFail() {
+  showModal('绑定失败', '微信校验未通过或网络异常。<br>请稍后重试；其他功能不受影响。', '重试', function () { requestPhone(); });
+}
+applyAccountState();
 
 /* ---------- AI 记忆 / 生词本：删除 + 补充 + 摘要（原型演示） ---------- */
 function refreshSummary() {
@@ -1498,6 +1829,8 @@ var SUB_ACT = {
 };
 
 function navigateTo(id, title) {
+  /* 登录墙守卫：未登录只允许进协议页（合规必读），其余二级页一律拦下 */
+  if (!ACCOUNT.loggedIn && id !== 'p-agreement') { wxToast('请先登录'); return; }
   cur.sub = id;
   $(id).classList.add('open');
   $(id).scrollTop = 0;
@@ -1601,6 +1934,7 @@ function switchTab(tab) {
     $('navbar').classList.add('has-hist');
   }
   else { $('navbar').classList.remove('has-act'); $('navbar').classList.remove('has-hist'); }
+  syncNavForAccount();
   if (tab !== 'chat') $('p-' + tab).scrollTop = 0;
 }
 function openApp(name) {
