@@ -13,6 +13,8 @@
 - [ ] **mac release types build**：`(cd packages/types && npm run build)`，`packages/types/dist/cjs/index.js` mtime 是今天
 - [ ] **mac release 8 服务 build**：8 个 `servers/<svc>/dist/main.js` mtime 都是今天，build log 无 ERROR
 - [ ] **mac release 发布前 dry-run**（5.A.6）：8 服务 `node -e "require('./dist/main')"` 全 OK，无 `MODULE_NOT_FOUND`
+  - dry-run 判读：DB 连接类报错是「没带 env」的预期噪音；**`TypeError` / `Cannot find module` 才是真问题**（见 C 段「.pnpm 副本」与 2026-09-24 事故）
+- [ ] **确认目标机的 env 来源**：`pm2 jlist | grep -E 'NODE_ENV|PORT'` 有值 → 环境变量在 **ecosystem 的 env 块**，重启必须走 E 段；服务的 `.env` 未必自足
 - [ ] **扫实体注释 DDL**：`grep -rnE "ADD COLUMN|生产环境 synchronize|手工 DDL" packages/`
 - [ ] **dev 库已 ALTER**（从实体注释里捞出的 DDL）
 - [ ] **prod 库已 ALTER**（同一条 DDL）
@@ -37,6 +39,13 @@
 
 - [ ] `pnpm install --prefer-offline --no-frozen-lockfile --shamefully-hoist`（必须带 `--shamefully-hoist`，见 5.A.2）
 - [ ] 同步 `.pnpm` 内 workspace 包副本（`shared`/`types`/`agent-core`/...，见 5.4）
+- [ ] **逐个服务核对 shared 的真实解析路径**（某些服务软链到 `.pnpm` 实体副本，只同步 `packages/shared/dist` 不够）：
+  ```bash
+  for d in <svc1> <svc2> ...; do t=$(readlink -f <DEPLOY_DIR>/servers/$d/node_modules/@<PROD_DOMAIN_NS>/shared); \
+    echo "$d -> $t"; grep -q '<新导出的符号>' $t/dist/index.js && echo OK || echo '缺新符号 ✗'; done
+  ```
+  缺符号时把新 dist 同步进该 `.pnpm` 副本（或改软链指向 `packages/shared`）。
+  症状：`TypeError: (0, shared_1.<Symbol>) is not a function`。
 - [ ] 手动补 pnpm 漏装的包（`ws`/`adm-zip`/...）从 mac rsync（见 5.5）
 - [ ] workspace 包名兼容软链：`<DEPLOY_DIR>/node_modules/@<PROD_DOMAIN_NS>/agent-core → packages/agent-core`（见 5.6）
 - [ ] 验：`cd <DEPLOY_DIR> && node -e "require('@<PROD_DOMAIN_NS>/agent-core'); console.log('OK')"` 打印 `OK`
@@ -50,12 +59,26 @@
 
 ---
 
-## E. ecosystem 端口切 600x（5.8）
+## E. ecosystem 端口切 600x（5.8）+ 重启方式
+
+> ⚠️ **重启铁律：禁止用 `env -i` 清环境重启 prod。**
+> prod 的 `PORT` / `NODE_ENV=production` / `DB_*` 写在 `ecosystem.config.js` 的 env 块里，服务的 `.env` **并不自足**
+> （DB_HOST 可能是内网地址）。`env -i PATH=… pm2 start dist/main.js` 会把这些变量全清掉，后果（2026-09-24 实测）：
+> - `NODE_ENV` 丢失 → TypeORM `synchronize=true` → 撞 MySQL 报错起不来；**且已起来的服务可能在无 `NODE_ENV` 下跑 synchronize，有动 schema 的风险**
+> - `DB_*` 丢失 → `Access denied for user …`（回落到错误的默认凭据）
+>
+> 正确姿势（每台机器 env 来源不同，动手前按 A 段最后一条确认）：
+> ```bash
+> cd <DEPLOY_DIR> && pm2 start ecosystem.config.js --only <name>   # prod 是 .js；dev/local 是 .cjs
+> pm2 save
+> ```
 
 - [ ] `sed` 改 `PORT: 300x` → `PORT: 600x`（按服务列表）
 - [ ] `sed` 改 `http://127.0.0.1:300x` → `http://127.0.0.1:600x`
 - [ ] `sed` 改 `http://localhost:3000` → `http://localhost:6000`
 - [ ] `pm2 reload ecosystem.config.js` + `pm2 save`
+- [ ] 重启后核对：`pm2 jlist | grep -E 'NODE_ENV|PORT'` 每服务的 `NODE_ENV=production` 与 `PORT` 都在位（不是空）
+- [ ] 重启后核对：各服务 `/health` 返回 200，且 `lsof -tiTCP:<port>` 的占用者 == `pm2 pid <name>`
 
 ---
 
@@ -71,6 +94,7 @@
 ## G. 验证（5.10）
 
 - [ ] `sudo ss -lntp | grep -i node` 看到 `6000 6001 6002 6003 6004 6005 6006 6007` 全部
+- [ ] 各服务 `curl 127.0.0.1:<port>/health` → 200（各服务已统一免鉴权 `/health`，见 specs/backend-health-endpoint/design.md）
 - [ ] `https://<PROD_DOMAIN>/api/health` → 200
 - [ ] `https://<ADMIN_DOMAIN>/` → 200
 - [ ] `POST https://<PROD_DOMAIN>/api/ai/chat` → 200（业务核心）
@@ -90,8 +114,11 @@
 
 1. **pm2 reload 错配**：`mv ecosystem.config.js.bad ecosystem.config.js && pm2 reload`
 2. **nginx 错配**：`sudo cp /etc/nginx/conf.d/admin.conf.bak-XXX /etc/nginx/conf.d/admin.conf && sudo systemctl reload nginx`
-3. **dist 错**：`git checkout <old-commit>` → rebuild → rsync → `pm2 restart all`
+3. **dist 错**：`git checkout <old-commit>` → rebuild → rsync → **`pm2 start ecosystem.config.js --only <name>`**（不要用 `env -i`，见 E 段铁律）
 4. **数据库错**：`mysql < /tmp/deploy-sync/dev-before-sync-XXX.sql`（会冲掉发布期间数据，慎用）
+5. **schema 被 synchronize 误动**（如误在无 `NODE_ENV` 下启动）：立即改回 `NODE_ENV=production` 重启止损，
+   再比对 `information_schema.tables` 的 `create_time/update_time` 定位被重建的表，
+   按业务库时间点备份恢复；发布前务必先做 A 段的库备份
 
 ---
 
