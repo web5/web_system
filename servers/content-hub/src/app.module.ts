@@ -7,6 +7,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import { FinnewsModule } from './finnews.module';
 import { ContentModule } from './content/content.module';
 import { InstitutionModule } from './institution/institution.module';
+import { HealthModule } from './health/health.module';
 import { TopicEntity } from './entities/topic.entity';
 import { NewsEntity } from './entities/news.entity';
 import { EntityEntity } from './entities/entity.entity';
@@ -68,6 +69,7 @@ import { ContentMediaEntity } from './content/entities/content-media.entity';
     FinnewsModule,
     ContentModule,
     InstitutionModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

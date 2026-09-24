@@ -5,6 +5,7 @@ import * as path from 'path';
 import { SnakeNamingStrategy } from '@web-system/shared';
 import { TodoModule } from './todo/todo.module';
 import { AuthModule } from './auth/auth.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { AuthModule } from './auth/auth.module';
 
     // 功能模块
     TodoModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
