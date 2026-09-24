@@ -67,9 +67,41 @@
 - [ ] IF 服务启动时读不到该键 THEN THE SYSTEM SHALL 在首次 internal 调用失败时报出**可区分**的错误（未配置 / 不匹配），而不是笼统 401
 - [ ] WHEN 不同环境设置不同值 THE SYSTEM SHALL 按 envId 解析，互不串扰
 
-## 7 待拍板
+## 7 拍板结论（2026-09-24）
 
-- [ ] **Q1**：接受方案 1 吗？（含「console 自身例外，仍人工维护」这一条）
-- [ ] **Q2**：一期就要**双值过渡轮换**能力，还是先只做下发？
-- [ ] **Q3**：dev 与 prod 是否用不同值？（推荐：是）
-- [ ] **Q4**：远程（dev/prod）下发确认是「console 写文件」路径吗？若是「服务自拉」，则回退到方案 2 才成立
+| # | 结论 |
+|---|---|
+| Q1 | **接受方案 1** —— 含「deploy-console 自身例外，仍人工维护 `.env`」 |
+| Q2 | **只做下发**，一期不做双值过渡轮换（轮换留待后续） |
+| Q3 | **dev 与 prod 用不同值** |
+| Q4 | 采用**「流水线发布时由脚本拉取配置」**路径（脚本凭据由平台注入 `CONSOLE_TOKEN`） |
+
+### 7.1 Q4 落地后的关键澄清：下发链的根是 console 的 `.env`
+
+实测确认（`pipeline.service.ts:265`）：**`CONSOLE_TOKEN` 的值就是控制台的 `INTERNAL_API_KEY`**。因此：
+
+- 脚本鉴权用的正是这把密钥 → **脚本是被下发者之外的角色**，不构成鸡生蛋；
+- 但它是**整条下发链的根**：控制台 `.env` 里这把钥匙一旦错/丢，所有服务的配置下发都会 401，且现象是"发布失败"而非"密钥错"；
+- 结论：`INTERNAL_API_KEY` 从「每个服务各写一份」变成「**控制台一份 + 配置中心一份（按环境）**」，人工维护面从 N 降到 1。
+
+## 8 实现清单与状态
+
+| # | 项 | 状态 |
+|---|---|---|
+| 1 | `config.service.ts`：`INTERNAL_API_KEY` 移出 `RESERVED_LOCAL_KEYS`（注释写明可下发 + console 例外） | ✅ |
+| 2 | 后端服务 `ConfigModule.envFilePath` 支持 `.env.generated`（排在 `.env` 之前） | ✅（原仅 gateway/console 支持，补齐其余 10 个服务） |
+| 3 | **部署（apply）路径**：`DeployService.writeGeneratedEnv` 已存在并在部署前写入（`deploy.service.ts:518`） | ✅ 既有能力，放开过滤后即可带出该键 |
+| 4 | **restart-only 路径**：新增 `scripts/pipeline/fetch-config.sh`（拉取 → 0600 落盘，204 保留现状，401 阻断） | ✅ 脚本已提供，**挂载到流水线为数据变更，需按环境配置** |
+| 5 | 服务侧启动自检：internal 调用失败区分「未配置 / 不匹配 / 对端未配置」 | ⬜ 未做（现状只报 `internal forbidden`） |
+| 6 | 控制台登记该键（`is_secret=1`，按 env 分层：dev / prod 不同值） | ⬜ 需人工在控制台操作 |
+
+### 8.1 `fetch-config.sh` 挂载方式
+
+流水线编排是**数据**（`restart` 的内置实现已于 2026-09-21 下沉为 DB action 脚本，见 `pipeline/steps/service-tools.ts:21`），故不擅自改库。挂载方式：在 restart 阶段的 action 脚本里，**重启命令之前**加一行：
+
+```bash
+bash <RELEASE_DIR>/scripts/pipeline/fetch-config.sh
+```
+
+变量由平台注入：`CONSOLE_API` / `CONSOLE_TOKEN` / `DEPLOY_ENV_ID` / `RELEASE_DIR` / `MODULE_KEY` / `MODULE_DIR`。
+缺任一变量 → 脚本**跳过**并沿用现有配置（不阻断发布）；401 → 阻断并提示"CONSOLE_TOKEN 与控制台 INTERNAL_API_KEY 不一致"。
