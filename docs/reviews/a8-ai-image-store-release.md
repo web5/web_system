@@ -20,7 +20,7 @@
 |---|---|---|
 | B1 | ✅ 约束 | 发布 ai-service 用干净 env（`env -i` / pm2 delete+start），**不用 `--update-env`** |
 | B2 | ✅ 一致 | ai-service 与 upload-service 的 `INTERNAL_API_KEY` **完全相同**（dev 侧比对通过，长度 47；本机同值） |
-| B3 | ⚠️ 待办（重要） | 新增 `UPLOAD_SERVICE_URL`：本地 .env 已配 6008；**dev 需在 `/data/web_system/servers/ai-service/.env` 补 `UPLOAD_SERVICE_URL=http://127.0.0.1:6008`**（dev upload-service PORT=6008、online）否则回落默认值 localhost:6008 —— 本机口径相同可用，但 dev/prod 应显式配置 |
+| B3 | ✅ 已完成 | 新增 `UPLOAD_SERVICE_URL`：本地 .env 配 6008；**dev 已补 `UPLOAD_SERVICE_URL=http://127.0.0.1:6008`** 并重启 ai-service（online，restarts=1）；prod 待 upload-service 上线后同法配置 |
 | B4 | ✅ | 无 `REPLACE_` 占位符 |
 | B5 | ✅ | 配置源为各服务 `.env`，无外部注入覆盖 |
 
@@ -42,7 +42,14 @@
 - 契约实测：`POST http://127.0.0.1:6008/internal/uploads/store`（multipart + `x-internal-key`）→ `{code:0,data:{url:"/api/uploads/bianbian/…png"}}`
 - 访问实测：`https://local.kedouai.com/api/uploads/bianbian/…png` → 200
 
+## dev 已验证（2026-09-24）
+
+- dev `ai-service/.env` 补 `UPLOAD_SERVICE_URL=http://127.0.0.1:6008`，重启后 online（restarts=1，无错误日志）
+- 用 **ai-service 自己的 `INTERNAL_API_KEY`** 调 `127.0.0.1:6008/internal/uploads/store` → `{code:0, data:{url:/api/uploads/bianbian/…png}}`
+- 产物落在**统一根** `/data/web_system/uploads/bianbian/`（不再是 ai-service 的 `cwd/uploads`）→ 收口目标达成
+- 公网访问 `https://dev.kedouai.com/api/uploads/bianbian/…png` → **200**
+
 ## 待办（发布前）
 
-1. dev：`servers/ai-service/.env` 补 `UPLOAD_SERVICE_URL=http://127.0.0.1:6008` 后重启 ai-service
-2. prod：upload-service **未运行且端口未登记**（见 `dev-env-config-inventory.md`）→ 需先起服务再上 A8；未起前 prod 新生成图会走回退（存远端 URL，功能可用但不符合收口目标）
+1. ✅ dev 已完成（见上）
+2. prod：upload-service **未运行且端口未登记**（见 `dev-env-config-inventory.md`）→ 需先起服务、配 `UPLOAD_SERVICE_URL` 再上 A8；未起前 prod 新生成图会走回退（存远端 URL，功能可用但不符合收口目标）
