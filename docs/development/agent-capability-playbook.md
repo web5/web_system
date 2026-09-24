@@ -377,5 +377,6 @@ ls packages/agent-core/src/tools/coding/
 | 合同场景端到端评测 | [`servers/ai-agent/e2e/contract-risk/`](../../servers/ai-agent/e2e/contract-risk) |
 | 本地发布运维手册 | [`docs/development/local-release-runbook.md`](local-release-runbook.md) |
 | admin 微前端开发 | [`docs/development/admin-dev.md`](admin-dev.md) |
+| 安全门禁基线（凭证 / 网络访问 / SSH / 数据库 / 审计 / 紧急响应） | [`docs/development/security-baseline.md`](security-baseline.md) |
 | 评测框架（L1~L4） | 上游 ai-agent-kit `references/eval-framework.md`（`https://github.com/web5/ai-agent-kit`） |
 | **各后端服务接口契约（自动生成 · AI 自进化接口真相源）** | `specs/<svc>/api-design.md`：`deploy-console`（手写，分 `pipeline-node-model/` 与 `deploy-console/` 两份）、`auth-service`、`user-service`、`ai-service`、`ai-agent`、`system-service`、`todo-service`、`mcp-gateway`、`knowledge-service`、`content-hub`、`upload-service`、`gateway`；重生成脚本 [`scripts/gen-api-design.mjs`](../../scripts/gen-api-design.mjs) |

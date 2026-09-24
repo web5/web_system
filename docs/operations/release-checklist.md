@@ -104,3 +104,44 @@
 | 服务日志 | `ssh <SSH_ALIAS_PROD> "pm2 logs <svc> --lines 200"` |
 | 数据库直查 | `mysql -h<DB_PUBLIC_HOST> -P<DB_PORT> -u<DB_USER> <DB_NAME_DEPLOY>` |
 | 回滚 dist 所需的旧 commit | `git log origin/master --oneline | head -10` |
+---
+
+## K. 安全门禁（每次发布必查）
+
+> 详细规则见 [`docs/development/security-baseline.md`](../development/security-baseline.md)。本段是发布前的快速勾选清单。
+
+### K.1 网络层
+- [ ] **腾讯云安全组**：prod `6000-6007` TCP 入站已放通（来源：`<SSL_PROXY_HOST>` + 公网）
+- [ ] **腾讯云安全组**：旧端口 `3000-3004` 已删除（避免被扫到）
+- [ ] **VPC**：dev/prod 在同一 VPC，`<VPC_SUBNET_CIDR>` 子网互通
+
+### K.2 主机层
+- [ ] **SSH 公钥**：发布人 mac 的 `~/.ssh/id_ed25519.pub` 在 prod `~/.ssh/authorized_keys`
+- [ ] **堡垒机白名单**：发布人账号已加
+- [ ] **`<SSH_KEY_FILE>` 私钥**：在 `~/.ssh/`，权限 600，未过期
+- [ ] **sudoers**：应用账号仅能 `systemctl` / `pm2 reload`，不能 su
+
+### K.3 数据库层
+- [ ] **云库 IP 白名单**：dev/prod 内网 IP 已加
+- [ ] **应急办公 IP**：debug 用，到期移除
+- [ ] **`<DB_USER>` 权限**：仅 SELECT/INSERT/UPDATE/DELETE on `<DB_NAME_DEPLOY>.*`，无 DROP/CREATE/ALTER
+- [ ] **MySQL 强制 SSL**：`require_secure_transport = ON`
+
+### K.4 凭证层
+- [ ] **1Password `web_system-infra` vault**：本次发布涉及到的占位符 → 实际值映射已更新
+- [ ] **凭证轮转**：90 天到期凭证已轮换（DB 密码 / GitHub PAT）
+- [ ] **凭证不进 .env**：所有 SECRET_* / KEY_* 走 KMS / vault 引用
+
+### K.5 仓库层
+- [ ] **branch protection**：master 需 PR + 1 approval + CI 全绿（不能 force-push）
+- [ ] **GitHub Secrets**：`PROD_SSH_KEY` / `PROD_HOST` 未过期，scope 限 `Environments=production`
+- [ ] **GitHub PAT**：发布人 gh 工具用的 PAT 未过期
+
+### K.6 第三方
+- [ ] **腾讯云 RAM**：发布用 sub-account，权限 ≤ deploy + restart
+- [ ] **npm token**：私有 scope token（如有）未过期
+
+### K.7 审计
+- [ ] **本周腾讯云安全组变更**：已 review（控制台 → 操作日志）
+- [ ] **上周 SSH 登录异常**：已 review（`last -f /var/log/btmp`）
+- [ ] **本月凭证库活动**：已 review（1Password Activity Log）
