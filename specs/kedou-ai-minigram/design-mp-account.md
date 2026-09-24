@@ -410,6 +410,81 @@ ALTER TABLE `users` ADD COLUMN `merged_to` BIGINT UNSIGNED NULL COMMENT '合并�
 - 合并能力抽成公共逻辑，入参带 `bindSource: 'phone' | 'email'`；迁移表清单（§5.7.3）、去重策略、凭证重签、`merged_to` 留痕全部复用，**不为邮箱写第二套**。
 - 冲突弹窗文案随来源变化：手机号显示脱敏号，邮箱显示脱敏邮箱。
 
+### 5.9 邮件服务设计（R3 基础设施）
+
+#### 5.9.0 基线
+
+- 复用 `servers/user-service/src/api-key/mail.service.ts` 的 `MailService.sendCode`（SMTP 发送）。
+- 缺口：验证码**不落库**（内存 Map）、**无发送限频**、**SMTP 未配置时静默失败**（catch 后返回 true）。直接复用会让邮箱绑定可被刷、且失败不可见。
+
+#### 5.9.1 复用与增强
+
+| 能力 | MCP API Key（现状） | 邮箱验证码（新增） | 归属 |
+|---|---|---|---|
+| 验证码生成 / 校验 | `api-key.service.ts:108-131` | **复用**（抽 `verification-code.service.ts`） | user-service |
+| 落库 | `mcp_key_codes` 表 | 新增 `email_verification_codes` 表 | user-service |
+| 发送通道 | SMTP（`MailService`） | **复用** | user-service |
+| 限频 | 无 | 新增：60s 重发 + 10 分钟 ≤5 次 + 同 IP 30 分钟 ≤20 次 | user-service |
+| 未配置 SMTP | 静默成功 | **显式 503**（`SMTP_NOT_CONFIGURED`） | user-service |
+
+```sql
+-- @database web_system
+CREATE TABLE `email_verification_codes` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `email` varchar(100) NOT NULL,
+  `user_id` bigint unsigned DEFAULT NULL COMMENT '申请人；未登录为 NULL',
+  `code_hash` char(64) NOT NULL COMMENT '验证码 SHA-256（不存明文）',
+  `purpose` varchar(20) NOT NULL DEFAULT 'bind' COMMENT 'bind / change',
+  `expires_at` datetime NOT NULL,
+  `attempts` tinyint unsigned NOT NULL DEFAULT 0 COMMENT '已校验次数',
+  `used_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_email_verification_codes_email` (`email`),
+  KEY `idx_email_verification_codes_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='邮箱验证码';
+```
+
+#### 5.9.2 接口（前缀 `/api/users/email`）
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/users/email/code` | 入参 `{ email }` → 生成 6 位码 → 落库 → 发送。**返回通用文案**（不回显邮箱、不回验证码）；未配置 SMTP → 503；限频命中 → 429 |
+| `POST /api/users/email/bind` | 入参 `{ email, code }` → 校验码 → 命中已有账号时走统一合并（`bindSource='email'`），含凭证重签 |
+
+- 两个接口均需 `AuthGuard`（绑定必须登录后）。
+- 限频：发送 60s 冷却；同一邮箱 10 分钟 ≤5 次；同一 IP 30 分钟 ≤20 次；单码 5 分钟有效、最多校验 5 次（超过作废）。
+- 未配置 SMTP 时两个接口都返回 503 `SMTP_NOT_CONFIGURED`，文案「邮件服务暂不可用，请稍后再试」。
+
+#### 5.9.2.1 配置来源两级（修正 admin「死配置」）
+
+admin「系统设置 → 通知设置 → 邮件通知」写入 `system_configs.notify_smtp_*`，但**此前没有任何服务读它**（页面填了不生效）。本批修正为：
+
+| 优先级 | 来源 | 说明 |
+|---|---|---|
+| 1 | 环境变量 `SMTP_HOST/PORT/USER/PASS/FROM` | 部署口径，存在即优先 |
+| 2 | `system_configs` 的 `notify_smtp_host/port/encryption/from/pass` | admin 页写入处，缓存 60s；`encryption` 取值 `ssl`/`tls`/`none`（tls = STARTTLS，secure=false） |
+| — | 都没有 | `SMTP_NOT_CONFIGURED` → 503，不静默兜底 |
+
+> 注意：admin 表单**没有「用户名」字段**，故 `user` 取 `notify_smtp_from`。
+> 另：MCP API Key 的 `/api/keys` 申请复用同一 `MailService`，此改动同时让那份配置也可在 admin 侧维护。
+
+#### 5.9.3 配置（user-service `.env`）
+
+```
+SMTP_HOST=          # 企业邮箱 SMTP 域名
+SMTP_PORT=465       # 465(SSL) / 587(STARTTLS)
+SMTP_USER=
+SMTP_PASS=          # 授权码，非登录密码
+SMTP_FROM=          # 建议 no-reply@已验证域名
+EMAIL_CODE_TTL=300          # 验证码有效秒数
+EMAIL_CODE_MAX_ATTEMPTS=5
+EMAIL_CODE_RESEND_INTERVAL=60
+EMAIL_CODE_WINDOW_LIMIT=5   # 10 分钟内同邮箱发送上限
+```
+
+> 未配置 `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` 任一，视为未启用 → 接口 503，不做静默兜底。
+
 ---
 
 ## 6. 分期与工作量
