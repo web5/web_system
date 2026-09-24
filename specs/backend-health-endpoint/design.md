@@ -2,7 +2,7 @@
 
 > 触发：deploy-console 服务监控页「响应」列大量 404，探活打的是 `/` 根路径，各服务无根路由 → 404 虽被判为「在线」但显示不友好、且无法区分「活着」与「真的健康」。
 > 关联：`specs/deploy-console/monitor-health-single-ssh.md`（探活已收敛为单 SSH 会话）、`servers/gateway/src/health/health.controller.ts`（现有唯一实现，作为模板）
-> 状态：已实现（本地 11 个服务实测 `/health` 全 200，控制台探活已切 `/health`），待提交 / 待同步 dev
+> 状态：已实现（commit da78932，分支 feature/backend-health-endpoint）；本地与 dev 均已实测通过
 
 ---
 
@@ -133,6 +133,14 @@ export class HealthController {
 - 构建：`packages/shared` 先 build；各服务 `npm run build`。
 - 验证（每个服务）：`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:<port>/health` 断言 `200`；并确认响应体 `status=ok`、`service` 与模块 key 一致。
 - 端到端：deploy-console 探活刷新 → 响应列应为 200（未升级的服务为 404）。
+
+### 5.0 dev 实测结果（2026-09-24）
+
+- dev 11 个服务（6000–6011）`/health` 全部 200；`GET /console/api/monitor/health?env=dev` 的响应列**由 404 全部变为 200**（10 个有地址的服务）。
+- dev 控制台直连 `curl 127.0.0.1:6200/health` → `{"status":"ok","service":"deploy-console"}`，证明前缀排除生效。
+- 发布方式：产物 rsync 到 `/data/web_system/servers/<svc>/dist` + `packages/{shared,types,mcp-core}/dist`，
+  再 `env -i` 干净重启各 pm2 进程（旧 dist 备份为 `dist.bak-1790230544`）；控制台走 `publish-deploy-console.sh --env dev`。
+- 注意：user-service 启动约需 11s（权限 seed），探活/重启脚本的等待时间要留够，否则误判未启动。
 
 ### 5.1 本地实测结果（2026-09-24）
 
