@@ -404,9 +404,9 @@ check_sync_pair() {
     done
     [ "$skip" -eq 1 ] && continue
     if [ ! -e "$dst/$rel" ]; then
-      add_warn "$rule" "${desc}（目标缺失，未同步）" "$rel" "建议：mkdir -p \"$(dirname "$dst/$rel")\" && cp \"$src/$rel\" \"$dst/$rel\""
+      add_warn "$rule" "${desc}（目标缺失，未同步）" "$rel" "建议：bash scripts/redline/apply-agent-kit.sh（第二跳一键镜像；单项亦可 cp \"$src/$rel\" \"$dst/$rel\"）"
     elif [ -f "$dst/$rel" ] && ! cmp -s "$f" "$dst/$rel"; then
-      add_warn "$rule" "${desc}（内容漂移）" "$rel" "建议：cp \"$src/$rel\" \"$dst/$rel\""
+      add_warn "$rule" "${desc}（内容漂移）" "$rel" "建议：bash scripts/redline/apply-agent-kit.sh（第二跳一键镜像；单项亦可 cp \"$src/$rel\" \"$dst/$rel\"）"
     fi
   done < <(find "$src" -type f -print 2>/dev/null)
   return 0
