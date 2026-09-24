@@ -31,11 +31,16 @@
 
 ## 3 各环境怎么配
 
-| 环境 | 落点 | 谁维护 |
+> 2026-09-24 拍板：`INTERNAL_API_KEY` **改为可走配置中心下发**（`specs/service-config-delivery/internal-key-delivery-design.md`）。
+> 下表「手工路径」退化为**首次启动兜底**，权威源是配置中心。
+
+| 场景 | 落点 | 谁维护 |
 |---|---|---|
-| local（工作区） | `servers/<svc>/.env` | 开发者，从同环境其它服务复制**同一个值** |
-| local（发布目录） | `~/web_system_release/servers/<svc>/.env` | **人工同步**（`local-release-runbook.md:154`：端口/DB/密钥不进 git） |
-| dev / prod | `/data/web_system/servers/<svc>/.env` | 人工逐台写入（当前无同步脚本，见 §6） |
+| 权威源 | 配置中心（`config_items`，按 env 分层，**dev / prod 用不同值**） | 控制台登记，`is_secret=1` |
+| 部署时下发 | `servers/<svc>/.env.generated`（0600，部署前写入，重启即生效） | console 自动（`DeployService.writeGeneratedEnv`） |
+| 仅重启 | 同上，由 `scripts/pipeline/fetch-config.sh` 拉取落盘（须挂在 restart 动作之前） | 流水线 |
+| 兜底（首次启动 / 未下发） | `servers/<svc>/.env` | 人工，逐环境 |
+| deploy-console 自身 | **只能** `servers/deploy-console/.env` | 人工 —— 它是下发链的根（`CONSOLE_TOKEN` 取自此，见 `pipeline.service.ts:265`） |
 
 ⚠️ **dev 与 prod 建议使用不同的值**（环境隔离）。当前本地 8 个服务共用同一值是 local 环境的事实，不要照搬到线上。
 
