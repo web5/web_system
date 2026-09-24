@@ -6,6 +6,8 @@
     "pages/discover/index/index",
     "pages/mine/index/index",
     "pages/mine/profile/profile",
+    "pages/mine/bind-email/bind-email",
+    "pages/mine/agreement/agreement",
     "pages/mine/settings/settings",
     "pages/mine/taste/index",
     "pages/mine/memory/index",

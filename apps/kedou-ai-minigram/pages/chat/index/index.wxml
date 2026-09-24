@@ -1,7 +1,11 @@
 <!-- 科豆 AI · 通用对话（tab 1，主界面 · 沉浸式，无 tabBar） -->
 <!-- 主对话：agentId 固定传 'auto'，由服务端 IntentService 意图路由决定交给哪个 agent；
      路由结果通过 SSE 首个 intent 事件下发，前端在消息区顶部显示 agent 徽标。 -->
-<view class="wrap {{radiusClass}}">
+<view class="wrap {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
+  <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不载入会话、不发业务请求 -->
+  <login-gate wx:if="{{!loggedIn}}" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+
+  <block wx:if="{{loggedIn}}">
   <!--
     自定义导航栏（index.json: navigationStyle = custom）
     对话页隐藏 tabBar 后，返回 icon 负责回到欢迎页；右侧「新对话」需避让原生胶囊。
@@ -164,6 +168,7 @@
       <view id="msg-bottom"></view>
     </scroll-view>
   </view>
+  </block>
 </view>
 
 <!-- 底部吸底输入栏 -->

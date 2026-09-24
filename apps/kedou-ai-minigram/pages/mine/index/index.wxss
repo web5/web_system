@@ -9,6 +9,14 @@ page {
   /* 自定义 tabBar 不占原生层，页面需自行留出底部空间 */
   padding: 24rpx 32rpx calc(150rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+  /* 登录引导卡是 absolute 铺满，父级需定位上下文 */
+  position: relative;
+}
+
+/* 未登录：锁滚动，登录墙不会被滚出视野（否则能滚出内容与退出入口） */
+.page.locked {
+  height: 100vh;
+  overflow: hidden;
 }
 
 .profile {

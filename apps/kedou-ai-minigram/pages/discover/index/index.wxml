@@ -1,6 +1,10 @@
 <!-- 科豆 AI · 发现（tab 2）：能力市场 -->
 <!-- 骨架期卡片写死；批次 4 改由 GET /ai/agents 的 entry 元数据驱动渲染 -->
-<view class="page {{radiusClass}}">
+<view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
+  <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不发起任何业务请求 -->
+  <login-gate wx:if="{{!loggedIn}}" desc="发现页的能力与记录都关联你的账号" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+
+  <block wx:if="{{loggedIn}}">
   <view class="sec-t">AI 能力<text class="em">点开即用</text></view>
 
   <view class="cap" bindtap="openTranslate">
@@ -44,4 +48,5 @@
   <view class="foot">新能力会持续加在这里，设置统一收在「我的」</view>
   <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
 已依法完成大模型与算法备案</view>
+  </block>
 </view>

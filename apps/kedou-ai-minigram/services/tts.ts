@@ -19,7 +19,7 @@
  * 用法：speakText(text) —— 同一段文本再调一次 = 停止；页面卸载调 stopSpeak()。
  */
 import { getApiBase } from './agent-stream';
-import { getToken } from '../utils/request';
+import { getToken, isLoggedOut } from '../utils/request';
 import { splitSpeakParts } from '../utils/translate-parse';
 
 const TTS_URL = '/api/ai/tts/speak';
@@ -109,6 +109,11 @@ export function stopSpeak(): void {
 export async function speakText(text: string): Promise<boolean> {
   const t = String(text || '').trim();
   if (!t) return false;
+  // 登录墙兜底：本通道不走 request.ts，未登录（无 token 或主动退出）时不发起合成
+  if (!getToken() || isLoggedOut()) {
+    wx.showToast({ title: '请先登录', icon: 'none' });
+    return false;
+  }
   // 同一段正在播 → 停止（不做重复合成）
   if (playingText === t) {
     stopSpeak();
