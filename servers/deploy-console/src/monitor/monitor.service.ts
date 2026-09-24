@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { exec, execSync } from 'child_process';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Client } from 'ssh2';
@@ -197,13 +197,26 @@ export class MonitorService {
    */
   private execOnHost(host: DeployHostEntity, command: string, timeoutMs?: number): Promise<string> {
     if (host.scope === 'local') {
-      try {
-        return Promise.resolve(this.execLocal(command, timeoutMs ?? 10000));
-      } catch (e) {
-        return Promise.reject(e);
-      }
+      // 异步：execSync 会阻塞 Node 事件循环，本机形态下"探活控制台自己"必然连不上（事件循环被自己堵死）
+      return this.execLocalAsync(command, timeoutMs ?? 10000);
     }
     return this.execSsh(this.sshConfigFor(host), command, timeoutMs);
+  }
+
+  /**
+   * 本机异步执行（Promise 封装）。
+   * 与 execLocal(execSync) 的区别：不阻塞事件循环 —— 监控要探活控制台自身时只能用异步版。
+   */
+  private execLocalAsync(command: string, timeoutMs = 10000): Promise<string> {
+    return new Promise((resolve, reject) => {
+      exec(command, { timeout: timeoutMs, encoding: 'utf8' }, (err, stdout) => {
+        if (err) {
+          if (stdout) return resolve(String(stdout));
+          return reject(new BadGatewayException(`本机命令执行失败: ${err.message}`));
+        }
+        resolve(String(stdout));
+      });
+    });
   }
 
   /**
