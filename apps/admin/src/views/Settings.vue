@@ -163,7 +163,7 @@
                   <a-input-password v-model:value="notify.smtp.pass" placeholder="SMTP 授权码" size="large" />
                 </a-form-item>
                 <div class="form-actions">
-                  <a-button @click="testEmail" size="large">发送测试邮件</a-button>
+                  <a-button @click="testEmail" size="large" :loading="testingEmail">发送测试邮件</a-button>
                   <a-button type="primary" size="large" :loading="savingNotify" @click="saveNotify">保存修改</a-button>
                 </div>
               </a-form>
@@ -270,7 +270,7 @@ import {
   AppstoreOutlined, ControlOutlined, SafetyCertificateOutlined,
   MailOutlined, FileSearchOutlined, ThunderboltOutlined, BgColorsOutlined,
 } from '@ant-design/icons-vue';
-import { getSettings, updateSettings, getLogs } from '@/api/settings';
+import { getSettings, updateSettings, getLogs, sendTestEmail } from '@/api/settings';
 import { fetchDictItems } from '@/api/dict';
 import { useThemeStore, RADIUS_OPTIONS } from '@/stores/theme';
 
@@ -301,6 +301,7 @@ const savingBasic = ref(false);
 const savingFeatures = ref(false);
 const savingSecurity = ref(false);
 const savingNotify = ref(false);
+const testingEmail = ref(false);
 const savingQuota = ref(false);
 
 const KEY = {
@@ -341,7 +342,25 @@ const saveNotify = () => doSave({
   [KEY.smtpHost]: notify.smtp.host, [KEY.smtpPort]: String(notify.smtp.port),
   [KEY.smtpEncryption]: notify.smtp.encryption, [KEY.smtpFrom]: notify.smtp.from, [KEY.smtpPass]: notify.smtp.pass,
 }, savingNotify);
-const testEmail = () => message.info('测试邮件已发送，请查收');
+/**
+ * 发送测试邮件：先保存当前表单，再触发真实发送。
+ * 此前这里是 message.info 的假实现（点了不发送），属伪装已实现，现接真。
+ */
+const testEmail = async () => {
+  testingEmail.value = true;
+  try {
+    await updateSettings({
+      [KEY.smtpHost]: notify.smtp.host, [KEY.smtpPort]: String(notify.smtp.port),
+      [KEY.smtpEncryption]: notify.smtp.encryption, [KEY.smtpFrom]: notify.smtp.from, [KEY.smtpPass]: notify.smtp.pass,
+    });
+    const res = await sendTestEmail(notify.smtp.from || undefined);
+    message.success(res?.message || '测试邮件已发送，请查收');
+  } catch (e: any) {
+    message.error(e?.response?.data?.message || '测试邮件发送失败，请检查 SMTP 配置');
+  } finally {
+    testingEmail.value = false;
+  }
+};
 
 const quota = reactive({ dailyTransformLimit: 3 });
 const saveQuota = () => doSave({
