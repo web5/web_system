@@ -76,21 +76,28 @@ function truncateText(text: string, max: number): string {
 
 /* ==================== 类型 ==================== */
 
-/** SSE 事件类型（与 agent-core StreamEvent 对齐） */
+/**
+ * SSE 事件（消费侧视图）。
+ * 契约真相源：`@kedouai/agent-core` 的 `StreamEventType`（登记见 `docs/api/contracts.md` C2）。
+ * 本类型须与之一致 —— 一致性由 `check-sse-contract`（CI R16）机检守。
+ */
 export interface StreamEvent {
   type:
-    | 'start'
     | 'content_delta'
     | 'reasoning_delta'
     | 'tool_call'
     | 'tool_result'
+    | 'skill_load'
     | 'summary'
     | 'final'
     | 'error'
     /** 批次 5：意图路由判定结果，服务端在本轮第一个事件推送 */
     | 'intent'
     /** 结构化卡片（一期：歌曲推荐卡片 kind=music），由工具结果转换后补发 */
-    | 'card';
+    | 'card'
+    | 'permission_request'
+    /** 向前兼容：未知类型不报编译错 */
+    | (string & {});
   content?: string;
   /** card 事件专用载荷：{ kind, provider, songs, keyword } */
   card?: {
