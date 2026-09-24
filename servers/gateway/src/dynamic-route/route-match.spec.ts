@@ -147,14 +147,14 @@ describe('dynamic-route 匹配语义', () => {
   describe('resolveEnvId（请求头 > Host 站点默认 > dev 回退）', () => {
     const sites = [
       { host: 'dev.kedouai.com', defaultEnvId: 'dev' },
-      { host: 'portal.kedouai.com', defaultEnvId: 'prod' },
+      { host: 'kedouai.com', defaultEnvId: 'prod' },
     ];
     it('请求头优先（用户在页面切换了环境）', () => {
       expect(resolveEnvId('1', 'dev.kedouai.com', sites)).toBe('1');
     });
     it('无请求头 → 按 Host 匹配站点默认环境', () => {
-      expect(resolveEnvId(undefined, 'portal.kedouai.com', sites)).toBe('prod');
-      expect(resolveEnvId(undefined, 'portal.kedouai.com:6000', sites)).toBe('prod');
+      expect(resolveEnvId(undefined, 'kedouai.com', sites)).toBe('prod');
+      expect(resolveEnvId(undefined, 'kedouai.com:6000', sites)).toBe('prod');
     });
     it('Host 未登记 → 回退 dev（Q1）', () => {
       expect(resolveEnvId(undefined, 'unknown.local', sites)).toBe('dev');
