@@ -14,7 +14,7 @@ import { KnowledgeChunkEntity } from './knowledge/entities/knowledge-chunk.entit
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [path.resolve(__dirname, '../.env')],
+      envFilePath: [ path.resolve(__dirname, '../.env.generated'),path.resolve(__dirname, '../.env')],
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

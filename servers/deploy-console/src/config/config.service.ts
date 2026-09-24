@@ -32,7 +32,13 @@ const SCOPE_PRIORITY: Record<string, number> = { global: 0, env: 1, module: 2 };
  * **永不写入 `.env.generated`** 的保留键（引导 / 基础设施 / 平台注入）。
  *
  * 判据（`specs/service-config-delivery/design.md` §2「什么配置该放哪」）：
- * - `CONFIG_MASTER_KEY` / `INTERNAL_API_KEY`：引导凭据，鸡生蛋 —— 读配置中心本身要先有它，必须留在 `.env`；
+ * - `CONFIG_MASTER_KEY`：引导凭据，鸡生蛋 —— 读配置中心本身要先有它，必须留在 `.env`；
+ * - `INTERNAL_API_KEY`：**已改为可下发**（2026-09-24 拍板，见
+ *   `specs/service-config-delivery/internal-key-delivery-design.md`）。
+ *   理由：下发走「部署时推送 / 流水线脚本拉取」，**不是服务进程自拉**，
+ *   `design.md:83` 已判定此路径「鸡生蛋：不涉及」。脚本凭据由平台注入（`CONSOLE_TOKEN`）。
+ *   唯一例外：**deploy-console 自身仍留 `.env`** —— 它是下发链的根凭据持有者，
+ *   且给自己写 `.env.generated` 会触发自杀式重启（`design.md` §4.0）。
  * - `MYSQL_*` / `REDIS_*`：基础设施连接，启动必需，且平台自己也在连同一库，下发易成单点；
  * - `PATH` / `HOME`：平台注入键（进程环境只保留这几个），下发进服务 `.env` 只会误导；
  * - `PM2_*`：平台推导的进程信息（名称/入口/工作目录），由 pm2 决定，不由服务 `.env` 决定；
@@ -42,7 +48,8 @@ const SCOPE_PRIORITY: Record<string, number> = { global: 0, env: 1, module: 2 };
  */
 export const RESERVED_LOCAL_KEYS: readonly string[] = [
   'CONFIG_MASTER_KEY',
-  'INTERNAL_API_KEY',
+  // 注：`INTERNAL_API_KEY` 已不在本列表 —— 可走配置中心下发（见上方注释与
+  // specs/service-config-delivery/internal-key-delivery-design.md）
   'PATH',
   'HOME',
   'CONSOLE_API',

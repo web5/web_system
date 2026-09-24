@@ -13,6 +13,9 @@ import { HealthModule } from './health/health.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
+        // 平台下发（配置中心 → .env.generated，流水线 restart 脚本落盘；删文件即回退到 .env）
+        // ⚠️ 必须排在 .env 之前：@nestjs/config 先出现者优先
+        path.resolve(__dirname, '../.env.generated'),
         path.resolve(__dirname, '../.env'),   // servers/todo-service/.env（兼容 dist/src 运行）
       ],
     }),
