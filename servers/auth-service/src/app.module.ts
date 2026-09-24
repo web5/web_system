@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
 import { HealthModule } from './health/health.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { HealthModule } from './health/health.module';
     }),
 
     AuthModule,
+    AccountModule,
     UserModule,
     QrcodeModule,
     HealthModule,
