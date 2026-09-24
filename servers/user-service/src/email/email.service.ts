@@ -42,7 +42,8 @@ export class EmailService {
     const to = String(email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(to)) throw new BadRequestException('邮箱格式不正确');
 
-    if (!this.mail.enabled) {
+    // 环境变量缺失时回退读 system_configs 的 notify_smtp_*（admin「通知设置 → 邮件通知」）
+    if (!(await this.mail.isEnabled())) {
       throw new HttpException('邮件服务暂不可用，请稍后再试', HttpStatus.SERVICE_UNAVAILABLE);
     }
 
