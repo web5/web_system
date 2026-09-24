@@ -147,7 +147,7 @@ env STORAGE_UPLOAD_DIR                 ← 部署注入，兜底
 | A3 | ✅ 本轮 | `servers/upload-service/src/storage/upload-dir.ts`、`src/upload/{upload-root,upload-root.token,upload-multer,internal-uploads.controller}.ts`、`dto/store-upload.dto.ts`；`upload.service.ts`（分类改复数、单一 Multer 实现、`storeBuffer`）、`main.ts`（静态根取进程生效值） |
 | A4 | ✅ 本轮 | `servers/gateway/src/proxy/proxy.service.ts`（`uploadProxy` / `uploadStaticProxy` 目标切 upload-service、变变「先新后旧」兜底、`UPLOAD_SERVICE_URL` 默认值改 `SERVICE_URL_DEFAULTS.upload`）+ `proxy.controller.ts` + `proxy.service.spec.ts`（真 HTTP 验证，6 例） |
 | A5 | ✅ 本轮（2026-09-23） | `scripts/migrate-uploads.mjs`（默认 DRY_RUN、幂等、不删源、`--apply`/`--prune` 分步）+ 内置灰度验证清单 |
-| A6~A8 | ⬜ 未做 | — |
+| A8 | ✅ 本轮（2026-09-24） | `servers/ai-service/src/bianbian/upload-store.client.ts`（新增，multipart + `x-internal-key`）、`bianbian.service.ts::downloadAndSaveImage`（不再本地写盘）、`bianbian.module.ts`、`.env.example`（新增 `UPLOAD_SERVICE_URL`）、单测 8 例 |
 
 **A5 说明与实测**
 
@@ -431,7 +431,10 @@ MCP 客户端 token 与用户 token 共用同一吊销机制（30s 缓存），�
 
 > 依赖关系：D2 依赖 C 的吊销机制（至少要能在 30s 内让一把令牌失效）；A8 依赖 A3 的 `internal/uploads/store`。
 
-> 进度：**B、D0、A1、A2、A3、A4、A5 已完成**；**C1 灰度中**（shared 助手已落地，todo-service 首个接入，其余 7 服务待迁）；D1 / D2 待做；A8 与 A6（需过 UI 门）在后。
+> 进度：**B、D0、A1、A2、A3、A4、A5、A8 已完成**（A8 见 PR #148；dev 已验证，见 `docs/reviews/a8-ai-image-store-release.md`）；
+> **C1 灰度中**（shared 助手已落地，todo-service 首个接入，其余 7 服务待迁）；D1 / D2 待做；A6（需过 UI 门）与 A7（依赖 A5 验证）在后。
+>
+> **A8 上 prod 的前置**：prod 的 upload-service **未运行且端口未登记** —— 需先起服务、配 `UPLOAD_SERVICE_URL` 与 `INTERNAL_API_KEY`（与 ai-service 同值），否则 prod 新生成图会走降级（存 MaaS 远端 URL，功能可用但不符合收口目标）。
 >
 > C1 的收敛方式（与"直接把 guard 塞进共享包"的区别）：
 > - 共享包**只出纯函数助手**（`verifyRemoteToken` / `resolveAuthServiceUrl` / `extractBearerToken`），
