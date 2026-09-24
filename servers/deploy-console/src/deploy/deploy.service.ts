@@ -24,6 +24,7 @@ import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { CommandService } from '../shell/command.service';
 import { ServerService } from '../server/server.service';
+import { HostsService } from '../hosts/hosts.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 // 应用域：env-dir 应用的「部署」= 切 env 入口指针（与流水线激活同一实现）
 import { AppsService } from '../apps/apps.service';
@@ -86,6 +87,8 @@ export class DeployService {
     private readonly environmentService: EnvironmentService,
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly serverService: ServerService,
+    // 主机管理（新模型）：服务 × 环境 → 主机组 → 地址/SSH 凭据
+    private readonly hostsService: HostsService,
     private readonly stageCommands: StageCommandService,
     private readonly commands: CommandService,
     // env-dir 应用（微前端）的「部署」= 切 env 入口指针，走应用域同一实现
@@ -1193,6 +1196,24 @@ export class DeployService {
     env: string,
     serviceName: string,
   ): Promise<Array<{ host: string; sshUser: string; sshKeyPath: string; remoteDir: string }>> {
+    // ① 新模型优先：服务 × 环境 → 主机组（deploy_hosts）
+    try {
+      const host = await this.hostsService.resolveHostForService(env, serviceName);
+      if (host) {
+        return [
+          {
+            host: host.host,
+            sshUser: host.sshUser,
+            sshKeyPath: host.sshKeyPath || '~/.ssh/id_ed25519_servers',
+            remoteDir: host.remoteDir,
+          },
+        ];
+      }
+    } catch (e) {
+      this.logger.warn(`解析主机组失败(${env}:${serviceName}): ${e.message}`);
+    }
+    // ② 回退旧模型（deploy_servers）：前端模块（admin/portal 等）尚未登记进 deploy_service_envs，
+    //    直接切会阻断它们的远端发布 → 待补齐登记后去掉本分支。
     try {
       const servers = await this.serverService.resolveServers(env, serviceName);
       if (servers.length > 0) {
@@ -1494,21 +1515,37 @@ export class DeployService {
   }
 
   /**
-   * 获取 SSH 配置（读环境默认服务器 serverName = <env>-default）
+   * 获取 SSH 配置（**主机管理优先**，回退旧表 deploy_servers 的 <env>-default）
    */
   private async getSshConfig(env: string) {
-    const srv = await this.serverService.resolveEnvDefaultServer(env);
-    if (!srv) {
-      throw new BadGatewayException(`环境 ${env} 无默认服务器，请先在「服务器管理」中配置`);
+    let host: string;
+    let sshUser: string;
+    let sshKeyPath: string | undefined;
+    const h = (await this.hostsService.resolveEnvHosts(env))[0] ?? null;
+    if (h) {
+      host = h.host;
+      sshUser = h.sshUser;
+      sshKeyPath = h.sshKeyPath || undefined;
+    } else {
+      const srv = await this.serverService.resolveEnvDefaultServer(env);
+      if (!srv) {
+        throw new BadGatewayException(
+          `环境 ${env} 无可用主机：请先在「基础设施 → 主机管理」登记，或在「服务器管理」配置 <env>-default`,
+        );
+      }
+      host = srv.host;
+      sshUser = srv.sshUser;
+      sshKeyPath = srv.sshKeyPath || undefined;
     }
-    let privateKeyPath = srv.sshKeyPath || '~/.ssh/id_ed25519_servers';
+    let privateKeyPath = sshKeyPath || '~/.ssh/id_ed25519_servers';
     if (privateKeyPath.startsWith('~')) {
       privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
     }
-    let privateKey: Buffer | undefined;
-    if (fs.existsSync(privateKeyPath)) {
-      privateKey = fs.readFileSync(privateKeyPath);
+    if (!fs.existsSync(privateKeyPath)) {
+      throw new BadGatewayException(
+        `环境 ${env} 的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机，或改「主机管理」的 sshKeyPath`,
+      );
     }
-    return { host: srv.host, port: 22, username: srv.sshUser, privateKey };
+    return { host, port: 22, username: sshUser, privateKey: fs.readFileSync(privateKeyPath) };
   }
 }

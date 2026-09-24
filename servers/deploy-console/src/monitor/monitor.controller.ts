@@ -45,12 +45,30 @@ export class MonitorController {
   }
 
   /**
-   * 获取远程 PM2 进程列表
+   * 获取远程 PM2 进程列表（扁平，兼容旧调用方）
    */
   @Get('pm2')
   @ApiOperation({ summary: '获取 PM2 进程列表' })
   getPm2List(@Query('env') env: string) {
     return this.monitorService.getPm2List(env);
+  }
+
+  /**
+   * 当前控制台可管的环境（真相源 = 主机管理）
+   */
+  @Get('envs')
+  @ApiOperation({ summary: '当前控制台可管的环境列表' })
+  listMonitorEnvs() {
+    return this.monitorService.listMonitorEnvs();
+  }
+
+  /**
+   * PM2 进程（按主机分组，含每台的可达性与失败原因）
+   */
+  @Get('pm2/hosts')
+  @ApiOperation({ summary: '获取 PM2 进程列表（按主机分组）' })
+  getPm2ByHost(@Query('env') env: string) {
+    return this.monitorService.getPm2ByHost(env);
   }
 
   /**

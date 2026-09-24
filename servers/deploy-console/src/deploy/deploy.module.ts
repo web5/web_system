@@ -7,6 +7,8 @@ import { AuditModule } from '../audit/audit.module';
 import { EnvironmentModule } from '../environment/environment.module';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
 import { ServerModule } from '../server/server.module';
+// 主机管理（新模型）：服务 × 环境 → 主机组 → 地址/SSH 凭据
+import { HostsModule } from '../hosts/hosts.module';
 // 后台模块部署需要「落地 + pm2 重启」：用 CommandService 取 pm2 / node 绝对路径
 import { ShellModule } from '../shell/shell.module';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
@@ -29,6 +31,7 @@ import { ConfigCenterModule } from '../config/config.module';
     EnvironmentModule,
     ModuleRegistryModule,
     ServerModule,
+    HostsModule,
     ShellModule,
     // 构建命令单一真相源：旧 deploy.sh 路径也改读这里，不再依赖 deploy_modules.buildCmd
     StageCommandModule,

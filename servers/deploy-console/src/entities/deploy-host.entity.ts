@@ -44,6 +44,32 @@ export class DeployHostEntity {
   })
   runtime: 'pm2' | 'docker';
 
+  /**
+   * 主机形态（migrations/0014_deploy_host_scope.sql）
+   * - local：本机形态（编排者本机那种，回环地址）
+   * - cloud：云服务器
+   * - container：容器服务器
+   */
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: 'cloud',
+    comment: '主机形态 local/cloud/container',
+  })
+  scope: 'local' | 'cloud' | 'container';
+
+  /**
+   * 归属控制台实例（对应各控制台 .env 的 CONSOLE_INSTANCE）
+   * NULL = 所有控制台可见；非 NULL = 仅该实例可管（用于把 local-default 限定给编排者本机）
+   */
+  @Column({
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+    comment: '归属控制台实例（NULL=所有控制台可见）',
+  })
+  managedBy?: string | null;
+
   /** 标签（如 {"zone":"cn-gz"}） */
   @Column({ type: 'json', nullable: true, comment: '标签' })
   labels?: Record<string, string> | null;

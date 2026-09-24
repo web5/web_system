@@ -8,9 +8,14 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Client } from 'ssh2';
 import { EnvironmentService } from '../environment/environment.service';
 import { ServerService } from '../server/server.service';
+import { HostsService } from '../hosts/hosts.service';
+import { DeployHostEntity } from '../entities/deploy-host.entity';
+import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 
 /**
  * SSH 连接配置
@@ -63,6 +68,10 @@ export interface HealthCheck {
   status: 'up' | 'down';
   response?: string;
   responseTime?: number;
+  /** 取数失败原因（SSH 不通 / 主机不可用…）；有值时页面顶部横幅用它提示真因 */
+  error?: string;
+  /** 所属主机组名（供表格「主机」列展示） */
+  hostName?: string;
 }
 
 /**
@@ -77,30 +86,101 @@ export class MonitorService {
     private readonly configService: ConfigService,
     private readonly environmentService: EnvironmentService,
     private readonly serverService: ServerService,
+    private readonly hostsService: HostsService,
+    @InjectRepository(DeployServiceEnvEntity)
+    private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
   ) {}
 
   /**
-   * 获取 SSH 配置（读环境默认服务器 serverName = <env>-default）
+   * 当前控制台实例标识（各份控制台 .env 的 CONSOLE_INSTANCE，**必配无默认值**）。
+   * 缺失 = 系统错误：启动自检已 FATAL（ConsoleInstanceSelfCheck），此处再兜一道，
+   * 避免运行期被改空后静默回落导致页签口径错乱。
    */
-  private async getSshConfig(env: string): Promise<SshConfig> {
-    const srv = await this.serverService.resolveEnvDefaultServer(env);
-    if (!srv) {
-      throw new BadGatewayException(`环境 ${env} 无默认服务器，请先在「服务器管理」中配置`);
+  private consoleInstance(): string {
+    const v = (this.configService.get<string>('CONSOLE_INSTANCE') || '').trim();
+    if (!v) {
+      throw new BadGatewayException(
+        'CONSOLE_INSTANCE 未配置：请在该控制台的 .env 写入实例标识（如 orchestrator / dev）后重启',
+      );
     }
-    let privateKeyPath = srv.sshKeyPath || '~/.ssh/id_ed25519_servers';
+    return v;
+  }
+
+  /**
+   * 当前控制台可管的环境（真相源 = 主机管理）。
+   * 环境 E 可管 ⇔ 有 deploy_service_envs 指向 E ∧ 主机启用 ∧（managedBy 为空 ∨ 等于本实例）
+   */
+  async listMonitorEnvs(): Promise<Array<{ id: string; name: string }>> {
+    const instance = this.consoleInstance();
+    const allowed = new Set(await this.hostsService.listManagedEnvIds(instance));
+    const rows = await this.environmentService.list();
+    const seen = new Set<string>();
+    const out: Array<{ id: string; name: string }> = [];
+    for (const e of rows) {
+      if (!allowed.has(e.id) || seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push({ id: e.id, name: e.name || e.id });
+    }
+    return out;
+  }
+
+  /**
+   * 解析某环境的目标：涉及的主机（去重、启用、按归属过滤）+ 服务×环境行（含解析出的地址）
+   */
+  private async resolveEnvTargets(env: string): Promise<{
+    hosts: DeployHostEntity[];
+    services: Array<{ serviceKey: string; hostName: string; port: number | null; address: string }>;
+  }> {
+    const instance = this.consoleInstance();
+    const hosts = await this.hostsService.resolveEnvHosts(env, instance);
+    if (!hosts.length) {
+      throw new BadGatewayException(
+        `环境 ${env} 在「主机管理」中没有可解析且归属本控制台的主机，请先在「基础设施 → 主机管理」登记`,
+      );
+    }
+    const rows = await this.serviceEnvRepo.find({ where: { envId: env } });
+    const addrByName = new Map(hosts.map((h) => [h.name, h.host]));
+    const services = rows
+      .filter((r) => !!r.hostName && addrByName.has(r.hostName))
+      .map((r) => {
+        const hostAddress = addrByName.get(r.hostName as string) as string;
+        return {
+          serviceKey: r.serviceKey,
+          hostName: r.hostName as string,
+          port: r.port ?? null,
+          address: r.port ? `${hostAddress}:${r.port}` : hostAddress,
+        };
+      });
+    return { hosts, services };
+  }
+
+  /**
+   * 由主机行构造 SSH 配置（**私钥缺失一律显式报错**，不再静默 undefined）
+   */
+  private sshConfigFor(host: DeployHostEntity): SshConfig {
+    let privateKeyPath = host.sshKeyPath || '~/.ssh/id_ed25519_servers';
     if (privateKeyPath.startsWith('~')) {
       privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
     }
-    let privateKey: Buffer | undefined;
-    if (fs.existsSync(privateKeyPath)) {
-      privateKey = fs.readFileSync(privateKeyPath);
+    if (!fs.existsSync(privateKeyPath)) {
+      throw new BadGatewayException(
+        `主机 ${host.name}（${host.host}）的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机或改「主机管理」的 sshKeyPath`,
+      );
     }
     return {
-      host: srv.host,
+      host: host.host,
       port: 22,
-      username: srv.sshUser,
-      privateKey,
+      username: host.sshUser,
+      privateKey: fs.readFileSync(privateKeyPath),
     };
+  }
+
+  /**
+   * 获取 SSH 配置（**走主机管理**：环境涉及的第一台主机）
+   */
+  private async getSshConfig(env: string): Promise<SshConfig> {
+    const { hosts } = await this.resolveEnvTargets(env);
+    return this.sshConfigFor(hosts[0]);
   }
 
   /**
@@ -195,51 +275,85 @@ export class MonitorService {
    * 端口按环境不同：dev=6000系, prod=3000系（mcp-gateway 特例为 6006）
    */
   async healthCheck(env: string): Promise<HealthCheck[]> {
-    const sshConfig = await this.getSshConfig(env);
-
-    // 服务地址从 DB 环境表读取：环境已归属模块（1:N），按环境 id 取该环境下所有模块行，
-    // 各行的 address 即该模块的服务地址（前端类模块无 address，跳过）
-    const envRows = await this.environmentService.list({ id: env });
-    const services: Array<{ name: string; address: string }> = envRows
-      .map((e) => ({
-        name: e.moduleKey,
-        address: (e.address || e.ports?.[e.moduleKey] || '').trim(),
-      }))
-      .filter((s) => !!s.address);
+    // 服务 × 环境 → 主机组（deploy_hosts）+ 端口；探活在**该服务所在的那台主机**上发起
+    const { hosts, services } = await this.resolveEnvTargets(env);
+    const hostByName = new Map(hosts.map((h) => [h.name, h]));
 
     const results: HealthCheck[] = [];
-
-    // 并行执行各服务健康检查
     const checks = services.map(async (service) => {
-      // 规范化 URL：含 // 视为已含协议；否则补 http://
-      const url = service.address.includes('://')
-        ? service.address.replace(/\/$/, '')
-        : `http://${service.address.replace(/\/$/, '')}`;
-      // 请求根路径：能拿到任何 HTTP 状态码说明端口在监听、服务进程存活；"000" 表示连接失败
-      const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 ${url}/ || echo "000:0"`;
-      try {
-        const output = await this.execSsh(sshConfig, command);
-        const [httpCode, responseTime] = output.trim().split(':');
-        const isUp = httpCode !== '000';
-        results.push({
-          service: service.name,
-          address: service.address,
-          status: isUp ? 'up' : 'down',
-          response: httpCode,
-          responseTime: parseFloat(responseTime) * 1000, // 转换为毫秒
-        });
-      } catch {
-        results.push({
-          service: service.name,
-          address: service.address,
-          status: 'down',
-          response: 'timeout',
-        });
+      const row: HealthCheck = {
+        service: service.serviceKey,
+        address: service.address,
+        hostName: service.hostName,
+        status: 'down',
+        response: 'timeout',
+      };
+      const host = hostByName.get(service.hostName);
+      if (!host) {
+        row.error = `主机组 ${service.hostName} 不可用（未启用或不属于本控制台）`;
+        results.push(row);
+        return;
       }
+      // 请求根路径：能拿到任何 HTTP 状态码说明端口在监听、服务进程存活；"000" 表示连接失败
+      const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${service.address}/ || echo "000:0"`;
+      try {
+        const output = await this.execSsh(this.sshConfigFor(host), command);
+        const [httpCode, responseTime] = output.trim().split(':');
+        row.status = httpCode !== '000' ? 'up' : 'down';
+        row.response = httpCode;
+        row.responseTime = parseFloat(responseTime) * 1000; // 转换为毫秒
+      } catch (e) {
+        row.error = (e as Error).message;
+      }
+      results.push(row);
     });
 
     await Promise.all(checks);
     return results;
+  }
+
+  /**
+   * PM2 进程（**按主机分组**）：环境内主机去重 → 逐台取 → 分组返回。
+   * 单台失败不影响其它主机：失败组仍返回，带 error（页面据此显示分组 Alert 与顶部横幅）。
+   */
+  async getPm2ByHost(env: string): Promise<
+    Array<{
+      name: string;
+      host: string;
+      scope: string;
+      runtime: string;
+      ok: boolean;
+      error?: string;
+      tookMs: number;
+      procs: Pm2Process[];
+    }>
+  > {
+    const { hosts } = await this.resolveEnvTargets(env);
+    const groups = hosts.map(async (host) => {
+      const started = Date.now();
+      const group = {
+        name: host.name,
+        host: host.host,
+        scope: host.scope,
+        runtime: host.runtime,
+        ok: false,
+        error: undefined as string | undefined,
+        tookMs: 0,
+        procs: [] as Pm2Process[],
+      };
+      try {
+        const output = await this.execSsh(this.sshConfigFor(host), 'pm2 jlist');
+        const rawList = JSON.parse(output.trim()) as RawPm2Process[];
+        group.procs = rawList.map((p) => this.toPm2Process(p));
+        group.ok = true;
+      } catch (e) {
+        group.error = (e as Error).message || String(e);
+      } finally {
+        group.tookMs = Date.now() - started;
+      }
+      return group;
+    });
+    return Promise.all(groups);
   }
 
   /**
