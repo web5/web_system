@@ -26,10 +26,10 @@
 | 列 | 来源字段 | 展示规则 | 操作 |
 |----|---------|---------|------|
 | 模块 | moduleName + key | 名称常规 + key 副行 mono 小字 | — |
-| 最近部署版本 | 各环境 deploy_deployments 中 deployedAt 最新一条的 currentVersion | `.ws-mono`；从未部署显示 — | — |
+| 最近发布版本 | 各环境 `deploy_versions` 中 releasedAt 最新一条的 versionTag（**不是指针**；见下方「2026-09-24 修正」） | `.ws-mono`；从未发布显示 — | — |
 | 环境 | 上述那条记录的 envId | 中性徽标 | — |
-| 发布时间 | deployedAt | tabular-nums，YYYY-MM-DD HH:mm | — |
-| 发布人 | deployedBy | 常规 | — |
+| 发布时间 | releasedAt | tabular-nums，YYYY-MM-DD HH:mm | — |
+| 发布人 | releasedBy（流水线为 `pipeline-script`） | 常规 | — |
 | 操作 | — | 「部署」link 按钮 | 打开抽屉（默认环境 = 该模块最近部署的环境，可换） |
 
 ## 抽屉（VersionDeployDrawer，共用组件，props 注入数据源）
@@ -38,7 +38,7 @@
 |------|------|
 | 头部 | 「部署 {模块名}（{key}）」+ 关闭 |
 | 环境选择条 | **目标环境下拉（默认入口环境，抽屉内可切换）**；切换后清空已选版本并重新加载该环境的版本记录；选项来自 `GET /environments`（含自建环境，可能数十个 → a-select + show-search） |
-| 当前版本条 | 所选环境的当前版本 tag（mono），无则 — |
+| 当前版本条 | 所选环境的**当前指针**（`deploy_deployments.currentVersion`，mono），无则 — |
 | 版本列表 | radio 项×N：tag（mono 600）+「当前」ok tag + meta（branch · commit · 时间 · 发布人）；当前版本置灰不可选 |
 | 底部 | 取消（default）+「部署到 {env}」（primary；未选版本 disabled + tooltip「先选版本」） |
 
@@ -54,6 +54,14 @@
 | 抽屉空态 | 模块无版本记录 | — | 否 | 显示「去发布流水线」按钮（跳 /pipelines 带模块预选） |
 | 抽屉错误态 | 版本列表加载失败 | — | 否 | 错误文案 +「重试」按钮 |
 | AppDetail「部署」 | 应用详情部署 tab 行内 / 页头按钮 | 同上（应用域接口） | 同上（backend=false 语义） | 打开本抽屉（应用域数据源：`GET /apps/:key/versions` + `POST /apps/:key/switch-version`），成功后 AppDetail load() 刷新 |
+
+> **2026-09-24 修正（缺陷修复，UI_GATE=off，不动原型布局）**
+> 原实现把 `deploy_deployments.currentVersion`（**当前指针**）当作「最近部署」展示，语义写错：
+> 指针是最后一次**部署（切指针）动作**的结果，而「最近发布」在 `deploy_versions`（releasedAt，
+> 流水线产物）。发布后未切指针、或指针被回滚时两者不同，页面会把指针冒充成最新发布。
+> 修正后：表格「最近发布版本 / 时间 / 发布人」一律取发布记录；指针另存 `pointer` 字段，
+> 当 `pointer !== 发布版本` 时在该单元格副行显示「当前指针：xxx」（`.ptr-hint`，三级文字色）。
+> 后端 `GET /deploy/module-deployments/:key` 每环境新增 `latestRelease {versionTag, releasedAt, releasedBy}`。
 
 ## 状态覆盖自查（design.md §3）
 
