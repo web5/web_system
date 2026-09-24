@@ -1,5 +1,7 @@
 # 交接文档 · 2026-09-23（远端发布 / dev 基础设施）
 
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
+
 > 用途：让下一个会话**直接读这一份**就能接上，不需要翻聊天记录。
 > 读完后先用「§0 现状自检」跑一遍，确认环境事实仍然成立再动手。
 
@@ -82,9 +84,9 @@ gh pr list --state open --json number,headRefName,title --template '{{range .}}#
 
 | 优先级 | 事项 | 说明 | 阻塞者 |
 |---|---|---|---|
-| **P0** | **A6 收尾**：dev 控制台 →「版本部署 → admin → `3d5ce61`」→ 部署 | admin 的 A6 产物已投递到 `modules/admin/dev/3d5ce61/`（公网 200、旧版有「存储配置」代码 / 新版 0 处已核对），**只差指针切换**；按用户口径指针切换**不自动做** | **用户点** |
-| **P0** | **dev/prod 共用库**的处置决策 | 是否要拆库？若不拆，需在文档与流程里明确"改 dev 业务库 = 改 prod" | **用户决策** |
-| P1 | **A8**：ai-service 生成图改调 `internal/uploads/store` 落盘 | 依赖 A3 已就绪；本轮未做（需通读 ai-service 图片落盘与路径消费点） | 我（下轮） |
+| ✅ | **A6**：dev admin → `3d5ce61` | 已完成并验证，见 §8.6 / §9.1 | — |
+| ✅ | **dev/prod 共用库**的处置决策 | 已决策：不拆库 + 5 条护栏，见 §8.8 | — |
+| P1 | **A8**：ai-service 生成图改调 `internal/uploads/store` 落盘 | PR #148 已合入 master；**dev/prod 是否已部署未确认** | 我（验证部署） |
 | P1 | **C1 剩余 7 个服务**接入统一助手 | user-service / ai-agent / ai-service / knowledge-service / system-service（remote）；gateway（本地 JwtService）/ upload-service（手写 HMAC）→ 属 `AuthMode.local`，需注入各自校验实现 | 我 |
 | P1 | **nginx 主机登记** | 42.194.200.69 的 SSH 用户 / 密钥 / 部署根目录，**未提供** | **用户提供** |
 | P2 | 迁移待定 3 条评审 | `0008_knowledge_tables`（dev/prod 均缺 knowledge 3 表）、`0010_pipeline_task_states`（`deploy_pipeline_runs` 已随域拆分迁到 `web_system_deploy`，该迁移过时）、`0012_music_recommend`（music 领域未上）→ 决定"执行"还是"记账跳过" | **用户/相关领域** |
@@ -250,3 +252,32 @@ dev 与 prod 业务库查 `users=2`、`schema_migrations=12`（两边一致）�
 
 - LIGHTHOUSE（101.43.117.234）：`ssh -i ~/.ssh/id_ed25519_lighthouse ubuntu@…` 可用（凭据在 `~/env_config`）。
 - 本会话产出已发 PR #147（连线着色规则定稿 + 连线绘制抽公共 util）。
+
+---
+
+## 9. 续作记录（2026-09-24 · dev 微前端指针与产物清理）
+
+### 9.1 dev 微前端指针（admin / portal）
+
+- 读取规则：dev gateway 跑 **NEW 读取源**，只读 `modules/<appKey>/<envId>/<version>/index.js`（`servers/deploy-console/src/apps/entry-pointer.ts`）。改 `deploy_deployments` 对 dev 无效。
+- 切指针的唯一写入口：`POST /console/api/apps/<appKey>/switch {"envId":"dev","version":"<裸 hash>"}` —— **version 必须是裸 hash**（`7a6be04`），带前缀（`admin-dev/3d5ce61`）会指到不存在的目录。
+- dev 控制台凭据：`admin / deploy2026`。
+- 当前指针：`admin/dev = 3d5ce61`、`portal/dev = 7a6be04`，写入口 200，manifest `source=new`。
+- 故障模式：指针指向**未投递**的版本（如 `b2b6d4a`）→ `modules/<app>/dev/index.js` 不存在 → 404。发版后必须确认 `modules/<app>/dev/<hash>/` 真的落盘。
+
+### 9.2 dev 历史产物清理
+
+- 已把 `modules/` 下除 `<appKey>/dev/` 外的顶层目录（admin 9 个、portal 7 个，含 `default/`、`admin-dev/`、`portal-dev/`）移到 dev 的 `/tmp/modules-legacy-20260924/`（108M）；`modules/` 由 119M 降到 11M。
+- 全量备份：dev `~/backups/static-modules-20260924-0320.tgz`（3387 项）。
+- 回收空间需再执行 `rm -rf /tmp/modules-legacy-20260924`（备份已有，随时可删）。
+
+### 9.3 LEGACY 回退路径（已决策：接受失效）
+
+- LEGACY 读取源（`DEPLOY_LEGACY_READ=1`）读 `deploy_deployments` → 路径 `modules/<appKey>/default/<hash>/`，该目录已在 9.2 清理。
+- 决策（用户 2026-09-24）：**接受 dev 上 LEGACY 回退失效**，不为它保留目录。
+- 约束：**不要把 dev 的 gateway 切回 LEGACY 读取源**；需要回退时从 `static-modules-*.tgz` 恢复，或重新发版。
+
+### 9.4 其它
+
+- LIGHTHOUSE：`ssh -i ~/.ssh/id_ed25519_lighthouse`；§0 自检脚本用默认 key 会误报 `Permission denied`。
+- dev 控制台重启前须确认 `/etc/web-system/config-master.key` 已 provision（见 §8.7）。
