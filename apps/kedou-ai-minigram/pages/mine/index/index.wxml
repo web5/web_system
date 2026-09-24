@@ -2,7 +2,7 @@
 <!-- 会话归属按「完全隔离」口径：各应用历史 与 主对话记录 分列，不混成一个列表 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：整页只渲染登录引导卡（Q1 必须登录才可用），不发任何业务请求 -->
-  <login-gate wx:if="{{!loggedIn}}" desc="口味记忆、生词本与手机号都跟着账号走" bind:logged="onLogged" />
+  <login-gate wx:if="{{!loggedIn}}" desc="口味记忆、生词本与手机号都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
   <view class="profile" bindtap="goProfile">

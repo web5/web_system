@@ -1,0 +1,25 @@
+<view class="page {{radiusClass}}">
+  <view class="sec-t">我们收集什么</view>
+  <view class="doc">
+    <view class="p"><text class="b">微信身份标识（openid）</text>：首次进入时通过 wx.login 静默获取，用于建立你的账号，不弹授权窗。</view>
+    <view class="p"><text class="b">手机号</text>：仅在你主动点击「绑定手机号」并授权后，经微信手机号验证组件获取，用于多端账号打通。<text class="b">不绑定不影响任何功能使用</text>。</view>
+    <view class="p"><text class="b">邮箱</text>：仅在你主动填写并验证后用于账号打通，同样可选。</view>
+    <view class="p"><text class="b">对话与学习数据</text>：对话记录、生词本、口味记忆，保存在你的账号下。</view>
+  </view>
+
+  <view class="sec-t">手机号与邮箱怎么用</view>
+  <view class="doc">
+    <view class="p">仅作为账号打通的标识；接口与页面一律只展示脱敏形式（138****6688 / a***@example.com）。</view>
+    <view class="p">若该手机号或邮箱已注册过科豆账号，会先征求你的同意，再把当前小程序的数据合并到那个账号 —— <text class="b">合并不可撤销</text>。</view>
+  </view>
+
+  <view class="sec-t">你的控制权</view>
+  <view class="doc">
+    <view class="p">可在「我的 → 个人信息」绑定或更换手机号 / 邮箱，更换需重新验证。</view>
+    <view class="p">可在「我的 → 小程序设置」退出登录：本地登录态清除，同时服务端凭证失效。</view>
+    <view class="p">账号注销：<text class="b">开发中</text>，上线后入口放在「小程序设置」。</view>
+  </view>
+
+  <view class="foot">文案待运营 / 法务确认
+生效日期：____ 年 __ 月 __ 日</view>
+</view>

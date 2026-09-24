@@ -1,0 +1,6 @@
+.sec-t { font-size: 24rpx; color: var(--t2); margin: 32rpx 0 16rpx; }
+.doc { background: var(--card); border-radius: var(--r-card); padding: 28rpx; }
+.p { font-size: 25rpx; color: var(--t2); line-height: 1.75; margin-bottom: 16rpx; }
+.p:last-child { margin-bottom: 0; }
+.b { color: var(--t1); font-weight: 500; }
+.foot { font-size: 22rpx; color: var(--t3); text-align: center; margin-top: 24rpx; line-height: 1.7; }

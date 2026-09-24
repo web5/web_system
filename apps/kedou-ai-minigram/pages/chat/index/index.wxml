@@ -3,7 +3,7 @@
      路由结果通过 SSE 首个 intent 事件下发，前端在消息区顶部显示 agent 徽标。 -->
 <view class="wrap {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不载入会话、不发业务请求 -->
-  <login-gate wx:if="{{!loggedIn}}" bind:logged="onLogged" />
+  <login-gate wx:if="{{!loggedIn}}" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
   <!--
@@ -168,6 +168,7 @@
       <view id="msg-bottom"></view>
     </scroll-view>
   </view>
+  </block>
 </view>
 
 <!-- 底部吸底输入栏 -->
@@ -214,5 +215,4 @@
     <view class="si" data-key="file" bindtap="onPlusItem">文件</view>
   </view>
   <view class="sc" bindtap="closePlus">取消</view>
-  </block>
 </view>

@@ -1,9 +1,15 @@
 // 小程序通用设置（影响全局）
 import * as appearance from '../../../utils/appearance';
-import { logout } from '../../../services/auth';
+import { logout, isLoggedIn } from '../../../services/auth';
 
 Page({
   onShow() {
+    // 登录守卫：分享直达等路径可能绕过 tab 的登录墙
+    if (!isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      wx.navigateBack();
+      return;
+    }
     // 圆角风格：本页即偏好入口，根节点 class 与设置项文案都按本地存储刷新
     const cls = appearance.currentClass();
     const label = appearance.labelOf();
