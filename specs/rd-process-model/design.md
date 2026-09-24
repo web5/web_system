@@ -187,16 +187,18 @@
 
 | # | 任务 | 产出 | 分期 |
 |---|---|---|---|
-| W1 | 本 spec 定稿 | `specs/rd-process-model/design.md` | P0 |
+| W1 | 本 spec 定稿 | `specs/rd-process-model/design.md` | P0 ✅ |
 | W2-a | 发布判据源落盘 | `docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道） | P0 **✅ 已落** |
-| W2-b | 契约判据源落盘 | 契约登记文件（接口契约 + SSE 事件 + MCP 工具 + 权限码 + types 双构建） | P0 **⏸ 阻塞**：契约无单一真相源，见 §7.3 |
-| W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**（`SKILL.md`，判据源外置到 `release-review-checklist.md`）；`contract-reviewer` **⏸ 待契约登记文件**；P2 加 `code-reviewer` | P1 |
+| W2-b | 契约判据源落盘 | `docs/api/contracts.md`（C1 接口 / C2 SSE 事件 / C3 MCP 工具 / C4 权限码与常量 / C5 网关路由 + 变更纪律 + 漂移清单） | P0 **✅ 已落**（原阻塞已解，见 §7.3 / §7.6） |
+| W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**；`contract-reviewer` **✅ 已落**；P2 加 `code-reviewer` | P1 |
 | W4 | 机检分派 | `scan-rules.sh` 的 `check_r13_r14`（一次遍历判两面）+ `is_contract_file` / `is_release_file`；P2 加 `check_r15` | P1 **✅ 已落**（warning 级，Q3 已拍板保持） |
-| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` **✅ 已落**（实测 R12 零漂移）；`contract-reviewer` / `code-reviewer` 随后续角色同批 | P1 |
-| W6 | 自检断言 | `selfcheck-ui-gate.sh` 加 V25（R13/R14 接线 + 契约面收窄防回退）**✅ 已落**（PASS=18） | P1 |
-| W7 | 常驻动作门增述 | `.codebuddy/CODEBUDDY.md` §2.5.1 + 新建 `.codebuddy/rules/release-interface/RULE.mdc` **✅ 已落** | P1 |
+| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` / `contract-reviewer` **✅ 已落**（实测 R12 零漂移）；`code-reviewer` 随后续角色同批 | P1 |
+| W6 | 自检断言 | `selfcheck-ui-gate.sh`：V25（R13/R14 接线 + 契约面收窄防回退）/ V26（CI 兜底层接线）/ V27（R16 接线）/ V28（新角色与 R12 保护清单同批）**✅ 已落**（PASS=21） | P1 |
+| W7 | 常驻动作门增述 | `CODEBUDDY.md` §2.5.1（交付面）+ §2.5.2（契约面）+ 新建 `rules/release-interface/RULE.mdc` **✅ 已落** | P1 |
 | W8 | 手册同步 | `agent-capability-playbook.md` v1.13：变更日志 + §7 易混淆点 6（项目专属清单与 R12 纪律）+ 附索引 **✅ 已落** | P1 |
-| W0 | auto-pr 残影 PR 治理 | `.github/workflows/auto-pr.yml` 排除长期分支（`feature/test` / `feature/kedou-ai-minigram`）**✅ 已落**（非原计划项，见 §7.4） | — |
+| W0 | auto-pr 治理 | ① 排除长期集成分支（治残影 PR，见 §7.4）**✅**；② 改用 **PAT** 创建 PR（治 CI 卡 `action_required`）**✅** | — |
+| W11 | **R16 SSE 契约一致性机检** | `scripts/redline/check-sse-contract.py` + `check_r16`：手写联合比对（MISSING / EXTRA / LOOSE）+ import 型消费方的 `switch case` 检查 | P1 **✅ 已落**（非原计划项，见 §7.6） |
+| W12 | **第二跳脚本化** | `scripts/redline/apply-agent-kit.sh`：能力源 → 运行源一键镜像 + 保护清单跳过 + `DRY_RUN`；R12 报错建议指向它 | P1 **✅ 已落**（治「第二跳靠人记」，见 §7.6） |
 | W9 | 独立代码评审 | `code-reviewer` 技能 + R15（warn→strict） | P2 |
 | W10 | 运营回流 | 故障模式库 → 判据源回灌机制 | P3 |
 
@@ -334,6 +336,24 @@ W4 落码时实查：
 **代价**：R11 为 error 级，恢复后遵循度不足的存量 / 并行 PR 会变红（09-22 实测 `Design:` 覆盖 72%），需逐个补 trailer。
 
 **遗留**：原 S1–S7 结构守护（`check-kit-structure.sh` + `kit-gate.yml`）未随机制回归；其中 **S7（运行源漂移）语义已由 R12 承接**，S1–S6 暂无对应实现。
+
+---
+
+### 7.6 收口记录（2026-09-24）：契约治理闭环 + 上游 Hub 落地
+
+| 项 | 结果 |
+|---|---|
+| **契约登记** | `docs/api/contracts.md` 落盘（PR #159）；R13 契约面按**明确路径**纳入 `packages/agent-core/src/interfaces/*` —— 解决「整个 SDK 太宽（摩擦）」与「协议文件漏纳（漏检）」的矛盾 |
+| **SSE 契约漂移修复** | `'card'` 未登记 + 死类型 `'token'` / `'start'` → 已修（PR #162），并**新增 R16** 守跨端一致性 |
+| **独立契约评审** | 首份「生产者 ≠ 评审者」报告 `docs/api/reviews/sse-stream-contract-20260924.md`：首轮 **❌ 阻塞**（1 阻塞 + 5 重要），全部处置。阻塞项为「删 `'token'` 破坏 import 型消费方 admin 的 `switch case`（TS2678）」——该教训已写成 `contract-reviewer` 工作流的**硬步骤** |
+| **第二跳脚本化** | `scripts/redline/apply-agent-kit.sh`（PR #169）；本次 Hub apply 正是用它完成 |
+| **上游 Hub** | `web5/ai-agent-kit#18` 合并（评审链改「环节 × 角色」+ 接入两个新角色 + 细节外置 `review-chain.md`，Hub 212 → 221 行）→ sync PR #168（**能力源**）→ **apply 到运行源**；Hub 现认识 `contract-reviewer` / `release-reviewer` |
+| **CI 摩擦** | auto-pr 改用 PAT 后，同分支后续 push 的 CI 自动跑；**新建 PR 的首次 run 仍需人工批准一次**（GitHub 对 bot 创建 PR 的侧行为，非 workflow 可改） |
+
+**两条可复用的教训**：
+
+1. **删契约前必须查 import 型消费方**（`grep "from '<包名>'"` 后看其 `switch case` / `=== 'xxx'`）——只 grep 手写联合会漏，且这类破坏在所有门禁下**静默通过**。
+2. **「评审过了吗」要物化成可机检的事实**（报告落盘 + 机器可读头 + commit 凭证 / CI 规则）：只登记不机检，下次仍会漂。
 
 ---
 
