@@ -2,16 +2,19 @@
 #
 # 触发：push 到任意非 master/main 分支时，自动创建 PR 到 master。
 # 幂等：若该分支已存在 PR，则跳过（不重复创建）。
-# 凭据：优先用仓库 Secret `AUTO_PR_TOKEN`（PAT），未配置时回退内置 GITHUB_TOKEN。
+# 凭据：用仓库 Secret `AUTO_PR_TOKEN`（PAT），**缺失即失败**（2026-09-24 起不再回退 GITHUB_TOKEN）。
 #   为什么必须用 PAT：**由 GITHUB_TOKEN 创建的事件不会触发后续 workflow**（GitHub 防递归机制），
-#   所以用 GITHUB_TOKEN 建的 PR，其 CI（quality-gate）会卡在 `action_required`，每次都要人工批准。
-#   改用 PAT 建 PR 后，PR 上的 workflow 会正常自动运行。
+#   所以用 GITHUB_TOKEN 建的 PR，其 CI（quality-gate）根本不会跑（0 job、conclusion=failure 或
+#   action_required）。
+#   ⚠️ 2026-09-24 事故：此前写成 `${{ secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN }}`，
+#   secret 未配置时**静默回落** GITHUB_TOKEN —— 表现为「每个 PR 的 quality-gate 都红，但一个
+#   job 都没有」，排查时极易误判成工作流文件或改动内容的问题（实测 4 个不同分支同时中招）。
+#   现改为显式失败并在日志里给出修法，让凭证缺失当场暴露。
 #   配置：Settings → Secrets and variables → Actions → New repository secret
 #         名称 `AUTO_PR_TOKEN`，值 = 具备 pull_requests:write + contents:read 的 fine-grained PAT
-#         （与本地根 .env 的 GITHUB_PR_TOKEN 同一个即可）。
+#         （与本地根 .env 的 GITHUB_PR_TOKEN 同一个即可）。注意 fine-grained PAT 会过期，
+#         到期后同样会以本 workflow 失败的形式暴露。
 # 权限：本 workflow 声明 pull-requests: write；PAT 自身权限以该 token 的配置为准。
-# 回退路径（未配 AUTO_PR_TOKEN）仍需在 Settings → Actions → General 开启
-# "Workflow permissions: Read and write permissions"。
 name: auto-pr
 
 on:
@@ -39,12 +42,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 凭证缺失即失败（不回退 GITHUB_TOKEN —— 回退会让后续 quality-gate 静默不执行）
+      - name: 校验 AUTO_PR_TOKEN
+        env:
+          AUTO_PR_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}
+        run: |
+          if [ -z "$AUTO_PR_TOKEN" ]; then
+            echo "::error::仓库 Secret AUTO_PR_TOKEN 未配置或为空。请在 Settings → Secrets and variables → Actions 新建/更新 AUTO_PR_TOKEN（fine-grained PAT，权限 pull_requests:write + contents:read，与本地根 .env 的 GITHUB_PR_TOKEN 同源）。回退 GITHUB_TOKEN 建的 PR，其 quality-gate 不会执行（GitHub 防递归机制），故此处不再回退。"
+            exit 1
+          fi
+          echo "AUTO_PR_TOKEN 已配置（长度 ${#AUTO_PR_TOKEN}）"
+
       - name: 自动创建 PR 到 master
         id: pr
         uses: actions/github-script@v7
         with:
-          # 优先 PAT（见文件头说明）；未配置该 secret 时回退 GITHUB_TOKEN（其 PR 的 CI 需人工批准）
-          github-token: ${{ secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.AUTO_PR_TOKEN }}
           script: |
             const { repo, owner } = context.repo;
             const head = context.ref.replace(/^refs\/heads\//, '');
