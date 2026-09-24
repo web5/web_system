@@ -3,8 +3,43 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 
 > 定位：服务监控页（`/monitor`）在 dev 控制台上的两个问题（页签口径 + 取数失败）的**事实、拍板口径与实现清单**。
-> 状态：**用户挂起，回头自行跟进**（2026-09-24 提出，未落码）。
+> 状态：**主体已完成并发布（本地 + dev 均已验证）**；仅剩 §0 的**待办**未处理。
 > ⚠️ 原记在 `session-handover-2026-09-23.md` §9，因该文件被并发会话重写而丢失，改放这里（不要写回那份交接文档）。
+
+---
+
+## 0. 待办（未处理 · 用户明确"回头再处理"）
+
+### TODO-1 · dev 云库 `scope` / `managed_by` 会被吃掉（结构性风险，待选方案）
+
+- **现象**：`deploy_hosts` 的两个新列在 **dev 云库（`web_system_deploy`，dev 与堡垒机共用）**上被 **DROP**；
+  本机库则是**值被重置**为默认（`scope=cloud` / `managed_by=NULL`）。已两次观察到。
+- **高度怀疑的根因**：deploy-console 用 `synchronize: true`，而该库被多个实例共用 ——
+  **旧代码实例启动时会把实体里没有的列 DROP 掉**（堡垒机上的 deploy-console 是重点嫌疑对象）。
+  已排除：gateway 的 deploy 连接 `synchronize: false`；脚本里只有 `p23-cleanup-history.mjs` 提及
+  `deploy_hosts` 且只删备份表。
+- **影响**：列/值丢失后，dev 控制台页签口径与"本机形态走 execLocal"的判断会退回到错误行为。
+- **当前缓解**：每次发布后复核并手工补回（= 方案 B）。
+- **待办**：三选一（**选 A 为治本**）
+  | 方案 | 说明 |
+  |---|---|
+  | A 治本 | 关掉 deploy-console 的 `synchronize`（改 `false` + 走 `migrations/`），并统一各实例版本 |
+  | B 过渡 | 每次发布后复核补回（现状） |
+  | C | 控制台库按实例拆分（dev / 堡垒机各一份） |
+- **复核 / 补回**（两份库都要）：
+
+```bash
+# 复核
+SELECT name, host, scope, managed_by FROM deploy_hosts;
+# 补回（列在就只回填值；列没了就跑迁移文件重建）
+mysql -h <host> -P <port> -u <user> -p web_system_deploy < migrations/0014_deploy_host_scope.sql
+```
+
+### TODO-2 · 取数失败时的"重要"跟进项（不阻塞，随 TODO-1 一并看）
+
+- 契约评审（`docs/api/reviews/monitor-env-scope-20260924.md`）重要项 I1：
+  后端与前端若**分开合并且间隔较久**，中间态里 dev 控制台旧页签「本地」会报 502（显式错误，不静默）。
+  本次已同日合并消除，后续同类改动注意保持同步。
 
 ---
 
