@@ -305,11 +305,12 @@ export class MonitorService {
         return;
       }
       // 输出格式：每行 "<serviceKey>|<httpCode>|<time_total>"
+      // 主机内并行探测（子 shell & + wait）：串行会让 12 个 curl 累计超过 execSsh 的 10s 超时
       const pairs = items.map((s) => `${s.serviceKey}:${s.port}`).join(' ');
       const command =
-        `for sp in ${pairs}; do n="\${sp%%:*}"; p="\${sp##*:}"; ` +
+        `for sp in ${pairs}; do ( n="\${sp%%:*}"; p="\${sp##*:}"; ` +
         `r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${host.host}:$p/ || echo "000:0"); ` +
-        `echo "$n|$r"; done`;
+        `echo "$n|$r" ) & done; wait`;
       try {
         const output = await this.execSsh(this.sshConfigFor(host), command);
         const parsed = new Map<string, string>();
