@@ -6,7 +6,7 @@
  * （后端由发布流水线的 restart / verify action 直接生效），本页只处理前端 / 微前端模块。
  * 表格 = 模块清单 + 最近一次部署摘要（环境维度收进部署抽屉，环境可数十个）。
  * 设计依据：specs/version-deploy/page-spec.md + design.md（已确认原型
- * docs/ui/prototypes/deploy-console-domain-split.html v4）
+ * docs/ui/prototypes/deploy-console-domain.html v4）
  * 数据来源：GET /deploy/modules（type 过滤）、/deploy/module-deployments/:key
  * （取 deployedAt 最新一条作「最近部署」）、/deploy/versions?env=&component=（抽屉）、
  * POST /deploy/modules/:k/envs/:env/deploy（部署动作 = 切换版本指针）。
