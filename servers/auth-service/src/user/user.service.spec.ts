@@ -7,7 +7,10 @@ import { User } from './user.entity';
 
 describe('UserService', () => {
   let service: UserService;
-  let repository: jest.Mocked<Partial<Repository<User>>>;
+  // 不用 jest.Mocked<Partial<X>>：Partial 让成员变成可选，@types/jest 的 Mocked
+  // 只包装**必填**函数成员，可选成员会保留原始函数签名 → 拿不到 mockResolvedValue
+  // （依赖小版本漂移即翻车，CI 时红时绿）。这里改成必填类型 + 赋值处显式断言。
+  let repository: jest.Mocked<Repository<User>>;
 
   const mockUser: User = {
     id: 1,
@@ -25,7 +28,7 @@ describe('UserService', () => {
     dailyTransformLimit: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as unknown as User;
 
   beforeEach(async () => {
     repository = {
@@ -33,7 +36,7 @@ describe('UserService', () => {
       create: jest.fn(),
       save: jest.fn(),
       delete: jest.fn(),
-    };
+    } as unknown as jest.Mocked<Repository<User>>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
