@@ -8,6 +8,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { EnvironmentService } from '../environment/environment.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ServerService } from '../server/server.service';
+import { HostsService } from '../hosts/hosts.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -76,6 +77,7 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         },
         { provide: ModuleRegistryService, useValue: { list: jest.fn().mockResolvedValue([]) } },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         {
           provide: StageCommandService,
           useValue: { resolve: jest.fn().mockResolvedValue(null) },
@@ -140,8 +142,11 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
   let workspace: string;
   let commands: { pm2Bin: jest.Mock; exec: jest.Mock };
   let moduleRegistry: { get: jest.Mock };
+  /** 真实存在的私钥文件（SSH 配置现在要求私钥必须存在，缺失即显式报错） */
+  const sshKeyFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-key-')), 'id_ed25519');
 
   beforeEach(async () => {
+    fs.writeFileSync(sshKeyFile, 'PRIVATE-KEY-STUB');
     workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-be-'));
     // 版本目录（发布流水线的产物）
     fs.mkdirSync(path.join(workspace, 'servers/mcp-gateway/mcp-gateway-local/abc1234'), {
@@ -186,10 +191,18 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
           provide: ServerService,
           useValue: {
             resolveServers: jest.fn().mockResolvedValue([]),
-            // 远程部署需要环境默认服务器
+            // 远程部署需要环境默认服务器（私钥必须真实存在：缺失已改为显式报错）
             resolveEnvDefaultServer: jest
               .fn()
-              .mockResolvedValue({ host: '127.0.0.1', sshUser: 'ubuntu', sshKeyPath: '/no/key' }),
+              .mockResolvedValue({ host: '127.0.0.1', sshUser: 'ubuntu', sshKeyPath: sshKeyFile }),
+          },
+        },
+        {
+          provide: HostsService,
+          useValue: {
+            // 新模型未登记 → 回退旧表（resolveEnvDefaultServer）
+            resolveHostForService: jest.fn().mockResolvedValue(null),
+            resolveEnvHosts: jest.fn().mockResolvedValue([]),
           },
         },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
@@ -317,6 +330,7 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
           },
         },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -395,6 +409,7 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
           },
         },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -488,6 +503,7 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
           },
         },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -572,6 +588,7 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         { provide: ModuleRegistryService, useValue: moduleRegistry },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: configCenter },

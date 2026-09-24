@@ -32,6 +32,17 @@ export class CreateHostDto {
   @IsIn(['pm2', 'docker'])
   runtime?: 'pm2' | 'docker';
 
+  /** 主机形态：local=本机形态 / cloud=云服务器 / container=容器服务器（默认 cloud） */
+  @IsOptional()
+  @IsIn(['local', 'cloud', 'container'])
+  scope?: 'local' | 'cloud' | 'container';
+
+  /** 归属控制台实例（对应 CONSOLE_INSTANCE）；留空 = 所有控制台可见 */
+  @IsOptional()
+  @IsString()
+  @Length(0, 64)
+  managedBy?: string;
+
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
@@ -62,6 +73,15 @@ export class UpdateHostDto {
   @IsOptional()
   @IsIn(['pm2', 'docker'])
   runtime?: 'pm2' | 'docker';
+
+  @IsOptional()
+  @IsIn(['local', 'cloud', 'container'])
+  scope?: 'local' | 'cloud' | 'container';
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 64)
+  managedBy?: string | null;
 
   @IsOptional()
   @IsBoolean()
