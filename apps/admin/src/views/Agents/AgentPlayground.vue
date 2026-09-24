@@ -378,7 +378,7 @@ function formatJson(v: unknown): string {
   }
 }
 function evtTag(type: string): string {
-  const map: Record<string, string> = { tool_call: 'tool', tool_result: 'result', skill_load: 'skill', final: 'final', error: 'error', start: 'start' };
+  const map: Record<string, string> = { tool_call: 'tool', tool_result: 'result', skill_load: 'skill', final: 'final', error: 'error' };
   return map[type] || type;
 }
 function evtColor(type: string): string {
@@ -732,11 +732,6 @@ function handleEvent(ev: StreamEvent) {
       }
       events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step, usage: ev.usage });
       scrollToBottom();
-      break;
-    }
-    case 'token': {
-      // token 事件（预留）：引擎未来逐块报告 token 消耗；当前进 Debugger
-      events.push({ type: ev.type, name: ev.name, content: ev.content, step: ev.step, usage: ev.usage });
       break;
     }
     default:

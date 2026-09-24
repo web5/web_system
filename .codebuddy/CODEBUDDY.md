@@ -33,8 +33,42 @@
 7. **实现一致性评审（D3）**：落码后比对原型锚点 `data-dr` 与截图并置，报告落盘
 
 - **机器强制与应急出口**：本门有 hook 强制与 CI 红线兜底（设计与实现见 `specs/kit-sop-enforcement/design.md`）；应急出口 `UI_GATE=off`。
-- 例外：纯后端 / 非 UI 文件改动不受本门约束；豁免：确属纯视觉微调（如仅调间距）在原型或规格记一行「微调豁免」即可通行。
+- 例外：除 §2.5.1 另有约束外，纯后端 / 非 UI 文件改动不受**本门**约束；豁免：确属纯视觉微调（如仅调间距）在原型或规格记一行「微调豁免」即可通行。
 - 本节只规定**顺序与语义**；触发路径清单、原型/规格/质检清单的文件位置、hook 配置等细节一律在对应规则与设计文档中检索，不在本文复制。
+
+### 2.5.1 交付环节动作门（发布 / 环境 / 数据变更 · 与 UI 无关）
+
+凡改动命中发布面或数据面 —— **即使是纯后端改动、即使只有一行**：
+
+- `ecosystem.config.cjs` / `servers/*/.env*` / 流水线与发布脚本 / `scripts/migrations/**` / `.github/workflows/**`
+
+按 `.codebuddy/rules/release-interface/RULE.mdc` 的动作门执行：过判据清单 → 出评审报告 → **阻塞项清零** → commit 带 `Release: pass`（CI R14 拦截）。
+
+- 判据源：`docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道）
+- 承担角色：`release-reviewer`（交付环节独立第三方，**不执行发布、不改码**，只出报告并回流）
+- 纯配置值微调走 `Micro-exempt: <理由>`
+
+> 为什么与 UI 门并列：**测试通过不等于能上线**。部署阶段的高频故障（改的不在被加载的目录、配置源被会话污染、旧进程占端口、迁移落到默认库）全部无报错，且不属任何现有评审的覆盖范围。
+
+### 2.5.2 契约变更动作门（改一处会不会让消费方静默失效 · 与 UI 无关）
+
+凡改动命中契约面 —— **即使是纯后端改动、即使只有一行**：
+
+- `packages/types/**`（权限码 / 共享常量 / 枚举）
+- `packages/agent-core/src/interfaces/**`（协议：`StreamEventType` / `RunInput`）
+- `scripts/migrations/**`（数据 / 结构迁移）
+- `servers/mcp-gateway/src/*/tools/**`（MCP 工具注册）
+- `servers/*/src/*/*.controller.ts`（对外接口）
+
+按契约纪律执行：过 `docs/api/contracts.md` 判据 → 出评审报告（**破坏性变更须附消费方清单**）→ **阻塞项清零** → commit 带 `Contract: pass`（或报告路径；CI R13 拦截）。
+
+- 判据源：`docs/api/contracts.md`（C1 接口 / C2 SSE 事件 / C3 MCP 工具 / C4 权限码与常量 / C5 网关路由）
+- 承担角色：`contract-reviewer`（**不代改、不代登记**，只出报告并回流）
+- 一致性机检：**R16** —— 以 agent-core 的 `StreamEventType` 为真相源，比对各端手写联合 + import 型消费方的 `switch case`
+- 纯微调走 `Micro-exempt: <理由>`
+
+> 为什么与 UI 门并列：契约的破坏是**静默的**。`'card'` 未登记 → 小程序漏分支、音乐卡片实时不下发；删掉一个「以为没人用」的类型 → import 型消费方的 `switch case` 直接编译失败。两者都编译能过 / 测试能过，**只有专门查消费方才会暴露**。
+> **硬步骤**：删契约前必须查 **import 型**消费方（grep `from '<包名>'` 后看其 `switch case` / `=== 'xxx'`）——只看手写型会漏（2026-09-24 实测踩过）。
 
 ## 3 AI 规则（含 agent 安全）
 

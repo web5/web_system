@@ -82,6 +82,10 @@ export interface HealthCheck {
 export class MonitorService {
   private readonly logger = new Logger(MonitorService.name);
 
+  /** 白名单：服务名（与 controller 的 SERVICE_RE 同规）与归一化后的 URL，拼进 shell 前校验 */
+  private static readonly NAME_RE = /^[a-zA-Z0-9_-]+$/;
+  private static readonly URL_RE = /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly environmentService: EnvironmentService,
@@ -185,9 +189,13 @@ export class MonitorService {
 
   /**
    * 通过 SSH 执行命令（Promise 封装）
-   * 超时 10 秒
+   * 默认超时 10 秒；批量探活等远程侧并行较长的命令可放宽
    */
-  private execSsh(sshConfig: SshConfig, command: string): Promise<string> {
+  private execSsh(
+    sshConfig: SshConfig,
+    command: string,
+    timeoutMs: number = 10000,
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
       const client = new Client();
       let isResolved = false;
@@ -198,7 +206,7 @@ export class MonitorService {
           client.end();
           reject(new BadGatewayException('SSH 连接超时'));
         }
-      }, 10000);
+      }, timeoutMs);
 
       client.on('ready', () => {
         client.exec(command, (err, stream) => {
@@ -270,25 +278,49 @@ export class MonitorService {
 
   /**
    * 健康检查
-   * 对各服务端口做连通性探测：只要能建立 HTTP 连接（任意状态码）即视为在线，
-   * 不再依赖各服务是否实现 /health 端点（仅 gateway 有，其他服务 404/302 会被误判为离线）。
+   * 对各服务探测 `GET /health`（各后端服务已统一提供免鉴权端点，见
+   * specs/backend-health-endpoint/design.md）。判活口径不变：只要能建立 HTTP 连接
+   * （任意状态码）即视为在线 —— 未升级的服务 /health 会返回 404，仍按在线计。
    * 端口按环境不同：dev=6000系, prod=3000系（mcp-gateway 特例为 6006）
+   *
+   * 探活在**单条 SSH 会话内**完成（远程侧用 shell 后台任务并行），而非每个服务一条 SSH 连接：
+   * 后者在模块较多时会超出 sshd 的 MaxStartups（默认 10:30:100），多余连接被丢弃 → 该服务被
+   * 随机误判为「离线/timeout」。详见 specs/deploy-console/monitor-health-single-ssh.md
    */
   async healthCheck(env: string): Promise<HealthCheck[]> {
     // 服务 × 环境 → 主机组（deploy_hosts）+ 端口；探活在**该服务所在的那台主机**上发起
     const { hosts, services } = await this.resolveEnvTargets(env);
 
-    // 按主机归拢：**每台主机只建一条 SSH 连接**，一条命令把该主机上所有端口探完。
-    // （踩坑：早期实现是"每个服务一条 SSH"，12 条并发握手会被 sshd 拒掉 → Connection lost before handshake）
+    // 归一化 URL 并白名单校验（地址来自 DB，拼进 shell 前必须校验）—— 沿用 PR #166 的安全口径
+    const badAddress = new Set<string>();
     const byHost = new Map<string, typeof services>();
     for (const s of services) {
-      if (!s.port) continue;
+      const url = `http://${s.address}`;
+      if (!s.port || !MonitorService.NAME_RE.test(s.serviceKey) || !MonitorService.URL_RE.test(url)) {
+        badAddress.add(s.serviceKey);
+        this.logger.warn(`服务 ${s.serviceKey} 的地址不合法，跳过探活: ${s.address}`);
+        continue;
+      }
       const list = byHost.get(s.hostName) || [];
       list.push(s);
       byHost.set(s.hostName, list);
     }
 
     const results: HealthCheck[] = [];
+    // 不合法地址：不发起 SSH，直接标记（与「服务离线」「SSH 不通」区分开）
+    for (const s of services) {
+      if (!badAddress.has(s.serviceKey)) continue;
+      results.push({
+        service: s.serviceKey,
+        address: s.address,
+        hostName: s.hostName,
+        status: 'down',
+        response: 'bad-address',
+      });
+    }
+
+    // 按主机归拢：**每台主机只建一条 SSH 连接**，一条命令把该主机上所有端口探完。
+    // （踩坑：早期实现是"每个服务一条 SSH"，12 条并发握手会被 sshd 拒掉 → Connection lost before handshake）
     const perHost = [...byHost.entries()].map(async ([hostName, items]) => {
       const host = hosts.find((h) => h.name === hostName);
       if (!host) {
@@ -304,57 +336,87 @@ export class MonitorService {
         }
         return;
       }
-      // 输出格式：每行 "<serviceKey>|<httpCode>|<time_total>"
-      // 主机内并行探测（子 shell & + wait）：串行会让 12 个 curl 累计超过 execSsh 的 10s 超时
-      const pairs = items.map((s) => `${s.serviceKey}:${s.port}`).join(' ');
-      // 先探回环（命令就跑在这台机上，多数服务监听 127.0.0.1），连不上再探主机地址
-      const command =
-        `for sp in ${pairs}; do ( n="\${sp%%:*}"; p="\${sp##*:}"; ` +
-        `r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://127.0.0.1:$p/ || echo "000:0"); ` +
-        `if [ "$r" = "000:0" ]; then r=$(curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${host.host}:$p/ || echo "000:0"); fi; ` +
-        `echo "$n|$r" ) & done; wait`;
+      // 单条 SSH 会话：每个服务一个后台子任务，wait 等全部结束；
+      // 子任务内先取结果再一次 printf 输出（< PIPE_BUF，避免并发写管道时行内交错）。
+      // 探活目标先回环（命令就跑在这台机上，多数服务监听 127.0.0.1），000 再退到主机地址。
+      const command = `${items
+        .map(
+          (s) =>
+            `( r=$(curl -s -o /dev/null -w '%{http_code}:%{time_total}' --connect-timeout 3 --max-time 5 'http://127.0.0.1:${s.port}/health') || r=000:0; ` +
+            `if [ "$r" = "000:0" ]; then r=$(curl -s -o /dev/null -w '%{http_code}:%{time_total}' --connect-timeout 3 --max-time 5 'http://${host.host}:${s.port}/health') || r=000:0; fi; ` +
+            `printf '%s|%s\\n' '${s.serviceKey}' "$r" ) &`,
+        )
+        .join(' ')} wait`;
+      let output: string;
       try {
-        const output = await this.execSsh(this.sshConfigFor(host), command);
-        const parsed = new Map<string, string>();
-        for (const line of output.trim().split('\n')) {
-          const [name, rest] = line.split('|');
-          if (name && rest) parsed.set(name.trim(), rest.trim());
-        }
-        for (const s of items) {
-          const raw = parsed.get(s.serviceKey);
-          const row: HealthCheck = {
-            service: s.serviceKey,
-            address: s.address,
-            hostName,
-            status: 'down',
-            response: 'timeout',
-          };
-          if (raw) {
-            const [httpCode, responseTime] = raw.split(':');
-            row.status = httpCode !== '000' ? 'up' : 'down';
-            row.response = httpCode;
-            row.responseTime = parseFloat(responseTime) * 1000; // 毫秒
-          } else {
-            row.error = `未取到探活结果（主机 ${host.host}）`;
-          }
-          results.push(row);
-        }
-      } catch (e) {
+        // 一次握手 + 远程侧并行（上界 ~10s：回环 + 主机地址两次尝试）+ 余量
+        output = await this.execSsh(this.sshConfigFor(host), command, 30000);
+      } catch (e: any) {
+        // SSH 层故障：属「控制台连不上主机」，与「服务离线」区分开
+        this.logger.error(`环境 ${env} 主机 ${hostName} 探活 SSH 失败: ${e?.message || e}`);
         for (const s of items) {
           results.push({
             service: s.serviceKey,
             address: s.address,
             hostName,
             status: 'down',
-            response: 'timeout',
+            response: 'ssh-failed',
             error: (e as Error).message,
           });
         }
+        return;
+      }
+      const parsed = this.parseProbeOutput(output);
+      for (const s of items) {
+        const raw = parsed.get(s.serviceKey);
+        const row: HealthCheck = {
+          service: s.serviceKey,
+          address: s.address,
+          hostName,
+          status: 'down',
+          response: raw ? undefined : 'no-result',
+        };
+        if (raw) {
+          // 请求 /health：能拿到任何 HTTP 状态码说明端口在监听、服务进程存活；"000" 表示连接失败
+          const [httpCode, responseTime] = raw.split(':');
+          row.status = httpCode !== '000' ? 'up' : 'down';
+          row.response = httpCode;
+          row.responseTime = parseFloat(responseTime) * 1000; // 毫秒
+        } else {
+          row.error = `未取到探活结果（主机 ${host.host}）`;
+        }
+        results.push(row);
       }
     });
 
     await Promise.all(perHost);
     return results;
+  }
+
+  /** 解析批量探活输出（每行 `name|httpCode:timeTotal`） */
+  private parseProbeOutput(output: string): Map<string, string> {
+    const parsed = new Map<string, string>();
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const idx = trimmed.indexOf('|');
+      if (idx <= 0) continue;
+      parsed.set(trimmed.slice(0, idx).trim(), trimmed.slice(idx + 1).trim());
+    }
+    return parsed;
+  }
+
+  /** 全部地址均不合法时的兜底结果（不发起 SSH） */
+  private buildBadAddressResults(
+    services: Array<{ name: string; address: string }>,
+    badAddress: Set<string>,
+  ): HealthCheck[] {
+    return services.map((s) => ({
+      service: s.name,
+      address: s.address,
+      status: 'down' as const,
+      response: badAddress.has(s.name) ? 'bad-address' : 'no-address',
+    }));
   }
 
   /**
@@ -478,7 +540,7 @@ export class MonitorService {
       .filter((p) => p.port)
       .map(async (p): Promise<HealthCheck> => {
         const address = `127.0.0.1:${p.port}`;
-        const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 http://${address}/ || echo "000:0"`;
+        const command = `curl -s -o /dev/null -w "%{http_code}:%{time_total}" --connect-timeout 3 --max-time 5 http://${address}/health || echo "000:0"`;
         try {
           const output = this.execLocal(command);
           const [httpCode, responseTime] = output.trim().split(':');

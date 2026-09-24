@@ -22,6 +22,15 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -n "${ROOT:-}" ] || exit 0
 cd "$ROOT"
 
+# ---- 豁免（本门不适用的情况）----
+# ① merge commit（$2 = merge）：合并进来的改动早已在各自分支走过凭证流程；
+#    把「合并结果」当「本次改动」判定会**稳定误报**（2026-09-24 实测：merge master 时
+#    因带入已合并的 .vue 而被拒）。注：squash 不豁免——它产生新 commit，内容仍需凭证。
+# ② UI_GATE=off：批量机械改动 / 紧急修复的应急出口（wrapper `.githooks/commit-msg` 亦已实现；
+#    此处自包含一份，保证直接调用本脚本时同样有出口）。
+[ "${2:-}" = "merge" ] && exit 0
+[ "${UI_GATE:-}" = "off" ] && exit 0
+
 is_ui() {
   case "$1" in
     *.wxml|*.wxss|*.vue) return 0 ;;

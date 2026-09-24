@@ -917,6 +917,10 @@ export class PipelineService {
     p.endTime = Date.now();
     p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: '已取消' };
     await this.pipelineRepo.save(p);
+    // 必须释放并发锁，否则后续提交会被拒绝（"X@Y 正在发布中"），需等 TTL 30 分钟过期。
+    // 正常完成路径（成功/失败）在 run() 的 finally 已释放；cancel 是另一入口，需自释放。
+    await this.releaseLock.release(p.moduleKey, p.env, p.id);
+    this.cancelled.delete(p.id);
     await this.auditService.log({
       user: operator || p.operator || 'unknown',
       action: 'pipeline.cancel',

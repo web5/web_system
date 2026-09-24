@@ -5,6 +5,7 @@ import { SnakeNamingStrategy } from '@web-system/shared';
 import * as path from 'path';
 import { AuthModule } from './auth/auth.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { HealthModule } from './health/health.module';
 import { KnowledgeCollectionEntity } from './knowledge/entities/knowledge-collection.entity';
 import { KnowledgeDocEntity } from './knowledge/entities/knowledge-doc.entity';
 import { KnowledgeChunkEntity } from './knowledge/entities/knowledge-chunk.entity';
@@ -34,6 +35,7 @@ import { KnowledgeChunkEntity } from './knowledge/entities/knowledge-chunk.entit
     }),
     AuthModule,
     KnowledgeModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

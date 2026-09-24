@@ -11,6 +11,7 @@ import { GlossaryModule } from './glossary/glossary.module';
 import { UserMemoryModule } from './memory/user-memory.module';
 import { UserTasteModule } from './user-taste/user-taste.module';
 import { InternalModule } from './internal/internal.module';
+import { HealthModule } from './health/health.module';
 import { User } from './user/user.entity';
 import { McpApiKeyEntity } from './api-key/entities/mcp-api-key.entity';
 import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
@@ -79,6 +80,7 @@ import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
     UserMemoryModule,
     UserTasteModule,
     InternalModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

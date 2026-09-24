@@ -14,6 +14,7 @@ import { AgentModule } from './agent/agent.module';
 import { AgentLogModule } from './agent-log/agent-log.module';
 import { AgentDefModule } from './agent-def/agent-def.module';
 import { SkillModule } from './skill/skill.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { SkillModule } from './skill/skill.module';
     AgentLogModule,
     AgentDefModule,
     SkillModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
