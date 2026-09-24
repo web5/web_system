@@ -1,5 +1,6 @@
 // 小程序通用设置（影响全局）
 import * as appearance from '../../../utils/appearance';
+import { logout } from '../../../services/auth';
 
 Page({
   onShow() {
@@ -75,9 +76,17 @@ Page({
   logout() {
     wx.showModal({
       title: '退出登录',
-      content: '退出后需要重新微信授权登录。',
+      content: '退出后需要重新登录才能继续使用。服务端登录凭证会同时失效。',
+      confirmText: '退出',
+      cancelText: '取消',
       success: (res: any) => {
-        if (res.confirm) wx.showToast({ title: '已退出' });
+        if (!res.confirm) return;
+        void (async () => {
+          await logout();
+          // 回到「我的」tab：那里有登录入口（欢迎页没有）
+          wx.switchTab({ url: '/pages/mine/index/index' });
+          wx.showToast({ title: '已退出登录', icon: 'none' });
+        })();
       },
     });
   },

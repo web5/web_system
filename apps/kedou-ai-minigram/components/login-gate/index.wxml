@@ -1,0 +1,9 @@
+<view class="gate">
+  <view class="gate-ic">豆</view>
+  <view class="gate-t">{{title}}</view>
+  <view class="gate-d">{{desc}}</view>
+  <view class="gate-btn" bindtap="onLogin">微信一键登录</view>
+  <view class="gate-note">
+    登录即表示同意<text wx:if="{{agreementUrl}}" class="gate-link" bindtap="onAgreement">《用户协议与隐私政策》</text><text wx:else>《用户协议与隐私政策》</text>
+  </view>
+</view>

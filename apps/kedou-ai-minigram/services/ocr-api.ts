@@ -2,7 +2,7 @@
  * 科豆 AI - OCR API
  * 调 ai-agent 的 OCR 服务识别合同图片文字。
  */
-import { getToken } from '../utils/request';
+import { getToken, isLoggedOut } from '../utils/request';
 
 const OCR_URL = '/api/ai-agent/ocr/recognize';
 
@@ -24,6 +24,11 @@ export function chooseAndRecognize(
   sourceType: 'camera' | 'album',
   options?: { onUploadStart?: () => void },
 ): Promise<OcrResult> {
+  // 登录墙兜底：本通道不走 request.ts，未登录（含主动退出）时不发起识别
+  if (isLoggedOut()) {
+    wx.showToast({ title: '请先登录', icon: 'none' });
+    return Promise.reject(new Error('请先登录'));
+  }
   return new Promise((resolve, reject) => {
     wx.chooseMedia({
       count: 1,

@@ -7,6 +7,8 @@ import { API_TIMEOUT } from './constants';
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
+/** 用户主动退出的标志位：与「token 过期」区分 —— 此状态下不得自动重新登录 */
+const LOGGED_OUT_KEY = 'account_logged_out';
 
 /** 取 wx 全局 app 实例 — 优先 storage 兜底，避开异步栈里 wx.getApp 抛 "not a function" */
 function getAppInstance(): IAppOption | null {
@@ -64,6 +66,23 @@ export function clearToken(): void {
   wx.removeStorageSync(REFRESH_TOKEN_KEY);
 }
 
+/** 是否处于「用户主动退出」状态（区别于 token 过期：此状态不自动重登） */
+export function isLoggedOut(): boolean {
+  try {
+    return wx.getStorageSync(LOGGED_OUT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** 设置 / 清除主动退出标志 */
+export function setLoggedOut(v: boolean): void {
+  try {
+    if (v) wx.setStorageSync(LOGGED_OUT_KEY, '1');
+    else wx.removeStorageSync(LOGGED_OUT_KEY);
+  } catch {}
+}
+
 /**
  * 登录确保器：由 services/auth.ts 在模块加载时注入（见 setLoginEnsurer 调用处）。
  * 这里用「注入钩子」而非直接 import auth.ts，是为了打破 request↔auth 的循环依赖：
@@ -99,10 +118,15 @@ export async function request<T = any>(options: RequestOptions): Promise<T> {
 
   // 首次启动时 App.onLaunch 的 autoLogin 是异步的，首屏页面请求可能早于登录完成；
   // 无 token 时先「确保登录」再发请求，避免发出无 token 请求 → 401 → 误触发掉线。
-  if (!getToken() && loginEnsurer) {
+  // ⚠️ 用户已主动退出时不自动重登，否则「退出登录」点了等于没点。
+  if (!getToken() && !isLoggedOut() && loginEnsurer) {
     await loginEnsurer();
   }
   const token = getToken();
+  if (!token) {
+    // 未登录（含主动退出态）：不发无 token 请求，交由上层引导登录
+    throw new Error('NOT_LOGGED_IN');
+  }
 
   return new Promise((resolve, reject) => {
     wx.request({
@@ -128,12 +152,16 @@ export async function request<T = any>(options: RequestOptions): Promise<T> {
             clearToken();
           }
           if (!options.silent) {
-            // 触发全局 401 事件
-            wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
-            // 延迟跳转到首页触发重新登录
-            setTimeout(() => {
-              wx.reLaunch({ url: '/pages/welcome/index/index' });
-            }, 1500);
+            if (isLoggedOut()) {
+              // 已主动退出：不自动重登、不跳欢迎页（欢迎页无登录入口），只提示需要登录
+              wx.showToast({ title: '请先登录', icon: 'none' });
+            } else {
+              wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
+              // 延迟跳转到首页触发重新登录
+              setTimeout(() => {
+                wx.reLaunch({ url: '/pages/welcome/index/index' });
+              }, 1500);
+            }
           }
           reject(res);
         } else {

@@ -10,10 +10,13 @@
 import { getMusicTaste, tasteSummary } from '../../../services/user-taste';
 import { listMemory } from '../../../services/user-memory';
 import { listGlossary } from '../../../services/glossary';
+import { isLoggedIn, logout } from '../../../services/auth';
 
 Page({
   data: {
     radiusClass: "",
+    /** 登录态：false 时整页渲染登录引导卡（不拉任何业务数据） */
+    loggedIn: true,
     nickname: '橙子哥哥',
     realName: '已实名',
     phone: '138****6688',
@@ -38,6 +41,12 @@ Page({
 
     const tabBar = (this as any).getTabBar?.();
     if (tabBar) tabBar.setData({ currentPage: '/pages/mine/index/index', selected: 2 });
+
+    const loggedIn = isLoggedIn();
+    this.setData({ loggedIn });
+    // 未登录：只渲染登录卡，不发起任何业务请求（判据第 8 条）
+    if (!loggedIn) return;
+
     // 口味摘要：轻量读一次，失败保持「未设置」不打扰
     void getMusicTaste().then((t) => {
       this.setData({ tasteSummary: tasteSummary(t) });
@@ -75,7 +84,30 @@ Page({
   onNotify() { wx.showToast({ title: '消息通知已开启', icon: 'none' }); },
   goAgreement() { wx.showToast({ title: '协议页开发中', icon: 'none' }); },
   goAbout() { wx.showToast({ title: '科豆 AI v1.0.0', icon: 'none' }); },
-  logout() { wx.showToast({ title: '退出登录开发中', icon: 'none' }); },
+
+  /** 退出登录：二次确认 → 服务端作废 + 本地清态 → 停在登录墙（不跳欢迎页） */
+  logout() {
+    wx.showModal({
+      title: '退出登录',
+      content: '退出后需要重新登录才能继续使用。服务端登录凭证会同时失效。',
+      confirmText: '退出',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return;
+        void (async () => {
+          await logout();
+          this.setData({ loggedIn: false });
+          wx.showToast({ title: '已退出登录', icon: 'none' });
+        })();
+      },
+    });
+  },
+
+  /** 登录卡登录成功后回调：刷新本页内容 */
+  onLogged() {
+    this.setData({ loggedIn: isLoggedIn() });
+    this.onShow();
+  },
 
   clearCache() {
     wx.showLoading({ title: '清理中…' });
