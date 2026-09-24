@@ -130,10 +130,17 @@ export const deployApi = {
       moduleKey: string
       environments: {
         envId: string
+        /** 当前指针（最后一次切指针动作的结果） */
         currentVersion: string
         status: string
         deployedAt: string | null
         deployedBy: string | null
+        /** 最新发布（deploy_versions 该环境 releasedAt 最新一条），与指针是两回事 */
+        latestRelease?: {
+          versionTag: string
+          releasedAt: string | null
+          releasedBy?: string | null
+        }
       }[]
       versionHistory: {
         id: string
