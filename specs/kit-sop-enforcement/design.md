@@ -60,8 +60,8 @@ v1.0 的 L3/L4 上线后，agent 仍能绕过。四个残余漏口均已定位�
 |---|---|---|
 | 红线扫描 | `scripts/redline/scan-rules.sh` | 已实现 **R1~R8**（R1–R4 error / R5、R8 warning）、四模式（`cached` / `diff <ref>` / `files` / `tree`）、`--strict`、`--no-color`。**新增 R9 只需加判定函数，勿改调用方** |
 | git hook 安装 | `scripts/redline/install-git-hooks.sh`、`check-commit.sh` | 本地 pre-commit 通道已存在 |
-| kit 结构守护 | `scripts/redline/check-kit-structure.sh` + `.github/workflows/kit-gate.yml` | **S1~S7**（含 S7「运行源与能力源零漂移」）→ 决定了 L5 不能手改运行源 |
-| PR 质量门 | `.github/workflows/quality-gate.yml` | job1 `redline-scan`（扫 PR diff）+ job2 `changed-packages`；master 分支保护要求其通过 → **R9 接进来即生效** |
+| kit 同源守护 | `scripts/redline/scan-rules.sh` 的 **R12** | 守「能力源 ↔ 运行源零漂移」；原 S1–S7 结构守护与其 CI（`kit-gate.yml`）未随本次机制回归，**S7 语义由 R12 承接** → 仍决定 L5 不能手改运行源 |
+| PR 质量门 | `.github/workflows/quality-gate.yml` | `redline-scan`（扫 PR diff，2026-09-24 恢复）+ `changed-packages`；master 分支保护要求其通过 → **R9 接进来即生效** |
 | CodeBuddy Hooks | `.codebuddy/settings.json`（v1.0 已建，v1.1 追加 matcher） | 7 类事件；`PreToolUse` 可硬阻断（`continue:false` + `permissionDecision:"deny"`，或退出码 2）；现已挂 `PreToolUse`（gate / mark）与 `PostToolUse`（mark） |
 | 项目规则目录 | `.codebuddy/rules/`（现有 `coding-best-practices.md`、`ui-interface/RULE.mdc`） | L2 在此新增品牌端规则 |
 
@@ -271,7 +271,7 @@ gate 判定在原有"标记新鲜"之外加一条：本次 UI 文件所属 app�
 | 触发 | diff 中出现 ① `apps/*/pages/**` **新增文件**；或 ② `app.json` 的 `pages` / `tabBar` 段变化 |
 | 判据 | 同一 diff 中**必须**同时出现通行证路径变化：`apps/*/prototype/**`、`docs/ui/prototypes/**` 或 `specs/**/page-spec*.md` |
 | 不满足时 | 报 warning：「UI 结构变更未经原型/规格（见 specs/kit-sop-enforcement/design.md）」，`--strict` 下非零退出 |
-| 接入点 | 已由 `.github/workflows/quality-gate.yml` job1 调用，**无需改 workflow** |
+| 接入点 | 已由 `.github/workflows/quality-gate.yml` 的 `redline-scan` job 调用（2026-09-24 恢复），**无需改 workflow** |
 
 > 为什么只卡"新增页面 / 信息架构变化"而不卡所有 UI 改动：纯视觉微调（改间距、换色）不该强制走原型，否则误报率高到没人看。
 
@@ -284,7 +284,7 @@ gate 判定在原有"标记新鲜"之外加一条：本次 UI 文件所属 app�
 | **R9b** | warning（`--strict` 下 error） | diff 中**既有** UI 源码（`.wxss`/`.wxml`/`.vue`/`apps/*/pages/**`）改动行数 ≥ 阈值（默认 5 行，或含结构标签 `<view`/`<template`） | 同一 diff 含原型/规格路径，或该 commit message 带 `Micro-exempt: <理由>` | 报「既有 UI 改动无同行原型/豁免」 |
 | **R10** | warning（`--strict` 下 error） | diff 中含 UI 源码改动的 commit | 该 commit message 带 `Proto: <sha>`，且 sha 在同一 range 内或为其祖先（详见 §3.8） | 报「UI commit 缺 Proto 凭证」 |
 
-接入点：`scan-rules.sh` 追加 `check_r9b` / `check_r10` 两个判定函数（该脚本头部已声明"改判定函数、勿改调用方"），由 `diff` 模式主流程调用；已被 `.github/workflows/quality-gate.yml` job1 覆盖，**无需改 workflow**。
+接入点：`scan-rules.sh` 追加 `check_r9b` / `check_r10` 两个判定函数（该脚本头部已声明"改判定函数、勿改调用方"），由 `diff` 模式主流程调用；由 `.github/workflows/quality-gate.yml` 的 `redline-scan` job 覆盖（2026-09-24 恢复），**无需改 workflow**。
 
 **R9b 已按 Q6 决议实装**（warning 级）。`Micro-exempt: <理由>` **同时豁免 R9b 与 R10** —— 同一个「微调豁免」语义必须在 CI 两条规则里口径一致，否则"记了豁免还是报错"会成为新的摩擦源（2026-09-21 实测后统一）。
 阈值 `R9B_LINE_THRESHOLD` 默认 5 行；diff 含结构标签（`<view` / `<template` / `<block`）时不受行数限制。
@@ -342,7 +342,7 @@ gate 判定在原有"标记新鲜"之外加一条：本次 UI 文件所属 app�
 
 **为什么必须指向祖先的原型 commit，而不是任意 sha**：工作区改过的原型没有经过 commit → 没有进入 review 面。这一点是方案 B 与旧标记机制（只看工作区有无改过）的本质差异。
 
-**CI 兜底 R10**（新增到 `scan-rules.sh`，已由 `quality-gate.yml` job1 调用，**无需改 workflow**）：遍历 PR range 内每个 commit，凡改动含 UI 源码的 commit 必须带 `Proto: <sha>`，且该 sha 位于同一 PR range 内或为其祖先。缺凭证 → warning，`--strict` 下 error。用途：本地 `--no-verify` 绕过时兜底。
+**CI 兜底 R10**（新增到 `scan-rules.sh`，已由 `quality-gate.yml` 的 `redline-scan` job 调用，**无需改 workflow**）：遍历 PR range 内每个 commit，凡改动含 UI 源码的 commit 必须带 `Proto: <sha>`，且该 sha 位于同一 PR range 内或为其祖先。缺凭证 → warning，`--strict` 下 error。用途：本地 `--no-verify` 绕过时兜底。
 
 **代价（必须接受）**：原型与 UI 不能图省事一起提交，需两条 commit 的纪律。
 

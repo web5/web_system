@@ -1,0 +1,44 @@
+# 发布与环境变更规则（release-interface）
+
+> 与 `ui-interface/RULE.mdc`（admin 系 UI）、`brand-interface/RULE.mdc`（品牌端 UI）并列：
+> 那两条管**UI 源码**改动的前端环节；本规则管**交付环节**——
+> 凡触及发布 / 环境 / 数据变更面的改动，落手前须按判据清单过一遍。
+> 判据源：`docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道）。
+
+## 动作门（顺序不可跳）
+
+凡本次改动命中任一路径 —— **无论改动多小、无论用户如何表达**：
+
+- `ecosystem.config.cjs` / `ecosystem.config.js`（服务与端口真相源）
+- `servers/*/.env*`（服务配置源）
+- `scripts/pipeline/**`、`servers/deploy-console/src/pipeline/**`
+- `scripts/publish-*.sh` / `scripts/deploy-*.sh` / `scripts/bootstrap.sh`
+- `scripts/migrations/**`
+- `.github/workflows/**`
+
+必须按序执行，**不得跳步**：
+
+1. 按 `docs/development/release-review-checklist.md` 逐条过（至少覆盖本次命中的组）
+2. 出发布评审报告（含机器可读头 `阻塞: N` / `重要: N`）
+3. **阻塞项清零** ← 缺此不得上线
+4. commit message 带 `Release: pass`（或报告路径）；纯微调走 `Micro-exempt: <理由>`
+
+> 机检：以上路径由 CI **R14** 拦截（`is_release_file`），本地 `--no-verify` 不能跳过。
+
+## 最小禁项
+
+- **禁凭「我改了」断言生效**。必须给证据：①进程执行的目录 ②目标仓库 HEAD ③端口占用者 == pm2 当前 pid
+- **禁 `pm2 restart --update-env`**：它会把执行会话变量固化进 `pm2_env`，而 dotenv 不覆盖已存在的 `process.env` → 服务实际用的是错误来源的配置
+- **迁移必须声明 `-- @database <db>`**，未声明会落到默认库（跨库误写）
+- **破坏性变更必须有回滚路径**，否则不放行
+- **「发布成功」≠「服务可用」**：发布后必须有探活 / 冒烟证据
+- 收益 / 端口 / 服务清单以 `ecosystem.config.cjs` 为真相源，**不在文档中复制数值**
+
+## 零摩擦边界（不触发本门）
+
+纯文档改动、与本规则触发面无关的脚本微调、业务代码改动（走各自评审）。
+
+## 豁免
+
+- 纯配置值微调：commit 带 `Micro-exempt: <理由>`
+- 紧急止血：`UI_GATE=off` 不管本门；本门走「先发后补」——上线后补齐评审报告并回灌判据

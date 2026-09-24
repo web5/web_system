@@ -23,9 +23,14 @@ jobs:
   create-pr:
     runs-on: ubuntu-latest
     # 只在 feature/* 或 fix/* 开发分支自动建 PR，避免 docs/、release/ 等误建。
-    # 例外：feature/test 是本地集成/联调分支（各功能 PR 的 base），不往 master 提 PR ——
-    # 它每次 push 都自动建 PR 只会产生噪音（历史上 PR #40 就是这么来的）。
-    if: (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/')) && github.ref_name != 'feature/test'
+    # 例外：长期 / 集成分支不自动建 PR —— 它们生命周期长、持续与 master 双向分叉，
+    # 每次 push 都会产出「提交数上百、文件数上百、必然冲突」的巨型残影 PR
+    # （feature/test → #40、feature/kedou-ai-minigram → #130 即此）。
+    # #130 还叠了一层成因：幂等检查只看 state=open 的 PR，同名 PR（#129）合并后再 push 又会新建。
+    # 这类分支的改动应按主题拆成短命分支各自走 auto-pr，才是可评审、可回滚的粒度。
+    if: >-
+      (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/'))
+      && !contains(fromJSON('["feature/test", "feature/kedou-ai-minigram"]'), github.ref_name)
     steps:
       - uses: actions/checkout@v4
 

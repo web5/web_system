@@ -113,7 +113,7 @@
 | V1…Vn 判据格式与同构规则 | `.codebuddy/skills/rd-plan/SKILL.md` §验证判据表 |
 | 规则文件写法范例 | `.codebuddy/rules/ui-interface/RULE.mdc`（注意：它明确排除品牌端 → 这正是断点 #2） |
 | 现有红线实现 | `scripts/redline/scan-rules.sh`（R1–R8）、`scripts/redline/check-kit-structure.sh`（S1–S7） |
-| CI 接入点 | `.github/workflows/quality-gate.yml`（job1 已调用 scan-rules）、`kit-gate.yml` |
+| CI 接入点 | `.github/workflows/quality-gate.yml` 的 `redline-scan` job（2026-09-24 恢复；此前 9-18 下线后未随机制回归，导致 R9–R14 一度只有本地 hook） |
 | Hook 机制（官方） | <https://www.codebuddy.ai/docs/zh/ide/Features/Hooks> |
 
 ---
