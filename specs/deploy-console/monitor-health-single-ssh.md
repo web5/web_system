@@ -1,7 +1,7 @@
 # 服务监控探活：单 SSH 会话批量探活（修复 MaxStartups 限流误报）
 
 > 服务：`servers/deploy-console`（`src/monitor/monitor.service.ts`，端口 6200）
-> 状态：已确认方案，待实现
+> 状态：已实现（commit e25b1fe），dev 环境实测验收通过
 > 关联：`docs/development/console-monitor-followups.md`（dev 监控改造待办）、`specs/deploy-console/api-design.md` §通用约定「命令注入防护」
 
 ## 1 问题
@@ -75,6 +75,14 @@ wait
 - V2：人为停掉 dev 上一个服务后刷新 → 仅该服务 `down`（`response:000`），其余仍 `up`，不再出现随机 `timeout`。
 - V3：`sshd` 的 `MaxStartups` 恢复默认（不调参）前提下 V1/V2 均通过 —— 证明修复不依赖改机器配置。
 - V4：构造非法 address（含 `;`、`$()`、空格）写入 DB 行 → 该行被跳过并 `warn`，不进入命令、不影响其他服务。
+
+### 4.1 实测结果（2026-09-24，dev）
+
+- V1 ✓：dev 控制台连续 5 轮 × 10 服务全部 `up`；`auth.log` 的 `MaxStartups throttling` 最后一条停在修复前 12:41:52，之后零新增。
+- V2 ✓：`pm2 stop todo-service` 后刷新 → 仅 todo-service `down`（`response=000`），其余 9 个仍 `up`；随后已 `pm2 start` 恢复 online。
+- V3 ✓：未改动 dev 的 `sshd` 配置（`maxstartups` 仍为 `10:30:100`）。
+- V4：未实测（未向 DB 写入非法地址），依赖白名单正则 + 单引号包裹。
+- 附带修正：失败路径原为 `curl -w` 输出与 `|| printf '000:0'` 拼接成 `000:0.000093000:0`，已改为赋值式兜底 `|| r=000:0`，实测输出 `000:0`。
 
 ## 5 待确认
 
