@@ -141,7 +141,16 @@ interface DrawerVersion { tag: string; branch?: string; commit?: string; time?: 
 结论：流水线把产物投到了 prod，但 prod 网关没有新指针/manifest 能力去加载它 ——
 `deploy_deployments` 里的「当前版本」对 prod 只是**账面值**。
 
-### 7.3 方向（与 pipeline-node-model 的 P1 多节点/host+SSH 同源）
+### 7.3 设计方案
+
+已产出：`specs/remote-mf-pointer/design.md`（方案对比 A/B/C + 决策表 D1–D7 + 分期 P0/P1/P2 + 验收 V1–V7 + 待确认 Q1–Q6），待确认后实现。
+
+补充一条**机制澄清**（2026-09-24 勘察修正）：gateway 的 `__manifest__` 真相源是**数据库**
+（`deploy_app_env_versions` 等，`index-html.service.ts:161-182`），它**从不读磁盘指针文件**，
+只是把指针 URL 拼进 manifest。因此「未接通」的根因是三件事：prod gateway 旧二进制 + 远端投递无 env 层 +
+指针写入只在编排者本机；缺口表见新文档 §1.3。
+
+### 7.4 方向（与 pipeline-node-model 的 P1 多节点/host+SSH 同源）
 
 - 远端网关升级到新入口机制（env-dir + 入口指针文件 + manifest 服务），或
 - 指针切换动作必须落到**目标机**（当前写的是控制台所在机的磁盘），并校验远端指针文件生成成功。
