@@ -53,6 +53,12 @@ fi
   echo "[release-console] 无法确定目标分支（发布目录可能处于 detached HEAD），请用 --branch 指定" >&2
   exit 1
 }
+# 分支名校验：下面会经 eval 拼进命令行，拒绝空白与 shell 元字符（防注入 + 防拼写事故）
+case "$BRANCH" in
+  *[!A-Za-z0-9._/-]*)
+    echo "[release-console] 非法分支名（只允许字母数字 . _ - /）：$BRANCH" >&2
+    exit 1 ;;
+esac
 
 run() {
   if [ "$DRY_RUN" = "1" ]; then
@@ -89,8 +95,11 @@ echo "[release-console] 已同步到 $NEW"
   exit 1
 }
 
-echo "[release-console] 调用 publish-deploy-console.sh --skip-sync（构建 + 重启 + 探活）..."
-run "bash '$RELEASE_DIR/scripts/publish-deploy-console.sh' --skip-sync"
+# 注意：只能用 --from-release（源 = 发布目录已同步的代码）。publish 脚本**不支持** --skip-sync
+# （未知参数 → exit 2，此链路此前一直是断的，2026-09-25 修）；也不带参数，那会改从**工作区**
+# 取源码，与本脚本「发布目录某分支」的语义相反。
+echo "[release-console] 调用 publish-deploy-console.sh --from-release（构建 + 重启 + 探活）..."
+run "bash '$RELEASE_DIR/scripts/publish-deploy-console.sh' --from-release --branch '$BRANCH'"
 
 # 注意：变量后紧跟中文/全角字符时必须用 ${VAR}，否则某些 locale 下会被并入变量名
 echo "[release-console] 完成 ✓（commit=${NEW}）"
