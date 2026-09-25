@@ -1,3 +1,4 @@
+-- @database web_system_deploy
 -- =============================================================================
 -- 0009_pipeline_vars_and_template_env.sql —— 流水线变量表 + 流水线归属环境
 --
@@ -47,22 +48,30 @@ CREATE TABLE IF NOT EXISTS `deploy_pipeline_vars` (
 --    null = 全局模板/不限环境；非 null = 该流水线归属某环境（local / dev / prod …）
 -- -----------------------------------------------------------------------------
 SET @db := DATABASE();
+-- ⚠️ 改名事实：deploy_pipeline_templates 已由 scripts/migrations/p9-rename-pipeline-tables.mjs
+--    RENAME 成 deploy_pipelines（2026-09-17，晚于本文件）。若硬写旧表名会 ERROR 1146，
+--    mysql 批量模式遇错即中止 → 记账写不进去 → **每次执行都红且永不自愈**。
+--    故此处按「新名优先」动态选存在的那张表；两张都不在则整段降级为 SELECT 1（幂等通过）。
+SET @tpl_table := (
+  SELECT TABLE_NAME FROM information_schema.TABLES
+   WHERE TABLE_SCHEMA = @db
+     AND TABLE_NAME IN ('deploy_pipelines', 'deploy_pipeline_templates')
+   ORDER BY FIELD(TABLE_NAME, 'deploy_pipelines', 'deploy_pipeline_templates') LIMIT 1
+);
 SET @has_env := (
   SELECT COUNT(*) FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'deploy_pipeline_templates' AND COLUMN_NAME = 'env'
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tpl_table AND COLUMN_NAME = 'env'
 );
-SET @ddl := IF(@has_env = 0,
-  'ALTER TABLE `deploy_pipeline_templates` ADD COLUMN `env` varchar(16) DEFAULT NULL COMMENT ''归属环境（null=全局模板，不限环境）''',
-  'SELECT 1');
+SET @ddl := IF(@tpl_table IS NULL OR @has_env > 0, 'SELECT 1',
+  CONCAT('ALTER TABLE `', @tpl_table, '` ADD COLUMN `env` varchar(16) DEFAULT NULL COMMENT ''归属环境（null=全局模板，不限环境）'''));
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @has_env_idx := (
   SELECT COUNT(*) FROM information_schema.STATISTICS
-  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'deploy_pipeline_templates' AND INDEX_NAME = 'idx_tpl_env'
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tpl_table AND INDEX_NAME = 'idx_tpl_env'
 );
-SET @ddl := IF(@has_env_idx = 0,
-  'ALTER TABLE `deploy_pipeline_templates` ADD KEY `idx_tpl_env` (`env`)',
-  'SELECT 1');
+SET @ddl := IF(@tpl_table IS NULL OR @has_env_idx > 0, 'SELECT 1',
+  CONCAT('ALTER TABLE `', @tpl_table, '` ADD KEY `idx_tpl_env` (`env`)'));
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 存量数据：既有模板 env 一律为 NULL（= 不限环境），这是安全的默认，
