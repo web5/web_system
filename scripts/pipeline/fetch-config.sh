@@ -12,8 +12,13 @@
 # 鉴权：`x-internal-key: $CONSOLE_TOKEN`（平台注入；其值 = 控制台的 INTERNAL_API_KEY，
 #   见 pipeline.service.ts:265）。脚本鉴权**不依赖被下发的键本身**，故无鸡生蛋。
 #
-# 平台注入变量：CONSOLE_API / CONSOLE_TOKEN / DEPLOY_ENV_ID
+# 平台注入变量：CONSOLE_API / CONSOLE_TOKEN / DEPLOY_ENV（标准名）
 #               RELEASE_DIR / MODULE_KEY / MODULE_DIR
+#   环境 ID 兼容两个写法，**以 DEPLOY_ENV 为准**：
+#     DEPLOY_ENV 是 PROTECTED_STAGE_KEYS（pipeline.service.ts:284）受保护键，不可能被配置中心/模板变量改写；
+#     DEPLOY_ENV_ID 不在保护名单（gateway .env 里就有同名键），优先采信它可能被带到别的环境。
+#   原实现只认 DEPLOY_ENV_ID，而平台注入的是 DEPLOY_ENV → 恒 skip（exit 0），
+#   远端重启型发布的配置下发链路一直是断的（2026-09-25 修）。
 # 本地调试：DRY_RUN=1 只打印计划，不写文件
 # ============================================================
 set -euo pipefail
@@ -27,14 +32,18 @@ MODULE_DIR_NAME="${MODULE_DIR:-${MODULE_KEY:-}}"
 
 skip() { log "跳过：$1（沿用现有 .env.generated / .env）"; exit 0; }
 
+DEPLOY_ENV_ID_EFF="${DEPLOY_ENV:-${DEPLOY_ENV_ID:-}}"
 [ -n "${CONSOLE_API:-}" ]   || skip "CONSOLE_API 未注入"
 [ -n "${CONSOLE_TOKEN:-}" ] || skip "CONSOLE_TOKEN 未注入"
-[ -n "${DEPLOY_ENV_ID:-}" ] || skip "DEPLOY_ENV_ID 未注入"
+[ -n "${DEPLOY_ENV_ID_EFF}" ] || skip "DEPLOY_ENV_ID / DEPLOY_ENV 均未注入"
 
 RELEASE_DIR_EFF="${RELEASE_DIR:-${RELEASE_WORKSPACE:-}}"
 [ -n "${RELEASE_DIR_EFF}" ] || skip "RELEASE_DIR 未设置"
 SVC_DIR="${RELEASE_DIR_EFF}/servers/${MODULE_DIR_NAME}"
-URL="${CONSOLE_API}/api/config/internal/dispatch/${MODULE_KEY:-${MODULE_DIR_NAME}}?envId=${DEPLOY_ENV_ID}"
+# 注意：CONSOLE_API 平台注入时**已含 /api 后缀**（pipeline.service.ts:591 → /api），
+#   不能再拼一次 /api，否则变成 /api/api/config/... → 404 → fail-fast 让重启型发布直接红。
+#   `${CONSOLE_API%/}` 先剥尾部斜杠再拼一（与已上线的 p25 脚本同一写法）。
+URL="${CONSOLE_API%/}/config/internal/dispatch/${MODULE_KEY:-${MODULE_DIR_NAME}}?envId=${DEPLOY_ENV_ID_EFF}"
 
 # DRY_RUN 先返回：本地调试时目标机目录可能不存在，不应因此失败
 if [ "$DRY_RUN" = "1" ]; then

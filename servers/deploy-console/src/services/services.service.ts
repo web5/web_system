@@ -148,7 +148,7 @@ export class ServicesService implements OnModuleInit {
         name: m.name,
         kind: m.key === 'mcp-gateway' ? ('mcp' as const) : ('nest' as const),
         repoDir: m.dir,
-        pm2Name: m.pm ?? null,
+        pm2Name: m.pm2 ?? null,
         defaultPort: null,
         healthPath: '/health',
         unknownPolicy: 'allow' as const,
