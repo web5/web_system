@@ -1,3 +1,4 @@
+-- @database web_system_deploy
 -- =============================================================================
 -- 0014_deploy_host_scope.sql —— 主机管理新增「形态 scope」与「归属控制台 managed_by」
 --
@@ -9,6 +10,12 @@
 --      「这台主机归哪份控制台管」：NULL = 所有控制台可见，非 NULL = 仅该实例可见。
 --
 -- 目标库：web_system_deploy（deploy-console / gateway 发布库）
+--   首行 `-- @database web_system_deploy` 是给 apply-migrations.sh 的注解（必填）：
+--   缺省时会落到默认库 web_system（**错库**，且该库没有 deploy_hosts 表）。
+--   另：apply-migrations.sh:181 把「文件体 + 记账 INSERT」放在同一批 SQL 交给 mysql，
+--   而 mysql 批量模式**遇错即中止** → 报错时记账 INSERT 也不会执行（**不是**「报错但已记账」）。
+--   因此判定是否需要手工补账，必须按环境查 `information_schema` + `schema_migrations` 核实，
+--   **不要**用 `--baseline-through` 批量基线（一旦记错，后续永久跳过且不可逆）。
 -- 命名：deploy-console 用 SnakeNamingStrategy，物理列一律 snake_case。
 --
 -- 幂等性：MySQL 无 ADD COLUMN IF NOT EXISTS，先查 information_schema 再 PREPARE 执行；
