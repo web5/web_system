@@ -98,13 +98,29 @@
 
 | # | 问题 | 证据 / 说明 |
 |---|---|---|
-| F14 | **`prod.env` 的 `MINI_PROGRAM_SECRET` 与 `OFFICIAL_ACCOUNT_SECRET` 同值**，疑似填错 | `~/env_config/web_system/prod.env:36-39`。上线前必须核对，否则小程序换号会用错密钥 |
+| F14 | ~~同值疑似填错~~ ✅ **已核对：确认同值（真错，待修）** | 2026-09-26 指纹比对（不明文）：`prod.env` 两值 sha256 前缀均为 `b3b176000412`、len=32 → 确为同一串。**上线前必须改成各自真实值**，否则小程序换号会用错密钥。详见下方「F14 核对记录」 |
+| F21 | **新增（核对 F14 时发现）**：`dev.env` 的 `MINI_PROGRAM_SECRET` **为空**（len=0）；且 dev 与 prod 的 `OFFICIAL_ACCOUNT_SECRET` **同值**（未隔离） | `~/env_config/web_system/dev.env`。dev 小程序登录会因此失败；dev/prod 共用公众号密钥属环境隔离问题 |
 | F15 | internal 调用失败只报 `internal forbidden`，分不清"本端未配置 / 值不匹配 / 对端未配置" | `InternalGuard`（各服务），排查成本最高的一环 |
 | F16 | admin 可能存在其它"假实现 / 死配置"（本次修了「发送测试邮件」的 `message.info` 假实现与 SMTP 死配置） | 建议顺一遍 `apps/admin/src/views/Settings.vue` 的其它按钮 |
 | F17 | `~/env_config/web_system/README.md:44-56` 描述 deploy.sh 会生成 `.env.production`，与当前 `scripts/deploy.sh` 实际行为不一致 | 文档漂移 |
 | F18 | 展示层仍有存量假数据：昵称「橙子哥哥」、UID「100238」、加入时间「2026-03」、缓存「24.6MB」、实名「已认证」 | `pages/mine/profile/profile.ts`、`pages/mine/index/index.ts` |
 | F19 | 退出只清了 `welcome_recent_cache`；`conv_detail_*`、`LIST_CACHE`、`RESUME_CONV_KEY`、`kd_translate_params` 未清 | `services/auth.ts` 的 `clearLocalAccountState()` |
 | F20 | 发布目录各服务 `.env` 全靠人工同步，无脚本、无一致性校验 | 本次补 `INTERNAL_API_KEY` 时才暴露：8 个服务里有 2 个漏配 |
+
+### F14 核对记录（2026-09-26）
+
+> 方式：只比对 **sha256 前 12 位 + 长度**，不打印明文，避免密钥进终端历史与日志。
+
+| 环境 | MINI_PROGRAM_SECRET | OFFICIAL_ACCOUNT_SECRET | 结论 |
+|---|---|---|---|
+| prod | `b3b176000412` / len=32 | `b3b176000412` / len=32 | ⚠️ **同值 —— 确认填错，待修** |
+| dev | len=**0**（空） | `b3b176000412` / len=32 | ⚠️ 小程序密钥缺失；公众号密钥与 prod 未隔离 |
+
+**待修动作（上线前）**：
+1. prod：取小程序真实 `AppSecret` 填入 `MINI_PROGRAM_SECRET`（与公众号 `AppSecret` 天然不同）。
+2. dev：补 `MINI_PROGRAM_SECRET`（可复用小程序测试号密钥）。
+3. dev/prod 的公众号密钥分开（至少 dev 用测试号）。
+4. 改完用同一指纹脚本复核：同一环境内不同键应不同，跨环境应不同。
 
 ---
 
