@@ -35,6 +35,21 @@ SELECT name, host, scope, managed_by FROM deploy_hosts;
 mysql -h <host> -P <port> -u <user> -p web_system_deploy < migrations/0014_deploy_host_scope.sql
 ```
 
+#### 复核记录（2026-09-26 · W1-7）
+
+在 dev 机执行，库 `web_system_deploy`（`gz-cdb-8y2lp8rt.sql.tencentcdb.com:27241`）：
+
+| name | scope | managed_by |
+|---|---|---|
+| dev-default | cloud | **NULL** |
+| local-default | local | orchestrator |
+| prod-default | cloud | **NULL** |
+
+- 结论：三行 `scope` 均已回填（cloud / local / cloud），但 **dev 与 prod 两行 `managed_by` 仍为 NULL** —— 与 TODO-1 描述一致（**列在、值被重置**）。
+- 处置：当前按**方案 B**（发布后复核 + 手工补回）缓解；治本待 **D9** 拍板（选 A 关 `synchronize`）。
+- 附带确认（4-7）：dev 控制台 `.env` 已有 `CONSOLE_INSTANCE=dev`，该项无需再改。
+- 未覆盖：prod 控制台库。该 CDB 实例上只有一份 `web_system_deploy`（dev 与堡垒机共用），prod 控制台是否指向同库待确认（需 prod 机凭据）。
+
 ### TODO-2 · 取数失败时的"重要"跟进项（不阻塞，随 TODO-1 一并看）
 
 - 契约评审（`docs/api/reviews/monitor-env-scope-20260924.md`）重要项 I1：
