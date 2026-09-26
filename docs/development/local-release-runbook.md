@@ -31,27 +31,32 @@
 - 前端产物：`servers/gateway/public/static/modules/<key>/<version>/`，gateway manifest 切指针
 - 控制台：`https://local.kedouai.com/console/`（nginx → 6200；直连 `http://127.0.0.1:6200/console/`）
 
-### 1.1 三环境端口矩阵（必读：prod 是 3000 系）
+### 1.1 三环境端口矩阵（2026-09-26 实测修正：**dev 与 prod 均为 6000 系**）
 
 > **主机地址一律不落文档**：dev / prod 的机器地址看 deploy-console「服务器管理」里的
 > `<env>-default` 主机组（`web_system_deploy.deploy_servers`），本文只记端口。
+>
+> ⚠️ **本节曾在 2026-09-26 前写「prod 是 3000 系」，那是错的**，已按实测更正。
+> prod 于 2026-09-26 迁到 git 目录（`/data/web_system_git`）并全量重启后，
+> **prod 一律是 6000 系**（与 dev 同），旧目录 `/data/web_system` 保留作回退。
+> 现网判定以 `pm2 env <id>` 的进程实际值为准，但仍**不要再照抄 `.env.example` 的 3000/3001 系**（那是本机值）。
 
 | 服务 | local（本机） | dev | prod |
 |---|---|---|---|
-| gateway | 6000 | 6000 | **3000** |
-| auth-service | **6101** | 6001 | **3001** |
-| user-service | 6002 | 6002 | **3002** |
-| ai-service | 6003 | 6003 | **3003** |
-| system-service | 6004 | 6004 | **3004** |
-| todo-service | 6005 | 6005 | **3005** |
+| gateway | 6000 | 6000 | 6000 |
+| auth-service | **6101** | 6001 | 6001 |
+| user-service | 6002 | 6002 | 6002 |
+| ai-service | 6003 | 6003 | 6003 |
+| system-service | 6004 | 6004 | 6004 |
+| todo-service | 6005 | 6005 | 6005 |
 | mcp-gateway | 6006 | 6006 | 6006 |
 | content-hub | 6007 | 6007 | 6007 |
-| upload-service | 6008 | 6008 | 未运行 |
-| ai-agent | 6010 | 6010 | 未运行 |
+| upload-service | 6008 | 6008 | 6008（**未运行**，缺 `.env`） |
+| ai-agent | 6010 | 6010 | 6010（2026-09-26 首次上线） |
 | knowledge-service | 6011 | 6011 | 未运行 |
 | deploy-console | 6200 | 6200 | 不在 prod 主机（运维堡垒机） |
 
-- **两个易踩的差异**：① auth-service 本机是 6101（6001 被他项目占用），dev/prod 是 6001；② **prod 走 3000 系**，与 `ecosystem.config.js` 声明的 6000 系**不一致**（prod 进程是历史手工启动的遗留），改 prod 端口前先 `pm2 env <id>` 看进程实际值，不要只看配置文件。
+- **易踩的两个差异**：① auth-service 本机是 6101（6001 被他项目占用），dev/prod 是 6001；② prod 与 dev **两套库**：dev 用 `web_system_deploy`，prod 是另一套库，改版本记录别改错库。
 - **两套"主机"语义别混用**：
   - `deploy_servers.server_name`（`dev-default` / `prod-default`）+ `deploy_env_service_routes` → **发布 / SSH / 监控**用它解析目标机器（主机组名，可多台）。
   - `deploy_service_envs.host_name` → **网关转发与探活**用，会被 `resolveUpstream` 直接拼成 `http://<hostName>:<port>`（`servers/gateway/src/dynamic-route/route-match.ts`），**必须填可解析地址**，填主机组名会解析失败。
@@ -61,6 +66,35 @@
   事故背景：本机 auth=6101、dev=6001，旧逻辑拿本机 6101 去探远端 → verify 判失败 → **自动回滚 dist**，
   表现为"流水线 failed 但线上没变"（详见 §3.1 第 6 条与 §4.10）。
 - 校验：`bash scripts/health-check.sh dev|prod`（走 SSH）；本机 `pm2 jlist`。
+
+### 1.1.1 配置三层真相源与生效方式（2026-09-26 实测，改配置前必读）
+
+**优先级（高 → 低）**：
+
+| 层 | 位置 | 谁加载 | 说明 |
+|---|---|---|---|
+| 1 | **根 `.env.production`** | `ecosystem.config.js`（第 14 行用 dotenv 注入 `process.env`） | **最高优先级，会压过一切** |
+| 2 | `servers/<svc>/.env` | 各服务 dotenv | dotenv **不覆盖已存在的 `process.env`**，所以被第 1 层覆盖掉的值改这里没用 |
+
+**三条铁律**：
+
+1. **判断「配置缺失」必须查全部层**。只翻服务 `.env` 会得出错误结论（2026-09-26：`INTERNAL_API_KEY` 其实在根 `.env.production:73`）。
+2. **根 `.env.production` 写错一个值，会静默压过所有服务的正确值**。
+   事故：曾把 `AUTH_SERVICE_URL/USER_SERVICE_URL` 照抄 `.env.example` 写成 `3001/3002`（本机端口），
+   结果是 gateway 代理与各服务内部互调**全 502「上游服务不可用」**、登录二维码消失。
+   **prod/dev 一律 6000 系**；`.env.example` 的 3000 系与 auth=6101 是本机专用。
+3. **改完 env 必须 `pm2 delete <id> && pm2 start <id>`**。`pm2 restart` **不会重注入新 env**；
+   严禁用 `pm2 restart --update-env`（它会把执行会话的环境变量固化进 `pm2_env`）。
+
+**静态资源外置的特殊坑**（2026-09-26）：`servers/gateway/src/static/public-root.ts` 在
+**import 时**求值 `process.env.STATIC_PUBLIC_ROOT`，早于 `@nestjs/config` 加载 `.env`——
+所以 `STATIC_PUBLIC_ROOT` **必须写在根 `.env.production`**，写 `servers/gateway/.env` 无效。
+（gateway 自己也只加载 `../.env.generated` + `../.env`，不读根 `.env.production`。）
+
+```bash
+# 生效后取证：进程实际拿到的值（不要只看配置文件）
+pm2 env <id> | grep -E "AUTH_SERVICE_URL|STATIC_PUBLIC_ROOT|NODE_ENV"
+```
 
 ## 二、日常发布流程
 
