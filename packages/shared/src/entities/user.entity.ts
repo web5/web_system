@@ -26,6 +26,17 @@ export interface UserPreferences {
   radiusStyle?: UiRadiusStyle;
 }
 
+/**
+ * 手机号唯一索引（具名 uk_users_phone）。
+ *
+ * 为什么必须具名且与迁移一致：迁移 0014_mp 建的是 `ADD UNIQUE KEY uk_users_phone`，
+ * 若这里改用 `@Column({ unique: true })`，TypeORM 会另起一个哈希名 IDX_xxx，
+ * synchronize 判定为「索引不匹配」→ 反复 DROP/BUILD 抖动。
+ *
+ * 为什么必须登记：不在实体里的索引会被 synchronize 按实体元数据反向 DROP
+ * （synchronize 以实体为准对齐 schema，不认手工 DDL）。
+ */
+@Index('uk_users_phone', ['phone'], { unique: true })
 @Entity('users')
 export class User extends BigIntEntity {
   @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true, comment: '用户 ID' })
@@ -40,6 +51,7 @@ export class User extends BigIntEntity {
   @Column({ type: 'varchar', length: 100, unique: true, nullable: true, comment: '邮箱' })
   email: string;
 
+  /** 手机号。唯一索引见类级 @Index('uk_users_phone')，此处不再重复声明 unique */
   @Column({ type: 'varchar', length: 20, nullable: true, comment: '手机号' })
   phone: string;
 
@@ -66,6 +78,29 @@ export class User extends BigIntEntity {
   /** 状态：active 正常 / inactive 未激活 / banned 封禁 */
   @Column({ type: 'varchar', length: 20, default: 'active', comment: '状态 active/inactive/banned' })
   status: 'active' | 'inactive' | 'banned';
+
+  /**
+   * 合并到的目标账号 id（非空表示该账号已被合并弃用）。
+   *
+   * 由 migrations/0014_mp_account_phone_email.sql 建立。读写方是 auth-service 的
+   * 裸 SQL（account.service.ts:218/258），**不在实体里登记就会被 synchronize 反向
+   * DROP** —— synchronize 以实体元数据为准对齐 schema，不认手工 DDL：
+   * 跑迁移补上 → 服务重启 synchronize=true → 又 DROP 掉，来回抖动。
+   *
+   * 受影响的服务：user-service（手写清单）/ auth-service、todo-service（glob 扫描），
+   * 三者都连 web_system 库。dev/prod 为 NODE_ENV=production（synchronize=false）不受影响；
+   * 本机为 development，本字段登记后 synchronize 会自动补齐（此前本机该列一直缺失）。
+   *
+   * 类型：与 id 保持一致用 number；注意 mysql 驱动对 bigint 实际返回 string。
+   */
+  @Column({
+    type: 'bigint',
+    unsigned: true,
+    nullable: true,
+    name: 'merged_to',
+    comment: '合并到的目标账号 id（非空表示该账号已被合并弃用）',
+  })
+  mergedTo: number | null;
 
   /** 角色列表，如 ['user','admin'] */
   @Column({ type: 'json', nullable: true, comment: '角色列表' })
