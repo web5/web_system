@@ -113,7 +113,7 @@
 
 | # | 事项 | 为什么 |
 |---|---|---|
-| P1 | **补 `INTERNAL_API_KEY`**（8 个服务，与 user-service 同值） | prod 全部缺失。拉齐后 `auth-service` 调 `/internal/users/email/verify` 会 401（dev 已踩过）；`user-service` 的 InternalGuard 在 expected 为空时直接抛 401 |
+| P1 | ~~补 `INTERNAL_API_KEY`~~ **经执行核实：不需要**（见 §9.1 事实修正） | prod 的该键**本就存在**于根 `.env.production:73`，由 ecosystem 统一注入所有服务；此前"全部缺失"的结论是只 grep 了 `servers/*/.env` 造成的误判 |
 | P2 | 完整备份（排除 node_modules） | 方案 A 的回退是改 cwd，但备份仍是最后保险 |
 | P3 | 确认 clone 方式（§3） | 否则卡在第一步 |
 | P4 | 确认那 2 个 prod 独有 agent 文件是否还需要 | `bianbian.agent.ts` / `study-assistant.agent.ts`，checkout 后会消失 |
@@ -160,11 +160,82 @@
 
 ---
 
-## 8 待你拍板
+## 8 拍板结果（2026-09-26 晚）
 
-| # | 问题 | 建议 |
+| # | 问题 | 结论 |
 |---|---|---|
-| Q1 | 方案 A（新目录）还是 B（原地）？ | **A** |
-| Q2 | prod 有无 GitHub 权限？无的话走完整 bundle（约几十 MB，需 scp） | 需你确认 |
-| Q3 | 变更窗口时间（会重启 pm2，有停机） | 待定 |
-| Q4 | 那 2 个 prod 独有 agent 文件还要吗？ | 建议先备份再删 |
+| Q1 | 方案 A / B | **A（新目录 clone）** |
+| Q2 | prod 有无 GitHub 权限 | public 仓库，**公有读可用**（`git ls-remote` 实测通） |
+| Q3 | 变更窗口 | 当晚执行 |
+| Q4 | 那 2 个 prod 独有 agent 文件 | **不保留** |
+
+---
+
+## 9 执行结果（2026-09-26 21:0x–22:0x 实测）
+
+### 9.1 事实修正：INTERNAL_API_KEY 不是缺失
+
+| 位置 | 值 |
+|---|---|
+| 根 `.env.production:73` | `kedou_internal_26c6a9ba579e6c40c0d91afa7b6efdd4` ← **唯一真相源** |
+| `pm2_env` 注入 | 同上（ecosystem 加载根 `.env.production`） |
+| `servers/*/.env` | 原来没有；执行中误加过一份后被**清除** |
+
+教训：判断"配置缺失"时必须查**全部加载源**（根 `.env.production` / ecosystem / 服务 `.env`）。
+dotenv **不覆盖**已存在的 `process.env` → 源优先级是 `pm2_env > 服务 .env`。
+
+验证（user-service:6002）：
+`POST /internal/keys/verify` 无 key = **401**、错 key = **401**、正确 key = **200** ✅
+
+### 9.2 最终状态
+
+| 项 | 结果 |
+|---|---|
+| prod git 仓库 | ✅ `/data/web_system_git`，`git log` 可用，HEAD `658d3ec` |
+| 远程 | `origin = https://github.com/web5/web_system.git` |
+| 8 个服务 | 全部 `online`，`cwd=/data/web_system_git`，`NODE_ENV=production`，**restarts=0** |
+| 端口 6000–6007 | **全部 200**（`/health`） |
+| admin 页面 | `/admin/` = 200 |
+| pm2 | 已 `pm2 save`（dump.pm2 落新 cwd，重启机器后不回退） |
+| 备份 | `/data/backup/web_system-20260926-2107.tar.gz`（94M，排除 node_modules/.git） |
+| 回退路径 | 旧目录 `/data/web_system` 完整保留 → 改 cwd 重启即可，秒级 |
+
+### 9.3 git 工作区
+
+- tracked 脏：**1 个** —— `servers/gateway/public/index.html`（有意保留，见 §11 遗留 L1）
+- 未跟踪：264 项（`servers/gateway/public/**` 产物、`dist/`、`node_modules/`、`logs/`、`.env*`）
+
+---
+
+## 10 踩坑清单（全部实测，下次直接照抄）
+
+| # | 坑 | 现象 | 解法 |
+|---|---|---|---|
+| 1 | GitHub clone 太慢 | `--depth 1` 跑 6 分钟只下 4.5M | 改**本地 `git bundle` 上传**：`git bundle create f.bundle master`（21M）→ scp **8 秒** → `git clone --branch master f.bundle` |
+| 2 | bundle 无 HEAD | `remote HEAD refers to nonexistent ref` | 必须用 `git bundle create f.bundle master`（带 `refs/heads/master`）+ `git clone --branch master`；用 `origin/master` 会生成 `refs/remotes/origin/master` 同样不可用 |
+| 3 | `pkill -f 'xxx'` 自杀 | ssh 命令行本身含该串 → exit 255 | 用字符类：`pkill -f 'git-remote-ht[t]ps'` |
+| 4 | 脚本退出码误判 | `cmd \| tail` 后取 `$?` 拿到的是 tail 的码 | 用 `${PIPESTATUS[0]}`，或改为检查产物是否生成 |
+| 5 | **`.pnpm` 里是旧包快照** | `Cannot find module .../dist/cjs/index.js`；shared 的 `Public` 为 `undefined` | pnpm 对 workspace 包在 `.pnpm` 存**副本**而非链接，复制旧 node_modules 会带过来 → 必须 `pnpm install` 重建 |
+| 6 | pnpm 11 默认只装根项目 | `pnpm install` 后 `@web-system/*` 全部消失 | 必须用 **`pnpm install -r`** |
+| 7 | 共享包缺 `reflect-metadata` | install 后 8 个服务**全挂** | 根 node_modules 被重建为只剩根依赖；给 `packages/*/node_modules` 补 `reflect-metadata` 软链 |
+| 8 | 包构建不是裸 `tsc` | `types` 需要 `dist/cjs` 双构建 | 一律用各包自己的 `npm run build` |
+| 9 | **影子测试环境差异** | 7xxx 端口手启 node 报 DB 失败，误判为代码问题 | 手启必须 `set -a; . ./.env.production; set +a`（pm2 会加载它）。实测 gateway/mcp-gateway/user-service 补上后**全部 200** |
+| 10 | DI 多实例 | `Nest can't resolve dependencies ... HttpAdapterHost/ModuleRef/Reflector` | 第三方 Nest 包与服务的 `@nestjs/core` 不是同一份 → `pnpm install -r` 修复 |
+
+### 10.1 推荐验证手法：影子启动
+
+改端口（7xxx）+ `NODE_ENV=production` + 加载根 `.env.production`，**不占用线上 600x**，
+可在不停机前提下确认新目录能否起。本次靠它避免了第三次全量回退。
+
+---
+
+## 11 遗留项（A1 之后）
+
+| # | 事项 | 说明 |
+|---|---|---|
+| L1 | `servers/gateway/public/index.html` 是 prod 旧产物（tracked 脏） | 保留它是为了让 `/admin/` 可用；**后续重建 admin 前端**后应还原为 master 版本。此脏文件会阻碍未来 `git pull`，流水线需先 `git checkout -- .` 或使用 force 策略 |
+| L2 | admin / portal 前端产物未重建 | 当前用的是旧目录复制来的构建产物（能用，但版本旧）。需在 prod 上 `pnpm -r --filter @web-system/admin build` 等 |
+| L3 | 升版后 `restarts` 观察 | 切换后全为 0（切换前 gateway 578 / ai-service 1002），需观察 24h |
+| L4 | `upload-service` 有 dist 无 .env | 未启动（与切换前一致） |
+| L5 | A2 统一 pm2 命名 / A4 补 4 个服务 | 后续轨道 A 任务 |
+| L6 | `NODE_ENV=production` 由 ecosystem 注入 | 全程**未使用** `pm2 restart --update-env`（项目规则禁），已核验 `pm2_env.NODE_ENV` 未被污染 |
