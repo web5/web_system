@@ -2,6 +2,8 @@
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > **定位**：跨文档待办的**唯一索引与拆解计划**。各主题域的详细做法仍在各自的 follow-ups / tasks 文档里，本文只做「去重编号 + 优先级 + 归属 + 推进批次」，不复制细节。
+>
+> ⚠️ **已被 `docs/development/master-todo-2026-09-26.md` 取代**（2026-09-26 重排：并入本轮已落地实现台账、修正被实测推翻的环境事实、全部任务按 P0–P3 重排优先级）。本文保留作编号溯源。
 > **为什么需要这一份**：仓库现有待办散在 7 份文档里（F/T/A/B/P/C/VN 多套编号），彼此有重复与过时；没有一处能回答「现在总共有哪些事、先做哪个」。
 > **数据来源**：`docs/development/{mp-account-follow-ups,miniprogram-follow-ups,dev-todo-2026-09-24,console-monitor-followups,optimization-roadmap}.md`、`specs/{kedou-ai-minigram,pipeline-node-model,pipeline-concurrency,rd-process-model}/`、`docs/ui/anchor-backlog.md`、`specs/deploy-console/backend-deploy-effect-tasks.md`。
 
