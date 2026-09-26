@@ -202,8 +202,9 @@ dotenv **不覆盖**已存在的 `process.env` → 源优先级是 `pm2_env > �
 
 ### 9.3 git 工作区
 
-- tracked 脏：**1 个** —— `servers/gateway/public/index.html`（有意保留，见 §11 遗留 L1）
+- tracked 脏：**0 个**（L1 已于 2026-09-26 22:1x 解决，见 §12）
 - 未跟踪：264 项（`servers/gateway/public/**` 产物、`dist/`、`node_modules/`、`logs/`、`.env*`）
+- `git pull --ff-only` **实测成功**，`HEAD=060997f` 与本地 master 一致
 
 ---
 
@@ -233,9 +234,65 @@ dotenv **不覆盖**已存在的 `process.env` → 源优先级是 `pm2_env > �
 
 | # | 事项 | 说明 |
 |---|---|---|
-| L1 | `servers/gateway/public/index.html` 是 prod 旧产物（tracked 脏） | 保留它是为了让 `/admin/` 可用；**后续重建 admin 前端**后应还原为 master 版本。此脏文件会阻碍未来 `git pull`，流水线需先 `git checkout -- .` 或使用 force 策略 |
-| L2 | admin / portal 前端产物未重建 | 当前用的是旧目录复制来的构建产物（能用，但版本旧）。需在 prod 上 `pnpm -r --filter @web-system/admin build` 等 |
+| ~~L1~~ | ~~`public/index.html` tracked 脏阻碍 pull~~ | **已解决**（2026-09-26 22:1x）——静态资源外置，见 §12。`git pull` 实测通过 |
+| L2 | admin / portal 前端产物未重建 | 当前用的是旧目录复制来的构建产物（能用，但版本旧）。需在 prod 上 `pnpm -r --filter @web-system/admin build` 等；重建后产物应投到**外置目录** `/data/web_system_static/public`，不再写回仓库 |
 | L3 | 升版后 `restarts` 观察 | 切换后全为 0（切换前 gateway 578 / ai-service 1002），需观察 24h |
 | L4 | `upload-service` 有 dist 无 .env | 未启动（与切换前一致） |
 | L5 | A2 统一 pm2 命名 / A4 补 4 个服务 | 后续轨道 A 任务 |
 | L6 | `NODE_ENV=production` 由 ecosystem 注入 | 全程**未使用** `pm2 restart --update-env`（项目规则禁），已核验 `pm2_env.NODE_ENV` 未被污染 |
+| L7 | 仓库仍 tracked 102 个 `servers/gateway/public/**` 构建产物 | 当前不阻碍 pull（工作区已干净）。建议 `git rm --cached` + 补 `.gitignore`，见 §12.2 |
+
+---
+
+## 12 静态资源外置：L1 的解法（2026-09-26 22:1x）
+
+### 12.1 事实修正：那个脏文件不是"旧产物"
+
+| | git 里的版本 | prod 上的版本 |
+|---|---|---|
+| `servers/gateway/public/index.html` | `<title>管理后台</title>`，引 `/assets/index-D48lIXi9.js` | `<title>科豆AI</title>`（官网首页） |
+
+**两者根本不是同一个东西** —— prod 根路径 `/` 的业务页面就是它，不是待废弃的旧产物。
+而 `/admin/` 走的是 `public/admin/index.html`，该文件 **untracked**，压根不受 `git pull` 影响。
+
+→ L1 的真实范围只有 **1 个 tracked 文件**，不是之前担心的 102 个。
+
+### 12.2 解法：用代码里已预留的 `STATIC_PUBLIC_ROOT`
+
+这不是 hack，是 2026-09-20（P2）就实现好的能力：
+
+```ts
+// servers/gateway/src/static/public-root.ts
+export const PUBLIC_ROOT = process.env.STATIC_PUBLIC_ROOT || join(__dirname, '..', '..', 'public');
+```
+
+`ServeStaticModule.forRoot({ rootPath: PUBLIC_ROOT })` 与 `IndexHtmlService.readHtml`
+（`join(PUBLIC_ROOT, pub, 'index.html')`）都读它。
+
+⚠️ 唯一漏网的：`main.ts:29` 的 `sendIndex` **兜底分支**仍硬编码 `join(__dirname,'..','public',pub,'index.html')`
+—— 只在 `render()` 抛异常时才走，建议后续也改成 `PUBLIC_ROOT`。
+
+### 12.3 执行步骤（全程零线上暴露）
+
+| # | 动作 | 结果 |
+|---|---|---|
+| 1 | `cp -a servers/gateway/public → /data/web_system_static/public` | 36M |
+| 2 | 备份 `public/index.html` → `/data/backup/prod-public-index-portal.html` | 回退保底 |
+| 3 | `servers/gateway/.env` 追加 `STATIC_PUBLIC_ROOT=/data/web_system_static/public` | gateway **只**加载 `../.env.generated` + `../.env`（`app.module.ts:42`）；根 `.env.production` 是 ecosystem 注入的，不是 gateway 自己读 |
+| 4 | **影子验证**：7010 端口 + `NODE_ENV=production` + 该 env | `/` title=科豆AI、`/admin/`=200 → 生效 |
+| 5 | `pm2 restart gateway`（**未**用 `--update-env`） | 线上 `/`=科豆AI、`/admin/`=200、`/health`=200 |
+| 6 | `git checkout -- servers/gateway/public/index.html` | 线上 `/` **仍是科豆AI** → 证明走外置；tracked 脏=0 |
+| 7 | `git pull --ff-only` | **Fast-forward 到 `060997f`**，tracked 脏仍为 0 |
+
+### 12.4 收益
+
+- 发布流水线第一个节点（pull）**畅通**，不再需要 force / 先 `checkout -- .`
+- 前端产物与仓库解耦：今后重建产物投**外置目录**，不会再弄脏工作区
+- 回退简单：删掉 `STATIC_PUBLIC_ROOT` 重启即回仓库 public；portal 首页另有备份
+
+### 12.5 建议（需 PR，本次未做）
+
+1. **把 102 个 tracked 构建产物移出 git**：`git rm --cached servers/gateway/public/assets/**` 等，
+   补 `.gitignore`；保留 `favicon.svg` / `materials/` / 验证 `*.txt` / `fathers-day.html` 等真正的静态资产。
+   不清理不影响当前 pull（已干净），但只要有人本地 build 后提交就会重新引入脏文件。
+2. **`main.ts:29` 兜底路径改用 `PUBLIC_ROOT`**，否则外置后该分支会指向空目录。
