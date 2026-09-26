@@ -190,28 +190,28 @@
 | W1 | 本 spec 定稿 | `specs/rd-process-model/design.md` | P0 ✅ |
 | W2-a | 发布判据源落盘 | `docs/development/release-review-checklist.md`（A 运行面 / B 配置面 / C 数据面 / D 前端面 / E 特殊通道） | P0 **✅ 已落** |
 | W2-b | 契约判据源落盘 | `docs/api/contracts.md`（C1 接口 / C2 SSE 事件 / C3 MCP 工具 / C4 权限码与常量 / C5 网关路由 + 变更纪律 + 漂移清单） | P0 **✅ 已落**（原阻塞已解，见 §7.3 / §7.6） |
-| W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**；`contract-reviewer` **✅ 已落**；P2 加 `code-reviewer` | P1 |
+| W3 | 新角色技能（项目专属，运行源） | `release-reviewer` **✅ 已落**；`contract-reviewer` **✅ 已落**；`code-reviewer` **✅ 已落**（原 P2，已随 R15 同批落地） | P1 ✅ |
 | W4 | 机检分派 | `scan-rules.sh` 的 `check_r13_r14`（一次遍历判两面）+ `is_contract_file` / `is_release_file`；P2 加 `check_r15` | P1 **✅ 已落**（warning 级，Q3 已拍板保持） |
-| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` / `contract-reviewer` **✅ 已落**（实测 R12 零漂移）；`code-reviewer` 随后续角色同批 | P1 |
-| W6 | 自检断言 | `selfcheck-ui-gate.sh`：V25（R13/R14 接线 + 契约面收窄防回退）/ V26（CI 兜底层接线）/ V27（R16 接线）/ V28（新角色与 R12 保护清单同批）**✅ 已落**（PASS=21） | P1 |
+| W5 | **R12 保护清单扩容** | `check_r12` 排除项加 `release-reviewer` / `contract-reviewer` **✅ 已落**（实测 R12 零漂移）；`code-reviewer` **✅ 已加**（实测 R12 零漂移） | P1 ✅ |
+| W6 | 自检断言 | `selfcheck-ui-gate.sh`：V25（R13/R14 接线 + 契约面收窄防回退）/ V26（CI 兜底层接线）/ V27（R16 接线）/ V28（新角色与 R12 保护清单同批）**✅ 已落**（PASS=22 / FAIL=0） | P1 ✅ |
 | W7 | 常驻动作门增述 | `CODEBUDDY.md` §2.5.1（交付面）+ §2.5.2（契约面）+ 新建 `rules/release-interface/RULE.mdc` **✅ 已落** | P1 |
 | W8 | 手册同步 | `agent-capability-playbook.md` v1.13：变更日志 + §7 易混淆点 6（项目专属清单与 R12 纪律）+ 附索引 **✅ 已落** | P1 |
 | W0 | auto-pr 治理 | ① 排除长期集成分支（治残影 PR，见 §7.4）**✅**；② 改用 **PAT** 创建 PR（治 CI 卡 `action_required`）**✅** | — |
 | W11 | **R16 SSE 契约一致性机检** | `scripts/redline/check-sse-contract.py` + `check_r16`：手写联合比对（MISSING / EXTRA / LOOSE）+ import 型消费方的 `switch case` 检查 | P1 **✅ 已落**（非原计划项，见 §7.6） |
 | W12 | **第二跳脚本化** | `scripts/redline/apply-agent-kit.sh`：能力源 → 运行源一键镜像 + 保护清单跳过 + `DRY_RUN`；R12 报错建议指向它 | P1 **✅ 已落**（治「第二跳靠人记」，见 §7.6） |
-| W9 | 独立代码评审 | `code-reviewer` 技能 + R15（warn→strict） | P2 |
+| W9 | 独立代码评审 | `code-reviewer` 技能 + R15（warn→strict） | P2 **✅ 已落**（warning 级；升 error 走 A3，须先有 A2 观察期数据） |
 | W10 | 运营回流 | 故障模式库 → 判据源回灌机制 | P3 |
 
 ### 4.3 上游 `web5/ai-agent-kit`（另仓另 PR）
 
 | # | 任务 | 说明 | 分期 |
 |---|---|---|---|
-| U1 | Hub 评审链重构 | `skills/rd-digital-agent/SKILL.md` 评审链 0–7 → 环节×角色两级（含 S0.1 / S1.2 / S3.2 / S4.2 / S5.2 / S8 / S8.1 / S9），加 ◆ 人审标注、分级短路、回流边 | P1 |
-| U2 | **细节外置**（硬约束） | Hub 现 213 行、`hub` 类上限 260 行——**禁止把新内容直接堆进 SKILL.md**，须外置 `references/review-chain.md`（环节表 + 标注规则 + 分级表），SKILL.md 只留决策树指针 | P1（与 U1 同批） |
-| U3 | 子技能矩阵 | 新增「交付」类别行、`contract-reviewer` / `release-reviewer` 行，标注「**项目可选装配**」（同 `design-reviewer` 的条件分派写法：未装配则分支不生效，不视为未定义分派） | P1 |
-| U4 | 质疑边表 | 补 §3.6 七条（项目专属角色的边亦登记，未装配时不生效） | P1 |
-| U5 | 评测门禁 | 改 `skills/` 须附评测报告，或加 `skip-eval` 并注明理由；**不得绕过 S7** | U1–U4 随行 |
-| U6 | **两跳落地** | 上游合并 → `sync-to-target.yml` 自动开 PR 到 web_system（写入**能力源** `.codebuddy/agent-kit/`）→ 人工/AI **apply 到运行源** `.codebuddy/skills/`（#117/#118 即此跳，缺了就等于没生效） | 随行 |
+| U1 | Hub 评审链重构 | `skills/rd-digital-agent/SKILL.md` 评审链 0–7 → 环节×角色两级（含 S0.1 / S1.2 / S3.2 / S4.2 / S5.2 / S8 / S8.1 / S9），加 ◆ 人审标注、分级短路、回流边 | P1 **✅ 已落** |
+| U2 | **细节外置**（硬约束） | Hub 现 213 行、`hub` 类上限 260 行——**禁止把新内容直接堆进 SKILL.md**，须外置 `references/review-chain.md`（环节表 + 标注规则 + 分级表），SKILL.md 只留决策树指针 | P1 **✅ 已落**（与 U1 同批） |
+| U3 | 子技能矩阵 | 新增「交付」类别行、`contract-reviewer` / `release-reviewer` 行，标注「**项目可选装配**」（同 `design-reviewer` 的条件分派写法：未装配则分支不生效，不视为未定义分派） | P1 **✅ 已落** |
+| U4 | 质疑边表 | 补 §3.6 七条（项目专属角色的边亦登记，未装配时不生效） | P1 **✅ 已落** |
+| U5 | 评测门禁 | 改 `skills/` 须附评测报告，或加 `skip-eval` 并注明理由；**不得绕过 S7** | U1–U4 随行 **✅ 已落** |
+| U6 | **两跳落地** | 上游合并 → `sync-to-target.yml` 自动开 PR 到 web_system（写入**能力源** `.codebuddy/agent-kit/`）→ 人工/AI **apply 到运行源** `.codebuddy/skills/`（#117/#118 即此跳，缺了就等于没生效） | 随行 **✅ 已落**（含 `scripts/redline/apply-agent-kit.sh`，见 §7.6） |
 
 > U6 第二跳是本项目已踩过的坑：上游合并后能力源更新、运行源未 apply → Hub 不认识新角色。落地后必须跑 `scan-rules.sh`（R12）确认零漂移。
 
@@ -261,17 +261,19 @@
 | **复用** | 其他项目复用 / 分层抽离 | **暂缓**：先看 P1 落地效果，效果好再按 §8 的路径分层上行 |
 | **Q3** | R13/R14 的级别 | **先保持 warning**（不升 error）——存量 commit 无 `Contract:` / `Release:` 凭证，直接 error 会让历史 PR 全红；先积累使用观察，转 error 须配套存量过渡策略 |
 
-### 7.2 待确认（落码前需拍板）
+### 7.2 ~~待确认~~ → **已结案**（2026-09-24 全部按建议执行完成）
 
-| # | 议题 | 建议 |
-|---|---|---|
-| Q2 | P1 先落哪两个 reviewer | 建议 `contract-reviewer` + `release-reviewer`（可机检、故障密度高）；`code-reviewer` 放 P2 |
-| Q4 | S1.2 可行性会签由谁承担 | 建议 `tech-review` 的轻量前置档，不新增角色 |
-| Q5 | 上游 U1 是否本期就做 | 建议「做」，但**先做 U2 外置**再改链，否则撞 260 行上限 |
+> 回填说明（2026-09-25）：本节原为「落码前需拍板」，三项均已按建议执行完毕，不再有悬项。保留原文以留痕。
+
+| # | 议题 | 建议 | 实际（已结案） |
+|---|---|---|---|
+| Q2 | P1 先落哪两个 reviewer | 建议 `contract-reviewer` + `release-reviewer`（可机检、故障密度高）；`code-reviewer` 放 P2 | ✅ 按建议：两个 reviewer 已落；`code-reviewer` 随后同批已落（§4 W3 / W9） |
+| Q4 | S1.2 可行性会签由谁承担 | 建议 `tech-review` 的轻量前置档，不新增角色 | ✅ 按建议：由 `tech-review` 轻量前置档承担，未新增角色 |
+| Q5 | 上游 U1 是否本期就做 | 建议「做」，但**先做 U2 外置**再改链，否则撞 260 行上限 | ✅ 按建议：U1 已做，且先完成 U2 外置（`references/review-chain.md`），未撞 260 行上限 |
 
 ---
 
-### 7.3 已暴露的缺口：契约无单一真相源（阻塞 W2-b）
+### 7.3 已暴露的缺口：契约无单一真相源（**原阻塞 W2-b，现已解除**）
 
 W4 落码时实查：
 
@@ -289,7 +291,8 @@ W4 落码时实查：
 1. **契约面收窄**：移除 `packages/agent-core/*`。实测把整个 SDK 纳入后，`type-only 导入修正`这类内部实现改动也报为契约变更 → 摩擦过大 → 门禁会被关掉。
 2. **控制器加行数阈值** `R13_LINE_THRESHOLD=5`（与 R9b 同策略）；`--no-merges` 跳过 merge commit（merge 不是真实改动，纳入只产噪音）。
 
-**待办**：先建**契约登记文件**（SSE 事件 / MCP 工具 / 权限码 / 接口清单的单一真相源），再以明确路径纳入契约面。这与「判据源先于角色、先于机检」同一纪律。
+**~~待办~~ ✅ 已办**：契约登记文件已建 —— `docs/api/contracts.md`（C1 接口 / C2 SSE 事件 / C3 MCP 工具 / C4 权限码与常量 / C5 网关路由 + 变更纪律 + 漂移清单 + §8 待补 + §9 体检命令）。SSE 一致性另由 **R16** 机检承接（`scripts/redline/check-sse-contract.py`，见 §7.6），契约面已纳入 `packages/agent-core/src/interfaces/*`。
+> 与「判据源先于角色、先于机检」同一纪律 —— 该项不再是悬项。剩余「SSE/MCP 是否明确纳入 R13 契约面」另记于 `TODO.md` 5-7。
 
 **实测**：R13/R14 首跑于 `HEAD~6..HEAD` 命中 3 条，全部为真实改动（存储配置接口 / 控制器 / 部署脚本），**零误伤**。
 
