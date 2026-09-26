@@ -22,6 +22,7 @@ import { RolePermissionEntity } from './permission/entities/role-permission.enti
 import { GlossaryEntryEntity } from './glossary/glossary-entry.entity';
 import { UserMemoryEntity } from './memory/user-memory.entity';
 import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
+import { EmailVerificationCodeEntity } from './email/entities/email-verification-code.entity';
 
 @Module({
   imports: [
@@ -38,7 +39,10 @@ import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'postgres');
-        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity, GlossaryEntryEntity, UserMemoryEntity, UserTasteProfileEntity];
+        // ⚠️ 手写清单：新增实体必须同步登记，否则 forFeature 注入 Repository 时
+        //    会抛 EntityMetadataNotFoundError（2026-09-26 踩过：EmailVerificationCodeEntity 漏登记
+        //    → /internal/users/email/verify 恒 500，且编译与单测均不报错）
+        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity, GlossaryEntryEntity, UserMemoryEntity, UserTasteProfileEntity, EmailVerificationCodeEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql',
