@@ -4,6 +4,8 @@ import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { IndexHtmlService } from './deploy-version/index-html.service';
+// P2（2026-09-20）：静态根可配（STATIC_PUBLIC_ROOT），兜底分支也必须用同一份定义
+import { PUBLIC_ROOT } from './static/public-root';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join, extname } from 'path';
 import compression from 'compression';
@@ -18,7 +20,7 @@ async function bootstrap() {
   const logger = new Logger('Gateway');
   const indexHtmlService = app.get(IndexHtmlService);
 
-  // 版本化 index.html：读取 public/<pub>/index.html，注入当前环境/版本元信息（供未来灰度扩展）
+  // 版本化 index.html：读取 <PUBLIC_ROOT>/<pub>/index.html，注入当前环境/版本元信息（供未来灰度扩展）
   const sendIndex = async (pub: string, req: any, res: any) => {
     try {
       const html = await indexHtmlService.render(pub, req);
@@ -26,7 +28,10 @@ async function bootstrap() {
       return res.type('html').send(html);
     } catch (e) {
       logger.error(`注入 index.html 失败(${pub}): ${e.message}`);
-      return res.sendFile(join(__dirname, '..', 'public', pub, 'index.html'));
+      // ⚠️ 兜底路径必须与 IndexHtmlService / ServeStaticModule 同源（PUBLIC_ROOT）：
+      // 早期此处硬编码 `__dirname/../public`，一旦配了 STATIC_PUBLIC_ROOT 外置静态资源，
+      // 该分支会指向空目录 → 注入失败时兜底也拿不到文件，直接 404。
+      return res.sendFile(join(PUBLIC_ROOT, pub, 'index.html'));
     }
   };
 
