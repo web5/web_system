@@ -1,4 +1,6 @@
 # Dependencies
+# pnpm workspace：禁止 npm lockfile 入仓，混用会破坏依赖一致性（W1 · 5-12，2026-09-25）
+package-lock.json
 node_modules/
 .pnp/
 .pnp.js
