@@ -14,7 +14,7 @@
  */
 import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync } from 'fs';
-import { resolve, join, dirname } from 'path';
+import { resolve, join } from 'path';
 
 const REPO_ROOT = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
 
@@ -97,15 +97,14 @@ async function main() {
  *
  * 幂等：入口文件已存在则跳过（换目录/首次才真正构建）。
  * 并发：同一包加目录锁，避免 admin/portal 并行发布时两个 tsc 写同一 dist。
+ *
+ * ⚠️ 用 `npm run build`（包目录内）而不是 `pnpm --filter <pkg> build`：
+ * pnpm 11 的 `--filter` 会先跑 `runDepsStatusCheck`，依赖状态不一致时**隐式执行 pnpm install**，
+ * 在发布端表现为联网/构建脚本被忽略而失败（2026-09-27 prod 实测：ERR_PNPM_IGNORED_BUILDS → exit 1），
+ * 且把「构建」牵连成「装依赖」，失败面变大。`npm run build` 直击 package.json 的完整 build 脚本，
+ * 同时满足发布门 A3（workspace 包必须走完整 build 脚本，不能只跑裸 tsc——
+ * types/agent-message 的 build 还负责产出 cjs 与 dist/cjs/package.json）。
  * ------------------------------------------------------------------ */
-
-/** 解析 pnpm 可执行文件：与 deploy-console CommandService.pnpmBin() 同策略 */
-function resolvePnpmBin() {
-  if (process.env.RELEASE_PNPM_BIN) return process.env.RELEASE_PNPM_BIN;
-  const sibling = join(dirname(process.execPath), 'pnpm');
-  if (existsSync(sibling)) return sibling;
-  return 'pnpm';
-}
 
 function readJson(file) {
   return JSON.parse(readFileSync(file, 'utf-8'));
@@ -206,7 +205,6 @@ function ensureWorkspaceDeps(appDir) {
   collectTopo(join(appDir, 'package.json'), wsMap, ordered, new Set());
   if (ordered.length === 0) return;
 
-  const pnpmBin = resolvePnpmBin();
   for (const name of ordered) {
     const entry = wsMap.get(name);
     if (!entry) continue;
@@ -223,8 +221,8 @@ function ensureWorkspaceDeps(appDir) {
     withBuildLock(entry.dir, () => {
       // 拿到锁后再查一次：等待期间可能已被别的进程构建好
       if (entryExists(entry)) { log(`workspace 依赖 ${name}：等待期间已构建完成`); return; }
-      execSync(`"${pnpmBin}" --filter ${name} build`, {
-        cwd: REPO_ROOT,
+      execSync('npm run build', {
+        cwd: entry.dir,
         stdio: 'inherit',
         env: { ...process.env },
       });
