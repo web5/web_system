@@ -62,11 +62,15 @@ import AppIcon from './AppIcon.vue';
 const emit = defineEmits<{ (e: 'open-command'): void }>();
 
 /**
- * logo 路径跟随构建 base：standalone 模式 base=/portal/，微前端模式
- * base=/static/modules/portal/<env>/<版本>/ —— 写死 /portal/ 会让 MF 构建直接失败
- * （rollup 无法解析绝对路径），且部署后 logo 404。
+ * logo 走自建 CDN（`__PUBLIC_ASSET_BASE__` = /static/cdn/pub/）。
+ *
+ * 历史上用 `${import.meta.env.BASE_URL}logo.svg`：跟随构建 base →
+ * `/static/modules/portal/<产品线>/<版本>/logo.svg`，要求投递目录与 base 段**逐字一致**，
+ * 少一层产品线段（或在 legacy 扁平布局下）就静默 404，且每个版本目录都要重复塞一份资源。
+ * 现在资源由 scripts/build-public-assets.mjs 从单一源目录发布到 CDN 目录
+ * （见 assets/shared-public/README.md），与产物 base 彻底解耦。
  */
-const logoUrl = `${import.meta.env.BASE_URL}logo.svg`;
+const logoUrl = `${__PUBLIC_ASSET_BASE__}logo.svg`;
 
 const route = useRoute();
 const router = useRouter();

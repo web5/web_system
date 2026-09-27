@@ -4,6 +4,8 @@
     "sharp": "^0.35.3"
   },
   "scripts": {
+    "build:cdn": "node scripts/build-externals.mjs && node scripts/build-public-assets.mjs",
+    "build:public-assets": "node scripts/build-public-assets.mjs",
     "pub:dev": "bash scripts/publish.sh dev",
     "pub:prod": "bash scripts/publish.sh prod",
     "pub:local": "bash scripts/deploy-local.sh",

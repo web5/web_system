@@ -106,6 +106,7 @@ DRY_RUN=1 ./scripts/apply-migrations.sh prod    # 预演
 |---|---|---|
 | 共享包构建 | `shared` / `types` / `mcp-core`（`local-up.sh` 清单）**+ `agent-core`**（ai-service 依赖，清单里漏了） | `pnpm --filter @kedouai/agent-core build` |
 | CDN 共享依赖 | `servers/gateway/public/static/cdn/`：vue / vue-router / pinia / antd / axios / dayjs(+插件) + `manifest.json` | `node scripts/build-externals.mjs`（按 cwd 输出） |
+| CDN 公共静态资源 | `servers/gateway/public/static/cdn/pub/`：logo / avatars / materials / 二维码，单一源目录 `assets/shared-public/` | `node scripts/build-public-assets.mjs` |
 | 微前端产物 | `public/static/modules/<key>/<version>/` | 各 app `RELEASE_TAG=<hash> MF_FORMAT=system npx vite build --mode mf` |
 | pm2 进程清单 | 12 个 `web-*`（开发）/ 12 个生产名（`ecosystem.config.js` 生产版，注入 DB/密钥） | `pm2 start ecosystem.config.cjs` + `pm2 save` + `pm2 startup` |
 | Redis | **无需预置数据**（JWT/限流/缓存） | `local-db.sh` 起即可 |
@@ -170,6 +171,7 @@ curl -s -X POST http://127.0.0.1:6000/api/auth/login \
 | `Cannot find module '@kedouai/agent-core'` | 只 build 了 shared/types | `pnpm --filter @kedouai/agent-core build` |
 | 接口通但菜单不显示 | 权限未同步（代码常量 vs DB） | `POST /internal/permissions/sync`（`scripts/sync-permissions.sh`） |
 | 前端白屏、`/static/cdn/vue.js` MIME 是 text/html | 缺 CDN 产物 | `node scripts/build-externals.mjs` |
+| 图片素材/头像全裂（200 但 body 是 index.html，或 404） | 缺 CDN 静态资源 | `node scripts/build-public-assets.mjs` |
 | 微前端仍加载旧版本 | 版本表未更新 | 写 `deploy_deployments`（注意是 **web_system_deploy** 库） |
 
 ---

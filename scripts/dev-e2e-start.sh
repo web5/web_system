@@ -28,8 +28,10 @@ COMMIT=$(git rev-parse --short HEAD)
 log "git commit = $COMMIT"
 
 # ---------- 1. externals ----------
-log "===== 1. 构建公共依赖 externals ====="
+log "===== 1. 构建公共依赖 externals + 公共静态资源 ====="
 node scripts/build-externals.mjs
+# logo / avatars / materials / 二维码：缺了不会报错，只会静默裂图，必须一并生成
+node scripts/build-public-assets.mjs
 
 # ---------- 2. 基座 shell ----------
 log "===== 2. 构建基座 shell ====="

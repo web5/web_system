@@ -250,6 +250,7 @@ curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 | **`scripts/health-check.sh local`** | **服务巡检首选**：12 服务端口 + gateway 接口 + MCP initialize + AI 链路（knowledge_list）；`dev`/`prod` 走 SSH（auth 分别 6001/3001） |
 | `scripts/check-env.sh` | `.env` vs `.env.example` 差异巡检 |
 | `scripts/build-externals.mjs` | 生成 `gateway/public/static/cdn/` 共享依赖（**缺它会导致 shell 白屏**，该目录是构建产物不入库） |
+| `scripts/build-public-assets.mjs` | 把 `assets/shared-public/`（logo / avatars / materials / 二维码）发布到 `gateway/public/static/cdn/pub/`；app 端用 `__PUBLIC_ASSET_BASE__` 引用，**缺资源不会报错只会静默裂图** |
 | `scripts/publish-deploy-console.sh` | deploy-console 传统发布（含 6200 孤儿进程清理） |
 | `scripts/seed-admin.mjs` / `reset-auth-admin-password.mjs` / `seed.sh` | 账号种子与密码重置 |
 | `ecosystem.config.cjs` | `pm2 start ecosystem.config.cjs` 全量起 12 个服务 |
