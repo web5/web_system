@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-brand">
-        <img src="/logo.svg" alt="科豆 AI" class="brand-svg" width="48" height="25" />
+        <img :src="assetBase + 'logo.svg'" alt="科豆 AI" class="brand-svg" width="48" height="25" />
         <h1 class="login-title">管理后台</h1>
       </div>
       <a-tabs v-model:activeKey="activeTab">
@@ -107,6 +107,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, h } from 'vue';
+// 公共静态资源前缀（见 apps/admin/src/layouts/BasicLayout.vue 同名注释：
+// 模板里不能直接用全局编译期常量，会报 TS2339）
+const assetBase = __PUBLIC_ASSET_BASE__;
 import { useRouter } from 'vue-router';
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue';
 import { message } from 'ant-design-vue';
