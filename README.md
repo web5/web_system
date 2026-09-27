@@ -199,7 +199,7 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 - **每服务独立数据库**；所有 API 走 gateway，前端不直连后端
 - **微前端**：shell 提供共享依赖防重复打包；CSS 用 `:where([data-module])` 前缀隔离；产物版本化存 `static/modules/<key>/<version>/`
 - **灰度**：gateway `deploy_canary_rules`（header / percent / user-list 三种匹配）
-- **静态资源**：`/api/uploads/*`（用户上传 + AI 生成图统一落盘）、`/materials/svg/*`（系统素材），均由 gateway 直出
+- **静态资源**：`/api/uploads/*`（用户上传 + AI 生成图统一落盘）、`/static/cdn/pub/**`（系统素材 / 默认头像 / logo / 二维码，源 `assets/shared-public/`），均由 gateway 直出
 
 详细说明：[docs/architecture/技术架构.md](./docs/architecture/技术架构.md)、
 [docs/architecture/micro-frontend-technical-design.md](./docs/architecture/micro-frontend-technical-design.md)

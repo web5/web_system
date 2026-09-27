@@ -37,11 +37,15 @@ log()  { echo -e "${GREEN}[publish:$TARGET]${NC} $1"; }
 warn() { echo -e "${YELLOW}[publish:$TARGET][WARN]${NC} $1"; }
 err()  { echo -e "${RED}[publish:$TARGET][ERROR]${NC} $1"; exit 1; }
 
-# 归一化：all => 后端全部 + 前端 portal/admin
+# 归一化：all => CDN（含公共静态资源）+ 后端全部 + 前端 portal/admin
+# ⚠️ cdn 必须在最前：
+#    线上缺 `public/static/cdn/` 时 shell 会白屏（vue 等 UMD 拿不到，且 MIME 被 SPA 回退成 text/html）；
+#    2026-09-27 起该目录还承载公共静态资源（logo / avatars / materials / 二维码），
+#    缺了不报错、只裂图 —— 更容易被当成「发布成功了」。详见 assets/shared-public/README.md。
 normalize_targets() {
   local t="$*"
   if [ "$t" = "all" ]; then
-    echo "gateway auth user ai system todo content-hub mcp-gateway portal admin"
+    echo "cdn gateway auth user ai system todo content-hub mcp-gateway portal admin"
   else
     echo "$t"
   fi

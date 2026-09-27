@@ -267,7 +267,9 @@ const quotaRecord = ref<User | null>(null);
 const quotaValue = ref<number | null>(null);
 
 function defaultAvatar(gender?: string) {
-  return gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+  return gender === 'female'
+    ? `${__PUBLIC_ASSET_BASE__}avatars/default-female.png`
+    : `${__PUBLIC_ASSET_BASE__}avatars/default-male.png`;
 }
 
 const formData = reactive<any>({

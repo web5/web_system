@@ -7,6 +7,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import { appVersionDefine, appVersionPlugin } from './vite-app-version.mjs';
+import { publicAssetDefine } from './vite-public-assets.mjs';
 
 // 默认 externals 映射：模块 external 这些 key，运行时从 window.__SHARED__ 对应字段取
 // ⚠️ globals 值必须是「点链」访问（rollup UMD 不支持 ["..."] 括号，会生成错误代码），
@@ -106,6 +107,8 @@ export function microFrontendConfig(opts) {
       // 否则 rollup 保留 `process.env.NODE_ENV !== "production"` 等表达式，浏览器无 process 全局
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env': JSON.stringify({ NODE_ENV: 'production' }),
+      // 公共静态资源前缀 /static/cdn/pub/ —— 资源不随版本投递，避免「双段目录」错一段即 404
+      ...publicAssetDefine(),
     },
     plugins: [appVersionPlugin(), vue(), cssScopePlugin(name)],
     resolve: {

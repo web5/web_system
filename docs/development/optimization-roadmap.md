@@ -21,6 +21,7 @@
 
 ### T0-2 网关构建产物移出版本库 + 素材目录收敛
 
+- ✅ **已解决（2026-09-27）**：gateway `public/materials/`（83 个 SVG）已整个删除，素材收敛到单一源 `assets/shared-public/materials/svg/`，由 `scripts/build-public-assets.mjs` 发布到 `public/static/cdn/pub/`（随 `deploy_cdn()` 一起投递）。剩余 `public/assets/`、`index.html` 的 git 遗留另见上一条。
 - **问题**：`servers/gateway/public/assets/`（102 个 Vite 哈希构建产物）、`index.html` 被提交进 git；`materials/svg/` 与构建产物目录中的素材重复。
 - **执行**：见下方「附录 A：gateway public 目录迁移方案」
 - **验收**：
@@ -152,10 +153,12 @@
 
 ### T2-4 静态资源去重
 
+- ✅ **已解决（2026-09-27）**：avatar / logo / 二维码统一迁到 `assets/shared-public/`，app 与 gateway 下的副本全部删除；
+  代码经编译期常量 `__PUBLIC_ASSET_BASE__` 引用 `/static/cdn/pub/**`，**微前端版本目录里不再有任何 public 资源**（portal 产物 5.0MB → 2.3MB）。
 - **问题**：`apps/admin/public/avatars/` 与 `apps/portal/public/avatars/` 各放一份 1.1MB 默认头像；gateway public 中素材与构建产物目录重复。
-- **执行**：
-  1. 默认头像收敛到 `packages/shared/assets/` 或 `apps/portal/public/`（作为唯一源），其他应用构建时引用
-  2. T0-2 已处理 gateway 素材重复
+- **执行**（历史方案，已被上面「已解决」项取代，保留作参考）：
+  1. 原计划：默认头像收敛到 `packages/shared/assets/` 或 `apps/portal/public/`（作为唯一源），其他应用构建时引用
+  2. 实际采用：`assets/shared-public/` + CDN 前缀，彻底不进产物（见 `assets/shared-public/README.md`）
 - **验收**：仓库中默认头像仅一份源文件；构建产物中可有多份（正常）。
 - **预估**：30 分钟
 - **依赖**：T0-2
