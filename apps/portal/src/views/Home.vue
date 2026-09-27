@@ -33,7 +33,7 @@
             <div class="scan-qr">
               <img
                 class="qr-image"
-                src="/bianbian-qrcode.png"
+                :src="assetBase + 'qrcode/bianbian-qrcode.png'"
                 alt="变变小程序码"
                 width="160"
                 height="160"
@@ -102,6 +102,9 @@
 
 <script setup lang="ts">
 // AppNavbar 已迁移到全局 App.vue
+// 公共静态资源前缀（编译期常量 /static/cdn/pub/）：模板里直接用全局常量会被 vue-tsc
+// 判为组件实例属性而报 TS2339，故在 script 里接一层（同 LoginPanel.vue）。
+const assetBase = __PUBLIC_ASSET_BASE__;
 </script>
 
 <style scoped>

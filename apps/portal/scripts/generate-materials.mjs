@@ -4,6 +4,12 @@
  * 生成素材配置文件 + 静态 SVG 文件
  *
  * 运行：node scripts/generate-materials.mjs
+ *
+ * ⚠️ 输出位置（2026-09-27 起单一源）：SVG 只写 assets/shared-public/materials/svg/。
+ *    历史做法是「portal public + gateway public」双写，两边必然漂移（脚本头 TODO 已记）。
+ *    现在统一由 node scripts/build-public-assets.mjs 发布到 gateway 的 CDN 目录，
+ *    再随 deploy.sh 的 deploy_cdn() 一起投递 —— 只有一份，不会再不同步。
+ *    生成后请记得跑一次 build-public-assets（本地 dev 需要，否则图片 404）。
  */
 
 import { createSSRApp, h } from 'vue';
@@ -11,10 +17,13 @@ import { renderToString } from 'vue/server-renderer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PUBLIC_ASSET_BASE } from '../../../scripts/vite-public-assets.mjs';
 import SELECTED_ICONS from './material-icons.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORTAL_ROOT = path.resolve(__dirname, '..');
+// 单一源目录（入 git）→ 由 scripts/build-public-assets.mjs 发布到 /static/cdn/pub/materials/svg/
+const SHARED_PUBLIC_ROOT = path.resolve(PORTAL_ROOT, '../../assets/shared-public');
 
 // 颜色方案（品牌色）
 const COLORS = {
@@ -60,17 +69,10 @@ const BACKGROUNDS = [
 
 async function generate() {
   const materialDefs = [];
-  const svgDir = path.join(PORTAL_ROOT, 'public', 'materials', 'svg');
+  const svgDir = path.join(SHARED_PUBLIC_ROOT, 'materials', 'svg');
 
   // 确保目录存在
   fs.mkdirSync(svgDir, { recursive: true });
-
-  // 同时输出到 Gateway 的 public 目录，供 Gateway 以 /materials/svg/ 路径服务
-  // 注意：这里是双写，Portal public/ 用于本地开发（Vite 直接 serve），
-  // Gateway public/ 用于生产环境。两者必须保持同步。
-  // TODO: 理想方案是本地开发也通过 Vite proxy 从 Gateway 拉取，只维护一份。
-  const gatewayPublicDir = path.resolve(PORTAL_ROOT, '../../servers/gateway/public/materials/svg');
-  fs.mkdirSync(gatewayPublicDir, { recursive: true });
 
   // 逐个渲染图标
   for (const item of SELECTED_ICONS) {
@@ -97,17 +99,17 @@ async function generate() {
 
       const svgHtml = await renderToString(app);
 
-      // 保存为 SVG 文件（Portal public 目录 + Gateway public 目录）
+      // 保存为 SVG 文件（单一源目录，仅此一份）
       const fileName = `material-${item.id}.svg`;
       fs.writeFileSync(path.join(svgDir, fileName), svgHtml, 'utf-8');
-      fs.writeFileSync(path.join(gatewayPublicDir, fileName), svgHtml, 'utf-8');
 
       materialDefs.push({
         id: item.id,
         name: item.name,
         category: item.category,
         type: 'svg',
-        content: `/materials/svg/${fileName}`,
+        // 编译期常量 __PUBLIC_ASSET_BASE__ = /static/cdn/pub/（scripts/vite-public-assets.mjs）
+        content: `${PUBLIC_ASSET_BASE}materials/svg/${fileName}`,
         color: color,
       });
 
@@ -124,8 +126,10 @@ async function generate() {
   fs.writeFileSync(tsPath, tsContent, 'utf-8');
 
   console.log(`\n[Generate] 完成！`);
-  console.log(`   SVG 文件: ${materialDefs.length} 个 → public/materials/svg/`);
+  console.log(`   SVG 文件: ${materialDefs.length} 个 → assets/shared-public/materials/svg/`);
   console.log(`   配置文件: src/config/materials.ts`);
+  console.log(`   下一步：发布到 CDN 目录`);
+  console.log(`   $ node scripts/build-public-assets.mjs`);
 }
 
 function generateTSConfig(defs) {
@@ -135,8 +139,10 @@ function generateTSConfig(defs) {
     return `  { key: '${key}', label: '${val.label}', icon: '${val.icon}', order: ${val.order}, count: ${count} },`;
   }).join('\n');
 
+  // ⚠️ content 必须写成「模板字符串」，让构建期的 __PUBLIC_ASSET_BASE__ define 能替换进去。
+  //    写成普通字符串 '/materials/svg/x.svg' 会退回「依赖 gateway public 根目录拷贝」的老问题。
   const materialEntries = defs.map(d =>
-    `  { id: '${d.id}', name: '${d.name}', category: '${d.category}', type: 'svg', content: '${d.content}', color: '${d.color}' }`
+    `  { id: '${d.id}', name: '${d.name}', category: '${d.category}', type: 'svg', content: \`${d.content}\`, color: '${d.color}' }`
   ).join(',\n');
 
   const bgEntries = BACKGROUNDS.map(b =>

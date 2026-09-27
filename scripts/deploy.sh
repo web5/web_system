@@ -111,13 +111,16 @@ deploy_backend() { # $1=service_name
 }
 
 deploy_cdn() {
-  # 自建 CDN 公共依赖（vue/vue-router/pinia/antd/axios/dayjs(+插件)/vue-demi）
-  # 先本地生成产物，再上传到远端 servers/gateway/public/static/cdn/，供 /static/cdn/ 托管。
-  log "部署自建 CDN 公共依赖 → $TARGET"
+  # 自建 CDN：① 公共依赖 vue/vue-router/pinia/antd/axios/dayjs(+插件)/vue-demi（../cdn/*.js）
+  #           ② 公共静态资源 ../cdn/pub/**（logo / avatars / materials / qrcode，源在 assets/shared-public/）
+  # 两者同处 servers/gateway/public/static/cdn/ 下，一起 tar 投递；
+  # 相应地模块版本目录里不再放 public 资源 —— 产物只含 index.js/css/manifest.json，
+  # 也不会再有「base 少一段产品线段 → 图片静默 404」的问题。
+  log "部署自建 CDN（依赖 UMD + 公共静态资源） → $TARGET"
   local src="$ROOT/servers/gateway/public/static/cdn"
   if [ ! -d "$src" ]; then
-    log "  本地未找到 $src，先运行 scripts/build-externals.mjs 生成产物"
-    say "cd $ROOT && node scripts/build-externals.mjs"
+    log "  本地未找到 $src，先生成 CDN 产物（依赖 UMD + 公共静态资源 pub/）"
+    say "cd $ROOT && node scripts/build-externals.mjs && node scripts/build-public-assets.mjs"
   fi
   if [ "$DRY_RUN" != "1" ]; then
     tar czf "/tmp/cdn-deploy.tar.gz" -C "$ROOT/servers/gateway/public/static" cdn

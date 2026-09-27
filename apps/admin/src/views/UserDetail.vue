@@ -160,7 +160,9 @@ const artworksLoading = ref(false);
 const avatarSrc = computed(() => {
   const u = user.value;
   if (u?.avatar) return u.avatar;
-  return u?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+  return u?.gender === 'female'
+    ? `${__PUBLIC_ASSET_BASE__}avatars/default-female.png`
+    : `${__PUBLIC_ASSET_BASE__}avatars/default-male.png`;
 });
 
 watch(user, (val) => {
