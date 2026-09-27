@@ -4,7 +4,7 @@
     <a-layout-sider v-model:collapsed="collapsed" :collapsedWidth="80" class="sider" width="220">
     <div class="sider-header">
       <div class="sider-logo" @click="router.push('/dashboard')">
-        <img src="/logo.svg" alt="科豆 AI" class="sider-logo-img" width="28" height="15" />
+        <img :src="assetBase + 'logo.svg'" alt="科豆 AI" class="sider-logo-img" width="28" height="15" />
         <span v-if="!collapsed" class="logo-text">科豆 AI</span>
       </div>
       <button class="collapse-toggle" :title="collapsed ? '展开菜单' : '收起菜单'" @click="collapsed = !collapsed">
@@ -138,7 +138,7 @@
       <a-layout-footer class="footer">
         <div class="footer-inner">
           <div class="footer-brand">
-            <img src="/logo.svg" alt="科豆 AI" width="20" height="10" />
+            <img :src="assetBase + 'logo.svg'" alt="科豆 AI" width="20" height="10" />
             <span class="footer-brand-text">科豆 AI</span>
           </div>
           <div class="footer-links">
@@ -160,6 +160,10 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+// 公共静态资源前缀（编译期常量 /static/cdn/pub/，见 scripts/vite-public-assets.mjs）。
+// ⚠️ 模板里直接写 `__PUBLIC_ASSET_BASE__` 会被 vue-tsc 当成「组件实例上的属性」，
+//    报 TS2339（全局 declare const 对模板表达式不生效），故在 script 里接一层再给模板用。
+const assetBase = __PUBLIC_ASSET_BASE__;
 import { useRouter, useRoute } from 'vue-router';
 import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
@@ -177,8 +181,10 @@ const userStore = useUserStore();
 const themeStore = useThemeStore();
 const collapsed = ref(false);
 const selectedKeys = ref<string[]>(['dashboard']);
-const DEFAULT_AVATAR_MALE = '/avatars/default-male.png';
-const DEFAULT_AVATAR_FEMALE = '/avatars/default-female.png';
+// 默认头像走自建 CDN（/static/cdn/pub/）：历史上写死根绝对路径 /avatars/*.png，
+// 依赖 gateway public 根目录下那份「人工拷进去、无人维护」的拷贝，dev 与 prod 两份常不同步。
+const DEFAULT_AVATAR_MALE = `${__PUBLIC_ASSET_BASE__}avatars/default-male.png`;
+const DEFAULT_AVATAR_FEMALE = `${__PUBLIC_ASSET_BASE__}avatars/default-female.png`;
 
 const userAvatar = computed(() => {
   const info = userStore.userInfo;

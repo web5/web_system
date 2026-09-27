@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import viteCompression from 'vite-plugin-compression';
 import { appVersionDefine, appVersionPlugin } from '../../scripts/vite-app-version.mjs';
+import { publicAssetDefine } from '../../scripts/vite-public-assets.mjs';
 import { microFrontendConfig } from '../../scripts/vite-micro-frontend.mjs';
 
 // mode=mf：微前端模块打包（UMD + externals + CSS scope）
@@ -13,7 +14,8 @@ export default defineConfig(({ mode }) => {
   }
   return {
     base: '/portal/',
-    define: appVersionDefine(),
+    // 版本常量 + 公共静态资源前缀（/static/cdn/pub/，见 assets/shared-public/README.md）
+    define: { ...appVersionDefine(), ...publicAssetDefine() },
     plugins: [
       appVersionPlugin(),
       vue(),
@@ -36,7 +38,9 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
       proxy: {
-        '/materials': { target: 'http://localhost:6000', changeOrigin: true },
+        // ⚠️ /materials 已迁至 /static/cdn/pub/materials/（由 gateway 托管），这里只保留 /static 代理，
+        //    本地 dev 与生产同源：都从 gateway 拉 CDN 目录下的资源，消灭两份拷贝漂移。
+        '/static': { target: 'http://localhost:6000', changeOrigin: true },
         '/api/ai/tts': {
           target: 'http://localhost:6003',
           changeOrigin: true,

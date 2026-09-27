@@ -212,7 +212,9 @@ const glossaryCount = ref(0);
 const avatarSrc = computed(() => {
   const info = userStore.userInfo;
   if (info?.avatar) return info.avatar;
-  return info?.gender === 'female' ? '/avatars/default-female.png' : '/avatars/default-male.png';
+  return info?.gender === 'female'
+    ? `${__PUBLIC_ASSET_BASE__}avatars/default-female.png`
+    : `${__PUBLIC_ASSET_BASE__}avatars/default-male.png`;
 });
 
 const formData = reactive({

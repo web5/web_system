@@ -11,6 +11,10 @@
  *   5. 产物 dist/index.js + dist/index.css + dist/manifest.json
  *
  * 由 deploy-console DeployService.publishModule 调用，或本地手动执行验证。
+ *
+ * ⚠️ 产物里的静态资源（logo/avatars/materials）必须走 __PUBLIC_ASSET_BASE__（/static/cdn/pub/），
+ *    不要放进 app 的 public/ 目录（否则每个版本目录重复 4~5MB，且双段目录错一段就静默 404）。
+ *    详见 assets/shared-public/README.md。
  */
 import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync } from 'fs';
@@ -42,8 +46,9 @@ async function main() {
   const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const version = commit;
   // 产物 base 必须含产品线段（平台默认模板 key = default）：/static/modules/<key>/<产品线>/<版本>/
-  // 契约与校验见 scripts/vite-micro-frontend.mjs resolveMfBase：
-  // 只传纯 commit 会让 base 少一层，产物内 public 资源（logo.svg / favicon.svg / avatars 等）静默 404。
+  // 契约与校验见 scripts/vite-micro-frontend.mjs resolveMfBase。
+  // 注：产物里的静态资源已于 2026-09-27 全部迁到 /static/cdn/pub/（见 assets/shared-public/README.md），
+  //     base 段此时只影响 index.js / index.css 的自身 URL；确需历史扁平布局时仍可用 MF_ALLOW_FLAT_BASE=1。
   const releaseTag = `default/${commit}`;
   const buildTime = new Date().toISOString();
   log(`版本: ${version} (branch=${branch})`);
