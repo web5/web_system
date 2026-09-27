@@ -16,7 +16,7 @@
     "./composables/*": "./src/composables/*"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsc --watch",
     "test": "jest"
   },
