@@ -58,6 +58,11 @@ UMD: 模块 portal@env:local 未暴露 lifecycle（缺 mount）: /static/modules
 
 → public 资源（`logo.svg` / `favicon.svg` / `avatars/*`）按**该绝对前缀**请求。
 
+> ⚠️ **2026-09-27 已改**：public 资源不再随版本目录投递 —— 统一迁到 `/static/cdn/pub/**`
+> （编译期常量 `__PUBLIC_ASSET_BASE__`，源目录 `assets/shared-public/`）。
+> 现在烘焙进产物的只剩入口路径，`base` 的产品线段对资源加载已无影响，
+> 「双目录 / 少一段产品线段 → 图片静默 404」这条风险已消失。
+
 ### C3 env-dir 布局只认 `<key>/<envId>/` 下的版本目录
 
 `servers/deploy-console/src/apps/entry-pointer.ts`：

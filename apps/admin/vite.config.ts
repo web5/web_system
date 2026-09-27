@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
 import { resolve } from 'path';
 import { appVersionDefine, appVersionPlugin } from '../../scripts/vite-app-version.mjs';
+import { publicAssetDefine } from '../../scripts/vite-public-assets.mjs';
 import { microFrontendConfig } from '../../scripts/vite-micro-frontend.mjs';
 
 export default defineConfig(({ mode }) => {
@@ -11,7 +12,8 @@ export default defineConfig(({ mode }) => {
   }
   return {
     base: '/admin/',
-    define: appVersionDefine(),
+    // 版本常量 + 公共静态资源前缀（/static/cdn/pub/，见 assets/shared-public/README.md）
+    define: { ...appVersionDefine(), ...publicAssetDefine() },
     plugins: [
       appVersionPlugin(),
       vue(),
@@ -48,7 +50,8 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['local.kedouai.com', 'localhost', '127.0.0.1'],
       proxy: {
         '/api': { target: 'http://localhost:6000', changeOrigin: true },
-        '/materials': { target: 'http://localhost:6000', changeOrigin: true },
+        // 公共静态资源由 gateway 托管（standalone 下也走同一份 CDN 产物）
+        '/static': { target: 'http://localhost:6000', changeOrigin: true },
       },
     },
     build: {

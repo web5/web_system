@@ -8,7 +8,7 @@
     <!-- 品牌区 -->
     <div class="brand-section">
       <div class="brand-icon">
-        <img src="/logo.svg" alt="科豆 AI" class="brand-logo" width="52" height="27" />
+        <img :src="assetBase + 'logo.svg'" alt="科豆 AI" class="brand-logo" width="52" height="27" />
       </div>
       <h1 class="brand-name">科豆 AI</h1>
       <p class="brand-desc">开启智能学习之旅</p>
@@ -142,6 +142,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue';
+// 公共静态资源前缀（编译期常量 /static/cdn/pub/）：模板里直接用全局常量会被 vue-tsc
+// 判为组件实例属性而报 TS2339，故在 script 里接一层（同 admin 的 BasicLayout.vue）。
+const assetBase = __PUBLIC_ASSET_BASE__;
 import { UserOutlined, LockOutlined, MobileOutlined, WechatOutlined } from '@ant-design/icons-vue';
 import { message } from 'ant-design-vue';
 import type { Rule } from 'ant-design-vue/es/form';

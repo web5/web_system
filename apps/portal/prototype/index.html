@@ -1,4 +1,14 @@
 <!doctype html>
+<!--
+  变更台账（prototype 作为 UX 变更入口）
+  ------------------------------------------------------------------
+  2026-09-27 · 微调豁免 · 静态资源 CDN 化重构
+  改动范围：apps/portal/src 与 apps/admin/src 中 logo / avatars / materials 的引用方式
+          （构造 URL 的前缀改为编译期常量 __PUBLIC_ASSET_BASE__ = /static/cdn/pub/）
+  判定：**非视觉变更** —— 资源文件内容、尺寸、位置、配色均未变，仅换了资源所在 URL，
+         属于「同一张图从另一个地址加载」，不构成视觉/交互改动，豁免 ux-review-checklist。
+  关联：assets/shared-public/README.md、scripts/build-public-assets.mjs
+-->
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
