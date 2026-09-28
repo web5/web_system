@@ -36,7 +36,7 @@
         v-if="userStore.isLoggedIn"
         :trigger="['click']"
         placement="bottomRight"
-        :get-popup-container="(t) => t.parentNode"
+        :get-popup-container="(t: HTMLElement) => t.parentElement ?? document.body"
       >
         <button type="button" class="avatar" :title="userName">
           {{ avatarText }}
