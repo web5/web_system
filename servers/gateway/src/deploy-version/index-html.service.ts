@@ -191,6 +191,15 @@ export class IndexHtmlService {
       // 才敢用 modules[] 的整包路径（换环境时它指向别处）
       push(packed.entry, 'script');
     }
+    // ①-b 分包形态下的**第三跳**：system 格式产物里 index.js 已退化成几百字节的
+    //     shim，真正的主体是它声明的相对依赖（`./main.<hash>.js`，admin 实测 249KB gz）。
+    //     这一跳只有在 shell 启动完 + shim 执行后才会被发现 —— 不预载就等于把
+    //     「并行下载」又打回串行（分包后 90% 的字节都在这里）。
+    if (version) {
+      for (const dep of this.readEntryDeps(`static/modules/${key}/${envId}/${version}/index.js`)) {
+        push(`/static/modules/${key}/${envId}/${version}/${dep}`, 'script');
+      }
+    }
     // ② 无版本指针 + 其样式指针：loader 真正的第一跳，几百字节
     if (pointer?.entry && pointer.entry !== packed?.entry) push(pointer.entry, 'script');
     // ③ 样式只放 shell 会注入的那份（byEnv 指针），不放 CDN 版本化副本 —— 否则重复下载 180KB
@@ -375,6 +384,36 @@ export class IndexHtmlService {
   /** 磁盘存在性判定（路径相对 PUBLIC_ROOT） */
   private diskHas(relPath: string): boolean {
     return existsSync(join(PUBLIC_ROOT, relPath));
+  }
+
+  /** 入口 shim 的相对依赖缓存（relPath → deps），避免每个请求都读盘 */
+  private static readonly entryDepCache = new Map<string, { deps: string[]; at: number }>();
+  private static readonly ENTRY_DEP_TTL = 60_000;
+  /** 单个入口最多预载的 chunk 数（防异常产物把 <head> 撑爆） */
+  private static readonly ENTRY_DEP_LIMIT = 4;
+
+  /**
+   * 读入口文件，抽出它声明的**相对依赖**（分包产物里的 `./main.<hash>.js` 等）。
+   * umd 整包没有相对依赖 → 空数组，行为与改造前一致。
+   * 读不到/解析不出 → 空数组（**绝不因此影响基座渲染**）。
+   */
+  private readEntryDeps(relPath: string): string[] {
+    const now = Date.now();
+    const hit = IndexHtmlService.entryDepCache.get(relPath);
+    if (hit && now - hit.at < IndexHtmlService.ENTRY_DEP_TTL) return hit.deps;
+    let deps: string[] = [];
+    try {
+      const src = readFileSync(join(PUBLIC_ROOT, relPath), 'utf8');
+      // System.register(['./main.<hash>.js', 'vue', ...]) —— 裸模块名是外置 CDN，跳过
+      const found = [...src.matchAll(/["'](\.\/[^"']+\.js)["']/g)]
+        .map((m) => m[1].replace(/^\.\//, ''))
+        .filter((d) => !d.includes('/') && !d.startsWith('..'));
+      deps = [...new Set(found)].slice(0, IndexHtmlService.ENTRY_DEP_LIMIT);
+    } catch {
+      deps = [];
+    }
+    IndexHtmlService.entryDepCache.set(relPath, { deps, at: now });
+    return deps;
   }
 
   /**

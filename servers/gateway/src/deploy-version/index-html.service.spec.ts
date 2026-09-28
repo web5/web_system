@@ -183,6 +183,40 @@ describe('IndexHtmlService 首屏 preload 注入', () => {
     expect(tags).not.toContain('/static/modules/admin/dev/');
   });
 
+  it('分包产物（system 格式）：连入口声明的 chunk 一起预载（第三跳才是字节主体）', async () => {
+    const { svc } = build();
+    const fs = require('fs');
+    // 依赖解析结果有 60s 缓存，上一条用例（盘上无该文件）已写入空结果
+    (IndexHtmlService as any).entryDepCache.clear();
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((() =>
+      'System.register(["./main.B9avsfki.js","vue","pinia"],function(){});') as any);
+    try {
+      const tags = await tagsOf(svc, { ...req, path: '/admin/users' });
+      expect(tags).toContain(
+        '<link rel="preload" href="/static/modules/admin/dev/3d5ce61/main.B9avsfki.js" as="script">',
+      );
+      // 裸模块名（外置 CDN 依赖）不能被当成产物 chunk 预载
+      expect(tags).not.toContain('/static/modules/admin/dev/3d5ce61/vue');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('入口读不到/解析不出依赖（umd 整包）→ 只预载前两跳，不报错', async () => {
+    const { svc } = build();
+    const fs = require('fs');
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((() => {
+      throw new Error('ENOENT');
+    }) as any);
+    try {
+      const tags = await tagsOf(svc, { ...req, path: '/admin/users' });
+      expect(tags).toContain('/static/modules/admin/dev/3d5ce61/index.js');
+      expect(tags).toContain('/static/modules/admin/dev/index.js');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('MF_PRELOAD=0（应急开关）→ 不注入', async () => {
     const { svc } = build({ preloadOff: true });
     expect(await tagsOf(svc, { ...req, path: '/admin' })).toBe('');
