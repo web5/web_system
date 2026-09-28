@@ -603,9 +603,9 @@ function workWelcome(){
       '<div style="margin-top:8px;font-size:14px;color:var(--t3);line-height:1.6">'+q.en+'</div>'+
     '</div>'+
     '<div style="margin-top:48px;font-size:12px;color:var(--t4);line-height:1.8">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>'+
-    // 备案信息（法定：站点首页底部必显）——2026-09-28 恢复，与 AppFooter.vue 同源
-    '<div style="margin-top:16px;font-size:12px;color:var(--t4);line-height:1.8">备案号：<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:var(--t4)">粤ICP备2021031984号</a><span style="margin:0 10px;color:var(--t4)">|</span><a href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44030902002737" target="_blank" rel="noopener noreferrer" style="color:var(--t4)">公安备案号：44030902002737号</a></div>'+
-    // 微调豁免（2026-09-28）：恢复既有备案信息块，无新增交互/状态/路由，不触发 checklist A–I 变更项
+    // 备案信息不再画在本页（2026-09-28 二次调整）：统一由基座 shell 的 SiteBeianBar 提供，
+    // 覆盖所有路由；子模块各自实现既重复又易漏（d1d27b7 就漏过一次）。原型见 apps/shell/prototype/index.html。
+    // 微调豁免（2026-09-28）：仅撤下本页备案块、上移到基座层，无新增交互/状态/路由。
   '</div>';
 }
 
