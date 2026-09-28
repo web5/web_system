@@ -107,7 +107,9 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
-          <a-dropdown>
+          <!-- 浮层挂回父节点：Teleport 到 body 会脱离 [data-module=admin] 容器，
+               mf 构建 :where 前缀匹配不上 → scoped 样式失效（同 portal AppNavbar 修复） -->
+          <a-dropdown :get-popup-container="(t) => t.parentNode">
             <span class="user-name">
               <a-avatar :size="30" :src="userAvatar" class="user-avatar">
                 <template #icon><UserOutlined /></template>
