@@ -24,7 +24,8 @@ version: 1.0.0
 4. **编码**：`docs/ui/design.md` 布局铁律（§2）/ 交互状态矩阵（§3）/ 视觉 Token 约束（§4）；antd 覆盖冲突走 `css-override-rules.md`；改色/加色走 `color-reference.md`。
 5. **自检（证据化）**：design.md §5——页面类型一致 / 无裸色 / 无新增 !important / dark 过目 / 状态矩阵全覆盖 / 截图基线到 `docs/ui/baselines/`（命名 `{app}-{page}-{before|after}.png`）/ 修正记录追加 `geist-token-评审记录.md`（只追加）。
 6. **规则整改执行门**：≥2 文件/跨页面/跨端的批量整改 → 先出《整改影响清单》交负责人确认，再动代码（R6 教训）。
-7. **微前端产物四步**（admin/portal/mcp-admin 改动后，否则等于没改）：构建（`RELEASE_TAG=$P/$V MF_FORMAT=system npx vite build --mode mf`，其中 `P=default` 为产品线段，**必须带** —— 缺段 base 会少一层、public 资源静默 404，现由 `scripts/vite-micro-frontend.mjs` 构建期拦截）→ 拷贝 `dist/*` 到 gateway `static/modules/<module>/$P/$V/` → 更新 `web_system_deploy.deploy_deployments`（不是 web_system 库！，current_version 写 `$P/$V`）→ 等 gateway TTL（10s）验证 `__manifest__`。详见 CODEBUDDY 微前端铁律与 `docs/development/admin-dev.md` §一·C。
+7. **微前端产物四步**（admin/portal/mcp-admin 改动后，否则等于没改）：构建（`RELEASE_TAG=$P/$V MF_FORMAT=system npx vite build --mode mf`，其中 `P=default` 为产品线段，**必须带** —— 缺段 base 会少一层、`resolveMfBase` 会 fail-fast，见 `scripts/vite-micro-frontend.mjs`）→ 拷贝 `dist/*` 到 gateway `static/modules/<module>/$P/$V/` → 更新 `web_system_deploy.deploy_deployments`（不是 web_system 库！，current_version 写 `$P/$V`）→ 等 gateway TTL（10s）验证 `__manifest__`。详见 CODEBUDDY 微前端铁律与 `docs/development/admin-dev.md` §一·C。
+8. **静态资源只能走 CDN**（2026-09-27 起）：新增图片/素材/头像一律放进单一源目录 `assets/shared-public/`，代码用编译期常量引用；**禁止**写 `/xxx.png` 裸绝对路径或 `${import.meta.env.BASE_URL}xxx.png`。发布：`node scripts/build-public-assets.mjs`（产物 `servers/gateway/public/static/cdn/pub/`，随 `deploy.sh cdn` 投递）。约定与两个坑见 `assets/shared-public/README.md`。
 
 ## 原型稿生成（prototype）
 
