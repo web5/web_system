@@ -175,6 +175,10 @@ async function buildUmd({ entryFile, entryCode, globalName, outFile, externals, 
       logLevel: 'warn',
       configFile: false,
       resolve: { alias },
+      // ⚠️ define 是 vite 顶层配置（放 build 下不生效）：es 源码里散布 `process.env.NODE_ENV`
+      //    （官方 UMD 已预替换，我们直接从 es 构建则不会）——不替换运行时抛
+      //    `ReferenceError: process is not defined`，window.antd 变 undefined，整个基座跟着挂。
+      define: { 'process.env.NODE_ENV': JSON.stringify('production'), 'process.env.VUE_ENV': JSON.stringify('client') },
       build: {
         write: true,
         outDir: OUT_DIR,
