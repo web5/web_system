@@ -279,7 +279,7 @@ check_r10() {
       continue
     fi
 
-    sha="$(printf '%s' "$body" | grep -E '^Proto:[[:space:]]*[0-9a-fA-F]{7,40}' | head -n 1 | awk '{print $2}')"
+    sha="$(printf '%s' "$body" | grep -E '^Proto:[[:space:]]*' | head -n 1 | grep -oE '[0-9a-fA-F]{7,40}' | head -n 1)"
     if [ -z "$sha" ]; then
       add_warn "R10" "UI commit 缺 Proto 凭证" "$(git log -1 --format=%s "$c")" "UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）"
       continue
