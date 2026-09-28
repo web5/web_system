@@ -102,7 +102,8 @@
             <a-space :size="2">
               <a-button type="link" size="small" @click="viewUser(record)">查看</a-button>
               <a-button type="link" size="small" @click="editUser(record)">编辑</a-button>
-              <a-dropdown placement="bottomRight" :trigger="['click']">
+              <!-- 浮层挂回父节点：避免 Teleport 到 body 脱离 [data-module=admin] 样式容器 -->
+              <a-dropdown placement="bottomRight" :trigger="['click']" :get-popup-container="(t) => t.parentNode">
                 <a-button type="link" size="small">
                   <template #icon><MoreOutlined /></template>
                 </a-button>

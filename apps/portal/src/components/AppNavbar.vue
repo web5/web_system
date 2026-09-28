@@ -29,7 +29,15 @@
         <kbd>{{ cmdHint }}</kbd>
       </button>
 
-      <a-dropdown v-if="userStore.isLoggedIn" :trigger="['click']" placement="bottomRight">
+      <!-- get-popup-container：浮层默认 Teleport 到 body，脱离 [data-module=portal]
+           容器 → mf 构建 :where 前缀匹配不上，scoped 样式（.menu-row/.app-icon）失效，
+           菜单图标文字竖排。挂回触发器父节点恢复横排。 -->
+      <a-dropdown
+        v-if="userStore.isLoggedIn"
+        :trigger="['click']"
+        placement="bottomRight"
+        :get-popup-container="(t) => t.parentNode"
+      >
         <button type="button" class="avatar" :title="userName">
           {{ avatarText }}
         </button>
