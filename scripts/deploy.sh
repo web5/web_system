@@ -146,9 +146,9 @@ deploy_frontend() { # $1=module_name
       rm -f "/tmp/shell-deploy.tar.gz"
     fi
   else
-    # ⚠️ 本脚本已 DEPRECATED，仍走历史扁平布局（产物落 modules/<mod>/<V>/）：
-    #    显式开逃生舱，否则 vite base 会按新契约（<产品线>/<版本>）拒绝构建。
-    say "cd $ROOT/apps/$mod && MF_ALLOW_FLAT_BASE=1 RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf"
+    # ⚠️ 本脚本已 DEPRECATED，仍走历史扁平布局（产物落 modules/<mod>/<V>/）。
+    #    扁平自 2026-09-28 起就是基底契约（不再是逃生舱），故无需再设 MF_ALLOW_FLAT_BASE=1。
+    say "cd $ROOT/apps/$mod && RELEASE_TAG=$V MF_FORMAT=system npx vite build --mode mf"
     if [ "$DRY_RUN" != "1" ]; then
       tar czf "/tmp/${mod}-deploy.tar.gz" -C "$ROOT/apps/$mod/dist" .
       scp_to "/tmp/${mod}-deploy.tar.gz"
