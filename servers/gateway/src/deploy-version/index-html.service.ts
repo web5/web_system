@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { join, normalize, extname } from 'path';
+import { join, normalize, extname, resolve, sep } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { DeployDeploymentEntity } from './deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-module.entity';
@@ -55,6 +55,8 @@ export class IndexHtmlService {
   private readonly logger = new Logger(IndexHtmlService.name);
   private htmlCache = new Map<string, { mtime: number; content: string }>();
   private versionCache = new Map<string, VersionCache>();
+  /** shell 版本目录缺失的告警只打一次（静态资源每次请求都会解析，避免刷日志） */
+  private shellDirWarned = false;
   private readonly versionTtl = 10_000;
 
   constructor(
@@ -422,13 +424,28 @@ export class IndexHtmlService {
    * `static/modules/shell/<版本>/index.html` + `deploy_deployments` 指针。
    */
   private async resolveShellHtmlFile(): Promise<string> {
+    return join(await this.resolveShellDir(), 'index.html');
+  }
+
+  /**
+   * 基座**目录**（html 与静态资源同源）。
+   *
+   * **NEW 域（默认）**：`static/modules/shell/<envId>/<版本>/`（与产物投递布局一致）。
+   * 取不到版本或目录缺失 → 退回固定目录 `shell/`（保证老部署仍可启动）。
+   *
+   * **应急通道**（`DEPLOY_LEGACY_READ=1`）：按旧扁平布局 `static/modules/shell/<版本>/`。
+   *
+   * 抽成目录（而不是直接给 html 路径）是为了让 `/shell/*` 静态资源走同一份解析
+   * —— 见 `resolveShellAssetPath`。
+   */
+  private async resolveShellDir(): Promise<string> {
     const envId = this.envId;
-    const fixed = join(PUBLIC_ROOT, 'shell', 'index.html');
+    const fixed = join(PUBLIC_ROOT, 'shell');
     if (this.legacyRead) {
       try {
         const version = await this.getCurrentVersion(envId, 'shell');
         if (!version) return fixed;
-        const flat = join(PUBLIC_ROOT, 'static/modules/shell', version, 'index.html');
+        const flat = join(PUBLIC_ROOT, 'static/modules/shell', version);
         return existsSync(flat) ? flat : fixed;
       } catch {
         return fixed;
@@ -437,13 +454,44 @@ export class IndexHtmlService {
     try {
       const version = await this.getCurrentAppVersion('shell', envId);
       if (!version) return fixed;
-      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', envId, version, 'index.html');
+      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', envId, version);
       if (existsSync(versioned)) return versioned;
-      this.logger.warn(`shell 版本目录不存在，回落固定路径：${versioned}`);
+      // 静态资源请求也会走这里，只告警一次，避免刷日志
+      if (!this.shellDirWarned) {
+        this.shellDirWarned = true;
+        this.logger.warn(`shell 版本目录不存在，回落固定路径：${versioned}`);
+      }
     } catch {
-      /* 查表失败 → 固定路径 */
+      /* 查表失败 → 固定目录 */
     }
     return fixed;
+  }
+
+  /**
+   * 基座静态资源 `/shell/*` 的物理路径 —— 与 html **同源**解析。
+   *
+   * 背景（wb-issues rtqmct）：基座的 html 走版本目录，而 html 里引用的
+   * `/shell/assets/<hash>.js` 走 ServeStatic 的固定目录 `public/shell/`。
+   * 两者不同源 → 只投版本目录时，新 html 引用新 hash、固定目录还是旧文件 → 404，
+   * 基座 JS 加载失败（且 html 本身 200，排障极迷惑），只能靠「两处同时更新」人工规避。
+   *
+   * 这里统一按版本目录解析；解析不到（老部署无指针 / 文件缺失）返回 `null`，
+   * 由调用方回落固定目录 —— 老部署不受影响。
+   *
+   * @param urlPath 形如 `/shell/assets/index.<hash>.js`（也接受相对路径 `assets/...`）
+   * @returns 绝对路径；不可用（非法 / 穿越 / 不存在）返回 `null`
+   */
+  async resolveShellAssetPath(urlPath: string): Promise<string | null> {
+    const rel = urlPath.startsWith('/shell/') ? urlPath.slice('/shell/'.length) : urlPath;
+    // 目录穿越防护：禁用 `..`、`\0`、绝对路径形态
+    if (!rel || rel.includes('\0') || /(^|[\\/])\.\.([\\/]|$)/.test(rel) || rel.startsWith('/')) {
+      return null;
+    }
+    const dir = await this.resolveShellDir();
+    const file = resolve(dir, rel);
+    // 归一化后必须仍在基座目录内（二次兜底）
+    if (file !== resolve(dir) && !file.startsWith(resolve(dir) + sep)) return null;
+    return existsSync(file) ? file : null;
   }
 
   /**
