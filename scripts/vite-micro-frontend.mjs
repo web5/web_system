@@ -80,8 +80,19 @@ export function resolveMfBase(name, rawTag = process.env.RELEASE_TAG) {
  */
 export function microFrontendConfig(opts) {
   const { name, entry = 'src/main.ts' } = opts;
-  // 支持 MF_FORMAT 环境变量：umd（默认，兼容现状）| system（SystemJS，可分包）
-  const format = opts.format || process.env.MF_FORMAT || 'umd';
+  // 支持 MF_FORMAT 环境变量：**默认 system**（2026-09-28 起）。
+  //
+  // 为什么要改默认值：umd 只能产出**单文件整包**（admin index.js 1.93MB / portal 2.21MB，
+  // 首屏必须先下完才能渲染），且主业务以外的路由、echarts（519KB）也一并打进去。
+  // 改 system 后 rollup 按路由分包：入口 index.js 退化为几百字节的 System.register shim，
+  // 其余 chunk 按需拉取；配合 gateway 的 preload 与 gateway 对 /static/modules/ 下
+  // 带 hash 分包的 immutable 缓存，首屏体积与回访命中率同步改善。
+  //
+  // loader 同时支持两种格式（system 主路径 / umd 旧产物兼容），且官方文档、
+  // deploy.sh / deploy-local.sh / 流水线配置历来写的都是 MF_FORMAT=system ——
+  // 这里只是让**不显式传 MF_FORMAT 的构建入口**（如 scripts/build-module.mjs）不再退化成 umd。
+  // 需要旧行为时显式传 MF_FORMAT=umd 即可。
+  const format = opts.format || process.env.MF_FORMAT || 'system';
   const externals = { ...DEFAULT_EXTERNALS, ...(opts.externals || {}) };
   // 模块名中的连字符转下划线，作为 UMD 全局变量名后缀
   const globalName = `__modules_${name.replace(/[-/]/g, '_')}`;
