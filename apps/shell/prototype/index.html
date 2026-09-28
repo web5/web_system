@@ -6,6 +6,10 @@
   <title>基座级全站备案条 · 原型（SiteBeianBar）</title>
   <style>
     :root {
+      /* 备案条高度：基座对外公开的唯一避让变量。
+         模块根容器用它做 calc(100vh - var(--site-beian-bar-h))，
+         模块单独运行（变量不存在）时回落 0，布局与改造前完全一致。 */
+      --site-beian-bar-h: 30px;
       --ws-brand-500: #fa8c16;
       --ws-text-primary: #1f2329;
       --ws-text-secondary: #646a73;
@@ -21,12 +25,28 @@
       background: var(--ws-bg-page);
     }
 
-    /* 模拟「模块页面」：全屏占满，底部内容会被固定条覆盖 —— 这正是本稿要验证的点 */
+    /* 模拟「模块页面」外壳：必须扣掉备案条高度，否则底部（侧栏能力区 / 后台分页条）
+       会被固定条压住 —— 这正是本次修复的点（sidebar 被遮挡） */
     .stage {
       position: relative;
-      height: 100vh;
+      height: calc(100vh - var(--site-beian-bar-h, 0px));
       overflow: auto;
       padding: 24px;
+    }
+    /* 模拟左栏：底部有钉住的能力面板，是全站最容易被贴底条压住的区域 */
+    .mock-side {
+      position: absolute;
+      left: 24px; top: 24px; bottom: 24px;
+      width: 220px;
+      display: flex; flex-direction: column;
+      background: #fff; border: 1px solid var(--ws-border-light); border-radius: 8px;
+      padding: 12px; font-size: 12px; color: var(--ws-text-secondary);
+    }
+    .mock-side-caps {
+      margin-top: auto;
+      border-top: 1px solid var(--ws-border-light);
+      padding-top: 10px;
+      color: var(--ws-text-tertiary);
     }
     .mock-card {
       max-width: 880px;
@@ -53,7 +73,7 @@
       right: 0;
       bottom: 0;
       z-index: 900;                 /* 低于环境切换挂件 1080，避免 dev 下互相压盖 */
-      height: 30px;
+      height: var(--site-beian-bar-h);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -96,6 +116,10 @@
 </head>
 <body>
   <div class="stage">
+    <aside class="mock-side">
+      模拟左栏（portal 记录列表 / admin sider）
+      <div class="mock-side-caps">底部能力面板：钉在栏底，扣掉备案条高度后才完整可见</div>
+    </aside>
     <div class="mock-card">
       <h3>模拟模块页面（portal 欢迎页 / admin 列表页）</h3>
       <p>
@@ -140,12 +164,19 @@
         内容流 footer 会掉到视口之外，必须滚动才看得到，等于没有。</li>
       <li><b>z-index 900</b>：低于环境切换挂件（1080），dev 下挂件浮在条之上，互不遮挡主体功能。</li>
       <li><b>高度 30px + 半透明</b>：尽量少占视口；模块贴底操作区需自留安全区（本稿 <code>.mock-tail</code> 已示意）。</li>
+      <li><b>避让机制（2026-09-28 补）</b>：fixed 条必然压住模块底部。首版未做避让，
+        portal 开始页 / 对话页的左栏底部能力面板、admin sider 底部均被压 30px。
+        修法：基座在 <code>:root</code> 公开 <code>--site-beian-bar-h</code>，
+        各模块根容器高度由 <code>100vh</code> 改为
+        <code>calc(100vh - var(--site-beian-bar-h, 0px))</code>。
+        模块单独运行（无该变量）时回落 <code>0</code>，布局与改造前一致 —— 不产生基座强耦合。</li>
     </ul>
     <h2>微调豁免（2026-09-28）</h2>
     <p>
-      本稿为「备案信息展示位置」的回归与统一：无新增交互、无新增状态、无路由变更，
-      仅把既有备案信息（粤ICP备2021031984号 / 公安备案号 44030902002737号）
-      从 portal 单页上移到基座全站层，故不触发 ux-review-checklist A–I 的新增项复核。
+      本稿为「备案信息展示位置」的回归与统一 + 「贴底条避让高度」修复：无新增交互、无新增状态、
+      无路由变更，仅把既有备案信息（粤ICP备2021031984号 / 公安备案号 44030902002737号）
+      从 portal 单页上移到基座全站层，并为模块根高度引入避让变量，
+      故不触发 ux-review-checklist A–I 的新增项复核。
     </p>
   </section>
 </body>
