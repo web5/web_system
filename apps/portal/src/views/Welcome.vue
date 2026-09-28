@@ -24,6 +24,11 @@
       内容由 AI 生成，仅供参考，不构成法律意见<br />
       已依法完成大模型与算法备案
     </p>
+
+    <!-- 备案信息（ICP + 公安，法定要求站点首页底部必显）：见 AppFooter.vue。
+         2026-09-28 恢复——portal 换血升级（d1d27b7）摘掉了 AppFooter 引用，
+         组件成为孤儿，首页只剩 AI 声明。 -->
+    <app-footer class="welcome-footer" />
   </div>
 </template>
 
@@ -34,6 +39,7 @@ import { dayIndex, getDailyQuote, nextQuote, type DailyQuote } from '@/config/da
 import { useConversationStore } from '@/stores/conversations';
 import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from '@/components/AppIcon.vue';
+import AppFooter from '@/components/AppFooter.vue';
 
 const router = useRouter();
 const store = useConversationStore();
@@ -72,6 +78,15 @@ function startChat() {
   background:
     radial-gradient(520px 260px at 12% 8%, var(--ws-brand-50) 0%, transparent 70%),
     radial-gradient(560px 280px at 88% 92%, var(--ws-brand-50) 0%, transparent 70%);
+}
+
+/* 备案信息贴底：欢迎页是垂直居中布局，用 auto 上外边距把 footer 推到可视区底部。
+   底色改透明以融入品牌光斑（AppFooter 默认是白底 + 上边框，适合常规内容页）。 */
+.welcome .welcome-footer {
+  margin-top: auto;
+  padding-top: 32px;
+  background: transparent;
+  border-top: none;
 }
 
 .hello {
