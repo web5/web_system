@@ -1,5 +1,15 @@
 <template>
-  <div id="module-container" :data-module="moduleName" class="module-container" ref="containerRef"></div>
+  <div class="module-host">
+    <div id="module-container" :data-module="moduleName" class="module-container" ref="containerRef"></div>
+    <!-- 加载占位：模块下载 + 挂载期间容器里什么都没有（用户看到的是"空白页"），
+         这里叠一层提示，与 #app 的 boot-fallback 视觉一致。
+         做成**兄弟节点**而不是子元素：模块 mount 会接管 #module-container 的内部 DOM，
+         占位若在容器里，Vue 后续移除已被模块清掉的节点会抛 NotFoundError。 -->
+    <div v-if="loading" class="module-boot" role="status" aria-live="polite">
+      <div class="module-boot__spinner" aria-hidden="true"></div>
+      <p class="module-boot__hint">正在加载「{{ moduleName }}」模块资源…</p>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -10,6 +20,8 @@ import type { MicroFrontendLoader } from '@web-system/shell-loader';
 const route = useRoute();
 const router = useRouter();
 const containerRef = ref<HTMLElement | null>(null);
+// 模块正在下载/挂载（ mount 是纯 await 网络 + 执行，耗时长）——决定占位显示与否
+const loading = ref(true);
 // 当前模块名（/portal/ → portal），作为 CSS scope 前缀 [data-module="portal"] 的锚点
 const moduleName = computed(() => (route.params.module as string) || '');
 
@@ -25,11 +37,14 @@ async function mountModule(name: string) {
     return;
   }
   containerRef.value.setAttribute('data-module', name);
+  loading.value = true;
   try {
     console.log(`[shell] mountModule call: ${name}`);
     await loader.mount(name, containerRef.value);
     console.log(`[shell] mounted module: ${name}`);
+    loading.value = false;
   } catch (e) {
+    loading.value = false;
     console.error(`[shell] 挂载模块 ${name} 失败:`, e);
     renderMountError(containerRef.value, name, e);
   }
@@ -84,10 +99,39 @@ onUnmounted(async () => {
 </script>
 
 <style>
+.module-host {
+  position: relative;
+  /* 撑出首屏高度：占位才有地方居中，模块 mounted 后由模块自身内容接管 */
+  min-height: calc(100vh - var(--site-beian-bar-h, 0px));
+}
 .module-container {
   /* 扣掉基座备案条高度：模块若未适配（100vh）也不至于把内容顶到条下面看不见 */
   min-height: calc(100vh - var(--site-beian-bar-h, 0px));
 }
+/* 加载占位：absolute 覆盖在容器之上，不参与模块 DOM，卸载无副作用 */
+.module-boot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #8c8c8c;
+  font-size: 13px;
+  /* 不拦鼠标：模块已挂载时不挡交互（loading 置 false 后本节点即被移除） */
+  pointer-events: none;
+}
+.module-boot__spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-top-color: #fa8c16;
+  border-radius: 50%;
+  animation: module-boot-spin 0.8s linear infinite;
+}
+@keyframes module-boot-spin { to { transform: rotate(360deg); } }
+.module-boot__hint { margin: 0; }
 .module-error {
   max-width: 640px;
   margin: 15vh auto 0;
