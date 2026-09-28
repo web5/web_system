@@ -131,6 +131,9 @@ export class AgentDefSyncService {
     return {
       id,
       name,
+      // 意图路由线索：由后台定义提供，随 30s 轮询实时生效（不要在本服务里写默认值）
+      description: row.description != null ? String(row.description) : null,
+      keywords: Array.isArray(row.keywords) ? (row.keywords as string[]) : null,
       systemPrompt,
       model,
       // 版本快照（Phase2.3：随定义下发，供回放/遥测/成本统计区分版本）
