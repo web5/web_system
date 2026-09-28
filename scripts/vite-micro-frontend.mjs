@@ -193,10 +193,17 @@ export function microFrontendConfig(opts) {
  *   大面积误伤 antdv 组件（Input padding 清零、按钮白色文字变深、hover 失效）。
  *   改成 :where() 后前缀优先级归零，模块 CSS 与 antdv 恢复正常的层叠关系。
  *
- * html/body/:root/[data-theme] 选择器不加前缀（保持全局）：
- *   - :root/[data-theme] 定义 CSS 变量，作用在 <html> 上；变量跨模块冲突已由
+ * html/body/:root/[data-theme]/[data-radius] 选择器不加前缀（保持全局）：
+ *   - :root/[data-theme]/[data-radius] 定义 CSS 变量，作用在 <html> 上；变量跨模块冲突已由
  *     shell-loader 在 unmount 时 removeCss 解决（单模块挂载场景）。
  *   - html/body 设置页面背景/字体，由模块统一维护。
+ *
+ * ⚠️ 2026-09-28 修缺陷：`[data-radius='...']`（圆角风格）**必须**与 `[data-theme` 同列豁免。
+ *    它和 data-theme 一样由模块 JS 写到 `<html>` 上（portal ui-prefs / admin theme store），
+ *    而 `<html>` 是模块容器 `<div data-module="x">` 的**祖先**。一旦加前缀变成
+ *    `:where([data-module="portal"]) [data-radius=sharp]`，语义就成了「模块**内部**带该属性的
+ *    后代」→ 永远匹配不到 → 表现即「设置里切了直角，页面圆角毫无变化」。
+ *    （产物实证：portal/admin dist/index.css 里该块被错误地加了前缀。）
  */
 function cssScopePlugin(moduleName) {
   const prefix = `:where([data-module="${moduleName}"])`;
@@ -213,8 +220,13 @@ function cssScopePlugin(moduleName) {
                   root.walkRules((rule) => {
                     if (!rule.selectors) return;
                     rule.selectors = rule.selectors.map((sel) => {
-                      // html/body/:root/[data-theme=...] 全局选择器不加前缀
-                      if (/^\s*(html|body|:root)/.test(sel) || /^\s*\[data-theme/.test(sel)) return sel;
+                      // html/body/:root/[data-theme=...]/[data-radius=...] 全局选择器不加前缀
+                      // （后两者是写在 <html> 上的主题/圆角开关，加前缀会命中不到，见上方 JSDoc）
+                      if (
+                        /^\s*(html|body|:root)/.test(sel) ||
+                        /^\s*\[data-(theme|radius)/.test(sel)
+                      )
+                        return sel;
                       if (sel.includes('[data-module')) return sel;
                       return `${prefix} ${sel}`;
                     });
