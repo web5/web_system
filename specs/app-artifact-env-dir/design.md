@@ -62,6 +62,14 @@ UMD: 模块 portal@env:local 未暴露 lifecycle（缺 mount）: /static/modules
 > （编译期常量 `__PUBLIC_ASSET_BASE__`，源目录 `assets/shared-public/`）。
 > 现在烘焙进产物的只剩入口路径，`base` 的产品线段对资源加载已无影响，
 > 「双目录 / 少一段产品线段 → 图片静默 404」这条风险已消失。
+>
+> ⚠️ **2026-09-28 进一步**：既然资源已与 base 解耦，**「产品线段」不再是必选项**。
+> `resolveMfBase` 改为「纯 `<commit>` 扁平为常态，两段为可选（环境/流水线命名空间）」，
+> 并删除 `MF_ALLOW_FLAT_BASE` 逃生舱。理由：此前 `build-module.mjs`（写 `default/<commit>`）、
+> `deploy.sh`（写纯 commit 却要靠逃生舱绕过校验）、线上 NEW 域实际入口
+> （`<key>/<envId>/index.js` 指针 + `<envId>/<commit>/`）三者互不一致。
+> 下方「产品线段必须等于 envId」的推论在**资源层面**已不再成立（保留其历史语境）；
+> 当前建议：env-dir 应用按需用 `<envId>/<commit>`，其余用纯 `<commit>`。
 
 ### C3 env-dir 布局只认 `<key>/<envId>/` 下的版本目录
 
