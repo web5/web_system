@@ -125,8 +125,118 @@ export class IndexHtmlService {
 
     // 基座：注入模块清单（新结构 envs/byEnv；与 /__manifest__ 端点同一来源）
     const manifest = await this.buildManifest(req);
-    const meta = `<script id="__MODULES_MANIFEST__">window.__MODULES_MANIFEST__=${JSON.stringify(manifest)};</script>`;
-    return this.injectHead(html, meta);
+    const scriptTag = `<script id="__MODULES_MANIFEST__">window.__MODULES_MANIFEST__=${JSON.stringify(manifest)};</script>`;
+    return this.injectHead(html, scriptTag + this.buildPreloadTags(manifest, req));
+  }
+
+  // ==================================================================
+  // 首屏资源 preload（2026-09-28 优化，P0-1）
+  //
+  // 背景：模块入口体积大（admin index.js 原始 1.93MB / gzip 约 500KB），
+  // 而基座是**下载完才挂载**的串行瀑布 —— shell 启动 → 路由 → ModuleContainer
+  // onMounted → 这才发现必需的主包还没开始下载，期间页面是一片空白。
+  // 改动前 2026-09-28 实测：入口 gzip 下载 ≈ 4s，未压缩 ≈ 16.7s。
+  //
+  // 手法：manifest 本来就在 HTML 里（version/entry 全都有），因此**服务端顺手**
+  // 把该次访问真正需要的模块资源以 `<link rel=preload>` 写进 <head> ——
+  // 浏览器在解析 HTML 阶段就并行开始下载，与 14 个 CDN 依赖、shell 包同时走，
+  // 消掉「shell 启动完成才能开始下主包」这段串行等待。
+  //
+  // 为什么要连层级都照顾到（担心少一个）？
+  //   shell 注册的是**无版本指针** `/static/modules/<key>/<envId>/index.js`，
+  //   指针内部 `System.register(['./<commit>/index.js'])` → 解析后就是
+  //   `/static/modules/<key>/<envId>/<commit>/index.js`。**两跳**，主体在第二跳，
+  //   故两个 URL 都要 preload（第二跳才是那 500KB）。
+  //
+  // 三个守卫：
+  //   ① URL 必须与运行时真正请求的 URL **逐字一致**（同源同 URL 才会命中 preload 缓存，
+  //      差一个字节就是白下载 500KB）；只 preload 当前这一个模块，不铺开全部；
+  //   ② 只发二级 hints，**不替托管 CSP**：不用 modulepreload（产物是 SystemJS classic script，
+  //      非 ESM），不加 crossorigin（运行时 script 也不加，加了反而重复下载）；
+  //   ③ 应急开关 `MF_PRELOAD=0` 一键关掉（注入链路出问题时不至于影响基座启动）。
+  // ==================================================================
+
+  /** 环境变量选择的 Cookie（由 shell 写入，服务端据此挑环境产物；缺省走 defaultEnv） */
+  private static readonly ENV_COOKIE = 'kedou_env';
+
+  /**
+   * 组装 `<link rel="preload">`（按当前请求命中的模块，只注入真正需要的资源）。
+   * 命中不了（/login、404、manifest 为空等）→ 空串，行为与改造前一致。
+   */
+  private buildPreloadTags(manifest: Record<string, any>, req?: any): string {
+    if (String(this.configService.get('MF_PRELOAD') ?? '1').trim().toLowerCase() === '0') return '';
+    const envId = this.resolvePreloadEnv(manifest, req);
+    const key = this.resolvePreloadModuleKey(manifest, req, envId);
+    if (!key) return '';
+
+    const tags: string[] = [];
+    const push = (href: unknown, kind: 'script' | 'style') => {
+      const url = typeof href === 'string' ? href : '';
+      // 只放行本站绝对路径（模块资源一律同源产物），杜绝任何注入面
+      if (!url.startsWith('/') || url.startsWith('//')) return;
+      tags.push(`<link rel="preload" href="${url}" as="${kind}">`);
+    };
+
+    const pointer = manifest.byEnv?.[envId]?.[key];
+    const packed = (manifest.modules || []).find((m: any) => m.name === key);
+
+    // ① 版本化整包（体积主体，几百 KB）：指针内部第二跳就是这个 URL，必须逐字一致
+    //    ⚠️ 版本必须取「当前环境」那份 —— `modules[]` 里只有 defaultEnv 的版本，
+    //    直接用它会预载到用户用不上的环境产物（白白多下一次 500KB），故优先用 byEnv.version。
+    const version = pointer?.version;
+    if (version) {
+      push(`/static/modules/${key}/${envId}/${version}/index.js`, 'script');
+    } else if (packed?.entry && (manifest.defaultEnv || this.envId) === envId) {
+      // 老 gateway / legacy 清单没有 version 字段：只在「当前环境即 defaultEnv」时
+      // 才敢用 modules[] 的整包路径（换环境时它指向别处）
+      push(packed.entry, 'script');
+    }
+    // ② 无版本指针 + 其样式指针：loader 真正的第一跳，几百字节
+    if (pointer?.entry && pointer.entry !== packed?.entry) push(pointer.entry, 'script');
+    // ③ 样式只放 shell 会注入的那份（byEnv 指针），不放 CDN 版本化副本 —— 否则重复下载 180KB
+    if (pointer?.css) push(pointer.css, 'style');
+    return tags.join('');
+  }
+
+  /**
+   * 本次请求会用哪个环境（① Cookie 选择 > ② 站点 defaultEnv）。
+   * 前端环境的真相源是 localStorage（`kedou.env`），服务端读不到 —— 故由 shell
+   * 把已选环境写进 Cookie。缺失不致命：退回 defaultEnv，最坏情况是预载了不需要的
+   * 那份（用户确实切过环境时），不会把资源引错、也不会影响挂载流程。
+   */
+  private resolvePreloadEnv(manifest: Record<string, any>, req?: any): string {
+    const ids: string[] = (manifest.envs || []).map((e: any) => e.id).filter(Boolean);
+    const picked = this.readCookie(req, IndexHtmlService.ENV_COOKIE);
+    if (picked && (!ids.length || ids.includes(picked))) return picked;
+    const fallback = manifest.defaultEnv || this.envId;
+    if (ids.length && !ids.includes(fallback)) return ids[0] || this.envId;
+    return fallback;
+  }
+
+  /**
+   * 本次请求命中的模块名。
+   * - `/admin/xxx` → admin；`/` → portal（基座 router `/` redirect `/portal/`）
+   * - `/login` 等命中不了任何已知模块 → null（不注入）
+   */
+  private resolvePreloadModuleKey(manifest: Record<string, any>, req?: any, envId?: string): string | null {
+    const known = new Set<string>([
+      ...Object.keys(manifest.byEnv?.[envId || manifest.defaultEnv] || {}),
+      ...(manifest.modules || []).map((m: any) => m.name),
+    ]);
+    if (!known.size) return null;
+    const raw = String(req?.path || req?.originalUrl || '').split('?')[0];
+    const first = raw.split('/').filter(Boolean)[0] || '';
+    if (!first) return known.has('portal') ? 'portal' : null;
+    return known.has(first) ? first : null;
+  }
+
+  /** 读单个 Cookie（Express req.cookies 不可用时退回手解 header） */
+  private readCookie(req: any, name: string): string {
+    const fromParsed = req?.cookies?.[name];
+    if (typeof fromParsed === 'string' && fromParsed) return fromParsed;
+    const raw: string = req?.headers?.cookie || '';
+    const hit = raw.split(';').map((s) => s.trim()).find((s) => s.startsWith(`${name}=`));
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : '';
   }
 
   /**
@@ -198,16 +308,20 @@ export class IndexHtmlService {
     // 基座（site-version）不纳入 env 切换（Q107）
     const envDirApps = apps.filter((a) => a.deployMode === 'env-dir');
 
-    const byEnv: Record<string, Record<string, { entry: string; css: string | null }>> = {};
+    const byEnv: Record<string, Record<string, { entry: string; css: string | null; version?: string }>> = {};
     for (const e of envIds) {
-      const entries: Record<string, { entry: string; css: string | null }> = {};
+      const entries: Record<string, { entry: string; css: string | null; version?: string }> = {};
       for (const app of envDirApps) {
-        if (!currentOf.get(`${app.key}@${e}`)) continue;
+        const version = currentOf.get(`${app.key}@${e}`) as string;
+        if (!version) continue;
         const cssRel = `/static/modules/${app.key}/${e}/index.css`;
         entries[app.key] = {
           entry: `/static/modules/${app.key}/${e}/index.js`,
           // 样式指针只在产物含 index.css 时被写入，按磁盘存在性给出（避免前端引 404）
           css: this.diskHas(`static/modules/${app.key}/${e}/index.css`) ? cssRel : null,
+          // 当前版本：**只给服务端首屏 preload 用**（据此拼出指针内部的第二跳 URL）。
+          // 前端挂载走无版本指针，不读这个字段，故指针漂移不影响前端行为。
+          version,
         };
       }
       byEnv[e] = entries;
