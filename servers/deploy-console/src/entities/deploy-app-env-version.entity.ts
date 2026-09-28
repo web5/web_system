@@ -1,12 +1,19 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique } from 'typeorm';
 
 /**
- * 应用 × 环境的版本指针（微前端域）—— 替代旧 `deploy_deployments` 的 env 维度
+ * 应用 × 环境的版本指针（**前端 env-dir 应用**域）
  *
  * 设计依据：specs/deploy-console-domain-split/design.md v2 §2.2（Q103：**无 slotKey**）
  * - `currentVersion` 指向产物目录 `<appKey>/<envId>/<version>/`
  * - 切换版本 / 回滚 = 只改写 `envId/index.js` 入口指针 + 本表指针（不重新构建）
  * - gateway `__manifest__` 的 `byEnv[envId]` 由此表解析
+ *
+ * ⚠️ 2026-09-28 更正早期表述「替代旧 `deploy_deployments` 的 env 维度」：
+ *   本表**只覆盖前端 env-dir 应用**（deploy_apps.deploy_mode='env-dir'，当前 admin / portal）。
+ *   后端服务的版本指针仍在 `deploy_deployments`（新模型无对应载体），
+ *   发布时由 `ReleaseRegistryService.setPointer` 双写：前端写两处，后端只写旧表。
+ *   ⇒ 迁移期两轨必须同步，否则旧 shell（只认 legacy `modules[]`）会拿到陈旧产物
+ *     （2026-09-28 dev 页面 404 事故即由此而来）。
  */
 @Entity('deploy_app_env_versions')
 @Unique(['appKey', 'envId'])
