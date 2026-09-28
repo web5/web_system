@@ -29,6 +29,13 @@
         菜单图标/文字竖排错乱。修复 = 浮层挂回触发器父节点，恢复设计稿应有的横排样式，
         不改任何交互、状态、布局规格。
   关联：scripts/vite-micro-frontend.mjs（cssScopePlugin）、apps/shell/src/loader.ts
+
+  2026-09-28 · 微调豁免 · 加载期首屏 FOUC 修复（缺陷修复）
+  改动范围：packages/shell-loader（模块 CSS 就位后再 mount）、
+         apps/portal/src/components/AppIcon.vue（svg 补 width/height 内建尺寸）
+  判定：**缺陷修复，非视觉/交互设计变更** —— 模块 CSS 未就位即挂载，顶栏「开始」
+        home 图标（无内建尺寸的 svg）短暂撑到默认 300×150 并继承品牌橙色，形成
+        「巨大橙色房子」一闪；修复后加载期不再出现该现象，稳态视觉完全不变。
 -->
 <html lang="zh-CN">
 <head>
