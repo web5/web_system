@@ -118,9 +118,17 @@ deploy_cdn() {
   # 也不会再有「base 少一段产品线段 → 图片静默 404」的问题。
   log "部署自建 CDN（依赖 UMD + 公共静态资源） → $TARGET"
   local src="$ROOT/servers/gateway/public/static/cdn"
+  # ⚠️ 2026-09-28 antd/icons 改为「扫描源码生成按需子集」后，CDN 产物**与源码强耦合**：
+  #    新增了 antd 组件 / 图标却没重建，子集里就没有它，运行时是静默失效（组件渲染不出来）。
+  #    此前只在「本地目录不存在」时提示手工生成 —— 目录残留旧产物就会被直接上传，
+  #    属于隐性故障源。故改为默认每次发布前重建（CDN_SKIP_REBUILD=1 可跳过，例如本地联调）。
+  if [ "$CDN_SKIP_REBUILD" != "1" ]; then
+    log "重建 CDN 产物（antd/icons 按需子集由源码扫描生成，必须与代码同步）"
+    (cd "$ROOT" && node scripts/build-externals.mjs && node scripts/build-public-assets.mjs) \
+      || die "CDN 产物重建失败（可 CDN_SKIP_REBUILD=1 跳过，但子集会与源码脱节）"
+  fi
   if [ ! -d "$src" ]; then
-    log "  本地未找到 $src，先生成 CDN 产物（依赖 UMD + 公共静态资源 pub/）"
-    say "cd $ROOT && node scripts/build-externals.mjs && node scripts/build-public-assets.mjs"
+    die "本地未找到 $src，CDN 产物缺失"
   fi
   if [ "$DRY_RUN" != "1" ]; then
     tar czf "/tmp/cdn-deploy.tar.gz" -C "$ROOT/servers/gateway/public/static" cdn
