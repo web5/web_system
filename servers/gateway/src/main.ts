@@ -141,7 +141,29 @@ async function bootstrap() {
       return next();
     }
 
-    // 基座静态资源（带扩展名）走 ServeStatic（public/shell/assets/*）
+    // 基座静态资源 `/shell/*`：与 html 同源，优先按**版本目录**解析
+    // （wb-issues rtqmct）。此前它走 ServeStatic 的固定目录 public/shell/，
+    // 而 html 走版本目录 → 只投一处就会 404（新 html 引用新 hash，固定目录还是旧文件），
+    // 只能靠「版本目录 + 固定路径两处同时更新」人工规避。
+    // 解析不到（老部署无指针 / 文件缺失）→ 回落 ServeStatic，行为与改造前一致。
+    if (path.startsWith('/shell/')) {
+      try {
+        const file = await indexHtmlService.resolveShellAssetPath(path);
+        if (file) {
+          // 带 content hash 的 assets 强缓存（与根级 /assets/ 同策略）；
+          // version.json 等非 hash 文件不设，避免部署后读到旧值
+          if (path.includes('/assets/')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+          return res.sendFile(file);
+        }
+      } catch (e) {
+        logger.warn(`解析基座资源失败(${path}): ${e.message}`);
+      }
+      return next();
+    }
+
+    // 其它带扩展名的静态资源走 ServeStatic
     if (extname(path)) {
       return next();
     }
