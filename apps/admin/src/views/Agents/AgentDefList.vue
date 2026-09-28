@@ -42,6 +42,15 @@
         <template v-else-if="column.dataIndex === 'tools'">
           {{ (record.tools || []).join(', ') || '—' }}
         </template>
+        <template v-else-if="column.dataIndex === 'keywords'">
+          <template v-if="(record.keywords || []).length">
+            <a-tag v-for="k in (record.keywords || []).slice(0, 3)" :key="k" color="orange">{{ k }}</a-tag>
+            <a-typography-text v-if="(record.keywords || []).length > 3" type="secondary">
+              +{{ (record.keywords || []).length - 3 }}
+            </a-typography-text>
+          </template>
+          <a-typography-text v-else type="secondary">未配置（只能靠 LLM 判断）</a-typography-text>
+        </template>
         <template v-else-if="column.dataIndex === 'updatedAt'">
           {{ fmt(record.updatedAt) }}
         </template>
@@ -85,6 +94,30 @@
         <a-col :span="12">
           <a-form-item label="名称">
             <a-input v-model:value="form.name" placeholder="如 合同翻译官" />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <!-- 意图路由线索：给 IntentClassifier 读（关键词命中走规则路由，零 LLM 开销） -->
+      <a-row :gutter="16">
+        <a-col :span="12">
+          <a-form-item
+            label="用途说明"
+            extra="给意图路由的 LLM 读的一句话：这个 agent 负责什么。留空则只能靠 agent 名称猜"
+          >
+            <a-input v-model:value="form.description!" :maxlength="500" placeholder="如：把脑海里的角色场景画成图片" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item
+            label="路由关键词"
+            extra="逗号分隔；用户这句里包含任一个关键词就直接路由过来，不调 LLM"
+          >
+            <a-select
+              v-model:value="keywordsInput"
+              mode="tags"
+              token-separators="[',','，','、']"
+              placeholder="如 画画,生图,变变"
+            />
           </a-form-item>
         </a-col>
       </a-row>
@@ -228,8 +261,12 @@ const defaultForm = (): SaveAgentDefPayload => ({
   temperature: 0.7,
   memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
   streaming: true,
+  description: '',
+  keywords: [],
 });
 const form = reactive<SaveAgentDefPayload>(defaultForm());
+/** 「路由关键词」tags 选择器的中间态（保存时同步进 form.keywords） */
+const keywordsInput = ref<string[]>([]);
 
 /**
  * 模型下拉来自字典 llm_models（可用性以字典为准），hy3 由专用通道承载固定列出。
@@ -257,6 +294,7 @@ const columns = [
   { title: '版本', dataIndex: 'version', width: 70 },
   { title: '模型', dataIndex: 'model', width: 100 },
   { title: '工具', dataIndex: 'tools' },
+  { title: '路由关键词', dataIndex: 'keywords', width: 220 },
   { title: '启用', dataIndex: 'enabled', width: 80 },
   { title: '更新时间', dataIndex: 'updatedAt', width: 150 },
   { title: '操作', dataIndex: 'actions', width: 200, fixed: 'right' as const },
@@ -294,6 +332,7 @@ async function reload() {
 function openCreate() {
   editing.value = null;
   Object.assign(form, defaultForm());
+  keywordsInput.value = [];
   editOpen.value = true;
 }
 
@@ -315,7 +354,10 @@ function openEdit(def: AgentDef) {
     temperature: def.temperature ?? 0.7,
     memory: { ...def.memory },
     streaming: def.streaming !== false,
+    description: def.description ?? '',
+    keywords: def.keywords ?? [],
   });
+  keywordsInput.value = [...(def.keywords || [])];
   editOpen.value = true;
 }
 
@@ -331,6 +373,8 @@ async function save() {
   }
   saving.value = true;
   try {
+    // tags 选择器是 string[] 的中间态，落 payload 前同步一次
+    form.keywords = keywordsInput.value.map((k) => k.trim()).filter(Boolean);
     if (editing.value) {
       const res: any = await updateAgentDef(editing.value.id, form);
       message.success('已保存（如修改了 prompt，需点"发布"才生效）');
