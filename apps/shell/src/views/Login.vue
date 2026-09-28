@@ -64,7 +64,8 @@ async function onLogin() {
 
 <style>
 .shell-login {
-  min-height: 100vh;
+  /* 扣掉基座备案条高度（:root 变量，见 App.vue） */
+  min-height: calc(100vh - var(--site-beian-bar-h, 0px));
   display: flex;
   align-items: center;
   justify-content: center;

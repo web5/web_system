@@ -32,6 +32,8 @@ watch(() => [themeStore.isDark, themeStore.radiusStyle], () => {
 <style>
 #app {
   width: 100%;
-  height: 100vh;
+  /* 扣掉基座备案条高度（--site-beian-bar-h 由 shell 提供，单独运行时回落 0）：
+     否则 sider 底部与分页条会被基座 fixed 备案条压住。 */
+  height: calc(100vh - var(--site-beian-bar-h, 0px));
 }
 </style>
