@@ -357,10 +357,13 @@ const turns = computed<Turn[]>(() => {
   });
 
   // 日期线：轮日期取首条消息 ts；仅当与下一轮跨天（存在日期 gap）时在该轮末尾插线（2026-09-22 拍板）
+  // 缺陷防御（2026-09-28）：存量数据可能缺 ts（B6 迁移前落库），new Date(undefined) 会渲染成
+  // 「NaN月NaN日」——缺 ts 的轮不渲染日期线（dayKey 置空即不参与 gap 判定）。
   out.forEach((t) => {
     const firstTs = t.msgs[0].ts;
-    t.dayKey = dayKeyOf(firstTs);
-    t.dayLabel = relDay(new Date(firstTs));
+    const valid = typeof firstTs === 'number' && Number.isFinite(firstTs) && firstTs > 0;
+    t.dayKey = valid ? dayKeyOf(firstTs) : '';
+    t.dayLabel = valid ? relDay(new Date(firstTs)) : '';
   });
   out.forEach((t, i) => {
     const nextKey = out[i + 1]?.dayKey;
