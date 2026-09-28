@@ -14,6 +14,13 @@
   判定：**缺陷修复，非视觉/交互变更** —— 历史消息缺 ts 时日期线渲染「NaN月NaN日」；
         修复口径 = 缺 ts 的轮不渲染日期线（与「无 ts 不显示」的既有语义一致），正常数据展示不变。
   关联：specs/portal-redesign（AiChat 日期线规格）
+
+  2026-09-28 · 微调豁免 · 对话页欢迎示例问题更新（文案微调）
+  改动范围：apps/portal/src/views/AiChat.vue EXAMPLES 常量（3 条示例文案）
+  判定：**纯文案替换，无结构/交互变更** —— 原三条全偏合同场景；新文案覆盖
+        生图（bianbian）/ 学习讲解（study-assistant）/ 翻译（translate）三类能力，
+        数量、卡片样式、点击行为均不变。
+  关联：意图路由（PR #219）—— 示例即各 agent 的能力试金石
 -->
 <html lang="zh-CN">
 <head>
