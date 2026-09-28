@@ -45,6 +45,7 @@ export type {
   IntentResult,
   IntentVia,
   ClassifyOptions,
+  IntentRoutingHint,
 } from './core/intent-classifier';
 export { AgentRunner } from './core/agent-runner';
 export { resolveAgentCapabilities } from './core/capability-resolver';

@@ -17,6 +17,7 @@ import {
   ClientRegistry,
   IntentClassifier,
   IntentResult,
+  type IntentRoutingHint,
 } from '@kedouai/agent-core';
 import { AgentConversation } from '../memory/agent-conversation.entity';
 
@@ -65,6 +66,14 @@ export class IntentService {
       ? this.fallbackAgentId
       : candidates[0] ?? this.fallbackAgentId;
 
+    // 0) `@agentId` 前缀显式指定：**开关关闭时也必须生效**（否则用户唯一的手动纠偏手段失效）。
+    //    这里先于 enabled 判定处理，且不调 LLM —— 零延迟、零误判。
+    const at = params.userInput.match(/^@([a-z0-9-]+)[\s:：]*/i);
+    if (at && candidates.includes(at[1])) {
+      await this.lock(params.conversationId, at[1], 'explicit');
+      return { agentId: at[1], confidence: 1, via: 'explicit', switched: false };
+    }
+
     // 1) 显式传入（非 auto）→ 不分类，直接走（老调用 contract-risk 一行都不用改）
     if (params.agentId && params.agentId !== 'auto' && candidates.includes(params.agentId)) {
       await this.lock(params.conversationId, params.agentId, 'explicit');
@@ -93,7 +102,13 @@ export class IntentService {
       this.timeoutMs,
       this.fallbackAgentId,
     );
-    const r = await classifier.classify(params.userInput, { candidates, lockedAgentId: locked });
+    const r = await classifier.classify(params.userInput, {
+      candidates,
+      lockedAgentId: locked,
+      // 路由线索实时取自注册表：关键词 + 用途说明都由后台定义提供
+      // （写死在本服务的历史版本即是 2026-09-28「100% 兜底」事故的根因）
+      routingHints: this.routingHints(),
+    });
 
     // 4) 切换判定：仅显式 / 高置信规则(≥.88) / 高置信 LLM(≥.75) 才允许切；兜底不切
     const shouldSwitch =
@@ -116,6 +131,21 @@ export class IntentService {
 
     await this.lock(params.conversationId, finalAgentId, r.via);
     return { ...r, agentId: finalAgentId, switched, previousAgentId: locked };
+  }
+
+  /**
+   * 从注册表实时生成路由线索（关键词 + 用途说明）。
+   *
+   * ⚠️ 必须实时取：后台改了某个 agent 的关键词后，下一轮对话就该按新口径路由，
+   * 中间不能有「回代码里改一张硬编码表」这一步（那张表迟早会和真注册表漂移）。
+   */
+  private routingHints(): IntentRoutingHint[] {
+    return this.registry.list().map((a) => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      keywords: a.keywords,
+    }));
   }
 
   /** 写回会话锁定 + 追加判定流水（首轮无 conversationId 时跳过） */

@@ -30,6 +30,10 @@ export interface SkillRef {
 export interface AgentDef {
   id: string;
   name: string;
+  /** 一句话用途说明：给意图路由的 LLM 分类器读 */
+  description: string | null;
+  /** 路由关键词：命中即规则路由（零 LLM 开销） */
+  keywords: string[] | null;
   systemPrompt: string;
   model: string;
   tools: string[];
@@ -71,6 +75,10 @@ export interface SaveAgentDefPayload {
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
   /** 是否流式输出（默认 true） */
   streaming?: boolean;
+  /** 一句话用途说明（意图路由线索，可选） */
+  description?: string | null;
+  /** 路由关键词（命中即规则路由，可选） */
+  keywords?: string[] | null;
 }
 
 /** MCP 模块（来自 mcp-gateway，配置器选择 MCP 工具用） */

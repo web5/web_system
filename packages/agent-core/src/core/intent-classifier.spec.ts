@@ -99,3 +99,80 @@ describe('IntentClassifier', () => {
     expect(r.agentId).toBe('emotion');
   });
 });
+
+/**
+ * 注册表驱动路由（2026-09-28 正式化）：规则与 LLM 候选由 `routingHints` 实时提供。
+ * 硬编码 taxonomy 的历史版本曾导致「规则永不命中 + LLM 结果被白名单丢弃」⇒ 100% 兜底。
+ */
+describe('IntentClassifier · routingHints 驱动', () => {
+  const HINTS = [
+    {
+      id: 'bianbian',
+      name: '变变创作助手',
+      description: '把脑海里的角色、场景画成图片（AI 绘画 / 生图）',
+      keywords: ['画画', '画一张', '画个', '生图', '生成图片', '变变'],
+    },
+    {
+      id: 'translate',
+      name: '翻译官',
+      description: '多语种互译与润色',
+      keywords: ['翻译', '译成', '英文怎么说'],
+    },
+    {
+      id: 'general',
+      name: '通用助手',
+      description: '日常提问与闲聊的兜底助手',
+      keywords: [],
+    },
+  ];
+  const CANDS = ['bianbian', 'translate', 'general'];
+
+  it('关键词命中 → 规则路由到对应 agent（登记表就是线上那套）', async () => {
+    const c = new IntentClassifier(fakeClient(''), 500, 'general');
+    const r = await c.classify('帮我画个宇航员', { candidates: CANDS, routingHints: HINTS });
+    expect(r.agentId).toBe('bianbian');
+    expect(r.via).toBe('rule');
+    expect(r.confidence).toBeGreaterThanOrEqual(0.88);
+  });
+
+  it('翻译类输入 → 路由到 translate', async () => {
+    const c = new IntentClassifier(fakeClient('{"agentId":"translate","confidence":0.9}'), 500, 'general');
+    const r = await c.classify('帮我把这段译成英文', { candidates: CANDS, routingHints: HINTS });
+    expect(r.agentId).toBe('translate');
+  });
+
+  it('关键词未命中 → 走 LLM，提示词里带上用途说明（候选描述由 hints 拼出）', async () => {
+    let seenPrompt = '';
+    const client = {
+      chat: async (msgs: Array<{ role: string; content: string }>) => {
+        seenPrompt = msgs.find((m) => m.role === 'system')?.content ?? '';
+        return '{"agentId":"general","confidence":0.4}';
+      },
+    } as unknown as BaseAiClient;
+    const c = new IntentClassifier(client, 500, 'general');
+    const r = await c.classify('今天心情一般', { candidates: CANDS, routingHints: HINTS });
+    expect(r.via).toBe('llm');
+    expect(seenPrompt).toContain('bianbian');
+    expect(seenPrompt).toContain('AI 绘画');
+    // 旧 taxonomy 的残留 id 不该出现在候选清单里
+    expect(seenPrompt).not.toContain('horoscope');
+  });
+
+  it('LLM 吐出候选外的 id（幻觉）→ 仍然丢弃落到兜底', async () => {
+    const c = new IntentClassifier(fakeClient('{"agentId":"ghost","confidence":0.9}'), 500, 'general');
+    const r = await c.classify('随便聊聊', { candidates: CANDS, routingHints: HINTS });
+    expect(r.via).toBe('fallback');
+    expect(r.agentId).toBe('general');
+  });
+
+  it('会话锁定 + hints 规则命中别的 agent → 允许切走', async () => {
+    const c = new IntentClassifier(fakeClient(''), 500, 'general');
+    const r = await c.classify('帮我画个猫', {
+      candidates: CANDS,
+      routingHints: HINTS,
+      lockedAgentId: 'translate',
+    });
+    expect(r.agentId).toBe('bianbian');
+    expect(r.via).toBe('rule');
+  });
+});
