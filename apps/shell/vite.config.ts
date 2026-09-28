@@ -36,6 +36,9 @@ export default defineConfig({
       'vue-router': 'VueRouter',
       pinia: 'Pinia',
       'ant-design-vue': 'antd',
+      // 图标改由 CDN 子集提供（static/cdn/icons.js，挂 window.antdIcons）。
+      // 此前 shell 全量打包 vendor-icons = 186KB gz，全仓实际只用到 42 个图标（20KB gz）。
+      '@ant-design/icons-vue': 'antdIcons',
       axios: 'axios',
       dayjs: 'dayjs',
     }),
