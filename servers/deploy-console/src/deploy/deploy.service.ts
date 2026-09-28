@@ -35,6 +35,8 @@ import {
   ConfigService as ConfigCenterService,
   renderGeneratedEnvFile,
 } from '../config/config.service';
+// 版本注册表：指针双写（legacy deploy_deployments + 新模型 deploy_app_env_versions）
+import { ReleaseRegistryService } from '../registry/release-registry.service';
 
 /**
  * 任务状态枚举
@@ -97,6 +99,8 @@ export class DeployService {
     private readonly configCenter: ConfigCenterService,
     // 下发审计（只记「下发了哪些键 + 内容 hash」，绝不记明文）
     private readonly audit: AuditService,
+    // 双写（2026-09-28）：前端 env-dir 应用的指针同步到 deploy_app_env_versions
+    private readonly registry: ReleaseRegistryService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -953,6 +957,13 @@ export class DeployService {
     row.deployedAt = new Date();
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
+    // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
+    await this.registry.syncAppEnvPointer({
+      env,
+      moduleKey: component,
+      currentVersion: versionTag,
+      deployedBy: operator,
+    });
 
     // 版本库补一条该环境的发布记录
     const v = new DeployVersionEntity();
@@ -1055,6 +1066,13 @@ export class DeployService {
     row.deployedAt = new Date();
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
+    // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
+    await this.registry.syncAppEnvPointer({
+      env,
+      moduleKey,
+      currentVersion: version,
+      deployedBy: operator,
+    });
 
     this.logger.log(`微前端模块发布完成: ${env}/${moduleKey} @ ${version}`);
     return { version };
