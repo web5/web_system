@@ -39,10 +39,14 @@ function makeRepo() {
   return { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null) };
 }
 
-function build(opts: { legacyRead?: boolean } = {}) {
+function build(opts: { legacyRead?: boolean; preloadOff?: boolean } = {}) {
   const cfg = {
-    get: (k: string) =>
-      k === 'DEPLOY_ENV_ID' ? 'dev' : k === 'DEPLOY_LEGACY_READ' && opts.legacyRead ? '1' : '',
+    get: (k: string) => {
+      if (k === 'DEPLOY_ENV_ID') return 'dev';
+      if (k === 'DEPLOY_LEGACY_READ' && opts.legacyRead) return '1';
+      if (k === 'MF_PRELOAD' && opts.preloadOff) return '0';
+      return '';
+    },
   };
   const deployRepo = makeRepo();
   const moduleRepo = makeRepo();
@@ -116,6 +120,78 @@ describe('IndexHtmlService.buildManifest（读取源 = NEW 域）', () => {
     expect(m.modules).toEqual([]);
     expect(m.byEnv).toEqual({});
     expect(deployRepo.findOne).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 首屏 preload 注入（2026-09-28 优化 P0-1）。
+ *
+ * 背景：模块入口 gzip 后仍有 ~500KB，而基座是「shell 启动完才发起模块请求」的
+ * 串行瀑布，下载期间屏幕一片空白。这里把服务端该注入什么锁死：
+ * 1. **只预载本次命中的那个模块**，URL 与运行时请求逐字一致（含两跳：无版本指针 + 版本化整包）；
+ * 2. 命中不了模块（/login、未知路径）→ 不注入任何东西；
+ * 3. Cookie 选过环境 → 按该环境预载（预载错环境等于白下载 500KB）；
+ * 4. `MF_PRELOAD=0` 应急开关一键关闭。
+ */
+describe('IndexHtmlService 首屏 preload 注入', () => {
+  /** 取预载标签（避免模块内部方法暴露造成的公开接口污染） */
+  const tagsOf = async (svc: IndexHtmlService, r: any) => {
+    const m = await svc.buildManifest(r);
+    return (svc as any).buildPreloadTags(m, r);
+  };
+
+  it('/admin 路由：预载版本化整包 + 无版本指针 + 样式（均为同源绝对路径）', async () => {
+    const { svc } = build();
+    const tags = await tagsOf(svc, { ...req, path: '/admin/users' });
+
+    expect(tags).toContain('<link rel="preload" href="/static/modules/admin/dev/3d5ce61/index.js" as="script">');
+    expect(tags).toContain('<link rel="preload" href="/static/modules/admin/dev/index.js" as="script">');
+    expect(tags).toContain('<link rel="preload" href="/static/modules/admin/dev/index.css" as="style">');
+    // 只预载命中的模块，不牵连 portal
+    expect(tags).not.toContain('portal');
+  });
+
+  it('/ 根路径：基座 router 会 redirect 到 portal，故预载 portal', async () => {
+    const { svc } = build();
+    const tags = await tagsOf(svc, { ...req, path: '/' });
+    expect(tags).toContain('/static/modules/portal/dev/7a6be04/index.js');
+    expect(tags).not.toContain('/static/modules/admin/');
+  });
+
+  it('/login 等非模块路径：不注入预载', async () => {
+    const { svc } = build();
+    expect(await tagsOf(svc, { ...req, path: '/login' })).toBe('');
+    expect(await tagsOf(svc, { ...req, path: '/404' })).toBe('');
+  });
+
+  it('Cookie 选过环境 → 按该环境预载（避免预载到用不上的版本）', async () => {
+    const { svc, envRepo, appVersionRepo } = build();
+    envRepo.find.mockResolvedValue([
+      { envId: 'dev', name: '开发', isProd: false },
+      { envId: 'staging', name: '预发', isProd: false },
+    ]);
+    appVersionRepo.find.mockResolvedValue([
+      { appKey: 'admin', envId: 'dev', currentVersion: '3d5ce61' },
+      { appKey: 'admin', envId: 'staging', currentVersion: 'aaa1111' },
+    ]);
+    const tags = await tagsOf(svc, {
+      ...req,
+      path: '/admin',
+      headers: { ...req.headers, cookie: 'kedou_env=staging; foo=1' },
+    });
+    expect(tags).toContain('/static/modules/admin/staging/aaa1111/index.js');
+    expect(tags).not.toContain('/static/modules/admin/dev/');
+  });
+
+  it('MF_PRELOAD=0（应急开关）→ 不注入', async () => {
+    const { svc } = build({ preloadOff: true });
+    expect(await tagsOf(svc, { ...req, path: '/admin' })).toBe('');
+  });
+
+  it('清单为空（我的模块都没登记）→ 不注入，行为与改造前一致', async () => {
+    const { svc, appVersionRepo } = build();
+    appVersionRepo.find.mockResolvedValue([]);
+    expect(await tagsOf(svc, { ...req, path: '/admin' })).toBe('');
   });
 });
 
