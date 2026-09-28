@@ -22,6 +22,22 @@ export class AgentDefinitionEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 128, comment: 'Agent 名称' })
   name: string;
 
+  /**
+   * 一句话用途说明（给意图路由用）。
+   *
+   * IntentService 把它 + keywords 喂给 LLM 分类器做 agent 选择；后台可编辑、改完 30s 内
+   * 被各服务轮询到，无需发版。为空时路由 LLM 只能靠 agent id / 名称猜，准确率下降。
+   */
+  @Column({ type: 'varchar', length: 500, nullable: true, comment: '用途说明（意图路由线索）' })
+  description: string | null;
+
+  /**
+   * 路由关键词（命中即规则路由，零 LLM 开销），如 ['画画','生图','变变']。
+   * 命中策略见 packages/agent-core IntentClassifier：关键词含匹配 userInput 即选中。
+   */
+  @Column({ type: 'json', nullable: true, comment: '路由关键词数组' })
+  keywords: string[] | null;
+
   /** systemPrompt 原文（可含换行，用 text） */
   @Column({ type: 'mediumtext', comment: 'systemPrompt' })
   systemPrompt: string;
