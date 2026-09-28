@@ -536,9 +536,10 @@ const DEFAULT_EXTERNALS = {
  * @param {string} opts.entry  入口文件相对路径，默认 src/main.ts
  */
 export function microFrontendConfig({ name, entry = 'src/main.ts' }) {
-  // 产物 base 布局：/static/modules/<name>/<产品线>/<版本>/
-  // <产品线> = 发布模板 key（默认 default），由 RELEASE_TAG=<产品线>/<版本> 提供；
-  // 缺产品线段时构建期 fail-fast（实际实现见 scripts/vite-micro-frontend.mjs 的 resolveMfBase）
+  // 产物 base 布局：/static/modules/<name>/<版本>/（扁平为常态）
+  // 可选命名空间：RELEASE_TAG=<ns>/<commit> → 多一层（隔离同一 commit 的不同流水线产物）；
+  // 非法段/超两段时构建期 fail-fast（实际实现见 scripts/vite-micro-frontend.mjs 的 resolveMfBase）
+  // 注：2026-09-27 起 public 资源走 /static/cdn/pub/（__PUBLIC_ASSET_BASE__），不随 base 变
   const publicBase = resolveMfBase(name)
   return defineConfig({
     base: publicBase,  // 模块内相对资源根
