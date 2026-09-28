@@ -36,7 +36,7 @@
         v-if="userStore.isLoggedIn"
         :trigger="['click']"
         placement="bottomRight"
-        :get-popup-container="(t: HTMLElement) => t.parentElement ?? document.body"
+        :get-popup-container="popupContainerOf"
       >
         <button type="button" class="avatar" :title="userName">
           {{ avatarText }}
@@ -68,6 +68,10 @@ import { useAuthGateStore } from '@/stores/authGate';
 import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits<{ (e: 'open-command'): void }>();
+
+/** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module=portal] 容器致 scoped 样式失效（菜单竖排）。
+ *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数。 */
+const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
 
 /**
  * logo 走自建 CDN（`__PUBLIC_ASSET_BASE__` = /static/cdn/pub/）。
