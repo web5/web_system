@@ -84,7 +84,9 @@ export class MicroFrontendLoader {
     try {
       const inst = await this.ensureLoaded(name);
       // 每次挂载都确保 CSS 已注入（重挂时 unmount 已移除 CSS，这里兜底重新注入）
-      this.ensureCss(name);
+      // ⚠️ 必须等 CSS **就位**再挂载：不等的话会先把无样式 DOM 渲染出来，
+      //    出现首屏 FOUC（无内建尺寸的 svg 撑到 300×150、颜色继承品牌色）。
+      await this.ensureCss(name);
       await inst.lifecycle.mount({ ...this.ctx, name, container }, container);
       this.mounted.set(name, inst);
     } finally {
@@ -144,8 +146,9 @@ export class MicroFrontendLoader {
    * 加载前把基座共享依赖（CDN 全局）注册为 System 模块，供 System.register 的依赖解析。
    */
   private loadModule(manifest: ModuleManifest): Promise<ModuleLifecycle> {
-    // CSS（幂等：已注入则跳过）
-    this.ensureCss(manifest.name);
+    // CSS（幂等：已注入则跳过）。此处提前注入可与 JS 并行下载，不必 await；
+    // 真正的「等就位」在 mount() 里做。
+    void this.ensureCss(manifest.name).catch(() => {});
     this.registerSharedModules();
 
     return System.import(manifest.entry)
@@ -251,17 +254,48 @@ export class MicroFrontendLoader {
     };
   }
 
-  /** 幂等注入模块 CSS（已存在同 data-module 的 link 则跳过） */
-  private ensureCss(name: string): void {
+  /**
+   * 幂等注入模块 CSS，并**等到它就位**再 resolve。
+   *
+   * 为什么必须等：
+   *   模块 CSS 走 byEnv 指针（内容只是一行 `@import url('./<version>/index.css')`），
+   *   实际是两跳；早期实现只 append link 就立刻 mount，模块 DOM 先渲染、CSS 后到，
+   *   首屏闪一下无样式状态（顶栏 home 图标撑到 300×150、继承品牌橙色）。
+   *
+   * 为什么不能死等：
+   *   CSS 404 / 网络异常时不能把模块挂载永久卡住 → onload/onerror/3s 超时三重兜底。
+   */
+  private ensureCss(name: string): Promise<void> {
     const manifest = this.manifests.get(name);
-    if (!manifest?.css) return;
-    if (document.querySelector(`link[data-module="${name}"]`)) return;
+    if (!manifest?.css) return Promise.resolve();
+    const existing = document.querySelector<HTMLLinkElement>(`link[data-module="${name}"]`);
+    if (existing) return this.waitCssReady(existing);
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = manifest.css;
     link.dataset.module = name;
     link.dataset.version = manifest.version;
+    const ready = this.waitCssReady(link);
     document.head.appendChild(link);
+    return ready;
+  }
+
+  /** 等 link 的 CSS 就位（load 事件含 @import 子资源），失败/超时不再阻塞挂载 */
+  private waitCssReady(link: HTMLLinkElement): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      link.addEventListener('load', finish, { once: true });
+      link.addEventListener('error', finish, { once: true });
+      // 兜底：CSS 迟迟不回（慢网 / 404 但不触发 error）也不能永久卡住挂载
+      setTimeout(finish, 3000);
+      // 已缓存/已解析完成时 link.sheet 已存在，直接放行
+      if (link.sheet) finish();
+    });
   }
 
   /** 移除模块的 CSS link */
