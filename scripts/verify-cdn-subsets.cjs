@@ -168,6 +168,16 @@ function gz(f) {
   return gzipSync(fs.readFileSync(path.join(CDN, f))).length;
 }
 console.log(`[verify-cdn-subsets] antd.js gzip=${(gz('antd.js') / 1024).toFixed(0)}KB  icons.js gzip=${(gz('icons.js') / 1024).toFixed(0)}KB`);
+// 静态检查：产物里不允许残留会被求值的 `process.env.*`。
+// jsdom 里 Node 的 process 天然存在，运行时校验抓不到这类问题（浏览器才炸：
+// ReferenceError: process is not defined → window.antd undefined → 基座白屏）。
+// 允许 `typeof process<"u"` 这类带守卫的写法。
+for (const f of ['antd.js', 'icons.js']) {
+  const code = fs.readFileSync(path.join(CDN, f), 'utf-8');
+  const bare = code.includes('process.env.NODE_ENV') && !/typeof\s+process/.test(code);
+  (bare ? fail : ok).push(`${f} 无裸 process.env 残留`);
+}
+
 console.log(`[verify-cdn-subsets] 通过 ${ok.length} 项`);
 if (fail.length) {
   console.error('[verify-cdn-subsets] ❌ 失败项：');
