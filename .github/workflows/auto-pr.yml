@@ -69,6 +69,15 @@ jobs:
             });
             if (existing.length > 0) {
               console.log(`已存在 PR #${existing[0].number}，跳过创建`);
+              // 分支再 push 时同样确保 auto-merge 处于启用状态（幂等）
+              try {
+                await github.rest.pulls.enableAutoMerge({
+                  owner, repo, pull_number: existing[0].number, merge_method: 'squash',
+                });
+                console.log(`PR #${existing[0].number} 已启用自动合入（squash）`);
+              } catch (e) {
+                core.warning(`PR #${existing[0].number} 启用自动合入失败（检查仓库设置与分支保护）：${e.message}`);
+              }
               return { skipped: true, number: existing[0].number, url: existing[0].html_url };
             }
 
@@ -98,4 +107,19 @@ jobs:
               owner, repo, title, head, base, body,
             });
             console.log(`PR 已创建: #${pr.number} ${pr.html_url}`);
+
+            // 4) 启用自动合入（squash）：分支保护要求的 checks 全绿后 GitHub 自动合。
+            //    前置条件（仓库设置一次）：① Settings→General 勾选 Allow auto-merge
+            //    ② master 分支保护规则把 quality-gate 的两个 job 设为必需检查。
+            //    未配置时此调用会 422，降级为 warning 不阻断建 PR。
+            for (const n of [pr.number]) {
+              try {
+                await github.rest.pulls.enableAutoMerge({
+                  owner, repo, pull_number: n, merge_method: 'squash',
+                });
+                console.log(`PR #${n} 已启用自动合入（squash）`);
+              } catch (e) {
+                core.warning(`PR #${n} 启用自动合入失败（检查仓库 Allow auto-merge 与 master 分支保护是否已配置）：${e.message}`);
+              }
+            }
             return { created: true, number: pr.number, url: pr.html_url };
