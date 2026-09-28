@@ -41,6 +41,7 @@ import { PresentMusicCardTool } from '../music/tools/present-music-card.tool';
 import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
 import { UserMemoryUpdateHook } from './user-memory-update.hook';
 import { POST_RUN_HOOKS, PostRunHook } from './post-run-hook';
+import { ImageGenTool } from './tools/image-gen.tool';
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -168,6 +169,8 @@ const postRunHooksProvider: Provider = {
     ContractCleanerTool,
     ContractBenchmarkTool,
     ContractConversationService,
+    // 生图（变变创作助手 / 科豆学习助手声明了 image-gen，缺注册会运行时报「工具未注册」）
+    ImageGenTool,
     AgentConversationQueryService,
     IntentService,
     UserMemoryUpdateHook,
@@ -193,6 +196,7 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     private readonly listMusicProvidersTool: ListMusicProvidersTool,
     private readonly presentMusicCardTool: PresentMusicCardTool,
     private readonly saveMusicTasteTool: SaveMusicTasteTool,
+    private readonly imageGenTool: ImageGenTool,
   ) {}
 
   onModuleInit(): void {
@@ -202,6 +206,9 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     this.toolRegistry.register(this.contractRuleTool);
     this.toolRegistry.register(this.contractIrrTool);
     this.toolRegistry.register(this.contractBenchmarkTool);
+
+    // 生图：经 ai-service internal/image 复用其密钥与轮询（变变 / 学习助手依赖）
+    this.toolRegistry.register(this.imageGenTool);
 
     // 音乐推荐：渠道查询 / 歌曲卡片 / 口味记忆（卡片事件由 controller 补发）
     this.toolRegistry.register(this.listMusicProvidersTool);

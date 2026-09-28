@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { AiService } from './ai.service';
 import { AiController } from './ai.controller';
+import { ImageInternalController } from './image.internal.controller';
 import { Hy3Client } from '../common/http/hy3.client';
 import { DeepseekClient } from '../common/http/deepseek.client';
 import { ImageGenClient } from '../common/http/image-gen.client';
@@ -9,7 +10,7 @@ import { ConversationModule } from '../conversation/conversation.module';
 
 @Module({
   imports: [HttpModule, ConversationModule],
-  controllers: [AiController],
+  controllers: [AiController, ImageInternalController],
   providers: [AiService, Hy3Client, DeepseekClient, ImageGenClient],
   exports: [AiService],
 })
