@@ -8,6 +8,12 @@
   判定：**非视觉变更** —— 资源文件内容、尺寸、位置、配色均未变，仅换了资源所在 URL，
          属于「同一张图从另一个地址加载」，不构成视觉/交互改动，豁免 ux-review-checklist。
   关联：assets/shared-public/README.md、scripts/build-public-assets.mjs
+
+  2026-09-28 · 微调豁免 · AI 对话页日期线 NaN 防御（缺陷修复）
+  改动范围：apps/portal/src/views/AiChat.vue turns 计算属性
+  判定：**缺陷修复，非视觉/交互变更** —— 历史消息缺 ts 时日期线渲染「NaN月NaN日」；
+        修复口径 = 缺 ts 的轮不渲染日期线（与「无 ts 不显示」的既有语义一致），正常数据展示不变。
+  关联：specs/portal-redesign（AiChat 日期线规格）
 -->
 <html lang="zh-CN">
 <head>
