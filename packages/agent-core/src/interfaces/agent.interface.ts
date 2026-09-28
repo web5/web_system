@@ -42,6 +42,16 @@ export interface AgentDefinition {
   name: string;
   systemPrompt: string;
   model: string;
+  /**
+   * 一句话用途说明（意图路由线索）。
+   * IntentService 把它 + keywords 喂给 LLM 分类器；由后台定义编辑，运行时随轮询生效。
+   */
+  description?: string | null;
+  /**
+   * 路由关键词：命中即规则路由（零 LLM 开销），如 bianbian 的「画画 / 生图 / 变变」。
+   * 同样由后台定义编辑——**不要把它写死在代码里**（历史教训见 intent-classifier.ts 头注释）。
+   */
+  keywords?: string[] | null;
   /** 本地工具名数组（向后兼容；新配置统一走 capabilities） */
   tools: string[];
   maxSteps: number;
