@@ -167,7 +167,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:6000/static/modules/<m
 **要点 / 踩坑记录**：
 - **版本表在 `web_system_deploy` 库**（gateway 独立数据源 `deploy`），写错库（如写进 `web_system`）manifest 不会变，这是最容易踩的坑。
 - `RELEASE_TAG` 必须是**新值**（不能复用旧 hash），否则产物覆盖旧目录、entry 不变，浏览器缓存可能拉到旧的。
-- `RELEASE_TAG` 必须带**产品线段**（`<产品线>/<版本>`，即 `default/<hash>`）：缺段会让产物 base 少一层，产物内 public 资源（logo.svg / favicon.svg / avatars 等）静默 404 —— 现已由 `scripts/vite-micro-frontend.mjs` 的 `resolveMfBase` 在构建期拦截（确需扁平 base 才设 `MF_ALLOW_FLAT_BASE=1`）。
+- `RELEASE_TAG` **1 段或 2 段均可**，由发布方决定：平台流水线默认 `<流水线key>/<hash>`（p20+ 约定），本地 `scripts/build-module.mjs` / `scripts/deploy.sh` 默认纯 `<hash>`。历史「必带产品线段 `default/<hash>` 否则静默 404」的约束已**取消**（2026-09-28）：那段是为让产物内 public 资源落在与投递目录一致的 base 下，而资源已全部迁到 `/static/cdn/pub/`（编译期常量 `__PUBLIC_ASSET_BASE__`），产物只剩 index.js/index.css。`scripts/vite-micro-frontend.mjs` 的 `resolveMfBase` 只做合法性校验（字符 + ≤2 段），不再设 `MF_ALLOW_FLAT_BASE` 逃生舱。
 - 模块 JS/CSS 由 nginx `/static/modules/` 直出（带 hash 强缓存 1 年）；版本目录名一变，manifest 的 entry 变，浏览器即拉新版，无需清浏览器缓存。
 - **gateway TTL 10s 版本缓存**：改完表后最多 10s manifest 自动刷新；若 12s 后仍旧，`pm2 restart web-gateway` 清内存缓存兜底。
 - **DB 密码**：本地 MySQL `root/{{LOCAL_DB_PASSWORD}}`（见各服务 `.env`）。生产走 deploy-console 正常发布流程，勿手改。

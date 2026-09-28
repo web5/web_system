@@ -23,36 +23,35 @@ const DEFAULT_EXTERNALS = {
 };
 
 /**
- * 产物 base 的第二段：产品线（= 发布模板 key）。平台默认模板 key 为 `default`，
- * 版本目录布局为 `/static/modules/<name>/<产品线>/<版本>/`。
+ * 解析 `RELEASE_TAG` → 产物 base。
+ *
+ * 契约：1 段或 2 段均合法（二者都在生产使用，勿再互相"纠正"）：
+ * - **2 段** `<流水线key>/<commit>`：平台流水线默认形态（p20+ 约定，见 `scripts/migrations/p22-app-artifact-env-dir.mjs`）；
+ *   env-dir 应用此时产品线段取 envId，投递落 `modules/<key>/<envId>/<commit>/`（`specs/app-artifact-env-dir` G2）。
+ * - **1 段** `<commit>`：本地 `scripts/build-module.mjs` / `scripts/deploy.sh` 的形态（历史扁平）。
+ *
+ * **为什么 2026-09-28 起不再强制 2 段、也不再需要逃生舱**：
+ *   第二段存在的意义是让产物内 public 资源（logo / avatars / materials）落在与投递目录
+ *   逐字一致的 base 下 —— 少一段就静默 404。这些资源已于 2026-09-27 全部迁到
+ *   `/static/cdn/pub/`（编译期常量 `__PUBLIC_ASSET_BASE__`，见 assets/shared-public/README.md），
+ *   产物只剩 index.js / index.css / manifest.json，**base 已与资源路径解耦**。
+ *
+ *   此前强制 2 段的实际后果是同一个仓三套写法并存：`build-module.mjs` 硬写 `default/<commit>`、
+ *   `deploy.sh` 写扁平却必须配 `MF_ALLOW_FLAT_BASE=1` 绕过本函数校验、而线上 NEW 域入口
+ *   是 `<key>/<envId>/index.js` 指针 —— 任何一处调整都会产出「构建成功但路径对不上」的产物。
+ *   现统一：**段数由发布方决定，此处只做合法性校验（字符 + ≤2 段）**。
  */
-const DEFAULT_PRODUCT_SEGMENT = 'default';
 
 /** base 路径段的合法字符（禁空格/引号/`..` 等，避免拼进 URL 与远端部署路径） */
 const TAG_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 
-/**
- * 解析 `RELEASE_TAG` → 产物 base。
- *
- * 契约：`<产品线>/<版本>`（流水线注入的是 `<templateKey>/<commit>`，如 `default/4caf272`）。
- *
- * 为什么「缺产品线段」直接报错而不是兜底一个默认值：
- *   历史缺陷——只传纯 commit（`RELEASE_TAG=4caf272`）时，base 会少一层产品线段：
- *   产物请求 `/static/modules/admin/4caf272/logo.svg`，而它实际部署在
- *   `/static/modules/admin/default/4caf272/` —— 于是 logo.svg / favicon.svg / avatars/*
- *   等 public 资源全部 404，且**构建期没有任何提示**（产物照常生成、页面照常能开）。
- *   这类「静默产出坏产物」的代价远高于构建失败，故此处 fail-fast。
- *
- * 逃生舱：确需历史扁平 base（`/static/modules/<name>/<版本>/`）时显式设
- *   `MF_ALLOW_FLAT_BASE=1`，此时按单段拼 base 并打印告警（仅用于兼容旧发布链路）。
- */
 export function resolveMfBase(name, rawTag = process.env.RELEASE_TAG) {
   const tag = String(rawTag ?? '').trim();
   if (!tag) {
     throw new Error(
-      `[mf] 缺少 RELEASE_TAG：产物 base 需要 /static/modules/${name}/<产品线>/<版本>/。\n` +
-        `     本地构建示例：RELEASE_TAG=${DEFAULT_PRODUCT_SEGMENT}/$(git rev-parse --short HEAD) MF_FORMAT=system npx vite build --mode mf\n` +
-        `     走发布流水线时由平台注入 <templateKey>/<commit>，无需手工传。`,
+      `[mf] 缺少 RELEASE_TAG：产物 base 需要 /static/modules/${name}/<版本>/。\n` +
+        `     本地构建示例：RELEASE_TAG=$(git rev-parse --short HEAD) MF_FORMAT=system npx vite build --mode mf\n` +
+        `     走发布流水线时由平台注入 <templateKey>/<commit> 或纯 <commit>，无需手工传。`,
     );
   }
 
@@ -64,22 +63,11 @@ export function resolveMfBase(name, rawTag = process.env.RELEASE_TAG) {
   }
   if (segments.length > 2) {
     throw new Error(
-      `[mf] RELEASE_TAG 最多两段（<产品线>/<版本>），当前收到 ${segments.length} 段：${tag}`,
+      `[mf] RELEASE_TAG 最多两段（<命名空间>/<版本>），当前收到 ${segments.length} 段：${tag}`,
     );
   }
-  if (segments.length === 1) {
-    if (process.env.MF_ALLOW_FLAT_BASE !== '1') {
-      throw new Error(
-        `[mf] RELEASE_TAG "${tag}" 缺少产品线段，应为 "${DEFAULT_PRODUCT_SEGMENT}/${tag}"。\n` +
-          `     缺段会让 base 少一层，产物内 public 资源（logo.svg/favicon.svg/avatars 等）会静默 404。\n` +
-          `     确需历史扁平 base 时显式设 MF_ALLOW_FLAT_BASE=1。`,
-      );
-    }
-    console.warn(
-      `[mf] MF_ALLOW_FLAT_BASE=1：RELEASE_TAG="${tag}" 未带产品线段，按扁平 base 构建（历史兼容，勿用于新发布）`,
-    );
-  }
-
+  // 两段是 env-dir 的正当形态（`specs/app-artifact-env-dir` G2：产品线段 = envId，
+  // 投递落 modules/<key>/<envId>/<commit>/），不告警；仅由上方 JSDoc 说明其与扁平的差异。
   return `/static/modules/${name}/${segments.join('/')}/`;
 }
 
