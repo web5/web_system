@@ -24,6 +24,14 @@ export class AgentDefinitionVersionEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 128, comment: 'Agent 名称' })
   name: string;
 
+  /** 用途说明快照（意图路由线索） */
+  @Column({ type: 'varchar', length: 500, nullable: true, comment: '用途说明快照' })
+  description: string | null;
+
+  /** 路由关键词快照 */
+  @Column({ type: 'json', nullable: true, comment: '路由关键词数组快照' })
+  keywords: string[] | null;
+
   @Column({ type: 'mediumtext', comment: 'systemPrompt' })
   systemPrompt: string;
 

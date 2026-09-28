@@ -20,6 +20,18 @@ export interface AgentDefinitionPayload {
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
   /** 是否流式输出（默认 true） */
   streaming?: boolean;
+  /**
+   * 一句话用途说明（可选）。
+   *
+   * ⚠️ 这是**意图路由的数据源**：IntentService 把它与 keywords 一起喂给 LLM 分类器，
+   * 后台改这里即刻改变路由行为，无需发版。写清楚「这个 agent 负责什么」。
+   */
+  description?: string | null;
+  /**
+   * 路由关键词（可选）：命中即规则路由（零 LLM 开销），如 bianbian 的「画画 / 生图 / 变变」。
+   * 与 description 一样作为路由线索下发，后台可改。
+   */
+  keywords?: string[] | null;
 }
 
 /** admin 操作用户信息（来自 req.user） */
@@ -72,6 +84,8 @@ export class AgentDefService {
     const row = this.defRepo.create({
       id,
       name: payload.name,
+      description: payload.description ?? null,
+      keywords: payload.keywords ?? null,
       systemPrompt: payload.systemPrompt,
       model: payload.model,
       tools,
@@ -98,6 +112,8 @@ export class AgentDefService {
     const { capabilities, tools } = this.normalizeCapabilities(payload);
     const skills = await this.resolveSkills(capabilities);
     row.name = payload.name;
+    row.description = payload.description ?? null;
+    row.keywords = payload.keywords ?? null;
     row.systemPrompt = payload.systemPrompt;
     row.model = payload.model;
     row.tools = tools;
@@ -132,6 +148,8 @@ export class AgentDefService {
         agentId: row.id,
         version: nextVersion,
         name: row.name,
+        description: row.description,
+        keywords: row.keywords,
         systemPrompt: row.systemPrompt,
         model: row.model,
         tools: row.tools,
@@ -191,6 +209,8 @@ export class AgentDefService {
 
     // 用历史版本内容覆盖当前定义
     row.name = ver.name;
+    row.description = ver.description;
+    row.keywords = ver.keywords;
     row.systemPrompt = ver.systemPrompt;
     row.model = ver.model;
     row.tools = ver.tools;
@@ -208,6 +228,8 @@ export class AgentDefService {
         agentId: row.id,
         version: nextVersion,
         name: row.name,
+        description: row.description,
+        keywords: row.keywords,
         systemPrompt: row.systemPrompt,
         model: row.model,
         tools: row.tools,
@@ -369,6 +391,8 @@ export class AgentDefService {
         this.defRepo.create({
           id: b.id,
           name: b.name,
+          description: b.description ?? null,
+          keywords: b.keywords ?? null,
           systemPrompt: b.systemPrompt,
           model: b.model,
           tools: b.tools,
@@ -389,6 +413,8 @@ export class AgentDefService {
           agentId: b.id,
           version: 1,
           name: b.name,
+          description: b.description ?? null,
+          keywords: b.keywords ?? null,
           systemPrompt: b.systemPrompt,
           model: b.model,
           tools: b.tools,
@@ -415,6 +441,8 @@ export class AgentDefService {
       {
         id: 'contract-risk',
         name: '合同翻译官',
+        description: '识别合同条款里的风险与可主张权益，输出带真实数字的体检报告（ scrubber 除外）',
+        keywords: ['合同', '协议', '条款', '风险', '违约', '违约金', '分期', '贷款利率', '签字', '体检'],
         systemPrompt:
           '你是"合同翻译官"，帮助中国普通消费者识别合同中的风险与可主张权益。你的工作方式：\n' +
           '1. 若用户提供的合同文本来自 OCR，先调用 contract-cleaner 工具清洗成纯净的合同条款。\n' +
@@ -436,6 +464,8 @@ export class AgentDefService {
       {
         id: 'study-assistant',
         name: '科豆学习助手',
+        description: '面向少儿的知识答疑与学习辅导，可以用画图辅助讲解',
+        keywords: ['学习', '作业', '辅导', '小朋友', '为什么', '怎么算'],
         systemPrompt:
           '你是科豆 AI 学习助手，面向少儿用户，用简单、友好、鼓励的语言回答。' +
           '可以使用生图工具把想法画出来。不知道答案时坦诚说明，不要编造。',
@@ -448,6 +478,8 @@ export class AgentDefService {
       {
         id: 'bianbian',
         name: '变变创作助手',
+        description: '把脑海里的角色、场景、变身效果画成图片（AI 绘画 / 生图）',
+        keywords: ['画画', '画一张', '画个', '生图', '生成图片', '配图', '插画', '变变', '变身'],
         systemPrompt:
           '你是变变创作助手，帮助小朋友把脑海中的角色和场景变成图画。' +
           '当用户描述想要的形象、场景或变身效果时，使用生图工具生成图片。' +
@@ -461,6 +493,8 @@ export class AgentDefService {
       {
         id: 'deploy',
         name: '发布助手',
+        description: '把微前端模块/后端服务发布到指定环境，支持灰度、回滚、流水线状态查询',
+        keywords: ['发布', '上线', '灰度', '回滚', '流水线', '部署', 'deploy', 'rollback'],
         systemPrompt:
           '你是「发布助手」，负责把代码发布到指定环境。你可以发布微前端模块（admin / portal），' +
           '支持全量发布、灰度发布、灰度转全量、按版本回滚。\n\n' +
@@ -542,6 +576,8 @@ export class AgentDefService {
       {
         id: 'web-system-dev',
         name: 'web_system 研发助手',
+        description: '检索 web_system 仓库工程知识（架构/服务/路由/表/Agent 平台/研发规范）回答研发问题',
+        keywords: ['web_system', '仓库', '架构', '接口', '这张表', '服务怎么', '研发规范', '源码'],
         systemPrompt:
           '你是「web_system 研发助手」，一个能检索本仓库工程知识来帮助研发与自我迭代的助手。\n\n' +
           '【工作方式】\n' +
@@ -580,6 +616,43 @@ export class AgentDefService {
         temperature: 0.2,
         memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
       },
+      {
+        id: 'translate',
+        name: '翻译官',
+        description: '多语种互译与润色，输出推荐译文 / 直译对照 / 委婉版 / 语气要点四段',
+        keywords: ['翻译', '译成', '翻成', '英文怎么说', '用英语', '润色', 'translation'],
+        systemPrompt:
+          '你是「翻译官」，负责高质量多语种互译与润色。\n\n' +
+          '【输入】用户会给出【源语言】【目标语言】【语气】【风格】【原文】四段（也可能直接给一句话）。\n' +
+          '【输出契约（硬性要求，顺序固定）】只输出四段，每段以【标题】开头，不要任何前后缀说明、markdown 围栏：\n' +
+          '【推荐译文】最符合目标语言习惯、符合指定语气与风格的最终译文（这一段最重要，用户会直接复制使用）。\n' +
+          '【直译对照】逐句/逐词组对照，帮助用户看懂每个部分怎么来的。\n' +
+          '【委婉版】更客气、留有余地的表达（商务场景常用）。\n' +
+          '【语气要点】1-3 条，说明为何这样选词/句式（正式度、文化差异、易踩的坑）。\n\n' +
+          '【红线】不删减、不臆造原文没有的信息；专有名词/人名照原样保留；不确定时给最接近的译法并在此段说明。',
+        model: 'hy3',
+        tools: [],
+        maxSteps: 4,
+        temperature: 0.4,
+        memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+      },
+      {
+        id: 'general',
+        name: '通用助手',
+        description: '日常提问、闲聊与通用知识问答的兜底助手；需要实时信息时用联网搜索',
+        keywords: [],
+        systemPrompt:
+          '你是科豆AI的通用助手，负责回答用户的日常提问、闲聊与各类知识问题。\n' +
+          '回答要求：准确、简洁、语气友好；不确定的信息要明确说明，不要编造。\n' +
+          '需要查询实时信息（新闻、天气、行情等）时调用 web-search 工具后基于结果作答。\n' +
+          '若用户的需求明显属于专业场景（AI 绘画、合同审查、翻译、发布上线、本仓库研发），' +
+          '可直接提示用户使用对应的功能入口。',
+        model: 'deepseek-v4-flash',
+        tools: ['web-search'],
+        maxSteps: 8,
+        temperature: 0.7,
+        memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+      },
     ];
   }
 
@@ -588,6 +661,8 @@ export class AgentDefService {
     return {
       id: r.id,
       name: r.name,
+      description: r.description,
+      keywords: r.keywords,
       systemPrompt: r.systemPrompt,
       model: r.model,
       tools: r.tools,
