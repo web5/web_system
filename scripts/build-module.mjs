@@ -45,11 +45,11 @@ async function main() {
   }
   const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const version = commit;
-  // 产物 base 必须含产品线段（平台默认模板 key = default）：/static/modules/<key>/<产品线>/<版本>/
+  // 产物 base：默认**纯 commit**（/static/modules/<key>/<commit>/，扁平）。
+  // 需隔离「同一 commit 不同流水线产物」时用 MF_BASE_NAMESPACE=<ns> 加一段（→ <key>/<ns>/<commit>/）。
   // 契约与校验见 scripts/vite-micro-frontend.mjs resolveMfBase。
-  // 注：产物里的静态资源已于 2026-09-27 全部迁到 /static/cdn/pub/（见 assets/shared-public/README.md），
-  //     base 段此时只影响 index.js / index.css 的自身 URL；确需历史扁平布局时仍可用 MF_ALLOW_FLAT_BASE=1。
-  const releaseTag = `default/${commit}`;
+  const ns = (process.env.MF_BASE_NAMESPACE || '').trim();
+  const releaseTag = ns ? `${ns}/${commit}` : commit;
   const buildTime = new Date().toISOString();
   log(`版本: ${version} (branch=${branch})`);
 
