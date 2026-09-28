@@ -10,6 +10,13 @@ import {
  * 环境-模块当前部署状态（「不同环境指定不同版本」的核心）。
  * 每个 (env_id, module_key) 一条记录，记录该环境该模块当前线上版本。
  * 部署成功时 upsert；回滚时改为指向历史版本。
+ *
+ * ⚠️ 2026-09-28 定论：**本表仍是唯一的「后端服务」版本指针**。
+ * 前端 env-dir 应用（admin / portal）自双写改造起**同时**写
+ * `deploy_app_env_versions`（见 ReleaseRegistryService.setPointer），
+ * 但 auth-service / gateway / upload-service / system-service / shell 等后端服务
+ * 在新模型中无对应载体，发布时仍只写本表。
+ * ⇒ 别把本表当「纯遗留表」清理：后端发布依赖它。
  */
 @Entity('deploy_deployments')
 @Unique(['envId', 'moduleKey'])
