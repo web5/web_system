@@ -103,7 +103,7 @@
               <a-button type="link" size="small" @click="viewUser(record)">查看</a-button>
               <a-button type="link" size="small" @click="editUser(record)">编辑</a-button>
               <!-- 浮层挂回父节点：避免 Teleport 到 body 脱离 [data-module=admin] 样式容器 -->
-              <a-dropdown placement="bottomRight" :trigger="['click']" :get-popup-container="(t: HTMLElement) => t.parentElement ?? document.body">
+              <a-dropdown placement="bottomRight" :trigger="['click']" :get-popup-container="popupContainerOf">
                 <a-button type="link" size="small">
                   <template #icon><MoreOutlined /></template>
                 </a-button>
@@ -237,6 +237,9 @@ import {
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { message, Modal } from 'ant-design-vue';
 import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
+/** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module] 容器致 scoped 样式失效。
+ *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数。 */
+const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
 import dayjs from 'dayjs';
 
 const router = useRouter();
