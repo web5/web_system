@@ -107,7 +107,9 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
-          <a-dropdown>
+          <!-- 浮层挂回父节点：Teleport 到 body 会脱离 [data-module=admin] 容器，
+               mf 构建 :where 前缀匹配不上 → scoped 样式失效（同 portal AppNavbar 修复） -->
+          <a-dropdown :get-popup-container="popupContainerOf">
             <span class="user-name">
               <a-avatar :size="30" :src="userAvatar" class="user-avatar">
                 <template #icon><UserOutlined /></template>
@@ -164,6 +166,9 @@ import { ref, watch, computed } from 'vue';
 // ⚠️ 模板里直接写 `__PUBLIC_ASSET_BASE__` 会被 vue-tsc 当成「组件实例上的属性」，
 //    报 TS2339（全局 declare const 对模板表达式不生效），故在 script 里接一层再给模板用。
 const assetBase = __PUBLIC_ASSET_BASE__;
+/** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module] 容器致 scoped 样式失效。
+ *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数（与 assetBase 同款踩坑）。 */
+const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
 import { useRouter, useRoute } from 'vue-router';
 import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';

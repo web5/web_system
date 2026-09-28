@@ -21,6 +21,21 @@
         生图（bianbian）/ 学习讲解（study-assistant）/ 翻译（translate）三类能力，
         数量、卡片样式、点击行为均不变。
   关联：意图路由（PR #219）—— 示例即各 agent 的能力试金石
+
+  2026-09-28 · 微调豁免 · 顶栏用户下拉菜单布局修复（缺陷修复）
+  改动范围：apps/portal/src/components/AppNavbar.vue（a-dropdown 加 get-popup-container）
+  判定：**缺陷修复，非视觉/交互设计变更** —— mf 构建给 CSS 加 :where([data-module=portal])
+        前缀，antd Dropdown 浮层 Teleport 到 body 后脱离容器，scoped 样式失效导致
+        菜单图标/文字竖排错乱。修复 = 浮层挂回触发器父节点，恢复设计稿应有的横排样式，
+        不改任何交互、状态、布局规格。
+  关联：scripts/vite-micro-frontend.mjs（cssScopePlugin）、apps/shell/src/loader.ts
+
+  2026-09-28 · 微调豁免 · 加载期首屏 FOUC 修复（缺陷修复）
+  改动范围：packages/shell-loader（模块 CSS 就位后再 mount）、
+         apps/portal/src/components/AppIcon.vue（svg 补 width/height 内建尺寸）
+  判定：**缺陷修复，非视觉/交互设计变更** —— 模块 CSS 未就位即挂载，顶栏「开始」
+        home 图标（无内建尺寸的 svg）短暂撑到默认 300×150 并继承品牌橙色，形成
+        「巨大橙色房子」一闪；修复后加载期不再出现该现象，稳态视觉完全不变。
 -->
 <html lang="zh-CN">
 <head>

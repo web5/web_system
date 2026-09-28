@@ -55,13 +55,17 @@ function showBanner(latest: string, kind: 'shell' | 'module' = 'shell') {
 }
 
 /**
- * 版本号归一化：服务端指针形如 `shell-local/8009883`（`<产品线段>/<commit>`），
- * 而构建注入的 `__APP_VERSION__` 只有 commit 段（`8009883`）。
- * 只比末段，避免"同一版本、两种写法"被判成新版本。
+ * 版本号归一化：服务端指针形态不一 ——
+ *   `shell-local/8009883`（<产品线段>/<commit>）、`subset-afb442b`（<分支尾段>-<commit>，
+ *   备案清障等脚本拼的）、`afb442b`（纯 commit）；而构建注入的 `__APP_VERSION__`
+ *   恒为纯 commit。取末段后，若尾部是 git commit 形态（7~40 位 hex）则只比 commit，
+ *   避免"同一版本、前缀写法不同"被判成新版本（会造成刷新也消不掉的恒弹横幅）。
  */
 function versionTail(v: unknown): string {
   const s = String(v ?? '').trim();
-  return s.includes('/') ? s.slice(s.lastIndexOf('/') + 1) : s;
+  const last = s.includes('/') ? s.slice(s.lastIndexOf('/') + 1) : s;
+  const m = last.match(/([0-9a-f]{7,40})$/i);
+  return m ? m[1] : last;
 }
 
 /** 服务端 shell 指针版本（与 gateway 渲染 shell HTML 的来源是同一个查询） */

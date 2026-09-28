@@ -32,6 +32,10 @@
   <script defer src="/static/cdn/dayjs-weekYear.js"></script>
   <script defer src="/static/cdn/dayjs-quarterOfYear.js"></script>
   <script defer src="/static/cdn/antd.js"></script>
+  <!-- 图标：按需子集（2026-09-28）。此前由 shell 全量打包 → vendor-icons chunk 186KB gz；
+       改由 scripts/build-subset-externals.mjs 扫描源码只构建实际用到的 42 个 → 20KB gz。
+       回退：ICONS_FULL=1 重新构建即产出全量版，本行无需改动。 -->
+  <script defer src="/static/cdn/icons.js"></script>
   <script defer src="/static/cdn/axios.js"></script>
   <script>
     window.__SHARED__ = window.__SHARED__ || {};

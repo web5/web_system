@@ -61,7 +61,12 @@ check_line_error() {
   s="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*//')"
 
   # R1 调试残留（注释里提 console.log 属说明，跳过注释行）
-  if ! is_comment_line "$s"; then
+  # 豁免：仓库根 scripts/ 一级目录的 CLI 工具（*.mjs / *.cjs）——
+  #   debug-local / build-subset-externals / verify-cdn-subsets 这类脚本的
+  #   stdout 输出是**产品行为**（进度/结论日志），不是调试残留（2026-09-29，CI 实测误报）。
+  #   仅豁免一级目录，scripts/migrations 等子目录业务代码不豁免。
+  if ! is_comment_line "$s" \
+     && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs ]]; then
     if printf '%s' "$content" | grep -qE '\b(console\.(log|debug)\(|debugger\b)'; then
       add_err "R1" "调试残留(console.log/debug/debugger)" "${file}:${line}" "$content"
     fi
