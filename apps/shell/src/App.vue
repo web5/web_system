@@ -19,3 +19,17 @@ import EnvSwitcher from '@web-system/ui/components/EnvSwitcher.vue';
 // 全站备案信息（ICP + 公安）：法定要求所有页面可及，由基座统一提供
 import SiteBeianBar from './components/SiteBeianBar.vue';
 </script>
+
+<style>
+/*
+ * 备案条高度：基座对外公开的**唯一避让变量**。
+ *
+ * fixed 贴底条必然压住模块底部（portal 左栏底部能力区 / admin sider 底部都会被压 30px），
+ * 所以模块根容器高度要写成 calc(100vh - var(--site-beian-bar-h, 0px))。
+ * 带 fallback 0：模块单独运行（不经基座、变量不存在）时布局与改造前完全一致，
+ * 避免模块被基座反向绑死。高度改这里即可，条与让位同步生效。
+ */
+:root {
+  --site-beian-bar-h: 30px;
+}
+</style>

@@ -85,7 +85,8 @@ onUnmounted(async () => {
 
 <style>
 .module-container {
-  min-height: 100vh;
+  /* 扣掉基座备案条高度：模块若未适配（100vh）也不至于把内容顶到条下面看不见 */
+  min-height: calc(100vh - var(--site-beian-bar-h, 0px));
 }
 .module-error {
   max-width: 640px;
