@@ -100,7 +100,9 @@ ON DUPLICATE KEY UPDATE
 
 const verifySql = `SELECT \`app_key\`, \`env_id\`, \`current_version\`, \`status\` FROM \`deploy_app_env_versions\` WHERE \`app_key\`='${APP_KEY}' AND \`env_id\`='${ENV_ID}';`;
 
-console.log(`[p30] ${APP_KEY}@${ENV_ID} -> ${version}${version && !process.env.VERSION ? ' (磁盘探测)' : ''}`);
+// EMIT_SQL 模式下 stdout 必须**只有** SQL（可直接 `mysql < out.sql`），进度行走 stderr
+const log = EMIT_SQL ? console.error : console.log;
+log(`[p30] ${APP_KEY}@${ENV_ID} -> ${version}${version && !process.env.VERSION ? ' (磁盘探测)' : ''}`);
 console.log(sql);
 
 if (DRY_RUN || EMIT_SQL) process.exit(0);
