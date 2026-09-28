@@ -44,7 +44,8 @@
   bottom: 0;
   /* 低于环境切换挂件（z-index 1080）：dev 下挂件浮在条之上，互不遮挡 */
   z-index: 900;
-  height: 30px;
+  /* 高度取自避让变量（shell App.vue 的 :root），模块按同一变量扣减根容器高度 */
+  height: var(--site-beian-bar-h, 30px);
   display: flex;
   align-items: center;
   justify-content: center;

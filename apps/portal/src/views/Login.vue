@@ -48,7 +48,8 @@ function onLoginSuccess() {
 <style scoped>
 .login-container {
   display: flex; align-items: center; justify-content: center;
-  min-height: 100vh;
+  /* 扣掉基座备案条高度（--site-beian-bar-h 由 shell 提供，fallback 0） */
+  min-height: calc(100vh - var(--site-beian-bar-h, 0px));
   background: linear-gradient(180deg, #FFFBF5 0%, #FFF8F0 100%);
   position: relative; overflow: hidden;
 }

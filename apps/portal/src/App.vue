@@ -150,8 +150,10 @@ watch(
 
 <style scoped>
 .app-shell {
-  height: 100vh;
-  min-height: 100vh;
+  /* 扣掉基座备案条高度（--site-beian-bar-h 由 shell 在 :root 提供，单独运行时回落 0）：
+     否则左栏底部能力区与页面底部会被基座 fixed 备案条压住 30px。 */
+  height: calc(100vh - var(--site-beian-bar-h, 0px));
+  min-height: calc(100vh - var(--site-beian-bar-h, 0px));
   display: flex;
   flex-direction: column;
   background: var(--ws-bg-subtle);
