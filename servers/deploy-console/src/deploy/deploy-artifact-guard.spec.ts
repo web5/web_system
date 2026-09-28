@@ -23,6 +23,7 @@ import { CommandService } from '../shell/command.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { AppsService } from '../apps/apps.service';
+import { ReleaseRegistryService } from '../registry/release-registry.service';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -80,6 +81,11 @@ describe('DeployService 产物守卫', () => {
         },
         { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
         { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
+        // 指针双写（2026-09-28）：本 spec 只关心产物守卫，指针写入用 spy 隔离
+        {
+          provide: ReleaseRegistryService,
+          useValue: { setPointer: jest.fn(), syncAppEnvPointer: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(DeployService);
