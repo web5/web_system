@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import { IndexHtmlService } from './index-html.service';
 
 /**
@@ -165,5 +166,46 @@ describe('IndexHtmlService 基座 shell 版本目录', () => {
     appVersionRepo.findOne.mockResolvedValue(null);
     const file = await (svc as any).resolveShellHtmlFile();
     expect(file).toBe('/public/shell/index.html');
+  });
+});
+
+/**
+ * 基座静态资源 `/shell/*`（wb-issues rtqmct）。
+ *
+ * 背景：html 走版本目录，而资源走 ServeStatic 固定目录 → 只投一处就 404、
+ * 基座 JS 加载失败。这里锁死「资源与 html 同源」以及老部署的回落行为。
+ */
+describe('IndexHtmlService.resolveShellAssetPath（/shell/* 与 html 同源）', () => {
+  beforeEach(() => {
+    (existsSync as jest.Mock).mockReset();
+    (existsSync as jest.Mock).mockReturnValue(true);
+  });
+
+  it('有指针 → 版本目录（与 html 同源），不再依赖固定目录', async () => {
+    const { svc } = build();
+    const file = await svc.resolveShellAssetPath('/shell/assets/index.abc123.js');
+    expect(file).toBe('/public/static/modules/shell/dev/7a6be04/assets/index.abc123.js');
+  });
+
+  it('无指针（老部署）→ 回落固定目录 public/shell/', async () => {
+    const { svc, appVersionRepo } = build();
+    appVersionRepo.findOne.mockResolvedValue(null);
+    const file = await svc.resolveShellAssetPath('/shell/assets/index.abc123.js');
+    expect(file).toBe('/public/shell/assets/index.abc123.js');
+  });
+
+  it('版本目录缺该文件 → 返回 null（由调用方回落固定目录）', async () => {
+    const { svc } = build();
+    (existsSync as jest.Mock).mockReturnValue(false);
+    const file = await svc.resolveShellAssetPath('/shell/assets/index.new.js');
+    expect(file).toBeNull();
+  });
+
+  it('目录穿越 / 非法路径 → 返回 null', async () => {
+    const { svc } = build();
+    expect(await svc.resolveShellAssetPath('/shell/../../etc/passwd')).toBeNull();
+    expect(await svc.resolveShellAssetPath('/shell/../secret.txt')).toBeNull();
+    expect(await svc.resolveShellAssetPath('/shell/')).toBeNull();
+    expect(await svc.resolveShellAssetPath('/shell//abs/path.js')).toBeNull();
   });
 });
