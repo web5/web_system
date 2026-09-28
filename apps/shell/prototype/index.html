@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>基座级全站备案条 · 原型（SiteBeianBar）</title>
+  <style>
+    :root {
+      --ws-brand-500: #fa8c16;
+      --ws-text-primary: #1f2329;
+      --ws-text-secondary: #646a73;
+      --ws-text-tertiary: #8c8c8c;
+      --ws-border-light: #f0f2f6;
+      --ws-bg-page: #f7f8fa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: var(--ws-text-primary);
+      background: var(--ws-bg-page);
+    }
+
+    /* 模拟「模块页面」：全屏占满，底部内容会被固定条覆盖 —— 这正是本稿要验证的点 */
+    .stage {
+      position: relative;
+      height: 100vh;
+      overflow: auto;
+      padding: 24px;
+    }
+    .mock-card {
+      max-width: 880px;
+      margin: 0 auto 16px;
+      background: #fff;
+      border: 1px solid var(--ws-border-light);
+      border-radius: 8px;
+      padding: 20px 24px;
+    }
+    .mock-card h3 { margin: 0 0 8px; font-size: 15px; }
+    .mock-card p { margin: 0; font-size: 13px; color: var(--ws-text-secondary); line-height: 1.7; }
+    .mock-tail {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 12px 24px 40px; /* 尾部留白：给固定条让出安全区 */
+      font-size: 12px;
+      color: var(--ws-text-tertiary);
+    }
+
+    /* ===== 本稿主角：基座级全站备案条（fixed 贴底，覆盖所有路由）===== */
+    .site-beian-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 900;                 /* 低于环境切换挂件 1080，避免 dev 下互相压盖 */
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--ws-text-tertiary);
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(6px);
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .site-beian-bar a {
+      color: var(--ws-text-tertiary);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      transition: color 0.2s;
+    }
+    .site-beian-bar a:hover { color: var(--ws-brand-500); }
+    .beian-sep { color: #ddd; margin: 0 4px; }
+    .beian-icon { width: 13px; height: 13px; vertical-align: -2px; }
+
+    /* 说明区（原型注解，非产品内容） */
+    .note {
+      max-width: 880px;
+      margin: 32px auto 64px;
+      padding: 20px 24px;
+      background: #fff;
+      border: 1px solid var(--ws-border-light);
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--ws-text-secondary);
+    }
+    .note h2 { font-size: 14px; margin: 0 0 10px; color: var(--ws-text-primary); }
+    .note ul { margin: 8px 0; padding-left: 20px; }
+    .note code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="mock-card">
+      <h3>模拟模块页面（portal 欢迎页 / admin 列表页）</h3>
+      <p>
+        基座只渲染 <code>&lt;router-view&gt;</code>，业务布局由各模块自带、通常占满视口。
+        因此备案信息不能走模块内容流（会掉到视口外、需滚动才可见），
+        必须由基座以固定条的形式统一提供 —— 一次挂载，全站生效。
+      </p>
+    </div>
+    <div class="mock-card">
+      <h3>覆盖范围</h3>
+      <p>
+        <code>/</code>（portal 欢迎页）、<code>/login</code>、<code>/admin/*</code>、404、
+        Forbidden —— 所有走基座的路由都带备案条，子模块无需各自实现。
+      </p>
+    </div>
+    <p class="mock-tail">
+      ↓ 页面底部安全区：模块若有贴底操作区（如后台分页条、输入框），
+      需自行留出约 30px，避免被固定条压住。
+    </p>
+  </div>
+
+  <!-- 全站备案条（基座职责） -->
+  <footer class="site-beian-bar">
+    <span>Copyright &copy; 2023 - 2026 kedouai.com</span>
+    <span class="beian-sep">|</span>
+    <span>备案号：<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">粤ICP备2021031984号</a></span>
+    <span class="beian-sep">|</span>
+    <a href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44030902002737" target="_blank" rel="noopener noreferrer">
+      <svg class="beian-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M10 2L3 5.5V10c0 4.42 3.13 8.62 7 9.5 3.87-.88 7-5.08 7-9.5V5.5L10 2z" />
+      </svg>
+      公安备案号：44030902002737号
+    </a>
+  </footer>
+
+  <section class="note">
+    <h2>设计决策记录</h2>
+    <ul>
+      <li><b>为什么放基座而不是子模块</b>：法定要求「网站所有页面」可及。基座是唯一全路由公共层，
+        portal / admin 各自实现既重复又容易漏（历史上 portal 换血升级就漏过一次，见 d1d27b7）。</li>
+      <li><b>为什么用 fixed 而非内容流</b>：模块布局普遍 <code>height: 100%</code> 占满视口，
+        内容流 footer 会掉到视口之外，必须滚动才看得到，等于没有。</li>
+      <li><b>z-index 900</b>：低于环境切换挂件（1080），dev 下挂件浮在条之上，互不遮挡主体功能。</li>
+      <li><b>高度 30px + 半透明</b>：尽量少占视口；模块贴底操作区需自留安全区（本稿 <code>.mock-tail</code> 已示意）。</li>
+    </ul>
+    <h2>微调豁免（2026-09-28）</h2>
+    <p>
+      本稿为「备案信息展示位置」的回归与统一：无新增交互、无新增状态、无路由变更，
+      仅把既有备案信息（粤ICP备2021031984号 / 公安备案号 44030902002737号）
+      从 portal 单页上移到基座全站层，故不触发 ux-review-checklist A–I 的新增项复核。
+    </p>
+  </section>
+</body>
+</html>
