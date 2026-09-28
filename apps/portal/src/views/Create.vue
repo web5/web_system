@@ -689,8 +689,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .create-page {
-  height: 100vh;
-  height: 100dvh;
+  /* 扣掉基座备案条高度（--site-beian-bar-h 由 shell 提供，fallback 0）：
+     本页在 .app-work 内按视口满高排布，不扣会让底部操作区被基座 fixed 备案条压住。 */
+  height: calc(100vh - var(--site-beian-bar-h, 0px));
+  height: calc(100dvh - var(--site-beian-bar-h, 0px));
   background: #FFF8F0;
   display: flex;
   flex-direction: column;
