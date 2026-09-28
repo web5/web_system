@@ -3,6 +3,8 @@
     <router-view />
     <!-- 环境切换挂件：基座职责，渲染在 portal / admin 等模块之上（prod 站点不渲染） -->
     <EnvSwitcher />
+    <!-- 全站备案条：基座职责 —— 一次挂载覆盖所有路由，子模块无需各自实现 -->
+    <SiteBeianBar />
   </a-config-provider>
 </template>
 
@@ -14,4 +16,6 @@ import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import { antdThemeLight } from '@web-system/ui';
 // 环境切换挂件改用共享组件（shell 与 micro-app 共用，见 packages/ui/src/components/EnvSwitcher.vue）
 import EnvSwitcher from '@web-system/ui/components/EnvSwitcher.vue';
+// 全站备案信息（ICP + 公安）：法定要求所有页面可及，由基座统一提供
+import SiteBeianBar from './components/SiteBeianBar.vue';
 </script>
