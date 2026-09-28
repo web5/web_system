@@ -15,6 +15,7 @@ import {
   WsaSearchProvider,
   WebSearchTool,
   TokenHubClient,
+  type AgentDefinition,
 } from '@kedouai/agent-core';
 import { ContractRuleTool } from '../contract/tools/contract-rule.tool';
 import { ContractIrrTool } from '../contract/tools/contract-irr.tool';
@@ -42,6 +43,29 @@ import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
 import { UserMemoryUpdateHook } from './user-memory-update.hook';
 import { POST_RUN_HOOKS, PostRunHook } from './post-run-hook';
 import { ImageGenTool } from './tools/image-gen.tool';
+
+/**
+ * 代码内置通用助手（唯一一个非 DB 来源的 agent 定义）。
+ *
+ * 存在意义：IntentService 关闭意图路由时的兜底 id 默认是 'general'（INTENT_FALLBACK_AGENT_ID），
+ * 注册表里必须有它能兜得住；否则会回落 candidates[0]，让所有通用对话进第一个专业 agent。
+ * 工具只给 web-search（通用问答够用，不放生图/命令类工具）；DB 配置同 id 定义时自动被覆盖。
+ */
+const GENERAL_AGENT_DEFINITION: AgentDefinition = {
+  id: 'general',
+  name: '通用助手',
+  systemPrompt:
+    '你是科豆AI的通用助手，负责回答用户的日常提问、闲聊与各类知识问题。' +
+    '回答要求：准确、简洁、语气友好；不确定的信息要明确说明，不要编造。' +
+    '需要查询实时信息（新闻、天气、行情等）时调用 web-search 工具后基于结果作答。' +
+    '若用户的需求明显属于专业场景（如 AI 绘画、合同审查、翻译），可以建议用户使用对应功能入口。',
+  model: 'deepseek-v4-flash',
+  tools: ['web-search'],
+  maxSteps: 8,
+  temperature: 0.7,
+  streaming: true,
+  memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
+};
 
 /**
  * Agent harness 统一注册入口（复用 @kedouai/agent-core）。
@@ -218,6 +242,12 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     // Agent 定义（含 contract-risk / deploy）由 DB 唯一事实源提供：AgentDefSyncService
     // 启动即拉取 ai-service 的 published 定义 upsert 到注册表，并按其 capabilities 懒注册
     // MCP 工具（含 deploy 的长任务 publish_pipeline）。（代码内置 *.agent.ts 已删除）
+
+    // 例外：`general` 通用助手必须代码内置。意图路由关闭时 IntentService 兜底
+    // INTENT_FALLBACK_AGENT_ID（默认 'general'）；DB 里只有 5 个专业 agent、没有
+    // general，candidates[0] 是 bianbian → 2026-09-28 线上「通用对话全进变变创作助手」。
+    // DB 若以后配置了同 id 定义会覆盖此处（upsert 语义，DB 优先）。
+    this.agentRegistry.upsert(GENERAL_AGENT_DEFINITION);
 
     // 演示"MCP 工具作为远程插件懒加载接入"（配置了 MCP_GATEWAY_URL 才生效）
     this.registerMcpTools();
