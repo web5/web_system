@@ -110,18 +110,19 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(saved).toMatchObject({ currentVersion: 'v2', previousVersion: 'v1' });
   });
 
-  it('setPointer 双写：后端服务 / site-version 应用不写新表', async () => {
-    // 未登记（后端服务在新模型无载体）
+  it('setPointer 双写：site-version（基座 shell）也写新表（gateway 停用 legacy 后读它）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9' });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved).toMatchObject({ appKey: 'shell', envId: 'prod', currentVersion: 'v9' });
+    expect(deploymentRepo.save).toHaveBeenCalled();
+  });
+
+  it('setPointer 双写：后端服务（未登记到 deploy_apps）只写 legacy', async () => {
     appRepo.findOne.mockResolvedValue(null);
     await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'v9' });
     expect(appVersionRepo.save).not.toHaveBeenCalled();
-
-    // shell 走 site-version，不纳入 env 切换
-    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
-    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9' });
-    expect(appVersionRepo.save).not.toHaveBeenCalled();
-    // 但 legacy 两处都写了（后端发布仍依赖它）
-    expect(deploymentRepo.save).toHaveBeenCalledTimes(2);
+    expect(deploymentRepo.save).toHaveBeenCalled();
   });
 
   it('setPointer 双写：新表写失败只告警，不阻断发布', async () => {

@@ -42,7 +42,12 @@ interface ModulesManifest {
  * - deploy-console index.html：走旧 SPA 模式（不微前端化，独立应用）
  * - 模块 js/css 不由 gateway serve，由 nginx /static/modules/ 直出
  *
- * 版本查询：deploy_deployments 表（envId, moduleKey）→ currentVersion，TTL 10s 缓存。
+ * **读取源（2026-09-28 停用 legacy）**：前端清单（含基座 shell 的版本目录）一律读 NEW 域
+ * —— `deploy_apps` + `deploy_app_env_versions`（TTL 10s 缓存）。
+ * `deploy_deployments` / `deploy_modules` **不再参与前端清单**，只保留
+ * 「后端微服务版本指针」一个职责（见 `DeployDeploymentEntity` 注释）。
+ * 唯一例外是应急开关 `DEPLOY_LEGACY_READ=1`（见 `legacyRead`）。
+ *
  * 未来灰度：在 resolveCanary() 中按用户规则返回 canary 版本即可。
  */
 @Injectable()
@@ -125,86 +130,154 @@ export class IndexHtmlService {
   /**
    * 组装模块清单（**唯一来源**：注入 shell 的 HTML 与 /__manifest__ 端点都走这里）。
    *
-   * 新结构（双域重构 P3）：
+   * **2026-09-28 停用 legacy**：默认读取源是 NEW 域（`deploy_apps` +
+   * `deploy_app_env_versions`），`deploy_deployments` / `deploy_modules`
+   * **不再参与前端清单** —— 旧表只保留「后端服务版本指针」一个职责。
+   * 这样做的原因：控制台的版本切换（`AppsService.switchVersion`）早已只写新表，
+   * 而 gateway 还从旧表读 → 两轨漂移（dev 曾出现「切了版本页面不变」）。
+   *
+   * 输出结构（双域重构 P3）：
    * - `site` / `defaultEnv` / `switchable`：由请求 Host 匹配 `deploy_sites`
-   * - `envs`：该站点下可切换的环境（挂件列表）
+   * - `envs`：站点下可切换的环境；未匹配站点（IP / localhost 直连）退化为 `DEPLOY_ENV_ID` 单环境
    * - `byEnv`：**每个环境 → 各应用的固定入口** `/static/modules/<appKey>/<envId>/index.js`
    *   （入口不含版本 → 切换版本只改磁盘指针，manifest 无需变化，R5）
-   * - 兼容期字段 `env` / `modules` / `canary` 始终保留，供未升级客户端回落
+   * - 兼容字段 `env` / `modules` / `canary`：**同样由 NEW 域合成**
+   *   （`modules[].version` 取自 `deploy_app_env_versions`，路径为整包目录
+   *   `<appKey>/<envId>/<version>/`），供尚未刷新的旧 shell bundle 使用。
    *
-   * 未匹配到站点（localhost / IP 直连）→ 只返回旧结构，行为与改造前一致。
-   *
-   * **M8**：`DEPLOY_LEGACY_READ=1` 时短路到旧表读取源（见 `legacyRead`），新表完全不参与。
-   * `source` 字段仅为排障标注（`new` / `legacy` / `new:nosite`），前端不依赖。
+   * `source` 仅为排障标注（`new` / `new:nosite` / `new:error` / `legacy`），前端不依赖。
+   * 唯一仍走 legacy 的通道是应急开关 `DEPLOY_LEGACY_READ=1`（见 `legacyRead`）。
    */
   async buildManifest(req?: any): Promise<Record<string, any>> {
-    const legacyEnv = this.envId;
-    const legacy = await this.resolveModulesManifest(legacyEnv, req);
+    const envId = this.envId;
 
-    // M8 回退：旧表为唯一读取源
-    if (this.legacyRead) return this.buildLegacyManifest(legacyEnv, legacy);
+    // M8 应急回退：旧表为唯一读取源（默认关闭）
+    if (this.legacyRead) {
+      const legacy = await this.resolveModulesManifest(envId, req);
+      return this.buildLegacyManifest(envId, legacy);
+    }
 
     try {
       const site = await this.resolveSite(req);
-      if (!site) {
-        return {
-          ...legacy,
-          site: null,
-          defaultEnv: legacyEnv,
-          switchable: false,
-          envs: [],
-          byEnv: {},
-          source: 'new:nosite',
-        };
-      }
+      return await this.buildNewManifest(envId, site ?? null, req);
+    } catch (e) {
+      // 不再回落旧表：旧表数据可能已漂移，回落只会掩盖问题（且会让两轨再次分叉）
+      this.logger.error(`manifest 组装失败（NEW 域读取源）：${(e as Error).message}`);
+      return this.emptyManifest(envId, 'new:error');
+    }
+  }
 
-      const [envs, apps, versions] = await Promise.all([
-        this.envRepo.find({
+  /** NEW 域清单组装（站点可空：未匹配时退化为单环境） */
+  private async buildNewManifest(
+    envId: string,
+    site: DeploySiteEntity | null,
+    req?: any,
+  ): Promise<Record<string, any>> {
+    const defaultEnv = site?.defaultEnvId || envId;
+
+    const envRows = site
+      ? await this.envRepo.find({
           where: { siteKey: site.key, enabled: true },
           order: { sort: 'ASC', envId: 'ASC' },
-        }),
-        this.appRepo.find({ where: { deletedAt: IsNull(), enabled: true } }),
-        this.appVersionRepo.find(),
-      ]);
+        })
+      : [];
+    const envList = envRows.length
+      ? envRows.map((e) => ({ id: e.envId, name: e.name, isProd: e.isProd }))
+      : [{ id: envId, name: envId, isProd: envId === 'prod' }];
+    const envIds = envList.map((e) => e.id);
 
-      const currentOf = new Map<string, string | null>();
-      for (const v of versions) currentOf.set(`${v.appKey}@${v.envId}`, v.currentVersion);
+    const [apps, versions] = await Promise.all([
+      this.appRepo.find({ where: { deletedAt: IsNull(), enabled: true } }),
+      this.appVersionRepo.find(),
+    ]);
+    const currentOf = new Map<string, string | null>();
+    for (const v of versions) currentOf.set(`${v.appKey}@${v.envId}`, v.currentVersion);
 
-      const byEnv: Record<string, Record<string, { entry: string; css: string | null }>> = {};
-      for (const e of envs) {
-        const entries: Record<string, { entry: string; css: string | null }> = {};
-        for (const app of apps) {
-          // 基座（site-version）不纳入 env 切换（Q107）
-          if (app.deployMode !== 'env-dir') continue;
-          if (!currentOf.get(`${app.key}@${e.envId}`)) continue;
-          const cssRel = `/static/modules/${app.key}/${e.envId}/index.css`;
-          entries[app.key] = {
-            entry: `/static/modules/${app.key}/${e.envId}/index.js`,
-            // 样式指针只在产物含 index.css 时被写入，按磁盘存在性给出（避免前端引 404）
-            css: existsSync(join(PUBLIC_ROOT, 'static/modules', app.key, e.envId, 'index.css'))
-              ? cssRel
-              : null,
-          };
-        }
-        byEnv[e.envId] = entries;
+    // 基座（site-version）不纳入 env 切换（Q107）
+    const envDirApps = apps.filter((a) => a.deployMode === 'env-dir');
+
+    const byEnv: Record<string, Record<string, { entry: string; css: string | null }>> = {};
+    for (const e of envIds) {
+      const entries: Record<string, { entry: string; css: string | null }> = {};
+      for (const app of envDirApps) {
+        if (!currentOf.get(`${app.key}@${e}`)) continue;
+        const cssRel = `/static/modules/${app.key}/${e}/index.css`;
+        entries[app.key] = {
+          entry: `/static/modules/${app.key}/${e}/index.js`,
+          // 样式指针只在产物含 index.css 时被写入，按磁盘存在性给出（避免前端引 404）
+          css: this.diskHas(`static/modules/${app.key}/${e}/index.css`) ? cssRel : null,
+        };
       }
-
-      return {
-        site: site.key,
-        defaultEnv: site.defaultEnvId || legacyEnv,
-        switchable: !!site.switchable,
-        envs: envs.map((e) => ({ id: e.envId, name: e.name, isProd: e.isProd })),
-        byEnv,
-        // 兼容期字段（未升级客户端回落）
-        env: legacyEnv,
-        modules: legacy.modules,
-        canary: legacy.canary,
-        source: 'new',
-      };
-    } catch (e) {
-      this.logger.warn(`manifest 新结构组装失败，回落旧结构：${(e as Error).message}`);
-      return { ...legacy, site: null, defaultEnv: legacyEnv, switchable: false, envs: [], byEnv: {}, source: 'new:error' };
+      byEnv[e] = entries;
     }
+
+    // 兼容期字段：旧 shell 只认 modules[]（整包版本目录），版本与 byEnv 同源取自新表
+    const modules: ModuleManifestEntry[] = [];
+    for (const app of envDirApps) {
+      const version = currentOf.get(`${app.key}@${defaultEnv}`);
+      if (!version) continue;
+      const base = `/static/modules/${app.key}/${defaultEnv}/${version}/`;
+      modules.push({
+        name: app.key,
+        version,
+        entry: `${base}index.js`,
+        css: this.diskHas(`static/modules/${app.key}/${defaultEnv}/${version}/index.css`)
+          ? `${base}index.css`
+          : null,
+        assetsBase: base,
+      });
+    }
+
+    return {
+      site: site?.key ?? null,
+      defaultEnv,
+      switchable: !!site?.switchable,
+      envs: envList,
+      byEnv,
+      env: envId,
+      modules,
+      canary: await this.resolveCanaryAny(defaultEnv, envDirApps, currentOf, req),
+      source: site ? 'new' : 'new:nosite',
+    };
+  }
+
+  /** 组装失败 / 无数据时的空清单（结构完整，避免前端 undefined 崩溃） */
+  private emptyManifest(envId: string, source: string): Record<string, any> {
+    return {
+      site: null,
+      defaultEnv: envId,
+      switchable: false,
+      envs: [{ id: envId, name: envId, isProd: envId === 'prod' }],
+      byEnv: {},
+      env: envId,
+      modules: [],
+      canary: null,
+      source,
+    };
+  }
+
+  /** 磁盘存在性判定（路径相对 PUBLIC_ROOT） */
+  private diskHas(relPath: string): boolean {
+    return existsSync(join(PUBLIC_ROOT, relPath));
+  }
+
+  /**
+   * 灰度命中（NEW 域版）：按 `deploy_canary_rules` 逐个 env-dir 应用比对，
+   * 首个命中即返回；未命中返回 null。
+   */
+  private async resolveCanaryAny(
+    envId: string,
+    apps: DeployAppEntity[],
+    currentOf: Map<string, string | null>,
+    req?: any,
+  ): Promise<{ module: string; version: string } | null> {
+    for (const app of apps) {
+      const stable = currentOf.get(`${app.key}@${envId}`);
+      if (!stable) continue;
+      const hit = await this.resolveCanary(envId, app.key, stable, req);
+      if (hit !== stable) return { module: app.key, version: hit };
+    }
+    return null;
   }
 
   /**
@@ -235,6 +308,46 @@ export class IndexHtmlService {
       modules: legacy.modules,
       canary: legacy.canary,
       source: 'legacy',
+    };
+  }
+
+  /**
+   * 单个模块的当前线上版本（`/__version__` 端点用；与 manifest 同一读取源）。
+   *
+   * **NEW 域（默认）**：`deploy_app_env_versions` → 整包目录
+   * `/static/modules/<key>/<envId>/<version>/`。未登记 / 无指针 → `version: undefined`
+   * （后端服务的版本指针只在 `deploy_deployments`，**不再**从这里对外暴露）。
+   * **应急通道**（`DEPLOY_LEGACY_READ=1`）：旧扁平布局 + `deploy_deployments`。
+   */
+  async resolveModuleVersion(moduleKey: string, req?: any): Promise<Record<string, any>> {
+    const envId = this.envId;
+    const module = await this.moduleRepo.findOne({ where: { key: moduleKey } });
+
+    let version: string | undefined;
+    let base: string | null = null;
+    if (this.legacyRead) {
+      version = await this.getCurrentVersion(envId, moduleKey);
+      if (version) base = `/static/modules/${moduleKey}/${version}/`;
+    } else {
+      version = await this.getCurrentAppVersion(moduleKey, envId);
+      if (version) base = `/static/modules/${moduleKey}/${envId}/${version}/`;
+    }
+
+    // 样式指针按磁盘存在性给出（避免前端引 404）
+    const cssRel = this.legacyRead
+      ? `static/modules/${moduleKey}/${version}/index.css`
+      : `static/modules/${moduleKey}/${envId}/${version}/index.css`;
+
+    return {
+      env: envId,
+      module: moduleKey,
+      name: module?.name || moduleKey,
+      type: module?.type || 'unknown',
+      version,
+      entry: base ? `${base}index.js` : null,
+      css: base && version && this.diskHas(cssRel) ? `${base}index.css` : null,
+      assetsBase: base,
+      source: this.legacyRead ? 'legacy' : 'new',
     };
   }
 
@@ -298,17 +411,60 @@ export class IndexHtmlService {
     }
   }
 
-  /** 基座 html 路径：优先版本目录（static/modules/shell/<版本>/），否则旧固定目录 */
+  /**
+   * 基座 html 路径。
+   *
+   * **NEW 域（默认）**：`deploy_app_env_versions(appKey='shell', envId)` →
+   * `static/modules/shell/<envId>/<版本>/index.html`（与产物投递布局一致）。
+   * 取不到版本或目录缺失 → 退回固定路径 `shell/index.html`（保证老部署仍可启动）。
+   *
+   * **应急通道**（`DEPLOY_LEGACY_READ=1`）：按旧扁平布局
+   * `static/modules/shell/<版本>/index.html` + `deploy_deployments` 指针。
+   */
   private async resolveShellHtmlFile(): Promise<string> {
-    const legacy = join(PUBLIC_ROOT, 'shell', 'index.html');
-    try {
-      const version = await this.getCurrentVersion(this.envId, 'shell');
-      if (!version) return legacy;
-      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', version, 'index.html');
-      return existsSync(versioned) ? versioned : legacy;
-    } catch {
-      return legacy;
+    const envId = this.envId;
+    const fixed = join(PUBLIC_ROOT, 'shell', 'index.html');
+    if (this.legacyRead) {
+      try {
+        const version = await this.getCurrentVersion(envId, 'shell');
+        if (!version) return fixed;
+        const flat = join(PUBLIC_ROOT, 'static/modules/shell', version, 'index.html');
+        return existsSync(flat) ? flat : fixed;
+      } catch {
+        return fixed;
+      }
     }
+    try {
+      const version = await this.getCurrentAppVersion('shell', envId);
+      if (!version) return fixed;
+      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', envId, version, 'index.html');
+      if (existsSync(versioned)) return versioned;
+      this.logger.warn(`shell 版本目录不存在，回落固定路径：${versioned}`);
+    } catch {
+      /* 查表失败 → 固定路径 */
+    }
+    return fixed;
+  }
+
+  /**
+   * 读取应用 × 环境指针（**NEW 域** `deploy_app_env_versions`，TTL 缓存）。
+   * 停用 legacy 后，前端侧（含基座 shell）的版本唯一来源是这里。
+   */
+  private async getCurrentAppVersion(appKey: string, envId: string): Promise<string | undefined> {
+    const key = `app:${appKey}@${envId}`;
+    const cached = this.versionCache.get(key);
+    if (cached && Date.now() - cached.at < this.versionTtl) return cached.value;
+
+    let version: string | undefined;
+    try {
+      const row = await this.appVersionRepo.findOne({ where: { appKey, envId } });
+      version = row?.currentVersion ?? undefined;
+    } catch (e) {
+      this.logger.warn(`查询应用版本失败(${key}): ${e.message}`);
+    }
+
+    this.versionCache.set(key, { value: version, at: Date.now() });
+    return version;
   }
 
   /**

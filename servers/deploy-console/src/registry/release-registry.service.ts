@@ -39,13 +39,13 @@ export interface SetPointerInput {
  * 版本写入逻辑，流水线各阶段与历史版本切换共用，避免再次漂移。
  *
  * **双写（2026-09-28）**：`setPointer` 在写完 legacy 指针后，若该 moduleKey 在
- * `deploy_apps` 中登记为 `deploy_mode='env-dir'`（前端 env-dir 应用），同步 upsert
- * `deploy_app_env_versions` —— gateway NEW 域的 `byEnv` 只读后者。
- * 后端服务（新模型无载体）只写 legacy，见 DeployDeploymentEntity 注释。
+ * `deploy_apps` 中登记（前端应用：`env-dir` **或** `site-version`），同步 upsert
+ * `deploy_app_env_versions` —— gateway NEW 域的 `byEnv` / 基座 shell 只读后者。
+ * 后端服务（不在 `deploy_apps`）只写 legacy，见 DeployDeploymentEntity 注释。
  *
- * 为什么双写而不是直接切：两轨并存期，旧 shell 仍消费 legacy `modules[]`，
- * 只写新表会让它停在旧版本（且无任何报错）。双写保证两侧一致，
- * 待 `deploy_sites` 全环境铺开 + shell 全量升级后再停写 legacy。
+ * 为什么前端仍双写：gateway 已停用 legacy 读取源（2026-09-28），新表是**唯一**前端读取源；
+ * 继续写旧表只是为了让「应急开关 `DEPLOY_LEGACY_READ=1`」与运维排障仍有可比对的数据。
+ * ⚠️ 两轨出现差异时**以新表为准**。
  */
 @Injectable()
 export class ReleaseRegistryService {
@@ -99,16 +99,18 @@ export class ReleaseRegistryService {
   }
 
   /**
-   * 把指针同步到新模型（前端 env-dir 应用）。
+   * 把指针同步到新模型（**所有前端应用**：env-dir 与 site-version）。
    *
-   * **失败只告警不抛出**：新表是「增量真相源」，写失败不该让整条流水线红掉
-   * （legacy 已写成功，页面仍可用；运维可从告警发现两轨不一致）。
+   * `site-version`（基座 shell）同样要写：gateway 的 `resolveShellHtmlFile`
+   * 停用 legacy 后从本表读版本（目录 `static/modules/<key>/<envId>/<version>/`）。
+   *
+   * **失败只告警不抛出**：写失败不该让整条流水线红掉
+   * （legacy 已写成功；运维可从告警发现两轨不一致）。
    */
   async syncAppEnvPointer(input: SetPointerInput): Promise<void> {
     try {
       const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
-      if (!app) return;                       // 后端服务 / 未登记模块：新模型无此实体
-      if (app.deployMode !== 'env-dir') return; // shell 走 site-version，不纳入 env 切换
+      if (!app) return; // 后端服务 / 未登记模块：新模型无此实体（legacy 仍是唯一指针）
 
       const row =
         (await this.appVersionRepo.findOne({
