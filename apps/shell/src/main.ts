@@ -50,6 +50,15 @@ const manifest = readManifest();
 const envId = resolveEnvId(manifest);
 console.log('[shell] manifest:', manifest, '→ env:', envId);
 
+// 环境同步给服务端：供 index.html 注入「该环境产物」的首屏 preload。
+// Cookie **不是**真相源（localStorage 才是，见 composables/env），写失败也不影响
+// 运行 —— 服务端缺失时退回 defaultEnv，最坏情况只是预载目标不是当前环境那份。
+try {
+  document.cookie = `kedou_env=${encodeURIComponent(envId)}; path=/; max-age=31536000; SameSite=Lax`;
+} catch {
+  /* Cookie 禁用（隐私模式等）不影响功能 */
+}
+
 // pinia + router
 const pinia = createPinia();
 const router: Router = createRouter({
