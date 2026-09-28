@@ -241,12 +241,13 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
-.layout { height: 100vh; overflow: hidden; }
+/* 同样扣掉基座备案条高度（变量由 shell 在 :root 提供，fallback 0） */
+.layout { height: calc(100vh - var(--site-beian-bar-h, 0px)); overflow: hidden; }
 
 /* 布局结构（2026-09-03 重构）：sider 参与流（非 fixed），右侧列自动从 sider 右缘无缝开始，
  * 消除原"fixed sider + marginLeft 244"造成的 24px 顶部/内容切口 */
 .sider {
-  position: sticky; top: 0; height: 100vh; z-index: 10;
+  position: sticky; top: 0; height: calc(100vh - var(--site-beian-bar-h, 0px)); z-index: 10;
   display: flex; flex-direction: column; overflow: hidden;
 }
 .sider-body { flex: 1; overflow-y: auto; }
