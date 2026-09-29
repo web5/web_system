@@ -1,7 +1,7 @@
 <template>
   <div class="login-card">
     <!-- 关闭按钮（弹窗模式下显示） -->
-    <button v-if="closable" class="card-close" @click="$emit('close')">
+    <button v-if="closable" class="card-close" @click="handleClose">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
 
@@ -44,28 +44,15 @@
       </a-button>
     </div>
 
-    <!-- 小程序扫码登录（推荐）-->
-    <div v-if="loginMode === 'miniprogram'" class="panel qrcode-panel">
+    <!-- 扫码登录（小程序扫码 / 微信扫码共用一套状态机，含过期态）-->
+    <div v-if="isQrMode" class="panel qrcode-panel">
       <template v-if="qrcodeStatus === 'pending'">
         <div class="qrcode-frame">
           <canvas ref="canvasRef" class="qrcode-canvas" width="220" height="220"></canvas>
         </div>
         <div class="qrcode-info">
-          <p class="qrcode-tip">请使用微信小程序扫一扫</p>
-          <p class="qrcode-expire">打开小程序 → 扫一扫 → 扫描此二维码</p>
-        </div>
-      </template>
-    </div>
-
-    <!-- 扫码登录 -->
-    <div v-if="loginMode === 'qrcode'" class="panel qrcode-panel">
-      <template v-if="qrcodeStatus === 'pending'">
-        <div class="qrcode-frame">
-          <canvas ref="canvasRef" class="qrcode-canvas" width="220" height="220"></canvas>
-        </div>
-        <div class="qrcode-info">
-          <p class="qrcode-tip">请使用微信扫一扫登录</p>
-          <p class="qrcode-expire">二维码 5 分钟有效，请尽快扫码</p>
+          <p class="qrcode-tip">{{ isMiniMode ? '请使用微信小程序扫一扫' : '请使用微信扫一扫登录' }}</p>
+          <p class="qrcode-expire">{{ isMiniMode ? '打开小程序 → 扫一扫 → 扫描此二维码' : '二维码 5 分钟有效，请尽快扫码' }}</p>
         </div>
       </template>
       <template v-else-if="qrcodeStatus === 'confirmed'">
@@ -77,7 +64,7 @@
           <p class="status-desc">正在跳转...</p>
         </div>
       </template>
-      <template v-else-if="qrcodeStatus === 'expired'">
+      <template v-else>
         <div class="status-card">
           <span class="status-icon expired">!</span>
           <p class="status-title">二维码已过期</p>
@@ -141,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 // 公共静态资源前缀（编译期常量 /static/cdn/pub/）：模板里直接用全局常量会被 vue-tsc
 // 判为组件实例属性而报 TS2339，故在 script 里接一层（同 admin 的 BasicLayout.vue）。
 const assetBase = __PUBLIC_ASSET_BASE__;
@@ -167,7 +154,22 @@ const loginMode = ref<'qrcode' | 'oauth' | 'account' | 'miniprogram'>(inWechat.v
 
 const canvasRef = ref<HTMLCanvasElement>();
 const qrcodeStatus = ref<'pending' | 'confirmed' | 'expired'>('pending');
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+/** 两种扫码模式共用同一套状态机，避免过期态只在其中一种模式下有 UI */
+const isQrMode = computed(() => loginMode.value === 'qrcode' || loginMode.value === 'miniprogram');
+const isMiniMode = computed(() => loginMode.value === 'miniprogram');
+
+// 轮询参数：二维码服务端 TTL 为 5 分钟，这里留 30s 余量后强制停止，
+// 防止「服务端已删票 / 前端仍在打」造成的无限轮询（每 2s 一次 ≈ 30 次/分钟）。
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_MS = 5 * 60 * 1000 + 30 * 1000;
+/** 连续失败上限：网关/网络异常时不再空转发请求 */
+const POLL_MAX_FAILURES = 5;
+
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let polling = false;
+let pollStartedAt = 0;
+let pollFailures = 0;
 let currentTicket = '';
 
 const loginForm = reactive({ username: '', password: '' });
@@ -203,10 +205,15 @@ onMounted(() => {
 });
 onUnmounted(() => stopPolling());
 
-// 切换到扫码模式时自动生成二维码
+// 切换到扫码模式时自动生成二维码；切走时立即停止轮询
 watch(loginMode, (mode) => {
   if (mode === 'qrcode' || mode === 'miniprogram') {
+    // 扫码进入（URL 带 qrcode_ticket）时不要另起一张票：
+    // 否则手机端确认的 ticket 与 PC 端轮询的 ticket 对不上，表现为「扫了没反应」。
+    if (props.qrcodeTicket) return;
     generateQrcode();
+  } else {
+    stopPolling();
   }
 }, { immediate: true });
 
@@ -254,22 +261,64 @@ async function generateQrcode() {
 
 function startPolling() {
   stopPolling();
-  pollTimer = setInterval(async () => {
-    if (!currentTicket) return;
-    try {
-      const result = await checkQrcodeTicket(currentTicket);
-      qrcodeStatus.value = result.status;
-      if (result.status === 'confirmed' && result.accessToken) {
-        stopPolling();
-        userStore.setToken(result.accessToken, result.refreshToken || '');
-        setTimeout(() => emit('login-success'), 1000);
-      }
-    } catch { /* ignore */ }
-  }, 2000);
+  if (!currentTicket) return;
+  polling = true;
+  pollStartedAt = Date.now();
+  pollFailures = 0;
+  pollOnce();
+}
+
+/**
+ * 单次轮询 + 串行调度（响应回来后再排下一次），
+ * 避免慢请求叠加导致的请求堆积。
+ */
+async function pollOnce() {
+  if (!polling || !currentTicket) return;
+
+  // 兜底：超过二维码生命周期仍未确认 → 停止（无论服务端返回什么）
+  if (Date.now() - pollStartedAt > POLL_MAX_MS) {
+    qrcodeStatus.value = 'expired';
+    stopPolling();
+    return;
+  }
+
+  try {
+    const result = await checkQrcodeTicket(currentTicket);
+    pollFailures = 0;
+    qrcodeStatus.value = result.status;
+
+    if (result.status === 'confirmed' && result.accessToken) {
+      stopPolling();
+      userStore.setToken(result.accessToken, result.refreshToken || '');
+      setTimeout(() => emit('login-success'), 1000);
+      return;
+    }
+    // 关键：过期即停。此前这里没停，二维码 5 分钟过期后仍每 2s 打一次接口，永不终止。
+    if (result.status === 'expired') {
+      stopPolling();
+      return;
+    }
+  } catch {
+    pollFailures += 1;
+    if (pollFailures >= POLL_MAX_FAILURES) {
+      stopPolling();
+      return;
+    }
+  }
+
+  if (!polling) return;
+  pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS);
 }
 
 function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  polling = false;
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+}
+
+/** 关闭按钮：先停轮询再通知父组件（弹窗关闭 ≠ 组件卸载，不能只依赖 onUnmounted） */
+function handleClose() {
+  stopPolling();
+  emit('close');
 }
 
 function handleWechatOAuth() {
