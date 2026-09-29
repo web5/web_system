@@ -198,6 +198,13 @@ function undeclaredVars(script, declared) {
 
 // ---------------------------------------------------------------- 主流程
 
+// fail-fast：仓库已公开，工具不再内置目标机地址，必须由 env/参数显式提供
+if (!has('--file') && !SSH_HOST) {
+  console.error('[pipeline-lint] 缺少目标主机：请用 --ssh you@your-host 或 export LINT_SSH_HOST=you@your-host');
+  console.error('  （密钥与库同理：LINT_SSH_KEY / LINT_DB / LINT_DB_USER / DEV_DB_PASSWORD）');
+  process.exit(2);
+}
+
 const src = has('--file') ? loadFromFile(val('--file')) : loadFromDb();
 const { actions, varsByPipe, configKeys = new Set() } = src;
 
