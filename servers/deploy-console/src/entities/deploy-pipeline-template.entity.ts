@@ -89,6 +89,18 @@ export class DeployPipelineTemplateEntity {
   @Column({ type: 'boolean', default: false, comment: '内置默认模板（不可删除/改名）' })
   builtin: boolean;
 
+  /**
+   * 配置版本号（2026-09-29）：每次编排树保存（步骤/任务/动作）+1。
+   *
+   * 与 `deploy_pipeline_revisions.rev` 一一对应 —— 这里是**当前指向**，
+   * 历史正文在那张快照表里。恢复历史版本同样 +1（不回退，保证只增）。
+   *
+   * 为什么放实体上而不只查快照表 max(rev)：列表页要直接显示「当前版本」，
+   * 每次都聚合一次不划算；且恢复/并发保存需要一个可比较的基准。
+   */
+  @Column({ type: 'int', default: 0, comment: '配置版本号（每次保存 +1）' })
+  rev: number;
+
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '创建人' })
   createdBy?: string;
 
