@@ -147,8 +147,22 @@
 | `PUT` | `/api/pipelines/:id/steps` | 步骤全量保存（名称/介绍/排序；空数组=清空） |
 | `PUT` | `/api/pipelines/:id/steps/:stepId/tasks` | 该步骤任务全量保存（含各自 actions；逐条 `bash -n` + 条件校验；空数组=清空） |
 | `DELETE` | `/api/pipelines/:id/steps/:stepId` | 删除步骤（级联任务与动作） |
+| `GET` | `/api/pipelines/:id/revisions` | 配置版本列表（不含快照正文，倒序） |
+| `GET` | `/api/pipelines/:id/revisions/:rev` | 单个配置版本（含完整快照正文） |
+| `POST` | `/api/pipelines/:id/revisions/:rev/restore` | 恢复到指定配置版本（**生成新版本**，历史不删除） |
 
 保存前校验：步骤名非空且唯一；任务名组内唯一、动作名任务内唯一；脚本动作 `bash -n`；`kind=approval` 审批字段完整且**不携带 actions/env**；`managed=1` 的动作不允许删除/改名（平台托管）；条件表达式语法；审计日志记录前后 diff。
+
+### 5.1 配置版本化（2026-09-29 新增）
+
+**为什么**：动作脚本以字符串存在 `deploy_pipeline_actions.script`，改坏后无从追溯、无从恢复（实测：13 条流水线的 prod `write-version` 脚本被一次坏写入损坏，只能人工重写）。故每次保存编排树即生成一个 revision 快照。
+
+- **自动打版本**：`PUT steps` / `PUT steps/:stepId/tasks` / `DELETE steps/:stepId` 成功后各生成一个新 revision（`source` = `save-steps` / `save-tasks` / `delete-step`）。
+- **快照失败不推翻保存**：保存事务已提交，快照仅影响可追溯性 —— 失败时记审计（status=error）并返回 200，避免前端误报「保存失败」导致重复提交。
+- **只增语义**：恢复 = 以旧快照全量重建当前编排树（保留原 id）后**追加新版本**，历史永不删除；恢复前还会对当前树先打一份快照，保证恢复本身也可反悔。
+- **恢复的约束**：需 `confirm=true`（整体替换编排树）；需 `deploy:pipeline:approve` 权限（user-service 不可达时降级放行并记 warn，与发布审批同策略）；可传 `expectedRev` 做乐观锁（不符返回 `409`）。
+- **取号**：`UPDATE deploy_pipelines SET rev = LAST_INSERT_ID(rev + 1)` 原子取号，并发保存不会撞唯一键。
+- **只回放编排树**：`snapshot.pipeline` 是元数据副本（用于展示差异），恢复不写回。
 
 ---
 
