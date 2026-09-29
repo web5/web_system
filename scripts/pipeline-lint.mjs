@@ -1,0 +1,273 @@
+#!/usr/bin/env node
+/**
+ * pipeline-lint — 流水线动作脚本体检（Phase 1 防再犯）
+ *
+ * 为什么需要：动作脚本以字符串存在 deploy_pipeline_actions.script，改坏了没人知道。
+ * 2026-09-29 实测两类病变，其中第二类 `bash -n` 完全抓不到：
+ *   ① 语法错误（缺续行符导致多行命令断裂）→ bash -n 可抓
+ *   ② ssh 行尾缺续行符 → 语法合法但**语义致命**：
+ *        $SSH "$PROD_USER@$PROD_HOST"
+ *          "rm -rf '$PROD_PATH/$VER' && ..."     ← 这行落到流水线执行机本地执行
+ *      当时 12 条流水线的 prod 发布动作全部中招，prod 发布等于在 dev 机上删目录。
+ *
+ * 用法：
+ *   node scripts/pipeline-lint.mjs --from-db [--ssh ubuntu@203.0.113.10] [--db web_system_deploy]
+ *   node scripts/pipeline-lint.mjs --file /tmp/actions.json      # 离线体检（CI 用）
+ *   node scripts/pipeline-lint.mjs --from-db --json > report.json
+ *   node scripts/pipeline-lint.mjs --from-db --dump /tmp/actions.json   # 导出供离线复检
+ *
+ * 退出码：0 = 无 error；1 = 有 error（CI 可用）
+ */
+import { execFileSync } from 'node:child_process';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+/**
+ * 平台注入变量 —— 权威来源 `pipeline.service.ts` 的 `resolveStageVars()`
+ * （脚本可直接引用，无需在流水线变量表声明；勿凭猜测增删）。
+ */
+const PLATFORM_VARS = new Set([
+  'DEPLOY_ENV', 'MODULE_KEY', 'MODULE_TYPE', 'MODULE_DIR', 'BRANCH', 'COMMIT_ID',
+  'RELEASE_DIR', 'STAGE', 'PM2_NAME', 'PORT', 'PORT_SOURCE', 'PM2_SCRIPT', 'PM2_CWD',
+  'PUBLIC_PATH', 'ENTRY_FILE', 'BUILD_OUTPUT_DIR', 'ARTIFACT_DIR', 'ARTIFACTS_DIR',
+  'DEPLOY_ROOT', 'DEPLOY_TARGET', 'GATEWAY_URL', 'GATEWAY_TTL_SEC', 'KEEP_VERSIONS',
+  'PROTECTED_VERSIONS', 'WS_SAFE_DELETE', 'CONSOLE_API', 'CONSOLE_TOKEN',
+  // shell 内建与脚本内临时量
+  'HOME', 'PATH', 'USER', 'PWD', 'SHELL', 'SSH', 'SCP', 'TS',
+  'VERSION_TAG', 'VERSION', 'VER', 'BUILD_ENV',
+]);
+
+const args = process.argv.slice(2);
+const has = (f) => args.includes(f);
+const val = (f, d) => {
+  const i = args.indexOf(f);
+  return i >= 0 && args[i + 1] ? args[i + 1] : d;
+};
+
+const SSH_HOST = val('--ssh', 'ubuntu@203.0.113.10');
+const SSH_KEY = val('--key', `${process.env.HOME}/.ssh/id_ed25519_servers`);
+const DB = val('--db', 'web_system_deploy');
+const DB_USER = val('--user', 'root');
+const DB_PASS = process.env.DEV_DB_PASSWORD || process.env.DB_PASSWORD || '';
+
+// ---------------------------------------------------------------- 取数
+
+/** 从线上库导出：动作 + 任务元信息 + 流水线变量（全部 base64 传输，避免换行/转义歧义） */
+function loadFromDb() {
+  const sql = `
+SELECT CONCAT(a.id,'||',s.pipeline_id,'||',t.name,'||',t.kind,'||',IFNULL(t.condition,''),'||',a.name,'||',REPLACE(TO_BASE64(a.script),CHAR(10),''))
+FROM deploy_pipeline_actions a
+JOIN deploy_pipeline_tasks t ON a.task_id=t.id
+JOIN deploy_pipeline_steps s ON t.step_id=s.id;
+SELECT CONCAT(v.pipeline_id,'||',v.\`key\`) FROM deploy_pipeline_vars v;
+SELECT DISTINCT c.\`key\` FROM config_items c;`;
+  const out = execFileSync('ssh', ['-o', 'BatchMode=yes', '-i', SSH_KEY, SSH_HOST,
+    `MYSQL_PWD='${DB_PASS}' mysql -h127.0.0.1 -u${DB_USER} ${DB} --raw -N`], {
+    input: sql, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+  });
+  const actions = [];
+  const varsByPipe = new Map();
+  const configKeys = new Set();
+  for (const line of out.split('\n')) {
+    const s = line.trim();
+    if (!s) continue;
+    const parts = s.split('||');
+    if (parts.length >= 7) {
+      const [id, pipelineId, taskName, kind, condition, name, b64] = parts;
+      actions.push({
+        id, pipelineId, taskName, kind, condition, name,
+        script: Buffer.from(b64, 'base64').toString('utf8'),
+      });
+    } else if (parts.length === 2 && !parts[1].startsWith('{')) {
+      const [pid, key] = parts;
+      if (!varsByPipe.has(pid)) varsByPipe.set(pid, new Set());
+      varsByPipe.get(pid).add(key);
+    } else if (parts.length === 1) {
+      // 第三条查询：配置中心全局键（resolveStageVars 会全量注入）
+      configKeys.add(parts[0]);
+    }
+  }
+  return { actions, varsByPipe, configKeys };
+}
+
+function loadFromFile(file) {
+  const raw = JSON.parse(execFileSync('cat', [file], { encoding: 'utf8' }));
+  return {
+    actions: raw.actions,
+    varsByPipe: new Map(Object.entries(raw.varsByPipe || {}).map(([k, v]) => [k, new Set(v)])),
+    configKeys: new Set(raw.configKeys || []),
+  };
+}
+
+// ---------------------------------------------------------------- 规则
+
+function bashSyntax(script) {
+  const dir = mkdtempSync(join(tmpdir(), 'plint-'));
+  const f = join(dir, 'a.sh');
+  writeFileSync(f, script);
+  try {
+    execFileSync('bash', ['-n', f], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return null;
+  } catch (e) {
+    return String(e.stderr || 'syntax error').split('\n').filter(Boolean)[0] || 'syntax error';
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * L5：ssh/scp 行尾缺续行符 —— 语法合法、语义致命。
+ * 特征：本行是 ssh/scp 调用且以 user@host 形态结尾、行尾无 `\`、下一行是缩进的续行内容。
+ */
+function sshContinuation(script) {
+  const lines = script.split('\n');
+  const hits = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i].replace(/\s+$/, '');
+    if (!cur) continue;
+    const isRemoteCall = /\b(ssh|scp)\b/i.test(cur) && !cur.startsWith('#');
+    const endsWithHost = /["']?\$?[\w.-]*@\$?[\w.]+["']?\s*$/.test(cur);
+    if (!isRemoteCall || !endsWithHost || cur.endsWith('\\')) continue;
+    const next = (lines[i + 1] || '').trim();
+    if (next && (next.startsWith('"') || next.startsWith("'"))) {
+      hits.push({ line: i + 1, text: cur.trim().slice(0, 90) });
+    }
+  }
+  return hits;
+}
+
+/**
+ * L6：危险命令是否处于远端上下文。
+ * 判定顺序：① 处于未闭合引号块内（ssh "多行命令" 的参数块）→ 安全；
+ *          ② 向上 10 行内出现 ssh/scp → 安全；否则报 warning。
+ * 为什么用引号奇偶：远端块常跨 40+ 行，靠行数窗口判不准。
+ */
+function dangerousLocal(script) {
+  const lines = script.split('\n');
+  const hits = [];
+  const BAD = /\b(rm\s+-rf?|mkfs|dd\s+if=|shutdown|reboot)\b/;
+  let quotes = 0; // 双引号累计奇偶（忽略 \" 转义）
+  let heredocEnd = null; // 处于 heredoc 块时的终结符
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i];
+    const stripped = cur.replace(/\\"/g, '');
+    const before = quotes;
+    quotes += (stripped.match(/"/g) || []).length;
+    const inQuoteBlock = before % 2 === 1;
+    // heredoc：ssh host <<'EOF' ... EOF —— 块内命令都在远端
+    const hOpen = cur.match(/<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?\s*$/);
+    if (heredocEnd === null && hOpen) heredocEnd = hOpen[1];
+    else if (heredocEnd !== null && cur.trim() === heredocEnd) heredocEnd = null;
+    if (!BAD.test(cur) || cur.trim().startsWith('#')) continue;
+    if (inQuoteBlock || heredocEnd !== null) continue;
+    let inRemote = false;
+    for (let j = Math.max(0, i - 10); j <= i; j++) {
+      if (/\b(ssh|scp)\b/i.test(lines[j])) { inRemote = true; break; }
+    }
+    if (!inRemote) hits.push({ line: i + 1, text: cur.trim().slice(0, 90) });
+  }
+  return hits;
+}
+
+/** L4：变量引用存在性（排除脚本内部自己赋值的变量，否则全是噪音） */
+function undeclaredVars(script, declared) {
+  // 脚本内声明的：NAME=... / local NAME=... / for NAME in / read NAME / NAME=$(...)
+  const local = new Set();
+  for (const m of script.matchAll(/^\s*(?:local\s+|export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)\s*=/gm)) local.add(m[1]);
+  for (const m of script.matchAll(/\bfor\s+([A-Z_][A-Z0-9_]*)\s+in\b/g)) local.add(m[1]);
+  for (const m of script.matchAll(/\bread\s+(?:-r\s+)?([A-Z_][A-Z0-9_]*)/g)) local.add(m[1]);
+
+  // 带默认值的引用（`${X:-...}` / `${X:=...}` / `${X:?...}`）脚本已自带兜底，不算未声明
+  const stripped = script.replace(/\$\{[A-Z_][A-Z0-9_]*\s*(?:-([^}]*)|:[=?][^}]*)\}/g, '');
+
+  const used = new Set();
+  for (const m of stripped.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g)) used.add(m[1]);
+  const miss = [];
+  for (const v of used) {
+    if (PLATFORM_VARS.has(v)) continue;
+    if (local.has(v)) continue;
+    if (declared && declared.has(v)) continue;
+    miss.push(v);
+  }
+  return miss;
+}
+
+// ---------------------------------------------------------------- 主流程
+
+const src = has('--file') ? loadFromFile(val('--file')) : loadFromDb();
+const { actions, varsByPipe, configKeys = new Set() } = src;
+
+if (has('--dump')) {
+  writeFileSync(val('--dump'), JSON.stringify({
+    actions,
+    varsByPipe: Object.fromEntries([...varsByPipe].map(([k, v]) => [k, [...v]])),
+    configKeys: [...configKeys],
+  }, null, 2));
+  console.log(`已导出 ${actions.length} 个动作到 ${val('--dump')}`);
+  process.exit(0);
+}
+
+const errors = [];
+const warnings = [];
+const tmpSyntax = new Map();
+
+for (const a of actions) {
+  const at = `${a.pipelineId} / ${a.taskName} / ${a.name}`;
+
+  // L2 kind 白名单
+  if (!['script', 'approval'].includes(a.kind)) {
+    errors.push({ rule: 'L2', at, msg: `非法 kind='${a.kind}'（UI 不渲染 action）` });
+  }
+  // L3 env 分流条件
+  if (/!=\s*local/.test(a.condition || '')) {
+    errors.push({ rule: 'L3', at, msg: `条件 '${a.condition}' 会截胡 prod（应为 == dev）` });
+  }
+  // L1 语法
+  const syn = bashSyntax(a.script);
+  if (syn) {
+    tmpSyntax.set(a.id, syn);
+    errors.push({ rule: 'L1', at, msg: `bash -n: ${syn.slice(0, 120)}` });
+  }
+  // L5 ssh 续行符（核心）
+  for (const h of sshContinuation(a.script)) {
+    errors.push({ rule: 'L5', at, msg: `第 ${h.line} 行 ssh/scp 缺续行符 → 下一行命令将落本地执行: ${h.text}` });
+  }
+  // L6 危险命令本地上下文
+  for (const h of dangerousLocal(a.script)) {
+    warnings.push({ rule: 'L6', at, msg: `第 ${h.line} 行危险命令疑似本地上下文: ${h.text}` });
+  }
+  // L4 变量引用（平台注入 + 流水线变量 + 配置中心）
+  const declared = new Set([...(varsByPipe.get(a.pipelineId) || []), ...configKeys]);
+  const miss = undeclaredVars(a.script, declared);
+  if (miss.length) {
+    warnings.push({ rule: 'L4', at, msg: `未声明变量引用: ${miss.join(', ')}` });
+  }
+}
+
+const report = {
+  checkedAt: new Date().toISOString(),
+  source: has('--file') ? val('--file') : `${SSH_HOST}:${DB}`,
+  total: actions.length,
+  errors, warnings,
+};
+
+if (has('--json')) {
+  console.log(JSON.stringify(report, null, 2));
+} else {
+  console.log(`pipeline-lint · 来源 ${report.source} · 动作 ${report.total} 个`);
+  console.log(`error ${errors.length} · warning ${warnings.length}\n`);
+  if (errors.length) {
+    console.log('== ERROR ==');
+    for (const e of errors) console.log(`[${e.rule}] ${e.at}\n    ${e.msg}`);
+    console.log('');
+  }
+  if (warnings.length) {
+    console.log('== WARNING ==');
+    for (const w of warnings.slice(0, 40)) console.log(`[${w.rule}] ${w.at}\n    ${w.msg}`);
+    if (warnings.length > 40) console.log(`  ... 另有 ${warnings.length - 40} 条`);
+  }
+  if (!errors.length && !warnings.length) console.log('✓ 全部通过');
+}
+
+process.exit(errors.length ? 1 : 0);
