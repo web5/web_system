@@ -1847,14 +1847,19 @@ export class PipelineService {
       //   （服务详情「部署」Tab 选版本 → deployVersion 落 dist+重启+探活），
       //   让「已上传但未重启」成为可见中间态（ServiceDetail 部署 Tab 的设计约定）。
       if (p.moduleType !== 'backend') {
+        // 实例 versionTag 形如 <流水线key>/<commit>（RELEASE_TAG 口径）；env-dir 指针
+        // 与产物目录都以**纯 commit** 为准（release-paths.toCommitId 契约）。此前直接
+        // 透传会把带前缀的值写进 deploy_app_env_versions → gateway 拼出 <env>/<key>/<commit>
+        // 路径 → 入口 404（2026-09-29 实测）。动作里的激活脚本已写对，这里归一化兜底。
+        const finalVersion = toCommitId(p.versionTag) || p.versionTag!;
         await this.registry.setPointer({
           env: p.env,
           moduleKey: p.moduleKey,
-          currentVersion: p.versionTag!,
+          currentVersion: finalVersion,
           deployedBy: p.operator || 'unknown',
           taskId: p.id,
         });
-        p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${p.versionTag}`];
+        p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${finalVersion}`];
       } else {
         p.logs = [
           ...(p.logs ?? []),
