@@ -57,8 +57,9 @@ if [ -n "$DEPLOY_HOST" ]; then
 fi
 
 SSH_OPTS=""
-if [ -n "$DEPLOY_KEY" ] && [ "$DEPLOY_KEY" != "~/.ssh/id_ed25519_servers" ] && [ -f "$DEPLOY_KEY" ]; then
-  SSH_OPTS="-i $DEPLOY_KEY"
+KEY_PATH="${DEPLOY_KEY/#\~/$HOME}"
+if [ -n "$DEPLOY_KEY" ] && [ "$DEPLOY_KEY" != "~/.ssh/id_ed25519" ] && [ -f "$KEY_PATH" ]; then
+  SSH_OPTS="-i $KEY_PATH"
 fi
 
 GREEN='\033[0;32m'

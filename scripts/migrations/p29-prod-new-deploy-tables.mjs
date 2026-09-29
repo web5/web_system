@@ -156,7 +156,7 @@ const SEED_SQL = [
 
 /**
  * `EMIT_SQL=1`：不连库，直接把建表 + 种子 SQL 打到 stdout。
- * 用于云数据库**只能从跳板机访问**的场景（本机连不上 172.16.16.x 内网）：
+ * 用于云数据库**只能从跳板机访问**的场景（本机连不上内网 10.0.16.x，需 scp 到跳板机再执行）：
  *   EMIT_SQL=1 node scripts/migrations/p29-prod-new-deploy-tables.mjs > /tmp/p29.sql
  *   scp /tmp/p29.sql <prod>:/tmp/ && ssh <prod> 'mysql web_system < /tmp/p29.sql'
  */

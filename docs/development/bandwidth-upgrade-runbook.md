@@ -7,9 +7,9 @@
 
 | 角色 | 实例 | 地域 | 公网 | 内网 | 说明 |
 |---|---|---|---|---|---|
-| **gateway** | `<INSTANCE_ID>` | 广州四区 | 192.0.2.30 | 10.0.16.15 | **所有域名的 TLS 入口**（www/admin/api/kedouai.com/dev.kedouai.com 都在此），响应头里的 nginx/1.20.2 来自它 |
-| **prod** | `<INSTANCE_ID>` | 广州四区 | 198.51.100.20 | 10.0.16.2 | 与 gateway **同 VPC 同网段**；机器上没装 nginx，Node 直出 6000/6006 |
-| **dev** | `<INSTANCE_ID>` | 南京三区 | 203.0.113.10 | — | 跨地域，gateway 只能走公网回源 |
+| **gateway** | `<instance-id>` | 广州四区 | 192.0.2.30 | 10.0.16.15 | **所有域名的 TLS 入口**（www/admin/api/kedouai.com/dev.kedouai.com 都在此），响应头里的 nginx/1.20.2 来自它 |
+| **prod** | `<instance-id>` | 广州四区 | 198.51.100.20 | 10.0.16.2 | 与 gateway **同 VPC 同网段**；机器上没装 nginx，Node 直出 6000/6006 |
+| **dev** | `<instance-id>` | 南京三区 | 203.0.113.10 | — | 跨地域，gateway 只能走公网回源 |
 
 两台目前都是**包年包月 + 1Mbps**（账单构成：运算组件 + 带宽 + 系统盘）。
 
@@ -47,7 +47,7 @@ cp -a /etc/nginx/conf.d.bak.<日期>/. /etc/nginx/conf.d/ && nginx -t && systemc
 
 ## 3. 步骤 1 · gateway（必做，生产唯一出口）
 
-控制台：云服务器 → 广州 → 实例 `<INSTANCE_ID>` → 更多 → 网络/安全 → **调整公网计费**
+控制台：云服务器 → 广州 → 实例 `<instance-id>` → 更多 → 网络/安全 → **调整公网计费**
 
 | 方案 | 单价 | gateway 月成本 | 首屏效果 |
 |---|---|---|---|
@@ -126,5 +126,5 @@ cd ~/workspace/web_system
 
 ## 10. 顺带待确认
 
-账号下 2026-09 新购一台**蜂驰型 BF1 在中国香港**（`<INSTANCE_ID>`，未命名），不在任何链路里；
+账号下 2026-09 新购一台**蜂驰型 BF1 在中国香港**（`<instance-id>`，未命名），不在任何链路里；
 如果是闲置的，按小时计费会一直扣钱。

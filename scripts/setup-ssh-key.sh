@@ -2,13 +2,15 @@
 # ============================================================
 # setup-ssh-key.sh — 一次性打通服务器 SSH 免密登录
 #
-# 作用：把本机已有的服务器密钥 ~/.ssh/id_ed25519_servers
+# 作用：把本机的服务器密钥（默认 ~/.ssh/id_ed25519，可用 DEPLOY_SSH_KEY 覆盖）
 #       分发到 dev / prod 服务器，并写入 ~/.ssh/config，
 #       之后所有部署脚本（publish / deploy / ssh-*）都无需再输密码。
 #
 # 用法：
 #   ./scripts/setup-ssh-key.sh           # 自动读取 scripts/.env.deploy
 #   ./scripts/setup-ssh-key.sh "密码"     # 直接传入服务器密码（仅首次分发用）
+#
+# 注意：本仓库 git 里不写死密钥文件名/IP —— 全部经 .env.deploy 或环境变量注入。
 #
 # 说明：
 #   - 第一次需要你输入一次服务器密码（用 ssh-copy-id 推公钥）。
@@ -31,7 +33,7 @@ if [ -z "$DEV_HOST" ] || [ -z "$PROD_HOST" ]; then
   exit 1
 fi
 
-KEY="$HOME/.ssh/id_ed25519_servers"
+KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 PUB="$KEY.pub"
 
 [ -f "$PUB" ] || { echo "[ERROR] 未找到服务器公钥 $PUB，请先生成: ssh-keygen -t ed25519 -f $KEY"; exit 1; }
