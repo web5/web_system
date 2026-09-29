@@ -10,8 +10,11 @@
  *          "rm -rf '$PROD_PATH/$VER' && ..."     ← 这行落到流水线执行机本地执行
  *      当时 12 条流水线的 prod 发布动作全部中招，prod 发布等于在 dev 机上删目录。
  *
- * 用法：
- *   node scripts/pipeline-lint.mjs --from-db [--ssh ubuntu@203.0.113.10] [--db web_system_deploy]
+ * 用法（仓库是公开的，**不写死任何服务器 IP/用户名/密钥路径**，一律经 env 或参数注入）：
+ *   export LINT_SSH_HOST=you@your-host        # 或 --ssh you@your-host
+ *   export LINT_SSH_KEY=$HOME/.ssh/id_ed25519 # 或 --key <path>（可选，缺省用 ~/.ssh/id_ed25519）
+ *   export DEV_DB_PASSWORD=...                # MySQL 口令
+ *   node scripts/pipeline-lint.mjs --from-db [--db web_system_deploy]
  *   node scripts/pipeline-lint.mjs --file /tmp/actions.json      # 离线体检（CI 用）
  *   node scripts/pipeline-lint.mjs --from-db --json > report.json
  *   node scripts/pipeline-lint.mjs --from-db --dump /tmp/actions.json   # 导出供离线复检
@@ -45,10 +48,10 @@ const val = (f, d) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : d;
 };
 
-const SSH_HOST = val('--ssh', 'ubuntu@203.0.113.10');
-const SSH_KEY = val('--key', `${process.env.HOME}/.ssh/id_ed25519_servers`);
-const DB = val('--db', 'web_system_deploy');
-const DB_USER = val('--user', 'root');
+const SSH_HOST = val('--ssh', process.env.LINT_SSH_HOST || '');
+const SSH_KEY = val('--key', process.env.LINT_SSH_KEY || `${process.env.HOME}/.ssh/id_ed25519`);
+const DB = val('--db', process.env.LINT_DB || 'web_system_deploy');
+const DB_USER = val('--user', process.env.LINT_DB_USER || 'root');
 const DB_PASS = process.env.DEV_DB_PASSWORD || process.env.DB_PASSWORD || '';
 
 // ---------------------------------------------------------------- 取数
@@ -194,6 +197,13 @@ function undeclaredVars(script, declared) {
 }
 
 // ---------------------------------------------------------------- 主流程
+
+// fail-fast：仓库已公开，工具不再内置目标机地址，必须由 env/参数显式提供
+if (!has('--file') && !SSH_HOST) {
+  console.error('[pipeline-lint] 缺少目标主机：请用 --ssh you@your-host 或 export LINT_SSH_HOST=you@your-host');
+  console.error('  （密钥与库同理：LINT_SSH_KEY / LINT_DB / LINT_DB_USER / DEV_DB_PASSWORD）');
+  process.exit(2);
+}
 
 const src = has('--file') ? loadFromFile(val('--file')) : loadFromDb();
 const { actions, varsByPipe, configKeys = new Set() } = src;
