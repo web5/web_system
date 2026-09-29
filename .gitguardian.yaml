@@ -1,5 +1,5 @@
 # =============================================================================
-# .gitguardian.yaml — GitGuardian / ggshield 配置
+# .gitguardian.yaml — GitGuardian / ggshield 配置（v2 格式）
 # -----------------------------------------------------------------------------
 # 目的：抑制「模板 / 占位符 / 文档示例」类误报（Generic Database Assignment 等），
 #       让本地 pre-commit / pre-push / CI 扫描聚焦真实泄露。
@@ -7,59 +7,73 @@
 # ⚠️ 作用范围（重要）：
 #   本文件只作用于【本地 ggshield 扫描】（pre-commit、pre-push、CI）。
 #   GitGuardian SaaS 控制台收到的告警邮件 / 事件，必须在 dashboard 里
-#   手动标记 False Positive / Rotated 才能关闭 —— 本文件无法直接消除 SaaS 告警。
+#   手动 Resolve / Ignore 才能关闭 —— 本文件无法直接消除 SaaS 告警。
+#
+# ⚠️ 格式说明：
+#   v2 规范要求 key 嵌套在 `secret:` 之下并使用下划线
+#   （secret.ignored_paths / secret.ignored_matches / secret.ignored_detectors）。
+#   顶层的 paths-ignore / matches-ignore 是 v1 老写法，配 version: 2 不生效。
 #
 # 与仓库既有 scripts/history-secret-scan.mjs 的关系：
 #   那个脚本是「git 全历史明文扫描器（只读）」，本文件是「ggshield 实时护栏」，
-#   两者互补。matches-ignore 的占位符判定与扫描器里 "跳过 <...> / ${...} / your_* /
-#   change_me" 的逻辑保持一致。
+#   两者互补。ignored_matches 的占位符判定与扫描器里 "跳过 <...> / ${...} /
+#   your_* / change_me" 的逻辑保持一致。
 # =============================================================================
 
 version: 2
 
-# -----------------------------------------------------------------------------
-# 1) 路径级忽略：设计上就是示例 / 文档，不当作真实泄露
-#    （ggshield 使用 glob，** 递归匹配）
-# -----------------------------------------------------------------------------
-paths-ignore:
-  - '**/.env.example'            # 占位符模板：DB_PASSWORD=xxx 等
-  - '**/.env.*.example'
-  - '**/.envrc'
-  - '**/docker-compose*.yml'    # 默认口令 change_me_in_dev / ${POSTGRES_PASSWORD}
-  - '**/docker-compose*.yaml'
-  - 'docs/**'                   # 文档里的示例连接串
-  - '**/*.md'
-  - '**/README*'
-  - '**/CHANGELOG*'
-  - '**/*.txt'
+secret:
+  # ---------------------------------------------------------------------------
+  # 1) 路径级忽略：设计上就是示例 / 文档，不当作真实泄露（gitignore 风格 glob）
+  # ---------------------------------------------------------------------------
+  ignored_paths:
+    - '**/.env.example'          # 占位符模板：DB_PASSWORD=xxx 等
+    - '**/.env.*.example'
+    - '**/.envrc'
+    - '**/docker-compose*.yml'   # 默认口令 change_me_in_dev / ${POSTGRES_PASSWORD}
+    - '**/docker-compose*.yaml'
+    - 'docs/**'                  # 文档里的示例连接串
+    - '**/*.md'
+    - '**/README*'
+    - '**/CHANGELOG*'
+    - '**/*.txt'
+
+  # ---------------------------------------------------------------------------
+  # 2) 内容级忽略：match 为正则，对检测到的 secret 值做匹配，命中即忽略
+  # ---------------------------------------------------------------------------
+  ignored_matches:
+    - name: "占位符 xxx / change_me_in_dev / your_xxx_here / example"
+      match: '(xxx|change_me_in_dev|your_[a-z_]*_here|example)'
+
+    - name: "环境变量插值 ${VAR} / ${VAR:-default}"
+      match: '\$\{[A-Za-z_][A-Za-z0-9_]*(:-[^}]*)?\}'
+
+    - name: "尖括号占位 <XXX>"
+      match: '<[A-Za-z_][A-Za-z0-9_]*>'
+
+    - name: "docker-compose 默认 DATABASE_URL"
+      match: 'postgresql://\w+:\$\{POSTGRES_PASSWORD.*\}@'
+
+    - name: "取值代码而非硬编码 (process.env / configService.get / getEnv)"
+      match: '(process\.env\.|configService\.get\(|getEnv\()'
+
+    - name: "文档保留 / 示例 / 私有 IP（RFC5737 / RFC1918）"
+      match: '((203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)\d{1,3}\.\d{1,3})'
+
+  show_secrets: false
+
+  # ---------------------------------------------------------------------------
+  # 3) 检测器级忽略（默认关闭，慎用）：
+  #    开启会把该类检测器在本地的所有告警全部静音，可能漏掉真实 DB 口令。
+  #    模板文件已由上面 ignored_paths 覆盖，通常无需再忽略检测器。
+  # ---------------------------------------------------------------------------
+  # ignored_detectors:
+  #   - Generic Database Assignment
 
 # -----------------------------------------------------------------------------
-# 2) 内容级忽略：匹配到这些模式的「赋值」一律视为占位符，不报警
-#    （match 为正则，对检测到的 secret 值进行匹配）
-# -----------------------------------------------------------------------------
-matches-ignore:
-  - name: "占位符 xxx / change_me_in_dev / your_xxx_here / example"
-    match: '(xxx|change_me_in_dev|your_[a-z_]*_here|example)'
-
-  - name: "环境变量插值 ${VAR} / ${VAR:-default}"
-    match: '\$\{[A-Za-z_][A-Za-z0-9_]*(:-[^}]*)?\}'
-
-  - name: "尖括号占位 <XXX>"
-    match: '<[A-Za-z_][A-Za-z0-9_]*>'
-
-  - name: "docker-compose 默认 DATABASE_URL"
-    match: 'postgresql://\w+:\$\{POSTGRES_PASSWORD.*\}@'
-
-  - name: "取值代码而非硬编码 (process.env / configService.get / getEnv)"
-    match: '(process\.env\.|configService\.get\(|getEnv\()'
-
-  - name: "文档保留 / 示例 / 私有 IP（RFC5737 / RFC1918）"
-    match: '((203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)\d{1,3}\.\d{1,3})'
-
-# -----------------------------------------------------------------------------
-# 3) 预提交护栏安装建议（非必须，按需启用）
-#    本地安装：  pipx install ggshield && ggshield auth login
-#    钩子：      ggshield install -m pre-commit -t global
-#    CI 中使用： ggshield secret scan ci
-#    本仓库已有 scripts/history-secret-scan.mjs 作全历史兜底。
+# 预提交护栏安装建议（非必须，按需启用）
+#   本地安装：  pipx install ggshield && ggshield auth login
+#   钩子：      ggshield install -m pre-commit -t global
+#   CI 中使用： ggshield secret scan ci
+#   本仓库已有 scripts/history-secret-scan.mjs 作全历史兜底。
 # -----------------------------------------------------------------------------
