@@ -224,6 +224,34 @@
 
 ---
 
+## 13. 流水线配置版本 `pipelines/:id/revisions`（PipelineOrchestrationController，仅控制台 JWT）
+
+> 2026-09-29 新增。给「流水线定义」装时间机器：每次保存编排树即生成快照，可回看、可恢复。
+> 详细设计（只增语义、恢复约束、取号方式）见 `specs/pipeline-step-task/design.md` §5.1。
+
+### 13.1 `GET /pipelines/:id/revisions` — 版本列表（不含快照正文，倒序）
+- 流水线不存在 → `404`（不再返回 200 空列表，避免 Agent 调用时静默失效）
+- 返回：`[{ id, rev, source, summary, restoredFromRev, createdBy, createdAt }]`
+
+### 13.2 `GET /pipelines/:id/revisions/:rev` — 单个版本（含完整快照正文）
+- 版本不存在 → `404`；快照结构损坏 → `400`
+- 返回：列表项 + `snapshot: { pipeline, steps: [{ ..., tasks: [{ ..., actions: [{ ..., script }] }] }] }`
+
+### 13.3 `POST /pipelines/:id/revisions/:rev/restore` — 恢复到指定版本
+- 入参：`{ confirm: true, expectedRev?: number }`
+  - `confirm !== true` → `400`（该操作整体替换当前编排树，与 prod 发布同一先例）
+  - `expectedRev` 与当前版本不符 → `409`（乐观锁，防覆盖他人改动）
+- 权限：需 `deploy:pipeline:approve`；`user-service` 不可达时**降级放行**并记 `warn` 审计（与发布审批同策略）
+- 语义：**不回退历史** —— 以旧快照全量重建编排树（保留原 id）后**追加新版本**；恢复前还会对当前树先打一份快照，保证恢复本身可反悔
+- 返回：`{ rev: <新版本号>, restoredFromRev: <来源版本> }`
+
+### 13.4 副作用：保存类接口自动打版本
+`PUT /pipelines/:id/steps`、`PUT /pipelines/:id/steps/:stepId/tasks`、`DELETE /pipelines/:id/steps/:stepId`
+成功后各生成一个新 revision。**快照失败不推翻保存结果**（记审计 `pipeline-orchestration.revision.failed` 后返回 200）——
+保存事务已提交，此时报 500 会让前端误显示「保存失败」而配置其实已落库。
+
+---
+
 ## 附：与其他文档的衔接
 
 - 流水线/节点模型接口 → `specs/pipeline-node-model/api-design.md`

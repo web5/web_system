@@ -4,9 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DeployPipelineStepEntity } from '../entities/deploy-pipeline-step.entity';
 import { DeployPipelineTaskEntity } from '../entities/deploy-pipeline-task.entity';
 import { DeployPipelineActionEntity } from '../entities/deploy-pipeline-action.entity';
+import { DeployPipelineRevisionEntity } from '../entities/deploy-pipeline-revision.entity';
+import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
 import { PipelineOrchestrationService } from './pipeline-orchestration.service';
+import { PipelineRevisionService } from './pipeline-revision.service';
 import { PipelineOrchestrationController } from './pipeline-orchestration.controller';
 import { AuditModule } from '../audit/audit.module';
+import { ApprovalModule } from '../approval/approval.module';
 
 /**
  * 流水线编排（步骤 → 任务 → 动作）—— 新三层实体模型（specs/pipeline-step-task/design.md）。
@@ -20,11 +24,14 @@ import { AuditModule } from '../audit/audit.module';
       DeployPipelineStepEntity,
       DeployPipelineTaskEntity,
       DeployPipelineActionEntity,
+      DeployPipelineRevisionEntity,
+      DeployPipelineTemplateEntity,
     ]),
     AuditModule,
+    ApprovalModule,
   ],
   controllers: [PipelineOrchestrationController],
-  providers: [PipelineOrchestrationService],
-  exports: [PipelineOrchestrationService],
+  providers: [PipelineOrchestrationService, PipelineRevisionService],
+  exports: [PipelineOrchestrationService, PipelineRevisionService],
 })
 export class PipelineOrchestrationModule {}
