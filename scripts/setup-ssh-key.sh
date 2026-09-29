@@ -10,6 +10,10 @@
 #   ./scripts/setup-ssh-key.sh           # 自动读取 scripts/.env.deploy
 #   ./scripts/setup-ssh-key.sh "密码"     # 直接传入服务器密码（仅首次分发用）
 #
+# 环境变量：
+#   DEPLOY_SSH_KEY  覆盖默认私钥路径（默认 ~/.ssh/id_ed25519_servers）
+#                   换机器/换密钥名时用它，不必改脚本。
+#
 # 说明：
 #   - 第一次需要你输入一次服务器密码（用 ssh-copy-id 推公钥）。
 #   - 推完后写入 ~/.ssh/config，之后全部走密钥，不再弹确认。
@@ -31,7 +35,10 @@ if [ -z "$DEV_HOST" ] || [ -z "$PROD_HOST" ]; then
   exit 1
 fi
 
-KEY="$HOME/.ssh/id_ed25519_servers"
+# 默认密钥路径保留既有的 $HOME/.ssh/id_ed25519_servers，避免打断已经在跑的机器；
+# 想换名就 export DEPLOY_SSH_KEY=... —— 直接改脚本默认值会让所有人的 ssh 静默连不上。
+KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519_servers}"
+KEY="${KEY/#\~/$HOME}"
 PUB="$KEY.pub"
 
 [ -f "$PUB" ] || { echo "[ERROR] 未找到服务器公钥 $PUB，请先生成: ssh-keygen -t ed25519 -f $KEY"; exit 1; }

@@ -56,9 +56,13 @@ if [ -n "$DEPLOY_HOST" ]; then
   log "使用 DB 环境连接覆盖: $DEPLOY_USER@$DEPLOY_HOST ($REMOTE_DIR)"
 fi
 
+# 支持 ~/xxx 写法（不展开的话 -f "$DEPLOY_KEY" 恒为假，会静默退化成「不带 -i」连接）
+DEPLOY_KEY="${DEPLOY_KEY/#\~/$HOME}"
 SSH_OPTS=""
-if [ -n "$DEPLOY_KEY" ] && [ "$DEPLOY_KEY" != "~/.ssh/id_ed25519_servers" ] && [ -f "$DEPLOY_KEY" ]; then
+if [ -n "$DEPLOY_KEY" ] && [ "$DEPLOY_KEY" != "$HOME/.ssh/id_ed25519_servers" ] && [ -f "$DEPLOY_KEY" ]; then
   SSH_OPTS="-i $DEPLOY_KEY"
+elif [ -n "$DEPLOY_KEY" ] && [ ! -f "$DEPLOY_KEY" ]; then
+  echo "[WARN] DEPLOY_KEY 指向的私钥不存在: $DEPLOY_KEY（将退回默认密钥/agent）" >&2
 fi
 
 GREEN='\033[0;32m'

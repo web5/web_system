@@ -28,6 +28,7 @@ fi
 
 RUSER="${PUBLISH_USER:-ubuntu}"
 RKEY="${PUBLISH_KEY:-$HOME/.ssh/id_ed25519_servers}"
+RKEY="${RKEY/#\~/$HOME}"
 SVC="${PUBLISH_PATH}"
 VER="${PUBLISH_PATH}/${COMMIT_ID}"
 NAME="${PM2_NAME:-web-${MODULE_KEY}}"
