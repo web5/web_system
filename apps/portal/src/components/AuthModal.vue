@@ -6,6 +6,7 @@
     :width="480"
     :body-style="{ padding: '0' }"
     :get-container="false"
+    :destroy-on-close="true"
     @cancel="gate.closeAuth()"
   >
     <!-- 复用登录/注册面板：closable 由面板自带关闭按钮承担 -->
