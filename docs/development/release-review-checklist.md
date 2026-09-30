@@ -64,6 +64,7 @@
 | E1 | **deploy-console 自身不走流水线** | 确认走独立发布脚本 | 走流水线会自杀式中断 |
 | E2 | **后端发布确实重启** | 确认模块类型字段已写入，restart 守卫生效 | 该字段缺失会导致后端发布不重启（历史未修，影响面需评估后再动） |
 | E3 | **变更后有验证动作** | 端口探活 / 健康检查 / 关键链路冒烟，留证据 | 「发布成功」不等于「服务可用」 |
+| E4 | **PR 已挂自动合入，且合入方式符合仓库惯例（merge commit）** | `gh pr view <n> --json state,autoMergeRequest,mergeCommit` —— 未合的 PR 应有 `autoMergeRequest`；已合的看是否为 merge commit | 未挂 → `gh pr merge --auto --merge`；状态 `BLOCKED`（分支落后 master）→ `gh pr update-branch` 后再挂（会**再触发一轮 CI**）。⚠️ 挂上后**不要同步干等**，转做别的事、收尾再对账 |
 
 ---
 

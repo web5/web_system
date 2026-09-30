@@ -13,7 +13,9 @@
 ```
 Settings → General → Pull Requests → ✅ Allow auto-merge
 ```
-（建议同时只保留 ✅ Allow squash merging，统一合并形态）
+> 合并形态：仓库**惯例是 merge commit**（master 历史绝大多数提交为双父节点 merge commit）。
+> `.github/workflows/{auto-pr,auto-merge}.yml` 的 `merge_method` 已统一为 `merge`；
+> 本地手动合也用 `gh pr merge --auto --merge`，不要用 `--squash`。
 
 ### 2. master 分支保护 + 必需检查
 
