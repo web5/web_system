@@ -219,7 +219,7 @@
 
 ## 7 迁移（p16，幂等）
 
-`scripts/migrations/p16-step-task.mjs`（DRY_RUN 支持，备份 `/tmp/p16-backup-<ts>.json`）：
+`archive/migrations/p16-step-task.mjs`（DRY_RUN 支持，备份 `/tmp/p16-backup-<ts>.json`）：
 
 以 `admin 发布` 为例的映射结果：
 

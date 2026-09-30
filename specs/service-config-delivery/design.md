@@ -184,7 +184,7 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 | 阶段 | 内容 | 回退 |
 |---|---|---|
 | **P0** | ① `resolveForScripts/ForProcess` 拆分 + 脚本注入排除密钥；② `envFilePath` 加下发文件；③ 平台侧下发实现 + 部署动作接线；④ `GATEWAY_SERVICE_KEY` 迁到配置中心（module，isSecret） | 删 `.env.generated`；`PIPELINE_CONFIG_INJECT=false` 可整体关脚本注入 |
-| **P1（已实施）** | 流水线 `restart` 动作（DB 脚本）接入下发：`curl` 内部接口 → 写 `.env.generated` → **失败即中止发布**；**仅 `DEPLOY_ENV=local` 生效**（首批范围只到本地，dev/prod 脚本行为不变）。落地：`scripts/migrations/p25-restart-config-dispatch.mjs` + `config.controller.ts` 的 `internal/dispatch` | `ROLLBACK=1 node scripts/migrations/p25-restart-config-dispatch.mjs`（按标记删段，恢复原文） |
+| **P1（已实施）** | 流水线 `restart` 动作（DB 脚本）接入下发：`curl` 内部接口 → 写 `.env.generated` → **失败即中止发布**；**仅 `DEPLOY_ENV=local` 生效**（首批范围只到本地，dev/prod 脚本行为不变）。落地：`archive/migrations/p25-restart-config-dispatch.mjs` + `config.controller.ts` 的 `internal/dispatch` | `ROLLBACK=1 node archive/migrations/p25-restart-config-dispatch.mjs`（按标记删段，恢复原文） |
 | **P2** | `CONFIG_MASTER_KEY` 的多机分发方案（独立小设计） | — |
 
 ## 8. 验收判据（本地）
@@ -233,7 +233,7 @@ resolveForProcess(envId, moduleKey): ResolvedConfig   // 含明文密钥（供 4
 | 4 | `config/config.controller.ts` 的 `GET internal/dispatch/:serviceKey?envId=`（鉴权实现抽到 `common/internal-key.ts`，与 `internal/release` 共用） |
 | 5 / 6 | `gateway/src/app.module.ts`、`deploy-console/src/app.module.ts` 的 `envFilePath`（下发文件在前） |
 | 7 | `config_items` 已建 `local/deploy-console` 与 `local/gateway` 两条 `module` 级 `GATEWAY_SERVICE_KEY`（`is_secret=1`，密文落库）；控制台侧 `gatewayServiceKey()` 先查配置中心、取不到回落 `.env`，gateway 侧靠下发得到 |
-| P1 | 11 个后端模板的 `restart`（后端）动作脚本由 `scripts/migrations/p25-restart-config-dispatch.mjs` 插入「配置下发段」（仅 `DEPLOY_ENV=local`，`200` 落盘 / `204` 跳过 / 其它 fail-fast 不落地不重启） |
+| P1 | 11 个后端模板的 `restart`（后端）动作脚本由 `archive/migrations/p25-restart-config-dispatch.mjs` 插入「配置下发段」（仅 `DEPLOY_ENV=local`，`200` 落盘 / `204` 跳过 / 其它 fail-fast 不落地不重启） |
 
 本地实测（2026-09-22）：`POST /api/internal/gateway/reload` 的 V1 / V2 通过（下发值 201、`.env` 旧值 403；删下发文件即回退）；
 正式发布（流水线 `jobId 1790003565095-xbgvrqq`）日志出现 `[config] 注入 1 项配置（强制覆盖），已排除 1 个密钥项`（V3）；

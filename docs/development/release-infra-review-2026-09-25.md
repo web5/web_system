@@ -59,7 +59,7 @@
 
 | 能力 | 状态 | 落地位置 |
 |---|---|---|
-| 远端 SSH 投递（tar→scp→解包） | ✅ 已合（PR #135） | `scripts/migrations/p5-pipeline-shell-approval-3env.mjs:167-215` |
+| 远端 SSH 投递（tar→scp→解包） | ✅ 已合（PR #135） | `archive/migrations/p5-pipeline-shell-approval-3env.mjs:167-215` |
 | 远端 sync / restart / verify 动作 | ✅ 已合，**默认只挂 `system-service`** | `p26-remote-backend-release.mjs:26-27,56` |
 | 远端发布写**远端库**的版本/指针 | ✅ 已合，默认后端 3 个、前端 admin | `p27-remote-release-remote-db.mjs:52-60` |
 | 远端微前端 env-dir 布局 | ✅ 已合，默认 admin/portal/shell、env=dev | `p28-remote-mf-envdir.mjs:43-44` |

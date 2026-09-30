@@ -215,14 +215,14 @@ UMD: 模块 portal@env:local 未暴露 lifecycle（缺 mount）: /static/modules
 
 | # | 文件 / 位置 | 改动 | 风险 | 状态 |
 |---|---|---|---|---|
-| I1 | 流水线 DB 脚本（`deploy_pipeline_actions.script`） | ① 构建动作：local 的 `RELEASE_TAG` 改 `<DEPLOY_ENV>/<纯commit>`；② 发布·local 投递动作：落 `<PUBLIC_PATH>/<DEPLOY_ENV>/<纯commit>/` + 写 env 指针 + legacy 兼容副本 | 中：模板级脚本，改错影响所有环境 → 已用 bash 条件把 dev/prod 隔离 | ✅ `scripts/migrations/p22-app-env-dir-artifact.mjs`（幂等、`bash -n` 前置校验、备份可回退） |
+| I1 | 流水线 DB 脚本（`deploy_pipeline_actions.script`） | ① 构建动作：local 的 `RELEASE_TAG` 改 `<DEPLOY_ENV>/<纯commit>`；② 发布·local 投递动作：落 `<PUBLIC_PATH>/<DEPLOY_ENV>/<纯commit>/` + 写 env 指针 + legacy 兼容副本 | 中：模板级脚本，改错影响所有环境 → 已用 bash 条件把 dev/prod 隔离 | ✅ `archive/migrations/p22-app-env-dir-artifact.mjs`（幂等、`bash -n` 前置校验、备份可回退） |
 | I2 | `deploy_apps.public_path` | env-dir 应用的构建段不再由它决定（改由 envId）；它仍用于 legacy 直出目录 | 低 | 🟡 语义已落实，字段保留（P4 再议） |
 | I3 | `/internal/release/pointer` + `AppsService` + `DeployModule` | env-dir 应用走**应用域激活**（校验产物 → 写磁盘指针 → upsert 版本表）；指针格式收敛到 `entry-pointer.ts` 一处 | 中：写路径变更 | ✅ 已实施（`p24`；端到端已验证） |
 | I4 | 存量 env-dir 产物 | 按 envId 口径重建 | 低（仅磁盘产物） | ✅ local 两个应用已重建为 `<key>/local/20d1380/` |
-| I5 | `scripts/migrations/p11-app-env-artifacts.mjs` | 迁移时校验产物 base 自洽性，不满足则告警跳过 | 低 | ⬜ 未做 |
+| I5 | `archive/migrations/p11-app-env-artifacts.mjs` | 迁移时校验产物 base 自洽性，不满足则告警跳过 | 低 | ⬜ 未做 |
 | I6 | 双源真相（`deploy_app_env_versions` vs `deploy_deployments`） | env-dir 应用以新表为准，旧表 P4 退役 | 中 | ⬜ 随 P4 |
 | I7 | legacy 兼容副本（G5） | 不再做兼容，移除 `p22` 落的副本段 | 低 | ✅ 已移除（`p23`） |
-| I8 | 历史记录与产物目录瘦身 | 流水线运行/审批/版本记录只留当前；遗留 `_bak_*` 表 DROP；磁盘只留指针指向的版本 | 中（不可逆，已做备份） | ✅ `scripts/migrations/p23-cleanup-history.mjs`（DB dump + 磁盘 mv 垃圾站，可回滚） |
+| I8 | 历史记录与产物目录瘦身 | 流水线运行/审批/版本记录只留当前；遗留 `_bak_*` 表 DROP；磁盘只留指针指向的版本 | 中（不可逆，已做备份） | ✅ `archive/migrations/p23-cleanup-history.mjs`（DB dump + 磁盘 mv 垃圾站，可回滚） |
 | I9 | `DeployService.deployVersion`（控制台「部署」） | 按 `deployMode` 分流：env-dir → env 指针；site-version → legacy 指针 + 清缓存 | 中：改的是所有模块共用的部署入口 | ✅ 已实施（端到端已验证：portal `mode=env-dir`、shell `mode=legacy`） |
 | I10 | gateway `versionCache` 失效通路 | 扩展 `/api/internal/gateway/reload` 一并清版本缓存；控制台在 site-version 部署后调用 | 低：best-effort，失败只告警 | ✅ 已实施（console `已通知` → gateway `版本缓存已失效：3 条` 同刻） |
 
@@ -231,7 +231,7 @@ UMD: 模块 portal@env:local 未暴露 lifecycle（缺 mount）: /static/modules
 ## 6. 验证方式（本地）
 
 1. 单测：`cd servers/deploy-console && npx jest src/apps/`（入口指针写法锁定）
-2. 迁移幂等 + 语法：`node scripts/migrations/p22-app-env-dir-artifact.mjs`（首跑变更、复跑零差异；写库前 `bash -n`）
+2. 迁移幂等 + 语法：`node archive/migrations/p22-app-env-dir-artifact.mjs`（首跑变更、复跑零差异；写库前 `bash -n`）
 3. 投递脚本功能验证（沙箱，不动真实目录）：
    `RELEASE_DIR=/tmp/p22-sandbox PUBLIC_PATH=portal DEPLOY_ENV=local COMMIT_ID=portal-dev/<sha> BUILD_OUTPUT_DIR=apps/portal/dist bash <投递脚本>`
    → 期望产出 `local/<sha>/`（产物）+ `local/index.js`（System.register 指针）+ `local/index.css` + `<流水线key>/<sha>/`（兼容副本）

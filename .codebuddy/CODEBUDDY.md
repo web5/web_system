@@ -40,7 +40,7 @@
 
 凡改动命中发布面或数据面 —— **即使是纯后端改动、即使只有一行**：
 
-- `ecosystem.config.cjs` / `servers/*/.env*` / 流水线与发布脚本 / `scripts/migrations/**` / `.github/workflows/**`
+- `ecosystem.config.cjs` / `servers/*/.env*` / 流水线与发布脚本 / `archive/migrations/**` / `.github/workflows/**`
 
 按 `.codebuddy/rules/release-interface/RULE.mdc` 的动作门执行：过判据清单 → 出评审报告 → **阻塞项清零** → commit 带 `Release: pass`（CI R14 拦截）。
 
@@ -56,7 +56,7 @@
 
 - `packages/types/**`（权限码 / 共享常量 / 枚举）
 - `packages/agent-core/src/interfaces/**`（协议：`StreamEventType` / `RunInput`）
-- `scripts/migrations/**`（数据 / 结构迁移）
+- `archive/migrations/**`（数据 / 结构迁移）
 - `servers/mcp-gateway/src/*/tools/**`（MCP 工具注册）
 - `servers/*/src/*/*.controller.ts`（对外接口）
 

@@ -56,7 +56,7 @@ loads: docs/api/contracts.md
 命中 `is_contract_file` 即由 CI **R13** 拦截：
 
 ```
-scripts/migrations/*                        # 数据/结构迁移
+archive/migrations/*                        # 数据/结构迁移
 packages/types/*                            # 权限码 / 共享常量 / 枚举
 packages/agent-core/src/interfaces/*        # 协议契约（StreamEventType / RunInput）
 servers/mcp-gateway/src/*/tools/*           # MCP 工具注册

@@ -33,7 +33,7 @@
 - 实测列现状（`web_system_deploy`）：`deploy_hosts.scope` ✅、`deploy_hosts.managed_by` ✅、`deploy_pipeline_runs.task_states` ✅、`deploy_pipelines.env` ✅ —— 即三张表的目标列**均已由 synchronize 建好**。
 - 实测记账：`web_system_deploy.schema_migrations` = `{0014_deploy_host_scope.sql}`；`web_system.schema_migrations` = 0001–0007、0012–0014(mp)、p26、p27（**无 0009/0010/0014_deploy_host_scope**）。
 - 实测回填结果：`deploy_hosts` 三行 = `local-default/local/orchestrator`、`dev-default/cloud/NULL`、`prod-default/cloud/NULL` ✅。
-- 改名事实：`scripts/migrations/p9-rename-pipeline-tables.mjs:119` → `deploy_pipeline_templates` **已 RENAME 为 `deploy_pipelines`**（p9 提交于 2026-09-17，晚于 0009 的 2026-09-15）。
+- 改名事实：`archive/migrations/p9-rename-pipeline-tables.mjs:119` → `deploy_pipeline_templates` **已 RENAME 为 `deploy_pipelines`**（p9 提交于 2026-09-17，晚于 0009 的 2026-09-15）。
 - `pipeline.service.ts:381` → `DEPLOY_ENV: i.env || ''`（值域 local/dev/prod）；`:591 consoleApiBase()` → `http://127.0.0.1:${port}/api`（**带 `/api` 后缀**）；`config.controller.ts:29` → `@Controller('config')` + `main.ts` `setGlobalPrefix('api')` → 真实路由 = `/api/config/internal/dispatch/:serviceKey`。
 - `p25-restart-config-dispatch.mjs:57` → 已在使用 `${CONSOLE_API%/}/config/internal/dispatch/${MODULE_KEY}?envId=${DEPLOY_ENV}`（**无 `/api` 二次拼接**，正确写法）。
 

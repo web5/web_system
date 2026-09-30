@@ -16,7 +16,7 @@
 | # | 任务 | 交付物 | 同行义务 | 依赖 | 判据 |
 |---|---|---|---|---|---|
 | **T0** | 迁移前数据快照（**一次性替换的前置动作**，不可跳过） | 导出 `deploy_release_locks` 与 `deploy_pipeline_runs` 全量数据到 `<WS>/.snapshots/p29-<时间戳>.sql`；保留到全部 V# 勾核。**连接参数取自 deploy-console 运行实例自身的数据源配置（实例的 `.env` / datasource），不硬编码、不凭推断选库——console 跑在哪台机器就导出那台机器对应的库** | — | — | **V8, V7′** |
-| **T1** | 数据模型与迁移 | `deploy_resource_locks` 表；`deploy_pipeline_runs` 扩展列 `queue_seq` / `worker_id` / `lease_until`；`status` 枚举新增 `queued`；迁移脚本 `scripts/migrations/p29-pipeline-concurrency.mjs`（幂等 + `DRY_RUN` + 动库前打印将变更行 + `bash -n` 自检；**不做 `ROLLBACK` 脚本**） | — | T0 | **V8** |
+| **T1** | 数据模型与迁移 | `deploy_resource_locks` 表；`deploy_pipeline_runs` 扩展列 `queue_seq` / `worker_id` / `lease_until`；`status` 枚举新增 `queued`；迁移脚本 `archive/migrations/p29-pipeline-concurrency.mjs`（幂等 + `DRY_RUN` + 动库前打印将变更行 + `bash -n` 自检；**不做 `ROLLBACK` 脚本**） | — | T0 | **V8** |
 | **T2** | 资源锁服务 | `ResourceLockService`（acquire / release / renew，TTL + 持有者校验），按 `artifact` / `pointer` / `runtime` / `cleanup` 四 kind 取 key；`run()` 接入 | **H2**：`ReleaseLockService` 与 `deploy_release_locks` 直接删除并 DROP，**不做兼容 shim** | T0, T1 | **V12, V13** |
 | **T3** | 队列与 worker pool | `PipelineQueue`（enqueue / claim / complete）；进程内 worker loop；`PIPELINE_WORKER_CONCURRENCY`（**已定 2**，Q3）；启动 reconcile（孤儿 run 重置为 `queued`、过期 lease 回收） | **H7**：删除后台 fire-and-forget `execAsync git fetch` | T2 | **V1, V2, V13** |
 | **T4a** | `queued` 状态与接口透出（后端） | `submit` 软校验改造：同一 resourceKey 已有 queued/running 时**不再抛 `ConflictException`**；`approve` / `retry` 走入队；列表接口返回 `queue_seq` 与排队位置 | — | T3 | **V1, V2** |
@@ -86,7 +86,7 @@ T0 ──> T1 ──┬──> T2 ──> T3 ──> T4a ──┐
 | 项 | 约定 |
 |---|---|
 | commit | 每个任务独立 commit；迁移脚本与业务代码不混入同一 commit |
-| 迁移 | 一律 `scripts/migrations/p29-pipeline-concurrency.mjs` 幂等惯例（`specs/remote-backend-release/design.md:63,189`）；**不放 `migrations/*.sql`**；**不写 `ROLLBACK` 脚本**（Q5），改为 T0 快照前置 |
+| 迁移 | 一律 `archive/migrations/p29-pipeline-concurrency.mjs` 幂等惯例（`specs/remote-backend-release/design.md:63,189`）；**不放 `migrations/*.sql`**；**不写 `ROLLBACK` 脚本**（Q5），改为 T0 快照前置 |
 | 开关 | **不引入运行时兼容开关**（N1 / H1）。如需止血，只允许「停 queue worker」这类熔断，不得切回旧实现 |
 | 旁路脚本 | Q4 决策：`publish-*.sh` 本期不改。交付前必须在 runbook 写明「并发发布期间禁止手工执行」，并在交付说明中提示 |
 | 证据 | 每条 V# 的证据必须是**可复现的命令与输出片段**，不接受截图式「看着对了」 |

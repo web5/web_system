@@ -47,7 +47,7 @@
 
 ### 3.2 建表（DDL）结论
 
-- 项目有正式迁移机制：`scripts/migrations/*.sql` + `scripts/apply-migrations.sh <local|dev|prod>`（`schema_migrations` 幂等记账）。本表已由 `scripts/migrations/p26-glossary-user-memory-tables.sql` 建表（幂等 CREATE TABLE IF NOT EXISTS）。
+- 项目有正式迁移机制：`scripts/migrations/*.sql` + `scripts/apply-migrations.sh <local|dev|prod>`（`schema_migrations` 幂等记账）。本表已由 `archive/migrations/p26-glossary-user-memory-tables.sql` 建表（幂等 CREATE TABLE IF NOT EXISTS）。
 - **本地/开发**：也可由 synchronize 自动建表（`NODE_ENV !== 'production'`）。
 - **生产**：`synchronize` 关闭，靠迁移脚本建表（p26）。
 - 实体必须**显式注册**进 `servers/user-service/src/app.module.ts` 的 `entities` 数组（该服务不是 glob 扫描，与 ai-agent 不同）。

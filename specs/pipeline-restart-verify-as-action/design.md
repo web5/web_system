@@ -650,7 +650,7 @@ log "验证通过: $MODULE_KEY"
 | `WS_PLATFORM_SCRIPTS_DIR` 注入 | `resolveStageVars` 不再下发；`nest-cli.json` 不再拷贝脚本资产 |
 | `PlatformScriptSeedService` 依赖 | `pipeline.service` / `pipeline-template.service` / module 一并移除 |
 
-新增：**`scripts/migrations/p21-pipeline-node-scripts.sql`**（幂等）——
+新增：**`archive/migrations/p21-pipeline-node-scripts.sql`**（幂等）——
 ① 新环境初始化：给所有模板补 git 节点默认脚本（仅空值才填，不覆盖运维改动）；
 ② 存量迁移：`write-version` 动作改为 curl 调 `/api/internal/release/versions`（不再依赖平台分发的 `.mjs`）。
 

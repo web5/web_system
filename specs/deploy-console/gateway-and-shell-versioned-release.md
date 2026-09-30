@@ -19,7 +19,7 @@
 
 | 项 | 现状 | 证据 |
 |---|---|---|
-| gateway 发布形态 | 有流水线 `tpl-gateway-{local,dev,prod}`，产物投到 `servers/gateway/<COMMIT_ID>/`（**已是版本目录**），但**没有「落地 dist + 切指针」步骤** —— 流水线跑完只是产物就位，服务生效仍靠人工 | `scripts/migrations/p5-pipeline-shell-approval-3env.mjs:58-65`（注释"就地发布"）、`254-302`（release 节点只挂 `上传产物 + 写版本记录` 两个 action） |
+| gateway 发布形态 | 有流水线 `tpl-gateway-{local,dev,prod}`，产物投到 `servers/gateway/<COMMIT_ID>/`（**已是版本目录**），但**没有「落地 dist + 切指针」步骤** —— 流水线跑完只是产物就位，服务生效仍靠人工 | `archive/migrations/p5-pipeline-shell-approval-3env.mjs:58-65`（注释"就地发布"）、`254-302`（release 节点只挂 `上传产物 + 写版本记录` 两个 action） |
 | 后台生效路径 | 生效 = `applyBackendVersion()`：版本目录 → `servers/<dir>/dist` + pm2 重启；由控制台「部署 / 回滚」触发，**流水线不做** | `servers/deploy-console/src/deploy/deploy.service.ts:307-326`、`:396-410`、`deployVersion():267` |
 | shell（基座）投递 | 已按版本目录投递（本机 `static/modules/shell/<COMMIT_ID>/`，远端 `remoteUploadScript` 也带 `/$VER`） | `p5...mjs:82-91`（MODULES.shell）、`:171-190`（remoteUploadScript） |
 | shell 加载 | gateway 侧**优先版本目录**、取不到退回旧固定路径 `public/shell/index.html` | `servers/gateway/src/deploy-version/index-html.service.ts:130-141` |
@@ -71,7 +71,7 @@ release 节点 actions：
 | # | 改动 | 文件 |
 |---|---|---|
 | A1 | 新增 `apply` 内置步骤 + `ApplyExecutor`（执行体 = `DeployService.deployVersion()`），并在 `SERVICE_TOOL_TO_STEP` 暴露为 service action tool **`apply-version`** | `steps/apply.executor.ts`、`steps/step-registry.ts`、`steps/service-tools.ts`、`pipeline.module.ts` |
-| A3 | 幂等迁移给 `tpl-gateway-{local,dev,prod}` 的 release 节点补第 ③ 个 action | `scripts/migrations/p8-gateway-release-apply-action.mjs`（已执行，3 条；复跑 0 变更） |
+| A3 | 幂等迁移给 `tpl-gateway-{local,dev,prod}` 的 release 节点补第 ③ 个 action | `archive/migrations/p8-gateway-release-apply-action.mjs`（已执行，3 条；复跑 0 变更） |
 | — | 测试：`ApplyExecutor` 4 条 + 步骤注册表守卫（backend 执行 / 前端跳过 / 复用产物跳过） | `steps/apply.executor.spec.ts`、`steps/step-registry.spec.ts` |
 
 **实测验证**（本机，2026-09-17）：构造真实版本目录 `servers/gateway/gateway-local/verify-apply/`
@@ -90,8 +90,8 @@ release 节点 actions：
 | # | 文件 | 改动 |
 |---|---|---|
 | A1 | `servers/deploy-console/src/pipeline/` 的 action 工具集（现有 `write-version`） | 新增 `apply-version`（或 `deploy-version`）service action：内部复用 `DeployService.deployVersion()`（已含"先落地后改指针"与 remote 分支 `applyBackendRemote`） |
-| A2 | `scripts/migrations/p5-pipeline-shell-approval-3env.mjs` | gateway 的 `localPath` 语义更正（去掉"就地发布"注释，改为版本目录口径）；release 节点 actions 追加 ③ |
-| A3 | 新迁移脚本 `scripts/migrations/p6-gateway-release-apply.mjs` | 给已存在的 `tpl-gateway-{local,dev,prod}` 三条模板的 release 节点补 ③（幂等，可重跑） |
+| A2 | `archive/migrations/p5-pipeline-shell-approval-3env.mjs` | gateway 的 `localPath` 语义更正（去掉"就地发布"注释，改为版本目录口径）；release 节点 actions 追加 ③ |
+| A3 | 新迁移脚本 `archive/migrations/p6-gateway-release-apply.mjs` | 给已存在的 `tpl-gateway-{local,dev,prod}` 三条模板的 release 节点补 ③（幂等，可重跑） |
 | A4 | `scripts/modules.json` | gateway 条目无需改类型；确认 `pm2: "gateway"` 与实际进程名一致 |
 
 ### 3.3 风险（必须处理）
@@ -202,7 +202,7 @@ ssh <prod-host> 'ls /data/web_system/servers/gateway/public/static/modules/shell
 注册表写 `gateway` / `user-service`，实际是 `web-gateway` / `web-user`。
 后果：`gateway` 侥幸被第二个候选 `web-gateway` 兜住；但 `user-service` 的三个候选
 （`user-service` / `web-user-service` / `user-service`）**全部落空** → 重启静默失败、
-发布显示成功但服务没起来。已用 `scripts/migrations/p7-backend-pm2-names.mjs`（幂等）修正 11 项，
+发布显示成功但服务没起来。已用 `archive/migrations/p7-backend-pm2-names.mjs`（幂等）修正 11 项，
 种子 `scripts/modules.json` 同步。
 
 ---
@@ -212,7 +212,7 @@ ssh <prod-host> 'ls /data/web_system/servers/gateway/public/static/modules/shell
 | 方案 | 文件 | 类型 |
 |---|---|---|
 | A | pipeline service action 新增 `apply-version`（复用 `DeployService.deployVersion`） | 后端 |
-| A | `scripts/migrations/p6-gateway-release-apply.mjs`（新，幂等） | 迁移 |
+| A | `archive/migrations/p6-gateway-release-apply.mjs`（新，幂等） | 迁移 |
 | A | `p5...mjs` gateway 条目注释/语义更正 | 迁移 |
 | B | `servers/gateway/src/deploy-version/index-html.service.ts`（legacy 兜底告警） | 后端 |
 | B | `p5...mjs` 删除 overlay 死代码 | 迁移 |

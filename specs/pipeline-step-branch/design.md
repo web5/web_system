@@ -110,7 +110,7 @@ VALUE  := [A-Za-z0-9._/@:-]+ | '引号串'  （支持含空格的引号值）
 
 ## 6 迁移
 
-`scripts/migrations/p15-step-branches.mjs`（幂等，`DRY_RUN` 支持）：
+`archive/migrations/p15-step-branches.mjs`（幂等，`DRY_RUN` 支持）：
 
 1. 备份受影响行到 `/tmp/p15-backup-<ts>.json`。
 2. 把 `admin 发布` 的 release 的两段分支落成两行任务：

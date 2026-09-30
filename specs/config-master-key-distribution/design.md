@@ -187,7 +187,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 | 为什么不用加列 | 除"不改数据模型"外还有一条实测理由：deploy-console 的 TypeORM 是 `synchronize: true`（`app.module.ts:53-56`），**加列会直接改真库表结构**，风险与不可控性都高 |
 | 代价 | 必须有一次**一次性格式迁移**（P2a），迁移期间**停写**（分钟级窗口） |
 
-**P2a 格式迁移（停机窗口，`scripts/migrations/p26-master-key-format-migrate.mjs`）**
+**P2a 格式迁移（停机窗口，`archive/migrations/p26-master-key-format-migrate.mjs`）**
 
 | 步 | 动作 | 校验 |
 |---|---|---|
@@ -296,7 +296,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 
 本地演练命令（拟定）：
 1. `node scripts/verify-config-master-key.mjs`（域 L 基线，**要求 `老格式计数≥1`**，否则迁移脚本没东西可检）
-2. `DRY_RUN=1 node scripts/migrations/p26-master-key-format-migrate.mjs` → 全量执行 → 再 `verify`（`老格式计数=0`）
+2. `DRY_RUN=1 node archive/migrations/p26-master-key-format-migrate.mjs` → 全量执行 → 再 `verify`（`老格式计数=0`）
 3. `node scripts/master-key-domain-split.mjs --dry-run`（域拆分脚本的空转自检）
 通过后再到堡垒机执行域 C。
 
@@ -308,7 +308,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 |---|---|---|
 | **P0 分发落地** | ① `config-crypto.ts` 支持 `CONFIG_MASTER_KEY_FILE`（+ 双源不一致即报错）；② 启动自检服务（含 `exit(1)` 与错误分类）；③ 启动脚本注入路径变量（`publish-deploy-console.sh` + 流水线 restart 脚本）；④ `scripts/verify-config-master-key.mjs`；⑤ `.env.example` / runbook 更新 | 恢复 `.env` 里的 `CONFIG_MASTER_KEY` 行 + 删注入变量（代码改动向后兼容，不删也不影响） |
 | **P1 流程固化** | ① `provision-master-key.sh` + checklist 落 runbook；② 跨机指纹比对（可选 `--peers`）；③ 堡垒机实测 K1–K3 | 脚本删除即可，无运行时耦合 |
-| **P2a 格式迁移（Q9，一次性）** | ① `scripts/migrations/p26-master-key-format-migrate.mjs`（影子表备份 + 幂等 + `DRY_RUN=1` + `ROLLBACK=1`）；② `encrypt/decrypt` 切"只认新格式"；③ 域 L 演练 K6 → 域 C 执行 | `ROLLBACK=1` 恢复影子表 + 回退代码版本（**格式不能长期双活，回退须在同一停机窗口内完成**） |
+| **P2a 格式迁移（Q9，一次性）** | ① `archive/migrations/p26-master-key-format-migrate.mjs`（影子表备份 + 幂等 + `DRY_RUN=1` + `ROLLBACK=1`）；② `encrypt/decrypt` 切"只认新格式"；③ 域 L 演练 K6 → 域 C 执行 | `ROLLBACK=1` 恢复影子表 + 回退代码版本（**格式不能长期双活，回退须在同一停机窗口内完成**） |
 | **P2b 在线轮换** | ① 密钥环（`CONFIG_ACTIVE_KEY_ID` + `*_OLD`）；② `reencryptSecrets()` + `POST /api/config/secrets/reencrypt`（含快照，compare-and-set）；③ `@RequireSuperAdmin()` + `config:secret:rotate`；④ 审计埋点；⑤ 域 L 完整演练 K4/K5 | 双钥并行期可随时停；回退 = active/`ring` 调回可用组合（密文保留现状） |
 | **P3 换库/拆域（已备好，按需触发）** | 文档 `specs/config-master-key-distribution/domain-split-guide.md` + 脚本 `scripts/master-key-domain-split.mjs` **本轮先交付**，待 prod 换库时执行；其后才是云 KMS/Secrets Manager、systemd `LoadCredential=`、按环境分钥 | 脚本默认 `--dry-run`，写入前备份目标库，`--apply` 才动数据;目标库可从影子表恢复 |
 | **P4 未来（不在本轮）** | 云 KMS/Secrets Manager；迁 systemd 时用 `LoadCredential=`（凭据进 `/run/credentials/<unit>/`，**天然不进 env**，比 `EnvironmentFile` 更安全）；按环境分钥（前置：先定义 `global` 行的归属） | — |
@@ -335,7 +335,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 | 6 | `scripts/publish-deploy-console.sh` + 流水线 restart 脚本（DB `deploy_pipeline_step_commands`） | `env -i` 白名单放行 `CONFIG_MASTER_KEY_FILE` | 与"只保留 PATH/HOME/PORT"铁律的**显式例外**，需在 runbook 写明理由 |
 | 7 | `servers/deploy-console/.env` / `.env.example` / 各服务器 | 迁移密钥到文件；`.env.example` 换键名 | 过渡期双源并存 → 必须验证"注入优先"（dotenv 不覆盖） |
 | 8 | 新增 `scripts/verify-config-master-key.mjs`、`scripts/provision-master-key.sh`、`scripts/rotate-master-key.sh` | 自检 / 投递 / 轮换工具 | 脚本不得接受"密钥作为命令行参数"（会进历史） |
-| 8b | 新增 `scripts/migrations/p26-master-key-format-migrate.mjs`（P2a） | 老密文 → 新格式，一次迁移；影子表备份 + 幂等 + `ROLLBACK=1` + `DRY_RUN=1` | 唯一写入方停掉才执行；漏掉快照 `payload` 则回滚炸（§5.3） |
+| 8b | 新增 `archive/migrations/p26-master-key-format-migrate.mjs`（P2a） | 老密文 → 新格式，一次迁移；影子表备份 + 幂等 + `ROLLBACK=1` + `DRY_RUN=1` | 唯一写入方停掉才执行；漏掉快照 `payload` 则回滚炸（§5.3） |
 | 8c | 新增 `scripts/master-key-domain-split.mjs`（P3，本轮交付） | 换库/拆域：跨库读-解-用新钥重加密-写 + 目标库备份 + `--dry-run` 默认 | 目标库被覆盖前必须备份；默认**不删源行**（`--prune-src` 显式才删） |
 | 9 | `docs/development/local-release-runbook.md` + 新 runbook 章节 | 分发/轮换/应急处置流程 | 文档不落 → 应急时会临场发明流程 |
 | 10 | 密钥文件的属主与 pm2 进程用户 | 若 pm2 以 **root** 运行，则 0600 root 文件**无法阻止该进程改写主密钥** —— "能改钥 = 能解密"权限等价 | 需明确：分发/轮换脚本走**独立权限通道**执行；能写密钥文件的身份 ≈ 能读全部密钥（Q11 一并确认） |

@@ -72,7 +72,7 @@
 ### 3.3 历史技术债（未做，不影响当前）
 
 - 表名 `deploy_pipeline_templates`、字段 `templateId`、路由 `/pipeline-templates` 仍是「模板」命名（决策 #7 登记）
-- `scripts/migrations/p3-pipeline-4nodes-env-split.mjs` 已标 DEPRECATED 保留（弯路记录）
+- `archive/migrations/p3-pipeline-4nodes-env-split.mjs` 已标 DEPRECATED 保留（弯路记录）
 - 流水线级 `defaultTarget` 后端仍在读（`pipeline.service.ts`），UI 已移除，保持默认 `auto`
 
 ---
@@ -95,6 +95,6 @@
 | `servers/deploy-console/src/shell/command.service.ts` | node / pm2 / pnpm 路径解析 |
 | `apps/deploy-console/src/views/PipelineEdit.vue` | 编辑/新建页（4 Tabs + 抽屉 + watchdog 开关） |
 | `apps/deploy-console/src/components/pipeline/PipelineVarPanel.vue`、`VarReferenceTable.vue` | 变量 / 参数面板（抽屉与页面 Tab 共用） |
-| `scripts/migrations/p5-pipeline-shell-approval-3env.mjs` | 流水线终态迁移（幂等；`MODULES` 加模块即补流水线） |
-| `scripts/migrations/p6-module-env-ownership.mjs` | 环境归属迁移（mysql2；可重复执行） |
+| `archive/migrations/p5-pipeline-shell-approval-3env.mjs` | 流水线终态迁移（幂等；`MODULES` 加模块即补流水线） |
+| `archive/migrations/p6-module-env-ownership.mjs` | 环境归属迁移（mysql2；可重复执行） |
 | `scripts/publish-deploy-console.sh` | 发布脚本（同步 release 当前分支 → 构建 → 干净重启 6200） |

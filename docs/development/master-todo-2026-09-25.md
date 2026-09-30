@@ -111,7 +111,7 @@
 | 4-13 | §6.3-3 节点边界变更（投递+写版本合并为「发布」节点，切指针移出） | ⛔ 含 AI 验证接入时机决策 | 你+研发 | L |
 | 4-14 | §1 P2 变量管理（`scope=template` 配置中心 + 管理页） | ⬜ | 研发 | L |
 | 4-15 | §1 P3 前端画布 `PipelineEdit.vue` | ⬜ UI | 研发 | L |
-| 4-16 | **并发发布整条线 V1–V13 + T0 快照**（`scripts/migrations/p29`、`ResourceLockService` 等**零落地**） | ⬜ | 研发 | XL |
+| 4-16 | **并发发布整条线 V1–V13 + T0 快照**（`archive/migrations/p29`、`ResourceLockService` 等**零落地**） | ⬜ | 研发 | XL |
 | 4-17 | T10 runbook 补「并发期间禁止手工 `publish-*.sh`」+ 回滚两步 | ⬜ | 运维 | S |
 
 > ⚠️ **冲突提示**：4-3（改 `PUBLISH_PATH`）与 4-16 V13（彻底删除 `PUBLISH_PATH`）矛盾 —— **先定并发改造排期，再决定 4-3 怎么改**，否则白做一轮。

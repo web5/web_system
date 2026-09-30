@@ -50,7 +50,7 @@
 | shell 按 envId 加载 + `x-env-id` | ✅ `apps/shell/src/main.ts` |
 | EnvSwitcher 接真实环境 + 审计（不阻断切换） | ✅ `packages/ui/src/components/EnvSwitcher.vue` |
 | **M8 双读开关 `DEPLOY_LEGACY_READ`** | ✅ `IndexHtmlService.buildManifest()` |
-| M1–M3 / M4-lite / M5 / M6 / M7 / M12 迁移 | ✅ 幂等脚本 `scripts/migrations/p1*.mjs` |
+| M1–M3 / M4-lite / M5 / M6 / M7 / M12 迁移 | ✅ 幂等脚本 `archive/migrations/p1*.mjs` |
 | **M9 旧表 DROP** | ⏸️ 阻塞，见 §3 |
 
 ---
@@ -130,7 +130,7 @@ DROP 表后服务启动会自动重建**。必须「删实体 + 删引用」与�
 | gateway DB 路由 | `servers/gateway/src/dynamic-route/` |
 | gateway manifest（**唯一来源**） | `servers/gateway/src/deploy-version/index-html.service.ts` → `buildManifest()` |
 | 模块读取适配层 | `servers/deploy-console/src/module-registry/module-registry.service.ts` |
-| 迁移脚本 | `scripts/migrations/p11-*.mjs`、`p12-*.mjs` |
+| 迁移脚本 | `archive/migrations/p11-*.mjs`、`p12-*.mjs` |
 | 前端 API 层 | `apps/deploy-console/src/api/index.ts`（`envsApi` / `appsApi` / `servicesApi`） |
 | 共享 UI | `packages/ui/src/components/EnvSwitcher.vue`、`src/composables/env.ts` |
 

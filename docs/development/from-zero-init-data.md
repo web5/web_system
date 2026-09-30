@@ -80,7 +80,7 @@ DRY_RUN=1 ./scripts/apply-migrations.sh prod    # 预演
 | mcp-gateway | `mcp_modules` / `mcp_tools`（6 个模块：finnews / wechat_mp / paper / institution / deploy / knowledge） | `mcp.service.ts` seed 系列 | 模块 upsert + 工具差量补齐 |
 | deploy-console | `deploy_environments`（dev/prod）、`deploy_modules`（读 `scripts/modules.json`）、默认流水线模板、平台阶段脚本 | `environment.service.ts` / `module-registry.service.ts` / `pipeline-template.service.ts` / `platform-script-seed.service.ts` | 多为「表为空才 seed」或 upsert |
 
-> `deploy_servers`（发布目标机）**无代码 seed**，需在控制台维护（或历史脚本 `scripts/migrations/p1-seed-servers-routes.sql`）。
+> `deploy_servers`（发布目标机）**无代码 seed**，需在控制台维护（或历史脚本 `archive/migrations/p1-seed-servers-routes.sql`）。
 
 ---
 

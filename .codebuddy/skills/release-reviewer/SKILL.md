@@ -70,7 +70,7 @@ scripts/publish-*.sh / scripts/deploy-*.sh   # 发布脚本
 .github/workflows/**                         # 门禁自身
 ```
 
-数据面（`scripts/migrations/*`）同时属契约评审范围；`contract-reviewer` 未装配前，**C 组（数据面）由本角色代审**。
+数据面（`archive/migrations/*`）同时属契约评审范围；`contract-reviewer` 未装配前，**C 组（数据面）由本角色代审**。
 
 ## 工作流
 

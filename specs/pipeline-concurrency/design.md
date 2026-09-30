@@ -102,7 +102,7 @@
 
 ### 3.4 为什么暂不做 ③
 
-③ 需要容器运行时，且 `scripts/migrations/p26-remote-backend-release.mjs` 已落的远程发布、pm2 起停属宿主机语义。保留为长期方向：**本文的 worker 抽象按「可以在别的机器」设计（§5 D2），届时把 worker 进程换成 Pod 即可**。
+③ 需要容器运行时，且 `archive/migrations/p26-remote-backend-release.mjs` 已落的远程发布、pm2 起停属宿主机语义。保留为长期方向：**本文的 worker 抽象按「可以在别的机器」设计（§5 D2），届时把 worker 进程换成 Pod 即可**。
 
 ---
 
@@ -194,7 +194,7 @@ pending ──► queued ──► running ──► succeeded / failed / cancel
 退役并 DROP，**不做兼容层、不做双写**（D6）。
 
 - `specs/pipeline-node-model/design.md:261` 里「锁键从 `module×env` 扩展为 `module×host`」的 P1 计划由 `runtime:` kind 承接（`<...>@<env>` 换成 `env@host` 即可），实现时将该 spec 对应条目指向本文。
-- 迁移：`scripts/migrations/p29-pipeline-concurrency.mjs`（幂等，惯例见 `specs/remote-backend-release/design.md:63,189`），含 `DRY_RUN`、动库前打印将变更行、`bash -n` 自检；**不提供 `ROLLBACK` 脚本**（Q5），改以 T0 数据快照为唯一止损。
+- 迁移：`archive/migrations/p29-pipeline-concurrency.mjs`（幂等，惯例见 `specs/remote-backend-release/design.md:63,189`），含 `DRY_RUN`、动库前打印将变更行、`bash -n` 自检；**不提供 `ROLLBACK` 脚本**（Q5），改以 T0 数据快照为唯一止损。
 
 ### 4.3 B：按运行的隔离工作区
 
@@ -261,7 +261,7 @@ per-run 装依赖是主线风险，三个缓解手段（缺一不可）：
 | D5 | 工作区机制 | **git worktree `--detach`** | 共享 object store，免二次 fetch；detached 规避同分支冲突 | `--shared` clone；硬链复制 |
 | D6 | `deploy_release_locks` | **退役并 DROP**，语义并入 `deploy_resource_locks` 的 `runtime:` kind | 同一概念（原子的 lease），粒度从「整条流水线」下沉到「动作」；留着才是包袱 | 双锁并存；保留旧表；兼容 shim |
 | **D7** | **回滚方式** | **不引入运行时开关（N1）**：回滚 = `git revert` + T0 数据快照恢复 | 运行时双路径（开关 / 兼容模式）本身就是本次要拆的包袱：它让每处改动多写一个分支、多维护一套实现、多测一遍（§6.4 H1/H2） | 保留 `PIPELINE_WORKSPACE_MODE` 双路径；兼容 shim（原 Q7 的 R-a / R-b，两者都是兜底） |
-| D8 | 迁移载体 | `scripts/migrations/p29-pipeline-concurrency.mjs`（幂等） | 惯例 `specs/remote-backend-release/design.md:63`；dev / 堡垒机共用云库，动数据必须幂等 | `migrations/*.sql`（该目录由 apply-migrations 扫描，非本类变更载体） |
+| D8 | 迁移载体 | `archive/migrations/p29-pipeline-concurrency.mjs`（幂等） | 惯例 `specs/remote-backend-release/design.md:63`；dev / 堡垒机共用云库，动数据必须幂等 | `migrations/*.sql`（该目录由 apply-migrations 扫描，非本类变更载体） |
 | D9 | 编排模型 | **不动** step/task/action 三层，也不动 `orchestration-engine` 的 DAG 语义 | N3/N4；只替换注入面与新增 kind 打标 | 借机重构编排模型 |
 
 ---
