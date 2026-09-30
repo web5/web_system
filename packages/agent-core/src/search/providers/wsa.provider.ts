@@ -6,6 +6,17 @@
  */
 import { type SearchProvider, type SearchResult } from '../provider.interface';
 
+/** 腾讯云响应体（成功时含 Pages，失败时含 Error）。 */
+interface WsaBody {
+  Pages?: unknown[];
+  Error?: { Code?: unknown; Message?: unknown };
+}
+
+/** 顶层响应：正常为 { Response: {...} }，异常时结构可能直接平铺。 */
+interface WsaRawResponse extends WsaBody {
+  Response?: WsaBody;
+}
+
 const WSA_HOST = 'wsa.tencentcloudapi.com';
 const WSA_SERVICE = 'wsa';
 const WSA_VERSION = '2025-05-08';
@@ -119,14 +130,16 @@ export class WsaSearchProvider implements SearchProvider {
       throw new Error(`腾讯云搜索请求失败: HTTP ${resp.status} ${errBody.slice(0, 300)}`);
     }
 
-    const data = await resp.json();
+    // 显式声明响应结构：fetch().json() 在各版本 @types/node 下推断不同（any / unknown / {}），
+    // 直接取值会在 TS 严格检查下报 TS2339（曾导致 prod 目标机编译失败）。
+    const data = (await resp.json()) as WsaRawResponse | null;
     // 响应结构为 { Response: { Pages: [...] } }，错误在 Response.Error
-    const body = data?.Response ?? data;
-    if (body?.Error) {
+    const body: WsaBody = data?.Response ?? data ?? {};
+    if (body.Error) {
       throw new Error(`腾讯云搜索错误: ${body.Error.Code ?? ''} ${body.Error.Message ?? ''}`.trim());
     }
 
-    const pages: unknown[] = body?.Pages ?? [];
+    const pages: unknown[] = body.Pages ?? [];
     const results: SearchResult[] = [];
     for (const raw of pages) {
       // Pages 元素是 JSON 字符串
