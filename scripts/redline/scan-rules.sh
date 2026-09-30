@@ -64,7 +64,7 @@ check_line_error() {
   # 豁免：仓库根 scripts/ 一级目录的 CLI 工具（*.mjs / *.cjs）——
   #   debug-local / build-subset-externals / verify-cdn-subsets 这类脚本的
   #   stdout 输出是**产品行为**（进度/结论日志），不是调试残留（2026-09-29，CI 实测误报）。
-  #   仅豁免一级目录，scripts/migrations 等子目录业务代码不豁免。
+  #   仅豁免一级目录，scripts/db 等子目录业务代码不豁免。
   if ! is_comment_line "$s" \
      && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs ]]; then
     if printf '%s' "$content" | grep -qE '\b(console\.(log|debug)\(|debugger\b)'; then
@@ -203,7 +203,7 @@ is_passport_file() {
 R13_LINE_THRESHOLD="${R13_LINE_THRESHOLD:-5}"
 is_contract_file() {
   case "$1" in
-    scripts/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险）
+    archive/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险，已归档至仓库根 archive/）
     packages/types/*) return 0 ;;                   # 共享常量：权限码 / 事件类型 / 枚举
     packages/agent-core/src/interfaces/*) return 0 ;;  # 协议契约（StreamEventType / RunInput）
     servers/mcp-gateway/src/*/tools/*) return 0 ;;  # MCP 工具注册
