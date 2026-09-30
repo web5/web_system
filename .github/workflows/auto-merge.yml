@@ -1,0 +1,65 @@
+# 给每个 PR 挂「自动合入」（兜底，覆盖 auto-pr 建不到的 PR）
+#
+# 为什么还需要它：`auto-pr.yml` 只在 **push 到 feature/* 或 fix/* 分支**时建 PR 并顺带启用
+# 自动合入 —— 其余分支（chore/、docs/、perf/ …）或**手工在网页建的 PR** 不会走那条路，
+# 于是出现「PR 开着、CI 全绿、但没人合」的静默挂起（2026-09-30 复盘：#239 挂 auto 后
+# 仍等了 7 分钟，因为分支落后 master 触发 BLOCKED，需要 update-branch 再跑一轮 CI）。
+# 本 workflow 与 auto-pr.yml 的 enableAutoMerge **幂等重复调用**，谁先跑都一样。
+#
+# 合入方式：与仓库惯例一致用 **merge**（保留分支历史）；auto-pr.yml 也同步改为 merge。
+#
+# 安全边界：
+#   - 只处理**同仓库**分支的 PR（fork PR 直接跳过），因为要读 Secret；
+#     事件用 `pull_request`（不是 pull_request_target），不 checkout 任何被改代码，只调 API。
+#   - draft PR 不挂自动合入（避免草稿被自动合）。
+#   - 合并仍需分支保护放行（checks 全绿 + 与 master 同步），本 workflow **不绕过任何门禁**：
+#     它只是把「等绿了自动合」这件事挂上，绿灯之前不会合。
+#
+# 凭据：与 auto-pr.yml 同源的 Secret `AUTO_PR_TOKEN`（PAT，需 pull_requests:write +
+#       contents:write）。**缺失即失败**，不回退 GITHUB_TOKEN —— 静默回退是 2026-09-24
+#       事故的根因（表现为「CI 红了但一个 job 都没有」，排查极易误判）。
+name: auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    runs-on: ubuntu-latest
+    # 同仓库分支 + 非草稿：fork PR 拿不到 Secret，跳过即可（不失败、不误合）
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.draft == false
+    steps:
+      - name: 校验 AUTO_PR_TOKEN
+        env:
+          AUTO_PR_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}
+        run: |
+          if [ -z "$AUTO_PR_TOKEN" ]; then
+            echo "::error::仓库 Secret AUTO_PR_TOKEN 未配置或为空（与 auto-pr.yml 同源）。请在 Settings → Secrets and variables → Actions 新建/更新 AUTO_PR_TOKEN（fine-grained PAT，权限 pull_requests:write + contents:write）。缺失时本 workflow 不回退 GITHUB_TOKEN，以便凭证问题当场暴露。"
+            exit 1
+          fi
+          echo "AUTO_PR_TOKEN 已配置（长度 ${#AUTO_PR_TOKEN}）"
+
+      - name: 启用自动合入（merge）
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.AUTO_PR_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            try {
+              await github.rest.pulls.enableAutoMerge({
+                owner, repo, pull_number, merge_method: 'merge',
+              });
+              console.log(`PR #${pull_number} 已启用自动合入（merge）：CI 全绿且分支与 master 同步后 GitHub 自动合并`);
+            } catch (e) {
+              // 不该阻断 CI：未开 Allow auto-merge / 保护规则不满足时 enable 会被拒，
+              // 但 PR 本身没问题。降级为 warning 并在日志给出修法。
+              core.warning(`PR #${pull_number} 启用自动合入失败：${e.message}（检查：Settings→General 勾选 Allow auto-merge；master 分支保护是否允许 merge commit）`);
+            }
