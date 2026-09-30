@@ -6,6 +6,8 @@ import { DeployPipelineTaskEntity } from '../entities/deploy-pipeline-task.entit
 import { DeployPipelineActionEntity } from '../entities/deploy-pipeline-action.entity';
 import { DeployPipelineRevisionEntity } from '../entities/deploy-pipeline-revision.entity';
 import { DeployPipelineTemplateEntity } from '../entities/deploy-pipeline-template.entity';
+import { DeployPipelineVarEntity } from '../entities/deploy-pipeline-var.entity';
+import { ConfigItemEntity } from '../entities/config-item.entity';
 import { PipelineOrchestrationService } from './pipeline-orchestration.service';
 import { PipelineRevisionService } from './pipeline-revision.service';
 import { PipelineOrchestrationController } from './pipeline-orchestration.controller';
@@ -26,6 +28,9 @@ import { ApprovalModule } from '../approval/approval.module';
       DeployPipelineActionEntity,
       DeployPipelineRevisionEntity,
       DeployPipelineTemplateEntity,
+      // saveTasks 的变量门禁需要读流水线变量与配置中心键
+      DeployPipelineVarEntity,
+      ConfigItemEntity,
     ]),
     AuditModule,
     ApprovalModule,
