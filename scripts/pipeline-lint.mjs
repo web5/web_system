@@ -20,6 +20,14 @@
  *   node scripts/pipeline-lint.mjs --from-db --dump /tmp/actions.json   # 导出供离线复检
  *
  * 退出码：0 = 无 error；1 = 有 error（CI 可用）
+ *
+ * 规则级别（2026-09-30 起 L4 由 warning 升为 error）：
+ *   error（阻断）：L1 bash -n 语法 / L2 kind 白名单 / L3 env 条件不得 `!= local`
+ *                 L4 变量引用存在性 / L5 ssh 行尾缺续行符
+ *   warning（提示）：L6 危险命令疑似本地上下文（远端 ssh 块内的 rm -rf 会误报，仅提示）
+ *
+ * ⚠️ L4 判据：只有「裸引用 ${X}」或「空兜底 ${X:-}」才算未声明；
+ *    `${X:-具体值}` 视为脚本自带兜底，不报。误报修复见 undeclaredVars()。
  */
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -177,12 +185,23 @@ function dangerousLocal(script) {
 function undeclaredVars(script, declared) {
   // 脚本内声明的：NAME=... / local NAME=... / for NAME in / read NAME / NAME=$(...)
   const local = new Set();
-  for (const m of script.matchAll(/^\s*(?:local\s+|export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)\s*=/gm)) local.add(m[1]);
+  // ⚠️ 旧正则用 `^\s*NAME=` 锚定行首，漏掉了「赋值不在行首」的写法，例如
+  //    `case ...) TAG="${COMMIT_ID##*/}" ;;` 与 `if ...; then TAG_ENV=...; else ...; fi`
+  //    → TAG / TAG_ENV 被误报未声明。改为按「前一个 token 是分隔符」判定。
+  for (const m of script.matchAll(
+    /(?:^|[;&|(){}\s])\s*(?:local\s+|export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)\s*=(?!=)/gm,
+  )) local.add(m[1]);
   for (const m of script.matchAll(/\bfor\s+([A-Z_][A-Z0-9_]*)\s+in\b/g)) local.add(m[1]);
   for (const m of script.matchAll(/\bread\s+(?:-r\s+)?([A-Z_][A-Z0-9_]*)/g)) local.add(m[1]);
 
-  // 带默认值的引用（`${X:-...}` / `${X:=...}` / `${X:?...}`）脚本已自带兜底，不算未声明
-  const stripped = script.replace(/\$\{[A-Z_][A-Z0-9_]*\s*(?:-([^}]*)|:[=?][^}]*)\}/g, '');
+  // 带「非空默认值」的引用（`${X:-值}` / `${X:=值}` / `${X:?值}`）脚本已自带兜底，不算未声明。
+  // ⚠️ 旧正则写成 `(?:-([^}]*)|:[=?][^}]*)`，匹配不到 `${X:-值}`（':' 在 '-' 前），
+  //    导致 130+ 条假阳性。现改为统一识别 `:-` `:=` `:?` `:+` `-` `=` `?` `+` 并判空：
+  //    默认值为空（`${X:-}`）等于静默展开成空串，仍视为引用并参与未声明检查。
+  const stripped = script.replace(
+    /\$\{([A-Z_][A-Z0-9_]*)\s*(?::-|:=|:?|\+|-|=|\?)([^}]*)\}/g,
+    (m, _name, def) => (def.trim() === '' ? m : ''),
+  );
 
   const used = new Set();
   for (const m of stripped.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g)) used.add(m[1]);
@@ -248,10 +267,12 @@ for (const a of actions) {
     warnings.push({ rule: 'L6', at, msg: `第 ${h.line} 行危险命令疑似本地上下文: ${h.text}` });
   }
   // L4 变量引用（平台注入 + 流水线变量 + 配置中心）
+  // 2026-09-30 升级为 error：假阳性已修（旧正则漏匹配 ${X:-值}、漏检非行首赋值），
+  // 且 13 个未登记变量已补进 deploy_pipeline_vars，现网 0 命中 → 可作门禁。
   const declared = new Set([...(varsByPipe.get(a.pipelineId) || []), ...configKeys]);
   const miss = undeclaredVars(a.script, declared);
   if (miss.length) {
-    warnings.push({ rule: 'L4', at, msg: `未声明变量引用: ${miss.join(', ')}` });
+    errors.push({ rule: 'L4', at, msg: `未声明变量引用: ${miss.join(', ')}（补进 deploy_pipeline_vars 或改用 ${'${X:-默认值}'}）` });
   }
 }
 
