@@ -203,7 +203,7 @@ is_passport_file() {
 R13_LINE_THRESHOLD="${R13_LINE_THRESHOLD:-5}"
 is_contract_file() {
   case "$1" in
-    scripts/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险）
+    archive/migrations/*) return 0 ;;               # 数据/结构迁移（含跨库误写风险，已归档至仓库根 archive/）
     packages/types/*) return 0 ;;                   # 共享常量：权限码 / 事件类型 / 枚举
     packages/agent-core/src/interfaces/*) return 0 ;;  # 协议契约（StreamEventType / RunInput）
     servers/mcp-gateway/src/*/tools/*) return 0 ;;  # MCP 工具注册
