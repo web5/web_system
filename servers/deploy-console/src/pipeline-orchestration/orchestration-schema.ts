@@ -46,8 +46,20 @@ export interface ScriptChecker {
   (script: string): void;
 }
 
+/**
+ * 变量引用存在性检查（pipeline-lint L4）。返回未声明变量名列表，空数组 = 通过。
+ * 可选 —— 不传则不做该检查（单测与不需要变量门禁的调用方保持原行为）。
+ */
+export interface VarChecker {
+  (script: string): string[];
+}
+
 /** 校验整棵树（steps 含各自 tasks/actions）；返回错误列表，空数组 = 通过 */
-export function validateTree(steps: StepInput[], checkScript: ScriptChecker): string[] {
+export function validateTree(
+  steps: StepInput[],
+  checkScript: ScriptChecker,
+  checkVars?: VarChecker,
+): string[] {
   const errs: string[] = [];
   const stepNames = new Set<string>();
 
@@ -115,6 +127,14 @@ export function validateTree(steps: StepInput[], checkScript: ScriptChecker): st
               checkScript(action.script);
             } catch (e) {
               errs.push(`${aPrefix}：脚本语法错误：${(e as Error).message.replace(/^shell 语法错误：/, '')}`);
+            }
+            if (checkVars) {
+              const miss = checkVars(action.script);
+              if (miss.length) {
+                errs.push(
+                  `${aPrefix}：引用了未声明变量 ${miss.join(', ')}（请在流水线变量或配置中心登记，或给默认值 ${'${X:-默认值}'}）`,
+                );
+              }
             }
           }
         });

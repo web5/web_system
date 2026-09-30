@@ -9,7 +9,10 @@ import { execSync } from 'child_process';
 import { DeployPipelineStepEntity } from '../entities/deploy-pipeline-step.entity';
 import { DeployPipelineTaskEntity } from '../entities/deploy-pipeline-task.entity';
 import { DeployPipelineActionEntity } from '../entities/deploy-pipeline-action.entity';
+import { DeployPipelineVarEntity } from '../entities/deploy-pipeline-var.entity';
+import { ConfigItemEntity } from '../entities/config-item.entity';
 import { validateTree, type StepInput, type TaskInput } from './orchestration-schema';
+import { undeclaredVars } from './script-vars';
 
 /**
  * 流水线编排（步骤 → 任务 → 动作）服务（specs/pipeline-step-task/design.md §4–§5）。
@@ -28,7 +31,27 @@ export class PipelineOrchestrationService {
     private readonly tasksRepo: Repository<DeployPipelineTaskEntity>,
     @InjectRepository(DeployPipelineActionEntity)
     private readonly actionsRepo: Repository<DeployPipelineActionEntity>,
+    @InjectRepository(DeployPipelineVarEntity)
+    private readonly varsRepo: Repository<DeployPipelineVarEntity>,
+    @InjectRepository(ConfigItemEntity)
+    private readonly configRepo: Repository<ConfigItemEntity>,
   ) {}
+
+  /**
+   * 本流水线「已声明变量」集合 = 流水线变量 + 配置中心键（resolveStageVars 全量注入）。
+   * 保存动作脚本时用它做变量引用存在性门禁，避免运行时静默展开成空串。
+   */
+  private async declaredVars(pipelineId: string): Promise<Set<string>> {
+    // 量级很小（单条流水线几十个变量、配置键百级），直接取整行再取 key
+    const [vars, configs] = await Promise.all([
+      this.varsRepo.find({ where: { pipelineId } }),
+      this.configRepo.find(),
+    ]);
+    const set = new Set<string>();
+    for (const v of vars) set.add(v.key);
+    for (const c of configs) set.add(c.key);
+    return set;
+  }
 
   /** shell 语法校验（bash -n）；与 step-command 同款实现 */
   checkScript(script: string): void {
@@ -160,7 +183,13 @@ export class PipelineOrchestrationService {
     const step = await this.stepsRepo.findOne({ where: { id: stepId, pipelineId } });
     if (!step) throw new NotFoundException('步骤不存在');
 
-    const errs = validateTree([{ name: step.name, tasks }], (s) => this.checkScript(s));
+    // 保存即门禁：语法（bash -n）+ 变量引用存在性（L4），任一不过 → 400，不落库
+    const declared = await this.declaredVars(pipelineId);
+    const errs = validateTree(
+      [{ name: step.name, tasks }],
+      (s) => this.checkScript(s),
+      (s) => undeclaredVars(s, declared),
+    );
     if (errs.length) throw new BadRequestException(errs.join('；'));
 
     // managed 保护：库中托管动作必须原样保留（名字不变且未删除；脚本内容允许更新）

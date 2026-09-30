@@ -6,6 +6,7 @@
  * 审核任务不携带动作与变量 / 脚本任务至少一个动作 / 脚本非空与语法。
  */
 import { validateTree, type StepInput } from './orchestration-schema';
+import { undeclaredVars } from './script-vars';
 
 const okScript = () => undefined; // bash -n 通过的 mock
 const badScript = () => {
@@ -126,5 +127,18 @@ describe('validateTree（编排树结构校验）', () => {
   it('步骤无任务是合法的（纯分组占位）', () => {
     const tree: StepInput[] = [{ name: '占位' }];
     expect(validateTree(tree, okScript)).toEqual([]);
+  });
+
+  it('变量门禁：传 checkVars 时未声明变量被拒，不传则不做该检查', () => {
+    const tree = validTree();
+    tree[0].tasks![0].actions![0].script = 'curl "$CONSOLE_TOKEN_PROD"';
+    // 不传 checkVars —— 与历史行为一致，不拦
+    expect(validateTree(tree, okScript)).toEqual([]);
+    // 传 checkVars —— 拒绝并说明修法
+    const errs = validateTree(tree, okScript, (s) => undeclaredVars(s));
+    expect(errs.some((e) => e.includes('CONSOLE_TOKEN_PROD') && e.includes('未声明变量'))).toBe(true);
+    // 登记后放行（基础样例里的 SRC/DST 一并登记，它们属于该断言的无关噪音）
+    const declared = new Set(['CONSOLE_TOKEN_PROD', 'SRC', 'DST']);
+    expect(validateTree(tree, okScript, (s) => undeclaredVars(s, declared))).toEqual([]);
   });
 });
