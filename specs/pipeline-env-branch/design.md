@@ -107,7 +107,7 @@ esac
 | `pipeline-step-command.service.ts` | upsert 支持 envBranches：校验 → 拼装 → 写 command + actions[shell].code |
 | `pipeline-step-command.controller.ts` | PUT body 扩展；GET 返回 envBranches |
 | `apps/deploy-console/src/views/PipelineEdit.vue` | 环境分支编辑器 |
-| `scripts/migrations/p14-env-branches-seed.mjs` | 把 admin-dev 现有 case 脚本拆成 `local` / `dev` 两段落库 |
+| `archive/migrations/p14-env-branches-seed.mjs` | 把 admin-dev 现有 case 脚本拆成 `local` / `dev` 两段落库 |
 
 ---
 

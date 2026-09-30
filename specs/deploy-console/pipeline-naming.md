@@ -17,7 +17,7 @@
 
 - UI 列表进编辑页用的是**模板 id**：`PipelineCenter.vue:174` → `/pipelines/:id/edit`
 - 创建后回跳的也是模板 id：`PipelineEdit.vue:426` 的 `created.id` 来自 `pipelineTemplateApi.create()`
-- 变量表的字段叫 `pipeline_id`，**装的却是 `tpl-…`**：`scripts/migrations/p5-…mjs:302`
+- 变量表的字段叫 `pipeline_id`，**装的却是 `tpl-…`**：`archive/migrations/p5-…mjs:302`
 - 残留规模：前端 `pipelineTemplateApi` 18 处；后端 `templateId` / `tpl-` 87 处
 
 也就是说：**"流水线"这个词在当前实现里指向两张不同的表，取决于你在哪一层说话** ——
@@ -56,7 +56,7 @@
 
 `deploy_pipeline_templates` 这个名字**就此释放**，留给将来的「用户模板」（见 §7）。
 
-执行方式（`scripts/migrations/p9-rename-pipeline-tables.mjs`）：
+执行方式（`archive/migrations/p9-rename-pipeline-tables.mjs`）：
 先 `CREATE TABLE … AS SELECT` 备份两张表 → `RENAME TABLE` → 校验行数；
 支持 `--rollback`（从备份表换回）。**改名期间需停 deploy-console**，改完发布新代码再启动。
 

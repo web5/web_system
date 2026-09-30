@@ -348,7 +348,7 @@ interface DeployStrategy {
 
 ## 7. 迁移方案（重写，去 slot）
 
-脚本：`scripts/migrations/p10-deploy-console-domain-split.mjs`（幂等）
+脚本：`archive/migrations/p10-deploy-console-domain-split.mjs`（幂等）
 
 | 步骤 | 内容 | 回退 |
 |---|---|---|

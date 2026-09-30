@@ -144,14 +144,14 @@
 > ③ 指针/版本目录只认 `<key>/<envId>/`。推论：**产品线段必须等于 envId**，否则三者对不上。
 >
 > **按方案 A 落地**（2026-09-21，`specs/app-artifact-env-dir/design.md` §4/§5）：
-> `scripts/migrations/p22-app-env-dir-artifact.mjs` 改流水线 DB 脚本 —— 构建动作在 local 用
+> `archive/migrations/p22-app-env-dir-artifact.mjs` 改流水线 DB 脚本 —— 构建动作在 local 用
 > `RELEASE_TAG=<DEPLOY_ENV>/<纯commit>`（dev/prod 不变），local 投递落
 > `modules/<PUBLIC_PATH>/<DEPLOY_ENV>/<纯commit>/` 并改写 env 入口指针（System.register），
 > 另落一份 legacy 兼容副本使「未匹配站点」不 404。首跑 4 条动作、复跑零差异；投递脚本沙箱实跑通过。
 > 剩余：G3 的 DB 侧（`deploy_app_env_versions` 同步，`PointerExecutor` 只写旧表 —— 不影响加载，
 > 只影响控制台版本矩阵显示）、dev/prod 是否同口径（待定）。
 >
-> **历史记录瘦身 + 兼容下线**（2026-09-21，`scripts/migrations/p23-cleanup-history.mjs`）：
+> **历史记录瘦身 + 兼容下线**（2026-09-21，`archive/migrations/p23-cleanup-history.mjs`）：
 > 用户定「历史构建产物不再考虑兼容」。DB：流水线运行 53→10、审批 47→9、版本记录 257→19，
 > 遗留 `_bak_*` 表 DROP 10 张（261 行）；磁盘：`modules/` 下历史产物目录共 130 个移入
 > `/tmp/p23-trash-*`，只留指针指向的版本（`portal/local/20d1380`、`admin/local/20d1380`、
@@ -172,7 +172,7 @@
 > **应用域激活**：校验产物存在（fail-fast）→ `writeEnvEntryPointer` 写磁盘指针 →
 > upsert `deploy_app_env_versions`（current/previous）。改动：`InternalReleaseController`（+env-dir 分支、
 > 注入 `AppsService`）、`DeployModule`（导入 `AppsModule`）、`AppsService.findAppOrNull`、
-> `scripts/migrations/p24-app-pointer-via-platform.mjs`（改 2 条 local 投递动作，幂等）。
+> `archive/migrations/p24-app-pointer-via-platform.mjs`（改 2 条 local 投递动作，幂等）。
 > 已验证：幂等 / 401 / 不存在版本 fail-fast 400 / 真实切换时磁盘指针与版本表同时更新 / 浏览器回归通过。
 > **缓存结论**：本路径无缓存（控制台读表与磁盘指针都是直连）；gateway 的 10s 版本缓存读的是旧表，
 > env-dir 加载路径不吃它 —— 无需额外失效。
@@ -202,18 +202,18 @@
 | 步骤 | 状态 | 说明 / 验证 |
 |---|---|---|
 | **M4-lite**（前端模块 → 应用域） | ✅ 已完成 | `AppsService.onModuleInit` 幂等种子：历史前端模块按类型映射进 `deploy_apps`（`isShell→shell`、`mini→mini-app`、`micro-frontend→micro-frontend`、`frontend→spa`），后端不进应用域。只补不覆盖 → 应用列表出现 `portal / shell / mini-contract / admin` |
-| **M5 + M7**（旧版本指针 + 产物 → `envId` 布局） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p11-app-env-artifacts.mjs`：`deploy_deployments` → `deploy_app_env_versions`（版本归一化纯 commit）+ 复制产物到 `<key>/<envId>/<commit>/` + 生成 A′ 入口指针 |
+| **M5 + M7**（旧版本指针 + 产物 → `envId` 布局） | ✅ 已完成 | 幂等脚本 `archive/migrations/p11-app-env-artifacts.mjs`：`deploy_deployments` → `deploy_app_env_versions`（版本归一化纯 commit）+ 复制产物到 `<key>/<envId>/<commit>/` + 生成 A′ 入口指针 |
 | M1–M3（建表 / 站点 / 环境种子） | ✅ | 由 `synchronize` + `EnvsService.ensureBuiltin` 承担 |
 | M6（服务指向） | ✅ | 由 `ServicesService.ensureSeeded` 承担（旧 `deploy_env_service_routes` → `deploy_service_envs`） |
-| **M12**（同模块多环境流水线合并为 1 条） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p12-merge-module-pipelines.mjs`：每模块保留 1 条（优先 env=dev），`env` 置 NULL（环境无关）、名称去环境后缀；冗余模板连同 `deploy_pipeline_step_commands` / `deploy_pipeline_vars` 一并清理。**48 → 16 条**（清理 160 行节点命令 + 64 行变量），复跑幂等 |
+| **M12**（同模块多环境流水线合并为 1 条） | ✅ 已完成 | 幂等脚本 `archive/migrations/p12-merge-module-pipelines.mjs`：每模块保留 1 条（优先 env=dev），`env` 置 NULL（环境无关）、名称去环境后缀；冗余模板连同 `deploy_pipeline_step_commands` / `deploy_pipeline_vars` 一并清理。**48 → 16 条**（清理 160 行节点命令 + 64 行变量），复跑幂等 |
 | **M21**（微前端发布落盘路径修复 p20） | ✅ 已完成 | 事故：门户加载失败（`portal@portal-dev/65c00a9` 404）。根因：网关按指针值直出 `/static/modules/<key>/<currentVersion>/index.js`，而 release 落盘与指针值不一致——portal/shell/mini-contract 无条件远程直投（local 发布投到远程机、本机无产物）；admin 落 `modules/<key>/<ENV_ID>/<commit>`（指针是 `<流水线key>/<commit>`）。修复：4 条微前端线按环境分支（local 落本机 `modules/<PUBLIC_PATH>/<COMMIT_ID>` 与指针值逐段一致；dev 保持远程 scp）；admin 复制补齐历史产物路径。**验证**：重新发布 portal/local → 产物落位 + 指针一致 + 网关直出 200；admin/portal 四环境指针路径全部 FS✓HTTP200；根页 200（shell 正常）|
-| **M20**（旧链路数据退役 p17） | ✅ 已完成 | `scripts/migrations/p17-retire-legacy-tables.mjs`：RENAME 归档（库内 _bak 惯例，可回退）——step_commands(90 行，含废弃列 env_branches) / step_branches(2 行) → `_bak_20260921`；前置校验新表有数据防断粮。**退役后回归全绿**：admin/local 新引擎全链路（提交→审批挂起/恢复→执行→版本+指针落库 30d9b1f）不依赖旧表；旧表由 synchronize 重建为空表、seed 服务回写 48 行平台脚本（代码兼容层保留，新链不读，下批删代码） |
+| **M20**（旧链路数据退役 p17） | ✅ 已完成 | `archive/migrations/p17-retire-legacy-tables.mjs`：RENAME 归档（库内 _bak 惯例，可回退）——step_commands(90 行，含废弃列 env_branches) / step_branches(2 行) → `_bak_20260921`；前置校验新表有数据防断粮。**退役后回归全绿**：admin/local 新引擎全链路（提交→审批挂起/恢复→执行→版本+指针落库 30d9b1f）不依赖旧表；旧表由 synchronize 重建为空表、seed 服务回写 48 行平台脚本（代码兼容层保留，新链不读，下批删代码） |
 | **M19**（编排新模型 P4：前端三层画布） | ✅ 已完成 | `OrchestrationEditor.vue`（对接 /console/api/pipelines/:id/steps 整树接口）：步骤→任务→动作三层画布（测量式 SVG 连线、分叉/箭头/中点＋插入步骤、动作块紧贴任务头圆角 2px、任务 tag「任务」/动作 tag「脚本」、hover × 删除、managed 动作禁删）；两态抽屉（任务总览/单动作，无保存无删除）；页头按钮组（取消/保存；删除走画布与删除流水线）。PipelineEdit「流程编排」tab 双轨：新表有数据→新画布，否则旧节点画布。**实测**（浏览器+截图基线 docs/ui/baselines/deploy-console-pipeline-edit-orchestration-after.png）：admin 发布树正确渲染（4 步骤/5 任务/6 动作、分叉连线、if 徽标）；踩坑：命令式创建的连线＋号吃不到 scoped CSS（改非 scoped 样式块） |
 | **M18**（编排新模型 P3：迁移 + 主链路接入） | ✅ 已完成 | ① 引擎增强：挂起恢复 skipThroughStep / afterTask 平台收尾 / PipelineSuspended 透传；runScript 改传 baseEnv+taskEnv 两段（调用方惰性重组——一次性快照会让 build 拿到回填前的空 COMMIT_ID，已实测踩坑）。② 接入主 run()：实例 orchestration 快照列（新表有数据→新引擎，否则旧链路并存）；提交时 getTree 固化；审批经 approvals.createNode + PipelineSuspended 挂起，approve 恢复跳过已完成步骤；成功 setPointer。③ write-version 动作脚本化：平台工具 write-version.mjs（直连部署库，随 console assets 分发）。④ p16 迁移（幂等）：16 条流水线 → 64 步骤/65 任务/66 动作；旧默认分支补互斥条件（`DEPLOY_ENV != local`）——旧「兜底」≠新「恒执行」，不补会让 local 发布时 dev 分支并行执行（已实测踩坑）。**端到端（admin/env=local）**：快照→git→build→审批挂起→恢复跳过已完成→local 命中（投递+write-version 串行）→dev 条件跳过→版本记录+指针落库，全绿 |
 | **M17**（编排新模型 P2 执行引擎·调度器） | ✅ 已完成 | `orchestration-engine.ts` 纯依赖注入调度器（14 单测，V2/V4/V5 语义全覆盖）：步骤串行/步骤内并行、条件过滤（非法 fail-fast / 未命中跳过留痕 / 全不命中步骤失败）、动作串行链失败即断、审核挂起（拒绝/超时按 onReject/timeoutAction）、env 合成（任务级覆盖 baseEnv）、取消中止。脚本执行/审批等待以回调注入，不依赖容器与 DB；P3 接入主 run() 与 p16 迁移 |
 | **M16**（编排新模型 P1 骨架） | ✅ 已完成 | 三张新表实体（steps/tasks/actions）+ `pipeline-orchestration` 模块：整树读取（IN 查询无 N+1）、步骤按名 upsert（id 稳定保任务）、任务+动作全量保存、managed 动作保护（不可删/不可改名）、条件与 bash -n 校验（`orchestration-schema.ts` 纯函数 11 单测）。**实测**：保存/managed 保护 400/非法条件 400/upsert 幂等 id 稳定/级联删除全过（6211 验证实例）。P2 执行引擎、P3 p16 迁移待做 |
 | **M14**（节点「环境分支」可编辑） | ✅ 已完成 | 设计 `specs/pipeline-env-branch/design.md`：每环境一段脚本，保存时拼装成单一执行体（同步写 `command` 与 `actions[shell].code`），未配置脚本的环境 fail-fast。纯函数 `pipeline/steps/env-branch.ts`(8 单测) + service/controller 接线 + 前端 `EnvBranchEditor.vue`；`admin 发布` 的 release 已落 `local`（本机 cp）/ `dev`（远程 scp）两段 |
-| **M13**（流水线配置完善：git URL 显式化 + 发布节点按环境分支 + admin 线合并） | ✅ 已完成 | 幂等脚本 `scripts/migrations/p13-pipeline-release-config.mjs`（设计 `specs/pipeline-release-config/design.md`）：① 配置中心 global 写入 `REPO_URL`（`git@github.com:web5/web_system.git`）；② 16 条流水线 git 脚本加「origin 与 REPO_URL 一致性校验 + 回显」；③ admin 两条线合并为「admin 发布」一条，release 脚本改 `case $DEPLOY_ENV`（local=本机 cp / 其他=scp），删除 `admin-local` 模板。**复跑幂等**（配置 0 / git 0 / release 0） |
+| **M13**（流水线配置完善：git URL 显式化 + 发布节点按环境分支 + admin 线合并） | ✅ 已完成 | 幂等脚本 `archive/migrations/p13-pipeline-release-config.mjs`（设计 `specs/pipeline-release-config/design.md`）：① 配置中心 global 写入 `REPO_URL`（`git@github.com:web5/web_system.git`）；② 16 条流水线 git 脚本加「origin 与 REPO_URL 一致性校验 + 回显」；③ admin 两条线合并为「admin 发布」一条，release 脚本改 `case $DEPLOY_ENV`（local=本机 cp / 其他=scp），删除 `admin-local` 模板。**复跑幂等**（配置 0 / git 0 / release 0） |
 | **M8**（gateway 双读开关 `DEPLOY_LEGACY_READ` / 默认切新） | ✅ 已完成 | `IndexHtmlService.buildManifest`（唯一来源）加开关：`DEPLOY_LEGACY_READ=1` → 短路 `buildLegacyManifest()`，只从 `deploy_modules` + `deploy_deployments` 组装，**输出与新格式同构**（`site/defaultEnv/switchable/envs/byEnv`），前端无需分支即可整体回退。启动打一条读取源日志；返回体带 `source`（`new` / `new:nosite` / `new:error` / `legacy`）便于排障 |
 | M9（旧表 DROP + 旧页面清理） | ⏸️ 半成品（有明确阻塞） | 已完成：① `/modules` CRUD controller 删除；② `ModuleRegistry` 读源切新表；③ 旧页面 `ModuleDetail/ModuleEdit` 早已不存在。**阻塞见下方 M9 阻塞清单** |
 

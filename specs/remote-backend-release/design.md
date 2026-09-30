@@ -2,7 +2,7 @@
 
 > 建立：2026-09-23 ｜ 状态：**B1 / B2 已实施并在 dev 实证通过**（含受控回滚演练）；B3~B5 待做
 > 授权记录：Q1~Q5 按本文推荐执行；需要动目标机 / 库的操作已获授权（执行时会先打印将要变更的内容）
-> 实现：`scripts/migrations/p26-remote-backend-release.mjs`（PR #132）｜实证、事故与教训见 §11
+> 实现：`archive/migrations/p26-remote-backend-release.mjs`（PR #132）｜实证、事故与教训见 §11
 > 相关：`specs/pipeline-restart-verify-as-action/design.md`（本方案的前身与留白出处）、
 > `specs/pipeline-node-model/design.md`、`specs/pipeline-env-scripts/design.md`、
 > `specs/release-platform/design.md`、`docs/development/local-release-runbook.md`、
@@ -186,9 +186,9 @@
 ### 11.1 落地物
 | 物 | 位置 |
 |---|---|
-| 迁移（幂等，含 `bash -n` 自检 / `DRY_RUN` / `ROLLBACK` / 动库前打印将变更行） | `scripts/migrations/p26-remote-backend-release.mjs` |
+| 迁移（幂等，含 `bash -n` 自检 / `DRY_RUN` / `ROLLBACK` / 动库前打印将变更行） | `archive/migrations/p26-remote-backend-release.mjs` |
 | 挂载结果（`tpl-system-service-dev` 的 `dev` 分支任务） | `发布(0) → write-version(1) → sync(5) → restart(11) → verify(21)` |
-| 模块范围可覆盖 | `MODULES=a,b,c node scripts/migrations/p26-remote-backend-release.mjs`（B3 用） |
+| 模块范围可覆盖 | `MODULES=a,b,c node archive/migrations/p26-remote-backend-release.mjs`（B3 用） |
 
 ### 11.2 两次真实事故（都已修，教训写进脚本注释）
 | # | 事故 | 根因 | 修法 / 影响 |

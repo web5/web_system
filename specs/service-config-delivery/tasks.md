@@ -55,7 +55,7 @@
 
 **验收**：控制台手动「部署」shell → 日志出现「已通知 gateway 刷新缓存」；gateway 日志出现「版本缓存已失效」。
 
-## P1 · 流水线脚本接入下发（已实施：`scripts/migrations/p25-restart-config-dispatch.mjs`）
+## P1 · 流水线脚本接入下发（已实施：`archive/migrations/p25-restart-config-dispatch.mjs`）
 
 - [x] `config.controller.ts` 加 `@Public()` + `x-internal-key` 的 `GET internal/dispatch/:serviceKey?envId=`（`200` 正文 / `204` 无 module 级条目 / `401`）
 - [x] `restart` 动作脚本（DB，11 个后端模板）：重启前 `curl` 该接口写 `.env.generated`，**失败即 fail-fast（不落地、不重启）**；改前 `bash -n` 自检

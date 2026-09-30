@@ -34,7 +34,7 @@
 
 ### 2.2 数据（prod）
 
-`scripts/migrations/p29-prod-new-deploy-tables.mjs`：
+`archive/migrations/p29-prod-new-deploy-tables.mjs`：
 
 - 建 4 表（`deploy_sites` / `deploy_envs` / `deploy_apps` / `deploy_app_env_versions`），DDL 与 dev 实测一致，`CREATE TABLE IF NOT EXISTS` + information_schema 守卫，**幂等**；
 - 种子：site `prod`→`kedouai.com`、env `prod`(isProd)、apps `admin`/`portal`(env-dir) + `shell`(site-version)、版本指针 `d9889ff`；

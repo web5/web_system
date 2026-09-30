@@ -128,8 +128,8 @@ gateway 直读 `public/shell/`，不能走版本目录；覆盖前自动备份 `
 | `servers/deploy-console/src/shell/command.service.ts` | `pm2Bin()` / `pnpmBin()` / `nodeBinDir()` / `exec()`（读 `RELEASE_PM2_BIN` 等） |
 | `servers/deploy-console/src/deploy/deploy.module.ts` | 已引入 `ShellModule`（提供 `CommandService`） |
 | `servers/deploy-console/src/deploy/deploy.service.spec.ts` | 现有 8 条相关单测 |
-| `scripts/migrations/p5-pipeline-shell-approval-3env.mjs` | `MODULES`（改投递路径后重跑即生效）、`localUploadScript` / `remoteUploadScript` |
-| `scripts/migrations/p6-module-env-ownership.mjs` | 环境归属（deploy_environments 复合主键） |
+| `archive/migrations/p5-pipeline-shell-approval-3env.mjs` | `MODULES`（改投递路径后重跑即生效）、`localUploadScript` / `remoteUploadScript` |
+| `archive/migrations/p6-module-env-ownership.mjs` | 环境归属（deploy_environments 复合主键） |
 
 ## 4. 相关文档
 

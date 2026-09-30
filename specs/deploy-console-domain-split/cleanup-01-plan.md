@@ -47,7 +47,7 @@
 |---|---|---|
 | D1 | `scripts/publish-deploy-console.sh`（含 6200 孤儿进程清理、`pm2 delete + start`、`--skip-sync/--skip-health`） | deploy-console 不能走流水线（自杀式 restart），该脚本是唯一正确通道 |
 | D2 | `scripts/release-deploy-console.sh`、`scripts/apply-migrations.sh` | 发布与迁移的必需入口 |
-| D3 | `scripts/migrations/p3–p9`（一次性数据迁移） | 已执行但保留作审计留痕（执行完可归档，不删） |
+| D3 | `archive/migrations/p3–p9`（一次性数据迁移） | 已执行但保留作审计留痕（执行完可归档，不删） |
 
 ---
 

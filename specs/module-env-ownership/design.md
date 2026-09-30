@@ -2,7 +2,7 @@
 
 > 状态：**P0 已实现（2026-09-15，待迁移脚本执行 + 联调）**；Q1/Q2/Q3 已由用户确认，Q4/Q5/Q6 按本文建议执行。
 > 变更日志：
-> - 2026-09-15 P0 落地：实体复合主键 + `address/server_name/port`、子资源路由 `/modules/:key/environments`、种子按模块（含新模块懒补 dev/prod）、monitor/server.service 适配、前端「本模块环境」Tab（覆盖所有模块类型）、迁移脚本 `scripts/migrations/p5-module-env-ownership.mjs`
+> - 2026-09-15 P0 落地：实体复合主键 + `address/server_name/port`、子资源路由 `/modules/:key/environments`、种子按模块（含新模块懒补 dev/prod）、monitor/server.service 适配、前端「本模块环境」Tab（覆盖所有模块类型）、迁移脚本 `archive/migrations/p5-module-env-ownership.mjs`
 > 决策来源：用户 2026-09-15 明确「一个模块有多个环境，一个环境只属于某个模块；dev/prod 每模块各一份」
 > 关联代码：`servers/deploy-console/src/entities/deploy-environment.entity.ts`、`src/environment/*`、`src/monitor/monitor.service.ts`、`src/server/server.service.ts`、`src/config/*`、`apps/deploy-console/src/components/EnvManagerPanel.vue`、`src/views/ModuleDetail.vue`
 > 接口契约：见同目录 `api-design.md`
@@ -152,7 +152,7 @@ ALTER TABLE deploy_environments
 | M5 | 代码切双读（`address` 优先，回退 `ports[module_key]`） | 切回只读 `ports` |
 | M6 | 观察一个发布周期 → P2 物理删 `ports` 列 + 删 `__legacy__` 行 + 删旧路由 | — |
 
-脚本形态：新增 `scripts/migrations/p5-module-env-ownership.mjs`（参照现有 `scripts/migrations/p2-ports-to-addresses.mjs`），支持 `--dry-run`。
+脚本形态：新增 `archive/migrations/p5-module-env-ownership.mjs`（参照现有 `archive/migrations/p2-ports-to-addresses.mjs`），支持 `--dry-run`。
 
 ---
 

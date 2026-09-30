@@ -101,7 +101,7 @@ D1 并入 monorepo（`servers/mp-platform` + `apps/mp-admin` 微前端子模块�
 | T1 | 执行模块改名迁移 | 目标库 **`web_system_deploy`**（dev 与堡垒机共用同一云实例）：`mysqldump` 备份 → `mysql -u <user> -p web_system_deploy < migrations/0006_rename_mini_contract_to_kedou_ai_minigram.sql` → 复核校验 SQL（文件末尾注释）→ restart `web-deploy-console` + `web-gateway` 清缓存 |
 | T6 | RAG 语料重灌 | 改名改了 `scripts/self-knowledge/out/dev-guide.md`，但库内 chunks 仍是旧文本（ingest 按 checksum 幂等，**不会自动重试**）：先 `DELETE FROM web_system_knowledge.knowledge_docs;` 再 `node scripts/self-knowledge/load.mjs`，验证 `ok(ready, chunks=N)` |
 
-**注意（不要误改的历史件）**：`migrations/0005_*.sql`、`scripts/migrations/p5-pipeline-shell-approval-3env.mjs` 里的 `mini-contract` 是历史记录，保持原样；模块**类型枚举** `mini-app`（`common/dto.ts`、`deploy-module.entity.ts`、`deploy-module-stage-command.entity.ts` 的 `DEFAULT_BUILD_TEMPLATE` 键名）是既有契约，也不要改。
+**注意（不要误改的历史件）**：`migrations/0005_*.sql`、`archive/migrations/p5-pipeline-shell-approval-3env.mjs` 里的 `mini-contract` 是历史记录，保持原样；模块**类型枚举** `mini-app`（`common/dto.ts`、`deploy-module.entity.ts`、`deploy-module-stage-command.entity.ts` 的 `DEFAULT_BUILD_TEMPLATE` 键名）是既有契约，也不要改。
 
 ---
 

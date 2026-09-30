@@ -49,7 +49,7 @@
 
 ### P0-1 `deploy_deployments` 加唯一约束
 
-**文件**：`scripts/migrations/p0-dedupe-deployments.sql`（新增）+ 集成测试脚本
+**文件**：`archive/migrations/p0-dedupe-deployments.sql`（新增）+ 集成测试脚本
 
 ```sql
 -- 1) 去重：每组 (env_id, module_key) 保留 deployed_at 最新一条
@@ -236,7 +236,7 @@ DTO 追加 `ServerDto`、`EnvServiceRouteDto` 到 `common/dto.ts`。
 | 阶段 | 文件 | 操作 |
 |---|---|---|
 | 测试基建 | `servers/deploy-console/package.json` / `jest.config.js` | 改/新增 |
-| P0 | `scripts/migrations/p0-dedupe-deployments.sql` | 新增 |
+| P0 | `archive/migrations/p0-dedupe-deployments.sql` | 新增 |
 | P0 | `servers/deploy-console/src/deploy/deploy.service.ts` | 改（upsert + 命名 + 版本号） |
 | P0 | `servers/deploy-console/src/deploy/deploy.controller.ts` | 改（audit 命名） |
 | P1 | `servers/deploy-console/src/entities/deploy-server.entity.ts` | 新增 |

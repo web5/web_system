@@ -10,7 +10,7 @@
 
 | 现象 | 证据 |
 |---|---|
-| 一个模块有 **3 条流水线**（local / dev / prod），内容几乎相同 | `scripts/migrations/p5-…mjs` 为每个模块 × 3 环境各建 `tpl-<key>-<env>` |
+| 一个模块有 **3 条流水线**（local / dev / prod），内容几乎相同 | `archive/migrations/p5-…mjs` 为每个模块 × 3 环境各建 `tpl-<key>-<env>` |
 | 三条的差异**只有投递变量** | 同文件：local 只写 `PUBLISH_PATH`（本机路径），dev/prod 追加 `PUBLISH_HOST` / `PUBLISH_USER`；节点序列与 actions 三条完全一样 |
 | 投递路径**硬编码在流水线变量里** | `pipeline.service.ts` 注入 `BUILD_OUTPUT_DIR` / `ARTIFACT_DIR`；`PUBLISH_PATH` 来自流水线变量表 |
 | 产物目录分裂成两套 | 前端类 `servers/gateway/public/static/modules/<key>/<版本>/`；后台类 `servers/<dir>/<版本>/` |

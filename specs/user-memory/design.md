@@ -42,7 +42,7 @@
 
 ### 3.3 建表（DDL）
 
-项目有正式迁移机制：`scripts/migrations/*.sql` + `scripts/apply-migrations.sh <local|dev|prod>`（`schema_migrations` 幂等记账，文件头 `-- @database <db>` 指定目标库）。本次两张新表已由 `scripts/migrations/p26-glossary-user-memory-tables.sql` 建表（幂等 CREATE TABLE IF NOT EXISTS）。三个新实体都要显式注册进 `servers/user-service/src/app.module.ts` 的 entities 数组。
+项目有正式迁移机制：`scripts/migrations/*.sql` + `scripts/apply-migrations.sh <local|dev|prod>`（`schema_migrations` 幂等记账，文件头 `-- @database <db>` 指定目标库）。本次两张新表已由 `archive/migrations/p26-glossary-user-memory-tables.sql` 建表（幂等 CREATE TABLE IF NOT EXISTS）。三个新实体都要显式注册进 `servers/user-service/src/app.module.ts` 的 entities 数组。
 
 ## 4 更新机制（PostRunHook 插件 + internal 写接口）
 

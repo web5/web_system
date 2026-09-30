@@ -96,7 +96,7 @@ esac
 
 ## 4 执行
 
-迁移脚本 `scripts/migrations/p13-pipeline-release-config.mjs`（幂等，可重跑，支持 `DRY_RUN=1`）：
+迁移脚本 `archive/migrations/p13-pipeline-release-config.mjs`（幂等，可重跑，支持 `DRY_RUN=1`）：
 
 1. 备份到 `/tmp/p13-backup-<ts>.json`（config 行 + git/release 脚本 + admin-local 三表数据）。
 2. 写 `REPO_URL`（`INSERT ... ON DUPLICATE KEY UPDATE`）。

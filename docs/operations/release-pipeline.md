@@ -666,7 +666,7 @@ mysql -h<DB_PUBLIC_HOST> -P<DB_PORT> -u<DB_USER> <DB_NAME_DEPLOY> < /tmp/deploy-
 - `docs/operations/release-pipeline.md`（本文档）— 发布规范（"怎么做"）
 - `docs/operations/release-checklist.md` — 发布执行单（"逐项打勾"）
 - `docs/operations/required-service-urls.md` — 各服务 `.env` 必须声明的 URL 清单
-- `scripts/migrations/p2-ports-to-addresses.mjs` — 已迁移过的 P2 脚本参考
+- `archive/migrations/p2-ports-to-addresses.mjs` — 已迁移过的 P2 脚本参考
 - `nginx-proxy.conf` / `nginx-server.conf` / `local.nginx.conf` — 反向代理模板
 - `servers/deploy-console/src/monitor/monitor.service.ts` — 健康检查实现
 - `servers/deploy-console/src/envs/envs.service.ts` — 内置 prod 站点 seed

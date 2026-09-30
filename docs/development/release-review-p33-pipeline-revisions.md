@@ -175,7 +175,7 @@ commit trailer 建议：`Release: docs/development/release-review-p33-pipeline-r
 
 ### R2 · 阻塞 · C1/C5 · 迁移目标库与服务库必须一致
 - **反例**：p33 默认取 `DB_NAME` 或 `.env` 的 `DB_DATABASE`（实测该文件只有 `MYSQL_*`），而服务连的是 `MYSQL_DB`；二者不同名 → 迁移写 A 库、服务同步 B 库，跨库误写且无报错。
-- **修法**：执行前 `grep MYSQL_DB servers/deploy-console/.env`（prod 机上取）→ 显式 `DB_NAME=<该库> node scripts/migrations/p33-pipeline-revisions.mjs` → 用文首 4 条核验 SQL **在同库**验证。**禁止**凭「dev 执行过」推断 prod。
+- **修法**：执行前 `grep MYSQL_DB servers/deploy-console/.env`（prod 机上取）→ 显式 `DB_NAME=<该库> node archive/migrations/p33-pipeline-revisions.mjs` → 用文首 4 条核验 SQL **在同库**验证。**禁止**凭「dev 执行过」推断 prod。
 
 ### R3 · 阻塞 · A2 · 分支与提交尚未落地（待办型，一条命令可清零）
 - **修法**：`git switch -c feat/pipeline-config-revision` → 只提交本次 5 个代码文件 + `p33-pipeline-revisions.mjs` + 相关文档 → push → 在发布目录 `git -C <发布目录> log --oneline -1` 核 sha 与本地一致。

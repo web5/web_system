@@ -64,9 +64,9 @@ gh pr list --state open --json number,headRefName,title --template '{{range .}}#
 
 | # | 主题 | 落点 | 状态 |
 |---|---|---|---|
-| A | 远端后端发布能力（B1/B2） | `scripts/migrations/p26-remote-backend-release.mjs`（sync/restart/verify 远端动作） | ✅ 已合入 master（PR #135） |
-| B | 远端写库（B6） | `scripts/migrations/p27-remote-release-remote-db.mjs`（`write-version（远端）`/`pointer（远端）`，远端分支停用写本机库动作，密钥经 ssh 从目标机 `.env` 取） | ✅ 已合入（#135） |
-| C | 远端微前端投递目录修正 | `scripts/migrations/p28-remote-mf-envdir.mjs`（改回 env-dir：`modules/<k>/<envId>/<commit>/`） | ✅ 已合入（#135） |
+| A | 远端后端发布能力（B1/B2） | `archive/migrations/p26-remote-backend-release.mjs`（sync/restart/verify 远端动作） | ✅ 已合入 master（PR #135） |
+| B | 远端写库（B6） | `archive/migrations/p27-remote-release-remote-db.mjs`（`write-version（远端）`/`pointer（远端）`，远端分支停用写本机库动作，密钥经 ssh 从目标机 `.env` 取） | ✅ 已合入（#135） |
+| C | 远端微前端投递目录修正 | `archive/migrations/p28-remote-mf-envdir.mjs`（改回 env-dir：`modules/<k>/<envId>/<commit>/`） | ✅ 已合入（#135） |
 | D | 控制台远端升级脚本 | `scripts/publish-deploy-console.sh --env dev\|prod`（构建→打包→远端备份换 dist→重启→探活→失败回滚；内建 JWT_SECRET / 模板名唯一性前置校验） | ✅ 已合入（#135） |
 | E | **端口解析修复** | `servers/deploy-console/src/pipeline/pipeline.service.ts` 的 `pickStagePort`；远端取目标环境登记，**绝不回落编排者本机 pm2**；注入 `PORT_SOURCE`；`PipelineModule` 补注册 `DeployServiceEnvEntity` | ✅ 已合入（#135） |
 | F | dev 控制台 IAM 登录修复 | `JWT_SECRET` 同源 + `AUTH_SERVICE_URL` + auth-service 升到 IAM 版 + `users.systems` 列 + `admin` 归属 deploy | ✅ 已生效（auth-service 发 dev **succeeded**，日志 `[verify-remote] 端口探活 6001 通过`） |
@@ -102,10 +102,10 @@ bash scripts/publish-deploy-console.sh --env dev          # 远端（备份/探�
 DRY_RUN=1 bash scripts/publish-deploy-console.sh --env dev
 
 # 迁移脚本（DB 侧）
-node scripts/migrations/p27-remote-release-remote-db.mjs            # 幂等，DRY_RUN=1 / ROLLBACK=1 可预演/回退
-BACKENDS=a,b,c node scripts/migrations/p27-...                      # 指定模块
-ENVS=dev,prod MODULES=admin,portal node scripts/migrations/p28-...  # 按模块/环境
-DRY_RUN=1 node scripts/migrations/p29...                            # 惯例：先预演
+node archive/migrations/p27-remote-release-remote-db.mjs            # 幂等，DRY_RUN=1 / ROLLBACK=1 可预演/回退
+BACKENDS=a,b,c node archive/migrations/p27-...                      # 指定模块
+ENVS=dev,prod MODULES=admin,portal node archive/migrations/p28-...  # 按模块/环境
+DRY_RUN=1 node archive/migrations/p29...                            # 惯例：先预演
 
 # 迁移记账（务必先对照、再记账、不动 DDL）
 #   对照方法见 docs/development/dev-env-config-inventory.md §5

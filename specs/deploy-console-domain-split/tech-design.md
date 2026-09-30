@@ -62,7 +62,7 @@
 
 | 项 | 改造 |
 |---|---|
-| `scripts/migrations/p10-deploy-console-domain-split.mjs` | 新增（M1–M9） |
+| `archive/migrations/p10-deploy-console-domain-split.mjs` | 新增（M1–M9） |
 | 产物目录搬迁脚本 | 新增（旧 `<key>/<version>/` → `<key>/<envId>/<version>/` + 生成指针） |
 | nginx | **无需改**（`/static/modules/` 前缀不变） |
 | `ecosystem.config.cjs` | 新增 `DEPLOY_LEGACY_READ`（迁移期） |
