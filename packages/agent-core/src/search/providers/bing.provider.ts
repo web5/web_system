@@ -6,6 +6,13 @@ import { type SearchProvider, type SearchResult } from '../provider.interface';
 
 const BING_ENDPOINT = 'https://api.bing.microsoft.com/v7.0/search';
 
+/** Bing 返回的网页条目（字段全部可选：不同 API 版本/配额下可能缺失）。 */
+interface BingWebPage {
+  name?: unknown;
+  url?: unknown;
+  snippet?: unknown;
+}
+
 export class BingSearchProvider implements SearchProvider {
   readonly id = 'bing';
   readonly name = 'Bing Web Search';
@@ -36,7 +43,9 @@ export class BingSearchProvider implements SearchProvider {
       throw new Error(`Bing 搜索请求失败: HTTP ${resp.status}`);
     }
 
-    const data = await resp.json();
+    // 显式声明响应结构：fetch().json() 在各版本 @types/node 下推断不同（any / unknown / {}），
+    // 直接取值会在 TS 严格检查下报 TS2339（曾导致 prod 目标机编译失败）。
+    const data = (await resp.json()) as { webPages?: { value?: BingWebPage[] } } | null;
     const results: SearchResult[] = [];
     const webPages = data?.webPages?.value ?? [];
     for (const item of webPages) {
