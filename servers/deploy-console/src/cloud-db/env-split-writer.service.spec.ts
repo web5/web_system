@@ -246,6 +246,30 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       expect(call!.sql).toContain('`env_id` = ?');
     });
 
+    it('id 必须参与 INSERT（uuid 主键无默认值，丢了就写不进去）', async () => {
+      const { cloud, calls } = makeCloud({ enabled: true });
+      const svc = new EnvSplitWriterService(cloud);
+      // deploy_hosts 的唯一键是 (name, host)，id 不在其中 —— 最容易踩的一类表
+      svc.mirrorRow('deploy_hosts', { id: 'h-1', name: 'g1', host: '10.0.0.1' });
+      await svc.flush();
+      const call = calls.find((c) => c.sql.includes('INSERT INTO deploy_hosts'));
+      expect(call).toBeDefined();
+      expect(call!.sql).toMatch(/INSERT INTO deploy_hosts \(`id`/);
+      // id 进 INSERT，但不进 UPDATE 列表
+      expect(call!.sql).not.toMatch(/ON DUPLICATE KEY UPDATE[^;]*`id` = VALUES/s);
+      expect(call!.params).toContain('h-1');
+    });
+
+    it('id 为空时省略该列（交给数据库生成）', async () => {
+      const { cloud, calls } = makeCloud({ enabled: true });
+      const svc = new EnvSplitWriterService(cloud);
+      svc.mirrorRow('deploy_hosts', { id: null, name: 'g1', host: '10.0.0.1' });
+      await svc.flush();
+      const call = calls.find((c) => c.sql.includes('INSERT INTO deploy_hosts'));
+      expect(call).toBeDefined();
+      expect(call!.sql).not.toMatch(/INSERT INTO deploy_hosts \(`id`/);
+    });
+
     it('batch：mirrorEntities 过滤掉 null/undefined', async () => {
       const { cloud, calls } = makeCloud({ enabled: true });
       const svc = new EnvSplitWriterService(cloud);

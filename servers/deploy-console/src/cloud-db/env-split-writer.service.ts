@@ -337,8 +337,13 @@ export class EnvSplitWriterService {
 
     try {
       for (const row of rows) {
-        const cols = Object.keys(row).filter((c) => c !== 'id' || uniqueKeys.includes('id'));
-        const updates = cols.filter((c) => !uniqueKeys.includes(c));
+        // ⚠️ id **必须参与 INSERT**：uuid 主键在云库没有默认值，不带 id 会
+        //    `Field 'id' doesn't have a default value`（2026-10-08 端到端实测：
+        //    凡「业务唯一键 ≠ id」的表——hosts / endpoints / service_envs / service_routes——全废）。
+        //    仅 id 为空时才省略（交给数据库自己生成）。
+        const cols = Object.keys(row).filter((c) => !(c === 'id' && (row[c] === null || row[c] === undefined)));
+        // UPDATE 列表排除唯一键；id 也不进 UPDATE（命中后改 id 没意义，还可能引起冲突）
+        const updates = cols.filter((c) => !uniqueKeys.includes(c) && c !== 'id');
         if (!cols.length) continue;
         const sql =
           `INSERT INTO ${table} (${cols.map((c) => `\`${c}\``).join(', ')}) ` +
