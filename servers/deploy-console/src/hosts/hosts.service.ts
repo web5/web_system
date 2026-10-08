@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { CreateHostDto, UpdateHostDto } from './dto';
 
 /**
@@ -22,6 +23,8 @@ export class HostsService {
     private readonly hostRepo: Repository<DeployHostEntity>,
     @InjectRepository(DeployServiceEnvEntity)
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
+    // 配置镜像双写（M4，design §5 #6）
+    private readonly mirror: EnvSplitWriterService,
   ) {}
 
   /** 列表（默认全部；`enabledOnly=true` 供下拉只出可用主机） */
@@ -119,6 +122,7 @@ export class HostsService {
       }),
     );
     this.logger.log(`主机组已创建：${saved.name} → ${saved.host}`);
+    this.mirror.mirrorRow('deploy_hosts', saved);
     return saved;
   }
 
@@ -134,6 +138,7 @@ export class HostsService {
     if (dto.enabled !== undefined) host.enabled = dto.enabled;
     const saved = await this.hostRepo.save(host);
     this.logger.log(`主机组已更新：${saved.name} → ${saved.host}`);
+    this.mirror.mirrorRow('deploy_hosts', saved);
     return saved;
   }
 
@@ -152,6 +157,9 @@ export class HostsService {
       );
     }
     await this.hostRepo.remove(host);
+    // ⚠️ 该表的业务唯一键是 (name, host)，而 `get(name)` 按 name 单列查 —— 同组多副本时
+    // remove 只删其中一行。删除补偿必须带上实际 host，避免误删云库同组的其它副本。
+    this.mirror.deleteMirror('deploy_hosts', { name, host: host.host });
     this.logger.warn(`主机组已删除：${name}（${host.host}）`);
     return { removed: true, occupants: [] };
   }

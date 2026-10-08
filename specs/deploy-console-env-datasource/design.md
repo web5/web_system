@@ -190,8 +190,8 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 | M1 | ~~dev 机验证连通~~ **✅ 完成（2026-10-08）**：TCP 通、mysql 握手 0.177s、池化查询稳定 36ms | M0 |
 | M2 | 落 §5 的 #1–#5（指针分流是核心价值，先上） | M1 | **✅ 完成（2026-10-08）**，见 §12 实施记录 |
 | M3 | ~~基线同步~~ **✅ 完成（2026-10-08）**：实测 §4 的 **10 张配置表两库已完全一致**（逐行内容 diff = 0，无需灌入）；仅 legacy `deploy_deployments` 落后（云库 7 行旧口径 / 本地 23 行），已备份后从本地 REPLACE 补齐，prod 行校验一致。详见 §13 | M1 |
-| M4 | 落 §5 的 #6–#8（配置镜像双写） | M2 |
-| M5 | 落 #9 一致性检查 | M4 |
+| M4 | ~~配置镜像双写~~ **✅ 完成（2026-10-08）**：30 个写入点接入 `mirrorRow` / `deleteMirror`，含唯一键选型与 Module 接线修复，见 §14 | M2 |
+| M5 | ~~两库一致性检查~~ **✅ 完成（2026-10-08）**：`scripts/check-cloud-db-consistency.sh`，正反验证通过；**不做 CI 门禁**（runner 不在白名单），属运维巡检 | M4 |
 
 ---
 
@@ -276,8 +276,8 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 ### 遗留（M3–M5）
 
 - ~~M3 基线同步~~ **✅ 完成（2026-10-08）**，见 §13
-- M4 配置镜像双写：`mirrorRows` 已就绪，需在 module-registry / server / envs / target / canary 的保存处接入（**优先级下调**：10 张配置表当前两库已一致，M4 是防漂移而非救火）
-- M5 一致性检查脚本（含接入 pipeline-lint 的评估）
+- ~~M4 配置镜像双写~~ **✅ 完成（2026-10-08）**，见 §14
+- ~~M5 一致性检查~~ **✅ 完成（2026-10-08）**；建议给 dev 机加 cron 每日巡检（`--quiet`）
 - 运维项：dev 机绑 EIP（白名单长期隐患）、云库公网是否开 SSL
 
 ---
@@ -327,3 +327,61 @@ M3 立项时的判断是「云库配置落后」（源于早期观察到 `deploy
 同值幂等推进时，本地库因 `unchanged` 跳过写入、云库仍被镜像 → 两库 `deployed_by` / `deployed_at` 会漂移。
 `current_version` 始终一致，不影响 gateway 读取，只影响审计字段。纳入 M5 一致性检查的比对范围时
 应**忽略 `deployed_by` / `deployed_at`，只比对版本列**，否则会持续误报。
+
+---
+
+## 14. M4 / M5 实施记录（2026-10-08）
+
+### M4 配置镜像双写
+
+**规模**：5 个 service、**30 个写入点**（services 13 / envs 7 / apps 4 / hosts 3 / canary 3），
+其中 **24 处增改 + 6 处物理删除**。`deploy_modules` 在 src 内零写入点（全部只读）→ 未插桩。
+
+**为什么不用 TypeORM Subscriber 自动捕获**（这是本方案最大的一次路线权衡）：
+
+| 候选 | 判定 |
+|---|---|
+| TypeORM `EntitySubscriber` 自动镜像 | ❌ 不选。`repo.delete()` / 批量删**不触发** RemoveEvent，而 6 处删除里有 5 处正是这种 bulk delete；`afterUpdate` 的 entity 在 partial update 下还可能为空 |
+| 显式插桩 + 统一 helper | ✅ 选中。确定性强、可测、不强依赖 TypeORM 内部实现；遗漏风险交给 M5 巡检兜底 |
+
+> 两者其实互补：插桩负责「写得准」，M5 负责「没漏写」。这也是 M5 必须存在的原因之一。
+
+**异步队列 + 去重**（`EnvSplitWriterService` 内建）：
+- 业务写路径**永不 await** 云库写 —— 配置镜像失败不阻断（§6）
+- 同一个「表 + 唯一键」在一个事件循环内的多次写合并为最后一次（后覆盖前）
+- `flush()` 仅供测试 / 退出前使用
+
+**唯一键选择（最容易出错的一处）**：优先用实体上的**业务唯一键**，不用 uuid 主键 ——
+主键是本地生成的，删了再建 uuid 会变，云库就会「老行 + 新行」并存。两个例外：
+
+- `deploy_service_routes`：唯一键 `(service_key, env_id, path_prefix)`，但 **`env_id` 可为 NULL**，
+  而 MySQL 唯一索引把 NULL 视为互不相等 → 用复合键 upsert 永远命中不了「全环境默认」那行，会插重复行。
+  故退回 uuid 主键 + `deleteMirror()` 删除补偿。
+- `deploy_canary_rules`：实体上 `env_id + module_key` 只是普通索引（允许同模块多条规则），没有可用业务唯一键。
+
+**三个必踩的坑（都已修）**：
+1. **列名必须 camelCase → snake_case**：主连接配了 `SnakeNamingStrategy`，而镜像写用的是原生 SQL
+2. **json 列必须 `JSON.stringify`**：`deploy_canary_rules.match_rule` 等，mysql2 不接受 JS 对象
+3. **⚠️ Module 接线遗漏**：给 service 注入新依赖后，**spec 全绿也可能生产启动就崩** ——
+   `@Module({imports})` 没包含 `CloudDbModule` 是编译期看不出来的，只在 Nest 容器启动时才炸。
+   本次 5 个 module 全部漏接（全绿测试完全发现不了），已逐个补齐并新增
+   `cloud-db-wiring.spec.ts` 做回归防护（断言「注入了 writer 的 module 必须 import CloudDbModule」）。
+
+### M5 一致性检查
+
+`scripts/check-cloud-db-consistency.sh`：比对 12 张表，忽略 `task_id / deployed_by / deployed_at / created_at / updated_at`
+（这些是「谁在何时由哪个任务改的」追溯字段，天然漂移；gateway 只读版本列，纳入比对只会长期误报），
+指针表额外排除 uuid 主键 `id`（同业务行两库 id 天然不同，否则 100% 误报）。
+
+支持 `--env dev` 远端巡检 / `--quiet`（cron）/ `--json`（机器消费），exit 1 = 不一致。
+
+**⚠️ 不做 CI 门禁**：GitHub Actions runner 不在云库公网白名单里，连不上。
+它是**运维巡检工具**（建议 dev 机 cron 每日跑），不是 CI 检查项。
+
+**正反验证**：正常态 12/12 一致；人为把云库 `deploy_hosts.managed_by` 改坏 → 立即报 DIFF + exit 1 → 还原后回全绿。
+
+### 本次同时完成的基线补齐
+
+M3 收尾时保守起见没动 `deploy_app_env_versions`（prod 行版本号已一致）。M4 上线后维护lify自动化，
+这里补一次基线让巡检从干净状态起步：备份 `deploy_app_env_versions-cloud-20261008-200140.sql` 后 REPLACE 补齐，
+现 12/12 全一致。
