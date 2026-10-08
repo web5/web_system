@@ -173,8 +173,18 @@ export class ApiKeyService {
     await this.keyRepo.save(r);
   }
 
-  /** 运营：直接创建（免邮件） */
-  async adminCreate(email: string, name?: string): Promise<{ plaintext: string; prefix: string }> {
-    return this.createKey(email, name, null, 'admin');
+  /**
+   * 运营：直接创建（免邮件）。
+   *
+   * ⚠️ 必须显式传 `ownerId`：MCP 通道（`deploy-console` 的 `McpKeyGuard`）用
+   * `ownerId` 作为审计日志的操作人。ownerId 为 null 的 key 发布后追溯不到人，
+   * 等同于匿名凭据 —— 2026-10-08 修正（此前硬编码 null，使本方法事实上不可用）。
+   */
+  async adminCreate(
+    email: string,
+    name?: string,
+    ownerId?: number | null,
+  ): Promise<{ plaintext: string; prefix: string }> {
+    return this.createKey(email, name, ownerId ?? null, 'admin');
   }
 }

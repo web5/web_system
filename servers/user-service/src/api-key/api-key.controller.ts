@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiKeyService } from './api-key.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -16,7 +17,7 @@ import { AuthGuard } from '../auth/auth.guard';
  * API Key 管理
  * 公开：POST /api/keys/apply（发码）、POST /api/keys/verify（验码签发）
  * 用户中心：GET /api/keys/mine、DELETE /api/keys/mine/:id（需登录）
- * 运营：GET /api/keys、DELETE /api/keys/:id（需登录且角色含 admin）
+ * 运营：GET /api/keys、DELETE /api/keys/:id、POST /api/keys/admin（需登录且角色含 admin）
  */
 @Controller('keys')
 export class ApiKeyController {
@@ -72,5 +73,29 @@ export class ApiKeyController {
     this.requireAdminRole(req.user);
     await this.svc.revoke(Number(id));
     return { id: Number(id), message: '已吊销' };
+  }
+
+  /**
+   * 运营：直接签发（免邮件验证码），用于自动化 / 运维场景发放专属凭据。
+   * 默认把 key 绑定到**操作者本人**（ownerId = 当前 admin 的 id），
+   * 使 MCP 通道的审计日志能追溯到人 —— 不做匿名凭据。
+   */
+  @Post('admin')
+  @UseGuards(AuthGuard)
+  async adminCreate(
+    @Req() req: any,
+    @Body() dto: { email?: string; ownerId?: number; name?: string },
+  ) {
+    this.requireAdminRole(req.user);
+    const email = dto?.email ?? req.user?.email;
+    if (!email) throw new BadRequestException('缺少邮箱（可显式传 email）');
+    const ownerId = dto?.ownerId ?? req.user?.id ?? null;
+    const { plaintext, prefix } = await this.svc.adminCreate(email, dto?.name, ownerId);
+    return {
+      key: plaintext,
+      prefix,
+      ownerId,
+      message: 'API Key 已生成（admin），请妥善保管（明文仅展示一次）',
+    };
   }
 }
