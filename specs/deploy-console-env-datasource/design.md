@@ -173,7 +173,12 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 | env = prod，云库写失败 | **抛出** → 任务置 `failed`，UI 明确提示「prod 指针未生效，prod 仍运行旧版本」 |
 | env = dev / local | 不涉及云库，行为不变 |
 | 镜像写（配置表）失败 | 告警 + 计入审计，不阻断（配置漂移不直接影响线上运行） |
+| **legacy `deploy_deployments` 写失败** | 告警 + 不阻断（gateway 默认不读它，只在 `DEPLOY_LEGACY_READ=1` 应急时才读；让它成为发布阻塞项只会制造噪音） |
 | `DEPLOY_CLOUD_DB_STRICT=false` | 回退到告警语义（仅应急，不推荐长期开启） |
+
+⚠️ **实现补充（2026-10-08 实测）**：异常必须用 `HttpException`（`ServiceUnavailableException`）而非裸 `Error`。
+全局异常过滤器会把非 `HttpException` 的消息统一替换成「服务器内部错误」，
+运维将看不到「prod 没切」这个关键事实，与设计意图相悖。
 
 ---
 
@@ -183,7 +188,7 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 |---|---|---|
 | M0 | ~~控制台开启云数据库公网，记录域名:端口；白名单放行 `175.27.189.123/32`~~ **✅ 完成（2026-10-08）**：`gz-cdb-8y2lp8rt.sql.tencentcdb.com:27241`，白名单已放行。遗留：**建议给 dev 机绑 EIP**（普通公网 IP 变配/重建后会失效） | 人工 |
 | M1 | ~~dev 机验证连通~~ **✅ 完成（2026-10-08）**：TCP 通、mysql 握手 0.177s、池化查询稳定 36ms | M0 |
-| M2 | 落 §5 的 #1–#5（指针分流是核心价值，先上） | M1 |
+| M2 | 落 §5 的 #1–#5（指针分流是核心价值，先上） | M1 | **✅ 完成（2026-10-08）**，见 §12 实施记录 |
 | M3 | 基线同步：把本地库 §4 的 12 张表全量灌入云库（当前云库配置落后，如 vars/modules） | M1 |
 | M4 | 落 §5 的 #6–#8（配置镜像双写） | M2 |
 | M5 | 落 #9 一致性检查 | M4 |
@@ -217,7 +222,7 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 | R1 | 公网可用性：prod 发布依赖外网，云库公网入口抖动会导致发布失败 | P0 | 严格失败语义（§6）+ 发布前连通性预检，失败早暴露而非静默 |
 | R2 | dev 机公网 IP 变化导致白名单失效 | P0 | **给 dev 机绑弹性公网 IP**；否则 IP 变更后发布静默失败 |
 | R3 | 云库连接 `synchronize` 误开 → DDL 变更生产表 | P0 | 显式 `synchronize:false`，并在启动时断言 |
-| R4 | 公网延迟导致发布任务超时 | P1 | `connectTimeout` / `acquireTimeout` 调大；镜像写加独立超时与重试 |
+| R4 | 公网延迟 / 链路中断导致发布任务长时间卡住 | P1 | ⚠️ 实测驱动 `connectTimeout` 在「SYN 无响应」场景**不生效**（单次 connect 挂 31s）。已加**应用层硬超时** `DEPLOY_CLOUD_DB_QUERY_TIMEOUT`（默认 8s）+ 重试 1 次，最坏 ~17s 收敛 |
 | R5 | 两库静默不一致 | P1 | M5 一致性检查；考虑接入 pipeline-lint 或定时巡检 |
 | R6 | 公网传输凭据与数据 | P1 | 云数据库公网建议开 SSL；凭据只存 `.env`（600），不进仓库 |
 
@@ -226,5 +231,51 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 ## 11. 未决问题
 
 1. 云数据库公网是否开启 SSL、console 侧是否需要配置 `ssl` 连接参数——公网已开通（`gz-cdb-8y2lp8rt.sql.tencentcdb.com:27241`），SSL 决策仍待定（开更安全，连接配置略复杂）
-2. `deploy_deployments`（legacy 指针）是否纳入镜像：当前 gateway 已停用 legacy 读取源，仅 `DEPLOY_LEGACY_READ=1` 应急时会读。倾向**纳入**（成本低、排障有价值），待确认
-3. 是否把「两库一致性检查」接入既有 `pipeline-lint`（L 规则）——倾向接入，待本次稳定后做
+2. ~~`deploy_deployments`（legacy 指针）是否纳入镜像~~ → **已纳入**（M2 实施），失败不阻断
+3. 是否把「两库一致性检查」接入既有 `pipeline-lint`（L 规则）——倾向接入，待本次稳定后做（M5）
+
+---
+
+## 12. 实施记录（M2，2026-10-08）
+
+### 落地范围（§5 的 #1–#5 + #8）
+
+| # | 落地情况 |
+|---|---|
+| 1 `.env` | 远端 `servers/deploy-console/.env` 加 `DEPLOY_CLOUD_DB_*`（7 项，600 权限）；仓库侧写进 `.env.example` 留空占位 |
+| 2 `CloudDbModule` | `src/cloud-db/cloud-db.service.ts`：独立 `DataSource`，`synchronize:false` + `entities:[]`，懒连接、可重试、应用层硬超时 |
+| 3 `EnvSplitWriterService` | `mirrorPointer` / `mirrorLegacyPointer` / `mirrorRows`（M4 备用），原生 SQL upsert，白名单校验 |
+| 4 `release-registry` | 本地写成功后才镜像；本地失败不镜像；prod 镜像失败抛出 |
+| 5 `deploy.service` | 两处 legacy 指针写入后镜像（不阻断） |
+| 8 `app.module` | `ReleaseRegistryModule` / `DeployModule` / `HealthModule` 引入 `CloudDbModule` |
+
+附带：新增 `GET /api/health/cloud-db` 探活（发布前预检，响应不回显公网地址）。
+
+### 验证证据
+
+| 用例 | 结果 |
+|---|---|
+| 探活 | `{"status":"ok","enabled":true,"latencyMs":192}`（池化后稳定 ~36ms） |
+| 正向 prod | 同值推指针 → 云库 `shell@prod` 的 `deployed_by`/`task_id`/`deployed_at` 同步更新 |
+| 正向 dev | 推 dev 指针 → 本地库更新、云库 `shell@dev` **未动**（证明 dev 不镜像） |
+| legacy | 云库 `deploy_deployments` prod 行同步更新 |
+| **反向** | `iptables` 阻断 27241 后推 prod 指针 → **HTTP 503** + 「prod 指针未生效…prod 仍运行旧版本」，**9s 快速失败** |
+| 回退 | `DEPLOY_CLOUD_DB_ENABLED=false` 即恢复人工同步现状（未触发，保留为应急开关） |
+
+### 发布方式
+
+`scripts/publish-deploy-console.sh --env dev`（console 不走流水线，E1 约束）。
+失败自动回滚，远端产物保留 `dist.bak-*`。PR #247（已挂 auto-merge / merge commit）。
+
+### 偏离说明
+
+- legacy 镜像**不阻断**发布（§6 表已补充）：它不是 gateway 默认读取源。
+- 异常类型用 `HttpException`：否则提示被全局过滤器脱敏成「服务器内部错误」。
+- 错误信息中的公网 IP/域名一律脱敏为 `<云库地址>`。
+
+### 遗留（M3–M5）
+
+- M3 基线同步：`deploy_modules` 等 10 张配置表全量灌入云库（当前云库配置落后）
+- M4 配置镜像双写：`mirrorRows` 已就绪，需在 module-registry / server / envs / target / canary 的保存处接入
+- M5 一致性检查脚本（含接入 pipeline-lint 的评估）
+- 运维项：dev 机绑 EIP（白名单长期隐患）、云库公网是否开 SSL
