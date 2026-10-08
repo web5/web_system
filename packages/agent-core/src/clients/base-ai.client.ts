@@ -83,10 +83,31 @@ export interface StreamToolEvent {
   result?: ChatWithToolsResult;
 }
 
+/**
+ * 思考开关（仅 TokenHub 系模型支持，网关透传官方 `thinking` 参数）。
+ *
+ * 之所以需要「按调用」覆盖：TokenHubClient 会按模型名自动给 DeepSeek 系注入
+ * `budget:1024`（防长任务思考把正文挤成 0）。但对「只要一小段结构化输出」的低成本调用
+ * （如意图分类 maxTokens=60），1024 的思考预算会把输出预算**全部吃光** ——
+ * 实测 `finish_reason=length`、`content` 为空，调用方拿到空串只能当失败处理。
+ * 全局环境变量 `TOKENHUB_THINKING` 是给主对话用的，不能用它来修单点调用。
+ */
+export interface ThinkingOption {
+  type: 'enabled' | 'disabled';
+  /** type='enabled' 时的思考 token 上限 */
+  budget_tokens?: number;
+}
+
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  /**
+   * 本次调用的思考开关（可选）。
+   * 传了则**覆盖**客户端按模型名推断的默认值；不传 = 沿用各客户端原有行为
+   * （因此对既有调用方零影响）。不支持该参数的客户端实现会忽略它。
+   */
+  thinking?: ThinkingOption;
 }
 
 export interface ModelInfo {

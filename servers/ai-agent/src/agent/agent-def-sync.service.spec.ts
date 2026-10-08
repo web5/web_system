@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentRegistry, ToolRegistry } from '@kedouai/agent-core';
+import { AgentRegistry, ClientRegistry, ToolRegistry } from '@kedouai/agent-core';
 import { McpService } from '../mcp/mcp.service';
 import { AgentDefSyncService } from './agent-def-sync.service';
 
@@ -15,7 +15,7 @@ import { AgentDefSyncService } from './agent-def-sync.service';
 describe('AgentDefSyncService.registerMcpCapabilities', () => {
   function setup(
     capabilities: Array<Record<string, unknown>>,
-    opts: { mcpAvailable?: boolean } = {},
+    opts: { mcpAvailable?: boolean; model?: string; registeredModels?: string[] } = {},
   ) {
     const configService = {
       get: (key: string, fallback?: string) =>
@@ -28,13 +28,22 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
       isAvailable: () => opts.mcpAvailable !== false,
       registerMcpTool,
     } as unknown as McpService;
+    // 注册表键带 `deepseek/` 前缀（= BUILTIN_TOKENHUB_MODELS）；模型清单由用例注入
+    const clientRegistry = {
+      listModels: () =>
+        (opts.registeredModels ?? ['hy3', 'deepseek/deepseek-v4-flash']).map((id) => ({
+          id,
+          displayName: id,
+          available: true,
+        })),
+    } as unknown as ClientRegistry;
 
     const rows = [
       {
         id: 'web-system-dev',
         name: 'web_system 研发助手',
         systemPrompt: 'p',
-        model: 'deepseek-v4-flash',
+        model: opts.model ?? 'deepseek/deepseek-v4-flash',
         capabilities,
       },
     ];
@@ -43,8 +52,14 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
       json: async () => rows,
     }) as unknown as typeof fetch;
 
-    const svc = new AgentDefSyncService(configService, agentRegistry, toolRegistry, mcpService);
-    return { svc, registerMcpTool };
+    const svc = new AgentDefSyncService(
+      configService,
+      agentRegistry,
+      toolRegistry,
+      mcpService,
+      clientRegistry,
+    );
+    return { svc, registerMcpTool, agentRegistry };
   }
 
   function registeredNames(registerMcpTool: jest.Mock): string[] {
@@ -147,5 +162,46 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  /**
+   * 2026-10-08 事故回归：定义里的 model 写成 TokenHub **短名** `deepseek-v4-flash`，
+   * 而 ai-agent 注册表的键是带前缀的 `deepseek/deepseek-v4-flash`。
+   * 两者不一致时 `getOrFallback` 不抛错、只静默回退 hy3 —— 必须由同步器**大声报出来**。
+   */
+  describe('assertModelRegistered（模型 id 与注册表键不一致必须告警）', () => {
+    it('短名未注册 → 打 error，且同一条只报一次', async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        const { svc } = setup([], { model: 'deepseek-v4-flash' });
+
+        await svc.sync();
+        await svc.sync();
+
+        const hits = errorSpy.mock.calls
+          .map((c) => String(c[0]))
+          .filter((m) => m.includes('deepseek-v4-flash'));
+        expect(hits).toHaveLength(1);
+        expect(hits[0]).toContain('静默回退 hy3');
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('改为注册表键（带前缀）→ 不告警', async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        const { svc } = setup([], { model: 'deepseek/deepseek-v4-flash' });
+
+        await svc.sync();
+
+        const hits = errorSpy.mock.calls
+          .map((c) => String(c[0]))
+          .filter((m) => m.includes('未注册'));
+        expect(hits).toHaveLength(0);
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
   });
 });

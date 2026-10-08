@@ -43,8 +43,12 @@ export class IntentService {
     private readonly config: ConfigService,
   ) {
     this.enabled = this.config.get<string>('INTENT_ROUTING_ENABLED', 'false') === 'true';
-    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek-v4-flash');
-    this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '1200')) || 1200;
+    // ⚠️ 默认值必须与 ClientRegistry 的注册键**逐字一致**（带 `deepseek/` 前缀）。
+    //    写短名 `deepseek-v4-flash` 时 getOrFallback 不会报错，只会静默回退到 hy3 ——
+    //    表现为「分类能用但偶发兜底」，极难定位（2026-10-08 事故根因之一）。
+    //    注册键来源：agent.module.ts 按 TOKENHUB_MODELS / BUILTIN_TOKENHUB_MODELS 注册。
+    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek/deepseek-v4-flash');
+    this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '3000')) || 3000;
     this.fallbackAgentId = this.config.get<string>('INTENT_FALLBACK_AGENT_ID', 'general');
   }
 

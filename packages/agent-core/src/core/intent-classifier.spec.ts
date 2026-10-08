@@ -87,6 +87,26 @@ describe('IntentClassifier', () => {
     expect(r.via).toBe('fallback');
   });
 
+  /**
+   * 2026-10-08 事故回归：分类调用曾用 `maxTokens: 60`，而思考型模型（hy3 / DeepSeek 系）
+   * 默认带 1024 思考预算，60 个 token 全被 reasoning 吃光 ⇒ `finish_reason=length`、
+   * `content=''` ⇒ 解析必然失败 ⇒ **100% 兜底**，且只表现为「偶尔判成通用助手」。
+   * 这两条参数是防复发的唯一机械保障，别删。
+   */
+  it('L3 调用参数：maxTokens 给足 + 显式关闭思考', async () => {
+    let seen: { maxTokens?: number; thinking?: unknown } = {};
+    const client = {
+      chat: async (_msgs: unknown, opts?: { maxTokens?: number; thinking?: unknown }) => {
+        seen = opts ?? {};
+        return '{"agentId":"translate","confidence":0.9}';
+      },
+    } as unknown as BaseAiClient;
+    const c = new IntentClassifier(client, 500, 'general');
+    await c.classify('随便说点什么', { candidates: CANDIDATES });
+    expect(seen.maxTokens).toBeGreaterThanOrEqual(200);
+    expect(seen.thinking).toEqual({ type: 'disabled' });
+  });
+
   it('规则命中但 agent 不在候选集 → 不命中该 agent', async () => {
     const c = new IntentClassifier(fakeClient(''), 500, 'general');
     const r = await c.classify('帮我把这段翻成英文', { candidates: ['general'] });
@@ -173,6 +193,35 @@ describe('IntentClassifier · routingHints 驱动', () => {
       lockedAgentId: 'translate',
     });
     expect(r.agentId).toBe('bianbian');
+    expect(r.via).toBe('rule');
+  });
+
+  /**
+   * 2026-10-08 事故回归：路由关键词是**字面量子串**，不构成「同义覆盖」。
+   * 线上词表只有「英文怎么说」，用户问「英语怎么说」就漏了 —— 于是本该 0ms 命中的
+   * 请求被推给 LLM，而 LLM 路径当时必然失败 ⇒ 整句落到通用助手。
+   * 下面一对用例把「漏词」和「补词后命中」钉死，防止后续再精简词表时回归。
+   */
+  it('词表只有「英文怎么说」时，问「英语怎么说」规则不命中（说明必须逐个列全）', async () => {
+    const c = new IntentClassifier(
+      fakeClient('{"agentId":"translate","confidence":0.95}'),
+      500,
+      'general',
+    );
+    const r = await c.classify('先完成，再完美 英语怎么说', {
+      candidates: CANDS,
+      routingHints: HINTS,
+    });
+    expect(r.via).toBe('llm');
+  });
+
+  it('补齐「英语怎么说」后 → 0ms 规则命中 translate', async () => {
+    const hints = HINTS.map((h) =>
+      h.id === 'translate' ? { ...h, keywords: [...h.keywords, '英语怎么说', '英语怎么讲'] } : h,
+    );
+    const c = new IntentClassifier(fakeClient('SHOULD_NOT_BE_CALLED'), 500, 'general');
+    const r = await c.classify('先完成，再完美 英语怎么说', { candidates: CANDS, routingHints: hints });
+    expect(r.agentId).toBe('translate');
     expect(r.via).toBe('rule');
   });
 });

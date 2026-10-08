@@ -20,6 +20,7 @@
  *  未传 routingHints 时才退回 LEGACY_RULE_TABLE（仅供旧单测 / 降级兼容，不要在新代码依赖）。
  */
 import type { BaseAiClient } from '../clients/base-ai.client';
+import { Logger } from '../lib/logger';
 
 export type IntentVia = 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
 
@@ -61,6 +62,16 @@ interface Rule {
 
 /** 关键词命中的置信度（≥0.88 ⇒ 允许从已锁定 agent 切走，与 IntentService 判定阈值对齐） */
 const KEYWORD_RULE_CONFIDENCE = 0.9;
+
+/**
+ * 分类调用（L3）的输出 token 预算。
+ *
+ * ⚠️ 不要调回 60 —— 60 会让「思考型模型」把预算全花在 reasoning 上，
+ * 返回 `finish_reason=length` + `content=''`，解析必然失败 ⇒ 100% 走向 L4 兜底。
+ * 实测（2026-10-08，TokenHub）：maxTokens=60 时 hy3 / deepseek-v4-flash 3/3 空返回；
+ * 关思考后 19~57 token 就能输出完整 JSON。256 是「留一倍余量且仍省成本」的取值。
+ */
+const CLASSIFY_MAX_TOKENS = 256;
 
 /**
  * 旧 taxonomy 规则表（**仅兼容**：caller 未传 routingHints 时使用）。
@@ -142,6 +153,8 @@ function buildPrompt(candidateSection: string, fallbackAgentId: string): string 
 }
 
 export class IntentClassifier {
+  private readonly logger = new Logger(IntentClassifier.name);
+
   constructor(
     private readonly client: BaseAiClient,
     private readonly timeoutMs = 1200,
@@ -181,6 +194,8 @@ export class IntentClassifier {
     }
 
     // L3 LLM（超时 / 失败 → L4，绝不阻塞主对话）
+    // ⚠️ 两个参数是硬要求，改前先读 CLASSIFY_MAX_TOKENS 的注释：
+    //    maxTokens 给足 + 显式关思考，否则思考 token 会吃光输出预算 → 必然兜底。
     try {
       const section = buildCandidateSection(hints, candidates);
       const prompt = section
@@ -192,14 +207,32 @@ export class IntentClassifier {
             { role: 'system', content: prompt, ts: Date.now() },
             { role: 'user', content: userInput.slice(0, 500), ts: Date.now() },
           ],
-          { temperature: 0, maxTokens: 60 },
+          {
+            temperature: 0,
+            maxTokens: CLASSIFY_MAX_TOKENS,
+            thinking: { type: 'disabled' },
+          },
         ),
         o.timeoutMs ?? this.timeoutMs,
       );
       const parsed = this.parse(raw, candidates);
       if (parsed) return parsed;
-    } catch {
-      /* 落到 L4 */
+      // 解析失败必须留痕：否则线上只能看到 via=fallback，永远定位不到原因
+      // （2026-10-08 就是靠别的模块的偶然告警才查出根因的）
+      if (!raw || !raw.trim()) {
+        this.logger.warn(
+          `意图分类返回空内容（多为思考 token 占满输出预算）→ 兜底 ${this.fallbackAgentId}；` +
+            `model=${this.client.modelId} maxTokens=${CLASSIFY_MAX_TOKENS}`,
+        );
+      } else {
+        this.logger.warn(
+          `意图分类输出不可解析（agentId 不在白名单内？）→ 兜底 ${this.fallbackAgentId}: ${raw.slice(0, 120)}`,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(
+        `意图分类调用失败（超时 / 网络 / 模型不可用）→ 兜底 ${this.fallbackAgentId}: ${(e as Error)?.message}`,
+      );
     }
     // L4 兜底
     return { agentId: this.fallbackAgentId, confidence: 0.3, via: 'fallback' };
