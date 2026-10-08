@@ -24,9 +24,18 @@ import { AuditService } from '../audit/audit.service';
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { AppsService } from '../apps/apps.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
+// 按环境分流（2026-10-08）：DeployService 依赖它把 prod 指针镜像到云数据库
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+/** 云库分流桩：单测不连公网云库，镜像写一律「成功但不落地」 */
+const splitWriterStub = () => ({
+  mirrorPointer: jest.fn().mockResolvedValue(undefined),
+  mirrorLegacyPointer: jest.fn().mockResolvedValue(undefined),
+  mirrorRows: jest.fn().mockResolvedValue(undefined),
+});
 
 describe('DeployService 产物守卫', () => {
   let service: DeployService;
@@ -51,6 +60,7 @@ describe('DeployService 产物守卫', () => {
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
