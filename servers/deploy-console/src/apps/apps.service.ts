@@ -15,6 +15,7 @@ import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.en
 // 历史模块注册表（仅用于把前端类模块种子进应用域；P4 退役后解耦）
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { EnvsService } from '../envs/envs.service';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { defaultReleaseWorkspace } from '../pipeline/release-paths';
 import {
   APP_KINDS,
@@ -53,6 +54,8 @@ export class AppsService implements OnModuleInit {
     private readonly legacyModuleRepo: Repository<DeployModuleEntity>,
     private readonly envsService: EnvsService,
     private readonly configService: ConfigService,
+    // 配置镜像双写（M4，design §5 #6）
+    private readonly mirror: EnvSplitWriterService,
   ) {}
 
   /**
@@ -75,21 +78,24 @@ export class AppsService implements OnModuleInit {
       if (!kind) continue; // 后端服务 → 服务域，跳过
       const exists = await this.appRepo.findOne({ where: { key: m.key } });
       if (exists) continue;
-      await this.appRepo.save(
-        this.appRepo.create({
-          key: m.key,
-          name: m.name,
-          kind,
-          parentKey: null,
-          repoDir: m.dir,
-          entry: m.entry ?? 'index.js',
-          publicPath: m.publicPath ?? m.key,
-          externals: null,
-          // 基座与小程序都不纳入 envId 目录（Q107）
-          deployMode: kind === 'shell' || kind === 'mini-app' ? 'site-version' : 'env-dir',
-          builtin: true,
-          enabled: true,
-        }),
+      this.mirror.mirrorRow(
+        'deploy_apps',
+        await this.appRepo.save(
+          this.appRepo.create({
+            key: m.key,
+            name: m.name,
+            kind,
+            parentKey: null,
+            repoDir: m.dir,
+            entry: m.entry ?? 'index.js',
+            publicPath: m.publicPath ?? m.key,
+            externals: null,
+            // 基座与小程序都不纳入 envId 目录（Q107）
+            deployMode: kind === 'shell' || kind === 'mini-app' ? 'site-version' : 'env-dir',
+            builtin: true,
+            enabled: true,
+          }),
+        ),
       );
       added++;
     }
@@ -233,6 +239,7 @@ export class AppsService implements OnModuleInit {
       }),
     );
     this.logger.log(`应用已创建：${saved.key}（kind=${saved.kind} mode=${saved.deployMode}）`);
+    this.mirror.mirrorRow('deploy_apps', saved);
     return saved;
   }
 
@@ -251,7 +258,9 @@ export class AppsService implements OnModuleInit {
       }
       app.deployMode = dto.deployMode;
     }
-    return this.appRepo.save(app);
+    const saved = await this.appRepo.save(app);
+    this.mirror.mirrorRow('deploy_apps', saved);
+    return saved;
   }
 
   /**
@@ -264,9 +273,11 @@ export class AppsService implements OnModuleInit {
       order: { envId: 'ASC' },
     });
     const activeEnvs = active.filter((v) => !!v.currentVersion).map((v) => v.envId);
+    // 软删除 = UPDATE（deleted_at + enabled=false），不做删除补偿
     app.deletedAt = new Date();
     app.enabled = false;
-    await this.appRepo.save(app);
+    const saved = await this.appRepo.save(app);
+    this.mirror.mirrorRow('deploy_apps', saved);
     await this.routeRepo.delete({ appKey: key });
     this.logger.warn(`应用已软删除：${key}（生效环境：${activeEnvs.join('、') || '无'}）`);
     return { removed: true, activeEnvs };

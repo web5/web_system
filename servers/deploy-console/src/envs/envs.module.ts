@@ -9,12 +9,15 @@ import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { EnvsService } from './envs.service';
 import { EnvsController } from './envs.controller';
 import { AuditModule } from '../audit/audit.module';
+import { CloudDbModule } from '../cloud-db/cloud-db.module';
 
 /**
  * 环境域模块（微前端加载维度）：站点 + 环境 + 环境详情承载的后端服务指向。
  */
 @Module({
   imports: [
+    // 配置镜像双写（M4）：把本地写的配置行同步到云数据库
+    CloudDbModule,
     TypeOrmModule.forFeature([
       DeploySiteEntity,
       DeployEnvEntity,

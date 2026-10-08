@@ -8,6 +8,7 @@ import { AppsService } from './apps.service';
 import { AppsController } from './apps.controller';
 import { EnvsModule } from '../envs/envs.module';
 import { AuditModule } from '../audit/audit.module';
+import { CloudDbModule } from '../cloud-db/cloud-db.module';
 
 /**
  * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
@@ -15,6 +16,8 @@ import { AuditModule } from '../audit/audit.module';
  */
 @Module({
   imports: [
+    // 配置镜像双写（M4）：把本地写的配置行同步到云数据库
+    CloudDbModule,
     TypeOrmModule.forFeature([
       DeployAppEntity,
       DeployAppRouteEntity,

@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DeployCanaryRuleEntity } from '../entities/deploy-canary-rule.entity';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 
 /**
  * 灰度规则服务。
@@ -18,6 +19,8 @@ export class CanaryService {
   constructor(
     @InjectRepository(DeployCanaryRuleEntity)
     private readonly ruleRepo: Repository<DeployCanaryRuleEntity>,
+    // 配置镜像双写（M4，design §5 #6）
+    private readonly mirror: EnvSplitWriterService,
   ) {}
 
   list(envId?: string, moduleKey?: string): Promise<DeployCanaryRuleEntity[]> {
@@ -33,18 +36,24 @@ export class CanaryService {
     return r;
   }
 
-  create(data: Partial<DeployCanaryRuleEntity>): Promise<DeployCanaryRuleEntity> {
-    return this.ruleRepo.save(this.ruleRepo.create(data));
+  async create(data: Partial<DeployCanaryRuleEntity>): Promise<DeployCanaryRuleEntity> {
+    const saved = await this.ruleRepo.save(this.ruleRepo.create(data));
+    // 本表实体上没有业务唯一键（允许同 env + 同 module 多条规则），只能用 uuid 主键做 upsert
+    this.mirror.mirrorRow('deploy_canary_rules', saved);
+    return saved;
   }
 
   async update(id: string, data: Partial<DeployCanaryRuleEntity>): Promise<DeployCanaryRuleEntity> {
     const r = await this.get(id);
     Object.assign(r, data);
-    return this.ruleRepo.save(r);
+    const saved = await this.ruleRepo.save(r);
+    this.mirror.mirrorRow('deploy_canary_rules', saved);
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
     await this.ruleRepo.delete(id);
+    this.mirror.deleteMirror('deploy_canary_rules', { id });
   }
 
   /** 判断请求是否命中灰度（供 gateway IndexHtmlService 调用） */

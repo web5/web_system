@@ -75,6 +75,13 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
     const legacyModuleRepo: any = { find: jest.fn(async () => []) };
     const legacyRouteRepo: any = { find: jest.fn(async () => []) };
     const configService: any = { get: jest.fn(() => undefined) };
+    // 云库镜像写（M4）：单测不连公网，记录调用便于断言
+    const mirror: any = {
+      mirrorRow: jest.fn(),
+      mirrorEntities: jest.fn(),
+      deleteMirror: jest.fn(),
+      flush: jest.fn(async () => undefined),
+    };
 
     svc = new ServicesService(
       serviceRepo,
@@ -86,6 +93,7 @@ describe('ServicesService（接口导入幂等 / 转发规则冲突）', () => {
       legacyModuleRepo,
       legacyRouteRepo,
       configService,
+      mirror,
     );
   });
 

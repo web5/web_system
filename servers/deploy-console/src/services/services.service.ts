@@ -20,6 +20,7 @@ import { DeployHostEntity } from '../entities/deploy-host.entity';
 // 仅用于种子导入（迁移 M4/M6 的运行时等价物，P4 正式迁移后移除依赖）
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import {
   CreateServiceDto,
   ENDPOINT_AUTH_MODES,
@@ -79,6 +80,8 @@ export class ServicesService implements OnModuleInit {
     @InjectRepository(DeployEnvServiceRouteEntity)
     private readonly legacyRouteRepo: Repository<DeployEnvServiceRouteEntity>,
     private readonly configService: ConfigService,
+    // 配置镜像双写（M4，design §5 #6）：把本地写的配置行 upsert 到云数据库（prod gateway 的读取源）
+    private readonly mirror: EnvSplitWriterService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -98,27 +101,34 @@ export class ServicesService implements OnModuleInit {
   async ensureSeeded(): Promise<void> {
     if ((await this.serviceRepo.count()) === 0) {
       const rows = await this.collectSeedServices();
+      const saved: DeployServiceEntity[] = [];
       for (const r of rows) {
-        await this.serviceRepo.save(this.serviceRepo.create(r));
+        saved.push(await this.serviceRepo.save(this.serviceRepo.create(r)));
       }
       if (rows.length) this.logger.log(`服务种子导入完成：${rows.length} 个`);
+      // 种子是幂等的（只在表空时写），但云库可能还没这份数据 → 一次性补齐
+      this.mirror.mirrorEntities('deploy_services', saved);
     }
 
     if ((await this.serviceEnvRepo.count()) === 0) {
       const legacy = await this.legacyRouteRepo.find();
+      const savedEnvs: DeployServiceEnvEntity[] = [];
       for (const r of legacy) {
-        await this.serviceEnvRepo.save(
-          this.serviceEnvRepo.create({
-            serviceKey: r.serviceName,
-            envId: r.envId,
-            hostName: r.serverName,
-            port: r.port ?? null,
-            replicas: 1,
-            status: 'active',
-          }),
+        savedEnvs.push(
+          await this.serviceEnvRepo.save(
+            this.serviceEnvRepo.create({
+              serviceKey: r.serviceName,
+              envId: r.envId,
+              hostName: r.serverName,
+              port: r.port ?? null,
+              replicas: 1,
+              status: 'active',
+            }),
+          ),
         );
       }
       if (legacy.length) this.logger.log(`服务×环境指向种子导入完成：${legacy.length} 条`);
+      this.mirror.mirrorEntities('deploy_service_envs', savedEnvs);
     }
   }
 
@@ -287,6 +297,7 @@ export class ServicesService implements OnModuleInit {
       }),
     );
     this.logger.log(`服务已创建：${saved.key}（kind=${saved.kind}）`);
+    this.mirror.mirrorRow('deploy_services', saved);
     return saved;
   }
 
@@ -301,7 +312,9 @@ export class ServicesService implements OnModuleInit {
     if (dto.deployChannel !== undefined) svc.deployChannel = dto.deployChannel;
     if (dto.description !== undefined) svc.description = dto.description || null;
     if (dto.enabled !== undefined) svc.enabled = dto.enabled;
-    return this.serviceRepo.save(svc);
+    const saved = await this.serviceRepo.save(svc);
+    this.mirror.mirrorRow('deploy_services', saved);
+    return saved;
   }
 
   /** 软删除：仍被环境指向引用时阻断并列出环境（避免"删了服务还在转发"） */
@@ -316,9 +329,11 @@ export class ServicesService implements OnModuleInit {
           .join('、')}。请先在环境详情解除指向。`,
       );
     }
+    // 软删除 = UPDATE（写 deleted_at + enabled=false）→ 镜像更新即可，不做删除补偿
     svc.deletedAt = new Date();
     svc.enabled = false;
-    await this.serviceRepo.save(svc);
+    const saved = await this.serviceRepo.save(svc);
+    this.mirror.mirrorRow('deploy_services', saved);
     this.logger.warn(`服务已软删除：${key}`);
     return { removed: true, softDeleted: true };
   }
@@ -399,6 +414,7 @@ export class ServicesService implements OnModuleInit {
         enabled: dto.enabled ?? true,
       }),
     );
+    this.mirror.mirrorRow('deploy_service_routes', saved);
     return { ...saved, warnings: await this.prefixOverlaps(serviceKey, envId, pathPrefix, saved.id) };
   }
 
@@ -424,6 +440,7 @@ export class ServicesService implements OnModuleInit {
     if (dto.enabled !== undefined) route.enabled = dto.enabled;
 
     const saved = await this.routeRepo.save(route);
+    this.mirror.mirrorRow('deploy_service_routes', saved);
     return {
       ...saved,
       warnings: await this.prefixOverlaps(serviceKey, saved.envId ?? null, saved.pathPrefix, saved.id),
@@ -434,6 +451,8 @@ export class ServicesService implements OnModuleInit {
     await this.getService(serviceKey);
     const res = await this.routeRepo.delete({ id, serviceKey });
     if (!res.affected) throw new NotFoundException(`转发规则不存在：${id}`);
+    // 物理删除不同步的话，云库会残留「全环境默认」规则（env_id IS NULL 优先级最高）→ 改变线上转发行为
+    this.mirror.deleteMirror('deploy_service_routes', { id });
     return { removed: true };
   }
 
@@ -487,7 +506,11 @@ export class ServicesService implements OnModuleInit {
         `接口已存在：${dto.method} ${dto.pathPattern}（同一服务下方法+路径唯一）`,
       );
     }
-    return this.endpointRepo.save(this.endpointRepo.create(this.endpointPayload(serviceKey, dto, 'manual')));
+    const saved = await this.endpointRepo.save(
+      this.endpointRepo.create(this.endpointPayload(serviceKey, dto, 'manual')),
+    );
+    this.mirror.mirrorRow('deploy_endpoints', saved);
+    return saved;
   }
 
   async updateEndpoint(serviceKey: string, id: string, dto: Partial<EndpointDto>) {
@@ -506,13 +529,16 @@ export class ServicesService implements OnModuleInit {
     if (dto.enabled !== undefined) row.enabled = dto.enabled;
     // 人工改过 → 标记为 manual，后续导入不再视为"可补空"目标
     row.source = 'manual';
-    return this.endpointRepo.save(row);
+    const saved = await this.endpointRepo.save(row);
+    this.mirror.mirrorRow('deploy_endpoints', saved);
+    return saved;
   }
 
   async removeEndpoint(serviceKey: string, id: string) {
     await this.getService(serviceKey);
     const res = await this.endpointRepo.delete({ id, serviceKey });
     if (!res.affected) throw new NotFoundException(`接口不存在：${id}`);
+    this.mirror.deleteMirror('deploy_endpoints', { id });
     return { removed: true };
   }
 
@@ -561,6 +587,7 @@ export class ServicesService implements OnModuleInit {
 
     let created = 0;
     let filled = 0;
+    const mirrored: DeployEndpointEntity[] = [];
     const details: { key: string; action: 'created' | 'filled' | 'skipped'; fields?: string[] }[] = [];
 
     for (const [k, item] of dedup) {
@@ -568,7 +595,9 @@ export class ServicesService implements OnModuleInit {
         where: { serviceKey, method: item.method, pathPattern: item.pathPattern.trim() },
       });
       if (!existing) {
-        await this.endpointRepo.save(this.endpointRepo.create(this.endpointPayload(serviceKey, item, source)));
+        mirrored.push(
+          await this.endpointRepo.save(this.endpointRepo.create(this.endpointPayload(serviceKey, item, source))),
+        );
         created++;
         details.push({ key: k, action: 'created' });
         continue;
@@ -587,7 +616,7 @@ export class ServicesService implements OnModuleInit {
       }
       if (fields.length) {
         // 保留原 source（人工维护过的仍是 manual）
-        await this.endpointRepo.save(existing);
+        mirrored.push(await this.endpointRepo.save(existing));
         filled++;
         details.push({ key: k, action: 'filled', fields });
       } else {
@@ -595,6 +624,8 @@ export class ServicesService implements OnModuleInit {
         details.push({ key: k, action: 'skipped' });
       }
     }
+    // 批量导入一次可能几百行：只镜像真正发生写入的行（created + filled）
+    this.mirror.mirrorEntities('deploy_endpoints', mirrored);
 
     this.logger.log(
       `接口导入 ${serviceKey}（source=${source}）：新增 ${created} / 补空 ${filled} / 跳过 ${skipped}`,

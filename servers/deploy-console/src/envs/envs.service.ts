@@ -7,6 +7,7 @@ import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.en
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 import { DeployServiceEntity } from '../entities/deploy-service.entity';
 import { DeployHostEntity } from '../entities/deploy-host.entity';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { CreateEnvDto, UpdateEnvDto, UpdateServiceRouteDto } from './dto';
 
 /** 内置保留字（不可作为用户创建的自增 ID 冲突源） */
@@ -55,6 +56,8 @@ export class EnvsService implements OnModuleInit {
     private readonly serviceRepo: Repository<DeployServiceEntity>,
     @InjectRepository(DeployHostEntity)
     private readonly hostRepo: Repository<DeployHostEntity>,
+    // 配置镜像双写（M4，design §5 #6）
+    private readonly mirror: EnvSplitWriterService,
   ) {}
 
   /** 启动时幂等种子：站点 + 内置环境（迁移脚本 M2/M3 的运行时等价物） */
@@ -70,14 +73,17 @@ export class EnvsService implements OnModuleInit {
     for (const s of BUILTIN_SITES) {
       const exists = await this.siteRepo.findOne({ where: { key: s.key } });
       if (!exists) {
-        await this.siteRepo.save(this.siteRepo.create({ ...s, enabled: true }));
+        this.mirror.mirrorRow('deploy_sites', await this.siteRepo.save(this.siteRepo.create({ ...s, enabled: true })));
         this.logger.log(`种子站点已创建：${s.key} (${s.host})`);
       }
     }
     for (const e of BUILTIN_ENV_ROWS) {
       const exists = await this.envRepo.findOne({ where: { envId: e.envId } });
       if (!exists) {
-        await this.envRepo.save(this.envRepo.create({ ...e, builtin: true, enabled: true }));
+        this.mirror.mirrorRow(
+          'deploy_envs',
+          await this.envRepo.save(this.envRepo.create({ ...e, builtin: true, enabled: true })),
+        );
         this.logger.log(`种子环境已创建：${e.envId} (${e.name})`);
       }
     }
@@ -168,6 +174,7 @@ export class EnvsService implements OnModuleInit {
       }),
     );
     this.logger.log(`环境已创建：envId=${envId} (${saved.name}) site=${site.key}`);
+    this.mirror.mirrorRow('deploy_envs', saved);
     return saved;
   }
 
@@ -194,7 +201,9 @@ export class EnvsService implements OnModuleInit {
     if (dto.name !== undefined) env.name = dto.name.trim();
     if (dto.sort !== undefined) env.sort = dto.sort;
     if (dto.enabled !== undefined) env.enabled = dto.enabled;
-    return this.envRepo.save(env);
+    const saved = await this.envRepo.save(env);
+    this.mirror.mirrorRow('deploy_envs', saved);
+    return saved;
   }
 
   /** 删除前占用检查：返回占用该环境的应用清单（FR-3.5） */
@@ -218,6 +227,9 @@ export class EnvsService implements OnModuleInit {
     }
     await this.serviceEnvRepo.delete({ envId });
     await this.envRepo.delete({ envId });
+    // 顺序保持：先删子表再删主表，云库侧同样保序，否则会留下指向已删环境的悬空行
+    this.mirror.deleteMirror('deploy_service_envs', { envId });
+    this.mirror.deleteMirror('deploy_envs', { envId });
     this.logger.warn(`环境已删除：${envId}`);
     return { removed: true, occupants: [] };
   }
@@ -331,7 +343,9 @@ export class EnvsService implements OnModuleInit {
     if (dto.runtime !== undefined) row.runtime = dto.runtime;
     if (dto.healthPath !== undefined) row.healthPath = dto.healthPath || null;
     if (dto.enabled !== undefined) row.status = dto.enabled ? 'active' : 'disabled';
-    return this.serviceEnvRepo.save(row);
+    const saved = await this.serviceEnvRepo.save(row);
+    this.mirror.mirrorRow('deploy_service_envs', saved);
+    return saved;
   }
 
   /** 内置保留字（供前端提示） */
