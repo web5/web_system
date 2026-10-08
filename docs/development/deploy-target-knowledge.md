@@ -51,6 +51,11 @@ env-dir 类（admin / portal）**不需要**这条：它们的 base 由 `scripts
 base 错位只影响 public 资源 —— 已迁 `/static/cdn/pub/**`，风险消失）。
 基座是整页 HTML 加载，`<script src>` 用烘焙的**绝对 base**，故必须严格对齐。
 
+**门禁**：`scripts/pipeline-lint.mjs` 的 **L7** 规则会比对「构建 hook 的 `RELEASE_TAG` 口径」与
+「dev/prod 投递脚本的 `VER` 口径」（只看环境段是否带 `${DEPLOY_ENV}`），不一致即 error，
+防止本类事故复发。仅对 site-version 类应用（`shell`）生效；env-dir 类误报已排除，
+local 环境仍是 legacy flat 口径（已知遗留，未纳入门禁）。
+
 ---
 
 ## 2. 服务域（`deploy_services`）—— 部署 = 重启 + 探活

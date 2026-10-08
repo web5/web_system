@@ -276,6 +276,65 @@ for (const a of actions) {
   }
 }
 
+// L7 构建/投递口径一致性（site-version 类应用专用，跨 action 聚合后检查）
+// 背景：2026-10-08 dev + prod 基座资源 404 事故。构建 hook 用 RELEASE_TAG 决定 vite base，
+// 投递脚本用 VER 决定落盘目录；两者口径不一致时，index.html 里烘死的绝对路径与真实
+// 落盘路径错位 → 构建成功、投递成功，但页面资源全 404（最难排查的一类"发布成功但页面坏"）。
+// 判据只比"环境段口径"（是否含 ${DEPLOY_ENV}）：commit 段写法（COMMIT_ID / COMMIT_ID##*/ /
+// 中间变量 COMMIT_SHORT）各流水线不统一，比它会误报。
+{
+  // 仅对 site-version 类应用生效：这类应用的 vite base 由 RELEASE_TAG 唯一决定
+  // （apps/*/vite.config.ts 用 releaseTag 拼 base），口径错了必然 404。
+  // env-dir 类（portal/admin）的 base 由 scripts/vite-micro-frontend.mjs 的 resolveMfBase()
+  // 统一处理，RELEASE_TAG 只作标记，不参与路径 → 不检查，否则误报。
+  // 判据来自 deploy_apps.deploy_mode='site-version'；lint 离线跑，此处白名单化。
+  const SITE_VERSION_APPS = new Set(['shell']);
+  // local 环境投递仍是 legacy flat 口径（VER=${COMMIT_ID}），属已知历史遗留，
+  // 不纳入门禁，只比较真正上机器的 dev / prod。
+  const GATED_ENVS = new Set(['dev', 'prod']);
+
+  const byPipe = new Map();
+  for (const a of actions) {
+    if (!byPipe.has(a.pipelineId)) byPipe.set(a.pipelineId, []);
+    byPipe.get(a.pipelineId).push(a);
+  }
+  // 注意：构建 hook 里是"行内前缀赋值"（RELEASE_TAG=... vite build），不是独立赋值行，
+  // 只认引号内的表达式，避免把后面的命令行参数吃进来。
+  const assignOf = (script, name) => {
+    const out = [];
+    const re = new RegExp(`(?:^|\\s)(?:export\\s+)?${name}\\s*=\\s*"([^"]*)"`, 'gm');
+    for (const m of (script || '').matchAll(re)) out.push(m[1].trim());
+    return out;
+  };
+  for (const [pid, list] of byPipe) {
+    const appKey = (pid.match(/^tpl-(.+)-(?:dev|prod|local)$/) || [])[1];
+    if (!appKey || !SITE_VERSION_APPS.has(appKey)) continue;
+    const tags = [];
+    const vers = [];
+    for (const a of list) {
+      for (const e of assignOf(a.script, 'RELEASE_TAG')) {
+        tags.push({ at: `${pid} / ${a.taskName} / ${a.name}`, expr: e });
+      }
+      if (!GATED_ENVS.has(a.taskName)) continue;
+      for (const e of assignOf(a.script, 'VER')) {
+        vers.push({ at: `${pid} / ${a.taskName} / ${a.name}`, expr: e });
+      }
+    }
+    if (!tags.length || !vers.length) continue;
+    const hasEnv = (expr) => /\$\{?DEPLOY_ENV\}?/.test(expr);
+    const tagShapes = new Set(tags.map((t) => (hasEnv(t.expr) ? 'env-prefixed' : 'flat')));
+    const verShapes = new Set(vers.map((v) => (hasEnv(v.expr) ? 'env-prefixed' : 'flat')));
+    if (tagShapes.size === 1 && verShapes.size === 1 && [...tagShapes][0] === [...verShapes][0]) continue;
+    errors.push({
+      rule: 'L7',
+      at: pid,
+      msg: `构建 RELEASE_TAG 口径 (${[...tagShapes].join('|')}) 与投递 VER 口径 (${[...verShapes].join('|')}) 不一致 → `
+        + `产物 base 与落盘目录错位，页面资源 404（见 2026-10-08 基座事故）。`
+        + ` 构建: ${tags.map((t) => t.expr).join(' , ')} ｜ 投递: ${vers.map((v) => v.expr).join(' , ')}`,
+    });
+  }
+}
+
 const report = {
   checkedAt: new Date().toISOString(),
   source: has('--file') ? val('--file') : `${SSH_HOST}:${DB}`,
