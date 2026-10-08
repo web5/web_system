@@ -61,8 +61,11 @@ web_system/
 │   ├── shell-loader/         # 自研微前端加载器
 │   ├── agent-core/           # @kedouai/agent-core（ReAct 引擎/注册表/记忆压缩）
 │   ├── kedou-agent/          # Agent CLI
-│   └── mcp-core/             # MCP 核心
+│   ├── mcp-core/             # MCP 核心
+│   └── agent-message/        # AI 对话消息共享逻辑（blocks 解析/翻译/折叠）
 ├── docs/                     # 人读文档（架构/开发/UI/产品/发布手册）
+│   └── architecture/system-overview.md   # ← 架构与部署总览（唯一入口）
+├── specs/                    # 设计/变更规格（新机制先在此定稿）
 ├── scripts/                  # 构建/启动/验证/发布脚本
 ├── migrations/               # 数据库迁移 SQL
 ├── .codebuddy/               # 数字人体系（agent-kit / skills / rules）
@@ -167,7 +170,10 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 | 服务 / 应用 | 端口 | pm2 进程 | 说明 |
 |---|---|---|---|
 | gateway | 6000 | web-gateway | API 反代 + 微前端基座 + 版本分发/灰度 |
-| auth-service | 6101 | web-auth | 认证（6001 被本机其他项目占用，故用 6101） |
+| auth-service | 6101（**仅本机**） / 6001（dev·prod） | web-auth | 认证。本机 6001 被其他项目占用故用 6101，dev/prod 用 6001 |
+
+> ⚠️ 完整的**三环境端口矩阵**见 [`docs/architecture/system-overview.md`](./docs/architecture/system-overview.md) §3。
+> 注意本机用 `ecosystem.config.cjs`、发布目录用 `ecosystem.config.js`，两者 pm2 名与 auth 端口口径不同（已知技术债）。
 | user-service | 6002 | web-user | 用户 |
 | ai-service | 6003 | web-ai | AI 对话/生图 |
 | system-service | 6004 | web-system | 系统配置 |

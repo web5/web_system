@@ -1,5 +1,16 @@
 # web_system 网络架构（dev 环境流量与运维链路）
 
+> ❌ **本文已废弃（2026-10-08）**
+>
+> 停留在 2026-08 拓扑，关键数据已失真：
+> - pm2 服务数写 **6 个**，实际 **12 个**（含 mcp-gateway 6006 / content-hub 6007 / upload 6008 / ai-agent 6010 / knowledge 6011 / deploy-console 6200）
+> - 无 prod 运行目录 `/data/web_system_git`、静态外置 `/data/web_system_static`
+> - 无 deploy-console 的**本地库 / 云数据库按环境分流**（2026-10-08 M2 落地）
+> - 安全组端口清单与实际端口面不符
+>
+> **拓扑信息请改看 [`system-overview.md`](./system-overview.md) §9「环境拓扑」。
+> 配图 `.drawio` / `.svg` 同样视为过期，仅供历史追溯。**
+
 > 更新于 2026-08-15 · 配图见 `kedou-network-architecture.svg`（源文件 `kedou-network-architecture.drawio` 可导入 diagrams.net 编辑）
 
 ## 一、机器清单
