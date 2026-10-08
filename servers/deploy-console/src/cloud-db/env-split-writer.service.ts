@@ -99,8 +99,8 @@ export class EnvSplitWriterService {
         // 用 HttpException（而非裸 Error）：全局异常过滤器会把非 HttpException 的消息
         // 统一替换成「服务器内部错误」，运维就看不到「prod 没切」这个关键事实。
         throw new ServiceUnavailableException(
-          `prod 指针未生效：写云数据库失败（${msg}）。本地库已更新，但 prod gateway 读的是云库，` +
-            `prod 仍运行旧版本。请检查云库公网连通性与白名单后重试发布。`,
+          `prod 指针未生效：写云数据库失败（${redactEndpoint(msg)}）。本地库已更新，` +
+            `但 prod gateway 读的是云库，prod 仍运行旧版本。请检查云库公网连通性与白名单后重试发布。`,
         );
       }
       this.logger.error(`prod 指针写云库失败（STRICT=false，仅告警）：${msg}`);
@@ -143,7 +143,7 @@ export class EnvSplitWriterService {
     } catch (e) {
       const msg = (e as Error).message;
       // 非阻断：legacy 表不是 gateway 默认读取源
-      this.logger.warn(`legacy 指针（deploy_deployments）写云库失败，不阻断发布：${msg}`);
+      this.logger.warn(`legacy 指针（deploy_deployments）写云库失败，不阻断发布：${redactEndpoint(msg)}`);
       return { outcome: 'failed', error: msg };
     }
   }
@@ -204,4 +204,14 @@ export class EnvSplitWriterService {
       return { outcome: 'failed', error: msg };
     }
   }
+}
+
+/**
+ * 错误信息里的公网地址一律脱敏（IP:端口 / 云数据库域名）。
+ * 异常消息会经 HTTP 响应回到控制台 UI 与流水线脚本日志，不该带上公网入口信息。
+ */
+function redactEndpoint(msg: string): string {
+  return String(msg)
+    .replace(/(\d{1,3}\.){3}\d{1,3}(:\d+)?/g, '<云库地址>')
+    .replace(/[\w.-]+\.sql\.tencentcdb\.com(:\d+)?/g, '<云库地址>');
 }
