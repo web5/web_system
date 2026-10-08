@@ -39,10 +39,32 @@
 - 鉴权：未显式标注（按服务鉴权策略）
 - 入参：Param:id
 
+### POST /api/keys/admin
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto
+
 
 ## InternalKeyController（`InternalKeyController` → 注册路径基 `internal/keys`）
 
 ### POST /api/internal/keys/verify
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto
+
+
+## EmailController（`EmailController` → 注册路径基 `users/email`）
+
+### POST /api/users/email/code
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto
+
+### POST /api/users/email/test
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto
+
+
+## InternalEmailController（`InternalEmailController` → 注册路径基 `internal/users/email`）
+
+### POST /api/internal/users/email/verify
 - 鉴权：未显式标注（按服务鉴权策略）
 - 入参：Body:dto
 
@@ -241,6 +263,14 @@
 | status | 'active' | 'inactive' | 'banned' | 否 |  |
 | roles | string[] | 否 |  |
 | dailyTransformLimit | number | null | 否 |  |
+| preferences | UserPreferencesDto | 否 |  |
+
+###### UpdateUserDto.preferences → `UserPreferencesDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| radiusStyle | UiRadiusStyle | 否 |  |
+
 
 
 ### POST /api/users/me/avatar
@@ -297,6 +327,14 @@
 | status | 'active' | 'inactive' | 'banned' | 否 |  |
 | roles | string[] | 否 |  |
 | dailyTransformLimit | number | null | 否 |  |
+| preferences | UserPreferencesDto | 否 |  |
+
+###### UpdateUserDto.preferences → `UserPreferencesDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| radiusStyle | UiRadiusStyle | 否 |  |
+
 
 
 ### DELETE /api/users/:id

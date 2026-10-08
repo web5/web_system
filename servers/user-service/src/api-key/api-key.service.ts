@@ -185,6 +185,18 @@ export class ApiKeyService {
     name?: string,
     ownerId?: number | null,
   ): Promise<{ plaintext: string; prefix: string }> {
-    return this.createKey(email, name, ownerId ?? null, 'admin');
+    let resolvedEmail = email;
+    if (ownerId != null) {
+      // 归属人是审计字段，必须指向一个真实且启用中的用户：
+      // 绑到不存在/已禁用的人 = 发布记录查不到责任人，与本次目的相悖。
+      const user = await this.userRepo.findOne({ where: { id: ownerId } });
+      if (!user) throw new BadRequestException(`ownerId=${ownerId} 用户不存在`);
+      if (user.status !== 'active') {
+        throw new BadRequestException(`ownerId=${ownerId} 用户已被禁用`);
+      }
+      if (!resolvedEmail) resolvedEmail = user.email;
+    }
+    if (!resolvedEmail) throw new BadRequestException('缺少邮箱');
+    return this.createKey(resolvedEmail, name, ownerId ?? null, 'admin');
   }
 }
