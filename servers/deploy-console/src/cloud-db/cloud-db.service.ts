@@ -36,6 +36,17 @@ export class CloudDbService implements OnModuleDestroy {
     return String(this.cfg.get('DEPLOY_CLOUD_DB_STRICT') ?? 'true').toLowerCase() !== 'false';
   }
 
+  /**
+   * 单次云库操作的**应用层硬超时**（默认 8s）。
+   *
+   * 为什么不能只靠驱动超时：实测（2026-10-08）公网链路被阻断时，mysql2 单次 connect
+   * 会挂到 **31s** 才报错（`connectTimeout` 在「SYN 无响应/被拒」场景不生效），
+   * 两次重试即 63s —— 发布任务会长时间卡住且失败反馈延迟。故在应用层再兜一层。
+   */
+  get queryTimeoutMs(): number {
+    return Number(this.cfg.get('DEPLOY_CLOUD_DB_QUERY_TIMEOUT') || 8000);
+  }
+
   /** 取连接（未启用返回 null；失败返回 null 并记 error，允许下次重试） */
   async getDataSource(): Promise<DataSource | null> {
     if (!this.enabled) return null;
@@ -91,7 +102,12 @@ export class CloudDbService implements OnModuleDestroy {
         connectionLimit: 3,
       },
     });
-    await ds.initialize();
+    // 建连同样要兜应用层超时：公网握手异常时会长时间挂起
+    await withTimeout(
+      ds.initialize(),
+      this.queryTimeoutMs,
+      `云数据库建连超时（>${this.queryTimeoutMs}ms）`,
+    );
     this.ds = ds;
     this.logger.log(`云数据库（prod 真相源）已连接：${host}:${port}/${database}`);
     return ds;
@@ -104,9 +120,14 @@ export class CloudDbService implements OnModuleDestroy {
       const ds = await this.getDataSource();
       if (!ds) throw new Error('云数据库不可用（未启用或连接失败），prod 指针未同步');
       try {
-        return (await ds.query(sql, params)) as T;
+        return (await withTimeout(
+          ds.query(sql, params),
+          this.queryTimeoutMs,
+          `云数据库查询超时（>${this.queryTimeoutMs}ms）`,
+        )) as T;
       } catch (e) {
         lastErr = e as Error;
+        // 超时同样按瞬时错误处理：公网抖动重试一次即可恢复
         if (attempt === 2 || !isTransient(e)) break;
         this.logger.warn(`云数据库查询失败，重试 1 次：${lastErr.message}`);
         await sleep(500);
@@ -138,9 +159,24 @@ export class CloudDbService implements OnModuleDestroy {
 /** 公网场景的瞬时错误：超时、连接被断、握手丢失 —— 重试有意义 */
 function isTransient(e: unknown): boolean {
   const code = String((e as { code?: string })?.code || '');
-  return ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'PROTOCOL_CONNECTION_LOST', 'EPIPE'].includes(
-    code,
-  );
+  if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'PROTOCOL_CONNECTION_LOST', 'EPIPE'].includes(code)) {
+    return true;
+  }
+  // 应用层超时（withTimeout 抛的）：底层可能还在挂，重试一次通常能恢复
+  return /超时/.test(String((e as Error)?.message || ''));
+}
+
+/** 应用层硬超时兜底：驱动超时在「SYN 无响应」场景不生效（实测挂 31s） */
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(msg)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
 }
 
 function sleep(ms: number): Promise<void> {
