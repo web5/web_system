@@ -37,6 +37,7 @@ import {
 } from '../config/config.service';
 // 版本注册表：指针双写（legacy deploy_deployments + 新模型 deploy_app_env_versions）
 import { ReleaseRegistryService } from '../registry/release-registry.service';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 
 /**
  * 任务状态枚举
@@ -101,6 +102,8 @@ export class DeployService {
     private readonly audit: AuditService,
     // 双写（2026-09-28）：前端 env-dir 应用的指针同步到 deploy_app_env_versions
     private readonly registry: ReleaseRegistryService,
+    // 按环境分流（2026-10-08）：prod 的指针镜像写到云数据库（prod gateway 的读取源）
+    private readonly splitWriter: EnvSplitWriterService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -957,6 +960,13 @@ export class DeployService {
     row.deployedAt = new Date();
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
+    // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
+    await this.splitWriter.mirrorLegacyPointer({
+      env,
+      moduleKey: component,
+      currentVersion: versionTag,
+      deployedBy: operator,
+    });
     // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
     await this.registry.syncAppEnvPointer({
       env,
@@ -1066,6 +1076,13 @@ export class DeployService {
     row.deployedAt = new Date();
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
+    // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
+    await this.splitWriter.mirrorLegacyPointer({
+      env,
+      moduleKey,
+      currentVersion: version,
+      deployedBy: operator,
+    });
     // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
     await this.registry.syncAppEnvPointer({
       env,

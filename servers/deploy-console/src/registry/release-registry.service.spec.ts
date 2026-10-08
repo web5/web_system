@@ -8,6 +8,8 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
   // 双写（2026-09-28）：应用域 + 应用×环境版本指针
   let appRepo: { findOne: jest.Mock };
   let appVersionRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  // 按环境分流（2026-10-08）：prod 指针镜像写云库
+  let splitWriter: { mirrorPointer: jest.Mock; mirrorLegacyPointer: jest.Mock };
   let svc: ReleaseRegistryService;
 
   beforeEach(() => {
@@ -27,11 +29,16 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       create: jest.fn(() => ({})),
       save: jest.fn(async (x: unknown) => x),
     };
+    splitWriter = {
+      mirrorPointer: jest.fn(async () => ({ outcome: 'skipped' })),
+      mirrorLegacyPointer: jest.fn(async () => ({ outcome: 'skipped' })),
+    };
     svc = new ReleaseRegistryService(
       versionRepo as never,
       deploymentRepo as never,
       appRepo as never,
       appVersionRepo as never,
+      splitWriter as never,
     );
   });
 
@@ -132,6 +139,43 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' }),
     ).resolves.toBeUndefined();
     expect(deploymentRepo.save).toHaveBeenCalled();
+  });
+
+  // ==================== 按环境分流（2026-10-08，design.md §6） ====================
+
+  it('分流：本地写成功后调用云库镜像（prod 指针由 writer 决定是否落云库）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9', taskId: 't-9' });
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9', taskId: 't-9' }),
+    );
+    // legacy 指针也镜像（应急读取源）
+    expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
+  });
+
+  it('分流：本地写失败时**不**镜像（没有可信数据可同步）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.save.mockRejectedValueOnce(new Error('db down'));
+    await svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' });
+    expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
+  });
+
+  it('分流：本地成功但云库镜像失败 → 抛出（禁止「显示成功、prod 没切」）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
+    splitWriter.mirrorPointer.mockRejectedValueOnce(new Error('云库公网不通'));
+    await expect(
+      svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9' }),
+    ).rejects.toThrow(/云库公网不通/);
+    // 本地已写成功（回滚目标仍在），错误必须上抛让任务失败
+    expect(appVersionRepo.save).toHaveBeenCalled();
+  });
+
+  it('分流：后端服务（未登记应用）本地不写新表 → 也不镜像指针', async () => {
+    appRepo.findOne.mockResolvedValue(null);
+    await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'v9' });
+    expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
+    // legacy 是后端服务唯一指针，仍需镜像
+    expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
   });
 
   it('findByVersionTag 按标签查版本记录；无记录 → undefined', async () => {

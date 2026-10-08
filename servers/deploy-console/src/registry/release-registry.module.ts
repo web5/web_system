@@ -4,6 +4,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployAppEntity } from '../entities/deploy-app.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
+import { CloudDbModule } from '../cloud-db/cloud-db.module';
 import { ReleaseRegistryService } from './release-registry.service';
 
 /**
@@ -12,6 +13,9 @@ import { ReleaseRegistryService } from './release-registry.service';
  */
 @Module({
   imports: [
+    // 按环境分流的镜像写（prod → 云数据库）；
+    // DEPLOY_CLOUD_DB_ENABLED≠true 时全部走 skipped 分支，等同改造前行为
+    CloudDbModule,
     TypeOrmModule.forFeature([
       DeployVersionEntity,
       DeployDeploymentEntity,

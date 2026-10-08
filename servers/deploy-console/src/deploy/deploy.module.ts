@@ -21,6 +21,8 @@ import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { AppsModule } from '../apps/apps.module';
 // 配置中心：部署前把解析结果下发给服务进程（写 .env.generated），见 DeployService.writeGeneratedEnv
 import { ConfigCenterModule } from '../config/config.module';
+// 按环境分流：prod 的指针/配置镜像写到云数据库（design.md §5）
+import { CloudDbModule } from '../cloud-db/cloud-db.module';
 
 /**
  * 部署管理模块
@@ -37,6 +39,7 @@ import { ConfigCenterModule } from '../config/config.module';
     StageCommandModule,
     ReleaseRegistryModule,
     AppsModule,
+    CloudDbModule,
     // 配置中心（下发配置到服务 .env.generated）
     ConfigCenterModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),
