@@ -34,17 +34,22 @@
 
 ### 1.1 基座（shell）构建动作约定 —— 换环境重踩点
 
-基座按**版本目录**加载：产物投 `static/modules/shell/<pipelineKey>/<commit>/`，指针值就是
-`<pipelineKey>/<commit>`（gateway `resolveShellHtmlFile()` 按指针拼路径读 index.html）。
+基座按**版本目录**加载：legacy 扁平布局（`static/modules/shell/<pipelineKey>/<commit>/`，
+指针 = `<pipelineKey>/<commit>`）已随 `2ec51212`（停用 legacy 读取源）废弃。**现行 NEW 域口径**：
+gateway `resolveShellDir()` 按 `deploy_app_env_versions(appKey='shell', envId)` 读版本，
+从 `static/modules/shell/<envId>/<纯commit>/` 读 index.html；投递脚本同口径投
+`$PUBLISH_PATH/<envId>/<纯commit>/`。
 因此它的 build 动作必须满足两条，缺一即「构建过了但页面不对」：
 
 | 必须 | 原因 | 缺失症状 |
 |---|---|---|
 | `cd "$RELEASE_DIR/apps/$MODULE_DIR"` | 平台默认 cwd 是发布目录根，而基座入口是 `apps/shell/index.html` | `Could not resolve entry module "index.html"`（构建直接失败） |
-| `RELEASE_TAG="$COMMIT_ID"`（完整引用，如 `shell-dev/7787826`） | `apps/shell/vite.config.ts` 用 `releaseTag` 决定 vite `base` | base 回落 `/shell/`（覆盖式发布时代的旧目录）→ 产物内资源路径与投递目录不一致 |
+| `RELEASE_TAG="${DEPLOY_ENV}/${COMMIT_ID##*/}"`（env-dir 口径，如 `dev/7787826`） | `apps/shell/vite.config.ts` 用 `releaseTag` 决定 vite `base`；**base 的版本段必须与投递目录版本段逐段一致** | 旧口径（完整引用 `shell-dev/xxxx`）烘出的 base 与投递目录 `dev/xxxx` 不一致 → 产物资源 404（2026-09-30 dev 事故，10-08 修复）；不注入则 base 回落 `/shell/` → 同样不一致 |
 
 env-dir 类（admin / portal）**不需要**这条：它们的 base 由 `scripts/vite-micro-frontend.mjs`
-的 `resolveMfBase()` 统一处理，且入口指针固定不含版本。
+的 `resolveMfBase()` 统一处理，且入口指针固定不含版本（SystemJS chunk 间相对引用，
+base 错位只影响 public 资源 —— 已迁 `/static/cdn/pub/**`，风险消失）。
+基座是整页 HTML 加载，`<script src>` 用烘焙的**绝对 base**，故必须严格对齐。
 
 ---
 
