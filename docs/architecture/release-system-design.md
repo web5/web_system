@@ -343,7 +343,8 @@ dev.kedouai.com ──nginx──▶ gateway(dev)   .env DEPLOY_ENV_ID=dev
 kedouai.com      ──nginx──▶ gateway(prod)  .env DEPLOY_ENV_ID=prod
 ```
 
-> 域名约定：生产域名为 `kedouai.com`；`portal.kedouai.com` 已失效（不再解析），勿再使用。
+> 域名约定：生产域名为 `kedouai.com`；`portal.kedouai.com` 已于 2026-09-10 下线（nginx 无对应
+> server 块、DNS 记录待删，即使解析也会因证书 SAN 不匹配而不可用），勿再引用。
 
 - 优点：环境彻底隔离、故障域独立、实现简单。
 - 缺点：每环境一套 gateway 进程。
