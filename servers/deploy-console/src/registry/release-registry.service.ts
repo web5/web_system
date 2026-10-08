@@ -6,6 +6,7 @@ import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployAppEntity } from '../entities/deploy-app.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 
 export interface RegisterVersionInput {
   env: string;
@@ -46,6 +47,11 @@ export interface SetPointerInput {
  * 为什么前端仍双写：gateway 已停用 legacy 读取源（2026-09-28），新表是**唯一**前端读取源；
  * 继续写旧表只是为了让「应急开关 `DEPLOY_LEGACY_READ=1`」与运维排障仍有可比对的数据。
  * ⚠️ 两轨出现差异时**以新表为准**。
+ *
+ * **按环境分流（2026-10-08，specs/deploy-console-env-datasource/design.md）**：
+ * prod 的指针必须**同时**写云数据库——prod gateway 在广州 VPC 内网读云库，
+ * 而 console 在 dev 机（南京）只能走公网写云库。此前只有 dev 本机库被自动更新，
+ * prod 指针靠人工同步，导致 prod 发布「显示成功但线上没切」（2026-09-30 基座事故）。
  */
 @Injectable()
 export class ReleaseRegistryService {
@@ -60,6 +66,8 @@ export class ReleaseRegistryService {
     private readonly appRepo: Repository<DeployAppEntity>,
     @InjectRepository(DeployAppEnvVersionEntity)
     private readonly appVersionRepo: Repository<DeployAppEnvVersionEntity>,
+    /** 按环境分流的镜像写（prod → 云数据库，公网） */
+    private readonly splitWriter: EnvSplitWriterService,
   ) {}
 
   /** 写一条版本发布记录（deploy_versions） */
@@ -94,6 +102,9 @@ export class ReleaseRegistryService {
     if (input.taskId) row.taskId = input.taskId;
     await this.deploymentRepo.save(row);
 
+    // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
+    await this.splitWriter.mirrorLegacyPointer(input);
+
     // 双写：前端 env-dir 应用同步到 deploy_app_env_versions（gateway byEnv 的读取源）
     await this.syncAppEnvPointer(input);
   }
@@ -104,10 +115,16 @@ export class ReleaseRegistryService {
    * `site-version`（基座 shell）同样要写：gateway 的 `resolveShellHtmlFile`
    * 停用 legacy 后从本表读版本（目录 `static/modules/<key>/<envId>/<version>/`）。
    *
-   * **失败只告警不抛出**：写失败不该让整条流水线红掉
-   * （legacy 已写成功；运维可从告警发现两轨不一致）。
+   * **失败语义（分两段，2026-10-08 修正）**：
+   * 1. 本地库写失败 → **只告警**（沿用原语义：legacy 已写成功，运维可从告警发现两轨不一致）
+   * 2. 本地成功、但 **prod 云库镜像失败** → **抛出**（见 EnvSplitWriterService）
+   *
+   * ⚠️ 第 2 条是本次修正的核心。原注释「失败只告警不抛出」在单库时代是合理止损，
+   * 分流后却成了事故放大器：本地成功 + 云库失败 = 流水线显示成功、prod 实际仍跑旧版本，
+   * 与 2026-09-30 基座事故形态完全一致。宁可让任务红掉，也不要静默不一致。
    */
   async syncAppEnvPointer(input: SetPointerInput): Promise<void> {
+    let written = false;
     try {
       const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
       if (!app) return; // 后端服务 / 未登记模块：新模型无此实体（legacy 仍是唯一指针）
@@ -126,11 +143,18 @@ export class ReleaseRegistryService {
       row.deployedBy = input.deployedBy;
       if (input.taskId) row.taskId = input.taskId;
       await this.appVersionRepo.save(row);
+      written = true;
     } catch (e) {
       this.logger.warn(
         `同步 deploy_app_env_versions 失败（legacy 已写成功，两轨可能不一致）：${(e as Error).message}`,
       );
+      return; // 本地都没写成功，没有可信数据可镜像
     }
+
+    if (!written) return;
+
+    // 分流：prod 的指针镜像到云库（prod gateway 的读取源）。失败按严格语义抛出。
+    await this.splitWriter.mirrorPointer(input);
   }
 
   /** 当前线上版本（指针），无记录返回 undefined */

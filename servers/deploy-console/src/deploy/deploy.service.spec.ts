@@ -19,6 +19,8 @@ import { CommandService } from '../shell/command.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { AppsService } from '../apps/apps.service';
+// 按环境分流（2026-10-08）：DeployService 依赖它把 prod 指针镜像到云数据库
+import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 
 /** 配置中心桩：默认「无 module 级条目」→ 既有用例走「跳过下发」路径，行为不变 */
 const noDispatchConfigCenter = () => ({
@@ -29,6 +31,13 @@ const noDispatchConfigCenter = () => ({
 
 /** 审计桩（下发只记「键 + hash」，不记明文） */
 const auditStub = () => ({ log: jest.fn().mockResolvedValue(undefined) });
+
+/** 云库分流桩：单测不连公网云库，镜像写一律「成功但不落地」 */
+const splitWriterStub = () => ({
+  mirrorPointer: jest.fn().mockResolvedValue(undefined),
+  mirrorLegacyPointer: jest.fn().mockResolvedValue(undefined),
+  mirrorRows: jest.fn().mockResolvedValue(undefined),
+});
 
 // ssh2 全程 mock：远程部署测试不能真的连机器
 jest.mock('ssh2', () => {
@@ -69,6 +78,7 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
@@ -181,6 +191,7 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
@@ -319,6 +330,7 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
@@ -394,6 +406,7 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
@@ -494,6 +507,7 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
@@ -585,6 +599,7 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
     const module = await Test.createTestingModule({
       providers: [
         DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => (k === 'RELEASE_WORKSPACE' ? workspace : undefined) },
