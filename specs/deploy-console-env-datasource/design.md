@@ -189,7 +189,7 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 | M0 | ~~控制台开启云数据库公网，记录域名:端口；白名单放行 `175.27.189.123/32`~~ **✅ 完成（2026-10-08）**：`gz-cdb-8y2lp8rt.sql.tencentcdb.com:27241`，白名单已放行。遗留：**建议给 dev 机绑 EIP**（普通公网 IP 变配/重建后会失效） | 人工 |
 | M1 | ~~dev 机验证连通~~ **✅ 完成（2026-10-08）**：TCP 通、mysql 握手 0.177s、池化查询稳定 36ms | M0 |
 | M2 | 落 §5 的 #1–#5（指针分流是核心价值，先上） | M1 | **✅ 完成（2026-10-08）**，见 §12 实施记录 |
-| M3 | 基线同步：把本地库 §4 的 12 张表全量灌入云库（当前云库配置落后，如 vars/modules） | M1 |
+| M3 | ~~基线同步~~ **✅ 完成（2026-10-08）**：实测 §4 的 **10 张配置表两库已完全一致**（逐行内容 diff = 0，无需灌入）；仅 legacy `deploy_deployments` 落后（云库 7 行旧口径 / 本地 23 行），已备份后从本地 REPLACE 补齐，prod 行校验一致。详见 §13 | M1 |
 | M4 | 落 §5 的 #6–#8（配置镜像双写） | M2 |
 | M5 | 落 #9 一致性检查 | M4 |
 
@@ -275,7 +275,55 @@ DEPLOY_CLOUD_DB_STRICT=true       # prod 写失败是否让任务失败（默认
 
 ### 遗留（M3–M5）
 
-- M3 基线同步：`deploy_modules` 等 10 张配置表全量灌入云库（当前云库配置落后）
-- M4 配置镜像双写：`mirrorRows` 已就绪，需在 module-registry / server / envs / target / canary 的保存处接入
+- ~~M3 基线同步~~ **✅ 完成（2026-10-08）**，见 §13
+- M4 配置镜像双写：`mirrorRows` 已就绪，需在 module-registry / server / envs / target / canary 的保存处接入（**优先级下调**：10 张配置表当前两库已一致，M4 是防漂移而非救火）
 - M5 一致性检查脚本（含接入 pipeline-lint 的评估）
 - 运维项：dev 机绑 EIP（白名单长期隐患）、云库公网是否开 SSL
+
+---
+
+## 13. M3 实施记录（2026-10-08）
+
+### 结论先说：原计划要灌的 10 张配置表，**一行都不用灌**
+
+M3 立项时的判断是「云库配置落后」（源于早期观察到 `deploy_pipelines.vars` 云库 94 vs 本地 119）。
+实施前做了一次逐行内容比对（两库都 `SELECT *` 全列排序后 diff），实测结果：
+
+| 表 | LOCAL | CLOUD | 内容差异行数 |
+|---|---|---|---|
+| `deploy_modules` | 16 | 16 | **0** |
+| `deploy_apps` | 4 | 4 | **0** |
+| `deploy_sites` | 3 | 3 | **0** |
+| `deploy_hosts` | 3 | 3 | **0** |
+| `deploy_envs` | 3 | 3 | **0** |
+| `deploy_endpoints` | 361 | 361 | **0** |
+| `deploy_services` | 13 | 13 | **0** |
+| `deploy_service_envs` | 32 | 32 | **0** |
+| `deploy_service_routes` | 3 | 3 | **0** |
+| `deploy_canary_rules` | 4 | 4 | **0** |
+
+→ **§4 清单里 gateway 真正会读的 10 张配置表，两库早已逐字节一致**。
+当初看到的 `vars 94 vs 119` 属于 `deploy_pipelines` —— 该表本就在「不镜像」范围内（gateway 不读），
+**不构成 prod 运行风险**。M3 的立项前提被推翻，工作量从「12 表全量灌入」收敛成「补一张 legacy 表」。
+
+> 教训：漂移清单要按「谁在读」过滤后再下结论。之前把「两库差异」直接等同于「云库落后且危险」，属于把噪音当风险。
+
+### 实际做了什么
+
+| 表 | 处理 | 理由 |
+|---|---|---|
+| `deploy_app_env_versions` | **不动** | 校验发现 **prod 行 `current_version` 完全一致**（shell=b94924b3 / portal=admin=6e7b2690）。dev/local 行虽有差异（云库残留 9/28 旧口径如 `admin-dev/cdb055bc`），但 prod gateway 只读自己 env 的行 → 对 prod 零影响。为避免任何「把云库正确值回写成本地值」的风险，本次不覆盖 |
+| `deploy_deployments`（legacy） | **本地 → 云库 REPLACE 补齐**（7 → 23 行） | 该表是 `DEPLOY_LEGACY_READ=1` 时的应急读取源。云库原 7 行是旧口径（`gateway-dev/7a6be04` 这类扁平格式），且缺 16 行（含 portal/admin/mcp-gateway/content-hub/user-service/todo-service 等 prod 行）→ 一旦启用应急开关，prod 会读到残缺且过期的指针。M2 上线后该表已能自动镜像（shell@prod 行已随本次验证更新），这次只是把历史补齐 |
+
+### 执行与回退
+
+- 备份：`/data/backup/deploy_deployments-cloud-20261008-190158.sql`（云库侧，dev 机）
+- 同步：`mysqldump --replace --no-create-info` 管道导入（REPLACE = delete+insert，云库无外键，无级联风险）
+- 回退：`mysql -h <云库域名> -P 27241 -u root web_system_deploy < /data/backup/deploy_deployments-cloud-20261008-190158.sql`
+- 验证：行数 7 → 23；**9 条 prod 行 `current_version` 与本地完全一致**（含 shell=b94924b3）
+
+### 顺带发现（P2）
+
+同值幂等推进时，本地库因 `unchanged` 跳过写入、云库仍被镜像 → 两库 `deployed_by` / `deployed_at` 会漂移。
+`current_version` 始终一致，不影响 gateway 读取，只影响审计字段。纳入 M5 一致性检查的比对范围时
+应**忽略 `deployed_by` / `deployed_at`，只比对版本列**，否则会持续误报。
