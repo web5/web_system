@@ -1,6 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentRegistry, AgentDefinition, CapabilityRef, SkillRef, ToolRegistry, McpToolMeta } from '@kedouai/agent-core';
+import {
+  AgentRegistry,
+  AgentDefinition,
+  CapabilityRef,
+  SkillRef,
+  ToolRegistry,
+  ClientRegistry,
+  McpToolMeta,
+} from '@kedouai/agent-core';
 import { McpService } from '../mcp/mcp.service';
 
 /**
@@ -40,12 +48,15 @@ export class AgentDefSyncService {
   private started = false;
   /** 「MCP 网关未配置」告警只打一次，避免每个 agent 定义轮询时刷屏 */
   private mcpUnavailableWarned = false;
+  /** 已告警过的 `agentId:model`（同一条只报一次；修好后自动移出） */
+  private readonly warnedModels = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
     private readonly agentRegistry: AgentRegistry,
     private readonly toolRegistry: ToolRegistry,
     private readonly mcpService: McpService,
+    private readonly clientRegistry: ClientRegistry,
   ) {
     const base = this.configService.get<string>('AI_SERVICE_URL', 'http://localhost:6003');
     this.endpoint = `${base.replace(/\/$/, '')}/internal/agent-definitions`;
@@ -90,6 +101,7 @@ export class AgentDefSyncService {
         if (!def) continue;
         this.agentRegistry.upsert(def);
         this.registerMcpCapabilities(def);
+        this.assertModelRegistered(def);
         updated++;
       }
       if (updated > 0) {
@@ -98,6 +110,34 @@ export class AgentDefSyncService {
     } catch (e) {
       this.logger.warn(`Agent 定义同步异常: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * 定义里的 `model` 必须**逐字**命中 ClientRegistry 的注册键。
+   *
+   * 为什么必须显式校验：注册键来自 `BUILTIN_TOKENHUB_MODELS` / `TOKENHUB_MODELS`
+   * （带 `deepseek/` 前缀），而后台里很容易填成 TokenHub 的短名
+   * （`deepseek-v4-flash`）。两者不一致时 `getOrFallback` **不抛错**，
+   * 只会静默回退到 hy3 —— 线上表现为「agent 徽标正确、但模型悄悄换了、偶尔兜底」，
+   * 2026-10-08 的路由事故就是这样藏了整轮对话（靠 ClientRegistry 的 warn 才捞出来）。
+   *
+   * 每个 `agentId:model` 只告警一次（30s 轮询否则会刷屏）；改对后自动移出告警集。
+   */
+  private assertModelRegistered(def: AgentDefinition): void {
+    const model = String(def.model || '');
+    if (!model) return;
+    const key = `${def.id}:${model}`;
+    const registered = new Set(this.clientRegistry.listModels().map((m) => m.id));
+    if (registered.has(model)) {
+      this.warnedModels.delete(key);
+      return;
+    }
+    if (this.warnedModels.has(key)) return;
+    this.warnedModels.add(key);
+    this.logger.error(
+      `Agent「${def.id}」的 model 未注册，运行期会静默回退 hy3：model=${model}；` +
+        `已注册=[${[...registered].join(', ')}]`,
+    );
   }
 
   private toAgentDefinition(row: Record<string, unknown>): AgentDefinition | null {

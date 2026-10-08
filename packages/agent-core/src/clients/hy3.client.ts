@@ -94,6 +94,18 @@ export class Hy3Client extends BaseAiClient {
     return (await this.chatWithTools(messages, [], options)).content;
   }
 
+  /**
+   * 思考开关（网关透传官方 `thinking` 参数）。
+   *
+   * hy3 默认是「边想边答」：只给 60 token 预算时，思考会先把预算吃光，
+   * 返回 `finish_reason=length` + `content=''`（实测 2026-10-08，意图分类 3/3 复现）。
+   * 只有调用方**显式**传 options.thinking 才下发 —— 不传时 payload 与改造前逐字节一致，
+   * 主对话的「思考中」可视化不受影响。
+   */
+  private thinkingPayload(options?: ChatOptions): Record<string, unknown> {
+    return options?.thinking ? { thinking: options.thinking } : {};
+  }
+
   async chatWithTools(
     messages: ChatMessage[],
     tools: ToolCallSchema[],
@@ -110,6 +122,7 @@ export class Hy3Client extends BaseAiClient {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 2000,
       top_p: options?.topP ?? 1.0,
+      ...this.thinkingPayload(options),
       stream: false,
     };
     if (tools.length > 0) {
@@ -205,6 +218,7 @@ export class Hy3Client extends BaseAiClient {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 4000,
       top_p: options?.topP ?? 1.0,
+      ...this.thinkingPayload(options),
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -311,6 +325,7 @@ export class Hy3Client extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 2000,
+      ...this.thinkingPayload(options),
       stream: true,
     };
 

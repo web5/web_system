@@ -59,7 +59,7 @@ const GENERAL_AGENT_DEFINITION: AgentDefinition = {
     '回答要求：准确、简洁、语气友好；不确定的信息要明确说明，不要编造。' +
     '需要查询实时信息（新闻、天气、行情等）时调用 web-search 工具后基于结果作答。' +
     '若用户的需求明显属于专业场景（如 AI 绘画、合同审查、翻译），可以建议用户使用对应功能入口。',
-  model: 'deepseek-v4-flash',
+  model: 'deepseek/deepseek-v4-flash',
   tools: ['web-search'],
   maxSteps: 8,
   temperature: 0.7,

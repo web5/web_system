@@ -18,6 +18,7 @@ import {
   type ToolCall,
   type ChatWithToolsResult,
   type StreamToolEvent,
+  type ThinkingOption,
   parseJsonToolCall,
 } from './base-ai.client';
 import { Logger } from '../lib/logger';
@@ -43,6 +44,18 @@ function resolveThinking(modelId: string): Record<string, unknown> {
     return { thinking: { type: 'enabled', budget_tokens: 1024 } };
   }
   return {};
+}
+
+/**
+ * 最终思考参数：**按调用**覆盖 > 按模型名推断 > 环境变量。
+ *
+ * 优先级刻意设为「显式传参最高」：调用方最清楚这次要什么
+ * （意图分类只要 60 token 的 JSON → 必须 disabled；主对话要边想边答 → 用默认）。
+ * 环境变量是全局开关，改它会连带影响主对话，因此不能用来修单点调用。
+ */
+function thinkingPayload(modelId: string, override?: ThinkingOption): Record<string, unknown> {
+  if (override) return { thinking: override };
+  return resolveThinking(modelId);
 }
 
 export class TokenHubClient extends BaseAiClient {
@@ -93,7 +106,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      ...resolveThinking(this.modelId),
+      ...thinkingPayload(this.modelId, options?.thinking),
       stream: false,
     };
     if (tools.length > 0) {
@@ -190,7 +203,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      ...resolveThinking(this.modelId),
+      ...thinkingPayload(this.modelId, options?.thinking),
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -303,7 +316,7 @@ export class TokenHubClient extends BaseAiClient {
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 8000,
-      ...resolveThinking(this.modelId),
+      ...thinkingPayload(this.modelId, options?.thinking),
       stream: true,
     };
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {
