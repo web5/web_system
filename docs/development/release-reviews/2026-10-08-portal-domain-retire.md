@@ -3,13 +3,13 @@
 > 评审对象：`nginx-proxy.conf`（仓库模板）、`docs/architecture/release-system-design.md`。
 > 触发规则：`release-interface`（环境/发布配置面）。判据源：`docs/development/release-review-checklist.md`。
 
-## 阻塞: 0　　重要: 1
+## 阻塞: 0　　重要: 0（DNS 保留为 2026-10-08 已决策的接受项，见 §4）
 
 ## 1 事实核查（排查结论）
 
 | 面 | 结论 | 证据 |
 |----|------|------|
-| DNS | 清理前**仍解析**到 gateway（TTL 600），非泛解析（随机子域无记录） | 随机子域探测空；`portal` A 记录存在 |
+| DNS | **仍解析**到 gateway（TTL 600），非泛解析（随机子域无记录）；2026-10-08 决策**保留不删** | 随机子域探测空；`portal` A 记录存在且 ENABLE |
 | HTTPS | 不可用：证书 SAN 不含 `portal.kedouai.com`，握手报 `SSL: no alternative certificate subject name matches` | curl (60) |
 | 线上 nginx | 生效配置**无** portal server 块（请求落到默认 server） | `grep portal.kedouai /etc/nginx/conf.d/*.conf` → 无 |
 | 线上残留 | `portal.conf.disabled` + 3 个 portal 相关 `.bak` | 已归档（见 §2） |
@@ -50,11 +50,19 @@
 **重要（1）**：DNS 的 `portal` A 记录仍未删除（API 子账号无 `dnspod:DeleteRecord` / `ModifyRecordStatus` 权限），
 需账号在 DNSPod 控制台手工删除 —— 见 §4。在删除前，「域名解析但不可用」的状态依旧存在。
 
-## 4 待办（需控制台权限）
+## 4 DNS 记录：保留不删（2026-10-08 决策）
 
-1. DNSPod → 域名 `kedouai.com` → 解析记录 → 找到主机记录 `portal`（A 记录，TTL 600）→ 删除。
-2. 删除后验证：`dig +short portal.kedouai.com A` 应为空。
-3. 回滚：重新添加 A 记录 `portal` → gateway 公网 IP（同 `kedouai.com` 的记录值），TTL 600，默认线路。
+不删除 `kedouai.com` 的 `portal` A 记录。理由与影响：
+
+- **无收益也无害**：域名零流量（`portal.access.log` 大小 0），保留不会产生访问误导；
+  而删除后「被遗忘的子域」风险由第三方视角看反而更低——本次选择保留，属**已接受的长期状态**。
+- **必须记住的副作用**：该域名**能解析但访问必失败**（无 server 块 + 证书 SAN 不匹配）。
+  ⚠️ 排障时禁止把「能 ping/dig 通」当作域名可用，也禁止据此判断 DNS 异常——这一点已在
+  `nginx-proxy.conf` 与 `docs/architecture/release-system-design.md` 的警示语中写死。
+- **若日后要删**（需主账号，当前 `~/env_config` 里的密钥无 dnspod 写权限）：
+  DNSPod → 域名 `kedouai.com` → 解析记录 → 主机记录 `portal`（A 记录，TTL 600）→ 删除；
+  验证 `dig +short portal.kedouai.com A` 为空；回滚即按原值重加 A 记录（默认值同 `kedouai.com`）。
+  可用脚本：`~/WorkBuddy/web_system/2026-10-08-portal域名清理/dnspod_record.py`（支持 list / delete）。
 
 ## 5 回滚
 
