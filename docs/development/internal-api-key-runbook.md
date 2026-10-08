@@ -19,13 +19,13 @@
 
 | 服务 | 角色 |
 |---|---|
-| user-service | 提供 `/internal/users/email/verify`、`/internal/roles/permissions` |
+| user-service | 提供 `/internal/users/email/verify`、`/internal/roles/permissions`、`/internal/keys/verify`（MCP Key 校验） |
 | auth-service | **调用** user-service 的 internal 端点（邮箱验证码核销） |
 | system-service | 提供 dict / logs / storage 的 internal 端点 |
 | gateway | 调用 auth-service 的 `/internal/auth/token-status`（黑名单校验） |
-| deploy-console | 提供 internal 端点（流水线脚本用 `CONSOLE_TOKEN`） |
+| deploy-console | 提供 internal 端点（流水线脚本用 `CONSOLE_TOKEN`）；**且调用** user-service `/internal/keys/verify`（MCP 通道鉴权）、`/internal/users/by-permissions`（审批人列表） |
 | ai-agent | 调用 user-service `/internal/roles/permissions` |
-| mcp-gateway / knowledge-service / upload-service | 提供或校验 internal 端点 |
+| mcp-gateway | 提供或校验 internal 端点；**且调用** user-service `/internal/keys/verify` |
 
 新增服务时按同一标准判断，配完记得回填本表。
 
@@ -81,8 +81,36 @@ ssh <host> "for f in auth-service gateway user-service; do
 2. **无轮换方案**：`INTERNAL_API_KEY` 目前**没有轮换设计**。可对齐 `specs/config-master-key-distribution/design.md:208-211` 的**双钥（active/old）**方案：
    - InternalGuard 支持多值（`INTERNAL_API_KEY` + `INTERNAL_API_KEY_OLD`），过渡期两者都接受；
    - 轮换顺序：先在所有服务加 `_OLD`（旧值）→ 再把主值换成新值并逐台重启 → 观察期后摘掉 `_OLD`。
-3. **凭据仓缺项**：`~/env_config/web_system/{dev,prod}.env` 未登记此键。
+3. ~~**凭据仓缺项**：`~/env_config/web_system/{dev,prod}.env` 未登记此键。~~
+   ✅ **2026-10-09 已补 dev**：`~/env_config/web_system/dev.env` 新增 `INTERNAL_API_KEY_DEV`（600）。**prod 仍缺**——prod 当前只跑 ai-agent / upload-service，尚无 user-service，暂不影响。
 4. **与"目标态"冲突**：`docs/operations/release-checklist.md:130-133` 要求凭证不进 `.env`（走 1Password），与现状明文存 `.env` 冲突 —— 属目标态，未落地。
+5. **无一致性门禁**：见 §8 —— 2026-10-09 实测 dev 有 2 个服务配成别的值，静默断链数月才发现。巡检只有文档里的手工命令，**没有脚本、没有 CI 门禁**。
+
+## 8 事故复盘：dev 双密钥静默断链（2026-10-09）
+
+**症状**：deploy-console 的 MCP 通道（`X-Mcp-Key`）报 `invalid or revoked MCP key`，但 key 确实是刚签发且 `active` 的。
+
+**根因**：dev 环境 `INTERNAL_API_KEY` **存在两个值** ——
+
+| 组 | 服务 | 指纹（md5 前 10） |
+|---|---|---|
+| 主流 | ai-agent / ai-service / deploy-console / knowledge-service / mcp-gateway / system-service / upload-service | `435802c1b2` |
+| 孤岛 | **auth-service / user-service** | `6e587fe267` |
+
+`McpAuthService` 用 console 的 key（主流值）去调 user-service 的 `/internal/keys/verify`，user-service 期望孤岛值 → 401 `internal forbidden` → 被 McpAuthService 的 `catch` 吞掉，只降级成 `valid: false`，**外层表现就是「key 无效」，极具误导性**。
+
+**连带影响（不止 MCP）**：同因断掉的还有
+
+- deploy-console → user-service `/internal/users/by-permissions`（**审批人列表**）
+- mcp-gateway → user-service `/internal/keys/verify`（MCP 网关侧的用户 key 校验）
+
+**修复**：按 §4 把 auth-service / user-service 统一到主流值（先备份 `.env.bak-internalkey-<ts>`），`pm2 restart` 两个服务（**未加 `--update-env`**）。现 dev 9 个服务指纹全部一致。
+
+**教训**
+
+1. **症状会骗人**：「key 无效」的真因可能是**校验链路本身断了**。遇到 401 先跑 §5 指纹巡检，别只盯着 key 的状态列。
+2. **`catch` 吞异常会掩盖故障**：`McpAuthService.verifyKey` 把网络/鉴权失败一律降级成 `valid:false`，与「key 真的无效」无法区分。理想做法是区分「校验服务不可用」与「key 无效」两种结果。
+3. **孤岛值是配置漂移**：两个服务同值、且与其余 7 个不同 —— 大概率是这两个服务后加时按另一份模板配的。新增服务时务必按 §5 巡检一次。
 
 ## 7 FAQ
 
