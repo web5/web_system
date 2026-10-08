@@ -1,8 +1,17 @@
 # Web System 部署指南
 
-> ⚠️ **占位符说明**：本文中的 `{{GATEWAY_HOST}}` / `{{DEV_HOST}}` / `{{PROD_HOST}}` / `{{DEV_INTERNAL_HOST}}` /
-> `{{PROD_DB_HOST}}` / `{{DEV_DB_PASSWORD}}` / `{{JWT_SECRET}}` 等均为**占位符**。真实机器地址与凭据一律通过
-> `.env` / `.env.production` 注入（模板见 `.env.example`、`scripts/.env.deploy.example`），不写入仓库。
+> ❌ **本文已废弃（2026-10-08）**
+>
+> 文档停留在 2026-09 口径，多处与现状不符，继续参考会导致误判：
+> - **端口全篇 3000/3001/3002…**，实际服务已是 **6000 系**（gateway 6000 / console 6200）
+> - **目录 `apps/admin-web`** 不存在（早已是 `apps/admin`）
+> - **部署方式是 scp + `pm2 restart all --update-env`**，实际为发布目录 + 流水线 + HMAC hook，
+>   且 `--update-env` 会导致环境变量丢失、启动失败，属于**反模式**
+> - 无微前端 manifest / env-dir 指针 / 静态外置 / 云库双数据源等机制
+>
+> **请改看 [`docs/architecture/system-overview.md`](./docs/architecture/system-overview.md)。**
+> 本文仅以下两节仍有参考价值，其余不再维护：**数据库迁移步骤**、**常见问题排查**。
+
 
 ## 架构总览
 

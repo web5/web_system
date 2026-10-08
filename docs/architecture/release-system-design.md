@@ -1,5 +1,20 @@
 # 多模块 + 多版本 + 多环境发布系统设计
 
+> ⚠️ **本文数据模型章节已过时（2026-10-08 标注）**
+>
+> 本文虽最近修改于 2026-10-08，但**主体内容仍是 2026-09 的设计稿口径**（标题仍标"待实施"、代码基线 `7b61e3d`）。
+> 发布系统此后已换过一代，以下描述**不再代表现状**：
+>
+> - §1.1 数据模型只列 **legacy 七表**（`deploy_modules` / `deploy_deployments` / `deploy_versions` …）。
+>   实际 gateway 自 2026-09-30 起**默认读 NEW 域**：`deploy_sites` / `deploy_envs` / `deploy_apps` /
+>   **`deploy_app_env_versions`**，`deploy_deployments` 已降级为 `DEPLOY_LEGACY_READ=1` 应急回退
+> - §1.3「环境来源 `DEPLOY_ENV_ID` 写死」已被站点匹配 `resolveSite(req)` 取代
+> - §4.4.4 提议新增的 `deploy_servers` / `deploy_env_service_routes` **早已存在并在用**
+> - 全文不含 deploy-console 的**本地库 / 云数据库按环境分流**（2026-10-08 M2–M5 落地）
+>
+> **现状请先看 [`system-overview.md`](./system-overview.md) §7「版本指针与发布数据模型」、§8「发布与部署通道」。**
+> 本文仍可作为**设计演进脉络**与「为什么这么设计」的参考，但未实施部分请以 `specs/` 下对应规格为准。
+
 > 状态：设计稿（待实施）
 > 关联：`docs/architecture/micro-frontend-technical-design.md`（微前端加载与样式隔离）
 > 代码基线：`7b61e3d`（gateway 灰度命中已实现并验证）
