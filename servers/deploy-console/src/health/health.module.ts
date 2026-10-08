@@ -29,6 +29,9 @@ export class HealthController {
   /**
    * 云数据库（prod 数据真相源）连通性探活 —— 发布前预检 / 排障用。
    *
+   * 实际路径 `/api/health/cloud-db`（全局前缀 `api` 只 exclude 了裸 `health`，
+   * 而裸路径会被 serve-static 的 SPA 回退吃掉，故统一走 `/api` 前缀）。
+   *
    * 只暴露「通不通 + 延迟」，不回显主机与凭据（公网链路信息不外泄）。
    * 未启用时返回 `enabled:false`，运维据此判断当前是否处于「人工同步」模式。
    */

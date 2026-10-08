@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { CloudDbService } from './cloud-db.service';
 
 export interface MirrorPointerInput {
@@ -96,7 +96,9 @@ export class EnvSplitWriterService {
     } catch (e) {
       const msg = (e as Error).message;
       if (this.cloud.strict) {
-        throw new Error(
+        // 用 HttpException（而非裸 Error）：全局异常过滤器会把非 HttpException 的消息
+        // 统一替换成「服务器内部错误」，运维就看不到「prod 没切」这个关键事实。
+        throw new ServiceUnavailableException(
           `prod 指针未生效：写云数据库失败（${msg}）。本地库已更新，但 prod gateway 读的是云库，` +
             `prod 仍运行旧版本。请检查云库公网连通性与白名单后重试发布。`,
         );
