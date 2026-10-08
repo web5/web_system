@@ -87,9 +87,14 @@ export class ApiKeyController {
     @Body() dto: { email?: string; ownerId?: number; name?: string },
   ) {
     this.requireAdminRole(req.user);
-    const email = dto?.email ?? req.user?.email;
-    if (!email) throw new BadRequestException('缺少邮箱（可显式传 email）');
     const ownerId = dto?.ownerId ?? req.user?.id ?? null;
+    // 显式指定 ownerId 时允许留空 email —— 由 service 从 owner 回填，
+    // 避免出现「email 是 A 的、ownerId 是 B 的」这种归属不一致的 key。
+    const email =
+      dto?.email ?? (dto?.ownerId != null ? undefined : req.user?.email);
+    if (!email && dto?.ownerId == null) {
+      throw new BadRequestException('缺少邮箱（可显式传 email 或 ownerId）');
+    }
     const { plaintext, prefix } = await this.svc.adminCreate(email, dto?.name, ownerId);
     return {
       key: plaintext,
