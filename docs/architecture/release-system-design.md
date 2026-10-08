@@ -343,8 +343,9 @@ dev.kedouai.com ──nginx──▶ gateway(dev)   .env DEPLOY_ENV_ID=dev
 kedouai.com      ──nginx──▶ gateway(prod)  .env DEPLOY_ENV_ID=prod
 ```
 
-> 域名约定：生产域名为 `kedouai.com`；`portal.kedouai.com` 已于 2026-09-10 下线（nginx 无对应
-> server 块、DNS 记录待删，即使解析也会因证书 SAN 不匹配而不可用），勿再引用。
+> 域名约定：生产域名为 `kedouai.com`；`portal.kedouai.com` 已于 2026-09-10 下线 —— nginx 无对应
+> server 块且证书 SAN 不含该名。**DNS A 记录刻意保留**（2026-10-08 决策，不删除），
+> 因此该域名「能解析但访问必失败」，排障时勿据此判断 DNS 异常，亦勿再引用。
 
 - 优点：环境彻底隔离、故障域独立、实现简单。
 - 缺点：每环境一套 gateway 进程。
