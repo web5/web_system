@@ -41,13 +41,33 @@
 
 | # | 用例 | 期望 | 实测 |
 |---|---|---|---|
-| 1 | `/console/` + `/api/apps` | 200 / 401 | ✅ |
-| 2 | `/api/health/cloud-db` | ok | ✅ ok 37ms |
-| 3 | pm2 restarts 稳定（无崩溃循环） | 不增长 | ✅ |
-| 4 | **正向**：console 改一条配置（如新建灰度规则） | 云库同表出现同一行 | 待发后验 |
-| 5 | **正向**：console 删一条配置 | 云库对应行消失（删除补偿生效） | 待发后验 |
-| 6 | **反向**：dev 环境的配置改动 | 云库**不应**变化（dev 数据留本地） | 待发后验 |
-| 7 | M5 巡检 | 12/12 一致 | ✅ 已验证（改坏→DIFF→还原→全绿） |
+| 1 | `/console/` + `/api/apps` | 200 / 401 | ✅ 200 / 401 |
+| 2 | `/api/health/cloud-db` | ok | ✅ ok 194ms |
+| 3 | pm2 restarts 稳定（无崩溃循环） | 不增长 | ✅ restarts 151 稳定 |
+| 4 | **正向**：Canary create / update / remove | 云库同步新增、更新不插重复、删除同步 | ✅ |
+| 5 | **正向**：Hosts create / update / remove（复合唯一键 name+host） | 同上 | ✅ |
+| 6 | **正向**：service_envs（业务唯一键 ≠ id）upsert + 删除 | 同上 | ✅ |
+| 7 | json 列 round-trip（`match_rule`） | 序列化后能读回对象 | ✅ `{"type":"percent","value":7}` |
+| 8 | **反向**：白名单外表 | 不入队、不写云库 | ✅ |
+| 9 | M5 巡检 | 12/12 一致 | ✅（改坏→DIFF→还原→全绿） |
+| 10 | 公网业务面未受影响 | dev.kedouai.com 200 | ✅ |
+
+> 端到端做法：在 dev 机用**真实 service 实现 + 真实 writer**，只 mock Repository（不连本地库），
+> 直接核对云库。共 11 项全绿 —— 这一步非常关键，见下方「发布后发现的一个真 bug」。
+
+## 4.1 发布后发现并修复的真 bug（P0）
+
+端到端跑到 `deploy_hosts` 时报 `Field 'id' doesn't have a default value`：
+`mirrorRows` 会过滤掉**不在 uniqueKeys 里的 id 列**，而云库 uuid 主键没有默认值 → 插不进去。
+
+**影响面**：凡「业务唯一键 ≠ id」的表全部受影响 —— `deploy_hosts`(name,host)、
+`deploy_endpoints`(service_key,method,path_pattern)、`deploy_service_envs`(service_key,env_id)、
+`deploy_service_routes`。配置镜像是「失败只告警不阻断」，表现是**静默不生效**。
+
+**为什么 558 项单测没抓到**：单测里的云库是 mock，不连真库。只有连真库的端到端才暴露。
+已修（PR #250，id 参与 INSERT 但不进 UPDATE 列表）+ 补 2 项单测锁行为，重发后端到端 11/11 全绿。
+
+> 教训：**镜像写这类"跨库副作用"必须做一次连真库的端到端验证**，单测覆盖不到目标库约束。
 
 ## 5. 基线补齐（发布前已完成）
 
