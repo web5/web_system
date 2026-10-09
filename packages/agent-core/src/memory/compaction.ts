@@ -59,10 +59,19 @@ export class Compaction {
     }
   }
 
-  /** 将引擎的完整 messages 中可持久的部分（去掉 system）提取为 StoredMessage */
+  /**
+   * 将引擎的完整 messages 中可持久的部分提取为 StoredMessage。
+   *
+   * 去掉 system 与 tool 消息。
+   * ⚠️ tool 消息不能落库：StoredMessage 不携带 assistant.toolCalls，落库后的 tool 消息
+   * 必然是「孤儿」（前面没有带 tool_calls 的 assistant）。OpenAI 兼容协议要求
+   * role=tool 必须紧跟 tool_calls 的响应，否则模型网关直接 400 —— 2026-10-09 事故：
+   * 搜索轮次落库后，下一轮回放 23 条历史被 TokenHub 400 打回（[MODEL_ERROR] HTTP 400）。
+   * 工具输出的信息已沉淀进同轮 assistant 总结，无需单独持久化。
+   */
   extractPersistable(messages: ChatMessage[]): StoredMessage[] {
     return messages
-      .filter((m) => m.role !== 'system')
+      .filter((m) => m.role !== 'system' && m.role !== 'tool')
       .map((m) => ({
         role: m.role as StoredMessage['role'],
         content: m.content,
