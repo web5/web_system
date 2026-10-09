@@ -1,21 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import { AppsService } from './apps.service';
-import { hasEnvVersion, writeEnvEntryPointer } from './entry-pointer';
 
 /**
- * 只 mock 磁盘侧的两个函数，其余走真实实现（requireActual）：
- * 指针格式本身已由 `entry-pointer.spec.ts` 锁定，这里验证的是**写入顺序与补偿**。
+ * 磁盘侧用 `EnvArtifactService` 桩替代（落点按环境解析，诊断 #3）：
+ * 指针格式本身已由 `entry-pointer.spec.ts` 锁定，这里验证的是
+ * **写入顺序 + 落点来源 + 补偿语义**。
  */
-jest.mock('./entry-pointer', () => ({
-  ...jest.requireActual('./entry-pointer'),
-  hasEnvVersion: jest.fn(() => true),
-  writeEnvEntryPointer: jest.fn(() => ({ js: '/ws/x/index.js', css: null })),
-}));
-
-const hasEnvVersionMock = hasEnvVersion as unknown as jest.Mock;
-const writePointerMock = writeEnvEntryPointer as unknown as jest.Mock;
-
-describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () => {
+describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', () => {
   let appRepo: { findOne: jest.Mock; save: jest.Mock; create: jest.Mock };
   let routeRepo: { delete: jest.Mock; save: jest.Mock; find: jest.Mock };
   let versionRepo: { findOne: jest.Mock; save: jest.Mock; create: jest.Mock; find: jest.Mock };
@@ -24,12 +15,17 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
   let configService: { get: jest.Mock };
   let mirror: { mirrorRow: jest.Mock; deleteMirror: jest.Mock };
   let registry: { setAppEnvPointer: jest.Mock; clearAppEnvPointer: jest.Mock };
+  let artifacts: {
+    hasVersion: jest.Mock;
+    listVersions: jest.Mock;
+    readPointer: jest.Mock;
+    writePointer: jest.Mock;
+    describeTarget: jest.Mock;
+  };
   let svc: AppsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    hasEnvVersionMock.mockReturnValue(true);
-    writePointerMock.mockReturnValue({ js: '/ws/x/index.js', css: null });
 
     appRepo = {
       findOne: jest.fn(async () => ({ key: 'portal', deployMode: 'env-dir' })),
@@ -51,6 +47,13 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
       setAppEnvPointer: jest.fn(async () => ({ from: 'v1', previous: 'v0', unchanged: false })),
       clearAppEnvPointer: jest.fn(async () => undefined),
     };
+    artifacts = {
+      hasVersion: jest.fn(async () => true),
+      listVersions: jest.fn(async () => []),
+      readPointer: jest.fn(async () => null),
+      writePointer: jest.fn(async () => ({ js: '/ws/x/index.js', css: null })),
+      describeTarget: jest.fn(() => '本机 /ws/servers/gateway/public'),
+    };
 
     svc = new AppsService(
       appRepo as never,
@@ -61,6 +64,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
       configService as never,
       mirror as never,
       registry as never,
+      artifacts as never,
     );
   });
 
@@ -85,7 +89,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
       order.push('db');
       return { from: 'v1', previous: 'v0', unchanged: false };
     });
-    writePointerMock.mockImplementation(() => {
+    artifacts.writePointer.mockImplementation(async () => {
       order.push('disk');
       return { js: '/ws/x/index.js', css: null };
     });
@@ -94,8 +98,8 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
   });
 
   it('磁盘指针写失败 → 回滚指针表并抛出（禁止「DB 说新版本、磁盘指旧版本」）', async () => {
-    writePointerMock.mockImplementation(() => {
-      throw new Error('EACCES: 只读文件系统');
+    artifacts.writePointer.mockImplementation(async () => {
+      throw new Error('远端写入口指针失败（root@prod:/data/web_system_static/public）：timeout');
     });
     await expect(svc.switchVersion('portal', 'prod', 'v2', 'u1')).rejects.toThrow(BadRequestException);
     // 补偿：把 current 改回 from、previous 原样带回来
@@ -110,7 +114,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
 
   it('首次写入（from=null）+ 磁盘失败 → 删行而不是写空指针', async () => {
     registry.setAppEnvPointer.mockResolvedValue({ from: null, previous: null, unchanged: false });
-    writePointerMock.mockImplementation(() => {
+    artifacts.writePointer.mockImplementation(async () => {
       throw new Error('EACCES');
     });
     await expect(svc.switchVersion('portal', 'prod', 'v2', 'u1')).rejects.toThrow(BadRequestException);
@@ -121,19 +125,31 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5）', () =
     registry.setAppEnvPointer.mockResolvedValue({ from: 'v2', previous: 'v1', unchanged: true });
     const r = await svc.switchVersion('portal', 'prod', 'v2', 'u1');
     expect(r).toMatchObject({ unchanged: true, pointer: null });
-    expect(writePointerMock).not.toHaveBeenCalled();
+    expect(artifacts.writePointer).not.toHaveBeenCalled();
   });
 
   it('产物目录不存在 → fail-fast，且不动指针表', async () => {
-    hasEnvVersionMock.mockReturnValue(false);
+    artifacts.hasVersion.mockResolvedValue(false);
     await expect(svc.switchVersion('portal', 'prod', 'v404', 'u1')).rejects.toThrow(/版本产物不存在/);
+    expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+  });
+
+  it('#3：产物校验与写入都按 env 走落点服务（prod 落点不在 console 本机）', async () => {
+    await svc.switchVersion('portal', 'prod', 'v2', 'u1');
+    expect(artifacts.hasVersion).toHaveBeenCalledWith('prod', 'portal', 'v2');
+    expect(artifacts.writePointer).toHaveBeenCalledWith('prod', 'portal', 'v2');
+  });
+
+  it('#3：远端静态根不可达 → 抛错且不动指针表（不把「没校验」伪装成「校验通过」）', async () => {
+    artifacts.hasVersion.mockRejectedValue(new Error('ssh: connect to host prod port 22: timed out'));
+    await expect(svc.switchVersion('portal', 'prod', 'v2', 'u1')).rejects.toThrow(/产物校验失败/);
     expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
   });
 
   it('site-version（基座 shell）不写 env-dir 磁盘指针', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
     const r = await svc.switchVersion('shell', 'prod', 'v3', 'u1');
-    expect(writePointerMock).not.toHaveBeenCalled();
+    expect(artifacts.writePointer).not.toHaveBeenCalled();
     expect(r.pointer).toBeNull();
     expect(registry.setAppEnvPointer).toHaveBeenCalled();
   });
