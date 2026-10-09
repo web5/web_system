@@ -33,7 +33,13 @@ grep -E '^(SecretId|SecretKey|AppId):' ~/env_config/tencent.env | cut -d: -f1
 
 ---
 
-## 3. dev：走配置中心（自动下发，别再手工写 .env）
+## 3. 配置中心：已纳管（⚠️ 下发当前**仅 local 生效**）
+
+> ⚠️ **读这段前先看清楚**：`restart` 动作脚本里的 `config-dispatch` 段落判定是
+> `if [ "$DEPLOY_ENV" = "local" ]`；而 **dev / prod 跑的是 `restart-remote`（远端版）脚本，
+> 里面根本没有 config-dispatch 段**。也就是说 2026-10-09 纳管后，
+> **只有本机 local 发布会自动落 `.env.generated`，dev / prod 仍要手工写 `.env`**。
+> 打通远端下发是独立改动（16 条流水线的 dev 任务脚本 + lint 回归），见 §7 遗留。
 
 已纳管（2026-10-09）：
 
@@ -44,9 +50,12 @@ grep -E '^(SecretId|SecretKey|AppId):' ~/env_config/tencent.env | cut -d: -f1
 | module | dev | ai-service | `TENCENT_APP_ID` | ❌（标识符，便于核对） |
 
 - 密钥在库里是密文（`iv:authTag:ciphertext`），列表接口只回掩码 `••••••••`，明文不回显
-- 下发路径：流水线 `restart` 动作脚本 → `GET /api/config/internal/dispatch/ai-service?envId=dev`
+- 下发路径（**local 生效**）：流水线 `restart` 动作脚本 →
+  `GET /api/config/internal/dispatch/ai-service?envId=local`
   → 落盘 `servers/ai-service/.env.generated`（该文件**不会**进 git）
 - 优先级：`.env.generated` > `.env`（`ConfigModule.envFilePath` 顺序）
+- 纳管的价值不只是下发：它是**唯一有版本、有审计、有掩码的凭据存放点**，
+  不再依赖「某台机器的 .env 里恰好有」
 
 验证下发内容（只列键名，不打印值）：
 
@@ -58,12 +67,14 @@ curl -s -H "x-internal-key: $IK" \
 
 ---
 
-## 4. prod：手工写 `.env`（已知限制）
+## 4. dev / prod：手工写 `.env`（当前唯一生效路径）
 
-> 配置下发 P0 **仅覆盖本地（dev）**，prod 目前只能手工写 —— 换机/重建时最容易漏这一条。
+> 远端下发未打通前，**两端都要手工** —— 换机/重建时最容易漏这一条。
 
 ```bash
-F=/data/web_system_git/servers/ai-service/.env      # ⚠️ prod 运行目录是 web_system_git
+# dev：/data/web_system/servers/ai-service/.env
+# prod：/data/web_system_git/servers/ai-service/.env   ⚠️ 运行目录是 web_system_git
+F=<按环境选上面之一>
 cp "$F" "$F.bak-tts-$(date +%Y%m%d%H%M%S)"          # 先备份
 TMP=$(mktemp); grep -v '^TENCENT_' "$F" > "$TMP"
 cat >> "$TMP" <<'EOF'
@@ -108,6 +119,8 @@ pm2 restart ai-service
 
 ## 7. 遗留
 
-- `TENCENT_*` 的 **prod 下发**：等配置下发打通远程机后移除 §4 的手工步骤（`rm3oJf`）
+- **远端配置下发**：给 `restart-remote` 脚本补 `config-dispatch` 段（dev 可下发，
+  prod 因目标机没有控制台只能保持手工，或改成发布机代写），
+  打通后 §4 的手工步骤可退化成兜底（`rm3oJf` 后续）
 - 前端按钮在 `configured=false` 时禁用 + tooltip（须过 UI 门，`rVyJX7`）
 - 流水线 `verify` 动作自动探 `/api/ai/tts/speak`（`rbvqgv`）
