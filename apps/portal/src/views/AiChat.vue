@@ -545,14 +545,18 @@ function send(text: string) {
 
   input.value = '';
   messages.value.push({ id: uid(), role: 'user', content, ts: Date.now() });
-  const reply: ChatMsg = {
+  // ⚠️ reply 必须是响应式对象：onDelta/onIntent/onEvent 直接改它的字段，
+  // 若持有的是 push 进去的裸对象，写入会绕过 Vue 代理 → 不触发依赖更新 →
+  // 流式期间页面不重渲染，blocksMap 也停留在 content='' 时的空缓存，
+  // 最终只渲染出「有徽标、无正文」的空气卡（刷新后由 loadConversation 重建才正常）。
+  const reply = reactive<ChatMsg>({
     id: uid(),
     role: 'assistant',
     content: '',
     streaming: true,
     musicCard: null,
     ts: Date.now(),
-  };
+  });
   messages.value.push(reply);
   sending.value = true;
   store.setRunning(true);
