@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
+import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployAppEntity } from '../entities/deploy-app.entity';
@@ -20,12 +21,36 @@ export interface RegisterVersionInput {
   note: string;
 }
 
+/**
+ * 写入指针时**顺带申请**的发布锁（诊断 #6）。
+ *
+ * 为什么要有它：`ReleaseLockService` 此前只被流水线使用，UI 切换/回滚、UI 部署、
+ * 内部脚本接口这些**非流水线入口**全裸奔——连点两次就交叉覆盖，
+ * `previous_version` 被写成错值后**回滚目标直接丢失**。
+ *
+ * `owner` 建议带来源前缀（`ui:<人>` / `script:<流水线>` / `deploy:<模块>`），
+ * 便于排障时看出是谁在发。流水线路径**不要传**：它自己持有跨阶段的锁，
+ * 传进来会变成重入（不释放），属于白跑一次。
+ */
+export interface PointerLock {
+  owner: string;
+  ttlMs?: number;
+}
+
 export interface SetPointerInput {
   env: string;
   moduleKey: string;
   currentVersion: string;
   deployedBy?: string;
   taskId?: string;
+  /** 本次写入是否申请发布锁（非流水线入口必填） */
+  lock?: PointerLock;
+  /**
+   * 乐观并发校验（CAS）：期望的**变更前**版本。
+   * 与实际读到不一致即抛 `ConflictException`——在调用方已持锁时等价于串行化校验，
+   * 用来挡住「页面显示 v1、实际已是 v2，还按 v1 提交」这类覆盖。
+   */
+  expectedFrom?: string | null;
   /**
    * 回滚补偿用：显式指定 `previous_version`。
    * 不传则取「变更前的值」（正常推进语义）；补偿场景需把旧值原样带回来，
@@ -83,7 +108,42 @@ export class ReleaseRegistryService {
     private readonly appVersionRepo: Repository<DeployAppEnvVersionEntity>,
     /** 按环境分流的镜像写（prod → 云数据库，公网） */
     private readonly splitWriter: EnvSplitWriterService,
+    /** 发布锁（诊断 #6）：指针写入是「改线上真相」的动作，必须串行化 */
+    private readonly locks: ReleaseLockService,
   ) {}
+
+  /**
+   * 可选的锁包装：只有显式传 `lock` 的调用才受保护（流水线自带锁，不传）。
+   *
+   * **释放条件**：仅当本次**新拿到**锁才释放。重入场景（外层已持有同一 owner 的锁）
+   * 释放会把外层还在用的锁删掉 —— 后面阶段就没保护了。
+   */
+  private async withLock<T>(
+    input: { env: string; moduleKey: string; lock?: PointerLock },
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!input.lock) return fn();
+    const r = await this.locks.acquireEx(
+      input.moduleKey,
+      input.env,
+      input.lock.owner,
+      input.lock.ttlMs,
+    );
+    if (!r.ok) {
+      throw new ConflictException(
+        `并发发布被拒绝：${input.moduleKey}@${input.env} 正被 ${r.holder ?? '未知持有者'} 占用` +
+          (r.expiresAt ? `（至 ${new Date(r.expiresAt).toISOString()}）` : '') +
+          '；请稍后重试，确认无人发布后再强制解锁',
+      );
+    }
+    try {
+      return await fn();
+    } finally {
+      if (r.newly) {
+        await this.locks.release(input.moduleKey, input.env, input.lock.owner);
+      }
+    }
+  }
 
   /** 写一条版本发布记录（deploy_versions） */
   async registerVersion(input: RegisterVersionInput): Promise<void> {
@@ -104,24 +164,27 @@ export class ReleaseRegistryService {
 
   /** upsert 当前版本指针（deploy_deployments，envId+moduleKey 唯一行） */
   async setPointer(input: SetPointerInput): Promise<void> {
-    const existing = await this.deploymentRepo.findOne({
-      where: { envId: input.env, moduleKey: input.moduleKey },
+    return this.withLock(input, async () => {
+      const existing = await this.deploymentRepo.findOne({
+        where: { envId: input.env, moduleKey: input.moduleKey },
+      });
+      const row = existing ?? this.deploymentRepo.create();
+      row.envId = input.env;
+      row.moduleKey = input.moduleKey;
+      row.currentVersion = input.currentVersion;
+      row.status = 'deployed';
+      row.deployedAt = new Date();
+      row.deployedBy = input.deployedBy;
+      if (input.taskId) row.taskId = input.taskId;
+      await this.deploymentRepo.save(row);
+
+      // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
+      await this.splitWriter.mirrorLegacyPointer(input);
+
+      // 双写：前端 env-dir 应用同步到 deploy_app_env_versions（gateway byEnv 的读取源）
+      // 已在锁内 → 走 inner，不再重复申请锁
+      await this.syncAppEnvPointerInner(input);
     });
-    const row = existing ?? this.deploymentRepo.create();
-    row.envId = input.env;
-    row.moduleKey = input.moduleKey;
-    row.currentVersion = input.currentVersion;
-    row.status = 'deployed';
-    row.deployedAt = new Date();
-    row.deployedBy = input.deployedBy;
-    if (input.taskId) row.taskId = input.taskId;
-    await this.deploymentRepo.save(row);
-
-    // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
-    await this.splitWriter.mirrorLegacyPointer(input);
-
-    // 双写：前端 env-dir 应用同步到 deploy_app_env_versions（gateway byEnv 的读取源）
-    await this.syncAppEnvPointer(input);
   }
 
   /**
@@ -137,8 +200,14 @@ export class ReleaseRegistryService {
    * ⚠️ 第 2 条是本次修正的核心。原注释「失败只告警不抛出」在单库时代是合理止损，
    * 分流后却成了事故放大器：本地成功 + 云库失败 = 流水线显示成功、prod 实际仍跑旧版本，
    * 与 2026-09-30 基座事故形态完全一致。宁可让任务红掉，也不要静默不一致。
+   *
+   * 单独调用（非 `setPointer` 内嵌）时按 `input.lock` 取锁；`setPointer` 已锁则走 inner。
    */
   async syncAppEnvPointer(input: SetPointerInput): Promise<void> {
+    return this.withLock(input, () => this.syncAppEnvPointerInner(input));
+  }
+
+  private async syncAppEnvPointerInner(input: SetPointerInput): Promise<void> {
     let written = false;
     try {
       const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
@@ -189,6 +258,10 @@ export class ReleaseRegistryService {
    * （否则同值推进会让两库 `deployed_by/deployed_at` 持续漂移，见 design §13 P2）
    */
   async setAppEnvPointer(input: SetPointerInput): Promise<AppEnvPointerResult> {
+    return this.withLock(input, () => this.setAppEnvPointerInner(input));
+  }
+
+  private async setAppEnvPointerInner(input: SetPointerInput): Promise<AppEnvPointerResult> {
     const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
     if (!app) {
       throw new NotFoundException(
@@ -203,6 +276,16 @@ export class ReleaseRegistryService {
 
     const from = row.currentVersion ?? null;
     const previous = row.previousVersion ?? null;
+
+    // CAS（诊断 #6）：调用方看到的是旧值就别写了 —— 否则会把别人刚推进的版本盖掉，
+    // 且 `previous_version` 会被写成那个「没真正生效过」的值，回滚目标随之丢失。
+    if (input.expectedFrom !== undefined && from !== input.expectedFrom) {
+      throw new ConflictException(
+        `版本已被并发修改：${input.moduleKey}@${input.env} 期望当前为 ` +
+          `${input.expectedFrom ?? '（空）'}，实际为 ${from ?? '（空）'}；请刷新后重试`,
+      );
+    }
+
     const unchanged = from === input.currentVersion;
 
     if (!unchanged) {

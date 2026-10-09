@@ -10,6 +10,21 @@ export interface RemoteTarget {
   remoteUser?: string;
 }
 
+/**
+ * 投递各阶段默认超时（诊断 #11）。
+ *
+ * 原实现三次 `command.exec` 都不传 `timeoutMs`（`CommandService.exec` 默认 0 = **不超时**），
+ * 远端 scp 半开或 ssh 卡住时，发布流水线会永久停在这一步：既不失败也不推进，
+ * 锁一直握着，该模块直到 TTL 30 分钟过期都不可再发布。
+ *
+ * 可配：`REMOTE_DELIVERY_TAR_TIMEOUT_MS` / `_SCP_` / `_SSH_`（单位 ms）。
+ */
+const DELIVERY_TIMEOUT_MS = {
+  tar: 5 * 60 * 1000,
+  scp: 15 * 60 * 1000,
+  ssh: 10 * 60 * 1000,
+} as const;
+
 export interface RemoteDeliveryResult {
   sshTarget: string;
   dest: string;
@@ -47,6 +62,13 @@ export class RemoteDeliveryService {
     return { remoteHost: host, remoteUser: user };
   }
 
+  /** 阶段超时（env 覆盖，非法值回落默认） */
+  private timeoutMs(stage: keyof typeof DELIVERY_TIMEOUT_MS): number {
+    const key = `REMOTE_DELIVERY_${stage.toUpperCase()}_TIMEOUT_MS`;
+    const raw = Number(this.configService.get<string>(key));
+    return Number.isFinite(raw) && raw > 0 ? raw : DELIVERY_TIMEOUT_MS[stage];
+  }
+
   /**
    * 远程投递 dist 产物：tar → scp → ssh 解压到远端
    * `<REMOTE_MODULES_ROOT>/<moduleKey>/<version>`，返回远端目标（供日志/result）。
@@ -59,13 +81,20 @@ export class RemoteDeliveryService {
     const cwd = process.cwd();
 
     if (fs.existsSync(tar)) fs.rmSync(tar);
-    this.command.exec(`tar czf ${tar} -C ${input.srcDir} .`, cwd);
-    this.command.exec(`scp -o ConnectTimeout=15 ${tar} ${sshTarget}:/tmp/`, cwd);
+    this.command.exec(`tar czf ${tar} -C ${input.srcDir} .`, cwd, {}, this.timeoutMs('tar'));
+    this.command.exec(
+      `scp -o ConnectTimeout=15 ${tar} ${sshTarget}:/tmp/`,
+      cwd,
+      {},
+      this.timeoutMs('scp'),
+    );
     this.command.exec(
       `ssh -o ConnectTimeout=15 ${sshTarget} "mkdir -p ${dest} && cd ${dest} && rm -rf ./* && tar xzf /tmp/${path.basename(
         tar,
       )} && rm -f /tmp/${path.basename(tar)}"`,
       cwd,
+      {},
+      this.timeoutMs('ssh'),
     );
     fs.rmSync(tar, { force: true });
     return { sshTarget, dest };

@@ -45,6 +45,7 @@ describe('ReleaseLockService.acquire（原子互斥 CAS）', () => {
   beforeEach(async () => {
     repo = {
       findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       query: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
@@ -124,5 +125,67 @@ describe('ReleaseLockService.acquire（原子互斥 CAS）', () => {
   it('释放异常不抛出（依赖 TTL 兜底）', async () => {
     repo.delete.mockRejectedValue(new Error('db down'));
     await expect(service.release('auth-service', 'dev', 'p1')).resolves.toBeUndefined();
+  });
+
+  // ── 诊断 #6/#12：newly 语义、强制解锁、过期清理 ──
+
+  it('#6：首次获取 → newly=true（调用方需负责释放）', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(holder('p1', Date.now() + 60_000));
+    const r = await service.acquireEx('auth-service', 'dev', 'p1');
+    expect(r).toMatchObject({ ok: true, newly: true });
+  });
+
+  it('#6：自己已持有（重入）→ newly=false（禁止内层把外层的锁释放掉）', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(holder('p1', Date.now() + 60_000))
+      .mockResolvedValueOnce(holder('p1', Date.now() + 60_000));
+    const r = await service.acquireEx('auth-service', 'dev', 'p1');
+    expect(r).toMatchObject({ ok: true, newly: false });
+  });
+
+  it('#6：抢占他人过期锁 → newly=true', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(holder('p2', Date.now() - 1))
+      .mockResolvedValueOnce(holder('p1', Date.now() + 60_000));
+    const r = await service.acquireEx('auth-service', 'dev', 'p1');
+    expect(r).toMatchObject({ ok: true, newly: true });
+  });
+
+  it('#6：被他人持有 → ok=false 且带回持有者（供报错文案）', async () => {
+    const at = Date.now() + 60_000;
+    repo.findOne.mockResolvedValueOnce(holder('p2', at));
+    const r = await service.acquireEx('auth-service', 'dev', 'p1');
+    expect(r).toMatchObject({ ok: false, newly: false, holder: 'p2', expiresAt: at });
+  });
+
+  it('#12：forceRelease 无条件删除（人工应急）', async () => {
+    repo.delete.mockResolvedValue({ affected: 1 });
+    await expect(service.forceRelease('auth-service', 'dev')).resolves.toBe(true);
+    expect(repo.delete).toHaveBeenCalledWith({ lockKey: 'auth-service@dev' });
+  });
+
+  it('#12：forceRelease 无锁可解 → false', async () => {
+    repo.delete.mockResolvedValue({ affected: 0 });
+    await expect(service.forceRelease('auth-service', 'dev')).resolves.toBe(false);
+  });
+
+  it('#12：releaseExpired 只清理到期锁，未过期的保留', async () => {
+    const now = Date.now();
+    repo.find.mockResolvedValue([
+      holder('p-old', now - 1_000), // 过期
+      holder('p-live', now + 60_000), // 仍在跑：绝不能清
+    ]);
+    const n = await service.releaseExpired(now);
+    expect(n).toBe(1);
+    expect(repo.delete).toHaveBeenCalledWith(['auth-service@dev']);
+  });
+
+  it('#12：listAll 返回持有者与是否过期', async () => {
+    const now = Date.now();
+    repo.find.mockResolvedValue([holder('p1', now - 1)]);
+    const rows = await service.listAll(now);
+    expect(rows[0]).toMatchObject({ lockKey: 'auth-service@dev', pipelineId: 'p1', expired: true });
   });
 });

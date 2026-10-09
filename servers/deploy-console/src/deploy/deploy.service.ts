@@ -39,6 +39,31 @@ import {
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 
+/** 远程命令默认 exec 超时（可配 `SSH_EXEC_TIMEOUT_MS`）：与 shell-runner 的 10min 对齐 */
+const DEFAULT_SSH_EXEC_TIMEOUT_MS = 10 * 60 * 1000;
+/** 远程上传默认超时（可配 `SSH_UPLOAD_TIMEOUT_MS`）：产物包可能上百 MB，留足余量 */
+const DEFAULT_SSH_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+/**
+ * pm2 重启失败的**专用退出码**（诊断 #4）。
+ * 远端脚本用它把「产物已换、进程没重启」与「产物没换成功」区分开：
+ * 前者保留现场（不回滚 dist，人工 `pm2 restart` 即可救），后者才回滚。
+ */
+export const PM2_RESTART_EXIT_CODE = 90;
+
+/** 远端错误是否为「pm2 没起来」（而非产物没换成功） */
+export function isPm2RestartFailure(message: string | undefined): boolean {
+  return new RegExp(`退出码 ${PM2_RESTART_EXIT_CODE}\\b`).test(message ?? '');
+}
+
+/** pm2 失败的可执行提示：保留现场 + 给出手工修复命令 */
+export function pm2FailureHint(where: string, cands: string[], detail: string): string {
+  return (
+    `部署未完成：产物已落地到 ${where}，但 pm2 重启失败，` +
+    `进程仍在跑旧代码。已保留现场（未回滚），请执行：` +
+    `${cands.map((n) => `pm2 restart ${n}`).join(' 或 ')}（${detail}）`
+  );
+}
+
 /**
  * 任务状态枚举
  */
@@ -345,6 +370,8 @@ export class DeployService {
       moduleKey: input.moduleKey,
       currentVersion: input.versionTag,
       deployedBy: input.operator,
+      // lock（诊断 #6）：UI「部署」入口此前完全无锁
+      lock: { owner: `deploy:${input.moduleKey}` },
     });
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
 
@@ -591,22 +618,30 @@ export class DeployService {
   /**
    * 重启后台模块的 pm2 进程。
    * 进程名候选：注册表 `pm2` 字段 → `web-<key>` → 裸 key（实测注册表常存裸 key，
-   * 而进程叫 `web-<key>`），逐个尝试到成功为止；全失败只告警（不回滚，避免状态撕裂）。
+   * 而进程叫 `web-<key>`），逐个尝试到成功为止。
+   *
+   * **全失败即抛错（诊断 #4）**：旧实现只 `logger.warn` 然后当作部署成功返回，
+   * 于是「产物已换、进程跑旧代码」这种**半成功**被报成绿灯——是最难排查的一类状态。
+   * 抛错后任务终态为 failed，且错误信息直接给出手工修复命令；不回滚 dist（保留现场）。
    */
   private restartPm2(mod: { pm2?: string }, moduleKey: string, cwd: string): void {
     const candidates = Array.from(
       new Set([mod.pm2, `web-${moduleKey}`, moduleKey].filter(Boolean) as string[]),
     );
+    let lastErr = '';
     for (const name of candidates) {
       try {
         this.commands.exec(`"${this.commands.pm2Bin()}" restart ${name}`, cwd, {}, 60000);
         this.logger.log(`pm2 重启完成: ${name}`);
         return;
       } catch (e) {
-        this.logger.warn(`pm2 restart ${name} 失败，试下一个候选: ${(e as Error).message}`);
+        lastErr = (e as Error).message;
+        this.logger.warn(`pm2 restart ${name} 失败，试下一个候选: ${lastErr}`);
       }
     }
-    this.logger.warn(`pm2 重启失败（产物已落地，请手工重启）：候选 ${candidates.join(' / ')}`);
+    throw new Error(
+      pm2FailureHint(path.join(cwd, 'dist'), candidates, lastErr || '候选进程名均不存在'),
+    );
   }
 
   /**
@@ -959,18 +994,27 @@ export class DeployService {
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
     // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
-    await this.splitWriter.mirrorLegacyPointer({
+    const legacyMirror = await this.splitWriter.mirrorLegacyPointer({
       env,
       moduleKey: component,
       currentVersion: versionTag,
       deployedBy: operator,
     });
+    // 诊断 #13：不再丢弃返回值——镜像失败必须留痕（不阻断：gateway 默认不读本表，
+    // 但应急开关 DEPLOY_LEGACY_READ=1 时它就是读取源，静默失败等于埋雷）
+    if (legacyMirror?.outcome === 'failed') {
+      this.logger.error(
+        `legacy 指针镜像到云库失败（${env}/${component}）：${legacyMirror.error ?? '未知原因'}`,
+      );
+    }
     // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
+    // lock（诊断 #6）：这是 UI 入口，不申请锁时连点两次会互相覆盖（流水线入口自带锁）
     await this.registry.syncAppEnvPointer({
       env,
       moduleKey: component,
       currentVersion: versionTag,
       deployedBy: operator,
+      lock: { owner: `publish:${component}` },
     });
 
     // 版本库补一条该环境的发布记录
@@ -1075,18 +1119,24 @@ export class DeployService {
     row.deployedBy = operator;
     await this.deploymentRepo.save(row);
     // 分流：prod 的 legacy 指针同步到云库（应急读取源，写失败不阻断）
-    await this.splitWriter.mirrorLegacyPointer({
+    const legacyMirror = await this.splitWriter.mirrorLegacyPointer({
       env,
       moduleKey,
       currentVersion: version,
       deployedBy: operator,
     });
+    if (legacyMirror?.outcome === 'failed') {
+      this.logger.error(
+        `legacy 指针镜像到云库失败（${env}/${moduleKey}）：${legacyMirror.error ?? '未知原因'}`,
+      );
+    }
     // 双写：同步到 deploy_app_env_versions（gateway byEnv 读取源）
     await this.registry.syncAppEnvPointer({
       env,
       moduleKey,
       currentVersion: version,
       deployedBy: operator,
+      lock: { owner: `publish:${moduleKey}` },
     });
 
     this.logger.log(`微前端模块发布完成: ${env}/${moduleKey} @ ${version}`);
@@ -1398,6 +1448,15 @@ export class DeployService {
       new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
     );
     const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
+    /**
+     * pm2 重启失败必须让整条命令**非 0 退出**（诊断 #4）。
+     *
+     * 旧写法 `|| echo "[warn] ..."` 把失败吞成成功：产物已换成新版、进程还在跑旧代码，
+     * 而任务显示绿灯——这是最难排查的「半成功」。改用专用退出码 90，
+     * 让调用方把它与「产物没换成功」区分开（只有后者才回滚 dist，前者保留现场待人工重启）。
+     */
+    const pm2Step =
+      `(${pm2Chain}) || { echo "[error] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）" >&2; exit ${PM2_RESTART_EXIT_CODE}; }`;
     const rollbackCmd = `if [ ! -d '${remoteDir}/dist' ] && [ -d '${remoteDir}/dist.bak-${stamp}' ]; then mv '${remoteDir}/dist.bak-${stamp}' '${remoteDir}/dist'; fi`;
 
     // ── 优先：远端版本目录就地换 dist（发布已投递到目标机，部署不再回传本机） ──
@@ -1417,12 +1476,18 @@ export class DeployService {
         `set -e; mkdir -p '${remoteDir}'; ` +
         `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
         `cp -R '${remoteVerDir}' '${remoteDir}/dist'; ` +
-        `(${pm2Chain}) || echo "[warn] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）"`;
+        pm2Step;
       try {
         await this.sshRun(sshConfig, cmd, input.env);
         this.logger.log(`远程落地完成（远端版本目录就地）: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
         return;
       } catch (e) {
+        if (isPm2RestartFailure((e as Error).message)) {
+          // 产物已换、进程没起来：保留现场，别回滚成「旧代码 + 报部署失败」的更难判断状态
+          throw new Error(
+            pm2FailureHint(`${input.env}:${remoteDir}/dist`, cands, (e as Error).message),
+          );
+        }
         try {
           await this.sshRun(sshConfig, rollbackCmd, input.env);
         } catch {
@@ -1450,13 +1515,18 @@ export class DeployService {
       `set -e; mkdir -p '${remoteDir}'; ` +
       `if [ -d '${remoteDir}/dist' ]; then mv '${remoteDir}/dist' '${remoteDir}/dist.bak-${stamp}'; fi; ` +
       `mkdir -p '${remoteDir}/dist'; tar xzf '${remoteTmp}' -C '${remoteDir}/dist'; rm -f '${remoteTmp}'; ` +
-      `(${pm2Chain}) || echo "[warn] pm2 重启失败，请手工重启（候选：${cands.join(' / ')}）"`;
+      pm2Step;
 
     try {
       await this.sshUpload(sshConfig, tgz, remoteTmp);
       await this.sshRun(sshConfig, cmd, input.env);
       this.logger.log(`远程落地完成（本机中转）: ${input.env}:${remoteDir}/dist <- ${input.versionTag}`);
     } catch (e) {
+      if (isPm2RestartFailure((e as Error).message)) {
+        throw new Error(
+          pm2FailureHint(`${input.env}:${remoteDir}/dist`, cands, (e as Error).message),
+        );
+      }
       try {
         await this.sshRun(sshConfig, rollbackCmd, input.env);
       } catch {
@@ -1472,11 +1542,30 @@ export class DeployService {
     }
   }
 
-  /** ssh2：sftp 上传单个文件 */
+  /**
+   * 远程操作超时（诊断 #11）。
+   *
+   * 背景：ssh2 的 `readyTimeout` 只管**建连**，命令/上传一旦开始执行就没有任何上限——
+   * 远端 `tar` 卡在 IO、`pm2 restart` 卡在 stop 阶段、网络半开，都会让这次发布 HTTP
+   * **永久挂起**（既不成功也不失败，锁还一直握着，该模块 30 分钟不可发布）。
+   */
+  private sshTimeoutMs(kind: 'exec' | 'upload'): number {
+    const def = kind === 'exec' ? DEFAULT_SSH_EXEC_TIMEOUT_MS : DEFAULT_SSH_UPLOAD_TIMEOUT_MS;
+    const raw = Number(this.configService.get<string>(kind === 'exec' ? 'SSH_EXEC_TIMEOUT_MS' : 'SSH_UPLOAD_TIMEOUT_MS'));
+    return Number.isFinite(raw) && raw > 0 ? raw : def;
+  }
+
+  /** ssh2：sftp 上传单个文件（带硬超时） */
   private sshUpload(sshConfig: any, localFile: string, remoteFile: string): Promise<void> {
+    const timeoutMs = this.sshTimeoutMs('upload');
     return new Promise((resolve, reject) => {
       const client = new Client();
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const done = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
         try {
           client.end();
         } catch {
@@ -1485,6 +1574,7 @@ export class DeployService {
         err ? reject(err) : resolve();
       };
       client.on('ready', () => {
+        timer = setTimeout(() => done(new Error(`SFTP 上传超时（${timeoutMs}ms）：${localFile}`)), timeoutMs);
         client.sftp((err, sftp) => {
           if (err) return done(new Error(`SFTP 失败: ${err.message}`));
           sftp.fastPut(localFile, remoteFile, (e: any) =>
@@ -1498,11 +1588,22 @@ export class DeployService {
     });
   }
 
-  /** ssh2：执行一条远程命令（收集 stdout / stderr，非 0 退出码即失败） */
-  private sshRun(sshConfig: any, cmd: string, tag: string): Promise<string> {
+  /**
+   * ssh2：执行一条远程命令（收集 stdout / stderr，非 0 退出码即失败）。
+   *
+   * 超时后**主动终止**：先给远端发信号再断连，避免留下孤儿进程继续写目标目录
+   * （历史教训：6200 端口被孤儿进程占死——见 shell-runner 的进程组 kill）。
+   */
+  private sshRun(sshConfig: any, cmd: string, tag: string, timeoutMs?: number): Promise<string> {
+    const limit = timeoutMs ?? this.sshTimeoutMs('exec');
     return new Promise((resolve, reject) => {
       const client = new Client();
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const done = (err?: Error, out?: string) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
         try {
           client.end();
         } catch {
@@ -1513,6 +1614,19 @@ export class DeployService {
       client.on('ready', () => {
         client.exec(cmd, (err, stream) => {
           if (err) return done(new Error(`远程执行失败: ${err.message}`));
+          timer = setTimeout(() => {
+            try {
+              (stream as unknown as { signal?: (s: string) => void }).signal?.('KILL');
+            } catch {
+              /* 远端不支持 signal 也要断连 */
+            }
+            try {
+              stream.close();
+            } catch {
+              /* ignore */
+            }
+            done(new Error(`远程命令执行超时（${limit}ms，${tag}）`));
+          }, limit);
           let out = '';
           let errOut = '';
           stream.on('data', (d: Buffer) => {
@@ -1535,43 +1649,23 @@ export class DeployService {
   }
 
   /**
-   * 列出远程可用快照（保留，实时 ls releases 目录）
+   * 列出远程可用快照（保留，实时 ls releases 目录）。
+   *
+   * 复用 `sshRun` 而非自管 client：顺带拿到**执行超时**（诊断 #11），
+   * 免得一次 `ls` 卡住就把列表接口挂死。
    */
   async listReleases(env: string): Promise<string[]> {
     const sshConfig = await this.getSshConfig(env);
-    const webSystemDir = this.getWebSystemDir();
-    return new Promise((resolve, reject) => {
-      const client = new Client();
-      client.on('ready', () => {
-        const releaseDir = `${webSystemDir}/releases`;
-        client.exec(`ls -1 ${releaseDir} 2>/dev/null || echo ""`, (err, stream) => {
-          if (err) {
-            client.end();
-            reject(new BadGatewayException(`SSH 执行失败: ${err.message}`));
-            return;
-          }
-          let output = '';
-          stream.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-          stream.on('close', () => {
-            client.end();
-            resolve(output.trim().split('\n').filter(Boolean));
-          });
-          stream.stderr.on('data', (data: Buffer) => {
-            this.logger.warn(`SSH stderr: ${data.toString()}`);
-          });
-        });
-      });
-      client.on('error', (err: Error) => {
-        reject(new BadGatewayException(`SSH 连接失败: ${err.message}`));
-      });
-      client.on('timeout', () => {
-        client.end();
-        reject(new BadGatewayException('SSH 连接超时'));
-      });
-      client.connect({ ...sshConfig, readyTimeout: 10000 });
-    });
+    const releaseDir = `${this.getWebSystemDir()}/releases`;
+    try {
+      const out = await this.sshRun(sshConfig, `ls -1 ${releaseDir} 2>/dev/null || echo ""`, env);
+      return out
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+    } catch (e) {
+      throw new BadGatewayException(`读取远程快照列表失败（${env}）：${(e as Error).message}`);
+    }
   }
 
   /**
