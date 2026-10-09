@@ -2,10 +2,11 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <!-- ⚠️ 绝对地址：相对路径 `favicon.svg` 会随文档 URL 解析，深链接下变 `/admin/system/favicon.svg` → 404 -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- ⚠️ 绝对地址：相对路径会随文档 URL 解析，深链接下变 `/admin/system/favicon.svg` → 404。
+         站根 `/favicon-admin.svg`：独立构建时由 public/ 提供，基座托管时由 gateway 静态根提供 -->
+    <link rel="icon" type="image/svg+xml" href="/favicon-admin.svg" />
     <!-- Apple Touch Icon（iOS Safari 添加到主屏时使用） -->
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon-admin.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>科豆 AI · 管理后台</title>
     <!-- 主题与圆角偏好：首屏渲染前写入根属性，避免「先浅色/柔和后跳变」（AC6）
