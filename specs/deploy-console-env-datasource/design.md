@@ -385,3 +385,66 @@ M3 立项时的判断是「云库配置落后」（源于早期观察到 `deploy
 M3 收尾时保守起见没动 `deploy_app_env_versions`（prod 行版本号已一致）。M4 上线后维护lify自动化，
 这里补一次基线让巡检从干净状态起步：备份 `deploy_app_env_versions-cloud-20261008-200140.sql` 后 REPLACE 补齐，
 现 12/12 全一致。
+
+## 15. 磁盘入口指针落点按环境分流（诊断 #3，2026-10-09）
+
+### 事实（实测，非推断）
+
+| 环境 | gateway 静态根 | 所在机器 | console 原落点 |
+|---|---|---|---|
+| dev | `/data/web_system/servers/gateway/public`（`STATIC_ROOT=./public`） | console 本机（南京 175.27.189.123） | 同一路径 ✅ |
+| prod | `/data/web_system_static/public`（进程 env `STATIC_PUBLIC_ROOT`） | prod 机（广州 106.52.176.246） | **dev 机 `/data/web_system/...`** ❌ |
+
+证据：prod gateway 进程 environ 里 `STATIC_PUBLIC_ROOT=/data/web_system_static/public`；
+`curl 127.0.0.1:6000/static/modules/portal/prod/index.js` 返回的内容与
+`/data/web_system_static/public/static/modules/portal/prod/index.js` 逐字节一致。
+
+### 根因
+
+console 把「磁盘入口指针」一律写到 `RELEASE_WORKSPACE` 下的 `servers/gateway/public`
+（即 console 本机），而**静态根所在的机器是环境的属性，不是 console 的属性**：
+
+1. **落点错** —— prod 切换写到 dev 机，线上读 prod 外置静态根 →
+   磁盘指针与 DB 指针长期撕裂（实测：DB=6e7b2690 / prod 磁盘=69d9e5f9）
+2. **校验走错机器** —— `hasEnvVersion` 在 console 本机校验 prod 产物，
+   本机 `portal/prod/` 只有 `cdb055bc` → 切不回只在 prod 机上存在的版本（E2E 已复现，2026-10-08）
+
+### 方案：落点是环境的一等属性
+
+配置驱动，未配置时与修复前**逐字节一致**：
+
+| 配置项 | 含义 |
+|---|---|
+| `STATIC_PUBLIC_ROOT_<ENV>` | 该环境的 gateway 静态根（目标机绝对路径） |
+| `STATIC_SSH_TARGET_<ENV>` | 静态根所在机器（`user@host`）；不配 = console 本机 |
+| `STATIC_PUBLIC_ROOT` | 全局兜底（不区分环境） |
+| （都不配） | `<RELEASE_WORKSPACE>/servers/gateway/public` |
+
+实现：
+
+- `apps/static-target.ts`：解析纯函数（env → 配置键归一化 `staging-1` → `STAGING_1`、尾斜杠归一）
+- `apps/env-artifact.service.ts`：产物读写的**唯一入口**，本机走 fs / 远端走 ssh
+  - 远端脚本 base64 传递（避免本地 shell + 远端 shell 多层引号转义）
+  - 失败语义：读类（列版本 / 读指针）降级空值 + 告警；**校验失败抛错**
+    （不能让「没校验」伪装成「校验通过」）
+  - 远端写指针：一次 ssh 完成「备份 → 写 js → 有 css 才写 css」
+- `entry-pointer.ts` 路径语义由「发布目录」改为「**静态根**」
+- `apps.service`：校验 / 列版本 / 读指针 / 写指针全部改走落点服务，报错文案带落点
+
+### 线上配置（dev console `.env`）
+
+```
+STATIC_PUBLIC_ROOT_PROD=/data/web_system_static/public
+STATIC_SSH_TARGET_PROD=root@106.52.176.246
+```
+
+### 验证
+
+- 单测：全量 593 passed；apps 域 36 项（新增落点解析 9 + 远端命令 9 + switchVersion 2）
+- E2E：内部接口 `POST /internal/release/pointer` 对 `portal@prod` 做
+  「切到 cdb055bc → 切回 6e7b2690」，校验与写盘都在 prod 外置静态根上完成
+
+### 遗留
+
+- 远端操作走 ssh 同步等待（15s 超时），在列版本接口上有网络耗时；后续如需可做缓存
+- prod 磁盘指针与 DB 指针的历史撕裂需人工核对一次（本次修复只保证**后续**写入一致）

@@ -19,6 +19,7 @@ import {
  * 属整模块白屏级回归，故用断言锁死写法，同时锁死 `readEnvEntryPointer` 的解析兼容。
  */
 describe('entry-pointer（入口指针 T1 定稿 A′）', () => {
+  /** 静态根（gateway 的 PUBLIC_ROOT），非发布目录 —— 诊断 #3 后的路径语义 */
   let ws: string;
 
   beforeEach(() => {

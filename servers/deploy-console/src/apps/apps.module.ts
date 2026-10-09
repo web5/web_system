@@ -10,6 +10,8 @@ import { EnvsModule } from '../envs/envs.module';
 import { AuditModule } from '../audit/audit.module';
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
+import { ShellModule } from '../shell/shell.module';
+import { EnvArtifactService } from './env-artifact.service';
 
 /**
  * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
@@ -21,6 +23,8 @@ import { ReleaseRegistryModule } from '../registry/release-registry.module';
     CloudDbModule,
     // 版本指针写入的唯一入口（含 prod 云库镜像，2026-10-09 收敛）
     ReleaseRegistryModule,
+    // 远端静态根读写要用命令执行通道（ssh），诊断 #3
+    ShellModule,
     TypeOrmModule.forFeature([
       DeployAppEntity,
       DeployAppRouteEntity,
@@ -32,7 +36,7 @@ import { ReleaseRegistryModule } from '../registry/release-registry.module';
     AuditModule,
   ],
   controllers: [AppsController],
-  providers: [AppsService],
-  exports: [AppsService],
+  providers: [AppsService, EnvArtifactService],
+  exports: [AppsService, EnvArtifactService],
 })
 export class AppsModule {}

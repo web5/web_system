@@ -24,13 +24,8 @@ import {
   CreateAppDto,
   UpdateAppDto,
 } from './dto';
-import {
-  envEntryUrl,
-  hasEnvVersion,
-  listEnvVersions,
-  readEnvEntryPointer,
-  writeEnvEntryPointer,
-} from './entry-pointer';
+import { envEntryUrl } from './entry-pointer';
+import { EnvArtifactService } from './env-artifact.service';
 
 /**
  * 应用域服务（微前端）
@@ -63,6 +58,12 @@ export class AppsService implements OnModuleInit {
      * 表现为「切换/回滚成功但 prod 线上没变」且不报错。
      */
     private readonly registry: ReleaseRegistryService,
+    /**
+     * 磁盘产物的**唯一读写口**（2026-10-09 新增，诊断 #3）。
+     * 它按环境解析落点（prod 的静态根外置在 prod 机），禁止再直接调 entry-pointer 的
+     * 本机函数 —— 那会把 prod 的指针写到 console 本机，线上永远读不到。
+     */
+    private readonly artifacts: EnvArtifactService,
   ) {}
 
   /**
@@ -362,12 +363,17 @@ export class AppsService implements OnModuleInit {
     ]);
     const byEnv = new Map(rows.map((r) => [r.envId, r]));
 
-    return {
-      app,
-      items: envs.map((e) => {
+    // 磁盘侧（版本列表 / 指针）按环境落点读取：prod 在远端机器上，可能有网络耗时
+    const items = await Promise.all(
+      envs.map(async (e) => {
         const r = byEnv.get(e.envId);
-        const versions =
-          app.deployMode === 'env-dir' ? listEnvVersions(this.workspace, appKey, e.envId) : [];
+        const [versions, pointerVersion] =
+          app.deployMode === 'env-dir'
+            ? await Promise.all([
+                this.artifacts.listVersions(e.envId, appKey),
+                this.artifacts.readPointer(e.envId, appKey),
+              ])
+            : [[] as string[], null];
         return {
           envId: e.envId,
           envName: e.name,
@@ -379,13 +385,14 @@ export class AppsService implements OnModuleInit {
           deployedAt: r?.deployedAt ?? null,
           deployedBy: r?.deployedBy ?? null,
           /** 磁盘上真实指向（与 DB 指针不一致时可用于排查） */
-          pointerVersion:
-            app.deployMode === 'env-dir' ? readEnvEntryPointer(this.workspace, appKey, e.envId) : null,
+          pointerVersion,
           availableVersions: versions,
           entryUrl: this.entryUrlFor(app, e.envId, r?.currentVersion ?? null),
         };
       }),
-    };
+    );
+
+    return { app, items };
   }
 
   private entryUrlFor(app: DeployAppEntity, envId: string, version: string | null): string {
@@ -401,7 +408,8 @@ export class AppsService implements OnModuleInit {
     const app = await this.getApp(appKey);
     await this.envsService.getEnv(envId);
     const row = await this.versionRepo.findOne({ where: { appKey, envId } });
-    const available = app.deployMode === 'env-dir' ? listEnvVersions(this.workspace, appKey, envId) : [];
+    const available =
+      app.deployMode === 'env-dir' ? await this.artifacts.listVersions(envId, appKey) : [];
     return {
       appKey,
       envId,
@@ -426,16 +434,31 @@ export class AppsService implements OnModuleInit {
    *
    * 原实现是「先盘后库」且库写失败无补偿，盘写成功/库写失败即静默双轨不一致。
    *
+   * 产物校验也在**该环境的静态根所在机器**上做：prod 产物只存在于 prod 机，
+   * 在 console 本机校验会把「机器上没有」误判成「版本不存在」（诊断 #3 的切不回现象）。
+   *
    * @returns 切换前后版本
    */
   async switchVersion(appKey: string, envId: string, version: string, operator?: string) {
     const app = await this.getApp(appKey);
     await this.envsService.getEnv(envId);
 
-    if (app.deployMode === 'env-dir' && !hasEnvVersion(this.workspace, appKey, envId, version)) {
-      throw new BadRequestException(
-        `版本产物不存在，无法切换：${appKey}/${envId}/${version}（产物目录缺 index.js）`,
-      );
+    if (app.deployMode === 'env-dir') {
+      let exists = false;
+      try {
+        exists = await this.artifacts.hasVersion(envId, appKey, version);
+      } catch (e) {
+        throw new BadRequestException(
+          `产物校验失败（无法访问 ${this.artifacts.describeTarget(envId)}）：${(e as Error).message}`,
+        );
+      }
+      if (!exists) {
+        throw new BadRequestException(
+          `版本产物不存在，无法切换：${appKey}/${envId}/${version}（${this.artifacts.describeTarget(
+            envId,
+          )} 下缺 index.js）`,
+        );
+      }
     }
 
     // 1) 指针表（含 prod 云库镜像，strict 失败即抛 → 不会留下「以为切了其实没切」）
@@ -453,7 +476,7 @@ export class AppsService implements OnModuleInit {
     let pointer: { js: string; css: string | null } | null = null;
     if (app.deployMode === 'env-dir') {
       try {
-        pointer = writeEnvEntryPointer(this.workspace, appKey, envId, version);
+        pointer = await this.artifacts.writePointer(envId, appKey, version);
       } catch (e) {
         await this.revertAppEnvPointer(appKey, envId, from, previous, operator);
         throw new BadRequestException(

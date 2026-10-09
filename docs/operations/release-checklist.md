@@ -56,6 +56,11 @@
 
 - [ ] 扫描 `REQUIRED_SERVICE_URLS_IN_PROD` 声明的 URL 全部填齐（清单见 [required-service-urls.md](./required-service-urls.md)）
 - [ ] 当前 known：system-service 需 `AUTH_SERVICE_URL=http://127.0.0.1:6001`
+- [ ] **ai-service 的 `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` / `TENCENT_APP_ID`**（朗读能力）：
+      dev 由配置中心下发 `.env.generated`；**prod 必须手工写 `.env`**（配置下发 P0 仅覆盖本地）。
+      探活 `GET /api/ai/tts/health` 应为 `{configured:true, streamConfigured:true}`，
+      步骤见 [tts-credentials-runbook.md](./tts-credentials-runbook.md)。
+      ⚠️ 这三个键漏配**不会让服务起不来**，只会让「朗读」静默 503 —— 必须单独勾，别靠「服务活着」推断
 
 ---
 
@@ -98,6 +103,8 @@
 - [ ] `https://<PROD_DOMAIN>/api/health` → 200
 - [ ] `https://<ADMIN_DOMAIN>/` → 200
 - [ ] `POST https://<PROD_DOMAIN>/api/ai/chat` → 200（业务核心）
+- [ ] `GET https://<PROD_DOMAIN>/api/ai/tts/health` → 200 且 `configured=true`（朗读能力；需带登录 token）
+- [ ] `POST https://<PROD_DOMAIN>/api/ai/tts/speak` → 200 `audio/mpeg`（端到端出声，不只是配置在）
 - [ ] `pm2 save` 完成
 
 ---
