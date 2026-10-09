@@ -108,8 +108,17 @@
               <button type="button" class="act" @click="copy(sections[tab])">
                 <app-icon name="copy" />复制
               </button>
-              <button type="button" class="act" @click="speak">
-                <app-icon name="volume" />{{ reading ? '停止' : '朗读' }}
+              <button
+                type="button"
+                class="act"
+                :class="{ 'is-disabled': ttsUnavailable }"
+                :aria-disabled="ttsUnavailable ? 'true' : undefined"
+                :title="ttsUnavailable ? TTS_OFF_TIP : undefined"
+                @click="onSpeak"
+              >
+                <app-icon v-if="!ttsUnavailable" name="volume" />{{
+                  ttsUnavailable ? '朗读不可用' : reading ? '停止' : '朗读'
+                }}
               </button>
               <button type="button" class="act" @click="fav">收藏</button>
             </div>
@@ -128,7 +137,14 @@ import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream } from '@/api/agent';
 import { useConversationStore } from '@/stores/conversations';
 import { collectGlossary } from '@/api/glossary';
-import { speakSequence, splitSpeakParts, stopTts } from '@/api/tts';
+import {
+  TTS_OFF_TIP,
+  refreshTtsHealth,
+  speakSequence,
+  splitSpeakParts,
+  stopTts,
+  ttsUnavailable,
+} from '@/api/tts';
 import { parseSections } from '@/utils/answer-parse';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -175,6 +191,7 @@ async function loadRecord(id: string) {
 }
 
 onMounted(() => {
+  void refreshTtsHealth();
   const id = route.query.id;
   if (typeof id === 'string' && id) void loadRecord(id);
 });
@@ -245,6 +262,18 @@ async function copy(text: string) {
   } catch {
     message.error('复制失败，请手动选择文本');
   }
+}
+
+/**
+ * 朗读点击入口：能力不可用时给一次明确反馈就返回。
+ * ⚠️ 不用原生 disabled（不触发 title / 键盘不可达），用 aria-disabled + 此处拦截。
+ */
+function onSpeak(): void {
+  if (ttsUnavailable.value) {
+    message.info(TTS_OFF_TIP);
+    return;
+  }
+  speak();
 }
 
 /** 朗读推荐译文（后端 TTS，腾讯云 603007 中英混读统一音色） */
@@ -691,6 +720,17 @@ onBeforeUnmount(() => {
 .act:hover {
   background: var(--ws-bg-subtle);
   color: var(--ws-brand-500);
+}
+
+/* 朗读能力不可用（2026-10-09）：视觉降级；hover 压掉品牌色，避免暗示可点 */
+.act.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.act.is-disabled:hover {
+  background: transparent;
+  color: var(--ws-text-tertiary);
 }
 
 .claim {
