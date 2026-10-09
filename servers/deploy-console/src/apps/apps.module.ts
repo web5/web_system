@@ -9,6 +9,7 @@ import { AppsController } from './apps.controller';
 import { EnvsModule } from '../envs/envs.module';
 import { AuditModule } from '../audit/audit.module';
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
+import { ReleaseRegistryModule } from '../registry/release-registry.module';
 
 /**
  * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
@@ -18,6 +19,8 @@ import { CloudDbModule } from '../cloud-db/cloud-db.module';
   imports: [
     // 配置镜像双写（M4）：把本地写的配置行同步到云数据库
     CloudDbModule,
+    // 版本指针写入的唯一入口（含 prod 云库镜像，2026-10-09 收敛）
+    ReleaseRegistryModule,
     TypeOrmModule.forFeature([
       DeployAppEntity,
       DeployAppRouteEntity,

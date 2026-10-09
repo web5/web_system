@@ -7,9 +7,13 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
   let deploymentRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
   // 双写（2026-09-28）：应用域 + 应用×环境版本指针
   let appRepo: { findOne: jest.Mock };
-  let appVersionRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let appVersionRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock; remove: jest.Mock };
   // 按环境分流（2026-10-08）：prod 指针镜像写云库
-  let splitWriter: { mirrorPointer: jest.Mock; mirrorLegacyPointer: jest.Mock };
+  let splitWriter: {
+    mirrorPointer: jest.Mock;
+    mirrorLegacyPointer: jest.Mock;
+    deleteMirror: jest.Mock;
+  };
   let svc: ReleaseRegistryService;
 
   beforeEach(() => {
@@ -28,10 +32,12 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       findOne: jest.fn(async () => null),
       create: jest.fn(() => ({})),
       save: jest.fn(async (x: unknown) => x),
+      remove: jest.fn(async (x: unknown) => x),
     };
     splitWriter = {
       mirrorPointer: jest.fn(async () => ({ outcome: 'skipped' })),
       mirrorLegacyPointer: jest.fn(async () => ({ outcome: 'skipped' })),
+      deleteMirror: jest.fn(),
     };
     svc = new ReleaseRegistryService(
       versionRepo as never,
@@ -176,6 +182,93 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
     // legacy 是后端服务唯一指针，仍需镜像
     expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
+  });
+
+  // ==================== setAppEnvPointer（2026-10-09 收敛，诊断 #1） ====================
+  // 背景：UI 切换/回滚、UI 部署、流水线 internal/release/pointer 三条路都走 AppsService.switchVersion，
+  // 而它原先自己 versionRepo.save() 且**从不写云库** → prod「切换成功但线上没变」且不报错。
+
+  it('setAppEnvPointer：走 registry 单一入口，prod 必须镜像云库', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'v1',
+      previousVersion: 'v0',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v2',
+      deployedBy: 'u1',
+    });
+    expect(r).toEqual({ from: 'v1', previous: 'v0', unchanged: false });
+    expect(appVersionRepo.save).toHaveBeenCalled();
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' }),
+    );
+  });
+
+  it('setAppEnvPointer：同值幂等 → 不写库也不镜像（避免两库 deployed_at 漂移）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'v1',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v1',
+    });
+    expect(r.unchanged).toBe(true);
+    expect(appVersionRepo.save).not.toHaveBeenCalled();
+    expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
+  });
+
+  it('setAppEnvPointer：prod 云库写失败 → 抛出（不留「以为切了其实没切」）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    splitWriter.mirrorPointer.mockRejectedValueOnce(new Error('云库公网不通'));
+    await expect(
+      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' }),
+    ).rejects.toThrow(/云库公网不通/);
+  });
+
+  it('setAppEnvPointer：应用未登记于 deploy_apps → 抛 404（不静默空转）', async () => {
+    appRepo.findOne.mockResolvedValue(null);
+    await expect(
+      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'ghost', currentVersion: 'v2' }),
+    ).rejects.toThrow(/未登记/);
+  });
+
+  it('setAppEnvPointer：previousVersion 显式传入时原样落库（回滚补偿用）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'v2',
+      previousVersion: 'v9',
+    });
+    await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v1',
+      previousVersion: 'v0',
+    });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    // 补偿要把旧值带回来，不能让 previous 指向那个没生效的失败目标
+    expect(saved).toMatchObject({ currentVersion: 'v1', previousVersion: 'v0' });
+  });
+
+  it('clearAppEnvPointer：本地删行 + 云库删除补偿（首次写入回滚用）', async () => {
+    const row = { appKey: 'portal', envId: 'prod', currentVersion: 'v1' };
+    appVersionRepo.findOne.mockResolvedValue(row);
+    await svc.clearAppEnvPointer('portal', 'prod');
+    expect(appVersionRepo.remove).toHaveBeenCalled();
+    expect(splitWriter.deleteMirror).toHaveBeenCalledWith('deploy_app_env_versions', {
+      app_key: 'portal',
+      env_id: 'prod',
+    });
   });
 
   it('findByVersionTag 按标签查版本记录；无记录 → undefined', async () => {
