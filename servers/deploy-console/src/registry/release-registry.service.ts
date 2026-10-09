@@ -130,10 +130,14 @@ export class ReleaseRegistryService {
       input.lock.ttlMs,
     );
     if (!r.ok) {
+      // ⚠️ 别直接 `new Date(r.expiresAt)`：expires_at 是 bigint 列，驱动可能给回字符串，
+      // 一旦非法就是 RangeError → 409 冲突被吞成 500（真实原因反而看不见）
+      const until = Number(r.expiresAt);
+      const untilText =
+        Number.isFinite(until) && until > 0 ? `（至 ${new Date(until).toISOString()}）` : '';
       throw new ConflictException(
         `并发发布被拒绝：${input.moduleKey}@${input.env} 正被 ${r.holder ?? '未知持有者'} 占用` +
-          (r.expiresAt ? `（至 ${new Date(r.expiresAt).toISOString()}）` : '') +
-          '；请稍后重试，确认无人发布后再强制解锁',
+          `${untilText}；请稍后重试，确认无人发布后再强制解锁`,
       );
     }
     try {

@@ -160,6 +160,15 @@ describe('ReleaseLockService.acquire（原子互斥 CAS）', () => {
     expect(r).toMatchObject({ ok: false, newly: false, holder: 'p2', expiresAt: at });
   });
 
+  it('#6 回归：bigint 列被读成字符串时，expiresAt 要转成数字', async () => {
+    repo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(holder('p1', '1791522115000' as never));
+    const r = await service.acquireEx('auth-service', 'dev', 'p1');
+    expect(typeof r.expiresAt).toBe('number');
+    expect(r.expiresAt).toBe(1_791_522_115_000);
+  });
+
   it('#12：forceRelease 无条件删除（人工应急）', async () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(service.forceRelease('auth-service', 'dev')).resolves.toBe(true);

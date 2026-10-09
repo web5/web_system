@@ -143,7 +143,9 @@ export class ReleaseLockService {
         ok,
         newly: ok ? newly : false,
         holder: row?.pipelineId,
-        expiresAt: row?.expiresAt,
+        // ⚠️ expires_at 是 bigint 列：mysql2 默认把它读成**字符串**，
+        // 直接 `new Date(str)` 会抛 RangeError（实测把 409 冲突打成了 500）。统一转数字。
+        expiresAt: row?.expiresAt != null ? Number(row.expiresAt) : undefined,
       };
     } catch (e) {
       this.logger.warn(`确认发布锁持有者失败，视为未抢到: ${(e as Error).message}`);
@@ -219,7 +221,8 @@ export class ReleaseLockService {
     try {
       const row = await this.repo.findOne({ where: { lockKey: buildLockKey(moduleKey, env) } });
       if (!row) return null;
-      return { pipelineId: row.pipelineId, expiresAt: row.expiresAt };
+      // 同上：bigint 列会被读成字符串，转数字避免调用方 new Date() 抛 RangeError
+      return { pipelineId: row.pipelineId, expiresAt: Number(row.expiresAt) };
     } catch {
       return null;
     }
