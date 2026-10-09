@@ -153,4 +153,35 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     expect(r.pointer).toBeNull();
     expect(registry.setAppEnvPointer).toHaveBeenCalled();
   });
+
+  it('锁 owner 默认按 operator 派生（ui: 前缀，排障可见来源）', async () => {
+    await svc.switchVersion('portal', 'prod', 'v2', 'pipeline-script');
+    expect(registry.setAppEnvPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { owner: 'ui:pipeline-script' } }),
+    );
+  });
+
+  /**
+   * 2026-10-09 回归（本批修复的起因）：
+   * 流水线自持锁 owner = run id，激活脚本若按 operator 派生出 `ui:pipeline-script`，
+   * 会被流水线自己那把锁判成并发 → 409 → dev 发布恒失败。
+   */
+  it('显式 lockOwner（流水线 run id）原样透传：与流水线锁同源 = 重入而非并发', async () => {
+    await svc.switchVersion('portal', 'dev', 'v2', 'pipeline-script', '1791531699962-3dznagn');
+    expect(registry.setAppEnvPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { owner: '1791531699962-3dznagn' } }),
+    );
+  });
+
+  it('显式 lockOwner 时回滚补偿也用同一 owner（否则补偿写会被外层锁拒绝）', async () => {
+    artifacts.writePointer.mockImplementation(async () => {
+      throw new Error('EIO');
+    });
+    await expect(
+      svc.switchVersion('portal', 'dev', 'v2', 'pipeline-script', 'run-1'),
+    ).rejects.toThrow(BadRequestException);
+    expect(registry.setAppEnvPointer).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lock: { owner: 'run-1' } }),
+    );
+  });
 });

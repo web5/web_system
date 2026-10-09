@@ -655,3 +655,53 @@ SSH_EXEC_TIMEOUT_MS=600000        # SshExecService 的远程执行超时
 - `remote-delivery` 的 `REMOTE_MODULES_ROOT` 仍是硬编码，未并入「环境 × 应用」推导
 - 后端 `servers/<dir>/<commit>/` 的远端保留未做（dist 就在旁边，误删风险更高，需单独验证）
 - 定时巡检只覆盖指针表；产物清理目前靠流水线 cleanup 步骤触发，非定时
+
+---
+
+## 18. 流水线锁与指针层锁必须同源（2026-10-09 回归修复）
+
+### 18.1 现象
+
+dev 发布 portal 时，前面的「拉取代码 / 构建 / 投递产物 / 写版本」全部成功，
+唯独最后一步「激活指针 · 写入口指针」恒失败：
+
+```
+[activate] 激活失败：http://127.0.0.1:6200/api/internal/release/pointer（指针未切换，页面仍是旧版本）
+```
+
+### 18.2 根因：两把锁不同源，流水线被自己拒绝
+
+| 锁 | 持有者 | owner |
+|---|---|---|
+| 流水线自持锁 | `pipeline.service.ts` acquire | **run id**（如 `1791531699962-3dznagn`） |
+| 指针层锁（#6 下沉） | `switchVersion` → `setAppEnvPointer` | `ui:<operator>`（如 `ui:pipeline-script`） |
+
+发布节点的激活脚本调 `internal/release/pointer` 时，指针层按 operator 派生出
+`ui:pipeline-script`，**与流水线那把锁不是同一个 owner** → `acquireEx` 判定为并发 → 409
+→ 脚本 `exit 1`。即：**流水线被自己持有的锁挡在门外**。
+
+这是 #6「锁下沉」的副作用：下沉本身是对的（UI/脚本入口此前裸奔），
+但漏了「流水线自己已经持锁」这条路径。
+
+### 18.3 修法：run id 显式透传，同 owner 即重入
+
+1. `resolveStageVars` 注入 `RUN_ID`（= run id），并列入 `PROTECTED_STAGE_KEYS`
+2. `internal/release/pointer` 接受 `lockOwner`（兼容 `runId` 字段），原样透传给 `switchVersion`
+3. `AppsService.resolveLockOwner()`：显式 lockOwner 优先，缺省才用 `ui:<operator>`
+4. 动作脚本 curl body 增加 `"lockOwner":"${RUN_ID}"`
+
+`acquireEx` 原本就支持「同 owner 重入」（`newly=false` 不释放外层锁），
+因此透传后激活步骤走的是重入分支，不再冲突。
+
+### 18.4 两个必须记住的细节
+
+- **`PROTECTED_STAGE_KEYS` 只拦配置中心，不拦流水线变量**。
+  `RUN_ID` 属平台身份类变量（与 `CONSOLE_TOKEN` 同类），被模板变量覆盖会导致
+  「锁 owner 错位」这类完全指不到根因的失败，故在合并流水线变量后再单独拦一次。
+- **动作脚本的变量门禁会拦住未声明变量**。必须先发布注入 `RUN_ID` 的代码，
+  再打脚本补丁，否则保存动作时报「引用了未声明变量 RUN_ID」（实测确实拦住了）。
+
+### 18.5 回归验证
+
+- 单测：默认 `ui:` 前缀 / 显式 owner 透传 / 回滚补偿沿用同一 owner / RUN_ID 注入与防覆盖
+- E2E：重跑一条 dev 发布，「激活指针」步骤 succeeded，指针与两库一致

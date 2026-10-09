@@ -215,6 +215,13 @@ export interface StageVarsInput {
   env: string;
   moduleKey: string;
   /**
+   * 流水线 run id（`deploy_pipeline_runs.id`）。
+   * 注入为 `RUN_ID`：动作脚本调平台内部接口（如切指针）时把它作为锁 owner 透传，
+   * 与流水线自身持有的那把锁同源 → 判定为重入而不是并发。
+   * 缺失会导致「流水线被自己持有的锁拒绝」（2026-10-09 dev 激活指针恒失败）。
+   */
+  runId?: string;
+  /**
    * 流水线变量（属于某条流水线，编辑页维护）。
    * **最后合并**：优先级 内置 → 配置中心 → 流水线变量 → 节点内联，故它可以覆盖配置中心同名键。
    */
@@ -293,6 +300,9 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   // 「脚本调用 401」或「脚本指向别的 console」这类难以定位的发布失败。
   'CONSOLE_API',
   'CONSOLE_TOKEN',
+  // 被流水线变量/配置中心覆盖会导致脚本拿到的锁 owner 与流水线实际持有的不一致
+  // → 流水线被自己的锁判成并发（409），表现为「激活指针」步骤恒失败
+  'RUN_ID',
 ];
 
 /** 端口来源（注入为 `PORT_SOURCE`，脚本/排障据此判断该不该信任这个端口） */
@@ -380,6 +390,8 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   const base: Record<string, string> = {
     DEPLOY_ENV: i.env || '',
     MODULE_KEY: i.moduleKey,
+    // run id：脚本调平台内部接口时透传为锁 owner（与流水线锁同源 = 重入，不被自己拒绝）
+    RUN_ID: i.runId || '',
     MODULE_TYPE: type,
     MODULE_DIR: dir,
     BRANCH: i.branch || '',
@@ -432,7 +444,13 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   }
 
   // 流水线变量最后铺开：内置 → 配置中心 → 流水线变量 → 节点内联
-  return { ...base, ...pipelineVars };
+  const merged = { ...base, ...pipelineVars };
+  // 例外：`RUN_ID` 是平台身份类变量（与 CONSOLE_TOKEN 同类）——被流水线变量覆盖后，
+  // 脚本透传给平台的锁 owner 会与流水线实际持有的不一致 → 被自己的锁判成并发（409），
+  // 表现为「激活指针」步骤恒失败且报错信息完全指不到这里（2026-10-09 回归）。
+  // `PROTECTED_STAGE_KEYS` 只拦配置中心，故这里对流水线变量再拦一次。
+  if (base.RUN_ID) merged.RUN_ID = base.RUN_ID;
+  return merged;
 }
 
 /** 流水线挂起（等审批）时的状态值（节点级审批，design D8 / R2） */
@@ -1747,6 +1765,8 @@ export class PipelineService {
       const env = resolveStageVars({
         env: p.env,
         moduleKey: p.moduleKey,
+        // 锁 owner 透传：与流水线 1477 行 acquire 用的 owner 同源（p.id）
+        runId: p.id,
         moduleType: mod?.type || p.moduleType,
         dir: mod?.dir ?? undefined,
         deployRoot: mod?.deployRoot ?? undefined,
@@ -2266,6 +2286,8 @@ export class PipelineService {
     const env = resolveStageVars({
       env: p.env,
       moduleKey: p.moduleKey,
+      // 锁 owner 透传（同上）
+      runId: p.id,
       moduleType: mod?.type || p.moduleType,
       dir: mod?.dir,
       deployRoot: mod?.deployRoot,

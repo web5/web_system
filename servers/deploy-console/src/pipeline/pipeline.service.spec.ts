@@ -212,6 +212,33 @@ describe('resolveStageVars（阶段命令变量）', () => {
     expect(v.PORT).toBe('6000');
   });
 
+  /**
+   * 2026-10-09 回归：脚本调平台内部接口（切指针）时必须能把 run id 作为锁 owner 透传，
+   * 否则流水线会被自己持有的那把锁判成并发（409）。
+   */
+  it('RUN_ID 注入：脚本透传为锁 owner，与流水线自持锁同源', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'portal',
+      runId: '1791531699962-3dznagn',
+      releaseWorkspace: ws,
+      commitId: '5ba74517',
+    });
+    expect(v.RUN_ID).toBe('1791531699962-3dznagn');
+  });
+
+  it('RUN_ID 是保护键：流水线变量/配置中心同名键不得覆盖（否则锁 owner 错位）', () => {
+    const v = resolveStageVars({
+      env: 'dev',
+      moduleKey: 'portal',
+      runId: 'real-run-id',
+      releaseWorkspace: ws,
+      config: { RUN_ID: 'hijacked-by-config' },
+      pipelineVars: { RUN_ID: 'hijacked-by-pipeline-var' },
+    });
+    expect(v.RUN_ID).toBe('real-run-id');
+  });
+
   it('PUBLIC_PATH：模块 publicPath 优先，缺省回落 moduleKey（字段接线）', () => {
     const withCfg = resolveStageVars({
       env: 'dev',
