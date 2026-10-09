@@ -174,7 +174,7 @@ export class IntentClassifier {
     }
 
     // L1-b 会话锁定：先查规则表 —— 高置信规则命中**其他** agent 时允许切走
-    //（如锁定的情感陪聊里突然问「英语怎么说」）；未命中则沿用锁定（零成本、不调 LLM）。
+    //（如锁定的情感陪聊里突然问「英语怎么说」）。
     // ⚠️ 不能在这里直接短路返回 locked：那样话题切换永远失效，
     //    与实现方案 §9「已锁定 baike 时说『帮我翻一下』应切到 translate」的用例矛盾。
     if (o.lockedAgentId && candidates.includes(o.lockedAgentId)) {
@@ -183,7 +183,15 @@ export class IntentClassifier {
           return { agentId: r.agentId, confidence: r.confidence, via: 'rule' };
         }
       }
-      return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
+      // 锁定 agent 的**自家关键词**命中 → 话题未漂移，零成本沿用（不调 LLM）
+      const own = rules.find((r) => r.agentId === o.lockedAgentId);
+      if (own && own.kw.test(userInput)) {
+        return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
+      }
+      // ⚠️ 无任何规则命中 = 话题可能已漂移，必须落到 L3 让 LLM 判定是否切走。
+      //    2026-10-09 事故：锁定 translate 后发「搜索资讯」，general 无关键词、
+      //    tool 未注册 → 这里若短路 return locked 会话永远无法逃逸（5 轮全 locked）。
+      //    L3 失败 / 解析不出时仍按锁定收尾（见 L4 的 locked 收尾分支），与旧语义一致。
     }
 
     // L2 规则
@@ -234,7 +242,11 @@ export class IntentClassifier {
         `意图分类调用失败（超时 / 网络 / 模型不可用）→ 兜底 ${this.fallbackAgentId}: ${(e as Error)?.message}`,
       );
     }
-    // L4 兜底
+    // L4 兜底。⚠️ 会话锁定时不能漂到兜底 agent（那等于把「分类临时不可用」
+    // 升级成「强制切换话题」），保持锁定与旧语义一致：下一轮再重新分类。
+    if (o.lockedAgentId && candidates.includes(o.lockedAgentId)) {
+      return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
+    }
     return { agentId: this.fallbackAgentId, confidence: 0.3, via: 'fallback' };
   }
 
