@@ -140,15 +140,30 @@ export class DbConversationMemory implements ConversationMemoryPort {
     return randomUUID();
   }
 
-  /** 把存储的 JSON messages 还原为 ChatMessage[] */
+  /**
+   * 把存储的 JSON messages 还原为 ChatMessage[]。
+   *
+   * ⚠️ 回放兜底：丢弃 role=tool 的历史消息。
+   * StoredMessage 不持久化 assistant.toolCalls，历史里的 tool 消息必然是「孤儿」
+   * （前面没有带 tool_calls 的 assistant），而 OpenAI 兼容协议要求 role=tool 必须紧跟
+   * tool_calls 响应，否则模型网关 400 —— 2026-10-09 事故：搜索轮次落库后，下一轮
+   * 回放 23 条历史被 TokenHub 400 打回。工具输出的信息已在同轮 assistant 总结里。
+   * （新数据从源头就不落 tool 消息，见 agent-core Compaction.extractPersistable；
+   *  这里兜底处理修复前已落库的存量行。）
+   */
   private parseMessages(raw: unknown): ChatMessage[] {
     if (!Array.isArray(raw)) return [];
-    return (raw as StoredMessage[]).map((m) => ({
+    const msgs = (raw as StoredMessage[]).map((m) => ({
       role: m.role,
       content: m.content,
       ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
       ...(m.name ? { name: m.name } : {}),
       ts: m.ts,
     }));
+    const filtered = msgs.filter((m) => m.role !== 'tool');
+    if (filtered.length !== msgs.length) {
+      this.logger.log(`历史回放丢弃 ${msgs.length - filtered.length} 条孤儿 tool 消息（toolCalls 未持久化，防 400）`);
+    }
+    return filtered;
   }
 }
