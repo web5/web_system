@@ -23,6 +23,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     describeTarget: jest.Mock;
   };
   let gatewayCache: { notifyVersionChange: jest.Mock };
+  let taskRecorder: { record: jest.Mock; start: jest.Mock; log: jest.Mock; finish: jest.Mock };
   let svc: AppsService;
 
   beforeEach(() => {
@@ -45,6 +46,16 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     configService = { get: jest.fn(() => '/ws') };
     mirror = { mirrorRow: jest.fn(), deleteMirror: jest.fn() };
     gatewayCache = { notifyVersionChange: jest.fn(async () => ({ ok: true, reason: 'notified' })) };
+    // 任务留痕桩：默认直接执行被包装的函数（不传 recordTask 时压根不会用到它）
+    taskRecorder = {
+      record: jest.fn(async (_meta: unknown, fn: (log: (l: string) => void) => Promise<unknown>) => ({
+        result: await fn(() => undefined),
+        taskId: 'task-1',
+      })),
+      start: jest.fn(async () => 'task-1'),
+      log: jest.fn(async () => undefined),
+      finish: jest.fn(async () => undefined),
+    };
     registry = {
       setAppEnvPointer: jest.fn(async () => ({ from: 'v1', previous: 'v0', unchanged: false })),
       clearAppEnvPointer: jest.fn(async () => undefined),
@@ -69,6 +80,8 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
       artifacts as never,
       // gateway 缓存通知（诊断 #16）桩：默认不产生网络调用
       gatewayCache as never,
+      // 任务留痕（UI 入口落 deploy_tasks）
+      taskRecorder as never,
     );
   });
 

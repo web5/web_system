@@ -191,7 +191,15 @@ export class AppsController {
     @Body() dto: SwitchEnvVersionDto,
     @CurrentUser() user: any,
   ) {
-    const res = await this.appsService.switchVersion(key, dto.envId, dto.version, user?.username);
+    // recordTask：UI 操作落 deploy_tasks（此前这类操作完全没有任务记录，出事只能翻 pm2 log）
+    const res = await this.appsService.switchVersion(
+      key,
+      dto.envId,
+      dto.version,
+      user?.username,
+      undefined,
+      { recordTask: true },
+    );
     await this.auditService.log({
       user: user?.username || 'unknown',
       action: 'app.version.switch',
@@ -210,7 +218,9 @@ export class AppsController {
     @Body() dto: RollbackVersionDto,
     @CurrentUser() user: any,
   ) {
-    const res = await this.appsService.rollback(key, dto.envId, dto.version, user?.username);
+    const res = await this.appsService.rollback(key, dto.envId, dto.version, user?.username, {
+      recordTask: true,
+    });
     await this.auditService.log({
       user: user?.username || 'unknown',
       action: 'app.version.rollback',
