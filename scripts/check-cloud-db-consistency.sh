@@ -69,17 +69,25 @@ for T in $TABLES; do
   }
   # 指针表的 `id` 是本地生成的 uuid：同一业务行在两库天然不同，
   # 纳lektive 比对会 100% 误报（业务键才是可比的那部分）
+  # 行范围：指针表**只比 prod 行** —— dev/local 的数据按设计留本地库、不镜像
+  # （2026-10-09 修正：此前全行比对，dev 每次部署都会让 M5 误报，掩盖真正的 prod 漂移）
   case "$T" in
     # 单引号必须用 printf "\047" 生成：字面单引号会被本 RUNNER 外层的单引号字符串吞掉
-    deploy_app_env_versions|deploy_deployments) IGN="${SQ}id${SQ},$IGNORE_COLS" ;;
-    *) IGN="$IGNORE_COLS" ;;
+    deploy_app_env_versions|deploy_deployments)
+      IGN="${SQ}id${SQ},$IGNORE_COLS"
+      FLT="WHERE env_id=\"prod\""
+      ;;
+    *)
+      IGN="$IGNORE_COLS"
+      FLT=""
+      ;;
   esac
   COLS="$(ql -e "$(mk_cols "$LN" "$T" "$IGN")")"
   if [ -z "$COLS" ] || [ "${COLS:0:3}" = "Err" ]; then echo "SKIP $T 本地库无此表或取列失败"; continue; fi
-  ql -e "SELECT $COLS FROM $T" | sort > "$WORK/local.$T"
+  ql -e "SELECT $COLS FROM $T $FLT" | sort > "$WORK/local.$T"
   CN_COLS="$(qc -e "$(mk_cols "$CN" "$T" "$IGN")")"
   if [ -z "$CN_COLS" ]; then echo "BAD  $T 云库缺表"; continue; fi
-  qc -e "SELECT $CN_COLS FROM $T" | sort > "$WORK/cloud.$T"
+  qc -e "SELECT $CN_COLS FROM $T $FLT" | sort > "$WORK/cloud.$T"
   L=$(wc -l < "$WORK/local.$T" | tr -d " ")
   C=$(wc -l < "$WORK/cloud.$T" | tr -d " ")
   LO=$(comm -23 "$WORK/local.$T" "$WORK/cloud.$T" | wc -l | tr -d " ")
