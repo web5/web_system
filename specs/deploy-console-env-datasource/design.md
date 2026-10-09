@@ -711,3 +711,13 @@ dev 发布 portal 时，前面的「拉取代码 / 构建 / 投递产物 / 写�
 
 - 单测：默认 `ui:` 前缀 / 显式 owner 透传 / 回滚补偿沿用同一 owner / RUN_ID 注入与防覆盖
 - E2E：重跑一条 dev 发布，「激活指针」步骤 succeeded，指针与两库一致
+
+### 18.6 加一个平台注入变量，要同步三处（第三处就是这次漏的）
+
+1. `resolveStageVars` 的 `base`（真正注入）
+2. `pipeline-orchestration/script-vars.ts` 的 `PLATFORM_VARS`（服务端保存门禁）
+3. `scripts/pipeline-lint.mjs` 的同名集合（CLI 全量体检）
+
+只改 1 不改 2/3 → 保存动作脚本时被拒「引用了未声明变量 RUN_ID」（实测命中）。
+现已加测试兜住：服务端集合与 CLI 集合**双向比对**必须一致，
+且 `resolveStageVars` 注入的每个键都必须在白名单内 —— 下次漏改任意一处即红。
