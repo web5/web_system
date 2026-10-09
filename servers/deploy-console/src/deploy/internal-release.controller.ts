@@ -105,13 +105,19 @@ export class InternalReleaseController {
       user: operator,
     };
 
+    // lockOwner（2026-10-09 回归）：流水线自身持有 `moduleKey × env` 的锁（owner=run id），
+    // 激活脚本再调本接口时若按 operator 派生成 `ui:*`，会被自己那把锁判成并发 → 409。
+    // 脚本必须把 run id 原样透传（注入变量 RUN_ID），同 owner 才算重入。
+    const lockOwner = String(body?.lockOwner || body?.runId || '').trim() || undefined;
+
     // env-dir 应用：磁盘指针 + 应用环境版本表（指针格式只在 entry-pointer.ts 一处实现）
     const app = await this.appsService.findAppOrNull(moduleKey);
     if (app && app.deployMode === 'env-dir') {
       const r = await this.guard.run(
         req,
         meta,
-        () => this.appsService.switchVersion(moduleKey, env, currentVersion, operator),
+        () =>
+          this.appsService.switchVersion(moduleKey, env, currentVersion, operator, lockOwner),
         // 留痕要能还原「谁把 prod 从哪个版本切到了哪个版本」
         (res) => `切指针（env-dir）${res.from ?? '-'} → ${res.to}${res.unchanged ? '（无变化）' : ''}`,
       );

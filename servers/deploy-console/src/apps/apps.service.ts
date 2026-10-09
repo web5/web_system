@@ -37,6 +37,21 @@ export function lockOwnerFor(operator?: string): string {
 }
 
 /**
+ * 解析本次指针写入实际使用的锁 owner。
+ *
+ * **为什么需要显式 `lockOwner`**（2026-10-09 回归）：
+ * 流水线自身在 `moduleKey × env` 上持有一把锁，owner = 流水线 run id；
+ * 而发布节点的「激活指针」动作脚本调 `internal/release/pointer`，若按默认规则
+ * 派生成 `ui:pipeline-script`，**与流水线那把锁不是同一个 owner** → 被自己持有的锁
+ * 判定为并发 → 409 → 脚本 exit 1 → dev 发布恒失败。
+ * 因此脚本必须能把 run id 原样透传进来（同 owner = 重入，不会提前释放外层锁）。
+ */
+export function resolveLockOwner(operator?: string, lockOwner?: string): string {
+  const explicit = lockOwner?.trim();
+  return explicit ? explicit : lockOwnerFor(operator);
+}
+
+/**
  * 应用域服务（微前端）
  *
  * 设计依据：specs/deploy-console-domain-split/design.md v2 §2.2 / §4.2
@@ -448,9 +463,17 @@ export class AppsService implements OnModuleInit {
    *
    * @returns 切换前后版本
    */
-  async switchVersion(appKey: string, envId: string, version: string, operator?: string) {
+  async switchVersion(
+    appKey: string,
+    envId: string,
+    version: string,
+    operator?: string,
+    lockOwner?: string,
+  ) {
     const app = await this.getApp(appKey);
     await this.envsService.getEnv(envId);
+    // 显式 lockOwner（流水线 run id）优先：与外层流水线锁同源才算重入
+    const owner = resolveLockOwner(operator, lockOwner);
 
     if (app.deployMode === 'env-dir') {
       let exists = false;
@@ -477,7 +500,7 @@ export class AppsService implements OnModuleInit {
       moduleKey: appKey,
       currentVersion: version,
       deployedBy: operator,
-      lock: { owner: lockOwnerFor(operator) },
+      lock: { owner },
     });
     if (unchanged) {
       return { appKey, envId, from, to: version, pointer: null, unchanged: true };
@@ -489,7 +512,7 @@ export class AppsService implements OnModuleInit {
       try {
         pointer = await this.artifacts.writePointer(envId, appKey, version);
       } catch (e) {
-        await this.revertAppEnvPointer(appKey, envId, from, previous, operator);
+        await this.revertAppEnvPointer(appKey, envId, from, previous, operator, owner);
         throw new BadRequestException(
           `写入口指针失败，已回滚版本指针：${appKey}/${envId} → ${version}（${(e as Error).message}）`,
         );
@@ -510,6 +533,7 @@ export class AppsService implements OnModuleInit {
     from: string | null,
     previous: string | null,
     operator?: string,
+    lockOwner?: string,
   ): Promise<void> {
     try {
       if (!from) {
@@ -524,7 +548,7 @@ export class AppsService implements OnModuleInit {
         previousVersion: previous,
         deployedBy: operator,
         // 与 switchVersion 同一 owner → 重入，不会提前释放外层还在用的锁
-        lock: { owner: lockOwnerFor(operator) },
+        lock: { owner: lockOwner ?? lockOwnerFor(operator) },
       });
     } catch (e) {
       this.logger.error(
