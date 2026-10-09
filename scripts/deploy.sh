@@ -41,6 +41,16 @@ case "$TARGET" in
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
+# ⚠️ 静态根 ≠ 代码目录：静态资源由 nginx 直接服务，落点是「nginx 从哪里读」而不是
+#    「代码在哪」。prod 的静态资源是外置根（/data/web_system_static/public），
+#    与代码目录 /data/web_system 不是同一棵树 —— 2026-10-09 的 prod 白屏事故就是
+#    cdn 推到了代码目录：tar 解压"成功"、脚本报完成，页面却 404。
+#    默认值按各环境实况给，环境不一致时用 DEV_STATIC_ROOT / PROD_STATIC_ROOT 覆盖。
+case "$TARGET" in
+  dev)  STATIC_ROOT="${DEV_STATIC_ROOT:-$REMOTE_DIR/servers/gateway/public}" ;;
+  prod) STATIC_ROOT="${PROD_STATIC_ROOT:-/data/web_system_static/public}" ;;
+esac
+
 BACKEND_SERVICES="gateway auth user ai ai-agent system todo content-hub mcp-gateway"
 FRONTEND_MODULES="shell portal admin"
 
@@ -133,10 +143,44 @@ deploy_cdn() {
   if [ "$DRY_RUN" != "1" ]; then
     tar czf "/tmp/cdn-deploy.tar.gz" -C "$ROOT/servers/gateway/public/static" cdn
     scp_to "/tmp/cdn-deploy.tar.gz"
-    remote "mkdir -p $REMOTE_DIR/servers/gateway/public/static && cd $REMOTE_DIR/servers/gateway/public/static && rm -rf cdn && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
+    remote "mkdir -p $STATIC_ROOT/static && cd $STATIC_ROOT/static && rm -rf cdn && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
     rm -f "/tmp/cdn-deploy.tar.gz"
+    verify_cdn
   fi
   log "自建 CDN 部署完成"
+}
+
+# 推完必须校验：**脚本成功 ≠ 线上拿得到**。
+# 落点写错时 tar 照样解压成功、日志照样打印"部署完成"，只有真的拉一次 URL
+# 才能暴露 —— 这类静默故障的代价是整页白屏，宁可发布失败也不能假成功。
+verify_cdn() {
+  [ "$CDN_SKIP_VERIFY" = "1" ] && { log "CDN 自检已跳过（CDN_SKIP_VERIFY=1）"; return 0; }
+  local src="$ROOT/servers/gateway/public/static/cdn"
+  local names
+  names="$(cd "$src" && ls *.js 2>/dev/null | tr '\n' ' ')"
+  [ -z "$names" ] && { log "CDN 目录下没有 *.js，跳过自检"; return 0; }
+
+  # ① 落点校验（不依赖 nginx）：远端文件数必须与本地一致
+  local local_n remote_n
+  local_n="$(echo "$names" | wc -w | tr -d ' ')"
+  remote_n="$(remote "ls -1 $STATIC_ROOT/static/cdn/*.js 2>/dev/null | wc -l" 2>/dev/null | tail -1 | tr -d ' ')"
+  if [ "${remote_n:-0}" -lt "$local_n" ]; then
+    die "CDN 落点自检失败：本地 $local_n 个 UMD，远端 $STATIC_ROOT/static/cdn 只有 ${remote_n:-0} 个 —— 静态根写错了？用 DEV_STATIC_ROOT/PROD_STATIC_ROOT 覆盖"
+  fi
+
+  # ② 可达性校验（走 nginx）：每个 UMD 拉一次，非 200 即失败
+  local f code bad=0
+  for f in $names; do
+    code="$(remote "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/static/cdn/$f" 2>/dev/null | tail -1 | tr -d "'")"
+    if [ "$code" != "200" ]; then
+      echo "  [cdn-verify] ✗ $f → HTTP ${code:-无响应}"
+      bad=$((bad + 1))
+    fi
+  done
+  if [ "$bad" -gt 0 ]; then
+    die "CDN 自检失败：$bad 个 UMD 取不到 200（落点 $STATIC_ROOT/static/cdn）。若本地直连 nginx 不适用，用 CDN_SKIP_VERIFY=1 跳过"
+  fi
+  log "CDN 自检通过：${local_n} 个 UMD 全部 200（落点 $STATIC_ROOT/static/cdn）"
 }
 
 deploy_frontend() { # $1=module_name
