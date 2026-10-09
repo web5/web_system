@@ -11,10 +11,49 @@
  * （语调连贯）；只有极长文本才由服务端按句切片并发拼接。块数从「按 110 切碎」的 5 块降到 2 块，
  * 唯一接缝落在句末标点处。
  */
+import { ref } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '@/api/request';
 import { getStoredToken } from '@/stores/user';
 import { API_TIMEOUT } from '@web-system/shared';
+
+/**
+ * 朗读不可用提示（**C 端话术**，不暴露「服务端 TTS 凭据缺失」内部细节）。
+ * 内部原因留给 `/ai/tts/health` 与 `docs/operations/tts-credentials-runbook.md`。
+ */
+export const TTS_OFF_TIP = '朗读服务暂不可用，请稍后再试';
+
+/**
+ * 朗读能力是否不可用（服务端 `GET /ai/tts/health` → `configured === false`）。
+ *
+ * 2026-10-09 事故（rNPjtC）：dev/prod 缺 `TENCENT_*` 凭据数月，用户侧唯一信号是
+ * 「点一下弹请求失败」。本开关把「不可用」前移到点击之前。
+ */
+export const ttsUnavailable = ref(false);
+
+let ttsHealthFetched = false;
+
+/**
+ * 进页时拉一次朗读能力健康状态（结果进 `ttsUnavailable`）。
+ *
+ * - 拉取**中**：按「可用」渲染 —— 避免禁用态闪烁与误伤
+ * - 拉取**失败**：也按「可用」渲染 —— 健康检查自身故障不该误禁用，仍走点击后报错路径
+ * - 只拉一次（模块级标记），不每次点击都打 health
+ */
+export async function refreshTtsHealth(): Promise<void> {
+  if (ttsHealthFetched) return;
+  ttsHealthFetched = true;
+  try {
+    const data = (await request.get('/ai/tts/health', {
+      silent: true,
+      timeout: API_TIMEOUT.DEFAULT,
+    })) as { configured?: boolean; streamConfigured?: boolean } | null;
+    // 只认显式 false：字段缺失/格式异常一律当可用，避免误禁用
+    ttsUnavailable.value = data?.configured === false;
+  } catch {
+    ttsUnavailable.value = false;
+  }
+}
 
 /** 流式合成的采样率（与服务端 SampleRate=16000 对齐） */
 const STREAM_SAMPLE_RATE = 16000;

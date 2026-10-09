@@ -24,8 +24,17 @@
           <button type="button" class="act" @click="copy(it.enMain)">
             <app-icon name="copy" />复制
           </button>
-          <button type="button" class="act" @click="speak(it.id, it.enMain)">
-            <app-icon name="volume" />{{ reading === it.id ? '停止' : '朗读' }}
+          <button
+            type="button"
+            class="act"
+            :class="{ 'is-disabled': ttsUnavailable }"
+            :aria-disabled="ttsUnavailable ? 'true' : undefined"
+            :title="ttsUnavailable ? TTS_OFF_TIP : undefined"
+            @click="onSpeak(it.id, it.enMain)"
+          >
+            <app-icon v-if="!ttsUnavailable" name="volume" />{{
+              ttsUnavailable ? '朗读不可用' : reading === it.id ? '停止' : '朗读'
+            }}
           </button>
           <button type="button" class="act danger" @click="remove(it.id)">
             <app-icon name="x" />移出
@@ -41,7 +50,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { listGlossary, removeGlossary, type GlossaryItem } from '@/api/glossary';
-import { speak as speakText, stopTts } from '@/api/tts';
+import {
+  TTS_OFF_TIP,
+  refreshTtsHealth,
+  speak as speakText,
+  stopTts,
+  ttsUnavailable,
+} from '@/api/tts';
 import AppIcon from '@/components/AppIcon.vue';
 
 const router = useRouter();
@@ -80,6 +95,18 @@ async function copy(text: string) {
   }
 }
 
+/**
+ * 朗读点击入口：能力不可用时给一次明确反馈就返回。
+ * ⚠️ 不用原生 disabled（不触发 title / 键盘不可达），用 aria-disabled + 此处拦截。
+ */
+function onSpeak(id: number, text: string): void {
+  if (ttsUnavailable.value) {
+    message.info(TTS_OFF_TIP);
+    return;
+  }
+  speak(id, text);
+}
+
 async function speak(id: number, text: string) {
   if (reading.value === id) {
     stopTts();
@@ -103,7 +130,10 @@ async function remove(id: number) {
   if (ok) void load();
 }
 
-onMounted(() => void load());
+onMounted(() => {
+  void refreshTtsHealth();
+  void load();
+});
 onBeforeUnmount(() => stopTts());
 </script>
 
@@ -235,5 +265,16 @@ onBeforeUnmount(() => stopTts());
 
 .act.danger:hover {
   color: var(--ws-error-500);
+}
+
+/* 朗读能力不可用（2026-10-09）：视觉降级；hover 压掉品牌色，避免暗示可点 */
+.act.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.act.is-disabled:hover {
+  background: transparent;
+  color: var(--ws-text-tertiary);
 }
 </style>

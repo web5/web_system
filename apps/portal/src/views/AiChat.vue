@@ -107,7 +107,14 @@
                           <div v-if="b.note && noteOpen[m.id]" class="tc-note">{{ b.note }}</div>
                           <div v-if="!m.streaming" class="tc-ops">
                             <button type="button" class="act" @click="copy(b.main)">复制</button>
-                            <button type="button" class="act" @click="speak(m.id, b.main)">
+                            <button
+                              type="button"
+                              class="act"
+                              :class="{ 'is-disabled': ttsUnavailable }"
+                              :aria-disabled="ttsUnavailable ? 'true' : undefined"
+                              :title="ttsUnavailable ? TTS_OFF_TIP : undefined"
+                              @click="onSpeak(m.id, b.main)"
+                            >
                               {{ speakLabel(m.id) }}
                             </button>
                             <button type="button" class="act" @click="collectWord(b)">收藏</button>
@@ -143,9 +150,12 @@
                       v-if="m.role === 'assistant' && m.content && !m.musicCard && !isTcard(m) && !m.streaming"
                       type="button"
                       class="act"
-                      @click="speak(m.id, speakableText(blocksMap[m.id]))"
+                      :class="{ 'is-disabled': ttsUnavailable }"
+                      :aria-disabled="ttsUnavailable ? 'true' : undefined"
+                      :title="ttsUnavailable ? TTS_OFF_TIP : undefined"
+                      @click="onSpeak(m.id, speakableText(blocksMap[m.id]))"
                     >
-                      <app-icon name="volume" />{{ speakLabel(m.id) }}
+                      <app-icon v-if="!ttsUnavailable" name="volume" />{{ speakLabel(m.id) }}
                     </button>
                     <button v-if="m.role === 'assistant'" type="button" class="act" @click="retryMsg(m.id)">
                       重新生成
@@ -205,7 +215,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { getConversation, runAgentStream, type MusicCardPayload } from '@/api/agent';
-import { speak as speakText, stopTts as stopAudio } from '@/api/tts';
+import {
+  TTS_OFF_TIP,
+  refreshTtsHealth,
+  speak as speakText,
+  stopTts as stopAudio,
+  ttsUnavailable,
+} from '@/api/tts';
 import { collectGlossary } from '@/api/glossary';
 import {
   parseAnswer,
@@ -445,10 +461,26 @@ async function speak(mId: string, text: string) {
   }
 }
 
-/** 朗读按钮文案：合成中「请稍候…」/ 播放中「停止」/ 空闲「朗读」 */
+/** 朗读按钮文案：不可用「朗读不可用」/ 合成中「请稍候…」/ 播放中「停止」/ 空闲「朗读」 */
 function speakLabel(mId: string): string {
+  // 不可用态把原因写在按钮文案里 —— 不依赖 tooltip 才有信息
+  if (ttsUnavailable.value) return '朗读不可用';
   if (reading.value?.id !== mId) return '朗读';
   return reading.value.phase === 'loading' ? '请稍候…' : '停止';
+}
+
+/**
+ * 朗读点击入口：能力不可用时给一次明确反馈就返回，不发无谓请求。
+ *
+ * ⚠️ 不用原生 `disabled`：桌面 Chromium 下 disabled 元素不触发 `title`（tooltip 永不出现）、
+ * 键盘也不可达 —— 会退化成「无声禁用」，比点了报错更糟。用 `aria-disabled` + 此处拦截。
+ */
+function onSpeak(mId: string, text: string): void {
+  if (ttsUnavailable.value) {
+    message.info(TTS_OFF_TIP);
+    return;
+  }
+  speak(mId, text);
 }
 
 /** 朗读文本：从 blocks 提取最终结果纯文本（strip 行内 markdown）；翻译卡片不含（已有独立朗读）；代码块跳过（读代码无意义） */
@@ -653,6 +685,8 @@ watch(
 );
 
 onMounted(() => {
+  // 朗读能力健康状态：不可用时不禁用点击路径，但按钮进「不可用」态（见 speakLabel / onSpeak）
+  void refreshTtsHealth();
   if (store.currentId) void loadConversation(store.currentId);
   else if (store.items.length === 0) void store.load();
 });
@@ -1082,6 +1116,21 @@ onBeforeUnmount(() => {
 .act:hover {
   background: var(--ws-bg-hover);
   color: var(--ws-brand-700);
+}
+
+/*
+ * 朗读能力不可用（2026-10-09）：视觉降级。
+ * 用 `.is-disabled` 而非原生 `disabled` —— 原生 disabled 不触发 title、键盘不可达。
+ * hover 需显式压掉品牌色，否则禁用态仍会「变橙」，视觉暗示可点。
+ */
+.act.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.act.is-disabled:hover {
+  background: transparent;
+  color: var(--ws-text-tertiary);
 }
 
 /* 流式 / 失败 */
