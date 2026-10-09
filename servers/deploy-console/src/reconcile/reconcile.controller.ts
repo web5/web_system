@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
 import { StartupReconcileService } from './startup-reconcile.service';
 import { ConsistencyWatchService } from './consistency-watch.service';
+import { RetentionService } from './retention.service';
 
 /**
  * 运维自愈接口（诊断 #12 / #13）。
@@ -13,6 +14,7 @@ import { ConsistencyWatchService } from './consistency-watch.service';
  * - `POST /api/reconcile/run`：手动跑一次启动对账（回收僵尸任务 + 清过期锁）
  * - `GET  /api/reconcile/consistency`：看最近一次两库一致性巡检结果（`?run=1` 立即跑）
  * - `GET|DELETE /api/reconcile/locks`：看当前谁在发布 / **强制解锁**
+ * - `GET  /api/reconcile/retention`：数据保留巡检结果（`?run=1` 立即跑；默认只观测不删）
  *
  * ⚠️ 强制解锁是危险操作：只在确认发布进程确实没了时使用，故强制留审计。
  */
@@ -24,6 +26,7 @@ export class ReconcileController {
     private readonly reconcile: StartupReconcileService,
     private readonly consistency: ConsistencyWatchService,
     private readonly locks: ReleaseLockService,
+    private readonly retentionSvc: RetentionService,
     private readonly audit: AuditService,
   ) {}
 
@@ -51,6 +54,22 @@ export class ReconcileController {
         reason: '尚未执行过巡检（用 ?run=1 立即执行）',
         checkedRows: 0,
         diffs: [],
+      }
+    );
+  }
+
+  @Get('retention')
+  @ApiOperation({ summary: '数据保留巡检结果（?run=1 立即执行；RETENTION_ENABLED≠true 时只统计不删除）' })
+  async retention(@Query('run') run: string) {
+    if (run === '1') return this.retentionSvc.run();
+    return (
+      this.retentionSvc.lastReport() ?? {
+        ranAt: 0,
+        enabled: this.retentionSvc.enabled,
+        keepDays: this.retentionSvc.keepDays,
+        status: 'skipped',
+        reason: '尚未执行过保留巡检（用 ?run=1 立即执行）',
+        tables: [],
       }
     );
   }

@@ -121,7 +121,9 @@ export class DeployController {
     if (body.env === 'prod' && body.confirm !== true) {
       throw new BadRequestException('Prod operations require confirm=true');
     }
-    const r = await this.deployService.rollbackVersion({
+    // 诊断 #17：统一入口 —— 按部署形态分派（env-dir 切指针 / 后端落地重启），
+    // 回滚目标统一读指针表的 previous_version（两个入口此前各查一处，口径不同）
+    const r = await this.deployService.rollbackUnified({
       env: body.env,
       moduleKey: body.moduleKey,
       operator: user?.username,
@@ -134,7 +136,7 @@ export class DeployController {
       env: body.env,
       component: body.moduleKey,
       status: 'success',
-      detail: `回滚 ${body.moduleKey} @ ${body.env}: ${r.from} -> ${r.to}`,
+      detail: `回滚 ${body.moduleKey} @ ${body.env}: ${r.from} -> ${r.to}（${r.mode}）`,
     });
     return { ...r, status: 'rolled-back' };
   }

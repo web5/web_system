@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
@@ -330,6 +335,55 @@ export class ReleaseRegistryService {
   async currentVersion(env: string, moduleKey: string): Promise<string | undefined> {
     const dep = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey } });
     return dep?.currentVersion;
+  }
+
+  /**
+   * 回滚目标的**唯一取法**（诊断 #17）。
+   *
+   * 此前两个入口各查一处：env-dir 读指针表 `deploy_app_env_versions.previous_version`，
+   * 后端读历史表 `deploy_versions` 里「最近一条非当前版本」——
+   * 两处口径不同，同一模块在不同页面点回滚可能得到不同目标。
+   *
+   * 统一口径：**指针表的 previous_version 优先**（它就是「上一次生效的版本」，
+   * 写指针时同步维护，语义最准）；指针表没有记录时才回落历史表（后端 legacy 只写
+   * `deploy_deployments`，新表里可能压根没行）。
+   */
+  async resolveRollbackTarget(input: {
+    env: string;
+    moduleKey: string;
+    /** 显式指定目标版本（UI「回滚到此版本」按行传入） */
+    to?: string;
+  }): Promise<{ from: string | null; to: string; source: 'explicit' | 'pointer' | 'history' }> {
+    const explicit = input.to?.trim();
+    const row = await this.appVersionRepo.findOne({
+      where: { appKey: input.moduleKey, envId: input.env },
+    });
+    const from = row?.currentVersion ?? null;
+
+    if (explicit) return { from, to: explicit, source: 'explicit' };
+
+    if (row?.previousVersion) {
+      return { from, to: row.previousVersion, source: 'pointer' };
+    }
+
+    // 回落历史表（后端 legacy）
+    const dep = await this.deploymentRepo.findOne({
+      where: { envId: input.env, moduleKey: input.moduleKey },
+    });
+    const rows = await this.versionRepo.find({
+      where: { env: input.env, component: input.moduleKey },
+      order: { releasedAt: 'DESC' } as never,
+    });
+    const prev = rows.find(
+      (r) => r.versionTag && r.versionTag !== (row?.currentVersion ?? dep?.currentVersion),
+    );
+    if (!prev?.versionTag) {
+      throw new BadRequestException(
+        `没有可回滚的历史版本：${input.moduleKey}@${input.env} 的指针表无 previous_version，` +
+          `deploy_versions 里也没有其他版本`,
+      );
+    }
+    return { from: from ?? dep?.currentVersion ?? null, to: prev.versionTag, source: 'history' };
   }
 
   /** 按版本标签查版本记录（复用产物时回填 gitCommit 用；跨 env 任意一条即可） */

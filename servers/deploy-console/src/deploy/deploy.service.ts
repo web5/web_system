@@ -757,6 +757,61 @@ export class DeployService {
    * 上一版本取自 `deploy_versions`（同 env + 模块，排除当前指针，取最近一条）；
    * 也可由调用方**指定目标版本**（`to`）—— UI 的「回滚到此版本」就是按行指定。
    */
+  /**
+   * 回滚的**唯一入口**（诊断 #17）：按部署形态分派。
+   *
+   * 为什么要分派：`rollbackVersion` 的后端逻辑是「版本目录落地 dist + pm2 重启」，
+   * 对微前端（env-dir）**完全不适用** —— 它的部署动作就是把入口指针指到某个版本目录。
+   * 此前两个入口各自独立、互不知情，从部署页回滚一个微前端模块会走后端逻辑
+   * （试图在服务器上找 dist 并重启 pm2），失败原因还很难懂。
+   *
+   * 分派后：env-dir → 应用域切指针；其余 → 后端落地 + 重启。
+   * 两条路径的**回滚目标取法**统一走 `registry.resolveRollbackTarget`。
+   */
+  async rollbackUnified(input: {
+    moduleKey: string;
+    env: string;
+    operator?: string;
+    to?: string;
+  }): Promise<{ moduleKey: string; env: string; from: string | null; to: string; mode: string; source: string }> {
+    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+
+    const app = await this.appsService.findAppOrNull(input.moduleKey);
+    if (app && app.deployMode === 'env-dir') {
+      const target = await this.registry.resolveRollbackTarget({
+        env: input.env,
+        moduleKey: input.moduleKey,
+        to: input.to,
+      });
+      const r = await this.appsService.switchVersion(
+        input.moduleKey,
+        input.env,
+        target.to,
+        input.operator,
+      );
+      return {
+        moduleKey: input.moduleKey,
+        env: input.env,
+        from: r.from ?? null,
+        to: r.to,
+        mode: 'env-dir',
+        source: target.source,
+      };
+    }
+
+    const r = await this.rollbackVersion(input);
+    return {
+      moduleKey: r.moduleKey,
+      env: r.env,
+      from: r.from,
+      to: r.to,
+      mode: app?.deployMode ?? 'backend',
+      // rollbackVersion 内部同样走 resolveRollbackTarget，这里不再重复解析
+      source: input.to ? 'explicit' : 'pointer-or-history',
+    };
+  }
+
   async rollbackVersion(input: {
     moduleKey: string;
     env: string;
@@ -772,16 +827,12 @@ export class DeployService {
     });
     if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
 
-    let target = input.to?.trim();
-    if (!target) {
-      const rows = await this.versionRepo.find({
-        where: { env: input.env, component: input.moduleKey },
-        order: { releasedAt: 'DESC' } as any,
-      });
-      const prev = rows.find((r) => r.versionTag && r.versionTag !== cur.currentVersion);
-      if (!prev) throw new Error('回滚失败: 没有可回滚的历史版本');
-      target = prev.versionTag;
-    }
+    // 诊断 #17：回滚目标统一走 registry（指针表 previous_version 优先，回落历史表）
+    const { to: target } = await this.registry.resolveRollbackTarget({
+      env: input.env,
+      moduleKey: input.moduleKey,
+      to: input.to,
+    });
     if (target === cur.currentVersion) {
       throw new Error(`回滚失败: ${target} 就是当前版本`);
     }

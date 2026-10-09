@@ -98,7 +98,16 @@ describe('DeployService 产物守卫', () => {
         // 指针双写（2026-09-28）：本 spec 只关心产物守卫，指针写入用 spy 隔离
         {
           provide: ReleaseRegistryService,
-          useValue: { setPointer: jest.fn(), syncAppEnvPointer: jest.fn() },
+          useValue: {
+            setPointer: jest.fn(),
+            syncAppEnvPointer: jest.fn(),
+            // 诊断 #17：回滚目标统一走 registry
+            resolveRollbackTarget: jest.fn(async (i: { to?: string }) => ({
+              from: 'v1',
+              to: i?.to || 'v0',
+              source: 'pointer',
+            })),
+          },
         },
       ],
     }).compile();

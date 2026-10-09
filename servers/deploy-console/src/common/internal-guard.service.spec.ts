@@ -141,4 +141,69 @@ describe('internal-guard（诊断 #7）', () => {
     expect(out).toBe('done');
     expect(errLog).toHaveBeenCalledWith(expect.stringContaining('审计写入失败'));
   });
+
+  /**
+   * 诊断 #20：幂等。
+   * 发布链路里重试是常态（脚本失败重跑、手动补刀），没有幂等键，
+   * 重试就会重复「写版本」并把 previous_version 覆盖掉。
+   */
+  describe('run 的幂等（诊断 #20）', () => {
+    it('不带 Idempotency-Key → 完全不启用（既有脚本零变化）', async () => {
+      const { svc } = makeGuard();
+      const fn = jest.fn(async () => 'ok');
+      await svc.run(reqWith({ 'x-internal-key': KEY }), { action: 'a' }, fn);
+      await svc.run(reqWith({ 'x-internal-key': KEY }), { action: 'a' }, fn);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('同一 action + key → 只执行一次，第二次复用结果', async () => {
+      const { svc } = makeGuard();
+      const fn = jest.fn(async () => 'ok');
+      const r1 = await svc.run(
+        reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'run-1' }),
+        { action: 'pointer' },
+        fn,
+      );
+      const r2 = await svc.run(
+        reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'run-1' }),
+        { action: 'pointer' },
+        fn,
+      );
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(r1).toBe('ok');
+      expect(r2).toBe('ok');
+    });
+
+    it('不同 key / 不同 action 互不干扰', async () => {
+      const { svc } = makeGuard();
+      const fn = jest.fn(async () => 'ok');
+      await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'a' }), { action: 'p' }, fn);
+      await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'b' }), { action: 'p' }, fn);
+      await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'a' }), { action: 'v' }, fn);
+      expect(fn).toHaveBeenCalledTimes(3);
+    });
+
+    /** 失败必须可重试：留了失败记录就等于一次抖动把发布永久卡死 */
+    it('失败不留幂等记录 → 可以重试', async () => {
+      const { svc } = makeGuard();
+      let n = 0;
+      const fn = jest.fn(async () => {
+        n += 1;
+        if (n === 1) throw new Error('网络抖动');
+        return 'ok';
+      });
+      const req = () => reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'r' });
+      await expect(svc.run(req(), { action: 'p' }, fn)).rejects.toThrow('网络抖动');
+      await expect(svc.run(req(), { action: 'p' }, fn)).resolves.toBe('ok');
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('INTERNAL_IDEMPOTENCY_TTL_MS=0 → 关闭幂等（可完全退回旧行为）', async () => {
+      const { svc } = makeGuard({ INTERNAL_IDEMPOTENCY_TTL_MS: '0' });
+      const fn = jest.fn(async () => 'ok');
+      await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'r' }), { action: 'p' }, fn);
+      await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'r' }), { action: 'p' }, fn);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+  });
 });

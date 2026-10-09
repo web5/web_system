@@ -780,3 +780,54 @@ dev 发布 portal 时，前面的「拉取代码 / 构建 / 投递产物 / 写�
 
 另注：env-dir 的产物投递现由 `EnvArtifactService`（#3）接管，本方法的远端分支属遗留路径
 （当前流水线的「投递产物」是脚本动作，不走它），故只做取值可配、不动结构。
+
+---
+
+## 20. 五线：数据保留 / 回滚入口统一 / 幂等 / 后端远端保留 / 清理定时化（2026-10-09）
+
+### 20.1 #18 数据保留（默认只观测）
+
+`deploy_tasks`（含 logs JSON）/ `deploy_versions` / `audit_logs` 此前**零保留策略**。
+新建 `reconcile/retention.service.ts`，与 #10 同款保守形态：
+
+- **默认只观测**：`RETENTION_ENABLED≠true` 时只统计「会删多少」，一条不删（删数据不可逆，先看数字）
+- **配置显式但非法 → 跳过**：`RETENTION_KEEP_DAYS=0` 不能静默回落 90 天（运维以为设了 0 天实际跑 90 天，
+  预期与实际长期不符且无人发现）—— 宁可不跑并报错
+- **指针指向的版本永不清**：`deploy_versions` 是回滚菜单的数据源，删掉当前/上一版本 = 入口少一项
+- **只删终态任务**：`running/pending` 可能是活的（启动对账还要回收它们）
+
+### 20.2 #17 回滚入口统一（修掉一个真隐患）
+
+两个入口各自查「上一版本」：env-dir 读指针表 `previous_version`，后端读 `deploy_versions` 历史。
+更严重的是：**后端入口不判 `deployMode`** —— 从部署页回滚一个微前端模块会走
+「版本目录落地 dist + pm2 重启」，对微前端完全不适用。
+
+- `registry.resolveRollbackTarget()` 成为唯一取法：**显式 > 指针表 previous_version > 历史表**
+- `DeployService.rollbackUnified()` 按形态分派：env-dir → 切指针；后端 → 落地 + 重启
+- `apps.service.rollback` 也走同一取法（顺带获得历史表回落，此前指针表没行就直接报错）
+
+### 20.3 #20 内部接口幂等
+
+`InternalGuardService.run()` 支持 `Idempotency-Key`：同 `action+key` 复用首次结果。
+存 Promise 而非结果（脚本重试可能是并发的）；**只缓存成功**（失败必须可重试，否则一次抖动永久卡住）；
+不带该头则完全不启用（既有脚本零变化）。
+
+### 20.4 遗留③ 后端远端产物保留
+
+#10 只覆盖了前端（`<静态根>/static/modules/<key>/<env>/<commit>`）。后端在
+`<workspace>/servers/<dir>/<commit>` 同样堆积。抽出 `cleanupDir()` 两种布局共用，
+后端额外把 **`dist` 加入保护名单**（它正在跑，被删就是线上事故）。
+
+### 20.5 遗留④ 清理定时化
+
+`RemoteCleanupWatchService`：定时跑，目标取自**指针表里出现过的「应用 × 环境」**
+（没发过版的组合远端压根没目录，扫了是空跑）。
+默认关闭（`REMOTE_CLEANUP_INTERVAL_MS` 不配即 0）—— 定时 + 删除默认开 = 无人值守删线上文件。
+
+### 20.6 运维动作（更正此前判断）
+
+- `deploy_hosts` **其实是登记好的**（dev-default / prod-default / local-default 三台，
+  `deploy_service_envs` 32 行全部有 host_name），`SshExecService` 回落告警 **0 次** ——
+  此前「表为空、都在走回落」的判断是错的，已更正
+- 云库 `deploy_app_env_versions` 清理了 **5 行非 prod 陈旧行**（portal/admin/shell 的 dev、local，
+  均为 9 月遗留；prod 三行保留且正确）
