@@ -143,18 +143,29 @@
 
 ### 7.3 `POST /mcp/pipeline/:jobId/cancel` — 取消（幂等）
 ### 7.4 `POST /mcp/pipeline/:jobId/promote` — 灰度转全量
-### 7.5 `POST /mcp/version` — 发布指定版本（秒级切换）
+### 7.5 `POST /mcp/pipeline/:jobId/approve` — 审批通过
+- 入参：`{ comment?, nodeKey?, confirm? }`（`env=prod` 需 `confirm=true`，否则 `400`）
+- 返回：`{ jobId, id, status: 'approved', resumedFrom? }`
+- 约束（与控制台一致，**不因通道放宽**）：
+  - 仅**提交者本人**可审批（`p.operator === req.mcpOperator`，不符返回 `404` 而非 403）
+  - 审批人由 Key 的 `ownerId` 解析成用户名（ownerId 直接当用户名必然 403），权限仍走 `deploy:pipeline:approve`
+- 背景：补齐「自动化发布最后一公里」——此前挂起 `awaiting-approval` 后 MCP 无审批路由，只能自签控制台 JWT
+
+### 7.6 `POST /mcp/pipeline/:jobId/reject` — 审批拒绝
+- 入参：`{ comment, nodeKey? }`（`comment` 必填，空则 `400`）；返回 `{ jobId, id, status }`
+
+### 7.7 `POST /mcp/version` — 发布指定版本（秒级切换）
 - 入参：`{ env, versionTag, component?, confirm? }`（`env=prod` 需 `confirm=true`）；版本表无记录时回退 `switchPointer`
 - 返回：`{ status, component?, versionTag, env, fallback? }`
 
-### 7.6 `POST /mcp/rollback` — 回滚到指定版本
+### 7.8 `POST /mcp/rollback` — 回滚到指定版本
 - 入参：`{ env, versionTag, component?, confirm? }`；返回 `{ taskId, status, env, versionTag }`
 
-### 7.7 `GET /mcp/modules` — 可发布模块清单
-### 7.8 `GET /mcp/current-versions?env=` — 某环境各模块当前版本
-### 7.9 `GET /mcp/releases?env=&component=` — 版本历史（回滚候选，含磁盘产物）
-### 7.10 `POST /mcp/mock-job` — **[dev-only]** 模拟长任务（`seconds`，1–600）；production 返回 404
-### 7.11 `GET /mcp/mock-job/:jobId` — **[dev-only]** 查询模拟任务状态
+### 7.9 `GET /mcp/modules` — 可发布模块清单
+### 7.10 `GET /mcp/current-versions?env=` — 某环境各模块当前版本
+### 7.11 `GET /mcp/releases?env=&component=` — 版本历史（回滚候选，含磁盘产物）
+### 7.12 `POST /mcp/mock-job` — **[dev-only]** 模拟长任务（`seconds`，1–600）；production 返回 404
+### 7.13 `GET /mcp/mock-job/:jobId` — **[dev-only]** 查询模拟任务状态
 
 ---
 
