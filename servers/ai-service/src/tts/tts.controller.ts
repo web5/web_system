@@ -24,6 +24,26 @@ export class TtsController {
     private readonly ttsStreamService: TtsStreamService,
   ) {}
 
+  /**
+   * TTS 能力健康检查。
+   *
+   * 为什么需要：2026-10-09 事故中 dev/prod 缺 `TENCENT_*` 凭据长达数月无人发现 ——
+   * 除「用户点朗读报错」外没有任何可观测信号。有了这个端点，
+   * 前端可在未配置时禁用朗读按钮，运维/CI 也能直接探活。
+   *
+   * 只回布尔，不回任何凭据信息（明文、掩码都不回）。
+   * - `configured`：整段合成可用（SecretId + SecretKey 齐）
+   * - `streamConfigured`：流式合成可用（再加 AppId）
+   */
+  @Get('health')
+  @ApiOperation({ summary: 'TTS 配置健康检查（整段 / 流式是否可用）' })
+  health() {
+    return {
+      configured: this.ttsService.isAvailable(),
+      streamConfigured: this.ttsStreamService.isAvailable(),
+    };
+  }
+
   @Post('speak')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '文字转语音（TTS）' })

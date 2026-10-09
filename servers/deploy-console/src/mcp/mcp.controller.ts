@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
 import { McpKeyGuard } from './mcp-key.guard';
+import { ApproverService } from '../approval/approver.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
 
@@ -40,10 +41,33 @@ export class McpController {
   constructor(
     private readonly pipelineService: PipelineService,
     private readonly deployService: DeployService,
+    private readonly approvers: ApproverService,
   ) {}
 
   private operator(req: any): string {
     return req?.mcpOperator || 'unknown';
+  }
+
+  /**
+   * 把 MCP Key 的 `ownerId` 解析成**用户名**，供审批权限校验使用。
+   *
+   * 为什么必须解析：`ApproverService.canApprove()` 按**用户名字符串**与 user-service
+   * 的授权清单比对，而 MCP Key 只带 `ownerId`（如 `1`）。不解析的话 ownerId 会被
+   * 当成用户名去比对，必然 403 —— 自动化审批永远过不去。
+   *
+   * 解析不到时原样回退 ownerId：此时权限校验会失败，语义是正确的
+   * （该 Key 的归属者不在授权审批人内），而不是静默放行。
+   */
+  private async reviewerOf(req: any): Promise<string> {
+    const ownerId = String(req?.mcpOperator || '');
+    try {
+      const { users } = await this.approvers.list();
+      const hit = users.find((u) => String(u.id) === ownerId);
+      if (hit?.username) return hit.username;
+    } catch {
+      // list() 自身已内建降级（返回 degraded），这里只是兜底不让审批路由 500
+    }
+    return ownerId;
   }
 
   /**
@@ -123,6 +147,63 @@ export class McpController {
   async promote(@Param('jobId') jobId: string, @Req() req: any) {
     await this.ownedPipeline(jobId, req);
     return this.pipelineService.promote(jobId, this.operator(req));
+  }
+
+  /**
+   * 审批通过 —— 打通自动化发布的「最后一公里」。
+   *
+   * 背景：流水线提交（`POST /api/mcp/pipeline`）走 MCP Key 没问题，但构建完成后
+   * 挂起 `awaiting-approval` 时 MCP 通道**没有审批路由**，只能回到控制台 JWT 的
+   * `/api/pipelines/:id/approve`。结果是自动化发布永远卡在半路，最后一步不得不
+   * 自签控制台 JWT 绕过（不可审计、与「优先 MCP Key」的约定相悖）。
+   *
+   * 安全约定（与控制台一致，不因通道放宽）：
+   *  - `ownedPipeline()`：只有**提交者本人**能审批自己的流水线（非本人 → 404）
+   *  - prod 必须 `confirm=true`（审批是最终放行点，比提交更需要显式确认）
+   *  - 审批人由 Key 的 ownerId 解析而来（`reviewerOf`），审计可追溯到人；
+   *    权限仍走 `deploy:pipeline:approve`，MCP 通道**不放宽**任何校验
+   */
+  @Post('pipeline/:jobId/approve')
+  @ApiOperation({ summary: '审批通过（仅提交者本人；prod 需 confirm=true）' })
+  async approvePipeline(
+    @Param('jobId') jobId: string,
+    @Body() body: { comment?: string; nodeKey?: string; confirm?: boolean },
+    @Req() req: any,
+  ) {
+    const p = await this.ownedPipeline(jobId, req);
+    if (p.env === 'prod' && body?.confirm !== true) {
+      throw new BadRequestException('Prod operations require confirm=true');
+    }
+    const reviewer = await this.reviewerOf(req);
+    const result = await this.pipelineService.approve(
+      jobId,
+      reviewer,
+      body?.comment,
+      body?.nodeKey,
+    );
+    return { jobId, ...result };
+  }
+
+  /** 审批拒绝（意见必填，与控制台同语义） */
+  @Post('pipeline/:jobId/reject')
+  @ApiOperation({ summary: '审批拒绝（仅提交者本人；必填审批意见）' })
+  async rejectPipeline(
+    @Param('jobId') jobId: string,
+    @Body() body: { comment?: string; nodeKey?: string },
+    @Req() req: any,
+  ) {
+    await this.ownedPipeline(jobId, req);
+    if (!body?.comment?.trim()) {
+      throw new BadRequestException('拒绝必须填写审批意见');
+    }
+    const reviewer = await this.reviewerOf(req);
+    const result = await this.pipelineService.reject(
+      jobId,
+      reviewer,
+      body?.comment,
+      body?.nodeKey,
+    );
+    return { jobId, ...result };
   }
 
   // ── 版本 / 回滚（复用既有 DeployService） ──

@@ -30,6 +30,16 @@
         不改任何交互、状态、布局规格。
   关联：scripts/vite-micro-frontend.mjs（cssScopePlugin）、apps/shell/src/loader.ts
 
+  2026-10-09 · 交互变更 · 朗读按钮新增「能力未配置」第 4 态
+  改动范围：apps/portal/src/views/{AiChat,Translate,Glossary}.vue 的朗读按钮
+          （原型：新增 readBtn() + 控制条「TTS 未配置」开关）
+  判定：**交互/状态变更** —— 原三态（合成中「请稍候…」→ 播放中「停止」→ 结束复位「朗读」）
+         之外新增禁用态：GET /api/ai/tts/health 返回 configured=false 时按钮 disabled
+         + tooltip「朗读能力未配置（服务端 TTS 凭据缺失）」。
+  理由：2026-10-09 事故（rNPjtC）—— dev/prod 缺 TENCENT_* 凭据数月，用户侧唯一信号是
+        「点一下弹请求失败」，排障成本极高。禁用态把「不可用」前移到点击之前。
+  关联：specs/tts-continuity/design.md · docs/operations/tts-credentials-runbook.md
+
   2026-09-28 · 微调豁免 · 加载期首屏 FOUC 修复（缺陷修复）
   改动范围：packages/shell-loader（模块 CSS 就位后再 mount）、
          apps/portal/src/components/AppIcon.vue（svg 补 width/height 内建尺寸）
@@ -436,6 +446,7 @@ u[onclick],.ans .codeblk .hd .cp,.act{transition:color var(--duration-fast) var(
     <button onclick="demo('code')">代码块</button>
     <button onclick="demoFail()">体检失败</button>
     <button onclick="demoNoReport()">报告空态</button>
+    <button id="ptt" onclick="toggleTts()">TTS 未配置</button>
     <button onclick="resetAll()">重置</button>
   </div>
   <button onclick="document.getElementById('protoBar').classList.toggle('open')">说明 ▲</button>
@@ -505,6 +516,9 @@ const S = {
   capsMore:false,
   /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
   trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
+  /* 朗读能力可用性（2026-10-09）：true = 服务端 TTS 凭据缺失（/ai/tts/health → configured:false）
+     → 所有朗读按钮禁用 + tooltip，替代「点了才报错」。由原型控制条「TTS 未配置」切换 */
+  ttsOff:false,
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
   exp:{}, cardOpen:{},
   sending:false, msgs:null,
@@ -740,7 +754,7 @@ function msgAi(m){
     '</div>'+
     '<div class="acts">'+
     '<button onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
-    (hasCard?'':'<button onclick="toast(\'已开始朗读 AI 最终结果（思考内容不播）\')">'+SVG(I.vol)+'朗读</button>')+
+    (hasCard?'':readBtn('', '<button onclick="toast(\'已开始朗读 AI 最终结果（思考内容不播）\')">'+SVG(I.vol)+'朗读</button>'))+
     '<button onclick="toast(\'已重新生成\')">重新生成</button></div></div></div>';
 }
 /* 一轮 = 一条用户消息 + 紧随其后的 AI 回答（连续追问的追加回答归同一轮） */
@@ -824,14 +838,15 @@ function workTranslate(){
       '<div style="display:flex;gap:8px;justify-content:center"><button class="btn sm pri" onclick="S.trState=\'loading\';render();setTimeout(()=>{S.trState=\'done\';render();},1000)">重试</button>'+
       '<button class="btn sm" onclick="S.trState=\'idle\';render()">返回</button></div></div>';
   } else if(S.trState==='done'){
-    const readBtn = S.trRead===null ? '<button class="btn ghost sm" onclick="S.trRead=\'loading\';render()">朗读</button>'
+    /* 局部变量不与全局 readBtn() 同名，否则遮蔽后翻译卡永远拿不到禁用态 */
+    const readBtnHtml = S.trRead===null ? readBtn('btn ghost sm', '<button class="btn ghost sm" onclick="S.trRead=\'loading\';render()">朗读</button>')
       : S.trRead==='loading' ? '<button class="btn ghost sm" disabled>请稍候…</button>'
       : '<button class="btn ghost sm" onclick="S.trRead=null;render();toast(\'朗读已中断\')">停止</button>';
     right = '<div class="trmeta"><span class="tag brand">推荐</span><span>'+S.trTone+' · '+S.trStyle+' · 中文 → 英语</span></div>'+
       '<div class="tabs">'+tabs.map(t=>'<button class="'+(S.trTab===t[0]?'on':'')+'" onclick="S.trTab=\''+t[0]+'\';render()">'+t[1]+'</button>').join('')+'</div>'+
       '<div style="font-size:14px;line-height:1.9">'+esc(TR_OUT[S.trTab])+'</div>'+
       '<div class="tonebox"><b>语气要点</b>'+TR_OUT.tone+'</div>'+
-      '<div class="tracts"><button class="btn ghost sm" onclick="toast(\'已复制到剪贴板\')">'+SVG(I.copy)+'复制</button>'+readBtn+
+      '<div class="tracts"><button class="btn ghost sm" onclick="toast(\'已复制到剪贴板\')">'+SVG(I.copy)+'复制</button>'+readBtnHtml+
       '<button class="btn ghost sm" onclick="toast(\'已收进生词本\')">收藏</button>'+
       '<button class="btn ghost sm" onclick="toast(\'更多：复制译文 / 加入生词本 / 生成分享图 / 举报\')">更多</button></div>'+
       '<div style="display:flex;gap:8px;margin-top:16px"><button class="btn sm" onclick="S.trState=\'loading\';render();setTimeout(()=>{S.trState=\'done\';render();},1000)">重新翻译</button></div>'+
@@ -1117,7 +1132,7 @@ function workGlossary(){
       '<div style="font-size:12px;color:var(--t3);margin-top:8px">'+esc(g.meta)+'</div>'+
       '<div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button class="btn ghost sm" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
-        '<button class="btn ghost sm" onclick="toast(\'已开始朗读（后端 TTS）\')">'+SVG(I.vol)+'朗读</button>'+
+        readBtn('btn ghost sm', '<button class="btn ghost sm" onclick="toast(\'已开始朗读（后端 TTS）\')">'+SVG(I.vol)+'朗读</button>')+
       '</div>'+
       '<button class="btn ghost sm" style="position:absolute;top:12px;right:12px" onclick="toast(\'已移出收藏\')">'+SVG(I.x)+'</button>'+
     '</div>').join('')+'</div>';
@@ -1225,11 +1240,31 @@ function openMenu(){
 }
 function confirmClear(){ if(confirm('清除缓存将删除本地临时文件（12.4 MB），不会删除你的对话记录与体检报告。确定清除吗？')) toast('缓存已清除'); }
 function toast(t){ const d=document.createElement('div'); d.className='toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),1600); }
+/**
+ * 朗读按钮渲染（2026-10-09 新增第 4 态）。
+ *
+ * 前三态（合成中 / 播放中 / 结束复位）见台账 2026-09-22 条目；本态是
+ * **能力不可用**：服务端 TTS 凭据缺失（GET /api/ai/tts/health → configured:false）。
+ *
+ * 为什么必须是「禁用 + tooltip」而不是「点了报错」：2026-10-09 事故里 dev/prod
+ * 凭据漏配数月，用户侧唯一信号是点一下弹「请求失败」—— 排障成本极高。
+ * 禁用态把「不可用」前移到点击之前，且 tooltip 说明原因而非让用户猜。
+ *
+ * @param cls  按钮样式类（对话操作条为 ''，卡片内为 'btn ghost sm'）
+ * @param okHtml 能力可用时渲染的按钮 html
+ */
+function readBtn(cls, okHtml){
+  if(!S.ttsOff) return okHtml;
+  return '<button class="'+(cls||'')+'" disabled title="朗读能力未配置（服务端 TTS 凭据缺失）" '
+       + 'style="opacity:.45;cursor:not-allowed">'+SVG(I.vol)+'朗读</button>';
+}
+/** 原型控制条：切换 TTS 可用性（非产品界面） */
+function toggleTts(){ S.ttsOff=!S.ttsOff; document.getElementById('ptt').classList.toggle('on',S.ttsOff); render(); }
 function toggle(m){ S.mode[m]=!S.mode[m]; ['loading','empty','error'].forEach(k=>{if(k!==m)S.mode[k]=false;}); document.getElementById('pk').classList.toggle('on',S.mode.loading); document.getElementById('pe').classList.toggle('on',S.mode.empty); document.getElementById('pf').classList.toggle('on',S.mode.error); render(); }
 /* 合翻两态演示入口：失败态 / 报告空态（P3，规格 §3.3 状态矩阵） */
 function demoFail(){ S.view='contract'; S.step='fail'; render(); }
 function demoNoReport(){ S.view='contract'; S.step='result'; S.sig=null; S.noReport=true; render(); }
-function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; S.capsMore=false; ['pk','pe','pf'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+function resetAll(){ S.mode={loading:false,empty:false,error:false}; S.step='home'; S.sig=null; S.trState='done'; S.trRead=null; S.msgs=null; S.ctext=''; S.ocring=false; S.noReport=false; S.cs=false; S.capsMore=false; S.ttsOff=false; ['pk','pe','pf','ptt'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
 
 /* ── ⌘K ── */
 const CMDS = [
