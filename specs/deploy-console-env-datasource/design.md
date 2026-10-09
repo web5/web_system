@@ -686,9 +686,15 @@ dev 发布 portal 时，前面的「拉取代码 / 构建 / 投递产物 / 写�
 ### 18.3 修法：run id 显式透传，同 owner 即重入
 
 1. `resolveStageVars` 注入 `RUN_ID`（= run id），并列入 `PROTECTED_STAGE_KEYS`
-2. `internal/release/pointer` 接受 `lockOwner`（兼容 `runId` 字段），原样透传给 `switchVersion`
-3. `AppsService.resolveLockOwner()`：显式 lockOwner 优先，缺省才用 `ui:<operator>`
-4. 动作脚本 curl body 增加 `"lockOwner":"${RUN_ID}"`
+2. `internal/release/pointer` 接受 `lockOwner`（兼容 `runId` 字段），原样透传给
+   **两条分支**：env-dir 走 `switchVersion`、后端走 `registry.setPointer`
+3. `AppsService.resolveLockOwner()`：显式 lockOwner 优先，缺省才用 `ui:<operator>`；
+   legacy 分支同理（缺省 `script:<operator>`）
+4. 动作脚本 curl body 增加 `"lockOwner":"${RUN_ID}"` —— **两类脚本都要改**：
+   env-dir 的「激活指针 · 写入口指针」与后端的「pointer · 切版本指针（远端）」
+
+> ⚠️ 第一批只覆盖了 env-dir 分支，漏了后端那条；后端发布 deploy-console 时同样 409 失败。
+> **同一个根因有两条路径**——改这类「入口」代码时必须按分支逐条核对，不能改完一条就收工。
 
 `acquireEx` 原本就支持「同 owner 重入」（`newly=false` 不释放外层锁），
 因此透传后激活步骤走的是重入分支，不再冲突。

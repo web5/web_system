@@ -142,8 +142,10 @@ export class InternalReleaseController {
           currentVersion,
           deployedBy: operator,
           taskId: body?.taskId,
-          // lock（诊断 #6）：脚本入口此前无锁；同一 owner 在同一「模块 × 环境」上串行
-          lock: { owner: `script:${operator}` },
+          // lock（诊断 #6）：脚本入口此前无锁；同一 owner 在同一「模块 × 环境」上串行。
+          // lockOwner（2026-10-09）：流水线自持锁 owner=run id，脚本必须原样透传，
+          // 否则和 env-dir 分支一样会被流水线自己的锁判成并发（409）。
+          lock: { owner: lockOwner ?? `script:${operator}` },
         }),
       () => `切指针（legacy）→ ${currentVersion}`,
     );
