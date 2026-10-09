@@ -12,7 +12,7 @@ import App from './App.vue';
 import { MicroFrontendLoader } from '@web-system/shell-loader';
 import type { ModuleContext } from '@web-system/shared';
 import { setupAntdAll } from './antd-all';
-import { saveAuth, clearAuth } from './auth-storage';
+import { saveAuth, clearAuth, readToken, readRefreshToken } from './auth-storage';
 import { startVersionCheck } from './version-check';
 // 页签图标按模块切换：admin / portal 同由基座 index.html 提供图标，不改写则两个标签页一模一样
 import { applyModuleBranding } from './module-branding';
@@ -81,7 +81,7 @@ const router: Router = createRouter({
 // axios 实例（预配 baseURL + token 拦截器，作为 ModuleContext.axios 传给模块）
 const http = axios.create({ baseURL: '/api', timeout: 30000 });
 http.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('token');
+  const token = readToken();
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   // 环境随请求透传：gateway 据此把请求转发到该环境的后端指向（前端产物与后端上游必须同源）
   cfg.headers[ENV_HEADER] = envId;
@@ -110,7 +110,7 @@ let isRefreshing = false;
 let pendingQueue: Array<{ resolve: (t: string) => void; reject: (e: any) => void }> = [];
 
 async function refreshAccessToken(): Promise<string> {
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken = readRefreshToken();
   if (!refreshToken) throw new Error('no refreshToken');
   const res: any = await axios.post('/api/auth/refresh', { refreshToken });
   const data = res?.data || res || {};
@@ -254,11 +254,67 @@ router.afterEach((to) => {
   applyModuleBranding((to.params.module as string) || '');
 });
 
-// 登录校验守卫：未登录跳 /login
+/**
+ * 登录校验守卫：未登录交给「目标模块自己的登录页」，模块不可判定才回落基座登录页。
+ *
+ * 为什么不让基座全拦：portal/admin 模块各自带 requireAuth 守卫与自己的登录页
+ * （portal 的登录页含微信扫码 / SPA 跳转 / 新版视觉），而基座的 `views/Login.vue`
+ * 是更早的一份实现（纯账密 + alert + 整页刷新）。此前守卫无条件跳 `/login`，
+ * 于是**模块登录页永远进不去** —— 未登录访问 /portal/xxx 一律落到基座老页面，
+ * 扫码登录也因此不可用。这正是 2026-10-10 排查「prod 的登录看着像旧代码」的根因。
+ *
+ * 死锁规避：`next()` 到与当前地址相同的路径会无限触发 beforeEach，
+ * 因此命中「已经在模块登录页」时必须直接放行。
+ */
+const knownModuleNames: string[] = Array.from(
+  new Set([
+    ...Object.keys(manifest.byEnv?.[envId] ?? {}),
+    ...(manifest.modules ?? []).map((m: any) => m?.name).filter(Boolean),
+  ]),
+);
+
+/** 从路径首段判定所属模块；判不出（非法/根路径）返回 null */
+function resolveModuleOf(fullPath: string): string | null {
+  const first = fullPath.split(/[?#]/)[0].split('/').filter(Boolean)[0];
+  if (!first) return null;
+  return knownModuleNames.includes(first) ? first : null;
+}
+
+function loginTargetOf(fullPath: string): string | null {
+  const mod = resolveModuleOf(fullPath);
+  return mod ? `/${mod}/login` : null;
+}
+
 router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('token');
-  if (to.name !== 'Login' && !token) {
-    return next({ path: '/login', query: { redirect: to.fullPath } });
+  const token = readToken();
+  if (token) {
+    next();
+    return;
+  }
+
+  // 模块内的路径 → 交给该模块的登录页（保留 redirect 便于登录后跳回）
+  if (to.name !== 'Login') {
+    const target = loginTargetOf(to.fullPath);
+    if (target) {
+      if (to.fullPath.split(/[?#]/)[0] === target) {
+        next(); // 已在模块登录页，放行（否则 next 同地址会死循环）
+        return;
+      }
+      next({ path: target, query: { redirect: to.fullPath } });
+      return;
+    }
+    next({ path: '/login', query: { redirect: to.fullPath } });
+    return;
+  }
+
+  // 已停在基座登录页：若 redirect 指向某个模块，交给模块登录页处理
+  const redirect = to.query.redirect;
+  if (typeof redirect === 'string') {
+    const target = loginTargetOf(redirect);
+    if (target && target !== to.fullPath.split(/[?#]/)[0]) {
+      next({ path: target, query: { redirect } });
+      return;
+    }
   }
   next();
 });
