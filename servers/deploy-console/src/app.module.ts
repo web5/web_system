@@ -67,8 +67,9 @@ import {
           database: cfg.get('MYSQL_DB'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: decision.enabled,
-          // 迁移目录先备好（当前库是 synchronize 建出来的，故默认不跑迁移）：
-          // 将来要收紧时，把 DB_SYNCHRONIZE 设 false 并生成迁移即可接上
+          // 迁移目录先备好（当前库是 synchronize 建出来的，故默认不跑迁移）。
+          // ⚠️ 本目录**刻意没有迁移文件** —— 见 `src/migrations/README.md` 的方案 A 决策，
+          //    不是待办事项。要收紧时按那里的步骤走：先 DB_SYNCHRONIZE=false，再生成 baseline。
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
           migrationsRun: false,
           charset: 'utf8mb4',
