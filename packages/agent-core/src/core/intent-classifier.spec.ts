@@ -224,4 +224,51 @@ describe('IntentClassifier · routingHints 驱动', () => {
     expect(r.agentId).toBe('translate');
     expect(r.via).toBe('rule');
   });
+
+  /**
+   * 2026-10-09 事故回归：L1-b 曾在「无规则命中」时直接短路 return locked，
+   * 锁定会话永远无法逃逸 —— translate 会话里发「搜索资讯」，general 无关键词、
+   * 规则救不了，5 轮全部 via=locked，翻译官把搜索请求当翻译活干掉。
+   * 下面三条把「逃逸 / 零成本沿用 / 故障保持锁定」钉死。
+   */
+  it('锁定后话题漂移：LLM 高置信判到其他 agent → 必须放行（逃逸通道）', async () => {
+    const c = new IntentClassifier(
+      fakeClient('{"agentId":"general","confidence":0.9,"reason":"搜索资讯"}'),
+      500,
+      'general',
+    );
+    const r = await c.classify('帮我搜索下今天的AI 相关的资讯', {
+      candidates: CANDS,
+      routingHints: HINTS,
+      lockedAgentId: 'translate',
+    });
+    expect(r.agentId).toBe('general');
+    expect(r.via).toBe('llm');
+  });
+
+  it('锁定 + 自家关键词命中 → 零成本沿用，LLM 不被调用', async () => {
+    const c = new IntentClassifier(fakeClient('SHOULD_NOT_BE_CALLED'), 500, 'general');
+    const r = await c.classify('帮我把这段翻译成英文', {
+      candidates: CANDS,
+      routingHints: HINTS,
+      lockedAgentId: 'translate',
+    });
+    expect(r.agentId).toBe('translate');
+    expect(r.via).toBe('locked');
+  });
+
+  it('锁定 + LLM 故障 → 保持锁定（不漂到兜底 agent）', async () => {
+    const c = new IntentClassifier(
+      fakeClient(() => Promise.reject(new Error('model down'))),
+      500,
+      'general',
+    );
+    const r = await c.classify('随便说点什么', {
+      candidates: CANDS,
+      routingHints: HINTS,
+      lockedAgentId: 'translate',
+    });
+    expect(r.agentId).toBe('translate');
+    expect(r.via).toBe('locked');
+  });
 });
