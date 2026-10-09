@@ -14,18 +14,18 @@ import { Client } from 'ssh2';
 import { EnvironmentService } from '../environment/environment.service';
 import { ServerService } from '../server/server.service';
 import { HostsService } from '../hosts/hosts.service';
+import { SshExecService, SshTarget } from '../remote/ssh-exec.service';
 import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
 
 /**
- * SSH 连接配置
+ * SSH 连接配置。
+ *
+ * 诊断 #15 收敛：直接用远程通道的 `SshTarget`（私钥必填）—— 监控侧此前把 privateKey
+ * 定义为可选，于是「私钥读不到」在类型层是合法的，只能靠运行期报错兜。
+ * 与发布侧同型后，这类问题在编译期就暴露。
  */
-interface SshConfig {
-  host: string;
-  port: number;
-  username: string;
-  privateKey?: Buffer;
-}
+type SshConfig = SshTarget;
 
 /**
  * PM2 进程信息
@@ -93,6 +93,8 @@ export class MonitorService {
     private readonly hostsService: HostsService,
     @InjectRepository(DeployServiceEnvEntity)
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
+    /** 远程命令执行通道（诊断 #15 收敛：监控不再自带一份 ssh2 实现） */
+    private readonly sshExec: SshExecService,
   ) {}
 
   /**
@@ -159,24 +161,13 @@ export class MonitorService {
   }
 
   /**
-   * 由主机行构造 SSH 配置（**私钥缺失一律显式报错**，不再静默 undefined）
+   * 由主机行构造 SSH 配置。
+   *
+   * 诊断 #15 收敛：私钥路径解析与「私钥缺失必须显式报错」的判据统一在
+   * `SshExecService.configForHost`，这里不再自己抄一份（抄一份就意味着将来改一处漏一处）。
    */
   private sshConfigFor(host: DeployHostEntity): SshConfig {
-    let privateKeyPath = host.sshKeyPath || '~/.ssh/id_ed25519_servers';
-    if (privateKeyPath.startsWith('~')) {
-      privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
-    }
-    if (!fs.existsSync(privateKeyPath)) {
-      throw new BadGatewayException(
-        `主机 ${host.name}（${host.host}）的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机或改「主机管理」的 sshKeyPath`,
-      );
-    }
-    return {
-      host: host.host,
-      port: 22,
-      username: host.sshUser,
-      privateKey: fs.readFileSync(privateKeyPath),
-    };
+    return this.sshExec.configForHost(host);
   }
 
   /**
@@ -220,72 +211,24 @@ export class MonitorService {
   }
 
   /**
-   * 通过 SSH 执行命令（Promise 封装）
-   * 默认超时 10 秒；批量探活等远程侧并行较长的命令可放宽
+   * 通过 SSH 执行命令（委托 `SshExecService`，诊断 #15 收敛）。
+   *
+   * 此前这里有一份 ssh2 的独立实现（连接/超时/退出码/错误各写一遍），
+   * 与发布链路那份长期双份维护 —— 超时处理改一处、另一处就静默漂移。
+   * 现统一走 `execOn`，顺带拿到发布侧已有的**输出脱敏**（诊断 #8）。
+   *
+   * 保留的两点监控特有语义：
+   * - 默认超时 10s（探活要快，不能用发布侧的分钟级默认）
+   * - `allowNonZeroExit`：命令输出是要直接展示给人看的（如 pm2 报「服务不存在」），
+   *   非零退出也返回输出，抛掉反而让人看不到原因
    */
   private execSsh(
     sshConfig: SshConfig,
     command: string,
     timeoutMs: number = 10000,
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const client = new Client();
-      let isResolved = false;
-
-      const timeout = setTimeout(() => {
-        if (!isResolved) {
-          isResolved = true;
-          client.end();
-          reject(new BadGatewayException('SSH 连接超时'));
-        }
-      }, timeoutMs);
-
-      client.on('ready', () => {
-        client.exec(command, (err, stream) => {
-          if (err) {
-            clearTimeout(timeout);
-            if (!isResolved) {
-              isResolved = true;
-              client.end();
-              reject(new BadGatewayException(`SSH 执行失败: ${err.message}`));
-            }
-            return;
-          }
-
-          let output = '';
-          let stderr = '';
-
-          stream.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
-          });
-
-          stream.on('close', () => {
-            clearTimeout(timeout);
-            client.end();
-            if (!isResolved) {
-              isResolved = true;
-              resolve(output);
-            }
-          });
-        });
-      });
-
-      client.on('error', (err: Error) => {
-        clearTimeout(timeout);
-        if (!isResolved) {
-          isResolved = true;
-          reject(new BadGatewayException(`SSH 连接失败: ${err.message}`));
-        }
-      });
-
-      client.connect({
-        ...sshConfig,
-        readyTimeout: 10000,
-      });
+    return this.sshExec.execOn(sshConfig, command, `monitor:${sshConfig.host}`, timeoutMs, {
+      allowNonZeroExit: true,
     });
   }
 

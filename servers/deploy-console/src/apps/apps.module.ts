@@ -12,6 +12,7 @@ import { CloudDbModule } from '../cloud-db/cloud-db.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { ShellModule } from '../shell/shell.module';
 import { EnvArtifactService } from './env-artifact.service';
+import { CommonModule } from '../common/common.module';
 
 /**
  * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
@@ -25,6 +26,8 @@ import { EnvArtifactService } from './env-artifact.service';
     ReleaseRegistryModule,
     // 远端静态根读写要用命令执行通道（ssh），诊断 #3
     ShellModule,
+    // gateway 版本缓存失效通知（诊断 #16）
+    CommonModule,
     TypeOrmModule.forFeature([
       DeployAppEntity,
       DeployAppRouteEntity,

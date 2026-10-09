@@ -19,6 +19,7 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { ServerService } from '../server/server.service';
 import { HostsService } from '../hosts/hosts.service';
 import { SshExecService } from '../remote/ssh-exec.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import { CommandService } from '../shell/command.service';
 import { AuditService } from '../audit/audit.service';
@@ -81,6 +82,7 @@ describe('DeployService 产物守卫', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         {
           provide: CommandService,

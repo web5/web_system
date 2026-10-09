@@ -22,6 +22,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     writePointer: jest.Mock;
     describeTarget: jest.Mock;
   };
+  let gatewayCache: { notifyVersionChange: jest.Mock };
   let svc: AppsService;
 
   beforeEach(() => {
@@ -43,6 +44,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     envsService = { getEnv: jest.fn(async () => ({ envId: 'prod' })) };
     configService = { get: jest.fn(() => '/ws') };
     mirror = { mirrorRow: jest.fn(), deleteMirror: jest.fn() };
+    gatewayCache = { notifyVersionChange: jest.fn(async () => ({ ok: true, reason: 'notified' })) };
     registry = {
       setAppEnvPointer: jest.fn(async () => ({ from: 'v1', previous: 'v0', unchanged: false })),
       clearAppEnvPointer: jest.fn(async () => undefined),
@@ -65,6 +67,8 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
       mirror as never,
       registry as never,
       artifacts as never,
+      // gateway 缓存通知（诊断 #16）桩：默认不产生网络调用
+      gatewayCache as never,
     );
   });
 
@@ -183,5 +187,23 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     expect(registry.setAppEnvPointer).toHaveBeenLastCalledWith(
       expect.objectContaining({ lock: { owner: 'run-1' } }),
     );
+  });
+
+  /**
+   * 诊断 #16：改指针就必须通知 gateway，否则 gateway 的 versionCache（TTL 10s）
+   * 还指着旧版本目录 —— 表现为「发布成功了，页面最多 10s 后才变」。
+   * 此前只有 deploy.service 那条路径通知，UI 切换/回滚/internal pointer 全都不通知。
+   */
+  it('切版本后通知 gateway 失效版本缓存（env-dir 分支）', async () => {
+    await svc.switchVersion('portal', 'prod', 'v2', 'u1');
+    expect(gatewayCache.notifyVersionChange).toHaveBeenCalledWith(
+      expect.objectContaining({ env: 'prod', moduleKey: 'portal', version: 'v2' }),
+    );
+  });
+
+  it('通知失败不影响发布结果 —— 指针已写成功，不能把成功判成失败', async () => {
+    gatewayCache.notifyVersionChange.mockRejectedValueOnce(new Error('gateway 不可达'));
+    const r = await svc.switchVersion('portal', 'prod', 'v2', 'u1');
+    expect(r.to).toBe('v2');
   });
 });

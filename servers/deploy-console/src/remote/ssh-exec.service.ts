@@ -82,11 +82,61 @@ export class SshExecService {
   }
 
   /**
+   * 由「主机管理」的一行记录构造连接配置（给不按 env 解析的调用方用，如监控探活）。
+   *
+   * 为什么要有它：监控按**具体主机**探活（`local` 形态还不走 SSH），而 `resolve(env)`
+   * 是按环境取第一台 —— 两者口径不同，但「私钥缺失必须显式报错」这条判据必须一致，
+   * 否则又会出现两处各写一遍、一处漏判的漂移。
+   */
+  configForHost(host: {
+    name?: string;
+    host: string;
+    sshUser: string;
+    sshKeyPath?: string | null;
+  }): SshTarget {
+    const privateKeyPath = this.keyPath(host.sshKeyPath || undefined);
+    if (!fs.existsSync(privateKeyPath)) {
+      throw new BadGatewayException(
+        `主机 ${host.name ?? host.host}（${host.host}）的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机或改「主机管理」的 sshKeyPath`,
+      );
+    }
+    return {
+      host: host.host,
+      port: 22,
+      username: host.sshUser,
+      privateKey: fs.readFileSync(privateKeyPath),
+    };
+  }
+
+  /**
    * 在目标机执行一条命令；非 0 退出码即失败，超时则发信号终止后断连。
    * 输出与错误消息统一脱敏（诊断 #8）。
    */
   async run(env: string, cmd: string, tag = env, timeoutMs?: number): Promise<string> {
     const cfg = await this.resolve(env);
+    return this.execOn(cfg, cmd, tag, timeoutMs);
+  }
+
+  /**
+   * 在**已解析好的**目标机上执行命令（`run` 的执行体，也供监控这类自带目标的调用方复用）。
+   *
+   * 抽出来的理由：ssh2 的超时/退出码/脱敏这套处理，此前在监控服务里还有一份副本 ——
+   * 两份副本意味着「改了超时处理只改一处」的静默漂移（诊断 #15 收敛）。
+   */
+  execOn(
+    cfg: SshTarget,
+    cmd: string,
+    tag = cfg.host,
+    timeoutMs?: number,
+    /**
+     * `allowNonZeroExit`：非零退出码也**返回输出**而非抛错。
+     *
+     * 只有监控这种「把命令输出直接展示给人看」的场景才开 —— 例如 `pm2 restart 不存在的服务`
+     * 退出码非 0 但输出里正好是人要读的报错原因，抛掉反而看不到。
+     * 发布链路一律用默认（严格）：退出码非 0 必须失败，否则「命令没跑成功」会被当成成功。
+     */
+    opts: { allowNonZeroExit?: boolean } = {},
+  ): Promise<string> {
     const limit =
       timeoutMs ??
       (Number(this.configService.get<string>('SSH_EXEC_TIMEOUT_MS')) || DEFAULT_SSH_EXEC_TIMEOUT_MS);
@@ -133,7 +183,7 @@ export class SshExecService {
             errOut += d.toString();
           });
           stream.on('close', (code: number) => {
-            if (code !== 0) {
+            if (code !== 0 && !opts.allowNonZeroExit) {
               return done(new Error(`远程命令退出码 ${code}: ${redactSecrets((errOut || out).trim())}`));
             }
             if (errOut.trim()) {

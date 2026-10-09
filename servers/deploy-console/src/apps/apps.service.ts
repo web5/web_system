@@ -26,6 +26,7 @@ import {
 } from './dto';
 import { envEntryUrl } from './entry-pointer';
 import { EnvArtifactService } from './env-artifact.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
 
 /**
  * 应用域（UI 操作）的锁 owner：带来源前缀，排障时一眼看出「谁在发」。
@@ -88,6 +89,11 @@ export class AppsService implements OnModuleInit {
      * 本机函数 —— 那会把 prod 的指针写到 console 本机，线上永远读不到。
      */
     private readonly artifacts: EnvArtifactService,
+    /**
+     * gateway 版本缓存失效通知（诊断 #16）：此前只有 deploy.service 那条路径会通知，
+     * UI 切换/回滚与 internal/release/pointer 改了指针却不通知 → 页面最多 10s 后才变。
+     */
+    private readonly gatewayCache: GatewayCacheService,
   ) {}
 
   /**
@@ -520,6 +526,25 @@ export class AppsService implements OnModuleInit {
     }
 
     this.logger.log(`切换版本指针：${appKey}/${envId} ${from ?? '-'} → ${version}`);
+
+    // 通知 gateway 失效版本缓存（best-effort，失败不影响发布结果）
+    // 只 env-dir 需要：微前端的入口由 gateway 按指针拼出，缓存住了就是「切了但页面没变」
+    if (app.deployMode === 'env-dir') {
+      try {
+        await this.gatewayCache.notifyVersionChange({
+          env: envId,
+          moduleKey: appKey,
+          version,
+          reason: `应用域切换版本 ${from ?? '-'} → ${version}`,
+        });
+      } catch (e) {
+        // 指针已经写成功了，通知失败最多是缓存晚 10s 失效 —— 绝不能把成功判成失败
+        this.logger.warn(
+          `gateway 缓存刷新失败（${appKey}/${envId} → ${version}）：${(e as Error).message}（最多 10s 后自然生效）`,
+        );
+      }
+    }
+
     return { appKey, envId, from, to: version, pointer };
   }
 

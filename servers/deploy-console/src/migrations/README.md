@@ -1,0 +1,2 @@
+-- 迁移目录（诊断 #19）：当前库是 synchronize 建出来的，尚未生成 baseline 迁移。
+-- 收紧步骤：① 设 DB_SYNCHRONIZE=false ② 用 typeorm migration:generate 生成 baseline ③ 按 migrationsRun 放开

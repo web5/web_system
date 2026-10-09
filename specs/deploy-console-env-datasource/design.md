@@ -721,3 +721,62 @@ dev 发布 portal 时，前面的「拉取代码 / 构建 / 投递产物 / 写�
 只改 1 不改 2/3 → 保存动作脚本时被拒「引用了未声明变量 RUN_ID」（实测命中）。
 现已加测试兜住：服务端集合与 CLI 集合**双向比对**必须一致，
 且 `resolveStageVars` 注入的每个键都必须在白名单内 —— 下次漏改任意一处即红。
+
+---
+
+## 19. 四线：gateway 通知下沉 / synchronize 可配 / 监控收敛 / 远端根可配（2026-10-09）
+
+### 19.1 #16 gateway 缓存通知必须跟得住「改指针」这件事
+
+`notifyGatewayRefreshCache` 此前**只存在于 `DeployService` 内部**，于是只有「走 deploy.service
+的那条发布路径」会通知；UI 切换/回滚、`internal/release/pointer` 这些同样改指针的入口全都不通知。
+表现是「发布成功了，页面最多 10s 后才变」，且不同入口行为不一致、极难定位。
+
+抽成 `common/gateway-cache.service.ts` 后由各入口各自调用（env-dir 的 `switchVersion`、
+后端 legacy 的 `internal/release/pointer`、deploy.service 原有的），地址与凭据按环境取
+（`GATEWAY_INTERNAL_URL_<ENV>` → 通用值；发 prod 不能去刷 dev 的 gateway）。
+
+**失败语义：只告警不抛错** —— 指针已写成功，通知失败最多是缓存晚 10s 失效，
+绝不能把一次成功的发布判成失败（两条入口都补了 try/catch，并有测试锁住）。
+
+### 19.2 #19 synchronize 不再硬编码（先证实风险等级，再动手）
+
+动手前先核实了两个事实，避免凭印象定级：
+
+- deploy-console **只在 dev 机运行**（prod 无该进程），作用对象是 dev 运维库
+- 云库（prod 指针读源）由 `CloudDbService` 单独建连接，**已经是** `synchronize: false`
+
+所以真实风险不是「改坏生产表」，而是「哪天把 console 指向别的库就自动 DDL」+「dev 表结构变更不可追溯」。
+取舍：**不引入 migrations 体系**（库本是 synchronize 建出来的，补 baseline 风险大于收益），
+改为「默认保持现状 + 环境变量关掉 + 远端库自动拒绝」：
+
+| 优先级 | 条件 | 结果 |
+|---|---|---|
+| 1 | `DB_SYNCHRONIZE` 显式指定 | 听它的 |
+| 2 | `NODE_ENV=production` | 关 |
+| 3 | `MYSQL_HOST` 非回环地址 | 关（远端库禁止自动 DDL） |
+| 4 | 其余 | 开（保持 dev 现状） |
+
+启动时把定夺结果打进日志（不靠读代码才知道开关状态）；`migrations` 目录先备好，将来收紧可无缝接上。
+
+### 19.3 遗留①：监控不再自带一份 ssh2（诊断 #15 收尾）
+
+`monitor.service` 里有一整套 ssh2 副本（连接/超时/退出码/错误各写一遍），与发布侧长期双份维护。
+现统一走 `SshExecService`（新增 `configForHost` + `execOn`），顺带拿到发布侧已有的输出脱敏。
+
+保留两点监控特有语义，**没有为了收敛而改变行为**：
+
+- 默认超时 10s（探活要快，不能用发布侧的分钟级默认）
+- `allowNonZeroExit`：命令输出要直接展示给人看（如 pm2 报「服务不存在」），非零退出也返回输出
+
+### 19.4 遗留②：`REMOTE_MODULES_ROOT` 不再写死
+
+原常量 `/data/web_system/servers/gateway/public/static/modules` 只适用于「与控制台同机同布局」
+的环境；prod 的静态根是 `/data/web_system_static/public`。改为按环境取值：
+`REMOTE_MODULES_ROOT_<ENV>` → `STATIC_PUBLIC_ROOT_<ENV>` + `/static/modules` → 旧常量（回落不变）。
+
+⚠️ 两个布局别混用：静态根下是 `static/modules`，**发布目录内**才是
+`servers/gateway/public/static/modules`（`STATIC_MODULES_REL`）。第一版就混了，被测试抓到。
+
+另注：env-dir 的产物投递现由 `EnvArtifactService`（#3）接管，本方法的远端分支属遗留路径
+（当前流水线的「投递产物」是脚本动作，不走它），故只做取值可配、不动结构。

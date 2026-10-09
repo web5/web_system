@@ -10,6 +10,7 @@ describe('InternalReleaseController.pointer（锁 owner 透传）', () => {
   let apps: { findAppOrNull: jest.Mock; switchVersion: jest.Mock };
   let registry: { setPointer: jest.Mock };
   let guard: { run: jest.Mock };
+  let gatewayCache: { notifyVersionChange: jest.Mock };
   let ctrl: InternalReleaseController;
 
   beforeEach(() => {
@@ -23,11 +24,13 @@ describe('InternalReleaseController.pointer（锁 owner 透传）', () => {
     guard = {
       run: jest.fn(async (_req: unknown, _meta: unknown, fn: () => Promise<unknown>) => fn()),
     };
+    gatewayCache = { notifyVersionChange: jest.fn(async () => ({ ok: true, reason: 'notified' })) };
     ctrl = new InternalReleaseController(
       {} as never,
       registry as never,
       apps as never,
       guard as never,
+      gatewayCache as never,
     );
   });
 
@@ -91,5 +94,29 @@ describe('InternalReleaseController.pointer（锁 owner 透传）', () => {
     expect(registry.setPointer).toHaveBeenCalledWith(
       expect.objectContaining({ lock: { owner: 'run-2' } }),
     );
+  });
+
+  /**
+   * 诊断 #16：后端服务切指针同样要通知 gateway。
+   * 此前只有 deploy.service 那条路径通知 —— 同样是改指针，入口不同行为却不同，
+   * 排查时极难定位（表现为「发布成功了，页面最多 10s 后才变」）。
+   */
+  it('legacy（后端服务）：切指针后也通知 gateway', async () => {
+    await ctrl.pointer(
+      { moduleKey: 'auth-service', env: 'prod', versionTag: 'v2', operator: 'ops' },
+      {} as never,
+    );
+    expect(gatewayCache.notifyVersionChange).toHaveBeenCalledWith(
+      expect.objectContaining({ env: 'prod', moduleKey: 'auth-service', version: 'v2' }),
+    );
+  });
+
+  it('通知失败不影响切指针结果（legacy 分支）', async () => {
+    gatewayCache.notifyVersionChange.mockRejectedValueOnce(new Error('gateway 不可达'));
+    const r = await ctrl.pointer(
+      { moduleKey: 'auth-service', env: 'prod', versionTag: 'v2', operator: 'ops' },
+      {} as never,
+    );
+    expect(r).toMatchObject({ ok: true, currentVersion: 'v2' });
   });
 });

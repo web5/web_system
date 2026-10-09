@@ -30,6 +30,10 @@ import { HostsModule } from './hosts/hosts.module';
 import { HealthModule } from './health/health.module';
 // 运维自愈（诊断 #12/#13）：启动对账（僵尸任务/过期锁）+ 两库一致性定时巡检 + 强制解锁入口
 import { ReconcileModule } from './reconcile/reconcile.module';
+import {
+  resolveSynchronize,
+  logSynchronizeDecision,
+} from './config/db-synchronize';
 
 @Module({
   imports: [
@@ -45,19 +49,33 @@ import { ReconcileModule } from './reconcile/reconcile.module';
     // MySQL 数据库连接（腾讯云/本机，凭据见 .env 的 MYSQL_*）
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (cfg: ConfigService) => ({
-        type: 'mysql',
-        host: cfg.get('MYSQL_HOST'),
-        port: Number(cfg.get('MYSQL_PORT') || 3306),
-        username: cfg.get('MYSQL_USER'),
-        password: cfg.get('MYSQL_PASSWORD'),
-        database: cfg.get('MYSQL_DB'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true, // 开发/本地运维工具：自动建表。生产应改用 migration。
-        charset: 'utf8mb4',
-        timezone: 'local',
-        namingStrategy: new SnakeNamingStrategy(),
-      }),
+      useFactory: (cfg: ConfigService) => {
+        // 诊断 #19：自动建表不再硬编码。远端库 / NODE_ENV=production 自动关闭，
+        // 也可显式设 DB_SYNCHRONIZE=false。判据与启动日志见 config/db-synchronize.ts
+        const decision = resolveSynchronize(cfg);
+        logSynchronizeDecision(
+          decision,
+          cfg.get('MYSQL_HOST') || '(未配置)',
+          cfg.get('MYSQL_DB') || '(未配置)',
+        );
+        return {
+          type: 'mysql',
+          host: cfg.get('MYSQL_HOST'),
+          port: Number(cfg.get('MYSQL_PORT') || 3306),
+          username: cfg.get('MYSQL_USER'),
+          password: cfg.get('MYSQL_PASSWORD'),
+          database: cfg.get('MYSQL_DB'),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: decision.enabled,
+          // 迁移目录先备好（当前库是 synchronize 建出来的，故默认不跑迁移）：
+          // 将来要收紧时，把 DB_SYNCHRONIZE 设 false 并生成迁移即可接上
+          migrations: [__dirname + '/migrations/*{.ts,.js}'],
+          migrationsRun: false,
+          charset: 'utf8mb4',
+          timezone: 'local',
+          namingStrategy: new SnakeNamingStrategy(),
+        };
+      },
     }),
     // 静态文件服务：serve apps/deploy-console/dist（monorepo 前端），排除 /api 路由
     ServeStaticModule.forRoot({
