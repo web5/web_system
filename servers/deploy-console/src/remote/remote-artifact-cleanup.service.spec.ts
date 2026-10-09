@@ -162,4 +162,45 @@ describe('RemoteArtifactCleanupService', () => {
     expect(r.remove).toEqual([]);
     expect(r.keep).toContain('0011223');
   });
+
+  /**
+   * 诊断 #10 遗留：后端服务的远端产物同样会堆积（`<workspace>/servers/<dir>/<commit>`），
+   * #10 当初只覆盖了前端。这里锁两点：目录布局算对 + `dist` 绝不能进删除列表。
+   */
+  describe('cleanupBackend（后端布局）', () => {
+    const stat = (names: string[], base = 1_700_000_000) =>
+      names.map((n, i) => `${base - i * 86400}\t${n}`).join('\n');
+
+    it('目录 = <workspace>/servers/<dir>（WEB_SYSTEM_DIR_<ENV> 优先）', () => {
+      const run = jest.fn();
+      const svc = makeSvc({ WEB_SYSTEM_DIR_PROD: '/data/prod_ws/' }, '', run);
+      expect(svc.svc.backendVersionDir('prod', 'auth-service')).toBe('/data/prod_ws/servers/auth-service');
+      const svc2 = makeSvc({ WEB_SYSTEM_DIR: '/data/web_system' }, '', jest.fn());
+      expect(svc2.svc.backendVersionDir('dev', 'gateway')).toBe('/data/web_system/servers/gateway');
+      // 未配 → 旧默认值
+      expect(makeSvc({}, '', jest.fn()).svc.backendVersionDir('dev', 'gateway')).toBe(
+        '/data/web_system/servers/gateway',
+      );
+    });
+
+    it('dist 永远受保护 —— 它是正在跑的目录，被删就是线上事故', async () => {
+      const run = jest.fn();
+      const svc = makeSvc({ REMOTE_CLEANUP_ENABLED: 'true', WEB_SYSTEM_DIR: '/data/web_system' },
+        stat(['dist', 'abc1234', 'def5678', 'ghi9012']), run);
+      const r = await svc.svc.cleanupBackend('dev', 'auth-service', { keep: 1, minAgeMs: 0 });
+      expect(r.scanned).toBe(4);
+      expect(r.keep).toContain('dist');
+      expect(r.remove).not.toContain('dist');
+      // 真发的删除命令里也必须没有 dist
+      const delCmd = run.mock.calls.map((c) => String(c[1])).find((c) => c.includes('rm -rf')) ?? '';
+      expect(delCmd).not.toMatch(/rm -rf -- 'dist'/);
+    });
+
+    it('扫描失败不阻断（与前端布局同语义）', async () => {
+      const svc = makeSvc({ WEB_SYSTEM_DIR: '/data/web_system' }, new Error('ssh 不通'));
+      const r = await svc.svc.cleanupBackend('dev', 'auth-service', {});
+      expect(r.applied).toBe(false);
+      expect(r.reason).toContain('scan-failed');
+    });
+  });
 });

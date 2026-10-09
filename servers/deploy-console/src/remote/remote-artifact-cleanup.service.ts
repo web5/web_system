@@ -117,7 +117,7 @@ export class RemoteArtifactCleanupService {
    * 目录不存在返回空数组（不抛错 —— 清理不该让流水线红掉）。
    */
   async scan(env: string, moduleKey: string, envId = env): Promise<RemoteEntry[]> {
-    const dir = this.versionDir(env, moduleKey, envId);
+    // env-dir 的静态根没配 SSH 目标 = 本机目录，不该走 ssh 去扫（否则本机发布会被误连）
     const { remote } = this.staticRootOf(env);
     if (!remote) {
       this.logger.warn(
@@ -125,12 +125,22 @@ export class RemoteArtifactCleanupService {
       );
       return [];
     }
+    return this.scanDir(env, this.versionDir(env, moduleKey, envId), `cleanup-scan:${moduleKey}@${envId}`);
+  }
+
+  /**
+   * 扫描任意远端目录（env-dir 与后端布局共用）。
+   *
+   * `remote` 判定：没配 `STATIC_SSH_TARGET_<ENV>` 时，env-dir 那套远端扫描无意义
+   * （本机目录不该走 ssh）；**后端布局不受此限** —— 它本来就在业务机上。
+   */
+  async scanDir(env: string, dir: string, tag: string): Promise<RemoteEntry[]> {
     // 只列一级目录；stat 取 mtime（秒 → 毫秒）。入口指针 index.js 是文件，天然被排除。
     const cmd =
       `cd '${dir}' 2>/dev/null || { echo ""; exit 0; }; ` +
       `for d in */; do n="\${d%/}"; [ -d "$n" ] || continue; ` +
       `printf '%s\\t%s\\n' "$(stat -c %Y "$n")" "$n"; done`;
-    const out = await this.ssh.run(env, cmd, `cleanup-scan:${moduleKey}@${env}`);
+    const out = await this.ssh.run(env, cmd, tag);
     return out
       .split('\n')
       .map((l) => l.trim())
@@ -142,9 +152,28 @@ export class RemoteArtifactCleanupService {
       .filter((e) => e.name && Number.isFinite(e.mtime));
   }
 
+  /** 远端业务机上的工作目录（`WEB_SYSTEM_DIR_<ENV>` → `WEB_SYSTEM_DIR` → /data/web_system） */
+  remoteWorkspaceRoot(env: string): string {
+    const e = (env || '').toUpperCase();
+    const perEnv = (this.configService.get<string>(`WEB_SYSTEM_DIR_${e}`) || '').trim();
+    if (perEnv) return perEnv.replace(/\/+$/, '');
+    return (this.configService.get<string>('WEB_SYSTEM_DIR') || '/data/web_system').replace(/\/+$/, '');
+  }
+
+  /**
+   * 后端服务的远端版本目录：`<workspace>/servers/<dir>`，其下直接是 `<versionTag>/`。
+   *
+   * 与 env-dir 的差别：后端**没有 env 层**（产物跟着环境走是另一套：`dist` 只有一个），
+   * 且根目录是业务机的工作目录，不是静态根。
+   */
+  backendVersionDir(env: string, dir: string): string {
+    return `${this.remoteWorkspaceRoot(env)}/servers/${dir}`;
+  }
+
   /**
    * 计算并执行保留策略。默认**只观测不删除**（`REMOTE_CLEANUP_ENABLED`）。
    */
+  /** env-dir（微前端）产物清理：`<静态根>/static/modules/<key>/<env>/<version>` */
   async cleanup(
     env: string,
     moduleKey: string,
@@ -156,13 +185,51 @@ export class RemoteArtifactCleanupService {
     } = {},
   ): Promise<RemoteCleanupResult> {
     const envId = opts.envId ?? env;
-    const dir = this.versionDir(env, moduleKey, envId);
+    return this.cleanupDir(env, this.versionDir(env, moduleKey, envId), opts, `${moduleKey}@${envId}`);
+  }
+
+  /**
+   * 后端服务产物清理（诊断 #10 遗留）：`<workspace>/servers/<dir>/<version>`。
+   *
+   * #10 当初只覆盖了前端产物，后端每次发布在远端留一个 `<commit>` 目录，
+   * 长期同样会堆积（今天实测 portal/prod 前端就堆了 11 个版本）。
+   * 策略与前端共用 `planRetain`：受保护版本 / 最近 keep 个 / 未满 minAge 的都保留。
+   *
+   * ⚠️ 后端目录里 `dist` 是**正在跑的**目录，`planRetain` 不会碰它（不在扫描结果里：
+   * 扫描只列目录，`dist` 会被列到！）—— 故后端布局额外把 `dist` 与 `dist.bak-*` 加入保护名单。
+   */
+  async cleanupBackend(
+    env: string,
+    dir: string,
+    opts: {
+      keep?: number;
+      protectedVersions?: ReadonlySet<string>;
+      minAgeMs?: number;
+    } = {},
+  ): Promise<RemoteCleanupResult> {
+    const protect = new Set(opts.protectedVersions ?? []);
+    // dist / dist.bak-* 永远不删：前者在跑，后者是回滚兜底（applyBackendVersion 会用它恢复）
+    protect.add('dist');
+    return this.cleanupDir(env, this.backendVersionDir(env, dir), { ...opts, protectedVersions: protect }, `backend:${dir}`);
+  }
+
+  /** 清理执行体（两种布局共用） */
+  private async cleanupDir(
+    env: string,
+    dir: string,
+    opts: {
+      keep?: number;
+      protectedVersions?: ReadonlySet<string>;
+      minAgeMs?: number;
+    },
+    tag: string,
+  ): Promise<RemoteCleanupResult> {
     let entries: RemoteEntry[] = [];
     try {
-      entries = await this.scan(env, moduleKey, envId);
+      entries = await this.scanDir(env, dir, `cleanup-scan:${tag}`);
     } catch (e) {
       // 扫描失败不阻断发布：清理是维护性动作
-      this.logger.warn(`远端产物扫描失败（${moduleKey}@${envId}）：${(e as Error).message}`);
+      this.logger.warn(`远端产物扫描失败（${tag}）：${(e as Error).message}`);
       return { scanned: 0, keep: [], remove: [], applied: false, reason: `scan-failed: ${(e as Error).message}`, dir };
     }
 
@@ -179,7 +246,7 @@ export class RemoteArtifactCleanupService {
     if (!enabled) {
       if (safe.length) {
         this.logger.warn(
-          `远端产物待清理（${moduleKey}@${envId}，${dir}）：共 ${entries.length} 个版本，超出保留策略的有 ${safe.length} 个` +
+          `远端产物待清理（${tag}，${dir}）：共 ${entries.length} 个版本，超出保留策略的有 ${safe.length} 个` +
             `（${safe.slice(0, 10).join(', ')}${safe.length > 10 ? ' …' : ''}）。` +
             `当前 REMOTE_CLEANUP_ENABLED 未开启，只观测不删除。`,
         );
@@ -207,9 +274,9 @@ export class RemoteArtifactCleanupService {
         .map((n) => `if [ -d '${n}' ] && [ '${n}' != dist ] && [ '${n}' != '.' ]; then rm -rf -- '${n}'; fi;`)
         .join(' ');
     try {
-      await this.ssh.run(env, cmd, `cleanup:${moduleKey}@${envId}`);
+      await this.ssh.run(env, cmd, `cleanup:${tag}`);
     } catch (e) {
-      this.logger.error(`远端产物清理失败（${moduleKey}@${envId}）：${(e as Error).message}`);
+      this.logger.error(`远端产物清理失败（${tag}）：${(e as Error).message}`);
       return {
         ...plan,
         remove: [],
@@ -219,7 +286,7 @@ export class RemoteArtifactCleanupService {
         dir,
       };
     }
-    this.logger.log(`远端产物清理完成（${moduleKey}@${envId}）：删除 ${safe.length} 个，保留 ${plan.keep.length} 个`);
+    this.logger.log(`远端产物清理完成（${tag}）：删除 ${safe.length} 个，保留 ${plan.keep.length} 个`);
     return { ...plan, remove: safe, scanned: entries.length, applied: true, dir };
   }
 }

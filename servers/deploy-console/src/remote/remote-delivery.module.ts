@@ -5,6 +5,7 @@ import { ServerModule } from '../server/server.module';
 import { RemoteDeliveryService } from './remote-delivery.service';
 import { SshExecService } from './ssh-exec.service';
 import { RemoteArtifactCleanupService } from './remote-artifact-cleanup.service';
+import { RemoteCleanupWatchService } from './remote-cleanup-watch.service';
 
 /**
  * 远程投递工具模块（upload 内置步骤 remote 分支的执行体）。
@@ -12,7 +13,17 @@ import { RemoteArtifactCleanupService } from './remote-artifact-cleanup.service'
  */
 @Module({
   imports: [ShellModule, HostsModule, ServerModule],
-  providers: [RemoteDeliveryService, SshExecService, RemoteArtifactCleanupService],
-  exports: [RemoteDeliveryService, SshExecService, RemoteArtifactCleanupService],
+  providers: [
+    RemoteDeliveryService,
+    SshExecService,
+    RemoteArtifactCleanupService,
+    RemoteCleanupWatchService,
+  ],
+  exports: [
+    RemoteDeliveryService,
+    SshExecService,
+    RemoteArtifactCleanupService,
+    RemoteCleanupWatchService,
+  ],
 })
 export class RemoteDeliveryModule {}

@@ -58,11 +58,31 @@ export function clientIpOf(req: ReqLike | undefined): string {
   return normalizeIp(raw);
 }
 
+/** 幂等记录默认保留时长（诊断 #20）：脚本重试通常发生在几分钟内 */
+export const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+/** 幂等记录上限：防止长时间运行把内存撑大（超出即淘汰最旧） */
+export const MAX_IDEMPOTENCY_ENTRIES = 2000;
+
+/** 取幂等键（请求头 `idempotency-key`，大小写不敏感；缺省空串 = 不启用） */
+export function idempotencyKeyOf(req: ReqLike | undefined): string {
+  const raw = req?.headers?.['idempotency-key'] ?? req?.headers?.['Idempotency-Key'];
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return String(v ?? '').trim();
+}
+
 @Injectable()
 export class InternalGuardService {
   private readonly logger = new Logger(InternalGuardService.name);
   private readonly limiter: SlidingWindowLimiter;
   private readonly allowlist: string[];
+  /**
+   * 幂等记录（诊断 #20）：`action:key` → Promise。
+   *
+   * 存 Promise 而不是结果：脚本重试可能是**并发**的（同一条流水线重跑 + 手动补刀），
+   * 存结果会让第二个请求穿透下去重复切指针。
+   * 只缓存**成功**结果：失败必须可重试，否则一次网络抖动就把发布永久卡住。
+   */
+  private readonly idem = new Map<string, { at: number; promise: Promise<unknown> }>();
 
   constructor(
     private readonly config: ConfigService,
@@ -123,6 +143,15 @@ export class InternalGuardService {
   /**
    * 执行 + 审计：成功失败都留痕，异常原样上抛（不改变既有错误语义）。
    *
+   * **幂等（诊断 #20）**：请求带 `Idempotency-Key` 时，同一 `action + key` 的重复调用
+   * 直接复用第一次的结果，不再重复执行。
+   *
+   * 为什么需要：流水线脚本失败重试 / 手动补跑时，「写版本」会多插一条记录、
+   * 「切指针」会把 `previous_version` 覆盖成当前值（PR #259 的同值幂等只挡住后者）。
+   * 没有幂等键，重试就不是幂等的 —— 而发布链路里重试是常态。
+   *
+   * 缺省零变化：**不带该请求头就完全不启用**，既有脚本不受影响。
+   *
    * @param detail 成功后用于生成审计详情（能看到 from → to，事后可还原）
    */
   async run<T>(
@@ -132,20 +161,59 @@ export class InternalGuardService {
     detail?: (result: T) => string,
   ): Promise<T> {
     const ip = this.check(req, meta.action);
-    try {
-      const result = await fn();
-      await this.write({
-        ...meta,
-        status: 'success',
-        detail: detail?.(result) ?? '',
-        ip,
-      });
-      return result;
-    } catch (e) {
-      const msg = redactSecrets((e as Error).message);
-      await this.write({ ...meta, status: 'failed', detail: msg, ip });
-      throw e;
+
+    const idemKey = idempotencyKeyOf(req);
+    const cacheKey = idemKey ? `${meta.action}:${idemKey}` : '';
+    if (cacheKey) {
+      const hit = this.idem.get(cacheKey);
+      if (hit && Date.now() - hit.at < this.idemTtlMs) {
+        this.logger.log(`幂等命中，跳过重复执行：${cacheKey}`);
+        const result = (await hit.promise) as T;
+        await this.write({
+          ...meta,
+          status: 'success',
+          detail: `${detail?.(result) ?? ''}（幂等命中：Idempotency-Key=${idemKey}，未重复执行）`.trim(),
+          ip,
+        });
+        return result;
+      }
+      if (hit) this.idem.delete(cacheKey); // 过期
     }
+
+    const exec = (async () => {
+      try {
+        const result = await fn();
+        await this.write({
+          ...meta,
+          status: 'success',
+          detail: detail?.(result) ?? '',
+          ip,
+        });
+        return result;
+      } catch (e) {
+        const msg = redactSecrets((e as Error).message);
+        await this.write({ ...meta, status: 'failed', detail: msg, ip });
+        // 失败不留幂等记录：必须可重试，否则一次抖动就永久卡住
+        if (cacheKey) this.idem.delete(cacheKey);
+        throw e;
+      }
+    })();
+
+    // TTL=0 = 关闭幂等：连记录都不写，避免白占内存
+    if (cacheKey && this.idemTtlMs > 0) {
+      this.idem.set(cacheKey, { at: Date.now(), promise: exec });
+      if (this.idem.size > MAX_IDEMPOTENCY_ENTRIES) {
+        const oldest = this.idem.keys().next().value as string | undefined;
+        if (oldest) this.idem.delete(oldest);
+      }
+    }
+    return exec;
+  }
+
+  /** 幂等记录保留时长（可配 `INTERNAL_IDEMPOTENCY_TTL_MS`，0 = 关闭幂等） */
+  private get idemTtlMs(): number {
+    const raw = Number(this.config.get<string>('INTERNAL_IDEMPOTENCY_TTL_MS'));
+    return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_IDEMPOTENCY_TTL_MS;
   }
 
   /**

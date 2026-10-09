@@ -583,13 +583,21 @@ export class AppsService implements OnModuleInit {
   }
 
   /** 回滚：默认回到 previousVersion（可显式指定目标版本） */
+  /**
+   * 回滚（env-dir：只把入口指针切回上一版本，不重新构建）。
+   *
+   * 诊断 #17：目标版本统一走 `registry.resolveRollbackTarget` —— 与后端入口同一口径。
+   * 此前这里只读指针表的 previous_version，指针表没行就直接报错；
+   * 而后端入口会去历史表找 —— 同一模块在两个入口得到不同结果。
+   * 统一后指针表优先、历史表回落，行为一致。
+   */
   async rollback(appKey: string, envId: string, version: string | undefined, operator?: string) {
-    const row = await this.versionRepo.findOne({ where: { appKey, envId } });
-    const target = version || row?.previousVersion;
-    if (!target) {
-      throw new BadRequestException('没有可回滚的上一版本，请显式指定版本');
-    }
-    return this.switchVersion(appKey, envId, target, operator);
+    const { to } = await this.registry.resolveRollbackTarget({
+      env: envId,
+      moduleKey: appKey,
+      to: version,
+    });
+    return this.switchVersion(appKey, envId, to, operator);
   }
 
   /** 内置应用类型与部署模式（供前端下拉） */
