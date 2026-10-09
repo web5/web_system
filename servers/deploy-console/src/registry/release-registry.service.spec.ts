@@ -327,6 +327,28 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(appVersionRepo.save).not.toHaveBeenCalled();
   });
 
+  it('#6 回归：expiresAt 被驱动读成字符串也不能把 409 打成 500（RangeError）', async () => {
+    // expires_at 是 bigint 列，mysql2 默认返回字符串；直接 new Date(str) 会抛 RangeError，
+    // 把「并发冲突」这条清晰信号吞成 500——正是本次要消灭的「看不出真实原因」
+    locks.acquireEx.mockResolvedValue({
+      ok: false,
+      newly: false,
+      holder: 'pipeline-9',
+      expiresAt: '1791522115000' as never,
+    });
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    const err = await svc
+      .setAppEnvPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'v2',
+        lock: { owner: 'ui:alice' },
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toContain('至 2026-'); // 时间真的被格式化出来了
+  });
+
   it('#6：不传 lock → 完全不碰锁（流水线自带锁，向后兼容）', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     await svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' });
