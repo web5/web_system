@@ -52,6 +52,16 @@ export class TtsService {
   }
 
   /**
+   * 是否已具备整段合成条件（缺少 SecretId/SecretKey 时 client 为 null，speak 会 503）。
+   *
+   * 作用：让「凭据没配」这种纯运维问题自己暴露出来，而不是等用户点朗读报错才发现
+   * —— 见 `GET /ai/tts/health` 与 2026-10-09 TTS 503 事故（`rNPjtC`）。
+   */
+  isAvailable(): boolean {
+    return this.client !== null;
+  }
+
+  /**
    * 将文本转为语音 MP3 Buffer（单次合成，文本须在厂商上限内）。
    * @param text 要朗读的文本
    * @param options 可选参数

@@ -272,6 +272,37 @@
 
 
 
+## ImageInternalController（`ImageInternalController` → 注册路径基 `internal/image`）
+
+### POST /api/internal/image/submit
+- 说明：提交生图任务（内部，供 ai-agent 工具调用）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(ImageSubmitDto)
+
+**字段定义**
+
+##### Body 对象 `ImageSubmitDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| prompt | string | 是(默认) | 图片生成提示词 |
+
+
+### POST /api/internal/image/query
+- 说明：查询生图任务结果（内部，供 ai-agent 工具调用）
+- 鉴权：未显式标注（按服务鉴权策略）
+- 入参：Body:dto(ImageQueryDto)
+
+**字段定义**
+
+##### Body 对象 `ImageQueryDto`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| id | string | 是(默认) | 任务 ID |
+
+
+
 ## ArtworksController（`ArtworksController` → 注册路径基 `ai/artworks`）
 
 ### POST /api/ai/artworks/
@@ -451,6 +482,10 @@
 
 
 ## TtsController（`TtsController` → 注册路径基 `ai/tts`）
+
+### GET /api/ai/tts/health
+- 说明：TTS 配置健康检查（整段 / 流式是否可用）
+- 鉴权：未显式标注（按服务鉴权策略）
 
 ### POST /api/ai/tts/speak
 - 说明：文字转语音（TTS）
