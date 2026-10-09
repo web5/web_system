@@ -230,7 +230,7 @@ P2 的目标（消除等待与不连贯）已由 P1 达成：首包 466ms 且全
 
 | # | 阻塞 | 现状 | 需谁解决 |
 |---|---|---|---|
-| 1 | ~~`AppId`（流式握手必填）~~ | 已解决：AppId 已入本机凭据仓 `~/env_config/tencent.env` 的 `tts/ocr` 段，并配进运行时的 `servers/ai-service/.env`（`TENCENT_APP_ID`）。**dev/prod 机器的 `servers/ai-service/.env` 尚未配置**，未配置时端侧自动回退整段方案 | — |
+| 1 | ~~`AppId`（流式握手必填）~~ | ✅ 已解决（2026-10-09）：`TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` / `TENCENT_APP_ID` 三件套已写入 **dev + prod 的 `servers/ai-service/.env`**（600）并重启生效。验收：两端日志均出现「腾讯云 TTS 客户端初始化成功」；`POST /api/ai/tts/speak` → 200 audio/mpeg；`GET /api/ai/tts/stream?codec=pcm` → 200 audio/pcm。未配置时端侧仍自动回退整段方案 | — |
 | 2 | ~~音色 603007 是否支持流式~~ | 已解决：直连实测通过（首包 653ms，无 10001） | — |
 | 3 | gateway 无 WS 依赖 | `@nestjs/websockets` / `ws` 均未安装 | 实现时新增依赖 |
 | 4 | ai-service 无 ws 依赖 | 未安装（根 `node_modules/ws` 为传递依赖，不可依赖） | 实现时显式声明 |
@@ -248,8 +248,9 @@ P2 的目标（消除等待与不连贯）已由 P1 达成：首包 466ms 且全
 
 | # | 事项 | 当前影响 | 处理时机 |
 |---|---|---|---|
-| 1 | dev / prod 的 `servers/ai-service/.env` 未配 `TENCENT_APP_ID` | 流式不可用，自动回退整段（能听，无接缝优化） | 下次发布 dev/prod 时一并配 |
+| 1 | ~~dev / prod 的 `servers/ai-service/.env` 未配 `TENCENT_*`~~ | ✅ 已于 2026-10-09 补配并重启生效（见 §10.4 阻塞项 1）。遗留限制：prod 只能手工写 `.env`（配置下发 `.env.generated` 仅覆盖本地），凭据未纳管进配置中心 | 凭据纳管见 §12 第 6 项 |
 | 2 | 小程序版本未上传（代码已就绪） | 线上小程序仍是旧版 | 开发者工具上传时 |
 | 3 | TTS 端点错误响应用 HTTP 200 包装（body 为 `{"code":4010,...}`） | 端侧需按 body 判定失败；现有 `isJsonResponse` 已兜底 | 服务错误响应风格统一时 |
 | 4 | 小程序 WebAudio 的 `AudioBufferSourceNode` 无 `onended` | 现用「开播延迟 + 时长」定时器移除音源 | 官方补齐 API 后可简化 |
 | 5 | `~/env_config/tencent.env` 的 tts/ocr 段密钥 | 预防性（该段曾在会话中被明文输出） | 下次凭据维护时轮换，并同步 `servers/ai-service/.env`、`servers/ai-agent/.env` |
+| 6 | `TENCENT_*` 凭据未纳管进 deploy-console 配置中心 | prod 只能手工写 `.env`（配置下发仅覆盖本地），换机/重建易再漏配 | 配置中心补 ai-service scope 的三键；dev 走 `.env.generated` 自动下发 |

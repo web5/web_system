@@ -11,12 +11,41 @@
  * （语调连贯）；只有极长文本才由服务端按句切片并发拼接。块数从「按 110 切碎」的 5 块降到 2 块，
  * 唯一接缝落在句末标点处。
  */
+import { message } from 'ant-design-vue';
 import request from '@/api/request';
 import { getStoredToken } from '@/stores/user';
 import { API_TIMEOUT } from '@web-system/shared';
 
 /** 流式合成的采样率（与服务端 SampleRate=16000 对齐） */
 const STREAM_SAMPLE_RATE = 16000;
+
+/**
+ * 朗读失败。
+ *
+ * `permanent = true` 表示**永久性错误**（凭据未配置 / 参数错误）——回退整段链路只会
+ * 重复失败并重复弹错（2026-10-09 事故：1 次失败 → 3 次请求 → 3 个 toast）。
+ */
+export class TtsError extends Error {
+  readonly permanent: boolean;
+  readonly status?: number;
+
+  constructor(msg: string, opts: { permanent?: boolean; status?: number } = {}) {
+    super(msg);
+    this.name = 'TtsError';
+    this.permanent = opts.permanent ?? false;
+    this.status = opts.status;
+  }
+}
+
+/**
+ * 判定是否永久性错误：4xx（除 408/429 这类可重试的）与服务端明示的「未配置」类错误
+ * 重试/回退没有意义，应当直接把真实原因告知用户。
+ */
+function isPermanentFailure(status: number, msg: string): boolean {
+  if (msg.includes('未配置')) return true;
+  if (status >= 400 && status < 500) return status !== 408 && status !== 429;
+  return false;
+}
 
 /** 首句单块上限：控制首播等待 ≈ 首句合成时间（实测 110 字符约 2s） */
 const MAX_FIRST_CHUNK = 110;
@@ -49,15 +78,26 @@ export function splitSpeakParts(text: string, max = MAX_FIRST_CHUNK): string[] {
   return rest ? [first, rest] : [first];
 }
 
-/** 请求一段文本的 TTS 音频（mp3 Blob）；失败抛错（request 拦截器已处理 401 刷新/跳登录） */
+/**
+ * 请求一段文本的 TTS 音频（mp3 Blob）；失败抛 TtsError（带服务端真实原因）。
+ *
+ * `silent: true` —— 关掉 axios 全局 toast：一次朗读会并发发起 N 个分块请求，
+ * 全局拦截器会弹 N 个「请求失败」。这里改由 `speak()` 统一弹一次真实原因。
+ */
 export async function requestTts(text: string): Promise<Blob> {
-  // 单片合成实测 2~6s，超过 DEFAULT(10s)：必须单独放宽超时
-  const data = (await request.post(
-    '/ai/tts/speak',
-    { text },
-    { responseType: 'blob', timeout: API_TIMEOUT.TTS },
-  )) as unknown as Blob;
-  return data;
+  try {
+    // 单片合成实测 2~6s，超过 DEFAULT(10s)：必须单独放宽超时
+    const data = (await request.post(
+      '/ai/tts/speak',
+      { text },
+      { responseType: 'blob', timeout: API_TIMEOUT.TTS, silent: true },
+    )) as unknown as Blob;
+    return data;
+  } catch (err: any) {
+    const status: number | undefined = err?.response?.status;
+    const msg: string = err?.response?.data?.message || err?.message || '语音合成失败';
+    throw new TtsError(msg, { permanent: isPermanentFailure(status ?? 0, msg), status });
+  }
 }
 
 /** 全局音频播放器（整段播放用；单例：新的播放顶掉旧的，与小程序 services/tts.ts 同一语义） */
@@ -125,11 +165,14 @@ export async function speakSequence(
 ): Promise<void> {
   // 所有块并发发起：剩余块的合成与首块同时进行，首块播完时剩余已就绪 —— 消除块间空档。
   // （串行发请求的等待 = 剩余块合成时间 − 首块音频时长，实测会差出 0~3s 的静音。）
-  const pending = chunks.map((c) => requestTts(c).catch(() => null));
+  // 保留原始错误（而不是吞成 null）：首块失败时要把服务端的真实原因抛给上层
+  const pending = chunks.map((c): Promise<Blob | Error> =>
+    requestTts(c).catch((e: unknown) => (e instanceof Error ? e : new TtsError(String(e)))),
+  );
 
   const first = await pending[0];
   if (!opts.isActive()) return;
-  if (!first) throw new Error('朗读失败，请重试');
+  if (first instanceof Error) throw first;
   opts.onPhase?.('playing');
 
   let blob: Blob = first;
@@ -139,7 +182,7 @@ export async function speakSequence(
     if (i + 1 >= chunks.length) return;
 
     const next = await pending[i + 1];
-    if (!next) throw new Error('朗读失败，请重试');
+    if (next instanceof Error) throw next;
     blob = next;
   }
 }
@@ -166,7 +209,18 @@ export async function streamSpeak(
     { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: abort.signal },
   );
   if (!opts.isActive()) return;
-  if (!res.ok || !res.body) throw new Error(`流式朗读失败 (${res.status})`);
+  if (!res.ok || !res.body) {
+    // 读出错误体：流式端点直接 res.json({code,message})，真实原因不能丢
+    const raw = await res.text().catch(() => '');
+    let msg = `流式朗读失败 (${res.status})`;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.message) msg = String(parsed.message);
+    } catch {
+      if (raw) msg = raw.slice(0, 120);
+    }
+    throw new TtsError(msg, { permanent: isPermanentFailure(res.status, msg), status: res.status });
+  }
 
   const ctx = ensureAudioCtx();
   if (ctx.state === 'suspended') await ctx.resume();
@@ -250,12 +304,31 @@ export async function speak(
 ): Promise<void> {
   try {
     await streamSpeak(text, opts);
+    return;
   } catch (err: any) {
-    // 流式不可用（未配 AppId / 服务端未部署 / 网络中断且尚未出声）→ 回退整段
     if (!opts.isActive()) return;
     if (String(err?.name) === 'AbortError') return;
-    console.warn('[tts] 流式朗读不可用，回退整段：', err?.message);
+
+    const streamErr =
+      err instanceof TtsError
+        ? err
+        : new TtsError(String(err?.message || '流式朗读失败'), { permanent: false });
+
+    // 永久性错误（未配置 / 参数错误）：回退整段只会重复失败并重复弹错 —— 一次说清
+    if (streamErr.permanent) {
+      message.error(streamErr.message);
+      return;
+    }
+
+    // 瞬时错误（网络中断 / 服务端未部署 / 超时）→ 回退整段
+    console.warn('[tts] 流式朗读不可用，回退整段：', streamErr.message);
     stopTts();
-    await speakSequence(splitSpeakParts(text), opts);
+    try {
+      await speakSequence(splitSpeakParts(text), opts);
+    } catch (err2: any) {
+      if (!opts.isActive()) return;
+      // 整段也失败：只弹一次，且带上服务端真实原因
+      message.error(err2?.message || '朗读失败，请重试');
+    }
   }
 }

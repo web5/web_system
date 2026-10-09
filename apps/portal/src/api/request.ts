@@ -101,6 +101,29 @@ declare module 'axios' {
   }
 }
 
+/**
+ * axios 在 `responseType: 'blob'` 时**不会解析错误响应体**——4xx/5xx 的 JSON body
+ * 会原样以 Blob 返回，`data?.message` 恒为 undefined，端侧只能弹「请求失败」，
+ * 真实原因（如「TTS 未配置」）被完全吞掉，排障成本极高。
+ *
+ * 这里把 Blob 错误体读成文本并尝试 JSON 解析后回填，让上层能拿到服务端 message。
+ */
+async function resolveBlobErrorBody(error: any): Promise<void> {
+  const data = error?.response?.data;
+  if (!data || typeof Blob === 'undefined' || !(data instanceof Blob)) return;
+  try {
+    const text = await data.text();
+    try {
+      error.response.data = JSON.parse(text);
+    } catch {
+      // 非 JSON（纯文本错误体）：包一层，保证上层 `data?.message` 仍能取到
+      error.response.data = { message: text };
+    }
+  } catch {
+    // 读取失败：保持原样，交由上层兜底
+  }
+}
+
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -117,6 +140,8 @@ request.interceptors.response.use(
     const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean; silent?: boolean };
 
     if (error.response) {
+      // blob / arraybuffer 响应：先把错误体解析成可读对象，再走下面的提示逻辑
+      await resolveBlobErrorBody(error);
       const { status, data } = error.response;
 
       if (status === 401) {
