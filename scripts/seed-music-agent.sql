@@ -28,6 +28,13 @@ ON DUPLICATE KEY UPDATE
   enabled = 1;
 
 -- 2. Agent 定义：音乐推荐官
+-- ⚠️ capabilities 必须是 NULL 而不是 '[]'：
+--    AgentDefSyncService.toAgentDefinition / resolveAgentCapabilities 的规则是
+--    「capabilities 非空(含空数组)则只认它，忽略 tools 字段」——
+--    填 '[]' 会让 tools 被解析成空，模型收不到任何工具，
+--    只能把 <tool_calls> 当文本吐出来（2026-10-09 dev 实录）。
+--    需要同时用两种能力时，应把工具写成 capabilities 数组：
+--    [{"type":"tool","ref":"present-music-card","enabled":true}, ...]
 INSERT INTO agent_definitions (
   id, name, system_prompt, model, tools, max_steps, temperature, memory,
   version, status, enabled, published_at, updated_by, capabilities, skills,
@@ -47,7 +54,7 @@ VALUES (
   1,
   NOW(6),
   'seed-music-agent.sql',
-  '[]',
+  NULL,
   NULL,
   1,
   '按场景/心情/口味推荐 1-3 首歌，输出可跳转的音乐推荐卡片',
