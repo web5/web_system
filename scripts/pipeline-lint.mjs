@@ -49,6 +49,8 @@ const PLATFORM_VARS = new Set([
   'PUBLIC_PATH', 'ENTRY_FILE', 'BUILD_OUTPUT_DIR', 'ARTIFACT_DIR', 'ARTIFACTS_DIR',
   'DEPLOY_ROOT', 'DEPLOY_TARGET', 'GATEWAY_URL', 'GATEWAY_TTL_SEC', 'KEEP_VERSIONS',
   'PROTECTED_VERSIONS', 'WS_SAFE_DELETE', 'CONSOLE_API', 'CONSOLE_TOKEN',
+  // 流水线 run id：脚本调平台接口时透传为锁 owner（2026-10-09 加，与 resolveStageVars 同源）
+  'RUN_ID',
   // shell 内建与脚本内临时量
   'HOME', 'PATH', 'USER', 'PWD', 'SHELL', 'SSH', 'SCP', 'TS',
   'VERSION_TAG', 'VERSION', 'VER', 'BUILD_ENV',
