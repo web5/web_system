@@ -12,6 +12,7 @@ import { Test } from '@nestjs/testing';
 import { ConfigController } from './config.controller';
 import { ConfigService } from './config.service';
 import { AuditService } from '../audit/audit.service';
+import { InternalGuardService } from '../common/internal-guard.service';
 
 /** 最小 res 桩：记录 status / body / 是否 end */
 function resStub() {
@@ -68,6 +69,14 @@ describe('ConfigController.dispatch（内部下发接口）', () => {
       providers: [
         { provide: ConfigService, useValue: configService },
         { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
+        // 诊断 #7：内部接口统一走 InternalGuardService（限流 + 白名单 + 审计）
+        {
+          provide: InternalGuardService,
+          useValue: new InternalGuardService(
+            { get: () => undefined } as never,
+            { log: jest.fn().mockResolvedValue(undefined) } as never,
+          ),
+        },
       ],
     }).compile();
     controller = moduleRef.get(ConfigController);

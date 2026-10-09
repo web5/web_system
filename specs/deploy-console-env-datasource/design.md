@@ -539,3 +539,119 @@ CONSISTENCY_CHECK_FIRST_DELAY_MS=60000
 - 定时巡检只覆盖指针表；配置表漂移仍靠人工跑 M5 脚本
 - 强制解锁是危险操作，目前只留审计、无二次确认（前端可加）
 - 僵尸任务回收只看 `deploy_tasks`；流水线实例（`deploy_pipelines`）的同类状态未纳入
+
+## 17. 三线治理（2026-10-09）：凭据脱敏 / 内部接口审计限流 / 产物清理 / lint L8-L9 / ssh 真相源
+
+一线（#1/#2/#3/#5）解决「写错地方、写不到」，二线（#11/#4/#6/#12/#13）解决
+「写对了但你不知道它没生效」。这一批解决的是**长期 hygiene**：凭据会泄露、
+操作无留痕、产物只增不减、脚本侧无门禁、同一个真相源有多份实现。
+
+### 17.1 #8 日志统一脱敏
+
+`INTERNAL_API_KEY` 被注入为脚本变量 `CONSOLE_TOKEN`，脚本里一句 `set -x` 就会把
+`+ curl -H "x-internal-key: <真实 key>"` 回显到 stderr；此前 `shell-runner` 把
+stdout/stderr **原样**落库（`deploy_tasks.logs`）并在 UI 展示 —— 一次误开即永久泄露。
+
+新增 `common/redact.ts`（纯函数 + 可注入 env，便于单测）：
+
+| 层 | 判据 | 说明 |
+|---|---|---|
+| 已知值 | 进程内敏感 env 的**值**整体替换 | 最可靠，无正则误伤；长值优先匹配避免前缀截断 |
+| 名称兜底 | `KEY=value` / JSON 字段 / `-H "x-internal-key: …"` / `Bearer …` | 覆盖「值来自别处」 |
+| URL userinfo | `mysql://root:pw@host` | 只换密码，保留 host 便于排障 |
+
+两条刻意的取舍：
+- **短值（<6 字符）不脱敏** —— 否则 `PORT=0`、`KEEP_VERSIONS=5` 全被抹掉，日志没法排障
+- **默认层级不脱敏 IP/端口** —— 脚本日志里满是 `curl http://127.0.0.1:6200`，
+  一刀切等于把排障最需要的信息删掉。只有明确出站的消息（云库连接错误）才走
+  `redactSecretsAndAddress`
+
+落点：`shell-runner` 的日志推送、`deploy.service` 的远端回显与异常消息。
+`env-split-writer` 原有的 `redactEndpoint` 改为委托（占位符沿用 `<云库地址>` 措辞）。
+
+### 17.2 #7 内部接口审计 + 限流
+
+`/api/internal/release/*` 与 `/api/config/internal/*` 是 `@Public()` + 单一静态 key：
+持有它就**能把 prod 任意模块切成任意版本**，且此前**零留痕**。
+
+新增 `InternalGuardService`（做成模块而非纯函数，因为**限流器必须持有进程内状态**
+才能跨请求计数，每次 new 等于没限流），四件事：鉴权（复用 `assertInternalKey`）→
+来源白名单 → 限流（按「来源 IP × 动作」滑动窗口，默认 120/分钟）→ 审计（成功失败都留痕）。
+
+审计写失败**只 error 不阻断**：审计是留痕设施，它挂了不该让发布发不出去，
+但必须有日志可查，避免「审计静默失效」变成新的盲区。
+
+> 实测踩坑（已修 + 回归测试）：`INTERNAL_IP_ALLOWLIST` 为空时，`''.split(',')` 得到
+> `['']`，而 `normalizeIp('')` 返回 `'unknown'`（审计占位值）被 `filter(Boolean)` 保留
+> ⇒ 白名单**默认启用**且只允许 `unknown` ⇒ 所有内部接口 403。空串必须先短路。
+
+### 17.3 #9 env-dir 产物清理（比诊断更严重）
+
+`listL1` 旧判定「一级目录含 index.js = 版本」，而 env-dir 布局是
+`modules/<key>/<env>/index.js`（**入口指针**）+ `modules/<key>/<env>/<commit>/index.js`
+⇒ env 层被误判成版本，两个后果：
+
+1. 它的 L2 commit 目录**永远扫不到** ⇒ 永不清理、无限增长
+2. 更危险：env 层 mtime 超龄且不在 keep 内时走 legacy 分支 `rmSync(<base>/<env>)`
+   —— **连指针带所有版本整个删掉**，线上直接白屏
+
+新判定：**有「含 index.js 的子目录」⇒ 该层是命名空间/env 层**（一条规则同时覆盖
+流水线命名空间与 env-dir，不需要引入 deployMode）。另外补两条保护：
+- 指针当前指向的版本自动受保护（它是线上正在服务的版本，调用方传的 protected 未必覆盖）
+- 版本清空后 env 层保留（指针不能丢），只有**无 index.js 的空目录**才移除
+
+### 17.4 #10 远端产物保留（#9 的远端版）
+
+关键认识：**prod 的产物根本不在 console 本机**（静态根外置在 prod 机），
+所以上一节的本地清理在 prod 上**从来没发生过** —— 远端才是主战场。
+
+新增 `RemoteArtifactCleanupService`：scan（只读）→ `planRetain`（纯函数，与本地同一套
+语义）→ 执行。**默认只观测**（`REMOTE_CLEANUP_ENABLED=false`）：远端 `rm -rf` 是高危操作，
+先把「有多少个版本、会删哪些」报出来，人工确认后再开。
+
+删除前两道闸（这是最后一道防线，宁可少删也不错删）：
+- `isSafeVersionName`：只放行 commit 哈希（7-40 位 hex）与 `vX.Y.Z`；
+  `..`、绝对路径、`dist`、`a/b` 一律拦下
+- 远端命令里再判一次 `'<name>' != dist`
+
+`cleanup.executor` 的 remote 分支从「静默跳过」改为扫描并回报（此前注释写
+「由目标环境自己的发布平台负责」，但实测目标机并没有另一套 console，无人清理）。
+
+### 17.5 #14 pipeline-lint L8 / L9
+
+| 规则 | 判据 | 防什么 |
+|---|---|---|
+| **L8**（error） | env-dir 应用（portal/admin）dev/prod 投递路径必须含 `${DEPLOY_ENV}` | L7 只管 site-version；env-dir 用扁平口径会落到 `modules/<key>/<commit>/`，与磁盘指针错位 → 发布成功但页面 404（诊断 #3 的类型） |
+| **L9**（error） | 调 `$CONSOLE_API` 的 curl 必须带 `-f`（或显式查 HTTP 码） | curl 默认 4xx/5xx 也返回 0 ⇒ 接口拒绝（产物不存在 / 并发锁 409 / 鉴权失败）时脚本照样往下走 |
+
+实现细节：L9 先把以 `\` 结尾的续行合并成**逻辑行**再判（curl 常写成每个 `-H` 一行，
+只看物理行会漏判）；L8 先剥掉注释行再取路径（否则脚本注释里画布局的
+`static/modules/<key>/<envId>/<commit>/` 会被当成真实路径误报 —— 实测命中过）。
+
+现网实测：230 个动作，**0 error / 43 warning**（warning 全是既有的 L6 提示）。
+L8/L9 均已用离线用例验证「坏写法命中、正确写法不误报」。
+
+### 17.6 #15 ssh 真相源收敛（部分）
+
+「环境 → 目标机 + 私钥」的解析此前在本仓有三份（deploy / monitor，新增能力还会抄
+第四份）。收敛为 `SshExecService.resolve`（唯一实现 + 统一硬超时 + 输出脱敏），
+`DeployService.getSshConfig` 改为委托（行为不变）。
+
+额外收益（#15 的核心要求）：**回落必须告警** —— 环境未在「主机管理」登记而回落到
+服务器管理默认机时，现在会 warn，不再静默用默认机。
+
+### 17.7 配置项汇总（均为可选，缺省零变化）
+
+```
+INTERNAL_RATE_LIMIT_PER_MIN=120   # 0 = 关闭限流
+INTERNAL_IP_ALLOWLIST=            # 空 = 不限制来源；逗号分隔，支持 ::1 / ::ffff: 写法
+REMOTE_CLEANUP_ENABLED=false      # true 才真正执行远端删除（默认只观测）
+SSH_EXEC_TIMEOUT_MS=600000        # SshExecService 的远程执行超时
+```
+
+### 17.8 遗留
+
+- `monitor.service` 仍有自己的 `getSshConfig`（未收敛到 `SshExecService`）
+- `remote-delivery` 的 `REMOTE_MODULES_ROOT` 仍是硬编码，未并入「环境 × 应用」推导
+- 后端 `servers/<dir>/<commit>/` 的远端保留未做（dist 就在旁边，误删风险更高，需单独验证）
+- 定时巡检只覆盖指针表；产物清理目前靠流水线 cleanup 步骤触发，非定时

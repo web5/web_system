@@ -111,4 +111,98 @@ describe('ArtifactStoreService（产物目录 fs 工具）', () => {
   it('cleanup：目录不存在时不抛错', () => {
     expect(svc.cleanup('missing', 5)).toEqual({ kept: [], removed: [] });
   });
+
+  // ── 诊断 #9：env-dir（微前端）布局 ──
+  // modules/<key>/<env>/index.js 是**入口指针**，版本在 modules/<key>/<env>/<commit>/
+  // 旧判定「一级含 index.js = 版本」会把 env 层误判成版本，导致 ① commit 目录永不清理
+  // ② 更危险：env 层超龄后走 legacy 分支被整个 rmSync（连指针带所有版本）
+
+  /** 造 env-dir 布局：env 层写指针（指向 current），下面挂若干 commit 版本目录 */
+  const mkEnvDir = (env: string, commits: { v: string; mtime: number }[], pointerTo?: string) => {
+    const envDir = path.join(moduleRoot(), env);
+    fs.mkdirSync(envDir, { recursive: true });
+    for (const c of commits) {
+      const d = path.join(envDir, c.v);
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, 'index.js'), `// ${c.v}`);
+      fs.utimesSync(d, new Date(c.mtime), new Date(c.mtime));
+    }
+    if (pointerTo) {
+      fs.writeFileSync(
+        path.join(envDir, 'index.js'),
+        `System.register(['./${pointerTo}/index.js'], function(){});`,
+      );
+    }
+    fs.utimesSync(envDir, new Date(Date.now()), new Date(Date.now()));
+  };
+
+  it('#9：env-dir 的 env 层不再被当成版本（listVersions 返回 env/commit）', () => {
+    const now = Date.now();
+    mkEnvDir('prod', [{ v: 'aaa1111', mtime: now - 2000 }, { v: 'bbb2222', mtime: now }], 'bbb2222');
+    expect(svc.listVersions('admin')).toEqual(['prod/bbb2222', 'prod/aaa1111']);
+  });
+
+  it('#9：env-dir 的过期 commit 目录会被清理（此前永不清理）', () => {
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    mkEnvDir(
+      'prod',
+      [
+        { v: 'old1', mtime: now - 30 * DAY },
+        { v: 'old2', mtime: now - 20 * DAY },
+        { v: 'cur1', mtime: now },
+      ],
+      'cur1',
+    );
+    const res = svc.cleanup('admin', 1, new Set(), 0); // minAge=0 只看数量
+    expect(res.removed.sort()).toEqual(['prod/old1', 'prod/old2']);
+    expect(res.kept).toContain('prod/cur1');
+  });
+
+  it('#9：env 层本身（含指针）绝不删除 —— 旧逻辑会 rmSync 整个 env 目录', () => {
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    // env 层 mtime 很旧（超龄），若被误判为 legacy 版本就会整个被删
+    mkEnvDir('prod', [{ v: 'cur1', mtime: now - 30 * DAY }], 'cur1');
+    fs.utimesSync(path.join(moduleRoot(), 'prod'), new Date(now - 30 * DAY), new Date(now - 30 * DAY));
+
+    svc.cleanup('admin', 1, new Set(), 0);
+    expect(fs.existsSync(path.join(moduleRoot(), 'prod'))).toBe(true);
+    expect(fs.existsSync(path.join(moduleRoot(), 'prod', 'index.js'))).toBe(true);
+  });
+
+  it('#9：指针当前指向的版本受保护（即使它最旧、且不在 keep 内）', () => {
+    const now = Date.now();
+    // 指针指向最旧的那个，且 keep=1 —— 若只按 mtime 保留，线上正在服务的版本会被删
+    mkEnvDir(
+      'prod',
+      [{ v: 'cur1', mtime: now - 10000 }, { v: 'v2', mtime: now - 5000 }, { v: 'v3', mtime: now }],
+      'cur1',
+    );
+    const res = svc.cleanup('admin', 1, new Set(), 0);
+    expect(res.removed).not.toContain('prod/cur1');
+    expect(fs.existsSync(path.join(moduleRoot(), 'prod', 'cur1', 'index.js'))).toBe(true);
+  });
+
+  it('#9：版本清空后 env 层仍保留（指针不能丢）；无指针的空目录才移除', () => {
+    const now = Date.now();
+    mkEnvDir('prod', [{ v: 'cur1', mtime: now }], 'cur1');
+    fs.rmSync(path.join(moduleRoot(), 'prod', 'cur1'), { recursive: true, force: true });
+    svc.cleanup('admin', 1, new Set(), 0);
+    expect(fs.existsSync(path.join(moduleRoot(), 'prod', 'index.js'))).toBe(true);
+
+    // 对照：没有 index.js 的空命名空间目录会被移除
+    const emptyNs = path.join(moduleRoot(), 'emptyns');
+    fs.mkdirSync(emptyNs, { recursive: true });
+    svc.cleanup('admin', 1, new Set(), 0);
+    expect(fs.existsSync(emptyNs)).toBe(false);
+  });
+
+  it('#9：readPointerTarget 解析不出版本时返回 null（不误保护、不误判）', () => {
+    const now = Date.now();
+    // 一级目录含 index.js 但内容是真实产物（不含 './<v>/index.js' 引用）→ legacy 版本
+    mkVersion('abc1234', now);
+    expect(svc.listVersions('admin')).toEqual(['abc1234']);
+    expect(svc.cleanup('admin', 1, new Set(), 0).kept).toEqual(['abc1234']);
+  });
 });

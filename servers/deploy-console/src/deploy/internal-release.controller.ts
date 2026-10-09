@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Req, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
-import { assertInternalKey } from '../common/internal-key';
+import { InternalGuardService } from '../common/internal-guard.service';
 import { DeployService } from './deploy.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { AppsService } from '../apps/apps.service';
@@ -26,6 +26,10 @@ import { AppsService } from '../apps/apps.service';
  * - 其余（后端服务 / site-version）→ 只 upsert `deploy_deployments`（legacy 指针）。
  *
  * 仍不开放：回滚 / 灰度规则 / 清理 —— 那些属人工决策，继续走控制台 JWT 接口。
+ *
+ * 安全（诊断 #7）：本接口的权限等价于「改线上指针」。此前它是 `@Public()` + 单一静态
+ * key 且**零留痕**，谁在什么时候把 prod 切成什么无从追查。现统一走
+ * `InternalGuardService`（鉴权 + 限流 + 来源白名单 + 成功/失败都审计）。
  */
 @ApiTags('内部发布接口')
 @ApiHeader({ name: 'x-internal-key', description: '内部服务密钥' })
@@ -36,32 +40,34 @@ export class InternalReleaseController {
     private readonly deployService: DeployService,
     private readonly registry: ReleaseRegistryService,
     private readonly appsService: AppsService,
+    private readonly guard: InternalGuardService,
   ) {}
-
-  /** 校验内部密钥（与 INTERNAL_API_KEY 一致）；不一致一律 401（实现见 common/internal-key） */
-  private assertInternalKey(req: any): void {
-    assertInternalKey(req);
-  }
 
   @Post('versions')
   @ApiOperation({ summary: '写版本记录（发布节点脚本调用：上传产物后落一条版本）' })
   async writeVersion(@Body() body: any, @Req() req: any) {
-    this.assertInternalKey(req);
     const moduleKey = String(body?.moduleKey || body?.component || '').trim();
     const versionTag = String(body?.versionTag || body?.version || '').trim();
     if (!moduleKey) throw new BadRequestException('moduleKey 必填');
     if (!versionTag) throw new BadRequestException('versionTag 必填');
-    const v = await this.deployService.recordReleaseVersion({
-      moduleKey,
-      versionTag,
-      env: body?.env,
-      gitCommit: body?.gitCommit,
-      gitBranch: body?.gitBranch,
-      note: body?.note ?? '由发布节点脚本写入',
-      // 脚本无用户身份，操作人留痕为 pipeline-script（审计可追溯到流水线实例）
-      operator: body?.operator || 'pipeline-script',
-    });
-    return { ok: true, id: v.id, moduleKey, versionTag: v.versionTag };
+    const operator = body?.operator || 'pipeline-script';
+
+    return this.guard.run(
+      req,
+      { action: 'internal.release.version', env: body?.env, component: moduleKey, user: operator },
+      async () =>
+        this.deployService.recordReleaseVersion({
+          moduleKey,
+          versionTag,
+          env: body?.env,
+          gitCommit: body?.gitCommit,
+          gitBranch: body?.gitBranch,
+          note: body?.note ?? '由发布节点脚本写入',
+          // 脚本无用户身份，操作人留痕为 pipeline-script（审计可追溯到流水线实例）
+          operator,
+        }),
+      (v) => `写版本 ${moduleKey}@${body?.env ?? '-'} → ${v.versionTag}`,
+    ).then((v) => ({ ok: true, id: v.id, moduleKey, versionTag: v.versionTag }));
   }
 
   /**
@@ -82,7 +88,6 @@ export class InternalReleaseController {
   @Post('pointer')
   @ApiOperation({ summary: '切当前版本指针（发布节点脚本调用：验证通过后推进）' })
   async pointer(@Body() body: any, @Req() req: any) {
-    this.assertInternalKey(req);
     const moduleKey = String(body?.moduleKey || body?.component || '').trim();
     const env = String(body?.env || '').trim();
     const currentVersion = String(
@@ -93,10 +98,23 @@ export class InternalReleaseController {
     if (!currentVersion) throw new BadRequestException('versionTag 必填');
     const operator = body?.operator || 'pipeline-script';
 
+    const meta = {
+      action: 'internal.release.pointer',
+      env,
+      component: moduleKey,
+      user: operator,
+    };
+
     // env-dir 应用：磁盘指针 + 应用环境版本表（指针格式只在 entry-pointer.ts 一处实现）
     const app = await this.appsService.findAppOrNull(moduleKey);
     if (app && app.deployMode === 'env-dir') {
-      const r = await this.appsService.switchVersion(moduleKey, env, currentVersion, operator);
+      const r = await this.guard.run(
+        req,
+        meta,
+        () => this.appsService.switchVersion(moduleKey, env, currentVersion, operator),
+        // 留痕要能还原「谁把 prod 从哪个版本切到了哪个版本」
+        (res) => `切指针（env-dir）${res.from ?? '-'} → ${res.to}${res.unchanged ? '（无变化）' : ''}`,
+      );
       return {
         ok: true,
         mode: 'env-dir',
@@ -108,15 +126,21 @@ export class InternalReleaseController {
       };
     }
 
-    await this.registry.setPointer({
-      env,
-      moduleKey,
-      currentVersion,
-      deployedBy: operator,
-      taskId: body?.taskId,
-      // lock（诊断 #6）：脚本入口此前无锁；同一 owner 在同一「模块 × 环境」上串行
-      lock: { owner: `script:${operator}` },
-    });
+    await this.guard.run(
+      req,
+      meta,
+      () =>
+        this.registry.setPointer({
+          env,
+          moduleKey,
+          currentVersion,
+          deployedBy: operator,
+          taskId: body?.taskId,
+          // lock（诊断 #6）：脚本入口此前无锁；同一 owner 在同一「模块 × 环境」上串行
+          lock: { owner: `script:${operator}` },
+        }),
+      () => `切指针（legacy）→ ${currentVersion}`,
+    );
     return { ok: true, mode: 'legacy', env, moduleKey, currentVersion };
   }
 }

@@ -4,6 +4,8 @@ import { DeployController } from './deploy.controller';
 import { InternalReleaseController } from './internal-release.controller';
 import { DeployService } from './deploy.service';
 import { AuditModule } from '../audit/audit.module';
+// 内部接口守卫（诊断 #7）：鉴权 + 限流 + 来源白名单 + 审计
+import { CommonModule } from '../common/common.module';
 import { EnvironmentModule } from '../environment/environment.module';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
 import { ServerModule } from '../server/server.module';
@@ -23,6 +25,8 @@ import { AppsModule } from '../apps/apps.module';
 import { ConfigCenterModule } from '../config/config.module';
 // 按环境分流：prod 的指针/配置镜像写到云数据库（design.md §5）
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
+// SSH 目标机解析 + 远程执行（诊断 #15 收敛到一处）
+import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 
 /**
  * 部署管理模块
@@ -30,6 +34,7 @@ import { CloudDbModule } from '../cloud-db/cloud-db.module';
 @Module({
   imports: [
     AuditModule,
+    CommonModule,
     EnvironmentModule,
     ModuleRegistryModule,
     ServerModule,
@@ -40,6 +45,7 @@ import { CloudDbModule } from '../cloud-db/cloud-db.module';
     ReleaseRegistryModule,
     AppsModule,
     CloudDbModule,
+    RemoteDeliveryModule,
     // 配置中心（下发配置到服务 .env.generated）
     ConfigCenterModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'child_process';
+import { redactSecrets } from '../common/redact';
 import { CommandService, buildChildEnv } from './command.service';
 import { killShellProcess } from './shell-process';
 
@@ -98,9 +99,18 @@ export class SpawnShellRunner implements ShellRunner {
         resolve(code ?? 1);
       };
 
+      /**
+       * 落库前统一脱敏（诊断 #8）。
+       *
+       * 脚本 env 里带着 `CONSOLE_TOKEN`（= `INTERNAL_API_KEY`，见
+       * `pipeline.service.ts:419-420`）。脚本只要有一句 `set -x`，bash 就会把
+       * `+ curl -H "x-internal-key: <真实 key>"` 回显到 stderr；此前这里原样落库 →
+       * 内部 key 永久写进 `deploy_tasks.logs` 并展示在 UI 上。
+       * 注意只脱敏**凭据**，不脱敏 IP/端口 —— 那是排障最需要的信息。
+       */
       const push = (raw: string, prefix = '') => {
         for (const line of String(raw).split('\n').filter(Boolean)) {
-          req.onLog?.(`${prefix}${line}`);
+          req.onLog?.(redactSecrets(`${prefix}${line}`));
         }
       };
       child.stdout.on('data', (d: Buffer) => push(String(d)));

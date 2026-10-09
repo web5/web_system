@@ -38,6 +38,9 @@ import {
 // 版本注册表：指针双写（legacy deploy_deployments + 新模型 deploy_app_env_versions）
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
+// 统一脱敏（诊断 #8）：远端回显 / 异常消息落库前脱掉凭据
+import { redactSecrets } from '../common/redact';
+import { SshExecService } from '../remote/ssh-exec.service';
 
 /** 远程命令默认 exec 超时（可配 `SSH_EXEC_TIMEOUT_MS`）：与 shell-runner 的 10min 对齐 */
 const DEFAULT_SSH_EXEC_TIMEOUT_MS = 10 * 60 * 1000;
@@ -117,6 +120,8 @@ export class DeployService {
     private readonly serverService: ServerService,
     // 主机管理（新模型）：服务 × 环境 → 主机组 → 地址/SSH 凭据
     private readonly hostsService: HostsService,
+    // SSH 目标机解析 + 远程执行的唯一实现（诊断 #15 收敛，见 getSshConfig 委托）
+    private readonly sshExec: SshExecService,
     private readonly stageCommands: StageCommandService,
     private readonly commands: CommandService,
     // env-dir 应用（微前端）的「部署」= 切 env 入口指针，走应用域同一实现
@@ -1636,9 +1641,12 @@ export class DeployService {
             errOut += d.toString();
           });
           stream.on('close', (code: number) => {
-            if (code !== 0) return done(new Error(`远程命令退出码 ${code}: ${(errOut || out).trim()}`));
-            if (errOut.trim()) this.logger.warn(`[${tag}] 远程 stderr: ${errOut.trim()}`);
-            done(undefined, out);
+            // 远端回显同样要脱敏（诊断 #8）：远端命令里若带 `set -x` 或打印了
+            // 含凭据的环境，输出会经异常消息/日志一路落到 UI 与 deploy_tasks.logs
+            const tail = redactSecrets((errOut || out).trim());
+            if (code !== 0) return done(new Error(`远程命令退出码 ${code}: ${tail}`));
+            if (errOut.trim()) this.logger.warn(`[${tag}] 远程 stderr: ${redactSecrets(errOut.trim())}`);
+            done(undefined, redactSecrets(out));
           });
         });
       });
@@ -1671,35 +1679,15 @@ export class DeployService {
   /**
    * 获取 SSH 配置（**主机管理优先**，回退旧表 deploy_servers 的 <env>-default）
    */
+  /**
+   * 环境 → SSH 目标机（诊断 #15 收敛）。
+   *
+   * 此前这套「主机管理优先、回落服务器管理默认机」的解析在本仓有三份
+   * （deploy / monitor，新增能力还会抄第四份），一旦漂移就是「连错机器 / 投递到没人读的目录」。
+   * 现统一委托 `SshExecService.resolve` —— 行为不变，额外获得**回落必告警**
+   * （未登记主机时不再静默用默认机）。
+   */
   private async getSshConfig(env: string) {
-    let host: string;
-    let sshUser: string;
-    let sshKeyPath: string | undefined;
-    const h = (await this.hostsService.resolveEnvHosts(env))[0] ?? null;
-    if (h) {
-      host = h.host;
-      sshUser = h.sshUser;
-      sshKeyPath = h.sshKeyPath || undefined;
-    } else {
-      const srv = await this.serverService.resolveEnvDefaultServer(env);
-      if (!srv) {
-        throw new BadGatewayException(
-          `环境 ${env} 无可用主机：请先在「基础设施 → 主机管理」登记，或在「服务器管理」配置 <env>-default`,
-        );
-      }
-      host = srv.host;
-      sshUser = srv.sshUser;
-      sshKeyPath = srv.sshKeyPath || undefined;
-    }
-    let privateKeyPath = sshKeyPath || '~/.ssh/id_ed25519_servers';
-    if (privateKeyPath.startsWith('~')) {
-      privateKeyPath = privateKeyPath.replace(/^~/, process.env.HOME || '');
-    }
-    if (!fs.existsSync(privateKeyPath)) {
-      throw new BadGatewayException(
-        `环境 ${env} 的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机，或改「主机管理」的 sshKeyPath`,
-      );
-    }
-    return { host, port: 22, username: sshUser, privateKey: fs.readFileSync(privateKeyPath) };
+    return this.sshExec.resolve(env);
   }
 }
