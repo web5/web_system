@@ -1,24 +1,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { moduleArtifactsRoot } from '../pipeline/release-paths';
 
 /**
  * 入口指针工具（微前端域 · P1）
  *
  * 设计依据：specs/deploy-console-domain-split/design.md v2 §3（Q105-B）+ tech-design.md §2.1（T1 定稿）
  *
- * 产物布局（**相对静态根** `staticRoot`）：
+ * 产物布局：
  * ```
- * <staticRoot>/static/modules/<appKey>/
+ * <ws>/servers/gateway/public/static/modules/<appKey>/
  *   <envId>/
  *     index.js          ← 入口指针（no-cache）：指向当前版本
  *     <version>/        ← 版本目录（immutable）
  *       index.js  index.css  assets/*
  * ```
- *
- * ⚠️ `staticRoot` 是 **gateway 的静态伺服根**（`STATIC_PUBLIC_ROOT`），
- * 不是发布目录：本机默认才是 `<RELEASE_WORKSPACE>/servers/gateway/public`，
- * prod 的外置静态根是 `/data/web_system_static/public`（诊断 #3，2026-10-09）。
- * 落点由 `EnvArtifactService` 按环境解析后传入，本文件只认静态根。
  *
  * 入口指针写法 **A'（System.register 版）**：命名导出 + `default` 双透传。
  *
@@ -51,40 +47,37 @@ export function entryPointerCss(version: string): string {
   return `@import url('./${version}/index.css');\n`;
 }
 
-/** 静态根内的微前端产物相对路径（与 gateway 静态伺服布局一致） */
-export const STATIC_MODULES_REL = 'static/modules';
-
-/** `<staticRoot>/static/modules/<appKey>/<envId>` */
-export function envArtifactsDir(staticRoot: string, appKey: string, envId: string): string {
-  return path.join(staticRoot, STATIC_MODULES_REL, appKey, envId);
+/** `<ws>/servers/gateway/public/static/modules/<appKey>/<envId>` */
+export function envArtifactsDir(releaseWorkspace: string, appKey: string, envId: string): string {
+  return path.join(moduleArtifactsRoot(releaseWorkspace, appKey), envId);
 }
 
 /** 某版本产物目录（version 可含 `/`，如 `default/1a2b3c4`） */
 export function envVersionDir(
-  staticRoot: string,
+  releaseWorkspace: string,
   appKey: string,
   envId: string,
   version: string,
 ): string {
-  return path.join(envArtifactsDir(staticRoot, appKey, envId), version);
+  return path.join(envArtifactsDir(releaseWorkspace, appKey, envId), version);
 }
 
 /** 某版本产物是否就绪（入口文件存在） */
 export function hasEnvVersion(
-  staticRoot: string,
+  releaseWorkspace: string,
   appKey: string,
   envId: string,
   version: string,
 ): boolean {
-  return fs.existsSync(path.join(envVersionDir(staticRoot, appKey, envId, version), 'index.js'));
+  return fs.existsSync(path.join(envVersionDir(releaseWorkspace, appKey, envId, version), 'index.js'));
 }
 
 /**
  * 列出某环境下的产物版本（按 mtime 倒序）。
  * 兼容两种布局：一级即版本（`<version>/index.js`）与命名空间（`<ns>/<commit>/index.js`）。
  */
-export function listEnvVersions(staticRoot: string, appKey: string, envId: string): string[] {
-  const base = envArtifactsDir(staticRoot, appKey, envId);
+export function listEnvVersions(releaseWorkspace: string, appKey: string, envId: string): string[] {
+  const base = envArtifactsDir(releaseWorkspace, appKey, envId);
   if (!fs.existsSync(base)) return [];
   const found: { ref: string; mtime: number }[] = [];
   for (const d of fs.readdirSync(base, { withFileTypes: true })) {
@@ -110,12 +103,12 @@ export function listEnvVersions(staticRoot: string, appKey: string, envId: strin
  * @returns 实际写入的绝对路径（js 必有，css 视产物而定）
  */
 export function writeEnvEntryPointer(
-  staticRoot: string,
+  releaseWorkspace: string,
   appKey: string,
   envId: string,
   version: string,
 ): { js: string; css: string | null } {
-  const dir = envArtifactsDir(staticRoot, appKey, envId);
+  const dir = envArtifactsDir(releaseWorkspace, appKey, envId);
   fs.mkdirSync(dir, { recursive: true });
   const js = path.join(dir, 'index.js');
   fs.writeFileSync(js, entryPointerJs(version), 'utf-8');
@@ -129,20 +122,14 @@ export function writeEnvEntryPointer(
 
 /** 读回入口指针当前指向的版本（展示/校验用；解析失败返回 null） */
 export function readEnvEntryPointer(
-  staticRoot: string,
+  releaseWorkspace: string,
   appKey: string,
   envId: string,
 ): string | null {
-  const file = path.join(envArtifactsDir(staticRoot, appKey, envId), 'index.js');
+  const file = path.join(envArtifactsDir(releaseWorkspace, appKey, envId), 'index.js');
   if (!fs.existsSync(file)) return null;
-  return parsePointerVersion(fs.readFileSync(file, 'utf-8'));
-}
-
-/**
- * 从指针文件内容解析当前版本（本机 / 远端 `cat` 回读共用）。
- * 兼容两种历史写法：System.register(['./<v>/index.js'], …) 与旧 ESM 的 from './<v>/index.js'
- */
-export function parsePointerVersion(content: string): string | null {
+  const content = fs.readFileSync(file, 'utf-8');
+  // 兼容两种历史写法：System.register(['./<v>/index.js'], …) 与旧 ESM 的 from './<v>/index.js'
   const m = content.match(/'\.\/(.+?)\/index\.js'/);
   return m ? m[1] : null;
 }
