@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { InternalGuardService } from './internal-guard.service';
+import { GatewayCacheService } from './gateway-cache.service';
 
 /**
  * 通用设施模块。
@@ -11,7 +12,7 @@ import { InternalGuardService } from './internal-guard.service';
  */
 @Module({
   imports: [AuditModule],
-  providers: [InternalGuardService],
-  exports: [InternalGuardService],
+  providers: [InternalGuardService, GatewayCacheService],
+  exports: [InternalGuardService, GatewayCacheService],
 })
 export class CommonModule {}

@@ -63,4 +63,52 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       fs.rmSync(src, { recursive: true, force: true });
     });
   });
+
+  /**
+   * 诊断 #3 遗留：远端产物根此前是硬编码常量（`/data/web_system/servers/gateway/public/...`），
+   * 而 prod 的静态根是 `/data/web_system_static/public` —— 硬编码意味着换环境就是
+   * 「投递成功但页面 404」，且日志里看不出落点错了。
+   */
+  describe('remoteModulesRoot（远端产物根按环境取值）', () => {
+    it('显式 REMOTE_MODULES_ROOT_<ENV> 优先', () => {
+      cfg.get.mockImplementation((k: string) =>
+        k === 'REMOTE_MODULES_ROOT_PROD' ? '/data/prod/modules/' : undefined,
+      );
+      // 结尾斜杠要剥掉，否则会出现 `//moduleKey` 这种落点
+      expect(svc.remoteModulesRoot('prod')).toBe('/data/prod/modules');
+    });
+
+    it('回落 STATIC_PUBLIC_ROOT_<ENV> + /static/modules（与 #3 的静态根同口径）', () => {
+      cfg.get.mockImplementation((k: string) =>
+        k === 'STATIC_PUBLIC_ROOT_PROD' ? '/data/web_system_static/public' : undefined,
+      );
+      expect(svc.remoteModulesRoot('prod')).toBe(
+        '/data/web_system_static/public/static/modules',
+      );
+    });
+
+    it('都没配 → 旧常量（未配置时不会突然改投递落点）', () => {
+      cfg.get.mockImplementation(() => undefined);
+      expect(svc.remoteModulesRoot('dev')).toBe(
+        '/data/web_system/servers/gateway/public/static/modules',
+      );
+    });
+
+    it('uploadDist 的 dest 走按环境的根（不再写死）', () => {
+      const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
+      fs.writeFileSync(path.join(src, 'index.js'), 'x');
+      cfg.get.mockImplementation((k: string) =>
+        k === 'PROD_SERVER'
+          ? '1.2.3.4'
+          : k === 'PROD_USER'
+            ? 'root'
+            : k === 'STATIC_PUBLIC_ROOT_PROD'
+              ? '/data/web_system_static/public'
+              : undefined,
+      );
+      const res = svc.uploadDist({ env: 'prod', moduleKey: 'portal', version: 'v9', srcDir: src });
+      expect(res.dest).toBe('/data/web_system_static/public/static/modules/portal/v9');
+      fs.rmSync(src, { recursive: true, force: true });
+    });
+  });
 });

@@ -21,7 +21,14 @@ export function defaultReleaseWorkspace(): string {
 /** 发布目录内 gateway 静态产物相对布局（与本地发布目录 / 远程部署目录布局一致） */
 export const STATIC_MODULES_REL = 'servers/gateway/public/static/modules';
 
-/** 远程服务器投递根目录（scp 目标，与发布目录布局一致） */
+/**
+ * 远程服务器投递根目录（scp 目标，与发布目录布局一致）——**仅作未配置时的回落**。
+ *
+ * 诊断 #3 遗留：这条路径只适用于「与控制台同机同布局」的环境（dev 那种）。
+ * prod 的静态根是 `/data/web_system_static/public`（完全不同），
+ * 因此真正的取值在 `RemoteDeliveryService.remoteModulesRoot(env)`：
+ * `REMOTE_MODULES_ROOT_<ENV>` → `STATIC_PUBLIC_ROOT_<ENV>` + /static/modules → 本常量。
+ */
 export const REMOTE_MODULES_ROOT = '/data/web_system/servers/gateway/public/static/modules';
 
 /** 发布目录（本地 fs）中某模块产物根目录 */

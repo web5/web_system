@@ -41,6 +41,7 @@ import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 // 统一脱敏（诊断 #8）：远端回显 / 异常消息落库前脱掉凭据
 import { redactSecrets } from '../common/redact';
 import { SshExecService } from '../remote/ssh-exec.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
 
 /** 远程命令默认 exec 超时（可配 `SSH_EXEC_TIMEOUT_MS`）：与 shell-runner 的 10min 对齐 */
 const DEFAULT_SSH_EXEC_TIMEOUT_MS = 10 * 60 * 1000;
@@ -134,6 +135,8 @@ export class DeployService {
     private readonly registry: ReleaseRegistryService,
     // 按环境分流（2026-10-08）：prod 的指针镜像写到云数据库（prod gateway 的读取源）
     private readonly splitWriter: EnvSplitWriterService,
+    // gateway 版本缓存失效通知（诊断 #16）：实现已下沉到该服务，与 UI 切换 / internal pointer 共用
+    private readonly gatewayCache: GatewayCacheService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -401,22 +404,16 @@ export class DeployService {
    * 失败只告警不抛错：部署本身已成功，最多 10s 缓存自然过期。
    */
   private async notifyGatewayRefreshCache(reason: string, envId?: string): Promise<void> {
-    const base = this.configService.get<string>('GATEWAY_INTERNAL_URL') || '';
-    const key = await this.gatewayServiceKey(envId);
-    if (!base || !key) {
-      this.logger.warn(
-        `未配置 GATEWAY_INTERNAL_URL / GATEWAY_SERVICE_KEY，跳过 gateway 缓存刷新（${reason}；最多 10s 后自然生效）`,
-      );
-      return;
-    }
-    try {
-      await this.postNoBody(`${base.replace(/\/+$/, '')}/api/internal/gateway/reload`, key);
-      this.logger.log(`已通知 gateway 刷新缓存（${reason}）`);
-    } catch (e) {
-      this.logger.warn(
-        `gateway 缓存刷新失败（${reason}）：${(e as Error).message}（最多 10s 后自然生效）`,
-      );
-    }
+    // 诊断 #16：实现下沉到 GatewayCacheService，与 UI 切换 / internal pointer 共用同一份。
+    // 这里保留方法是为了不改动调用方与既有单测；凭据仍走「配置中心优先」的那条链。
+    await this.gatewayCache.notifyVersionChange({
+      env: envId || '',
+      moduleKey: '-',
+      version: '-',
+      reason,
+      // 凭据仍走本服务那条「配置中心优先」的取值链（控制台自身不下发 .env）
+      serviceKey: await this.gatewayServiceKey(envId),
+    });
   }
 
   /**

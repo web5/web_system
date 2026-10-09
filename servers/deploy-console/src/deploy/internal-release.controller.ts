@@ -1,10 +1,11 @@
-import { Controller, Post, Body, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Req, BadRequestException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
 import { InternalGuardService } from '../common/internal-guard.service';
 import { DeployService } from './deploy.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { AppsService } from '../apps/apps.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
 
 /**
  * 内部发布接口（`/api/internal/release/*`）——供**流水线节点脚本**调用。
@@ -36,11 +37,15 @@ import { AppsService } from '../apps/apps.service';
 @Controller('internal/release')
 @Public()
 export class InternalReleaseController {
+  private readonly logger = new Logger(InternalReleaseController.name);
+
   constructor(
     private readonly deployService: DeployService,
     private readonly registry: ReleaseRegistryService,
     private readonly appsService: AppsService,
     private readonly guard: InternalGuardService,
+    /** gateway 版本缓存失效通知（诊断 #16）：后端切指针后 gateway 也要立刻感知 */
+    private readonly gatewayCache: GatewayCacheService,
   ) {}
 
   @Post('versions')
@@ -149,6 +154,21 @@ export class InternalReleaseController {
         }),
       () => `切指针（legacy）→ ${currentVersion}`,
     );
+    // 后端/legacy 走 registry.setPointer，不经过 AppsService —— 通知必须在这里补，
+    // 否则 deploy.service 之外的后端发布路径都不刷 gateway 缓存（诊断 #16）
+    try {
+      await this.gatewayCache.notifyVersionChange({
+        env,
+        moduleKey,
+        version: currentVersion,
+        reason: `internal/release/pointer（legacy）`,
+      });
+    } catch (e) {
+      // 同上：指针已写成功，通知失败不影响本次结果
+      this.logger.warn(
+        `gateway 缓存刷新失败（${moduleKey}/${env} → ${currentVersion}）：${(e as Error).message}（最多 10s 后自然生效）`,
+      );
+    }
     return { ok: true, mode: 'legacy', env, moduleKey, currentVersion };
   }
 }

@@ -12,6 +12,7 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { ServerService } from '../server/server.service';
 import { HostsService } from '../hosts/hosts.service';
 import { SshExecService } from '../remote/ssh-exec.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
 import { StageCommandService } from '../stage-command/stage-command.service';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -93,6 +94,7 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         {
           provide: StageCommandService,
           useValue: { resolve: jest.fn().mockResolvedValue(null) },
@@ -223,6 +225,7 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
           },
         },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -352,6 +355,7 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -434,6 +438,7 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -531,6 +536,7 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
@@ -619,6 +625,7 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
         { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
         { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
         { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
         { provide: CommandService, useValue: commands },
         { provide: ConfigCenterService, useValue: configCenter },

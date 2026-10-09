@@ -70,13 +70,40 @@ export class RemoteDeliveryService {
   }
 
   /**
+   * 远端静态产物根（诊断 #3 遗留：此前是 `release-paths.ts` 里的硬编码常量）。
+   *
+   * 为什么不能硬编码一条路径：prod 的静态根**不在** gateway 目录下
+   * （实测 `/data/web_system_static/public`，与 dev 的
+   * `/data/web_system/servers/gateway/public` 完全不同）。硬编码的那条只适用于
+   * 与控制台同机同布局的环境 —— 换台机器就是「投递成功但页面 404」，且日志看不出来。
+   *
+   * 取值优先级（与 `apps/static-target.ts` 同口径，避免两处再漂移）：
+   * 1. `REMOTE_MODULES_ROOT_<ENV>`（显式指定，最直白）
+   * 2. `STATIC_PUBLIC_ROOT_<ENV>` + `/static/modules`（静态根已在 #3 按环境配置过）
+   * 3. 旧常量（保持既有行为，未配置时不会突然改投递落点）
+   */
+  remoteModulesRoot(env: string): string {
+    const e = (env || '').toUpperCase();
+    const explicit = (this.configService.get<string>(`REMOTE_MODULES_ROOT_${e}`) || '').trim();
+    if (explicit) return explicit.replace(/\/+$/, '');
+
+    const staticRoot = (this.configService.get<string>(`STATIC_PUBLIC_ROOT_${e}`) || '').trim();
+    // 静态根下的布局是 `static/modules`（见 apps/static-target.ts 的 envArtifactsRel），
+    // 与**发布目录内**的 `servers/gateway/public/static/modules` 不是一回事 —— 混用会得到
+    // `/data/web_system_static/public/servers/gateway/public/static/modules` 这种落点
+    if (staticRoot) return `${staticRoot.replace(/\/+$/, '')}/static/modules`;
+
+    return releasePaths.REMOTE_MODULES_ROOT;
+  }
+
+  /**
    * 远程投递 dist 产物：tar → scp → ssh 解压到远端
-   * `<REMOTE_MODULES_ROOT>/<moduleKey>/<version>`，返回远端目标（供日志/result）。
+   * `<远端静态产物根>/<moduleKey>/<version>`，返回远端目标（供日志/result）。
    */
   uploadDist(input: { env: string; moduleKey: string; version: string; srcDir: string }): RemoteDeliveryResult {
     const { remoteHost, remoteUser } = this.resolveTarget(input.env);
     const sshTarget = remoteUser ? `${remoteUser}@${remoteHost}` : remoteHost;
-    const dest = `${releasePaths.REMOTE_MODULES_ROOT}/${input.moduleKey}/${input.version}`;
+    const dest = `${this.remoteModulesRoot(input.env)}/${input.moduleKey}/${input.version}`;
     const tar = `/tmp/${input.moduleKey}-${input.version}.tar.gz`;
     const cwd = process.cwd();
 

@@ -8,6 +8,8 @@ import { ServerModule } from '../server/server.module';
 import { HostsModule } from '../hosts/hosts.module';
 import { AuditModule } from '../audit/audit.module';
 import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
+// 远程命令执行通道（诊断 #15）：监控不再自带 ssh2 实现，改复用发布侧那条
+import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 
 /**
  * 服务监控与自助诊断模块
@@ -20,6 +22,7 @@ import { DeployServiceEnvEntity } from '../entities/deploy-service-env.entity';
     EnvironmentModule,
     ServerModule,
     HostsModule,
+    RemoteDeliveryModule,
     TypeOrmModule.forFeature([DeployServiceEnvEntity]),
     // 重启等运维操作需留审计
     AuditModule,
