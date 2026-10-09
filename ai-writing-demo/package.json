@@ -1,0 +1,21 @@
+{
+  "name": "ai-writing-demo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI 协作写作编辑最小可运行原型（Vue3+Tiptap+Yjs+NestJS），验证 AI 受控 peer + 流式 ghost 建议 + 人机回合协议",
+  "workspaces": [
+    "apps/*",
+    "servers/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm -w @demo/collab run start:dev",
+    "dev:web": "npm -w @demo/web run dev",
+    "build": "npm -w @demo/web run build && npm -w @demo/collab run build",
+    "start": "npm -w @demo/collab run start:prod & npm -w @demo/web run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
