@@ -1,0 +1,20 @@
+<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
+  <!-- admin 模块页签图标（与 portal 区分）：portal = 品牌橙底 + 白豆（整块实底，见同目录 favicon.svg），
+       admin = 透明底 + 品牌橙豆（不铺底色，页签栏底色直接透出来）。
+       豆形取自品牌 logo，等比放大 1.5x 铺到 75% 画布（去掉底色后按原比例会显得过小）。
+       色值：豆 #F97316（brand.500）/ 眼 #FFFFFF / 高光 #FDE68A；登记见 docs/ui/color-reference.md §4 品牌图标例外。
+
+       浏览器访问地址是**站根** `/favicon-admin.svg` —— 本文件由 gateway 静态根提供
+       （dev = servers/gateway/public/，prod = 外置根 /data/web_system_static/public/）。
+       基座运行时按模块切换图标：apps/shell/src/module-branding.ts。
+
+       ⚠️ 为什么不放模块版本目录：图标是品牌资产，不随代码版本走。此前 module-branding 用
+       `BASE_URL + 'favicon.svg'`（解析成 /static/modules/shell/<env>/<版本>/favicon.svg），
+       产物清理只保留有限版本，旧版本目录被删后该地址即 404。
+
+       ⚠️ 同一份图标另存于 apps/admin/public/favicon-admin.svg（admin 独立构建/直连访问时
+       由该目录充当站根），两处需保持同步。 -->
+  <path d="M 48 6 C 69 6, 84 21, 84 48 C 84 78, 69 90, 48 90 C 27 90, 12 75, 12 48 C 12 21, 27 6, 48 6 Z" fill="#F97316"/>
+  <circle cx="48" cy="48" r="12" fill="#FFFFFF"/>
+  <circle cx="48" cy="46.5" r="4.5" fill="#FDE68A"/>
+</svg>

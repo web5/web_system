@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <!-- ⚠️ favicon 必须用**绝对地址**：这里渲染的是基座宿主页，文档 URL 可能是
+       `/`、`/portal/xxx`、`/admin/system/dict` 等任意深链接，相对路径 `favicon.svg`
+       会随文档 URL 解析 → `/portal/favicon.svg`、`/admin/system/favicon.svg` → **404 无图标**。
+       文件由 gateway 静态根提供（dev 的 `servers/gateway/public/`、prod 的外置根），站根恒可达。
+       运行时按模块切换图标见 src/module-branding.ts（同样用绝对地址）。 -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>科豆AI</title>
   <!-- 公共依赖从自建 CDN 加载（挂全局），shell 不再打包这些库（减小包体积）。
