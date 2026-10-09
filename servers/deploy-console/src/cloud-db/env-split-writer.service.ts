@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { CloudDbService } from './cloud-db.service';
+import { redactSecretsAndAddress } from '../common/redact';
 
 export interface MirrorPointerInput {
   env: string;
@@ -378,13 +379,14 @@ export class EnvSplitWriterService {
 }
 
 /**
- * 错误信息里的公网地址一律脱敏（IP:端口 / 云数据库域名）。
- * 异常消息会经 HTTP 响应回到控制台 UI 与流水线脚本日志，不该带上公网入口信息。
+ * 异常消息脱敏：凭据 + 公网地址。
+ *
+ * 委托 `common/redact`（诊断 #8）统一实现 —— 以前这里只做地址脱敏，
+ * 而云库连接串里可能带着库密码，异常消息同样会回到 UI 与脚本日志。
+ * 占位符沿用历史的 `<云库地址>` 措辞（运维已习惯），故再映射一次。
  */
 function redactEndpoint(msg: string): string {
-  return String(msg)
-    .replace(/(\d{1,3}\.){3}\d{1,3}(:\d+)?/g, '<云库地址>')
-    .replace(/[\w.-]+\.sql\.tencentcdb\.com(:\d+)?/g, '<云库地址>');
+  return redactSecretsAndAddress(msg).replace(/<address>/g, '<云库地址>');
 }
 
 /**

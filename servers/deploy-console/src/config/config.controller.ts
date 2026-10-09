@@ -17,7 +17,7 @@ import { ConfigService, UpsertConfigDto, renderGeneratedEnvFile } from './config
 import { SECRET_UNRECORDED } from './config-crypto';
 import { ConfigScope } from '../entities/config-item.entity';
 import { CurrentUser } from '../common/decorators';
-import { assertInternalKey } from '../common/internal-key';
+import { InternalGuardService } from '../common/internal-guard.service';
 import { Public } from '../auth/public.decorator';
 import { AuditService } from '../audit/audit.service';
 
@@ -34,6 +34,8 @@ export class ConfigController {
   constructor(
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    // 诊断 #7：内部下发接口同样要限流 + 留痕（它把配置明文交给脚本）
+    private readonly internalGuard: InternalGuardService,
   ) {}
 
   @Get('items')
@@ -69,18 +71,25 @@ export class ConfigController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    assertInternalKey(req);
     const env = String(envId || '').trim();
     const key = String(serviceKey || '').trim();
     if (!env) throw new BadRequestException('envId 必填');
     if (!key) throw new BadRequestException('serviceKey 必填');
 
-    // 按需：没有 module 级条目 = 该服务没在配置中心声明需要配置 → 不下发（免得凭空落盘）
-    if (!(await this.configService.hasModuleScope(env, key))) {
-      return res.status(204).end();
-    }
-    const items = await this.configService.dispatchPayload(env, key);
-    if (!items.length) {
+    // 鉴权 + 限流 + 来源白名单 + 审计（审计失败不阻断，见 InternalGuardService）
+    const items = await this.internalGuard.run(
+      req,
+      { action: 'internal.config.dispatch', env, component: key },
+      async () => {
+        // 按需：没有 module 级条目 = 该服务没在配置中心声明需要配置 → 不下发（免得凭空落盘）
+        if (!(await this.configService.hasModuleScope(env, key))) return null;
+        return this.configService.dispatchPayload(env, key);
+      },
+      // 只记「下发了多少个键」，明文与键名一律不进审计
+      (r) => (r ? `下发配置 ${r.length} 个键` : '无 module 级条目，未下发（204）'),
+    );
+
+    if (!items || !items.length) {
       return res.status(204).end();
     }
     return res

@@ -26,6 +26,11 @@
  *                 L4 变量引用存在性 / L5 ssh 行尾缺续行符
  *   warning（提示）：L6 危险命令疑似本地上下文（远端 ssh 块内的 rm -rf 会误报，仅提示）
  *
+ * 聚合规则（跨 action，最后统一检查）：
+ *   L7（error）构建 RELEASE_TAG 与投递 VER 的**环境段口径**必须一致（仅 site-version）
+ *   L8（error）env-dir 应用的投递路径必须含 ${DEPLOY_ENV}（只检查 dev/prod）
+ *   L9（error）调 $CONSOLE_API 的 curl 必须带 -f（否则 HTTP 失败静默通过）
+ *
  * ⚠️ L4 判据：只有「裸引用 ${X}」或「空兜底 ${X:-}」才算未声明；
  *    `${X:-具体值}` 视为脚本自带兜底，不报。误报修复见 undeclaredVars()。
  */
@@ -332,6 +337,116 @@ for (const a of actions) {
         + `产物 base 与落盘目录错位，页面资源 404（见 2026-10-08 基座事故）。`
         + ` 构建: ${tags.map((t) => t.expr).join(' , ')} ｜ 投递: ${vers.map((v) => v.expr).join(' , ')}`,
     });
+  }
+}
+
+/**
+ * 把以 `\` 结尾的续行合并成逻辑行（L9 用）。
+ * curl 命令常写成多行（每个 -H 一行），只看物理行会漏判。
+ * @returns {{line: number, text: string}[]} line = 该逻辑行的起始行号
+ */
+function logicalLines(script) {
+  const out = [];
+  const raw = String(script || '').split('\n');
+  let buf = '';
+  let start = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i];
+    if (!buf) start = i + 1;
+    const cont = /\\\s*$/.test(t);
+    buf += (buf ? '\n' : '') + (cont ? t.replace(/\\\s*$/, ' ') : t);
+    if (!cont) {
+      if (buf.trim()) out.push({ line: start, text: buf });
+      buf = '';
+    }
+  }
+  if (buf.trim()) out.push({ line: start, text: buf });
+  return out;
+}
+
+// L8：env-dir 应用投递路径必须含 ${DEPLOY_ENV}
+// 背景（2026-10-09 诊断 #3/#9）：env-dir（微前端）的产物布局是
+// `modules/<key>/<env>/<commit>/`，而磁盘入口指针写的是 `./<commit>/index.js`。
+// 投递脚本若用扁平口径（VER=${COMMIT_ID}），产物会落到 `modules/<key>/<commit>/`，
+// 与指针期望的层级错位 → 构建成功、投递成功、切指针成功，但页面 404。
+// L7 只覆盖 site-version（其 base 由 RELEASE_TAG 决定），env-dir 的这类错位无人检查。
+{
+  const ENV_DIR_APPS = new Set(['portal', 'admin']);
+  const GATED_ENVS = new Set(['dev', 'prod']);
+
+  const byPipe = new Map();
+  for (const a of actions) {
+    if (!byPipe.has(a.pipelineId)) byPipe.set(a.pipelineId, []);
+    byPipe.get(a.pipelineId).push(a);
+  }
+  const assignOf = (script, name) => {
+    const out = [];
+    const re = new RegExp(`(?:^|\\s)(?:export\\s+)?${name}\\s*=\\s*"([^"]*)"`, 'gm');
+    for (const m of (script || '').matchAll(re)) out.push(m[1].trim());
+    return out;
+  };
+  // 投递目标路径：VER 或含 modules/ 的目标目录表达式
+  const hasEnvSegment = (expr) => /\$\{?DEPLOY_ENV\}?/.test(expr);
+  /**
+   * 去掉注释行再判。
+   * 踩过的坑：脚本注释里常画布局示意（`static/modules/<key>/<envId>/<commit>/index.js`），
+   * 带 `<` `>` 占位符的描述文字会被当成真实路径 → 误报（实测命中过）。
+   * 另外只认**代码行**：注释以 `#` 开头（允许前置空白）。
+   */
+  const codeOf = (script) =>
+    String(script || '')
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+
+  for (const [pid, list] of byPipe) {
+    const appKey = (pid.match(/^tpl-(.+)-(?:dev|prod|local)$/) || [])[1];
+    if (!appKey || !ENV_DIR_APPS.has(appKey)) continue;
+    for (const a of list) {
+      if (!GATED_ENVS.has(a.taskName)) continue;
+      const code = codeOf(a.script);
+      // 投递动作：脚本里出现 modules/ 路径或 VER 赋值才判定为「投递」
+      const vers = assignOf(code, 'VER');
+      const isDeliver = vers.length > 0 || /static\/modules\//.test(code);
+      if (!isDeliver) continue;
+      const all = [...vers, ...(code.match(/static\/modules\/[^"'\\\s]+/g) || [])];
+      // 占位符描述（含 < > 或中文）不是真实路径，跳过
+      const bad = all.filter((e) => !hasEnvSegment(e) && !/[<>]/.test(e));
+      if (bad.length) {
+        errors.push({
+          rule: 'L8',
+          at: `${pid} / ${a.taskName} / ${a.name}`,
+          msg: `env-dir 应用投递路径缺 ${'${DEPLOY_ENV}'}：${bad.join(' , ')} → `
+            + `产物会落到 modules/<key>/<commit>/，与磁盘指针（./<commit>/index.js）错位，`
+            + `表现为「发布成功但页面 404」（见 2026-10-09 诊断 #3）。`,
+        });
+      }
+    }
+  }
+}
+
+// L9：调 $CONSOLE_API 的 curl 必须带 -f / --fail
+// 背景：动作脚本用 curl 调平台内部接口（写版本 / 切指针）。curl 默认 **HTTP 4xx/5xx
+// 也返回退出码 0**，脚本没有 set -e 或不检查返回码时，接口明确拒绝了（产物不存在、
+// 并发被锁、鉴权失败）脚本照样往下走 —— 这就是「脚本侧静默失败无门禁」。
+// 判据：逻辑行里同时出现 curl 与 CONSOLE_API，且不含 -f / --fail → error。
+{
+  for (const a of actions) {
+    const at = `${a.pipelineId} / ${a.taskName} / ${a.name}`;
+    for (const l of logicalLines(a.script)) {
+      if (!/\bcurl\b/.test(l.text)) continue;
+      if (!/CONSOLE_API/.test(l.text)) continue;
+      if (/(^|\s)(-{1,2}[a-zA-Z-]*f[a-zA-Z-]*\b|--fail)(\s|$)/.test(l.text)) continue;
+      // 允许显式检查退出码/HTTP 码的写法（等价于 -f 的效果）
+      if (/\$?\?\s*(?:-ne|!=)\s*0|HTTP_CODE|http_code|-o\s+\/dev\/null\s+-w/.test(l.text)) continue;
+      errors.push({
+        rule: 'L9',
+        at,
+        msg: `第 ${l.line} 行 curl 调 $CONSOLE_API 未带 -f：HTTP 4xx/5xx 也会返回 0，`
+          + `接口拒绝（产物不存在 / 并发锁 409 / 鉴权失败）时脚本照样继续 → 静默失败。`
+          + ` 改法：curl -fsS ... 或 curl -f ...`,
+      });
+    }
   }
 }
 

@@ -22,6 +22,34 @@ export interface ArtifactCleanupResult {
   removed: string[];
 }
 
+/** 产物根下一级目录的分类结果（见 {@link ArtifactStoreService.listL1} 的三种布局） */
+export interface L1Entry {
+  name: string;
+  mtime: number;
+  /** 一级目录即版本（legacy） */
+  isVersion: boolean;
+  /** 该层是 env-dir 入口指针层时，指针当前指向的版本（纯 commit） */
+  pointerTarget: string | null;
+  /** 该层是否存在 index.js（指针或版本入口） */
+  hasEntry: boolean;
+}
+
+/**
+ * 读入口指针指向的版本（纯函数）。
+ *
+ * 指针文本形如 `System.register(['./<version>/index.js'], …)`（写法 A′）。
+ * 解析不出就返回 null —— 调方据此当作「不是指针层」，不会误保护。
+ */
+export function readPointerTarget(entryFile: string): string | null {
+  try {
+    const content = fs.readFileSync(entryFile, 'utf-8');
+    const m = content.match(/['"]\.\/(.+?)\/index\.js['"]/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 静态产物存储工具（upload/cleanup 内置步骤的执行体）。
  *
@@ -55,19 +83,47 @@ export class ArtifactStoreService {
     return fs.existsSync(releasePaths.moduleArtifactEntry(this.workspace(), moduleKey, version));
   }
 
-  /** 列出某模块产物根的一级子目录（含 mtime，按 mtime 倒序），供内部使用 */
-  private listL1(moduleKey: string): { name: string; mtime: number; isVersion: boolean }[] {
+  /**
+   * 列出某模块产物根的一级子目录（含 mtime，按 mtime 倒序），供内部使用。
+   *
+   * 三种布局（诊断 #9 修正点）：
+   * - **legacy**：`modules/<m>/<commit>/index.js` —— 一级即版本
+   * - **流水线命名空间**：`modules/<m>/<pipeline>/<commit>/index.js` —— 一级无 index.js
+   * - **env-dir（微前端）**：`modules/<m>/<env>/index.js` 是**入口指针**，
+   *   真正的版本在其下的 `modules/<m>/<env>/<commit>/index.js`
+   *
+   * 旧的判定只看「一级目录含不含 index.js」，把 env-dir 的 **env 层误判成版本**：
+   * ① 它的 L2 版本目录永远扫不到 ⇒ 永不清理、无限增长；
+   * ② 更危险：一旦该 env 层 mtime 超过 minAge 且不在 keep 内，就会走 legacy 分支
+   *   `rmSync(<base>/<env>)` —— **连指针带所有版本整个删掉**，线上直接白屏。
+   *
+   * 修正后的判定：**有「含 index.js 的子目录」⇒ 该层是命名空间/env 层**，
+   * 只有「含 index.js 且无此类子目录」才是 legacy 版本。这条规则同时覆盖流水线
+   * 命名空间与 env-dir，不需要额外引入 deployMode 概念。
+   */
+  private listL1(moduleKey: string): L1Entry[] {
     const base = this.root(moduleKey);
     if (!fs.existsSync(base)) return [];
     return fs
       .readdirSync(base, { withFileTypes: true })
       .filter((d) => d.isDirectory())
-      .map((d) => ({
-        name: d.name,
-        mtime: fs.statSync(path.join(base, d.name)).mtimeMs,
-        // 一级目录含 index.js = legacy 版本；无 = 流水线命名空间
-        isVersion: fs.existsSync(path.join(base, d.name, 'index.js')),
-      }))
+      .map((d): L1Entry => {
+        const dir = path.join(base, d.name);
+        const entry = path.join(dir, 'index.js');
+        const hasEntry = fs.existsSync(entry);
+        const hasVersionChildren = fs
+          .readdirSync(dir, { withFileTypes: true })
+          .some((c) => c.isDirectory() && fs.existsSync(path.join(dir, c.name, 'index.js')));
+
+        return {
+          name: d.name,
+          mtime: fs.statSync(dir).mtimeMs,
+          isVersion: hasEntry && !hasVersionChildren,
+          // 有子版本 + 有 index.js ⇒ 那个 index.js 是入口指针（env-dir）
+          pointerTarget: hasEntry && hasVersionChildren ? readPointerTarget(entry) : null,
+          hasEntry,
+        };
+      })
       .sort((a, b) => b.mtime - a.mtime);
   }
 
@@ -155,12 +211,17 @@ export class ArtifactStoreService {
           removed.push(d.name);
         }
       } else {
-        // 流水线命名空间：清理其下的版本
+        // 命名空间 / env 层：清理其下的版本
         const nsKept: string[] = [];
         const nsVersions = this.listL2(moduleKey, d.name).sort((a, b) => b.mtime - a.mtime);
         for (const v of nsVersions) {
           const ref = `${d.name}/${v.name}`;
+          // env-dir：指针当前指向的版本必须受保护 —— 它是**线上正在服务的版本**。
+          // 少了这条，高频发布下清理有可能把当前版本删掉 ⇒ 已打开页面请求不到分包（白屏）。
+          // 调用方传入的 protectedVersions 未必覆盖它（那张表可能是空的或被绕过）。
+          const isPointerTarget = !!d.pointerTarget && d.pointerTarget === v.name;
           if (
+            isPointerTarget ||
             protectedVersions.has(ref) ||
             protectedVersions.has(v.name) ||
             nsKept.length < keep ||
@@ -173,8 +234,10 @@ export class ArtifactStoreService {
           }
         }
         kept.push(...nsKept);
-        // 空命名空间目录清理（无版本时移除）
-        if (nsVersions.length === 0) {
+        // 空命名空间目录清理：无版本**且无入口指针**时才移除。
+        // env-dir 的 env 层即使版本被清空，`index.js`（指针）也必须留着 —— 删了它
+        // 等于把该环境的入口文件删除，gateway 拼 index.html 时直接取不到模块。
+        if (nsVersions.length === 0 && !d.hasEntry) {
           fs.rmSync(path.join(base, d.name), { recursive: true, force: true });
         }
       }
