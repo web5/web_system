@@ -114,6 +114,8 @@ export class InternalReleaseController {
       currentVersion,
       deployedBy: operator,
       taskId: body?.taskId,
+      // lock（诊断 #6）：脚本入口此前无锁；同一 owner 在同一「模块 × 环境」上串行
+      lock: { owner: `script:${operator}` },
     });
     return { ok: true, mode: 'legacy', env, moduleKey, currentVersion };
   }

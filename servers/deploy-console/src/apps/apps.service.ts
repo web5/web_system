@@ -28,6 +28,15 @@ import { envEntryUrl } from './entry-pointer';
 import { EnvArtifactService } from './env-artifact.service';
 
 /**
+ * 应用域（UI 操作）的锁 owner：带来源前缀，排障时一眼看出「谁在发」。
+ * 同一 operator 在同一「模块 × 环境」上重入 → 补偿写指针时不会提前放锁。
+ */
+export function lockOwnerFor(operator?: string): string {
+  const who = operator && operator.trim() ? operator.trim() : 'anonymous';
+  return `ui:${who}`;
+}
+
+/**
  * 应用域服务（微前端）
  *
  * 设计依据：specs/deploy-console-domain-split/design.md v2 §2.2 / §4.2
@@ -462,11 +471,13 @@ export class AppsService implements OnModuleInit {
     }
 
     // 1) 指针表（含 prod 云库镜像，strict 失败即抛 → 不会留下「以为切了其实没切」）
+    // lock（诊断 #6）：UI 连点两次会交叉覆盖，previousVersion 被写成错值 → 回滚目标丢失
     const { from, previous, unchanged } = await this.registry.setAppEnvPointer({
       env: envId,
       moduleKey: appKey,
       currentVersion: version,
       deployedBy: operator,
+      lock: { owner: lockOwnerFor(operator) },
     });
     if (unchanged) {
       return { appKey, envId, from, to: version, pointer: null, unchanged: true };
@@ -512,6 +523,8 @@ export class AppsService implements OnModuleInit {
         // 把变更前的值原样带回来，否则 previous 会指向那个没生效的失败目标
         previousVersion: previous,
         deployedBy: operator,
+        // 与 switchVersion 同一 owner → 重入，不会提前释放外层还在用的锁
+        lock: { owner: lockOwnerFor(operator) },
       });
     } catch (e) {
       this.logger.error(

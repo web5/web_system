@@ -448,3 +448,94 @@ STATIC_SSH_TARGET_PROD=root@106.52.176.246
 
 - 远端操作走 ssh 同步等待（15s 超时），在列版本接口上有网络耗时；后续如需可做缓存
 - prod 磁盘指针与 DB 指针的历史撕裂需人工核对一次（本次修复只保证**后续**写入一致）
+
+---
+
+## 16. 二线可靠性（2026-10-09）：远程超时 / pm2 失败语义 / 锁下沉 / 启动对账 / 一致性巡检
+
+对应诊断 #11 #4 #6 #12 #13。一线（#1/#2/#3/#5）解决的是「写错地方、写不到」，
+这一批解决的是**「写对了，但你不知道它其实没生效」**——半成功、静默挂起、无人回收。
+
+### 16.1 #11 远程执行必须有硬超时
+
+| 位置 | 修复前 | 修复后 |
+|---|---|---|
+| `deploy.service.ts#sshRun` | `client.exec` 无超时 | 默认 10min（`SSH_EXEC_TIMEOUT_MS`），到期发信号 + 断连 |
+| `deploy.service.ts#sshUpload` | sftp 无超时 | 默认 15min（`SSH_UPLOAD_TIMEOUT_MS`） |
+| `deploy.service.ts#listReleases` | 自管 client，无超时 | 复用 `sshRun`，顺带拿到超时与退出码检查 |
+| `remote-delivery.service.ts#uploadDist` | 三次 `exec` 均未传 `timeoutMs`（**0 = 不超时**） | tar 5min / scp 15min / ssh 10min（`REMOTE_DELIVERY_*_TIMEOUT_MS`） |
+
+`ssh2` 的 `readyTimeout` 只管**建连**；命令开始执行后没有任何上限，远端卡住时
+发布 HTTP 永久挂起，且**锁一直握着**——该模块 30 分钟内谁也发不了。超时后主动
+`signal('KILL')` + `stream.close()`，避免留下孤儿进程（历史教训：6200 端口被孤儿进程占死）。
+
+### 16.2 #4 pm2 失败不能再伪装成成功
+
+- **远端**：`(${pm2Chain}) || echo "[warn] ..."` → 失败改 `exit 90`；调用方按退出码区分：
+  - `90`（产物已换、进程没起来）→ **保留现场不回滚 dist**，抛出并给出手工修复命令
+  - 其他 → 回滚 dist 后抛错（保持"未部署"）
+- **本地**：`restartPm2` 全部候选失败从 `logger.warn` 改为**抛错**（终态 failed + 手工命令）
+
+判据：半成功是最难排查的一类状态——产物已换、进程跑旧代码、任务显示绿灯。
+
+### 16.3 #6 发布锁下沉 + CAS
+
+`ReleaseLockService` 此前只被流水线使用，**非流水线入口全裸奔**（UI 切换/回滚/部署、
+内部脚本接口），连点两次即交叉覆盖，`previous_version` 被写成错值 → **回滚目标丢失**。
+
+- `SetPointerInput.lock?: { owner, ttlMs }` —— 传了才申请锁；流水线**不传**（它自带跨阶段锁）
+- `ReleaseLockService.acquireEx()` 新增 `newly`：
+  - `newly=true`（无锁 / 抢占过期锁）→ 写完释放
+  - `newly=false`（**重入**自己已持有的锁）→ **不释放**（否则把外层流水线还在用的锁删了）
+- 冲突 → `409 ConflictException`（带持有者与到期时间）
+- `expectedFrom`（CAS）：期望的变更前版本与实读不符即 409，挡住「页面显示 v1、实际已是 v2」
+
+owner 约定（排障时一眼看出谁在发）：`ui:<人>` / `script:<operator>` / `deploy:<模块>` / `publish:<模块>`。
+
+### 16.4 #12 启动对账 + 强制解锁
+
+`status='running'` 此前**没有任何回收路径**：发布中重启 console → 任务永久转圈 +
+该模块 30 分钟不可发布（锁只能等 TTL）。
+
+新增 `reconcile` 模块：
+- `StartupReconcileService`（`onApplicationBootstrap`）：超期 running → `failed`（附原因，不静默删）；
+  过期锁 → 清理（**未过期的不动**，那可能是真在跑的发布）。阈值 `DEPLOY_TASK_STALE_MS` 默认 60min
+- `DELETE /api/reconcile/locks/:moduleKey/:env`：强制解锁，**强制留审计**
+- `GET /api/reconcile/locks`：看当前谁在发
+- `POST /api/reconcile/run`：手动对账
+
+对账失败绝不冒泡到启动流程（catch + error 日志）。
+
+### 16.5 #13 两库一致性定时巡检
+
+`check-cloud-db-consistency.sh` 能发现漂移，但**没人定时跑它**（全仓无 cron）。
+
+`ConsistencyWatchService`：定时比对**指针表** prod 行（`deploy_app_env_versions` /
+`deploy_deployments`）——那是 gateway 的读取源，漂移 = 线上跑的不是你以为的版本。
+- 不引 `@nestjs/schedule`：一个 `setInterval` 足够，不为一个定时任务加依赖
+- `CONSISTENCY_CHECK_INTERVAL_MS`（默认 6h，**0 = 关闭**）、`CONSISTENCY_CHECK_FIRST_DELAY_MS`（默认 60s）
+- 只比对指针表；配置表仍由 M5 脚本按需巡检（行多、不直接影响线上加载）
+- 忽略 `id / task_id / deployed_by / deployed_at / created_at / updated_at`（与 M5 脚本一致）
+- 结果可被 `GET /api/reconcile/consistency?run=1` 取回；漂移时 `logger.error` 留痕
+
+另修：`mirrorLegacyPointer` 的返回值此前**被直接丢弃**，现检查 `outcome === 'failed'` 并 error 留痕
+（不阻断——gateway 默认不读本表，但应急开关 `DEPLOY_LEGACY_READ=1` 时它就是读取源）。
+
+### 16.6 配置项汇总（均为可选，缺省零变化）
+
+```
+SSH_EXEC_TIMEOUT_MS=600000
+SSH_UPLOAD_TIMEOUT_MS=900000
+REMOTE_DELIVERY_TAR_TIMEOUT_MS=300000
+REMOTE_DELIVERY_SCP_TIMEOUT_MS=900000
+REMOTE_DELIVERY_SSH_TIMEOUT_MS=600000
+DEPLOY_TASK_STALE_MS=3600000
+CONSISTENCY_CHECK_INTERVAL_MS=21600000   # 0 = 关闭
+CONSISTENCY_CHECK_FIRST_DELAY_MS=60000
+```
+
+### 16.7 遗留
+
+- 定时巡检只覆盖指针表；配置表漂移仍靠人工跑 M5 脚本
+- 强制解锁是危险操作，目前只留审计、无二次确认（前端可加）
+- 僵尸任务回收只看 `deploy_tasks`；流水线实例（`deploy_pipelines`）的同类状态未纳入

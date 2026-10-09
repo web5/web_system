@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { ReleaseRegistryService } from './release-registry.service';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -14,6 +15,8 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     mirrorLegacyPointer: jest.Mock;
     deleteMirror: jest.Mock;
   };
+  /** 发布锁（诊断 #6）：默认抢得到 */
+  let locks: { acquireEx: jest.Mock; release: jest.Mock };
   let svc: ReleaseRegistryService;
 
   beforeEach(() => {
@@ -39,12 +42,17 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       mirrorLegacyPointer: jest.fn(async () => ({ outcome: 'skipped' })),
       deleteMirror: jest.fn(),
     };
+    locks = {
+      acquireEx: jest.fn(async () => ({ ok: true, newly: true })),
+      release: jest.fn(async () => undefined),
+    };
     svc = new ReleaseRegistryService(
       versionRepo as never,
       deploymentRepo as never,
       appRepo as never,
       appVersionRepo as never,
       splitWriter as never,
+      locks as never,
     );
   });
 
@@ -277,5 +285,107 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(await svc.findByVersionTag('abc')).toBe(found);
     versionRepo.findOne.mockResolvedValue(null);
     expect(await svc.findByVersionTag('nope')).toBeUndefined();
+  });
+
+  // ── 诊断 #6：非流水线入口的锁 + CAS ──
+
+  it('#6：传 lock → 申请锁并在写完后释放（本次新拿到）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v2',
+      lock: { owner: 'ui:alice' },
+    });
+    expect(locks.acquireEx).toHaveBeenCalledWith('portal', 'prod', 'ui:alice', undefined);
+    expect(locks.release).toHaveBeenCalledWith('portal', 'prod', 'ui:alice');
+  });
+
+  it('#6：重入（newly=false）→ 不释放锁（那是外层流水线还在用的）', async () => {
+    locks.acquireEx.mockResolvedValue({ ok: true, newly: false });
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v2',
+      lock: { owner: 'pipeline-1' },
+    });
+    expect(locks.release).not.toHaveBeenCalled();
+  });
+
+  it('#6：锁被他人持有 → 409 且不写库（禁止交叉覆盖）', async () => {
+    locks.acquireEx.mockResolvedValue({ ok: false, newly: false, holder: 'pipeline-9' });
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    await expect(
+      svc.setAppEnvPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'v2',
+        lock: { owner: 'ui:alice' },
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(appVersionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('#6：不传 lock → 完全不碰锁（流水线自带锁，向后兼容）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    await svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' });
+    expect(locks.acquireEx).not.toHaveBeenCalled();
+    expect(locks.release).not.toHaveBeenCalled();
+  });
+
+  it('#6：CAS 不符（页面显示 v1、实际已是 v2）→ 409 且不写库', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'v2',
+      previousVersion: 'v1',
+    });
+    await expect(
+      svc.setAppEnvPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'v3',
+        expectedFrom: 'v1',
+      }),
+    ).rejects.toThrow(/版本已被并发修改/);
+    expect(appVersionRepo.save).not.toHaveBeenCalled();
+    expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
+  });
+
+  it('#6：CAS 相符 → 正常推进（previous 记为真实旧值）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'v2',
+      previousVersion: 'v1',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v3',
+      expectedFrom: 'v2',
+    });
+    expect(r).toMatchObject({ from: 'v2', unchanged: false });
+    expect(appVersionRepo.save.mock.calls[0][0]).toMatchObject({
+      currentVersion: 'v3',
+      previousVersion: 'v2',
+    });
+  });
+
+  it('#6：setPointer 带锁 → 锁覆盖「legacy + 镜像 + 新表」整段，且只申请一次', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    await svc.setPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'v2',
+      lock: { owner: 'deploy:portal' },
+    });
+    // 内嵌的 syncAppEnvPointer 走 inner，不再重复申请
+    expect(locks.acquireEx).toHaveBeenCalledTimes(1);
+    expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
+    expect(appVersionRepo.save).toHaveBeenCalled();
   });
 });
