@@ -84,7 +84,15 @@ export class MusicService {
     return first ?? null;
   }
 
-  isReady(provider: Pick<MusicProvider, 'appId'>): boolean {
+  /**
+   * 渠道是否可用于跳转。
+   *
+   * h5 渠道不需要 appId（浏览器开新页即可，小程序 appId 对它无意义）：
+   * 有搜索模板就视为可用。此前只看 appId，导致 h5 渠道恒为 ready=false，
+   * PC 端只能降级「复制歌名」，永远跳不出去。
+   */
+  isReady(provider: Pick<MusicProvider, 'appId' | 'entryType' | 'searchTemplate'>): boolean {
+    if (provider.entryType === 'h5') return !!provider.searchTemplate;
     return !!provider.appId && !provider.appId.startsWith(PLACEHOLDER_PREFIX);
   }
 
