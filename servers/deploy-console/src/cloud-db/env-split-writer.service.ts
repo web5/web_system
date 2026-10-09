@@ -163,6 +163,19 @@ export class EnvSplitWriterService {
   ] as const;
 
   /**
+   * 允许**删除补偿**的表（= 配置表 + 指针表）。
+   *
+   * 指针表不在 `MIRROR_TABLES` 里：它不走 `mirrorRows` 的通用行镜像，
+   * 而是由 `mirrorPointer` 单独写（需要「取旧值 → previous_version」语义）。
+   * 但**删除**必须两库同步，否则云库会残留一条没生效的指针。
+   */
+  static readonly MIRROR_DELETE_TABLES = [
+    ...EnvSplitWriterService.MIRROR_TABLES,
+    'deploy_app_env_versions',
+    'deploy_deployments',
+  ] as const;
+
+  /**
    * 每张表的镜像唯一键（决定 INSERT ... ON DUPLICATE KEY UPDATE 是否命中已有行）。
    *
    * **必须取实体上的业务唯一键，不能用 uuid 主键**（除非该表没有业务唯一键）：
@@ -226,7 +239,7 @@ export class EnvSplitWriterService {
    */
   deleteMirror(table: string, where: Record<string, unknown>): void {
     if (!this.cloud.enabled) return;
-    if (!EnvSplitWriterService.MIRROR_TABLES.includes(table as never)) return;
+    if (!EnvSplitWriterService.MIRROR_DELETE_TABLES.includes(table as never)) return;
     const cols = Object.keys(where || {}).filter((c) => where[c] !== undefined);
     if (!cols.length) {
       this.logger.warn(`deleteMirror(${table}) 条件为空，拒绝执行（防误删整表）`);

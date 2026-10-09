@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Logger } from '@nestjs/common';
@@ -26,6 +26,21 @@ export interface SetPointerInput {
   currentVersion: string;
   deployedBy?: string;
   taskId?: string;
+  /**
+   * 回滚补偿用：显式指定 `previous_version`。
+   * 不传则取「变更前的值」（正常推进语义）；补偿场景需把旧值原样带回来，
+   * 否则回滚后 previous 会指向那个**没生效的失败目标**。
+   */
+  previousVersion?: string | null;
+}
+
+export interface AppEnvPointerResult {
+  /** 变更前的 current_version（首次写入为 null） */
+  from: string | null;
+  /** 变更前的 previous_version */
+  previous: string | null;
+  /** 目标版本与当前值相同 → 未做任何写入（含镜像） */
+  unchanged: boolean;
 }
 
 /**
@@ -155,6 +170,73 @@ export class ReleaseRegistryService {
 
     // 分流：prod 的指针镜像到云库（prod gateway 的读取源）。失败按严格语义抛出。
     await this.splitWriter.mirrorPointer(input);
+  }
+
+  /**
+   * **应用域指针写入的唯一入口**（2026-10-09 收敛，诊断 #1）。
+   *
+   * 背景：`AppsService.switchVersion` 原先自己 `versionRepo.save()`，**从不写云库**，
+   * 而 UI 切换/回滚、UI 部署、流水线 `internal/release/pointer` 三条路全部走它 →
+   * prod 表现为「发布成功但线上没变」且**不报错**（2026-09-30 基座事故的同一形态）。
+   *
+   * 与 `syncAppEnvPointer` 的分工：
+   * - 本方法用于**用户/脚本主动切版本**：本地写失败即抛（不留半成功），
+   *   prod 云库镜像按严格语义抛（见 `EnvSplitWriterService`）
+   * - `syncAppEnvPointer` 用于 `setPointer` 的**附赠同步**：本地失败只告警
+   *   （legacy 已写成功，运维可从告警发现两轨不一致）
+   *
+   * 幂等：目标版本 == 当前版本时**不写库也不镜像**。
+   * （否则同值推进会让两库 `deployed_by/deployed_at` 持续漂移，见 design §13 P2）
+   */
+  async setAppEnvPointer(input: SetPointerInput): Promise<AppEnvPointerResult> {
+    const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
+    if (!app) {
+      throw new NotFoundException(
+        `应用未登记于 deploy_apps：${input.moduleKey}（应用域指针需先注册应用）`,
+      );
+    }
+
+    const row =
+      (await this.appVersionRepo.findOne({
+        where: { appKey: input.moduleKey, envId: input.env },
+      })) ?? this.appVersionRepo.create();
+
+    const from = row.currentVersion ?? null;
+    const previous = row.previousVersion ?? null;
+    const unchanged = from === input.currentVersion;
+
+    if (!unchanged) {
+      if (!row.appKey) row.appKey = input.moduleKey;
+      if (!row.envId) row.envId = input.env;
+      row.previousVersion = input.previousVersion !== undefined ? input.previousVersion : from;
+      row.currentVersion = input.currentVersion;
+      row.status = 'deployed';
+      row.deployedAt = new Date();
+      row.deployedBy = input.deployedBy;
+      if (input.taskId) row.taskId = input.taskId;
+      await this.appVersionRepo.save(row);
+    }
+
+    // 分流：prod 必须镜像到云库（gateway 的读取源）。strict 下失败即抛。
+    if (!unchanged) {
+      await this.splitWriter.mirrorPointer(input);
+    }
+
+    return { from, previous, unchanged };
+  }
+
+  /**
+   * 删除应用域指针行（**回滚补偿**用：首次写入失败时把空指针清掉）。
+   * 两库都要删，否则云库会残留一条「没生效」的指针。
+   */
+  async clearAppEnvPointer(appKey: string, envId: string): Promise<void> {
+    const row = await this.appVersionRepo.findOne({ where: { appKey, envId } });
+    if (!row) return;
+    await this.appVersionRepo.remove(row);
+    this.splitWriter.deleteMirror('deploy_app_env_versions', {
+      app_key: appKey,
+      env_id: envId,
+    });
   }
 
   /** 当前线上版本（指针），无记录返回 undefined */

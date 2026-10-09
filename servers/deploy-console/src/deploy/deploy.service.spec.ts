@@ -83,7 +83,7 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         {
           provide: EnvironmentService,
           useValue: { get: jest.fn().mockResolvedValue({ publicUrl: '' }), list: jest.fn().mockResolvedValue([]) },
@@ -199,7 +199,7 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         { provide: ModuleRegistryService, useValue: moduleRegistry },
         {
@@ -338,7 +338,7 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn() } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         {
           provide: ModuleRegistryService,
@@ -414,7 +414,7 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: versionRepo },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         {
           provide: ModuleRegistryService,
@@ -515,7 +515,7 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         {
           provide: ModuleRegistryService,
@@ -607,7 +607,7 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn(), find: jest.fn() } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn() } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn() } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         { provide: ModuleRegistryService, useValue: moduleRegistry },
         { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
@@ -651,6 +651,10 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
 
     // 下发之后才重启
     expect(commands.exec).toHaveBeenCalled();
+
+    // 回归（2026-10-09 诊断 #2）：指针必须走 registry.setPointer（含新表 + 云库镜像），
+    // 不能退回 deploymentRepo.upsert —— 那条路只写 legacy，gateway 读不到
+    expect(deploymentRepo.upsert).not.toHaveBeenCalled();
   });
 
   it('下发失败 → 中止部署：不重启、不落地、指针不改', async () => {

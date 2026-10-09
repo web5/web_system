@@ -16,6 +16,7 @@ import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.en
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { EnvsService } from '../envs/envs.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
+import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { defaultReleaseWorkspace } from '../pipeline/release-paths';
 import {
   APP_KINDS,
@@ -56,6 +57,12 @@ export class AppsService implements OnModuleInit {
     private readonly configService: ConfigService,
     // 配置镜像双写（M4，design §5 #6）
     private readonly mirror: EnvSplitWriterService,
+    /**
+     * 版本指针写入的**唯一入口**（2026-10-09 收敛，诊断 #1）。
+     * 原先这里自己 `versionRepo.save()` → 只写本地库，prod 云库拿不到新指针，
+     * 表现为「切换/回滚成功但 prod 线上没变」且不报错。
+     */
+    private readonly registry: ReleaseRegistryService,
   ) {}
 
   /**
@@ -410,6 +417,15 @@ export class AppsService implements OnModuleInit {
 
   /**
    * 切换版本：只改写入口指针 + 指针表（不重新构建）。
+   *
+   * **写入顺序（2026-10-09 修正，诊断 #1/#5）**：
+   * 1. 先提交指针表（`registry.setAppEnvPointer`）—— 它同时承担云库镜像与 strict 抛错，
+   *    是 gateway 的**唯一真相源**，必须最先落地
+   * 2. 再写磁盘入口指针 —— 它只是次级加载路径（gateway 的 manifest 由 DB 生成），
+   *    写失败时**回滚第 1 步**，避免「DB 说新版本、磁盘还指旧版本」的撕裂态
+   *
+   * 原实现是「先盘后库」且库写失败无补偿，盘写成功/库写失败即静默双轨不一致。
+   *
    * @returns 切换前后版本
    */
   async switchVersion(appKey: string, envId: string, version: string, operator?: string) {
@@ -422,26 +438,63 @@ export class AppsService implements OnModuleInit {
       );
     }
 
-    const row = await this.ensureVersionRow(appKey, envId);
-    const from = row.currentVersion ?? null;
-    if (from === version) {
+    // 1) 指针表（含 prod 云库镜像，strict 失败即抛 → 不会留下「以为切了其实没切」）
+    const { from, previous, unchanged } = await this.registry.setAppEnvPointer({
+      env: envId,
+      moduleKey: appKey,
+      currentVersion: version,
+      deployedBy: operator,
+    });
+    if (unchanged) {
       return { appKey, envId, from, to: version, pointer: null, unchanged: true };
     }
 
-    const pointer =
-      app.deployMode === 'env-dir'
-        ? writeEnvEntryPointer(this.workspace, appKey, envId, version)
-        : null;
-
-    row.previousVersion = from;
-    row.currentVersion = version;
-    row.status = 'deployed';
-    row.deployedAt = new Date();
-    row.deployedBy = operator ?? null;
-    await this.versionRepo.save(row);
+    // 2) 磁盘入口指针（env-dir 专用）；失败则回滚指针表
+    let pointer: { js: string; css: string | null } | null = null;
+    if (app.deployMode === 'env-dir') {
+      try {
+        pointer = writeEnvEntryPointer(this.workspace, appKey, envId, version);
+      } catch (e) {
+        await this.revertAppEnvPointer(appKey, envId, from, previous, operator);
+        throw new BadRequestException(
+          `写入口指针失败，已回滚版本指针：${appKey}/${envId} → ${version}（${(e as Error).message}）`,
+        );
+      }
+    }
 
     this.logger.log(`切换版本指针：${appKey}/${envId} ${from ?? '-'} → ${version}`);
     return { appKey, envId, from, to: version, pointer };
+  }
+
+  /**
+   * 回滚 `switchVersion` 已经提交的指针表变更（磁盘入口指针写失败的补偿）。
+   * `from` 为空表示本次是首次写入，直接删行而不是写空指针。
+   */
+  private async revertAppEnvPointer(
+    appKey: string,
+    envId: string,
+    from: string | null,
+    previous: string | null,
+    operator?: string,
+  ): Promise<void> {
+    try {
+      if (!from) {
+        await this.registry.clearAppEnvPointer(appKey, envId);
+        return;
+      }
+      await this.registry.setAppEnvPointer({
+        env: envId,
+        moduleKey: appKey,
+        currentVersion: from,
+        // 把变更前的值原样带回来，否则 previous 会指向那个没生效的失败目标
+        previousVersion: previous,
+        deployedBy: operator,
+      });
+    } catch (e) {
+      this.logger.error(
+        `指针表回滚失败（${appKey}/${envId}），需人工介入比对两库：${(e as Error).message}`,
+      );
+    }
   }
 
   /** 回滚：默认回到 previousVersion（可显式指定目标版本） */
@@ -452,14 +505,6 @@ export class AppsService implements OnModuleInit {
       throw new BadRequestException('没有可回滚的上一版本，请显式指定版本');
     }
     return this.switchVersion(appKey, envId, target, operator);
-  }
-
-  private async ensureVersionRow(appKey: string, envId: string) {
-    let row = await this.versionRepo.findOne({ where: { appKey, envId } });
-    if (!row) {
-      row = this.versionRepo.create({ appKey, envId, status: 'unknown' });
-    }
-    return row;
   }
 
   /** 内置应用类型与部署模式（供前端下拉） */

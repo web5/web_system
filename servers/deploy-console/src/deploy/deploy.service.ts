@@ -337,17 +337,15 @@ export class DeployService {
     // 落地失败时指针保持原值，不会出现「指针指向没生效的版本」这种撕裂状态。
     await this.applyBackendVersion(input);
 
-    await this.deploymentRepo.upsert(
-      {
-        envId: input.env,
-        moduleKey: input.moduleKey,
-        currentVersion: input.versionTag,
-        status: 'deployed',
-        deployedAt: new Date(),
-        deployedBy: input.operator,
-      },
-      ['envId', 'moduleKey'],
-    );
+    // 收敛到 registry（2026-10-09，诊断 #2）：原实现只 `deploymentRepo.upsert`，
+    // **既不写 deploy_app_env_versions（gateway 唯一读取源）也不写云库**，
+    // 导致同一个「部署」动作走本方法 vs 走 startPublishVersion 结果完全不同。
+    await this.registry.setPointer({
+      env: input.env,
+      moduleKey: input.moduleKey,
+      currentVersion: input.versionTag,
+      deployedBy: input.operator,
+    });
     this.logger.log(`已改指针: ${input.env}/${input.moduleKey} -> ${input.versionTag}`);
 
     // site-version 前端（基座 shell / 小程序）：**这个指针就是它们的加载路径** ——
