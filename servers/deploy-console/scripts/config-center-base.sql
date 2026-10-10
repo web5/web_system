@@ -65,7 +65,8 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
    WHERE TABLE_SCHEMA=@db AND TABLE_NAME='config_items' AND COLUMN_NAME='key_version') = 0,
-  'ALTER TABLE config_items ADD COLUMN key_version INT NOT NULL DEFAULT 1 COMMENT "主密钥代次（密钥轮换用）" AFTER validators',
+  -- 注释统一用单引号（'' 转义）：双引号在 ANSI_QUOTES 模式下会被当成标识符而非字符串
+  'ALTER TABLE config_items ADD COLUMN key_version INT NOT NULL DEFAULT 1 COMMENT ''主密钥代次（密钥轮换用）'' AFTER validators',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
