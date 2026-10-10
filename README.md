@@ -69,7 +69,9 @@ web_system/
 ├── scripts/                  # 构建/启动/验证/发布脚本
 ├── migrations/               # 数据库迁移 SQL
 ├── .codebuddy/               # 数字人体系（agent-kit / skills / rules）
-└── ecosystem.config.cjs      # pm2 进程清单（web-*）
+├── ecosystem.apps.cjs        # pm2 清单 · 应用域（11 个业务服务）
+├── ecosystem.console.cjs     # pm2 清单 · console 域（deploy-console，独立发布互不影响）
+└── ecosystem.config.cjs      # pm2 全量入口（= 应用域 + console 域合并）
 ```
 
 > **小程序命名约定**：一个微信小程序 = 一个 `apps/<小程序名>` 包（当前 `apps/kedou-ai-minigram` = 科豆 AI 小程序；2026-09 由 `apps/mini-contract`（合同翻译官）更名而来，不再沿用早先的 `mini-<业务>` 前缀）。新增小程序时同步三处：① `rush.json` 登记 package；② `scripts/modules.json` 注册发布模块（`key` 与目录同名、`type=frontend`、`publicPath` 唯一）；③ 模块 key 由 `modules.json` 种子进发布平台 DB，如需改 key 走 `migrations/` 迁移（参考 `0006_rename_mini_contract_to_kedou_ai_minigram.sql`）。
@@ -188,7 +190,7 @@ ADMIN_INIT_PASSWORD='你的管理员密码' TEST_INIT_PASSWORD='test123456' pnpm
 | admin（dev） | 5174 | — | Vite dev |
 | docs | 4173 | — | 静态文档站 |
 
-> 端口在 `ecosystem.config.cjs` 中写死 `env.PORT`，避免 `pm2 restart` 沿袭旧 PORT 造成端口漂移。
+> 端口在域清单中写死 `env.PORT`，避免 `pm2 restart` 沿袭旧 PORT 造成端口漂移；console 与应用拆成两个 pm2 域（`ecosystem.console.cjs` / `ecosystem.apps.cjs`），发布互不影响。
 
 ---
 
@@ -217,6 +219,9 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 > 核心认知：服务统一从**发布目录 `~/web_system_release`** 运行（pm2 `web-*`，dotenv 按 cwd 加载发布目录 `.env`）。
 > **发布 = 工作区 commit & push → 发布目录 git 拉取 → 构建部署**，不是基于当前工作区。
 > 手册：[docs/development/local-release-runbook.md](./docs/development/local-release-runbook.md)
+>
+> **小程序不走这条链路**（无 pm2、无发布目录）：出预览码 / 上传体验版见
+> [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md)。
 
 ### 7.1 三条发布通道（别混用）
 
@@ -225,6 +230,7 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 | 后端服务 + admin/portal 前端 | **发布流水线** | `POST /api/pipelines`（deploy-console 6200，env=local，branch=feature/xxx）→ 轮询至 succeeded |
 | deploy-console 自身（6200） | **传统发布** | 仓库根 `./scripts/publish-deploy-console.sh`（⚠️ 勿走流水线，会自杀式重启执行者） |
 | admin/portal 前端微前端模块 | 四步铁律 | 见下 |
+| 微信小程序（kedou-ai-minigram） | **CI 出码** | 固定出口 IP 的执行机上跑 `scripts/preview.js`（预览码）/ `scripts/upload.js`（体验版）；完整前置与排错见 [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
 
 ### 7.2 微前端模块更新四步铁律
 
@@ -287,6 +293,8 @@ packages/shared/src/api.ts
 | 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
 | admin 微前端开发 | [docs/development/admin-dev.md](./docs/development/admin-dev.md) |
 | 本地发布运维 | [docs/development/local-release-runbook.md](./docs/development/local-release-runbook.md) |
+| **小程序出码（预览码 / 体验版）** | [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
+| 小程序 AI 对话技术实现 | [docs/miniprogram/ai-chat-miniprogram.md](./docs/miniprogram/ai-chat-miniprogram.md) |
 | 发布流水线设计 | [docs/development/deploy-pipeline-dev.md](./docs/development/deploy-pipeline-dev.md) |
 | Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
 | Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |

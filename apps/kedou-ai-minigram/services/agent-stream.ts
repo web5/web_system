@@ -244,9 +244,10 @@ function createChunkDecoder(): (chunk: unknown) => string | null {
       if (Decoder) {
         out = new Decoder('utf-8').decode(merged.subarray(0, merged.length - keep));
       } else {
-        // 极端退化：无 TextDecoder，仅按字节透传（老基础库环境）
-        const seg = merged.subarray(0, merged.length - keep);
-        for (let i = 0; i < seg.length; i++) out += String.fromCharCode(seg[i]);
+        // 退化：无 TextDecoder（真机小程序环境常见）→ 纯 JS 解码 UTF-8。
+        // ⚠️ 不能用 String.fromCharCode 逐字节透传：那会把中文（3 字节）拆成
+        //    3 个 latin-1 字符（真机实证：AI 回复中文全乱、英文正常）。
+        out = decodeUtf8Bytes(merged.subarray(0, merged.length - keep));
       }
       pending = merged.subarray(merged.length - keep);
       return out;
@@ -261,6 +262,73 @@ function toBytes(chunk: unknown): Uint8Array | null {
   if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
   if (typeof Uint8Array !== 'undefined' && chunk instanceof Uint8Array) return chunk;
   return null;
+}
+
+/**
+ * 纯 JS 的 UTF-8 字节解码（不依赖 TextDecoder）。
+ *
+ * 背景：小程序真机的 JS 环境通常没有标准 TextDecoder，wx.TextDecoder 也不一定可用，
+ * 此前退化分支用 String.fromCharCode 逐字节透传，中文（UTF-8 3 字节）会被拆成
+ * 3 个 latin-1 字符（真机实证：AI 回复中文全乱、英文正常）。
+ *
+ * 前置条件：调用方已用 incompleteTailLen 截掉末尾不完整序列，入参应为完整 UTF-8 序列。
+ * 非法字节以 U+FFFD 替换；超过 U+FFFF 的码点拼代理对。
+ */
+function decodeUtf8Bytes(bytes: Uint8Array): string {
+  let out = '';
+  let i = 0;
+  while (i < bytes.length) {
+    const b = bytes[i];
+    if (b < 0x80) {
+      out += String.fromCharCode(b);
+      i += 1;
+      continue;
+    }
+    let cp = 0;
+    let len = 0;
+    if ((b & 0xe0) === 0xc0) {
+      cp = b & 0x1f;
+      len = 2;
+    } else if ((b & 0xf0) === 0xe0) {
+      cp = b & 0x0f;
+      len = 3;
+    } else if ((b & 0xf8) === 0xf0) {
+      cp = b & 0x07;
+      len = 4;
+    } else {
+      out += '\ufffd';
+      i += 1;
+      continue;
+    }
+    if (i + len > bytes.length) {
+      out += '\ufffd';
+      i += 1;
+      continue;
+    }
+    let ok = true;
+    for (let k = 1; k < len; k++) {
+      const cb = bytes[i + k];
+      if ((cb & 0xc0) !== 0x80) {
+        ok = false;
+        break;
+      }
+      cp = (cp << 6) | (cb & 0x3f);
+    }
+    if (!ok) {
+      out += '\ufffd';
+      i += 1;
+      continue;
+    }
+    if (cp > 0xffff) {
+      // 增补平面码点 → 代理对
+      const v = cp - 0x10000;
+      out += String.fromCharCode(0xd800 + (v >> 10), 0xdc00 + (v & 0x3ff));
+    } else {
+      out += String.fromCharCode(cp);
+    }
+    i += len;
+  }
+  return out;
 }
 
 /** 计算字节序列末尾不完整 UTF-8 序列的长度（0 = 末尾字符完整或已是 ASCII） */

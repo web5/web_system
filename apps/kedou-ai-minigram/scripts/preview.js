@@ -59,6 +59,44 @@ function gitHead() {
   }
 }
 
+/**
+ * 生成一个自包含的 HTML 预览页（二维码以 data URI 内嵌）。
+ *
+ * 为什么要有它：二维码图片直接丢进聊天/IM 会被转码压缩，压缩后手机常常扫不出来；
+ * 而一个本地 HTML 打开就是原图，点击即可扫。
+ *
+ * ⚠️ 必须 sniff 真实格式：微信 CI 的 qrcodeOutputDest 写出的文件**扩展名是 .png
+ * 但内容是 JPEG**，若照扩展名写 data:image/png，浏览器会解析失败显示不出图。
+ */
+function writeQrHtml(imgPath, pagePath) {
+  try {
+    const buf = fs.readFileSync(imgPath);
+    const isPng = buf.length > 4 && buf[0] === 0x89 && buf[1] === 0x50;
+    const mime = isPng ? 'image/png' : 'image/jpeg';
+    const b64 = buf.toString('base64');
+    const dest = path.join(path.dirname(imgPath), 'preview-qr.html');
+    const html = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>小程序预览码</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+background:#FFF8F0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1a1a1a}
+.card{background:#fff;border-radius:20px;padding:32px 40px;box-shadow:0 8px 32px rgba(0,0,0,.08);text-align:center}
+img{width:420px;height:420px;display:block}
+h1{font-size:18px;margin:0 0 6px}
+.t{font-size:13px;color:#8A90A0;margin:14px 0 0;line-height:1.7}
+.warn{color:#EA580C;font-weight:600}
+</style></head><body><div class="card">
+<h1>科豆 AI · 开发版预览码</h1>
+<img src="data:${mime};base64,${b64}" alt="预览码">
+<p class="t">直达 ${pagePath}<br><span class="warn">有时效，过期重跑 npm run preview</span></p>
+</div></body></html>`;
+    fs.writeFileSync(dest, html);
+    return dest;
+  } catch (e) {
+    return '(HTML 预览页生成失败: ' + e.message + ')';
+  }
+}
+
 async function previewApp() {
   const version = process.env.PREVIEW_VERSION || require('../package.json').version || '1.0.0';
   const qrcodeFormat = process.env.QRCODE_FORMAT || 'image';
@@ -102,7 +140,10 @@ async function previewApp() {
 
     console.log('[Preview] 预览成功 ✅');
     if (qrcodeFormat === 'image') {
+      const htmlPath = writeQrHtml(qrcodeOutputDest, pagePath);
       console.log(`[Preview] 二维码: ${qrcodeOutputDest}`);
+      console.log(`[Preview] 可直接扫码的页面: ${htmlPath}`);
+      console.log('[Preview]   → 打开它就能用手机扫（内嵌原图，不经聊天工具转码压缩）');
       console.log('[Preview] ⚠️ 二维码有时效，过期重新执行 npm run preview');
       console.log('[Preview] ⚠️ 真机需开「开发调试」，或已在公众平台配置 request 合法域名 https://dev.kedouai.com');
     } else {
