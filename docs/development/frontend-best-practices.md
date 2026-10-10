@@ -209,7 +209,8 @@ if (status === 401) {
 | UI 类改动 | 原型/规格与代码**分开提交**，代码 message 带 `Proto: <sha>` + `Design: pass` |
 | 合并方式 | **merge commit**（非 squash / rebase） |
 | CI | 建 PR 后 `--auto` 即可，不要阻塞等待；最后统一对账 `gh pr view --json state` |
-| 自检 | 提交前跑类型检查：`npx vue-tsc --noEmit`（仓库未配 ESLint，类型检查是主要门禁） |
+| 自检 | 提交前跑类型检查：`npx vue-tsc --noEmit` |
+| Lint | 提交前跑 `pnpm lint`（配置 `eslint.config.mjs`，范围 shell/portal/admin/deploy-console/packages/ui）；CI 口径 `pnpm lint:ci` 带 `--max-warnings` 基线，新增告警即失败。详见 `docs/development/eslint-gate.md` |
 
 ---
 
@@ -253,4 +254,5 @@ if (status === 401) {
 - [ ] 新增组件/图标已重建 CDN 子集
 - [ ] UI 改动已带 `Proto:` / `Design: pass`，或原型稿已记微调豁免
 - [ ] `npx vue-tsc --noEmit` 通过
+- [ ] `pnpm lint` 无新增告警（`--max-warnings` 基线见 `docs/development/eslint-gate.md`，只会下调不会上调）
 - [ ] 若改了 `apps/*` 源码：已走流水线发布，并核对 dev/prod 指针
