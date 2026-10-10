@@ -163,7 +163,7 @@
     <!-- 分块详情 -->
     <a-modal v-model:open="chunkOpen" :title="`分块 · ${viewingDoc?.title || ''}`" :footer="null" width="760">
       <a-empty v-if="!viewingChunks.length" description="该文档无分块" />
-      <div v-for="(c, i) in viewingChunks" :key="c.id" class="chunk-item">
+      <div v-for="c in viewingChunks" :key="c.id" class="chunk-item">
         <div class="chunk-head">#{{ c.seq }}<span class="ws-mono"> {{ shortId(c.id) }}</span></div>
         <pre class="chunk-content">{{ c.content }}</pre>
       </div>
