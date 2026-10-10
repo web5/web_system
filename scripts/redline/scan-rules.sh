@@ -65,8 +65,16 @@ check_line_error() {
   #   debug-local / build-subset-externals / verify-cdn-subsets 这类脚本的
   #   stdout 输出是**产品行为**（进度/结论日志），不是调试残留（2026-09-29，CI 实测误报）。
   #   仅豁免一级目录，scripts/db 等子目录业务代码不豁免。
+  #
+  # 同性质扩展（2026-10-10，CI 实测误报）：apps/*/scripts/*.{js,mjs,cjs} 一级目录。
+  #   apps/kedou-ai-minigram/scripts/{preview,upload}.js 是 miniprogram-ci CLI 工具，
+  #   「预览成功 / 二维码路径 / 请用微信扫码」这类 console.log 是**给开发者看的产品输出**，
+  #   与根 scripts 的 debug-local 完全同构；与根 scripts 一样只豁免一级目录，
+  #   apps/*/src 下的业务代码不受影响。
   if ! is_comment_line "$s" \
-     && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs ]]; then
+     && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs \
+          || "$file" == apps/*/scripts/*.js || "$file" == apps/*/scripts/*.mjs \
+          || "$file" == apps/*/scripts/*.cjs ]]; then
     if printf '%s' "$content" | grep -qE '\b(console\.(log|debug)\(|debugger\b)'; then
       add_err "R1" "调试残留(console.log/debug/debugger)" "${file}:${line}" "$content"
     fi
