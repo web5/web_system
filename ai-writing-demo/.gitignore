@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.DS_Store
+
+# 运行期落盘的文档快照（首次保存时自动创建目录）
+servers/collab/data/docs.json
