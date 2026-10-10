@@ -13,6 +13,8 @@ import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { ShellModule } from '../shell/shell.module';
 import { EnvArtifactService } from './env-artifact.service';
 import { CommonModule } from '../common/common.module';
+import { TaskRecorderService } from '../common/task-recorder.service';
+import { DeployTaskEntity } from '../entities/deploy-task.entity';
 
 /**
  * 应用域模块（微前端）：应用 + shell 挂载路由 + 版本指针（含入口指针写入）。
@@ -34,12 +36,14 @@ import { CommonModule } from '../common/common.module';
       DeployAppEnvVersionEntity,
       // 历史模块注册表（应用种子导入用，P4 退役后移除）
       DeployModuleEntity,
+      // UI 切换/回滚的任务留痕（2026-10-09）
+      DeployTaskEntity,
     ]),
     EnvsModule,
     AuditModule,
   ],
   controllers: [AppsController],
-  providers: [AppsService, EnvArtifactService],
+  providers: [AppsService, EnvArtifactService, TaskRecorderService],
   exports: [AppsService, EnvArtifactService],
 })
 export class AppsModule {}

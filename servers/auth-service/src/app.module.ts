@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { RedisModule, RedisModuleOptions } from '@liaoliaots/nestjs-redis';
 import * as path from 'path';
 import { SnakeNamingStrategy } from '@web-system/shared';
+import { redisOptionsFromUrl } from './config/redis-options';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { QrcodeModule } from './qrcode/qrcode.module';
@@ -28,8 +29,13 @@ import { AccountModule } from './account/account.module';
       useFactory: (...args: unknown[]): RedisModuleOptions => {
         const configService = args[0] as ConfigService;
         return {
+          // ⚠️ 不能写 `{ url: REDIS_URL }` —— ioredis 不解析 options.url，host/port 会
+          // 静默回落到 localhost:6379（线上因此 594+ 次 ECONNREFUSED）。必须拆成连接参数，
+          // 见 ./config/redis-options.ts 的说明。
           config: {
-            url: configService.get('REDIS_URL', 'redis://localhost:6379'),
+            ...redisOptionsFromUrl(
+              configService.get('REDIS_URL') || 'redis://localhost:6379',
+            ),
             retryStrategy(times: number) {
               return Math.min(times * 100, 3000);
             },

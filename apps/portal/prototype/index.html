@@ -34,11 +34,15 @@
   改动范围：apps/portal/src/views/{AiChat,Translate,Glossary}.vue 的朗读按钮
           （原型：新增 readBtn() + 控制条「TTS 未配置」开关）
   判定：**交互/状态变更** —— 原三态（合成中「请稍候…」→ 播放中「停止」→ 结束复位「朗读」）
-         之外新增禁用态：GET /api/ai/tts/health 返回 configured=false 时按钮 disabled
-         + tooltip「朗读能力未配置（服务端 TTS 凭据缺失）」。
+         之外新增第 4 态「不可用」：GET /api/ai/tts/health 返回 configured=false 时，
+         按钮文案改「朗读不可用」+ .is-disabled 视觉降级 + title/toast「朗读服务暂不可用，请稍后再试」。
+  ⚠️ 不用原生 disabled：桌面 Chromium 下 disabled 元素不触发 title（tooltip 永不出现）、
+     键盘不可达 —— 会退化成「无声禁用」，比点了报错更糟。改用 aria-disabled + 点击拦截。
   理由：2026-10-09 事故（rNPjtC）—— dev/prod 缺 TENCENT_* 凭据数月，用户侧唯一信号是
         「点一下弹请求失败」，排障成本极高。禁用态把「不可用」前移到点击之前。
   关联：specs/tts-continuity/design.md · docs/operations/tts-credentials-runbook.md
+        页面规格 specs/tts-continuity/page-spec-tts-disabled.md
+        D2 评审 docs/ui/reviews/tts-disabled-state-20261009.md
 
   2026-09-28 · 微调豁免 · 加载期首屏 FOUC 修复（缺陷修复）
   改动范围：packages/shell-loader（模块 CSS 就位后再 mount）、
@@ -147,8 +151,13 @@ input,textarea{font:inherit;color:inherit}
 .btn.pri:hover{background:var(--brand-strong);border-color:var(--brand-strong);color:var(--on-brand)}
 .btn.sm{height:28px;padding:0 10px;font-size:13px}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--t2)}
-.btn.ghost:hover{background:var(--page-bg);color:var(--brand-strong)}
+.btn.ghost:not(.is-disabled):hover{background:var(--page-bg);color:var(--brand-strong)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+/* 朗读能力不可用（2026-10-09）：用 aria-disabled + .is-disabled，而非原生 disabled。
+   原生 disabled 在桌面 Chromium 不触发 title（tooltip 永不出现）、键盘也不可达 →
+   用户拿不到「为什么点不了」，等于无声禁用，比报错更糟。
+   .is-disabled 只做视觉降级，按钮仍可聚焦/点击，点击给一次明确反馈。 */
+.is-disabled{opacity:.5;cursor:not-allowed}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--sh-1)}
 .tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:500;background:var(--page-bg);color:var(--t2)}
 .tag.hi{background:var(--hi-bg);color:var(--hi-fg)} .tag.mid{background:var(--mid-bg);color:var(--mid-fg)} .tag.ok{background:var(--ok-bg);color:var(--ok-fg)}
@@ -232,7 +241,7 @@ u[onclick],.ans .codeblk .hd .cp,.act{transition:color var(--duration-fast) var(
 .mrow:hover .acts{opacity:1}
 .mrow.me .acts{justify-content:flex-end}
 .acts button{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:6px;font-size:12px;color:var(--t3)}
-.acts button:hover{background:var(--page-bg);color:var(--brand-strong)}
+.acts button:not(.is-disabled):hover{background:var(--page-bg);color:var(--brand-strong)}
 .acts .tm{font-size:12px;color:var(--t4);margin-right:2px}
 .answering{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--t3)}
 /* 长回答折叠：PC 约 5 行（≈220 字）收起，文案对齐小程序「展开更多 ▼ / 收起 ▲」 */
@@ -458,10 +467,14 @@ u[onclick],.ans .codeblk .hd .cp,.act{transition:color var(--duration-fast) var(
   <b style="color:var(--brand)">P1 补充（2026-09-21 确认）：</b>开始页为公开页，未登录点「开始对话」弹登录 / 注册弹窗（复用 LoginPanel）；会话删除补后端 DELETE /agent/conversations/:id。<br>
   <b style="color:var(--brand)">已拍板（2026-09-22）：</b>日期分隔线<b>只在有日期 gap 处显示</b>且标注<b>具体日期</b>（如「9月21日」，不用「今天/昨天」相对词）——相邻消息跨天时在边界插一条线；单天会话无线、最后一轮末尾也无线。原型演示数据同天，故无跨天线。<br>
   <b style="color:var(--brand)">已拍板（2026-09-22）：</b>「我的」页新增<b>AI 记忆</b>分组（音乐口味 / 用户记忆）+ 「我的数据」新增<b>生词本</b>，各带二级页（口味标签 + 手动补充 + 清空；记忆按分类分组 + 单条删除；生词本卡片 + 单条移出 + <b>复制 / 朗读</b>）——对齐小程序 p-taste / p-memory / p-glossary，后端 user-service 已就绪。<br>
-  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>普通对话 AI 最终结果<b>支持语音朗读</b>（操作条加「朗读」）；<b>思考内容不播</b>——只读最终正文。<b>朗读走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色）</b>，替代浏览器 Web Speech；翻译卡朗读同走后端 TTS、音乐卡不播。按钮三态：合成中「请稍候…」→ 播放中「停止」→ 结束复位「朗读」。<br>
+  <b style="color:var(--brand)">已拍板（2026-09-22）：</b>普通对话 AI 最终结果<b>支持语音朗读</b>（操作条加「朗读」）；<b>思考内容不播</b>——只读最终正文。<b>朗读走后端 TTS（腾讯云 603007 邻家女孩，中英混读统一音色）</b>，替代浏览器 Web Speech；翻译卡朗读同走后端 TTS、音乐卡不播。按钮四态：合成中「请稍候…」→ 播放中「停止」→ 结束复位「朗读」→ **能力不可用「朗读不可用」（2026-10-09 新增）**。<br>
   <b style="color:var(--brand)">已拍板（2026-09-21）：</b><b>Q9</b> 长回答<b>折叠</b>（PC 5 行 ≈ 220 字，文案「展开更多 ▼ / 收起 ▲」，卡片不折叠）；识别为<b>翻译</b>→ 翻译卡片（推荐译文 + 方向 + 注解折叠 + 复制/朗读/收藏），识别为<b>音乐</b>→ 音乐卡片（歌单 + 换一批 / 不感兴趣 / 去渠道听）——均对齐小程序。<b>Q10</b> 对话侧<b>不做来源 / 查看原文</b>（合翻报告侧保留原文联动）。<br>
   <b style="color:var(--brand)">已拍板：</b><b>Q11</b> PDF / Word 解析<b>本轮不支持</b>——合翻上传仅<b>图片 OCR + 粘贴文本</b>（对齐小程序）。<br>
   <b style="color:var(--brand)">微调豁免（2026-09-29）：</b>登录面板 LoginPanel 二维码轮询修复 —— 过期 / 切走 tab / 关闭弹窗一律停止轮询，过期态补「刷新二维码」（miniprogram 与 qrcode 两种模式共用同一套状态机文案）。<b>纯行为修复 + 复用既有状态卡片，无新增视觉元素</b>，按微调豁免记一行，不另出独立原型页。<br>
+  <b style="color:var(--brand)">微调豁免（2026-10-10）：</b>「僵尸半登录态」自愈 —— 本地残留无效 token 时，
+  401 刷新失败后<b>先清凭据再跳登录页</b>，公开扫码接口（`/auth/qrcode/create|check|oauth-url`）不再挂 Authorization；
+  左栏由「加载失败 + 重试」回到既有的「登录 / 注册」空态，登录页回到既有的二维码卡片。
+  <b>全部复用既有状态卡片与既有空态，无新增视觉元素、无路由变更</b>，按微调豁免记一行，不另出独立原型页。<br>
   <b style="color:var(--brand)">待确认：</b>Q1 原文定位字段 · Q2 上传方式 · Q3 能力数据源 · Q4 会话隔离 · Q5 会员占位 · Q6 实验室去留 · Q7 每日一句数据来源 · Q8 长文本识别</div>
 </div>
 
@@ -516,8 +529,9 @@ const S = {
   capsMore:false,
   /* 翻译：idle / loading / done / fail（对齐小程序 packageTranslate 四页合一） */
   trState:'done', trTab:'recommend', trTone:'正式', trStyle:'完整', trRead:null,
-  /* 朗读能力可用性（2026-10-09）：true = 服务端 TTS 凭据缺失（/ai/tts/health → configured:false）
-     → 所有朗读按钮禁用 + tooltip，替代「点了才报错」。由原型控制条「TTS 未配置」切换 */
+  /* 朗读能力可用性（2026-10-09）：true = 服务端 TTS 不可用（/ai/tts/health → configured:false）
+     → 所有朗读按钮进「不可用」态（文案 + 视觉降级 + title/toast），替代「点了才报错」。
+     由原型控制条「TTS 未配置」切换。注意：health 拉取中按「可用」渲染，避免禁用态闪烁误伤 */
   ttsOff:false,
   /* 对话：长回答折叠（Q9 拍板：要折叠）+ 卡片展开态，按消息 id 记 */
   exp:{}, cardOpen:{},
@@ -700,7 +714,7 @@ function renderBlocks(bs){
         '<span>直译对照 · 委婉版 · 语气要点</span><span class="act">'+(S.cardOpen[b.id]?'收起':'展开')+'</span></div>'+
         (S.cardOpen[b.id]?'<div class="note">'+esc(b.note)+'</div>':'') : (b.streaming?'<div class="foldh"><span>正在生成注解…</span></div>':''))+
       (b.streaming?'':'<div class="ops"><button class="btn ghost sm" onclick="toast(\'已复制\')">'+SVG(I.copy)+'复制</button>'+
-        '<button class="btn ghost sm" onclick="toast(\'朗读：请稍候…\')">朗读</button>'+
+        readBtn('btn ghost sm', '<button class="btn ghost sm" onclick="toast(\'朗读：请稍候…\')">朗读</button>')+
         '<button class="btn ghost sm" onclick="toast(\'已收进生词本\')">收藏</button></div>')+
       '</div>';
     /* 识别为音乐 → 音乐卡片（对齐小程序 components/music-card） */
@@ -1253,10 +1267,17 @@ function toast(t){ const d=document.createElement('div'); d.className='toast'; d
  * @param cls  按钮样式类（对话操作条为 ''，卡片内为 'btn ghost sm'）
  * @param okHtml 能力可用时渲染的按钮 html
  */
+const TTS_OFF_TIP = '朗读服务暂不可用，请稍后再试';
 function readBtn(cls, okHtml){
   if(!S.ttsOff) return okHtml;
-  return '<button class="'+(cls||'')+'" disabled title="朗读能力未配置（服务端 TTS 凭据缺失）" '
-       + 'style="opacity:.45;cursor:not-allowed">'+SVG(I.vol)+'朗读</button>';
+  /* 不可用态三要点（D2 评审反例后修正）：
+     1) aria-disabled + .is-disabled，**不用原生 disabled** —— 原生 disabled 在桌面 Chromium
+        不触发 title（tooltip 永不出现）、键盘不可达 → 无声禁用，比报错更糟
+     2) 按钮文案直接写「朗读不可用」，**信息不依赖 tooltip 才成立**
+     3) tooltip / toast 用 C 端话术，**不暴露「服务端凭据缺失」内部细节**
+     4) 不带喇叭图标 —— 三处形态对齐（翻译卡启用态本无图标，禁用态凭空加图标会更重） */
+  return '<button class="'+((cls||'')+' is-disabled').trim()+'" aria-disabled="true" title="'+TTS_OFF_TIP+'" '
+       + 'onclick="toast(\''+TTS_OFF_TIP+'\')">朗读不可用</button>';
 }
 /** 原型控制条：切换 TTS 可用性（非产品界面） */
 function toggleTts(){ S.ttsOff=!S.ttsOff; document.getElementById('ptt').classList.toggle('on',S.ttsOff); render(); }

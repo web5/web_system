@@ -69,6 +69,20 @@ DENY_MSG = (
 )
 
 
+def strip_quoted(cmd):
+    """去掉单/双引号包裹的段落，只留「裸命令」文本。
+
+    必要性（2026-10-10 实测踩坑）：一条纯 `git commit -m "..."` 也可能被判成写 UI——
+    ① commit message 里写了组件文件名（`.../UserSelect.vue`）→ 命中 UI_PATH_PAT；
+    ② message 里的 ASCII 箭头 `->` 被 `>>?` 当成 shell 重定向 → 命中写语义。
+    于是「双命中」deny，且文案指向动作门，看起来像门禁策略问题，实为**命令文本误判**。
+
+    引号内一律是字面量（commit message / 脚本参数），不可能是真重定向或真写操作，
+    故写算子与重定向判定只在去引号文本上跑；UI 路径判定仍用原文，保持保守。
+    """
+    return re.sub(r'"[^"]*"|\'[^\']*\'', ' ', cmd)
+
+
 def ui_targets(cmd):
     return [m.group(0) for m in UI_PATH_PAT.finditer(cmd)]
 
@@ -123,14 +137,16 @@ def main():
 
     # 2) 双命中判定（判定优先于白名单）
     #    白名单不赦免写语义 —— 否则 `echo x > a.wxss` 会因 `echo ` 在白名单里被放过。
+    #    写算子/重定向只在「去引号」文本上判定：commit message 等字面量不算写操作。
+    plain = strip_quoted(cmd)
     redirected = False
-    for mm in re.finditer('>>?', cmd):
-        tail = cmd[mm.end():mm.end() + 160]
+    for mm in re.finditer('>>?', plain):
+        tail = plain[mm.end():mm.end() + 160]
         if any(within_repo(root, cwd, p) for p in ui_targets(tail)):
             redirected = True
             break
 
-    if WRITE_OP_PAT.search(cmd) or redirected:
+    if WRITE_OP_PAT.search(plain) or redirected:
         C.deny(DENY_MSG, stop_reason='UI 源码须经原型改动通道')
         C.audit(root, 'deny', tool_name, hit, session_id, {'via': 'shell'})
         return 0

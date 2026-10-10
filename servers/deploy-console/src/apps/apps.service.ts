@@ -27,6 +27,7 @@ import {
 import { envEntryUrl } from './entry-pointer';
 import { EnvArtifactService } from './env-artifact.service';
 import { GatewayCacheService } from '../common/gateway-cache.service';
+import { TaskRecorderService, RecordedTaskType } from '../common/task-recorder.service';
 
 /**
  * 应用域（UI 操作）的锁 owner：带来源前缀，排障时一眼看出「谁在发」。
@@ -94,6 +95,12 @@ export class AppsService implements OnModuleInit {
      * UI 切换/回滚与 internal/release/pointer 改了指针却不通知 → 页面最多 10s 后才变。
      */
     private readonly gatewayCache: GatewayCacheService,
+    /**
+     * 任务留痕（2026-10-09）：让 UI 切换/回滚在 `deploy_tasks` 里留下记录。
+     * 此前这类操作**完全无任务记录**，出事只能翻 pm2 error log。
+     * 只有显式传 `recordTask` 的入口才落库 —— 流水线与内部脚本接口各有自己的留痕。
+     */
+    private readonly taskRecorder: TaskRecorderService,
   ) {}
 
   /**
@@ -469,7 +476,39 @@ export class AppsService implements OnModuleInit {
    *
    * @returns 切换前后版本
    */
+  /**
+   * 切换版本（对外入口）。
+   *
+   * `opts.recordTask`：是否落 `deploy_tasks` 任务记录。**只有 UI 入口需要** ——
+   * 流水线本身已有任务与 SSE 推送，内部脚本接口已有审计（诊断 #7），
+   * 重复建任务只会让任务列表出现两条。真正空白的一直是 UI 这条路径。
+   */
   async switchVersion(
+    appKey: string,
+    envId: string,
+    version: string,
+    operator?: string,
+    lockOwner?: string,
+    opts?: { recordTask?: boolean; taskType?: RecordedTaskType },
+  ) {
+    if (!opts?.recordTask) {
+      return this.doSwitchVersion(appKey, envId, version, operator, lockOwner);
+    }
+    const { result } = await this.taskRecorder.record(
+      {
+        type: opts.taskType ?? 'deploy',
+        component: appKey,
+        env: envId,
+        tag: version,
+        operator,
+      },
+      () => this.doSwitchVersion(appKey, envId, version, operator, lockOwner),
+    );
+    return result;
+  }
+
+  /** 切换版本主体（不含任务留痕） */
+  private async doSwitchVersion(
     appKey: string,
     envId: string,
     version: string,
@@ -591,7 +630,30 @@ export class AppsService implements OnModuleInit {
    * 而后端入口会去历史表找 —— 同一模块在两个入口得到不同结果。
    * 统一后指针表优先、历史表回落，行为一致。
    */
-  async rollback(appKey: string, envId: string, version: string | undefined, operator?: string) {
+  async rollback(
+    appKey: string,
+    envId: string,
+    version: string | undefined,
+    operator?: string,
+    opts?: { recordTask?: boolean },
+  ) {
+    if (!opts?.recordTask) {
+      return this.doRollback(appKey, envId, version, operator);
+    }
+    // 整段包进来：解析回滚目标失败也要留痕（那正是最需要查的一类失败）
+    const { result } = await this.taskRecorder.record(
+      { type: 'rollback', component: appKey, env: envId, tag: version, operator },
+      () => this.doRollback(appKey, envId, version, operator),
+    );
+    return result;
+  }
+
+  private async doRollback(
+    appKey: string,
+    envId: string,
+    version: string | undefined,
+    operator?: string,
+  ) {
     const { to } = await this.registry.resolveRollbackTarget({
       env: envId,
       moduleKey: appKey,

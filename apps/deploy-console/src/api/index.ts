@@ -1586,4 +1586,52 @@ export const servicesApi = {
   // 后端「发布即生效」由流水线的 restart / verify action 承担，控制台不再需要独立部署动作。
 }
 
+/**
+ * 清理巡检（只读观测）。
+ *
+ * 与「清理动作」严格分开：这里的接口**永远不会删东西**，只回答「如果现在开开关，会删什么」。
+ * 结论会落库，于是能连续观察多天再决定要不要开 RETENTION_ENABLED / REMOTE_CLEANUP_ENABLED。
+ */
+export interface CleanupScanSummaryRow {
+  key: string
+  candidates: number
+  deleted?: number
+  protectedRows?: number
+  scanned?: number
+  note?: string
+}
+
+export interface CleanupScanRow {
+  id: string
+  kind: 'retention' | 'remote'
+  env: string
+  component: string
+  status: string
+  dryRun: boolean
+  reason?: string
+  summary?: CleanupScanSummaryRow[]
+  items?: string[]
+  candidateCount: number
+  deletedCount: number
+  operator?: string
+  scanTime: number
+  createdAt?: string
+}
+
+export const cleanupScanApi = {
+  /** 数据保留巡检（是否真删取决于后端 RETENTION_ENABLED） */
+  runRetention: () =>
+    http.post('/reconcile/scans/retention') as Promise<{ scan: CleanupScanRow; report: unknown }>,
+  /** 远端产物巡检（只列出会删哪些，绝不删除） */
+  runRemote: (env: string, moduleKey?: string) =>
+    http.post('/reconcile/scans/remote', { env, moduleKey }) as Promise<{
+      env: string
+      scan: CleanupScanRow
+      outcomes: { moduleKey: string; scanned: number; keep: string[]; remove: string[]; reason?: string }[]
+    }>,
+  list: (params?: { kind?: string; env?: string; limit?: number }) =>
+    http.get('/reconcile/scans', { params }) as Promise<CleanupScanRow[]>,
+  one: (id: string) => http.get(`/reconcile/scans/${id}`) as Promise<CleanupScanRow | null>,
+}
+
 export default http

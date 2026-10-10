@@ -81,6 +81,9 @@ apps/kedou-ai-minigram/private.key
 *.key
 *.cert
 
+# 小程序 CI 产物（预览二维码等，含临时产物不入库）
+apps/kedou-ai-minigram/.ci-output/
+
 # 本地工具缓存
 .workbuddy/
 

@@ -110,6 +110,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '审计日志' },
       },
       {
+        path: 'cleanup',
+        name: 'CleanupScan',
+        component: () => import('@/views/CleanupScan.vue'),
+        meta: { title: '清理巡检' },
+      },
+      {
         path: 'config',
         name: 'ConfigCenter',
         component: () => import('@/views/ConfigCenter.vue'),

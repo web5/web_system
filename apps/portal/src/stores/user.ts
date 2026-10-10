@@ -57,8 +57,11 @@ export const useUserStore = defineStore(
         if (res.code === 200 && res.data) {
           setUserInfo(res.data);
         }
-      } catch {
-        // 静默处理，刷新页面后重试
+      } catch (err: any) {
+        // 401 = 凭据已失效：必须清掉本地 token，否则 isLoggedIn 仍为 true，
+        // 左栏会停在「加载失败 + 重试」而不是「登录 / 注册」（僵尸半登录态）。
+        // 其余错误（网络抖动等）保持静默，不误伤在线用户。
+        if (err?.response?.status === 401) logout();
       }
     }
 
@@ -80,3 +83,20 @@ export const useUserStore = defineStore(
     },
   },
 );
+
+/**
+ * 凭据失效广播（request.ts 的 clearStoredAuth 在 401 清理后发出）。
+ *
+ * localStorage 清了只是「磁盘」清了；pinia 内存里的 token 若不同步，
+ * `isLoggedIn` 仍是 true，界面就继续按「已登录」渲染（左栏错误态 / 无登录入口）。
+ * 这里监听并同步内存态，完成「磁盘 + 内存」双清。
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:expired', () => {
+    try {
+      useUserStore().logout();
+    } catch {
+      // pinia 尚未激活（极端时序）：忽略，页面刷新后会以空凭据 hydrate
+    }
+  });
+}

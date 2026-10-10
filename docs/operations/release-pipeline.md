@@ -644,6 +644,65 @@ mysql -h<DB_PUBLIC_HOST> -P<DB_PORT> -u<DB_USER> <DB_NAME_DEPLOY> < /tmp/deploy-
 
 ---
 
+## 十一、deploy-console 自举发布的手工旁路
+
+> **触发条件**：发布目标就是 **deploy-console 自己**。
+> 流水线发布要先拿发布锁，而锁归 console 管 —— console 一重启就没人放锁，
+> 于是「发布 console」永远等不到锁：**自举死锁**。
+>
+> **症状**：任务一直卡在等待锁 / 长时间 pending，且 console 页面此时已不可访问。
+>
+> 2026-10-09 是靠现场推断破的。下次换个人就会卡住，所以写成固定旁路。
+
+### 11.1 旁路步骤（在目标机器上直接做，完全不走流水线）
+
+```bash
+ssh <SSH_ALIAS_PROD>
+
+# ① 外部目录拉源码 —— 不要在部署目录里 build，避免半成品被 pm2 载入
+mkdir -p /tmp/console-build && cd /tmp/console-build
+git clone --depth 1 -b master <REPO_ORG>/<REPO_NAME>.git .
+pnpm install --frozen-lockfile
+pnpm --filter deploy-console-server build
+
+# ② 备份旧 dist（回退全靠它，不许跳过）
+cp -r <DEPLOY_DIR>/servers/deploy-console/dist \
+      <DEPLOY_DIR>/servers/deploy-console/dist.bak-$(date +%Y%m%d%H%M)
+
+# ③ 替换
+rm -rf <DEPLOY_DIR>/servers/deploy-console/dist
+cp -r /tmp/console-build/servers/deploy-console/dist \
+      <DEPLOY_DIR>/servers/deploy-console/dist
+
+# ④ 重启
+pm2 restart deploy-console
+```
+
+如果流水线里还挂着那个卡住的任务，**先把它的锁解掉再重启**（否则重启后它可能立刻
+又去抢锁做二次部署，把刚换上的 dist 又覆盖掉）。
+
+### 11.2 回退
+
+```bash
+rm -rf <DEPLOY_DIR>/servers/deploy-console/dist
+mv <DEPLOY_DIR>/servers/deploy-console/dist.bak-<时间戳> \
+   <DEPLOY_DIR>/servers/deploy-console/dist
+pm2 restart deploy-console
+```
+
+### 11.3 验收（三条都要过，缺一条不算完成）
+
+| # | 检查 | 期望 |
+| --- | --- | --- |
+| 1 | `curl -o /dev/null -w '%{http_code}' https://<PROD_DOMAIN>/console/` | `200`（不是 502/504） |
+| 2 | `pm2 list \| grep deploy-console` 的 restarts | **未增长**（增长 = 起来又崩了） |
+| 3 | `pm2 logs deploy-console --lines 100 --nostream` | 无 Nest 启动期报错；任一需鉴权接口返回 **401 而不是 502**（401 说明进程已起来并在正常鉴权，502 说明没起来） |
+
+⚠️ **不要用「页面打开了」当验收**：console 前端是构建产物，页面能开不代表后端接口活着；
+也不要用不需要鉴权的静态资源当探活目标，那是 nginx 直接返回的。
+
+---
+
 ## 附录 A：本规范制定时的踩坑时间线
 
 1. **dev 流水线配置不是最新**：local → dev 同步。

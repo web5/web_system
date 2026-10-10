@@ -685,8 +685,11 @@ curl -X POST https://kedouai.com/ai/chat \
 ```
 
 3. **小程序预览**
-- 在微信开发者工具中点击「预览」
-- 使用微信扫码在真机上测试
+- 在微信开发者工具中点击「预览」，或用 CI 脚本出码（无需打开开发者工具）：
+  `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js`
+- 使用微信扫码在真机上测试（**开发者工具里 OK ≠ 真机 OK**，流式与域名校验务必真机复验）
+- 完整前置（CI 私钥、IP 白名单、依赖隔离）与排错见
+  [release-runbook.md](./release-runbook.md)
 
 ---
 
