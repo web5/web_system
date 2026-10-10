@@ -53,4 +53,5 @@ version: 1.0.0
 | CODEBUDDY.md（开发规则 / AI 编程规范 / 部署铁律 / 微前端四步 / 提交铁律） | 任何后端任务（常驻） |
 | `.codebuddy/rules/coding-best-practices.md` | 编码细则 |
 | `docs/development/local-release-runbook.md` / `deploy-pipeline-dev.md` / `admin-dev.md` | 发布/流水线/提 PR |
+| `docs/miniprogram/release-runbook.md` | 小程序出码（预览码 / 体验版）：CI 私钥、IP 白名单、`MINIPROGRAM_CI_PATH` 依赖隔离、排错表 |
 | be-dev-common（上游 ai-agent-kit `references/be-dev-common.md`） | 通用工程质量规则 |
