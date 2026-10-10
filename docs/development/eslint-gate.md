@@ -112,3 +112,40 @@ npx eslint apps/portal --fix
 1. **新增告警即失败**：`lint:ci` 的 `--max-warnings` 只能**下调**，不得上调（修一批降一批）。
 2. 升 error 的规则必须先在本文登记基线数字，确认存量已清零。
 3. 关闭规则必须写清理由（如 `vue/multi-word-component-names` 因存量单文件组件名过多而 off）。
+
+---
+
+## 7 整改影响清单（P0 · 5 个 error，2026-10-10）
+
+动作门要求：批量整改（≥2 文件 / 跨端）**先出清单**再动（`ui-interface/RULE.mdc` 动作门第 9 条）。
+本节即为该清单，兼作豁免留痕。
+
+### 7.1 性质判定：全部属**机械改动**（零视觉变化）
+
+判据（`frontend-best-practices.md` §2.1.1）：**改完截图前后一致 → 机械改动**。
+下列 5 处均不新增/删除视觉元素、不改状态机、不改布局与配色 → 走 `UI_GATE` 应急出口与
+`Micro-exempt` 留痕，**不触发**原型的「微调豁免」设计评审流程（D2/D3）。
+
+### 7.2 逐条清单
+
+| # | 文件 | 规则 | 改动 | 风险 | 优先级 |
+|---|---|---|---|---|---|
+| 1 | `packages/ui/src/components/UserSelect.vue:108` | `vue/no-dupe-keys` | 本地 `function load()` 重命名 → `loadUsers()`，同步调用点 | **低但必须**：现网同名 key 存在覆盖风险；改名后行为等价 | **P0** |
+| 2 | `apps/admin/src/views/Agents/AgentRuns.vue:222` | `no-self-assign` | 删自赋值语句（无效代码） | 无：自赋值是 no-op | P1 |
+| 3 | `apps/admin/src/views/Agents/KnowledgeCollectionsPage.vue:166` | `vue/no-unused-vars` | 删除未使用的模板变量 | 无：变量未参与渲染 | P1 |
+| 4 | `apps/deploy-console/src/components/pipeline/StepConditionEditor.vue:77` | `no-irregular-whitespace` | 全角/异常空白字符 → 普通空格 | 无：纯字符替换，字符串内容需确认**非业务数据**（若是业务文案需改文案而非字符） | P2 |
+| 5 | `apps/portal/src/views/Todo.vue:133` | `no-empty` | 空异常分支补最小处理（记录/静默降级需显式注明） | 低：补的是**可见性**，不是行为；须保证不把「可忽略错误」变成弹窗噪音 | P2 |
+
+### 7.3 豁免留痕
+
+- 判据：截图前后一致 → 机械改动（§7.1）
+- 出口：`UI_GATE=off`（会话级）；commit 带 `Micro-exempt: <理由>`
+- 口径源：`.codebuddy/rules/{ui,brand}-interface/RULE.mdc`「零摩擦边界」、
+  `specs/kit-sop-enforcement/design.md` §3.7.1
+- 复核：整改后 `pnpm lint:ci` 须 **0 error**；`npx vue-tsc --noEmit` 无新增类型错误
+
+### 7.4 不做的事（本次范围外）
+
+- 不修 325 条 warning（`no-explicit-any` 283 条等）—— 属 P2，需按工程分批
+- 不改任何视觉/交互/文案语义
+- 不顺手重构相邻代码（保持 diff 最小，便于回滚）

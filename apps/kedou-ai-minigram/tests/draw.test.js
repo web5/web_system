@@ -1,9 +1,22 @@
 // tests/draw.test.js
 // 画板页面端到端自动化测试
+//
+// ⚠️ 本套件依赖**微信开发者工具 CLI**（见 tests/setup.js，硬编码 macOS 路径）：
+// 只能在「本地 macOS + 已安装开发者工具」下运行。
+// CI（Linux runner，无开发者工具）下自动跳过 —— 否则任何触碰 kedou-ai-minigram 包的 PR
+// 都会在 quality-gate 的「改动包 build/test」环节必红（2026-10-10 实测：9 failed / 26 passed）。
+// 这是真机 E2E，不是单元/快照测试，不该进 CI 门禁。
 
+const fs = require('fs');
 const { setup, teardown } = require('./setup');
 
-describe('画板功能自动化测试', () => {
+const WECHAT_DEVTOOLS_CLI = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
+const AUTOMATION_AVAILABLE =
+  !process.env.CI && process.platform === 'darwin' && fs.existsSync(WECHAT_DEVTOOLS_CLI);
+
+const describeAutomation = AUTOMATION_AVAILABLE ? describe : describe.skip;
+
+describeAutomation('画板功能自动化测试', () => {
   let miniProgram;
   let page;
 
