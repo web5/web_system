@@ -179,5 +179,65 @@
       故不触发 ux-review-checklist A–I 的新增项复核。
     </p>
   </section>
+
+  <!-- ===== 2026-10-10 增补：未登录路由交接（登录页归属）=====
+       变更性质：路由归属，不是新增页面。基座不再「截胡」未登录访问，
+       由目标模块自己的登录页承接；基座 /login 降级为兜底。 -->
+  <section class="note" data-dr="login-handoff">
+    <h2>未登录路由交接（登录页归属）</h2>
+
+    <div class="mock-card">
+      <h3>交接流程</h3>
+      <p>
+        未登录访问 <code>/portal/chat</code> →
+        基座守卫判定首段归属 <code>portal</code> →
+        跳 <code>/portal/login?redirect=/portal/chat</code> →
+        <b>portal 模块登录页</b>（账密 + 微信扫码 + 注册）→
+        登录成功写 <code>user-store</code> → 回跳 <code>redirect</code>。
+      </p>
+      <p style="margin-top:10px">
+        改前：基座守卫无条件 <code>next('/login')</code> → 落在基座老登录页
+        （纯账密 + <code>alert</code> + 整页刷新），<b>模块登录页永远进不去</b>，扫码登录不可用。
+      </p>
+    </div>
+
+    <div class="mock-card">
+      <h3>状态矩阵</h3>
+      <table class="matrix">
+        <thead>
+          <tr><th>场景</th><th>判定</th><th>落点</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>已登录 · 任意路径</td><td><code>token</code> 存在</td><td>直接放行</td></tr>
+          <tr><td>未登录 · <code>/portal/*</code></td><td>首段命中模块</td><td><code>/portal/login</code>（带 redirect）</td></tr>
+          <tr><td>未登录 · <code>/admin/*</code></td><td>首段命中模块</td><td><code>/admin/login</code>（带 redirect）</td></tr>
+          <tr><td>未登录 · 已在模块登录页</td><td>目标 == 当前</td><td>放行（防 beforeEach 死循环）</td></tr>
+          <tr><td>未登录 · 非模块路径</td><td>首段未命中</td><td>基座 <code>/login</code>（兜底）</td></tr>
+          <tr><td>模块内登录成功</td><td>写 <code>user-store</code></td><td>基座判定口径同源，不再误判未登录</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>设计决策记录（登录交接）</h2>
+    <ul>
+      <li><b>为什么不让基座全拦</b>：portal / admin 各自带 <code>requiresAuth</code> 守卫与自己的登录页，
+        基座登录页是更早的一份实现。全拦等于让全站登录体验退化到最早版本。</li>
+      <li><b>为什么模块名取自 manifest</b>：<code>byEnv[env]</code> 与 <code>modules[]</code> 是模块真身清单，
+        不硬编码 <code>['portal','admin']</code> —— 新增模块自动生效。</li>
+      <li><b>为什么保留基座 /login</b>：模块判定不出来（根路径 / 非法路径）时必须有兜底，不能白屏。</li>
+      <li><b>判定口径统一（auth-storage）</b>：模块登录后只写自己的 pinia persist key
+        <code>user-store</code>，基座若只读历史 <code>token</code> 会误判未登录 → 登录死循环。
+        故 <code>readToken/readRefreshToken</code> 以 <code>user-store</code> 为准，无记录才回落旧 key。</li>
+      <li><b>死锁规避</b>：<code>next()</code> 到当前同址会无限触发 <code>beforeEach</code>，
+        「已在模块登录页」必须直接放行。</li>
+    </ul>
+  </section>
+
+  <style>
+    .matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .matrix th, .matrix td { border: 1px solid var(--ws-border-light); padding: 6px 10px; text-align: left; }
+    .matrix th { background: #fafbfc; color: var(--ws-text-secondary); font-weight: 600; }
+    .matrix code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; }
+  </style>
 </body>
 </html>
