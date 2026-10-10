@@ -130,7 +130,10 @@ async function fetchStats() {
   try {
     const res = await getTodoStats('today');
     Object.assign(stats, res.data);
-  } catch {}
+  } catch {
+    // 统计为辅助信息：失败时保留上一次的值，不弹窗（主列表失败已有提示），仅登记便于排查
+    console.warn('[Todo] getTodoStats 失败，保留上一次统计值');
+  }
 }
 
 function loadMore() {

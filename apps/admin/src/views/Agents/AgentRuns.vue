@@ -219,7 +219,7 @@ function handleTableChange(pag: any) {
 }
 
 function resetFilters() {
-  filters.agentId = filters.agentId; // 保留当前 agent
+  // agentId 不在重置范围内（保留当前 agent），故此处不对其赋值
   filters.userId = '';
   filters.status = undefined;
   filters.keyword = '';

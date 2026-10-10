@@ -74,7 +74,7 @@ async function save() {
         <b>变量</b>：<code>DEPLOY_ENV</code> <code>MODULE_KEY</code> <code>MODULE_TYPE</code>
         <code>BRANCH</code> <code>COMMIT_ID</code>、本流水线变量与配置中心值（见「变量」Tab）。
       </div>
-      <div><b>示例</b>：<code>DEPLOY_ENV == prod</code>　<code>DEPLOY_ENV != local &amp;&amp; MODULE_TYPE == backend</code></div>
+      <div><b>示例</b>：<code>DEPLOY_ENV == prod</code>&emsp;<code>DEPLOY_ENV != local &amp;&amp; MODULE_TYPE == backend</code></div>
     </div>
     <div class="cond-note">
       条件满足 → 正常执行；不满足 → <b>跳过整个步骤</b>（日志记「执行条件不满足，已跳过」，流程继续）；
