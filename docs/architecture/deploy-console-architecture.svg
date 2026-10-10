@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="PingFang SC, Microsoft YaHei, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <linearGradient id="dcBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A0A0D"/>
+      <stop offset="1" stop-color="#13131C"/>
+    </linearGradient>
+    <marker id="dcArrO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F97316"/>
+    </marker>
+    <marker id="dcArrT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4ECDC4"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="1000" fill="url(#dcBg)"/>
+
+  <!-- Header -->
+  <text x="40" y="42" font-size="26" font-weight="600" fill="#FFF8F0">deploy-console（Beehive 发布平台）· 技术架构图</text>
+  <text x="40" y="64" font-size="13" fill="#8A8A99">运维平台旁路：流水线编排（4 步可定制）+ 配置中心 + 版本指针 + 执行下发 · 现状视图 2026-10-09</text>
+  <text x="1400" y="64" font-size="12" fill="#5C5C6B" text-anchor="end">source: dev 库 deploy_pipeline_steps 实测 + specs/service-config-delivery</text>
+  <line x1="40" y1="74" x2="1400" y2="74" stroke="#24242F" stroke-width="1"/>
+
+  <!-- ===== 接入层 ===== -->
+  <rect x="40" y="84" width="1360" height="88" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="84" width="4" height="88" rx="2" fill="#4ECDC4"/>
+  <text x="60" y="106" font-size="13" font-weight="600" fill="#4ECDC4">接入层（谁在调用 deploy-console :6200）</text>
+  <g font-size="11">
+    <rect x="40" y="116" width="210" height="44" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="145" y="134" text-anchor="middle" font-size="12.5" fill="#FFF8F0">控制台 SPA</text>
+    <text x="145" y="150" text-anchor="middle" fill="#9090A2">/console/ · JWT</text>
+    <rect x="262" y="116" width="210" height="44" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="367" y="134" text-anchor="middle" font-size="12.5" fill="#FFF8F0">REST API</text>
+    <text x="367" y="150" text-anchor="middle" fill="#9090A2">/api/* · 控制台 JWT</text>
+    <rect x="484" y="116" width="210" height="44" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="589" y="134" text-anchor="middle" font-size="12.5" fill="#FFF8F0">MCP 端点</text>
+    <text x="589" y="150" text-anchor="middle" fill="#9090A2">/api/mcp/* · X-Mcp-Key</text>
+    <rect x="706" y="116" width="210" height="44" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="811" y="134" text-anchor="middle" font-size="12.5" fill="#FFF8F0">发布 Agent</text>
+    <text x="811" y="150" text-anchor="middle" fill="#9090A2">ai-agent → mcp-gw :6006</text>
+    <rect x="928" y="116" width="210" height="44" rx="9" fill="#1F1A16" stroke="#5A3A22"/>
+    <text x="1033" y="134" text-anchor="middle" font-size="12.5" fill="#FDBA74">GitHub Actions</text>
+    <text x="1033" y="150" text-anchor="middle" fill="#9090A2">HMAC /api/hooks/release</text>
+    <rect x="1150" y="116" width="210" height="44" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1255" y="134" text-anchor="middle" font-size="12.5" fill="#FFF8F0">CLI</text>
+    <text x="1255" y="150" text-anchor="middle" fill="#9090A2">kedou-agent 对话发布</text>
+  </g>
+  <path d="M560,172 L560,194" stroke="#F97316" stroke-width="1.6" marker-end="url(#dcArrO)"/>
+
+  <!-- ===== 核心服务 ===== -->
+  <rect x="40" y="196" width="1040" height="444" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="196" width="4" height="444" rx="2" fill="#F97316"/>
+  <text x="60" y="220" font-size="13.5" font-weight="600" fill="#F97316">核心服务 · deploy-console :6200（NestJS · pm2 · 仅部署在 dev）</text>
+
+  <g font-size="11">
+    <!-- 行1 -->
+    <rect x="56" y="238" width="326" height="106" rx="10" fill="#1F1A16" stroke="#5A3A22"/>
+    <text x="72" y="262" font-size="13" font-weight="600" fill="#FDBA74">① 流水线引擎（编排）</text>
+    <text x="72" y="282" fill="#C9C9D6">pipeline → steps → tasks → actions 三层，</text>
+    <text x="72" y="298" fill="#C9C9D6">全部存 DB，可自由增删改（非固定阶段）</text>
+    <text x="72" y="314" fill="#9090A2">当前模板 4 步：拉取代码 → 构建 →</text>
+    <text x="72" y="330" fill="#9090A2">发布确认（审批挂起）→ 发布</text>
+
+    <rect x="396" y="238" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="412" y="262" font-size="13" font-weight="600" fill="#FFF8F0">② 变量与脚本门禁</text>
+    <text x="412" y="282" fill="#C9C9D6">deploy_pipeline_vars 变量引用解析</text>
+    <text x="412" y="298" fill="#C9C9D6">保存时 bash -n 语法校验</text>
+    <text x="412" y="314" fill="#9090A2">pipeline-lint L1-L7（L5 ssh 缺续行符、</text>
+    <text x="412" y="330" fill="#9090A2">L7 基座 RELEASE_TAG 必须为两段）</text>
+
+    <rect x="736" y="238" width="326" height="106" rx="10" fill="#141C1C" stroke="#2C4A46"/>
+    <text x="752" y="262" font-size="13" font-weight="600" fill="#4ECDC4">③ 配置中心</text>
+    <text x="752" y="282" fill="#C9C9D6">config_items：global / env / module 三层</text>
+    <text x="752" y="298" fill="#C9C9D6">AES-256-GCM 加密（CONFIG_MASTER_KEY）</text>
+    <text x="752" y="314" fill="#9090A2">列表掩码回显 · 审计不记明文 · 快照随版本</text>
+    <text x="752" y="330" fill="#4ECDC4">内部接口 /config/env → .env.generated</text>
+
+    <!-- 行2 -->
+    <rect x="56" y="356" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="380" font-size="13" font-weight="600" fill="#FFF8F0">④ 版本与指针</text>
+    <text x="72" y="400" fill="#C9C9D6">NEW 域 deploy_app_env_versions（主指针）</text>
+    <text x="72" y="416" fill="#C9C9D6">legacy deploy_deployments（应急回退）</text>
+    <text x="72" y="432" fill="#9090A2">prod 严格模式写云库（失败抛 503）</text>
+    <text x="72" y="448" fill="#9090A2">配置镜像双写（异步队列，不阻塞业务）</text>
+
+    <rect x="396" y="356" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="412" y="380" font-size="13" font-weight="600" fill="#FFF8F0">⑤ 环境与注册表</text>
+    <text x="412" y="400" fill="#C9C9D6">apps / sites / envs / services（host+port）</text>
+    <text x="412" y="416" fill="#C9C9D6">routes / endpoints（网关路由真相源）</text>
+    <text x="412" y="432" fill="#9090A2">灰度 deploy_canary_rules（header /</text>
+    <text x="412" y="448" fill="#9090A2">percent / user-list）+ promote / rollback</text>
+
+    <rect x="736" y="356" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="752" y="380" font-size="13" font-weight="600" fill="#FFF8F0">⑥ 执行与远程</text>
+    <text x="752" y="400" fill="#C9C9D6">动作序列（按环境不同）：</text>
+    <text x="752" y="416" fill="#4ECDC4">write-version → sync → restart → verify</text>
+    <text x="752" y="432" fill="#9090A2">sync 按指纹重建 workspace 包；</text>
+    <text x="752" y="448" fill="#9090A2">ssh2/scp 直连目标机（已知技术债）</text>
+
+    <!-- 行3 -->
+    <rect x="56" y="474" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="498" font-size="13" font-weight="600" fill="#FFF8F0">⑦ 监控与健康检查</text>
+    <text x="72" y="518" fill="#C9C9D6">服务健康探测 · 控制台实例自检</text>
+    <text x="72" y="534" fill="#C9C9D6">部署后 verify 探活（发布成功 ≠ 可用）</text>
+    <text x="72" y="550" fill="#9090A2">清 gateway 版本缓存（TTL 10s）</text>
+    <text x="72" y="566" fill="#9090A2">失败按 rollback_on_failure 回退上一版</text>
+
+    <rect x="396" y="474" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="412" y="498" font-size="13" font-weight="600" fill="#FFF8F0">⑧ 审计与日志</text>
+    <text x="412" y="518" fill="#C9C9D6">流水线执行日志流式输出（按阶段）</text>
+    <text x="412" y="534" fill="#C9C9D6">操作审计（operator = ownerId，禁 anonymous）</text>
+    <text x="412" y="550" fill="#B03A3A">⚠ 审计在丢：component 列 Data too long</text>
+    <text x="412" y="566" fill="#9090A2">配置版本化：revisions 快照 + 乐观锁恢复</text>
+
+    <rect x="736" y="474" width="326" height="106" rx="10" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="752" y="498" font-size="13" font-weight="600" fill="#FFF8F0">⑨ 密钥与鉴权</text>
+    <text x="752" y="518" fill="#C9C9D6">JWT（控制台）· X-Mcp-Key（MCP，精确到人）</text>
+    <text x="752" y="534" fill="#C9C9D6">INTERNAL_API_KEY（服务间，曾双值静默断链）</text>
+    <text x="752" y="550" fill="#C9C9D6">CONFIG_MASTER_KEY 只注入文件路径</text>
+    <text x="752" y="566" fill="#9090A2">GitHub Token / 服务间凭据 → 配置中心托管</text>
+  </g>
+
+  <!-- ===== 执行目标 ===== -->
+  <rect x="1100" y="196" width="300" height="444" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="1100" y="196" width="4" height="444" rx="2" fill="#8B7CF6"/>
+  <text x="1116" y="220" font-size="13" font-weight="600" fill="#8B7CF6">执行目标（被管对象）</text>
+  <g font-size="11">
+    <rect x="1116" y="238" width="268" height="82" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1132" y="260" font-size="12.5" font-weight="500" fill="#FFF8F0">dev 机（本地 shell）</text>
+    <text x="1132" y="278" fill="#9090A2">构建 → 版本目录 → pm2 restart</text>
+    <text x="1132" y="294" fill="#9090A2">servers/&lt;svc&gt;/&lt;key&gt;/&lt;commit&gt;</text>
+    <text x="1132" y="310" fill="#4ECDC4">落盘 .env.generated（P0 仅本地）</text>
+
+    <rect x="1116" y="330" width="268" height="82" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1132" y="352" font-size="12.5" font-weight="500" fill="#FFF8F0">prod 机（ssh 远端）</text>
+    <text x="1132" y="370" fill="#9090A2">sync → restart → verify</text>
+    <text x="1132" y="386" fill="#9090A2">严格模式：指针写云数据库</text>
+    <text x="1132" y="402" fill="#B03A3A">.env 目前需人工维护（下发 P1）</text>
+
+    <rect x="1116" y="422" width="268" height="76" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1132" y="444" font-size="12.5" font-weight="500" fill="#FFF8F0">gateway :6000</text>
+    <text x="1132" y="462" fill="#9090A2">清版本缓存 / manifest 断言</text>
+    <text x="1132" y="478" fill="#9090A2">GATEWAY_SERVICE_KEY（双边持有）</text>
+    <text x="1132" y="492" fill="#9090A2">灰度命中 resolveCanary</text>
+
+    <rect x="1116" y="508" width="268" height="112" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1132" y="530" font-size="12.5" font-weight="500" fill="#FFF8F0">微前端产物</text>
+    <text x="1132" y="548" fill="#9090A2">static/modules/&lt;key&gt;/&lt;env&gt;/</text>
+    <text x="1132" y="564" fill="#9090A2">&lt;commit&gt;/ + 无版本入口 index.js</text>
+    <text x="1132" y="584" fill="#9090A2">shell 基座走 site-version 模式</text>
+    <text x="1132" y="600" fill="#9090A2">（不参与环境切换）</text>
+    <text x="1132" y="614" fill="#4ECDC4">CDN 子集按需重建</text>
+  </g>
+  <path d="M1080,300 L1096,300" stroke="#F97316" stroke-width="1.6" marker-end="url(#dcArrO)"/>
+  <path d="M1062,330 C1076,330 1080,326 1096,326" stroke="#4ECDC4" stroke-width="1.3" stroke-dasharray="4 3" fill="none" marker-end="url(#dcArrT)"/>
+  <text x="1088" y="316" font-size="10" fill="#4ECDC4" text-anchor="middle">配置下发</text>
+
+  <path d="M560,640 L560,662" stroke="#F97316" stroke-width="1.6" marker-end="url(#dcArrO)"/>
+
+  <!-- ===== 数据层 ===== -->
+  <rect x="40" y="664" width="1360" height="120" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="664" width="4" height="120" rx="2" fill="#8B7CF6"/>
+  <text x="60" y="688" font-size="13" font-weight="600" fill="#8B7CF6">数据层（web_system_deploy）</text>
+  <g font-size="11">
+    <rect x="56" y="696" width="432" height="72" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="718" font-size="12.5" font-weight="500" fill="#FFF8F0">库实例与双写</text>
+    <text x="72" y="736" fill="#9090A2">本机库（dev/local 写）· 云数据库（prod 严格写）</text>
+    <text x="72" y="752" fill="#9090A2">10 张配置表镜像写（异步队列 + 同键去重）</text>
+    <text x="72" y="766" fill="#5C5C6B">web_system_deploy_shadow：影子库演练</text>
+
+    <rect x="504" y="696" width="432" height="72" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="520" y="718" font-size="12.5" font-weight="500" fill="#FFF8F0">流水线配置表</text>
+    <text x="520" y="736" fill="#9090A2">deploy_pipelines · _steps · _tasks · _actions</text>
+    <text x="520" y="752" fill="#9090A2">deploy_pipeline_vars · deploy_pipeline_revisions</text>
+    <text x="520" y="766" fill="#5C5C6B">配置版本化：快照含脚本正文 + rev 乐观锁</text>
+
+    <rect x="952" y="696" width="432" height="72" rx="9" fill="#141C1C" stroke="#2C4A46"/>
+    <text x="968" y="718" font-size="12.5" font-weight="500" fill="#4ECDC4">配置与版本表</text>
+    <text x="968" y="736" fill="#9090A2">config_items（加密配置，带 scope/env/module）</text>
+    <text x="968" y="752" fill="#9090A2">deploy_app_env_versions · deploy_canary_rules</text>
+    <text x="968" y="766" fill="#5C5C6B">发布记录 / 执行日志 / 审批记录</text>
+  </g>
+
+  <!-- ===== 关键约束 ===== -->
+  <rect x="40" y="804" width="1360" height="156" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="804" width="4" height="156" rx="2" fill="#B03A3A"/>
+  <text x="60" y="828" font-size="13" font-weight="600" fill="#B03A3A">关键约束与已知债（改这里前必读）</text>
+  <g font-size="11.5" fill="#C9C9D6">
+    <text x="60" y="850"><tspan fill="#F97316">部署形态：</tspan>console 只在 dev 部署（运维平台 + synchronize:true 不污染 prod 库）；自发布会自杀 → 必须异步排程重启，且 pointer 排在 restart 之前。</text>
+    <text x="60" y="870"><tspan fill="#F97316">配置下发边界：</tspan>引导凭据（CONFIG_MASTER_KEY、MYSQL_* / REDIS_*）留 .env；业务与服务间凭据 + GitHub Token 进配置中心（加密 + 审计），按需下发给服务进程（.env.generated）或仅注入流水线脚本 env。</text>
+    <text x="60" y="890"><tspan fill="#F97316">P0 覆盖不足：</tspan>.env.generated 下发当前只覆盖本地；远程机（prod）仍只能手工写 .env —— 远程下发是 P1 待补项。</text>
+    <text x="60" y="910"><tspan fill="#B03A3A">禁项：</tspan>禁 pm2 restart --update-env（会把会话变量固化进 pm2_env）；禁手动 ssh 构建（无版本记录 / 无审批 / 无回滚点）；改流水线后必跑 pipeline-lint。</text>
+    <text x="60" y="934"><tspan fill="#B03A3A">待解技术债：</tspan>console 用 ssh2/scp 直连 prod（应拆独立 runner）；审计 component 列过短丢数据；13 个流水线变量未登记（静默兜底）。</text>
+    <text x="60" y="952"><tspan fill="#4ECDC4">扩展点：</tspan>流水线 steps/tasks/actions 全在 DB，新增模块只需复制模板并改动作脚本；MCP 工具经 mcp-gateway :6006 暴露，供发布 Agent / CLI 对话式调用。</text>
+  </g>
+</svg>
