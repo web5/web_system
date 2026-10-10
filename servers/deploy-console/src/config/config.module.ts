@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigItemEntity } from '../entities/config-item.entity';
 import { ConfigSnapshotEntity } from '../entities/config-snapshot.entity';
+import { ConfigRevisionEntity } from '../entities/config-revision.entity';
+import { ConfigDeliveryEntity } from '../entities/config-delivery.entity';
 import { AuditModule } from '../audit/audit.module';
 import { CommonModule } from '../common/common.module';
 import { ConfigService } from './config.service';
@@ -10,7 +12,13 @@ import { ConfigSelfCheckService } from './config-self-check.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ConfigItemEntity, ConfigSnapshotEntity]),
+    TypeOrmModule.forFeature([
+      ConfigItemEntity,
+      ConfigSnapshotEntity,
+      // 2026-10-10：变更历史（P0-2）+ 下发记录（P0-3）
+      ConfigRevisionEntity,
+      ConfigDeliveryEntity,
+    ]),
     // 配置变更必须留审计（密钥只记"已变更"，明文不入审计）
     AuditModule,
     // 内部下发接口（config/internal/dispatch）的限流与审计（诊断 #7）
