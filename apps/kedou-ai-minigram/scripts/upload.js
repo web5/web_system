@@ -9,9 +9,22 @@
  * 4. 小程序已发布过正式版本
  */
 
-const { upload, getVersion } = require('miniprogram-ci');
 const path = require('path');
 const fs = require('fs');
+
+/**
+ * 依赖加载：默认从干净安装目录（MINIPROGRAM_CI_PATH）加载 miniprogram-ci。
+ *
+ * 为什么要隔离：本仓库是 pnpm monorepo，根提升的 @babel/helper-compilation-targets
+ * 与 miniprogram-ci 编译链不兼容，会炸 TypeError: _lruCache is not a constructor。
+ * 解决：在独立目录单独安装一份，再用 MINIPROGRAM_CI_PATH 指过去：
+ *   mkdir -p ~/mp-ci && cd ~/mp-ci && npm i miniprogram-ci@2.1.31
+ *   MINIPROGRAM_CI_PATH=~/mp-ci/node_modules node scripts/upload.js
+ */
+const CI_ROOT = process.env.MINIPROGRAM_CI_PATH;
+const { upload } = require(CI_ROOT
+  ? path.join(CI_ROOT, 'miniprogram-ci')
+  : 'miniprogram-ci');
 
 // 读取配置
 const projectConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../project.config.json'), 'utf-8'));
