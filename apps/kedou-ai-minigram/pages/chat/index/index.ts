@@ -99,13 +99,25 @@ const OPENING_SUGGESTIONS = ['帮我翻一句话', '看看合同风险', '今天
  * looksLikeTranslateReply：含【推荐译文】标记，或「英文开头 + 中文说明」形态）。
  * 方向 meta 用其前面最近一条用户提问推断 —— 找不到对应提问就不显示（不猜）。
  */
+/**
+ * 卡片合法性校验（实时 SSE 的 card 事件与历史 tool 消息 JSON 共用同一套规则）。
+ *
+ * 为什么收敛成一个入口：卡片有两条来源，最终落在同一个气泡上 ——
+ *   ① 本轮：SSE 的 `type === 'card'` 事件（服务端在 tool_result 之后补发）
+ *   ② 历史：getConversation 回放里 role=tool 消息的 JSON content
+ * 两边判定规则必须一致，否则会出现「实时能出卡片、刷新历史就没了」这类不一致。
+ */
+function pickMusicCard(payload: unknown): MusicCardPayload | null {
+  const obj = payload as Partial<MusicCardPayload> | null | undefined;
+  if (!obj || obj.kind !== 'music' || !Array.isArray(obj.songs) || !obj.songs.length) return null;
+  return obj as MusicCardPayload;
+}
+
 /** 尝试把 tool 消息内容解析成歌曲卡片；不是卡片返回 null（历史回看据此还原，不退化为文本） */
 function tryParseMusicCard(content: unknown): MusicCardPayload | null {
   if (typeof content !== 'string' || !content) return null;
   try {
-    const obj = JSON.parse(content);
-    if (!obj || obj.kind !== 'music' || !Array.isArray(obj.songs) || !obj.songs.length) return null;
-    return obj as MusicCardPayload;
+    return pickMusicCard(JSON.parse(content));
   } catch {
     return null;
   }
@@ -543,6 +555,14 @@ Page({
                 note: view.note,
               });
             }
+          }
+          // card 事件：工具产出的富卡片（一期：歌曲推荐 kind=music）。
+          // ⚠️ 这条分支不能省 —— 卡片是服务端在 tool_result 之后单独补发的，
+          // 「等历史回放那条路」意味着首轮推荐要退出重进会话才看得到。
+          // 与历史回看共用 pickMusicCard 判定，避免两边规则漂移。
+          if (e.type === 'card') {
+            const musicCard = pickMusicCard(e.card);
+            if (musicCard) patchAi({ musicCard });
           }
         },
         onDelta: (delta) => {
