@@ -105,7 +105,7 @@ const filterOption = (input: string, opt: any) => {
   return hay.includes(input.toLowerCase())
 }
 
-async function load() {
+async function loadUsers() {
   if (!props.load) return
   loading.value = true
   try {
@@ -128,9 +128,9 @@ function onUpdate(v?: string | string[]) {
 }
 
 // load 变化（如切换了筛选条件）→ 重新拉取；immediate 使挂载即加载
-watch(() => props.load, () => void load(), { immediate: true })
+watch(() => props.load, () => void loadUsers(), { immediate: true })
 onMounted(() => {
-  if (props.load && !fetched.value.length) void load()
+  if (props.load && !fetched.value.length) void loadUsers()
 })
 </script>
 
