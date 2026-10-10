@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
+import { CapabilityRef, SkillRef, ThinkingOption } from '@kedouai/agent-core';
 import { AgentDefinitionEntity } from './entities/agent-definition.entity';
 import { AgentDefinitionVersionEntity } from './entities/agent-definition-version.entity';
 import { SkillService } from '../skill/skill.service';
@@ -16,7 +16,21 @@ export interface AgentDefinitionPayload {
   /** 能力数组（tool/mcp/skill）。可选：不传时后端从 tools 派生 */
   capabilities?: CapabilityRef[];
   maxSteps: number;
+  /**
+   * 采样温度（C7 生成参数）。与 `topP` **互斥** —— 二者只允许填其一，
+   * 保存时校验（同时填 = BadRequest），因为同填后「输出时好时坏」无法归因。
+   */
   temperature?: number | null;
+  /** 输出 token 上限；null / 不传 = 沿用客户端 / 网关默认 */
+  maxTokens?: number | null;
+  /** 核采样 top_p；与 `temperature` 互斥 */
+  topP?: number | null;
+  /**
+   * 思考预算覆盖 `{ type: 'enabled' | 'disabled', budget_tokens?: number }`。
+   * null / 不传 = 沿用客户端按模型名推断的默认行为。
+   * ⚠️ 意图分类链路不受此字段控制（固定 disabled，见 contracts.md C7-d）。
+   */
+  thinking?: ThinkingOption | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
   /** 是否流式输出（默认 true） */
   streaming?: boolean;
@@ -79,6 +93,7 @@ export class AgentDefService {
   async create(id: string, payload: AgentDefinitionPayload) {
     const exists = await this.defRepo.findOne({ where: { id } });
     if (exists) throw new BadRequestException(`Agent ${id} 已存在，请改用编辑`);
+    this.assertTuningParams(payload);
     const { capabilities, tools } = this.normalizeCapabilities(payload);
     const skills = await this.resolveSkills(capabilities);
     const row = this.defRepo.create({
@@ -93,6 +108,9 @@ export class AgentDefService {
       skills,
       maxSteps: payload.maxSteps,
       temperature: payload.temperature ?? null,
+      maxTokens: payload.maxTokens ?? null,
+      topP: payload.topP ?? null,
+      thinking: payload.thinking ?? null,
       memory: payload.memory,
       streaming: payload.streaming ?? true,
       version: 0,
@@ -109,6 +127,7 @@ export class AgentDefService {
   async update(id: string, payload: AgentDefinitionPayload, operator?: OperatorInfo) {
     const row = await this.defRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Agent ${id} 不存在`);
+    this.assertTuningParams(payload);
     const { capabilities, tools } = this.normalizeCapabilities(payload);
     const skills = await this.resolveSkills(capabilities);
     row.name = payload.name;
@@ -121,6 +140,13 @@ export class AgentDefService {
     row.skills = skills;
     row.maxSteps = payload.maxSteps;
     row.temperature = payload.temperature ?? null;
+    // C7 三字段走「**传了才覆盖**」语义，而不是 `?? null`：
+    // 老前端（表单还没这三个控件）保存时 payload 里根本没有它们，若用 `?? null`
+    // 会把后台已配的参数**静默清空**，且同一次保存还会把定义降级为 draft。
+    // 想清空请显式传 null。（temperature 沿用原全量语义，避免动到既有行为）
+    if (payload.maxTokens !== undefined) row.maxTokens = payload.maxTokens;
+    if (payload.topP !== undefined) row.topP = payload.topP;
+    if (payload.thinking !== undefined) row.thinking = payload.thinking;
     row.memory = payload.memory;
     row.streaming = payload.streaming ?? true;
     // 已发布的定义被编辑后，标记为 draft，等重新 publish 生效（保留原版本号）
@@ -157,6 +183,9 @@ export class AgentDefService {
         skills,
         maxSteps: row.maxSteps,
         temperature: row.temperature,
+        maxTokens: row.maxTokens,
+        topP: row.topP,
+        thinking: row.thinking,
         memory: row.memory,
         streaming: row.streaming,
         changeNote: changeNote ?? null,
@@ -218,6 +247,9 @@ export class AgentDefService {
     row.skills = ver.skills ?? null;
     row.maxSteps = ver.maxSteps;
     row.temperature = ver.temperature;
+    row.maxTokens = ver.maxTokens ?? null;
+    row.topP = ver.topP ?? null;
+    row.thinking = ver.thinking ?? null;
     row.memory = ver.memory;
     row.streaming = ver.streaming ?? true;
 
@@ -237,6 +269,9 @@ export class AgentDefService {
         skills: row.skills,
         maxSteps: row.maxSteps,
         temperature: row.temperature,
+        maxTokens: row.maxTokens,
+        topP: row.topP,
+        thinking: row.thinking,
         memory: row.memory,
         streaming: row.streaming,
         changeNote: `回滚自 v${ver.version}`,
@@ -686,6 +721,45 @@ export class AgentDefService {
   }
 
   /** 转展示视图 */
+  /**
+   * 生成参数校验（C7-b / C7 档位约定）。
+   *
+   * **为什么必须在保存时硬拦 `temperature` + `topP` 同填**：它不会报错、不会崩溃，
+   * 现象只是「输出时好时坏」，排查时无法归因到参数 —— 官方口径就是二者只改其一。
+   * 其余校验是取值域（防把 0~2 之外的温度写进 DB 再静默传给模型）。
+   */
+  private assertTuningParams(
+    p: Pick<AgentDefinitionPayload, 'temperature' | 'topP' | 'maxTokens' | 'thinking'>,
+  ): void {
+    if (p.temperature != null && p.topP != null) {
+      throw new BadRequestException(
+        'temperature 与 topP 只能填其一（同填会导致输出不稳定且无法归因），请清空其中一个',
+      );
+    }
+    if (p.temperature != null && (p.temperature < 0 || p.temperature > 2)) {
+      throw new BadRequestException('temperature 取值应在 0 ~ 2 之间');
+    }
+    if (p.topP != null && (p.topP <= 0 || p.topP > 1)) {
+      throw new BadRequestException('topP 取值应在 (0, 1] 之间');
+    }
+    if (p.maxTokens != null && (!Number.isFinite(p.maxTokens) || p.maxTokens < 1)) {
+      throw new BadRequestException('maxTokens 必须是 ≥1 的数字');
+    }
+    const t = p.thinking as { type?: unknown; budget_tokens?: unknown } | null | undefined;
+    if (t != null) {
+      if (t.type !== 'enabled' && t.type !== 'disabled') {
+        throw new BadRequestException("thinking.type 只能是 'enabled' 或 'disabled'");
+      }
+      if (
+        t.type === 'enabled' &&
+        t.budget_tokens != null &&
+        (typeof t.budget_tokens !== 'number' || t.budget_tokens < 1)
+      ) {
+        throw new BadRequestException('thinking.budget_tokens 必须是 ≥1 的数字');
+      }
+    }
+  }
+
   private toView(r: AgentDefinitionEntity) {
     return {
       id: r.id,
@@ -699,6 +773,9 @@ export class AgentDefService {
       skills: r.skills,
       maxSteps: r.maxSteps,
       temperature: r.temperature,
+      maxTokens: r.maxTokens,
+      topP: r.topP,
+      thinking: r.thinking,
       memory: r.memory,
       streaming: r.streaming,
       version: r.version,

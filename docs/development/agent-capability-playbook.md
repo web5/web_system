@@ -138,7 +138,8 @@ bash scripts/start-frontend.sh             # 或 dev server：admin 5174 / porta
 | Coding 工具 | `src/tools/coding/` | 只读三件套 `list-dir`/`read-file`/`grep-search`；写操作 `write-file`/`shell-exec` **强制确认** + 命令白名单 + 路径越界防护 |
 | 遥测 | `src/interfaces/telemetry.interface.ts` | 全部可选；字段口径对齐 OTel GenAI SemConv，但不引 SDK |
 
-> 📌 `README.md` 里的 `DeepseekClient` **已下线**（官方直连取消）。当前只有 `Hy3Client` + `TokenHubClient(model)`；`dist/` 残留旧产物，**以 `src/` 为准**。
+> 📌 模型客户端当前只有 **`Hy3Client` + `TokenHubClient(modelId)`**（README 与 `src/index.ts` 导出已一致，由 `scripts/check-agent-core-exports.mjs` 对拍守护）。
+> ⚠️ 别混：agent-core 里的旧 `DeepseekClient` 已下线；而 `servers/ai-service/src/common/http/deepseek.client.ts` 是**服务侧自研**的同名类（走 `api.deepseek.com` 官方直连、独立 key），两者不是一回事。
 
 ### 3.2 编排层 · `servers/ai-agent:6010`
 
@@ -306,7 +307,7 @@ REPL 内斜杠命令：`/help` `/agents` `/agent <id>` `/clear` `/exit`
 6. **技能实体只有一份**：`.codebuddy/skills/`（工具实际扫描加载）。约定：通用技能只在上游 `https://github.com/web5/ai-agent-kit` 演进，本地不得改写；项目专属只放 `be-developer` / `fe-developer` / `design-reviewer` / `release-reviewer` 与 `rd-digital-agent/references/project-context.md`。`.codebuddy/agent-kit/` 只留来源声明，内容（常驻总则 / 红线 / 方法论）在上游仓库。
    ⚠️ **新增项目专属技能必须同步登记 R12 保护清单**（`scripts/redline/scan-rules.sh` 的 `check_r12`），否则 CI 会报「能力源缺失」漂移；反过来，技能一旦上行到上游能力源，就要从保护清单移除，不然会掩盖真实漂移。
 7. **`ai-agent` / `knowledge-service` 未注册到 `scripts/modules.json`** —— 虽跑在 pm2 且有网关路由，但不在发布流水线和微前端清单里，deploy-console 管不到。
-8. **`DeepseekClient` 已下线** —— `README.md` 未同步，`dist/` 有残留，以 `src/` 为准。
+8. **agent-core 的 `DeepseekClient` 已下线** —— 官方直连取消，改由 `TokenHubClient(modelId)` 承载（README 已于 2026-10-10 同步，对拍脚本防复发）。若看到本地 `dist/` 里有旧产物，那是构建残留，**一律以 `src/` 为准**（`npm run build` 重建）。
 9. **SSE 超时** —— AI 类链路三层超时取最短层，走 `API_TIMEOUT.AI_TASK`（90s；agent-core 内部常量为 180s）/ gateway `PROXY_TIMEOUT.AI_TASK`，被截短会从最内层往外查。
 10. **改 `.env` 的 `TOKENHUB_MODELS` 想加模型却不生效** —— 模型清单现在的真相源是 **DB 字典 `llm_models`**（admin →「字典管理」，`MODEL_SOURCE=db` 默认）；`.env` 只在字典不可用/为空时兜底，代码内置常量再兜底。改字典后等 60s（`MODEL_POLL_MS`）或重启 `web-ai-agent`。排查入口：`GET /api/ai-agent/agent/models`（还带 `available`）与 ai-agent 日志里的「模型清单已更新：来源=db/env/builtin」。
 11. **字典里的 `hy3` 不会生效** —— `hy3` 由 `Hy3Client` 专用通道承载（与 TokenHub 的 key/base 不同），`ModelCatalogService` 会过滤并 WARN；要调 hy3 请确认 `HY3_API_KEY`，不要往 `llm_models` 里加。

@@ -7,7 +7,7 @@
 ## 特性
 
 - **ReAct 引擎**：`AgentEngine` 循环（工具调用 → 回写 → 最终回答），`maxSteps` 熔断。
-- **模型客户端**：`Hy3Client`、`DeepseekClient`（原生 `fetch`，支持 `chatWithTools` / `chatStream`）。
+- **模型客户端**：`Hy3Client`、`TokenHubClient`（原生 `fetch`，支持 `chatWithTools` / `chatStream`；`TokenHubClient` 按传入 modelId 走 TokenHub 网关，DeepSeek 系由此承载）。
 - **注册表**：`ToolRegistry` / `AgentRegistry` / `ClientRegistry` 集中管理。
 - **记忆**：`InMemoryConversationMemory` + `Compaction` 增量摘要压缩。
 - **搜索插件**：`SearchProviderRegistry` + `SearchProvider` 接口，默认内置 `BingSearchProvider`。
@@ -77,11 +77,25 @@ for await (const ev of engine.run(
 |------|------|
 | 引擎 | `AgentEngine`、`AgentRunner` |
 | 注册表 | `ToolRegistry`、`AgentRegistry`、`ClientRegistry` |
-| 客户端 | `BaseAiClient`、`Hy3Client`、`DeepseekClient` |
+| 客户端 | `BaseAiClient`、`Hy3Client`、`TokenHubClient` |
 | 记忆 | `InMemoryConversationMemory`、`Compaction` |
 | 搜索 | `SearchProviderRegistry`、`SearchProvider`、`WebSearchTool`、`BingSearchProvider` |
 | coding | `ListDirTool`、`ReadFileTool`、`GrepSearchTool`、`WriteFileTool`、`ShellExecTool` |
 | 工具 | `Logger`、`API_TIMEOUT` |
+
+## 生成参数（C7）
+
+Agent 定义里的 `temperature` / `maxTokens` / `topP` / `thinking` 会在 `AgentEngine` 里组装成
+`ChatOptions` 透传给模型客户端 —— **只有显式填了（非 null）的字段才会带上**，全为 null 时等价于
+不传，行为与未配置完全一致（可回归对照）。
+
+两条硬约定：
+
+- `temperature` 与 `topP` **只能填其一**（同时填会让输出时好时坏且无法归因）；
+- `thinking` 为 `ThinkingOption`：`{ type: 'enabled' | 'disabled', budget_tokens?: number }`，
+  `null` = 沿用客户端按模型名推断的默认行为。**意图分类链路不受它控制**（固定 disabled）。
+
+取值档位与完整契约见 `docs/api/contracts.md` §7（C7）。
 
 ## 工具安全
 

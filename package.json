@@ -10,6 +10,7 @@
     "pub:dev": "bash scripts/publish.sh dev",
     "pub:prod": "bash scripts/publish.sh prod",
     "pub:local": "bash scripts/deploy-local.sh",
+    "check:agent-core-exports": "node scripts/check-agent-core-exports.mjs",
     "check:env": "bash scripts/check-env.sh",
     "check:health": "bash scripts/health-check.sh",
     "sync:schema": "bash scripts/sync-schema.sh",

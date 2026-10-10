@@ -1,7 +1,7 @@
 /**
  * TokenHub 通用客户端（腾讯 MaaS 网关，OpenAI 兼容）。
  *
- * 与 Hy3Client/DeepseekClient 协议一致（chat/completions + OpenAI function calling），
+ * 与 Hy3Client 协议一致（chat/completions + OpenAI function calling），
  * 区别：modelId 由构造注入，因此可用网关上托管的任意模型
  * （如 deepseek-v4-flash、deepseek-v4-pro-0813、hy4-preview、glm-5.3、kimi-k3 等）。
  *

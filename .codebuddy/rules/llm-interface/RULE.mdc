@@ -1,0 +1,57 @@
+---
+description: 模型接入与生成参数（LLM 调参）实现规范。任务涉及新增/切换大模型、模型客户端（Hy3/TokenHub/Deepseek）、ChatOptions 参数、AgentDefinition 调参字段、agent_definitions 表列、llm_models 字典、TOKENHUB_* 环境变量时使用。细则本体在 docs/api/contracts.md §7（C7），本规则只负责触发与动作顺序。
+alwaysApply: false
+enabled: true
+updatedAt: 2026-10-10T00:00:00.000Z
+---
+
+# 模型接入与生成参数规则（llm-interface）
+
+> 与 `ui-interface` / `brand-interface`（UI 源码）、`release-interface`（发布与环境）并列：
+> 它们管界面与交付环节，本规则管**「模型怎么接、参数怎么调」**这条链路。
+> 判据源：`docs/api/contracts.md` §7（C7 · Agent 生成参数与模型清单）——本规则**不复制取值档位**，只规定「触发 + 动作顺序 + 最小禁项」。
+
+## 触发范围（命中任一即适用，与改动大小无关）
+
+- `packages/agent-core/src/clients/**`（`ChatOptions` / `Hy3Client` / `TokenHubClient` 等模型客户端）
+- `packages/agent-core/src/interfaces/agent.interface.ts` 的 `AgentDefinition` **调参字段**
+- `packages/agent-core/src/core/agent-engine.ts` 里传给模型的 options 构造处
+- `servers/ai-service/src/agent-def/**`（`agent_definitions` 实体列 / DTO / 定义下发）
+- `servers/ai-agent/src/agent/model-catalog.service.ts`、`servers/ai-service/src/common/client.registry.ts`（模型装配）
+- DB 字典 `llm_models`（admin 字典管理）
+- `INTENT_MODEL` / `CLASSIFY_MAX_TOKENS` / `TOKENHUB_*`（含 `TOKENHUB_MODELS` / `TOKENHUB_THINKING`）相关 env
+
+## 动作门（顺序不可跳）
+
+1. **先判是不是契约**：只要「同一个参数/模型要在两处以上各写一份」（契约面字段 ↔ DB 列 ↔ 运行时入参）→ 它就是 C7 契约，先读 `docs/api/contracts.md` §7。
+2. **先文档后实现**：新增/改名调参字段或模型 → 先在 contracts.md §7 更新真相源表与约定（C7-a…C7-f），再动代码。
+3. **三处同步（C7-a，缺一即「填了不生效」）**：
+   - `AgentDefinition` 契约字段（agent-core）
+   - `agent_definitions` 实体列 + DTO + 下发映射（ai-service）+ 迁移脚本
+   - `AgentEngine` 传给 `chatWithToolsStream` 的 options
+4. **互斥校验（C7-b）**：`temperature` 与 `topP` 只允许填其一，保存时在 DTO 层报错（不静默忽略、不取后者覆盖）。
+5. **兼容性（C7-e）**：新字段全为 null 时，行为必须与改动前完全一致 —— 否则存量 agent 静默漂移。
+6. **跑机检**：`node scripts/check-agent-core-exports.mjs`（README 声明 ↔ `src/index.ts` 导出对拍）+ 相关单测；改 `interfaces/**` 另过 R13。
+7. **commit 带 `Contract: pass`**（或评审报告路径）；纯文档/微调走 `Micro-exempt: <理由>`。
+   - 同时命中 `servers/*/.env*` 的（如新增 `TOKENHUB_*`）→ **并行走 `release-interface` 门**，两门的 trailer 都要带。
+8. **DB 侧填值晚于代码发布**：新列上线并同步到发布目录之后，才在后台/字典里填参数值（先填=绑定即故障）。
+
+## 最小禁项（不查机器不报，故写死在此）
+
+| # | 禁项 | 原因 |
+|---|---|---|
+| 1 | 同时填 `temperature` 与 `topP` | 官方口径只改其一；同填的现象是「输出时好时坏」，无法归因 |
+| 2 | 改 `CLASSIFY_MAX_TOKENS`（现 256）或放开意图分类的 `thinking: disabled` | 实测：思考 token 吃光输出预算 → 空返回 → 100% 兜底 |
+| 3 | 新增模型只在代码里硬编码 | 两侧装配会不一致（ai-agent 字典驱动 / ai-service 曾硬编码）→ 一侧能加、另一侧永远要发版 |
+| 4 | 删/改 `ChatOptions` 字段不查消费方 | 契约破坏是静默的；必须 grep import 型消费方的 `=== 'xxx'` / `switch case` |
+| 5 | 把模型 id 写进提示词或前端常量 | 模型清单真相源是 DB 字典 `llm_models`，写死即双份事实 |
+
+## 档位从哪查
+
+调参取值档位（分类 / 抽取 / 代码 / 对话 / 创意 / Agent 工具调用）**一律查 `docs/api/contracts.md` §7.4**，不在本规则复制。
+
+## 关联
+
+- 契约登记与漂移记录：`docs/api/contracts.md` §7（C7）、§9（D7 / D8 / D9）
+- 执行计划：`docs/plans/2026-10-10-multi-model-and-llm-tuning-plan.md`
+- 体检命令：`docs/api/contracts.md` §10

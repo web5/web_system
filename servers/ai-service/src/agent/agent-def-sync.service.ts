@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentRegistry, AgentDefinition } from '@kedouai/agent-core';
+import { AgentRegistry, AgentDefinition, ThinkingOption } from '@kedouai/agent-core';
 
 /**
  * Agent 定义同步器（一期，ai-service 自身）
@@ -92,12 +92,31 @@ export class AgentDefSyncService {
       model,
       tools: Array.isArray(row.tools) ? (row.tools as string[]) : [],
       maxSteps: Number(row.maxSteps) || 10,
-      temperature: typeof row.temperature === 'number' ? row.temperature : undefined,
+      // C7 生成参数：一律 null 兜底（null = 沿用客户端默认，行为与未配置一致）
+      temperature: typeof row.temperature === 'number' ? row.temperature : null,
+      maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : null,
+      topP: typeof row.topP === 'number' ? row.topP : null,
+      thinking: this.parseThinking(row.thinking),
       memory: {
         compactionThreshold: Number(memory.compactionThreshold) || 20,
         keepRecent: Number(memory.keepRecent) || 6,
         enabled: memory.enabled !== false,
       },
     };
+  }
+
+  /**
+   * 解析思考预算覆盖（C7）。形状不对一律当「未配置」返回 null（语义 = 沿用客户端默认，
+   * 与旧行为一致），避免脏数据把调用打挂。
+   */
+  private parseThinking(raw: unknown): ThinkingOption | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const t = raw as { type?: unknown; budget_tokens?: unknown };
+    if (t.type !== 'enabled' && t.type !== 'disabled') return null;
+    const opt: ThinkingOption = { type: t.type };
+    if (typeof t.budget_tokens === 'number' && Number.isFinite(t.budget_tokens)) {
+      opt.budget_tokens = t.budget_tokens;
+    }
+    return opt;
   }
 }

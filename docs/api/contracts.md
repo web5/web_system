@@ -25,7 +25,7 @@
 
 这就是「契约没有单一真相源」的代价。本文的作用是**把这类契约登记到一处**，让变更时知道要同步谁、让 CI（R13 / R16）能拦。
 
-> 该漂移已于 2026-09-24 修复（见 §8 D1 / D2），并由 **R16** 守跨端一致性 —— **登记 + 机检**才是完整闭环；只登记不机检，下次仍会漂。
+> 该漂移已于 2026-09-24 修复（见 §9 D1 / D2），并由 **R16** 守跨端一致性 —— **登记 + 机检**才是完整闭环；只登记不机检，下次仍会漂。
 
 ---
 
@@ -39,6 +39,7 @@
 | **C4** | 权限码 / 共享常量 | `packages/types/src/index.ts` | 本文 §5 | R13 |
 | **C5** | 网关路由 | `servers/gateway/src/proxy/proxy.controller.ts` | 本文 §6 | — |
 | **C6** | 微前端版本指针 | 发布平台库 `deploy_deployments.current_version` + gateway `__manifest__` | `docs/development/admin-dev.md` §一·C | R14（间接） |
+| **C7** | **Agent 生成参数与模型清单** | `packages/agent-core/src/clients/base-ai.client.ts`（`ChatOptions`）+ `interfaces/agent.interface.ts`（`AgentDefinition` 调参字段） | 本文 §7 | R13（`interfaces/*`）+ `scripts/check-agent-core-exports.mjs` |
 
 > 判据：**只要两方（或以上）各自维护同一事实，它就是契约**。单一消费方的内部约定不算。
 
@@ -198,18 +199,71 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 
 ---
 
-## 7. 契约变更纪律（改契约前必读）
+## 7. C7 · Agent 生成参数与模型清单
+
+> 为什么它也算契约：**同一个「生成参数」同时存在于三处** —— 契约面字段（`AgentDefinition`）、
+> 持久化列（DB `agent_definitions`）、运行时入参（`ChatOptions`）。任一处不同步，现象都是
+> 「后台填了值但不生效」或「填了也没人读」，编译与测试全绿 —— 与 D1 同型的静默失效。
+
+### 7.1 真相源
+
+| 层 | 真相源 | 说明 |
+|---|---|---|
+| 参数形状（运行时） | `packages/agent-core/src/clients/base-ai.client.ts` → `ChatOptions` | `temperature` / `maxTokens` / `topP` / `thinking` |
+| 参数形状（定义侧） | `packages/agent-core/src/interfaces/agent.interface.ts` → `AgentDefinition` | Agent 级默认参数，随定义下发 |
+| 持久化 | `servers/ai-service/src/agent-def/entities/agent-definition.entity.ts` + DB `agent_definitions` | 后台编辑落这里，30s 轮询下发 |
+| 模型清单 | DB 字典 `llm_models`（admin 字典管理）→ `ModelCatalogService` | **ai-agent 已字典驱动；ai-service 曾硬编码** |
+
+### 7.2 契约级约定（改这块前必读）
+
+| # | 约定 | 违反后果 |
+|---|---|---|
+| **C7-a** | 契约面新增一个调参字段 → **必须同时**加 DB 列 + DTO + 下发映射，三处缺一即「填了不生效」 | 后台能填、引擎不读 |
+| **C7-b** | **`temperature` 与 `topP` 互斥**：二者只填其一，保存时校验报错 | 同时填 → 输出时好时坏，无法归因（官方口径：只改其一） |
+| **C7-c** | `thinking` 优先级：`RunInput` 单次覆盖 > Agent 定义字段 > env `TOKENHUB_THINKING` > 客户端按模型名推断 | 优先级反了会出现「关不掉 / 开不了」 |
+| **C7-d** | **意图分类链路不受 Agent 定义控制**：固定 `maxTokens=256` + `thinking: disabled`，由 `CLASSIFY_MAX_TOKENS` 与代码强制 | 放开即复现「思考 token 吃光输出预算 → 100% 兜底」 |
+| **C7-e** | 新增字段**全为 null 时行为必须与旧版完全一致**（可回归对照） | 存量 agent 行为漂移 |
+| **C7-f** | Agent 定义里的 `model` 必须能在 `ClientRegistry` 解析；解析不到按服务侧策略回落（ai-agent → `hy3`） | 选了没注册的模型直接报错 |
+| **C7-g** | `src/index.ts` 对 `interfaces/agent.interface` 是**包级 `export *`** —— 契约面新增字段对所有 import 方**自动可见**（编译时即生效，无需对方改代码） | 「我加了字段对方怎么知道」的答案是：一定知道；反过来说，删字段会**直接编译失败**（比静默失效好） |
+| **C7-h** | 老前端（表单没有新字段）保存时，后端对新增参数必须走**「传了才覆盖」**而非 `?? null` | 否则一次表单保存就把后台已配参数**静默清空**（见 §9 D10） |
+
+### 7.3 消费方清单（改字段时要同步谁）
+
+| 消费方 | 位置 | 依赖形态 |
+|---|---|---|
+| ai-service | `agent-def/entities/agent-definition.entity.ts` + `dto/agent-def.dto.ts` + 定义同步 | DB 列 ↔ 契约字段映射 |
+| ai-agent | `agent/agent.module.ts` / `ModelCatalogService` / `AgentRegistry` | 读下发定义、解析 model |
+| `packages/kedou-agent` | 组装 `RunInput` | 单次覆盖 |
+| admin `AgentPlayground.vue` | `RunInput.model` 临时覆盖 | 单次覆盖（UI 门） |
+| admin `AgentDefList.vue` + `api/agent-defs.ts` | Agent 定义表单 | **UI 侧尚未补齐**（§9 D10）：表单只有 temperature，且把 `null` 强转成 0.7 |
+
+### 7.4 档位约定（P0 落地，写入文档而非只靠人记）
+
+| 场景 | temperature | topP | maxTokens | thinking |
+|---|---|---|---|---|
+| 分类 / 意图路由 | 0 ~ 0.1 | 不填 | 256 | **disabled**（强制，见 C7-d） |
+| 结构化抽取 / JSON | 0 ~ 0.2 | 不填 | 按字段量 | disabled |
+| 代码生成 | 0 ~ 0.2 | 不填 | ≥3000 | 视复杂度 |
+| 通用对话 | 0.6 ~ 0.7 | 不填 | 800~2000 | 可开小预算 |
+| 创意 / 文案 | 0.8 ~ 1.0 | 或改 topP 0.95 | 放宽 | 可开 |
+| Agent 工具调用 | 0.2 ~ 0.4 | 不填 | 按工具返回量 | 视链路长短 |
+
+> 推理模型（DeepSeek V4 思考模式）例外：官方口径 temperature 0.6~0.7，且思考模式下 temperature 不生效、top_p 被钳在 0.95~1.0。压到 0.1 不更准，只会复读。
+
+---
+
+## 8. 契约变更纪律（改契约前必读）
 
 1. **先判影响面**：本次改的是 §1 表格里的哪一类？消费方有哪些（端 / 服务 / DB 绑定）？
 2. **先文档后实现**：接口类先落 `api-design.md`；SSE / 工具 / 权限类先在本文更新登记与约定。
-3. **机检会报**：C1–C4 的改动面命中 **CI R13**（跨端一致性另由 **R16** 检查），commit 须带 `Contract: pass`（或报告路径）；纯微调走 `Micro-exempt: <理由>`。
+3. **机检会报**：C1–C4、C7 的改动面命中 **CI R13**（跨端一致性另由 **R16** 检查），commit 须带 `Contract: pass`（或报告路径）；纯微调走 `Micro-exempt: <理由>`。
    > 级别现状：R13 / R16 均为 **warning** —— `quality-gate.yml` 调用 `scan-rules.sh diff` **不带 `--strict`**，因此 warning 只出现在日志里、**不阻断合并**。升为阻断需配套存量过渡（见 `specs/rd-process-model/design.md` §7.1 的 Q3 决议）。
-4. **DB 绑定晚于代码同步**：`agent_definitions.capabilities` / 字典 / 权限码的 DB 侧改动，必须在**运行代码已同步到发布目录之后**再做（先后顺序反了就是「绑定即故障」）。
+4. **DB 绑定晚于代码同步**：`agent_definitions.capabilities` / 字典 / 权限码的 DB 侧改动，必须在**运行代码已同步到发布目录之后**再做（先后顺序反了就是「绑定即故障」）。**调参字段同理**（C7-a）：先发带新列的代码，再在后台填值。
 5. **破坏性变更写消费方清单**：谁在用、怎么迁移、保留多久。
 
 ---
 
-## 8. 已知漂移与待补
+## 9. 已知漂移与待补
 
 | # | 项 | 状态 |
 |---|---|---|
@@ -219,10 +273,13 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 | D4 | MCP 工具清单无自动生成物 | 可选：仿 `gen-api-design.mjs` 生成工具清单，减少人工核对 |
 | D5 | 各端 DTO 类型未共享 | 现状：接口类型由 `api-design.md` 描述，前端各自定义；是否抽共享类型待评估 |
 | D6 | 死类型清理 | `'token'`（无生产者；**其消费者 admin 的 `case 'token'` 已一并删除**——教训：删类型前必须查 **import 型**消费方，否则 `switch` case 会 TS2678 编译失败）与 `'start'`（两端手写联合里混入的本地事件）已于 2026-09-24 清理。**未清理**：`minigram/packageContract/pages/contract/{chat,assistant}.ts` 与 admin `evtTag` 里的 `'start'` 消费点——它们**无兜底**，删了若真有生产者会导致文案静默消失，故留待确认生产者后处理 |
-
+| D7 | 模型客户端文档漂移 | **待修（2026-10-10 登记）**：`packages/agent-core/README.md` 与 `clients/tokenhub.client.ts` 注释仍写 `DeepseekClient`（已被 `TokenHubClient` 取代且不再导出）；`servers/ai-service/src/common/client.registry.ts` 日志里 `DEPSEEK_API_KEY` 拼写错误；`docs/development/agent-capability-playbook.md` 的 📌 提示语随 README 修复而过期。**防复发**：`scripts/check-agent-core-exports.mjs` 对拍 README 声明与 `src/index.ts` 实际导出 |
+| D8 | 调参字段只有 `temperature` 贯通 | **待修（2026-10-10 登记）**：`ChatOptions` 支持 `maxTokens` / `topP` / `thinking`，但 `AgentEngine` 只传 `temperature`；`agent_definitions` 也无对应列 → 按 C7-a 三处同步补齐 |
+| D9 | 两侧模型装配不一致 | **待修（2026-10-10 登记）**：ai-agent 字典驱动（`ModelCatalogService`），ai-service 硬编码 `Hy3Client` + `TokenHubClient('deepseek-v4-flash')`；且 ai-service 普通 chat 链路另走自研 `common/http/deepseek.client.ts`（官方直连，另一套 key）。**已修 ai-service Agent 链路**（新增 `agent/model-catalog.service.ts`，同源复制待后续抽 `packages/llm-catalog`） |
+| D10 | admin 表单未跟上 C7 三字段 | **待修（2026-10-10 登记，走 UI 门）**：`AgentDefList.vue` 只有 temperature 控件、`api/agent-defs.ts` 的 `SaveAgentDefPayload` 缺 maxTokens/topP/thinking；且 `def.temperature ?? 0.7` 把「null = 沿用默认」强转成 0.7（违反 C7-e）。**后端已按 C7-h 兜住**（更新时「传了才覆盖」，不会因老前端保存而清空），UI 补齐需先过 UI 门 |
 ---
 
-## 9. 体检命令（一句话复跑）
+## 10. 体检命令（一句话复跑）
 
 ```bash
 # C1 接口契约是否齐（缺哪个服务一眼看出）
@@ -243,4 +300,10 @@ ls -l packages/types/dist/index.js packages/types/dist/cjs/index.js 2>/dev/null 
 
 # C5 网关路由（特化是否在通配之前）
 grep -nE "@All\('" servers/gateway/src/proxy/proxy.controller.ts
+
+# C7 生成参数：契约面字段 ↔ DB 列 是否三处同步（缺谁一眼看出）
+grep -nE "maxTokens|topP|thinking" packages/agent-core/src/interfaces/agent.interface.ts
+grep -nE "maxTokens|topP|thinking" servers/ai-service/src/agent-def/entities/agent-definition.entity.ts
+# 模型客户端文档是否漂移（README 声明 ↔ index.ts 实际导出，无输出=一致）
+node scripts/check-agent-core-exports.mjs
 ```

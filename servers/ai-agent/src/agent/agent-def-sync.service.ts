@@ -8,6 +8,7 @@ import {
   ToolRegistry,
   ClientRegistry,
   McpToolMeta,
+  ThinkingOption,
 } from '@kedouai/agent-core';
 import { McpService } from '../mcp/mcp.service';
 
@@ -182,7 +183,11 @@ export class AgentDefSyncService {
       capabilities,
       skills,
       maxSteps: Number(row.maxSteps) || 10,
-      temperature: typeof row.temperature === 'number' ? row.temperature : undefined,
+      // C7 生成参数：一律 null 兜底（null = 沿用客户端默认，行为与未配置一致）
+      temperature: typeof row.temperature === 'number' ? row.temperature : null,
+      maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : null,
+      topP: typeof row.topP === 'number' ? row.topP : null,
+      thinking: this.parseThinking(row.thinking),
       streaming: row.streaming === false ? false : true,
       memory: {
         compactionThreshold: Number(memory.compactionThreshold) || 20,
@@ -190,6 +195,22 @@ export class AgentDefSyncService {
         enabled: memory.enabled !== false,
       },
     };
+  }
+
+  /**
+   * 解析思考预算覆盖（C7）。
+   * 形状不对一律当「未配置」返回 null —— 脏数据不该把调用打挂，且 null 的语义就是
+   * 「沿用客户端默认」，与旧行为一致。
+   */
+  private parseThinking(raw: unknown): ThinkingOption | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const t = raw as { type?: unknown; budget_tokens?: unknown };
+    if (t.type !== 'enabled' && t.type !== 'disabled') return null;
+    const opt: ThinkingOption = { type: t.type };
+    if (typeof t.budget_tokens === 'number' && Number.isFinite(t.budget_tokens)) {
+      opt.budget_tokens = t.budget_tokens;
+    }
+    return opt;
   }
 
   /**

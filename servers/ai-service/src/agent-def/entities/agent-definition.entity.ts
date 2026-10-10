@@ -1,6 +1,6 @@
 import { Column, Entity, PrimaryColumn, Index } from 'typeorm';
 import { AbstractEntity } from '@web-system/shared';
-import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
+import { CapabilityRef, SkillRef, ThinkingOption } from '@kedouai/agent-core';
 
 /**
  * Agent 定义主表（数据库配置化）
@@ -62,9 +62,28 @@ export class AgentDefinitionEntity extends AbstractEntity {
   @Column({ type: 'int', default: 10, comment: '最大步数' })
   maxSteps: number;
 
-  /** 采样温度 */
+  /**
+   * 采样温度（C7 生成参数）。
+   * 与 topP **互斥**：二者只允许填其一（保存时校验，见 agent-def.service）。
+   */
   @Column({ type: 'float', nullable: true, comment: '采样温度' })
   temperature: number | null;
+
+  /** 输出 token 上限（防跑飞）；null = 沿用客户端 / 网关默认 */
+  @Column({ type: 'int', nullable: true, comment: '输出 token 上限' })
+  maxTokens: number | null;
+
+  /** 核采样 top_p；与 temperature 互斥，null = 不传 */
+  @Column({ type: 'float', nullable: true, comment: '核采样 top_p' })
+  topP: number | null;
+
+  /**
+   * 思考预算覆盖（{ type: 'enabled' | 'disabled', budget_tokens?: number }）。
+   * null = 沿用客户端按模型名推断的默认行为。
+   * ⚠️ 意图分类链路不受此列控制（固定 disabled，见 contracts.md C7-d）。
+   */
+  @Column({ type: 'json', nullable: true, comment: '思考预算覆盖' })
+  thinking: ThinkingOption | null;
 
   /** 记忆配置（AgentMemoryConfig） */
   @Column({ type: 'json', comment: '记忆配置' })
