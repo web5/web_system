@@ -186,6 +186,36 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 | 私钥相关失败 | `private.key` 缺失或权限不对 | 按 §1.1 重新放置并 `chmod 600` |
 | 版本号不合规 / 已存在 | `package.json` 版本未递增 | 升版本号后重跑 |
 | 编译成功但扫码白屏 | 域名未配合法 / 代码本身问题 | 检查 §1.4 域名配置；真机调试看 vConsole |
+| 能进首页、点「登录」失败并弹「登录失败，请重试」 | 后端 `MINI_PROGRAM_SECRET` 在微信侧失效 | 见 §5.1 |
+| 后端日志 `invalid appsecret, rid: xxx` | AppSecret 被重置/停用，或填成了别的应用的 | 见 §5.1 |
+
+### 5.1 登录失败：AppSecret 失效（真机点登录必现）
+
+**判定三连**（能在一分钟内把问题从「前端/域名/后端」三选一定死）：
+
+```bash
+# 1) 网关是否能通 + 后端路由是否存在
+curl -s -X POST https://<domain>/api/auth/miniprogram-login \
+  -H 'Content-Type: application/json' -d '{"code":"probe-invalid-code"}'
+# 2) 后端日志里有没有非探针的失败记录 —— 有，说明真机请求到达了后端
+#    （即 request 合法域名已配好，问题不在域名）
+pm2 logs auth-service --nostream | grep miniprogram-login
+# 3) 直连微信验证凭据本身（不经过自己任何代码）
+curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID\
+&secret=$MINI_PROGRAM_SECRET&js_code=probe&grant_type=authorization_code"
+```
+
+| 微信返回 | 含义 |
+|---|---|
+| `{"errcode":40125,"errmsg":"invalid appsecret"}` | **凭据失效** —— 与放了多久、有没有重启无关，微信侧已不接受 |
+| `{"errcode":40029,"errmsg":"invalid code"}` | ✅ 凭据有效（code 是假的，属预期） |
+
+**处置**：公众平台 → 开发管理 → 开发设置 → 开发者密码(AppSecret) → 取当前值或重置 →
+更新执行机上 `MINI_PROGRAM_SECRET` → **`pm2 restart auth-service`**（`dotenv` 在进程启动时读取，
+改文件不重启不生效；且按既定禁项不用 `--update-env`）→ 重跑上面第 3 步确认返回 `invalid code`。
+
+> ⚠️ `.env` 与 `servers/auth-service/.env` 都要一致（`auth-service` 的 cwd 在后者，两份都改最稳）。
+> 这条同 `USER_SERVICE_KEY` 一样属**配置漂移**高危项：若流水线会下发 `.env.generated`，手工改的值会被冲掉。
 
 ---
 
