@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   Controller,
   Get,
@@ -76,26 +77,174 @@ export class ConfigController {
     if (!env) throw new BadRequestException('envId 必填');
     if (!key) throw new BadRequestException('serviceKey 必填');
 
+    const runId = String((req?.query?.runId as string) || '').trim() || null;
+    let emptyReason = '';
     // 鉴权 + 限流 + 来源白名单 + 审计（审计失败不阻断，见 InternalGuardService）
     const items = await this.internalGuard.run(
       req,
       { action: 'internal.config.dispatch', env, component: key },
       async () => {
         // 按需：没有 module 级条目 = 该服务没在配置中心声明需要配置 → 不下发（免得凭空落盘）
-        if (!(await this.configService.hasModuleScope(env, key))) return null;
-        return this.configService.dispatchPayload(env, key);
+        if (!(await this.configService.hasModuleScope(env, key))) {
+          emptyReason = 'no-module-scope';
+          return null;
+        }
+        const payload = await this.configService.dispatchPayload(env, key);
+        if (!payload.length) emptyReason = 'no-deliverable-key';
+        return payload;
       },
       // 只记「下发了多少个键」，明文与键名一律不进审计
       (r) => (r ? `下发配置 ${r.length} 个键` : '无 module 级条目，未下发（204）'),
     );
 
+    return this.finishDispatch({
+      res,
+      items,
+      env,
+      serviceKey: key,
+      host: req?.ip ?? null,
+      runId,
+      emptyReason,
+    });
+  }
+
+  /**
+   * 收口「下发结果」：有内容则 200 + 文本，无内容则 204；两种情况**都落下发记录**。
+   *
+   * 为什么 204 也要记：脚本拿到 204 会保留目标机现状，若某次配置明明配了却返回 204，
+   * 只有记录里写明原因（`no-module-scope` / `no-deliverable-key`）才能事后查清，
+   * 否则现象会是"配了没生效"且无从下手。
+   */
+  private async finishDispatch(args: {
+    res: Response;
+    items: { key: string; value: string; scope: string }[] | null;
+    env: string;
+    serviceKey: string;
+    host: string | null;
+    runId: string | null;
+    emptyReason: string;
+  }): Promise<void> {
+    const { res, items, env, serviceKey, host, runId } = args;
+    const meta = { envId: env, moduleKey: serviceKey, host, runId, dispatchedBy: 'internal-dispatch' };
+
     if (!items || !items.length) {
-      return res.status(204).end();
+      await this.configService.recordDelivery({
+        ...meta,
+        keyCount: 0,
+        contentHash: null,
+        result: 'empty',
+        // 记清原因：排查"配了没生效"时，这是唯一能区分「没到配置中心」还是「被层过滤」的依据
+        emptyReason: args.emptyReason || null,
+      });
+      res.status(204).end();
+      return;
     }
-    return res
-      .status(200)
-      .type('text/plain; charset=utf-8')
-      .send(renderGeneratedEnvFile(items, { envId: env, serviceKey: key }));
+
+    const content = renderGeneratedEnvFile(items, { envId: env, serviceKey });
+    await this.configService.recordDelivery({
+      ...meta,
+      keyCount: items.length,
+      contentHash: createHash('sha256').update(content).digest('hex'),
+      result: 'delivered',
+    });
+    res.status(200).type('text/plain; charset=utf-8').send(content);
+  }
+
+  /**
+   * 内部：目标机上报「实际生效的配置内容 hash」。
+   *
+   * 用途：与最近一次下发的 hash 比对，得到是否漂移（**漂移检测的实际态来源**，设计 P0-3）。
+   * 只上报 hash、不上报内容 —— 避免把目标机的配置明文明文回流到平台。
+   */
+  @Public()
+  @ApiHeader({ name: 'x-internal-key', description: '内部服务密钥' })
+  @Post('internal/report')
+  @ApiOperation({ summary: '内部：目标机上报实际配置 hash（漂移检测）' })
+  async reportDelivery(
+    @Body() body: { envId?: string; moduleKey?: string; contentHash?: string },
+    @Req() req: any,
+  ) {
+    const env = String(body?.envId || '').trim();
+    const mod = String(body?.moduleKey || '').trim();
+    const hash = String(body?.contentHash || '').trim();
+    if (!env) throw new BadRequestException('envId 必填');
+    if (!mod) throw new BadRequestException('moduleKey 必填');
+    if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+      throw new BadRequestException('contentHash 必填且须为 sha256（64 位 hex）');
+    }
+
+    return this.internalGuard.run(
+      req,
+      { action: 'internal.config.report', env, component: mod },
+      () => this.configService.reportDelivery({ envId: env, moduleKey: mod, reportedHash: hash, host: req?.ip ?? null }),
+      (r) => (r.deliveryId ? `回执已记（drift=${r.drift}）` : '未找到对应下发记录'),
+    );
+  }
+
+  /** 下发记录列表（含目标机回执与漂移标记） */
+  @Get('deliveries')
+  @ApiOperation({ summary: '配置下发记录（含目标机回执 / 漂移）' })
+  deliveries(
+    @Query('envId') envId?: string,
+    @Query('moduleKey') moduleKey?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.configService.listDeliveries({
+      envId,
+      moduleKey,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /** 配置变更历史（密钥只显指纹，不显示值） */
+  @Get('revisions')
+  @ApiOperation({ summary: '配置变更历史（值不回显，仅指纹）' })
+  revisions(
+    @Query('scope') scope?: string,
+    @Query('envId') envId?: string,
+    @Query('moduleKey') moduleKey?: string,
+    @Query('key') key?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.configService.listRevisions({
+      scope,
+      envId,
+      moduleKey,
+      key,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /**
+   * 单键回滚：把指定变更记录的值写回配置项。
+   *
+   * ⚠️ 这是**改数据**的操作，因此：detail 不回显值（只回键与 revision id），
+   * 审计里记的是"回滚到哪条记录"而非值本身（与 config.update 同口径）。
+   */
+  @Post('rollback')
+  @ApiOperation({ summary: '回滚配置项到指定变更记录' })
+  async rollback(@Body() body: { revisionId: string }, @CurrentUser() user: any) {
+    const revisionId = String(body?.revisionId || '').trim();
+    if (!revisionId) throw new BadRequestException('缺少 revisionId');
+    const username = user?.username || 'unknown';
+
+    const saved = await this.configService.rollbackToRevision(revisionId, username);
+
+    await this.auditService.log({
+      user: username,
+      action: 'config.rollback',
+      env: saved.envId,
+      component: saved.moduleKey,
+      status: 'success',
+      detail: JSON.stringify({
+        scope: saved.scope,
+        key: saved.key,
+        revisionId,
+        value: SECRET_UNRECORDED,
+      }),
+      changes: [{ field: 'value', before: SECRET_UNRECORDED, after: SECRET_UNRECORDED }],
+    });
+    return { ok: true, key: saved.key, scope: saved.scope };
   }
 
   @Put('items')
@@ -144,7 +293,8 @@ export class ConfigController {
     // 删除前先取元数据用于审计（findById 不返回值，避免触碰密钥）
     const target = await this.configService.findById(id);
 
-    await this.configService.remove(id);
+    // 传操作人：删除同样要进 config_revisions（否则删了什么无从追溯）
+    await this.configService.remove(id, username);
 
     await this.auditService.log({
       user: username,

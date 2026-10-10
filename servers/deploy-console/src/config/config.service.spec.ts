@@ -3,11 +3,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigItemEntity } from '../entities/config-item.entity';
 import { ConfigSnapshotEntity } from '../entities/config-snapshot.entity';
+import { ConfigRevisionEntity } from '../entities/config-revision.entity';
+import { ConfigDeliveryEntity } from '../entities/config-delivery.entity';
 import { ConfigService } from './config.service';
 import {
   escapeEnvValue,
   isReservedLocalKey,
+  isRowDeliverable,
   renderGeneratedEnvFile,
+  validateConfigValue,
+  valueFingerprint,
 } from './config.service';
 import { decryptSecret, encryptSecret, SECRET_MASK } from './config-crypto';
 
@@ -18,6 +23,8 @@ describe('ConfigService（配置中心）', () => {
   let service: ConfigService;
   let itemRepo: any;
   let snapRepo: any;
+  let revisionRepo: any;
+  let deliveryRepo: any;
 
   beforeAll(() => {
     process.env.CONFIG_MASTER_KEY = TEST_KEY;
@@ -33,12 +40,27 @@ describe('ConfigService（配置中心）', () => {
       count: jest.fn().mockResolvedValue(0),
     };
     snapRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() };
+    // 2026-10-10：变更历史（P0-2）与下发记录（P0-3）
+    revisionRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+      create: jest.fn((dto) => dto),
+      save: jest.fn(async (row) => row),
+    };
+    deliveryRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+      create: jest.fn((dto) => dto),
+      save: jest.fn(async (row) => row),
+    };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         ConfigService,
         { provide: getRepositoryToken(ConfigItemEntity), useValue: itemRepo },
         { provide: getRepositoryToken(ConfigSnapshotEntity), useValue: snapRepo },
+        { provide: getRepositoryToken(ConfigRevisionEntity), useValue: revisionRepo },
+        { provide: getRepositoryToken(ConfigDeliveryEntity), useValue: deliveryRepo },
       ],
     }).compile();
     service = moduleRef.get(ConfigService);
@@ -315,6 +337,262 @@ describe('ConfigService（配置中心）', () => {
     it('无快照可回滚时返回 0 而不是抛错', async () => {
       snapRepo.findOne.mockResolvedValue(null);
       await expect(service.restore('dev', 'auth', 'nope')).resolves.toBe(0);
+    });
+  });
+
+  // ══════════ 2026-10-10 新增：配置中心底座（P0-1/2/3）══════════
+
+  describe('层（layer）与下发判定', () => {
+    it('bootstrap / platform 层永不下发', () => {
+      expect(isRowDeliverable({ key: 'MYSQL_HOST', layer: 'bootstrap' })).toBe(false);
+      expect(isRowDeliverable({ key: 'PLATFORM_TIMEOUT', layer: 'platform' })).toBe(false);
+    });
+
+    it('app / infra 层正常下发', () => {
+      expect(isRowDeliverable({ key: 'FEATURE_X', layer: 'app' })).toBe(true);
+      expect(isRowDeliverable({ key: 'PORT', layer: 'infra' })).toBe(true);
+    });
+
+    it('deliverable=false 时即使是 app 层也不下发', () => {
+      expect(isRowDeliverable({ key: 'INTERNAL_ONLY', layer: 'app', deliverable: false })).toBe(false);
+    });
+
+    it('双保险：layer 未回填（存量行）时仍按保留键名单拦截', () => {
+      // 这是迁移回填没跑到时的兜底 —— 没这条就会把 DB 连接信息写进服务 .env.generated
+      expect(isRowDeliverable({ key: 'MYSQL_PASSWORD', layer: 'app' })).toBe(false);
+      expect(isRowDeliverable({ key: 'CONSOLE_TOKEN', layer: '' })).toBe(false);
+      expect(isRowDeliverable({ key: 'PM2_NAME' })).toBe(false);
+      // 普通键不受影响
+      expect(isRowDeliverable({ key: 'API_BASE', layer: 'app' })).toBe(true);
+    });
+
+    it('保留键名单本身不变（向后兼容）', () => {
+      expect(isReservedLocalKey('MYSQL_HOST')).toBe(true);
+      expect(isReservedLocalKey('CONFIG_MASTER_KEY')).toBe(true);
+      expect(isReservedLocalKey('PORT')).toBe(false);
+    });
+  });
+
+  describe('值类型与规则校验', () => {
+    it('端口越界与非数字均报错', () => {
+      expect(validateConfigValue('70000', { valueType: 'port' })).toContain('端口应在 1–65535 之间');
+      expect(validateConfigValue('abc', { valueType: 'port' })).toContain('端口应为正整数');
+      expect(validateConfigValue('3000', { valueType: 'port' })).toEqual([]);
+    });
+
+    it('bool / number / json 按类型校验', () => {
+      expect(validateConfigValue('yes', { valueType: 'bool' })).toEqual(['应为 true / false']);
+      expect(validateConfigValue('true', { valueType: 'bool' })).toEqual([]);
+      expect(validateConfigValue('1.5', { valueType: 'number' })).toEqual([]);
+      expect(validateConfigValue('12x', { valueType: 'number' })).toEqual(['应为数字']);
+      expect(validateConfigValue('{bad}', { valueType: 'json' })).toEqual(['应为合法 JSON']);
+      expect(validateConfigValue('{"a":1}', { valueType: 'json' })).toEqual([]);
+    });
+
+    it('validators 的 enum / pattern / min / max 生效', () => {
+      expect(
+        validateConfigValue('b', { validators: { enum: ['a', 'c'] } }),
+      ).toEqual(['取值必须是 a / c 之一']);
+      expect(validateConfigValue('abc', { validators: { pattern: '^\\d+$' } })).toEqual([
+        '不匹配规则 ^\\d+$',
+      ]);
+      expect(validateConfigValue('3', { valueType: 'number', validators: { min: 10 } })).toEqual([
+        '不能小于 10',
+      ]);
+      expect(validateConfigValue('30', { valueType: 'number', validators: { max: 10 } })).toEqual([
+        '不能大于 10',
+      ]);
+    });
+
+    it('非法正则本身会被识别为规则错误，而不是通过校验', () => {
+      expect(validateConfigValue('x', { validators: { pattern: '([unclosed' } })).toEqual([
+        '校验规则的正则非法：([unclosed',
+      ]);
+    });
+
+    it('同一值命中多条规则时全部返回（一次把问题报全）', () => {
+      const errs = validateConfigValue('70000', { valueType: 'port', validators: { min: 1 } });
+      expect(errs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('值指纹', () => {
+    it('同一值指纹恒定、不同值指纹不同，且长度固定', () => {
+      expect(valueFingerprint('abc')).toBe(valueFingerprint('abc'));
+      expect(valueFingerprint('abc')).not.toBe(valueFingerprint('abd'));
+      expect(valueFingerprint('abc')).toHaveLength(12);
+    });
+  });
+
+  describe('变更历史（config_revisions）', () => {
+    it('新建与更新各写一条记录，密钥保持密文形态', async () => {
+      itemRepo.findOne.mockResolvedValue(null);
+      itemRepo.create.mockImplementation((dto) => dto);
+      itemRepo.save.mockImplementation(async (row) => ({ id: 'item-1', ...row }));
+
+      const row = await service.upsert(
+        {
+          scope: 'module',
+          envId: 'dev',
+          moduleKey: 'auth',
+          key: 'DB_PASSWORD',
+          value: 'topsecret',
+          isSecret: true,
+        },
+        'alice',
+      );
+
+      expect(row.value).not.toContain('topsecret');
+      const first = revisionRepo.create.mock.calls[0][0];
+      expect(first.action).toBe('create');
+      expect(first.beforeValue).toBeNull();
+      // afterValue 必须是密文 —— 明文一旦入历史表，就等于多了一个泄露面
+      expect(first.afterValue).toBe(row.value);
+      expect(first.afterValue).not.toContain('topsecret');
+      expect(first.changedBy).toBe('alice');
+
+      // 第二次走 update 分支
+      itemRepo.findOne.mockResolvedValue({ ...row });
+      await service.upsert(
+        {
+          scope: 'module',
+          envId: 'dev',
+          moduleKey: 'auth',
+          key: 'DB_PASSWORD',
+          value: 'rotated',
+          isSecret: true,
+        },
+        'bob',
+      );
+      const second = revisionRepo.create.mock.calls[1][0];
+      expect(second.action).toBe('update');
+      expect(second.beforeFingerprint).not.toBe(second.afterFingerprint);
+    });
+
+    it('删除也留痕：记录了删之前的值', async () => {
+      itemRepo.findOne.mockResolvedValue({
+        id: 'item-9',
+        scope: 'global',
+        envId: '',
+        moduleKey: '',
+        key: 'LEGACY_FLAG',
+        value: 'on',
+        isSecret: false,
+      });
+      await service.remove('item-9', 'carol');
+
+      const rev = revisionRepo.create.mock.calls[0][0];
+      expect(rev.action).toBe('delete');
+      expect(rev.beforeValue).toBe('on');
+      expect(rev.afterValue).toBeNull();
+      expect(itemRepo.delete).toHaveBeenCalledWith('item-9');
+    });
+
+    it('写入历史失败不阻断配置变更（可观测性债务不该变成可用性债务）', async () => {
+      itemRepo.findOne.mockResolvedValue(null);
+      itemRepo.create.mockImplementation((dto) => dto);
+      itemRepo.save.mockImplementation(async (row) => ({ id: 'x', ...row }));
+      revisionRepo.save.mockRejectedValue(new Error('revision table down'));
+
+      await expect(
+        service.upsert({ scope: 'global', key: 'A', value: '1' }, 'dave'),
+      ).resolves.toBeTruthy();
+    });
+
+    it('回滚：把 revision 的值原样写回，密钥无需解密', async () => {
+      const cipher = encryptSecret('original-secret');
+      revisionRepo.findOne.mockResolvedValue({
+        id: 'rev-1',
+        scope: 'module',
+        envId: 'dev',
+        moduleKey: 'auth',
+        key: 'DB_PASSWORD',
+        afterValue: cipher,
+        beforeValue: 'x',
+        isSecret: true,
+      });
+      itemRepo.findOne.mockResolvedValue({
+        id: 'item-1',
+        scope: 'module',
+        envId: 'dev',
+        moduleKey: 'auth',
+        key: 'DB_PASSWORD',
+        value: 'changed-away',
+        isSecret: true,
+      });
+      itemRepo.save.mockImplementation(async (row) => row);
+
+      const saved = await service.rollbackToRevision('rev-1', 'erin');
+      expect(saved.value).toBe(cipher);
+      expect(decryptSecret(saved.value)).toBe('original-secret');
+    });
+
+    it('回滚不存在的记录要报错（不静默什么都不做）', async () => {
+      revisionRepo.findOne.mockResolvedValue(null);
+      await expect(service.rollbackToRevision('nope', 'frank')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('下发记录（config_deliveries）', () => {
+    it('下发落成记录，只记元数据不记键值', async () => {
+      await service.recordDelivery({
+        envId: 'prod',
+        moduleKey: 'user-service',
+        keyCount: 12,
+        contentHash: 'a'.repeat(64),
+        result: 'delivered',
+        host: '10.0.0.5',
+        runId: 'run-7',
+      });
+
+      const row = deliveryRepo.create.mock.calls[0][0];
+      expect(row.keyCount).toBe(12);
+      expect(row.contentHash).toBe('a'.repeat(64));
+      expect(row.host).toBe('10.0.0.5');
+      expect(row.runId).toBe('run-7');
+      // 键名与值一律不入库
+      expect(JSON.stringify(row)).not.toContain('MYSQL_PASSWORD');
+    });
+
+    it('记录失败不影响下发本身', async () => {
+      deliveryRepo.save.mockRejectedValue(new Error('delivery table down'));
+      await expect(
+        service.recordDelivery({
+          envId: 'prod',
+          moduleKey: 'x',
+          keyCount: 1,
+          contentHash: null,
+          result: 'empty',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('回执一致时不漂移，不一致时漂移', async () => {
+      const hash = 'b'.repeat(64);
+      deliveryRepo.findOne.mockResolvedValue({
+        id: 'dl-1',
+        contentHash: hash,
+        reportedHash: null,
+        drift: false,
+      });
+
+      await expect(
+        service.reportDelivery({ envId: 'prod', moduleKey: 'x', reportedHash: hash }),
+      ).resolves.toEqual({ drift: false, deliveryId: 'dl-1', expectedHash: hash });
+
+      await expect(
+        service.reportDelivery({ envId: 'prod', moduleKey: 'x', reportedHash: 'c'.repeat(64) }),
+      ).resolves.toEqual({ drift: true, deliveryId: 'dl-1', expectedHash: hash });
+      expect(deliveryRepo.save.mock.calls[1][0].drift).toBe(true);
+    });
+
+    it('没有下发记录时上报返回空 disposition（不臆造漂移）', async () => {
+      deliveryRepo.findOne.mockResolvedValue(null);
+      await expect(
+        service.reportDelivery({ envId: 'prod', moduleKey: 'x', reportedHash: 'd'.repeat(64) }),
+      ).resolves.toEqual({ drift: false, deliveryId: null, expectedHash: null });
     });
   });
 });
