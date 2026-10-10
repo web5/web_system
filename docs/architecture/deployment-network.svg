@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" font-family="PingFang SC, Microsoft YaHei, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A0A0D"/>
+      <stop offset="1" stop-color="#13131C"/>
+    </linearGradient>
+    <marker id="aOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F97316"/>
+    </marker>
+    <marker id="aTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4ECDC4"/>
+    </marker>
+    <marker id="aGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7A7A8C"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="1040" fill="url(#bgGrad2)"/>
+
+  <!-- Header -->
+  <text x="40" y="42" font-size="26" font-weight="600" fill="#FFF8F0">科豆 AI · 网络部署架构</text>
+  <text x="40" y="64" font-size="13" fill="#8A8A99">三环境拓扑 · 跨 VPC 网络边界 · 发布链路 · 现状视图 2026-10-09</text>
+  <text x="1400" y="64" font-size="12" fill="#5C5C6B" text-anchor="end">source: docs/architecture/system-overview.md §9</text>
+  <line x1="40" y1="74" x2="1400" y2="74" stroke="#24242F" stroke-width="1"/>
+
+  <!-- ===== Internet / DNS ===== -->
+  <rect x="40" y="84" width="1360" height="76" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="84" width="4" height="76" rx="2" fill="#4ECDC4"/>
+  <text x="60" y="104" font-size="13" font-weight="600" fill="#4ECDC4">Internet / DNS（用户 · 小程序 · AI 客户端）</text>
+  <g font-size="12" fill="#C9C9D6">
+    <rect x="60" y="110" width="319" height="38" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="76" y="126" font-size="12.5" fill="#FFF8F0">kedouai.com</text>
+    <text x="76" y="141" font-size="11" fill="#9090A2">生产 PROD</text>
+    <rect x="393" y="110" width="319" height="38" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="409" y="126" font-size="12.5" fill="#FFF8F0">dev.kedouai.com</text>
+    <text x="409" y="141" font-size="11" fill="#9090A2">测试 DEV</text>
+    <rect x="726" y="110" width="319" height="38" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="742" y="126" font-size="12.5" fill="#FFF8F0">local.kedouai.com</text>
+    <text x="742" y="141" font-size="11" fill="#9090A2">本机 Mac + 本机 nginx</text>
+    <rect x="1059" y="110" width="319" height="38" rx="8" fill="#231B1B" stroke="#4A2A2A"/>
+    <text x="1075" y="126" font-size="12.5" fill="#FCA5A5">portal.kedouai.com</text>
+    <text x="1075" y="141" font-size="11" fill="#B08080">2026-09-10 已下线：DNS 保留但必失败</text>
+  </g>
+
+  <path d="M720,160 L720,188" stroke="#4ECDC4" stroke-width="1.6" marker-end="url(#aTeal)"/>
+
+  <!-- ===== GATEWAY 机 ===== -->
+  <rect x="470" y="190" width="500" height="80" rx="14" fill="#1F1A16" stroke="#5A3A22"/>
+  <rect x="470" y="190" width="4" height="80" rx="2" fill="#F97316"/>
+  <text x="490" y="216" font-size="13.5" font-weight="600" fill="#FDBA74">GATEWAY 机 · Nginx（公网入口）</text>
+  <text x="490" y="238" font-size="11.5" fill="#9090A2">SSL 在网关机终止 · 域名路由 · 反代后端</text>
+  <text x="490" y="256" font-size="11.5" fill="#9090A2">→ dev / prod 的 :6000（网关）与 :6006（MCP）</text>
+
+  <path d="M600,270 C420,282 360,282 350,298" stroke="#F97316" stroke-width="1.6" fill="none" marker-end="url(#aOrange)"/>
+  <path d="M840,270 C1020,282 1080,282 1090,298" stroke="#F97316" stroke-width="1.6" fill="none" marker-end="url(#aOrange)"/>
+
+  <!-- ===== DEV ===== -->
+  <rect x="40" y="300" width="640" height="430" rx="16" fill="#14141C" stroke="#2C2C3A"/>
+  <rect x="40" y="300" width="640" height="38" rx="16" fill="#191922"/>
+  <rect x="40" y="326" width="640" height="12" fill="#191922"/>
+  <text x="60" y="325" font-size="14" font-weight="600" fill="#FFF8F0">DEV 环境</text>
+  <text x="664" y="325" font-size="11.5" fill="#9090A2" text-anchor="end">ap-nanjing-3 · VPC-A（10.206.16.0/20）· dev.kedouai.com</text>
+
+  <text x="56" y="366" font-size="11.5" fill="#6F6F80">pm2 服务（6000 系，端口写死防漂移）</text>
+  <g font-size="11" fill="#C9C9D6">
+    <rect x="56" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="128" y="395" text-anchor="middle">gateway :6000</text>
+    <rect x="210" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="282" y="395" text-anchor="middle">auth :6001</text>
+    <rect x="364" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="436" y="395" text-anchor="middle">user :6002</text>
+    <rect x="518" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="590" y="395" text-anchor="middle">ai :6003</text>
+
+    <rect x="56" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="128" y="435" text-anchor="middle">system :6004</text>
+    <rect x="210" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="282" y="435" text-anchor="middle">todo :6005</text>
+    <rect x="364" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="436" y="435" text-anchor="middle">mcp-gw :6006</text>
+    <rect x="518" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="590" y="435" text-anchor="middle">content-hub :6007</text>
+
+    <rect x="56" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="128" y="475" text-anchor="middle">upload :6008</text>
+    <rect x="210" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="282" y="475" text-anchor="middle">ai-agent :6010</text>
+    <rect x="364" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="436" y="475" text-anchor="middle">knowledge :6011</text>
+    <rect x="518" y="454" width="145" height="34" rx="7" fill="#1F1A16" stroke="#5A3A22"/>
+    <text x="590" y="475" text-anchor="middle" fill="#FDBA74">console :6200 ★</text>
+  </g>
+
+  <g font-size="11.5" fill="#C9C9D6">
+    <rect x="56" y="500" width="608" height="34" rx="8" fill="#141C1C" stroke="#2C4A46"/>
+    <text x="72" y="521">GitHub Actions self-hosted runner（构建在 dev，打到版本目录）</text>
+
+    <rect x="56" y="542" width="608" height="34" rx="8" fill="#1F1A16" stroke="#5A3A22"/>
+    <text x="72" y="563" fill="#FDBA74">deploy-console :6200 ★ 发布平台主运行环境（不在 prod 部署）· 配置中心：下发 .env.generated / 注入流水线变量</text>
+
+    <rect x="56" y="584" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="605">MySQL（dev 机本地，web_system + web_system_deploy）+ Redis</text>
+
+    <rect x="56" y="626" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="647">静态产物：public/static/modules/&lt;key&gt;/&lt;env&gt;/&lt;commit&gt;/</text>
+
+    <rect x="56" y="668" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="72" y="689">对外暴露：:6000 网关 / :6006 MCP / :6200 控制台（控制台公网可达，收敛中）</text>
+  </g>
+
+  <!-- ===== 跨 VPC 边界 ===== -->
+  <path d="M686,520 L754,520" stroke="#7A7A8C" stroke-width="1.4" stroke-dasharray="5 4" marker-start="url(#aGray)" marker-end="url(#aGray)"/>
+  <text x="720" y="504" font-size="11" fill="#9090A2" text-anchor="middle">跨 VPC</text>
+  <text x="720" y="518" font-size="11" fill="#9090A2" text-anchor="middle">仅公网</text>
+  <text x="720" y="542" font-size="11" fill="#9090A2" text-anchor="middle">SSH / 同步</text>
+
+  <!-- ===== PROD ===== -->
+  <rect x="760" y="300" width="640" height="430" rx="16" fill="#14141C" stroke="#2C2C3A"/>
+  <rect x="760" y="300" width="640" height="38" rx="16" fill="#191922"/>
+  <rect x="760" y="326" width="640" height="12" fill="#191922"/>
+  <text x="780" y="325" font-size="14" font-weight="600" fill="#FFF8F0">PROD 环境</text>
+  <text x="1384" y="325" font-size="11.5" fill="#9090A2" text-anchor="end">ap-guangzhou-4 · VPC-B（172.16.16.0/20）· kedouai.com</text>
+
+  <text x="776" y="366" font-size="11.5" fill="#6F6F80">pm2 服务（同端口；deploy-console 不部署）</text>
+  <g font-size="11" fill="#C9C9D6">
+    <rect x="776" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="848" y="395" text-anchor="middle">gateway :6000</text>
+    <rect x="930" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1002" y="395" text-anchor="middle">auth :6001</text>
+    <rect x="1084" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1156" y="395" text-anchor="middle">user :6002</text>
+    <rect x="1238" y="374" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1310" y="395" text-anchor="middle">ai :6003</text>
+
+    <rect x="776" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="848" y="435" text-anchor="middle">system :6004</text>
+    <rect x="930" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1002" y="435" text-anchor="middle">todo :6005</text>
+    <rect x="1084" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1156" y="435" text-anchor="middle">mcp-gw :6006</text>
+    <rect x="1238" y="414" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1310" y="435" text-anchor="middle">content-hub :6007</text>
+
+    <rect x="776" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="848" y="475" text-anchor="middle">upload :6008</text>
+    <rect x="930" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1002" y="475" text-anchor="middle">ai-agent :6010</text>
+    <rect x="1084" y="454" width="145" height="34" rx="7" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1156" y="475" text-anchor="middle">knowledge :6011</text>
+    <rect x="1238" y="454" width="145" height="34" rx="7" fill="#1A1A20" stroke="#33333F" stroke-dasharray="4 3"/>
+    <text x="1310" y="475" text-anchor="middle" fill="#5C5C6B">console ✗ 不部署</text>
+  </g>
+
+  <g font-size="11.5" fill="#C9C9D6">
+    <rect x="776" y="500" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="792" y="521">静态资源外置 /data/web_system_static/public（STATIC_PUBLIC_ROOT，须写根 .env.production）</text>
+
+    <rect x="776" y="542" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="792" y="563">指针严格模式：prod 版本指针写云数据库（DEPLOY_CLOUD_DB_STRICT，失败抛 503）</text>
+
+    <rect x="776" y="584" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="792" y="605">iptables 双链白名单：INPUT + DOCKER-USER（lo / 云内网 / dev / gateway）</text>
+
+    <rect x="776" y="626" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="792" y="647">运行目录 /data/web_system_git；版本目录 servers/&lt;svc&gt;/&lt;key&gt;/&lt;commit&gt;</text>
+
+    <rect x="776" y="668" width="608" height="34" rx="8" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="792" y="689">对外暴露：仅 :6000 / :6006（经网关机）；DB / Redis 不公网开放</text>
+  </g>
+
+  <path d="M350,730 L350,754" stroke="#7A7A8C" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#aGray)"/>
+  <path d="M1090,730 L1090,754" stroke="#4ECDC4" stroke-width="1.6" marker-end="url(#aTeal)"/>
+  <text x="358" y="746" font-size="10.5" fill="#7A7A8C">公网 SSL</text>
+  <text x="1098" y="746" font-size="10.5" fill="#4ECDC4">云内网</text>
+
+  <!-- ===== 数据与制品 ===== -->
+  <rect x="40" y="756" width="1360" height="100" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="756" width="4" height="100" rx="2" fill="#8B7CF6"/>
+  <text x="60" y="778" font-size="13" font-weight="600" fill="#8B7CF6">云数据层（与 PROD 同 VPC 内网互通；DEV 跨 VPC 走公网）</text>
+  <g font-size="11.5" fill="#C9C9D6">
+    <rect x="60" y="786" width="620" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="76" y="806" font-size="12.5" fill="#FFF8F0">云 MySQL（内网）</text>
+    <text x="76" y="824" font-size="11" fill="#9090A2">web_system（业务）· web_system_knowledge（RAG）· web_system_deploy（发布平台）</text>
+    <rect x="696" y="786" width="200" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="796" y="806" font-size="12.5" fill="#FFF8F0" text-anchor="middle">云 Redis</text>
+    <text x="796" y="824" font-size="11" fill="#9090A2" text-anchor="middle">缓存 / 会话</text>
+    <rect x="912" y="786" width="468" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="928" y="806" font-size="12.5" fill="#FFF8F0">发布制品 / 版本目录</text>
+    <text x="928" y="824" font-size="11" fill="#9090A2">servers/&lt;svc&gt;/&lt;key&gt;/&lt;commit&gt; · 静态 modules 子集（CDN 按需）</text>
+  </g>
+
+  <!-- ===== 发布链路 ===== -->
+  <rect x="40" y="878" width="1360" height="122" rx="14" fill="#14141C" stroke="#24242F"/>
+  <rect x="40" y="878" width="4" height="122" rx="2" fill="#F97316"/>
+  <text x="60" y="900" font-size="13" font-weight="600" fill="#F97316">发布链路（唯一正规通道 · 禁止手动 ssh 构建）</text>
+  <g font-size="11.5" fill="#C9C9D6">
+    <rect x="60" y="910" width="241" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="180" y="930" text-anchor="middle" font-size="12.5" fill="#FFF8F0">① git push</text>
+    <text x="180" y="948" text-anchor="middle" font-size="11" fill="#9090A2">GitHub Actions release.yml</text>
+
+    <rect x="329" y="910" width="241" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="449" y="930" text-anchor="middle" font-size="12.5" fill="#FFF8F0">② 构建</text>
+    <text x="449" y="948" text-anchor="middle" font-size="11" fill="#9090A2">self-hosted runner（dev 机）</text>
+
+    <rect x="598" y="910" width="241" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="718" y="930" text-anchor="middle" font-size="12.5" fill="#FFF8F0">③ 投递</text>
+    <text x="718" y="948" text-anchor="middle" font-size="11" fill="#9090A2">HMAC 签名 POST /api/hooks/release</text>
+
+    <rect x="867" y="910" width="241" height="52" rx="9" fill="#1F1A16" stroke="#5A3A22"/>
+    <text x="987" y="930" text-anchor="middle" font-size="12.5" fill="#FDBA74">④ 流水线 4 步（可定制）</text>
+    <text x="987" y="948" text-anchor="middle" font-size="11" fill="#9090A2">拉取代码 → 构建 → 发布确认(审批) → 发布</text>
+
+    <rect x="1136" y="910" width="241" height="52" rx="9" fill="#1B1B24" stroke="#2C2C3A"/>
+    <text x="1256" y="930" text-anchor="middle" font-size="12.5" fill="#FFF8F0">⑤ 动作序列（按环境）</text>
+    <text x="1256" y="948" text-anchor="middle" font-size="11" fill="#9090A2">write-version → sync → restart → verify</text>
+  </g>
+  <g stroke="#F97316" stroke-width="1.6" fill="none" marker-end="url(#aOrange)">
+    <path d="M301,936 L325,936"/>
+    <path d="M570,936 L594,936"/>
+    <path d="M839,936 L863,936"/>
+    <path d="M1108,936 L1132,936"/>
+  </g>
+
+  <text x="40" y="1022" font-size="11.5" fill="#6F6F80">网络边界：GATEWAY 机只开 22/80/443；dev ↔ prod 跨 VPC 仅公网可达（发布、SSH 同步走公网）；prod ↔ 云 MySQL/Redis 走内网；</text>
+</svg>
