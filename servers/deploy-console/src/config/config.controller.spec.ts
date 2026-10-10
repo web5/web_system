@@ -46,6 +46,12 @@ describe('ConfigController.dispatch（内部下发接口）', () => {
   let configService: {
     hasModuleScope: jest.Mock;
     dispatchPayload: jest.Mock;
+    /** 2026-10-10：下发记录（P0-3） */
+    recordDelivery: jest.Mock;
+    reportDelivery: jest.Mock;
+    listDeliveries: jest.Mock;
+    listRevisions: jest.Mock;
+    rollbackToRevision: jest.Mock;
   };
   const originalKey = process.env.INTERNAL_API_KEY;
 
@@ -63,6 +69,15 @@ describe('ConfigController.dispatch（内部下发接口）', () => {
       dispatchPayload: jest.fn().mockResolvedValue([
         { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:local/gateway' },
       ]),
+      recordDelivery: jest.fn().mockResolvedValue(undefined),
+      reportDelivery: jest.fn().mockResolvedValue({
+        drift: false,
+        deliveryId: 'dl-1',
+        expectedHash: null,
+      }),
+      listDeliveries: jest.fn().mockResolvedValue([]),
+      listRevisions: jest.fn().mockResolvedValue([]),
+      rollbackToRevision: jest.fn().mockResolvedValue({ key: 'A', scope: 'global' }),
     };
     const moduleRef = await Test.createTestingModule({
       controllers: [ConfigController],
@@ -117,5 +132,81 @@ describe('ConfigController.dispatch（内部下发接口）', () => {
     expect(res.body).toContain('# [module:local/gateway]');
     expect(res.body).toContain('GATEWAY_SERVICE_KEY=svc-key-123');
     expect(res.body).toContain('# 服务: gateway');
+  });
+
+  // ═══════ 2026-10-10：下发记录（P0-3）═══════
+
+  it('成功下发要落记录：delivered + 键数 + 内容 hash', async () => {
+    const res = resStub();
+    await controller.dispatch('gateway', 'local', reqOf(KEY), res);
+
+    expect(configService.recordDelivery).toHaveBeenCalledTimes(1);
+    const arg = configService.recordDelivery.mock.calls[0][0];
+    expect(arg.result).toBe('delivered');
+    expect(arg.keyCount).toBe(1);
+    expect(arg.envId).toBe('local');
+    expect(arg.moduleKey).toBe('gateway');
+    // hash 必须与实际正文一致，否则目标机回执永远判成漂移
+    expect(arg.contentHash).toHaveLength(64);
+    expect(arg.emptyReason).toBeFalsy();
+  });
+
+  it('204 也要落记录，且写明原因 —— 否则「配了没生效」无从查起', async () => {
+    configService.hasModuleScope.mockResolvedValue(false);
+    await controller.dispatch('todo-service', 'local', reqOf(KEY), resStub());
+
+    const arg = configService.recordDelivery.mock.calls[0][0];
+    expect(arg.result).toBe('empty');
+    expect(arg.emptyReason).toBe('no-module-scope');
+    expect(arg.keyCount).toBe(0);
+  });
+
+  it('有 module 级条目但没有可下发键 → empty 原因是 no-deliverable-key', async () => {
+    configService.dispatchPayload.mockResolvedValue([]);
+    await controller.dispatch('gateway', 'local', reqOf(KEY), resStub());
+
+    const arg = configService.recordDelivery.mock.calls[0][0];
+    expect(arg.result).toBe('empty');
+    expect(arg.emptyReason).toBe('no-deliverable-key');
+  });
+
+  describe('目标机回执（内部上报接口）', () => {
+    it('envId / moduleKey 缺失 → 400', async () => {
+      await expect(
+        controller.reportDelivery({ moduleKey: 'x', contentHash: 'a'.repeat(64) }, reqOf(KEY)),
+      ).rejects.toThrow();
+      await expect(
+        controller.reportDelivery({ envId: 'local', contentHash: 'a'.repeat(64) }, reqOf(KEY)),
+      ).rejects.toThrow();
+    });
+
+    it('hash 不是 sha256（64 位 hex）→ 400', async () => {
+      await expect(
+        controller.reportDelivery({ envId: 'local', moduleKey: 'x', contentHash: 'abc' }, reqOf(KEY)),
+      ).rejects.toThrow();
+    });
+
+    it('合法上报走 internalGuard，返回结果含 drift 判定', async () => {
+      configService.reportDelivery.mockResolvedValue({
+        drift: true,
+        deliveryId: 'dl-9',
+        expectedHash: 'b'.repeat(64),
+      });
+      await expect(
+        controller.reportDelivery(
+          { envId: 'local', moduleKey: 'gateway', contentHash: 'a'.repeat(64) },
+          reqOf(KEY),
+        ),
+      ).resolves.toEqual({ drift: true, deliveryId: 'dl-9', expectedHash: 'b'.repeat(64) });
+    });
+
+    it('缺少 x-internal-key → 401', async () => {
+      await expect(
+        controller.reportDelivery(
+          { envId: 'local', moduleKey: 'gateway', contentHash: 'a'.repeat(64) },
+          reqOf(),
+        ),
+      ).rejects.toThrow();
+    });
   });
 });

@@ -55,6 +55,35 @@ packages/    shared · types · ui · shell-loader · agent-core · agent-messag
 3. 纯行为修复 / 既有状态卡片复用 → 在原型稿里记一行「微调豁免」，不另出独立原型页；
 4. 批量机械改动或紧急修复才用 `UI_GATE=off` 豁免。
 
+#### 2.1.1 门禁是**路径盲拦**（必读，否则会误判为「必须先改原型」）
+
+hook 只按路径匹配，不看 diff 语义（判定实现：`scripts/redline/ui_gate_common.py` 的 `UI_PATH_GLOBS` 与 `UI_EXTS`）：
+
+```python
+UI_PATH_GLOBS = ['apps/*/pages/*', 'apps/*/src/*.vue', 'apps/*/components/*',
+                 'packages/ui/*', 'apps/*/app.json', 'app.json']
+UI_EXTS = ('.wxml', '.wxss', '.vue')
+```
+
+→ 只要碰 `.vue`，**无论改的是按钮间距还是重名变量，一律拦**。
+
+| 改动性质 | 举例 | 是否过门 |
+|---|---|---|
+| 视觉 / 布局 / 交互 / 状态变化 | 新增按钮、改配色、改路由、改组件结构 | **必须过门**（原型 + D2 + 人审 + D3） |
+| 纯代码缺陷（零视觉变化） | 重复 key 重命名、自赋值、未使用变量、异常空白字符、空 catch 补全、类型收敛 | **零摩擦**，走 `UI_GATE=off` |
+| Lint / 类型批量整改 | 规则升格后的存量整改 | **零摩擦**，走 `UI_GATE=off` |
+| 文案错别字 / 注释 / 日志 / 格式化 | — | **零摩擦**，走 `UI_GATE=off` |
+
+**判据一句话：改完截图前后一致 → 零摩擦；有像素 / 状态 / 布局变化 → 走完整动作门。**
+
+豁免用法与留痕（缺一不可）：
+
+- 命令前缀或会话级 `UI_GATE=off`（机器实现见 `specs/kit-sop-enforcement/design.md` §3.4.1）
+- commit message 带 `Micro-exempt: <理由>`，例：`Micro-exempt: lint 缺陷修复，零视觉变化`
+- 批量整改另在整改报告（如 `docs/development/eslint-gate.md`）记一行「豁免理由 + 判据」
+
+⚠️ 把「有交互变化」的改动当机械改动豁免 = 绕过人审，等同绕过动作门。
+
 ### 2.2 写法约定
 
 ```vue
