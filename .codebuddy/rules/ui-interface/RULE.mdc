@@ -29,6 +29,25 @@ updatedAt: 2026-09-21T00:00:00.000Z
 9. **批量整改先出清单**：若为规则升格后的批量整改（≥2 文件 / 跨页面 / 跨端），先列《整改影响清单》（文件 / 改动 / 风险 / 优先级）给负责人确认，**不得直接开改**（design.md §5-7，R6 教训）。
 10. 落码提交时：UI 源码须与已确认的原型/规格配对 —— 原型或规格先**单独 commit**，其后的 UI commit 带 `Proto: <sha>` trailer **并带 `Design: pass`**（`commit-msg` hook 强制 + CI R10 / **R11（error）** 兜底，见 `specs/kit-sop-enforcement/design.md` §3.8 与 `specs/design-reviewer/design.md` §3.7）。
 
+## 零摩擦边界（不触发本门）
+
+> ⚠️ **门禁是路径盲拦**：hook 只按路径判定（`apps/*/src/*.vue`、`apps/*/pages/**`、`packages/ui/**`、`*.vue`），
+> **不看 diff 语义**。因此下列改动虽命中路径，**不触发**本门的原型 / 评审 / `Proto:` 流程：
+
+- **纯代码缺陷修复**：重复 key 重命名、自赋值、未使用变量、异常空白字符、空异常分支补全、类型收敛
+- **Lint / 类型错误批量整改**（规则升格后的整改，无视觉与交互变化）
+- 纯文案错别字（不改变状态与布局）、注释、日志、格式化
+
+**判据一句话：改完截图前后一致 → 零摩擦；有像素 / 状态 / 布局变化 → 走完整动作门。**
+
+## 豁免（机械改动）
+
+- 判为机械改动后，用 `UI_GATE=off` 放行（环境变量，session 级或命令前缀 `UI_GATE=off <cmd>`）；
+  机器判定真相源 `specs/kit-sop-enforcement/design.md` §3.4.1。
+- **留痕不可省**：commit message 记 `Micro-exempt: <理由>`（如「lint 缺陷修复，零视觉变化」）；
+  批量整改另在整改报告（如 `docs/development/eslint-gate.md`）记一行豁免理由与判据。
+- ⚠️ **误用代价**：把「有交互 / 视觉变化」的改动当机械改动豁免 = 绕过人审，等同绕过动作门，按事故复盘处理。
+
 ## 核心约束精要（来不及翻 docs 时的最小禁项）
 
 - 色值只引用 `--ws-*` CSS 变量或 `uiTokens`；禁裸 hex/rgba。新色必须先入 `packages/ui/src/tokens.ts` + `tokens.css`（双文件同步）。

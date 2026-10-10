@@ -22,6 +22,14 @@ NL = chr(10)
 
 # §3.1 UI 源码（受门禁约束）
 # fnmatch 的 * 跨 / 匹配，故 apps/*/pages/* 覆盖 pages 全部深度。
+#
+# ⚠️ 已知取舍（design.md §3.7.1，2026-10-10 实测）：本判定**只看路径不看 diff 语义**，
+#    因此修 lint 缺陷这类「零视觉变化」的改动（重复 key 重命名、自赋值、未使用变量、
+#    空异常分支补全、类型收敛）也会被拦 —— 它们不需要原型与设计评审。
+#    不打算改为语义判定（成本高且不可靠）：豁免口径写在规则层
+#    （.codebuddy/rules/{ui,brand}-interface/RULE.mdc 的「零摩擦边界」+
+#     docs/development/frontend-best-practices.md §2.1.1），出口是 UI_GATE=off。
+#    判据：改完截图前后一致 → 机械改动，可豁免。
 UI_PATH_GLOBS = [
     'apps/*/pages/*',
     'apps/*/src/*.vue',
