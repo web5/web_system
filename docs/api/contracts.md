@@ -307,3 +307,16 @@ grep -nE "maxTokens|topP|thinking" servers/ai-service/src/agent-def/entities/age
 # 模型客户端文档是否漂移（README 声明 ↔ index.ts 实际导出，无输出=一致）
 node scripts/check-agent-core-exports.mjs
 ```
+
+### C7 改动的最小验证集（不做全量）
+
+契约改动的验点是「**四处是否同步**」，不是「代码会不会崩」—— 后者由编译器和 CI 负责。
+`quality-gate` → `changed-packages` 已在 PR 时跑改动包的 build/test，本地重复跑全量属于浪费。
+
+| 档 | 触发条件 | 动作 |
+|---|---|---|
+| L0 | **任何** C7 改动 | 上面「三条必跑」+ `grep -rln "AgentDefinition" servers packages apps` 查漏掉第三处映射 |
+| L1 | 改了 `.ts` 签名/类型 | `bash scripts/worktree-link-deps.sh <svc>` + 只跑改动包的 `tsc --noEmit` |
+| L2 | 改动命中**被测逻辑本身** | `jest <具体 spec>`（纯加字段 + 直透传不触发新分支，**不必跑**） |
+
+明细、明确不做的清单与豁免条件见 `.codebuddy/rules/llm-interface/RULE.mdc`《验证策略》。

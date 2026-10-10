@@ -31,7 +31,7 @@ updatedAt: 2026-10-10T00:00:00.000Z
    - `AgentEngine` 传给 `chatWithToolsStream` 的 options
 4. **互斥校验（C7-b）**：`temperature` 与 `topP` 只允许填其一，保存时在 DTO 层报错（不静默忽略、不取后者覆盖）。
 5. **兼容性（C7-e）**：新字段全为 null 时，行为必须与改动前完全一致 —— 否则存量 agent 静默漂移。
-6. **跑机检**：`node scripts/check-agent-core-exports.mjs`（README 声明 ↔ `src/index.ts` 导出对拍）+ 相关单测；改 `interfaces/**` 另过 R13。
+6. **靶向验证（分级，不做全量）**：按「改到哪验到哪」，见下方《验证策略》表；以静态对拍为主，`pnpm install` / 全仓 build / 全包 jest 一律留给 CI（`quality-gate` → `changed-packages` 已自动跑改动包）。
 7. **commit 带 `Contract: pass`**（或评审报告路径）；纯文档/微调走 `Micro-exempt: <理由>`。
    - 同时命中 `servers/*/.env*` 的（如新增 `TOKENHUB_*`）→ **并行走 `release-interface` 门**，两门的 trailer 都要带。
 8. **DB 侧填值晚于代码发布**：新列上线并同步到发布目录之后，才在后台/字典里填参数值（先填=绑定即故障）。
@@ -45,6 +45,46 @@ updatedAt: 2026-10-10T00:00:00.000Z
 | 3 | 新增模型只在代码里硬编码 | 两侧装配会不一致（ai-agent 字典驱动 / ai-service 曾硬编码）→ 一侧能加、另一侧永远要发版 |
 | 4 | 删/改 `ChatOptions` 字段不查消费方 | 契约破坏是静默的；必须 grep import 型消费方的 `=== 'xxx'` / `switch case` |
 | 5 | 把模型 id 写进提示词或前端常量 | 模型清单真相源是 DB 字典 `llm_models`，写死即双份事实 |
+
+## 验证策略（分级靶向 · 默认不做全量）
+
+> 立规原因（2026-10-10）：一次纯「加字段 + 透传」的契约改动跑了全仓类型检查 + 整个包 70 个单测，
+> 耗时耗 token 却没多抓到一个问题。契约改动的验点是**「四处是否同步」**，不是「代码会不会崩」——
+> 后者交给编译器和 CI。以下三档**自上而下做，做完即停**，不要因为「顺手」就往下多跑。
+
+| 档 | 适用 | 动作 | 成本 |
+|---|---|---|---|
+| **L0 静态对拍** | **任何** C7 改动（含纯文档） | 见下表「三条必跑」，纯 grep / node 单文件，无需依赖 | 秒级 |
+| **L1 定点类型检查** | 改了 `.ts`（新增/改签名/改字段类型） | `bash scripts/worktree-link-deps.sh <svc>` 备依赖后，**只**对本次改动所在包跑 `tsc --noEmit`（如 `packages/agent-core`），不连带下游服务 | 秒级备依赖 + 单次 tsc |
+| **L2 定点单测** | 改动命中**被测逻辑本身**（引擎 options 构造、下发映射、校验函数） | `jest <具体 spec 路径>`，**禁止跑整个包**；纯加字段 PASS（透传不进新分支）时不跑 | 视 spec 而定 |
+
+**L0 三条必跑（零依赖，秒级）**
+
+```bash
+# 1 三处同步（C7-a）：契约面 / DB 列 / 引擎透传点，缺谁一眼看出
+grep -nE "maxTokens|topP|thinking" packages/agent-core/src/interfaces/agent.interface.ts
+grep -nE "maxTokens|topP|thinking" servers/ai-service/src/agent-def/entities/agent-definition.entity.ts
+grep -nE "maxTokens|topP|thinking" packages/agent-core/src/core/agent-engine.ts
+
+# 2 文档漂移（README 声明 ↔ index.ts 导出，无输出=一致）
+node scripts/check-agent-core-exports.mjs
+
+# 3 消费方清单（有第三处 @kedouai/agent-core 引用没跟着改？）
+grep -rln "AgentDefinition" --include="*.ts" servers packages apps | grep -v node_modules | grep -v dist
+```
+
+**明确不做的（理由 + 由谁兜）**
+
+| 不做 | 理由 | 谁兜 |
+|---|---|---|
+| 全仓 `pnpm install` / 全仓 build | worktree 无 `node_modules`，装一次几分钟且与结论无关 | CI `changed-packages` |
+| 整个包的 `jest`（如 70 个用例全跑） | 未被改动的用例对「契约是否同步」零信息量 | CI `changed-packages`（PR 时跑改动包） |
+| 连带检查下游服务 `tsc` | 若契约字段是**纯新增 optional**，下游不会因缺字段报错；真改名/收窄类型才会，那种情况再单独跑 | 需要时按需单独跑 1 个服务 |
+| 全仓红线扫描 R9–R14 | 本地 hook 已跑；CI `redline-scan` 会按 PR 真实 diff 范围再兜一遍 | CI `redline-scan` |
+
+**何时才升级到 L1/L2**：① 改了 `interfaces/**` 的**类型签名**（含收窄、从 `undefined` 改 `null` 这类放宽）；
+② 改了 `agent-engine.ts` 的 options 构造**分支**；③ 改了 dirty-data 兜底逻辑（`parseThinking` / 校验函数）。
+仅「加字段 + 直透传」属于 L0 封顶。
 
 ## 档位从哪查
 

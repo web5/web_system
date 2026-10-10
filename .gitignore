@@ -2,6 +2,11 @@
 # pnpm workspace：禁止 npm lockfile 入仓，混用会破坏依赖一致性（W1 · 5-12，2026-09-25）
 package-lock.json
 node_modules/
+# 同上但**不带斜杠**：上面那条只匹配目录，不匹配 symlink。
+# git worktree 里根 node_modules 常建成软链复用主仓依赖（scripts/worktree-link-deps.sh），
+# 少了这行它就会以 `?? node_modules` 出现在 git status。实测 git 2.39：per-worktree 的
+# $GIT_DIR/info/exclude 不生效，锚定写法 /node_modules 也不匹配 symlink，只有这条管用。
+node_modules
 .pnp/
 .pnp.js
 
