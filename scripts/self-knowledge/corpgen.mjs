@@ -169,7 +169,7 @@ async function buildMarkdowns(services, gateway, mcp, admin, perms, pkgs, specs)
   }
   aLines.push('', '## gateway 代理路由（/api 前缀）', '', bullet(gateway.routes.map((r) => `/api${r}`)));
   aLines.push('', '## 共享包（packages/*）', '', bullet(pkgs));
-  aLines.push('', '## 端口与部署登记', '', '- deploy-local.sh BACKENDS 与 ecosystem.config.js 为部署事实源；health-check.sh SERVICES 为巡检清单。');
+  aLines.push('', '## 端口与部署登记', '', '- 服务器侧：deploy-local.sh BACKENDS 与 ecosystem.config.js 为部署事实源；health-check.sh SERVICES 为巡检清单。', '- 本机 pm2 清单已拆域：ecosystem.apps.cjs（应用域 11 个业务服务）+ ecosystem.console.cjs（console 域 deploy-console），ecosystem.config.cjs 为全量入口（合并两者）。');
   aLines.push('', '## 前端微前端（apps/admin）', '', `- 路由与权限：${admin.length} 条页面路由`, bullet(admin.map((p) => p.replace(/\|/g, ' /'))));
 
   // 2) Agent 平台玩法

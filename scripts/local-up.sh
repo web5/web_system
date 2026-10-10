@@ -12,7 +12,8 @@
 #   - 根目录已 pnpm install（脚本会检测，缺则自动跑一次）
 #
 # 说明:
-#   - 后端经 pm2 跑 servers/*/dist/main.js（进程清单见 ecosystem.config.cjs，10 个 web-* 服务）。
+#   - 后端经 pm2 跑 servers/*/dist/main.js（进程清单见 ecosystem.config.cjs，11 应用 + 1 console 共 12 个 web-* 服务；
+#     拆域见 ecosystem.apps.cjs / ecosystem.console.cjs，全量入口 ecosystem.config.cjs 只是合并两者）。
 #   - dev 库 synchronize:true，服务启动时自动对齐表结构（snake_case + created_at/updated_at/deleted_at）。
 #   - 登录端点: POST http://127.0.0.1:6000/api/auth/login   (admin / admin123)
 set -euo pipefail
