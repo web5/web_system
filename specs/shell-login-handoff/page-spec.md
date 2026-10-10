@@ -65,3 +65,45 @@
 
 基座按版本目录加载（`static/modules/shell/<env>/<commit>/`），
 回滚 = 把 `deploy_app_env_versions` 的 `current_version` 改回 `b94924b3`，无需重新构建。
+
+---
+
+## 7 追加：僵尸半登录态自愈（2026-10-10）
+
+### 7.1 现象
+
+无痕模式正常（跳模块登录页 + 二维码正常）；**非无痕**模式下：没有二维码，
+左栏是「加载失败 + 重试」而不是「登录 / 注册」，刷新页面也不恢复。
+
+### 7.2 根因（实测，`/api/auth/qrcode/create` 返回 401）
+
+本地残留**无效但存在**的 token（过期或被服务端作废）时：
+
+| # | 链路 | 结果 |
+|---|---|---|
+| 1 | `isLoggedIn = !!token` 从不校验有效性 | 左栏按「已登录」去拉列表 → 401 → 落到错误态「重试」 |
+| 2 | 请求拦截器**无条件**挂 `Authorization` | 连公开的扫码二维码接口也被带坏 token → 401 → 二维码生不出来 |
+| 3 | `fetchUserInfo` 的 catch **静默** | 401 不清凭据，僵尸态永久化，刷新无用 |
+| 4 | 401 跳登录页时**没先清凭据** | 到了登录页仍带坏 token → 二维码依然 401 → 死局 |
+
+### 7.3 判据（V8–V11）
+
+| # | 判据 | 验证方式 |
+|---|---|---|
+| V8 | 残留无效 token 访问 `/portal/chat` → 最终落在登录页且 `canvas` 存在（二维码渲染成功），Network 中 `/api/auth/qrcode/create` **不是** 401 | 无头浏览器注入过期 token 后实跑 |
+| V9 | 401 清理后 `localStorage['user-store']` 不再含 `token`，历史 `token` / `refreshToken` 也移除 | `page.evaluate` 读 localStorage |
+| V10 | 左栏在凭据失效后回到「登录 / 注册」空态，而非「加载失败 + 重试」 | 元素文本断言 |
+| V11 | 无痕（干净状态）行为不受影响：`/portal/chat` → `/portal/login?redirect=...`，二维码正常 | 对照跑 |
+
+### 7.4 反例
+
+- **B6 不误伤在线用户**：仅 401 且 refresh 失败才清；网络错误（无 response）不得清凭据。
+- **B7 不误伤公开接口**：`/auth/qrcode/*` 不带 Authorization，即使本地有**有效** token 也一样（匿名接口）。
+- **B8 内存同步**：只清 localStorage 不清 pinia 会导致 `isLoggedIn` 仍为 true → 必须广播 `auth:expired` 同步内存态。
+
+### 7.5 落地文件
+
+| 文件 | 改动 |
+|---|---|
+| `apps/portal/src/api/request.ts` | 新增 `skipAuthHeader`（qrcode 公开链路不挂 token）、`clearStoredAuth()`（清磁盘 + 广播）；401 刷新失败后**先清再跳** |
+| `apps/portal/src/stores/user.ts` | `fetchUserInfo` 401 时 `logout()`（不再静默）；监听 `auth:expired` 同步内存态 |

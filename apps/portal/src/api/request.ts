@@ -25,6 +25,28 @@ function isPublicAuthRequest(config?: InternalAxiosRequestConfig): boolean {
 }
 
 /**
+ * 完全公开、且**绝不能带 Authorization** 的接口。
+ *
+ * 背景（2026-10-10 事故）：本地残留一个无效/过期的 token 时，请求拦截器仍会
+ * 无条件挂上 `Authorization: Bearer <坏 token>`，导致**公开的扫码二维码接口**
+ * `/api/auth/qrcode/create` 也被网关判 401 → 二维码生不出来 → 登录页只剩
+ * 「二维码已过期 / 刷新二维码」，用户点刷新也没用（token 还在，次次 401）。
+ *
+ * 这类接口本身就是匿名可用的，带上坏凭据只会把「能自愈的公开链路」一起拖死。
+ */
+const NO_AUTH_HEADER_PATHS = [
+  '/auth/qrcode/create',
+  '/auth/qrcode/check',
+  '/auth/qrcode/oauth-url',
+];
+
+function skipAuthHeader(config?: InternalAxiosRequestConfig): boolean {
+  if (!config?.url) return false;
+  const path = config.url.split('?')[0];
+  return NO_AUTH_HEADER_PATHS.some((p) => path === p || path.endsWith(p));
+}
+
+/**
  * 从 localStorage 读取 refreshToken（避免与 pinia store 产生循环依赖）
  */
 export function getStoredRefreshToken(): string | null {
@@ -38,6 +60,38 @@ export function getStoredRefreshToken(): string | null {
   }
 }
 
+/**
+ * 清除本地凭据（401 且刷新失败时调用）。
+ *
+ * 只清不跳——「清」是根因修复：凭据留在 localStorage 里，下一次进页面仍是
+ * 「半登录」僵尸态（左栏显示「加载失败 + 重试」而不是「登录 / 注册」，
+ * 二维码接口也仍带着坏 token）。清干净后刷新/重进都能落到正确状态。
+ *
+ * 同时广播 `auth:expired`，让 pinia store 同步内存态（避免 isLoggedIn 仍为 true）。
+ * 这里不能用 import store 的方式（store → request 会形成循环依赖）。
+ */
+export function clearStoredAuth(): void {
+  try {
+    const raw = localStorage.getItem('user-store');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      delete parsed.token;
+      delete parsed.refreshToken;
+      delete parsed.userInfo;
+      localStorage.setItem('user-store', JSON.stringify(parsed));
+    }
+    // 历史遗留 key（老基座登录页写的）：一并清掉，避免基座守卫仍判「已登录」
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+  } catch {
+    // 静默失败
+  }
+  try {
+    window.dispatchEvent(new Event('auth:expired'));
+  } catch {
+    // 非浏览器环境（SSR / 单测）忽略
+  }
+}
 /**
  * 更新 localStorage 中的 token（pinia persist key 为 'user-store'）
  */
@@ -57,7 +111,7 @@ export function updateStoredTokens(accessToken: string, refreshToken: string): v
 request.interceptors.request.use(
   (config) => {
     const token = getStoredToken();
-    if (token) {
+    if (token && !skipAuthHeader(config)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -160,11 +214,13 @@ request.interceptors.response.use(
           }
         }
 
-        // 刷新失败，跳转登录
+        // 刷新失败：先清凭据再跳登录。顺序不能反——带着坏 token 跳到登录页，
+        // 扫码二维码接口仍会 401，登录页就变成「二维码已过期」的死局。
         if (!isRedirecting) {
           isRedirecting = true;
           // 60 秒后自动解锁，防止永久锁死
           setTimeout(() => { isRedirecting = false; }, 60000);
+          clearStoredAuth();
           message.error('登录已过期，请重新登录');
           const currentPath = router.currentRoute.value.fullPath;
           const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
