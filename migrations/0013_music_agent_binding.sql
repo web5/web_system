@@ -1,3 +1,29 @@
+-- ⚠️ DEPRECATED（2026-10-10）—— 请勿执行，保留仅供审计追溯。
+--
+-- 废弃原因：
+--   1. 设计前提已被取代。本迁移写于「音乐能力没有承载体」的阶段，靠给三个通用 agent
+--      挂工具兜底；现在已有专职音乐 agent `id='music'`（published，17 个音乐关键词命中
+--      路由，tools = list-music-providers / present-music-card / save-music-taste，
+--      system_prompt 已含音乐推荐段）。再给 general 挂一套 = 双通道：会话被锁定在
+--      general 且未达切换阈值（rule <0.88 / llm <0.75）时会走 general 出卡，
+--      偏好写入（save-music-taste）也可能重复。
+--   2. 影响面已萎缩且不对称。三个目标 id 里 `general-assistant` / `emotion` 在 dev/prod
+--      均不存在，实际只有 general 一行会变；而它 capabilities 已是 [web-search]，
+--      追加后 general 的 prompt 与函数表无谓膨胀（它是 keywords 为空的兜底 agent，
+--      误调用概率上升）。
+--   3. system_prompt 追加不可逆，本文件未提供回滚段。
+--
+-- ⚠️ 执行记录陷阱：`schema_migrations` 里本文件被记为 2026-09-23 16:39:26 已执行，
+--    但那是**空跑** —— 目标行 `general` 的 created_at 是 2026-09-28（晚 5 天），
+--    UPDATE 命中 0 行。dev/prod 两端一致，均**未生效**。
+--    → 不要把 schema_migrations 当「已生效」证据，它只记「跑过」。
+--
+-- 如确需让通用 agent 具备音乐能力（当前不建议）：必须先在 dev 执行并验证，
+-- 再同步到 prod，且自备回滚 SQL 备份 general.system_prompt 与 capabilities。
+--
+-- ---------------------------------------------------------------------------
+-- 以下为历史原文，未作修改：
+--
 -- 0013 · 音乐推荐能力绑定到 Agent（general / general-assistant / emotion）
 --
 -- 背景：工具已在 ai-agent 的 ToolRegistry 注册，但引擎按 agent_definitions.capabilities
