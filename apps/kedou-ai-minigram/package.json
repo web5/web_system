@@ -1,6 +1,6 @@
 {
   "name": "@web-system/kedou-ai-minigram",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "科豆 AI 小程序（kedou-ai-minigram · WeChat Mini Program）",
   "main": "app.ts",
   "scripts": {
