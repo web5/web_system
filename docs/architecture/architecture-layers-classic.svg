@@ -1,0 +1,246 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="PingFang SC, Microsoft YaHei, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="cArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5B6673"/>
+    </marker>
+    <marker id="cArrO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8A6100"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="1000" fill="#FAFBFC"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1440" height="56" fill="#1F3864"/>
+  <text x="40" y="30" font-size="21" font-weight="600" fill="#FFFFFF">科豆 AI（web_system）· 业务分层架构图</text>
+  <text x="40" y="47" font-size="12" fill="#B9CBE3">Classic Layered Architecture · 现状视图 · 2026-10-09 · 事实源：docs/architecture/system-overview.md</text>
+
+  <!-- ===== L1 表现层 ===== -->
+  <rect x="40" y="80" width="1180" height="88" rx="4" fill="#E8F0FE" stroke="#7EA6DB" stroke-width="1.2"/>
+  <rect x="40" y="80" width="140" height="88" fill="#2E5C8A"/>
+  <text x="110" y="116" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L1</text>
+  <text x="110" y="138" font-size="13" fill="#D3E2F5" text-anchor="middle">表现层</text>
+  <g font-size="11">
+    <rect x="196" y="96" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="212" y="116" font-size="12.5" font-weight="600" fill="#1F2937">浏览器 Web</text>
+    <text x="212" y="134" fill="#5B6673">shell 基座 + portal / admin 微前端</text>
+    <rect x="451" y="96" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="467" y="116" font-size="12.5" font-weight="600" fill="#1F2937">微信小程序</text>
+    <text x="467" y="134" fill="#5B6673">科豆 AI（微信原生 + TS）</text>
+    <rect x="706" y="96" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="722" y="116" font-size="12.5" font-weight="600" fill="#1F2937">运维控制台 SPA</text>
+    <text x="722" y="134" fill="#5B6673">/console/（6200 自身 serve）</text>
+    <rect x="961" y="96" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="977" y="116" font-size="12.5" font-weight="600" fill="#1F2937">AI 客户端（MCP）</text>
+    <text x="977" y="134" fill="#5B6673">WorkBuddy / Claude · /mcp</text>
+  </g>
+  <path d="M650,170 L650,186" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L2 网关接入层 ===== -->
+  <rect x="40" y="188" width="1180" height="88" rx="4" fill="#E7F4F8" stroke="#6BA8BF" stroke-width="1.2"/>
+  <rect x="40" y="188" width="140" height="88" fill="#1F6B80"/>
+  <text x="110" y="224" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L2</text>
+  <text x="110" y="246" font-size="13" fill="#CFE9F0" text-anchor="middle">网关接入层</text>
+  <g font-size="11">
+    <rect x="196" y="204" width="260" height="52" rx="3" fill="#FFFFFF" stroke="#9CC5D4"/>
+    <text x="212" y="224" font-size="12.5" font-weight="600" fill="#1F2937">Nginx（GATEWAY 机）</text>
+    <text x="212" y="242" fill="#5B6673">SSL 终止 · 域名路由 · 反向代理</text>
+    <rect x="472" y="204" width="716" height="52" rx="3" fill="#FFFFFF" stroke="#9CC5D4"/>
+    <text x="488" y="224" font-size="12.5" font-weight="600" fill="#1F2937">Gateway :6000（统一入口）</text>
+    <text x="488" y="242" fill="#5B6673">/api/* 反代 · 鉴权透传 · 灰度命中 · 静态托管 · manifest 版本分发 ｜ 前端不直连后端</text>
+  </g>
+  <path d="M650,278 L650,294" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L3 应用服务层 ===== -->
+  <rect x="40" y="296" width="1180" height="152" rx="4" fill="#EAF4E7" stroke="#7FB069" stroke-width="1.2"/>
+  <rect x="40" y="296" width="140" height="152" fill="#3F6B2E"/>
+  <text x="110" y="362" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L3</text>
+  <text x="110" y="384" font-size="13" fill="#D8EAD0" text-anchor="middle">应用服务层</text>
+  <text x="110" y="410" font-size="10.5" fill="#B9DCAE" text-anchor="middle">NestJS · pm2 · 独立库</text>
+  <g font-size="11">
+    <rect x="196" y="312" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="212" y="330" font-size="12.5" font-weight="600" fill="#1F2937">auth-service <tspan fill="#3F6B2E">:6001</tspan></text>
+    <text x="212" y="345" fill="#5B6673">认证 · JWT · 微信 OAuth</text>
+    <rect x="536" y="312" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="552" y="330" font-size="12.5" font-weight="600" fill="#1F2937">user-service <tspan fill="#3F6B2E">:6002</tspan></text>
+    <text x="552" y="345" fill="#5B6673">用户 · API Key · 权限</text>
+    <rect x="876" y="312" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="892" y="330" font-size="12.5" font-weight="600" fill="#1F2937">ai-service <tspan fill="#3F6B2E">:6003</tspan></text>
+    <text x="892" y="345" fill="#5B6673">对话 · 生图 · TTS · 变变</text>
+
+    <rect x="196" y="358" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="212" y="376" font-size="12.5" font-weight="600" fill="#1F2937">ai-agent <tspan fill="#3F6B2E">:6010</tspan></text>
+    <text x="212" y="391" fill="#5B6673">Agent 运行时（ReAct）· OCR</text>
+    <rect x="536" y="358" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="552" y="376" font-size="12.5" font-weight="600" fill="#1F2937">knowledge-service <tspan fill="#3F6B2E">:6011</tspan></text>
+    <text x="552" y="391" fill="#5B6673">RAG：分块 · 向量 · 检索</text>
+    <rect x="876" y="358" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="892" y="376" font-size="12.5" font-weight="600" fill="#1F2937">content-hub <tspan fill="#3F6B2E">:6007</tspan></text>
+    <text x="892" y="391" fill="#5B6673">财经 / 论文 / 资讯 + 公众号</text>
+
+    <rect x="196" y="404" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="212" y="422" font-size="12.5" font-weight="600" fill="#1F2937">system-service <tspan fill="#3F6B2E">:6004</tspan></text>
+    <text x="212" y="437" fill="#5B6673">配置 · 字典 · 操作日志</text>
+    <rect x="536" y="404" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="552" y="422" font-size="12.5" font-weight="600" fill="#1F2937">todo-service <tspan fill="#3F6B2E">:6005</tspan></text>
+    <text x="552" y="437" fill="#5B6673">待办任务</text>
+    <rect x="876" y="404" width="326" height="40" rx="3" fill="#FFFFFF" stroke="#A9C99A"/>
+    <text x="892" y="422" font-size="12.5" font-weight="600" fill="#1F2937">upload-service <tspan fill="#3F6B2E">:6008</tspan></text>
+    <text x="892" y="437" fill="#5B6673">统一文件上传</text>
+  </g>
+  <path d="M650,450 L650,466" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L4 领域/能力层 ===== -->
+  <rect x="40" y="468" width="1180" height="88" rx="4" fill="#FFF4E0" stroke="#E0B050" stroke-width="1.2"/>
+  <rect x="40" y="468" width="140" height="88" fill="#8A6100"/>
+  <text x="110" y="504" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L4</text>
+  <text x="110" y="526" font-size="13" fill="#F2E0BC" text-anchor="middle">领域能力层</text>
+  <g font-size="11">
+    <rect x="196" y="484" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#E5CB96"/>
+    <text x="212" y="503" font-size="12.5" font-weight="600" fill="#1F2937">agent-core / kedou-agent</text>
+    <text x="212" y="521" fill="#5B6673">ReAct 引擎 · 注册表 · 记忆压缩</text>
+    <rect x="451" y="484" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#E5CB96"/>
+    <text x="467" y="503" font-size="12.5" font-weight="600" fill="#1F2937">mcp-core</text>
+    <text x="467" y="521" fill="#5B6673">MCP 注册 · 声明式 HTTP 适配</text>
+    <rect x="706" y="484" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#E5CB96"/>
+    <text x="722" y="503" font-size="12.5" font-weight="600" fill="#1F2937">shell-loader</text>
+    <text x="722" y="521" fill="#5B6673">自研微前端加载器（非 qiankun）</text>
+    <rect x="961" y="484" width="243" height="52" rx="3" fill="#FFFFFF" stroke="#E5CB96"/>
+    <text x="977" y="503" font-size="12.5" font-weight="600" fill="#1F2937">shared / types / ui / message</text>
+    <text x="977" y="521" fill="#5B6673">跨端配置收口 · 权限码 · 设计 token</text>
+  </g>
+  <path d="M650,558 L650,574" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L5 数据访问层 ===== -->
+  <rect x="40" y="576" width="1180" height="76" rx="4" fill="#F0EAF8" stroke="#9B7FC4" stroke-width="1.2"/>
+  <rect x="40" y="576" width="140" height="76" fill="#5B3F8A"/>
+  <text x="110" y="606" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L5</text>
+  <text x="110" y="628" font-size="13" fill="#DDD0EF" text-anchor="middle">数据访问层</text>
+  <g font-size="11">
+    <rect x="196" y="592" width="243" height="44" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
+    <text x="212" y="611" font-size="12.5" font-weight="600" fill="#1F2937">TypeORM 0.3.x（锁定版本）</text>
+    <text x="212" y="627" fill="#5B6673">禁升 1.x：CURRENT_TIMESTAMP(6) 冲突</text>
+    <rect x="451" y="592" width="243" height="44" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
+    <text x="467" y="611" font-size="12.5" font-weight="600" fill="#1F2937">SnakeNamingStrategy</text>
+    <text x="467" y="627" fill="#5B6673">驼峰属性 → 下划线列（统一收口）</text>
+    <rect x="706" y="592" width="243" height="44" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
+    <text x="722" y="611" font-size="12.5" font-weight="600" fill="#1F2937">迁移脚本 apply-migrations.sh</text>
+    <text x="722" y="627" fill="#5B6673">按 -- @database &lt;db&gt; 注解路由目标库</text>
+    <rect x="961" y="592" width="243" height="44" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
+    <text x="977" y="611" font-size="12.5" font-weight="600" fill="#1F2937">Repository / 事务</text>
+    <text x="977" y="627" fill="#5B6673">取号用事务内悲观锁（非 LAST_INSERT_ID）</text>
+  </g>
+  <path d="M650,654 L650,670" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L6 数据存储层 ===== -->
+  <rect x="40" y="672" width="1180" height="100" rx="4" fill="#FDE8E8" stroke="#D98A8A" stroke-width="1.2"/>
+  <rect x="40" y="672" width="140" height="100" fill="#8A3A3A"/>
+  <text x="110" y="710" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L6</text>
+  <text x="110" y="732" font-size="13" fill="#F3D2D2" text-anchor="middle">数据存储层</text>
+  <text x="110" y="752" font-size="10.5" fill="#E0B4B4" text-anchor="middle">运行时全部 MySQL</text>
+  <g font-size="11">
+    <rect x="196" y="688" width="470" height="64" rx="3" fill="#FFFFFF" stroke="#DFA9A9"/>
+    <text x="212" y="708" font-size="12.5" font-weight="600" fill="#1F2937">云 / 本机 MySQL</text>
+    <g font-size="10.5" fill="#5B6673">
+      <rect x="212" y="716" width="106" height="24" rx="3" fill="#FBF3F3" stroke="#E8C6C6"/>
+      <text x="265" y="732" text-anchor="middle">web_system 业务</text>
+      <rect x="324" y="716" width="106" height="24" rx="3" fill="#FBF3F3" stroke="#E8C6C6"/>
+      <text x="377" y="732" text-anchor="middle">_knowledge RAG</text>
+      <rect x="436" y="716" width="106" height="24" rx="3" fill="#FBF3F3" stroke="#E8C6C6"/>
+      <text x="489" y="732" text-anchor="middle">_deploy 发布</text>
+      <rect x="548" y="716" width="106" height="24" rx="3" fill="#FBF3F3" stroke="#E8C6C6"/>
+      <text x="601" y="732" text-anchor="middle">_shadow 影子</text>
+    </g>
+    <rect x="682" y="688" width="190" height="64" rx="3" fill="#FFFFFF" stroke="#DFA9A9"/>
+    <text x="777" y="712" font-size="12.5" font-weight="600" fill="#1F2937" text-anchor="middle">Redis</text>
+    <text x="777" y="730" fill="#5B6673" text-anchor="middle">缓存 · 会话 · 令牌</text>
+    <text x="777" y="745" font-size="10.5" fill="#8A3A3A" text-anchor="middle">已收敛至白名单访问</text>
+    <rect x="888" y="688" width="300" height="64" rx="3" fill="#FFFFFF" stroke="#DFA9A9"/>
+    <text x="904" y="708" font-size="12.5" font-weight="600" fill="#1F2937">文件与静态存储</text>
+    <text x="904" y="726" fill="#5B6673">/api/uploads/*（用户上传 + AI 生成图）</text>
+    <text x="904" y="742" fill="#5B6673">/static/cdn/pub/** · prod 外置静态根</text>
+  </g>
+  <path d="M650,774 L650,790" stroke="#5B6673" stroke-width="1.4" marker-end="url(#cArr)"/>
+
+  <!-- ===== L7 基础设施与外部依赖 ===== -->
+  <rect x="40" y="792" width="1180" height="88" rx="4" fill="#EEF1F4" stroke="#9AA5B1" stroke-width="1.2"/>
+  <rect x="40" y="792" width="140" height="88" fill="#4A5560"/>
+  <text x="110" y="828" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">L7</text>
+  <text x="110" y="850" font-size="13" fill="#D3D9DF" text-anchor="middle">基础设施</text>
+  <g font-size="11" fill="#1F2937">
+    <rect x="196" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="275" y="828" text-anchor="middle" font-size="12" font-weight="600">pm2</text>
+    <text x="275" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">进程守护（禁 --update-env）</text>
+    <rect x="365" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="444" y="828" text-anchor="middle" font-size="12" font-weight="600">Nginx</text>
+    <text x="444" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">SSL 终止 / 反代</text>
+    <rect x="534" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="613" y="828" text-anchor="middle" font-size="12" font-weight="600">GitHub Actions</text>
+    <text x="613" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">构建 / 发布投递</text>
+    <rect x="703" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="782" y="828" text-anchor="middle" font-size="12" font-weight="600">腾讯混元 TokenHub</text>
+    <text x="782" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">LLM 主通道</text>
+    <rect x="872" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="951" y="828" text-anchor="middle" font-size="12" font-weight="600">微信 OpenAPI</text>
+    <text x="951" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">登录 / 公众号</text>
+    <rect x="1041" y="808" width="159" height="44" rx="3" fill="#FFFFFF" stroke="#BFC8D2"/>
+    <text x="1120" y="828" text-anchor="middle" font-size="12" font-weight="600">腾讯 TTS / OCR</text>
+    <text x="1120" y="844" text-anchor="middle" fill="#5B6673" font-size="10.5">语音 / 识别</text>
+  </g>
+
+  <!-- ===== 横切能力 ===== -->
+  <rect x="1236" y="80" width="164" height="800" rx="4" fill="#FFFFFF" stroke="#BFC8D2" stroke-width="1.2"/>
+  <rect x="1236" y="80" width="164" height="34" rx="4" fill="#4A5560"/>
+  <text x="1318" y="102" font-size="13" font-weight="600" fill="#FFFFFF" text-anchor="middle">横切能力</text>
+  <g font-size="11">
+    <rect x="1250" y="128" width="136" height="150" rx="3" fill="#F7F9FB" stroke="#D5DCE4"/>
+    <text x="1318" y="150" font-size="12" font-weight="600" fill="#1F2937" text-anchor="middle">安全</text>
+    <text x="1318" y="170" fill="#5B6673" text-anchor="middle">JWT 鉴权</text>
+    <text x="1318" y="188" fill="#5B6673" text-anchor="middle">服务间密钥</text>
+    <text x="1318" y="206" fill="#5B6673" text-anchor="middle">CORS 默认空</text>
+    <text x="1318" y="224" fill="#5B6673" text-anchor="middle">异常脱敏</text>
+    <text x="1318" y="242" fill="#5B6673" text-anchor="middle">iptables 白名单</text>
+    <text x="1318" y="264" fill="#8A3A3A" text-anchor="middle">生产非 Http</text>
+    <text x="1318" y="276" fill="#5B6673" text-anchor="middle">一律脱敏</text>
+
+    <rect x="1250" y="292" width="136" height="110" rx="3" fill="#F7F9FB" stroke="#D5DCE4"/>
+    <text x="1318" y="314" font-size="12" font-weight="600" fill="#1F2937" text-anchor="middle">可观测</text>
+    <text x="1318" y="334" fill="#5B6673" text-anchor="middle">/health 探活</text>
+    <text x="1318" y="352" fill="#5B6673" text-anchor="middle">Nest Logger</text>
+    <text x="1318" y="370" fill="#5B6673" text-anchor="middle">操作审计日志</text>
+    <text x="1318" y="392" fill="#8A3A3A" text-anchor="middle">审计列截断丢数据</text>
+
+    <rect x="1250" y="416" width="136" height="150" rx="3" fill="#F7F9FB" stroke="#D5DCE4"/>
+    <text x="1318" y="438" font-size="12" font-weight="600" fill="#1F2937" text-anchor="middle">配置管理</text>
+    <text x="1318" y="458" fill="#5B6673" text-anchor="middle">根 .env.production</text>
+    <text x="1318" y="476" fill="#5B6673" text-anchor="middle">＞ 服务级 .env</text>
+    <text x="1318" y="494" fill="#5B6673" text-anchor="middle">＞ 代码默认值</text>
+    <text x="1318" y="516" fill="#5B6673" text-anchor="middle">主密钥只注入路径</text>
+    <text x="1318" y="534" fill="#5B6673" text-anchor="middle">配置镜像双写</text>
+    <text x="1318" y="556" fill="#8A3A3A" text-anchor="middle">13 个变量未登记</text>
+
+    <rect x="1250" y="580" width="136" height="152" rx="3" fill="#F7F9FB" stroke="#D5DCE4"/>
+    <text x="1318" y="602" font-size="12" font-weight="600" fill="#1F2937" text-anchor="middle">发布交付</text>
+    <text x="1318" y="622" fill="#5B6673" text-anchor="middle">流水线四步（可定制）</text>
+    <text x="1318" y="640" fill="#5B6673" text-anchor="middle">审批挂起</text>
+    <text x="1318" y="658" fill="#5B6673" text-anchor="middle">版本指针可回滚</text>
+    <text x="1318" y="676" fill="#5B6673" text-anchor="middle">pipeline-lint L1-L7</text>
+    <text x="1318" y="694" fill="#5B6673" text-anchor="middle">禁手动 ssh 构建</text>
+    <text x="1318" y="716" fill="#8A6100" text-anchor="middle">配置中心</text>
+    <text x="1318" y="734" fill="#5B6673" text-anchor="middle">加密 · 审计 · 分层</text>
+  </g>
+
+  <!-- 运维平台（旁路） -->
+  <rect x="40" y="892" width="1180" height="52" rx="4" fill="#FFF4E0" stroke="#E0B050" stroke-width="1.2"/>
+  <rect x="40" y="892" width="140" height="52" fill="#8A6100"/>
+  <text x="110" y="912" font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">旁路</text>
+  <text x="110" y="930" font-size="13" fill="#F2E0BC" text-anchor="middle">运维平台</text>
+  <text x="196" y="912" font-size="12.5" font-weight="600" fill="#1F2937">deploy-console :6200 · 流水线四步（可自由定制）：拉取代码 → 构建 → 发布确认（审批挂起）→ 发布（按环境动作序列：write-version → sync → restart → verify）</text>
+  <text x="196" y="930" font-size="11" fill="#5B6673">配置中心 config_items（AES-256-GCM 加密 · 掩码回显 · 审计 · 按环境/模块分层）→ 部署前下发 &lt;svc&gt;/.env.generated（覆盖 .env）；GitHub Token 等流水线凭据仅注入脚本 env</text>
+  <path d="M188,886 L188,456" stroke="#8A6100" stroke-width="1.3" stroke-dasharray="6 4" fill="none" marker-end="url(#cArrO)"/>
+  <text x="196" y="470" font-size="10.5" fill="#8A6100">▲ 配置下发 .env.generated（部署/重启前，dotenv 优先级高于 .env）</text>
+
+  <line x1="40" y1="958" x2="1400" y2="958" stroke="#D5DCE4"/>
+  <text x="40" y="978" font-size="11.5" fill="#5B6673">调用方向：表现层 → 网关接入层 → 应用服务层 → 领域能力层 → 数据访问层 → 数据存储层；AI 客户端经 mcp-gateway（:6006）旁路进入，最终仍回灌 Gateway 反代业务接口。</text>
+  <text x="40" y="994" font-size="11.5" fill="#5B6673">运维平台（deploy-console :6200）是旁路：不参与业务请求链路，但通过配置中心向服务进程下发配置（.env.generated），并向流水线注入脚本变量；端口为 dev/prod 口径（本机 auth 为 6101）。</text>
+</svg>

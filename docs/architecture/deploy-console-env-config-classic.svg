@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="880" viewBox="0 0 1440 880" font-family="PingFang SC, Microsoft YaHei, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="dceArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E5C8A"/>
+    </marker>
+    <marker id="dceArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3F8F5B"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="880" fill="#FAFBFC"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1440" height="56" fill="#1F3864"/>
+  <text x="40" y="30" font-size="21" font-weight="600" fill="#FFFFFF">env 定义与配置中心 · 定义配置逻辑图（三环境）</text>
+  <text x="40" y="47" font-size="12" fill="#B9CBE3">Classic Env &amp; Config Topology · 环境注册表 → 配置加载优先级 → 配置中心定义与下发 · 2026-10-09</text>
+  <text x="1400" y="47" font-size="11" fill="#8FA8C8" text-anchor="end">事实源：dev 库 deploy_envs / deploy_service_envs / deploy_hosts / config_items 实测</text>
+
+  <!-- ===== 区 A 环境注册表 ===== -->
+  <rect x="40" y="68" width="440" height="440" rx="4" fill="#FFFFFF" stroke="#7EA6DB" stroke-width="1.2"/>
+  <rect x="40" y="68" width="440" height="26" fill="#2E5C8A"/>
+  <text x="52" y="87" font-size="11.5" font-weight="600" fill="#FFFFFF">① 环境注册表（谁在哪、怎么连）</text>
+
+  <g font-size="10.5" fill="#5B6673">
+    <rect x="56" y="104" width="408" height="76" rx="3" fill="#F2F7FC" stroke="#B4C6E7"/>
+    <text x="70" y="124" font-size="12" font-weight="600" fill="#1F2937">deploy_envs —— 环境维度主表</text>
+    <text x="70" y="142">local / dev / prod 三行 · is_prod · site_key · builtin</text>
+    <text x="70" y="158">prod.is_prod=1 → 该环境发布走严格模式（写云库）</text>
+    <text x="70" y="174">本地调试：DRY_RUN=1 只打印计划，不写文件</text>
+
+    <rect x="56" y="188" width="408" height="92" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="70" y="208" font-size="12" font-weight="600" fill="#1F2937">deploy_service_envs —— 服务 × 环境注册</text>
+    <text x="70" y="226">service_key × env_id：port / pm2_name / runtime(pm2)</text>
+    <text x="70" y="242">replicas / health_path / upstream_url / config(JSON)</text>
+    <text x="70" y="258">12 服务 × 3 环境；auth 本机 6101（6001 被占）</text>
+    <text x="70" y="274" fill="#C0504D">⚠ prod 端口仍登记为 3000 系（实际 6000 系，待修）</text>
+
+    <rect x="56" y="288" width="408" height="92" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="70" y="308" font-size="12" font-weight="600" fill="#1F2937">deploy_hosts —— 目标机注册</text>
+    <text x="70" y="326">host / ssh_user / ssh_key_path / remote_dir / runtime</text>
+    <text x="70" y="342">local = 127.0.0.1（scope=local，orchestrator 托管）</text>
+    <text x="70" y="358">dev = dev 机 /data/web_system · prod = prod 机 /data/web_system</text>
+    <text x="70" y="374" fill="#C0504D">⚠ prod remote_dir 与实际运行目录 /data/web_system_git 不符</text>
+
+    <rect x="56" y="388" width="408" height="104" rx="3" fill="#F7F7F7" stroke="#C9C9D0"/>
+    <text x="70" y="408" font-size="12" font-weight="600" fill="#5B6673">deploy_environments —— 老地址表（legacy）</text>
+    <text x="70" y="426">public_url + ports(JSON)；prod 记录仍为旧 3000 系地址</text>
+    <text x="70" y="442">NEW 域指针真相源 = deploy_app_env_versions（byEnv）</text>
+    <text x="70" y="458">legacy deploy_deployments 仅作应急回退（后端唯一指针）</text>
+    <text x="70" y="474" fill="#8A8A99">仅历史参考，新功能不再依赖此表</text>
+  </g>
+
+  <!-- ===== 区 B 配置加载优先级 ===== -->
+  <rect x="496" y="68" width="440" height="440" rx="4" fill="#FFFFFF" stroke="#7EA6DB" stroke-width="1.2"/>
+  <rect x="496" y="68" width="440" height="26" fill="#2E5C8A"/>
+  <text x="508" y="87" font-size="11.5" font-weight="600" fill="#FFFFFF">② 进程配置加载优先级（envFilePath 先者胜）</text>
+
+  <g font-size="10.5" fill="#5B6673">
+    <rect x="512" y="104" width="408" height="60" rx="3" fill="#FFF8E6" stroke="#E0B050"/>
+    <text x="526" y="124" font-size="12" font-weight="600" fill="#8A6100">3 · pm2_env 注入（先存在于 process.env）</text>
+    <text x="526" y="142">只允许 PATH / HOME / PORT（PORT 写死防漂移）</text>
+    <text x="526" y="158">禁存密钥：ps e / dump.pm2 均可读到</text>
+
+    <rect x="512" y="172" width="408" height="60" rx="3" fill="#F4FBF6" stroke="#7FB069"/>
+    <text x="526" y="192" font-size="12" font-weight="600" fill="#3F8F5B">2 · servers/&lt;svc&gt;/.env.generated（配置中心下发）</text>
+    <text x="526" y="210">0600 权限 · 必须在 restart 之前落盘（dotenv 先读它）</text>
+    <text x="526" y="226" fill="#C0504D">⚠ dev 当前未常态化落盘（下发链路未跑起来）</text>
+
+    <rect x="512" y="240" width="408" height="60" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="526" y="260" font-size="12" font-weight="600" fill="#1F2937">1 · servers/&lt;svc&gt;/.env（唯一真相 · 引导凭据）</text>
+    <text x="526" y="278">MYSQL_* / JWT_SECRET / CONFIG_MASTER_KEY 等引导凭据</text>
+    <text x="526" y="294">只留这里（配置中心自身依赖它 → 不能进配置中心）</text>
+
+    <rect x="512" y="308" width="408" height="42" rx="3" fill="#F7F9FB" stroke="#C9D5E3"/>
+    <text x="526" y="326" font-size="12" font-weight="600" fill="#1F2937">→ process.env（服务进程实际生效值）</text>
+    <text x="526" y="342">dotenv 不覆盖已存在键 → pm2 注入的 PORT 顶掉 .env（历史事故源）</text>
+
+    <rect x="512" y="358" width="408" height="134" rx="3" fill="#FFF8F8" stroke="#D89A9A"/>
+    <text x="526" y="378" font-size="12" font-weight="600" fill="#C0504D">deploy-console 自身 .env 关键键（dev 实测）</text>
+    <text x="526" y="398">MYSQL_*（dev 本机库）· PORT=6200 · NODE_ENV</text>
+    <text x="526" y="414">DEPLOY_CLOUD_DB_*（云库双写）+ _STRICT（prod 严格）</text>
+    <text x="526" y="430">JWT_SECRET（缺则启动即崩）· INTERNAL_API_KEY</text>
+    <text x="526" y="446">CONSOLE_INSTANCE · RELEASE_WORKSPACE · AUTH_SERVICE_URL</text>
+    <text x="526" y="462">GATEWAY_INTERNAL_URL_DEV · GATEWAY_SERVICE_KEY_DEV</text>
+    <text x="526" y="478">STATIC_PUBLIC_ROOT_PROD · STATIC_SSH_TARGET_PROD</text>
+    <text x="526" y="494">CONFIG_MASTER_KEY（过渡态；目标=只注入文件路径）</text>
+  </g>
+
+  <!-- ===== 区 C 配置中心 ===== -->
+  <rect x="952" y="68" width="448" height="440" rx="4" fill="#FFFFFF" stroke="#7FB069" stroke-width="1.2"/>
+  <rect x="952" y="68" width="448" height="26" fill="#3F8F5B"/>
+  <text x="964" y="87" font-size="11.5" font-weight="600" fill="#FFFFFF">③ 配置中心 config_items（定义 → 加密 → 下发）</text>
+
+  <g font-size="10.5" fill="#5B6673">
+    <rect x="968" y="104" width="416" height="56" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="982" y="124" font-size="12" font-weight="600" fill="#1F2937">表结构（三层作用域）</text>
+    <text x="982" y="142">scope(global / env / module) × env_id × module_key × key</text>
+    <text x="982" y="158">value(text) · is_secret · enabled · updated_by</text>
+
+    <rect x="968" y="168" width="416" height="56" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="982" y="188" font-size="12" font-weight="600" fill="#1F2937">安全机制</text>
+    <text x="982" y="206">AES-256-GCM 加密（CONFIG_MASTER_KEY 只注入文件路径）</text>
+    <text x="982" y="222">列表掩码回显 · 审计不记明文 · config_snapshots / config_change_logs</text>
+
+    <rect x="968" y="232" width="416" height="120" rx="3" fill="#F4FBF6" stroke="#7FB069"/>
+    <text x="982" y="252" font-size="12" font-weight="600" fill="#3F8F5B">下发链路（两条，殊途同归落盘 .env.generated）</text>
+    <text x="982" y="272">路径 A · 部署：DeployService.writeGeneratedEnv（console 内置，apply 即覆盖）</text>
+    <text x="982" y="288">路径 B · 重启：fetch-config.sh → curl /config/internal/dispatch/:moduleKey?envId=</text>
+    <text x="982" y="304">鉴权 x-internal-key = INTERNAL_API_KEY（不依赖被下发键，无鸡生蛋）</text>
+    <text x="982" y="320">→ 落盘 0600 → restart（顺序不能反，否则进程读旧值）</text>
+    <text x="982" y="340">变量注入流水线脚本：CONSOLE_API / CONSOLE_TOKEN / DEPLOY_ENV（受保护键）</text>
+
+    <rect x="968" y="360" width="416" height="132" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="982" y="380" font-size="12" font-weight="600" fill="#1F2937">当前登记条目（dev 库实测）</text>
+    <text x="982" y="400">global：REPO_URL</text>
+    <text x="982" y="416">module×dev · ai-agent：TOKENHUB_API_KEY · HY3_API_KEY（secret）</text>
+    <text x="982" y="432">module×dev · ai-service：TENCENT_SECRET_ID / _KEY（secret）/ TENCENT_APP_ID</text>
+    <text x="982" y="448">module×dev · gateway &amp; deploy-console：GATEWAY_SERVICE_KEY（secret，双边同值）</text>
+    <text x="982" y="468" fill="#C0504D">缺口：GitHub Token / 服务间凭据尚未入配置中心（建议项）</text>
+    <text x="982" y="484" fill="#C0504D">缺口：仅覆盖 dev；prod 下发为 P1（prod .env 现人工维护）</text>
+  </g>
+
+  <!-- 下发箭头：配置中心 → .env.generated -->
+  <path d="M952,262 C930,262 940,200 904,200" stroke="#3F8F5B" stroke-width="1.5" stroke-dasharray="6 4" fill="none" marker-end="url(#dceArrG)"/>
+  <text x="928" y="188" font-size="10" fill="#3F8F5B" text-anchor="middle">下发</text>
+
+  <!-- ===== 三环境对照 ===== -->
+  <rect x="40" y="520" width="1360" height="200" rx="4" fill="#F2F7FC" stroke="#7EA6DB" stroke-width="1.2"/>
+  <rect x="40" y="520" width="1360" height="24" fill="#2E5C8A"/>
+  <text x="52" y="537" font-size="11.5" font-weight="600" fill="#FFFFFF">三环境 deploy-console 定义配置对照（同一份代码，配置各管各）</text>
+
+  <g font-size="10.5" fill="#5B6673">
+    <rect x="56" y="552" width="432" height="156" rx="3" fill="#FFFFFF" stroke="#E0C888"/>
+    <text x="70" y="574" font-size="12.5" font-weight="600" fill="#8A6100">local（本机 macOS · 研发位）</text>
+    <text x="70" y="596">进程：pm2 web-deploy-console:6200（ecosystem 登记）</text>
+    <text x="70" y="612">库：本机 MySQL strict 模式 web_system_deploy</text>
+    <text x="70" y="628">synchronize:true（启动自动建表/同步列）</text>
+    <text x="70" y="644">发布：脚本直达（不走流水线）· 6200 孤儿铁律</text>
+    <text x="70" y="660">运行目录 ~/web_system_release（只运行不构建）</text>
+    <text x="70" y="676">目标机注册：127.0.0.1（orchestrator 托管）</text>
+
+    <rect x="504" y="552" width="432" height="156" rx="3" fill="#FFFFFF" stroke="#B4C6E7"/>
+    <text x="518" y="574" font-size="12.5" font-weight="600" fill="#1F2937">dev（VPC-A · console 唯一运行环境）</text>
+    <text x="518" y="596">进程：pm2 deploy-console:6200（短名）</text>
+    <text x="518" y="612">库：dev 机本地 MySQL（web_system_deploy）</text>
+    <text x="518" y="628">synchronize:true · 云库双写（DEPLOY_CLOUD_DB_*）</text>
+    <text x="518" y="644">发布：dev/prod 全环境流水线的执行者</text>
+    <text x="518" y="660">配置中心：可下发（当前未常态化落盘 ⚠）</text>
+    <text x="518" y="676">自发布：restart-self 异步排程（防自杀）</text>
+
+    <rect x="952" y="552" width="432" height="156" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
+    <text x="966" y="574" font-size="12.5" font-weight="600" fill="#5B3F8A">prod（VPC-B · 被管对象，无 console）</text>
+    <text x="966" y="596">console ✗ 不部署（synchronize 会污染 prod 库）</text>
+    <text x="966" y="612">库：云数据库 MySQL（指针 deploy_app_env_versions）</text>
+    <text x="966" y="628">DEPLOY_CLOUD_DB_STRICT=1 → 写失败抛 503</text>
+    <text x="966" y="644">发布：由 dev console 跨 VPC 公网 ssh 下发执行</text>
+    <text x="966" y="660">.env 人工维护（配置下发 P1 待补）</text>
+    <text x="966" y="676">运行目录 /data/web_system_git（注册表未同步 ⚠）</text>
+  </g>
+
+  <!-- ===== 风险条 ===== -->
+  <rect x="40" y="732" width="1360" height="106" rx="4" fill="#FFF8F8" stroke="#C0504D" stroke-width="1.2"/>
+  <rect x="40" y="732" width="1360" height="24" fill="#C0504D"/>
+  <text x="52" y="749" font-size="11.5" font-weight="600" fill="#FFFFFF">归属判据与实测偏差</text>
+  <g font-size="11" fill="#374151">
+    <text x="56" y="774"><tspan font-weight="600" fill="#C0504D">凭据归属：</tspan>引导凭据（MYSQL_* / JWT_SECRET / CONFIG_MASTER_KEY / REDIS_*）留 .env —— 配置中心自身依赖它们，不能自举；业务与服务间凭据 + GitHub Token 进配置中心（加密 + 审计）；流水线专用变量（CONSOLE_* / DEPLOY_ENV / PUBLISH_*）平台注入，不落 .env。</text>
+    <text x="56" y="794"><tspan font-weight="600" fill="#C0504D">优先级铁律：</tspan>.env.generated ＞ .env ＞ pm2_env；下发必须先于 restart；pm2 只注入 PATH/HOME/PORT，禁 --update-env。</text>
+    <text x="56" y="814"><tspan font-weight="600" fill="#C0504D">实测偏差：</tspan>dev 无 .env.generated 落盘（下发未常态化）；prod 注册表 remote_dir 与 service_envs 端口均为过时值；审计 component 列过短丢数据；13 个流水线变量未登记（静默兜底）。</text>
+  </g>
+
+  <!-- ===== 图例 ===== -->
+  <rect x="40" y="850" width="1360" height="20" rx="3" fill="#FFFFFF" stroke="#D5DCE4"/>
+  <text x="56" y="864" font-size="10.5" font-weight="600" fill="#1F2937">图例</text>
+  <line x1="100" y1="860" x2="140" y2="860" stroke="#3F8F5B" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="148" y="864" font-size="10.5" fill="#5B6673">配置下发（加密 → 落盘 0600）</text>
+  <text x="360" y="864" font-size="10.5" fill="#5B6673">灰底卡 = 过时/仅历史参考 · 红字 = 实测偏差 · 表名均来自 web_system_deploy 库</text>
+  <text x="1384" y="864" font-size="10.5" fill="#8A8A99" text-anchor="end">图中不含密钥明文与服务器公网地址（仓库 PUBLIC）</text>
+</svg>
