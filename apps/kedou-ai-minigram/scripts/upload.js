@@ -22,7 +22,7 @@ const fs = require('fs');
  *   MINIPROGRAM_CI_PATH=~/mp-ci/node_modules node scripts/upload.js
  */
 const CI_ROOT = process.env.MINIPROGRAM_CI_PATH;
-const { upload } = require(CI_ROOT
+const { upload, Project } = require(CI_ROOT
   ? path.join(CI_ROOT, 'miniprogram-ci')
   : 'miniprogram-ci');
 
@@ -43,21 +43,23 @@ async function uploadApp() {
   const packageJson = require('../package.json');
   const version = packageJson.version || '1.0.0';
   
-  const config = {
+  // miniprogram-ci 约定：先构造 Project 实例，再作为 upload({ project }) 传入。
+  // 直接把配置展开进 upload 参数会报 lack of parameter: "project"。
+  const project = new Project({
     appid: projectConfig.appid,
     type: 'miniProgram',
     projectPath,
     privateKey,
     privateKeyPath,
     ignores: ['node_modules/**/*'],
-  };
+  });
 
   try {
     console.log('[Upload] 开始上传...');
     console.log(`[Upload] 版本号: ${version}`);
-    
+
     const uploadResult = await upload({
-      ...config,
+      project,
       version,
       desc: `上传时间: ${new Date().toLocaleString('zh-CN')}`,
       setting: {
