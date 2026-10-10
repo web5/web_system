@@ -51,6 +51,10 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 **用固定出口 IP 的执行机出码，不要用本机。** 本机公网 IP 会变（家宽/办公网都是动态的），
 每次变都要改白名单，不可维护。执行机出口 IP 固定，加一次即可。
 
+实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
+21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
+本机出码只适合「改完立刻自验」这种临时场景；要给出可复现的码，走执行机。
+
 判定出口 IP 时**以微信侧报错为准**，不要信 `curl ifconfig.me`：
 
 ```
@@ -94,6 +98,9 @@ mkdir -p <ci-dir> && cd <ci-dir> && npm init -y
 npm install miniprogram-ci@2.1.31 --no-audit --no-fund
 ```
 
+> `<ci-dir>` 建议放在**用户目录下固定位置**（例如 `~/mp-ci`），别放 `/tmp`
+> —— 临时目录会被系统清理，下次出码又得重装一千多个包。
+
 然后：
 
 ```bash
@@ -121,7 +128,14 @@ cd apps/kedou-ai-minigram
 MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 ```
 
-产物：`.ci-output/preview-qr.png`。
+产物：`.ci-output/preview-qr.png` + **`.ci-output/preview-qr.html`**。
+
+**扫码请用 HTML 那个**。原因：二维码图片直接丢进聊天工具/IM 会被转码压缩，
+压缩后手机常常扫不出来（踩过）。HTML 里用 data URI 内嵌原图，打开就是清晰的码，
+点开即可扫。
+
+> 实现细节：微信 CI 的 `qrcodeOutputDest` 写出的文件**扩展名是 .png 但内容是 JPEG**，
+> 所以脚本按文件头魔数嗅探真实格式再写 data URI 的 MIME，照扩展名写会导致图片显示不出来。
 
 **有时效**（约 25 分钟量级，以微信侧为准），过期重跑即可，重跑幂等。
 
