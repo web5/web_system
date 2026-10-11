@@ -188,6 +188,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 | 编译成功但扫码白屏 | 域名未配合法 / 代码本身问题 | 检查 §1.4 域名配置；真机调试看 vConsole |
 | 能进首页、点「登录」失败并弹「登录失败，请重试」 | 后端 `MINI_PROGRAM_SECRET` 在微信侧失效 | 见 §5.1 |
 | 后端日志 `invalid appsecret, rid: xxx` | AppSecret 被重置/停用，或填成了别的应用的 | 见 §5.1 |
+| 扫码后白屏、vConsole/日志报 `page xxx 页面不存在` | 小程序码**手填了 path**，指向不存在或已改名的页面（包本身没问题） | 见 §5.2 |
 
 ### 5.1 登录失败：AppSecret 失效（真机点登录必现）
 
@@ -217,6 +218,45 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 > ⚠️ `.env` 与 `servers/auth-service/.env` 都要一致（`auth-service` 的 cwd 在后者，两份都改最稳）。
 > 这条同 `USER_SERVICE_KEY` 一样属**配置漂移**高危项：若流水线会下发 `.env.generated`，手工改的值会被冲掉。
 
+### 5.2 扫码白屏：小程序码 path 参数指向不存在的页面
+
+**这次真摔过**：开发版一切正常、体验版冷启动白屏，查遍域名/证书/登录/数据库/渲染层全绿，
+最后靠一行日志定性 —— `pages/index/index 页面不存在`（`app.json` 里根本没有这一页）。
+
+根因不在代码包：后台「工具 → 生成小程序码」允许**手填 path**，填了不存在或已改名的页面后，
+微信冷启动照做 → 找不到页 → 白屏。标准体验版二维码本身不带 path，但带 path 的旧码会一直生效。
+
+**先做二分，避免查错方向**（30 秒）：
+
+1. 微信首页下拉 → 最近使用里直接点开小程序（不走码）→ 正常，则**实锤是码的 path 问题**
+2. 仍白 → 才回到代码层排查
+
+**处置**：公众平台 → 版本管理 → 体验版 → 用**系统生成的标准二维码**（不要手填 path）；
+若必须用带 path 的码，`path` 必须是 `app.json` 注册过的页面（含分包，如
+`packageTranslate/pages/translate/index/index`）。
+
+**已加的防线**（PR #307）：
+- `preview.js`：`pagePath` 不在注册列表里直接拒绝并打印可用页面；默认值改为 `pages/welcome/index/index`
+- `upload.js`：上传前校验每个注册页面有实体文件（`.ts/.js` + `.wxml`）；上传成功打印 `pages[0]` 入口页并提示勿手填 path
+- 两个脚本都从 **app.json** 读 `pages`（`project.config.json` 无此字段，读错会拿到空数组、校验形同虚设）
+
+### 5.3 环境：不同版本连不同后端（别让正式版打到 dev）
+
+`app.ts` 按 `wx.getAccountInfoSync().miniProgram.envVersion` 切换 `apiBase`：
+
+| 运行环境 | envVersion | apiBase |
+|---|---|---|
+| 开发者工具 | (platform=devtools) | `http://local.kedouai.com` |
+| 开发版 | develop | `https://dev.kedouai.com` |
+| 体验版 | trial | `https://dev.kedouai.com` |
+| **正式版** | release | `https://kedouai.com` |
+
+老基础库不支持该 API 时兜底 dev（宁可连错环境也不白屏）。
+
+> ⚠️ **改 dev 的 AppSecret 时，prod 也要同步改**（同一 appid 同一份密钥，但两边 `.env` 独立）。
+> prod 的 pm2 运行目录可能与部署目录不同名，先 `pm2 jlist` 看 `pm2_env.cwd` 再改，改完按 §5.1 复验。
+> 否则会出现「体验版登录正常、正式版登录失败」的假象。
+
 ---
 
 ## 六、变更历史
@@ -224,3 +264,4 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 | 日期 | 变更 |
 |---|---|
 | 2026-10-10 | 初版。CI 脚本改造（PR #292）：二维码 `image` 落盘、版本读 `package.json`、支持 `PREVIEW_PAGE`、`MINIPROGRAM_CI_PATH` 依赖隔离 |
+| 2026-10-11 | §5.1 登录失败判定三连（AppSecret 失效）；§5.2 扫码白屏 = 小程序码 path 指向不存在页面；§5.3 三环境 apiBase + prod 需同步改 AppSecret（PR #307） |
