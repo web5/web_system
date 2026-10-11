@@ -168,6 +168,7 @@ function ensureRecorder(): WechatMiniprogram.RecorderManager {
     // ⚠️ 只绑一次：onStop/onError 重复注册会累积触发
     recorder.onStop((res) => {
       clearTick();
+      clearStopWatchdog();
       if (cancelled) {
         finish(null);
         return;
@@ -184,6 +185,7 @@ function ensureRecorder(): WechatMiniprogram.RecorderManager {
     });
     recorder.onError(() => {
       clearTick();
+      clearStopWatchdog();
       toast('录音失败，请重试');
       finish(null);
     });
@@ -202,10 +204,36 @@ function clearTick(): void {
 function finish(text: string | null): void {
   preparing = false;
   pressed = false;
+  clearStopWatchdog();
   emit({ phase: 'idle', seconds: 0 });
   const r = pendingResolve;
   pendingResolve = null;
   if (r) r(text);
+}
+
+/**
+ * stop() 后等待 onStop 的看门狗（规格 §8 修订 ③ · 不变量 4）。
+ * 真机偶发 onStop 不回（尤其长录音后）：不兜底 = 浮层悬挂到天荒地老。
+ * 4s 足够宽裕 —— onStop 正常 <1s；识别阶段的耗时由 request timeout 兜，不归它管。
+ */
+let stopWatchdog: ReturnType<typeof setTimeout> | null = null;
+
+function armStopWatchdog(): void {
+  clearStopWatchdog();
+  stopWatchdog = setTimeout(() => {
+    stopWatchdog = null;
+    if (pendingResolve) {
+      toast('没收到录音结果，请再试一次');
+      finish(null);
+    }
+  }, 4000);
+}
+
+function clearStopWatchdog(): void {
+  if (stopWatchdog) {
+    clearTimeout(stopWatchdog);
+    stopWatchdog = null;
+  }
 }
 
 /** 收尾并归位（不唤醒等待方：用于「未真正开麦」的放弃路径） */
@@ -263,6 +291,12 @@ export async function startAsr(): Promise<boolean> {
   emit({ phase: 'recording', seconds: 0 });
 
   tickTimer = setInterval(() => {
+    // 收尾保护：finish 后可能残留一次 tick（clearInterval 与已排队的回调有竞态），
+    // 不拦会把 idle 覆盖回 recording，浮层文案/计时全部错乱（不变量 4）
+    if (state.phase !== 'recording') {
+      clearTick();
+      return;
+    }
     const s = Math.floor((Date.now() - startedAt) / 1000);
     emit({ phase: 'recording', seconds: s });
     if (s >= MAX_SECONDS) void stopAsr(); // 到点自动结束并识别
@@ -308,6 +342,7 @@ export function releaseAsr(): Promise<string | null> {
     pendingResolve = resolve;
     try {
       ensureRecorder().stop();
+      armStopWatchdog();
     } catch {
       clearTick();
       finish(null);
@@ -326,6 +361,7 @@ export function stopAsr(): Promise<string | null> {
     pendingResolve = resolve;
     try {
       ensureRecorder().stop();
+      armStopWatchdog();
     } catch {
       clearTick();
       finish(null);
@@ -345,6 +381,7 @@ export function cancelAsr(): void {
   cancelled = true;
   try {
     ensureRecorder().stop();
+    armStopWatchdog();
   } catch {
     clearTick();
     finish(null);

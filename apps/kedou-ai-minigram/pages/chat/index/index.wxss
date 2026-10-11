@@ -425,7 +425,8 @@ page {
 }
 .chat-auto:active { opacity: .7; }
 
-/* 语音输入（按住说话）：麦克风用「竖条 + 底座」两个伪元素画出，不引图标字体 */
+/* 语音输入（按住说话）：标准麦克风三笔造型（规格 §8 修订 ①）
+   胶囊话筒头(::before) + U 形拾音支架(::after) + 底部短杆(.mic-stem)，纯 CSS 不引图标字体 */
 .chat-mic {
   position: relative;
   flex: 0 0 76rpx;
@@ -442,25 +443,37 @@ page {
   flex-shrink: 0;
   box-sizing: border-box;
 }
-/* 麦克风头部：圆角竖条 */
+/* 话筒头：圆角胶囊（插进 U 形支架上口） */
 .chat-mic::before {
   content: '';
-  width: 8rpx;
+  width: 14rpx;
   height: 24rpx;
-  border-radius: 4rpx;
+  border-radius: 7rpx;
   background: currentColor;
-  transform: translateY(-3rpx);
+  transform: translateY(-5rpx);
 }
-/* 麦克风底座：一横 */
+/* 拾音支架：U 形（左右臂 + 底弧），开口朝上接住话筒头 */
 .chat-mic::after {
   content: '';
   position: absolute;
+  top: 26rpx;
   left: 50%;
-  bottom: 20rpx;
   transform: translateX(-50%);
-  width: 20rpx;
-  height: 3rpx;
-  border-radius: 2rpx;
+  width: 26rpx;
+  height: 20rpx;
+  box-sizing: border-box;
+  border: 3rpx solid currentColor;
+  border-top: none;
+  border-radius: 0 0 13rpx 13rpx;
+}
+/* 底部短杆：从 U 弧底部垂下（麦克风颈杆） */
+.mic-stem {
+  position: absolute;
+  top: 47rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3rpx;
+  height: 8rpx;
   background: currentColor;
 }
 .chat-mic:active { opacity: .75; }

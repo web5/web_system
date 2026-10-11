@@ -136,4 +136,19 @@ describe('按住说话生命周期（services/asr）', () => {
       expect.objectContaining({ title: '按住麦克风说话，松手识别' }),
     );
   });
+
+  it('onStop 迟迟不回 → 4s 看门狗强制收尾（不变量 4：浮层必归 idle）', async () => {
+    authorizeDelay = 0;
+    const asr = loadAsr();
+    await asr.startAsr();
+    const p = asr.releaseAsr();
+    expect(recorder.stop).toHaveBeenCalledTimes(1);
+    // 刻意不触发 stopCb：模拟真机 onStop 丢失
+    await jest.advanceTimersByTimeAsync(4000);
+    await expect(p).resolves.toBeNull();
+    expect(asr.getAsrState().phase).toBe('idle');
+    expect((global as any).wx.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '没收到录音结果，请再试一次' }),
+    );
+  });
 });
