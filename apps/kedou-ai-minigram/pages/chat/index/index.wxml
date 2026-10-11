@@ -234,12 +234,16 @@
 <!-- 录音态浮层：录音中 / 识别中，覆盖在页面上，明确「松手识别、上滑取消」 -->
 <view wx:if="{{asrPhase !== 'idle'}}" class="voice-mask" catchtouchmove="noop">
   <view class="vm-card">
-    <view class="vm-wave {{asrPhase === 'recognizing' ? 'is-busy' : ''}}">
+    <view class="vm-wave {{asrPhase === 'recording' && !asrCancelling ? '' : 'is-busy'}}">
       <view class="vw-bar"></view><view class="vw-bar"></view><view class="vw-bar"></view>
       <view class="vw-bar"></view><view class="vw-bar"></view>
     </view>
     <view class="vm-tip">
-      {{asrPhase === 'recognizing' ? '识别中…' : (asrCancelling ? '松开手指取消' : '松手识别，上滑取消')}}
+      {{
+        asrPhase === 'preparing' ? '准备中…'
+        : asrPhase === 'recognizing' ? '识别中…'
+        : (asrCancelling ? '松开手指取消' : '松手识别，上滑取消')
+      }}
     </view>
     <view wx:if="{{asrPhase === 'recording'}}" class="vm-sec">{{asrSeconds}}s</view>
   </view>

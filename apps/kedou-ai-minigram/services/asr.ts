@@ -9,10 +9,18 @@
  * 否则麦克风会收进扬声器正在播的声音，识别结果全是胡话（回声自激）。
  *
  * 用法：
- *   await startAsr()                    // 按住
- *   const text = await stopAsr()        // 松手，返回识别文本（null = 取消/失败）
+ *   await startAsr()                    // 按住（内部有异步授权，故返回 Promise）
+ *   const text = await releaseAsr()     // 松手，返回识别文本（null = 取消/失败）
  *   cancelAsr()                         // 上滑取消
  *   onAsrState(cb) 订阅录音态（UI 据此渲染计时/波形/「识别中」）
+ *
+ * ⚠️ 2026-10-11 修复「点一下也弹录音浮层」：
+ *   startAsr 里的隐私协议 + 录音授权是**异步**的（首次还会弹系统授权框，耗时 1s 级）。
+ *   旧实现在这段 await 期间状态仍是 idle，于是手指已松开、touchend 判定「不在录音中」
+ *   直接 return；等授权回来录音才真正启动 —— 没人再给它 stop，浮层就一直挂着（直到
+ *   60s 上限）。表现为「点一下 = 弹出录音浮层停不下来」，长按语义被架空。
+ *   修法：按下即同步进入 `preparing` 态，松手（releaseAsr）时若仍在 preparing
+ *   → 标记放弃，授权回来后不再启动录音。手指离开 = 结束，才是长按该有的语义。
  */
 import { getApiBase } from './agent-stream';
 import { getToken, isLoggedOut } from '../utils/request';
@@ -25,7 +33,14 @@ const MAX_SECONDS = 60;
 /** 最短有效录音：低于此值视为误触 */
 const MIN_DURATION_MS = 500;
 
-export type AsrPhase = 'idle' | 'recording' | 'recognizing';
+/**
+ * 录音生命周期。
+ * - `preparing`：手指已按下，正在走隐私协议 / 录音授权，**尚未**开麦（首次授权耗时 1s 级）
+ * - `recording`：已开麦，计时中
+ * - `recognizing`：已松手，等云端结果
+ * UI 浮层对 preparing / recording / recognizing 都要可见（否则用户以为按下没反应）。
+ */
+export type AsrPhase = 'idle' | 'preparing' | 'recording' | 'recognizing';
 
 export interface AsrState {
   phase: AsrPhase;
@@ -59,8 +74,18 @@ let recorder: WechatMiniprogram.RecorderManager | null = null;
 let startedAt = 0;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let cancelled = false;
-/** 松手后在等识别结果的调用方（stopAsr 的 Promise） */
+/** 松手后在等识别结果的调用方（releaseAsr / stopAsr 的 Promise） */
 let pendingResolve: ((text: string | null) => void) | null = null;
+
+/** 手指是否仍按在麦克风上（同步维护，不等 await） */
+let pressed = false;
+/** 授权/启动进行中：此时尚未开麦，松手即放弃 */
+let preparing = false;
+/** 授权途中已松手 → 授权回来后不启动录音 */
+let releaseEarly = false;
+/** 授权结果缓存：同一会话只问一次，避免每次按下都被 await 卡住（这是「点一下像没反应」的次因） */
+let privacyOk = false;
+let authOk = false;
 
 function toast(title: string): void {
   wx.showToast({ title, icon: 'none', duration: 1500 });
@@ -149,7 +174,8 @@ function ensureRecorder(): WechatMiniprogram.RecorderManager {
       }
       const dur = Number(res?.duration || 0);
       if (dur < MIN_DURATION_MS) {
-        toast('说话时间太短');
+        // 低于阈值基本是「点了一下」：明确告知是按住，而不是含糊说太短
+        toast('按住麦克风说话，松手识别');
         finish(null);
         return;
       }
@@ -174,22 +200,60 @@ function clearTick(): void {
 
 /** 收尾：唤醒等待方 + 状态归位 */
 function finish(text: string | null): void {
+  preparing = false;
+  pressed = false;
   emit({ phase: 'idle', seconds: 0 });
   const r = pendingResolve;
   pendingResolve = null;
   if (r) r(text);
 }
 
+/** 收尾并归位（不唤醒等待方：用于「未真正开麦」的放弃路径） */
+function resetToIdle(): void {
+  preparing = false;
+  pressed = false;
+  emit({ phase: 'idle', seconds: 0 });
+}
+
+/**
+ * 隐私协议 + 录音授权（结果按会话缓存，二次按下不再 await）。
+ * 首次仍会弹系统授权框：那 1s 左右用户手指大概率已松 —— 由 preparing 态兜住。
+ */
+async function ensureReady(): Promise<boolean> {
+  if (!privacyOk) {
+    if (!(await ensurePrivacy())) return false;
+    privacyOk = true;
+  }
+  if (!authOk) {
+    if (!(await ensureRecordAuth())) return false;
+    authOk = true;
+  }
+  return true;
+}
+
 /** 开始录音（按住说话） */
 export async function startAsr(): Promise<boolean> {
-  if (state.phase !== 'idle') return false;
+  // preparing 也算「忙」：连点两次会开两次麦，第二次必须挡掉
+  if (state.phase !== 'idle' || preparing) return false;
 
   if (!getToken() || isLoggedOut()) {
     toast('请先登录');
     return false;
   }
-  if (!(await ensurePrivacy())) return false;
-  if (!(await ensureRecordAuth())) return false;
+
+  // 按下即同步入态：让 UI 立刻有反馈，也让 touchend 能识别「按下过但还没开麦」
+  pressed = true;
+  releaseEarly = false;
+  preparing = true;
+  emit({ phase: 'preparing', seconds: 0 });
+
+  const ready = await ensureReady();
+  if (!ready || !pressed || releaseEarly) {
+    // 手指已离开 / 授权被拒 → 长按语义下本次作废，绝不在松手后才开麦
+    if (releaseEarly) toast('按住麦克风说话，松手识别');
+    resetToIdle();
+    return false;
+  }
 
   // 打断朗读：避免扬声器声音被录进去
   stopSpeak();
@@ -212,17 +276,48 @@ export async function startAsr(): Promise<boolean> {
       encodeBitRate: 48000,
       format: 'mp3',
     });
+    preparing = false;
     return true;
   } catch {
     clearTick();
-    emit({ phase: 'idle', seconds: 0 });
+    resetToIdle();
     toast('录音启动失败');
     return false;
   }
 }
 
-/** 松手：结束录音并识别，返回文本（null = 取消或失败，UI 不改动输入框） */
+/**
+ * 松手：结束录音并识别，返回文本（null = 取消或失败，UI 不改动输入框）。
+ *
+ * 关键：preparing 期间松手也算一次「松开」—— 标记放弃，等授权回来不再开麦，
+ * 而不是像旧实现那样留一个没人收尾的录音在跑。
+ */
+export function releaseAsr(): Promise<string | null> {
+  return new Promise((resolve) => {
+    pressed = false;
+    if (state.phase === 'preparing') {
+      releaseEarly = true;
+      resetToIdle();
+      resolve(null);
+      return;
+    }
+    if (state.phase !== 'recording') {
+      resolve(null);
+      return;
+    }
+    pendingResolve = resolve;
+    try {
+      ensureRecorder().stop();
+    } catch {
+      clearTick();
+      finish(null);
+    }
+  });
+}
+
+/** 到点（60s 上限）自动结束并识别：非用户松手路径，故不带 preparing 判定 */
 export function stopAsr(): Promise<string | null> {
+  pressed = false;
   return new Promise((resolve) => {
     if (state.phase !== 'recording') {
       resolve(null);
@@ -238,8 +333,14 @@ export function stopAsr(): Promise<string | null> {
   });
 }
 
-/** 取消本次录音（上滑取消 / 页面卸载） */
+/** 取消本次录音（上滑取消 / 页面卸载 / 系统打断） */
 export function cancelAsr(): void {
+  pressed = false;
+  if (state.phase === 'preparing') {
+    releaseEarly = true;
+    resetToIdle();
+    return;
+  }
   if (state.phase !== 'recording') return;
   cancelled = true;
   try {

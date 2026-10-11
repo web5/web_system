@@ -22,7 +22,7 @@ import {
 import { speakText, stopSpeak, onSpeakState } from '../../../services/tts';
 import {
   startAsr,
-  stopAsr,
+  releaseAsr,
   cancelAsr,
   onAsrState,
   getAsrState,
@@ -186,7 +186,7 @@ Page({
     speakLoadingIdx: -1,
     /** 朗读按钮态：正在播放的消息下标；-1 = 无（再点一次 = 停止） */
     speakPlayingIdx: -1,
-    /** 录音态：idle / recording / recognizing（按住说话） */
+    /** 录音态：idle / preparing（授权中）/ recording / recognizing（按住说话） */
     asrPhase: 'idle' as AsrPhase,
     /** 已录音秒数 */
     asrSeconds: 0,
@@ -475,21 +475,26 @@ Page({
     if (cancelling !== this.data.asrCancelling) this.setData({ asrCancelling: cancelling });
   },
 
-  /** 松手：取消态则丢弃，否则结束录音并识别 */
+  /**
+   * 松手：取消态则丢弃，否则结束录音并识别。
+   *
+   * ⚠️ 这里**不能**先判 `asrPhase !== 'recording'` 就 return —— 首次按下要先走异步授权
+   * （preparing 态），那 1s 里手指早就松了；旧实现在此直接 return，等授权回来录音才
+   * 启动且无人收尾 → 表现成「点一下弹出录音浮层停不下来」。判定下沉到 releaseAsr()。
+   */
   async onVoiceEnd() {
-    if (this.data.asrPhase !== 'recording') return;
     if (this.data.asrCancelling) {
       cancelAsr();
       return;
     }
-    const text = await stopAsr();
+    const text = await releaseAsr();
     // 回填输入框而不是直接发送：识别可能有误，给用户改的机会
     if (text) this.setData({ input: text });
   },
 
-  /** 触摸被系统打断（来电等）：按取消处理 */
+  /** 触摸被系统打断（来电等）：按取消处理（preparing 态也要取消，否则授权回来会自己开麦） */
   onVoiceCancel() {
-    if (this.data.asrPhase === 'recording') cancelAsr();
+    if (this.data.asrPhase !== 'idle') cancelAsr();
   },
 
   /** 切换「自动朗读 AI 回复」 */
