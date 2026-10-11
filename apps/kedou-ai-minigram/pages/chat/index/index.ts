@@ -20,6 +20,14 @@ import {
   looksLikeTranslateReply,
 } from '../../../utils/translate-parse';
 import { speakText, stopSpeak, onSpeakState } from '../../../services/tts';
+import {
+  startAsr,
+  stopAsr,
+  cancelAsr,
+  onAsrState,
+  getAsrState,
+  type AsrPhase,
+} from '../../../services/asr';
 import { collectGlossary } from '../../../services/glossary';
 
 /** 主对话走服务端意图路由 */
@@ -178,6 +186,14 @@ Page({
     speakLoadingIdx: -1,
     /** 朗读按钮态：正在播放的消息下标；-1 = 无（再点一次 = 停止） */
     speakPlayingIdx: -1,
+    /** 录音态：idle / recording / recognizing（按住说话） */
+    asrPhase: 'idle' as AsrPhase,
+    /** 已录音秒数 */
+    asrSeconds: 0,
+    /** 是否处于「上滑取消」手势中（松开即放弃本次录音） */
+    asrCancelling: false,
+    /** 自动朗读：AI 回复完成后自动播报（落 storage 记忆） */
+    autoSpeak: false,
   },
 
   /**
@@ -193,6 +209,12 @@ Page({
   /** 朗读状态订阅的退订函数（onUnload 时调用） */
   _offSpeakState: null as null | (() => void),
 
+  /** 录音状态订阅的退订函数（onUnload 时调用） */
+  _offAsrState: null as null | (() => void),
+
+  /** 按住说话：起始触点 Y（用于判定上滑取消） */
+  _voiceStartY: 0,
+
   onLoad() {
     this.initNavBar();
     this.setData({
@@ -202,6 +224,20 @@ Page({
     this._offSpeakState = onSpeakState((s) => {
       if (!s) this.setData({ speakPlayingIdx: -1 });
     });
+    // 录音态：驱动浮层（录音中 / 识别中 / 计时）
+    this._offAsrState = onAsrState((s) => {
+      this.setData({ asrPhase: s.phase, asrSeconds: s.seconds });
+      if (s.phase === 'idle') this.setData({ asrCancelling: false });
+    });
+    // 首帧同步一次，避免页面重建后浮层状态与实际不符
+    const cur = getAsrState();
+    this.setData({ asrPhase: cur.phase, asrSeconds: cur.seconds });
+    // 自动朗读偏好（本地记忆，未登录也可用）
+    try {
+      this.setData({ autoSpeak: wx.getStorageSync('auto_speak') === '1' });
+    } catch {
+      /* storage 不可用：保持关闭 */
+    }
   },
 
   /**
@@ -406,10 +442,90 @@ Page({
     this._runId += 1;
     // 离开页面停掉朗读，避免音频在后台继续响
     stopSpeak();
+    // 离开页面若仍在录音：取消，避免录音在后台继续
+    cancelAsr();
     if (this._offSpeakState) {
       this._offSpeakState();
       this._offSpeakState = null;
     }
+    if (this._offAsrState) {
+      this._offAsrState();
+      this._offAsrState = null;
+    }
+  },
+
+  /** 浮层用：阻止触摸穿透（滚动/误触下方元素） */
+  noop() {},
+
+  /** 按住开始说话 */
+  async onVoiceStart(e: any) {
+    const t = e?.touches?.[0];
+    this._voiceStartY = Number(t?.clientY || 0);
+    this.setData({ asrCancelling: false });
+    // 打断朗读已在 services/asr 内部处理（开麦前 stopSpeak），这里不重复调用
+    await startAsr();
+  },
+
+  /** 按住期间移动：上滑超过阈值即进入「取消」态 */
+  onVoiceMove(e: any) {
+    if (this.data.asrPhase !== 'recording') return;
+    const t = e?.touches?.[0];
+    const dy = this._voiceStartY - Number(t?.clientY || 0);
+    const cancelling = dy > 60;
+    if (cancelling !== this.data.asrCancelling) this.setData({ asrCancelling: cancelling });
+  },
+
+  /** 松手：取消态则丢弃，否则结束录音并识别 */
+  async onVoiceEnd() {
+    if (this.data.asrPhase !== 'recording') return;
+    if (this.data.asrCancelling) {
+      cancelAsr();
+      return;
+    }
+    const text = await stopAsr();
+    // 回填输入框而不是直接发送：识别可能有误，给用户改的机会
+    if (text) this.setData({ input: text });
+  },
+
+  /** 触摸被系统打断（来电等）：按取消处理 */
+  onVoiceCancel() {
+    if (this.data.asrPhase === 'recording') cancelAsr();
+  },
+
+  /** 切换「自动朗读 AI 回复」 */
+  onToggleAutoSpeak() {
+    const next = !this.data.autoSpeak;
+    this.setData({ autoSpeak: next });
+    try {
+      wx.setStorageSync('auto_speak', next ? '1' : '0');
+    } catch {
+      /* 存不下不影响本次生效 */
+    }
+    wx.showToast({ title: next ? '已开启自动朗读' : '已关闭自动朗读', icon: 'none' });
+    // 关掉时若正在播，立即停
+    if (!next) stopSpeak();
+  },
+
+  /**
+   * AI 纯文本回复的朗读（卡片态自带 ec-op 朗读，这里只补普通文本）。
+   * 再点一次 = 停止（由 speakText 内部判定）。
+   */
+  async onSpeakMsg(e: any) {
+    const idx = Number(e?.currentTarget?.dataset?.idx ?? -1);
+    if (idx < 0) return;
+    const msg = this.data.chatMessages[idx] as ChatMsg | undefined;
+    const text = String(msg?.text || '').trim();
+    if (!text) return;
+
+    // 再点一次 = 停止
+    if (this.data.speakPlayingIdx === idx) {
+      this.setData({ speakPlayingIdx: -1 });
+      await speakText(text);
+      return;
+    }
+    this.setData({ speakLoadingIdx: idx, speakPlayingIdx: -1 });
+    const ok = await speakText(text);
+    this.setData({ speakLoadingIdx: -1, speakPlayingIdx: ok ? idx : -1 });
   },
 
   onInput(e: any) {
@@ -507,6 +623,8 @@ Page({
         return;
       }
       patchAi({ text: next, streaming: !done });
+      // 自动朗读：整段回复完成后播报（卡片态有自己的朗读入口，这里不重复触发）
+      if (done && this.data.autoSpeak) void speakText(next);
     };
 
     this.setData({
