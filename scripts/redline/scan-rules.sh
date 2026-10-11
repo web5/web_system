@@ -245,9 +245,13 @@ check_r9b() {
   local -a ui_files=()
   while IFS=$'\t' read -r st path; do
     [ -n "${path:-}" ] || continue
+    # ⚠️ 顺序不能反（2026-10-11 实测误报）：passport 判定必须**先于**新增文件的 continue。
+    #   原型/规格绝大多数是**新建**文件（A 状态，如 apps/<app>/prototype/voice-input-spec.md），
+    #   原来把它和「新增页面」一起 continue 掉 → 「先提原型、再提 UI 源码」这条正规走法
+    #   反而被判「无同行原型」，逼人回头去用 Micro-exempt 后门。
+    if is_passport_file "$path"; then passport=1; fi
     case "$st" in A*) continue ;; esac          # 新增页面由 R9 管
     if is_ui_file "$path"; then ui_files+=("$path"); fi
-    if is_passport_file "$path"; then passport=1; fi
   done < <(git diff --name-status --no-renames "$range" -- 2>/dev/null)
 
   [ ${#ui_files[@]} -eq 0 ] && return 0
