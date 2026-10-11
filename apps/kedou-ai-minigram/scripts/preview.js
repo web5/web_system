@@ -97,11 +97,35 @@ h1{font-size:18px;margin:0 0 6px}
   }
 }
 
+/**
+ * 读取 app.json 中全部注册页面（含分包）。
+ * ⚠️ 注意：pages 字段在 app.json，project.config.json 里没有（别读错了会拿到空数组）。
+ */
+function readRegisteredPages() {
+  const appJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../app.json'), 'utf-8'));
+  const pages = [...(appJson.pages || [])];
+  // root 无尾斜杠（如 "packageTranslate"），page 无前导斜杠（如 "pages/xxx"），需自行补 /
+  (appJson.subPackages || appJson.subpackages || []).forEach((sp) => {
+    (sp.pages || []).forEach((p) => pages.push(`${(sp.root || '').replace(/\/$/, '')}/${p}`));
+  });
+  return pages;
+}
+
 async function previewApp() {
   const version = process.env.PREVIEW_VERSION || require('../package.json').version || '1.0.0';
   const qrcodeFormat = process.env.QRCODE_FORMAT || 'image';
   const qrcodeOutputDest = path.resolve(ROOT, process.env.QRCODE_DEST || '.ci-output/preview-qr.png');
-  const pagePath = process.env.PREVIEW_PAGE || 'pages/chat/index/index';
+  const pagePath = process.env.PREVIEW_PAGE || 'pages/welcome/index/index';
+
+  // 直达页合法性校验：pagePath 必须是 app.json 里注册过的页面。
+  // 历史上在后台手填过不存在的 pages/index/index，扫码冷启动直接「页面不存在」白屏。
+  const registered = readRegisteredPages();
+  if (!registered.includes(pagePath)) {
+    console.error(`[Preview] ❌ pagePath 未在 app.json 注册: ${pagePath}`);
+    console.error('[Preview] 可用页面（app.json pages）:');
+    registered.forEach((p) => console.error(`    ${p}`));
+    process.exit(1);
+  }
 
   if (qrcodeFormat === 'image') {
     fs.mkdirSync(path.dirname(qrcodeOutputDest), { recursive: true });

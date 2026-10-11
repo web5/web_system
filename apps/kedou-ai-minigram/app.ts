@@ -2,11 +2,13 @@ import { ensureLogin, isLoggedIn } from './services/auth';
 import { currentClass, applyFromServer } from './utils/appearance';
 
 /**
- * 后端地址按运行环境切换：
+ * 后端地址按运行环境切换（wx.getAccountInfoSync().miniProgram.envVersion）：
  * - 开发者工具：local.kedouai.com（本机 hosts → nginx → gateway）
- * - 真机（预览/体验版/远程调试）：dev 环境公网网关（DNS → nginx SSL → dev gateway）。
- *   走 https + 正式域名，真机无需开「开发调试」跳域名校验。
- *   ⚠️ 小程序正式上线前需在微信公众平台把 dev.kedouai.com 加入 request 合法域名（或体验版勾选「不校验合法域名」）。
+ * - develop 开发版 / trial 体验版：dev 环境公网网关 https://dev.kedouai.com
+ * - release 正式版：生产域名 https://kedouai.com
+ * 老基础库不支持 getAccountInfoSync 时兜底 dev（宁可连错环境也不白屏）。
+ *
+ * 合法域名：dev.kedouai.com 与 kedouai.com 均需在公众平台「request 合法域名」中登记。
  */
 const IS_DEVTOOLS = (() => {
   try {
@@ -15,6 +17,18 @@ const IS_DEVTOOLS = (() => {
     return false;
   }
 })();
+
+function resolveApiBase(): string {
+  if (IS_DEVTOOLS) return 'http://local.kedouai.com';
+  try {
+    const env = wx.getAccountInfoSync()?.miniProgram?.envVersion;
+    if (env === 'release') return 'https://kedouai.com';
+    // 'develop' | 'trial' 一律连 dev
+  } catch {
+    // 老基础库无该 API，走下面兜底
+  }
+  return 'https://dev.kedouai.com';
+}
 
 App<IAppOption>({
   onLaunch() {
@@ -54,7 +68,7 @@ App<IAppOption>({
     userInfo: null,
     token: '',
     refreshToken: '',
-    apiBase: IS_DEVTOOLS ? 'http://local.kedouai.com' : 'https://dev.kedouai.com',
+    apiBase: resolveApiBase(),
     bianbianOrigin: undefined,
     bianbianDesc: undefined,
     bianbianResult: undefined,
