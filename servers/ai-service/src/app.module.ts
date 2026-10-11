@@ -9,6 +9,7 @@ import { ConversationModule } from './conversation/conversation.module';
 import { BianbianModule } from './bianbian/bianbian.module';
 import { ArtworksModule } from './artworks/artworks.module';
 import { TtsModule } from './tts/tts.module';
+import { AsrModule } from './asr/asr.module';
 import { AuthModule } from './auth/auth.module';
 import { AgentModule } from './agent/agent.module';
 import { AgentLogModule } from './agent-log/agent-log.module';
@@ -103,6 +104,7 @@ import { HealthModule } from './health/health.module';
     BianbianModule,
     ArtworksModule,
     TtsModule,
+    AsrModule,
     AgentModule,
     AgentLogModule,
     AgentDefModule,
