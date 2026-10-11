@@ -270,12 +270,26 @@
   .sugs span { font-size: 12.5px; padding: 7px 12px; border-radius: 15px; background: var(--card); color: var(--t2); border: .5px solid var(--line); cursor: pointer; }
   .sugs span:active { background: var(--brand-soft); color: var(--brand-txt); }
   .composer { flex: none; display: flex; align-items: center; gap: 9px; padding: 9px 14px 12px; background: var(--nav-bg); border-top: .5px solid var(--line); }
-  .composer .plus { width: 32px; height: 32px; border-radius: 50%; background: var(--page-bg); display: flex; align-items: center; justify-content: center; font-size: 19px; color: var(--t2); flex: none; cursor: pointer; }
+  /* 输入栏圆钮（+ / 麦克风）：常态线性 —— 浅橙底 + 橙细描边（spec §8 定稿 v1.0.8） */
+  .composer .plus, .composer .mic { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-50); color: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+  .composer .plus svg, .composer .mic svg { width: 19px; height: 19px; display: block; }
+  .composer .plus:active, .composer .mic:active { opacity: .75; }
+  /* 录音中（高亮）= 面性：实心橙底 + 白图标（激活态视觉跃迁，用户补充） */
+  .composer .mic.is-rec { background: var(--brand); color: #fff; }
   /* 输入区为单行 input（与真机一致）：回车 / 键盘「发送」直接发送，回车不再换行 */
   .composer input { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
   .composer input::placeholder { color: var(--t3); }
   .composer .send { width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: var(--card); display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; cursor: pointer; transition: background .18s; }
   .composer .send.on { background: var(--brand); color: #fff; }
+  /* 录音浮层（按住说话）：覆盖手机壳，展示 preparing / recording / recognizing 文案 */
+  .voice-mask { position: absolute; inset: 0; background: rgba(0,0,0,.32); z-index: 31; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .voice-mask.show { opacity: 1; pointer-events: auto; }
+  .vm-card { background: var(--card); border-radius: 18px; padding: 22px 28px; text-align: center; min-width: 190px; box-shadow: var(--shadow); }
+  .vm-wave { display: flex; gap: 3px; align-items: center; justify-content: center; height: 22px; }
+  .vm-wave i { width: 4px; background: var(--brand); border-radius: 2px; }
+  .vm-wave i:nth-child(1) { height: 10px; } .vm-wave i:nth-child(2) { height: 18px; } .vm-wave i:nth-child(3) { height: 14px; } .vm-wave i:nth-child(4) { height: 20px; } .vm-wave i:nth-child(5) { height: 12px; }
+  .vm-card .vm-sec { font-size: 22px; font-weight: 600; color: var(--brand); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .vm-card .vm-tip { font-size: 13px; color: var(--t2); margin-top: 4px; }
 
   /* ---------- 发现页 ---------- */
   .cap { display: flex; align-items: center; gap: 13px; background: var(--card); border-radius: 14px; padding: 15px 15px; margin-bottom: 10px; cursor: pointer; }
@@ -664,7 +678,19 @@
           </div>
         </div>
         <div class="composer">
-          <div class="plus" onclick="openPlusMenu()">+</div>
+          <div class="plus" onclick="openPlusMenu()" aria-label="更多">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <div class="mic" id="micBtn" aria-label="按住说话"
+               onmousedown="voiceStart(event)" onmouseup="voiceEnd(event)"
+               ontouchstart="voiceStart(event)" ontouchend="voiceEnd(event)" ontouchcancel="voiceCancel(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
           <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter'){event.preventDefault();send();}" />
           <div class="send" id="sendBtn" onclick="send()">↑</div>
         </div>
@@ -1285,6 +1311,14 @@
     <div class="wx-toast" id="wxToast"></div>
     <div class="wx-loading" id="wxLoading"><span class="sp"></span><span id="wxLoadTxt">处理中…</span></div>
     <div class="mask" id="mask" onclick="closeAll()"></div>
+    <!-- 录音浮层（按住说话）：状态机 preparing → recording → recognizing，见 voice-input-spec.md §2 -->
+    <div class="voice-mask" id="voiceMask">
+      <div class="vm-card">
+        <div class="vm-wave"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="vm-sec" id="vmSec">0″</div>
+        <div class="vm-tip" id="vmTip">准备中…</div>
+      </div>
+    </div>
 
     <!-- 原生弹窗模拟：wx.showModal（退出确认 / 合并二次确认）。真机由微信渲染，原型只复刻形态与文案 -->
     <div class="wxmodal" id="wxModal" data-dr="modal">
@@ -1457,6 +1491,52 @@ function openPlusMenu() {
   ], function (v) {
     wxToast(v + '（演示）');
   });
+}
+
+/* ---------- 对话输入区「按住说话」（语音输入，spec §2 状态机） ----------
+ * 原型复刻真机四态：idle → preparing（按下即同步入态，等授权）→ recording（开麦计时）
+ * → recognizing（松手等识别）→ idle；preparing 期间松手 = 作废不开麦。
+ * 关键交互：常态线性 icon、录音中 .is-rec 面性（实心橙底白图），浮层随态切换文案。
+ */
+var voice = { phase: 'idle', started: 0, timer: null };
+function voiceStart(e) {
+  if (e) e.preventDefault();
+  if (voice.phase !== 'idle') return;
+  voice.phase = 'preparing';
+  $('micBtn').classList.add('is-rec');
+  $('voiceMask').classList.add('show');
+  $('vmSec').textContent = '0″';
+  $('vmTip').textContent = '准备中…';
+  /* 模拟隐私协议 + 录音授权（首次约 200ms 异步窗口期） */
+  setTimeout(function () {
+    if (voice.phase !== 'preparing') return;
+    voice.phase = 'recording';
+    voice.started = Date.now();
+    $('vmTip').textContent = '松手识别，上滑取消';
+    voice.timer = setInterval(function () {
+      $('vmSec').textContent = Math.floor((Date.now() - voice.started) / 1000) + '″';
+    }, 250);
+  }, 220);
+}
+function voiceEnd(e) {
+  if (e) e.preventDefault();
+  if (voice.phase === 'preparing') { voiceReset(); return; }   // 授权未回就松手 → 作废，不开麦
+  if (voice.phase !== 'recording') return;
+  clearInterval(voice.timer);
+  voice.phase = 'recognizing';
+  $('vmTip').textContent = '识别中…';
+  setTimeout(function () {
+    $('cinp').value = '帮我写一份周报';   // 识别结果回填输入框（可编辑再发），不直接发送
+    onType();
+    voiceReset();
+  }, 900);
+}
+function voiceCancel() { voiceReset(); }
+function voiceReset() {
+  clearInterval(voice.timer);
+  voice.phase = 'idle';
+  $('micBtn').classList.remove('is-rec');
+  $('voiceMask').classList.remove('show');
 }
 
 /* ---------- 翻译失败态（原型演示） ---------- */
