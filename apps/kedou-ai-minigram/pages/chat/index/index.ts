@@ -192,8 +192,6 @@ Page({
     asrSeconds: 0,
     /** 是否处于「上滑取消」手势中（松开即放弃本次录音） */
     asrCancelling: false,
-    /** 自动朗读：AI 回复完成后自动播报（落 storage 记忆） */
-    autoSpeak: false,
   },
 
   /**
@@ -232,12 +230,6 @@ Page({
     // 首帧同步一次，避免页面重建后浮层状态与实际不符
     const cur = getAsrState();
     this.setData({ asrPhase: cur.phase, asrSeconds: cur.seconds });
-    // 自动朗读偏好（本地记忆，未登录也可用）
-    try {
-      this.setData({ autoSpeak: wx.getStorageSync('auto_speak') === '1' });
-    } catch {
-      /* storage 不可用：保持关闭 */
-    }
   },
 
   /**
@@ -497,20 +489,6 @@ Page({
     if (this.data.asrPhase !== 'idle') cancelAsr();
   },
 
-  /** 切换「自动朗读 AI 回复」 */
-  onToggleAutoSpeak() {
-    const next = !this.data.autoSpeak;
-    this.setData({ autoSpeak: next });
-    try {
-      wx.setStorageSync('auto_speak', next ? '1' : '0');
-    } catch {
-      /* 存不下不影响本次生效 */
-    }
-    wx.showToast({ title: next ? '已开启自动朗读' : '已关闭自动朗读', icon: 'none' });
-    // 关掉时若正在播，立即停
-    if (!next) stopSpeak();
-  },
-
   /**
    * AI 纯文本回复的朗读（卡片态自带 ec-op 朗读，这里只补普通文本）。
    * 再点一次 = 停止（由 speakText 内部判定）。
@@ -628,8 +606,6 @@ Page({
         return;
       }
       patchAi({ text: next, streaming: !done });
-      // 自动朗读：整段回复完成后播报（卡片态有自己的朗读入口，这里不重复触发）
-      if (done && this.data.autoSpeak) void speakText(next);
     };
 
     this.setData({

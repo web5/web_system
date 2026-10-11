@@ -184,7 +184,7 @@
 <!-- 底部吸底输入栏 -->
 <view class="chat-input-bar">
   <view class="chat-composer">
-    <view class="chat-plus" bindtap="openPlus">+</view>
+    <view class="chat-plus" bindtap="openPlus" aria-label="更多"></view>
     <!--
       语音输入（按住说话）：用 touch 事件而非 tap —— 按住期间要持续判断
       「上滑取消」，松手才结束并识别。识别结果回填输入框，可编辑后再发送。
@@ -197,12 +197,6 @@
       bindtouchend="onVoiceEnd"
       bindtouchcancel="onVoiceCancel"
       aria-label="按住说话"
-    ></view>
-    <!-- 自动朗读开关：开启后 AI 回复完自动播报（落 storage 记忆） -->
-    <view
-      class="chat-auto {{autoSpeak ? 'is-on' : ''}}"
-      bindtap="onToggleAutoSpeak"
-      aria-label="自动朗读"
     ></view>
     <!--
       单行 input（而非 textarea）：移动端回车 / 键盘右下角「发送」= 直接发送，
