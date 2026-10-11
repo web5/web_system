@@ -92,6 +92,11 @@
       }
     ]
   },
+  "permission": {
+    "scope.record": {
+      "desc": "用于语音输入，将你的语音转为文字"
+    }
+  },
   "resizable": true,
   "style": "v2",
   "sitemapLocation": "sitemap.json"
