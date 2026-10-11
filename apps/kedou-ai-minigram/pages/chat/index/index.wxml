@@ -197,7 +197,7 @@
       bindtouchend="onVoiceEnd"
       bindtouchcancel="onVoiceCancel"
       aria-label="按住说话"
-    ><view class="mic-stem"></view></view>
+    ></view>
     <!-- 自动朗读开关：开启后 AI 回复完自动播报（落 storage 记忆） -->
     <view
       class="chat-auto {{autoSpeak ? 'is-on' : ''}}"
