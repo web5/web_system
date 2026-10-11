@@ -257,11 +257,65 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 > prod 的 pm2 运行目录可能与部署目录不同名，先 `pm2 jlist` 看 `pm2_env.cwd` 再改，改完按 §5.1 复验。
 > 否则会出现「体验版登录正常、正式版登录失败」的假象。
 
+### 5.4 隐私校验：开 `__usePrivacyCheck__` 前必须声明齐全
+
+`__usePrivacyCheck__: true` 是**全局开关**——开启后小程序内**所有**隐私接口都要经过校验，
+且**只有在公众平台《用户隐私保护指引》里声明过的信息类型才放行**；未声明的会被微信硬性拦截
+（不是报错，代码侧 `try/catch` 也救不回来）。
+
+**顺序依赖（反了最难排查）**：先在后台声明并**发布** → 再开 `__usePrivacyCheck__`。
+提前开 = 真机表现「不报错、也不执行」。
+
+本仓库代码里用到的隐私接口与需声明的对应关系：
+
+| 代码位置 | 接口 | 需声明的信息类型 |
+|---|---|---|
+| `services/asr.ts` | `wx.getRecorderManager` | 麦克风 |
+| `services/ocr-api.ts`、`packageAssess` | `wx.chooseMedia` | 相册（图片/视频）、摄像头 |
+| `packageAssess` | `wx.chooseMessageFile` | 文件 |
+| `packageBianbian` | `wx.saveImageToPhotosAlbum` | 相册写入 |
+
+> 结论：**只声明「麦克风」时不要开校验**——语音功能本身不受影响（不校验就照常录音），
+> 但会连带打断变变保存图片、OCR/测评选图。补全声明并发布后再开。
+>
+> 代码侧已用 `wx.requirePrivacyAuthorize` 主动方式（`services/asr.ts`），
+> 因此 `app.ts` 无需再注册 `wx.onNeedPrivacyAuthorization`。
+
 ---
 
-## 六、变更历史
+## 六、后端部署：把 dev 验证过的东西送到 prod
+
+小程序连的后端（dev/prod）与小程序代码是**两条独立发布线**：体验版连 dev，正式版连 prod。
+prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正式版 404」。
+
+**流程（可回滚优先）**：
+
+1. **先备份**：`pm2 save` + 把要动的服务的 `dist/` 复制到 `/root/dist-backup-<ts>/`，
+   并记录当前 HEAD（`git log --oneline -1`）。回滚 = 拷回 dist + restart
+2. `git pull --ff-only`，确认 `git status` 无被挡（未跟踪的 `dist.bak-*` 之类会挡 pull，按需清理）
+3. **看 migration 注释再决定跑不跑**：`migrations/` 下的文件可能是 DEPRECATED。
+   例：`0013_music_agent_binding.sql` 头部写明「请勿执行」，且 `schema_migrations`
+   里的"已执行"记录其实是**空跑**（UPDATE 命中 0 行）——
+   **不要把 `schema_migrations` 当「已生效」证据，它只记「跑过」**
+4. **只构建改动过的服务**：`git diff --name-only <旧HEAD> HEAD | grep -oE "^servers/[^/]+"` 看影响面；
+   若服务 `package.json` 无变化则**不用 reinstall**
+5. `pm2 restart <name>`（fork 单实例有秒级中断；cluster 才走 reload）。
+   进程是旧 ecosystem 起的，`restart` 沿用现有配置，不受 `ecosystem.*.cjs` 拆分影响
+6. **验证**：服务日志看路由注册（如 `AsrController {/ai/asr}`）；
+   直连验证需临时 token——用 `jsonwebtoken` + `JWT_SECRET` 现签，
+   payload 照抄 `auth.service.ts` 的 `{sub, username, roles, systems, sid, type:'access'}`，
+   然后 `curl -H "Authorization: Bearer <token>" http://127.0.0.1:<port>/...`
+   （端口从 `.env` 的 `PORT` 读，`pm2_env.env` 里没有——dotenv 是运行时加载的）
+
+> ⚠️ `pm2 logs --lines N` 会混入历史日志（含几个月前的 ERROR），
+> 判断"本次启动是否正常"要**带时间戳过滤**，别被旧 ERROR 误导。
+
+---
+
+## 七、变更历史
 
 | 日期 | 变更 |
 |---|---|
 | 2026-10-10 | 初版。CI 脚本改造（PR #292）：二维码 `image` 落盘、版本读 `package.json`、支持 `PREVIEW_PAGE`、`MINIPROGRAM_CI_PATH` 依赖隔离 |
 | 2026-10-11 | §5.1 登录失败判定三连（AppSecret 失效）；§5.2 扫码白屏 = 小程序码 path 指向不存在页面；§5.3 三环境 apiBase + prod 需同步改 AppSecret（PR #307） |
+| 2026-10-11 | §5.4 隐私校验前置（全局生效 + 未声明即拦截 + 隐私接口↔声明类型对照）；§六 后端 prod 部署手法（备份优先、migration 需读注释、只构建改动服务、临时 token 验证法） |
