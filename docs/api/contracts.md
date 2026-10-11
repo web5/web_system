@@ -365,3 +365,4 @@ PORT=5280 node scripts/proto-serve.mjs  # 端口被占时换端口
 | UI 门的「用户确认原型」 | 用本地 URL 确认；原型 commit（`Proto: <sha>`）与规格照旧，不因入口变化而变 |
 | `docs/ui/prototypes/README.md` | 仍是原型台账（谁取代谁、状态）；**索引页由脚本自动生成**，不要在 README 里维护「当前入口链接」 |
 | 无头验证 | `node scripts/verify-agent-def-detail.mjs` 等仍走 `file://`，与本地服务解耦（服务挂了不影响回归） |
+| Agents 模块整合稿 | `admin-agents-hub.html` 是**生成物**（`node scripts/build-agents-hub.mjs` 从两份定稿同源抽取），禁止手改；改内容改定稿后重跑生成 + 三条验证。口径见 `docs/ui/page-specs/agent-def-detail-v2.md` §10 |
