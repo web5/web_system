@@ -116,6 +116,16 @@
               data-idx="{{idx}}"
               bindlongpress="onLongPressMsg"
             >{{item.text}}</view>
+
+            <!-- AI 纯文本回复的朗读（卡片态自带 ec-op 朗读，这里只补普通文本） -->
+            <view
+              wx:if="{{item.role === 'ai' && item.text && !item.streaming && !item.enMain}}"
+              class="msg-speak {{speakPlayingIdx === idx ? 'is-speaking' : ''}}"
+              data-idx="{{idx}}"
+              catchtap="onSpeakMsg"
+            >
+              <text class="ms-t">{{speakLoadingIdx === idx ? '请稍候…' : (speakPlayingIdx === idx ? '停止' : '朗读')}}</text>
+            </view>
             <!-- 失败且没有内容：气泡内给友好提示，不留一片空白 -->
             <view wx:elif="{{item.failed}}" class="msg-text msg-empty">{{item.failReason}}</view>
             <view wx:if="{{item.en}}" class="msg-quote-en">{{item.en}}</view>
@@ -175,6 +185,12 @@
 <view class="chat-input-bar">
   <view class="chat-composer">
     <view class="chat-plus" bindtap="openPlus">+</view>
+    <!-- 自动朗读开关：开启后 AI 回复完自动播报（落 storage 记忆） -->
+    <view
+      class="chat-auto {{autoSpeak ? 'is-on' : ''}}"
+      bindtap="onToggleAutoSpeak"
+      aria-label="自动朗读"
+    ></view>
     <!--
       单行 input（而非 textarea）：移动端回车 / 键盘右下角「发送」= 直接发送，
       回车不再插入换行（用户要求）。confirm-type="send" 让键盘按钮显示「发送」。
@@ -192,6 +208,18 @@
       bindconfirm="onConfirm"
       disabled="{{sending}}"
     />
+    <!--
+      语音输入（按住说话）：用 touch 事件而非 tap —— 按住期间要持续判断
+      「上滑取消」，松手才结束并识别。识别结果回填输入框，可编辑后再发送。
+    -->
+    <view
+      class="chat-mic {{asrPhase === 'recording' ? 'is-rec' : ''}}"
+      bindtouchstart="onVoiceStart"
+      bindtouchmove="onVoiceMove"
+      bindtouchend="onVoiceEnd"
+      bindtouchcancel="onVoiceCancel"
+      aria-label="按住说话"
+    ></view>
     <button
       class="chat-send"
       bindtap="send"
@@ -200,6 +228,20 @@
     >
       {{sending ? '…' : '↑'}}
     </button>
+  </view>
+</view>
+
+<!-- 录音态浮层：录音中 / 识别中，覆盖在页面上，明确「松手识别、上滑取消」 -->
+<view wx:if="{{asrPhase !== 'idle'}}" class="voice-mask" catchtouchmove="noop">
+  <view class="vm-card">
+    <view class="vm-wave {{asrPhase === 'recognizing' ? 'is-busy' : ''}}">
+      <view class="vw-bar"></view><view class="vw-bar"></view><view class="vw-bar"></view>
+      <view class="vw-bar"></view><view class="vw-bar"></view>
+    </view>
+    <view class="vm-tip">
+      {{asrPhase === 'recognizing' ? '识别中…' : (asrCancelling ? '松开手指取消' : '松手识别，上滑取消')}}
+    </view>
+    <view wx:if="{{asrPhase === 'recording'}}" class="vm-sec">{{asrSeconds}}s</view>
   </view>
 </view>
 
