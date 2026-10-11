@@ -88,3 +88,23 @@
 
 不变量补充第 4 条：**任何路径下浮层都必须能回到 idle** —— 松手、打断、60s 上限、
 onStop 丢失、识别失败，全部有收尾出口，不允许悬挂态。
+
+### 2026-10-11 23:59 · 麦克风 icon 修订 v2（v1.0.7）
+
+v1.0.6 的伪元素三笔造型真机复验仍「不像」：WXSS 只有 `::before/::after` 两个伪元素
++ 一个实体子节点，22px 显示尺寸下笔画比例失真、rpx 取整出锯齿，拼不出标准麦克风。
+
+修订：**放弃 CSS 拼笔画，改用 @3x 位图内联**。
+
+- 生成：`scripts/gen-mic-icon.py`（Pillow，4x 超采样 + LANCZOS 降采样，几何参数见脚本头部），
+  造型 = 实心胶囊话筒头 + U 形拾音支架 + 颈杆 + 底座横线（Material mic 同构）。
+- 内联：小程序 WXSS 的 `background-image` **不支持本地相对路径，只吃 base64 / 网络图**，
+  故以 data URI 写进 `.chat-mic` / `.chat-mic.is-rec`（橙 `#F97316` / 白 `#FFFFFF` 两配色，
+  对应常态浅橙底与录音中实心橙底），`background-size: 44rpx`。
+- 体积：两张 PNG 共 ~4.9KB（base64 后 ~6.5KB），对包体（309KB）可忽略。
+- 复现：改几何参数后跑 `python3 scripts/gen-mic-icon.py`，把输出的两段 base64
+  替换进 `index.wxss` 即可。
+
+顺带：出码脚本 `scripts/preview.js` 增加**过期时间产物**（预览码官方口径 25 分钟，
+体验版 7 天）—— `preview-qr.html` 卡片带「有效期至 + 剩余倒计时」，`preview-qr.meta.json`
+机器可读，PNG 另存带生成时刻的副本，后台 desc 同步写有效期。

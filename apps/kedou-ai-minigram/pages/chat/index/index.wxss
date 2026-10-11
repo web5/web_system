@@ -425,8 +425,11 @@ page {
 }
 .chat-auto:active { opacity: .7; }
 
-/* 语音输入（按住说话）：标准麦克风三笔造型（规格 §8 修订 ①）
-   胶囊话筒头(::before) + U 形拾音支架(::after) + 底部短杆(.mic-stem)，纯 CSS 不引图标字体 */
+/* 语音输入（按住说话）：麦克风用 @3x 位图内联（规格 §8 修订 ① v2）。
+   为什么放弃伪元素拼笔画：WXSS 只有 before/after 两个伪元素 + 一个实体子节点，
+   22px 下笔画比例失真且 rpx 取整锯齿，真机「不像麦克风」；位图一次画对，
+   超 4x 采样 + LANCZOS 抗锯齿。两种配色对应常态/录音中（WXSS background-image
+   不支持本地路径，只吃 base64，故内联）。生成脚本口径见 prototype/voice-input-spec.md §8。 */
 .chat-mic {
   position: relative;
   flex: 0 0 76rpx;
@@ -434,53 +437,20 @@ page {
   height: 76rpx;
   min-width: 76rpx;
   border-radius: 50%;
-  background: var(--brand-50);
-  color: var(--brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background-color: var(--brand-50);
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAL00lEQVR42u1cf2xdZ3l+nu/7zj3XDiHkh526DQWGYMKs3TqCyqZJMDHopP6BJuEICbaVqmSiLJA0o2XTNucyTRpbmqRIVF26gdimbbKZVG3TBH8wVjQmtWg0K0sYYQw1atXGTpsmcXzvOef7vmd/3HPda9cxabBzT+rzSJYsy74+532/7/39PkCNGjVq1KhRo0aNGjVq1KhRo0aN9QJeSw+rSRi8HcRxECcgjEMAMH0CnBhfeJfIFmKt2tUU/ASsJmAv+/cFagpW18ABc5UWvEAcANlCAAD93o4bvM9uVeRNiriZBpujBIiFdXycxA9twsfI574HlH8zCVPlG8Eqn3pOd4VY3Dv6PgC/LvEDicNrYQlEoWuASlgCEfBF9AS/ARP/5tjZ2b/beRSFpmC5q/tZtQIuR/ilwC5+Yuv1jWF7v3P8EEiEPMILAYIAcNHTlz8jYRsNApYIeXwsBn6qcf/pxzQJgxbExWqrFXCpk9++Z+Q2Z/kl1+BY1lYUIBKGP/6ZJSBCUNqgCxE+Rn26cXDmSBWVYCoW5ThOI7T3jX6smZqvWnIsa8uTMIawvLwDQwKWhMtyBR9kkyFzON8/cpQtRExWyzmzcmZn78gHhzfY6TyLQREkf7JDUnoKn24wSWcuHBk6NLtPk3BswdcK6Ivv2UJs7xl5sxvityFsCgH4SYXfrwRD+KTBJJuPE80js1/pd/K1CSqVYBr4c+e42YeuvV/FU8YYYYOXTMIH5+4euQ5TiJoc/PubSpieFmJ+YeQ3GkP2vVlH3vDyk67LVgJhvEdIUjPimvwTEsKJwVuAwd+A45AAivgEvLQkuFxtWN+JMhYfnNu7bYzTCNJglWAGHnK2EIt9o7c6a34+zyVi9U9/3y1giAhJw2xoWH4EAHBg7f5f9W9AWUATdbtt0AhXoWRAUFGIwO2lD4jr2QTFUgE7EYQ1Nj+9kMjACwTHZ2ZHhtlCHKQZcgMttBE6tW/HEJG/sZvrrr0KCNBHyBps3JTY1wP4Hg6AGFB2bAachOi1OD8E4nrFq5SXdOt4so5Na+MOABhkNDT4KKhDAQPISrulu6IOQ7vC4IA8UJ0HrHfUCqgVUCugRq2AWgE11q0CcvGqlCCWTcq0fvsBJCSBm3acPy/p/2iJq1EOkCBrQB90sfDFDwCgN2G3/m7ALhi24AU8RQOBV0cQ1oAh4uzZztkzAIAD61UBZTma4r/DkOVsz1rXggIdIemJG45iXhOw5HpVwEItPv5zyOJ82YpcW2EIBAgjTgEAJtaxE2YLUROwzUNnThZBjyYp2e2VrJn9j87C5FmYfTHTIwKIifXdkOkVJulo/jRGwKytOYg2NRT5wPYHZ+cwVRq+dT8XVM7odO4Z/UI6bO7uXIzemNVtFkkIaUqb5TqWnpq5FePwVRhTrEYiNtU1RWlH9xWd8N1mk05avR6BhGgN6KPmWeA3OY281xCqE7EyJ8A4xAdn5xT44SCdTZPVUYKEQAO6Bk3MdHf6+Zkne9MYdSa8jENOD898N5sPtwXh2bS8CbqC8FSAJPg0oXWWodPW7vTI7Jd7A8Drfjh3chLmwHK92HFYtpDP7d021kzMl2zD3BbziDwgsDs3wUtNSau7JSAAkYRrNA1CoZN5Hu8cPjL7Le1BiueWuVXj0KBuROV3qPzvbN8Dq9+3zowiCN4LISIuM89jDGESR8AR3sfMCEfPvVj8wZajZ8+hXlF6aRyFhNr7t7+pOYw3+nlooTdrIDcMdi7oqebhmR+V+2FR+7ePBqsPSLxDij+XODMMW24C9CpIUSgKeWNwUtR0KOLfNw89/z+9wd9z53e8blOz+NlO56VZHA+g2QTyIp5ND84eU/cT9eqeC+qOAnoD7UZiP+NsBJK+vDgxMNb/EYk/1G44TYC8//QMgIcBPKz7xm5EiG8uct1MGzfHCEgsbIrHk6Z5Gjc/d7K3D6YJWMyAbMEXnypuhuO/NhsvrWc4AUiImOExAO/CJIjWq10BCzchXkBmQuYV+p7Dp+3oCIwBAH4FkbvKAdppGOxC5OeePQXgFIBvrDRxjeMQWwiahMOjIF18PbyJWaGA3vwpEVLCkjqLdTMZd6J7wqzcdxBlBdCUuwACLAQTgHeUdZq4EKb2rZ3iBIjxJeazt7jdgpbZiFRB7LSWBlDs7R5IiHI09Oa/+qLC+OpWQFl7DzF/it7llkikcmZQsEUhOcvxbO/2twOnTyzd830l0YoA4gDCM8+ODRuFX1URl4bepACIP1g3eQA/iyiAafuF/w0RP3IOXJiK7o4NBtcwaTTxo+XJv/JnfHe31Lx1qHh3IzVvLTxC/+aNIYzPY64ifHNxdfbVnIgJwCQsj6IA8E90ZvGLE9Z3YkwcP9reO/pTaCG8EpqCRcO/7ykdsTOfjVHqn4IWEJKE8EFPpJvP/HBQG/WDyYRLP0DPr8gL7HsOAvQBsJZbjMPfAoCZfmVKKCkOLFvw+Y0jB9Om2VnkL9n+hcVuR5L4h1LwZl0lYr0FufzCyNcbqXlPlimwbzdMQkiHaIsMf/Gtb5/++C8/Cq9JuJXYUPoF303iRn/LOD5U9Ec+ZV/YWSgKL2ZzfNtrHjo9Cy04+3VC1nEC5DTC/D4diMK/LX15EjZrK6RD5q5funX0bZ13xDvZOnNywblOwCyJhCKJCMDrvs2bohoHjcNdWaZYMkn0I9jUOD/vD2186MyMpmDJwdSHWPU+QK+O7wudA/lwlP46PTjz5LKfd++WHUW0HwL4sSQ1b+20YyzpDS7dFwACphEHVZrmwOlodsFgZGSoGMZ/JIm5qZMpLF1TjUJMDIxtGuSdGAzxnRBxnNBTpQd/nSNvCRG3pMNmI3Ih84tNWl9fALDoxDZ+If38zJODprNhVbbks32jN9kUjzJyc+5froSy0hkM4ZKkdNtmcS0oFIKP8ADM0kVvCZEGajRo8/l4R3pk9stV2JavVEvy4ie3vjNt2q9Zy82djpZtSwoQgfiyHkF3um5ZNpUohMTC2oTotLV76PDMw1Xhi6gcWUd2z7ZbbMP8pXXmlmw+RnRpauyVtiIBxLRJ571eiCF+PL3/zFRN1vFjboLu3LoxbrN/TMM9JNDJJHZrQWalhky/0AEwTWjhiODj1y7OxU9u+sKZk1Vjz2IVmRF7TrH49Oh7jdF9BuZ9cAS8UPiV+5MNy4Xg2hc6HsFD6Z+d/uICH1FFTn61KcvKOL/nIPN7R36R4q9BuD0Cb5EWtWP6KWkI4pQFvm4sHkE681W2kPeR/1WOvI9Vp6vEFGIvSdMULP5z5GeKwH8xxJjvcgpRgJxFCJ4fadyQ/CP3P91e6ltQ7wdcwemYRiChqQlYTaLBXQh5zmgMRkPsCr88/sEmxhFxC/c/3dYepJroUpNVWfjXzIbMrmkEnOiySRjiOmvplglDIWKHAGILAqcRqsaQeM2vKBEQyOJSYhWZXwtCv7Z3xFbYbqdE1Dtia/7EunQOQF1rr+MqyRe9a9mDYTUBdCKbjj3q3JfNmDY1AYsXYDWxjKIGOAF3TShAkzBlTX+5yCUAwMU9+X+H4NrWoBkjVEZCZaDKJ8rcIVxOolfnAUuSLwI6v+e6kY3DuqmTQ27JUfFBBqSg+LlGYnYWhSIIWgNKOsPA3d7wnOv6CvWbLdeEyeb8M80Hnv9+bzqvVsCSU5nv3/pO49wj1uL6lc5olktcslssIaYJzUpvFIU8z/XbZTW0EjeBlbH7dyDNt40ea6T86ayjAiuwJ16S1FWIWmFcPbGwAmLIw3jzgee/XwUlmCoIn4TOv2bjBgBv8Fn0pfB5qS8JKuf/tej7Ff6GhCkCCpfQWJO8CQCqQNzqqrAd052QuHAumxv6pttg36+LEXaVj0YU4FImRaGZPIvHBBBTg+fMqowJIqHz94xtG7bhrwC8K8RlI80r/hc0gLV8ppPhrg2HTz9e+4BLREEAoM/cuBntczqXr87zbWpAuG4TD/zuqXOtbjuzMlFQ5ZKwtSZRrQJjevUbMj0CV63iW/YmsFGf/Bo1atSoUaNGjRo1atSoUaPGusX/A9+G4b6s8K0HAAAAAElFTkSuQmCC");
+  background-size: 44rpx 44rpx;
+  background-repeat: no-repeat;
+  background-position: center;
   align-self: flex-end;
   flex-shrink: 0;
   box-sizing: border-box;
 }
-/* 话筒头：圆角胶囊（插进 U 形支架上口） */
-.chat-mic::before {
-  content: '';
-  width: 14rpx;
-  height: 24rpx;
-  border-radius: 7rpx;
-  background: currentColor;
-  transform: translateY(-5rpx);
-}
-/* 拾音支架：U 形（左右臂 + 底弧），开口朝上接住话筒头 */
-.chat-mic::after {
-  content: '';
-  position: absolute;
-  top: 26rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 26rpx;
-  height: 20rpx;
-  box-sizing: border-box;
-  border: 3rpx solid currentColor;
-  border-top: none;
-  border-radius: 0 0 13rpx 13rpx;
-}
-/* 底部短杆：从 U 弧底部垂下（麦克风颈杆） */
-.mic-stem {
-  position: absolute;
-  top: 47rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 3rpx;
-  height: 8rpx;
-  background: currentColor;
-}
 .chat-mic:active { opacity: .75; }
-/* 录音中：实心品牌色，给用户明确的「正在录」反馈 */
+/* 录音中：实心品牌色底 + 白色图标，给用户明确的「正在录」反馈 */
 .chat-mic.is-rec {
-  background: var(--brand);
-  color: #fff;
+  background-color: var(--brand);
+  background-image: url("data:image/png;base64,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");
 }
 
 .chat-send::after { border: none; }
