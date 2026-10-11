@@ -185,6 +185,19 @@
 <view class="chat-input-bar">
   <view class="chat-composer">
     <view class="chat-plus" bindtap="openPlus">+</view>
+    <!--
+      语音输入（按住说话）：用 touch 事件而非 tap —— 按住期间要持续判断
+      「上滑取消」，松手才结束并识别。识别结果回填输入框，可编辑后再发送。
+      与「+」同列左侧（规格 §8 修订 ②），右侧只留发送键。
+    -->
+    <view
+      class="chat-mic {{asrPhase === 'recording' ? 'is-rec' : ''}}"
+      bindtouchstart="onVoiceStart"
+      bindtouchmove="onVoiceMove"
+      bindtouchend="onVoiceEnd"
+      bindtouchcancel="onVoiceCancel"
+      aria-label="按住说话"
+    ><view class="mic-stem"></view></view>
     <!-- 自动朗读开关：开启后 AI 回复完自动播报（落 storage 记忆） -->
     <view
       class="chat-auto {{autoSpeak ? 'is-on' : ''}}"
@@ -208,18 +221,6 @@
       bindconfirm="onConfirm"
       disabled="{{sending}}"
     />
-    <!--
-      语音输入（按住说话）：用 touch 事件而非 tap —— 按住期间要持续判断
-      「上滑取消」，松手才结束并识别。识别结果回填输入框，可编辑后再发送。
-    -->
-    <view
-      class="chat-mic {{asrPhase === 'recording' ? 'is-rec' : ''}}"
-      bindtouchstart="onVoiceStart"
-      bindtouchmove="onVoiceMove"
-      bindtouchend="onVoiceEnd"
-      bindtouchcancel="onVoiceCancel"
-      aria-label="按住说话"
-    ></view>
     <button
       class="chat-send"
       bindtap="send"
@@ -231,8 +232,18 @@
   </view>
 </view>
 
-<!-- 录音态浮层：录音中 / 识别中，覆盖在页面上，明确「松手识别、上滑取消」 -->
-<view wx:if="{{asrPhase !== 'idle'}}" class="voice-mask" catchtouchmove="noop">
+<!--
+  录音态浮层：录音中 / 识别中，覆盖在页面上，明确「松手识别、上滑取消」。
+  ⚠️ 遮罩必须绑 touchend/touchcancel/touchmove（规格 §8 修订 ③）：部分真机会把
+  触摸序列派发给 hit-test 到的全屏遮罩而非原按钮，不绑 = 松手收不到 → 浮层悬挂。
+-->
+<view
+  wx:if="{{asrPhase !== 'idle'}}"
+  class="voice-mask"
+  catchtouchmove="onVoiceMove"
+  bindtouchend="onVoiceEnd"
+  bindtouchcancel="onVoiceCancel"
+>
   <view class="vm-card">
     <view class="vm-wave {{asrPhase === 'recording' && !asrCancelling ? '' : 'is-busy'}}">
       <view class="vw-bar"></view><view class="vw-bar"></view><view class="vw-bar"></view>
