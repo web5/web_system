@@ -281,6 +281,27 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 > 代码侧已用 `wx.requirePrivacyAuthorize` 主动方式（`services/asr.ts`），
 > 因此 `app.ts` 无需再注册 `wx.onNeedPrivacyAuthorization`。
 
+### 5.5 「点一下麦克风也弹录音浮层」= 授权异步窗口期（按住说话语义被架空）
+
+真机现象：轻点麦克风 → 录音浮层弹出且**停不下来**（直到 60s 上限），看起来像是"点击录音"，
+与设计的"按住说话"不符。
+
+根因链（2026-10-11 修复）：
+
+1. `startAsr()` 里隐私协议 + 录音授权是 **await**（首次还会弹系统授权框，1s 量级）；
+2. 旧实现在这段 await 期间状态仍是 `idle` → 手指已抬起，`touchend` 判定"不在 recording"直接 return；
+3. 授权回来后录音才真正启动，而**没有任何人再给它结束信号** → 浮层悬挂。
+
+修法（`services/asr.ts`，状态机见 `prototype/voice-input-spec.md`）：
+
+- 按下即**同步**入 `preparing` 态（不等 await），touchend 才认得出"按下过但还没开麦"；
+- 松手 / `touchcancel` / 页面卸载在 `preparing` 期间一律作废本次，授权回来不再开麦；
+- 授权结果按会话缓存（`privacyOk` / `authOk`），二次按下不再被 await 卡住（"按了没反应"的次因）；
+- 录音 <500ms 归为误触，提示改为动作导向的「按住麦克风说话，松手识别」。
+
+> 判定口诀：**手指离开 = 本次结束**，代码里不允许存在"松手后才开麦"的路径。
+> 三条不变量由 `tests/asr-hold.test.ts` 锁死（旧代码下 5 条用例全红）。
+
 ---
 
 ## 六、后端部署：把 dev 验证过的东西送到 prod
@@ -319,3 +340,4 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 | 2026-10-10 | 初版。CI 脚本改造（PR #292）：二维码 `image` 落盘、版本读 `package.json`、支持 `PREVIEW_PAGE`、`MINIPROGRAM_CI_PATH` 依赖隔离 |
 | 2026-10-11 | §5.1 登录失败判定三连（AppSecret 失效）；§5.2 扫码白屏 = 小程序码 path 指向不存在页面；§5.3 三环境 apiBase + prod 需同步改 AppSecret（PR #307） |
 | 2026-10-11 | §5.4 隐私校验前置（全局生效 + 未声明即拦截 + 隐私接口↔声明类型对照）；§六 后端 prod 部署手法（备份优先、migration 需读注释、只构建改动服务、临时 token 验证法） |
+| 2026-10-11 | §5.5 「点一下也弹录音浮层」= 授权异步窗口期；按住说话修复为 `preparing` 状态机（PR #312） |
