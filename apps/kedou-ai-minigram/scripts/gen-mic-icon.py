@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""生成输入栏图标：线性（常态）+ 面性（录音中高亮）两套风格。
+"""生成输入栏图标：全面型（filled）两套底色共用一套白图。
 
-交互规范：常态 = 线性（浅橙底 + 橙细描边），录音中 = 面性（实心橙底 + 白面性），
-激活态有明确视觉跃迁。生成后 base64 内联进 WXSS（小程序 background-image 只吃 base64）。
+交互规范（2026-10-12 v1.0.9 真机定稿）：
+- 常态 = 面性：实心橙底（--brand #F97316）+ 白色图标
+- 录音中高亮 = 面性深橙底（--brand-deep #E8620A）+ 同款白图标（CSS 底色切换区分，不换图）
+生成后 base64 内联进 WXSS（小程序 background-image 只吃 base64）。
 """
 import base64
 import io
@@ -69,29 +71,26 @@ def b64(img):
 
 
 def main():
-    mic_lo = mic_line(ORANGE)
-    mic_fw = mic_fill(WHITE)
-    plus_lo = plus_line(ORANGE)
+    mic_fw = mic_fill(WHITE)   # 面性白麦克风（常态 / 录音中共用）
+    plus_fw = plus_line(WHITE)  # 面性白加号（常态）
 
-    mic_lo.save("/tmp/mic-line-orange.png")
     mic_fw.save("/tmp/mic-fill-white.png")
-    plus_lo.save("/tmp/plus-line-orange.png")
+    plus_fw.save("/tmp/plus-fill-white.png")
 
-    # 拼接对比图：常态（浅橙底） | 录音中（橙底） | 加号（浅橙底）
-    BG = (255, 248, 240)
-    preview = Image.new("RGB", (SIZE * 3, SIZE), BG)
+    # 拼接对比图：麦克风常态（橙底）| 录音中（深橙底）| 加号（橙底）
+    preview = Image.new("RGB", (SIZE * 3, SIZE), (255, 255, 255))
     def paste(img, x, bg):
         preview.paste(Image.new("RGB", (SIZE, SIZE), bg), (x, 0))
         preview.paste(img, (x, 0), img)
-    paste(mic_lo, 0, (255, 237, 213))
-    paste(mic_fw, SIZE, (249, 115, 22))
-    paste(plus_lo, SIZE * 2, (255, 237, 213))
+    paste(mic_fw, 0, (249, 115, 22))
+    paste(mic_fw, SIZE, (232, 98, 10))
+    paste(plus_fw, SIZE * 2, (249, 115, 22))
     preview = preview.resize((SIZE * 3 * 4, SIZE * 4), Image.NEAREST)
-    preview.save("/tmp/mic-preview2.png")
+    preview.save("/tmp/mic-preview3.png")
 
-    with open("/tmp/mic2-b64.txt", "w") as f:
-        f.write("\n".join([b64(mic_lo), b64(mic_fw), b64(plus_lo)]))
-    print("done; 三张图 base64 已写入 /tmp/mic2-b64.txt")
+    with open("/tmp/mic3-b64.txt", "w") as f:
+        f.write("\n".join([b64(mic_fw), b64(plus_fw)]))
+    print("done; 两张白图 base64 已写入 /tmp/mic3-b64.txt（行1=麦克风，行2=加号）")
 
 
 main()

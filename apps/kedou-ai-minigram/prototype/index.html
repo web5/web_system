@@ -270,12 +270,12 @@
   .sugs span { font-size: 12.5px; padding: 7px 12px; border-radius: 15px; background: var(--card); color: var(--t2); border: .5px solid var(--line); cursor: pointer; }
   .sugs span:active { background: var(--brand-soft); color: var(--brand-txt); }
   .composer { flex: none; display: flex; align-items: center; gap: 9px; padding: 9px 14px 12px; background: var(--nav-bg); border-top: .5px solid var(--line); }
-  /* 输入栏圆钮（+ / 麦克风）：常态线性 —— 浅橙底 + 橙细描边（spec §8 定稿 v1.0.8） */
-  .composer .plus, .composer .mic { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-50); color: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+  /* 输入栏圆钮（+ / 麦克风）：全面型（filled）—— 实心橙底 + 白图（spec §8 定稿 v1.0.9） */
+  .composer .plus, .composer .mic { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
   .composer .plus svg, .composer .mic svg { width: 19px; height: 19px; display: block; }
   .composer .plus:active, .composer .mic:active { opacity: .75; }
-  /* 录音中（高亮）= 面性：实心橙底 + 白图标（激活态视觉跃迁，用户补充） */
-  .composer .mic.is-rec { background: var(--brand); color: #fff; }
+  /* 录音中（高亮）= 深橙底 + 白图标（全面型，底色切换区分） */
+  .composer .mic.is-rec { background: var(--brand-deep); color: #fff; }
   /* 输入区为单行 input（与真机一致）：回车 / 键盘「发送」直接发送，回车不再换行 */
   .composer input { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
   .composer input::placeholder { color: var(--t3); }
