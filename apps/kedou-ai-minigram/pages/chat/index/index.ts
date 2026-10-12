@@ -185,6 +185,9 @@ Page({
         才能与原生胶囊视觉对齐。真机若仍感偏高/偏低，只调 initNavBar 里这两个常量 */
     navTitleTop: 29,
     navTextTop: 28,
+    /** 对话记录 icon 的 top = capsuleTop + 1：用户实测确认——同为纯 icon，
+        它比返回键需多 1px 下移才视觉齐平（自身图形重心差异） */
+    navHistTop: 27,
     /** 「+」菜单是否展开 */
     showPlus: false,
     /**
@@ -319,6 +322,7 @@ Page({
       statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight,
       navTextTop: capsuleTop + 2,
       navTitleTop: capsuleTop + 3,
+      navHistTop: capsuleTop + 1,
     });
   },
 
