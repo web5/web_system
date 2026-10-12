@@ -14,6 +14,8 @@ export interface PublishPayload {
   folder?: string;
   /** 原文链接（用于出处标注） */
   source_url?: string;
+  /** 公众号多账号：不传用默认号；传 kedouai 等走对应账号凭据 */
+  account?: string;
 }
 
 export interface PublishResult {
