@@ -16,23 +16,49 @@ export interface DraftResult {
 export class WechatMpPublisher implements IPublisher {
   readonly target = 'wechat_mp';
   private readonly logger = new Logger(WechatMpPublisher.name);
-  private client: WechatMpClient | null = null;
+  /** 多公众号：account → client 缓存（默认号 key 为 default） */
+  private readonly clients = new Map<string, WechatMpClient>();
 
-  private getClient(): WechatMpClient {
-    const appId = process.env.WECHAT_MP_APP_ID ?? '';
-    const appSecret = process.env.WECHAT_MP_APP_SECRET ?? '';
+  /**
+   * 按账号取 client。
+   * - 不传 / default：读 WECHAT_MP_APP_ID / WECHAT_MP_APP_SECRET
+   * - 传 kedouai：读 WECHAT_MP_KEDOUAI_APP_ID / WECHAT_MP_KEDOUAI_APP_SECRET
+   * 若配置了 WECHAT_MP_ACCOUNTS，则只放行名单内的账号，防止拼错变量名静默落到空凭据。
+   */
+  private getClient(account?: string): WechatMpClient {
+    const key = (account || 'default').trim().toLowerCase();
+
+    const allowList = (process.env.WECHAT_MP_ACCOUNTS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowList.length > 0 && !allowList.includes(key)) {
+      throw new Error(
+        `公众号账号「${key}」未注册，可用账号：${allowList.join(' / ')}`,
+      );
+    }
+
+    const cached = this.clients.get(key);
+    if (cached) return cached;
+
+    const suffix = key === 'default' ? '' : `_${key.toUpperCase()}`;
+    const appId = process.env[`WECHAT_MP${suffix}_APP_ID`] ?? '';
+    const appSecret = process.env[`WECHAT_MP${suffix}_APP_SECRET`] ?? '';
     if (!appId || !appSecret) {
-      throw new Error('微信公众号凭据未配置（WECHAT_MP_APP_ID/APP_SECRET）');
+      throw new Error(
+        `公众号账号「${key}」凭据未配置（WECHAT_MP${suffix}_APP_ID/APP_SECRET）`,
+      );
     }
-    if (!this.client) {
-      // WECHAT_MP_API_BASE 可选：默认官方 API，测试/私有化可指向代理
-      this.client = new WechatMpClient({
-        appId,
-        appSecret,
-        apiBase: process.env.WECHAT_MP_API_BASE || undefined,
-      });
-    }
-    return this.client;
+
+    // WECHAT_MP_API_BASE 可选：默认官方 API，测试/私有化可指向代理
+    const client = new WechatMpClient({
+      appId,
+      appSecret,
+      apiBase: process.env.WECHAT_MP_API_BASE || undefined,
+    });
+    this.clients.set(key, client);
+    this.logger.log(`[wechat_mp] 使用公众号账号: ${key}`);
+    return client;
   }
 
   /** 发布：建草稿 → freepublish 提交发布（对外契约 publish()） */
@@ -45,7 +71,7 @@ export class WechatMpPublisher implements IPublisher {
 
     let client: WechatMpClient;
     try {
-      client = this.getClient();
+      client = this.getClient(payload.account);
     } catch (e) {
       return { success: false, error: (e as Error).message };
     }
@@ -72,7 +98,7 @@ export class WechatMpPublisher implements IPublisher {
 
     let client: WechatMpClient;
     try {
-      client = this.getClient();
+      client = this.getClient(payload.account);
     } catch (e) {
       return { success: false, error: (e as Error).message };
     }

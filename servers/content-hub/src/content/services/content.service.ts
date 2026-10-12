@@ -19,6 +19,8 @@ export interface WechatMpPublishDto {
   source_url?: string;
   /** 关联内容条目 ID（发布记录用，可省略） */
   item_id?: number;
+  /** 公众号账号：不传用默认号（大橙子社区），传 kedouai 用科豆AI 号 */
+  account?: string;
 }
 
 @Injectable()
@@ -106,6 +108,7 @@ export class ContentService {
       thumb_media_id: dto.thumb_media_id,
       digest: dto.digest,
       source_url: dto.source_url,
+      account: dto.account,
     };
     const result = await this.wechatMpPublisher.publish(payload);
     await this.publicationRepo.save(
@@ -129,6 +132,7 @@ export class ContentService {
       thumb_media_id: dto.thumb_media_id,
       digest: dto.digest,
       source_url: dto.source_url,
+      account: dto.account,
     };
     return this.wechatMpPublisher.createDraft(payload);
   }
