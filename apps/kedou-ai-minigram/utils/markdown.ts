@@ -18,12 +18,21 @@
  * 未配对收尾的 ``` 代码围栏不生效（按普通段落渲染），完成态 onReply 重算即定型。
  */
 
-/** rich-text 节点（只用白名单：div / span / text / br；style 值一律 px） */
+/** rich-text 元素节点（只用白名单：div / span / text / br；style 值一律 px） */
 export interface MdNode {
   name: string;
   attrs?: Record<string, string>;
-  children?: Array<MdNode | string>;
+  children?: MdChild[];
 }
+/** rich-text 文本节点（官方 nodes 格式：children 不接受裸字符串，文本必须包这层） */
+export interface MdTextNode {
+  type: 'text';
+  text: string;
+}
+export type MdChild = MdNode | MdTextNode;
+
+/** 文本节点快捷构造 */
+const txt = (text: string): MdTextNode => ({ type: 'text', text });
 
 /* ===== 设计 Token 硬编码副本（与 app.wxss 同步） ===== */
 const C = {
@@ -53,27 +62,27 @@ const BASE = `font-size:${px(26)};line-height:1.6;color:${C.t1};word-break:break
 /* ================= 行内解析 ================= */
 
 /** 行内标记节点（code / bold / italic / del / link） */
-function inlineSpan(style: string, children: Array<MdNode | string>): MdNode {
+function inlineSpan(style: string, children: MdChild[]): MdNode {
   return { name: 'span', attrs: { style: BASE + style }, children };
 }
 
 /** 纯文本节点 */
 function textSpan(text: string, extraStyle = ''): MdNode {
-  return { name: 'span', attrs: { style: BASE + extraStyle }, children: [text] };
+  return { name: 'span', attrs: { style: BASE + extraStyle }, children: [txt(text)] };
 }
 
 /**
  * 行内解析：手写扫描器（正则难以表达「未闭合就原样输出」的降级语义）。
  * 支持：`code`、**bold**、__bold__、*italic*、_italic_、~~del~~、[text](url)、![alt](url)。
  */
-function parseInline(src: string): Array<MdNode | string> {
-  const out: Array<MdNode | string> = [];
+function parseInline(src: string): MdChild[] {
+  const out: MdChild[] = [];
   let buf = '';
   let i = 0;
 
   const flush = () => {
     if (buf) {
-      out.push({ name: 'span', attrs: { style: BASE }, children: [buf] });
+      out.push({ name: 'span', attrs: { style: BASE }, children: [txt(buf)] });
       buf = '';
     }
   };
@@ -90,7 +99,7 @@ function parseInline(src: string): Array<MdNode | string> {
           inlineSpan(
             `background:${C.codeBg};border-radius:${px(8)};padding:0 ${px(6)};` +
               `font-family:Menlo,Consolas,monospace;font-size:${px(23)};color:${C.codeText};`,
-            [src.slice(i + 1, close)],
+            [txt(src.slice(i + 1, close))],
           ),
         );
         i = close + 1;
@@ -234,7 +243,7 @@ export function mdToNodes(src: string): MdNode[] {
 
   const flushPara = () => {
     if (!paraBuf.length) return;
-    const children: Array<MdNode | string> = [];
+    const children: MdChild[] = [];
     paraBuf.forEach((line, idx) => {
       if (idx > 0) children.push({ name: 'br' });
       parseInline(line).forEach((n) => children.push(n));
@@ -260,10 +269,10 @@ export function mdToNodes(src: string): MdNode[] {
     if (fence) {
       flushPara();
       const body = lines.slice(fence[0] + 1, fence[1]);
-      const children: Array<MdNode | string> = [];
+      const children: MdChild[] = [];
       body.forEach((codeLine, idx) => {
         if (idx > 0) children.push({ name: 'br' });
-        children.push(codeLine);
+        children.push(txt(codeLine));
       });
       nodes.push({
         name: 'div',
@@ -318,7 +327,7 @@ export function mdToNodes(src: string): MdNode[] {
         quoteLines.push(lines[i].trim().replace(/^>{1,}\s?/, ''));
         i += 1;
       }
-      const children: Array<MdNode | string> = [];
+      const children: MdChild[] = [];
       quoteLines.forEach((q, idx) => {
         if (idx > 0) children.push({ name: 'br' });
         parseInline(q).forEach((n) => children.push(n));
@@ -345,7 +354,7 @@ export function mdToNodes(src: string): MdNode[] {
           name: 'div',
           attrs: { style: BASE + 'display:flex;margin:0 0 4px;' },
           children: [
-            { name: 'span', attrs: { style: BASE + `flex:0 0 ${px(28)};color:${C.brand};` }, children: ['•'] },
+            { name: 'span', attrs: { style: BASE + `flex:0 0 ${px(28)};color:${C.brand};` }, children: [txt('•')] },
             { name: 'span', attrs: { style: BASE + 'flex:1;' }, children: parseInline(content) },
           ],
         });
@@ -368,7 +377,7 @@ export function mdToNodes(src: string): MdNode[] {
             {
               name: 'span',
               attrs: { style: BASE + `flex:0 0 ${px(32)};color:${C.t2};` },
-              children: [`${n}.`],
+              children: [txt(`${n}.`)],
             },
             { name: 'span', attrs: { style: BASE + 'flex:1;' }, children: parseInline(content) },
           ],
@@ -399,7 +408,7 @@ export function mdToNodes(src: string): MdNode[] {
         const cols = Math.max(...rows.map((r) => r.length));
         rows.forEach((cells, r) => {
           const isHead = hasSep && r === 0;
-          const children: Array<MdNode | string> = [];
+          const children: MdChild[] = [];
           for (let c = 0; c < cols; c += 1) {
             const cell = cells[c] ?? '';
             children.push({
