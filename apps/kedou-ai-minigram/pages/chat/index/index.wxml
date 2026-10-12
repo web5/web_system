@@ -46,7 +46,7 @@
 
       <view
         wx:for="{{chatMessages}}"
-        wx:key="index"
+        wx:key="_id"
         wx:for-index="idx"
         class="chat-msg {{item.role}}"
       >

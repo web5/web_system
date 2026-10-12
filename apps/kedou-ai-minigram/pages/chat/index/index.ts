@@ -173,6 +173,38 @@ function withMdNodes(msgs: ChatMsg[]): ChatMsg[] {
   });
 }
 
+/**
+ * 合并历史会话里连续的 assistant 文本消息。
+ *
+ * 为什么需要：服务端 agent 引擎是 ReAct 多步循环，每一步的 assistant content 都单独落库
+ * （如天气问答：第一轮「我来帮你查一下…」+ 工具执行后正文 = DB 里两条 assistant）。
+ * 实时对话时前端只维护一个气泡（PC 端 delta 拼接 / 小程序 final 覆盖），视觉上就是一条；
+ * 历史载入若按 DB 原样渲染，「一次问答」会裂成两个气泡，与实时形态不一致。
+ *
+ * 口径：仅合并「都不带 musicCard」的相邻 assistant（卡片必须挂在各自的消息上）；
+ * 段落间用 \n\n 连接（markdown 下是两个段落，视觉有呼吸）。
+ */
+function mergeConsecutiveAi(msgs: ChatMsg[]): ChatMsg[] {
+  const out: ChatMsg[] = [];
+  for (const m of msgs) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.role === 'ai' &&
+      m.role === 'ai' &&
+      !prev.musicCard &&
+      !m.musicCard &&
+      prev.text &&
+      m.text
+    ) {
+      out[out.length - 1] = { ...prev, text: `${prev.text}\n\n${m.text}` };
+      continue;
+    }
+    out.push({ ...m });
+  }
+  return out;
+}
+
 Page({
   data: {
     radiusClass: "",
@@ -264,7 +296,7 @@ Page({
       __bus.on('auth:expired', this._offAuthExpired);
     }
     this.setData({
-      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING }]),
+      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING, _id: 'welcome' }]),
     });
     // 播放结束 / 停止时清除按钮「停止」态（合成中由 await 时序管理）
     this._offSpeakState = onSpeakState((s) => {
@@ -441,11 +473,15 @@ Page({
             musicCard: card,
             _id: `h-${Math.random().toString(36).slice(2)}`,
           };
-        })
-        // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
-        .filter((m) => m.musicCard || m.text || m.role === 'user');
-      // ③ 长会话只取最近 N 条，避免一次性渲染过多
-      const msgs = all.length > RECENT_MSG_LIMIT ? all.slice(-RECENT_MSG_LIMIT) : all;
+      })
+      // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
+      .filter((m) => m.musicCard || m.text || m.role === 'user');
+      // ③ 合并连续的 assistant：服务端 ReAct 两段式（第一轮过渡语 + 工具后正文）会落库
+      // 两条独立 assistant，实时对话是「一条气泡」（PC 端 += 拼接 / 小程序 final 覆盖），
+      // 历史载入若不合并就会裂成两条气泡——与实时形态不一致，用户感知「一次对话变两条」。
+      const mergedAll = mergeConsecutiveAi(all);
+      // ④ 长会话只取最近 N 条，避免一次性渲染过多
+      const msgs = mergedAll.length > RECENT_MSG_LIMIT ? mergedAll.slice(-RECENT_MSG_LIMIT) : mergedAll;
       try {
         wx.setStorageSync(CONV_CACHE_PREFIX + id, msgs);
       } catch {
@@ -462,7 +498,7 @@ Page({
     this.setData({
       conversationId: id,
       chatMessages: msgs.length
-        ? withMdNodes(decorateHistoryCards(msgs))
+        ? withMdNodes(decorateHistoryCards(mergeConsecutiveAi(msgs)))
         : withMdNodes([{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }]),
       sending: false,
       input: '',
@@ -487,7 +523,7 @@ Page({
       input: '',
       expandMap: {},
       suggestions: OPENING_SUGGESTIONS as string[],
-      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING }]),
+      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING, _id: 'welcome' }]),
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
       copyIdx: -1,
