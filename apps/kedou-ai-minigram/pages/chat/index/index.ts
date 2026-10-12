@@ -175,6 +175,11 @@ Page({
     navHeight: 44,
     /** 「新增对话」胶囊避让：按钮右缘距屏幕右边 px（102 = 兜底值，onLoad 时按胶囊矩形动态算） */
     navActRight: 102,
+    /** 自定义导航元素垂直基准：胶囊 top 相对内容区（已扣 statusBarHeight）px ——
+        与原生胶囊同中线，替代"44px 区间中线"假设（rect.top−statusBarHeight 随机型而变） */
+    capsuleTop: 6,
+    /** 胶囊高度 px（标准 32，以实测为准） */
+    capsuleHeight: 32,
     /** 「+」菜单是否展开 */
     showPlus: false,
     /**
@@ -265,35 +270,43 @@ Page({
    * 自定义导航栏尺寸：状态栏高 + 胶囊下沿，保证标题与原生胶囊视觉对齐。
    * 取不到时保留 data 里的默认值（不阻塞页面）。
    */
+  /**
+   * 自定义导航栏：胶囊矩形是水平避让与垂直对齐的唯一基准。
+   * 背景：rect.top − statusBarHeight 随机型而异（iOS 标准 6，部分安卓 12+），
+   * 硬编码"内容区 44px 中线"会与原生胶囊错位数 px（实测偏移 12px，用户可感知）。
+   * 取一次矩形同时解两题：
+   *   垂直 —— 自定义元素 top/height 绑胶囊，与胶囊严格同中线
+   *   水平 —— 新增对话 right = 屏宽 − 胶囊左缘 + 12px
+   * API 异常或 rect 全 0（旧基础库/开发者工具）时全部走兜底值，不阻塞渲染。
+   */
   initNavBar() {
+    let statusBarHeight = 20;
     try {
       const sys = wx.getSystemInfoSync();
-      const statusBarHeight = sys.statusBarHeight || 20;
-      // 导航栏内容区固定 44px（微信标准）：胶囊（32px 高）在其中自然居中，
-      // 且 44px 与机型无关 —— 返回键 / 标题 / 右上操作都以它做垂直基准
-      this.setData({ statusBarHeight, navHeight: statusBarHeight + 44 });
+      statusBarHeight = sys.statusBarHeight || 20;
     } catch {
-      // 忽略：退回默认高度
+      // 保留默认
     }
-    this.initNavActRight();
-  },
-
-  /**
-   * 「新增对话」水平避让：原生胶囊（右上角 ···/◯）左缘随机型而异
-   * （屏宽与胶囊宽度都不同），硬编码 right 在小屏/刘海屏必翻车。
-   * 按胶囊矩形动态算：right = 屏宽 − 胶囊左缘 + 12px（12px = 呼吸间距）。
-   * API 异常或 rect 全 0（旧基础库/开发者工具）时保留 102px 兜底。
-   */
-  initNavActRight() {
+    // 兜底值：iOS 标准姿态（差值 6 / 胶囊 32 / 导航 44）
+    let navHeight = statusBarHeight + 44;
+    let capsuleTop = 6;
+    let capsuleHeight = 32;
+    let navActRight = 102;
     try {
       const sys = wx.getSystemInfoSync();
       const rect = wx.getMenuButtonBoundingClientRect();
-      if (rect && rect.left > 0 && sys.windowWidth) {
-        this.setData({ navActRight: Math.max(12, sys.windowWidth - rect.left + 12) });
+      if (rect && rect.top > 0 && rect.height > 0) {
+        capsuleTop = rect.top - statusBarHeight;   // 内容区内相对位置
+        capsuleHeight = rect.height;
+        navHeight = rect.bottom + 12;              // 内容下沿：胶囊下 12px
+        if (sys.windowWidth && rect.left > 0) {
+          navActRight = Math.max(12, sys.windowWidth - rect.left + 12);
+        }
       }
     } catch {
-      // 忽略：保留 data 默认 102
+      // 忽略：保留全部兜底值
     }
+    this.setData({ statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight });
   },
 
   /**

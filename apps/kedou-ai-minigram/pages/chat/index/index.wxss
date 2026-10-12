@@ -513,6 +513,7 @@ page {
 .nav-back {
   position: absolute;
   left: 8rpx;
+  /* 运行时被 wxml style 覆盖（top/height 绑胶囊矩形）；bottom/height 为兜底，勿当设计值 */
   bottom: 0;
   /* 热区 8~64rpx：与右侧列表图标紧邻，两图标视觉间隙收窄到约 50rpx（原 ~82rpx） */
   width: 56rpx;
@@ -536,6 +537,7 @@ page {
 .nav-hist {
   position: absolute;
   left: 64rpx;
+  /* 运行时被 wxml style 覆盖（top/height 绑胶囊矩形）；bottom/height 为兜底，勿当设计值 */
   bottom: 0;
   width: 56rpx;
   height: 44px;
@@ -556,6 +558,7 @@ page {
   position: absolute;
   left: 0;
   right: 0;
+  /* 运行时被 wxml style 覆盖（top/height/line-height 绑胶囊矩形）；以下为兜底，勿当设计值 */
   bottom: 0;
   height: 44px;
   line-height: 44px;
@@ -569,6 +572,7 @@ page {
   /* 运行时被 wxml style 绑定覆盖（index.ts initNavActRight() 按胶囊左缘动态算）；
      102px 仅是 style 绑定生效前的兜底，勿当成设计值 */
   right: 102px;
+  /* top/height/right 运行时均被 wxml style 覆盖（绑胶囊矩形）；以下为兜底，勿当设计值 */
   bottom: 0;
   height: 44px;
   display: flex;
