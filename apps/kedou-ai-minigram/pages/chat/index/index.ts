@@ -29,6 +29,7 @@ import {
   type AsrPhase,
 } from '../../../services/asr';
 import { collectGlossary } from '../../../services/glossary';
+import { mdToNodes, mdToPlain } from '../../../utils/markdown';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
@@ -83,6 +84,10 @@ interface ChatMsg {
   note?: string;
   /** 卡片方向 meta（如「中文 → 英语」）；推断不出为空，只留 tag */
   meta?: string;
+  /** 运行时：正文的 rich-text nodes 缓存（markdown 渲染，见 utils/markdown.ts） */
+  _nodes?: any[];
+  /** 生成 _nodes 时的原文：命中即跳过重解析（流式期每条 delta 只重算当前条） */
+  _mdSrc?: string;
 }
 
 /**
@@ -152,6 +157,19 @@ function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
     // 消费掉提问：连续多条 AI 消息时，后面那条没有对应提问，meta 不再沿用
     lastUserText = '';
     return out;
+  });
+}
+
+/**
+ * 给消息列表补 rich-text nodes（正文走 markdown 渲染，见 utils/markdown.ts）。
+ * `_mdSrc` 命中缓存的条目不重解析 —— 流式期每条 delta 只重算当前条，
+ * 历史消息nodes 一次生成、后续复用。
+ */
+function withMdNodes(msgs: ChatMsg[]): ChatMsg[] {
+  return msgs.map((m) => {
+    if (!m.text) return m;
+    if (m._mdSrc === m.text && m._nodes) return m;
+    return { ...m, _nodes: mdToNodes(m.text), _mdSrc: m.text };
   });
 }
 
@@ -240,7 +258,7 @@ Page({
       __bus.on('auth:expired', this._offAuthExpired);
     }
     this.setData({
-      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
+      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING }]),
     });
     // 播放结束 / 停止时清除按钮「停止」态（合成中由 await 时序管理）
     this._offSpeakState = onSpeakState((s) => {
@@ -390,7 +408,9 @@ Page({
       // ② 未命中 → 先给占位气泡（不用全屏 loading：它会盖住导航栏、也像卡住）
       this.setData({
         conversationId: id,
-        chatMessages: [{ role: 'ai', text: '正在载入…', _id: 'h-loading', loading: true }],
+        chatMessages: withMdNodes([
+          { role: 'ai', text: '正在载入…', _id: 'h-loading', loading: true },
+        ]),
         sending: false,
         input: '',
         suggestions: [],
@@ -436,8 +456,8 @@ Page({
     this.setData({
       conversationId: id,
       chatMessages: msgs.length
-        ? decorateHistoryCards(msgs)
-        : [{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }],
+        ? withMdNodes(decorateHistoryCards(msgs))
+        : withMdNodes([{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }]),
       sending: false,
       input: '',
       expandMap: {},
@@ -461,7 +481,7 @@ Page({
       input: '',
       expandMap: {},
       suggestions: OPENING_SUGGESTIONS as string[],
-      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
+      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING }]),
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
       copyIdx: -1,
@@ -569,7 +589,8 @@ Page({
     const idx = Number(e?.currentTarget?.dataset?.idx ?? -1);
     if (idx < 0) return;
     const msg = this.data.chatMessages[idx] as ChatMsg | undefined;
-    const text = String(msg?.text || '').trim();
+    // markdown 标记剥离后再送 TTS：星号/井号/反引号会被当标点念出怪声
+    const text = mdToPlain(String(msg?.text || '')).trim();
     if (!text) return;
 
     // 再点一次 = 停止
@@ -603,10 +624,10 @@ Page({
     this.setData({ copyIdx: idx });
   },
 
-  /** 点「复制」：写入系统剪贴板 */
+  /** 点「复制」：写入系统剪贴板（markdown 语法剥离，粘到别处不留星号） */
   onCopyMsg(e: any) {
     const idx = Number(e.currentTarget.dataset.idx);
-    const text = this.data.chatMessages[idx]?.text || '';
+    const text = mdToPlain(this.data.chatMessages[idx]?.text || '');
     this.setData({ copyIdx: -1 });
     if (!text) return;
     wx.setClipboardData({
@@ -657,12 +678,31 @@ Page({
     /** 本轮是否由翻译官作答 → 卡片承载（intent 事件到达后置位，早于任何正文） */
     let isCard = false;
 
+    /**
+     * 流式期打补丁：只传变动字段（路径级 setData）。
+     * 不用全量 chatMessages —— 每条 delta 全量序列化会把整棵 _nodes 树反复过一遍，
+     * 长会话流式会明显掉帧；这里按 idx 定位，仅更新 patch 到的键。
+     * 正文变化时顺带重算该条的 markdown nodes（其余 patch 不触发解析）。
+     */
     const patchAi = (patch: Partial<ChatMsg>) => {
-      this.setData({
-        chatMessages: this.data.chatMessages.map((m: ChatMsg) =>
-          m._id === aiId ? { ...m, ...patch } : m,
-        ),
+      const list = this.data.chatMessages;
+      const idx = list.findIndex((m: ChatMsg) => m._id === aiId);
+      if (idx < 0) return;
+      const merged: ChatMsg = { ...list[idx], ...patch };
+      if (patch.text !== undefined) {
+        merged._nodes = mdToNodes(merged.text || '');
+        merged._mdSrc = merged.text || '';
+      }
+      list[idx] = merged;
+      const payload: Record<string, any> = {};
+      (Object.keys(patch) as Array<keyof ChatMsg>).forEach((k) => {
+        payload[`chatMessages[${idx}].${String(k)}`] = merged[k];
       });
+      if (patch.text !== undefined) {
+        payload[`chatMessages[${idx}]._nodes`] = merged._nodes;
+        payload[`chatMessages[${idx}]._mdSrc`] = merged._mdSrc;
+      }
+      this.setData(payload);
       this.scrollToBottom();
     };
 
@@ -847,7 +887,8 @@ Page({
   async onCardSpeak(e: any) {
     const idx = Number(e.currentTarget.dataset.idx);
     const msg = this.data.chatMessages[idx];
-    const text = msg?.enMain || msg?.text || '';
+    // 卡片主文本理论上是纯文本，仍过一次 mdToPlain 兜底（幂等，无标记时原文输出）
+    const text = mdToPlain(msg?.enMain || msg?.text || '');
     if (!text) return;
     // 再点一次 = 停止（speakText 内部判定，直接返回，无需 loading 态）
     if (this.data.speakPlayingIdx === idx) {

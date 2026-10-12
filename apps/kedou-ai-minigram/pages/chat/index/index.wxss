@@ -137,6 +137,8 @@ page {
 }
 
 .msg-text {
+  /* relative：给 .msg-fade 折叠渐隐遮罩提供定位基准 */
+  position: relative;
   font-size: 26rpx;
   color: inherit;
   line-height: 1.6;
@@ -260,12 +262,27 @@ page {
 }
 
 /* 长 AI 消息：默认折叠 5 行 + 展开更多 */
+/* 折叠：rich-text 内部是节点树，-webkit-line-clamp 只对纯文本生效会失效，
+   改 max-height 裁剪 + 底部渐隐遮罩（.msg-fade 按气泡底色分角色） */
 .msg-bubble.collapsed .msg-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
+  max-height: 216rpx; /* 5 行 × 26rpx × 1.6 ≈ 208rpx，取整留余量 */
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* 折叠渐隐遮罩：绝对定位于正文容器底部，渐变色 = 气泡底色 */
+.msg-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 80rpx;
+  pointer-events: none;
+}
+.msg-fade.ai {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #FFFFFF);
+}
+.msg-fade.user {
+  background: linear-gradient(to bottom, rgba(255, 247, 237, 0), #FFF7ED);
 }
 .msg-expand {
   margin-top: 12rpx;
