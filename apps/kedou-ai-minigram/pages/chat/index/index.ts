@@ -183,7 +183,7 @@ Page({
     /** 含文字元素（标题/新增对话）的 top = capsuleTop + 光学补偿：
         文字视觉重心高于几何中心（汉字字面框 + 拉丁字母升部），对胶囊几何中线下移
         才能与原生胶囊视觉对齐。真机若仍感偏高/偏低，只调 initNavBar 里这两个常量 */
-    navTitleTop: 30,
+    navTitleTop: 29,
     navTextTop: 28,
     /** 「+」菜单是否展开 */
     showPlus: false,
@@ -318,7 +318,7 @@ Page({
     this.setData({
       statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight,
       navTextTop: capsuleTop + 2,
-      navTitleTop: capsuleTop + 4,
+      navTitleTop: capsuleTop + 3,
     });
   },
 
