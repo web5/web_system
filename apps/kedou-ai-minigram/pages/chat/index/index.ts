@@ -249,15 +249,15 @@ Page({
 
   /**
    * 隐藏 tabBar：对话页走沉浸式（navigationStyle 为 custom + 自定义 tabBar 不渲染），
-   * 导航由「顶部返回 icon」与「输入区 + 菜单」承接。
+  /**
+   * 沉浸式（navigationStyle custom + 不挂 tabBar）：导航由「顶部返回 icon」与
+   * 「输入区 + 菜单」承接。2026-10-12 起对话页退出 tabBar 集合（普通页），
+   * tabBar 高亮改由 custom-tab-bar 组件按路由自推导，本页不再手工登记。
    */
   onShow() {
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
-
-    const tabBar = (this as any).getTabBar?.();
-    if (tabBar) tabBar.setData({ currentPage: '/pages/chat/index/index', selected: 0 });
 
     const loggedIn = isLoggedIn();
     this.setData({ loggedIn });
@@ -342,8 +342,8 @@ Page({
 
   /**
    * 从「对话记录」点某条记录返回时载入该会话。
-   * 对话页是 tabBar 页（navigateTo 到不了、switchTab 不能带参数），
-   * 因此历史页把 conversationId 写进 storage，由这里读取后拉详情渲染。
+   * 历史页与对话页同属 chat 包，用 navigateBack 返回 + storage 传会话 id
+   * （兼容 2026-10-12 前的机制；对话页现已退出 tabBar 集合，后续可改 URL 参数）。
    */
   async resumeIfNeeded() {
     let id = '';

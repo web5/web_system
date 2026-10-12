@@ -564,7 +564,8 @@ page {
   line-height: 44px;
   text-align: center;
   font-size: 32rpx;
-  font-weight: 600;
+  /* 不加粗：全 App 页面级 title 统一常规字重（2026-10-12 用户拍板，加粗突兀） */
+  font-weight: 400;
   color: var(--t1);
 }
 .nav-act {

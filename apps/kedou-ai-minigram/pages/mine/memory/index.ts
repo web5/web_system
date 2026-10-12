@@ -69,6 +69,7 @@ Page({
   },
 
   goChat() {
-    wx.switchTab({ url: '/pages/chat/index/index' });
+    // navigateTo（非 switchTab）：对话页是普通页，进页面栈右滑可退回本页
+    wx.navigateTo({ url: '/pages/chat/index/index' });
   },
 });

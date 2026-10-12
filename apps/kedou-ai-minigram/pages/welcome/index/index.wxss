@@ -3,6 +3,20 @@ page {
   background: var(--page-bg);
 }
 
+/* 自绘导航（替代系统白导航栏）：状态栏 + 44px 标题行，与对话页自定义导航同规格 */
+.w-nav {
+  background: var(--page-bg);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.w-nav-t {
+  font-size: 32rpx;
+  font-weight: 400;
+  color: var(--t1);
+  line-height: 44px;
+}
+
 .page {
   min-height: 100vh;
   background: var(--page-bg);
@@ -10,13 +24,19 @@ page {
   flex-direction: column;
   justify-content: space-between;
   /* 手动挂载的自定义 tabBar 不占原生层，页面需自行留出底部空间 */
-  padding: 140rpx 48rpx calc(150rpx + env(safe-area-inset-bottom));
+  padding: 0 48rpx calc(150rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+/* 顶部留白从 .page padding 挪到内容组（自绘导航进了文档流，.page 要保持 100vh 不溢出） */
+.w-group {
+  margin-top: 140rpx;
 }
 
 .w-hello {
   font-size: 88rpx;
-  font-weight: 600;
+  /* 不加粗：全 App 页面级 title 统一常规字重（2026-10-12 用户拍板，加粗突兀） */
+  font-weight: 400;
   letter-spacing: -2rpx;
   color: var(--t1);
   line-height: 1.2;

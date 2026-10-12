@@ -22,6 +22,10 @@ interface Recent {
 Page({
   data: {
     radiusClass: "",
+    /** 自绘导航（navigationStyle custom）：状态栏高与导航行总高 px。
+        欢迎页原用系统导航栏（白底），与页面暖白底 + 对话页 custom 导航在转场时露白帧 —— 统一自绘后同色无缝 */
+    statusBarHeight: 20,
+    navBarHeight: 64,
     quote: getDailyQuote(),
     /** 最近一次会话（最多展示一条）；null = 还没有任何会话 */
     recent: null as Recent | null,
@@ -39,8 +43,15 @@ Page({
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
 
-    const tabBar = this.selectComponent('#tabbar') as any;
-    if (tabBar) tabBar.setData({ currentPage: '/pages/welcome/index/index', selected: -1 });
+    // 自绘导航高度：状态栏 + 44px 标题行（与对话页自定义导航同规格）
+    try {
+      const sys = wx.getSystemInfoSync();
+      const statusBarHeight = sys.statusBarHeight || 20;
+      this.setData({ statusBarHeight, navBarHeight: statusBarHeight + 44 });
+    } catch {
+      // 保留默认高度
+    }
+
     this.loadRecent();
   },
 
@@ -110,16 +121,18 @@ Page({
   /**
    * 点最近对话卡片：写入待恢复会话 id → 进对话页。
    * 对话页 onShow 会载入该会话并滚动到底部（聚焦最新一条）。
+   * navigateTo（非 switchTab）：对话页 2026-10-12 起是普通页，进页面栈，
+   * 右滑 / 返回 icon 均可退回欢迎页（switchTab 会清栈导致右滑退出小程序）。
    */
   openConv(e: any) {
     const id = String(e.currentTarget.dataset.id || '');
     if (!id) return;
     wx.setStorageSync(RESUME_CONV_KEY, id);
-    wx.switchTab({ url: '/pages/chat/index/index' });
+    wx.navigateTo({ url: '/pages/chat/index/index' });
   },
 
-  /** 进入对话 tab（switchTab：进入后不可后退回欢迎页） */
+  /** 进入对话页（navigateTo：进入页面栈，可后退回欢迎页） */
   startChat() {
-    wx.switchTab({ url: '/pages/chat/index/index' });
+    wx.navigateTo({ url: '/pages/chat/index/index' });
   },
 });
