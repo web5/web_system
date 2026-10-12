@@ -6,7 +6,8 @@
   <view class="w-nav-t">科豆 AI</view>
 </view>
 <view class="page {{radiusClass}}">
-  <view class="w-group">
+  <!-- 顶部间距动态避开 fixed 导航（navGroupTop = 导航高+6px，index.ts onShow 算） -->
+  <view class="w-group" style="margin-top:{{navGroupTop}}px">
     <view class="w-hello">Hello<text class="dot">.</text></view>
     <view class="w-sub">科豆 AI · 体验不一样的 AI</view>
 

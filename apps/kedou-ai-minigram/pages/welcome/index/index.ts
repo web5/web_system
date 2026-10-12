@@ -26,6 +26,9 @@ Page({
         欢迎页原用系统导航栏（白底），与页面暖白底 + 对话页 custom 导航在转场时露白帧 —— 统一自绘后同色无缝 */
     statusBarHeight: 20,
     navBarHeight: 64,
+    /** 内容组顶部间距 px（兜底 70 = 旧 140rpx 的等价值）：导航 fixed 脱流后由它避开导航。
+        onShow 按 navBarHeight 动态算 = 导航高 + 6px（还原旧 12rpx 呼吸） */
+    navGroupTop: 70,
     quote: getDailyQuote(),
     /** 最近一次会话（最多展示一条）；null = 还没有任何会话 */
     recent: null as Recent | null,
@@ -47,7 +50,9 @@ Page({
     try {
       const sys = wx.getSystemInfoSync();
       const statusBarHeight = sys.statusBarHeight || 20;
-      this.setData({ statusBarHeight, navBarHeight: statusBarHeight + 44 });
+      const navBarHeight = statusBarHeight + 44;
+      // 内容组避开 fixed 导航：导航高 + 6px 呼吸（等价旧结构 140rpx 间距）
+      this.setData({ statusBarHeight, navBarHeight, navGroupTop: navBarHeight + 6 });
     } catch {
       // 保留默认高度
     }

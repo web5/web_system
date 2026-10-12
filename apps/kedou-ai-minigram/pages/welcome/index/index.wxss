@@ -3,8 +3,15 @@ page {
   background: var(--page-bg);
 }
 
-/* 自绘导航（替代系统白导航栏）：状态栏 + 44px 标题行，与对话页自定义导航同规格 */
+/* 自绘导航（替代系统白导航栏）：状态栏 + 44px 标题行，与对话页自定义导航同规格。
+   fixed 脱流是关键——自绘导航若占文档流，.page 的 100vh 会加出导航高导致整页溢出一屏；
+   系统导航栏本就不占页面流，fixed 才能保持同行为 */
 .w-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
   background: var(--page-bg);
   display: flex;
   align-items: flex-end;
@@ -28,7 +35,8 @@ page {
   box-sizing: border-box;
 }
 
-/* 顶部留白从 .page padding 挪到内容组（自绘导航进了文档流，.page 要保持 100vh 不溢出） */
+/* 顶部间距避开 fixed 导航：运行时被 wxml inline style 覆盖（navGroupTop = 导航高+6px）；
+   此处 140rpx 仅兜底（onShow 同步 setData，首帧即正确值，此值基本不生效） */
 .w-group {
   margin-top: 140rpx;
 }
