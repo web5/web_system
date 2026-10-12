@@ -17,8 +17,12 @@ Page({
     loggedIn: true,
   },
 
-  /** 登录态过期广播退订函数（onUnload 调用；any 因小程序 TS 编译不吃联合类型属性） */
-  _offAuthExpired: any = null,
+  /**
+   * 登录态过期广播退订函数（onUnload 调用）。
+   * ⚠️ Page() 参数是对象字面量、没有类属性语法：`xxx: T = v` 会被解析成「把 T 当值用」，
+   * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
+   */
+  _offAuthExpired: null as any,
 
   onShow() {
     const __app = getApp<IAppOption>();

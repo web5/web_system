@@ -245,8 +245,14 @@ Page({
 
   /** 按住说话：起始触点 Y（用于判定上滑取消） */
   _voiceStartY: 0,
-  /** 登录态过期广播退订函数（onUnload 调用；any 因小程序 TS 编译不吃联合类型属性） */
-  _offAuthExpired: any = null,
+  /**
+   * 登录态过期广播退订函数（onUnload 调用）。
+   * ⚠️ Page() 参数是对象字面量、没有类属性语法：`xxx: T = v` 会被解析成「把 T 当值用」，
+   * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
+   * （88bbff84 曾写成 `any = null` 想绕过联合类型限制，结果三页真机编译全挂、白屏，
+   *   2026-10-12 修复；教训：对象字面量里根本没有「类属性」这回事，断言式才是正解）
+   */
+  _offAuthExpired: null as any,
 
   onLoad() {
     this.initNavBar();
