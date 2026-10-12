@@ -566,6 +566,8 @@ page {
 }
 .nav-act {
   position: absolute;
+  /* 运行时被 wxml style 绑定覆盖（index.ts initNavActRight() 按胶囊左缘动态算）；
+     102px 仅是 style 绑定生效前的兜底，勿当成设计值 */
   right: 102px;
   bottom: 0;
   height: 44px;

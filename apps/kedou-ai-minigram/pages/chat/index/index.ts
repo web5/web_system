@@ -173,6 +173,8 @@ Page({
     /** 自定义导航栏（navigationStyle: custom）：状态栏高与导航栏总高，单位 px */
     statusBarHeight: 20,
     navHeight: 44,
+    /** 「新增对话」胶囊避让：按钮右缘距屏幕右边 px（102 = 兜底值，onLoad 时按胶囊矩形动态算） */
+    navActRight: 102,
     /** 「+」菜单是否展开 */
     showPlus: false,
     /**
@@ -272,6 +274,25 @@ Page({
       this.setData({ statusBarHeight, navHeight: statusBarHeight + 44 });
     } catch {
       // 忽略：退回默认高度
+    }
+    this.initNavActRight();
+  },
+
+  /**
+   * 「新增对话」水平避让：原生胶囊（右上角 ···/◯）左缘随机型而异
+   * （屏宽与胶囊宽度都不同），硬编码 right 在小屏/刘海屏必翻车。
+   * 按胶囊矩形动态算：right = 屏宽 − 胶囊左缘 + 12px（12px = 呼吸间距）。
+   * API 异常或 rect 全 0（旧基础库/开发者工具）时保留 102px 兜底。
+   */
+  initNavActRight() {
+    try {
+      const sys = wx.getSystemInfoSync();
+      const rect = wx.getMenuButtonBoundingClientRect();
+      if (rect && rect.left > 0 && sys.windowWidth) {
+        this.setData({ navActRight: Math.max(12, sys.windowWidth - rect.left + 12) });
+      }
+    } catch {
+      // 忽略：保留 data 默认 102
     }
   },
 

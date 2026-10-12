@@ -19,7 +19,8 @@
     <view class="nav-back" bindtap="goBack"><view class="nav-back-arrow"></view></view>
     <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
     <view class="nav-hist" bindtap="openHistory" aria-label="对话记录"><view class="nav-hist-ic"></view></view>
-    <view class="nav-act" bindtap="newChat" aria-label="新建对话"><view class="nav-new-ic"></view></view>
+    <!-- 「新增对话」避让原生胶囊：right 由 index.ts initNavActRight() 按胶囊左缘动态算（硬编码会在异形屏翻车） -->
+    <view class="nav-act" bindtap="newChat" aria-label="新建对话" style="right:{{navActRight}}px"><view class="nav-new-ic"></view></view>
   </view>
 
   <view class="page">
