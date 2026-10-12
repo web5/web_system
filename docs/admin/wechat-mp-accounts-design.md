@@ -178,6 +178,8 @@ getClient(account)
 
 ## 八、实施步骤
 
+> 逐条可勾选的执行计划见：[wechat-mp-accounts-plan.md](./wechat-mp-accounts-plan.md)
+
 | 阶段 | 内容 | 工作量 |
 |---|---|---|
 | **P0 存储与读取** | migration 建表；`CONFIG_ENC_KEY` 配置；content-hub 新增 entity + 读取链路（DB 优先/env 兜底/60s 缓存）；保留现有白名单行为 | 0.5 天 |
