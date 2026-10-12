@@ -5,12 +5,13 @@ v1.0.12（2026-10-12）造型换代：麦克风 → 声波（圆点 + 右侧双�
 真机迭代史：v1.0.10 瘦长胶囊「单薄」→ v1.0.11 加粗圆头仍不够精致 → 用户拍板去话筒只留声波，
 并选定「圆点+右弧」构图（对照稿 ①），要求整体放大、视觉居中。
 
-几何（24 网格，脚本内 ×16 映射到 96px 画布，4x 超采样）：
-- 圆点：cx=6.5, cy=12, r=2.6（实心）
-- 内弧：M10.7 7.8 → a4.2（半圆，右凸），端点 (10.7,7.8)/(10.7,16.2)
-- 外弧：M13.3 5.2 → a6.8（半圆，右凸），端点 (13.3,5.2)/(13.3,18.8)
-- 水平跨度 3.9→20.1，光学中心 ≈ 12.0（居中）；竖直 5.2→18.8 居中
-- 线宽 2.2（×16=35.2≈36 → 96 画布 9px），所有端点补圆头，杜绝 PIL 平切
+几何（24 网格，脚本内 ×16 映射到 96px 画布，4x 超采样）· 左右对称单弧：
+- 圆点居中：cx=12, cy=12, r=2.7（实心）
+- 右弧：M15.4 7.2 → a4.8（半圆右凸）；左弧：M8.6 7.2 → a4.8（半圆左凸）——左右镜像
+- 水平跨度 3.8→20.2，严格对称，光学中心 12.0；竖直 7.2→16.8 居中
+- 线宽 2.25（×16=36 → 96 画布 9px），所有端点补圆头，杜绝 PIL 平切
+- 迭代：v1.0.11 加粗圆头仍不够精致 → 换声波 → 去话筒 → ①圆点+右双弧 →
+  用户裁定「不要对称双弧（双侧各两条），单弧就好但得左右对称」→ 定稿对称单弧
 - ➕ 维持 v1.0.10 定稿不动（线宽锁定 8px）
 
 显示口径：位图 44rpx → 48rpx（76rpx 圆钮内占比 58%→63%，响应「稍微大一点」）。
@@ -30,29 +31,39 @@ ORANGE = (249, 115, 22, 255)
 WHITE = (255, 255, 255, 255)
 
 # ---- 声波几何（24 网格值 × K） ----
-DOT_CX, DOT_CY, DOT_R = 6.5 * K, 12 * K, 2.6 * K
-IN_X, IN_R = 10.7 * K, 4.2 * K     # 内弧：圆心 x、半径
-OUT_X, OUT_R = 13.3 * K, 6.8 * K   # 外弧
-LW = round(2.2 * K)                 # 36（=96 画布 9px）
+DOT_CX, DOT_CY, DOT_R = 12 * K, 12 * K, 2.7 * K   # 圆点居中
+ARC_R = 7.0 * K                     # 弧半径（以圆点为圆心，同心）
+ARC_SPAN = 60                       # 弧半张角（度）：-60°→60° 右弧，镜像左弧
+LW = round(2.3 * K)                 # 37（=96 画布 9.2px）
 
 WAVE_JSON = os.environ.get("WAVE_JSON", "")
 
 
-def _arc_right(d, ccx, r, color):
-    """右凸半圆弧（-90°→90°）+ 两端圆头。"""
-    box = (ccx - r, C // 2 - r, ccx + r, C // 2 + r)
-    d.arc(box, start=-90, end=90, fill=color, width=LW)
-    for ey in (C // 2 - r, C // 2 + r):
-        d.ellipse((ccx - LW // 2, ey - LW // 2, ccx + LW // 2, ey + LW // 2), fill=color)
+import math
+
+
+def _arc(d, r, color, right=True):
+    """同心弧：以圆点为圆心，右弧 -SPAN→+SPAN / 左弧镜像，两端补圆头。"""
+    box = (DOT_CX - r, DOT_CY - r, DOT_CX + r, DOT_CY + r)
+    if right:
+        d.arc(box, start=-ARC_SPAN, end=ARC_SPAN, fill=color, width=LW)
+        angles = (-ARC_SPAN, ARC_SPAN)
+    else:
+        d.arc(box, start=180 - ARC_SPAN, end=180 + ARC_SPAN, fill=color, width=LW)
+        angles = (180 - ARC_SPAN, 180 + ARC_SPAN)
+    for a in angles:
+        ex = DOT_CX + r * math.cos(math.radians(a))
+        ey = DOT_CY + r * math.sin(math.radians(a))
+        d.ellipse((ex - LW // 2, ey - LW // 2, ex + LW // 2, ey + LW // 2), fill=color)
 
 
 def wave(color):
-    """声波：实心圆点 + 右侧双弧，全部圆头。"""
+    """声波：居中实心圆点 + 左右镜像单弧，严格左右对称。"""
     img = Image.new("RGBA", (C, C), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.ellipse((DOT_CX - DOT_R, DOT_CY - DOT_R, DOT_CX + DOT_R, DOT_CY + DOT_R), fill=color)
-    _arc_right(d, IN_X, IN_R, color)
-    _arc_right(d, OUT_X, OUT_R, color)
+    _arc(d, ARC_R, color, right=False)
+    _arc(d, ARC_R, color, right=True)
     return img.resize((SIZE, SIZE), Image.LANCZOS)
 
 
