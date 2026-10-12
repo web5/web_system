@@ -16,8 +16,9 @@
   >
     <!-- 标题放最前：absolute 布局下后出现的兄弟在上层，保证返回键 / 新对话可点 -->
     <!-- top/height 绑胶囊矩形（index.ts initNavBar，绝对页面坐标与 rect 同框）：与原生胶囊严格同中线，禁回归 44px 区间假设 -->
-    <!-- 含文字元素用 navTextTop（=胶囊 top+2px 光学补偿）：文字视觉重心高于几何中心，补偿后才与胶囊视觉对齐 -->
-    <view class="nav-title" style="top:{{navTextTop}}px;height:{{capsuleHeight}}px;line-height:{{capsuleHeight}}px">科豆 AI</view>
+    <!-- 含文字元素用各自的光学补偿 top（index.ts initNavBar）：文字视觉重心高于几何中心。
+         标题 navTitleTop（+4px）比新增对话 navTextTop（+2px）补得多——「科豆 AI」含拉丁字母升部，重心抬得更高 -->
+    <view class="nav-title" style="top:{{navTitleTop}}px;height:{{capsuleHeight}}px;line-height:{{capsuleHeight}}px">科豆 AI</view>
     <view class="nav-back" bindtap="goBack" style="top:{{capsuleTop}}px;height:{{capsuleHeight}}px"><view class="nav-back-arrow"></view></view>
     <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
     <view class="nav-hist" bindtap="openHistory" aria-label="对话记录" style="top:{{capsuleTop}}px;height:{{capsuleHeight}}px"><view class="nav-hist-ic"></view></view>
