@@ -55,6 +55,30 @@ App<IAppOption>({
     return currentClass();
   },
 
+  /**
+   * 极简事件总线：跨页面广播（页面栈内任意页可收）。
+   * 当前承载 `auth:expired`：request 层 401 清 token 后广播，各页收信 setData
+   * loggedIn=false 弹出登录墙（login-gate）——替代旧方案 reLaunch 回首页
+   * （会清空整个页面栈，导致用户「被弹回首页」且右滑返回永远回首页）。
+   */
+  eventBus: {
+    _handlers: {} as Record<string, Array<(payload?: any) => void>>,
+    on(event: string, handler: (payload?: any) => void) {
+      const list = this._handlers[event] || (this._handlers[event] = []);
+      list.push(handler);
+    },
+    off(event: string, handler: (payload?: any) => void) {
+      const list = this._handlers[event];
+      if (!list) return;
+      this._handlers[event] = list.filter((h) => h !== handler);
+    },
+    emit(event: string, payload?: any) {
+      const list = this._handlers[event];
+      if (!list) return;
+      list.slice().forEach((h) => h(payload));
+    },
+  },
+
   /** 启动时自动登录（已有 token 则跳过，避免覆盖本地测试 token） */
   async autoLogin() {
     if (isLoggedIn()) {

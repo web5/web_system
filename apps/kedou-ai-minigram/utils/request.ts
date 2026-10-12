@@ -157,10 +157,14 @@ export async function request<T = any>(options: RequestOptions): Promise<T> {
               wx.showToast({ title: '请先登录', icon: 'none' });
             } else {
               wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
-              // 延迟跳转到首页触发重新登录
-              setTimeout(() => {
-                wx.reLaunch({ url: '/pages/welcome/index/index' });
-              }, 1500);
+              // 通知各页弹登录墙（login-gate：静默 wx.login 一键恢复）。
+              // 禁 reLaunch 回首页：会清空整个页面栈——用户从任何页进来都被弹回首页，
+              // 且此后右滑返回永远回首页（栈已脏，「对话页右滑始终回首页」的元凶）。
+              try {
+                (getApp() as any)?.eventBus?.emit('auth:expired');
+              } catch {
+                // getApp 不可用（极早期）：放弃广播，页面 onShow 仍会兜底刷新登录态
+              }
             }
           }
           reject(res);

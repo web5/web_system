@@ -227,9 +227,18 @@ Page({
 
   /** 按住说话：起始触点 Y（用于判定上滑取消） */
   _voiceStartY: 0,
+  /** 登录态过期广播退订函数（onUnload 调用；any 因小程序 TS 编译不吃联合类型属性） */
+  _offAuthExpired: any = null,
 
   onLoad() {
     this.initNavBar();
+    // 登录态过期广播：request 401 清 token 后发 auth:expired → 本页弹登录墙。
+    // （旧方案 reLaunch 回首页会清空页面栈，致右滑返回永远回首页，已废弃）
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.on) {
+      this._offAuthExpired = () => this.setData({ loggedIn: false });
+      __bus.on('auth:expired', this._offAuthExpired);
+    }
     this.setData({
       chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
     });
@@ -327,12 +336,18 @@ Page({
   },
 
   /**
-   * 顶部返回 icon：**统一回欢迎页** ——
-   * 无论本次会话是从「开始对话」、记录页点一条、还是欢迎页卡片进入的，返回都回欢迎页。
-   * （记录页自己有原生返回可以退回，不需要对话页代劳）
+   * 顶部返回 icon：**回来源页**（与右滑返回一致）——
+   * 无论本次会话是从欢迎页「开始对话」、欢迎页卡片、对话记录还是 tabBar「对话」项进入的，
+   * 都退回来源页。禁 redirectTo 回欢迎页：那会把「返回」变成「回首页」，
+   * 且替换栈顶会污染页面栈（之后右滑也回首页）。
    */
   goBack() {
-    wx.redirectTo({ url: '/pages/welcome/index/index' });
+    wx.navigateBack({
+      fail() {
+        // 栈仅一层（对话页被直接打开，如分享卡片入口）：兜底回欢迎页
+        wx.redirectTo({ url: '/pages/welcome/index/index' });
+      },
+    });
   },
 
   /** 导航栏「列表」icon：打开对话记录 */
@@ -481,6 +496,12 @@ Page({
   },
 
   onUnload() {
+    // 页面销毁：退订登录态广播，避免回调打到已销毁实例
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.off && this._offAuthExpired) {
+      __bus.off('auth:expired', this._offAuthExpired);
+      this._offAuthExpired = null;
+    }
     // 页面销毁：作废在途回调，避免 setData 打到已销毁实例
     this._runId += 1;
     // 离开页面停掉朗读，避免音频在后台继续响

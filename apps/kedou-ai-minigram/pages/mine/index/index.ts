@@ -35,6 +35,28 @@ Page({
     glossarySummary: '0 条',
   },
 
+  /** 登录态过期广播退订函数（onUnload 调用；any 因小程序 TS 编译不吃联合类型属性） */
+  _offAuthExpired: any = null,
+
+  onLoad() {
+    // 登录态过期广播：request 401 清 token 后发 auth:expired → 本页弹登录墙。
+    // （旧方案 reLaunch 回首页会清空页面栈，致右滑返回永远回首页，已废弃）
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.on) {
+      this._offAuthExpired = () => this.setData({ loggedIn: false });
+      __bus.on('auth:expired', this._offAuthExpired);
+    }
+  },
+
+  onUnload() {
+    // 退订登录态广播，避免回调打到已销毁实例
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.off && this._offAuthExpired) {
+      __bus.off('auth:expired', this._offAuthExpired);
+      this._offAuthExpired = null;
+    }
+  },
+
   onShow() {
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
