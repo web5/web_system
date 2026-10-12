@@ -684,11 +684,10 @@
           <div class="mic" id="micBtn" aria-label="按住说话"
                onmousedown="voiceStart(event)" onmouseup="voiceEnd(event)"
                ontouchstart="voiceStart(event)" ontouchend="voiceEnd(event)" ontouchcancel="voiceCancel(event)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6.5" cy="12" r="2.6" fill="currentColor" stroke="none"/>
+              <path d="M10.7 7.8a4.2 4.2 0 0 1 0 8.4"/>
+              <path d="M13.3 5.2a6.8 6.8 0 0 1 0 13.6"/>
             </svg>
           </div>
           <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter'){event.preventDefault();send();}" />
