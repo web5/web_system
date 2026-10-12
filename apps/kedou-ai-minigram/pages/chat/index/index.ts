@@ -172,12 +172,12 @@ Page({
     scrollIntoId: '',
     /** 自定义导航栏（navigationStyle: custom）：状态栏高与导航栏总高，单位 px */
     statusBarHeight: 20,
-    navHeight: 44,
+    navHeight: 70,
     /** 「新增对话」胶囊避让：按钮右缘距屏幕右边 px（102 = 兜底值，onLoad 时按胶囊矩形动态算） */
     navActRight: 102,
-    /** 自定义导航元素垂直基准：胶囊 top 相对内容区（已扣 statusBarHeight）px ——
-        与原生胶囊同中线，替代"44px 区间中线"假设（rect.top−statusBarHeight 随机型而变） */
-    capsuleTop: 6,
+    /** 自定义导航元素垂直基准：胶囊 top 的绝对页面坐标 px（与 wx.getMenuButtonBoundingClientRect().top 同框，
+        直接绑给子元素 style top）—— 与原生胶囊严格同中线，替代"44px 区间中线"假设 */
+    capsuleTop: 26,
     /** 胶囊高度 px（标准 32，以实测为准） */
     capsuleHeight: 32,
     /** 「+」菜单是否展开 */
@@ -287,16 +287,18 @@ Page({
     } catch {
       // 保留默认
     }
-    // 兜底值：iOS 标准姿态（差值 6 / 胶囊 32 / 导航 44）
-    let navHeight = statusBarHeight + 44;
-    let capsuleTop = 6;
+    // 兜底值：iOS 标准姿态（胶囊在状态栏下 6px / 高 32 / 导航总高 70）
+    let navHeight = statusBarHeight + 6 + 32 + 12;
+    // capsuleTop 用绝对页面坐标：.nav 虽在页面顶部，但其 absolute 子元素的 top
+    // 从 .nav padding box 顶边（=页面顶 y=0）算，与 rect 同框 —— 减 statusBarHeight 会整体上移一个状态栏高（标题戳进刘海）
+    let capsuleTop = statusBarHeight + 6;
     let capsuleHeight = 32;
     let navActRight = 102;
     try {
       const sys = wx.getSystemInfoSync();
       const rect = wx.getMenuButtonBoundingClientRect();
       if (rect && rect.top > 0 && rect.height > 0) {
-        capsuleTop = rect.top - statusBarHeight;   // 内容区内相对位置
+        capsuleTop = rect.top;                    // 绝对坐标，直接绑给子元素 top
         capsuleHeight = rect.height;
         navHeight = rect.bottom + 12;              // 内容下沿：胶囊下 12px
         if (sys.windowWidth && rect.left > 0) {

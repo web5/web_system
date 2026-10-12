@@ -15,7 +15,7 @@
     style="padding-top:{{statusBarHeight}}px;height:{{navHeight}}px;box-sizing:border-box"
   >
     <!-- 标题放最前：absolute 布局下后出现的兄弟在上层，保证返回键 / 新对话可点 -->
-    <!-- top/height 绑胶囊矩形（index.ts initNavBar）：与原生胶囊严格同中线，禁回归 44px 区间假设 -->
+    <!-- top/height 绑胶囊矩形（index.ts initNavBar，绝对页面坐标与 rect 同框）：与原生胶囊严格同中线，禁回归 44px 区间假设 -->
     <view class="nav-title" style="top:{{capsuleTop}}px;height:{{capsuleHeight}}px;line-height:{{capsuleHeight}}px">科豆 AI</view>
     <view class="nav-back" bindtap="goBack" style="top:{{capsuleTop}}px;height:{{capsuleHeight}}px"><view class="nav-back-arrow"></view></view>
     <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
