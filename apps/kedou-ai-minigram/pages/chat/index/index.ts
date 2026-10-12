@@ -180,6 +180,10 @@ Page({
     capsuleTop: 26,
     /** 胶囊高度 px（标准 32，以实测为准） */
     capsuleHeight: 32,
+    /** 含文字元素（标题/新增对话）的 top = capsuleTop + 2 光学补偿：
+        文字视觉重心高于几何中心（汉字字面框 + 拉丁字母升部），对胶囊几何中线下移 2px
+        才能与原生胶囊视觉对齐。真机若仍感偏高/偏低，只调 initNavBar 里这一个常量 */
+    navTextTop: 28,
     /** 「+」菜单是否展开 */
     showPlus: false,
     /**
@@ -308,7 +312,7 @@ Page({
     } catch {
       // 忽略：保留全部兜底值
     }
-    this.setData({ statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight });
+    this.setData({ statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight, navTextTop: capsuleTop + 2 });
   },
 
   /**
