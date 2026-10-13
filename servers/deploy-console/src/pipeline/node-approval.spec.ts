@@ -32,6 +32,7 @@ import { ReleaseGitService } from '../git/release-git.service';
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { PipelineService, PIPELINE_AWAITING_APPROVAL } from './pipeline.service';
 import { PipelineVarService } from './pipeline-var.service';
+import { SshExecService, type SshTarget } from '../remote/ssh-exec.service';
 import { PipelineSuspended } from './pipeline-suspension';
 import type { TemplateNode } from '../pipeline-template/template-node';
 import type { StepAction } from '../entities/deploy-pipeline-step-command.entity';
@@ -66,11 +67,15 @@ function act(id: string, code: string, extra: Partial<StepAction> = {}): StepAct
 /** 假 shell runner：按节点（env.STAGE）返回预设退出码，并记录执行过的节点 */
 function makeShellRunner(codes: Record<string, number> = {}) {
   const stages: string[] = [];
+  /** 每次执行的完整环境变量（脚本能看到什么，就由这里决定） */
+  const envs: Record<string, string>[] = [];
   const runner = {
     stages,
+    envs,
     run: jest.fn(async (req: ShellRunRequest) => {
       const stage = String(req.env.STAGE ?? '');
       stages.push(stage);
+      envs.push({ ...req.env });
       req.onLog?.(`${stage} 输出`);
       return codes[stage] ?? 0;
     }),
@@ -113,7 +118,13 @@ interface Ctx {
   notify: { notify: jest.Mock };
 }
 
-async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number> = {}): Promise<Ctx> {
+async function setup(
+  nodes: TemplateNode[] = NODES,
+  codes: Record<string, number> = {},
+  sshResolve: () => Promise<SshTarget> = async () => {
+    throw new Error('环境未登记主机');
+  },
+): Promise<Ctx> {
   const runner = makeShellRunner(codes);
   const approvals = makeApprovalRepo();
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
@@ -210,6 +221,8 @@ async function setup(nodes: TemplateNode[] = NODES, codes: Record<string, number
       { provide: ReleaseRegistryService, useValue: {} },
       { provide: ReleaseGitService, useValue: {} },
       { provide: PIPELINE_BUILTIN_STEPS, useValue: {} },
+      // SSH 目标机（远端投递变量的真相源）：默认「未登记」，由 setup 的 sshResolve 覆盖
+      { provide: SshExecService, useValue: { resolve: async () => sshResolve() } },
     ],
   }).compile();
 
@@ -329,5 +342,50 @@ describe('approval 节点：挂起与恢复（P0 核心）', () => {
     expect(e.approvalId).toBe('ap-1');
     expect(e.name).toBe('PipelineSuspended');
     expect(e.message).toContain('发布确认');
+  });
+});
+
+/**
+ * S1（边界脚本化）：upload/cleanup 改由脚本做 scp/ssh，但「投到哪台机器、用哪把钥匙」
+ * 仍由平台裁决。这两条锁的是**接线口径**：
+ *   - 脚本 env 里的目标机必须来自 SshExecService（主机管理），平台侧不再自己推导；
+ *   - 解析不到目标机时，流水线照常执行（留空 + 告警），不能连累不需要 SSH 的节点。
+ *
+ * 为什么写在这个 spec 里：这里是目前唯一一处用**完整 Provider 装配**真实 PipelineService 的
+ * 测试台（其余用纯函数单测），注入口径只有实例化才验证得到。
+ */
+describe('远端投递变量注入（S1：脚本做 scp，真相仍在平台）', () => {
+  const okTarget = (): Promise<SshTarget> =>
+    Promise.resolve({
+      host: '10.9.9.9',
+      port: 22,
+      username: 'deploy',
+      privateKey: Buffer.from('K'),
+      keyPath: '/home/u/.ssh/id_ed25519_servers',
+    });
+
+  it('主机管理解析出目标机 ⇒ 脚本 env 拿到它的结果（user@host + 私钥路径）', async () => {
+    const ctx = await setup(NODES, {}, okTarget);
+    await runPipeline(ctx);
+
+    expect(ctx.runner.stages).toContain('a');
+    const env = ctx.runner.envs.find((e) => e.STAGE === 'a')!;
+    expect(env.REMOTE_SSH_TARGET).toBe('deploy@10.9.9.9');
+    expect(env.SSH_KEY_PATH).toBe('/home/u/.ssh/id_ed25519_servers');
+    // 目录由平台按环境算好下发（脚本不该自己拼三级取值链）
+    expect(env.REMOTE_MODULES_ROOT).not.toBe('');
+  });
+
+  it('主机管理未登记 ⇒ 两个 SSH 变量留空，但流水线照常执行到下一节点', async () => {
+    const ctx = await setup();
+    await runPipeline(ctx);
+
+    // 走到 approval 挂起（说明没有因为「没有 SSH 目标」把流水线打死）
+    expect(ctx.p.status).toBe(PIPELINE_AWAITING_APPROVAL);
+    const env = ctx.runner.envs.find((e) => e.STAGE === 'a')!;
+    expect(env.REMOTE_SSH_TARGET).toBe('');
+    expect(env.SSH_KEY_PATH).toBe('');
+    // 留空是给脚本显式报错用的，不能顺手把「发到哪」也抹掉
+    expect(env.DEPLOY_ENV).toBeTruthy();
   });
 });

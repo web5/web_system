@@ -22,6 +22,13 @@ export interface SshTarget {
   port: number;
   username: string;
   privateKey: Buffer;
+  /**
+   * 私钥的绝对路径（S1：脚本做 `ssh -i` 要用，不能给脚本私钥内容本身）。
+   *
+   * 放在这里是**唯一解**：路径只有解析过程才知道（可能来自「主机管理」的 sshKeyPath），
+   * 让调用方按缺省再拼一遍 = 又长出一份真相（诊断 #15 刚收敛过的东西不能重新发散）。
+   */
+  keyPath: string;
 }
 
 export const DEFAULT_SSH_KEY_PATH = '~/.ssh/id_ed25519_servers';
@@ -78,7 +85,7 @@ export class SshExecService {
         `环境 ${env} 的 SSH 私钥不存在：${privateKeyPath} —— 请把私钥放到控制台所在机，或改「主机管理」的 sshKeyPath`,
       );
     }
-    return { host, port: 22, username: sshUser, privateKey: fs.readFileSync(privateKeyPath) };
+    return { host, port: 22, username: sshUser, privateKey: fs.readFileSync(privateKeyPath), keyPath: privateKeyPath };
   }
 
   /**
@@ -105,6 +112,7 @@ export class SshExecService {
       port: 22,
       username: host.sshUser,
       privateKey: fs.readFileSync(privateKeyPath),
+      keyPath: privateKeyPath,
     };
   }
 

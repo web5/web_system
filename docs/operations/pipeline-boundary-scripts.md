@@ -48,10 +48,10 @@ S1 之后发布路径上的平台 SSH 只剩 0 处 —— `upload` 与 `cleanup(
 
 | 变量 | 含义 | 谁算 |
 |---|---|---|
-| `REMOTE_SSH_TARGET` | `user@host` | 平台按环境解析（`DEV_SERVER/DEV_USER` / `PROD_*`） |
+| `REMOTE_SSH_TARGET` | `user@host` | 平台：`SshExecService`（「主机管理 → 服务器管理」），**不读 `DEV_SERVER` 等环境变量** |
 | `REMOTE_MODULES_ROOT` | 远端静态产物根 | 三级取值链：`REMOTE_MODULES_ROOT_<ENV>` → `STATIC_PUBLIC_ROOT_<ENV>/static/modules` → 旧常量 |
 | `REMOTE_DEST_DIR` | 本次落点 `<根>/<模块>/<版本>` | 平台（与 `uploadDist` 的 dest 同源） |
-| `SSH_KEY_PATH` | 私钥**绝对路径**（不是私钥内容） | 平台挑一个确实存在的文件；都没有则为空 |
+| `SSH_KEY_PATH` | 私钥**绝对路径**（不是私钥内容） | 平台：与目标机同源（主机管理登记的 `sshKeyPath`，未填则用控制台默认私钥）；都没有则为空 |
 
 三条铁律：
 
@@ -62,6 +62,10 @@ S1 之后发布路径上的平台 SSH 只剩 0 处 —— `upload` 与 `cleanup(
    被改写 = 发布到别处还报成功，最难排查的一类事故。
    `SSH_KEY_PATH` 例外 —— 允许流水线变量覆盖（换私钥路径是合法定制，改错也只是连不上）。
 3. **空串 = 未配置**，脚本必须显式报错退出，不能带着空串去连 `""`。
+
+> 「空串」最常见的成因是 **该环境没在「基础设施 → 主机管理」登记**（或登记了但私钥不在控制台所在机）。
+> 排查顺序：主机管理有没有这台机 → `sshKeyPath` 指向的私钥控制台读得到吗 → 再看流水线。
+> 控制台日志会留一条 `REMOTE_SSH_TARGET / SSH_KEY_PATH 留空` 的 WARN（每个环境只打一次）。
 
 ## 5. 两件**不能**下放给脚本的事
 

@@ -1,43 +1,56 @@
-import { BadRequestException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  pickSshKeyPath,
   resolveRemoteModulesRoot,
   resolveRemoteScriptVars,
-  resolveRemoteSshTarget,
+  toRemoteScriptSsh,
   RemoteDeliveryService,
 } from './remote-delivery.service';
+import { SshTarget } from './ssh-exec.service';
+
+/** 造一台「主机管理」解析出来的目标机 */
+const target = (over: Partial<SshTarget> = {}): SshTarget => ({
+  host: '10.0.0.1',
+  port: 22,
+  username: 'deploy',
+  privateKey: Buffer.from('KEY'),
+  keyPath: '/home/u/.ssh/id_ed25519_servers',
+  ...over,
+});
 
 describe('RemoteDeliveryService（远程投递工具）', () => {
   let cfg: { get: jest.Mock };
   let command: { exec: jest.Mock };
+  let sshExec: { resolve: jest.Mock };
   let svc: RemoteDeliveryService;
 
   beforeEach(() => {
     cfg = { get: jest.fn(() => undefined) };
     command = { exec: jest.fn(() => '') };
-    svc = new RemoteDeliveryService(cfg as never, command as never);
+    sshExec = { resolve: jest.fn(async () => target()) };
+    svc = new RemoteDeliveryService(cfg as never, command as never, sshExec as never);
   });
 
-  describe('resolveTarget（服务器地址解析）', () => {
-    it('dev 环境读 DEV_SERVER/DEV_USER', () => {
-      cfg.get.mockImplementation((k: string) =>
-        k === 'DEV_SERVER' ? '10.0.0.1' : k === 'DEV_USER' ? 'deploy' : undefined,
-      );
-      expect(svc.resolveTarget('dev')).toEqual({ remoteHost: '10.0.0.1', remoteUser: 'deploy' });
+  /**
+   * 诊断 #15：目标机此前按 `DEV_SERVER/PROD_SERVER` 环境变量在本文件算一份，
+   * 而发布/监控走的是「主机管理 → 服务器管理」（SshExecService）。两份口径漂移的代价是
+   * 「配了脚本和没配脚本投到不同机器」，且两边日志都写「投递成功」。
+   */
+  describe('resolveTarget（目标机解析：只认主机管理）', () => {
+    it('主机管理解析出什么就用什么（不再读 DEV_SERVER 这类环境变量）', async () => {
+      cfg.get.mockImplementation((k: string) => (k === 'DEV_SERVER' ? '1.1.1.1' : undefined));
+      await expect(svc.resolveTarget('dev')).resolves.toEqual({
+        remoteHost: '10.0.0.1',
+        remoteUser: 'deploy',
+      });
+      expect(sshExec.resolve).toHaveBeenCalledWith('dev');
+      expect(cfg.get).not.toHaveBeenCalled();
     });
 
-    it('prod 环境读 PROD_SERVER/PROD_USER', () => {
-      cfg.get.mockImplementation((k: string) =>
-        k === 'PROD_SERVER' ? '1.2.3.4' : k === 'PROD_USER' ? 'root' : undefined,
-      );
-      expect(svc.resolveTarget('prod')).toEqual({ remoteHost: '1.2.3.4', remoteUser: 'root' });
-    });
-
-    it('未配置服务器地址 → 抛 BadRequestException（提示可 target=local）', () => {
-      expect(() => svc.resolveTarget('dev')).toThrow(BadRequestException);
+    it('未登记主机 → 原样透传解析方的错误（不回落本机、不回落环境变量）', async () => {
+      sshExec.resolve.mockRejectedValue(new Error('环境 dev 无可用主机'));
+      await expect(svc.resolveTarget('dev')).rejects.toThrow(/无可用主机/);
     });
   });
 
@@ -45,11 +58,8 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
     it('按 tar → scp → ssh 解压 顺序执行，返回远端目标', async () => {
       const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
       fs.writeFileSync(path.join(src, 'index.js'), 'x');
-      cfg.get.mockImplementation((k: string) =>
-        k === 'DEV_SERVER' ? '10.0.0.1' : k === 'DEV_USER' ? 'deploy' : undefined,
-      );
 
-      const res = svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'v1', srcDir: src });
+      const res = await svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'v1', srcDir: src });
       expect(res.sshTarget).toBe('deploy@10.0.0.1');
       expect(res.dest).toBe('/data/web_system/servers/gateway/public/static/modules/admin/v1');
 
@@ -61,12 +71,12 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       fs.rmSync(src, { recursive: true, force: true });
     });
 
-    it('无 remoteUser 时 ssh 目标为裸 host', async () => {
-      const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
-      cfg.get.mockImplementation((k: string) => (k === 'DEV_SERVER' ? '10.0.0.1' : undefined));
-      const res = svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'v1', srcDir: src });
-      expect(res.sshTarget).toBe('10.0.0.1');
-      fs.rmSync(src, { recursive: true, force: true });
+    it('解析不到目标机 → 整个投递失败（不带着空目标机 scp）', async () => {
+      sshExec.resolve.mockRejectedValue(new Error('环境 dev 无可用主机'));
+      await expect(
+        svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'v1', srcDir: '/tmp/none' }),
+      ).rejects.toThrow(/无可用主机/);
+      expect(command.exec).not.toHaveBeenCalled();
     });
   });
 
@@ -100,19 +110,16 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       );
     });
 
-    it('uploadDist 的 dest 走按环境的根（不再写死）', () => {
+    it('uploadDist 的 dest 走按环境的根（不再写死）', async () => {
       const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
       fs.writeFileSync(path.join(src, 'index.js'), 'x');
       cfg.get.mockImplementation((k: string) =>
-        k === 'PROD_SERVER'
-          ? '1.2.3.4'
-          : k === 'PROD_USER'
-            ? 'root'
-            : k === 'STATIC_PUBLIC_ROOT_PROD'
-              ? '/data/web_system_static/public'
-              : undefined,
+        k === 'STATIC_PUBLIC_ROOT_PROD' ? '/data/web_system_static/public' : undefined,
       );
-      const res = svc.uploadDist({ env: 'prod', moduleKey: 'portal', version: 'v9', srcDir: src });
+      sshExec.resolve.mockResolvedValue(
+        target({ host: '1.2.3.4', username: 'root', keyPath: '/home/u/.ssh/id_ed25519_servers' }),
+      );
+      const res = await svc.uploadDist({ env: 'prod', moduleKey: 'portal', version: 'v9', srcDir: src });
       expect(res.dest).toBe('/data/web_system_static/public/static/modules/portal/v9');
       fs.rmSync(src, { recursive: true, force: true });
     });
@@ -129,18 +136,15 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
     const getter = (map: Record<string, string | undefined>) => (k: string) => map[k];
 
     it('落点与 service 的 remoteModulesRoot 同源（同一次装配两种走法必须一致）', () => {
-      const get = getter({
-        DEV_SERVER: '10.0.0.9',
-        DEV_USER: 'ubuntu',
-        REMOTE_MODULES_ROOT_DEV: '/data/mods',
-      });
+      const get = getter({ REMOTE_MODULES_ROOT_DEV: '/data/mods' });
       const v = resolveRemoteScriptVars(get, {
         env: 'dev',
         moduleKey: 'admin',
         version: 'v1',
-        exists: () => false,
+        ssh: toRemoteScriptSsh(target()),
       });
-      expect(v.REMOTE_SSH_TARGET).toBe('ubuntu@10.0.0.9');
+      expect(v.REMOTE_SSH_TARGET).toBe('deploy@10.0.0.1');
+      expect(v.SSH_KEY_PATH).toBe('/home/u/.ssh/id_ed25519_servers');
       expect(v.REMOTE_MODULES_ROOT).toBe('/data/mods');
       expect(v.REMOTE_DEST_DIR).toBe('/data/mods/admin/v1');
       // 与 uploadDist 的 dest 必须逐字相同（换条断言方式：直接比 former 与 latter）
@@ -149,54 +153,46 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       );
     });
 
-    it('目标机未登记 → 目标与目标目录都为空（平台不猜默认机，脚本据此显式报错）', () => {
+    it('目标机未解析到 → SSH 两个变量都为空（平台不猜默认机，脚本据此显式报错）', () => {
       const v = resolveRemoteScriptVars(getter({}), {
         env: 'staging',
         moduleKey: 'admin',
         version: 'v1',
-        exists: () => false,
+        ssh: null,
       });
       expect(v.REMOTE_SSH_TARGET).toBe('');
-      // 静态根没配时三级链回落到旧常量，这个要与既有行为一致 —— 空非法：
-      // 值为空会让脚本在 scp 阶段才炸，且报的是「Permission denied」而非「未配置」
+      expect(v.SSH_KEY_PATH).toBe('');
+      // 静态根没配时三级链回落到旧常量，这个要与既有行为一致 —— 值为空非法：
+      // 为空会让脚本在 scp 阶段才炸，且报的是「Permission denied」而非「未配置」
       expect(v.REMOTE_DEST_DIR).not.toBe('');
     });
 
     it('无 version → 不出 DEST 目录（半条路径比没有更危险）', () => {
-      const v = resolveRemoteScriptVars(getter({ DEV_SERVER: 'h' }), {
+      const v = resolveRemoteScriptVars(getter({}), {
         env: 'dev',
         moduleKey: 'admin',
-        exists: () => false,
+        ssh: toRemoteScriptSsh(target()),
       });
       expect(v.REMOTE_DEST_DIR).toBe('');
     });
 
-    it('resolveRemoteSshTarget：无 user 时返回裸 host；未配置返回空串', () => {
-      expect(resolveRemoteSshTarget(getter({ PROD_SERVER: '1.2.3.4' }), 'prod')).toBe('1.2.3.4');
-      expect(resolveRemoteSshTarget(getter({}), 'prod')).toBe('');
+    it('目标机变量只来自传入的解析结果（平台侧不再按环境变量推导第二份）', () => {
+      const get = getter({ DEV_SERVER: '应该用不到', DEV_USER: 'nobody' });
+      const v = resolveRemoteScriptVars(get, {
+        env: 'dev',
+        moduleKey: 'admin',
+        version: 'v1',
+        ssh: null,
+      });
+      expect(v.REMOTE_SSH_TARGET).toBe('');
     });
+  });
 
-    describe('pickSshKeyPath（私钥路径）', () => {
-      it('显式路径存在即用它', () => {
-        expect(pickSshKeyPath('/keys/a', { exists: (p) => p === '/keys/a' })).toBe('/keys/a');
-      });
-
-      it('显式路径不存在 → 回落默认私钥（存在才用）', () => {
-        const exists = (p: string) => p === '/home/u/.ssh/id_ed25519_servers';
-        expect(pickSshKeyPath('/keys/missing', { exists, home: '/home/u' })).toBe(
-          '/home/u/.ssh/id_ed25519_servers',
-        );
-      });
-
-      it('一个都不存在 → 空串（脚本按本机 ssh 默认行为连接，而不是拿着错路径去连）', () => {
-        expect(pickSshKeyPath(undefined, { exists: () => false, home: '/home/u' })).toBe('');
-      });
-
-      it('~ 展开到给定 HOME', () => {
-        const exists = (p: string) => p === '/home/u/.ssh/id_ed25519_servers';
-        expect(pickSshKeyPath('~/.ssh/id_ed25519_servers', { exists, home: '/home/u' })).toBe(
-          '/home/u/.ssh/id_ed25519_servers',
-        );
+  describe('toRemoteScriptSsh（解析结果 → 脚本变量形状）', () => {
+    it('拼 user@host，私钥路径原样透传', () => {
+      expect(toRemoteScriptSsh(target({ host: 'h', username: 'u', keyPath: '/k/a' }))).toEqual({
+        target: 'u@h',
+        keyPath: '/k/a',
       });
     });
   });

@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as releasePaths from '../pipeline/release-paths';
 import { CommandService } from '../shell/command.service';
+import { SshExecService, SshTarget } from './ssh-exec.service';
 
 export interface RemoteTarget {
   remoteHost: string;
@@ -64,39 +65,24 @@ export function resolveRemoteModulesRoot(get: ConfigGetter, env: string): string
 }
 
 /**
- * 远端 SSH 目标（`user@host`），与 `RemoteDeliveryService.resolveTarget` 同口径。
- * 未配置返回空串 —— **平台不猜默认值**（诊断 #15：猜默认机 = 连错机器）。
+ * SSH 目标 + 私钥：**由 SshExecService 解析后传入**，本文件不做第二份推导。
+ *
+ * 背景（诊断 #15）：此前「环境 → 投递到哪台机器、用哪把钥匙」在本服务里按
+ * `DEV_SERVER/PROD_SERVER` 环境变量算一份，`SshExecService`（发布/监控在用）按
+ * 「主机管理 → 服务器管理」算第二份，边界脚本化时又会长出第三份。
+ * 多份推导的后果是**同一模块配不配脚本会投到不同机器**，且日志全绿 —— 最难排查的那一类。
+ * 故这里只接受解析结果；解析本身只有一个入口（`SshExecService.resolve`）。
  */
-export function resolveRemoteSshTarget(get: ConfigGetter, env: string): string {
-  const host = env === 'prod' ? get('PROD_SERVER') : get('DEV_SERVER');
-  if (!host) return '';
-  const user = env === 'prod' ? get('PROD_USER') : get('DEV_USER');
-  return user ? `${user}@${host}` : host;
+export interface RemoteScriptSsh {
+  /** `user@host` */
+  target: string;
+  /** 私钥绝对路径（解析方已完成存在性校验；空串 = 未解析到目标机） */
+  keyPath: string;
 }
 
-/** 控制台默认私钥路径（进程的 HOME 下），与 SshExecService 的缺省同源 */
-export const DEFAULT_SSH_KEY_REL = '~/.ssh/id_ed25519_servers';
-
-/**
- * 挑一个**确实存在**的私钥绝对路径。
- *
- * 只认存在的文件：把不存在的路径下发下去，脚本会在 scp 那一步才失败
- * （且报的是 Permission denied，看不出是路径写错还是密钥不对）。
- * 一个都不存在 → 返回空串，交脚本按本机 ssh 默认行为（agent / ~/.ssh/config）连接。
- */
-export function pickSshKeyPath(
-  raw: string | undefined,
-  opts: { home?: string; exists?: (p: string) => boolean } = {},
-): string {
-  const exists = opts.exists ?? fs.existsSync;
-  const expand = (p: string) =>
-    p.startsWith('~') ? p.replace(/^~/, opts.home ?? process.env.HOME ?? '') : p;
-  for (const cand of [raw?.trim(), DEFAULT_SSH_KEY_REL]) {
-    if (!cand) continue;
-    const abs = expand(cand);
-    if (abs && exists(abs)) return abs;
-  }
-  return '';
+/** 把 SshExecService 的解析结果转成脚本变量形状（`user@host` 的拼法也只此一处） */
+export function toRemoteScriptSsh(t: Pick<SshTarget, 'host' | 'username' | 'keyPath'>): RemoteScriptSsh {
+  return { target: `${t.username}@${t.host}`, keyPath: t.keyPath };
 }
 
 /**
@@ -119,17 +105,22 @@ export function resolveRemoteScriptVars(
     moduleKey: string;
     /** 版本（commit 短哈希 / 版本引用）；为空时不出 Dest 目录 */
     version?: string;
-    sshKeyPathRaw?: string;
-    home?: string;
-    exists?: (p: string) => boolean;
+    /**
+     * 目标机与私钥（`SshExecService.resolve` 的结果）。
+     * 未解析到（环境没登记主机 / 私钥缺失）时传 null → 两个 SSH 变量留空，
+     * 由脚本在使用点显式报错（见 `scripts/pipeline/upload-remote.sh`）。
+     */
+    ssh?: RemoteScriptSsh | null;
   },
 ): RemoteScriptVars {
   const root = resolveRemoteModulesRoot(get, input.env);
+  const sshTarget = input.ssh?.target ?? '';
+  const keyPath = input.ssh?.keyPath ?? '';
   return {
-    REMOTE_SSH_TARGET: resolveRemoteSshTarget(get, input.env),
+    REMOTE_SSH_TARGET: sshTarget,
     REMOTE_MODULES_ROOT: root,
     REMOTE_DEST_DIR: root && input.version ? `${root}/${input.moduleKey}/${input.version}` : '',
-    SSH_KEY_PATH: pickSshKeyPath(input.sshKeyPathRaw, { home: input.home, exists: input.exists }),
+    SSH_KEY_PATH: keyPath,
   };
 }
 
@@ -137,32 +128,31 @@ export function resolveRemoteScriptVars(
  * 远程投递工具（upload 内置步骤 remote 分支的执行体）。
  *
  * 收敛自 pipeline.service.ts 的 stageUpload(remote) + readRemoteTarget：
- * 服务器地址按环境从配置读取（prod→PROD_SERVER/PROD_USER，其余→DEV_SERVER/DEV_USER），
  * 产物 tar → scp 到 /tmp → ssh 解压到远端 gateway 静态目录（路径布局与发布目录一致）。
+ *
+ * ⚠️ **目标机不在这里算**（2026-10-13）：此前按环境的 `DEV_SERVER/PROD_SERVER` 取，
+ * 与发布/监控走的「主机管理」不是同一份来源；现在统一委托 `SshExecService.resolve`，
+ * 平台内置执行体与边界脚本因此拿到**同一个**目标机。
  */
 @Injectable()
 export class RemoteDeliveryService {
   constructor(
     private readonly configService: ConfigService,
     private readonly command: CommandService,
+    // SSH 目标机的唯一真相源（主机管理 → 服务器管理）
+    private readonly sshExec: SshExecService,
   ) {}
 
-  /** 读取远程投递目标（未配置则抛错提示可改用 target=local） */
-  resolveTarget(env: string): RemoteTarget {
-    const host =
-      env === 'prod'
-        ? this.configService.get<string>('PROD_SERVER')
-        : this.configService.get<string>('DEV_SERVER');
-    const user =
-      env === 'prod'
-        ? this.configService.get<string>('PROD_USER')
-        : this.configService.get<string>('DEV_USER');
-    if (!host) {
-      throw new BadRequestException(
-        `未配置 ${env} 服务器地址（DEV_SERVER/PROD_SERVER），无法远程投递；可改用 target=local`,
-      );
-    }
-    return { remoteHost: host, remoteUser: user };
+  /**
+   * 远端 SSH 目标（异步：要查「主机管理」）。
+   *
+   * 原实现按环境的 `DEV_SERVER/PROD_SERVER` 环境变量取，与发布/监控用的一台机器
+   * 不是同一份来源 —— 两边的 deployments 指向不同机器时，日志同样「投递成功」，
+   * 页面却是旧的。现统一走 `SshExecService`（未登记主机 / 私钥缺失 → 抛错，不回落本机）。
+   */
+  async resolveTarget(env: string): Promise<RemoteTarget> {
+    const t = await this.sshExec.resolve(env);
+    return { remoteHost: t.host, remoteUser: t.username };
   }
 
   /** 阶段超时（env 覆盖，非法值回落默认） */
@@ -194,9 +184,9 @@ export class RemoteDeliveryService {
    * 远程投递 dist 产物：tar → scp → ssh 解压到远端
    * `<远端静态产物根>/<moduleKey>/<version>`，返回远端目标（供日志/result）。
    */
-  uploadDist(input: { env: string; moduleKey: string; version: string; srcDir: string }): RemoteDeliveryResult {
-    const { remoteHost, remoteUser } = this.resolveTarget(input.env);
-    const sshTarget = remoteUser ? `${remoteUser}@${remoteHost}` : remoteHost;
+  async uploadDist(input: { env: string; moduleKey: string; version: string; srcDir: string }): Promise<RemoteDeliveryResult> {
+    // `user@host` 的拼法复用脚本变量那一份（同一个 helper），避免投递执行体与脚本变量两种写法
+    const { target: sshTarget } = toRemoteScriptSsh(await this.sshExec.resolve(input.env));
     const dest = `${this.remoteModulesRoot(input.env)}/${input.moduleKey}/${input.version}`;
     const tar = `/tmp/${input.moduleKey}-${input.version}.tar.gz`;
     const cwd = process.cwd();

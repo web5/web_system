@@ -62,8 +62,11 @@ import { CommandService } from '../shell/command.service';
 // 远端投递四件套的解析（脚本环境用；平台内置 upload 执行体用同一套纯函数）
 import {
   resolveRemoteScriptVars,
+  toRemoteScriptSsh,
   type RemoteScriptVars,
 } from '../remote/remote-delivery.service';
+// SSH 目标机的**唯一真相源**（主机管理 → 服务器管理，见服务头注释：诊断 #15）
+import { SshExecService } from '../remote/ssh-exec.service';
 // shell 执行通道（可注入：测试用假实现，不打真实子进程）
 import { SHELL_RUNNER, ShellRunner, ShellRunHandle } from '../shell/shell-runner';
 // 进程组终止（原内联在本文件，抽到 shell/ 供 shell-runner 共用）
@@ -558,6 +561,8 @@ export class PipelineService {
   private readonly runTokenJtis = new Map<string, string[]>();
   /** 已告警过「取不到签名密钥」的 runId：编排模式每个动作都会调这里，不告警会刷屏 */
   private readonly runTokenWarned = new Set<string>();
+  /** 已告警过「SSH 目标解析失败」的 env：同上，按维度去重避免每个节点刷一条 */
+  private readonly remoteVarWarned = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -610,7 +615,40 @@ export class PipelineService {
     // 服务×环境登记（deploy_service_envs）：**远端**端口的真相源，见 pickStagePort
     @InjectRepository(DeployServiceEnvEntity)
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
+    // SSH 目标机（主机管理 → 服务器管理）：远端投递变量 REMOTE_SSH_TARGET / SSH_KEY_PATH 的真相源
+    private readonly sshExec: SshExecService,
   ) {}
+
+  /**
+   * 远端投递变量（S1 边界脚本化：upload/cleanup 节点脚本做 scp/ssh 时直接取用）。
+   *
+   * 目标机与私钥只问 `SshExecService`（主机管理 → 服务器管理）—— 不在流水线侧按环境变量
+   * 再推导一份（那会是第四份真相，见 `remote-delivery.service` 的同名注释）。
+   *
+   * 解析失败（环境没登记主机 / 私钥不在控制台所在机）**不阻断整条流水线**：变量留空 + 告警，
+   * 由使用它们的脚本显式报错。理由：这条路径对 build 这类不需要 SSH 的节点也会跑一次，
+   * 硬失败会让「环境没登记远程投递」顺带把本机发布一起打死。
+   */
+  private async resolveRemoteVars(p: DeployPipelineEntity): Promise<RemoteScriptVars> {
+    let ssh: ReturnType<typeof toRemoteScriptSsh> | null = null;
+    try {
+      ssh = toRemoteScriptSsh(await this.sshExec.resolve(p.env));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (p.env !== 'local' && !this.remoteVarWarned.has(p.env)) {
+        this.remoteVarWarned.add(p.env);
+        this.logger.warn(
+          `[${p.env}] 「主机管理」未解析出可用 SSH 目标，REMOTE_SSH_TARGET / SSH_KEY_PATH 留空（配了 upload/cleanup 脚本时会在脚本内显式报错）：${msg}`,
+        );
+      }
+    }
+    return resolveRemoteScriptVars((k) => this.configService.get<string>(k), {
+      env: p.env,
+      moduleKey: p.moduleKey,
+      version: p.versionTag,
+      ssh,
+    });
+  }
 
   /**
    * 端口解析（唯一入口）：配置中心 → 远端环境登记 / local 本机 pm2。
@@ -2423,12 +2461,8 @@ export class PipelineService {
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       consoleApi: this.consoleApiBase(),
       consoleToken: this.issueScriptToken(p),
-      // 远端投递变量（平台算 → 脚本用：投到哪台机器、落到哪个目录由平台裁决）
-      remote: resolveRemoteScriptVars((k) => this.configService.get<string>(k), {
-        env: p.env,
-        moduleKey: p.moduleKey,
-        version: p.versionTag,
-      }),
+      // 远端投递变量（平台算 → 脚本用：投到哪台机器、落到哪个目录由平台裁决；目标机走主机管理）
+      remote: await this.resolveRemoteVars(p),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });

@@ -111,7 +111,7 @@ describe('SshExecService（远程执行通道）', () => {
       setExitCode(1);
       await expect(
         svc.execOn(
-          { host: 'h', port: 22, username: 'u', privateKey: Buffer.from('k') },
+          { host: 'h', port: 22, username: 'u', privateKey: Buffer.from('k'), keyPath: '/k/a' },
           'pm2 restart nope',
           't',
           1000,
@@ -123,7 +123,7 @@ describe('SshExecService（远程执行通道）', () => {
     it('默认严格：非零退出即失败（发布链路上「命令没跑成功」不能被当成成功）', async () => {
       setExitCode(1);
       await expect(
-        svc.execOn({ host: 'h', port: 22, username: 'u', privateKey: Buffer.from('k') }, 'x', 't', 1000),
+        svc.execOn({ host: 'h', port: 22, username: 'u', privateKey: Buffer.from('k'), keyPath: '/k/a' }, 'x', 't', 1000),
       ).rejects.toThrow(/退出码 1/);
     });
   });
