@@ -29,6 +29,20 @@
 **脚本侧零改造**：两种都走同一个头 `x-internal-key: $CONSOLE_TOKEN`，
 服务端按前缀判定（`common/internal-key.ts`）。静态 key 不会被移除。
 
+### 2.1 注入点：两个变量，同一个来源
+
+引擎有**两套**变量组装，进脚本 env 的凭据变量也因此有两个名字：
+
+| 变量 | 组装位置 | 说明 |
+| --- | --- | --- |
+| `CONSOLE_TOKEN` | `resolveStageVars()`（编排模式） | 现网脚本在用；随 `CONSOLE_API` 一起注入 |
+| `WS_INTERNAL_KEY` | `runStageCommand()`（旧版 4 节点模板） | **僵尸凭据**：现网 DB 脚本检索为 0 条引用，但仍每次 run 注入 |
+
+两者都改走 `issueScriptToken()` 签发短期令牌（2026-10-13 一次收口，
+见 PR #333 / 补 PR）。为什么**不直接删掉** `WS_INTERNAL_KEY`：prod 库未逐条核过
+脚本正文，删除是破坏性变更；换成短期令牌是兼容的（校验端按 `rt1_` 前缀自动识别）。
+下期确认两端脚本都无引用后，可连 `WS_PLATFORM_API` 一起整块摘掉。
+
 ## 3. 令牌内容
 
 ```jsonc

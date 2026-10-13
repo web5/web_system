@@ -2420,7 +2420,13 @@ export class PipelineService {
     const platformPort = this.configService.get<string>('PLATFORM_PORT') || '6200';
     env.WS_PLATFORM_API =
       this.configService.get<string>('PLATFORM_API_BASE') || `http://127.0.0.1:${platformPort}/api`;
-    env.WS_INTERNAL_KEY = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    // 与 `CONSOLE_TOKEN` 同源（2026-10-13）：这也是进脚本 env 的长期 key，同样换成
+    // 短期令牌。本变量属旧版 4 节点模板的遗留命名 —— 现网 DB 脚本已无引用（dev/prod
+    // 均检索为 0 条），但每次 run 仍会把静态 key 塞进脚本进程，属「僵尸凭据」：
+    // 脚本一句 `set -x`/`env` 就泄露，且任何新脚本照抄旧模板即回到老路。
+    // 不直接删除而改成短期令牌：prod 库未逐条核过，删除是破坏性变更，换令牌则是
+    // 兼容的（校验端按 `rt1_` 前缀自动识别）。下期确认无引用后可整块摘掉。
+    env.WS_INTERNAL_KEY = this.issueScriptToken(p);
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${runActs.length} 个操作`];
     await this.save(p);
 
