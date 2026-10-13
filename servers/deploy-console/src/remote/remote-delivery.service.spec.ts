@@ -2,7 +2,13 @@ import { BadRequestException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { RemoteDeliveryService } from './remote-delivery.service';
+import {
+  pickSshKeyPath,
+  resolveRemoteModulesRoot,
+  resolveRemoteScriptVars,
+  resolveRemoteSshTarget,
+  RemoteDeliveryService,
+} from './remote-delivery.service';
 
 describe('RemoteDeliveryService（远程投递工具）', () => {
   let cfg: { get: jest.Mock };
@@ -109,6 +115,89 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       const res = svc.uploadDist({ env: 'prod', moduleKey: 'portal', version: 'v9', srcDir: src });
       expect(res.dest).toBe('/data/web_system_static/public/static/modules/portal/v9');
       fs.rmSync(src, { recursive: true, force: true });
+    });
+  });
+
+  /**
+   * S1（2026-10-13）边界脚本化：upload/cleanup 节点改由**脚本**做 scp/ssh，
+   * 但「投到哪台机器、落到哪个目录」仍由平台裁决 —— 这四个变量就是裁决结果。
+   *
+   * 关键判据：同一套解析必须同时喂给脚本变量与平台执行体，否则又会长出两份真相
+   * （正是 upload/cleanup 的 override 在 v5 被漏掉那一类漂移）。
+   */
+  describe('resolveRemoteScriptVars（给边界脚本的远端变量）', () => {
+    const getter = (map: Record<string, string | undefined>) => (k: string) => map[k];
+
+    it('落点与 service 的 remoteModulesRoot 同源（同一次装配两种走法必须一致）', () => {
+      const get = getter({
+        DEV_SERVER: '10.0.0.9',
+        DEV_USER: 'ubuntu',
+        REMOTE_MODULES_ROOT_DEV: '/data/mods',
+      });
+      const v = resolveRemoteScriptVars(get, {
+        env: 'dev',
+        moduleKey: 'admin',
+        version: 'v1',
+        exists: () => false,
+      });
+      expect(v.REMOTE_SSH_TARGET).toBe('ubuntu@10.0.0.9');
+      expect(v.REMOTE_MODULES_ROOT).toBe('/data/mods');
+      expect(v.REMOTE_DEST_DIR).toBe('/data/mods/admin/v1');
+      // 与 uploadDist 的 dest 必须逐字相同（换条断言方式：直接比 former 与 latter）
+      expect(v.REMOTE_DEST_DIR).toBe(
+        `${resolveRemoteModulesRoot(get, 'dev')}/admin/v1`,
+      );
+    });
+
+    it('目标机未登记 → 目标与目标目录都为空（平台不猜默认机，脚本据此显式报错）', () => {
+      const v = resolveRemoteScriptVars(getter({}), {
+        env: 'staging',
+        moduleKey: 'admin',
+        version: 'v1',
+        exists: () => false,
+      });
+      expect(v.REMOTE_SSH_TARGET).toBe('');
+      // 静态根没配时三级链回落到旧常量，这个要与既有行为一致 —— 空非法：
+      // 值为空会让脚本在 scp 阶段才炸，且报的是「Permission denied」而非「未配置」
+      expect(v.REMOTE_DEST_DIR).not.toBe('');
+    });
+
+    it('无 version → 不出 DEST 目录（半条路径比没有更危险）', () => {
+      const v = resolveRemoteScriptVars(getter({ DEV_SERVER: 'h' }), {
+        env: 'dev',
+        moduleKey: 'admin',
+        exists: () => false,
+      });
+      expect(v.REMOTE_DEST_DIR).toBe('');
+    });
+
+    it('resolveRemoteSshTarget：无 user 时返回裸 host；未配置返回空串', () => {
+      expect(resolveRemoteSshTarget(getter({ PROD_SERVER: '1.2.3.4' }), 'prod')).toBe('1.2.3.4');
+      expect(resolveRemoteSshTarget(getter({}), 'prod')).toBe('');
+    });
+
+    describe('pickSshKeyPath（私钥路径）', () => {
+      it('显式路径存在即用它', () => {
+        expect(pickSshKeyPath('/keys/a', { exists: (p) => p === '/keys/a' })).toBe('/keys/a');
+      });
+
+      it('显式路径不存在 → 回落默认私钥（存在才用）', () => {
+        const exists = (p: string) => p === '/home/u/.ssh/id_ed25519_servers';
+        expect(pickSshKeyPath('/keys/missing', { exists, home: '/home/u' })).toBe(
+          '/home/u/.ssh/id_ed25519_servers',
+        );
+      });
+
+      it('一个都不存在 → 空串（脚本按本机 ssh 默认行为连接，而不是拿着错路径去连）', () => {
+        expect(pickSshKeyPath(undefined, { exists: () => false, home: '/home/u' })).toBe('');
+      });
+
+      it('~ 展开到给定 HOME', () => {
+        const exists = (p: string) => p === '/home/u/.ssh/id_ed25519_servers';
+        expect(pickSshKeyPath('~/.ssh/id_ed25519_servers', { exists, home: '/home/u' })).toBe(
+          '/home/u/.ssh/id_ed25519_servers',
+        );
+      });
     });
   });
 });

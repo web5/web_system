@@ -30,6 +30,109 @@ export interface RemoteDeliveryResult {
   dest: string;
 }
 
+/** 配置项读取器（`ConfigService.get<string>` 的形状，抽出来便于纯函数单测） */
+export type ConfigGetter = (key: string) => string | undefined;
+
+/**
+ * 远端静态产物根（诊断 #3 遗留：此前是 `release-paths.ts` 里的硬编码常量）。
+ *
+ * 为什么不能硬编码一条路径：prod 的静态根**不在** gateway 目录下
+ * （实测 `/data/web_system_static/public`，与 dev 的
+ * `/data/web_system/servers/gateway/public` 完全不同）。硬编码的那条只适用于
+ * 与控制台同机同布局的环境 —— 换台机器就是「投递成功但页面 404」，且日志看不出来。
+ *
+ * 取值优先级（与 `apps/static-target.ts` 同口径，避免两处再漂移）：
+ * 1. `REMOTE_MODULES_ROOT_<ENV>`（显式指定，最直白）
+ * 2. `STATIC_PUBLIC_ROOT_<ENV>` + `/static/modules`（静态根已在 #3 按环境配置过）
+ * 3. 旧常量（保持既有行为，未配置时不会突然改投递落点）
+ *
+ * ⚠️ 抽成纯函数是为 S1「边界脚本化」服务：`upload` 节点改由脚本做 scp 时，
+ * 落点仍必须由平台算好下发 —— 脚本各拼一遍这条链，迟早拼错成第 3 级默认值。
+ */
+export function resolveRemoteModulesRoot(get: ConfigGetter, env: string): string {
+  const e = (env || '').toUpperCase();
+  const explicit = (get(`REMOTE_MODULES_ROOT_${e}`) || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+
+  const staticRoot = (get(`STATIC_PUBLIC_ROOT_${e}`) || '').trim();
+  // 静态根下的布局是 `static/modules`（见 apps/static-target.ts 的 envArtifactsRel），
+  // 与**发布目录内**的 `servers/gateway/public/static/modules` 不是一回事 —— 混用会得到
+  // `/data/web_system_static/public/servers/gateway/public/static/modules` 这种落点
+  if (staticRoot) return `${staticRoot.replace(/\/+$/, '')}/static/modules`;
+
+  return releasePaths.REMOTE_MODULES_ROOT;
+}
+
+/**
+ * 远端 SSH 目标（`user@host`），与 `RemoteDeliveryService.resolveTarget` 同口径。
+ * 未配置返回空串 —— **平台不猜默认值**（诊断 #15：猜默认机 = 连错机器）。
+ */
+export function resolveRemoteSshTarget(get: ConfigGetter, env: string): string {
+  const host = env === 'prod' ? get('PROD_SERVER') : get('DEV_SERVER');
+  if (!host) return '';
+  const user = env === 'prod' ? get('PROD_USER') : get('DEV_USER');
+  return user ? `${user}@${host}` : host;
+}
+
+/** 控制台默认私钥路径（进程的 HOME 下），与 SshExecService 的缺省同源 */
+export const DEFAULT_SSH_KEY_REL = '~/.ssh/id_ed25519_servers';
+
+/**
+ * 挑一个**确实存在**的私钥绝对路径。
+ *
+ * 只认存在的文件：把不存在的路径下发下去，脚本会在 scp 那一步才失败
+ * （且报的是 Permission denied，看不出是路径写错还是密钥不对）。
+ * 一个都不存在 → 返回空串，交脚本按本机 ssh 默认行为（agent / ~/.ssh/config）连接。
+ */
+export function pickSshKeyPath(
+  raw: string | undefined,
+  opts: { home?: string; exists?: (p: string) => boolean } = {},
+): string {
+  const exists = opts.exists ?? fs.existsSync;
+  const expand = (p: string) =>
+    p.startsWith('~') ? p.replace(/^~/, opts.home ?? process.env.HOME ?? '') : p;
+  for (const cand of [raw?.trim(), DEFAULT_SSH_KEY_REL]) {
+    if (!cand) continue;
+    const abs = expand(cand);
+    if (abs && exists(abs)) return abs;
+  }
+  return '';
+}
+
+/**
+ * S1：给边界脚本的远端投递变量（平台算好，脚本只管用）。
+ *
+ * 空串 = 未配置；脚本必须**显式报错**而不是带着空串联到 `""` 目标机上
+ * （模板 `upload-remote.sh` / `clean-remote.sh` 已这么做）。
+ */
+export interface RemoteScriptVars {
+  REMOTE_SSH_TARGET: string;
+  REMOTE_MODULES_ROOT: string;
+  REMOTE_DEST_DIR: string;
+  SSH_KEY_PATH: string;
+}
+
+export function resolveRemoteScriptVars(
+  get: ConfigGetter,
+  input: {
+    env: string;
+    moduleKey: string;
+    /** 版本（commit 短哈希 / 版本引用）；为空时不出 Dest 目录 */
+    version?: string;
+    sshKeyPathRaw?: string;
+    home?: string;
+    exists?: (p: string) => boolean;
+  },
+): RemoteScriptVars {
+  const root = resolveRemoteModulesRoot(get, input.env);
+  return {
+    REMOTE_SSH_TARGET: resolveRemoteSshTarget(get, input.env),
+    REMOTE_MODULES_ROOT: root,
+    REMOTE_DEST_DIR: root && input.version ? `${root}/${input.moduleKey}/${input.version}` : '',
+    SSH_KEY_PATH: pickSshKeyPath(input.sshKeyPathRaw, { home: input.home, exists: input.exists }),
+  };
+}
+
 /**
  * 远程投递工具（upload 内置步骤 remote 分支的执行体）。
  *
@@ -82,18 +185,9 @@ export class RemoteDeliveryService {
    * 2. `STATIC_PUBLIC_ROOT_<ENV>` + `/static/modules`（静态根已在 #3 按环境配置过）
    * 3. 旧常量（保持既有行为，未配置时不会突然改投递落点）
    */
+  /** 委派给纯函数实现（同一入口，避免脚本变量与投递执行体各算一遍） */
   remoteModulesRoot(env: string): string {
-    const e = (env || '').toUpperCase();
-    const explicit = (this.configService.get<string>(`REMOTE_MODULES_ROOT_${e}`) || '').trim();
-    if (explicit) return explicit.replace(/\/+$/, '');
-
-    const staticRoot = (this.configService.get<string>(`STATIC_PUBLIC_ROOT_${e}`) || '').trim();
-    // 静态根下的布局是 `static/modules`（见 apps/static-target.ts 的 envArtifactsRel），
-    // 与**发布目录内**的 `servers/gateway/public/static/modules` 不是一回事 —— 混用会得到
-    // `/data/web_system_static/public/servers/gateway/public/static/modules` 这种落点
-    if (staticRoot) return `${staticRoot.replace(/\/+$/, '')}/static/modules`;
-
-    return releasePaths.REMOTE_MODULES_ROOT;
+    return resolveRemoteModulesRoot((k) => this.configService.get<string>(k), env);
   }
 
   /**

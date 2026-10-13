@@ -228,7 +228,9 @@ describe('runBootstrap（失败分档：缺键致命，库抖动不致命）', (
     const out = await runBootstrap(env);
     expect(out.warning).not.toMatch(/CONFIG_MASTER_KEY/);
     resetMasterKeyCache();
-  });
+    // 显式超时：这条会真的去连一次 mysql（端口 1 ≈ 立即 ECONNREFUSED，但 I/O 等待
+    // 在 CI 满载时可能超 jest 默认 5s）。失败的是环境不是断言，别让它变成红灯误导。
+  }, 20000);
 
   it('库连不上 → 只告警不抛（DB 抖动不该让发布系统起不来）', async () => {
     const env = {
@@ -240,5 +242,5 @@ describe('runBootstrap（失败分档：缺键致命，库抖动不致命）', (
     expect(out.mode).toBe('bootstrap');
     expect(out.loaded).toBe(false);
     expect(out.warning).toBeTruthy();
-  });
+  }, 20000);
 });

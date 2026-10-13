@@ -327,6 +327,48 @@ describe('resolveStageVars（阶段命令变量）', () => {
     });
   });
 
+  /**
+   * S1（2026-10-13）边界脚本化：远端投递由脚本执行，平台只下发「算好的结果」。
+   * 这几个变量一旦可被覆盖，症状是「流水线全绿但产物投到了别的机器/目录」——
+   * 与 CONSOLE_API 同类，属发布语义真相源，必须硬保护。
+   */
+  describe('远端投递四变量（S1：平台算 → 脚本用）', () => {
+    const base = { env: 'dev', moduleKey: 'admin', releaseWorkspace: ws, commitId: 'abc1234' };
+    const remote = {
+      REMOTE_SSH_TARGET: 'ubuntu@10.0.0.9',
+      REMOTE_MODULES_ROOT: '/data/mods',
+      REMOTE_DEST_DIR: '/data/mods/admin/abc1234',
+      SSH_KEY_PATH: '/home/u/.ssh/id_ed25519_servers',
+    };
+
+    it('原样下发到脚本环境', () => {
+      const v = resolveStageVars({ ...base, remote });
+      expect(v.REMOTE_SSH_TARGET).toBe('ubuntu@10.0.0.9');
+      expect(v.REMOTE_DEST_DIR).toBe('/data/mods/admin/abc1234');
+      expect(v.SSH_KEY_PATH).toBe('/home/u/.ssh/id_ed25519_servers');
+    });
+
+    it('未传（平台未解析出）→ 空串，交脚本显式报错', () => {
+      const v = resolveStageVars(base);
+      expect(v.REMOTE_SSH_TARGET).toBe('');
+      expect(v.REMOTE_MODULES_ROOT).toBe('');
+      expect(v.REMOTE_DEST_DIR).toBe('');
+      expect(v.SSH_KEY_PATH).toBe('');
+    });
+
+    it('REMOTE_* 不可被配置中心/流水线变量覆盖（防"投到别的机子还报成功"）', () => {
+      const v = resolveStageVars({
+        ...base,
+        remote,
+        config: { REMOTE_SSH_TARGET: 'root@1.1.1.1', REMOTE_DEST_DIR: '/wrong' },
+        pipelineVars: { REMOTE_MODULES_ROOT: '/wrong' },
+      });
+      expect(v.REMOTE_SSH_TARGET).toBe('ubuntu@10.0.0.9');
+      expect(v.REMOTE_DEST_DIR).toBe('/data/mods/admin/abc1234');
+      expect(v.REMOTE_MODULES_ROOT).toBe('/data/mods');
+    });
+  });
+
   describe('P3 pm2 入口 / 工作目录可配（2026-09-20）', () => {
     const be = {
       env: 'local',

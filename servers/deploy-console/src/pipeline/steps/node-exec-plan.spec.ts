@@ -1,4 +1,4 @@
-import { planNodeExec } from './node-exec-plan';
+import { OVERRIDABLE_PLATFORM_NODES, planNodeExec } from './node-exec-plan';
 
 /**
  * 节点执行策略的防回归测试。
@@ -27,6 +27,31 @@ describe('planNodeExec（v5 节点执行策略）', () => {
     expect(planNodeExec({ kind: 'platform', key: 'pointer' })).toEqual({
       how: 'builtin',
       builtinKey: 'pointer',
+    });
+  });
+
+  // S1（2026-10-13）：v5 分派原本把 upload/cleanup 判成纯内置 —— 运维给节点配了脚本
+  // 却静默不跑，而 step-registry 早就声明它们是 override。这两条把「声明」与「兑现」拴住。
+  it('upload / cleanup（platform 节点）→ 脚本可覆盖内置，未配则回退', () => {
+    expect(planNodeExec({ kind: 'platform', key: 'upload' })).toEqual({
+      how: 'builtin-override',
+      builtinKey: 'upload',
+    });
+    expect(planNodeExec({ kind: 'platform', key: 'cleanup' })).toEqual({
+      how: 'builtin-override',
+      builtinKey: 'cleanup',
+    });
+  });
+
+  it('可覆盖清单必须与 step-registry 的 override 步骤一致（新增步骤忘了同步即红）', () => {
+    // 'build' 也是 override，但它没有内置执行体 → 若被误加进清单，
+    // 内置回退分支会抛「注册表无可执行逻辑」，而不是回退到 build 命令。
+    expect([...OVERRIDABLE_PLATFORM_NODES].sort()).toEqual(['cleanup', 'upload']);
+  });
+
+  it('script 形态的同名 upload 节点仍走命令驱动（不改存量行为）', () => {
+    expect(planNodeExec({ kind: 'script', key: 'upload', label: '投递' })).toEqual({
+      how: 'script',
     });
   });
 
