@@ -8,7 +8,9 @@ import {
   resolveRunStages,
   isRollbackAnchor,
   pickStagePort,
+  PipelineService,
 } from './pipeline.service';
+import { RUN_TOKEN_PREFIX, __clearRevokedForTest, verifyRunToken } from '../common/run-token';
 
 /**
  * 执行记录删除状态门禁的防回归测试。
@@ -465,5 +467,87 @@ describe('pickStagePort（端口取值链 · 防"远端探错端口→假失败�
     });
     expect(v.PORT).toBe('');
     expect(v.PORT_SOURCE).toBe('unresolved');
+  });
+});
+
+/**
+ * 2026-10-13：脚本凭据从「长期 `INTERNAL_API_KEY`」切换为「run 短期令牌」。
+ *
+ * 刻意用 `Object.create(PipelineService.prototype)` 挂最小依赖：完整构造
+ * PipelineService 需要十余个 repo/service 桩，而这里只关心**凭据取值链路**，
+ * 桩一多就把被测逻辑淹了（且每加一个构造参数都要回来改桩）。
+ */
+describe('issueScriptToken（脚本凭据：优先 run 短期令牌）', () => {
+  const SECRET = 'pipeline-run-token-secret-0123456789';
+  const STATIC = 'static-internal-key-0123456789';
+  const saved = { ...process.env };
+
+  function mkSvc(cfg: Record<string, string> = {}) {
+    const svc = Object.create(PipelineService.prototype) as unknown as {
+      configService: { get: (k: string) => string | undefined };
+      logger: { warn: jest.Mock };
+      issueScriptToken: (p: unknown) => string;
+      revokeScriptTokens: (runId: string) => void;
+    };
+    svc.configService = { get: (k: string) => cfg[k] };
+    svc.logger = { warn: jest.fn() };
+    // 两个字段在类里是字段初始化器（不在 prototype 上），原型构造不会带过来
+    (svc as unknown as { runTokenJtis: Map<string, string[]> }).runTokenJtis = new Map();
+    (svc as unknown as { runTokenWarned: Set<string> }).runTokenWarned = new Set();
+    return svc;
+  }
+
+  const p = { id: 'run-77', env: 'prod', moduleKey: 'portal' };
+
+  beforeEach(() => {
+    process.env.RUN_TOKEN_SECRET = SECRET;
+    __clearRevokedForTest();
+  });
+  afterEach(() => {
+    process.env = { ...saved };
+    __clearRevokedForTest();
+  });
+
+  it('默认签发 run 短期令牌，且令牌带本次 run 的身份', () => {
+    const svc = mkSvc({ INTERNAL_API_KEY: STATIC });
+    const token = svc.issueScriptToken(p);
+    expect(token.startsWith(RUN_TOKEN_PREFIX)).toBe(true);
+    expect(token).not.toBe(STATIC); // 静态 key 不再进脚本 env
+    const v = verifyRunToken(token);
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(v.claims.runId).toBe('run-77');
+    expect(v.claims.env).toBe('prod');
+    expect(v.claims.moduleKey).toBe('portal');
+  });
+
+  it('RUN_TOKEN_ENABLED=false → 回落静态 key（应急开关，行为与改造前一致）', () => {
+    const svc = mkSvc({ INTERNAL_API_KEY: STATIC, RUN_TOKEN_ENABLED: 'false' });
+    expect(svc.issueScriptToken(p)).toBe(STATIC);
+  });
+
+  it('取不到签名密钥 → 回落静态 key，不阻断发布，且只告警一次', () => {
+    delete process.env.RUN_TOKEN_SECRET;
+    delete process.env.CONFIG_MASTER_KEY;
+    delete process.env.JWT_SECRET;
+    const svc = mkSvc({ INTERNAL_API_KEY: STATIC });
+    expect(svc.issueScriptToken(p)).toBe(STATIC);
+    expect(svc.issueScriptToken(p)).toBe(STATIC);
+    // 编排模式每个动作都会调一次：不收敛告警量会把日志刷爆
+    expect(svc.logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('run 结束后撤销：本次签发的令牌全部失效', () => {
+    const svc = mkSvc({ INTERNAL_API_KEY: STATIC });
+    const a = svc.issueScriptToken(p);
+    const b = svc.issueScriptToken(p); // 编排模式每动作重新组装 env → 会签多枚
+    svc.revokeScriptTokens(p.id);
+    expect(verifyRunToken(a)).toMatchObject({ ok: false, reason: 'revoked' });
+    expect(verifyRunToken(b)).toMatchObject({ ok: false, reason: 'revoked' });
+  });
+
+  it('撤销幂等：对未知 runId 调用不抛异常（finally 里调用，不能成为新的失败点）', () => {
+    const svc = mkSvc({ INTERNAL_API_KEY: STATIC });
+    expect(() => svc.revokeScriptTokens('never-existed')).not.toThrow();
   });
 });

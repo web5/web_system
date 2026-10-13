@@ -1,5 +1,6 @@
 import { ForbiddenException, HttpException } from '@nestjs/common';
 import { InternalGuardService, clientIpOf, normalizeIp } from './internal-guard.service';
+import { __clearRevokedForTest, issueRunToken, revokeRunToken } from './run-token';
 
 const KEY = 'test-internal-key-0123456789';
 
@@ -205,5 +206,89 @@ describe('internal-guard（诊断 #7）', () => {
       await svc.run(reqWith({ 'x-internal-key': KEY, 'idempotency-key': 'r' }), { action: 'p' }, fn);
       expect(fn).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+/**
+ * 2026-10-13：run 短期令牌接入内部守卫。
+ *
+ * 关注点不只是「能不能过鉴权」，还有两条：
+ *   1. **双凭据并存** —— 存量脚本/运维脚本仍用静态 `INTERNAL_API_KEY`，不能因为
+ *      上线短期令牌就把它们拒之门外；
+ *   2. **审计可归因** —— 以前所有内部调用都记 `pipeline-script`，切了 prod 指针
+ *      无从追查是哪次发布；现在能落到 `pipeline:run:<runId>`。
+ */
+describe('internal-guard × run 短期令牌', () => {
+  const SECRET = 'guard-run-token-secret-0123456789';
+
+  beforeEach(() => {
+    process.env.INTERNAL_API_KEY = KEY;
+    process.env.RUN_TOKEN_SECRET = SECRET;
+    __clearRevokedForTest();
+  });
+  afterEach(() => {
+    delete process.env.INTERNAL_API_KEY;
+    delete process.env.RUN_TOKEN_SECRET;
+    __clearRevokedForTest();
+  });
+
+  it('run 令牌可替代静态 key 通过鉴权（脚本侧零改造，仍是同一个 x-internal-key 头）', () => {
+    const { svc } = makeGuard();
+    const t = issueRunToken({ runId: 'run-9', env: 'prod', moduleKey: 'portal' });
+    expect(svc.check(reqWith({ 'x-internal-key': t!.token }), 'a')).toBe('10.0.0.1');
+  });
+
+  it('未配静态 key 时 run 令牌仍可用（凭据改造不该引入新的配置摩擦）', () => {
+    delete process.env.INTERNAL_API_KEY;
+    const { svc } = makeGuard();
+    const t = issueRunToken({ runId: 'run-9', env: 'prod', moduleKey: 'portal' });
+    expect(svc.check(reqWith({ 'x-internal-key': t!.token }), 'a')).toBe('10.0.0.1');
+    // 静态 key 路径仍按旧规则拒绝（内部接口宁不可用，也不裸奔）
+    expect(() => svc.check(reqWith({ 'x-internal-key': KEY }), 'a')).toThrow(/未配置/);
+  });
+
+  it('撤销后的 run 令牌 → 401（run 已结束，脚本不该还能回调平台）', () => {
+    const { svc } = makeGuard();
+    const t = issueRunToken({ runId: 'run-9', env: 'prod', moduleKey: 'portal' });
+    revokeRunToken(t!.jti);
+    expect(() => svc.check(reqWith({ 'x-internal-key': t!.token }), 'a')).toThrow(/撤销/);
+  });
+
+  it('run 令牌过期 → 401 且文案指明过期（而不是笼统的"不正确"）', () => {
+    const { svc } = makeGuard();
+    const t = issueRunToken({ runId: 'run-9', env: 'prod', moduleKey: 'portal', ttlSec: 1 });
+    // 直接把时钟推后：等真实过期太慢，且让测试依赖 wall clock 会偶发不稳
+    const realNow = Date.now;
+    Date.now = () => realNow() + 5000;
+    try {
+      expect(() => svc.check(reqWith({ 'x-internal-key': t!.token }), 'a')).toThrow(/过期/);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('审计归因：run 令牌的调用记到具体 run（静态 key 仍记 pipeline-script）', async () => {
+    const { svc, audit } = makeGuard();
+    const t = issueRunToken({ runId: 'run-42', env: 'prod', moduleKey: 'portal' });
+    await svc.run(
+      reqWith({ 'x-internal-key': t!.token }),
+      { action: 'internal.release.pointer', env: 'prod', component: 'portal' },
+      async () => ({ from: 'v1', to: 'v2' }),
+      (r) => `切指针 ${r.from} → ${r.to}`,
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: 'pipeline:run:run-42',
+        detail: expect.stringContaining('run run-42 · portal @ prod'),
+      }),
+    );
+
+    audit.log.mockClear();
+    await svc.run(
+      reqWith({ 'x-internal-key': KEY }),
+      { action: 'internal.release.pointer', env: 'prod', component: 'portal' },
+      async () => 'ok',
+    );
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ user: 'pipeline-script' }));
   });
 });
