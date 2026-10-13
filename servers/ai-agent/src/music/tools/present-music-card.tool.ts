@@ -114,6 +114,16 @@ export class PresentMusicCardTool implements ToolDefinition {
         path: this.music.buildPath(provider, keyword),
         ready: this.music.isReady(provider),
       },
+      /**
+       * 全量可用渠道（按 sort 升序）。
+       *
+       * 为什么多带一份：渠道能不能用是**端**决定的 —— h5 渠道 PC 浏览器能开新页，
+       * 小程序里 web-view 受业务域名限制根本打不开；mini_program 渠道反之，只有
+       * 小程序能跳、PC 跳不了。而 `provider` 只有一个（resolveProvider 按 sort 取最小），
+       * 一旦默认渠道是 h5，小程序端就永远只能降级复制。
+       * 端上自选，服务端就不需要感知「请求来自哪一端」（ToolContext 里也没有端信息）。
+       */
+      providers: await this.music.listProviders(),
       songs,
       keyword,
     };
