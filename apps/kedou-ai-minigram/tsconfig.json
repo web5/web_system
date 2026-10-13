@@ -14,9 +14,13 @@
     "paths": {
       "@web-system/shared": ["../../packages/shared/src/index.ts"]
     },
+    // module 为 ES6 时默认 classic 解析，会与 resolveJsonModule 冲突（TS5070），必须显式指定
+    "moduleResolution": "node",
+    // 类型名必须等于 node_modules/@types 下的**目录名**。此前写的 miniprogram-api-typings /
+    // weixin-miniprogram 本机与 CI 都没装（依赖里只有 @types/wechat-miniprogram），tsc 直接
+    // TS2688 找不到 → 微信全局类型没加载 → 报出一堆假错（TouchDetail、wx.xxx 等）
     "types": [
-      "miniprogram-api-typings",
-      "weixin-miniprogram",
+      "wechat-miniprogram",
       "jest"
     ]
   },
