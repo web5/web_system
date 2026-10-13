@@ -623,7 +623,12 @@ function trimCache(): void {
       .map((f) => {
         const p = `${dir}/${f}`;
         try {
-          return { p, mtime: fsm.statSync(p).mtimeMs || 0 };
+          // ⚠️ 微信小程序 Stats 只有 lastModifiedTime（秒级 UNIX 时间戳），没有 Node fs 的
+          // mtimeMs —— 写 mtimeMs 恒为 undefined，全部回退 || 0，排序等于没排，
+          // 淘汰掉的不是最旧的缓存文件（LRU 形同虚设）
+          // statSync 的类型是 `Stats | Stats[]`（传 recursive 时返回数组）；单路径调用只会
+          // 返回单个 Stats，收窄后再取字段
+          return { p, mtime: (fsm.statSync(p) as WechatMiniprogram.Stats).lastModifiedTime || 0 };
         } catch {
           return null;
         }
