@@ -9,9 +9,16 @@
  * 微信直接退出小程序。改为普通页后 welcome/发现/我的均 navigateTo 进入，右滑退回来源页。
  * 代价：对话项（isTab=false）点击走 navigateTo 而非 switchTab。
  *
- * 高亮推导：组件挂在哪些页面就由哪些页面的 show 触发 —— attached + pageLifetimes.show
- * 时读 getCurrentPages() 最后一条路由，匹配 list 项则高亮；沉浸页（对话/历史）不匹配
- * 任何项时保持上次高亮，避免闪空。各页面不再需要 onShow 手工登记。
+ * ============================ 高亮的两级机制 ============================
+ * 一级（权威）：页面在 onShow 里显式登记 —— 见 utils/tabbar.ts 的 setTabBarSelected。
+ *   自定义 tabBar 组件**在每个页面是独立实例**（不是全局单例），新页面的 selected
+ *   会回到初始值，且 attached/show 与页面入栈的时序不保证 —— 纯自推导会在首次
+ *   进入某页时读到旧栈顶，表现为「页面切过去了、高亮还停在上一项」（10-13 实测）。
+ *   登记后写 _registered=true，组件不再覆盖。
+ * 二级（兜底）：页面未登记时（设置/翻译/对话记录等二级页），syncFromRoute 从页面栈
+ *   回溯推导归属（settings→「我的」、history→「对话」）。
+ * ======================================================================
+ *
  * key 用于映射图标样式类（.tb-ic-<key>），见 index.wxss。
  */
 Component({
@@ -22,24 +29,28 @@ Component({
       { key: 'mine', pagePath: '/pages/mine/index/index', text: '我的', isTab: true },
     ],
     selected: 0,
+    /** 页面是否已显式登记高亮；true 后组件的自推导不再覆盖（见文件头「两级机制」） */
+    _registered: false,
   },
 
   lifetimes: {
     attached() {
-      this.syncFromRoute();
+      if (!this.data._registered) this.syncFromRoute();
     },
   },
 
   pageLifetimes: {
     show() {
-      this.syncFromRoute();
+      if (!this.data._registered) this.syncFromRoute();
     },
   },
 
   methods: {
-    /** 由当前页面栈推导高亮项：从栈顶往前找第一个匹配 list 的页面。
-     *  二级页（设置/翻译/对话记录等）不匹配任何项时，归属栈中最近的 tab 相关页
-     *  （如 mine→settings 应保持「我的」），否则右滑返回二级页时高亮会漂移。 */
+    /**
+     * 兜底推导：从栈顶往前找第一个匹配 list 的页面。
+     * 二级页（设置/翻译/对话记录）不匹配任何项时归属栈中最近的 tab 相关页，
+     * 避免右滑返回二级页时高亮漂移。已登记（_registered）时不执行。
+     */
     syncFromRoute() {
       const pages = getCurrentPages() as Array<{ route: string }>;
       for (let i = pages.length - 1; i >= 0; i--) {
@@ -60,12 +71,13 @@ Component({
       // （10-13 实测：点「对话」误走 switchTab，而 chat 不在 tabBar.list → 失败不跳转，
       // 但 selected 已置 0 → 高亮与当前页错位）。统一数值化后比较。
       const isTab = Number(istab) === 1;
-      // 对话页已在栈顶时避免重复 push（navigateTo 同路由会新建实例，栈越栈越厚）
+      // 对话页已在栈顶时避免重复 push（navigateTo 同路由会新建实例，栈越点越厚）
       if (!isTab) {
         const pages = getCurrentPages() as Array<{ route: string }>;
         const top = pages.length ? '/' + pages[pages.length - 1].route : '';
         if (top === path) return;
       }
+      // 乐观高亮：切页前先亮，目标页 onShow 会再登记一次（幂等、值一致）
       this.setData({ selected: idx });
       // tab 页（发现/我的）switchTab 切换；对话页是普通页，navigateTo 进入（右滑可退回来源页）
       if (isTab) {

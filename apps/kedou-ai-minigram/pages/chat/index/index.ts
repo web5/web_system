@@ -30,6 +30,7 @@ import {
 } from '../../../services/asr';
 import { collectGlossary } from '../../../services/glossary';
 import { mdToNodes, mdToPlain } from '../../../utils/markdown';
+import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
@@ -306,9 +307,13 @@ Page({
   /**
    * 沉浸式（navigationStyle custom + 不挂 tabBar）：导航由「顶部返回 icon」与
    * 「输入区 + 菜单」承接。2026-10-12 起对话页退出 tabBar 集合（普通页），
-   * tabBar 高亮改由 custom-tab-bar 组件按路由自推导，本页不再手工登记。
+   * 但仍在 tabBar 上占一项，故本页 onShow 需登记高亮（组件每页独立实例，
+   * 不能靠自推导 —— 详见 utils/tabbar.ts）。
    */
   onShow() {
+    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
+    setTabBarSelected(this, TAB_INDEX.chat);
+
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });

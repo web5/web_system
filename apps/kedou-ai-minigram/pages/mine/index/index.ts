@@ -12,6 +12,7 @@ import { listMemory } from '../../../services/user-memory';
 import { listGlossary } from '../../../services/glossary';
 import { isLoggedIn, logout } from '../../../services/auth';
 import { fetchProfile } from '../../../services/account';
+import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 
 Page({
   data: {
@@ -62,6 +63,9 @@ Page({
   },
 
   onShow() {
+    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
+    setTabBarSelected(this, TAB_INDEX.mine);
+
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });

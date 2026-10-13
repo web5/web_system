@@ -8,6 +8,7 @@
  * 届时本页 onShow 拉清单渲染即可，跳转逻辑见下方 openCustom。
  */
 import { isLoggedIn } from '../../../services/auth';
+import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 
 Page({
   data: {
@@ -25,6 +26,9 @@ Page({
   _offAuthExpired: null as any,
 
   onShow() {
+    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
+    setTabBarSelected(this, TAB_INDEX.discover);
+
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : '';
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
