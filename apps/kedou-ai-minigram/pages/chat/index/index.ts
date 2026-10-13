@@ -90,20 +90,11 @@ interface ChatMsg {
   _mdSrc?: string;
 }
 
-/**
- * 新会话首屏的统一欢迎语。
- * 不再是「今日一句」—— 用户还没开始对话时，给一句稳定的招呼即可（今日一句保留在欢迎页展示）。
- */
-const WELCOME_GREETING = '科豆 AI · 体验不一样的 AI';
-
 /** 历史会话详情缓存前缀：按会话 id 缓存，第二次进入同一会话秒开 */
 const CONV_CACHE_PREFIX = 'conv_detail_';
 
 /** 载入历史会话时最多渲染的条数：长会话只取最近这些，避免一次性渲染过多 */
 const RECENT_MSG_LIMIT = 50;
-
-/** 开场推荐问题（写死；批次 4 改由 GET /ai/agents 的 entry.suggestions 驱动） */
-const OPENING_SUGGESTIONS = ['帮我翻一句话', '看看合同风险', '今天该做什么'];
 
 /**
  * 历史消息的翻译卡片启发式补判（缓存与网络刷新共用，幂等：已打 card 标记的不重算）。
@@ -216,8 +207,6 @@ Page({
     sending: false,
     /** AI 长消息「展开/收起」状态，按消息下标记录 */
     expandMap: {} as Record<number, boolean>,
-    /** 开场推荐问题（发送一次后收起） */
-    suggestions: OPENING_SUGGESTIONS as string[],
     /** scroll-view 滚动锚点（命中底部锚点即滚到底） */
     scrollIntoId: '',
     /** 自定义导航栏（navigationStyle: custom）：状态栏高与导航栏总高，单位 px */
@@ -296,7 +285,7 @@ Page({
       __bus.on('auth:expired', this._offAuthExpired);
     }
     this.setData({
-      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING, _id: 'welcome' }]),
+      chatMessages: [],
     });
     // 播放结束 / 停止时清除按钮「停止」态（合成中由 await 时序管理）
     this._offSpeakState = onSpeakState((s) => {
@@ -451,7 +440,6 @@ Page({
         ]),
         sending: false,
         input: '',
-        suggestions: [],
         copyIdx: -1,
         currentAgent: null,
       });
@@ -503,7 +491,6 @@ Page({
       sending: false,
       input: '',
       expandMap: {},
-      suggestions: [],
       copyIdx: -1,
       // 历史会话的 agent 归属不在列表接口里（产品决策：不展示）
       currentAgent: null,
@@ -522,8 +509,7 @@ Page({
       sending: false,
       input: '',
       expandMap: {},
-      suggestions: OPENING_SUGGESTIONS as string[],
-      chatMessages: withMdNodes([{ role: 'ai', text: WELCOME_GREETING, _id: 'welcome' }]),
+      chatMessages: [],
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
       copyIdx: -1,
@@ -696,12 +682,6 @@ Page({
     this.sendWith('不感兴趣，换一批');
   },
 
-  /** 点击开场推荐问题：直接发送 */
-  onTapSug(e: any) {
-    const q = String(e.currentTarget.dataset.q || '').trim();
-    if (q) this.sendWith(q);
-  },
-
   send() {
     const question = this.data.input.trim();
     if (!question) {
@@ -770,7 +750,6 @@ Page({
       ],
       input: '',
       sending: true,
-      suggestions: [],
       copyIdx: -1,
     });
     this.scrollToBottom();

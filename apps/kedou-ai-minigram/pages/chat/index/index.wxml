@@ -44,6 +44,9 @@
         </view>
       </view>
 
+      <!-- 空态欢迎语：无消息时的一段浅灰提示。wx:if 条件渲染，不进消息列表、不落库、不参与历史合并 -->
+      <view wx:if="{{!chatMessages.length}}" class="chat-empty">有什么想聊的，直接说</view>
+
       <view
         wx:for="{{chatMessages}}"
         wx:key="_id"
@@ -178,17 +181,6 @@
             </view>
           </view>
         </view>
-      </view>
-
-      <!-- 开场推荐问题（发送后收起；批次 4 改由 entry.suggestions 驱动） -->
-      <view wx:if="{{suggestions.length}}" class="sugs">
-        <view
-          wx:for="{{suggestions}}"
-          wx:key="*this"
-          class="sug"
-          data-q="{{item}}"
-          bindtap="onTapSug"
-        >{{item}}</view>
       </view>
 
       <!-- 滚动锚点：scroll-into-view 命中它即滚到底 -->
