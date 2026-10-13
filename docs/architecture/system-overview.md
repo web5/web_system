@@ -56,9 +56,16 @@
 | `knowledge-service` | RAG 知识库：分块、embedding、余弦检索（独立库） | 6011 |
 | `deploy-console` | 发布平台：流水线、环境、应用/服务、版本指针、审批、灰度、配置中心 | 6200 |
 
-**端口矩阵差异**：本机 local 的 `auth-service` 是 **6101**（6001 被他项目占用，写在 `ecosystem.config.cjs`）；dev/prod 用 6001（写在发布目录的 `ecosystem.config.js`）。
+**端口矩阵差异**：本机 local 的 `auth-service` 是 **6101**（6001 被他项目占用，写在 `ecosystem.apps.cjs`）；dev/prod 用 6001（写在发布目录的 `ecosystem.config.js`）。
 
-> ⚠️ `ecosystem.config.cjs`（本机）与 `.js`（发布目录）**双文件漂移**是已知技术债：pm2 名前者 `web-*`、后者裸名，是排查时的高频误导源。
+> 📌 pm2 清单自 2026-10-09 起按**域拆分**，本机侧不再是单一文件：
+> `ecosystem.config.cjs` 是**全量入口**（只做合并），
+> 真实定义在 `ecosystem.apps.cjs`（11 个业务服务）+ `ecosystem.console.cjs`（deploy-console）。
+> 拆域的原因：console 会「发布自己」并重启自身进程，与应用共用一份清单时，
+> 一次全量 restart 会把应用一起带走，发布影响面不可控。
+>
+> ⚠️ **仍在的债是命名口径，不是文件结构**：本机 pm2 名是 `web-*`（`web-gateway`），
+> 发布目录是裸名（`gateway`），两边对不上 —— 排查时按名字找进程仍然容易找错。
 
 ## 4. 前端应用
 
@@ -132,6 +139,10 @@
 
 **关键约束**：基座是整页 HTML、`<script src>` 用烘焙的**绝对 base**，所以 shell 构建必须 `RELEASE_TAG=${DEPLOY_ENV}/${COMMIT_ID##*/}`，否则产物 404。已由 `scripts/pipeline-lint.mjs` 的 **L7 规则**卡位。
 
+> ⚠️ 别以为进了 CI 就万事大吉：**L7 是跨动作聚合规则，只在从 DB 取数（`--from-db`）时执行**。
+> CI 阶段跑的是静态模式（`--scripts`，只体检仓库内的 `.sh`），规则是 L1/L5/L6/L9，**不含 L7**，
+> 因为静态文件没有"同一条流水线里多个动作"这个上下文。DB 侧口径仍靠运维定期 `--from-db` 体检。
+
 ## 8. 发布与部署通道
 
 三条通道并存：
@@ -140,7 +151,11 @@
 2. **传统发布**：`scripts/publish-deploy-console.sh --env dev|prod`（deploy-console 专用，带备份替换 + 探活 + 失败自动回滚）。
 3. **本地调试**：本机 nginx + `local.kedouai.com`。
 
-门禁：`quality-gate.yml`（红线扫描 R9–R14 + 改动包 build/test，**lint 档已关闭**，全仓无 ESLint flat config）、`pipeline-lint.mjs` L7。
+门禁：`quality-gate.yml`（红线扫描 R9–R14 + **流水线脚本体检 L1/L5/L6/L9** + 改动包 build/test）、`scripts/pipeline-lint.mjs`。
+
+> ⚠️ **ESLint 处于半拉子状态，别当成"有门禁"**：根级 `eslint.config.mjs` 已就位（#291，2026-10-13 前合入），
+> 但 `scripts/ci/changed-packages.sh` **尚不支持 `--lint` 参数**，所以 lint 档**仍未启用** ——
+> 现在只有 build/test 在守，风格与部分静态错误无人管。补 `--lint` 前先把存量告警清零，否则任何后端 PR 必红。
 
 ## 9. 环境拓扑
 
@@ -164,7 +179,13 @@
 ## 10. 配置与密钥
 
 - 三层优先级：**根 `.env.production` > 服务级 `.env` > 代码默认值**。
-- pm2 铁律：`pm2 delete && pm2 start`，**禁用 `--update-env`**（裸 `pm2 start ecosystem.config.js` 会注入 0 个变量导致 JWT_SECRET 缺失启动失败）。
+- pm2 铁律：**只用 `pm2 restart <name>`** —— 不用 `delete` + `start`，**禁用 `--update-env`**。
+  - 不用 `delete`+`start`：`delete` 会把进程从 pm2 列表移除（含 `pm2 save` 的开机自启列表），
+    且两次操作之间服务完全不可用；`restart` 保持进程身份与列表位置不变。
+  - 不用 `--update-env`：它会把**执行会话**的环境变量固化进 `pm2_env`，而 dotenv 默认不覆盖
+    已存在的 `process.env` → 服务实际用的是错误来源的配置。历史事故：`web-ai-agent` / `web-todo`
+    曾被误注入 6200，服务起来就抢错端口。
+  - 端口一律在 ecosystem 域文件里写死 `env.PORT`，不依赖 `restart` 沿袭的旧值。
 - `CONFIG_MASTER_KEY` 只注入**文件路径**（`scripts/provision-master-key.sh`），不注入值。
 
 ## 11. CI/CD
@@ -173,7 +194,7 @@
 |---|---|---|
 | `auto-pr.yml` | push 到 `feature/*` `fix/*`（排除 `feature/test`、`kedou-ai-minigram`） | 自动建 PR + 挂 auto-merge |
 | `auto-merge.yml` | PR opened/synchronize | 幂等挂自动合入兜底 |
-| `quality-gate.yml` | PR → master | 红线扫描 + 改动包 build/test |
+| `quality-gate.yml` | PR → master | 红线扫描 R9–R14 + 流水线脚本体检 L1/L5/L6/L9 + 改动包 build/test（**lint 档未启用**） |
 | `release.yml` | push 到 **`feature/test`** 或手动 | self-hosted runner 发布 |
 
 凭据用 `RELEASE_HOOK_SECRET`（HMAC-SHA256 + 300s 时间窗 + deliveryId 幂等），不用控制台 JWT。
@@ -204,10 +225,11 @@
 
 | 债务 | 影响 |
 |---|---|
-| `ecosystem.config.cjs` / `.js` 双文件漂移 | pm2 名与端口口径不一，排查误导 |
+| 本机 pm2 名 `web-*` vs 发布目录裸名 | 跨环境按名找进程对不上（ecosystem 域**拆分已完成**，剩下的是命名口径未统一） |
 | `docker-compose*.yml` 失真（PG vs MySQL 自相矛盾） | 新人按 compose 部署必然错 |
 | `apps/mini-app` 空壳目录 | 误导文档与 grep |
-| 全仓无 ESLint flat config | quality-gate 的 lint 档关闭，只有 build/test |
+| **ESLint lint 档未启用**：`eslint.config.mjs` 已就位，但 `changed-packages.sh` 不支持 `--lint` | 只有 build/test 在守；风格与部分静态错误无人管（比"没有 config"更容易被误认为已启用） |
+| 流水线动作脚本存在 DB、不进仓库 | 无法 PR 评审 / 无法 diff 回溯；也**不能**导出到本仓库（PUBLIC，含主机与路径） |
 | 文档命名残留 `mini-contract` | `deploy-target-knowledge.md` 未同步更名 |
 
 ## 15. 相关文档
