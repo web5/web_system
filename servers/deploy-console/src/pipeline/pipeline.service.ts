@@ -41,6 +41,8 @@ import { pickStepBranch } from './steps/step-branch';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
+// 流水线 run 短期令牌（替代注入脚本的长期 INTERNAL_API_KEY；见 common/run-token.ts）
+import { issueRunToken, revokeRunTokens } from '../common/run-token';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
@@ -269,8 +271,15 @@ export interface StageVarsInput {
    */
   consoleApi?: string;
   /**
-   * 脚本调用平台内部接口的凭据（`INTERNAL_API_KEY`），注入为 `CONSOLE_TOKEN`，
-   * 通过 `x-internal-key` 头鉴权（与 `/api/internal/release/*` 一致）。
+   * 脚本调用平台内部接口的凭据，注入为 `CONSOLE_TOKEN`，通过 `x-internal-key` 头鉴权。
+   *
+   * 两种形态（2026-10-13）：
+   *   - **run 短期令牌**（`rt1_...`，推荐）：本次 run 现签，带 runId/env/moduleKey，
+   *     run 结束即撤销；由 `PipelineService.issueScriptToken()` 签发；
+   *   - **静态 `INTERNAL_API_KEY`**：取不到签名密钥或 `RUN_TOKEN_ENABLED=false` 时的回落。
+   *
+   * 脚本侧**零感知**：仍然是 `curl -H "x-internal-key: $CONSOLE_TOKEN"`，见
+   * `common/internal-key.ts` 的双凭据校验。
    */
   consoleToken?: string;
   /**
@@ -512,6 +521,13 @@ export class PipelineService {
   private readonly shells = new Map<string, ShellRunHandle>();
   /** 后台执行的 run promise：引擎是非阻塞的，这里只是登记，便于 `waitFor` 等待结束 */
   private readonly running = new Map<string, Promise<void>>();
+  /**
+   * 本次 run 已签发的短期令牌 jti（`runId → jti[]`）：run 结束时统一撤销。
+   * 一个 run 会签多枚（编排模式下每个动作都重新组装 env），故是数组。
+   */
+  private readonly runTokenJtis = new Map<string, string[]>();
+  /** 已告警过「取不到签名密钥」的 runId：编排模式每个动作都会调这里，不告警会刷屏 */
+  private readonly runTokenWarned = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -610,6 +626,48 @@ export class PipelineService {
   private consoleApiBase(): string {
     const port = this.configService.get<string>('PORT') || '6200';
     return `http://127.0.0.1:${port}/api`;
+  }
+
+  /**
+   * 注入给动作脚本的 `CONSOLE_TOKEN`：**优先签发 run 短期令牌**，取不到才回落静态 key。
+   *
+   * 为什么不再直接用 `INTERNAL_API_KEY`：那个 key 是静态配置，对 prod 意味着
+   * 「任意模块切任意版本」，而一次发布只需要「改这一个模块、这一次 run」的权限；
+   * 且它长期躺在脚本 env 里，日志或 `set -x` 泄露一次就永久有效
+   * （完整论证见 `common/run-token.ts` 文件头）。
+   *
+   * 回落路径（任一命中都回到旧行为，**不阻断发布** —— 凭据改造不该成为发布的新故障点）：
+   *   1. `RUN_TOKEN_ENABLED=false` —— 应急开关；
+   *   2. 取不到签名密钥（`RUN_TOKEN_SECRET`/`CONFIG_MASTER_KEY`/`JWT_SECRET` 全空）。
+   */
+  private issueScriptToken(p: DeployPipelineEntity): string {
+    const staticKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    if (this.configService.get<string>('RUN_TOKEN_ENABLED') === 'false') return staticKey;
+
+    const issued = issueRunToken({ runId: p.id, env: p.env, moduleKey: p.moduleKey });
+    if (!issued) {
+      if (!this.runTokenWarned.has(p.id)) {
+        this.runTokenWarned.add(p.id);
+        this.logger.warn(
+          '未启用 run 短期令牌（RUN_TOKEN_SECRET/CONFIG_MASTER_KEY/JWT_SECRET 均为空），' +
+            `本次发布回落静态 INTERNAL_API_KEY：run=${p.id}`,
+        );
+      }
+      return staticKey;
+    }
+    const list = this.runTokenJtis.get(p.id) ?? [];
+    list.push(issued.jti);
+    this.runTokenJtis.set(p.id, list);
+    return issued.token;
+  }
+
+  /** run 结束后撤销本次签发的所有令牌（成功 / 失败 / 取消 / 挂起都走 `run()` 的 finally） */
+  private revokeScriptTokens(runId: string): void {
+    const list = this.runTokenJtis.get(runId);
+    this.runTokenJtis.delete(runId);
+    this.runTokenWarned.delete(runId);
+    if (!list?.length) return;
+    revokeRunTokens(list);
   }
 
   /**
@@ -1711,6 +1769,9 @@ export class PipelineService {
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      // 撤销本次 run 签发的短期令牌：脚本已跑完，令牌再有效就是多余的敞口
+      // （挂起等审批也走这里 —— 恢复时会重新签发新令牌，不受影响）
+      this.revokeScriptTokens(p.id);
       this.cancelled.delete(p.id);
     }
   }
@@ -1787,7 +1848,7 @@ export class PipelineService {
         gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
         safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
         consoleApi: this.consoleApiBase(),
-        consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
+        consoleToken: this.issueScriptToken(p),
         pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
       });
       return { ...env, ...inject };
@@ -2309,7 +2370,7 @@ export class PipelineService {
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       consoleApi: this.consoleApiBase(),
-      consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
+      consoleToken: this.issueScriptToken(p),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });

@@ -1,7 +1,7 @@
 import { Injectable, Logger, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
-import { assertInternalKey } from './internal-key';
+import { assertInternalKey, InternalIdentity } from './internal-key';
 import { SlidingWindowLimiter } from './rate-limit';
 import { redactSecrets } from './redact';
 
@@ -32,6 +32,12 @@ export interface InternalAuditMeta {
   component?: string;
   /** 操作人：脚本传的 operator，缺省 pipeline-script */
   user?: string;
+  /**
+   * 调用方身份（2026-10-13）：run 短期令牌会带 runId/env/moduleKey，
+   * 审计据此把「某次内部接口调用」归因到**某一次发布**。
+   * 静态 key 调用时为 `{ kind:'static-key' }`（与改造前行为一致）。
+   */
+  identity?: InternalIdentity;
 }
 
 interface ReqLike {
@@ -114,7 +120,20 @@ export class InternalGuardService {
    * @returns 来源 IP（供审计留痕）
    */
   check(req: ReqLike | undefined, action: string): string {
-    assertInternalKey(req as never);
+    return this.checkWithIdentity(req, action).ip;
+  }
+
+  /**
+   * 同上，但**额外返回调用方身份**（run 令牌的 runId/env/moduleKey）。
+   *
+   * 单独开一个方法而不是改 `check` 的返回值：`check` 返回 IP 字符串是既有契约
+   * （被本服务的守卫与单测广泛使用），改返回类型属于静默破坏。
+   */
+  checkWithIdentity(
+    req: ReqLike | undefined,
+    action: string,
+  ): { ip: string; identity: InternalIdentity } {
+    const identity = assertInternalKey(req as never);
 
     const ip = clientIpOf(req);
 
@@ -137,7 +156,7 @@ export class InternalGuardService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return ip;
+    return { ip, identity };
   }
 
   /**
@@ -160,7 +179,9 @@ export class InternalGuardService {
     fn: () => Promise<T>,
     detail?: (result: T) => string,
   ): Promise<T> {
-    const ip = this.check(req, meta.action);
+    // 带身份：run 令牌的 runId 会一起进审计，事后可把「切了 prod 指针」归因到具体某次发布
+    const { ip, identity } = this.checkWithIdentity(req, meta.action);
+    const metaWithId: InternalAuditMeta = { ...meta, identity };
 
     const idemKey = idempotencyKeyOf(req);
     const cacheKey = idemKey ? `${meta.action}:${idemKey}` : '';
@@ -170,7 +191,7 @@ export class InternalGuardService {
         this.logger.log(`幂等命中，跳过重复执行：${cacheKey}`);
         const result = (await hit.promise) as T;
         await this.write({
-          ...meta,
+          ...metaWithId,
           status: 'success',
           detail: `${detail?.(result) ?? ''}（幂等命中：Idempotency-Key=${idemKey}，未重复执行）`.trim(),
           ip,
@@ -184,7 +205,7 @@ export class InternalGuardService {
       try {
         const result = await fn();
         await this.write({
-          ...meta,
+          ...metaWithId,
           status: 'success',
           detail: detail?.(result) ?? '',
           ip,
@@ -192,7 +213,7 @@ export class InternalGuardService {
         return result;
       } catch (e) {
         const msg = redactSecrets((e as Error).message);
-        await this.write({ ...meta, status: 'failed', detail: msg, ip });
+        await this.write({ ...metaWithId, status: 'failed', detail: msg, ip });
         // 失败不留幂等记录：必须可重试，否则一次抖动就永久卡住
         if (cacheKey) this.idem.delete(cacheKey);
         throw e;
@@ -221,14 +242,22 @@ export class InternalGuardService {
    * 但必须打 error（pm2 日志可查），避免「审计静默失效」变成新的盲区。
    */
   private async write(e: InternalAuditMeta & { status: string; detail: string; ip: string }): Promise<void> {
+    // 身份归因：run 令牌能让「谁切的指针」精确到某一次发布（此前一律记 pipeline-script）
+    const ident = e.identity;
+    const run = ident && ident.kind === 'run-token' ? ident : null;
+    const who = run ? `pipeline:run:${run.runId}` : e.user || 'pipeline-script';
+    const runTag = run ? `（run ${run.runId} · ${run.moduleKey || '-'} @ ${run.env || '-'}）` : '';
+    // 静态 key 路径必须**逐字保持**改造前的格式（`detail（来源 ip）`）：既有排障脚本与
+    // 单测都按这个格式断言，run 标签只作为 detail 的后缀追加。
+    const head = `${e.detail}${runTag}`.trim();
     try {
       await this.audit.log({
-        user: e.user || 'pipeline-script',
+        user: who,
         action: e.action,
         env: e.env,
         component: e.component,
         status: e.status,
-        detail: e.detail ? `${e.detail}（来源 ${e.ip}）` : `来源 ${e.ip}`,
+        detail: head ? `${head}（来源 ${e.ip}）` : `来源 ${e.ip}`,
       });
     } catch (err) {
       this.logger.error(
