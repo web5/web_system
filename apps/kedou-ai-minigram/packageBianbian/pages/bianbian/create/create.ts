@@ -61,6 +61,11 @@ Page({
   dragStartElX: 0,
   dragStartElY: 0,
   lastTapTime: 0,
+  /** Canvas 2D 上下文与节点：挂在实例上（非 data），避免进 setData 的序列化开销 */
+  // ⚠️ 小程序 Page({}) 是对象字面量，没有类属性语法 —— 运行时字段必须写成 `null as any`，
+  // 写成 `any = null` 会被 tsc 当成类型别名引用并导致运行时 ReferenceError
+  canvasCtx: null as any,
+  canvasNode: null as any,
   /** 双指变换状态 */
   pinching: false,
   pinchStartDist: 0,
@@ -202,8 +207,8 @@ Page({
       canvas.width = this.data.canvasWidth * dpr;
       canvas.height = this.data.canvasHeight * dpr;
       ctx.scale(dpr, dpr);
-      (this as Record<string, unknown>).canvasCtx = ctx;
-      (this as Record<string, unknown>).canvasNode = canvas;
+      this.canvasCtx = ctx;
+      this.canvasNode = canvas;
 
       if (this.data.elements.length > 0) {
         this.renderCanvas();
@@ -213,7 +218,7 @@ Page({
 
   /** 渲染画布 */
   renderCanvas() {
-    const ctx = (this as Record<string, unknown>).canvasCtx as CanvasRenderingContext2D;
+    const ctx = this.canvasCtx as CanvasRenderingContext2D;
     if (!ctx) return;
 
     const { canvasWidth, canvasHeight, canvasBg, elements, selectedIdx } = this.data;
@@ -288,8 +293,8 @@ Page({
       // 双指：pinch 开始
       const tp1 = touches[0];
       const tp2 = touches[1];
-      const dx = tp2.x - tp1.x;
-      const dy = tp2.y - tp1.y;
+      const dx = tp2.clientX - tp1.clientX;
+      const dy = tp2.clientY - tp1.clientY;
       this.pinching = true;
       this.pinchStartDist = Math.sqrt(dx * dx + dy * dy);
       this.pinchStartAngle = Math.atan2(dy, dx);
@@ -303,8 +308,8 @@ Page({
 
     if (touches.length === 1) {
       const touch = touches[0];
-      const tx = touch.x - this.data.canvasLeft;
-      const ty = touch.y - this.data.canvasTop;
+      const tx = touch.clientX - this.data.canvasLeft;
+      const ty = touch.clientY - this.data.canvasTop;
       const hitIdx = this.hitTest(tx, ty);
 
       // 双击删除
@@ -339,8 +344,8 @@ Page({
       // 双指缩放+旋转
       const tp1 = touches[0];
       const tp2 = touches[1];
-      const dx = tp2.x - tp1.x;
-      const dy = tp2.y - tp1.y;
+      const dx = tp2.clientX - tp1.clientX;
+      const dy = tp2.clientY - tp1.clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx);
 
@@ -363,8 +368,8 @@ Page({
 
     if (this.dragging && touches.length >= 1) {
       const touch = touches[0];
-      const tx = touch.x - this.data.canvasLeft;
-      const ty = touch.y - this.data.canvasTop;
+      const tx = touch.clientX - this.data.canvasLeft;
+      const ty = touch.clientY - this.data.canvasTop;
       const dx = tx - this.dragStartX;
       const dy = ty - this.dragStartY;
 

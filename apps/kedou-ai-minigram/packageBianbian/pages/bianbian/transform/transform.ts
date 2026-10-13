@@ -101,22 +101,33 @@ Page({
     try {
       const apiBase = getApp<IAppOption>().globalData.apiBase || 'https://kedouai.com/api';
 
-      const res = await wx.request({
-        url: `${apiBase}/bianbian/transform`,
-        method: 'POST',
-        data: {
-          image: originImage,
-          description,
-          style: 'pixar-3d',
-          outputSize: '1024x1024',
+      // ⚠️ wx.request 的**类型**返回值是 RequestTask（官方类型包如此声明），并非 Promise。
+      // 运行时能 await 是因为基础库 2.10.2+ 的「API Promise 化」：不传 success/fail/complete
+      // 时返回 Promise。这里显式 Promise 化，避免把功能正确性押在「基础库够新 + 不传回调」
+      // 这条隐式契约上；老基础库上原写法会拿到 RequestTask，data/statusCode 全 undefined，
+      // 请求其实成功也照样走进 catch。
+      const res = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>(
+        (resolve, reject) => {
+          wx.request({
+            url: `${apiBase}/bianbian/transform`,
+            method: 'POST',
+            data: {
+              image: originImage,
+              description,
+              style: 'pixar-3d',
+              outputSize: '1024x1024',
+            },
+            header: { 'Content-Type': 'application/json' },
+            // 后端为任务式生成（轮询），耗时较长，给足超时
+            timeout: 110000,
+            success: resolve,
+            fail: (err) => reject(err),
+          });
         },
-        header: { 'Content-Type': 'application/json' },
-        // 后端为任务式生成（轮询），耗时较长，给足超时
-        timeout: 110000,
-      });
+      );
 
       // 后端统一返回 { code, message, data: { aiImage, status, ... } }
-      const body = res.data as {
+      const body = res.data as unknown as {
         code?: number;
         data?: { aiImage?: string; status?: string };
       };
