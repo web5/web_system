@@ -15,11 +15,21 @@
  *   export LINT_SSH_KEY=$HOME/.ssh/id_ed25519 # 或 --key <path>（可选，缺省用 ~/.ssh/id_ed25519）
  *   export DEV_DB_PASSWORD=...                # MySQL 口令
  *   node scripts/pipeline-lint.mjs --from-db [--db web_system_deploy]
- *   node scripts/pipeline-lint.mjs --file /tmp/actions.json      # 离线体检（CI 用）
+ *   node scripts/pipeline-lint.mjs --file /tmp/actions.json      # 离线快照体检
  *   node scripts/pipeline-lint.mjs --from-db --json > report.json
  *   node scripts/pipeline-lint.mjs --from-db --dump /tmp/actions.json   # 导出供离线复检
  *
- * 退出码：0 = 无 error；1 = 有 error（CI 可用）
+ *   # 静态脚本模式（CI 用，不需要任何凭据）：体检仓库内的 .sh
+ *   node scripts/pipeline-lint.mjs --scripts scripts/pipeline
+ *
+ * 三种输入互斥：--scripts（仓库内 .sh）/ --file（离线快照）/ --ssh（从线上库拉）。
+ *
+ * ⚠️ **DB 里的动作脚本禁止导出到本仓库**：动作脚本含 REMOTE_DIR / 主机 / 账号等运维信息，
+ *   而 web5/web_system 是 PUBLIC 仓库，落盘即泄露。`--dump` 导出的快照只能放私有位置。
+ *   能在 PR 阶段被 CI 拦的只有仓库内的 .sh（scripts/pipeline/*.sh 等），
+ *   DB 动作仍靠运维侧定期 `--from-db` 体检。
+ *
+ * 退出码：0 = 无 error；1 = 有 error（CI 可用）；2 = 缺少输入
  *
  * 规则级别（2026-09-30 起 L4 由 warning 升为 error）：
  *   error（阻断）：L1 bash -n 语法 / L2 kind 白名单 / L3 env 条件不得 `!= local`
@@ -35,7 +45,7 @@
  *    `${X:-具体值}` 视为脚本自带兜底，不报。误报修复见 undeclaredVars()。
  */
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -68,6 +78,21 @@ const SSH_KEY = val('--key', process.env.LINT_SSH_KEY || `${process.env.HOME}/.s
 const DB = val('--db', process.env.LINT_DB || 'web_system_deploy');
 const DB_USER = val('--user', process.env.LINT_DB_USER || 'root');
 const DB_PASS = process.env.DEV_DB_PASSWORD || process.env.DB_PASSWORD || '';
+const SCRIPTS_DIR = val('--scripts', '');
+
+/**
+ * 静态脚本模式：直接体检仓库里的 .sh（CI 用）。
+ *
+ * 为什么单独一个模式：DB 里的动作脚本**不能**导出到仓库 —— 本仓库是 PUBLIC，
+ * 动作脚本含 REMOTE_DIR / 主机 / 账号等运维信息，落盘即泄露。而 `scripts/pipeline/*.sh`
+ * 这类**仓库内脚本**本就是公开资产、且已在向「脚本承担」方向演进（2026-10 起），
+ * 它们的语法与 ssh 续行符问题必须能在 PR 阶段拦住。
+ *
+ * 代价：静态脚本没有流水线变量表 / 任务 kind / 聚合上下文，故只跑
+ *   L1（bash -n 语法）· L5（ssh 行尾缺续行符）· L6（危险命令提示）
+ * L4/L7/L8/L9 依赖 DB 上下文，静态模式一律跳过（否则全是误报）。
+ */
+const STATIC_MODE = !!SCRIPTS_DIR;
 
 // ---------------------------------------------------------------- 取数
 
@@ -115,6 +140,40 @@ function loadFromFile(file) {
     actions: raw.actions,
     varsByPipe: new Map(Object.entries(raw.varsByPipe || {}).map(([k, v]) => [k, new Set(v)])),
     configKeys: new Set(raw.configKeys || []),
+  };
+}
+
+/**
+ * 仓库内 .sh 静态体检（递归）：把每个文件包成一个「虚拟 action」，复用 L1/L5/L6/L9
+ *
+ * 递归而非只看一层：`scripts/` 下还有 pipeline / ci / redline / mcp-fallback 四个子目录，
+ * 只扫一层会漏掉真正要保护的流水线脚本。
+ */
+function loadFromDir(dir) {
+  const entries = readdirSync(dir, { recursive: true });
+  const files = entries
+    .filter((f) => typeof f === 'string' && f.endsWith('.sh'))
+    .map((f) => join(dir, f))
+    .sort();
+  if (!files.length) {
+    console.error(`pipeline-lint: ${dir} 下没有 .sh 文件`);
+    process.exit(1);
+  }
+  return {
+    actions: files.map((full) => ({
+      id: `static:${full}`,
+      pipelineId: 'static-scripts',
+      taskName: 'static',
+      // kind 用白名单内的 'script'：静态脚本没有"动作类型"这一维，
+      // 用 'shell' 之类自定义值会被 L2 判为非法 kind 而误报
+      kind: 'script',
+      condition: '',
+      // 显示相对路径，便于 CI 日志直接定位文件
+      name: full.replace(`${dir}/`, ''),
+      script: readFileSync(full, 'utf8'),
+    })),
+    varsByPipe: new Map(),
+    configKeys: new Set(),
   };
 }
 
@@ -224,14 +283,21 @@ function undeclaredVars(script, declared) {
 
 // ---------------------------------------------------------------- 主流程
 
-// fail-fast：仓库已公开，工具不再内置目标机地址，必须由 env/参数显式提供
-if (!has('--file') && !SSH_HOST) {
-  console.error('[pipeline-lint] 缺少目标主机：请用 --ssh you@your-host 或 export LINT_SSH_HOST=you@your-host');
-  console.error('  （密钥与库同理：LINT_SSH_KEY / LINT_DB / LINT_DB_USER / DEV_DB_PASSWORD）');
+// fail-fast：仓库已公开，工具不再内置目标机地址，必须由 env/参数显式提供。
+// 三种输入互斥：--scripts（仓库内静态脚本，CI 用）/ --file（离线快照）/ --ssh（从线上库拉）
+if (!has('--file') && !SSH_HOST && !STATIC_MODE) {
+  console.error('[pipeline-lint] 缺少输入：三选一');
+  console.error('  --scripts <dir>  体检仓库内的 .sh（CI 用，不需要任何凭据）');
+  console.error('  --file <json>    体检离线快照（由 --from-db --dump 导出）');
+  console.error('  --ssh you@host   从线上库拉取（需要 LINT_SSH_KEY / DEV_DB_PASSWORD）');
   process.exit(2);
 }
 
-const src = has('--file') ? loadFromFile(val('--file')) : loadFromDb();
+const src = STATIC_MODE
+  ? loadFromDir(SCRIPTS_DIR)
+  : has('--file')
+    ? loadFromFile(val('--file'))
+    : loadFromDb();
 const { actions, varsByPipe, configKeys = new Set() } = src;
 
 if (has('--dump')) {
@@ -276,10 +342,15 @@ for (const a of actions) {
   // L4 变量引用（平台注入 + 流水线变量 + 配置中心）
   // 2026-09-30 升级为 error：假阳性已修（旧正则漏匹配 ${X:-值}、漏检非行首赋值），
   // 且 13 个未登记变量已补进 deploy_pipeline_vars，现网 0 命中 → 可作门禁。
-  const declared = new Set([...(varsByPipe.get(a.pipelineId) || []), ...configKeys]);
-  const miss = undeclaredVars(a.script, declared);
-  if (miss.length) {
-    errors.push({ rule: 'L4', at, msg: `未声明变量引用: ${miss.join(', ')}（补进 deploy_pipeline_vars 或改用 ${'${X:-默认值}'}）` });
+  //
+  // 静态模式跳过：仓库内脚本的"变量表"就是调用方（流水线动作脚本）注入的 env，
+  // 这一侧没有 deploy_pipeline_vars 可查，跑 L4 会把 ${PUBLISH_KEY} 之类全判未声明。
+  if (!STATIC_MODE) {
+    const declared = new Set([...(varsByPipe.get(a.pipelineId) || []), ...configKeys]);
+    const miss = undeclaredVars(a.script, declared);
+    if (miss.length) {
+      errors.push({ rule: 'L4', at, msg: `未声明变量引用: ${miss.join(', ')}（补进 deploy_pipeline_vars 或改用 ${'${X:-默认值}'}）` });
+    }
   }
 }
 
@@ -454,7 +525,8 @@ function logicalLines(script) {
 
 const report = {
   checkedAt: new Date().toISOString(),
-  source: has('--file') ? val('--file') : `${SSH_HOST}:${DB}`,
+  mode: STATIC_MODE ? 'static-scripts' : has('--file') ? 'snapshot' : 'db',
+  source: STATIC_MODE ? SCRIPTS_DIR : has('--file') ? val('--file') : `${SSH_HOST}:${DB}`,
   total: actions.length,
   errors, warnings,
 };

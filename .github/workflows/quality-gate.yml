@@ -1,6 +1,7 @@
 # quality-gate — PR 代码质量门禁（红线扫描 + 改动包 build/test）
 #
 #   redline-scan     : scripts/redline/scan-rules.sh 全量规则（R9–R14）扫 PR 范围
+#   pipeline-lint    : scripts/pipeline-lint.mjs --scripts scripts（仓库内 .sh 静态体检）
 #   changed-packages : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
 #
 # 2026-09-18：redline-scan 曾随红线机制整体下线，本 workflow 只留「改动包 build/test」。
@@ -8,6 +9,13 @@
 #   未跟着恢复 → R9–R14 全部失去 CI 兜底（本地 hook 可被 --no-verify 绕过）。本次恢复。
 # 职责分离：auto-pr.yml 只负责建 PR，本 workflow 负责检查。
 # 启用要求：master 分支保护开启，要求本 workflow 通过才可 merge。
+#
+# 2026-10-13：新增 pipeline-lint job。**只体检仓库内的 .sh**（scripts/ 递归），
+#   不碰 DB —— 动作脚本存在 deploy_pipeline_actions 里、含主机与路径信息，
+#   而本仓库是 PUBLIC，导出即泄露；DB 侧仍靠运维定期 `--from-db` 体检。
+#   拦的是两类最贵的事故：bash 语法错（L1）与 ssh 行尾缺续行符（L5，
+#   2026-09-29 那次「脚本在 dev 机上删 prod 目录」就是它，bash -n 完全抓不到）。
+#   上线前已全仓试跑：47 个 .sh，error 0（8 条 L6 warning 是已知的远端块误报，不阻断）。
 #
 # 2026-09-22：**lint 档暂时关闭**（下面步骤不再传 --lint）。原因：11 个子包配了 `lint:ci`
 #   但全仓没有任何 ESLint 配置（无 eslint.config.* / .eslintrc*），ESLint 9 直接报
@@ -47,6 +55,21 @@ jobs:
           fi
           echo "扫描范围: ${BASE}..HEAD（$(git rev-list --count "${BASE}..HEAD") 个 commit）"
           bash scripts/redline/scan-rules.sh diff "${BASE}..HEAD"
+
+  pipeline-lint:
+    name: 流水线脚本体检（L1/L5/L6/L9）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 只用 Node 内置模块（child_process / fs），无需 pnpm install —— 这一档要跑得快，
+      # 它是「改一行 shell 也要立刻知道有没有踩坑」的第一道反馈。
+      - name: 体检仓库内 .sh（scripts/ 递归）
+        run: node scripts/pipeline-lint.mjs --scripts scripts
 
   changed-packages:
     name: 改动包 build/test
