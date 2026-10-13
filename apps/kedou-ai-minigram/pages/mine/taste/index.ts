@@ -53,7 +53,9 @@ Page({
   apply(taste: TasteData) {
     const tags: TagItem[] = [];
     const push = (group: 'likes' | 'dislikes', field: TagItem['field']) => {
-      const list = (taste?.[group]?.[field] || []) as string[];
+      // TasteData 里 dislikes 没有 moods 字段（"不想听"只记风格/歌手），而 field 的联合类型包含
+      // moods —— 直接索引会 TS7053。调用处不会对 dislikes 传 moods，这里按字典收窄一次
+      const list = ((taste?.[group] as Record<string, string[]>)?.[field] || []) as string[];
       for (const label of list) {
         tags.push({ label, group, field, dislike: group === 'dislikes' });
       }

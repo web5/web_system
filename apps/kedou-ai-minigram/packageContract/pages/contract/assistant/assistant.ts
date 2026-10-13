@@ -34,7 +34,13 @@ const TOOL_HINT: Record<string, string> = {
   'web-search': '联网检索…',
 };
 
-type Step = { id: string; name: string; hint: string; status: 'pending' | 'running' | 'done' };
+// 'skipped'：该步本次不需要执行（如粘贴文本无需 cleaner 清洗），与 analyzing 页口径一致
+type Step = {
+  id: string;
+  name: string;
+  hint: string;
+  status: 'pending' | 'running' | 'done' | 'skipped';
+};
 
 type Msg =
   | { id: number; role: 'user'; kind: 'text' | 'image'; text: string; fullText: string }
@@ -258,6 +264,8 @@ Page({
       },
       onDone: (report) => {
         const safeReport: ContractReport = {
+          // createdAt 是 ContractReport 必填（历史记录按它排序），后端不带时由前端兜底
+          createdAt: report?.createdAt || Date.now(),
           scene: report?.scene || '未知',
           conclusion:
             report?.conclusion ||

@@ -30,6 +30,14 @@ function resolveApiBase(): string {
   return 'https://dev.kedouai.com';
 }
 
+/**
+ * 事件总线的订阅表。
+ * 放模块级而非挂在 eventBus 对象上：App({}) 对象字面量里方法中的 `this` 被推断成 App 实例，
+ * 在 eventBus 内部访问 this._handlers 会被判「实例上无此属性」（TS2339）。订阅表本就是
+ * 单例（整个小程序一份），移到模块级语义不变且类型干净。
+ */
+const EVENT_HANDLERS: Record<string, Array<(payload?: any) => void>> = {};
+
 App<IAppOption>({
   onLaunch() {
     // 把 apiBase 同步落到 storage，供后续请求绕过 wx.getApp 直接读，
@@ -62,19 +70,19 @@ App<IAppOption>({
    * （会清空整个页面栈，导致用户「被弹回首页」且右滑返回永远回首页）。
    */
   eventBus: {
-    _handlers: {} as Record<string, Array<(payload?: any) => void>>,
     on(event: string, handler: (payload?: any) => void) {
-      const list = this._handlers[event] || (this._handlers[event] = []);
+      const list = EVENT_HANDLERS[event] || (EVENT_HANDLERS[event] = []);
       list.push(handler);
     },
     off(event: string, handler: (payload?: any) => void) {
-      const list = this._handlers[event];
+      const list = EVENT_HANDLERS[event];
       if (!list) return;
-      this._handlers[event] = list.filter((h) => h !== handler);
+      EVENT_HANDLERS[event] = list.filter((h) => h !== handler);
     },
     emit(event: string, payload?: any) {
-      const list = this._handlers[event];
+      const list = EVENT_HANDLERS[event];
       if (!list) return;
+      // 快照遍历：回调里可能再 off 自己（页面 onUnload 注销），避免改动正在遍历的数组
       list.slice().forEach((h) => h(payload));
     },
   },

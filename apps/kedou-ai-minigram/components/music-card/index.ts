@@ -25,7 +25,9 @@ interface Provider {
 
 Component({
   properties: {
-    card: { type: Object, value: null },
+    // value 的官方类型是 `IAnyObject | undefined`，null 不被接受；
+    // 但「卡片未就绪」用 null 语义最准（空对象会被当成有效卡片），故显式放宽
+    card: { type: Object, value: null as any },
   },
 
   data: {
