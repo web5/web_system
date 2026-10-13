@@ -397,7 +397,7 @@ const AGENT_FLOW = {
     { k: 'step', tone: 'cyan', t: '取子定义快照 + 装配子上下文（registerLazy 拉起）', s: '只传子任务描述，不继承父上下文 —— 上下文隔离正是委派的收益',
       note: '子 run 落 agent_runs 并挂 parentRunId + depth，否则多层失败无法归因（这也是先补 outcome 再上多 Agent 的原因）' },
     { k: 'step', tone: 'cyan', t: '子 Agent 独立 ReAct 循环', s: '走的还是本图 ⑤→⑫ 这一段，只是换了一套定义与上下文',
-      note: 'SSE 口径：子链路的过程事件默认折叠，对外只表现为父的一条 tool_call / tool_result —— 否则前端事件流翻倍且难以归因' },
+      note: 'SSE 口径：子链路过程事件默认折叠不上浮，对外只表现为父的一条 tool_call / tool_result；若要区分「调工具 / 派子 Agent」再加 sub_agent_start / sub_agent_end（见 multi-agent-design.md §7.2）' },
     { k: 'step', tone: 'cyan', t: '末步产出结构化摘要', s: '只回结论 + 关键证据，不回过程全量',
       note: '不截断就会把父上下文撑爆，第二轮直接超窗；摘要回写后父循环继续推理' },
     { k: 'recur-end', t: '摘要作为 tool_result 回到父循环' },

@@ -98,6 +98,8 @@
 
 ![Agent-as-Tool 委派调用链](./multi-agent-delegation-flow.svg)
 
+> 本图 = **主链路图** `ai-agent-run-flow.svg` 中「递归层」（第 12–15 段，青色虚线框）的放大；主链路图已把多 Agent 画进「完整链路」——单 Agent 运行整段跳过，只有工具解析为子 Agent 时才进入。
+
 一次委派 = 父循环中的一个工具调用，全链路阶段：
 
 | # | 阶段 | 关键点 | 代码落点 |
