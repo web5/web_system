@@ -153,6 +153,7 @@ function renderFlow(cfg) {
   let y = PAD + 74;
 
   const openLoops = [];
+  const openRecurs = [];
   const nodeTops = [];
   let seq = 0;
 
@@ -168,18 +169,25 @@ function renderFlow(cfg) {
     else if (n.k === 'start' || n.k === 'end') h = Math.max(48, 18 + tLines.length * 19 + (sLines.length ? sLines.length * 16 + 4 : 0));
     else h = Math.max(56, 18 + tLines.length * 19 + (sLines.length ? sLines.length * 16 + 4 : 0));
     if (noteNeed) h = Math.max(h, noteNeed);
-    return { n, tLines, sLines, h, idx: ++seq, top: 0 };
+    // 容器节点（循环/递归）不占序号，避免主链序号断号
+    const isContainer = ['loop-start', 'loop-end', 'recur-start', 'recur-end'].includes(n.k);
+    return { n, tLines, sLines, h, idx: isContainer ? 0 : ++seq, top: 0 };
   });
 
   for (const b of boxes) {
     const tone = TONE[b.n.tone || 'orange'];
     b.top = y;
     nodeTops.push(b.top);
+    // 嵌套容器（循环 / 递归）按已打开层数缩进，避免内外框重叠
+    const nestDepth = () => openLoops.length + openRecurs.length;
+
     if (b.n.k === 'loop-start') {
-      openLoops.push({ y, ...b.n });
-      P.push(`<rect x="${CX - 26}" y="${y}" width="${NW + 52}" height="0" rx="12" fill="#04785710" stroke="#34d399" stroke-dasharray="8 5" stroke-width="1.8" data-loop="1"/>`);
-      P.push(`<text x="${CX - 8}" y="${y + 16}" font-family="${FONT}" font-size="12" font-weight="700" fill="${tone.main}">${esc(b.n.t)}</text>`);
-      const nLines = wrap(b.n.s || '', 12, NOTE_W);
+      const d = nestDepth();
+      openLoops.push({ y, d, ...b.n });
+      const bx = CX - 26 + d * 15, bw = NW + 52 - d * 30;
+      P.push(`<rect x="${bx}" y="${y}" width="${bw}" height="0" rx="12" fill="#04785710" stroke="#34d399" stroke-dasharray="8 5" stroke-width="1.8" data-loop="1"/>`);
+      P.push(`<text x="${bx + 18}" y="${y + 16}" font-family="${FONT}" font-size="12" font-weight="700" fill="${tone.main}">${esc(b.n.t)}</text>`);
+      const nLines = wrap(b.n.s || '', 12, NOTE_W - d * 30);
       if (nLines.length) {
         P.push(`<text x="${NOTE_X}" y="${y + 16}" font-family="${FONT}" font-size="12" fill="#64748b">${nLines.map((l, i) => `<tspan x="${NOTE_X}" dy="${i ? 17 : 0}">${esc(l)}</tspan>`).join('')}</text>`);
       }
@@ -192,11 +200,36 @@ function renderFlow(cfg) {
         // 补 loop 容器矩形高度
         const idx = P.findIndex((s) => s.includes('data-loop="1"') && s.includes(`y="${lp.y}"`));
         if (idx >= 0) P[idx] = P[idx].replace('height="0"', `height="${Math.max(40, y - lp.y - 10)}"`);
-        // 左侧回环虚线
-        const lx = CX - 66;
-        P.push(`<path d="M ${CX} ${y + b.h / 2} L ${lx} ${y + b.h / 2} L ${lx} ${lp.y + 6} L ${CX - 30} ${lp.y + 6}" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#frm-${cfg.id})"/>`);
+        // 左侧回环虚线（让开序号徽章列，内层随缩进右移）
+        const lx = CX - 110 + lp.d * 21;
+        P.push(`<path d="M ${CX} ${y + b.h / 2} L ${lx} ${y + b.h / 2} L ${lx} ${lp.y + 6} L ${CX - 58 - lp.d * 21} ${lp.y + 6}" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#frm-${cfg.id})"/>`);
         P.push(`<text x="${lx - 6}" y="${(lp.y + y) / 2}" font-family="${FONT}" font-size="11.5" fill="#64748b" text-anchor="end">${esc(b.n.t || '循环')}</text>`);
       }
+      continue;
+    }
+    // 递归层：子 Agent 委派时展开的一层子链路（不是循环，不画回环线，只画「回父」标注）
+    if (b.n.k === 'recur-start') {
+      const d = nestDepth();
+      openRecurs.push({ y, d, ...b.n });
+      const bx = CX - 26 + d * 15, bw = NW + 52 - d * 30;
+      P.push(`<rect x="${bx}" y="${y}" width="${bw}" height="0" rx="12" fill="#0e749008" stroke="#67e8f9" stroke-dasharray="3 4" stroke-width="1.8" data-recur="1"/>`);
+      P.push(`<text x="${bx + 18}" y="${y + 16}" font-family="${FONT}" font-size="12" font-weight="700" fill="${tone.main}">${esc(b.n.t)}</text>`);
+      const nLines = wrap(b.n.s || '', 12, NOTE_W - d * 30);
+      if (nLines.length) {
+        P.push(`<text x="${NOTE_X}" y="${y + 16}" font-family="${FONT}" font-size="12" fill="#64748b">${nLines.map((l, i) => `<tspan x="${NOTE_X}" dy="${i ? 17 : 0}">${esc(l)}</tspan>`).join('')}</text>`);
+      }
+      y += 30;
+      continue;
+    }
+    if (b.n.k === 'recur-end') {
+      const rc = openRecurs.pop();
+      if (rc) {
+        const idx = P.findIndex((s) => s.includes('data-recur="1"') && s.includes(`y="${rc.y}"`));
+        if (idx >= 0) P[idx] = P[idx].replace('height="0"', `height="${Math.max(40, y - rc.y - 10)}"`);
+        P.push(`<path d="M ${CX + NW - 30} ${y + 4} L ${CX + NW - 30} ${y - 6}" fill="none" stroke="#0e7490" stroke-width="1.6" marker-end="url(#frm-${cfg.id})"/>`);
+        P.push(`<text x="${CX + NW - 38}" y="${y + 12}" font-family="${FONT}" font-size="11.5" fill="#0e7490" text-anchor="end">${esc(b.n.t || '↑ 回父循环')}</text>`);
+      }
+      y += 24;
       continue;
     }
 
@@ -214,6 +247,10 @@ function renderFlow(cfg) {
         P.push(`<text x="${CX + NW / 2}" y="${sy}" font-family="${FONT}" font-size="12" fill="#64748b" text-anchor="middle">${esc(l)}</text>`);
         sy += 16;
       }
+      // 决策点也给序号，保证主链序号连续
+      const dbx = CX - 20 - nestDepth() * 21;
+      P.push(`<circle cx="${dbx}" cy="${cy}" r="13" fill="${tone.soft}" stroke="${tone.line}"/>`);
+      P.push(`<text x="${dbx}" y="${cy + 5}" font-family="${FONT}" font-size="12" font-weight="700" fill="${tone.main}" text-anchor="middle">${b.idx}</text>`);
     } else {
       const rx = (b.n.k === 'start' || b.n.k === 'end') ? 22 : 10;
       P.push(`<rect x="${CX}" y="${y}" width="${NW}" height="${b.h}" rx="${rx}" fill="#fff" stroke="${tone.line}" stroke-width="1.5"/>`);
@@ -230,8 +267,8 @@ function renderFlow(cfg) {
         P.push(`<text x="${CX + 15}" y="${sy}" font-family="${FONT}" font-size="12" fill="#64748b">${esc(l)}</text>`);
         sy += 16;
       }
-      // 序号徽章
-      const bx = CX - 20;
+      // 序号徽章：按嵌套层级左移，避免压住循环 / 递归容器边框
+      const bx = CX - 20 - nestDepth() * 21;
       P.push(`<circle cx="${bx}" cy="${y + b.h / 2}" r="13" fill="${tone.soft}" stroke="${tone.line}"/>`);
       P.push(`<text x="${bx}" y="${y + b.h / 2 + 5}" font-family="${FONT}" font-size="12" font-weight="700" fill="${tone.main}" text-anchor="middle">${b.n.k === 'end' ? '✓' : b.idx}</text>`);
     }
@@ -252,7 +289,7 @@ function renderFlow(cfg) {
   }
 
   // 主干连接箭头（在相邻节点之间）
-  const main = boxes.filter((b) => b.n.k !== 'loop-start' && b.n.k !== 'loop-end');
+  const main = boxes.filter((b) => !['loop-start', 'loop-end', 'recur-start', 'recur-end'].includes(b.n.k));
   for (let i = 0; i < main.length - 1; i++) {
     const a = main[i], b2 = main[i + 1];
     const x = CX + NW / 2;
@@ -327,8 +364,8 @@ const AI_ARCH = {
 const AGENT_FLOW = {
   id: 'flow', type: 'flow', file: 'ai-agent-run-flow',
   title: '一次 Agent 运行的完整链路（POST /agent/run · SSE）',
-  subtitle: '从 HTTP 请求进入，到 SSE 流关闭；含意图路由、多步工具循环、权限确认、超步数终止与异步落库',
-  footnote: '事实来源：servers/ai-agent/src/agent/agent.controller.ts:122-348 · packages/agent-core/src/core/agent-engine.ts:60-366。',
+  subtitle: '从 HTTP 请求进入，到 SSE 流关闭；含意图路由、多步工具循环、权限确认、子 Agent 递归展开、超步数终止与异步落库',
+  footnote: '事实来源：servers/ai-agent/src/agent/agent.controller.ts:122-348 · packages/agent-core/src/core/agent-engine.ts:60-366。青色虚线框 = 子 Agent 委派时递归展开的一层（设计中，方案见 docs/architecture/multi-agent-design.md）；单 Agent 场景下不进入该框。',
   flow: [
     { k: 'start', tone: 'slate', t: '客户端发起 POST /api/agent/run', s: 'Authorization 鉴权穿透（AuthGuard）',
       note: '响应头：text/event-stream + no-cache + X-Accel-Buffering:no（禁 nginx 缓冲）' },
@@ -350,9 +387,20 @@ const AGENT_FLOW = {
     { k: 'decision', tone: 'rose', t: '模型返回工具调用？', s: 'resp.toolCalls.length === 0',
       note: '否 → memory.persist 落库 → 有工具步骤则发 summary → 发 final → end(ok)' },
     { k: 'step', tone: 'purple', t: '下发 tool_call 事件，执行工具', s: 'tool_call → 执行 → tool_result',
-      note: '三类：本地工具 / MCP 工具（经 mcp-gateway 异步 job 轮询）/ load_skill 内置；演进：子 Agent 委派（第四类，设计中，见 multi-agent-design.md）' },
+      note: '四类工具：本地 / MCP（经 mcp-gateway 异步 job 轮询）/ load_skill 内置 / 子 Agent 委派（第四类 = 下方递归块，设计中）' },
     { k: 'decision', tone: 'rose', t: '工具是否需要人工确认？', s: 'requiresConfirm = 写操作',
-      note: '是 → permission_request 事件挂起 → 前端 POST /agent/permission/:requestId；60s 超时自动拒绝' },
+      note: '是 → permission_request 事件挂起 → 前端 POST /agent/permission/:requestId；60s 超时自动拒绝；子 Agent 委派同样先过这道门' },
+    { k: 'recur-start', tone: 'cyan', t: '↻ 条件进入：工具是「子 Agent」时才展开这一层（depth+1）',
+      s: '设计中 · 方案见 docs/architecture/multi-agent-design.md；入口前先过四道护栏' },
+    { k: 'step', tone: 'cyan', t: '四道护栏（任一不满足即短路返回错误，不阻塞父循环）', s: 'depth ≤ 3 · 调用栈去重 · 全局步数预算 · 权限取交集',
+      note: '预算必须跨层共享：父子各用各自 maxSteps 会相乘放大成本；权限取「父 ∩ 子」而非并集，防越权' },
+    { k: 'step', tone: 'cyan', t: '取子定义快照 + 装配子上下文（registerLazy 拉起）', s: '只传子任务描述，不继承父上下文 —— 上下文隔离正是委派的收益',
+      note: '子 run 落 agent_runs 并挂 parentRunId + depth，否则多层失败无法归因（这也是先补 outcome 再上多 Agent 的原因）' },
+    { k: 'step', tone: 'cyan', t: '子 Agent 独立 ReAct 循环', s: '走的还是本图 ⑤→⑫ 这一段，只是换了一套定义与上下文',
+      note: 'SSE 口径：子链路的过程事件默认折叠，对外只表现为父的一条 tool_call / tool_result —— 否则前端事件流翻倍且难以归因' },
+    { k: 'step', tone: 'cyan', t: '末步产出结构化摘要', s: '只回结论 + 关键证据，不回过程全量',
+      note: '不截断就会把父上下文撑爆，第二轮直接超窗；摘要回写后父循环继续推理' },
+    { k: 'recur-end', t: '摘要作为 tool_result 回到父循环' },
     { k: 'step', tone: 'orange', t: 'tool_result 回写 messages', s: 'onToolSpan(ok/latency) 遥测',
       note: '特殊项：present-music-card 的工具结果额外转成 card 事件下发前端' },
     { k: 'loop-end', t: '继续下一轮推理（工具结果入上下文）' },
@@ -446,9 +494,9 @@ ${out.map((o) => `
   <h2>读法与口径<span>怎么读这三张图</span></h2>
   <ul style="font-size:13px; line-height:2; color:#475569; max-width:980px">
     <li><b>AI 子系统架构图</b>：看「职责分层」——谁编排、谁执行循环、能力怎么挂、模型怎么换、数据落在哪。</li>
-    <li><b>Agent 运行主链路</b>：看「一次请求怎么走完」——每个 SSE 事件在哪个阶段产出、哪里会失败、失败怎么兜住。</li>
+    <li><b>Agent 运行主链路</b>：看「一次请求怎么走完」——每个 SSE 事件在哪个阶段产出、哪里会失败、失败怎么兜住。图中<b>青色虚线框</b>是子 Agent 委派的递归展开层：子 Agent 走的是同一条链路，只是换一套定义与上下文，且过程事件折叠不上浮。</li>
     <li><b>知识链路</b>：看「知识从哪来、怎么被 Agent 用到、质量怎么量」——当前缺口是<b>召回率未测</b>与<b>golden 集未版本化</b>。</li>
-    <li>实线箭头 = 主干流向；虚线箭头 = 异步/可选/回看路径；菱形 = 决策点，右侧框是它的分支说明。</li>
+    <li>实线箭头 = 主干流向；虚线箭头 = 异步/可选/回看路径；菱形 = 决策点，右侧框是它的分支说明；绿色虚线框 = 循环体，青色虚线框 = 递归展开层（多 Agent）。</li>
     <li>配套方案文档：<code>docs/architecture/ai-flow-technical-design.md</code>（链路表 + 容错降级 + 待补口径）。</li>
   </ul>
 </section>

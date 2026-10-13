@@ -45,7 +45,9 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 
 ---
 
-## 3. 主链路：一次运行的 17 个阶段（图 2）
+## 3. 主链路：一次运行的 18 个阶段（图 2）
+
+> ⚠️ **口径**：单 Agent 场景下可见 **15 段**（14 段 + 后置钩子 ✓），**不进入递归层**；只有工具解析为「子 Agent」且真的发起委派时，才展开第 12–15 段的「递归层」（条件进入）。图上以**青色虚线框**标注该层，日常单 Agent 运行可整段跳过。
 
 > 见图 `ai-agent-run-flow.svg`
 
@@ -69,11 +71,28 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 
 | # | 阶段 | 关键实现 |
 |---|---|---|
-| 9 | 调模型（流式） | `content_delta` / `reasoning_delta` 逐字透传；`reasoning_delta` 不计入最终回答 |
-| 10 | 判是否有工具调用 | 无 → 落库 +（有工具步骤则 `summary`）+ `final` + `onRunEnd(ok)` |
-| 11 | 执行工具 | `tool_call` → 执行 → `tool_result`；三类：本地 / MCP（异步 job 轮询）/ `load_skill` |
-| 12 | 权限确认（HITL） | 写操作工具（`requiresConfirm`）→ `permission_request` 事件挂起 → 前端 `POST /agent/permission/:requestId`；**60s 超时自动拒绝**；确认者必须与发起者同一 userId |
-| 13 | 结果回写 | tool 消息入上下文 → 回到步骤 9 再次推理；`onToolSpan(ok/latency)` 遥测 |
+| 8 | 调模型（流式） | `content_delta` / `reasoning_delta` 逐字透传；`reasoning_delta` 不计入最终回答 |
+| 9 | 判是否有工具调用 | 无 → 落库 +（有工具步骤则 `summary`）+ `final` + `onRunEnd(ok)` |
+| 10 | 执行工具 | `tool_call` → 执行 → `tool_result`；**四类**：本地 / MCP（异步 job 轮询）/ `load_skill` / **子 Agent 委派**（第四类，见 §3.3.1） |
+| 11 | 权限确认（HITL） | 写操作工具（`requiresConfirm`）→ `permission_request` 事件挂起 → 前端 `POST /agent/permission/:requestId`；**60s 超时自动拒绝**；确认者必须与发起者同一 userId。子 Agent 委派同样先过这道门 |
+| 12–15 | 子 Agent 递归层（条件进入） | 工具是子 Agent 时展开一层子链路：护栏 → 子上下文 → 子循环 → 摘要，见 §3.3.1 |
+| 16 | 结果回写 | tool 消息（或子 Agent 摘要）入上下文 → 回到步骤 8 再次推理；`onToolSpan(ok/latency)` 遥测 |
+
+### 3.3.1 子 Agent 递归层（图 2 青色虚线框 · 设计中）
+
+> 完整方案见 `multi-agent-design.md`；此处只描述**它在主链路里长什么样**。范式选 **Agent-as-Tool**：子 Agent 就是「第四类工具」，因此父循环的代码路径不改，递归层挂在第 11 步（权限确认）之后、第 16 步（结果回写）之前。
+
+| 段 | 关键设计 | 为什么 |
+|---|---|---|
+| 入口 | 工具名解析为 `agent:<子 Agent ID>`（`CapabilityRef.type = 'agent'`，JSON 取值扩展，**零 DDL**） | 与普通工具共用同一条 `execute` 路径，引擎不必感知差异 |
+| 护栏 | ① `depth ≤ 3` ② 调用栈去重（A→B→A 立即熔断）③ **全局步数预算跨层共享** ④ 权限取「父 ∩ 子」交集 | 缺一即失控：无限递归 / 循环烧钱 / 父子 `maxSteps` **相乘**放大成本 / 权限越界。任一不满足即短路返回错误，**不阻塞父循环** |
+| 子上下文 | 只传「子任务描述」，**不继承**父的完整上下文 | 上下文隔离正是委派的收益；同时避免父上下文被撑爆 |
+| 子循环 | 复用同一 ReAct 引擎与 `ToolRegistry`（`registerLazy` 按需拉起，不调不拉起） | 一套引擎支撑多层，不引入第二套控制流 |
+| 摘要 | 子 run 末步**强制**产出结构化摘要（结论 + 关键证据，不回过程全量） | 不回摘要就会把父上下文撑爆，第二轮直接超窗 |
+| SSE 口径 | 子链路过程事件**默认折叠**，对外只表现为父的一条 `tool_call` / `tool_result` | 否则事件流按层数翻倍，前端渲染与问题归因都失控 |
+| 归因 | 子 run 落 `agent_runs` 并挂 `parentRunId` + `depth` | 多层失败可定位到「第几层第几步」 |
+
+⚠️ **顺序铁律**：先落 P0（`agent_runs.outcome / fail_stage`），再上多 Agent。否则多层失败在当前埋点下完全不可见——只能看到「run 失败」，看不到是哪一层的哪个阶段失败。
 
 ### 3.4 终止与收尾
 
@@ -126,6 +145,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 本地工具 | 代码注册进 `ToolRegistry` | 进程内调用，统一 `ToolResult` |
 | MCP 工具 | `agent-def-sync` 按定义装配 → `McpToolAdapter` 包装 | `POST {MCP_GATEWAY_URL}/mcp/tools/call` → 异步 job → `fetchJobStatus` 轮询 |
 | 技能 | `load_skill` 内置工具按需挂载 | 引擎内置逻辑（不计入普通工具路径） |
+| 子 Agent（设计中） | `CapabilityRef.type = 'agent'` → `resolveAgentCapabilities()` 解析 | 走 `ToolRegistry` 同一条路径；`registerLazy` 按需拉起，实际执行的是 §3.3.1 的递归层 |
 
 > MCP 元数据里的 `requiresConfirm` 决定是否走人工确认（见 3.3 #12）。
 
@@ -166,6 +186,8 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 超步数 | 保存已产生消息后报错 | 无断点续跑（无 checkpoint） |
 | 落库失败 | 不影响对话结果（日志告警） | 无重投队列 → 可能丢 trace |
 | 检索无召回 | 模型基于空上下文作答 | ⚠️ **无「无据拒答」护栏**，有编造风险 |
+| 子 Agent 护栏不满足（设计中） | 短路返回错误，父循环继续推理 | 无：护栏即安全侧默认；但**失败归因依赖 `fail_stage`（P0）** |
+| 子 Agent 返回超长内容（设计中） | 末步强制摘要截断 | 需在协议里固化摘要长度上限，否则父上下文仍有撑爆风险 |
 
 ---
 
@@ -178,6 +200,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 走了哪条意图路由、是否切换 agent | ✅ | `intent` 事件 + `intent_history` |
 | 这次答复**对不对** | ❌ | 无 `outcome`、无 golden 集 |
 | 失败是检索没召回还是推理错 | ⚠️ 仅检索侧 | 有 Ragas 指标；Agent 任务级 `fail_stage` 缺 |
+| 多层委派里是**哪一层哪一步**失败的 | ❌（设计目标） | 需 `agent_runs.parentRunId + depth + fail_stage` 三者齐备（见 §3.3.1 归因） |
 
 ---
 
@@ -189,7 +212,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | P1 | **先合入 C7**（`topP / maxTokens / thinking` 进 `agent_definitions` + 引擎透传，现仅在分支 `feat/llm-tuning-multi-model`）→ **再补调参 UI**（含 `?? 0.7` 修正） | §3.2 #7；master 现状只透传 `temperature` |
 | P1 | ai-service 模型链路统一 | §4.4 三级回落，统一到同一 `ClientRegistry` |
 | P1 | thinking token 计价 | §4.5 成本口径 |
-| P1 | **多 Agent 编排（Agent-as-Tool）** | §3.3 #11 由「工具三类」扩到「第四类：子 Agent 委派」；完整方案见 `multi-agent-design.md`（含四道护栏与依赖顺序：须在 P0 之后） |
+| P1 | **多 Agent 编排（Agent-as-Tool）** | 主链路图已画出第四类工具与递归层（§3.3.1、图 2 青色虚线框）；完整方案见 `multi-agent-design.md`（含四道护栏与依赖顺序：须在 P0 之后） |
 | P2 | 检索质量（召回率 → 混合检索/rerank → golden 集） | §4.6 知识链路 |
 | P2 | 工具 schema 语义版本 | §4.3 工具生态 |
 | P2 | HITL 编排级审批 | §3.3 #12 从工具级扩到编排级 |
@@ -198,7 +221,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 
 ## 8. 验收标准
 
-1. **可复现**：按图 2 的 17 个阶段加日志，任一 `agent_runs` 记录能回放出完整阶段序列（含 intent / tool / usage）。
+1. **可复现**：按图 2 的 18 段（单 Agent 15 段，递归层条件进入）加日志，任一 `agent_runs` 记录能回放出完整阶段序列（含 intent / tool / usage）。
 2. **不阻塞**：注入意图分类超时（>3s），对话仍能走兜底完成（P95 延迟增加 < 3.1s）。
 3. **可止血**：某 agent 效果劣化时，后台改参数（不发版）30s 内生效。
 4. **答案可判**：抽 20 条真实用例，能标出 `outcome` 与失败环节（依赖 P0 落地）。

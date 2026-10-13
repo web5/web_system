@@ -125,8 +125,9 @@ const FLOW = [
 function renderFlow() {
   const W = 1200, PAD = 40, NW = W - PAD * 2, CX = W / 2;
   const P = [];
-  let y = 76;
+  let y = 94;
   P.push(`<text x="${PAD}" y="48" font-size="19" font-weight="700" fill="#0f172a">一次委派调用：父循环不动，子 Agent 只是一个「特殊工具」</text>`);
+  P.push(`<text x="${PAD}" y="72" font-size="12.8" fill="#64748b">本图 = 主链路图 <tspan font-family="ui-monospace,Menlo,monospace" fill="#c2410c">ai-agent-run-flow.svg</tspan> 中「递归层」（第 12–15 段，青色虚线框）的放大；单 Agent 运行不经过这里。</text>`);
   FLOW.forEach((n, i) => {
     const t = TONE[n.tone];
     const sLines = wrap(n.s, 13, NW - 44);
@@ -158,7 +159,7 @@ function renderFlow() {
 mkdirSync(OUT_DIR, { recursive: true });
 const diagrams = [
   { file: 'multi-agent-paradigms.svg', svg: renderParadigms(), h2: '四种编排范式对比', span: '区别只在「下一步由谁决定」', lead: '先看这张定范式。四种范式不是并列优劣，而是「控制流放在谁手里」的差异：放在模型手里就有灵活性但难预测，放在代码手里就可控但丧失自主性。' },
-  { file: 'multi-agent-delegation-flow.svg', svg: renderFlow(), h2: 'Agent-as-Tool 委派调用链', span: '父循环不动，子 Agent 只是一个「特殊工具」', lead: '范式定了之后看链路。关键点是子 Agent 走的是普通工具的同一条 execute 路径，所以引擎几乎不用改；真正要新增的是中间那道护栏。' },
+  { file: 'multi-agent-delegation-flow.svg', svg: renderFlow(), h2: 'Agent-as-Tool 委派调用链', span: '父循环不动，子 Agent 只是一个「特殊工具」', lead: '范式定了之后看链路。这张图是主链路图（<code>ai-agent-run-flow.svg</code>）中「递归层」（第 12–15 段，青色虚线框）的放大：子 Agent 走的是普通工具的同一条 execute 路径，所以引擎几乎不用改；真正要新增的是中间那道护栏。' },
 ];
 for (const d of diagrams) {
   writeFileSync(resolve(OUT_DIR, d.file), d.svg, 'utf8');

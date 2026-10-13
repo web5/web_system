@@ -58,6 +58,8 @@
 <polygon points="430,687 710,651 990,687 710,723" fill="#fff" stroke="#be123c" stroke-width="1.6"/>
 <text x="710" y="684" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#be123c" text-anchor="middle">需要量化检索质量时？</text>
 <text x="710" y="704" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b" text-anchor="middle">离线评测独立于在线链路</text>
+<circle cx="410" cy="687" r="13" fill="#ffe4e6" stroke="#fda4af"/>
+<text x="410" y="692" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#be123c" text-anchor="middle">7</text>
 <line x1="994" y1="687" x2="1030" y2="687" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
 <rect x="1036" y="663" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
 <text x="1046" y="681" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">是 → POST /knowledge/mcp/eval 跑</text>
