@@ -5,13 +5,14 @@
 >
 > | 版本 | 日期 | 说明 |
 > |---|---|---|
+> | v1.3 | 2026-10-13 | 增补 Agent 消息计划表（`agent-message-schedule.md`：SSE/HTTP 消息清单与消费方矩阵） |
 > | v1.2 | 2026-10-13 | 增补多 Agent 编排方案（`multi-agent-design.md`）与图示入口 |
 > | v1.1 | 2026-10-13 | 增补图示入口：业务/技术架构图、AI 架构与流程（均为生成物，改图请改脚本后重跑） |
 > | v1.0 | 2026-10-08 | 首版。取代已废弃的 `DEPLOYMENT.md` 与 `kedou-network-architecture.md` |
 >
 > **图示**（一页看清全局，推荐先看）：
 > [业务架构图 + 技术架构图](./kedou-architecture-diagrams.html) ｜ [AI 架构与流程](./ai-flow-diagrams.html) ｜ [多 Agent 编排](./multi-agent-diagrams.html)
-> **AI 域方案**：`ai-flow-technical-design.md`（整体流程）、`agent-system-design.md`（系统设计与缺口）、`multi-agent-design.md`（多 Agent 编排）
+> **AI 域方案**：`ai-flow-technical-design.md`（整体流程）、`agent-message-schedule.md`（**消息计划表**：11 类流内消息 / 错误码 / 消费方矩阵）、`agent-system-design.md`（系统设计与缺口）、`multi-agent-design.md`（多 Agent 编排）
 
 ---
 

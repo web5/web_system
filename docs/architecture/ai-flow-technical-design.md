@@ -106,6 +106,8 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 
 ### 3.5 SSE 事件表
 
+> 完整消息计划表（11 类流内消息 + HTTP 侧、错误码表、消费方对照矩阵、多 Agent 折叠策略）见 **`agent-message-schedule.md`**；本节只保留「是否落 steps」这一条落库口径。
+
 | 事件 | 含义 | 是否落 steps |
 |---|---|---|
 | `intent` | 路由结果（agentId / confidence / via / switched） | ✅ |
@@ -234,6 +236,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 文档 | 用途 |
 |---|---|
 | `docs/architecture/ai-flow-diagrams.html` | 本方案的图（架构 / 主链路 / 知识链路） |
+| `docs/architecture/agent-message-schedule.md` | **消息计划表**：11 类流内消息 / 传输约定 / 错误码 / 消费方矩阵 / 多 Agent 消息折叠 |
 | `docs/architecture/multi-agent-design.md` | 多 Agent 编排方案（Agent-as-Tool，设计中；含四道护栏与依赖顺序） |
 | `docs/architecture/agent-system-design.md` | 架构决策清单与缺口 P0→P2 |
 | `docs/architecture/agent-dev-t11-mindmap.md` | 技能思维导图（价值 / 原理 / 实现三段） |
