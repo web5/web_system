@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 432" width="100%" role="img" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif">
+<title>多 Agent 四种编排范式对比</title><desc>Agent-as-Tool 层级委派、Supervisor-Worker 编排分发、Handoff 控制权交接、Pipeline 确定性图四种范式的控制流归属与适配场景对比，推荐先做 Agent-as-Tool</desc>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+    <path d="M1,1 L9,5 L1,9" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<rect x="0" y="0" width="1200" height="432" fill="#ffffff"/><text x="40" y="48" font-size="19" font-weight="700" fill="#0f172a">四种编排范式：区别只在「下一步由谁决定」</text>
+<rect x="40" y="76" width="548" height="104" rx="10" fill="#ffffff" stroke="#fdba74" stroke-width="1.2"/>
+<rect x="40" y="76" width="548" height="5" rx="2.5" fill="#c2410c"/>
+<text x="58" y="106" font-size="15" font-weight="700" fill="#c2410c">Agent-as-Tool 层级委派</text>
+<text x="58" y="128" font-size="12.8" fill="#475569">控制流在父模型：子 Agent 作为一个「特殊工具」被调用</text>
+<text x="58" y="150" font-size="12.2" fill="#64748b">适配：专业分工与能力复用，覆盖约 80% 场景</text>
+<rect x="492" y="88" width="80" height="22" rx="11" fill="#ffedd5"/>
+<text x="532" y="103" font-size="11.5" font-weight="700" fill="#c2410c" text-anchor="middle">推荐先做</text>
+<rect x="612" y="76" width="548" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="612" y="76" width="548" height="5" rx="2.5" fill="#334155"/>
+<text x="630" y="106" font-size="15" font-weight="700" fill="#334155">Supervisor-Worker 编排分发</text>
+<text x="630" y="128" font-size="12.8" fill="#475569">控制流在编排器：拆任务后分发给专职 worker</text>
+<text x="630" y="150" font-size="12.2" fill="#64748b">适配：任务边界清晰、可明确拆分的批处理</text>
+<rect x="1064" y="88" width="80" height="22" rx="11" fill="#f1f5f9"/>
+<text x="1104" y="103" font-size="11.5" font-weight="700" fill="#64748b" text-anchor="middle">需新增编排器</text>
+<rect x="40" y="200" width="548" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="40" y="200" width="548" height="5" rx="2.5" fill="#334155"/>
+<text x="58" y="230" font-size="15" font-weight="700" fill="#334155">Handoff 控制权交接</text>
+<text x="58" y="252" font-size="12.8" fill="#475569">控制流在当前 Agent：主动把会话整个交出</text>
+<text x="58" y="274" font-size="12.2" fill="#64748b">适配：客服转人工这类会话态转移</text>
+<rect x="492" y="212" width="80" height="22" rx="11" fill="#f1f5f9"/>
+<text x="532" y="227" font-size="11.5" font-weight="700" fill="#64748b" text-anchor="middle">需会话状态机</text>
+<rect x="612" y="200" width="548" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="612" y="200" width="548" height="5" rx="2.5" fill="#334155"/>
+<text x="630" y="230" font-size="15" font-weight="700" fill="#334155">Pipeline 确定性图</text>
+<text x="630" y="252" font-size="12.8" fill="#475569">控制流在代码：DAG 提前定义，模型只填节点内容</text>
+<text x="630" y="274" font-size="12.2" fill="#64748b">适配：流程固定且需可审计（如发布流水线）</text>
+<rect x="1064" y="212" width="80" height="22" rx="11" fill="#f1f5f9"/>
+<text x="1104" y="227" font-size="11.5" font-weight="700" fill="#64748b" text-anchor="middle">与 ReAct 冲突</text>
+<rect x="40" y="328" width="1120" height="80" rx="10" fill="#ffedd5" stroke="#fdba74" stroke-width="1.2"/>
+<text x="60" y="358" font-size="13.4" fill="#c2410c" font-weight="700">选型：先做 Agent-as-Tool —— 它复用现有 ReAct 引擎与 ToolRegistry，不引入第二套控制流。</text>
+<text x="60" y="384" font-size="13.4" fill="#c2410c" font-weight="400">Supervisor 与 Pipeline 的本质是「把控制流从模型手里收回」，与自主循环互斥，只在特定业务线按需引入。</text></svg>
