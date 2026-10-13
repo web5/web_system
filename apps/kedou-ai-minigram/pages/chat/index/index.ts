@@ -747,11 +747,19 @@ Page({
       patchAi({ text: next, streaming: !done });
     };
 
+    /**
+     * 入列的两条都要过 withMdNodes。
+     * 气泡正文改走 rich-text 后，渲染只看 `_nodes`：用户这条若不在这里生成，
+     * nodes 恒为 undefined → 自己刚发的消息整条空白（历史消息正常，因为它走
+     * 载入链路时统一过过一次 withMdNodes）。AI 占位条 text 为空，会原样返回。
+     */
     this.setData({
       chatMessages: [
         ...this.data.chatMessages,
-        { role: 'user', text: question, _id: `u-${Date.now()}` },
-        { role: 'ai', text: '', _id: aiId, streaming: true },
+        ...withMdNodes([
+          { role: 'user', text: question, _id: `u-${Date.now()}` } as ChatMsg,
+          { role: 'ai', text: '', _id: aiId, streaming: true } as ChatMsg,
+        ]),
       ],
       input: '',
       sending: true,
