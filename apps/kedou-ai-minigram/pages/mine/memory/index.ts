@@ -69,7 +69,7 @@ Page({
   },
 
   goChat() {
-    // navigateTo（非 switchTab）：对话页是普通页，进页面栈右滑可退回本页
-    wx.navigateTo({ url: '/pages/chat/index/index' });
+    // 统一入口：保证对话页返回栈底是欢迎页（详见 utils/tabbar.ts 的 openChat）
+    openChat();
   },
 });

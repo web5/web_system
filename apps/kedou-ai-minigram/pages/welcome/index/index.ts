@@ -37,6 +37,17 @@ Page({
   },
 
   /**
+   * reLaunch 过来的「去对话」指令（openChat 第 ⑤ 种栈重建路径）：
+   * 立即进对话页，最终栈 = [welcome, chat] —— 保证对话页右滑 / 返回始终回到本页。
+   * onLoad 只触发一次，不会重复跳。
+   */
+  onLoad(options: any) {
+    if (options?.to !== 'chat') return;
+    const q = decodeURIComponent(options.q || '');
+    wx.navigateTo({ url: '/pages/chat/index/index' + (q ? '?' + q : '') });
+  },
+
+  /**
    * 欢迎页不是 tab 页，框架不会自动注入自定义 tabBar —— 本页是手动挂载的，
    * 所以这里用 selectComponent 取实例（`getTabBar()` 只对 tab 页有效）。
    * selected = -1：tabBar 显示但不高亮任何一项。

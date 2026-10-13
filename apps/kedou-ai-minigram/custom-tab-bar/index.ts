@@ -21,6 +21,8 @@
  *
  * key 用于映射图标样式类（.tb-ic-<key>），见 index.wxss。
  */
+import { openChat } from '../utils/tabbar';
+
 Component({
   data: {
     list: [
@@ -71,19 +73,15 @@ Component({
       // （10-13 实测：点「对话」误走 switchTab，而 chat 不在 tabBar.list → 失败不跳转，
       // 但 selected 已置 0 → 高亮与当前页错位）。统一数值化后比较。
       const isTab = Number(istab) === 1;
-      // 对话页已在栈顶时避免重复 push（navigateTo 同路由会新建实例，栈越点越厚）
-      if (!isTab) {
-        const pages = getCurrentPages() as Array<{ route: string }>;
-        const top = pages.length ? '/' + pages[pages.length - 1].route : '';
-        if (top === path) return;
-      }
       // 乐观高亮：切页前先亮，目标页 onShow 会再登记一次（幂等、值一致）
       this.setData({ selected: idx });
-      // tab 页（发现/我的）switchTab 切换；对话页是普通页，navigateTo 进入（右滑可退回来源页）
       if (isTab) {
+        // tab 页（发现/我的）switchTab 切换
         wx.switchTab({ url: path });
       } else {
-        wx.navigateTo({ url: path });
+        // 对话页：统一走 openChat —— 保证返回栈底是欢迎页（右滑/返回始终回欢迎页），
+        // 并内含「栈顶已是对话页则不动」的防重复入栈逻辑
+        openChat();
       }
     },
   },
