@@ -29,6 +29,8 @@ import {
   type AsrPhase,
 } from '../../../services/asr';
 import { collectGlossary } from '../../../services/glossary';
+import { mdToNodes, mdToPlain } from '../../../utils/markdown';
+import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
@@ -83,22 +85,17 @@ interface ChatMsg {
   note?: string;
   /** 卡片方向 meta（如「中文 → 英语」）；推断不出为空，只留 tag */
   meta?: string;
+  /** 运行时：正文的 rich-text nodes 缓存（markdown 渲染，见 utils/markdown.ts） */
+  _nodes?: any[];
+  /** 生成 _nodes 时的原文：命中即跳过重解析（流式期每条 delta 只重算当前条） */
+  _mdSrc?: string;
 }
-
-/**
- * 新会话首屏的统一欢迎语。
- * 不再是「今日一句」—— 用户还没开始对话时，给一句稳定的招呼即可（今日一句保留在欢迎页展示）。
- */
-const WELCOME_GREETING = '科豆 AI · 体验不一样的 AI';
 
 /** 历史会话详情缓存前缀：按会话 id 缓存，第二次进入同一会话秒开 */
 const CONV_CACHE_PREFIX = 'conv_detail_';
 
 /** 载入历史会话时最多渲染的条数：长会话只取最近这些，避免一次性渲染过多 */
 const RECENT_MSG_LIMIT = 50;
-
-/** 开场推荐问题（写死；批次 4 改由 GET /ai/agents 的 entry.suggestions 驱动） */
-const OPENING_SUGGESTIONS = ['帮我翻一句话', '看看合同风险', '今天该做什么'];
 
 /**
  * 历史消息的翻译卡片启发式补判（缓存与网络刷新共用，幂等：已打 card 标记的不重算）。
@@ -155,6 +152,51 @@ function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
   });
 }
 
+/**
+ * 给消息列表补 rich-text nodes（正文走 markdown 渲染，见 utils/markdown.ts）。
+ * `_mdSrc` 命中缓存的条目不重解析 —— 流式期每条 delta 只重算当前条，
+ * 历史消息nodes 一次生成、后续复用。
+ */
+function withMdNodes(msgs: ChatMsg[]): ChatMsg[] {
+  return msgs.map((m) => {
+    if (!m.text) return m;
+    if (m._mdSrc === m.text && m._nodes) return m;
+    return { ...m, _nodes: mdToNodes(m.text), _mdSrc: m.text };
+  });
+}
+
+/**
+ * 合并历史会话里连续的 assistant 文本消息。
+ *
+ * 为什么需要：服务端 agent 引擎是 ReAct 多步循环，每一步的 assistant content 都单独落库
+ * （如天气问答：第一轮「我来帮你查一下…」+ 工具执行后正文 = DB 里两条 assistant）。
+ * 实时对话时前端只维护一个气泡（PC 端 delta 拼接 / 小程序 final 覆盖），视觉上就是一条；
+ * 历史载入若按 DB 原样渲染，「一次问答」会裂成两个气泡，与实时形态不一致。
+ *
+ * 口径：仅合并「都不带 musicCard」的相邻 assistant（卡片必须挂在各自的消息上）；
+ * 段落间用 \n\n 连接（markdown 下是两个段落，视觉有呼吸）。
+ */
+function mergeConsecutiveAi(msgs: ChatMsg[]): ChatMsg[] {
+  const out: ChatMsg[] = [];
+  for (const m of msgs) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.role === 'ai' &&
+      m.role === 'ai' &&
+      !prev.musicCard &&
+      !m.musicCard &&
+      prev.text &&
+      m.text
+    ) {
+      out[out.length - 1] = { ...prev, text: `${prev.text}\n\n${m.text}` };
+      continue;
+    }
+    out.push({ ...m });
+  }
+  return out;
+}
+
 Page({
   data: {
     radiusClass: "",
@@ -166,13 +208,26 @@ Page({
     sending: false,
     /** AI 长消息「展开/收起」状态，按消息下标记录 */
     expandMap: {} as Record<number, boolean>,
-    /** 开场推荐问题（发送一次后收起） */
-    suggestions: OPENING_SUGGESTIONS as string[],
     /** scroll-view 滚动锚点（命中底部锚点即滚到底） */
     scrollIntoId: '',
     /** 自定义导航栏（navigationStyle: custom）：状态栏高与导航栏总高，单位 px */
     statusBarHeight: 20,
-    navHeight: 44,
+    navHeight: 70,
+    /** 「新增对话」胶囊避让：按钮右缘距屏幕右边 px（102 = 兜底值，onLoad 时按胶囊矩形动态算） */
+    navActRight: 102,
+    /** 自定义导航元素垂直基准：胶囊 top 的绝对页面坐标 px（与 wx.getMenuButtonBoundingClientRect().top 同框，
+        直接绑给子元素 style top）—— 与原生胶囊严格同中线，替代"44px 区间中线"假设 */
+    capsuleTop: 26,
+    /** 胶囊高度 px（标准 32，以实测为准） */
+    capsuleHeight: 32,
+    /** 含文字元素（标题/新增对话）的 top = capsuleTop + 光学补偿：
+        文字视觉重心高于几何中心（汉字字面框 + 拉丁字母升部），对胶囊几何中线下移
+        才能与原生胶囊视觉对齐。真机若仍感偏高/偏低，只调 initNavBar 里这两个常量 */
+    navTitleTop: 29,
+    navTextTop: 28,
+    /** 对话记录 icon 的 top = capsuleTop + 1：用户实测确认——同为纯 icon，
+        它比返回键需多 1px 下移才视觉齐平（自身图形重心差异） */
+    navHistTop: 27,
     /** 「+」菜单是否展开 */
     showPlus: false,
     /**
@@ -212,11 +267,26 @@ Page({
 
   /** 按住说话：起始触点 Y（用于判定上滑取消） */
   _voiceStartY: 0,
+  /**
+   * 登录态过期广播退订函数（onUnload 调用）。
+   * ⚠️ Page() 参数是对象字面量、没有类属性语法：`xxx: T = v` 会被解析成「把 T 当值用」，
+   * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
+   * （88bbff84 曾写成 `any = null` 想绕过联合类型限制，结果三页真机编译全挂、白屏，
+   *   2026-10-12 修复；教训：对象字面量里根本没有「类属性」这回事，断言式才是正解）
+   */
+  _offAuthExpired: null as any,
 
   onLoad() {
     this.initNavBar();
+    // 登录态过期广播：request 401 清 token 后发 auth:expired → 本页弹登录墙。
+    // （旧方案 reLaunch 回首页会清空页面栈，致右滑返回永远回首页，已废弃）
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.on) {
+      this._offAuthExpired = () => this.setData({ loggedIn: false });
+      __bus.on('auth:expired', this._offAuthExpired);
+    }
     this.setData({
-      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
+      chatMessages: [],
     });
     // 播放结束 / 停止时清除按钮「停止」态（合成中由 await 时序管理）
     this._offSpeakState = onSpeakState((s) => {
@@ -234,15 +304,19 @@ Page({
 
   /**
    * 隐藏 tabBar：对话页走沉浸式（navigationStyle 为 custom + 自定义 tabBar 不渲染），
-   * 导航由「顶部返回 icon」与「输入区 + 菜单」承接。
+  /**
+   * 沉浸式（navigationStyle custom + 不挂 tabBar）：导航由「顶部返回 icon」与
+   * 「输入区 + 菜单」承接。2026-10-12 起对话页退出 tabBar 集合（普通页），
+   * 但仍在 tabBar 上占一项，故本页 onShow 需登记高亮（组件每页独立实例，
+   * 不能靠自推导 —— 详见 utils/tabbar.ts）。
    */
   onShow() {
+    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
+    setTabBarSelected(this, TAB_INDEX.chat);
+
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
-
-    const tabBar = (this as any).getTabBar?.();
-    if (tabBar) tabBar.setData({ currentPage: '/pages/chat/index/index', selected: 0 });
 
     const loggedIn = isLoggedIn();
     this.setData({ loggedIn });
@@ -263,25 +337,67 @@ Page({
    * 自定义导航栏尺寸：状态栏高 + 胶囊下沿，保证标题与原生胶囊视觉对齐。
    * 取不到时保留 data 里的默认值（不阻塞页面）。
    */
+  /**
+   * 自定义导航栏：胶囊矩形是水平避让与垂直对齐的唯一基准。
+   * 背景：rect.top − statusBarHeight 随机型而异（iOS 标准 6，部分安卓 12+），
+   * 硬编码"内容区 44px 中线"会与原生胶囊错位数 px（实测偏移 12px，用户可感知）。
+   * 取一次矩形同时解两题：
+   *   垂直 —— 自定义元素 top/height 绑胶囊，与胶囊严格同中线
+   *   水平 —— 新增对话 right = 屏宽 − 胶囊左缘 + 12px
+   * API 异常或 rect 全 0（旧基础库/开发者工具）时全部走兜底值，不阻塞渲染。
+   */
   initNavBar() {
+    let statusBarHeight = 20;
     try {
       const sys = wx.getSystemInfoSync();
-      const statusBarHeight = sys.statusBarHeight || 20;
-      // 导航栏内容区固定 44px（微信标准）：胶囊（32px 高）在其中自然居中，
-      // 且 44px 与机型无关 —— 返回键 / 标题 / 右上操作都以它做垂直基准
-      this.setData({ statusBarHeight, navHeight: statusBarHeight + 44 });
+      statusBarHeight = sys.statusBarHeight || 20;
     } catch {
-      // 忽略：退回默认高度
+      // 保留默认
     }
+    // 兜底值：iOS 标准姿态（胶囊在状态栏下 6px / 高 32 / 导航总高 70）
+    let navHeight = statusBarHeight + 6 + 32 + 12;
+    // capsuleTop 用绝对页面坐标：.nav 虽在页面顶部，但其 absolute 子元素的 top
+    // 从 .nav padding box 顶边（=页面顶 y=0）算，与 rect 同框 —— 减 statusBarHeight 会整体上移一个状态栏高（标题戳进刘海）
+    let capsuleTop = statusBarHeight + 6;
+    let capsuleHeight = 32;
+    let navActRight = 102;
+    try {
+      const sys = wx.getSystemInfoSync();
+      const rect = wx.getMenuButtonBoundingClientRect();
+      if (rect && rect.top > 0 && rect.height > 0) {
+        capsuleTop = rect.top;                    // 绝对坐标，直接绑给子元素 top
+        capsuleHeight = rect.height;
+        navHeight = rect.bottom + 12;              // 内容下沿：胶囊下 12px
+        if (sys.windowWidth && rect.left > 0) {
+          navActRight = Math.max(12, sys.windowWidth - rect.left + 12);
+        }
+      }
+    } catch {
+      // 忽略：保留全部兜底值
+    }
+    // 光学补偿（只作用于含文字元素）：新增对话 = 纯汉字+小图标，2px 即视觉居中；
+    // 标题「科豆 AI」含拉丁字母升部，视觉重心抬得更高，需 4px
+    this.setData({
+      statusBarHeight, navHeight, capsuleTop, capsuleHeight, navActRight,
+      navTextTop: capsuleTop + 2,
+      navTitleTop: capsuleTop + 3,
+      navHistTop: capsuleTop + 1,
+    });
   },
 
   /**
-   * 顶部返回 icon：**统一回欢迎页** ——
-   * 无论本次会话是从「开始对话」、记录页点一条、还是欢迎页卡片进入的，返回都回欢迎页。
-   * （记录页自己有原生返回可以退回，不需要对话页代劳）
+   * 顶部返回 icon：**回来源页**（与右滑返回一致）——
+   * 无论本次会话是从欢迎页「开始对话」、欢迎页卡片、对话记录还是 tabBar「对话」项进入的，
+   * 都退回来源页。禁 redirectTo 回欢迎页：那会把「返回」变成「回首页」，
+   * 且替换栈顶会污染页面栈（之后右滑也回首页）。
    */
   goBack() {
-    wx.redirectTo({ url: '/pages/welcome/index/index' });
+    wx.navigateBack({
+      fail() {
+        // 栈仅一层（对话页被直接打开，如分享卡片入口）：兜底回欢迎页
+        wx.redirectTo({ url: '/pages/welcome/index/index' });
+      },
+    });
   },
 
   /** 导航栏「列表」icon：打开对话记录 */
@@ -291,8 +407,8 @@ Page({
 
   /**
    * 从「对话记录」点某条记录返回时载入该会话。
-   * 对话页是 tabBar 页（navigateTo 到不了、switchTab 不能带参数），
-   * 因此历史页把 conversationId 写进 storage，由这里读取后拉详情渲染。
+   * 历史页与对话页同属 chat 包，用 navigateBack 返回 + storage 传会话 id
+   * （兼容 2026-10-12 前的机制；对话页现已退出 tabBar 集合，后续可改 URL 参数）。
    */
   async resumeIfNeeded() {
     let id = '';
@@ -324,10 +440,11 @@ Page({
       // ② 未命中 → 先给占位气泡（不用全屏 loading：它会盖住导航栏、也像卡住）
       this.setData({
         conversationId: id,
-        chatMessages: [{ role: 'ai', text: '正在载入…', _id: 'h-loading', loading: true }],
+        chatMessages: withMdNodes([
+          { role: 'ai', text: '正在载入…', _id: 'h-loading', loading: true },
+        ]),
         sending: false,
         input: '',
-        suggestions: [],
         copyIdx: -1,
         currentAgent: null,
       });
@@ -349,11 +466,15 @@ Page({
             musicCard: card,
             _id: `h-${Math.random().toString(36).slice(2)}`,
           };
-        })
-        // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
-        .filter((m) => m.musicCard || m.text || m.role === 'user');
-      // ③ 长会话只取最近 N 条，避免一次性渲染过多
-      const msgs = all.length > RECENT_MSG_LIMIT ? all.slice(-RECENT_MSG_LIMIT) : all;
+      })
+      // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
+      .filter((m) => m.musicCard || m.text || m.role === 'user');
+      // ③ 合并连续的 assistant：服务端 ReAct 两段式（第一轮过渡语 + 工具后正文）会落库
+      // 两条独立 assistant，实时对话是「一条气泡」（PC 端 += 拼接 / 小程序 final 覆盖），
+      // 历史载入若不合并就会裂成两条气泡——与实时形态不一致，用户感知「一次对话变两条」。
+      const mergedAll = mergeConsecutiveAi(all);
+      // ④ 长会话只取最近 N 条，避免一次性渲染过多
+      const msgs = mergedAll.length > RECENT_MSG_LIMIT ? mergedAll.slice(-RECENT_MSG_LIMIT) : mergedAll;
       try {
         wx.setStorageSync(CONV_CACHE_PREFIX + id, msgs);
       } catch {
@@ -370,12 +491,11 @@ Page({
     this.setData({
       conversationId: id,
       chatMessages: msgs.length
-        ? decorateHistoryCards(msgs)
-        : [{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }],
+        ? withMdNodes(decorateHistoryCards(mergeConsecutiveAi(msgs)))
+        : withMdNodes([{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }]),
       sending: false,
       input: '',
       expandMap: {},
-      suggestions: [],
       copyIdx: -1,
       // 历史会话的 agent 归属不在列表接口里（产品决策：不展示）
       currentAgent: null,
@@ -394,8 +514,7 @@ Page({
       sending: false,
       input: '',
       expandMap: {},
-      suggestions: OPENING_SUGGESTIONS as string[],
-      chatMessages: [{ role: 'ai', text: WELCOME_GREETING }],
+      chatMessages: [],
       // 新会话 = 未锁定，清空上一轮的 agent 徽标
       currentAgent: null,
       copyIdx: -1,
@@ -430,6 +549,12 @@ Page({
   },
 
   onUnload() {
+    // 页面销毁：退订登录态广播，避免回调打到已销毁实例
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.off && this._offAuthExpired) {
+      __bus.off('auth:expired', this._offAuthExpired);
+      this._offAuthExpired = null;
+    }
     // 页面销毁：作废在途回调，避免 setData 打到已销毁实例
     this._runId += 1;
     // 离开页面停掉朗读，避免音频在后台继续响
@@ -497,7 +622,8 @@ Page({
     const idx = Number(e?.currentTarget?.dataset?.idx ?? -1);
     if (idx < 0) return;
     const msg = this.data.chatMessages[idx] as ChatMsg | undefined;
-    const text = String(msg?.text || '').trim();
+    // markdown 标记剥离后再送 TTS：星号/井号/反引号会被当标点念出怪声
+    const text = mdToPlain(String(msg?.text || '')).trim();
     if (!text) return;
 
     // 再点一次 = 停止
@@ -531,10 +657,10 @@ Page({
     this.setData({ copyIdx: idx });
   },
 
-  /** 点「复制」：写入系统剪贴板 */
+  /** 点「复制」：写入系统剪贴板（markdown 语法剥离，粘到别处不留星号） */
   onCopyMsg(e: any) {
     const idx = Number(e.currentTarget.dataset.idx);
-    const text = this.data.chatMessages[idx]?.text || '';
+    const text = mdToPlain(this.data.chatMessages[idx]?.text || '');
     this.setData({ copyIdx: -1 });
     if (!text) return;
     wx.setClipboardData({
@@ -561,12 +687,6 @@ Page({
     this.sendWith('不感兴趣，换一批');
   },
 
-  /** 点击开场推荐问题：直接发送 */
-  onTapSug(e: any) {
-    const q = String(e.currentTarget.dataset.q || '').trim();
-    if (q) this.sendWith(q);
-  },
-
   send() {
     const question = this.data.input.trim();
     if (!question) {
@@ -585,12 +705,31 @@ Page({
     /** 本轮是否由翻译官作答 → 卡片承载（intent 事件到达后置位，早于任何正文） */
     let isCard = false;
 
+    /**
+     * 流式期打补丁：只传变动字段（路径级 setData）。
+     * 不用全量 chatMessages —— 每条 delta 全量序列化会把整棵 _nodes 树反复过一遍，
+     * 长会话流式会明显掉帧；这里按 idx 定位，仅更新 patch 到的键。
+     * 正文变化时顺带重算该条的 markdown nodes（其余 patch 不触发解析）。
+     */
     const patchAi = (patch: Partial<ChatMsg>) => {
-      this.setData({
-        chatMessages: this.data.chatMessages.map((m: ChatMsg) =>
-          m._id === aiId ? { ...m, ...patch } : m,
-        ),
+      const list = this.data.chatMessages;
+      const idx = list.findIndex((m: ChatMsg) => m._id === aiId);
+      if (idx < 0) return;
+      const merged: ChatMsg = { ...list[idx], ...patch };
+      if (patch.text !== undefined) {
+        merged._nodes = mdToNodes(merged.text || '');
+        merged._mdSrc = merged.text || '';
+      }
+      list[idx] = merged;
+      const payload: Record<string, any> = {};
+      (Object.keys(patch) as Array<keyof ChatMsg>).forEach((k) => {
+        payload[`chatMessages[${idx}].${String(k)}`] = merged[k];
       });
+      if (patch.text !== undefined) {
+        payload[`chatMessages[${idx}]._nodes`] = merged._nodes;
+        payload[`chatMessages[${idx}]._mdSrc`] = merged._mdSrc;
+      }
+      this.setData(payload);
       this.scrollToBottom();
     };
 
@@ -616,7 +755,6 @@ Page({
       ],
       input: '',
       sending: true,
-      suggestions: [],
       copyIdx: -1,
     });
     this.scrollToBottom();
@@ -775,7 +913,8 @@ Page({
   async onCardSpeak(e: any) {
     const idx = Number(e.currentTarget.dataset.idx);
     const msg = this.data.chatMessages[idx];
-    const text = msg?.enMain || msg?.text || '';
+    // 卡片主文本理论上是纯文本，仍过一次 mdToPlain 兜底（幂等，无标记时原文输出）
+    const text = mdToPlain(msg?.enMain || msg?.text || '');
     if (!text) return;
     // 再点一次 = 停止（speakText 内部判定，直接返回，无需 loading 态）
     if (this.data.speakPlayingIdx === idx) {

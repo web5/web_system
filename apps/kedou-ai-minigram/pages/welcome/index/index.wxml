@@ -1,8 +1,13 @@
 <!-- 科豆 AI · 欢迎页（启动页，非 tab 页）
      手动引入自定义 tabBar：本页是进入「发现 / 我的」的枢纽。
      对话页才是沉浸式（隐藏 tabBar），其顶部返回 icon 回到本页。 -->
+<!-- 自绘导航（navigationStyle: custom）：原系统白导航栏与页面暖白底/对话页 custom 导航转场露白帧，统一自绘同色无缝 -->
+<view class="w-nav" style="padding-top:{{statusBarHeight}}px;height:{{navBarHeight}}px;box-sizing:border-box">
+  <view class="w-nav-t">科豆 AI</view>
+</view>
 <view class="page {{radiusClass}}">
-  <view class="w-group">
+  <!-- 顶部间距动态避开 fixed 导航（navGroupTop = 导航高+6px，index.ts onShow 算） -->
+  <view class="w-group" style="margin-top:{{navGroupTop}}px">
     <view class="w-hello">Hello<text class="dot">.</text></view>
     <view class="w-sub">科豆 AI · 体验不一样的 AI</view>
 

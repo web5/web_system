@@ -13,6 +13,7 @@ import {
   clearMusicTaste,
   TasteData,
 } from '../../../services/user-taste';
+import { openChat } from '../../../utils/tabbar';
 
 interface TagItem {
   label: string;
@@ -134,6 +135,7 @@ Page({
 
   /** 空态唯一恢复入口：去对话里告诉 AI */
   goChat() {
-    wx.switchTab({ url: '/pages/chat/index/index' });
+    // 统一入口：保证对话页返回栈底是欢迎页（详见 utils/tabbar.ts 的 openChat）
+    openChat();
   },
 });

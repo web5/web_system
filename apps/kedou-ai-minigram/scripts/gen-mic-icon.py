@@ -1,114 +1,105 @@
 #!/usr/bin/env python3
-"""生成输入栏图标：常态线性（橙）+ 录音中（白）两态。
+"""输入栏录音键图标生成：SVG 唯一真相源 → 无头 Chrome 光栅化 → base64。
 
-v1.0.12（2026-10-12）造型换代：麦克风 → 声波（圆点 + 右侧双弧，微信语音输入同款语义）。
-真机迭代史：v1.0.10 瘦长胶囊「单薄」→ v1.0.11 加粗圆头仍不够精致 → 用户拍板去话筒只留声波，
-并选定「圆点+右弧」构图（对照稿 ①），要求整体放大、视觉居中。
+为什么不再用 PIL 手画（v1.0.13 起因）：
+PIL 版与原型稿 SVG 是两套几何代码，位图与原型观感会漂移（双源漂移）。现在**原型稿与真机位图共用同一份 SVG**，
+本脚本只负责把 SVG 光栅化成 WXSS 能吃的 base64 PNG（小程序 background-image
+不支持本地路径，也不支持 SVG data-uri，必须位图）。
 
-几何（24 网格，脚本内 ×16 映射到 96px 画布，4x 超采样）· 左右对称单弧：
-- 圆点居中：cx=12, cy=12, r=2.7（实心）
-- 右弧：M15.4 7.2 → a4.8（半圆右凸）；左弧：M8.6 7.2 → a4.8（半圆左凸）——左右镜像
-- 水平跨度 3.8→20.2，严格对称，光学中心 12.0；竖直 7.2→16.8 居中
-- 线宽 2.25（×16=36 → 96 画布 9px），所有端点补圆头，杜绝 PIL 平切
-- 迭代：v1.0.11 加粗圆头仍不够精致 → 换声波 → 去话筒 → ①圆点+右双弧 →
-  用户裁定「不要对称双弧（双侧各两条），单弧就好但得左右对称」→ 定稿对称单弧
-- ➕ 维持 v1.0.10 定稿不动（线宽锁定 8px）
+构图（微信语音输入同款）：实心圆点 + 右侧双层同心弧，整组在 24 画布内光学居中
+（圆点偏左是构图的一部分，不是居中对象）。
 
-显示口径：位图 44rpx → 48rpx（76rpx 圆钮内占比 58%→63%，响应「稍微大一点」）。
-生成后 base64 内联进 WXSS（小程序 background-image 只吃 base64）。
+几何参数集中在 PARAMS，改这里即可换档：
+    dot_r 圆点半径 / r1 内弧半径 / r2 外弧半径 / span 弧半张角(度) / sw 线宽
+派生量：
+    dot_cx = 12 - (r2 - dot_r) / 2 - sw / 4   # 整组水平光学居中（含线宽补偿）
+    水平跨度 = r2 + dot_r            # 决定横向饱满度
+    竖向跨度 = 2 * r2 * sin(span)    # 决定纵向饱满度（也决定"弯曲感"）
+
+产物：/tmp/wave-b64.txt（行1=橙线版常态 / 行2=白线版录音中）
 """
 import base64
 import io
-import os
-from PIL import Image, ImageDraw
-
-SS = 4
-SIZE = 96
-C = SIZE * SS
-K = 16  # 24 网格 → 96 画布 的换算系数
-
-ORANGE = (249, 115, 22, 255)
-WHITE = (255, 255, 255, 255)
-
-# ---- 声波几何（24 网格值 × K） ----
-DOT_CX, DOT_CY, DOT_R = 12 * K, 12 * K, 2.7 * K   # 圆点居中
-ARC_R = 7.0 * K                     # 弧半径（以圆点为圆心，同心）
-ARC_SPAN = 60                       # 弧半张角（度）：-60°→60° 右弧，镜像左弧
-LW = round(2.3 * K)                 # 37（=96 画布 9.2px）
-
-WAVE_JSON = os.environ.get("WAVE_JSON", "")
-
-
 import math
+import os
+import subprocess
+from PIL import Image
+
+# ---- 几何（L1 定稿：立弧 · 半弧端点严格同 x 镜像）----
+# 端点 = (dot_cx + R·cos(span), 12 ± R·sin(span))，两端同 x、关于水平中线镜像
+# span=48° ↔ 端点与垂直轴夹角 42°（L 系列 θ）；W 63% H 79%，点弧缝 1.35px、弧间距 2.25px
+PARAMS = dict(dot_r=2.5, r1=7.25, r2=11.55, span=48, sw=2.3)
+DOT_R = PARAMS["dot_r"]
+R1, R2 = PARAMS["r1"], PARAMS["r2"]
+SPAN, SW = PARAMS["span"], PARAMS["sw"]
+# 整组光学居中：含线宽补偿 —— 左极值 = dot_cx - dot_r（圆点无描边），
+# 右极值 = dot_cx + r2 + sw/2（外弧描边向外撑），中点为两者平均 ⇒ 多退 sw/4
+DOT_CX = 12 - (R2 - DOT_R) / 2 - SW / 4
+
+ORANGE = "#F97316"
+WHITE = "#FFFFFF"
+
+NODE_MODULES = "/Users/geekwen/.workbuddy/binaries/node/workspace/node_modules"
+NODE_BIN = "/Users/geekwen/.workbuddy/binaries/node/versions/22.22.2-6/bin/node"
+RASTER_PX = 288  # 96 的 3 倍，对应 @3x 位图，缩放不糊
 
 
-def _arc(d, r, color, right=True):
-    """同心弧：以圆点为圆心，右弧 -SPAN→+SPAN / 左弧镜像，两端补圆头。"""
-    box = (DOT_CX - r, DOT_CY - r, DOT_CX + r, DOT_CY + r)
-    if right:
-        d.arc(box, start=-ARC_SPAN, end=ARC_SPAN, fill=color, width=LW)
-        angles = (-ARC_SPAN, ARC_SPAN)
-    else:
-        d.arc(box, start=180 - ARC_SPAN, end=180 + ARC_SPAN, fill=color, width=LW)
-        angles = (180 - ARC_SPAN, 180 + ARC_SPAN)
-    for a in angles:
-        ex = DOT_CX + r * math.cos(math.radians(a))
-        ey = DOT_CY + r * math.sin(math.radians(a))
-        d.ellipse((ex - LW // 2, ey - LW // 2, ex + LW // 2, ey + LW // 2), fill=color)
+def wave_paths(color: str) -> str:
+    """圆点 + 双层同心弧的 SVG 片段。原型稿 HTML 与本脚本共用同一份几何。"""
+    parts = [f'<circle cx="{DOT_CX:.2f}" cy="12" r="{DOT_R}" fill="{color}" stroke="none"/>']
+    for R in (R1, R2):
+        x = DOT_CX + R * math.cos(math.radians(SPAN))
+        y1 = 12 - R * math.sin(math.radians(SPAN))
+        y2 = 12 + R * math.sin(math.radians(SPAN))
+        parts.append(f'<path d="M{x:.2f} {y1:.2f}A{R} {R} 0 0 1 {x:.2f} {y2:.2f}"/>')
+    return "".join(parts)
 
 
-def wave(color):
-    """声波：居中实心圆点 + 左右镜像单弧，严格左右对称。"""
-    img = Image.new("RGBA", (C, C), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.ellipse((DOT_CX - DOT_R, DOT_CY - DOT_R, DOT_CX + DOT_R, DOT_CY + DOT_R), fill=color)
-    _arc(d, ARC_R, color, right=False)
-    _arc(d, ARC_R, color, right=True)
-    return img.resize((SIZE, SIZE), Image.LANCZOS)
+def build_svg(color: str) -> str:
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+        f'stroke="{color}" stroke-width="{SW}" stroke-linecap="round" stroke-linejoin="round">'
+        f'{wave_paths(color)}</svg>'
+    )
 
 
-# ---- 线性加号（v1.0.10 定稿，不动） ----
-PLUS_LW = 32
+def rasterize(svg_path: str, png_path: str) -> None:
+    env = dict(os.environ, NODE_PATH=NODE_MODULES)
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "svg2png.js")
+    r = subprocess.run([NODE_BIN, script, svg_path, png_path, str(RASTER_PX)],
+                       env=env, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"[gen-mic-icon] 光栅化失败（需无头 Chrome + puppeteer-core）:\n{r.stderr}")
+    print(r.stdout.strip())
 
 
-def plus_line(color):
-    img = Image.new("RGBA", (C, C), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle((C // 2 - PLUS_LW // 2, 42, C // 2 + PLUS_LW // 2, 342),
-                        radius=PLUS_LW // 2, fill=color)
-    d.rounded_rectangle((42, C // 2 - PLUS_LW // 2, 342, C // 2 + PLUS_LW // 2),
-                        radius=PLUS_LW // 2, fill=color)
-    return img.resize((SIZE, SIZE), Image.LANCZOS)
-
-
-def b64(img):
+def b64_of(path: str) -> str:
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
+    Image.open(path).convert("RGBA").save(buf, format="PNG", optimize=True)
     return base64.b64encode(buf.getvalue()).decode()
 
 
 def main():
-    wave_lo = wave(ORANGE)   # 橙声波（常态，浅橙底）
-    wave_fw = wave(WHITE)    # 白声波（录音中，橙底）
-    plus_lo = plus_line(ORANGE)
+    os.makedirs("/tmp/micgen", exist_ok=True)
+    out = []
+    for name, color in (("wave-orange", ORANGE), ("wave-white", WHITE)):
+        svg_path, png_path = f"/tmp/micgen/{name}.svg", f"/tmp/micgen/{name}.png"
+        with open(svg_path, "w") as f:
+            f.write(build_svg(color))
+        rasterize(svg_path, png_path)
+        b = Image.open(png_path).getbbox()
+        w, h = b[2] - b[0], b[3] - b[1]
+        print(f"[gen-mic-icon] {name}: 宽 {w/RASTER_PX*100:.0f}% 高 {h/RASTER_PX*100:.0f}% "
+              f"中心 ({(b[0]+b[2])/2:.0f},{(b[1]+b[3])/2:.0f})")
+        out.append(b64_of(png_path))
+        Image.open(png_path).resize((96, 96), Image.LANCZOS).save(f"/tmp/micgen/{name}-96.png")
 
-    wave_lo.save("/tmp/wave-orange.png")
-    wave_fw.save("/tmp/wave-white.png")
-
-    # 三联预览：常态 | 录音中 | 加号
-    preview = Image.new("RGB", (SIZE * 3, SIZE), (255, 255, 255))
-    def paste(img, x, bg):
-        preview.paste(Image.new("RGB", (SIZE, SIZE), bg), (x, 0))
-        preview.paste(img, (x, 0), img)
-    paste(wave_lo, 0, (255, 247, 237))
-    paste(wave_fw, SIZE, (249, 115, 22))
-    paste(plus_lo, SIZE * 2, (255, 247, 237))
-    preview = preview.resize((SIZE * 3 * 4, SIZE * 4), Image.NEAREST)
-    preview.save("/tmp/wave-preview3.png")
-
-    with open("/tmp/mic3-b64.txt", "w") as f:
-        f.write("\n".join([b64(wave_lo), b64(wave_fw), b64(plus_lo)]))
-    print("done; base64 → /tmp/mic3-b64.txt（行1=橙声波 行2=白声波 行3=加号）；预览 /tmp/wave-preview3.png")
+    with open("/tmp/wave-b64.txt", "w") as f:
+        f.write("\n".join(out))
+    print("done; base64 → /tmp/wave-b64.txt（行1=橙常态 行2=白录音中）")
+    print(f"[gen-mic-icon] 几何: dot_r={DOT_R} r1={R1} r2={R2} span=±{SPAN}° sw={SW} dot_cx={DOT_CX:.2f}")
+    print(f"[gen-mic-icon] 两态 SVG 同步来源: {os.path.basename(__file__)} 的 wave_paths()")
+    print("[gen-mic-icon] 原型稿请同步 <svg …>" + wave_paths("currentColor") + "</svg>")
 
 
 main()

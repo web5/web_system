@@ -7,8 +7,10 @@
  */
 
 /**
- * 会话恢复通道：对话页是 tabBar 页，`navigateTo` 到不了、`switchTab` 又不能带参数，
- * 因此用 storage 传递要恢复的 conversationId，由对话页 `onShow` 读取并载入。
+ * 会话恢复通道：欢迎页卡片进对话页时用 storage 传递要恢复的 conversationId，
+ * 由对话页 `onShow` 读取并载入。（历史机制：对话页曾是 tabBar 页，
+ * `navigateTo` 到不了、`switchTab` 又不能带参数；2026-10-12 起对话页已是普通页，
+ * 后续可平滑迁移到 URL 参数，storage 通道保留兼容。）
  */
 export const RESUME_CONV_KEY = 'resume_conversation_id';
 

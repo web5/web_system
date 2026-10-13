@@ -1,12 +1,15 @@
 <!-- 自定义 tabBar（app.json: tabBar.custom = true）
-     图标为线性图标，与原型 prototype/index.html 同源；对话页不渲染（沉浸式）。 -->
-<view class="tabbar" wx:if="{{!hidden}}">
+     图标为线性图标，与原型 prototype/index.html 同源。
+     list 第 0 项「对话」已退出 tabBar 集合（isTab=false）：点击 navigateTo 进入，
+     右滑可退回来源页（tab 页右滑会退出小程序）。 -->
+<view class="tabbar">
   <view
     class="tb {{selected === index ? 'on' : ''}}"
     wx:for="{{list}}"
     wx:key="pagePath"
     data-path="{{item.pagePath}}"
     data-index="{{index}}"
+    data-istab="{{item.isTab ? 1 : 0}}"
     bindtap="onSwitch"
   >
     <view class="tb-ic tb-ic-{{item.key}}"></view>

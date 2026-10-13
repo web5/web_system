@@ -15,11 +15,15 @@
     style="padding-top:{{statusBarHeight}}px;height:{{navHeight}}px;box-sizing:border-box"
   >
     <!-- 标题放最前：absolute 布局下后出现的兄弟在上层，保证返回键 / 新对话可点 -->
-    <view class="nav-title">科豆 AI</view>
-    <view class="nav-back" bindtap="goBack"><view class="nav-back-arrow"></view></view>
-    <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history -->
-    <view class="nav-hist" bindtap="openHistory" aria-label="对话记录"><view class="nav-hist-ic"></view></view>
-    <view class="nav-act" bindtap="newChat" aria-label="新建对话"><view class="nav-new-ic"></view></view>
+    <!-- top/height 绑胶囊矩形（index.ts initNavBar，绝对页面坐标与 rect 同框）：与原生胶囊严格同中线，禁回归 44px 区间假设 -->
+    <!-- 含文字元素用各自的光学补偿 top（index.ts initNavBar）：文字视觉重心高于几何中心。
+         标题 navTitleTop（+4px）比新增对话 navTextTop（+2px）补得多——「科豆 AI」含拉丁字母升部，重心抬得更高 -->
+    <view class="nav-title" style="top:{{navTitleTop}}px;height:{{capsuleHeight}}px;line-height:{{capsuleHeight}}px">科豆 AI</view>
+    <view class="nav-back" bindtap="goBack" style="top:{{capsuleTop}}px;height:{{capsuleHeight}}px"><view class="nav-back-arrow"></view></view>
+    <!-- 对话记录入口：返回 icon 旁，进入 pages/chat/history；top 用 navHistTop（+1px，实测该 icon 比返回键需多 1px 下移才齐平） -->
+    <view class="nav-hist" bindtap="openHistory" aria-label="对话记录" style="top:{{navHistTop}}px;height:{{capsuleHeight}}px"><view class="nav-hist-ic"></view></view>
+    <!-- 「新增对话」避让原生胶囊：top/height/right 均由 index.ts initNavBar 按胶囊矩形动态算（硬编码会在异形屏翻车）；含文字故 top 用 navTextTop 光学补偿 -->
+    <view class="nav-act" bindtap="newChat" aria-label="新建对话" style="top:{{navTextTop}}px;height:{{capsuleHeight}}px;right:{{navActRight}}px"><view class="nav-new-ic"></view></view>
   </view>
 
   <view class="page">
@@ -40,9 +44,12 @@
         </view>
       </view>
 
+      <!-- 空态欢迎语：无消息时的一段浅灰提示。wx:if 条件渲染，不进消息列表、不落库、不参与历史合并 -->
+      <view wx:if="{{!chatMessages.length}}" class="chat-empty">有什么想聊的，直接说</view>
+
       <view
         wx:for="{{chatMessages}}"
-        wx:key="index"
+        wx:key="_id"
         wx:for-index="idx"
         class="chat-msg {{item.role}}"
       >
@@ -110,12 +117,25 @@
             </view>
 
             <!-- 长按复制：仅对已有正文的气泡生效（流式中 / 空气泡不弹） -->
-            <view
-              wx:elif="{{item.text}}"
-              class="msg-text"
-              data-idx="{{idx}}"
-              bindlongpress="onLongPressMsg"
-            >{{item.text}}</view>
+            <block wx:elif="{{item.text}}">
+              <!--
+                markdown → rich-text：AI 回复的 **加粗** / 标题 / 列表 / 代码块按排版渲染。
+                nodes 由 index.ts 的 mdToNodes 生成（utils/markdown.ts）；
+                色值硬编码在转换器内（rich-text 是 webview 隔离渲染，拿不到页面 CSS 变量）。
+              -->
+              <view
+                class="msg-text"
+                data-idx="{{idx}}"
+                bindlongpress="onLongPressMsg"
+              >
+                <rich-text nodes="{{item._nodes}}"></rich-text>
+                <!-- 长文本折叠渐隐：rich-text 内 line-clamp 失效，改 max-height 裁剪 + 底部渐隐遮罩 -->
+                <view
+                  wx:if="{{item.text.length > 140 && !expandMap[idx]}}"
+                  class="msg-fade {{item.role}}"
+                ></view>
+              </view>
+            </block>
 
             <!-- AI 纯文本回复的朗读（卡片态自带 ec-op 朗读，这里只补普通文本） -->
             <view
@@ -161,17 +181,6 @@
             </view>
           </view>
         </view>
-      </view>
-
-      <!-- 开场推荐问题（发送后收起；批次 4 改由 entry.suggestions 驱动） -->
-      <view wx:if="{{suggestions.length}}" class="sugs">
-        <view
-          wx:for="{{suggestions}}"
-          wx:key="*this"
-          class="sug"
-          data-q="{{item}}"
-          bindtap="onTapSug"
-        >{{item}}</view>
       </view>
 
       <!-- 滚动锚点：scroll-into-view 命中它即滚到底 -->

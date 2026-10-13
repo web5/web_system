@@ -12,6 +12,7 @@ import { listMemory } from '../../../services/user-memory';
 import { listGlossary } from '../../../services/glossary';
 import { isLoggedIn, logout } from '../../../services/auth';
 import { fetchProfile } from '../../../services/account';
+import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 
 Page({
   data: {
@@ -35,14 +36,39 @@ Page({
     glossarySummary: '0 条',
   },
 
-  /** 登记当前 tab（自定义 tabBar 据此渲染并高亮；对话页则隐藏） */
+  /**
+   * 登录态过期广播退订函数（onUnload 调用）。
+   * ⚠️ Page() 参数是对象字面量、没有类属性语法：`xxx: T = v` 会被解析成「把 T 当值用」，
+   * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
+   */
+  _offAuthExpired: null as any,
+
+  onLoad() {
+    // 登录态过期广播：request 401 清 token 后发 auth:expired → 本页弹登录墙。
+    // （旧方案 reLaunch 回首页会清空页面栈，致右滑返回永远回首页，已废弃）
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.on) {
+      this._offAuthExpired = () => this.setData({ loggedIn: false });
+      __bus.on('auth:expired', this._offAuthExpired);
+    }
+  },
+
+  onUnload() {
+    // 退订登录态广播，避免回调打到已销毁实例
+    const __bus = (getApp() as any)?.eventBus;
+    if (__bus?.off && this._offAuthExpired) {
+      __bus.off('auth:expired', this._offAuthExpired);
+      this._offAuthExpired = null;
+    }
+  },
+
   onShow() {
+    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
+    setTabBarSelected(this, TAB_INDEX.mine);
+
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : "";
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
-
-    const tabBar = (this as any).getTabBar?.();
-    if (tabBar) tabBar.setData({ currentPage: '/pages/mine/index/index', selected: 2 });
 
     const loggedIn = isLoggedIn();
     this.setData({ loggedIn });

@@ -69,6 +69,7 @@ Page({
   },
 
   goChat() {
-    wx.switchTab({ url: '/pages/chat/index/index' });
+    // 统一入口：保证对话页返回栈底是欢迎页（详见 utils/tabbar.ts 的 openChat）
+    openChat();
   },
 });

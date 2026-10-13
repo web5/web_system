@@ -275,6 +275,7 @@
   .composer .plus svg, .composer .mic svg { width: 19px; height: 19px; display: block; }
   .composer .plus:active, .composer .mic:active { opacity: .75; }
   /* 录音中（按住）= 面性：实心橙底 + 白图标（激活态视觉跃迁） */
+  /* 声波 icon 几何 = L1 立弧定稿（v1.0.13），详见 docs/语音输入icon设计规范.md；SVG 即资产包 svg/wave-current.svg 同源 */
   .composer .mic.is-rec { background: var(--brand); color: #fff; }
   /* 输入区为单行 input（与真机一致）：回车 / 键盘「发送」直接发送，回车不再换行 */
   .composer input { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
@@ -681,13 +682,20 @@
           <div class="plus" onclick="openPlusMenu()" aria-label="更多">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
           </div>
+          <!--
+            录音键 icon = 声波 L1 立弧定稿（v1.0.13, 2026-10-12）
+            几何：圆点 cx6.90 cy12 r2.5 实心 + 双层同心弧 r7.25/r11.55，端点同 x 严格镜像
+            资产包（三态 SVG/多尺寸 PNG/WXSS base64）：assets/voice-icon/（本仓库 prototype 下）
+            通用版（PC 端复用）：web_system 仓库根 assets/voice-icon/
+            换挡改参重跑：scripts/gen-mic-icon.py；规范与最佳实践：docs/语音输入icon设计规范.md
+          -->
           <div class="mic" id="micBtn" aria-label="按住说话"
                onmousedown="voiceStart(event)" onmouseup="voiceEnd(event)"
                ontouchstart="voiceStart(event)" ontouchend="voiceEnd(event)" ontouchcancel="voiceCancel(event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="2.7" fill="currentColor" stroke="none"/>
-              <path d="M15.5 5.94a7 7 0 0 1 0 12.12"/>
-              <path d="M8.5 5.94a7 7 0 0 0 0 12.12"/>
+              <circle cx="6.90" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+              <path d="M11.75 6.61A7.25 7.25 0 0 1 11.75 17.39"/>
+              <path d="M14.63 3.42A11.55 11.55 0 0 1 14.63 20.58"/>
             </svg>
           </div>
           <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter'){event.preventDefault();send();}" />

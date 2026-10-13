@@ -35,6 +35,8 @@ open apps/kedou-ai-minigram/prototype/打开原型.command   # 起本地服务�
 
 对话页输入栏 icon 与语音输入的规格唯一真相源：`voice-input-spec.md`（含 §8 质感选型定稿：常态线性 / 录音中面性 / 无朗读开关）。
 
+语音输入 icon（L1 立弧）即用资产包：`assets/voice-icon/`（三态 SVG + 四尺寸 PNG + WXSS 即贴 base64 + 定稿总览图；改参重跑入口 `../../scripts/gen-mic-icon.py`）。完整方法论沉淀在 skill `icon-design-pipeline`。
+
 ## 3 主交互稿页面地图
 
 ### 3.1 `index.html`（14 屏）

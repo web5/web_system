@@ -67,6 +67,7 @@
   },
   "window": {
     "backgroundTextStyle": "light",
+    "backgroundColor": "#F7F4F0",
     "navigationBarBackgroundColor": "#FFFFFF",
     "navigationBarTitleText": "科豆 AI",
     "navigationBarTextStyle": "black"
@@ -78,10 +79,6 @@
     "backgroundColor": "#FFFFFF",
     "borderStyle": "black",
     "list": [
-      {
-        "pagePath": "pages/chat/index/index",
-        "text": "对话"
-      },
       {
         "pagePath": "pages/discover/index/index",
         "text": "发现"
