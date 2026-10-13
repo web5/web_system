@@ -19,7 +19,6 @@
     <view class="mc-main" bindtap="onPlay">{{btnText}}</view>
   </view>
 
-  <view class="mc-note" wx:if="{{provider}}">
-    跳转后在 {{provider.name}} 搜索并播放，本小程序不提供音频播放
-  </view>
+  <!-- 说明随「能不能跳」变化：能跳才说跳转，只复制就说复制，避免误导 -->
+  <view class="mc-note" wx:if="{{noteText}}">{{noteText}}</view>
 </view>
