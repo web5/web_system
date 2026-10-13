@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>AI 子系统架构图与流程图</title>
+<style>
+  :root { --bg:#fffdf9; --ink:#0f172a; --sub:#64748b; --brand:#c2410c; --line:#e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; }
+  header { padding:22px 28px 12px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); }
+  h1 { margin:0 0 6px; font-size:19px; }
+  header p { margin:0; color:var(--sub); font-size:12.5px; }
+  nav { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+  nav a { padding:5px 12px; border:1px solid var(--line); border-radius:999px; color:var(--sub); text-decoration:none; font-size:12.5px; }
+  nav a:hover { border-color:var(--brand); color:var(--brand); }
+  section { padding:20px 28px 34px; border-bottom:1px dashed var(--line); }
+  h2 { font-size:15px; margin:0 0 10px; }
+  h2 span { color:var(--sub); font-weight:400; font-size:12.5px; margin-left:8px; }
+  .shot { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:auto; padding:6px; }
+  .shot svg { display:block; width:100%; height:auto; }
+  footer { padding:18px 28px 40px; color:var(--sub); font-size:12px; line-height:1.9; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI 子系统 · 架构图与流程图</h1>
+  <p>基于代码事实绘制 · 生成脚本 <code>scripts/gen-ai-flow-diagrams.mjs</code> · 改图请改脚本数据后重跑，勿手改 SVG/HTML</p>
+  <nav>
+    <a href="#arch">AI 子系统架构</a>
+    <a href="#flow">Agent 运行主链路</a>
+    <a href="#kb">知识链路</a>
+    <a href="#read">读法与口径</a>
+  </nav>
+</header>
+
+<section id="arch">
+  <h2>AI 子系统架构图（web_system）<span>六层：终端接入 → 服务编排（ai-agent / ai-service）→ 运行时核心（agent-core）→ 能力端口 → 模型层 → 数据与可观测</span></h2>
+  <div class="shot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1034" width="1400" height="1034" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"><defs><marker id="arm-arch" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#64748b"/></marker></defs><rect x="0" y="0" width="1400" height="1034" fill="#fffdf9"/><text x="28" y="36" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="800" fill="#0f172a">AI 子系统架构图（web_system）</text><text x="28" y="60" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12.5" fill="#64748b">六层：终端接入 → 服务编排（ai-agent / ai-service）→ 运行时核心（agent-core）→ 能力端口 → 模型层 → 数据与可观测</text><rect x="28" y="90" width="138" height="95" rx="10" fill="#e2e8f0" stroke="#cbd5e1"/>
+<rect x="28" y="90" width="5" height="95" rx="3" fill="#334155"/>
+<text x="46" y="135.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#334155">终端接入</text>
+<text x="46" y="152.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">谁发起</text>
+<rect x="182" y="96" width="589" height="87" rx="9" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="182" y="96" width="589" height="35" rx="9" fill="#e2e8f0"/>
+<rect x="182" y="125" width="589" height="6" fill="#e2e8f0"/>
+<text x="195" y="120" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#334155">portal / admin / 小程序</text>
+<text x="195" y="146" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">SSE 消费逐字流与过程事件</text>
+<text x="195" y="164" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">admin-run 需 agents:debug</text>
+<rect x="783" y="96" width="589" height="87" rx="9" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="783" y="96" width="589" height="35" rx="9" fill="#e2e8f0"/>
+<rect x="783" y="125" width="589" height="6" fill="#e2e8f0"/>
+<text x="796" y="120" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#334155">开放接入</text>
+<text x="796" y="146" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">MCP 订阅方 / API Key</text>
+<line x1="777" y1="191" x2="777" y2="205" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/>
+<rect x="28" y="213" width="138" height="131" rx="10" fill="#cffafe" stroke="#67e8f9"/>
+<rect x="28" y="213" width="5" height="131" rx="3" fill="#0e7490"/>
+<text x="46" y="276.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#0e7490">服务编排</text>
+<text x="46" y="293.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">Nest 服务</text>
+<rect x="182" y="219" width="589" height="123" rx="9" fill="#ffffff" stroke="#67e8f9" stroke-width="1.2"/>
+<rect x="182" y="219" width="589" height="35" rx="9" fill="#cffafe"/>
+<rect x="182" y="248" width="589" height="6" fill="#cffafe"/>
+<text x="195" y="243" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#0e7490">ai-agent :6010</text>
+<text x="195" y="269" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">POST /agent/run（SSE）</text>
+<text x="195" y="287" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">IntentService 意图路由 / 定义检索</text>
+<text x="195" y="305" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">PermissionBroker 权限确认（60s）</text>
+<text x="195" y="323" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">Steps 落库 + 后置钩子</text>
+<rect x="783" y="219" width="589" height="123" rx="9" fill="#ffffff" stroke="#67e8f9" stroke-width="1.2"/>
+<rect x="783" y="219" width="589" height="35" rx="9" fill="#cffafe"/>
+<rect x="783" y="248" width="589" height="6" fill="#cffafe"/>
+<text x="796" y="243" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#0e7490">ai-service :6003</text>
+<text x="796" y="269" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">chat / chatStream 普通对话</text>
+<text x="796" y="287" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">Agent 定义 CRUD（draft/published）</text>
+<text x="796" y="305" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">运行日志 AgentRun 与成本统计</text>
+<line x1="777" y1="350" x2="777" y2="364" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/>
+<rect x="28" y="372" width="138" height="113" rx="10" fill="#ffedd5" stroke="#fdba74"/>
+<rect x="28" y="372" width="5" height="113" rx="3" fill="#c2410c"/>
+<text x="46" y="426.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#c2410c">运行时核心</text>
+<text x="46" y="443.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">agent-core</text>
+<rect x="182" y="378" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#fdba74" stroke-width="1.2"/>
+<rect x="182" y="378" width="388.6666666666667" height="35" rx="9" fill="#ffedd5"/>
+<rect x="182" y="407" width="388.6666666666667" height="6" fill="#ffedd5"/>
+<text x="195" y="402" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#c2410c">AgentEngine（ReAct）</text>
+<text x="195" y="428" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">for step &lt; maxSteps 循环</text>
+<text x="195" y="446" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">工具调用 → 结果回写 → 再推理</text>
+<text x="195" y="464" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">streaming 逐字透传</text>
+<rect x="582.6666666666667" y="378" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#fdba74" stroke-width="1.2"/>
+<rect x="582.6666666666667" y="378" width="388.6666666666667" height="35" rx="9" fill="#ffedd5"/>
+<rect x="582.6666666666667" y="407" width="388.6666666666667" height="6" fill="#ffedd5"/>
+<text x="595.6666666666667" y="402" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#c2410c">上下文装配</text>
+<text x="595.6666666666667" y="428" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">systemPrompt + 技能目录</text>
+<text x="595.6666666666667" y="446" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">历史摘要 compaction</text>
+<text x="595.6666666666667" y="464" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">长期 profile 记忆</text>
+<rect x="983.3333333333335" y="378" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#fdba74" stroke-width="1.2"/>
+<rect x="983.3333333333335" y="378" width="388.6666666666667" height="35" rx="9" fill="#ffedd5"/>
+<rect x="983.3333333333335" y="407" width="388.6666666666667" height="6" fill="#ffedd5"/>
+<text x="996.3333333333335" y="402" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#c2410c">遥测 TelemetryPort</text>
+<text x="996.3333333333335" y="428" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">run / llm / tool / skill / end</text>
+<line x1="777" y1="491" x2="777" y2="505" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/>
+<rect x="28" y="513" width="138" height="95" rx="10" fill="#ede9fe" stroke="#c4b5fd"/>
+<rect x="28" y="513" width="5" height="95" rx="3" fill="#6d28d9"/>
+<text x="46" y="558.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#6d28d9">能力端口</text>
+<text x="46" y="575.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">工具生态</text>
+<rect x="182" y="519" width="288.5" height="87" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2"/>
+<rect x="182" y="519" width="288.5" height="35" rx="9" fill="#ede9fe"/>
+<rect x="182" y="548" width="288.5" height="6" fill="#ede9fe"/>
+<text x="195" y="543" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#6d28d9">ToolRegistry</text>
+<text x="195" y="569" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">本地工具 · 统一 ToolResult</text>
+<rect x="482.5" y="519" width="288.5" height="87" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2"/>
+<rect x="482.5" y="519" width="288.5" height="35" rx="9" fill="#ede9fe"/>
+<rect x="482.5" y="548" width="288.5" height="6" fill="#ede9fe"/>
+<text x="495.5" y="543" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#6d28d9">MCP 适配器</text>
+<text x="495.5" y="569" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">mcp-gateway /mcp/tools/call</text>
+<text x="495.5" y="587" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">异步 job + 轮询结果</text>
+<rect x="783" y="519" width="288.5" height="87" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2"/>
+<rect x="783" y="519" width="288.5" height="35" rx="9" fill="#ede9fe"/>
+<rect x="783" y="548" width="288.5" height="6" fill="#ede9fe"/>
+<text x="796" y="543" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#6d28d9">SkillLoader</text>
+<text x="796" y="569" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">按需 load_skill 挂载</text>
+<rect x="1083.5" y="519" width="288.5" height="87" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2"/>
+<rect x="1083.5" y="519" width="288.5" height="35" rx="9" fill="#ede9fe"/>
+<rect x="1083.5" y="548" width="288.5" height="6" fill="#ede9fe"/>
+<text x="1096.5" y="543" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#6d28d9">KnowledgeTool</text>
+<text x="1096.5" y="569" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">knowledge_search / ingest 等</text>
+<line x1="777" y1="614" x2="777" y2="628" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/>
+<rect x="28" y="636" width="138" height="113" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+<rect x="28" y="636" width="5" height="113" rx="3" fill="#1d4ed8"/>
+<text x="46" y="690.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#1d4ed8">模型层</text>
+<text x="46" y="707.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">可换</text>
+<rect x="182" y="642" width="589" height="105" rx="9" fill="#ffffff" stroke="#93c5fd" stroke-width="1.2"/>
+<rect x="182" y="642" width="589" height="35" rx="9" fill="#dbeafe"/>
+<rect x="182" y="671" width="589" height="6" fill="#dbeafe"/>
+<text x="195" y="666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#1d4ed8">ClientRegistry</text>
+<text x="195" y="692" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">DB 字典 → env → 内置（60s 轮询）</text>
+<text x="195" y="710" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">getOrFallback 兜底不抛错</text>
+<text x="195" y="728" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">hy3 由专用 client 承载（混入清单会被跳过）</text>
+<rect x="783" y="642" width="589" height="105" rx="9" fill="#ffffff" stroke="#93c5fd" stroke-width="1.2"/>
+<rect x="783" y="642" width="589" height="35" rx="9" fill="#dbeafe"/>
+<rect x="783" y="671" width="589" height="6" fill="#dbeafe"/>
+<text x="796" y="666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#1d4ed8">意图分类模型</text>
+<text x="796" y="692" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">INTENT_MODEL 独立小模型</text>
+<text x="796" y="710" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">3s 超时 → 规则 → 兜底</text>
+<line x1="777" y1="755" x2="777" y2="769" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/>
+<rect x="28" y="777" width="138" height="113" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+<rect x="28" y="777" width="5" height="113" rx="3" fill="#047857"/>
+<text x="46" y="831.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#047857">数据与可观测</text>
+<text x="46" y="848.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#64748b">沉淀</text>
+<rect x="182" y="783" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#6ee7b7" stroke-width="1.2"/>
+<rect x="182" y="783" width="388.6666666666667" height="35" rx="9" fill="#d1fae5"/>
+<rect x="182" y="812" width="388.6666666666667" height="6" fill="#d1fae5"/>
+<text x="195" y="807" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#047857">MySQL</text>
+<text x="195" y="833" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">agent_definitions / versions</text>
+<text x="195" y="851" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">agent_runs（步骤与用量）</text>
+<text x="195" y="869" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">agent_conversations（锁定）</text>
+<rect x="582.6666666666667" y="783" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#6ee7b7" stroke-width="1.2"/>
+<rect x="582.6666666666667" y="783" width="388.6666666666667" height="35" rx="9" fill="#d1fae5"/>
+<rect x="582.6666666666667" y="812" width="388.6666666666667" height="6" fill="#d1fae5"/>
+<text x="595.6666666666667" y="807" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#047857">knowledge-service :6011</text>
+<text x="595.6666666666667" y="833" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">集合 / 文档 / 向量检索</text>
+<text x="595.6666666666667" y="851" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">Ragas 离线评测</text>
+<rect x="983.3333333333335" y="783" width="388.6666666666667" height="105" rx="9" fill="#ffffff" stroke="#6ee7b7" stroke-width="1.2"/>
+<rect x="983.3333333333335" y="783" width="388.6666666666667" height="35" rx="9" fill="#d1fae5"/>
+<rect x="983.3333333333335" y="812" width="388.6666666666667" height="6" fill="#d1fae5"/>
+<text x="996.3333333333335" y="807" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14.5" font-weight="700" fill="#047857">成本与 trace</text>
+<text x="996.3333333333335" y="833" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">usage → DictPricing → cost</text>
+<line x1="777" y1="896" x2="777" y2="910" stroke="#64748b" stroke-width="2" marker-end="url(#arm-arch)"/><line x1="28" y1="912" x2="1372" y2="912" stroke="#e2e8f0"/><text x="28" y="934" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#475569">· 控制流所有权分工：代码定骨架（循环 + maxSteps + 判别失败），模型只决定「下一步调哪个工具」——ReAct 的叶子由模型填。</text><text x="28" y="956" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#475569">· 意图路由优先级：@显式 &gt; 显式传入 &gt; 会话锁定 &gt; 规则 &gt; LLM(3s 超时) &gt; 兜底 general；失败一律回落，绝不阻塞主对话。</text><text x="28" y="978" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#475569">· 权限确认是工具级 HITL：permission_request 事件 → 前端确认 → POST /agent/permission/:requestId → Promise resolve/reject（60s 自动拒绝）。</text><text x="28" y="1014" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#94a3b8">事实来源：agent.controller.ts / agent-engine.ts / intent.service.ts / mcp.service.ts / knowledge-service。虚线=异步或可选。</text></svg></div>
+</section>
+
+<section id="flow">
+  <h2>一次 Agent 运行的完整链路（POST /agent/run · SSE）<span>从 HTTP 请求进入，到 SSE 流关闭；含意图路由、多步工具循环、权限确认、超步数终止与异步落库</span></h2>
+  <div class="shot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 1446" width="1320" height="1446" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"><defs><marker id="frm-flow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#64748b"/></marker></defs><rect x="0" y="0" width="1320" height="1446" fill="#fffdf9"/><text x="30" y="38" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="800" fill="#0f172a">一次 Agent 运行的完整链路（POST /agent/run · SSE）</text><text x="30" y="62" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12.5" fill="#64748b">从 HTTP 请求进入，到 SSE 流关闭；含意图路由、多步工具循环、权限确认、超步数终止与异步落库</text><text x="1036" y="92" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="700" fill="#94a3b8">右侧 = 实现要点 / 分支说明 / 落点</text><rect x="430" y="104" width="560" height="48" rx="22" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="445" y="133" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#334155">客户端发起 POST /api/agent/run</text>
+<text x="445" y="154" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">Authorization 鉴权穿透（AuthGuard）</text>
+<circle cx="410" cy="128" r="13" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="410" y="133" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#334155" text-anchor="middle">1</text>
+<line x1="994" y1="128" x2="1030" y2="128" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="100" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="118" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">响应头：text/event-stream + no-cache</text>
+<text x="1046" y="135" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">+ X-Accel-Buffering:no（禁 nginx</text>
+<text x="1046" y="152" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">缓冲）</text>
+<rect x="430" y="178" width="560" height="57" rx="10" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="445" y="200" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#0e7490">IntentService.resolve 意图路由</text>
+<text x="445" y="221" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">客户端传死的 agentId → 服务端解析</text>
+<circle cx="410" cy="206.5" r="13" fill="#cffafe" stroke="#67e8f9"/>
+<text x="410" y="211.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#0e7490" text-anchor="middle">2</text>
+<line x1="994" y1="206.5" x2="1030" y2="206.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="174" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="192" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">五步优先级：@显式 &gt; 显式传入 &gt; 会话锁定 &gt;</text>
+<text x="1046" y="209" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">规则(≥.88) &gt; LLM(≥.75, 3s超时) &gt; 兜底</text>
+<text x="1046" y="226" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">general</text>
+<rect x="430" y="261" width="560" height="57" rx="10" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="445" y="283" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#0e7490">下发 SSE intent 事件</text>
+<text x="445" y="304" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">必须早于任何 token 输出</text>
+<circle cx="410" cy="289.5" r="13" fill="#cffafe" stroke="#67e8f9"/>
+<text x="410" y="294.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#0e7490" text-anchor="middle">3</text>
+<line x1="994" y1="289.5" x2="1030" y2="289.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="265.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="283.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">前端据此渲染 Agent 徽标 /</text>
+<text x="1046" y="300.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">排查误判；时序要求写在 controller 注释里</text>
+<rect x="430" y="344" width="560" height="57" rx="10" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="445" y="366" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#0e7490">AgentRegistry 取定义快照</text>
+<text x="445" y="387" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">systemPrompt / tools / model / version</text>
+<circle cx="410" cy="372.5" r="13" fill="#cffafe" stroke="#67e8f9"/>
+<text x="410" y="377.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#0e7490" text-anchor="middle">4</text>
+<line x1="994" y1="372.5" x2="1030" y2="372.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="348.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="366.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">易漏点：要用解析后的 id 取快照，用</text>
+<text x="1046" y="383.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">dto.agentId 会在 auto 时空掉</text>
+<rect x="430" y="427" width="560" height="57" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/>
+<text x="445" y="449" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#c2410c">上下文装配 messages</text>
+<text x="445" y="470" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">system + 技能目录 + 历史摘要 + 长期 profile + 用户输入</text>
+<circle cx="410" cy="455.5" r="13" fill="#ffedd5" stroke="#fdba74"/>
+<text x="410" y="460.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#c2410c" text-anchor="middle">5</text>
+<line x1="994" y1="455.5" x2="1030" y2="455.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="431.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="449.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">memory.compaction 摘要 +</text>
+<text x="1046" y="466.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">keepRecent；长期 profile 跨会话</text>
+<polygon points="430,546 710,510 990,546 710,582" fill="#fff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="710" y="543" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#6d28d9" text-anchor="middle">Agent 是否挂载技能？</text>
+<text x="710" y="563" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b" text-anchor="middle">capabilities.skills.length &gt; 0</text>
+<line x1="994" y1="546" x2="1030" y2="546" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="513.5" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="531.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">是 → 追加技能目录到 systemPrompt，并注入</text>
+<text x="1046" y="548.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">load_skill 工具；否 → 直接生成 tool</text>
+<text x="1046" y="565.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">schemas</text>
+<rect x="430" y="608" width="560" height="57" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/>
+<text x="445" y="630" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#c2410c">ToolRegistry.toSchemas 生成工具 schema</text>
+<text x="445" y="651" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">temperature/topP/maxTokens/thinking 透传（C7）</text>
+<circle cx="410" cy="636.5" r="13" fill="#ffedd5" stroke="#fdba74"/>
+<text x="410" y="641.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#c2410c" text-anchor="middle">7</text>
+<line x1="994" y1="636.5" x2="1030" y2="636.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="612.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="630.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">生成参数只透传显式填了的字段，全空等价于不</text>
+<text x="1046" y="647.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">传（向后兼容）</text>
+<rect x="404" y="691" width="612" height="465" rx="12" fill="#04785710" stroke="#34d399" stroke-dasharray="8 5" stroke-width="1.8" data-loop="1"/>
+<text x="422" y="707" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857">循环：for step &lt; maxSteps</text>
+<text x="1036" y="707" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b"><tspan x="1036" dy="0">maxSteps 由 DB 定义配置</tspan></text>
+<rect x="430" y="721" width="560" height="57" rx="10" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="445" y="743" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#1d4ed8">client.chatWithToolsStream 调模型</text>
+<text x="445" y="764" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">content_delta / reasoning_delta / done</text>
+<circle cx="410" cy="749.5" r="13" fill="#dbeafe" stroke="#93c5fd"/>
+<text x="410" y="754.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#1d4ed8" text-anchor="middle">9</text>
+<line x1="994" y1="749.5" x2="1030" y2="749.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="725.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="743.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">模型失败或空返回 → 带错误码 SSE error</text>
+<text x="1046" y="760.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">事件 + onRunEnd(status=error)</text>
+<polygon points="430,840 710,804 990,840 710,876" fill="#fff" stroke="#be123c" stroke-width="1.6"/>
+<text x="710" y="837" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#be123c" text-anchor="middle">模型返回工具调用？</text>
+<text x="710" y="857" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b" text-anchor="middle">resp.toolCalls.length === 0</text>
+<line x1="994" y1="840" x2="1030" y2="840" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="807.5" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="825.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">否 → memory.persist 落库 →</text>
+<text x="1046" y="842.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">有工具步骤则发 summary → 发 final →</text>
+<text x="1046" y="859.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">end(ok)</text>
+<rect x="430" y="902" width="560" height="57" rx="10" fill="#fff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="445" y="924" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#6d28d9">下发 tool_call 事件，执行工具</text>
+<text x="445" y="945" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">tool_call → 执行 → tool_result</text>
+<circle cx="410" cy="930.5" r="13" fill="#ede9fe" stroke="#c4b5fd"/>
+<text x="410" y="935.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#6d28d9" text-anchor="middle">11</text>
+<line x1="994" y1="930.5" x2="1030" y2="930.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="898" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="916" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">三类：本地工具 / MCP 工具（经</text>
+<text x="1046" y="933" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">mcp-gateway 异步 job 轮询）/</text>
+<text x="1046" y="950" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">load_skill 内置</text>
+<polygon points="430,1021 710,985 990,1021 710,1057" fill="#fff" stroke="#be123c" stroke-width="1.6"/>
+<text x="710" y="1018" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#be123c" text-anchor="middle">工具是否需要人工确认？</text>
+<text x="710" y="1038" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b" text-anchor="middle">requiresConfirm = 写操作</text>
+<line x1="994" y1="1021" x2="1030" y2="1021" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="981" width="254" height="82" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="999" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">是 → permission_request 事件挂起 → 前端</text>
+<text x="1046" y="1016" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">POST</text>
+<text x="1046" y="1033" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">/agent/permission/:requestId；60s</text>
+<text x="1046" y="1050" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">超时自动拒绝</text>
+<rect x="430" y="1083" width="560" height="57" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/>
+<text x="445" y="1105" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#c2410c">tool_result 回写 messages</text>
+<text x="445" y="1126" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">onToolSpan(ok/latency) 遥测</text>
+<circle cx="410" cy="1111.5" r="13" fill="#ffedd5" stroke="#fdba74"/>
+<text x="410" y="1116.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#c2410c" text-anchor="middle">13</text>
+<line x1="994" y1="1111.5" x2="1030" y2="1111.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="1087.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="1105.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">特殊项：present-music-card</text>
+<text x="1046" y="1122.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">的工具结果额外转成 card 事件下发前端</text>
+<path d="M 430 1194 L 364 1194 L 364 697 L 400 697" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#frm-flow)"/>
+<text x="358" y="928.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#64748b" text-anchor="end">继续下一轮推理（工具结果入上下文）</text>
+<rect x="430" y="1166" width="560" height="57" rx="10" fill="#fff" stroke="#fda4af" stroke-width="1.5"/>
+<text x="445" y="1188" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#be123c">超步数终止</text>
+<text x="445" y="1209" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">达到最大步数限制 (maxSteps)</text>
+<circle cx="410" cy="1194.5" r="13" fill="#ffe4e6" stroke="#fda4af"/>
+<text x="410" y="1199.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#be123c" text-anchor="middle">15</text>
+<line x1="994" y1="1194.5" x2="1030" y2="1194.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="1162" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="1180" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">先 persist 已产生消息，再发 error 事件 +</text>
+<text x="1046" y="1197" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">onRunEnd(status=error) ——</text>
+<text x="1046" y="1214" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">不丢已有上下文</text>
+<rect x="430" y="1249" width="560" height="57" rx="10" fill="#fff" stroke="#6ee7b7" stroke-width="1.5"/>
+<text x="445" y="1271" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#047857">SSE 关闭 res.end()</text>
+<text x="445" y="1292" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">steps 流水异步落库 agent_runs（含 usage）</text>
+<circle cx="410" cy="1277.5" r="13" fill="#d1fae5" stroke="#6ee7b7"/>
+<text x="410" y="1282.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">16</text>
+<line x1="994" y1="1277.5" x2="1030" y2="1277.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="1253.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="1271.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">content_delta / reasoning_delta</text>
+<text x="1046" y="1288.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">逐字增量不落 steps，避免表膨胀</text>
+<rect x="430" y="1332" width="560" height="48" rx="22" fill="#fff" stroke="#6ee7b7" stroke-width="1.5"/>
+<text x="445" y="1361" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#047857">后置钩子 fire-and-forget</text>
+<text x="445" y="1382" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">用户记忆更新等插件（失败不影响结果）</text>
+<circle cx="410" cy="1356" r="13" fill="#d1fae5" stroke="#6ee7b7"/>
+<text x="410" y="1361" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">✓</text>
+<line x1="710" y1="154" x2="710" y2="174" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="237" x2="710" y2="257" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="320" x2="710" y2="340" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="403" x2="710" y2="423" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="486" x2="710" y2="506" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="584" x2="710" y2="604" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="667" x2="710" y2="717" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="780" x2="710" y2="800" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="878" x2="710" y2="898" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="961" x2="710" y2="981" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="1059" x2="710" y2="1079" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="1142" x2="710" y2="1162" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="1225" x2="710" y2="1245" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/>
+<line x1="710" y1="1308" x2="710" y2="1328" stroke="#64748b" stroke-width="2" marker-end="url(#frm-flow)"/><text x="30" y="1432" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#94a3b8">事实来源：servers/ai-agent/src/agent/agent.controller.ts:122-348 · packages/agent-core/src/core/agent-engine.ts:60-366。</text></svg></div>
+</section>
+
+<section id="kbf">
+  <h2>知识链路：入库 → 检索 → 评测（knowledge-service :6011）<span>知识以「集合」为单位绑定 Agent 定义，经 MCP 工具被运行时调用；离线评测独立于在线链路</span></h2>
+  <div class="shot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 897" width="1320" height="897" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"><defs><marker id="frm-kbf" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#64748b"/></marker></defs><rect x="0" y="0" width="1320" height="897" fill="#fffdf9"/><text x="30" y="38" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="800" fill="#0f172a">知识链路：入库 → 检索 → 评测（knowledge-service :6011）</text><text x="30" y="62" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12.5" fill="#64748b">知识以「集合」为单位绑定 Agent 定义，经 MCP 工具被运行时调用；离线评测独立于在线链路</text><text x="1036" y="92" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="700" fill="#94a3b8">右侧 = 实现要点 / 分支说明 / 落点</text><rect x="430" y="104" width="560" height="57" rx="10" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="445" y="126" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#0e7490">admin 创建知识集合 / 上传文档</text>
+<text x="445" y="147" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">collections.service / documents.service</text>
+<circle cx="410" cy="132.5" r="13" fill="#cffafe" stroke="#67e8f9"/>
+<text x="410" y="137.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#0e7490" text-anchor="middle">1</text>
+<line x1="994" y1="132.5" x2="1030" y2="132.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="108.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="126.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">集合是绑定单位：一个 Agent</text>
+<text x="1046" y="143.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">可绑多个集合，工具按集合级 enabled 校验</text>
+<rect x="430" y="187" width="560" height="57" rx="10" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="445" y="209" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#0e7490">入库：分块 → embedding → 落库</text>
+<text x="445" y="230" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">documents → chunks → vectors</text>
+<circle cx="410" cy="215.5" r="13" fill="#cffafe" stroke="#67e8f9"/>
+<text x="410" y="220.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#0e7490" text-anchor="middle">2</text>
+<line x1="994" y1="215.5" x2="1030" y2="215.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="191.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="209.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">库：web_system_knowledge（与业务主库</text>
+<text x="1046" y="226.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">分离）</text>
+<rect x="430" y="270" width="560" height="57" rx="10" fill="#fff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="445" y="292" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#6d28d9">装配：集合随 Agent 定义绑定</text>
+<text x="445" y="313" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">ai-agent agent-def-sync 同步 → ToolRegistry 注册 MCP 工具</text>
+<circle cx="410" cy="298.5" r="13" fill="#ede9fe" stroke="#c4b5fd"/>
+<text x="410" y="303.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#6d28d9" text-anchor="middle">3</text>
+<line x1="994" y1="298.5" x2="1030" y2="298.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="266" width="254" height="82" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="284" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">装配规则：按集合操作的工具（search/inge</text>
+<text x="1046" y="301" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">st/delete）必须有</text>
+<text x="1046" y="318" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">collectionId；集合无关的（list/statu</text>
+<text x="1046" y="335" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">s）只要绑定 ≥1 个集合就注册</text>
+<rect x="430" y="353" width="560" height="57" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/>
+<text x="445" y="375" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#c2410c">运行时检索：模型调用 knowledge_search</text>
+<text x="445" y="396" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">ToolRegistry.execute → McpToolExecutor</text>
+<circle cx="410" cy="381.5" r="13" fill="#ffedd5" stroke="#fdba74"/>
+<text x="410" y="386.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#c2410c" text-anchor="middle">4</text>
+<line x1="994" y1="381.5" x2="1030" y2="381.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="349" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="367" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">工具链：Agent → mcp-gateway :6006 →</text>
+<text x="1046" y="384" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">/knowledge/mcp/search（InternalKey</text>
+<text x="1046" y="401" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">鉴权）</text>
+<rect x="430" y="436" width="560" height="57" rx="10" fill="#fff" stroke="#6ee7b7" stroke-width="1.5"/>
+<text x="445" y="458" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#047857">检索返回 topK 上下文</text>
+<text x="445" y="479" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">默认 topK=5，余弦检索</text>
+<circle cx="410" cy="464.5" r="13" fill="#d1fae5" stroke="#6ee7b7"/>
+<text x="410" y="469.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">5</text>
+<line x1="994" y1="464.5" x2="1030" y2="464.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="440.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="458.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">当前无混合检索 / rerank ——</text>
+<text x="1046" y="475.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">召回质量是待补的最高质量杠杆</text>
+<rect x="430" y="519" width="560" height="57" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/>
+<text x="445" y="541" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#c2410c">结果回写 messages 继续推理</text>
+<text x="445" y="562" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">工具结果作为 tool 消息入上下文</text>
+<circle cx="410" cy="547.5" r="13" fill="#ffedd5" stroke="#fdba74"/>
+<text x="410" y="552.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#c2410c" text-anchor="middle">6</text>
+<line x1="994" y1="547.5" x2="1030" y2="547.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="523.5" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="541.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">模型据此生成最终回答，与普通工具结果走同一</text>
+<text x="1046" y="558.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">条回写路径</text>
+<polygon points="430,638 710,602 990,638 710,674" fill="#fff" stroke="#be123c" stroke-width="1.6"/>
+<text x="710" y="635" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#be123c" text-anchor="middle">需要量化检索质量时？</text>
+<text x="710" y="655" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b" text-anchor="middle">离线评测独立于在线链路</text>
+<line x1="994" y1="638" x2="1030" y2="638" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="614" width="254" height="48" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="632" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">是 → POST /knowledge/mcp/eval 跑</text>
+<text x="1046" y="649" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">Ragas 三指标；否 → 在线链路到此结束</text>
+<rect x="430" y="700" width="560" height="57" rx="10" fill="#fff" stroke="#6ee7b7" stroke-width="1.5"/>
+<text x="445" y="722" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#047857">评测：context_relevance · answer_relevance · faithfulness</text>
+<text x="445" y="743" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">rag-eval.service.ts 逐个 case 打分后取均值</text>
+<circle cx="410" cy="728.5" r="13" fill="#d1fae5" stroke="#6ee7b7"/>
+<text x="410" y="733.5" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">8</text>
+<line x1="994" y1="728.5" x2="1030" y2="728.5" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 4"/>
+<rect x="1036" y="696" width="254" height="65" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/>
+<text x="1046" y="714" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">用例集目前由请求体传入（cases:[{questi</text>
+<text x="1046" y="731" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">on}]），尚未沉淀成版本化 golden 集 ——</text>
+<text x="1046" y="748" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">Phase4 eval_cases 待落地</text>
+<rect x="430" y="783" width="560" height="48" rx="22" fill="#fff" stroke="#6ee7b7" stroke-width="1.5"/>
+<text x="445" y="812" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" fill="#047857">产出评估报告 → 指导改 KB / prompt / 编排</text>
+<text x="445" y="833" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">metrics 三均值 + 每个 case 明细</text>
+<circle cx="410" cy="807" r="13" fill="#d1fae5" stroke="#6ee7b7"/>
+<text x="410" y="812" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="700" fill="#047857" text-anchor="middle">✓</text>
+<line x1="710" y1="163" x2="710" y2="183" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="246" x2="710" y2="266" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="329" x2="710" y2="349" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="412" x2="710" y2="432" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="495" x2="710" y2="515" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="578" x2="710" y2="598" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="676" x2="710" y2="696" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/>
+<line x1="710" y1="759" x2="710" y2="779" stroke="#64748b" stroke-width="2" marker-end="url(#frm-kbf)"/><text x="30" y="883" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" font-size="11" fill="#94a3b8">事实来源：servers/knowledge-service/src/knowledge/* · ai-agent agent-def-sync.service.ts（装配规则）· mcp.service.ts。</text></svg></div>
+</section>
+<section id="read">
+  <h2>读法与口径<span>怎么读这三张图</span></h2>
+  <ul style="font-size:13px; line-height:2; color:#475569; max-width:980px">
+    <li><b>AI 子系统架构图</b>：看「职责分层」——谁编排、谁执行循环、能力怎么挂、模型怎么换、数据落在哪。</li>
+    <li><b>Agent 运行主链路</b>：看「一次请求怎么走完」——每个 SSE 事件在哪个阶段产出、哪里会失败、失败怎么兜住。</li>
+    <li><b>知识链路</b>：看「知识从哪来、怎么被 Agent 用到、质量怎么量」——当前缺口是<b>召回率未测</b>与<b>golden 集未版本化</b>。</li>
+    <li>实线箭头 = 主干流向；虚线箭头 = 异步/可选/回看路径；菱形 = 决策点，右侧框是它的分支说明。</li>
+    <li>配套方案文档：<code>docs/architecture/ai-flow-technical-design.md</code>（链路表 + 容错降级 + 待补口径）。</li>
+  </ul>
+</section>
+<footer>生成时间：2026-10-13 · 由 scripts/gen-ai-flow-diagrams.mjs 自动生成（生成物，勿手改）</footer>
+</body>
+</html>

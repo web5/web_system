@@ -5,7 +5,11 @@
 >
 > | 版本 | 日期 | 说明 |
 > |---|---|---|
+> | v1.1 | 2026-10-13 | 增补图示入口：业务架构图 / 技术架构图 / AI 链路图（均为**生成物**，改图请改 `scripts/gen-*-diagrams.mjs` 后重跑） |
 > | v1.0 | 2026-10-08 | 首版。取代已废弃的 `DEPLOYMENT.md` 与 `kedou-network-architecture.md` |
+>
+> **图示**（一页看清全局，推荐新人先看）：[业务架构图 + 技术架构图](./kedou-architecture-diagrams.html) ｜ [AI 子系统架构图 + Agent 运行主链路 + 知识链路](./ai-flow-diagrams.html)
+> 配套方案：[`ai-flow-technical-design.md`](./ai-flow-technical-design.md)（AI 整体流程）、[`agent-system-design.md`](./agent-system-design.md)（架构决策与缺口清单）
 
 ---
 
