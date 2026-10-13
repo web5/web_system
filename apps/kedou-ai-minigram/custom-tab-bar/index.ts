@@ -37,12 +37,19 @@ Component({
   },
 
   methods: {
-    /** 由当前页面路由推导高亮项；沉浸页（对话/记录等）不匹配时保持上次，不闪空 */
+    /** 由当前页面栈推导高亮项：从栈顶往前找第一个匹配 list 的页面。
+     *  二级页（设置/翻译/对话记录等）不匹配任何项时，归属栈中最近的 tab 相关页
+     *  （如 mine→settings 应保持「我的」），否则右滑返回二级页时高亮会漂移。 */
     syncFromRoute() {
       const pages = getCurrentPages() as Array<{ route: string }>;
-      const route = pages.length ? '/' + pages[pages.length - 1].route : '';
-      const idx = this.data.list.findIndex((it) => it.pagePath === route);
-      if (idx >= 0) this.setData({ selected: idx });
+      for (let i = pages.length - 1; i >= 0; i--) {
+        const route = '/' + pages[i].route;
+        const idx = this.data.list.findIndex((it) => it.pagePath === route);
+        if (idx >= 0) {
+          this.setData({ selected: idx });
+          return;
+        }
+      }
     },
 
     onSwitch(e: any) {
