@@ -48,9 +48,20 @@ Component({
     onSwitch(e: any) {
       const { path, index, istab } = e.currentTarget.dataset;
       if (!path) return;
-      this.setData({ selected: Number(index) });
+      const idx = Number(index);
+      // ⚠️ data- 属性经 dataset 后一律是字符串：直接 if(istab) 会让 'false' 也 truthy
+      // （10-13 实测：点「对话」误走 switchTab，而 chat 不在 tabBar.list → 失败不跳转，
+      // 但 selected 已置 0 → 高亮与当前页错位）。统一数值化后比较。
+      const isTab = Number(istab) === 1;
+      // 对话页已在栈顶时避免重复 push（navigateTo 同路由会新建实例，栈越栈越厚）
+      if (!isTab) {
+        const pages = getCurrentPages() as Array<{ route: string }>;
+        const top = pages.length ? '/' + pages[pages.length - 1].route : '';
+        if (top === path) return;
+      }
+      this.setData({ selected: idx });
       // tab 页（发现/我的）switchTab 切换；对话页是普通页，navigateTo 进入（右滑可退回来源页）
-      if (istab) {
+      if (isTab) {
         wx.switchTab({ url: path });
       } else {
         wx.navigateTo({ url: path });
