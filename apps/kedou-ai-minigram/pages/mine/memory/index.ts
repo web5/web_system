@@ -6,6 +6,7 @@
  * 一期只读 + 删除，不支持手动新增/编辑。
  */
 import { listMemory, removeMemory, MemoryItem } from '../../../services/user-memory';
+import { openChat } from '../../../utils/tabbar';
 
 const CATEGORY_TITLE: Record<string, string> = {
   fact: '事实',

@@ -519,6 +519,40 @@ function newChat() {
 }
 
 /**
+ * 合并历史会话里连续的 assistant 文本消息（与小程序 mergeConsecutiveAi 同口径）。
+ *
+ * 为什么需要：服务端 agent 引擎是 ReAct 多步循环，每一步的 assistant content 都单独落库
+ * （天气问答：第一轮「我来帮你查一下…」+ 工具执行后的正文 = DB 里两条 assistant）。
+ * 实时对话时 PC 端是 delta 拼接，视觉上只有一个气泡；历史载入若按 DB 原样渲染，
+ * 「一次问答」会裂成两个气泡，与实时形态不一致（小程序侧同一缺陷已修：b08343ad）。
+ *
+ * 口径：仅合并「都不带 musicCard 且 agentId 相同」的相邻 assistant —— 卡片必须挂在各自的
+ * 消息上，不同 agent 的作答不揉在一起；段落间用 \n\n 连接（两个段落，视觉有呼吸）。
+ * 幂等：已合并的数据再跑一次不变。
+ */
+function mergeConsecutiveAssistant(msgs: ChatMsg[]): ChatMsg[] {
+  const out: ChatMsg[] = [];
+  for (const m of msgs) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.role === 'assistant' &&
+      m.role === 'assistant' &&
+      !prev.musicCard &&
+      !m.musicCard &&
+      (prev.agentId || '') === (m.agentId || '') &&
+      (prev.content || '').trim() &&
+      (m.content || '').trim()
+    ) {
+      out[out.length - 1] = { ...prev, content: `${prev.content}\n\n${m.content}` };
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
+}
+
+/**
  * 载入历史会话（统一会话流：不区分类型）。
  * 历史消息没有 intent 事件——卡片按小程序 decorateHistoryCards 口径还原：
  * - role=tool 消息内容即音乐卡 JSON（present-music-card 工具产出）→ 挂到紧随的 assistant；
@@ -562,7 +596,8 @@ async function loadConversation(id: string) {
       });
       pendingCard = null;
     });
-    messages.value = msgs;
+    // 连续 assistant 是同一轮 ReAct 的多个步骤，合成一条（与实时形态一致）
+    messages.value = mergeConsecutiveAssistant(msgs);
     agentBadge.value = '';
     nextTick(scrollToBottom);
   } catch {
