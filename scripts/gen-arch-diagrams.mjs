@@ -131,6 +131,7 @@ const BUSINESS = {
   notes: [
     '能力资产是四条腿：本地工具（代码注册）、MCP 工具（远程）、技能（技能库）、知识集合（RAG）——在 admin「能力资产」页按 Agent 聚合只读展示。',
     'Agent 定义 draft/published 双态 + 版本快照 = 真正的「可回滚」，发布态改动不影响运行中的 Agent。',
+    '演进：多 Agent 编排（子 Agent 委派）为设计中能力，不改变本图的服务拓扑与业务场景，方案见 docs/architecture/multi-agent-design.md。',
   ],
 };
 
@@ -216,6 +217,7 @@ const TECHNICAL = {
     '知识链路：Agent 运行时 → MCP 工具 knowledge_* → mcp-gateway → knowledge-service /knowledge/mcp/*（InternalKey 鉴权）。',
     '服务互联地址全部走 packages/shared（缺关键地址 fail-fast，不在各服务里复制写）。',
     '上线链路：push master → Actions → HMAC 签名投递 release hook → 流水线 pipeline → 拉代码→构建→同步→重启→校验。',
+    'AI 域细分见 ai-flow-diagrams.html（AI 子系统架构 / Agent 运行主链路 / 知识链路）；多 Agent 编排为设计中能力，方案见 docs/architecture/multi-agent-design.md。',
   ],
 };
 

@@ -160,10 +160,14 @@ function renderFlow(cfg) {
     const inner = NW - 30;
     const tLines = wrap(n.t, 14, inner);
     const sLines = n.s ? wrap(n.s, 12, inner) : [];
+    // 右侧注释按行数占高，若不把节点撑到至少容纳注释，相邻注释卡片会重叠
+    const noteLines = n.note ? wrap(n.note, 12, NOTE_W - 6) : [];
+    const noteNeed = noteLines.length ? 14 + noteLines.length * 17 + 8 : 0;
     let h;
     if (n.k === 'decision') h = Math.max(72, 24 + tLines.length * 18 + (sLines.length ? sLines.length * 16 : 0));
-    else if (n.k === 'start' || n.k === 'end') h = 48;
+    else if (n.k === 'start' || n.k === 'end') h = Math.max(48, 18 + tLines.length * 19 + (sLines.length ? sLines.length * 16 + 4 : 0));
     else h = Math.max(56, 18 + tLines.length * 19 + (sLines.length ? sLines.length * 16 + 4 : 0));
+    if (noteNeed) h = Math.max(h, noteNeed);
     return { n, tLines, sLines, h, idx: ++seq, top: 0 };
   });
 
@@ -213,7 +217,10 @@ function renderFlow(cfg) {
     } else {
       const rx = (b.n.k === 'start' || b.n.k === 'end') ? 22 : 10;
       P.push(`<rect x="${CX}" y="${y}" width="${NW}" height="${b.h}" rx="${rx}" fill="#fff" stroke="${tone.line}" stroke-width="1.5"/>`);
-      let ty = y + (b.n.k === 'start' || b.n.k === 'end' ? b.h / 2 + 5 : 22);
+      const isCap = b.n.k === 'start' || b.n.k === 'end';
+      // 起止节点内容整体垂直居中；其余节点顶部对齐（下方可能还有 s 行）
+      const blockH = b.tLines.length * 19 + (b.sLines.length ? b.sLines.length * 16 + 4 : 0);
+      let ty = isCap ? y + Math.max(10, (b.h - blockH) / 2 + 14) : y + 22;
       for (const l of b.tLines) {
         P.push(`<text x="${CX + 15}" y="${ty}" font-family="${FONT}" font-size="14" font-weight="700" fill="${tone.main}">${esc(l)}</text>`);
         ty += 19;
@@ -295,6 +302,7 @@ const AI_ARCH = {
         { title: 'MCP 适配器', items: ['mcp-gateway /mcp/tools/call', '异步 job + 轮询结果'] },
         { title: 'SkillLoader', items: ['按需 load_skill 挂载'] },
         { title: 'KnowledgeTool', items: ['knowledge_search / ingest 等'] },
+        { title: '委派（子 Agent）', items: ['设计中 · 尚未实现', '方案见 multi-agent-design.md'] },
       ] }] },
     { name: '模型层', tone: 'blue', note: '可换',
       groups: [{ boxes: [
@@ -312,6 +320,7 @@ const AI_ARCH = {
     '控制流所有权分工：代码定骨架（循环 + maxSteps + 判别失败），模型只决定「下一步调哪个工具」——ReAct 的叶子由模型填。',
     '意图路由优先级：@显式 > 显式传入 > 会话锁定 > 规则 > LLM(3s 超时) > 兜底 general；失败一律回落，绝不阻塞主对话。',
     '权限确认是工具级 HITL：permission_request 事件 → 前端确认 → POST /agent/permission/:requestId → Promise resolve/reject（60s 自动拒绝）。',
+    '⚠ 本图按 master 现状绘制：调参仅透传 temperature（topP/maxTokens/thinking 在分支 feat/llm-tuning-multi-model 未合入）；多 Agent 委派为设计中能力，方案见 docs/architecture/multi-agent-design.md。',
   ],
 };
 
@@ -333,15 +342,15 @@ const AGENT_FLOW = {
       note: 'memory.compaction 摘要 + keepRecent；长期 profile 跨会话' },
     { k: 'decision', tone: 'purple', t: 'Agent 是否挂载技能？', s: 'capabilities.skills.length > 0',
       note: '是 → 追加技能目录到 systemPrompt，并注入 load_skill 工具；否 → 直接生成 tool schemas' },
-    { k: 'step', tone: 'orange', t: 'ToolRegistry.toSchemas 生成工具 schema', s: 'temperature/topP/maxTokens/thinking 透传（C7）',
-      note: '生成参数只透传显式填了的字段，全空等价于不传（向后兼容）' },
+    { k: 'step', tone: 'orange', t: 'ToolRegistry.toSchemas 生成工具 schema', s: 'temperature 透传（master 现状）',
+      note: 'agent-engine.ts:165 只传 temperature（agent.interface.ts 仅有 maxSteps + temperature?）；topP/maxTokens/thinking 属 C7 变更，仍在分支 feat/llm-tuning-multi-model，未合入 master' },
     { k: 'loop-start', tone: 'green', t: '循环：for step < maxSteps', s: 'maxSteps 由 DB 定义配置' },
     { k: 'step', tone: 'blue', t: 'client.chatWithToolsStream 调模型', s: 'content_delta / reasoning_delta / done',
       note: '模型失败或空返回 → 带错误码 SSE error 事件 + onRunEnd(status=error)' },
     { k: 'decision', tone: 'rose', t: '模型返回工具调用？', s: 'resp.toolCalls.length === 0',
       note: '否 → memory.persist 落库 → 有工具步骤则发 summary → 发 final → end(ok)' },
     { k: 'step', tone: 'purple', t: '下发 tool_call 事件，执行工具', s: 'tool_call → 执行 → tool_result',
-      note: '三类：本地工具 / MCP 工具（经 mcp-gateway 异步 job 轮询）/ load_skill 内置' },
+      note: '三类：本地工具 / MCP 工具（经 mcp-gateway 异步 job 轮询）/ load_skill 内置；演进：子 Agent 委派（第四类，设计中，见 multi-agent-design.md）' },
     { k: 'decision', tone: 'rose', t: '工具是否需要人工确认？', s: 'requiresConfirm = 写操作',
       note: '是 → permission_request 事件挂起 → 前端 POST /agent/permission/:requestId；60s 超时自动拒绝' },
     { k: 'step', tone: 'orange', t: 'tool_result 回写 messages', s: 'onToolSpan(ok/latency) 遥测',

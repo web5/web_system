@@ -1,9 +1,11 @@
 # Agent 系统架构设计 · web_system（维度 → 架构 → 实现）
 
-> 状态：**待评审（v2）** ｜ 日期：2026-10-13 ｜ 分支：`feat/llm-tuning-multi-model`（worktree `/Users/geekwen/workspace/web_system-llm-tuning`）
+> 状态：**待评审（v2）** ｜ 日期：2026-10-13 ｜ 盘点基线：**分支 `feat/llm-tuning-multi-model`**（worktree `/Users/geekwen/workspace/web_system-llm-tuning`，**尚未合入 master**）
 > 视角：T11 架构师三层递进 —— **维度（要回答什么）→ 架构（结构长什么样）→ 实现（用什么技术填）**
-> 姊妹文档：`docs/architecture/agent-dev-t11-mindmap.md`（技能思维导图）、`docs/architecture/kedou-architecture-diagrams.html`（业务 / 技术架构图）
+> 姊妹文档：`docs/architecture/agent-dev-t11-mindmap.md`（技能思维导图）、`kedou-architecture-diagrams.html`（业务 / 技术架构图）、`ai-flow-technical-design.md`（AI 主链路）、`multi-agent-design.md`（多 Agent，设计中）
 > **v2（同日复核）**：更正 v1 关于 RAG 与评测的两处结论（详见 §0.6），缺口清单与工作量随之调整。
+>
+> ⚠️ **基线口径**：本文按上述**分支**代码盘点。凡与 `master` 现状不同的条目，均在该处标注「**仅分支**」——目前集中在 **C7 调参三项**（`topP / maxTokens / thinking`；master 只透传 `temperature`，实体亦无此三列）与 **ai-service 的 ModelCatalog**。落码前请先核对自己所在分支。
 >
 > 本文档只做架构设计与现状盘点，**不改任何代码**。文中标注缺口/目标处均为尚未实施项，落地时须按对应动作门执行（见 §4）。
 
@@ -20,11 +22,11 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | 事实 | 文件 |
 |---|---|
 | 引擎是 **ReAct 循环**（单 Agent 闭环） | `packages/agent-core/src/core/agent-engine.ts:1-11` |
-| 生成参数已透传 temperature/maxTokens/topP/thinking | `agent-engine.ts:164-171` |
-| 定义实体**已有** maxTokens/topP/thinking（含互斥注释） | `servers/ai-service/src/agent-def/entities/agent-definition.entity.ts:66-86` |
+| 生成参数已透传 temperature/maxTokens/topP/thinking（**仅分支**：master 只传 `temperature`，`agent-engine.ts:165`） | `agent-engine.ts:164-171`（分支） |
+| 定义实体**已有** maxTokens/topP/thinking（含互斥注释）（**仅分支**：master 实体无此三列） | `servers/ai-service/src/agent-def/entities/agent-definition.entity.ts:66-86` |
 | **三级回落** DB → env → 内置，60s 轮询 | `servers/ai-agent/src/agent/model-catalog.service.ts:48-52,75` |
 | `hy3` 由专用 client 承载，清单混入需跳过（否则覆盖注册） | `model-catalog.service.ts:156-167` |
-| ai-service Agent 链路已有同款 ModelCatalog（2026-10-10 新增） | `servers/ai-service/src/agent/model-catalog.service.ts` |
+| ai-service Agent 链路已有同款 ModelCatalog（2026-10-10 新增）（**仅分支**：master 该路径无此文件） | `servers/ai-service/src/agent/model-catalog.service.ts` |
 | 但 `ClientRegistry` Provider **仍硬编码** Hy3 + deepseek-v4-flash 作初始值 | `servers/ai-service/src/agent/agent.module.ts:32-36` |
 | 普通 chat 链路另有一套自研 client + 独立 key | `servers/ai-service/src/ai/ai.service.ts:27-37`、`src/common/http/hy3.client.ts` |
 | 遥测端口 5 类事件（run / llm / tool / skill / end） | `agent-engine.ts:22,72-88,102,231,293` |
@@ -88,10 +90,11 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 |---|---|---|
 | 模型 | ✅ DB 字典可切，不发版 | `model-catalog.service.ts` |
 | prompt | ✅ `systemPrompt` 存 DB，30s 轮询生效 | `agent-definition.entity.ts:28-43` |
-| temperature / maxTokens / topP / thinking | ✅ **四参数全 DB 化且引擎已透传**（2026-10-10 C7 落地） | `agent-engine.ts:164-171` |
+| temperature / maxTokens / topP / thinking | ✅ **四参数全 DB 化且引擎已透传**（2026-10-10 C7 落地）（**仅分支**：master 只透传 temperature） | `agent-engine.ts:164-171` |
 | maxSteps / streaming / memory | ✅ DB 可配 | entity 相应列 |
 
 > ⚠️ **剩余缺口在 UI**：admin 表单尚未加 `maxTokens` / `topP` / `thinking` 三个控件（另有一处 `?? 0.7` 默认值 bug），目前只能改库或走接口 —— 属 UI 门 C-3。
+> ⚠️ **依赖分支**：上述四项中后三项（`maxTokens / topP / thinking`）的**后端**改动仅在分支上；master 直接做 UI 会指向不存在的字段，故 §3.3 的前置动作是「先合入 C7」。具体 UI 仍按 UI 门评审（原型先行）。
 
 ### 2.4 业务透镜
 
@@ -137,7 +140,9 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 ### 3.3 调参 UI P1（易变层收尾）
 
-**现状**：后端已就绪，admin 表单缺控件且有一处 `?? 0.7` 默认值 bug。
+**现状**：后端已就绪（**仅分支** `feat/llm-tuning-multi-model`；**master 尚未合入 C7**），admin 表单缺控件且有一处 `?? 0.7` 默认值 bug。
+
+**前置**：先把 C7（`topP / maxTokens / thinking`）合入目标分支，否则控件会指向不存在的字段。
 
 **目标**：三个控件 + 互斥即时提示。
 
@@ -197,15 +202,16 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | 优先级 | 项 | 解决哪个维度 | 工作量 | 落地命中动作门 |
 |---|---|---|---|---|
 | **P0** | `agent_runs` 加 `outcome/fail_stage` + 各阶段埋点 | 可靠性 / 可观测 / 度量 | 1.5d | **契约门** + 迁移规范 |
-| **P1** | 调参 UI 表单（含 `?? 0.7` 修正） | 可演化 / 风险 | 1d | **UI 门** |
+| **P1** | 调参 UI 表单（含 `?? 0.7` 修正）—— **前置：合入 C7** | 可演化 / 风险 | 1d | **UI 门** |
 | **P1** | ai-service 模型链路统一（清双 client / 双 key） | 杠杆 / 可演进 | 1d | **发布门** |
 | **P1** | thinking token 计价口径入字典 | 成本 | 0.5d | **发布门**（改字典配置） |
 | **P2** | 检索质量与评测覆盖（召回率基线 → 混合检索/rerank → golden 集） | 可靠性 / 质量 | 1.5d | 无（服务内改动，若动对外契约则**契约门**） |
 | **P2** | 工具 schema 语义版本 | 可交付 | 1d | **契约门** C3 |
 | **P2** | 业务线 golden eval 集（≥20 条/线） | 度量 | 1d | 无（脚本） |
 | **P2** | HITL 编排级审批节点 | 可控性 | 1.5d | **契约门** |
+| **P2** | **多 Agent 编排（Agent-as-Tool）** —— **必须排在 P0 之后** | 能力边界 / 可控性 | 3d（内核 1.5 + 可观测 1 + admin 0.5） | **契约门**（动 `agent-core`）+ UI 门（能力选择器） |
 
-> 串行建议：P0（质量归因）→ P1 UI 与 P1 模型统一并行 → P1 thinking 计价 → P2 按业务节奏。
+> 串行建议：P0（质量归因）→ P1 UI 与 P1 模型统一并行 → P1 thinking 计价 → P2 按业务节奏（多 Agent 最后，见 `multi-agent-design.md` §9 依赖顺序）。
 
 ---
 
@@ -229,6 +235,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | `docs/architecture/ai-flow-technical-design.md` | **AI 整体流程技术方案**（主链路 17 阶段 / 容错降级矩阵 / 可观测性） |
 | `docs/architecture/ai-flow-diagrams.html` | AI 子系统架构图 + Agent 运行主链路 + 知识链路（脚本 `scripts/gen-ai-flow-diagrams.mjs`） |
 | `docs/architecture/agent-dev-t11-mindmap.md` | 技能思维导图（节点版，含价值/原理/实现三段） |
+| `docs/architecture/multi-agent-design.md` | **多 Agent 编排方案**（Agent-as-Tool / 四道护栏 / 分阶段，设计中） |
 | `docs/api/contracts.md` §7 C7 | Agent 生成参数与模型清单约定（C7-a…C7-h） |
 | `docs/api/reviews/contract-review-2026-10-10-c7-tuning-params.md` | C7 评审报告（阻塞 0 / 重要 2） |
 | `docs/plans/2026-10-10-multi-model-and-llm-tuning-plan.md` | A/B/C 三条工作线进度（A 完成、C 后端完成、B 半完成） |

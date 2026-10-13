@@ -1,10 +1,11 @@
 # AI 整体流程 · 技术方案（web_system）
 
-> 状态：**待评审** ｜ 日期：2026-10-13 ｜ 分支：`feat/llm-tuning-multi-model`
+> 状态：**待评审** ｜ 日期：2026-10-13 ｜ 基线：`master`（现状）
 > 图示：`docs/architecture/ai-flow-diagrams.html`（AI 子系统架构图 / Agent 运行主链路 / 知识链路，脚本 `scripts/gen-ai-flow-diagrams.mjs` 生成，禁手改）
-> 关联：`agent-system-design.md`（架构决策与缺口清单）、`agent-dev-t11-mindmap.md`（技能思维导图）、`system-overview.md`（系统现状单一真相源）
+> 关联：`agent-system-design.md`（架构决策与缺口清单）、`agent-dev-t11-mindmap.md`（技能思维导图）、`multi-agent-design.md`（多 Agent 编排，设计中）、`system-overview.md`（系统现状单一真相源）
 >
 > 本文只描述**流程与技术方案**，不重复缺口清单；所有条目均可在代码中定位（见每节「事实来源」）。
+> ⚠️ 口径：图上与文中的数据按 **master 现状** 绘制。凡「仅在分支 `feat/llm-tuning-multi-model` 上」的差异，均在该处显式标注（目前仅一处：生成参数透传，见 §3.2 #7）。
 
 ---
 
@@ -62,7 +63,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 |---|---|---|
 | 5 | 装配 messages | `system`（prompt + 技能目录）→ 历史摘要 → 长期 profile → 用户输入；profile 放在用户消息**之前**（离意图最近、权重最高） |
 | 6 | 技能判定 | 有技能 → 追加技能目录 + 注入 `load_skill` 工具 |
-| 7 | 生成工具 schema | `temperature/topP/maxTokens/thinking` 只透传**显式填了**的字段（全空 = 不传，向后兼容） |
+| 7 | 生成工具 schema | 透传 `temperature`（**master 现状**：`agent-engine.ts:165` 只传 temperature，`agent.interface.ts` 仅有 `maxSteps + temperature?`）。`topP/maxTokens/thinking` 属 C7 变更，**仅在分支 `feat/llm-tuning-multi-model`**，合入前无此三项 |
 
 ### 3.3 ReAct 循环（`for step < maxSteps`）
 
@@ -185,9 +186,10 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 优先级 | 项 | 本方案中的落点 |
 |---|---|---|
 | **P0** | `agent_runs` 加 `outcome / fail_stage` + 阶段埋点 | §3.4 终止态与 §3.5 事件表已把「阶段」定义清楚，埋点直接挂在这三处终止 + 工具结果 |
-| P1 | 调参 UI（含 `?? 0.7` 修正） | §3.2 #7 透传口径不变，只补 UI |
+| P1 | **先合入 C7**（`topP / maxTokens / thinking` 进 `agent_definitions` + 引擎透传，现仅在分支 `feat/llm-tuning-multi-model`）→ **再补调参 UI**（含 `?? 0.7` 修正） | §3.2 #7；master 现状只透传 `temperature` |
 | P1 | ai-service 模型链路统一 | §4.4 三级回落，统一到同一 `ClientRegistry` |
 | P1 | thinking token 计价 | §4.5 成本口径 |
+| P1 | **多 Agent 编排（Agent-as-Tool）** | §3.3 #11 由「工具三类」扩到「第四类：子 Agent 委派」；完整方案见 `multi-agent-design.md`（含四道护栏与依赖顺序：须在 P0 之后） |
 | P2 | 检索质量（召回率 → 混合检索/rerank → golden 集） | §4.6 知识链路 |
 | P2 | 工具 schema 语义版本 | §4.3 工具生态 |
 | P2 | HITL 编排级审批 | §3.3 #12 从工具级扩到编排级 |
@@ -209,6 +211,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 文档 | 用途 |
 |---|---|
 | `docs/architecture/ai-flow-diagrams.html` | 本方案的图（架构 / 主链路 / 知识链路） |
+| `docs/architecture/multi-agent-design.md` | 多 Agent 编排方案（Agent-as-Tool，设计中；含四道护栏与依赖顺序） |
 | `docs/architecture/agent-system-design.md` | 架构决策清单与缺口 P0→P2 |
 | `docs/architecture/agent-dev-t11-mindmap.md` | 技能思维导图（价值 / 原理 / 实现三段） |
 | `docs/architecture/system-overview.md` | 系统现状单一真相源（服务 / 端口 / 库） |
