@@ -1,4 +1,7 @@
-# Agent 消息计划表（SSE / HTTP）
+# Agent 消息清单（SSE / HTTP）
+
+> ⚠️ **命名澄清**：这里的「Schedule」是 **schedule = 清单 / 时序表**（像价格表 price schedule），**不是"项目计划"**。
+> 本文只回答「有哪些消息、谁发的、什么载荷、谁消费了」，**不回答"要做什么改造"** —— 改造计划见 `agent-evolution-roadmap.md`。
 
 > 状态：**待评审** ｜ 日期：2026-10-13 ｜ 基线：`master`（现状）
 > 真相源：`packages/agent-core/src/interfaces/runtime.interface.ts` 的 `StreamEventType`（**11 项**，含全部载荷字段）
