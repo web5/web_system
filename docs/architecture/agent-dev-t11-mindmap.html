@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>T11 Agent 开发技术架构 · 技能思维导图</title>
+<style>
+  :root{
+    --bg:#0A0A0D; --panel:rgba(255,255,255,.04); --panel-2:rgba(255,255,255,.07);
+    --line:rgba(255,255,255,.10); --txt:#FFF8F0; --muted:#a9a39a;
+    --brand:#F97316; --brand-2:#ffae73; --cyan:#4ECDC4; --c1:#F97316; --c2:#4ECDC4; --c3:#a78bfa; --c4:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,rgba(249,115,22,.12),transparent 60%),var(--bg);
+    color:var(--txt);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;}
+  header{padding:28px 32px 18px;border-bottom:1px solid var(--line);}
+  h1{margin:0 0 6px;font-size:24px;letter-spacing:.5px;}
+  h1 .o{color:var(--brand)}
+  .sub{color:var(--muted);font-size:13px;max-width:880px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .wrap{padding:22px 32px 60px;max-width:1280px;margin:0 auto}
+  .layers{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:980px){.layers{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.layers{grid-template-columns:1fr}}
+  .layer{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;backdrop-filter:blur(6px)}
+  .layer-h{padding:14px 16px;font-weight:700;display:flex;align-items:center;gap:8px;position:sticky;top:0}
+  .layer-h .dot{width:9px;height:9px;border-radius:50%}
+  .layer .tag{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500}
+  .l1 .layer-h{background:linear-gradient(135deg,rgba(249,115,22,.22),rgba(249,115,22,.06))}
+  .l2 .layer-h{background:linear-gradient(135deg,rgba(78,205,196,.20),rgba(78,205,196,.05))}
+  .l3 .layer-h{background:linear-gradient(135deg,rgba(167,139,250,.20),rgba(167,139,250,.05))}
+  .l4 .layer-h{background:linear-gradient(135deg,rgba(251,191,36,.20),rgba(251,191,36,.05))}
+  .node{border-top:1px solid var(--line);cursor:pointer;transition:background .15s}
+  .node:hover{background:var(--panel-2)}
+  .node-t{padding:12px 16px;display:flex;align-items:center;gap:10px}
+  .node-t .num{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:26px}
+  .node-t .nm{flex:1}
+  .node-t .ar{color:var(--muted);transition:transform .2s;font-size:12px}
+  .node.open .node-t .ar{transform:rotate(90deg)}
+  .node-b{max-height:0;overflow:hidden;transition:max-height .35s ease}
+  .node.open .node-b{max-height:1200px}
+  .node-b .inner{padding:4px 16px 16px;display:grid;gap:10px}
+  .seg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:rgba(0,0,0,.18)}
+  .seg h4{margin:0 0 5px;font-size:12px;letter-spacing:.4px;text-transform:uppercase}
+  .seg.v h4{color:var(--brand-2)} .seg.p h4{color:var(--cyan)} .seg.r h4{color:#c4b5fd}
+  .seg p{margin:0;font-size:13.5px;color:#e9e3da}
+  .note{margin-top:30px;color:var(--muted);font-size:12.5px;border:1px dashed var(--line);border-radius:12px;padding:14px 16px}
+  .note b{color:var(--txt)}
+  mark{background:rgba(249,115,22,.25);color:var(--txt);padding:0 3px;border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>T11 Agent 开发 · <span class="o">技术架构技能思维导图</span></h1>
+  <div class="sub">第一性原理：<b>把承重层做稳、可换层做松、易变层做便宜</b>。模型层动得越快越要这样分层。点击任意节点展开「价值 / 技术原理 / 技术实现方案」三段，对应我们要逐个拆解的节点。</div>
+  <div class="legend">
+    <span><i style="background:var(--c1)"></i>承重层 · 改一次伤筋动骨</span>
+    <span><i style="background:var(--c2)"></i>可换层 · 设计为可插拔</span>
+    <span><i style="background:var(--c3)"></i>易变层 · 便宜快速迭代</span>
+    <span><i style="background:var(--c4)"></i>业务透镜 · 翻译为业务决策</span>
+  </div>
+</header>
+<div class="wrap"><div class="layers" id="layers"></div>
+<div class="note">拆解顺序建议（按 ROI）：<b>2.1 模型解耦（ai-service）</b> → <b>3.3 调参配置化</b> → <b>1.5/2.4 质量与评测落地</b> → 其余按业务节奏。在对话里说「拆 X.Y」即可展开该节点，我会把三段结合实际项目代码落点一次性讲透。</div>
+</div>
+
+<script>
+const DATA=[
+ {cls:'l1',name:'承重层',tag:'伤筋动骨',nodes:[
+  {num:'1.1',nm:'架构范式',v:'决定引擎形态，事后改要推倒重写。多 Agent 编排 vs 单 Agent 闭环、自主循环(ReAct) vs 确定性图(LangGraph 式) 一旦选定，工具/状态/HITL 接口都受其约束。',
+   p:'自主循环 = 模型每步采样决定下一步，灵活但不可控；确定性图 = 代码控制流转，可预测但丧失涌现。本质是「在哪划不确定性的边界」。',
+   r:'先按任务确定性选基线（确定性任务用图，探索性任务用循环）；多 Agent 用 supervisor/黑板模式，避免网状互调。项目：agent-core 已是契约面，范式基本定了，但多 Agent 编排尚未铺开——扩之前先预留子 Agent 注册与消息总线接口。'},
+  {num:'1.2',nm:'控制流所有权',v:'模型驱动还是代码驱动，定了它引擎形态就定型。错判→要么失控不可控，要么丧失 Agent 灵活性。',
+   p:'「下一步做什么」的来源。代码驱动=确定性状态机；模型驱动=LLM 输出动作。混合态=代码定骨架、模型填叶子。',
+   r:'以「人类可审批节点」为锚点划分——审批前代码驱动保可控，审批后模型驱动保灵活。项目：agent-engine.ts 是驱动核心、RunInput.model 单次覆盖，目前代码驱动为主、模型采样为辅，符合「骨架代码定、叶子模型填」。'},
+  {num:'1.3',nm:'状态与记忆边界',v:'决定长对话能否不崩、成本是否爆炸、中断能否续跑。错判→上下文溢出或重复计算。',
+   p:'context 窗口有限，需压缩/摘要/检索平衡；long-term 记忆要解决「存什么、怎么取、何时忘」；checkpoint 解决可恢复性。',
+   r:'短期上下文用滑动窗口+关键摘要；长期用向量库+结构化记忆；每步写 checkpoint 支持断点续跑。项目：agent_definitions.memory 字段已在，但压缩/恢复策略未体系化，建议补「上下文管理策略」配置项。'},
+  {num:'1.4',nm:'安全边界（爆炸半径 + 认知安全）',v:'Agent 能碰什么（工具/数据/外部调用）决定出错影响面；认知安全（grounding/抗幻觉）决定敢说什么。错判→越权、数据泄露、资损、编造答案客诉。',
+   p:'最小权限原则 + 工具权限收敛；grounding = 答案必须可溯源到给定上下文，无据则拒答。',
+   r:'工具按风险分级（只读/写/外部），Agent 实例按角色授权；输出层加引用校验与置信度门。项目：InternalGuard/权限码体系在，但 Agent 自主调用时的权限收敛还需明确（见 1.5 grounding 护栏）。'},
+  {num:'1.5',nm:'质量与评测（成功标准 + grounding）⭐ 新增',v:'定义「完成/准确」即定义优化目标（Goodhart：指标塑造优化方向）；grounding 是认知安全边界。错判→优化错方向、答不对留不住人（直接挂钩营收）。这是被遗漏的一整块，现升级为承重层一等决策。',
+   p:'成功标准设计（过程跑通 vs 答案正确 vs 用户满意）决定你卷什么；grounding 把「模型自信但错误」挡在门外；评测体系把「感觉变好」变成可量化。',
+   r:'落地方案：① agent_runs 加 outcome(success/partial/fail)、fail_stage(retrieval/推理/工具/其他)、score、graded_by、graded_at，各阶段埋点；② 成本+质量双归因（现有 DictPricingProvider→cost，加 outcome 升双维）；③ 业务线 golden 集（论文/财经/变变/科豆各 20~50 条含 rubric）；④ 离线 eval（LLM-as-judge 判 outcome，出完成率+分项失败率）；⑤ 线上监控 outcome/fail_stage 分布；⑥ KB 侧优先测检索召回率（当前性价比最高）。'} ]},
+ {cls:'l2',name:'可换层',tag:'可插拔',nodes:[
+  {num:'2.1',nm:'模型解耦层（多级回落）',v:'模型层一动（涨价/停服/出新模型）不伤结构，护住议价权与抗断供能力。错判→绑死单一供应商，定价权不在手。',
+   p:'抽象 ChatClient 接口，注册多实现；按 DB 字典 → env → 代码 三级回落选择。',
+   r:'项目 ai-agent 已做三级回落（DB llm_models → TOKENHUB_MODELS(env) → 代码内置）；ai-service 仍硬编码 Hy3Client + TokenHubClient(\'deepseek-v4-flash\')——最该先补齐的可换层缺口（落地方案见 agent-def-detail-v2.md §11.3，过契约评审门）。'},
+  {num:'2.2',nm:'工具契约（schema 版本化）',v:'工具 schema 是模型直接消费的接口，版本化错了→模型调不动工具或升级 breaking。',
+   p:'工具描述/参数 schema 是 prompt 的一部分，影响模型的函数调用准确率；需语义化版本（breaking/feat/fix）。',
+   r:'工具定义集中登记，变更走版本号 + 兼容策略；契约登记进 contracts.md（项目已有「MCP 工具」契约类）。新增/改工具须过契约评审。'},
+  {num:'2.3',nm:'知识库与检索（KB & RAG）',v:'短期质量主因。召回率上不来，模型再强也答不对（KB 准确率被 recall 卡死）。',
+   p:'chunking 决定粒度，embedding 决定语义召回，rerank/混合检索提升精度，时效与冲突消解决定正确性。',
+   r:'按业务切分策略（论文按章节、财经按标的）；embedding + 向量库 + BM25 混合；rerank 模型兜底；知识更新走增量。项目：每日论文/财经聚合强依赖 KB，知识库沉淀腾讯 ima——先测检索召回率再谈其他优化。'},
+  {num:'2.4',nm:'评测体系（离线 golden + 线上监控）',v:'换模型/prompt 用数据说话，而非赌。错判→越改越差不知道。',
+   p:'离线 golden 集 + LLM-as-judge 判分 + 线上完成率监控 + 人工抽检，构成「改之前有基线、改之后有对比」。',
+   r:'与 1.5 共用——golden 集与 agent_runs.outcome 是同一套数据资产的两端：离线定基线，线上看分布。建议新建 scripts/agent-eval/ 跑 golden，结果落 agent_runs。'} ]},
+ {cls:'l3',name:'易变层',tag:'便宜迭代',nodes:[
+  {num:'3.1',nm:'提示词',v:'调对了收益大、成本低，但它是易变层——每周都能改，不该进代码评审重流程。',
+   p:'指令遵循、角色设定、少样本、结构约束，共同决定输出形态。',
+   r:'提示词模板化 + 版本化存配置/DB，支持 A/B；与具体模型共同调（换模型常需重写 prompt）。项目：prompt 管理应纳入配置面，避免散落代码。'},
+  {num:'3.2',nm:'模型选型',v:'影响成本/延迟/能力天花板，但属易变层——应能通过配置切换，不应发版。',
+   p:'不同模型在指令遵循、长上下文、工具调用、价格上各有取舍。',
+   r:'与 2.1 解耦层配合——agent_definitions.model 字段 + DB 字典即可切模型，不发版。RunInput.model 支持单次覆盖做实验。'},
+  {num:'3.3',nm:'调参（temp / maxTokens / topP / thinking）',v:'压住输出分布方差到系统可承受范围；但必须配置化。',
+   p:'temperature 控随机性、maxTokens 防截断、topP 控长尾、thinking 控推理深度（hidden cost 大头）。',
+   r:'把 maxTokens/topP/thinking 补进 agent_definitions（现状只暴露 model/temperature/maxSteps/streaming/memory，另三个透传断在 agent-engine.ts）→ 配置化后线上出问题有止血手段。参考 CLASSIFY_MAX_TOKENS=256 + thinking:disabled 教训（思考吃光输出→100% 兜底）。'} ]},
+ {cls:'l4',name:'业务透镜',tag:'翻译业务',nodes:[
+  {num:'4.1',nm:'成本',v:'决定定价/毛利/能否养免费试用。错判→按 token 粗算，thinking+多步重算吃穿毛利。',
+   p:'成本 = input + output + thinking 三块，thinking 常是隐形大头；多步 Agent = 单步 × 步数；缓存命中率决定毛利。',
+   r:'agent_runs.cost 已做单 run 归因；补 outcome 后做「质量×成本」矩阵，识别高成本低质量路径。定价基于实测单任务成本而非标称 token 价。'},
+  {num:'4.2',nm:'风险',v:'决定哪些功能敢写进卖点/SLA。错判→「模型变傻」投诉，翻日志才发现是配额。',
+   p:'幻觉/长文丢失/工具不稳是概率性能力；版本升级、供应商换底层会让「昨天好的今天挂」。',
+   r:'把旋钮配置化（3.3）作为止血手段；关键路径加 fallback 与兜底分支；对外承诺只对确定性能力下保证。'},
+  {num:'4.3',nm:'杠杆',v:'决定议价权/抗断供/技术债。错判→供应商一涨价核心体验跟着挂。',
+   p:'多模型可切换 = 不被单一供应商绑架；model-agnostic 架构让「今天补的后处理，下月模型可能原生支持」。',
+   r:'优先做 2.1（ai-service 解绑）；架构保持 model-agnostic，避免把后处理写死成某模型特化逻辑。'},
+  {num:'4.4',nm:'度量',v:'决定「到底有没有变好 / 该不该换模型」。错判→凭感觉迭代。',
+   p:'通用 benchmark ≠ 你的业务效果；要自建 eval 集对齐转化率/人工接管率等业务指标。',
+   r:'即 2.4 + 1.5 的 eval 体系；以业务指标（完单率、接管率）为目标函数，而非模型榜单分数。'} ]}
+ ];
+
+const dotColor={l1:'var(--c1)',l2:'var(--c2)',l3:'var(--c3)',l4:'var(--c4)'};
+const html=DATA.map(L=>`<div class="layer ${L.cls}">
+  <div class="layer-h"><span class="dot" style="background:${dotColor[L.cls]}"></span>${L.name}<span class="tag">${L.tag}</span></div>
+  ${L.nodes.map(n=>`<div class="node" onclick="this.classList.toggle('open')">
+    <div class="node-t"><span class="num">${n.num}</span><span class="nm">${n.nm}</span><span class="ar">▶</span></div>
+    <div class="node-b"><div class="inner">
+      <div class="seg v"><h4>价值</h4><p>${n.v}</p></div>
+      <div class="seg p"><h4>技术原理</h4><p>${n.p}</p></div>
+      <div class="seg r"><h4>技术实现方案</h4><p>${n.r}</p></div>
+    </div></div>
+  </div>`).join('')}
+</div>`).join('');
+document.getElementById('layers').innerHTML=html;
+</script>
+</body>
+</html>
