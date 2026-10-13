@@ -59,6 +59,14 @@ import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 // 命令执行工具（runShell 子进程 PATH / node bin 解析用）
 import { CommandService } from '../shell/command.service';
+// 远端投递四件套的解析（脚本环境用；平台内置 upload 执行体用同一套纯函数）
+import {
+  resolveRemoteScriptVars,
+  toRemoteScriptSsh,
+  type RemoteScriptVars,
+} from '../remote/remote-delivery.service';
+// SSH 目标机的**唯一真相源**（主机管理 → 服务器管理，见服务头注释：诊断 #15）
+import { SshExecService } from '../remote/ssh-exec.service';
 // shell 执行通道（可注入：测试用假实现，不打真实子进程）
 import { SHELL_RUNNER, ShellRunner, ShellRunHandle } from '../shell/shell-runner';
 // 进程组终止（原内联在本文件，抽到 shell/ 供 shell-runner 共用）
@@ -283,6 +291,13 @@ export interface StageVarsInput {
    */
   consoleToken?: string;
   /**
+   * 远端投递四件套（S1 边界脚本化：`upload`/`cleanup` 节点脚本做 scp/ssh 时要用的值）。
+   *
+   * 由 `resolveRemoteScriptVars()` 产出 —— **平台解析后下发，脚本不做推导**，
+   * 否则脚本各拼一遍三级取值链，迟早拼错成旧常量那个默认值。
+   */
+  remote?: RemoteScriptVars;
+  /**
    * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
    * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
    */
@@ -312,6 +327,12 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   // 被流水线变量/配置中心覆盖会导致脚本拿到的锁 owner 与流水线实际持有的不一致
   // → 流水线被自己的锁判成并发（409），表现为「激活指针」步骤恒失败
   'RUN_ID',
+  // 远端投递事实（2026-10-13 S1）：脚本拿到的是**平台按环境算好的结果**，
+  // 被配置中心/流水线变量覆盖 = 把产物投到另一台机器的另一个目录，
+  // 而流水线照样报成功 —— 这是最难排查的一类发布事故（页面 404 + 日志全绿）。
+  'REMOTE_SSH_TARGET',
+  'REMOTE_MODULES_ROOT',
+  'REMOTE_DEST_DIR',
 ];
 
 /** 端口来源（注入为 `PORT_SOURCE`，脚本/排障据此判断该不该信任这个端口） */
@@ -439,6 +460,12 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 调平台（写版本 / 切指针），脚本自包含、不直连数据库
     CONSOLE_API: i.consoleApi ?? '',
     CONSOLE_TOKEN: i.consoleToken ?? '',
+    // ── 远端投递（S1：脚本做 scp/ssh，平台只负责「算对」这几个值）──
+    // 空串 = 未配置；脚本必须显式报错，不能带着空串去连 ""（模板已如此）。
+    REMOTE_SSH_TARGET: i.remote?.REMOTE_SSH_TARGET || '',
+    REMOTE_MODULES_ROOT: i.remote?.REMOTE_MODULES_ROOT || '',
+    REMOTE_DEST_DIR: i.remote?.REMOTE_DEST_DIR || '',
+    SSH_KEY_PATH: i.remote?.SSH_KEY_PATH || '',
   };
 
   // P0（2026-09-20）：配置中心全量注入。
@@ -459,6 +486,12 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   // 表现为「激活指针」步骤恒失败且报错信息完全指不到这里（2026-10-09 回归）。
   // `PROTECTED_STAGE_KEYS` 只拦配置中心，故这里对流水线变量再拦一次。
   if (base.RUN_ID) merged.RUN_ID = base.RUN_ID;
+  // 同类：远端落点三件套也是**平台本次算出来的结果**（S1）。模板变量兜一层改写，
+  // 会出现「流水线全绿 + 页面 404」——产物在另一台机器/另一个目录，而日志不会报错。
+  // `SSH_KEY_PATH` 不在此列：换私钥路径是合法的按环境定制，改错也只是连不上（不静默）。
+  for (const k of ['REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR'] as const) {
+    if (base[k]) merged[k] = base[k];
+  }
   return merged;
 }
 
@@ -528,6 +561,8 @@ export class PipelineService {
   private readonly runTokenJtis = new Map<string, string[]>();
   /** 已告警过「取不到签名密钥」的 runId：编排模式每个动作都会调这里，不告警会刷屏 */
   private readonly runTokenWarned = new Set<string>();
+  /** 已告警过「SSH 目标解析失败」的 env：同上，按维度去重避免每个节点刷一条 */
+  private readonly remoteVarWarned = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -580,7 +615,40 @@ export class PipelineService {
     // 服务×环境登记（deploy_service_envs）：**远端**端口的真相源，见 pickStagePort
     @InjectRepository(DeployServiceEnvEntity)
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
+    // SSH 目标机（主机管理 → 服务器管理）：远端投递变量 REMOTE_SSH_TARGET / SSH_KEY_PATH 的真相源
+    private readonly sshExec: SshExecService,
   ) {}
+
+  /**
+   * 远端投递变量（S1 边界脚本化：upload/cleanup 节点脚本做 scp/ssh 时直接取用）。
+   *
+   * 目标机与私钥只问 `SshExecService`（主机管理 → 服务器管理）—— 不在流水线侧按环境变量
+   * 再推导一份（那会是第四份真相，见 `remote-delivery.service` 的同名注释）。
+   *
+   * 解析失败（环境没登记主机 / 私钥不在控制台所在机）**不阻断整条流水线**：变量留空 + 告警，
+   * 由使用它们的脚本显式报错。理由：这条路径对 build 这类不需要 SSH 的节点也会跑一次，
+   * 硬失败会让「环境没登记远程投递」顺带把本机发布一起打死。
+   */
+  private async resolveRemoteVars(p: DeployPipelineEntity): Promise<RemoteScriptVars> {
+    let ssh: ReturnType<typeof toRemoteScriptSsh> | null = null;
+    try {
+      ssh = toRemoteScriptSsh(await this.sshExec.resolve(p.env));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (p.env !== 'local' && !this.remoteVarWarned.has(p.env)) {
+        this.remoteVarWarned.add(p.env);
+        this.logger.warn(
+          `[${p.env}] 「主机管理」未解析出可用 SSH 目标，REMOTE_SSH_TARGET / SSH_KEY_PATH 留空（配了 upload/cleanup 脚本时会在脚本内显式报错）：${msg}`,
+        );
+      }
+    }
+    return resolveRemoteScriptVars((k) => this.configService.get<string>(k), {
+      env: p.env,
+      moduleKey: p.moduleKey,
+      version: p.versionTag,
+      ssh,
+    });
+  }
 
   /**
    * 端口解析（唯一入口）：配置中心 → 远端环境登记 / local 本机 pm2。
@@ -2071,6 +2139,28 @@ export class PipelineService {
         return;
       }
 
+      // upload / cleanup：**可被脚本覆盖**的 platform 节点（与 registry 的
+      // commandMode='override' 对齐 —— 此前 v5 只兑现了 git，导致运维配了脚本根本不跑）。
+      // 配了脚本 → 脚本做 scp/ssh，平台不再 spawn；没配 → 回退内置执行体（存量零影响）。
+      case 'builtin-override': {
+        const def = this.builtinSteps[plan.builtinKey];
+        if (!def?.run) {
+          throw new Error(`platform 节点 ${stage} 无可执行内置逻辑（注册表缺失 ${plan.builtinKey}）`);
+        }
+        if (def.skip?.(p)) return; // 守卫优先：复用产物 / 后端模块跳过 upload
+        const hasCmd = await this.runStageCommand(p, stage, stage, undefined, uploadTarget);
+        if (hasCmd) {
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stage}] 已由节点脚本执行（内置 ${plan.builtinKey} 未介入；产物落点与回执由脚本负责）`,
+          ];
+          await this.save(p);
+          return;
+        }
+        await def.run(ctx);
+        return;
+      }
+
       // approval：创建节点级审批单 → 挂起流水线（后续节点不执行），等人工决议后继续。
       // 挂起用异常跳出主循环（见 pipeline-suspension.ts），实例 stage 记当前节点作为恢复锚点。
       case 'approval': {
@@ -2371,6 +2461,8 @@ export class PipelineService {
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       consoleApi: this.consoleApiBase(),
       consoleToken: this.issueScriptToken(p),
+      // 远端投递变量（平台算 → 脚本用：投到哪台机器、落到哪个目录由平台裁决；目标机走主机管理）
+      remote: await this.resolveRemoteVars(p),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });

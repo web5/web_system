@@ -13,6 +13,13 @@ import { TemplateNode } from '../../pipeline-template/template-node';
  *
  * 2) **git 要支持 DB 锁定脚本 + 内置回退**：平台托管脚本（`locked`）优先执行，
  *    模板未 seed 时回退内置 `PullExecutor`；两者之后都由平台回填版本（见 resolveGitIdentity）。
+ *
+ * 3) **upload / cleanup 同样要能被脚本覆盖**（2026-10-13 边界 S1）：
+ *    `step-registry.ts` 里这两步的 `commandMode` 早就是 `'override'`
+ *    （配了命令就覆盖执行体），但 **v5 分派把它们判成了纯内置** —— 只有 git
+ *    走「脚本优先」。后果是「平台省心、边界清晰」的口径在 v5 模板上根本落不了地：
+ *    运维给 upload 节点配了 SSH 投递脚本，跑起来还是平台自己的那份。
+ *    registry 声明的语义与执行分派各写一遍、各改各的，是典型的双真相源漂移。
  */
 export type NodeExecPlan =
   /** check：安全基线恒内置执行，DB 命令作为附加校验叠加 */
@@ -23,8 +30,22 @@ export type NodeExecPlan =
   | { how: 'git' }
   /** approval：审批节点 —— 创建节点级审批单并挂起流水线，等人工决议后继续 */
   | { how: 'approval' }
+  /**
+   * platform 节点 + **可被脚本覆盖**：配了节点脚本就跑脚本，没配回退内置执行体。
+   * 与 `step-registry.ts` 的 `commandMode='override'` 一一对应，见文件头第 3 条。
+   */
+  | { how: 'builtin-override'; builtinKey: string }
   /** 旧 platform 节点（version/pointer）：发布语义真相源，纯内置，不可被命令覆盖 */
   | { how: 'builtin'; builtinKey: string };
+
+/**
+ * 允许被节点脚本覆盖的 platform 节点 key。
+ *
+ * 必须与 `step-registry.ts` 里 `commandMode: 'override'` 且**存在内置执行体**的
+ * 步骤保持一致 —— 这正是此前漂移的地方：registry 说了可覆盖，执行侧没兑现。
+ * `build` 也是 override，但它没有内置执行体（走 `script` 分支要求必配命令）。
+ */
+export const OVERRIDABLE_PLATFORM_NODES: ReadonlySet<string> = new Set(['upload', 'cleanup']);
 
 /**
  * 解析节点执行策略（纯函数）。
@@ -36,6 +57,10 @@ export function planNodeExec(node: TemplateNode): NodeExecPlan {
   if (node.kind === 'approval') return { how: 'approval' };
   if (node.kind === 'platform') {
     if (node.key === 'git') return { how: 'git' };
+    // upload / cleanup：registry 声明可覆盖 ⇒ 这里必须兑现（否则配置静默失效）
+    if (OVERRIDABLE_PLATFORM_NODES.has(node.key)) {
+      return { how: 'builtin-override', builtinKey: node.key };
+    }
     return { how: 'builtin', builtinKey: node.key };
   }
   // git 作为普通 shell 节点时同样走「脚本优先 + 内置回退」的拉码语义

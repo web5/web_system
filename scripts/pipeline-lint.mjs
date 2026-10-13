@@ -61,6 +61,8 @@ const PLATFORM_VARS = new Set([
   'PROTECTED_VERSIONS', 'WS_SAFE_DELETE', 'CONSOLE_API', 'CONSOLE_TOKEN',
   // 流水线 run id：脚本调平台接口时透传为锁 owner（2026-10-09 加，与 resolveStageVars 同源）
   'RUN_ID',
+  // 远端投递四件套（2026-10-13 S1：platform 算好 → 脚本只引用，禁止脚本自行推导）
+  'REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR', 'SSH_KEY_PATH',
   // shell 内建与脚本内临时量
   'HOME', 'PATH', 'USER', 'PWD', 'SHELL', 'SSH', 'SCP', 'TS',
   'VERSION_TAG', 'VERSION', 'VER', 'BUILD_ENV',
