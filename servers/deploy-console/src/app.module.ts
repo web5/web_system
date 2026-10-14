@@ -30,6 +30,8 @@ import { HostsModule } from './hosts/hosts.module';
 import { HealthModule } from './health/health.module';
 // 运维自愈（诊断 #12/#13）：启动对账（僵尸任务/过期锁）+ 两库一致性定时巡检 + 强制解锁入口
 import { ReconcileModule } from './reconcile/reconcile.module';
+// 事实层 v1：定时采集线上真实态并与期望态比对（/api/fact/*）
+import { FactModule } from './fact/fact.module';
 import {
   resolveSynchronize,
   logSynchronizeDecision,
@@ -148,6 +150,8 @@ import {
     HealthModule,
     // 运维自愈：启动对账 + 两库一致性定时巡检（/api/reconcile/*）
     ReconcileModule,
+    // 事实层 v1：环境事实巡检（/api/fact/*）—— 线上真实态 vs 期望态
+    FactModule,
   ],
 })
 export class AppModule {}
