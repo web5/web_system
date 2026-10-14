@@ -5,6 +5,7 @@
 >
 > | 版本 | 日期 | 说明 |
 > |---|---|---|
+> | v1.5 | 2026-10-14 | 增补**发布主链路技术流程图**（`deploy-pipeline-flow.svg`：控制面 / 数据面 / 目标机三段 + 门禁 + 生效验证 + Fact 对账；生成脚本 `scripts/gen-pipeline-flow-diagram.mjs`） |
 > | v1.4 | 2026-10-13 | 增补 AI 域**落地路线图**（`agent-evolution-roadmap.md`：B0→B5 分批 / 依赖顺序 / 动作门对照） |
 > | v1.3 | 2026-10-13 | 增补 Agent 消息清单（`agent-message-schedule.md`：SSE/HTTP 消息清单与消费方矩阵） |
 > | v1.2 | 2026-10-13 | 增补多 Agent 编排方案（`multi-agent-design.md`）与图示入口 |
@@ -12,7 +13,8 @@
 > | v1.0 | 2026-10-08 | 首版。取代已废弃的 `DEPLOYMENT.md` 与 `kedou-network-architecture.md` |
 >
 > **图示**（一页看清全局，推荐先看）：
-> [业务架构图 + 技术架构图](./kedou-architecture-diagrams.html) ｜ [AI 架构与流程](./ai-flow-diagrams.html) ｜ [多 Agent 编排](./multi-agent-diagrams.html)
+> [业务架构图 + 技术架构图](./kedou-architecture-diagrams.html) ｜ [AI 架构与流程](./ai-flow-diagrams.html) ｜ [多 Agent 编排](./multi-agent-diagrams.html) ｜ [发布主链路技术流程](./deploy-pipeline-flow.html)
+> **边界与配置**：`../operations/pipeline-boundary-scripts.md`（S1 边界脚本化 · 四变量注入 · 脚本模板）—— 平台「控制面只裁决 / 数据面只执行」的落地口径见此图与文
 > **AI 域方案**：`ai-flow-technical-design.md`（整体流程）、`agent-message-schedule.md`（**消息清单**：11 类流内消息 / 错误码 / 消费方矩阵）、`agent-system-design.md`（系统设计与缺口）、`multi-agent-design.md`（多 Agent 编排）
 > **AI 域落地路线图**：`agent-evolution-roadmap.md`（B0→B5 分批 / 依赖顺序 / 动作门对照）—— 想问「下一步改什么」先看它
 
