@@ -332,12 +332,19 @@ export class FactCollectService {
   }
 
   /**
-   * 最近一批的漂移清单。
+   * 最近一批快照的**全量信息**（含采集时间），无从数据时返回 null。
    *
-   * 只取**最近一批**而不是"历史上所有异常"：事实会随发布变化，
-   * 把三小时前的漂移一起报出来等于噪音。
+   * 为什么要单独给这个入口：漂移清单 `drift()` 只返回告警项，消费者拿不到
+   * 「最近一次是什么时候采的 / 到底采没采过」；而这两者恰恰决定了能不能把
+   * "没有告警"读成"健康" —— **从未采集 ≠ 健康**（这是 #342 反复踩的 failure 模式：
+   * 把"判不了"静默报成"没问题"）。
+   *
+   * 统一由这里提供最近批次，`drift()` 复用它做告警过滤，避免两处各写一个
+   * 「找最近 batchId」的口径而漂移（参照 config-layer-backfill.spec 的双向比对做法）。
    */
-  async drift(env: string): Promise<{ batchId: string | null; items: DeployFactSnapshotEntity[] }> {
+  async latestBatch(
+    env: string,
+  ): Promise<{ batchId: string; collectedAt: number; items: DeployFactSnapshotEntity[] } | null> {
     const latest = await this.repo
       .createQueryBuilder('f')
       .select('f.batch_id', 'batchId')
@@ -345,11 +352,25 @@ export class FactCollectService {
       .orderBy('f.collected_at', 'DESC')
       .limit(1)
       .getRawOne<{ batchId: string }>();
-    if (!latest?.batchId) return { batchId: null, items: [] };
+    if (!latest?.batchId) return null;
     const items = await this.repo.find({ where: { batchId: latest.batchId } });
+    if (!items.length) return null;
+    const collectedAt = Math.max(...items.map((i) => new Date(i.collectedAt).getTime()));
+    return { batchId: latest.batchId, collectedAt, items };
+  }
+
+  /**
+   * 最近一批的漂移清单。
+   *
+   * 只取**最近一批**而不是"历史上所有异常"：事实会随发布变化，
+   * 把三小时前的漂移一起报出来等于噪音。
+   */
+  async drift(env: string): Promise<{ batchId: string | null; items: DeployFactSnapshotEntity[] }> {
+    const batch = await this.latestBatch(env);
+    if (!batch) return { batchId: null, items: [] };
     return {
-      batchId: latest.batchId,
-      items: items.filter((i) => FACT_ALERT_STATUSES.includes(i.status)),
+      batchId: batch.batchId,
+      items: batch.items.filter((i) => FACT_ALERT_STATUSES.includes(i.status)),
     };
   }
 

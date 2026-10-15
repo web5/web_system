@@ -342,6 +342,29 @@ const DEPLOY_HTTP_TOOLS: Array<{
     ],
   },
   {
+    name: 'release_plan',
+    description:
+      '发布提案（**只读 dry-run，不改动任何东西**）：返回这次发布的影响面、7 项前置检查结论、' +
+      '风险等级（low/medium/high/critical）与是否需要人工审批。发布前先调它确认能不能发 —— ' +
+      'blockers 非空表示提交会被直接拒绝；warnings 列出有告警或**判定不了**的项；' +
+      'knownGaps 列出本工具尚未覆盖的检查，**没有报警不等于检查过**。' +
+      '返回的 planId 是幂等提案标识（同入参恒相同），evidenceHash 是当时的事实指纹（事实漂移后会变）',
+    method: 'POST',
+    path: '/api/mcp/release-plan',
+    params: [
+      { name: 'env', type: 'string', required: true, description: '目标环境 local/dev/staging/prod' },
+      { name: 'moduleKey', type: 'string', required: true, description: '模块 key（不确定先用 list_modules 查，不要猜）' },
+      {
+        name: 'versionTag',
+        type: 'string',
+        required: false,
+        description: '目标版本（纯 git 短哈希，或 namespace/commit 形式的完整引用）。不传 = 现场构建，此时产物是否存在无法预判',
+      },
+      { name: 'mode', type: 'string', required: false, description: 'direct（默认，全量直发）/ grayscale（灰度，须同时传 grayscaleRule）' },
+      { name: 'grayscaleRule', type: 'string', required: false, description: '灰度规则（mode=grayscale 时必填）' },
+    ],
+  },
+  {
     name: 'publish_version',
     description: '把某模块的线上指针切到指定历史版本（秒级生效，不重新构建）。用于回滚或版本回退',
     method: 'POST',

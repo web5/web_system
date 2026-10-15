@@ -65,9 +65,7 @@ export class ApprovalService {
 
   /** 创建审批单（同一 env+moduleKey 不允许重复待审批单） */
   async create(spec: ApprovalCreateSpec): Promise<DeployApprovalEntity> {
-    const dup = await this.repo.findOne({
-      where: { env: spec.env, moduleKey: spec.moduleKey, status: 'pending' as ApprovalStatus },
-    });
+    const dup = await this.pendingFor(spec.env, spec.moduleKey);
     if (dup) {
       throw new ConflictException(
         `模块 ${spec.moduleKey} 在 ${spec.env} 已有待审批的发布请求 ${dup.pipelineId}，请等待审批结果`,
@@ -115,6 +113,19 @@ export class ApprovalService {
       createdAt: Date.now(),
     });
     return this.repo.save(row);
+  }
+
+  /**
+   * 某「环境 × 模块」当前**待决**的审批单（无则 null）。
+   *
+   * 独立成只读方法的原因：`release_plan` 要在**不写库**的前提下判断
+   * "提交会不会撞上已有待审单而 409"，而判重原本内联在 `create()` 里。
+   * 两边共用同一个方法，避免"plan 阶段说没冲突、提交时却 409"的口径分裂。
+   */
+  async pendingFor(env: string, moduleKey: string): Promise<DeployApprovalEntity | null> {
+    return this.repo.findOne({
+      where: { env, moduleKey, status: 'pending' as ApprovalStatus },
+    });
   }
 
   /** 某流水线某节点**待决**的审批单（无则 null） */
