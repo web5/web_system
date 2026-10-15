@@ -170,10 +170,24 @@ export interface StoredChatMessage {
   type?: 'text' | 'report';
 }
 
+import type { IntentHistoryItem } from '../utils/history-cards';
+
+/**
+ * 意图判定流水（agent_conversations.intent_history 一项；append-only，按轮次有序）
+ *
+ * 定义在 utils/history-cards.ts（页面与本文件共用一份）—— 单独在此再声明一份
+ * 会造成两处类型漂移，正是本次要修的「实时/历史两套标准」同类病根。
+ */
+export type { IntentHistoryItem };
+
 /** 对话详情；`report` 快照是各 agent 自己的结构，由调用方指定类型 */
 export interface ConversationDetail<Report = unknown> {
   id: string;
   title: string | null;
+  /** 会话级锁定 agentId（每轮被覆盖，只作「当前 agent」参考，判历史消息归属请用 intentHistory） */
+  agentId?: string | null;
+  /** 逐轮意图流水：历史消息定归属的权威依据；老会话 / 路由开关未开时为 null → 前端降级到文本启发式 */
+  intentHistory?: IntentHistoryItem[] | null;
   report: Report | null;
   meta?: { scene?: string; danger: number; warn: number; ok: number } | null;
   messages: StoredChatMessage[];
