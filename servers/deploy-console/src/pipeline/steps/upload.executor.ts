@@ -33,7 +33,7 @@ export class UploadExecutor {
       const dest = this.artifacts.uploadLocal(p.moduleKey, p.versionTag!, src);
       ctx.log(`产物已投递到 ${dest}`);
     } else {
-      const { sshTarget, dest } = this.remoteDelivery.uploadDist({
+      const { sshTarget, dest } = await this.remoteDelivery.uploadDist({
         env: p.env,
         moduleKey: p.moduleKey,
         version: p.versionTag!,

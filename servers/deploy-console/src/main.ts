@@ -6,10 +6,18 @@ import { json } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
-import { AppModule } from './app.module';
+import { runBootstrap } from './bootstrap/load';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
+  // ── 阶段 0/1：自举（两阶段启动，设计 §3.6）────────────────────────────
+  // 必须在 AppModule **求值之前**完成：ConfigModule 与 TypeORM 都在 import 期或
+  // 模块装饰器里读 env，静态 import 会让它们读到「还没合并配置中心」的旧值。
+  // 故 AppModule 改为下面的动态 import —— 这不是风格偏好，是顺序依赖。
+  await runBootstrap();
+
+  const { AppModule } = await import('./app.module');
+
   // rawBody：CI/CD 触发端点需用**原始请求体**做 HMAC 验签
   // （重新序列化 JSON 会因键顺序/空白差异导致签名永远不匹配）
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -74,4 +82,10 @@ async function bootstrap() {
   logger.log(`服务已启动，监听端口: ${port}`);
 }
 
-bootstrap();
+bootstrap().catch((e: unknown) => {
+  // 启动失败必须**非 0 退出**且只留一条错误：pm2 依退出码判定要不要重试，
+  // 堆栈打两遍会让日志里分不清「启动失败」还是「运行中崩了」。
+  // 自举缺键的修复指引由 runBootstrap 打印在前面，这里不再重复。
+  new Logger('Bootstrap').error(`console 启动失败：${(e as Error)?.message || e}`);
+  process.exit(1);
+});

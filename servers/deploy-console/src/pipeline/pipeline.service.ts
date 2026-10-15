@@ -41,6 +41,8 @@ import { pickStepBranch } from './steps/step-branch';
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
+// 流水线 run 短期令牌（替代注入脚本的长期 INTERNAL_API_KEY；见 common/run-token.ts）
+import { issueRunToken, revokeRunTokens } from '../common/run-token';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
@@ -57,6 +59,14 @@ import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 // 命令执行工具（runShell 子进程 PATH / node bin 解析用）
 import { CommandService } from '../shell/command.service';
+// 远端投递四件套的解析（脚本环境用；平台内置 upload 执行体用同一套纯函数）
+import {
+  resolveRemoteScriptVars,
+  toRemoteScriptSsh,
+  type RemoteScriptVars,
+} from '../remote/remote-delivery.service';
+// SSH 目标机的**唯一真相源**（主机管理 → 服务器管理，见服务头注释：诊断 #15）
+import { SshExecService } from '../remote/ssh-exec.service';
 // shell 执行通道（可注入：测试用假实现，不打真实子进程）
 import { SHELL_RUNNER, ShellRunner, ShellRunHandle } from '../shell/shell-runner';
 // 进程组终止（原内联在本文件，抽到 shell/ 供 shell-runner 共用）
@@ -269,10 +279,24 @@ export interface StageVarsInput {
    */
   consoleApi?: string;
   /**
-   * 脚本调用平台内部接口的凭据（`INTERNAL_API_KEY`），注入为 `CONSOLE_TOKEN`，
-   * 通过 `x-internal-key` 头鉴权（与 `/api/internal/release/*` 一致）。
+   * 脚本调用平台内部接口的凭据，注入为 `CONSOLE_TOKEN`，通过 `x-internal-key` 头鉴权。
+   *
+   * 两种形态（2026-10-13）：
+   *   - **run 短期令牌**（`rt1_...`，推荐）：本次 run 现签，带 runId/env/moduleKey，
+   *     run 结束即撤销；由 `PipelineService.issueScriptToken()` 签发；
+   *   - **静态 `INTERNAL_API_KEY`**：取不到签名密钥或 `RUN_TOKEN_ENABLED=false` 时的回落。
+   *
+   * 脚本侧**零感知**：仍然是 `curl -H "x-internal-key: $CONSOLE_TOKEN"`，见
+   * `common/internal-key.ts` 的双凭据校验。
    */
   consoleToken?: string;
+  /**
+   * 远端投递四件套（S1 边界脚本化：`upload`/`cleanup` 节点脚本做 scp/ssh 时要用的值）。
+   *
+   * 由 `resolveRemoteScriptVars()` 产出 —— **平台解析后下发，脚本不做推导**，
+   * 否则脚本各拼一遍三级取值链，迟早拼错成旧常量那个默认值。
+   */
+  remote?: RemoteScriptVars;
   /**
    * 是否把「配置中心」解析结果全量注入脚本变量（P0，默认 true）。
    * 关闭后行为与 2026-09-20 之前完全一致（配置中心只影响 PORT），作为回退开关。
@@ -303,6 +327,12 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   // 被流水线变量/配置中心覆盖会导致脚本拿到的锁 owner 与流水线实际持有的不一致
   // → 流水线被自己的锁判成并发（409），表现为「激活指针」步骤恒失败
   'RUN_ID',
+  // 远端投递事实（2026-10-13 S1）：脚本拿到的是**平台按环境算好的结果**，
+  // 被配置中心/流水线变量覆盖 = 把产物投到另一台机器的另一个目录，
+  // 而流水线照样报成功 —— 这是最难排查的一类发布事故（页面 404 + 日志全绿）。
+  'REMOTE_SSH_TARGET',
+  'REMOTE_MODULES_ROOT',
+  'REMOTE_DEST_DIR',
 ];
 
 /** 端口来源（注入为 `PORT_SOURCE`，脚本/排障据此判断该不该信任这个端口） */
@@ -430,6 +460,12 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 调平台（写版本 / 切指针），脚本自包含、不直连数据库
     CONSOLE_API: i.consoleApi ?? '',
     CONSOLE_TOKEN: i.consoleToken ?? '',
+    // ── 远端投递（S1：脚本做 scp/ssh，平台只负责「算对」这几个值）──
+    // 空串 = 未配置；脚本必须显式报错，不能带着空串去连 ""（模板已如此）。
+    REMOTE_SSH_TARGET: i.remote?.REMOTE_SSH_TARGET || '',
+    REMOTE_MODULES_ROOT: i.remote?.REMOTE_MODULES_ROOT || '',
+    REMOTE_DEST_DIR: i.remote?.REMOTE_DEST_DIR || '',
+    SSH_KEY_PATH: i.remote?.SSH_KEY_PATH || '',
   };
 
   // P0（2026-09-20）：配置中心全量注入。
@@ -450,6 +486,12 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   // 表现为「激活指针」步骤恒失败且报错信息完全指不到这里（2026-10-09 回归）。
   // `PROTECTED_STAGE_KEYS` 只拦配置中心，故这里对流水线变量再拦一次。
   if (base.RUN_ID) merged.RUN_ID = base.RUN_ID;
+  // 同类：远端落点三件套也是**平台本次算出来的结果**（S1）。模板变量兜一层改写，
+  // 会出现「流水线全绿 + 页面 404」——产物在另一台机器/另一个目录，而日志不会报错。
+  // `SSH_KEY_PATH` 不在此列：换私钥路径是合法的按环境定制，改错也只是连不上（不静默）。
+  for (const k of ['REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR'] as const) {
+    if (base[k]) merged[k] = base[k];
+  }
   return merged;
 }
 
@@ -512,6 +554,15 @@ export class PipelineService {
   private readonly shells = new Map<string, ShellRunHandle>();
   /** 后台执行的 run promise：引擎是非阻塞的，这里只是登记，便于 `waitFor` 等待结束 */
   private readonly running = new Map<string, Promise<void>>();
+  /**
+   * 本次 run 已签发的短期令牌 jti（`runId → jti[]`）：run 结束时统一撤销。
+   * 一个 run 会签多枚（编排模式下每个动作都重新组装 env），故是数组。
+   */
+  private readonly runTokenJtis = new Map<string, string[]>();
+  /** 已告警过「取不到签名密钥」的 runId：编排模式每个动作都会调这里，不告警会刷屏 */
+  private readonly runTokenWarned = new Set<string>();
+  /** 已告警过「SSH 目标解析失败」的 env：同上，按维度去重避免每个节点刷一条 */
+  private readonly remoteVarWarned = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -564,7 +615,40 @@ export class PipelineService {
     // 服务×环境登记（deploy_service_envs）：**远端**端口的真相源，见 pickStagePort
     @InjectRepository(DeployServiceEnvEntity)
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
+    // SSH 目标机（主机管理 → 服务器管理）：远端投递变量 REMOTE_SSH_TARGET / SSH_KEY_PATH 的真相源
+    private readonly sshExec: SshExecService,
   ) {}
+
+  /**
+   * 远端投递变量（S1 边界脚本化：upload/cleanup 节点脚本做 scp/ssh 时直接取用）。
+   *
+   * 目标机与私钥只问 `SshExecService`（主机管理 → 服务器管理）—— 不在流水线侧按环境变量
+   * 再推导一份（那会是第四份真相，见 `remote-delivery.service` 的同名注释）。
+   *
+   * 解析失败（环境没登记主机 / 私钥不在控制台所在机）**不阻断整条流水线**：变量留空 + 告警，
+   * 由使用它们的脚本显式报错。理由：这条路径对 build 这类不需要 SSH 的节点也会跑一次，
+   * 硬失败会让「环境没登记远程投递」顺带把本机发布一起打死。
+   */
+  private async resolveRemoteVars(p: DeployPipelineEntity): Promise<RemoteScriptVars> {
+    let ssh: ReturnType<typeof toRemoteScriptSsh> | null = null;
+    try {
+      ssh = toRemoteScriptSsh(await this.sshExec.resolve(p.env));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (p.env !== 'local' && !this.remoteVarWarned.has(p.env)) {
+        this.remoteVarWarned.add(p.env);
+        this.logger.warn(
+          `[${p.env}] 「主机管理」未解析出可用 SSH 目标，REMOTE_SSH_TARGET / SSH_KEY_PATH 留空（配了 upload/cleanup 脚本时会在脚本内显式报错）：${msg}`,
+        );
+      }
+    }
+    return resolveRemoteScriptVars((k) => this.configService.get<string>(k), {
+      env: p.env,
+      moduleKey: p.moduleKey,
+      version: p.versionTag,
+      ssh,
+    });
+  }
 
   /**
    * 端口解析（唯一入口）：配置中心 → 远端环境登记 / local 本机 pm2。
@@ -610,6 +694,48 @@ export class PipelineService {
   private consoleApiBase(): string {
     const port = this.configService.get<string>('PORT') || '6200';
     return `http://127.0.0.1:${port}/api`;
+  }
+
+  /**
+   * 注入给动作脚本的 `CONSOLE_TOKEN`：**优先签发 run 短期令牌**，取不到才回落静态 key。
+   *
+   * 为什么不再直接用 `INTERNAL_API_KEY`：那个 key 是静态配置，对 prod 意味着
+   * 「任意模块切任意版本」，而一次发布只需要「改这一个模块、这一次 run」的权限；
+   * 且它长期躺在脚本 env 里，日志或 `set -x` 泄露一次就永久有效
+   * （完整论证见 `common/run-token.ts` 文件头）。
+   *
+   * 回落路径（任一命中都回到旧行为，**不阻断发布** —— 凭据改造不该成为发布的新故障点）：
+   *   1. `RUN_TOKEN_ENABLED=false` —— 应急开关；
+   *   2. 取不到签名密钥（`RUN_TOKEN_SECRET`/`CONFIG_MASTER_KEY`/`JWT_SECRET` 全空）。
+   */
+  private issueScriptToken(p: DeployPipelineEntity): string {
+    const staticKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    if (this.configService.get<string>('RUN_TOKEN_ENABLED') === 'false') return staticKey;
+
+    const issued = issueRunToken({ runId: p.id, env: p.env, moduleKey: p.moduleKey });
+    if (!issued) {
+      if (!this.runTokenWarned.has(p.id)) {
+        this.runTokenWarned.add(p.id);
+        this.logger.warn(
+          '未启用 run 短期令牌（RUN_TOKEN_SECRET/CONFIG_MASTER_KEY/JWT_SECRET 均为空），' +
+            `本次发布回落静态 INTERNAL_API_KEY：run=${p.id}`,
+        );
+      }
+      return staticKey;
+    }
+    const list = this.runTokenJtis.get(p.id) ?? [];
+    list.push(issued.jti);
+    this.runTokenJtis.set(p.id, list);
+    return issued.token;
+  }
+
+  /** run 结束后撤销本次签发的所有令牌（成功 / 失败 / 取消 / 挂起都走 `run()` 的 finally） */
+  private revokeScriptTokens(runId: string): void {
+    const list = this.runTokenJtis.get(runId);
+    this.runTokenJtis.delete(runId);
+    this.runTokenWarned.delete(runId);
+    if (!list?.length) return;
+    revokeRunTokens(list);
   }
 
   /**
@@ -1711,6 +1837,9 @@ export class PipelineService {
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      // 撤销本次 run 签发的短期令牌：脚本已跑完，令牌再有效就是多余的敞口
+      // （挂起等审批也走这里 —— 恢复时会重新签发新令牌，不受影响）
+      this.revokeScriptTokens(p.id);
       this.cancelled.delete(p.id);
     }
   }
@@ -1787,7 +1916,7 @@ export class PipelineService {
         gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
         safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
         consoleApi: this.consoleApiBase(),
-        consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
+        consoleToken: this.issueScriptToken(p),
         pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
       });
       return { ...env, ...inject };
@@ -2007,6 +2136,28 @@ export class PipelineService {
         if (hasCmd) await pullDef.afterRun?.(ctx); // 脚本只拉码 → 依赖同步/预构建由平台收尾
         else await pullDef.run!(ctx); // 内置路径：run 内已含收尾
         await this.resolveGitIdentity(p);
+        return;
+      }
+
+      // upload / cleanup：**可被脚本覆盖**的 platform 节点（与 registry 的
+      // commandMode='override' 对齐 —— 此前 v5 只兑现了 git，导致运维配了脚本根本不跑）。
+      // 配了脚本 → 脚本做 scp/ssh，平台不再 spawn；没配 → 回退内置执行体（存量零影响）。
+      case 'builtin-override': {
+        const def = this.builtinSteps[plan.builtinKey];
+        if (!def?.run) {
+          throw new Error(`platform 节点 ${stage} 无可执行内置逻辑（注册表缺失 ${plan.builtinKey}）`);
+        }
+        if (def.skip?.(p)) return; // 守卫优先：复用产物 / 后端模块跳过 upload
+        const hasCmd = await this.runStageCommand(p, stage, stage, undefined, uploadTarget);
+        if (hasCmd) {
+          p.logs = [
+            ...(p.logs ?? []),
+            `[${stage}] 已由节点脚本执行（内置 ${plan.builtinKey} 未介入；产物落点与回执由脚本负责）`,
+          ];
+          await this.save(p);
+          return;
+        }
+        await def.run(ctx);
         return;
       }
 
@@ -2309,7 +2460,9 @@ export class PipelineService {
       gatewayUrl: this.configService.get<string>('GATEWAY_INTERNAL_URL'),
       safeDelete: this.configService.get<string>('SAFE_DELETE_STRATEGY') === 'rm' ? 'rm' : 'mv',
       consoleApi: this.consoleApiBase(),
-      consoleToken: this.configService.get<string>('INTERNAL_API_KEY'),
+      consoleToken: this.issueScriptToken(p),
+      // 远端投递变量（平台算 → 脚本用：投到哪台机器、落到哪个目录由平台裁决；目标机走主机管理）
+      remote: await this.resolveRemoteVars(p),
       // 流水线变量（编辑流水线页维护，${KEY} 引用）
       pipelineVars: await this.pipelineVars.resolve(p.pipelineId),
     });
@@ -2359,7 +2512,13 @@ export class PipelineService {
     const platformPort = this.configService.get<string>('PLATFORM_PORT') || '6200';
     env.WS_PLATFORM_API =
       this.configService.get<string>('PLATFORM_API_BASE') || `http://127.0.0.1:${platformPort}/api`;
-    env.WS_INTERNAL_KEY = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    // 与 `CONSOLE_TOKEN` 同源（2026-10-13）：这也是进脚本 env 的长期 key，同样换成
+    // 短期令牌。本变量属旧版 4 节点模板的遗留命名 —— 现网 DB 脚本已无引用（dev/prod
+    // 均检索为 0 条），但每次 run 仍会把静态 key 塞进脚本进程，属「僵尸凭据」：
+    // 脚本一句 `set -x`/`env` 就泄露，且任何新脚本照抄旧模板即回到老路。
+    // 不直接删除而改成短期令牌：prod 库未逐条核过，删除是破坏性变更，换令牌则是
+    // 兼容的（校验端按 `rt1_` 前缀自动识别）。下期确认无引用后可整块摘掉。
+    env.WS_INTERNAL_KEY = this.issueScriptToken(p);
     p.logs = [...(p.logs ?? []), `[${stage}] 共 ${runActs.length} 个操作`];
     await this.save(p);
 

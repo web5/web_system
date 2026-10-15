@@ -9,8 +9,11 @@
 # 为什么必须在**重启之前**执行：进程启动时读 dotenv，
 #   `.env.generated` 排在 `.env` 之前（先出现者优先）→ 先落盘才能保证重启即读到新值。
 #
-# 鉴权：`x-internal-key: $CONSOLE_TOKEN`（平台注入；其值 = 控制台的 INTERNAL_API_KEY，
-#   见 pipeline.service.ts:265）。脚本鉴权**不依赖被下发的键本身**，故无鸡生蛋。
+# 鉴权：`x-internal-key: $CONSOLE_TOKEN`（平台注入）。脚本鉴权**不依赖被下发的键本身**，故无鸡生蛋。
+#   CONSOLE_TOKEN 有两种形态，脚本侧**无需区分**（服务端自行判定，见 common/internal-key.ts）：
+#     ① run 短期令牌（以 `rt1_` 开头，2026-10-13 起默认）：本次发布现签，run 结束即撤销；
+#     ② 静态 INTERNAL_API_KEY：未启用短期令牌（RUN_TOKEN_ENABLED=false 或缺签名密钥）时的回落。
+#   排障提示：401 时先看令牌是不是 rt1_ 开头 —— 是，则多半是「run 已结束/过期」，重跑发布即可。
 #
 # 平台注入变量：CONSOLE_API / CONSOLE_TOKEN / DEPLOY_ENV（标准名）
 #               RELEASE_DIR / MODULE_KEY / MODULE_DIR
@@ -79,7 +82,7 @@ case "$CODE" in
     die "拉取失败：控制台不可达或超时（${CONSOLE_API}）"
     ;;
   401)
-    die "拉取被拒绝（401）：CONSOLE_TOKEN 与控制台 INTERNAL_API_KEY 不一致 —— 检查控制台 .env 与流水线变量注入"
+    die "拉取被拒绝（401）：CONSOLE_TOKEN 无效 —— 若它以 rt1_ 开头（run 短期令牌），通常是已过期或所属 run 已结束，重跑本次发布即可；否则检查它与控制台 INTERNAL_API_KEY 是否一致"
     ;;
   *)
     die "拉取失败：HTTP ${CODE}"
