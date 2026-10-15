@@ -99,51 +99,18 @@ const CONV_CACHE_PREFIX = 'conv_detail_';
 const RECENT_MSG_LIMIT = 50;
 
 /**
- * 历史消息的翻译卡片判定 → 已抽到 `utils/history-cards.ts`（2026-10-15）。
+ * 歌曲卡片载荷校验（只认 kind=music 且 songs 非空）。
  *
- * 原实现在此，判据是文本启发式（looksLikeTranslateReply）。后端现已透出
- * `intentHistory`（逐轮意图流水），改由权威 agentId 判定；启发式降级为兜底。
- * 口径与对齐规则见 utils/history-cards.ts 文件头。
- */
-/**
- * 卡片合法性校验（实时 SSE 的 card 事件与历史 tool 消息 JSON 共用同一套规则）。
- *
- * 为什么收敛成一个入口：卡片有两条来源，最终落在同一个气泡上 ——
- *   ① 本轮：SSE 的 `type === 'card'` 事件（服务端在 tool_result 之后补发）
- *   ② 历史：getConversation 回放里 role=tool 消息的 JSON content
- * 两边判定规则必须一致，否则会出现「实时能出卡片、刷新历史就没了」这类不一致。
+ * 2026-10-15 简化：原先此处还有「历史 tool 消息 JSON」第二条来源（tryParseMusicCard），
+ *   已删除 —— 实测存量会话里没有任何音乐卡依赖那条路径（详见 git 历史与记忆库）。
+ *   现在**唯一来源是本轮 SSE 的 `type === 'card'` 事件**，
+ *   历史回放靠落库的 assistant 消息还原，不再单独解析 tool 消息。
  */
 function pickMusicCard(payload: unknown): MusicCardPayload | null {
   const obj = payload as Partial<MusicCardPayload> | null | undefined;
   if (!obj || obj.kind !== 'music' || !Array.isArray(obj.songs) || !obj.songs.length) return null;
   return obj as MusicCardPayload;
 }
-
-/**
- * 尝试把 tool 消息内容解析成歌曲卡片；不是卡片返回 null（历史回看据此还原，不退化为文本）
- *
- * ⚠️ 2026-10-15 核实：这条对**新数据已是死代码** —— `Compaction.extractPersistable`
- *   在源头就 `filter(m => m.role !== 'tool')`（packages/agent-core/src/memory/compaction.ts:74），
- *   tool 消息不会进 agent_conversations.messages。
- *   保留是因为 2026-10-09 事故前的**存量数据**里仍有 tool 消息，删了会让那批会话的音乐卡消失。
- *   待存量数据过了保留期后可连同 index.ts 里的 role==='tool' 分支一起清理。
- */
-function tryParseMusicCard(content: unknown): MusicCardPayload | null {
-  if (typeof content !== 'string' || !content) return null;
-  try {
-    return pickMusicCard(JSON.parse(content));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 历史消息的翻译卡片判定 → 已抽到 `utils/history-cards.ts`（2026-10-15）。
- *
- * 抽出来的原因：这段对齐逻辑有首轮偏移 / 一轮多 assistant / 降级三条分支，
- * 埋在 Page 里无法单测。抽成 util 后由 `tests/history-cards.test.ts` 覆盖。
- * 判定口径（为何不用文本启发式当主判据）见该文件头注释。
- */
 
 /**
  * 给消息列表补 rich-text nodes（正文走 markdown 渲染，见 utils/markdown.ts）。
@@ -461,22 +428,28 @@ Page({
       const intentHistory = (detail as any)?.intentHistory as IntentHistoryItem[] | null;
       // 会话级锁定 agentId：只用来把导航栏徽标补回来（判归属请用 intentHistory）
       const convAgentId = (detail as any)?.agentId as string | null | undefined;
-      // 只渲染 user / assistant；tool 过程消息不进对话流（与后端一致）
+      // 只渲染 user / assistant —— 与 PC 端口径一致（AiChat.vue:574-584 对 tool 消息直接 return）
+      //
+      // ⚠️ 2026-10-15 修正：此前把 tool 消息当**纯文本**展示是错的 ——
+      //   tool 消息是工具过程输出（搜索结果等），渲染出来会让用户看到原始内容。
+      //   PC 端口径是「非音乐卡的 tool 消息忽略」，小程序对齐该行为。
+      //
+      // 音乐卡不依赖这条路径：它由本轮 SSE `card` 事件渲染，历史回放走 assistant 消息。
+      // 两端实测均无「音乐卡依赖 tool 消息」的情况：
+      //   · dev 库 25 会话：仅 3 个含 tool 消息，全是搜索类工具输出（zagjs / 乐趣无限），name 为 null；
+      //   · prod 库 2 会话：0 个含 tool 消息。
       const all: ChatMsg[] = raw
-        .filter((m) => m && (m.role === 'user' || m.role === 'assistant' || m.role === 'tool'))
+        .filter((m) => m && m.role !== 'tool') // tool 过程消息不进对话流
         .map((m) => {
-          // tool 消息只有一种要渲染：歌曲卡片（present-music-card 的结果，内容即卡片 JSON）。
-          // 其余工具过程消息不进对话流（与后端一致），避免历史里冒出原始 JSON。
-          const card = m.role === 'tool' ? tryParseMusicCard(m.content) : null;
           return {
             role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai',
-            text: card ? '' : String(m.content || ''),
-            musicCard: card,
+            text: String(m.content || ''),
             _id: `h-${Math.random().toString(36).slice(2)}`,
           };
-      })
-      // 卡片消息没有正文，若紧邻的空气泡会出现空白：过滤掉「无正文且无卡片」的空 assistant
-      .filter((m) => m.musicCard || m.text || m.role === 'user');
+        })
+      // 过滤空 assistant：无正文的气泡会在列表里留一段空白。
+      // （历史消息已不再有 musicCard —— 唯一来源是本轮 SSE card 事件）
+      .filter((m) => m.text || m.role === 'user');
       // ③ 合并连续的 assistant：服务端 ReAct 两段式（第一轮过渡语 + 工具后正文）会落库
       // 两条独立 assistant，实时对话是「一条气泡」（PC 端 += 拼接 / 小程序 final 覆盖），
       // 历史载入若不合并就会裂成两条气泡——与实时形态不一致，用户感知「一次对话变两条」。
