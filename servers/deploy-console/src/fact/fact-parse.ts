@@ -34,9 +34,17 @@ export function parsePm2Processes(out: string): Pm2ProcessFact[] {
   try {
     arr = JSON.parse(out.trim());
   } catch {
-    return [];
+    // ⚠️ 这里不能返回 [] ——「解析失败」和「线上真的没有进程」都是空结果，
+    // 两条路径的结论却完全相反：前者是采集机制故障（应记 error），
+    // 后者是业务状态（应记 missing）。返回 [] 会把一条本该报 error 的故障
+    // 判成「线上服务不存在」，误导运维去重启一个正在跑的服务。
+    // 起因：脱敏器曾把 jlist 的 JSON 改坏（引号被吞），prod 上 10 个 online
+    // 进程被全判 missing，而同一批次的 port 事实却是全 ok —— 自相矛盾。
+    throw new Error(`pm2 jlist 输出无法解析为 JSON：${out.trim().slice(0, 120)}`);
   }
-  if (!Array.isArray(arr)) return [];
+  if (!Array.isArray(arr)) {
+    throw new Error(`pm2 jlist 输出不是进程数组：${out.trim().slice(0, 120)}`);
+  }
   const rows: Pm2ProcessFact[] = [];
   for (const raw of arr) {
     const r = raw as Record<string, unknown>;

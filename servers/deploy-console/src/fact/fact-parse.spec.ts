@@ -46,10 +46,22 @@ describe('事实采集 · 输出解析', () => {
     expect(JSON.stringify(rows)).not.toContain('another-secret');
   });
 
-  it('pm2 输出非 JSON / 空 → 空数组（不抛错，交给上层记 error）', () => {
+  it('pm2 输出为空 → 空数组（真的没有进程，业务状态）', () => {
     expect(parsePm2Processes('')).toEqual([]);
-    expect(parsePm2Processes('not json')).toEqual([]);
-    expect(parsePm2Processes('{}')).toEqual([]);
+    // 空数组本身也是合法结果：pm2 在跑但没托管任何进程
+    expect(parsePm2Processes('[]')).toEqual([]);
+  });
+
+  it('pm2 输出不是合法 JSON → 抛错（采集机制故障，必须与「没有进程」分开）', () => {
+    // `not json` / `{}` / 被改坏的 JSON：都意味着拿不到可信的进程清单。
+    // 若在此返回 []，上层会判 missing「线上服务不存在」，
+    // 而真实情况是「这条采集根本没成功」—— 两者处置动作完全不同。
+    expect(() => parsePm2Processes('not json')).toThrow(/无法解析为 JSON/);
+    expect(() => parsePm2Processes('{}')).toThrow(/不是进程数组/);
+    // 脱敏器曾把引号吞掉导致结构损坏，这条就是当时的真实形态
+    expect(() => parsePm2Processes('[{"name":"gw","pm2_env":{"TOKEN":***}}')).toThrow(
+      /无法解析为 JSON/,
+    );
   });
 
   it('ss -ltn 解析监听端口', () => {
