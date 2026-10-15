@@ -17,8 +17,9 @@ import { ensureLogin, isLoggedIn } from '../../../services/auth';
 import {
   buildTranslateCardView,
   inferTranslateDirection,
-  looksLikeTranslateReply,
 } from '../../../utils/translate-parse';
+import { decorateHistoryCards, CARD_AGENT_IDS } from '../../../utils/history-cards';
+import type { IntentHistoryItem } from '../../../utils/history-cards';
 import { speakText, stopSpeak, onSpeakState } from '../../../services/tts';
 import {
   startAsr,
@@ -35,8 +36,8 @@ import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 /** 主对话走服务端意图路由 */
 const CHAT_AGENT_ID = 'auto';
 
-/** 需要按「翻译卡片」承载的 agent（与 SSE intent 的 agentId 对齐） */
-const CARD_AGENT_IDS = ['translate'];
+// CARD_AGENT_IDS 已移到 utils/history-cards.ts（实时态与历史态共用同一份常量，
+// 避免两处各写一份又各自漂移 —— 那正是本次要修的病根）。
 
 /** 歌曲卡片载荷（与 services/agent-stream.ts 的 StreamEvent.card 同构） */
 interface MusicCardPayload {
@@ -98,11 +99,11 @@ const CONV_CACHE_PREFIX = 'conv_detail_';
 const RECENT_MSG_LIMIT = 50;
 
 /**
- * 历史消息的翻译卡片启发式补判（缓存与网络刷新共用，幂等：已打 card 标记的不重算）。
+ * 历史消息的翻译卡片判定 → 已抽到 `utils/history-cards.ts`（2026-10-15）。
  *
- * 后端 getConversation 不回传 intent，只能从文本形态识别（utils/translate-parse 的
- * looksLikeTranslateReply：含【推荐译文】标记，或「英文开头 + 中文说明」形态）。
- * 方向 meta 用其前面最近一条用户提问推断 —— 找不到对应提问就不显示（不猜）。
+ * 原实现在此，判据是文本启发式（looksLikeTranslateReply）。后端现已透出
+ * `intentHistory`（逐轮意图流水），改由权威 agentId 判定；启发式降级为兜底。
+ * 口径与对齐规则见 utils/history-cards.ts 文件头。
  */
 /**
  * 卡片合法性校验（实时 SSE 的 card 事件与历史 tool 消息 JSON 共用同一套规则）。
@@ -118,7 +119,15 @@ function pickMusicCard(payload: unknown): MusicCardPayload | null {
   return obj as MusicCardPayload;
 }
 
-/** 尝试把 tool 消息内容解析成歌曲卡片；不是卡片返回 null（历史回看据此还原，不退化为文本） */
+/**
+ * 尝试把 tool 消息内容解析成歌曲卡片；不是卡片返回 null（历史回看据此还原，不退化为文本）
+ *
+ * ⚠️ 2026-10-15 核实：这条对**新数据已是死代码** —— `Compaction.extractPersistable`
+ *   在源头就 `filter(m => m.role !== 'tool')`（packages/agent-core/src/memory/compaction.ts:74），
+ *   tool 消息不会进 agent_conversations.messages。
+ *   保留是因为 2026-10-09 事故前的**存量数据**里仍有 tool 消息，删了会让那批会话的音乐卡消失。
+ *   待存量数据过了保留期后可连同 index.ts 里的 role==='tool' 分支一起清理。
+ */
 function tryParseMusicCard(content: unknown): MusicCardPayload | null {
   if (typeof content !== 'string' || !content) return null;
   try {
@@ -128,29 +137,13 @@ function tryParseMusicCard(content: unknown): MusicCardPayload | null {
   }
 }
 
-function decorateHistoryCards(msgs: ChatMsg[]): ChatMsg[] {
-  let lastUserText = '';
-  return msgs.map((m) => {
-    if (m.role === 'user') {
-      lastUserText = m.text;
-      return m;
-    }
-    // 已是卡片（新缓存）或不像翻译回复：原样返回
-    if (m.card || !looksLikeTranslateReply(m.text)) return m;
-    const view = buildTranslateCardView(m.text);
-    const out: ChatMsg = {
-      ...m,
-      card: true,
-      text: view.text,
-      enMain: view.main,
-      note: view.note,
-      meta: inferTranslateDirection(lastUserText),
-    };
-    // 消费掉提问：连续多条 AI 消息时，后面那条没有对应提问，meta 不再沿用
-    lastUserText = '';
-    return out;
-  });
-}
+/**
+ * 历史消息的翻译卡片判定 → 已抽到 `utils/history-cards.ts`（2026-10-15）。
+ *
+ * 抽出来的原因：这段对齐逻辑有首轮偏移 / 一轮多 assistant / 降级三条分支，
+ * 埋在 Page 里无法单测。抽成 util 后由 `tests/history-cards.test.ts` 覆盖。
+ * 判定口径（为何不用文本启发式当主判据）见该文件头注释。
+ */
 
 /**
  * 给消息列表补 rich-text nodes（正文走 markdown 渲染，见 utils/markdown.ts）。
@@ -428,14 +421,25 @@ Page({
     this._runId += 1;
 
     // ① 缓存命中 → 立即渲染（秒开），随后再后台静默刷新
+    // ⚠️ 缓存格式 2026-10-15 变更：裸数组 → {msgs, intentHistory, agentId}。
+    // 两种格式都要认（存量缓存还是旧格式），否则老缓存会被当成对象而渲染成空。
     let cached: ChatMsg[] | null = null;
+    let cachedHistory: IntentHistoryItem[] | null = null;
+    let cachedAgentId: string | null = null;
     try {
-      cached = wx.getStorageSync(CONV_CACHE_PREFIX + id) || null;
+      const raw = wx.getStorageSync(CONV_CACHE_PREFIX + id);
+      if (Array.isArray(raw)) {
+        cached = raw; // 旧格式：只有消息列表
+      } else if (raw && Array.isArray(raw.msgs)) {
+        cached = raw.msgs;
+        cachedHistory = Array.isArray(raw.intentHistory) ? raw.intentHistory : null;
+        cachedAgentId = raw.agentId || null;
+      }
     } catch {
       /* 读不到就走网络 */
     }
     if (Array.isArray(cached) && cached.length) {
-      this.applyResumed(id, cached);
+      this.applyResumed(id, cached, cachedHistory, cachedAgentId);
     } else {
       // ② 未命中 → 先给占位气泡（不用全屏 loading：它会盖住导航栏、也像卡住）
       this.setData({
@@ -453,6 +457,10 @@ Page({
     try {
       const detail = await createAgentApi(CHAT_AGENT_ID).getConversation(id);
       const raw: any[] = Array.isArray(detail?.messages) ? detail.messages : [];
+      // 意图流水（2026-10-15）：历史消息定卡片归属的权威依据；老会话/开关未开时为 null
+      const intentHistory = (detail as any)?.intentHistory as IntentHistoryItem[] | null;
+      // 会话级锁定 agentId：只用来把导航栏徽标补回来（判归属请用 intentHistory）
+      const convAgentId = (detail as any)?.agentId as string | null | undefined;
       // 只渲染 user / assistant；tool 过程消息不进对话流（与后端一致）
       const all: ChatMsg[] = raw
         .filter((m) => m && (m.role === 'user' || m.role === 'assistant' || m.role === 'tool'))
@@ -475,30 +483,48 @@ Page({
       const mergedAll = mergeConsecutiveAi(all);
       // ④ 长会话只取最近 N 条，避免一次性渲染过多
       const msgs = mergedAll.length > RECENT_MSG_LIMIT ? mergedAll.slice(-RECENT_MSG_LIMIT) : mergedAll;
+      // 缓存连同 intentHistory / agentId 一起存（2026-10-15）：只存 msgs 会让
+      // 「秒开路径」拿不到权威判据而退回文本启发式 → 卡片在秒开时和刷新后表现不一致。
       try {
-        wx.setStorageSync(CONV_CACHE_PREFIX + id, msgs);
+        wx.setStorageSync(CONV_CACHE_PREFIX + id, {
+          msgs,
+          intentHistory: intentHistory || null,
+          agentId: convAgentId || null,
+        });
       } catch {
         /* 缓存写失败不影响本次显示 */
       }
-      this.applyResumed(id, msgs);
+      this.applyResumed(id, msgs, intentHistory, convAgentId);
     } catch {
       wx.showToast({ title: '载入会话失败', icon: 'none' });
     }
   },
 
-  /** 渲染载回的历史会话（缓存命中与网络刷新共用） */
-  applyResumed(id: string, msgs: ChatMsg[]) {
+  /**
+   * 渲染载回的历史会话（缓存命中与网络刷新共用）
+   *
+   * @param intentHistory 逐轮意图流水（权威判据）。缓存命中路径拿不到
+   *   （缓存在 intentHistory 透出之前就写入了）→ 走启发式降级，网络刷新后会自我纠正。
+   * @param convAgentId 会话级锁定 agentId，仅用于导航栏徽标；判消息归属请用 intentHistory。
+   */
+  applyResumed(
+    id: string,
+    msgs: ChatMsg[],
+    intentHistory?: IntentHistoryItem[] | null,
+    convAgentId?: string | null,
+  ) {
     this.setData({
       conversationId: id,
       chatMessages: msgs.length
-        ? withMdNodes(decorateHistoryCards(mergeConsecutiveAi(msgs)))
+        ? withMdNodes(decorateHistoryCards(mergeConsecutiveAi(msgs), intentHistory))
         : withMdNodes([{ role: 'ai' as const, text: '这个会话还没有内容。', _id: 'h-empty' }]),
       sending: false,
       input: '',
       expandMap: {},
       copyIdx: -1,
-      // 历史会话的 agent 归属不在列表接口里（产品决策：不展示）
-      currentAgent: null,
+      // 会话级 agentId 只作导航栏徽标（会话内可能多轮切换，不代表每条消息归属）；
+      // 拿不到（缓存路径 / 路由开关未开会话未锁定）→ null，不猜。
+      currentAgent: convAgentId ? { id: convAgentId, name: '' } : null,
     });
     // 从二级页返回后重新校正导航栏尺寸：避免残留状态导致返回键错位 / 不可见
     this.initNavBar();

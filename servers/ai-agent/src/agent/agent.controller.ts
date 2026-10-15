@@ -93,6 +93,19 @@ export class AgentController {
     return {
       id: conv.id,
       title: conv.title,
+      // 意图路由结果（2026-10-15 透出）：两列早已落库，此前只是没往外拿。
+      //
+      // 为什么必须透出：前端恢复历史时只能靠文本形态猜「这条是不是翻译官答的」
+      //（looksLikeTranslateReply：含【推荐译文】或「英文开头+中文说明」），
+      // 而实时态用的是权威 agentId —— 两套判定标准必然漂移，表现为
+      // 「实时出卡片、刷新历史卡片没了」或把普通英文回答错套成翻译卡。
+      //
+      // · agentId：会话级锁定值（每轮被覆盖），只作「当前 agent」参考
+      // · intentHistory：逐轮 append-only 流水，历史消息定归属要用它
+      //   ⚠️ 会话级 agentId 不够 —— 同一会话「先闲聊后翻译」是合法形态，
+      //      会话级只留最后一个 agent，前面的轮次会全判错。
+      agentId: conv.agentId,
+      intentHistory: conv.intentHistory,
       report: conv.report,
       meta: conv.meta,
       messages: Array.isArray(conv.messages) ? conv.messages : [],

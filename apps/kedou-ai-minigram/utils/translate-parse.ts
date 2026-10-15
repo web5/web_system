@@ -68,13 +68,16 @@ export function buildTranslateCardView(raw: string): CardView {
 }
 
 /**
- * 历史消息的「翻译官回复」启发式补判（后端 getConversation 不回传 intent）。
+ * 历史消息的「翻译官回复」启发式补判。
  *
- * 判定标准（满足全部三条才套卡片，宁缺勿滥）：
- * 1. 含段落标记【推荐译文】—— 契约出参，最可靠；
- * 2. 或：以拉丁句子开头（首个非空字符是英文字母），且其后出现中文说明；
- *    —— 翻译官的典型形态「Thank you. 更正式用 …」。
- * 纯中文回复、纯英文闲聊、代码块等都不命中，保持纯文本。
+ * ⚠️ 2026-10-15 起这是**降级路径**，不再是历史卡片的主判据：
+ *   后端 `GET agent/conversations/:id` 已透出 `intentHistory`（逐轮意图流水），
+ *   历史卡片归属改由 `utils/history-cards.ts` 按权威 agentId 判定。
+ *   本函数仅在 `intentHistory` 缺失时兜底（老会话 / `INTENT_ROUTING_ENABLED` 未开）。
+ *
+ * ⚠️ 本判定**宁缺勿滥但仍会误判**：「英文开头 + 中文说明」这条规则很宽泛，
+ *   任何以英文单词开头的解释型回答都会命中 → 曾把普通回答错套成翻译卡。
+ *   有权威判据时不要用本函数（历史卡片已改走 intentHistory）。
  */
 export function looksLikeTranslateReply(text: string): boolean {
   const t = String(text || '').trim();
