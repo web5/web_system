@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>admin Agents · 对话调试（Agent Playground）· blocks 渲染原型</title>
+<title>admin Agents · ①对话调试 blocks 渲染 ②定义编辑 · 生成参数区</title>
 <!--
   ============================================================
   admin Agents 模块 · 原型（P4 批次首屏：Agent Playground 对话调试）
@@ -28,6 +28,37 @@
       ③ 列表页新增「路由」列：显示 keywords 前 3 个 tag，空则显示「— 未配置」
     ⚠️ 交互与视觉均复用既有 a-form-item / a-tag 口径（无新组件），故按**微调豁免**处理
     ——本次真正的实现重点在后端路由链路（见 intent-classifier.ts / intent.service.ts）
+  · 2026-10-10 · **生成参数区（范围：Agent 定义管理 · 编辑弹窗）** —— 见下方「屏 ②」
+    ⚠️ **本屏已被 `admin-agent-def-detail.html` 取代**：产品意见要求编辑改用独立详情页、表单单开「高级」、
+    调试可直接对话看结果、用例可多个（调参测试用例表）、改参数给对比提示。屏② 仅作演进记录，落地以新稿为准。
+    背景：C7 契约落地后 agent_definitions 新增 maxTokens / topP / thinking 三列，但 admin 表单
+    只有 temperature 一个控件 → 后台配不了输出上限与思考预算；且 `def.temperature ?? 0.7`
+    把「null = 沿用模型默认」强转成 0.7（违反 C7-e）。
+    变更内容（编辑/新建弹窗，System Prompt 之上新增「生成参数」分组）：
+      ① **采样策略二选一**（a-radio-group：Temperature / Top P）—— 官方口径只改其一（C7-b），
+         未选中项置灰并说明原因；两者均支持「留空 = 沿用模型默认」
+      ② **输出上限 maxTokens**（整数 ≥1）—— extra 明示「与思考预算共用同一上限」
+      ③ **思考预算 thinking**（沿用模型默认 / 关闭 / 开启并限制预算），开启后出 budget_tokens
+      ④ **按场景套用预设**（分类 / 抽取 / 代码 / 对话 / 创意 / 工具调用，档位取 contracts.md §7.4）
+      ⑤ 列表页新增「生成参数」列：null 显示「沿用默认」而非写死数值
+    状态：**待确认**（本轮只出原型，未落码）
+  · 2026-10-11 · **屏① 与详情页调试台同构 + AA/字阶回填（范围：本屏① 对话消息结构）**
+    背景：`admin-agent-def-detail.html` 的调参调试台另造了一套简化气泡（纯文本 + `<br>` 拼接），
+    与屏① 的 blocks 渲染长得不一样 → 产品意见「对话面板略显粗糙，最好跟 playground 保持一致能够复用」。
+    变更内容：
+      ① 屏① 的消息结构定为**模块共用组件**：.turn > .bubble-wrap(.me) > [.avatar] + .bubble
+         > [.bubble-meta(.src-tag)] + .ans(blocks) + .proc(过程卡片，落气泡外侧)
+         —— 详情页调试台已按同结构改造，落地时两侧复用同一组组件（Turn / Bubble / AnswerBlocks / ProcCard）。
+      ② AA 回填（此前屏① 用了不达标色档，详情页评审已修正，本屏同步）：
+         头像/用户气泡由橙底白字（#F97316 白字仅 2.8:1）改 brand-700 / brand-soft + 主文本；
+         bubble-meta、proc .pb 由 text-tertiary（2.5:1）改 text-secondary；
+         src-tag 由 --ws-ok 改 --ws-ok-700；law b 由 brand-600 改 brand-700；
+         「AI 直答」标签加 .gray 灰档（与「基于工具」绿档区分，和调试台一致）。
+      ③ 字阶回填：h4 13.5px → 14px、p.lead 14.5px → 14px、头像字号 11px → 12px、去掉 lang 的 .3px 字距
+         （字阶只允许 12/13/14/16/18/24/32）。
+    间距保留差异：屏① 整页用 16/22px，调试台并排限高用 .pg-chat.compact 的 12/18px（同一组件，尺寸修饰不同）。
+      ④ 2026-10-11 v2.3：`.turn` 语义定为**一问一答组**（用户气泡 + 过程卡片 + AI 气泡同组），调试台已按此改造；
+         补 `.bubble-wrap:last-child{margin-bottom:0}` 与调试台一致；两处同构由 scripts/verify-playground-parity.mjs 机检守。
   ============================================================
 -->
 <style>
@@ -37,13 +68,16 @@
     --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
     --ws-text-primary:#171717; --ws-text-secondary:#525252; --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
     --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
-    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-700:#C2410C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
     --ws-accent:#FF8C42; --ws-accent-soft:rgba(255,140,66,.15);
     --ws-on-brand:#FFFFFF;
-    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC;
+    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC; --ws-ok-700:#256E35;
     --ws-danger:#E5484D;
     --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
     --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    /* 屏② 用到、:root 原未定义的两个：与 packages/ui/src/tokens.ts 同值，**待入包后删本行** */
+    --ws-overlay:rgba(23,23,23,.45);
+    --ws-shadow-float:0 8px 24px rgba(0,0,0,.18);
     --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
     /* 以下与 packages/ui/src/tokens.ts（+ tokens.css）同值；原型侧同步定义，落地代码引用包内 token */
     --ws-code-bg:#1C1E26; --ws-code-hd:#16181F; --ws-code-text:#E2E8F0; --ws-code-hd-text:#A5ACBA;
@@ -55,6 +89,7 @@
     --ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);
     --ws-control-sm:24px; --ws-control-md:32px; --ws-control-lg:40px;
     --ws-icon-inline:16px; --ws-icon-action:20px; --ws-icon-feature:24px;
+    --ws-danger-soft:#FDECEC; --ws-shadow-shell:0 24px 70px rgba(20,30,50,.14); --ws-accent-soft-2:rgba(255,140,66,.04); --ws-overlay:rgba(23,23,23,.45); --ws-code-bg:#1C1E26;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   /* 焦点态（G11）：键盘 Tab 可见；鼠标点击不显 ring */
@@ -111,27 +146,39 @@
 
   .pg-chat{border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);background:var(--ws-bg-surface);
     padding:20px;min-height:560px;}
+  /* 对话面板 = 「工具栏 + 对话区 + 输入区」三段复用单元（与定义详情调试台同一套结构） */
+  .chatpanel{display:flex;flex-direction:column;min-width:0;}
+  .composer{display:flex;gap:8px;margin-top:12px;align-items:flex-start;}
+  .composer .ctrl{flex:1;height:auto;padding:8px 12px;}
+  .composer textarea{border:none;outline:none;width:100%;font:inherit;font-size:13px;color:inherit;background:transparent;
+    resize:none;min-height:40px;line-height:var(--ws-leading-normal);}
+  .composer textarea::placeholder{color:var(--ws-text-disabled);}
   .turn{margin-bottom:22px;}
   .turn:last-child{margin-bottom:0;}
   .bubble-wrap{display:flex;gap:10px;margin-bottom:10px;}
+  .bubble-wrap:last-child{margin-bottom:0;}
   .bubble-wrap.me{justify-content:flex-end;}
-  .avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
-  .avatar.user{background:var(--ws-accent);color:var(--ws-on-brand);}
-  .avatar.ai{background:var(--ws-ok);color:#fff;}
-  .bubble{max-width:76%;border-radius:var(--ws-radius-lg);padding:10px 14px;}
-  .bubble.user{background:var(--ws-accent);color:var(--ws-on-brand);font-size:14px;line-height:var(--ws-leading-relaxed);border-top-right-radius:2px;}
-  .bubble.ai{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:8px;
+  .avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+  .avatar.user{background:var(--ws-brand-700);color:var(--ws-on-brand);}
+  .avatar.ai{background:var(--ws-ok-700);color:var(--ws-on-brand);}
+  .bubble{max-width:76%;min-width:0;border-radius:var(--ws-radius-lg);padding:10px 14px;
+    font-size:14px;line-height:var(--ws-leading-relaxed);}
+  /* 用户气泡不用橙底白字：白字压 #F97316 仅 2.8:1 不过 AA → 灰底 + 主文本（与详情页调试台同档） */
+  .bubble.user{background:var(--ws-brand-soft);color:var(--ws-text-primary);border-top-right-radius:2px;}
+  .bubble.ai{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-top-left-radius:2px;
     box-shadow:0 1px 2px rgba(0,0,0,.04);}
-  .bubble-meta{display:flex;gap:8px;align-items:center;margin-bottom:4px;font-size:11px;color:var(--ws-text-tertiary);}
-  .src-tag{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:var(--ws-radius-sm);font-size:10px;background:var(--ws-ok-soft);color:var(--ws-ok);}
+  /* 元信息：text-tertiary 压白仅 2.5:1 不承载说明文字 → 一律 text-secondary；加 flex-wrap 防参数多时竖排 */
+  .bubble-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:11px;color:var(--ws-text-secondary);}
+  .src-tag{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:var(--ws-radius-sm);font-size:10px;background:var(--ws-ok-soft);color:var(--ws-ok-700);}
+  .src-tag.gray{background:var(--ws-bg-subtle);color:var(--ws-text-secondary);}
 
   /* —— AI 回答 blocks（视觉对齐 portal AiChat 的 .ans）—— */
   .ans{font-size:14px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-body);}
   .ans p{margin:0 0 16px;}
   .ans p:last-child{margin-bottom:0;}
-  .ans p.lead{font-size:14.5px;font-weight:500;color:var(--ws-text-strong);}
-  .ans h4{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:24px 0 8px;
-    color:var(--ws-text-strong);letter-spacing:var(--ws-tracking-tight);}
+  .ans p.lead{font-weight:500;color:var(--ws-text-strong);}
+  .ans h4{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:24px 0 8px;
+    color:var(--ws-text-strong);}
   .ans h4::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--ws-brand-500);flex:0 0 3px;}
   .ans ol{margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
   .ans ol li{display:flex;gap:10px;align-items:flex-start;}
@@ -141,7 +188,7 @@
   /* —— code 块：深色方案（三端统一，对齐 portal AnswerCode）—— */
   .ans .codeblk{margin:0 0 16px;border-radius:var(--ws-radius-md);background:var(--ws-code-bg);overflow:hidden;}
   .ans .codeblk .hd{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--ws-code-hd);}
-  .ans .codeblk .hd .lang{font-weight:600;font-size:12px;color:var(--ws-code-hd-text);font-family:var(--ws-font-mono);letter-spacing:.3px;}
+  .ans .codeblk .hd .lang{font-weight:600;font-size:12px;color:var(--ws-code-hd-text);font-family:var(--ws-font-mono);}
   .ans .codeblk .hd .cp{margin-left:auto;font-size:12px;color:var(--ws-code-hd-text);background:none;border:none;cursor:pointer;font-family:inherit;}
   .ans .codeblk .hd .cp:hover{color:var(--ws-brand-400);}
   /* 12.5px = 字阶例外（代码块专用，等宽场景惯例），已在 specs/agent-message-extract/page-spec.md 登记 */
@@ -150,7 +197,7 @@
   /* —— law 法条 —— */
   .ans .law{margin:0 0 16px;padding:8px 16px;border-left:3px solid var(--ws-brand-500);background:var(--ws-brand-soft);
     border-radius:0 var(--ws-radius-sm) var(--ws-radius-sm) 0;font-size:13px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-secondary);}
-  .ans .law b{display:block;font-size:12px;font-weight:600;color:var(--ws-brand-600);margin-bottom:2px;}
+  .ans .law b{display:block;font-size:12px;font-weight:600;color:var(--ws-brand-700);margin-bottom:2px;}
 
   /* —— 过程卡片（现状保留）—— */
   .proc{margin:6px 0 6px 40px;max-width:76%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);
@@ -159,9 +206,193 @@
   .proc .ph svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-text-tertiary);stroke-width:1.5;}
   .proc .ph code{font-family:var(--ws-font-mono);font-size:11px;background:var(--ws-bg-subtle);padding:1px 5px;border-radius:3px;}
   .proc .pb{padding:6px 10px;border-top:1px dashed var(--ws-border-subtle);font-family:var(--ws-font-mono);
-    font-size:11px;color:var(--ws-text-tertiary);white-space:pre-wrap;}
+    font-size:11px;color:var(--ws-text-secondary);white-space:pre-wrap;}
   .cursor{display:inline-block;color:var(--ws-brand-500);animation:blink 1s step-start infinite;}
   @keyframes blink{50%{opacity:0;}}
+
+  /* ============================================================
+     屏 ②：定义管理 · 编辑弹窗（生成参数区）
+     组件口径对齐 antd：a-form-item(label + control + extra) / a-radio-group / a-input-number
+     ============================================================ */
+  .proto-sep{width:1280px;border-top:1px dashed var(--ws-border);margin:8px 0 0;}
+  .proto-head .sub code{padding:1px 5px;border-radius:3px;background:var(--ws-bg-subtle);
+    font-family:var(--ws-font-mono);font-size:12px;}
+
+  /* —— 列表 —— */
+  .tbl{width:100%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    background:var(--ws-bg-surface);overflow:hidden;font-size:13px;}
+  .tbl .th{display:flex;padding:8px 16px;background:var(--ws-bg-subtle);
+    font-size:12px;font-weight:500;color:var(--ws-text-secondary);border-bottom:1px solid var(--ws-border);}
+  .tbl .tr{display:flex;padding:12px 16px;border-bottom:1px solid var(--ws-border-subtle);align-items:center;}
+  .tbl .tr:last-child{border-bottom:none;}
+  .tbl .tr:hover{background:var(--ws-bg-hover);}
+  .tbl .c1{flex:0 0 168px;} .tbl .c2{flex:0 0 150px;} .tbl .c3{flex:1;min-width:0;}
+  .tbl .c4{flex:0 0 96px;text-align:right;}
+  .tbl .nm{font-weight:500;color:var(--ws-text-primary);}
+  .tbl .id{font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-tertiary);margin-top:4px;}
+  /* chip 一律中性：不按「参数类型」上色（G2/X6），重点参数靠文字而非配色表达 */
+  .chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;margin:0 4px 4px 0;
+    border-radius:var(--ws-radius-sm);background:var(--ws-bg-subtle);color:var(--ws-text-secondary);
+    font-size:12px;font-family:var(--ws-font-mono);}
+  .muted{color:var(--ws-text-tertiary);font-size:12px;}
+  .lnk{color:var(--ws-brand-600);font-size:13px;cursor:pointer;font-weight:500;}
+
+  /* —— 弹窗 —— */
+  .mask{position:absolute;inset:0;background:var(--ws-overlay);display:flex;
+    align-items:flex-start;justify-content:center;padding:32px 0 40px;overflow:auto;}
+  .modal{width:760px;background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);
+    box-shadow:var(--ws-shadow-card);overflow:hidden;}
+  .modal .mh{display:flex;align-items:center;padding:12px 24px;border-bottom:1px solid var(--ws-border);}
+  .modal .mh .t{font-size:16px;font-weight:600;}
+  .modal .mh .x{margin-left:auto;color:var(--ws-text-tertiary);cursor:pointer;display:flex;}
+  .modal .mb{padding:16px 24px 4px;max-height:520px;overflow:auto;}
+  .modal .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 24px;
+    border-top:1px solid var(--ws-border);background:var(--ws-bg-page);}
+  .btn{height:var(--ws-control-md);padding:0 16px;border-radius:var(--ws-radius-md);font-size:13px;
+    border:1px solid var(--ws-border);background:var(--ws-bg-surface);color:var(--ws-text-primary);cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),border-color var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out);}
+  .btn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .btn.primary{background:var(--ws-brand-700);border-color:var(--ws-brand-700);color:var(--ws-on-brand);font-weight:500;}
+  .btn.primary:hover{background:var(--ws-brand-700);border-color:var(--ws-brand-700);color:var(--ws-on-brand);box-shadow:var(--ws-shadow-card);}
+  /* 调试台「运行」不抢页头「保存」的 primary（E6 同屏唯一主按钮）；两处对话区共用同一套按钮变体 */
+  .btn.run{background:var(--ws-brand-soft);border-color:var(--ws-brand-400);color:var(--ws-brand-700);font-weight:500;}
+  .btn.run:hover{background:var(--ws-brand-soft);border-color:var(--ws-brand-700);color:var(--ws-brand-700);}
+  .btn.sm{height:var(--ws-control-sm);padding:0 10px;font-size:12px;}
+  .btn svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .btn[disabled]{opacity:.55;cursor:not-allowed;}
+
+  /* —— 表单项（间距一律取 space 阶梯 4/8/12/16/24/32） —— */
+  .row{display:flex;gap:12px;margin-bottom:12px;}
+  .col{flex:1;min-width:0;}
+  .lb{font-size:13px;color:var(--ws-text-primary);font-weight:500;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+  .lb .req{color:var(--ws-danger);}
+  .ctrl{height:var(--ws-control-md);border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);
+    background:var(--ws-bg-surface);display:flex;align-items:center;padding:0 12px;font-size:13px;
+    color:var(--ws-text-primary);gap:8px;}
+  .ctrl.off{background:var(--ws-bg-subtle);color:var(--ws-text-disabled);cursor:not-allowed;}
+  .ctrl.off .clear{pointer-events:none;color:var(--ws-text-disabled);}
+  .ctrl input{border:none;outline:none;width:100%;font:inherit;color:inherit;background:transparent;}
+  .ctrl input::placeholder{color:var(--ws-text-disabled);}
+  .ctrl .unit{color:var(--ws-text-tertiary);font-size:12px;}
+  .ctrl .clear{margin-left:auto;font-size:12px;color:var(--ws-text-tertiary);cursor:pointer;white-space:nowrap;}
+  .ctrl .clear:hover{color:var(--ws-brand-600);}
+  .extra{font-size:12px;color:var(--ws-text-tertiary);line-height:var(--ws-leading-snug);margin-top:4px;}
+  .extra.warn{color:var(--ws-brand-600);}
+
+  /* 分段单选（a-radio-group button 样式）
+     选中态刻意用「灰底 + 主文本」而非白字压品牌橙：白字压 #F97316 仅 2.8:1，不过 AA */
+  .seg{display:inline-flex;border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);overflow:hidden;background:var(--ws-bg-surface);}
+  .seg button{height:var(--ws-control-md);padding:0 16px;border:none;background:transparent;
+    font:inherit;font-size:13px;color:var(--ws-text-secondary);cursor:pointer;border-right:1px solid var(--ws-border);}
+  .seg button:last-child{border-right:none;}
+  .seg button:hover{background:var(--ws-bg-hover);}
+  .seg button.on{background:var(--ws-bg-active);color:var(--ws-text-primary);font-weight:500;}
+  .seg.locked{opacity:.6;cursor:not-allowed;}
+  .seg.locked button{pointer-events:none;}
+
+  /* 分组标题 */
+  .grp{display:flex;align-items:center;gap:12px;margin:24px 0 12px;font-size:13px;font-weight:600;color:var(--ws-text-strong);}
+  .grp::before{content:'';width:3px;height:13px;border-radius:2px;background:var(--ws-brand-500);}
+  .grp .side{margin-left:auto;font-weight:400;font-size:12px;color:var(--ws-text-tertiary);display:flex;align-items:center;gap:8px;}
+  .grp .side .preset{height:var(--ws-control-sm);border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);
+    font-size:12px;padding:0 8px;background:var(--ws-bg-surface);color:var(--ws-text-secondary);cursor:pointer;}
+
+  /* 提示条：正文用次级文本（品牌橙小字仅 3.4:1，不过 AA），关键数字用主文本强调 */
+  .note{display:flex;gap:8px;padding:8px 12px;border-radius:var(--ws-radius-md);
+    background:var(--ws-bg-subtle);color:var(--ws-text-secondary);font-size:12px;line-height:var(--ws-leading-snug);}
+  .note .k{color:var(--ws-text-primary);font-weight:600;}
+
+  /* toast（反馈样例；文案在实机由后端返回，此处仅示意） */
+  .toast{position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:9;
+    display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:var(--ws-radius-md);
+    background:var(--ws-text-primary);color:var(--ws-bg-surface);font-size:13px;box-shadow:var(--ws-shadow-float);}
+  .toast .dot{width:6px;height:6px;border-radius:50%;background:var(--ws-danger);flex:0 0 6px;}
+  .toast .tclose{margin-left:4px;color:var(--ws-text-tertiary);cursor:pointer;font-size:12px;}
+  .toast .tclose:hover{color:var(--ws-text-primary);}
+  /* 不用 !important（仓库清零目标）：本规则定义在 .row 之后，同特异性后者胜出 */
+  .hidden{display:none;}
+</style>
+<style>
+/* ===== PROTO-SHELL-CSS (auto, single source) ===== */
+
+  /* ===== 框架壳与菜单：对齐 apps/admin/src/layouts/BasicLayout.vue（scripts/lib/proto-shell.mjs 单源，勿手改） =====
+     sider 220 / 收起 80 / 头部 56 / 菜单项高 40 / 图标 16 /
+     选中 = 橙渐变 + 右侧 3px 竖条（ant-menu-item-selected::after）/ hover = 橙 6% /
+     子菜单选中时父标题高亮（ant-menu-submenu-selected） */
+  :root{--ws-accent-hover:rgba(255,140,66,.06);--ws-menu-w:220px;--ws-menu-w-collapsed:80px;}
+  .ad-sider{width:var(--ws-menu-w);background:var(--ws-bg-surface);
+    transition:width var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-sider.collapsed{width:var(--ws-menu-w-collapsed);}
+  .ad-sider-head{height:56px;display:flex;align-items:center;justify-content:space-between;
+    gap:8px;padding:0 16px;flex-shrink:0;}
+  .ad-logo{display:flex;align-items:center;gap:10px;cursor:pointer;min-width:0;}
+  .ad-logo-dot{flex:0 0 22px;}   /* 不加会被 flex 压扁（折叠态曾挤成 11px 宽的细条） */
+  .ad-logo-t{color:var(--ws-accent);font-size:16px;font-weight:700;white-space:nowrap;}
+  .ad-collapse{display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;padding:0;
+    border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);background:var(--ws-bg-surface);
+    color:var(--ws-text-tertiary);cursor:pointer;transition:all var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-collapse:hover{color:var(--ws-accent);border-color:var(--ws-accent-soft);background:var(--ws-accent-hover);}
+  .ad-menu{padding:4px 8px;overflow:auto;flex:1;}
+  .ad-item{height:40px;padding:0 12px;border-radius:var(--ws-radius-lg);color:var(--ws-text-secondary);
+    font-size:13px;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:10px;flex-shrink:0;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-item .ad-ic{display:flex;align-items:center;justify-content:center;width:16px;height:16px;
+    flex:0 0 16px;color:var(--ws-text-tertiary);}
+  .ad-item svg{width:16px;height:16px;flex:0 0 16px;}   /* 防 SVG 无尺寸约束撑爆（曾 1026px） */
+  .ad-item:hover{background:var(--ws-accent-hover);color:var(--ws-accent);}
+  .ad-item.active{background:linear-gradient(90deg,var(--ws-accent-soft) 0%,var(--ws-accent-soft-2) 100%);
+    color:var(--ws-accent);font-weight:600;position:relative;}
+  .ad-item.active::after{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;
+    background:var(--ws-accent);border-radius:0 2px 2px 0;}   /* ant-menu-item-selected::after */
+  .ad-sub{padding-left:0;font-size:13px;}   /* 覆写旧稿把 .ad-sub 当「子项缩进」用的规则 */
+  .ad-sub-t{height:40px;padding:0 12px;border-radius:var(--ws-radius-lg);color:var(--ws-text-secondary);
+    font-size:13px;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:10px;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-sub-t:hover{background:var(--ws-accent-hover);color:var(--ws-accent);}
+  .ad-sub-t .ad-ic{display:flex;align-items:center;justify-content:center;width:16px;height:16px;
+    flex:0 0 16px;color:var(--ws-text-tertiary);}
+  .ad-arrow{margin-left:auto;display:flex;align-items:center;color:var(--ws-text-tertiary);
+    transition:transform var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-sub.open .ad-arrow{transform:rotate(180deg);}
+  .ad-sub.selected .ad-sub-t{color:var(--ws-accent);font-weight:600;}
+  .ad-sub.selected .ad-sub-t .ad-ic{color:var(--ws-accent);}
+  .ad-sub-bd{display:none;}
+  .ad-sub.open .ad-sub-bd{display:block;}
+  .ad-item-sub{padding-left:46px;}   /* a-sub-menu 内缩进（一级 12 + 图标 16 + gap 10 + indent 8） */
+  .ad-header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+    gap:8px;flex-shrink:0;border-bottom:1px solid var(--ws-border);}
+  .ad-hl{display:flex;align-items:center;gap:8px;min-width:0;}
+  .ad-home{display:flex;align-items:center;color:var(--ws-text-tertiary);}
+  .ad-hr{display:flex;align-items:center;gap:12px;flex:0 0 auto;}
+  .ad-theme{display:grid;place-items:center;width:34px;height:34px;padding:0;
+    border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);background:var(--ws-bg-surface);
+    color:var(--ws-text-tertiary);cursor:pointer;transition:all var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-theme:hover{color:var(--ws-accent);border-color:var(--ws-accent-soft);background:var(--ws-accent-hover);}
+  .ad-user{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:999px;cursor:pointer;}
+  .ad-user:hover{background:var(--ws-accent-hover);}
+  .ad-avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;
+    border:2px solid var(--ws-accent-soft);background:var(--ws-bg-subtle);color:var(--ws-text-secondary);}
+  .ad-username{font-size:14px;font-weight:500;color:var(--ws-text-primary);}
+  .ad-footer{flex-shrink:0;background:var(--ws-bg-surface);}
+  .ad-footer-inner{padding:14px 16px 18px;border-top:1px solid var(--ws-border);
+    display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .ad-footer-brand{display:flex;align-items:center;gap:6px;opacity:.6;font-size:13px;font-weight:600;color:var(--ws-accent);}
+  .ad-footer-links{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ws-text-tertiary);}
+  .ad-footer-links .dot{color:var(--ws-accent-soft);}
+  .ad-footer-copy{font-size:12px;color:var(--ws-text-tertiary);}
+  /* 折叠态：只留图标（必须写在菜单展开规则之后 —— 与 .ad-sub.open .ad-sub-bd 同特异性，靠后序胜出；
+     2026-10-11 实测：写在前面会让折叠态子项漏出来 + 子菜单标题文字外溢） */
+  .ad-sider.collapsed .ad-logo-t,
+  .ad-sider.collapsed .ad-item .ad-t,
+  .ad-sider.collapsed .ad-sub-t .ad-t,
+  .ad-sider.collapsed .ad-arrow{display:none;}
+  .ad-sider.collapsed .ad-sub .ad-sub-bd{display:none;}   /* 覆写 .ad-sub.open .ad-sub-bd{display:block} */
+  .ad-sider.collapsed .ad-item,.ad-sider.collapsed .ad-sub-t{justify-content:center;padding-left:0;padding-right:0;}
+  /* 折叠态头部：80px 宽容不下「logo + 按钮」（padding 16×2 后仅剩 48px）→ 收窄内边距，别挤压 logo */
+  .ad-sider.collapsed .ad-sider-head{padding:0 10px;gap:6px;}
+
 </style>
 </head>
 <body>
@@ -177,107 +408,628 @@
 
 <div class="ad-desktop">
   <!-- 侧栏（Agents 选中，子项仅 Playground 为本轮真实屏） -->
-  <aside class="ad-sider">
-    <div class="ad-sider-head"><span class="ad-logo-dot"></span><span class="ad-logo-t">科豆管理</span></div>
-    <nav class="ad-menu">
-      <div class="ad-item">工作台</div>
-      <div class="ad-item">用户管理</div>
-      <div class="ad-item">系统设置</div>
-      <div class="ad-group">Agents</div>
-      <div class="ad-item">概览</div>
-      <div class="ad-item ad-sub active">对话调试 Playground</div>
-      <div class="ad-item ad-sub">观测</div>
-      <div class="ad-item ad-sub">对话记录</div>
-      <div class="ad-item ad-sub">定义管理</div>
-      <div class="ad-item ad-sub">技能库</div>
-      <div class="ad-item">MCP 管理</div>
-    </nav>
-  </aside>
+  <aside class="ad-sider" id="sider">
+      <div class="ad-sider-head">
+        <div class="ad-logo"><span class="ad-logo-dot"></span><span class="ad-logo-t">科豆 AI</span></div>
+        <button class="ad-collapse" id="btn-collapse" type="button" title="收起菜单" aria-label="收起菜单"><svg class="ad-collapse-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 9l-3 3 3 3"/></svg></button>
+      </div>
+      <nav class="ad-menu">
+        <div class="ad-item" data-screen="dashboard" title="工作台"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span><span class="ad-t">工作台</span></div>
+        <div class="ad-item" data-screen="bianbian" title="变变管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span><span class="ad-t">变变管理</span></div>
+        <div class="ad-item" data-screen="users" title="用户管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ad-t">用户管理</span></div>
+        <div class="ad-item" data-screen="settings" title="系统设置"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><span class="ad-t">系统设置</span></div>
+        <div class="ad-item" data-screen="roles" title="角色权限"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="ad-t">角色权限</span></div>
+        <div class="ad-item" data-screen="dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
+        <div class="ad-item" data-screen="mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
+        <div class="ad-item" data-screen="database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
+      <div class="ad-sub open selected" data-sub="agents">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/></svg></span><span class="ad-t">Agents</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="ad-sub-bd">
+        <div class="ad-item ad-item-sub" data-screen="overview" title="Agent 概览"><span class="ad-t">Agent 概览</span></div>
+        <div class="ad-item ad-item-sub" data-screen="observe" title="Agent 观测"><span class="ad-t">Agent 观测</span></div>
+        <div class="ad-item ad-item-sub" data-screen="records" title="运行记录"><span class="ad-t">运行记录</span></div>
+        <div class="ad-item ad-item-sub" data-screen="capabilities" title="能力资产"><span class="ad-t">能力资产</span></div>
+        <div class="ad-item ad-item-sub" data-screen="knowledge" title="知识集合"><span class="ad-t">知识集合</span></div>
+        <div class="ad-item ad-item-sub" data-screen="retrieval" title="检索调试"><span class="ad-t">检索调试</span></div>
+        <div class="ad-item ad-item-sub" data-screen="list" title="定义管理"><span class="ad-t">定义管理</span></div>
+        <div class="ad-item ad-item-sub" data-screen="skills" title="技能库"><span class="ad-t">技能库</span></div>
+        <div class="ad-item ad-item-sub active" data-screen="pg" title="对话调试"><span class="ad-t">对话调试</span></div>
+        </div>
+      </div>
+      </nav>
+    </aside>
 
   <div class="ad-main">
     <header class="ad-header">
+      <div class="ad-hl"><span class="ad-home"><svg class="ad-home-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
       <span class="ad-crumb">Agents / <b>对话调试 Playground</b></span>
+    </div>
+      <div class="ad-hr">
+        <button class="ad-theme" type="button" title="切换暗色" aria-label="主题切换"><svg class="ad-theme-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+        <span class="ad-user"><span class="ad-avatar"><svg class="ad-avatar-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="ad-username">admin</span></span>
+      </div>
     </header>
 
     <main class="ad-content">
-      <div class="pg-toolbar">
-        <span class="pg-agent">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12.5" r="0.5"/><circle cx="15" cy="12.5" r="0.5"/></svg>
-          <b>通用助手</b><span class="caret">▾</span>
-        </span>
-        <span class="pg-spacer"></span>
-        <span class="pg-run"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>已完成 · 基于工具</span>
-        <span class="pg-dbg">Debugger (12)</span>
-      </div>
+      <div class="chatpanel">
+        <div class="pg-toolbar">
+          <span class="pg-agent">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12.5" r="0.5"/><circle cx="15" cy="12.5" r="0.5"/></svg>
+            <b>通用助手</b><span class="caret">▾</span>
+          </span>
+          <span class="pg-spacer"></span>
+          <span class="pg-run"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>已完成 · 基于工具</span>
+          <span class="pg-dbg">Debugger (12)</span>
+        </div>
 
-      <div class="pg-chat">
-        <!-- 轮一：代码块 -->
-        <div class="turn">
-          <div class="bubble-wrap me">
-            <div class="bubble user">帮我写一个 JS 防抖函数</div>
-            <div class="avatar user">我</div>
-          </div>
-
-          <div class="proc">
-            <div class="ph">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              调用工具 · <code>web-search</code><span style="margin-left:auto;color:var(--ws-text-tertiary)">step 1 · 0.8s</span>
+        <div class="pg-chat">
+          <!-- 轮一：代码块 -->
+          <div class="turn">
+            <div class="bubble-wrap me">
+              <div class="bubble user">帮我写一个 JS 防抖函数</div>
+              <div class="avatar user">我</div>
             </div>
-            <div class="pb">{ "query": "JS debounce best practice" }</div>
+
+            <div class="proc">
+              <div class="ph">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                调用工具 · <code>web-search</code><span style="margin-left:auto;color:var(--ws-text-tertiary)">step 1 · 0.8s</span>
+              </div>
+              <div class="pb">{ "query": "JS debounce best practice" }</div>
+            </div>
+
+            <div class="bubble-wrap">
+              <div class="avatar ai">AI</div>
+              <div class="bubble ai">
+                <div class="bubble-meta"><span class="src-tag">基于工具</span><span>通用助手</span><span>17:42</span></div>
+                <div class="ans">
+                  <p class="lead">防抖函数把高频触发合并成一次执行，核心是「清旧定时器 → 重新计时」。</p>
+                  <div class="codeblk">
+                    <div class="hd"><span class="lang">js</span><button class="cp" type="button">复制</button></div>
+                    <pre>function debounce(fn, wait = 300) {
+    let timer = null;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() =&gt; fn.apply(this, args), wait);
+    };
+  }</pre>
+                  </div>
+                  <h4>注意两点</h4>
+                  <ol>
+                    <li><span class="n">1</span><span><strong>定时器放闭包</strong>，避免全局污染；</span></li>
+                    <li><span class="n">2</span><span>组件卸载时 <strong>clearTimeout</strong>，防内存泄漏。</span></li>
+                  </ol>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="bubble-wrap">
-            <div class="avatar ai">AI</div>
-            <div class="bubble ai">
-              <div class="bubble-meta"><span class="src-tag">基于工具</span><span>通用助手</span><span>17:42</span></div>
-              <div class="ans">
-                <p class="lead">防抖函数把高频触发合并成一次执行，核心是「清旧定时器 → 重新计时」。</p>
-                <div class="codeblk">
-                  <div class="hd"><span class="lang">js</span><button class="cp" type="button">复制</button></div>
-                  <pre>function debounce(fn, wait = 300) {
-  let timer = null;
-  return function (...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() =&gt; fn.apply(this, args), wait);
-  };
-}</pre>
+          <!-- 轮二：法条 + 列表 -->
+          <div class="turn">
+            <div class="bubble-wrap me">
+              <div class="bubble user">合同里「租金每年递增但没上限」有风险吗？</div>
+              <div class="avatar user">我</div>
+            </div>
+            <div class="bubble-wrap">
+              <div class="avatar ai">AI</div>
+              <div class="bubble ai">
+                <div class="bubble-meta"><span class="src-tag gray">AI 直答</span><span>通用助手</span><span>17:44</span></div>
+                <div class="ans">
+                  <p class="lead">有风险，条款本身不无效——风险在于 <strong>你把定价权交给了房东，且没有上限</strong>。</p>
+                  <div class="law"><b>《民法典》第 510 条</b>合同生效后，当事人就价款等内容没有约定或约定不明确的，可以协议补充；不能达成补充协议的，按照合同相关条款或者交易习惯确定。</div>
+                  <h4>建议争取两处修改</h4>
+                  <ol>
+                    <li><span class="n">1</span><span><strong>写死递增上限</strong>：不超过上一年度租金的 5%，或锚定 CPI；</span></li>
+                    <li><span class="n">2</span><span><strong>删掉「乙方不得异议」</strong>：改成「双方协商一致」，保留谈判空间。</span></li>
+                  </ol>
+                  <p>如果房东连补充协议都不签，说明后续争议概率不低，建议换房。<span class="cursor">▍</span></p>
                 </div>
-                <h4>注意两点</h4>
-                <ol>
-                  <li><span class="n">1</span><span><strong>定时器放闭包</strong>，避免全局污染；</span></li>
-                  <li><span class="n">2</span><span>组件卸载时 <strong>clearTimeout</strong>，防内存泄漏。</span></li>
-                </ol>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 轮二：法条 + 列表 -->
-        <div class="turn">
-          <div class="bubble-wrap me">
-            <div class="bubble user">合同里「租金每年递增但没上限」有风险吗？</div>
-            <div class="avatar user">我</div>
+        <div class="composer">
+          <div class="ctrl"><textarea id="pg-input" rows="1"
+            placeholder="直接输入问题，用当前 Agent 配置跑一次"></textarea></div>
+          <button class="btn run" id="pg-run-btn">运行</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ============================================================
+     屏 ②：定义管理 · 编辑弹窗「生成参数」区（2026-10-10 新增，待确认）
+     ============================================================ -->
+<div class="proto-head" style="margin-top:22px">
+  <h1>屏 ② · Agent 定义管理 · 编辑弹窗「生成参数」区</h1>
+  <div class="sub">
+    改动边界：只在编辑/新建弹窗里新增<b>生成参数</b>分组（System Prompt 之上），并把列表页的
+    <code>temperature</code> 列升级为 <b>生成参数</b> 摘要；其余（名称/能力/记忆/流式）保持现状。
+    三处语义必须对齐 C7 契约：<b>null = 沿用模型默认</b>（不再强转 0.7）、
+    <b>temperature 与 topP 二选一</b>、<b>思考预算与 maxTokens 共用同一上限</b>。
+  </div>
+</div>
+
+<div class="ad-desktop">
+  <aside class="ad-sider" id="sider">
+      <div class="ad-sider-head">
+        <div class="ad-logo"><span class="ad-logo-dot"></span><span class="ad-logo-t">科豆 AI</span></div>
+        <button class="ad-collapse" id="btn-collapse" type="button" title="收起菜单" aria-label="收起菜单"><svg class="ad-collapse-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 9l-3 3 3 3"/></svg></button>
+      </div>
+      <nav class="ad-menu">
+        <div class="ad-item" data-screen="dashboard" title="工作台"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span><span class="ad-t">工作台</span></div>
+        <div class="ad-item" data-screen="bianbian" title="变变管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span><span class="ad-t">变变管理</span></div>
+        <div class="ad-item" data-screen="users" title="用户管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="ad-t">用户管理</span></div>
+        <div class="ad-item" data-screen="settings" title="系统设置"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><span class="ad-t">系统设置</span></div>
+        <div class="ad-item" data-screen="roles" title="角色权限"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="ad-t">角色权限</span></div>
+        <div class="ad-item" data-screen="dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
+        <div class="ad-item" data-screen="mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
+        <div class="ad-item" data-screen="database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
+      <div class="ad-sub open selected" data-sub="agents">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/></svg></span><span class="ad-t">Agents</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="ad-sub-bd">
+        <div class="ad-item ad-item-sub" data-screen="overview" title="Agent 概览"><span class="ad-t">Agent 概览</span></div>
+        <div class="ad-item ad-item-sub" data-screen="observe" title="Agent 观测"><span class="ad-t">Agent 观测</span></div>
+        <div class="ad-item ad-item-sub" data-screen="records" title="运行记录"><span class="ad-t">运行记录</span></div>
+        <div class="ad-item ad-item-sub" data-screen="capabilities" title="能力资产"><span class="ad-t">能力资产</span></div>
+        <div class="ad-item ad-item-sub" data-screen="knowledge" title="知识集合"><span class="ad-t">知识集合</span></div>
+        <div class="ad-item ad-item-sub" data-screen="retrieval" title="检索调试"><span class="ad-t">检索调试</span></div>
+        <div class="ad-item ad-item-sub active" data-screen="list" title="定义管理"><span class="ad-t">定义管理</span></div>
+        <div class="ad-item ad-item-sub" data-screen="skills" title="技能库"><span class="ad-t">技能库</span></div>
+        <div class="ad-item ad-item-sub" data-screen="pg" title="对话调试"><span class="ad-t">对话调试</span></div>
+        </div>
+      </div>
+      </nav>
+    </aside>
+
+  <div class="ad-main">
+    <header class="ad-header">
+      <div class="ad-hl"><span class="ad-home"><svg class="ad-home-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span><span class="ad-crumb">Agents / <b>定义管理</b></span></div>
+      <div class="ad-hr">
+        <button class="ad-theme" type="button" title="切换暗色" aria-label="主题切换"><svg class="ad-theme-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+        <span class="ad-user"><span class="ad-avatar"><svg class="ad-avatar-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="ad-username">admin</span></span>
+      </div>
+    </header>
+
+    <main class="ad-content">
+      <!-- 列表：null 显示「沿用默认」，不再写死 0.7 -->
+      <div class="tbl" data-dr="agent-def-list">
+        <div class="th">
+          <div class="c1">名称 / 标识</div><div class="c2">模型</div>
+          <div class="c3">生成参数</div><div class="c4">操作</div>
+        </div>
+        <div class="tr">
+          <div class="c1"><div class="nm">通用助手</div><div class="id">general</div></div>
+          <div class="c2"><span class="chip">deepseek-v4-flash</span></div>
+          <div class="c3">
+            <span class="chip">temp 0.7</span><span class="chip">max 2048</span><span class="chip">思考 沿用</span>
           </div>
-          <div class="bubble-wrap">
-            <div class="avatar ai">AI</div>
-            <div class="bubble ai">
-              <div class="bubble-meta"><span class="src-tag">AI 直答</span><span>通用助手</span><span>17:44</span></div>
-              <div class="ans">
-                <p class="lead">有风险，条款本身不无效——风险在于 <strong>你把定价权交给了房东，且没有上限</strong>。</p>
-                <div class="law"><b>《民法典》第 510 条</b>合同生效后，当事人就价款等内容没有约定或约定不明确的，可以协议补充；不能达成补充协议的，按照合同相关条款或者交易习惯确定。</div>
-                <h4>建议争取两处修改</h4>
-                <ol>
-                  <li><span class="n">1</span><span><strong>写死递增上限</strong>：不超过上一年度租金的 5%，或锚定 CPI；</span></li>
-                  <li><span class="n">2</span><span><strong>删掉「乙方不得异议」</strong>：改成「双方协商一致」，保留谈判空间。</span></li>
-                </ol>
-                <p>如果房东连补充协议都不签，说明后续争议概率不低，建议换房。<span class="cursor">▍</span></p>
+          <div class="c4"><span class="lnk">编辑</span></div>
+        </div>
+        <div class="tr">
+          <div class="c1"><div class="nm">意图分类</div><div class="id">intent-router</div></div>
+          <div class="c2"><span class="chip">deepseek-v4-flash</span></div>
+          <div class="c3">
+            <span class="chip">temp 0</span><span class="chip">max 256</span><span class="chip">思考 关闭</span>
+          </div>
+          <div class="c4"><span class="lnk">编辑</span></div>
+        </div>
+        <div class="tr">
+          <div class="c1"><div class="nm">画师·变变</div><div class="id">bianbian-draw</div></div>
+          <div class="c2"><span class="chip">hy3</span></div>
+          <div class="c3"><span class="muted">全部沿用默认（未配置）</span></div>
+          <div class="c4"><span class="lnk">编辑</span></div>
+        </div>
+      </div>
+
+      <!-- 编辑弹窗 -->
+      <div class="mask">
+        <!-- role=alert：成功/失败不只靠圆点颜色区分，另有「保存失败：」文字前缀与关闭按钮 -->
+        <div class="toast hidden" id="toast" role="alert" aria-live="assertive">
+          <span class="dot" aria-hidden="true"></span><span id="toastText"></span>
+          <span class="tclose" id="toastClose">关闭</span>
+        </div>
+
+        <div class="modal" data-dr="agent-def-edit-modal">
+          <div class="mh"><span class="t">编辑 Agent · 通用助手</span>
+            <span class="x"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+          </div>
+
+          <div class="mb">
+            <!-- 既有：基础（简述，聚焦生成参数） -->
+            <div class="row">
+              <div class="col">
+                <div class="lb">模型</div>
+                <div class="ctrl"><span>deepseek-v4-flash</span><span class="clear">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></div>
+                <div class="extra">来自字典 <code>llm_models</code>，改模型不必发版</div>
+              </div>
+              <div class="col">
+                <div class="lb">最大步数</div>
+                <div class="ctrl"><input value="10" /><span class="unit">步</span></div>
+                <div class="extra">工具调用轮次上限（1–50）</div>
+              </div>
+              <div class="col">
+                <div class="lb">流式输出</div>
+                <div class="ctrl"><span>已开启</span><span class="clear">
+                  <svg viewBox="0 0 36 20" width="32" height="18" aria-label="开关·已开启">
+                    <rect x="0.5" y="0.5" width="35" height="19" rx="9.5" fill="var(--ws-brand-500)"/>
+                    <circle cx="27" cy="10" r="7" fill="var(--ws-bg-surface)"/>
+                  </svg></span></div>
+                <div class="extra">关闭则最终回答一次性输出</div>
               </div>
             </div>
+
+            <!-- 新增：生成参数 -->
+            <div class="grp" data-dr="gen-params-group">
+              生成参数
+              <span class="side">
+                按场景套用
+                <select class="preset" id="preset" data-dr="gen-params-preset">
+                  <option value="">— 选择 —</option>
+                  <option value="cls">分类 / 意图路由</option>
+                  <option value="ext">结构化抽取</option>
+                  <option value="code">代码生成</option>
+                  <option value="chat">通用对话</option>
+                  <option value="idea">创意文案</option>
+                  <option value="tool">Agent 工具调用</option>
+                </select>
+              </span>
+            </div>
+
+            <!-- 采样策略：二选一 -->
+            <div class="lb" style="margin-top:4px">采样策略<span class="muted" style="font-weight:400">（与 Top P 二选一，官方口径只改其一）</span></div>
+            <div class="seg" style="margin-bottom:12px" data-dr="gen-params-sampler">
+              <button class="on" data-mode="temperature">Temperature</button>
+              <button data-mode="topP">Top P</button>
+            </div>
+            <div class="row">
+              <div class="col">
+                <div class="lb">Temperature</div>
+                <div class="ctrl" id="ctrlTemp" data-dr="gen-params-temperature">
+                  <input id="inTemp" value="0.7" placeholder="沿用默认" /><span class="unit">0–2 · step 0.1</span>
+                  <span class="clear" data-clear="inTemp">沿用默认</span>
+                </div>
+                <div class="extra" id="exTemp">留空 = 沿用服务侧默认</div>
+              </div>
+              <div class="col">
+                <div class="lb">Top P</div>
+                <div class="ctrl off" id="ctrlTopP" data-dr="gen-params-topP">
+                  <input id="inTopP" placeholder="沿用默认" disabled />
+                  <span class="unit">0–1 · step 0.05</span>
+                  <span class="clear" data-clear="inTopP">沿用默认</span>
+                </div>
+                <div class="extra" id="exTopP">未选中：与 Temperature 互斥，同填会被后端拒绝</div>
+              </div>
+            </div>
+
+            <!-- 输出上限 + 思考预算 -->
+            <div class="row">
+              <div class="col">
+                <div class="lb">输出上限 maxTokens</div>
+                <div class="ctrl" id="ctrlMax" data-dr="gen-params-maxTokens">
+                  <input id="inMax" value="2048" placeholder="沿用默认" /><span class="unit">tokens · 整数</span>
+                  <span class="clear" data-clear="inMax">沿用默认</span>
+                </div>
+                <div class="extra" id="exMax">1–32768（按模型上下文定）；留空 = 沿用服务侧默认</div>
+              </div>
+              <div class="col">
+                <div class="lb">思考预算 thinking</div>
+                <div class="seg" id="thinkSeg" data-dr="gen-params-thinking">
+                  <button class="on" data-think="inherit">沿用默认</button>
+                  <button data-think="off">关闭</button>
+                  <button data-think="on">开启并限预算</button>
+                </div>
+                <div class="extra" id="exThink">null = 不覆盖，沿用服务侧默认（TOKENHUB_THINKING / 客户端按模型推断）</div>
+              </div>
+            </div>
+            <div class="row hidden" id="budgetRow">
+              <div class="col">
+                <div class="lb">思考 token 上限</div>
+                <div class="ctrl" style="max-width:240px" data-dr="gen-params-thinking-budget">
+                  <input id="inBudget" value="1024" placeholder="沿用默认" /><span class="unit">tokens · 整数</span>
+                  <span class="clear" data-clear="inBudget">沿用默认</span>
+                </div>
+                <div class="extra warn">与「输出上限」共用同一预算：思考吃光则正文为空</div>
+              </div>
+            </div>
+
+            <!-- 提交前会发什么（验收锚点：互斥裁剪在这里一眼可见） -->
+            <div class="note" style="display:block;margin:4px 0 12px" data-dr="gen-params-payload-preview">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                提交内容预览 <span class="muted" style="margin-left:auto;font-weight:400">未填的字段不进入 payload（= 沿用默认）</span>
+              </div>
+              <pre id="payloadView" style="font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-primary);white-space:pre-wrap;margin:0">{}</pre>
+            </div>
+
+            <div class="note" style="margin:0 0 12px">
+              档位参考（<code>contracts.md §7.4</code>）：分类 <span class="k">0</span>（强制关思考）· 抽取 <span class="k">0.2</span> ·
+              代码 <span class="k">0~0.2</span> · 对话 <span class="k">0.6~0.7</span> · 创意 <span class="k">0.8~1.0</span> ·
+              工具调用 <span class="k">0.2~0.4</span>。仅 temperature 六档有据；maxTokens 除分类 256 / 代码 ≥3000 外按任务定。
+            </div>
+          </div>
+
+          <div class="mf">
+            <button class="btn" type="button">取消</button>
+            <button class="btn primary" type="button" id="saveBtn" data-dr="agent-def-save">保存</button>
           </div>
         </div>
       </div>
     </main>
   </div>
 </div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* —— 采样策略二选一（C7-b）——————————————————————————
+     两条纪律（评审提出，已修）：
+     ① 切换即清空另一侧 —— 否则旧值留在禁用框里看不见、保存却被后端拒；
+        清空在 extra 上回显，让状态可解释
+     ② 提交前按当前模式裁剪 payload —— 未选中那一侧不进请求体  */
+  var sampler = document.querySelector('[data-dr="gen-params-sampler"]');
+  sampler.addEventListener('click', function (e) {
+    if (sampler.classList.contains('locked')) return;
+    var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
+    sampler.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    var isTemp = b.dataset.mode === 'temperature';
+    var cleared = null;
+    var staleId = isTemp ? 'inTopP' : 'inTemp';
+    if ($(staleId).value !== '') { $(staleId).value = ''; cleared = isTemp ? 'Top P' : 'Temperature'; }
+    toggle('ctrlTemp', 'inTemp', isTemp, 'exTemp',
+      cleared ? '已清空 ' + cleared + ' 的值（二者只能填其一）' : '留空 = 沿用服务侧默认',
+      '未选中；其值不会进入提交内容');
+    toggle('ctrlTopP', 'inTopP', !isTemp, 'exTopP',
+      cleared ? '已清空 ' + cleared + ' 的值（二者只能填其一）' : '核采样，建议 0.9–0.95；留空 = 沿用服务侧默认',
+      '未选中；其值不会进入提交内容');
+    render();
+  });
+
+  function toggle(ctrlId, inputId, on, exId, onText, offText) {
+    var c = $(ctrlId), i = $(inputId), ex = $(exId);
+    c.classList.toggle('off', !on); i.disabled = !on;
+    ex.textContent = on ? onText : offText;
+    ex.classList.toggle('warn', !!onText.match(/已清空/));
+  }
+
+  /* —— 思考预算三态：extra 跟随联动，措辞统一「服务侧默认」 —— */
+  var THINK_EXTRA = {
+    inherit: 'null = 不覆盖，沿用服务侧默认（TOKENHUB_THINKING / 客户端按模型推断）',
+    off:     'type=disabled：强制关闭思考（分类等确定性场景适用）',
+    on:      'type=enabled + budget_tokens：思考与正文共用输出上限',
+  };
+  var thinkSeg = $('thinkSeg');
+  thinkSeg.addEventListener('click', function (e) {
+    if (thinkSeg.classList.contains('locked')) return;
+    var b = e.target.closest('button'); if (!b) return;
+    thinkSeg.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    $('budgetRow').classList.toggle('hidden', b.dataset.think !== 'on');
+    $('exThink').textContent = THINK_EXTRA[b.dataset.think];
+    render();
+  });
+
+  // —— 沿用默认（清空）——
+  document.querySelectorAll('[data-clear]').forEach(function (el) {
+    el.addEventListener('click', function () { $(el.dataset.clear).value = ''; render(); });
+  });
+  ['inTemp', 'inTopP', 'inMax', 'inBudget'].forEach(function (id) {
+    $(id).addEventListener('input', render);
+  });
+
+  /* —— 按场景套用预设 ——————————————————————————————
+     纪律（评审提出，已修）：
+     ① 套用前先把采样模式复位到 temperature —— 档位给的是 temperature，
+        否则会往禁用的 Temperature 框里写值（数据改了界面看不出来）
+     ② 只填 §7.4 有据的字段：maxTokens 除「分类 256 / 代码 ≥3000」外一律留空，
+        并在 extra 上说明「按任务定」，不脑补数字
+     ③ 分类场景 thinking 锁死 disabled（C7-d 强制），不允许改回  */
+  var PRESET = {
+    cls:  { temp: '0',   max: '256',  think: 'off',     lock: true,  note: '分类：温度 0 + 强制关闭思考（C7-d）' },
+    ext:  { temp: '0.2', max: '',     think: 'off',     note: '抽取：温度 0.2；上限按字段量自定（§7.4 未给值）' },
+    code: { temp: '0.2', max: '3000', think: 'inherit', note: '代码：温度 0~0.2；上限 ≥3000（§7.4）' },
+    chat: { temp: '0.7', max: '',     think: 'inherit', note: '对话：温度 0.6~0.7；上限 800~2000 自定（§7.4）' },
+    idea: { temp: '0.9', max: '',     think: 'inherit', note: '创意：温度 0.8~1.0；或改 Top P 0.95（二选一）' },
+    tool: { temp: '0.3', max: '',     think: 'inherit', note: '工具调用：温度 0.2~0.4；上限按工具返回量自定' },
+  };
+  $('preset').addEventListener('change', function (e) {
+    var key = e.target.value, p = PRESET[key]; if (!p) return;
+    var label = e.target.selectedOptions[0].text;
+
+    // ① 解锁并复位到 temperature（档位基于 temperature）
+    sampler.classList.remove('locked');
+    sampler.querySelector('[data-mode="temperature"]').click();
+
+    $('inTemp').value = p.temp;
+    $('inMax').value = p.max;
+    $('inTemp').disabled = false; $('ctrlTemp').classList.remove('off');
+    $('exMax').textContent = p.max ? '1–32768（按模型上下文定）；留空 = 沿用服务侧默认'
+      : '按任务自定（§7.4 未给具体值，故留空）';
+
+    // ② thinking：先切换、再上锁
+    //    ⚠️ 顺序反了会静默失效：locked 状态下 click handler 直接 return（防用户改），
+    //    于是「分类」档位点了却没切成 disabled，文案却声称已强制关闭（复检实测）
+    thinkSeg.classList.remove('locked');
+    thinkSeg.querySelector('[data-think="' + p.think + '"]').click();
+    if (p.lock) thinkSeg.classList.add('locked');
+    if (p.lock) {
+      $('exThink').textContent = '已按「分类」档位锁定为关闭（C7-d 强制）；切其它档位可解锁';
+    }
+
+    render();
+    toast(p.note, false);
+    // 不清空 select：让用户看得见自己刚选了哪个档位（评审意见）
+  });
+
+  // —— 提交内容预览（互斥裁剪在这里一眼可见）——
+  function payload() {
+    var mode = sampler.querySelector('.on').dataset.mode;
+    var o = {};
+    if (mode === 'temperature' && $('inTemp').value !== '') o.temperature = Number($('inTemp').value);
+    if (mode === 'topP' && $('inTopP').value !== '') o.topP = Number($('inTopP').value);
+    if ($('inMax').value !== '') o.maxTokens = parseInt($('inMax').value, 10);
+    var t = thinkSeg.querySelector('.on').dataset.think;
+    if (t === 'off') o.thinking = { type: 'disabled' };
+    else if (t === 'on') {
+      o.thinking = { type: 'enabled' };
+      if ($('inBudget').value !== '') o.thinking.budget_tokens = parseInt($('inBudget').value, 10);
+    }
+    return o;
+  }
+  function render() {
+    $('payloadView').textContent = JSON.stringify(payload(), null, 0);
+  }
+
+  /* —— 保存：loading + 防重复 + 后端返回的错误态 ————————————
+     ⚠️ 原型刻意**不在前端判值域**：判据与文案的真相源在后端 assertTuningParams()（C7-b）。
+     前端照抄一份判据是最易发生的漂移（后端改了值域、前端还按旧值报错），
+     故这里用 fakeSave() 模拟后端响应，字段级红边与文案都取自「后端返回」。  */
+  function fakeSave(p) {
+    if (p.maxTokens != null && (!Number.isInteger(p.maxTokens) || p.maxTokens < 1 || p.maxTokens > 32768)) {
+      return { ok: false, field: 'maxTokens', message: '输出上限须为 1–32768 的整数' };
+    }
+    return { ok: true };
+  }
+
+  var saveBtn = $('saveBtn');
+  saveBtn.addEventListener('click', function () {
+    if (saveBtn.disabled) return;
+    clearFieldError();
+    saveBtn.disabled = true; saveBtn.textContent = '保存中…';
+    setTimeout(function () {
+      saveBtn.disabled = false; saveBtn.textContent = '保存';
+      var res = fakeSave(payload());
+      if (!res.ok) { fieldError(res.field, res.message); toast(res.message, true); return; }
+      toast('已保存，下一次运行生效', false);
+    }, 900);
+  });
+
+  var FIELD = { maxTokens: ['ctrlMax', 'exMax', '1–32768（按模型上下文定）；留空 = 沿用服务侧默认'] };
+  function fieldError(field, message) {
+    var f = FIELD[field]; if (!f) return;
+    var c = $(f[0]), ex = $(f[1]);
+    c.style.borderColor = 'var(--ws-danger)';
+    ex.textContent = message; ex.style.color = 'var(--ws-danger)';
+  }
+  // 用户一动输入就撤掉错误态（不靠 2.6s 定时器自动消失）
+  function clearFieldError() {
+    Object.keys(FIELD).forEach(function (k) {
+      var f = FIELD[k];
+      $(f[0]).style.borderColor = '';
+      $(f[1]).style.color = ''; $(f[1]).textContent = f[2];
+    });
+  }
+
+  var tEl = $('toast');
+  function toast(text, isErr) {
+    $('toastText').textContent = (isErr ? '保存失败：' : '') + text;
+    tEl.querySelector('.dot').style.background = isErr ? 'var(--ws-danger)' : 'var(--ws-ok)';
+    tEl.classList.remove('hidden');
+    clearTimeout(tEl._t);
+    // 错误常驻（等用户改或手动关），成功才自动消失
+    if (!isErr) tEl._t = setTimeout(function () { tEl.classList.add('hidden'); }, 2800);
+  }
+  $('toastClose').addEventListener('click', function () { tEl.classList.add('hidden'); });
+
+  render();
+
+  /* PG-COMPOSER-START 对话面板输入区：与定义详情调试台**同一套结构与行为**（.composer > .ctrl/textarea + .btn.run）
+     静态示例屏同样可实际跑：跑一轮就走一次「运行中 → 已完成」的状态流转。 —— */
+  (function () {
+    var box = document.querySelector('.chatpanel .pg-chat');
+    var input = $('pg-input'), btn = $('pg-run-btn'), run = document.querySelector('.chatpanel .pg-run');
+    if (!box || !input || !btn) return;
+    var RUN_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>';
+    function setState(text, kind) {
+      if (!run) return;
+      run.innerHTML = RUN_ICON + text;
+      run.style.color = kind === 'busy' ? 'var(--ws-text-secondary)' : 'var(--ws-ok)';
+    }
+    function turn() {
+      var d = document.createElement('div');
+      d.className = 'turn';
+      box.appendChild(d);
+      box.scrollTop = box.scrollHeight;
+      return d;
+    }
+    function now() {
+      var t = new Date();
+      return ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+    }
+    function runOnce() {
+      var q = input.value.trim();
+      if (!q) { input.focus(); return; }
+      input.value = '';
+      var t = turn(), useTool = Math.random() > 0.4;
+      t.insertAdjacentHTML('beforeend',
+        '<div class="bubble-wrap me"><div class="bubble user">' + q + '</div><div class="avatar user">我</div></div>');
+      var wrap = document.createElement('div');
+      wrap.className = 'bubble-wrap';
+      wrap.innerHTML = '<div class="avatar ai">AI</div>'
+        + '<div class="bubble ai"><span class="typing"><i></i><i></i><i></i></span> 运行中…</div>';
+      t.appendChild(wrap);
+      setState('运行中…', 'busy');
+      setTimeout(function () {
+        var src = useTool ? '基于工具' : 'AI 直答';
+        if (useTool) {
+          var p = document.createElement('div');
+          p.className = 'proc';
+          p.innerHTML = '<div class="ph">调用工具 · <code>web-search</code>'
+            + '<span style="margin-left:auto;color:var(--ws-text-tertiary)">step 1 · 0.6s</span></div>'
+            + '<div class="pb">{ "query": ' + JSON.stringify(q) + ' }</div>';
+          t.insertBefore(p, wrap);
+        }
+        wrap.querySelector('.bubble').innerHTML =
+          '<div class="bubble-meta"><span class="src-tag' + (useTool ? '' : ' gray') + '">' + src + '</span>'
+          + '<span>通用助手</span><span>' + now() + '</span></div>'
+          + '<div class="ans"><p class="lead">这是 Playground 的演示回答（与调试台共用同一套对话组件，'
+          + '只是这里直接跑线上参数、不做参数对比）。</p>'
+          + '<p>你的问题：<strong>' + q + '</strong>。真实接入后，此处输出模型的流式结果。</p></div>';
+        setState('已完成 · ' + src, 'ok');
+      }, 900);
+    }
+    btn.addEventListener('click', runOnce);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runOnce(); }
+    });
+  })();
+  /* PG-COMPOSER-END */
+</script>
+<script>
+/* PROTO-SHELL-JS (auto, single source) */
+
+(function(){
+  var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+  var ICON_FOLD = "<svg class=\"ad-collapse-ic\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 6h18M3 12h18M3 18h18\"/><path d=\"M8 9l-3 3 3 3\"/></svg>";
+  var ICON_UNFOLD = "<svg class=\"ad-collapse-ic\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 6h18M3 12h18M3 18h18\"/><path d=\"M16 9l3 3-3 3\"/></svg>";
+  qsa('.ad-sider').forEach(function(sider){
+    var btn = sider.querySelector('#btn-collapse') || sider.querySelector('.ad-collapse');
+    if (btn) btn.addEventListener('click', function(){
+      var c = sider.classList.toggle('collapsed');
+      btn.innerHTML = c ? ICON_UNFOLD : ICON_FOLD;
+      btn.title = c ? '展开菜单' : '收起菜单';
+    });
+    /* 折叠态点图标：先恢复展开态（真实 antd 走 popover，原型简化为展开后进入） */
+    sider.querySelector('.ad-menu').addEventListener('click', function(e){
+      if (!sider.classList.contains('collapsed')) return;
+      if (e.target.closest('.ad-item, .ad-sub-t')) {
+        sider.classList.remove('collapsed');
+        if (btn) { btn.innerHTML = ICON_FOLD; btn.title = '收起菜单'; }
+      }
+    }, true);
+  });
+  qsa('.ad-sub-t').forEach(function(t){
+    t.addEventListener('click', function(){
+      var sub = t.closest('.ad-sub');
+      var open = sub.classList.toggle('open');
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+})();
+
+</script>
 </body>
 </html>

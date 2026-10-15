@@ -200,6 +200,25 @@
 
   /* ---------- 对话页 · 翻译官作答的推荐译文卡片（与 pages/translate/result 同语言） ---------- */
   .msg .bub.en-card { padding: 0; overflow: hidden; }
+
+/* ---------- 歌曲推荐卡片（SSE `card` 事件 kind=music） ----------
+   来源：prototype/music-taste.html 的 .mcard 系列，迁入整体稿以消除孤立稿。
+   同构约束：圆角/字号/间距对齐本稿翻译卡（.en-card）口径，不引入新 token。 */
+  .msg .bub.music-card { padding: 0; overflow: hidden; }
+  .music-card .mc-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
+  .music-card .mc-tag { font-size: 10px; color: #fff; background: var(--brand); border-radius: 3px; padding: 1px 6px; font-weight: 500; flex: none; }
+  .music-card .mc-meta { font-size: 11px; color: var(--t3); }
+  .music-card .mc-song { padding: 10px 12px; border-top: .5px solid var(--line); }
+  .music-card .mc-song:first-of-type { margin-top: 8px; }
+  .music-card .mc-song .t { font-size: 14px; font-weight: 500; color: var(--t1); display: flex; justify-content: space-between; gap: 8px; }
+  .music-card .mc-song .t .ar { font-weight: 400; font-size: 13px; color: var(--t2); flex: none; }
+  .music-card .mc-song .why { font-size: 12px; color: var(--t2); margin-top: 2px; }
+  .music-card .mc-ops { display: flex; border-top: .5px solid var(--line); }
+  .music-card .mc-ops u { flex: 1; text-align: center; padding: 9px 0; font-size: 12px; color: var(--t2); }
+  .music-card .mc-ops u + u { border-left: .5px solid var(--line); }
+  .music-card .mc-ops u.play { color: var(--brand-txt); font-weight: 500; }
+  .music-card .mc-note { padding: 8px 12px 12px; border-top: .5px solid var(--line); font-size: 11px; color: var(--t3); }
+
   .en-card .ec-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
   .en-card .ec-tag { font-size: 10px; color: #fff; background: var(--brand); border-radius: 3px; padding: 1px 6px; font-weight: 500; flex: none; }
   .en-card .ec-meta { font-size: 11px; color: var(--t3); }
@@ -675,7 +694,46 @@
                 </div>
               </div>
               <div class="meta">T2 · 完成：操作行出现，含转发 · 语言翻译官 作答</div>
+              <!-- 歌曲推荐卡片示例：由 SSE `card` 事件渲染（kind=music），与翻译卡同一时刻落地 -->
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub music-card">
+                <div class="mc-head"><span class="mc-tag">为你推荐</span><span class="mc-meta">按你的口味 · 安静</span></div>
+                <div class="mc-song">
+                  <div class="t"><span>安静</span><span class="ar">周杰伦</span></div>
+                  <div class="why">你常在夜里听慢歌</div>
+                </div>
+              </div>
+              <div class="meta">T1 · 卡片随正文一起流式补齐</div>
             </div>
+          </div>
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub music-card">
+                <div class="mc-head"><span class="mc-tag">为你推荐</span><span class="mc-meta">按你的口味 · 安静</span></div>
+                <div class="mc-song">
+                  <div class="t"><span>安静</span><span class="ar">周杰伦</span></div>
+                  <div class="why">你常在夜里听慢歌</div>
+                </div>
+                <div class="mc-song">
+                  <div class="t"><span>晴天</span><span class="ar">周杰伦</span></div>
+                  <div class="why">适合白天通勤</div>
+                </div>
+                <div class="mc-ops">
+                  <u onclick="wxToast('换一批')">换一批</u>
+                  <u onclick="wxToast('已记录，不再推荐')">不感兴趣</u>
+                </div>
+                <div class="mc-ops" style="border-top:none;padding-top:0">
+                  <u class="play" onclick="wxToast('跳转 QQ音乐搜索播放')">去 QQ音乐听</u>
+                </div>
+                <div class="mc-note">跳转后在 QQ音乐搜索并播放，本小程序不提供音频播放</div>
+              </div>
+              <div class="meta">T2 · 完成：操作行出现 · 音乐推荐 作答</div>
+            </div>
+          </div>
+        </div>
           </div>
         </div>
         <div class="composer">

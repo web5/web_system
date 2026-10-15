@@ -50,6 +50,25 @@ export class IntentService {
     this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek/deepseek-v4-flash');
     this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '3000')) || 3000;
     this.fallbackAgentId = this.config.get<string>('INTENT_FALLBACK_AGENT_ID', 'general');
+
+    // 启动即打印灰度真实状态（2026-10-15 加）
+    //
+    // 为什么必须可观测：意图路由是**静默降级**的 —— 开关一关，不报错、不告警，
+    // 只是所有输入都落兜底 agent。前端侧表现为「翻译官不出现了 / 历史卡片判定退化」，
+    // 排查时很容易误判成代码 bug，而根因只是一行环境变量没配。
+    // 而该变量**只存在于部署机的 .env**（仓库 .env 不含、.env.example 是 false），
+    // 环境漂移 / 新机器 / 容器重建都可能悄悄回到默认值 —— 所以启动时必须留痕。
+    //
+    // ⚠️ 这里只打印、不改 enabled：默认值保持 false 是**有意的**
+    //   （见文件头注释：agent 未配置就开开关，全部落兜底比不开更糟）。
+    //   本条只解决「不知道它开着还是关着」，不改变灰度策略本身。
+    this.logger.log(
+      `意图路由：${this.enabled ? '已开启' : '未开启（灰度关闭）'}` +
+        ` · 分类模型 ${this.modelId}` +
+        ` · 兜底 ${this.fallbackAgentId}` +
+        ` · 超时 ${this.timeoutMs}ms` +
+        (this.enabled ? '' : '  ← 历史消息卡片归属将退化为文本启发式（utils/history-cards.ts 降级路径）'),
+    );
   }
 
   /**
