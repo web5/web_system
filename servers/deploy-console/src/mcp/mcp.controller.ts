@@ -148,6 +148,13 @@ export class McpController {
         env,
         moduleKey: String(body?.moduleKey || ''),
         mode: body?.mode,
+        // ⚠️ branch / commitId 必须显式转发。
+        // mcp-gateway 的 publish_pipeline 声明里就有这两个参数，Agent 会认真传；
+        // 早期这里漏转，结果是**静默忽略** —— 请求 200、流水线照常跑，
+        // 但发布的是默认分支 master 的最新提交，不是调用方指定的 commit。
+        // 这比报错更坏：没有失败信号，事故要到上线后才发现。
+        branch: body?.branch,
+        commitId: body?.commitId,
         versionTag: body?.versionTag,
         target: body?.target,
         grayscaleRule: body?.grayscaleRule,

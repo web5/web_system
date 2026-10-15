@@ -24,6 +24,21 @@ import { McpModuleEntity } from './entities/mcp-module.entity';
 import { McpToolEntity } from './entities/mcp-tool.entity';
 import { McpJobEntity } from './entities/mcp-job.entity';
 
+/**
+ * 稳定序列化：对象键按字典序输出，用于判断"声明有没有变"。
+ *
+ * 为什么不能直接 `JSON.stringify(a) === JSON.stringify(b)`：params 来自 MySQL 的 json 列，
+ * 出库后键序由库里的存储决定，同一份声明换个插入顺序就会被判成漂移，
+ * 结果是每次启动都刷一遍 UPDATE（连带 updated_at 乱跳，排查时非常干扰）。
+ */
+function stableJson(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v ?? null);
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  const obj = v as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(obj[k])}`).join(',')}}`;
+}
+
 /** 财经资讯微服务的 REST 接口声明（seed 到 mcp_modules） */
 const FINNEWS_HTTP_TOOLS: Array<{
   name: string;
@@ -361,7 +376,14 @@ const DEPLOY_HTTP_TOOLS: Array<{
         description: '目标版本（纯 git 短哈希，或 namespace/commit 形式的完整引用）。不传 = 现场构建，此时产物是否存在无法预判',
       },
       { name: 'mode', type: 'string', required: false, description: 'direct（默认，全量直发）/ grayscale（灰度，须同时传 grayscaleRule）' },
-      { name: 'grayscaleRule', type: 'string', required: false, description: '灰度规则（mode=grayscale 时必填）' },
+      {
+        name: 'grayscaleRule',
+        type: 'string',
+        required: false,
+        description:
+          '灰度规则，**字符串**（本工具只做 dry-run，它仅参与影响面判定与输入指纹）。' +
+          '真正提交发布时 publish_pipeline 的 grayscaleRule 是**对象**（如 {type:"percent",value:10}），两处类型刻意不同',
+      },
     ],
   },
   {
@@ -373,6 +395,14 @@ const DEPLOY_HTTP_TOOLS: Array<{
       { name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' },
       { name: 'versionTag', type: 'string', required: true, description: '目标版本标签（git 短哈希）' },
       { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境必须传 true' },
+      {
+        name: 'component',
+        type: 'string',
+        required: false,
+        description:
+          '模块 key。**仅回退路径需要**：版本表里查不到该版本时（历史 deploy.sh 写入的记录形如 mf:admin），' +
+          '传 component 可在产物确实存在时直接切指针。正常情况不需要传',
+      },
     ],
   },
   {
@@ -394,6 +424,35 @@ const DEPLOY_HTTP_TOOLS: Array<{
     path: '/api/mcp/pipeline/{pipelineId}/promote',
     params: [
       { name: 'pipelineId', type: 'string', required: true, description: '灰度流水线的 jobId' },
+    ],
+  },
+  {
+    name: 'approve_pipeline',
+    description:
+      '审批**通过**挂起中的流水线（挂起时 status=awaiting-approval）。' +
+      '只有流水线的**提交者本人**能审批自己的流水线，prod 环境必须额外传 confirm=true。' +
+      '审批人由调用所用 API Key 解析，审计可追溯到人。' +
+      '先调 publish_pipeline 拿到 jobId，流水线若配置了审批门禁会在此挂起',
+    method: 'POST',
+    path: '/api/mcp/pipeline/{jobId}/approve',
+    params: [
+      { name: 'jobId', type: 'string', required: true, description: '流水线 jobId（publish_pipeline 返回）' },
+      { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境审批必须传 true（审批是最终放行点，比提交更需要显式确认）' },
+      { name: 'comment', type: 'string', required: false, description: '审批意见（可空，建议写清放行理由）' },
+      { name: 'nodeKey', type: 'string', required: false, description: '多审批节点时指定节点；不传则审批当前待决节点' },
+    ],
+  },
+  {
+    name: 'reject_pipeline',
+    description:
+      '审批**拒绝**挂起中的流水线，流水线转入终态不再继续。**审批意见必填**（拒绝不留理由等于无法复盘）。' +
+      '同样只允许提交者本人操作',
+    method: 'POST',
+    path: '/api/mcp/pipeline/{jobId}/reject',
+    params: [
+      { name: 'jobId', type: 'string', required: true, description: '流水线 jobId' },
+      { name: 'comment', type: 'string', required: true, description: '拒绝理由（**必填**，空字符串会被拒绝）' },
+      { name: 'nodeKey', type: 'string', required: false, description: '多审批节点时指定节点' },
     ],
   },
 ];
@@ -868,21 +927,56 @@ export class McpService implements OnModuleInit {
   }
 
   /**
-   * 工具差量同步：比对模块已有工具与代码声明，补插缺失项。
-   * 解决"seed 只在模块不存在时创建，历史模块升级后新工具不生效"的问题。
+   * 工具差量同步：让库里的工具定义与代码声明一致 —— **缺失则插入，有差异则更新**。
+   *
+   * 历史包袱：早期只做"补插缺失"，理由是"seed 只在模块不存在时创建，升级后新工具不生效"。
+   * 但只补插意味着**已有工具的 params 改了永远不会落库** —— 代码声明改了、库里还是旧的，
+   * `tools/list` 下发给 Agent 的 inputSchema 也就还是旧的。
+   * 表现是"我明明补了参数声明，Agent 却说没有这个参数"，而且只在**已部署过**的环境出现，
+   * 新环境一切正常 —— 排查时极易误判成缓存或 SDK 问题。
+   *
+   * 只补 description / method / path / params 四个声明字段，不动 id / module_id / created_at。
    */
   private async syncModuleTools(
     moduleId: number,
-    declared: Array<{ name: string; description: string; method: string; path: string; params: unknown[] }>,
+    declared: Array<{
+      name: string;
+      description: string;
+      method: string;
+      path: string;
+      params: Array<Record<string, unknown>>;
+    }>,
   ): Promise<void> {
     const existing = await this.toolRepo.find({ where: { module_id: moduleId } });
-    const existingNames = new Set(existing.map((t) => t.name));
-    const missing = declared.filter((t) => !existingNames.has(t.name));
-    if (missing.length === 0) return;
-    await this.toolRepo.save(
-      missing.map((t) => this.toolRepo.create({ module_id: moduleId, ...t })),
-    );
-    this.logger.log(`模块 #${moduleId} 补插缺失工具: ${missing.map((t) => t.name).join(', ')}`);
+    const existingByName = new Map(existing.map((t) => [t.name, t]));
+
+    const missing = declared.filter((t) => !existingByName.has(t.name));
+    if (missing.length > 0) {
+      await this.toolRepo.save(
+        missing.map((t) => this.toolRepo.create({ module_id: moduleId, ...t })),
+      );
+      this.logger.log(`模块 #${moduleId} 补插缺失工具: ${missing.map((t) => t.name).join(', ')}`);
+    }
+
+    // 定义漂移：同名的比对声明字段，不同才写（避免每次启动无谓 UPDATE 刷 updated_at）
+    const drifted = declared.filter((t) => {
+      const row = existingByName.get(t.name);
+      if (!row) return false;
+      return (
+        row.description !== t.description ||
+        row.method !== t.method ||
+        row.path !== t.path ||
+        stableJson(row.params) !== stableJson(t.params)
+      );
+    });
+    if (drifted.length === 0) return;
+    for (const t of drifted) {
+      await this.toolRepo.update(
+        { module_id: moduleId, name: t.name },
+        { description: t.description, method: t.method, path: t.path, params: t.params },
+      );
+    }
+    this.logger.log(`模块 #${moduleId} 更新已变更工具: ${drifted.map((t) => t.name).join(', ')}`);
   }
 
   /**
