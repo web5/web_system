@@ -19,7 +19,7 @@ describe('redact（诊断 #8 日志脱敏）', () => {
   it('值未知时按名称兜底：KEY=value / JSON / curl -H / Bearer', () => {
     const r = createRedactor([]);
     expect(r('CONSOLE_TOKEN=abc123def')).toBe(`CONSOLE_TOKEN=${REDACTED}`);
-    expect(r('"password": "p@ssw0rd1"')).toBe(`"password": ${REDACTED}`);
+    expect(r('"password": "p@ssw0rd1"')).toBe(`"password": "${REDACTED}"`);
     expect(r(`-H 'x-internal-key: zzz-zzz'`)).toBe(`-H 'x-internal-key: ${REDACTED}'`);
     expect(r('Authorization: Bearer eyJhbGciOiJIUzI1')).toBe(`Authorization: Bearer ${REDACTED}`);
   });
@@ -37,6 +37,24 @@ describe('redact（诊断 #8 日志脱敏）', () => {
     const out = createRedactor([KEY])(line);
     expect(out).not.toContain(KEY);
     expect(out).toContain('/internal/release/pointer');
+  });
+
+  it('脱敏后仍是合法 JSON（2026-10-15：pm2 jlist 被脱敏破坏结构调整导致的 prod 误判）', () => {
+    const r = createRedactor([]);
+    // 真实形态：`pm2 jlist` 的 pm2_env 里带服务的环境变量
+    const line = '{"name":"gateway","pm2_env":{"MCP_ADMIN_KEY":"a95ab33ed1f36f4d","PORT":"6000"}}';
+    const out = r(line);
+    expect(out).not.toContain('a95ab33ed1f36f4d');
+    expect(() => JSON.parse(out)).not.toThrow();
+    expect(JSON.parse(out).pm2_env.MCP_ADMIN_KEY).toBe(REDACTED);
+    // 非密钥字段必须原样保留（端口要看得到，否则排障信息被一起抹掉）
+    expect(JSON.parse(out).pm2_env.PORT).toBe('6000');
+  });
+
+  it('无引号形态不带引号，带引号形态成对出现', () => {
+    const r = createRedactor([]);
+    expect(r('TOKEN=abc123def')).toBe(`TOKEN=${REDACTED}`); // 无引号：不凭空加
+    expect(r("'SECRET': 'zzz'")).toBe(`'SECRET': '${REDACTED}'`); // 单引号同样成对
   });
 
   it('短值不脱敏，避免误伤 PORT=0 / KEEP_VERSIONS=5', () => {

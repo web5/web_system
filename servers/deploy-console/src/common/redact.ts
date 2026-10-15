@@ -65,16 +65,17 @@ export function collectSecretValues(env: Env = process.env, extra: string[] = []
  * 每条规则都保留前缀（第 1 组），只替换值部分 —— 这样排障时仍能看出
  * 「哪一行、哪个变量被脱敏了」，而不是整行变成一个黑洞。
  */
-const SHAPE_PATTERNS: RegExp[] = [
-  // KEY=value / KEY: value / "KEY": "value"（env 赋值、JSON、curl -H、set -x 回显）
-  /\b((?:CONSOLE_TOKEN|INTERNAL_API_KEY|CONFIG_MASTER_KEY|MCP_ADMIN_KEY|ACCESS_TOKEN|API_KEY|APIKEY|SECRET|PASSWORD|PASSWD|TOKEN)\s*["']?\s*[:=]\s*)(["']?)([^"'\s,;}&]+)\2/gi,
-  // -H "x-internal-key: xxx"（curl 头，值里可能有 - 和 .）
-  /\b(x-internal-key\s*:\s*)([^\s"',}]+)/gi,
-  // Authorization: Bearer xxx
-  /\b(Bearer\s+)([A-Za-z0-9._~+/=-]{6,})/gi,
-  // URL userinfo：mysql://root:pass@host、redis://:pass@host
-  /\b([a-z][a-z0-9+.-]*:\/\/[^:/\s@]+:)([^@\s]+)(@)/gi,
-];
+const PAT_KEY_VALUE =
+  /\b((?:CONSOLE_TOKEN|INTERNAL_API_KEY|CONFIG_MASTER_KEY|MCP_ADMIN_KEY|ACCESS_TOKEN|API_KEY|APIKEY|SECRET|PASSWORD|PASSWD|TOKEN)\s*["']?\s*[:=]\s*)(["']?)([^"'\s,;}&]+)\2/gi;
+
+/** -H "x-internal-key: xxx"（curl 头，值里可能有 - 和 .） */
+const PAT_HEADER = /\b(x-internal-key\s*:\s*)([^\s"',}]+)/gi;
+
+/** Authorization: Bearer xxx */
+const PAT_BEARER = /\b(Bearer\s+)([A-Za-z0-9._~+/=-]{6,})/gi;
+
+/** URL userinfo：mysql://root:pass@host、redis://:pass@host */
+const PAT_URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/[^:/\s@]+:)([^@\s]+)(@)/gi;
 
 /**
  * 公网地址（云库域名 / IP:端口）。
@@ -108,14 +109,23 @@ export function createRedactor(values: string[] = collectSecretValues()): Redact
 
     if (valueRe) out = out.replace(valueRe, REDACTED);
 
-    for (const re of SHAPE_PATTERNS) {
-      // 第 1 组是前缀（保留：看得出是哪个变量被脱敏）；值统一替换成占位符。
-      // 三条规则的组数不同：2 组=前缀+值，3 组=前缀+引号+值，4 组=URL userinfo。
-      out = out.replace(re, (_m, ...groups: unknown[]) => {
-        const [g1 = '', , g3 = ''] = groups as string[];
-        return g3 === '@' ? `${g1}${REDACTED}@` : `${g1}${REDACTED}`;
-      });
-    }
+    // KEY=value / KEY: value / "KEY": "value"
+    //
+    // ⚠️ 必须**原样补回包裹引号**：此前只回吐前缀 + 占位符，把 `"password": "p@ss"`
+    // 变成 `"password": ***`，直接破坏了 JSON 结构。
+    //
+    // 踩过的场景：`pm2 jlist` 返回的就是 JSON，经本函数脱敏后 `JSON.parse` 抛错，
+    // 事实巡检于是把 prod 上 10 个 online 的进程全判成 missing —— 而同批次的 port
+    // 事实是全 ok 的。这种自相矛盾的判定比"采集中断"更难排查：流水线是绿的，
+    // 症状却是"线上服务都没了"。占位符落在**值**的位置，引号属于结构的一部分。
+    out = out.replace(PAT_KEY_VALUE, (_m, prefix: string, quote: string) =>
+      quote ? `${prefix}${quote}${REDACTED}${quote}` : `${prefix}${REDACTED}`,
+    );
+    out = out.replace(PAT_HEADER, (_m, prefix: string) => `${prefix}${REDACTED}`);
+    out = out.replace(PAT_BEARER, (_m, prefix: string) => `${prefix}${REDACTED}`);
+    out = out.replace(PAT_URL_USERINFO, (_m, prefix: string, _pwd: string, at: string) =>
+      at === '@' ? `${prefix}${REDACTED}${at}` : `${prefix}${REDACTED}`,
+    );
 
     return out;
   };
