@@ -5,6 +5,8 @@ import { McpKeyGuard } from './mcp-key.guard';
 import { PipelineModule } from '../pipeline/pipeline.module';
 import { DeployModule } from '../deploy/deploy.module';
 import { ApprovalModule } from '../approval/approval.module';
+// release_plan（L1 只读 dry-run）：Agent 在提交前先看影响面与风险
+import { ReleasePlanModule } from '../release-plan/release-plan.module';
 
 /**
  * MCP 执行接口模块。
@@ -15,7 +17,7 @@ import { ApprovalModule } from '../approval/approval.module';
  * 「Nest can't resolve dependencies of the McpController」→ 服务起不来。
  */
 @Module({
-  imports: [PipelineModule, DeployModule, ApprovalModule],
+  imports: [PipelineModule, DeployModule, ApprovalModule, ReleasePlanModule],
   controllers: [McpController],
   providers: [McpAuthService, McpKeyGuard],
   exports: [McpAuthService],

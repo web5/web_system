@@ -7,6 +7,8 @@ import {
   Query,
   Req,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +18,8 @@ import { McpKeyGuard } from './mcp-key.guard';
 import { ApproverService } from '../approval/approver.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
+import { ReleasePlanService } from '../release-plan/release-plan.service';
+import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
 
 /**
  * MCP 发布接口（/api/mcp/*）。
@@ -42,6 +46,7 @@ export class McpController {
     private readonly pipelineService: PipelineService,
     private readonly deployService: DeployService,
     private readonly approvers: ApproverService,
+    private readonly releasePlanService: ReleasePlanService,
   ) {}
 
   private operator(req: any): string {
@@ -88,6 +93,45 @@ export class McpController {
       throw new NotFoundException(`流水线不存在: ${jobId}`);
     }
     return p;
+  }
+
+  // ── 发布提案（L1 只读 dry-run）──
+
+  /**
+   * `release_plan`：在不执行的前提下算出这一次发布的影响面、前置检查与风险。
+   *
+   * 与 `POST /api/mcp/pipeline` 的关系：**先 plan 后 submit**。
+   * - 本接口只读：不写任何业务数据、不触发构建、不碰版本指针。
+   *   因此**不需要** `confirm=true`（`confirm` 是给会改变系统的动作用的，
+   *   给只读接口加确认开关只会让调用方养成无脑传 true 的习惯）。
+   * - 返回的 `planId` 是输入指纹（幂等），`evidenceHash` 是当时的事实指纹：
+   *   后续 `release_submit` 带 planId 提交时用它判断"提案是否已过期"。
+   * - `blockers` 非空意味着提交会被直接拒绝，调用方应当先解决再提交。
+   *
+   * 返回体里的 `warnings` / `knownGaps` 必须下发给调用方：**没报警不等于检查过**。
+   *
+   * ⚠️ 校验为什么挂在这一个方法上：`main.ts` **没有**全局 `ValidationPipe`，
+   * 而本控制器其余路由收 `any` 并各自手校验（错误文案是既有契约的一部分）。
+   * 整体开全局管道会改变它们的行为，故只对新增的这条 DTO 化的路由开启。
+   */
+  @Post('release-plan')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      // 剥掉未声明字段：多余的入参不该悄悄流进 plan 的输入指纹里
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    }),
+  )
+  @ApiOperation({ summary: '发布提案（只读 dry-run：影响面 + 前置检查 + 风险 + 是否需审批）' })
+  async releasePlan(@Body() body: ReleasePlanDto) {
+    return this.releasePlanService.plan({
+      env: body.env,
+      moduleKey: body.moduleKey,
+      versionTag: body.versionTag,
+      mode: body.mode as 'direct' | 'grayscale' | undefined,
+      grayscaleRule: body.grayscaleRule,
+    });
   }
 
   // ── 发布流水线 ──

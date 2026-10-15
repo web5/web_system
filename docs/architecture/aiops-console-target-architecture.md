@@ -143,7 +143,7 @@ Agent                          console                        runner
 | `diff_envs`(新增，dev vs prod 版本矩阵) | L0 | 是 | 「prod 落后几个版本」 | ❌ |
 | `health_probe`(新增) | L0 | 是 | 服务/pm2/端口健康（今天 probe 走 SSH → 改造为 runner 执行） | ❌ |
 | `pipeline_lint`(新增) | L0 | 是 | 编排健康巡检（kind/condition/bash -n/env 完备性） | ❌（今日一次性脚本） |
-| `release_plan`(新增) | L1 | 是 | **dry-run**：影响面 + 前置检查 + 风险 + 是否需审批 | ❌ |
+| `release_plan`(新增) | L1 | 是 | **dry-run**：影响面 + 前置检查 + 风险 + 是否需审批 | ✅ `POST /api/mcp/release-plan`（见 §五·甲） |
 | `release_submit` | L2 | 幂等键 | 提交变更（须带 planId） | ⚠️ `publish_pipeline` 有，需加 planId 语义 |
 | `job_status` / `job_stream` | L0 | 是 | 进度、日志、阶段 state | ✅ `publish_pipeline` 内嵌 / ⚠️ 需独立工具 |
 | `job_cancel` | L2 | 是 | 取消（仅本人/本人 agent） | ✅ 已有（`ownedPipeline` 404 语义已加固） |
@@ -162,6 +162,40 @@ Agent                          console                        runner
                "scope": "publish", "approval": "auto:dev|human:prod", "timeoutSec": 900 }
 }
 ```
+
+---
+
+### 五·甲 `release_plan` 落地说明（2026-10-15 实现）
+
+入口：`POST /api/mcp/release-plan`（`McpController`，沿用 `McpKeyGuard` 鉴权）。
+实现在 `servers/deploy-console/src/release-plan/`，依赖全部复用既有真相源，不新建第二套判定。
+
+返回两类 ID，用途**不同**，不要混用：
+
+| 字段 | 生成依据 | 语义 |
+|---|---|---|
+| `planId` | 入参指纹（`sha256(env|moduleKey|versionTag|mode|grayscaleRule)` 前 12 位） | 幂等标识：同一份入参恒得同一个 ID。**不代表当时的事实仍成立** |
+| `evidenceHash` | 影响面 + 全部不变量结论 | 事实指纹：漂移后必然变化。下游 `release_submit` 比对它，即可判断"提案是否已过期" |
+
+**7 项前置不变量**（每项三态：`pass / fail / unknown`）：
+
+| key | 真相源 | blocking |
+|---|---|---|
+| `module.registered` | `ModuleRegistryService.get` | 是 |
+| `artifact.target` | `ArtifactStoreService.exists` | 是（远端静态根时判不了 → unknown） |
+| `lock.free` | `ReleaseLockService.holder`（过期锁可抢占） | 是 |
+| `pipeline.noRunning` | `PipelineService.list` | 是 |
+| `env.healthy` | `FactCollectService.latestBatch`（#341 事实巡检） | 否 |
+| `rollback.point` | `ReleaseRegistryService.resolveRollbackTarget`（诊断 #17 唯一口径） | 否 |
+| `approval.noPending` | `ApprovalService.pendingFor` | 是 |
+
+**三条判定纪律**（后续工具沿用）：
+
+1. **`unknown ≠ pass`。** 判定不了就是判定不了：从未采集 / 快照超过 24h / 静态根在远端，一律 `unknown` 并进 `warnings`。把"判不了"静默报成"没问题"比直接报错更坏 —— 它让人基于一个从未验证过的前提做发布决策（同一 failure 模式见 #342 的 `parsePm2Processes` 修复）。
+2. **做不了的检查要写明缺口。** 返回体带 `knownGaps`：当前 ④ 脚本 hash、目标机配置 hash 给不出真相，调用方会默认"没报警 = 通过了"，不声明等于制造假绿灯。
+3. **`env.healthy` 故意不 blocking。** 环境带着漂移发新版本有时正是修复手段；一律拦住会让"发版修问题"这条路走不通。它以告警 + 抬高风险的方式表达。
+
+**只读红线**：整份 plan 不得调用任何写方法。由 `release-plan.service.spec.ts` 的 `WRITE_METHODS` 名单用 mock 断言守住（含"全部前置都失败"的场景 —— 失败时最容易顺手自愈）。
 
 ---
 
