@@ -580,7 +580,17 @@
         <div class="ad-item" data-screen="dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open selected" data-sub="agents">
+      <div class="ad-sub open" data-sub="content" data-screens="content-overview,content-items,content-detail,content-lhb,content-seats">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/></svg></span><span class="ad-t">内容中心</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="ad-sub-bd">
+        <div class="ad-item ad-item-sub" data-screen="content-overview" title="采集总览"><span class="ad-t">采集总览</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-items" title="内容条目"><span class="ad-t">内容条目</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-detail" title="条目详情"><span class="ad-t">条目详情</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-lhb" title="龙虎榜"><span class="ad-t">龙虎榜</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-seats" title="席位库"><span class="ad-t">席位库</span></div>
+        </div>
+      </div>
+      <div class="ad-sub open selected" data-sub="agents" data-screens="overview,observe,records,capabilities,knowledge,retrieval,list,skills,pg">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/></svg></span><span class="ad-t">Agents</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="overview" title="Agent 概览"><span class="ad-t">Agent 概览</span></div>
@@ -600,10 +610,16 @@
   <div class="ad-main">
     <header class="ad-header">
       <div class="ad-hl"><span class="ad-home"><svg class="ad-home-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
+      <div class="ad-hl"><span class="ad-home"><svg class="ad-home-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
       <span class="ad-crumb" id="crumb">
         <button class="lnk-btn" id="crumb-main" data-dr="crumb-list">Agents / 定义管理</button>
         <span id="crumb-sub"></span>
       </span>
+    </div>
+      <div class="ad-hr">
+        <button class="ad-theme" type="button" title="切换暗色" aria-label="主题切换"><svg class="ad-theme-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+        <span class="ad-user"><span class="ad-avatar"><svg class="ad-avatar-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="ad-username">admin</span></span>
+      </div>
     </div>
       <div class="ad-hr">
         <button class="ad-theme" type="button" title="切换暗色" aria-label="主题切换"><svg class="ad-theme-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>

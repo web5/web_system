@@ -37,6 +37,16 @@
  *   trail     尾随片段：源稿里弹层（drawer / mask / toast）常挂在内容区**之外**，
  *             wrapper 剥完就被丢掉，导致「点新增记录 → 找不到抽屉」报错。
  *             声明 { from, to } 追加进来（同样参与 id 前缀与 inline handler 改写）
+ *             配 shared 时这段**不进任何一屏**，由 build 单独放到整合稿的 .ad-desktop 末尾
+ *             （弹层是模块级共享的，塞进某一屏会导致别的屏打不开它）
+ *   rootToGlobal  true：源稿的 `:root` 变量**并入整合稿全局**（只补整合稿缺的 token，
+ *             同名以整合稿为准）。用于「源稿补了设计系统级新 token」的场景（如金融涨跌档
+ *             --ws-fin-up/down）—— 不并就是「声明在 :root 里、实际只在该屏生效」的假象。
+ *   shared    **一份稿服务多屏**（内容中心这类「一组二级页 + JS 渲染」的模块）：
+ *             { hostSel, screens }。
+ *             抽取区间的 DOM 里按 hostSel 找到 N 个容器（每个带 data-cc="<屏 key>"），
+ *             build 把它们**分别**装进各自的屏（不是复制 5 份），CSS/JS 全局只注入一次 ——
+ *             否则同一份脚本注入 5 次 = 5 份状态机互相打架。
  */
 
 import fs from 'node:fs';
@@ -99,7 +109,34 @@ const SRC_DICTS = {
   trace: ['id="dm-typeList"', 'id="dm-itemBody"', 'id="dm-dItem"', 'id="dm-toast"'],
 };
 
-/* ── 注册表本体：17 屏，与 BasicLayout.vue 菜单逐项对应 ───────────────── */
+/**
+ * 内容中心（content:view / content:manage）：**一份稿 5 屏**的共享源。
+ * 为什么不是「一屏一行」：这 5 屏是同一组二级页，DOM 由 JS 按当前屏渲染（状态机 / 筛选 /
+ * 抽屉 / 弹窗都是模块级共享的），拆成 5 份就变成 5 个互不相通的状态机。
+ * → 用 shared：DOM 按 data-cc 拆给各屏，CSS 作用域隔离，JS 只注入一次（IIFE + ns=CC）。
+ */
+const SRC_CONTENT = {
+  file: 'admin-content-hub.html',
+  from: '<div class="ad-content">',
+  to: '<div class="mask"',
+  wrapper: '<div class="ad-content">',
+  /* 类名是裸通用名（.card/.btn/.tbl/.badge/.drawer/.modal…），不隔离会污染其它屏 */
+  scope: '.cc-scope',
+  cssDrop: ['body', 'html'],
+  rootToGlobal: true,
+  idPrefix: 'cc-',
+  ns: 'CC',
+  exports: ['go', 'setState', 'apply', 'toast', 'closeAll', 'modalOk', 'openDetail', 'confirmRerun',
+    'confirmCollect', 'openSeats', 'openSeatForm', 'confirmDisable'],
+  trail: { from: '<div class="mask"', to: '<script>' },
+  shared: {
+    hostSel: '.cc-host',
+    screens: ['content-overview', 'content-items', 'content-detail', 'content-lhb', 'content-seats'],
+  },
+  trace: ['data-cc="content-overview"', 'data-cc="content-seats"', 'id="cc-drawer"', 'id="cc-toast"'],
+};
+
+/* ── 注册表本体：22 屏，与 BasicLayout.vue 菜单逐项对应 ───────────────── */
 export const REGISTRY = [
   /* —— 非 Agents 模块 —— */
   {
@@ -149,6 +186,14 @@ export const REGISTRY = [
     skel: '左侧表清单 + 右侧只读表格（分页 / 条件查询）；脱敏列显式标注。',
     reuse: ['.tbl 列表', '分页条（admin 既有）', '脱敏列标注'],
   },
+
+  /* —— 内容中心子菜单（共享源：一份稿 5 屏，CSS 作用域隔离 + JS 只注入一次） —— */
+  ...SRC_CONTENT.shared.screens.map((s) => ({
+    screen: s, source: SRC_CONTENT,
+    note: SRCNOTE('admin-content-hub.html（内容中心模块稿 · 5 屏共享一份 JS 状态机）',
+      '字段与接口对照 M1 落码：<code>collect_runs</code> / <code>content_items.quality_*</code> / '
+      + '<code>lhb_records</code> / <code>hotmoney_seats</code>，不是编的。'),
+  })),
 
   /* —— Agents 子菜单（P4 批次，带示意数据） —— */
   {
@@ -235,6 +280,13 @@ export const REGISTRY = [
 ];
 
 export const BY_SCREEN = Object.fromEntries(REGISTRY.map((r) => [r.screen, r]));
+/**
+ * 抽取声明**去重后**的列表（按源稿文件；共享源会被多屏引用，但只能抽一次）。
+ * build 用它注入 CSS/JS —— 不去重 = 同一份脚本注入 5 次，5 个状态机互相打架。
+ */
+export const SOURCE_DEFS = [...new Map(
+  REGISTRY.filter((r) => r.source).map((r) => [r.source.file, r.source]),
+).values()];
 /** 待补齐批次（占位屏）→ verify ⑩d 段与 specs/admin-prototype-coverage/tasks.md 对账 */
 export const BATCHES = Object.fromEntries(
   REGISTRY.filter((r) => r.batch).map((r) => [r.screen, r.batch]),
@@ -261,13 +313,20 @@ export function loadSource(src) {
     const extra = src.to;
     if (!html.includes(extra)) html += '\n        ' + extra;
   }
-  if (src.trail) html += '\n        ' + takeTopLevelElements(between(text, src.trail.from, src.trail.to));
+  /* trail：共享源下单独返回（弹层是模块级共享的，塞进某一屏别的屏就打不开它） */
+  let trailHtml = '';
+  if (src.trail) {
+    trailHtml = takeTopLevelElements(between(text, src.trail.from, src.trail.to));
+    if (!src.shared) html += '\n        ' + trailHtml;
+  }
 
   /* 2) id 前缀：抽取片段内 id="x" → id="pfx-x"（避免与其它屏撞 id，最常见是 toast） */
   const ids = new Set();
-  if (src.idPrefix) {
-    html = html.replace(/id="([A-Za-z][-\w]*)"/g, (m, id) => { ids.add(id); return `id="${src.idPrefix}${id}"`; });
-  }
+  const addPrefix = (s) => (src.idPrefix
+    ? s.replace(/id="([A-Za-z][-\w]*)"/g, (m, id) => { ids.add(id); return `id="${src.idPrefix}${id}"`; })
+    : s);
+  html = addPrefix(html);
+  if (src.shared) trailHtml = addPrefix(trailHtml);
 
   /* 3) script：全部 <script> 段拼起来（源稿可能拆多段） */
   let js = [...text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
@@ -290,6 +349,7 @@ export function loadSource(src) {
     : s);
   if (src.ns && src.exports) {
     html = nsAttrs(html);
+    trailHtml = nsAttrs(trailHtml);
     js = nsAttrs(js);
     js += `\n  window.${src.ns} = { ${src.exports.map((f) => `${f}:${f}`).join(', ')} };\n`;
   }
@@ -306,7 +366,34 @@ export function loadSource(src) {
     if (src.cssKeep && !src.cssKeep(s)) return false;
     return true;
   });
+  /* 4a) rootToGlobal：:root 块不进作用域 CSS，改为「并进整合稿全局 :root」的候选声明
+         （作用域化 :root 会让这些 token 只在该屏生效，与「设计系统级 token」的语义不符） */
+  let rootDecls = [];
+  if (src.rootToGlobal) {
+    rootDecls = (blocks.filter((b) => /^:root$/i.test(selOf(b)))
+      .map((b) => b.slice(b.indexOf('{') + 1, b.lastIndexOf('}')))
+      .join(';') || '')
+      .split(';').map((d) => d.trim()).filter((d) => d.startsWith('--'));
+    blocks = blocks.filter((b) => !/^:root$/i.test(selOf(b)));
+  }
   const css = src.scope ? scopeCssBlocks(blocks, src.scope).join('\n  ') : blocks.join('\n  ');
 
-  return { html, css, js, ids: [...ids], blocks: blocks.length, scoped: !!src.scope };
+  /* 5) shared：把抽取片段里的 N 个 host 容器按 data-cc 拆给各屏（不是复制 N 份） */
+  let hosts = null;
+  if (src.shared) {
+    hosts = {};
+    const re = /<div class="([^"]*)\bcc-host\b([^"]*)"([^>]*)data-cc="([^"]+)"([^>]*)>\s*<\/div>/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      hosts[m[4]] = `<div class="cc-host" data-cc="${m[4]}"></div>`;
+    }
+    const missing = src.shared.screens.filter((s) => !hosts[s]);
+    if (missing.length) throw new Error(`${src.file}：共享源缺 host：${missing.join(', ')}`);
+    html = '';   /* 共享源没有「整段 DOM」，只有 host + 模块级 trail */
+  }
+
+  return {
+    html, css, js, ids: [...ids], blocks: blocks.length, scoped: !!src.scope,
+    hosts, trailHtml, rootDecls, shared: !!src.shared,
+  };
 }

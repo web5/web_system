@@ -1060,6 +1060,451 @@
   content:attr(data-tip);position:absolute;bottom:120%;left:50%;transform:translateX(-50%);
   background:var(--text);color:#fff;font-size:11px;padding:5px 8px;border-radius:6px;white-space:nowrap;z-index:70;
   }
+  /* ===== 来自 admin-content-hub.html（CSS 已作用域隔离：裸通用类名不污染其它屏） ===== */
+  .cc-scope [data-radius='crisp']{
+  --ws-radius-sm:2px; --ws-radius-md:2px; --ws-radius-lg:4px;
+  }
+  .cc-scope [data-radius='sharp']{
+  --ws-radius-sm:0px; --ws-radius-md:0px; --ws-radius-lg:2px;
+  }
+  .cc-scope *{
+  margin:0;padding:0;box-sizing:border-box;
+  }
+  .cc-scope :focus-visible{
+  outline:none;box-shadow:var(--ws-focus-ring);
+  }
+  .cc-scope .proto-head{
+  width:1280px;
+  }
+  .cc-scope .proto-head h1{
+  font-size:18px;font-weight:600;margin-bottom:6px;letter-spacing:var(--ws-tracking-tight);
+  }
+  .cc-scope .proto-head .sub{
+  font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);
+  }
+  .cc-scope .proto-head .sub b{
+  color:var(--ws-brand-600);font-weight:600;
+  }
+  .cc-scope .proto-head .sub code{
+  font-family:var(--ws-font-mono);font-size:12px;background:var(--ws-bg-subtle);padding:1px 4px;border-radius:3px;
+  }
+  .cc-scope .pg-head{
+  display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap;
+  }
+  .cc-scope .pg-head h2{
+  font-size:18px;font-weight:600;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  }
+  .cc-scope .pg-head .sub{
+  font-size:12px;color:var(--ws-text-secondary);margin-top:4px;line-height:var(--ws-leading-snug);
+  }
+  .cc-scope .pg-head .spacer{
+  flex:1;
+  }
+  .cc-scope .card{
+  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    padding:16px;margin-bottom:14px;box-shadow:var(--ws-shadow-card);
+  }
+  .cc-scope .card .ct{
+  font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:14px;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  }
+  .cc-scope .card .ct .hint{
+  font-size:12px;font-weight:400;color:var(--ws-text-tertiary);
+  }
+  .cc-scope .card .ct .ic{
+  width:var(--ws-icon-inline);height:var(--ws-icon-inline);color:var(--ws-brand-600);flex-shrink:0;
+  }
+  .cc-scope .card .ct .ic svg{
+  width:100%;height:100%;
+  }
+  .cc-scope .note{
+  display:flex;gap:8px;align-items:flex-start;border-radius:var(--ws-radius-md);padding:9px 12px;
+    font-size:12px;line-height:var(--ws-leading-relaxed);margin-bottom:12px;
+  }
+  .cc-scope .note.info{
+  background:var(--ws-brand-soft);color:var(--ws-brand-600);border:1px solid var(--ws-border-brand);
+  }
+  .cc-scope .note.warn{
+  background:var(--ws-warn-soft);color:var(--ws-warn-text);border:1px solid var(--ws-border-warn);
+  }
+  .cc-scope .note.danger{
+  background:var(--ws-danger-soft);color:var(--ws-danger);border:1px solid var(--ws-border-danger);
+  }
+  .cc-scope .note.ok{
+  background:var(--ws-ok-soft);color:var(--ws-ok);border:1px solid var(--ws-border-ok);
+  }
+  .cc-scope .note code,
+  .cc-scope .mono{
+  font-family:var(--ws-font-mono);font-size:12px;
+  }
+  .cc-scope .kv{
+  font-family:var(--ws-font-mono);font-size:12px;background:var(--ws-bg-subtle);padding:1px 5px;border-radius:3px;color:var(--ws-text-body);
+  }
+  .cc-scope .btn{
+  background:var(--ws-bg-surface);color:var(--ws-text-strong);border:1px solid var(--ws-input-border);
+    border-radius:var(--ws-radius-md);padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out),border-color var(--ws-duration-fast) var(--ws-ease-out);
+  }
+  .cc-scope .btn:hover{
+  background:var(--ws-bg-hover);
+  }
+  .cc-scope .btn.primary{
+  background:var(--ws-brand-500);border-color:var(--ws-brand-500);color:var(--ws-on-brand);font-weight:600;
+  }
+  .cc-scope .btn.primary:hover{
+  background:var(--ws-brand-600);
+  }
+  .cc-scope .btn.danger{
+  color:var(--ws-danger);border-color:var(--ws-border-danger-strong);
+  }
+  .cc-scope .btn.danger:hover{
+  background:var(--ws-danger-soft);
+  }
+  .cc-scope .btn.sm{
+  height:var(--ws-control-sm);padding:0 10px;font-size:12px;border-radius:var(--ws-radius-sm);
+  }
+  .cc-scope .btn[disabled]{
+  opacity:.55;cursor:not-allowed;
+  }
+  .cc-scope .btn-row{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .cc-scope .badge{
+  font-size:12px;padding:2px 8px;border-radius:var(--ws-radius-pill);font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;
+  }
+  .cc-scope .badge.ok{
+  background:var(--ws-ok-soft);color:var(--ws-ok);
+  }
+  .cc-scope .badge.warn{
+  background:var(--ws-warn-soft);color:var(--ws-warn-text);
+  }
+  .cc-scope .badge.err{
+  background:var(--ws-danger-soft);color:var(--ws-danger);
+  }
+  .cc-scope .badge.info{
+  background:var(--ws-info-soft);color:var(--ws-info);
+  }
+  .cc-scope .badge.neutral{
+  background:var(--ws-bg-subtle);color:var(--ws-text-secondary);
+  }
+  .cc-scope .trade{
+  display:inline-flex;align-items:center;font-size:12px;padding:2px 8px;border-radius:var(--ws-radius-pill);font-weight:600;white-space:nowrap;
+  }
+  .cc-scope .trade.buy{
+  background:var(--ws-danger-soft);color:var(--ws-fin-up);
+  }
+  .cc-scope .trade.sell{
+  background:var(--ws-ok-soft);color:var(--ws-fin-down);
+  }
+  .cc-scope .trade.both{
+  background:var(--ws-bg-subtle);color:var(--ws-fin-flat);
+  }
+  .cc-scope .filters{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;
+  }
+  .cc-scope .input,
+  .cc-scope .select{
+  border:1px solid var(--ws-input-border);border-radius:var(--ws-radius-md);background:var(--ws-input-bg);
+    color:var(--ws-text-body);font-size:13px;padding:6px 10px;outline:none;font-family:inherit;height:var(--ws-control-md);
+  }
+  .cc-scope .input:focus,
+  .cc-scope .select:focus{
+  border-color:var(--ws-brand-500);
+  }
+  .cc-scope .input::placeholder{
+  color:var(--ws-input-placeholder);
+  }
+  .cc-scope .lb{
+  font-size:12px;color:var(--ws-text-secondary);
+  }
+  .cc-scope table.tbl{
+  width:100%;border-collapse:collapse;font-size:13px;
+  }
+  .cc-scope table.tbl th{
+  text-align:left;color:var(--ws-text-tertiary);font-weight:600;font-size:12px;
+    padding:8px 10px;border-bottom:1px solid var(--ws-border);white-space:nowrap;
+  }
+  .cc-scope table.tbl td{
+  padding:9px 10px;border-bottom:1px solid var(--ws-border-subtle);color:var(--ws-text-primary);vertical-align:middle;
+  }
+  .cc-scope table.tbl td.num{
+  font-family:var(--ws-font-mono);font-size:12px;text-align:right;white-space:nowrap;
+  }
+  .cc-scope table.tbl .ell{
+  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .cc-scope .row-actions{
+  display:flex;gap:6px;
+  }
+  .cc-scope .stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;
+  }
+  .cc-scope .stat{
+  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);padding:14px 16px;box-shadow:var(--ws-shadow-card);
+  }
+  .cc-scope .stat .lb{
+  font-size:12px;color:var(--ws-text-tertiary);margin-bottom:6px;
+  }
+  .cc-scope .stat .v{
+  font-size:24px;font-weight:600;color:var(--ws-text-strong);letter-spacing:var(--ws-tracking-tight);
+  }
+  .cc-scope .stat .v small{
+  font-size:12px;font-weight:400;color:var(--ws-text-tertiary);margin-left:4px;
+  }
+  .cc-scope .stat .sub2{
+  font-size:12px;color:var(--ws-text-tertiary);margin-top:4px;
+  }
+  .cc-scope .srcs{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;
+  }
+  .cc-scope .src{
+  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);padding:14px 16px;box-shadow:var(--ws-shadow-card);display:flex;flex-direction:column;gap:8px;
+  }
+  .cc-scope .src .nm{
+  font-size:13px;font-weight:600;color:var(--ws-text-strong);display:flex;align-items:center;gap:6px;
+  }
+  .cc-scope .src .meta{
+  font-size:12px;color:var(--ws-text-tertiary);line-height:var(--ws-leading-snug);
+  }
+  .cc-scope .src .act{
+  margin-top:auto;
+  }
+  .cc-scope .src.cycle{
+  border-color:var(--ws-border-warn-strong);background:linear-gradient(180deg,var(--ws-warn-soft),var(--ws-bg-surface));
+  }
+  .cc-scope .skel i{
+  display:block;height:10px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-active);margin-bottom:10px;
+  }
+  .cc-scope .skel i:nth-child(2){
+  width:74%;
+  }
+  .cc-scope .skel i:nth-child(3){
+  width:52%;
+  }
+  .cc-scope .exception{
+  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    padding:56px 24px;text-align:center;box-shadow:var(--ws-shadow-card);
+  }
+  .cc-scope .exception .ic{
+  width:var(--ws-icon-feature);height:var(--ws-icon-feature);margin:0 auto 14px;color:var(--ws-text-disabled);
+  }
+  .cc-scope .exception .ic svg{
+  width:100%;height:100%;
+  }
+  .cc-scope .exception .t{
+  font-size:16px;font-weight:600;margin-bottom:8px;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  }
+  .cc-scope .exception .d{
+  font-size:13px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);margin-bottom:18px;
+  }
+  .cc-scope .empty-ic{
+  width:var(--ws-icon-feature);height:var(--ws-icon-feature);color:var(--ws-text-disabled);margin:0 auto 10px;display:block;
+  }
+  .cc-scope .empty-txt{
+  font-size:13px;color:var(--ws-text-secondary);margin-bottom:4px;
+  }
+  .cc-scope .empty-sub{
+  font-size:12px;color:var(--ws-text-tertiary);margin-bottom:16px;
+  }
+  .cc-scope .mask{
+  position:absolute;inset:0;background:var(--ws-overlay);z-index:20;opacity:0;pointer-events:none;
+    transition:opacity var(--ws-duration-base) var(--ws-ease-out);
+  }
+  .cc-scope .mask.show{
+  opacity:1;pointer-events:auto;
+  }
+  .cc-scope .drawer{
+  position:absolute;top:0;right:0;height:100%;width:560px;background:var(--ws-bg-surface);
+    border-left:1px solid var(--ws-border);z-index:21;transform:translateX(100%);display:flex;flex-direction:column;
+    transition:transform var(--ws-duration-base) var(--ws-ease-out);
+  }
+  .cc-scope .drawer.show{
+  transform:translateX(0);
+  }
+  .cc-scope .drawer .dh{
+  height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;
+    border-bottom:1px solid var(--ws-border);flex-shrink:0;
+  }
+  .cc-scope .drawer .dh .ttl{
+  font-size:14px;font-weight:600;color:var(--ws-text-strong);
+  }
+  .cc-scope .drawer .db{
+  flex:1;overflow:auto;padding:16px 18px;background:var(--ws-bg-page);
+  }
+  .cc-scope .icon-btn{
+  width:28px;height:28px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border-subtle);
+    background:var(--ws-bg-surface);color:var(--ws-text-tertiary);cursor:pointer;display:grid;place-items:center;
+  }
+  .cc-scope .icon-btn:hover{
+  background:var(--ws-bg-hover);color:var(--ws-text-strong);
+  }
+  .cc-scope .icon-btn svg{
+  width:14px;height:14px;
+  }
+  .cc-scope .modal-mask{
+  position:absolute;inset:0;background:var(--ws-overlay);z-index:30;display:none;
+    align-items:flex-start;justify-content:center;padding-top:120px;
+  }
+  .cc-scope .modal-mask.show{
+  display:flex;
+  }
+  .cc-scope .modal{
+  width:460px;background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);box-shadow:0 18px 50px var(--ws-shadow-modal);overflow:hidden;
+  }
+  .cc-scope .modal .mh{
+  padding:16px 20px 0;font-size:16px;font-weight:600;color:var(--ws-text-strong);
+  }
+  .cc-scope .modal .mb{
+  padding:10px 20px 16px;font-size:13px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);
+  }
+  .cc-scope .modal .mf{
+  padding:0 20px 4px;
+  }
+  .cc-scope .modal .mfoot{
+  padding:12px 20px 16px;display:flex;justify-content:flex-end;gap:10px;
+  }
+  .cc-scope .frow{
+  display:flex;flex-direction:column;gap:10px;margin-bottom:6px;
+  }
+  .cc-scope .fitem{
+  display:flex;align-items:center;gap:10px;
+  }
+  .cc-scope .flb{
+  width:84px;flex-shrink:0;font-size:12px;color:var(--ws-text-secondary);text-align:right;
+  }
+  .cc-scope .fld{
+  flex:1;min-width:0;
+  }
+  .cc-scope .fld .input,
+  .cc-scope .fld .select{
+  width:100%;
+  }
+  .cc-scope .fhint{
+  font-size:12px;color:var(--ws-text-tertiary);margin:-4px 0 6px 94px;
+  }
+  .cc-scope .sec{
+  margin-bottom:14px;
+  }
+  .cc-scope .sec .st{
+  font-size:12px;font-weight:600;color:var(--ws-text-tertiary);letter-spacing:var(--ws-tracking-wide);margin-bottom:8px;
+  }
+  .cc-scope .dl-grid{
+  display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;
+  }
+  .cc-scope .dl-grid dt{
+  color:var(--ws-text-tertiary);font-size:12px;
+  }
+  .cc-scope .dl-grid dd{
+  color:var(--ws-text-body);word-break:break-all;
+  }
+  .cc-scope pre.codeblk{
+  margin:0;border-radius:var(--ws-radius-md);background:var(--ws-code-bg);overflow:hidden;
+  }
+  .cc-scope pre.codeblk .hd{
+  display:flex;align-items:center;padding:8px 14px;background:var(--ws-code-hd);color:var(--ws-code-hd-text);font-size:12px;
+  }
+  .cc-scope pre.codeblk .bd{
+  margin:0;padding:12px 16px;overflow-x:auto;font-family:var(--ws-font-mono);font-size:12px;line-height:var(--ws-leading-relaxed);color:var(--ws-code-text);white-space:pre-wrap;
+  }
+  .cc-scope .toast{
+  position:fixed;left:50%;top:22px;transform:translate(-50%,-14px);opacity:0;pointer-events:none;
+    background:var(--ws-text-primary);color:var(--ws-bg-surface);font-size:13px;padding:9px 16px;
+    border-radius:var(--ws-radius-lg);transition:opacity var(--ws-duration-fast) var(--ws-ease-out),transform var(--ws-duration-fast) var(--ws-ease-out);z-index:60;
+  }
+  .cc-scope .toast.show{
+  opacity:1;transform:translate(-50%,0);
+  }
+  .cc-scope .pg-toolbar{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+  }
+  .cc-scope .pg-chat{
+  border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);background:var(--ws-bg-surface);padding:20px;min-height:520px;
+  }
+  .cc-scope .turn{
+  margin-bottom:22px;
+  }
+  .cc-scope .turn:last-child{
+  margin-bottom:0;
+  }
+  .cc-scope .bubble-wrap{
+  display:flex;gap:10px;margin-bottom:10px;
+  }
+  .cc-scope .bubble-wrap.me{
+  justify-content:flex-end;
+  }
+  .cc-scope .avatar{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+  }
+  .cc-scope .avatar.user{
+  background:var(--ws-accent);color:var(--ws-on-brand);
+  }
+  .cc-scope .avatar.ai{
+  background:var(--ws-ok);color:var(--ws-on-brand);
+  }
+  .cc-scope .bubble{
+  max-width:76%;border-radius:var(--ws-radius-lg);padding:10px 14px;
+  }
+  .cc-scope .bubble.user{
+  background:var(--ws-accent);color:var(--ws-on-brand);font-size:14px;line-height:var(--ws-leading-relaxed);
+  }
+  .cc-scope .bubble.ai{
+  background:var(--ws-bg-surface);border:1px solid var(--ws-border);box-shadow:0 1px 2px var(--ws-shadow-bubble);
+  }
+  .cc-scope .ans{
+  font-size:14px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-body);
+  }
+  .cc-scope .ans p{
+  margin:0 0 16px;
+  }
+  .cc-scope .ans p.lead{
+  font-size:14px;font-weight:500;color:var(--ws-text-strong);
+  }
+  .cc-scope .ans h4{
+  display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;margin:24px 0 8px;color:var(--ws-text-strong);
+  }
+  .cc-scope .ans h4::before{
+  content:'';width:3px;height:14px;border-radius:2px;background:var(--ws-brand-500);flex:0 0 3px;
+  }
+  .cc-scope .ans ol{
+  margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;
+  }
+  .cc-scope .ans ol li{
+  display:flex;gap:10px;align-items:flex-start;
+  }
+  .cc-scope .ans ol li .n{
+  width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--ws-brand-soft);color:var(--ws-brand-600);font-size:12px;font-weight:600;display:grid;place-items:center;margin-top:4px;
+  }
+  .cc-scope .proc{
+  margin:6px 0 6px 40px;max-width:76%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);
+    background:var(--ws-bg-surface);overflow:hidden;font-size:12px;
+  }
+  .cc-scope .proc .ph{
+  display:flex;align-items:center;gap:7px;padding:6px 10px;color:var(--ws-text-secondary);
+  }
+  .cc-scope .proc .ph svg{
+  width:var(--ws-icon-inline);height:var(--ws-icon-inline);
+  }
+  .cc-scope .proc .pb{
+  padding:6px 10px;border-top:1px dashed var(--ws-border-subtle);font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-tertiary);
+  }
+  .cc-scope .cc-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;
+    padding:8px 12px;border:1px dashed var(--ws-border-warn-strong);border-radius:var(--ws-radius-md);
+    background:var(--ws-warn-soft);color:var(--ws-warn-text);font-size:12px;
+  }
+  .cc-scope .cc-bar .tag{
+  font-weight:600;
+  }
+  .cc-scope .cc-bar button{
+  border:1px solid var(--ws-border-warn-strong);background:var(--ws-bg-surface);
+    color:var(--ws-warn-text);border-radius:var(--ws-radius-sm);padding:3px 10px;font-size:12px;
+    cursor:pointer;font-family:inherit;
+  }
+  .cc-scope .cc-bar button.on{
+  background:var(--ws-warn);color:var(--ws-on-brand);border-color:var(--ws-warn);font-weight:600;
+  }
+  .cc-scope .cc-bar .sp{
+  color:var(--ws-text-secondary);
+  }
   /* ===== 框架壳与菜单：对齐 apps/admin/src/layouts/BasicLayout.vue（scripts/lib/proto-shell.mjs 单源，勿手改） =====
      sider 220 / 收起 80 / 头部 56 / 菜单项高 40 / 图标 16 /
      选中 = 橙渐变 + 右侧 3px 竖条（ant-menu-item-selected::after）/ hover = 橙 6% /
@@ -1135,7 +1580,9 @@
   .ad-sider.collapsed .ad-item,.ad-sider.collapsed .ad-sub-t{justify-content:center;padding-left:0;padding-right:0;}
   /* 折叠态头部：80px 宽容不下「logo + 按钮」（padding 16×2 后仅剩 48px）→ 收窄内边距，别挤压 logo */
   .ad-sider.collapsed .ad-sider-head{padding:0 10px;gap:6px;}
-</style>
+
+  /* ===== 源稿补进来的设计系统级 token（只补整合稿缺的；同名以整合稿为准） ===== */
+  :root{--ws-bg-page:#FAFAFA;--ws-bg-surface:#FFFFFF;--ws-bg-elevated:#FFFFFF;--ws-bg-subtle:#F2F2F2;--ws-bg-hover:#F2F2F2;--ws-bg-active:#EBEBEB;--ws-text-primary:#171717;--ws-text-secondary:#525252;--ws-text-tertiary:#A3A3A3;--ws-text-disabled:#D4D4D4;--ws-border:#E5E5E5;--ws-border-subtle:#EBEBEB;--ws-input-bg:#FFFFFF;--ws-input-border:#E5E5E5;--ws-input-placeholder:#A3A3A3;--ws-brand-500:#F97316;--ws-brand-600:#EA580C;--ws-brand-400:#FB923C;--ws-brand-soft:#FFF7ED;--ws-accent:#FF8C42;--ws-accent-soft:rgba(255,140,66,.15);--ws-on-brand:#FFFFFF;--ws-ok:#398E4A;--ws-ok-soft:#EAF6EC;--ws-warn:#F5A623;--ws-warn-soft:#FEF3DC;--ws-warn-text:#8A5A00;--ws-danger:#E5484D;--ws-danger-soft:#FCEBEC;--ws-info:#2563EB;--ws-info-soft:#EFF4FF;--ws-radius-sm:4px;--ws-radius-md:6px;--ws-radius-lg:8px;--ws-radius-pill:9999px;--ws-text-body:#3F3F46;--ws-text-strong:#18181B;--ws-leading-tight:1.25;--ws-leading-snug:1.4;--ws-leading-normal:1.6;--ws-leading-relaxed:1.75;--ws-tracking-tight:-0.02em;--ws-tracking-normal:0;--ws-tracking-wide:0.02em;--ws-duration-fast:150ms;--ws-duration-base:200ms;--ws-duration-slow:300ms;--ws-ease-out:cubic-bezier(0.16, 1, 0.3, 1);--ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);--ws-control-sm:24px;--ws-control-md:32px;--ws-control-lg:40px;--ws-icon-inline:16px;--ws-icon-action:20px;--ws-icon-feature:24px;--ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);--ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;--ws-overlay:rgba(23,23,23,.35);--ws-shadow-window:0 24px 70px rgba(20,30,50,.14);--ws-shadow-modal:0 18px 50px rgba(20,30,50,.2);--ws-shadow-thumb:0 1px 2px rgba(0,0,0,.2);--ws-shadow-bubble:0 1px 2px rgba(0,0,0,.04);--ws-accent-04:rgba(255,140,66,.04);--ws-border-brand:rgba(249,115,22,.25);--ws-border-warn:rgba(245,166,35,.3);--ws-border-warn-strong:rgba(245,166,35,.45);--ws-border-danger:rgba(229,72,77,.25);--ws-border-danger-strong:rgba(229,72,77,.4);--ws-border-ok:rgba(57,142,74,.25);--ws-fin-up:#C4322F;--ws-fin-down:#2E7D48;--ws-fin-flat:var(--ws-text-secondary);--ws-code-bg:#1C1E26;--ws-code-hd:#16181F;--ws-code-text:#E2E8F0;--ws-code-hd-text:#A5ACBA}</style>
 </head>
 <body>
 <div class="proto-head">
@@ -1172,7 +1619,17 @@
         <div class="ad-item" data-screen="dicts" data-route="#/settings/dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" data-route="#/mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" data-route="#/database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="agents">
+      <div class="ad-sub open" data-sub="content" data-screens="content-overview,content-items,content-detail,content-lhb,content-seats">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/></svg></span><span class="ad-t">内容中心</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="ad-sub-bd">
+        <div class="ad-item ad-item-sub" data-screen="content-overview" data-route="#/content" title="采集总览"><span class="ad-t">采集总览</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-items" data-route="#/content/items" title="内容条目"><span class="ad-t">内容条目</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-detail" data-route="#/content/items/12043" title="条目详情"><span class="ad-t">条目详情</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-lhb" data-route="#/content/lhb" title="龙虎榜"><span class="ad-t">龙虎榜</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-seats" data-route="#/content/seats" title="席位库"><span class="ad-t">席位库</span></div>
+        </div>
+      </div>
+      <div class="ad-sub open" data-sub="agents" data-screens="overview,observe,records,capabilities,knowledge,retrieval,list,skills,pg">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/></svg></span><span class="ad-t">Agents</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="overview" data-route="#/agents" title="Agent 概览"><span class="ad-t">Agent 概览</span></div>
@@ -1397,6 +1854,36 @@
         <div class="ph-note note"><span class="k">范围说明</span><span>本屏属 admin 原型补齐 <b>P3</b> 批次，内容由该批次单独出稿（见 <code>specs/admin-prototype-coverage/tasks.md</code>）。涉敏感数据：全程只读、脱敏列显式标注。</span></div>
         <div class="ph-skel"><b>骨架</b>：左侧表清单 + 右侧只读表格（分页 / 条件查询）；脱敏列显式标注。</div>
         <div class="ph-reuse"><span>复用：</span><span class="chip">.tbl 列表</span><span class="chip">分页条（admin 既有）</span><span class="chip">脱敏列标注</span></div>
+      </div>
+
+      <!-- 真实屏（同源抽取）：采集总览 -->
+      <div class="screen hidden" data-screen="content-overview">      <div class="cc-scope">
+        <div class="cc-host" data-cc="content-overview"></div>
+      </div>
+      </div>
+
+      <!-- 真实屏（同源抽取）：内容条目 -->
+      <div class="screen hidden" data-screen="content-items">      <div class="cc-scope">
+        <div class="cc-host" data-cc="content-items"></div>
+      </div>
+      </div>
+
+      <!-- 真实屏（同源抽取）：条目详情 -->
+      <div class="screen hidden" data-screen="content-detail">      <div class="cc-scope">
+        <div class="cc-host" data-cc="content-detail"></div>
+      </div>
+      </div>
+
+      <!-- 真实屏（同源抽取）：龙虎榜 -->
+      <div class="screen hidden" data-screen="content-lhb">      <div class="cc-scope">
+        <div class="cc-host" data-cc="content-lhb"></div>
+      </div>
+      </div>
+
+      <!-- 真实屏（同源抽取）：席位库 -->
+      <div class="screen hidden" data-screen="content-seats">      <div class="cc-scope">
+        <div class="cc-host" data-cc="content-seats"></div>
+      </div>
       </div>
 
       <!-- 占位屏：Agent 概览 -->
@@ -1914,6 +2401,15 @@
   </div>
 
   <div class="toast hidden" id="toast" role="alert"></div>
+  <!-- admin-content-hub.html 的模块级弹层（不进屏，5 屏共用） -->
+  <div class="cc-scope">
+  <div class="mask" id="cc-mask" onclick="CC.CC.closeAll()"></div>
+<aside class="drawer" id="cc-drawer"></aside>
+<div class="modal-mask" id="cc-modalMask">
+  <div class="modal" id="cc-modal"></div>
+</div>
+<div class="toast" id="cc-toast"></div>
+  </div>
 </div>
 
 
@@ -2437,12 +2933,738 @@ renderTypeList(); renderItems();
 
 })();
 
+/* 来自 admin-content-hub.html（IIFE 包裹，符号不泄漏到全局） · 共享源：一份脚本服务 5 屏 */
+(function(){
+  var RAW_BY_ID = document.getElementById.bind(document);
+  var SELF_IDS = ["mask","drawer","modalMask","modal","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('cc-'+id) : RAW_BY_ID(id); };
+
+var ICON = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  team:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  safe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+  db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
+  api:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
+  news:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/></svg>',
+  robot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12.5" r="0.6"/><circle cx="15" cy="12.5" r="0.6"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.5h13l3.5 6.5v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+};
+
+/* ===== 全局状态 ===== */
+var S = {
+  screen:'content-overview',
+  state:'normal',
+  expanded:{ content:true, agents:false },
+  detailId:12043,
+  f:{ qs:'', stage:'', source:'', keyword:'' },
+  page:1,
+  lhbDate:'2026-10-15',
+  lhbTag:'',
+  lhbOpen:null,
+  seatKw:'', seatTag:'', seatActive:'',
+  busy:null,
+  settingsTab:'basic', radius:'soft',
+  modal:null
+};
+var STATES = [['normal','正常'],['loading','加载中'],['empty','空数据'],['error','请求失败'],['noperm','无权限']];
+
+/* ===== 模拟数据（字段名对齐落码） ===== */
+/* 字段对齐 collect-log.service.ts health() 的真实返回：
+   windowDays / totalRuns / failedRuns / successRate / todayFailed / staleSources（无「入库条数」） */
+var HEALTH = { windowDays:7, totalRuns:28, failedRuns:1, successRate:'96.4%', todayFailed:1, staleSources:[] };
+var SOURCES = [
+  { code:'eastmoney_lhb', name:'东方财富龙虎榜', cron:'收盘后 15:10', last:'2026-10-15 15:12:07', dur:2410, count:68, status:'ok' },
+  { code:'sina_news',     name:'新浪财经快讯',   cron:'每 30 分钟',   last:'2026-10-15 09:05:41', dur:1830, count:120, status:'ok' },
+  { code:'eastmoney_news',name:'东方财富快讯',   cron:'每 30 分钟',   last:'2026-10-15 08:40:12', dur:3020, count:0,  status:'failed' }
+];
+var RUNS = [
+  { id:8421, source_code:'eastmoney_lhb', source_name:'东方财富龙虎榜', trigger_type:'schedule', status:'ok',     item_count:68, dedup_count:0,  fail_count:0, duration_ms:2410, error_message:null, started_at:'2026-10-15 15:12:07' },
+  { id:8420, source_code:'sina_news',     source_name:'新浪财经快讯',   trigger_type:'manual',   status:'ok',     item_count:24, dedup_count:3,  fail_count:0, duration_ms:980,  error_message:null, started_at:'2026-10-15 14:26:33' },
+  { id:8419, source_code:'sina_news',     source_name:'新浪财经快讯',   trigger_type:'schedule', status:'ok',     item_count:96, dedup_count:11, fail_count:0, duration_ms:2210, error_message:null, started_at:'2026-10-15 09:05:41' },
+  { id:8418, source_code:'eastmoney_news',source_name:'东方财富快讯',   trigger_type:'schedule', status:'failed', item_count:0,  dedup_count:0,  fail_count:0, duration_ms:3020, error_message:'connect ETIMEDOUT（源不可达，30s 超时）', started_at:'2026-10-15 08:40:12' },
+  { id:8417, source_code:'eastmoney_lhb', source_name:'东方财富龙虎榜', trigger_type:'schedule', status:'ok',     item_count:71, dedup_count:0,  fail_count:0, duration_ms:2660, error_message:null, started_at:'2026-10-14 15:11:52' }
+];
+var ITEMS = [
+  { id:12043, external_id:'arxiv:2408.12345', title:'链式推理蒸馏在小参数模型上的迁移效果', source:'arxiv_digest', pipeline:3, qs:'ok',      stage:'llm',      issue:null,                                   pub:'2026-10-15', pv:'v1' },
+  { id:12042, external_id:'arxiv:2408.11902', title:'面向长文档的检索增强：分块策略再评估',  source:'arxiv_digest', pipeline:3, qs:'partial', stage:'llm',      issue:'分类未返回，摘要生成成功',             pub:'2026-10-15', pv:'v1' },
+  { id:12041, external_id:'sina:20261015A0B2',title:'央行开展 5000 亿元中期借贷便利操作',      source:'sina_news',    pipeline:1, qs:'ok',      stage:'publish',  issue:null,                                   pub:'2026-10-15', pv:'' },
+  { id:12040, external_id:'sina:20261015A0C7',title:'多家银行下调存款利率，专家解读影响',      source:'sina_news',    pipeline:1, qs:'skip',    stage:'dedup',    issue:'SimHash 命中 #12039（内容重复）',      pub:'2026-10-15', pv:'' },
+  { id:12039, external_id:'arxiv:2408.11011', title:'多模态对齐中的表征崩塌问题综述',          source:'arxiv_digest', pipeline:3, qs:'fail',    stage:'collect',  issue:'源返回空（0 条），已在批次 8418 记 failed', pub:'2026-10-15', pv:'v1' },
+  { id:12038, external_id:'arxiv:2408.10744', title:'稀疏注意力在端侧推理的内存优化',          source:'arxiv_digest', pipeline:3, qs:'partial', stage:'fallback', issue:'LLM 不可用，摘要走模板降级产出',        pub:'2026-10-15', pv:'v1' }
+];
+var ITEM_META = {
+  12043:{ arxiv_id:'2408.12345', title_en:'Transferring Chain-of-Thought Distillation to Small Models', prompt_version:'v1', authors:['Zhang Wei','Li Ming','Chen Hao'], categories:'cs.CL, cs.LG' },
+  12038:{ arxiv_id:'2408.10744', title_en:'Memory Optimization for Sparse Attention on Edge Devices', prompt_version:'v1', authors:['Liu Yang'], categories:'cs.LG' }
+};
+var ITEM_CONTENT = {
+  12043:'We study whether chain-of-thought (CoT) distillation transfers to sub-1B models. Across 6 reasoning benchmarks, CoT distillation yields +7.4 average gain over answer-only distillation, but degrades sharply below 0.6B where the student lacks capacity for multi-step traces. We introduce a length-aware curriculum that schedules trace complexity by validation loss, recovering 3.1 of the 4.2 points lost at 0.3B.',
+  12038:'Sparse attention reduces theoretical FLOPs but often fails to reduce wall-clock memory on edge accelerators due to materialized score matrices. We propose tile-wise streaming softmax which keeps peak memory constant with respect to sequence length, achieving 2.3x longer context on a 4GB NPU with under 1% perplexity loss.'
+};
+var LHB_STATS = { trade_date:'2026-10-15', total:68, limit_up:12, hotmoney:31, institution:24 };
+var LHB = [
+  { id:301, trade_date:'2026-10-15', stock_code:'600150', stock_name:'中国船舶', reason:'日涨幅偏离值达 7%',   buy:412350000, sell:188720000, net:223630000, turnover:'8.42', limit_up:1, is_st:0, tags:['hotmoney','institution'], hasSeats:true },
+  { id:302, trade_date:'2026-10-15', stock_code:'002594', stock_name:'比亚迪',   reason:'连续三日涨幅偏离值累计达 20%', buy:688400000, sell:912500000, net:-224100000, turnover:'5.17', limit_up:0, is_st:0, tags:['institution'], hasSeats:true },
+  { id:303, trade_date:'2026-10-15', stock_code:'300308', stock_name:'中际旭创', reason:'换手率达 20%',        buy:295180000, sell:301420000, net:-6240000,  turnover:'21.30', limit_up:0, is_st:0, tags:['hotmoney'], hasSeats:true },
+  { id:304, trade_date:'2026-10-15', stock_code:'000725', stock_name:'京东方A',  reason:'日振幅值达 15%',            buy:157600000, sell:120300000, net:37300000,  turnover:'3.88', limit_up:0, is_st:0, tags:['retail'], hasSeats:false },
+  { id:305, trade_date:'2026-10-15', stock_code:'600122', stock_name:'ST 宏图',   reason:'ST 股连续三日涨跌幅偏离',   buy:88200000,  sell:104600000, net:-16400000, turnover:'12.05', limit_up:1, is_st:1, tags:['hotmoney'], hasSeats:true }
+];
+var LHB_SEATS = {
+  301:[
+    { name:'华鑫证券有限责任公司上海分公司',           buy:188000000, sell:0,        type:'buy',  tag:'hotmoney',    alias:'章盟主系' },
+    { name:'机构专用',                                 buy:96300000,  sell:41200000, type:'both', tag:'institution', alias:'' },
+    { name:'东方财富证券股份有限公司拉萨团结路第二',   buy:42600000,  sell:18700000, type:'both', tag:'hotmoney',    alias:'拉萨天团' },
+    { name:'中信证券股份有限公司上海溧阳路',           buy:0,         sell:73400000, type:'sell', tag:'hotmoney',    alias:'溧阳路传奇' }
+  ],
+  302:[
+    { name:'机构专用',     buy:214000000, sell:398000000, type:'both', tag:'institution', alias:'' },
+    { name:'深股通专用',   buy:88600000,  sell:129000000, type:'both', tag:'institution', alias:'' },
+    { name:'国信证券股份有限公司深圳泰然九路', buy:41200000, sell:0,   type:'buy',  tag:'hotmoney',    alias:'深圳帮' }
+  ],
+  303:[
+    { name:'东方财富证券股份有限公司拉萨东环路第二', buy:73100000, sell:0,        type:'buy',  tag:'hotmoney', alias:'拉萨天团' },
+    { name:'国盛证券有限责任公司宁波桑田路',         buy:0,        sell:68400000, type:'sell', tag:'hotmoney', alias:'宁波桑田路' }
+  ],
+  305:[
+    { name:'广发证券股份有限公司佛山平湖大道',       buy:44100000, sell:12000000, type:'both', tag:'hotmoney', alias:'佛山无影脚' }
+  ]
+};
+/* 席位种子：真实名单取自 archive/migrations/p35-content-quality.mjs 的 SEAT_SEED */
+var SEATS = [
+  { id:1,  seat_name:'华鑫证券有限责任公司上海分公司',           alias:'章盟主系',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:2,  seat_name:'国泰君安证券股份有限公司上海江苏路',       alias:'炒股养家',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:3,  seat_name:'银河证券股份有限公司绍兴证券营业部',       alias:'绍兴帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:4,  seat_name:'中国银河证券股份有限公司北京金融街',       alias:'北京帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:5,  seat_name:'东方财富证券股份有限公司拉萨团结路第二',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:6,  seat_name:'东方财富证券股份有限公司拉萨东环路第二',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:7,  seat_name:'东方财富证券股份有限公司拉萨团结路第一',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:8,  seat_name:'中信证券股份有限公司上海溧阳路',           alias:'溧阳路传奇', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:9,  seat_name:'华泰证券股份有限公司深圳益田路荣超商务中心',alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:10, seat_name:'招商证券股份有限公司深圳蛇口工业七路',     alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:11, seat_name:'国信证券股份有限公司深圳泰然九路',         alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:12, seat_name:'广发证券股份有限公司佛山平湖大道',         alias:'佛山无影脚', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:13, seat_name:'国盛证券有限责任公司宁波桑田路',           alias:'宁波桑田路', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:14, seat_name:'方正证券股份有限公司杭州萧山市心中路',     alias:'杭州系',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:15, seat_name:'财通证券股份有限公司杭州体育场路',         alias:'杭州系',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
+  { id:16, seat_name:'机构专用',                                 alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' },
+  { id:17, seat_name:'沪股通专用',                               alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' },
+  { id:18, seat_name:'深股通专用',                               alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' }
+];
+
+/* ===== 工具 ===== */
+function toast(msg){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.remove('show'); },2000);
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
+function money(v){ return (v/100000000).toFixed(2)+' 亿'; }
+function 万元(v){ return (v/10000).toFixed(0); }
+function qsbadge(q){
+  var map={ ok:['ok','完整'], partial:['warn','部分成功'], fail:['err','失败'], skip:['neutral','跳过'] };
+  var m=map[q]||['neutral',q];
+  return '<span class="badge '+m[0]+'">'+m[1]+'</span>';
+}
+function stageBadge(s){
+  var map={ collect:['','采集'], dedup:['neutral','去重'], llm:['','LLM'], fallback:['warn','降级'], publish:['','发布'] };
+  var m=map[s]||['neutral',s];
+  return '<span class="badge '+(m[0]||'info')+'">'+m[1]+'</span>';
+}
+function tagBadge(t){
+  if(t==='hotmoney') return '<span class="badge warn">游资</span>';
+  if(t==='institution') return '<span class="badge info">机构</span>';
+  return '<span class="badge neutral">散户</span>';
+}
+/* 净额：涨红跌绿（A 股口径） */
+function netCell(v){
+  var pos=v>=0;
+  return '<td class="num" style="color:'+(pos?'var(--ws-fin-up)':'var(--ws-fin-down)')+';font-weight:600">'+(pos?'+':'')+money(v)+'</td>';
+}
+
+/* ===== 通用状态件 ===== */
+function skeletonCards(n){
+  var h='<div class="stats">';
+  for(var i=0;i<(n||4);i++) h+='<div class="stat"><div class="skel"><i></i><i></i></div></div>';
+  return h+'</div>';
+}
+function exceptionHtml(perm,mod){
+  return '<div class="exception"><div class="ic">'+ICON.lock+'</div>'
+    +'<div class="t">无权访问'+(mod||'该模块')+'</div>'
+    +'<div class="d">当前账号缺少 <span class="kv">'+perm+'</span> 权限。<br>'
+    +'如需访问，请联系超管在「角色权限」中授予该权限。</div>'
+    +'<button class="btn primary" onclick="CC.setState(\'normal\')">返回工作台</button></div>';
+}
+function errorHtml(msg){
+  return '<div class="exception"><div class="ic">'+ICON.alert+'</div>'
+    +'<div class="t">加载失败</div>'
+    +'<div class="d">'+esc(msg||'请求超时（Gateway Timeout）')+'<br>'
+    +'批次级错误会记入 <span class="kv">collect_runs.error_message</span>，条目级错误记 '
+    +'<span class="kv">content_items.error</span>。</div>'
+    +'<button class="btn primary" onclick="CC.setState(\'normal\')">重试</button></div>';
+}
+function emptyHtml(title,sub,action){
+  return '<div class="exception">'+ICON.inbox.replace('<svg','<svg class="empty-ic"')
+    +'<div class="empty-txt">'+esc(title)+'</div>'
+    +'<div class="empty-sub">'+esc(sub)+'</div>'
+    +(action||'')+'</div>';
+}
+function notApplicable(why){
+  return '<div class="note info"><span>[原型] 本模块该状态不适用：'+why+'</span></div>';
+}
+
+/* =========================================================
+   屏 1：内容中心 · 采集总览
+   接口：GET /api/content/collect/health?days=7、GET /api/content/collect/runs
+        POST /api/content/collect/:sourceCode（content:manage）
+   ========================================================= */
+function healthCard(v,l,sub){
+  return '<div class="stat"><div class="lb">'+l+'</div><div class="v">'+v+'</div>'
+    +'<div class="sub2">'+sub+'</div></div>';
+}
+function screenOverview(){
+  var head='<div class="pg-head"><div><h2>采集总览</h2>'
+    +'<div class="sub">回答三个问题：今天采了多少 / 这次成功了没有 / 哪个源最近老失败'
+    +'<br>批次级问题看这里（collect_runs），条目级问题在「内容条目」看（content_items.quality_*）</div></div></div>';
+  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
+  if(S.state==='loading') return head+skeletonCards(4)+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
+  if(S.state==='error')   return head+errorHtml('GET /api/content/collect/health 返回 504');
+
+  if(S.state==='empty'){
+    return head+emptyHtml('暂无采集批次记录','执行 p35 迁移后的第一次采集才会产生 collect_runs 记录。',
+      '<div class="btn-row" style="justify-content:center"><button class="btn primary" onclick="CC.confirmCollect(\'eastmoney_lhb\')">立即采集一次</button></div>');
+  }
+  var h=head;
+  /* 健康度 */
+  h+='<div class="stats">'
+    + healthCard(HEALTH.successRate,'近 '+HEALTH.windowDays+' 天成功率','共 '+HEALTH.totalRuns+' 批次，失败 '+HEALTH.failedRuns+' 批次')
+    + healthCard(HEALTH.todayFailed,'今日失败次数','今日失败批次计数')
+    + healthCard(RUNS[0].started_at.slice(0,10),'最近一次采集','来自批次日志最新一行')
+    + healthCard(HEALTH.staleSources.length,'静默失效源','配置在列表中但近 7 天零采集')
+    + '</div>';
+  if(HEALTH.staleSources.length){
+    h+='<div class="note danger"><span>发现静默失效源：'
+      + HEALTH.staleSources.map(function(s){return '<span class="kv">'+s.source_code+'</span>';}).join('、')
+      + ' —— 源还在配置里但近 7 天一次都没跑。比「采集失败」更隐蔽。</span></div>';
+  } else {
+    h+='<div class="note ok"><span>近 7 天无静默失效源。静默失效 = 源仍在配置中但零采集；'
+      + '它不会报错，只能靠「最后采集时间」发现。</span></div>';
+  }
+  /* 采集源 */
+  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.news+'</span>采集源'
+    +'<span class="hint">「立即采集」需要 content:manage</span></div><div class="srcs">';
+  SOURCES.forEach(function(s){
+    var bad=s.status!=='ok';
+    h+='<div class="src'+(bad?' cycle':'')+'">'
+      +'<div class="nm">'+esc(s.name)
+      +(s.status==='ok'?'<span class="badge ok">正常</span>':'<span class="badge err">今日失败</span>')+'</div>'
+      +'<div class="meta"><span class="kv">'+s.code+'</span></div>'
+      +'<div class="meta">调度：'+esc(s.cron)+'</div>'
+      +'<div class="meta">最近：'+esc(s.last)+' · 耗时 '+(s.dur/1000).toFixed(2)+'s · '+s.count+' 条</div>'
+      +'<div class="act"><button class="btn sm" '+(S.busy?'disabled':'')
+      +' onclick="CC.confirmCollect(\''+s.code+'\')">'
+      +(S.busy===s.code?'采集中…（禁止重复触发）':'立即采集')+'</button></div>'
+      +'</div>';
+  });
+  h+='</div>'
+    +'<div class="note info"><span>论文摘要 <span class="kv">arxiv_digest</span> '
+    +'<b>不经采集器</b>：摘要由定时任务里的 AI 生成后，通过 '
+    +'<span class="kv">POST /api/content/arxiv-digest</span> 批量落库，因此不出现在上方采集源里。</span></div>'
+    +'</div>';
+  /* 批次日志 */
+  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.clock+'</span>采集批次日志'
+    +'<span class="hint">GET /api/content/collect/runs · content_items 记条目，批次级问题查这里</span></div>'
+    +'<table class="tbl"><thead><tr><th>批次</th><th>采集源</th><th>触发</th><th>状态</th>'
+    +'<th>采集</th><th>去重跳过</th><th>失败</th><th>耗时</th><th>开始时间</th><th>错误信息</th></tr></thead><tbody>';
+  RUNS.forEach(function(r){
+    h+='<tr><td class="mono">'+r.id+'</td>'
+      +'<td>'+esc(r.source_name)+'<div><span class="kv">'+r.source_code+'</span></div></td>'
+      +'<td>'+(r.trigger_type==='schedule'?'<span class="badge neutral">定时</span>':'<span class="badge info">手动</span>')+'</td>'
+      +'<td>'+(r.status==='ok'?'<span class="badge ok">成功</span>':'<span class="badge err">失败</span>')+'</td>'
+      +'<td class="num">'+r.item_count+'</td><td class="num">'+r.dedup_count+'</td><td class="num">'+r.fail_count+'</td>'
+      +'<td class="num">'+(r.duration_ms/1000).toFixed(2)+'s</td>'
+      +'<td class="mono">'+r.started_at+'</td>'
+      +'<td>'+(r.error_message?'<span style="color:var(--ws-danger)">'+esc(r.error_message)+'</span>':'<span style="color:var(--ws-text-disabled)">—</span>')+'</td></tr>';
+  });
+  h+='</tbody></table>'
+    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">默认返回最近 50 批（limit 上限 200）</div>'
+    +'</div>';
+  return h;
+}
+function confirmCollect(code){
+  var src=null; SOURCES.forEach(function(s){ if(s.code===code) src=s; });
+  if(!src) return;
+  S.modal={ title:'确认立即采集', ok:'确认采集',
+    body:'即将手动触发采集器 <span class="kv">'+code+'</span>（'+esc(src.name)+'）。<br><br>'
+        +'该操作会真实请求上游数据源，<b>同一采集器运行期间会被服务端拒绝</b>（返回 '
+        +'<span class="kv">status=rejected</span>）。建议仅在排查数据时使用。',
+    onOk:function(){ doCollect(code); } };
+  renderModal();
+}
+function doCollect(code){
+  S.busy=code; S.modal=null; renderModal(); render();
+  setTimeout(function(){
+    S.busy=null;
+    var now=new Date();
+    var ts=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+    RUNS.unshift({ id:RUNS[0].id+1, source_code:code, source_name:srcName(code), trigger_type:'manual',
+      status:code==='eastmoney_news'?'failed':'ok', item_count:code==='eastmoney_news'?0:68,
+      dedup_count:0, fail_count:0, duration_ms:2410,
+      error_message:code==='eastmoney_news'?'connect ETIMEDOUT（源不可达，30s 超时）':null, started_at:ts });
+    render();
+    toast(code==='eastmoney_news'?'采集失败，已记入批次日志（source_code='+code+'）':'采集完成：新增 68 条');
+  },1400);
+}
+function pad(n){ return n<10?'0'+n:''+n; }
+function srcName(code){
+  var n=code; SOURCES.forEach(function(s){ if(s.code===code) n=s.name; }); return n;
+}
+
+/* =========================================================
+   屏 2：内容中心 · 内容条目
+   接口：既有的 GET items 需增强以支持 quality_status / quality_stage 筛选
+   ========================================================= */
+function selectOpts(map,cur,allLabel){
+  var h='<option value="">'+(allLabel||'全部')+'</option>';
+  for(var k in map) h+='<option value="'+k+'"'+(cur===k?' selected':'')+'>'+map[k]+'</option>';
+  return h;
+}
+function screenItems(){
+  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
+  if(S.state==='error')   return errorHtml('GET /api/content/items 返回 500');
+
+  var head='<div class="pg-head"><div><h2>内容条目</h2>'
+    +'<div class="sub">按质量结论（quality_status）与归因阶段（quality_stage）筛选 —— '
+    +'回答「这批内容里有多少是失败 / 降级的、卡在哪一步」</div></div></div>';
+  if(S.state==='loading'){
+    return head+'<div class="card"><div class="skel"><i></i><i></i><i></i><i></i></div></div>';
+  }
+  var h=head;
+  h+='<div class="note warn"><span><b>[落地待补]</b>：<span class="kv">quality_status</span> / '
+    +'<span class="kv">quality_stage</span> 两个筛选维度当前服务端'
+    +'只有自查占位（<span class="kv">GET /api/content/quality/filter-support</span>），'
+    +'真正的筛选要在既有 controller 上补齐。原型先按目标形态表达。</span></div>';
+
+  h+='<div class="card"><div class="filters">'
+    +'<select class="select" onchange="S.f.qs=this.value;render()">'+selectOpts({ok:'完整',partial:'部分成功',fail:'失败',skip:'跳过'},S.f.qs,'质量结论：全部')+'</select>'
+    +'<select class="select" onchange="S.f.stage=this.value;render()">'+selectOpts({collect:'采集',dedup:'去重',llm:'LLM',fallback:'降级',publish:'发布'},S.f.stage,'归因阶段：全部')+'</select>'
+    +'<select class="select" onchange="S.f.source=this.value;render()">'+selectOpts({arxiv_digest:'论文摘要',sina_news:'新浪财经快讯',eastmoney_news:'东方财富快讯'},S.f.source,'来源：全部')+'</select>'
+    +'<input class="input" style="width:180px" placeholder="标题 / 摘要关键词" value="'+escAttr(S.f.keyword)+'" oninput="S.f.keyword=this.value">'
+    +'<input class="input" style="width:120px" value="2026-10-01" readonly aria-label="日期起点">'
+    +'<input class="input" style="width:120px" value="2026-10-15" readonly aria-label="日期终点">'
+    +'<button class="btn primary" onclick="CC.toast(\'[原型] 已按条件筛选\')">查询</button>'
+    +'<button class="btn" onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};render()">重置</button>'
+    +'</div>';
+
+  if(S.state==='empty'){
+    h+=emptyHtml('没有匹配的内容条目','当前筛选条件下无结果；可放宽质量结论或日期范围后再试。',
+      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
+      +'onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};CC.setState(\'normal\');render()">清空筛选条件</button></div>');
+    return h+'</div>';
+  }
+  var rows=ITEMS.filter(function(it){
+    if(S.f.qs && it.qs!==S.f.qs) return false;
+    if(S.f.stage && it.stage!==S.f.stage) return false;
+    if(S.f.source && it.source!==S.f.source) return false;
+    if(S.f.keyword && it.title.indexOf(S.f.keyword)<0) return false;
+    return true;
+  });
+  if(rows.length===0){
+    h+=emptyHtml('没有匹配的内容条目','已按当前筛选条件过滤，放宽条件后再试。',
+      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
+      +'onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};render()">清空筛选条件</button></div>');
+    return h+'</div>';
+  }
+  h+='<table class="tbl"><thead><tr><th>ID</th><th>标题</th><th>来源</th><th>质量结论</th>'
+    +'<th>归因阶段</th><th>归因说明</th><th>发布时间</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(function(it){
+    h+='<tr><td class="mono">'+it.id+'</td>'
+      +'<td><div class="ell" title="'+escAttr(it.title)+'">'+esc(it.title)+'</div>'
+      +'<div class="kv" style="font-size:12px">'+esc(it.external_id)+'</div></td>'
+      +'<td><span class="kv">'+esc(it.source)+'</span></td>'
+      +'<td>'+qsbadge(it.qs)+'</td>'
+      +'<td>'+stageBadge(it.stage)+'</td>'
+      +'<td style="max-width:260px;font-size:12px;color:var(--ws-text-secondary)">'
+      +(it.issue?esc(it.issue):'<span style="color:var(--ws-text-disabled)">—</span>')+'</td>'
+      +'<td class="mono">'+it.pub+'</td>'
+      +'<td><div class="row-actions"><button class="btn sm" onclick="CC.openDetail('+it.id+')">详情</button></div></td></tr>';
+  });
+  h+='</tbody></table>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:10px">'
+    +'<div style="font-size:12px;color:var(--ws-text-tertiary)">共 1,284 条 · 每页 20 条 · 第 '+S.page+' 页</div>'
+    +'<div class="btn-row"><button class="btn sm" '+(S.page<=1?'disabled':'')+' onclick="S.page--;render()">上一页</button>'
+    +'<button class="btn sm" onclick="S.page++;render()">下一页</button></div></div>';
+  return h+'</div>';
+}
+function openDetail(id){ S.detailId=id; go('content-detail'); }
+
+/* =========================================================
+   屏 3：内容中心 · 条目详情（独立页而非抽屉：meta JSON 与原文塞不进抽屉）
+   ========================================================= */
+function screenDetail(){
+  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
+  if(S.state==='error')   return errorHtml('GET /api/content/items/'+S.detailId+' 返回 500');
+  var it=null; ITEMS.forEach(function(x){ if(x.id===S.detailId) it=x; });
+  if(!it){
+    return '<div class="pg-head"><div><h2>条目详情</h2><div class="sub">条目不存在或已被软删除</div></div></div>'
+      + emptyHtml('未找到该条目','条目 #'+S.detailId+' 不存在（可能已被软删除 deleted_at 标记）。',
+        '<button class="btn" onclick="CC.go(\'content-items\')">返回内容条目</button>');
+  }
+  if(S.state==='loading'){
+    return '<div class="pg-head"><div><h2>条目详情</h2></div></div>'
+      +'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
+  }
+  var meta=ITEM_META[it.id]||{}, content=ITEM_CONTENT[it.id]||'(该来源为资讯类，content 字段存正文)';
+  var h='<div class="pg-head"><div><h2>条目详情</h2>'
+    +'<div class="sub">回答「这一条到底怎么了」 —— 质量结论、卡在哪一步、原始内容分别在哪看'
+    +'<br>（从列表点击「详情」进入；直接从侧栏进入时默认展示最近一条 #'+S.detailId+'）</div></div>'
+    +'<div class="spacer"></div><div class="btn-row">'
+    +'<button class="btn" onclick="CC.go(\'content-items\')">返回列表</button>'
+    +'<button class="btn" onclick="CC.confirmRerun('+it.id+')">重新处理</button></div></div>';
+
+  if(it.stage==='fallback'){
+    h+='<div class="note warn"><span>该条<b>走了降级通道</b>（<span class="kv">quality_stage=fallback</span>）：'
+      +'摘要是模板化产出，不含 LLM 内容。<br>'
+      +'为什么不直接算失败：它是「成功但降级」，混进评测集会拉低幻觉率（模板没内容自然没幻觉），'
+      +'所以必须单独标记 —— 这正是 v2.0 把 fallback 加进枚举的原因。</span></div>';
+  }
+  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.db+'</span>基本信息</div>'
+    +'<dl class="dl-grid">'
+    +'<dt>条目 ID</dt><dd class="mono">'+it.id+'</dd>'
+    +'<dt>外部 ID</dt><dd class="mono">'+esc(it.external_id)+'</dd>'
+    +'<dt>来源</dt><dd><span class="kv">'+esc(it.source)+'</span></dd>'
+    +'<dt>所属管线</dt><dd>'+(it.pipeline?'pipeline_id = '+it.pipeline:'<span style="color:var(--ws-text-tertiary)">null（手动触发，不进固定管线）</span>')+'</dd>'
+    +'<dt>发布时间</dt><dd class="mono">'+it.pub+'</dd>'
+    +'</dl></div>';
+
+  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.alert+'</span>质量归因'
+    +'<span class="hint">结论 + 阶段，两层才答得全「出了什么事 / 卡在哪」</span></div>'
+    +'<dl class="dl-grid">'
+    +'<dt>quality_status</dt><dd>'+qsbadge(it.qs)+' <span class="kv">'+it.qs+'</span></dd>'
+    +'<dt>quality_stage</dt><dd>'+stageBadge(it.stage)+' <span class="kv">'+it.stage+'</span></dd>'
+    +'<dt>quality_issue</dt><dd>'+(it.issue?esc(it.issue):'<span style="color:var(--ws-text-disabled)">—</span>')+'</dd>'
+    +'</dl>'
+    +'<div class="note warn" style="margin:12px 0 0"><span>'
+    +'<b>[落地待补]</b> 本稿曾列出 <span class="kv">quality_version</span> 与 '
+    +'<span class="kv">quality_scored_at</span>，但 p35 实际只建了 '
+    +'<span class="kv">quality_status</span> / <span class="kv">quality_stage</span> / '
+    +'<span class="kv">quality_issue</span> 三列 —— 前两者<b>目前不存在</b>。'
+    +'若要留存「评分规则版本」与「打分时间」，需补迁移再画。</span></div>'
+    +'<div class="note info" style="margin:12px 0 0"><span>'
+    +'<span class="kv">quality_issue</span> 是<b>归因标签</b>（人读）；'
+    +'<span class="kv">error</span> 字段是<b>技术错误原文</b>（机器留痕）。两者职责不同，不合并。</span></div>'
+    +'</div>';
+
+  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.news+'</span>原始内容'
+    +'<span class="hint">'+(it.source==='arxiv_digest'?'存 arXiv 原文 —— Phase 2 判定幻觉的比对基准':'资讯正文')+'</span></div>'
+    +'<pre class="codeblk"><span class="hd">'+(it.source==='arxiv_digest'?'abstract · '+esc(meta.arxiv_id||'')+' · English':'content · Chinese')+'</span>'
+    +'<code class="bd">'+esc(content)+'</code></pre>'
+    +(it.source==='arxiv_digest'
+      ? '<div class="note info" style="margin:12px 0 0"><span><b>为什么这里必须存原文</b>：'
+        +'Phase 2 要判定「摘要里的数字在原文里找不找得到」，没有原文就自动判不了。'
+        +'这也是 D1 裁决「论文摘要落 content_items」而不是单独建表的原因 —— '
+        +'一个表同时解决抽样、幻觉比对、Admin 查阅三件事。</span></div>'
+      : '')
+    +'</div>';
+
+  if(Object.keys(meta).length){
+    h+='<div class="card"><div class="ct"><span class="ic">'+ICON.gear+'</span>meta'
+      +'<span class="hint">Phase 2 按 prompt_version 做版本对照抽样</span></div>'
+      +'<pre class="codeblk"><span class="hd">meta · json</span>'
+      +'<code class="bd">'+esc(JSON.stringify(meta,null,2))+'</code></pre></div>';
+  }
+  return h;
+}
+function confirmRerun(id){
+  S.modal={ title:'确认重新处理该条目？', ok:'确认重跑',
+    body:'将对该条目重跑「去重 → LLM 摘要 → 发布」链路。<br><br>'
+        +'重跑会<b>覆盖</b>现有的 <span class="kv">quality_status</span> / '
+        +'<span class="kv">quality_stage</span> / <span class="kv">quality_issue</span>，'
+        +'原有的失败归因记录将无法复原。',
+    onOk:function(){ S.modal=null; renderModal(); toast('已提交重跑（content:manage）'); } };
+  renderModal();
+}
+
+/* =========================================================
+   屏 4：内容中心 · 龙虎榜
+   接口：GET /api/content/lhb、GET /api/content/lhb/stats、GET /api/content/lhb/:id
+   ========================================================= */
+function screenLhb(){
+  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
+  if(S.state==='error')   return errorHtml('GET /api/content/lhb 返回 502');
+  var head='<div class="pg-head"><div><h2>龙虎榜</h2>'
+    +'<div class="sub">最近交易日的上榜明细与资金性质；席位判定走规则表（hotmoney_seats），不是 AI 推断</div></div></div>';
+  if(S.state==='loading') return head+skeletonCards(4)+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
+
+  var h=head;
+  h+='<div class="stats">'
+    + healthCard(LHB_STATS.trade_date,'最近交易日','统计口径按该日，非历史累计')
+    + healthCard(LHB_STATS.total,'当日上榜数','lhb_records 当日记录数')
+    + healthCard(LHB_STATS.limit_up,'当日涨停数','limit_up = 1')
+    + healthCard(LHB_STATS.hotmoney+' / '+LHB_STATS.institution,'游资 / 机构参与','命中 tags 的记录数（可同时命中）')
+    + '</div>';
+
+  h+='<div class="card"><div class="filters">'
+    +'<label class="lb">交易日</label><input class="input" style="width:140px" value="'+escAttr(S.lhbDate)+'" readonly aria-label="交易日">'
+    +'<select class="select" onchange="S.lhbTag=this.value;render()">'
+    + selectOpts({hotmoney:'游资',institution:'机构',retail:'散户'},S.lhbTag,'资金性质：全部')+'</select>'
+    +'<button class="btn primary" onclick="CC.toast(\'[原型] 已按条件查询\')">查询</button>'
+    +'<button class="btn" onclick="CC.toast(\'[原型] 已导出 CSV（68 条）\')">导出</button>'
+    +'</div>';
+
+  if(S.state==='empty'){
+    h+=emptyHtml('该交易日暂无龙虎榜数据','可能尚未到当日收盘同步时间（15:10 后），或该日为非交易日。',
+      '<div class="btn-row" style="justify-content:center">'
+      +'<button class="btn primary" onclick="S.lhbTag=\'\';CC.setState(\'normal\');render()">查看全部交易日</button></div>');
+    return h+'</div>';
+  }
+  var rows=S.lhbTag?LHB.filter(function(r){ return r.tags.indexOf(S.lhbTag)>=0; }):LHB;
+  h+='<table class="tbl"><thead><tr><th>代码</th><th>名称</th><th>上榜原因</th>'
+    +'<th style="text-align:right">买入额</th><th style="text-align:right">卖出额</th><th style="text-align:right">净额</th>'
+    +'<th style="text-align:right">换手率</th><th>资金性质</th><th>标记</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td class="mono">'+r.stock_code+'</td>'
+      +'<td><b>'+esc(r.stock_name)+'</b></td>'
+      +'<td style="max-width:200px;font-size:12px;color:var(--ws-text-secondary)">'+esc(r.reason)+'</td>'
+      +'<td class="num">'+money(r.buy)+'</td>'
+      +'<td class="num">'+money(r.sell)+'</td>'
+      + netCell(r.net)
+      +'<td class="num">'+r.turnover+'%</td>'
+      +'<td>'+r.tags.map(tagBadge).join(' ')+'</td>'
+      +'<td>'+(r.limit_up?'<span class="badge err">涨停</span> ':'')+(r.is_st?'<span class="badge warn">ST</span>':'')+'</td>'
+      +'<td><div class="row-actions"><button class="btn sm" onclick="CC.openSeats('+r.id+')">席位明细</button></div></td></tr>';
+  });
+  h+='</tbody></table>'
+    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">'
+    +'净额与买卖方向用<b>金融涨跌档</b>（--ws-fin-up / --ws-fin-down）：正为红、负为绿（A 股口径），'
+    +'与「失败/成功」的 err / ok 语义色<b>刻意区分</b>，避免同屏红色两义。｜默认返回 50 条，按 trade_date DESC 排序</div></div>';
+  /* 若有行已展开席位抽屉，列表不再重复渲染抽屉内容（抽屉在 .drawer 里） */
+  return h;
+}
+function openSeats(id){
+  S.lhbOpen=id; renderDrawer();
+}
+function renderDrawer(){
+  var el=document.getElementById('drawer'), mask=document.getElementById('mask');
+  if(S.lhbOpen===null){ el.classList.remove('show'); mask.classList.remove('show'); return; }
+  var row=null; LHB.forEach(function(r){ if(r.id===S.lhbOpen) row=r; });
+  if(!row){ el.classList.remove('show'); mask.classList.remove('show'); return; }
+  var h='<div class="dh"><span class="ttl">席位明细 · '+row.stock_code+' '+esc(row.stock_name)+'</span>'
+    +'<button class="icon-btn" type="button" aria-label="关闭抽屉" onclick="CC.closeAll()">'+ICON.x+'</button></div><div class="db">';
+  var seats=LHB_SEATS[row.id];
+  if(!seats){
+    h+='<div class="note warn"><span>该条<b>未取到席位明细</b>（<span class="kv">seats_available = false</span>）。<br>'
+      +'原因多为上游分页接口当次未返回明细；金额与上榜结论仍然有效，'
+      +'但<b>资金性质只能判为 retail</b> —— 没有席位就谈不上「命中游资席位」。</span></div>';
+  } else {
+    h+='<div class="note info"><span>判定方式：<b>规则匹配</b>（席位名归一化去空格后查 '
+      +'<span class="kv">hotmoney_seats</span> 表），不是 AI 推断。<br>'
+      +'为什么不用 AI：席位归属要<b>可复现</b>，同一份数据今天查明天查必须得到同一结论。</span></div>';
+    h+='<table class="tbl" style="background:var(--ws-bg-surface)"><thead><tr><th>席位名称</th><th>性质</th>'
+      +'<th style="text-align:right">买入</th><th style="text-align:right">卖出</th><th>方向</th></tr></thead><tbody>';
+    seats.forEach(function(s){
+      var dir=s.type==='buy'?'<span class="trade buy">买入</span>'
+            :s.type==='sell'?'<span class="trade sell">卖出</span>':'<span class="trade both">双向</span>';
+      h+='<tr><td>'+esc(s.name)+(s.alias?'<div style="font-size:12px;color:var(--ws-text-tertiary)">简称：'+esc(s.alias)+'</div>':'')+'</td>'
+        +'<td>'+tagBadge(s.tag)+'</td>'
+        +'<td class="num">'+(s.buy?万元(s.buy)+' 万':'—')+'</td>'
+        +'<td class="num">'+(s.sell?万元(s.sell)+' 万':'—')+'</td>'
+        +'<td>'+dir+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  }
+  h+='</div>';
+  el.innerHTML=h; el.classList.add('show'); mask.classList.add('show');
+}
+function closeAll(){
+  S.lhbOpen=null; S.modal=null;
+  document.getElementById('drawer').classList.remove('show');
+  document.getElementById('mask').classList.remove('show');
+  renderModal();
+}
+
+/* =========================================================
+   屏 5：内容中心 · 席位库
+   规则表：席位会迁址，所以要「启用 / 停用」而不是删除
+   ========================================================= */
+function screenSeats(){
+  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
+  if(S.state==='error')   return errorHtml('GET /api/content/seats 返回 500');
+  var head='<div class="pg-head"><div><h2>席位库</h2>'
+    +'<div class="sub">游资 / 机构营业部名单 —— 规则表，不硬编码在代码里</div></div>'
+    +'<div class="spacer"></div><div class="btn-row">'
+    +'<button class="btn primary" onclick="CC.openSeatForm()">新增席位</button></div></div>';
+  if(S.state==='loading') return head+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
+  if(S.state==='empty')   return head+emptyHtml('席位库为空','执行 p35 迁移会写入 18 条初始名单（15 游资 + 3 机构通道）。',
+      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
+      +'onclick="S.seatKw=\'\';S.seatTag=\'\';S.seatActive=\'\';CC.setState(\'normal\');render()">清空筛选条件</button></div>');
+
+  var h=head;
+  h+='<div class="note info"><span>席位会<b>迁址</b>。迁址后请<b>停用</b>旧记录而不是删除 —— '
+    +'删除会让历史龙虎榜的判定结论不可再现，而今天查同一份数据必须得到同一结论。</span></div>';
+  h+='<div class="card"><div class="filters">'
+    +'<input class="input" style="width:240px" placeholder="搜索营业部名称 / 简称" value="'+escAttr(S.seatKw)+'" oninput="S.seatKw=this.value;renderSeatTable()">'
+    +'<select class="select" onchange="S.seatTag=this.value;renderSeatTable()">'
+    + selectOpts({hotmoney:'游资',institution:'机构'},S.seatTag,'资金性质：全部')+'</select>'
+    +'<select class="select" onchange="S.seatActive=this.value;renderSeatTable()">'
+    +'<option value="">状态：全部</option><option value="1">启用</option><option value="0">停用</option></select>'
+    +'</div><div id="seatTable"></div></div>';
+  return h;
+}
+function seatRows(){
+  return SEATS.filter(function(s){
+    if(S.seatTag && s.tag!==S.seatTag) return false;
+    if(S.seatActive!=='' && String(s.is_active)!==S.seatActive) return false;
+    if(S.seatKw && s.seat_name.indexOf(S.seatKw)<0 && (s.alias||'').indexOf(S.seatKw)<0) return false;
+    return true;
+  });
+}
+function renderSeatTable(){
+  var el=document.getElementById('seatTable'); if(!el) return;
+  var rows=seatRows();
+  if(rows.length===0){
+    el.innerHTML=emptyHtml('没有匹配的席位','换个关键词，或清空筛选条件。',''); return;
+  }
+  var h='<table class="tbl"><thead><tr><th>ID</th><th>营业部全称</th><th>简称</th><th>资金性质</th>'
+    +'<th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(function(s){
+    h+='<tr><td class="mono">'+s.id+'</td>'
+      +'<td>'+esc(s.seat_name)+'</td>'
+      +'<td>'+(s.alias?esc(s.alias):'<span style="color:var(--ws-text-disabled)">—</span>')+'</td>'
+      +'<td>'+tagBadge(s.tag)+'</td>'
+      +'<td>'+(s.is_active?'<span class="badge ok">启用</span>':'<span class="badge neutral">停用</span>')+'</td>'
+      +'<td class="mono">'+s.created_at+'</td>'
+      +'<td><div class="row-actions">'
+      +(s.is_active
+        ?'<button class="btn sm danger" onclick="CC.confirmDisable('+s.id+')">停用</button>'
+        :'<button class="btn sm" onclick="SEATS.forEach(function(x){if(x.id==='+s.id+')x.is_active=1;});renderSeatTable();CC.toast(\'已启用\')">启用</button>')
+      +'</div></td></tr>';
+  });
+  el.innerHTML=h+'</tbody></table>'
+    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">共 '+rows.length+' 条</div>';
+}
+function confirmDisable(id){
+  var nm=''; SEATS.forEach(function(s){ if(s.id===id) nm=s.seat_name; });
+  S.modal={ title:'确认停用该席位？', ok:'确认停用',
+    body:'席位：<b>'+esc(nm)+'</b><br><br>'
+        +'停用后<b>新采集</b>的龙虎榜不再用它判定资金性质，未命中规则的席位会落到 '
+        +'<span class="kv">retail</span>。<br>'
+        +'历史记录<b>不会</b>被改写 —— 这正是「停用而非删除」的意义。',
+    onOk:function(){
+      SEATS.forEach(function(x){ if(x.id===id) x.is_active=0; });
+      S.modal=null; renderModal(); renderSeatTable(); toast('已停用（历史判定保持不变）');
+    } };
+  renderModal();
+}
+function openSeatForm(){
+  S.modal={ title:'新增席位', ok:'保存',
+    form:true,
+    body:'新增后立即对新采集生效。席位全称需与龙虎榜返回<b>完全一致</b>（匹配前会做去空格归一化）。',
+    onOk:function(){ S.modal=null; renderModal(); toast('已保存（content:manage）'); } };
+  renderModal();
+}
+
+
+/* ===== 弹窗 ===== */
+function renderModal(){
+  var el=document.getElementById('modal'), mask=document.getElementById('modalMask');
+  if(!S.modal){ mask.classList.remove('show'); el.innerHTML=''; return; }
+  var m=S.modal, h='<div class="mh">'+esc(m.title)+'</div><div class="mb">'+m.body+'</div>';
+  if(m.form){
+    h+='<div class="mf"><div class="frow">'
+      +'<div class="fitem"><span class="flb">营业部全称</span><span class="fld"><input class="input" placeholder="与龙虎榜返回完全一致"></span></div>'
+      +'<div class="fitem"><span class="flb">常用简称</span><span class="fld"><input class="input" placeholder="如：章盟主系"></span></div>'
+      +'<div class="fitem"><span class="flb">资金性质</span><span class="fld"><select class="select">'
+      +'<option value="hotmoney">游资</option><option value="institution">机构</option></select></span></div>'
+      +'</div><div class="fhint">简称可选；全称写错会导致规则永远匹配不上</div></div>';
+  }
+  h+='<div class="mfoot"><button class="btn" onclick="CC.closeAll()">取消</button>'
+    +'<button class="btn primary" onclick="CC.modalOk()">'+esc(m.ok||'确定')+'</button></div>';
+  el.innerHTML=h; mask.classList.add('show');
+}
+function modalOk(){ var m=S.modal; if(m&&m.onOk) m.onOk(); }
+
+
+
+/* =========================================================
+   导航：双模（独立稿 / 整合稿）
+   · 独立打开本稿：切 .cc-host 显隐（本稿自带 5 个 host）
+   · 被 build 抽进 admin-agents-hub.html：走 hash 路由（与 hub 菜单一致）
+   判据 = 页面上是否存在 hub 的 .screen 容器 —— 不靠全局变量，抽出来也不会错。
+   ========================================================= */
+var IN_HUB = !!document.querySelector('.screen[data-screen="content-overview"]');
+var ROUTE = {
+  'content-overview':'#/content',
+  'content-items':'#/content/items',
+  'content-detail':'#/content/items/__ID__',
+  'content-lhb':'#/content/lhb',
+  'content-seats':'#/content/seats'
+};
+function go(k){
+  S.lhbOpen=null;
+  if(IN_HUB){ location.hash=(ROUTE[k]||'#/content').replace('__ID__', S.detailId); return; }
+  S.screen=k; closeAll(false); apply();
+}
+/* 当前可见的 host（hub 下由 .screen 的 hidden 决定；独立稿由 host 自身 hidden 决定） */
+function ccHost(){
+  var ns=[].slice.call(document.querySelectorAll('.cc-host'));
+  for(var i=0;i<ns.length;i++){
+    var n=ns[i], sc=n.closest('.screen');
+    if(!n.classList.contains('hidden') && (!sc || !sc.classList.contains('hidden'))) return n;
+  }
+  return ns[0]||null;
+}
+/* [原型] 状态矩阵控件：只出现在本模块 5 屏顶部，落地不保留 */
+function protoBar(){
+  return '<div class="cc-bar"><span class="tag">[原型] 状态</span>'
+    + STATES.map(function(s){
+        return '<button type="button" class="'+(S.state===s[0]?'on':'')+'" '
+          +'onclick="CC.setState(\''+s[0]+'\')">'+s[1]+'</button>';
+      }).join('')
+    + '<span class="sp">当前：<b>'+curStateLabel()+'</b> · 5 屏 × 5 态均需有回应</span></div>';
+}
+/* 主渲染：渲染到「当前可见的 host」，不碰壳（壳归 proto-shell.mjs 单源） */
+function apply(){
+  var host=ccHost(); if(!host) return;
+  S.screen=host.getAttribute('data-cc')||S.screen;
+  host.innerHTML=protoBar()+screenHtml();
+  renderSeatTable(); renderDrawer(); renderModal();
+}
+function setState(st){ S.state=st; apply(); }
+/* 屏分发：只本模块 5 屏（系统设置 / 对话调试 / 占位屏不属本模块，已随无关段切走） */
+function screenHtml(){
+  switch(S.screen){
+    case 'content-overview': return screenOverview();
+    case 'content-items':    return screenItems();
+    case 'content-detail':   return screenDetail();
+    case 'content-lhb':      return screenLhb();
+    case 'content-seats':    return screenSeats();
+  }
+  return '<div class="note warn"><span>未知屏：'+esc(S.screen)+'</span></div>';
+}
+function curStateLabel(){
+  var l='正常'; STATES.forEach(function(s){ if(s[0]===S.state) l=s[1]; }); return l;
+}
+
+/* 入口：独立打开渲染第一屏；在整合稿里由 hub 的 showHub 调 CC.apply() */
+apply();
+
+  window.CC = { go:go, setState:setState, apply:apply, toast:toast, closeAll:closeAll, modalOk:modalOk, openDetail:openDetail, confirmRerun:confirmRerun, confirmCollect:confirmCollect, openSeats:openSeats, openSeatForm:openSeatForm, confirmDisable:confirmDisable };
+
+})();
+
 </script>
 <script>
 /* hub 路由（hash 驱动；在新稿 script 之前定义：openDef/goList 改写后写 location.hash） */
 (function(){
   var ROUTES = [
     { re: /^#\/agents\/definitions\/([\w-]+)$/, screen: 'detail' },
+    { re: /^#\/content\/items\/([\w-]+)$/, screen: 'content-detail' },
     { re: /^#\/dashboard$/, screen: 'dashboard' },
     { re: /^#\/bianbian$/, screen: 'bianbian' },
     { re: /^#\/users$/, screen: 'users' },
@@ -2451,6 +3673,11 @@ renderTypeList(); renderItems();
     { re: /^#\/settings\/dicts$/, screen: 'dicts' },
     { re: /^#\/mcp$/, screen: 'mcp' },
     { re: /^#\/database$/, screen: 'database' },
+    { re: /^#\/content$/, screen: 'content-overview' },
+    { re: /^#\/content\/items$/, screen: 'content-items' },
+    { re: /^#\/content\/items\/12043$/, screen: 'content-detail' },
+    { re: /^#\/content\/lhb$/, screen: 'content-lhb' },
+    { re: /^#\/content\/seats$/, screen: 'content-seats' },
     { re: /^#\/agents$/, screen: 'overview' },
     { re: /^#\/agents\/metrics$/, screen: 'observe' },
     { re: /^#\/agents\/runs$/, screen: 'records' },
@@ -2463,36 +3690,44 @@ renderTypeList(); renderItems();
   ];
   /* 面包屑：由 NAV 生成（非 Agents 模块为模块名本身，Agents 模块为「Agents / 页面名」） */
   var CRUMB = {
-    dashboard: '<b>工作台</b>',
-    bianbian: '<b>变变管理</b>',
-    users: '<b>用户管理</b>',
-    settings: '<b>系统设置</b>',
-    roles: '<b>角色权限</b>',
-    dicts: '<b>字典管理</b>',
-    mcp: '<b>MCP 管理</b>',
-    database: '<b>数据浏览</b>',
-    overview: 'Agents / <b>Agent 概览</b>',
-    observe: 'Agents / <b>Agent 观测</b>',
-    records: 'Agents / <b>运行记录</b>',
-    capabilities: 'Agents / <b>能力资产</b>',
-    knowledge: 'Agents / <b>知识集合</b>',
-    retrieval: 'Agents / <b>检索调试</b>',
-    list: 'Agents / <b>定义管理</b>',
-    skills: 'Agents / <b>技能库</b>',
-    pg: 'Agents / <b>对话调试</b>',
+    'dashboard': '<b>工作台</b>',
+    'bianbian': '<b>变变管理</b>',
+    'users': '<b>用户管理</b>',
+    'settings': '<b>系统设置</b>',
+    'roles': '<b>角色权限</b>',
+    'dicts': '<b>字典管理</b>',
+    'mcp': '<b>MCP 管理</b>',
+    'database': '<b>数据浏览</b>',
+    'content-overview': '内容中心 / <b>采集总览</b>',
+    'content-items': '内容中心 / <b>内容条目</b>',
+    'content-detail': '内容中心 / <b>条目详情</b>',
+    'content-lhb': '内容中心 / <b>龙虎榜</b>',
+    'content-seats': '内容中心 / <b>席位库</b>',
+    'overview': 'Agents / <b>Agent 概览</b>',
+    'observe': 'Agents / <b>Agent 观测</b>',
+    'records': 'Agents / <b>运行记录</b>',
+    'capabilities': 'Agents / <b>能力资产</b>',
+    'knowledge': 'Agents / <b>知识集合</b>',
+    'retrieval': 'Agents / <b>检索调试</b>',
+    'list': 'Agents / <b>定义管理</b>',
+    'skills': 'Agents / <b>技能库</b>',
+    'pg': 'Agents / <b>对话调试</b>',
   };
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ["overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  var SUB_SCREENS = ["content-overview","content-items","content-detail","content-lhb","content-seats","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
 
   window.showHub = function(name, id){
     qsa('.screen').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
     qsa('.ad-item[data-screen]').forEach(function(i){
       i.classList.toggle('active', i.dataset.screen === name || (name === 'detail' && i.dataset.screen === 'list'));
     });
-    var sub = document.querySelector('.ad-sub');
-    if (sub) sub.classList.toggle('selected', SUB_SCREENS.indexOf(name) >= 0);
+    /* 父级高亮按「哪个 sub-menu 含这一屏」判定（多 sub-menu：内容中心 / Agents） */
+    qsa('.ad-sub').forEach(function(s){
+      var list = (s.getAttribute('data-screens') || '').split(',');
+      s.classList.toggle('selected', list.indexOf(name) >= 0);
+    });
     var crumb = document.getElementById('crumb');
     if(crumb){
       crumb.innerHTML = name === 'detail'
@@ -2501,6 +3736,10 @@ renderTypeList(); renderItems();
     }
     var c = document.querySelector('.ad-content');
     if(c) c.scrollTop = 0;
+    /* 共享源（内容中心）的屏是 JS 渲染的：切过去后让模块稿自己渲染当前 host */
+    if (window.CC && window.CC.apply && document.querySelector('.cc-host[data-cc="' + name + '"]')) {
+      window.CC.apply();
+    }
   };
 
   function applyHash(){
