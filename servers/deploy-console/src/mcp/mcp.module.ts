@@ -7,6 +7,8 @@ import { DeployModule } from '../deploy/deploy.module';
 import { ApprovalModule } from '../approval/approval.module';
 // release_plan（L1 只读 dry-run）：Agent 在提交前先看影响面与风险
 import { ReleasePlanModule } from '../release-plan/release-plan.module';
+// verify_release（L1 只读）：发布后比对线上事实，确认发布真的生效
+import { ReleaseVerifyModule } from '../release-verify/release-verify.module';
 
 /**
  * MCP 执行接口模块。
@@ -17,7 +19,13 @@ import { ReleasePlanModule } from '../release-plan/release-plan.module';
  * 「Nest can't resolve dependencies of the McpController」→ 服务起不来。
  */
 @Module({
-  imports: [PipelineModule, DeployModule, ApprovalModule, ReleasePlanModule],
+  imports: [
+    PipelineModule,
+    DeployModule,
+    ApprovalModule,
+    ReleasePlanModule,
+    ReleaseVerifyModule,
+  ],
   controllers: [McpController],
   providers: [McpAuthService, McpKeyGuard],
   exports: [McpAuthService],

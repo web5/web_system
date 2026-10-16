@@ -20,6 +20,8 @@ import { PipelineService } from '../pipeline/pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ReleasePlanService } from '../release-plan/release-plan.service';
 import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
+import { ReleaseVerifyService } from '../release-verify/release-verify.service';
+import { ReleaseVerifyDto } from '../release-verify/dto/release-verify.dto';
 
 /**
  * MCP 发布接口（/api/mcp/*）。
@@ -47,6 +49,7 @@ export class McpController {
     private readonly deployService: DeployService,
     private readonly approvers: ApproverService,
     private readonly releasePlanService: ReleasePlanService,
+    private readonly releaseVerifyService: ReleaseVerifyService,
   ) {}
 
   private operator(req: any): string {
@@ -134,6 +137,36 @@ export class McpController {
     });
   }
 
+  /**
+   * 发布后验证 —— 回答「这次发布，线上真的生效了吗」。
+   *
+   * 与 `release_plan` 是发布前后的一对：plan 管「发之前能不能发」，
+   * 这里管「发之后是不是真的发了」。
+   *
+   * ⚠️ 判据不是流水线状态：`status=succeeded` 只说明脚本跑完，
+   * 不说明产物真的落地、进程真的重启。这里比对的是**此刻线上事实**。
+   *
+   * 返回体里的 `warnings` / `knownGaps` 必须下发给调用方：**没报警不等于检查过**。
+   */
+  @Post('release-verify')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    }),
+  )
+  @ApiOperation({ summary: '发布后验证（只读：线上事实比对，确认发布是否真的生效）' })
+  async releaseVerify(@Body() body: ReleaseVerifyDto) {
+    return this.releaseVerifyService.verify({
+      env: body.env,
+      moduleKey: body.moduleKey,
+      versionTag: body.versionTag,
+      jobId: body.jobId,
+      strict: body.strict,
+    });
+  }
+
   // ── 发布流水线 ──
 
   @Post('pipeline')
@@ -148,6 +181,13 @@ export class McpController {
         env,
         moduleKey: String(body?.moduleKey || ''),
         mode: body?.mode,
+        // ⚠️ branch / commitId 必须显式转发。
+        // mcp-gateway 的 publish_pipeline 声明里就有这两个参数，Agent 会认真传；
+        // 早期这里漏转，结果是**静默忽略** —— 请求 200、流水线照常跑，
+        // 但发布的是默认分支 master 的最新提交，不是调用方指定的 commit。
+        // 这比报错更坏：没有失败信号，事故要到上线后才发现。
+        branch: body?.branch,
+        commitId: body?.commitId,
         versionTag: body?.versionTag,
         target: body?.target,
         grayscaleRule: body?.grayscaleRule,
