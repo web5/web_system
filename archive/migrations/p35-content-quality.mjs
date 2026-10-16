@@ -5,7 +5,10 @@
  * 背景：三条内容链路（arXiv / 新浪+东财快讯 / 龙虎榜）已跑通，但「跑得好不好没法证明」——
  *  出了问题只能翻服务器日志。本迁移把「可归因」的地基建起来：
  *
- *  1) `content_items` 补 5 个质量字段（对应 web_system B0 的 outcome/fail_stage 思路）
+ *  1) `content_items` 补 6 个列：5 个质量字段 + `meta`（源私有字段）
+ *     ⚠️ `meta` 必须一并补：`ContentItemEntity.meta`（json）随本工程新增，
+ *        而它在旧库上**并不存在** —— 只加 5 个质量列会在运行时报 Unknown column，
+ *        详情页「原始 payload」与 Phase 2 的 prompt_version 抽样也无从落地。
  *  2) `lhb_records`       龙虎榜原始快照（结构化数值 + 席位明细）
  *  3) `hotmoney_seats`游资营业部名单（规则表，不硬编码——席位会迁址）
  *  4) `collect_runs`      采集批次日志（`content_items` 记条目，这里记批次）
@@ -45,7 +48,7 @@
  *   ALTER TABLE `content_items`
  *     DROP COLUMN `quality_status`, DROP COLUMN `quality_stage`,
  *     DROP COLUMN `quality_issue`, DROP COLUMN `collect_duration_ms`,
- *     DROP COLUMN `raw_hash`;
+ *     DROP COLUMN `raw_hash`, DROP COLUMN `meta`;
  *   DROP TABLE IF EXISTS `collect_runs`;
  *   DROP TABLE IF EXISTS `hotmoney_seats`;
  *   DROP TABLE IF EXISTS `lhb_records`;
@@ -86,8 +89,12 @@ const cfg = {
   database: process.env.DB_NAME || consoleEnv.DB_NAME,
 };
 
-/** content_items 待新增的 5 个质量字段：列名 → DDL 片段 */
-const QUALITY_COLUMNS = {
+/** content_items 待新增的列：列名 → DDL 片段（5 个质量字段 + 采集器 meta） */
+const CONTENT_ITEM_COLUMNS = {
+  meta: {
+    ddl: "json NULL COMMENT '源私有字段（采集器 meta）'",
+    desc: '采集器塞入的源私有字段（论文四字段 / 龙虎榜数值 / prompt_version…）',
+  },
   quality_status: {
     ddl: "varchar(16) NULL COMMENT 'ok/partial/fail/skip'",
     desc: '质量结论：ok 完整 / partial 部分成功 / fail 失败 / skip 去重跳过',
@@ -191,9 +198,11 @@ const SEAT_SEED = [
 ];
 
 function buildSeedSql() {
+  // is_active 必须显式给值：一旦写进 INSERT 的列清单，MySQL 就**不再套用 DDL 默认值**
+  // —— earlier 只给 3 个值而列清单有 4 列，执行时报 ERROR 1136（导出 SQL 时看不出来）。
   const values = SEAT_SEED.map(
     ([name, alias, tag]) =>
-      `(${sqlStr(name)}, ${alias ? sqlStr(alias) : 'NULL'}, ${sqlStr(tag)})`,
+      `(${sqlStr(name)}, ${alias ? sqlStr(alias) : 'NULL'}, ${sqlStr(tag)}, 1)`,
   ).join(',\n  ');
   return (
     'INSERT IGNORE INTO `hotmoney_seats` (`seat_name`, `alias`, `tag`, `is_active`) VALUES\n  ' +
@@ -261,8 +270,8 @@ async function runOnline() {
     created++;
   }
 
-  // 2) content_items 加质量列（逐列独立守卫，任一列已存在不影响其余）
-  for (const [col, spec] of Object.entries(QUALITY_COLUMNS)) {
+  // 2) content_items 加列（逐列独立守卫，任一列已存在不影响其余）
+  for (const [col, spec] of Object.entries(CONTENT_ITEM_COLUMNS)) {
     if (await columnExists(conn, 'content_items', col)) {
       process.stderr.write(`跳过（列已存在）：content_items.${col}\n`);
       skipped++;
@@ -287,13 +296,13 @@ async function runOnline() {
   const [cols] = await conn.query(
     "SELECT COLUMN_NAME, COLUMN_TYPE FROM `information_schema`.`COLUMNS` " +
       "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'content_items' " +
-      "AND COLUMN_NAME IN ('quality_status','quality_stage','quality_issue','collect_duration_ms','raw_hash')",
+      "AND COLUMN_NAME IN ('quality_status','quality_stage','quality_issue','collect_duration_ms','raw_hash','meta')",
     [cfg.database],
   );
   for (const c of cols) process.stderr.write(`${c.COLUMN_NAME}\t${c.COLUMN_TYPE}\n`);
-  if (cols.length !== Object.keys(QUALITY_COLUMNS).length) {
+  if (cols.length !== Object.keys(CONTENT_ITEM_COLUMNS).length) {
     process.stderr.write(
-      `✗ 校验失败：应有 ${Object.keys(QUALITY_COLUMNS).length} 列，实有 ${cols.length} 列\n`,
+      `✗ 校验失败：应有 ${Object.keys(CONTENT_ITEM_COLUMNS).length} 列，实有 ${cols.length} 列\n`,
     );
     await conn.end();
     process.exit(1);
@@ -321,11 +330,11 @@ function runOffline() {
     process.stderr.write(`-- 步骤：建表 ${name}\n`);
   }
 
-  const cols = Object.entries(QUALITY_COLUMNS)
+  const cols = Object.entries(CONTENT_ITEM_COLUMNS)
     .map(([col, spec]) => `  ADD COLUMN \`${col}\` ${spec.ddl}`)
     .join(',\n');
   process.stdout.write(`ALTER TABLE \`content_items\`\n${cols};\n`);
-  process.stderr.write('-- 步骤：content_items 加 5 个质量列\n');
+  process.stderr.write('-- 步骤：content_items 加 6 个列（5 质量列 + meta）\n');
 
   process.stdout.write(`${buildSeedSql()}\n`);
   process.stderr.write('-- 步骤：游资名单种子（INSERT IGNORE，重复执行安全）\n');
@@ -336,7 +345,8 @@ function runOffline() {
   );
   process.stderr.write(
     '-- 回滚：ALTER TABLE content_items DROP COLUMN quality_status, DROP COLUMN quality_stage,\n' +
-      '--        DROP COLUMN quality_issue, DROP COLUMN collect_duration_ms, DROP COLUMN raw_hash;\n' +
+      '--        DROP COLUMN quality_issue, DROP COLUMN collect_duration_ms, DROP COLUMN raw_hash,\n' +
+      '--        DROP COLUMN meta;\n' +
       '--        DROP TABLE IF EXISTS collect_runs; DROP TABLE IF EXISTS hotmoney_seats; DROP TABLE IF EXISTS lhb_records;\n',
   );
   if (DRY_RUN) process.stderr.write('-- DRY_RUN：以上 SQL 未执行\n');
