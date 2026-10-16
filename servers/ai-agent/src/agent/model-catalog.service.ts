@@ -9,10 +9,16 @@ import { ClientRegistry, Hy3Client, TokenHubClient } from '@kedouai/agent-core';
  * admin「字典管理」维护），其次是 `TOKENHUB_MODELS` 环境变量。
  * 代码默认值与 .env 打架曾导致 hy4-preview 从下拉里消失，所以各级只在
  * 上一级不可用时生效，且每次回落都打 WARN。
+ *
+ * ⚠️ 这里每项都是**网关 model id**（= ClientRegistry 注册键），不是「厂商/型号」
+ * 的展示名。2026-10-17 复核：`deepseek/deepseek-v4-flash` 已被网关返回 402
+ * （业务码 401008，免费额度耗尽且未开后付费）且**不在** `GET /models` 中；
+ * 可用的 flash 是短名 `deepseek-v4-flash`（实测 200）。带前缀的 pro 仍在线，
+ * 可见前缀本身不是规律——**改前必须照 `GET {TOKENHUB_BASE_URL}/models` 核**。
  */
 export const BUILTIN_TOKENHUB_MODELS = [
   'deepseek/deepseek-v4-pro',
-  'deepseek/deepseek-v4-flash',
+  'deepseek-v4-flash',
   'deepseek-v4-pro-0813',
   'hy4-preview',
   'glm-5.3',

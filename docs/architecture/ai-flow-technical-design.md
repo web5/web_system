@@ -129,7 +129,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 - **路由线索实时生成**（`routingHints()`：id / name / description / keywords）：历史版本把线索写死在服务里，是 2026-09-28「100% 兜底」事故根因。
 - **切换门槛**：`规则 ≥0.88`、`LLM ≥0.75` 才允许换 agent；兜底不切。
 - **灰度开关 `INTENT_ROUTING_ENABLED` 默认关**：开关应与「后台 agent 配置完成并 publish」绑定上线，否则所有输入落兜底。
-- **模型名必须与注册键逐字一致**（默认 `deepseek/deepseek-v4-flash`）：写短名不报错、只静默回退 hy3，表现为「偶发兜底」，极难定位。
+- **模型名必须与注册键逐字一致**（默认 `deepseek-v4-flash`，即网关 model id）：不匹配时不报错、只静默回退 hy3，表现为「偶发兜底」，极难定位。⚠️ 2026-10-17 复核：带前缀的 `deepseek/deepseek-v4-flash` 已 402 且不在 `GET /models`，前缀不是规律，改前照 `/models` 核。
 
 ### 4.2 上下文与记忆
 
