@@ -330,11 +330,27 @@ function runOffline() {
     process.stderr.write(`-- 步骤：建表 ${name}\n`);
   }
 
-  const cols = Object.entries(CONTENT_ITEM_COLUMNS)
-    .map(([col, spec]) => `  ADD COLUMN \`${col}\` ${spec.ddl}`)
-    .join(',\n');
-  process.stdout.write(`ALTER TABLE \`content_items\`\n${cols};\n`);
-  process.stderr.write('-- 步骤：content_items 加 6 个列（5 质量列 + meta）\n');
+  // content_items 逐列加列 —— information_schema 守卫 + PREPARE 动态执行。
+  //
+  // 为什么不用一条 ALTER 带 6 个 ADD COLUMN：MySQL 的 ALTER **没有** IF NOT EXISTS，
+  // 多列合一条时只要有一列已存在就整条报 duplicate column，
+  // 也就是导出 SQL 没法重复执行、必须预先知道库处在哪个版本。
+  // 在线模式本来就逐列守卫，导出路径这里补齐同样的语义。
+  for (const [col, spec] of Object.entries(CONTENT_ITEM_COLUMNS)) {
+    const addSql = `ALTER TABLE \`content_items\` ADD COLUMN \`${col}\` ${spec.ddl}`.replace(/'/g, "''");
+    process.stdout.write(
+      `SET @p35_ddl := (SELECT IF(\n` +
+        `  EXISTS(\n` +
+        `    SELECT 1 FROM information_schema.COLUMNS\n` +
+        `    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_items' AND COLUMN_NAME = '${col}'\n` +
+        `  ),\n` +
+        `  'SELECT ''skip content_items.${col}（已存在）'' AS p35',\n` +
+        `  '${addSql}'\n` +
+        `));\n` +
+        `PREPARE p35_stmt FROM @p35_ddl; EXECUTE p35_stmt; DEALLOCATE PREPARE p35_stmt;\n`,
+    );
+  }
+  process.stderr.write('-- 步骤：content_items 加 6 个列（5 质量列 + meta，逐列守卫可重复执行）\n');
 
   process.stdout.write(`${buildSeedSql()}\n`);
   process.stderr.write('-- 步骤：游资名单种子（INSERT IGNORE，重复执行安全）\n');
