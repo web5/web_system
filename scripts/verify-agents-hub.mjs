@@ -1,6 +1,9 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { REGISTRY } from './lib/proto-registry.mjs';
+import { REGISTRY, SOURCE_DEFS } from './lib/proto-registry.mjs';
+import { SHELL_TOP, SHELL_SUBS } from './lib/proto-shell.mjs';
 import { cssBlocks, selOf } from './lib/html-utils.mjs';
 const require = createRequire('/Users/geekwen/.workbuddy/binaries/node/workspace/');
 const puppeteer = require('puppeteer-core');
@@ -20,7 +23,9 @@ const puppeteer = require('puppeteer-core');
 //       ⑩ 注册表整合：每屏内容来源可追溯（登记了 = 真合进去了）+ 作用域隔离不泄漏其它屏
 //          + 占位屏批次与 specs/admin-prototype-coverage/tasks.md 对账
 // 消息结构 parity（与 Playground / 原两份文件对拍）由 verify-playground-parity.mjs 守，此处不重复。
-const ROOT = '/Users/geekwen/workspace/web_system-llm-tuning';
+/* ⚠️ ROOT 必须是**当前工作仓**（曾硬编码成另一个 worktree 路径 → 读的是别人的文件，
+   改了脚本却在旧仓上验，等于没验）。要用就从命令行传 html 路径。 */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FILE = 'file://' + (process.argv[2] || ROOT + '/docs/ui/prototypes/admin-agents-hub.html');
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -68,10 +73,10 @@ const clickEl = async (sel, opts) => {
 
 // —— ① 壳与起始态 ——
 rec('1a 页面无 JS 报错', jsErrors.length, 0);
-// 弹窗：整合稿自身不用弹窗（进新页面）；但合入的模块稿允许自带（dict-module.html 的删除确认）
-// → 断言收敛为「弹窗只出现在合入稿的屏内，不散落到其它屏」
-rec('1b 弹窗结构只出现在合入的模块稿屏内（不散落其它屏）',
-  await page.$$eval('.mask, .modal', (ns) => ns.every((n) => !!n.closest('.screen[data-screen="dicts"]'))), true);
+// 弹窗：整合稿自身不用弹窗（进新页面）；但合入的模块稿允许自带（dict 的删除确认、
+// 内容中心的席位抽屉）→ 断言收敛为「弹窗只出现在合入稿的容器内，不散落到别的屏」
+rec('1b 弹窗结构只出现在合入稿容器内（dicts 屏内 / 内容中心共享弹层 .cc-scope），不散落其它屏',
+  await page.$$eval('.mask, .modal, .modal-mask, .drawer', (ns) => ns.every((n) => !!n.closest('.screen[data-screen="dicts"]') || !!n.closest('.cc-scope'))), true);
 rec('1c 起始屏 = Agent 概览', await vis('.screen[data-screen="overview"]'), true);
 rec('1d 起始 crumb', await txt('#crumb'), 'Agents / Agent 概览');
 rec('1e 起始菜单 active = Agent 概览',
@@ -92,7 +97,8 @@ const NAV = await page.$$eval('.ad-item[data-screen]', (ns) => ns.map((n) => ({
   screen: n.dataset.screen, route: n.dataset.route,
   label: (n.querySelector('.ad-t') || n).textContent.trim(),   // 文案在 .ad-t（图标是 svg，不混进文案）
 })));
-rec('2a 菜单项数', NAV.length, 17);
+rec('2a 菜单项数（8 一级 + 内容中心 5 + Agents 9）', NAV.length,
+  SHELL_TOP.length + SHELL_SUBS.reduce((n, s) => n + s.items.length, 0));
 rec('2b 无 .nolink 死项（每一项都必须可点）', await page.$$eval('.ad-item.nolink', (n) => n.length), 0);
 rec('2c 屏数 = 菜单数 + 1（detail 无菜单项）',
   await page.$$eval('.screen', (n) => n.length), NAV.length + 1);
@@ -214,16 +220,25 @@ const realLabels = [...vueSrc.matchAll(/<a-menu-item[^>]*key="[^"]*"[^>]*>([\s\S
   .map((s) => (s || '').trim())
   .filter(Boolean);
 const hubLabels = NAV.map((m) => m.label);
-// 已知增量：Agent 概览 —— router 的 /agents index 页（AgentOverview.vue），BasicLayout 未挂菜单项
-const KNOWN_EXTRA = ['Agent 概览'];
+/* 已知增量（原型有、BasicLayout.vue 还没挂菜单）：
+   ① Agent 概览 —— router 的 /agents index 页（AgentOverview.vue）；
+   ② 内容中心 5 屏 —— content:view / content:manage 尚未落地（契约门 C4：权限码待登记）。
+   这两组是「原型领先落地」，不是菜单漂移 —— 必须显式登记，否则 8b 会把它们当成对账失败。 */
+const KNOWN_EXTRA = [...SHELL_SUBS[0].items.map((m) => m.label), 'Agent 概览'];
 rec('8a 真实菜单项数（BasicLayout 读取成功）', realLabels.length > 10, true);
 rec('8b 菜单文案与顺序 = BasicLayout.vue（剔除已知增量）',
   hubLabels.filter((l) => !KNOWN_EXTRA.includes(l)).join('|'), realLabels.join('|'));
 rec('8c 已知增量有且仅有 1 项（Agent 概览，router /agents index）',
   hubLabels.filter((l) => !realLabels.includes(l)).join('|'), KNOWN_EXTRA.join('|'));
-rec('8d 每项菜单路由的末段在 router/index.ts 里存在',
-  NAV.filter((m) => !new RegExp(`path: '(?:[a-z-]+/)*${m.route.split('/').pop()}(?:[/':]|$)`).test(routerSrc))
-    .map((m) => m.label).join('|'), '');
+/* 内容中心 5 条路由**尚未落地**（原型领先）：不能因为它们不在 router 里就让 8d 失败
+   —— 那只会逼人去改断言。改成两条：已落地的必须对得上，未落地的必须**确实**未落地
+   （等真落地了 8d2 会 FAIL，正好提醒去同步 BasicLayout.vue 与权限码登记）。 */
+const routeHit = (m) => new RegExp(`path: '(?:[a-z-]+/)*${m.route.split('/').pop()}(?:[/':]|$)`).test(routerSrc);
+const NOT_LANDED = SHELL_SUBS[0].items.map((m) => m.label);
+rec('8d 已落地菜单的路由末段在 router/index.ts 里存在',
+  NAV.filter((m) => !NOT_LANDED.includes(m.label) && !routeHit(m)).map((m) => m.label).join('|'), '');
+rec('8d2 内容中心 5 条路由尚未落地（落地后本条 FAIL = 提醒同步 router + BasicLayout + 权限码）',
+  NAV.filter((m) => NOT_LANDED.includes(m.label) && routeHit(m)).map((m) => m.label).join('|'), '');
 rec('8e BasicLayout 里没有本稿缺掉的菜单项',
   realLabels.filter((l) => !hubLabels.includes(l)).join('|'), '');
 
@@ -236,15 +251,20 @@ await wait(280);
 const siderW = () => page.$eval('#sider', (e) => Math.round(e.getBoundingClientRect().width));
 
 rec('9a sider 宽 = 220（BasicLayout width="220"）', await siderW(), 220);
-rec('9a2 当前屏属二级模块 → 父级 sub-menu 标题高亮（submenu-selected）',
-  await page.evaluate(() => {
-    const s = document.querySelector('.ad-sub');
-    return s.classList.contains('selected') + '|' + getComputedStyle(s.querySelector('.ad-sub-t')).color;
-  }), 'true|rgb(255, 140, 66)');
+/* ⚠️ 多 sub-menu 后不能取「第一个 .ad-sub」—— 要按「哪个 sub 含当前屏」取（内容中心 / Agents） */
+const subOf = (screen) => page.evaluate((sc) => {
+  const s = [...document.querySelectorAll('.ad-sub')]
+    .find((x) => (x.getAttribute('data-screens') || '').split(',').includes(sc));
+  return s ? s.getAttribute('data-sub') + '|' + s.classList.contains('selected') + '|'
+    + getComputedStyle(s.querySelector('.ad-sub-t')).color : '(无)';
+}, screen);
+rec('9a2 当前屏属二级模块 → 对应父级 sub-menu 标题高亮（submenu-selected）',
+  await subOf('list'), 'agents|true|rgb(255, 140, 66)');
 rec('9b 一级菜单 8 项且每项带图标',
   await page.$$eval('.ad-item:not(.ad-item-sub)', (ns) => ns.filter((n) => n.querySelector('svg')).length), 8);
-rec('9c Agents 子菜单 9 项且不带图标（对齐 a-menu-item 无 icon）',
-  await page.$$eval('.ad-item-sub', (ns) => ns.length + '|' + ns.filter((n) => n.querySelector('svg')).length), '9|0');
+rec('9c 二级菜单项（内容中心 5 + Agents 9）且不带图标（对齐 a-menu-item 无 icon）',
+  await page.$$eval('.ad-item-sub', (ns) => ns.length + '|' + ns.filter((n) => n.querySelector('svg')).length),
+  `${SHELL_SUBS.reduce((n, s) => n + s.items.length, 0)}|0`);
 rec('9d 菜单项高 40（antd itemHeight）',
   await page.$eval('.ad-item', (e) => Math.round(e.getBoundingClientRect().height)), 40);
 rec('9d2 子项左缩进 46px（a-sub-menu 内缩进，明显大于一级的 12px）',
@@ -282,10 +302,11 @@ await page.mouse.move(4, 4); await wait(120);
 rec('9i hover 背景 = rgba(255,140,66,.06)（且非 hover 态不是该色）',
   bgHover + '|' + (bgBefore !== bgHover), 'rgba(255, 140, 66, 0.06)|true');
 
-await clickEl('.ad-sub-t'); await wait(220);
-rec('9j 子菜单可收起（收起后子项不可见）', await vis('.ad-item[data-screen="skills"]'), false);
-await clickEl('.ad-sub-t'); await wait(220);
-rec('9k 子菜单可展开', await vis('.ad-item[data-screen="skills"]'), true);
+/* 收起/展开：必须指定**哪个** sub-menu（多 sub-menu 下取第一个会收错组，断言就假通过了） */
+await clickEl('.ad-sub[data-sub="content"] .ad-sub-t'); await wait(220);
+rec('9j 子菜单可收起（收起后子项不可见）', await vis('.ad-item[data-screen="content-seats"]'), false);
+await clickEl('.ad-sub[data-sub="content"] .ad-sub-t'); await wait(220);
+rec('9k 子菜单可展开', await vis('.ad-item[data-screen="content-seats"]'), true);
 
 await clickEl('#btn-collapse'); await wait(320);
 rec('9l 折叠后 sider 宽 = 80（collapsedWidth）', await siderW(), 80);
@@ -312,8 +333,10 @@ rec('9q 页脚（品牌 + ©2026，对齐 BasicLayout footer）',
   await page.$eval('.ad-footer', (e) => e.textContent.includes('科豆 AI') && e.textContent.includes('©2026')), true);
 // BasicLayout 的 #icon 槽位只取 sider 的 <a-menu>…</a-menu> 区间（顶栏头像那个 #icon 不算菜单图标）
 const menuBlock = (vueSrc.match(/<a-menu[\s\S]*?<\/a-menu>/) || [''])[0];
-rec('9r 菜单图标数 = BasicLayout 侧栏 a-menu 的 #icon 槽位数',
-  await page.$$eval('.ad-menu .ad-ic', (n) => n.length), (menuBlock.match(/<template #icon>/g) || []).length);
+/* +1 = 内容中心 sub 标题图标：该组是原型增量（BasicLayout 还没挂这个 a-sub-menu）。
+   等落地后这个值要回落成「与 BasicLayout 完全相等」，所以这里显式登记而不是放宽。 */
+rec('9r 菜单图标数 = BasicLayout 侧栏 a-menu 的 #icon 槽位数 + 内容中心（原型增量 1）',
+  await page.$$eval('.ad-menu .ad-ic', (n) => n.length), (menuBlock.match(/<template #icon>/g) || []).length + 1);
 rec('9s 菜单结构与 BasicLayout 同构（有 a-sub-menu / 无平铺分组标题）',
   await page.evaluate(() => !!document.querySelector('.ad-sub .ad-sub-t') && !document.querySelector('.ad-group')), true);
 rec('9t 折叠/展开子菜单后无 JS 报错', jsErrors.length, 0);
@@ -330,18 +353,22 @@ rec('10a 注册表屏集合 = 菜单屏集合（无孤儿 / 无遗漏）',
   regScreens.slice().sort().join('|'), navScreens.slice().sort().join('|'));
 
 // 10b 源稿指纹必须出现在生成稿（防「注册表登记了、build 没抽进去」这类静默失配）
-const srcEntries = REGISTRY.filter((r) => r.source);
-rec('10b-0 注册表里有稿的屏数量 ≥ 2', srcEntries.length >= 2, true);
-for (const r of srcEntries) {
-  const missing = r.source.trace.filter((t) => !hubHtml.includes(t));
-  rec(`10b-${r.screen} 源稿指纹在生成稿里（${r.source.file}）`, missing.join('|'), '');
+//     ⚠️ 按**源稿**比对（SOURCE_DEFS）：共享源一份稿服务 5 屏，按屏比会重复且漏掉「抽没抽」
+const srcEntries = SOURCE_DEFS;
+rec('10b-0 注册表里有稿的源稿数 ≥ 2', srcEntries.length >= 2, true);
+for (const s of srcEntries) {
+  const missing = s.trace.filter((t) => !hubHtml.includes(t));
+  rec(`10b-${s.file} 源稿指纹在生成稿里`, missing.join('|'), '');
 }
-// 有稿的屏不得残留占位块（否则等于「合了一半」）
-for (const r of srcEntries) {
+// 有稿的屏不得残留占位块（否则等于「合了一半」）—— 这一条按**屏**比（共享源 5 屏都要过）
+for (const r of REGISTRY.filter((x) => x.source)) {
   rec(`10b-${r.screen}2 有稿的屏不留占位块（ph-note/ph-skel）`,
     await page.$$eval(`.screen[data-screen="${r.screen}"] .ph-note, .screen[data-screen="${r.screen}"] .ph-skel`,
       (n) => n.length), 0);
 }
+// 10b3 共享源：CSS/JS 只注入一次（注入 N 次 = N 份状态机互相打架，是最容易犯的错）
+const ccJsCount = (hubHtml.match(/来自 admin-content-hub\.html/g) || []).length;
+rec('10b3 共享源脚本只注入一次（一次 CSS + 一次 JS，不是每屏一份）', ccJsCount, 2);
 
 // 10c 作用域隔离：合入稿的 CSS 规则必须条条带作用域（裸规则会污染全站 —— v2 事故同型）
 const SEC = '/* ===== 来自 ';
@@ -425,6 +452,43 @@ const batchMismatch = REGISTRY.filter((r) => r.batch).map((r) => {
 }).filter(Boolean);
 rec('10e 占位屏批次与 specs/admin-prototype-coverage/tasks.md 逐项一致',
   batchMismatch.slice(0, 3).join(' | '), '');
+
+// 10g 共享源（内容中心 5 屏 = 一份稿）：合进去了 + 交互真的可跑（不是静态贴图）
+//     背景：2026-10-15 内容中心曾单独出一份带自造壳的整合稿（admin-console.html），
+//     与 hub 抢真相源。现在它只是注册表里的一条共享源 —— 这一段守「真的合进去了」。
+const routeOf = (sc) => (SHELL_SUBS[0].items.find((m) => m.screen === sc) || {}).route;
+for (const k of SHELL_SUBS[0].screens) {
+  await page.evaluate((r) => { location.hash = r; }, routeOf(k));
+  await wait(360);
+  rec(`10g-${k} 共享源屏渲染出真实内容（host 非空）`,
+    await page.$eval(`.screen[data-screen="${k}"] .cc-host`, (e) => e.innerHTML.length > 800).catch(() => false), true);
+  rec(`10g-${k}2 仅本屏可见 + 父级为内容中心`,
+    (await visibleScreens()).join(',') + '|' + (await subOf(k)).split('|')[1], `${k}|true`);
+}
+// 状态矩阵：5 态必须有回应（切「空数据」→ 屏内出现空态）
+await page.evaluate(() => { location.hash = '#/content/items'; });
+await wait(360);
+const emptyBtn = await page.$('.screen[data-screen="content-items"] .cc-bar button:nth-of-type(3)');
+if (emptyBtn) await emptyBtn.evaluate((e) => e.click());
+await wait(320);
+rec('10g-state 状态矩阵可切（空数据态有回应）',
+  await page.$eval('.screen[data-screen="content-items"] .cc-host',
+    (e) => /暂无|没有|清空筛选/.test(e.textContent)), true);
+await page.$eval('.screen[data-screen="content-items"] .cc-bar button:nth-of-type(1)', (e) => e.click());
+await wait(300);
+// 抽屉：龙虎榜「席位明细」开抽屉 → 可关（弹层是模块级共享的，5 屏都能用）
+await page.evaluate(() => { location.hash = '#/content/lhb'; });
+await wait(360);
+const seatBtn = await page.$('.screen[data-screen="content-lhb"] [onclick^="CC.openSeats"]');
+if (seatBtn) await seatBtn.evaluate((e) => e.click());
+await wait(340);
+rec('10g-drawer 共享弹层可打开（龙虎榜 · 席位明细）',
+  await page.$eval('#cc-drawer', (e) => e.classList.contains('show') + '|' + (getComputedStyle(e).transform === 'none'
+    || /matrix\(1, 0, 0, 1, 0, 0\)/.test(getComputedStyle(e).transform))), 'true|true');
+await page.$eval('#cc-drawer .drawer-head .x, #cc-drawer .dh .icon-btn', (e) => e.click()).catch(() => {});
+await wait(320);
+rec('10g-drawer2 共享弹层可关闭', await page.$eval('#cc-drawer', (e) => e.classList.contains('show')), false);
+rec('10g-err 内容中心交互后仍无 JS 报错', jsErrors.length, 0);
 
 // 10f 页面头部说明必须写明「注册表机制」，否则新人还是按老办法手工整合
 rec('10f 页头写明整合机制（注册表 + 重跑 build）',

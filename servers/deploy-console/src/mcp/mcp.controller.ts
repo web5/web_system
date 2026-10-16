@@ -20,6 +20,8 @@ import { PipelineService } from '../pipeline/pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ReleasePlanService } from '../release-plan/release-plan.service';
 import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
+import { ReleaseVerifyService } from '../release-verify/release-verify.service';
+import { ReleaseVerifyDto } from '../release-verify/dto/release-verify.dto';
 
 /**
  * MCP 发布接口（/api/mcp/*）。
@@ -47,6 +49,7 @@ export class McpController {
     private readonly deployService: DeployService,
     private readonly approvers: ApproverService,
     private readonly releasePlanService: ReleasePlanService,
+    private readonly releaseVerifyService: ReleaseVerifyService,
   ) {}
 
   private operator(req: any): string {
@@ -131,6 +134,36 @@ export class McpController {
       versionTag: body.versionTag,
       mode: body.mode as 'direct' | 'grayscale' | undefined,
       grayscaleRule: body.grayscaleRule,
+    });
+  }
+
+  /**
+   * 发布后验证 —— 回答「这次发布，线上真的生效了吗」。
+   *
+   * 与 `release_plan` 是发布前后的一对：plan 管「发之前能不能发」，
+   * 这里管「发之后是不是真的发了」。
+   *
+   * ⚠️ 判据不是流水线状态：`status=succeeded` 只说明脚本跑完，
+   * 不说明产物真的落地、进程真的重启。这里比对的是**此刻线上事实**。
+   *
+   * 返回体里的 `warnings` / `knownGaps` 必须下发给调用方：**没报警不等于检查过**。
+   */
+  @Post('release-verify')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    }),
+  )
+  @ApiOperation({ summary: '发布后验证（只读：线上事实比对，确认发布是否真的生效）' })
+  async releaseVerify(@Body() body: ReleaseVerifyDto) {
+    return this.releaseVerifyService.verify({
+      env: body.env,
+      moduleKey: body.moduleKey,
+      versionTag: body.versionTag,
+      jobId: body.jobId,
+      strict: body.strict,
     });
   }
 

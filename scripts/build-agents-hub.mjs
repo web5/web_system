@@ -43,9 +43,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 /* 「壳与菜单」单一真相源（三份原型稿共用；见该文件头注释） */
-import { SHELL_TOP, SHELL_SUB, SHELL_NAV, shellSider, shellFooter, shellHeaderLeft, shellHeaderRight, shellIcon, shellCss, shellJs } from './lib/proto-shell.mjs';
+import { SHELL_TOP, SHELL_SUBS, SHELL_NAV, shellSider, shellFooter, shellHeaderLeft, shellHeaderRight, shellIcon, shellCss, shellJs } from './lib/proto-shell.mjs';
 /* 「每屏装什么内容」单一真相源：登记了 source 的屏从原型稿同源抽取，没登记的走占位（见该文件头注释） */
-import { REGISTRY, BY_SCREEN, BATCHES, loadSource } from './lib/proto-registry.mjs';
+import { REGISTRY, BY_SCREEN, BATCHES, SOURCE_DEFS, loadSource } from './lib/proto-registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -222,6 +222,9 @@ const hubCss = `
 const CRUMBS = {
   dashboard: ['工作台'], bianbian: ['变变管理'], users: ['用户管理'], settings: ['系统设置'],
   roles: ['角色权限'], dicts: ['字典管理'], mcp: ['MCP 管理'], database: ['数据浏览'],
+  'content-overview': ['内容中心', '采集总览'], 'content-items': ['内容中心', '内容条目'],
+  'content-detail': ['内容中心', '条目详情'], 'content-lhb': ['内容中心', '龙虎榜'],
+  'content-seats': ['内容中心', '席位库'],
   overview: ['Agents', 'Agent 概览'], observe: ['Agents', 'Agent 观测'], records: ['Agents', '运行记录'],
   capabilities: ['Agents', '能力资产'], knowledge: ['Agents', '知识集合'], retrieval: ['Agents', '检索调试'],
   list: ['Agents', '定义管理'], skills: ['Agents', '技能库'], pg: ['Agents', '对话调试'],
@@ -231,7 +234,7 @@ const NAV = SHELL_NAV.map((m) => {
   return { ...m, crumb: CRUMBS[m.screen] };
 });
 const TOP = SHELL_TOP;
-const SUB = SHELL_SUB;
+const SUBS = SHELL_SUBS;
 
 /** 侧栏 DOM（单源：scripts/lib/proto-shell.mjs；interactive = 菜单项带 data-route 由 hash 路由驱动） */
 const MENU = shellSider({ interactive: true });
@@ -269,13 +272,26 @@ const pageHead = (key) => {
  *  · JS 包 IIFE，DOM 有 inline handler 时把顶层函数挂到 window[ns] 并改写调用点。
  * 以后某模块出稿 / 改稿：改注册表一行 → 重跑本脚本，不需要再改这里。
  */
-const SOURCES = REGISTRY.filter((r) => r.source).map((r) => ({
-  screen: r.screen, file: r.source.file, trace: r.source.trace, scoped: !!r.source.scope,
-  ...loadSource(r.source),
-}));
+/**
+ * 按**源稿**抽取（不是按屏）：共享源被 5 屏引用，但只能抽一次 —— 抽 5 次 = 5 份状态机。
+ * 每份产物带 `screens`（这份稿服务哪些屏）与 `hosts`（共享源按 data-cc 拆好的屏容器）。
+ */
+const SOURCES = SOURCE_DEFS.map((src) => {
+  const reg = REGISTRY.filter((r) => r.source === src).map((r) => r.screen);
+  return { screens: reg, file: src.file, trace: src.trace, scoped: !!src.scope, shared: !!src.shared, ...loadSource(src) };
+});
 const SOURCE_CSS = SOURCES.map((s) => `  /* ===== 来自 ${s.file}（${s.scoped ? 'CSS 已作用域隔离：裸通用类名不污染其它屏' : '类名自带前缀，直接合入'}） ===== */\n  ${s.css}`).join('\n');
-const SOURCE_SCREENS = SOURCES.map((s) => s.screen);
-const SOURCE_JS = SOURCES.map((s) => `/* 来自 ${s.file}（IIFE 包裹，符号不泄漏到全局） */\n${s.js}`).join('\n');
+const SOURCE_SCREENS = SOURCES.flatMap((s) => s.screens);
+const SOURCE_JS = SOURCES.map((s) => `/* 来自 ${s.file}（IIFE 包裹，符号不泄漏到全局）${s.shared ? ` · 共享源：一份脚本服务 ${s.screens.length} 屏` : ''} */\n${s.js}`).join('\n');
+/* rootToGlobal 的源稿：只补整合稿全局 :root 里**缺的** token（同名以整合稿为准） */
+const GLOBAL_TOKENS = [...new Map(
+  SOURCES.flatMap((s) => (s.rootDecls || []).map((d) => [d.split(':')[0].trim(), d])),
+).values()];
+/* 共享源的模块级弹层（drawer / mask / modal / toast）：挂到 .ad-desktop 末尾，不进任何一屏
+   —— 否则「在席位库开的抽屉，切到龙虎榜就打不开了」 */
+const SHARED_TRAILS = SOURCES.filter((s) => s.shared && s.trailHtml)
+  .map((s) => `  <!-- ${s.file} 的模块级弹层（不进屏，5 屏共用） -->\n  <div class="cc-scope">\n  ${s.trailHtml}\n  </div>`)
+  .join('\n');
 
 /** 占位屏渲染：范围说明 → 示意数据（KPI / 卡片 / .tbl）→ 骨架 → 复用件 */
 const placeholder = (key) => {
@@ -374,15 +390,30 @@ const REUSE_MAP = `
 const reLit = (r) => r.replace(/[/]/g, '\\/');
 const ROUTE_JS = [
   `    { re: /^#\\/agents\\/definitions\\/([\\w-]+)$/, screen: 'detail' },`,
+  /* 内容中心「条目详情」：id 随列表点击变（#/content/items/<id>）→ 通配，不能只认菜单里那条 */
+  `    { re: /^#\\/content\\/items\\/([\\w-]+)$/, screen: 'content-detail' },`,
   ...NAV.filter((m) => m.screen).map((m) => `    { re: /^${reLit(m.route)}$/, screen: '${m.screen}' },`),
 ].join('\n');
 const crumbHtml = (parts) => parts.map((p, i) => (i === parts.length - 1 ? `<b>${p}</b>` : p)).join(' / ');
+/* ⚠️ key 必须加引号：屏名带连字符（content-overview…），裸写是语法错误 */
 const CRUMB_JS = NAV.filter((m) => m.screen)
-  .map((m) => `    ${m.screen}: '${crumbHtml(m.crumb)}',`).join('\n');
+  .map((m) => `    '${m.screen}': '${crumbHtml(m.crumb)}',`).join('\n');
 
 /* ---------- 8. 拼装 ---------- */
 /* 屏顺序 = 菜单顺序（真实屏 pg / list 嵌在其中）；detail 无菜单项，紧跟 list 之后 */
-const REAL_BODY = { pg: pgScreen, list: listInner, ...Object.fromEntries(SOURCES.map((s) => [s.screen, s.html])) };
+/* 共享源：每屏 = 作用域容器 + 自己那个 host（DOM 由模块稿的 JS 渲染进去） */
+const sharedBody = {};
+for (const s of SOURCES) {
+  if (!s.shared) continue;
+  for (const sc of s.screens) {
+    sharedBody[sc] = `      <div class="cc-scope">\n        ${s.hosts[sc]}\n      </div>`;
+  }
+}
+const REAL_BODY = {
+  pg: pgScreen, list: listInner,
+  ...Object.fromEntries(SOURCES.filter((s) => !s.shared).map((s) => [s.screens[0], s.html])),
+  ...sharedBody,
+};
 const screenBlock = (m) => {
   const body = REAL_BODY[m.screen] || placeholder(m.screen);
   const kind = REAL_BODY[m.screen] ? '真实屏（同源抽取）' : '占位屏';
@@ -457,7 +488,9 @@ const hub = `<!DOCTYPE html>
   ${pgOnlyCss}
   /* ===== 新稿（admin-agent-def-detail.html）整块规则，AA 修正版为准 ===== */
 ${dtStyleInner}
-${hubCss}${SOURCE_CSS}${shellCss()}</style>
+${hubCss}${SOURCE_CSS}${shellCss()}
+  /* ===== 源稿补进来的设计系统级 token（只补整合稿缺的；同名以整合稿为准） ===== */
+  :root{${GLOBAL_TOKENS.join(';')}}</style>
 </head>
 <body>
 <div class="proto-head">
@@ -496,6 +529,7 @@ ${SCREEN_BLOCKS}
   </div>
 
   ${toastBlock}
+${SHARED_TRAILS}
 </div>
 
 ${REUSE_MAP}
@@ -517,15 +551,18 @@ ${CRUMB_JS}
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ${JSON.stringify([...SUB.items.map((m) => m.screen), 'detail'])};
+  var SUB_SCREENS = ${JSON.stringify([...SUBS.flatMap((s) => s.screens), 'detail'])};
 
   window.showHub = function(name, id){
     qsa('.screen').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
     qsa('.ad-item[data-screen]').forEach(function(i){
       i.classList.toggle('active', i.dataset.screen === name || (name === 'detail' && i.dataset.screen === 'list'));
     });
-    var sub = document.querySelector('.ad-sub');
-    if (sub) sub.classList.toggle('selected', SUB_SCREENS.indexOf(name) >= 0);
+    /* 父级高亮按「哪个 sub-menu 含这一屏」判定（多 sub-menu：内容中心 / Agents） */
+    qsa('.ad-sub').forEach(function(s){
+      var list = (s.getAttribute('data-screens') || '').split(',');
+      s.classList.toggle('selected', list.indexOf(name) >= 0);
+    });
     var crumb = document.getElementById('crumb');
     if(crumb){
       crumb.innerHTML = name === 'detail'
@@ -534,6 +571,10 @@ ${CRUMB_JS}
     }
     var c = document.querySelector('.ad-content');
     if(c) c.scrollTop = 0;
+    /* 共享源（内容中心）的屏是 JS 渲染的：切过去后让模块稿自己渲染当前 host */
+    if (window.CC && window.CC.apply && document.querySelector('.cc-host[data-cc="' + name + '"]')) {
+      window.CC.apply();
+    }
   };
 
   function applyHash(){
@@ -583,10 +624,12 @@ if (styleOpen !== 1) problems.push(`<style> 开标签 ${styleOpen} 个（应为 
 // ② token 必须齐（dt :root 变量数 + pg 补齐量）
 const tokenCount = (out.match(/--ws-[\w-]+:/g) || []).length;
 if (tokenCount < 50) problems.push(`token 定义仅 ${tokenCount} 个（应 ≥ 50）——:root 规则可能被丢`);
-// ③ div 配平
-const divOpen = (out.match(/<div[\s>]/g) || []).length;
-const divClose = (out.match(/<\/div>/g) || []).length;
-if (divOpen !== divClose) problems.push(`div 不配平：开 ${divOpen} / 闭 ${divClose}`);
+// ③ div 配平（**剥掉 <script>**：合入的模块稿在 JS 字符串里拼 HTML，整段计数会被
+//   跨行拼接的片段带偏；要守的是「静态结构」配平，运行时正确性由 verify 的可见性断言守）
+const htmlOnly = out.replace(/<script>[\s\S]*?<\/script>/g, '');
+const divOpen = (htmlOnly.match(/<div[\s>]/g) || []).length;
+const divClose = (htmlOnly.match(/<\/div>/g) || []).length;
+if (divOpen !== divClose) problems.push(`div 不配平（剥 script 后）：开 ${divOpen} / 闭 ${divClose}`);
 // ④ Playground 专属 CSS 必须合入（SVG 无尺寸约束会撑成 1026px 顶翻整屏）
 if (!out.includes('.pg-agent svg{width:var(--ws-icon-inline)')) problems.push('缺少 .pg-agent svg 尺寸规则——Playground 屏会布局爆炸');
 // ⑤ 两处对话面板必须同构：chatpanel ×2 / pg-toolbar ×2 / composer ×2（含 Playground 屏）
@@ -608,14 +651,17 @@ if (menuItems.length !== MENU_LABELS.length) problems.push(`菜单项 ${menuItem
 const routes = menuItems.map((s) => (s.match(/data-route="([^"]+)"/) || [])[1]);
 if (routes.some((r) => !r)) problems.push('有菜单项缺 data-route');
 if (new Set(routes).size !== routes.length) problems.push('菜单路由重复：' + routes.join(' '));
-// ⑦b 菜单**结构**对齐真实 admin：8 个一级项（带图标）+ 1 个 sub-menu（图标 + Agents + 9 子项无图标）
+// ⑦b 菜单**结构**对齐真实 admin：8 个一级项（带图标）+ N 个 sub-menu（图标 + 标题 + 子项无图标）
+const subItemTotal = SUBS.reduce((n, s) => n + s.items.length, 0);
 const topItems = (out.match(/<div class="ad-item" data-screen=/g) || []).length;
 const subItems = (out.match(/<div class="ad-item ad-item-sub"/g) || []).length;
 if (topItems !== TOP.length) problems.push(`一级菜单项 ${topItems}（应 ${TOP.length}）——结构脱离 BasicLayout`);
-if (subItems !== SUB.items.length) problems.push(`Agents 子菜单项 ${subItems}（应 ${SUB.items.length}）`);
-if ((out.match(/class="ad-sub open"/g) || []).length !== 1) problems.push('sub-menu 结构缺失（a-sub-menu 应为 1 个且默认展开）');
+if (subItems !== subItemTotal) problems.push(`二级菜单项 ${subItems}（应 ${subItemTotal}）`);
+if ((out.match(/class="ad-sub open"/g) || []).length !== SUBS.length) {
+  problems.push(`sub-menu ${(out.match(/class="ad-sub open"/g) || []).length} 个（应 ${SUBS.length}：${SUBS.map((s) => s.title).join(' / ')}）`);
+}
 const iconCount = (out.match(/<span class="ad-ic">/g) || []).length;
-if (iconCount !== TOP.length + 1) problems.push(`菜单图标 ${iconCount} 个（应一级 ${TOP.length} + sub 标题 1）`);
+if (iconCount !== TOP.length + SUBS.length) problems.push(`菜单图标 ${iconCount} 个（应一级 ${TOP.length} + sub 标题 ${SUBS.length}）`);
 // ⑦c 壳对齐：折叠按钮 / 顶栏右侧（主题 + 用户）/ 页脚
 ['id="btn-collapse"', 'class="ad-theme"', 'class="ad-user"', 'class="ad-footer"'].forEach((tok) => {
   if (!out.includes(tok)) problems.push(`壳缺 ${tok}——与 BasicLayout.vue 的框架不一致`);
@@ -626,12 +672,12 @@ if (screenCount !== MENU_LABELS.length + 1) {
 }
 // ⑧ 菜单文案序列必须等于 NAV（防「改了 NAV 忘了重建」或手改菜单）
 const outLabels = [...out.matchAll(/<span class="ad-t">([^<]+)<\/span>/g)].map((m) => m[1].trim())
-  .filter((l) => l !== SUB.title);
+  .filter((l) => !SUBS.some((s) => s.title === l));
 if (outLabels.join('|') !== MENU_LABELS.join('|')) {
   problems.push('菜单文案序列与 NAV 不一致：' + outLabels.join(' | '));
 }
 // ⑨ 每个屏都有面包屑映射（漏了会出现「切过去 crumb 空白」）
-const missingCrumb = NAV.filter((m) => m.screen && !new RegExp(`^\\s+${m.screen}: '`, 'm').test(out));
+const missingCrumb = NAV.filter((m) => m.screen && !new RegExp(`^\\s+'${m.screen}': '`, 'm').test(out));
 if (missingCrumb.length) problems.push('CRUMB 缺屏：' + missingCrumb.map((m) => m.screen).join(' '));
 // ⑩ 占位屏必须带「范围说明」（不许出现无出处的空屏）
 const phCount = (out.match(/class="ph-note note/g) || []).length;

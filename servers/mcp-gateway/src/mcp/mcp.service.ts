@@ -387,6 +387,45 @@ const DEPLOY_HTTP_TOOLS: Array<{
     ],
   },
   {
+    name: 'verify_release',
+    description:
+      '**发布后验证（只读，不改动任何东西）**：比对**此刻的线上事实**，回答「这次发布真的生效了吗」。' +
+      '⚠️ 判据不是流水线状态 —— `status=succeeded` 只说明脚本跑完，不说明产物落地、进程重启。' +
+      '检查项：流水线是否成功 / 线上版本指针是否等于目标版本 / 目标版本目录是否有入口产物 / ' +
+      '服务进程是否在线 / 端口是否监听。' +
+      '返回 verified（已生效）/ failed（未生效）/ unknown（判不了，缺真相源或采集故障）/ ' +
+      'degraded（生效但有瑕疵）。' +
+      '⚠️ **unknown 不等于通过**：核心项判不了时整体就是 unknown，绝不当成通过。' +
+      'warnings 含所有 unknown 与 skipped 及其原因；knownGaps 列出尚未覆盖的检查；' +
+      '**没有报警不等于检查过**。strict=true 时非核心项失败也判 failed',
+    method: 'POST',
+    path: '/api/mcp/release-verify',
+    params: [
+      { name: 'env', type: 'string', required: true, description: '目标环境 local/dev/staging/prod' },
+      { name: 'moduleKey', type: 'string', required: true, description: '模块 key（不确定先用 list_modules 查，不要猜）' },
+      {
+        name: 'versionTag',
+        type: 'string',
+        required: false,
+        description:
+          '期望生效的目标版本。**不传则回落为当前线上指针** —— 那是"确认现状"而非"验证发布"，' +
+          '此时 expected.source=current-pointer，结论恒为通过，**不能用作发布生效的证据**',
+      },
+      {
+        name: 'jobId',
+        type: 'string',
+        required: false,
+        description: '关联流水线 jobId。传了才会校验「流水线是否成功」这项；不传则只做事实比对',
+      },
+      {
+        name: 'strict',
+        type: 'boolean',
+        required: false,
+        description: '严格模式：非核心项（进程/端口）失败也判 failed。默认 false（降级为 degraded）',
+      },
+    ],
+  },
+  {
     name: 'publish_version',
     description: '把某模块的线上指针切到指定历史版本（秒级生效，不重新构建）。用于回滚或版本回退',
     method: 'POST',

@@ -47,8 +47,10 @@ for (const { file, actives } of FILES) {
   let out = s;
   const problems = [];
 
-  /* 1. 每个旧 <aside class="ad-sider">…</aside> → 新 antd 结构（静态菜单，active 指定） */
-  const asideRe = /<aside class="ad-sider">[\s\S]*?<\/aside>/g;
+  /* 1. 每个 <aside class="ad-sider">…</aside> → 新 antd 结构（静态菜单，active 指定）
+       ⚠️ 开标签要允许带属性（新壳写的是 `<aside class="ad-sider" id="sider">`）—— 只匹配
+          无属性的写法会让本脚本**第二次跑就失配**，壳改了却同步不进去（2026-10-15 实测）。 */
+  const asideRe = /<aside class="ad-sider"[^>]*>[\s\S]*?<\/aside>/g;
   let ai = 0;
   out = out.replace(asideRe, () => shellSider({ interactive: false, active: actives[ai++] ?? actives[actives.length - 1] }));
   if (ai === 0) problems.push('未找到 <aside class="ad-sider">（可能已同步或结构变更）');
