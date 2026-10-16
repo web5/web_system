@@ -107,3 +107,6 @@ servers/ai-service/.agent-cli.config.json
 
 # 文件监听/传输测试残留
 .tmp-wft-*
+
+# git worktree 隔离目录（多会话并行用）
+.worktrees/
