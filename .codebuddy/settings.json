@@ -40,6 +40,11 @@
             "type": "command",
             "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-shell-ui-gate.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-worktree-shell-gate.py\"",
+            "timeout": 10
           }
         ]
       }

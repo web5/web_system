@@ -7,7 +7,8 @@
 #   ./install-worktree-gate.sh /path/to/target-repo --dry-run
 #
 # 做什么：
-#   1) 复制 hook-worktree-gate.py / hook-worktree-session.py 到 <target>/scripts/redline/
+#   1) 复制 hook-worktree-gate.py / hook-worktree-session.py /
+#      hook-worktree-shell-gate.py 到 <target>/scripts/redline/
 #   2) 幂等合并 hook 到 <target>/.codebuddy/settings.json（不破坏已有 hook）
 #   3) 确保 .gitignore 含 .worktrees/（否则 worktree 内容会被提交进仓库）
 #
@@ -42,7 +43,7 @@ echo
 
 # ---- 1. 复制脚本 ----
 DST="$TARGET/scripts/redline"
-for f in hook-worktree-gate.py hook-worktree-session.py; do
+for f in hook-worktree-gate.py hook-worktree-session.py hook-worktree-shell-gate.py; do
   [ -f "$SRC_DIR/$f" ] || { echo "❌ 缺少源脚本 $f" >&2; exit 1; }
   if [ "$DRY" = "1" ]; then
     echo "[dry] 复制 $f → $DST/$f"
@@ -72,13 +73,16 @@ except Exception:
 
 d.setdefault('hooks', {})
 P = '"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/%s"'
-NEW = {
-    'SessionStart': ('', 'hook-worktree-session.py'),
-    'PreToolUse': ('write_to_file|replace_in_file|Write|Edit|MultiEdit',
-                   'hook-worktree-gate.py'),
-}
+NEW = [
+    ('SessionStart', '', 'hook-worktree-session.py'),
+    ('PreToolUse', 'write_to_file|replace_in_file|Write|Edit|MultiEdit',
+     'hook-worktree-gate.py'),
+    # Bash 通道：Write/Edit 类工具不经过时（echo > / sed -i / tee / python -c）
+    # 文件照样落盘，故单独挂一道（默认 soft 只提醒）
+    ('PreToolUse', 'execute_command|Bash', 'hook-worktree-shell-gate.py'),
+]
 changed = []
-for event, (matcher, script) in NEW.items():
+for event, matcher, script in NEW:
     groups = d['hooks'].setdefault(event, [])
     target = None
     for g in groups:
@@ -121,4 +125,5 @@ fi
 echo
 echo "完成。验证方式："
 echo "  cd $TARGET && git worktree list"
-echo "  WORKTREE_GATE=soft 可降级为只提醒；=off 关闭"
+echo "  WORKTREE_GATE=soft 可降级为只提醒；=off 关闭（Write/Edit 通道）"
+echo "  WORKTREE_SHELL_GATE=hard 把 Bash 通道从提醒升级为阻断；=off 关闭"
