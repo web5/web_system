@@ -110,14 +110,18 @@ export class FactCollectService {
    * 采集一个环境。
    * @throws ConflictException 该环境正在采集（手动连点 / 与定时撞车）
    */
-  async collect(env: string, trigger: 'schedule' | 'manual' = 'schedule'): Promise<FactBatchReport> {
+  async collect(
+    env: string,
+    trigger: 'schedule' | 'manual' = 'schedule',
+    opts?: { persist?: boolean },
+  ): Promise<FactBatchReport> {
     if (!env) throw new Error('collect 需要 env');
     if (this.inFlight.has(env)) {
       throw new ConflictException(`环境 ${env} 正在采集中，请稍后再试`);
     }
     this.inFlight.add(env);
     try {
-      return await this.doCollect(env, trigger);
+      return await this.doCollect(env, trigger, opts?.persist !== false);
     } finally {
       this.inFlight.delete(env);
     }
@@ -132,7 +136,18 @@ export class FactCollectService {
       .filter(Boolean);
   }
 
-  private async doCollect(env: string, trigger: 'schedule' | 'manual'): Promise<FactBatchReport> {
+  /**
+   * @param persist 是否落快照。**采集这件事本身是只读的**（跑的都是 cat / ls /
+   *   `pm2 jlist` 这类读命令），只有落库才是写 —— 两者要能分开：
+   *   `verify_release` 需要**此刻**的事实来判定发布是否生效，但作为 L1 只读工具
+   *   它不该在事实表里留痕（否则一次"看看发成功了没"就会改变巡检时间线）。
+   *   定时任务与手动巡检入口都不传，保持既有落库行为。
+   */
+  private async doCollect(
+    env: string,
+    trigger: 'schedule' | 'manual',
+    persist: boolean,
+  ): Promise<FactBatchReport> {
     const batchId = crypto.randomUUID();
     const ranAt = Date.now();
     const target = resolveStaticTarget(
@@ -263,21 +278,23 @@ export class FactCollectService {
     }
 
     // ③ 落库（一批 save；失败整批记，不做部分成功）
-    const rows = items.map((it) =>
-      this.repo.create({
-        batchId,
-        envId: env,
-        kind: it.kind,
-        targetKey: it.targetKey,
-        host: runner.host,
-        expected: it.expected,
-        actual: it.actual,
-        status: it.status,
-        detail: it.detail ?? null,
-        trigger,
-      }),
-    );
-    if (rows.length) await this.repo.save(rows);
+    if (persist && items.length) {
+      const rows = items.map((it) =>
+        this.repo.create({
+          batchId,
+          envId: env,
+          kind: it.kind,
+          targetKey: it.targetKey,
+          host: runner.host,
+          expected: it.expected,
+          actual: it.actual,
+          status: it.status,
+          detail: it.detail ?? null,
+          trigger,
+        }),
+      );
+      await this.repo.save(rows);
+    }
 
     const drift = items.filter((i) => i.status === 'drift').length;
     const missing = items.filter((i) => i.status === 'missing').length;

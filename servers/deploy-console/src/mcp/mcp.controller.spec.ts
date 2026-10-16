@@ -18,6 +18,7 @@ import { PipelineService } from '../pipeline/pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApproverService } from '../approval/approver.service';
 import { ReleasePlanService } from '../release-plan/release-plan.service';
+import { ReleaseVerifyService } from '../release-verify/release-verify.service';
 
 describe('McpController.submitPipeline（入参转发）', () => {
   let controller: McpController;
@@ -36,6 +37,7 @@ describe('McpController.submitPipeline（入参转发）', () => {
         },
         { provide: ApproverService, useValue: { list: jest.fn(async () => ({ users: [] })) } },
         { provide: ReleasePlanService, useValue: { plan: jest.fn() } },
+        { provide: ReleaseVerifyService, useValue: { verify: jest.fn() } },
         // 直调控制器方法，不执行 guard；但 `@UseGuards(McpKeyGuard)` 的元数据要求
         // Nest 能**构造**出这个守卫，故补上它依赖的 McpAuthService 桩
         { provide: McpAuthService, useValue: { verifyKey: jest.fn() } },

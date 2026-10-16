@@ -147,7 +147,7 @@ Agent                          console                        runner
 | `release_submit` | L2 | 幂等键 | 提交变更（须带 planId） | ⚠️ `publish_pipeline` 有，需加 planId 语义 |
 | `job_status` / `job_stream` | L0 | 是 | 进度、日志、阶段 state | ✅ `publish_pipeline` 内嵌 / ⚠️ 需独立工具 |
 | `job_cancel` | L2 | 是 | 取消（仅本人/本人 agent） | ✅ 已有（`ownedPipeline` 404 语义已加固） |
-| `verify_release`(新增) | L0 | 是 | 发布后断言（版本一致/入口 200/无 pageerror） | ❌（今日靠人工 curl 清单） |
+| `verify_release`(新增) | L0 | 是 | 发布后断言（版本一致/入口 200/无 pageerror） | ⚠️ `POST /api/mcp/release-verify`（见 §五·乙；HTTP 探测仍是缺口） |
 | `rollback` | L3 | 是 | 回滚到 previous_version | ✅ 已有，建议升 L3 强制审批 |
 | `promote_release` | L3 | 是 | 灰度转全量 | ✅ 已有 |
 | `lock_status` / `acquire_lock`(新增) | L1/L2 | 是 | 发布互斥（同 module+env） | ⚠️ 有 `deploy_release_lock` 表未用起来 |
@@ -196,6 +196,49 @@ Agent                          console                        runner
 3. **`env.healthy` 故意不 blocking。** 环境带着漂移发新版本有时正是修复手段；一律拦住会让"发版修问题"这条路走不通。它以告警 + 抬高风险的方式表达。
 
 **只读红线**：整份 plan 不得调用任何写方法。由 `release-plan.service.spec.ts` 的 `WRITE_METHODS` 名单用 mock 断言守住（含"全部前置都失败"的场景 —— 失败时最容易顺手自愈）。
+
+---
+
+### 五·乙 `verify_release` 落地说明（2026-10-15 实现）
+
+入口：`POST /api/mcp/release-verify`（`McpController`，沿用 `McpKeyGuard` 鉴权）。
+实现在 `servers/deploy-console/src/release-verify/`，**只读**。
+
+回答一个具体问题：**「这次发布，线上真的生效了吗？」**
+与 `release_plan` 是发布前后的一对：`plan` 管「发之前能不能发」，这里管「发之后是不是真的发了」。
+
+**判据不是流水线状态。** `status=succeeded` 只说明脚本跑完，不说明产物落地、进程重启。
+这里比对的是**此刻的线上事实**（调 `FactCollectService.collect(env,'manual',{persist:false})` ——
+采集跑的都是读命令，只有落库才是写，故关闭落库，避免"看一眼发成功没"改写巡检时间线）。
+
+| key | 真相源 | 核心项 |
+|---|---|---|
+| `pipeline.succeeded` | `PipelineService.get`（未传 jobId → skipped） | 是 |
+| `pointer.matches` | Fact `version` 事实（读指针文件解析出的 commit） | 是 |
+| `artifact.versionDir` | Fact `dir` 事实（仅微前端产物） | 是（非前端 → skipped） |
+| `process.alive` | Fact `process` 事实 | 否 |
+| `port.listening` | Fact `port` 事实 | 否 |
+
+**verdict 判定顺序**（有意如此，每一步回答不同性质的问题）：
+
+1. 核心项 fail → `failed`「确实没生效」，已能下负面结论，直接返回
+2. 核心项 unknown → `unknown`「给不出结论」—— 不能因为"没找到它失败的证据"就说它成功了
+3. 非核心项 fail/unknown → `strict ? failed/unknown : degraded`「生效了但有瑕疵」
+4. 否则 → `verified`
+
+⚠️ **第 2 步必须排在第 3 步之前**：核心判不了比"某个次要检查没过"严重得多。
+反过来会让一份"指针根本没采到"的验证因为端口正常而被报成 `degraded`，
+把"我不知道"包装成"大概没问题"。
+另外：**核心项全部 skipped 时 verdict 是 `unknown` 而非 `verified`**
+—— 什么都没验 ≠ 验证通过（该判定在 `gradeVerdict` 内，便于单测）。
+
+**比 `release_plan` 多一个状态 `skipped`**：`unknown` 是**缺真相源**（判不了），
+`skipped` 是**确定不适用**（前端模块本就没有 pm2 进程）。混在一起会稀释
+`unknown` 的语义，而它恰恰是最需要被看见的状态。`skipped` 也会进 `warnings` 并给出原因。
+
+**已知缺口**（返回体 `knownGaps`，不是"做了没列"）：
+- 无真实 HTTP 探测（只能靠进程/端口兜住"服务没了"，兜不住"服务在但内部报错"）
+- 目标机配置 hash（依赖 P1 config-client）
 
 ---
 
