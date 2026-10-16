@@ -32,9 +32,29 @@ export const SHELL_TOP = [
   { label: '数据浏览', screen: 'database',   route: '#/database',       icon: 'database' },
 ];
 
+/**
+ * 子菜单（a-sub-menu）**列表**。为什么从单个 SHELL_SUB 改成数组：
+ * 真实 admin 的 a-menu 里 a-sub-menu 不止一个（Agents 是一组，内容中心也是一组二级页），
+ * 而壳只能有一份定义 —— 之前硬编码「只有一个 sub」导致内容中心无处可放，只能另起一份稿
+ * （2026-10-15 admin-console.html 事故：壳被复制成第二真相源）。现在按**组**声明，
+ * `key` 用于生成 .ad-sub 的 data-sub（切屏时按它判定哪个父级标题高亮）。
+ */
+/** 内容中心（content:view / content:manage）—— 原型侧新增模块，落地需在 BasicLayout.vue 挂菜单（契约门 C4：权限码先登记） */
+export const SUB_CONTENT = {
+  key: 'content', title: '内容中心', icon: 'news',
+  screens: ['content-overview', 'content-items', 'content-detail', 'content-lhb', 'content-seats'],
+  items: [
+    { label: '采集总览', screen: 'content-overview', route: '#/content',             icon: null },
+    { label: '内容条目', screen: 'content-items',    route: '#/content/items',       icon: null },
+    { label: '条目详情', screen: 'content-detail',   route: '#/content/items/12043', icon: null },
+    { label: '龙虎榜',   screen: 'content-lhb',      route: '#/content/lhb',         icon: null },
+    { label: '席位库',   screen: 'content-seats',    route: '#/content/seats',       icon: null },
+  ],
+};
 /** Agents 子菜单（a-sub-menu）。`Agent 概览` = router 的 /agents index 页，BasicLayout 未挂菜单项（已知增量） */
-export const SHELL_SUB = {
-  title: 'Agents', icon: 'robot', screens: ['overview', 'observe', 'records', 'capabilities', 'knowledge', 'retrieval', 'list', 'skills', 'pg'],
+export const SUB_AGENTS = {
+  key: 'agents', title: 'Agents', icon: 'robot',
+  screens: ['overview', 'observe', 'records', 'capabilities', 'knowledge', 'retrieval', 'list', 'skills', 'pg'],
   items: [
     { label: 'Agent 概览', screen: 'overview',     route: '#/agents',              icon: null },
     { label: 'Agent 观测', screen: 'observe',      route: '#/agents/metrics',      icon: null },
@@ -47,9 +67,15 @@ export const SHELL_SUB = {
     { label: '对话调试',   screen: 'pg',           route: '#/agents/playground',   icon: null },
   ],
 };
+export const SHELL_SUBS = [SUB_CONTENT, SUB_AGENTS];
+/** 兼容旧引用（= Agents 组）；新代码请用 SHELL_SUBS */
+export const SHELL_SUB = SUB_AGENTS;
 
 /** 菜单项文案序列（BasicLayout 对账 & 生成自检用） */
-export const SHELL_LABELS = [...SHELL_TOP.map((m) => m.label), ...SHELL_SUB.items.map((m) => m.label)];
+export const SHELL_LABELS = [
+  ...SHELL_TOP.map((m) => m.label),
+  ...SHELL_SUBS.flatMap((s) => s.items.map((m) => m.label)),
+];
 
 const ICON_PATHS = {
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
@@ -60,6 +86,7 @@ const ICON_PATHS = {
   database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>',
   api: '<path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/>',
   robot: '<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/>',
+  news: '<path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/>',
   home: '<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -78,8 +105,16 @@ const menuItem = (m, { sub, interactive, active }) => `\n        <div class="ad-
   + ` title="${m.label}">`
   + `${sub ? '' : `<span class="ad-ic">${shellIcon(m.icon)}</span>`}<span class="ad-t">${m.label}</span></div>`;
 
+/** 一个 a-sub-menu（标题 + 子项容器）；data-screens 供切屏时判定「哪个父级标题该高亮」 */
+const subBlock = (s, { interactive, active }) => `
+      <div class="ad-sub open${s.screens.includes(active) ? ' selected' : ''}" data-sub="${s.key}" data-screens="${s.screens.join(',')}">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic">${shellIcon(s.icon)}</span><span class="ad-t">${s.title}</span><span class="ad-arrow">${shellIcon('caret', 'ad-arrow-ic')}</span></div>
+        <div class="ad-sub-bd">${s.items.map((m) => menuItem(m, { sub: true, interactive, active })).join('')}
+        </div>
+      </div>`;
+
 /**
- * 侧栏（sider-header + a-menu 结构）
+ * 侧栏（sider-header + a-menu 结构）：一级项 + **任意组** a-sub-menu
  * @param {{interactive?: boolean, active?: string|null}} o
  *   interactive=true  → 菜单项带 data-route，由页内 hash 路由驱动（整合稿）
  *   interactive=false → 静态示意（定稿单页稿），active 由参数指定
@@ -89,12 +124,7 @@ export const shellSider = ({ interactive = false, active = null } = {}) => `<asi
         <div class="ad-logo"><span class="ad-logo-dot"></span><span class="ad-logo-t">科豆 AI</span></div>
         <button class="ad-collapse" id="btn-collapse" type="button" title="收起菜单" aria-label="收起菜单">${shellIcon('fold', 'ad-collapse-ic')}</button>
       </div>
-      <nav class="ad-menu">${SHELL_TOP.map((m) => menuItem(m, { sub: false, interactive, active })).join('')}
-      <div class="ad-sub open${SHELL_SUB.screens.includes(active) ? ' selected' : ''}" data-sub="agents">
-        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic">${shellIcon(SHELL_SUB.icon)}</span><span class="ad-t">${SHELL_SUB.title}</span><span class="ad-arrow">${shellIcon('caret', 'ad-arrow-ic')}</span></div>
-        <div class="ad-sub-bd">${SHELL_SUB.items.map((m) => menuItem(m, { sub: true, interactive, active })).join('')}
-        </div>
-      </div>
+      <nav class="ad-menu">${SHELL_TOP.map((m) => menuItem(m, { sub: false, interactive, active })).join('')}${SHELL_SUBS.map((s) => subBlock(s, { interactive, active })).join('')}
       </nav>
     </aside>`;
 
@@ -231,5 +261,5 @@ export const shellJs = () => `
 /** 供 build 脚本做「菜单 ↔ BasicLayout.vue」对账用的映射（route 末段 / 屏名） */
 export const SHELL_NAV = [
   ...SHELL_TOP.map((m) => ({ ...m, group: null })),
-  ...SHELL_SUB.items.map((m) => ({ ...m, group: SHELL_SUB.title })),
+  ...SHELL_SUBS.flatMap((s) => s.items.map((m) => ({ ...m, group: s.title }))),
 ];

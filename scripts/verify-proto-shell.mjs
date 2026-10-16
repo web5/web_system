@@ -1,5 +1,8 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { SHELL_LABELS, SHELL_SUBS } from './lib/proto-shell.mjs';
 const require = createRequire('/Users/geekwen/.workbuddy/binaries/node/workspace/');
 const puppeteer = require('puppeteer-core');
 
@@ -10,7 +13,9 @@ const puppeteer = require('puppeteer-core');
 //       背景：三份稿此前各写一套壳 → 漂移；现在壳由 scripts/lib/proto-shell.mjs 单源生成，
 //       定稿由 sync-prototype-shell.mjs 注入、整合稿由 build-agents-hub.mjs 内联。
 // 消息结构 parity 由 verify-playground-parity.mjs 守，菜单文案 vs BasicLayout 由 verify-agents-hub.mjs ⑧ 守，此处不重复。
-const ROOT = '/Users/geekwen/workspace/web_system-llm-tuning';
+/* ⚠️ 必须是**当前工作仓**：曾硬编码成另一个 worktree → 三份稿读的是别处的旧文件，
+   壳改了却在旧仓上对拍，机检全绿假象。 */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FILES = [
   ROOT + '/docs/ui/prototypes/admin-agents.html',
   ROOT + '/docs/ui/prototypes/admin-agent-def-detail.html',
@@ -57,7 +62,8 @@ for (const file of FILES) {
       siderW: sider ? Math.round(sider.getBoundingClientRect().width) : 0,
       logo: sider.querySelector('.ad-logo-t').textContent.trim(),
       labels,
-      subTitle: sider.querySelector('.ad-sub-t .ad-t').textContent.trim(),
+      /* 多 sub-menu（内容中心 / Agents）：标题与子项都按**全部**采，不能只取第一个 */
+      subTitle: [...sider.querySelectorAll('.ad-sub-t .ad-t')].map((n) => n.textContent.trim()).join('+'),
       subCount: sider.querySelectorAll('.ad-sub-bd .ad-item-sub').length,
       hasCollapse: !!sider.querySelector('#btn-collapse'),
       hasHeaderRight: !!document.querySelector('.ad-hr'),
@@ -73,7 +79,14 @@ for (const file of FILES) {
           color: s.color,
         };
       })(),
-      subSelected: sider.querySelector('.ad-sub').classList.contains('selected'),
+      /* 父级高亮要按「哪个 sub 含当前 active 屏」判定（多 sub-menu 下取第一个恒为 false） */
+      subSelected: (() => {
+        const act = sider.querySelector('.ad-item.active');
+        const sc = act && act.dataset.screen;
+        const sub = [...sider.querySelectorAll('.ad-sub')]
+          .find((x) => (x.getAttribute('data-screens') || '').split(',').includes(sc));
+        return sub ? sub.classList.contains('selected') : false;
+      })(),
     };
   });
   snapshots.push(snap);
@@ -81,8 +94,10 @@ for (const file of FILES) {
   const name = file.split('/').pop();
   rec(`${name} · sider 宽 = 220`, snap.siderW, SIDER_W);
   rec(`${name} · logo = 科豆 AI`, snap.logo, LOGO);
-  rec(`${name} · 菜单 17 项`, snap.labels.length, 17);
-  rec(`${name} · 子菜单标题 Agents + 9 子项`, [snap.subTitle, snap.subCount].join('/'), 'Agents/9');
+  rec(`${name} · 菜单 ${SHELL_LABELS.length} 项`, snap.labels.length, SHELL_LABELS.length);
+  rec(`${name} · 子菜单（${SHELL_SUBS.map((s) => s.title).join('+')}）+ 子项总数`,
+    [snap.subTitle, snap.subCount].join('/'),
+    `${SHELL_SUBS.map((s) => s.title).join('+')}/${SHELL_SUBS.reduce((n, s) => n + s.items.length, 0)}`);
   rec(`${name} · 有折叠按钮 / 顶栏右侧 / home 图标`, [snap.hasCollapse, snap.hasHeaderRight, snap.hasHome].join('/'), 'true/true/true');
   /* 选中项：class 里恰好一个 active，且样式真生效（渐变底 + 3px 竖条 + 橙字——computed 级，防「声明一致≠生效」） */
   rec(`${name} · 选中项 = ${ACTIVE_EXPECT[name.split('/').pop()]}`,
@@ -102,13 +117,15 @@ for (const file of FILES) {
   const expandedW = await page.$eval('#sider', (e) => Math.round(e.getBoundingClientRect().width));
   rec(`${name} · 再展开 sider = 220`, expandedW, SIDER_W);
 
-  // 子菜单收起：点 Agents 标题 → .ad-sub 不再 open → 再点恢复
-  await page.click('.ad-sub-t');
+  // 子菜单收起：点 Agents 标题 → 该 .ad-sub 不再 open → 再点恢复（多 sub-menu 必须指定 data-sub）
+  await page.click('.ad-sub[data-sub="agents"] .ad-sub-t');
   await wait(100);
-  rec(`${name} · 点 Agents 标题收起子菜单`, await page.$eval('.ad-sub', (e) => e.classList.contains('open')), false);
-  await page.click('.ad-sub-t');
+  rec(`${name} · 点 Agents 标题收起子菜单`,
+    await page.$eval('.ad-sub[data-sub="agents"]', (e) => e.classList.contains('open')), false);
+  await page.click('.ad-sub[data-sub="agents"] .ad-sub-t');
   await wait(100);
-  rec(`${name} · 再点恢复展开`, await page.$eval('.ad-sub', (e) => e.classList.contains('open')), true);
+  rec(`${name} · 再点恢复展开`,
+    await page.$eval('.ad-sub[data-sub="agents"]', (e) => e.classList.contains('open')), true);
 
   await page.close();
 }
