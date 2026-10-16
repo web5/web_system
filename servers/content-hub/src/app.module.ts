@@ -17,6 +17,9 @@ import { ContentPipelineEntity } from './content/entities/content-pipeline.entit
 import { ContentItemEntity } from './content/entities/content-item.entity';
 import { ContentPublicationEntity } from './content/entities/content-publication.entity';
 import { ContentMediaEntity } from './content/entities/content-media.entity';
+import { LhbRecordEntity } from './content/entities/lhb-record.entity';
+import { HotmoneySeatEntity } from './content/entities/hotmoney-seat.entity';
+import { CollectRunEntity } from './content/entities/collect-run.entity';
 
 @Module({
   imports: [
@@ -39,6 +42,9 @@ import { ContentMediaEntity } from './content/entities/content-media.entity';
           ContentItemEntity,
           ContentPublicationEntity,
           ContentMediaEntity,
+          LhbRecordEntity,
+          HotmoneySeatEntity,
+          CollectRunEntity,
         ];
         if (dbType === 'mysql') {
           return {

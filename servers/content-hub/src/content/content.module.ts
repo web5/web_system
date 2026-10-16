@@ -11,6 +11,14 @@ import { ContentPipelineEntity } from './entities/content-pipeline.entity';
 import { ContentItemEntity } from './entities/content-item.entity';
 import { ContentPublicationEntity } from './entities/content-publication.entity';
 import { ContentMediaEntity } from './entities/content-media.entity';
+import { LhbRecordEntity } from './entities/lhb-record.entity';
+import { HotmoneySeatEntity } from './entities/hotmoney-seat.entity';
+import { CollectRunEntity } from './entities/collect-run.entity';
+import { CollectLogService } from './services/collect-log.service';
+import { SeatTagService } from './services/seat-tag.service';
+import { FinnewsAdapterService } from './services/finnews-adapter.service';
+import { ArxivDigestService } from './services/arxiv-digest.service';
+import { ContentQualityController } from './content-quality.controller';
 
 /** 内容管道领域模块——论文 / AI 资讯的采集、处理、发布 */
 @Module({
@@ -21,16 +29,30 @@ import { ContentMediaEntity } from './entities/content-media.entity';
       ContentItemEntity,
       ContentPublicationEntity,
       ContentMediaEntity,
+      LhbRecordEntity,
+      HotmoneySeatEntity,
+      CollectRunEntity,
     ]),
   ],
-  controllers: [ContentController],
+  controllers: [ContentController, ContentQualityController],
   providers: [
     ContentService,
     PipelineService,
     SchedulerService,
     TencentDocsPublisher,
     WechatMpPublisher,
+    CollectLogService,
+    SeatTagService,
+    FinnewsAdapterService,
+    ArxivDigestService,
   ],
-  exports: [ContentService, PipelineService],
+  exports: [
+    ContentService,
+    PipelineService,
+    CollectLogService,
+    SeatTagService,
+    FinnewsAdapterService,
+    ArxivDigestService,
+  ],
 })
 export class ContentModule {}
