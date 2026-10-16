@@ -7,6 +7,7 @@ import {
   UploadedFile,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -25,6 +26,9 @@ import { createUploadInterceptor } from './upload-multer';
 @ApiTags('文件上传')
 @Controller('upload')
 export class UploadController {
+  /** 日志统一走 NestJS Logger（横切铁律：不走进程 stdout 裸写，保证级别可控） */
+  private readonly logger = new Logger(UploadController.name);
+
   constructor(private readonly uploadService: UploadService) {}
 
   /** 获取支持的上传分类信息（无需鉴权，供前端参考） */
@@ -145,7 +149,7 @@ export class UploadController {
       });
     } catch (e) {
       // 文件已落盘：元数据失败只告警，不让上传在用户眼里失败
-      console.warn(`[upload] 记录上传元数据失败: ${(e as Error).message}`);
+      this.logger.warn(`[upload] 记录上传元数据失败: ${(e as Error).message}`);
     }
   }
 }
