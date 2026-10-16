@@ -58,7 +58,29 @@
 
 ## 7 关联：同期发现 p35 迁移缺陷（不在本用例范围，顺带记录）
 
-同一轮检查把 p35（内容质量工程 CQO，属另一个改动域）在 dev 首次执行时发现的两个缺陷一并修掉：
-`content_items.meta` 漏迁、游资名单种子列数与值数不一致（ERROR 1136）。
-修复 commit：`1b14226f fix(content-hub): p35 补 meta 列并修种子 INSERT`
-两者都是**静态评审看不出来、只有真执行才暴露**的类型。
+同一轮检查把 p35（内容质量工程 CQO，属另一个改动域）在 dev 首跑暴露的缺陷一并修掉，共三个：
+
+| # | 缺陷 | 修复 commit |
+|---|------|-------------|
+| ① | `content_items.meta` 漏迁（实体新增了 json 列，迁移只加 5 个质量列 → 旧库运行时 Unknown column） | `1b14226f` |
+| ② | 游资名单种子 ERROR 1136：`is_active` 写进列清单后 MySQL 不再套 DDL 的 DEFAULT 1，列数与值数不符 | `1b14226f` |
+| ③ | `EMIT_SQL` 导出产物不可重复执行：一条 ALTER 带 6 个 ADD COLUMN，而 MySQL 的 ALTER 无 IF NOT EXISTS | `92c59c79` |
+
+三者同型：**静态评审看不出来、只有真执行才暴露**。①②靠 dev 实库击发，③是②修完、重跑路径被
+真正用到时才浮出来 —— 教训是「幂等」必须两条执行路径（直连 / 导出）同时成立，只验一条等于没验。
+
+### 7.1 事实订正：p35 已在 dev 执行过
+
+`b52ee833` 的正文写有「⚠️ 迁移尚未在任何环境执行」，该表述**已过期**，后续以本表为准
+（2026-10-16 实读 dev 机 `web_system` 库，MySQL 8.0.45）：
+
+| 项 | dev 实测 |
+|----|----------|
+| `content_items` 6 个新列 | 全在（含 `meta`，json） |
+| `lhb_records` / `hotmoney_seats` / `collect_runs` | 均在 |
+| `hotmoney_seats` 种子 | 18 行，全部 `is_active=1` |
+| `lhb_records` / `collect_runs` / `content_items` 数据行数 | 均 0（尚未有任何采集流过） |
+
+⚠️ 数据端已就位，但 p35 的**代码尚未部署**：dev content-hub 进程自 2026-10-12 起未重启，
+dist 里没有 `content-quality.controller.js`。故 CQO 目前仍产生不出任何归因证据 ——
+「数据底座 + 用它的代码」要一起上线才算交付。
