@@ -8,6 +8,11 @@
             "type": "command",
             "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-session-start.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-worktree-session.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -19,6 +24,11 @@
           {
             "type": "command",
             "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-ui-prototype-gate.py\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CODEBUDDY_PROJECT_DIR:-.}/scripts/redline/hook-worktree-gate.py\"",
             "timeout": 10
           }
         ]
