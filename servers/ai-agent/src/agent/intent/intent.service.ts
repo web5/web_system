@@ -43,11 +43,16 @@ export class IntentService {
     private readonly config: ConfigService,
   ) {
     this.enabled = this.config.get<string>('INTENT_ROUTING_ENABLED', 'false') === 'true';
-    // ⚠️ 默认值必须与 ClientRegistry 的注册键**逐字一致**（带 `deepseek/` 前缀）。
-    //    写短名 `deepseek-v4-flash` 时 getOrFallback 不会报错，只会静默回退到 hy3 ——
-    //    表现为「分类能用但偶发兜底」，极难定位（2026-10-08 事故根因之一）。
+    // ⚠️ 默认值必须与 ClientRegistry 的注册键**逐字一致**（= 网关 model id）。
     //    注册键来源：agent.module.ts 按 TOKENHUB_MODELS / BUILTIN_TOKENHUB_MODELS 注册。
-    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek/deepseek-v4-flash');
+    //    不匹配时 getOrFallback 不报错，只静默回退 hy3 —— 表现为「分类能用但偶发兜底」。
+    //    2026-10-08 因「短名 vs 带前缀名」不一致中招；2026-10-17 复核结论反转：
+    //    带前缀的 `deepseek/deepseek-v4-flash` 已被网关 402（401008）且不在 GET /models 中，
+    //    可用的反而是短名 `deepseek-v4-flash`。规则未变（仍要逐字等于注册键），
+    //    变的是注册键本身 —— 见 model-catalog.service.ts 的 BUILTIN_TOKENHUB_MODELS。
+    //    ⚠️ 该 id 现被网关解析到 `deepseek-v4-flash-0731`（/models 标 discontinued）：
+    //    今天能用但属过渡态，后续应迁 `deepseek/deepseek-flash`（V4.1，online，实测 200）。
+    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek-v4-flash');
     this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '3000')) || 3000;
     this.fallbackAgentId = this.config.get<string>('INTENT_FALLBACK_AGENT_ID', 'general');
 
