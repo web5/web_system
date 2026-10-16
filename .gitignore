@@ -110,3 +110,6 @@ servers/ai-service/.agent-cli.config.json
 
 # git worktree 隔离目录（多会话并行用）
 .worktrees/
+
+# WorkBuddy 预览 app 清单（本地生成，appId + 预览目录绝对路径，换机即失效）
+.wbapp_*.genie
