@@ -39,3 +39,26 @@
 ## 5 回滚路径
 
 `git revert` 单 commit 即可；改动仅 3 行，风险可忽略。
+
+## 6 交付结果（step 2~4 执行完毕）
+
+实现 + 验证 commit：`794267e3 fix(upload-service): 日志改走 NestJS Logger，并用单测锁住`
+
+| ID | 结果 | 证据 |
+|----|------|------|
+| V1 | ✅ 0 命中 | `rg 'console\.' servers/upload-service/src/upload/upload.controller.ts` 无输出（注释刻意回避该字面量，否则会给自证留假阳性） |
+| V2 | ✅ | 类字段 `private readonly logger = new Logger(UploadController.name)`；`tsc --noEmit` 通过 |
+| V3 | ✅ | spy `Logger.prototype.warn` 调用一次，文案含 `[upload] 记录上传元数据失败` 且保留错误原文 |
+| V4 | ✅ | `upload.controller.logger.spec.ts` 2 例通过；console 通道 spy 断言未被调用 |
+| V5 | ✅ | 全 upload-service 用例 **32 passed / 4 suites**；成功响应仍为 `{ code: 200, data }` |
+
+⚠️ 执行中发现的一处口径冲突（供后续用例复用）：
+若把「禁止 console.*」写进代码注释，V1 的 grep 会命中注释本身 —— 自证类判据
+应改为扫描**代码**，或注释里回避该字面量。本次采用后者。
+
+## 7 关联：同期发现 p35 迁移缺陷（不在本用例范围，顺带记录）
+
+同一轮检查把 p35（内容质量工程 CQO，属另一个改动域）在 dev 首次执行时发现的两个缺陷一并修掉：
+`content_items.meta` 漏迁、游资名单种子列数与值数不一致（ERROR 1136）。
+修复 commit：`1b14226f fix(content-hub): p35 补 meta 列并修种子 INSERT`
+两者都是**静态评审看不出来、只有真执行才暴露**的类型。

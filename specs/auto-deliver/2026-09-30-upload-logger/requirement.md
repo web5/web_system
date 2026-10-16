@@ -1,6 +1,7 @@
 # 需求规格 · upload.controller 日志合规化（Tier1 验证用例）
 
 > 来源：全自动交付编排中枢 `wb-auto-deliver` 端到端验证用例。
+> 状态：**已交付**（2026-10-16）— 实现与验证见 `plan.md` §6，commit `794267e3`。
 > 改动域：`servers/upload-service/src/upload/upload.controller.ts`（单文件、纯内部）。
 
 ## 1 背景
