@@ -6,6 +6,21 @@ import { installChunkLoadErrorGuard, isChunkLoadError, showModuleLoadError } fro
 import LoginView from '@/views/Login.vue';
 
 /**
+ * 「是否已登录」的唯一口径：token 非空且未过期。
+ *
+ * ⚠️ 路由守卫的**每一个**分支都必须用这个判定，不能有的看 `!!token`、有的看
+ * `isTokenExpired`。过期 token 是**非空字符串**，混用口径会让「受保护路由」与
+ * 「登录页」互相把对方踢出去，形成同步无限重定向 —— 主线程被占满，页面渲染不出来
+ * 且控制台零报错（详见 guard-process.spec.ts 的回归用例）。
+ *
+ * 抽取为独立导出是为了让这条口径可被单测直接锁定：守卫本身依赖 vue-router 运行时，
+ * 而这个判定不需要。
+ */
+export function isAuthed(token: string | null | undefined): boolean {
+  return !!token && !isTokenExpired(token as string);
+}
+
+/**
  * 解析 JWT token，检查是否过期
  * 不做签名验证（那是后端的事），只检查 exp 字段
  *
@@ -13,7 +28,7 @@ import LoginView from '@/views/Login.vue';
  * 字段被 base64url 编码（atob 对 url-safe base64 兼容性差），让 token 继续
  * 带到请求中，由后端 401 兜底处理，避免误把有效 token 判过期踢到登录页。
  */
-function isTokenExpired(token: string): boolean {
+export function isTokenExpired(token: string): boolean {
   try {
     // JWT 标准是 base64url，部分签发方会用 url-safe 字符（-/_），先归一化
     const normalized = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -209,12 +224,15 @@ router.beforeEach(async (to, _from, next) => {
   // 从 Pinia store 读取状态，而非裸解析 localStorage JSON
   const userStore = useUserStore();
   const token = userStore.token;
+  // 唯一「已登录」口径（过期即未登录），守卫内所有分支必须共用，见 isAuthed 注释
+  const authed = isAuthed(token);
 
-  if (to.meta.requiresAuth && (!token || isTokenExpired(token))) {
-    next('/login');
+  if (to.meta.requiresAuth && !authed) {
+    // 带上来路：与 portal / deploy-console 对齐，登录后能回到原页面
+    next({ path: '/login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } });
     return;
   }
-  if (to.path === '/login' && token) {
+  if (to.path === '/login' && authed) {
     next('/');
     return;
   }
@@ -222,7 +240,7 @@ router.beforeEach(async (to, _from, next) => {
   // 每次页面加载都重新拉取一次权限（模块级标记，刷新即重置）。
   // 不能只看持久化的 permissionsReady，否则权限一旦被写脏就永久生效：
   // 表现为菜单塌陷成只剩「工作台」，而守卫（按角色映射）却放行页面，非常迷惑。
-  if (token && !permissionsFetched) {
+  if (authed && !permissionsFetched) {
     try {
       await userStore.fetchPermissions();
     } catch {
