@@ -10,25 +10,13 @@ import { ClientRegistry, Hy3Client, TokenHubClient } from '@kedouai/agent-core';
  * 代码默认值与 .env 打架曾导致 hy4-preview 从下拉里消失，所以各级只在
  * 上一级不可用时生效，且每次回落都打 WARN。
  *
- * ⚠️ 这里每项都是**网关 model id**（= ClientRegistry 注册键），不是「厂商/型号」
- * 的展示名。带不带 `deepseek/` 前缀**没有规律**（带前缀的 pro 在线、带前缀的
- * v4-flash 却已死）——**改前必须照 `GET {TOKENHUB_BASE_URL}/models` 核**。
- *
- * flash 三项并存的沿革（保留旧键是刻意的，理由见各行注释）：
- *   `deepseek/deepseek-flash` = DeepSeek-V4.1-Flash，当前在线，首选；
- *   `deepseek-v4-flash`       = 被网关解析到 `deepseek-v4-flash-0731`，/models 标
- *                              discontinued，过渡态，随时可能下线；
- *   `deepseek/deepseek-v4-flash` = 2026-10-17 起网关返回 402（401008，免费额度耗尽
- *                              且未开后付费），且已不在 /models。
+ * 模型 id 必须与实际生效的字典、Agent 定义和调用方逐字一致。
+ * DeepSeek 默认值沿用 prod 字典的 deepseek-v4-flash / deepseek-v4-pro；
+ * 网关别名是否出现在 /models 中不能代替调用验证，也不能自动触发模型版本迁移。
  */
 export const BUILTIN_TOKENHUB_MODELS = [
-  'deepseek/deepseek-v4-pro',
-  // 首选 flash：V4.1，在线（2026-10-18 实测 200，responses 直报本 id）
-  'deepseek/deepseek-flash',
-  // 兼容旧环境：以下两项已过时，但 DB 字典 / 旧 .env 里可能仍写它们，
-  // 保留注册键可让这些环境继续命中模型，而不是静默回退 hy3。
+  'deepseek-v4-pro',
   'deepseek-v4-flash',
-  'deepseek/deepseek-v4-flash',
   'deepseek-v4-pro-0813',
   'hy4-preview',
   'glm-5.3',

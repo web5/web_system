@@ -438,11 +438,9 @@ export class AgentDefService {
   /**
    * 内置 agent 定义快照（一期 seed 数据源，迁移完成后可删）
    *
-   * ⚠️ `model` 必须写 **ai-agent 侧 ClientRegistry 的注册键**（带 `deepseek/` 前缀），
-   * 不是 TokenHub 网关的短名。两者不匹配时 ai-agent 不会报错，只会静默把该 agent
-   * 回退到 hy3（更慢更贵），线上表现为「agent 徽标对、但模型悄悄换了」——
-   * 2026-10-08 一次路由事故就是这个前缀差异引起的（deploy / web-system-dev / general 三个）。
-   * 判据来源：`servers/ai-agent/src/agent/model-catalog.service.ts` 的 BUILTIN_TOKENHUB_MODELS。
+   * `model` 必须逐字命中 ai-agent 实际生效的 ClientRegistry 注册键。
+   * DeepSeek 默认值沿用 prod llm_models 字典的 deepseek-v4-flash；
+   * 字典同步会整体重建注册表，仅在内置清单里保留别名不能保证运行期命中。
    */
   private builtinSeeds(): Array<AgentDefinitionPayload & { id: string }> {
     return [
@@ -552,8 +550,8 @@ export class AgentDefService {
           '【输出要求】\n' +
           '- 全程简体中文，简洁。不要输出工具原始 JSON，只讲结论与关键信息。\n' +
           '- 发布中给出进度，发布后给出结果；失败时给出原因与下一步建议。',
-        // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型（deepseek-v4-flash）
-        model: 'deepseek/deepseek-v4-flash',
+        // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型
+        model: 'deepseek-v4-flash',
         tools: [
           'list_modules',
           'get_current_versions',
@@ -601,7 +599,7 @@ export class AgentDefService {
           '- 涉及代码发布、流水线操作，请引导用户使用「发布助手」agent 或按其发布工具流程执行；本助手不做发布动作。\n' +
           '- 需要把新知识沉淀入库时，提示用户运行 scripts/self-knowledge/corpgen.mjs 重新生成语料后入库。\n\n' +
           '【输出】全程简体中文，简洁，结论优先。',
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek-v4-flash',
         tools: [],
         capabilities: [
           { type: 'mcp', ref: 'knowledge/knowledge_list', enabled: true },
@@ -678,7 +676,7 @@ export class AgentDefService {
           '需要查询实时信息（新闻、天气、行情等）时调用 web-search 工具后基于结果作答。\n' +
           '若用户的需求明显属于专业场景（AI 绘画、合同审查、翻译、发布上线、本仓库研发），' +
           '可直接提示用户使用对应的功能入口。',
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek-v4-flash',
         tools: ['web-search'],
         maxSteps: 8,
         temperature: 0.7,
