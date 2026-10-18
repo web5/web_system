@@ -56,12 +56,12 @@ export class ContractCleanerTool implements ToolDefinition {
       return { success: false, content: '', error: '原始文本不能为空' };
     }
 
-    // 取一个可用模型（官方直连 deepseek-chat 已下线；优先 TokenHub deepseek-v4-flash，回退 hy3）
+    // 取一个可用模型（官方直连 deepseek-chat 已下线；优先 TokenHub flash，回退 hy3）
     // ⚠️ 必须**逐字等于**注册表的注册键（= 网关 model id）：不匹配时 getOrFallback
     //    不报错，只静默回退 hy3（更贵更慢），日志里只有一条 warn（2026-10-08 事故同源）。
-    //    2026-10-17 复核：注册键已从带前缀的 `deepseek/deepseek-v4-flash` 改为短名
-    //    `deepseek-v4-flash`（前者被网关 402 且已不在 GET /models）—— 见 model-catalog.service.ts。
-    const model = this.clientRegistry.getOrFallback('deepseek-v4-flash');
+    //    id 沿革见 model-catalog.service.ts 的 BUILTIN_TOKENHUB_MODELS 注释；
+    //    当前首选 `deepseek/deepseek-flash`（V4.1，在线）。
+    const model = this.clientRegistry.getOrFallback('deepseek/deepseek-flash');
 
     const systemPrompt =
       '你是一个专业的合同文本清洗助手。给定一份 OCR 识别出的合同原始文本，请清洗后输出"纯净的合同条款"。\n' +

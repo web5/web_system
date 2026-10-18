@@ -116,8 +116,8 @@ export class AgentDefSyncService {
    * 定义里的 `model` 必须**逐字**命中 ClientRegistry 的注册键。
    *
    * 为什么必须显式校验：注册键来自 `BUILTIN_TOKENHUB_MODELS` / `TOKENHUB_MODELS`
-   * （= 网关 model id；2026-10-08 期间是带 `deepseek/` 前缀的键，2026-10-17 起
-   * flash 改为短名 `deepseek-v4-flash` —— 前缀不是规律，照 GET /models 核），
+   * （= 网关 model id；前缀有无**没有规律**，flash 的键 2026-10 一个月内换过
+   * 两次，照 `GET /models` 核 —— 沿革见 model-catalog.service.ts），
    * 而后台里很容易填成另一个别名。两者不一致时 `getOrFallback` **不抛错**，
    * 只会静默回退到 hy3 —— 线上表现为「agent 徽标正确、但模型悄悄换了、偶尔兜底」，
    * 2026-10-08 的路由事故就是这样藏了整轮对话（靠 ClientRegistry 的 warn 才捞出来）。
