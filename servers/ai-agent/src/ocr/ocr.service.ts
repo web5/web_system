@@ -132,8 +132,9 @@ export class OcrService {
     if (!rawText.trim()) return rawText;
 
     try {
-      // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型（deepseek-v4-flash）
-      const model = this.clientRegistry.getOrFallback('deepseek-v4-flash');
+      // 官方直连 deepseek-chat 已下线，统一走 TokenHub 托管模型
+      // id 沿革见 model-catalog.service.ts 的 BUILTIN_TOKENHUB_MODELS 注释
+      const model = this.clientRegistry.getOrFallback('deepseek/deepseek-flash');
       const cleaned = await model.chat(
         [
           { role: 'system', content: CLEANER_SYSTEM_PROMPT, ts: Date.now() },
