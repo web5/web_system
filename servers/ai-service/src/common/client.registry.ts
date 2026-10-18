@@ -27,7 +27,7 @@ export class ClientRegistry implements OnModuleInit {
       .filter((c) => c.isAvailable())
       .map((c) => c.modelId);
     if (available.length === 0) {
-      this.logger.warn('警告：当前无可用模型客户端（请检查 HY3_API_KEY / DEPSEEK_API_KEY 配置）');
+      this.logger.warn('警告：当前无可用模型客户端（请检查 TOKENHUB_API_KEY / HY3_API_KEY 配置）');
     } else {
       this.logger.log(`可用模型: ${available.join(', ')}`);
     }

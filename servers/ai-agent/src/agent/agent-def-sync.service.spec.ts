@@ -31,7 +31,7 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
     // 注册表键 = 网关 model id（= BUILTIN_TOKENHUB_MODELS）；模型清单由用例注入
     const clientRegistry = {
       listModels: () =>
-        (opts.registeredModels ?? ['hy3', 'deepseek/deepseek-flash']).map((id) => ({
+        (opts.registeredModels ?? ['hy3', 'deepseek-v4-flash']).map((id) => ({
           id,
           displayName: id,
           available: true,
@@ -43,7 +43,7 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
         id: 'web-system-dev',
         name: 'web_system 研发助手',
         systemPrompt: 'p',
-        model: opts.model ?? 'deepseek/deepseek-flash',
+        model: opts.model ?? 'deepseek-v4-flash',
         capabilities,
       },
     ];
@@ -167,21 +167,20 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
   /**
    * 2026-10-08 事故回归：定义里的 model 与 ai-agent 注册表的注册键不一致时，
    * `getOrFallback` 不抛错、只静默回退 hy3 —— 必须由同步器**大声报出来**。
-   * （反例用一个没人注册的 id，断言的是「不一致必告警」，而非某种命名格式 ——
-   * flash 的键 2026-10 内换过两次，把格式写进用例会让它随网关演进而假失败。）
+   * 反例用未注册的 id，断言「不一致必告警」，不依赖某种模型命名格式。
    */
   describe('assertModelRegistered（模型 id 与注册表键不一致必须告警）', () => {
     it('未注册的 model id → 打 error，且同一条只报一次', async () => {
       const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       try {
-        const { svc } = setup([], { model: 'deepseek-v4-flash-0731' });
+        const { svc } = setup([], { model: 'unregistered-model' });
 
         await svc.sync();
         await svc.sync();
 
         const hits = errorSpy.mock.calls
           .map((c) => String(c[0]))
-          .filter((m) => m.includes('deepseek-v4-flash-0731'));
+          .filter((m) => m.includes('unregistered-model'));
         expect(hits).toHaveLength(1);
         expect(hits[0]).toContain('静默回退 hy3');
       } finally {
@@ -192,7 +191,7 @@ describe('AgentDefSyncService.registerMcpCapabilities', () => {
     it('改为注册表键 → 不告警', async () => {
       const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       try {
-        const { svc } = setup([], { model: 'deepseek/deepseek-flash' });
+        const { svc } = setup([], { model: 'deepseek-v4-flash' });
 
         await svc.sync();
 

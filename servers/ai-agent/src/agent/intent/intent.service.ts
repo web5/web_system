@@ -43,17 +43,9 @@ export class IntentService {
     private readonly config: ConfigService,
   ) {
     this.enabled = this.config.get<string>('INTENT_ROUTING_ENABLED', 'false') === 'true';
-    // ⚠️ 默认值必须与 ClientRegistry 的注册键**逐字一致**（= 网关 model id）。
-    //    注册键来源：agent.module.ts 按 TOKENHUB_MODELS / BUILTIN_TOKENHUB_MODELS 注册。
-    //    不匹配时 getOrFallback 不报错，只静默回退 hy3 —— 表现为「分类能用但偶发兜底」。
-    //    本 id 的沿革（都是「照 GET /models 核」挖出来的，非命名格式问题，见下）：
-    //      2026-10-08 用带前缀的 `deepseek/deepseek-v4-flash`（当时是对的做法）；
-    //      2026-10-17 该 id 被网关 402（401008）且不在 /models → 改短名 `deepseek-v4-flash`；
-    //      同日复核发现短名被解析到 `deepseek-v4-flash-0731`，/models 标 discontinued
-    //      （过渡态，随时可能下线）→ 定为在线的 `deepseek/deepseek-flash`（V4.1）。
-    //    注意 `deepseek/deepseek-flash` 是 DeepSeek-V4.1-Flash，**不是** V4-Flash 的换名；
-    //    已实测 thinking:disabled + maxTokens=220 下 reasoning_tokens=0、正文正常。
-    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek/deepseek-flash');
+    // 默认值与 prod llm_models 字典、内置清单逐字一致；未注册的 id 会回退 hy3。
+    // DB 字典同步会整体重建 ClientRegistry，不能只在内置清单里补另一个别名。
+    this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek-v4-flash');
     this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '3000')) || 3000;
     this.fallbackAgentId = this.config.get<string>('INTENT_FALLBACK_AGENT_ID', 'general');
 

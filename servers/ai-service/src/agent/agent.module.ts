@@ -21,7 +21,8 @@ import {
  * Agent harness 统一注册入口（收敛自 @kedouai/agent-core）。
  * 引擎/注册表/客户端/摘要压缩均复用 agent-core（纯 TS），
  * 通过 useFactory 桥接进 Nest DI；ConversationMemory(DB 版) 与 ImageGenTool(生图) 为 ai-service 特有。
- * 说明：官方直连 DeepseekClient(deepseek-chat) 已下线，统一走 TokenHub 托管（deepseek-v4-flash）。
+ * 说明：官方直连 DeepseekClient(deepseek-chat) 已下线，统一走 TokenHub 托管。
+ * DeepSeek 注册键与 prod llm_models 字典及内置 Agent seed 一致：deepseek-v4-flash。
  */
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
