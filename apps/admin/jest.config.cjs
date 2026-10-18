@@ -1,13 +1,3 @@
-/**
- * admin 前端单测配置。
- *
- * 为什么单独配一份：仓库既有 jest 都在 servers/*（NestJS）与 packages/*，
- * admin 此前没有测试运行时。这里刻意只覆盖 **纯逻辑**（不含 .vue 组件）：
- *   - 不需要 @vue/test-utils / jsdom 等额外依赖，ts-jest + node 环境即可；
- *   - 改动面最小，引入的理由是锁住容易写歪的判定口径（见 guard-process.spec.ts）。
- *
- * testMatch 只收 src 下的 spec：避免把 dist/ 里的构建产物当用例跑。
- */
 module.exports = {
   rootDir: '.',
   // jsdom：index.ts 模块顶层 createWebHistory('/admin/') 会摸 window/history，
