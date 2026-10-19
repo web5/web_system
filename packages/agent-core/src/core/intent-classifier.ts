@@ -303,9 +303,12 @@ export class IntentClassifier {
   }
 
   private withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-    return Promise.race([
-      p,
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('classify timeout')), ms)),
-    ]);
+    // ⚠️ 必须在 race 结束后清除 timer：否则每次分类都会留一个存活 ms 的悬空定时器
+    // （高并发下持续堆积，也会让测试进程无法优雅退出）。
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new Error('classify timeout')), ms);
+    });
+    return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
   }
 }
