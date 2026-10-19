@@ -1,8 +1,8 @@
 # Console dev P0 交付准备与生产适用性核查
 
-> 最新本地代码验证：102 suites / 1239 tests，Console 后端构建通过；此前交付基线的 Console 前端、MCP Gateway 构建及远端 CI 已通过，新提交 CI 以 PR 状态为准。脚本体检基线 0 error / 8 条既有 warning。草稿 PR #358 未合并、未开启自动合入。用户随后授权立即维护，生产根目录已离线统一为 `/data/web_system`，10 个服务恢复并验活；dev/prod canonical 入口门禁均通过。此次只迁移既有运行字节，没有把 PR 新代码部署到生产。
+> 本地最新验证覆盖 Todo 材料和交付策略补丁，结果以当前提交测试/CI 为准。前序 PR #358 已于 2026-10-19 15:35 由账号 web5 转为 ready 后合入，head 为 `6cf7781b`，不是后续 Todo 材料提交。后续变更另起人工评审草稿 PR，不沿用旧 PR 的绿灯。生产根维护已完成，后续只在仓库外准备材料，没有激活新业务代码；详见第 9、10 节。
 
-核查日期：2026-10-19。用户已授权创建独立分支、提交并开 PR，并指定运行根统一到 web_system，随后明确授权立即进入维护窗口。当前交付分支为 `feature/manual-review/console-delivery-closeout`，基于已核实的 master `0127aacb`；提交/草稿 PR 以 Git 记录为准，不自动合并。维护前核查与执行后结果分开记录，不将目录切换视作生产业务发布。
+核查日期：2026-10-19。用户已授权创建独立分支、提交并开 PR，并指定运行根统一到 web_system，随后明确授权立即进入维护窗口。交付分支为 `feature/manual-review/console-delivery-closeout`，原始基线为 master `0127aacb`；前序实际合并为 `ca0949ec`，后续变更独立草稿交付，本助手未执行 GitHub merge。维护前核查与执行后结果分开记录，不将目录切换视作生产业务发布。
 
 ## 1. 交付基线
 
@@ -100,3 +100,9 @@ MCP Gateway 的整包 schema 差异仍属于独立阻断项：本轮未连接生
 生产 MySQL 只读 schema 检查两份均 2 个实体、0 差异，无 DDL；禁止网络/监听/子进程的离线模块加载及 MySQL 驱动检查通过。SQLite 原生绑定在两份材料中均不可用，保持明确未通过，不推广为通用数据库能力。
 
 同时补上产物完整性缺口：新包剔除未纳入摘要的额外根内容，严格 inspect/publish 拒绝额外条目和元数据软链，已安装 env 只接受原服务的精确软链绑定，并覆盖可选 generated 配置删除后的原绑定空链回退。6 项新增用例先失败后通过；最终本地 102 suites / 1239 tests、Console 后端构建通过。本机 pnpm 的自动依赖预检曾中止，未重装依赖，最终直接运行现有 Jest/Nest 验证。工具捕获的是声明依赖闭包而非所有可能的动态文件访问，正式发布和回滚演练仍未执行，详见 `docs/operations/todo-prod-artifact-preparation-2026-10-19.md`。
+
+## 10. 前序 PR 状态变化与后续交付
+
+GitHub 时间线显示：账号 web5 于 2026-10-19 15:35:37 将 #358 转为 ready，15:35:43 合入 master，合并 head 为 `6cf7781b`、merge commit 为 `ca0949ec`。本任务没有调用 ready/merge 或开启自动合入，也不撤销该既有合并。Todo 材料提交 `2323ac5d`、`c07a2f5e` 不属于该已合入 head，必须另起草稿 PR，重新绑定当前 head 的 CI，不能继续报“#358 当前草稿/CI 已覆盖后续代码”。原 PR 描述恢复为合入前版本，后续交付单独记录。
+
+发现交付策略遗漏：auto-pr 已排除 `feature/manual-review/`，但 auto-merge 只检查 draft，外部转为 ready 后仍会启用自动合入。新增明确的 head 前缀排除，保留同仓库/草稿安全条件；2 个 ready 状态回归先失败后通过。人工分支不因状态变化被自动启用合入，其他普通分支行为不变，实际人工合并仍由操作者决定。
