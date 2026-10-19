@@ -38,6 +38,7 @@ import { StepBranchService } from '../pipeline-step-command/step-branch.service'
 import { evalCondition } from './steps/condition';
 import { pickStepBranch } from './steps/step-branch';
 import { assertBackendRuntimePlan } from './backend-runtime-safety';
+import { submissionConflictWhere } from './submission-admission';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
@@ -863,9 +864,7 @@ export class PipelineService {
     }
 
     const running = await this.pipelineRepo.findOne({
-      where: ['pending', 'running', 'pending-approval', PIPELINE_AWAITING_APPROVAL].map(status => ({
-        env: dto.env, moduleKey: dto.moduleKey, status,
-      })),
+      where: submissionConflictWhere({ env: dto.env, moduleKey: dto.moduleKey, configuredCutover: this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS') }),
     });
     if (running) {
       throw new ConflictException(
