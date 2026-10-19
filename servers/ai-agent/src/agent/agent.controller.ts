@@ -230,7 +230,8 @@ export class AgentController {
     const resolvedAgentId = intent.agentId;
     this.logger.log(
       `意图路由: ${dto.agentId ?? '(auto)'} → ${resolvedAgentId}` +
-        ` (via=${intent.via} conf=${intent.confidence} switched=${intent.switched})`,
+        ` (via=${intent.via} conf=${intent.confidence} switched=${intent.switched}` +
+        `${intent.degradeReason ? ` degrade=${intent.degradeReason}` : ''})`,
     );
     res.write(
       `data: ${JSON.stringify({
