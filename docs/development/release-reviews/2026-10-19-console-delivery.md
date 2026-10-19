@@ -1,6 +1,6 @@
 # Console dev P0 交付准备与生产适用性核查
 
-> 最新本地代码验证：102 suites / 1238 tests，Console 后端构建通过；此前交付基线的 Console 前端、MCP Gateway 构建及远端 CI 已通过，新提交 CI 以 PR 状态为准。脚本体检基线 0 error / 8 条既有 warning。草稿 PR #358 未合并、未开启自动合入。用户随后授权立即维护，生产根目录已离线统一为 `/data/web_system`，10 个服务恢复并验活；dev/prod canonical 入口门禁均通过。此次只迁移既有运行字节，没有把 PR 新代码部署到生产。
+> 最新本地代码验证：102 suites / 1239 tests，Console 后端构建通过；此前交付基线的 Console 前端、MCP Gateway 构建及远端 CI 已通过，新提交 CI 以 PR 状态为准。脚本体检基线 0 error / 8 条既有 warning。草稿 PR #358 未合并、未开启自动合入。用户随后授权立即维护，生产根目录已离线统一为 `/data/web_system`，10 个服务恢复并验活；dev/prod canonical 入口门禁均通过。此次只迁移既有运行字节，没有把 PR 新代码部署到生产。
 
 核查日期：2026-10-19。用户已授权创建独立分支、提交并开 PR，并指定运行根统一到 web_system，随后明确授权立即进入维护窗口。当前交付分支为 `feature/manual-review/console-delivery-closeout`，基于已核实的 master `0127aacb`；提交/草稿 PR 以 Git 记录为准，不自动合并。维护前核查与执行后结果分开记录，不将目录切换视作生产业务发布。
 
@@ -99,4 +99,4 @@ MCP Gateway 的整包 schema 差异仍属于独立阻断项：本轮未连接生
 
 生产 MySQL 只读 schema 检查两份均 2 个实体、0 差异，无 DDL；禁止网络/监听/子进程的离线模块加载及 MySQL 驱动检查通过。SQLite 原生绑定在两份材料中均不可用，保持明确未通过，不推广为通用数据库能力。
 
-同时补上产物完整性缺口：新包剔除未纳入摘要的额外根内容，严格 inspect/publish 拒绝额外条目和元数据软链，已安装 env 只接受原服务的精确软链绑定。6 项新增用例先失败后通过；最终本地 102 suites / 1238 tests、Console 后端构建通过。本机 pnpm 的自动依赖预检曾中止，未重装依赖，最终直接运行现有 Jest/Nest 验证。工具捕获的是声明依赖闭包而非所有可能的动态文件访问，正式发布和回滚演练仍未执行，详见 `docs/operations/todo-prod-artifact-preparation-2026-10-19.md`。
+同时补上产物完整性缺口：新包剔除未纳入摘要的额外根内容，严格 inspect/publish 拒绝额外条目和元数据软链，已安装 env 只接受原服务的精确软链绑定，并覆盖可选 generated 配置删除后的原绑定空链回退。6 项新增用例先失败后通过；最终本地 102 suites / 1239 tests、Console 后端构建通过。本机 pnpm 的自动依赖预检曾中止，未重装依赖，最终直接运行现有 Jest/Nest 验证。工具捕获的是声明依赖闭包而非所有可能的动态文件访问，正式发布和回滚演练仍未执行，详见 `docs/operations/todo-prod-artifact-preparation-2026-10-19.md`。

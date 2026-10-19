@@ -93,7 +93,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       if (allowed.has(name)) continue;
       const file = path.join(root, name);
       const source = environmentSource && ['.env', '.env.generated'].includes(name) ? path.join(environmentSource, name) : null;
-      if (source && fs.existsSync(source) && fs.lstatSync(file).isSymbolicLink() && fs.realpathSync(file) === fs.realpathSync(source)) continue;
+      if (source && fs.lstatSync(file).isSymbolicLink() && path.resolve(path.dirname(file), fs.readlinkSync(file)) === path.resolve(source)) continue;
       throw new Error('Unexpected unsigned runtime entry: ' + name);
     }
     for (const name of ['package.json', 'version.json', 'runtime-manifest.json']) {

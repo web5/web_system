@@ -223,6 +223,15 @@ describe('isolated backend runtime', () => {
     expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(1);
   });
 
+  it('preserves generated-config removal fallback without rejecting its original dangling binding', async () => {
+    const fixture = await activationFixture();
+    write(path.join(fixture.service, '.env.generated'), 'PORT=6005\n');
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    fs.unlinkSync(path.join(fixture.service, '.env.generated'));
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).resolves.toMatchObject({ unchanged: true });
+    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(1);
+  });
+
   it('rejects port drift before touching the active service', async () => {
     const fixture = await activationFixture();
     await expect(executeBackendRuntime({ ...fixture.input, port: '7000' }, fixture.adapters)).rejects.toThrow(/port differs/);
