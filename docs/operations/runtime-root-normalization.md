@@ -73,7 +73,7 @@ node normalize-runtime-root.cjs \
 - 后端旧格式落地前检查具体 PM2 服务的真实脚本入口，与登记服务目录不一致则在任何 dist 改写前失败；不再允许复制到闲置树后重启另一棵树的同名进程。
 - 隔离运行包保留更严格的单服务 cwd 要求，不为兼容生产旧 cwd 放宽。
 - 部署、回滚和 SQL 迁移历史脚本使用 `scripts/lib/runtime-root.sh` 校验服务器根目录名；local SQL 模式不受服务器根校验影响。`deploy.sh` 仍是弃用入口，本次不把它恢复为新发布通道。
-- Git 交付使用 `feature/manual-review/` 分支和草稿 PR。auto-pr 对该分支前缀不自动创建/启用合入，质量检查继续运行；不把代码评审授权等同生产切换授权。
+- Git 交付使用 `feature/manual-review/` 分支和草稿 PR。auto-pr 和 auto-merge 均排除该分支前缀，不因外部转为 ready 就启用自动合入，质量检查继续运行；不把代码评审授权等同生产切换授权。
 
 ## 2026-10-19 维护窗口执行结果
 
