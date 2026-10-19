@@ -38,6 +38,7 @@ jobs:
     # 这类分支的改动应按主题拆成短命分支各自走 auto-pr，才是可评审、可回滚的粒度。
     if: >-
       (startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'fix/'))
+      && !startsWith(github.ref_name, 'feature/manual-review/')
       && !contains(fromJSON('["feature/test", "feature/kedou-ai-minigram"]'), github.ref_name)
     steps:
       - uses: actions/checkout@v4

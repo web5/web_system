@@ -1579,6 +1579,9 @@ export const servicesApi = {
       status: number
       target: string
       latencyMs: number
+      transport?: 'direct' | 'ssh'
+      probeTarget?: string
+      probeHost?: string
       error?: string
     }>,
 

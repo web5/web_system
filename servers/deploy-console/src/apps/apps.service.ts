@@ -435,7 +435,7 @@ export class AppsService implements OnModuleInit {
   private entryUrlFor(app: DeployAppEntity, envId: string, version: string | null): string {
     if (app.deployMode === 'site-version') {
       // 基座：按版本目录直出（无指针，Q107）
-      return version ? `/static/modules/${app.key}/${version}/index.js` : '';
+      return version ? `/static/modules/${app.key}/${envId}/${version}/index.html` : '';
     }
     return envEntryUrl(app.key, envId);
   }
@@ -445,8 +445,10 @@ export class AppsService implements OnModuleInit {
     const app = await this.getApp(appKey);
     await this.envsService.getEnv(envId);
     const row = await this.versionRepo.findOne({ where: { appKey, envId } });
-    const available =
-      app.deployMode === 'env-dir' ? await this.artifacts.listVersions(envId, appKey) : [];
+    const htmlSite = app.kind === 'shell' || app.deployMode === 'site-version';
+    const available = htmlSite
+      ? await this.artifacts.listVersions(envId, appKey, 'index.html')
+      : app.deployMode === 'env-dir' ? await this.artifacts.listVersions(envId, appKey) : [];
     return {
       appKey,
       envId,
@@ -519,11 +521,14 @@ export class AppsService implements OnModuleInit {
     await this.envsService.getEnv(envId);
     // 显式 lockOwner（流水线 run id）优先：与外层流水线锁同源才算重入
     const owner = resolveLockOwner(operator, lockOwner);
+    const siteVersionShell = app.kind === 'shell' && app.deployMode === 'site-version';
 
-    if (app.deployMode === 'env-dir') {
+    if (app.deployMode === 'env-dir' || siteVersionShell) {
       let exists = false;
       try {
-        exists = await this.artifacts.hasVersion(envId, appKey, version);
+        exists = siteVersionShell
+          ? await this.artifacts.hasVersion(envId, appKey, version, 'index.html')
+          : await this.artifacts.hasVersion(envId, appKey, version);
       } catch (e) {
         throw new BadRequestException(
           `产物校验失败（无法访问 ${this.artifacts.describeTarget(envId)}）：${(e as Error).message}`,
@@ -533,7 +538,7 @@ export class AppsService implements OnModuleInit {
         throw new BadRequestException(
           `版本产物不存在，无法切换：${appKey}/${envId}/${version}（${this.artifacts.describeTarget(
             envId,
-          )} 下缺 index.js）`,
+          )} 下缺 ${siteVersionShell ? 'index.html' : 'index.js'}）`,
         );
       }
     }
@@ -568,7 +573,7 @@ export class AppsService implements OnModuleInit {
 
     // 通知 gateway 失效版本缓存（best-effort，失败不影响发布结果）
     // 只 env-dir 需要：微前端的入口由 gateway 按指针拼出，缓存住了就是「切了但页面没变」
-    if (app.deployMode === 'env-dir') {
+    if (app.deployMode === 'env-dir' || siteVersionShell) {
       try {
         await this.gatewayCache.notifyVersionChange({
           env: envId,

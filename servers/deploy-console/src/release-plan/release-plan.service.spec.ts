@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ArtifactStoreService } from '../artifact/artifact-store.service';
 import { ReleaseLockService } from '../release-lock/release-lock.service';
@@ -28,6 +31,7 @@ const WRITE_METHODS: Record<string, string[]> = {
     'syncAppEnvPointer',
     'setAppEnvPointer',
     'clearAppEnvPointer',
+    'withReleaseLock',
   ],
   approvals: ['create', 'createNode', 'resolve'],
   pipelines: [
@@ -48,6 +52,7 @@ interface Opts {
   /** 模块是否存在（默认存在） */
   moduleMissing?: boolean;
   moduleType?: string;
+  isShell?: boolean;
   artifactExists?: boolean;
   /** 锁持有者；undefined = 默认无锁 */
   lockHolder?: { pipelineId: string; expiresAt: number } | null;
@@ -72,12 +77,12 @@ function buildHarness(opts: Opts = {}) {
     modules: {
       get: jest.fn(async () => {
         if (opts.moduleMissing) throw new Error(`模块不存在: admin`);
-        return { key: 'admin', type: opts.moduleType ?? 'micro-frontend' };
+        return { key: 'admin', type: opts.moduleType ?? 'micro-frontend', isShell: opts.isShell };
       }),
       list: jest.fn(async () => []),
     },
     artifacts: {
-      exists: jest.fn(() => opts.artifactExists ?? true),
+      exists: jest.fn((..._args: Parameters<ArtifactStoreService['exists']>) => opts.artifactExists ?? true),
       listVersions: jest.fn(() => []),
       uploadLocal: jest.fn(() => '/tmp/x'),
       cleanup: jest.fn(() => ({ kept: [], removed: [] })),
@@ -94,6 +99,7 @@ function buildHarness(opts: Opts = {}) {
       releaseExpired: jest.fn(async () => 0),
     },
     registry: {
+      currentAppVersion: jest.fn(async () => 'currentVersion' in opts ? opts.currentVersion : 'aaa111'),
       currentVersion: jest.fn(async () =>
         // 用 in 而非 ??：调用方要显式区分"没传"（默认有版本）与"传了 undefined"（无版本＝首次发布）
         'currentVersion' in opts ? opts.currentVersion : 'aaa111',
@@ -108,6 +114,7 @@ function buildHarness(opts: Opts = {}) {
       syncAppEnvPointer: jest.fn(async () => undefined),
       setAppEnvPointer: jest.fn(async () => ({})),
       clearAppEnvPointer: jest.fn(async () => undefined),
+      withReleaseLock: jest.fn(async () => undefined),
     },
     approvals: {
       needsApproval: jest.fn(async () => opts.needsApproval ?? false),
@@ -144,15 +151,14 @@ function buildHarness(opts: Opts = {}) {
   return { mocks };
 }
 
-async function buildService(mocks: ReturnType<typeof buildHarness>['mocks']): Promise<ReleasePlanService> {
-  const cfgGet =
-    (): ((k: string) => string | undefined) =>
-    (k) =>
-      k === 'STATIC_SSH_TARGET_DEV' ? undefined : undefined;
+async function buildService(
+  mocks: ReturnType<typeof buildHarness>['mocks'],
+  configuration: Record<string, string> = {},
+): Promise<ReleasePlanService> {
   const moduleRef: TestingModule = await Test.createTestingModule({
     providers: [
       ReleasePlanService,
-      { provide: ConfigService, useValue: { get: jest.fn(cfgGet()) } },
+      { provide: ConfigService, useValue: { get: jest.fn((key: string) => configuration[key]) } },
       { provide: ModuleRegistryService, useValue: mocks.modules },
       { provide: ArtifactStoreService, useValue: mocks.artifacts },
       { provide: ReleaseLockService, useValue: mocks.locks },
@@ -210,7 +216,10 @@ describe('ReleasePlanService.plan（入参）', () => {
     const svc = await buildService(mocks);
     const p = await svc.plan({ env: 'dev', moduleKey: 'admin', versionTag: 'default/abc123def' });
     expect(p.input.versionTag).toBe('abc123def');
-    expect(mocks.artifacts.exists).toHaveBeenCalledWith('admin', 'abc123def');
+    expect(mocks.artifacts.exists).toHaveBeenCalledWith('admin', 'abc123def', {
+      env: 'dev',
+      staticRoot: expect.any(String),
+    });
   });
 });
 
@@ -341,6 +350,93 @@ describe('ReleasePlanService 不变量：目标产物', () => {
     expect(p.impact.staticTarget).toBe('root@1.2.3.4');
     // 远端时反而**不得**用本机 fs 去查，那会给出关于另一台机器的错误结论
     expect(mocks.artifacts.exists).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReleasePlanService site-version proposal', () => {
+  it('后端产物不能套静态 index.js 判据，未访问目标机时明确标 unknown', async () => {
+    const { mocks } = buildHarness({ moduleType: 'backend', artifactExists: false });
+    const service = await buildService(mocks);
+    const result = await service.plan({ env: 'dev', moduleKey: 'todo-service', versionTag: 'todo-service-dev/abc1234' });
+    expect(mocks.artifacts.exists).not.toHaveBeenCalled();
+    expect(result.invariants.find(item => item.key === INVARIANT_KEYS.targetArtifact)).toMatchObject({ status: 'unknown', blocking: false, evidence: { reason: 'backend-runtime-artifact' } });
+    assertReadOnly(mocks as any);
+  });
+
+  it('shell 提案检查 env/version/index.html，而非微前端 index.js', async () => {
+    const { mocks } = buildHarness({ moduleType: 'frontend', isShell: true });
+    const service = await buildService(mocks);
+    const result = await service.plan({ env: 'dev', moduleKey: 'shell', versionTag: 'dev/abc1234' });
+    expect(mocks.artifacts.exists).toHaveBeenCalledWith('shell', 'abc1234', { env: 'dev', staticRoot: expect.any(String), entry: 'index.html' });
+    expect(result.invariants.find(item => item.key === INVARIANT_KEYS.targetArtifact)).toMatchObject({ status: 'pass', evidence: { layout: 'site-version' } });
+    assertReadOnly(mocks as any);
+  });
+
+  it('uses the restored Shell application pointer instead of a stale legacy deployment in its impact', async () => {
+    const { mocks } = buildHarness({ moduleType: 'frontend', isShell: true });
+    mocks.registry.currentVersion.mockResolvedValue('stale123');
+    mocks.registry.currentAppVersion.mockResolvedValue('a82270f9');
+    const result = await (await buildService(mocks)).plan({ env: 'dev', moduleKey: 'shell', versionTag: 'a82270f9' });
+    expect(result.impact).toMatchObject({ currentVersion: 'a82270f9', versionChange: 'same' });
+    expect(mocks.registry.currentVersion).not.toHaveBeenCalled();
+    assertReadOnly(mocks as any);
+  });
+});
+
+describe('ReleasePlanService 环境目录实盘回归', () => {
+  let workspace: string;
+  let staticRoot: string;
+
+  beforeEach(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'release-plan-layout-'));
+    staticRoot = path.join(workspace, 'external-public');
+  });
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  });
+
+  async function planWithRealArtifacts(useConfiguredRoot = true) {
+    const { mocks } = buildHarness();
+    const configuration: Record<string, string> = { RELEASE_WORKSPACE: workspace };
+    if (useConfiguredRoot) configuration.STATIC_PUBLIC_ROOT_DEV = staticRoot;
+    const artifacts = new ArtifactStoreService(new ConfigService(configuration));
+    mocks.artifacts.exists.mockImplementation((...args) => artifacts.exists(...args));
+    const service = await buildService(mocks, configuration);
+    const result = await service.plan({ env: 'dev', moduleKey: 'admin', versionTag: 'default/abc1234' });
+    assertReadOnly(mocks);
+    return result;
+  }
+
+  function createEntry(root: string, ...segments: string[]) {
+    const directory = path.join(root, 'static', 'modules', 'admin', ...segments);
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'index.js'), 'export default {};');
+  }
+
+  it('环境目录：使用配置静态根和 dev 层读取真实产物', async () => {
+    createEntry(staticRoot, 'dev', 'abc1234');
+    const result = await planWithRealArtifacts();
+    expect(find(result, INVARIANT_KEYS.targetArtifact).status).toBe('pass');
+    expect(result.blockers).not.toContain(find(result, INVARIANT_KEYS.targetArtifact).title);
+  });
+
+  it('环境目录：旧目录存在同版本不能冒充 dev 环境产物', async () => {
+    createEntry(path.join(workspace, 'servers', 'gateway', 'public'), 'abc1234');
+    const result = await planWithRealArtifacts();
+    expect(find(result, INVARIANT_KEYS.targetArtifact).status).toBe('fail');
+  });
+
+  it('环境目录：未配置静态根时仍读取默认根下的环境层', async () => {
+    createEntry(path.join(workspace, 'servers', 'gateway', 'public'), 'dev', 'abc1234');
+    const result = await planWithRealArtifacts(false);
+    expect(find(result, INVARIANT_KEYS.targetArtifact).status).toBe('pass');
+  });
+
+  it('跨环境：prod 存在同版本不能放行 dev 发布', async () => {
+    createEntry(staticRoot, 'prod', 'abc1234');
+    const result = await planWithRealArtifacts();
+    expect(find(result, INVARIANT_KEYS.targetArtifact).status).toBe('fail');
   });
 });
 

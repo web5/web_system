@@ -52,6 +52,12 @@ describe('EnvArtifactService（按环境路由产物读写）', () => {
     expect(await svc.hasVersion('prod', 'portal', 'x')).toBe(false);
   });
 
+  it('shell 校验 index.html，不把微前端入口当作站点产物', async () => {
+    const { svc, execAsync } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH });
+    expect(await svc.hasVersion('prod', 'shell', 'abc1234', 'index.html')).toBe(true);
+    expect(execAsync.mock.calls[0][0]).toContain('/shell/prod/abc1234/index.html');
+  });
+
   it('远端列版本：脚本内 cd 到静态根，输出按 mtime 倒序（指针自身被排除）', async () => {
     const { svc, execAsync } = makeSvc({
       STATIC_PUBLIC_ROOT_PROD: PROD_ROOT,
@@ -75,6 +81,16 @@ describe('EnvArtifactService（按环境路由产物读写）', () => {
     });
     execAsync.mockResolvedValue({ ok: false, stdout: '', stderr: 'no route to host' });
     expect(await svc.listVersions('prod', 'portal')).toEqual([]);
+  });
+
+  it('lists remote Shell HTML artifacts without requiring a JS pointer', async () => {
+    const { svc, execAsync } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH });
+    execAsync.mockResolvedValue({ ok: true, stdout: 'e1618537\na82270f9\n', stderr: '' });
+    await expect(svc.listVersions('prod', 'shell', 'index.html')).resolves.toEqual(['e1618537', 'a82270f9']);
+    const encoded = execAsync.mock.calls[0][0].match(/echo ([A-Za-z0-9+/=]+) \| base64 -d/);
+    const script = Buffer.from(encoded![1], 'base64').toString('utf8');
+    expect(script).toContain("-name 'index.html'");
+    expect(script).not.toContain('-name index.js');
   });
 
   it('远端写指针：一次 ssh 完成备份 + 写 js（+ 有 css 才写 css）', async () => {

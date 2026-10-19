@@ -32,6 +32,8 @@ const KIND_LABEL: Record<string, string> = {
   'mini-app': '小程序',
 }
 const kindLabel = computed(() => KIND_LABEL[app.value?.kind || ''] || app.value?.kind || '-')
+const isShell = computed(() => app.value?.kind === 'shell')
+const effectiveEntry = computed(() => isShell.value ? 'index.html' : (app.value?.entry || 'index.js'))
 
 /**
  * 时间展示口径（规格 §10）：后端 Date 经 JSON 是 ISO(UTC)，必须本地化后再上屏，
@@ -346,7 +348,7 @@ onMounted(load)
               <span class="ws-mono">apps/{{ app?.repoDir || '-' }}</span>
             </a-descriptions-item>
             <a-descriptions-item label="入口">
-              <span class="ws-mono">{{ app?.entry || 'index.js' }}</span>
+              <span class="ws-mono">{{ effectiveEntry }}</span>
             </a-descriptions-item>
             <a-descriptions-item label="部署模式">
               <a-tag v-if="app?.deployMode === 'site-version'">站点 + 版本（不随环境切换）</a-tag>
@@ -455,7 +457,8 @@ onMounted(load)
           </a-table>
           <p class="hint">
             应用侧部署只切版本指针、不触碰任何进程；后端服务发布在「服务管理」内。
-            切换版本与回滚都只改写 <code>index.js</code> 指针，用户刷新即生效。
+            <template v-if="isShell">切换版本与回滚更新应用域版本指向并刷新网关缓存，按 <code>index.html</code> 入口加载；不会生成或改写 <code>index.js</code> 指针。</template>
+            <template v-else>切换版本与回滚都只改写 <code>index.js</code> 指针，用户刷新即生效。</template>
           </p>
         </a-tab-pane>
       </a-tabs>
@@ -510,7 +513,8 @@ onMounted(load)
           </div>
         </a-form-item>
       </a-form>
-      <p class="modal-hint">切换后用户刷新页面立即加载新版本（index.js 为 no-cache）。</p>
+      <p v-if="isShell" class="modal-hint">切换前校验目标版本的 index.html，成功后更新应用域指向并刷新网关缓存，用户刷新页面加载新版本。</p>
+      <p v-else class="modal-hint">切换后用户刷新页面立即加载新版本（index.js 为 no-cache）。</p>
     </a-modal>
 
     <!-- 回滚 -->
@@ -539,7 +543,8 @@ onMounted(load)
           </a-select>
         </a-form-item>
       </a-form>
-      <p class="modal-hint">回滚只改写入口指针指向该版本（版本目录保留，无需重新构建）。</p>
+      <p v-if="isShell" class="modal-hint">回滚校验目标版本的 index.html 并更新应用域指向，版本目录保留，无需重新构建或重启进程。</p>
+      <p v-else class="modal-hint">回滚只改写入口指针指向该版本（版本目录保留，无需重新构建）。</p>
     </a-modal>
 
     <!-- 选版本部署抽屉（应用域数据源：磁盘版本目录 + switch-version） -->

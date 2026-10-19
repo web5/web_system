@@ -82,6 +82,15 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(saved.releasedAt).toBeInstanceOf(Date);
   });
 
+  it('reads the application-domain current pointer without falling back to a stale legacy deployment', async () => {
+    appVersionRepo.findOne.mockResolvedValue({ currentVersion: 'restored' });
+    deploymentRepo.findOne.mockResolvedValue({ currentVersion: 'stale-published' });
+    await expect(svc.currentAppVersion('dev', 'shell')).resolves.toBe('restored');
+    expect(deploymentRepo.findOne).not.toHaveBeenCalled();
+    appVersionRepo.findOne.mockResolvedValue(null);
+    await expect(svc.currentAppVersion('dev', 'shell')).resolves.toBeUndefined();
+  });
+
   it('setPointer 无记录时新建（upsert）', async () => {
     await svc.setPointer({ env: 'dev', moduleKey: 'admin', currentVersion: 'abc', deployedBy: 'op', taskId: 't-1' });
     expect(deploymentRepo.findOne).toHaveBeenCalledWith({ where: { envId: 'dev', moduleKey: 'admin' } });
@@ -106,11 +115,42 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(existing).toMatchObject({ currentVersion: 'new', status: 'deployed', taskId: 't-2' });
   });
 
+  it('setPointer 重复写相同版本时保留真实 previousVersion', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'admin', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({ appKey: 'admin', envId: 'dev', currentVersion: 'v2', previousVersion: 'v1' });
+
+    await svc.setPointer({ env: 'dev', moduleKey: 'admin', currentVersion: 'v2', taskId: 'pipeline-finalize' });
+
+    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'v2', previousVersion: 'v1' }));
+    expect(splitWriter.mirrorPointer).toHaveBeenCalled();
+  });
+
+  it('syncAppEnvPointer 重复同步时不丢失回滚目标', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
+    appVersionRepo.findOne.mockResolvedValue({ appKey: 'shell', envId: 'dev', currentVersion: 'v2', previousVersion: 'v1' });
+
+    await svc.syncAppEnvPointer({ env: 'dev', moduleKey: 'shell', currentVersion: 'v2' });
+
+    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'v2', previousVersion: 'v1' }));
+  });
+
   it('currentVersion 返回指针版本', async () => {
     deploymentRepo.findOne.mockResolvedValue({ currentVersion: 'abc' });
     expect(await svc.currentVersion('dev', 'admin')).toBe('abc');
     deploymentRepo.findOne.mockResolvedValue(null);
     expect(await svc.currentVersion('dev', 'admin')).toBeUndefined();
+  });
+
+  it('操作级锁冲突时，不能开始后端落地或重启', async () => {
+    locks.acquireEx.mockResolvedValue({ ok: false, holder: 'active-run', expiresAt: Date.now() + 1000 });
+    const work = jest.fn();
+    await expect(svc.withReleaseLock({ env: 'dev', moduleKey: 'todo-service', owner: 'rollback-unique' }, work)).rejects.toThrow(ConflictException);
+    expect(work).not.toHaveBeenCalled();
+  });
+
+  it('操作失败仍释放本次新获取的锁', async () => {
+    await expect(svc.withReleaseLock({ env: 'dev', moduleKey: 'todo-service', owner: 'rollback-unique' }, async () => { throw new Error('activation failed'); })).rejects.toThrow('activation failed');
+    expect(locks.release).toHaveBeenCalledWith('todo-service', 'dev', 'rollback-unique');
   });
 
   it('setPointer 双写：env-dir 应用同步写 deploy_app_env_versions', async () => {

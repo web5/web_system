@@ -37,6 +37,7 @@ import { StepBranchService } from '../pipeline-step-command/step-branch.service'
 // 步骤执行条件 / 步骤任务匹配条件：同一套表达式引擎（specs/pipeline-step-branch/design.md §2）
 import { evalCondition } from './steps/condition';
 import { pickStepBranch } from './steps/step-branch';
+import { assertBackendRuntimePlan } from './backend-runtime-safety';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
@@ -80,6 +81,7 @@ import { PipelineVarService } from './pipeline-var.service';
 export { resolveStartIndex };
 // 发布目录 git 工作区（拉码后回填实际 commit 用）
 import { ReleaseGitService } from '../git/release-git.service';
+import { assertIsolatedBuildWorkspace, assertRunAfterWorkspaceCutover, CONSOLE_RUNTIME_ROOT } from '../git/workspace-safety';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
@@ -822,6 +824,24 @@ export class PipelineService {
     dto: SubmitPipelineDto,
     operator?: string,
   ): Promise<{ jobId: string; status: string; approvalId?: string }> {
+    assertRunAfterWorkspaceCutover(Date.now(), this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
+    this.git.assertWorkspaceSafe();
+    const admissionModule = 'submit-' + dto.moduleKey;
+    const admissionOwner = this.generateId();
+    if (!await this.releaseLock.acquire(admissionModule, dto.env, admissionOwner, 60000)) {
+      throw new ConflictException('同一模块的提交正在处理，请稍后重试');
+    }
+    try {
+      return await this.submitWithAdmission(dto, operator);
+    } finally {
+      await this.releaseLock.release(admissionModule, dto.env, admissionOwner);
+    }
+  }
+
+  private async submitWithAdmission(
+    dto: SubmitPipelineDto,
+    operator?: string,
+  ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     const mode: PipelineMode = dto.mode ?? 'direct';
     // 环境校验已移除（2026-09-20）：环境由用户在「环境管理」自建或由模板/配置声明，
     // 引擎不再跨域依赖环境域做准入校验 —— 输入合法性由调用方保证（页面下拉 / AI 传参 / MCP）。
@@ -843,11 +863,13 @@ export class PipelineService {
     }
 
     const running = await this.pipelineRepo.findOne({
-      where: { env: dto.env, moduleKey: dto.moduleKey, status: 'running' as any },
+      where: ['pending', 'running', 'pending-approval', PIPELINE_AWAITING_APPROVAL].map(status => ({
+        env: dto.env, moduleKey: dto.moduleKey, status,
+      })),
     });
     if (running) {
       throw new ConflictException(
-        `模块 ${dto.moduleKey} 在 ${dto.env} 有正在运行的流水线 ${running.id}，请等待完成或取消`,
+        `模块 ${dto.moduleKey} 在 ${dto.env} 有未完成的流水线 ${running.id}，请等待完成或取消`,
       );
     }
 
@@ -893,6 +915,7 @@ export class PipelineService {
     // 编排快照（新三层模型）：新表有步骤 → 整树固化进实例，run() 分派到新引擎；
     // 空树（未迁移的流水线）→ null 走旧链路（nodes/legacy），迁移期双链并存。
     const orchTree = await this.orchestration.getTree(tpl.id);
+    assertBackendRuntimePlan({ env: dto.env, moduleKey: dto.moduleKey, gitBranch: dto.branch, orchestration: orchTree as EngineStep[] });
     const entity = this.pipelineRepo.create({
       id,
       env: dto.env,
@@ -1046,6 +1069,12 @@ export class PipelineService {
     if (['succeeded', 'failed', 'cancelled'].includes(p.status)) {
       return { id, status: p.status };
     }
+    const buildCompleted = (p.orchestration as EngineStep[] | null)?.some(step =>
+      step.tasks?.some(task => task.name === 'build' && p.taskStates?.[`${step.id}/${task.id}`] === 'succeeded'),
+    );
+    if (p.status === 'running' && buildCompleted) {
+      throw new ConflictException('发布已进入产物交付或激活阶段，不允许中断；请等待结果后执行模块级回滚');
+    }
     // 撤回待审批（门禁级 / 节点级挂起）：联动关闭审批单，避免审批台出现孤儿单
     if (p.status === 'pending-approval' || p.status === PIPELINE_AWAITING_APPROVAL) {
       const pending = await this.approvals.pendingForPipeline(id);
@@ -1063,8 +1092,10 @@ export class PipelineService {
     await this.pipelineRepo.save(p);
     // 必须释放并发锁，否则后续提交会被拒绝（"X@Y 正在发布中"），需等 TTL 30 分钟过期。
     // 正常完成路径（成功/失败）在 run() 的 finally 已释放；cancel 是另一入口，需自释放。
-    await this.releaseLock.release(p.moduleKey, p.env, p.id);
-    this.cancelled.delete(p.id);
+    if (!this.running.has(p.id)) {
+      await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      this.cancelled.delete(p.id);
+    }
     await this.auditService.log({
       user: operator || p.operator || 'unknown',
       action: 'pipeline.cancel',
@@ -1169,6 +1200,9 @@ export class PipelineService {
         'approve',
         node && node.kind === 'approval' ? node.approvers : undefined,
       );
+      assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
+      assertBackendRuntimePlan(p);
+      this.git.assertWorkspaceSafe();
       await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
       const resumeAfter = approval.nodeKey ?? p.stage;
 
@@ -1220,6 +1254,9 @@ export class PipelineService {
     if (!approval) {
       throw new NotFoundException(`流水线 ${id} 缺少审批单`);
     }
+    assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
+    assertBackendRuntimePlan(p);
+    this.git.assertWorkspaceSafe();
     await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
 
     p.status = 'pending';
@@ -1649,7 +1686,7 @@ export class PipelineService {
       // 与旧链路（nodes/legacy）并存，迁移期以「新表是否有数据」为分派依据（P3）。
       // 放在 try 内：审批挂起信号（PipelineSuspended）由本方法的 catch 统一处置。
       if (Array.isArray(p.orchestration) && p.orchestration.length) {
-        await this.runOrchestrationMode(p, opts?.resumeAfter ?? null);
+        await this.runOrchestrationMode(p, opts?.resumeAfter ?? null, uploadTarget);
         return;
       }
 
@@ -1860,8 +1897,13 @@ export class PipelineService {
    *       由 run() 的 catch 置 awaiting-approval；approve() 恢复时 resumeAfter=步骤名 →
    *       skipThroughStep 跳过已完成步骤，已执行的动作不重跑。
    */
-  private async runOrchestrationMode(p: DeployPipelineEntity, resumeAfter: string | null): Promise<void> {
+  private async runOrchestrationMode(
+    p: DeployPipelineEntity,
+    resumeAfter: string | null,
+    uploadTarget: 'local' | 'remote',
+  ): Promise<void> {
     const tree = p.orchestration as EngineStep[];
+    assertBackendRuntimePlan(p);
 
     // 变量与动作环境：与旧链路 runStageCommand 同一套合成（内置 + 流水线变量 + 配置中心 + 保护版本）。
     // 惰性组装（每动作一次）：git 任务回填 versionTag 后 COMMIT_ID/ARTIFACT_DIR 等必须取到新值
@@ -1882,6 +1924,7 @@ export class PipelineService {
     } catch {
       /* 模块未登记时变量走兜底 */
     }
+    if (mod?.type) p.moduleType = mod.type;
     const buildBaseEnv = async (): Promise<Record<string, string>> => {
       const inject = await this.resolveInjectEnv(p);
       // 端口：配置中心 → 远端环境登记 / local 本机 pm2（见 pickStagePort；远端不查本机进程）
@@ -1938,7 +1981,10 @@ export class PipelineService {
         },
         afterTask: async (_step, task) => {
           // git 任务平台收尾：把拉码结果（实际 commit）回填实例（旧链 resolveGitIdentity 同款）
-          if (task.name === 'git') await this.resolveGitIdentity(p);
+          if (task.name === 'git') {
+            await this.resolveGitIdentity(p);
+            await this.builtinSteps.pull?.afterRun?.(this.buildStepContext(p, 'git', uploadTarget));
+          }
         },
         waitApproval: async (task) => {
           const step = tree.find((s) => (s.tasks ?? []).some((t) => t.id === task.id));
@@ -1967,6 +2013,7 @@ export class PipelineService {
         // 任务级状态落库（specs/pipeline-task-status/design.md §3）：
         // 状态变化即 save（每任务约 2 次写库），前端详情页画布据此高亮走过的路径。
         onTaskStatus: async (step, task, status) => {
+          if (status === 'running' || status === 'awaiting') p.stage = Array.from(step.name).slice(0, 32).join('');
           p.taskStates = { ...(p.taskStates ?? {}), [`${step.id}/${task.id}`]: status };
           await this.save(p);
         },
@@ -1975,19 +2022,20 @@ export class PipelineService {
       resumeAfter ? { skipThroughStep: resumeAfter } : undefined,
     );
 
+    const succeeded = result.status === 'succeeded' && !this.cancelled.has(p.id);
     p.progress = {
       current: total,
       total,
-      message: result.status === 'succeeded' ? '发布完成' : `发布${result.status === 'aborted' ? '已取消' : '失败'}`,
+      message: succeeded ? '发布完成' : `发布${result.status === 'aborted' || this.cancelled.has(p.id) ? '已取消' : '失败'}`,
     };
     p.logs = [
       ...(p.logs ?? []),
-      result.status === 'succeeded'
+      succeeded
         ? '[orchestration] 全部步骤执行完成'
         : `[orchestration] 终止: ${result.status} @ ${result.failedAt ?? '-'} ${result.error ?? ''}`.trim(),
     ];
 
-    if (result.status === 'succeeded') {
+    if (succeeded) {
       p.status = 'succeeded';
       p.endTime = Date.now();
       // 版本指针语义分域（用户 2026-09-21 反馈）：
@@ -2012,7 +2060,7 @@ export class PipelineService {
       } else {
         p.logs = [
           ...(p.logs ?? []),
-          `[orchestration] 发布完成（产物+版本记录就绪，未改指向）——到「服务详情 → 部署」执行部署后生效`,
+          '[orchestration] 后端编排完成；平台不自动覆盖部署指针，是否已生效以部署动作和验证结果为准',
         ];
       }
     } else if (result.status === 'aborted' || this.cancelled.has(p.id)) {
@@ -2669,6 +2717,14 @@ export class PipelineService {
     timeoutSec?: number,
     cwd?: string,
   ): Promise<number> {
+    assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
+    const workingDirectory = cwd || this.releaseWorkspace;
+    const configuredRuntime = this.configService.get<string>('WEB_SYSTEM_DIR');
+    const backendRuntime = this.configService.get<string>('BACKEND_RUNTIME_ROOT_DEV') || this.configService.get<string>('BACKEND_RUNTIME_ROOT');
+    assertIsolatedBuildWorkspace(workingDirectory,
+      [CONSOLE_RUNTIME_ROOT, ...[configuredRuntime, backendRuntime].filter((root): root is string => !!root)]);
+    this.git.assertWorkspaceSafe(env.RELEASE_DIR || this.releaseWorkspace);
+
     // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
     const scheduleFlush = () => {
@@ -2687,7 +2743,7 @@ export class PipelineService {
       return await this.shellRunner.run({
         command,
         // 未显式传 cwd 时回落到发布目录，避免落到 deploy-console 自身目录
-        cwd: cwd || this.releaseWorkspace,
+        cwd: workingDirectory,
         env,
         timeoutSec,
         defaultTimeoutMs: BUILD_TIMEOUT_MS,

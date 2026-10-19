@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { CommandService } from '../shell/command.service';
 import { defaultReleaseWorkspace } from '../pipeline/release-paths';
+import { assertIsolatedBuildWorkspace, CONSOLE_RUNTIME_ROOT } from './workspace-safety';
 
 /** 依赖清单指纹文件（pnpm-lock.yaml 变化才重装） */
 const DEPS_HASH_FILE = '.deploy-lock-hash';
@@ -31,6 +32,26 @@ export class ReleaseGitService {
     return (
       this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace()
     );
+  }
+
+  assertWorkspaceSafe(workspace = this.workspace()): string {
+    const configuredRuntime = this.configService.get<string>('WEB_SYSTEM_DIR');
+    const runtimeRoots = configuredRuntime ? [CONSOLE_RUNTIME_ROOT, configuredRuntime] : [CONSOLE_RUNTIME_ROOT];
+    const backendRuntime = this.configService.get<string>('BACKEND_RUNTIME_ROOT_DEV') || this.configService.get<string>('BACKEND_RUNTIME_ROOT');
+    if (backendRuntime) runtimeRoots.push(backendRuntime);
+    assertIsolatedBuildWorkspace(workspace, runtimeRoots);
+    if (!fs.existsSync(path.join(workspace, '.git'))) {
+      throw new BadRequestException('独立构建目录不是 git 仓库，请先初始化 RELEASE_WORKSPACE');
+    }
+    const changes = this.command.exec('git status --porcelain --untracked-files=all', workspace).trim();
+    if (changes) {
+      throw new BadRequestException('构建目录存在未提交或未跟踪内容，拒绝拉码；请先保留并处理这些文件');
+    }
+    const preview = this.command.exec('git clean -nd', workspace).trim();
+    if (preview) {
+      throw new BadRequestException('构建目录清理预览非空，拒绝执行 git clean；请先确认并保留待清理内容');
+    }
+    return workspace;
   }
 
   /** 校验发布目录为 git 仓库（未 clone 时抛错并给出初始化提示） */
@@ -133,7 +154,7 @@ export class ReleaseGitService {
    * 返回同步后的实际 commit（未指定 commit 时即分支最新）。
    */
   syncToBranch(branch: string, commit?: string, ws?: string): string {
-    const dir = ws ?? this.ensureRepo();
+    const dir = this.assertWorkspaceSafe(ws ?? this.ensureRepo());
     this.command.exec('git fetch --all --prune', dir);
     this.command.exec(
       `git checkout -B ${branch} origin/${branch} 2>/dev/null || git checkout -B ${branch} ${branch}`,
@@ -161,7 +182,8 @@ export class ReleaseGitService {
     const hashFile = path.join(dir, DEPS_HASH_FILE);
     const last = fs.existsSync(hashFile) ? fs.readFileSync(hashFile, 'utf-8') : '';
     if (hash === last) return 'unchanged';
-    this.command.exec(`"${this.command.pnpmBin()}" install --prefer-offline`, dir);
+    this.assertWorkspaceSafe(dir);
+    this.command.exec(`"${this.command.pnpmBin()}" install --frozen-lockfile --prefer-offline`, dir);
     fs.writeFileSync(hashFile, hash);
     return 'installed';
   }

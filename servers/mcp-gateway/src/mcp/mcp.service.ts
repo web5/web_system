@@ -446,13 +446,13 @@ const DEPLOY_HTTP_TOOLS: Array<{
   },
   {
     name: 'rollback',
-    description: '回滚到指定版本（走脚本级回滚任务，返回 taskId）。前端模块优先用 publish_version（秒级切换）',
+    description: '将指定模块回滚到目标版本，返回 taskId；仅操作该模块，不执行整站快照恢复或重启全部服务',
     method: 'POST',
     path: '/api/mcp/rollback',
     params: [
       { name: 'env', type: 'string', required: true, description: '环境 local（本机，不污染 dev）/dev/staging/prod' },
       { name: 'versionTag', type: 'string', required: true, description: '目标版本标签' },
-      { name: 'component', type: 'string', required: false, description: '模块 key（可选，便于定位）' },
+      { name: 'component', type: 'string', required: true, description: '实际执行回滚的模块 key，必填；不支持省略后回滚整站' },
       { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境必须传 true' },
     ],
   },

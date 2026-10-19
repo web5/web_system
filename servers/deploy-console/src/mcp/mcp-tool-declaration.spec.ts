@@ -163,4 +163,13 @@ describe('MCP 工具声明 · 与后端路由同源', () => {
     const dup = names.filter((n, i) => names.indexOf(n) !== i);
     expect(dup).toEqual([]);
   });
+
+  it('模块回滚声明必须要求 component，不能把整站恢复藏在可选参数后', () => {
+    const block = blocks.DEPLOY_HTTP_TOOLS;
+    const start = block.indexOf("name: 'rollback'");
+    const end = block.indexOf('\n  {', start);
+    const rollback = block.slice(start, end < 0 ? undefined : end);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(rollback).toMatch(/name:\s*'component',\s*type:\s*'string',\s*required:\s*true/);
+  });
 });

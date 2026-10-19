@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
@@ -69,7 +69,7 @@ export class ModuleRegistryService {
       return legacy;
     }
 
-    throw new Error(`模块不存在: ${key}`);
+    throw new NotFoundException(`模块不存在: ${key}`);
   }
 
   /** 旧表兜底读取（旧表 DROP 后返回空数组，不抛错 —— 见 list 中的同样处理） */
@@ -106,6 +106,8 @@ function fromApp(a: DeployAppEntity): DeployModuleEntity {
     dir: a.repoDir,
     pm2: null,
     publicPath: a.publicPath ?? null,
+    entry: a.kind === 'shell' ? 'index.html' : (a.entry ?? 'index.js'),
+    isShell: a.kind === 'shell',
     buildCmd: null,
     // P1（2026-09-20）：部署位置随应用走 —— 透出后流水线 `DEPLOY_TARGET` 才有值
     deployRoot: a.deployRoot ?? null,

@@ -15,6 +15,7 @@ import { AuditModule } from '../audit/audit.module';
 import { Pm2Module } from '../pm2/pm2.module';
 import { ShellModule } from '../shell/shell.module';
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
+import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 
 /**
  * 服务域模块（API 网关）：服务 + 转发规则 + 接口清单 + 服务×环境（只读）+ 探活。
@@ -23,6 +24,7 @@ import { CloudDbModule } from '../cloud-db/cloud-db.module';
   imports: [
     // 配置镜像双写（M4）：把本地写的配置行同步到云数据库
     CloudDbModule,
+    RemoteDeliveryModule,
     TypeOrmModule.forFeature([
       DeployServiceEntity,
       DeployServiceRouteEntity,

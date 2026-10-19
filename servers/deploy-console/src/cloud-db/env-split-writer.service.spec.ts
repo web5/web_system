@@ -65,7 +65,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       expect(r.outcome).toBe('ok');
       // 1) 读旧值 2) upsert
       expect(calls).toHaveLength(2);
-      expect(calls[0].sql).toContain('SELECT current_version FROM deploy_app_env_versions');
+      expect(calls[0].sql).toContain('SELECT current_version, previous_version FROM deploy_app_env_versions');
       expect(calls[1].sql).toContain('INSERT INTO deploy_app_env_versions');
       expect(calls[1].sql).toContain('ON DUPLICATE KEY UPDATE');
       // 列顺序：app_key, env_id, current_version, previous_version, deployed_at, deployed_by, task_id
@@ -77,6 +77,20 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       const svc = new EnvSplitWriterService(cloud);
       await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v1' });
       expect(calls[1].params[3]).toBeNull();
+    });
+
+    it('重复镜像相同版本时保留云库原 previous_version，仍重试镜像写入', async () => {
+      const { cloud, calls, setQuery } = makeCloud({ enabled: true });
+      setQuery(async (sql: string) => sql.startsWith('SELECT')
+        ? [{ current_version: 'v2', previous_version: 'v1' }]
+        : []);
+      const svc = new EnvSplitWriterService(cloud);
+
+      const result = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v2' });
+
+      expect(result.outcome).toBe('ok');
+      expect(calls).toHaveLength(2);
+      expect(calls[1].params.slice(0, 4)).toEqual(['shell', 'prod', 'v2', 'v1']);
     });
 
     it('严格模式：prod 写云库失败 → 抛出（任务必须红掉，不能静默不一致）', async () => {

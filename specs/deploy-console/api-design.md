@@ -15,6 +15,24 @@
 - **写操作审计**：配置/通知渠道/环境/模块/工具/监控重启/系统设置等写接口统一落 `audit` 表。
 - **prod 约束**：发布类接口 `env=prod` 需 `confirm=true`，否则 `400`。
 - **命令注入防护**：拼进 shell/git 的参数（`service`/`port`/`branch`/`key` 等）均有白名单，非法即 `400`。
+- **构建隔离门禁**：流水线提交前及实际 shell 执行前校验工作目录/`RELEASE_DIR`；与运行根重合、包含或经软链重合时拒绝。Git 工作区未提交内容或清理预览非空时不执行拉码/清理。
+- **服务器运行根**：部署、远端后端产物巡检和快照列表共用环境级/全局运行根解析，默认 `/data/web_system`，旧 `web_system_git` 不能继续作为新目标。旧格式后端在改写 dist 前核对 PM2 的实际入口；登记树与运行树不同则拒绝，不能只重启另一棵树的同名进程后报成功。目录实迁移须使用离线计划和维护窗口，构建/静态/独立依赖根不合并。
+- **目录切换门禁**：`RELEASE_WORKSPACE_CUTOVER_MS` 为可选正整数毫秒时间戳。切换前的历史发布单审批恢复返回 `409`，在改审批状态和启动脚本前拒绝；须在新目录重新提交并复核，不能自动恢复旧任务。
+- **编排构建前置**：新编排中 `git` 任务成功后，先校验实际 commit，再等待既有 pull 收尾钩子完成依赖同步和共享包预构建，之后才进入后续构建步骤；从发布确认恢复时不重复已完成的拉码/准备动作。收尾钩子的依赖失败处理沿用既有语义，不把本条当作安装成功保证。
+- **依赖锁定**：发布目录的依赖安装使用 `--frozen-lockfile`，不得在发布过程中重写锁文件；安装失败不写入成功指纹。
+- **后端依赖打包**：pnpm 10 使用共享锁文件的新 deploy 路径，仅本次命令启用 workspace 注入和 isolated linker；不改仓库配置。禁止 legacy deploy（hoisted 工作区中会忽略锁文件并重新解析版本）。运行包离线从冻结锁与已有 store 生成，不回落联网解析。
+- **重复指针写入**：脚本激活后流水线收尾再次写入同一版本时，保留原 previous_version；只有版本实际变化才推进回滚历史。编排 stage 随实际运行/待审批步骤更新，不固定停留在 git。
+- **重复提交**：同模块同环境在 pending、running 或待审批状态均拒绝新提交；提交检查与记录创建由独立原子锁串行化，避免待审批产物被下一次构建覆盖。旧任务须先完成/取消，再提交新构建。
+- **shell 恢复**：shell/site-version 校验目标环境版本目录中的 index.html，通过应用域写版本并刷新 gateway 缓存，不生成微前端 index.js 指针、不降级成后端或整站恢复。
+- **shell 版本选择**：应用版本列表按请求环境按需列举 HTML 版本，并标记 current/previous；入口 URL 使用 `<envId>/<version>/index.html`，不再返回空候选或 JS 地址。进入概览不额外批量探测生产产物，实际切换/回滚仍须单独确认。
+- **dev 手动探活通道**：服务健康接口默认保持 direct HTTP。可通过 `SERVICE_HEALTH_TRANSPORT_DEV=ssh` 显式启用 dev 登记 PM2 主机内探活：使用该服务环境绑定的具体主机和既有 SSH 凭据，在目标机请求登记端口的 loopback HTTP，不回落到控制台本机或环境默认主机。显式 upstream URL 仍直连；非 PM2、无主机/端口、SSH 故障或异常结果如实失败。响应包含 transport、probeHost、probeTarget，界面标明 SSH 路径；不改业务上游、不新增公网暴露，未配置的 prod/local 行为不变。
+- **shell 验证**：release-verify 以应用域指针与 Fact 的 HTML 入口探测分别验证版本、产物，不要求不存在的 JS 指针。事实采集期间指针变化、只有 JS 指针或目录非空都不能判定 HTML 就绪；HTTP 与配置摘要仍在 knownGaps 单独披露。
+- **shell 提案真相源**：release-plan 与 release-verify 均读取应用域当前指针，不以 legacy deploy_deployments 的上次发布记录替代回滚后的实际应用指针。
+- **隔离后端产物**：web-system-runtime-v1 产物包含 dist、独立 node_modules、身份/平台/Node ABI 和文件摘要。适配该格式的发布先检查完整性，再切目标服务 dist 并只重启所属进程；真实 HTTP 和端口归属验证失败时恢复原 dist。运行仓库不执行拉码、reset 或依赖安装/共享包重建；旧格式保持兼容，不以新格式的验收结果替代旧模板评审。
+- **后端运行位置**：隔离产物激活到目标用户的 web_system_runtimes 独立目录，dist 只链接到该版本，环境文件链接回原服务目录；可用 BACKEND_RUNTIME_ROOT_DEV 等环境配置指定根。禁止与运行仓库或构建根重合，不能沿用 NODE_PATH/保留 symlink 的运行参数来回落共享依赖。
+- **旧模板迁移门**：已知的 RROOT 运行仓库 reset 同步脚本在提交、审批恢复、实际编排前返回 409，拒绝前不改变审批状态；这是旧模板迁移门，不是任意 shell 的安全沙箱。未迁移的 prod 模板不放行，不影响现有服务运行。
+- **后端指针与回退**：编排保存后端模块类型，不走前端收尾的纯 commit 指针；只有部署探活通过后的动作才能推进后端完整版本引用。后端回退从取版本到恢复结束持有唯一操作锁，不能与在途发布交叉覆盖。
+- **提案能力边界**：后端运行包不适用静态 index.js 入口检查。只读提案不连接目标机时明确返回 unknown，不能伪造已通过；由投递后的格式/摘要校验、进程与 HTTP 探活补证。
 
 ---
 
@@ -142,6 +160,8 @@
 - 返回：`{ jobId, env, moduleKey, versionTag, mode, status, stage, progress, logs, error, result, operator, startTime, endTime }`
 
 ### 7.3 `POST /mcp/pipeline/:jobId/cancel` — 取消（幂等）
+- 编排实例构建完成且处于 running 时返回 409，不强杀交付/激活中的远端命令；等待执行结果后使用模块级回滚。待审批仍可取消并关闭审批单。
+- 构建中的取消保留取消标记和执行锁，直到后台执行器停止；最后一个动作完成时也检查取消标记，不能把已取消任务收尾成成功或推进指针。
 ### 7.4 `POST /mcp/pipeline/:jobId/promote` — 灰度转全量
 ### 7.5 `POST /mcp/pipeline/:jobId/approve` — 审批通过
 - 入参：`{ comment?, nodeKey?, confirm? }`（`env=prod` 需 `confirm=true`，否则 `400`）
@@ -158,8 +178,13 @@
 - 入参：`{ env, versionTag, component?, confirm? }`（`env=prod` 需 `confirm=true`）；版本表无记录时回退 `switchPointer`
 - 返回：`{ status, component?, versionTag, env, fallback? }`
 
-### 7.8 `POST /mcp/rollback` — 回滚到指定版本
-- 入参：`{ env, versionTag, component?, confirm? }`；返回 `{ taskId, status, env, versionTag }`
+### 7.8 `POST /mcp/rollback` — 指定模块回滚到目标版本
+- 入参：`{ env, versionTag, component, confirm? }`；返回 `{ taskId, status: 'started', env, versionTag }`。
+- `component` 必填并参与真实执行；env-dir 应用复用应用域指针切换，后端复用模块级版本恢复，不调用整站 `rollback.sh` 或 `pm2 restart all`。
+- 缺少 `component`、非法环境/版本引用返回 `400`，不创建任务；`env=prod` 仍必须 `confirm=true`。
+- 模块不存在、目标产物缺失等执行期错误落任务 `failed`；HTTP `started` 不表示回滚已成功。
+- 任务到达 `success` 才表示回滚已完成；模块回滚失败记 `failed`，不得降级为整站恢复。
+- 兼容性变更（2026-10-17）：旧调用未传 `component` 现在被拒绝，调用方须升级；遗留整站恢复不再经本 MCP 入口暴露。
 
 ### 7.9 `GET /mcp/modules` — 可发布模块清单
 ### 7.10 `GET /mcp/current-versions?env=` — 某环境各模块当前版本

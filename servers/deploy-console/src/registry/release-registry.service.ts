@@ -154,6 +154,14 @@ export class ReleaseRegistryService {
     }
   }
 
+  async withReleaseLock<Result>(
+    input: { env: string; moduleKey: string; owner: string },
+    work: () => Promise<Result>,
+  ): Promise<Result> {
+    if (!input.owner) throw new Error('Release lock owner required');
+    return this.withLock({ env: input.env, moduleKey: input.moduleKey, lock: { owner: input.owner } }, work);
+  }
+
   /** 写一条版本发布记录（deploy_versions） */
   async registerVersion(input: RegisterVersionInput): Promise<void> {
     const v = this.versionRepo.create({
@@ -229,7 +237,9 @@ export class ReleaseRegistryService {
       if (!row.appKey) row.appKey = input.moduleKey;
       if (!row.envId) row.envId = input.env;
       // 旧版本留作回滚目标
-      row.previousVersion = row.currentVersion ?? null;
+      if (row.currentVersion !== input.currentVersion) {
+        row.previousVersion = row.currentVersion ?? null;
+      }
       row.currentVersion = input.currentVersion;
       row.status = 'deployed';
       row.deployedAt = new Date();
@@ -335,6 +345,11 @@ export class ReleaseRegistryService {
   async currentVersion(env: string, moduleKey: string): Promise<string | undefined> {
     const dep = await this.deploymentRepo.findOne({ where: { envId: env, moduleKey } });
     return dep?.currentVersion;
+  }
+
+  async currentAppVersion(env: string, moduleKey: string): Promise<string | undefined> {
+    const pointer = await this.appVersionRepo.findOne({ where: { envId: env, appKey: moduleKey } });
+    return pointer?.currentVersion ?? undefined;
   }
 
   /**
