@@ -70,3 +70,7 @@ node scripts/plan-backend-template-migration.cjs \
 5. MCP Gateway 的 schema 风险独立审查；旧 24 项差异不是本阶段重新测量的结果。未评审前不运行 ORM 同步或整包部署。
 
 原始数据库脚本、进程详情、归一化输入及报告保存在本机私有 `/tmp/web-system-console-delivery-20261019/` 和 `/tmp/web-system-console-p0-20261019/`。不得将输入或原始快照提交到 Git；公开材料仅记录脱敏结论和操作边界。
+
+## Todo/prod 材料准备后续
+
+后续已在仓库外准备规范化候选载荷及生产声明依赖检查点，保留原字节和私有配置备份；两份材料的生产 MySQL schema 检查均为 0 差异，离线 MySQL 模块加载通过，SQLite 原生能力仍未通过。没有迁移模板、改账本或激活产物；完整来源、摘要和能力限制见 `docs/operations/todo-prod-artifact-preparation-2026-10-19.md`。

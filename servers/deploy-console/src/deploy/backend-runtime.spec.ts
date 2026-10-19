@@ -80,6 +80,29 @@ describe('isolated backend runtime', () => {
     expect(fs.existsSync(path.join(output, 'main.js'))).toBe(true);
   });
 
+  it('packages only signed payload roots, excluding source and mutable data', async () => {
+    await executeBackendRuntime(packageInput(), { run: packager(bundle => {
+      write(path.join(bundle, 'data/todo.db'), 'private live data');
+      write(path.join(bundle, 'src/main.ts'), 'unverified source');
+    }) });
+    expect(fs.readdirSync(output).sort()).toEqual(['dist', 'node_modules', 'package.json', 'runtime-manifest.json', 'version.json']);
+  });
+
+  it.each(['data/private.db', 'src/main.ts', '.env', '.npmrc'])('rejects unsigned artifact entry %s even when the payload checksum matches', async relative => {
+    await executeBackendRuntime(packageInput(), { run: packager() });
+    write(path.join(output, relative), 'private unverified fixture');
+    await expect(executeBackendRuntime(inspectInput())).rejects.toThrow(/unsigned runtime entry/);
+  });
+
+  it('rejects a manifest symlink outside the bundle', async () => {
+    await executeBackendRuntime(packageInput(), { run: packager() });
+    const manifest = path.join(output, 'runtime-manifest.json');
+    const outside = path.join(temporary, 'manifest.json');
+    fs.renameSync(manifest, outside);
+    fs.symlinkSync(outside, manifest);
+    await expect(executeBackendRuntime(inspectInput())).rejects.toThrow(/metadata must be a regular file/);
+  });
+
   it('rejects dependency links outside the version payload', async () => {
     const commands = packager(bundle => fs.symlinkSync(runtime, path.join(bundle, 'node_modules/escape'), 'dir'));
     await expect(executeBackendRuntime(packageInput(), { run: commands })).rejects.toThrow(/link/);
@@ -185,6 +208,19 @@ describe('isolated backend runtime', () => {
     expect(fs.lstatSync(path.join(fixture.service, 'dist')).isSymbolicLink()).toBe(false);
     expect(fs.readFileSync(path.join(fixture.service, 'dist/main.js'), 'utf8')).toBe('old-runtime');
     expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(2);
+  });
+
+  it('accepts only the original service environment binding on installed-runtime retries', async () => {
+    const fixture = await activationFixture();
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).resolves.toMatchObject({ unchanged: true });
+    const installed = path.join(fixture.storage, 'todo-service', versionTag);
+    const foreign = path.join(temporary, 'foreign.env');
+    write(foreign, 'PORT=6005');
+    fs.unlinkSync(path.join(installed, '.env'));
+    fs.symlinkSync(foreign, path.join(installed, '.env'));
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/unsigned runtime entry/);
+    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(1);
   });
 
   it('rejects port drift before touching the active service', async () => {

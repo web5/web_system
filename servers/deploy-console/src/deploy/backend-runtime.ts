@@ -86,8 +86,19 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
     }
     return { files: entries.length, sha256: hash(JSON.stringify(entries)) };
   };
-  const inspect = (directory: string) => {
+  const inspect = (directory: string, environmentSource?: string) => {
     const root = fs.realpathSync(directory);
+    const allowed = new Set(['package.json', 'version.json', 'runtime-manifest.json', 'dist', 'node_modules']);
+    for (const name of fs.readdirSync(root)) {
+      if (allowed.has(name)) continue;
+      const file = path.join(root, name);
+      const source = environmentSource && ['.env', '.env.generated'].includes(name) ? path.join(environmentSource, name) : null;
+      if (source && fs.existsSync(source) && fs.lstatSync(file).isSymbolicLink() && fs.realpathSync(file) === fs.realpathSync(source)) continue;
+      throw new Error('Unexpected unsigned runtime entry: ' + name);
+    }
+    for (const name of ['package.json', 'version.json', 'runtime-manifest.json']) {
+      if (!fs.lstatSync(path.join(root, name)).isFile()) throw new Error('Runtime metadata must be a regular file: ' + name);
+    }
     const manifest = readJson(path.join(root, 'runtime-manifest.json'));
     if (manifest.format !== 'web-system-runtime-v1' || manifest.moduleKey !== input.moduleKey || manifest.versionTag !== input.versionTag) {
       throw new Error('Runtime artifact identity mismatch');
@@ -128,6 +139,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       run(input.pnpm || 'pnpm', ['--filter', pkg.name, 'deploy', '--prod', '--offline', '--frozen-lockfile', '--ignore-scripts', '--config.inject-workspace-packages=true', '--config.node-linker=isolated', bundle], { cwd: root, timeout: 180000 });
       for (const name of fs.readdirSync(bundle)) {
         if (name !== '.env.example' && /^(?:\.env(?:$|\.)|\.npmrc$|id_(?:rsa|ed25519)$)|\.(?:key|pem)$/.test(name)) throw new Error('Private environment file was included in runtime package');
+        if (!['package.json', 'dist', 'node_modules'].includes(name)) fs.rmSync(path.join(bundle, name), { recursive: true, force: true });
       }
       fs.rmSync(path.join(bundle, 'dist'), { recursive: true, force: true });
       fs.cpSync(output, path.join(bundle, 'dist'), { recursive: true, dereference: false, verbatimSymlinks: true });
@@ -240,7 +252,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       fs.renameSync(staging, installed);
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
-  if (inspect(installed).payload.sha256 !== inspected.payload.sha256) throw new Error('Installed runtime version is immutable');
+  if (inspect(installed, service).payload.sha256 !== inspected.payload.sha256) throw new Error('Installed runtime version is immutable');
   for (const name of ['.env', '.env.generated']) {
     const source = path.join(service, name);
     const destination = path.join(installed, name);
