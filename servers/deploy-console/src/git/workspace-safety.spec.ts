@@ -98,6 +98,42 @@ describe('构建/运行路径隔离', () => {
     expect(runner.run).not.toHaveBeenCalled();
     expect(command.exec).not.toHaveBeenCalled();
   });
+
+  it.each(['WEB_SYSTEM_DIR_DEV', 'WEB_SYSTEM_DIR_PROD', 'BACKEND_RUNTIME_ROOT_PROD', 'BACKEND_RUNTIME_ROOT_LOCAL'])('%s 在 Git 清理前受保护', key => {
+    fs.mkdirSync(path.join(runtime, '.git'));
+    const config = new ConfigService({ RELEASE_WORKSPACE: runtime, [key]: runtime });
+    const command = { exec: jest.fn(() => '') };
+    const git = new ReleaseGitService(config, command as never);
+    expect(() => git.assertWorkspaceSafe()).toThrow(/运行目录/);
+    expect(command.exec).not.toHaveBeenCalled();
+  });
+
+  it('dev 的依赖根配置不能遮蔽全局依赖根保护', () => {
+    fs.mkdirSync(path.join(runtime, '.git'));
+    const config = new ConfigService({ RELEASE_WORKSPACE: runtime, BACKEND_RUNTIME_ROOT: runtime, BACKEND_RUNTIME_ROOT_DEV: build });
+    const command = { exec: jest.fn(() => '') };
+    const git = new ReleaseGitService(config, command as never);
+    expect(() => git.assertWorkspaceSafe()).toThrow(/运行目录/);
+    expect(command.exec).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['WEB_SYSTEM_DIR_PROD', 'prod'],
+    ['BACKEND_RUNTIME_ROOT_PROD', 'prod'],
+    ['WEB_SYSTEM_DIR_QA', 'qa'],
+    ['BACKEND_RUNTIME_ROOT_QA', 'qa'],
+  ])('实际 shell 在 %s 内执行时先拒绝再调用 runner', async (key, environment) => {
+    fs.mkdirSync(path.join(build, '.git'));
+    const config = new ConfigService({ RELEASE_WORKSPACE: build, [key]: runtime });
+    const command = { exec: jest.fn(() => ''), nodeBinDir: jest.fn(() => '/node/bin') };
+    const git = new ReleaseGitService(config, command as never);
+    const runner = { run: jest.fn().mockResolvedValue(0) };
+    const context = { configService: config, git, command, shellRunner: runner, releaseWorkspace: build, shells: new Map() };
+    const runShell = (PipelineService.prototype as any).runShell;
+    await expect(runShell.call(context, 'git clean -fd', { RELEASE_DIR: build }, { id: 'preflight-run', env: environment }, undefined, runtime)).rejects.toThrow(/运行目录/);
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(command.exec).not.toHaveBeenCalled();
+  });
 });
 
 describe('PipelineService 提交前安全门', () => {

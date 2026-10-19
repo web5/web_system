@@ -2,9 +2,18 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { DEFAULT_RUNTIME_ROOT } from '../deploy/runtime-root';
 
 export const CONSOLE_RUNTIME_ROOT = path.resolve(__dirname, '../../../..');
 export const BACKEND_RUNTIME_ROOT = path.join(os.homedir(), 'web_system_runtimes');
+
+export function configuredRuntimeRoots(config: { get<T = string>(key: string): T | undefined }, environment?: string): string[] {
+  const scopes = new Set(['DEV', 'PROD', 'LOCAL', ...(environment ? [environment.toUpperCase()] : [])]);
+  const keys = ['WEB_SYSTEM_DIR', 'BACKEND_RUNTIME_ROOT'];
+  for (const scope of scopes) keys.push(`WEB_SYSTEM_DIR_${scope}`, `BACKEND_RUNTIME_ROOT_${scope}`);
+  const roots = keys.map(key => config.get<string>(key)?.trim()).filter((root): root is string => !!root);
+  return [...new Set([CONSOLE_RUNTIME_ROOT, DEFAULT_RUNTIME_ROOT, ...roots])];
+}
 
 export function assertRunAfterWorkspaceCutover(startTime: unknown, configuredCutover: unknown): void {
   const raw = String(configuredCutover ?? '').trim();

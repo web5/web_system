@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { CommandService } from '../shell/command.service';
 import { defaultReleaseWorkspace } from '../pipeline/release-paths';
-import { assertIsolatedBuildWorkspace, CONSOLE_RUNTIME_ROOT } from './workspace-safety';
+import { assertIsolatedBuildWorkspace, configuredRuntimeRoots } from './workspace-safety';
 
 /** 依赖清单指纹文件（pnpm-lock.yaml 变化才重装） */
 const DEPS_HASH_FILE = '.deploy-lock-hash';
@@ -34,12 +34,8 @@ export class ReleaseGitService {
     );
   }
 
-  assertWorkspaceSafe(workspace = this.workspace()): string {
-    const configuredRuntime = this.configService.get<string>('WEB_SYSTEM_DIR');
-    const runtimeRoots = configuredRuntime ? [CONSOLE_RUNTIME_ROOT, configuredRuntime] : [CONSOLE_RUNTIME_ROOT];
-    const backendRuntime = this.configService.get<string>('BACKEND_RUNTIME_ROOT_DEV') || this.configService.get<string>('BACKEND_RUNTIME_ROOT');
-    if (backendRuntime) runtimeRoots.push(backendRuntime);
-    assertIsolatedBuildWorkspace(workspace, runtimeRoots);
+  assertWorkspaceSafe(workspace = this.workspace(), environment?: string): string {
+    assertIsolatedBuildWorkspace(workspace, configuredRuntimeRoots(this.configService, environment));
     if (!fs.existsSync(path.join(workspace, '.git'))) {
       throw new BadRequestException('独立构建目录不是 git 仓库，请先初始化 RELEASE_WORKSPACE');
     }

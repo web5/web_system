@@ -1,6 +1,6 @@
 # Console dev P0 交付准备与生产适用性核查
 
-> 代码验证：100 suites / 1184 tests，Console 后端、前端和 MCP Gateway 构建通过，远端 CI 全绿；脚本体检 0 error / 8 条既有 warning。草稿 PR #358 未合并、未开启自动合入。用户随后授权立即维护，生产根目录已离线统一为 `/data/web_system`，10 个服务恢复并验活；dev/prod canonical 入口门禁均通过。此次只迁移既有运行字节，没有把 PR 新代码部署到生产。
+> 最新本地代码验证：101 suites / 1220 tests，Console 后端构建通过；此前交付基线的 Console 前端、MCP Gateway 构建及远端 CI 已通过，新提交 CI 以 PR 状态为准。脚本体检基线 0 error / 8 条既有 warning。草稿 PR #358 未合并、未开启自动合入。用户随后授权立即维护，生产根目录已离线统一为 `/data/web_system`，10 个服务恢复并验活；dev/prod canonical 入口门禁均通过。此次只迁移既有运行字节，没有把 PR 新代码部署到生产。
 
 核查日期：2026-10-19。用户已授权创建独立分支、提交并开 PR，并指定运行根统一到 web_system，随后明确授权立即进入维护窗口。当前交付分支为 `feature/manual-review/console-delivery-closeout`，基于已核实的 master `0127aacb`；提交/草稿 PR 以 Git 记录为准，不自动合并。维护前核查与执行后结果分开记录，不将目录切换视作生产业务发布。
 
@@ -86,3 +86,9 @@ MCP Gateway 的整包 schema 差异仍属于独立阻断项：本轮未连接生
 生产 10 个现运行后端的 `PROD_PATH` 已精确更新；主机记录、流水线 revision/动作脚本、业务版本指针和原 pending 审批均保持。末次复查无活跃 run、task 或遗留发布锁。操作回执、完整 PM2 备份及最终服务验收在目标机私有目录 `/root/web-system-maintenance-20261019/`；路径级备份在 `/data/web_system_backups/runtime-root-6dNcfM/`，不纳入 Git。
 
 尚未完成：生产后端旧模板改为隔离运行包、仓库根 cwd 的逐服务兼容评估、完整产物引用与真实恢复点、按模块正式发布/回滚演练及 MCP schema 评估。历史脚本和未运行模块仍有旧名引用，因此兼容链接继续保留。具体维护结果及回退前置条件见 `docs/operations/runtime-root-normalization.md`；不能把本次目录统一标记为 Console 全量生产推广完成。
+
+## 8. 生产模板迁移准备
+
+目录维护后新增只读迁移预检，已实际核对 10 个模板：6 个为标准五动作，4 个含额外版本/指针流程；5 个进程仍为仓库根 cwd；6 个模块当前记录为短 commit，4 个在中央部署账本没有当前记录。全部 10 个旧模板仍有运行仓库 reset 和版本命名空间截断；4 个额外指针流程还尝试从目标机控制台环境文件取密钥。本阶段没有修改这些模板、账本、生产进程或原审批，不把结构匹配当作可发布。
+
+同时修复 Git/shell 构建隔离遗漏生产及其他环境级运行根的问题，保留全局和环境级依赖根的全部保护。修复前新增 9 个用例失败，修复后通过；最新全量本地 101 suites / 1220 tests 与 Console 后端构建通过。源码仍随草稿 PR 评审，不宣称已部署。可重复命令、模块分组和后续顺序见 `docs/operations/backend-runtime-production-readiness.md`。

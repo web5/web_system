@@ -81,7 +81,7 @@ import { PipelineVarService } from './pipeline-var.service';
 export { resolveStartIndex };
 // 发布目录 git 工作区（拉码后回填实际 commit 用）
 import { ReleaseGitService } from '../git/release-git.service';
-import { assertIsolatedBuildWorkspace, assertRunAfterWorkspaceCutover, CONSOLE_RUNTIME_ROOT } from '../git/workspace-safety';
+import { assertIsolatedBuildWorkspace, assertRunAfterWorkspaceCutover, configuredRuntimeRoots } from '../git/workspace-safety';
 // 内置步骤执行器注册表（executeStage 数据驱动分派）
 import { PIPELINE_BUILTIN_STEPS } from './steps/step-registry';
 import { BuiltinStepDef, StepContext } from './steps/step.types';
@@ -825,7 +825,7 @@ export class PipelineService {
     operator?: string,
   ): Promise<{ jobId: string; status: string; approvalId?: string }> {
     assertRunAfterWorkspaceCutover(Date.now(), this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
-    this.git.assertWorkspaceSafe();
+    this.git.assertWorkspaceSafe(undefined, dto.env);
     const admissionModule = 'submit-' + dto.moduleKey;
     const admissionOwner = this.generateId();
     if (!await this.releaseLock.acquire(admissionModule, dto.env, admissionOwner, 60000)) {
@@ -1202,7 +1202,7 @@ export class PipelineService {
       );
       assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
       assertBackendRuntimePlan(p);
-      this.git.assertWorkspaceSafe();
+      this.git.assertWorkspaceSafe(undefined, p.env);
       await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
       const resumeAfter = approval.nodeKey ?? p.stage;
 
@@ -1256,7 +1256,7 @@ export class PipelineService {
     }
     assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
     assertBackendRuntimePlan(p);
-    this.git.assertWorkspaceSafe();
+    this.git.assertWorkspaceSafe(undefined, p.env);
     await this.approvals.resolve(approval.id, 'approve', reviewer || 'unknown', comment);
 
     p.status = 'pending';
@@ -2719,11 +2719,9 @@ export class PipelineService {
   ): Promise<number> {
     assertRunAfterWorkspaceCutover(p.startTime, this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS'));
     const workingDirectory = cwd || this.releaseWorkspace;
-    const configuredRuntime = this.configService.get<string>('WEB_SYSTEM_DIR');
-    const backendRuntime = this.configService.get<string>('BACKEND_RUNTIME_ROOT_DEV') || this.configService.get<string>('BACKEND_RUNTIME_ROOT');
-    assertIsolatedBuildWorkspace(workingDirectory,
-      [CONSOLE_RUNTIME_ROOT, ...[configuredRuntime, backendRuntime].filter((root): root is string => !!root)]);
-    this.git.assertWorkspaceSafe(env.RELEASE_DIR || this.releaseWorkspace);
+    const runtimeRoots = configuredRuntimeRoots(this.configService, p.env);
+    assertIsolatedBuildWorkspace(workingDirectory, runtimeRoots);
+    this.git.assertWorkspaceSafe(env.RELEASE_DIR || this.releaseWorkspace, p.env);
 
     // 日志节流：命令逐行输出按 300ms 合并写库，避免每行都全量序列化 p.logs
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
