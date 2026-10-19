@@ -429,10 +429,11 @@ async function probe(envId: string) {
   probing.value = envId
   try {
     const res = await servicesApi.health(svcKey.value, envId)
+    const destination = res.transport === 'ssh' ? `${res.probeTarget}（SSH 目标机 ${res.probeHost}）` : res.target
     if (res.ok) {
-      message.success(`${envId} 健康（${res.status}，${res.latencyMs}ms）→ ${res.target}`)
+      message.success(`${envId} 健康（${res.status}，${res.latencyMs}ms）→ ${destination}`)
     } else {
-      message.error(`${envId} 探活失败：${res.error || `HTTP ${res.status}`}（${res.target}）`)
+      message.error(`${envId} 探活失败：${res.error || `HTTP ${res.status}`}（${destination}）`)
     }
   } catch (e: any) {
     message.error(e?.response?.data?.message || '探活失败')

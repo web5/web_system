@@ -41,6 +41,9 @@ case "$TARGET" in
   *) echo "目标必须为 dev|prod"; exit 1 ;;
 esac
 
+source "$ROOT/scripts/lib/runtime-root.sh"
+REMOTE_DIR="$(ws_runtime_root "$REMOTE_DIR")" || exit 1
+
 # ⚠️ 静态根 ≠ 代码目录：静态资源由 nginx 直接服务，落点是「nginx 从哪里读」而不是
 #    「代码在哪」。prod 的静态资源是外置根（/data/web_system_static/public），
 #    与代码目录 /data/web_system 不是同一棵树 —— 2026-10-09 的 prod 白屏事故就是

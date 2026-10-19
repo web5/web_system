@@ -425,6 +425,7 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
           { provide: ReleaseRegistryService, useValue: {
               syncAppEnvPointer: jest.fn(),
               setPointer: jest.fn(),
+              withReleaseLock: jest.fn(async (_input: unknown, work: () => Promise<unknown>) => work()),
               // 诊断 #17：回滚目标改由 registry 定夺（此处按 versionRepo 的桩还原旧语义）
               resolveRollbackTarget: jest.fn(async (i: { to?: string }) => {
                 if (i?.to) return { from: 'mcp-gateway-local/B', to: i.to, source: 'explicit' };
@@ -536,7 +537,7 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
         { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
         { provide: getRepositoryToken(DeployVersionEntity), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(DeployDeploymentEntity), useValue: deploymentRepo },
-          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn(), resolveRollbackTarget: jest.fn(async (i: { to?: string }) => ({ from: 'v1', to: i?.to || 'v0', source: 'pointer' })) } },
+          { provide: ReleaseRegistryService, useValue: { syncAppEnvPointer: jest.fn(), setPointer: jest.fn(), withReleaseLock: jest.fn(async (_input: unknown, work: () => Promise<unknown>) => work()), resolveRollbackTarget: jest.fn(async (i: { to?: string }) => ({ from: 'v1', to: i?.to || 'v0', source: 'pointer' })) } },
         { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
         {
           provide: ModuleRegistryService,

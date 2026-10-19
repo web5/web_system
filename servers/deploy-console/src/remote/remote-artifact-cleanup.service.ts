@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SshExecService } from './ssh-exec.service';
+import { resolveRuntimeRoot } from '../deploy/runtime-root';
 import { resolveStaticTarget } from '../apps/static-target';
 import { defaultReleaseWorkspace } from '../pipeline/release-paths';
 import { KEEP_MIN_AGE_MS, KEEP_VERSIONS } from '../artifact/artifact-store.service';
@@ -154,10 +155,7 @@ export class RemoteArtifactCleanupService {
 
   /** 远端业务机上的工作目录（`WEB_SYSTEM_DIR_<ENV>` → `WEB_SYSTEM_DIR` → /data/web_system） */
   remoteWorkspaceRoot(env: string): string {
-    const e = (env || '').toUpperCase();
-    const perEnv = (this.configService.get<string>(`WEB_SYSTEM_DIR_${e}`) || '').trim();
-    if (perEnv) return perEnv.replace(/\/+$/, '');
-    return (this.configService.get<string>('WEB_SYSTEM_DIR') || '/data/web_system').replace(/\/+$/, '');
+    return resolveRuntimeRoot(this.configService, env);
   }
 
   /**

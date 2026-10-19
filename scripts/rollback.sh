@@ -57,6 +57,9 @@ if [ -n "$DEPLOY_HOST" ]; then
 fi
 
 # 支持 ~/xxx 写法（不展开的话 -f "$DEPLOY_KEY" 恒为假，会静默退化成「不带 -i」连接）
+source "$SCRIPT_DIR/scripts/lib/runtime-root.sh"
+REMOTE_DIR="$(ws_runtime_root "$REMOTE_DIR")" || exit 1
+
 DEPLOY_KEY="${DEPLOY_KEY/#\~/$HOME}"
 SSH_OPTS=""
 if [ -n "$DEPLOY_KEY" ] && [ "$DEPLOY_KEY" != "$HOME/.ssh/id_ed25519_servers" ] && [ -f "$DEPLOY_KEY" ]; then

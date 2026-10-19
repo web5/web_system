@@ -83,10 +83,11 @@ export class ReleaseVerifyService {
     // 模块类型决定走哪套判据；模块不存在会让后续所有检查失去意义，直接抛错
     // 由调用方（controller）转成 404，而不是返回一份"全是 unknown"的报告。
     const mod = await this.modules.get(norm.moduleKey);
-    const isFrontend = FRONTEND_TYPES.has(String(mod.type));
+    const isShell = Boolean((mod as unknown as { isShell?: boolean }).isShell);
+    const isFrontend = isShell || FRONTEND_TYPES.has(String(mod.type));
 
     // 期望版本：入参优先；其次流水线记录；都没有则回落当前线上指针（"确认现状"场景）
-    const expectation = await this.resolveExpectation(norm);
+    const expectation = await this.resolveExpectation(norm, isShell);
 
     // 现采事实（不落库）
     const batch = await this.facts.collect(norm.env, 'manual', { persist: false });
@@ -96,10 +97,12 @@ export class ReleaseVerifyService {
         this.checkPipeline(norm.jobId),
       ),
       await this.safe(VERIFY_CHECK_KEYS.pointerMatches, true, () =>
-        this.checkPointer(norm.moduleKey, expectation.version, batch),
+        isShell
+          ? this.checkShellPointer(norm.env, norm.moduleKey, expectation.version, batch)
+          : this.checkPointer(norm.moduleKey, expectation.version, batch),
       ),
       await this.safe(VERIFY_CHECK_KEYS.versionDirPresent, isFrontend, () =>
-        this.checkVersionDir(norm.moduleKey, batch, isFrontend),
+        isShell ? this.checkShellEntry(norm.moduleKey, batch) : this.checkVersionDir(norm.moduleKey, batch, isFrontend),
       ),
       await this.safe(VERIFY_CHECK_KEYS.processAlive, false, () =>
         this.checkProcess(norm.moduleKey, batch, isFrontend),
@@ -117,7 +120,10 @@ export class ReleaseVerifyService {
       strict: norm.strict,
     });
 
-    const actualVersion = pickActual(batch, 'version', norm.moduleKey);
+    const pointerCheck = checks.find(check => check.key === VERIFY_CHECK_KEYS.pointerMatches);
+    const actualVersion = isShell
+      ? (typeof pointerCheck?.actual === 'string' ? pointerCheck.actual : null)
+      : pickActual(batch, 'version', norm.moduleKey);
     const report: ReleaseVerifyReport = {
       verifyId: buildVerifyId(input),
       resultHash: '',
@@ -184,7 +190,7 @@ export class ReleaseVerifyService {
     moduleKey: string;
     versionTag: string | null;
     jobId: string | null;
-  }): Promise<{ version: string | null; source: ExpectationSource | null }> {
+  }, isShell = false): Promise<{ version: string | null; source: ExpectationSource | null }> {
     if (norm.versionTag) return { version: norm.versionTag, source: 'input' };
 
     if (norm.jobId) {
@@ -197,7 +203,9 @@ export class ReleaseVerifyService {
       }
     }
 
-    const current = (await this.registry.currentVersion(norm.env, norm.moduleKey)) ?? null;
+    const current = (isShell
+      ? await this.registry.currentAppVersion(norm.env, norm.moduleKey)
+      : await this.registry.currentVersion(norm.env, norm.moduleKey)) ?? null;
     return {
       version: current ? (toCommitId(current) ?? current) : null,
       source: current ? 'current-pointer' : null,
@@ -243,6 +251,37 @@ export class ReleaseVerifyService {
    * 这是"生效"的直接证据 —— 读的是指针文件真实内容解析出的 commit，
    * 不是数据库里"我们认为应该是什么"。
    */
+  private async checkShellPointer(env: string, moduleKey: string, expected: string | null, batch: FactBatchReport): Promise<VerifyCheckResult> {
+    const actual = (await this.registry.currentAppVersion(env, moduleKey)) ?? null;
+    const item = batch.items.find(fact => fact.kind === 'version' && fact.targetKey === moduleKey);
+    if (item && item.expected !== actual) {
+      return unknownCheck(VERIFY_CHECK_KEYS.pointerMatches, true, new Error('Shell 指针在事实采集期间变化，请重新验证'));
+    }
+    return compareCheck({
+      key: VERIFY_CHECK_KEYS.pointerMatches, core: true, expected, actual,
+      passDetail: `Shell 应用域指针 ${actual} 与目标版本一致`,
+      failDetail: `Shell 应用域指针为 ${actual ?? '空'}，目标版本为 ${expected ?? '未指定'}`,
+      evidence: { source: 'deploy_app_env_versions', host: batch.host, batchId: batch.batchId },
+    });
+  }
+
+  private async checkShellEntry(moduleKey: string, batch: FactBatchReport): Promise<VerifyCheckResult> {
+    const item = batch.items.find(fact => fact.kind === 'version' && fact.targetKey === moduleKey);
+    if (!item || item.status === 'error') {
+      return unknownCheck(VERIFY_CHECK_KEYS.versionDirPresent, true, new Error('无法确认 Shell 的 index.html 入口'));
+    }
+    const present = item.status === 'skipped' && item.detail?.pointerApplicable === false;
+    if (!present && item.status !== 'missing') {
+      return unknownCheck(VERIFY_CHECK_KEYS.versionDirPresent, true, new Error('Shell 不能以 JS 指针或目录非空代替 HTML 入口验证'));
+    }
+    return verifyCheck({
+      key: VERIFY_CHECK_KEYS.versionDirPresent, core: true, status: present ? 'pass' : 'fail',
+      expected: 'index.html', actual: present ? 'index.html' : null,
+      detail: present ? '事实采集已确认当前 Shell 版本存在 index.html 入口' : 'Shell 的 index.html 入口不存在',
+      evidence: { host: batch.host, batchId: batch.batchId, version: item.expected },
+    });
+  }
+
   private async checkPointer(
     moduleKey: string,
     expected: string | null,

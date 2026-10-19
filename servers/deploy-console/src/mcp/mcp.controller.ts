@@ -22,6 +22,7 @@ import { ReleasePlanService } from '../release-plan/release-plan.service';
 import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
 import { ReleaseVerifyService } from '../release-verify/release-verify.service';
 import { ReleaseVerifyDto } from '../release-verify/dto/release-verify.dto';
+import { ModuleRollbackDto } from './dto/module-rollback.dto';
 
 /**
  * MCP 发布接口（/api/mcp/*）。
@@ -325,8 +326,9 @@ export class McpController {
   }
 
   @Post('rollback')
-  @ApiOperation({ summary: '回滚到指定版本' })
-  async rollback(@Body() body: any, @Req() req: any) {
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: '指定模块回滚到指定版本，不执行整站恢复' })
+  async rollback(@Body() body: ModuleRollbackDto, @Req() req: any) {
     const env = String(body?.env || '');
     if (env === 'prod' && body?.confirm !== true) {
       throw new BadRequestException('Prod operations require confirm=true');
@@ -335,7 +337,7 @@ export class McpController {
       env,
       String(body?.versionTag || ''),
       this.operator(req),
-      body?.component,
+      body.component,
     );
     return { taskId, status: 'started', env, versionTag: body?.versionTag };
   }

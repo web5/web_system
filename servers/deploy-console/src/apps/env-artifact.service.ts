@@ -67,14 +67,19 @@ export class EnvArtifactService {
   }
 
   /** 某版本产物是否就绪（入口文件存在） */
-  async hasVersion(env: string, appKey: string, version: string): Promise<boolean> {
+  async hasVersion(
+    env: string,
+    appKey: string,
+    version: string,
+    entry: 'index.js' | 'index.html' = 'index.js',
+  ): Promise<boolean> {
     const t = this.target(env);
     if (!t.sshTarget) {
       return fs.existsSync(
-        path.join(envArtifactsDir(t.root, appKey, env), version, 'index.js'),
+        path.join(envArtifactsDir(t.root, appKey, env), version, entry),
       );
     }
-    const abs = `${t.root}/${path.posix.join(envArtifactsRel(appKey, env), version, 'index.js')}`;
+    const abs = `${t.root}/${path.posix.join(envArtifactsRel(appKey, env), version, entry)}`;
     const r = await this.command.execAsync(
       `${sshPrefix(t.sshTarget)} "test -f '${abs}'"`,
       process.cwd(),
@@ -85,13 +90,13 @@ export class EnvArtifactService {
   }
 
   /** 该环境的可用版本（mtime 倒序）；远端不可达返回空数组 */
-  async listVersions(env: string, appKey: string): Promise<string[]> {
+  async listVersions(env: string, appKey: string, entry: 'index.js' | 'index.html' = 'index.js'): Promise<string[]> {
     const t = this.target(env);
-    if (!t.sshTarget) return listEnvVersions(t.root, appKey, env);
+    if (!t.sshTarget) return listEnvVersions(t.root, appKey, env, entry);
     const script = [
       `cd '${t.root}/${envArtifactsRel(appKey, env)}' 2>/dev/null || exit 0`,
       // -mindepth 2：跳过环境目录下的 index.js 指针本身，只取版本目录
-      `find . -mindepth 2 -maxdepth 3 -name index.js -printf '%T@\\t%h\\n' | sort -rn | cut -f2- | sed 's|^\\./||'`,
+      `find . -mindepth 2 -maxdepth 3 -name '${entry}' -printf '%T@\\t%h\\n' | sort -rn | cut -f2- | sed 's|^\\./||'`,
       '',
     ].join('\n');
     const r = await this.command.execAsync(

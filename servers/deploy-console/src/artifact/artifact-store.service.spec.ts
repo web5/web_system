@@ -31,6 +31,32 @@ describe('ArtifactStoreService（产物目录 fs 工具）', () => {
     expect(svc.exists('admin', 'nope')).toBe(false);
   });
 
+  it('exists：环境产物按配置静态根和环境寻址', () => {
+    const staticRoot = path.join(tmpWs, 'external-public');
+    const directory = path.join(staticRoot, 'static', 'modules', 'admin', 'dev', 'abc1234');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'index.js'), 'export default {};');
+    expect(svc.exists('admin', 'abc1234', { env: 'dev', staticRoot })).toBe(true);
+    expect(svc.exists('admin', 'abc1234', { env: 'prod', staticRoot })).toBe(false);
+    expect(svc.exists('admin', 'abc1234')).toBe(false);
+  });
+
+  it('exists：旧目录同版本不能作为环境目录兜底', () => {
+    mkVersion('abc1234', Date.now());
+    const staticRoot = path.join(tmpWs, 'servers', 'gateway', 'public');
+    expect(svc.exists('admin', 'abc1234')).toBe(true);
+    expect(svc.exists('admin', 'abc1234', { env: 'dev', staticRoot })).toBe(false);
+  });
+
+  it('exists：shell/site-version 使用环境目录中的 index.html', () => {
+    const staticRoot = path.join(tmpWs, 'external-public');
+    const directory = path.join(staticRoot, 'static/modules/shell/dev/abc1234');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'index.html'), '<html></html>');
+    expect(svc.exists('shell', 'abc1234', { env: 'dev', staticRoot, entry: 'index.html' })).toBe(true);
+    expect(svc.exists('shell', 'abc1234', { env: 'dev', staticRoot })).toBe(false);
+  });
+
   it('listVersions：按 mtime 倒序返回产物版本', () => {
     mkVersion('v1', Date.now() - 3000);
     mkVersion('v2', Date.now() - 1000);

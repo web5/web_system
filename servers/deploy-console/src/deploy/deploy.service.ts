@@ -17,6 +17,9 @@ import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
 import { Client } from 'ssh2';
+import { backendRuntimeActivationCommand } from './backend-runtime';
+import { resolveRuntimeRoot } from './runtime-root';
+import { runtimeTargetGuardCommand } from './runtime-target';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployVersionEntity } from '../entities/deploy-version.entity';
 import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
@@ -152,8 +155,8 @@ export class DeployService {
   /**
    * 获取 WEB_SYSTEM_DIR 路径
    */
-  private getWebSystemDir(): string {
-    return this.configService.get<string>('WEB_SYSTEM_DIR') || '/data/web_system';
+  private getWebSystemDir(env?: string): string {
+    return resolveRuntimeRoot(this.configService, env);
   }
 
   /**
@@ -222,6 +225,7 @@ export class DeployService {
     status: TaskStatus,
     log?: string,
     error?: string,
+    recordRelease = true,
   ) {
     task.status = status;
     if (log) {
@@ -240,7 +244,7 @@ export class DeployService {
       partial.endTime = task.endTime;
       this.progressEmitter.emit(`task:${task.id}`, { type: 'done', status, error: task.error });
       // 部署/回滚成功 → 记录版本 + 更新该环境该模块当前版本
-      if (status === 'success' && (task.type === 'deploy' || task.type === 'rollback')) {
+      if (recordRelease && status === 'success' && (task.type === 'deploy' || task.type === 'rollback')) {
         await this.recordVersion(task);
         await this.recordDeployment(task);
       }
@@ -773,12 +777,13 @@ export class DeployService {
     env: string;
     operator?: string;
     to?: string;
+    taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string | null; to: string; mode: string; source: string }> {
     if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
 
     const app = await this.appsService.findAppOrNull(input.moduleKey);
-    if (app && app.deployMode === 'env-dir') {
+    if (app && (app.deployMode === 'env-dir' || (app.kind === 'shell' && app.deployMode === 'site-version'))) {
       const target = await this.registry.resolveRollbackTarget({
         env: input.env,
         moduleKey: input.moduleKey,
@@ -795,7 +800,7 @@ export class DeployService {
         env: input.env,
         from: r.from ?? null,
         to: r.to,
-        mode: 'env-dir',
+        mode: app.deployMode,
         source: target.source,
       };
     }
@@ -818,45 +823,49 @@ export class DeployService {
     operator?: string;
     /** 回滚到指定版本（省略 = 上一个版本） */
     to?: string;
+    taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
     if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
     if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
 
-    const cur = await this.deploymentRepo.findOne({
-      where: { envId: input.env, moduleKey: input.moduleKey },
-    });
-    if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
+    return this.registry.withReleaseLock({ env: input.env, moduleKey: input.moduleKey, owner: 'rollback:' + crypto.randomUUID() }, async () => {
+      const cur = await this.deploymentRepo.findOne({
+        where: { envId: input.env, moduleKey: input.moduleKey },
+      });
+      if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
 
-    // 诊断 #17：回滚目标统一走 registry（指针表 previous_version 优先，回落历史表）
-    const { to: target } = await this.registry.resolveRollbackTarget({
-      env: input.env,
-      moduleKey: input.moduleKey,
-      to: input.to,
-    });
-    if (target === cur.currentVersion) {
-      throw new Error(`回滚失败: ${target} 就是当前版本`);
-    }
-
-    // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
-    await this.applyBackendVersion({
-      moduleKey: input.moduleKey,
-      env: input.env,
-      versionTag: target,
-      operator: input.operator,
-    });
-    await this.deploymentRepo.upsert(
-      {
-        envId: input.env,
+      // 诊断 #17：回滚目标统一走 registry（指针表 previous_version 优先，回落历史表）
+      const { to: target } = await this.registry.resolveRollbackTarget({
+        env: input.env,
         moduleKey: input.moduleKey,
-        currentVersion: target,
-        status: 'deployed',
-        deployedAt: new Date(),
-        deployedBy: input.operator,
-      },
-      ['envId', 'moduleKey'],
-    );
-    this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
-    return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
+        to: input.to,
+      });
+      if (target === cur.currentVersion) {
+        throw new Error(`回滚失败: ${target} 就是当前版本`);
+      }
+
+      // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
+      await this.applyBackendVersion({
+        moduleKey: input.moduleKey,
+        env: input.env,
+        versionTag: target,
+        operator: input.operator,
+      });
+      await this.deploymentRepo.upsert(
+        {
+          envId: input.env,
+          moduleKey: input.moduleKey,
+          currentVersion: target,
+          status: 'deployed',
+          deployedAt: new Date(),
+          deployedBy: input.operator,
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+        },
+        ['envId', 'moduleKey'],
+      );
+      this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
+      return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
+    });
   }
 
   /**
@@ -1200,11 +1209,37 @@ export class DeployService {
    * 启动回滚（回滚到指定版本 tag）
    */
   async startRollback(env: string, tag: string, operator?: string, component?: string): Promise<string> {
+    if (component !== undefined) {
+      const moduleKey = component.trim();
+      if (!moduleKey) throw new BadRequestException('模块回滚必须指定 component');
+      const task = await this.createTask('rollback', moduleKey, env, tag, operator);
+      void this.executeModuleRollback(task, env, tag, moduleKey, operator).catch(error => {
+        this.logger.error(`模块回滚任务状态更新失败: ${redactSecrets(String(error?.message || error))}`);
+      });
+      return task.id;
+    }
     const task = await this.createTask('rollback', component || 'system', env, tag, operator);
     const webSystemDir = this.getWebSystemDir();
     this.logger.log(`开始回滚任务: ${task.id}, 环境: ${env}, 标签: ${tag}`);
     this.executeRollbackScript(task, webSystemDir, env, tag);
     return task.id;
+  }
+
+  private async executeModuleRollback(
+    task: DeployTask,
+    env: string,
+    tag: string,
+    moduleKey: string,
+    operator?: string,
+  ): Promise<void> {
+    try {
+      await this.updateTask(task, 'running', `模块回滚开始: ${moduleKey}/${env} → ${tag}`);
+      const result = await this.rollbackUnified({ moduleKey, env, to: tag, operator, taskId: task.id });
+      await this.updateTask(task, 'success', `模块回滚完成: ${moduleKey}/${env} → ${result.to}`, undefined, false);
+    } catch (error) {
+      const message = redactSecrets(error instanceof Error ? error.message : String(error));
+      await this.updateTask(task, 'failed', `模块回滚失败: ${message}`, message, false);
+    }
   }
 
   /**
@@ -1493,14 +1528,37 @@ export class DeployService {
     const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
     const dir = mod.dir || input.moduleKey;
     const sshConfig = await this.getSshConfig(input.env);
-    const remoteDir = `${this.getWebSystemDir()}/servers/${dir}`;
+    const remoteDir = `${this.getWebSystemDir(input.env)}/servers/${dir}`;
     // 远端版本目录（发布流水线的远程投递已放好，用户 2026-09-21：产物跟着环境走，类似 admin）
     const remoteVerDir = `${remoteDir}/${input.versionTag}`;
+    let isolatedRuntime = false;
+    try {
+      isolatedRuntime = (await this.sshRun(sshConfig,
+        `if test -f '${remoteVerDir}/runtime-manifest.json'; then printf 'isolated-runtime-v1'; fi`,
+        input.env)).trim() === 'isolated-runtime-v1';
+    } catch (error) {
+      throw new Error(`远程部署失败：无法确认版本格式，拒绝继续落地：${(error as Error).message}`);
+    }
+    if (isolatedRuntime) {
+      const command = backendRuntimeActivationCommand({
+        moduleKey: input.moduleKey,
+        versionTag: input.versionTag,
+        serviceDirectory: remoteDir,
+        versionDirectory: remoteVerDir,
+        processName: mod.pm2,
+        runtimeStorageRoot: this.configService.get<string>('BACKEND_RUNTIME_ROOT_' + input.env.toUpperCase()),
+      });
+      await this.sshRun(sshConfig, command, input.env, Math.max(this.sshTimeoutMs('exec'), 120000));
+      this.logger.log(`隔离运行版本已生效并通过探活：${input.moduleKey}@${input.env} → ${input.versionTag}`);
+      return;
+    }
     const stamp = Date.now();
     const cands = Array.from(
       new Set([mod.pm2, `web-${input.moduleKey}`, input.moduleKey].filter(Boolean) as string[]),
     );
     const pm2Chain = cands.map((n) => `pm2 restart ${n}`).join(' || ');
+    const targetGuard = runtimeTargetGuardCommand({ serviceDirectory: remoteDir, processNames: cands });
+    await this.sshRun(sshConfig, targetGuard, input.env, Math.max(this.sshTimeoutMs('exec'), 20000));
     /**
      * pm2 重启失败必须让整条命令**非 0 退出**（诊断 #4）。
      *
@@ -1712,7 +1770,7 @@ export class DeployService {
    */
   async listReleases(env: string): Promise<string[]> {
     const sshConfig = await this.getSshConfig(env);
-    const releaseDir = `${this.getWebSystemDir()}/releases`;
+    const releaseDir = `${this.getWebSystemDir(env)}/releases`;
     try {
       const out = await this.sshRun(sshConfig, `ls -1 ${releaseDir} 2>/dev/null || echo ""`, env);
       return out

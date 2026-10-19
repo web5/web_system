@@ -29,6 +29,17 @@ describe('entry-pointer（入口指针 T1 定稿 A′）', () => {
     fs.rmSync(ws, { recursive: true, force: true });
   });
 
+  it('lists HTML site versions locally while keeping JS entry selection as the default', () => {
+    const htmlVersion = path.join(envArtifactsDir(ws, 'shell', 'dev'), 'e1618537');
+    const jsVersion = path.join(envArtifactsDir(ws, 'shell', 'dev'), 'js-only');
+    fs.mkdirSync(htmlVersion, { recursive: true });
+    fs.mkdirSync(jsVersion, { recursive: true });
+    fs.writeFileSync(path.join(htmlVersion, 'index.html'), '<html></html>');
+    fs.writeFileSync(path.join(jsVersion, 'index.js'), 'System.register([]);');
+    expect(listEnvVersions(ws, 'shell', 'dev', 'index.html')).toEqual(['e1618537']);
+    expect(listEnvVersions(ws, 'shell', 'dev')).toEqual(['js-only']);
+  });
+
   const mkVersion = (appKey: string, envId: string, version: string, withCss = false) => {
     const dir = path.join(envArtifactsDir(ws, appKey, envId), version);
     fs.mkdirSync(dir, { recursive: true });

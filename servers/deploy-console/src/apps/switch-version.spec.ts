@@ -26,6 +26,21 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
   let taskRecorder: { record: jest.Mock; start: jest.Mock; log: jest.Mock; finish: jest.Mock };
   let svc: AppsService;
 
+  it('lists Shell HTML versions on demand and preserves current/previous flags without writes', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
+    versionRepo.findOne.mockResolvedValue({ currentVersion: 'a82270f9', previousVersion: 'e1618537' });
+    artifacts.listVersions.mockResolvedValue(['e1618537', 'a82270f9']);
+    const result = await svc.listVersions('shell', 'dev');
+    expect(artifacts.listVersions).toHaveBeenCalledWith('dev', 'shell', 'index.html');
+    expect(result.availableVersions).toEqual([
+      { ref: 'e1618537', isCurrent: false, isPrevious: true },
+      { ref: 'a82270f9', isCurrent: true, isPrevious: false },
+    ]);
+    expect((svc as any).entryUrlFor({ key: 'shell', deployMode: 'site-version' }, 'dev', 'a82270f9')).toBe('/static/modules/shell/dev/a82270f9/index.html');
+    expect(versionRepo.save).not.toHaveBeenCalled();
+    expect(artifacts.writePointer).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -164,11 +179,21 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
   });
 
   it('site-version（基座 shell）不写 env-dir 磁盘指针', async () => {
-    appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
+    appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
     const r = await svc.switchVersion('shell', 'prod', 'v3', 'u1');
     expect(artifacts.writePointer).not.toHaveBeenCalled();
     expect(r.pointer).toBeNull();
     expect(registry.setAppEnvPointer).toHaveBeenCalled();
+    expect(artifacts.hasVersion).toHaveBeenCalledWith('prod', 'shell', 'v3', 'index.html');
+    expect(gatewayCache.notifyVersionChange).toHaveBeenCalledWith(expect.objectContaining({ moduleKey: 'shell', version: 'v3' }));
+  });
+
+  it('shell 缺少 index.html 时不能改写站点版本', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
+    artifacts.hasVersion.mockResolvedValue(false);
+    await expect(svc.switchVersion('shell', 'dev', 'missing', 'operator')).rejects.toThrow(/index.html/);
+    expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+    expect(artifacts.writePointer).not.toHaveBeenCalled();
   });
 
   it('锁 owner 默认按 operator 派生（ui: 前缀，排障可见来源）', async () => {

@@ -86,11 +86,12 @@ async function probe(row: ServiceRow, envId: string) {
   probing.value = `${row.key}@${envId}`
   try {
     const res = await servicesApi.health(row.key, envId)
+    const destination = res.transport === 'ssh' ? `${res.probeTarget}（SSH 目标机 ${res.probeHost}）` : res.target
     if (res.ok) {
-      message.success(`${row.key} @ ${envId} 健康（${res.status}，${res.latencyMs}ms）→ ${res.target}`)
+      message.success(`${row.key} @ ${envId} 健康（${res.status}，${res.latencyMs}ms）→ ${destination}`)
     } else {
       message.error(
-        `${row.key} @ ${envId} 探活失败：${res.error || `HTTP ${res.status}`}（${res.target}）`,
+        `${row.key} @ ${envId} 探活失败：${res.error || `HTTP ${res.status}`}（${destination}）`,
       )
     }
   } catch (e: any) {

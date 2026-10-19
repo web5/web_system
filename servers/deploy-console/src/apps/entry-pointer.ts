@@ -83,21 +83,21 @@ export function hasEnvVersion(
  * 列出某环境下的产物版本（按 mtime 倒序）。
  * 兼容两种布局：一级即版本（`<version>/index.js`）与命名空间（`<ns>/<commit>/index.js`）。
  */
-export function listEnvVersions(staticRoot: string, appKey: string, envId: string): string[] {
+export function listEnvVersions(staticRoot: string, appKey: string, envId: string, entry: 'index.js' | 'index.html' = 'index.js'): string[] {
   const base = envArtifactsDir(staticRoot, appKey, envId);
   if (!fs.existsSync(base)) return [];
   const found: { ref: string; mtime: number }[] = [];
   for (const d of fs.readdirSync(base, { withFileTypes: true })) {
     if (!d.isDirectory()) continue;
     const l1 = path.join(base, d.name);
-    if (fs.existsSync(path.join(l1, 'index.js'))) {
+    if (fs.existsSync(path.join(l1, entry))) {
       found.push({ ref: d.name, mtime: fs.statSync(l1).mtimeMs });
       continue;
     }
     for (const v of fs.readdirSync(l1, { withFileTypes: true })) {
       if (!v.isDirectory()) continue;
       const l2 = path.join(l1, v.name);
-      if (fs.existsSync(path.join(l2, 'index.js'))) {
+      if (fs.existsSync(path.join(l2, entry))) {
         found.push({ ref: `${d.name}/${v.name}`, mtime: fs.statSync(l2).mtimeMs });
       }
     }

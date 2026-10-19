@@ -42,6 +42,7 @@ const WRITE_METHODS: Record<string, string[]> = {
 interface Opts {
   moduleMissing?: boolean;
   moduleType?: string;
+  isShell?: boolean;
   pipelineStatus?: string;
   /** Fact 采集项；不传 = 默认「指针匹配 + 目录非空」 */
   factItems?: Array<{
@@ -63,11 +64,12 @@ function buildHarness(opts: Opts = {}) {
     modules: {
       get: jest.fn(async () => {
         if (opts.moduleMissing) throw new Error(`模块不存在: admin`);
-        return { key: 'admin', type: opts.moduleType ?? 'micro-frontend' };
+        return { key: 'admin', type: opts.moduleType ?? 'micro-frontend', isShell: opts.isShell };
       }),
       list: jest.fn(async () => []),
     },
     registry: {
+      currentAppVersion: jest.fn(async () => 'currentVersion' in opts ? opts.currentVersion : 'aaa111'),
       currentVersion: jest.fn(async () =>
         'currentVersion' in opts ? opts.currentVersion : 'aaa111',
       ),
@@ -167,6 +169,39 @@ function assertCollectedWithoutPersist(mocks: { facts: Record<string, jest.Mock>
 }
 
 describe('ReleaseVerifyService', () => {
+  it.each([
+    ['aaa111', 'skipped', 'verified'],
+    ['bbb222', 'skipped', 'failed'],
+    ['aaa111', 'missing', 'failed'],
+    ['aaa111', 'error', 'unknown'],
+  ])('uses the Shell application pointer and actual HTML probe (%s/%s)', async (versionTag, factStatus, verdict) => {
+    const { mocks } = buildHarness({
+      moduleType: 'frontend', isShell: true, currentVersion: 'aaa111',
+      factItems: [{ kind: 'version', targetKey: 'admin', status: factStatus as FactStatus,
+        expected: 'aaa111', actual: null, detail: { pointerApplicable: factStatus !== 'skipped' } }],
+    });
+    const service = await buildService(mocks);
+    const report = await service.verify({ env: 'dev', moduleKey: 'admin', versionTag });
+    expect(report.verdict).toBe(verdict);
+    expect(report.actual.version).toBe('aaa111');
+    expect(find(report, VERIFY_CHECK_KEYS.versionDirPresent).status).toBe(factStatus === 'error' ? 'unknown' : factStatus === 'missing' ? 'fail' : 'pass');
+    assertReadOnly(mocks);
+    assertCollectedWithoutPersist(mocks, 'dev');
+  });
+
+  it('does not certify a Shell HTML entry from a JS pointer or a nonempty directory', async () => {
+    const { mocks } = buildHarness({ isShell: true, moduleType: 'frontend' });
+    const report = await (await buildService(mocks)).verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111' });
+    expect(report.verdict).toBe('unknown');
+    expect(find(report, VERIFY_CHECK_KEYS.versionDirPresent).status).toBe('unknown');
+  });
+
+  it('reports an inconclusive Shell pointer when it changes during collection', async () => {
+    const { mocks } = buildHarness({ isShell: true, moduleType: 'frontend', currentVersion: 'bbb222' });
+    const report = await (await buildService(mocks)).verify({ env: 'dev', moduleKey: 'admin', versionTag: 'bbb222' });
+    expect(find(report, VERIFY_CHECK_KEYS.pointerMatches).status).toBe('unknown');
+    expect(report.verdict).toBe('unknown');
+  });
   it('全部一致 → verified（前端模块：进程/端口不适用）', async () => {
     const { mocks } = buildHarness({ moduleType: 'micro-frontend' });
     const svc = await buildService(mocks);

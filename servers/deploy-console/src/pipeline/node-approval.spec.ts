@@ -219,7 +219,7 @@ async function setup(
       { provide: SHELL_RUNNER, useValue: runner },
       { provide: ArtifactStoreService, useValue: {} },
       { provide: ReleaseRegistryService, useValue: {} },
-      { provide: ReleaseGitService, useValue: {} },
+      { provide: ReleaseGitService, useValue: { assertWorkspaceSafe: jest.fn() } },
       { provide: PIPELINE_BUILTIN_STEPS, useValue: {} },
       // SSH 目标机（远端投递变量的真相源）：默认「未登记」，由 setup 的 sshResolve 覆盖
       { provide: SshExecService, useValue: { resolve: async () => sshResolve() } },

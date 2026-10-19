@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as releasePaths from '../pipeline/release-paths';
+import { envArtifactsDir } from '../apps/entry-pointer';
 
 /** 每个命名空间保留的历史版本目录数量（用户约定 N=5） */
 export const KEEP_VERSIONS = 5;
@@ -79,8 +80,15 @@ export class ArtifactStoreService {
   }
 
   /** 产物是否已在磁盘（index.js 存在；version 可含 `/`） */
-  exists(moduleKey: string, version: string): boolean {
-    return fs.existsSync(releasePaths.moduleArtifactEntry(this.workspace(), moduleKey, version));
+  exists(
+    moduleKey: string,
+    version: string,
+    environment?: { env: string; staticRoot: string; entry?: 'index.js' | 'index.html' },
+  ): boolean {
+    const entry = environment
+      ? path.join(envArtifactsDir(environment.staticRoot, moduleKey, environment.env), version, environment.entry ?? 'index.js')
+      : releasePaths.moduleArtifactEntry(this.workspace(), moduleKey, version);
+    return fs.existsSync(entry);
   }
 
   /**

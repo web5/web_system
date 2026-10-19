@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -21,6 +22,8 @@ import { DeployHostEntity } from '../entities/deploy-host.entity';
 import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { DeployEnvServiceRouteEntity } from '../entities/deploy-env-service-route.entity';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
+import { SshExecService } from '../remote/ssh-exec.service';
+import { managedHealthCommand, HttpHealthResult } from './managed-health-probe';
 import {
   CreateServiceDto,
   ENDPOINT_AUTH_MODES,
@@ -82,6 +85,7 @@ export class ServicesService implements OnModuleInit {
     private readonly configService: ConfigService,
     // 配置镜像双写（M4，design §5 #6）：把本地写的配置行 upsert 到云数据库（prod gateway 的读取源）
     private readonly mirror: EnvSplitWriterService,
+    @Optional() private readonly ssh?: SshExecService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -684,8 +688,8 @@ export class ServicesService implements OnModuleInit {
   private async resolveUpstream(serviceKey: string, envId: string) {
     const svc = await this.getService(serviceKey);
     const row = await this.serviceEnvRepo.findOne({ where: { serviceKey, envId } });
-    if (row?.upstreamUrl) return { url: row.upstreamUrl, row, svc };
-    if (!row?.hostName) return { url: null, row, svc };
+    if (row?.upstreamUrl) return { url: row.upstreamUrl, row, svc, host: null };
+    if (!row?.hostName) return { url: null, row, svc, host: null };
 
     const host = await this.hostRepo.findOne({ where: { name: row.hostName } });
     if (!host) {
@@ -701,7 +705,7 @@ export class ServicesService implements OnModuleInit {
         `服务 ${serviceKey} 在环境 ${envId} 未配置端口，无法解析上游地址（端口不继承服务默认值，请到「环境详情 → 后端服务指向」补齐）`,
       );
     }
-    return { url: `http://${host.host}:${row.port}`, row, svc };
+    return { url: `http://${host.host}:${row.port}`, row, svc, host };
   }
 
   /**
@@ -709,23 +713,61 @@ export class ServicesService implements OnModuleInit {
    * 未配置主机 → **明确报错**，不回落本机（B4）。
    */
   async probeHealth(serviceKey: string, envId: string) {
-    const { url, svc, row } = await this.resolveUpstream(serviceKey, envId);
+    const { url, svc, row, host } = await this.resolveUpstream(serviceKey, envId);
     if (!url) {
       throw new BadRequestException(
         `服务 ${serviceKey} 在环境 ${envId} 未配置目标主机，无法探活（不允许回落到本机）`,
       );
     }
     const target = `${url.replace(/\/+$/, '')}${row?.healthPath || svc.healthPath || '/health'}`;
+    const configuredTransport = this.configService.get<string>(`SERVICE_HEALTH_TRANSPORT_${envId.toUpperCase()}`) || 'direct';
+    if (!['direct', 'ssh'].includes(configuredTransport)) {
+      throw new BadRequestException('服务探活通道必须是 direct 或 ssh');
+    }
+    const transport = configuredTransport === 'ssh' && !row?.upstreamUrl ? 'ssh' : 'direct';
+    let probeTarget = target;
+    if (transport === 'ssh') {
+      if (!host || (row?.runtime || host.runtime) !== 'pm2') {
+        throw new BadRequestException('目标机内探活需要已登记的 PM2 主机，不允许回落控制台本机');
+      }
+      const port = row?.port;
+      if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new BadRequestException('服务探活端口不合法');
+      }
+      const healthPath = row?.healthPath || svc.healthPath || '/health';
+      if (!healthPath.startsWith('/') || healthPath.startsWith('//') || /[\r\n]/.test(healthPath)) {
+        throw new BadRequestException('目标机内探活路径必须是本机绝对路径');
+      }
+      probeTarget = `http://127.0.0.1:${port}${healthPath}`;
+    }
     const started = Date.now();
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 3000);
-      const res = await fetch(target, { signal: ctrl.signal });
-      clearTimeout(timer);
+      let result: HttpHealthResult;
+      if (transport === 'ssh') {
+        if (!this.ssh) throw new Error('SSH 探活服务不可用');
+        const connection = this.ssh.configForHost(host!);
+        const output = await this.ssh.execOn(connection, managedHealthCommand(probeTarget), `health:${envId}/${serviceKey}`, 10000);
+        result = JSON.parse(output);
+        if (!Number.isInteger(result?.status) || (result.status !== 0 && (result.status < 100 || result.status > 599)) || typeof result.ok !== 'boolean' || result.ok !== (result.status >= 200 && result.status < 300)) {
+          throw new Error('目标机探活结果无效');
+        }
+        result = { ok: result.ok, status: result.status, ...(typeof result.error === 'string' ? { error: result.error } : {}) };
+      } else {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3000);
+        try {
+          const response = await fetch(target, { signal: controller.signal });
+          result = { ok: response.ok, status: response.status };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       return {
-        ok: res.ok,
-        status: res.status,
+        ...result,
         target,
+        probeTarget,
+        probeHost: transport === 'ssh' ? host!.host : undefined,
+        transport,
         latencyMs: Date.now() - started,
       };
     } catch (e) {
@@ -733,6 +775,9 @@ export class ServicesService implements OnModuleInit {
         ok: false,
         status: 0,
         target,
+        probeTarget,
+        probeHost: transport === 'ssh' ? host!.host : undefined,
+        transport,
         latencyMs: Date.now() - started,
         error: (e as Error).message,
       };

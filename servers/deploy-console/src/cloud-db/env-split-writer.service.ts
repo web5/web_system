@@ -62,11 +62,14 @@ export class EnvSplitWriterService {
     try {
       // 先取旧值，保证云库的 previous_version 与本地语义一致（旧 current → previous）。
       // 不做「ON DUPLICATE 里引用自身列」的写法：赋值顺序语义依赖 MySQL 版本，易踩坑。
-      const rows = await this.cloud.query<Array<{ current_version: string | null }>>(
-        'SELECT current_version FROM deploy_app_env_versions WHERE app_key = ? AND env_id = ?',
+      const rows = await this.cloud.query<Array<{ current_version: string | null; previous_version: string | null }>>(
+        'SELECT current_version, previous_version FROM deploy_app_env_versions WHERE app_key = ? AND env_id = ?',
         [input.moduleKey, input.env],
       );
-      const previous = rows?.[0]?.current_version ?? null;
+      const existing = rows?.[0];
+      const previous = existing?.current_version === input.currentVersion
+        ? existing.previous_version ?? null
+        : existing?.current_version ?? null;
 
       await this.cloud.query(
         `INSERT INTO deploy_app_env_versions

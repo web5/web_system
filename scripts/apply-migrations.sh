@@ -70,6 +70,9 @@ case "$TARGET" in
 esac
 
 # 远端目标必须显式配置（脚本内不再内置任何真实服务器地址）
+source "$SCRIPT_DIR/scripts/lib/runtime-root.sh"
+if [ "$TARGET" != "local" ]; then REMOTE_DIR="$(ws_runtime_root "$REMOTE_DIR")" || exit 1; fi
+
 case "$TARGET" in
   dev)  [ -n "$SSH_TARGET" ] || err "未在 scripts/.env.deploy 配置 DEV_SERVER（参考 .env.deploy.example）" ;;
   prod) [ -n "$SSH_TARGET" ] || err "未在 scripts/.env.deploy 配置 PROD_SERVER（参考 .env.deploy.example）" ;;

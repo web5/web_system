@@ -100,6 +100,7 @@ describe('DeployService 产物守卫', () => {
           provide: ReleaseRegistryService,
           useValue: {
             setPointer: jest.fn(),
+            withReleaseLock: jest.fn(async (_input: unknown, work: () => Promise<unknown>) => work()),
             syncAppEnvPointer: jest.fn(),
             // 诊断 #17：回滚目标统一走 registry
             resolveRollbackTarget: jest.fn(async (i: { to?: string }) => ({

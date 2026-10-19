@@ -104,7 +104,7 @@ export class ReleasePlanService {
         this.checkModuleRegistered(moduleKey),
       ),
       await this.safeCheck(INVARIANT_KEYS.targetArtifact, () =>
-        this.checkTargetArtifact(moduleKey, targetVersion, target),
+        this.checkTargetArtifact(moduleKey, targetVersion, target, impact.moduleType),
       ),
       await this.safeCheck(INVARIANT_KEYS.releaseLock, () => this.checkReleaseLock(moduleKey, env)),
       await this.safeCheck(INVARIANT_KEYS.noRunningPipeline, () =>
@@ -176,14 +176,18 @@ export class ReleasePlanService {
     mode: ReleasePlanMode,
     target: StaticTarget,
   ): Promise<ReleaseImpact> {
-    const currentVersion =
-      (await this.safeNullable(() => this.registry.currentVersion(env, moduleKey))) ?? null;
     let moduleType: string | null = null;
+    let isShell = false;
     try {
-      moduleType = (await this.modules.get(moduleKey))?.type ?? null;
+      const mod = await this.modules.get(moduleKey);
+      moduleType = mod?.type ?? null;
+      isShell = mod?.isShell === true;
     } catch {
       // 模块不存在由「模块已登记」那条不变量表达，这里不影响影响面的其它字段
     }
+    const currentVersion = (await this.safeNullable(() => isShell
+      ? this.registry.currentAppVersion(env, moduleKey)
+      : this.registry.currentVersion(env, moduleKey))) ?? null;
 
     return {
       currentVersion,
@@ -228,6 +232,7 @@ export class ReleasePlanService {
     moduleKey: string,
     targetVersion: string | null,
     target: StaticTarget,
+    moduleType: string | null,
   ): Promise<InvariantResult> {
     const base = { key: INVARIANT_KEYS.targetArtifact };
 
@@ -243,6 +248,16 @@ export class ReleasePlanService {
       });
     }
 
+    if (moduleType === 'backend') {
+      return invariant({
+        ...base,
+        status: 'unknown',
+        blocking: false,
+        detail: '后端产物位于目标服务的版本目录，不以静态 index.js 判断；本 dry-run 不连接目标机，须由投递后的运行产物校验及真实探活补证',
+        evidence: { reason: 'backend-runtime-artifact', moduleKey, version: targetVersion },
+      });
+    }
+
     if (target.sshTarget) {
       return invariant({
         ...base,
@@ -255,15 +270,32 @@ export class ReleasePlanService {
       });
     }
 
-    const exists = await this.artifacts.exists(moduleKey, targetVersion);
+    const htmlSite = moduleType === 'frontend' && (await this.modules.get(moduleKey)).isShell === true;
+    const environment = htmlSite
+      ? { env: target.env, staticRoot: target.root, entry: 'index.html' as const }
+      : moduleType === 'micro-frontend'
+      ? { env: target.env, staticRoot: target.root }
+      : undefined;
+    const exists = environment
+      ? await this.artifacts.exists(moduleKey, targetVersion, environment)
+      : await this.artifacts.exists(moduleKey, targetVersion);
+    const artifactRef = environment
+      ? `${moduleKey}/${environment.env}/${targetVersion}`
+      : `${moduleKey}/${targetVersion}`;
     return invariant({
       ...base,
       status: exists ? 'pass' : 'fail',
       blocking: true,
       detail: exists
-        ? `本机产物目录中已存在 ${moduleKey}/${targetVersion} 入口`
-        : `本机产物目录中不存在 ${moduleKey}/${targetVersion} 的 index.js —— 直接发布会在切指针阶段失败`,
-      evidence: { moduleKey, version: targetVersion, root: target.root },
+        ? `本机产物目录中已存在 ${artifactRef} 入口`
+        : `本机产物目录中不存在 ${artifactRef} 的 ${htmlSite ? 'index.html' : 'index.js'} —— 直接发布会在切指针阶段失败`,
+      evidence: {
+        moduleKey,
+        version: targetVersion,
+        root: target.root,
+        env: target.env,
+        layout: htmlSite ? 'site-version' : environment ? 'env-dir' : 'legacy',
+      },
     });
   }
 
@@ -408,7 +440,10 @@ export class ReleasePlanService {
    */
   private async checkRollbackPoint(moduleKey: string, env: string): Promise<InvariantResult> {
     const base = { key: INVARIANT_KEYS.rollbackPoint };
-    const current = (await this.registry.currentVersion(env, moduleKey)) ?? null;
+    const mod = await this.modules.get(moduleKey);
+    const current = (mod.isShell === true
+      ? await this.registry.currentAppVersion(env, moduleKey)
+      : await this.registry.currentVersion(env, moduleKey)) ?? null;
 
     let rollback: { from: string | null; to: string; source: string } | null = null;
     let reason = '';
