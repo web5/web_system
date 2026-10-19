@@ -31,9 +31,9 @@ node normalize-runtime-root.cjs --plan \
 
 ## 实际生产盘点
 
-2026-10-19 的只读计划识别到 10 个仍在线的进程引用旧树，模式为 `promote-legacy-tree`。当前 `/data/web_system` 中已有另一棵旧代码树，不能直接覆盖，也不能把“改了配置路径”当成运行进程已切换。
+2026-10-19 维护前的只读计划识别到 10 个在线进程引用旧树，模式为 `promote-legacy-tree`。当时 `/data/web_system` 中已有另一棵旧代码树，不能直接覆盖，也不能把“改了配置路径”当成运行进程已切换。
 
-本轮没有执行生产 apply、停止进程、重启、搬目录或改生产数据库。物理切换必须先明确维护窗口，现网在线时脚本拒绝 apply；这不是可热迁移或零停机承诺。
+用户随后明确授权立即进入维护窗口，已完成离线 apply 和服务复验，结果见本文末尾。脚本仍拒绝在线 apply；本次有停服和重启，不是热迁移或零停机承诺。
 
 ## 窗口内执行顺序
 
@@ -74,3 +74,15 @@ node normalize-runtime-root.cjs \
 - 隔离运行包保留更严格的单服务 cwd 要求，不为兼容生产旧 cwd 放宽。
 - 部署、回滚和 SQL 迁移历史脚本使用 `scripts/lib/runtime-root.sh` 校验服务器根目录名；local SQL 模式不受服务器根校验影响。`deploy.sh` 仍是弃用入口，本次不把它恢复为新发布通道。
 - Git 交付使用 `feature/manual-review/` 分支和草稿 PR。auto-pr 对该分支前缀不自动创建/启用合入，质量检查继续运行；不把代码评审授权等同生产切换授权。
+
+## 2026-10-19 维护窗口执行结果
+
+- 获取 10 个后端及 Admin/Portal/Shell 共 13 个生产维护锁，确认无运行中发布、部署任务，远端清理及保留策略未开启写入；私有备份 PM2 完整定义、原 dump、数据库路径变量及模板 revision。完成后仅释放本次 owner 的锁，复查无遗留任务或锁。
+- 停止 10 个进程并保留 PM2 记录，执行目录工具；原闲置树保存在 `/data/web_system_backups/runtime-root-6dNcfM/web_system.before`，原活动树成为 `/data/web_system`，保留 `/data/web_system_git -> /data/web_system`。
+- 全部 PM2 实际入口已改为 canonical 前缀，cwd 只替换根前缀，保留仓库根 cwd 与服务 cwd 的既有语义。环境键值除明确的根前缀替换外保持一致，全部仍为 production；启动参数和实例定义未重建，完成 `pm2 save`。
+- 10 个进程均 online；实际监听端口 6000–6008、6010 的 `/health` 全部 200。最终复查 PID 与逐项启动验证一致。1,125 个受控文件摘要及活动树 inode 与迁移前一致，Git HEAD 仍为 `4b5872d76841ac0c8118a482ac23aa82e2ab1247`；未升级业务代码、安装依赖或执行数据库迁移。
+- 静态根保持 `/data/web_system_static/public`；通过 Gateway 的本机 6000 端口核对 Admin 当前、Portal 当前/上一、Shell 当前共 4 个入口，HTTP 200 且 SHA-256 与磁盘文件一致。本机 80 端口不监听，不作为验收入口；本次未验证公网可达性。
+- 仅将 10 个现运行后端模板的 `PROD_PATH` 改为 canonical 路径，事务校验维护锁及原值；保留私有前后快照。主机记录、流水线 revision/动作脚本、应用和部署版本指针均未改动，原生产审批仍 pending。
+- 工具原始回执保留离线阶段状态，服务级最终验收另存 `/root/web-system-maintenance-20261019/acceptance.json`，不会把目录工具本身的成功等同业务验活。原 PM2 定义与回退工具也在该私有目录；回退须重新获取维护锁，并恢复本次改过的 10 条 `PROD_PATH`，不能仅回退文件路径。
+
+兼容链接暂不移除：历史模板脚本仍有旧根引用，未运行的 deploy-console/mini-contract 路径变量也没有纳入本次 10 个后端的精确更新。mini-contract 涉及独立静态根，不能按后端路径规则盲改。生产旧后端模板迁移、严格服务 cwd、完整产物引用和真实回滚演练仍是后续发布门禁；本次目录维护不代表这些门禁已完成。
