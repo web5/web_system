@@ -24,11 +24,36 @@ import { Logger } from '../lib/logger';
 
 export type IntentVia = 'explicit' | 'locked' | 'rule' | 'llm' | 'fallback';
 
+/**
+ * 降级原因：为什么没能正常判出结果。
+ *
+ * 为什么要有它：`via=fallback` 只说明「兜底了」，不说明「为什么」。
+ * 2026-10-08 那次是靠别的模块偶然告警才查出根因（思考预算吃光 → 空内容）。
+ * 有了原因，监控就能按原因分桶，一眼区分「模型不稳」「输出格式漂了」「超时/不可用」。
+ *
+ * - llm_empty：分类调用返回空内容（多为思考 token 占满输出预算）
+ * - llm_unparseable：有内容，但解析不出合法 agentId（常见：幻觉 id、不在候选白名单）
+ * - llm_error：调用抛错 / 超时 / 模型不可用
+ * - not_candidate：最终 agentId 不在候选集（由编排层 IntentService 设置）
+ * - disabled：灰度开关关闭，未经分类直接兜底（由编排层设置；不应计入「真兜底」）
+ */
+export type IntentDegradeReason =
+  | 'llm_empty'
+  | 'llm_unparseable'
+  | 'llm_error'
+  | 'not_candidate'
+  | 'disabled';
+
 export interface IntentResult {
   agentId: string;
   /** 0~1 */
   confidence: number;
   via: IntentVia;
+  /**
+   * 仅当「本该走 L3 却降级了」时才有。注意 via 可能是 fallback，
+   * 也可能是 locked（会话已锁定时，分类失败不漂到兜底，沿用锁定）。
+   */
+  degradeReason?: IntentDegradeReason;
 }
 
 /** 单个 agent 的路由线索（来自 agent 定义：后台可编辑，改完随轮询生效） */
@@ -201,6 +226,9 @@ export class IntentClassifier {
       }
     }
 
+    // 记录 L3 降级原因，L4 收尾时带出去（见 IntentDegradeReason）
+    let degradeReason: IntentDegradeReason | undefined;
+
     // L3 LLM（超时 / 失败 → L4，绝不阻塞主对话）
     // ⚠️ 两个参数是硬要求，改前先读 CLASSIFY_MAX_TOKENS 的注释：
     //    maxTokens 给足 + 显式关思考，否则思考 token 会吃光输出预算 → 必然兜底。
@@ -228,16 +256,19 @@ export class IntentClassifier {
       // 解析失败必须留痕：否则线上只能看到 via=fallback，永远定位不到原因
       // （2026-10-08 就是靠别的模块的偶然告警才查出根因的）
       if (!raw || !raw.trim()) {
+        degradeReason = 'llm_empty';
         this.logger.warn(
           `意图分类返回空内容（多为思考 token 占满输出预算）→ 兜底 ${this.fallbackAgentId}；` +
             `model=${this.client.modelId} maxTokens=${CLASSIFY_MAX_TOKENS}`,
         );
       } else {
+        degradeReason = 'llm_unparseable';
         this.logger.warn(
           `意图分类输出不可解析（agentId 不在白名单内？）→ 兜底 ${this.fallbackAgentId}: ${raw.slice(0, 120)}`,
         );
       }
     } catch (e) {
+      degradeReason = 'llm_error';
       this.logger.warn(
         `意图分类调用失败（超时 / 网络 / 模型不可用）→ 兜底 ${this.fallbackAgentId}: ${(e as Error)?.message}`,
       );
@@ -245,9 +276,9 @@ export class IntentClassifier {
     // L4 兜底。⚠️ 会话锁定时不能漂到兜底 agent（那等于把「分类临时不可用」
     // 升级成「强制切换话题」），保持锁定与旧语义一致：下一轮再重新分类。
     if (o.lockedAgentId && candidates.includes(o.lockedAgentId)) {
-      return { agentId: o.lockedAgentId, confidence: 1, via: 'locked' };
+      return { agentId: o.lockedAgentId, confidence: 1, via: 'locked', ...(degradeReason && { degradeReason }) };
     }
-    return { agentId: this.fallbackAgentId, confidence: 0.3, via: 'fallback' };
+    return { agentId: this.fallbackAgentId, confidence: 0.3, via: 'fallback', ...(degradeReason && { degradeReason }) };
   }
 
   /** 解析容错三道防线：去围栏 → 正则抠 JSON → 校验 agentId 在白名单内 */

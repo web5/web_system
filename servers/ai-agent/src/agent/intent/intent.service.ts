@@ -17,9 +17,11 @@ import {
   ClientRegistry,
   IntentClassifier,
   IntentResult,
+  type IntentDegradeReason,
   type IntentRoutingHint,
 } from '@kedouai/agent-core';
 import { AgentConversation } from '../memory/agent-conversation.entity';
+import { IntentStats } from './intent-stats';
 
 export interface ResolvedIntent extends IntentResult {
   /** 是否从上一任 agent 切换过来（供前端提示 / 埋点） */
@@ -34,6 +36,8 @@ export class IntentService {
   private readonly modelId: string;
   private readonly timeoutMs: number;
   private readonly fallbackAgentId: string;
+  /** 兜底比例统计（进程内滑动窗口，口径见 intent-stats.ts 头注释） */
+  private readonly stats: IntentStats;
 
   constructor(
     @InjectRepository(AgentConversation)
@@ -48,6 +52,9 @@ export class IntentService {
     this.modelId = this.config.get<string>('INTENT_MODEL', 'deepseek-v4-flash');
     this.timeoutMs = Number(this.config.get<string>('INTENT_TIMEOUT_MS', '3000')) || 3000;
     this.fallbackAgentId = this.config.get<string>('INTENT_FALLBACK_AGENT_ID', 'general');
+    // 兜底比例告警线：窗口内 fallback 占比达到该值时打 warn（默认 50%，样本 ≥30 才判）
+    const warnRatio = Number(this.config.get<string>('INTENT_FALLBACK_WARN_RATIO', '0.5'));
+    this.stats = new IntentStats({ warnRatio: warnRatio > 0 && warnRatio <= 1 ? warnRatio : 0.5 });
 
     // 启动即打印灰度真实状态（2026-10-15 加）
     //
@@ -103,7 +110,8 @@ export class IntentService {
 
     // 2) 开关关闭 → 不分类，直接用兜底（与改动前行为一致：无分类延迟、无误判风险）
     if (!this.enabled) {
-      return { agentId: fallback, confidence: 1, via: 'fallback', switched: false };
+      // 带上 disabled 原因，便于上游区分「开关关闭」与「真兜底」；不计入兜底比例统计。
+      return { agentId: fallback, confidence: 1, via: 'fallback', switched: false, degradeReason: 'disabled' };
     }
 
     // 3) 读会话锁定（DB 异常时按「未锁定」处理，绝不阻塞对话）
@@ -141,16 +149,22 @@ export class IntentService {
     const switched = !!locked && finalAgentId !== locked;
 
     if (!candidates.includes(finalAgentId)) {
+      // 此路径过去既不写判定流水、也无任何痕迹 —— 是「兜底」却统计不到（2026-10-19 补）。
+      // 只追加流水，**不能**走 lock()：lock 会把会话的 agentId 改写成兜底 agent，改变既有行为。
+      this.observe('fallback', 'not_candidate');
+      await this.appendHistory(params.conversationId, locked ?? fallback, 'fallback', 'not_candidate');
       return {
         agentId: locked ?? fallback,
         confidence: 0.3,
         via: 'fallback',
         switched: false,
         previousAgentId: locked,
+        degradeReason: 'not_candidate',
       };
     }
 
-    await this.lock(params.conversationId, finalAgentId, r.via);
+    this.observe(r.via, r.degradeReason);
+    await this.lock(params.conversationId, finalAgentId, r.via, r.degradeReason);
     return { ...r, agentId: finalAgentId, switched, previousAgentId: locked };
   }
 
@@ -169,22 +183,68 @@ export class IntentService {
     }));
   }
 
+  /**
+   * 记入兜底比例统计；达到告警线时打 warn（同一时间窗内只打一次，防刷屏）。
+   * 注意这是**进程内**窗口：重启清零、多实例各算各的 —— 它负责「发现异常」，不替代监控平台。
+   */
+  private observe(via: IntentResult['via'], reason?: IntentDegradeReason): void {
+    this.stats.record(via, reason);
+    if (this.stats.shouldWarn()) {
+      const s = this.stats.snapshot();
+      this.logger.warn(
+        `意图路由兜底比例偏高：${(s.fallbackRatio * 100).toFixed(0)}%（最近 ${s.total} 次）` +
+          ` via=${JSON.stringify(s.byVia)} 降级原因=${JSON.stringify(s.byReason)}` +
+          ` —— 先查事实源（agent 注册表是否发布、关键词/候选是否漂移），再查分类模型。`,
+      );
+    }
+  }
+
   /** 写回会话锁定 + 追加判定流水（首轮无 conversationId 时跳过） */
-  private async lock(conversationId: string | undefined, agentId: string, via: string): Promise<void> {
+  private async lock(
+    conversationId: string | undefined,
+    agentId: string,
+    via: string,
+    reason?: IntentDegradeReason,
+  ): Promise<void> {
     if (!conversationId) return;
     try {
       await this.convRepo.update(conversationId, { agentId });
-      await this.convRepo.query(
-        `UPDATE agent_conversations
-            SET intent_history = JSON_ARRAY_APPEND(
-                  COALESCE(intent_history, JSON_ARRAY()), '$',
-                  CAST(JSON_OBJECT('agentId', ?, 'via', ?, 'ts', NOW()) AS JSON))
-          WHERE id = ?`,
-        [agentId, via, conversationId],
-      );
     } catch (e) {
       // 落库失败不影响本轮对话（最多是下一轮重新分类）
       this.logger.warn(`意图锁定写回失败（不阻塞对话）: ${(e as Error)?.message}`);
+      return;
+    }
+    await this.appendHistory(conversationId, agentId, via, reason);
+  }
+
+  /**
+   * 只追加判定流水，不改会话的 agentId。
+   * 只有出现降级时才写 reason 字段，正常记录的 JSON 形状与之前完全一致（向后兼容）。
+   */
+  private async appendHistory(
+    conversationId: string | undefined,
+    agentId: string,
+    via: string,
+    reason?: IntentDegradeReason,
+  ): Promise<void> {
+    if (!conversationId) return;
+    try {
+      const entry = reason
+        ? "JSON_OBJECT('agentId', ?, 'via', ?, 'reason', ?, 'ts', NOW())"
+        : "JSON_OBJECT('agentId', ?, 'via', ?, 'ts', NOW())";
+      const params = reason ? [agentId, via, reason, conversationId] : [agentId, via, conversationId];
+      await this.convRepo.query(
+        `UPDATE agent_conversations
+            SET intent_history = JSON_ARRAY_APPEND(
+                  COALESCE(intent_history, JSON_ARRAY()), '
+}
+,
+                  CAST(${entry} AS JSON))
+          WHERE id = ?`,
+        params,
+      );
+    } catch (e) {
+      this.logger.warn(`意图判定流水写入失败（不阻塞对话）: ${(e as Error)?.message}`);
     }
   }
 }

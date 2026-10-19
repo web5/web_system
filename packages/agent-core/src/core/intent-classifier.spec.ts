@@ -272,3 +272,64 @@ describe('IntentClassifier · routingHints 驱动', () => {
     expect(r.via).toBe('locked');
   });
 });
+
+/**
+ * 降级原因（degradeReason）：via=fallback 只说明「兜底了」，不说明「为什么」。
+ * 监控要按原因分桶（模型不稳 / 格式漂移 / 超时不可用），所以每条 L3 降级路径都必须带原因。
+ */
+describe('IntentClassifier · degradeReason', () => {
+  const run = (reply: string | (() => Promise<string>), locked?: string, timeoutMs = 500) =>
+    new IntentClassifier(fakeClient(reply), timeoutMs, 'general').classify('随便说点什么', {
+      candidates: CANDIDATES,
+      lockedAgentId: locked,
+    });
+
+  it('空内容 → llm_empty（2026-10-08 思考预算吃光的形态）', async () => {
+    const r = await run('');
+    expect(r.via).toBe('fallback');
+    expect(r.degradeReason).toBe('llm_empty');
+  });
+
+  it('有内容但解析不出 → llm_unparseable', async () => {
+    const r = await run('我觉得应该是闲聊吧');
+    expect(r.via).toBe('fallback');
+    expect(r.degradeReason).toBe('llm_unparseable');
+  });
+
+  it('幻觉 agentId（不在候选白名单）→ llm_unparseable', async () => {
+    const r = await run('{"agentId":"ghost","confidence":0.9}');
+    expect(r.degradeReason).toBe('llm_unparseable');
+  });
+
+  it('模型抛错 → llm_error', async () => {
+    const r = await run(() => Promise.reject(new Error('model down')));
+    expect(r.degradeReason).toBe('llm_error');
+  });
+
+  it('超时 → llm_error', async () => {
+    const r = await run(() => new Promise((res) => setTimeout(() => res('{"agentId":"baike"}'), 300)), undefined, 50);
+    expect(r.via).toBe('fallback');
+    expect(r.degradeReason).toBe('llm_error');
+  });
+
+  it('会话已锁定 + 分类失败 → via 仍是 locked，但带上降级原因（不被「沿用锁定」掩盖）', async () => {
+    const r = await run(() => Promise.reject(new Error('model down')), 'translate');
+    expect(r.via).toBe('locked');
+    expect(r.agentId).toBe('translate');
+    expect(r.degradeReason).toBe('llm_error');
+  });
+
+  it('正常判出 → 不带 degradeReason（字段必须是「有问题才有」）', async () => {
+    const r = await run('{"agentId":"baike","confidence":0.9}');
+    expect(r.via).toBe('llm');
+    expect(r).not.toHaveProperty('degradeReason');
+  });
+
+  it('规则命中 → 不带 degradeReason', async () => {
+    const r = await new IntentClassifier(fakeClient(''), 500, 'general').classify('帮我把这段翻成英文', {
+      candidates: CANDIDATES,
+    });
+    expect(r.via).toBe('rule');
+    expect(r).not.toHaveProperty('degradeReason');
+  });
+});

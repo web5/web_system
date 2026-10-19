@@ -44,6 +44,7 @@ export type { AgentErrorCode } from './core/agent-errors';
 export type {
   IntentResult,
   IntentVia,
+  IntentDegradeReason,
   ClassifyOptions,
   IntentRoutingHint,
 } from './core/intent-classifier';
