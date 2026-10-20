@@ -91,9 +91,52 @@ describe('McpController.submitPipeline（入参转发）', () => {
   });
 
   it('prod 传了 confirm=true 才放行', async () => {
-    await call({ env: 'prod', moduleKey: 'admin', confirm: true, commitId: 'abc1234' });
+    await call({
+      env: 'prod',
+      moduleKey: 'admin',
+      confirm: true,
+      branch: 'master',
+      commitId: 'abc1234',
+    });
     expect(submit).toHaveBeenCalledTimes(1);
     // 放行时同样要把 commit 传下去：prod 是最不能发错版本的场景
     expect(submit.mock.calls[0][0].commitId).toBe('abc1234');
+  });
+
+  // ── 版本定位硬校验：转发对了还不够，漏传必须报错 ──
+  // 只做转发时，调用方漏传 branch/commitId 会静默发到默认分支最新提交：
+  // 请求 200、零失败信号，事故上线后才发现（2026-10-20 实测踩到）。
+
+  it('缺 branch 直接拒绝（不进入服务层）', async () => {
+    await expect(call({ env: 'dev', moduleKey: 'admin', commitId: 'abc1234' })).rejects.toThrow(
+      /branch 与 commitId 必须显式传入/,
+    );
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('缺 commitId 直接拒绝（不进入服务层）', async () => {
+    await expect(call({ env: 'dev', moduleKey: 'admin', branch: 'master' })).rejects.toThrow(
+      /branch 与 commitId 必须显式传入/,
+    );
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('两个都缺（只给 env + moduleKey）同样拒绝', async () => {
+    await expect(call({ env: 'dev', moduleKey: 'admin' })).rejects.toThrow(
+      /branch 与 commitId 必须显式传入/,
+    );
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('空串不算显式传入', async () => {
+    await expect(
+      call({ env: 'dev', moduleKey: 'admin', branch: '  ', commitId: 'abc1234' }),
+    ).rejects.toThrow(/branch 与 commitId 必须显式传入/);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('显式传 versionTag 发布既有产物时不需要 branch / commitId', async () => {
+    await call({ env: 'dev', moduleKey: 'admin', versionTag: 'admin-dev/abc1234' });
+    expect(submit).toHaveBeenCalledTimes(1);
   });
 });
