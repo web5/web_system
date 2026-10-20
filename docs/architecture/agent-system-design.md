@@ -122,7 +122,17 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 **现状**：`agent_runs` 只在 `cost` 维度归因；结果只有 `ok/error`，无法区分"检索没召回 / 推理错 / 工具调错"。
 
-> **2026-10-20 B0 进度**：上述"现状"的落库侧已补齐——`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列 + `AgentLogService.deriveAttribution` 服务端推导（按 error 事件的 `[CODE]` 前缀映射 `fail_stage`）。分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `archive/migrations/p36-agent-runs-outcome.mjs` **待执行**、待部署。
+> **2026-10-20 B0 进度**：上述"现状"的落库侧已补齐——`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列 + `AgentLogService.deriveAttribution` 服务端推导（按 error 事件的 `[CODE]` 前缀映射 `fail_stage`）。分支 `feat/agent-runs-outcome`，PR #368 draft。
+>
+> **迁移 p36 执行状态**（`archive/migrations/p36-agent-runs-outcome.mjs`，幂等可重跑）：
+>
+> | 环境 | 状态 | 备注 |
+> |---|---|---|
+> | 本地 dev 库（`127.0.0.1` / `web_system`） | ✅ 已执行 | 244 行存量 `outcome` 全部保持 NULL = 未判定，未回填 |
+> | dev 服务器库 | ❌ 待执行 | — |
+> | prod 服务器库 | ❌ 待执行 | 需独立维护窗口 |
+>
+> 代码侧仍未部署（PR draft 未合入），故线上此刻还不会产生任何 `outcome` 值。
 > ⚠️ **口径**：`outcome='success'` 仅代表"链路跑通、未触发错误码、未超步数"，**不代表答案正确**——B0 只产出 `graded_by='rule'`，不读 `finalAnswer` 语义。业务准确率需下方第 3 条的 golden 集 + LLM-as-judge（B4）。
 > ⚠️ 历史行 **不回填**，`outcome` 保持 NULL = 未判定，统计时须与 `fail` 区分。
 

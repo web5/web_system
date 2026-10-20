@@ -31,8 +31,12 @@
  *
  * 用法：
  *   # 直连（推荐，走 information_schema 守卫）
- *   DB_HOST=127.0.0.1 DB_NAME=web_system DB_USER=root DB_PASSWORD=... \
+ *   DB_HOST=127.0.0.1 DB_DATABASE=web_system DB_USERNAME=root DB_PASSWORD=... \
  *     node archive/migrations/p36-agent-runs-outcome.mjs
+ *
+ *   # 不传参数时退回 servers/ai-service/.env（agent_runs 的属主服务配置）
+ *   # 兼容两套键名：DB_USERNAME/DB_DATABASE 与 DB_USER/DB_NAME
+ *   node archive/migrations/p36-agent-runs-outcome.mjs
  *
  *   # 本机连不到目标库 → 导出 SQL 后在目标库执行
  *   EMIT_SQL=1 node archive/migrations/p36-agent-runs-outcome.mjs > p36.sql
@@ -56,15 +60,26 @@ const DRY_RUN = process.env.DRY_RUN === '1';
 const EMIT_SQL = process.env.EMIT_SQL === '1';
 const OFFLINE = DRY_RUN || EMIT_SQL;
 
-/** 未显式给 env 时，退回 servers/deploy-console/.env（与 p28/p29/p34/p35 同口径） */
-function loadConsoleEnv() {
-  const p = path.join(root, 'servers/deploy-console/.env');
+/**
+ * 未显式给 env 时，退回 `servers/ai-service/.env` —— **不是 deploy-console/.env**。
+ *
+ * ⚠️ 这里和 p33/p34/p35 的写法不同，是刻意的：前序脚本退回 `deploy-console/.env`，
+ *  但那份文件用的是 `MYSQL_HOST` / `MYSQL_DB` 一套键名，而脚本读的是 `DB_HOST` / `DB_NAME`，
+ *  **回退从来没真正生效过**（读到 undefined），所以它们其实一直靠显式传参执行 —— p35 甚至
+ *  加了「必须显式传 DB_HOST 与 DB_NAME」的守卫。
+ *
+ *  本脚本改的是 ai-service 的表（`agent_runs`），属主服务就是 ai-service，
+ *  因此退回它自己的 `.env` 才是正确口径。同时兼容两套键名：
+ *  `DB_USERNAME` / `DB_DATABASE`（ai-service 实际用的）与 `DB_USER` / `DB_NAME`（前序脚本用的）。
+ */
+function loadServiceEnv() {
+  const p = path.join(root, 'servers/ai-service/.env');
   if (!fs.existsSync(p)) return {};
   return Object.fromEntries(
     fs
       .readFileSync(p, 'utf8')
       .split('\n')
-      .filter((l) => l.includes('=') && !l.startsWith('#'))
+      .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
       .map((l) => {
         const i = l.indexOf('=');
         return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
@@ -72,14 +87,30 @@ function loadConsoleEnv() {
   );
 }
 
-const consoleEnv = loadConsoleEnv();
+const serviceEnv = loadServiceEnv();
 const cfg = {
-  host: process.env.DB_HOST || consoleEnv.DB_HOST,
-  port: Number(process.env.DB_PORT || consoleEnv.DB_PORT || 3306),
-  user: process.env.DB_USER || consoleEnv.DB_USER,
-  password: process.env.DB_PASSWORD || consoleEnv.DB_PASSWORD,
-  database: process.env.DB_NAME || consoleEnv.DB_NAME,
+  host: process.env.DB_HOST || serviceEnv.DB_HOST,
+  port: Number(process.env.DB_PORT || serviceEnv.DB_PORT || 3306),
+  user: process.env.DB_USER || process.env.DB_USERNAME || serviceEnv.DB_USERNAME || serviceEnv.DB_USER,
+  password: process.env.DB_PASSWORD ?? serviceEnv.DB_PASSWORD,
+  database: process.env.DB_NAME || process.env.DB_DATABASE || serviceEnv.DB_DATABASE || serviceEnv.DB_NAME,
 };
+
+/**
+ * 直连前的强制守卫（与 p35 同口径）：目标库必须明确，不接受「连上了但库是 undefined」。
+ * 没有这条守卫时，缺参会连上默认实例再报 No database selected —— 排查成本高，
+ * 且在多库实例上有「看着像执行成功了其实没落到目标库」的风险。
+ */
+if (!OFFLINE && (!cfg.host || !cfg.database || !cfg.user || !cfg.password)) {
+  process.stderr.write(
+    '✗ 拒绝执行：直连模式未能确定完整目标库，请显式传入连接参数\n' +
+      '  示例：DB_HOST=127.0.0.1 DB_DATABASE=web_system DB_USERNAME=root DB_PASSWORD=... \\\n' +
+      '        node archive/migrations/p36-agent-runs-outcome.mjs\n' +
+      `  当前解析：host=${cfg.host || '∅'} database=${cfg.database || '∅'} ` +
+      `user=${cfg.user || '∅'} password=${cfg.password ? '已设置' : '∅'}\n`,
+  );
+  process.exit(1);
+}
 
 const TABLE = 'agent_runs';
 
