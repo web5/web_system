@@ -103,4 +103,24 @@ describe('PipelineVarService（流水线变量）', () => {
     expect(await svc.list('tpl-1')).toHaveLength(0);
     expect(await svc.resolve('tpl-1')).toEqual({});
   });
+
+  it('普通变量允许显式清空', async () => {
+    const variable = await svc.create('tpl-1', { key: 'VALUE', value: 'before' });
+    await svc.update(variable.id, { value: '' });
+    expect(await svc.resolve('tpl-1')).toEqual({ VALUE: '' });
+  });
+
+  it.each([undefined, ''])('密钥转普通变量必须提供新值（%s）', async value => {
+    const variable = await svc.create('tpl-1', { key: 'SECRET', value: 'private-original', isSecret: true });
+    await expect(svc.update(variable.id, { key: 'PUBLIC', isSecret: false, value })).rejects.toThrow(BadRequestException);
+    expect(await svc.resolve('tpl-1')).toEqual({ SECRET: 'private-original' });
+    expect((await svc.list('tpl-1'))[0]).toMatchObject({ key: 'SECRET', isSecret: true, value: PIPELINE_VAR_MASK });
+  });
+
+  it('密钥转普通变量可以显式替换值，不公开留存密钥', async () => {
+    const variable = await svc.create('tpl-1', { key: 'VALUE', value: 'private-original', isSecret: true });
+    const updated = await svc.update(variable.id, { value: 'public-replacement', isSecret: false });
+    expect(updated).toMatchObject({ isSecret: false, value: 'public-replacement' });
+    expect(await svc.resolve('tpl-1')).toEqual({ VALUE: 'public-replacement' });
+  });
 });
