@@ -15,7 +15,7 @@
 
 web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` + `knowledge-service`）**承重层基本成型、易变层已完成配置化、可换层一半成型**，最大缺口在**质量与评测**：检索侧已有 Ragas 三指标离线评测，但 **Agent 任务层面**只有成本归因、没有**结果归因**（`agent_runs` 无 `outcome`），导致"任务完成准确率"这个一等决策在本系统里**无法被度量**。建议按 §4 的 P0 → P1 → P2 补齐。
 
-> **2026-10-20 更正（B0）**：上一段"无结果归因"的历史判断**已被部分推翻**。`agent_runs` 的 `outcome` / `fail_stage` / `graded_by` / `graded_at` 已于本日实现（分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `p36` 待执行、待部署）。
+> **2026-10-20 更正（B0）**：上一段"无结果归因"的历史判断**已被部分推翻**。`agent_runs` 的 `outcome` / `fail_stage` / `graded_by` / `graded_at` 已于本日实现，**PR #368 已合入 master**（merge commit `54dcd96d`）；迁移 `p36` 本地 dev 库已执行，**dev / prod 服务器库待执行**、待部署。
 > 但**"任务完成准确率无法被度量"这个结论依然成立**，原因变了：
 > 1. **还没上线** —— PR 未合入 + 迁移未执行，线上 `agent_runs` 查不到 `outcome`
 > 2. **即使上线也不够** —— B0 只产出 `graded_by='rule'`，判定依据仅为 `status` 与 error 事件的 `[CODE]` 前缀，**不读 `finalAnswer` 语义**。`outcome='success'` = "链路跑通、没报错、没超步数"，**不等于答案正确**
@@ -82,7 +82,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | **控制流所有权** | 代码定骨架（for 循环 + maxSteps + 错误判别），模型填叶子（调哪个工具） | ⚠️ HITL 止步于工具级 `confirmHandler`，**无编排级审批** |
 | **状态与记忆** | `memory`（compaction / keepRecent）+ 长期 profile 已落地 | ❌ **无 checkpoint**（中断不可续跑）；多步重算上下文 = 隐性成本 |
 | **安全边界** | 项目级 guard 在 | ❌ Agent 自主调用的能力授权未收敛（爆炸半径未定义） |
-| **质量与评测** ⭐ | 仅成本归因，无结果归因；检索侧另有 Ragas 离线评测 | ⚠️ 已收窄：**B0（2026-10-20）已实现** `agent_runs.outcome / fail_stage / graded_by / graded_at`（分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `p36` 待执行、待部署）。剩余缺口：**无业务线 golden eval 集**，`graded_by='auto_llm_judge'` 与 `score` 未落地（B4） |
+| **质量与评测** ⭐ | 仅成本归因，无结果归因；检索侧另有 Ragas 离线评测 | ⚠️ 已收窄：**B0（2026-10-20）已实现并合入 master** `agent_runs.outcome / fail_stage / graded_by / graded_at`（PR #368，`54dcd96d`；迁移 `p36` 本地已执行，**dev/prod 待执行**、待部署）。剩余缺口：**无业务线 golden eval 集**，`graded_by='auto_llm_judge'` 与 `score` 未落地（B4） |
 
 ### 2.2 可换层（设计为可插拔）
 
@@ -122,7 +122,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 **现状**：`agent_runs` 只在 `cost` 维度归因；结果只有 `ok/error`，无法区分"检索没召回 / 推理错 / 工具调错"。
 
-> **2026-10-20 B0 进度**：上述"现状"的落库侧已补齐——`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列 + `AgentLogService.deriveAttribution` 服务端推导（按 error 事件的 `[CODE]` 前缀映射 `fail_stage`）。分支 `feat/agent-runs-outcome`，PR #368 draft。
+> **2026-10-20 B0 进度**：上述"现状"的落库侧已补齐——`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列 + `AgentLogService.deriveAttribution` 服务端推导（按 error 事件的 `[CODE]` 前缀映射 `fail_stage`）。**PR #368 已合入 master**（`54dcd96d`）。
 >
 > **迁移 p36 执行状态**（`archive/migrations/p36-agent-runs-outcome.mjs`，幂等可重跑）：
 >
@@ -132,7 +132,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 > | dev 服务器库 | ❌ 待执行 | — |
 > | prod 服务器库 | ❌ 待执行 | 需独立维护窗口 |
 >
-> 代码侧仍未部署（PR draft 未合入），故线上此刻还不会产生任何 `outcome` 值。
+> 代码侧仍未部署，且 dev / prod 服务器库尚未执行 p36，故线上此刻还不会产生任何 `outcome` 值。
 > ⚠️ **口径**：`outcome='success'` 仅代表"链路跑通、未触发错误码、未超步数"，**不代表答案正确**——B0 只产出 `graded_by='rule'`，不读 `finalAnswer` 语义。业务准确率需下方第 3 条的 golden 集 + LLM-as-judge（B4）。
 > ⚠️ 历史行 **不回填**，`outcome` 保持 NULL = 未判定，统计时须与 `fail` 区分。
 
@@ -224,7 +224,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 | 优先级 | 项 | 解决哪个维度 | 工作量 | 落地命中动作门 |
 |---|---|---|---|---|
-| **P0** ✅ | `agent_runs` 加 `outcome/fail_stage` + 各阶段埋点 —— **B0 已实现**（PR #368 draft；剩合入 + 执行 `p36` 迁移 + 部署） | 可靠性 / 可观测 / 度量 | 1.5d | **契约门** + 迁移规范 |
+| **P0** ✅ | `agent_runs` 加 `outcome/fail_stage` + 各阶段埋点 —— **B0 已合入 master**（PR #368，`54dcd96d`）；剩 dev/prod 服务器库执行 `p36` 迁移 + 部署 | 可靠性 / 可观测 / 度量 | 1.5d | **契约门** + 迁移规范 |
 | **P1** | 调参 UI 表单（含 `?? 0.7` 修正）—— **前置：合入 C7** | 可演化 / 风险 | 1d | **UI 门** |
 | **P1** | ai-service 模型链路统一（清双 client / 双 key） | 杠杆 / 可演进 | 1d | **发布门** |
 | **P1** | thinking token 计价口径入字典 | 成本 | 0.5d | **发布门**（改字典配置） |
@@ -240,7 +240,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 ## 5. 验收标准
 
-1. **质量双归因**（B0 部分达成）：`agent_runs.outcome` 有值且 `fail_stage` 分布可按周查看；随机抽 20 条失败 run 能明确归因到 `model` / `tool` / `network` / `auth` / `upstream` / `max_steps` / `permission` / `other` 之一。⚠️ 达成前提：PR #368 合入 + `p36` 迁移执行 + 部署；且历史行 `outcome` 为 NULL 不参与统计。
+1. **质量双归因**（B0 部分达成）：`agent_runs.outcome` 有值且 `fail_stage` 分布可按周查看；随机抽 20 条失败 run 能明确归因到 `model` / `tool` / `network` / `auth` / `upstream` / `max_steps` / `permission` / `other` 之一。⚠️ 达成前提：~~PR #368 合入~~ ✅ 已完成（`54dcd96d`）+ dev/prod 服务器库 `p36` 迁移执行 + 部署；且历史行 `outcome` 为 NULL 不参与统计。
 2. **调参可止血**：某 agent 效果劣化时，管理员后台改一个参数（不发版、不重启），30s 内生效，且可用 `outcome` 前后对比验证。
 3. **加模型零发版**：字典加一个模型 id，≤60s 内 ai-agent 与 ai-service **两侧同时**可见（ai-service 需先完成对应 P1）。
 4. **成本真实**：一条开了 thinking 的 run，其 `cost` 覆盖 thinking 消耗，或文档明确并入 output 的口径。

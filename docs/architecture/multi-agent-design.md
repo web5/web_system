@@ -43,13 +43,13 @@
 
 顺序颠倒的后果：你会得到一堆无法归因的失败，且成本被放大数倍却说不清花在哪。
 
-> **2026-10-20 B0 进度**：`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列已实现于分支 `feat/agent-runs-outcome`（PR #368 draft），推导收口在 `AgentLogService.deriveAttribution`。
+> **2026-10-20 B0 进度**：`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列已实现，**PR #368 已合入 master**（merge commit `54dcd96d`），推导收口在 `AgentLogService.deriveAttribution`。
 > ⚠️ **本条依赖尚未解除**：
-> - PR #368 未合入 master（draft）
+> - ~~PR #368 未合入 master~~ ✅ 已合入（`54dcd96d`）
 > - 迁移 p36：**本地 dev 库已执行**；**dev / prod 服务器库待执行**
 > - 代码未部署
 >
-> 线上（dev/prod 服务器）`agent_runs` 仍无 `outcome` 列可查。**这几件事做完才算解锁**。
+> 线上（dev/prod 服务器）`agent_runs` 仍无 `outcome` 列可查。**剩下两件事做完才算解锁**。
 > ⚠️ 且 B0 只够"看到失败"：**归因到子 run 还需 P1 的 `parentRunId` / `depth` 落库**（见 §9）。
 
 ---
@@ -164,7 +164,7 @@ export interface ToolContext {
 
 | 批次 | 新增列 | 用途 | 归属 |
 |---|---|---|---|
-| **第一批（P0，先做）** ✅ | `outcome` | 业务结果：success / partial / fail | 质量归因（见 §8）—— B0 2026-10-20 已实现（PR #368 draft；`p36` 迁移待执行） |
+| **第一批（P0，先做）** ✅ | `outcome` | 业务结果：success / partial / fail | 质量归因（见 §8）—— B0 2026-10-20 已合入 master（PR #368 / `54dcd96d`；`p36` 本地已执行，dev/prod 待执行） |
 | | `failStage` | 失败环节标记 | 质量归因 |
 | | `parentRunId` | 子 run 指向父 run | 多 Agent 可观测 |
 | | `depth` | 嵌套深度 | 多 Agent 可观测 |
@@ -235,7 +235,7 @@ export interface ToolContext {
 
 ```
 P0  agent_runs 加 outcome / fail_stage          ← 必须先做
-    └ 2026-10-20：代码已实现（PR #368 draft）；p36 迁移本地 dev 库已执行，
+    └ 2026-10-20：代码已合入 master（PR #368 / 54dcd96d）；p36 迁移本地 dev 库已执行，
        dev/prod 服务器库待执行；代码未部署
         │
         ▼
@@ -253,7 +253,7 @@ P2  评测体系（golden 集 + LLM-as-judge）         ← 依赖 outcome 才�
 
 | 阶段 | 内容 | 工作量 | 动作门 |
 |---|---|---|---|
-| **P0** ✅ | `agent_runs` 加 `outcome` / `fail_stage` + 阶段埋点 —— **代码已实现**（PR #368 draft）；p36 本地 dev 库已执行；剩合入 master + dev/prod 迁移 + 部署 | 1.5d | **契约门** |
+| **P0** ✅ | `agent_runs` 加 `outcome` / `fail_stage` + 阶段埋点 —— **已合入 master**（PR #368 / `54dcd96d`）；p36 本地 dev 库已执行；剩 dev/prod 服务器库迁移 + 部署 | 1.5d | **契约门** |
 | **P1** | 多 Agent 内核：`capabilities` agent 类型 + 子 Agent 工具 + 四道护栏 | 1.5d | **契约门**（动 agent-core） |
 | **P1** | 可观测：`parentRunId` / `depth` 落库 + SSE 事件 | 1d | 契约门 |
 | **P2** | admin 能力选择器新增「子 Agent」类型 | 0.5d | **UI 门** |
