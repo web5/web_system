@@ -476,7 +476,8 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
     expect(r.to).toBe('mcp-gateway-local/A');
     expect(fs.readFileSync(path.join(svc(), 'dist/main.js'), 'utf-8')).toBe('// A(old)');
     expect(String(commands.exec.mock.calls[0][0])).toContain('restart web-mcp-gateway');
-    expect(deploymentRepo.upsert).toHaveBeenCalled();
+    expect(deploymentRepo.upsert).not.toHaveBeenCalled();
+    expect(Reflect.get(service, 'registry').setPointer).toHaveBeenCalledWith(expect.objectContaining({ env: 'local', moduleKey: 'mcp-gateway', currentVersion: 'mcp-gateway-local/A', deployedBy: 't2' }));
   });
 
   it('版本目录已清理：用最近的 dist.bak-* 兜底恢复', async () => {

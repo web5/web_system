@@ -184,6 +184,8 @@
 - 缺少 `component`、非法环境/版本引用返回 `400`，不创建任务；`env=prod` 仍必须 `confirm=true`。
 - 模块不存在、目标产物缺失等执行期错误落任务 `failed`；HTTP `started` 不表示回滚已成功。
 - 任务到达 `success` 才表示回滚已完成；模块回滚失败记 `failed`，不得降级为整站恢复。
+- 后端回滚在现有模块/环境锁内，先完成运行版本激活和健康检查，再经 `ReleaseRegistryService.setPointer` 更新指针及 prod legacy 云库镜像；不直接绕过注册表 upsert 本地部署表，任务 ID 和操作人一并透传。
+- prod 的真实验收仍须读回实际运行版本、健康及控制台/云库指针；现有 legacy 镜像告警策略不因本次入口收敛变成强一致事务，不能仅凭 HTTP `started` 或任务状态推定两库一致。
 - 兼容性变更（2026-10-17）：旧调用未传 `component` 现在被拒绝，调用方须升级；遗留整站恢复不再经本 MCP 入口暴露。
 
 ### 7.9 `GET /mcp/modules` — 可发布模块清单

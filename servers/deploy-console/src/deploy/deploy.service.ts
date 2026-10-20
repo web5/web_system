@@ -851,18 +851,13 @@ export class DeployService {
         versionTag: target,
         operator: input.operator,
       });
-      await this.deploymentRepo.upsert(
-        {
-          envId: input.env,
-          moduleKey: input.moduleKey,
-          currentVersion: target,
-          status: 'deployed',
-          deployedAt: new Date(),
-          deployedBy: input.operator,
-          ...(input.taskId ? { taskId: input.taskId } : {}),
-        },
-        ['envId', 'moduleKey'],
-      );
+      await this.registry.setPointer({
+        env: input.env,
+        moduleKey: input.moduleKey,
+        currentVersion: target,
+        deployedBy: input.operator,
+        taskId: input.taskId,
+      });
       this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
       return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
     });
