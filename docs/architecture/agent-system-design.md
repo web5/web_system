@@ -34,7 +34,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | 记忆：压缩配置 + 长期 profile 均已落地 | `agent-definition.entity.ts:88-94`、`agent-engine.ts:127-132` |
 | 版本快照 / draft-published / enabled / DB 优先 | `agent-definition-version.entity.ts`、`agent-definition.entity.ts:13,100-110` |
 | 成本：字典价 → `agent_runs.cost` → `run_metrics` 聚合 | `dict-pricing.provider.ts`、`run-metrics.entity.ts`（`total_cost`） |
-| **`agent_runs` 无 `outcome` / `fail_stage`** | grep `servers/` 无命中（仅 deploy-console 存在同名无关变量） |
+| **`agent_runs` 结果归因（B0，2026-10-20 已落地）** | `outcome` / `fail_stage` / `graded_by` / `graded_at` 四列已加（迁移 `archive/migrations/p36-agent-runs-outcome.mjs`）；推导收口在 `AgentLogService.deriveAttribution`——按 error 事件的 `[CODE]` 前缀（agent-core `withCode`）映射 `fail_stage`，B0 只产出 `graded_by='rule'`；**历史行不回填**，保持 NULL = 未判定 |
 | **RAG 由独立服务承载（v2 更正）** | `servers/knowledge-service`（:6011）已实现集合 / 文档 / embedding / 检索 / Ragas 离线评测；经 `knowledge.internal.controller.ts` 暴露 `knowledge/mcp/*`，由 mcp-gateway 以 MCP 工具装配进 Agent（`ai-agent/src/agent/agent-def-sync.service.spec.ts` 为装配规则的回归用例） |
 
 ### 0.6 盘点更正记录（v2，2026-10-13 同日复核）
@@ -43,6 +43,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 |---|---|---|
 | 「agent-core 无 RAG / KB 子系统，知识全压 `systemPrompt`」 | RAG 不在 `packages/agent-core` 里，而在独立服务 `knowledge-service`（6011），并通过 MCP 工具进 Agent | **RAG 已建成**（独立服务形态，比内嵌在 core 更符合"可换层"设计）；缺口在**召回质量与评测覆盖**，不是"整块缺失" |
 | 「评测体系：无」 | `rag-eval.service.ts` 实现 Ragas 三指标（context_relevance / answer_relevance / faithfulness） | **KB 问答链路有离线评测**；缺口收窄为「Agent 任务级 outcome 与业务线 golden 集」 |
+| 「`agent_runs` 无结果归因」（v2 列为最大架构债） | B0（2026-10-20）已补 `outcome` / `fail_stage`，落库侧不再缺 | 缺口收窄为「**业务线 golden 集 + 离线 LLM 评测**」——`graded_by='auto_llm_judge'` 与 `score` 尚未落地（B4） |
 
 > 教训（已进记忆）：`grep` 的作用域决定结论的作用域 —— 只在 `packages/agent-core` 里搜 RAG，得到的是"core 内没有"，而不是"系统没有"。盘点跨服务能力时必须全仓搜。
 

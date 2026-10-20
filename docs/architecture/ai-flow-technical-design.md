@@ -200,8 +200,8 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 | 这次运行花了多少 token / 多少钱 | ✅ | `agent_runs` + usage + 字典定价 |
 | 卡在哪个工具、耗时多少 | ✅ | `onToolSpan` |
 | 走了哪条意图路由、是否切换 agent | ✅ | `intent` 事件 + `intent_history` |
-| 这次答复**对不对** | ❌ | 无 `outcome`、无 golden 集 |
-| 失败是检索没召回还是推理错 | ⚠️ 仅检索侧 | 有 Ragas 指标；Agent 任务级 `fail_stage` 缺 |
+| 这次答复**对不对** | ⚠️ | B0（2026-10-20）起有 `outcome`，但**只有 `graded_by='rule'`**——能判「链路成没成」，判不了「答案对不对」；要能判得先有 golden 集（B4） |
+| 失败是检索没召回还是推理错 | ⚠️ | Agent 任务级 `fail_stage` 已落地（model / tool / network / auth / upstream / max_steps / permission / other）；检索侧仍靠 Ragas |
 | 多层委派里是**哪一层哪一步**失败的 | ❌（设计目标） | 需 `agent_runs.parentRunId + depth + fail_stage` 三者齐备（见 §3.3.1 归因） |
 
 ---
@@ -210,7 +210,7 @@ AI 流程的本体是**「一次 ReAct 循环」**：代码负责骨架（意图
 
 | 优先级 | 项 | 本方案中的落点 |
 |---|---|---|
-| **P0** | `agent_runs` 加 `outcome / fail_stage` + 阶段埋点 | §3.4 终止态与 §3.5 事件表已把「阶段」定义清楚，埋点直接挂在这三处终止 + 工具结果 |
+| **P0** ✅ **已交付（2026-10-20）** | `agent_runs` 加 `outcome / fail_stage` + 阶段埋点 | 四列 + 索引由迁移 `archive/migrations/p36-agent-runs-outcome.mjs` 提供；埋点在 `AgentLogService.deriveAttribution` 收口（服务端推导，两个调用点自动生效）。**剩余**：`score` 与 `graded_by='auto_llm_judge'` 属 B4，不在本项 |
 | P1 | **先合入 C7**（`topP / maxTokens / thinking` 进 `agent_definitions` + 引擎透传，现仅在分支 `feat/llm-tuning-multi-model`）→ **再补调参 UI**（含 `?? 0.7` 修正） | §3.2 #7；master 现状只透传 `temperature` |
 | P1 | ai-service 模型链路统一 | §4.4 三级回落，统一到同一 `ClientRegistry` |
 | P1 | thinking token 计价 | §4.5 成本口径 |
