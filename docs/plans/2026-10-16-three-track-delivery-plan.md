@@ -1,5 +1,7 @@
 # 工程三主线任务计划（2026-10-16）
 
+> **状态（2026-10-20 最终）：Console 主线本轮约定范围 CLOSED。**#363 变量编辑、#365 回滚指针修复已合入并受控部署，生产首个正式发布与获准窗口内的真实回滚/恢复均已验收；收尾测试与文档 PR #366 已合入 master，无运行逻辑变更、无需再部署。**统一交付清单见 `docs/operations/console-delivery-status-2026-10-20.md`；本页正文为阶段记录，以下 dev 测试数与部署状态保留原验收时点。**Content-hub 与 AI Agent 两条主线不因 Console 关闭而推定完成，分别见 §4 与 §5。
+>
 > 2026-10-19 交付续记：已获创建分支、提交和 PR 的授权，使用 `feature/manual-review/console-delivery-closeout` 草稿交付，不自动合并。本次新增运行根统一、离线迁移/回退和非运行树部署拒绝门禁；生产 10 个进程仍在线，物理目录未切换，维护窗口须单独确认。见 `docs/development/release-reviews/2026-10-19-console-delivery.md` 与 `docs/operations/runtime-root-normalization.md`；以下 dev 测试数与部署状态保留原验收时点。
 
 > 状态（2026-10-19 dev 探活修复更新）：本轮 Console dev P0 遗留已收口。Admin、Shell、隔离后端发布与模块级恢复、独立 Beehive 登录态检查通过；Shell HTML 入口/版本候选与 dev 手动探活均已修复部署。探活显式经登记目标机 SSH 通道，详情与列表实际返回 200，不开放公网业务端口；prod/local 仍 direct。97 suites / 1156 tests 及前后端构建通过。原 prod 审批未动，源码未提交/合入；生产推广和长期能力不在本轮完成声明内。最新证据见 [剩余项收口](2026-10-19-console-p0-closeout.md)。
