@@ -54,6 +54,12 @@ loads: references/（见文末「共享参考文档」表）
   │                                         ↓ 产出原型稿 → 过独立交互质检 → 人确认
   │                                      skills/rd-plan（回填 page-spec）→ rd-execute → rd-review
   │
+  ├─ 品牌色 / 头像 / icon / logo / 视觉走查 ──→ ⚠️ 不在本 Kit（私人资产）
+  │     真源 `~/skills/`，经 `~/.workbuddy/skills/` 软链调用
+  │     含：品牌 token 真源、生成式头像、icon 流水线、logo 统一/矢量化、
+  │         视觉设计工作流、品牌规范、前端设计判据
+  │      branding token 取值优先走私有 skill；本 Kit 不做视觉设计分派
+  │
   ├─ 评审设计 / 把关设计 / 视觉走查 / 落码后一致性 ──→ skills/design-reviewer
   │     （条件分派：项目装配了该技能才走；未装配则本分支不生效，不视为"未定义分派"）
   │                                         ↓ 出设计评审报告（阻塞/重要/建议 + 反例 + 判据编号）
@@ -75,6 +81,9 @@ loads: references/（见文末「共享参考文档」表）
   │
   ├─ 架构 / 选型 / 安全 / 信息结构 ────→ skills/tech-review（辅助审查）
   │
+  ├─ 简历转 PDF / md 转刷题卡片 ──────────→ skills/resume-pdf-pipeline
+  │                                         skills/md-flashcards
+  │
   ├─ 任何交付前收尾 ──────────────────→ `rd-execute` 完成验证门（任何任务不分级）
   │
   └─ 写作/产出任务（所有）────────────→ 加载项目自有纪律（可选，本模板不内置）
@@ -89,7 +98,7 @@ loads: references/（见文末「共享参考文档」表）
 | 流水线 | `rd-plan` | 细化为任务列表 |
 | 流水线 | `rd-execute` | 逐项实现（TDD 迭代-校验）+ 收尾完成验证门（对照同一份 V1…Vn；完成声明 = 验证证据） |
 | 流水线 | `rd-review` | 自检产物质量（实现者自查） |
-| 设计 | `ux-prototype-designer` | 需求/方案 → 可点击交互 HTML 原型稿；独立交互质检（`ux-review-checklist.md`） |
+| 设计 | `ux-prototype-designer` | 需求/方案 → 可点击交互 HTML 原型稿；独立交互质检（`ux-review-checklist.md`）；品牌 token 取 `~/skills/brand-kit`（外部） |
 | 设计评审 | `design-reviewer`（项目可选装配） | 设计侧**独立第三方评审**：盲审（先读判据后看稿、不采信生产者自辩），按项目设计基线条目评审产品设计 / 交互 / 视觉；三关口 D1 设计输入 / D2 原型规格 / D3 实现一致性。不出稿、不改码，只出报告并回流 |
 | 契约评审 | `contract-reviewer`（项目可选装配） | 跨端/跨服务**契约变更**的独立第三方评审：按项目契约登记（接口 / 事件 / 工具 / 权限码 / 路由）查**消费方影响面**，判「改一处会不会让消费方静默失效」；破坏性变更须附消费方清单。不代改、不代登记 |
 | 交付评审 | `release-reviewer`（项目可选装配） | 交付环节独立第三方评审：按项目发布判据清单评审发布 / 环境 / 数据变更，判「**测试通过 ≠ 能上线**」（改的不在被加载的目录 / 配置源被会话污染 / 端口被旧进程占用 / 迁移落错库）。不执行发布、不改码 |
@@ -98,6 +107,12 @@ loads: references/（见文末「共享参考文档」表）
 | 重构 | `incremental-refactoring` | 测试保护下小步重构 |
 | 探索 | `code-explore` | 代码库理解与影响面分析（只读） |
 | 审查 | `tech-review` | 方案/结构/安全多维度审查 |
+| 效率 | `resume-pdf-pipeline` | 简历 markdown → A4 专业排版 PDF（投递版） |
+| 效率 | `md-flashcards` | Markdown 题库 / 笔记 → 可交互刷题卡片 HTML（本地搜索 + 掌握进度） |
+
+> **私人资产不进本 Kit**：投研策略 / 热点资讯 / **视觉设计类** / 含凭证流程与内部端点者，真源在 `~/skills/`（投研 + 视觉设计）或 `~/.workbuddy/skills/`（凭证类直存），**不在本表登记** —— 本仓库是 PUBLIC，登记即暴露私人资产与内部端点。它们经 `~/.workbuddy/skills/` 软链在会话中可用。
+>
+> 视觉设计类清单（真源 `~/skills/`）：原型出稿、品牌 token 真源、生成式头像、icon 流水线、logo 统一 / 矢量化、视觉设计工作流、品牌规范、前端设计判据。**分派到这类任务时不要在本 Kit 目录里找**，走 `~/.workbuddy/skills/` 软链。
 
 > 写作/产出纪律（如 Think First / Simplicity）为可选层，由各项目自行补充，不内置在本模板。
 

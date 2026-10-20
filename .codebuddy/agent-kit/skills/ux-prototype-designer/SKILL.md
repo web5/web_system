@@ -81,6 +81,21 @@ loads: references/prototype-common.md, references/ux-review-checklist.md
 - 原型的 Token 与项目 tokens 对齐；但原型内联 CSS 变量，不 import 业务包
 - 不产出非 HTML 的落地代码（WXML / 小程序页面 / App 原生页等不属于原型稿）
 
+## 品牌 token 与判据索引（2026-10-20 补）
+
+出稿涉及品牌色 / 字阶 / 圆角 / 间距时，**数值唯一来源 = `skills/brand-kit/references/tokens.md`**，不凭记忆、不从项目代码现场抄：
+
+| 端 | token 源 | 单位 |
+|---|---|---|
+| 小程序（品牌端） | tokens.md §1.9（`--brand*` / `--page-bg` / `--t1..t3`）+ §2 Claymorphism | rpx（8rpx 基准） |
+| web / admin | tokens.md §1.1–1.8（`--ws-*`，Geist 语义 scale） | px |
+
+- 🔴 **两端 token 勿混用**：admin 稿出现 `--page-bg` / `--brand-txt` / `--card`，或桌面稿冒小程序胶囊 / TabBar → 串端，打回。
+- 🔴 品牌橙 `#F97316` 白底对比度仅 **2.9:1**，**不得作正文文本色**；文本 / 选中态取 `--brand-txt` `#EA580C`（4.9:1 过 AA）。
+- 详细设计判据（层级 E / 间距 F / 色彩 G / 状态 S / 文案 H / 端差异 I / 反模式 X）见 `web_system/docs/ui/design-system.md`，**按条目编号引用，不复制到本 skill**（防两份事实来源漂移）。
+- 关键结构元素打 `data-dr="<key>"` 锚点（页头 / 主操作 / 状态区 / 列表容器），实现侧同名同语义，供 `design-reviewer` 比对；改名 / 删除须两侧同步并登记。
+- 单图标走 `icon-design-pipeline`（SVG 唯一真源 + 显示尺寸反推），不在本角色内生成。
+
 ## 独立交互质检（本角色的质量门）
 
 - 清单：`references/ux-review-checklist.md`（信息架构 / 任务流闭环 / 状态矩阵 / 视觉 token / 可用性 / 可访问性基线 / 与规格书一致性 / 目标端一致性 / 未定义默认项显式标注）
