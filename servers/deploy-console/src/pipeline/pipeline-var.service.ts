@@ -105,6 +105,9 @@ export class PipelineVarService {
   ): Promise<PipelineVarItem> {
     const row = await this.repo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`变量不存在: ${id}`);
+    if (patch.isSecret !== undefined && typeof patch.isSecret !== 'boolean') {
+      throw new BadRequestException('密钥标记必须为布尔值');
+    }
     if (row.isSecret && patch.isSecret === false && !patch.value) {
       throw new BadRequestException('密钥转为普通变量时必须填写新的值');
     }

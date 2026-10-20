@@ -123,4 +123,11 @@ describe('PipelineVarService（流水线变量）', () => {
     expect(updated).toMatchObject({ isSecret: false, value: 'public-replacement' });
     expect(await svc.resolve('tpl-1')).toEqual({ VALUE: 'public-replacement' });
   });
+
+  it.each([0, 1, 'false', null])('密钥标记拒绝非布尔值（%s）且不改变原记录', async flag => {
+    const variable = await svc.create('tpl-1', { key: 'SECRET', value: 'private-original', isSecret: true });
+    await expect(svc.update(variable.id, { key: 'PUBLIC', isSecret: flag as unknown as boolean })).rejects.toThrow(BadRequestException);
+    expect(await svc.resolve('tpl-1')).toEqual({ SECRET: 'private-original' });
+    expect((await svc.list('tpl-1'))[0]).toMatchObject({ key: 'SECRET', isSecret: true, value: PIPELINE_VAR_MASK });
+  });
 });

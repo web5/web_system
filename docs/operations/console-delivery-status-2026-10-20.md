@@ -35,6 +35,7 @@ Console 主体重构和约定 dev 验收已完成，Todo/prod 的首个正式发
 本次保留已确认的行内布局：展开后滚动定位并聚焦，显示正确编辑标题，回填普通值；密钥不回显且留空保留，普通值可清空。补上新增身份重置、重复保存防护、失败保留输入和流水线切换时的异步上下文保护。
 
 同时通过前后端校验阻止「密钥留空、取消密钥标记」直接公开留存值；必须显式填写替换值。后端新增用例包含失败前后原记录不变的断言，无 schema 或迁移变更。
+接口更新仅接受真正的布尔密钥标记，拒绝 0/1、字符串和 null，防止非标准请求绕过转换保护。
 
 浏览器使用真实组件和 Ant Design Vue，在本机页面/抽屉两种容器下隔离模拟 API；没有真实变量写入、凭据读取、生产部署或闸门修改。脚本为 `scripts/verify-console-variable-editor.mjs`，行为规格为 `specs/deploy-console/page-spec-variable-editor.md`。
 
@@ -44,7 +45,7 @@ Console 主体重构和约定 dev 验收已完成，Todo/prod 的首个正式发
 
 - 行为规格提交 `3f05bb45`，实现一致性记录见 `docs/ui/reviews/console-variable-editor-2026-10-20.md`；修复沿用原有布局，仍待人工评审合入。
 - 真实组件浏览器回归：页面/抽屉各 9 项，共 18/18 通过，浏览器运行时错误为 0；原实现同组场景出现 16 项失败。
-- 后端新增保护用例中的 2 项先失败后通过；完整 Console 后端 103 suites / 1261 tests 通过。
+- 后端新增保护用例中的 6 项先失败后通过；完整 Console 后端 103 suites / 1265 tests 通过。
 - Console 前端类型检查、Vite 构建、Nest 后端构建通过；改动组件 lint 0 error，保留 2 项既有 any warning。
 - 私有浏览器截图及红/绿回归证据保存在 `/tmp/web-system-console-editor-20261020`，未将原始环境配置或凭据提交入库。
 
