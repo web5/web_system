@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { pipelineVarApi, type PipelineVar } from '@/api'
 
@@ -17,6 +17,8 @@ const emit = defineEmits<{ (e: 'changed'): void }>()
 const q = ref('')
 const adding = ref(false)
 const saving = ref(false)
+const editor = ref<HTMLElement | null>(null)
+const editingSecret = ref(false)
 const form = ref({ id: '', key: '', value: '', isSecret: false, description: '' })
 const editing = computed(() => !!form.value.id)
 
@@ -37,49 +39,76 @@ const rows = computed(() => {
 
 function resetForm() {
   form.value = { id: '', key: '', value: '', isSecret: false, description: '' }
+  editingSecret.value = false
 }
 
-function editVar(v: PipelineVar) {
-  form.value = { id: v.id, key: v.key, value: '', isSecret: !!v.isSecret, description: v.description || '' }
+async function revealEditor() {
+  await nextTick()
+  editor.value?.scrollIntoView({ block: 'center', behavior: 'auto' })
+  const valueInput = editor.value?.querySelector<HTMLInputElement>('input[aria-label="变量值"]')
+  valueInput?.focus({ preventScroll: true })
+  valueInput?.select()
+}
+
+async function toggleCreateForm() {
+  if (saving.value) return
+  const closing = adding.value && !editing.value
+  resetForm()
+  adding.value = !closing
+  if (adding.value) await revealEditor()
+}
+
+async function editVar(v: PipelineVar) {
+  if (saving.value) return
+  form.value = { id: v.id, key: v.key, value: v.isSecret ? '' : v.value, isSecret: !!v.isSecret, description: v.description || '' }
+  editingSecret.value = !!v.isSecret
   adding.value = true
+  await revealEditor()
 }
 
 async function submit() {
-  const f = form.value
+  if (saving.value) return
+  const f = { ...form.value }
   if (!f.key.trim()) {
     message.warning('变量键必填')
     return
   }
+  if (editingSecret.value && !f.isSecret && !f.value) {
+    message.warning('密钥转为普通变量时必须填写新的值')
+    return
+  }
+  const submittedTemplate = props.templateId
   saving.value = true
   try {
     if (f.id) {
       await pipelineVarApi.update(f.id, {
         key: f.key.trim(),
-        // 密钥留空 = 不更新（后端语义）
-        ...(f.value ? { value: f.value } : {}),
+        ...(!editingSecret.value || f.value ? { value: f.value } : {}),
         isSecret: f.isSecret,
         description: f.description,
       })
     } else {
-      await pipelineVarApi.create(props.templateId, {
+      await pipelineVarApi.create(submittedTemplate, {
         key: f.key.trim(),
         value: f.value,
         isSecret: f.isSecret,
         description: f.description,
       })
     }
+    if (props.templateId !== submittedTemplate) return
     resetForm()
     adding.value = false
     emit('changed')
     message.success('变量已保存')
   } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存变量失败')
+    if (props.templateId === submittedTemplate) message.error(e?.response?.data?.message || '保存变量失败')
   } finally {
     saving.value = false
   }
 }
 
 function removeVar(v: PipelineVar) {
+  if (saving.value) return
   Modal.confirm({
     title: `删除变量「${v.key}」`,
     content: `删除后节点脚本里的 \${${v.key}} 会取不到值。确认删除？`,
@@ -102,41 +131,47 @@ function removeVar(v: PipelineVar) {
   <div>
     <div style="display: flex; gap: 8px; align-items: center;">
       <a-input v-model:value="q" placeholder="检索变量（键 / 说明）" size="small" style="flex: 1;" allow-clear />
-      <a-button size="small" type="primary" @click="adding = !adding">
-        {{ adding ? '收起' : '+ 新增变量' }}
+      <a-button size="small" type="primary" :disabled="saving" @click="toggleCreateForm">
+        {{ adding && !editing ? '收起' : '+ 新增变量' }}
       </a-button>
     </div>
 
     <a-card v-if="adding" size="small" style="margin-top: 10px;">
-      <div style="font-weight: 600; margin-bottom: 8px;">新增变量</div>
+      <div ref="editor" role="region" :aria-label="editing ? '编辑变量' : '新增变量'">
+      <div style="font-weight: 600; margin-bottom: 8px;">{{ editing ? `编辑变量 · ${form.key}` : '新增变量' }}</div>
       <div class="var-grid">
         <div class="var-field">
           <label>键 *</label>
-          <a-input v-model:value="form.key" size="small" placeholder="如 PUBLISH_PATH" class="mono-input" />
+          <a-input v-model:value="form.key" aria-label="变量键" :disabled="saving" size="small" placeholder="如 PUBLISH_PATH" class="mono-input" />
         </div>
         <div class="var-field">
           <label>值</label>
           <a-input
             v-model:value="form.value"
+            aria-label="变量值"
+            :type="form.isSecret ? 'password' : 'text'"
+            :autocomplete="form.isSecret ? 'new-password' : 'off'"
+            :disabled="saving"
             size="small"
-            :placeholder="editing ? '值（留空 = 不更新，密钥不回显）' : '值'"
+            :placeholder="editingSecret ? (form.isSecret ? '留空保留原密钥' : '转为普通变量时必须填写新值') : '值（允许为空）'"
             class="mono-input"
           />
         </div>
         <div class="var-field">
           <label>说明</label>
-          <a-input v-model:value="form.description" size="small" placeholder="用途说明" />
+          <a-input v-model:value="form.description" :disabled="saving" size="small" placeholder="用途说明" />
         </div>
         <div class="var-field">
           <label>密钥</label>
-          <a-checkbox v-model:checked="form.isSecret">值不回显</a-checkbox>
+          <a-checkbox v-model:checked="form.isSecret" :disabled="saving">值不回显</a-checkbox>
         </div>
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
-        <a-button size="small" @click="adding = false; resetForm()">取消</a-button>
+        <a-button size="small" :disabled="saving" @click="adding = false; resetForm()">取消</a-button>
         <a-button size="small" type="primary" :loading="saving" @click="submit">
           {{ editing ? '保存' : '添加' }}
         </a-button>
+      </div>
       </div>
     </a-card>
 
@@ -173,9 +208,9 @@ function removeVar(v: PipelineVar) {
       </a-table-column>
       <a-table-column title="操作" :width="110">
         <template #default="{ record }">
-          <a @click="editVar(record)">编辑</a>
+          <a :aria-disabled="saving" @click="editVar(record)">编辑</a>
           <a-divider type="vertical" />
-          <a style="color: var(--ws-error-500);" @click="removeVar(record)">删除</a>
+          <a :aria-disabled="saving" style="color: var(--ws-error-500);" @click="removeVar(record)">删除</a>
         </template>
       </a-table-column>
       <template #emptyText>
@@ -187,7 +222,7 @@ function removeVar(v: PipelineVar) {
 
     <div class="muted-text" style="margin-top: 10px;">
       变量属于本条流水线，动作脚本里 <code>${'{KEY}'}</code> 引用；优先级高于配置中心、低于任务级 env。
-      密钥只写入不回显，留空保存 = 不更新。
+      密钥只写入不回显，留空保留原密钥；普通变量可以清空，密钥转普通变量须填写新值。
     </div>
   </div>
 </template>
