@@ -20,3 +20,5 @@
 - 合入、部署、真实页面复验前只标记本地修复验证完成，不把数据库代改当页面修复。
 
 浏览器回归命令：`CONSOLE_BROWSER_RUNTIME=/path/to/runtime-with-puppeteer-core node scripts/verify-console-variable-editor.mjs`。支持 `CHROME_BIN` 指定本机 Chrome、`CONSOLE_VAR_EVIDENCE_DIR` 指定证据目录，不安装新依赖。
+
+本地一致性证据与边界见 `docs/ui/reviews/console-variable-editor-2026-10-20.md`；补丁仍须人工评审，不把执行者自查当作额外人审。
