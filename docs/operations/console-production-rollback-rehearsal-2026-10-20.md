@@ -49,6 +49,8 @@ Console 已部署合入提交 `c325ef979f1318784b2b801246853a89b232a80e`；此�
 
 15:09:05，独立读回控制台/云库指针、历史发布及审批、部署任务、锁、closed闸门、Console配置指纹和全部dev进程，与演练后基线一致。没有生产再次切换、数据库业务写入或持久凭据生成。完整回归为105 suites / 1288 tests通过，Nest后端构建通过；本补充仅测试和文档，无需重新部署。
 
+15:13:17，另经用户页面实际使用的HTTPS公网入口 `dev.kedouai.com/console/api/deploy/rollback-version` 验证缺失Bearer和畸形令牌，两项均401；未跟随重定向，均带 `confirm=false`，没有触发回滚。此项补充真实反向代理路径的拒绝验证，不等同于有效用户令牌的生产写操作；证据为 `http-auth-public.json`。
+
 补验的明确边界：没有获取真实用户令牌或用它在现网写端点执行第三次生产切换；**真实用户有效JWT经现网回滚写端点完成生产回滚仍未验证**。此边界不与“真实生产服务层回滚已完成”和“真实HTTP鉴权隔离用例已通过”混为同一证据。当前已有真实登录UI验收、隔离HTTP正反向鉴权、现网HTTP拒绝无效凭据和生产服务层实际回滚证据；按用户要求，本轮约定范围先关闭，不为补验扩展认证或重新打开生产维护窗口。
 
 HTTP测试证据为 `http-auth-jest.json`、`http-auth-deployed.json`、`http-auth-final-state.json`、`closeout-all-jest.json` 和 `closeout-build.log`，都在下述私有目录。可复跑代码库测试：`pnpm --dir servers/deploy-console exec jest --config jest.config.js --runInBand src/deploy/rollback-auth.http.spec.ts`。该命令仅运行隔离HTTP测试，不连接现网或读取生产凭据。
