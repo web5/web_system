@@ -15,6 +15,14 @@
 
 web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` + `knowledge-service`）**承重层基本成型、易变层已完成配置化、可换层一半成型**，最大缺口在**质量与评测**：检索侧已有 Ragas 三指标离线评测，但 **Agent 任务层面**只有成本归因、没有**结果归因**（`agent_runs` 无 `outcome`），导致"任务完成准确率"这个一等决策在本系统里**无法被度量**。建议按 §4 的 P0 → P1 → P2 补齐。
 
+> **2026-10-20 更正（B0）**：上一段"无结果归因"的历史判断**已被部分推翻**。`agent_runs` 的 `outcome` / `fail_stage` / `graded_by` / `graded_at` 已于本日实现（分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `p36` 待执行、待部署）。
+> 但**"任务完成准确率无法被度量"这个结论依然成立**，原因变了：
+> 1. **还没上线** —— PR 未合入 + 迁移未执行，线上 `agent_runs` 查不到 `outcome`
+> 2. **即使上线也不够** —— B0 只产出 `graded_by='rule'`，判定依据仅为 `status` 与 error 事件的 `[CODE]` 前缀，**不读 `finalAnswer` 语义**。`outcome='success'` = "链路跑通、没报错、没超步数"，**不等于答案正确**
+>
+> 因此缺口收窄为：**业务线 golden eval 集 + 离线 LLM 评测**（B4，`graded_by='auto_llm_judge'` + `score`）。
+> 一句话：**B0 解决了"看不看得见失败"，没解决"答案对不对"。**
+
 ---
 
 ## 0.5 事实依据（全部来自本仓库代码，非记忆）
@@ -74,7 +82,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | **控制流所有权** | 代码定骨架（for 循环 + maxSteps + 错误判别），模型填叶子（调哪个工具） | ⚠️ HITL 止步于工具级 `confirmHandler`，**无编排级审批** |
 | **状态与记忆** | `memory`（compaction / keepRecent）+ 长期 profile 已落地 | ❌ **无 checkpoint**（中断不可续跑）；多步重算上下文 = 隐性成本 |
 | **安全边界** | 项目级 guard 在 | ❌ Agent 自主调用的能力授权未收敛（爆炸半径未定义） |
-| **质量与评测** ⭐ | 仅成本归因，无结果归因；检索侧另有 Ragas 离线评测 | ❌ **Agent 任务层整块缺失**：`agent_runs` 无 `outcome/fail_stage`；无业务线 golden eval 集 |
+| **质量与评测** ⭐ | 仅成本归因，无结果归因；检索侧另有 Ragas 离线评测 | ⚠️ 已收窄：**B0（2026-10-20）已实现** `agent_runs.outcome / fail_stage / graded_by / graded_at`（分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `p36` 待执行、待部署）。剩余缺口：**无业务线 golden eval 集**，`graded_by='auto_llm_judge'` 与 `score` 未落地（B4） |
 
 ### 2.2 可换层（设计为可插拔）
 
@@ -83,7 +91,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | **模型解耦** | `ClientRegistry` 抽象 + `ModelCatalogService` 三级回落（ai-agent 完善） | ⚠️ ai-service 普通 chat 链路双套 client / 双 key 未统一 |
 | **工具契约** | `capabilities` 归一三类；`ToolRegistry.toSchemas` 生成 schema；contracts.md 有 MCP 工具类 | ❌ schema **无语义化版本**，工具变更可能静默 breaking |
 | **KB & RAG** | ✅ **已建成独立服务**：`knowledge-service`（:6011）集合 / 文档 / embedding / 检索 + Ragas 评测；经 mcp-gateway 以 MCP 工具（`knowledge_search/list/status/ingest/delete`）装配进 Agent，集合绑定随 Agent 定义走 | ⚠️ 缺口不在"有没有"，而在"准不准"：无混合检索（BM25+向量）/rerank、**召回率未测**；`agent-core` 侧无 `KnowledgePort` 抽象（耦合在 MCP 工具层，替换供应商需改工具层） |
-| **评测体系** | ⚠️ **KB 链路有**：`rag-eval.service.ts` Ragas 三指标（context_relevance / answer_relevance / faithfulness），`POST /knowledge/mcp/eval` | ❌ Agent **任务级**评测缺失：无 outcome、无业务线 golden 集 |
+| **评测体系** | ⚠️ **KB 链路有**：`rag-eval.service.ts` Ragas 三指标（context_relevance / answer_relevance / faithfulness），`POST /knowledge/mcp/eval` | ⚠️ Agent **任务级**评测仍缺：B0 有 `outcome`（`graded_by='rule'`，只判链路成败）；**无业务线 golden 集**，B4 的 `auto_llm_judge` / `score` 未落地 |
 
 ### 2.3 易变层（配置化 —— **本系统完成度最高**）
 
@@ -104,7 +112,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 | 成本 | ✅ 大部分 | `agent_runs.cost` + `run_metrics.total_cost`；缺 thinking 计价口径 |
 | 风险 | ⚠️ 部分 | 旋钮已配置化（止血手段在），但无模型级 fallback 策略 |
 | 杠杆 | ⚠️ 部分 | ai-agent 已解绑；ai-service 普通链路未解绑 |
-| 度量 | ⚠️ 部分 | KB 问答有 Ragas 三指标；**Agent 任务无 outcome / eval 集** → 换模型仍凭感觉 |
+| 度量 | ⚠️ 部分 | KB 问答有 Ragas 三指标；Agent 任务：B0 起有 `outcome`，但**只有 `graded_by='rule'`**（判链路不判答案）+ 无 eval 集 → 换模型仍凭感觉 |
 
 ---
 
@@ -113,6 +121,10 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 ### 3.1 质量与评测 ⭐ P0（承重层 · 最大债）
 
 **现状**：`agent_runs` 只在 `cost` 维度归因；结果只有 `ok/error`，无法区分"检索没召回 / 推理错 / 工具调错"。
+
+> **2026-10-20 B0 进度**：上述"现状"的落库侧已补齐——`outcome` / `fail_stage` / `graded_by` / `graded_at` 四列 + `AgentLogService.deriveAttribution` 服务端推导（按 error 事件的 `[CODE]` 前缀映射 `fail_stage`）。分支 `feat/agent-runs-outcome`，PR #368 draft；迁移 `archive/migrations/p36-agent-runs-outcome.mjs` **待执行**、待部署。
+> ⚠️ **口径**：`outcome='success'` 仅代表"链路跑通、未触发错误码、未超步数"，**不代表答案正确**——B0 只产出 `graded_by='rule'`，不读 `finalAnswer` 语义。业务准确率需下方第 3 条的 golden 集 + LLM-as-judge（B4）。
+> ⚠️ 历史行 **不回填**，`outcome` 保持 NULL = 未判定，统计时须与 `fail` 区分。
 
 **目标**：成本归因升级为 **成本 + 质量双归因**。
 
@@ -202,7 +214,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 | 优先级 | 项 | 解决哪个维度 | 工作量 | 落地命中动作门 |
 |---|---|---|---|---|
-| **P0** | `agent_runs` 加 `outcome/fail_stage` + 各阶段埋点 | 可靠性 / 可观测 / 度量 | 1.5d | **契约门** + 迁移规范 |
+| **P0** ✅ | `agent_runs` 加 `outcome/fail_stage` + 各阶段埋点 —— **B0 已实现**（PR #368 draft；剩合入 + 执行 `p36` 迁移 + 部署） | 可靠性 / 可观测 / 度量 | 1.5d | **契约门** + 迁移规范 |
 | **P1** | 调参 UI 表单（含 `?? 0.7` 修正）—— **前置：合入 C7** | 可演化 / 风险 | 1d | **UI 门** |
 | **P1** | ai-service 模型链路统一（清双 client / 双 key） | 杠杆 / 可演进 | 1d | **发布门** |
 | **P1** | thinking token 计价口径入字典 | 成本 | 0.5d | **发布门**（改字典配置） |
@@ -218,7 +230,7 @@ web_system 的 Agent 底座（`packages/agent-core` + `ai-agent` + `ai-service` 
 
 ## 5. 验收标准
 
-1. **质量双归因**：`agent_runs.outcome` 有值且 `fail_stage` 分布可按周查看；随机抽 20 条失败 run 能明确归因到 retrieval / reasoning / tool 之一。
+1. **质量双归因**（B0 部分达成）：`agent_runs.outcome` 有值且 `fail_stage` 分布可按周查看；随机抽 20 条失败 run 能明确归因到 `model` / `tool` / `network` / `auth` / `upstream` / `max_steps` / `permission` / `other` 之一。⚠️ 达成前提：PR #368 合入 + `p36` 迁移执行 + 部署；且历史行 `outcome` 为 NULL 不参与统计。
 2. **调参可止血**：某 agent 效果劣化时，管理员后台改一个参数（不发版、不重启），30s 内生效，且可用 `outcome` 前后对比验证。
 3. **加模型零发版**：字典加一个模型 id，≤60s 内 ai-agent 与 ai-service **两侧同时**可见（ai-service 需先完成对应 P1）。
 4. **成本真实**：一条开了 thinking 的 run，其 `cost` 覆盖 thinking 消耗，或文档明确并入 output 的口径。
