@@ -28,6 +28,7 @@ import {
 } from './dto/content-quality.dto';
 import { COLLECT_TRIGGER } from './quality/quality.enum';
 import { LhbRecordEntity } from './entities/lhb-record.entity';
+import { ContentSourceEntity } from './entities/content-source.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SeatTagService } from './services/seat-tag.service';
@@ -43,6 +44,8 @@ export class ContentQualityController {
     private readonly seatTag: SeatTagService,
     @InjectRepository(LhbRecordEntity)
     private readonly lhbRepo: Repository<LhbRecordEntity>,
+    @InjectRepository(ContentSourceEntity)
+    private readonly sourceRepo: Repository<ContentSourceEntity>,
   ) {}
 
   // ── 采集批次日志（FR-API-6）────────────────────────────────────────
@@ -91,17 +94,38 @@ export class ContentQualityController {
     @Param('sourceCode') sourceCode: string,
     @Body() body: TriggerCollectDto,
   ) {
-    if (!this.running.has(sourceCode)) {
+    // 幂等保护：同一采集源同一时刻只跑一次（`running` 集合），防重复点击把上游打爆
+    if (this.running.has(sourceCode)) {
       return {
         source_code: sourceCode,
         status: 'rejected',
-        reason: '该采集器正在运行中，请勿重复触发',
+        reason: '该采集源正在运行中，请勿重复触发',
       };
     }
+
+    // 读表拿源配置：code / enabled / type / config 都在 content_sources 表里，
+    // 改源、停用、换参都只改表，不用发版。
+    const source = await this.sourceRepo.findOne({ where: { code: sourceCode } });
+    if (!source) {
+      return {
+        source_code: sourceCode,
+        status: 'unknown',
+        reason: `未登记的采集源：${sourceCode}（请先在「内容采集源」里添加）`,
+      };
+    }
+    if (!source.enabled) {
+      return {
+        source_code: sourceCode,
+        status: 'rejected',
+        reason: `采集源已停用：${source.name}`,
+      };
+    }
+
     this.running.add(sourceCode);
     const startedAt = new Date();
     try {
-      if (sourceCode === 'sina_news' || sourceCode === 'eastmoney_news') {
+      // 财经快讯（新浪/东财）：走 finnews 适配器双写（质量归因 + 唯一键去重）
+      if (source.type === 'sina_news' || source.type === 'eastmoney_news') {
         // pipelineId 传null：手动触发的条目不进固定管线（只保证内容有质量归因）
         const results = await this.finnewsAdapter.syncToContentItems(null, {
           trigger: COLLECT_TRIGGER.MANUAL,
@@ -109,13 +133,15 @@ export class ContentQualityController {
         });
         return { source_code: sourceCode, status: 'ok', results };
       }
-      if (sourceCode === 'eastmoney_lhb') {
-        const items = await new EastmoneyLhbCollector().collect({}, body.limit);
+
+      // 龙虎榜：专用采集器（交易日窗口 + 席位明细 + 涨停/ST 标记）
+      if (source.type === 'eastmoney_lhb') {
+        const items = await new EastmoneyLhbCollector().collect(source.config ?? {}, body.limit);
         const finishedAt = new Date();
         if (items.length === 0) {
           await this.collectLog.logFailure({
             sourceCode,
-            sourceName: '东方财富龙虎榜',
+            sourceName: source.name,
             trigger: COLLECT_TRIGGER.MANUAL,
             errorMessage: '采集返回空（源不可达或解析失败）',
             startedAt,
@@ -125,7 +151,7 @@ export class ContentQualityController {
         }
         await this.collectLog.logSuccess({
           sourceCode,
-          sourceName: '东方财富龙虎榜',
+          sourceName: source.name,
           trigger: COLLECT_TRIGGER.MANUAL,
           itemCount: items.length,
           startedAt,
@@ -133,10 +159,11 @@ export class ContentQualityController {
         });
         return { source_code: sourceCode, status: 'ok', items: items.length };
       }
+
       return {
         source_code: sourceCode,
         status: 'unknown',
-        reason: `未注册的采集器：${sourceCode}`,
+        reason: `未注册采集器类型：${source.type}`,
       };
     } catch (e) {
       const finishedAt = new Date();
