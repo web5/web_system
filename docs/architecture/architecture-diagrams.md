@@ -216,7 +216,7 @@ flowchart LR
 
 ### 3.3 关键约束
 
-- console **只在 dev 部署**；自发布会自杀 → 异步排程重启，pointer 必须排在 restart 前。
+- console **只在 dev 部署**，且**手动发布**（`publish-deploy-console.sh` 传统发布，不走平台流水线，故无 restart 节点）。
 - 禁 `pm2 restart --update-env`；禁手动 ssh 构建；改流水线必跑 `pipeline-lint`。
 - 已知债：ssh2/scp 直连 prod（应拆 runner）、审计 `component` 列过短丢数据、13 个流水线变量未登记。
 
@@ -268,7 +268,7 @@ pm2 管理层（2026-10-09 起拆成两个域，发布互不影响）：
 | ③ 审批与挂起（awaiting-approval + approve，prod 更严） | verify · 探活 + manifest 断言（通过后切指针；失败 rollback_on_failure） |
 | 版本指针 · 灰度 · 回滚（byEnv 主指针 + legacy 应急；canary rules + promote/rollback） | fetch-config · 配置下发落盘（restart-only 场景补齐，0600） |
 | 配置中心下发两条路径（writeGeneratedEnv / dispatch 接口） | 前端专属动作（CDN 子集重建 / 静态同步 / shell 基座 site-version） |
-| 变量注入（deploy_pipeline_vars + 受保护键 DEPLOY_ENV + 平台注入 CONSOLE_* / RELEASE_DIR 等） | （已停用）restart-self · 自部署排程重启（保留备将来拆 runner 复用） |
+| 变量注入（deploy_pipeline_vars + 受保护键 DEPLOY_ENV + 平台注入 CONSOLE_* / RELEASE_DIR 等） | —— |
 | 门禁与审计（bash -n、pipeline-lint L1-L7、审计/限流/来源白名单、监控断言） | —— |
 
 归属口诀：**「编排、凭据、指针、灰度、审计、门禁」是平台的事（改代码）；「同步、重启、验证、下发落盘、产物处理」是脚本的事（改 DB）。**

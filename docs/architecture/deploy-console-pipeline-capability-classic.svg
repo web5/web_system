@@ -118,12 +118,6 @@
     <text x="758" y="570" font-size="12" font-weight="600" fill="#1F2937">前端 / 微前端专属动作</text>
     <text x="758" y="588">CDN 子集按需重建（verify-cdn-subsets）· 静态资源同步 · shell 基座 site-version 模式</text>
     <text x="758" y="604">新增组件/图标必须重建子集，漏了线上静默不渲染</text>
-
-    <rect x="744" y="620" width="640" height="86" rx="3" fill="#F7F7F7" stroke="#C9C9D0"/>
-    <text x="758" y="640" font-size="12" font-weight="600" fill="#5B6673">（已停用）restart-self · 自部署排程重启</text>
-    <text x="758" y="658">曾用于 console 自发布：同步段落地 dist + pointer 先行，异步段 setsid nohup 排程重启，避免 kill 自己</text>
-    <text x="758" y="674">2026-10-09 起 console 改手动脚本发布（publish-deploy-console.sh），tpl-deploy-console-dev 已禁用</text>
-    <text x="758" y="690" fill="#C0504D">保留脚本以备将来「拆独立 runner」方案复用</text>
   </g>
 
   <!-- ===== 定制边界 ===== -->
