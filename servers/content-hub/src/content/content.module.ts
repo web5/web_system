@@ -19,6 +19,7 @@ import { SeatTagService } from './services/seat-tag.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { ContentQualityController } from './content-quality.controller';
+import { ContentAuthModule } from '../auth/auth.module';
 
 /** 内容管道领域模块——论文 / AI 资讯的采集、处理、发布 */
 @Module({
@@ -33,6 +34,7 @@ import { ContentQualityController } from './content-quality.controller';
       HotmoneySeatEntity,
       CollectRunEntity,
     ]),
+    ContentAuthModule,
   ],
   controllers: [ContentController, ContentQualityController],
   providers: [

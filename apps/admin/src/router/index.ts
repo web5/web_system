@@ -190,6 +190,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Database/DataBrowser.vue'),
         meta: { title: '数据浏览', permission: 'database:view' },
       },
+      {
+        path: 'content-sources',
+        name: 'ContentSources',
+        component: () => import('@/views/Content/ContentSources.vue'),
+        meta: { title: '内容采集源', permission: 'content:view' },
+      },
     ],
   },
   // 403 无权限页面

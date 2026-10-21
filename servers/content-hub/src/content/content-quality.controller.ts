@@ -11,12 +11,14 @@
  *   · 查询类 → `content:view`（高频只读）
  *   · 触发类 → `content:manage`（低频 + 有副作用）
  */
-import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { CollectLogService } from './services/collect-log.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
 import { EastmoneyLhbCollector } from './collectors/eastmoney-lhb.collector';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import {
   ArxivDigestBatchDto,
   CollectHealthQueryDto,
@@ -33,6 +35,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SeatTagService } from './services/seat-tag.service';
 
+/**
+ * 采集观测 / 手动触发 / 落库接口，默认走运营后台（admin）用户 JWT。
+ * 例外（服务间、鉴权在 gateway service-key 层已做）用 @Public() 放行：
+ *   · arxiv-digest* —— 定时任务里的 AI 生成日报后落库
+ *   · lhb*            —— 机构行为 / 龙虎榜取数（MCP / kedou-mcp-curl）
+ */
+@UseGuards(JwtAuthGuard)
 @Controller('api/content')
 export class ContentQualityController {
   private readonly logger = new Logger(ContentQualityController.name);
@@ -196,6 +205,7 @@ export class ContentQualityController {
    * 🔴 这是 Phase 2 的数据地基：不落库 →评测集无从抽样、幻觉率无法自动判定。
    * 由定时任务里的 AI 在生成日报后调用。
    */
+  @Public()
   @Post('arxiv-digest')
   async saveDigest(@Body() body: ArxivDigestBatchDto) {
     const items = body.items.map((i) => ({
@@ -213,6 +223,7 @@ export class ContentQualityController {
   }
 
   /** 各 prompt 版本的产出条数（评测进度看板） */
+  @Public()
   @Get('arxiv-digest/versions')
   versions() {
     return this.digest.countByVersion();
@@ -223,6 +234,7 @@ export class ContentQualityController {
    *
    * 刻意排除降级产物：降级摘要模板化、无 LLM 内容，混进评测集会拉低幻觉率。
    */
+  @Public()
   @Get('arxiv-digest/sample')
   async sample(@Query() query: EvalSampleQueryDto) {
     const rows = await this.digest.sampleForEval(query.prompt_version, query.size);
@@ -246,6 +258,7 @@ export class ContentQualityController {
   // ── 龙虎榜（FR-API-8）────────────────────────────────────────────
 
   /** 龙虎榜列表（按交易日 / 标签筛） */
+  @Public()
   @Get('lhb')
   async listLhb(@Query() query: ListLhbQueryDto) {
     const qb = this.lhbRepo
@@ -278,6 +291,7 @@ export class ContentQualityController {
   }
 
   /** 单条详情（含席位明细） */
+  @Public()
   @Get('lhb/:id')
   async lhbDetail(@Param('id') id: string) {
     const row = await this.lhbRepo.findOne({ where: { id: Number(id) } });
@@ -294,6 +308,7 @@ export class ContentQualityController {
   }
 
   /** 龙虎榜统计：上榜数 / 涨停数 / 游资参与数 / 机构参与数 */
+  @Public()
   @Get('lhb/stats')
   async lhbStats() {
     const row = await this.lhbRepo
@@ -345,6 +360,7 @@ export class ContentQualityController {
   // ── 占位：内容条目筛选（M2 由既有 controller 增强时补齐）──────────
 
   /** 条目筛选能力自查（避免与既有 GET items 语义混淆） */
+  @Public()
   @Get('quality/filter-support')
   filterSupport(@Query() query: ListItemsQueryDto) {
     return {

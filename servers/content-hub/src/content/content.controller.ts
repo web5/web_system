@@ -1,7 +1,15 @@
 /** 内容管道 REST API（供网关 /api/content-hub/* 或管理台调用） */
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ContentService, WechatMpPublishDto } from './services/content.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 
+/**
+ * 采集源 / 管线 / 条目的管理接口，默认走运营后台（admin）用户 JWT。
+ * 唯一的例外是公众号建稿/发布（wechat/*）：它们由 mcp-gateway / 连接器以
+ * service key 调用，鉴权在 gateway 的 service-key 层已做，故用 @Public() 放行。
+ */
+@UseGuards(JwtAuthGuard)
 @Controller('api/content')
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
@@ -65,14 +73,16 @@ export class ContentController {
     return this.contentService.runPipeline(pipeline);
   }
 
-  // ── 公众号发布 ──
+  // ── 公众号发布（服务间：mcp-gateway / 连接器以 service key 调用，鉴权在 gateway 层）──
   /** 只建草稿不发布（MCP create_wechat_draft 对应接口） */
+  @Public()
   @Post('wechat/draft')
   createWechatDraft(@Body() body: WechatMpPublishDto) {
     return this.contentService.createWechatDraft(body);
   }
 
   /** 一键发布到公众号（MCP publish_to_wechat 对应接口） */
+  @Public()
   @Post('wechat/publish')
   publishWechat(@Body() body: WechatMpPublishDto) {
     return this.contentService.publishWechatArticle(body);
