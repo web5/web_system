@@ -7,6 +7,41 @@ import {
 import { AbstractEntity } from '@web-system/shared';
 
 /**
+ * 结果归因（B0）
+ *
+ * 与 `status` 的区别：`status` 只回答「链路有没有报错」，
+ * `outcome` 回答「这次任务到底成没成」——有成本归因之后缺的就是这一半。
+ *
+ * - success：正常产出最终回答
+ * - partial：已产出部分内容但被截断（当前唯一有据可依的场景是超步数）
+ * - fail：链路报错终止
+ * - unknown：信息不足，无法判定（**不猜**）
+ *
+ * ⚠️ NULL 即「未判定」：历史存量行不回填，不允许用推断值伪造归因。
+ */
+export type RunOutcome = 'success' | 'partial' | 'fail' | 'unknown';
+
+/**
+ * 失败阶段（B0）
+ *
+ * 取值对齐 `agent-core` 的 `AGENT_ERROR_CODES`（`[CODE] 文案` 前缀），
+ * 让「模型失败 / 工具失败 / 上游基础设施失败」三类能分开统计——
+ * 这是决定改 prompt、改工具还是改基础设施的依据。
+ */
+export type RunFailStage =
+  | 'model' // MODEL_ERROR / MODEL_EMPTY
+  | 'tool' // AGENT_ERROR（工具或子 Agent 执行失败）
+  | 'network' // NETWORK_TIMEOUT
+  | 'auth' // AUTH_EXPIRED
+  | 'upstream' // SERVER_ERROR / RATE_LIMITED（上游不可用或限流）
+  | 'max_steps' // 超步数终止（无独立错误码，按文案判定）
+  | 'permission' // 高危工具确认超时/拒绝
+  | 'other'; // UNKNOWN 或无法归类
+
+/** 归因判定来源：rule=服务端规则；human=人工标注；auto_llm_judge=离线 LLM 评测 */
+export type RunGradedBy = 'rule' | 'human' | 'auto_llm_judge';
+
+/**
  * Agent 运行记录（统一存放在 ai-service 库，方便 admin 统一 debug）
  *
  * 设计目的：开发/运营查看每个 agent 每次 run 的完整原始数据（prompt、消息、工具调用、最终回答），
@@ -23,6 +58,7 @@ import { AbstractEntity } from '@web-system/shared';
 @Index('idx_agent_runs_user', ['userId'])
 @Index('idx_agent_runs_conversation', ['conversationId'])
 @Index('idx_agent_runs_created', ['createdAt'])
+@Index('idx_agent_runs_outcome', ['agentId', 'outcome'])
 export class AgentRun extends AbstractEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -115,4 +151,22 @@ export class AgentRun extends AbstractEntity {
   /** 成本（按 model_pricing 单价 × usage 核算；无单价记 0） */
   @Column({ type: 'decimal', precision: 12, scale: 6, nullable: true, comment: '成本 CNY' })
   cost: string | null;
+
+  // ── B0 结果归因（有成本归因之后缺的另一半） ──
+
+  /** 结果归因（NULL = 未判定；历史数据不回填） */
+  @Column({ type: 'varchar', length: 16, nullable: true, comment: '结果归因 success/partial/fail/unknown' })
+  outcome: RunOutcome | null;
+
+  /** 失败阶段（仅 fail / partial 时有值） */
+  @Column({ type: 'varchar', length: 24, nullable: true, comment: '失败阶段' })
+  failStage: RunFailStage | null;
+
+  /** 判定来源（B0 只产出 rule） */
+  @Column({ type: 'varchar', length: 16, nullable: true, comment: '判定来源 rule/human/auto_llm_judge' })
+  gradedBy: RunGradedBy | null;
+
+  /** 判定时间 */
+  @Column({ type: 'datetime', nullable: true, comment: '判定时间' })
+  gradedAt: Date | null;
 }

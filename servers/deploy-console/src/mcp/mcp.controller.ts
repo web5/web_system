@@ -177,6 +177,20 @@ export class McpController {
     if (env === 'prod' && body?.confirm !== true) {
       throw new BadRequestException('Prod operations require confirm=true');
     }
+    // ── 版本定位硬校验：不传清"发哪个版本"就不许发 ──
+    // 只转发 branch/commitId 还不够：调用方**漏传**时这两个字段是 undefined，
+    // 流水线照常执行，发的是默认分支最新提交 —— 请求 200、零失败信号，
+    // 事故要等上线后才暴露（2026-10-20 实测踩到：本想 dry-run 探测，
+    // 结果真的发起了 todo-service 的发布）。把静默默认改成显式拒绝。
+    // 例外：显式给了 versionTag（发布既有产物）时不需要源码定位参数。
+    if (
+      !String(body?.versionTag || '').trim() &&
+      (!String(body?.branch || '').trim() || !String(body?.commitId || '').trim())
+    ) {
+      throw new BadRequestException(
+        'branch 与 commitId 必须显式传入：缺失时流水线仍会执行，但发布的是默认分支最新提交，没有任何失败信号；若要发布既有产物，请改为显式传 versionTag',
+      );
+    }
     const result = await this.pipelineService.submit(
       {
         env,

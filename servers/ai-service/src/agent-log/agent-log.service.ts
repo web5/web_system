@@ -4,6 +4,19 @@ import { Repository, FindOptionsWhere, Like, MoreThanOrEqual, LessThanOrEqual, B
 import { AgentRun } from './entities/agent-run.entity';
 import { RunMetrics } from './entities/run-metrics.entity';
 import { DictPricingProvider } from './dict-pricing.provider';
+import type {
+  RunOutcome,
+  RunFailStage,
+  RunGradedBy,
+} from './entities/agent-run.entity';
+
+/** 归因推导结果 */
+export interface RunAttribution {
+  outcome: RunOutcome;
+  failStage: RunFailStage | null;
+  gradedBy: RunGradedBy;
+  gradedAt: Date;
+}
 
 export interface RecordRunInput {
   agentId: string;
@@ -30,6 +43,13 @@ export interface RecordRunInput {
   source?: string;
   /** Agent 定义版本快照（Phase2.3；ai-agent 推送时填充） */
   agentVersion?: number | null;
+  /**
+   * B0 归因覆盖：调用方已判定时显式传入，服务端不再推导。
+   * 未传则按 status + steps 里的错误码自动推导（graded_by='rule'）。
+   */
+  outcome?: RunOutcome | null;
+  failStage?: RunFailStage | null;
+  gradedBy?: RunGradedBy | null;
 }
 
 /** Agent 运行记录查询参数（admin 列表用） */
@@ -72,6 +92,9 @@ export class AgentLogService {
       // Phase2.3/2.4：从 steps 提取 usage、按单价核算成本，并同步增量日指标
       const usage = this.extractUsage(input.steps);
       const cost = this.computeCost(input.model ?? '', usage.prompt, usage.completion);
+      // B0：结果归因。放在服务端统一推导，两个调用点（本服务 SSE / ai-agent 推送）都自动生效，
+      // 不需要跨服务改 ai-agent；推导不抛错，推导失败只降级为 unknown，绝不影响主链路落库。
+      const attribution = this.deriveAttribution(input);
       const row = this.repo.create({
         agentId: input.agentId,
         agentName: input.agentName ?? null,
@@ -92,6 +115,10 @@ export class AgentLogService {
         completionTokens: usage.completion || null,
         totalTokens: usage.total || null,
         cost: cost.toFixed(6),
+        outcome: attribution.outcome,
+        failStage: attribution.failStage,
+        gradedBy: attribution.gradedBy,
+        gradedAt: attribution.gradedAt,
       });
       const saved = await this.repo.save(row);
       await this.upsertDailyMetric(saved);
@@ -195,6 +222,86 @@ export class AgentLogService {
     };
   }
 
+  // ── B0：结果归因推导 ──
+
+  /**
+   * 判定这次 run「成没成、败在哪一步」。
+   *
+   * 依据只有两处客观事实：`status` 与 steps 里 error 事件的 `[CODE]` 前缀
+   * （由 agent-core 的 `withCode` 生成）。不读 finalAnswer 语义、不猜模型意图——
+   * 判不出来就落 `other`，拿不到任何错误信息的历史行保持 NULL，不用推断值冒充归因。
+   *
+   * 公开是为了可单测；推导不抛错，永远返回可用值。
+   */
+  deriveAttribution(input: RecordRunInput): RunAttribution {
+    const now = new Date();
+
+    // 调用方已判定 → 直接采信（ai-agent 侧自带判定或人工回填走这条路）
+    if (input.outcome) {
+      return {
+        outcome: input.outcome,
+        failStage: input.failStage ?? null,
+        gradedBy: input.gradedBy ?? 'rule',
+        gradedAt: now,
+      };
+    }
+
+    if (input.status === 'ok') {
+      return { outcome: 'success', failStage: null, gradedBy: 'rule', gradedAt: now };
+    }
+
+    const raw = this.lastErrorMessage(input);
+
+    // 超步数：已 persist 部分消息后被截断 —— 唯一有据可依的 partial 场景
+    if (/最大步数|max.?steps/i.test(raw)) {
+      return { outcome: 'partial', failStage: 'max_steps', gradedBy: 'rule', gradedAt: now };
+    }
+
+    return {
+      outcome: 'fail',
+      failStage: this.mapFailStage(this.parseErrorCode(raw), raw),
+      gradedBy: 'rule',
+      gradedAt: now,
+    };
+  }
+
+  /** 取最后一条 error 事件的文案；没有则退回 input.error */
+  private lastErrorMessage(input: RecordRunInput): string {
+    const steps = Array.isArray(input.steps) ? input.steps : [];
+    for (let i = steps.length - 1; i >= 0; i -= 1) {
+      if (steps[i]?.type === 'error') return steps[i]?.content ?? '';
+    }
+    return input.error ?? '';
+  }
+
+  /** 解析 `[MODEL_ERROR]` 这类前缀码；老格式无码时返回 null */
+  private parseErrorCode(text: string): string | null {
+    const m = /\[([A-Z_]+)\]/.exec(text || '');
+    return m ? m[1] : null;
+  }
+
+  /** 错误码 → 失败阶段。无码时只认权限一类文案特征，其余一律 other（不猜） */
+  private mapFailStage(code: string | null, raw: string): RunFailStage {
+    switch (code) {
+      case 'MODEL_ERROR':
+      case 'MODEL_EMPTY':
+        return 'model';
+      case 'AGENT_ERROR':
+        return 'tool';
+      case 'NETWORK_TIMEOUT':
+        return 'network';
+      case 'AUTH_EXPIRED':
+        return 'auth';
+      case 'SERVER_ERROR':
+      case 'RATE_LIMITED':
+        return 'upstream';
+      default:
+        break;
+    }
+    if (/权限|permission|确认超时|拒绝确认/i.test(raw)) return 'permission';
+    return 'other';
+  }
+
   // ── Phase2.4：成本核算 + 每日指标聚合 ──
 
   /** 从 steps 提取最后出现的 usage（final/summary/error 事件携带，Phase1.6 起随步骤落库） */
@@ -206,8 +313,11 @@ export class AgentLogService {
     let prompt = 0;
     let completion = 0;
     let total = 0;
-    for (const s of steps) {
-      if (!s.usage) continue;
+    // steps 脏值（undefined / 非数组）防御：不防御会在这里抛错，
+    // 被 recordRun 的 try/catch 吞掉后**整条 run 记录丢失**（归因也就无从谈起）。
+    const list = Array.isArray(steps) ? steps : [];
+    for (const s of list) {
+      if (!s?.usage) continue;
       prompt = s.usage.promptTokens ?? prompt;
       completion = s.usage.completionTokens ?? completion;
       total = s.usage.totalTokens ?? total;

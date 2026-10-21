@@ -239,6 +239,16 @@ describe('isolated backend runtime', () => {
     expect(fixture.commands.mock.calls.some(([, args]) => args[0] === 'restart')).toBe(false);
   });
 
+  it('prefers the isolated storage copy over a dirty delivery directory on reactivation', async () => {
+    const fixture = await activationFixture();
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    // 历史债：投递副本 servers/<svc>/<vtag> 曾被整目录带源码，触发 inspect 白名单拒绝。
+    // 修复后 activate 应优先用 storage 里的干净副本，不再碰这个脏投递副本。
+    write(path.join(fixture.version, 'src/main.ts'), 'unverified source');
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).resolves.toMatchObject({ unchanged: true });
+    expect(fs.realpathSync(path.join(fixture.service, 'dist'))).toBe(fs.realpathSync(path.join(fixture.storage, 'todo-service', versionTag, 'dist')));
+  });
+
   it('serializes a self-contained program and quotes remote values safely', async () => {
     await executeBackendRuntime(packageInput(), { run: packager() });
     const response = execFileSync(process.execPath, ['-e', backendRuntimeProgram()], { encoding: 'utf8', env: { ...process.env, BACKEND_RUNTIME_ACTION: 'inspect', MODULE_KEY: 'todo-service', COMMIT_ID: versionTag, RUNTIME_VERSION_DIR: output } });

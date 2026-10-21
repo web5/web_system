@@ -779,8 +779,8 @@ export class DeployService {
     to?: string;
     taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string | null; to: string; mode: string; source: string }> {
-    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
-    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+    if (!input?.moduleKey?.trim()) throw new BadRequestException('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new BadRequestException('回滚失败: env 必填');
 
     const app = await this.appsService.findAppOrNull(input.moduleKey);
     if (app && (app.deployMode === 'env-dir' || (app.kind === 'shell' && app.deployMode === 'site-version'))) {
@@ -825,14 +825,14 @@ export class DeployService {
     to?: string;
     taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
-    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
-    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+    if (!input?.moduleKey?.trim()) throw new BadRequestException('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new BadRequestException('回滚失败: env 必填');
 
     return this.registry.withReleaseLock({ env: input.env, moduleKey: input.moduleKey, owner: 'rollback:' + crypto.randomUUID() }, async () => {
       const cur = await this.deploymentRepo.findOne({
         where: { envId: input.env, moduleKey: input.moduleKey },
       });
-      if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
+      if (!cur?.currentVersion) throw new BadRequestException('回滚失败: 该模块在此环境还没有部署记录');
 
       // 诊断 #17：回滚目标统一走 registry（指针表 previous_version 优先，回落历史表）
       const { to: target } = await this.registry.resolveRollbackTarget({
@@ -841,7 +841,7 @@ export class DeployService {
         to: input.to,
       });
       if (target === cur.currentVersion) {
-        throw new Error(`回滚失败: ${target} 就是当前版本`);
+        throw new BadRequestException(`回滚失败: ${target} 就是当前版本`);
       }
 
       // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
@@ -952,6 +952,9 @@ export class DeployService {
    * 查询某环境各模块的当前版本（供前端按环境展示）
    */
   async getCurrentVersions(env: string): Promise<any[]> {
+    if (!env?.trim()) {
+      throw new BadRequestException('env 必填（current-versions 不带 env 会因 undefined 命中 TypeORM where 条件而 500）');
+    }
     const rows = await this.deploymentRepo.find({ where: { envId: env } });
     const modules = await this.listModules();
     const map = new Map(modules.map((m: any) => [m.key, m]));
@@ -1526,10 +1529,13 @@ export class DeployService {
     const remoteDir = `${this.getWebSystemDir(input.env)}/servers/${dir}`;
     // 远端版本目录（发布流水线的远程投递已放好，用户 2026-09-21：产物跟着环境走，类似 admin）
     const remoteVerDir = `${remoteDir}/${input.versionTag}`;
+    // 隔离产物真源：storage root（activate 的落地目标）。两者任一有 manifest 即走隔离激活；
+    // activate 内部会优先用 storage 里的干净副本（见 backend-runtime.ts），投递副本仅作回退。
+    const storageVerDir = `\${HOME}/web_system_runtimes/${input.moduleKey}/${input.versionTag}`;
     let isolatedRuntime = false;
     try {
       isolatedRuntime = (await this.sshRun(sshConfig,
-        `if test -f '${remoteVerDir}/runtime-manifest.json'; then printf 'isolated-runtime-v1'; fi`,
+        `if test -f "${storageVerDir}/runtime-manifest.json" || test -f '${remoteVerDir}/runtime-manifest.json'; then printf 'isolated-runtime-v1'; fi`,
         input.env)).trim() === 'isolated-runtime-v1';
     } catch (error) {
       throw new Error(`远程部署失败：无法确认版本格式，拒绝继续落地：${(error as Error).message}`);
@@ -1539,6 +1545,7 @@ export class DeployService {
         moduleKey: input.moduleKey,
         versionTag: input.versionTag,
         serviceDirectory: remoteDir,
+        // 仍传投递副本：activate 内部优先 storage，这里只是「没命中 storage 时的回退真源」
         versionDirectory: remoteVerDir,
         processName: mod.pm2,
         runtimeStorageRoot: this.configService.get<string>('BACKEND_RUNTIME_ROOT_' + input.env.toUpperCase()),
