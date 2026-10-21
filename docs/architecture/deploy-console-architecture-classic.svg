@@ -217,7 +217,7 @@
   <rect x="40" y="828" width="1360" height="26" fill="#C0504D"/>
   <text x="52" y="846" font-size="11.5" font-weight="600" fill="#FFFFFF">⑤ 关键约束与已知债（改这里前必读）</text>
   <g font-size="11.5" fill="#374151">
-    <text x="56" y="876"><tspan font-weight="600" fill="#C0504D">部署形态：</tspan>console 只在 dev 部署（运维平台 + synchronize:true 不污染 prod 库）；自发布会自杀 → 必须异步排程重启，且 pointer 排在 restart 之前。</text>
+    <text x="56" y="876"><tspan font-weight="600" fill="#C0504D">部署形态：</tspan>console 只在 dev 部署（运维平台 + synchronize:true 不污染 prod 库）；手动发布（publish-deploy-console.sh 传统发布，不走平台流水线）。</text>
     <text x="56" y="896"><tspan font-weight="600" fill="#C0504D">配置下发边界：</tspan>引导凭据（CONFIG_MASTER_KEY、MYSQL_* / REDIS_*）留 .env；业务与服务间凭据 + GitHub Token 进配置中心（加密 + 审计），按需下发给服务进程（.env.generated）或仅注入流水线脚本 env。</text>
     <text x="56" y="916"><tspan font-weight="600" fill="#C0504D">P0 覆盖不足：</tspan>.env.generated 下发当前只覆盖本地；远程机（prod）仍只能手工写 .env —— 远程下发是 P1 待补项。</text>
     <text x="56" y="936"><tspan font-weight="600" fill="#C0504D">禁项：</tspan>禁 pm2 restart --update-env（会把会话变量固化进 pm2_env）；禁手动 ssh 构建（无版本记录 / 无审批 / 无回滚点）；改流水线后必跑 pipeline-lint。</text>

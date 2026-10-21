@@ -146,7 +146,7 @@
     <text x="518" y="628">synchronize:true · 云库双写（DEPLOY_CLOUD_DB_*）</text>
     <text x="518" y="644">发布：dev/prod 全环境流水线的执行者</text>
     <text x="518" y="660">配置中心：可下发（当前未常态化落盘 ⚠）</text>
-    <text x="518" y="676">自发布：restart-self 异步排程（防自杀）</text>
+    <text x="518" y="676">发布：手动脚本（publish-deploy-console.sh，不走流水线）</text>
 
     <rect x="952" y="552" width="432" height="156" rx="3" fill="#FFFFFF" stroke="#C4B0DF"/>
     <text x="966" y="574" font-size="12.5" font-weight="600" fill="#5B3F8A">prod（VPC-B · 被管对象，无 console）</text>
