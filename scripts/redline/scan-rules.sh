@@ -71,10 +71,16 @@ check_line_error() {
   #   「预览成功 / 二维码路径 / 请用微信扫码」这类 console.log 是**给开发者看的产品输出**，
   #   与根 scripts 的 debug-local 完全同构；与根 scripts 一样只豁免一级目录，
   #   apps/*/src 下的业务代码不受影响。
+  #
+  # 同性质扩展（2026-10-21，CI 实测误报）：archive/migrations/*.{mjs,cjs} 一级目录。
+  #   迁移脚本（p26~p37 等）是「给运维手动跑的 CLI 工具」，console.log 是**进度/结论日志**，
+  #   与根 scripts 的 debug-local、apps/*/scripts 的 miniprogram-ci 完全同构（产品行为，非调试残留）。
+  #   仅豁免 archive/migrations 一级目录；迁移脚本引用的业务代码不受影响。
   if ! is_comment_line "$s" \
      && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs \
           || "$file" == apps/*/scripts/*.js || "$file" == apps/*/scripts/*.mjs \
-          || "$file" == apps/*/scripts/*.cjs ]]; then
+          || "$file" == apps/*/scripts/*.cjs \
+          || "$file" == archive/migrations/*.mjs || "$file" == archive/migrations/*.cjs ]]; then
     if printf '%s' "$content" | grep -qE '\b(console\.(log|debug)\(|debugger\b)'; then
       add_err "R1" "调试残留(console.log/debug/debugger)" "${file}:${line}" "$content"
     fi
