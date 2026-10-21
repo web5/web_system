@@ -952,6 +952,9 @@ export class DeployService {
    * 查询某环境各模块的当前版本（供前端按环境展示）
    */
   async getCurrentVersions(env: string): Promise<any[]> {
+    if (!env?.trim()) {
+      throw new BadRequestException('env 必填（current-versions 不带 env 会因 undefined 命中 TypeORM where 条件而 500）');
+    }
     const rows = await this.deploymentRepo.find({ where: { envId: env } });
     const modules = await this.listModules();
     const map = new Map(modules.map((m: any) => [m.key, m]));
