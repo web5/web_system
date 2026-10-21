@@ -33,6 +33,10 @@ ai-agent-kit/
 │       ├── 04-subagent-isolation.md
 │       ├── 05-red-line-check.md
 │       └── RATIONALE.md            #   五条红线的设计理由（人面，AI 不加载）
+├── experts/                    # 专家实例层（2026-10-15 新增）：实战实例，非通用方法论
+│   ├── README.md               #   索引 + 准入标准（四条硬门槛）+ 与 skills/ 的关系
+│   ├── _template/              #   专家定义模板（从 agent-definition-template.md 派生）
+│   └── design-reviewer/        #   第 2 号实例：视觉交互设计评审（自带 76 条判据，来自 web_system）
 ├── references/
 │   ├── ai-methodology.md                   # 完整方法论（8 节，可当 PPT 大纲）
 │   ├── eval-framework.md                   # 评测体系定稿（五层过滤 + 五维 rubric）

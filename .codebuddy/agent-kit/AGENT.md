@@ -17,6 +17,8 @@
 | **工程纪律** | 这个工程动作怎么做才对 | `skills/` 内实体，索引见 §工程纪律 | 命中即调用 |
 | **协作主干** | 任务怎么组织、判据怎么定、人在哪审 | `skills/rd-digital-agent` + 12 子技能 | 入口常驻 |
 | **资产维护型能力** | 一类持久资产（知识库 / 记忆）怎么建与维护 | `skills/karpathy-llm-wiki`、`skills/user-memory` | 触发词命中即调用 |
+| **领域方法论 / 效率工具** | 非研发域的成套 SOP 与工具（简历、刷题页） | `skills/md-flashcards`、`skills/resume-pdf-pipeline` | 触发词命中即调用 |
+| **私人资产（不进本仓库）** | 投研策略 / 热点资讯 / 视觉设计 / 含凭证流程与内部端点者 —— 本仓库是 PUBLIC，这类**不进** | 真源 `~/skills/`（投研 + 视觉设计类）与 `~/.workbuddy/skills/`（凭证类直存），本表不列举其名称 | 仅 WorkBuddy 会话可用，经 `~/.workbuddy/skills/` 软链接入 |
 | 红线 | 底线，必须可机器判定 | `rules/general/01–05` | 始终 |
 | 设计论证 | 三类资产为何这样分、来源映射 | `references/methodology-design.md` | 不加载，改 kit 前读 |
 
@@ -36,8 +38,8 @@
 
 中大型方案的设计确认走评审链，AI 自查后人在此复核：
 产品方案评审（做不做对的事）→ 技术方案评审（怎么实现）→ 实现后代码评审（rd-review）。
-涉及可点击原型稿/交互设计的方案，产品评审后先过 UX 交互质检（`ux-prototype-designer` 独立质检清单，与产品确认互不替代）。
-清单：`rd-digital-agent/references/product-review-checklist.md`、`skills/ux-prototype-designer/references/ux-review-checklist.md`、`tech-review/references/review-checklist.md`。
+涉及可点击原型稿/交互设计的方案，产品评审后先过 UX 交互质检（原型 skill 自带独立质检清单，与产品确认互不替代；该 skill 属私人资产，真源在 `~/skills/`）。
+清单：`rd-digital-agent/references/product-review-checklist.md`、`tech-review/references/review-checklist.md`（UX 质检清单随原型 skill 本体走，不在本仓库）。
 小改动走简化档（`thinking-checklist` 简化档 · 最小交付卡），不走全链。
 
 ## 开工前置 · 不分级不变量（交付物 + 验证判据）
@@ -78,6 +80,9 @@
 | 并行分派 | 多个子任务可并行 | `skills/rd-digital-agent` §多 Agent 协作团队模式 |
 | 隔离工作区（worktree） | 需隔离或并行改多处 | `skills/rd-execute` 隔离约定 |
 | 请审 / 接审 | 提交前请审、收到评审意见 | `skills/rd-review` |
+| **效率产出**（简历 / 刷题页） | 简历转 A4 PDF、md 转刷题卡片 HTML | `skills/resume-pdf-pipeline`、`skills/md-flashcards` |
+
+> 投研（A股）/ 热点资讯 / **视觉设计**（品牌 token、头像、icon、logo、界面出稿、前端判据）属私人资产，真源在 `~/skills/`，不在本 Kit 登记（见 §资产分层「私人资产」行）。涉及时经 `~/.workbuddy/skills/` 软链调用，不假设本仓库内有。
 
 > 完整清单（含铁律与「何时不用」）见 `references/methodology-design.md` §四。
 
