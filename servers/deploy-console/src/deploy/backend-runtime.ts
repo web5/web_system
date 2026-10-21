@@ -209,11 +209,26 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       return { action: 'publish', unchanged: false, versionTag: input.versionTag, payloadSha256: incoming.payload.sha256 };
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
-  const inspected = inspect(input.versionDirectory);
-  if (input.action === 'inspect') return { action: 'inspect', moduleKey: input.moduleKey, versionTag: input.versionTag, files: inspected.payload.files, payloadSha256: inspected.payload.sha256 };
+  if (input.action === 'inspect') {
+    const inspected = inspect(input.versionDirectory);
+    return { action: 'inspect', moduleKey: input.moduleKey, versionTag: input.versionTag, files: inspected.payload.files, payloadSha256: inspected.payload.sha256 };
+  }
   if (input.action !== 'activate' || !input.serviceDirectory) throw new Error('Runtime activation requires a service directory');
   const service = fs.realpathSync(input.serviceDirectory);
-  if (!contains(service, inspected.root) || service === inspected.root) throw new Error('Runtime version is outside the target service');
+  const storage = canonical(input.runtimeStorageRoot || path.join(os.homedir(), 'web_system_runtimes'));
+  const installed = canonical(path.join(storage, input.moduleKey, input.versionTag));
+  // 隔离产物真源优先 storage（activate 的落地目标，发布时已 inspect 过、干净）：
+  // 历史债是投递副本 servers/<svc>/<vtag> 曾整目录带源码，被 inspect 白名单拒。
+  // 若 storage 已有该版本，直接用干净副本；否则才回退到投递副本校验。
+  let inspected;
+  if (fs.existsSync(path.join(installed, 'runtime-manifest.json'))) {
+    inspected = inspect(installed, service);
+  } else {
+    inspected = inspect(input.versionDirectory);
+  }
+  const inService = contains(service, inspected.root) && service !== inspected.root;
+  const inStorage = contains(storage, inspected.root) && storage !== inspected.root;
+  if (!inService && !inStorage) throw new Error('Runtime version is outside the target service or storage root');
   const active = path.join(service, 'dist');
   if (!fs.existsSync(active)) throw new Error('Current runtime is unavailable; refusing unprovisioned activation');
   const list = () => JSON.parse(run('pm2', ['jlist'], { cwd: service })) as Array<{ name: string; pid: number; pm2_env: Record<string, any> }>;
@@ -234,10 +249,8 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
   }
   const port = Number(configuredPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Runtime health port is required');
-  const storage = canonical(input.runtimeStorageRoot || path.join(os.homedir(), 'web_system_runtimes'));
   const project = path.resolve(service, '..', '..');
   if (contains(project, storage) || contains(storage, project)) throw new Error('Isolated runtime storage overlaps the running repository');
-  const installed = canonical(path.join(storage, input.moduleKey, input.versionTag));
   if (!contains(storage, installed)) throw new Error('Isolated runtime storage escapes its root');
   for (let ancestor = path.dirname(installed); ; ancestor = path.dirname(ancestor)) {
     if (fs.existsSync(path.join(ancestor, 'node_modules'))) throw new Error('Isolated runtime has ambient ancestor dependencies');

@@ -1526,10 +1526,13 @@ export class DeployService {
     const remoteDir = `${this.getWebSystemDir(input.env)}/servers/${dir}`;
     // 远端版本目录（发布流水线的远程投递已放好，用户 2026-09-21：产物跟着环境走，类似 admin）
     const remoteVerDir = `${remoteDir}/${input.versionTag}`;
+    // 隔离产物真源：storage root（activate 的落地目标）。两者任一有 manifest 即走隔离激活；
+    // activate 内部会优先用 storage 里的干净副本（见 backend-runtime.ts），投递副本仅作回退。
+    const storageVerDir = `\${HOME}/web_system_runtimes/${input.moduleKey}/${input.versionTag}`;
     let isolatedRuntime = false;
     try {
       isolatedRuntime = (await this.sshRun(sshConfig,
-        `if test -f '${remoteVerDir}/runtime-manifest.json'; then printf 'isolated-runtime-v1'; fi`,
+        `if test -f "${storageVerDir}/runtime-manifest.json" || test -f '${remoteVerDir}/runtime-manifest.json'; then printf 'isolated-runtime-v1'; fi`,
         input.env)).trim() === 'isolated-runtime-v1';
     } catch (error) {
       throw new Error(`远程部署失败：无法确认版本格式，拒绝继续落地：${(error as Error).message}`);
@@ -1539,6 +1542,7 @@ export class DeployService {
         moduleKey: input.moduleKey,
         versionTag: input.versionTag,
         serviceDirectory: remoteDir,
+        // 仍传投递副本：activate 内部优先 storage，这里只是「没命中 storage 时的回退真源」
         versionDirectory: remoteVerDir,
         processName: mod.pm2,
         runtimeStorageRoot: this.configService.get<string>('BACKEND_RUNTIME_ROOT_' + input.env.toUpperCase()),
