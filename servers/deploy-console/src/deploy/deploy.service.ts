@@ -779,8 +779,8 @@ export class DeployService {
     to?: string;
     taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string | null; to: string; mode: string; source: string }> {
-    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
-    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+    if (!input?.moduleKey?.trim()) throw new BadRequestException('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new BadRequestException('回滚失败: env 必填');
 
     const app = await this.appsService.findAppOrNull(input.moduleKey);
     if (app && (app.deployMode === 'env-dir' || (app.kind === 'shell' && app.deployMode === 'site-version'))) {
@@ -825,14 +825,14 @@ export class DeployService {
     to?: string;
     taskId?: string;
   }): Promise<{ moduleKey: string; env: string; from: string; to: string }> {
-    if (!input?.moduleKey?.trim()) throw new Error('回滚失败: moduleKey 必填');
-    if (!input?.env?.trim()) throw new Error('回滚失败: env 必填');
+    if (!input?.moduleKey?.trim()) throw new BadRequestException('回滚失败: moduleKey 必填');
+    if (!input?.env?.trim()) throw new BadRequestException('回滚失败: env 必填');
 
     return this.registry.withReleaseLock({ env: input.env, moduleKey: input.moduleKey, owner: 'rollback:' + crypto.randomUUID() }, async () => {
       const cur = await this.deploymentRepo.findOne({
         where: { envId: input.env, moduleKey: input.moduleKey },
       });
-      if (!cur?.currentVersion) throw new Error('回滚失败: 该模块在此环境还没有部署记录');
+      if (!cur?.currentVersion) throw new BadRequestException('回滚失败: 该模块在此环境还没有部署记录');
 
       // 诊断 #17：回滚目标统一走 registry（指针表 previous_version 优先，回落历史表）
       const { to: target } = await this.registry.resolveRollbackTarget({
@@ -841,7 +841,7 @@ export class DeployService {
         to: input.to,
       });
       if (target === cur.currentVersion) {
-        throw new Error(`回滚失败: ${target} 就是当前版本`);
+        throw new BadRequestException(`回滚失败: ${target} 就是当前版本`);
       }
 
       // 先落地生效（后台），再改指针 —— 与 deployVersion 保持同一顺序
