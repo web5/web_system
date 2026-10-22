@@ -23,6 +23,14 @@
 #   与改动内容无关；实例：PR #113 只改了 gateway 的 app.module.ts，gateway 的 build/test 全过、仅 lint 挂）。
 #   恢复条件：给相关子包补 flat config（可用已装的 @typescript-eslint/*），先从 warn / 最小规则集起步，
 #   再逐步收紧；恢复时把步骤里的 `--lint` 加回来即可。
+#
+# 2026-10-22：**lint 档已恢复**（配置 10-10 就位，开关滞后了 30 天——见《质量门禁总纲》§8 P1-1）。
+#   恢复前实测：全仓 error 已从基线 5 → 0，warning 325 → 328（存量演进，非新增破窗）。
+#   恢复时补了两件事，否则这道门是半残的：
+#     ① apps/shell、apps/deploy-console、packages/ui 原本**连 lint 脚本都没有** → CI 的
+#        changed-packages --lint 会静默跳过这三个包（只覆盖 2/5 工程）；
+#     ② 子包 lint:ci 都不带 --max-warnings → 只拦 error，存量 warning 涨了没人管。
+#   因此拆成两道：改动包 lint（拦 error，快）+ 根级全量水位（拦 warning 总量），见下方两个步骤。
 name: quality-gate
 
 on:
@@ -72,7 +80,7 @@ jobs:
         run: node scripts/pipeline-lint.mjs --scripts scripts
 
   changed-packages:
-    name: 改动包 build/test
+    name: 改动包 build/test/lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +100,7 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: 提取改动包并逐个 build/test
+      - name: 提取改动包并逐个 build/test/lint
         run: |
           BASE="${{ github.event.pull_request.base.sha || 'origin/master' }}"
           if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
@@ -100,10 +108,18 @@ jobs:
           fi
           # 两点 diff（clean checkout 下 git diff <sha> 即 <sha>..HEAD）
           #
-          # ⚠️ 这里刻意**不传 --lint**（2026-09-22 起暂时关闭，原因见文件头）：子包都配了 lint:ci
-          # 但全仓没有 ESLint 配置，ESLint 9 一律报找不到 eslint.config.* → 任何后端 PR 必红。
-          # 补上 flat config 后把 `--lint` 加回来即可恢复 lint 门。
-          bash scripts/ci/changed-packages.sh "$BASE"
+          # --lint 于 2026-10-22 恢复（配置 10-10 就位、开关滞后 30 天）。
+          # 注意：这一档只拦 **error**——子包 lint:ci 均不带 --max-warnings，
+          # 存量 warning 不在这里管（见下一步的根级全量水位）。
+          bash scripts/ci/changed-packages.sh "$BASE" --lint
+
+      # 全量水位：error 必须 0（子包 lint 已管），warning 不得超过基线。
+      # 为什么用「总量」而不是「改动文件」：ESLint 不提供「只报新增行」，
+      #   按文件判会误伤（apps/shell/src/main.ts 存量 25 条，改一行就必挂）。
+      #   总量法的效果等价于「新增必须零告警」，且改存量文件不会误伤。
+      # 纪律：水位**只降不升**——修掉存量后必须在同一 PR 下调 package.json 里的数字。
+      - name: 全量 ESLint 水位（warning 不超基线）
+        run: pnpm lint:ci
 
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
   #
