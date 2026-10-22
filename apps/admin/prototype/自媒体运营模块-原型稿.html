@@ -1,0 +1,1279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>自媒体运营模块 · 原型稿（待确认）</title>
+<style>
+/* ============ Token（admin 工程端 · light）============ */
+:root {
+  --brand: #F97316; --brand-txt: #EA580C; --brand-soft: #FFF7ED; --brand-deep: #C2410C;
+  --bg-page: #FAFAFA; --bg-surface: #FFFFFF; --bg-subtle: #F2F2F2; --bg-hover: #F2F2F2; --bg-active: #EBEBEB;
+  --t1: #171717; --t2: #3F3F46; --t3: #525252; --t4: #A3A3A3; --t-disabled: #D4D4D4;
+  --border: #E5E5E5; --border-subtle: #EBEBEB;
+  --ok-bg: #EAF6EC; --ok: #398E4A;
+  --warn-bg: #FEF3DC; --warn: #F5A623; --warn-txt: #B45309;
+  --err-bg: #FCEBEC; --err: #E5484D;
+  --info-bg: #FFF7ED; --info: #F97316;
+  --r-chip: 4px; --r-control: 6px; --r-card: 8px;
+  --on-brand: #FFFFFF; --mask: rgba(0,0,0,.45); --focus-ring: 0 0 0 2px rgba(249,115,22,.15);
+  --ok-deep: #2C6B3B; --warn-deep: #92580A; --err-deep: #B02A2F;
+  --code-bg: #1C1E26; --code-text: #E2E8F0;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --shadow-pop: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);
+  --mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: 'Geist Sans', 'Inter', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: var(--sans); font-size: 14px; color: var(--t2); background: var(--bg-page); line-height: 1.6; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; font-size: 14px; }
+svg.ic { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; }
+svg.ic-20 { width: 20px; height: 20px; }
+a { color: var(--brand-txt); text-decoration: none; }
+
+/* ============ 桌面壳 ============ */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.sider { width: 220px; flex: none; background: var(--bg-surface); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
+.sider-head { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); }
+.sider-logo { width: 28px; height: 28px; border-radius: var(--r-control); background: var(--brand); display: flex; align-items: center; justify-content: center; color: var(--on-brand); font-weight: 600; font-size: 13px; }
+.sider-title { font-size: 15px; font-weight: 600; color: var(--t1); }
+.sider-body { flex: 1; overflow-y: auto; padding: 8px; }
+.menu-group-label { font-size: 12px; color: var(--t4); padding: 12px 12px 4px; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-control); color: var(--t3); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-size: 14px; }
+.menu-item:hover { background: var(--bg-hover); }
+.menu-item.active { background: var(--brand-soft); color: var(--brand-txt); font-weight: 500; }
+.menu-item.dim { color: var(--t4); cursor: default; }
+.menu-item.dim:hover { background: none; }
+.menu-sub { padding-left: 20px; }
+.menu-sub .menu-item { font-size: 13px; padding: 7px 12px; }
+.menu-caret { margin-left: auto; transition: transform .15s; color: var(--t4); }
+.menu-open .menu-caret { transform: rotate(90deg); }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar { height: 56px; flex: none; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; padding: 0 24px; gap: 12px; }
+.crumb { font-size: 14px; color: var(--t4); display: flex; align-items: center; gap: 8px; }
+.crumb b { color: var(--t1); font-weight: 500; }
+.crumb .sep { color: var(--t-disabled); }
+.env-tag { font-size: 12px; color: var(--warn-txt); background: var(--warn-bg); border-radius: var(--r-chip); padding: 2px 8px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--t4); font-size: 13px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.screen { display: none; max-width: 1200px; margin: 0 auto; }
+.screen.on { display: block; animation: fadein .2s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ============ 通用组件 ============ */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.page-title { font-size: 20px; font-weight: 600; color: var(--t1); line-height: 1.25; }
+.page-desc { font-size: 13px; color: var(--t4); margin-top: 4px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-control); border: 1px solid var(--border); background: var(--bg-surface); color: var(--t2); font-size: 14px; transition: all .15s; }
+.btn:hover { border-color: var(--brand); color: var(--brand-txt); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.btn.primary:hover { background: var(--brand-txt); border-color: var(--brand-txt); color: var(--on-brand); }
+.btn.danger { color: var(--err); border-color: var(--err); }
+.btn.danger:hover { background: var(--err-bg); border-color: var(--err); color: var(--err); }
+.btn.sm { height: 24px; padding: 0 10px; font-size: 13px; }
+.btn.text { border: none; background: none; padding: 0 6px; color: var(--brand-txt); }
+.btn.text:hover { background: none; text-decoration: underline; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn .ic { width: 14px; height: 14px; }
+
+.card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.card-pad { padding: 16px; }
+.card + .card { margin-top: 16px; }
+
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 20px; padding: 0 8px; border-radius: var(--r-chip); background: var(--bg-subtle); color: var(--t3); white-space: nowrap; }
+.tag.ok { background: var(--ok-bg); color: var(--ok); }
+.tag.warn { background: var(--warn-bg); color: var(--warn-txt); }
+.tag.err { background: var(--err-bg); color: var(--err); }
+.tag.info { background: var(--brand-soft); color: var(--brand-txt); }
+.tag.mono { font-family: var(--mono); font-size: 11px; }
+.tag.sub { font-size: 11px; padding: 0 6px; line-height: 18px; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-size: 13px; font-weight: 500; color: var(--t3); background: var(--bg-subtle); padding: 10px 12px; white-space: nowrap; }
+.table th:first-child { border-radius: var(--r-control) 0 0 0; }
+.table th:last-child { border-radius: 0 var(--r-control) 0 0; }
+.table td { padding: 12px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table tbody tr:hover { background: var(--bg-hover); }
+.table .mono { font-family: var(--mono); font-size: 12px; color: var(--t3); }
+.ellip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.row-actions { display: flex; gap: 4px; }
+.switch { width: 36px; height: 20px; border-radius: 999px; background: var(--t-disabled); position: relative; border: none; transition: background .15s; flex: none; }
+.switch::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--on-brand); top: 2px; left: 2px; transition: left .15s; }
+.switch.on { background: var(--brand); }
+.switch.on::after { left: 18px; }
+
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.select, .input { height: 32px; border: 1px solid var(--border); border-radius: var(--r-control); padding: 0 10px; background: var(--bg-surface); color: var(--t2); min-width: 140px; }
+.input::placeholder { color: var(--t4); }
+.select:focus, .input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
+.demo-switch { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t4); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-control); overflow: hidden; }
+.seg button { border: none; background: var(--bg-surface); padding: 4px 10px; font-size: 12px; color: var(--t3); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--brand-soft); color: var(--brand-txt); font-weight: 500; }
+
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.stat { padding: 16px; }
+.stat .label { font-size: 13px; color: var(--t4); }
+.stat .value { font-size: 24px; font-weight: 600; color: var(--t1); margin-top: 4px; line-height: 1.25; }
+.stat .value.danger { color: var(--err); }
+.stat .hint { font-size: 12px; color: var(--t4); margin-top: 2px; }
+
+.empty { padding: 48px 16px; text-align: center; color: var(--t4); }
+.empty .ic { width: 40px; height: 40px; color: var(--t-disabled); margin-bottom: 8px; }
+.empty .t { font-size: 14px; color: var(--t3); }
+.empty .d { font-size: 13px; margin-top: 4px; }
+.skeleton { padding: 16px; }
+.sk-line { height: 14px; border-radius: var(--r-chip); background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-active) 50%, var(--bg-subtle) 75%); background-size: 200% 100%; animation: sk 1.2s infinite; margin-bottom: 12px; }
+@keyframes sk { to { background-position: -200% 0; } }
+
+/* ============ 弹窗 / 抽屉 ============ */
+.mask { position: fixed; inset: 0; background: var(--mask); display: none; align-items: center; justify-content: center; z-index: 50; }
+.mask.on { display: flex; }
+.modal { width: 560px; max-width: calc(100vw - 48px); background: var(--bg-surface); border-radius: var(--r-card); box-shadow: var(--shadow-pop); max-height: calc(100vh - 96px); display: flex; flex-direction: column; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
+.modal-title { font-size: 16px; font-weight: 600; color: var(--t1); }
+.modal-body { padding: 24px; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border-subtle); }
+.x { border: none; background: none; color: var(--t4); padding: 4px; border-radius: var(--r-chip); display: inline-flex; }
+.x:hover { background: var(--bg-hover); color: var(--t2); }
+
+.drawer-mask { position: fixed; inset: 0; background: var(--mask); display: none; z-index: 50; justify-content: flex-end; }
+.drawer-mask.on { display: flex; }
+.drawer { width: 720px; max-width: 92vw; background: var(--bg-surface); height: 100%; display: flex; flex-direction: column; box-shadow: var(--shadow-pop); }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg-subtle); }
+
+/* ============ 触发结果卡（核心改造点）============ */
+.result-card { border-radius: var(--r-card); border: 1px solid var(--border-subtle); padding: 16px; margin-top: 16px; }
+.result-card.ok { background: var(--ok-bg); border-color: var(--ok); }
+.result-card.warn { background: var(--warn-bg); border-color: var(--warn); }
+.result-card.err { background: var(--err-bg); border-color: var(--err); }
+.result-card.info { background: var(--info-bg); border-color: var(--info); }
+.rc-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.result-card.ok .rc-head { color: var(--ok); }
+.result-card.warn .rc-head { color: var(--warn-txt); }
+.result-card.err .rc-head { color: var(--err); }
+.result-card.info .rc-head { color: var(--brand-txt); }
+.rc-desc { font-size: 13px; margin-top: 8px; line-height: 1.6; }
+.result-card.ok .rc-desc { color: var(--ok-deep); }
+.result-card.warn .rc-desc { color: var(--warn-deep); }
+.result-card.err .rc-desc { color: var(--err-deep); }
+.result-card.info .rc-desc { color: var(--brand-deep); }
+.rc-metrics { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+.rc-metric .n { font-size: 18px; font-weight: 600; color: var(--t1); }
+.rc-metric .l { font-size: 12px; color: var(--t4); }
+.rc-actions { display: flex; gap: 8px; margin-top: 16px; }
+.tech-detail { margin-top: 12px; }
+.tech-detail summary { font-size: 12px; color: var(--t4); cursor: pointer; user-select: none; }
+.tech-detail pre { background: var(--code-bg); color: var(--code-text); border-radius: var(--r-control); padding: 12px; font-family: var(--mono); font-size: 12px; margin-top: 8px; overflow-x: auto; line-height: 1.5; }
+
+/* ============ 表单页 ============ */
+.form-card { max-width: 720px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-item { margin-bottom: 16px; }
+.form-item.full { grid-column: 1 / -1; }
+.form-label { font-size: 13px; font-weight: 500; color: var(--t3); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.form-label .req { color: var(--err); }
+.form-label .tip { font-weight: 400; color: var(--t4); font-size: 12px; }
+.form-input, .form-select, .form-area { width: 100%; border: 1px solid var(--border); border-radius: var(--r-control); padding: 6px 10px; background: var(--bg-surface); color: var(--t2); }
+.form-input:focus, .form-select:focus, .form-area:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
+.form-input[disabled] { background: var(--bg-subtle); color: var(--t4); }
+.form-area { font-family: var(--mono); font-size: 12px; min-height: 120px; resize: vertical; }
+.form-err { font-size: 12px; color: var(--err); margin-top: 4px; display: none; }
+.form-item.bad .form-input, .form-item.bad .form-area { border-color: var(--err); }
+.form-item.bad .form-err { display: block; }
+.form-foot { display: flex; gap: 8px; margin-top: 8px; }
+.switch-row { display: flex; align-items: center; gap: 8px; height: 32px; }
+.switch-row .t { font-size: 13px; color: var(--t3); }
+
+/* ============ 详情页 ============ */
+.back-link { display: inline-flex; align-items: center; gap: 4px; color: var(--t4); font-size: 13px; background: none; border: none; padding: 4px 8px 4px 0; margin-bottom: 8px; }
+.back-link:hover { color: var(--brand-txt); }
+.detail-title { font-size: 20px; font-weight: 600; color: var(--t1); line-height: 1.4; display: flex; align-items: flex-start; gap: 8px; }
+.kv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px; }
+.kv .k { font-size: 12px; color: var(--t4); }
+.kv .v { font-size: 13px; color: var(--t2); margin-top: 2px; word-break: break-all; }
+.kv .v.mono { font-family: var(--mono); font-size: 12px; }
+.sec-title { font-size: 15px; font-weight: 600; color: var(--t1); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.doc-text { font-size: 13px; color: var(--t2); line-height: 1.75; }
+.code-block { background: var(--code-bg); color: var(--code-text); border-radius: var(--r-control); padding: 12px 16px; font-family: var(--mono); font-size: 12px; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flow .node { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t4); background: var(--bg-subtle); border-radius: var(--r-chip); padding: 4px 10px; }
+.flow .node.done { color: var(--ok); background: var(--ok-bg); }
+.flow .node.cur { color: var(--brand-txt); background: var(--brand-soft); font-weight: 500; }
+.flow .node.fail { color: var(--err); background: var(--err-bg); }
+.flow .arr { color: var(--t-disabled); font-size: 12px; }
+
+/* ============ 成文预览 ============ */
+.article { background: var(--bg-surface); border-radius: var(--r-card); padding: 32px 40px; font-size: 14px; line-height: 1.75; color: var(--t2); }
+.article h1 { font-size: 20px; color: var(--t1); line-height: 1.4; margin-bottom: 8px; }
+.article .meta { font-size: 12px; color: var(--t4); margin-bottom: 24px; }
+.article h2 { font-size: 16px; color: var(--t1); margin: 20px 0 8px; }
+.article p { margin-bottom: 12px; }
+.article .paper { border-left: 3px solid var(--brand); padding-left: 12px; margin-bottom: 16px; }
+.article .paper .pt { font-weight: 600; color: var(--t1); font-size: 14px; }
+.article .paper .pa { font-size: 12px; color: var(--t4); }
+
+/* ============ Toast ============ */
+#toast { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); background: var(--t1); color: var(--on-brand); font-size: 13px; padding: 8px 16px; border-radius: var(--r-control); opacity: 0; transition: opacity .2s; z-index: 100; pointer-events: none; box-shadow: var(--shadow-pop); }
+#toast.on { opacity: 1; }
+
+/* ============ 演示控件 ============ */
+.demo-panel { position: fixed; right: 16px; bottom: 16px; background: var(--bg-surface); border: 1px dashed var(--brand); border-radius: var(--r-card); padding: 10px 14px; font-size: 12px; color: var(--t3); box-shadow: var(--shadow-pop); z-index: 40; max-width: 300px; }
+.demo-panel .dt { font-weight: 600; color: var(--brand-txt); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.demo-panel .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.demo-panel .note { color: var(--t4); line-height: 1.5; margin-top: 6px; }
+
+.alert { display: flex; gap: 8px; border-radius: var(--r-card); padding: 12px 16px; font-size: 13px; margin-bottom: 16px; align-items: flex-start; }
+.alert.warn { background: var(--warn-bg); color: var(--warn-txt); }
+.alert .ic { flex: none; margin-top: 2px; }
+.alert b { font-weight: 600; }
+
+.pager { display: flex; justify-content: flex-end; gap: 4px; margin-top: 12px; align-items: center; }
+.pager button { min-width: 28px; height: 28px; border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--r-chip); font-size: 12px; color: var(--t3); }
+.pager button.on { border-color: var(--brand); color: var(--brand-txt); background: var(--brand-soft); }
+.pager .info { font-size: 12px; color: var(--t4); margin-right: 8px; }
+
+.footer-note { margin-top: 24px; font-size: 12px; color: var(--t4); text-align: center; }
+
+/* ============ 试采面板（编辑页 · 测试采集）============ */
+.test-panel { margin-top: 16px; max-width: 720px; }
+.test-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.test-title { font-size: 15px; font-weight: 600; color: var(--t1); }
+.test-no-persist { font-size: 12px; color: var(--brand-txt); background: var(--brand-soft); border: 1px solid var(--brand); border-radius: var(--r-chip); padding: 1px 8px; }
+.test-summary { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; }
+.test-summary.ok { color: var(--ok); }
+.test-summary.warn { color: var(--warn-txt); }
+.test-summary.err { color: var(--err); }
+.test-note { font-size: 12px; color: var(--t4); margin-top: 6px; }
+.sample-list { margin-top: 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-control); overflow: hidden; }
+.sample-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; }
+.sample-item + .sample-item { border-top: 1px solid var(--border-subtle); }
+.sample-item:hover { background: var(--bg-hover); }
+.sample-idx { font-family: var(--mono); font-size: 11px; color: var(--t4); width: 18px; flex: none; }
+.sample-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t2); }
+.sample-date { font-family: var(--mono); font-size: 11px; color: var(--t4); flex: none; }
+.sample-link { flex: none; color: var(--brand-txt); display: inline-flex; align-items: center; gap: 2px; font-size: 12px; background: none; border: none; padding: 2px 4px; }
+.sample-link:hover { text-decoration: underline; }
+.test-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.test-foot .demo-switch { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<!-- SVG 图标库 -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v8m0-8l-3 3m3-3l3 3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3 3 0 0 1 3 3v4"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 14 8-14 8z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7-7 7 7 7"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-xcircle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-robot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M2 14h2M20 14h2M15 13v2M9 13v2"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sider">
+    <div class="sider-head">
+      <div class="sider-logo">豆</div>
+      <div class="sider-title">科豆 AI</div>
+    </div>
+    <div class="sider-body">
+      <div class="menu-group-label">运营</div>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-dash"/></svg>工作台</button>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-team"/></svg>用户管理</button>
+
+      <div class="menu-group-label">内容</div>
+      <!-- 自媒体运营 sub-menu（本次改造对象） -->
+      <button class="menu-item menu-open" id="menuContentGroup" onclick="toggleGroup(this)">
+        <svg class="ic"><use href="#i-cloud"/></svg>自媒体运营
+        <svg class="ic menu-caret"><use href="#i-caret"/></svg>
+      </button>
+      <div class="menu-sub" id="contentGroupChildren">
+        <button class="menu-item active" data-screen="sources" onclick="go('sources')"><svg class="ic"><use href="#i-list"/></svg>采集源管理</button>
+        <button class="menu-item" data-screen="items" onclick="go('items')"><svg class="ic"><use href="#i-file"/></svg>采集明细</button>
+        <button class="menu-item" data-screen="publications" onclick="go('publications')"><svg class="ic"><use href="#i-send"/></svg>公众号成文</button>
+        <button class="menu-item" data-screen="pipelines" onclick="go('pipelines')"><svg class="ic"><use href="#i-flow"/></svg>发布管线</button>
+        <button class="menu-item" data-screen="runs" onclick="go('runs')"><svg class="ic"><use href="#i-activity"/></svg>采集监控</button>
+      </div>
+
+      <div class="menu-group-label">系统</div>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-robot"/></svg>Agents</button>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-settings"/></svg>系统设置</button>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-api"/></svg>MCP 管理</button>
+      <button class="menu-item dim"><svg class="ic"><use href="#i-db"/></svg>数据浏览</button>
+    </div>
+  </aside>
+
+  <!-- ============ 主区 ============ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb" id="crumb">自媒体运营 <span class="sep">/</span> <b>采集源管理</b></div>
+      <span class="env-tag">dev</span>
+      <div class="topbar-right">
+        <span>admin</span>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ═══════════ S1 采集源管理 ═══════════ -->
+      <section class="screen on" id="screen-sources">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集源管理</div>
+            <div class="page-desc">配置内容采集来源，改源、停用、换参数只改表不发版；「触发」为手动补采，日常采集由发布管线定时执行。</div>
+          </div>
+          <button class="btn primary" onclick="go('source-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加采集源</button>
+        </div>
+
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>编码</th><th>名称</th><th>类型</th><th>领域</th><th>状态</th><th>最近采集</th><th style="width:190px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">sina_news</td><td>新浪财经快讯</td><td><span class="tag mono">sina_news</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-22 09:00 成功 · 12 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('sina_news','新浪财经快讯','sina_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">eastmoney_news</td><td>东方财富快讯</td><td><span class="tag mono">eastmoney_news</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-22 09:00 成功 · 20 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('eastmoney_news','东方财富快讯','eastmoney_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag mono">eastmoney_lhb</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-21 18:05 成功 · 86 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('eastmoney_lhb','东方财富龙虎榜','eastmoney_lhb')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag mono">arxiv</span></td><td>论文</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag err">08-24 18:44 失败 · 网络不可达</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('arxiv','arXiv 论文','arxiv')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">hackernews</td><td>Hacker News</td><td><span class="tag mono">hackernews</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('hackernews','Hacker News','hackernews')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-jiqizhixin</td><td>机器之心</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('rss-jiqizhixin','机器之心','rss')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-qbitai</td><td>量子位</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="openTrigger('rss-qbitai','量子位','rss')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-mit-tr</td><td>MIT Technology Review</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" disabled><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-note">原型稿 · 数据为演示 mock ｜ 「最近采集」列读取采集监控数据，失败源在此直接可见</div>
+      </section>
+
+      <!-- ═══════════ S3 采集源 编辑/新建（新页面） ═══════════ -->
+      <section class="screen" id="screen-source-edit">
+        <button class="back-link" onclick="go('sources')"><svg class="ic"><use href="#i-back"/></svg>返回采集源管理</button>
+        <div class="page-head">
+          <div>
+            <div class="page-title">编辑采集源</div>
+            <div class="page-desc">编码创建后不可修改；私有配置按采集器类型填写，格式错误将无法保存。</div>
+          </div>
+        </div>
+
+        <div class="alert warn" id="srcTypeAlert">
+          <svg class="ic"><use href="#i-warn"/></svg>
+          <div><b>该类型暂不支持手动触发：</b>arxiv / hackernews / rss 由定时管线自动采集，编辑保存不影响管线运行。改完配置可点下方「测试采集」验证是否取得到数——试采仅预览，不入库。</div>
+        </div>
+
+        <div class="card card-pad form-card">
+          <div class="form-grid">
+            <div class="form-item">
+              <div class="form-label">编码 code <span class="req">*</span></div>
+              <input class="form-input" value="arxiv" disabled />
+            </div>
+            <div class="form-item">
+              <div class="form-label">名称 <span class="req">*</span></div>
+              <input class="form-input" value="arXiv 论文" />
+            </div>
+            <div class="form-item">
+              <div class="form-label">采集器类型 <span class="req">*</span></div>
+              <select class="form-select">
+                <option>arxiv · arXiv 论文</option>
+                <option>sina_news · 新浪财经快讯</option>
+                <option>eastmoney_news · 东方财富快讯</option>
+                <option>eastmoney_lhb · 东方财富龙虎榜</option>
+                <option>hackernews · Hacker News</option>
+                <option>rss · RSS 订阅</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">内容领域</div>
+              <select class="form-select"><option>论文</option><option>财经</option><option>AI</option></select>
+            </div>
+            <div class="form-item full">
+              <div class="form-label">私有配置 config（JSON） <span class="tip">各源私有参数，如 rss：{"url":"https://..."}；arxiv：{"categories":"cs.AI","max_results":10}</span></div>
+              <textarea class="form-area">{
+  "categories": "cs.AI+OR+cat:cs.CL+OR+cat:cs.CV+OR+cat:cs.LG",
+  "max_results": 20
+}</textarea>
+              <div class="form-err">config 必须是合法 JSON</div>
+            </div>
+            <div class="form-item full">
+              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用（停用后定时管线将跳过该源）</span></div>
+            </div>
+          </div>
+          <div class="form-foot">
+            <button class="btn primary" onclick="toast('已保存（原型演示）'); go('sources')">保存</button>
+            <button class="btn" onclick="runTest()" id="testBtn"><svg class="ic"><use href="#i-play"/></svg>测试采集</button>
+            <button class="btn" onclick="go('sources')">取消</button>
+          </div>
+        </div>
+
+        <!-- 试采面板：默认隐藏，点击「测试采集」后出现 -->
+        <div class="card card-pad test-panel" id="testPanel" style="display:none">
+          <div class="test-head">
+            <span class="test-title">测试采集</span>
+            <span class="test-no-persist">仅预览 · 未入库</span>
+          </div>
+          <div class="test-note">按当前表单配置试采，结果只在这里预览：不写入采集明细、不计入采集记录、不触发定时管线。</div>
+
+          <!-- 加载态 -->
+          <div id="testLoading" style="display:none; margin-top:12px">
+            <div class="skeleton"><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line"></div></div>
+          </div>
+
+          <!-- 结果态 -->
+          <div id="testResult" style="display:none">
+            <div class="test-summary" id="testSummaryLine">
+              <svg class="ic ic-20"><use href="#i-check"/></svg>
+              <span id="testSummaryText"></span>
+            </div>
+            <div class="sample-list" id="testSampleList"></div>
+            <div class="test-note" id="testResultNote"></div>
+          </div>
+
+          <div class="test-foot">
+            <button class="btn sm" onclick="runTest()"><svg class="ic"><use href="#i-refresh"/></svg>重新测试</button>
+            <div class="demo-switch">
+              原型演示 · 结果
+              <div class="seg" id="testStateSeg">
+                <button class="on" data-st="ok" onclick="setTestState('ok',this)">成功</button>
+                <button data-st="empty" onclick="setTestState('empty',this)">空结果</button>
+                <button data-st="failed" onclick="setTestState('failed',this)">失败</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S4 采集明细 ═══════════ -->
+      <section class="screen" id="screen-items">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集明细</div>
+            <div class="page-desc">每一条采集结果的内容、质量归因与去向；「质量异常」的条目可点进去看卡在哪一步。</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select"><option>全部采集源</option><option>sina_news</option><option>eastmoney_news</option><option>eastmoney_lhb</option><option>arxiv</option></select>
+          <select class="select"><option>全部管线</option><option>daily_paper</option><option>daily_finance</option></select>
+          <select class="select"><option>全部质量状态</option><option>ok 完整</option><option>partial 部分成功</option><option>fail 失败</option><option>skip 去重跳过</option></select>
+          <input class="input" style="min-width:200px" placeholder="搜索标题 / 外部 ID" />
+          <button class="btn">查询</button>
+          <button class="btn">重置</button>
+          <div class="demo-switch">
+            原型演示
+            <div class="seg"><button class="on" onclick="demoState('items','data',this)">有数据</button><button onclick="demoState('items','empty',this)">空态</button></div>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="card stat"><div class="label">今日新增</div><div class="value">118</div><div class="hint">较昨日 +12%</div></div>
+          <div class="card stat"><div class="label">今日去重跳过</div><div class="value">36</div><div class="hint">SimHash 命中</div></div>
+          <div class="card stat"><div class="label">质量异常（近 7 天）</div><div class="value danger">4</div><div class="hint">fail 2 · partial 2</div></div>
+          <div class="card stat"><div class="label">进入成文</div><div class="value">23</div><div class="hint">近 7 天被管线选用</div></div>
+        </div>
+
+        <div class="card" id="itemsTableWrap">
+          <table class="table">
+            <thead>
+              <tr><th style="min-width:260px">标题</th><th>来源</th><th>领域</th><th>质量</th><th>所属管线</th><th>发布时间</th><th>采集时间</th><th style="width:70px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_paper</span></td>
+                <td class="mono">10-21 14:00</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">央行开展 365 亿元 7 天期逆回购操作，净投放 120 亿元</span></td>
+                <td>新浪财经快讯</td><td>财经</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td><span class="tag info">daily_finance</span></td>
+                <td class="mono">10-22 08:31</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">龙虎榜：机构专用席位净买入华工科技 1.24 亿元</span></td>
+                <td>东方财富龙虎榜</td><td>财经</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td>—</td>
+                <td class="mono">10-21 18:00</td><td class="mono">10-21 18:05</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">OpenAI 发布新一代推理模型，API 价格下调 40%</span></td>
+                <td>东方财富快讯</td><td>财经</td>
+                <td><span class="tag warn">partial</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_finance</span></td>
+                <td class="mono">10-22 07:52</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Think Harder Where It Matters: Item-Level Adaptive Recursion for Sequential Recommendation</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_paper</span></td>
+                <td class="mono">10-20 16:20</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Rethinking Video Autoencoders for Interactive World Models</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag err">fail</span> <span class="tag sub">llm</span></td>
+                <td>—</td>
+                <td class="mono">10-19 02:11</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">某券商研报：AI 算力租赁市场规模测算（与 10-15 条目重复）</span></td>
+                <td>新浪财经快讯</td><td>财经</td>
+                <td><span class="tag">skip</span> <span class="tag sub">dedup</span></td>
+                <td>—</td>
+                <td class="mono">10-15 10:02</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Hacker News 热帖：Show HN — 我用 Rust 写了一个本地 RAG 引擎</span></td>
+                <td>Hacker News</td><td>AI</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td>—</td>
+                <td class="mono">10-22 06:40</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="go('item-detail')">详情</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:0 16px 16px"><div class="pager"><span class="info">共 118 条</span><button class="on">1</button><button>2</button><button>3</button><button>…</button><button>15</button></div></div>
+        </div>
+
+        <div class="card empty" id="itemsEmpty" style="display:none">
+          <svg class="ic"><use href="#i-file"/></svg>
+          <div class="t">没有符合条件的采集明细</div>
+          <div class="d">试试调整筛选条件，或去「采集源管理」确认源已启用</div>
+          <div style="margin-top:16px"><button class="btn" onclick="demoState('items','data',document.querySelector('#screen-items .seg button'))">重置筛选</button></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S5 采集明细详情 ═══════════ -->
+      <section class="screen" id="screen-item-detail">
+        <button class="back-link" onclick="go('items')"><svg class="ic"><use href="#i-back"/></svg>返回采集明细</button>
+        <div class="page-head">
+          <div style="flex:1">
+            <div class="detail-title">
+              <span>LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data</span>
+              <a class="btn sm" href="#" onclick="toast('原型演示：跳转 arXiv 原文');return false"><svg class="ic"><use href="#i-ext"/></svg>原文</a>
+            </div>
+            <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
+              <span class="tag info">论文</span><span class="tag mono">external_id: 2608.21360</span><span class="tag ok">质量 ok</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">质量归因</div>
+          <div class="flow">
+            <span class="node done">采集 collect</span><span class="arr">→</span>
+            <span class="node done">去重 dedup</span><span class="arr">→</span>
+            <span class="node done">LLM 摘要 llm</span><span class="arr">→</span>
+            <span class="node cur">成文 publish</span><span class="arr">→</span>
+            <span class="node">已发布</span>
+          </div>
+          <div class="kv-grid" style="margin-top:16px">
+            <div class="kv"><div class="k">采集源</div><div class="v">arXiv 论文（arxiv）</div></div>
+            <div class="kv"><div class="k">所属管线</div><div class="v">daily_paper</div></div>
+            <div class="kv"><div class="k">采集耗时</div><div class="v mono">1,842 ms</div></div>
+            <div class="kv"><div class="k">原文发布时间</div><div class="v mono">2026-10-21 14:00:00</div></div>
+            <div class="kv"><div class="k">入库时间</div><div class="v mono">2026-10-22 09:01:12</div></div>
+            <div class="kv"><div class="k">SimHash</div><div class="v mono">a3f9…7c21</div></div>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">AI 摘要</div>
+          <div class="doc-text">
+            本文提出 LongZero，一种从零数据出发增强大模型长上下文推理能力的方法。作者构建了一条「自举式」课程：先用短样本合成推理链，再逐段加长上下文窗口，使模型在 128K 上下文中保持稳定的多跳推理表现。在 LongBench 与 NEEDLE 基准上，LongZero 较基线提升 6.8~11.2 个百分点，且无需人工标注长文本数据。
+          </div>
+          <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap">
+            <span class="tag sub">prompt_version: v2.3</span><span class="tag sub">degraded: false</span>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">源私有字段（meta）</div>
+          <div class="code-block">{
+  "arxiv_id": "2608.21360",
+  "title_en": "LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data",
+  "authors": ["Wei Zhang", "Li Chen", "…"],
+  "abs_url": "https://arxiv.org/abs/2608.21360",
+  "prompt_version": "v2.3",
+  "degraded": false,
+  "digest": {
+    "译名": "LongZero：零数据增强大模型长上下文推理",
+    "核心贡献": "自举式课程合成推理链，无需人工长文本标注",
+    "方法亮点": "逐段加长上下文窗口，128K 下多跳推理稳定",
+    "潜在应用": "长文档问答、代码库级理解"
+  },
+  "categories": "cs.AI+OR+cat:cs.CL+OR+cat:cs.CV+OR+cat:cs.LG"
+}</div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="sec-title">发布记录 <span class="tag sub" style="cursor:pointer" onclick="go('publications')">去「公众号成文」查看 →</span></div>
+          <table class="table">
+            <thead><tr><th>成文</th><th>发布目标</th><th>状态</th><th>外部 ID</th><th>时间</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">每日论文速览 ｜ 2026-10-22</span></td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-8f21…</td><td class="mono">10-22 09:05</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════ S6 公众号成文 ═══════════ -->
+      <section class="screen" id="screen-publications">
+        <div class="page-head">
+          <div>
+            <div class="page-title">公众号成文</div>
+            <div class="page-desc">管线生成并投递到腾讯文档 / 公众号的成文记录；「预览成文」查看最终交付内容，确认发布状态。</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select"><option>全部目标</option><option>腾讯文档</option><option>公众号</option></select>
+          <select class="select"><option>全部状态</option><option>success 已发布</option><option>submitted 已提交</option><option>failed 失败</option></select>
+          <input class="input" style="min-width:200px" placeholder="搜索成文标题" />
+          <button class="btn">查询</button>
+          <button class="btn">重置</button>
+          <div class="demo-switch">
+            原型演示
+            <div class="seg"><button class="on" onclick="demoState('pub','data',this)">有数据</button><button onclick="demoState('pub','empty',this)">空态</button></div>
+          </div>
+        </div>
+
+        <div class="card" id="pubTableWrap">
+          <table class="table">
+            <thead>
+              <tr><th style="min-width:280px">成文标题</th><th>来源条目</th><th>发布目标</th><th>状态</th><th>外部 ID</th><th>创建时间</th><th style="width:120px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-22</span></td>
+                <td>8 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-8f21c3 / MP-91d2</td>
+                <td class="mono">10-22 09:05</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-21</span></td>
+                <td>6 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-7a04e9 / MP-88c1</td>
+                <td class="mono">10-21 09:03</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">财经早报 ｜ 2026-10-22</span></td>
+                <td>20 条快讯</td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="tag warn">submitted</span></td>
+                <td class="mono">MP-91f0</td>
+                <td class="mono">10-22 08:12</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-18</span></td>
+                <td>5 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag err">failed</span></td>
+                <td class="mono">—</td>
+                <td class="mono">10-18 09:04</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">龙虎榜复盘 ｜ 2026-10-21</span></td>
+                <td>86 条记录</td>
+                <td><span class="tag info">腾讯文档</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-7b11f2</td>
+                <td class="mono">10-21 18:30</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card empty" id="pubEmpty" style="display:none">
+          <svg class="ic"><use href="#i-send"/></svg>
+          <div class="t">还没有成文记录</div>
+          <div class="d">成文由发布管线定时生成；可去「发布管线」手动运行一次</div>
+          <div style="margin-top:16px"><button class="btn" onclick="go('pipelines')">前往发布管线</button></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S7 发布管线 ═══════════ -->
+      <section class="screen" id="screen-pipelines">
+        <div class="page-head">
+          <div>
+            <div class="page-title">发布管线</div>
+            <div class="page-desc">定时把采集明细加工为成文并投递到腾讯文档 / 公众号；cron 变更次日生效。</div>
+          </div>
+          <button class="btn primary" onclick="go('pipeline-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加管线</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>编码</th><th>类型</th><th>cron</th><th>标题模板</th><th>发布目标</th><th>状态</th><th style="width:140px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">daily_paper</td><td><span class="tag info">paper</span></td><td class="mono">0 9 * * *</td>
+                <td><span class="ellip" style="max-width:180px">每日论文速览 ｜ {{date}}</span></td>
+                <td><span class="tag sub">腾讯文档</span> <span class="tag sub">公众号</span></td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><div class="row-actions"><button class="btn sm" onclick="go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="confirmDel(this)">删除</button></div></td>
+              </tr>
+              <tr>
+                <td class="mono">daily_finance</td><td><span class="tag info">ai-news</span></td><td class="mono">0 8 * * 1-5</td>
+                <td><span class="ellip" style="max-width:180px">财经早报 ｜ {{date}}</span></td>
+                <td><span class="tag sub">公众号</span></td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><div class="row-actions"><button class="btn sm" onclick="go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="confirmDel(this)">删除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════ S8 管线编辑（新页面） ═══════════ -->
+      <section class="screen" id="screen-pipeline-edit">
+        <button class="back-link" onclick="go('pipelines')"><svg class="ic"><use href="#i-back"/></svg>返回发布管线</button>
+        <div class="page-head">
+          <div>
+            <div class="page-title">编辑管线</div>
+            <div class="page-desc">编码创建后不可修改；LLM prompt 留空走默认模板。</div>
+          </div>
+        </div>
+        <div class="card card-pad form-card">
+          <div class="form-grid">
+            <div class="form-item">
+              <div class="form-label">编码 code <span class="req">*</span></div>
+              <input class="form-input" value="daily_paper" disabled />
+            </div>
+            <div class="form-item">
+              <div class="form-label">类型 <span class="req">*</span></div>
+              <select class="form-select"><option>paper</option><option>ai-news</option></select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">cron 表达式 <span class="req">*</span></div>
+              <input class="form-input" value="0 9 * * *" />
+            </div>
+            <div class="form-item">
+              <div class="form-label">标题模板</div>
+              <input class="form-input" value="每日论文速览 ｜ {{date}}" />
+            </div>
+            <div class="form-item full">
+              <div class="form-label">发布目标</div>
+              <select class="form-select" multiple size="2"><option selected>tencent_docs · 腾讯文档</option><option selected>wechat_mp · 公众号</option></select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">腾讯文档目录</div>
+              <input class="form-input" value="每日论文学习" />
+            </div>
+            <div class="form-item">
+              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
+            </div>
+            <div class="form-item full">
+              <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
+              <textarea class="form-area">你是「大橙子社区」的论文编辑。把下面 N 篇 arXiv 论文各压缩成四字段：中文译名 / 一句话核心贡献 / 方法亮点 / 潜在应用。语气克制，不堆形容词。</textarea>
+            </div>
+          </div>
+          <div class="form-foot">
+            <button class="btn primary" onclick="toast('已保存（原型演示）'); go('pipelines')">保存</button>
+            <button class="btn" onclick="go('pipelines')">取消</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S9 采集监控 ═══════════ -->
+      <section class="screen" id="screen-runs">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集监控</div>
+            <div class="page-desc">每次采集（定时 / 手动）的批次结果与近 7 天健康度；连续失败的源会标为「静默失效」。</div>
+          </div>
+          <button class="btn" onclick="toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
+        </div>
+
+        <div class="stat-row">
+          <div class="card stat"><div class="label">近 7 天采集批次</div><div class="value">42</div></div>
+          <div class="card stat"><div class="label">近 7 天成功率</div><div class="value">88%</div></div>
+          <div class="card stat"><div class="label">今日失败次数</div><div class="value danger">2</div></div>
+          <div class="card stat"><div class="label">静默失效源</div><div class="value danger">1</div><div class="hint">arxiv · 08-24 起未成功</div></div>
+        </div>
+
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>源</th><th>源名称</th><th>触发</th><th>状态</th><th>条数</th><th>去重</th><th>失败</th><th>耗时</th><th>开始时间</th><th>错误</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">sina_news</td><td>新浪财经快讯</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>12</td><td>3</td><td>0</td><td class="mono">4,210</td><td class="mono">10-22 09:00:02</td><td class="mono">—</td></tr>
+              <tr><td class="mono">eastmoney_news</td><td>东方财富快讯</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>20</td><td>8</td><td>0</td><td class="mono">6,102</td><td class="mono">10-22 09:00:02</td><td class="mono">—</td></tr>
+              <tr><td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag info">定时</span></td><td><span class="tag err">failed</span></td><td>0</td><td>0</td><td>1</td><td class="mono">12,004</td><td class="mono">10-22 09:01:00</td><td class="mono">fetch failed</td></tr>
+              <tr><td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>86</td><td>12</td><td>0</td><td class="mono">18,340</td><td class="mono">10-21 18:05:00</td><td class="mono">—</td></tr>
+              <tr><td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag" style="color:var(--brand-txt);background:var(--brand-soft)">手动</span></td><td><span class="tag ok">ok</span></td><td>86</td><td>12</td><td>0</td><td class="mono">17,982</td><td class="mono">10-21 15:22:41</td><td class="mono">—</td></tr>
+              <tr><td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag info">定时</span></td><td><span class="tag err">failed</span></td><td>0</td><td>0</td><td>1</td><td class="mono">12,011</td><td class="mono">10-21 09:01:00</td><td class="mono">fetch failed</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-note">失败明细（错误原文）仅保留技术信息；用户可读的归因见「采集明细 · 质量」列</div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 触发弹窗 ═══════════ -->
+<div class="mask" id="triggerMask">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="triggerTitle">手动触发采集</div>
+      <button class="x" onclick="closeModal('triggerMask')"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-item" style="max-width:240px">
+        <div class="form-label">采集条数上限</div>
+        <input class="form-input" value="20" />
+      </div>
+      <button class="btn primary" id="triggerRunBtn" onclick="runTrigger()"><svg class="ic"><use href="#i-play"/></svg>开始采集</button>
+
+      <!-- 结果区（友好化后） -->
+      <div id="triggerResultZone" style="display:none">
+        <div class="result-card" id="rcCard">
+          <div class="rc-head"><svg class="ic ic-20"><use href="#i-check"/></svg><span id="rcTitle">采集完成</span></div>
+          <div class="rc-desc" id="rcDesc"></div>
+          <div class="rc-metrics" id="rcMetrics"></div>
+          <div class="rc-actions" id="rcActions"></div>
+        </div>
+        <details class="tech-detail">
+          <summary>技术详情（排查用）</summary>
+          <pre id="rcRaw"></pre>
+        </details>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div style="flex:1; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--t4)">
+        原型演示 · 结果状态
+        <div class="seg" id="rcStateSeg">
+          <button class="on" data-st="unsupported" onclick="setRcState('unsupported',this)">类型未接入</button>
+          <button data-st="ok" onclick="setRcState('ok',this)">成功</button>
+          <button data-st="empty" onclick="setRcState('empty',this)">空结果</button>
+          <button data-st="failed" onclick="setRcState('failed',this)">失败</button>
+          <button data-st="running" onclick="setRcState('running',this)">运行中</button>
+        </div>
+      </div>
+      <button class="btn" onclick="closeModal('triggerMask')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 成文预览抽屉 ═══════════ -->
+<div class="drawer-mask" id="previewMask">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="modal-title">成文预览 ｜ 每日论文速览 ｜ 2026-10-22</div>
+      <button class="x" onclick="closeModal('previewMask')"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="drawer-body">
+      <div class="article">
+        <h1>每日论文速览 ｜ 2026-10-22</h1>
+        <div class="meta">大橙子社区 · 8 篇 · 已发布至腾讯文档 / 公众号（MP-91d2）· 09:05</div>
+
+        <h2>今日导读</h2>
+        <p>本期聚焦长上下文推理与世界模型两条主线：LongZero 用零数据自举把 128K 上下文的多跳推理做了上去；视频自编码器的重构思路则可能成为交互式世界模型的底座。</p>
+
+        <div class="paper">
+          <div class="pt">1. LongZero：零数据增强大模型长上下文推理</div>
+          <div class="pa">arXiv:2608.21360 · cs.CL</div>
+          <p style="margin-top:6px">用短样本合成推理链再逐段加长窗口，LongBench 提升 6.8~11.2 个百分点，无需人工长文本标注。</p>
+        </div>
+
+        <div class="paper">
+          <div class="pt">2. Rethinking Video Autoencoders for Interactive World Models</div>
+          <div class="pa">arXiv:2608.21345 · cs.CV</div>
+          <p style="margin-top:6px">重新审视视频自编码器的时序压缩率与重建质量权衡，提出面向交互式世界模型的架构调整。</p>
+        </div>
+
+        <div class="paper">
+          <div class="pt">3. Think Harder Where It Matters：序列推荐的项目级自适应递归</div>
+          <div class="pa">arXiv:2608.21356 · cs.IR</div>
+          <p style="margin-top:6px">按项目难度自适应分配推理深度，在保持延迟的同时提升长序列推荐效果。</p>
+        </div>
+
+        <p style="color:var(--t4); font-size:12px; margin-top:24px">—— 以上内容为原型演示 mock，实际成文由管线 LLM prompt 生成 ——</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 演示控件 -->
+<div class="demo-panel">
+  <div class="dt"><svg class="ic"><use href="#i-info"/></svg>原型演示控件</div>
+  <div class="note">本稿为交互原型：菜单、跳转、弹窗均可点击；数据为 mock。待确认项见随稿《设计决策记录》。</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── 屏幕切换 ──
+const SCREENS = {
+  sources:        { el: 'screen-sources',        crumb: ['自媒体运营', '采集源管理'] },
+  'source-edit':  { el: 'screen-source-edit',    crumb: ['自媒体运营', '采集源管理', '编辑采集源'] },
+  items:          { el: 'screen-items',          crumb: ['自媒体运营', '采集明细'] },
+  'item-detail':  { el: 'screen-item-detail',    crumb: ['自媒体运营', '采集明细', '明细详情'] },
+  publications:   { el: 'screen-publications',   crumb: ['自媒体运营', '公众号成文'] },
+  pipelines:      { el: 'screen-pipelines',      crumb: ['自媒体运营', '发布管线'] },
+  'pipeline-edit':{ el: 'screen-pipeline-edit',  crumb: ['自媒体运营', '发布管线', '编辑管线'] },
+  runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
+};
+function go(key) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  const s = SCREENS[key];
+  document.getElementById(s.el).classList.add('on');
+  document.getElementById('crumb').innerHTML = s.crumb.map((c, i) =>
+    i === s.crumb.length - 1 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
+  document.querySelectorAll('#contentGroupChildren .menu-item').forEach(m =>
+    m.classList.toggle('active', m.dataset.screen === key));
+  document.querySelector('.content').scrollTop = 0;
+  // 离开编辑页时重置试采面板（下次进入重新开始）
+  const tp = document.getElementById('testPanel');
+  if (tp) { tp.style.display = 'none'; document.getElementById('testLoading').style.display = 'none'; document.getElementById('testResult').style.display = 'none'; }
+  // 明细/成文进入时模拟加载
+  if (key === 'items') simulateLoading('itemsTableWrap', 'itemsEmpty');
+  if (key === 'publications') simulateLoading('pubTableWrap', 'pubEmpty');
+}
+function toggleGroup(btn) {
+  btn.classList.toggle('menu-open');
+  document.getElementById('contentGroupChildren').style.display =
+    btn.classList.contains('menu-open') ? '' : 'none';
+}
+
+// ── 加载态模拟 ──
+function simulateLoading(tableId, emptyId) {
+  const wrap = document.getElementById(tableId);
+  if (wrap.dataset.state === 'empty') return;
+  wrap.style.opacity = '.5';
+  setTimeout(() => { wrap.style.opacity = '1'; }, 400);
+}
+
+// ── 演示态切换（空态） ──
+function demoState(key, state, btn) {
+  const seg = btn.parentElement;
+  seg.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (key === 'items') {
+    document.getElementById('itemsTableWrap').style.display = state === 'empty' ? 'none' : '';
+    document.getElementById('itemsEmpty').style.display = state === 'empty' ? '' : 'none';
+  } else {
+    document.getElementById('pubTableWrap').style.display = state === 'empty' ? 'none' : '';
+    document.getElementById('pubEmpty').style.display = state === 'empty' ? '' : 'none';
+  }
+}
+
+// ── 触发弹窗 ──
+let rcState = 'unsupported';
+function openTrigger(code, name, type) {
+  document.getElementById('triggerTitle').textContent = '手动触发采集：' + name;
+  document.getElementById('triggerResultZone').style.display = 'none';
+  document.getElementById('triggerMask').classList.add('on');
+  rcState = type === 'sina_news' || type === 'eastmoney_news' || type === 'eastmoney_lhb' ? 'ok' : 'unsupported';
+  setSeg('rcStateSeg', rcState);
+}
+function setSeg(segId, st) {
+  document.querySelectorAll('#' + segId + ' button').forEach(b =>
+    b.classList.toggle('on', b.dataset.st === st));
+}
+function setRcState(st, btn) {
+  rcState = st;
+  setSeg('rcStateSeg', st);
+  renderResult();
+}
+function runTrigger() {
+  const btn = document.getElementById('triggerRunBtn');
+  btn.disabled = true; btn.innerHTML = '<svg class="ic"><use href="#i-refresh"/></svg>采集中…';
+  setTimeout(() => {
+    btn.disabled = false; btn.innerHTML = '<svg class="ic"><use href="#i-play"/></svg>开始采集';
+    renderResult();
+  }, 1200);
+}
+function renderResult() {
+  const zone = document.getElementById('triggerResultZone');
+  const card = document.getElementById('rcCard');
+  const head = card.querySelector('.rc-head');
+  const title = document.getElementById('rcTitle');
+  const desc = document.getElementById('rcDesc');
+  const metrics = document.getElementById('rcMetrics');
+  const actions = document.getElementById('rcActions');
+  const raw = document.getElementById('rcRaw');
+  zone.style.display = '';
+
+  const S = {
+    unsupported: {
+      cls: 'warn', icon: 'i-warn', t: '该采集类型暂不支持手动触发',
+      d: 'arxiv / hackernews / rss 由定时管线自动采集（如每日 09:00 的「每日论文速览」），手动触发目前仅支持新浪 / 东财快讯与龙虎榜。上方结果已记录，本次未产生新内容。',
+      m: [['—', '新增'], ['—', '去重'], ['—', '耗时']],
+      a: [['前往发布管线', 'go(\'pipelines\')', ''], ['查看采集明细', 'go(\'items\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "unknown",\n  "reason": "未注册采集器类型: arxiv"\n}'
+    },
+    ok: {
+      cls: 'ok', icon: 'i-check', t: '采集完成',
+      d: '本次采集已写入「采集明细」，去重条目不会重复进入成文。',
+      m: [['12', '新增'], ['3', '去重'], ['0', '失败'], ['4.2s', '耗时']],
+      a: [['查看采集明细', 'go(\'items\')', 'primary']],
+      raw: '{\n  "source_code": "sina_news",\n  "status": "ok",\n  "results": { "fetched": 15, "inserted": 12, "deduped": 3, "failed": 0 }\n}'
+    },
+    empty: {
+      cls: 'warn', icon: 'i-warn', t: '采集完成，但上游返回 0 条',
+      d: '常见原因：源限流、网络不可达（如 dev 机访问 arxiv.org 受限）、或该时段源无更新。可在「采集监控」查看错误原文。',
+      m: [['0', '新增'], ['0', '去重'], ['12.0s', '耗时']],
+      a: [['查看采集监控', 'go(\'runs\')', ''], ['查看采集明细', 'go(\'items\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "empty",\n  "items": 0\n}'
+    },
+    failed: {
+      cls: 'err', icon: 'i-xcircle', t: '采集失败',
+      d: '错误：fetch failed（连接 export.arxiv.org 超时）。网络类失败通常 1~2 天后自行恢复；持续失败请检查源可达性。',
+      m: [['0', '新增'], ['0', '去重'], ['12.0s', '耗时']],
+      a: [['重试', 'runTrigger()', 'primary'], ['查看采集监控', 'go(\'runs\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "failed",\n  "error": "fetch failed"\n}'
+    },
+    running: {
+      cls: 'info', icon: 'i-info', t: '该采集源正在采集中',
+      d: '同一源同时只跑一次（防止重复点击打爆上游）。请等待当前批次结束后再试。',
+      m: [['—', '新增'], ['—', '去重'], ['—', '耗时']],
+      a: [['查看采集监控', 'go(\'runs\')', '']],
+      raw: '{\n  "source_code": "sina_news",\n  "status": "rejected",\n  "reason": "该采集源正在运行中，请勿重复触发"\n}'
+    },
+  };
+  const s = S[rcState];
+  card.className = 'result-card ' + s.cls;
+  head.innerHTML = '<svg class="ic ic-20"><use href="#' + s.icon + '"/></svg><span>' + s.t + '</span>';
+  title.textContent = s.t;
+  desc.textContent = s.d;
+  metrics.innerHTML = s.m.map(x => '<div class="rc-metric"><div class="n">' + x[0] + '</div><div class="l">' + x[1] + '</div></div>').join('');
+  actions.innerHTML = s.a.map(x => '<button class="btn ' + (x[2] || '') + '" onclick="' + x[1] + '">' + x[0] + '</button>').join('');
+  raw.textContent = s.raw;
+}
+
+// ── 成文预览 ──
+function openPreview() { document.getElementById('previewMask').classList.add('on'); }
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+// ── 编辑页 · 测试采集（不入库）──
+let testState = 'ok';
+function runTest() {
+  const panel = document.getElementById('testPanel');
+  panel.style.display = '';
+  document.getElementById('testResult').style.display = 'none';
+  document.getElementById('testLoading').style.display = '';
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => {
+    document.getElementById('testLoading').style.display = 'none';
+    btn.disabled = false;
+    renderTest();
+  }, 1200);
+}
+function setTestState(st, btn) {
+  testState = st;
+  document.querySelectorAll('#testStateSeg button').forEach(b => b.classList.toggle('on', b === btn));
+  renderTest();
+}
+function renderTest() {
+  document.getElementById('testPanel').style.display = '';
+  document.getElementById('testResult').style.display = '';
+  const line = document.getElementById('testSummaryLine');
+  const text = document.getElementById('testSummaryText');
+  const list = document.getElementById('testSampleList');
+  const note = document.getElementById('testResultNote');
+
+  const SAMPLES = [
+    ['LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data', '10-21'],
+    ['Rethinking Video Autoencoders for Interactive World Models', '10-21'],
+    ['Think Harder Where It Matters: Item-Level Adaptive Recursion for Sequential Recommendation', '10-20'],
+    ['Scaling Test-Time Compute for Multilingual Mathematical Reasoning', '10-20'],
+    ['A Controlled Study on Why RLHF Fails at Long-Horizon Planning', '10-19'],
+  ];
+  const S = {
+    ok: {
+      cls: 'ok', icon: 'i-check',
+      t: '试采成功 · 5 条 · 1.8s',
+      n: '以上为按当前配置（max_results=20）取回的前 5 条预览；内容可直接核对标题与链接是否符合预期。',
+      samples: SAMPLES,
+    },
+    empty: {
+      cls: 'warn', icon: 'i-warn',
+      t: '试采返回 0 条',
+      n: '常见原因：源限流、网络不可达（如 dev 机访问 arxiv.org 受限）、分类参数无匹配论文、RSS 地址失效。可调整 config 后重新测试。',
+      samples: [],
+    },
+    failed: {
+      cls: 'err', icon: 'i-xcircle',
+      t: '试采失败 · fetch failed',
+      n: '连接 export.arxiv.org 超时（12s）。网络类失败通常 1~2 天自行恢复；持续失败请检查源可达性或更换分类参数。',
+      samples: [],
+    },
+  };
+  const s = S[testState];
+  line.className = 'test-summary ' + s.cls;
+  line.querySelector('svg').innerHTML = '<use href="#' + s.icon + '"/>';
+  text.textContent = s.t;
+  note.textContent = s.n;
+  if (s.samples.length) {
+    list.style.display = '';
+    list.innerHTML = s.samples.map((x, i) =>
+      '<div class="sample-item"><span class="sample-idx">' + (i + 1) + '</span>' +
+      '<span class="sample-title" title="' + x[0] + '">' + x[0] + '</span>' +
+      '<span class="sample-date">' + x[1] + '</span>' +
+      '<button class="sample-link" onclick="toast(\'原型演示：打开原文链接\')"><svg class="ic" style="width:12px;height:12px"><use href="#i-ext"/></svg>原文</button></div>'
+    ).join('');
+  } else {
+    list.style.display = 'none';
+    list.innerHTML = '';
+  }
+}
+
+// ── 删除二次确认 ──
+function confirmDel(btn) {
+  const tr = btn.closest('tr');
+  const name = tr.children[1].textContent;
+  if (confirm('确定删除「' + name + '」？\n删除后该源的采集明细保留，但定时管线不再采集它。')) {
+    tr.style.opacity = '.4';
+    toast('已删除（原型演示）');
+  }
+}
+
+// ── Toast ──
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
+}
+
+// 点击遮罩关闭
+document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
+</script>
+</body>
+</html>
