@@ -1,10 +1,10 @@
 ---
 name: ux-prototype-designer
 description: UX 原型交互设计师 — 独立于产品（判断做不做）与前端（编码落地）的设计角色：把已对齐的需求设计成可点击交互 HTML 原型稿（信息架构 / 交互模式 / 状态矩阵 / 视觉 token），覆盖桌面 Web / 移动 H5 / App / 小程序 / 定制落地页等目标端（HTML 模拟壳），过独立交互质检后交人确认。触发：原型稿生成、交互怎么设计、页面信息架构、做个可点击的稿看看、小程序/H5/App/落地页先看交互、rd-plan 判定需要原型稿；也覆盖用户直接用「微调措辞」提 UI 改动（间距/太丑/隐藏/挪/颜色/字号/换行/视觉微调/交互调整）——此类措辞同样应先回到原型稿，不直接改 WXML/WXSS/Vue。出稿/改稿均须带原型演示控件（场景包 / 角色 / 数据态切换，规格见 references/demo-control-panel.md；机检 scripts/check-demo-panel.mjs）。
-version: 1.2.0
+version: 1.3.0
 rationale: RATIONALE.md
-checks: 无（机检 `scripts/check-demo-panel.mjs` + 质检清单 `references/ux-review-checklist.md`，人工/AI 逐条过）
-loads: references/prototype-common.md, references/demo-control-panel.md, references/ux-review-checklist.md
+checks: 无（机检 `scripts/check-demo-panel.mjs` + 质检清单 `references/ux-review-checklist.md`，人工/AI 逐条过；可并入性见 `references/proto-adoption.md`）
+loads: references/prototype-common.md, references/demo-control-panel.md, references/proto-adoption.md, references/ux-review-checklist.md
 ---
 
 > 设计理由 / 返工教训见 [`RATIONALE.md`](RATIONALE.md)（人面，按需加载，不在执行路径上）。
@@ -95,7 +95,9 @@ loads: references/prototype-common.md, references/demo-control-panel.md, referen
 
 ## 产出要求
 
-- 交付目录：按项目约定（无约定则与需求/规格同目录），**不进应用代码目录**
+- 交付目录：**落项目约定的「统一原型目录」**（无约定则与需求/规格同目录），且该目录必须是自动化整合脚本的扫描根
+  - 🔴 **不进应用代码目录**，尤其不在 `apps/*/` `src/` 下新建 `prototype/`：整合脚本通常只扫一个目录，写在别处 = 抽不到 = 白做（2026-10-22 实际事故：模块稿落在 `apps/admin/prototype/`，整合稿里一直是占位）
+  - 🔴 **同模块多版本不平级堆放**：旧版本进该目录下的 `_archive/`，目录里只留当前版（同时存在 v9 和 v14 = 给评审埋「照旧稿实现」的坑）
 - 交付物：可点击 HTML 原型稿（单文件零依赖，含目标端宿主元素模拟 **+ 原型演示控件 L0/L1**）+ 设计决策记录（含：目标端确认、哪些是设计取舍、哪些待用户拍板、平台原生能力占位项）
 - 原型的 Token 与项目 tokens 对齐；但原型内联 CSS 变量，不 import 业务包
 - 不产出非 HTML 的落地代码（WXML / 小程序页面 / App 原生页等不属于原型稿）
@@ -140,3 +142,4 @@ loads: references/prototype-common.md, references/demo-control-panel.md, referen
 - **移动端控件不得放进手机壳内部**（遮挡真实界面、让人误以为是产品浮层）
 - 不替未定义交互脑补默认行为（无业务定义的交互路径 → 显式标注待确认）；平台原生能力（分享/授权/支付等）不假装已实现，做占位 + 标注
 - 不跳过 §独立交互质检 直接宣布完成
+- **不让稿散落**：同一模块的设计不许以「新开一份 html」累积（v5…v14 平级堆放 = 评审无法判断哪份有效）；换版本就归档旧的。**写完必须自检可并入性**（自带壳 / 自带 hash 路由 / 图标 sprite 位置 / 裸通用类名 / 跨屏跳转 —— 决定按屏拆还是整块搬），规格见 `references/proto-adoption.md`；项目里有对应检查脚本就直接跑它，过了才算交付
