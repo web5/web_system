@@ -1,7 +1,8 @@
 # ESLint 门禁与基线报告
 
-> **门禁状态（2026-10-22 核实）**：配置已就位（`eslint.config.mjs`），但 **CI 仍未接入**——`quality-gate.yml` 的 `changed-packages` 步骤至今不传 `--lint`（自 2026-09-22 关闭后未恢复）。即：当前只有本地 `pnpm lint` 可用，PR 上零拦截。
-> 本文是 ESLint 门的**判据源**；门的级别、开关状态与整改优先级见 `docs/development/质量门禁总纲.md` §3.4 D3 与 §8 P1-1。
+> **门禁状态（2026-10-22 已接入 CI）**：配置 2026-10-10 就位，开关滞后 30 天后于本日恢复。
+> 现在 CI 是两道：① `changed-packages.sh --lint` 拦改动包的 **error**；② 根级 `pnpm lint:ci` 守 **warning 总量水位**（328）。
+> 本文是 ESLint 门的**判据源**；门的级别、开关状态与编号见 `docs/development/质量门禁总纲.md` §3.4 D3。
 
 > 建立日期：2026-10-10 · 关联任务 `rLCb1M`
 > 配置文件：`eslint.config.mjs`（根级，ESLint 9 flat config）
@@ -62,7 +63,11 @@ error：5        warning：325
 
 ### 3.2 按工程
 
-| 工程 | 告警数 |
+> ⚠️ **口径说明（2026-10-22 修正）**：本表是**问题总数**（warning + error），不是 warning 数。
+> 故各工程之和 330 ≠ 上方 warning 总数 325——差的 5 就是 §3.3 那 5 个 error。
+> 原表未标注口径，曾被误读为「warning 数对不上」。
+
+| 工程 | 告警数（含 error） |
 |---|---|
 | apps/deploy-console | 149 |
 | apps/admin | 89 |
@@ -82,11 +87,44 @@ error：5        warning：325
 
 ---
 
+### 3.4 复测（2026-10-22，恢复 CI 门时的事实）
+
+```
+文件：218 个 · error：0 · warning：328
+```
+
+| 项 | 基线（10-10） | 复测（10-22） | 变化 |
+|---|---|---|---|
+| error | 5 | **0** | **−5（§3.3 五项全部修完）** |
+| warning | 325 | **328** | +3 |
+| 问题总数（= 3.2 表口径） | 330 | **328** | −2 |
+
+按工程（问题总数口径）：admin 89→90（+1）· deploy-console 149→148（−1）· portal 50→49（−1）· ui 6→5（−1）。
+
+> **怎么读这组数**：error 清零是真实整改成果；warning +3 是存量演进（新代码带进来的 any / unused-vars），
+> 不是误报。处理方式不是"清零"——328 条里 283 条是 `no-explicit-any`，属长期工程——
+> 而是把水位从 325 调到 **328**，并执行下面的水位纪律。
+
+### 3.5 水位纪律（防"越修越高"）
+
+1. `--max-warnings` 的数字 = **当前存量**，不是"允许的新增额度"
+2. **只降不升**：修掉 N 条存量，同一 PR 把数字减 N
+3. 涨水位必须单独说明理由，并与本文件 §3.4 的复测一起提交
+4. 分工程收敛优先级：`packages/ui`（5 条，收益最高，先在 `pnpm --filter ui lint` 清零）
+
+---
+
 ## 4 用法
 
 ```bash
-pnpm lint       # 全量检查（不带 --fix，首次接入不自动改存量）
-pnpm lint:ci    # CI 口径：--max-warnings 325，超基线即失败
+pnpm lint       # 全量检查（不带 --fix）
+pnpm lint:ci    # CI 口径：--max-warnings 328（= 当前存量水位），超即失败
+```
+
+子包级（`apps/shell` `apps/deploy-console` `packages/ui` 于 10-22 补齐，此前**没有 lint 脚本**）：
+
+```bash
+cd apps/shell && pnpm lint:ci   # 只拦 error，不设 warning 水位
 ```
 
 需要自动修复时显式加 `--fix`：
@@ -99,14 +137,14 @@ npx eslint apps/portal --fix
 
 ## 5 后续计划（按优先级）
 
-| 优先级 | 事项 | 说明 |
+| 优先级 | 事项 | 状态 |
 |---|---|---|
-| P0 | 修 5 个 error | 尤其 `UserSelect.vue` 的重复 key（已在跑的线上代码） |
-| P1 | 显式声明依赖 | 目前靠 hoisted 间接可用，需写入根 `devDependencies` 并更新 lockfile，否则 `pnpm install --frozen-lockfile` 的 CI 不可复现 |
-| P1 | 接入 CI | 在 `quality-gate` 加 lint job（改动 `.github/workflows/**` 需过发布/环境动作门） |
-| P2 | 收敛 `no-explicit-any` | 283 条，占比 87%；按工程分批，先收 `packages/ui` |
-| P2 | 统一 app 级脚本 | `apps/admin`、`apps/portal` 的 `eslint .` 指向根配置，避免规则漂移 |
-| P3 | 引入 prettier | 风格类（引号/缩进）交给格式化工具，ESLint 只管正确性 |
+| ~~P0~~ | ~~修 5 个 error~~ | ✅ **已完成**（10-22 复测 error=0） |
+| ~~P1~~ | ~~接入 CI~~ | ✅ **已完成**（10-22 恢复 `--lint` + 根级水位两道） |
+| P1 | 显式声明依赖 | ⏳ 仍靠 `.npmrc node-linker=hoisted` 间接可用，未写入根 `devDependencies`；`--frozen-lockfile` 下是否可复现**未验证** |
+| P2 | 收敛 `no-explicit-any` | ⏳ 283 条（占 87%）；建议先清 `packages/ui`（仅 5 条，可一次归零后把水位降到 323） |
+| P2 | 统一 app 级脚本 | ⏳ `apps/portal` 仍带 `--ext`（ESLint 9 flat config 下无效但被忽略，不报错）；`apps/shell` / `deploy-console` / `packages/ui` 已于 10-22 补齐 |
+| P3 | 引入 prettier | ⏳ 未开始 |
 
 ---
 

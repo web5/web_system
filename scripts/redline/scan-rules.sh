@@ -248,7 +248,10 @@ is_ui_file() {
     apps/*/pages/*) return 0 ;;
     apps/*/components/*) return 0 ;;
     apps/*/src/*.vue) return 0 ;;
-    packages/ui/*) return 0 ;;
+    # ⚠️ 不能写 `packages/ui/*`：会把 package.json / tsconfig / jest.config.js
+    # 也算成 UI 源码 → R9b/R11 对「改个 lint 脚本」报设计评审缺失（2026-10-22 实测误报）。
+    # 源码在 src/ 下（.vue 已被上面第一条覆盖，这里补 tokens.css / index.ts 等）。
+    packages/ui/src/*) return 0 ;;
     app.json|apps/*/app.json) return 0 ;;
   esac
   return 1

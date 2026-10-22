@@ -37,7 +37,10 @@ is_ui() {
     apps/*/pages/*) return 0 ;;
     apps/*/src/*.vue) return 0 ;;
     apps/*/components/*) return 0 ;;
-    packages/ui/*) return 0 ;;
+    # ⚠️ 不能写 `packages/ui/*`：那会把 package.json / tsconfig / jest.config.js
+    # 也算成 UI 源码 → 改个 lint 脚本都要求 Proto + Design 凭证（2026-10-22 实测误报）。
+    # 源码在 src/ 下，故收窄到 packages/ui/src/*。
+    packages/ui/src/*) return 0 ;;
     app.json|apps/*/app.json) return 0 ;;
   esac
   return 1

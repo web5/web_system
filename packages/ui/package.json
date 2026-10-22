@@ -18,7 +18,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc --watch",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint . --fix",
+    "lint:ci": "eslint ."
   },
   "dependencies": {
     "ant-design-vue": "^4.2.0",

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build --mode mf",
     "build:standalone": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "lint:ci": "eslint ."
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.0",
