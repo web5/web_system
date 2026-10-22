@@ -545,6 +545,83 @@ check_r15() {
   done
 }
 
+# ---- R17 测试用例凭证（commit 级 · warning）----
+# 背景：2026-10-22「自媒体运营」模块（3a22972c）交付后**没有测试用例文档**，
+#       验证只能靠用户在界面上即兴点 → dev/prod 各漏一半发布项（dev 缺 gateway 路由、
+#       prod 缺前端产物与 seed），全部由用户走查才发现。
+# 判据源：docs/development/研发方案与发布规范-v2.md §4（测试方案）
+# 触发面：**新增**非测试源码（servers/*/src、apps/*/src 下 *.ts/*.vue，排除 *.spec.ts）
+#   —— 触发面刻意取窄（同 R15）：新增实现是最该配用例的形态，改动既有实现不触发。
+# 判据：commit 须带 `Test: pass` 或 `Test: <用例文档路径>`
+# 级别：warning（--strict 下 error），先观察误报再决定是否收紧
+check_r17() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c st f body hit
+  for c in "${commits[@]}"; do
+    hit=0
+    while IFS=$'\t' read -r st f; do
+      [ -n "${f:-}" ] || continue
+      case "$st" in
+        A*)
+          case "$f" in
+            servers/*/src/*.ts|apps/*/src/*.ts|apps/*/src/*.vue)
+              case "$f" in *.spec.ts|*.spec.tsx|*.test.ts) ;; *) hit=1 ;; esac
+              ;;
+          esac
+          ;;
+      esac
+    done < <(git show --name-status --format= "$c" 2>/dev/null)
+    [ "$hit" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
+    _trailer_check_one "R17" "Test" "测试用例" "$c" "$body"
+  done
+}
+
+# ---- R18 研发方案与发布任务清单凭证（commit 级 · warning）----
+# 背景：同 R17。发布清单缺失导致流水线「成功」但前端产物没投递、
+#       初始化 seed 没跑（prod content_sources = 0 行）—— 功能上线即空壳。
+#       平台侧 release_plan 只校验不变量，不校验「方案里有没有写发布清单」，故需本门。
+# 判据源：docs/development/研发方案与发布规范-v2.md §5（发布任务清单）
+# 触发面：**新增** service / controller / 前端 view（功能级改动，必然涉及发布）
+# 判据：commit 须带 `Plan: pass`（本 commit 无需发布，如纯内部重构）或 `Plan: <研发方案路径>`
+# 级别：warning（--strict 下 error）
+check_r18() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c st f body hit
+  for c in "${commits[@]}"; do
+    hit=0
+    while IFS=$'\t' read -r st f; do
+      [ -n "${f:-}" ] || continue
+      case "$st" in
+        A*)
+          case "$f" in
+            */*.controller.ts|*/*.controller.js|*/*.service.ts|apps/*/src/views/*) hit=1 ;;
+          esac
+          ;;
+      esac
+    done < <(git show --name-status --format= "$c" 2>/dev/null)
+    [ "$hit" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
+    _trailer_check_one "R18" "Plan" "研发方案与发布清单" "$c" "$body"
+  done
+}
+
 # ---- R12 kit 能力源 ↔ 运行源 同源守门 ----
 # 背景：上游 ai-agent-kit 经 sync-to-target 只写 .codebuddy/agent-kit/（能力源），
 #       而 IDE 加载的是 .codebuddy/skills/（运行源），中间缺 apply → 漂移（#117/#118 即此坑）。
@@ -598,6 +675,8 @@ scan_diff_range() {
   check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
   check_r13_r14 "$range" # R13/R14：契约与数据变更 / 发布与环境 评审凭证（一次遍历，specs/rd-process-model §3.7）
   check_r15 "$range"  # R15：新增对外接口的独立代码评审凭证（判据源 code-review-checklist.md）
+  check_r17 "$range"  # R17：测试用例凭证（判据源 docs/development/研发方案与发布规范-v2.md §4）
+  check_r18 "$range"  # R18：研发方案与发布任务清单凭证（同上 §5）
   check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
   check_r16           # R16：SSE 事件契约一致性（消费方手写联合 ↔ agent-core 真相源，不依赖 range）
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
