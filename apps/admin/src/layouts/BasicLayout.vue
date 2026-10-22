@@ -47,10 +47,15 @@
           <template #icon><DatabaseOutlined /></template>
           <span>数据浏览</span>
         </a-menu-item>
-        <a-menu-item v-if="userStore.hasPermission('content:view')" key="content-sources">
+        <a-sub-menu v-if="userStore.hasPermission('content:view')" key="content">
           <template #icon><CloudDownloadOutlined /></template>
-          <span>内容采集源</span>
-        </a-menu-item>
+          <template #title>自媒体运营</template>
+          <a-menu-item key="content-sources">采集源管理</a-menu-item>
+          <a-menu-item key="content-items">采集明细</a-menu-item>
+          <a-menu-item key="content-publications">公众号成文</a-menu-item>
+          <a-menu-item key="content-pipelines">发布管线</a-menu-item>
+          <a-menu-item key="content-monitor">采集监控</a-menu-item>
+        </a-sub-menu>
         <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
           <template #icon><RobotOutlined /></template>
           <template #title>Agents</template>
@@ -204,7 +209,7 @@ const userAvatar = computed(() => {
 const currentTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '工作台', '/bianbian': '变变管理', '/users': '用户管理', '/settings': '系统设置',
-    '/agents': 'Agents', '/database': '数据浏览', '/content-sources': '内容采集源',
+    '/agents': 'Agents', '/database': '数据浏览',
   };
   const matched = route.matched.find((r) => r.meta.title);
   return (matched?.meta.title as string) || '工作台';
@@ -218,7 +223,11 @@ watch(() => route.path, (path) => {
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
   else if (path.includes('/database')) selectedKeys.value = ['database'];
-  else if (path.includes('/content-sources')) selectedKeys.value = ['content-sources'];
+  else if (path.includes('/content/items')) selectedKeys.value = ['content-items'];
+  else if (path.includes('/content/publications')) selectedKeys.value = ['content-publications'];
+  else if (path.includes('/content/pipelines')) selectedKeys.value = ['content-pipelines'];
+  else if (path.includes('/content/monitor')) selectedKeys.value = ['content-monitor'];
+  else if (path.includes('/content')) selectedKeys.value = ['content-sources'];
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
   else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
   else if (path.includes('/agents/playground')) selectedKeys.value = ['agents-playground'];
@@ -233,7 +242,10 @@ watch(() => route.path, (path) => {
 const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
-    database: '/database', 'content-sources': '/content-sources',
+    database: '/database',
+    'content-sources': '/content', 'content-items': '/content/items',
+    'content-publications': '/content/publications', 'content-pipelines': '/content/pipelines',
+    'content-monitor': '/content/monitor',
     roles: '/settings/roles', dicts: '/settings/dicts',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',
