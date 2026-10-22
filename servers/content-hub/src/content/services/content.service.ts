@@ -166,7 +166,9 @@ export class ContentService {
       }),
       this.itemRepo
         .createQueryBuilder('item')
-        .where('item.quality_status IN (:...qs', { qs: ['fail', 'partial'] })
+        // ⚠️ 曾写成 'IN (:...qs'（缺右括号 + 多写 ...），生成的 SQL 未闭合 →
+        //    MySQL 报 "syntax error near '' at line 1"，整页 500。改这里务必跑 content.service.spec。
+        .where('item.quality_status IN (:qs)', { qs: ['fail', 'partial'] })
         .andWhere('item.created_at >= :since', { since: weekAgo })
         .getCount(),
       this.itemRepo

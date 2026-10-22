@@ -49,11 +49,13 @@ async function loadAll() {
         date_from: filters.date_from || undefined,
         date_to: filters.date_to || undefined,
       }),
-      itemStats(),
+      // 统计卡是装饰性数据：失败只让四卡归零，不得拖垮列表。
+      // （2026-10-23 事故：itemStats 一处 SQL 笔误 → 整个采集明细页 500，而列表数据其实一直是好的）
+      itemStats().catch(() => null),
     ]);
     items.value = listRes.items;
     page.total = listRes.total;
-    stats.value = statsRes;
+    stats.value = statsRes ?? { today_new: 0, today_dedup: 0, quality_abnormal_7d: 0, into_article_7d: 0 };
   } catch {
     /* request 拦截器已弹错 */
   } finally {

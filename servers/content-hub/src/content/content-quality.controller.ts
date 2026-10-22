@@ -20,6 +20,7 @@ import { ManualCollectService } from './services/manual-collect.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
+import { parseId } from './content.controller';
 import {
   ArxivDigestBatchDto,
   CollectHealthQueryDto,
@@ -309,9 +310,11 @@ export class ContentQualityController {
   /** 单条详情（含席位明细；服务间接口，InternalKeyGuard 鉴权） */
   @Public()
   @UseGuards(InternalKeyGuard)
-  @Get('lhb/:id')
+  // ⚠️ :id 必须带 (\d+) 约束：下方 @Get('lhb/stats') 声明在其后，
+  //    无约束时 'stats' 会被当成 id 匹配（同类事故：sources/last-collect 被 sources/:id 抢走）。
+  @Get('lhb/:id(\\d+)')
   async lhbDetail(@Param('id') id: string) {
-    const row = await this.lhbRepo.findOne({ where: { id: Number(id) } });
+    const row = await this.lhbRepo.findOne({ where: { id: parseId(id, '龙虎榜') } });
     if (!row) return { found: false };
     return {
       found: true,
