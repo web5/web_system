@@ -1,7 +1,14 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { InstitutionService } from './institution.service';
+import { InternalKeyGuard } from '../auth/internal-key.guard';
 
-/** 机构行为数据 REST API（供 mcp-gateway / kedou-mcp-curl 调用） */
+/**
+ * 机构行为数据 REST API。
+ *
+ * 服务间接口：调用方为 mcp-gateway（institution 模块）与 kedou-mcp-curl 等
+ * 工程侧 skill。鉴权统一由 InternalKeyGuard 校验 Bearer <CONTENT_HUB_SERVICE_KEY>。
+ */
+@UseGuards(InternalKeyGuard)
 @Controller('api/institution')
 export class InstitutionController {
   constructor(private readonly institutionService: InstitutionService) {}

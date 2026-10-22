@@ -18,6 +18,7 @@ import { ArxivDigestService } from './services/arxiv-digest.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
 import { EastmoneyLhbCollector } from './collectors/eastmoney-lhb.collector';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
 import {
   ArxivDigestBatchDto,
@@ -37,9 +38,11 @@ import { SeatTagService } from './services/seat-tag.service';
 
 /**
  * 采集观测 / 手动触发 / 落库接口，默认走运营后台（admin）用户 JWT。
- * 例外（服务间、鉴权在 gateway service-key 层已做）用 @Public() 放行：
- *   · arxiv-digest* —— 定时任务里的 AI 生成日报后落库
- *   · lhb*            —— 机构行为 / 龙虎榜取数（MCP / kedou-mcp-curl）
+ * 两类例外：
+ *   · lhb* / arxiv-digest(POST) —— 服务间接口，@Public() 跳过用户 JWT +
+ *     @UseGuards(InternalKeyGuard) 校验 Bearer <CONTENT_HUB_SERVICE_KEY>
+ *   · arxiv-digest/versions、sample、quality/filter-support —— admin 评测看板，
+ *     走用户 JWT（不挂 @Public）
  */
 @UseGuards(JwtAuthGuard)
 @Controller('api/content')
@@ -206,6 +209,7 @@ export class ContentQualityController {
    * 由定时任务里的 AI 在生成日报后调用。
    */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Post('arxiv-digest')
   async saveDigest(@Body() body: ArxivDigestBatchDto) {
     const items = body.items.map((i) => ({
@@ -222,8 +226,7 @@ export class ContentQualityController {
     };
   }
 
-  /** 各 prompt 版本的产出条数（评测进度看板） */
-  @Public()
+  /** 各 prompt 版本的产出条数（评测进度看板，admin 用户 JWT） */
   @Get('arxiv-digest/versions')
   versions() {
     return this.digest.countByVersion();
@@ -234,7 +237,6 @@ export class ContentQualityController {
    *
    * 刻意排除降级产物：降级摘要模板化、无 LLM 内容，混进评测集会拉低幻觉率。
    */
-  @Public()
   @Get('arxiv-digest/sample')
   async sample(@Query() query: EvalSampleQueryDto) {
     const rows = await this.digest.sampleForEval(query.prompt_version, query.size);
@@ -257,8 +259,9 @@ export class ContentQualityController {
 
   // ── 龙虎榜（FR-API-8）────────────────────────────────────────────
 
-  /** 龙虎榜列表（按交易日 / 标签筛） */
+  /** 龙虎榜列表（按交易日 / 标签筛；服务间接口，InternalKeyGuard 鉴权） */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb')
   async listLhb(@Query() query: ListLhbQueryDto) {
     const qb = this.lhbRepo
@@ -290,8 +293,9 @@ export class ContentQualityController {
     };
   }
 
-  /** 单条详情（含席位明细） */
+  /** 单条详情（含席位明细；服务间接口，InternalKeyGuard 鉴权） */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb/:id')
   async lhbDetail(@Param('id') id: string) {
     const row = await this.lhbRepo.findOne({ where: { id: Number(id) } });
@@ -307,8 +311,9 @@ export class ContentQualityController {
     };
   }
 
-  /** 龙虎榜统计：上榜数 / 涨停数 / 游资参与数 / 机构参与数 */
+  /** 龙虎榜统计：上榜数 / 涨停数 / 游资参与数 / 机构参与数（服务间接口） */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb/stats')
   async lhbStats() {
     const row = await this.lhbRepo
@@ -359,8 +364,7 @@ export class ContentQualityController {
 
   // ── 占位：内容条目筛选（M2 由既有 controller 增强时补齐）──────────
 
-  /** 条目筛选能力自查（避免与既有 GET items 语义混淆） */
-  @Public()
+  /** 条目筛选能力自查（避免与既有 GET items 语义混淆；admin 用户 JWT） */
   @Get('quality/filter-support')
   filterSupport(@Query() query: ListItemsQueryDto) {
     return {

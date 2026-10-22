@@ -1,9 +1,17 @@
-import { Controller, Get, Post, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
 import { FinnewsService } from './services/finnews.service';
 import { ContentService, WechatMpPublishDto } from './content/services/content.service';
 import { ArxivCollector } from './content/collectors/arxiv.collector';
+import { InternalKeyGuard } from './auth/internal-key.guard';
 
-/** 财经资讯 REST API（供 mcp-gateway 或其他系统调用） */
+/**
+ * 财经资讯 REST API。
+ *
+ * 服务间接口：调用方为 mcp-gateway（paper/finnews 模块经 mcp-core bearer 直连）
+ * 与 SSH 运维脚本（dev-machine / finnews / wechat-mp 等 skill 的 curl）。
+ * 鉴权统一由 InternalKeyGuard 校验 Bearer <CONTENT_HUB_SERVICE_KEY>。
+ */
+@UseGuards(InternalKeyGuard)
 @Controller('api')
 export class FinnewsController {
   private readonly arxivCollector = new ArxivCollector();

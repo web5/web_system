@@ -214,10 +214,15 @@ description: 文风与风格模仿工程——把"写得像某个高手"从感�
 ### 8.3 发布（一次 POST）
 
 ```bash
+CH_KEY=$(ssh ubuntu@{{DEV_HOST}} "sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' /data/web_system/.env.production | head -1")
 ssh ubuntu@{{DEV_HOST}} "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
+  -H 'Authorization: Bearer $CH_KEY' \
   -H 'Content-Type: application/json' \
   -d '{\"title\":\"标题\",\"html\":\"<body><p>首段含封面img</p>...</body>\"}'"
 ```
+
+> 🔴 服务间鉴权：content-hub 业务接口必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`
+> （key 从 dev 的 `/data/web_system/.env.production` 取，单一真源），否则 401。
 返回 `media_id` 即建草稿成功；去公众号后台确认排版，**默认不自动群发**。凭证 dev 已配，无需填密钥。
 
 ### 8.4 发布前 30 秒自检（必做）

@@ -10,6 +10,8 @@
 #
 # 环境变量：
 #   CH_BASE          content-hub 地址（默认 http://127.0.0.1:6007）
+#   CH_SERVICE_KEY   content-hub 服务间 key（默认从 CH_ENV_FILE 读取）
+#   CH_ENV_FILE      key 来源文件（默认 /data/web_system/.env.production）
 #   COVER_URL        封面图 URL
 #   TITLE            文章标题
 #   CATEGORIES       arxiv 分类（默认 cs.AI+OR+cs.CL+OR+cs.CV+OR+cs.LG）
@@ -19,6 +21,10 @@
 set -euo pipefail
 
 CH_BASE="${CH_BASE:-http://127.0.0.1:6007}"
+# 服务间鉴权：key 单一真源是 dev 机器上的 .env.production，本地不留副本
+CH_ENV_FILE="${CH_ENV_FILE:-/data/web_system/.env.production}"
+CH_SERVICE_KEY="${CH_SERVICE_KEY:-$(sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' "$CH_ENV_FILE" 2>/dev/null | head -1 | tr -d '"' | tr -d "'" || true)}"
+[ -n "$CH_SERVICE_KEY" ] || { echo "FAIL: 未取到 CONTENT_HUB_SERVICE_KEY（来源 $CH_ENV_FILE）—— content-hub 已对服务间接口强制鉴权，无 key 会全部 401"; exit 1; }
 COVER_URL="${COVER_URL:-https://dummyimage.com/800x400/4A90E2/fff.png&text=arXiv+Daily}"
 TITLE="${TITLE:-arXiv 论文日报（降级通道）}"
 CATEGORIES="${CATEGORIES:-cs.AI+OR+cs.CL+OR+cs.CV+OR+cs.LG}"
@@ -135,11 +141,13 @@ PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"title":sys.argv[1],"ht
 
 if [ "$PUBLISH_FLAG" = "1" ]; then
   RESP=$(curl -sf -m 30 -X POST "$CH_BASE/api/content/wechat/publish" \
+    -H "Authorization: Bearer ${CH_SERVICE_KEY}" \
     -H "Content-Type: application/json" -d "$PAYLOAD") \
     || { echo "FAIL: 发布失败"; exit 1; }
   echo "发布结果: $RESP"
 else
   RESP=$(curl -sf -m 30 -X POST "$CH_BASE/api/content/wechat/draft" \
+    -H "Authorization: Bearer ${CH_SERVICE_KEY}" \
     -H "Content-Type: application/json" -d "$PAYLOAD") \
     || { echo "FAIL: 建草稿失败"; exit 1; }
   echo "草稿结果: $RESP"

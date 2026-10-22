@@ -32,7 +32,7 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // @Public() 放行的路由（服务间接口，鉴权在 gateway service-key 层已做）跳过本守卫
+    // @Public() 放行的路由（服务间接口，由方法级 InternalKeyGuard 鉴权）跳过本守卫
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

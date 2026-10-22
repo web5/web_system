@@ -26,7 +26,11 @@ agent_created: true
 ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "echo ok"
 
 # 执行单条命令
-ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "curl -s http://127.0.0.1:6007/api/market-pulse"
+ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "echo ok"
+
+# 调 content-hub 业务接口（🔴 必须带服务间 key，见 §4 说明）
+CH_KEY=$(ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' /data/web_system/.env.production | head -1")
+ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "curl -s -H 'Authorization: Bearer $CH_KEY' http://127.0.0.1:6007/api/market-pulse"
 
 # 执行多条命令（分号分隔）
 ssh -o ConnectTimeout=8 -o BatchMode=yes ubuntu@{{DEV_HOST}} "cd /workspace/daily-paper && python3 fetch_arxiv.py"
@@ -112,9 +116,17 @@ dev 机器上 content-hub 提供公众号 REST 接口（无需 MCP，直接 curl
 | 建草稿 | POST | `http://127.0.0.1:6007/api/content/wechat/draft` |
 | 一键发布 | POST | `http://127.0.0.1:6007/api/content/wechat/publish` |
 
+> 🔴 **服务间鉴权（2026-10-22 起强制）**：content-hub 的 `/api/*` 业务接口已启用
+> InternalKeyGuard，curl 必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`，否则一律 401。
+> key 的单一真源是 dev 机器的 `/data/web_system/.env.production`（与 content-hub 进程同源），
+> **本地不留副本**。降级脚本 `scripts/mcp-fallback/*.sh` 已自动读取该 key；
+> 探测服务存活请用 `/health`（免鉴权端点），别用业务接口探活。
+
 ```bash
-# 建草稿
+# 建草稿（先取 key，再带 Bearer 调）
+CH_KEY=$(ssh ubuntu@{{DEV_HOST}} "sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' /data/web_system/.env.production | head -1")
 ssh ubuntu@{{DEV_HOST}} "curl -s -X POST http://127.0.0.1:6007/api/content/wechat/draft \
+  -H 'Authorization: Bearer $CH_KEY' \
   -H 'Content-Type: application/json' \
   -d '{\"title\":\"标题\",\"html\":\"<body><p>正文</p></body>\"}'"
 

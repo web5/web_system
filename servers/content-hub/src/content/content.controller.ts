@@ -2,12 +2,14 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ContentService, WechatMpPublishDto } from './services/content.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
 
 /**
  * 采集源 / 管线 / 条目的管理接口，默认走运营后台（admin）用户 JWT。
- * 唯一的例外是公众号建稿/发布（wechat/*）：它们由 mcp-gateway / 连接器以
- * service key 调用，鉴权在 gateway 的 service-key 层已做，故用 @Public() 放行。
+ * 例外是公众号建稿/发布（wechat/*）：服务间接口（mcp-gateway wechat_mp 模块 +
+ * SSH 运维 skill 直连），用 @Public() 跳过用户 JWT + @UseGuards(InternalKeyGuard)
+ * 校验 Bearer <CONTENT_HUB_SERVICE_KEY>。
  */
 @UseGuards(JwtAuthGuard)
 @Controller('api/content')
@@ -73,16 +75,25 @@ export class ContentController {
     return this.contentService.runPipeline(pipeline);
   }
 
-  // ── 公众号发布（服务间：mcp-gateway / 连接器以 service key 调用，鉴权在 gateway 层）──
-  /** 只建草稿不发布（MCP create_wechat_draft 对应接口） */
+  // ── 公众号发布（服务间：mcp-gateway wechat_mp 模块 + SSH 运维 skill 直连）──
+  /**
+   * 只建草稿不发布（MCP create_wechat_draft 对应接口）。
+   * @Public() 跳过用户 JWT（服务间调用不带用户凭证），
+   * InternalKeyGuard 校验 Bearer <CONTENT_HUB_SERVICE_KEY>。
+   */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Post('wechat/draft')
   createWechatDraft(@Body() body: WechatMpPublishDto) {
     return this.contentService.createWechatDraft(body);
   }
 
-  /** 一键发布到公众号（MCP publish_to_wechat 对应接口） */
+  /**
+   * 一键发布到公众号（MCP publish_to_wechat 对应接口）。
+   * 鉴权同 wechat/draft。
+   */
   @Public()
+  @UseGuards(InternalKeyGuard)
   @Post('wechat/publish')
   publishWechat(@Body() body: WechatMpPublishDto) {
     return this.contentService.publishWechatArticle(body);
