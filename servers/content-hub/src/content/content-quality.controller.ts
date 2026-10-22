@@ -16,7 +16,7 @@ import { Logger } from '@nestjs/common';
 import { CollectLogService } from './services/collect-log.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
-import { EastmoneyLhbCollector } from './collectors/eastmoney-lhb.collector';
+import { ManualCollectService } from './services/manual-collect.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
@@ -27,6 +27,7 @@ import {
   EvalSampleQueryDto,
   ListItemsQueryDto,
   ListLhbQueryDto,
+  TestCollectDto,
   TriggerCollectDto,
 } from './dto/content-quality.dto';
 import { COLLECT_TRIGGER } from './quality/quality.enum';
@@ -53,6 +54,7 @@ export class ContentQualityController {
     private readonly collectLog: CollectLogService,
     private readonly digest: ArxivDigestService,
     private readonly finnewsAdapter: FinnewsAdapterService,
+    private readonly manualCollect: ManualCollectService,
     private readonly seatTag: SeatTagService,
     @InjectRepository(LhbRecordEntity)
     private readonly lhbRepo: Repository<LhbRecordEntity>,
@@ -94,12 +96,27 @@ export class ContentQualityController {
     return this.collectLog.health(query.days);
   }
 
+  /**
+   * 每个源最近一次采集结果（admin 采集源列表「最近采集」列，p40）。
+   * 让「这源还活着吗」在列表页直接可见，不用跳监控页。
+   */
+  @Get('sources/last-collect')
+  lastCollect() {
+    return this.collectLog.lastBySource();
+  }
+
   // ── 手动触发采集（FR-API-5）───────────────────────────────────────
 
   /**
    * 手动触发某个采集器（需 `content:manage`）。
    *
    * 幂等保护：同一采集器同一时刻只跑一次（`running` 集合），防重复点击把上游打爆。
+   *
+   * 分派（p40 补全，原来只有 finnews 双写 + 龙虎榜，arxiv/hackernews/rss
+   * 全部落入「未注册采集器类型」——管理页点了触发实际什么都没采）：
+   *   · sina_news / eastmoney_news → FinnewsAdapterService（双写 topics/news 旧表）
+   *   · arxiv / rss / hackernews / eastmoney_lhb → ManualCollectService（落 content_items）
+   *   · 其余 → rejected（配置了没有采集器的类型，属配置错误）
    */
   @Post('collect/:sourceCode')
   async trigger(
@@ -122,7 +139,7 @@ export class ContentQualityController {
       return {
         source_code: sourceCode,
         status: 'unknown',
-        reason: `未登记的采集源：${sourceCode}（请先在「内容采集源」里添加）`,
+        reason: `未登记的采集源：${sourceCode}（请先在「采集源管理」里添加）`,
       };
     }
     if (!source.enabled) {
@@ -134,67 +151,53 @@ export class ContentQualityController {
     }
 
     this.running.add(sourceCode);
-    const startedAt = new Date();
     try {
       // 财经快讯（新浪/东财）：走 finnews 适配器双写（质量归因 + 唯一键去重）
       if (source.type === 'sina_news' || source.type === 'eastmoney_news') {
         // pipelineId 传null：手动触发的条目不进固定管线（只保证内容有质量归因）
+        const startedAt = new Date();
         const results = await this.finnewsAdapter.syncToContentItems(null, {
           trigger: COLLECT_TRIGGER.MANUAL,
           limit: body.limit,
         });
-        return { source_code: sourceCode, status: 'ok', results };
+        return {
+          source_code: sourceCode,
+          status: 'ok',
+          item_count: results.reduce((n, r) => n + r.legacyTotal, 0),
+          inserted: results.reduce((n, r) => n + r.newWritten, 0),
+          deduped: results.reduce((n, r) => n + r.dedupSkipped, 0),
+          failed_count: results.reduce((n, r) => n + r.failed, 0),
+          duration_ms: Date.now() - startedAt.getTime(),
+        };
       }
 
-      // 龙虎榜：专用采集器（交易日窗口 + 席位明细 + 涨停/ST 标记）
-      if (source.type === 'eastmoney_lhb') {
-        const items = await new EastmoneyLhbCollector().collect(source.config ?? {}, body.limit);
-        const finishedAt = new Date();
-        if (items.length === 0) {
-          await this.collectLog.logFailure({
-            sourceCode,
-            sourceName: source.name,
-            trigger: COLLECT_TRIGGER.MANUAL,
-            errorMessage: '采集返回空（源不可达或解析失败）',
-            startedAt,
-            finishedAt,
-          });
-          return { source_code: sourceCode, status: 'empty', items: 0 };
-        }
-        await this.collectLog.logSuccess({
-          sourceCode,
-          sourceName: source.name,
+      // 其余有采集器的类型（arxiv / rss / hackernews / 龙虎榜）：统一走手动采集执行器
+      if (this.manualCollect.hasCollector(source.type)) {
+        return await this.manualCollect.run(source, {
           trigger: COLLECT_TRIGGER.MANUAL,
-          itemCount: items.length,
-          startedAt,
-          finishedAt,
+          limit: body.limit,
         });
-        return { source_code: sourceCode, status: 'ok', items: items.length };
       }
 
       return {
         source_code: sourceCode,
-        status: 'unknown',
-        reason: `未注册采集器类型：${source.type}`,
-      };
-    } catch (e) {
-      const finishedAt = new Date();
-      await this.collectLog.logFailure({
-        sourceCode,
-        trigger: COLLECT_TRIGGER.MANUAL,
-        errorMessage: (e as Error).message,
-        startedAt,
-        finishedAt,
-      });
-      this.logger.error(`手动采集失败 ${sourceCode}: ${(e as Error).message}`);
-      return {
-        source_code: sourceCode,
-        status: 'failed',
-        error: (e as Error).message,
+        status: 'rejected',
+        reason: `未注册采集器类型：${source.type}（该类型没有可用采集器，请检查采集源类型配置）`,
       };
     } finally {
       this.running.delete(sourceCode);
     }
+  }
+
+  /**
+   * 试采（编辑页「测试采集」）。
+   *
+   * 🔴 与 trigger 的唯一区别：**不落库**——不写 content_items、不写
+   *    collect_runs。config 取管理端当前表单值（含未保存修改），支持先测后存。
+   */
+  @Post('sources/test')
+  testCollect(@Body() body: TestCollectDto) {
+    return this.manualCollect.test(body.type, body.config ?? {}, body.limit ?? 5);
   }
 
   /** 运行中的采集器（防重复触发） */

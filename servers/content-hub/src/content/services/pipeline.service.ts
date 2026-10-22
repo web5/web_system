@@ -134,7 +134,16 @@ export class PipelineService {
             target,
             status: result.success ? 'success' : 'failed',
             external_id: result.external_id ?? null,
-            detail: result.error ? { error: result.error } : null,
+            detail: {
+              ...(result.error ? { error: result.error } : {}),
+              // p40：留存成文 payload，供「重新发布 / 成文预览」复用（无 payload 的历史记录靠聚合重建）
+              payload: {
+                title,
+                markdown,
+                ...(target === 'wechat_mp' ? { html: markdownToHtml(markdown) } : {}),
+                folder: pipeline.tencent_folder ?? undefined,
+              },
+            },
           }),
         );
         if (result.success) published++;

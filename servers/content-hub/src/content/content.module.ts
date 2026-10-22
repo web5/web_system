@@ -17,6 +17,8 @@ import { CollectRunEntity } from './entities/collect-run.entity';
 import { CollectLogService } from './services/collect-log.service';
 import { SeatTagService } from './services/seat-tag.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
+import { ContentItemPersistService } from './services/content-item-persist.service';
+import { ManualCollectService } from './services/manual-collect.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { ContentQualityController } from './content-quality.controller';
 import { ContentAuthModule } from '../auth/auth.module';
@@ -46,6 +48,8 @@ import { ContentAuthModule } from '../auth/auth.module';
     CollectLogService,
     SeatTagService,
     FinnewsAdapterService,
+    ContentItemPersistService,
+    ManualCollectService,
     ArxivDigestService,
   ],
   exports: [
