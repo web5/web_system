@@ -99,8 +99,18 @@ export class ContentQualityController {
   /**
    * 每个源最近一次采集结果（admin 采集源列表「最近采集」列，p40）。
    * 让「这源还活着吗」在列表页直接可见，不用跳监控页。
+   *
+   * 🔴 路径必须是 `collect/last`，**不能**叫 `sources/last-collect`（2026-10-22 事故）：
+   *    两个 controller 前缀都是 `api/content`，且 `content.module.ts` 里
+   *    ContentController 先于 ContentQualityController 注册，于是
+   *    `GET sources/last-collect` 会被 ContentController 的 `@Get('sources/:id')`
+   *    **抢先匹配** → `Number('last-collect')` = NaN → `getSource(NaN)` →
+   *    MySQL `Unknown column 'NaN' in 'where clause'` → 500，
+   *    且 admin 采集源页用 `Promise.all([listSources(), lastCollect()])` 挂载，
+   *    这一个 500 会让整页白屏报「服务器错误」。
+   *    改名后不再与 `sources/:id` 的通配有交集，从根上消除歧义。
    */
-  @Get('sources/last-collect')
+  @Get('collect/last')
   lastCollect() {
     return this.collectLog.lastBySource();
   }
