@@ -117,6 +117,26 @@
 - 关键异步流程用 `setTimeout` 模拟进度，让评审感知真实时序。
 - **平台原生能力占位**：转发/分享、授权弹窗、订阅消息、调起支付、拨号/定位等 HTML 无法真实模拟的原生能力，一律「可见入口 + 占位反馈 + 决策记录标注真机语义」，不假装已实现。
 
+### 五·B 原型演示控件（每稿必带的评审台）
+
+原型交互再全，评审人也未必找得到。控件把「能点哪 / 有哪些屏 / 有哪些分支 / 哪些是假设」外化，**完整规格见 `demo-control-panel.md`**，此处只定执行契约：
+
+- **四区**：① 稿头（稿名/目标端/日期/mock 声明/待确认计数）② 场景包 ③ 屏直达 ④ 辅助（标注层/复位/收起）
+- **场景包** = 具名剧本，一点同时设 `角色 + 屏 + 数据态 + 弹层`；≥3 个，命名是「谁 · 什么情况」，顺序即演示顺序
+- **状态分支用 CSS 声明，不用 JS 逐个改 `display`**（改 js 会漏、会漂）：
+
+```css
+.only-loading,.only-empty,.only-error,.only-forbidden{display:none}
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal{display:none}
+[data-demo-state="empty"] .only-empty{display:block}   /* loading/error/forbidden 同理 */
+```
+
+- **单一导航入口**：产品菜单与控件都调同一个 `go(key)`，它负责切屏/面包屑/菜单选中/控件高亮/hash
+- **角色可见性**：`html[data-demo-role="X"] [data-need-role="Y"]{display:none}`，菜单与页内按钮同时生效
+- **让位**：`H` 收起、产品弹层打开时控件降透明、`@media print` 隐藏、窄屏（<1200）自动收起
+- **位置**：桌面右下浮层（fixed）；移动端放**壳外画布**，🔴 不得放进手机壳内部
+- 可复制实现 `../examples/demo-panel.html`；机检 `node skills/ux-prototype-designer/scripts/check-demo-panel.mjs <稿.html>`
+
 ## 六、页面类型最小结构（通用分类，与目标端叠加使用）
 
 > 页面类型决定**内容组织**，目标端决定**壳与导航**，两者正交：同一「列表页」在小程序是 TabBar 页内列表 + 下拉刷新，在桌面 Web 是侧边栏内表格页。

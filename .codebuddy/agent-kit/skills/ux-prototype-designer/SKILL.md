@@ -1,10 +1,10 @@
 ---
 name: ux-prototype-designer
-description: UX 原型交互设计师 — 独立于产品（判断做不做）与前端（编码落地）的设计角色：把已对齐的需求设计成可点击交互 HTML 原型稿（信息架构 / 交互模式 / 状态矩阵 / 视觉 token），覆盖桌面 Web / 移动 H5 / App / 小程序 / 定制落地页等目标端（HTML 模拟壳），过独立交互质检后交人确认。触发：原型稿生成、交互怎么设计、页面信息架构、做个可点击的稿看看、小程序/H5/App/落地页先看交互、rd-plan 判定需要原型稿；也覆盖用户直接用「微调措辞」提 UI 改动（间距/太丑/隐藏/挪/颜色/字号/换行/视觉微调/交互调整）——此类措辞同样应先回到原型稿，不直接改 WXML/WXSS/Vue。
-version: 1.1.0
+description: UX 原型交互设计师 — 独立于产品（判断做不做）与前端（编码落地）的设计角色：把已对齐的需求设计成可点击交互 HTML 原型稿（信息架构 / 交互模式 / 状态矩阵 / 视觉 token），覆盖桌面 Web / 移动 H5 / App / 小程序 / 定制落地页等目标端（HTML 模拟壳），过独立交互质检后交人确认。触发：原型稿生成、交互怎么设计、页面信息架构、做个可点击的稿看看、小程序/H5/App/落地页先看交互、rd-plan 判定需要原型稿；也覆盖用户直接用「微调措辞」提 UI 改动（间距/太丑/隐藏/挪/颜色/字号/换行/视觉微调/交互调整）——此类措辞同样应先回到原型稿，不直接改 WXML/WXSS/Vue。出稿/改稿均须带原型演示控件（场景包 / 角色 / 数据态切换，规格见 references/demo-control-panel.md；机检 scripts/check-demo-panel.mjs）。
+version: 1.2.0
 rationale: RATIONALE.md
-checks: 无（质检清单为 `references/ux-review-checklist.md`，人工/AI 逐条过）
-loads: references/prototype-common.md, references/ux-review-checklist.md
+checks: 无（机检 `scripts/check-demo-panel.mjs` + 质检清单 `references/ux-review-checklist.md`，人工/AI 逐条过）
+loads: references/prototype-common.md, references/demo-control-panel.md, references/ux-review-checklist.md
 ---
 
 > 设计理由 / 返工教训见 [`RATIONALE.md`](RATIONALE.md)（人面，按需加载，不在执行路径上）。
@@ -36,6 +36,23 @@ loads: references/prototype-common.md, references/ux-review-checklist.md
 - 平台原生能力（分享 / 授权 / 订阅消息 / 调起支付等）HTML 无法真实模拟 → 原型做「占位入口 + 标注真机语义」，写进设计决策记录，不假装已实现。
 - 一稿聚焦一个主目标端；涉及多端时在单稿内分区标注或按约定分稿，不混壳、不做跨端响应式。
 
+## 原型演示控件（每稿必带，2026-10-22 起）
+
+原型给**不做设计的人**看：他们不知道哪些能点、有哪些屏、有哪些分支。控件把这些外化，是评审效率的主要来源，不是装饰——一句「数据为 mock」的静态说明卡**不算**控件。
+
+| 必须做到 | 做不到的后果 |
+|---|---|
+| **场景包 ≥3**：具名场景，一点同时设「角色 × 屏 × 数据态 × 弹层」 | 评审只看首页，分支靠嘴说 |
+| **屏直达 + 双向同步**：全部屏可跳，与产品菜单**共用同一个 `go()`** | 想看第 5 屏要连点 4 层；跳完菜单选中项不跟 |
+| **开关真生效**：切 `data-demo-*` 界面必须真的变 | **假开关比没有更糟**——给了「分支已覆盖」的错觉 |
+| **可隐没**：`H` 收起 / 产品弹层打开时让位 / `@media print` 隐藏 | 挡住主操作、污染截图 |
+
+- 规格（四区结构 / 属性契约 / 状态矩阵 CSS / 角色可见性 / 快捷键 / L0-L1 两档 / 反模式）→ `references/demo-control-panel.md`
+- 可复制实现 → `examples/demo-panel.html`（单文件可跑，改注册表即用）
+- 机检 → `node skills/ux-prototype-designer/scripts/check-demo-panel.mjs <稿.html>`，**交人前必跑，不过不算完成**
+- 低保真只做 **L0**（稿头 + 屏清单 + 收起）；多屏 / 高保真做 **L1**（+ 场景包 + 角色 + 五态 + 标注层 + 复位）
+- 控件是**评审台**不是产品 UI：虚线边框 +「演示」标签与产品卡片区分；控件操作不写进产品状态
+
 ## 触发条件
 
 - 用户/rd-plan 判定需要原型稿（UI 大改 / 新功能 / 跨页面流程 / 多方案演示）
@@ -65,9 +82,11 @@ loads: references/prototype-common.md, references/ux-review-checklist.md
    - 方法：读 `references/prototype-common.md`（通用方法，含目标端矩阵）
    - 先叠加项目 scaffold / 设计 token（若项目无，仅通用方法亦可产出）
    - 非 Web 端按宿主元素模拟（原生导航 / 小程序胶囊 TabBar），原生能力做占位 + 标注
+   - **同稿带上原型演示控件**（场景包 / 屏直达 / 数据态，见上节；移动端放壳外画布）
   ↓
-5. 独立交互质检：逐条过 `references/ux-review-checklist.md`
-   （自检 + 交人前最后一次过；此处替代「看起来 OK」）
+5. 独立交互质检：逐条过 `references/ux-review-checklist.md`（含 J 段演示控件）
+   - 先跑机检 `scripts/check-demo-panel.mjs <稿.html>`，再人工过清单
+   - （自检 + 交人前最后一次过；此处替代「看起来 OK」）
   ↓
 6. 【等待用户确认】
   ↓
@@ -77,7 +96,7 @@ loads: references/prototype-common.md, references/ux-review-checklist.md
 ## 产出要求
 
 - 交付目录：按项目约定（无约定则与需求/规格同目录），**不进应用代码目录**
-- 交付物：可点击 HTML 原型稿（单文件零依赖，含目标端宿主元素模拟）+ 设计决策记录（含：目标端确认、哪些是设计取舍、哪些待用户拍板、平台原生能力占位项）
+- 交付物：可点击 HTML 原型稿（单文件零依赖，含目标端宿主元素模拟 **+ 原型演示控件 L0/L1**）+ 设计决策记录（含：目标端确认、哪些是设计取舍、哪些待用户拍板、平台原生能力占位项）
 - 原型的 Token 与项目 tokens 对齐；但原型内联 CSS 变量，不 import 业务包
 - 不产出非 HTML 的落地代码（WXML / 小程序页面 / App 原生页等不属于原型稿）
 
@@ -117,5 +136,7 @@ loads: references/prototype-common.md, references/ux-review-checklist.md
 - 不把原型当最终代码提交进应用代码目录
 - 不引外部依赖 / 框架 / CDN；不在原型里写裸 hex（除 `:root` 定义）、不新增 `!important`
 - 不用 emoji 图标；一稿聚焦一个主目标端（不混壳、不做跨端响应式；落地页双视口并置需显式分区）
+- 不用一句「数据为 mock」的静态说明卡代替演示控件；不提供点了没反应的开关（假开关）
+- **移动端控件不得放进手机壳内部**（遮挡真实界面、让人误以为是产品浮层）
 - 不替未定义交互脑补默认行为（无业务定义的交互路径 → 显式标注待确认）；平台原生能力（分享/授权/支付等）不假装已实现，做占位 + 标注
 - 不跳过 §独立交互质检 直接宣布完成
