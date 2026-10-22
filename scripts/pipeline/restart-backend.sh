@@ -77,6 +77,25 @@ check_deps() {
         die "mcp-gateway.KNOWLEDGE_SERVICE_AUTH_CONFIG.token 与 knowledge-service.INTERNAL_API_KEY 不一致 —— knowledge 工具调用会返回 4010"
       fi
       ;;
+    # ══ p39:content-hub-guard:begin ══
+    content-hub)
+      [ -f "$ENV_FILE" ] || die "content-hub 缺少 .env（${ENV_FILE}）"
+      [ -n "$(env_get "$ENV_FILE" JWT_SECRET)" ] || die \
+        "content-hub/.env 缺少 JWT_SECRET —— 运营后台（/api/content-admin/*）用户 JWT 校验全部失败，
+      页面表现为管理页 401「登录凭证无效」而 MCP 链路正常（极难定位）。
+      修复：从 .env.production 同源复制 JWT_SECRET 到 ${ENV_FILE} 后重启 content-hub"
+      local ch_key gw_finnews_key
+      ch_key="$(env_get "$ENV_FILE" CONTENT_HUB_SERVICE_KEY)"
+      [ -n "$ch_key" ] || die \
+        "content-hub/.env 缺少 CONTENT_HUB_SERVICE_KEY —— InternalKeyGuard 空 key 全拒，
+      mcp-gateway 的 paper/finnews/wechat_mp/institution 四模块调用全部 401。
+      修复：在 ${ENV_FILE} 增加 CONTENT_HUB_SERVICE_KEY（与 gateway 的 FINNEWS_SERVICE_KEY 同值）"
+      gw_finnews_key="$(env_get "${RELEASE_DIR}/servers/gateway/.env" FINNEWS_SERVICE_KEY)"
+      if [ -n "$ch_key" ] && [ -n "$gw_finnews_key" ] && [ "$ch_key" != "$gw_finnews_key" ]; then
+        die "content-hub.CONTENT_HUB_SERVICE_KEY 与 gateway.FINNEWS_SERVICE_KEY 不一致 —— 服务间调用 401"
+      fi
+      ;;
+    # ══ p39:content-hub-guard:end ══
   esac
   return 0
 }
@@ -146,11 +165,28 @@ clean_orphan_port
 # 不用 `pm2 restart --update-env`：它只增量更新，历史 pm2_env 中的混杂变量
 # （如 .env.production 的 JWT_SECRET / 微信密钥 / MCP_CLIENT_KEY）会残留，
 # 而 dotenv 不覆盖已存在的 process.env → 服务实际用的是错误来源的配置。
+# ══ p39:static-root:begin ══
+# gateway 静态根透传（p39）：
+# 为什么必须走进程环境而不是 .env：PUBLIC_ROOT 是 public-root.ts 的模块级常量，
+# 在 Node require 链加载时求值，早于 ConfigModule 读 .env —— .env 里配
+# STATIC_PUBLIC_ROOT 永远不生效（2026-10-22 实测：/static/modules 全 404，
+# admin 白屏；根因是 gateway 服务 runtime 快照、流水线投递 servers/public，两份漂移）。
+# 未配置时回落 servers/gateway/public（与 remote-delivery 的投递落点一致）。
+EXTRA_ENV=()
+if [ "$MODULE_KEY" = "gateway" ]; then
+  GW_STATIC_ROOT="$(env_get "$ENV_FILE" STATIC_PUBLIC_ROOT)"
+  [ -n "$GW_STATIC_ROOT" ] || GW_STATIC_ROOT="${RELEASE_DIR}/servers/gateway/public"
+  EXTRA_ENV+=("STATIC_PUBLIC_ROOT=$GW_STATIC_ROOT")
+  log "gateway 静态根：${GW_STATIC_ROOT}"
+fi
+# ══ p39:static-root:end ══
+
 "$PM2" delete "$NAME" >/dev/null 2>&1 || true
 env -i \
   PATH="$PATH" \
   HOME="${HOME:-/root}" \
   PORT="${PORT:-}" \
+  ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
   "$PM2" start "${SVC_DIR}/dist/main.js" \
   --name "$NAME" \
   --cwd "$SVC_DIR" \
