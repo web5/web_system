@@ -29,7 +29,7 @@ import { ListItemsQueryDto } from './dto/content-quality.dto';
  * 字面量路径（如曾经的 `sources/last-collect`），`Number()` 后变 NaN，
  * TypeORM 会把它当列名生成 SQL，最终是 500 而不是可读的 400。
  */
-function parseId(raw: string, label: string): number {
+export function parseId(raw: string, label: string): number {
   const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0) {
     throw new BadRequestException(`${label} ID 非法：${raw}`);
@@ -56,7 +56,7 @@ export class ContentController {
    *    路由改名（collect/last）是根治，这里是**兜底**：任何落到本路由的非数字 ID
    *    都返回 400，不再产生 500，也不再让调用方 `Promise.all` 整页崩掉。
    */
-  @Get('sources/:id')
+  @Get('sources/:id(\\d+)')
   source(@Param('id') id: string) {
     return this.contentService.getSource(parseId(id, '采集源'));
   }
@@ -66,12 +66,12 @@ export class ContentController {
     return this.contentService.createSource(body);
   }
 
-  @Patch('sources/:id')
+  @Patch('sources/:id(\\d+)')
   updateSource(@Param('id') id: string, @Body() body: any) {
     return this.contentService.updateSource(parseId(id, '采集源'), body);
   }
 
-  @Delete('sources/:id')
+  @Delete('sources/:id(\\d+)')
   deleteSource(@Param('id') id: string) {
     return this.contentService.deleteSource(parseId(id, '采集源'));
   }
@@ -82,7 +82,7 @@ export class ContentController {
     return this.contentService.listPipelines();
   }
 
-  @Get('pipelines/:id')
+  @Get('pipelines/:id(\\d+)')
   pipeline(@Param('id') id: string) {
     return this.contentService.getPipeline(parseId(id, '管线'));
   }
@@ -92,12 +92,12 @@ export class ContentController {
     return this.contentService.createPipeline(body);
   }
 
-  @Patch('pipelines/:id')
+  @Patch('pipelines/:id(\\d+)')
   updatePipeline(@Param('id') id: string, @Body() body: any) {
     return this.contentService.updatePipeline(parseId(id, '管线'), body);
   }
 
-  @Delete('pipelines/:id')
+  @Delete('pipelines/:id(\\d+)')
   deletePipeline(@Param('id') id: string) {
     return this.contentService.deletePipeline(parseId(id, '管线'));
   }
@@ -119,7 +119,7 @@ export class ContentController {
   }
 
   /** 单条明细详情（含关联管线 / 源 / 发布记录） */
-  @Get('items/:id')
+  @Get('items/:id(\\d+)')
   itemDetail(@Param('id') id: string) {
     return this.contentService.getItemDetail(parseId(id, '明细'));
   }
@@ -141,13 +141,13 @@ export class ContentController {
   }
 
   /** 成文预览（Q5：文章级聚合，payload 直渲染 / 历史记录按管线+当日重建） */
-  @Get('publications/:id/preview')
+  @Get('publications/:id(\\d+)/preview')
   publicationPreview(@Param('id') id: string) {
     return this.contentService.publicationPreview(parseId(id, '发布记录'));
   }
 
   /** 重新发布（Q3：failed 成文一键重发，产生新记录） */
-  @Post('publications/:id/republish')
+  @Post('publications/:id(\\d+)/republish')
   republish(@Param('id') id: string) {
     return this.contentService.republishPublication(parseId(id, '发布记录'));
   }

@@ -30,9 +30,10 @@ const lastCollectMap = ref<Record<string, LastCollectRow>>({});
 async function loadSources() {
   sourceLoading.value = true;
   try {
-    const [list, lastRes] = await Promise.all([listSources(), lastCollect()]);
+    // 「最近采集」是装饰性列：失败只留空，不得拖垮列表（同上，2026-10-22 事故同理）
+    const [list, lastRes] = await Promise.all([listSources(), lastCollect().catch(() => null)]);
     sources.value = list;
-    lastCollectMap.value = Object.fromEntries(lastRes.items.map((r) => [r.source_code, r]));
+    lastCollectMap.value = Object.fromEntries((lastRes?.items ?? []).map((r) => [r.source_code, r]));
   } catch {
     /* request 拦截器已弹错 */
   } finally {
