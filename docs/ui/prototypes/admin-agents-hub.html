@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>admin 管理后台 · 菜单级整合稿（菜单对齐真实 admin · 对话调试 / 定义管理 / 定义详情 · 组件复用地图）</title>
+<title>admin 管理后台 · 菜单级整合稿（菜单对齐真实 admin · 自媒体运营 / 对话调试 / 定义管理 / 定义详情 · 组件复用地图）</title>
 <!--
   ============================================================
   admin 管理后台 · 菜单级整合交互稿（build-agents-hub.mjs 生成，请勿手改）
@@ -12,15 +12,16 @@
             docs/ui/prototypes/admin-agent-def-detail.html（定义管理 / 定义详情+调试台）
             docs/ui/prototypes/admin-settings.html（系统设置，同源抽取）
             docs/ui/prototypes/dict-module.html（字典管理，CSS 已作用域隔离 + id 加 dm- 前缀）
+            docs/ui/prototypes/admin-media-ops.html（自媒体运营 5 页，mount：一份 DOM 8 个 section）
             其余菜单屏暂无稿 → 占位（批次 / 骨架 / 复用件从注册表读，不伪造业务数据）
   · 菜单源：apps/admin/src/layouts/BasicLayout.vue（文案 / 顺序逐项对齐，无死项）
             路由与 apps/admin/src/router/index.ts 的真实 path 同构
   · 目标端：桌面 Web（admin 管理后台，亮色）；零依赖单文件，浏览器双击即开
   · 路由：hash 路由（#/agents/definitions、#/agents/definitions/<id>…），点菜单即「进入」模块页面
   · 本稿解决的四件事：
-    ① 菜单里的页面整合进一份稿：菜单**全部可点**，17 项菜单 + 定义详情共 18 屏均可达；
-       **有原型稿的模块直接同源抽取真实内容**（系统设置 / 字典管理 / 对话调试 / 定义管理 /
-       定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
+    ① 菜单里的页面整合进一份稿：菜单**全部可点**，22 项菜单 + 定义详情共 23 屏均可达；
+       **有原型稿的模块直接同源抽取真实内容**（自媒体运营 / 系统设置 / 字典管理 / 对话调试 /
+       定义管理 / 定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
     ② 菜单与真实 admin 一致：文案/顺序对齐 BasicLayout.vue，由 verify-agents-hub.mjs ⑧ 段对账；
     ③ 复用显性化：页面底部「组件复用地图」钉死 Turn / Bubble / AnswerBlocks / ProcCard
        四件套与表单侧复用件，落地按图施工；
@@ -44,6 +45,14 @@
       两稿真实合入（此前它们只是占位），新增 ⑩ 段断言守「登记了=真合进去了 / 隔离不泄漏 /
       批次与 specs 对账」。以后某模块出稿：注册表加一行 → 重跑本脚本，不需再改本文件。
       背景：产品意见「把菜单占位的原型稿也整合进来吧，后续就不用整合了，迭代也会更精准」。
+    · 2026-10-22 · v7：**自媒体运营模块并入**。产品意见「设计出来的原型需要统一融合进 admin 的
+      原型稿里，目前是散落的」——该模块此前是 apps/admin/prototype/ 下的一份独立单页稿，
+      与整合稿互不相通。本次：① 稿归位 docs/ui/prototypes/admin-media-ops.html；
+      ② 注册表新增 mount 源（一份 DOM / 8 个 section / 5 个菜单页，切屏时由 hub 把这些块搬过去，
+      而不是拆成 5 份）——因为模块内的二级页之间有跨根键跳转（明细详情 →「去公众号成文」），
+      拆开就跳不过去；③ 同步替换旧的「内容中心」5 屏（真实 router 已无 采集总览/龙虎榜/席位库
+      三个路由，继续留着就是第二真相源）；④ 注册表补 trails / jsDrop / sprite / cssExtra 四个
+      字段（多段弹层 / 丢弃源稿评审台 / 图标库 sprite / 作用域内补基准排版）。
     · 2026-10-11 · v4：**菜单全量对齐真实 admin**（工作台 / 变变管理 / 用户管理 / 系统设置 /
       角色权限 / 字典管理 / MCP 管理 / 数据浏览 + Agents 9 项），去掉全部「.nolink」死项，
       每一项都进入对应模块页面；非 Agents 模块为骨架式占位（登记归属批次与复用口径，
@@ -1060,451 +1069,573 @@
   content:attr(data-tip);position:absolute;bottom:120%;left:50%;transform:translateX(-50%);
   background:var(--text);color:#fff;font-size:11px;padding:5px 8px;border-radius:6px;white-space:nowrap;z-index:70;
   }
-  /* ===== 来自 admin-content-hub.html（CSS 已作用域隔离：裸通用类名不污染其它屏） ===== */
-  .cc-scope [data-radius='crisp']{
-  --ws-radius-sm:2px; --ws-radius-md:2px; --ws-radius-lg:4px;
+  /* ===== 来自 admin-media-ops.html（CSS 已作用域隔离：裸通用类名不污染其它屏） ===== */
+  .zm-scope{
+  --brand: #F97316; --brand-txt: #EA580C; --brand-soft: #FFF7ED; --brand-deep: #C2410C;
+  --bg-page: #FAFAFA; --bg-surface: #FFFFFF; --bg-subtle: #F2F2F2; --bg-hover: #F2F2F2; --bg-active: #EBEBEB;
+  --t1: #171717; --t2: #3F3F46; --t3: #525252; --t4: #A3A3A3; --t-disabled: #D4D4D4;
+  --border: #E5E5E5; --border-subtle: #EBEBEB;
+  --ok-bg: #EAF6EC; --ok: #398E4A;
+  --warn-bg: #FEF3DC; --warn: #F5A623; --warn-txt: #B45309;
+  --err-bg: #FCEBEC; --err: #E5484D;
+  --info-bg: #FFF7ED; --info: #F97316;
+  --r-chip: 4px; --r-control: 6px; --r-card: 8px;
+  --on-brand: #FFFFFF; --mask: rgba(0,0,0,.45); --focus-ring: 0 0 0 2px rgba(249,115,22,.15);
+  --ok-deep: #2C6B3B; --warn-deep: #92580A; --err-deep: #B02A2F;
+  --code-bg: #1C1E26; --code-text: #E2E8F0;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --shadow-pop: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);
+  --mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: 'Geist Sans', 'Inter', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+  .zm-scope *{
+  margin: 0; padding: 0; box-sizing: border-box;
   }
-  .cc-scope [data-radius='sharp']{
-  --ws-radius-sm:0px; --ws-radius-md:0px; --ws-radius-lg:2px;
+  .zm-scope button{
+  font-family: inherit; cursor: pointer;
   }
-  .cc-scope *{
-  margin:0;padding:0;box-sizing:border-box;
+  .zm-scope input,
+  .zm-scope select,
+  .zm-scope textarea{
+  font-family: inherit; font-size: 14px;
   }
-  .cc-scope :focus-visible{
-  outline:none;box-shadow:var(--ws-focus-ring);
+  .zm-scope svg.ic{
+  width: 16px; height: 16px; display: inline-block; vertical-align: -3px;
   }
-  .cc-scope .proto-head{
-  width:1280px;
+  .zm-scope svg.ic-20{
+  width: 20px; height: 20px;
   }
-  .cc-scope .proto-head h1{
-  font-size:18px;font-weight:600;margin-bottom:6px;letter-spacing:var(--ws-tracking-tight);
+  .zm-scope a{
+  color: var(--brand-txt); text-decoration: none;
   }
-  .cc-scope .proto-head .sub{
-  font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);
+  .zm-scope .main{
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
   }
-  .cc-scope .proto-head .sub b{
-  color:var(--ws-brand-600);font-weight:600;
+  .zm-scope .screen{
+  display: none; max-width: 1200px; margin: 0 auto;
   }
-  .cc-scope .proto-head .sub code{
-  font-family:var(--ws-font-mono);font-size:12px;background:var(--ws-bg-subtle);padding:1px 4px;border-radius:3px;
+  .zm-scope .screen.on{
+  display: block; animation: fadein .2s ease;
   }
-  .cc-scope .pg-head{
-  display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap;
+  
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .zm-scope .page-head{
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px;
   }
-  .cc-scope .pg-head h2{
-  font-size:18px;font-weight:600;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  .zm-scope .page-title{
+  font-size: 20px; font-weight: 600; color: var(--t1); line-height: 1.25;
   }
-  .cc-scope .pg-head .sub{
-  font-size:12px;color:var(--ws-text-secondary);margin-top:4px;line-height:var(--ws-leading-snug);
+  .zm-scope .page-desc{
+  font-size: 13px; color: var(--t4); margin-top: 4px;
   }
-  .cc-scope .pg-head .spacer{
-  flex:1;
+  .zm-scope .btn{
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-control); border: 1px solid var(--border); background: var(--bg-surface); color: var(--t2); font-size: 14px; transition: all .15s;
   }
-  .cc-scope .card{
-  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
-    padding:16px;margin-bottom:14px;box-shadow:var(--ws-shadow-card);
+  .zm-scope .btn:hover{
+  border-color: var(--brand); color: var(--brand-txt);
   }
-  .cc-scope .card .ct{
-  font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:14px;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  .zm-scope .btn.primary{
+  background: var(--brand); border-color: var(--brand); color: var(--on-brand);
   }
-  .cc-scope .card .ct .hint{
-  font-size:12px;font-weight:400;color:var(--ws-text-tertiary);
+  .zm-scope .btn.primary:hover{
+  background: var(--brand-txt); border-color: var(--brand-txt); color: var(--on-brand);
   }
-  .cc-scope .card .ct .ic{
-  width:var(--ws-icon-inline);height:var(--ws-icon-inline);color:var(--ws-brand-600);flex-shrink:0;
+  .zm-scope .btn.danger{
+  color: var(--err); border-color: var(--err);
   }
-  .cc-scope .card .ct .ic svg{
-  width:100%;height:100%;
+  .zm-scope .btn.danger:hover{
+  background: var(--err-bg); border-color: var(--err); color: var(--err);
   }
-  .cc-scope .note{
-  display:flex;gap:8px;align-items:flex-start;border-radius:var(--ws-radius-md);padding:9px 12px;
-    font-size:12px;line-height:var(--ws-leading-relaxed);margin-bottom:12px;
+  .zm-scope .btn.sm{
+  height: 24px; padding: 0 10px; font-size: 13px;
   }
-  .cc-scope .note.info{
-  background:var(--ws-brand-soft);color:var(--ws-brand-600);border:1px solid var(--ws-border-brand);
+  .zm-scope .btn.text{
+  border: none; background: none; padding: 0 6px; color: var(--brand-txt);
   }
-  .cc-scope .note.warn{
-  background:var(--ws-warn-soft);color:var(--ws-warn-text);border:1px solid var(--ws-border-warn);
+  .zm-scope .btn.text:hover{
+  background: none; text-decoration: underline;
   }
-  .cc-scope .note.danger{
-  background:var(--ws-danger-soft);color:var(--ws-danger);border:1px solid var(--ws-border-danger);
+  .zm-scope .btn[disabled]{
+  opacity: .5; cursor: not-allowed;
   }
-  .cc-scope .note.ok{
-  background:var(--ws-ok-soft);color:var(--ws-ok);border:1px solid var(--ws-border-ok);
+  .zm-scope .btn .ic{
+  width: 14px; height: 14px;
   }
-  .cc-scope .note code,
-  .cc-scope .mono{
-  font-family:var(--ws-font-mono);font-size:12px;
+  .zm-scope .card{
+  background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--r-card); box-shadow: var(--shadow-card);
   }
-  .cc-scope .kv{
-  font-family:var(--ws-font-mono);font-size:12px;background:var(--ws-bg-subtle);padding:1px 5px;border-radius:3px;color:var(--ws-text-body);
+  .zm-scope .card-pad{
+  padding: 16px;
   }
-  .cc-scope .btn{
-  background:var(--ws-bg-surface);color:var(--ws-text-strong);border:1px solid var(--ws-input-border);
-    border-radius:var(--ws-radius-md);padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit;
-    transition:background var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out),border-color var(--ws-duration-fast) var(--ws-ease-out);
+  .zm-scope .card + .card{
+  margin-top: 16px;
   }
-  .cc-scope .btn:hover{
-  background:var(--ws-bg-hover);
+  .zm-scope .tag{
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 20px; padding: 0 8px; border-radius: var(--r-chip); background: var(--bg-subtle); color: var(--t3); white-space: nowrap;
   }
-  .cc-scope .btn.primary{
-  background:var(--ws-brand-500);border-color:var(--ws-brand-500);color:var(--ws-on-brand);font-weight:600;
+  .zm-scope .tag.ok{
+  background: var(--ok-bg); color: var(--ok);
   }
-  .cc-scope .btn.primary:hover{
-  background:var(--ws-brand-600);
+  .zm-scope .tag.warn{
+  background: var(--warn-bg); color: var(--warn-txt);
   }
-  .cc-scope .btn.danger{
-  color:var(--ws-danger);border-color:var(--ws-border-danger-strong);
+  .zm-scope .tag.err{
+  background: var(--err-bg); color: var(--err);
   }
-  .cc-scope .btn.danger:hover{
-  background:var(--ws-danger-soft);
+  .zm-scope .tag.info{
+  background: var(--brand-soft); color: var(--brand-txt);
   }
-  .cc-scope .btn.sm{
-  height:var(--ws-control-sm);padding:0 10px;font-size:12px;border-radius:var(--ws-radius-sm);
+  .zm-scope .tag.mono{
+  font-family: var(--mono); font-size: 11px;
   }
-  .cc-scope .btn[disabled]{
-  opacity:.55;cursor:not-allowed;
+  .zm-scope .tag.sub{
+  font-size: 11px; padding: 0 6px; line-height: 18px;
   }
-  .cc-scope .btn-row{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  .zm-scope .table{
+  width: 100%; border-collapse: collapse;
   }
-  .cc-scope .badge{
-  font-size:12px;padding:2px 8px;border-radius:var(--ws-radius-pill);font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;
+  .zm-scope .table th{
+  text-align: left; font-size: 13px; font-weight: 500; color: var(--t3); background: var(--bg-subtle); padding: 10px 12px; white-space: nowrap;
   }
-  .cc-scope .badge.ok{
-  background:var(--ws-ok-soft);color:var(--ws-ok);
+  .zm-scope .table th:first-child{
+  border-radius: var(--r-control) 0 0 0;
   }
-  .cc-scope .badge.warn{
-  background:var(--ws-warn-soft);color:var(--ws-warn-text);
+  .zm-scope .table th:last-child{
+  border-radius: 0 var(--r-control) 0 0;
   }
-  .cc-scope .badge.err{
-  background:var(--ws-danger-soft);color:var(--ws-danger);
+  .zm-scope .table td{
+  padding: 12px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; vertical-align: middle;
   }
-  .cc-scope .badge.info{
-  background:var(--ws-info-soft);color:var(--ws-info);
+  .zm-scope .table tr:last-child td{
+  border-bottom: none;
   }
-  .cc-scope .badge.neutral{
-  background:var(--ws-bg-subtle);color:var(--ws-text-secondary);
+  .zm-scope .table .mono{
+  font-family: var(--mono); font-size: 12px; color: var(--t3);
   }
-  .cc-scope .trade{
-  display:inline-flex;align-items:center;font-size:12px;padding:2px 8px;border-radius:var(--ws-radius-pill);font-weight:600;white-space:nowrap;
+  .zm-scope .ellip{
+  display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
   }
-  .cc-scope .trade.buy{
-  background:var(--ws-danger-soft);color:var(--ws-fin-up);
+  .zm-scope .row-actions{
+  display: flex; gap: 4px;
   }
-  .cc-scope .trade.sell{
-  background:var(--ws-ok-soft);color:var(--ws-fin-down);
+  .zm-scope .switch{
+  width: 36px; height: 20px; border-radius: 999px; background: var(--t-disabled); position: relative; border: none; transition: background .15s; flex: none;
   }
-  .cc-scope .trade.both{
-  background:var(--ws-bg-subtle);color:var(--ws-fin-flat);
+  .zm-scope .switch::after{
+  content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--on-brand); top: 2px; left: 2px; transition: left .15s;
   }
-  .cc-scope .filters{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;
+  .zm-scope .switch.on{
+  background: var(--brand);
   }
-  .cc-scope .input,
-  .cc-scope .select{
-  border:1px solid var(--ws-input-border);border-radius:var(--ws-radius-md);background:var(--ws-input-bg);
-    color:var(--ws-text-body);font-size:13px;padding:6px 10px;outline:none;font-family:inherit;height:var(--ws-control-md);
+  .zm-scope .switch.on::after{
+  left: 18px;
   }
-  .cc-scope .input:focus,
-  .cc-scope .select:focus{
-  border-color:var(--ws-brand-500);
+  .zm-scope .filter-bar{
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;
   }
-  .cc-scope .input::placeholder{
-  color:var(--ws-input-placeholder);
+  .zm-scope .select,
+  .zm-scope .input{
+  height: 32px; border: 1px solid var(--border); border-radius: var(--r-control); padding: 0 10px; background: var(--bg-surface); color: var(--t2); min-width: 140px;
   }
-  .cc-scope .lb{
-  font-size:12px;color:var(--ws-text-secondary);
+  .zm-scope .input::placeholder{
+  color: var(--t4);
   }
-  .cc-scope table.tbl{
-  width:100%;border-collapse:collapse;font-size:13px;
+  .zm-scope .select:focus,
+  .zm-scope .input:focus{
+  outline: none; border-color: var(--brand); box-shadow: var(--focus-ring);
   }
-  .cc-scope table.tbl th{
-  text-align:left;color:var(--ws-text-tertiary);font-weight:600;font-size:12px;
-    padding:8px 10px;border-bottom:1px solid var(--ws-border);white-space:nowrap;
+  .zm-scope .seg{
+  display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-control); overflow: hidden;
   }
-  .cc-scope table.tbl td{
-  padding:9px 10px;border-bottom:1px solid var(--ws-border-subtle);color:var(--ws-text-primary);vertical-align:middle;
+  .zm-scope .seg button{
+  border: none; background: var(--bg-surface); padding: 4px 10px; font-size: 12px; color: var(--t3);
   }
-  .cc-scope table.tbl td.num{
-  font-family:var(--ws-font-mono);font-size:12px;text-align:right;white-space:nowrap;
+  .zm-scope .seg button + button{
+  border-left: 1px solid var(--border);
   }
-  .cc-scope table.tbl .ell{
-  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  .zm-scope .seg button.on{
+  background: var(--brand-soft); color: var(--brand-txt); font-weight: 500;
   }
-  .cc-scope .row-actions{
-  display:flex;gap:6px;
+  .zm-scope .stat-row{
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;
   }
-  .cc-scope .stats{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;
+  .zm-scope .stat{
+  padding: 16px;
   }
-  .cc-scope .stat{
-  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);padding:14px 16px;box-shadow:var(--ws-shadow-card);
+  .zm-scope .stat .label{
+  font-size: 13px; color: var(--t4);
   }
-  .cc-scope .stat .lb{
-  font-size:12px;color:var(--ws-text-tertiary);margin-bottom:6px;
+  .zm-scope .stat .value{
+  font-size: 24px; font-weight: 600; color: var(--t1); margin-top: 4px; line-height: 1.25;
   }
-  .cc-scope .stat .v{
-  font-size:24px;font-weight:600;color:var(--ws-text-strong);letter-spacing:var(--ws-tracking-tight);
+  .zm-scope .stat .value.danger{
+  color: var(--err);
   }
-  .cc-scope .stat .v small{
-  font-size:12px;font-weight:400;color:var(--ws-text-tertiary);margin-left:4px;
+  .zm-scope .stat .hint{
+  font-size: 12px; color: var(--t4); margin-top: 2px;
   }
-  .cc-scope .stat .sub2{
-  font-size:12px;color:var(--ws-text-tertiary);margin-top:4px;
+  .zm-scope .empty{
+  padding: 48px 16px; text-align: center; color: var(--t4);
   }
-  .cc-scope .srcs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;
+  .zm-scope .empty .ic{
+  width: 40px; height: 40px; color: var(--t-disabled); margin-bottom: 8px;
   }
-  .cc-scope .src{
-  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);padding:14px 16px;box-shadow:var(--ws-shadow-card);display:flex;flex-direction:column;gap:8px;
+  .zm-scope .empty .t{
+  font-size: 14px; color: var(--t3);
   }
-  .cc-scope .src .nm{
-  font-size:13px;font-weight:600;color:var(--ws-text-strong);display:flex;align-items:center;gap:6px;
+  .zm-scope .empty .d{
+  font-size: 13px; margin-top: 4px;
   }
-  .cc-scope .src .meta{
-  font-size:12px;color:var(--ws-text-tertiary);line-height:var(--ws-leading-snug);
+  .zm-scope .skeleton{
+  padding: 16px;
   }
-  .cc-scope .src .act{
-  margin-top:auto;
+  .zm-scope .sk-line{
+  height: 14px; border-radius: var(--r-chip); background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-active) 50%, var(--bg-subtle) 75%); background-size: 200% 100%; animation: sk 1.2s infinite; margin-bottom: 12px;
   }
-  .cc-scope .src.cycle{
-  border-color:var(--ws-border-warn-strong);background:linear-gradient(180deg,var(--ws-warn-soft),var(--ws-bg-surface));
+  
+@keyframes sk { to { background-position: -200% 0; } }
+  .zm-scope .mask{
+  position: fixed; inset: 0; background: var(--mask); display: none; align-items: center; justify-content: center; z-index: 50;
   }
-  .cc-scope .skel i{
-  display:block;height:10px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-active);margin-bottom:10px;
+  .zm-scope .mask.on{
+  display: flex;
   }
-  .cc-scope .skel i:nth-child(2){
-  width:74%;
+  .zm-scope .modal{
+  width: 560px; max-width: calc(100vw - 48px); background: var(--bg-surface); border-radius: var(--r-card); box-shadow: var(--shadow-pop); max-height: calc(100vh - 96px); display: flex; flex-direction: column;
   }
-  .cc-scope .skel i:nth-child(3){
-  width:52%;
+  .zm-scope .modal-head{
+  display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle);
   }
-  .cc-scope .exception{
-  background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
-    padding:56px 24px;text-align:center;box-shadow:var(--ws-shadow-card);
+  .zm-scope .modal-title{
+  font-size: 16px; font-weight: 600; color: var(--t1);
   }
-  .cc-scope .exception .ic{
-  width:var(--ws-icon-feature);height:var(--ws-icon-feature);margin:0 auto 14px;color:var(--ws-text-disabled);
+  .zm-scope .modal-foot{
+  display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border-subtle);
   }
-  .cc-scope .exception .ic svg{
-  width:100%;height:100%;
+  .zm-scope .x{
+  border: none; background: none; color: var(--t4); padding: 4px; border-radius: var(--r-chip); display: inline-flex;
   }
-  .cc-scope .exception .t{
-  font-size:16px;font-weight:600;margin-bottom:8px;letter-spacing:var(--ws-tracking-tight);color:var(--ws-text-strong);
+  .zm-scope .x:hover{
+  background: var(--bg-hover); color: var(--t2);
   }
-  .cc-scope .exception .d{
-  font-size:13px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);margin-bottom:18px;
+  .zm-scope .drawer-mask{
+  position: fixed; inset: 0; background: var(--mask); display: none; z-index: 50; justify-content: flex-end;
   }
-  .cc-scope .empty-ic{
-  width:var(--ws-icon-feature);height:var(--ws-icon-feature);color:var(--ws-text-disabled);margin:0 auto 10px;display:block;
+  .zm-scope .drawer-mask.on{
+  display: flex;
   }
-  .cc-scope .empty-txt{
-  font-size:13px;color:var(--ws-text-secondary);margin-bottom:4px;
+  .zm-scope .drawer{
+  width: 720px; max-width: 92vw; background: var(--bg-surface); height: 100%; display: flex; flex-direction: column; box-shadow: var(--shadow-pop);
   }
-  .cc-scope .empty-sub{
-  font-size:12px;color:var(--ws-text-tertiary);margin-bottom:16px;
+  .zm-scope .drawer-head{
+  display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle);
   }
-  .cc-scope .mask{
-  position:absolute;inset:0;background:var(--ws-overlay);z-index:20;opacity:0;pointer-events:none;
-    transition:opacity var(--ws-duration-base) var(--ws-ease-out);
+  .zm-scope .result-card{
+  border-radius: var(--r-card); border: 1px solid var(--border-subtle); padding: 16px; margin-top: 16px;
   }
-  .cc-scope .mask.show{
-  opacity:1;pointer-events:auto;
+  .zm-scope .result-card.ok{
+  background: var(--ok-bg); border-color: var(--ok);
   }
-  .cc-scope .drawer{
-  position:absolute;top:0;right:0;height:100%;width:560px;background:var(--ws-bg-surface);
-    border-left:1px solid var(--ws-border);z-index:21;transform:translateX(100%);display:flex;flex-direction:column;
-    transition:transform var(--ws-duration-base) var(--ws-ease-out);
+  .zm-scope .result-card.warn{
+  background: var(--warn-bg); border-color: var(--warn);
   }
-  .cc-scope .drawer.show{
-  transform:translateX(0);
+  .zm-scope .result-card.err{
+  background: var(--err-bg); border-color: var(--err);
   }
-  .cc-scope .drawer .dh{
-  height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;
-    border-bottom:1px solid var(--ws-border);flex-shrink:0;
+  .zm-scope .result-card.info{
+  background: var(--info-bg); border-color: var(--info);
   }
-  .cc-scope .drawer .dh .ttl{
-  font-size:14px;font-weight:600;color:var(--ws-text-strong);
+  .zm-scope .rc-head{
+  display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600;
   }
-  .cc-scope .drawer .db{
-  flex:1;overflow:auto;padding:16px 18px;background:var(--ws-bg-page);
+  .zm-scope .result-card.ok .rc-head{
+  color: var(--ok);
   }
-  .cc-scope .icon-btn{
-  width:28px;height:28px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border-subtle);
-    background:var(--ws-bg-surface);color:var(--ws-text-tertiary);cursor:pointer;display:grid;place-items:center;
+  .zm-scope .result-card.warn .rc-head{
+  color: var(--warn-txt);
   }
-  .cc-scope .icon-btn:hover{
-  background:var(--ws-bg-hover);color:var(--ws-text-strong);
+  .zm-scope .result-card.err .rc-head{
+  color: var(--err);
   }
-  .cc-scope .icon-btn svg{
-  width:14px;height:14px;
+  .zm-scope .result-card.info .rc-head{
+  color: var(--brand-txt);
   }
-  .cc-scope .modal-mask{
-  position:absolute;inset:0;background:var(--ws-overlay);z-index:30;display:none;
-    align-items:flex-start;justify-content:center;padding-top:120px;
+  .zm-scope .rc-desc{
+  font-size: 13px; margin-top: 8px; line-height: 1.6;
   }
-  .cc-scope .modal-mask.show{
-  display:flex;
+  .zm-scope .result-card.ok .rc-desc{
+  color: var(--ok-deep);
   }
-  .cc-scope .modal{
-  width:460px;background:var(--ws-bg-surface);border-radius:var(--ws-radius-lg);box-shadow:0 18px 50px var(--ws-shadow-modal);overflow:hidden;
+  .zm-scope .result-card.warn .rc-desc{
+  color: var(--warn-deep);
   }
-  .cc-scope .modal .mh{
-  padding:16px 20px 0;font-size:16px;font-weight:600;color:var(--ws-text-strong);
+  .zm-scope .result-card.err .rc-desc{
+  color: var(--err-deep);
   }
-  .cc-scope .modal .mb{
-  padding:10px 20px 16px;font-size:13px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);
+  .zm-scope .result-card.info .rc-desc{
+  color: var(--brand-deep);
   }
-  .cc-scope .modal .mf{
-  padding:0 20px 4px;
+  .zm-scope .rc-metrics{
+  display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap;
   }
-  .cc-scope .modal .mfoot{
-  padding:12px 20px 16px;display:flex;justify-content:flex-end;gap:10px;
+  .zm-scope .rc-metric .n{
+  font-size: 18px; font-weight: 600; color: var(--t1);
   }
-  .cc-scope .frow{
-  display:flex;flex-direction:column;gap:10px;margin-bottom:6px;
+  .zm-scope .rc-metric .l{
+  font-size: 12px; color: var(--t4);
   }
-  .cc-scope .fitem{
-  display:flex;align-items:center;gap:10px;
+  .zm-scope .rc-actions{
+  display: flex; gap: 8px; margin-top: 16px;
   }
-  .cc-scope .flb{
-  width:84px;flex-shrink:0;font-size:12px;color:var(--ws-text-secondary);text-align:right;
+  .zm-scope .tech-detail{
+  margin-top: 12px;
   }
-  .cc-scope .fld{
-  flex:1;min-width:0;
+  .zm-scope .tech-detail summary{
+  font-size: 12px; color: var(--t4); cursor: pointer; user-select: none;
   }
-  .cc-scope .fld .input,
-  .cc-scope .fld .select{
-  width:100%;
+  .zm-scope .tech-detail pre{
+  background: var(--code-bg); color: var(--code-text); border-radius: var(--r-control); padding: 12px; font-family: var(--mono); font-size: 12px; margin-top: 8px; overflow-x: auto; line-height: 1.5;
   }
-  .cc-scope .fhint{
-  font-size:12px;color:var(--ws-text-tertiary);margin:-4px 0 6px 94px;
+  .zm-scope .form-card{
+  max-width: 720px;
   }
-  .cc-scope .sec{
-  margin-bottom:14px;
+  .zm-scope .form-grid{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px;
   }
-  .cc-scope .sec .st{
-  font-size:12px;font-weight:600;color:var(--ws-text-tertiary);letter-spacing:var(--ws-tracking-wide);margin-bottom:8px;
+  .zm-scope .form-item{
+  margin-bottom: 16px;
   }
-  .cc-scope .dl-grid{
-  display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;
+  .zm-scope .form-item.full{
+  grid-column: 1 / -1;
   }
-  .cc-scope .dl-grid dt{
-  color:var(--ws-text-tertiary);font-size:12px;
+  .zm-scope .form-label{
+  font-size: 13px; font-weight: 500; color: var(--t3); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;
   }
-  .cc-scope .dl-grid dd{
-  color:var(--ws-text-body);word-break:break-all;
+  .zm-scope .form-label .req{
+  color: var(--err);
   }
-  .cc-scope pre.codeblk{
-  margin:0;border-radius:var(--ws-radius-md);background:var(--ws-code-bg);overflow:hidden;
+  .zm-scope .form-label .tip{
+  font-weight: 400; color: var(--t4); font-size: 12px;
   }
-  .cc-scope pre.codeblk .hd{
-  display:flex;align-items:center;padding:8px 14px;background:var(--ws-code-hd);color:var(--ws-code-hd-text);font-size:12px;
+  .zm-scope .form-input,
+  .zm-scope .form-select,
+  .zm-scope .form-area{
+  width: 100%; border: 1px solid var(--border); border-radius: var(--r-control); padding: 6px 10px; background: var(--bg-surface); color: var(--t2);
   }
-  .cc-scope pre.codeblk .bd{
-  margin:0;padding:12px 16px;overflow-x:auto;font-family:var(--ws-font-mono);font-size:12px;line-height:var(--ws-leading-relaxed);color:var(--ws-code-text);white-space:pre-wrap;
+  .zm-scope .form-input:focus,
+  .zm-scope .form-select:focus,
+  .zm-scope .form-area:focus{
+  outline: none; border-color: var(--brand); box-shadow: var(--focus-ring);
   }
-  .cc-scope .toast{
-  position:fixed;left:50%;top:22px;transform:translate(-50%,-14px);opacity:0;pointer-events:none;
-    background:var(--ws-text-primary);color:var(--ws-bg-surface);font-size:13px;padding:9px 16px;
-    border-radius:var(--ws-radius-lg);transition:opacity var(--ws-duration-fast) var(--ws-ease-out),transform var(--ws-duration-fast) var(--ws-ease-out);z-index:60;
+  .zm-scope .form-input[disabled]{
+  background: var(--bg-subtle); color: var(--t4);
   }
-  .cc-scope .toast.show{
-  opacity:1;transform:translate(-50%,0);
+  .zm-scope .form-area{
+  font-family: var(--mono); font-size: 12px; min-height: 120px; resize: vertical;
   }
-  .cc-scope .pg-toolbar{
-  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+  .zm-scope .form-err{
+  font-size: 12px; color: var(--err); margin-top: 4px; display: none;
   }
-  .cc-scope .pg-chat{
-  border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);background:var(--ws-bg-surface);padding:20px;min-height:520px;
+  .zm-scope .form-item.bad .form-input,
+  .zm-scope .form-item.bad .form-area{
+  border-color: var(--err);
   }
-  .cc-scope .turn{
-  margin-bottom:22px;
+  .zm-scope .form-item.bad .form-err{
+  display: block;
   }
-  .cc-scope .turn:last-child{
-  margin-bottom:0;
+  .zm-scope .form-foot{
+  display: flex; gap: 8px; margin-top: 8px;
   }
-  .cc-scope .bubble-wrap{
-  display:flex;gap:10px;margin-bottom:10px;
+  .zm-scope .switch-row{
+  display: flex; align-items: center; gap: 8px; height: 32px;
   }
-  .cc-scope .bubble-wrap.me{
-  justify-content:flex-end;
+  .zm-scope .switch-row .t{
+  font-size: 13px; color: var(--t3);
   }
-  .cc-scope .avatar{
-  width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+  .zm-scope .back-link{
+  display: inline-flex; align-items: center; gap: 4px; color: var(--t4); font-size: 13px; background: none; border: none; padding: 4px 8px 4px 0; margin-bottom: 8px;
   }
-  .cc-scope .avatar.user{
-  background:var(--ws-accent);color:var(--ws-on-brand);
+  .zm-scope .back-link:hover{
+  color: var(--brand-txt);
   }
-  .cc-scope .avatar.ai{
-  background:var(--ws-ok);color:var(--ws-on-brand);
+  .zm-scope .detail-title{
+  font-size: 20px; font-weight: 600; color: var(--t1); line-height: 1.4; display: flex; align-items: flex-start; gap: 8px;
   }
-  .cc-scope .bubble{
-  max-width:76%;border-radius:var(--ws-radius-lg);padding:10px 14px;
+  .zm-scope .kv-grid{
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px;
   }
-  .cc-scope .bubble.user{
-  background:var(--ws-accent);color:var(--ws-on-brand);font-size:14px;line-height:var(--ws-leading-relaxed);
+  .zm-scope .kv .k{
+  font-size: 12px; color: var(--t4);
   }
-  .cc-scope .bubble.ai{
-  background:var(--ws-bg-surface);border:1px solid var(--ws-border);box-shadow:0 1px 2px var(--ws-shadow-bubble);
+  .zm-scope .kv .v{
+  font-size: 13px; color: var(--t2); margin-top: 2px; word-break: break-all;
   }
-  .cc-scope .ans{
-  font-size:14px;line-height:var(--ws-leading-relaxed);color:var(--ws-text-body);
+  .zm-scope .kv .v.mono{
+  font-family: var(--mono); font-size: 12px;
   }
-  .cc-scope .ans p{
-  margin:0 0 16px;
+  .zm-scope .sec-title{
+  font-size: 15px; font-weight: 600; color: var(--t1); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
   }
-  .cc-scope .ans p.lead{
-  font-size:14px;font-weight:500;color:var(--ws-text-strong);
+  .zm-scope .doc-text{
+  font-size: 13px; color: var(--t2); line-height: 1.75;
   }
-  .cc-scope .ans h4{
-  display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;margin:24px 0 8px;color:var(--ws-text-strong);
+  .zm-scope .code-block{
+  background: var(--code-bg); color: var(--code-text); border-radius: var(--r-control); padding: 12px 16px; font-family: var(--mono); font-size: 12px; overflow-x: auto; line-height: 1.6;
   }
-  .cc-scope .ans h4::before{
-  content:'';width:3px;height:14px;border-radius:2px;background:var(--ws-brand-500);flex:0 0 3px;
+  .zm-scope .flow{
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
-  .cc-scope .ans ol{
-  margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;
+  .zm-scope .flow .node{
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t4); background: var(--bg-subtle); border-radius: var(--r-chip); padding: 4px 10px;
   }
-  .cc-scope .ans ol li{
-  display:flex;gap:10px;align-items:flex-start;
+  .zm-scope .flow .node.done{
+  color: var(--ok); background: var(--ok-bg);
   }
-  .cc-scope .ans ol li .n{
-  width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--ws-brand-soft);color:var(--ws-brand-600);font-size:12px;font-weight:600;display:grid;place-items:center;margin-top:4px;
+  .zm-scope .flow .node.cur{
+  color: var(--brand-txt); background: var(--brand-soft); font-weight: 500;
   }
-  .cc-scope .proc{
-  margin:6px 0 6px 40px;max-width:76%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);
-    background:var(--ws-bg-surface);overflow:hidden;font-size:12px;
+  .zm-scope .flow .node.fail{
+  color: var(--err); background: var(--err-bg);
   }
-  .cc-scope .proc .ph{
-  display:flex;align-items:center;gap:7px;padding:6px 10px;color:var(--ws-text-secondary);
+  .zm-scope .flow .arr{
+  color: var(--t-disabled); font-size: 12px;
   }
-  .cc-scope .proc .ph svg{
-  width:var(--ws-icon-inline);height:var(--ws-icon-inline);
+  .zm-scope .article{
+  background: var(--bg-surface); border-radius: var(--r-card); padding: 32px 40px; font-size: 14px; line-height: 1.75; color: var(--t2);
   }
-  .cc-scope .proc .pb{
-  padding:6px 10px;border-top:1px dashed var(--ws-border-subtle);font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-tertiary);
+  .zm-scope .article h1{
+  font-size: 20px; color: var(--t1); line-height: 1.4; margin-bottom: 8px;
   }
-  .cc-scope .cc-bar{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;
-    padding:8px 12px;border:1px dashed var(--ws-border-warn-strong);border-radius:var(--ws-radius-md);
-    background:var(--ws-warn-soft);color:var(--ws-warn-text);font-size:12px;
+  .zm-scope .article .meta{
+  font-size: 12px; color: var(--t4); margin-bottom: 24px;
   }
-  .cc-scope .cc-bar .tag{
-  font-weight:600;
+  .zm-scope .article h2{
+  font-size: 16px; color: var(--t1); margin: 20px 0 8px;
   }
-  .cc-scope .cc-bar button{
-  border:1px solid var(--ws-border-warn-strong);background:var(--ws-bg-surface);
-    color:var(--ws-warn-text);border-radius:var(--ws-radius-sm);padding:3px 10px;font-size:12px;
-    cursor:pointer;font-family:inherit;
+  .zm-scope .article p{
+  margin-bottom: 12px;
   }
-  .cc-scope .cc-bar button.on{
-  background:var(--ws-warn);color:var(--ws-on-brand);border-color:var(--ws-warn);font-weight:600;
+  .zm-scope .article .paper{
+  border-left: 3px solid var(--brand); padding-left: 12px; margin-bottom: 16px;
   }
-  .cc-scope .cc-bar .sp{
-  color:var(--ws-text-secondary);
+  .zm-scope .article .paper .pt{
+  font-weight: 600; color: var(--t1); font-size: 14px;
   }
+  .zm-scope .article .paper .pa{
+  font-size: 12px; color: var(--t4);
+  }
+  .zm-scope #toast{
+  position: fixed; top: 72px; left: 50%; transform: translateX(-50%); background: var(--t1); color: var(--on-brand); font-size: 13px; padding: 8px 16px; border-radius: var(--r-control); opacity: 0; transition: opacity .2s; z-index: 100; pointer-events: none; box-shadow: var(--shadow-pop);
+  }
+  .zm-scope #toast.on{
+  opacity: 1;
+  }
+  .zm-scope .row-actions .btn{
+  flex: none;
+  }
+  .zm-scope .chip{
+  border: 1px solid var(--border); background: var(--bg-surface); color: var(--t3); border-radius: 20px; padding: 2px 9px; font-size: 11px; cursor: pointer;
+  }
+  .zm-scope .chip:hover{
+  border-color: var(--brand);
+  }
+  .zm-scope .chip.on{
+  background: var(--brand-soft); border-color: var(--brand); color: var(--brand-txt); font-weight: 500;
+  }
+  
+@keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .zm-scope [data-demo-anno="on"] [data-anno]{
+  outline: 1px dashed var(--brand); position: relative;
+  }
+  .zm-scope [data-demo-anno="on"] [data-anno]::after{
+  content: attr(data-anno); position: absolute; top: -9px; left: -3px; z-index: 5; font-size: 10px; line-height: 14px; padding: 0 5px; background: var(--brand); color: var(--on-brand); border-radius: 4px;
+  }
+  .zm-scope .alert{
+  display: flex; gap: 8px; border-radius: var(--r-card); padding: 12px 16px; font-size: 13px; margin-bottom: 16px; align-items: flex-start;
+  }
+  .zm-scope .alert.warn{
+  background: var(--warn-bg); color: var(--warn-txt);
+  }
+  .zm-scope .alert .ic{
+  flex: none; margin-top: 2px;
+  }
+  .zm-scope .alert b{
+  font-weight: 600;
+  }
+  .zm-scope .pager{
+  display: flex; justify-content: flex-end; gap: 4px; margin-top: 12px; align-items: center;
+  }
+  .zm-scope .pager button{
+  min-width: 28px; height: 28px; border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--r-chip); font-size: 12px; color: var(--t3);
+  }
+  .zm-scope .pager button.on{
+  border-color: var(--brand); color: var(--brand-txt); background: var(--brand-soft);
+  }
+  .zm-scope .pager .info{
+  font-size: 12px; color: var(--t4); margin-right: 8px;
+  }
+  .zm-scope .footer-note{
+  margin-top: 24px; font-size: 12px; color: var(--t4); text-align: center;
+  }
+  .zm-scope .test-panel{
+  margin-top: 16px; max-width: 720px;
+  }
+  .zm-scope .test-head{
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .zm-scope .test-title{
+  font-size: 15px; font-weight: 600; color: var(--t1);
+  }
+  .zm-scope .test-no-persist{
+  font-size: 12px; color: var(--brand-txt); background: var(--brand-soft); border: 1px solid var(--brand); border-radius: var(--r-chip); padding: 1px 8px;
+  }
+  .zm-scope .test-summary{
+  display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px;
+  }
+  .zm-scope .test-summary.ok{
+  color: var(--ok);
+  }
+  .zm-scope .test-summary.warn{
+  color: var(--warn-txt);
+  }
+  .zm-scope .test-summary.err{
+  color: var(--err);
+  }
+  .zm-scope .test-note{
+  font-size: 12px; color: var(--t4); margin-top: 6px;
+  }
+  .zm-scope .sample-list{
+  margin-top: 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-control); overflow: hidden;
+  }
+  .zm-scope .sample-item{
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px;
+  }
+  .zm-scope .sample-item + .sample-item{
+  border-top: 1px solid var(--border-subtle);
+  }
+  .zm-scope .sample-item:hover{
+  background: var(--bg-hover);
+  }
+  .zm-scope .sample-idx{
+  font-family: var(--mono); font-size: 11px; color: var(--t4); width: 18px; flex: none;
+  }
+  .zm-scope .sample-title{
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t2);
+  }
+  .zm-scope .sample-date{
+  font-family: var(--mono); font-size: 11px; color: var(--t4); flex: none;
+  }
+  .zm-scope .sample-link{
+  flex: none; color: var(--brand-txt); display: inline-flex; align-items: center; gap: 2px; font-size: 12px; background: none; border: none; padding: 2px 4px;
+  }
+  .zm-scope .sample-link:hover{
+  text-decoration: underline;
+  }
+  .zm-scope .test-foot{
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .zm-scope{font-family:var(--sans);font-size:14px;color:var(--t2);line-height:1.6;}
+
   /* ===== 框架壳与菜单：对齐 apps/admin/src/layouts/BasicLayout.vue（scripts/lib/proto-shell.mjs 单源，勿手改） =====
      sider 220 / 收起 80 / 头部 56 / 菜单项高 40 / 图标 16 /
      选中 = 橙渐变 + 右侧 3px 竖条（ant-menu-item-selected::after）/ hover = 橙 6% /
@@ -1582,9 +1713,38 @@
   .ad-sider.collapsed .ad-sider-head{padding:0 10px;gap:6px;}
 
   /* ===== 源稿补进来的设计系统级 token（只补整合稿缺的；同名以整合稿为准） ===== */
-  :root{--ws-bg-page:#FAFAFA;--ws-bg-surface:#FFFFFF;--ws-bg-elevated:#FFFFFF;--ws-bg-subtle:#F2F2F2;--ws-bg-hover:#F2F2F2;--ws-bg-active:#EBEBEB;--ws-text-primary:#171717;--ws-text-secondary:#525252;--ws-text-tertiary:#A3A3A3;--ws-text-disabled:#D4D4D4;--ws-border:#E5E5E5;--ws-border-subtle:#EBEBEB;--ws-input-bg:#FFFFFF;--ws-input-border:#E5E5E5;--ws-input-placeholder:#A3A3A3;--ws-brand-500:#F97316;--ws-brand-600:#EA580C;--ws-brand-400:#FB923C;--ws-brand-soft:#FFF7ED;--ws-accent:#FF8C42;--ws-accent-soft:rgba(255,140,66,.15);--ws-on-brand:#FFFFFF;--ws-ok:#398E4A;--ws-ok-soft:#EAF6EC;--ws-warn:#F5A623;--ws-warn-soft:#FEF3DC;--ws-warn-text:#8A5A00;--ws-danger:#E5484D;--ws-danger-soft:#FCEBEC;--ws-info:#2563EB;--ws-info-soft:#EFF4FF;--ws-radius-sm:4px;--ws-radius-md:6px;--ws-radius-lg:8px;--ws-radius-pill:9999px;--ws-text-body:#3F3F46;--ws-text-strong:#18181B;--ws-leading-tight:1.25;--ws-leading-snug:1.4;--ws-leading-normal:1.6;--ws-leading-relaxed:1.75;--ws-tracking-tight:-0.02em;--ws-tracking-normal:0;--ws-tracking-wide:0.02em;--ws-duration-fast:150ms;--ws-duration-base:200ms;--ws-duration-slow:300ms;--ws-ease-out:cubic-bezier(0.16, 1, 0.3, 1);--ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);--ws-control-sm:24px;--ws-control-md:32px;--ws-control-lg:40px;--ws-icon-inline:16px;--ws-icon-action:20px;--ws-icon-feature:24px;--ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);--ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;--ws-overlay:rgba(23,23,23,.35);--ws-shadow-window:0 24px 70px rgba(20,30,50,.14);--ws-shadow-modal:0 18px 50px rgba(20,30,50,.2);--ws-shadow-thumb:0 1px 2px rgba(0,0,0,.2);--ws-shadow-bubble:0 1px 2px rgba(0,0,0,.04);--ws-accent-04:rgba(255,140,66,.04);--ws-border-brand:rgba(249,115,22,.25);--ws-border-warn:rgba(245,166,35,.3);--ws-border-warn-strong:rgba(245,166,35,.45);--ws-border-danger:rgba(229,72,77,.25);--ws-border-danger-strong:rgba(229,72,77,.4);--ws-border-ok:rgba(57,142,74,.25);--ws-fin-up:#C4322F;--ws-fin-down:#2E7D48;--ws-fin-flat:var(--ws-text-secondary);--ws-code-bg:#1C1E26;--ws-code-hd:#16181F;--ws-code-text:#E2E8F0;--ws-code-hd-text:#A5ACBA}</style>
+  :root{}</style>
 </head>
 <body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v8m0-8l-3 3m3-3l3 3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3 3 0 0 1 3 3v4"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 14 8-14 8z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7-7 7 7 7"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-xcircle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-robot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M2 14h2M20 14h2M15 13v2M9 13v2"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+</svg>
 <div class="proto-head">
   <h1>admin 管理后台 · 菜单级整合稿 · 复用组件同构</h1>
   <div class="sub">
@@ -1592,9 +1752,12 @@
     <b>整合方式 = 注册表驱动</b>：<code>scripts/lib/proto-registry.mjs</code> 里每屏一行，
     写了 <code>source</code> 的屏由构建脚本从原型稿<b>同源抽取</b>（DOM 剥壳 + CSS 作用域隔离
     + id 前缀 + inline handler 命名空间），没写的走占位。<b>已是真实内容的屏</b>：
-    对话调试 / 定义管理 / 定义详情 / <b>系统设置</b>（admin-settings.html）/
-    <b>字典管理</b>（dict-module.html）；其余（工作台 / 变变管理 / 用户管理 / 角色权限 /
-    MCP 管理 / 数据浏览 + Agents 组内若干页）为占位，各自标注归属批次与复用口径，不伪造业务数据。
+    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 5 页</b>（admin-media-ops.html）/
+    <b>系统设置</b>（admin-settings.html）/ <b>字典管理</b>（dict-module.html）；
+    其余（工作台 / 变变管理 / 用户管理 / 角色权限 / MCP 管理 / 数据浏览 + Agents 组内若干页）
+    为占位，各自标注归属批次与复用口径，不伪造业务数据。
+    <b>自媒体运营是「一份 DOM 服务 5 屏」</b>（mount 源）：切菜单时整块搬到当前屏，
+    模块内的跨页跳转（明细详情 →「去公众号成文」）会带动左侧菜单与地址栏一起走。
     <b>以后补稿不用再整合</b>：在注册表加一行 <code>source</code>，重跑
     <code>node scripts/build-agents-hub.mjs</code> 即可。
     菜单一致性由 <code>scripts/verify-agents-hub.mjs</code> 直接读 .vue 源对账；参数口径取自
@@ -1619,14 +1782,14 @@
         <div class="ad-item" data-screen="dicts" data-route="#/settings/dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" data-route="#/mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" data-route="#/database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="content" data-screens="content-overview,content-items,content-detail,content-lhb,content-seats">
-        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/></svg></span><span class="ad-t">内容中心</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
+      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor">
+        <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></svg></span><span class="ad-t">自媒体运营</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
-        <div class="ad-item ad-item-sub" data-screen="content-overview" data-route="#/content" title="采集总览"><span class="ad-t">采集总览</span></div>
-        <div class="ad-item ad-item-sub" data-screen="content-items" data-route="#/content/items" title="内容条目"><span class="ad-t">内容条目</span></div>
-        <div class="ad-item ad-item-sub" data-screen="content-detail" data-route="#/content/items/12043" title="条目详情"><span class="ad-t">条目详情</span></div>
-        <div class="ad-item ad-item-sub" data-screen="content-lhb" data-route="#/content/lhb" title="龙虎榜"><span class="ad-t">龙虎榜</span></div>
-        <div class="ad-item ad-item-sub" data-screen="content-seats" data-route="#/content/seats" title="席位库"><span class="ad-t">席位库</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-sources" data-route="#/content" title="采集源管理"><span class="ad-t">采集源管理</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-items" data-route="#/content/items" title="采集明细"><span class="ad-t">采集明细</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-publications" data-route="#/content/publications" title="公众号成文"><span class="ad-t">公众号成文</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-pipelines" data-route="#/content/pipelines" title="发布管线"><span class="ad-t">发布管线</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-monitor" data-route="#/content/monitor" title="采集监控"><span class="ad-t">采集监控</span></div>
         </div>
       </div>
       <div class="ad-sub open" data-sub="agents" data-screens="overview,observe,records,capabilities,knowledge,retrieval,list,skills,pg">
@@ -1856,34 +2019,690 @@
         <div class="ph-reuse"><span>复用：</span><span class="chip">.tbl 列表</span><span class="chip">分页条（admin 既有）</span><span class="chip">脱敏列标注</span></div>
       </div>
 
-      <!-- 真实屏（同源抽取）：采集总览 -->
-      <div class="screen hidden" data-screen="content-overview">      <div class="cc-scope">
-        <div class="cc-host" data-cc="content-overview"></div>
+      <!-- 真实屏（同源抽取）：采集源管理 -->
+      <div class="screen hidden" data-screen="content-sources">      <div class="zm-scope" data-zm-module data-zm-file="admin-media-ops.html">
+<!-- ═══════════ S1 采集源管理 ═══════════ -->
+      <section class="screen on" id="zm-screen-sources">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集源管理</div>
+            <div class="page-desc">配置内容采集来源，改源、停用、换参数只改表不发版；「触发」为手动补采，日常采集由发布管线定时执行。</div>
+          </div>
+          <button class="btn primary" data-need-role="admin" onclick="ZM.go('source-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加采集源</button>
+        </div>
+
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>编码</th><th>名称</th><th>类型</th><th>领域</th><th>状态</th><th data-anno="D6">最近采集</th><th style="width:190px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">sina_news</td><td>新浪财经快讯</td><td><span class="tag mono">sina_news</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-22 09:00 成功 · 12 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" data-anno="D2" onclick="ZM.openTrigger('sina_news','新浪财经快讯','sina_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">eastmoney_news</td><td>东方财富快讯</td><td><span class="tag mono">eastmoney_news</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-22 09:00 成功 · 20 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('eastmoney_news','东方财富快讯','eastmoney_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag mono">eastmoney_lhb</span></td><td>财经</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag ok">10-21 18:05 成功 · 86 条</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('eastmoney_lhb','东方财富龙虎榜','eastmoney_lhb')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag mono">arxiv</span></td><td>论文</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag err">08-24 18:44 失败 · 网络不可达</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('arxiv','arXiv 论文','arxiv')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">hackernews</td><td>Hacker News</td><td><span class="tag mono">hackernews</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('hackernews','Hacker News','hackernews')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-jiqizhixin</td><td>机器之心</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('rss-jiqizhixin','机器之心','rss')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-qbitai</td><td>量子位</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" onclick="ZM.openTrigger('rss-qbitai','量子位','rss')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+              <tr>
+                <td class="mono">rss-mit-tr</td><td>MIT Technology Review</td><td><span class="tag mono">rss</span></td><td>AI</td>
+                <td><button class="switch" onclick="this.classList.toggle('on')"></button></td>
+                <td><span class="tag">—</span></td>
+                <td><div class="row-actions">
+                  <button class="btn sm primary" disabled><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm" onclick="ZM.go('source-edit')">编辑</button>
+                  <button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button>
+                </div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-note">原型稿 · 数据为演示 mock ｜ 「最近采集」列读取采集监控数据，失败源在此直接可见</div>
+      </section>
+
+      <!-- ═══════════ S3 采集源 编辑/新建（新页面） ═══════════ -->
+      <section class="screen" id="zm-screen-source-edit">
+        <button class="back-link" onclick="ZM.go('sources')"><svg class="ic"><use href="#i-back"/></svg>返回采集源管理</button>
+        <div class="page-head">
+          <div>
+            <div class="page-title">编辑采集源</div>
+            <div class="page-desc">编码创建后不可修改；私有配置按采集器类型填写，格式错误将无法保存。</div>
+          </div>
+        </div>
+
+        <div class="alert warn" id="zm-srcTypeAlert">
+          <svg class="ic"><use href="#i-warn"/></svg>
+          <div><b>该类型暂不支持手动触发：</b>arxiv / hackernews / rss 由定时管线自动采集，编辑保存不影响管线运行。改完配置可点下方「测试采集」验证是否取得到数——试采仅预览，不入库。</div>
+        </div>
+
+        <div class="card card-pad form-card">
+          <div class="form-grid">
+            <div class="form-item">
+              <div class="form-label">编码 code <span class="req">*</span></div>
+              <input class="form-input" value="arxiv" disabled />
+            </div>
+            <div class="form-item">
+              <div class="form-label">名称 <span class="req">*</span></div>
+              <input class="form-input" value="arXiv 论文" />
+            </div>
+            <div class="form-item">
+              <div class="form-label">采集器类型 <span class="req">*</span></div>
+              <select class="form-select">
+                <option>arxiv · arXiv 论文</option>
+                <option>sina_news · 新浪财经快讯</option>
+                <option>eastmoney_news · 东方财富快讯</option>
+                <option>eastmoney_lhb · 东方财富龙虎榜</option>
+                <option>hackernews · Hacker News</option>
+                <option>rss · RSS 订阅</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">内容领域</div>
+              <select class="form-select"><option>论文</option><option>财经</option><option>AI</option></select>
+            </div>
+            <div class="form-item full">
+              <div class="form-label">私有配置 config（JSON） <span class="tip">各源私有参数，如 rss：{"url":"https://..."}；arxiv：{"categories":"cs.AI","max_results":10}</span></div>
+              <textarea class="form-area">{
+  "categories": "cs.AI+OR+cat:cs.CL+OR+cat:cs.CV+OR+cat:cs.LG",
+  "max_results": 20
+}</textarea>
+              <div class="form-err">config 必须是合法 JSON</div>
+            </div>
+            <div class="form-item full">
+              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用（停用后定时管线将跳过该源）</span></div>
+            </div>
+          </div>
+          <div class="form-foot">
+            <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('sources')">保存</button>
+            <button class="btn" onclick="ZM.runTest()" id="zm-testBtn"><svg class="ic"><use href="#i-play"/></svg>测试采集</button>
+            <button class="btn" onclick="ZM.go('sources')">取消</button>
+          </div>
+        </div>
+
+        <!-- 试采面板：默认隐藏，点击「测试采集」后出现 -->
+        <div class="card card-pad test-panel" id="zm-testPanel" data-anno="D8" style="display:none">
+          <div class="test-head">
+            <span class="test-title">测试采集</span>
+            <span class="test-no-persist">仅预览 · 未入库</span>
+          </div>
+          <div class="test-note">按当前表单配置试采，结果只在这里预览：不写入采集明细、不计入采集记录、不触发定时管线。</div>
+
+          <!-- 加载态 -->
+          <div id="zm-testLoading" style="display:none; margin-top:12px">
+            <div class="skeleton"><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line"></div></div>
+          </div>
+
+          <!-- 结果态 -->
+          <div id="zm-testResult" style="display:none">
+            <div class="test-summary" id="zm-testSummaryLine">
+              <svg class="ic ic-20"><use href="#i-check"/></svg>
+              <span id="zm-testSummaryText"></span>
+            </div>
+            <div class="sample-list" id="zm-testSampleList"></div>
+            <div class="test-note" id="zm-testResultNote"></div>
+          </div>
+
+          <div class="test-foot">
+            <button class="btn sm" onclick="ZM.runTest()"><svg class="ic"><use href="#i-refresh"/></svg>重新测试</button>
+            <div class="demo-switch">
+              原型演示 · 结果
+              <div class="seg" id="zm-testStateSeg">
+                <button class="on" data-st="ok" onclick="ZM.setTestState('ok',this)">成功</button>
+                <button data-st="empty" onclick="ZM.setTestState('empty',this)">空结果</button>
+                <button data-st="failed" onclick="ZM.setTestState('failed',this)">失败</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S4 采集明细 ═══════════ -->
+      <section class="screen" id="zm-screen-items">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集明细</div>
+            <div class="page-desc">每一条采集结果的内容、质量归因与去向；「质量异常」的条目可点进去看卡在哪一步。</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select"><option>全部采集源</option><option>sina_news</option><option>eastmoney_news</option><option>eastmoney_lhb</option><option>arxiv</option></select>
+          <select class="select"><option>全部管线</option><option>daily_paper</option><option>daily_finance</option></select>
+          <select class="select"><option>全部质量状态</option><option>ok 完整</option><option>partial 部分成功</option><option>fail 失败</option><option>skip 去重跳过</option></select>
+          <input class="input" style="min-width:200px" placeholder="搜索标题 / 外部 ID" />
+          <button class="btn">查询</button>
+          <button class="btn">重置</button>
+        </div>
+
+        <div class="stat-row">
+          <div class="card stat"><div class="label">今日新增</div><div class="value">118</div><div class="hint">较昨日 +12%</div></div>
+          <div class="card stat"><div class="label">今日去重跳过</div><div class="value">36</div><div class="hint">SimHash 命中</div></div>
+          <div class="card stat"><div class="label">质量异常（近 7 天）</div><div class="value danger">4</div><div class="hint">fail 2 · partial 2</div></div>
+          <div class="card stat"><div class="label">进入成文</div><div class="value">23</div><div class="hint">近 7 天被管线选用</div></div>
+        </div>
+
+        <div class="card" id="zm-itemsTableWrap">
+          <table class="table">
+            <thead>
+              <tr><th style="min-width:260px">标题</th><th>来源</th><th>领域</th><th>质量</th><th>所属管线</th><th>发布时间</th><th>采集时间</th><th style="width:70px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_paper</span></td>
+                <td class="mono">10-21 14:00</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">央行开展 365 亿元 7 天期逆回购操作，净投放 120 亿元</span></td>
+                <td>新浪财经快讯</td><td>财经</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td><span class="tag info">daily_finance</span></td>
+                <td class="mono">10-22 08:31</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">龙虎榜：机构专用席位净买入华工科技 1.24 亿元</span></td>
+                <td>东方财富龙虎榜</td><td>财经</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td>—</td>
+                <td class="mono">10-21 18:00</td><td class="mono">10-21 18:05</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">OpenAI 发布新一代推理模型，API 价格下调 40%</span></td>
+                <td>东方财富快讯</td><td>财经</td>
+                <td><span class="tag warn">partial</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_finance</span></td>
+                <td class="mono">10-22 07:52</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Think Harder Where It Matters: Item-Level Adaptive Recursion for Sequential Recommendation</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">llm</span></td>
+                <td><span class="tag info">daily_paper</span></td>
+                <td class="mono">10-20 16:20</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Rethinking Video Autoencoders for Interactive World Models</span></td>
+                <td>arXiv 论文</td><td>论文</td>
+                <td><span class="tag err">fail</span> <span class="tag sub">llm</span></td>
+                <td>—</td>
+                <td class="mono">10-19 02:11</td><td class="mono">10-22 09:01</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">某券商研报：AI 算力租赁市场规模测算（与 10-15 条目重复）</span></td>
+                <td>新浪财经快讯</td><td>财经</td>
+                <td><span class="tag">skip</span> <span class="tag sub">dedup</span></td>
+                <td>—</td>
+                <td class="mono">10-15 10:02</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">Hacker News 热帖：Show HN — 我用 Rust 写了一个本地 RAG 引擎</span></td>
+                <td>Hacker News</td><td>AI</td>
+                <td><span class="tag ok">ok</span> <span class="tag sub">collect</span></td>
+                <td>—</td>
+                <td class="mono">10-22 06:40</td><td class="mono">10-22 09:00</td>
+                <td><button class="btn text" onclick="ZM.go('item-detail')">详情</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:0 16px 16px"><div class="pager"><span class="info">共 118 条</span><button class="on">1</button><button>2</button><button>3</button><button>…</button><button>15</button></div></div>
+        </div>
+
+        <div class="card empty" id="zm-itemsEmpty" style="display:none">
+          <svg class="ic"><use href="#i-file"/></svg>
+          <div class="t">没有符合条件的采集明细</div>
+          <div class="d">试试调整筛选条件，或去「采集源管理」确认源已启用</div>
+          <div style="margin-top:16px"><button class="btn" onclick="ZM.resetFilter()">重置筛选</button></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S5 采集明细详情 ═══════════ -->
+      <section class="screen" id="zm-screen-item-detail">
+        <button class="back-link" onclick="ZM.go('items')"><svg class="ic"><use href="#i-back"/></svg>返回采集明细</button>
+        <div class="page-head">
+          <div style="flex:1">
+            <div class="detail-title">
+              <span>LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data</span>
+              <a class="btn sm" href="#" onclick="ZM.toast('原型演示：跳转 arXiv 原文');return false"><svg class="ic"><use href="#i-ext"/></svg>原文</a>
+            </div>
+            <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
+              <span class="tag info">论文</span><span class="tag mono">external_id: 2608.21360</span><span class="tag ok">质量 ok</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">质量归因</div>
+          <div class="flow">
+            <span class="node done">采集 collect</span><span class="arr">→</span>
+            <span class="node done">去重 dedup</span><span class="arr">→</span>
+            <span class="node done">LLM 摘要 llm</span><span class="arr">→</span>
+            <span class="node cur">成文 publish</span><span class="arr">→</span>
+            <span class="node">已发布</span>
+          </div>
+          <div class="kv-grid" style="margin-top:16px">
+            <div class="kv"><div class="k">采集源</div><div class="v">arXiv 论文（arxiv）</div></div>
+            <div class="kv"><div class="k">所属管线</div><div class="v">daily_paper</div></div>
+            <div class="kv"><div class="k">采集耗时</div><div class="v mono">1,842 ms</div></div>
+            <div class="kv"><div class="k">原文发布时间</div><div class="v mono">2026-10-21 14:00:00</div></div>
+            <div class="kv"><div class="k">入库时间</div><div class="v mono">2026-10-22 09:01:12</div></div>
+            <div class="kv"><div class="k">SimHash</div><div class="v mono">a3f9…7c21</div></div>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">AI 摘要</div>
+          <div class="doc-text">
+            本文提出 LongZero，一种从零数据出发增强大模型长上下文推理能力的方法。作者构建了一条「自举式」课程：先用短样本合成推理链，再逐段加长上下文窗口，使模型在 128K 上下文中保持稳定的多跳推理表现。在 LongBench 与 NEEDLE 基准上，LongZero 较基线提升 6.8~11.2 个百分点，且无需人工标注长文本数据。
+          </div>
+          <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap">
+            <span class="tag sub">prompt_version: v2.3</span><span class="tag sub">degraded: false</span>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="sec-title">源私有字段（meta）</div>
+          <div class="code-block">{
+  "arxiv_id": "2608.21360",
+  "title_en": "LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data",
+  "authors": ["Wei Zhang", "Li Chen", "…"],
+  "abs_url": "https://arxiv.org/abs/2608.21360",
+  "prompt_version": "v2.3",
+  "degraded": false,
+  "digest": {
+    "译名": "LongZero：零数据增强大模型长上下文推理",
+    "核心贡献": "自举式课程合成推理链，无需人工长文本标注",
+    "方法亮点": "逐段加长上下文窗口，128K 下多跳推理稳定",
+    "潜在应用": "长文档问答、代码库级理解"
+  },
+  "categories": "cs.AI+OR+cat:cs.CL+OR+cat:cs.CV+OR+cat:cs.LG"
+}</div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="sec-title">发布记录 <span class="tag sub" style="cursor:pointer" onclick="ZM.go('publications')">去「公众号成文」查看 →</span></div>
+          <table class="table">
+            <thead><tr><th>成文</th><th>发布目标</th><th>状态</th><th>外部 ID</th><th>时间</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:280px">每日论文速览 ｜ 2026-10-22</span></td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-8f21…</td><td class="mono">10-22 09:05</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════ S6 公众号成文 ═══════════ -->
+      <section class="screen" id="zm-screen-publications">
+        <div class="page-head">
+          <div>
+            <div class="page-title">公众号成文</div>
+            <div class="page-desc">管线生成并投递到腾讯文档 / 公众号的成文记录；「预览成文」查看最终交付内容，确认发布状态。</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select"><option>全部目标</option><option>腾讯文档</option><option>公众号</option></select>
+          <select class="select"><option>全部状态</option><option>success 已发布</option><option>submitted 已提交</option><option>failed 失败</option></select>
+          <input class="input" style="min-width:200px" placeholder="搜索成文标题" />
+          <button class="btn">查询</button>
+          <button class="btn">重置</button>
+        </div>
+
+        <div class="card" id="zm-pubTableWrap">
+          <table class="table">
+            <thead>
+              <tr><th style="min-width:280px">成文标题</th><th>来源条目</th><th>发布目标</th><th>状态</th><th>外部 ID</th><th>创建时间</th><th style="width:120px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-22</span></td>
+                <td>8 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-8f21c3 / MP-91d2</td>
+                <td class="mono">10-22 09:05</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-21</span></td>
+                <td>6 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-7a04e9 / MP-88c1</td>
+                <td class="mono">10-21 09:03</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">财经早报 ｜ 2026-10-22</span></td>
+                <td>20 条快讯</td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="tag warn">submitted</span></td>
+                <td class="mono">MP-91f0</td>
+                <td class="mono">10-22 08:12</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-18</span></td>
+                <td>5 篇论文</td>
+                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
+                <td><span class="tag err">failed</span></td>
+                <td class="mono">—</td>
+                <td class="mono">10-18 09:04</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.openPreview()">预览成文</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="ellip" style="max-width:300px">龙虎榜复盘 ｜ 2026-10-21</span></td>
+                <td>86 条记录</td>
+                <td><span class="tag info">腾讯文档</span></td>
+                <td><span class="tag ok">success</span></td>
+                <td class="mono">DOC-7b11f2</td>
+                <td class="mono">10-21 18:30</td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.openPreview()">预览成文</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card empty" id="zm-pubEmpty" style="display:none">
+          <svg class="ic"><use href="#i-send"/></svg>
+          <div class="t">还没有成文记录</div>
+          <div class="d">成文由发布管线定时生成；可去「发布管线」手动运行一次</div>
+          <div style="margin-top:16px"><button class="btn" onclick="ZM.go('pipelines')">前往发布管线</button></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S7 发布管线 ═══════════ -->
+      <section class="screen" id="zm-screen-pipelines">
+        <div class="page-head">
+          <div>
+            <div class="page-title">发布管线</div>
+            <div class="page-desc">定时把采集明细加工为成文并投递到腾讯文档 / 公众号；cron 变更次日生效。</div>
+          </div>
+          <button class="btn primary" onclick="ZM.go('pipeline-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加管线</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>编码</th><th>类型</th><th>cron</th><th>标题模板</th><th>发布目标</th><th>状态</th><th style="width:140px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">daily_paper</td><td><span class="tag info">paper</span></td><td class="mono">0 9 * * *</td>
+                <td><span class="ellip" style="max-width:180px">每日论文速览 ｜ {{date}}</span></td>
+                <td><span class="tag sub">腾讯文档</span> <span class="tag sub">公众号</span></td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+              </tr>
+              <tr>
+                <td class="mono">daily_finance</td><td><span class="tag info">ai-news</span></td><td class="mono">0 8 * * 1-5</td>
+                <td><span class="ellip" style="max-width:180px">财经早报 ｜ {{date}}</span></td>
+                <td><span class="tag sub">公众号</span></td>
+                <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
+                <td><div class="row-actions"><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════ S8 管线编辑（新页面） ═══════════ -->
+      <section class="screen" id="zm-screen-pipeline-edit">
+        <button class="back-link" onclick="ZM.go('pipelines')"><svg class="ic"><use href="#i-back"/></svg>返回发布管线</button>
+        <div class="page-head">
+          <div>
+            <div class="page-title">编辑管线</div>
+            <div class="page-desc">编码创建后不可修改；LLM prompt 留空走默认模板。</div>
+          </div>
+        </div>
+        <div class="card card-pad form-card">
+          <div class="form-grid">
+            <div class="form-item">
+              <div class="form-label">编码 code <span class="req">*</span></div>
+              <input class="form-input" value="daily_paper" disabled />
+            </div>
+            <div class="form-item">
+              <div class="form-label">类型 <span class="req">*</span></div>
+              <select class="form-select"><option>paper</option><option>ai-news</option></select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">cron 表达式 <span class="req">*</span></div>
+              <input class="form-input" value="0 9 * * *" />
+            </div>
+            <div class="form-item">
+              <div class="form-label">标题模板</div>
+              <input class="form-input" value="每日论文速览 ｜ {{date}}" />
+            </div>
+            <div class="form-item full">
+              <div class="form-label">发布目标</div>
+              <select class="form-select" multiple size="2"><option selected>tencent_docs · 腾讯文档</option><option selected>wechat_mp · 公众号</option></select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">腾讯文档目录</div>
+              <input class="form-input" value="每日论文学习" />
+            </div>
+            <div class="form-item">
+              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
+            </div>
+            <div class="form-item full">
+              <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
+              <textarea class="form-area">你是「大橙子社区」的论文编辑。把下面 N 篇 arXiv 论文各压缩成四字段：中文译名 / 一句话核心贡献 / 方法亮点 / 潜在应用。语气克制，不堆形容词。</textarea>
+            </div>
+          </div>
+          <div class="form-foot">
+            <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('pipelines')">保存</button>
+            <button class="btn" onclick="ZM.go('pipelines')">取消</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ S9 采集监控 ═══════════ -->
+      <section class="screen" id="zm-screen-runs">
+        <div class="page-head">
+          <div>
+            <div class="page-title">采集监控</div>
+            <div class="page-desc">每次采集（定时 / 手动）的批次结果与近 7 天健康度；连续失败的源会标为「静默失效」。</div>
+          </div>
+          <button class="btn" onclick="ZM.toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
+        </div>
+
+        <div class="stat-row">
+          <div class="card stat"><div class="label">近 7 天采集批次</div><div class="value">42</div></div>
+          <div class="card stat"><div class="label">近 7 天成功率</div><div class="value">88%</div></div>
+          <div class="card stat"><div class="label">今日失败次数</div><div class="value danger">2</div></div>
+          <div class="card stat"><div class="label">静默失效源</div><div class="value danger">1</div><div class="hint">arxiv · 08-24 起未成功</div></div>
+        </div>
+
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>源</th><th>源名称</th><th>触发</th><th>状态</th><th>条数</th><th>去重</th><th>失败</th><th>耗时</th><th>开始时间</th><th>错误</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">sina_news</td><td>新浪财经快讯</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>12</td><td>3</td><td>0</td><td class="mono">4,210</td><td class="mono">10-22 09:00:02</td><td class="mono">—</td></tr>
+              <tr><td class="mono">eastmoney_news</td><td>东方财富快讯</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>20</td><td>8</td><td>0</td><td class="mono">6,102</td><td class="mono">10-22 09:00:02</td><td class="mono">—</td></tr>
+              <tr><td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag info">定时</span></td><td><span class="tag err">failed</span></td><td>0</td><td>0</td><td>1</td><td class="mono">12,004</td><td class="mono">10-22 09:01:00</td><td class="mono">fetch failed</td></tr>
+              <tr><td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag info">定时</span></td><td><span class="tag ok">ok</span></td><td>86</td><td>12</td><td>0</td><td class="mono">18,340</td><td class="mono">10-21 18:05:00</td><td class="mono">—</td></tr>
+              <tr><td class="mono">eastmoney_lhb</td><td>东方财富龙虎榜</td><td><span class="tag" style="color:var(--brand-txt);background:var(--brand-soft)">手动</span></td><td><span class="tag ok">ok</span></td><td>86</td><td>12</td><td>0</td><td class="mono">17,982</td><td class="mono">10-21 15:22:41</td><td class="mono">—</td></tr>
+              <tr><td class="mono">arxiv</td><td>arXiv 论文</td><td><span class="tag info">定时</span></td><td><span class="tag err">failed</span></td><td>0</td><td>0</td><td>1</td><td class="mono">12,011</td><td class="mono">10-21 09:01:00</td><td class="mono">fetch failed</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-note">失败明细（错误原文）仅保留技术信息；用户可读的归因见「采集明细 · 质量」列</div>
+      </section>
+        <div class="mask" id="zm-triggerMask">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="zm-triggerTitle">手动触发采集</div>
+      <button class="x" onclick="ZM.closeModal('triggerMask')"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-item" style="max-width:240px">
+        <div class="form-label">采集条数上限</div>
+        <input class="form-input" value="20" />
+      </div>
+      <button class="btn primary" id="zm-triggerRunBtn" onclick="ZM.runTrigger()"><svg class="ic"><use href="#i-play"/></svg>开始采集</button>
+
+      <!-- 结果区（友好化后） -->
+      <div id="zm-triggerResultZone" style="display:none">
+        <div class="result-card" id="zm-rcCard">
+          <div class="rc-head"><svg class="ic ic-20"><use href="#i-check"/></svg><span id="zm-rcTitle">采集完成</span></div>
+          <div class="rc-desc" id="zm-rcDesc"></div>
+          <div class="rc-metrics" id="zm-rcMetrics"></div>
+          <div class="rc-actions" id="zm-rcActions"></div>
+        </div>
+        <details class="tech-detail">
+          <summary>技术详情（排查用）</summary>
+          <pre id="zm-rcRaw"></pre>
+        </details>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div style="flex:1; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--t4)">
+        原型演示 · 结果状态
+        <div class="seg" id="zm-rcStateSeg">
+          <button class="on" data-st="unsupported" onclick="ZM.setRcState('unsupported',this)">类型未接入</button>
+          <button data-st="ok" onclick="ZM.setRcState('ok',this)">成功</button>
+          <button data-st="empty" onclick="ZM.setRcState('empty',this)">空结果</button>
+          <button data-st="failed" onclick="ZM.setRcState('failed',this)">失败</button>
+          <button data-st="running" onclick="ZM.setRcState('running',this)">运行中</button>
+        </div>
+      </div>
+      <button class="btn" onclick="ZM.closeModal('triggerMask')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 成文预览抽屉 ═══════════ -->
+<div class="drawer-mask" id="zm-previewMask">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="modal-title">成文预览 ｜ 每日论文速览 ｜ 2026-10-22</div>
+      <button class="x" onclick="ZM.closeModal('previewMask')"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="drawer-body">
+      <div class="article">
+        <h1>每日论文速览 ｜ 2026-10-22</h1>
+        <div class="meta">大橙子社区 · 8 篇 · 已发布至腾讯文档 / 公众号（MP-91d2）· 09:05</div>
+
+        <h2>今日导读</h2>
+        <p>本期聚焦长上下文推理与世界模型两条主线：LongZero 用零数据自举把 128K 上下文的多跳推理做了上去；视频自编码器的重构思路则可能成为交互式世界模型的底座。</p>
+
+        <div class="paper">
+          <div class="pt">1. LongZero：零数据增强大模型长上下文推理</div>
+          <div class="pa">arXiv:2608.21360 · cs.CL</div>
+          <p style="margin-top:6px">用短样本合成推理链再逐段加长窗口，LongBench 提升 6.8~11.2 个百分点，无需人工长文本标注。</p>
+        </div>
+
+        <div class="paper">
+          <div class="pt">2. Rethinking Video Autoencoders for Interactive World Models</div>
+          <div class="pa">arXiv:2608.21345 · cs.CV</div>
+          <p style="margin-top:6px">重新审视视频自编码器的时序压缩率与重建质量权衡，提出面向交互式世界模型的架构调整。</p>
+        </div>
+
+        <div class="paper">
+          <div class="pt">3. Think Harder Where It Matters：序列推荐的项目级自适应递归</div>
+          <div class="pa">arXiv:2608.21356 · cs.IR</div>
+          <p style="margin-top:6px">按项目难度自适应分配推理深度，在保持延迟的同时提升长序列推荐效果。</p>
+        </div>
+
+        <p style="color:var(--t4); font-size:12px; margin-top:24px">—— 以上内容为原型演示 mock，实际成文由管线 LLM prompt 生成 ——</p>
+      </div>
+    </div>
+  </div>
+</div>
+        <div id="zm-toast"></div>
       </div>
       </div>
 
-      <!-- 真实屏（同源抽取）：内容条目 -->
-      <div class="screen hidden" data-screen="content-items">      <div class="cc-scope">
-        <div class="cc-host" data-cc="content-items"></div>
-      </div>
+      <!-- 真实屏（同源抽取）：采集明细 -->
+      <div class="screen hidden" data-screen="content-items">
       </div>
 
-      <!-- 真实屏（同源抽取）：条目详情 -->
-      <div class="screen hidden" data-screen="content-detail">      <div class="cc-scope">
-        <div class="cc-host" data-cc="content-detail"></div>
-      </div>
+      <!-- 真实屏（同源抽取）：公众号成文 -->
+      <div class="screen hidden" data-screen="content-publications">
       </div>
 
-      <!-- 真实屏（同源抽取）：龙虎榜 -->
-      <div class="screen hidden" data-screen="content-lhb">      <div class="cc-scope">
-        <div class="cc-host" data-cc="content-lhb"></div>
-      </div>
+      <!-- 真实屏（同源抽取）：发布管线 -->
+      <div class="screen hidden" data-screen="content-pipelines">
       </div>
 
-      <!-- 真实屏（同源抽取）：席位库 -->
-      <div class="screen hidden" data-screen="content-seats">      <div class="cc-scope">
-        <div class="cc-host" data-cc="content-seats"></div>
-      </div>
+      <!-- 真实屏（同源抽取）：采集监控 -->
+      <div class="screen hidden" data-screen="content-monitor">
       </div>
 
       <!-- 占位屏：Agent 概览 -->
@@ -2401,15 +3220,7 @@
   </div>
 
   <div class="toast hidden" id="toast" role="alert"></div>
-  <!-- admin-content-hub.html 的模块级弹层（不进屏，5 屏共用） -->
-  <div class="cc-scope">
-  <div class="mask" id="cc-mask" onclick="CC.CC.closeAll()"></div>
-<aside class="drawer" id="cc-drawer"></aside>
-<div class="modal-mask" id="cc-modalMask">
-  <div class="modal" id="cc-modal"></div>
-</div>
-<div class="toast" id="cc-toast"></div>
-  </div>
+
 </div>
 
 
@@ -2933,728 +3744,260 @@ renderTypeList(); renderItems();
 
 })();
 
-/* 来自 admin-content-hub.html（IIFE 包裹，符号不泄漏到全局） · 共享源：一份脚本服务 5 屏 */
+/* 来自 admin-media-ops.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
   var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["mask","drawer","modalMask","modal","toast"].reduce(function(a,i){a[i]=1;return a;},{});
-  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('cc-'+id) : RAW_BY_ID(id); };
+  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","screen-pipeline-edit","screen-runs","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('zm-'+id) : RAW_BY_ID(id); };
 
-var ICON = {
-  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
-  team:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
-  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-  safe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
-  db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
-  api:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
-  news:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/></svg>',
-  robot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12.5" r="0.6"/><circle cx="15" cy="12.5" r="0.6"/></svg>',
-  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
-  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.5h13l3.5 6.5v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg>',
-  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
-  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+// ── 屏幕切换 ──
+const SCREENS = {
+  sources:        { el: 'screen-sources',        crumb: ['自媒体运营', '采集源管理'] },
+  'source-edit':  { el: 'screen-source-edit',    crumb: ['自媒体运营', '采集源管理', '编辑采集源'] },
+  items:          { el: 'screen-items',          crumb: ['自媒体运营', '采集明细'] },
+  'item-detail':  { el: 'screen-item-detail',    crumb: ['自媒体运营', '采集明细', '明细详情'] },
+  publications:   { el: 'screen-publications',   crumb: ['自媒体运营', '公众号成文'] },
+  pipelines:      { el: 'screen-pipelines',      crumb: ['自媒体运营', '发布管线'] },
+  'pipeline-edit':{ el: 'screen-pipeline-edit',  crumb: ['自媒体运营', '发布管线', '编辑管线'] },
+  runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
 };
-
-/* ===== 全局状态 ===== */
-var S = {
-  screen:'content-overview',
-  state:'normal',
-  expanded:{ content:true, agents:false },
-  detailId:12043,
-  f:{ qs:'', stage:'', source:'', keyword:'' },
-  page:1,
-  lhbDate:'2026-10-15',
-  lhbTag:'',
-  lhbOpen:null,
-  seatKw:'', seatTag:'', seatActive:'',
-  busy:null,
-  settingsTab:'basic', radius:'soft',
-  modal:null
-};
-var STATES = [['normal','正常'],['loading','加载中'],['empty','空数据'],['error','请求失败'],['noperm','无权限']];
-
-/* ===== 模拟数据（字段名对齐落码） ===== */
-/* 字段对齐 collect-log.service.ts health() 的真实返回：
-   windowDays / totalRuns / failedRuns / successRate / todayFailed / staleSources（无「入库条数」） */
-var HEALTH = { windowDays:7, totalRuns:28, failedRuns:1, successRate:'96.4%', todayFailed:1, staleSources:[] };
-var SOURCES = [
-  { code:'eastmoney_lhb', name:'东方财富龙虎榜', cron:'收盘后 15:10', last:'2026-10-15 15:12:07', dur:2410, count:68, status:'ok' },
-  { code:'sina_news',     name:'新浪财经快讯',   cron:'每 30 分钟',   last:'2026-10-15 09:05:41', dur:1830, count:120, status:'ok' },
-  { code:'eastmoney_news',name:'东方财富快讯',   cron:'每 30 分钟',   last:'2026-10-15 08:40:12', dur:3020, count:0,  status:'failed' }
-];
-var RUNS = [
-  { id:8421, source_code:'eastmoney_lhb', source_name:'东方财富龙虎榜', trigger_type:'schedule', status:'ok',     item_count:68, dedup_count:0,  fail_count:0, duration_ms:2410, error_message:null, started_at:'2026-10-15 15:12:07' },
-  { id:8420, source_code:'sina_news',     source_name:'新浪财经快讯',   trigger_type:'manual',   status:'ok',     item_count:24, dedup_count:3,  fail_count:0, duration_ms:980,  error_message:null, started_at:'2026-10-15 14:26:33' },
-  { id:8419, source_code:'sina_news',     source_name:'新浪财经快讯',   trigger_type:'schedule', status:'ok',     item_count:96, dedup_count:11, fail_count:0, duration_ms:2210, error_message:null, started_at:'2026-10-15 09:05:41' },
-  { id:8418, source_code:'eastmoney_news',source_name:'东方财富快讯',   trigger_type:'schedule', status:'failed', item_count:0,  dedup_count:0,  fail_count:0, duration_ms:3020, error_message:'connect ETIMEDOUT（源不可达，30s 超时）', started_at:'2026-10-15 08:40:12' },
-  { id:8417, source_code:'eastmoney_lhb', source_name:'东方财富龙虎榜', trigger_type:'schedule', status:'ok',     item_count:71, dedup_count:0,  fail_count:0, duration_ms:2660, error_message:null, started_at:'2026-10-14 15:11:52' }
-];
-var ITEMS = [
-  { id:12043, external_id:'arxiv:2408.12345', title:'链式推理蒸馏在小参数模型上的迁移效果', source:'arxiv_digest', pipeline:3, qs:'ok',      stage:'llm',      issue:null,                                   pub:'2026-10-15', pv:'v1' },
-  { id:12042, external_id:'arxiv:2408.11902', title:'面向长文档的检索增强：分块策略再评估',  source:'arxiv_digest', pipeline:3, qs:'partial', stage:'llm',      issue:'分类未返回，摘要生成成功',             pub:'2026-10-15', pv:'v1' },
-  { id:12041, external_id:'sina:20261015A0B2',title:'央行开展 5000 亿元中期借贷便利操作',      source:'sina_news',    pipeline:1, qs:'ok',      stage:'publish',  issue:null,                                   pub:'2026-10-15', pv:'' },
-  { id:12040, external_id:'sina:20261015A0C7',title:'多家银行下调存款利率，专家解读影响',      source:'sina_news',    pipeline:1, qs:'skip',    stage:'dedup',    issue:'SimHash 命中 #12039（内容重复）',      pub:'2026-10-15', pv:'' },
-  { id:12039, external_id:'arxiv:2408.11011', title:'多模态对齐中的表征崩塌问题综述',          source:'arxiv_digest', pipeline:3, qs:'fail',    stage:'collect',  issue:'源返回空（0 条），已在批次 8418 记 failed', pub:'2026-10-15', pv:'v1' },
-  { id:12038, external_id:'arxiv:2408.10744', title:'稀疏注意力在端侧推理的内存优化',          source:'arxiv_digest', pipeline:3, qs:'partial', stage:'fallback', issue:'LLM 不可用，摘要走模板降级产出',        pub:'2026-10-15', pv:'v1' }
-];
-var ITEM_META = {
-  12043:{ arxiv_id:'2408.12345', title_en:'Transferring Chain-of-Thought Distillation to Small Models', prompt_version:'v1', authors:['Zhang Wei','Li Ming','Chen Hao'], categories:'cs.CL, cs.LG' },
-  12038:{ arxiv_id:'2408.10744', title_en:'Memory Optimization for Sparse Attention on Edge Devices', prompt_version:'v1', authors:['Liu Yang'], categories:'cs.LG' }
-};
-var ITEM_CONTENT = {
-  12043:'We study whether chain-of-thought (CoT) distillation transfers to sub-1B models. Across 6 reasoning benchmarks, CoT distillation yields +7.4 average gain over answer-only distillation, but degrades sharply below 0.6B where the student lacks capacity for multi-step traces. We introduce a length-aware curriculum that schedules trace complexity by validation loss, recovering 3.1 of the 4.2 points lost at 0.3B.',
-  12038:'Sparse attention reduces theoretical FLOPs but often fails to reduce wall-clock memory on edge accelerators due to materialized score matrices. We propose tile-wise streaming softmax which keeps peak memory constant with respect to sequence length, achieving 2.3x longer context on a 4GB NPU with under 1% perplexity loss.'
-};
-var LHB_STATS = { trade_date:'2026-10-15', total:68, limit_up:12, hotmoney:31, institution:24 };
-var LHB = [
-  { id:301, trade_date:'2026-10-15', stock_code:'600150', stock_name:'中国船舶', reason:'日涨幅偏离值达 7%',   buy:412350000, sell:188720000, net:223630000, turnover:'8.42', limit_up:1, is_st:0, tags:['hotmoney','institution'], hasSeats:true },
-  { id:302, trade_date:'2026-10-15', stock_code:'002594', stock_name:'比亚迪',   reason:'连续三日涨幅偏离值累计达 20%', buy:688400000, sell:912500000, net:-224100000, turnover:'5.17', limit_up:0, is_st:0, tags:['institution'], hasSeats:true },
-  { id:303, trade_date:'2026-10-15', stock_code:'300308', stock_name:'中际旭创', reason:'换手率达 20%',        buy:295180000, sell:301420000, net:-6240000,  turnover:'21.30', limit_up:0, is_st:0, tags:['hotmoney'], hasSeats:true },
-  { id:304, trade_date:'2026-10-15', stock_code:'000725', stock_name:'京东方A',  reason:'日振幅值达 15%',            buy:157600000, sell:120300000, net:37300000,  turnover:'3.88', limit_up:0, is_st:0, tags:['retail'], hasSeats:false },
-  { id:305, trade_date:'2026-10-15', stock_code:'600122', stock_name:'ST 宏图',   reason:'ST 股连续三日涨跌幅偏离',   buy:88200000,  sell:104600000, net:-16400000, turnover:'12.05', limit_up:1, is_st:1, tags:['hotmoney'], hasSeats:true }
-];
-var LHB_SEATS = {
-  301:[
-    { name:'华鑫证券有限责任公司上海分公司',           buy:188000000, sell:0,        type:'buy',  tag:'hotmoney',    alias:'章盟主系' },
-    { name:'机构专用',                                 buy:96300000,  sell:41200000, type:'both', tag:'institution', alias:'' },
-    { name:'东方财富证券股份有限公司拉萨团结路第二',   buy:42600000,  sell:18700000, type:'both', tag:'hotmoney',    alias:'拉萨天团' },
-    { name:'中信证券股份有限公司上海溧阳路',           buy:0,         sell:73400000, type:'sell', tag:'hotmoney',    alias:'溧阳路传奇' }
-  ],
-  302:[
-    { name:'机构专用',     buy:214000000, sell:398000000, type:'both', tag:'institution', alias:'' },
-    { name:'深股通专用',   buy:88600000,  sell:129000000, type:'both', tag:'institution', alias:'' },
-    { name:'国信证券股份有限公司深圳泰然九路', buy:41200000, sell:0,   type:'buy',  tag:'hotmoney',    alias:'深圳帮' }
-  ],
-  303:[
-    { name:'东方财富证券股份有限公司拉萨东环路第二', buy:73100000, sell:0,        type:'buy',  tag:'hotmoney', alias:'拉萨天团' },
-    { name:'国盛证券有限责任公司宁波桑田路',         buy:0,        sell:68400000, type:'sell', tag:'hotmoney', alias:'宁波桑田路' }
-  ],
-  305:[
-    { name:'广发证券股份有限公司佛山平湖大道',       buy:44100000, sell:12000000, type:'both', tag:'hotmoney', alias:'佛山无影脚' }
-  ]
-};
-/* 席位种子：真实名单取自 archive/migrations/p35-content-quality.mjs 的 SEAT_SEED */
-var SEATS = [
-  { id:1,  seat_name:'华鑫证券有限责任公司上海分公司',           alias:'章盟主系',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:2,  seat_name:'国泰君安证券股份有限公司上海江苏路',       alias:'炒股养家',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:3,  seat_name:'银河证券股份有限公司绍兴证券营业部',       alias:'绍兴帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:4,  seat_name:'中国银河证券股份有限公司北京金融街',       alias:'北京帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:5,  seat_name:'东方财富证券股份有限公司拉萨团结路第二',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:6,  seat_name:'东方财富证券股份有限公司拉萨东环路第二',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:7,  seat_name:'东方财富证券股份有限公司拉萨团结路第一',   alias:'拉萨天团',   tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:8,  seat_name:'中信证券股份有限公司上海溧阳路',           alias:'溧阳路传奇', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:9,  seat_name:'华泰证券股份有限公司深圳益田路荣超商务中心',alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:10, seat_name:'招商证券股份有限公司深圳蛇口工业七路',     alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:11, seat_name:'国信证券股份有限公司深圳泰然九路',         alias:'深圳帮',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:12, seat_name:'广发证券股份有限公司佛山平湖大道',         alias:'佛山无影脚', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:13, seat_name:'国盛证券有限责任公司宁波桑田路',           alias:'宁波桑田路', tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:14, seat_name:'方正证券股份有限公司杭州萧山市心中路',     alias:'杭州系',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:15, seat_name:'财通证券股份有限公司杭州体育场路',         alias:'杭州系',     tag:'hotmoney',    is_active:1, created_at:'2026-10-15 11:02' },
-  { id:16, seat_name:'机构专用',                                 alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' },
-  { id:17, seat_name:'沪股通专用',                               alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' },
-  { id:18, seat_name:'深股通专用',                               alias:'',           tag:'institution', is_active:1, created_at:'2026-10-15 11:02' }
-];
-
-/* ===== 工具 ===== */
-function toast(msg){
-  var el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.remove('show'); },2000);
+function go(key) {
+  /* 屏显隐**按 id 精确操作**，不按 `.screen` 类选择器：本稿会被同源抽取进 admin 整合稿
+     （docs/ui/prototypes/admin-agents-hub.html），那边的屏容器也叫 .screen —— 用类选择器
+     会连带把 hub 自己的屏一起摘掉 / 隐藏。id 是本稿私有的，不会误伤。 */
+  Object.keys(SCREENS).forEach(k => document.getElementById(SCREENS[k].el).classList.remove('on'));
+  const s = SCREENS[key];
+  document.getElementById(s.el).classList.add('on');
+  document.getElementById('crumb').innerHTML = s.crumb.map((c, i) =>
+    i === s.crumb.length - 1 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
+  document.querySelectorAll('#contentGroupChildren .menu-item').forEach(m =>
+    m.classList.toggle('active', m.dataset.screen === key));
+  /* 滚动容器：独立打开时是 .content，被抽进整合稿后壳换成 .ad-content —— 两者都兜住，
+     都没有就跳过（否则 null.scrollTop 会让整个切屏挂掉） */
+  const sc = document.querySelector('.content, .ad-content');
+  if (sc) sc.scrollTop = 0;
+  // 离开编辑页时重置试采面板（下次进入重新开始）
+  const tp = document.getElementById('testPanel');
+  if (tp) { tp.style.display = 'none'; document.getElementById('testLoading').style.display = 'none'; document.getElementById('testResult').style.display = 'none'; }
+  // 明细/成文进入时模拟加载
+  if (key === 'items') simulateLoading('itemsTableWrap', 'itemsEmpty');
+  if (key === 'publications') simulateLoading('pubTableWrap', 'pubEmpty');
+  /* 演示控件块可选：本稿被抽进 admin 整合稿时会整段丢弃（见下方 DEMO-PANEL 标记），
+     所以这里必须用 typeof 守卫 —— 直接调用会 ReferenceError，整个切屏失效 */
+  if (typeof DEMO !== 'undefined') DEMO.onGo(key);
+  /* 被抽进 admin 整合稿后，模块内的跳转要带动 hub 的菜单高亮 / 面包屑（跨根键跳转用：
+     明细详情 →「去公众号成文」）。独立打开时 zmSync 不存在，静默跳过。 */
+  if (typeof window.zmSync === 'function') window.zmSync(key);
 }
-function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
-function money(v){ return (v/100000000).toFixed(2)+' 亿'; }
-function 万元(v){ return (v/10000).toFixed(0); }
-function qsbadge(q){
-  var map={ ok:['ok','完整'], partial:['warn','部分成功'], fail:['err','失败'], skip:['neutral','跳过'] };
-  var m=map[q]||['neutral',q];
-  return '<span class="badge '+m[0]+'">'+m[1]+'</span>';
-}
-function stageBadge(s){
-  var map={ collect:['','采集'], dedup:['neutral','去重'], llm:['','LLM'], fallback:['warn','降级'], publish:['','发布'] };
-  var m=map[s]||['neutral',s];
-  return '<span class="badge '+(m[0]||'info')+'">'+m[1]+'</span>';
-}
-function tagBadge(t){
-  if(t==='hotmoney') return '<span class="badge warn">游资</span>';
-  if(t==='institution') return '<span class="badge info">机构</span>';
-  return '<span class="badge neutral">散户</span>';
-}
-/* 净额：涨红跌绿（A 股口径） */
-function netCell(v){
-  var pos=v>=0;
-  return '<td class="num" style="color:'+(pos?'var(--ws-fin-up)':'var(--ws-fin-down)')+';font-weight:600">'+(pos?'+':'')+money(v)+'</td>';
+function toggleGroup(btn) {
+  btn.classList.toggle('menu-open');
+  document.getElementById('contentGroupChildren').style.display =
+    btn.classList.contains('menu-open') ? '' : 'none';
 }
 
-/* ===== 通用状态件 ===== */
-function skeletonCards(n){
-  var h='<div class="stats">';
-  for(var i=0;i<(n||4);i++) h+='<div class="stat"><div class="skel"><i></i><i></i></div></div>';
-  return h+'</div>';
-}
-function exceptionHtml(perm,mod){
-  return '<div class="exception"><div class="ic">'+ICON.lock+'</div>'
-    +'<div class="t">无权访问'+(mod||'该模块')+'</div>'
-    +'<div class="d">当前账号缺少 <span class="kv">'+perm+'</span> 权限。<br>'
-    +'如需访问，请联系超管在「角色权限」中授予该权限。</div>'
-    +'<button class="btn primary" onclick="CC.setState(\'normal\')">返回工作台</button></div>';
-}
-function errorHtml(msg){
-  return '<div class="exception"><div class="ic">'+ICON.alert+'</div>'
-    +'<div class="t">加载失败</div>'
-    +'<div class="d">'+esc(msg||'请求超时（Gateway Timeout）')+'<br>'
-    +'批次级错误会记入 <span class="kv">collect_runs.error_message</span>，条目级错误记 '
-    +'<span class="kv">content_items.error</span>。</div>'
-    +'<button class="btn primary" onclick="CC.setState(\'normal\')">重试</button></div>';
-}
-function emptyHtml(title,sub,action){
-  return '<div class="exception">'+ICON.inbox.replace('<svg','<svg class="empty-ic"')
-    +'<div class="empty-txt">'+esc(title)+'</div>'
-    +'<div class="empty-sub">'+esc(sub)+'</div>'
-    +(action||'')+'</div>';
-}
-function notApplicable(why){
-  return '<div class="note info"><span>[原型] 本模块该状态不适用：'+why+'</span></div>';
+// ── 加载态模拟 ──
+function simulateLoading(tableId, emptyId) {
+  const wrap = document.getElementById(tableId);
+  if (wrap.dataset.state === 'empty') return;
+  wrap.style.opacity = '.5';
+  setTimeout(() => { wrap.style.opacity = '1'; }, 400);
 }
 
-/* =========================================================
-   屏 1：内容中心 · 采集总览
-   接口：GET /api/content/collect/health?days=7、GET /api/content/collect/runs
-        POST /api/content/collect/:sourceCode（content:manage）
-   ========================================================= */
-function healthCard(v,l,sub){
-  return '<div class="stat"><div class="lb">'+l+'</div><div class="v">'+v+'</div>'
-    +'<div class="sub2">'+sub+'</div></div>';
+/* 采集明细空态里的「重置筛选」：清掉筛选输入 + 分段回到第一档 + 演示态回正常。
+   此前这里写的是 demoState(...) —— 那个函数在控件改造时已删掉，点了会报 is not defined。 */
+function resetFilter() {
+  document.querySelectorAll('#screen-items .seg button').forEach((b, i) => b.classList.toggle('on', i === 0));
+  const q = document.querySelector('#screen-items .filter-bar input');
+  if (q) q.value = '';
+  if (typeof applyState === 'function') applyState('normal');
 }
-function screenOverview(){
-  var head='<div class="pg-head"><div><h2>采集总览</h2>'
-    +'<div class="sub">回答三个问题：今天采了多少 / 这次成功了没有 / 哪个源最近老失败'
-    +'<br>批次级问题看这里（collect_runs），条目级问题在「内容条目」看（content_items.quality_*）</div></div></div>';
-  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
-  if(S.state==='loading') return head+skeletonCards(4)+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
-  if(S.state==='error')   return head+errorHtml('GET /api/content/collect/health 返回 504');
 
-  if(S.state==='empty'){
-    return head+emptyHtml('暂无采集批次记录','执行 p35 迁移后的第一次采集才会产生 collect_runs 记录。',
-      '<div class="btn-row" style="justify-content:center"><button class="btn primary" onclick="CC.confirmCollect(\'eastmoney_lhb\')">立即采集一次</button></div>');
-  }
-  var h=head;
-  /* 健康度 */
-  h+='<div class="stats">'
-    + healthCard(HEALTH.successRate,'近 '+HEALTH.windowDays+' 天成功率','共 '+HEALTH.totalRuns+' 批次，失败 '+HEALTH.failedRuns+' 批次')
-    + healthCard(HEALTH.todayFailed,'今日失败次数','今日失败批次计数')
-    + healthCard(RUNS[0].started_at.slice(0,10),'最近一次采集','来自批次日志最新一行')
-    + healthCard(HEALTH.staleSources.length,'静默失效源','配置在列表中但近 7 天零采集')
-    + '</div>';
-  if(HEALTH.staleSources.length){
-    h+='<div class="note danger"><span>发现静默失效源：'
-      + HEALTH.staleSources.map(function(s){return '<span class="kv">'+s.source_code+'</span>';}).join('、')
-      + ' —— 源还在配置里但近 7 天一次都没跑。比「采集失败」更隐蔽。</span></div>';
+
+// ── 触发弹窗 ──
+let rcState = 'unsupported';
+function openTrigger(code, name, type) {
+  document.getElementById('triggerTitle').textContent = '手动触发采集：' + name;
+  document.getElementById('triggerResultZone').style.display = 'none';
+  document.getElementById('triggerMask').classList.add('on');
+  rcState = type === 'sina_news' || type === 'eastmoney_news' || type === 'eastmoney_lhb' ? 'ok' : 'unsupported';
+  setSeg('rcStateSeg', rcState);
+}
+function setSeg(segId, st) {
+  document.querySelectorAll('#' + segId + ' button').forEach(b =>
+    b.classList.toggle('on', b.dataset.st === st));
+}
+function setRcState(st, btn) {
+  rcState = st;
+  setSeg('rcStateSeg', st);
+  renderResult();
+}
+function runTrigger() {
+  const btn = document.getElementById('triggerRunBtn');
+  btn.disabled = true; btn.innerHTML = '<svg class="ic"><use href="#i-refresh"/></svg>采集中…';
+  setTimeout(() => {
+    btn.disabled = false; btn.innerHTML = '<svg class="ic"><use href="#i-play"/></svg>开始采集';
+    renderResult();
+  }, 1200);
+}
+function renderResult() {
+  const zone = document.getElementById('triggerResultZone');
+  const card = document.getElementById('rcCard');
+  const head = card.querySelector('.rc-head');
+  const desc = document.getElementById('rcDesc');
+  const metrics = document.getElementById('rcMetrics');
+  const actions = document.getElementById('rcActions');
+  const raw = document.getElementById('rcRaw');
+  zone.style.display = '';
+
+  const S = {
+    unsupported: {
+      cls: 'warn', icon: 'i-warn', t: '该采集类型暂不支持手动触发',
+      d: 'arxiv / hackernews / rss 由定时管线自动采集（如每日 09:00 的「每日论文速览」），手动触发目前仅支持新浪 / 东财快讯与龙虎榜。上方结果已记录，本次未产生新内容。',
+      m: [['—', '新增'], ['—', '去重'], ['—', '耗时']],
+      a: [['前往发布管线', 'go(\'pipelines\')', ''], ['查看采集明细', 'go(\'items\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "unknown",\n  "reason": "未注册采集器类型: arxiv"\n}'
+    },
+    ok: {
+      cls: 'ok', icon: 'i-check', t: '采集完成',
+      d: '本次采集已写入「采集明细」，去重条目不会重复进入成文。',
+      m: [['12', '新增'], ['3', '去重'], ['0', '失败'], ['4.2s', '耗时']],
+      a: [['查看采集明细', 'go(\'items\')', 'primary']],
+      raw: '{\n  "source_code": "sina_news",\n  "status": "ok",\n  "results": { "fetched": 15, "inserted": 12, "deduped": 3, "failed": 0 }\n}'
+    },
+    empty: {
+      cls: 'warn', icon: 'i-warn', t: '采集完成，但上游返回 0 条',
+      d: '常见原因：源限流、网络不可达（如 dev 机访问 arxiv.org 受限）、或该时段源无更新。可在「采集监控」查看错误原文。',
+      m: [['0', '新增'], ['0', '去重'], ['12.0s', '耗时']],
+      a: [['查看采集监控', 'go(\'runs\')', ''], ['查看采集明细', 'go(\'items\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "empty",\n  "items": 0\n}'
+    },
+    failed: {
+      cls: 'err', icon: 'i-xcircle', t: '采集失败',
+      d: '错误：fetch failed（连接 export.arxiv.org 超时）。网络类失败通常 1~2 天后自行恢复；持续失败请检查源可达性。',
+      m: [['0', '新增'], ['0', '去重'], ['12.0s', '耗时']],
+      a: [['重试', 'runTrigger()', 'primary'], ['查看采集监控', 'go(\'runs\')', '']],
+      raw: '{\n  "source_code": "arxiv",\n  "status": "failed",\n  "error": "fetch failed"\n}'
+    },
+    running: {
+      cls: 'info', icon: 'i-info', t: '该采集源正在采集中',
+      d: '同一源同时只跑一次（防止重复点击打爆上游）。请等待当前批次结束后再试。',
+      m: [['—', '新增'], ['—', '去重'], ['—', '耗时']],
+      a: [['查看采集监控', 'go(\'runs\')', '']],
+      raw: '{\n  "source_code": "sina_news",\n  "status": "rejected",\n  "reason": "该采集源正在运行中，请勿重复触发"\n}'
+    },
+  };
+  const s = S[rcState];
+  card.className = 'result-card ' + s.cls;
+  head.innerHTML = '<svg class="ic ic-20"><use href="#' + s.icon + '"/></svg><span id="rcTitle">' + s.t + '</span>';
+  desc.textContent = s.d;
+  metrics.innerHTML = s.m.map(x => '<div class="rc-metric"><div class="n">' + x[0] + '</div><div class="l">' + x[1] + '</div></div>').join('');
+  actions.innerHTML = s.a.map(x => '<button class="btn ' + (x[2] || '') + '" onclick="' + x[1] + '">' + x[0] + '</button>').join('');
+  raw.textContent = s.raw;
+}
+
+// ── 成文预览 ──
+function openPreview() { document.getElementById('previewMask').classList.add('on'); }
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+// ── 编辑页 · 测试采集（不入库）──
+let testState = 'ok';
+function runTest() {
+  const panel = document.getElementById('testPanel');
+  panel.style.display = '';
+  document.getElementById('testResult').style.display = 'none';
+  document.getElementById('testLoading').style.display = '';
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => {
+    document.getElementById('testLoading').style.display = 'none';
+    btn.disabled = false;
+    renderTest();
+  }, 1200);
+}
+function setTestState(st, btn) {
+  testState = st;
+  document.querySelectorAll('#testStateSeg button').forEach(b => b.classList.toggle('on', b === btn));
+  renderTest();
+}
+function renderTest() {
+  document.getElementById('testPanel').style.display = '';
+  document.getElementById('testResult').style.display = '';
+  const line = document.getElementById('testSummaryLine');
+  const text = document.getElementById('testSummaryText');
+  const list = document.getElementById('testSampleList');
+  const note = document.getElementById('testResultNote');
+
+  const SAMPLES = [
+    ['LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data', '10-21'],
+    ['Rethinking Video Autoencoders for Interactive World Models', '10-21'],
+    ['Think Harder Where It Matters: Item-Level Adaptive Recursion for Sequential Recommendation', '10-20'],
+    ['Scaling Test-Time Compute for Multilingual Mathematical Reasoning', '10-20'],
+    ['A Controlled Study on Why RLHF Fails at Long-Horizon Planning', '10-19'],
+  ];
+  const S = {
+    ok: {
+      cls: 'ok', icon: 'i-check',
+      t: '试采成功 · 5 条 · 1.8s',
+      n: '以上为按当前配置（max_results=20）取回的前 5 条预览；内容可直接核对标题与链接是否符合预期。',
+      samples: SAMPLES,
+    },
+    empty: {
+      cls: 'warn', icon: 'i-warn',
+      t: '试采返回 0 条',
+      n: '常见原因：源限流、网络不可达（如 dev 机访问 arxiv.org 受限）、分类参数无匹配论文、RSS 地址失效。可调整 config 后重新测试。',
+      samples: [],
+    },
+    failed: {
+      cls: 'err', icon: 'i-xcircle',
+      t: '试采失败 · fetch failed',
+      n: '连接 export.arxiv.org 超时（12s）。网络类失败通常 1~2 天自行恢复；持续失败请检查源可达性或更换分类参数。',
+      samples: [],
+    },
+  };
+  const s = S[testState];
+  line.className = 'test-summary ' + s.cls;
+  line.querySelector('svg').innerHTML = '<use href="#' + s.icon + '"/>';
+  text.textContent = s.t;
+  note.textContent = s.n;
+  if (s.samples.length) {
+    list.style.display = '';
+    list.innerHTML = s.samples.map((x, i) =>
+      '<div class="sample-item"><span class="sample-idx">' + (i + 1) + '</span>' +
+      '<span class="sample-title" title="' + x[0] + '">' + x[0] + '</span>' +
+      '<span class="sample-date">' + x[1] + '</span>' +
+      '<button class="sample-link" onclick="ZM.toast(\'原型演示：打开原文链接\')"><svg class="ic" style="width:12px;height:12px"><use href="#i-ext"/></svg>原文</button></div>'
+    ).join('');
   } else {
-    h+='<div class="note ok"><span>近 7 天无静默失效源。静默失效 = 源仍在配置中但零采集；'
-      + '它不会报错，只能靠「最后采集时间」发现。</span></div>';
+    list.style.display = 'none';
+    list.innerHTML = '';
   }
-  /* 采集源 */
-  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.news+'</span>采集源'
-    +'<span class="hint">「立即采集」需要 content:manage</span></div><div class="srcs">';
-  SOURCES.forEach(function(s){
-    var bad=s.status!=='ok';
-    h+='<div class="src'+(bad?' cycle':'')+'">'
-      +'<div class="nm">'+esc(s.name)
-      +(s.status==='ok'?'<span class="badge ok">正常</span>':'<span class="badge err">今日失败</span>')+'</div>'
-      +'<div class="meta"><span class="kv">'+s.code+'</span></div>'
-      +'<div class="meta">调度：'+esc(s.cron)+'</div>'
-      +'<div class="meta">最近：'+esc(s.last)+' · 耗时 '+(s.dur/1000).toFixed(2)+'s · '+s.count+' 条</div>'
-      +'<div class="act"><button class="btn sm" '+(S.busy?'disabled':'')
-      +' onclick="CC.confirmCollect(\''+s.code+'\')">'
-      +(S.busy===s.code?'采集中…（禁止重复触发）':'立即采集')+'</button></div>'
-      +'</div>';
-  });
-  h+='</div>'
-    +'<div class="note info"><span>论文摘要 <span class="kv">arxiv_digest</span> '
-    +'<b>不经采集器</b>：摘要由定时任务里的 AI 生成后，通过 '
-    +'<span class="kv">POST /api/content/arxiv-digest</span> 批量落库，因此不出现在上方采集源里。</span></div>'
-    +'</div>';
-  /* 批次日志 */
-  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.clock+'</span>采集批次日志'
-    +'<span class="hint">GET /api/content/collect/runs · content_items 记条目，批次级问题查这里</span></div>'
-    +'<table class="tbl"><thead><tr><th>批次</th><th>采集源</th><th>触发</th><th>状态</th>'
-    +'<th>采集</th><th>去重跳过</th><th>失败</th><th>耗时</th><th>开始时间</th><th>错误信息</th></tr></thead><tbody>';
-  RUNS.forEach(function(r){
-    h+='<tr><td class="mono">'+r.id+'</td>'
-      +'<td>'+esc(r.source_name)+'<div><span class="kv">'+r.source_code+'</span></div></td>'
-      +'<td>'+(r.trigger_type==='schedule'?'<span class="badge neutral">定时</span>':'<span class="badge info">手动</span>')+'</td>'
-      +'<td>'+(r.status==='ok'?'<span class="badge ok">成功</span>':'<span class="badge err">失败</span>')+'</td>'
-      +'<td class="num">'+r.item_count+'</td><td class="num">'+r.dedup_count+'</td><td class="num">'+r.fail_count+'</td>'
-      +'<td class="num">'+(r.duration_ms/1000).toFixed(2)+'s</td>'
-      +'<td class="mono">'+r.started_at+'</td>'
-      +'<td>'+(r.error_message?'<span style="color:var(--ws-danger)">'+esc(r.error_message)+'</span>':'<span style="color:var(--ws-text-disabled)">—</span>')+'</td></tr>';
-  });
-  h+='</tbody></table>'
-    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">默认返回最近 50 批（limit 上限 200）</div>'
-    +'</div>';
-  return h;
-}
-function confirmCollect(code){
-  var src=null; SOURCES.forEach(function(s){ if(s.code===code) src=s; });
-  if(!src) return;
-  S.modal={ title:'确认立即采集', ok:'确认采集',
-    body:'即将手动触发采集器 <span class="kv">'+code+'</span>（'+esc(src.name)+'）。<br><br>'
-        +'该操作会真实请求上游数据源，<b>同一采集器运行期间会被服务端拒绝</b>（返回 '
-        +'<span class="kv">status=rejected</span>）。建议仅在排查数据时使用。',
-    onOk:function(){ doCollect(code); } };
-  renderModal();
-}
-function doCollect(code){
-  S.busy=code; S.modal=null; renderModal(); render();
-  setTimeout(function(){
-    S.busy=null;
-    var now=new Date();
-    var ts=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
-    RUNS.unshift({ id:RUNS[0].id+1, source_code:code, source_name:srcName(code), trigger_type:'manual',
-      status:code==='eastmoney_news'?'failed':'ok', item_count:code==='eastmoney_news'?0:68,
-      dedup_count:0, fail_count:0, duration_ms:2410,
-      error_message:code==='eastmoney_news'?'connect ETIMEDOUT（源不可达，30s 超时）':null, started_at:ts });
-    render();
-    toast(code==='eastmoney_news'?'采集失败，已记入批次日志（source_code='+code+'）':'采集完成：新增 68 条');
-  },1400);
-}
-function pad(n){ return n<10?'0'+n:''+n; }
-function srcName(code){
-  var n=code; SOURCES.forEach(function(s){ if(s.code===code) n=s.name; }); return n;
 }
 
-/* =========================================================
-   屏 2：内容中心 · 内容条目
-   接口：既有的 GET items 需增强以支持 quality_status / quality_stage 筛选
-   ========================================================= */
-function selectOpts(map,cur,allLabel){
-  var h='<option value="">'+(allLabel||'全部')+'</option>';
-  for(var k in map) h+='<option value="'+k+'"'+(cur===k?' selected':'')+'>'+map[k]+'</option>';
-  return h;
-}
-function screenItems(){
-  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
-  if(S.state==='error')   return errorHtml('GET /api/content/items 返回 500');
-
-  var head='<div class="pg-head"><div><h2>内容条目</h2>'
-    +'<div class="sub">按质量结论（quality_status）与归因阶段（quality_stage）筛选 —— '
-    +'回答「这批内容里有多少是失败 / 降级的、卡在哪一步」</div></div></div>';
-  if(S.state==='loading'){
-    return head+'<div class="card"><div class="skel"><i></i><i></i><i></i><i></i></div></div>';
+// ── 删除二次确认 ──
+function confirmDel(btn) {
+  const tr = btn.closest('tr');
+  const name = tr.children[1].textContent;
+  if (confirm('确定删除「' + name + '」？\n删除后该源的采集明细保留，但定时管线不再采集它。')) {
+    tr.style.opacity = '.4';
+    toast('已删除（原型演示）');
   }
-  var h=head;
-  h+='<div class="note warn"><span><b>[落地待补]</b>：<span class="kv">quality_status</span> / '
-    +'<span class="kv">quality_stage</span> 两个筛选维度当前服务端'
-    +'只有自查占位（<span class="kv">GET /api/content/quality/filter-support</span>），'
-    +'真正的筛选要在既有 controller 上补齐。原型先按目标形态表达。</span></div>';
-
-  h+='<div class="card"><div class="filters">'
-    +'<select class="select" onchange="S.f.qs=this.value;render()">'+selectOpts({ok:'完整',partial:'部分成功',fail:'失败',skip:'跳过'},S.f.qs,'质量结论：全部')+'</select>'
-    +'<select class="select" onchange="S.f.stage=this.value;render()">'+selectOpts({collect:'采集',dedup:'去重',llm:'LLM',fallback:'降级',publish:'发布'},S.f.stage,'归因阶段：全部')+'</select>'
-    +'<select class="select" onchange="S.f.source=this.value;render()">'+selectOpts({arxiv_digest:'论文摘要',sina_news:'新浪财经快讯',eastmoney_news:'东方财富快讯'},S.f.source,'来源：全部')+'</select>'
-    +'<input class="input" style="width:180px" placeholder="标题 / 摘要关键词" value="'+escAttr(S.f.keyword)+'" oninput="S.f.keyword=this.value">'
-    +'<input class="input" style="width:120px" value="2026-10-01" readonly aria-label="日期起点">'
-    +'<input class="input" style="width:120px" value="2026-10-15" readonly aria-label="日期终点">'
-    +'<button class="btn primary" onclick="CC.toast(\'[原型] 已按条件筛选\')">查询</button>'
-    +'<button class="btn" onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};render()">重置</button>'
-    +'</div>';
-
-  if(S.state==='empty'){
-    h+=emptyHtml('没有匹配的内容条目','当前筛选条件下无结果；可放宽质量结论或日期范围后再试。',
-      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
-      +'onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};CC.setState(\'normal\');render()">清空筛选条件</button></div>');
-    return h+'</div>';
-  }
-  var rows=ITEMS.filter(function(it){
-    if(S.f.qs && it.qs!==S.f.qs) return false;
-    if(S.f.stage && it.stage!==S.f.stage) return false;
-    if(S.f.source && it.source!==S.f.source) return false;
-    if(S.f.keyword && it.title.indexOf(S.f.keyword)<0) return false;
-    return true;
-  });
-  if(rows.length===0){
-    h+=emptyHtml('没有匹配的内容条目','已按当前筛选条件过滤，放宽条件后再试。',
-      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
-      +'onclick="S.f={qs:\'\',stage:\'\',source:\'\',keyword:\'\'};render()">清空筛选条件</button></div>');
-    return h+'</div>';
-  }
-  h+='<table class="tbl"><thead><tr><th>ID</th><th>标题</th><th>来源</th><th>质量结论</th>'
-    +'<th>归因阶段</th><th>归因说明</th><th>发布时间</th><th>操作</th></tr></thead><tbody>';
-  rows.forEach(function(it){
-    h+='<tr><td class="mono">'+it.id+'</td>'
-      +'<td><div class="ell" title="'+escAttr(it.title)+'">'+esc(it.title)+'</div>'
-      +'<div class="kv" style="font-size:12px">'+esc(it.external_id)+'</div></td>'
-      +'<td><span class="kv">'+esc(it.source)+'</span></td>'
-      +'<td>'+qsbadge(it.qs)+'</td>'
-      +'<td>'+stageBadge(it.stage)+'</td>'
-      +'<td style="max-width:260px;font-size:12px;color:var(--ws-text-secondary)">'
-      +(it.issue?esc(it.issue):'<span style="color:var(--ws-text-disabled)">—</span>')+'</td>'
-      +'<td class="mono">'+it.pub+'</td>'
-      +'<td><div class="row-actions"><button class="btn sm" onclick="CC.openDetail('+it.id+')">详情</button></div></td></tr>';
-  });
-  h+='</tbody></table>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:10px">'
-    +'<div style="font-size:12px;color:var(--ws-text-tertiary)">共 1,284 条 · 每页 20 条 · 第 '+S.page+' 页</div>'
-    +'<div class="btn-row"><button class="btn sm" '+(S.page<=1?'disabled':'')+' onclick="S.page--;render()">上一页</button>'
-    +'<button class="btn sm" onclick="S.page++;render()">下一页</button></div></div>';
-  return h+'</div>';
-}
-function openDetail(id){ S.detailId=id; go('content-detail'); }
-
-/* =========================================================
-   屏 3：内容中心 · 条目详情（独立页而非抽屉：meta JSON 与原文塞不进抽屉）
-   ========================================================= */
-function screenDetail(){
-  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
-  if(S.state==='error')   return errorHtml('GET /api/content/items/'+S.detailId+' 返回 500');
-  var it=null; ITEMS.forEach(function(x){ if(x.id===S.detailId) it=x; });
-  if(!it){
-    return '<div class="pg-head"><div><h2>条目详情</h2><div class="sub">条目不存在或已被软删除</div></div></div>'
-      + emptyHtml('未找到该条目','条目 #'+S.detailId+' 不存在（可能已被软删除 deleted_at 标记）。',
-        '<button class="btn" onclick="CC.go(\'content-items\')">返回内容条目</button>');
-  }
-  if(S.state==='loading'){
-    return '<div class="pg-head"><div><h2>条目详情</h2></div></div>'
-      +'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
-  }
-  var meta=ITEM_META[it.id]||{}, content=ITEM_CONTENT[it.id]||'(该来源为资讯类，content 字段存正文)';
-  var h='<div class="pg-head"><div><h2>条目详情</h2>'
-    +'<div class="sub">回答「这一条到底怎么了」 —— 质量结论、卡在哪一步、原始内容分别在哪看'
-    +'<br>（从列表点击「详情」进入；直接从侧栏进入时默认展示最近一条 #'+S.detailId+'）</div></div>'
-    +'<div class="spacer"></div><div class="btn-row">'
-    +'<button class="btn" onclick="CC.go(\'content-items\')">返回列表</button>'
-    +'<button class="btn" onclick="CC.confirmRerun('+it.id+')">重新处理</button></div></div>';
-
-  if(it.stage==='fallback'){
-    h+='<div class="note warn"><span>该条<b>走了降级通道</b>（<span class="kv">quality_stage=fallback</span>）：'
-      +'摘要是模板化产出，不含 LLM 内容。<br>'
-      +'为什么不直接算失败：它是「成功但降级」，混进评测集会拉低幻觉率（模板没内容自然没幻觉），'
-      +'所以必须单独标记 —— 这正是 v2.0 把 fallback 加进枚举的原因。</span></div>';
-  }
-  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.db+'</span>基本信息</div>'
-    +'<dl class="dl-grid">'
-    +'<dt>条目 ID</dt><dd class="mono">'+it.id+'</dd>'
-    +'<dt>外部 ID</dt><dd class="mono">'+esc(it.external_id)+'</dd>'
-    +'<dt>来源</dt><dd><span class="kv">'+esc(it.source)+'</span></dd>'
-    +'<dt>所属管线</dt><dd>'+(it.pipeline?'pipeline_id = '+it.pipeline:'<span style="color:var(--ws-text-tertiary)">null（手动触发，不进固定管线）</span>')+'</dd>'
-    +'<dt>发布时间</dt><dd class="mono">'+it.pub+'</dd>'
-    +'</dl></div>';
-
-  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.alert+'</span>质量归因'
-    +'<span class="hint">结论 + 阶段，两层才答得全「出了什么事 / 卡在哪」</span></div>'
-    +'<dl class="dl-grid">'
-    +'<dt>quality_status</dt><dd>'+qsbadge(it.qs)+' <span class="kv">'+it.qs+'</span></dd>'
-    +'<dt>quality_stage</dt><dd>'+stageBadge(it.stage)+' <span class="kv">'+it.stage+'</span></dd>'
-    +'<dt>quality_issue</dt><dd>'+(it.issue?esc(it.issue):'<span style="color:var(--ws-text-disabled)">—</span>')+'</dd>'
-    +'</dl>'
-    +'<div class="note warn" style="margin:12px 0 0"><span>'
-    +'<b>[落地待补]</b> 本稿曾列出 <span class="kv">quality_version</span> 与 '
-    +'<span class="kv">quality_scored_at</span>，但 p35 实际只建了 '
-    +'<span class="kv">quality_status</span> / <span class="kv">quality_stage</span> / '
-    +'<span class="kv">quality_issue</span> 三列 —— 前两者<b>目前不存在</b>。'
-    +'若要留存「评分规则版本」与「打分时间」，需补迁移再画。</span></div>'
-    +'<div class="note info" style="margin:12px 0 0"><span>'
-    +'<span class="kv">quality_issue</span> 是<b>归因标签</b>（人读）；'
-    +'<span class="kv">error</span> 字段是<b>技术错误原文</b>（机器留痕）。两者职责不同，不合并。</span></div>'
-    +'</div>';
-
-  h+='<div class="card"><div class="ct"><span class="ic">'+ICON.news+'</span>原始内容'
-    +'<span class="hint">'+(it.source==='arxiv_digest'?'存 arXiv 原文 —— Phase 2 判定幻觉的比对基准':'资讯正文')+'</span></div>'
-    +'<pre class="codeblk"><span class="hd">'+(it.source==='arxiv_digest'?'abstract · '+esc(meta.arxiv_id||'')+' · English':'content · Chinese')+'</span>'
-    +'<code class="bd">'+esc(content)+'</code></pre>'
-    +(it.source==='arxiv_digest'
-      ? '<div class="note info" style="margin:12px 0 0"><span><b>为什么这里必须存原文</b>：'
-        +'Phase 2 要判定「摘要里的数字在原文里找不找得到」，没有原文就自动判不了。'
-        +'这也是 D1 裁决「论文摘要落 content_items」而不是单独建表的原因 —— '
-        +'一个表同时解决抽样、幻觉比对、Admin 查阅三件事。</span></div>'
-      : '')
-    +'</div>';
-
-  if(Object.keys(meta).length){
-    h+='<div class="card"><div class="ct"><span class="ic">'+ICON.gear+'</span>meta'
-      +'<span class="hint">Phase 2 按 prompt_version 做版本对照抽样</span></div>'
-      +'<pre class="codeblk"><span class="hd">meta · json</span>'
-      +'<code class="bd">'+esc(JSON.stringify(meta,null,2))+'</code></pre></div>';
-  }
-  return h;
-}
-function confirmRerun(id){
-  S.modal={ title:'确认重新处理该条目？', ok:'确认重跑',
-    body:'将对该条目重跑「去重 → LLM 摘要 → 发布」链路。<br><br>'
-        +'重跑会<b>覆盖</b>现有的 <span class="kv">quality_status</span> / '
-        +'<span class="kv">quality_stage</span> / <span class="kv">quality_issue</span>，'
-        +'原有的失败归因记录将无法复原。',
-    onOk:function(){ S.modal=null; renderModal(); toast('已提交重跑（content:manage）'); } };
-  renderModal();
 }
 
-/* =========================================================
-   屏 4：内容中心 · 龙虎榜
-   接口：GET /api/content/lhb、GET /api/content/lhb/stats、GET /api/content/lhb/:id
-   ========================================================= */
-function screenLhb(){
-  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
-  if(S.state==='error')   return errorHtml('GET /api/content/lhb 返回 502');
-  var head='<div class="pg-head"><div><h2>龙虎榜</h2>'
-    +'<div class="sub">最近交易日的上榜明细与资金性质；席位判定走规则表（hotmoney_seats），不是 AI 推断</div></div></div>';
-  if(S.state==='loading') return head+skeletonCards(4)+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
-
-  var h=head;
-  h+='<div class="stats">'
-    + healthCard(LHB_STATS.trade_date,'最近交易日','统计口径按该日，非历史累计')
-    + healthCard(LHB_STATS.total,'当日上榜数','lhb_records 当日记录数')
-    + healthCard(LHB_STATS.limit_up,'当日涨停数','limit_up = 1')
-    + healthCard(LHB_STATS.hotmoney+' / '+LHB_STATS.institution,'游资 / 机构参与','命中 tags 的记录数（可同时命中）')
-    + '</div>';
-
-  h+='<div class="card"><div class="filters">'
-    +'<label class="lb">交易日</label><input class="input" style="width:140px" value="'+escAttr(S.lhbDate)+'" readonly aria-label="交易日">'
-    +'<select class="select" onchange="S.lhbTag=this.value;render()">'
-    + selectOpts({hotmoney:'游资',institution:'机构',retail:'散户'},S.lhbTag,'资金性质：全部')+'</select>'
-    +'<button class="btn primary" onclick="CC.toast(\'[原型] 已按条件查询\')">查询</button>'
-    +'<button class="btn" onclick="CC.toast(\'[原型] 已导出 CSV（68 条）\')">导出</button>'
-    +'</div>';
-
-  if(S.state==='empty'){
-    h+=emptyHtml('该交易日暂无龙虎榜数据','可能尚未到当日收盘同步时间（15:10 后），或该日为非交易日。',
-      '<div class="btn-row" style="justify-content:center">'
-      +'<button class="btn primary" onclick="S.lhbTag=\'\';CC.setState(\'normal\');render()">查看全部交易日</button></div>');
-    return h+'</div>';
-  }
-  var rows=S.lhbTag?LHB.filter(function(r){ return r.tags.indexOf(S.lhbTag)>=0; }):LHB;
-  h+='<table class="tbl"><thead><tr><th>代码</th><th>名称</th><th>上榜原因</th>'
-    +'<th style="text-align:right">买入额</th><th style="text-align:right">卖出额</th><th style="text-align:right">净额</th>'
-    +'<th style="text-align:right">换手率</th><th>资金性质</th><th>标记</th><th>操作</th></tr></thead><tbody>';
-  rows.forEach(function(r){
-    h+='<tr><td class="mono">'+r.stock_code+'</td>'
-      +'<td><b>'+esc(r.stock_name)+'</b></td>'
-      +'<td style="max-width:200px;font-size:12px;color:var(--ws-text-secondary)">'+esc(r.reason)+'</td>'
-      +'<td class="num">'+money(r.buy)+'</td>'
-      +'<td class="num">'+money(r.sell)+'</td>'
-      + netCell(r.net)
-      +'<td class="num">'+r.turnover+'%</td>'
-      +'<td>'+r.tags.map(tagBadge).join(' ')+'</td>'
-      +'<td>'+(r.limit_up?'<span class="badge err">涨停</span> ':'')+(r.is_st?'<span class="badge warn">ST</span>':'')+'</td>'
-      +'<td><div class="row-actions"><button class="btn sm" onclick="CC.openSeats('+r.id+')">席位明细</button></div></td></tr>';
-  });
-  h+='</tbody></table>'
-    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">'
-    +'净额与买卖方向用<b>金融涨跌档</b>（--ws-fin-up / --ws-fin-down）：正为红、负为绿（A 股口径），'
-    +'与「失败/成功」的 err / ok 语义色<b>刻意区分</b>，避免同屏红色两义。｜默认返回 50 条，按 trade_date DESC 排序</div></div>';
-  /* 若有行已展开席位抽屉，列表不再重复渲染抽屉内容（抽屉在 .drawer 里） */
-  return h;
-}
-function openSeats(id){
-  S.lhbOpen=id; renderDrawer();
-}
-function renderDrawer(){
-  var el=document.getElementById('drawer'), mask=document.getElementById('mask');
-  if(S.lhbOpen===null){ el.classList.remove('show'); mask.classList.remove('show'); return; }
-  var row=null; LHB.forEach(function(r){ if(r.id===S.lhbOpen) row=r; });
-  if(!row){ el.classList.remove('show'); mask.classList.remove('show'); return; }
-  var h='<div class="dh"><span class="ttl">席位明细 · '+row.stock_code+' '+esc(row.stock_name)+'</span>'
-    +'<button class="icon-btn" type="button" aria-label="关闭抽屉" onclick="CC.closeAll()">'+ICON.x+'</button></div><div class="db">';
-  var seats=LHB_SEATS[row.id];
-  if(!seats){
-    h+='<div class="note warn"><span>该条<b>未取到席位明细</b>（<span class="kv">seats_available = false</span>）。<br>'
-      +'原因多为上游分页接口当次未返回明细；金额与上榜结论仍然有效，'
-      +'但<b>资金性质只能判为 retail</b> —— 没有席位就谈不上「命中游资席位」。</span></div>';
-  } else {
-    h+='<div class="note info"><span>判定方式：<b>规则匹配</b>（席位名归一化去空格后查 '
-      +'<span class="kv">hotmoney_seats</span> 表），不是 AI 推断。<br>'
-      +'为什么不用 AI：席位归属要<b>可复现</b>，同一份数据今天查明天查必须得到同一结论。</span></div>';
-    h+='<table class="tbl" style="background:var(--ws-bg-surface)"><thead><tr><th>席位名称</th><th>性质</th>'
-      +'<th style="text-align:right">买入</th><th style="text-align:right">卖出</th><th>方向</th></tr></thead><tbody>';
-    seats.forEach(function(s){
-      var dir=s.type==='buy'?'<span class="trade buy">买入</span>'
-            :s.type==='sell'?'<span class="trade sell">卖出</span>':'<span class="trade both">双向</span>';
-      h+='<tr><td>'+esc(s.name)+(s.alias?'<div style="font-size:12px;color:var(--ws-text-tertiary)">简称：'+esc(s.alias)+'</div>':'')+'</td>'
-        +'<td>'+tagBadge(s.tag)+'</td>'
-        +'<td class="num">'+(s.buy?万元(s.buy)+' 万':'—')+'</td>'
-        +'<td class="num">'+(s.sell?万元(s.sell)+' 万':'—')+'</td>'
-        +'<td>'+dir+'</td></tr>';
-    });
-    h+='</tbody></table>';
-  }
-  h+='</div>';
-  el.innerHTML=h; el.classList.add('show'); mask.classList.add('show');
-}
-function closeAll(){
-  S.lhbOpen=null; S.modal=null;
-  document.getElementById('drawer').classList.remove('show');
-  document.getElementById('mask').classList.remove('show');
-  renderModal();
+// ── Toast ──
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
 }
 
-/* =========================================================
-   屏 5：内容中心 · 席位库
-   规则表：席位会迁址，所以要「启用 / 停用」而不是删除
-   ========================================================= */
-function screenSeats(){
-  if(S.state==='noperm') return exceptionHtml('content:view','内容中心');
-  if(S.state==='error')   return errorHtml('GET /api/content/seats 返回 500');
-  var head='<div class="pg-head"><div><h2>席位库</h2>'
-    +'<div class="sub">游资 / 机构营业部名单 —— 规则表，不硬编码在代码里</div></div>'
-    +'<div class="spacer"></div><div class="btn-row">'
-    +'<button class="btn primary" onclick="CC.openSeatForm()">新增席位</button></div></div>';
-  if(S.state==='loading') return head+'<div class="card"><div class="skel"><i></i><i></i><i></i></div></div>';
-  if(S.state==='empty')   return head+emptyHtml('席位库为空','执行 p35 迁移会写入 18 条初始名单（15 游资 + 3 机构通道）。',
-      '<div class="btn-row" style="justify-content:center"><button class="btn primary" '
-      +'onclick="S.seatKw=\'\';S.seatTag=\'\';S.seatActive=\'\';CC.setState(\'normal\');render()">清空筛选条件</button></div>');
+// 点击遮罩关闭
+document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  var h=head;
-  h+='<div class="note info"><span>席位会<b>迁址</b>。迁址后请<b>停用</b>旧记录而不是删除 —— '
-    +'删除会让历史龙虎榜的判定结论不可再现，而今天查同一份数据必须得到同一结论。</span></div>';
-  h+='<div class="card"><div class="filters">'
-    +'<input class="input" style="width:240px" placeholder="搜索营业部名称 / 简称" value="'+escAttr(S.seatKw)+'" oninput="S.seatKw=this.value;renderSeatTable()">'
-    +'<select class="select" onchange="S.seatTag=this.value;renderSeatTable()">'
-    + selectOpts({hotmoney:'游资',institution:'机构'},S.seatTag,'资金性质：全部')+'</select>'
-    +'<select class="select" onchange="S.seatActive=this.value;renderSeatTable()">'
-    +'<option value="">状态：全部</option><option value="1">启用</option><option value="0">停用</option></select>'
-    +'</div><div id="seatTable"></div></div>';
-  return h;
-}
-function seatRows(){
-  return SEATS.filter(function(s){
-    if(S.seatTag && s.tag!==S.seatTag) return false;
-    if(S.seatActive!=='' && String(s.is_active)!==S.seatActive) return false;
-    if(S.seatKw && s.seat_name.indexOf(S.seatKw)<0 && (s.alias||'').indexOf(S.seatKw)<0) return false;
-    return true;
-  });
-}
-function renderSeatTable(){
-  var el=document.getElementById('seatTable'); if(!el) return;
-  var rows=seatRows();
-  if(rows.length===0){
-    el.innerHTML=emptyHtml('没有匹配的席位','换个关键词，或清空筛选条件。',''); return;
-  }
-  var h='<table class="tbl"><thead><tr><th>ID</th><th>营业部全称</th><th>简称</th><th>资金性质</th>'
-    +'<th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
-  rows.forEach(function(s){
-    h+='<tr><td class="mono">'+s.id+'</td>'
-      +'<td>'+esc(s.seat_name)+'</td>'
-      +'<td>'+(s.alias?esc(s.alias):'<span style="color:var(--ws-text-disabled)">—</span>')+'</td>'
-      +'<td>'+tagBadge(s.tag)+'</td>'
-      +'<td>'+(s.is_active?'<span class="badge ok">启用</span>':'<span class="badge neutral">停用</span>')+'</td>'
-      +'<td class="mono">'+s.created_at+'</td>'
-      +'<td><div class="row-actions">'
-      +(s.is_active
-        ?'<button class="btn sm danger" onclick="CC.confirmDisable('+s.id+')">停用</button>'
-        :'<button class="btn sm" onclick="SEATS.forEach(function(x){if(x.id==='+s.id+')x.is_active=1;});renderSeatTable();CC.toast(\'已启用\')">启用</button>')
-      +'</div></td></tr>';
-  });
-  el.innerHTML=h+'</tbody></table>'
-    +'<div style="font-size:12px;color:var(--ws-text-tertiary);margin-top:10px">共 '+rows.length+' 条</div>';
-}
-function confirmDisable(id){
-  var nm=''; SEATS.forEach(function(s){ if(s.id===id) nm=s.seat_name; });
-  S.modal={ title:'确认停用该席位？', ok:'确认停用',
-    body:'席位：<b>'+esc(nm)+'</b><br><br>'
-        +'停用后<b>新采集</b>的龙虎榜不再用它判定资金性质，未命中规则的席位会落到 '
-        +'<span class="kv">retail</span>。<br>'
-        +'历史记录<b>不会</b>被改写 —— 这正是「停用而非删除」的意义。',
-    onOk:function(){
-      SEATS.forEach(function(x){ if(x.id===id) x.is_active=0; });
-      S.modal=null; renderModal(); renderSeatTable(); toast('已停用（历史判定保持不变）');
-    } };
-  renderModal();
-}
-function openSeatForm(){
-  S.modal={ title:'新增席位', ok:'保存',
-    form:true,
-    body:'新增后立即对新采集生效。席位全称需与龙虎榜返回<b>完全一致</b>（匹配前会做去空格归一化）。',
-    onOk:function(){ S.modal=null; renderModal(); toast('已保存（content:manage）'); } };
-  renderModal();
-}
-
-
-/* ===== 弹窗 ===== */
-function renderModal(){
-  var el=document.getElementById('modal'), mask=document.getElementById('modalMask');
-  if(!S.modal){ mask.classList.remove('show'); el.innerHTML=''; return; }
-  var m=S.modal, h='<div class="mh">'+esc(m.title)+'</div><div class="mb">'+m.body+'</div>';
-  if(m.form){
-    h+='<div class="mf"><div class="frow">'
-      +'<div class="fitem"><span class="flb">营业部全称</span><span class="fld"><input class="input" placeholder="与龙虎榜返回完全一致"></span></div>'
-      +'<div class="fitem"><span class="flb">常用简称</span><span class="fld"><input class="input" placeholder="如：章盟主系"></span></div>'
-      +'<div class="fitem"><span class="flb">资金性质</span><span class="fld"><select class="select">'
-      +'<option value="hotmoney">游资</option><option value="institution">机构</option></select></span></div>'
-      +'</div><div class="fhint">简称可选；全称写错会导致规则永远匹配不上</div></div>';
-  }
-  h+='<div class="mfoot"><button class="btn" onclick="CC.closeAll()">取消</button>'
-    +'<button class="btn primary" onclick="CC.modalOk()">'+esc(m.ok||'确定')+'</button></div>';
-  el.innerHTML=h; mask.classList.add('show');
-}
-function modalOk(){ var m=S.modal; if(m&&m.onOk) m.onOk(); }
-
-
-
-/* =========================================================
-   导航：双模（独立稿 / 整合稿）
-   · 独立打开本稿：切 .cc-host 显隐（本稿自带 5 个 host）
-   · 被 build 抽进 admin-agents-hub.html：走 hash 路由（与 hub 菜单一致）
-   判据 = 页面上是否存在 hub 的 .screen 容器 —— 不靠全局变量，抽出来也不会错。
-   ========================================================= */
-var IN_HUB = !!document.querySelector('.screen[data-screen="content-overview"]');
-var ROUTE = {
-  'content-overview':'#/content',
-  'content-items':'#/content/items',
-  'content-detail':'#/content/items/__ID__',
-  'content-lhb':'#/content/lhb',
-  'content-seats':'#/content/seats'
-};
-function go(k){
-  S.lhbOpen=null;
-  if(IN_HUB){ location.hash=(ROUTE[k]||'#/content').replace('__ID__', S.detailId); return; }
-  S.screen=k; closeAll(false); apply();
-}
-/* 当前可见的 host（hub 下由 .screen 的 hidden 决定；独立稿由 host 自身 hidden 决定） */
-function ccHost(){
-  var ns=[].slice.call(document.querySelectorAll('.cc-host'));
-  for(var i=0;i<ns.length;i++){
-    var n=ns[i], sc=n.closest('.screen');
-    if(!n.classList.contains('hidden') && (!sc || !sc.classList.contains('hidden'))) return n;
-  }
-  return ns[0]||null;
-}
-/* [原型] 状态矩阵控件：只出现在本模块 5 屏顶部，落地不保留 */
-function protoBar(){
-  return '<div class="cc-bar"><span class="tag">[原型] 状态</span>'
-    + STATES.map(function(s){
-        return '<button type="button" class="'+(S.state===s[0]?'on':'')+'" '
-          +'onclick="CC.setState(\''+s[0]+'\')">'+s[1]+'</button>';
-      }).join('')
-    + '<span class="sp">当前：<b>'+curStateLabel()+'</b> · 5 屏 × 5 态均需有回应</span></div>';
-}
-/* 主渲染：渲染到「当前可见的 host」，不碰壳（壳归 proto-shell.mjs 单源） */
-function apply(){
-  var host=ccHost(); if(!host) return;
-  S.screen=host.getAttribute('data-cc')||S.screen;
-  host.innerHTML=protoBar()+screenHtml();
-  renderSeatTable(); renderDrawer(); renderModal();
-}
-function setState(st){ S.state=st; apply(); }
-/* 屏分发：只本模块 5 屏（系统设置 / 对话调试 / 占位屏不属本模块，已随无关段切走） */
-function screenHtml(){
-  switch(S.screen){
-    case 'content-overview': return screenOverview();
-    case 'content-items':    return screenItems();
-    case 'content-detail':   return screenDetail();
-    case 'content-lhb':      return screenLhb();
-    case 'content-seats':    return screenSeats();
-  }
-  return '<div class="note warn"><span>未知屏：'+esc(S.screen)+'</span></div>';
-}
-function curStateLabel(){
-  var l='正常'; STATES.forEach(function(s){ if(s[0]===S.state) l=s[1]; }); return l;
-}
-
-/* 入口：独立打开渲染第一屏；在整合稿里由 hub 的 showHub 调 CC.apply() */
-apply();
-
-  window.CC = { go:go, setState:setState, apply:apply, toast:toast, closeAll:closeAll, modalOk:modalOk, openDetail:openDetail, confirmRerun:confirmRerun, confirmCollect:confirmCollect, openSeats:openSeats, openSeatForm:openSeatForm, confirmDisable:confirmDisable };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel };
 
 })();
 
@@ -3664,7 +4007,7 @@ apply();
 (function(){
   var ROUTES = [
     { re: /^#\/agents\/definitions\/([\w-]+)$/, screen: 'detail' },
-    { re: /^#\/content\/items\/([\w-]+)$/, screen: 'content-detail' },
+    { re: /^#\/content\/items\/([\w-]+)$/, screen: 'content-items' },
     { re: /^#\/dashboard$/, screen: 'dashboard' },
     { re: /^#\/bianbian$/, screen: 'bianbian' },
     { re: /^#\/users$/, screen: 'users' },
@@ -3673,11 +4016,11 @@ apply();
     { re: /^#\/settings\/dicts$/, screen: 'dicts' },
     { re: /^#\/mcp$/, screen: 'mcp' },
     { re: /^#\/database$/, screen: 'database' },
-    { re: /^#\/content$/, screen: 'content-overview' },
+    { re: /^#\/content$/, screen: 'content-sources' },
     { re: /^#\/content\/items$/, screen: 'content-items' },
-    { re: /^#\/content\/items\/12043$/, screen: 'content-detail' },
-    { re: /^#\/content\/lhb$/, screen: 'content-lhb' },
-    { re: /^#\/content\/seats$/, screen: 'content-seats' },
+    { re: /^#\/content\/publications$/, screen: 'content-publications' },
+    { re: /^#\/content\/pipelines$/, screen: 'content-pipelines' },
+    { re: /^#\/content\/monitor$/, screen: 'content-monitor' },
     { re: /^#\/agents$/, screen: 'overview' },
     { re: /^#\/agents\/metrics$/, screen: 'observe' },
     { re: /^#\/agents\/runs$/, screen: 'records' },
@@ -3698,11 +4041,11 @@ apply();
     'dicts': '<b>字典管理</b>',
     'mcp': '<b>MCP 管理</b>',
     'database': '<b>数据浏览</b>',
-    'content-overview': '内容中心 / <b>采集总览</b>',
-    'content-items': '内容中心 / <b>内容条目</b>',
-    'content-detail': '内容中心 / <b>条目详情</b>',
-    'content-lhb': '内容中心 / <b>龙虎榜</b>',
-    'content-seats': '内容中心 / <b>席位库</b>',
+    'content-sources': '自媒体运营 / <b>采集源管理</b>',
+    'content-items': '自媒体运营 / <b>采集明细</b>',
+    'content-publications': '自媒体运营 / <b>公众号成文</b>',
+    'content-pipelines': '自媒体运营 / <b>发布管线</b>',
+    'content-monitor': '自媒体运营 / <b>采集监控</b>',
     'overview': 'Agents / <b>Agent 概览</b>',
     'observe': 'Agents / <b>Agent 观测</b>',
     'records': 'Agents / <b>运行记录</b>',
@@ -3716,14 +4059,19 @@ apply();
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ["content-overview","content-items","content-detail","content-lhb","content-seats","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-pipelines","content-monitor","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  /* mount 源（自媒体运营）：hub 屏 → 模块根键 */
+  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-pipelines":"pipelines","content-monitor":"runs"};
+  /* hub 屏 → hash 路由（模块内跨根键跳转后要把地址栏同步过来，否则后退键会错位） */
+  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor"};
+  var curScreen = null;      // 当前 hub 屏（供 zmSync 判断"要不要动"）
+  var curMountKey = null;    // 当前模块根键
 
-  window.showHub = function(name, id){
-    qsa('.screen').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
+  /** 菜单高亮 + 父级高亮 + 面包屑（showHub 与 zmSync 共用同一套，避免两处各写一份） */
+  function paint(name, id){
     qsa('.ad-item[data-screen]').forEach(function(i){
       i.classList.toggle('active', i.dataset.screen === name || (name === 'detail' && i.dataset.screen === 'list'));
     });
-    /* 父级高亮按「哪个 sub-menu 含这一屏」判定（多 sub-menu：内容中心 / Agents） */
     qsa('.ad-sub').forEach(function(s){
       var list = (s.getAttribute('data-screens') || '').split(',');
       s.classList.toggle('selected', list.indexOf(name) >= 0);
@@ -3734,12 +4082,51 @@ apply();
         ? 'Agents / 定义管理 / <b>' + id + '</b>'
         : (CRUMB[name] || '');
     }
+  }
+
+  window.showHub = function(name, id){
+    /* ⚠️ 必须 .screen[data-screen] —— 注册表抽取进来的模块稿自己也用 .screen 做屏容器
+       （admin-media-ops.html 的 8 个 <section class="screen">），裸 .screen 会把它们
+       一起 hidden 掉，切过去一片空白。data-screen 是 hub 屏的唯一标记。 */
+    qsa('.screen[data-screen]').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
+    paint(name, id);
     var c = document.querySelector('.ad-content');
     if(c) c.scrollTop = 0;
     /* 共享源（内容中心）的屏是 JS 渲染的：切过去后让模块稿自己渲染当前 host */
     if (window.CC && window.CC.apply && document.querySelector('.cc-host[data-cc="' + name + '"]')) {
       window.CC.apply();
     }
+    /* mount 源：把模块整块搬到当前屏（DOM 只有一份），再让它切到该屏对应的根键。
+       curMountKey 相等时不再调 go() —— 否则从播子页返回列表这类操作会被强行重置。 */
+    if (Object.prototype.hasOwnProperty.call(MOUNT_MAP, name)) {
+      var mod = document.querySelector('[data-zm-module]');
+      var host = document.querySelector('.screen[data-screen="' + name + '"]');
+      if (mod && host && mod.parentNode !== host) host.appendChild(mod);
+      if (window.ZM && window.ZM.go && curMountKey !== MOUNT_MAP[name]) window.ZM.go(MOUNT_MAP[name]);
+      curMountKey = MOUNT_MAP[name];
+    }
+    curScreen = name;
+  };
+
+  /**
+   * 模块内部跳转的出口（源稿 go() 末尾调用）：把"模块根键"翻译回"hub 屏"，同步菜单高亮 /
+   * 面包屑 / 地址栏。子页（source-edit / item-detail / pipeline-edit）映射到父屏，菜单高亮不掉。
+   *
+   * 为什么**先记账再改 hash**：改 hash 会触发 hashchange → applyHash → showHub，
+   * 而 showHub 在 curMountKey 与目标根键不一致时会调 ZM.go() 把子页重置回列表。
+   * 先写 curMountKey 就是告诉 showHub「模块已经在这一根键上了，别再重置」——
+   * 这样模块内的子页状态能穿过一次 hash 变更活下来。
+   */
+  var SUB_TO_ROOT = { 'source-edit': 'content-sources', 'item-detail': 'content-items', 'pipeline-edit': 'content-pipelines' };
+  var ROOT_TO_SCREEN = {};
+  Object.keys(MOUNT_MAP).forEach(function(sc){ ROOT_TO_SCREEN[MOUNT_MAP[sc]] = sc; });
+  window.zmSync = function(key){
+    var target = ROOT_TO_SCREEN[key] || SUB_TO_ROOT[key];
+    if (!target) return;
+    curMountKey = MOUNT_MAP[target];
+    var r = MOUNT_ROUTE[target];
+    if (r && location.hash !== r) { location.hash = r; }     // → hashchange → showHub（不重置子页）
+    else if (target !== curScreen) { window.showHub(target); }
   };
 
   function applyHash(){

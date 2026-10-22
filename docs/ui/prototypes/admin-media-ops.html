@@ -225,11 +225,66 @@ a { color: var(--brand-txt); text-decoration: none; }
 #toast { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); background: var(--t1); color: var(--on-brand); font-size: 13px; padding: 8px 16px; border-radius: var(--r-control); opacity: 0; transition: opacity .2s; z-index: 100; pointer-events: none; box-shadow: var(--shadow-pop); }
 #toast.on { opacity: 1; }
 
-/* ============ 演示控件 ============ */
-.demo-panel { position: fixed; right: 16px; bottom: 16px; background: var(--bg-surface); border: 1px dashed var(--brand); border-radius: var(--r-card); padding: 10px 14px; font-size: 12px; color: var(--t3); box-shadow: var(--shadow-pop); z-index: 40; max-width: 300px; }
-.demo-panel .dt { font-weight: 600; color: var(--brand-txt); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-.demo-panel .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-.demo-panel .note { color: var(--t4); line-height: 1.5; margin-top: 6px; }
+/* ============ 原型演示控件（评审台，不是产品 UI · 规格见 ux-prototype-designer/references/demo-control-panel.md）============ */
+.demo-ctl { position: fixed; right: 16px; bottom: 16px; width: 300px; max-height: calc(100vh - 32px); overflow: auto; background: var(--bg-surface); border: 1px dashed var(--brand); border-radius: var(--r-card); box-shadow: var(--shadow-pop); z-index: 90; font-size: 12px; color: var(--t3); transition: opacity .2s; }
+.demo-ctl[data-open="false"] { width: auto; }
+.demo-ctl[data-open="false"] .dc-body { display: none; }
+.demo-ctl[data-open="false"] .dc-head .fold { transform: rotate(180deg); }
+/* 展开时给内容区让出空间——控件不压在表格操作列上（只让位，不遮挡） */
+body:has([data-demo-ctl][data-open="true"]) .content { padding-right: 344px; transition: padding .2s; }
+/* 窄了让表格在卡片内横向滚动，而不是把按钮挤成竖排 */
+body:has([data-demo-ctl][data-open="true"]) .card:has(.table) { overflow-x: auto; }
+.row-actions .btn { flex: none; }
+/* 收起态 = 评审模式（产品原貌）；展开态 = 演示模式（控件优先） */
+body.modal-open .demo-ctl { opacity: .35; }
+body.modal-open .demo-ctl:hover { opacity: 1; }
+.dc-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 9px 12px; background: none; border: none; text-align: left; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--brand-txt); }
+.dc-head .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); flex: none; }
+.dc-head .cnt { margin-left: auto; font-weight: 400; color: var(--t4); }
+.dc-head .fold { color: var(--t4); transition: transform .15s; margin-left: 4px; }
+.dc-body { border-top: 1px dashed var(--border); padding: 10px 12px; }
+.dc-meta { color: var(--t4); line-height: 1.55; margin-bottom: 8px; }
+.dc-meta b { color: var(--t1); font-weight: 600; }
+.dc-grp { margin-top: 10px; }
+.dc-lb { color: var(--t4); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { border: 1px solid var(--border); background: var(--bg-surface); color: var(--t3); border-radius: 20px; padding: 2px 9px; font-size: 11px; cursor: pointer; }
+.chip:hover { border-color: var(--brand); }
+.chip.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-txt); font-weight: 500; }
+.dc-presets { display: flex; flex-direction: column; gap: 3px; }
+.preset { border: 1px solid var(--border); background: var(--bg-surface); color: var(--t3); border-radius: var(--r-chip); padding: 4px 8px; font-size: 11px; text-align: left; cursor: pointer; }
+.preset:hover { border-color: var(--brand); }
+.preset.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-txt); }
+.dc-foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.dc-foot .k { margin-left: auto; color: var(--t4); font-size: 10px; text-align: right; line-height: 1.4; }
+
+/* 演示数据态 · 整屏状态层（方案 B：现有稿改造，不必逐屏重排） */
+.demo-states { display: none; }
+[data-demo-state]:not([data-demo-state="normal"]) > *:not(.demo-states) { display: none; }
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal { display: none; }
+[data-demo-state]:not([data-demo-state="normal"]) .demo-states { display: block; }
+.demo-states > div { display: none; }
+[data-demo-state="loading"] .demo-states .only-loading,
+[data-demo-state="empty"] .demo-states .only-empty,
+[data-demo-state="error"] .demo-states .only-error,
+[data-demo-state="forbidden"] .demo-states .only-forbidden { display: block; }
+.demo-state-box { padding: 56px 16px; text-align: center; color: var(--t4); }
+.demo-state-box .t { color: var(--t2); font-size: 14px; font-weight: 500; margin: 10px 0 4px; }
+.demo-state-box .d { font-size: 13px; margin-bottom: 14px; }
+.demo-skel-wrap { padding: 16px; }
+.demo-skel { height: 14px; border-radius: 4px; margin: 12px 0; background: linear-gradient(90deg, var(--bg-subtle), var(--bg-page), var(--bg-subtle)); background-size: 200% 100%; animation: sk 1.2s infinite; }
+@keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* 角色可见性（只读访客看不到写操作） */
+html[data-demo-role="viewer"] [data-need-role="admin"] { display: none; }
+html[data-demo-role="viewer"] .page-head .btn.primary,
+html[data-demo-role="viewer"] .row-actions { display: none; }
+
+/* 标注层（决策编号对应《设计决策记录》） */
+[data-demo-anno="on"] [data-anno] { outline: 1px dashed var(--brand); position: relative; }
+[data-demo-anno="on"] [data-anno]::after { content: attr(data-anno); position: absolute; top: -9px; left: -3px; z-index: 5; font-size: 10px; line-height: 14px; padding: 0 5px; background: var(--brand); color: var(--on-brand); border-radius: 4px; }
+
+@media print { .demo-ctl { display: none; } }
 
 .alert { display: flex; gap: 8px; border-radius: var(--r-card); padding: 12px 16px; font-size: 13px; margin-bottom: 16px; align-items: flex-start; }
 .alert.warn { background: var(--warn-bg); color: var(--warn-txt); }
@@ -353,13 +408,13 @@ a { color: var(--brand-txt); text-decoration: none; }
             <div class="page-title">采集源管理</div>
             <div class="page-desc">配置内容采集来源，改源、停用、换参数只改表不发版；「触发」为手动补采，日常采集由发布管线定时执行。</div>
           </div>
-          <button class="btn primary" onclick="go('source-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加采集源</button>
+          <button class="btn primary" data-need-role="admin" onclick="go('source-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加采集源</button>
         </div>
 
         <div class="card">
           <table class="table">
             <thead>
-              <tr><th>编码</th><th>名称</th><th>类型</th><th>领域</th><th>状态</th><th>最近采集</th><th style="width:190px">操作</th></tr>
+              <tr><th>编码</th><th>名称</th><th>类型</th><th>领域</th><th>状态</th><th data-anno="D6">最近采集</th><th style="width:190px">操作</th></tr>
             </thead>
             <tbody>
               <tr>
@@ -367,7 +422,7 @@ a { color: var(--brand-txt); text-decoration: none; }
                 <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
                 <td><span class="tag ok">10-22 09:00 成功 · 12 条</span></td>
                 <td><div class="row-actions">
-                  <button class="btn sm primary" onclick="openTrigger('sina_news','新浪财经快讯','sina_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
+                  <button class="btn sm primary" data-anno="D2" onclick="openTrigger('sina_news','新浪财经快讯','sina_news')"><svg class="ic"><use href="#i-play"/></svg>触发</button>
                   <button class="btn sm" onclick="go('source-edit')">编辑</button>
                   <button class="btn sm danger" onclick="confirmDel(this)">删除</button>
                 </div></td>
@@ -508,7 +563,7 @@ a { color: var(--brand-txt); text-decoration: none; }
         </div>
 
         <!-- 试采面板：默认隐藏，点击「测试采集」后出现 -->
-        <div class="card card-pad test-panel" id="testPanel" style="display:none">
+        <div class="card card-pad test-panel" id="testPanel" data-anno="D8" style="display:none">
           <div class="test-head">
             <span class="test-title">测试采集</span>
             <span class="test-no-persist">仅预览 · 未入库</span>
@@ -560,10 +615,6 @@ a { color: var(--brand-txt); text-decoration: none; }
           <input class="input" style="min-width:200px" placeholder="搜索标题 / 外部 ID" />
           <button class="btn">查询</button>
           <button class="btn">重置</button>
-          <div class="demo-switch">
-            原型演示
-            <div class="seg"><button class="on" onclick="demoState('items','data',this)">有数据</button><button onclick="demoState('items','empty',this)">空态</button></div>
-          </div>
         </div>
 
         <div class="stat-row">
@@ -652,7 +703,7 @@ a { color: var(--brand-txt); text-decoration: none; }
           <svg class="ic"><use href="#i-file"/></svg>
           <div class="t">没有符合条件的采集明细</div>
           <div class="d">试试调整筛选条件，或去「采集源管理」确认源已启用</div>
-          <div style="margin-top:16px"><button class="btn" onclick="demoState('items','data',document.querySelector('#screen-items .seg button'))">重置筛选</button></div>
+          <div style="margin-top:16px"><button class="btn" onclick="resetFilter()">重置筛选</button></div>
         </div>
       </section>
 
@@ -750,10 +801,6 @@ a { color: var(--brand-txt); text-decoration: none; }
           <input class="input" style="min-width:200px" placeholder="搜索成文标题" />
           <button class="btn">查询</button>
           <button class="btn">重置</button>
-          <div class="demo-switch">
-            原型演示
-            <div class="seg"><button class="on" onclick="demoState('pub','data',this)">有数据</button><button onclick="demoState('pub','empty',this)">空态</button></div>
-          </div>
         </div>
 
         <div class="card" id="pubTableWrap">
@@ -1025,10 +1072,82 @@ a { color: var(--brand-txt); text-decoration: none; }
   </div>
 </div>
 
-<!-- 演示控件 -->
-<div class="demo-panel">
-  <div class="dt"><svg class="ic"><use href="#i-info"/></svg>原型演示控件</div>
-  <div class="note">本稿为交互原型：菜单、跳转、弹窗均可点击；数据为 mock。待确认项见随稿《设计决策记录》。</div>
+<!-- ═══════════ 原型演示控件（评审台 · 四区：稿头 / 场景 / 导航 / 辅助）═══════════ -->
+<aside class="demo-ctl" data-demo-ctl data-open="false" aria-label="原型演示控件">
+  <button class="dc-head" data-dc-toggle aria-expanded="false">
+    <span class="dot"></span>原型演示控件
+    <span class="cnt" id="dcCnt">决策锚点 0</span>
+    <svg class="ic fold"><use href="#i-caret"/></svg>
+  </button>
+  <div class="dc-body">
+    <div class="dc-meta">
+      <b>自媒体运营 · 原型稿</b><br>
+      目标端 桌面 Web（admin 壳）· 2026-10-22 · 数据全为 mock<br>
+      标注编号对应《自媒体运营模块-设计决策记录》
+    </div>
+
+    <div class="dc-grp">
+      <div class="dc-lb"><span>演示场景（点一下到那儿）</span><button class="chip" data-dc-next>下一步 →</button></div>
+      <div class="dc-presets" id="dcPresets"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="dc-lb">角色</div>
+      <div class="dc-chips" id="dcRoles"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="dc-lb">数据态（当前屏）</div>
+      <div class="dc-chips" id="dcStates"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="dc-lb">屏幕直达（8 屏）</div>
+      <div class="dc-chips" id="dcScreens"></div>
+    </div>
+
+    <div class="dc-foot">
+      <button class="chip" data-dc-anno>标注层</button>
+      <button class="chip" data-dc-reset>复位</button>
+      <span class="k">H 收起 · [ ] 上下屏<br>1-9 场景 · A 标注</span>
+    </div>
+  </div>
+</aside>
+
+<!-- 演示数据态 · 整屏状态层（JS 挂到当前屏；方案 B，不逐屏重排） -->
+<div class="demo-states" id="demoStates">
+  <div class="only-loading">
+    <div class="demo-skel-wrap">
+      <div class="demo-skel" style="width:55%"></div>
+      <div class="demo-skel" style="width:82%"></div>
+      <div class="demo-skel" style="width:68%"></div>
+      <div class="demo-skel" style="width:40%"></div>
+    </div>
+  </div>
+  <div class="only-empty">
+    <div class="demo-state-box">
+      <svg class="ic ic-20"><use href="#i-file"/></svg>
+      <div class="t" id="dsEmptyT">这里还没有数据</div>
+      <div class="d" id="dsEmptyD">首次使用时的样子</div>
+      <button class="btn primary" onclick="applyState('normal')">回到有数据</button>
+    </div>
+  </div>
+  <div class="only-error">
+    <div class="demo-state-box">
+      <svg class="ic ic-20"><use href="#i-xcircle"/></svg>
+      <div class="t">请求失败</div>
+      <div class="d" id="dsErrorD">接口超时（3s）</div>
+      <button class="btn" onclick="applyState('normal')"><svg class="ic"><use href="#i-refresh"/></svg>重试</button>
+    </div>
+  </div>
+  <div class="only-forbidden">
+    <div class="demo-state-box">
+      <svg class="ic ic-20"><use href="#i-warn"/></svg>
+      <div class="t">无访问权限</div>
+      <div class="d" id="dsForbiddenD">需要 content:view 权限</div>
+      <button class="btn" onclick="toast('原型演示：跳转权限申请')">申请权限</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -1046,20 +1165,32 @@ const SCREENS = {
   runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
 };
 function go(key) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  /* 屏显隐**按 id 精确操作**，不按 `.screen` 类选择器：本稿会被同源抽取进 admin 整合稿
+     （docs/ui/prototypes/admin-agents-hub.html），那边的屏容器也叫 .screen —— 用类选择器
+     会连带把 hub 自己的屏一起摘掉 / 隐藏。id 是本稿私有的，不会误伤。 */
+  Object.keys(SCREENS).forEach(k => document.getElementById(SCREENS[k].el).classList.remove('on'));
   const s = SCREENS[key];
   document.getElementById(s.el).classList.add('on');
   document.getElementById('crumb').innerHTML = s.crumb.map((c, i) =>
     i === s.crumb.length - 1 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
   document.querySelectorAll('#contentGroupChildren .menu-item').forEach(m =>
     m.classList.toggle('active', m.dataset.screen === key));
-  document.querySelector('.content').scrollTop = 0;
+  /* 滚动容器：独立打开时是 .content，被抽进整合稿后壳换成 .ad-content —— 两者都兜住，
+     都没有就跳过（否则 null.scrollTop 会让整个切屏挂掉） */
+  const sc = document.querySelector('.content, .ad-content');
+  if (sc) sc.scrollTop = 0;
   // 离开编辑页时重置试采面板（下次进入重新开始）
   const tp = document.getElementById('testPanel');
   if (tp) { tp.style.display = 'none'; document.getElementById('testLoading').style.display = 'none'; document.getElementById('testResult').style.display = 'none'; }
   // 明细/成文进入时模拟加载
   if (key === 'items') simulateLoading('itemsTableWrap', 'itemsEmpty');
   if (key === 'publications') simulateLoading('pubTableWrap', 'pubEmpty');
+  /* 演示控件块可选：本稿被抽进 admin 整合稿时会整段丢弃（见下方 DEMO-PANEL 标记），
+     所以这里必须用 typeof 守卫 —— 直接调用会 ReferenceError，整个切屏失效 */
+  if (typeof DEMO !== 'undefined') DEMO.onGo(key);
+  /* 被抽进 admin 整合稿后，模块内的跳转要带动 hub 的菜单高亮 / 面包屑（跨根键跳转用：
+     明细详情 →「去公众号成文」）。独立打开时 zmSync 不存在，静默跳过。 */
+  if (typeof window.zmSync === 'function') window.zmSync(key);
 }
 function toggleGroup(btn) {
   btn.classList.toggle('menu-open');
@@ -1075,19 +1206,199 @@ function simulateLoading(tableId, emptyId) {
   setTimeout(() => { wrap.style.opacity = '1'; }, 400);
 }
 
-// ── 演示态切换（空态） ──
-function demoState(key, state, btn) {
-  const seg = btn.parentElement;
-  seg.querySelectorAll('button').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  if (key === 'items') {
-    document.getElementById('itemsTableWrap').style.display = state === 'empty' ? 'none' : '';
-    document.getElementById('itemsEmpty').style.display = state === 'empty' ? '' : 'none';
-  } else {
-    document.getElementById('pubTableWrap').style.display = state === 'empty' ? 'none' : '';
-    document.getElementById('pubEmpty').style.display = state === 'empty' ? '' : 'none';
-  }
+/* 采集明细空态里的「重置筛选」：清掉筛选输入 + 分段回到第一档 + 演示态回正常。
+   此前这里写的是 demoState(...) —— 那个函数在控件改造时已删掉，点了会报 is not defined。 */
+function resetFilter() {
+  document.querySelectorAll('#screen-items .seg button').forEach((b, i) => b.classList.toggle('on', i === 0));
+  const q = document.querySelector('#screen-items .filter-bar input');
+  if (q) q.value = '';
+  if (typeof applyState === 'function') applyState('normal');
 }
+
+/* ══════════ DEMO-PANEL-START ══════════
+   这一段是「本稿自己的评审台」：演示控件 DOM（.demo-ctl）+ 数据态层（.demo-states）+
+   它的全部脚本。同源抽取进 admin 整合稿时**整段丢弃**（scripts/lib/proto-registry.mjs 的
+   jsKeep 标记），原因有两个，都是硬的：
+     ① 它写 location.hash = '#s=<key>'，而整合稿的 hash 是它自己的路由（#/content/items）；
+        两者会互相打断 —— 切一次场景包，整合稿就被踢回默认屏；
+     ② 整合稿已经有菜单级导航，再叠一层「屏幕直达」就是两套入口（见 skill 规格
+        ux-prototype-designer/references/demo-control-panel.md §5.4 单一导航入口）。
+   独立打开本稿时这段照常生效，评审台功能不变。 */
+// ══════════════════════════════════════════════════════════════════
+// 原型演示控件（评审台）
+// 规格：ux-prototype-designer/references/demo-control-panel.md
+// 机检：node skills/ux-prototype-designer/scripts/check-demo-panel.mjs <本文件>
+// 做新稿只改 DEMO 注册表（roles / states / presets / emptyCopy）
+// ══════════════════════════════════════════════════════════════════
+const DEMO = {
+  roles:  { admin: '内容管理员', viewer: '只读访客' },
+  states: { normal: '正常', loading: '加载中', empty: '空数据', error: '请求失败', forbidden: '无权限' },
+  // 场景包 = 具名剧本：一点同时设「角色 × 屏 × 数据态 × 弹层」
+  presets: [
+    { id: 'p1',  label: 'S1 采集源管理 · 主路径',        role: 'admin',  screen: 'sources',       state: 'normal', default: true },
+    { id: 'p2',  label: 'S2 只读访客 · 无操作列',        role: 'viewer', screen: 'sources',       state: 'normal' },
+    { id: 'p3',  label: 'S3 新装系统 · 空态',            role: 'admin',  screen: 'sources',       state: 'empty' },
+    { id: 'p4',  label: 'S4 手动触发 · 类型未接入',      role: 'admin',  screen: 'sources',       state: 'normal', act: 'triggerUnsupported' },
+    { id: 'p5',  label: 'S5 采集明细 · 质量异常',        role: 'admin',  screen: 'items',         state: 'normal' },
+    { id: 'p6',  label: 'S6 明细详情 · 归因流程条',      role: 'admin',  screen: 'item-detail',   state: 'normal' },
+    { id: 'p7',  label: 'S7 公众号成文 · 成文预览抽屉',  role: 'admin',  screen: 'publications',  state: 'normal', act: 'preview' },
+    { id: 'p8',  label: 'S8 发布管线 · 编辑管线',        role: 'admin',  screen: 'pipeline-edit', state: 'normal' },
+    { id: 'p9',  label: 'S9 采集监控 · 静默失效',        role: 'admin',  screen: 'runs',          state: 'normal' },
+    { id: 'p10', label: 'S10 接口失败 · 重试入口',        role: 'admin',  screen: 'runs',          state: 'error' },
+  ],
+  emptyCopy: {
+    sources:      { t: '还没有采集源', d: '添加第一个采集源后，发布管线才会开始采集' },
+    items:        { t: '没有符合条件的采集明细', d: '试试调整筛选条件，或去「采集源管理」确认源已启用' },
+    publications: { t: '还没有成文记录', d: '成文由发布管线定时生成；可去「发布管线」手动运行一次' },
+    pipelines:    { t: '还没有发布管线', d: '新建管线，把采集与成文编排起来' },
+    runs:         { t: '还没有采集批次', d: '管线运行一次后这里会出现记录' },
+  },
+};
+
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const labelOf = k => SCREENS[k].crumb[SCREENS[k].crumb.length - 1];
+let cur = { role: 'admin', screen: 'sources', preset: null, anno: false };
+const stateOf = {};
+
+function renderCtl() {
+  $('#dcPresets').innerHTML = DEMO.presets.map((p, i) =>
+    '<button class="preset' + (cur.preset === p.id ? ' on' : '') + '" data-dc-preset="' + p.id + '">' +
+    (i + 1) + '. ' + p.label + '</button>').join('');
+  $('#dcRoles').innerHTML = Object.keys(DEMO.roles).map(k =>
+    '<button class="chip' + (cur.role === k ? ' on' : '') + '" data-dc-role="' + k + '">' + DEMO.roles[k] + '</button>').join('');
+  const st = stateOf[cur.screen] || 'normal';
+  $('#dcStates').innerHTML = Object.keys(DEMO.states).map(k =>
+    '<button class="chip' + (st === k ? ' on' : '') + '" data-dc-state="' + k + '">' + DEMO.states[k] + '</button>').join('');
+  $('#dcScreens').innerHTML = Object.keys(SCREENS).map(k =>
+    '<button class="chip' + (cur.screen === k ? ' on' : '') + '" data-dc-screen="' + k + '">' + labelOf(k) + '</button>').join('');
+  // 决策锚点从 DOM 数出来（不手写，避免与设计决策记录漂移）
+  $('#dcCnt').textContent = '决策锚点 ' + $$('[data-anno]').length;
+}
+
+function setRole(role) {
+  cur.role = role;
+  document.documentElement.dataset.demoRole = role;
+  renderCtl();
+}
+
+function applyState(st) {
+  const el = document.getElementById(SCREENS[cur.screen].el);
+  stateOf[cur.screen] = st;
+  el.dataset.demoState = st;
+  const layer = document.getElementById('demoStates');
+  if (layer.parentElement !== el) el.appendChild(layer);
+  const c = DEMO.emptyCopy[cur.screen] || { t: '该页暂无数据', d: '（此屏未定义空态文案，属待补项）' };
+  $('#dsEmptyT').textContent = c.t;
+  $('#dsEmptyD').textContent = c.d;
+  $('#dsErrorD').textContent = labelOf(cur.screen) + '：接口超时（3s）· 服务端返回 500';
+  $('#dsForbiddenD').textContent = labelOf(cur.screen) + '：需要 content:view 权限';
+  renderCtl();
+}
+
+function resetStates() {
+  Object.keys(SCREENS).forEach(k => {
+    stateOf[k] = 'normal';
+    document.getElementById(SCREENS[k].el).dataset.demoState = 'normal';
+  });
+}
+
+function closeAllModals() {
+  $$('.mask.on, .drawer-mask.on').forEach(m => m.classList.remove('on'));
+  document.body.classList.remove('modal-open');
+}
+
+function applyPreset(id) {
+  const p = DEMO.presets.find(x => x.id === id);
+  if (!p) return;
+  cur.preset = id;
+  setRole(p.role);
+  go(p.screen);                     // 与产品菜单同一个入口
+  applyState(p.state);
+  closeAllModals();
+  if (p.act === 'triggerUnsupported') { openTrigger('arxiv', 'arXiv 论文', 'arxiv'); renderResult(); }
+  if (p.act === 'preview') openPreview();
+  if (p.state === 'loading') setTimeout(() => applyState('normal'), 1200);  // 让评审看到时序
+}
+
+// go() 的统一出口：当前屏高亮 / hash / 数据态回灌
+DEMO.onGo = function (key) {
+  cur.screen = key;
+  if (location.hash !== '#s=' + key) location.hash = '#s=' + key;
+  applyState(stateOf[key] || 'normal');
+};
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-dc-preset],[data-dc-role],[data-dc-state],[data-dc-screen],[data-dc-anno],[data-dc-reset],[data-dc-next],[data-dc-toggle]');
+  if (!t) return;
+  if (t.dataset.dcPreset) return applyPreset(t.dataset.dcPreset);
+  if (t.dataset.dcRole)   return setRole(t.dataset.dcRole);
+  if (t.dataset.dcState)  return applyState(t.dataset.dcState);
+  if (t.dataset.dcScreen) return go(t.dataset.dcScreen);
+  if (t.hasAttribute('data-dc-next')) {
+    const i = DEMO.presets.findIndex(p => p.id === cur.preset);
+    return applyPreset(DEMO.presets[(i + 1) % DEMO.presets.length].id);
+  }
+  if (t.hasAttribute('data-dc-anno')) {
+    cur.anno = !cur.anno;
+    document.documentElement.dataset.demoAnno = cur.anno ? 'on' : 'off';
+    t.classList.toggle('on', cur.anno);
+    return;
+  }
+  if (t.hasAttribute('data-dc-reset')) {
+    cur.anno = false;
+    document.documentElement.dataset.demoAnno = 'off';
+    $$('[data-dc-anno]').forEach(b => b.classList.remove('on'));
+    resetStates();
+    return applyPreset(DEMO.presets.find(p => p.default).id);
+  }
+  if (t.hasAttribute('data-dc-toggle')) {
+    const ctl = $('[data-demo-ctl]');
+    const open = ctl.dataset.open !== 'true';
+    ctl.dataset.open = String(open);
+    t.setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem('dc:' + location.pathname, open ? '1' : '0'); } catch (_) {}
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select,[contenteditable]')) return;   // 表单内让行
+  const keys = Object.keys(SCREENS);
+  if (e.key === '[') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) - 1 + keys.length) % keys.length]); }
+  else if (e.key === ']') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) + 1) % keys.length]); }
+  else if (e.key === 'h' || e.key === 'H') $('[data-dc-toggle]').click();
+  else if (e.key === 'a' || e.key === 'A') $('[data-dc-anno]').click();
+  else if (e.key === '?') { const c = $('[data-demo-ctl]'); c.dataset.open = 'true'; $('[data-dc-toggle]').setAttribute('aria-expanded', 'true'); }
+  else if (e.key === 'Escape') { if ($('.mask.on, .drawer-mask.on')) closeAllModals(); }
+  else if (/^[1-9]$/.test(e.key)) { const p = DEMO.presets[Number(e.key) - 1]; if (p) applyPreset(p.id); }
+});
+
+addEventListener('hashchange', () => {
+  const k = (location.hash.match(/^#s=([\w-]+)/) || [])[1];
+  if (k && SCREENS[k] && k !== cur.screen) go(k);
+});
+
+// 弹层打开时控件让位（不改动产品弹层的既有逻辑，用观察器同步）
+const modalObserver = new MutationObserver(() => {
+  document.body.classList.toggle('modal-open', !!$('.mask.on, .drawer-mask.on'));
+});
+['triggerMask', 'previewMask'].forEach(id => {
+  const m = document.getElementById(id);
+  if (m) modalObserver.observe(m, { attributes: true, attributeFilter: ['class'] });
+});
+
+// 初始化：折叠态恢复（key 带文件标识，避免 file:// 同源跨稿串状态）+ 默认场景 + hash 续接
+try {
+  const saved = localStorage.getItem('dc:' + location.pathname);
+  if (saved !== null) $('[data-demo-ctl]').dataset.open = saved === '1' ? 'true' : 'false';
+} catch (_) {}
+if (window.innerWidth < 1200) $('[data-demo-ctl]').dataset.open = 'false';
+(function initDemo() {
+  applyPreset(DEMO.presets.find(p => p.default).id);
+  const k = (location.hash.match(/^#s=([\w-]+)/) || [])[1];
+  if (k && SCREENS[k]) go(k); else applyState('normal');
+})();
+/* ══════════ DEMO-PANEL-END ══════════ */
 
 // ── 触发弹窗 ──
 let rcState = 'unsupported';
@@ -1119,7 +1430,6 @@ function renderResult() {
   const zone = document.getElementById('triggerResultZone');
   const card = document.getElementById('rcCard');
   const head = card.querySelector('.rc-head');
-  const title = document.getElementById('rcTitle');
   const desc = document.getElementById('rcDesc');
   const metrics = document.getElementById('rcMetrics');
   const actions = document.getElementById('rcActions');
@@ -1165,8 +1475,7 @@ function renderResult() {
   };
   const s = S[rcState];
   card.className = 'result-card ' + s.cls;
-  head.innerHTML = '<svg class="ic ic-20"><use href="#' + s.icon + '"/></svg><span>' + s.t + '</span>';
-  title.textContent = s.t;
+  head.innerHTML = '<svg class="ic ic-20"><use href="#' + s.icon + '"/></svg><span id="rcTitle">' + s.t + '</span>';
   desc.textContent = s.d;
   metrics.innerHTML = s.m.map(x => '<div class="rc-metric"><div class="n">' + x[0] + '</div><div class="l">' + x[1] + '</div></div>').join('');
   actions.innerHTML = s.a.map(x => '<button class="btn ' + (x[2] || '') + '" onclick="' + x[1] + '">' + x[0] + '</button>').join('');

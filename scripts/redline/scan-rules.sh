@@ -41,7 +41,16 @@ add_err()  { ERRS+=("$1|$2|$3|$4"); }
 add_warn() { WARNS+=("$1|$2|$3|$4"); }
 # add_err <规则> <说明> <定位> <内容>
 
+# ---- 分阶段计时（SCAN_PROFILE=1 时打到 stderr，不影响 stdout 判定）----
+# 动机：2026-10-22 实测一次 diff 扫描 10 分 29 秒，凭猜找不到瓶颈（怀疑行级 fork 风暴，
+#   实测是 R12/R16 的全仓遍历）。留着比"再猜一次"便宜。
+_prof() {
+  [ "${SCAN_PROFILE:-0}" = "1" ] || return 0
+  printf '[prof] %-26s %ss\n' "$1" "$SECONDS" >&2
+}
+
 # ---- 文件判定辅助 ----
+_MAINTS_SEEN=""   # check_file 的 main.ts 判定去重标记（set -u 下必须先初始化）
 is_code_file() { case "$1" in *.ts|*.tsx|*.vue|*.js|*.jsx|*.mjs|*.cjs) return 0;; *) return 1;; esac; }
 is_ts_file()   { case "$1" in *.ts|*.tsx|*.vue) return 0;; *) return 1;; esac; }
 is_test_path() { case "$1" in */test/*|*/tests/*|*/__tests__/*|*/spec/*|*.spec.*|*.test.*|*/fixtures/*|*/mocks/*|*/mock/*) return 0;; *) return 1;; esac; }
@@ -54,11 +63,35 @@ is_comment_line() {
   esac
 }
 
+# 去掉行首空白（等价于 sed -E 's/^[[:space:]]*//'，但零子进程）
+# 为何不能用 "$(printf … | sed …)"：macOS 上每次 fork/exec 实测 ~80ms，
+#   一次 diff 扫描上万行 → 十几分钟（2026-10-22 实测 10m29s）。
+# 又为何不写成函数返回：$( ) 本身就是 subshell = 一次 fork。故结果写入全局 _S。
+lstrip_to_s() {
+  _S="$1"
+  while [[ "$_S" == [[:blank:]]* ]]; do _S="${_S:1}"; done
+}
+
+# ---- 行级正则常量（集中定义，供 [[ =~ ]] 用；避免每次调用重复构造）----
+# 用 `[[ $x =~ $VAR ]]` 而非字面量：正则含 ( ) | ; " ' 时字面量会被 shell 语法解析。
+# `\s` 一律换 [[:space:]]：POSIX ERE 无 \s，bash 的 =~ 是 POSIX ERE。
+RE_R1='(^|[^0-9A-Za-z_])(console\.(log|debug)\(|debugger([^0-9A-Za-z_]|$))'
+RE_R3='(^|[^0-9A-Za-z_])(TODO|FIXME)([^0-9A-Za-z_]|$)'
+RE_R3B='(^|[^0-9A-Za-z_])(TEMP|TBD|HACK|XXX)([^0-9A-Za-z_]|$)'
+RE_R4TS='@ts-(ignore|nocheck)'
+# 词界写法：`: any` 后接非标识符字符即命中（覆盖空格 / , ) ; } ] [ = $ 等全部形态）。
+# 原写法 `[[:space:],);\]}]` 的 \] 在 POSIX 字符类里不是转义 → 整个类解析错，
+# 只剩 `|$)` 分支有效，`const a: any = 1` / `any[]` / `x: any;` 全部漏报（存量 bug）。
+RE_R4ANY=':[[:space:]]*any([^0-9A-Za-z_]|$)'
+RE_R5A='enableCors\([[:space:]]*\)'
+RE_R5B="origin[[:space:]]*:[[:space:]]*[\"']\\*[\"']"
+RE_CRED="(password|passwd|secret|api[_-]?key|private[_-]?key|access[_-]?token)[^=;]*=[[:space:]]*[\"'][^\"']{8,}"
+
 # ---- 行级规则（error 级）----
 check_line_error() {
   local file="$1" line="$2" content="$3" s
   is_code_file "$file" || return 0
-  s="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*//')"
+  lstrip_to_s "$content"; s="$_S"
 
   # R1 调试残留（注释里提 console.log 属说明，跳过注释行）
   # 豁免：仓库根 scripts/ 一级目录的 CLI 工具（*.mjs / *.cjs）——
@@ -92,21 +125,21 @@ check_line_error() {
           || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.js \
           || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.mjs \
           || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.cjs ]]; then
-    if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(console\.(log|debug)\(|debugger([^0-9A-Za-z_]|$))'; then
+    if [[ "$content" =~ $RE_R1 ]]; then
       add_err "R1" "调试残留(console.log/debug/debugger)" "${file}:${line}" "$content"
     fi
   fi
   # R3 占位残留（TODO/FIXME 常写在注释里，不跳过注释行）
-  if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(TODO|FIXME)([^0-9A-Za-z_]|$)'; then
+  if [[ "$content" =~ $RE_R3 ]]; then
     add_err "R3" "占位残留(TODO/FIXME)" "${file}:${line}" "$content"
   fi
   # R4 TS 铁律：@ts-ignore / @ts-nocheck 本身是注释指令，不跳过
-  if printf '%s' "$content" | grep -qE '@ts-(ignore|nocheck)'; then
+  if [[ "$content" =~ $RE_R4TS ]]; then
     add_err "R4" "TS 铁律违反(@ts-ignore/nocheck)" "${file}:${line}" "$content"
   fi
   # R4 TS 铁律：裸 : any（.d.ts 与 test 夹具豁免；跳过注释行）
   if ! is_comment_line "$s" && is_ts_file "$file" && ! is_test_path "$file" && [[ "$file" != *.d.ts ]]; then
-    if printf '%s' "$content" | grep -qE ':[[:space:]]*any([[:space:],);\]}]|$)'; then
+    if [[ "$content" =~ $RE_R4ANY ]]; then
       add_err "R4" "TS 铁律违反(: any)" "${file}:${line}" "$content"
     fi
   fi
@@ -116,18 +149,17 @@ check_line_error() {
 check_line_warn() {
   local file="$1" line="$2" content="$3" s
   is_code_file "$file" || return 0
-  s="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*//')"
+  lstrip_to_s "$content"; s="$_S"
 
   # R3b 弱占位（注释里出现同样算占位，不跳过）
-  if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(TEMP|TBD|HACK|XXX)([^0-9A-Za-z_]|$)'; then
+  if [[ "$content" =~ $RE_R3B ]]; then
     add_warn "R3" "弱占位(TEMP/TBD/HACK/XXX)" "${file}:${line}" "$content"
   fi
   # R5 CORS（server 源码目录才判定；跳过注释行）
   case "$file" in
     servers/*/src/*|servers/gateway/src/*)
       if ! is_comment_line "$s" \
-          && { printf '%s' "$content" | grep -qE 'enableCors\(\s*\)' \
-          || printf '%s' "$content" | grep -qE "origin\s*:\s*['\"]\*['\"]"; }; then
+          && { [[ "$content" =~ $RE_R5A ]] || [[ "$content" =~ $RE_R5B ]]; }; then
         add_warn "R5" "CORS 疑似硬编码" "${file}:${line}" "$content"
       fi ;;
   esac
@@ -144,8 +176,12 @@ check_file() {
     add_err "R2" "敏感文件入库" "$file" ".env* 不应提交（.gitignore 已兜底）"
   fi
   # R5+R8 main.ts
+  # 按文件缓存：diff/tree 模式每行都会调本函数，不缓存就等于每个 main.ts
+  # 的每一行都读 3 次文件（`grep -q` 各一次）→ Fork 风暴。
   case "$file" in
     servers/*/src/main.ts)
+      case " $_MAINTS_SEEN " in *" $file "*) return 0;; esac
+      _MAINTS_SEEN="$_MAINTS_SEEN $file"
       if grep -qE 'enableCors\(\s*\)' "$file"; then
         add_warn "R5" "CORS 无参启用" "$file" "应读取 config CORS_ORIGINS"
       fi
@@ -161,13 +197,17 @@ check_cred_line() {
   local file="$1" line="$2" content="$3" s
   is_example "$file" && return 0
   is_test_path "$file" && return 0
-  s="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*//')"
+  lstrip_to_s "$content"; s="$_S"
   is_comment_line "$s" && return 0  # 注释里的示例凭据不拦（如配置说明文档）
   # 形如 apiSecret: string = '...' 也命中：敏感词后允许类型注解等 token，再到 '='
   # 注：逐行扫描（read 已去行尾），字符类不含 \n（macOS BSD grep 的 \n 处理有坑）
-  if printf '%s' "$content" | grep -qiE '(password|passwd|secret|api[_-]?key|private[_-]?key|access[_-]?token)[^=;]*=[[:space:]]*["'"'"'][^"'"'"']{8,}'; then
+  # 大小写不敏感：bash 的 =~ 受 nocasematch 控制（原 grep -i），用完还原
+  local _hadnm=0
+  shopt -q nocasematch || { _hadnm=1; shopt -s nocasematch; }
+  if [[ "$content" =~ $RE_CRED ]]; then
     add_err "R2" "疑似硬编码凭据" "${file}:${line}" "$content"
   fi
+  [ "$_hadnm" = 1 ] && shopt -u nocasematch
 }
 
 # ---- R9 UI 结构变更须同行原型/规格（文件级 · warning 级）----
@@ -679,18 +719,20 @@ check_one_line() {
 scan_diff_range() {
   local range="$1" diff_text dl add cur_file=""
   local -a pending=()
-  check_r9 "$range"   # R9：文件级 UI 结构门禁（warning 级，先于行扫描）
-  check_r9b "$range"  # R9b：既有 UI 改动门禁（补 R9 覆盖缺口）
-  check_r10 "$range"  # R10：UI commit 的 Proto 凭证（方案 B CI 兜底）
-  check_r11 "$range"  # R11：设计评审凭证（error 级 · specs/design-reviewer/design.md §3.7）
-  check_r11b "$range" # R11b：原型锚点漂移（受 DESIGN_ANCHOR_MODE 控制，默认 off）
-  check_r13_r14 "$range" # R13/R14：契约与数据变更 / 发布与环境 评审凭证（一次遍历，specs/rd-process-model §3.7）
-  check_r15 "$range"  # R15：新增对外接口的独立代码评审凭证（判据源 code-review-checklist.md）
-  check_r17 "$range"  # R17：测试用例凭证（判据源 docs/development/研发方案与发布规范-v2.md §4）
-  check_r18 "$range"  # R18：研发方案与发布任务清单凭证（同上 §5）
-  check_r12           # R12：kit 能力源 ↔ 运行源 同源守门（不依赖 range）
-  check_r16           # R16：SSE 事件契约一致性（消费方手写联合 ↔ agent-core 真相源，不依赖 range）
+  _prof "start(range=$range)"
+  check_r9 "$range";   _prof "R9  文件级 UI 结构"
+  check_r9b "$range";  _prof "R9b 既有 UI 改动"
+  check_r10 "$range";  _prof "R10 UI commit Proto 凭证"
+  check_r11 "$range";  _prof "R11 设计评审凭证"
+  check_r11b "$range"; _prof "R11b 原型锚点漂移"
+  check_r13_r14 "$range"; _prof "R13/R14 契约与发布凭证"
+  check_r15 "$range";  _prof "R15 对外接口评审凭证"
+  check_r17 "$range";  _prof "R17 测试用例凭证"
+  check_r18 "$range";  _prof "R18 研发方案凭证"
+  check_r12;           _prof "R12 kit 同源（全仓遍历）"
+  check_r16;           _prof "R16 SSE 契约（调 python）"
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
+  _prof "git diff 取新增行"
   [ -n "$diff_text" ] || return 0
   while IFS= read -r dl; do
     case "$dl" in
@@ -710,6 +752,7 @@ scan_diff_range() {
     file="${rec%%|*}"; content="${rec#*|}"
     check_one_line "$file" "" "$content"
   done
+  _prof "行级扫描（${#pending[@]} 行）"
 }
 
 # ---- cached 模式（pre-commit）----
@@ -729,7 +772,9 @@ scan_one_file() {
   [ -f "$f" ] || { echo "跳过(不存在): $f" >&2; return 0; }
   check_file "$f"
   is_code_file "$f" || return 0
-  while IFS= read -r content; do
+  # `|| [ -n "$content" ]`：文件末尾没有换行符时，read 返回非零但 content 有值，
+  # 纯 `while read` 会把最后一行**整行跳过**（存量漏洞，2026-10-22 用无尾换行夹具实测）。
+  while IFS= read -r content || [ -n "$content" ]; do
     line_no=$((line_no + 1))
     check_line_error "$f" "$line_no" "$content"
     check_line_warn "$f" "$line_no" "$content"

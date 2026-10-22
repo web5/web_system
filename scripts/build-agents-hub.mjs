@@ -222,9 +222,10 @@ const hubCss = `
 const CRUMBS = {
   dashboard: ['工作台'], bianbian: ['变变管理'], users: ['用户管理'], settings: ['系统设置'],
   roles: ['角色权限'], dicts: ['字典管理'], mcp: ['MCP 管理'], database: ['数据浏览'],
-  'content-overview': ['内容中心', '采集总览'], 'content-items': ['内容中心', '内容条目'],
-  'content-detail': ['内容中心', '条目详情'], 'content-lhb': ['内容中心', '龙虎榜'],
-  'content-seats': ['内容中心', '席位库'],
+  /* 自媒体运营（2026-10-22 起）：与 BasicLayout.vue 的 a-sub-menu key="content" 逐项对齐 */
+  'content-sources': ['自媒体运营', '采集源管理'], 'content-items': ['自媒体运营', '采集明细'],
+  'content-publications': ['自媒体运营', '公众号成文'], 'content-pipelines': ['自媒体运营', '发布管线'],
+  'content-monitor': ['自媒体运营', '采集监控'],
   overview: ['Agents', 'Agent 概览'], observe: ['Agents', 'Agent 观测'], records: ['Agents', '运行记录'],
   capabilities: ['Agents', '能力资产'], knowledge: ['Agents', '知识集合'], retrieval: ['Agents', '检索调试'],
   list: ['Agents', '定义管理'], skills: ['Agents', '技能库'], pg: ['Agents', '对话调试'],
@@ -280,7 +281,7 @@ const SOURCES = SOURCE_DEFS.map((src) => {
   const reg = REGISTRY.filter((r) => r.source === src).map((r) => r.screen);
   return { screens: reg, file: src.file, trace: src.trace, scoped: !!src.scope, shared: !!src.shared, ...loadSource(src) };
 });
-const SOURCE_CSS = SOURCES.map((s) => `  /* ===== 来自 ${s.file}（${s.scoped ? 'CSS 已作用域隔离：裸通用类名不污染其它屏' : '类名自带前缀，直接合入'}） ===== */\n  ${s.css}`).join('\n');
+const SOURCE_CSS = SOURCES.map((s) => `  /* ===== 来自 ${s.file}（${s.scoped ? 'CSS 已作用域隔离：裸通用类名不污染其它屏' : '类名自带前缀，直接合入'}） ===== */\n  ${s.css}${s.cssExtra ? '\n' + s.cssExtra : ''}`).join('\n');
 const SOURCE_SCREENS = SOURCES.flatMap((s) => s.screens);
 const SOURCE_JS = SOURCES.map((s) => `/* 来自 ${s.file}（IIFE 包裹，符号不泄漏到全局）${s.shared ? ` · 共享源：一份脚本服务 ${s.screens.length} 屏` : ''} */\n${s.js}`).join('\n');
 /* rootToGlobal 的源稿：只补整合稿全局 :root 里**缺的** token（同名以整合稿为准） */
@@ -290,7 +291,7 @@ const GLOBAL_TOKENS = [...new Map(
 /* 共享源的模块级弹层（drawer / mask / modal / toast）：挂到 .ad-desktop 末尾，不进任何一屏
    —— 否则「在席位库开的抽屉，切到龙虎榜就打不开了」 */
 const SHARED_TRAILS = SOURCES.filter((s) => s.shared && s.trailHtml)
-  .map((s) => `  <!-- ${s.file} 的模块级弹层（不进屏，5 屏共用） -->\n  <div class="cc-scope">\n  ${s.trailHtml}\n  </div>`)
+  .map((s) => `  <!-- ${s.file} 的模块级弹层（不进屏，${s.screens.length} 屏共用） -->\n  <div class="${s.wrap || 'cc-scope'}">\n  ${s.trailHtml}\n  </div>`)
   .join('\n');
 
 /** 占位屏渲染：范围说明 → 示意数据（KPI / 卡片 / .tbl）→ 骨架 → 复用件 */
@@ -390,8 +391,9 @@ const REUSE_MAP = `
 const reLit = (r) => r.replace(/[/]/g, '\\/');
 const ROUTE_JS = [
   `    { re: /^#\\/agents\\/definitions\\/([\\w-]+)$/, screen: 'detail' },`,
-  /* 内容中心「条目详情」：id 随列表点击变（#/content/items/<id>）→ 通配，不能只认菜单里那条 */
-  `    { re: /^#\\/content\\/items\\/([\\w-]+)$/, screen: 'content-detail' },`,
+/* 采集明细「明细详情」：真实 router 是 #/content/items/:id，但整合稿里详情是模块内部的子页
+   （同一个 hub 屏 content-items 内切换）→ 路由收敛到父屏，由模块自己定位到详情子页 */
+`    { re: /^#\\/content\\/items\\/([\\w-]+)$/, screen: 'content-items' },`,
   ...NAV.filter((m) => m.screen).map((m) => `    { re: /^${reLit(m.route)}$/, screen: '${m.screen}' },`),
 ].join('\n');
 const crumbHtml = (parts) => parts.map((p, i) => (i === parts.length - 1 ? `<b>${p}</b>` : p)).join(' / ');
@@ -406,17 +408,45 @@ const sharedBody = {};
 for (const s of SOURCES) {
   if (!s.shared) continue;
   for (const sc of s.screens) {
-    sharedBody[sc] = `      <div class="cc-scope">\n        ${s.hosts[sc]}\n      </div>`;
+    sharedBody[sc] = `      <div class="${s.wrap || 'cc-scope'}">\n        ${s.hosts[sc]}\n      </div>`;
   }
 }
+/**
+ * mount 源（自媒体运营）：**一份 DOM 服务多屏**，DOM 不拆。
+ *   · 整块（含模块级弹层）挂在**第一屏**里，容器带 data-zm-module；
+ *   · 其余屏留空壳 —— 切过去时由 hub 的 showHub 把这个节点 appendChild 搬过去，
+ *     再调源稿自己的 go(根键) 切到对应子页。
+ * 为什么不做构建期拆分：模块内部的子页之间有跨根键跳转（明细详情 →「去公众号成文」），
+ * 拆开后目标 section 在别的屏里、被 hub 隐藏，点了什么也不会发生。
+ */
+const mountBody = {};
+const MOUNT_MAP = {};      // hub 屏 → 模块根键
+for (const s of SOURCES) {
+  if (!s.mount) continue;
+  Object.keys(s.mount.screens).forEach((sc, i) => {
+    MOUNT_MAP[sc] = s.mount.screens[sc];
+    mountBody[sc] = i === 0
+      ? `      <div class="${s.wrap || 'zm-scope'}" data-zm-module data-zm-file="${s.file}">\n${s.html}\n      </div>`
+      : '';
+  });
+}
+const MOUNT_SCREENS = Object.keys(MOUNT_MAP);
+/* 图标库 sprite（源稿挂在 body 顶层，不抽就是整稿图标全空）；同一份只注入一次 */
+const SPRITES = SOURCES.filter((s) => s.spriteHtml);
+if (SPRITES.length > 1) throw new Error('多份源稿带 sprite：当前实现只支持一份，需先做 id 前缀合并');
+const SPRITE_HTML = SPRITES.length ? SPRITES[0].spriteHtml : '';
+
 const REAL_BODY = {
   pg: pgScreen, list: listInner,
-  ...Object.fromEntries(SOURCES.filter((s) => !s.shared).map((s) => [s.screens[0], s.html])),
+  ...Object.fromEntries(SOURCES.filter((s) => !s.shared && !s.mount).map((s) => [s.screens[0], s.html])),
   ...sharedBody,
+  ...mountBody,
 };
+/** 有 REAL_BODY 的键（值是空串也是真实屏 —— mount 的后续屏就是空壳） */
+const hasReal = (k) => Object.prototype.hasOwnProperty.call(REAL_BODY, k);
 const screenBlock = (m) => {
-  const body = REAL_BODY[m.screen] || placeholder(m.screen);
-  const kind = REAL_BODY[m.screen] ? '真实屏（同源抽取）' : '占位屏';
+  const body = hasReal(m.screen) ? REAL_BODY[m.screen] : placeholder(m.screen);
+  const kind = hasReal(m.screen) ? '真实屏（同源抽取）' : '占位屏';
   /* 注册表抽取来的屏自带页头（源稿的 .st-head / .page-head），不能再叠一层 —— 叠了会出现
      「undefined / undefined」这种空标题（BY_SCREEN 里 source 屏没有 t/d 字段） */
   const head = SOURCE_SCREENS.includes(m.screen) ? '' : pageHead(m.screen);
@@ -435,7 +465,7 @@ const hub = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>admin 管理后台 · 菜单级整合稿（菜单对齐真实 admin · 对话调试 / 定义管理 / 定义详情 · 组件复用地图）</title>
+<title>admin 管理后台 · 菜单级整合稿（菜单对齐真实 admin · 自媒体运营 / 对话调试 / 定义管理 / 定义详情 · 组件复用地图）</title>
 <!--
   ============================================================
   admin 管理后台 · 菜单级整合交互稿（build-agents-hub.mjs 生成，请勿手改）
@@ -444,15 +474,16 @@ const hub = `<!DOCTYPE html>
             docs/ui/prototypes/admin-agent-def-detail.html（定义管理 / 定义详情+调试台）
             docs/ui/prototypes/admin-settings.html（系统设置，同源抽取）
             docs/ui/prototypes/dict-module.html（字典管理，CSS 已作用域隔离 + id 加 dm- 前缀）
+            docs/ui/prototypes/admin-media-ops.html（自媒体运营 5 页，mount：一份 DOM 8 个 section）
             其余菜单屏暂无稿 → 占位（批次 / 骨架 / 复用件从注册表读，不伪造业务数据）
   · 菜单源：apps/admin/src/layouts/BasicLayout.vue（文案 / 顺序逐项对齐，无死项）
             路由与 apps/admin/src/router/index.ts 的真实 path 同构
   · 目标端：桌面 Web（admin 管理后台，亮色）；零依赖单文件，浏览器双击即开
   · 路由：hash 路由（#/agents/definitions、#/agents/definitions/<id>…），点菜单即「进入」模块页面
   · 本稿解决的四件事：
-    ① 菜单里的页面整合进一份稿：菜单**全部可点**，17 项菜单 + 定义详情共 18 屏均可达；
-       **有原型稿的模块直接同源抽取真实内容**（系统设置 / 字典管理 / 对话调试 / 定义管理 /
-       定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
+    ① 菜单里的页面整合进一份稿：菜单**全部可点**，22 项菜单 + 定义详情共 23 屏均可达；
+       **有原型稿的模块直接同源抽取真实内容**（自媒体运营 / 系统设置 / 字典管理 / 对话调试 /
+       定义管理 / 定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
     ② 菜单与真实 admin 一致：文案/顺序对齐 BasicLayout.vue，由 verify-agents-hub.mjs ⑧ 段对账；
     ③ 复用显性化：页面底部「组件复用地图」钉死 Turn / Bubble / AnswerBlocks / ProcCard
        四件套与表单侧复用件，落地按图施工；
@@ -476,6 +507,14 @@ const hub = `<!DOCTYPE html>
       两稿真实合入（此前它们只是占位），新增 ⑩ 段断言守「登记了=真合进去了 / 隔离不泄漏 /
       批次与 specs 对账」。以后某模块出稿：注册表加一行 → 重跑本脚本，不需再改本文件。
       背景：产品意见「把菜单占位的原型稿也整合进来吧，后续就不用整合了，迭代也会更精准」。
+    · 2026-10-22 · v7：**自媒体运营模块并入**。产品意见「设计出来的原型需要统一融合进 admin 的
+      原型稿里，目前是散落的」——该模块此前是 apps/admin/prototype/ 下的一份独立单页稿，
+      与整合稿互不相通。本次：① 稿归位 docs/ui/prototypes/admin-media-ops.html；
+      ② 注册表新增 mount 源（一份 DOM / 8 个 section / 5 个菜单页，切屏时由 hub 把这些块搬过去，
+      而不是拆成 5 份）——因为模块内的二级页之间有跨根键跳转（明细详情 →「去公众号成文」），
+      拆开就跳不过去；③ 同步替换旧的「内容中心」5 屏（真实 router 已无 采集总览/龙虎榜/席位库
+      三个路由，继续留着就是第二真相源）；④ 注册表补 trails / jsDrop / sprite / cssExtra 四个
+      字段（多段弹层 / 丢弃源稿评审台 / 图标库 sprite / 作用域内补基准排版）。
     · 2026-10-11 · v4：**菜单全量对齐真实 admin**（工作台 / 变变管理 / 用户管理 / 系统设置 /
       角色权限 / 字典管理 / MCP 管理 / 数据浏览 + Agents 9 项），去掉全部「.nolink」死项，
       每一项都进入对应模块页面；非 Agents 模块为骨架式占位（登记归属批次与复用口径，
@@ -493,6 +532,7 @@ ${hubCss}${SOURCE_CSS}${shellCss()}
   :root{${GLOBAL_TOKENS.join(';')}}</style>
 </head>
 <body>
+${SPRITE_HTML}
 <div class="proto-head">
   <h1>admin 管理后台 · 菜单级整合稿 · 复用组件同构</h1>
   <div class="sub">
@@ -500,9 +540,12 @@ ${hubCss}${SOURCE_CSS}${shellCss()}
     <b>整合方式 = 注册表驱动</b>：<code>scripts/lib/proto-registry.mjs</code> 里每屏一行，
     写了 <code>source</code> 的屏由构建脚本从原型稿<b>同源抽取</b>（DOM 剥壳 + CSS 作用域隔离
     + id 前缀 + inline handler 命名空间），没写的走占位。<b>已是真实内容的屏</b>：
-    对话调试 / 定义管理 / 定义详情 / <b>系统设置</b>（admin-settings.html）/
-    <b>字典管理</b>（dict-module.html）；其余（工作台 / 变变管理 / 用户管理 / 角色权限 /
-    MCP 管理 / 数据浏览 + Agents 组内若干页）为占位，各自标注归属批次与复用口径，不伪造业务数据。
+    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 5 页</b>（admin-media-ops.html）/
+    <b>系统设置</b>（admin-settings.html）/ <b>字典管理</b>（dict-module.html）；
+    其余（工作台 / 变变管理 / 用户管理 / 角色权限 / MCP 管理 / 数据浏览 + Agents 组内若干页）
+    为占位，各自标注归属批次与复用口径，不伪造业务数据。
+    <b>自媒体运营是「一份 DOM 服务 5 屏」</b>（mount 源）：切菜单时整块搬到当前屏，
+    模块内的跨页跳转（明细详情 →「去公众号成文」）会带动左侧菜单与地址栏一起走。
     <b>以后补稿不用再整合</b>：在注册表加一行 <code>source</code>，重跑
     <code>node scripts/build-agents-hub.mjs</code> 即可。
     菜单一致性由 <code>scripts/verify-agents-hub.mjs</code> 直接读 .vue 源对账；参数口径取自
@@ -552,13 +595,20 @@ ${CRUMB_JS}
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
   var SUB_SCREENS = ${JSON.stringify([...SUBS.flatMap((s) => s.screens), 'detail'])};
+  /* mount 源（自媒体运营）：hub 屏 → 模块根键 */
+  var MOUNT_MAP = ${JSON.stringify(MOUNT_MAP)};
+  /* hub 屏 → hash 路由（模块内跨根键跳转后要把地址栏同步过来，否则后退键会错位） */
+  var MOUNT_ROUTE = ${JSON.stringify(Object.fromEntries(
+    MOUNT_SCREENS.map((k) => [k, (NAV.find((m) => m.screen === k) || {}).route || '']),
+  ))};
+  var curScreen = null;      // 当前 hub 屏（供 zmSync 判断"要不要动"）
+  var curMountKey = null;    // 当前模块根键
 
-  window.showHub = function(name, id){
-    qsa('.screen').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
+  /** 菜单高亮 + 父级高亮 + 面包屑（showHub 与 zmSync 共用同一套，避免两处各写一份） */
+  function paint(name, id){
     qsa('.ad-item[data-screen]').forEach(function(i){
       i.classList.toggle('active', i.dataset.screen === name || (name === 'detail' && i.dataset.screen === 'list'));
     });
-    /* 父级高亮按「哪个 sub-menu 含这一屏」判定（多 sub-menu：内容中心 / Agents） */
     qsa('.ad-sub').forEach(function(s){
       var list = (s.getAttribute('data-screens') || '').split(',');
       s.classList.toggle('selected', list.indexOf(name) >= 0);
@@ -569,12 +619,51 @@ ${CRUMB_JS}
         ? 'Agents / 定义管理 / <b>' + id + '</b>'
         : (CRUMB[name] || '');
     }
+  }
+
+  window.showHub = function(name, id){
+    /* ⚠️ 必须 .screen[data-screen] —— 注册表抽取进来的模块稿自己也用 .screen 做屏容器
+       （admin-media-ops.html 的 8 个 <section class="screen">），裸 .screen 会把它们
+       一起 hidden 掉，切过去一片空白。data-screen 是 hub 屏的唯一标记。 */
+    qsa('.screen[data-screen]').forEach(function(s){ s.classList.toggle('hidden', s.dataset.screen !== name); });
+    paint(name, id);
     var c = document.querySelector('.ad-content');
     if(c) c.scrollTop = 0;
     /* 共享源（内容中心）的屏是 JS 渲染的：切过去后让模块稿自己渲染当前 host */
     if (window.CC && window.CC.apply && document.querySelector('.cc-host[data-cc="' + name + '"]')) {
       window.CC.apply();
     }
+    /* mount 源：把模块整块搬到当前屏（DOM 只有一份），再让它切到该屏对应的根键。
+       curMountKey 相等时不再调 go() —— 否则从播子页返回列表这类操作会被强行重置。 */
+    if (Object.prototype.hasOwnProperty.call(MOUNT_MAP, name)) {
+      var mod = document.querySelector('[data-zm-module]');
+      var host = document.querySelector('.screen[data-screen="' + name + '"]');
+      if (mod && host && mod.parentNode !== host) host.appendChild(mod);
+      if (window.ZM && window.ZM.go && curMountKey !== MOUNT_MAP[name]) window.ZM.go(MOUNT_MAP[name]);
+      curMountKey = MOUNT_MAP[name];
+    }
+    curScreen = name;
+  };
+
+  /**
+   * 模块内部跳转的出口（源稿 go() 末尾调用）：把"模块根键"翻译回"hub 屏"，同步菜单高亮 /
+   * 面包屑 / 地址栏。子页（source-edit / item-detail / pipeline-edit）映射到父屏，菜单高亮不掉。
+   *
+   * 为什么**先记账再改 hash**：改 hash 会触发 hashchange → applyHash → showHub，
+   * 而 showHub 在 curMountKey 与目标根键不一致时会调 ZM.go() 把子页重置回列表。
+   * 先写 curMountKey 就是告诉 showHub「模块已经在这一根键上了，别再重置」——
+   * 这样模块内的子页状态能穿过一次 hash 变更活下来。
+   */
+  var SUB_TO_ROOT = { 'source-edit': 'content-sources', 'item-detail': 'content-items', 'pipeline-edit': 'content-pipelines' };
+  var ROOT_TO_SCREEN = {};
+  Object.keys(MOUNT_MAP).forEach(function(sc){ ROOT_TO_SCREEN[MOUNT_MAP[sc]] = sc; });
+  window.zmSync = function(key){
+    var target = ROOT_TO_SCREEN[key] || SUB_TO_ROOT[key];
+    if (!target) return;
+    curMountKey = MOUNT_MAP[target];
+    var r = MOUNT_ROUTE[target];
+    if (r && location.hash !== r) { location.hash = r; }     // → hashchange → showHub（不重置子页）
+    else if (target !== curScreen) { window.showHub(target); }
   };
 
   function applyHash(){
@@ -681,8 +770,22 @@ const missingCrumb = NAV.filter((m) => m.screen && !new RegExp(`^\\s+'${m.screen
 if (missingCrumb.length) problems.push('CRUMB 缺屏：' + missingCrumb.map((m) => m.screen).join(' '));
 // ⑩ 占位屏必须带「范围说明」（不许出现无出处的空屏）
 const phCount = (out.match(/class="ph-note note/g) || []).length;
-const phExpect = NAV.filter((m) => m.screen && !REAL_BODY[m.screen]).length;
+const phExpect = NAV.filter((m) => m.screen && !hasReal(m.screen)).length;
 if (phCount !== phExpect) problems.push(`范围说明 ${phCount} 处（占位屏 ${phExpect} 个）——占位屏必须标注归属批次`);
+// ⑪ mount 源（自媒体运营）：模块 DOM 必须只有一份，屏映射必须齐全
+if (MOUNT_SCREENS.length) {
+  const modCount = (out.match(/data-zm-module data-zm-file=/g) || []).length;
+  if (modCount !== 1) problems.push(`data-zm-module 出现 ${modCount} 处（应 1）——一份 DOM 服务多屏，复制多份=多套状态机`);
+  const missing = MOUNT_SCREENS.filter((sc) => !new RegExp(`data-screen="${sc}"`).test(out));
+  if (missing.length) problems.push('mount 屏缺 hub 容器：' + missing.join(' '));
+  /* sprite 的 symbol id 必须全局唯一（多份稿各自一套 #i-* 会互相抢） */
+  const symIds = [...out.matchAll(/<symbol id="([^"]+)"/g)].map((m) => m[1]);
+  const dup = symIds.filter((id, i) => symIds.indexOf(id) !== i);
+  if (dup.length) problems.push('sprite symbol id 重复：' + [...new Set(dup)].join(' '));
+  if (!/data-zm-module/.test(out) || !out.includes('<symbol id="i-')) {
+    problems.push('自媒体运营模块的 sprite 图标库没注入——图标会全空');
+  }
+}
 if (problems.length) {
   process.stderr.write('❌ 生成自检未过：\n' + problems.map((p) => '  · ' + p).join('\n') + '\n');
   process.exit(1);

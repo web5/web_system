@@ -47,16 +47,81 @@
  *             抽取区间的 DOM 里按 hostSel 找到 N 个容器（每个带 data-cc="<屏 key>"），
  *             build 把它们**分别**装进各自的屏（不是复制 5 份），CSS/JS 全局只注入一次 ——
  *             否则同一份脚本注入 5 次 = 5 份状态机互相打架。
+ *
+ * ── 2026-10-22 新增字段（自媒体运营模块接入时补的四个缺口，都是"整稿带壳"才会踩到）──
+ *   mount     **一份 DOM 服务多屏的第二形态**（与 shared 的分工见下）：
+ *             { screens: { '<hub 屏 key>': '<源稿内的根键>' } }
+ *             · shared = 构建期**按 host 把 DOM 拆给各屏**；
+ *             · mount  = **DOM 不拆**，整块挂在其中一屏，切屏时由 hub 在**运行时搬过去**
+ *               （showHub 里 appendChild），并调用源稿自己的 go(根键) 让它切到对应子页。
+ *             适用场景：模块内部还有一层子页（列表 → 编辑 → 详情），且子页之间有
+ *             **跨根键跳转**（例：明细详情 →「去公众号成文」、成文空态 →「前往发布管线」）。
+ *             拆开就跳不过去（目标 section 在别的屏里，被 hub 隐藏了）。
+ *   trails    trail 的多段版：[{from,to}, …]。源稿的弹层常散落在内容区之外的多个位置
+ *             （手动触发弹窗 + 成文预览抽屉 + toast），单段 trail 一次切不全。
+ *   jsDrop    [[startMarker, endMarker], …]：把源稿脚本里这两段标记**所在的整行区间**丢掉。
+ *             专治「源稿自带评审台」：它写 location.hash = '#s=<key>'，而整合稿的 hash
+ *             是它自己的路由（#/content/items）—— 两者会互相打断，必须整段丢弃。
+ *             源稿里被测函数一律用 `typeof X !== 'undefined'` 守卫（丢弃后安全）。
+ *   sprite    {from,to}：源稿的 <svg><symbol> 图标库（挂在 body 顶层、内容区之外）。
+ *             整合稿只注入一次；**symbol id 必须全局唯一**（build 生成自检会数重复）。
+ *   cssExtra  追加在**作用域内**的 CSS。源稿靠 body 给的基准排版（字体/字号/行高/字色）
+ *             在 body 规则被丢弃后要补回来 —— 否则模块文本会继承整合稿的排版。
+ *   wrap      构建期给这份 DOM 套的容器 class（通常 = scope 去掉点号）；不写则不套。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  between, stripWrapper, stripCssComments, cssBlocks, selOf, scopeCssBlocks, takeTopLevelElements,
+  between, betweenInclusive, stripWrapper, stripCssComments, cssBlocks, selOf, scopeCssBlocks, takeTopLevelElements,
 } from './html-utils.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
 export const PROTO_DIR = path.join(ROOT, 'docs/ui/prototypes');
+
+/**
+ * 已明确存档的原型稿：真实代码里已无对应页面/路由，留着只为追溯历史。
+ *
+ * 为什么要单独登记：审计要把「存档」与「散落」分开。
+ *   散落 = 有稿、有用、但没进整合稿（该处理）
+ *   存档 = 有稿、但已不是当前设计（合法保留，不该反复报警）
+ * 两者混在一起，人会因为「一堆红字」而忽略真正新增的散落稿。
+ *
+ * 2026-10-22 清空：原唯一的 admin-content-hub.html（内容中心 5 屏）已随「自媒体运营」5 页
+ * 接替而**物理删除**（真实 router/index.ts 已无 采集总览 / 龙虎榜 / 席位库 三个路由）。
+ * 留空数组而不是删掉导出：审计脚本按「存档 = 0」继续工作，且以后再有存档稿直接往这里加。
+ */
+export const ARCHIVED_PROTOS = [];
+
+/**
+ * 明确**不并入 admin 整合稿**的稿（有理由，不是「忘了登记」）。
+ *
+ * 为什么需要这一层：审计的「散落」定义是「有稿、有用、却没进整合稿」。
+ * 但目录里还有一类稿，它们的宿主根本不是 admin —— deploy-console 控制台的原型、
+ * 发布平台的历史终稿、外观风格探索稿。把它们算作「散落」会让真的散落稿淹没在噪音里：
+ * 实测 16 份「散落」中 6 份属于这一类，每次审计都红一次，人就开始无视审计了。
+ *
+ * 判定口径是**「该不该进 admin 整合稿」**，不是「这份稿好不好」：
+ *   - 有理由进 admin（admin 侧模块）却没登记 → 散落（FAIL）
+ *   - 宿主是别的端 / 已定性为历史 → 这里登记（范围外，不计散落）
+ *
+ * ⚠️ 加进这里等于宣布「这份稿永远不会出现在整合稿里」。如果只是「还没排期并入」，
+ * 别加 —— 那是散落，该留在散落清单里被催。
+ */
+export const OUT_OF_SCOPE_PROTOS = {
+  'deploy-console-domain.html':
+    '当前有效稿（README §一）：deploy-console 双域控制台 + 系统设置/存储配置。宿主是 deploy-console，不是 admin。',
+  'deploy-console-version-deploy.html':
+    '当前有效稿（README §一）：版本部署页（VersionDeploy.vue）。宿主是 deploy-console 的微前端域。',
+  'pipeline-env-branch-canvas.html':
+    '当前有效稿（README §一）：流水线编辑画布（OrchestrationEditor.vue）。宿主是 deploy-console 的流水线编辑页。',
+  'module-deploy-target-prototype.html':
+    '历史专题稿：部署目标专题，非当前控制台结构，已被 deploy-console 双域结构取代。',
+  'release-platform-v14-整合框架.html':
+    '发布平台历史终稿：v5～v14 共 11 份旧稿已于 2026-10-22 收敛，仅留这一份作设计过程记录（README §三）。',
+  'radius-style-dual.html':
+    '外观风格探索稿：圆角双风格（柔和/清爽）对比，属设计系统层探索，不是业务模块页。',
+};
 
 /* ── 占位屏的说明文案构造器（不许伪造业务数据） ───────────────────────── */
 const P4NOTE = (html) => ({ html: '本屏属 Agents 的 P4 后续批次，本稿只定「壳与复用口径」：' + html });
@@ -110,30 +175,63 @@ const SRC_DICTS = {
 };
 
 /**
- * 内容中心（content:view / content:manage）：**一份稿 5 屏**的共享源。
- * 为什么不是「一屏一行」：这 5 屏是同一组二级页，DOM 由 JS 按当前屏渲染（状态机 / 筛选 /
- * 抽屉 / 弹窗都是模块级共享的），拆成 5 份就变成 5 个互不相通的状态机。
- * → 用 shared：DOM 按 data-cc 拆给各屏，CSS 作用域隔离，JS 只注入一次（IIFE + ns=CC）。
+ * 自媒体运营（content:view / content:manage）—— **一份稿 8 个 section 服务 5 个菜单页**。
+ *
+ * 取代此前的「内容中心」5 屏（admin-content-hub.html：采集总览 / 内容条目 / 条目详情 /
+ * 龙虎榜 / 席位库）。2026-10-22 产品侧把该模块重构为「自媒体运营」功能组，真实代码
+ * （apps/admin/src/layouts/BasicLayout.vue + apps/admin/src/router/index.ts）已无
+ * 采集总览 / 龙虎榜 / 席位库三个路由 —— 原型侧继续留着就是**第二真相源**，故整体替换。
+ * （admin-content-hub.html 已于 2026-10-22 删除，不再登记进整合稿。）
+ *
+ * 为什么用 mount 而不是 shared：这 5 屏的二级页之间有**跨根键跳转**
+ *   · screen-item-detail → go('publications')「去『公众号成文』查看」
+ *   · screen-publications 空态 → go('pipelines')「前往发布管线」
+ * 把 8 个 section 按菜单页拆到 5 个 host 里，这两处点了会跳到「被 hub 隐藏的那一屏」，
+ * 什么也不会发生。→ DOM 不拆，整块一块，切屏时由 hub 在运行时搬过去（见 mount 字段口径）。
  */
-const SRC_CONTENT = {
-  file: 'admin-content-hub.html',
-  from: '<div class="ad-content">',
-  to: '<div class="mask"',
-  wrapper: '<div class="ad-content">',
-  /* 类名是裸通用名（.card/.btn/.tbl/.badge/.drawer/.modal…），不隔离会污染其它屏 */
-  scope: '.cc-scope',
-  cssDrop: ['body', 'html'],
-  rootToGlobal: true,
-  idPrefix: 'cc-',
-  ns: 'CC',
-  exports: ['go', 'setState', 'apply', 'toast', 'closeAll', 'modalOk', 'openDetail', 'confirmRerun',
-    'confirmCollect', 'openSeats', 'openSeatForm', 'confirmDisable'],
-  trail: { from: '<div class="mask"', to: '<script>' },
-  shared: {
-    hostSel: '.cc-host',
-    screens: ['content-overview', 'content-items', 'content-detail', 'content-lhb', 'content-seats'],
+const SRC_MEDIA = {
+  file: 'admin-media-ops.html',
+  from: '<div class="content">',
+  to: '<aside class="demo-ctl"',
+  wrapper: '<div class="content">',
+  /* 类名是裸通用名且与整合稿**大面积重叠**（.btn / .card / .table / .page-head / .chip /
+     .tag / .screen / .seg / .empty …），hub 自己也用 .page-head 与 .screen —— 不隔离必然
+     互相污染（2026-10-11「样式完全是乱的」同型事故）。 */
+  scope: '.zm-scope',
+  wrap: 'zm-scope',
+  /* 丢弃源稿自己的壳（整页导航壳在这里没有意义）与评审台（其 DOM 未抽取，规则留着只会误伤） */
+  cssDrop: ['body', 'html', '.app', '.sider', '.topbar', '.menu-', '.crumb', '.env-tag',
+    '.avatar', '.content', '.demo-', '.dc-', '.preset', '.only-', '@media print'],
+  /* 源稿的 :root 是**模块私有 token**（--brand / --bg-page / --t1 …），不能并进整合稿
+     全局 :root —— 里面 --border / --bg-surface 这类名字与别的稿重名，会互相覆盖。
+     交给 scopeCssBlocks 改写成 `.zm-scope{…}`，只在本模块子树生效。
+     但 body 上的基准排版被丢掉了，得在作用域内补回来（否则文本继承整合稿排版）。 */
+  cssExtra: '  .zm-scope{font-family:var(--sans);font-size:14px;color:var(--t2);line-height:1.6;}\n',
+  idPrefix: 'zm-',
+  ns: 'ZM',
+  exports: ['go', 'toast', 'openTrigger', 'setRcState', 'runTrigger', 'resetFilter',
+    'openPreview', 'closeModal', 'runTest', 'setTestState', 'confirmDel'],
+  /* 内容区之外的三块：手动触发弹窗 + 成文预览抽屉（同一段）、toast —— 源稿把弹层挂在
+     .content 之外，按 from/to 切内容区会连它们一起丢掉，点「触发」就找不到弹窗 */
+  trails: [
+    { from: '<div class="mask" id="triggerMask">', to: '<aside class="demo-ctl"' },
+    { from: '<div id="toast">', to: '<script>' },
+  ],
+  /* 评审台脚本整段丢弃：它写 location.hash = '#s=<key>'，与整合稿的 hash 路由互斥
+     （切一次场景包，整合稿就被踢回默认屏）。源稿里对它的调用都做了 typeof 守卫。 */
+  jsDrop: [['DEMO-PANEL-START', 'DEMO-PANEL-END']],
+  /* 图标库 sprite 挂在 body 顶层、内容区之外，不抽就是整稿「图标全空」 */
+  sprite: { from: '<svg style="display:none"', to: '</svg>' },
+  mount: {
+    screens: {
+      'content-sources': 'sources',
+      'content-items': 'items',
+      'content-publications': 'publications',
+      'content-pipelines': 'pipelines',
+      'content-monitor': 'runs',
+    },
   },
-  trace: ['data-cc="content-overview"', 'data-cc="content-seats"', 'id="cc-drawer"', 'id="cc-toast"'],
+  trace: ['id="zm-triggerMask"', 'id="zm-previewMask"', 'id="zm-toast"', 'class="screen on"'],
 };
 
 /* ── 注册表本体：22 屏，与 BasicLayout.vue 菜单逐项对应 ───────────────── */
@@ -187,12 +285,13 @@ export const REGISTRY = [
     reuse: ['.tbl 列表', '分页条（admin 既有）', '脱敏列标注'],
   },
 
-  /* —— 内容中心子菜单（共享源：一份稿 5 屏，CSS 作用域隔离 + JS 只注入一次） —— */
-  ...SRC_CONTENT.shared.screens.map((s) => ({
-    screen: s, source: SRC_CONTENT,
-    note: SRCNOTE('admin-content-hub.html（内容中心模块稿 · 5 屏共享一份 JS 状态机）',
-      '字段与接口对照 M1 落码：<code>collect_runs</code> / <code>content_items.quality_*</code> / '
-      + '<code>lhb_records</code> / <code>hotmoney_seats</code>，不是编的。'),
+  /* —— 自媒体运营子菜单（mount 源：一份 DOM 8 个 section 服务 5 个菜单页） —— */
+  ...Object.keys(SRC_MEDIA.mount.screens).map((s) => ({
+    screen: s, source: SRC_MEDIA,
+    note: SRCNOTE('admin-media-ops.html（自媒体运营模块稿 · 8 个 section / 5 个菜单页 · 一份 JS 状态机）',
+      '字段与接口对照 M1 落码：<code>collect_sources</code> / <code>collect_runs</code> / '
+      + '<code>content_items.quality_*</code> / <code>content_publications</code> / '
+      + '<code>publish_pipelines</code>，不是编的。'),
   })),
 
   /* —— Agents 子菜单（P4 批次，带示意数据） —— */
@@ -313,10 +412,13 @@ export function loadSource(src) {
     const extra = src.to;
     if (!html.includes(extra)) html += '\n        ' + extra;
   }
-  /* trail：共享源下单独返回（弹层是模块级共享的，塞进某一屏别的屏就打不开它） */
+  /* trail / trails：共享源下单独返回（弹层是模块级共享的，塞进某一屏别的屏就打不开它） */
+  const trailDefs = src.trails || (src.trail ? [src.trail] : []);
   let trailHtml = '';
-  if (src.trail) {
-    trailHtml = takeTopLevelElements(between(text, src.trail.from, src.trail.to));
+  if (trailDefs.length) {
+    trailHtml = trailDefs
+      .map((tr) => takeTopLevelElements(between(text, tr.from, tr.to)))
+      .filter(Boolean).join('\n        ');
     if (!src.shared) html += '\n        ' + trailHtml;
   }
 
@@ -330,6 +432,17 @@ export function loadSource(src) {
 
   /* 3) script：全部 <script> 段拼起来（源稿可能拆多段） */
   let js = [...text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+
+  /*  3-0) jsDrop：把标记**所在整行区间**整段丢弃（如源稿自带的评审台）
+        —— 按"行"切而不是按标记串切，是为了连标记行的注释一起带走，不留半截注释。 */
+  for (const [mA, mB] of (src.jsDrop || [])) {
+    const i = js.indexOf(mA);
+    const j = js.indexOf(mB, i < 0 ? 0 : i);
+    if (i < 0 || j < 0) throw new Error(`${src.file}：jsDrop 标记找不到（${mA} / ${mB}）`);
+    const lineStart = js.lastIndexOf('\n', i) + 1;
+    const lineEnd = js.indexOf('\n', j);
+    js = js.slice(0, lineStart) + js.slice(lineEnd < 0 ? js.length : lineEnd + 1);
+  }
 
   /*  3a) getElementById shim —— **只映射本源自己的 id**，其它 id 一律走原生。
        inline handler 之后还会被调用，所以 shim 必须长期有效，不能探完即恢复。 */
@@ -378,6 +491,10 @@ export function loadSource(src) {
   }
   const css = src.scope ? scopeCssBlocks(blocks, src.scope).join('\n  ') : blocks.join('\n  ');
 
+  /* 4b) sprite：图标库 <svg><symbol>（挂在源稿 body 顶层，不抽就整稿图标全空）。
+         只抽一次由 build 负责；这里返回原文，注入时不做改写（symbol id 全局唯一由 build 自检）。 */
+  const spriteHtml = src.sprite ? betweenInclusive(text, src.sprite.from, src.sprite.to) : '';
+
   /* 5) shared：把抽取片段里的 N 个 host 容器按 data-cc 拆给各屏（不是复制 N 份） */
   let hosts = null;
   if (src.shared) {
@@ -395,5 +512,7 @@ export function loadSource(src) {
   return {
     html, css, js, ids: [...ids], blocks: blocks.length, scoped: !!src.scope,
     hosts, trailHtml, rootDecls, shared: !!src.shared,
+    spriteHtml, cssExtra: src.cssExtra || '', wrap: src.wrap || null,
+    mount: src.mount || null,
   };
 }

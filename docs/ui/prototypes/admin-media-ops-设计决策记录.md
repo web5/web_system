@@ -1,6 +1,6 @@
 # 设计决策记录 · 自媒体运营模块原型稿
 
-> 配套文件：`自媒体运营模块-原型稿.html`（单文件可点击原型，浏览器直接打开）
+> 配套文件：`admin-media-ops.html`（单文件可点击原型，浏览器直接打开）
 > 状态：**待用户确认** —— 确认后才进入规格化与编码
 > 日期：2026-10-22
 
@@ -122,3 +122,108 @@ Q1–Q8 全部按拍板结论实现，PR：**web5/web_system#378**（分支 `fea
 **验证记录**：content-hub `tsc` 通过、44 个单测通过（新增 9 个，含"试采零副作用"锁定）；admin `vue-tsc -b` + `vite build` 通过；网关 `/api/content-admin` → `/api` 前缀 rewrite 覆盖全部新端点，无需改网关。
 
 *原型稿确认方式：在 HTML 中逐屏过一遍，重点看 ① 触发弹窗五态 ② 明细/成文两新视图 ③ 菜单结构；有意见直接在这份记录上批注或口头说。*
+
+---
+
+## 九、原型演示控件升级（2026-10-22 晚 · 按 `ux-prototype-designer` v1.2.0 规格）
+
+> 起因：用户反馈原控件只是一张静态说明卡（「本稿为交互原型：菜单、跳转、弹窗均可点击；数据为 mock」），信息量太低——它没说**哪些**能点、有**哪些屏**、有**哪些分支**。
+> 升级后按通用规格落地，规格真源 `~/workspace/ai-agent-kit/skills/ux-prototype-designer/references/demo-control-panel.md`。
+
+### 9.1 控件四区
+
+| 区 | 本稿内容 |
+|---|---|
+| ① 稿头 | 稿名 / 目标端（桌面 Web · admin 壳）/ 日期 / 数据全为 mock / 标注编号对应本记录 |
+| ② 场景 | **10 个具名场景包** + `下一步 →`；角色 2 个（内容管理员 / 只读访客）；数据态 5 个（正常/加载中/空数据/请求失败/无权限） |
+| ③ 导航 | **8 屏直达**（含菜单里没有的 3 个二级页：编辑采集源 / 明细详情 / 编辑管线）+ `[` `]` 上下屏 |
+| ④ 辅助 | 标注层（D2/D6/D8 三处锚点）/ 复位 / 收起；快捷键 `H` `[ ]` `1-9` `A` `?` `Esc` |
+
+### 9.2 场景包清单（= 分支清单的单一来源）
+
+| # | 场景 | 角色 | 屏 | 数据态 | 附加 |
+|---|---|---|---|---|---|
+| S1 | 采集源管理 · 主路径 | 内容管理员 | 采集源管理 | 正常 | 默认场景 |
+| S2 | 只读访客 · 无操作列 | 只读访客 | 采集源管理 | 正常 | 写操作全隐藏 |
+| S3 | 新装系统 · 空态 | 内容管理员 | 采集源管理 | 空数据 | 空态唯一出路=添加源 |
+| S4 | 手动触发 · 类型未接入 | 内容管理员 | 采集源管理 | 正常 | 打开触发弹窗并渲染「类型未接入」结果卡（技术详情折叠） |
+| S5 | 采集明细 · 质量异常 | 内容管理员 | 采集明细 | 正常 | |
+| S6 | 明细详情 · 归因流程条 | 内容管理员 | 明细详情 | 正常 | |
+| S7 | 公众号成文 · 成文预览抽屉 | 内容管理员 | 公众号成文 | 正常 | 打开右侧抽屉 |
+| S8 | 发布管线 · 编辑管线 | 内容管理员 | 编辑管线 | 正常 | 二级页可达性 |
+| S9 | 采集监控 · 静默失效 | 内容管理员 | 采集监控 | 正常 | |
+| S10 | 接口失败 · 重试入口 | 内容管理员 | 采集监控 | 请求失败 | 失败态带屏名 + 重试 |
+
+### 9.3 两条设计取舍（本稿特有）
+
+| # | 取舍 | 理由 | 备选 |
+|---|---|---|---|
+| D10 | 数据态用**整屏状态层**（方案 B），不逐屏重排 `.only-*` 分支 | 本稿 8 屏已有完整真实内容，逐屏插 4 个分支块要重排 32 处、回归成本高于收益 | 方案 A 逐屏分支（新稿推荐；能表达「列表空但统计卡仍在」这类局部态） |
+| D11 | 控件**默认收起**，展开时内容区右移 344px 让位 | 展开态必然挤窄表格（7 列 + 190px 操作列）；收起态=评审模式看产品原貌，展开态=演示模式看分支，职责分开 | 常驻展开（会挡操作列）/ 悬浮覆盖（反馈中的原问题） |
+
+**遗留**：展开态下表格在卡片内横向滚动（macOS 滚动条默认隐藏），操作列需横滑才能看全 → 若要彻底解决，需在编码阶段按「控件改为可拖拽浮层」或「面板收窄至 240px」再评估。
+
+### 9.4 机检
+
+```
+node ~/workspace/ai-agent-kit/skills/ux-prototype-designer/scripts/check-demo-panel.mjs \
+  "docs/ui/prototypes/admin-media-ops.html"
+# ✔ 演示控件机检通过（屏清单对账 / 场景包字段 / 假开关检测 / 复位 / 打印隐藏）
+```
+
+---
+
+## 十、并入 admin 整合稿（2026-10-22）
+
+> 背景（产品意见）：「设计出来的原型需要统一融合进 admin 的原型稿里，目前是散落的」。
+> 此前本稿落在 `apps/admin/prototype/` 下，与整合稿 `admin-agents-hub.html` 互不相通 ——
+> 评审要看两份稿，改一处要记得改两处。
+
+### 10.1 三条硬约束（决定了技术上必须这么做）
+
+| # | 约束 | 后果 |
+|---|---|---|
+| C1 | **不能按菜单页拆 DOM** | 模块内二级页之间有跨根键跳转：明细详情 →「去『公众号成文』查看」、成文空态 →「前往发布管线」。拆成 5 份后，目标 `section` 在别的屏里、被 hub 隐藏，点了什么也不会发生 |
+| C2 | **不能带自己的评审台进 hub** | 控件写 `location.hash = '#s=<key>'`，而 hub 的 hash 是它自己的路由（`#/content/items`）——切一次场景包，hub 就被踢回默认屏 |
+| C3 | **不能带自己的壳进 hub** | 壳与菜单的唯一真相源是 `BasicLayout.vue` → `proto-shell.mjs`；第二份壳 = 第二真相源（2026-10-15 已裁决过同型问题） |
+
+### 10.2 落地方式：`mount` 源（一份 DOM 服务 5 页）
+
+| 项 | 做法 |
+|---|---|
+| 稿的位置 | `docs/ui/prototypes/admin-media-ops.html`（与其它原型同目录；`PROTO_DIR` 只认这一个目录） |
+| 注册表登记 | `scripts/lib/proto-registry.mjs` → `SRC_MEDIA`，`mount.screens` 把 5 个 hub 屏映射到模块根键：`content-sources→sources` / `content-items→items` / `content-publications→publications` / `content-pipelines→pipelines` / `content-monitor→runs` |
+| DOM | **整块一份**，容器 `data-zm-module`；切菜单时 hub 把这块 `appendChild` 到当前屏，再调 `ZM.go(根键)` |
+| 状态机 | 一份（IIFE + `ns:'ZM'`，inline handler 改写为 `ZM.xxx()`） |
+| CSS | 作用域隔离到 `.zm-scope`（本稿类名是裸通用名且与 hub 大面积重叠：`.btn/.card/.page-head/.screen`…）；`:root` 私有 token 转成 `.zm-scope{…}`，**不并进整合稿全局** |
+| 弹层 | `trails` 多段抽取：手动触发弹窗 + 成文预览抽屉 + `#toast`（这三块挂在 `.content` 之外） |
+| 图标库 | `sprite`：`<svg><symbol id="i-*">` 在 body 顶层，不抽就是整稿图标全空 |
+| 评审台 | `jsDrop` 按 `DEMO-PANEL-START/END` 整段丢弃；本稿对它的两处调用都做了 `typeof` 守卫（独立打开照常生效） |
+| 模块内跳转 | `go()` 末尾调 `window.zmSync(key)` → hub 换屏 + 菜单高亮 + 地址栏同步（子页映射到父屏，如 `item-detail → content-items`） |
+| 屏容器命名 | **保留 `.screen`**，但 `go()` 改成按 id 精确操作（`SCREENS[k].el`）—— hub 的屏容器也叫 `.screen`，用类选择器会互相误伤；hub 侧也把 `qsa('.screen')` 收紧成 `qsa('.screen[data-screen]')` |
+
+### 10.3 带来的变化（对评审可见）
+
+| 变化 | 说明 |
+|---|---|
+| 一份稿看全站 | 左侧菜单点「自媒体运营」即进入本模块，5 页都在整合稿里；面包屑、选中态、地址栏与真实 admin 同构 |
+| 跨页跳转连着走 | 明细详情 →「去公众号成文」会**同时**切换模块子页、hub 屏、左侧菜单高亮与地址栏 |
+| 评审台留在本稿 | 场景包 / 角色 / 数据态 / 8 屏直达只在**独立打开本稿**时可用；整合稿里用菜单导航（单一导航入口，符合 skill 规格 §5.4） |
+| 旧「内容中心」5 屏下线 | 真实 `router/index.ts` 已无 采集总览 / 龙虎榜 / 席位库 三个路由，`admin-content-hub.html` 已删除（git 历史可追溯） |
+
+### 10.4 机检（改了本稿或注册表都要跑）
+
+```
+node scripts/build-agents-hub.mjs          # 生成自检 11 条（含 mount 唯一性 / sprite id 去重）
+node scripts/verify-agents-hub.mjs         # 211 项（⑩g 段：模块被搬到位 / 一份 DOM / 跨键跳转带动 hub / 弹层）
+node scripts/verify-proto-shell.mjs        # 39 项（三稿壳与菜单一致）
+node scripts/verify-playground-parity.mjs  # 31 项
+node scripts/verify-agent-def-detail.mjs   # 118 项
+```
+
+### 10.5 顺带修掉的两个 bug
+
+| # | 现象 | 根因 | 修法 |
+|---|---|---|---|
+| B1 | 采集明细空态里点「重置筛选」报 `demoState is not defined` | 控件改造时删掉了 `demoState()`，但空态按钮还在调它 | 改为 `resetFilter()`（清筛选输入 + 分段回第一档 + 演示态回正常） |
+| B2 | 被抽进整合稿后 `go()` 报 `Cannot read properties of null (reading 'scrollTop')` | 源稿写死 `document.querySelector('.content')`，整合稿的滚动容器叫 `.ad-content` | 改成 `.content, .ad-content` 双兜底 + 空值跳过 |

@@ -50,11 +50,26 @@
         <a-sub-menu v-if="userStore.hasPermission('content:view')" key="content">
           <template #icon><CloudDownloadOutlined /></template>
           <template #title>自媒体运营</template>
-          <a-menu-item key="content-sources">采集源管理</a-menu-item>
-          <a-menu-item key="content-items">采集明细</a-menu-item>
-          <a-menu-item key="content-publications">公众号成文</a-menu-item>
-          <a-menu-item key="content-pipelines">发布管线</a-menu-item>
-          <a-menu-item key="content-monitor">采集监控</a-menu-item>
+          <a-menu-item key="content-sources">
+            <template #icon><CloudServerOutlined /></template>
+            <span>采集源管理</span>
+          </a-menu-item>
+          <a-menu-item key="content-items">
+            <template #icon><UnorderedListOutlined /></template>
+            <span>采集明细</span>
+          </a-menu-item>
+          <a-menu-item key="content-publications">
+            <template #icon><WechatOutlined /></template>
+            <span>公众号成文</span>
+          </a-menu-item>
+          <a-menu-item key="content-pipelines">
+            <template #icon><DeploymentUnitOutlined /></template>
+            <span>发布管线</span>
+          </a-menu-item>
+          <a-menu-item key="content-monitor">
+            <template #icon><MonitorOutlined /></template>
+            <span>采集监控</span>
+          </a-menu-item>
         </a-sub-menu>
         <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
           <template #icon><RobotOutlined /></template>
@@ -179,7 +194,30 @@ const assetBase = __PUBLIC_ASSET_BASE__;
  *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数（与 assetBase 同款踩坑）。 */
 const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined, CloudDownloadOutlined } from '@ant-design/icons-vue';
+import {
+  DashboardOutlined,
+  ThunderboltOutlined,
+  TeamOutlined,
+  SettingOutlined,
+  ApiOutlined,
+  LogoutOutlined,
+  DownOutlined,
+  UserOutlined,
+  HomeOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  DatabaseOutlined,
+  CloudDownloadOutlined,
+  // 自媒体运营子菜单（p40）：与顶级菜单项一致，子项也带图标，
+  // 否则展开后是一片纯文本，和其他分组的视觉节奏不一致。
+  CloudServerOutlined,
+  UnorderedListOutlined,
+  WechatOutlined,
+  DeploymentUnitOutlined,
+  MonitorOutlined,
+} from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
