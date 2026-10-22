@@ -181,9 +181,14 @@ await wait(250);
 rec('12a 保存需内联二次确认', await page.$$eval('.cfm', (n) => n.length), 1);
 rec('12b 确认条标明改动项数', await txt('.cfm'), (t) => /项改动/.test(t), true);
 await clickEl('.cfm [data-y]');
+/* toast 是定时自动消失的。旧写法「固定 wait(1300) 后再断言可见」等于跟定时器比赛：
+   机器稍慢一步就红，单跑又绿（2026-10-22 实测偶发 12d 失败）。
+   改成：点击后**先等它出现**并记下结果，再等保存流程走完断言 diff 条。 */
+let toastSeen = true;
+try { await page.waitForSelector('#toast', { state: 'visible', timeout: 2000 }); } catch { toastSeen = false; }
 await wait(1300);
 rec('12c diff 条隐藏', await vis('#diffbar'), false);
-rec('12d toast 提示成功', await vis('#toast'), true);
+rec('12d toast 提示成功', toastSeen, true);
 rec('12e 生效提示回到一致', await txt('#rb-note'), '与线上一致');
 
 // —— ⑫ 续：保存后状态自洽（版本号 / 列表 chips 回写） ——

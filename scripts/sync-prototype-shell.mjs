@@ -39,6 +39,11 @@ const FILES = [
 
 const MARK_CSS = '/* ===== PROTO-SHELL-CSS (auto, single source) ===== */';
 const MARK_JS = '/* PROTO-SHELL-JS (auto, single source) */';
+/* 顶栏注入块没有天然标记，靠「形状」剥：上一次注入留下的左前缀 / 右侧块。
+   ⚠️ 2026-10-22 事故：第 2 步原先直接 prepend/append，没有剥旧层 —— 跑两次后顶栏出现
+   两组 home 图标 + 两组「主题/用户」（admin-agents.html 出现 4 个 .ad-hl）。下面三行就是幂等键。 */
+const LEFT_INJ = /<div class="ad-hl"><span class="ad-home">[\s\S]*?<\/span>\s*/g;
+const RIGHT_INJ = /\s*<\/div>\s*<div class="ad-hr">[\s\S]*?<\/div>\s*/g;
 
 let failed = false;
 for (const { file, actives } of FILES) {
@@ -56,10 +61,17 @@ for (const { file, actives } of FILES) {
   if (ai === 0) problems.push('未找到 <aside class="ad-sider">（可能已同步或结构变更）');
   if (ai !== actives.length) problems.push(`sider 数 ${ai} ≠ 预期 ${actives.length}`);
 
-  /* 2. 顶栏：home 图标 + 右侧（保留原面包屑内容） */
+  /* 2. 顶栏：home 图标 + 右侧（保留原面包屑内容）
+        **先剥旧层再注入**（见 LEFT_INJ / RIGHT_INJ 注释）—— 不然本步不幂等。 */
   const home = shellIcon('home', 'ad-home-ic');
-  out = out.replace(/<header class="ad-header">/g, `<header class="ad-header">\n      <div class="ad-hl"><span class="ad-home">${home}</span>`);
-  out = out.replace(/<\/header>/g, `</div>\n      ${shellHeaderRight()}\n    </header>`);
+  out = out.replace(/<header class="ad-header">[\s\S]*?<\/header>/g, (block) => {
+    let inner = block
+      .replace(/^<header class="ad-header">/, '')
+      .replace(/<\/header>$/, '');
+    inner = inner.replace(LEFT_INJ, '').replace(RIGHT_INJ, '');
+    return `<header class="ad-header">\n      <div class="ad-hl"><span class="ad-home">${home}</span>`
+      + `${inner.trimEnd()}\n</div>\n      ${shellHeaderRight()}\n    </header>`;
+  });
 
   /* 3. 壳 CSS：第二个 <style> 独立块（幂等） */
   if (!out.includes(MARK_CSS)) {

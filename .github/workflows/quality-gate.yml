@@ -104,3 +104,39 @@ jobs:
           # 但全仓没有 ESLint 配置，ESLint 9 一律报找不到 eslint.config.* → 任何后端 PR 必红。
           # 补上 flat config 后把 `--lint` 加回来即可恢复 lint 门。
           bash scripts/ci/changed-packages.sh "$BASE"
+
+  # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
+  #
+  # 为什么不只靠本地脚本：散落的根因不是「不会跑」，是「没人提醒要跑」。
+  # 本地脚本可以被忽略，PR 门禁不能。
+  #
+  # 只跑**静态**三步（build / audit / adopt），三个脚本都只用 Node 内置模块，无需 install。
+  # 四条浏览器机检（verify-agents-hub 等）依赖 puppeteer + Chrome，留在本地/发布前跑：
+  # 装 Chrome 会让这个 job 从 20 秒变成几分钟，反馈一慢就没人看它。
+  proto-static-check:
+    name: 原型体系静态门禁（散落稿 / 登记自洽 / 可并入性）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 构建整合稿并校验「生成物 = 注册表」
+        run: |
+          node scripts/build-agents-hub.mjs
+          # build 会重写 docs/ui/prototypes/admin-agents-hub.html。
+          # 若与提交版本不同 → 要么改了源稿/注册表却没重跑 build，要么有人手改了生成物。
+          # 两种情况都会让「以整合稿为准」的评审看到过期内容。
+          if ! git diff --quiet -- docs/ui/prototypes/admin-agents-hub.html; then
+            echo "::error::整合稿与注册表不一致。请在本地重跑 node scripts/build-agents-hub.mjs 并提交生成物。"
+            git diff --stat -- docs/ui/prototypes/admin-agents-hub.html
+            exit 1
+          fi
+
+      - name: 审计（散落稿 / 版本族 / 登记自洽）
+        run: node scripts/audit-proto-registry.mjs
+
+      - name: 已并入稿的可并入性回归
+        run: node scripts/check-proto-adopt.mjs --registered

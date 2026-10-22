@@ -39,16 +39,23 @@ export const SHELL_TOP = [
  * （2026-10-15 admin-console.html 事故：壳被复制成第二真相源）。现在按**组**声明，
  * `key` 用于生成 .ad-sub 的 data-sub（切屏时按它判定哪个父级标题高亮）。
  */
-/** 内容中心（content:view / content:manage）—— 原型侧新增模块，落地需在 BasicLayout.vue 挂菜单（契约门 C4：权限码先登记） */
+/**
+ * 自媒体运营（content:view / content:manage）。
+ * 逐项对齐 apps/admin/src/layouts/BasicLayout.vue 的 `a-sub-menu key="content"`，
+ * route 与 apps/admin/src/router/index.ts 的 content 子路由 path 同构。
+ * ⚠️ 2026-10-22 替换掉旧的「内容中心」5 屏（采集总览 / 内容条目 / 条目详情 / 龙虎榜 / 席位库）：
+ *    真实代码已把该模块重构为功能组，旧的采集总览 / 龙虎榜 / 席位库三个路由**已不存在**，
+ *    原型侧再留着就是第二真相源。原型稿见 docs/ui/prototypes/admin-media-ops.html。
+ */
 export const SUB_CONTENT = {
-  key: 'content', title: '内容中心', icon: 'news',
-  screens: ['content-overview', 'content-items', 'content-detail', 'content-lhb', 'content-seats'],
+  key: 'content', title: '自媒体运营', icon: 'clouddownload',
+  screens: ['content-sources', 'content-items', 'content-publications', 'content-pipelines', 'content-monitor'],
   items: [
-    { label: '采集总览', screen: 'content-overview', route: '#/content',             icon: null },
-    { label: '内容条目', screen: 'content-items',    route: '#/content/items',       icon: null },
-    { label: '条目详情', screen: 'content-detail',   route: '#/content/items/12043', icon: null },
-    { label: '龙虎榜',   screen: 'content-lhb',      route: '#/content/lhb',         icon: null },
-    { label: '席位库',   screen: 'content-seats',    route: '#/content/seats',       icon: null },
+    { label: '采集源管理', screen: 'content-sources',      route: '#/content',              icon: null },
+    { label: '采集明细',   screen: 'content-items',        route: '#/content/items',        icon: null },
+    { label: '公众号成文', screen: 'content-publications', route: '#/content/publications', icon: null },
+    { label: '发布管线',   screen: 'content-pipelines',    route: '#/content/pipelines',    icon: null },
+    { label: '采集监控',   screen: 'content-monitor',      route: '#/content/monitor',      icon: null },
   ],
 };
 /** Agents 子菜单（a-sub-menu）。`Agent 概览` = router 的 /agents index 页，BasicLayout 未挂菜单项（已知增量） */
@@ -87,6 +94,8 @@ const ICON_PATHS = {
   api: '<path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/>',
   robot: '<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 17h5"/>',
   news: '<path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M19 7h1v13"/><path d="M7 8h7M7 12h7M7 16h4"/>',
+  /* 自媒体运营 = BasicLayout 的 CloudDownloadOutlined */
+  clouddownload: '<path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/>',
   home: '<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
