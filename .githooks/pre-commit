@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ============================================================
+# pre-commit — 本地红线扫描（暂存区）
+#
+# 定位：**快反馈**，不是契约。真正的契约是 CI 的 quality-gate.yml——
+#      它能被 --no-verify 绕过，所以本 hook 只承担「刚写完就发现自己踩坑」，
+#      不承担「保证 master 干净」的职责。
+#
+# 为什么用 cached 而不是 diff：pre-commit 阶段 commit 还没产生，
+#      只有暂存区。`scan-rules.sh cached` 扫的就是 git diff --cached。
+#
+# 实际生效的规则（scan_cached → check_file + scan_diff_range --cached）：
+#   R1 调试残留 · R2 敏感文件 · R2b 硬编码凭据 · R3 占位 · R4 TS 铁律
+#   R5 CORS · R8 main.ts 异常过滤器 · R9 新增页面须同行原型 · R9b 既有 UI 改动
+# commit 级规则（R10/R11/R13/R14/R15/R17/R18）在本地**不跑**——它们要看
+# commit message 与祖先链，只有 commit 之后才存在，交给 CI。
+#
+# 耗时：实测 0.5~3s（2026-10-22 行级改 bash 内建后）。超过 5s 请查
+#      SCAN_PROFILE=1，不要靠感觉。
+#
+# 绕过：
+#   git commit --no-verify   临时绕过（CI 会重跑同一套规则，故不是真绕过）
+#
+# 安装：bash scripts/redline/install-git-hooks.sh
+# 设计：docs/development/质量门禁总纲.md §2（L2 层）、specs/kit-sop-enforcement §3.5
+# ============================================================
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT" || exit 0
+
+SCANNER="scripts/redline/scan-rules.sh"
+
+# 扫描器缺失时不阻断（比如在非完整检出的环境里），只提示。
+# 理由：本地门禁是便利设施，不该因为仓库不全而让人无法提交。
+if [ ! -f "$SCANNER" ]; then
+  echo "⚠️  pre-commit: 未找到 $SCANNER，跳过红线扫描" >&2
+  exit 0
+fi
+
+exec bash "$SCANNER" cached
