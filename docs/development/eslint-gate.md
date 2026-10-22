@@ -1,5 +1,8 @@
 # ESLint 门禁与基线报告
 
+> **门禁状态（2026-10-22 核实）**：配置已就位（`eslint.config.mjs`），但 **CI 仍未接入**——`quality-gate.yml` 的 `changed-packages` 步骤至今不传 `--lint`（自 2026-09-22 关闭后未恢复）。即：当前只有本地 `pnpm lint` 可用，PR 上零拦截。
+> 本文是 ESLint 门的**判据源**；门的级别、开关状态与整改优先级见 `docs/development/质量门禁总纲.md` §3.4 D3 与 §8 P1-1。
+
 > 建立日期：2026-10-10 · 关联任务 `rLCb1M`
 > 配置文件：`eslint.config.mjs`（根级，ESLint 9 flat config）
 > 规范索引：`docs/development/frontend-best-practices.md`
