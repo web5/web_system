@@ -76,17 +76,28 @@ check_line_error() {
   #   迁移脚本（p26~p37 等）是「给运维手动跑的 CLI 工具」，console.log 是**进度/结论日志**，
   #   与根 scripts 的 debug-local、apps/*/scripts 的 miniprogram-ci 完全同构（产品行为，非调试残留）。
   #   仅豁免 archive/migrations 一级目录；迁移脚本引用的业务代码不受影响。
+  #
+  # 同性质扩展（2026-10-22，CI 实测误报 · PR #379）：.codebuddy/[agent-kit/]skills/<skill>/scripts/*.{js,mjs,cjs}。
+  #   skill 自带的**机检/脚手架脚本**（如 ux-prototype-designer 的 check-demo-panel.mjs）
+  #   靠 stdout 交付结果：`::error file=…::…` 是 GitHub Actions 注解格式，通过提示是给人看的结论。
+  #   删掉就没有任何输出 —— 同 scripts/*.mjs，属产品行为。只豁免 skill 的 scripts/ 一级，
+  #   skill 目录里其余 .mjs（若有）与业务代码不受影响。
   if ! is_comment_line "$s" \
      && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs \
           || "$file" == apps/*/scripts/*.js || "$file" == apps/*/scripts/*.mjs \
           || "$file" == apps/*/scripts/*.cjs \
-          || "$file" == archive/migrations/*.mjs || "$file" == archive/migrations/*.cjs ]]; then
-    if printf '%s' "$content" | grep -qE '\b(console\.(log|debug)\(|debugger\b)'; then
+          || "$file" == archive/migrations/*.mjs || "$file" == archive/migrations/*.cjs \
+          || "$file" == .codebuddy/skills/*/scripts/*.js || "$file" == .codebuddy/skills/*/scripts/*.mjs \
+          || "$file" == .codebuddy/skills/*/scripts/*.cjs \
+          || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.js \
+          || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.mjs \
+          || "$file" == .codebuddy/agent-kit/skills/*/scripts/*.cjs ]]; then
+    if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(console\.(log|debug)\(|debugger([^0-9A-Za-z_]|$))'; then
       add_err "R1" "调试残留(console.log/debug/debugger)" "${file}:${line}" "$content"
     fi
   fi
   # R3 占位残留（TODO/FIXME 常写在注释里，不跳过注释行）
-  if printf '%s' "$content" | grep -qE '\b(TODO|FIXME)\b'; then
+  if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(TODO|FIXME)([^0-9A-Za-z_]|$)'; then
     add_err "R3" "占位残留(TODO/FIXME)" "${file}:${line}" "$content"
   fi
   # R4 TS 铁律：@ts-ignore / @ts-nocheck 本身是注释指令，不跳过
@@ -108,7 +119,7 @@ check_line_warn() {
   s="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*//')"
 
   # R3b 弱占位（注释里出现同样算占位，不跳过）
-  if printf '%s' "$content" | grep -qE '\b(TEMP|TBD|HACK|XXX)\b'; then
+  if printf '%s' "$content" | grep -qE '(^|[^0-9A-Za-z_])(TEMP|TBD|HACK|XXX)([^0-9A-Za-z_]|$)'; then
     add_warn "R3" "弱占位(TEMP/TBD/HACK/XXX)" "${file}:${line}" "$content"
   fi
   # R5 CORS（server 源码目录才判定；跳过注释行）
