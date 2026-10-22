@@ -37,6 +37,28 @@ const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:6001'
  *    排查时务必先看 `pm2 env <id>` 的这项，而不是只看 .env（pm2 env 优先于 dotenv）。
  */
 const SYSTEM_SERVICE_URL = process.env.SYSTEM_SERVICE_URL || 'http://127.0.0.1:6004';
+/**
+ * content-hub 系服务间鉴权的单一真源派生。
+ *
+ * mcp-gateway 的 paper / finnews / wechat_mp / institution 四个模块都直连
+ * content-hub（同机 127.0.0.1:6007），共用同一把 CONTENT_HUB_SERVICE_KEY。
+ * key 只在 .env.production 出现一次，这里统一派生 auth_type + auth_config，
+ * 避免「两处手填同一值漂移」——knowledge 链路就吃过这个亏（restart-backend.sh
+ * 专门加了校验脚本兜底）。
+ *
+ * 显式环境变量优先；未显式配置时，只要 key 存在就默认 bearer。
+ * prefix 取 FINNEWS / CONTENT_HUB / INSTITUTION，对应各自的 *_SERVICE_AUTH_*。
+ */
+function contentHubServiceAuth(prefix) {
+  const key = process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '';
+  const authType = process.env[`${prefix}_SERVICE_AUTH_TYPE`] || (key ? 'bearer' : '');
+  const authConfig =
+    process.env[`${prefix}_SERVICE_AUTH_CONFIG`] || (key ? JSON.stringify({ token: key }) : '');
+  return {
+    [`${prefix}_SERVICE_AUTH_TYPE`]: authType,
+    [`${prefix}_SERVICE_AUTH_CONFIG`]: authConfig,
+  };
+}
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
 const MINI_PROGRAM_SECRET = process.env.MINI_PROGRAM_SECRET || '';
@@ -214,12 +236,13 @@ module.exports = {
         // 财经资讯微服务（content-hub 内模块）：默认同机直连 :6007（Node fetch 对 gateway 代理端口有 bad port 问题）
         // 如需经 gateway 代理，可用环境变量覆盖 FINNEWS_SERVICE_URL=http://127.0.0.1:6000/api/content-hub + AUTH_TYPE=bearer
         FINNEWS_SERVICE_URL: process.env.FINNEWS_SERVICE_URL || 'http://127.0.0.1:6007',
-        FINNEWS_SERVICE_AUTH_TYPE: process.env.FINNEWS_SERVICE_AUTH_TYPE || '',
-        FINNEWS_SERVICE_AUTH_CONFIG: process.env.FINNEWS_SERVICE_AUTH_CONFIG || '',
+        ...contentHubServiceAuth('FINNEWS'),
         // 内容中枢（content-hub，含公众号发布接口）：与财经同机直连
         CONTENT_HUB_SERVICE_URL: process.env.CONTENT_HUB_SERVICE_URL || 'http://127.0.0.1:6007',
-        CONTENT_HUB_SERVICE_AUTH_TYPE: process.env.CONTENT_HUB_SERVICE_AUTH_TYPE || '',
-        CONTENT_HUB_SERVICE_AUTH_CONFIG: process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG || '',
+        ...contentHubServiceAuth('CONTENT_HUB'),
+        // 机构行为（institution 接口同样在 content-hub 内）：auth 独立 env，便于将来拆服务单独换 key
+        INSTITUTION_SERVICE_URL: process.env.INSTITUTION_SERVICE_URL || 'http://127.0.0.1:6007',
+        ...contentHubServiceAuth('INSTITUTION'),
         // 兼容遗留共享密钥（内部/WorkBuddy 集成）；对外公网改为每用户 API Key
         MCP_CLIENT_KEY: process.env.MCP_CLIENT_KEY || '',
         // 运营后台密钥：保护 /api/keys 的列表/吊销接口（X-Admin-Key）
@@ -244,6 +267,8 @@ module.exports = {
         PORT: 6007,
         ...baseDbConfig,
         SYSTEM_SERVICE_URL,
+        // 服务间调用鉴权（InternalKeyGuard 读）：与 gateway / mcp-gateway 同值
+        CONTENT_HUB_SERVICE_KEY: process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '',
         LLM_API_KEY: process.env.IMAGE_GEN_API_KEY || '',
         LLM_BASE_URL: 'https://tokenhub.tencentmaas.com/v1',
         LLM_MODEL: 'hy3',

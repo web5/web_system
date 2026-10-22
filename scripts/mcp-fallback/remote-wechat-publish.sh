@@ -10,6 +10,8 @@
 #
 # 环境变量：
 #   CH_BASE          content-hub 地址（默认 http://127.0.0.1:6007）
+#   CH_SERVICE_KEY   content-hub 服务间 key（默认从 CH_ENV_FILE 读取）
+#   CH_ENV_FILE      key 来源文件（默认 /data/web_system/.env.production）
 #   COVER_URL        封面图 URL
 #   TITLE            文章标题
 #   PUBLISH_FLAG     1=发布，0=仅建草稿（默认）
@@ -17,13 +19,18 @@
 set -euo pipefail
 
 CH_BASE="${CH_BASE:-http://127.0.0.1:6007}"
+# 服务间鉴权：key 的单一真源是 dev 机器上的 .env.production（与 content-hub 进程同源），
+# 本地不留副本，避免两处手填漂移。显式传 CH_SERVICE_KEY 时优先。
+CH_ENV_FILE="${CH_ENV_FILE:-/data/web_system/.env.production}"
+CH_SERVICE_KEY="${CH_SERVICE_KEY:-$(sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' "$CH_ENV_FILE" 2>/dev/null | head -1 | tr -d '"' | tr -d "'" || true)}"
+[ -n "$CH_SERVICE_KEY" ] || { echo "FAIL: 未取到 CONTENT_HUB_SERVICE_KEY（来源 $CH_ENV_FILE）—— content-hub 已对服务间接口强制鉴权，无 key 会全部 401"; exit 1; }
 COVER_URL="${COVER_URL:-https://dummyimage.com/800x400/FF8C42/fff.png&text=Finance+Daily}"
 TITLE="${TITLE:-财经日报（降级通道）}"
 PUBLISH_FLAG="${PUBLISH_FLAG:-0}"
 
 # 1) 拉财经数据
-PULSE=$(curl -sf -m 10 "$CH_BASE/api/market-pulse") || { echo "FAIL: 拉取 market-pulse 失败"; exit 1; }
-TOPICS=$(curl -sf -m 10 "$CH_BASE/api/topics?limit=3") || TOPICS="[]"
+PULSE=$(curl -sf -m 10 -H "Authorization: Bearer ${CH_SERVICE_KEY}" "$CH_BASE/api/market-pulse") || { echo "FAIL: 拉取 market-pulse 失败"; exit 1; }
+TOPICS=$(curl -sf -m 10 -H "Authorization: Bearer ${CH_SERVICE_KEY}" "$CH_BASE/api/topics?limit=3") || TOPICS="[]"
 
 # 2) 用 python3 生成 HTML（带封面图）
 HTML=$(COVER_URL="$COVER_URL" PULSE="$PULSE" TOPICS="$TOPICS" python3 <<'PY'
@@ -62,11 +69,13 @@ PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"title":sys.argv[1],"ht
 
 if [ "$PUBLISH_FLAG" = "1" ]; then
   RESP=$(curl -sf -m 30 -X POST "$CH_BASE/api/content/wechat/publish" \
+    -H "Authorization: Bearer ${CH_SERVICE_KEY}" \
     -H "Content-Type: application/json" -d "$PAYLOAD") \
     || { echo "FAIL: 发布失败"; exit 1; }
   echo "发布结果: $RESP"
 else
   RESP=$(curl -sf -m 30 -X POST "$CH_BASE/api/content/wechat/draft" \
+    -H "Authorization: Bearer ${CH_SERVICE_KEY}" \
     -H "Content-Type: application/json" -d "$PAYLOAD") \
     || { echo "FAIL: 建草稿失败"; exit 1; }
   echo "草稿结果: $RESP"

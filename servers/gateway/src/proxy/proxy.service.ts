@@ -33,6 +33,7 @@ export class ProxyService implements OnModuleInit {
   private bianbianLegacyStaticProxy!: ReturnType<typeof createProxyMiddleware>;
   private mcpProxy!: ReturnType<typeof createProxyMiddleware>;
   private contentProxy!: ReturnType<typeof createProxyMiddleware>;
+  private contentAdminProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentRunsProxy!: ReturnType<typeof createProxyMiddleware>;
   private agentDefsProxy!: ReturnType<typeof createProxyMiddleware>;
   private knowledgeProxy!: ReturnType<typeof createProxyMiddleware>;
@@ -161,7 +162,7 @@ export class ProxyService implements OnModuleInit {
       },
     });
 
-    // 内容中枢通道（/api/content-hub/* → content-hub:6007）—— 唯一入口
+    // 内容中枢通道（/api/content-hub/* → content-hub:6007）—— 服务间唯一入口
     // 财经资讯与内容管道共用：剥掉 /api/content-hub 后即为 content-hub 的真实路由
     //   - /api/content-hub/api/papers          → /api/papers（财经资讯，@Controller('api')）
     //   - /api/content-hub/api/content/sources → /api/content/sources（内容管道，@Controller('api/content')）
@@ -172,6 +173,21 @@ export class ProxyService implements OnModuleInit {
       changeOrigin: true,
       timeout: 30_000,
       pathRewrite: { '^/api/content-hub': '' },
+      on: {
+        proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
+        error: this.boundErrorHandler,
+      },
+    });
+
+    // 内容中枢 · 运营后台通道（/api/content-admin/* → content-hub:6007）—— 供 admin 前端浏览器调用
+    // 与 content-hub 通道的区别：这里**不校验 service key**，用户 JWT 原样透传给 content-hub，
+    // 由 content-hub 的 JwtAuthGuard 校验（payload.systems 含 'admin' 才放行）。
+    // pathRewrite：/api/content-admin/content/sources → /api/content/sources（content-hub 的 @Controller('api/content')）
+    this.contentAdminProxy = createProxyMiddleware({
+      target: this.contentHubServiceUrl,
+      changeOrigin: true,
+      timeout: 30_000,
+      pathRewrite: { '^/api/content-admin': '/api' },
       on: {
         proxyReq: fixRequestBody as NonNullable<Options['on']>['proxyReq'],
         error: this.boundErrorHandler,
@@ -256,6 +272,7 @@ export class ProxyService implements OnModuleInit {
   getAgentRunsProxy() { return this.agentRunsProxy; }
   getAgentDefsProxy() { return this.agentDefsProxy; }
   getContentProxy() { return this.contentProxy; }
+  getContentAdminProxy() { return this.contentAdminProxy; }
   getAiServiceUrl() { return this.aiServiceUrl; }
 
   /**

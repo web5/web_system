@@ -92,7 +92,8 @@ agent_created: true
 | 维度 | 说明 |
 |------|------|
 | 降级数据源 | `http://127.0.0.1:6007/api/market-pulse`、`/api/topics?limit=N`、`/api/sector-hot`（经 SSH 访问 dev 机器 `ubuntu@{{DEV_HOST}}`） |
-| 调用方式 | `ssh ubuntu@{{DEV_HOST}} "curl -s http://127.0.0.1:6007/api/market-pulse"` |
+| 调用方式 | `CH_KEY=$(ssh ubuntu@{{DEV_HOST}} "sed -n 's/^CONTENT_HUB_SERVICE_KEY=//p' /data/web_system/.env.production \| head -1") && ssh ubuntu@{{DEV_HOST}} "curl -s -H 'Authorization: Bearer $CH_KEY' http://127.0.0.1:6007/api/market-pulse"` |
+| 鉴权要求 | 🔴 content-hub 业务接口已强制服务间鉴权，必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`（key 从 dev 的 `/data/web_system/.env.production` 取，单一真源）；探测存活用 `/health`（免鉴权） |
 | 数据格式 | 与 MCP 工具返回一致（sentiment_index / hot_sectors / topics 列表） |
 | 与公众号联动 | 若同时需要发布，直接运行 `web_system/scripts/mcp-fallback/wechat-fallback-publish.sh`，一次完成「取数+生成+建稿」 |
 

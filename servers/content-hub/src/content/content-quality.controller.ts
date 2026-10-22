@@ -11,12 +11,15 @@
  *   · 查询类 → `content:view`（高频只读）
  *   · 触发类 → `content:manage`（低频 + 有副作用）
  */
-import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { CollectLogService } from './services/collect-log.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
 import { EastmoneyLhbCollector } from './collectors/eastmoney-lhb.collector';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { InternalKeyGuard } from '../auth/internal-key.guard';
+import { Public } from '../auth/public.decorator';
 import {
   ArxivDigestBatchDto,
   CollectHealthQueryDto,
@@ -28,10 +31,20 @@ import {
 } from './dto/content-quality.dto';
 import { COLLECT_TRIGGER } from './quality/quality.enum';
 import { LhbRecordEntity } from './entities/lhb-record.entity';
+import { ContentSourceEntity } from './entities/content-source.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SeatTagService } from './services/seat-tag.service';
 
+/**
+ * 采集观测 / 手动触发 / 落库接口，默认走运营后台（admin）用户 JWT。
+ * 两类例外：
+ *   · lhb* / arxiv-digest(POST) —— 服务间接口，@Public() 跳过用户 JWT +
+ *     @UseGuards(InternalKeyGuard) 校验 Bearer <CONTENT_HUB_SERVICE_KEY>
+ *   · arxiv-digest/versions、sample、quality/filter-support —— admin 评测看板，
+ *     走用户 JWT（不挂 @Public）
+ */
+@UseGuards(JwtAuthGuard)
 @Controller('api/content')
 export class ContentQualityController {
   private readonly logger = new Logger(ContentQualityController.name);
@@ -43,6 +56,8 @@ export class ContentQualityController {
     private readonly seatTag: SeatTagService,
     @InjectRepository(LhbRecordEntity)
     private readonly lhbRepo: Repository<LhbRecordEntity>,
+    @InjectRepository(ContentSourceEntity)
+    private readonly sourceRepo: Repository<ContentSourceEntity>,
   ) {}
 
   // ── 采集批次日志（FR-API-6）────────────────────────────────────────
@@ -91,17 +106,38 @@ export class ContentQualityController {
     @Param('sourceCode') sourceCode: string,
     @Body() body: TriggerCollectDto,
   ) {
-    if (!this.running.has(sourceCode)) {
+    // 幂等保护：同一采集源同一时刻只跑一次（`running` 集合），防重复点击把上游打爆
+    if (this.running.has(sourceCode)) {
       return {
         source_code: sourceCode,
         status: 'rejected',
-        reason: '该采集器正在运行中，请勿重复触发',
+        reason: '该采集源正在运行中，请勿重复触发',
       };
     }
+
+    // 读表拿源配置：code / enabled / type / config 都在 content_sources 表里，
+    // 改源、停用、换参都只改表，不用发版。
+    const source = await this.sourceRepo.findOne({ where: { code: sourceCode } });
+    if (!source) {
+      return {
+        source_code: sourceCode,
+        status: 'unknown',
+        reason: `未登记的采集源：${sourceCode}（请先在「内容采集源」里添加）`,
+      };
+    }
+    if (!source.enabled) {
+      return {
+        source_code: sourceCode,
+        status: 'rejected',
+        reason: `采集源已停用：${source.name}`,
+      };
+    }
+
     this.running.add(sourceCode);
     const startedAt = new Date();
     try {
-      if (sourceCode === 'sina_news' || sourceCode === 'eastmoney_news') {
+      // 财经快讯（新浪/东财）：走 finnews 适配器双写（质量归因 + 唯一键去重）
+      if (source.type === 'sina_news' || source.type === 'eastmoney_news') {
         // pipelineId 传null：手动触发的条目不进固定管线（只保证内容有质量归因）
         const results = await this.finnewsAdapter.syncToContentItems(null, {
           trigger: COLLECT_TRIGGER.MANUAL,
@@ -109,13 +145,15 @@ export class ContentQualityController {
         });
         return { source_code: sourceCode, status: 'ok', results };
       }
-      if (sourceCode === 'eastmoney_lhb') {
-        const items = await new EastmoneyLhbCollector().collect({}, body.limit);
+
+      // 龙虎榜：专用采集器（交易日窗口 + 席位明细 + 涨停/ST 标记）
+      if (source.type === 'eastmoney_lhb') {
+        const items = await new EastmoneyLhbCollector().collect(source.config ?? {}, body.limit);
         const finishedAt = new Date();
         if (items.length === 0) {
           await this.collectLog.logFailure({
             sourceCode,
-            sourceName: '东方财富龙虎榜',
+            sourceName: source.name,
             trigger: COLLECT_TRIGGER.MANUAL,
             errorMessage: '采集返回空（源不可达或解析失败）',
             startedAt,
@@ -125,7 +163,7 @@ export class ContentQualityController {
         }
         await this.collectLog.logSuccess({
           sourceCode,
-          sourceName: '东方财富龙虎榜',
+          sourceName: source.name,
           trigger: COLLECT_TRIGGER.MANUAL,
           itemCount: items.length,
           startedAt,
@@ -133,10 +171,11 @@ export class ContentQualityController {
         });
         return { source_code: sourceCode, status: 'ok', items: items.length };
       }
+
       return {
         source_code: sourceCode,
         status: 'unknown',
-        reason: `未注册的采集器：${sourceCode}`,
+        reason: `未注册采集器类型：${source.type}`,
       };
     } catch (e) {
       const finishedAt = new Date();
@@ -169,6 +208,8 @@ export class ContentQualityController {
    * 🔴 这是 Phase 2 的数据地基：不落库 →评测集无从抽样、幻觉率无法自动判定。
    * 由定时任务里的 AI 在生成日报后调用。
    */
+  @Public()
+  @UseGuards(InternalKeyGuard)
   @Post('arxiv-digest')
   async saveDigest(@Body() body: ArxivDigestBatchDto) {
     const items = body.items.map((i) => ({
@@ -185,7 +226,7 @@ export class ContentQualityController {
     };
   }
 
-  /** 各 prompt 版本的产出条数（评测进度看板） */
+  /** 各 prompt 版本的产出条数（评测进度看板，admin 用户 JWT） */
   @Get('arxiv-digest/versions')
   versions() {
     return this.digest.countByVersion();
@@ -218,7 +259,9 @@ export class ContentQualityController {
 
   // ── 龙虎榜（FR-API-8）────────────────────────────────────────────
 
-  /** 龙虎榜列表（按交易日 / 标签筛） */
+  /** 龙虎榜列表（按交易日 / 标签筛；服务间接口，InternalKeyGuard 鉴权） */
+  @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb')
   async listLhb(@Query() query: ListLhbQueryDto) {
     const qb = this.lhbRepo
@@ -250,7 +293,9 @@ export class ContentQualityController {
     };
   }
 
-  /** 单条详情（含席位明细） */
+  /** 单条详情（含席位明细；服务间接口，InternalKeyGuard 鉴权） */
+  @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb/:id')
   async lhbDetail(@Param('id') id: string) {
     const row = await this.lhbRepo.findOne({ where: { id: Number(id) } });
@@ -266,7 +311,9 @@ export class ContentQualityController {
     };
   }
 
-  /** 龙虎榜统计：上榜数 / 涨停数 / 游资参与数 / 机构参与数 */
+  /** 龙虎榜统计：上榜数 / 涨停数 / 游资参与数 / 机构参与数（服务间接口） */
+  @Public()
+  @UseGuards(InternalKeyGuard)
   @Get('lhb/stats')
   async lhbStats() {
     const row = await this.lhbRepo
@@ -317,7 +364,7 @@ export class ContentQualityController {
 
   // ── 占位：内容条目筛选（M2 由既有 controller 增强时补齐）──────────
 
-  /** 条目筛选能力自查（避免与既有 GET items 语义混淆） */
+  /** 条目筛选能力自查（避免与既有 GET items 语义混淆；admin 用户 JWT） */
   @Get('quality/filter-support')
   filterSupport(@Query() query: ListItemsQueryDto) {
     return {

@@ -649,9 +649,19 @@ export class McpService implements OnModuleInit {
   /** seed 论文学习模块（code_key=paper，直连本机 content-hub 的 /api/papers 接口） */
   private async seedPaperModule(): Promise<void> {
     // paper 数据源在 content-hub，与 finnews 同机部署；优先直连本机，避免跨机
+    // paper 与 wechat_mp 共用 CONTENT_HUB_SERVICE_URL（都指向 content-hub），
+    // 因此也共用同一套 auth 配置与同一把 CONTENT_HUB_SERVICE_KEY。
     const baseUrl = process.env.CONTENT_HUB_SERVICE_URL ?? 'http://127.0.0.1:6007';
-    const authType = '';
-    const authConfig: Record<string, any> | null = null;
+    const authType = process.env.CONTENT_HUB_SERVICE_AUTH_TYPE ?? '';
+    const authConfigRaw = process.env.CONTENT_HUB_SERVICE_AUTH_CONFIG ?? '';
+    let authConfig: Record<string, any> | null = null;
+    if (authConfigRaw) {
+      try {
+        authConfig = JSON.parse(authConfigRaw);
+      } catch (e) {
+        this.logger.warn(`CONTENT_HUB_SERVICE_AUTH_CONFIG JSON 解析失败: ${authConfigRaw}`);
+      }
+    }
 
     let existing = await this.moduleRepo.findOne({ where: { code_key: 'paper' } });
     if (existing && existing.module_type !== 'http') {
@@ -707,9 +717,19 @@ export class McpService implements OnModuleInit {
   /** seed 机构行为数据模块（code_key=institution，直连本机 content-hub 的 /api/institution/* 接口） */
   private async seedInstitutionModule(): Promise<void> {
     // institution 数据源在 content-hub，与 finnews 同机部署；优先直连本机
+    // institution 接口也在 content-hub 内（/api/institution/*），auth 独立配一套 env，
+    // 便于将来拆服务时单独换 key；默认同样指向同机 content-hub。
     const baseUrl = process.env.INSTITUTION_SERVICE_URL ?? 'http://127.0.0.1:6007';
-    const authType = '';
-    const authConfig: Record<string, any> | null = null;
+    const authType = process.env.INSTITUTION_SERVICE_AUTH_TYPE ?? '';
+    const authConfigRaw = process.env.INSTITUTION_SERVICE_AUTH_CONFIG ?? '';
+    let authConfig: Record<string, any> | null = null;
+    if (authConfigRaw) {
+      try {
+        authConfig = JSON.parse(authConfigRaw);
+      } catch (e) {
+        this.logger.warn(`INSTITUTION_SERVICE_AUTH_CONFIG JSON 解析失败: ${authConfigRaw}`);
+      }
+    }
 
     let existing = await this.moduleRepo.findOne({ where: { code_key: 'institution' } });
     if (existing && existing.module_type !== 'http') {

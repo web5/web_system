@@ -47,6 +47,10 @@
           <template #icon><DatabaseOutlined /></template>
           <span>数据浏览</span>
         </a-menu-item>
+        <a-menu-item v-if="userStore.hasPermission('content:view')" key="content-sources">
+          <template #icon><CloudDownloadOutlined /></template>
+          <span>内容采集源</span>
+        </a-menu-item>
         <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
           <template #icon><RobotOutlined /></template>
           <template #title>Agents</template>
@@ -170,7 +174,7 @@ const assetBase = __PUBLIC_ASSET_BASE__;
  *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数（与 assetBase 同款踩坑）。 */
 const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
 import { useRouter, useRoute } from 'vue-router';
-import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined } from '@ant-design/icons-vue';
+import { DashboardOutlined, ThunderboltOutlined, TeamOutlined, SettingOutlined, ApiOutlined, LogoutOutlined, DownOutlined, UserOutlined, HomeOutlined, MenuFoldOutlined, MenuUnfoldOutlined, RobotOutlined, SafetyCertificateOutlined, DatabaseOutlined, CloudDownloadOutlined } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import { logout as logoutApi } from '@/api/auth';
@@ -200,7 +204,7 @@ const userAvatar = computed(() => {
 const currentTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '工作台', '/bianbian': '变变管理', '/users': '用户管理', '/settings': '系统设置',
-    '/agents': 'Agents', '/database': '数据浏览',
+    '/agents': 'Agents', '/database': '数据浏览', '/content-sources': '内容采集源',
   };
   const matched = route.matched.find((r) => r.meta.title);
   return (matched?.meta.title as string) || '工作台';
@@ -214,6 +218,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/mcp')) selectedKeys.value = ['mcp'];
   else if (path.includes('/bianbian')) selectedKeys.value = ['bianbian'];
   else if (path.includes('/database')) selectedKeys.value = ['database'];
+  else if (path.includes('/content-sources')) selectedKeys.value = ['content-sources'];
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
   else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
   else if (path.includes('/agents/playground')) selectedKeys.value = ['agents-playground'];
@@ -228,7 +233,7 @@ watch(() => route.path, (path) => {
 const handleMenuClick = ({ key }: { key: string }) => {
   const routes: Record<string, string> = {
     dashboard: '/dashboard', bianbian: '/bianbian', users: '/users', settings: '/settings', mcp: '/mcp',
-    database: '/database',
+    database: '/database', 'content-sources': '/content-sources',
     roles: '/settings/roles', dicts: '/settings/dicts',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',

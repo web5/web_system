@@ -65,9 +65,11 @@ ssh -o ConnectTimeout=8 -o BatchMode=yes "$DEV_HOST" "echo ok" >/dev/null 2>&1 \
   || err "SSH 连接失败: ${DEV_HOST}"
 
 # ── 2. 探测 content-hub ──
+# 用 /health（免鉴权端点）探测，避免业务接口的服务间鉴权把「服务不可达」
+# 和「鉴权失败」混为一谈；key 校验由远程脚本自己从 .env.production 读。
 log "探测 content-hub 服务..."
 ssh -o ConnectTimeout=8 -o BatchMode=yes "$DEV_HOST" \
-  "curl -sf -m 5 ${CH_BASE}/api/market-pulse >/dev/null" 2>/dev/null \
+  "curl -sf -m 5 ${CH_BASE}/health >/dev/null" 2>/dev/null \
   || err "content-hub 不可达: ${CH_BASE}（请先确认 dev 机器 content-hub 已启动）"
 
 # ── 3. 探测 arXiv 网络可达性（避免拉取失败时白跑）──
@@ -84,6 +86,7 @@ if [ "$DRY_RUN" = "1" ]; then
   log "[dry-run] 将传输 remote-paper-publish.sh 到 ${DEV_HOST} 并执行："
   echo "  CH_BASE=${CH_BASE}  COVER_URL=${COVER_IMAGE_URL}"
   echo "  TITLE=${TITLE}  CATEGORIES=${CATEGORIES}  MAX_RESULTS=${MAX_RESULTS}  PUBLISH_FLAG=${PUBLISH}"
+  echo "  服务间 key 由远程脚本从 ${CH_ENV_FILE:-/data/web_system/.env.production} 读取"
   echo "  远程脚本长度: ${#REMOTE_SCRIPT} 字节（base64 ${#B64}）"
   exit 0
 fi

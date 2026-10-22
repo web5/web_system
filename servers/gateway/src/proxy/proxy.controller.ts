@@ -578,6 +578,20 @@ export class ProxyController {
     return this.checkServiceAuthAndProxy(req, res, this.proxyService.getContentProxy());
   }
 
+  // 内容中枢 · 运营后台通道（/api/content-admin/* → content-hub:6007）
+  // 供 admin 前端浏览器调用：**不校验 service key**，用户 JWT 原样透传，
+  // 由 content-hub 的 JwtAuthGuard 校验（systems 含 'admin'）。
+  // 必须放在 @All(':path(*)') 通配之前，否则被通配兜底 404。
+  @All('content-admin')
+  proxyContentAdminExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getContentAdminProxy()(req, res);
+  }
+
+  @All('content-admin/:path(*)')
+  proxyContentAdminWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getContentAdminProxy()(req, res);
+  }
+
   /** 验证服务间 Bearer Token，通过后转发到指定 proxy */
   private checkServiceAuthAndProxy(req: Request, res: Response, proxy: any): Promise<void> | void {
     // 新名优先、旧名兼容：环境配置还没同步到新名时，不会静默失去鉴权

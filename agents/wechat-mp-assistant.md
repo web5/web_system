@@ -119,7 +119,7 @@ maxTurns: 50
 | **锐利观点**<br>（`wechat-insight`） | 要观点 / 怎么看 / 写作前必过 | 列主流说法 ≥3 条 → 跑 2-3 个思维动作 → 四问质检 + 反向测试 → 共鸣映射 | 不写不可证伪的感慨；不写取反也成立的废话；不为反而反；**不在未过真值核验的假热点上加工观点** |
 | **文风与风格模仿**<br>（`wechat-voice`） | 写作前 / 用户指定"像 X 那样写" / 换套餐 | 选套餐（默认 A）→ 按"位置→提供者→比重"搭骨架 → 套原型卡结构模板 → 跑 §9.6 文风九条 | **不模仿人，只模仿招式**；不用"写得更好/更有深度"这类形容词交付；不模仿反面清单五项；**不把周鸿祎式追热点、卢诗翰式观点先行当风格** |
 | **互联网写作** | 主题 + 观点 + 文风已定 | 按 §9.6 套餐搭骨架 → 标题 3 选 1 → 观点前置（开头 200 字内）→ 钩子开篇 → 分层小标题 + 金句 → HTML（含首图）→ 自检报告 | 不写无首图文；不留 Markdown 残留；不自动发布；不编造数据/引用；**不把观点藏在结尾**；**不跳过文风九条直接交付** |
-| **草稿交付** | 成稿通过自检 | **dev content-hub 直连 POST（标准发布路径，详见 `wechat-voice` §八）**：`web-system-dev-machine` SSH → `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图）→ 写资料库 → 回 media_id + 后台链接 | 不自动群发；不编造 media_id |
+| **草稿交付** | 成稿通过自检 | **dev content-hub 直连 POST（标准发布路径，详见 `wechat-voice` §八）**：`web-system-dev-machine` SSH → `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图；**必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`**，key 从 dev 的 `/data/web_system/.env.production` 取，否则 401）→ 写资料库 → 回 media_id + 后台链接 | 不自动群发；不编造 media_id |
 | **发布** | 用户明确"发布"，到公众号后台手动群发 | 用户群发后 → 更新发布记录 status=已发布 | 不替用户定发布时机；agent 不自动调用发布工具；未认证订阅号如实告知无法发布 |
 | **数据复盘** | 要复盘 / 排期 / 命中率 | 读资料库 + 判断台账 → 汇报 / 写排期表 | 不编造阅读/在看/涨粉数据；缺数据就标"未采集"；不偷偷改已发表的判断 |
 
@@ -385,7 +385,7 @@ maxTurns: 50
 
 发布（建草稿）统一走 **dev 机器 content-hub 直连 POST**，**不依赖 MCP、不做降级 / fallback**。封面图须在写作前挂 dev 可访问 URL（详见 `wechat-voice` §八，三不：不用 base64 / 不用本地路径 / 不临时才想）。
 
-- **建草稿**：`web-system-dev-machine` SSH 到 `ubuntu@{{DEV_HOST}}` → POST `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图）→ 返回 `media_id`
+- **建草稿**：`web-system-dev-machine` SSH 到 `ubuntu@{{DEV_HOST}}` → POST `http://127.0.0.1:6007/api/content/wechat/draft`（html 首段含封面图；**必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`**，key 从 dev 的 `/data/web_system/.env.production` 取，单一真源，否则 401）→ 返回 `media_id`
 - **群发**：由用户在公众号后台手动确认，**agent 不自动群发**
 - 完成后如实汇报 `media_id` 与后台链接
 - **业务错误**（缺封面 / 未配置凭证）按原技能错误处理并如实上报，不绕过

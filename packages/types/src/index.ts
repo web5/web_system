@@ -134,7 +134,7 @@ export type Role = 'super_admin' | 'admin' | 'editor' | 'viewer';
 
 export type PermissionGroup =
   | 'dashboard' | 'users' | 'settings' | 'logs' | 'mcp' | 'agents' | 'database' | 'knowledge'
-  | 'deploy';
+  | 'content' | 'deploy';
 export type PermissionType = 'menu' | 'action' | 'api';
 
 export interface PermissionDef {
@@ -174,6 +174,9 @@ export const PERMISSIONS: Record<string, PermissionDef> = {
   // 字典 / 维表（system-service）
   'system:dict:view':   { code: 'system:dict:view',   name: '查看字典维表', group: 'settings', type: 'menu' },
   'system:dict:manage': { code: 'system:dict:manage', name: '维护字典维表', group: 'settings' },
+  // 内容采集源管理（content-hub：源 / 管线 / 手动触发采集）
+  'content:view':   { code: 'content:view',   name: '查看内容采集源', group: 'content', type: 'menu' },
+  'content:manage': { code: 'content:manage', name: '管理内容采集源', group: 'content' },
   /**
    * 浏览服务器存储目录（system-service `GET /admin/settings/storage/browse`）。
    *

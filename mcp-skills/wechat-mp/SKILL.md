@@ -118,6 +118,8 @@ agent_created: true
 
 行为：SSH 到 dev 机器（`ubuntu@{{DEV_HOST}}`）→ 探测 content-hub（:6007）→ 拉取财经数据（`/api/market-pulse`、`/api/topics`）→ 生成带封面图的 HTML → 调 `/api/content/wechat/draft`（或 `/publish`）。
 
+> 🔴 content-hub 业务接口已强制服务间鉴权：调 `/api/market-pulse`、`/api/topics`、`/api/content/wechat/*` 必须带 `Authorization: Bearer <CONTENT_HUB_SERVICE_KEY>`（key 从 dev 的 `/data/web_system/.env.production` 取）。脚本 `wechat-fallback-publish.sh` 已自动读取该 key；探测存活用 `/health`（免鉴权）。
+
 ### 4.3 直连执行约束
 
 | # | 约束 |
