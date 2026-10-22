@@ -169,8 +169,13 @@ export interface LastCollectRow {
   duration_ms: number;
 }
 
+/**
+ * 每个源最近一次采集结果。
+ * 🔴 路径与后端 `@Get('collect/last')` 保持一致 —— 原 `sources/last-collect`
+ *    会被后端 `sources/:id` 通配抢先匹配，返回 500（2026-10-22 事故）。
+ */
 export function lastCollect(): Promise<{ items: LastCollectRow[] }> {
-  return request.get('/content-admin/content/sources/last-collect');
+  return request.get('/content-admin/content/collect/last');
 }
 
 // ── 采集明细（p40：五维筛选 + 服务端分页）──
