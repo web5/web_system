@@ -80,7 +80,11 @@ jobs:
         run: node scripts/pipeline-lint.mjs --scripts scripts
 
   changed-packages:
-    name: 改动包 build/test/lint
+    # ⚠️ 这个 name 不只是一句描述——**分支保护的 required status check 是按它匹配的**。
+    # 2026-10-22 实测：把它改成「改动包 build/test/lint」后，CI 全绿但 PR 永久 BLOCKED
+    # （GitHub 在等那个旧名字的 check，它永远不会再出现，界面上也不会提示缺了哪个）。
+    # 要改名必须同时改 Settings → Branches → required checks，否则就是悄悄把门禁变成摆设。
+    name: 改动包 build/test   # 含 lint（步骤见下），名字保持与分支保护一致
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
