@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-demo-role="operator">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>演示控件示例 · 自媒体运营</title>
+<!--
+  原型演示控件 · 可复制实现（ux-prototype-designer / examples）
+  ─────────────────────────────────────────────────────────────
+  这份文件同时是「控件样板」和「控件用的最小产品壳」。
+  拿去做新稿时：
+    1) 保留 .demo-ctl 整块（CSS + HTML + JS 的 DEMO 段）
+    2) 改 DEMO.screens（屏注册表）、DEMO.roles、DEMO.presets（场景包）
+    3) 屏内用 .only-normal / .only-empty / .only-error … 声明分支
+    4) 跑：node skills/ux-prototype-designer/scripts/check-demo-panel.mjs <本文件>
+  规格见 references/demo-control-panel.md
+-->
+<style>
+:root{
+  --brand:#F97316; --brand-txt:#EA580C; --brand-soft:#FFF3E8;
+  --bg:#F6F7F9; --card:#FFFFFF; --text:#1A1D23; --text-2:#5A6270; --text-3:#8A929F;
+  --border:#E3E6EB; --r:10px; --r-sm:6px;
+  --shadow:0 2px 8px rgba(20,24,32,.06); --shadow-pop:0 8px 28px rgba(20,24,32,.16);
+  --ok:#2E9E5B; --ok-soft:#E7F5EC; --danger:#E5484D; --danger-soft:#FDEBEC;
+  --warn:#E8833A; --warn-soft:#FFF3E6; --gap:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
+
+/* ── 产品壳（示例用，非控件部分） ───────────────────────── */
+.shell{display:flex;min-height:100vh}
+.side{width:200px;flex:none;background:var(--card);border-right:1px solid var(--border);padding:16px 10px}
+.logo{font-weight:600;padding:0 8px 16px;font-size:15px}
+.menu-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer;font-size:13px}
+.menu-item:hover{background:var(--bg)}
+.menu-item.active{background:var(--brand-soft);color:var(--brand-txt);font-weight:500}
+.main{flex:1;min-width:0;padding:20px 24px}
+.crumb{font-size:12px;color:var(--text-3);margin-bottom:4px}
+.crumb b{color:var(--text-2)}
+h1{font-size:19px;margin:0 0 16px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+.head-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.btn{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer}
+.btn:hover{color:var(--text)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.danger{color:var(--danger);border-color:var(--danger-soft);background:var(--danger-soft)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--text-3);font-weight:500;font-size:12px}
+tr:last-child td{border-bottom:none}
+.tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:12px;background:var(--bg);color:var(--text-2)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.bad{background:var(--danger-soft);color:var(--danger)}
+.screen{display:none}
+.screen.on{display:block}
+
+/* 分支块：由 data-demo-state 驱动（§5.2 契约，别用 JS 改 style.display） */
+.only-loading,.only-empty,.only-error,.only-forbidden{display:none}
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal{display:none}
+[data-demo-state="loading"] .only-loading,
+[data-demo-state="empty"] .only-empty,
+[data-demo-state="error"] .only-error,
+[data-demo-state="forbidden"] .only-forbidden{display:block}
+.state-box{padding:48px 16px;text-align:center;color:var(--text-3)}
+.state-box .t{color:var(--text-2);font-weight:500;margin:8px 0 4px}
+.skel{height:14px;border-radius:4px;background:linear-gradient(90deg,#EEF0F3,#F7F8FA,#EEF0F3);background-size:200% 100%;animation:sk 1.2s infinite;margin:10px 16px}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* 角色可见性（§5.3） */
+html[data-demo-role="operator"] [data-need-role="admin"]{display:none}
+html[data-demo-role="admin"] [data-need-role="operator"]{display:none}
+
+/* 标注层（§5.5） */
+[data-demo-anno="on"] [data-anno]{outline:1px dashed var(--brand);position:relative}
+[data-demo-anno="on"] [data-anno]::after{content:attr(data-anno);position:absolute;top:-9px;left:-3px;
+  font-size:10px;line-height:14px;padding:0 5px;background:var(--brand);color:#fff;border-radius:4px}
+
+/* 弹层 */
+.modal{position:fixed;inset:0;background:rgba(20,24,32,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.on{display:flex}
+.modal .box{background:var(--card);border-radius:var(--r);width:380px;padding:20px;box-shadow:var(--shadow-pop)}
+.modal h3{margin:0 0 8px;font-size:15px}
+.modal p{margin:0 0 16px;color:var(--text-2);font-size:13px}
+.modal .acts{display:flex;justify-content:flex-end;gap:8px}
+
+/* ── 原型演示控件（控件本体，复制这段） ─────────────────── */
+.demo-ctl{position:fixed;right:16px;bottom:16px;width:300px;background:var(--card);
+  border:1px dashed var(--brand);border-radius:var(--r);box-shadow:var(--shadow-pop);z-index:90;
+  font-size:12px;transition:opacity .2s;max-height:calc(100vh - 32px);overflow:auto}
+.demo-ctl[data-open="false"]{width:auto}
+.demo-ctl[data-open="false"] .dc-body{display:none}
+body.modal-open .demo-ctl{opacity:.35}
+body.modal-open .demo-ctl:hover{opacity:1}
+.dc-head{display:flex;align-items:center;gap:6px;width:100%;padding:9px 12px;background:none;border:none;
+  cursor:pointer;font-size:12px;font-weight:600;color:var(--brand-txt);text-align:left}
+.dc-head .dot{width:6px;height:6px;border-radius:50%;background:var(--brand)}
+.dc-head .cnt{margin-left:auto;font-weight:400;color:var(--text-3)}
+.dc-body{border-top:1px dashed var(--border);padding:10px 12px}
+.dc-meta{color:var(--text-3);line-height:1.5;margin-bottom:8px}
+.dc-meta b{color:var(--text);font-weight:600}
+.dc-grp{margin-top:10px}
+.dc-grp .lb{color:var(--text-3);margin-bottom:4px}
+.dc-chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:20px;
+  padding:2px 9px;font-size:11px;cursor:pointer}
+.chip:hover{border-color:var(--brand)}
+.chip.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-txt);font-weight:500}
+.dc-presets{display:flex;flex-direction:column;gap:3px}
+.preset{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:var(--r-sm);
+  padding:4px 8px;font-size:11px;text-align:left;cursor:pointer}
+.preset:hover{border-color:var(--brand)}
+.preset.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-txt)}
+.dc-foot{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border)}
+.dc-foot .k{margin-left:auto;color:var(--text-3);font-size:10px}
+@media print{.demo-ctl{display:none}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="side">
+    <div class="logo">自媒体运营</div>
+    <div class="menu-item active" data-dc-screen="sources">采集源管理</div>
+    <div class="menu-item" data-dc-screen="detail">采集明细</div>
+    <div class="menu-item" data-dc-screen="edit" data-need-role="admin">编辑采集源</div>
+  </aside>
+
+  <main class="main">
+    <div class="crumb" id="crumb">自媒体运营 / <b>采集源管理</b></div>
+
+    <!-- S1 -->
+    <section class="screen on" id="screen-sources" data-demo-state="normal">
+      <h1>采集源管理</h1>
+      <div class="card">
+        <div class="head-row">
+          <span style="color:var(--text-3)">共 3 个采集源</span>
+          <div>
+            <button class="btn" data-anno="D5">测试采集</button>
+            <button class="btn primary" data-need-role="admin">新建采集源</button>
+          </div>
+        </div>
+        <div class="only-normal">
+          <table>
+            <thead><tr><th>源</th><th>类型</th><th>最近采集</th><th>状态</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>rss-mit-tr</td><td><span class="tag">rss</span></td><td>10-22 09:12</td><td><span class="tag ok">正常</span></td><td><button class="btn" data-dc-screen="detail">明细</button></td></tr>
+              <tr><td>arxiv-cs-cl</td><td><span class="tag">arxiv</span></td><td>—</td><td><span class="tag bad">失败</span></td><td><button class="btn" data-dc-screen="detail">诊断</button></td></tr>
+              <tr><td>wechat-demo</td><td><span class="tag">wechat</span></td><td>10-21 18:40</td><td><span class="tag ok">正常</span></td><td><button class="btn" data-dc-screen="detail">明细</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="only-loading"><div class="skel" style="width:60%"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:45%"></div><div class="state-box">加载中…</div></div>
+        <div class="only-empty"><div class="state-box"><div class="t">还没有采集源</div><div>先建一个 RSS 源试试</div><p><button class="btn primary">新建采集源</button></p></div></div>
+        <div class="only-error"><div class="state-box"><div class="t">列表加载失败</div><div>网络超时（3s）</div><p><button class="btn">重试</button></p></div></div>
+        <div class="only-forbidden"><div class="state-box"><div class="t">无查看权限</div><div>需要 content:view</div><p><button class="btn">申请权限</button></p></div></div>
+      </div>
+    </section>
+
+    <!-- S2 -->
+    <section class="screen" id="screen-detail" data-demo-state="normal">
+      <h1>明细详情</h1>
+      <div class="card" style="padding:16px">
+        <div class="only-normal">
+          <p style="margin:0 0 8px"><b>rss-mit-tr / Technology Review</b></p>
+          <p style="color:var(--text-2);margin:0">质量归因：<span class="tag ok">ok</span> 抽取 → 清洗 → 入库 全部通过。</p>
+          <p style="margin-top:16px"><button class="btn danger" data-need-role="admin" id="btn-del">删除此条</button>
+          <button class="btn" data-dc-screen="sources">返回列表</button></p>
+        </div>
+        <div class="only-loading"><div class="state-box">加载中…</div></div>
+        <div class="only-empty"><div class="state-box">该条记录已被清理</div></div>
+        <div class="only-error"><div class="state-box"><div class="t">请求失败</div><p><button class="btn">重试</button></p></div></div>
+        <div class="only-forbidden"><div class="state-box">无权限</div></div>
+      </div>
+    </section>
+
+    <!-- S3 -->
+    <section class="screen" id="screen-edit" data-demo-state="normal">
+      <h1>编辑采集源</h1>
+      <div class="card" style="padding:16px;max-width:520px">
+        <label style="display:block;color:var(--text-3);margin-bottom:4px">源名称</label>
+        <input value="rss-mit-tr" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px">
+        <p style="color:var(--text-3);font-size:12px">改动未保存 · 试采不入库</p>
+        <button class="btn primary" data-anno="D8">保存</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ══ 原型演示控件（① 稿头 ② 场景 ③ 导航 ④ 辅助） ══ -->
+<aside class="demo-ctl" data-demo-ctl data-open="true" aria-label="原型演示控件">
+  <button class="dc-head" data-dc-toggle aria-expanded="true">
+    <span class="dot"></span>原型演示控件<span class="cnt" id="dc-cnt">待确认 2</span>
+  </button>
+  <div class="dc-body">
+    <div class="dc-meta">
+      <b>自媒体运营 · 原型稿</b><br>
+      目标端 桌面 Web · 2026-10-22 · 数据全为 mock<br>
+      待确认见《设计决策记录》D5 / D8
+    </div>
+
+    <div class="dc-grp">
+      <div class="lb" style="display:flex;align-items:center;justify-content:space-between">
+        <span>演示场景（点一下到那儿）</span>
+        <button class="chip" data-dc-next>下一步 →</button>
+      </div>
+      <div class="dc-presets" id="dc-presets"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="lb">角色</div>
+      <div class="dc-chips" id="dc-roles"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="lb">数据态（当前屏）</div>
+      <div class="dc-chips" id="dc-states"></div>
+    </div>
+
+    <div class="dc-grp">
+      <div class="lb">屏幕直达</div>
+      <div class="dc-chips" id="dc-screens"></div>
+    </div>
+
+    <div class="dc-foot">
+      <button class="chip" data-dc-anno>标注层</button>
+      <button class="chip" data-dc-reset>复位</button>
+      <span class="k">H 收起 · [ ] 上下屏 · 1-9 场景</span>
+    </div>
+  </div>
+</aside>
+
+<div class="modal" id="modal-del">
+  <div class="box">
+    <h3>删除这条明细？</h3>
+    <p>删除后不可恢复，关联的发布记录会保留。</p>
+    <div class="acts"><button class="btn" data-close>取消</button><button class="btn danger" data-close>确认删除</button></div>
+  </div>
+</div>
+
+<script>
+/* ══════════ DEMO 注册表：做新稿只改这一段 ══════════ */
+const DEMO = {
+  screens: {
+    sources: { el:'screen-sources', label:'采集源管理', group:'采集' },
+    detail:  { el:'screen-detail',  label:'明细详情',   group:'采集' },
+    edit:    { el:'screen-edit',    label:'编辑采集源', group:'采集' },
+  },
+  roles:  { operator:'运营专员', admin:'管理员' },
+  states: { normal:'正常', loading:'加载中', empty:'空数据', error:'请求失败', forbidden:'无权限' },
+  presets: [
+    { id:'p1', label:'S1 运营专员 · 主路径', role:'operator', screen:'sources', state:'normal', default:true },
+    { id:'p2', label:'S2 新用户首次进入 · 空态', role:'operator', screen:'sources', state:'empty' },
+    { id:'p3', label:'S3 采集失败 · 诊断入口', role:'operator', screen:'sources', state:'error' },
+    { id:'p4', label:'S4 管理员 · 多出 2 个操作', role:'admin',    screen:'sources', state:'normal' },
+    { id:'p5', label:'S5 越权访问 · 无权限', role:'operator', screen:'detail',  state:'forbidden' },
+    { id:'p6', label:'S6 加载时序 · 1.2s 后完成', role:'operator', screen:'sources', state:'loading' },
+  ],
+};
+
+/* ══════════ 控件逻辑（照抄） ══════════ */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const KEY = 'dc:' + location.pathname;   // file:// 同源，key 必须带文件标识（§5.6）
+let cur = { role:'operator', screen:'sources', preset:null, anno:false };
+const stateOf = {};                       // 每屏各自记住数据态
+
+function render() {
+  // 场景包
+  $('#dc-presets').innerHTML = DEMO.presets.map((p,i) =>
+    `<button class="preset${cur.preset===p.id?' on':''}" data-dc-preset="${p.id}">${i+1}. ${p.label}</button>`).join('');
+  // 角色
+  $('#dc-roles').innerHTML = Object.entries(DEMO.roles).map(([k,v]) =>
+    `<button class="chip${cur.role===k?' on':''}" data-dc-role="${k}">${v}</button>`).join('');
+  // 数据态
+  const st = stateOf[cur.screen] || 'normal';
+  $('#dc-states').innerHTML = Object.entries(DEMO.states).map(([k,v]) =>
+    `<button class="chip${st===k?' on':''}" data-dc-state="${k}">${v}</button>`).join('');
+  // 屏幕
+  $('#dc-screens').innerHTML = Object.entries(DEMO.screens).map(([k,v]) =>
+    `<button class="chip${cur.screen===k?' on':''}" data-dc-screen="${k}">${v.label}</button>`).join('');
+  // 待确认项计数：从 DOM 数，不硬编码（§三·①）
+  $('#dc-cnt').textContent = '待确认 ' + $$('[data-anno]').length;
+  // 产品菜单选中态同步（§5.4 单一入口）
+  $$('.side .menu-item').forEach(m => m.classList.toggle('active', m.dataset.dcScreen === cur.screen));
+}
+
+function go(key, { hash = true } = {}) {
+  if (!DEMO.screens[key]) return;
+  cur.screen = key;
+  $$('.screen').forEach(s => s.classList.remove('on'));
+  document.getElementById(DEMO.screens[key].el).classList.add('on');
+  // 面包屑
+  $('#crumb').innerHTML = '自媒体运营 / <b>' + DEMO.screens[key].label + '</b>';
+  // 当前屏数据态回灌
+  applyState(stateOf[key] || 'normal');
+  if (hash && location.hash !== '#s=' + key) location.hash = '#s=' + key;
+  render();
+}
+
+function setRole(role) {
+  cur.role = role;
+  document.documentElement.dataset.demoRole = role;
+  render();
+}
+
+function applyState(state) {
+  stateOf[cur.screen] = state;
+  const el = document.getElementById(DEMO.screens[cur.screen].el);
+  el.dataset.demoState = state;
+  render();
+}
+
+function applyPreset(id) {
+  const p = DEMO.presets.find(x => x.id === id);
+  if (!p) return;
+  cur.preset = id;
+  setRole(p.role);
+  go(p.screen);
+  applyState(p.state);
+  closeModal();
+  if (p.state === 'loading') setTimeout(() => applyState('normal'), 1200); // 让评审看到时序
+  if (p.modal) openModal(p.modal);
+}
+
+function openModal(){ $('#modal-del').classList.add('on'); document.body.classList.add('modal-open'); }
+function closeModal(){ $('#modal-del').classList.remove('on'); document.body.classList.remove('modal-open'); }
+
+/* 复位要把「所有屏」的数据态都清掉，否则跳过的屏留着上次的 forbidden（§5.6） */
+function resetStates() {
+  Object.keys(DEMO.screens).forEach(k => {
+    stateOf[k] = 'normal';
+    document.getElementById(DEMO.screens[k].el).dataset.demoState = 'normal';
+  });
+}
+
+/* 统一事件委托 */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-dc-preset],[data-dc-role],[data-dc-state],[data-dc-screen],[data-dc-anno],[data-dc-reset],[data-dc-next],[data-dc-toggle],[data-close],.menu-item');
+  if (!t) return;
+  if (t.dataset.dcPreset) return applyPreset(t.dataset.dcPreset);
+  if (t.hasAttribute('data-dc-next')) {           // 按场景顺序推进，现场讲稿照场景名念
+    const i = DEMO.presets.findIndex(p => p.id === cur.preset);
+    return applyPreset(DEMO.presets[(i + 1) % DEMO.presets.length].id);
+  }
+  if (t.dataset.dcRole)   return setRole(t.dataset.dcRole);
+  if (t.dataset.dcState)  return applyState(t.dataset.dcState);
+  if (t.dataset.dcScreen) return go(t.dataset.dcScreen);
+  if (t.hasAttribute('data-dc-anno')) {
+    cur.anno = !cur.anno;
+    document.documentElement.dataset.demoAnno = cur.anno ? 'on' : 'off';
+    t.classList.toggle('on', cur.anno);
+    return;
+  }
+  if (t.hasAttribute('data-dc-reset')) {
+    cur.anno = false; document.documentElement.dataset.demoAnno = 'off';
+    $$('[data-dc-anno]').forEach(b => b.classList.remove('on'));
+    resetStates();
+    return applyPreset(DEMO.presets.find(p => p.default).id);
+  }
+  if (t.hasAttribute('data-dc-toggle')) {
+    const ctl = $('[data-demo-ctl]'), open = ctl.dataset.open !== 'true';
+    ctl.dataset.open = String(open);
+    $('[data-dc-toggle]').setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch(_) {}
+    return;
+  }
+  if (t.hasAttribute('data-close')) return closeModal();
+  if (t.classList.contains('menu-item')) return go(t.dataset.dcScreen);
+});
+
+$('#btn-del')?.addEventListener('click', openModal);
+
+/* 键盘（§七；输入框内让行） */
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select,[contenteditable]')) return;
+  const keys = Object.keys(DEMO.screens);
+  if (e.key === '[') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen)-1+keys.length)%keys.length]); }
+  else if (e.key === ']') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen)+1)%keys.length]); }
+  else if (e.key === 'h' || e.key === 'H') { $('[data-dc-toggle]').click(); }
+  else if (e.key === 'a' || e.key === 'A') { $('[data-dc-anno]').click(); }
+  else if (e.key === '?') { $('[data-demo-ctl]').dataset.open = 'true'; $('[data-dc-toggle]').setAttribute('aria-expanded','true'); }
+  else if (e.key === 'Escape') { if ($('#modal-del').classList.contains('on')) closeModal(); }
+  else if (/^[1-9]$/.test(e.key)) { const p = DEMO.presets[+e.key-1]; if (p) applyPreset(p.id); }
+});
+
+/* hash 路由回灌（§5.4 单一入口的另一半） */
+addEventListener('hashchange', () => {
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  if (k && k !== cur.screen) go(k, { hash:false });
+});
+
+/* 初始化：折叠态恢复 + 默认场景 */
+try { const o = localStorage.getItem(KEY); if (o !== null) $('[data-demo-ctl]').dataset.open = o === '1' ? 'true' : 'false'; } catch(_) {}
+if (innerWidth < 1200) $('[data-demo-ctl]').dataset.open = 'false';   // 窄屏直接收起，别糊在内容上
+(function init(){
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  applyPreset(DEMO.presets.find(p => p.default).id);
+  if (k) go(k, { hash:false });
+})();
+</script>
+</body>
+</html>
