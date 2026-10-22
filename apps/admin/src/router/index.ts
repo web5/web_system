@@ -191,10 +191,74 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据浏览', permission: 'database:view' },
       },
       {
-        path: 'content-sources',
-        name: 'ContentSources',
-        component: () => import('@/views/Content/ContentSources.vue'),
-        meta: { title: '内容采集源', permission: 'content:view' },
+        // 自媒体运营（p40）：原「内容采集源」单项重构为功能组，
+        // 采集源 / 采集明细 / 公众号成文 / 发布管线 / 采集监控各自独立成页。
+        // 权限分级：view 看全部页面；manage 控制页内写操作（按钮级 v-if）。
+        path: 'content',
+        name: 'Content',
+        meta: { title: '自媒体运营', permission: 'content:view' },
+        children: [
+          {
+            path: '',
+            name: 'ContentSources',
+            component: () => import('@/views/Content/ContentSources.vue'),
+            meta: { title: '采集源管理', permission: 'content:view' },
+          },
+          {
+            path: 'sources/new',
+            name: 'ContentSourceCreate',
+            component: () => import('@/views/Content/ContentSourceEdit.vue'),
+            meta: { title: '新建采集源', permission: 'content:manage' },
+          },
+          {
+            path: 'sources/:id',
+            name: 'ContentSourceEdit',
+            component: () => import('@/views/Content/ContentSourceEdit.vue'),
+            meta: { title: '编辑采集源', permission: 'content:manage' },
+          },
+          {
+            path: 'items',
+            name: 'ContentItems',
+            component: () => import('@/views/Content/ContentItems.vue'),
+            meta: { title: '采集明细', permission: 'content:view' },
+          },
+          {
+            path: 'items/:id',
+            name: 'ContentItemDetail',
+            component: () => import('@/views/Content/ContentItemDetail.vue'),
+            meta: { title: '明细详情', permission: 'content:view' },
+          },
+          {
+            path: 'publications',
+            name: 'ContentPublications',
+            component: () => import('@/views/Content/ContentPublications.vue'),
+            meta: { title: '公众号成文', permission: 'content:view' },
+          },
+          {
+            path: 'pipelines',
+            name: 'ContentPipelines',
+            component: () => import('@/views/Content/ContentPipelines.vue'),
+            meta: { title: '发布管线', permission: 'content:view' },
+          },
+          {
+            path: 'pipelines/new',
+            name: 'ContentPipelineCreate',
+            component: () => import('@/views/Content/ContentPipelineEdit.vue'),
+            meta: { title: '新建管线', permission: 'content:manage' },
+          },
+          {
+            path: 'pipelines/:id',
+            name: 'ContentPipelineEdit',
+            component: () => import('@/views/Content/ContentPipelineEdit.vue'),
+            meta: { title: '编辑管线', permission: 'content:manage' },
+          },
+          {
+            path: 'monitor',
+            name: 'CollectMonitor',
+            component: () => import('@/views/Content/CollectMonitor.vue'),
+            meta: { title: '采集监控', permission: 'content:view' },
+          },
+        ],
       },
     ],
   },

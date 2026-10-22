@@ -55,6 +55,14 @@ export function listSources(): Promise<ContentSource[]> {
   return request.get('/content-admin/content/sources');
 }
 
+export function getSource(id: number): Promise<ContentSource> {
+  return request.get(`/content-admin/content/sources/${id}`);
+}
+
+export function getPipeline(id: number): Promise<ContentPipeline> {
+  return request.get(`/content-admin/content/pipelines/${id}`);
+}
+
 export function createSource(dto: Partial<ContentSource>): Promise<ContentSource> {
   return request.post('/content-admin/content/sources', dto);
 }
@@ -121,4 +129,163 @@ export interface CollectHealth {
 
 export function collectHealth(days = 7): Promise<CollectHealth> {
   return request.get('/content-admin/content/collect/health', { params: { days } });
+}
+
+// ── 试采（p40：仅预览，不入库）──
+export interface TestSampleItem {
+  external_id: string;
+  title: string;
+  url: string | null;
+  publish_date: string | null;
+  source_name: string;
+  summary?: string | null;
+}
+
+export interface TestCollectResult {
+  status: 'ok' | 'empty' | 'failed';
+  items: TestSampleItem[];
+  duration_ms: number;
+  error?: string;
+}
+
+/**
+ * 试采：按当前表单配置调采集器，返回预览条目。
+ * 零副作用——不写 content_items / collect_runs，可在保存前验证配置。
+ */
+export function testCollect(body: {
+  type: string;
+  config?: Record<string, unknown>;
+  limit?: number;
+}): Promise<TestCollectResult> {
+  return request.post('/content-admin/content/sources/test', body);
+}
+
+// ── 最近采集聚合（p40：列表页「最近采集」列）──
+export interface LastCollectRow {
+  source_code: string;
+  status: string;
+  item_count: number;
+  finished_at: string | null;
+  duration_ms: number;
+}
+
+export function lastCollect(): Promise<{ items: LastCollectRow[] }> {
+  return request.get('/content-admin/content/sources/last-collect');
+}
+
+// ── 采集明细（p40：五维筛选 + 服务端分页）──
+export interface ContentItem {
+  id: number;
+  external_id: string;
+  title: string;
+  url: string | null;
+  summary: string | null;
+  /** 采集原文（详情页展示；列表接口不返回正文，故为可选） */
+  content?: string | null;
+  source_id: number | null;
+  source_name: string | null;
+  pipeline_id: number | null;
+  pipeline_code: string | null;
+  publish_date: string | null;
+  status: string;
+  quality_status: string | null;
+  quality_stage: string | null;
+  quality_issue: string | null;
+  collect_duration_ms: number | null;
+  simhash: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListItemsParams {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  quality_status?: string;
+  quality_stage?: string;
+  /** 管线 ID */
+  pipeline?: number;
+  /** 采集源 ID */
+  source?: number;
+  keyword?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export function listItems(params: ListItemsParams = {}): Promise<{ total: number; items: ContentItem[] }> {
+  return request.get('/content-admin/content/items', { params });
+}
+
+export function itemStats(): Promise<{
+  today_new: number;
+  today_dedup: number;
+  quality_abnormal_7d: number;
+  into_article_7d: number;
+}> {
+  return request.get('/content-admin/content/items/stats');
+}
+
+export interface ContentItemDetail {
+  item: ContentItem;
+  pipeline: { id: number; code: string; type: string } | null;
+  source: { id: number; code: string; name: string; type: string } | null;
+  publications: Publication[];
+}
+
+export function getItemDetail(id: number): Promise<ContentItemDetail> {
+  return request.get(`/content-admin/content/items/${id}`);
+}
+
+// ── 公众号成文（p40：筛选分页 + 文章级预览 + 重发）──
+export interface Publication {
+  id: number;
+  item_id: number;
+  item_title: string | null;
+  pipeline_id: number | null;
+  target: string;
+  status: string;
+  external_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListPublicationsParams {
+  limit?: number;
+  offset?: number;
+  target?: string;
+  status?: string;
+}
+
+export function listPublications(
+  params: ListPublicationsParams = {},
+): Promise<{ total: number; items: Publication[] }> {
+  return request.get('/content-admin/content/publications', { params });
+}
+
+export interface PublicationPreview {
+  id: number;
+  target: string;
+  status: string;
+  external_id: string | null;
+  published_at: string;
+  title: string;
+  html: string;
+  item_count: number;
+  /** payload=发布留存的原文；aggregated=按管线+日期聚合重建；none=无内容 */
+  source: 'payload' | 'aggregated' | 'none';
+}
+
+export function publicationPreview(id: number): Promise<PublicationPreview> {
+  return request.get(`/content-admin/content/publications/${id}/preview`);
+}
+
+export function republishPublication(id: number): Promise<{
+  ok: boolean;
+  publication_id: number;
+  status: string;
+  external_id: string | null;
+  error: string | null;
+}> {
+  return request.post(`/content-admin/content/publications/${id}/republish`);
 }

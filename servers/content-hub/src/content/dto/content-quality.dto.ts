@@ -135,6 +135,31 @@ export class TriggerCollectDto {
   config?: Record<string, unknown>[];
 }
 
+/**
+ * 试采（编辑页「测试采集」，p40）。
+ *
+ * 🔴 与 TriggerCollectDto 的本质区别：试采**不落库**。入参里的 config 来自
+ * 管理端当前表单（可能还没保存），就是为了让用户先验证再保存。
+ */
+export class TestCollectDto {
+  /** 采集器类型（content_sources.type） */
+  @IsString()
+  @MaxLength(32)
+  type: string;
+
+  /** 采集器私有配置（当前表单值，如 rss 的 url） */
+  @IsOptional()
+  config?: Record<string, unknown>;
+
+  /** 试采条数，默认 5（管理页预览前几条即可判断配置对不对） */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number = 5;
+}
+
 /** 采集批次日志查询（FR-API-6） */
 export class CollectRunsQueryDto {
   @IsOptional()

@@ -95,6 +95,53 @@ export class CollectLogService {
     return qb.getMany();
   }
 
+  /**
+   * 每个源最近一次采集批次（admin 采集源列表「最近采集」列，p40）。
+   *
+   * 实现说明：按 started_at 倒序取最近 500 条，JS 侧按 source_code 取首条
+   * （即每个源的最新一次）。当前量级（个位数源、日均几十批次）下 500 条
+   * 足够覆盖全部源；若源数量级上涨再改 GROUP BY 子查询。
+   */
+  async lastBySource(): Promise<
+    Record<
+      string,
+      {
+        status: string;
+        item_count: number;
+        dedup_count: number;
+        started_at: Date;
+        error_message: string | null;
+      }
+    >
+  > {
+    const rows = await this.runRepo.find({
+      order: { started_at: 'DESC' },
+      take: 500,
+    });
+    const map: Record<
+      string,
+      {
+        status: string;
+        item_count: number;
+        dedup_count: number;
+        started_at: Date;
+        error_message: string | null;
+      }
+    > = {};
+    for (const r of rows) {
+      if (!map[r.source_code]) {
+        map[r.source_code] = {
+          status: r.status,
+          item_count: r.item_count,
+          dedup_count: r.dedup_count,
+          started_at: r.started_at,
+          error_message: r.error_message,
+        };
+      }
+    }
+    return map;
+  }
+
   /** 采集健康度：近 N 天成功率 + 今日失败次数（admin 健康度卡片用） */
   async health(days = 7): Promise<{
     windowDays: number;
