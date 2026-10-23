@@ -30,6 +30,24 @@ export class ContentPublicationEntity {
   @Column({ type: 'varchar', length: 128, nullable: true, comment: '外部 ID' })
   external_id: string | null;
 
+  /**
+   * 发布所用账号与其主体类型的**快照**（2026-10-23）
+   *
+   * 不显示时现查账号表：类型若日后调整，历史成文的状态语义不应该跟着漂移——
+   * 一条昨天以个人号发的草稿，不能因为今天升级成企业号就变成「待发布」。
+   * 空值表示当时还没登记账号（本功能上线前的记录），前端按「未登记」处理。
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true, comment: '发布所用账号编码' })
+  account_code: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+    comment: '发布时账号主体类型快照 personal | enterprise',
+  })
+  account_type: string | null;
+
   @Column({ type: 'json', nullable: true, comment: '错误信息/回调结果' })
   detail: Record<string, unknown> | null;
 

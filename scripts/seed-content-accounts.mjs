@@ -19,6 +19,10 @@
  *   --platform <key>    默认 wechat_mp
  *   --code <code>       默认 default
  *   --name <显示名>     默认「大橙子社区」
+ *   --type <personal|enterprise>  账号主体类型，默认 personal
+ *
+ * 主体类型为什么重要：个人主体（未认证订阅号）没有 freepublish 权限，草稿就是终点；
+ * 企业主体才走「待发布 → 已发布」。类型写错，界面上的状态流转就是错的。
  */
 import { existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { randomBytes, createCipheriv } from 'node:crypto';
@@ -37,6 +41,12 @@ const KEY_FILE = opt('key-file', process.env.ACCOUNT_CRED_KEY_FILE || '/data/web
 const PLATFORM = opt('platform', 'wechat_mp');
 const CODE = opt('code', 'default');
 const NAME = opt('name', '大橙子社区');
+const TYPE = opt('type', 'personal');
+
+if (TYPE !== 'personal' && TYPE !== 'enterprise') {
+  console.error(`❌ --type 只能是 personal 或 enterprise，收到：${TYPE}`);
+  process.exit(1);
+}
 
 // content-hub 的 node_modules 里取 mysql2（脚本不在服务目录下也能跑）
 const require = createRequire('/data/web_system/servers/content-hub/package.json');
@@ -116,13 +126,14 @@ const row = {
   platform: PLATFORM,
   code: CODE,
   name: NAME,
+  account_type: TYPE,
   credentials_enc: enc,
   credentials_mask: maskText,
   enabled: 1,
 };
 
 console.log('将写入（凭据只显示掩码）：');
-console.log(`  platform=${row.platform} code=${row.code} name=${row.name}`);
+console.log(`  platform=${row.platform} code=${row.code} name=${row.name} type=${row.account_type}`);
 console.log(`  app_id=${appId.slice(0, 4)}****${appId.slice(-4)}`);
 console.log(`  app_secret=${maskText}`);
 console.log(`  credentials_enc 长度=${enc.length}（base64）`);
@@ -143,25 +154,34 @@ const conn = await mysql.createConnection({
 try {
   const [res] = await conn.execute(
     `INSERT INTO content_accounts
-       (platform, code, name, credentials_enc, credentials_mask, enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
+       (platform, code, name, account_type, credentials_enc, credentials_mask, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW(6), NOW(6))
      ON DUPLICATE KEY UPDATE
        name = VALUES(name),
+       account_type = VALUES(account_type),
        credentials_enc = VALUES(credentials_enc),
        credentials_mask = VALUES(credentials_mask),
        updated_at = NOW(6)`,
-    [row.platform, row.code, row.name, row.credentials_enc, row.credentials_mask, row.enabled],
+    [
+      row.platform,
+      row.code,
+      row.name,
+      row.account_type,
+      row.credentials_enc,
+      row.credentials_mask,
+      row.enabled,
+    ],
   );
   console.log(`\n✅ 已写入：affectedRows=${res.affectedRows} insertId=${res.insertId}`);
 
   const [rows] = await conn.execute(
-    `SELECT id, platform, code, name, identity, credentials_mask, last_check_status, enabled
+    `SELECT id, platform, code, name, account_type, identity, credentials_mask, last_check_status, enabled
      FROM content_accounts WHERE deleted_at IS NULL ORDER BY platform, code`,
   );
   console.log('当前账号表：');
   for (const r of rows) {
     console.log(
-      `  #${r.id} ${r.platform}/${r.code} name=${r.name} mask=${r.credentials_mask ?? '-'} status=${r.last_check_status ?? '未检测'} enabled=${r.enabled}`,
+      `  #${r.id} ${r.platform}/${r.code} name=${r.name} type=${r.account_type ?? '-'} mask=${r.credentials_mask ?? '-'} status=${r.last_check_status ?? '未检测'} enabled=${r.enabled}`,
     );
   }
 } finally {

@@ -105,6 +105,12 @@ export interface ContentAccount {
   credentials_mask: string | null;
   /** 是否有已加密凭据（有密文但掩码为空也按"有"处理） */
   has_credentials: boolean;
+  /**
+   * 账号主体类型（2026-10-23）
+   * personal=个人主体（未认证订阅号，无 freepublish 权限，草稿即终点）；
+   * enterprise=企业主体（草稿后可正式发布）。
+   */
+  account_type: string | null;
   capabilities: string[] | null;
   last_checked_at: string | null;
   /** ok | warn | err | null（null = 未检测） */
@@ -346,6 +352,13 @@ export interface Publication {
   external_id: string | null;
   /** 草稿 media_id（公众号草稿箱定位用，非草稿记录为 null） */
   media_id: string | null;
+  /** 发布所用账号编码（本功能上线前的历史记录为 null） */
+  account_code: string | null;
+  /**
+   * 发布时账号主体类型**快照**：personal | enterprise | null。
+   * null = 未登记账号（历史记录），前端按"未登记"处理，不臆造类型。
+   */
+  account_type: string | null;
   detail: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -379,6 +392,9 @@ export interface PublicationPreview {
   status: string;
   external_id: string | null;
   published_at: string;
+  /** 发布时账号主体类型快照（决定状态文案），历史记录为 null */
+  account_code: string | null;
+  account_type: string | null;
   title: string;
   html: string;
   /** stored 分支与 none 分支拿不到条数（后端返回 null），只有 aggregated 有 */

@@ -167,20 +167,61 @@ const TARGET_LABEL: Record<string, string> = {
   tencent_docs: '腾讯文档',
 };
 
+const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  personal: '个人',
+  enterprise: '企业',
+};
+
 /**
- * drafted：草稿已进公众号草稿箱，但发布接口没权限（未认证个人号 / 未开通 freepublish）。
- * 内容没丢，只是要人工去后台点一次发布 —— 所以单独一档，不混进「失败」。
+ * 状态呈现按**账号主体类型**分流（2026-10-23）。
+ *
+ * 同一个 status=drafted 在两种主体下是完全不同的含义：
+ *   · 个人主体（未认证订阅号）：没有 freepublish 权限，微信侧返回 48001 时我们
+ *     已降级成草稿 —— 草稿就是这条内容的终点，显示「草稿」即可。以前一律显示
+ *     「待发布」，运营天天去点「正式发布」，再撞一次 48001，纯属挨打。
+ *   · 企业主体：草稿只是中间态，显示「待发布」，给「发布」按钮，发出去后「已发布」。
+ *   · 类型未登记（本功能上线前的历史记录 / 账号表没 seed）：沿用旧口径，
+ *     显示「待发布」+ 两个按钮，不臆造类型。
  */
-const STATUS_LABEL: Record<string, string> = {
-  success: '成功',
-  drafted: '待发布',
-  failed: '失败',
-};
-const STATUS_COLOR: Record<string, string> = {
-  success: 'green',
-  drafted: 'orange',
-  failed: 'red',
-};
+function statusLabel(p: Pick<Publication, 'status' | 'account_type'>): string {
+  if (p.status === 'success') return '已发布';
+  if (p.status === 'failed') return '失败';
+  return p.account_type === 'personal' ? '草稿' : '待发布';
+}
+
+/** 个人号的草稿是终点（蓝色=完成），企业号的草稿是待办（橙色=还差一步） */
+function statusColor(p: Pick<Publication, 'status' | 'account_type'>): string {
+  if (p.status === 'success') return 'green';
+  if (p.status === 'failed') return 'red';
+  return p.account_type === 'personal' ? 'blue' : 'orange';
+}
+
+/** drafted 这档的说明文案：告诉运营"下一步要不要做、去哪做" */
+function statusHint(p: Pick<Publication, 'status' | 'account_type'>): string {
+  if (p.account_type === 'personal') {
+    return '个人号无发布权限，内容已在草稿箱，需到公众号后台手动发布';
+  }
+  if (p.account_type === 'enterprise') {
+    return '草稿已建，点「发布」即推送给读者';
+  }
+  return '在公众号草稿箱，需到后台手动发布';
+}
+
+/**
+ * 「正式发布」入口只对**企业主体**有意义：个人主体点了也是 48001 降级回草稿。
+ * 类型未登记时保留入口（历史记录，无从判断，交给运营自己试）。
+ */
+const canPublish = (p: Publication) =>
+  canManage && hasPayload(p) && (p.account_type === 'enterprise' || !p.account_type);
+
+/**
+ * 「建草稿」入口：
+ *   · 个人主体只在失败时有意义 —— 草稿已是终点，再建一条是重复稿；
+ *   · 企业主体同样只在失败时需要（草稿态下一步是「发布」，不是再建一份草稿）；
+ *   · 类型未登记时保留（原行为）。
+ */
+const canDraft = (p: Publication) =>
+  canManage && hasPayload(p) && (p.status === 'failed' || !p.account_type);
 
 const pubColumns = [
   { title: 'ID', dataIndex: 'id', width: 70 },
@@ -219,8 +260,8 @@ onMounted(load);
         style="width: 120px"
         @change="onFilterChange"
       >
-        <a-select-option value="success">成功</a-select-option>
-        <a-select-option value="drafted">待发布</a-select-option>
+        <a-select-option value="success">已发布</a-select-option>
+        <a-select-option value="drafted">草稿 / 待发布</a-select-option>
         <a-select-option value="failed">失败</a-select-option>
       </a-select>
       <a-button type="primary" @click="onFilterChange">查询</a-button>
@@ -249,14 +290,18 @@ onMounted(load);
           <a-tag color="geekblue">{{ TARGET_LABEL[record.target] ?? record.target }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'status'">
-          <a-tag :color="STATUS_COLOR[record.status] ?? 'default'">
-            {{ STATUS_LABEL[record.status] ?? record.status }}
-          </a-tag>
+          <a-space :size="4">
+            <a-tag :color="statusColor(record)">{{ statusLabel(record) }}</a-tag>
+            <a-tag v-if="record.account_type" color="default">
+              {{ ACCOUNT_TYPE_LABEL[record.account_type] ?? record.account_type }}
+            </a-tag>
+            <a-tag v-else color="default">未登记账号</a-tag>
+          </a-space>
           <div
             v-if="record.status === 'drafted'"
             style="margin-top: 2px; font-size: 12px; color: #999"
           >
-            在公众号草稿箱，需到后台手动发布
+            {{ statusHint(record) }}
             <span v-if="record.media_id">（media: {{ String(record.media_id).slice(0, 12) }}…）</span>
           </div>
         </template>
@@ -268,7 +313,8 @@ onMounted(load);
             <a-button size="small" type="link" @click="openPreview(record)">预览</a-button>
             <template v-if="canManage && canRepublish(record)">
               <a-tooltip
-                :title="hasPayload(record) ? '只投递到公众号草稿箱，不直接发布（会在本列表新增一条「待发布」记录）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
+                v-if="canDraft(record)"
+                :title="hasPayload(record) ? '只投递到公众号草稿箱，不直接发布（会在本列表新增一条记录）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
               >
                 <a-button
                   size="small"
@@ -281,7 +327,8 @@ onMounted(load);
                 </a-button>
               </a-tooltip>
               <a-tooltip
-                :title="hasPayload(record) ? '建草稿后直接提交发布（公众号有发布权限时用这个）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
+                v-if="canPublish(record)"
+                :title="hasPayload(record) ? '建草稿后直接提交发布（企业主体有发布权限；个人主体点了会被微信 48001 降级回草稿）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
               >
                 <a-button
                   size="small"
@@ -291,9 +338,16 @@ onMounted(load);
                   :disabled="!hasPayload(record)"
                   @click="onRepublish(record, 'publish')"
                 >
-                  正式发布
+                  {{ record.status === 'drafted' ? '发布' : '正式发布' }}
                 </a-button>
               </a-tooltip>
+              <!-- 个人主体的草稿是终点：这里没有可点的操作，留一句说明而不是留两个点了会失败的按钮 -->
+              <span
+                v-if="!canDraft(record) && !canPublish(record)"
+                class="muted-inline"
+              >
+                已完成
+              </span>
             </template>
           </a-space>
         </template>
@@ -319,11 +373,9 @@ onMounted(load);
         <div v-if="preview" class="preview-wrap">
           <div class="preview-meta">
             <a-tag color="geekblue">{{ TARGET_LABEL[preview.target] ?? preview.target }}</a-tag>
-            <a-tag :color="STATUS_COLOR[preview.status] ?? 'default'">
-              {{ STATUS_LABEL[preview.status] ?? preview.status }}
-            </a-tag>
+            <a-tag :color="statusColor(preview)">{{ statusLabel(preview) }}</a-tag>
             <span v-if="preview.status === 'drafted'" class="muted">
-              · 在公众号草稿箱，需到后台手动发布
+              · {{ statusHint(preview) }}
             </span>
             <span class="muted">{{ fmtTime(preview.published_at) }}</span>
             <span v-if="preview.source === 'aggregated'" class="muted">
@@ -420,6 +472,11 @@ onMounted(load);
 .muted {
   color: var(--ws-text-tertiary);
   font-size: 12px;
+}
+/* 个人主体的草稿是终点：操作列只剩这句说明，避免占位空白让人以为按钮没渲染出来 */
+.muted-inline {
+  font-size: 12px;
+  color: var(--ws-text-tertiary);
 }
 .preview-aside {
   display: flex;

@@ -40,6 +40,7 @@ export class ContentAccountService {
       // 只有掩码：密文本身不进响应
       credentials_mask: r.credentials_mask,
       has_credentials: !!r.credentials_enc,
+      account_type: r.account_type,
       capabilities: r.capabilities,
       last_checked_at: r.last_checked_at,
       last_check_status: r.last_check_status,
@@ -47,5 +48,24 @@ export class ContentAccountService {
       created_at: r.created_at,
       updated_at: r.updated_at,
     }));
+  }
+
+  /**
+   * 发布时解析「这条内容算在哪个账号头上」——只取编码与主体类型，不碰凭据。
+   *
+   * 当前阶段一个平台一个账号（绑定关系是下轮的事：管线侧选账号）。
+   * 查不到账号时返回 null，调用方按「未登记账号」处理（前端沿用原有状态显示，
+   * 不会因为没有账号就把成文判成失败）。
+   */
+  async resolveForPublish(
+    platform: string,
+  ): Promise<{ account_code: string; account_type: string } | null> {
+    const row = await this.repo.findOne({
+      where: { platform, enabled: true },
+      order: { id: 'ASC' },
+      select: ['code', 'account_type'],
+    });
+    if (!row) return null;
+    return { account_code: row.code, account_type: row.account_type ?? 'personal' };
   }
 }

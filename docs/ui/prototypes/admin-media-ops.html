@@ -96,6 +96,8 @@ a { color: var(--brand-txt); text-decoration: none; }
 .tag.info { background: var(--brand-soft); color: var(--brand-txt); }
 .tag.mono { font-family: var(--mono); font-size: 11px; }
 .tag.sub { font-size: 11px; padding: 0 6px; line-height: 18px; }
+/* 个人主体的草稿是终点：操作列用这句代替按钮，避免占位空白被当成「按钮没渲染出来」 */
+.muted-note { font-size: 12px; color: var(--t4); }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th { text-align: left; font-size: 13px; font-weight: 500; color: var(--t3); background: var(--bg-subtle); padding: 10px 12px; white-space: nowrap; }
@@ -834,13 +836,14 @@ html[data-demo-role="viewer"] .row-actions { display: none; }
         <div class="page-head">
           <div>
             <div class="page-title">公众号成文</div>
-            <div class="page-desc">管线生成并投递到腾讯文档 / 公众号的成文记录；「预览成文」查看最终交付内容，确认发布状态。</div>
+            <div class="page-desc">管线生成并投递到公众号的成文记录；「预览成文」查看最终交付内容。状态按<b>账号主体类型</b>分流：个人号无发布权限，草稿即完成；企业号草稿显示「待发布」，可点「发布」推送给读者。</div>
           </div>
         </div>
 
         <div class="filter-bar">
-          <select class="select"><option>全部目标</option><option>腾讯文档</option><option>公众号</option></select>
-          <select class="select"><option>全部状态</option><option>success 已发布</option><option>submitted 已提交</option><option>failed 失败</option></select>
+          <select class="select"><option>全部目标</option><option>公众号</option></select>
+          <select class="select"><option>全部状态</option><option>已发布</option><option>草稿 / 待发布</option><option>失败</option></select>
+          <select class="select"><option>全部主体</option><option>个人</option><option>企业</option></select>
           <input class="input" style="min-width:200px" placeholder="搜索成文标题" />
           <button class="btn">查询</button>
           <button class="btn">重置</button>
@@ -849,53 +852,69 @@ html[data-demo-role="viewer"] .row-actions { display: none; }
         <div class="card" id="pubTableWrap">
           <table class="table">
             <thead>
-              <tr><th style="min-width:280px">成文标题</th><th>来源条目</th><th>发布目标</th><th>状态</th><th>外部 ID</th><th>创建时间</th><th style="width:120px">操作</th></tr>
+              <tr><th style="min-width:280px">成文标题</th><th>来源条目</th><th>发布目标</th><th>账号</th><th>状态</th><th>外部 ID</th><th>创建时间</th><th style="width:190px">操作</th></tr>
             </thead>
             <tbody>
               <tr>
-                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-22</span></td>
+                <td><span class="ellip" style="max-width:300px">2026-10-22 09:05 ｜ 每日论文速览</span></td>
                 <td>8 篇论文</td>
-                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
-                <td><span class="tag ok">success</span></td>
-                <td class="mono">DOC-8f21c3 / MP-91d2</td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="tag sub">企业</span></td>
+                <td><span class="tag ok">已发布</span></td>
+                <td class="mono">MP-91d2</td>
                 <td class="mono">10-22 09:05</td>
                 <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
               </tr>
               <tr>
-                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-21</span></td>
+                <td><span class="ellip" style="max-width:300px">2026-10-21 09:03 ｜ 每日论文速览</span></td>
                 <td>6 篇论文</td>
-                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
-                <td><span class="tag ok">success</span></td>
-                <td class="mono">DOC-7a04e9 / MP-88c1</td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="tag sub">企业</span></td>
+                <td><span class="tag ok">已发布</span></td>
+                <td class="mono">MP-88c1</td>
                 <td class="mono">10-21 09:03</td>
                 <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
               </tr>
               <tr>
-                <td><span class="ellip" style="max-width:300px">财经早报 ｜ 2026-10-22</span></td>
+                <td><span class="ellip" style="max-width:300px">2026-10-22 08:12 ｜ 财经早报</span></td>
                 <td>20 条快讯</td>
                 <td><span class="tag info">公众号</span></td>
-                <td><span class="tag warn">submitted</span></td>
+                <td><span class="tag sub">企业</span></td>
+                <!-- 企业主体：草稿只是中间态，还有「发布」这一步 -->
+                <td><span class="tag warn">待发布</span></td>
                 <td class="mono">MP-91f0</td>
                 <td class="mono">10-22 08:12</td>
-                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+                <td><div class="row-actions">
+                  <button class="btn sm" onclick="openPreview()">预览成文</button>
+                  <button class="btn sm primary" onclick="toast('已提交发布，状态变为「已发布」')">发布</button>
+                </div></td>
               </tr>
               <tr>
-                <td><span class="ellip" style="max-width:300px">每日论文速览 ｜ 2026-10-18</span></td>
+                <td><span class="ellip" style="max-width:300px">2026-10-18 09:04 ｜ 每日论文速览</span></td>
                 <td>5 篇论文</td>
-                <td><span class="tag info">腾讯文档</span> <span class="tag info">公众号</span></td>
-                <td><span class="tag err">failed</span></td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="tag sub">企业</span></td>
+                <td><span class="tag err">失败</span></td>
                 <td class="mono">—</td>
                 <td class="mono">10-18 09:04</td>
-                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+                <td><div class="row-actions">
+                  <button class="btn sm" onclick="openPreview()">预览成文</button>
+                  <button class="btn sm" onclick="toast('已重新投递到草稿箱（新记录，状态「待发布」）')">建草稿</button>
+                </div></td>
               </tr>
               <tr>
-                <td><span class="ellip" style="max-width:300px">龙虎榜复盘 ｜ 2026-10-21</span></td>
-                <td>86 条记录</td>
-                <td><span class="tag info">腾讯文档</span></td>
-                <td><span class="tag ok">success</span></td>
-                <td class="mono">DOC-7b11f2</td>
-                <td class="mono">10-21 18:30</td>
-                <td><div class="row-actions"><button class="btn sm" onclick="openPreview()">预览成文</button></div></td>
+                <td><span class="ellip" style="max-width:300px">2026-10-23 21:30 ｜ AI 资讯日报</span></td>
+                <td>12 条快讯</td>
+                <td><span class="tag info">公众号</span></td>
+                <!-- 个人主体：没有 freepublish 权限，草稿就是这条内容的终点，不再给发布按钮 -->
+                <td><span class="tag sub">个人</span></td>
+                <td><span class="tag ok">草稿</span></td>
+                <td class="mono">MP-a3f1</td>
+                <td class="mono">10-23 21:30</td>
+                <td><div class="row-actions">
+                  <button class="btn sm" onclick="openPreview()">预览成文</button>
+                  <span class="muted-note">已完成</span>
+                </div></td>
               </tr>
             </tbody>
           </table>
@@ -1052,6 +1071,7 @@ html[data-demo-role="viewer"] .row-actions { display: none; }
 
         <div class="filter-bar">
           <select class="select"><option>全部平台</option><option>公众号</option></select>
+          <select class="select"><option>全部主体</option><option>个人</option><option>企业</option></select>
           <select class="select"><option>全部状态</option><option>连通正常</option><option>异常</option><option>未检测</option></select>
           <input class="input" placeholder="搜索名称 / 编码" />
           <button class="btn" onclick="toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
@@ -1060,15 +1080,20 @@ html[data-demo-role="viewer"] .row-actions { display: none; }
         <div class="card" data-anno="A2">
           <table class="table">
             <thead>
-              <tr><th>账号</th><th>平台</th><th>主体标识</th><th>凭据</th><th>连通性</th><th>启用</th><th style="width:170px">操作</th></tr>
+              <tr><th>账号</th><th>平台</th><th>主体类型</th><th>主体标识</th><th>凭据</th><th>连通性</th><th>启用</th><th style="width:170px">操作</th></tr>
             </thead>
             <tbody>
               <tr>
                 <td><div>大橙子社区</div><div class="cell-sub mono">default</div></td>
                 <td><span class="tag info">公众号</span></td>
-                <td><span class="mono">wxc94524****717a06</span><div class="cell-sub">服务号 · 已认证</div></td>
+                <!--
+                  主体类型不是展示标签而已：它决定「公众号成文」里每条内容的状态流转。
+                  个人主体没有 freepublish 权限 → 草稿即完成；企业主体 → 待发布 → 已发布。
+                -->
+                <td><span class="tag sub">个人</span><div class="cell-sub">无发布权限，草稿即完成</div></td>
+                <td><span class="mono">wxc94524****717a06</span><div class="cell-sub">订阅号 · 未认证</div></td>
                 <td><div class="mono">8815****&nbsp;****d39d</div><div class="cell-sub"><span class="tag ok sub">已加密</span></div></td>
-                <td><span class="tag ok"><svg class="ic" style="width:12px;height:12px"><use href="#i-check"/></svg>正常</span><div class="cell-sub">10-23 13:20 · 可正式发布</div></td>
+                <td><span class="tag warn"><svg class="ic" style="width:12px;height:12px"><use href="#i-warn"/></svg>权限不足</span><div class="cell-sub">10-23 13:20 · 仅可建草稿</div></td>
                 <td><button class="switch on" data-need-role="admin" onclick="this.classList.toggle('on')"></button></td>
                 <td>
                   <div class="row-actions">
@@ -1128,6 +1153,14 @@ html[data-demo-role="viewer"] .row-actions { display: none; }
                 <option disabled>小红书（未接入）</option>
               </select>
               <span class="hint">腾讯文档凭据 dev/prod 均未配置，本轮下线该目标</span>
+            </div>
+            <div class="acc-field">
+              <label>主体类型 <span class="req">*</span></label>
+              <select class="select">
+                <option selected>个人（无发布权限，草稿即完成）</option>
+                <option>企业（可发布：待发布 → 已发布）</option>
+              </select>
+              <span class="hint">决定「公众号成文」里该账号内容的状态流转；选错会让运营天天点一个注定失败的发布按钮</span>
             </div>
             <div class="acc-field">
               <label>启用</label>
