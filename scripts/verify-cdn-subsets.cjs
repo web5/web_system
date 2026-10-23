@@ -77,12 +77,31 @@ const REQUIRED_COMPONENTS = [
   'Typography', 'Upload', 'App', 'message', 'theme',
 ];
 
-/** 模块 import 的图标（子集漏一个就是运行时空白） */
-const REQUIRED_ICONS = [
+/**
+ * 模块 import 的图标。
+ *
+ * ⚠️ 这份硬编码清单**只作下限兜底**，真正的清单必须由源码扫描得出。
+ *
+ * 硬编码永远追不上新增图标：2026-10-23 线上「自媒体运营」五个二级菜单没有图标，
+ * 就是因为 BasicLayout.vue 新加的 CloudServer / UnorderedList / DeploymentUnit /
+ * Monitor / Idcard 五个图标不在这份清单里 —— 子集漏了它们，校验却全绿。
+ * 现在改为「扫描 apps/*\/src + packages/ui/src 里所有 @ant-design/icons-vue 具名导入」，
+ * 与 build-subset-externals.mjs 共用 scripts/lib/scan-pkg-imports.cjs，两边口径一致。
+ */
+const REQUIRED_ICONS_FALLBACK = [
   'ApiOutlined', 'DashboardOutlined', 'SettingOutlined', 'UserOutlined', 'LockOutlined', 'PlusOutlined',
   'DeleteOutlined', 'EditOutlined', 'SearchOutlined', 'ReloadOutlined', 'MenuFoldOutlined',
   'MenuUnfoldOutlined', 'WechatOutlined', 'ThunderboltOutlined', 'RobotOutlined', 'HomeOutlined',
 ];
+
+const { SCAN_DIRS, SCAN_EXCLUDE_FILES, collectSources, collectNamedImports } = require('./lib/scan-pkg-imports.cjs');
+const REQUIRED_ICONS = new Set(REQUIRED_ICONS_FALLBACK);
+for (const s of collectSources(
+  SCAN_DIRS.map((d) => path.join(REPO_ROOT, d)),
+  { exclude: SCAN_EXCLUDE_FILES },
+)) {
+  for (const n of collectNamedImports(s.code, '@ant-design/icons-vue')) REQUIRED_ICONS.add(n);
+}
 
 loadScript('antd.js');
 loadScript('icons.js');

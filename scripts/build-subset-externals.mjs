@@ -22,34 +22,19 @@
  *   ANTA_FULL=1 node scripts/build-subset-externals.mjs
  */
 import { createRequire } from 'module';
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, readdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { gzipSync } from 'zlib';
 import { build } from 'vite';
+// 扫描实现与 scripts/verify-cdn-subsets.cjs 共用同一份，防止「构建口径」与「校验口径」漂移
+import scanLib from './lib/scan-pkg-imports.cjs';
+const { SCAN_DIRS, SCAN_EXCLUDE_FILES, collectSources, collectNamedImports, collectTemplateTags } = scanLib;
 
 const REPO_ROOT = resolve(process.cwd());
 const OUT_DIR = resolve(REPO_ROOT, 'servers/gateway/public/static/cdn');
 
-/** 参与扫描的源码目录（微前端链路：基座 + 两个模块 + 共享 UI） */
-const SCAN_DIRS = [
-  'apps/shell/src',
-  'apps/admin/src',
-  'apps/portal/src',
-  'packages/ui/src',
-];
-
-/**
- * 扫描时排除的文件。
- *
- * `apps/shell/src/antd-all.ts` 是为「保留 cssinjs 样式模板」而**全量 import + 全量注册**
- * antd 的历史 workaround（文件内有详细说明）。它不是真实使用面，纳入会让子集退化成
- * 接近全量（58 个组件），按需就白做了。
- *
- * 排除后该文件里缺失的组件会拿到 undefined —— 其注册循环有
- * `typeof install === 'function'` 运行时判断，缺失项静默跳过，不会崩；而且将来真的
- * 用到某个组件时，模板 `<a-xxx>` 扫描会把它自动补回子集，属于自愈。
- */
-const SCAN_EXCLUDE_FILES = ['antd-all.ts'];
+/** 参与扫描的源码目录 / 排除文件：定义在 scripts/lib/scan-pkg-imports.cjs，
+ *  与 verify-cdn-subsets.cjs 共用，避免构建口径与校验口径漂移 */
 
 function log(msg) { console.log(`[subset] ${msg}`); }
 function die(msg) { console.error(`[subset] ERROR: ${msg}`); process.exit(1); }
@@ -69,55 +54,10 @@ function pkgRealPath(viaApp, pkg) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. 源码扫描
+// 1. 源码扫描（实现见 scripts/lib/scan-pkg-imports.cjs，与 verify-cdn-subsets 共用）
 // ---------------------------------------------------------------------------
 
-/** 递归收集 .vue/.ts/.tsx/.js 源码文本 */
-function collectSources() {
-  const files = [];
-  const walk = (dir) => {
-    let entries;
-    try { entries = readdirSync(dir); } catch { return; }
-    for (const e of entries) {
-      const p = join(dir, e);
-      let st;
-      try { st = statSync(p); } catch { continue; }
-      if (st.isDirectory()) walk(p);
-      else if (/\.(vue|ts|tsx|js)$/.test(e) && !SCAN_EXCLUDE_FILES.includes(e)) files.push(p);
-    }
-  };
-  for (const d of SCAN_DIRS) walk(resolve(REPO_ROOT, d));
-  return files;
-}
-
-/**
- * 收集 `import { A, B as C } from '<pkg>'` 的**原始导出名**（别名取原名）。
- * 不收集 `import * as X`（那是全量，会被子集破坏，扫描到时应告警）。
- */
-function collectNamedImports(code, pkg) {
-  const names = new Set();
-  const re = new RegExp(`(?:import|export)\\s*\\{([^}]*)\\}\\s*from\\s*['"\`]${pkg.replace(/[/@]/g, '\\$&')}['"\`]`, 'g');
-  let m;
-  while ((m = re.exec(code))) {
-    for (const raw of m[1].split(',')) {
-      const s = raw.trim();
-      if (!s) continue;
-      const asIdx = s.toLowerCase().indexOf(' as ');
-      const name = (asIdx >= 0 ? s.slice(0, asIdx) : s).trim();
-      if (/^[A-Za-z][A-Za-z0-9]*$/.test(name)) names.add(name);
-    }
-  }
-  return names;
-}
-
 /** 收集模板里的 `<a-xxx-yyy>` 标签名（kebab） */
-function collectTemplateTags(code) {
-  const tags = new Set();
-  const re = /<a-([a-z0-9-]+)/g;
-  let m;
-  while ((m = re.exec(code))) tags.add(m[1]);
-  return tags;
-}
 
 // ---------------------------------------------------------------------------
 // 2. antd：组件名 → es 子路径映射（从官方 es/index.js 解析，避免手写清单漂移）
@@ -222,7 +162,10 @@ function gzSize(file) {
 async function main() {
   // ANTA_FULL=1：跳过 antd 子集（由 build-externals.mjs 直接 copy 官方 UMD 兜底）
   const antdFull = process.env.ANTA_FULL === '1';
-  const sources = collectSources().map((p) => ({ path: p, code: readFileSync(p, 'utf-8') }));
+  const sources = collectSources(
+    SCAN_DIRS.map((d) => resolve(REPO_ROOT, d)),
+    { exclude: SCAN_EXCLUDE_FILES },
+  );
   log(`扫描源码 ${sources.length} 个文件`);
 
   // ---- antd ----
@@ -301,6 +244,43 @@ async function main() {
   const iconsOut = resolve(OUT_DIR, 'icons.js');
   appendWrapper(iconsOut, 'antdIcons', 'antDesignIconsVue');
   log(`icons.js raw=${(readFileSync(iconsOut).length / 1024).toFixed(0)}KB gzip=${(gzSize(iconsOut) / 1024).toFixed(0)}KB`);
+
+  /**
+   * 构建即自检（**独立口径**，不能拿扫描结果当基准）。
+   *
+   * 为什么不能简单比「扫描结果 vs 产物」：漏图标恰恰是扫描结果自己少了一个，
+   * 拿它去比产物，两边一样缺 → 永远对得上，属于循环论证（实测 47 vs 47 全绿，
+   * 而实际少了 CloudServerOutlined）。
+   *
+   * 这里换一个更笨但独立的口径：
+   *   ① 从 icons 包 `es/icons/` 目录列出**真实存在的全部图标名**（约 800 个）；
+   *   ② 在源码全文里找出现过的这些名字（不局限于 import 块，注释里也算）；
+   *   ③ 这些名字必须全部能在产物 icons.js 里取到。
+   *
+   * 方向是「宁多勿漏」：注释里提到的图标会被要求纳入子集，代价是几 KB，
+   * 但绝不会再出现「源码在用、产物没有」的空白图标。
+   */
+  const iconsCode = readFileSync(iconsOut, 'utf-8');
+  const allIconNames = new Set(
+    readdirSync(resolve(iconsRoot, 'es/icons'))
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => f.replace(/\.js$/, '')),
+  );
+  const mentioned = new Set();
+  for (const s of sources) {
+    for (const m of s.code.matchAll(/\b([A-Z][A-Za-z0-9]+)\b/g)) {
+      if (allIconNames.has(m[1])) mentioned.add(m[1]);
+    }
+  }
+  const missingIcons = [...mentioned].filter((n) => !iconsCode.includes(n)).sort();
+  if (missingIcons.length) {
+    die(
+      `icons 子集漏了 ${missingIcons.length} 个图标（源码里出现、产物里没有）：${missingIcons.join(', ')}`,
+    );
+  }
+  log(
+    `icons 自检通过：源码提到的 ${mentioned.size} 个图标全部在产物中（图标库共 ${allIconNames.size} 个）`,
+  );
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
