@@ -55,7 +55,7 @@ node scripts/db-shadow.mjs status                                   # 对比
 #   通过 → 申请时间窗口 → 停服务 → 真库执行 → 发布 → 验证
 
 # ④ PR：分支 → CI（L1 结构 / build+test / 红线扫描）→ squash 合入 master
-#    门禁全景（哪层拦、什么级别、怎么豁免）：docs/development/质量门禁总纲.md
+#    门禁全景（哪层拦、什么级别、怎么豁免）：docs/development/质量门禁总纲.md → gates/01-日常使用.md
 # ⑤ 发布：只在发布源做
 cd ~/workspace/web_system && git pull --ff-only && ./scripts/publish-deploy-console.sh
 ```
