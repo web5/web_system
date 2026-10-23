@@ -268,7 +268,7 @@ function runEnable(script, { recognize = true, presetAutoMerge = null, state = '
 }
 
 // ── 4.2 落后同步（rest 读 + graphql 写） ──
-function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } = {}) {
+function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }], baseTip = 'base222' } = {}) {
   const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [], reads: 0 };
   const queue = [...states];
   const github = {
@@ -282,7 +282,11 @@ function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } =
           };
         },
       },
-      repos: { getCommit: async () => ({ data: { parents } }) },
+      repos: {
+        getCommit: async () => ({ data: { parents } }),
+        // 安全阀的比对基准已从 pr.base.sha 改成「当前 base 分支 tip」（#417 实测）
+        getBranch: async () => ({ data: { commit: { sha: baseTip } } }),
+      },
     },
     graphql: async (q, vars) => {
       if (q.includes('updatePullRequestBranch')) st.mutations.push(vars);
@@ -307,7 +311,7 @@ function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } =
 
 // ── 4.3 master 前进后批量同步（push 事件，无 pull_request 上下文） ──
 // prs: [{ number, draft?, fork?, states?: [...], parents?: [{sha}] }]
-function runMasterSync(script, prs) {
+function runMasterSync(script, prs, { after = null } = {}) {
   const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [] };
   const queues = {};
   for (const p of prs) queues[p.number] = [...(p.states || ['behind'])];
@@ -340,6 +344,8 @@ function runMasterSync(script, prs) {
           const p = prs.find((x) => `head${x.number}` === ref) || {};
           return { data: { parents: p.parents || [{ sha: 'older' }] } };
         },
+        // 兜底路径：没有 payload.after 时才走 API 取 base tip
+        getBranch: async () => ({ data: { commit: { sha: 'base000' } } }),
       },
     },
     graphql: async (q, vars) => {
@@ -353,7 +359,7 @@ function runMasterSync(script, prs) {
     },
   };
   // push 事件：payload 里没有 pull_request —— 脚本如果误读 context.payload.pull_request 会当场挂
-  const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: {} };
+  const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: after ? { after } : {} };
   const sandbox = newSandbox({
     github,
     context,
@@ -457,6 +463,16 @@ function runMasterSync(script, prs) {
       `mutation=${s.mutations.length}`,
     );
 
+    // 9b. 🔴 回归（#417 实测）：head 里含的是**旧 base**（pr.base.sha），当前 master tip 已前进
+    //     → 必须同步。用 pr.base.sha 当基准会把「落后」误判成「已同步」，落后 PR 永远被跳过。
+    s = runSync(syncBlock, { states: ['behind'], parents: [{ sha: 'base222' }], baseTip: 'newmaster' });
+    await tick();
+    t(
+      'behave:旧 base 不得被当成已同步（#417 回归）',
+      s.mutations.length === 1,
+      `mutation=${s.mutations.length}（应 1；0 说明安全阀又退回用 pr.base.sha）`,
+    );
+
     // 10. unknown（GitHub 异步计算中）→ 等一轮再读，不能当"无需同步"
     s = runSync(syncBlock, { states: ['unknown', 'behind'], parents: [{ sha: 'older' }] });
     await tick();
@@ -484,6 +500,18 @@ function runMasterSync(script, prs) {
         s.notices.length === 1 &&
         s.failed.length === 0,
       `mutation=${s.mutations.length}（应 1，且只打 #501）draft/fork 被误动即为错`,
+    );
+
+    // 11b. 🔴 回归（#417 实测）：push 事件用 payload.after（当前 master tip）当基准，
+    //      head 里含旧 base 时必须同步，不能被安全阀误跳。
+    s = runMasterSync(masterSyncBlock, [{ number: 508, states: ['behind'], parents: [{ sha: 'base000' }] }], {
+      after: 'newmaster',
+    });
+    await tick();
+    t(
+      'behave:push 事件用 payload.after 当基准',
+      s.mutations.length === 1,
+      `mutation=${s.mutations.length}（应 1）`,
     );
 
     // 12. 安全阀：head 已含 base → 跳过（master 连推两次不重复同步）
