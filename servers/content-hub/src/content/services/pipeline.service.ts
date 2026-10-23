@@ -16,7 +16,6 @@ import { detectAiCategories } from '../processors/categorize';
 import { buildDailyMarkdown, markdownToHtml, RenderItem } from '../processors/render';
 import { renderTitle } from './title.util';
 import { IPublisher, publicationStatus } from '../publishers/publisher.interface';
-import { TencentDocsPublisher } from '../publishers/tencent-docs.publisher';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
 
 export interface RunResult {
@@ -42,7 +41,6 @@ export class PipelineService {
     private readonly itemRepo: Repository<ContentItemEntity>,
     @InjectRepository(ContentPublicationEntity)
     private readonly publicationRepo: Repository<ContentPublicationEntity>,
-    private readonly tencentDocsPublisher: TencentDocsPublisher,
     private readonly wechatMpPublisher: WechatMpPublisher,
   ) {
     // 采集器注册表（新增来源在此登记）
@@ -52,8 +50,8 @@ export class PipelineService {
       hackernews: new HackerNewsCollector(),
     };
     // 发布器注册表
+    // 腾讯文档通道 2026-10-23 下线（A5），注册表只留公众号
     this.publishers = {
-      tencent_docs: tencentDocsPublisher,
       wechat_mp: wechatMpPublisher,
     };
   }

@@ -4,9 +4,11 @@ import { ContentController } from './content.controller';
 import { ContentService } from './services/content.service';
 import { PipelineService } from './services/pipeline.service';
 import { SchedulerService } from './scheduler.service';
-import { TencentDocsPublisher } from './publishers/tencent-docs.publisher';
 import { WechatMpPublisher } from './publishers/wechat-mp/wechat-mp.publisher';
 import { ContentSourceEntity } from './entities/content-source.entity';
+import { ContentAccountEntity } from './entities/content-account.entity';
+import { ContentAccountService } from './services/content-account.service';
+import { AccountCredentialService } from './services/account-credential.service';
 import { ContentPipelineEntity } from './entities/content-pipeline.entity';
 import { ContentItemEntity } from './entities/content-item.entity';
 import { ContentPublicationEntity } from './entities/content-publication.entity';
@@ -35,6 +37,7 @@ import { ContentAuthModule } from '../auth/auth.module';
       LhbRecordEntity,
       HotmoneySeatEntity,
       CollectRunEntity,
+      ContentAccountEntity,
     ]),
     ContentAuthModule,
   ],
@@ -43,8 +46,9 @@ import { ContentAuthModule } from '../auth/auth.module';
     ContentService,
     PipelineService,
     SchedulerService,
-    TencentDocsPublisher,
     WechatMpPublisher,
+    ContentAccountService,
+    AccountCredentialService,
     CollectLogService,
     SeatTagService,
     FinnewsAdapterService,
