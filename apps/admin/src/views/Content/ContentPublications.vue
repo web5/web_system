@@ -303,7 +303,7 @@ onMounted(load);
     <a-drawer
       v-model:open="previewVisible"
       :title="preview?.title ?? '成文预览'"
-      width="720"
+      width="820"
       :body-style="{ padding: '0' }"
     >
       <a-spin :spinning="previewLoading">
@@ -321,37 +321,47 @@ onMounted(load);
               · 按管线 + 发布日期聚合 {{ preview.item_count }} 条明细重建
             </span>
           </div>
-          <!--
-            失败原因（#405）：此前 status=failed 只能看到一个红叉，原因得去查库。
-            内容是后端白名单 + 脱敏后的串（code/message/at），不含凭证与路径。
-          -->
-          <a-alert
-            v-if="preview.failure"
-            class="preview-failure"
-            type="error"
-            show-icon
-            :message="failureTitle"
-          >
-            <template #description>
-              <div class="failure-msg">{{ preview.failure.message }}</div>
-              <div v-if="preview.failure.at" class="muted">
-                失败于 {{ fmtTime(preview.failure.at) }}
+
+          <div class="preview-body">
+            <!--
+              失败原因（#405）：此前 status=failed 只能看到一个红叉，原因得去查库。
+              内容是后端白名单 + 脱敏后的串（code/message/at），不含凭证与路径。
+            -->
+            <div class="preview-aside">
+              <a-alert
+                v-if="preview.failure"
+                class="preview-failure"
+                type="error"
+                show-icon
+                :message="failureTitle"
+              >
+                <template #description>
+                  <div class="failure-msg">{{ preview.failure.message }}</div>
+                  <div v-if="preview.failure.at" class="muted">
+                    失败于 {{ fmtTime(preview.failure.at) }}
+                  </div>
+                </template>
+              </a-alert>
+              <!--
+                存量记录重建（#431）：payload.html 是发布当时的产物，渲染器升级对它无效。
+                只在 stored 出现 —— aggregated 本来就按当前渲染器现算，不需要重算。
+              -->
+              <div v-if="canRebuild" class="preview-toolbar">
+                <a-button size="small" :loading="rebuilding" @click="onRebuild">
+                  重建成文（按当前渲染器）
+                </a-button>
+                <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
               </div>
-            </template>
-          </a-alert>
-          <!--
-            存量记录重建（#431）：payload.html 是发布当时的产物，渲染器升级对它无效。
-            只在 stored 出现 —— aggregated 本来就按当前渲染器现算，不需要重算。
-          -->
-          <div v-if="canRebuild" class="preview-toolbar">
-            <a-button size="small" :loading="rebuilding" @click="onRebuild">
-              重建成文（按当前渲染器）
-            </a-button>
-            <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
+            </div>
+
+            <!-- 成文 HTML 由自家管线 LLM 生成后留存/重建，非用户输入 -->
+            <!-- previewHtml 在渲染层把裸 URL 兜底成链接（#433），不依赖数据是否洗过 -->
+            <!-- 版面按公众号阅读版心呈现（#436）：680 版心 / 16px / 1.8 行高 -->
+            <div class="preview-paper">
+              <div v-if="previewHtml" class="preview-html" v-html="previewHtml" />
+              <a-empty v-else description="该记录未留存成文内容，请重跑对应管线" />
+            </div>
           </div>
-          <!-- 成文 HTML 由自家管线 LLM 生成后留存/重建，非用户输入 -->
-          <!-- previewHtml 在渲染层把裸 URL 兜底成链接（#433），不依赖数据是否洗过 -->
-          <div class="preview-html" v-html="previewHtml" />
         </div>
       </a-spin>
     </a-drawer>
@@ -377,53 +387,301 @@ onMounted(load);
   margin-bottom: 12px;
   align-items: center;
 }
+/* ── 成文预览（#436）：让运营看到的就是读者在手机上看到的样子 ──
+   纸张浮在页面底色上 + 680 版心 + 16px/1.8 行高，颜色全走 @web-system/ui 语义
+   token（light / dark 自动跟随）。此处只做「显示」，不改产物。 */
 .preview-wrap {
-  padding: 16px 24px;
+  min-height: 100%;
+  background: var(--ws-bg-page);
+}
+.preview-body {
+  padding: 0 24px 40px;
 }
 .preview-meta {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 24px;
+  background: var(--ws-bg-surface);
+  border-bottom: 1px solid var(--ws-border-subtle);
 }
 .muted {
-  color: var(--text-faint);
+  color: var(--ws-text-tertiary);
   font-size: 12px;
 }
-.preview-failure {
-  margin-bottom: 16px;
+.preview-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 680px;
+  margin: 0 auto;
+  padding-top: 16px;
 }
 .preview-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px dashed var(--border-subtle);
+  padding: 10px 16px;
+  background: var(--ws-bg-surface);
+  border: 1px dashed var(--ws-border-subtle);
+  border-radius: var(--r-control, 6px);
+}
+.preview-paper {
+  box-sizing: border-box;
+  max-width: 680px;
+  margin: 20px auto 0;
+  padding: 40px 36px 44px;
+  background: var(--ws-bg-surface);
+  border: 1px solid var(--ws-border-subtle);
+  border-radius: var(--r-card, 8px);
+  box-shadow: var(--ws-shadow-card);
 }
 .failure-msg {
   word-break: break-all;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--ws-font-mono);
   font-size: 12px;
   line-height: 1.7;
 }
+
+/* ── 正文排版 ── */
 .preview-html {
-  font-size: 14px;
+  font-family: var(--ws-font-sans);
+  font-size: 16px;
   line-height: 1.8;
-  color: var(--text-body);
+  letter-spacing: 0.2px;
+  color: var(--ws-text-body);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  -webkit-font-smoothing: antialiased;
 }
-.preview-html :deep(h1),
-.preview-html :deep(h2),
+/* 文章主标题：渲染器把 `#` 降级成 h2，首个标题元素即标题 */
+.preview-html :deep(> h1:first-child),
+.preview-html :deep(> h2:first-child) {
+  margin: 0 0 24px;
+  padding: 0 0 18px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -0.2px;
+  color: var(--ws-text-primary);
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+.preview-html :deep(> h1:first-child)::before,
+.preview-html :deep(> h2:first-child)::before {
+  content: none;
+}
+/* 章节标题：橙色竖条（top/height 按首行行盒定，多行标题也不错位） */
+.preview-html :deep(h2) {
+  position: relative;
+  margin: 36px 0 14px;
+  padding-left: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: 0;
+  color: var(--ws-text-primary);
+}
+.preview-html :deep(h2)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--ws-brand-500);
+}
 .preview-html :deep(h3) {
-  color: var(--text-primary);
+  margin: 26px 0 10px;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ws-text-primary);
 }
+.preview-html :deep(h3)::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ws-brand-500);
+  vertical-align: 3px;
+}
+.preview-html :deep(h4) {
+  margin: 22px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ws-text-secondary);
+}
+.preview-html :deep(h5),
+.preview-html :deep(h6) {
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ws-text-secondary);
+}
+.preview-html :deep(p) {
+  margin: 0 0 18px;
+}
+.preview-html :deep(> *:last-child) {
+  margin-bottom: 0;
+}
+/* 列表：橙色圆点记号（日报全是条目，这层最影响观感） */
+.preview-html :deep(ul) {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  list-style: none;
+}
+.preview-html :deep(ul > li) {
+  position: relative;
+  margin-bottom: 10px;
+}
+.preview-html :deep(ul > li)::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0.74em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ws-brand-400);
+}
+.preview-html :deep(ul > li:last-child) {
+  margin-bottom: 0;
+}
+.preview-html :deep(ol) {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+.preview-html :deep(ol li) {
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+.preview-html :deep(ol > li:last-child) {
+  margin-bottom: 0;
+}
+.preview-html :deep(ol li)::marker {
+  color: var(--ws-brand-500);
+  font-weight: 600;
+}
+/* 链接：发丝下划线；长 URL 必须能断行，否则版心被撑破 */
 .preview-html :deep(a) {
-  color: #ff8c42;
+  color: var(--ws-brand-600);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(249, 115, 22, 0.35);
+  transition: color 150ms var(--ws-ease-out), border-color 150ms var(--ws-ease-out);
+}
+.preview-html :deep(a:hover) {
+  color: var(--ws-brand-500);
+  border-bottom-color: var(--ws-brand-500);
+}
+/* 暗底上 #EA580C 与纸面 #1A1A1A 对比不足，亮一档 */
+[data-theme='dark'] .preview-html :deep(a) {
+  color: var(--ws-brand-400);
+  border-bottom-color: rgba(251, 146, 60, 0.35);
+}
+[data-theme='dark'] .preview-html :deep(a:hover) {
+  color: var(--ws-brand-300);
+  border-bottom-color: var(--ws-brand-300);
+}
+.preview-html :deep(strong),
+.preview-html :deep(b) {
+  font-weight: 600;
+  color: var(--ws-text-strong);
+}
+.preview-html :deep(em) {
+  font-style: normal;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(249, 115, 22, 0.14);
 }
 .preview-html :deep(img) {
+  display: block;
   max-width: 100%;
+  height: auto;
+  margin: 22px auto;
+  border-radius: var(--r-control, 6px);
+}
+.preview-html :deep(figure) {
+  margin: 22px 0;
+}
+.preview-html :deep(figcaption) {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--ws-text-tertiary);
+}
+/* 引用 / 代码 / 表头底色用 bg-hover：暗色下 bg-subtle 比纸面更深，会像挖了个洞 */
+.preview-html :deep(blockquote) {
+  margin: 22px 0;
+  padding: 14px 18px;
+  background: var(--ws-bg-hover);
+  border-left: 3px solid var(--ws-brand-500);
+  border-radius: 0 var(--r-control, 6px) var(--r-control, 6px) 0;
+  color: var(--ws-text-secondary);
+}
+.preview-html :deep(blockquote p:last-child) {
+  margin-bottom: 0;
+}
+.preview-html :deep(code) {
+  padding: 2px 6px;
+  font-family: var(--ws-font-mono);
+  font-size: 0.88em;
+  color: var(--ws-text-secondary);
+  background: var(--ws-bg-hover);
+  border-radius: var(--r-chip, 4px);
+}
+.preview-html :deep(pre) {
+  margin: 22px 0;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--ws-code-bg);
+  border-radius: var(--r-control, 6px);
+}
+.preview-html :deep(pre code) {
+  padding: 0;
+  font-size: inherit;
+  color: var(--ws-code-text);
+  background: none;
+  border-radius: 0;
+}
+.preview-html :deep(table) {
+  width: 100%;
+  margin: 22px 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.preview-html :deep(th),
+.preview-html :deep(td) {
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--ws-border-subtle);
+}
+.preview-html :deep(th) {
+  font-weight: 600;
+  color: var(--ws-text-primary);
+  background: var(--ws-bg-hover);
+}
+.preview-html :deep(hr) {
+  margin: 30px 0;
+  border: 0;
+  border-top: 1px solid var(--ws-border-subtle);
+}
+
+@media (max-width: 760px) {
+  .preview-body {
+    padding: 0 12px 24px;
+  }
+  .preview-paper {
+    padding: 26px 18px 30px;
+  }
 }
 </style>
