@@ -18,6 +18,68 @@ import {
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
 import { renderTitle } from './title.util';
 
+/**
+ * 预览里能看到的失败原因（#405）。**白名单三件，多一个字段都不给。**
+ *
+ * 为什么不直接透出 `detail.error`：那是给日志看的原始串，会带上 access_token、
+ * 部署绝对路径、第三方接口返回体片段。后台是浏览器页面，仓库又是 PUBLIC，
+ * 一次截图就散出去了。所以这里做「结构 + 脱敏」两道：
+ *   1. 结构：只留 code / message / at，其余字段一律不出现；
+ *   2. 脱敏：message 里命中的凭证模式替换成 `***`，并截断长度。
+ *
+ * 反向约束（已写进单测）：页面上**不得**出现任何原始 token 片段。
+ */
+export interface PublicationFailure {
+  /** 微信 errcode 之类的机器码，抓不到为 null */
+  code: string | null;
+  /** 脱敏后的可读原因 */
+  message: string;
+  /** 失败时间（ISO），取记录的 updated_at */
+  at: string | null;
+}
+
+/**
+ * 凭证类参数：`access_token=xxx` / `secret: xxx` / `"key":"xxx"` 等，值一律抹掉。
+ * 两侧 `\b` 是必须的 —— 否则 `monkey=` `design=` 这类字段会被 `key` / `sig` 顺带命中，
+ * 把无关字段也抹成 ***，排障时反而看不出是哪个参数坏了。
+ */
+const SECRET_PARAM = /\b((?:access[_-]?token|refresh[_-]?token|token|secret|app[_-]?secret|api[_-]?key|key|signature|sig)\b"?\s*[:=]\s*"?)([^&"'\s,}]{4,})/gi;
+/** `Authorization: Bearer xxx` */
+const BEARER = /(Bearer\s+)[\w.\-+/=]{8,}/gi;
+/** 部署绝对路径（macOS / Linux / Windows），泄露服务器结构 */
+const ABS_PATH = /(?:\/(?:Users|home|root|opt|var|data)\/[^\s"'<>)]{2,}|[A-Za-z]:\\[^\s"'<>)]{2,})/g;
+/** 单条消息上限：够排障，不够拖库 */
+const FAILURE_MAX = 400;
+
+/**
+ * 把原始错误串洗成可展示的失败原因。纯函数，导出以便单测直接钉死脱敏规则。
+ */
+export function redactFailure(raw: unknown, at?: Date | string | null): PublicationFailure | null {
+  const text = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const message = trimmed
+    .replace(SECRET_PARAM, '$1***')
+    .replace(BEARER, '$1***')
+    .replace(ABS_PATH, '***')
+    .replace(/\s+/g, ' ')
+    .slice(0, FAILURE_MAX);
+
+  // 机器码：优先 `[48001]`，其次 `errcode=48001` / `error_code: 48001`
+  const code =
+    message.match(/\[(\d{3,6})\]/)?.[1] ??
+    message.match(/(?:err|error)[_-]?code\s*[:=]\s*(\d{1,6})/i)?.[1] ??
+    null;
+
+  const when = at == null ? null : new Date(at);
+  return {
+    code,
+    message,
+    at: when && !Number.isNaN(when.getTime()) ? when.toISOString() : null,
+  };
+}
+
 /** 公众号发布/建稿入参 */
 export interface WechatMpPublishDto {
   title: string;
@@ -352,12 +414,27 @@ export class ContentService {
     const pub = await this.publicationRepo.findOne({ where: { id } });
     if (!pub) return null;
 
+    const detail = pub.detail as { error?: unknown } | null;
+
+    /**
+     * 失败原因（#405）：`status=failed` 时后台只能看到红叉、原因得去查库。
+     * 这里脱敏后透出，三条返回路径共用 `base`，所以只写一次。
+     *
+     * 只对 failed 透出：`drafted` 记录里也有 error，但那是「已进草稿箱待发布」的
+     * 提示语，不是失败 —— 挂成 failure 会让后台把它当错误展示，语义又反过来。
+     */
+    const failure =
+      pub.status === 'failed'
+        ? redactFailure(detail?.error, pub.updated_at ?? pub.created_at)
+        : null;
+
     const base = {
       id: Number(pub.id),
       target: pub.target,
       status: pub.status,
       external_id: pub.external_id,
       published_at: pub.created_at,
+      failure,
     };
 
     const payload = (pub.detail as { payload?: { title?: string; html?: string; markdown?: string } } | null)
