@@ -285,10 +285,15 @@ export class ContentService {
       );
     }
 
+    // 存量记录的 payload.title 可能是未渲染的模板（2026-10-23 前的定时发布漏了替换，
+    // 落库成「AI 资讯日报 ｜ {{date}}」）。重发前必须再渲染一次，否则会把原始模板
+    // 发到微信端。日期沿用该条记录的创建日，保持与原发布一致。
+    const title = renderTitle(payload.title, payload.title, pub.created_at);
+
     const result =
       pub.target === 'wechat_mp'
         ? await this.wechatMpPublisher.publish({
-            title: payload.title,
+            title,
             html: payload.html ?? '',
             thumb_media_id: payload.thumb_media_id,
             digest: payload.digest,
@@ -296,10 +301,13 @@ export class ContentService {
             account: payload.account,
           })
         : await this.tencentDocsPublisher.publish({
-            title: payload.title,
+            title,
             markdown: payload.markdown ?? '',
             folder: payload.folder,
           });
+
+    // 新记录里也存渲染后的标题，避免再次重发时重复踩同一个坑
+    const renderedPayload = { ...payload, title };
 
     const saved = await this.publicationRepo.save(
       this.publicationRepo.create({
@@ -311,7 +319,7 @@ export class ContentService {
         detail: {
           republish_of: Number(pub.id),
           ...(result.error ? { error: result.error } : {}),
-          payload,
+          payload: renderedPayload,
         },
       }),
     );
