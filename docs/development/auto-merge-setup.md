@@ -90,33 +90,32 @@ Micro-exempt: 纯文案替换，无结构/交互变更
 - 必需检查的名字改了（如 workflow 里 job 改名），分支保护里要同步改，否则永远 pending。
 - **分支落后 master（`mergeStateStatus=BEHIND`）**：2026-10-23 起由 `auto-merge.yml` 的
   「落后 master 时自动同步分支」step 自动处理（`updatePullRequestBranch`）。三条实现细节：
-  1. `mergeable_state=unknown`（GitHub 异步计算，刚 push 完常见）会等 3s 再读一次；否则会把
-     「还没算完」误判成「无需同步」。
-  2. 安全阀：head 已包含 base sha（说明刚同步过）直接跳过，避免 synchronize 触发的第二轮重复同步。
-  3. 同步失败**只 warning 不判红** —— 「该不该合」没被破坏，只是没自动补齐条件；
+  1. 🔴 **判「落后」用 commit 比较，不用 `mergeable_state`**。后者是 GitHub 异步算的缓存字段：
+     master 刚前进时十几秒甚至更久都是 `unknown`（2026-10-23 实测两轮：等 3 秒仍 unknown；
+     改成轮询 5×3 秒后，`#417` / `#420` 在第 15 秒**仍是** unknown）。
+     而「master 刚前进」正是这个 job 唯一会启动的时刻 —— 撞上概率接近 100%，等于每次都赌它算完了。
+     改用 `compareCommits({base: head.sha, head: 当前 tip})`，看 head 里到底有没有当前 tip：
+     `behind` / `identical` = 已含（跳过），`diverged` / `ahead` = 落后（同步）。即时、确定、零等待。
+  2. 🔴 **比对基准是「当前 base 分支 tip」，不是 `pr.base.sha`**。`pr.base.sha` 是**该 PR
+     记录里的 base**（分支上次合并时的 master 提交），master 前进后**不跟着变**。
+     实测：#417 的 head `467c06a1` 父提交里含着 `pr.base.sha = 3a0d83b9`（旧 master），
+     当时 master tip 已是 `21725b60` —— 拿它比对会把「落后 2 个提交」判成「已同步」，
+     落后 PR **永远被跳过**（PR #422 就是这样白跑一轮）。push 事件直接取 `context.payload.after`
+     （零 API 且绝对准确），其他事件退回 `repos.getBranch(base.ref)`。
+  3. 安全阀不需要单独写：上面的 compare 判据本身就是安全阀 —— head 已含当前 tip 就不动，
+     master 连推两次也不会对同一个 PR 重复同步（每次同步都会白触发一轮 CI）。
+  4. 同步失败**只 warning 不判红** —— 「该不该合」没被破坏，只是没自动补齐条件；
      判红会让每次落后都红一片，反而盖住真正的问题。日志里带临时修法（`gh pr update-branch <n>`）。
-  4. ⚠️ `AUTO_PR_TOKEN` 需 **`contents: write`**（`updatePullRequestBranch` 的要求，比只挂合入的
+  5. ⚠️ `AUTO_PR_TOKEN` 需 **`contents: write`**（`updatePullRequestBranch` 的要求，比只挂合入的
      `pull_requests:write` 高一档）。2026-10-23 实测当前 token 已具备。
-  5. ✅ **已补（2026-10-23）**：PR 已开着、master 后来前进 —— 由新增的 `sync-behind-on-master`
-     job 负责（`push: branches: [master]` 触发，扫所有开放 PR，只同步 `behind` 的）。
+  6. ✅ **已补（2026-10-23）**：PR 已开着、master 后来前进 —— 由新增的 `sync-behind-on-master`
+     job 负责（`push: branches: [master]` 触发，扫所有开放 PR，只同步落后的）。
      **此前这里写的是「有意不做（每次合并都扫所有 open PR）」，今天证明这个权衡是错的**：
      master 前进**不会产生任何 `pull_request` 事件**，所以上面那个同步 step 只在
      「PR 恰好有动静」时才跑得到。实测 PR #417：12:30 变 `BEHIND`，随后 #418、#419 接连合入，
      它一直 `BEHIND`、`autoMergeRequest` 挂着却一动不动，只能人工 `gh pr update-branch`。
-     代价重算：开放 PR 常年个位数，成本 = 1 次 list + 每个 PR 1 次 get；
+     代价重算：开放 PR 常年个位数，成本 = 1 次 list + 每个 PR 2 次 get（快照 + compare）；
      对比「每次都要人记得手敲 update-branch」，这个成本可以直接认。
-  6. 🔴 **安全阀的比对基准是「当前 base 分支 tip」，不是 `pr.base.sha`**。
-     `pr.base.sha` 是**该 PR 记录里的 base**（分支上次合并/分叉时的 master 提交），
-     master 前进后它不会跟着变。2026-10-23 实测：#417 的 head `467c06a1` 是 merge commit，
-     父提交里就含着 `pr.base.sha = 3a0d83b9`（旧 master），而当时 master tip 已是 `21725b60` ——
-     拿 `pr.base.sha` 比对会把「落后 2 个提交」判成「已同步」，落后 PR 于是**永远被跳过**。
-     push 事件直接用 `context.payload.after`（当前 tip，零 API 且准确），其他事件退回
-     `repos.getBranch(base.ref)`。回归用例：「旧 base 不得被当成已同步（#417 回归）」——
-     把基准改回 `pr.base.sha` 它会立刻变红（已用负向探针验证）。
-  7. ⏳ **`mergeable_state` 必须轮询，不能「等一轮看一眼」**。master 前进后十几秒内它一直是
-     `unknown`。实测 05:20:26 合并、05:20:32 job 开跑、等 3 秒后 #417 / #420 仍是 `unknown`
-     → 被当成「无需同步」全跳过，job 白跑一轮。现在轮询 5×3 秒；15 秒后仍 `unknown` 就
-     `core.warning`（下一次 master 前进会再试），**不静默**。
 - 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
   （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
   照单全收 —— 单测全绿、线上必挂（PR #409 实测）。
@@ -132,8 +131,8 @@ Micro-exempt: 纯文案替换，无结构/交互变更
   | 层 | 覆盖 | 需要网络 |
   |---|---|---|
   | YAML + 每段 `script:` 的语法 | 2 份 YAML、3 段内嵌脚本 | 否 |
-  | 静态回归 | 无 `rest.pulls.enableAutoMerge`（#396 根因）、`$oid` 声明必须是 `GitObjectID!`（#409，**两个同步块各查一次**）、`on.push.branches` 必须含 `master`（缺了 #417 会一直挂着） | 否 |
-  | mock 行为 | 首次挂上 / 已挂幂等 / 非 OPEN 不动 / **mutation 名改错必须判红** / auto-pr 只 warning / BEHIND 触发同步 / 已同步跳过 / clean 不动 / `unknown` 等一轮重读 / **master 前进后只同步 behind 的 PR（草稿与 fork 必须跳过）** / master 同步的安全阀 / master 同步遇 unknown / master 同步失败只 warning | 否 |
+  | 静态回归 | 无 `rest.pulls.enableAutoMerge`（#396 根因）、`$oid` 声明必须是 `GitObjectID!`（#409，**两个同步块各查一次**）、`on.push.branches` 必须含 `master`（缺了 #417 会一直挂着）、同步块代码**不得**出现 `pr.base.sha` 与 `mergeable_state`（两条都是今天踩过的误判源；断言前先剥注释行，否则解释「不要用」的注释会被判成违规） | 否 |
+  | mock 行为 | 首次挂上 / 已挂幂等 / 非 OPEN 不动 / **mutation 名改错必须判红** / auto-pr 只 warning / `diverged` 同步 / `behind`·`identical` 跳过（安全阀）/ `ahead` 同步 / 同步失败只 warning / **master 前进后只同步落后的 PR（草稿与 fork 必须跳过）** / 都最新则不动 / **push 事件必须用 `payload.after`（不许再问 API）** / 无 `after` 时退回 API / master 同步失败只 warning | 否 |
   | 线上 schema | `Mutation` 里确有 `enablePullRequestAutoMerge`、`updatePullRequestBranch`；`expectedHeadOid` 类型与声明一致；`updateMethod` / `mergeMethod` 取值合法 | 是（`gh` 已登录） |
 
   不加 `--schema` 时只跑离线部分（schema 那几条会显式标注「未含」，不会假装通过）。
