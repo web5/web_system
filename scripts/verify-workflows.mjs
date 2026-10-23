@@ -167,6 +167,48 @@ t(
   '写成 String! 线上报 Type mismatch（#409，mock 测不出来所以这条必须静态断言）',
 );
 
+// ── master 前进触发（2026-10-23，修 #407 残留缺口）──
+// 用一句日志文本当锚点，而不是块下标：加 step 会让下标静默指错（见上面 findBlock 的注释）。
+const masterSyncBlock = findBlock('auto-merge.yml', '扫描 master 前进后落后的开放 PR');
+t(
+  'blocks:auto-merge 的 master 前进同步块',
+  !!masterSyncBlock,
+  masterSyncBlock ? '已定位' : '找不到含「扫描 master 前进后落后的开放 PR」的 script 块',
+);
+t(
+  'static:auto-merge 监听 master push',
+  /\n\s*push:\s*\n\s*branches:\s*\[\s*master\s*\]/.test(texts['auto-merge.yml']),
+  '缺这个触发点：master 前进不产生 pull_request 事件，落后的 PR 永远等不到同步（#417 实测：BEHIND 后 #418/#419 合入仍纹丝不动）',
+);
+t(
+  'static:master 同步块的 $oid 声明为 GitObjectID!',
+  !!masterSyncBlock && /\$oid:\s*GitObjectID!/.test(masterSyncBlock) && !/\$oid:\s*String/.test(masterSyncBlock),
+  '同一坑第二次：新块也要 GitObjectID!（#409）',
+);
+// 只看代码行不看注释：这两个块里的注释**正是在解释「为什么不要用」**，
+// 全文正则会把它判成违规（本项目第三次踩这个坑，第一次是 rest.pulls.enableAutoMerge）。
+const codeOnlyJs = (txt) =>
+  txt
+    .split('\n')
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join('\n');
+t(
+  'static:两个同步块都不用 pr.base.sha 当基准',
+  !!syncBlock &&
+    !!masterSyncBlock &&
+    !/pr\.base\.sha/.test(codeOnlyJs(syncBlock)) &&
+    !/pr\.base\.sha/.test(codeOnlyJs(masterSyncBlock)),
+  'pr.base.sha 是 PR 记录里的 base，master 前进后不更新 —— 拿它比对会把「落后」判成「已同步」（#417 实测，落后 PR 被永远跳过）',
+);
+t(
+  'static:两个同步块都不靠 mergeable_state 判落后',
+  !!syncBlock &&
+    !!masterSyncBlock &&
+    !/mergeable_state/.test(codeOnlyJs(syncBlock)) &&
+    !/mergeable_state/.test(codeOnlyJs(masterSyncBlock)),
+  'mergeable_state 是异步缓存：master 刚前进时十几秒都是 unknown（实测 15 秒轮询仍 unknown），而「master 刚前进」正是本 job 的启动时刻 → 改用 compareCommits',
+);
+
 // ─────────────────────────── 4. mock 运行器 ───────────────────────────
 function newSandbox({ github, core, context }) {
   const sandbox = {
@@ -248,29 +290,99 @@ function runEnable(script, { recognize = true, presetAutoMerge = null, state = '
   return st;
 }
 
-// ── 4.2 落后同步（rest 读 + graphql 写） ──
-function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } = {}) {
-  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [], reads: 0 };
-  const queue = [...states];
+// ── 4.2 落后同步（compareCommits 判据 + graphql 写） ──
+// compare: compareCommits 返回的 status —— behind/identical = head 已含 tip；diverged/ahead = 落后
+function runSync(script, { compare = 'diverged', baseTip = 'tip999', graphqlFails = false } = {}) {
+  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [] };
   const github = {
     rest: {
       pulls: {
-        get: async () => {
-          st.reads += 1;
-          const s = queue.length > 1 ? queue.shift() : queue[0];
-          return {
-            data: { node_id: 'PR_node_407', mergeable_state: s, head: { sha: 'head111' }, base: { sha: 'base222' } },
-          };
-        },
+        get: async () => ({
+          // 故意让 pr.base.sha 与「当前 tip」不同：用 pr.base.sha 当基准的写法会把
+          // diverged 误判成已同步（#417 实测的真 bug，见下方静态断言）
+          data: { node_id: 'PR_node_407', head: { sha: 'head111' }, base: { ref: 'master', sha: 'stale-base' } },
+        }),
       },
-      repos: { getCommit: async () => ({ data: { parents } }) },
+      repos: {
+        getBranch: async () => ({ data: { commit: { sha: baseTip } } }),
+        compareCommits: async () => ({ data: { status: compare, behind_by: 1 } }),
+      },
     },
     graphql: async (q, vars) => {
-      if (q.includes('updatePullRequestBranch')) st.mutations.push(vars);
+      if (!q.includes('updatePullRequestBranch')) {
+        throw new Error("Field 'updateBranch' doesn't exist on type 'Mutation'");
+      }
+      if (graphqlFails) throw new Error('boom');
+      st.mutations.push(vars);
       return { updatePullRequestBranch: { pullRequest: { number: 407 } } };
     },
   };
   const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: { pull_request: { number: 407 } } };
+  const sandbox = newSandbox({
+    github,
+    context,
+    core: {
+      notice: (m) => st.notices.push(m),
+      warning: (m) => st.warnings.push(m),
+      setFailed: (m) => st.failed.push(m),
+      info: () => {},
+    },
+  });
+  sandbox.console = { log: (m) => st.logs.push(String(m)), warn: () => {} };
+  exec(script, sandbox);
+  return st;
+}
+
+// ── 4.3 master 前进后批量同步（push 事件，无 pull_request 上下文） ──
+// prs: [{ number, draft?, fork?, compare?, parents? }]
+function runMasterSync(script, prs, { after = null, graphqlFails = false } = {}) {
+  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [], branchReads: 0 };
+  const byNumber = {};
+  for (const p of prs) byNumber[p.number] = p;
+  const github = {
+    rest: {
+      pulls: {
+        list: async () => ({
+          data: prs.map((p) => ({
+            number: p.number,
+            draft: !!p.draft,
+            head: { repo: { full_name: p.fork ? 'someone/else' : 'web5/web_system' } },
+          })),
+        }),
+        get: async ({ pull_number }) => ({
+          data: {
+            number: pull_number,
+            node_id: `PR_${pull_number}`,
+            head: { sha: `head${pull_number}` },
+            base: { ref: 'master', sha: 'stale-base' },
+          },
+        }),
+      },
+      repos: {
+        // push 事件带了 payload.after 时**不该**再问 API —— 调了就抛，让用例当场红
+        getBranch: async () => {
+          st.branchReads += 1;
+          if (after) throw new Error('有 payload.after 时不该调用 getBranch');
+          return { data: { commit: { sha: 'tip999' } } };
+        },
+        compareCommits: async ({ base }) => {
+          const num = Number(String(base).replace('head', ''));
+          const p = byNumber[num] || {};
+          return { data: { status: p.compare || 'diverged', behind_by: 1 } };
+        },
+      },
+    },
+    graphql: async (q, vars) => {
+      if (!q.includes('updatePullRequestBranch')) {
+        throw new Error("Field 'updateBranch' doesn't exist on type 'Mutation'");
+      }
+      if (graphqlFails) throw new Error('boom');
+      st.mutations.push(vars);
+      return { updatePullRequestBranch: { pullRequest: { number: 0 } } };
+    },
+  };
+  // push 事件：payload 里没有 pull_request —— 脚本如果误读 context.payload.pull_request 会当场挂
+  const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: after ? { after } : {} };
   const sandbox = newSandbox({
     github,
     context,
@@ -347,40 +459,96 @@ function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } =
   }
 
   if (syncBlock) {
-    // 7. behind 且 head 未含 base → 必须同步
-    let s = runSync(syncBlock, { states: ['behind'], parents: [{ sha: 'older' }] });
+    // 7. diverged（正常 PR 的最常见形态：head 缺 master 的新提交）→ 必须同步
+    let s = runSync(syncBlock, { compare: 'diverged' });
     await tick();
     t(
-      'behave:BEHIND 触发同步',
+      'behave:diverged 触发同步',
       s.mutations.length === 1 && s.mutations[0].oid === 'head111' && s.notices.length === 1,
       `mutation=${s.mutations.length} oid=${s.mutations[0] && s.mutations[0].oid}`,
     );
 
-    // 8. behind 但 head 已含 base → 安全阀跳过（防重复同步）
-    s = runSync(syncBlock, { states: ['behind'], parents: [{ sha: 'older' }, { sha: 'base222' }] });
+    // 8. behind（tip 是 head 的祖先 → head 已含 master）→ 跳过，别白跑一轮 CI
+    s = runSync(syncBlock, { compare: 'behind' });
     await tick();
     t(
-      'behave:已同步则跳过（安全阀）',
-      s.mutations.length === 0 && s.logs.join(' ').includes('跳过'),
+      'behave:head 已含 tip 则跳过（安全阀）',
+      s.mutations.length === 0 && s.logs.join(' ').includes('无需同步分支'),
       `mutation=${s.mutations.length}`,
     );
 
-    // 9. clean → 不动
-    s = runSync(syncBlock, { states: ['clean'] });
+    // 9. identical（同一个提交）→ 跳过
+    s = runSync(syncBlock, { compare: 'identical' });
+    await tick();
+    t('behave:identical 跳过', s.mutations.length === 0, `mutation=${s.mutations.length}`);
+
+    // 10. ahead（head 是 tip 的祖先，PR 自己没有提交）→ 也要同步
+    s = runSync(syncBlock, { compare: 'ahead' });
+    await tick();
+    t('behave:ahead 也要同步', s.mutations.length === 1, `mutation=${s.mutations.length}`);
+
+    // 11. 同步失败 → 只 warning 不判红（补齐条件失败 ≠ 该不该合被破坏）
+    s = runSync(syncBlock, { compare: 'diverged', graphqlFails: true });
     await tick();
     t(
-      'behave:非 BEHIND 不动',
-      s.mutations.length === 0 && s.logs.join(' ').includes('无需同步'),
-      `mutation=${s.mutations.length}`,
+      'behave:同步失败只 warning',
+      s.warnings.length === 1 && s.failed.length === 0,
+      `warnings=${s.warnings.length} setFailed=${s.failed.length}`,
+    );
+  }
+
+  if (masterSyncBlock) {
+    // 12. 混合一轮：diverged 的同步、identical 的不动、草稿跳过、fork 跳过
+    let s = runMasterSync(masterSyncBlock, [
+      { number: 501, compare: 'diverged' },
+      { number: 502, compare: 'identical' },
+      { number: 503, draft: true },
+      { number: 504, fork: true },
+    ]);
+    await tick();
+    t(
+      'behave:master 前进后只同步落后的 PR',
+      s.mutations.length === 1 &&
+        s.mutations[0].id === 'PR_501' &&
+        s.mutations[0].oid === 'head501' &&
+        s.notices.length === 1 &&
+        s.failed.length === 0,
+      `mutation=${s.mutations.length}（应 1，且只打 #501）draft/fork 被误动即为错`,
     );
 
-    // 10. unknown（GitHub 异步计算中）→ 等一轮再读，不能当"无需同步"
-    s = runSync(syncBlock, { states: ['unknown', 'behind'], parents: [{ sha: 'older' }] });
+    // 13. 全部已含 tip → 一个都不动
+    s = runMasterSync(masterSyncBlock, [
+      { number: 505, compare: 'behind' },
+      { number: 506, compare: 'identical' },
+    ]);
+    await tick();
+    t('behave:都最新则不动', s.mutations.length === 0, `mutation=${s.mutations.length}`);
+
+    // 14. push 事件必须用 payload.after 当基准（零 API），不能退回去问 getBranch
+    s = runMasterSync(masterSyncBlock, [{ number: 507, compare: 'diverged' }], { after: 'newmaster1' });
     await tick();
     t(
-      'behave:UNKNOWN 等一轮重新读取',
-      s.reads === 2 && s.mutations.length === 1,
-      `reads=${s.reads} mutation=${s.mutations.length}`,
+      'behave:push 事件用 payload.after 当基准',
+      s.mutations.length === 1 && s.branchReads === 0,
+      `mutation=${s.mutations.length} branchReads=${s.branchReads}（应 0：payload.after 已够，多问一次 API 就是浪费）`,
+    );
+
+    // 15. 非 push 场景（没有 after）→ 退回 API 取 base tip，仍然能同步
+    s = runMasterSync(masterSyncBlock, [{ number: 508, compare: 'diverged' }]);
+    await tick();
+    t(
+      'behave:无 payload.after 时退回 API 取 tip',
+      s.mutations.length === 1 && s.branchReads === 1,
+      `mutation=${s.mutations.length} branchReads=${s.branchReads}`,
+    );
+
+    // 16. 同步失败 → 只 warning
+    s = runMasterSync(masterSyncBlock, [{ number: 509, compare: 'diverged' }], { graphqlFails: true });
+    await tick();
+    t(
+      'behave:master 同步失败只 warning',
+      s.warnings.length === 1 && s.failed.length === 0,
+      `warnings=${s.warnings.length} setFailed=${s.failed.length}`,
     );
   }
 

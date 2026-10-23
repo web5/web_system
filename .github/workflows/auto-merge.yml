@@ -24,6 +24,11 @@ name: auto-merge
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
+  # master 前进后扫一遍开放 PR（修 #407 的残留缺口）——
+  # 「master 前进导致 PR 落后」**不产生 pull_request 事件**，只靠上面的触发点，
+  # 落后的 PR 会一直等到有人往它上面推代码为止。
+  push:
+    branches: [master]
 
 permissions:
   contents: write
@@ -121,26 +126,18 @@ jobs:
             const { repo, owner } = context.repo;
             const n = context.payload.pull_request.number;
 
-            const getPr = async () =>
-              (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
+            const pr = (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
 
-            let pr = await getPr();
-            // mergeable_state 由 GitHub 异步计算，刚 push 完常为 unknown —— 等一轮再读，
-            // 否则会把「还没算完」误当成「不需要同步」。
-            if (pr.mergeable_state === 'unknown') {
-              await new Promise((r) => setTimeout(r, 3000));
-              pr = await getPr();
-            }
-            if (pr.mergeable_state !== 'behind') {
-              console.log(`PR #${n} mergeable_state=${pr.mergeable_state}，无需同步分支`);
-              return;
-            }
-
-            // 安全阀：head 已是「把 base 合进来」的 merge commit 时跳过。
-            // 防的是 synchronize 触发后 mergeable_state 短暂仍报 behind 导致的重复同步。
-            const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
-            if ((headCommit.parents || []).some((p) => p.sha === pr.base.sha)) {
-              console.log(`PR #${n} head 已包含 base ${pr.base.sha.slice(0, 7)}，跳过（防重复同步）`);
+            // 判据用 commit 比较，不用 mergeable_state（异步缓存，常在 unknown；
+            // 完整理由见 sync-behind-on-master 里同段注释）。
+            // 这里不是 push 事件，没有 payload.after，直接问 API 要当前 base 分支 tip；
+            // 同样**不能用 pr.base.sha**（master 前进后它不更新，会把落后判成已同步）。
+            const tip = (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
+            const cmp = (
+              await github.rest.repos.compareCommits({ owner, repo, base: pr.head.sha, head: tip })
+            ).data;
+            if (cmp.status === 'behind' || cmp.status === 'identical') {
+              console.log(`PR #${n} head 已含当前 base tip ${tip.slice(0, 7)}（compare=${cmp.status}），无需同步分支`);
               return;
             }
 
@@ -164,3 +161,107 @@ jobs:
                 `（expectedHeadOid 要 GitObjectID!）｜临时修法：gh pr update-branch ${n}`,
               );
             }
+
+  # master 前进后，把所有「落后」的开放 PR 同步一次（2026-10-23，修 #407 的残留缺口）
+  #
+  # 为什么必须单独一个 job：
+  #   `pull_request` 事件只在 PR 自己身上有动作时触发（opened / synchronize / ready_for_review …）。
+  #   「master 前进 → PR 变 BEHIND」这条因果链里，**PR 侧一个事件都没有**。
+  #   所以上面那个「落后 master 时自动同步」的 step 写得再对也叫不醒 ——
+  #   它只在「PR 刚好有动静、且此刻恰好落后」时才跑得到。
+  #   实测（2026-10-23）：PR #417 12:30 变 BEHIND，之后 #418、#419 接连合入 master，
+  #   它一直是 BEHIND、autoMergeRequest 明明挂着却一动不动，只能人工 `gh pr update-branch`。
+  #   → 触发点要挂在「master 前进」这个**原因**上，而不是「PR 有动静」这个无关现象上。
+  #
+  # 边界：只处理前 100 个开放 PR（本仓库常年个位数）；只同步、不合入；失败只 warning。
+  #   失败为什么不判红：同步是「补齐条件」，没补上 ≠ 合错了。
+  #   判红会让每次 master 前进都可能红一片，把真问题盖掉（与上面 step 的判断一致）。
+  sync-behind-on-master:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 校验 AUTO_PR_TOKEN
+        env:
+          AUTO_PR_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}
+        run: |
+          if [ -z "$AUTO_PR_TOKEN" ]; then
+            echo "::error::仓库 Secret AUTO_PR_TOKEN 未配置或为空（与 auto-pr.yml 同源）。见本文件头部说明。"
+            exit 1
+          fi
+          echo "AUTO_PR_TOKEN 已配置（长度 ${#AUTO_PR_TOKEN}）"
+
+      - name: 同步所有落后 master 的开放 PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.AUTO_PR_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            console.log('扫描 master 前进后落后的开放 PR');
+
+            // 只取第一页 100 个：本仓库常年个位数开放 PR，翻页只会白多一次 API 调用。
+            const open = (await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 })).data;
+            if (!open.length) {
+              console.log('没有开放 PR，结束');
+              return;
+            }
+
+            let synced = 0;
+            for (const it of open) {
+              if (it.draft) {
+                console.log(`PR #${it.number} 是草稿，跳过`);
+                continue;
+              }
+              // 同仓库分支才处理：fork PR 拿不到 Secret，也不该去动别人仓库的分支
+              if (!it.head || !it.head.repo || it.head.repo.full_name !== `${owner}/${repo}`) {
+                console.log(`PR #${it.number} 来自 fork，跳过`);
+                continue;
+              }
+
+              const pr = (await github.rest.pulls.get({ owner, repo, pull_number: it.number })).data;
+
+              // 判「落后」**不用 mergeable_state**：那是 GitHub 异步算的缓存字段，
+              // master 刚前进时十几秒甚至更久都是 unknown（实测 15 秒轮询两次仍是 unknown，
+              // 而「master 刚前进」正是本 job 唯一会启动的时刻 —— 撞上概率接近 100%）。
+              // 改用 commit 比较，即时且确定：head 里到底有没有当前 base tip。
+              //
+              // 比较方向 base=head.sha, head=当前 tip：
+              //   behind    → tip 是 head 的祖先，head 已含 master → 最新，跳过
+              //   identical → 同一个提交 → 跳过
+              //   diverged  → head 缺 master 的新提交（正常 PR 的最常见形态）→ 同步
+              //   ahead     → head 是 tip 的祖先（PR 自己没提交，罕见）→ 同步
+              //
+              // ⚠️ 基准**不能用 `pr.base.sha`**：它是该 PR 记录里的 base（分支上次合并时的
+              // master 提交），master 前进后**不跟着变**。实测 2026-10-23：#417 head 含
+              // `pr.base.sha = 3a0d83b9`（旧 master），当时 master tip 已是 21725b60 ——
+              // 用它比对会把「落后 2 个提交」判成「已同步」，落后 PR 永远被跳过。
+              const tip =
+                context.payload && context.payload.after
+                  ? context.payload.after // push 事件：本次推到 master 的新 sha，零 API 且绝对准确
+                  : (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
+              const cmp = (
+                await github.rest.repos.compareCommits({ owner, repo, base: pr.head.sha, head: tip })
+              ).data;
+              if (cmp.status === 'behind' || cmp.status === 'identical') {
+                console.log(
+                  `PR #${it.number} head 已含当前 base tip ${tip.slice(0, 7)}（compare=${cmp.status}），无需同步`,
+                );
+                continue;
+              }
+
+              try {
+                // ⚠️ $oid 必须 GitObjectID!（写 String! 线上报 Type mismatch，#409）
+                await github.graphql(
+                  `mutation($id:ID!,$oid:GitObjectID!){
+                     updatePullRequestBranch(input:{pullRequestId:$id, expectedHeadOid:$oid, updateMethod:MERGE}){
+                       pullRequest { number } } }`,
+                  { id: pr.node_id, oid: pr.head.sha },
+                );
+                synced += 1;
+                core.notice(`PR #${it.number} 落后 master，已触发同步；CI 会重跑一轮，自动合入仍有效`);
+              } catch (e) {
+                core.warning(
+                  `PR #${it.number} 同步失败：${e.message}｜` +
+                  `临时修法：gh pr update-branch ${it.number}`,
+                );
+              }
+            }
+            console.log(`本轮共同步 ${synced} 个 PR`);
