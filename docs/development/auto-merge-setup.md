@@ -97,8 +97,14 @@ Micro-exempt: 纯文案替换，无结构/交互变更
      判红会让每次落后都红一片，反而盖住真正的问题。日志里带临时修法（`gh pr update-branch <n>`）。
   4. ⚠️ `AUTO_PR_TOKEN` 需 **`contents: write`**（`updatePullRequestBranch` 的要求，比只挂合入的
      `pull_requests:write` 高一档）。2026-10-23 实测当前 token 已具备。
-  5. **未覆盖**：PR 已开着、master 后来前进（`push` 到 master 不触发本 workflow）。
-     需要时再上「master push 全量扫描」，现状是有意不做（每次合并都扫所有 open PR）。
+  5. ✅ **已补（2026-10-23）**：PR 已开着、master 后来前进 —— 由新增的 `sync-behind-on-master`
+     job 负责（`push: branches: [master]` 触发，扫所有开放 PR，只同步 `behind` 的）。
+     **此前这里写的是「有意不做（每次合并都扫所有 open PR）」，今天证明这个权衡是错的**：
+     master 前进**不会产生任何 `pull_request` 事件**，所以上面那个同步 step 只在
+     「PR 恰好有动静」时才跑得到。实测 PR #417：12:30 变 `BEHIND`，随后 #418、#419 接连合入，
+     它一直 `BEHIND`、`autoMergeRequest` 挂着却一动不动，只能人工 `gh pr update-branch`。
+     代价重算：开放 PR 常年个位数，成本 = 1 次 list + 每个 PR 1 次 get；
+     对比「每次都要人记得手敲 update-branch」，这个成本可以直接认。
 - 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
   （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
   照单全收 —— 单测全绿、线上必挂（PR #409 实测）。
@@ -109,13 +115,13 @@ Micro-exempt: 纯文案替换，无结构/交互变更
   node scripts/verify-workflows.mjs --schema
   ```
 
-  它把「人眼看日志发现不了」的那几件事都做成了断言（28 条，任一失败退出码 1）：
+  它把「人眼看日志发现不了」的那几件事都做成了断言（**31 条离线 / 36 条含 schema**，任一失败退出码 1）：
 
   | 层 | 覆盖 | 需要网络 |
   |---|---|---|
   | YAML + 每段 `script:` 的语法 | 2 份 YAML、3 段内嵌脚本 | 否 |
-  | 静态回归 | 无 `rest.pulls.enableAutoMerge`（#396 根因）、`$oid` 声明必须是 `GitObjectID!`（#409） | 否 |
-  | mock 行为 | 首次挂上 / 已挂幂等 / 非 OPEN 不动 / **mutation 名改错必须判红** / auto-pr 只 warning / BEHIND 触发同步 / 已同步跳过 / clean 不动 / `unknown` 等一轮重读 | 否 |
+  | 静态回归 | 无 `rest.pulls.enableAutoMerge`（#396 根因）、`$oid` 声明必须是 `GitObjectID!`（#409，**两个同步块各查一次**）、`on.push.branches` 必须含 `master`（缺了 #417 会一直挂着） | 否 |
+  | mock 行为 | 首次挂上 / 已挂幂等 / 非 OPEN 不动 / **mutation 名改错必须判红** / auto-pr 只 warning / BEHIND 触发同步 / 已同步跳过 / clean 不动 / `unknown` 等一轮重读 / **master 前进后只同步 behind 的 PR（草稿与 fork 必须跳过）** / master 同步的安全阀 / master 同步遇 unknown / master 同步失败只 warning | 否 |
   | 线上 schema | `Mutation` 里确有 `enablePullRequestAutoMerge`、`updatePullRequestBranch`；`expectedHeadOid` 类型与声明一致；`updateMethod` / `mergeMethod` 取值合法 | 是（`gh` 已登录） |
 
   不加 `--schema` 时只跑离线部分（schema 那几条会显式标注「未含」，不会假装通过）。
