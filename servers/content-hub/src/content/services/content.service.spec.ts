@@ -49,7 +49,6 @@ function buildService(log: SqlLog): ContentService {
     {} as any,
     {} as any,
     {} as any,
-    {} as any,
   );
 }
 
@@ -111,7 +110,6 @@ function buildPreviewService(pub: Record<string, any>) {
     {} as any,
     {} as any,
     publicationRepo,
-    {} as any,
     {} as any,
     {} as any,
   );
@@ -243,7 +241,6 @@ function buildRebuildService(pub: Record<string, any> | null) {
     {} as any,
     {} as any,
     publicationRepo,
-    {} as any,
     {} as any,
     {} as any,
   );

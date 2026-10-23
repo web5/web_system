@@ -94,6 +94,56 @@ export function deletePipeline(id: number): Promise<{ ok: boolean }> {
   return request.delete(`/content-admin/content/pipelines/${id}`);
 }
 
+// ── 自媒体账号（只读注册表；凭据只回掩码）──
+export interface ContentAccount {
+  id: number;
+  platform: string;
+  code: string;
+  name: string;
+  identity: string | null;
+  /** 掩码后的凭据（AppSecret 前 2 后 4），接口永不返回明文 */
+  credentials_mask: string | null;
+  /** 是否有已加密凭据（有密文但掩码为空也按"有"处理） */
+  has_credentials: boolean;
+  capabilities: string[] | null;
+  last_checked_at: string | null;
+  /** ok | warn | err | null（null = 未检测） */
+  last_check_status: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listAccounts(platform?: string): Promise<ContentAccount[]> {
+  return request.get('/content-admin/content/accounts', {
+    params: platform ? { platform } : {},
+  });
+}
+
+// ── 手动跑管线（采集 → 成文 → 发布，一次跑完）──
+export interface PipelineRunResult {
+  pipeline: string;
+  /** 采集到的条目数 */
+  collected: number;
+  /** 去重后新入库条目数 */
+  newItems: number;
+  errors: number;
+  /** 成功发布的条数 */
+  published: number;
+}
+
+/**
+ * 立即运行一次管线。
+ *
+ * 🔴 这是**真发布**：管线配置的发布目标会真的收到内容（公众号草稿箱或正式发布，
+ *    取决于管线的发布模式）。所以调用方必须二次确认，不能做成静默按钮。
+ * 🔴 请求体给 `{}` 而不是 `null` —— 原因同 republish（#428）：axios 会把 null
+ *    序列化成裸字符串 "null"，网关 body-parser strict 模式直接 400。
+ */
+export function runPipeline(code: string): Promise<PipelineRunResult> {
+  return request.post(`/content-admin/content/run/${code}`, {});
+}
+
 // ── 手动触发采集 ──
 export interface TriggerResult {
   source_code: string;

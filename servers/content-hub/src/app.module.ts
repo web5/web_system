@@ -20,6 +20,7 @@ import { ContentMediaEntity } from './content/entities/content-media.entity';
 import { LhbRecordEntity } from './content/entities/lhb-record.entity';
 import { HotmoneySeatEntity } from './content/entities/hotmoney-seat.entity';
 import { CollectRunEntity } from './content/entities/collect-run.entity';
+import { ContentAccountEntity } from './content/entities/content-account.entity';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { CollectRunEntity } from './content/entities/collect-run.entity';
           LhbRecordEntity,
           HotmoneySeatEntity,
           CollectRunEntity,
+          ContentAccountEntity,
         ];
         if (dbType === 'mysql') {
           return {

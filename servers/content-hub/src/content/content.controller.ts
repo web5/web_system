@@ -12,6 +12,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ContentService, WechatMpPublishDto } from './services/content.service';
+import { ContentAccountService } from './services/content-account.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
@@ -40,7 +41,16 @@ export function parseId(raw: string, label: string): number {
 @UseGuards(JwtAuthGuard)
 @Controller('api/content')
 export class ContentController {
-  constructor(private readonly contentService: ContentService) {}
+  constructor(
+    private readonly contentService: ContentService,
+    private readonly contentAccountService: ContentAccountService,
+  ) {}
+
+  // ── 自媒体账号（只读注册表；凭据只回掩码，密文不出接口）──
+  @Get('accounts')
+  accounts(@Query('platform') platform?: string) {
+    return this.contentAccountService.list(platform);
+  }
 
   // ── 采集源 ──
   @Get('sources')

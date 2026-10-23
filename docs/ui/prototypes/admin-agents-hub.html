@@ -2577,29 +2577,29 @@
         <div class="page-head">
           <div>
             <div class="page-title">发布管线</div>
-            <div class="page-desc">定时把采集明细加工为成文并投递到腾讯文档 / 公众号；cron 变更次日生效。</div>
+            <div class="page-desc">定时把采集明细加工为成文并投递到公众号（腾讯文档通道 2026-10-23 已下线）；cron 变更次日生效，等不及就用「立即运行」手动跑一次。</div>
           </div>
           <button class="btn primary" onclick="ZM.go('pipeline-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加管线</button>
         </div>
         <div class="card">
           <table class="table">
             <thead>
-              <tr><th>编码</th><th>类型</th><th>cron</th><th>标题模板</th><th>发布目标</th><th>状态</th><th style="width:140px">操作</th></tr>
+              <tr><th>编码</th><th>类型</th><th>cron</th><th>标题模板</th><th>发布目标</th><th>状态</th><th style="width:230px">操作</th></tr>
             </thead>
             <tbody>
               <tr>
                 <td class="mono">daily_paper</td><td><span class="tag info">paper</span></td><td class="mono">0 9 * * *</td>
                 <td><span class="ellip" style="max-width:180px">每日论文速览 ｜ {{date}}</span></td>
-                <td><span class="tag sub">腾讯文档</span> <span class="tag sub">公众号</span></td>
+                <td><span class="tag sub">公众号</span></td>
                 <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
-                <td><div class="row-actions"><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+                <td><div class="row-actions"><button class="btn sm primary" onclick="ZM.runPipeline('daily_paper')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
               </tr>
               <tr>
                 <td class="mono">daily_finance</td><td><span class="tag info">ai-news</span></td><td class="mono">0 8 * * 1-5</td>
                 <td><span class="ellip" style="max-width:180px">财经早报 ｜ {{date}}</span></td>
                 <td><span class="tag sub">公众号</span></td>
                 <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
-                <td><div class="row-actions"><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+                <td><div class="row-actions"><button class="btn sm primary" onclick="ZM.runPipeline('daily_finance')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
               </tr>
             </tbody>
           </table>
@@ -2635,11 +2635,8 @@
             </div>
             <div class="form-item full">
               <div class="form-label">发布目标</div>
-              <select class="form-select" multiple size="2"><option selected>tencent_docs · 腾讯文档</option><option selected>wechat_mp · 公众号</option></select>
-            </div>
-            <div class="form-item">
-              <div class="form-label">腾讯文档目录</div>
-              <input class="form-input" value="每日论文学习" />
+              <select class="form-select" multiple size="2"><option selected>wechat_mp · 公众号</option></select>
+              <div class="tip" style="margin-top:6px">腾讯文档通道 2026-10-23 下线；历史 target=tencent_docs 的记录仍可在列表查到，但不能再新建。</div>
             </div>
             <div class="form-item">
               <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
@@ -4321,6 +4318,18 @@ function confirmDel(btn) {
   }
 }
 
+/* ── 立即运行管线（2026-10-23）────────────────────────────────────
+   🔴 这是"真发布"入口：会按发布目标真实投递内容，所以原型里也带二次确认，
+      不做成点了就发。结果必须给四个数（采集 / 新入库 / 发布 / 失败），
+      否则"跑了但没数据"和"跑了且发出去了"在界面上长得一样。 */
+function runPipeline(code) {
+  if (!confirm('立即运行「' + code + '」？\n会按该管线的发布目标真实投递内容（草稿或正式发布取决于发布模式）。')) return;
+  toast('运行中…（原型演示：约 20-60 秒）');
+  setTimeout(() => {
+    toast('已运行：采集 12 · 新入库 3 · 发布 1 · 失败 0');
+  }, 1200);
+}
+
 // ── Toast ──
 let toastTimer;
 function toast(msg) {
@@ -4334,7 +4343,7 @@ function toast(msg) {
 document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline };
 
 })();
 

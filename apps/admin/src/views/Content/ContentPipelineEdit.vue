@@ -17,7 +17,8 @@ const pipelineId = computed(() => (isNew.value ? null : Number(route.params.id))
 
 const PIPELINE_TYPES = ['paper', 'ai-news'];
 const PUBLISH_TARGETS = [
-  { value: 'tencent_docs', label: '腾讯文档' },
+  // 腾讯文档通道 2026-10-23 下线（A5），发布目标只剩公众号。
+  // 历史 target=tencent_docs 的记录仍在库里，列表页的显示映射保留，只是不能再新建。
   { value: 'wechat_mp', label: '公众号' },
 ];
 

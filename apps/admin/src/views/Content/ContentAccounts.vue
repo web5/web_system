@@ -15,6 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
+import { listAccounts, type ContentAccount } from '@/api/content';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -33,22 +34,7 @@ const CHECK_STATUS: Record<string, { color: string; label: string }> = {
   err: { color: 'red', label: '失败' },
 };
 
-/**
- * 账号行（骨架期本地定义；后端落地后移入 @/api/content 并对齐后端 VO）
- * 凭据字段只会有掩码，接口永不返回明文 secret。
- */
-interface ContentAccount {
-  id: number;
-  platform: string;
-  code: string;
-  name: string;
-  identity?: string | null;
-  credentials_mask?: string | null;
-  last_checked_at?: string | null;
-  last_check_status?: string | null;
-  capabilities?: string[] | null;
-  enabled: boolean;
-}
+// 账号行类型来自 @/api/content（接口只回掩码，密文不出后端）
 
 // ── 列表 ──
 const accounts = ref<ContentAccount[]>([]);
@@ -64,8 +50,7 @@ async function load() {
   loading.value = true;
   error.value = null;
   try {
-    // 后端接口落地后替换：await listAccounts() —— 接口 GET /content-admin/content/accounts
-    accounts.value = [];
+    accounts.value = await listAccounts();
   } catch (e) {
     error.value = (e as Error)?.message || '请求失败';
   } finally {
@@ -146,12 +131,12 @@ onMounted(load);
       </template>
     </a-alert>
 
-    <!-- 骨架提示条：后端接口落地后删除 -->
+    <!-- 只读说明条：写操作接口落地后删除 -->
     <a-alert type="warning" show-icon class="acc-tip">
-      <template #message>骨架页 · 后端接口建设中</template>
+      <template #message>只读注册表 · 写操作待接入</template>
       <template #description>
-        页面结构与权限已按原型 p11–p16 落定；<span class="mono">content_accounts</span> 表与
-        CRUD / 连通性检测接口落地后，本页数据即接入，本条提示随之移除。
+        列表已接真实数据（<span class="mono">content_accounts</span> 表）。新增 / 编辑 / 删除 /
+        连通性检测接口落地前，账号的录入与变更走服务端 seed 脚本，本条提示随之移除。
       </template>
     </a-alert>
 

@@ -8,7 +8,6 @@ import { ContentItemEntity } from '../entities/content-item.entity';
 import { ContentPublicationEntity } from '../entities/content-publication.entity';
 import { PipelineService } from './pipeline.service';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
-import { TencentDocsPublisher } from '../publishers/tencent-docs.publisher';
 import { PublishPayload, publicationStatus } from '../publishers/publisher.interface';
 import {
   buildDailyMarkdown,
@@ -108,7 +107,6 @@ export class ContentService {
     private readonly publicationRepo: Repository<ContentPublicationEntity>,
     private readonly pipelineService: PipelineService,
     private readonly wechatMpPublisher: WechatMpPublisher,
-    private readonly tencentDocsPublisher: TencentDocsPublisher,
   ) {}
 
   // ── 采集源 ──
@@ -354,23 +352,22 @@ export class ContentService {
     // 发到微信端。日期沿用该条记录的创建日，保持与原发布一致。
     const title = renderTitle(payload.title, payload.title, pub.created_at);
 
-    const result =
-      pub.target === 'wechat_mp'
-        ? await this.wechatMpPublisher.publish({
-            title,
-            html: payload.html ?? '',
-            thumb_media_id: payload.thumb_media_id,
-            digest: payload.digest,
-            source_url: payload.source_url,
-            account: payload.account,
-            // 腾讯文档没有草稿概念，mode 只在公众号通道生效
-            mode,
-          })
-        : await this.tencentDocsPublisher.publish({
-            title,
-            markdown: payload.markdown ?? '',
-            folder: payload.folder,
-          });
+    // 腾讯文档通道已于 2026-10-23 下线（A5）：库里可能仍有 target=tencent_docs 的历史记录，
+    // 重发这类记录要给明确错误，而不是"找不到发布器"的 undefined 崩溃。
+    if (pub.target !== 'wechat_mp') {
+      throw new BadRequestException(
+        `发布目标 ${pub.target} 已下线，仅支持 wechat_mp（腾讯文档通道 2026-10-23 下线）`,
+      );
+    }
+    const result = await this.wechatMpPublisher.publish({
+      title,
+      html: payload.html ?? '',
+      thumb_media_id: payload.thumb_media_id,
+      digest: payload.digest,
+      source_url: payload.source_url,
+      account: payload.account,
+      mode,
+    });
 
     // 新记录里也存渲染后的标题，避免再次重发时重复踩同一个坑
     const renderedPayload = { ...payload, title };
