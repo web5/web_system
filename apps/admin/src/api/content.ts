@@ -272,6 +272,15 @@ export function listPublications(
   return request.get('/content-admin/content/publications', { params });
 }
 
+export interface PublicationFailure {
+  /** 机器码（如微信 errcode 48001），抓不到为 null */
+  code: string | null;
+  /** 后端脱敏后的可读原因（凭证/路径已替换为 ***） */
+  message: string;
+  /** 失败时间（ISO） */
+  at: string | null;
+}
+
 export interface PublicationPreview {
   id: number;
   target: string;
@@ -283,6 +292,8 @@ export interface PublicationPreview {
   item_count: number;
   /** payload=发布留存的原文；aggregated=按管线+日期聚合重建；none=无内容 */
   source: 'payload' | 'aggregated' | 'none';
+  /** 仅 status=failed 时有值；其余为 null（#405） */
+  failure: PublicationFailure | null;
 }
 
 export function publicationPreview(id: number): Promise<PublicationPreview> {
