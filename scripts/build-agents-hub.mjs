@@ -226,6 +226,7 @@ const CRUMBS = {
   'content-sources': ['自媒体运营', '采集源管理'], 'content-items': ['自媒体运营', '采集明细'],
   'content-publications': ['自媒体运营', '公众号成文'], 'content-pipelines': ['自媒体运营', '发布管线'],
   'content-monitor': ['自媒体运营', '采集监控'],
+  'content-accounts': ['自媒体运营', '账号管理'],
   overview: ['Agents', 'Agent 概览'], observe: ['Agents', 'Agent 观测'], records: ['Agents', '运行记录'],
   capabilities: ['Agents', '能力资产'], knowledge: ['Agents', '知识集合'], retrieval: ['Agents', '检索调试'],
   list: ['Agents', '定义管理'], skills: ['Agents', '技能库'], pg: ['Agents', '对话调试'],
@@ -474,14 +475,14 @@ const hub = `<!DOCTYPE html>
             docs/ui/prototypes/admin-agent-def-detail.html（定义管理 / 定义详情+调试台）
             docs/ui/prototypes/admin-settings.html（系统设置，同源抽取）
             docs/ui/prototypes/dict-module.html（字典管理，CSS 已作用域隔离 + id 加 dm- 前缀）
-            docs/ui/prototypes/admin-media-ops.html（自媒体运营 5 页，mount：一份 DOM 8 个 section）
+            docs/ui/prototypes/admin-media-ops.html（自媒体运营 6 页，mount：一份 DOM 10 个 section）
             其余菜单屏暂无稿 → 占位（批次 / 骨架 / 复用件从注册表读，不伪造业务数据）
   · 菜单源：apps/admin/src/layouts/BasicLayout.vue（文案 / 顺序逐项对齐，无死项）
             路由与 apps/admin/src/router/index.ts 的真实 path 同构
   · 目标端：桌面 Web（admin 管理后台，亮色）；零依赖单文件，浏览器双击即开
   · 路由：hash 路由（#/agents/definitions、#/agents/definitions/<id>…），点菜单即「进入」模块页面
   · 本稿解决的四件事：
-    ① 菜单里的页面整合进一份稿：菜单**全部可点**，22 项菜单 + 定义详情共 23 屏均可达；
+    ① 菜单里的页面整合进一份稿：菜单**全部可点**，23 项菜单 + 定义详情共 24 屏均可达；
        **有原型稿的模块直接同源抽取真实内容**（自媒体运营 / 系统设置 / 字典管理 / 对话调试 /
        定义管理 / 定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
     ② 菜单与真实 admin 一致：文案/顺序对齐 BasicLayout.vue，由 verify-agents-hub.mjs ⑧ 段对账；
@@ -540,7 +541,7 @@ ${SPRITE_HTML}
     <b>整合方式 = 注册表驱动</b>：<code>scripts/lib/proto-registry.mjs</code> 里每屏一行，
     写了 <code>source</code> 的屏由构建脚本从原型稿<b>同源抽取</b>（DOM 剥壳 + CSS 作用域隔离
     + id 前缀 + inline handler 命名空间），没写的走占位。<b>已是真实内容的屏</b>：
-    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 5 页</b>（admin-media-ops.html）/
+    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 6 页</b>（admin-media-ops.html）/
     <b>系统设置</b>（admin-settings.html）/ <b>字典管理</b>（dict-module.html）；
     其余（工作台 / 变变管理 / 用户管理 / 角色权限 / MCP 管理 / 数据浏览 + Agents 组内若干页）
     为占位，各自标注归属批次与复用口径，不伪造业务数据。

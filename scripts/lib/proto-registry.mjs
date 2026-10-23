@@ -232,18 +232,17 @@ const SRC_MEDIA = {
       'content-publications': 'publications',
       'content-pipelines': 'pipelines',
       'content-monitor': 'runs',
-      /* 'content-accounts': 'accounts' —— 账号管理（源稿里已有 2 个 section，2026-10-23）
-         ⛔ 暂不登记：build 自检会报「mount 屏缺 hub 容器」—— hub 的屏容器由壳生成，
-            壳的真相源是真实 BasicLayout.vue，而 apps/admin 尚无该路由/菜单。
-         落地 PR 里补三件事后打开这一行：① router/index.ts 加 /content/accounts 路由
-         ② BasicLayout.vue 加「账号管理」菜单项 ③ 建 ContentAccounts.vue（可先骨架）
-         → 然后 node scripts/build-agents-hub.mjs + node scripts/verify-agents-hub.mjs */
+      /* 账号管理（2026-10-23 落地）：源稿第 6 个菜单页，2 个 section（accounts / account-edit）。
+         依赖已在真实 admin 落地：router /content/accounts（+ new / :id）、BasicLayout 菜单项
+         「账号管理」、ContentAccounts.vue / ContentAccountEdit.vue 骨架页。 */
+      'content-accounts': 'accounts',
     },
   },
-  trace: ['id="zm-triggerMask"', 'id="zm-previewMask"', 'id="zm-toast"', 'class="screen on"'],
+  trace: ['id="zm-triggerMask"', 'id="zm-previewMask"', 'id="zm-toast"', 'class="screen on"',
+    'id="zm-screen-accounts"', 'id="zm-accDelMask"'],
 };
 
-/* ── 注册表本体：22 屏，与 BasicLayout.vue 菜单逐项对应 ───────────────── */
+/* ── 注册表本体：23 屏，与 BasicLayout.vue 菜单逐项对应 ───────────────── */
 export const REGISTRY = [
   /* —— 非 Agents 模块 —— */
   {
@@ -294,10 +293,10 @@ export const REGISTRY = [
     reuse: ['.tbl 列表', '分页条（admin 既有）', '脱敏列标注'],
   },
 
-  /* —— 自媒体运营子菜单（mount 源：一份 DOM 8 个 section 服务 5 个菜单页） —— */
+  /* —— 自媒体运营子菜单（mount 源：一份 DOM 10 个 section 服务 6 个菜单页） —— */
   ...Object.keys(SRC_MEDIA.mount.screens).map((s) => ({
     screen: s, source: SRC_MEDIA,
-    note: SRCNOTE('admin-media-ops.html（自媒体运营模块稿 · 8 个 section / 5 个菜单页 · 一份 JS 状态机）',
+    note: SRCNOTE('admin-media-ops.html（自媒体运营模块稿 · 10 个 section / 6 个菜单页 · 一份 JS 状态机）',
       '字段与接口对照 M1 落码：<code>collect_sources</code> / <code>collect_runs</code> / '
       + '<code>content_items.quality_*</code> / <code>content_publications</code> / '
       + '<code>publish_pipelines</code>，不是编的。'),
