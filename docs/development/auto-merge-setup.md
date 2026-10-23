@@ -55,11 +55,10 @@ EOF
 
 ## 二、日常使用（配置完成后零操作）
 
-- **auto-pr 自动建的 PR**：workflow 已自动 `enableAutoMerge(squash)`，checks 全绿即自动合入，无需任何动作。
-- **手工开的 PR**：PR 页面底部点 **Enable auto-merge**，或本地：
-  ```bash
-  gh pr merge --auto --squash
-  ```
+- **auto-pr 自动建的 PR**：workflow 已自动挂上自动合入（`mergeMethod=MERGE`），checks 全绿即自动合，无需任何动作。
+- **手工开的 PR**：不用手动点，`auto-merge.yml` 对**所有**同仓库、非草稿 PR 都会挂（2026-10-23 起）。
+- **落后 master 时**：`auto-merge.yml` 会自动 `updatePullRequestBranch` 同步（2026-10-23 起，见 §四），
+  同步后 checks 重跑一轮，自动合入保持有效 —— 不再需要人工 `gh pr update-branch`。
 - **想撤**：PR 页面 Disable auto-merge；checks 红了 GitHub 会一直挂着不合并，不会误合。
 
 ## 三、commit trailer 速查（让门禁一次通过）
@@ -89,5 +88,21 @@ Micro-exempt: 纯文案替换，无结构/交互变更
 ## 四、已知边界
 
 - 必需检查的名字改了（如 workflow 里 job 改名），分支保护里要同步改，否则永远 pending。
-- `Require branches to be up to date` 开启后，master 有新合入时 PR 会变 stale，需要 `gh pr update-branch` 或点 Update branch，然后 checks 重跑。
+- **分支落后 master（`mergeStateStatus=BEHIND`）**：2026-10-23 起由 `auto-merge.yml` 的
+  「落后 master 时自动同步分支」step 自动处理（`updatePullRequestBranch`）。三条实现细节：
+  1. `mergeable_state=unknown`（GitHub 异步计算，刚 push 完常见）会等 3s 再读一次；否则会把
+     「还没算完」误判成「无需同步」。
+  2. 安全阀：head 已包含 base sha（说明刚同步过）直接跳过，避免 synchronize 触发的第二轮重复同步。
+  3. 同步失败**只 warning 不判红** —— 「该不该合」没被破坏，只是没自动补齐条件；
+     判红会让每次落后都红一片，反而盖住真正的问题。日志里带临时修法（`gh pr update-branch <n>`）。
+  4. ⚠️ `AUTO_PR_TOKEN` 需 **`contents: write`**（`updatePullRequestBranch` 的要求，比只挂合入的
+     `pull_requests:write` 高一档）。2026-10-23 实测当前 token 已具备。
+  5. **未覆盖**：PR 已开着、master 后来前进（`push` 到 master 不触发本 workflow）。
+     需要时再上「master push 全量扫描」，现状是有意不做（每次合并都扫所有 open PR）。
+- 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
+  （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
+  照单全收 —— 单测全绿、线上必挂（PR #409 实测）。改动 GraphQL 调用时用 introspection 核实：
+  ```bash
+  gh api graphql -f query='{ __type(name:"UpdatePullRequestBranchInput"){ inputFields{ name type{ name ofType{ name } } } } }'
+  ```
 - 红线扫描 R11 是 **error 级**：UI commit 缺 `Design: pass` / `Micro-exempt:` 会直接挂——这是 2026-09-22 拍板的口径，不是误报；被拦时按上表补 trailer 即可（改 commit message 用 `git commit --amend` 或 rebase）。
