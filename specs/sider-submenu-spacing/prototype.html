@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>侧边栏二级菜单间距优化 · 对照原型（#442）</title>
+<title>侧边栏二级菜单间距优化 · 对照原型（#443）</title>
 <link rel="stylesheet" href="../../packages/ui/src/tokens.css" />
 <style>
   /* ─── 管理后台别名 token（shell 注入的等价写法，便于原型独立跑） ─── */
@@ -59,11 +59,6 @@
   .ico { width: 14px; height: 14px; flex: none; }
 
   /* ─── 改后方案（仅作用于 .after 画板） ─── */
-  .after .ant-menu-sub.ant-menu-inline { position: relative; }
-  .after .ant-menu-sub.ant-menu-inline::before {
-    content: ''; position: absolute; left: 34px; top: 6px; bottom: 6px;
-    width: 1px; background: var(--border-light);
-  }
   .after .ant-menu-sub.ant-menu-inline > .ant-menu-item {
     padding-left: 44px !important;
     height: 34px; line-height: 34px; margin: 2px 4px;
@@ -77,7 +72,7 @@
 <body>
   <div class="doc-hd">
     <h1>侧边栏二级菜单间距优化 · 对照原型</h1>
-    <p>问题：antd inline 菜单默认一级缩进 24px、二级 48px，中间 24px 留白无任何视觉锚点，读起来像「死空白」。方案：二级缩进 48→44px 并加 1px 竖线导轨对齐父级图标；二级项高度 40→34px、上下 margin 4→2px、字号 14→13px，让子列表读成一个更紧凑、更弱的层级组。</p>
+    <p>问题：antd inline 菜单默认一级缩进 24px、二级 48px，中间 24px 留白无任何视觉锚点，读起来像「死空白」。方案：二级缩进 48→44px；二级项高度 40→34px、上下 margin 4→2px、字号 14→13px，让子列表读成一个更紧凑、更弱的层级组。</p>
   </div>
 
   <div class="boards">
