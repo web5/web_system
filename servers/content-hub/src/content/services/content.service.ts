@@ -16,7 +16,7 @@ import {
   type RenderItem,
 } from '../processors/render';
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
-import { renderTitle } from './title.util';
+import { renderPlaceholders, renderTitle } from './title.util';
 
 /**
  * 预览里能看到的失败原因（#405）。**白名单三件，多一个字段都不给。**
@@ -399,6 +399,68 @@ export class ContentService {
       external_id: result.external_id ?? null,
       media_id: result.media_id ?? null,
       error: result.error ?? null,
+    };
+  }
+
+  /**
+   * 按当前渲染器重建成文（#431：存量记录洗白）。
+   *
+   * 为什么做成显式动作，而不是在 `publicationPreview` 里顺手重建：stored 分支
+   * 直传 `payload.html`，那是**发布当时**渲染好的产物，渲染器升级（#399 的裸 URL
+   * 链接化、`{{date}}` 替换）对它完全无效。把改写塞进只读接口，等于让「看到的内容」
+   * 随部署版本漂移、出现差异也无从归因 —— 所以做成写动作：运营点了才洗，留 rebuilt_at。
+   *
+   * 重建源头是 `payload.markdown`（`pipeline.service` 落库时同时存 markdown 与 html），
+   * 因此这是**重新渲染**而不是给旧 HTML 打补丁：渲染器以后再怎么改，再点一次就是
+   * 最新语义。不投递 —— 不发外网请求、不产生新记录（那是 republishPublication 的活）。
+   */
+  async rebuildPublication(id: number) {
+    const pub = await this.publicationRepo.findOne({ where: { id } });
+    if (!pub) throw new NotFoundException(`发布记录 ${id} 不存在`);
+
+    const detail = (pub.detail ?? {}) as {
+      payload?: PublishPayload & { markdown?: string; folder?: string };
+    };
+    const payload = detail.payload;
+    if (!payload?.title) {
+      throw new BadRequestException(
+        '该发布记录未留存成文内容（2026-10-22 前的历史记录），无法重建；请重跑对应发布管线',
+      );
+    }
+    // 只有 html 没有 markdown：成品反推不回源，重建等于把旧串又抄一遍，必须拒绝
+    if (!payload.markdown) {
+      throw new BadRequestException(
+        '该记录只留存了 HTML 成品、没有 markdown 源，无法按当前渲染器重建；请重跑对应发布管线',
+      );
+    }
+
+    // 与 republishPublication 同一套口径：日期沿用记录创建日，保持与原发布一致。
+    // markdown 也要过一遍占位符：**存量记录的 markdown 是旧代码落的**（当时定时发布
+    // 漏了 renderTitle），首行 `# 日报 ｜ {{date}}` 会原样进 h2 —— 只重渲 title
+    // 修不掉正文里的这处，必须连 markdown 一起洗。
+    const markdown = renderPlaceholders(payload.markdown, pub.created_at);
+    const title = renderTitle(payload.title, payload.title, pub.created_at);
+    const html = markdownToHtml(markdown);
+
+    await this.publicationRepo.update(pub.id, {
+      detail: {
+        ...detail,
+        payload: { ...payload, title, markdown, html },
+        /** 洗白痕迹：谁在何时重算过，出问题可倒查 */
+        rebuilt_at: new Date().toISOString(),
+      },
+    });
+
+    return {
+      ok: true,
+      id: Number(pub.id),
+      title,
+      /**
+       * 两个 changed 让前端能区分「真变了」和「本来就新」：重复点不再假装成功，
+       * 也顺带成为验证项（同一记录连点两次，第二次两个 false）。
+       */
+      title_changed: title !== payload.title,
+      html_changed: html !== (payload.html ?? null),
     };
   }
 

@@ -289,9 +289,14 @@ export interface PublicationPreview {
   published_at: string;
   title: string;
   html: string;
-  item_count: number;
-  /** payload=发布留存的原文；aggregated=按管线+日期聚合重建；none=无内容 */
-  source: 'payload' | 'aggregated' | 'none';
+  /** stored 分支与 none 分支拿不到条数（后端返回 null），只有 aggregated 有 */
+  item_count: number | null;
+  /**
+   * stored=发布留存的 payload 直渲染（**存的是发布当时的产物**，渲染器升级后不会自己变）；
+   * aggregated=按管线+日期聚合现场重建；none=无内容。
+   * ⚠️ 后端返回的是 `'stored'`，此前这里误写成 `'payload'`，会让按 source 分支的判断失效。
+   */
+  source: 'stored' | 'aggregated' | 'none';
   /** 仅 status=failed 时有值；其余为 null（#405） */
   failure: PublicationFailure | null;
 }
@@ -325,4 +330,25 @@ export function republishPublication(
   return request.post(`/content-admin/content/publications/${id}/republish`, {}, {
     params: { mode },
   });
+}
+
+/**
+ * 按当前渲染器重建成文（#431）。
+ *
+ * 只重算库里 `detail.payload` 的标题 + HTML 并写回，**不投递、不产生新记录**。
+ * 用于存量记录：它们在发布当时就把 HTML 渲染好存下来了，之后渲染器修的问题
+ * （裸 URL 链接化、`{{date}}` 替换）对它们无效，只能重算一遍。
+ *
+ * 请求体给 `{}` 而不是 `null` —— 原因同上面 republish（#428）。
+ */
+export function rebuildPublication(id: number): Promise<{
+  ok: boolean;
+  id: number;
+  title: string;
+  /** 标题是否真的变了（false = 本来就是新的，重复点不会假装成功） */
+  title_changed: boolean;
+  /** HTML 是否真的变了 */
+  html_changed: boolean;
+}> {
+  return request.post(`/content-admin/content/publications/${id}/rebuild`, {});
 }

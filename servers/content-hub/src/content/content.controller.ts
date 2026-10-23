@@ -159,6 +159,18 @@ export class ContentController {
     );
   }
 
+  /**
+   * 按当前渲染器重建成文（#431：存量记录洗白）。
+   *
+   * 与上面 republish 的区别是**不投递**：只把 `detail.payload` 里的标题 + HTML
+   * 按当前渲染器重算一遍。所以不发外网请求、不产生新记录，也不受公众号资质限制
+   * —— 纯粹是修预览（存量记录的 `payload.html` 是发布当时渲染的，渲染器升级对它无效）。
+   */
+  @Post('publications/:id(\\d+)/rebuild')
+  rebuild(@Param('id') id: string) {
+    return this.contentService.rebuildPublication(parseId(id, '发布记录'));
+  }
+
   // ── 手动触发 ──
   @Post('run/:pipeline')
   run(@Param('pipeline') pipeline: string) {
