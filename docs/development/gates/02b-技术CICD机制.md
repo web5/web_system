@@ -1,7 +1,7 @@
-# 02 · 机制原理（要改门禁时读这份）
+# 02b · 技术 CI/CD 机制（赛道二 · 要改技术门时读这份）
 
-> 读者：要理解、修改或扩展门禁的人。回三个问题：**几层？几种机制？warning 怎么升 error？**
-> 总入口见 [../质量门禁总纲.md](../质量门禁总纲.md)；日常用法见 [01-日常使用.md](01-日常使用.md)；治理与编号索引见 [03-治理与索引.md](03-治理与索引.md)。
+> 读者：要理解、修改或扩展**技术 CI/CD 门禁**的人。回三个问题：**流水线几层？哪些技术门？warning 怎么升 error？**
+> 总入口见 [../质量门禁总纲.md](../质量门禁总纲.md)；日常用法见 [01-日常使用.md](01-日常使用.md)；需求流程机制见 [02a-需求流程机制.md](02a-需求流程机制.md)；治理与编号索引见 [03-治理与索引.md](03-治理与索引.md)。
 
 ---
 
@@ -17,16 +17,7 @@
 > **设计含义**：L1 是"越早越便宜"的反馈，不是安全边界；L2 是快反馈（可被 `--no-verify` 绕过）；**L3 是唯一契约**。
 > 「本地会拦住」只在「没加 --no-verify」的前提下成立——所以本地绿灯不等于可合并，CI 绿灯才是。
 
-### 1.1 L1 的四道 hook 分别管什么
-
-| hook | 触发 | 作用 | 拒绝后怎么办 |
-|---|---|---|---|
-| `hook-ui-prototype-gate.py` | AI 写文件前 | 未确认原型就写 UI 源码 → deny | 先出原型 → 用户确认 → 再写码 |
-| `hook-shell-ui-gate.py` | AI 执行命令前 | 命令里含 UI 源码写入/生成 → deny | 同上 |
-| `hook-worktree-gate.py` / `hook-worktree-shell-gate.py` | AI 写文件 / 执行命令前 | 非 worktree、非规范分支上的危险动作 → deny | 按 `docs/development/dev-workflow.md` 建 worktree |
-| `hook-mark-proto-touched.py` | AI 写完文件后 | 标记本轮碰过原型，供后续判定 | 无（只做标记） |
-
-### 1.2 L3 的两个隐藏契约（改 CI 前必读）
+### 1.1 L3 的两个隐藏契约（改 CI 前必读）
 
 这两条都不写在任何 workflow 文件里，但违反了就会让门禁**静默失效**——CI 页面全绿，PR 却合不进去，或者反过来。
 
@@ -40,9 +31,7 @@
 
 ---
 
-## 2 五类机制（用机制替掉 20 个编号）
-
-### 2.1 A 类 · 行级静态规则（逐行扫**新增行**）
+## 2 A 类 · 行级静态规则（逐行扫**新增行**）
 
 共同约定：
 - **只看新增/变更行**，存量违规不背锅（这是全仓门禁的第一原则）
@@ -62,48 +51,23 @@
 
 > **A5 的实现坑（已修，勿回退）**：`: any` 原字符类 `[[:space:],);\]}]` 在 POSIX 里 `\]` 不是转义 → 整类解析错 → `const a: any = 1` / `any[]` / `x: any;` 全部漏报。现用词界 `([^0-9A-Za-z_]|$)`。**禁止改回 `[[:alnum:]]`**：UTF-8 下汉字算字母，`中文TODO中文` 会漏报。
 
-### 2.2 B 类 · 结构门（看「文件集合」而非单行）
+---
+
+## 3 B 类 · 技术结构门
 
 | 机制 | 编号 | 级别 | 触发面 → 要求 |
 |---|---|---|---|
-| B1 新增页面须同行原型 | R9 | warn | diff 新增 `apps/*/pages/**` 或 `app.json` 的 pages/tabBar 变化 → 同 diff 须含 `apps/*/prototype/**` / `docs/ui/prototypes/**` / `specs/**/page-spec*.md` |
-| B2 既有 UI 改动须同行原型 | R9b | warn | 改动既有 UI 源码且未同行改原型/规格 → 须 `Micro-exempt: <理由>` |
-| B3 原型锚点漂移 | R11b | **off（默认）** | 原型与 page-spec 的 `data-dr` 锚点比对；`DESIGN_ANCHOR_MODE=warn/strict/scoped` 才生效 |
 | B4 双源同源 | R12 | warn | `.codebuddy/agent-kit/skills` ↔ `.codebuddy/skills` 内容一致（项目专属技能与下游定制文件白名单跳过） |
 | B5 SSE 契约一致 | R16 | warn | 消费方手写事件联合 ↔ `packages/agent-core` 的 `StreamEventType` 真相源（由 `check-sse-contract.py` 输出） |
 | B6 原型体系静态三件套 | —（job: proto-static-check） | error | ① `build-agents-hub` 后生成物必须与提交一致；② 散落稿必须为 0 或已登记；③ 已并入稿的可并入性回归 |
 | B7 流水线脚本静态体检 | L1/L5/L6/L9 | error / error / warn / error | L1 `bash -n`；L5 ssh 行尾缺续行符；L6 危险命令提示；L9 调 `$CONSOLE_API` 的 curl 缺 `-f` |
 
 > B6 的判据源不在本文，在 skill `ux-prototype-designer/references/proto-adoption.md`。本文只保证「散落 = 0」这个不变量被 CI 守住。
+> B1/B2/B3（原型门）归赛道一，见 [02a-需求流程机制.md §2](02a-需求流程机制.md)。
 
-### 2.3 C 类 · 凭证门（commit message trailer）
+---
 
-**这是全仓最容易被误认为「7 个门」的地方。实际是 1 个机制 + 7 个触发面。**
-
-统一语义（实现：`_trailer_check_one`）：
-
-```
-命中触发面的 commit → message 必须含
-    <Key>: pass                  ← 声明「本 commit 已过该评审」
-  或 <Key>: <报告路径>            ← 指向报告，且报告须存在、头部 `阻塞: N` 为 0
-否则 warning。统一豁免：Micro-exempt: <理由>
-```
-
-| 门 | Key | 触发面（可枚举，非语义判断） | 级别 |
-|---|---|---|---|
-| C1 原型确认 | `Proto` | commit 含 UI 源码 → 须指向**已落库且在本 commit 祖先链上**的原型 commit sha（四条校验） | warn |
-| C2 设计评审 | `Design` | commit 含 UI 源码 / 原型规格 → `Design: pass`，且报告 `阻塞: 0` | **error** |
-| C3 契约与数据 | `Contract` | `archive/migrations/*` · `packages/types/*` · `packages/agent-core/src/interfaces/*` · `servers/mcp-gateway/src/*/tools/*` · `servers/*/src/*/*.controller.ts`（另有行数阈值） | warn |
-| C4 发布与环境 | `Release` | `ecosystem.config.**` · `servers/*/.env*` · `scripts/pipeline/*` · `scripts/{publish,deploy}-*.sh` · `servers/deploy-console/src/pipeline/*` · `.github/workflows/*` | warn |
-| C5 独立代码评审 | `Code` | **新增** `*.controller.ts` 文件 | warn |
-| C6 测试用例 | `Test` | **新增** `servers/*/src` · `apps/*/src` 下的非测试源码 | warn |
-| C7 研发方案与发布清单 | `Plan` | **新增** service / controller / 前端 view（功能级改动） | warn |
-
-**设计取向（务必保留）**：C5/C6/C7 的触发面刻意取窄（只认「新增」）。原因是这三条主观性最强、成本最高，宽触发面必然被 `Micro-exempt` 淹掉——**门禁一旦被批量豁免，就等于不存在**。
-
-**C1 的特殊约束**：`Proto` 不是自由文本，是 sha。校验四条：非空 → 该 commit 存在 → 是 HEAD 的祖先 → 指向的 commit 含原型/规格文件。混合提交（UI 源码 + 原型同 commit）直接 error，因为那正是绕过「用户确认原型」节点的形态。
-
-### 2.4 D 类 · 构建与测试门
+## 4 D 类 · 构建与测试门
 
 | 机制 | 实现 | 级别 | 说明 |
 |---|---|---|---|
@@ -112,7 +76,9 @@
 | D3 ESLint | 两道：`changed-packages --lint`（拦 error）+ 根 `pnpm lint:ci`（warning 水位 328） | error | 2026-10-22 开启。子包 lint:ci 只拦 error；warning 用**总量水位**（只降不升），因为 ESLint 不提供「只报新增行」，按文件判会误伤存量大户 |
 | D4 生成物一致性 | proto-static-check 第一步 | error | build 后 `git diff --quiet` 校验，防「改了源稿没重跑 build」与「手改生成物」 |
 
-### 2.5 E 类 · 发布门
+---
+
+## 5 E 类 · 发布门
 
 | 机制 | 载体 | 校验什么 |
 |---|---|---|
@@ -124,27 +90,31 @@
 
 ---
 
-## 3 升级路径：warn → error 的三条件
+## 6 升级路径（技术门口径）
 
-一条 warning 门要升 error，必须**同时**满足：
+一条技术门 warning 要升 error，必须**同时**满足：
 
-1. **数据**：`docs/development/gate-observation-log.md` 累计 ≥20 个 commit、≥5 条真实命中、误报率可算出
-2. **误报率 < 30%**：超过说明触发面画宽了，先收窄再谈升级
-3. **豁免频次未走高**：`Micro-exempt` 使用率随门禁上线没有明显上升（这是"门禁被绕开"的头号前兆指标）
+| 条件 | 要求 | 怎么算 |
+|---|---|---|
+| **样本量** | ≥20 个 commit（`--first-parent`） | 观察日志累计 |
+| **命中量** | ≥5 次真实命中 | 人工核对每条命中 |
+| **误报率 < 30%** | 非真残留（人工判） | 触发面没画宽 |
+| **豁免趋势** | 未出现暴增 | `Micro-exempt` 使用率 |
 
-**现状（2026-10-23 更新）**：观察期已恢复采集，但**条件 1 仍未满足**。
+**水位门的特殊规则**：ESLint warning 水位（当前 328）**只降不升**。每次降低水位后反向验证（调低 1 应 FAIL），确认是真门。
 
-| 门 | 近窗（`master~20..master`，20 commit） | 对照窗（`master~40..master~20`） | 条件 1 要求 ≥5 命中 |
-|---|---|---|---|
-| R13 契约面 | 6 | 8 | ✅ 已够 |
-| R14 发布面 | 3 | 7 | ⏳ 未够 |
-| R15 独立代码评审 | 0 | 1 | ❌ 差得远 |
-| R17 测试用例 | 3 | 6 | ⏳ 未够 |
-| R18 研发方案清单 | 2 | 2 | ❌ 差得远 |
+---
 
-`Micro-exempt` 豁免 1 → 2（20 commit 粒度），**未出现豁免暴增**，条件 3 暂无风险信号。
-但 **条件 2（误报率 < 30%）一次都没算过**——它需要对每条命中人工判"这是真缺失还是触发面画宽了"，而当前数据里 R13 的 6 条命中还没逐条看过。
+## 7 判据源
 
-**所以：R13 是唯一"数据接近够用"的门，其余四条都不够。不要因为「采集恢复了」就以为可以升 error。**
-
-**恢复动作（见 [03-治理与索引.md](03-治理与索引.md) §缺口 P1-2）**：不要求每天采，改为「每合入一个含契约/发布面改动的 PR，跑一次 `collect-gate-observations.sh` 追加一行」。零命中也要记，因为"零命中"本身就是判断触发面是否画准的数据。
+| 编号 | 实现位置 |
+|---|---|
+| A 类行级 | `scripts/redline/scan-rules.sh` |
+| B4 双源同源 | `scripts/redline/scan-rules.sh` |
+| B5 SSE 契约 | `scripts/redline/check-sse-contract.py` |
+| B6 原型体系 | `scripts/redline/proto-static-check`（CI job） |
+| B7 流水线体检 | `scripts/redline/scan-rules.sh` |
+| D1/D2 构建测试 | `scripts/ci/changed-packages.sh` |
+| D3 ESLint | `quality-gate.yml` → `pnpm lint:ci` + `changed-packages --lint` |
+| E1 发布流水线 | `.github/workflows/release.yml` |
+| E2/E3 发布门 | deploy-console `release_plan` / `release-verify` |
