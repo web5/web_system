@@ -113,3 +113,6 @@ servers/ai-service/.agent-cli.config.json
 
 # WorkBuddy 预览 app 清单（本地生成，appId + 预览目录绝对路径，换机即失效）
 .wbapp_*.genie
+
+# 数据库备份（线上真实数据 dump，含业务内容与 external_id，绝不提交）
+archive/db-backups/
