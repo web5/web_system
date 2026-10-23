@@ -126,37 +126,18 @@ jobs:
             const { repo, owner } = context.repo;
             const n = context.payload.pull_request.number;
 
-            const getPr = async () =>
-              (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
+            const pr = (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
 
-            let pr = await getPr();
-            // mergeable_state 由 GitHub 异步计算，刚 push 完、或 master 刚前进时几乎必然是 unknown。
-            // **必须轮询到不再是 unknown 为止**，不能「等 3 秒看一眼」：
-            // 2026-10-23 实测 master 前进后 6 秒开跑，3 秒后两个 PR 仍是 unknown，
-            // 于是被当成「无需同步」全跳过 —— 该 job 存在的唯一场景恰好就是它最常 unknown 的时候。
-            for (let i = 0; i < 5 && pr.mergeable_state === 'unknown'; i++) {
-              await new Promise((r) => setTimeout(r, 3000));
-              pr = await getPr();
-            }
-            if (pr.mergeable_state === 'unknown') {
-              core.warning(`PR #${n} mergeable_state 轮询 15 秒仍为 unknown，本轮跳过（下次 master 前进会再试）`);
-              return;
-            }
-            if (pr.mergeable_state !== 'behind') {
-              console.log(`PR #${n} mergeable_state=${pr.mergeable_state}，无需同步分支`);
-              return;
-            }
-
-            // 安全阀：head 已是「把 base 合进来」的 merge commit 时跳过。
-            // 防的是 synchronize 触发后 mergeable_state 短暂仍报 behind 导致的重复同步。
-            //
-            // ⚠️ 基准不能用 `pr.base.sha`（=该 PR 记录里的 base，master 前进后不更新）：
-            // 用它比对会把「落后」误判成「已同步」（#417 实测，详见 sync-behind-on-master 里同段注释）。
-            // 这里没有 push 事件的 `payload.after`，直接问 API 要当前 base 分支 tip。
-            const baseBranch = (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
-            const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
-            if ((headCommit.parents || []).some((p) => p.sha === baseBranch)) {
-              console.log(`PR #${n} head 已包含 base ${baseBranch.slice(0, 7)}，跳过（防重复同步）`);
+            // 判据用 commit 比较，不用 mergeable_state（异步缓存，常在 unknown；
+            // 完整理由见 sync-behind-on-master 里同段注释）。
+            // 这里不是 push 事件，没有 payload.after，直接问 API 要当前 base 分支 tip；
+            // 同样**不能用 pr.base.sha**（master 前进后它不更新，会把落后判成已同步）。
+            const tip = (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
+            const cmp = (
+              await github.rest.repos.compareCommits({ owner, repo, base: pr.head.sha, head: tip })
+            ).data;
+            if (cmp.status === 'behind' || cmp.status === 'identical') {
+              console.log(`PR #${n} head 已含当前 base tip ${tip.slice(0, 7)}（compare=${cmp.status}），无需同步分支`);
               return;
             }
 
@@ -235,45 +216,34 @@ jobs:
                 continue;
               }
 
-              const read = async () =>
-                (await github.rest.pulls.get({ owner, repo, pull_number: it.number })).data;
-              let pr = await read();
-              // mergeable_state 异步计算：master 刚推上来时几乎必然是 unknown，且可能持续十几秒。
-              // **轮询到不再是 unknown**，不能只等一轮 —— 实测 05:20:26 合并、05:20:32 开跑，
-              // 3 秒后 #417 #420 仍是 unknown，被当成「无需同步」全跳过（该 job 白跑）。
-              for (let i = 0; i < 5 && pr.mergeable_state === 'unknown'; i++) {
-                await new Promise((r) => setTimeout(r, 3000));
-                pr = await read();
-              }
-              if (pr.mergeable_state === 'unknown') {
-                core.warning(
-                  `PR #${it.number} mergeable_state 轮询 15 秒仍为 unknown，本轮跳过（下次 master 前进会再试）`,
-                );
-                continue;
-              }
-              if (pr.mergeable_state !== 'behind') {
-                console.log(`PR #${it.number} mergeable_state=${pr.mergeable_state}，无需同步`);
-                continue;
-              }
-              // 安全阀：head 已经是「把 base 合进来」的 merge commit 就跳过。
-              // 防的是 master 连推两次时对同一个 PR 重复同步 —— 每次同步都会触发一轮 CI。
+              const pr = (await github.rest.pulls.get({ owner, repo, pull_number: it.number })).data;
+
+              // 判「落后」**不用 mergeable_state**：那是 GitHub 异步算的缓存字段，
+              // master 刚前进时十几秒甚至更久都是 unknown（实测 15 秒轮询两次仍是 unknown，
+              // 而「master 刚前进」正是本 job 唯一会启动的时刻 —— 撞上概率接近 100%）。
+              // 改用 commit 比较，即时且确定：head 里到底有没有当前 base tip。
               //
-              // ⚠️ 比对基准**不能用 `pr.base.sha`**：那是该 PR 记录里的 base（分支上次
-              // 合并/分叉时的 master 提交），**master 前进后它不会跟着变**。
-              // 实测 2026-10-23：#417 的 head 467c06a1 是 merge commit，父提交含
-              // `pr.base.sha = 3a0d83b9`（旧 master），而当时 master tip 已是 21725b60 ——
-              // 用它比对会把「落后 2 个提交」误判成「已同步」，落后 PR 被永远跳过。
-              // 正确基准 = 当前 master tip：push 事件直接取 `context.payload.after`（零 API
-              // 且绝对准确），其他事件退回 `repos.getBranch(base.ref)`。
-              const baseTip = async () => {
-                if (context.payload && context.payload.after) return context.payload.after;
-                const b = await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref });
-                return b.data.commit.sha;
-              };
-              const baseTipSha = await baseTip();
-              const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
-              if ((headCommit.parents || []).some((p) => p.sha === baseTipSha)) {
-                console.log(`PR #${it.number} head 已含 base ${baseTipSha.slice(0, 7)}，跳过（防重复同步）`);
+              // 比较方向 base=head.sha, head=当前 tip：
+              //   behind    → tip 是 head 的祖先，head 已含 master → 最新，跳过
+              //   identical → 同一个提交 → 跳过
+              //   diverged  → head 缺 master 的新提交（正常 PR 的最常见形态）→ 同步
+              //   ahead     → head 是 tip 的祖先（PR 自己没提交，罕见）→ 同步
+              //
+              // ⚠️ 基准**不能用 `pr.base.sha`**：它是该 PR 记录里的 base（分支上次合并时的
+              // master 提交），master 前进后**不跟着变**。实测 2026-10-23：#417 head 含
+              // `pr.base.sha = 3a0d83b9`（旧 master），当时 master tip 已是 21725b60 ——
+              // 用它比对会把「落后 2 个提交」判成「已同步」，落后 PR 永远被跳过。
+              const tip =
+                context.payload && context.payload.after
+                  ? context.payload.after // push 事件：本次推到 master 的新 sha，零 API 且绝对准确
+                  : (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
+              const cmp = (
+                await github.rest.repos.compareCommits({ owner, repo, base: pr.head.sha, head: tip })
+              ).data;
+              if (cmp.status === 'behind' || cmp.status === 'identical') {
+                console.log(
+                  `PR #${it.number} head 已含当前 base tip ${tip.slice(0, 7)}（compare=${cmp.status}），无需同步`,
+                );
                 continue;
               }
 
