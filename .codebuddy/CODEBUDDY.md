@@ -17,6 +17,7 @@
 - **AI 技能继承 `.codebuddy/agent-kit/`** —— 需要的技能从这里找。
 - 技能文件：能力源 `.codebuddy/agent-kit/skills/<name>/SKILL.md` → 运行源 `.codebuddy/skills/<name>/SKILL.md`（IDE 实际加载的是运行源，它是能力源的镜像；`be-developer` / `fe-developer` 是项目专属，只在运行源）。
 - 技能涉及的**规范与项目上下文** → `.codebuddy/skills/`、`.codebuddy/rules/`、`.codebuddy/references/`。
+- **写码前流程自查**（非 UI 也适用：业务逻辑/接口/契约/重构）→ `.codebuddy/skills/process-gate/SKILL.md`。**WorkBuddy 等无 PreToolUse hook 的环境，写码前主动读它做软 L1 自查**（硬门仍是 L2 git hook / L3 CI）。
 
 ## 2.5 动作门（不可跳，且与用户措辞无关）
 
