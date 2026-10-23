@@ -532,6 +532,24 @@ function runMasterSync(script, prs, { after = null } = {}) {
       `mutation=${s.mutations.length}`,
     );
 
+    // 13b. 🔴 回归（master 前进实测）：unknown 会持续十几秒，必须轮询到底，不能「等一轮看一眼」
+    s = runMasterSync(masterSyncBlock, [{ number: 509, states: ['unknown', 'unknown', 'unknown', 'behind'] }]);
+    await tick();
+    t(
+      'behave:unknown 持续多次仍要轮询到 behind',
+      s.mutations.length === 1,
+      `mutation=${s.mutations.length}（应 1；0 说明只等了一轮就当无需同步）`,
+    );
+
+    // 13c. 轮询 15 秒仍是 unknown → 必须显式 warning，不许静默当"无需同步"
+    s = runMasterSync(masterSyncBlock, [{ number: 510, states: ['unknown'] }]);
+    await tick();
+    t(
+      'behave:一直 unknown 要 warning 不静默',
+      s.mutations.length === 0 && s.warnings.length === 1,
+      `warnings=${s.warnings.length}（应 1）mutation=${s.mutations.length}`,
+    );
+
     // 14. 负向：mutation 名写错 → 只 warning 不判红（同步是补齐条件，不是放行门禁）
     s = runMasterSync(masterSyncBlock.replace(/updatePullRequestBranch/g, 'updateBranch'), [
       { number: 507, states: ['behind'] },
