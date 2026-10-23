@@ -54,6 +54,15 @@ export class ContentController {
     return this.contentAccountService.list(platform);
   }
 
+  /**
+   * 连通性检测（2026-10-24）：解密凭据 → 换 stable_token 实测，回填 last_check_*。
+   * 只探活不写平台侧数据；结论 ok/warn/err + 人话原因（如 IP 白名单没加）。
+   */
+  @Post('accounts/:id(\\d+)/test')
+  probeAccount(@Param('id') id: string) {
+    return this.contentAccountService.probe(parseId(id, '账号'));
+  }
+
   // ── 采集源 ──
   @Get('sources')
   sources() {
