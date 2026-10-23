@@ -146,10 +146,17 @@ export class ContentController {
     return this.contentService.publicationPreview(parseId(id, '发布记录'));
   }
 
-  /** 重新发布（Q3：failed 成文一键重发，产生新记录） */
+  /**
+   * 重新发布（Q3：failed 成文一键重发，产生新记录）。
+   *
+   * `?mode=draft` 只进草稿箱（公众号资质不足时的正常操作），默认 publish 直接发。
+   */
   @Post('publications/:id(\\d+)/republish')
-  republish(@Param('id') id: string) {
-    return this.contentService.republishPublication(parseId(id, '发布记录'));
+  republish(@Param('id') id: string, @Query('mode') mode?: string) {
+    return this.contentService.republishPublication(
+      parseId(id, '发布记录'),
+      mode === 'draft' ? 'draft' : 'publish',
+    );
   }
 
   // ── 手动触发 ──
@@ -173,6 +180,7 @@ export class ContentController {
 
   /**
    * 一键发布到公众号（MCP publish_to_wechat 对应接口）。
+   * body.mode=draft 时只建草稿（等价于 wechat/draft，但会落发布记录）。
    * 鉴权同 wechat/draft。
    */
   @Public()

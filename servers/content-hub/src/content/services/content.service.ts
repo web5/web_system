@@ -29,6 +29,8 @@ export interface WechatMpPublishDto {
   item_id?: number;
   /** 公众号账号：不传用默认号（大橙子社区），传 kedouai 用科豆AI 号 */
   account?: string;
+  /** 发布模式：draft=只进草稿箱，publish=直接发布（默认 publish） */
+  mode?: 'draft' | 'publish';
 }
 
 @Injectable()
@@ -273,7 +275,7 @@ export class ContentService {
    * 2026-10-22 前的历史记录没有 payload，重发会报错引导重跑管线。
    * 重发产生**新记录**（不覆盖原失败记录，保留审计痕迹）。
    */
-  async republishPublication(id: number) {
+  async republishPublication(id: number, mode: 'draft' | 'publish' = 'publish') {
     const pub = await this.publicationRepo.findOne({ where: { id } });
     if (!pub) throw new NotFoundException(`发布记录 ${id} 不存在`);
 
@@ -299,6 +301,8 @@ export class ContentService {
             digest: payload.digest,
             source_url: payload.source_url,
             account: payload.account,
+            // 腾讯文档没有草稿概念，mode 只在公众号通道生效
+            mode,
           })
         : await this.tencentDocsPublisher.publish({
             title,
@@ -319,15 +323,19 @@ export class ContentService {
         detail: {
           republish_of: Number(pub.id),
           ...(result.error ? { error: result.error } : {}),
+          ...(result.media_id ? { media_id: result.media_id } : {}),
+          mode,
           payload: renderedPayload,
         },
       }),
     );
     return {
       ok: result.success,
+      success: result.success,
       publication_id: Number(saved.id),
       status: saved.status,
       external_id: result.external_id ?? null,
+      media_id: result.media_id ?? null,
       error: result.error ?? null,
     };
   }
@@ -422,6 +430,8 @@ export class ContentService {
       status: p.status,
       external_id: p.external_id,
       detail: p.detail,
+      /** 草稿 media_id：detail.media_id（草稿箱定位 + 后台按它搜） */
+      media_id: (p.detail as { media_id?: string } | null)?.media_id ?? null,
       created_at: p.created_at,
       updated_at: p.updated_at,
     };
@@ -434,7 +444,12 @@ export class ContentService {
 
   // ── 公众号 ──
 
-  /** 一键发布文章到公众号：建草稿 → freepublish 提交，落发布记录 */
+  /**
+   * 一键发布文章到公众号，落发布记录。
+   *
+   * mode 决定终点：`publish`（默认）建草稿后 freepublish 提交；
+   * `draft` 只建草稿，落 status=drafted，可在后台对这条记录再点「正式发布」。
+   */
   async publishWechatArticle(dto: WechatMpPublishDto) {
     const payload: PublishPayload = {
       title: dto.title,
@@ -443,9 +458,10 @@ export class ContentService {
       digest: dto.digest,
       source_url: dto.source_url,
       account: dto.account,
+      mode: dto.mode ?? 'publish',
     };
     const result = await this.wechatMpPublisher.publish(payload);
-    await this.publicationRepo.save(
+    const saved = await this.publicationRepo.save(
       this.publicationRepo.create({
         item_id: dto.item_id ?? 0,
         pipeline_id: null,
@@ -454,24 +470,32 @@ export class ContentService {
         external_id: result.external_id ?? null,
         detail: {
           ...(result.error ? { error: result.error } : {}),
+          ...(result.media_id ? { media_id: result.media_id } : {}),
+          mode: payload.mode,
           // p40：留存成文 payload，供「重新发布 / 成文预览」复用（无 payload 的历史记录只能靠聚合重建）
           payload,
         },
       }),
     );
-    return result;
+    return {
+      // success 保留：MCP 工具 create_wechat_draft / publish_to_wechat 的调用方按它判成败
+      success: result.success,
+      ok: result.success,
+      publication_id: Number(saved.id),
+      status: saved.status,
+      external_id: result.external_id ?? null,
+      media_id: result.media_id ?? null,
+      error: result.error ?? null,
+    };
   }
 
-  /** 只建草稿不发布（供预览/确认），返回 media_id */
+  /**
+   * 只建草稿不发布，返回 media_id，**并落一条发布记录**。
+   *
+   * 之前草稿不落库，后台完全看不到、也没法对草稿再点发布——草稿成了黑洞。
+   * 现在统一走 publish({mode:'draft'})，与正式发布共用落库与预览/重发链路。
+   */
   async createWechatDraft(dto: WechatMpPublishDto) {
-    const payload: PublishPayload = {
-      title: dto.title,
-      html: dto.html,
-      thumb_media_id: dto.thumb_media_id,
-      digest: dto.digest,
-      source_url: dto.source_url,
-      account: dto.account,
-    };
-    return this.wechatMpPublisher.createDraft(payload);
+    return this.publishWechatArticle({ ...dto, mode: 'draft' });
   }
 }

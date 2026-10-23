@@ -80,13 +80,20 @@ async function openPreview(p: Publication) {
 }
 
 // ── 重新发布（Q3）──
+// 两个终点可选：草稿箱（mode=draft）/ 直接发布（mode=publish）。
+// 公众号资质不足（未认证个人号 48001）时「直接发布」会降级成草稿，
+// 与其每天撞一次失败，不如让运营显式选「建草稿」。
 const republishingId = ref<number | null>(null);
+const republishingMode = ref<'draft' | 'publish' | null>(null);
 
-async function onRepublish(p: Publication) {
+async function onRepublish(p: Publication, mode: 'draft' | 'publish') {
   republishingId.value = p.id;
+  republishingMode.value = mode;
   try {
-    const res = await republishPublication(p.id);
-    if (res.ok) {
+    const res = await republishPublication(p.id, mode);
+    if (mode === 'draft' && res.status === 'drafted') {
+      message.success(`已进草稿箱（新记录 #${res.publication_id}），请到公众号后台发布`);
+    } else if (res.ok) {
       message.success(`重发成功（新记录 #${res.publication_id}）`);
     } else {
       message.error(`重发失败：${res.error ?? '未知错误'}`);
@@ -96,8 +103,15 @@ async function onRepublish(p: Publication) {
     /* request 拦截器已弹错 */
   } finally {
     republishingId.value = null;
+    republishingMode.value = null;
   }
 }
+
+const isRepublishing = (p: Publication, mode: 'draft' | 'publish') =>
+  republishingId.value === p.id && republishingMode.value === mode;
+
+/** 只有失败 / 停在草稿箱的记录需要重投；已发布（success）不重复投 */
+const canRepublish = (p: Publication) => p.status === 'failed' || p.status === 'drafted';
 
 const TARGET_LABEL: Record<string, string> = {
   wechat_mp: '公众号',
@@ -126,7 +140,7 @@ const pubColumns = [
   { title: '状态', dataIndex: 'status', width: 90 },
   { title: '外部 ID', dataIndex: 'external_id', width: 130, ellipsis: true },
   { title: '发布时间', dataIndex: 'created_at', width: 160 },
-  { title: '操作', key: 'action', width: 140 },
+  { title: '操作', key: 'action', width: 190 },
 ];
 
 onMounted(load);
@@ -194,6 +208,7 @@ onMounted(load);
             style="margin-top: 2px; font-size: 12px; color: #999"
           >
             在公众号草稿箱，需到后台手动发布
+            <span v-if="record.media_id">（media: {{ String(record.media_id).slice(0, 12) }}…）</span>
           </div>
         </template>
         <template v-else-if="column.dataIndex === 'created_at'">
@@ -202,21 +217,35 @@ onMounted(load);
         <template v-else-if="column.key === 'action'">
           <a-space>
             <a-button size="small" type="link" @click="openPreview(record)">预览</a-button>
-            <a-tooltip
-              v-if="canManage && record.status === 'failed'"
-              :title="hasPayload(record) ? '按发布时留存的内容重新投递' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
-            >
-              <a-button
-                size="small"
-                type="link"
-                danger
-                :loading="republishingId === record.id"
-                :disabled="!hasPayload(record)"
-                @click="onRepublish(record)"
+            <template v-if="canManage && canRepublish(record)">
+              <a-tooltip
+                :title="hasPayload(record) ? '只投递到公众号草稿箱，不直接发布（会在本列表新增一条「待发布」记录）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
               >
-                重新发布
-              </a-button>
-            </a-tooltip>
+                <a-button
+                  size="small"
+                  type="link"
+                  :loading="isRepublishing(record, 'draft')"
+                  :disabled="!hasPayload(record)"
+                  @click="onRepublish(record, 'draft')"
+                >
+                  建草稿
+                </a-button>
+              </a-tooltip>
+              <a-tooltip
+                :title="hasPayload(record) ? '建草稿后直接提交发布（公众号有发布权限时用这个）' : '该记录未留存成文内容（2026-10-22 前历史记录），请重跑对应管线'"
+              >
+                <a-button
+                  size="small"
+                  type="link"
+                  danger
+                  :loading="isRepublishing(record, 'publish')"
+                  :disabled="!hasPayload(record)"
+                  @click="onRepublish(record, 'publish')"
+                >
+                  正式发布
+                </a-button>
+              </a-tooltip>
+            </template>
           </a-space>
         </template>
       </template>

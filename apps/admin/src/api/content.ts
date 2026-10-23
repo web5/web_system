@@ -29,6 +29,8 @@ export interface ContentPipeline {
   cron: string;
   llm_prompt: string | null;
   publish_targets: string[] | null;
+  /** 发布模式：publish=直接发布，draft=只进公众号草稿箱 */
+  publish_mode?: 'draft' | 'publish' | null;
   tencent_folder: string | null;
   enabled: boolean;
   created_at?: string;
@@ -250,6 +252,8 @@ export interface Publication {
   target: string;
   status: string;
   external_id: string | null;
+  /** 草稿 media_id（公众号草稿箱定位用，非草稿记录为 null） */
+  media_id: string | null;
   detail: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -285,12 +289,24 @@ export function publicationPreview(id: number): Promise<PublicationPreview> {
   return request.get(`/content-admin/content/publications/${id}/preview`);
 }
 
-export function republishPublication(id: number): Promise<{
+/**
+ * 重新发布。
+ * mode='draft' 只把成文投递到公众号草稿箱（资质不足时的正常操作）；
+ * mode='publish'（默认）建草稿后直接提交发布。两种都会产生一条新记录。
+ */
+export function republishPublication(
+  id: number,
+  mode: 'draft' | 'publish' = 'publish',
+): Promise<{
   ok: boolean;
+  success: boolean;
   publication_id: number;
   status: string;
-  external_id: string | null;
+  external_id: number | string | null;
+  media_id: string | null;
   error: string | null;
 }> {
-  return request.post(`/content-admin/content/publications/${id}/republish`);
+  return request.post(`/content-admin/content/publications/${id}/republish`, null, {
+    params: { mode },
+  });
 }

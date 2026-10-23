@@ -3,6 +3,8 @@ module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
+  // 集成测试需要真实 DB，CI 中排除；本地用 jest.int.config.js 跑
+  testPathIgnorePatterns: ['<rootDir>/src/integration/'],
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },
