@@ -34,6 +34,18 @@ const CHECK_STATUS: Record<string, { color: string; label: string }> = {
   err: { color: 'red', label: '失败' },
 };
 
+/**
+ * 主体类型 → tag 与说明（2026-10-23）
+ *
+ * 这不是一个展示用的标签而已：它决定「公众号成文」里那条内容的状态流转。
+ * 个人主体没有 freepublish 权限，草稿就是终点；企业主体才有「发布」这一步。
+ * 类型标错，运营看到的就是错的下一步（天天点一个注定 48001 的按钮）。
+ */
+const ACCOUNT_TYPE: Record<string, { color: string; label: string; hint: string }> = {
+  personal: { color: 'blue', label: '个人', hint: '无发布权限，草稿即完成' },
+  enterprise: { color: 'green', label: '企业', hint: '可发布：待发布 → 已发布' },
+};
+
 // 账号行类型来自 @/api/content（接口只回掩码，密文不出后端）
 
 // ── 列表 ──
@@ -98,6 +110,7 @@ const fmtTime = (s?: string | null) => (s ? String(s).slice(5, 16).replace('T', 
 const columns = [
   { title: '账号', key: 'account', width: 200 },
   { title: '平台', key: 'platform', width: 100 },
+  { title: '主体类型', key: 'accountType', width: 160 },
   { title: '主体标识', key: 'identity', width: 200 },
   { title: '凭据', key: 'credentials', width: 200 },
   { title: '连通性', key: 'check', width: 180 },
@@ -181,6 +194,15 @@ onMounted(load);
         </template>
         <template v-else-if="column.key === 'platform'">
           <a-tag color="blue">{{ PLATFORM_LABEL[record.platform] ?? record.platform }}</a-tag>
+        </template>
+        <template v-else-if="column.key === 'accountType'">
+          <template v-if="record.account_type">
+            <a-tag :color="ACCOUNT_TYPE[record.account_type]?.color ?? 'default'">
+              {{ ACCOUNT_TYPE[record.account_type]?.label ?? record.account_type }}
+            </a-tag>
+            <div class="sub">{{ ACCOUNT_TYPE[record.account_type]?.hint ?? '' }}</div>
+          </template>
+          <span v-else class="muted">未设置</span>
         </template>
         <template v-else-if="column.key === 'identity'">
           <span class="mono">{{ record.identity || '-' }}</span>
