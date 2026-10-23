@@ -101,7 +101,27 @@ Micro-exempt: 纯文案替换，无结构/交互变更
      需要时再上「master push 全量扫描」，现状是有意不做（每次合并都扫所有 open PR）。
 - 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
   （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
-  照单全收 —— 单测全绿、线上必挂（PR #409 实测）。改动 GraphQL 调用时用 introspection 核实：
+  照单全收 —— 单测全绿、线上必挂（PR #409 实测）。
+
+  **改完这两个 workflow，先跑一条命令再推**：
+
+  ```bash
+  node scripts/verify-workflows.mjs --schema
+  ```
+
+  它把「人眼看日志发现不了」的那几件事都做成了断言（28 条，任一失败退出码 1）：
+
+  | 层 | 覆盖 | 需要网络 |
+  |---|---|---|
+  | YAML + 每段 `script:` 的语法 | 2 份 YAML、3 段内嵌脚本 | 否 |
+  | 静态回归 | 无 `rest.pulls.enableAutoMerge`（#396 根因）、`$oid` 声明必须是 `GitObjectID!`（#409） | 否 |
+  | mock 行为 | 首次挂上 / 已挂幂等 / 非 OPEN 不动 / **mutation 名改错必须判红** / auto-pr 只 warning / BEHIND 触发同步 / 已同步跳过 / clean 不动 / `unknown` 等一轮重读 | 否 |
+  | 线上 schema | `Mutation` 里确有 `enablePullRequestAutoMerge`、`updatePullRequestBranch`；`expectedHeadOid` 类型与声明一致；`updateMethod` / `mergeMethod` 取值合法 | 是（`gh` 已登录） |
+
+  不加 `--schema` 时只跑离线部分（schema 那几条会显式标注「未含」，不会假装通过）。
+  底线：**mock 通过 ≠ 线上能跑**，这两层是并列的，少跑一层就等于没测。
+
+  单查某个类型时仍可直接 introspection：
   ```bash
   gh api graphql -f query='{ __type(name:"UpdatePullRequestBranchInput"){ inputFields{ name type{ name ofType{ name } } } } }'
   ```
