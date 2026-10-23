@@ -199,7 +199,12 @@
     </a-tabs>
 
     <!-- 单元格全文 Drawer -->
-    <a-drawer v-model:open="cellOpen" :title="cellTitle" width="640">
+    <a-drawer
+      v-model:open="cellOpen"
+      :title="cellTitle"
+      width="640"
+      :get-container="moduleOverlayContainer"
+    >
       <div class="cell-full ws-mono">{{ cellValue }}</div>
       <a-button type="primary" class="cell-copy" @click="copyCell">
         <template #icon><CopyOutlined /></template>
@@ -231,6 +236,7 @@ import {
   type SensitiveLevel,
   type SqlResult,
 } from '@/api/database';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const userStore = useUserStore();
 

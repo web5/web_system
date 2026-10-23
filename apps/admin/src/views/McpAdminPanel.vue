@@ -13,6 +13,7 @@ import {
   type McpModule,
   type McpTool,
 } from '@/api/mcp';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const activeTab = ref<'modules' | 'keys'>('modules');
 
@@ -277,6 +278,7 @@ const keyColumns = [
           v-model:open="editVisible"
           :title="editingId ? '编辑模块' : '添加模块'"
           width="760px"
+          :get-container="moduleOverlayContainer"
           @ok="submitEdit"
         >
           <a-form layout="vertical">
@@ -363,6 +365,7 @@ const keyColumns = [
           :title="`调试 ${debugModule?.name ?? ''}`"
           width="640px"
           :footer="null"
+          :get-container="moduleOverlayContainer"
         >
           <a-form layout="vertical">
             <a-form-item label="选择工具">

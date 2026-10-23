@@ -143,7 +143,8 @@
       width="520px"
       :destroy-on-close="true"
       @cancel="modalVisible = false"
-    >
+    
+      :get-container="moduleOverlayContainer">
       <template #closeIcon>
         <a-button type="text" shape="circle">
           <template #icon><CloseOutlined /></template>
@@ -204,7 +205,8 @@
       :confirm-loading="quotaLoading"
       @ok="saveQuota"
       @cancel="quotaVisible = false"
-    >
+    
+      :get-container="moduleOverlayContainer">
       <p>用户：{{ quotaRecord?.username }}</p>
       <a-form layout="vertical">
         <a-form-item label="每日变身次数限制">
@@ -236,6 +238,7 @@ import {
 } from '@ant-design/icons-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { message, Modal } from 'ant-design-vue';
+import { moduleOverlayContainer } from '@/utils/mount';
 import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
 /** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module] 容器致 scoped 样式失效。
  *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数。 */

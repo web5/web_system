@@ -2,6 +2,7 @@
 import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { moduleOverlayContainer } from '@/utils/mount';
 import { useUserStore } from '@/stores/user';
 import {
   listSources,
@@ -207,6 +208,7 @@ onMounted(loadSources);
       :title="`手动触发采集：${triggerSource?.name ?? ''}`"
       width="560px"
       :footer="null"
+      :get-container="moduleOverlayContainer"
     >
       <a-form layout="vertical">
         <a-form-item label="采集条数上限">

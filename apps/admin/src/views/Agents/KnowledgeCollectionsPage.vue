@@ -74,6 +74,7 @@
       :title="editing ? '编辑集合' : '新建集合'"
       :confirm-loading="saving"
       :mask-closable="false"
+      :get-container="moduleOverlayContainer"
       @ok="submitCollection"
       @cancel="modalOpen = false"
     >
@@ -92,6 +93,7 @@
       :open="drawerOpen"
       :width="760"
       :title="`集合管理 · ${current?.name || ''}`"
+      :get-container="moduleOverlayContainer"
       @close="drawerOpen = false"
     >
       <a-spin :spinning="docsLoading">
@@ -161,7 +163,13 @@
     </a-drawer>
 
     <!-- 分块详情 -->
-    <a-modal v-model:open="chunkOpen" :title="`分块 · ${viewingDoc?.title || ''}`" :footer="null" width="760">
+    <a-modal
+      v-model:open="chunkOpen"
+      :title="`分块 · ${viewingDoc?.title || ''}`"
+      :footer="null"
+      width="760"
+      :get-container="moduleOverlayContainer"
+    >
       <a-empty v-if="!viewingChunks.length" description="该文档无分块" />
       <div v-for="c in viewingChunks" :key="c.id" class="chunk-item">
         <div class="chunk-head">#{{ c.seq }}<span class="ws-mono"> {{ shortId(c.id) }}</span></div>
@@ -190,6 +198,7 @@ import {
   type KnowledgeDoc,
   type KnowledgeChunk,
 } from '@/api/knowledge';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const userStore = useUserStore();
 const canManage = computed(() => userStore.hasPermission('knowledge:manage'));
