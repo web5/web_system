@@ -317,7 +317,12 @@ export function republishPublication(
   media_id: string | null;
   error: string | null;
 }> {
-  return request.post(`/content-admin/content/publications/${id}/republish`, null, {
+  // ⚠️ 请求体必须是空对象 {}，不能写 null / undefined 占位。
+  // 原因（#428）：axios 实例默认 Content-Type: application/json，transformRequest
+  // 会把 null 序列化成裸字符串 "null" 发出去；网关 body-parser 默认 strict:true
+  // 只接受顶层对象/数组，于是直接 400，前端只看到
+  // `Unexpected token 'n', "null" is not valid JSON`（mode 走 query，本来不需要 body）。
+  return request.post(`/content-admin/content/publications/${id}/republish`, {}, {
     params: { mode },
   });
 }
