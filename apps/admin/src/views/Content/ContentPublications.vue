@@ -104,6 +104,21 @@ const TARGET_LABEL: Record<string, string> = {
   tencent_docs: '腾讯文档',
 };
 
+/**
+ * drafted：草稿已进公众号草稿箱，但发布接口没权限（未认证个人号 / 未开通 freepublish）。
+ * 内容没丢，只是要人工去后台点一次发布 —— 所以单独一档，不混进「失败」。
+ */
+const STATUS_LABEL: Record<string, string> = {
+  success: '成功',
+  drafted: '待发布',
+  failed: '失败',
+};
+const STATUS_COLOR: Record<string, string> = {
+  success: 'green',
+  drafted: 'orange',
+  failed: 'red',
+};
+
 const pubColumns = [
   { title: 'ID', dataIndex: 'id', width: 70 },
   { title: '标题', key: 'title', ellipsis: true },
@@ -142,6 +157,7 @@ onMounted(load);
         @change="onFilterChange"
       >
         <a-select-option value="success">成功</a-select-option>
+        <a-select-option value="drafted">待发布</a-select-option>
         <a-select-option value="failed">失败</a-select-option>
       </a-select>
       <a-button type="primary" @click="onFilterChange">查询</a-button>
@@ -170,9 +186,15 @@ onMounted(load);
           <a-tag color="geekblue">{{ TARGET_LABEL[record.target] ?? record.target }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'status'">
-          <a-tag :color="record.status === 'success' ? 'green' : record.status === 'failed' ? 'red' : 'default'">
-            {{ record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : record.status }}
+          <a-tag :color="STATUS_COLOR[record.status] ?? 'default'">
+            {{ STATUS_LABEL[record.status] ?? record.status }}
           </a-tag>
+          <div
+            v-if="record.status === 'drafted'"
+            style="margin-top: 2px; font-size: 12px; color: #999"
+          >
+            在公众号草稿箱，需到后台手动发布
+          </div>
         </template>
         <template v-else-if="column.dataIndex === 'created_at'">
           {{ fmtTime(record.created_at) }}
@@ -211,9 +233,12 @@ onMounted(load);
         <div v-if="preview" class="preview-wrap">
           <div class="preview-meta">
             <a-tag color="geekblue">{{ TARGET_LABEL[preview.target] ?? preview.target }}</a-tag>
-            <a-tag :color="preview.status === 'success' ? 'green' : 'red'">
-              {{ preview.status === 'success' ? '成功' : '失败' }}
+            <a-tag :color="STATUS_COLOR[preview.status] ?? 'default'">
+              {{ STATUS_LABEL[preview.status] ?? preview.status }}
             </a-tag>
+            <span v-if="preview.status === 'drafted'" class="muted">
+              · 在公众号草稿箱，需到后台手动发布
+            </span>
             <span class="muted">{{ fmtTime(preview.published_at) }}</span>
             <span v-if="preview.source === 'aggregated'" class="muted">
               · 按管线 + 发布日期聚合 {{ preview.item_count }} 条明细重建

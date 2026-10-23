@@ -19,6 +19,18 @@ const WECHAT_CDN_HOSTS = /mmbiz\.qpic\.cn|mmbiz\.qlogo\.cn/i;
 const FALLBACK_THUMB_MEDIA_ID =
   'BUSabtk9juW90vSVH4g1KvRzUZWAHmPFAFslvaKJIwuQ_CyNhFapHJA7CIRSUTTI';
 
+/**
+ * 发布接口未授权：微信返回 48001 api unauthorized。
+ *
+ * 成因是公众号侧资质（未认证个人主体 / 未开通 freepublish），改代码绕不过去。
+ * 关键是：这一步失败时**草稿已经建成功了**，内容没丢，
+ * 所以降级成「已进草稿箱待发布」，而不是记一条 failed 让人以为文章没了。
+ */
+function isPublishUnauthorized(e: unknown): boolean {
+  const msg = (e as Error)?.message ?? '';
+  return /\[48001\]|api unauthorized/i.test(msg);
+}
+
 export interface DraftResult {
   success: boolean;
   media_id?: string;
@@ -91,9 +103,27 @@ export class WechatMpPublisher implements IPublisher {
 
     try {
       const mediaId = await this.buildDraft(client, { ...payload, title, html });
-      const publishId = await client.submitFreepublish(mediaId);
-      this.logger.log(`[wechat_mp] 发布成功 media=${mediaId} publish=${publishId} «${title}»`);
-      return { success: true, external_id: publishId };
+      try {
+        const publishId = await client.submitFreepublish(mediaId);
+        this.logger.log(
+          `[wechat_mp] 发布成功 media=${mediaId} publish=${publishId} «${title}»`,
+        );
+        return { success: true, external_id: publishId };
+      } catch (e) {
+        // 草稿已建成，卡在发布接口权限上（未认证个人号 / 未开通 freepublish）
+        if (isPublishUnauthorized(e)) {
+          this.logger.warn(
+            `[wechat_mp] 草稿已建但未发布（公众号无发布接口权限）media=${mediaId} «${title}»`,
+          );
+          return {
+            success: false,
+            drafted: true,
+            media_id: mediaId,
+            error: `已进草稿箱待发布（media=${mediaId}）：该公众号未开通发布接口权限，请到公众号后台手动发布`,
+          };
+        }
+        throw e;
+      }
     } catch (e) {
       const msg = (e as Error).message;
       this.logger.error(`公众号发布失败: ${msg}`);

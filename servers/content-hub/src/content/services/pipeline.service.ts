@@ -15,7 +15,7 @@ import { summarizePaper, summarizeNews } from '../processors/llm';
 import { detectAiCategories } from '../processors/categorize';
 import { buildDailyMarkdown, markdownToHtml, RenderItem } from '../processors/render';
 import { renderTitle } from './title.util';
-import { IPublisher } from '../publishers/publisher.interface';
+import { IPublisher, publicationStatus } from '../publishers/publisher.interface';
 import { TencentDocsPublisher } from '../publishers/tencent-docs.publisher';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
 
@@ -134,7 +134,7 @@ export class PipelineService {
             item_id: 0,
             pipeline_id: pipeline.id,
             target,
-            status: result.success ? 'success' : 'failed',
+            status: publicationStatus(result),
             external_id: result.external_id ?? null,
             detail: {
               ...(result.error ? { error: result.error } : {}),
