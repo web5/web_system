@@ -101,3 +101,61 @@ jobs:
                 `AUTO_PR_TOKEN 需 pull_requests:write（GraphQL 同样走此权限）`,
               );
             }
+
+      # 落后 master 时自动同步（修 #407）
+      #
+      # 为什么需要这一步：GitHub 的 auto-merge 语义是「条件满足了就合」，**不是**把条件补齐。
+      # 分支落后 master 时 mergeStateStatus=BEHIND，自动合入会一直等 —— PR #404 实测：
+      # 6 项 checks 全绿、autoMergeRequest 已挂，等了 2.5 分钟纹丝不动，
+      # 手动 `gh pr update-branch` 后立刻推进。同一现象 auto-merge.yml 头部注释里
+      # 早记过（#239 等了 7 分钟），第二次踩，所以挪进代码。
+      #
+      # 权限：`updatePullRequestBranch` 需要 **contents: write**（仅挂合入只需 pull_requests:write）。
+      # token 没给 contents 写时这里**只 warning 不判红** —— 因为「PR 该不该合」没被破坏，
+      # 只是没自动补齐条件；判红会让每次落后都红一片，反而盖住真正的问题。
+      - name: 落后 master 时自动同步分支
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.AUTO_PR_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            const n = context.payload.pull_request.number;
+
+            const getPr = async () =>
+              (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
+
+            let pr = await getPr();
+            // mergeable_state 由 GitHub 异步计算，刚 push 完常为 unknown —— 等一轮再读，
+            // 否则会把「还没算完」误当成「不需要同步」。
+            if (pr.mergeable_state === 'unknown') {
+              await new Promise((r) => setTimeout(r, 3000));
+              pr = await getPr();
+            }
+            if (pr.mergeable_state !== 'behind') {
+              console.log(`PR #${n} mergeable_state=${pr.mergeable_state}，无需同步分支`);
+              return;
+            }
+
+            // 安全阀：head 已是「把 base 合进来」的 merge commit 时跳过。
+            // 防的是 synchronize 触发后 mergeable_state 短暂仍报 behind 导致的重复同步。
+            const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
+            if ((headCommit.parents || []).some((p) => p.sha === pr.base.sha)) {
+              console.log(`PR #${n} head 已包含 base ${pr.base.sha.slice(0, 7)}，跳过（防重复同步）`);
+              return;
+            }
+
+            try {
+              await github.graphql(
+                `mutation($id:ID!,$oid:String!){
+                   updatePullRequestBranch(input:{pullRequestId:$id, expectedHeadOid:$oid, updateMethod:MERGE}){
+                     pullRequest { number } } }`,
+                { id: pr.node_id, oid: pr.head.sha },
+              );
+              // 同步会推一个新提交 → 触发新一轮 CI（synchronize），自动合入保持有效
+              core.notice(`PR #${n} 落后 master，已触发自动同步；CI 会重跑一轮，自动合入仍有效`);
+            } catch (e) {
+              core.warning(
+                `PR #${n} 落后 master，自动同步失败：${e.message}｜` +
+                `主因多为 AUTO_PR_TOKEN 缺 contents:write；临时修法：gh pr update-branch ${n}`,
+              );
+            }
