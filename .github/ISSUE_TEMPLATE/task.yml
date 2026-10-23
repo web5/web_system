@@ -1,0 +1,90 @@
+name: 任务（技术债 / 治理 / 门禁整改）
+description: 不改用户可见行为的改动：重构、规范整改、门禁增删、流水线与脚本治理、事故整改项。
+title: "chore: "
+labels: ["chore", "P2-待排期"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        规则出处：[docs/development/issue-workflow.md](https://github.com/web5/web_system/blob/master/docs/development/issue-workflow.md)。
+        门禁类改动受维护纪律约束：增删任何门禁必须同 PR 更新 [gates/01-日常使用.md](https://github.com/web5/web_system/blob/master/docs/development/gates/01-日常使用.md)
+        与 [gates/03-治理与索引.md](https://github.com/web5/web_system/blob/master/docs/development/gates/03-治理与索引.md)。
+        **本仓库是 PUBLIC** —— 不要贴凭证、内网 IP、服务器路径。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题（现状是什么）
+      description: 描述机制或现状，不是描述你想怎么改。
+      placeholder: 例：观察期采集只能人工触发，R13/R14/R17/R18 的 warn→error 永远走不到
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 文件路径 + 行号 / 命令输出 / 最近一次发生的日期。没有证据的整改项就是个人偏好。
+      placeholder: |
+        docs/development/gate-observation-log.md 唯一记录停在 2026-09-25
+        scripts/observation/collect.mjs 缺 R17/R18 两列
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 类型
+      description: 决定要不要过发布门（碰流水线/配置/CI 的必须过）。
+      options:
+        - 代码重构（行为不变）
+        - 门禁 / CI / hook
+        - 流水线 / 发布脚本 / 配置
+        - 文档治理
+        - 事故整改项
+        - 依赖升级
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: 建议动作
+      description: 给出可执行的步骤，而不是方向。落地成本明显超出收益的，直接写「不做」并说理由——这也是合格结论。
+      placeholder: |
+        1. 采集脚本补 R17/R18 两列
+        2. --append 改为插入表尾
+        3. 豁免计数改行首锚定，commits 用 --first-parent
+        不做：全自动化（触发时机取决于 PR 内容，误报成本高）
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完成判据
+      description: |
+        必填。写「怎么验证改完了」，最好是一条命令或一次故意让它红的负向验证。
+        「重构完成」「已优化」不算判据。
+      placeholder: |
+        改回旧写法跑一次采集 → 新列必须缺值（证明采集真的读到新逻辑）；
+        正常跑一次 → gate-observation-log.md 表尾出现含 R17/R18 的新行。
+    validations:
+      required: true
+
+  - type: textarea
+    id: blast
+    attributes:
+      label: 影响面（谁会被波及）
+      description: 碰共享层 / 配置 / workflow 的要写明波及范围，并提示需要的 commit trailer。
+      placeholder: |
+        .github/workflows/** → 需 Release: pass（或 Micro-exempt + 理由）
+        packages/shared → 波及全部服务，需重新 build
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 证据是查过的实际状态，不是按记忆推断
+          required: true
+        - label: 完成判据能被别人照着复现
+          required: true
