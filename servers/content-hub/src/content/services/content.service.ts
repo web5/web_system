@@ -16,6 +16,7 @@ import {
   type RenderItem,
 } from '../processors/render';
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
+import { renderTitle } from './title.util';
 
 /** 公众号发布/建稿入参 */
 export interface WechatMpPublishDto {
@@ -380,10 +381,11 @@ export class ContentService {
       .take(50)
       .getMany();
 
-    const dateStr = pub.created_at.toISOString().slice(0, 10);
-    const title = (pipeline?.title_template ?? `日报（${pipeline?.code ?? ''}）`).replace(
-      '{{date}}',
-      dateStr,
+    // 与定时发布路径共用同一渲染函数（pub.created_at = 该次发布日期，非当前时间）
+    const title = renderTitle(
+      pipeline?.title_template,
+      `日报（${pipeline?.code ?? ''}）`,
+      pub.created_at,
     );
     const renderItems: RenderItem[] = items.map((it) => ({
       title: it.title,
