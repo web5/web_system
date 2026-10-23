@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ContentService, WechatMpPublishDto } from './services/content.service';
 import { ContentAccountService } from './services/content-account.service';
+import { PipelineRunService } from './services/pipeline-run.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
@@ -44,6 +45,7 @@ export class ContentController {
   constructor(
     private readonly contentService: ContentService,
     private readonly contentAccountService: ContentAccountService,
+    private readonly pipelineRunService: PipelineRunService,
   ) {}
 
   // ── 自媒体账号（只读注册表；凭据只回掩码，密文不出接口）──
@@ -181,10 +183,33 @@ export class ContentController {
     return this.contentService.rebuildPublication(parseId(id, '发布记录'));
   }
 
-  // ── 手动触发 ──
+  // ── 手动触发（异步：受理即返回 job_id，前端轮询 job 拿结果）──
+  /**
+   * 🔴 这里**故意不等管线跑完**。
+   * 一次完整运行 30 秒起步，而链路上三道超时依次是 前端 10s / 网关 30s / nginx 60s，
+   * 同步等的结果是调用方先被掐断、看到「网络错误」，而后端仍在跑、内容仍会投出去
+   * ——比报错更糟：用户以为没跑成，于是再点一次，草稿箱就多一条重复内容。
+   * 异步化后本接口毫秒级返回，执行由 PipelineRunService 在后台完成。
+   */
   @Post('run/:pipeline')
   run(@Param('pipeline') pipeline: string) {
-    return this.contentService.runPipeline(pipeline);
+    return this.pipelineRunService.start(pipeline, 'manual');
+  }
+
+  /** 查询一次运行的结果（轮询终点：status 变成 ok / failed） */
+  @Get('run/job/:id(\\d+)')
+  runJob(@Param('id') id: string) {
+    return this.pipelineRunService.getJob(parseId(id, '运行任务'));
+  }
+
+  /** 最近运行记录 —— 解决"刚才那次到底跑了没 / 跑了多久"只能靠猜 */
+  @Get('run/recent')
+  runRecent(@Query('pipeline') pipeline?: string, @Query('take') take?: string) {
+    const n = Number(take ?? 10);
+    return this.pipelineRunService.listRecent(
+      pipeline,
+      Number.isInteger(n) && n > 0 && n <= 50 ? n : 10,
+    );
   }
 
   // ── 公众号发布（服务间：mcp-gateway wechat_mp 模块 + SSH 运维 skill 直连）──

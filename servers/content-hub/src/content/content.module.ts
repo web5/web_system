@@ -16,6 +16,8 @@ import { ContentMediaEntity } from './entities/content-media.entity';
 import { LhbRecordEntity } from './entities/lhb-record.entity';
 import { HotmoneySeatEntity } from './entities/hotmoney-seat.entity';
 import { CollectRunEntity } from './entities/collect-run.entity';
+import { PipelineRunEntity } from './entities/pipeline-run.entity';
+import { PipelineRunService } from './services/pipeline-run.service';
 import { CollectLogService } from './services/collect-log.service';
 import { SeatTagService } from './services/seat-tag.service';
 import { FinnewsAdapterService } from './services/finnews-adapter.service';
@@ -38,6 +40,7 @@ import { ContentAuthModule } from '../auth/auth.module';
       HotmoneySeatEntity,
       CollectRunEntity,
       ContentAccountEntity,
+      PipelineRunEntity,
     ]),
     ContentAuthModule,
   ],
@@ -49,6 +52,7 @@ import { ContentAuthModule } from '../auth/auth.module';
     WechatMpPublisher,
     ContentAccountService,
     AccountCredentialService,
+    PipelineRunService,
     CollectLogService,
     SeatTagService,
     FinnewsAdapterService,
