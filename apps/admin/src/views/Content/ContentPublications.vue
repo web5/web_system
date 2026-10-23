@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user';
 import {
   listPublications,
   publicationPreview,
+  rebuildPublication,
   republishPublication,
   type Publication,
   type PublicationPreview,
@@ -84,6 +85,35 @@ const failureTitle = computed(() => {
   const code = preview.value?.failure?.code;
   return code ? `发布失败（错误码 ${code}）` : '发布失败';
 });
+
+// ── 按当前渲染器重建成文（#431）──
+// 存量记录的 payload.html 是**发布当时**渲染好的产物，之后渲染器修的问题
+// （裸 URL 链接化、{{date}} 替换）对它完全无效 —— 预览和重发都直传那串旧 HTML。
+// 这里显式按当前渲染器重算一次并写回，只修内容、不投递。
+const rebuilding = ref(false);
+
+/** 只有 stored 需要重建：aggregated 本来就是现场按当前渲染器生成的 */
+const canRebuild = computed(() => canManage && preview.value?.source === 'stored');
+
+async function onRebuild() {
+  const p = preview.value;
+  if (!p) return;
+  rebuilding.value = true;
+  try {
+    const res = await rebuildPublication(p.id);
+    if (res.title_changed || res.html_changed) {
+      message.success('已按当前渲染器重建成文');
+    } else {
+      message.info('内容已是最新，无需重建');
+    }
+    // 立即重拉预览，让运营当场看到「原文」变成可点链接
+    preview.value = await publicationPreview(p.id);
+  } catch {
+    /* request 拦截器已弹错 */
+  } finally {
+    rebuilding.value = false;
+  }
+}
 
 // ── 重新发布（Q3）──
 // 两个终点可选：草稿箱（mode=draft）/ 直接发布（mode=publish）。
@@ -297,6 +327,16 @@ onMounted(load);
               </div>
             </template>
           </a-alert>
+          <!--
+            存量记录重建（#431）：payload.html 是发布当时的产物，渲染器升级对它无效。
+            只在 stored 出现 —— aggregated 本来就按当前渲染器现算，不需要重算。
+          -->
+          <div v-if="canRebuild" class="preview-toolbar">
+            <a-button size="small" :loading="rebuilding" @click="onRebuild">
+              重建成文（按当前渲染器）
+            </a-button>
+            <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
+          </div>
           <!-- 成文 HTML 由自家管线 LLM 生成后留存/重建，非用户输入 -->
           <div class="preview-html" v-html="preview.html" />
         </div>
@@ -341,6 +381,15 @@ onMounted(load);
 }
 .preview-failure {
   margin-bottom: 16px;
+}
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-subtle);
 }
 .failure-msg {
   word-break: break-all;

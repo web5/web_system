@@ -13,6 +13,18 @@ export function renderTitle(
   fallback: string,
   date: Date = new Date(),
 ): string {
-  const raw = template ?? fallback;
-  return raw.replace('{{date}}', date.toISOString().slice(0, 10));
+  return renderPlaceholders(template ?? fallback, date);
+}
+
+/**
+ * 把文本里的 `{{date}}` **全部**替换成日期（YYYY-MM-DD）。
+ *
+ * 两处刻意为之：
+ *   - 用 split/join 而非 `replaceAll` —— 老 Node / 转译链路不一定有它；
+ *   - 全量而非只替首个（`String.replace` 配字符串参数只换第一处）—— 成文
+ *     markdown 里 `{{date}}` 可能出现不止一处（标题行、摘要），只替首个会把
+ *     半截模板留在正文里（#431 重建存量记录时实测）。
+ */
+export function renderPlaceholders(text: string, date: Date = new Date()): string {
+  return text.split('{{date}}').join(date.toISOString().slice(0, 10));
 }

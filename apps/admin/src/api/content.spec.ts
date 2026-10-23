@@ -17,7 +17,7 @@ jest.mock('./request', () => ({
 }));
 
 import request from './request';
-import { republishPublication } from './content';
+import { rebuildPublication, republishPublication } from './content';
 
 const mockedPost = request.post as unknown as jest.Mock;
 
@@ -45,6 +45,28 @@ describe('republishPublication（#428 body 不能是 null）', () => {
 
     const [, body, config] = mockedPost.mock.calls[0];
     expect(config).toEqual({ params: { mode: 'publish' } });
+    expect(body).toEqual({});
+  });
+});
+
+/**
+ * 重建接口（#431）——同一个 body-parser 陷阱，换了个新接口很容易再踩一次。
+ */
+describe('rebuildPublication（#431）', () => {
+  beforeEach(() => mockedPost.mockClear());
+
+  it('打到 rebuild 路由且请求体是空对象（不是 null）', async () => {
+    await rebuildPublication(17);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    const [url, body, config] = mockedPost.mock.calls[0];
+
+    expect(url).toBe('/content-admin/content/publications/17/rebuild');
+    // 没有 query 参数 —— 传 undefined 与不传等价，这里只防「传了别的东西」
+    expect(config).toBeUndefined();
+
+    expect(body).not.toBeNull();
+    expect(body).not.toBeUndefined();
     expect(body).toEqual({});
   });
 });

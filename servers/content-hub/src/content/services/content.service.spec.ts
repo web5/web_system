@@ -217,3 +217,125 @@ describe('publicationPreview 透出失败原因（#405）', () => {
     expect(r!.failure).toBeNull();
   });
 });
+
+/**
+ * 存量记录重建（#431）。
+ *
+ * 线上现象：#427 把渲染器修好了，但**存量记录的预览一字未变** —— preview 与
+ * republish 两条路都直传发布当时存下的 `payload.html`，渲染器改了它也不会变。
+ * 这里钉死三件事：
+ *   1. 重建是从 markdown **重新渲染**（不是给旧 HTML 打补丁）；
+ *   2. markdown 里的 `{{date}}` 也要洗 —— 存量 markdown 是旧代码落的，只重渲
+ *      title 会让正文 h2 里剩半截模板；
+ *   3. 写回留 `rebuilt_at`，不抹掉 error / media_id 这些审计痕迹，且幂等。
+ */
+function buildRebuildService(pub: Record<string, any> | null) {
+  const sink: { updated?: { id: number; patch: any } } = {};
+  const publicationRepo: any = {
+    findOne: async () => pub,
+    update: async (id: number, patch: any) => {
+      sink.updated = { id, patch };
+      return { affected: 1, generatedMaps: [], raw: [] };
+    },
+  };
+  const svc = new ContentService(
+    {} as any,
+    {} as any,
+    {} as any,
+    publicationRepo,
+    {} as any,
+    {} as any,
+    {} as any,
+  );
+  return { svc, sink };
+}
+
+/** 一条「10-23 之前落的」存量记录：标题与正文都带 {{date}}，原文是纯文本 URL */
+const stalePub = {
+  id: 17,
+  item_id: 0,
+  pipeline_id: 2,
+  target: 'wechat_mp',
+  status: 'drafted',
+  external_id: null,
+  created_at: new Date('2026-10-23T04:34:00Z'),
+  updated_at: new Date('2026-10-23T04:34:00Z'),
+  detail: {
+    payload: {
+      title: 'AI 资讯日报 ｜ {{date}}',
+      markdown:
+        '# AI 资讯日报 ｜ {{date}}\n\n## 1. 某条新闻\n\n摘要\n\n原文：https://example.com/a',
+      html:
+        '<h2>AI 资讯日报 ｜ {{date}}</h2>\n<h3>1. 某条新闻</h3>\n<p>摘要</p>\n<p>原文：https://example.com/a</p>',
+    },
+  },
+};
+
+describe('rebuildPublication 存量记录重建（#431）', () => {
+  it('从 markdown 重渲：裸 URL 变 <a>、{{date}} 在全链路被洗掉', async () => {
+    const { svc, sink } = buildRebuildService(stalePub);
+    const r = await svc.rebuildPublication(17);
+
+    expect(r.ok).toBe(true);
+    // 日期取记录创建日，不是「今天」
+    expect(r.title).toBe('AI 资讯日报 ｜ 2026-10-23');
+
+    const written = sink.updated!.patch.detail.payload;
+    // 正文里的 {{date}} 必须也洗掉 —— 只重渲 title 修不到正文
+    expect(written.markdown).not.toContain('{{date}}');
+    expect(written.html).not.toContain('{{date}}');
+    // 裸 URL 变成可点链接（#399 的渲染器）
+    expect(written.html).toContain(
+      '<a href="https://example.com/a">https://example.com/a</a>',
+    );
+    expect(written.title).toBe('AI 资讯日报 ｜ 2026-10-23');
+  });
+
+  it('写回留 rebuilt_at，且不抹掉 error / media_id 这些审计痕迹', async () => {
+    const { svc, sink } = buildRebuildService({
+      ...stalePub,
+      detail: { ...stalePub.detail, error: '微信 48001', media_id: 'm1' },
+    });
+    await svc.rebuildPublication(17);
+
+    const d = sink.updated!.patch.detail;
+    expect(d.rebuilt_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(d.error).toBe('微信 48001');
+    expect(d.media_id).toBe('m1');
+  });
+
+  it('幂等：拿写回结果再重建一次，两个 changed 都是 false', async () => {
+    const { svc, sink } = buildRebuildService(stalePub);
+    const first = await svc.rebuildPublication(17);
+    expect(first.title_changed).toBe(true);
+    expect(first.html_changed).toBe(true);
+
+    const { svc: svc2 } = buildRebuildService({
+      ...stalePub,
+      detail: { ...stalePub.detail, payload: sink.updated!.patch.detail.payload },
+    });
+    const second = await svc2.rebuildPublication(17);
+    expect(second).toEqual(
+      expect.objectContaining({ title_changed: false, html_changed: false }),
+    );
+  });
+
+  it('只有 html 没有 markdown：400（成品反推不回源，重建等于抄一遍旧串）', async () => {
+    const { svc, sink } = buildRebuildService({
+      ...stalePub,
+      detail: { payload: { title: 't', html: '<p>x</p>' } },
+    });
+    await expect(svc.rebuildPublication(17)).rejects.toThrow(/没有 markdown 源/);
+    expect(sink.updated).toBeUndefined();
+  });
+
+  it('无 payload（2026-10-22 前记录）：400 且文案指向重跑管线', async () => {
+    const { svc } = buildRebuildService({ ...stalePub, detail: null });
+    await expect(svc.rebuildPublication(17)).rejects.toThrow(/未留存成文内容/);
+  });
+
+  it('记录不存在：404', async () => {
+    const { svc } = buildRebuildService(null);
+    await expect(svc.rebuildPublication(999)).rejects.toThrow(/不存在/);
+  });
+});
