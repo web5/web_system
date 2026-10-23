@@ -17,6 +17,7 @@ import { buildDailyMarkdown, markdownToHtml, RenderItem } from '../processors/re
 import { renderTitle } from './title.util';
 import { IPublisher, publicationStatus } from '../publishers/publisher.interface';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
+import { ContentAccountService } from './content-account.service';
 
 export interface RunResult {
   pipeline: string;
@@ -42,6 +43,7 @@ export class PipelineService {
     @InjectRepository(ContentPublicationEntity)
     private readonly publicationRepo: Repository<ContentPublicationEntity>,
     private readonly wechatMpPublisher: WechatMpPublisher,
+    private readonly accountService: ContentAccountService,
   ) {
     // 采集器注册表（新增来源在此登记）
     this.collectors = {
@@ -130,6 +132,8 @@ export class PipelineService {
           mode:
             target === 'wechat_mp' && pipeline.publish_mode === 'draft' ? 'draft' : 'publish',
         });
+        // 账号快照：主体类型决定这条成文在后台显示成「草稿」还是「待发布」
+        const account = await this.resolveAccount(target);
         await this.publicationRepo.save(
           this.publicationRepo.create({
             item_id: 0,
@@ -137,6 +141,8 @@ export class PipelineService {
             target,
             status: publicationStatus(result),
             external_id: result.external_id ?? null,
+            account_code: account?.account_code ?? null,
+            account_type: account?.account_type ?? null,
             detail: {
               ...(result.error ? { error: result.error } : {}),
               ...(result.media_id ? { media_id: result.media_id } : {}),
@@ -159,6 +165,16 @@ export class PipelineService {
       `管线 ${pipelineCode} 完成: 采集 ${collected}，新增 ${newItems}，错误 ${errors}，发布 ${published}`,
     );
     return { pipeline: pipelineCode, collected, newItems, errors, published };
+  }
+
+  /** 解析发布账号（查不到就当未登记，不阻断发布） */
+  private async resolveAccount(platform: string) {
+    try {
+      return await this.accountService.resolveForPublish(platform);
+    } catch (e) {
+      this.logger.warn(`解析发布账号失败（按未登记处理）：${(e as Error).message}`);
+      return null;
+    }
   }
 
   /** 处理单条：去重 → LLM 摘要 → 入库 */

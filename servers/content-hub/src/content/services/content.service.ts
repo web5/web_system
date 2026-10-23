@@ -1,5 +1,5 @@
 /** 内容管道查询/配置服务——源、管线 CRUD + 采集历史查询 + 手动触发 + 公众号发布 */
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In, IsNull } from 'typeorm';
 import { ContentSourceEntity } from '../entities/content-source.entity';
@@ -16,6 +16,7 @@ import {
 } from '../processors/render';
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
 import { renderPlaceholders, renderTitle } from './title.util';
+import { ContentAccountService } from './content-account.service';
 
 /**
  * 预览里能看到的失败原因（#405）。**白名单三件，多一个字段都不给。**
@@ -96,6 +97,8 @@ export interface WechatMpPublishDto {
 
 @Injectable()
 export class ContentService {
+  private readonly logger = new Logger(ContentService.name);
+
   constructor(
     @InjectRepository(ContentSourceEntity)
     private readonly sourceRepo: Repository<ContentSourceEntity>,
@@ -107,7 +110,23 @@ export class ContentService {
     private readonly publicationRepo: Repository<ContentPublicationEntity>,
     private readonly pipelineService: PipelineService,
     private readonly wechatMpPublisher: WechatMpPublisher,
+    private readonly accountService: ContentAccountService,
   ) {}
+
+  /**
+   * 发布前解析账号快照（编码 + 主体类型）。
+   *
+   * 失败不能阻断发布：账号表还没 seed 时只是"不知道是谁发的"，
+   * 内容照样要发出去、记录照样要落。所以这里吞掉异常，返回 null。
+   */
+  private async accountSnapshot(platform: string) {
+    try {
+      return await this.accountService.resolveForPublish(platform);
+    } catch (e) {
+      this.logger?.warn?.(`解析发布账号失败（按未登记处理）：${(e as Error).message}`);
+      return null;
+    }
+  }
 
   // ── 采集源 ──
   listSources() {
@@ -372,6 +391,9 @@ export class ContentService {
     // 新记录里也存渲染后的标题，避免再次重发时重复踩同一个坑
     const renderedPayload = { ...payload, title };
 
+    // 账号快照落在**重发时**：重发可能换到另一个主体类型的账号上，语义以这一次为准
+    const account = await this.accountSnapshot(pub.target);
+
     const saved = await this.publicationRepo.save(
       this.publicationRepo.create({
         item_id: pub.item_id,
@@ -379,6 +401,8 @@ export class ContentService {
         target: pub.target,
         status: publicationStatus(result),
         external_id: result.external_id ?? null,
+        account_code: account?.account_code ?? null,
+        account_type: account?.account_type ?? null,
         detail: {
           republish_of: Number(pub.id),
           ...(result.error ? { error: result.error } : {}),
@@ -493,6 +517,9 @@ export class ContentService {
       status: pub.status,
       external_id: pub.external_id,
       published_at: pub.created_at,
+      // 主体类型快照：抽屉里的状态文案（草稿 / 待发布）要跟列表保持一致
+      account_code: pub.account_code ?? null,
+      account_type: pub.account_type ?? null,
       failure,
     };
 
@@ -565,6 +592,12 @@ export class ContentService {
       target: p.target,
       status: p.status,
       external_id: p.external_id,
+      /**
+       * 账号与主体类型快照（2026-10-23）：决定前端怎么呈现这条成文的状态。
+       * 空 = 本功能上线前的历史记录，前端按「未登记」处理，不臆造类型。
+       */
+      account_code: p.account_code ?? null,
+      account_type: p.account_type ?? null,
       detail: p.detail,
       /** 草稿 media_id：detail.media_id（草稿箱定位 + 后台按它搜） */
       media_id: (p.detail as { media_id?: string } | null)?.media_id ?? null,
@@ -597,6 +630,7 @@ export class ContentService {
       mode: dto.mode ?? 'publish',
     };
     const result = await this.wechatMpPublisher.publish(payload);
+    const account = await this.accountSnapshot('wechat_mp');
     const saved = await this.publicationRepo.save(
       this.publicationRepo.create({
         item_id: dto.item_id ?? 0,
@@ -604,6 +638,8 @@ export class ContentService {
         target: 'wechat_mp',
         status: publicationStatus(result),
         external_id: result.external_id ?? null,
+        account_code: account?.account_code ?? null,
+        account_type: account?.account_type ?? null,
         detail: {
           ...(result.error ? { error: result.error } : {}),
           ...(result.media_id ? { media_id: result.media_id } : {}),

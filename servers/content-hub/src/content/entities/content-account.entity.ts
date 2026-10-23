@@ -31,6 +31,21 @@ export class ContentAccountEntity {
   @Column({ type: 'varchar', length: 128, comment: '显示名' })
   name: string;
 
+  /**
+   * 账号主体类型（2026-10-23）
+   *
+   * 决定成文状态分流：个人主体（未认证订阅号）没有 freepublish 权限，草稿就是终点；
+   * 企业主体才走「待发布 → 已发布」。发布时把类型**快照**进 content_publications，
+   * 所以本字段改了不影响历史成文的语义。
+   */
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: 'personal',
+    comment: '账号主体类型 personal 个人 | enterprise 企业',
+  })
+  account_type: string;
+
   @Column({
     type: 'varchar',
     length: 255,
