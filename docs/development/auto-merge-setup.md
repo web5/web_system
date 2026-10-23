@@ -113,6 +113,10 @@ Micro-exempt: 纯文案替换，无结构/交互变更
      push 事件直接用 `context.payload.after`（当前 tip，零 API 且准确），其他事件退回
      `repos.getBranch(base.ref)`。回归用例：「旧 base 不得被当成已同步（#417 回归）」——
      把基准改回 `pr.base.sha` 它会立刻变红（已用负向探针验证）。
+  7. ⏳ **`mergeable_state` 必须轮询，不能「等一轮看一眼」**。master 前进后十几秒内它一直是
+     `unknown`。实测 05:20:26 合并、05:20:32 job 开跑、等 3 秒后 #417 / #420 仍是 `unknown`
+     → 被当成「无需同步」全跳过，job 白跑一轮。现在轮询 5×3 秒；15 秒后仍 `unknown` 就
+     `core.warning`（下一次 master 前进会再试），**不静默**。
 - 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
   （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
   照单全收 —— 单测全绿、线上必挂（PR #409 实测）。
@@ -123,7 +127,7 @@ Micro-exempt: 纯文案替换，无结构/交互变更
   node scripts/verify-workflows.mjs --schema
   ```
 
-  它把「人眼看日志发现不了」的那几件事都做成了断言（**33 条离线 / 38 条含 schema**，任一失败退出码 1）：
+  它把「人眼看日志发现不了」的那几件事都做成了断言（**35 条离线 / 40 条含 schema**，任一失败退出码 1）：
 
   | 层 | 覆盖 | 需要网络 |
   |---|---|---|
