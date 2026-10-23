@@ -11,6 +11,7 @@ import {
   type PublicationPreview,
 } from '@/api/content';
 import { linkifyHtml } from '@/utils/linkify';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('content:manage');
@@ -299,12 +300,20 @@ onMounted(load);
       </template>
     </a-table>
 
-    <!-- 成文预览抽屉（文章级聚合渲染） -->
+    <!--
+      成文预览抽屉（文章级聚合渲染）
+
+      🔴 get-container 不能省：微前端构建给所有 CSS 加了 :where([data-module="admin"])
+      前缀做隔离，而 antd Drawer 默认 teleport 到 <body>（模块容器之外），
+      抽屉里的 .preview-* 会整片匹配不上 —— 卡片/字号/层级全消失，内容贴边像纯文本。
+      挂回模块容器后 DOM 位置与样式作用域才一致。详见 utils/mount.ts。
+    -->
     <a-drawer
       v-model:open="previewVisible"
       :title="preview?.title ?? '成文预览'"
       width="820"
       :body-style="{ padding: '0' }"
+      :get-container="moduleOverlayContainer"
     >
       <a-spin :spinning="previewLoading">
         <div v-if="preview" class="preview-wrap">
