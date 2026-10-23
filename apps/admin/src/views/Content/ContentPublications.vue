@@ -10,6 +10,7 @@ import {
   type Publication,
   type PublicationPreview,
 } from '@/api/content';
+import { linkifyHtml } from '@/utils/linkify';
 
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('content:manage');
@@ -85,6 +86,17 @@ const failureTitle = computed(() => {
   const code = preview.value?.failure?.code;
   return code ? `发布失败（错误码 ${code}）` : '发布失败';
 });
+
+/**
+ * 预览正文（#433）：渲染层兜底把裸 URL 染成链接。
+ *
+ * stored 分支返回的是**发布当时**存下的 `payload.html`，渲染器后来修的链接化对它
+ * 无效 —— 2026-10-23 前的记录点开就是纯文本。这里不再依赖「重建成文」被人工触发，
+ * 而是显示时统一处理：数据脏不脏都看得对。
+ *
+ * 只影响后台预览；发到公众号的成品仍是 payload.html，要干净得用「重建成文」+「重新发布」。
+ */
+const previewHtml = computed(() => linkifyHtml(preview.value?.html));
 
 // ── 按当前渲染器重建成文（#431）──
 // 存量记录的 payload.html 是**发布当时**渲染好的产物，之后渲染器修的问题
@@ -338,7 +350,8 @@ onMounted(load);
             <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
           </div>
           <!-- 成文 HTML 由自家管线 LLM 生成后留存/重建，非用户输入 -->
-          <div class="preview-html" v-html="preview.html" />
+          <!-- previewHtml 在渲染层把裸 URL 兜底成链接（#433），不依赖数据是否洗过 -->
+          <div class="preview-html" v-html="previewHtml" />
         </div>
       </a-spin>
     </a-drawer>
