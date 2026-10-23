@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>侧边栏二级菜单间距优化 · 对照原型（#442）</title>
+<link rel="stylesheet" href="../../packages/ui/src/tokens.css" />
+<style>
+  /* ─── 管理后台别名 token（shell 注入的等价写法，便于原型独立跑） ─── */
+  :root {
+    --r-chip: var(--ws-radius-sm);
+    --r-control: var(--ws-radius-md);
+    --header-bg: var(--ws-bg-surface);
+    --header-border: var(--ws-border-subtle);
+    --text-body: var(--ws-text-body);
+    --text-secondary: var(--ws-text-secondary);
+    --text-tertiary: var(--ws-text-tertiary);
+    --text-muted: var(--ws-text-tertiary);
+    --text-faint: var(--ws-gray-500);
+    --border-light: var(--ws-border-subtle);
+    --border-divider: var(--ws-border-subtle);
+    --input-bg: var(--ws-bg-surface);
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #E9E9EC;
+    font-family: var(--ws-font-sans);
+    padding: 28px 28px 56px;
+  }
+  .doc-hd { max-width: 1740px; margin: 0 auto 20px; }
+  .doc-hd h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; color: #171717; }
+  .doc-hd p { margin: 0; font-size: 13px; line-height: 1.7; color: #525252; max-width: 760px; }
+  .boards { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; max-width: 1740px; margin: 0 auto; }
+
+  .artboard { border-radius: 10px; overflow: hidden; background: var(--ws-bg-surface); box-shadow: 0 8px 28px rgba(0,0,0,.14); }
+  .artboard-label {
+    padding: 8px 14px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+    color: #6B6B73; background: #F4F4F6; border-bottom: 1px solid #E2E2E6;
+  }
+  .sider { width: 220px; background: var(--ws-bg-surface); }
+
+  /* ─── antd 4.2.6 inline menu 结构样式（忠实复刻，只保留与间距相关的规则） ─── */
+  .ant-menu { margin: 0; padding: 0; list-style: none; outline: none; }
+  .ant-menu.ant-menu-inline { border-right: 1px solid var(--ws-border-subtle); }
+  .ant-menu-item, .ant-menu-submenu-title {
+    position: relative; display: flex; align-items: center;
+    height: 40px; line-height: 40px; margin: 4px; padding: 0 16px;
+    white-space: nowrap; cursor: pointer; overflow: hidden; text-overflow: ellipsis;
+    border-radius: var(--r-chip);
+  }
+  .ant-menu-item-icon { min-width: 14px; font-size: 14px; display: inline-flex; align-items: center; }
+  .ant-menu-item-icon + .ant-menu-title-content { margin-inline-start: 10px; }
+  .ant-menu-title-content { font-size: 14px; color: var(--text-secondary); }
+  .ant-menu-item-selected .ant-menu-title-content { color: #FF8C42; }
+  .ant-menu-item-selected { background: linear-gradient(90deg, rgba(255,140,66,.15), rgba(255,140,66,.04)); }
+  .ant-menu-sub.ant-menu-inline { padding: 0; }
+  .ant-menu-submenu-arrow { margin-left: auto; font-size: 10px; color: var(--text-tertiary); }
+
+  .ico { width: 14px; height: 14px; flex: none; }
+
+  /* ─── 改后方案（仅作用于 .after 画板） ─── */
+  .after .ant-menu-sub.ant-menu-inline { position: relative; }
+  .after .ant-menu-sub.ant-menu-inline::before {
+    content: ''; position: absolute; left: 34px; top: 6px; bottom: 6px;
+    width: 1px; background: var(--border-light);
+  }
+  .after .ant-menu-sub.ant-menu-inline > .ant-menu-item {
+    padding-left: 44px !important;
+    height: 34px; line-height: 34px; margin: 2px 4px;
+    font-size: 13px;
+  }
+  .after .ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-title-content { font-size: 13px; color: var(--text-secondary); }
+  .after .ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-item-icon { font-size: 13px; min-width: 13px; }
+  .after .ant-menu-sub.ant-menu-inline > .ant-menu-item-selected .ant-menu-title-content { color: #FF8C42; }
+</style>
+</head>
+<body>
+  <div class="doc-hd">
+    <h1>侧边栏二级菜单间距优化 · 对照原型</h1>
+    <p>问题：antd inline 菜单默认一级缩进 24px、二级 48px，中间 24px 留白无任何视觉锚点，读起来像「死空白」。方案：二级缩进 48→44px 并加 1px 竖线导轨对齐父级图标；二级项高度 40→34px、上下 margin 4→2px、字号 14→13px，让子列表读成一个更紧凑、更弱的层级组。</p>
+  </div>
+
+  <div class="boards">
+    <div class="artboard before" data-theme-bind="light">
+      <div class="artboard-label">Before · 当前</div>
+      <div class="sider" id="sider-before"></div>
+    </div>
+    <div class="artboard after" data-theme-bind="dark">
+      <div class="artboard-label">After · 改后（暗色）</div>
+      <div class="sider" id="sider-after"></div>
+    </div>
+    <div class="artboard after">
+      <div class="artboard-label">After · 改后（亮色）</div>
+      <div class="sider" id="sider-after-light"></div>
+    </div>
+  </div>
+
+  <script>
+    const ICONS = {
+      dashboard: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      bolt: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>',
+      team: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15.2c2.6.3 4.4 1.8 5 4.3"/></svg>',
+      setting: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.01a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>',
+      shield: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/></svg>',
+      db: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+      api: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 0-7 17h14A10 10 0 0 0 12 2z"/><circle cx="12" cy="12" r="3"/></svg>',
+      cloud: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19 9a4 4 0 0 1-.6 9"/></svg>',
+      cloudserver: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="6" rx="1"/><rect x="3" y="15" width="18" height="6" rx="1"/><path d="M7 6h.01M7 18h.01"/></svg>',
+      list: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>',
+      wechat: '<svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M9 4C5.7 4 3 6.5 3 9.6c0 1.8.9 3.4 2.4 4.5L4.7 16l2.2-1.1c.6.2 1.4.3 2.1.3 3.3 0 6-2.5 6-5.6S12.3 4 9 4zm-2.3 4a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8zm4.6 0a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8zM21 14.4c0-2.6-2.2-4.7-5-4.7-.2 0-.5 0-.7.1.4.9.6 1.9.6 2.9 0 3.4-3 6.2-6.7 6.2-.3 0-.7 0-1-.1.7 1.7 2.4 3 4.6 3.7l1.9.9-.6-1.6c1.9-.9 3-2.6 3-4.4 0-1.6-.8-3-2.1-4 1.5.3 2.9 1.1 3.6 2.2l1.9-.9-.5 1.5c1.1-.4 1.9-1.1 1.9-1.9z"/></svg>',
+      robot: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M8 4v4M16 4v4"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M9 8h6"/></svg>',
+    };
+
+    function item(key, icon, label, level, selected) {
+      const ic = icon ? `<span class="ant-menu-item-icon">${icon}</span>` : '';
+      return `<li class="ant-menu-item${selected ? ' ant-menu-item-selected' : ''}" style="padding-left:${level === 2 ? 48 : 24}px">${ic}<span class="ant-menu-title-content">${label}</span></li>`;
+    }
+    function submenu(key, icon, title, children, selectedKey) {
+      const kids = children.map(c => item(c[0], c[1], c[2], 2, c[0] === selectedKey)).join('');
+      return `<li class="ant-menu-submenu"><div class="ant-menu-submenu-title" style="padding-left:24px"><span class="ant-menu-item-icon">${icon}</span><span class="ant-menu-title-content">${title}</span><span class="ant-menu-submenu-arrow">▾</span></div><ul class="ant-menu ant-menu-sub ant-menu-inline">${kids}</ul></li>`;
+    }
+
+    const menu = (selected) => `
+      <ul class="ant-menu ant-menu-root ant-menu-inline" style="background:transparent">
+        ${item('dashboard', ICONS.dashboard, '工作台', 1, selected==='dashboard')}
+        ${item('bianbian', ICONS.bolt, '变变管理', 1)}
+        ${item('users', ICONS.team, '用户管理', 1)}
+        ${item('settings', ICONS.setting, '系统设置', 1)}
+        ${item('roles', ICONS.shield, '角色权限', 1)}
+        ${item('dicts', ICONS.db, '字典管理', 1)}
+        ${item('mcp', ICONS.api, 'MCP 管理', 1)}
+        ${item('database', ICONS.db, '数据浏览', 1)}
+        ${submenu('content', ICONS.cloud, '自媒体运营', [
+          ['content-sources', ICONS.cloudserver, '采集源管理'],
+          ['content-items', ICONS.list, '采集明细'],
+          ['content-publications', ICONS.wechat, '公众号成文'],
+          ['content-pipelines', ICONS.cloudserver, '发布管线'],
+          ['content-monitor', ICONS.cloud, '采集监控'],
+          ['content-accounts', ICONS.list, '账号管理'],
+        ], selected)}
+        ${submenu('agents', ICONS.robot, 'Agents', [
+          ['agents-metrics', null, 'Agent 观测'],
+          ['agents-runs', null, '运行记录'],
+          ['agents-capabilities', null, '能力资产'],
+          ['agents-knowledge', null, '知识集合'],
+          ['agents-retrieval', null, '检索调试'],
+          ['agents-defs', null, '定义管理'],
+        ], selected)}
+      </ul>`;
+
+    document.getElementById('sider-before').innerHTML = menu('content-publications');
+    document.getElementById('sider-after').innerHTML = menu('content-publications');
+    document.getElementById('sider-after-light').innerHTML = menu('content-publications');
+  </script>
+</body>
+</html>

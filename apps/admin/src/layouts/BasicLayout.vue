@@ -363,6 +363,34 @@ const handleLogout = async () => {
   color: #FF8C42 !important;
 }
 
+/* 二级菜单：收紧缩进 + 竖线导轨 + 紧凑分组（#442）
+ * 问题：antd inline 默认一级 24px、二级 48px，中间 24px 留白无锚点，读起来像死空白。
+ * 方案：二级 48→44px 缩进，并加 1px 竖线导轨对齐父级图标，让留白成为层级线索；
+ *       子项高度 40→34、上下 margin 4→2、字号 14→13，读成更紧凑、更弱的层级组。 */
+.sider :deep(.ant-menu-sub.ant-menu-inline) {
+  position: relative;
+}
+.sider :deep(.ant-menu-sub.ant-menu-inline::before) {
+  content: '';
+  position: absolute;
+  left: 34px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border-light);
+}
+.sider :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  padding-left: 44px !important;
+  height: 34px;
+  line-height: 34px;
+  margin: 2px 4px;
+  font-size: 13px;
+}
+.sider :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-item-icon) {
+  font-size: 13px;
+  min-width: 13px;
+}
+
 .top-header {
   background: var(--header-bg) !important; padding: 0 24px; display: flex; align-items: center;
   justify-content: space-between; z-index: 9;
