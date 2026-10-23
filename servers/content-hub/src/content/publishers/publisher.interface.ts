@@ -22,6 +22,20 @@ export interface PublishResult {
   success: boolean;
   external_id?: string;
   error?: string;
+  /**
+   * 草稿已建成，但发布接口没权限（微信 48001 api unauthorized，多为未认证个人号）。
+   * 此时文章静静躺在公众号草稿箱里，需要人工去后台点发布 ——
+   * 既不是成功（读者看不到），也不是失败（内容没丢，不该记成红叉）。
+   */
+  drafted?: boolean;
+  /** 草稿的 media_id，便于人工到草稿箱定位 */
+  media_id?: string;
+}
+
+/** 落库 status 的统一换算：三处写入点必须共用，避免各写一遍又漏一处 */
+export function publicationStatus(r: PublishResult): 'success' | 'drafted' | 'failed' {
+  if (r.success) return 'success';
+  return r.drafted ? 'drafted' : 'failed';
 }
 
 export interface IPublisher {

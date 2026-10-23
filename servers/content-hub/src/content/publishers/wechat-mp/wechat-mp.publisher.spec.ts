@@ -1,4 +1,5 @@
 import { WechatMpPublisher } from './wechat-mp.publisher';
+import { publicationStatus } from '../publisher.interface';
 
 /**
  * 封面兜底回归测试。
@@ -61,5 +62,39 @@ describe('WechatMpPublisher 封面', () => {
     const { pub, added } = setup();
     await pub.publish({ title: 't', html: HTML_NO_IMAGE });
     expect(added[0].thumb_media_id).toBe('env-thumb-id');
+  });
+
+  it('发布接口无权限(48001)时降级为「已进草稿箱待发布」，不记成失败', async () => {
+    const { pub, fakeClient, added } = setup();
+    fakeClient.submitFreepublish.mockRejectedValue(
+      new Error('微信 发布草稿失败[48001] api unauthorized rid: 6adae03f'),
+    );
+    const r = await pub.publish({ title: 'AI 资讯日报 ｜ 2026-10-23', html: HTML_NO_IMAGE });
+
+    // 草稿其实建成功了，内容没丢
+    expect(added).toHaveLength(1);
+    expect(r.success).toBe(false);
+    expect(r.drafted).toBe(true);
+    expect(r.media_id).toBe('draft-media-1');
+    expect(r.error).toContain('草稿箱');
+  });
+
+  it('非权限类发布错误仍是普通失败，不降级', async () => {
+    const { pub, fakeClient } = setup();
+    fakeClient.submitFreepublish.mockRejectedValue(
+      new Error('微信 发布草稿失败[45009] reach max quota'),
+    );
+    const r = await pub.publish({ title: 't', html: HTML_NO_IMAGE });
+
+    expect(r.success).toBe(false);
+    expect(r.drafted).toBeUndefined();
+  });
+});
+
+describe('publicationStatus', () => {
+  it('成功 / 待发布 / 失败 三态换算', () => {
+    expect(publicationStatus({ success: true })).toBe('success');
+    expect(publicationStatus({ success: false, drafted: true })).toBe('drafted');
+    expect(publicationStatus({ success: false, error: 'boom' })).toBe('failed');
   });
 });

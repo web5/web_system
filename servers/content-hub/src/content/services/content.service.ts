@@ -9,7 +9,7 @@ import { ContentPublicationEntity } from '../entities/content-publication.entity
 import { PipelineService } from './pipeline.service';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
 import { TencentDocsPublisher } from '../publishers/tencent-docs.publisher';
-import { PublishPayload } from '../publishers/publisher.interface';
+import { PublishPayload, publicationStatus } from '../publishers/publisher.interface';
 import {
   buildDailyMarkdown,
   markdownToHtml,
@@ -314,7 +314,7 @@ export class ContentService {
         item_id: pub.item_id,
         pipeline_id: pub.pipeline_id,
         target: pub.target,
-        status: result.success ? 'success' : 'failed',
+        status: publicationStatus(result),
         external_id: result.external_id ?? null,
         detail: {
           republish_of: Number(pub.id),
@@ -450,7 +450,7 @@ export class ContentService {
         item_id: dto.item_id ?? 0,
         pipeline_id: null,
         target: 'wechat_mp',
-        status: result.success ? 'success' : 'failed',
+        status: publicationStatus(result),
         external_id: result.external_id ?? null,
         detail: {
           ...(result.error ? { error: result.error } : {}),
