@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="zh-CN" data-demo-role="admin" data-demo-anno="off">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>自媒体账号管理 · 原型稿（待确认）</title>
+<style>
+/* ============ Token（沿用 admin-media-ops.html，保证同模块视觉一致）============ */
+:root {
+  --brand: #F97316; --brand-txt: #EA580C; --brand-soft: #FFF7ED; --brand-deep: #C2410C;
+  --bg-page: #FAFAFA; --bg-surface: #FFFFFF; --bg-subtle: #F2F2F2; --bg-hover: #F2F2F2;
+  --t1: #171717; --t2: #3F3F46; --t3: #525252; --t4: #A3A3A3; --t-disabled: #D4D4D4;
+  --border: #E5E5E5; --border-subtle: #EBEBEB;
+  --ok-bg: #EAF6EC; --ok: #398E4A;
+  --warn-bg: #FEF3DC; --warn: #F5A623; --warn-txt: #B45309;
+  --err-bg: #FCEBEC; --err: #E5484D;
+  --info-bg: #FFF7ED; --info: #F97316;
+  --r-chip: 4px; --r-control: 6px; --r-card: 8px;
+  --on-brand: #FFFFFF; --mask: rgba(0,0,0,.45);
+  --mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: 'Geist Sans', 'Inter', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --shadow-pop: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: var(--sans); font-size: 14px; color: var(--t2); background: var(--bg-page); line-height: 1.6; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; font-size: 14px; }
+svg.ic { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; }
+svg.ic-20 { width: 20px; height: 20px; }
+a { color: var(--brand-txt); text-decoration: none; }
+
+/* ============ 桌面壳 ============ */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.sider { width: 220px; flex: none; background: var(--bg-surface); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
+.sider-head { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); }
+.sider-logo { width: 28px; height: 28px; border-radius: var(--r-control); background: var(--brand); display: flex; align-items: center; justify-content: center; color: var(--on-brand); font-weight: 600; font-size: 13px; }
+.sider-title { font-size: 15px; font-weight: 600; color: var(--t1); }
+.sider-body { flex: 1; overflow-y: auto; padding: 8px; }
+.menu-group-label { font-size: 12px; color: var(--t4); padding: 12px 12px 4px; }
+.menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-control); color: var(--t3); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-size: 14px; }
+.menu-item:hover { background: var(--bg-hover); }
+.menu-item.active { background: var(--brand-soft); color: var(--brand-txt); font-weight: 500; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar { height: 56px; flex: none; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; padding: 0 24px; gap: 12px; }
+.crumb { font-size: 14px; color: var(--t4); display: flex; align-items: center; gap: 8px; }
+.crumb b { color: var(--t1); font-weight: 500; }
+.crumb .sep { color: var(--t-disabled); }
+.env-tag { font-size: 12px; color: var(--warn-txt); background: var(--warn-bg); border-radius: var(--r-chip); padding: 2px 8px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--t4); font-size: 13px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+
+body:has([data-demo-ctl][data-open="true"]) .content { padding-right: 344px; transition: padding .2s; }
+.content { flex: 1; overflow-y: auto; padding: 24px; transition: padding .2s; }
+.screen { display: none; max-width: 1200px; margin: 0 auto; }
+.screen.on { display: block; animation: fadein .2s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ============ 通用组件 ============ */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.page-title { font-size: 20px; font-weight: 600; color: var(--t1); line-height: 1.25; }
+.page-desc { font-size: 13px; color: var(--t4); margin-top: 4px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-control); border: 1px solid var(--border); background: var(--bg-surface); color: var(--t2); font-size: 14px; transition: all .15s; }
+.btn:hover { border-color: var(--brand); color: var(--brand-txt); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.btn.primary:hover { background: var(--brand-txt); border-color: var(--brand-txt); color: var(--on-brand); }
+.btn.danger { color: var(--err); border-color: var(--err); }
+.btn.danger:hover { background: var(--err-bg); }
+.btn.sm { height: 24px; padding: 0 10px; font-size: 13px; }
+.btn.text { border: none; background: none; padding: 0 6px; color: var(--brand-txt); }
+.btn.text:hover { background: none; text-decoration: underline; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.card-pad { padding: 16px; }
+.card + .card { margin-top: 16px; }
+.card-head { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+.card-head .t { font-size: 14px; font-weight: 600; color: var(--t1); }
+
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 20px; padding: 0 8px; border-radius: var(--r-chip); background: var(--bg-subtle); color: var(--t3); white-space: nowrap; }
+.tag.ok { background: var(--ok-bg); color: var(--ok); }
+.tag.warn { background: var(--warn-bg); color: var(--warn-txt); }
+.tag.err { background: var(--err-bg); color: var(--err); }
+.tag.info { background: var(--brand-soft); color: var(--brand-txt); }
+.tag.mono { font-family: var(--mono); font-size: 11px; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-size: 13px; font-weight: 500; color: var(--t3); background: var(--bg-subtle); padding: 10px 12px; white-space: nowrap; }
+.table td { padding: 12px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table tbody tr:hover { background: var(--bg-hover); }
+.table .mono { font-family: var(--mono); font-size: 12px; color: var(--t3); }
+.cell-sub { font-size: 12px; color: var(--t4); margin-top: 2px; }
+.row-actions { display: flex; gap: 4px; }
+.switch { width: 36px; height: 20px; border-radius: 999px; background: var(--t-disabled); position: relative; border: none; transition: background .15s; flex: none; }
+.switch::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--on-brand); top: 2px; left: 2px; transition: left .15s; }
+.switch.on { background: var(--brand); }
+.switch.on::after { left: 18px; }
+
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.select, .input { height: 32px; border: 1px solid var(--border); border-radius: var(--r-control); padding: 0 10px; background: var(--bg-surface); color: var(--t2); min-width: 140px; }
+.input::placeholder { color: var(--t4); }
+.select:focus, .input:focus { outline: none; border-color: var(--brand); }
+.select[disabled], .input[disabled] { background: var(--bg-subtle); color: var(--t4); cursor: not-allowed; }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-card); background: var(--info-bg); border: 1px solid #FED7AA; font-size: 13px; color: var(--t2); margin-bottom: 16px; }
+.banner .ic { color: var(--brand); flex: none; margin-top: 2px; }
+.banner b { color: var(--t1); font-weight: 600; }
+
+.empty { padding: 48px 16px; text-align: center; color: var(--t4); }
+.empty .ic { width: 40px; height: 40px; color: var(--t-disabled); margin-bottom: 8px; }
+.empty .t { font-size: 14px; color: var(--t3); }
+.empty .d { font-size: 13px; margin-top: 4px; }
+
+/* 表单 */
+.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field.full { grid-column: 1 / -1; }
+.field label { font-size: 13px; color: var(--t3); font-weight: 500; }
+.field label .req { color: var(--err); }
+.field .hint { font-size: 12px; color: var(--t4); }
+.mask-row { display: flex; align-items: center; gap: 8px; }
+.mask-val { flex: 1; font-family: var(--mono); font-size: 13px; color: var(--t3); background: var(--bg-subtle); border-radius: var(--r-control); padding: 0 10px; height: 32px; display: flex; align-items: center; }
+.form-foot { position: sticky; bottom: 0; background: var(--bg-surface); border-top: 1px solid var(--border-subtle); padding: 12px 16px; display: flex; gap: 8px; align-items: center; }
+.form-foot .right { margin-left: auto; display: flex; gap: 8px; }
+
+/* 检测结果面板 */
+.check-panel { margin: 0 16px 16px; border: 1px solid var(--border); border-radius: var(--r-control); overflow: hidden; display: none; }
+.check-panel[data-show="1"] { display: block; }
+.check-head { padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.check-panel[data-result="ok"] .check-head { background: var(--ok-bg); color: var(--ok); }
+.check-panel[data-result="err"] .check-head { background: var(--err-bg); color: var(--err); }
+.check-body { padding: 12px 14px; font-size: 13px; }
+.kv { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; }
+.kv .k { color: var(--t4); }
+.cap-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.advice { margin-top: 10px; padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--r-control); font-size: 13px; color: var(--t2); }
+
+/* 弹层 */
+.modal-mask { position: fixed; inset: 0; background: var(--mask); display: none; align-items: center; justify-content: center; z-index: 80; padding: 24px; }
+.modal-mask.show { display: flex; }
+.modal { background: var(--bg-surface); border-radius: var(--r-card); padding: 20px; width: 100%; max-width: 380px; box-shadow: var(--shadow-pop); }
+.modal .t { font-size: 15px; font-weight: 600; color: var(--t1); margin-bottom: 8px; }
+.modal .d { font-size: 13px; color: var(--t3); margin-bottom: 16px; }
+.modal-foot { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%) translateY(8px); background: rgba(23,23,23,.92); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 90; opacity: 0; pointer-events: none; transition: all .2s; }
+#toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* ============ 演示态 ============ */
+[data-demo-state]:not([data-demo-state="normal"]) > *:not(.demo-states) { display: none; }
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal { display: none; }
+[data-demo-state]:not([data-demo-state="normal"]) .demo-states { display: block; }
+[data-demo-state="loading"] .demo-states .only-loading,
+[data-demo-state="empty"] .demo-states .only-empty,
+[data-demo-state="error"] .demo-states .only-error,
+[data-demo-state="forbidden"] .demo-states .only-forbidden { display: block; }
+.demo-states { display: none; }
+.demo-states > div { display: none; }
+html[data-demo-role="viewer"] [data-need-role="admin"] { display: none; }
+[data-demo-anno="on"] [data-anno] { outline: 1px dashed var(--brand); position: relative; }
+[data-demo-anno="on"] [data-anno]::after { content: attr(data-anno); position: absolute; top: -9px; left: -3px; z-index: 5; font-size: 10px; line-height: 14px; padding: 0 5px; background: var(--brand); color: var(--on-brand); border-radius: 4px; }
+.demo-skel { height: 14px; border-radius: 6px; background: var(--bg-subtle); margin-bottom: 12px; }
+.demo-skel-wrap { padding: 24px 16px; }
+.demo-state-box { text-align: center; padding: 48px 16px; color: var(--t4); }
+.demo-state-box .t { font-size: 14px; color: var(--t3); margin-top: 8px; }
+.demo-state-box .d { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
+
+/* ============ 演示控件 ============ */
+.demo-ctl { position: fixed; right: 16px; top: 76px; width: 320px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-pop); z-index: 70; font-size: 13px; }
+.dc-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: none; border: none; font-size: 13px; font-weight: 600; color: var(--t1); text-align: left; }
+.dc-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); flex: none; }
+.dc-head .cnt { margin-left: auto; font-size: 11px; color: var(--t4); font-weight: 400; }
+.dc-body { display: none; padding: 0 12px 12px; border-top: 1px solid var(--border-subtle); max-height: 68vh; overflow-y: auto; }
+.demo-ctl[data-open="true"] .dc-body { display: block; }
+.dc-meta { padding: 10px 0; font-size: 12px; color: var(--t4); border-bottom: 1px dashed var(--border-subtle); margin-bottom: 10px; }
+.dc-meta b { color: var(--t2); }
+.dc-grp { margin-bottom: 12px; }
+.dc-lb { font-size: 12px; color: var(--t4); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.chip { border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--r-chip); padding: 3px 8px; font-size: 12px; color: var(--t3); }
+.chip:hover { border-color: var(--brand); color: var(--brand-txt); }
+.chip.on { background: var(--brand-soft); color: var(--brand-txt); border-color: var(--brand); font-weight: 500; }
+.dc-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.dc-preset { width: 100%; text-align: left; border: 1px solid var(--border); background: var(--bg-surface); border-radius: var(--r-control); padding: 6px 8px; font-size: 12px; color: var(--t3); }
+.dc-preset:hover { border-color: var(--brand); }
+.dc-preset.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-txt); }
+.dc-foot { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--border-subtle); }
+.dc-foot .k { font-size: 11px; color: var(--t4); margin-left: auto; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-xcircle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="15" r="4"/><path d="m10 12 8-8 3 3-8 8"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sider">
+    <div class="sider-head"><div class="sider-logo">科</div><div class="sider-title">科豆 AI 控制台</div></div>
+    <div class="sider-body">
+      <div class="menu-group-label">自媒体运营</div>
+      <button class="menu-item" data-screen="sources">采集源管理</button>
+      <button class="menu-item" data-screen="items">采集明细</button>
+      <button class="menu-item" data-screen="publications">公众号成文</button>
+      <button class="menu-item" data-screen="pipelines">发布管线</button>
+      <button class="menu-item" data-screen="runs">采集监控</button>
+      <button class="menu-item active" data-screen="accounts">账号管理</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb" id="crumb">自媒体运营 <span class="sep">/</span> <b>账号管理</b></div>
+      <span class="env-tag">DEV</span>
+      <div class="topbar-right"><span id="roleTag">管理员</span><div class="avatar">文</div></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ================= 屏 1：账号列表 ================= -->
+      <section class="screen on" id="screen-accounts" data-demo-state="normal">
+        <div class="page-head">
+          <div>
+            <div class="page-title">账号管理</div>
+            <div class="page-desc">登记各平台账号凭据；发布管线与手动发布按账号取用，不再依赖服务器环境变量</div>
+          </div>
+          <button class="btn primary" data-need-role="admin" data-dr="btn-create" data-anno="① 主操作" onclick="go('account-edit')">
+            <svg class="ic"><use href="#i-plus"/></svg>新增账号
+          </button>
+        </div>
+
+        <div class="banner" data-dr="banner-crypto">
+          <svg class="ic"><use href="#i-lock"/></svg>
+          <div>
+            <b>凭据加密存储</b>：AppSecret 等以 AES-256-GCM 加密入库，列表与接口只返回掩码。<br>
+            解密钥由 <span style="font-family:var(--mono);font-size:12px">ACCOUNT_CRED_KEY_FILE</span> 指向的 0600 文件提供，
+            <b>不进进程环境变量</b>（避免 <span style="font-family:var(--mono);font-size:12px">pm2 env</span> 之类命令直接打出明文）；
+            密钥归本模块自管，<b>不进配置中心</b>。
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select" id="fPlatform">
+            <option>全部平台</option><option>公众号</option>
+          </select>
+          <select class="select" id="fStatus">
+            <option>全部状态</option><option>连通正常</option><option>异常</option><option>未检测</option>
+          </select>
+          <input class="input" placeholder="搜索名称 / 编码" />
+          <button class="btn" data-dr="btn-refresh" onclick="toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
+        </div>
+
+        <div class="card" data-dr="accounts-table" data-anno="② 凭据列只显掩码">
+          <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr><th>账号</th><th>平台</th><th>主体标识</th><th>凭据</th><th>连通性</th><th>启用</th><th style="width:170px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div>大橙子社区</div>
+                  <div class="cell-sub mono">default</div>
+                </td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="mono">wxc94524****717a06</span><div class="cell-sub">服务号 · 已认证</div></td>
+                <td>
+                  <div class="mono">8815****&nbsp;****d39d</div>
+                  <div class="cell-sub"><span class="tag ok sub">已加密</span></div>
+                </td>
+                <td>
+                  <span class="tag ok"><svg class="ic" style="width:12px;height:12px"><use href="#i-check"/></svg>正常</span>
+                  <div class="cell-sub">10-23 13:20 · 可正式发布</div>
+                </td>
+                <td><button class="switch on" data-need-role="admin" onclick="this.classList.toggle('on')"></button></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn text sm" data-need-role="admin" onclick="go('account-edit')">检测</button>
+                    <button class="btn text sm" data-need-role="admin" onclick="go('account-edit')">编辑</button>
+                    <button class="btn text sm" data-need-role="admin" style="color:var(--err)" onclick="openModal('mDel')">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div>科豆AI</div>
+                  <div class="cell-sub mono">kedouai</div>
+                </td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="mono">wx1b**************2f</span><div class="cell-sub">订阅号 · 未认证</div></td>
+                <td>
+                  <div class="mono">9076****&nbsp;****1c8e</div>
+                  <div class="cell-sub"><span class="tag ok sub">已加密</span></div>
+                </td>
+                <td>
+                  <span class="tag warn"><svg class="ic" style="width:12px;height:12px"><use href="#i-warn"/></svg>权限不足</span>
+                  <div class="cell-sub">48001 · 仅可建草稿</div>
+                </td>
+                <td><button class="switch on" data-need-role="admin" onclick="this.classList.toggle('on')"></button></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn text sm" data-need-role="admin" onclick="go('account-edit')">检测</button>
+                    <button class="btn text sm" data-need-role="admin" onclick="go('account-edit')">编辑</button>
+                    <button class="btn text sm" data-need-role="admin" style="color:var(--err)" onclick="openModal('mDel')">删除</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <div class="demo-states">
+          <div class="only-loading">
+            <div class="demo-skel-wrap">
+              <div class="demo-skel" style="width:40%"></div>
+              <div class="demo-skel" style="width:88%"></div>
+              <div class="demo-skel" style="width:76%"></div>
+              <div class="demo-skel" style="width:60%"></div>
+            </div>
+          </div>
+          <div class="only-empty">
+            <div class="demo-state-box">
+              <svg class="ic ic-20"><use href="#i-key"/></svg>
+              <div class="t">还没有登记任何账号</div>
+              <div class="d">登记后，发布管线才能按账号取凭据；不登记则继续沿用环境变量</div>
+              <button class="btn primary" onclick="go('account-edit')"><svg class="ic"><use href="#i-plus"/></svg>新增账号</button>
+            </div>
+          </div>
+          <div class="only-error">
+            <div class="demo-state-box">
+              <svg class="ic ic-20"><use href="#i-xcircle"/></svg>
+              <div class="t">请求失败</div>
+              <div class="d">GET /api/content-admin/accounts 超时（3s）</div>
+              <button class="btn" onclick="applyState('normal')"><svg class="ic"><use href="#i-refresh"/></svg>重试</button>
+            </div>
+          </div>
+          <div class="only-forbidden">
+            <div class="demo-state-box">
+              <svg class="ic ic-20"><use href="#i-warn"/></svg>
+              <div class="t">无访问权限</div>
+              <div class="d">需要 content:view 权限</div>
+              <button class="btn" onclick="toast('原型演示：跳转权限申请')">申请权限</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 屏 2：新增 / 编辑账号 ================= -->
+      <section class="screen" id="screen-account-edit" data-demo-state="normal">
+        <div class="page-head">
+          <div>
+            <div class="page-title" id="editTitle">新增账号</div>
+            <div class="page-desc">凭据一经保存不再展示明文，仅显示掩码；需变更时点「重新录入」</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="t">基础信息</span></div>
+          <div class="form-grid">
+            <div class="field">
+              <label>账号名称 <span class="req">*</span></label>
+              <input class="input" id="fName" value="大橙子社区" placeholder="如：大橙子社区" />
+              <span class="hint">后台展示用，可随时改</span>
+            </div>
+            <div class="field">
+              <label>账号编码 <span class="req">*</span></label>
+              <input class="input mono" id="fCode" value="default" disabled />
+              <span class="hint">管线与接口引用，创建后不可改</span>
+            </div>
+            <div class="field">
+              <label>平台 <span class="req">*</span></label>
+              <select class="select" id="fPf" onchange="onPlatformChange()">
+                <option value="wechat_mp" selected>公众号</option>
+                <option value="tencent_docs" disabled>腾讯文档（已下线）</option>
+                <option value="xiaohongshu" disabled>小红书（未接入）</option>
+              </select>
+              <span class="hint">A5 决议：腾讯文档凭据两侧均未配置，本轮下线该目标</span>
+            </div>
+            <div class="field">
+              <label>启用</label>
+              <div><button class="switch on" onclick="this.classList.toggle('on')"></button></div>
+              <span class="hint">停用后管线与手动发布均不可选该账号</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-dr="cred-card" data-anno="③ 平台决定凭据字段">
+          <div class="card-head"><span class="t">凭据</span><span class="tag ok sub" id="encTag"><svg class="ic" style="width:12px;height:12px"><use href="#i-lock"/></svg>已加密保存</span></div>
+          <div class="form-grid">
+            <div class="field">
+              <label>AppID <span class="req">*</span></label>
+              <input class="input mono" value="wxc945245618717a06" />
+            </div>
+            <div class="field">
+              <label>AppSecret <span class="req">*</span></label>
+              <div class="mask-row" id="secretMask">
+                <div class="mask-val">8815****&nbsp;****d39d</div>
+                <button class="btn sm" data-need-role="admin" onclick="resetSecret()">重新录入</button>
+              </div>
+              <div class="mask-row" id="secretInput" style="display:none">
+                <input class="input mono" type="password" placeholder="留空表示不修改" />
+                <button class="btn sm" onclick="cancelSecret()">取消</button>
+              </div>
+              <span class="hint">以 AES-256-GCM 加密入库，界面不回显明文</span>
+            </div>
+            <div class="field">
+              <label>GH_ID（选填）</label>
+              <input class="input mono" value="gh_e********" />
+              <span class="hint">部分接口需要原始 ID</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="t">连通性</span>
+            <button class="btn sm" data-need-role="admin" data-dr="btn-check" onclick="runCheck()"><svg class="ic"><use href="#i-plug"/></svg>测试连通性</button>
+          </div>
+          <div class="check-panel" id="checkPanel" data-show="0" data-result="ok">
+            <div class="check-head" id="checkHead"></div>
+            <div class="check-body" id="checkBody"></div>
+          </div>
+          <div style="padding:12px 16px;color:var(--t4);font-size:13px" id="checkHint">未检测 · 保存前建议先测一次，权限不足会在这里提前暴露（如 48001）</div>
+        </div>
+
+        <div class="card">
+          <div class="form-foot">
+            <button class="btn danger" data-need-role="admin" onclick="openModal('mDel')"><svg class="ic"><use href="#i-trash"/></svg>删除账号</button>
+            <div class="right">
+              <button class="btn" onclick="go('accounts')">取消</button>
+              <button class="btn primary" data-need-role="admin" onclick="toast('已保存（原型演示）')">保存</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- 删除二次确认 -->
+<div class="modal-mask" id="mDel" onclick="if(event.target===this)closeModal('mDel')">
+  <div class="modal">
+    <div class="t">删除账号「大橙子社区」？</div>
+    <div class="d">该账号的加密凭据会一并删除，且不可恢复。若仍有管线引用此账号，那些管线会发布失败。</div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('mDel')">取消</button>
+      <button class="btn danger" onclick="closeModal('mDel');toast('已删除（原型演示）')">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 演示控件 -->
+<aside class="demo-ctl" data-demo-ctl data-open="false" aria-label="原型演示控件">
+  <button class="dc-head" data-dc-toggle aria-expanded="false">
+    <span class="dot"></span>原型演示控件
+    <span class="cnt" id="dcCnt">9 个场景</span>
+    <svg class="ic"><use href="#i-caret"/></svg>
+  </button>
+  <div class="dc-body">
+    <div class="dc-meta">
+      <b>自媒体账号管理 · 原型稿</b><br>
+      目标端 桌面 Web（admin 壳）· 2026-10-23 · 数据全为 mock<br>
+      场景包即评审分支，逐条过
+    </div>
+    <div class="dc-grp">
+      <div class="dc-lb"><span>演示场景</span><button class="chip" data-dc-next>下一步 →</button></div>
+      <div class="dc-list" id="dcPresets"></div>
+    </div>
+    <div class="dc-grp">
+      <div class="dc-lb">角色</div>
+      <div class="dc-list" id="dcRoles"></div>
+    </div>
+    <div class="dc-grp">
+      <div class="dc-lb">数据态（当前屏）</div>
+      <div class="dc-list" id="dcStates"></div>
+    </div>
+    <div class="dc-grp">
+      <div class="dc-lb">屏幕直达</div>
+      <div class="dc-list" id="dcScreens"></div>
+    </div>
+    <div class="dc-foot">
+      <button class="chip" data-dc-anno>标注层</button>
+      <button class="chip" data-dc-reset>复位</button>
+      <span class="k">H 收起 · 1-9 场景</span>
+    </div>
+  </div>
+</aside>
+
+<div id="toast"></div>
+
+<script>
+/* ── 屏切换 ── */
+const SCREENS = {
+  accounts:     { el: 'screen-accounts',     crumb: ['自媒体运营', '账号管理'] },
+  'account-edit': { el: 'screen-account-edit', crumb: ['自媒体运营', '账号管理', '新增账号'] },
+};
+function go(key) {
+  Object.keys(SCREENS).forEach(k => document.getElementById(SCREENS[k].el).classList.remove('on'));
+  const s = SCREENS[key];
+  document.getElementById(s.el).classList.add('on');
+  document.getElementById('crumb').innerHTML = s.crumb.map((c, i) =>
+    i === s.crumb.length - 1 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
+  document.querySelectorAll('.sider .menu-item').forEach(m =>
+    m.classList.toggle('active', m.dataset.screen === key));
+  const sc = document.querySelector('.content');
+  if (sc) sc.scrollTop = 0;
+  if (typeof DEMO !== 'undefined') DEMO.onGo(key);
+}
+
+/* ── 数据态 ── */
+const STATES = ['normal', 'loading', 'empty', 'error', 'forbidden'];
+const STATE_LABEL = { normal: '有数据', loading: '加载中', empty: '空态', error: '失败', forbidden: '无权限' };
+function applyState(st) {
+  document.querySelectorAll('.screen.on').forEach(s => s.dataset.demoState = st);
+  syncChips('#dcStates', STATES, STATE_LABEL, st, applyState);
+}
+
+/* ── 角色 ── */
+const ROLES = ['admin', 'viewer'];
+const ROLE_LABEL = { admin: '管理员', viewer: '只读' };
+function setRole(r) {
+  document.documentElement.dataset.demoRole = r;
+  document.getElementById('roleTag').textContent = ROLE_LABEL[r];
+  syncChips('#dcRoles', ROLES, ROLE_LABEL, r, setRole);
+}
+
+/* ── 凭据重新录入 ── */
+function resetSecret() {
+  document.getElementById('secretMask').style.display = 'none';
+  document.getElementById('secretInput').style.display = '';
+  document.getElementById('encTag').style.display = 'none';
+}
+function cancelSecret() {
+  document.getElementById('secretInput').style.display = 'none';
+  document.getElementById('secretMask').style.display = '';
+  document.getElementById('encTag').style.display = '';
+}
+function onPlatformChange() {
+  const v = document.getElementById('fPf').value;
+  if (v === 'wechat_mp') toast('公众号：AppID / AppSecret / GH_ID');
+}
+
+/* ── 连通性检测 ── */
+function runCheck() {
+  const p = document.getElementById('checkPanel');
+  const which = document.getElementById('fName').value.indexOf('科豆') >= 0 ? 'err' : 'ok';
+  p.dataset.show = '1'; p.dataset.result = which;
+  document.getElementById('checkHint').style.display = 'none';
+  const head = document.getElementById('checkHead');
+  const body = document.getElementById('checkBody');
+  if (which === 'ok') {
+    head.innerHTML = '<svg class="ic"><use href="#i-check"/></svg>连通正常 · 耗时 412ms';
+    body.innerHTML =
+      '<div class="kv">' +
+      '<div class="k">主体</div><div>大橙子社区（服务号 · 已认证）</div>' +
+      '<div class="k">AppID</div><div class="mono">wxc945245618717a06</div>' +
+      '</div>' +
+      '<div class="cap-list">' +
+      '<span class="tag ok">建草稿 可用</span><span class="tag ok">正式发布 可用</span><span class="tag ok">封面上传 可用</span>' +
+      '</div>';
+  } else {
+    head.innerHTML = '<svg class="ic"><use href="#i-warn"/></svg>权限不足 · 48001 api unauthorized';
+    body.innerHTML =
+      '<div class="kv">' +
+      '<div class="k">主体</div><div>科豆AI（订阅号 · 未认证）</div>' +
+      '<div class="k">错误码</div><div class="mono">48001</div>' +
+      '</div>' +
+      '<div class="cap-list">' +
+      '<span class="tag ok">建草稿 可用</span><span class="tag err">正式发布 不可用</span>' +
+      '</div>' +
+      '<div class="advice">未认证订阅号没有发布权限。该账号只能进草稿箱，需人工到公众号后台发布；' +
+      '或在管线里把发布模式设为「只建草稿」。若需自动发布，请先完成微信认证。</div>';
+  }
+}
+
+/* ── 弹层 / Toast ── */
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+let tt;
+function toast(msg){
+  const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+/* ── chips 渲染 ── */
+function syncChips(sel, keys, labels, cur, fn) {
+  const box = document.querySelector(sel); if (!box) return;
+  box.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.v === cur));
+}
+
+/* ── 演示场景包（= 评审分支清单） ── */
+const PRESETS = [
+  { n: '列表 · 有数据',        role: 'admin',  screen: 'accounts',      state: 'normal' },
+  { n: '列表 · 空态（首次）',   role: 'admin',  screen: 'accounts',      state: 'empty' },
+  { n: '列表 · 加载中',        role: 'admin',  screen: 'accounts',      state: 'loading' },
+  { n: '列表 · 请求失败',      role: 'admin',  screen: 'accounts',      state: 'error' },
+  { n: '列表 · 只读角色',      role: 'viewer', screen: 'accounts',      state: 'normal' },
+  { n: '列表 · 无权限',        role: 'viewer', screen: 'accounts',      state: 'forbidden' },
+  { n: '新增 · 公众号字段',     role: 'admin',  screen: 'account-edit',  state: 'normal', edit: 'new' },
+  { n: '新增 · 检测成功',      role: 'admin',  screen: 'account-edit',  state: 'normal', edit: 'new', check: 'ok' },
+  { n: '新增 · 检测失败 48001', role: 'admin',  screen: 'account-edit',  state: 'normal', edit: 'err', check: 'err' },
+];
+let curPreset = 0;
+function applyPreset(i) {
+  curPreset = i; const p = PRESETS[i];
+  setRole(p.role);
+  go(p.screen);
+  applyState(p.state);
+  // 编辑屏形态
+  const isEdit = p.edit === 'err';
+  document.getElementById('editTitle').textContent = isEdit ? '编辑账号 · 科豆AI' : '新增账号';
+  document.getElementById('fName').value = isEdit ? '科豆AI' : '大橙子社区';
+  document.getElementById('fCode').value = isEdit ? 'kedouai' : 'default';
+  document.getElementById('encTag').style.display = isEdit ? '' : 'none';
+  document.getElementById('secretMask').style.display = isEdit ? '' : 'none';
+  document.getElementById('secretInput').style.display = isEdit ? 'none' : '';
+  // 检测面板
+  const cp = document.getElementById('checkPanel');
+  const hint = document.getElementById('checkHint');
+  if (p.check) { cp.dataset.show = '1'; hint.style.display = 'none'; runCheck(); }
+  else { cp.dataset.show = '0'; hint.style.display = ''; }
+  // 面包屑同步
+  SCREENS['account-edit'].crumb[2] = isEdit ? '编辑账号' : '新增账号';
+  document.getElementById('crumb').innerHTML = (isEdit ? ['自媒体运营','账号管理','编辑账号'] : ['自媒体运营','账号管理','新增账号'])
+    .map((c, i) => i === 2 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
+  document.querySelectorAll('#dcPresets .dc-preset').forEach((b, k) => b.classList.toggle('on', k === i));
+}
+
+/* ── 演示控件装配 ── */
+const DEMO = {
+  onGo() {},
+  init() {
+    const ps = document.getElementById('dcPresets');
+    PRESETS.forEach((p, i) => {
+      const b = document.createElement('button');
+      b.className = 'dc-preset'; b.textContent = (i + 1) + '. ' + p.n;
+      b.onclick = () => applyPreset(i);
+      ps.appendChild(b);
+    });
+    const rs = document.getElementById('dcRoles');
+    ROLES.forEach(r => {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.dataset.v = r; b.textContent = ROLE_LABEL[r];
+      b.onclick = () => setRole(r); rs.appendChild(b);
+    });
+    const ss = document.getElementById('dcStates');
+    STATES.forEach(s => {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.dataset.v = s; b.textContent = STATE_LABEL[s];
+      b.onclick = () => applyState(s); ss.appendChild(b);
+    });
+    const sc = document.getElementById('dcScreens');
+    [['accounts', '账号列表'], ['account-edit', '新增/编辑']].forEach(([k, t]) => {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.textContent = t; b.onclick = () => go(k); sc.appendChild(b);
+    });
+    const ctl = document.querySelector('[data-demo-ctl]');
+    document.querySelector('[data-dc-toggle]').onclick = () => {
+      const open = ctl.dataset.open === 'true';
+      ctl.dataset.open = open ? 'false' : 'true';
+      document.querySelector('[data-dc-toggle]').setAttribute('aria-expanded', String(!open));
+    };
+    document.querySelector('[data-dc-anno]').onclick = () => {
+      const on = document.documentElement.dataset.demoAnno === 'on';
+      document.documentElement.dataset.demoAnno = on ? 'off' : 'on';
+      document.querySelector('[data-dc-anno]').classList.toggle('on', !on);
+    };
+    document.querySelector('[data-dc-reset]').onclick = () => applyPreset(0);
+    document.querySelector('[data-dc-next]').onclick = () => applyPreset((curPreset + 1) % PRESETS.length);
+    document.addEventListener('keydown', e => {
+      if (e.key >= '1' && e.key <= '9') { const i = +e.key - 1; if (i < PRESETS.length) applyPreset(i); }
+      else if (e.key === 'h' || e.key === 'H') document.querySelector('[data-dc-toggle]').click();
+    });
+    document.getElementById('dcCnt').textContent = PRESETS.length + ' 个场景';
+  }
+};
+DEMO.init();
+setRole('admin');
+applyState('normal');
+document.querySelectorAll('#dcPresets .dc-preset')[0].classList.add('on');
+</script>
+</body>
+</html>
