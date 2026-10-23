@@ -210,7 +210,10 @@ const SRC_MEDIA = {
   idPrefix: 'zm-',
   ns: 'ZM',
   exports: ['go', 'toast', 'openTrigger', 'setRcState', 'runTrigger', 'resetFilter',
-    'openPreview', 'closeModal', 'runTest', 'setTestState', 'confirmDel'],
+    'openPreview', 'closeModal', 'runTest', 'setTestState', 'confirmDel',
+    /* 账号管理（2026-10-23 新增第 6 个菜单页）：内联 onclick 用到的函数必须在此登记，
+       否则抽取时 IIFE 化后点击报 is not defined */
+    'accResetSecret', 'accCancelSecret', 'accCheck', 'accDelOpen', 'accDelClose'],
   /* 内容区之外的三块：手动触发弹窗 + 成文预览抽屉（同一段）、toast —— 源稿把弹层挂在
      .content 之外，按 from/to 切内容区会连它们一起丢掉，点「触发」就找不到弹窗 */
   trails: [
@@ -229,6 +232,12 @@ const SRC_MEDIA = {
       'content-publications': 'publications',
       'content-pipelines': 'pipelines',
       'content-monitor': 'runs',
+      /* 'content-accounts': 'accounts' —— 账号管理（源稿里已有 2 个 section，2026-10-23）
+         ⛔ 暂不登记：build 自检会报「mount 屏缺 hub 容器」—— hub 的屏容器由壳生成，
+            壳的真相源是真实 BasicLayout.vue，而 apps/admin 尚无该路由/菜单。
+         落地 PR 里补三件事后打开这一行：① router/index.ts 加 /content/accounts 路由
+         ② BasicLayout.vue 加「账号管理」菜单项 ③ 建 ContentAccounts.vue（可先骨架）
+         → 然后 node scripts/build-agents-hub.mjs + node scripts/verify-agents-hub.mjs */
     },
   },
   trace: ['id="zm-triggerMask"', 'id="zm-previewMask"', 'id="zm-toast"', 'class="screen on"'],
