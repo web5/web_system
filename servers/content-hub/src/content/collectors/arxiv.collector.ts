@@ -2,7 +2,9 @@
 import { ICollector, RawItem } from './collector.interface';
 import { decodeEntities, stripTags, extractTag } from './xml';
 
-const ARXIV_API = 'http://export.arxiv.org/api/query';
+// 必须 https：http 端点会返回 301 跳转，undici 跟随跳转时在国内网络下常直接 fetch failed，
+// 表现为「源 arxiv 采集失败」且拿不到任何条目（2026-10-23 修复）。
+const ARXIV_API = 'https://export.arxiv.org/api/query';
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 

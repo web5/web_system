@@ -6,6 +6,19 @@ import { WechatMpClient } from './wechat-mp.client';
 /** 微信 CDN 域名前缀，已上传图片不再重复处理 */
 const WECHAT_CDN_HOSTS = /mmbiz\.qpic\.cn|mmbiz\.qlogo\.cn/i;
 
+/**
+ * 正文无图时的兜底封面（thumb_media_id，公众号永久素材）。
+ *
+ * 背景：日报类成文是纯文本 HTML（只有 h2/h3/p，没有 <img>），
+ * 取不到正文首图 → 建草稿必然抛「缺少封面」→ 每天定时发布全失败。
+ * 该素材为「大橙子社区」通用封面，2026-10-23 上传到公众号永久素材库；
+ * dev / prod 共用同一公众号（WECHAT_MP_APP_ID 一致），media_id 两边通用。
+ *
+ * 换封面：设环境变量 WECHAT_MP_DEFAULT_THUMB_MEDIA_ID 覆盖，无需改代码。
+ */
+const FALLBACK_THUMB_MEDIA_ID =
+  'BUSabtk9juW90vSVH4g1KvRzUZWAHmPFAFslvaKJIwuQ_CyNhFapHJA7CIRSUTTI';
+
 export interface DraftResult {
   success: boolean;
   media_id?: string;
@@ -130,6 +143,15 @@ export class WechatMpPublisher implements IPublisher {
     if (!thumbMediaId && firstImage) {
       thumbMediaId = await client.uploadThumbMedia(firstImage.blob, firstImage.filename);
       this.logger.log(`[wechat_mp] 已用正文首图作封面: ${thumbMediaId}`);
+    }
+    if (!thumbMediaId) {
+      // 2'. 兜底：正文一张图都没有时用默认封面（env 优先，其次内置常量）。
+      // 日报类成文普遍无图，没有这层兜底就会每天定时发布失败。
+      thumbMediaId =
+        process.env.WECHAT_MP_DEFAULT_THUMB_MEDIA_ID?.trim() || FALLBACK_THUMB_MEDIA_ID;
+      if (thumbMediaId) {
+        this.logger.warn(`[wechat_mp] 正文无图，已用默认封面兜底: ${thumbMediaId}`);
+      }
     }
     if (!thumbMediaId) {
       throw new Error('缺少封面：请传 thumb_media_id，或正文中放一张图片用作封面');
