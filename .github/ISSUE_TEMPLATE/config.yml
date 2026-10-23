@@ -1,0 +1,18 @@
+# 为什么关掉空白 issue：
+# 本仓库的 issue 是「任务载体 + 追溯键」（docs/development/issue-workflow.md），
+# 不是聊天入口。空白 issue 会退化成「一句话愿望」，没有实证/验收标准，
+# 后续谁接都得重新问一遍当初为什么——等于没登记。
+blank_issues_enabled: false
+
+contact_links:
+  - name: 我要改代码：先看协作指令速查
+    url: https://github.com/web5/web_system/blob/master/docs/协作指令速查.md
+    about: 五大动作门（UI / 发布 / 契约 / 新增接口）与必需 commit trailer，动代码前必读。
+
+  - name: 我要过门禁：门禁总纲
+    url: https://github.com/web5/web_system/blob/master/docs/development/质量门禁总纲.md
+    about: 哪些门会拦、什么级别、怎么豁免。issue 不替代原型确认与评审报告。
+
+  - name: 我该不该开 issue（以及怎么带编号）
+    url: https://github.com/web5/web_system/blob/master/docs/development/issue-workflow.md
+    about: 什么该开、什么不该开，分支名怎么带编号，PR 怎么自动关联，标签怎么打。
