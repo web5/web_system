@@ -2,7 +2,7 @@
 
 > **门禁状态（2026-10-22 已接入 CI）**：配置 2026-10-10 就位，开关滞后 30 天后于本日恢复。
 > 现在 CI 是两道：① `changed-packages.sh --lint` 拦改动包的 **error**；② 根级 `pnpm lint:ci` 守 **warning 总量水位**（328）。
-> 本文是 ESLint 门的**判据源**；门的级别、开关状态与编号见 `docs/development/gates/02-机制原理.md` §2.4 D 类。
+> 本文是 ESLint 门的**判据源**；门的级别、开关状态与编号见 `docs/development/gates/02b-技术CICD机制.md` §4 D 类。
 
 > 建立日期：2026-10-10 · 关联任务 `rLCb1M`
 > 配置文件：`eslint.config.mjs`（根级，ESLint 9 flat config）
