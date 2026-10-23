@@ -14,6 +14,7 @@ import { simhash } from '../../common/dedup';
 import { summarizePaper, summarizeNews } from '../processors/llm';
 import { detectAiCategories } from '../processors/categorize';
 import { buildDailyMarkdown, markdownToHtml, RenderItem } from '../processors/render';
+import { renderTitle } from './title.util';
 import { IPublisher } from '../publishers/publisher.interface';
 import { TencentDocsPublisher } from '../publishers/tencent-docs.publisher';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
@@ -111,7 +112,8 @@ export class PipelineService {
         url: it.url ?? undefined,
         source_name: it.source_name ?? undefined,
       }));
-      const title = pipeline.title_template ?? `日报（${pipeline.code}）`;
+      // 与「重新发布 / 成文预览」路径共用同一渲染函数，避免 {{date}} 漏替换
+      const title = renderTitle(pipeline.title_template, `日报（${pipeline.code}）`);
       const markdown = buildDailyMarkdown(title, renderItems);
 
       for (const target of pipeline.publish_targets ?? []) {
