@@ -271,6 +271,18 @@ publish_remote() {
 
 if [ "$ENV_OPT" != "local" ]; then
   publish_remote || err "远端发布失败（已尝试回滚到发布前版本）"
+
+  # 远端固定验收
+  VERIFY_SH="$ROOT/scripts/verify/verify-deploy-console.sh"
+  if [ -f "$VERIFY_SH" ] && [ "$SKIP_HEALTH" != "1" ]; then
+    step "固定验收（verify-deploy-console.sh --host ${ENV_OPT}）..."
+    if bash "$VERIFY_SH" --host "$ENV_OPT" --quick 2>&1; then
+      step "固定验收通过 ✓"
+    else
+      err "远端固定验收未通过，发布判定为失败"
+    fi
+  fi
+
   step "完成 ✓（env=${ENV_OPT}，源 ${WS_BRANCH} @ ${WS_HEAD}）"
   exit 0
 fi

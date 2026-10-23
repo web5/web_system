@@ -116,3 +116,4 @@ servers/ai-service/.agent-cli.config.json
 
 # 数据库备份（线上真实数据 dump，含业务内容与 external_id，绝不提交）
 archive/db-backups/
+tests/.env.test
