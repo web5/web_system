@@ -1,7 +1,7 @@
 # 成文预览 · 公众号版面重排（#436）设计与验收记录
 
 - 日期：2026-10-23
-- 原型：`docs/ui/prototypes/admin-content-preview-typography.html`
+- 原型：`specs/content-preview-typography/prototype.html`
 - 实现：`apps/admin/src/views/Content/ContentPublications.vue`（`.preview-paper` / `.preview-html` 样式块 + 抽屉结构）
 - 关联：#428（建草稿 400）、#431（重建成文）、#433（渲染层链接化）—— 三次修的都是「内容对不对」，本次修的是「看得下去」
 

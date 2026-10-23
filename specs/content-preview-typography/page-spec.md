@@ -1,7 +1,7 @@
 # 页面规格书 · 成文预览抽屉（公众号版面）
 
 > 版本：v1.0 ｜ 2026-10-23 ｜ 关联 issue #436
-> 原型稿：`docs/ui/prototypes/admin-content-preview-typography.html`
+> 原型稿：`specs/content-preview-typography/prototype.html`
 > 设计决策与验收：`docs/ui/reviews/content-preview-typography-20261023.md`
 > 适用端：admin（`--ws-brand-500` 主橙 / `@web-system/ui` 语义 token）
 > 实现：`apps/admin/src/views/Content/ContentPublications.vue`
