@@ -1128,6 +1128,17 @@
   .zm-scope .page-desc{
   font-size: 13px; color: var(--t4); margin-top: 4px;
   }
+  .zm-scope .run-banner{
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 12px; border-radius: var(--r-control); background: var(--info-bg); border: 1px solid var(--info); color: var(--t2); font-size: 12px;
+  }
+  .zm-scope .run-banner[hidden]{
+  display: none;
+  }
+  .zm-scope .run-dot{
+  width: 6px; height: 6px; border-radius: 50%; background: var(--info); animation: runPulse 1.2s infinite;
+  }
+  
+@keyframes runPulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   .zm-scope .btn{
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-control); border: 1px solid var(--border); background: var(--bg-surface); color: var(--t2); font-size: 14px; transition: all .15s;
   }
@@ -2581,6 +2592,11 @@
           </div>
           <button class="btn primary" onclick="ZM.go('pipeline-edit')"><svg class="ic"><use href="#i-plus"/></svg>添加管线</button>
         </div>
+        <!-- 运行进度条：一次运行 30 秒起步，没有反馈用户会当成卡死（2026-10-23 异步化） -->
+        <div class="run-banner" id="zm-runBanner" hidden>
+          <span class="run-dot"></span>
+          <span id="zm-runBannerText"></span>
+        </div>
         <div class="card">
           <table class="table">
             <thead>
@@ -2592,14 +2608,14 @@
                 <td><span class="ellip" style="max-width:180px">每日论文速览 ｜ {{date}}</span></td>
                 <td><span class="tag sub">公众号</span></td>
                 <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
-                <td><div class="row-actions"><button class="btn sm primary" onclick="ZM.runPipeline('daily_paper')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+                <td><div class="row-actions"><button class="btn sm primary" data-run-code="daily_paper" onclick="ZM.runPipeline('daily_paper')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
               </tr>
               <tr>
                 <td class="mono">daily_finance</td><td><span class="tag info">ai-news</span></td><td class="mono">0 8 * * 1-5</td>
                 <td><span class="ellip" style="max-width:180px">财经早报 ｜ {{date}}</span></td>
                 <td><span class="tag sub">公众号</span></td>
                 <td><button class="switch on" onclick="this.classList.toggle('on')"></button></td>
-                <td><div class="row-actions"><button class="btn sm primary" onclick="ZM.runPipeline('daily_finance')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
+                <td><div class="row-actions"><button class="btn sm primary" data-run-code="daily_finance" onclick="ZM.runPipeline('daily_finance')">立即运行</button><button class="btn sm" onclick="ZM.go('pipeline-edit')">编辑</button><button class="btn sm danger" onclick="ZM.confirmDel(this)">删除</button></div></td>
               </tr>
             </tbody>
           </table>
@@ -4003,7 +4019,7 @@ renderTypeList(); renderItems();
 /* 来自 admin-media-ops.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
   var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","screen-pipeline-edit","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","runBanner","runBannerText","screen-pipeline-edit","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
   document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('zm-'+id) : RAW_BY_ID(id); };
 
 // ── 屏幕切换 ──
@@ -4318,16 +4334,58 @@ function confirmDel(btn) {
   }
 }
 
-/* ── 立即运行管线（2026-10-23）────────────────────────────────────
+/* ── 立即运行管线（2026-10-23 异步化）─────────────────────────────
    🔴 这是"真发布"入口：会按发布目标真实投递内容，所以原型里也带二次确认，
       不做成点了就发。结果必须给四个数（采集 / 新入库 / 发布 / 失败），
-      否则"跑了但没数据"和"跑了且发出去了"在界面上长得一样。 */
+      否则"跑了但没数据"和"跑了且发出去了"在界面上长得一样。
+
+   🔴 为什么点完是"受理"而不是"等结果"：一次完整运行 30 秒起步，
+      而链路超时依次是 前端 10s / 网关 30s / nginx 60s —— 同步等的结果是
+      请求先被掐断，界面只弹出「网络错误」，后端却仍在跑、内容仍会投出去，
+      用户以为没跑成于是再点一次，草稿箱就多一条重复内容。
+      所以形态是：点一下 → 按钮变"运行中…" + 顶部进度条走秒 → 完成后弹四数。 */
+let runTimer = null;
+let runSeconds = 0;
+
 function runPipeline(code) {
+  // 已有任务在跑就复用它 —— 重复点击意味着重复投递，必须挡在入口
+  if (runTimer) {
+    toast('已有管线在跑：本次不再重复投递内容');
+    return;
+  }
   if (!confirm('立即运行「' + code + '」？\n会按该管线的发布目标真实投递内容（草稿或正式发布取决于发布模式）。')) return;
-  toast('运行中…（原型演示：约 20-60 秒）');
-  setTimeout(() => {
-    toast('已运行：采集 12 · 新入库 3 · 发布 1 · 失败 0');
-  }, 1200);
+
+  var btns = document.querySelectorAll('[data-run-code]');
+  btns.forEach(function (b) {
+    b.disabled = true;
+    if (b.getAttribute('data-run-code') === code) b.textContent = '运行中…';
+  });
+  var banner = document.getElementById('runBanner');
+  var text = document.getElementById('runBannerText');
+  if (banner) banner.hidden = false;
+  runSeconds = 0;
+  if (text) text.textContent = '管线 ' + code + ' 已提交，正在后台执行 · 采集多个源 + 逐条 LLM，通常 30-60 秒';
+  runTimer = setInterval(function () {
+    runSeconds += 2;
+    if (text) text.textContent = '管线 ' + code + ' 正在后台执行 · 已运行 ' + runSeconds + 's';
+  }, 2000);
+  // 原型演示：6 秒后给终态（真实实现由前端轮询 job 接口）
+  setTimeout(function () { stopRun(code, true); }, 6000);
+}
+
+/** 结束运行态：复位按钮与进度条，弹四数结果 */
+function stopRun(code, ok) {
+  if (runTimer) { clearInterval(runTimer); runTimer = null; }
+  var banner = document.getElementById('runBanner');
+  if (banner) banner.hidden = true;
+  var btns = document.querySelectorAll('[data-run-code]');
+  btns.forEach(function (b) {
+    b.disabled = false;
+    if (b.getAttribute('data-run-code') === code) b.textContent = '立即运行';
+  });
+  toast(ok
+    ? '运行完成（42.3s）：采集 12 · 新入库 3 · 发布 1 · 失败 0'
+    : '运行失败：采集源 arxiv 超时');
 }
 
 // ── Toast ──
@@ -4343,7 +4401,7 @@ function toast(msg) {
 document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline, stopRun:stopRun };
 
 })();
 
