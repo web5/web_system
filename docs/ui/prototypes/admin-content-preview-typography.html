@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>成文预览 · 公众号版面规格（#436）</title>
+<!-- 设计令牌走真实来源，不复制数值：改 tokens.css 这里自动跟随 -->
+<link rel="stylesheet" href="../../../packages/ui/src/tokens.css" />
+<style>
+  /* ─── 原型画布（不属于产品样式） ─── */
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #E9E9EC;
+    font-family: var(--ws-font-sans);
+    padding: 28px 28px 56px;
+  }
+  .doc-hd { max-width: 1740px; margin: 0 auto 20px; }
+  .doc-hd h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; color: #171717; }
+  .doc-hd p { margin: 0; font-size: 13px; line-height: 1.7; color: #525252; }
+  .doc-hd code { font-family: var(--ws-font-mono); font-size: 12px; background: #fff; padding: 1px 5px; border-radius: 3px; }
+  .boards { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; max-width: 1740px; margin: 0 auto; }
+  .artboard {
+    width: 820px; flex: none; border-radius: 10px; overflow: hidden;
+    background: var(--ws-bg-page);
+    box-shadow: 0 8px 28px rgba(0,0,0,.14);
+  }
+  .artboard-label {
+    padding: 8px 14px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+    color: #6B6B73; background: #F4F4F6; border-bottom: 1px solid #E2E2E6;
+  }
+  /* antd 抽屉外壳（近似，只为表达比例） */
+  .drawer-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px;
+    background: var(--ws-bg-surface);
+    border-bottom: 1px solid var(--ws-border-subtle);
+    color: var(--ws-text-primary);
+  }
+  .drawer-hd .t { font-size: 16px; font-weight: 600; }
+  .drawer-hd .x { font-size: 14px; color: var(--ws-text-tertiary); }
+  .tag {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+    font-size: 12px; border-radius: 4px;
+    background: rgba(249,115,22,.1); color: #EA580C; border: 1px solid rgba(249,115,22,.25);
+  }
+  .tag.ok { background: #EAF6EC; color: #398E4A; border-color: transparent; }
+  .btn {
+    display: inline-flex; align-items: center; height: 26px; padding: 0 10px;
+    font-size: 12px; color: var(--ws-text-secondary);
+    background: var(--ws-bg-surface); border: 1px solid var(--ws-border); border-radius: 6px;
+  }
+
+  /* ─── 下方为产品样式（与 apps/admin/src/views/Content/ContentPublications.vue 一致） ─── */
+/* ── 成文预览：公众号阅读版面 ─────────────────────────────────
+   目标不是「后台一坨 HTML」，而是让运营看到的就是读者在手机上看到的样子：
+   640~680px 版心 / 16px 正文 / 1.8 行高 / 橙色标题锚点 / 链接可辨。
+   颜色一律走 @web-system/ui 语义 token，light·dark 自动跟随。
+   ------------------------------------------------------------ */
+
+
+/* 抽屉容器：纸张浮在页面底色上 */
+.preview-wrap {
+  min-height: 100%;
+  background: var(--ws-bg-page);
+}
+.preview-body {
+  padding: 0 24px 40px;
+}
+.preview-meta {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--ws-bg-surface);
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+.muted {
+  color: var(--ws-text-tertiary);
+  font-size: 12px;
+}
+/* 告警 / 重建工具栏与版心同宽，避免左右不齐 */
+.preview-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 680px;
+  margin: 0 auto;
+  padding-top: 16px;
+}
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--ws-bg-surface);
+  border: 1px dashed var(--ws-border-subtle);
+  border-radius: var(--r-control, 6px);
+}
+
+.preview-paper {
+  box-sizing: border-box;
+  max-width: 680px;
+  margin: 24px auto 0;
+  padding: 40px 36px 44px;
+  background: var(--ws-bg-surface);
+  border: 1px solid var(--ws-border-subtle);
+  border-radius: var(--r-card, 8px);
+  box-shadow: var(--ws-shadow-card);
+}
+
+.preview-html {
+  font-family: var(--ws-font-sans);
+  font-size: 16px;
+  line-height: 1.8;
+  letter-spacing: 0.2px;
+  color: var(--ws-text-body);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 文章主标题（渲染器把 # 降级成 h2，因此首个标题元素 = 标题） */
+.preview-html > h1:first-child,
+.preview-html > h2:first-child {
+  margin: 0 0 24px;
+  padding: 0 0 18px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -0.2px;
+  color: var(--ws-text-primary);
+  border-bottom: 1px solid var(--ws-border-subtle);
+}
+.preview-html > h1:first-child::before,
+.preview-html > h2:first-child::before {
+  content: none;
+}
+
+/* 章节标题：左侧橙色竖条 */
+.preview-html h2 {
+  position: relative;
+  margin: 36px 0 14px;
+  padding-left: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: 0;
+  color: var(--ws-text-primary);
+}
+.preview-html h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--ws-brand-500);
+}
+
+/* 小节标题：橙色圆点 */
+.preview-html h3 {
+  margin: 26px 0 10px;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ws-text-primary);
+}
+.preview-html h3::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ws-brand-500);
+  vertical-align: 3px;
+}
+
+.preview-html h4 {
+  margin: 22px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ws-text-secondary);
+}
+
+.preview-html h5,
+.preview-html h6 {
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ws-text-secondary);
+}
+
+.preview-html p {
+  margin: 0 0 18px;
+}
+
+.preview-html > *:last-child {
+  margin-bottom: 0;
+}
+
+/* 列表：橙色圆点记号 + 更松的行距（日报全是条目，这层最影响观感） */
+.preview-html ul {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  list-style: none;
+}
+.preview-html ul li {
+  position: relative;
+  margin-bottom: 10px;
+}
+.preview-html ul li::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0.74em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ws-brand-400);
+}
+.preview-html ul li:last-child {
+  margin-bottom: 0;
+}
+.preview-html ol {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+.preview-html ol li {
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+.preview-html ol li::marker {
+  color: var(--ws-brand-500);
+  font-weight: 600;
+}
+.preview-html ol li:last-child {
+  margin-bottom: 0;
+}
+
+/* 链接：下划线用发丝线，长 URL 必须能断行，否则版心被撑破 */
+.preview-html a {
+  color: var(--ws-brand-600);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(249, 115, 22, 0.35);
+  transition: color 150ms var(--ws-ease-out), border-color 150ms var(--ws-ease-out);
+}
+.preview-html a:hover {
+  color: var(--ws-brand-500);
+  border-bottom-color: var(--ws-brand-500);
+}
+
+/* 暗底 #EA580C 与纸面 #1A1A1A 只差 3:1，换成亮一档 */
+[data-theme='dark'] .preview-html a {
+  color: var(--ws-brand-400);
+  border-bottom-color: rgba(251, 146, 60, 0.35);
+}
+[data-theme='dark'] .preview-html a:hover {
+  color: var(--ws-brand-300);
+  border-bottom-color: var(--ws-brand-300);
+}
+
+.preview-html strong,
+.preview-html b {
+  font-weight: 600;
+  color: var(--ws-text-strong);
+}
+
+.preview-html em {
+  font-style: normal;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.preview-html img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 22px auto;
+  border-radius: var(--r-control, 6px);
+}
+
+.preview-html figure {
+  margin: 22px 0;
+}
+.preview-html figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--ws-text-tertiary);
+}
+
+.preview-html blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  background: var(--ws-bg-hover);
+  border-left: 3px solid var(--ws-brand-500);
+  border-radius: 0 var(--r-control, 6px) var(--r-control, 6px) 0;
+  color: var(--ws-text-secondary);
+}
+.preview-html blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.preview-html code {
+  padding: 2px 6px;
+  font-family: var(--ws-font-mono);
+  font-size: 0.88em;
+  color: var(--ws-text-secondary);
+  background: var(--ws-bg-hover);
+  border-radius: var(--r-chip, 4px);
+}
+.preview-html pre {
+  margin: 22px 0;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--ws-code-bg);
+  border-radius: var(--r-control, 6px);
+}
+.preview-html pre code {
+  padding: 0;
+  font-size: inherit;
+  color: var(--ws-code-text);
+  background: none;
+  border-radius: 0;
+}
+
+.preview-html table {
+  width: 100%;
+  margin: 22px 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.preview-html th,
+.preview-html td {
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--ws-border-subtle);
+}
+.preview-html th {
+  font-weight: 600;
+  color: var(--ws-text-primary);
+  background: var(--ws-bg-hover);
+}
+
+.preview-html hr {
+  margin: 30px 0;
+  border: 0;
+  border-top: 1px solid var(--ws-border-subtle);
+}
+
+  /* ─── 规格表 ─── */
+  .spec {
+    flex: 0 0 100%; box-sizing: border-box;
+    column-count: 2; column-gap: 40px;
+    background: #fff; border-radius: 10px; padding: 20px 22px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.10);
+    font-size: 13px; line-height: 1.7; color: #3F3F46;
+  }
+  .spec h2 { margin: 0 0 4px; font-size: 15px; color: #171717; }
+  .spec h3 { margin: 18px 0 6px; font-size: 13px; color: #171717; }
+  .spec p { margin: 0 0 10px; }
+  .spec h2, .spec h3, .spec table, .spec ul, .spec p { break-inside: avoid; }
+  .spec table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec th, .spec td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #EBEBEB; }
+  .spec th { color: #737373; font-weight: 500; }
+  .spec td code { font-family: var(--ws-font-mono); font-size: 11px; }
+  .spec ul { margin: 0 0 10px; padding-left: 18px; }
+  .spec li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+  <div class="doc-hd">
+    <h1>成文预览 · 公众号版面规格（#436）</h1>
+    <p>
+      公众号成文预览抽屉的正文排版。目标：<strong>运营看到的 = 读者在手机上看到的</strong>，
+      而不是后台里一坨等大小文本。颜色全部引用 <code>@web-system/ui</code> 语义 token
+      （<code>--ws-*</code>），浅色 / 暗色自动跟随。<br />
+      实现位置：<code>apps/admin/src/views/Content/ContentPublications.vue</code> 的
+      <code>.preview-paper / .preview-html</code> 样式块。
+    </p>
+  </div>
+
+  <div class="boards">
+    <section class="artboard" data-theme="light">
+      <div class="artboard-label">Light · 后台主用</div>
+
+  <div class="drawer-hd">
+    <span class="t">每日 AI 观察 · 10 月 23 日</span>
+    <span class="x">&#10005;</span>
+  </div>
+  <div class="preview-wrap">
+    <div class="preview-meta">
+      <span class="tag">公众号</span>
+      <span class="tag ok">成功</span>
+      <span class="muted">· 2026-10-23 09:00:12</span>
+    </div>
+    <div class="preview-body">
+      <div class="preview-aside">
+        <div class="preview-toolbar">
+          <span class="btn">重建成文（按当前渲染器）</span>
+          <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
+        </div>
+      </div>
+      <div class="preview-paper">
+        <div class="preview-html"><h2>每日 AI 观察 · 10 月 23 日</h2>
+        <p>今天最值得注意的不是某个模型又刷了榜，而是<strong>推理成本</strong>这条曲线继续往下压：三家厂商在同一周把长上下文价格砍到原来的三分之一。成本一旦塌方，产品形态就会跟着变。</p>
+        <h2>1. 长上下文不再是奢侈品</h2>
+        <p>某团队把 1M token 的推理单价压到 0.12 美元，代价是首 token 延迟上升 40%。对批处理场景几乎无感，对实时对话是致命的。原文：<a href="https://example.com/paper/2026-1023-long-context">https://example.com/paper/2026-1023-long-context</a></p>
+        <ul>
+          <li><strong>要点一</strong>：分块预填充把显存峰值降了一半，代价是多一次 kernel 调度。</li>
+          <li><strong>要点二</strong>：KV cache 复用在多轮对话里收益最大，单轮问答几乎为零。</li>
+          <li><strong>要点三</strong>：真正省钱的是「少算」，不是「算得快」—— 路由层比推理层更值得投。</li>
+        </ul>
+        <h3>1.1 对我们意味着什么</h3>
+        <p>日报管线的摘要环节可以从「一次喂全文」改成「先粗筛再精读」，token 消耗预计降 60%，代价是多一次串行调用。</p>
+        <blockquote>
+          <p>成本下降不会自动带来好产品，它只是把「做不了」变成「做得起」。真正的分水岭在需求侧。</p>
+        </blockquote>
+        <h2>2. 智能体评测开始看「恢复力」</h2>
+        <p>传统 benchmark 只看一次成功率，新提出的指标体系把<em>失败后自我恢复</em>单列一档。数据很扎心：首轮成功率 62% 的模型，三轮内恢复到 88%；另一个首轮 71% 的模型，三轮只到 74%。</p>
+        <table>
+          <thead><tr><th>模型</th><th>首轮</th><th>三轮内</th></tr></thead>
+          <tbody>
+            <tr><td>A</td><td>62%</td><td>88%</td></tr>
+            <tr><td>B</td><td>71%</td><td>74%</td></tr>
+          </tbody>
+        </table>
+        <hr />
+        <p>明日关注：两家厂商的开发者大会均安排在同一天，注意别把两边的发布混成一条。</p></div>
+      </div>
+    </div>
+  </div>
+
+    </section>
+
+    <section class="artboard" data-theme="dark">
+      <div class="artboard-label">Dark · 夜间主题</div>
+
+  <div class="drawer-hd">
+    <span class="t">每日 AI 观察 · 10 月 23 日</span>
+    <span class="x">&#10005;</span>
+  </div>
+  <div class="preview-wrap">
+    <div class="preview-meta">
+      <span class="tag">公众号</span>
+      <span class="tag ok">成功</span>
+      <span class="muted">· 2026-10-23 09:00:12</span>
+    </div>
+    <div class="preview-body">
+      <div class="preview-aside">
+        <div class="preview-toolbar">
+          <span class="btn">重建成文（按当前渲染器）</span>
+          <span class="muted">仅重算库里存的标题与正文，不投递、不新增记录</span>
+        </div>
+      </div>
+      <div class="preview-paper">
+        <div class="preview-html"><h2>每日 AI 观察 · 10 月 23 日</h2>
+        <p>今天最值得注意的不是某个模型又刷了榜，而是<strong>推理成本</strong>这条曲线继续往下压：三家厂商在同一周把长上下文价格砍到原来的三分之一。成本一旦塌方，产品形态就会跟着变。</p>
+        <h2>1. 长上下文不再是奢侈品</h2>
+        <p>某团队把 1M token 的推理单价压到 0.12 美元，代价是首 token 延迟上升 40%。对批处理场景几乎无感，对实时对话是致命的。原文：<a href="https://example.com/paper/2026-1023-long-context">https://example.com/paper/2026-1023-long-context</a></p>
+        <ul>
+          <li><strong>要点一</strong>：分块预填充把显存峰值降了一半，代价是多一次 kernel 调度。</li>
+          <li><strong>要点二</strong>：KV cache 复用在多轮对话里收益最大，单轮问答几乎为零。</li>
+          <li><strong>要点三</strong>：真正省钱的是「少算」，不是「算得快」—— 路由层比推理层更值得投。</li>
+        </ul>
+        <h3>1.1 对我们意味着什么</h3>
+        <p>日报管线的摘要环节可以从「一次喂全文」改成「先粗筛再精读」，token 消耗预计降 60%，代价是多一次串行调用。</p>
+        <blockquote>
+          <p>成本下降不会自动带来好产品，它只是把「做不了」变成「做得起」。真正的分水岭在需求侧。</p>
+        </blockquote>
+        <h2>2. 智能体评测开始看「恢复力」</h2>
+        <p>传统 benchmark 只看一次成功率，新提出的指标体系把<em>失败后自我恢复</em>单列一档。数据很扎心：首轮成功率 62% 的模型，三轮内恢复到 88%；另一个首轮 71% 的模型，三轮只到 74%。</p>
+        <table>
+          <thead><tr><th>模型</th><th>首轮</th><th>三轮内</th></tr></thead>
+          <tbody>
+            <tr><td>A</td><td>62%</td><td>88%</td></tr>
+            <tr><td>B</td><td>71%</td><td>74%</td></tr>
+          </tbody>
+        </table>
+        <hr />
+        <p>明日关注：两家厂商的开发者大会均安排在同一天，注意别把两边的发布混成一条。</p></div>
+      </div>
+    </div>
+  </div>
+
+    </section>
+
+    <aside class="spec">
+      <h2>排版规格</h2>
+      <p>行高 1.8 / 字距 0.2px，正文字号 16px —— 对齐公众号移动端阅读尺寸，预览不会被误判「后台随便渲染的」。</p>
+
+      <h3>层级</h3>
+      <table>
+        <tr><th>元素</th><th>字号 / 字重</th><th>标识</th><th>间距</th></tr>
+        <tr><td>文章主标题（首个 h1/h2）</td><td>24 / 700</td><td>底部分割线</td><td>下 24px</td></tr>
+        <tr><td>章节 h2</td><td>18 / 600</td><td>左侧 3×16 橙色竖条</td><td>上 36 下 14</td></tr>
+        <tr><td>小节 h3</td><td>16.5 / 600</td><td>6px 橙色圆点</td><td>上 26 下 10</td></tr>
+        <tr><td>正文 p</td><td>16 / 400</td><td>—</td><td>下 18</td></tr>
+        <tr><td>列表 li</td><td>16 / 400</td><td>5px 橙色圆点</td><td>条目间 10</td></tr>
+      </table>
+
+      <h3>为什么这么定</h3>
+      <ul>
+        <li><strong>680 版心 + 纸张卡片</strong>：抽屉宽 820，正文居中留白，视觉上「在读一篇文章」而不是「在看一段 dump」。公众号正文宽度约 677px，尺寸对得上。</li>
+        <li><strong>h2 竖条 / h3 圆点</strong>：日报是多章节 + 多条目结构，纯字号差异在 16px 正文旁边几乎看不出来，需要一个非文字的形状锚点。</li>
+        <li><strong>列表去 disc</strong>：浏览器默认 disc 又小又黑，与橙色标题体系割裂；换 5px 圆点并统一 10px 间距。</li>
+        <li><strong>链接发丝下划线</strong>：裸 URL 链接化后（#433）正文会出现长链接，只有颜色区分不够；加 1px 半透明下划线既像正文又能点。</li>
+        <li><strong>底色用 bg-hover 而非 bg-subtle</strong>：暗色下 <code>--ws-bg-subtle</code>(#111) 比纸面 (#1A1A1A) 还深，引用块/表头会像"挖了个洞"。</li>
+        <li><strong>暗底链接提亮一档</strong>：<code>--ws-brand-600</code> 在 #1A1A1A 上对比不足，改用 400 (#FB923C)。</li>
+      </ul>
+
+      <h3>边界（本次不做）</h3>
+      <p>只改「显示」，不改产物：发到公众号的 HTML 仍是 <code>payload.html</code>；存量记录的脏数据要靠「重建成文」+ 重新发布。列表页表格样式不在本次范围。</p>
+    </aside>
+  </div>
+</body>
+</html>
