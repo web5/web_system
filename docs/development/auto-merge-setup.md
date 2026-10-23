@@ -105,6 +105,14 @@ Micro-exempt: 纯文案替换，无结构/交互变更
      它一直 `BEHIND`、`autoMergeRequest` 挂着却一动不动，只能人工 `gh pr update-branch`。
      代价重算：开放 PR 常年个位数，成本 = 1 次 list + 每个 PR 1 次 get；
      对比「每次都要人记得手敲 update-branch」，这个成本可以直接认。
+  6. 🔴 **安全阀的比对基准是「当前 base 分支 tip」，不是 `pr.base.sha`**。
+     `pr.base.sha` 是**该 PR 记录里的 base**（分支上次合并/分叉时的 master 提交），
+     master 前进后它不会跟着变。2026-10-23 实测：#417 的 head `467c06a1` 是 merge commit，
+     父提交里就含着 `pr.base.sha = 3a0d83b9`（旧 master），而当时 master tip 已是 `21725b60` ——
+     拿 `pr.base.sha` 比对会把「落后 2 个提交」判成「已同步」，落后 PR 于是**永远被跳过**。
+     push 事件直接用 `context.payload.after`（当前 tip，零 API 且准确），其他事件退回
+     `repos.getBranch(base.ref)`。回归用例：「旧 base 不得被当成已同步（#417 回归）」——
+     把基准改回 `pr.base.sha` 它会立刻变红（已用负向探针验证）。
 - 🔴 **mock 测不出 GraphQL schema 错误**：`expectedHeadOid` 必须声明成 `GitObjectID!`
   （写成 `String!` 会报 `Type mismatch ... (String! / GitObjectID)`），而假 graphql 对变量类型
   照单全收 —— 单测全绿、线上必挂（PR #409 实测）。
@@ -115,7 +123,7 @@ Micro-exempt: 纯文案替换，无结构/交互变更
   node scripts/verify-workflows.mjs --schema
   ```
 
-  它把「人眼看日志发现不了」的那几件事都做成了断言（**31 条离线 / 36 条含 schema**，任一失败退出码 1）：
+  它把「人眼看日志发现不了」的那几件事都做成了断言（**33 条离线 / 38 条含 schema**，任一失败退出码 1）：
 
   | 层 | 覆盖 | 需要网络 |
   |---|---|---|

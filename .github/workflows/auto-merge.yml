@@ -143,9 +143,14 @@ jobs:
 
             // 安全阀：head 已是「把 base 合进来」的 merge commit 时跳过。
             // 防的是 synchronize 触发后 mergeable_state 短暂仍报 behind 导致的重复同步。
+            //
+            // ⚠️ 基准不能用 `pr.base.sha`（=该 PR 记录里的 base，master 前进后不更新）：
+            // 用它比对会把「落后」误判成「已同步」（#417 实测，详见 sync-behind-on-master 里同段注释）。
+            // 这里没有 push 事件的 `payload.after`，直接问 API 要当前 base 分支 tip。
+            const baseBranch = (await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref })).data.commit.sha;
             const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
-            if ((headCommit.parents || []).some((p) => p.sha === pr.base.sha)) {
-              console.log(`PR #${n} head 已包含 base ${pr.base.sha.slice(0, 7)}，跳过（防重复同步）`);
+            if ((headCommit.parents || []).some((p) => p.sha === baseBranch)) {
+              console.log(`PR #${n} head 已包含 base ${baseBranch.slice(0, 7)}，跳过（防重复同步）`);
               return;
             }
 
@@ -239,9 +244,23 @@ jobs:
               }
               // 安全阀：head 已经是「把 base 合进来」的 merge commit 就跳过。
               // 防的是 master 连推两次时对同一个 PR 重复同步 —— 每次同步都会触发一轮 CI。
+              //
+              // ⚠️ 比对基准**不能用 `pr.base.sha`**：那是该 PR 记录里的 base（分支上次
+              // 合并/分叉时的 master 提交），**master 前进后它不会跟着变**。
+              // 实测 2026-10-23：#417 的 head 467c06a1 是 merge commit，父提交含
+              // `pr.base.sha = 3a0d83b9`（旧 master），而当时 master tip 已是 21725b60 ——
+              // 用它比对会把「落后 2 个提交」误判成「已同步」，落后 PR 被永远跳过。
+              // 正确基准 = 当前 master tip：push 事件直接取 `context.payload.after`（零 API
+              // 且绝对准确），其他事件退回 `repos.getBranch(base.ref)`。
+              const baseTip = async () => {
+                if (context.payload && context.payload.after) return context.payload.after;
+                const b = await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref });
+                return b.data.commit.sha;
+              };
+              const baseTipSha = await baseTip();
               const headCommit = (await github.rest.repos.getCommit({ owner, repo, ref: pr.head.sha })).data;
-              if ((headCommit.parents || []).some((p) => p.sha === pr.base.sha)) {
-                console.log(`PR #${it.number} head 已含 base，跳过（防重复同步）`);
+              if ((headCommit.parents || []).some((p) => p.sha === baseTipSha)) {
+                console.log(`PR #${it.number} head 已含 base ${baseTipSha.slice(0, 7)}，跳过（防重复同步）`);
                 continue;
               }
 
