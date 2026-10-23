@@ -167,6 +167,25 @@ t(
   '写成 String! 线上报 Type mismatch（#409，mock 测不出来所以这条必须静态断言）',
 );
 
+// ── master 前进触发（2026-10-23，修 #407 残留缺口）──
+// 用一句日志文本当锚点，而不是块下标：加 step 会让下标静默指错（见上面 findBlock 的注释）。
+const masterSyncBlock = findBlock('auto-merge.yml', '扫描 master 前进后落后的开放 PR');
+t(
+  'blocks:auto-merge 的 master 前进同步块',
+  !!masterSyncBlock,
+  masterSyncBlock ? '已定位' : '找不到含「扫描 master 前进后落后的开放 PR」的 script 块',
+);
+t(
+  'static:auto-merge 监听 master push',
+  /\n\s*push:\s*\n\s*branches:\s*\[\s*master\s*\]/.test(texts['auto-merge.yml']),
+  '缺这个触发点：master 前进不产生 pull_request 事件，落后的 PR 永远等不到同步（#417 实测：BEHIND 后 #418/#419 合入仍纹丝不动）',
+);
+t(
+  'static:master 同步块的 $oid 声明为 GitObjectID!',
+  !!masterSyncBlock && /\$oid:\s*GitObjectID!/.test(masterSyncBlock) && !/\$oid:\s*String/.test(masterSyncBlock),
+  '同一坑第二次：新块也要 GitObjectID!（#409）',
+);
+
 // ─────────────────────────── 4. mock 运行器 ───────────────────────────
 function newSandbox({ github, core, context }) {
   const sandbox = {
@@ -286,6 +305,70 @@ function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } =
   return st;
 }
 
+// ── 4.3 master 前进后批量同步（push 事件，无 pull_request 上下文） ──
+// prs: [{ number, draft?, fork?, states?: [...], parents?: [{sha}] }]
+function runMasterSync(script, prs) {
+  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [] };
+  const queues = {};
+  for (const p of prs) queues[p.number] = [...(p.states || ['behind'])];
+  const github = {
+    rest: {
+      pulls: {
+        list: async () => ({
+          data: prs.map((p) => ({
+            number: p.number,
+            draft: !!p.draft,
+            head: { repo: { full_name: p.fork ? 'someone/else' : 'web5/web_system' } },
+          })),
+        }),
+        get: async ({ pull_number }) => {
+          const q = queues[pull_number];
+          const s = q.length > 1 ? q.shift() : q[0];
+          return {
+            data: {
+              number: pull_number,
+              node_id: `PR_${pull_number}`,
+              mergeable_state: s,
+              head: { sha: `head${pull_number}` },
+              base: { sha: 'base000' },
+            },
+          };
+        },
+      },
+      repos: {
+        getCommit: async ({ ref }) => {
+          const p = prs.find((x) => `head${x.number}` === ref) || {};
+          return { data: { parents: p.parents || [{ sha: 'older' }] } };
+        },
+      },
+    },
+    graphql: async (q, vars) => {
+      if (q.includes('updatePullRequestBranch')) {
+        st.mutations.push(vars);
+        return { updatePullRequestBranch: { pullRequest: { number: 0 } } };
+      }
+      // 线上 GraphQL 对未知字段是**报错**，不是静默成功；mock 必须照这个来，
+      // 否则「mutation 名写错」会被测成绿的（与 runEnable 的 recognize 同一动机）。
+      throw new Error("Field 'updateBranch' doesn't exist on type 'Mutation'");
+    },
+  };
+  // push 事件：payload 里没有 pull_request —— 脚本如果误读 context.payload.pull_request 会当场挂
+  const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: {} };
+  const sandbox = newSandbox({
+    github,
+    context,
+    core: {
+      notice: (m) => st.notices.push(m),
+      warning: (m) => st.warnings.push(m),
+      setFailed: (m) => st.failed.push(m),
+      info: () => {},
+    },
+  });
+  sandbox.console = { log: (m) => st.logs.push(String(m)), warn: () => {} };
+  exec(script, sandbox);
+  return st;
+}
+
 // ─────────────────────────── 5. 行为用例 ───────────────────────────
 (async () => {
   if (enableMerge) {
@@ -381,6 +464,55 @@ function runSync(script, { states = ['behind'], parents = [{ sha: 'older' }] } =
       'behave:UNKNOWN 等一轮重新读取',
       s.reads === 2 && s.mutations.length === 1,
       `reads=${s.reads} mutation=${s.mutations.length}`,
+    );
+  }
+
+  if (masterSyncBlock) {
+    // 11. 混合一轮：behind 的同步、clean 的不动、草稿跳过、fork 跳过
+    let s = runMasterSync(masterSyncBlock, [
+      { number: 501, states: ['behind'] },
+      { number: 502, states: ['clean'] },
+      { number: 503, draft: true },
+      { number: 504, fork: true },
+    ]);
+    await tick();
+    t(
+      'behave:master 前进后只同步 behind 的 PR',
+      s.mutations.length === 1 &&
+        s.mutations[0].id === 'PR_501' &&
+        s.mutations[0].oid === 'head501' &&
+        s.notices.length === 1 &&
+        s.failed.length === 0,
+      `mutation=${s.mutations.length}（应 1，且只打 #501）draft/fork 被误动即为错`,
+    );
+
+    // 12. 安全阀：head 已含 base → 跳过（master 连推两次不重复同步）
+    s = runMasterSync(masterSyncBlock, [{ number: 505, states: ['behind'], parents: [{ sha: 'base000' }] }]);
+    await tick();
+    t(
+      'behave:master 同步的安全阀生效',
+      s.mutations.length === 0 && s.logs.join(' ').includes('防重复同步'),
+      `mutation=${s.mutations.length}`,
+    );
+
+    // 13. unknown（GitHub 异步计算中）→ 等一轮再读，不能当"无需同步"
+    s = runMasterSync(masterSyncBlock, [{ number: 506, states: ['unknown', 'behind'] }]);
+    await tick();
+    t(
+      'behave:master 同步遇 UNKNOWN 等一轮',
+      s.mutations.length === 1,
+      `mutation=${s.mutations.length}`,
+    );
+
+    // 14. 负向：mutation 名写错 → 只 warning 不判红（同步是补齐条件，不是放行门禁）
+    s = runMasterSync(masterSyncBlock.replace(/updatePullRequestBranch/g, 'updateBranch'), [
+      { number: 507, states: ['behind'] },
+    ]);
+    await tick();
+    t(
+      'behave:master 同步失败只 warning',
+      s.warnings.length === 1 && s.failed.length === 0,
+      `warnings=${s.warnings.length} setFailed=${s.failed.length}`,
     );
   }
 
