@@ -1,8 +1,19 @@
 <!--
   这张模板只干一件事：把「哪些检查会拦、哪些只是提示」写进每张 PR。
-  口径来源：docs/development/质量门禁总纲.md §5（阻断力真相）。
+  口径来源：docs/development/gates/01-日常使用.md §阻断力真相。
   刻意保持短——模板一长，人就开始删它。
 -->
+
+## 关联 Issue
+
+<!--
+  分支名带编号（fix/123-xxx、feature/123-xxx）时，auto-pr 会自动填 Closes #123，本节可留空。
+  没开 issue 的写：无 issue —— <一句为什么不必开>（判据见 docs/development/issue-workflow.md §1，
+  只有「十分钟说完 + 一次改完 + 不需要发布方案」三条全中才允许）。
+  ⚠️ 只有 Closes/Fixes #N 才会自动关单，写「见 #123」不会关。
+-->
+
+Closes #
 
 ## 改了什么
 

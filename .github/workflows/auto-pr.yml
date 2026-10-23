@@ -93,7 +93,34 @@ jobs:
             const commits = compare.commits || [];
             const titles = commits.slice(0, 5).map((c) => c.commit.message.split('\n')[0]);
             const title = titles[0] ? titles[0].slice(0, 100) : `feat(${head}): 变更`;
+
+            // 2.1) 从分支名解析 issue 编号（feature/123-xxx、fix/123-xxx），为 PR 注入
+            //      `Closes #123` —— 这是 GitHub **唯一**能自动关单的语法。
+            //      为什么要自动注入：手写 body 时最容易漏，漏了的代价是「PR 合并了、
+            //      issue 永远开着」，两周后没人记得到底做完没有（等于退回没用 issue 的状态）。
+            //      为什么必须校验：issue 与 PR 共用同一套编号序列，编号写错时 Closes 只是
+            //      一句无效文本，却会让人以为关联成功 —— 静默失败比不写更糟，所以查不到就 warning。
+            let closesLine = '';
+            const issueMatch = head.match(/^(?:feature|fix)\/(\d+)-/);
+            if (issueMatch) {
+              const n = Number(issueMatch[1]);
+              try {
+                const { data: iss } = await github.rest.issues.get({ owner, repo, issue_number: n });
+                if (iss.pull_request) {
+                  console.log(`分支名里的 #${n} 指向的是 PR 而非 issue，不写 Closes`);
+                } else {
+                  closesLine = `Closes #${n}`;
+                  console.log(`分支名解析到 issue #${n}（state=${iss.state}），将写入 Closes #${n}`);
+                }
+              } catch (e) {
+                core.warning(`分支名含编号 ${n}，但读不到该 issue，未写入 Closes（确认它是 issue 编号，不是 PR 编号）：${e.message}`);
+              }
+            } else {
+              console.log('分支名不含 issue 编号（形如 fix/123-xxx），不写 Closes；PR 模板「关联 Issue」一栏需人工填');
+            }
+
             const body = [
+              ...(closesLine ? [closesLine, ``] : []),
               `## 自动生成的 PR（由 GitHub Actions 创建）`,
               ``,
               `- **分支**: \`${head}\` → \`${base}\``,

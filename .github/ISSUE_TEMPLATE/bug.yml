@@ -1,0 +1,106 @@
+name: 缺陷（有复现路径的坏行为）
+description: 线上/本地能复现的错误。必须带实证，否则只能算「怀疑」。
+title: "fix: "
+labels: ["bug", "P2-待排期"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        规则出处：[docs/development/issue-workflow.md](https://github.com/web5/web_system/blob/master/docs/development/issue-workflow.md)。
+        **本仓库是 PUBLIC** —— 不要贴凭证、内网 IP、服务器路径、真实用户数据。
+
+  - type: input
+    id: symptom
+    attributes:
+      label: 一句话症状
+      description: 用「在哪、点了什么、看到什么」说清，别写「有 bug」。
+      placeholder: 例：dev 采集明细 /content/items 整页报服务器错误，列表数据其实是好的
+    validations:
+      required: true
+
+  - type: dropdown
+    id: env
+    attributes:
+      label: 复现环境
+      description: 单选。两个环境表现不一致的，在「实证」里分开写。
+      options:
+        - dev
+        - prod
+        - 本地
+        - dev + prod 同为
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 从可复现的起点开始，编号列出。写不到「照着做一定复现」说明还没定位到入口。
+      placeholder: |
+        1. 用有 content:read 权限的号登录 admin
+        2. 进 自媒体运营 → 采集明细
+        3. 页面报错，Network 里 content/items/stats 返回 500
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 实证（日志 / 接口返回 / 运行版本）
+      description: |
+        **必填，不是客套**。10-23 那次事故里，`pm2 logs` 里的一行
+        `.../1e946126/node_modules/...` 直接排除了「发布没生效」这个错误方向；
+        没有实证时，同一个症状会被误判成发布问题、多查两小时。
+        至少给一条：真实报错栈 / 接口原始响应 / 运行版本号。
+      placeholder: |
+        pm2 logs content-hub：00:02:12 ERROR [ExceptionsHandler] You have an error in your SQL syntax ... near '' at line 1
+        运行版本：.../1e946126/node_modules/...（说明跑的是最新构建）
+    validations:
+      required: true
+
+  - type: textarea
+    id: excluded
+    attributes:
+      label: 已排除的假设
+      description: 写清「查过什么、为什么不成立」，避免下一个人重走。没查过就留空，别猜。
+      placeholder: |
+        - 发布没生效 → 否，日志路径含最新 commit
+        - 前端缓存 → 否，产物 chunk 内 grep 到新代码
+
+  - type: textarea
+    id: root_cause
+    attributes:
+      label: 根因假设 / 定位线索
+      description: 指到文件行号最好。不确定就写「待定 + 下一步查哪里」。
+      placeholder: |
+        servers/content-hub/src/content/services/content.service.ts itemStats()：QueryBuilder 字符串括号未闭合
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: 回归用例（修完靠什么证明不再犯）
+      description: |
+        这条会被当作 R17 `Test:` 的依据。写「用什么断言、挡哪种写法」，
+        不写「已修复，测试通过」——那种句子过两周没有任何信息量。
+      placeholder: |
+        新增 content.service.spec.ts：断言原生 SQL 的 IN 子句括号配平 + 占位符数量与 params 一致；
+        负向验证：把 SQL 改回错误写法，该用例必须红。
+
+  - type: textarea
+    id: blast
+    attributes:
+      label: 影响面 / 发布影响
+      description: 涉及哪些服务或前端模块、需不需要动数据。纯前端单点可写「无」。
+      placeholder: |
+        后端：content-hub；前端：admin（ContentItems.vue 降级）
+        数据：无 DDL
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 已搜过同类 issue，不是重复登记
+          required: true
+        - label: 实证部分贴的是原始输出，不是转述
+          required: true

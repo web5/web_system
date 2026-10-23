@@ -1,0 +1,105 @@
+name: 需求（新功能 / 新接口 / 新页面）
+description: 用户能看见的新能力。有设计决策的，方案另落 docs/，issue 只放链接与验收。
+title: "feat: "
+labels: ["enhancement", "P2-待排期"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        规则出处：[docs/development/issue-workflow.md](https://github.com/web5/web_system/blob/master/docs/development/issue-workflow.md)。
+        命中 UI 门 / 契约门 / 新增接口门的，先看 [docs/协作指令速查.md](https://github.com/web5/web_system/blob/master/docs/协作指令速查.md) §1 —— issue 不能替代原型确认和评审报告。
+        **本仓库是 PUBLIC** —— 不要贴凭证、内网 IP、服务器路径。
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标（用户可见的结果）
+      description: 描述「做完之后用户能做什么」，不描述代码结构。一句话能说清就别写三句。
+      placeholder: 例：在 admin 里能按来源筛选采集明细，并看到每个来源最近一次采集时间
+    validations:
+      required: true
+
+  - type: input
+    id: why_now
+    attributes:
+      label: 为什么现在做
+      description: 什么触发的。写不出来通常说明这件事还不该做。
+      placeholder: 例：10-22 运营走查时 8 个来源漏采，没有时间戳就判断不出是没采还是没数据
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 范围外（明确不做什么）
+      description: |
+        **必填**。不写这栏的 issue，做完一定会被追加需求，然后变成一周的活儿。
+        写「不涉及 X」，比留空强。
+      placeholder: |
+        - 不做来源的增删改，只做筛选与时间展示
+        - 不做导出
+        - 不改采集调度频率
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准（可判定）
+      description: |
+        每条都要能回答「通过 / 不通过」，禁止写「体验良好」。
+        发布后要逐条走查，所以也决定了发布清单的粒度。
+      placeholder: |
+        1. 8 个来源都能在筛选下拉里出现
+        2. 选任一来源，列表只剩该来源数据，条数与 DB count 一致
+        3. 最近采集列：有数据显相对时间，无数据显示「—」，不报错
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 影响面
+      description: 多选。决定要过哪几道门、发布顺序怎么排。
+      multiple: true
+      options:
+        - 后端服务（servers/*）
+        - admin 管理端（apps/admin）
+        - deploy-console / mcp-admin
+        - portal / 小程序（品牌端）
+        - packages/*（共享层，会波及其他端）
+        - 数据库迁移
+        - 流水线 / 配置 / CI
+        - 纯文档
+    validations:
+      required: true
+
+  - type: textarea
+    id: release_order
+    attributes:
+      label: 发布顺序与依赖
+      description: |
+        顺序铁律是「后端 → 数据 → 前端指针」。有跨服务常量、权限项、网关路由变更的必须写在这里，
+        否则会踩「功能发了但菜单看不见」。
+      placeholder: |
+        1. content-hub 后端
+        2. 权限常量同步（早于前端，否则菜单被门控过滤）
+        3. admin 前端指针
+        依赖：网关版本需已含新路径
+
+  - type: input
+    id: design_doc
+    attributes:
+      label: 方案 / 原型链接
+      description: 有设计决策的必须给。方案落 docs/ 或 specs/，**不要贴在 issue 正文里**。
+      placeholder: docs/development/xxx-方案.md 或 specs/xxx/design.md
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 验收标准每条都能判通过/不通过（不是「体验良好」这类）
+          required: true
+        - label: 范围外已写，且不是「暂无」
+          required: true
