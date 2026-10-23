@@ -129,6 +129,13 @@ gh label create "chore"       --color C5DEF5 --description "重构/治理/门禁
 gh label create "回归"         --color 5319E7 --description "事故复盘派生的整改项，需带 TC 用例"
 ```
 
+> 🔴 **前置条件：token 必须给 `Issues: Read and write`**
+> 实测（2026-10-23，issue #401）：fine-grained PAT 没这条权限时，`gh issue create --label` **照样返回成功 URL，但标签被静默丢弃**；
+> 且**改正文 / 加标签 / 评论 / 手工关单全部 403** —— 三个环节（标签、验收 comment、关单）同时失效，却一条报错都没有。
+> 判据只能是回查 `gh issue view <N> --json labels`，不能看命令是否成功。
+> `scripts/issue/new.sh` 已内置回查，缺权限时**exit 4** 并列出被丢的标签。
+> 修法：Settings → Developer settings → Fine-grained tokens → 该 token → Permissions → **Issues: Read and write**。
+
 ---
 
 ## 6 与发布、验收、关单的衔接
@@ -251,6 +258,7 @@ scripts/issue/new.sh bug "..." --dry-run
 | auto-pr 从分支名注入 `Closes #N` | ✅ 已落地（CI 侧，无本地门） | 代码校验编号是 issue 而非 PR；查不到只 warning 不写死 |
 | 五个标签 | ✅ 已建（10-23 实测） | `P0-阻断` `P1-重要` `P2-待排期` `chore` `回归` |
 | 自测速记脚本 | ✅ 已落地 | `scripts/issue/new.sh`，8 个用例实跑（含 dry-run 与错误分支） |
+| token 具备 `Issues: Read and write` | ⚠️ **10-23 实测未授予** | 未开时：标签静默丢弃、无法评论/关单（见 §5 前置条件、#401）；脚本已改为 exit 4 报错 |
 | 把 S0 产出物回填进 `gates/01-日常使用.md` §1 | ❌ **未做** | 该文档正在治理中，留待下一轮统一改，避免与门禁重构冲突 |
 | 编号格式的机器校验（R19） | ❌ **不做** | 单人仓库，人工约定的成本低于维护一条新红线；若出现漏带编号，再加 warn 级 |
 | 「记一下」这句话被 AI 稳定识别 | ⚠️ **靠约定，无强制** | 写在本文 §8.1 与协作指令速查；AI 漏识别时人就多打一句 `用 scripts/issue/new.sh 记` |

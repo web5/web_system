@@ -180,6 +180,41 @@ if [ ! -x "$GH_BIN" ]; then
   exit 3
 fi
 
-"$GH_BIN" issue create --title "$FULL_TITLE" --body "$BODY" "${LABEL_ARGS[@]}"
+LAST_OUT="$("$GH_BIN" issue create --title "$FULL_TITLE" --body "$BODY" "${LABEL_ARGS[@]}" 2>&1)" || {
+  printf '%s\n' "$LAST_OUT" >&2
+  exit 5
+}
+printf '%s\n' "$LAST_OUT"
+
+# ---- 建完校验标签是否真的生效 ----
+# 实测（2026-10-23）：fine-grained PAT 若没给 Issues: Read and write，
+# `gh issue create --label` 仍然**成功返回 URL，但标签被静默丢弃**（后续 edit/comment/close 全 403）。
+# 静默失败比报错更糟 —— 优先级轴空了却没人知道，等于这套标签体系没生效。
+# 所以这里必须回查一次；查不到就明确报错并给修法，不假装成功。
+ISSUE_URL="$(printf '%s\n' "$LAST_OUT" | grep -oE 'https://github.com/[^ ]+/issues/[0-9]+' | tail -n 1)"
+echo
+if [ -n "$ISSUE_URL" ]; then
+  echo "已创建：$ISSUE_URL"
+  ISSUE_NO="${ISSUE_URL##*/}"
+  REPO_SLUG="$("$GH_BIN" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+  if [ -n "$REPO_SLUG" ]; then
+    APPLIED="$("$GH_BIN" api "repos/${REPO_SLUG}/issues/${ISSUE_NO}" --jq '[.labels[].name] | join(",")' 2>/dev/null || true)"
+    MISSING=""
+    for l in "$BASE_LABELS" "$PRIORITY" ${EXTRA_LABELS+"${EXTRA_LABELS[@]}"}; do
+      case ",${APPLIED}," in *,${l},*) ;; *) MISSING+=" ${l}" ;; esac
+    done
+    if [ -n "$MISSING" ]; then
+      echo "🔴 标签没生效（issue 已创建，但以下标签被丢弃）：${MISSING}" >&2
+      echo "   原因通常是 token 缺 Issues 写权限（实测：能 create，不能 edit/label/comment/close）。" >&2
+      echo "   修法：GitHub → Settings → Developer settings → Fine-grained tokens →" >&2
+      echo "         选中当前 token → Permissions → Issues: Read and write → 保存后重试。" >&2
+      exit 4
+    fi
+    echo "标签已生效：${APPLIED}"
+  fi
+else
+  echo "已创建（未能解析 URL，跳过标签校验）"
+fi
+
 echo
 echo "→ 记得回填：① 根因 ② 回归用例（缺这两项，这条 issue 只能算线索，不算登记）"
