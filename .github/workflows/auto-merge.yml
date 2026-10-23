@@ -145,8 +145,12 @@ jobs:
             }
 
             try {
+              // ⚠️ `$oid` 必须声明成 **GitObjectID!**，不是 String! ——
+              // 写 String! 会被 schema 拒：`Type mismatch on variable $oid and argument
+              // expectedHeadOid (String! / GitObjectID)`（PR #409 实测，mock 测不出来，
+              // 因为假 graphql 不校验 schema）。
               await github.graphql(
-                `mutation($id:ID!,$oid:String!){
+                `mutation($id:ID!,$oid:GitObjectID!){
                    updatePullRequestBranch(input:{pullRequestId:$id, expectedHeadOid:$oid, updateMethod:MERGE}){
                      pullRequest { number } } }`,
                 { id: pr.node_id, oid: pr.head.sha },
@@ -156,6 +160,7 @@ jobs:
             } catch (e) {
               core.warning(
                 `PR #${n} 落后 master，自动同步失败：${e.message}｜` +
-                `主因多为 AUTO_PR_TOKEN 缺 contents:write；临时修法：gh pr update-branch ${n}`,
+                `常见原因：① AUTO_PR_TOKEN 缺 contents:write；② GraphQL 变量类型不对` +
+                `（expectedHeadOid 要 GitObjectID!）｜临时修法：gh pr update-branch ${n}`,
               );
             }
