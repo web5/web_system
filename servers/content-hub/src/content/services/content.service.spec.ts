@@ -94,3 +94,126 @@ describe('ContentService.itemStats 原生 SQL 形状', () => {
     }
   });
 });
+
+/**
+ * 成文预览的失败原因（#405）。
+ *
+ * 线上现象：pub 记录 status=failed，后台预览只有红叉 —— 想看原因得去查库。
+ * 直接透出 `detail.error` 又不行：那是日志原文，带 access_token、部署绝对路径。
+ * 所以这里钉死两件事：**该出现的信息要出现**，**不该出现的（凭证/路径）一个字都不能出现**。
+ */
+import { redactFailure } from './content.service';
+
+function buildPreviewService(pub: Record<string, any>) {
+  const publicationRepo: any = { findOne: async () => pub };
+  return new ContentService(
+    {} as any,
+    {} as any,
+    {} as any,
+    publicationRepo,
+    {} as any,
+    {} as any,
+    {} as any,
+  );
+}
+
+describe('redactFailure 脱敏规则（#405）', () => {
+  it('凭证类参数的值一律抹成 ***', () => {
+    const f = redactFailure(
+      '调用失败 access_token=abc123def456&appsecret=zzz999&other=keep',
+      new Date('2026-10-23T02:00:07Z'),
+    );
+    expect(f!.message).toContain('access_token=***');
+    expect(f!.message).toContain('appsecret=***');
+    // 非敏感参数保留，排障才有信息量
+    expect(f!.message).toContain('other=keep');
+  });
+
+  it('不误伤普通字段（monkey / design 里含 key / sig 的词）', () => {
+    const f = redactFailure('monkey=alpha design=beta key=gamma');
+    expect(f!.message).toContain('monkey=alpha');
+    expect(f!.message).toContain('design=beta');
+    expect(f!.message).toContain('key=***');
+  });
+
+  it('JSON 风格与 Bearer 也要抹', () => {
+    const f = redactFailure('body={"access_token":"tok_9f8e7d6c"} Authorization: Bearer eyJhbGciOiJIUzI1NiJ9');
+    expect(f!.message).not.toContain('tok_9f8e7d6c');
+    expect(f!.message).not.toContain('eyJhbGciOiJIUzI1NiJ9');
+    expect(f!.message).toContain('***');
+  });
+
+  it('部署绝对路径不外泄', () => {
+    const f = redactFailure('ENOENT: no such file /Users/geekwen/workspace/web_system/.env.prod');
+    expect(f!.message).not.toContain('/Users/geekwen');
+    expect(f!.message).toContain('***');
+  });
+
+  it('抓得到机器码（微信 [] 与 errcode= 两种写法）', () => {
+    expect(redactFailure('微信 草稿失败[48001] 未开通发布接口')!.code).toBe('48001');
+    expect(redactFailure('wechat errcode=45009 limit')!.code).toBe('45009');
+    expect(redactFailure('普通错误没有码')!.code).toBeNull();
+  });
+
+  it('超长消息截断到 400 字（不把接口返回体整段搬上页面）', () => {
+    const f = redactFailure('x'.repeat(2000));
+    expect(f!.message.length).toBe(400);
+  });
+
+  it('空错误返回 null（不产出空 failure 块）', () => {
+    expect(redactFailure('')).toBeNull();
+    expect(redactFailure(null)).toBeNull();
+    expect(redactFailure(undefined)).toBeNull();
+  });
+});
+
+describe('publicationPreview 透出失败原因（#405）', () => {
+  const basePub = {
+    id: 10,
+    target: 'wechat_mp',
+    status: 'failed',
+    external_id: null,
+    created_at: new Date('2026-10-23T02:00:07Z'),
+    updated_at: new Date('2026-10-23T02:00:09Z'),
+    pipeline_id: null,
+    detail: {
+      error: '公众号发布失败：微信 草稿失败[48001] token=abc123 invalid ip 1.2.3.4',
+      payload: { title: 'AI 资讯日报 ｜ 10-23', html: '<p>正文</p>' },
+    },
+  };
+
+  it('failed 记录带上脱敏后的 failure（code/message/at 三件）', async () => {
+    const r = await buildPreviewService(basePub).publicationPreview(10);
+    expect(r!.failure).toEqual({
+      code: '48001',
+      message: expect.stringContaining('token=***'),
+      at: '2026-10-23T02:00:09.000Z',
+    });
+  });
+
+  it('🔴 反向断言：整条响应里不得出现原始 token', async () => {
+    const r = await buildPreviewService(basePub).publicationPreview(10);
+    expect(JSON.stringify(r)).not.toContain('abc123');
+  });
+
+  it('success 记录不带 failure（不产出误导性的红条）', async () => {
+    const r = await buildPreviewService({
+      ...basePub,
+      status: 'success',
+      detail: { payload: { title: 't', html: '<p>x</p>' } },
+    }).publicationPreview(10);
+    expect(r!.failure).toBeNull();
+  });
+
+  it('drafted 记录也不带 failure —— 它的 error 是「已进草稿箱」提示语，不是失败', async () => {
+    const r = await buildPreviewService({
+      ...basePub,
+      status: 'drafted',
+      detail: {
+        error: '已进草稿箱待发布（media=xyz）：该公众号未开通发布接口权限',
+        payload: { title: 't', html: '<p>x</p>' },
+      },
+    }).publicationPreview(10);
+    expect(r!.failure).toBeNull();
+  });
+});

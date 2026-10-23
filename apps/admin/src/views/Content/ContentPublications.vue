@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
 import {
@@ -78,6 +78,12 @@ async function openPreview(p: Publication) {
     previewLoading.value = false;
   }
 }
+
+/** 失败原因标题：有机器码就带上，它是最快的定位入口（如微信 48001） */
+const failureTitle = computed(() => {
+  const code = preview.value?.failure?.code;
+  return code ? `发布失败（错误码 ${code}）` : '发布失败';
+});
 
 // ── 重新发布（Q3）──
 // 两个终点可选：草稿箱（mode=draft）/ 直接发布（mode=publish）。
@@ -273,6 +279,24 @@ onMounted(load);
               · 按管线 + 发布日期聚合 {{ preview.item_count }} 条明细重建
             </span>
           </div>
+          <!--
+            失败原因（#405）：此前 status=failed 只能看到一个红叉，原因得去查库。
+            内容是后端白名单 + 脱敏后的串（code/message/at），不含凭证与路径。
+          -->
+          <a-alert
+            v-if="preview.failure"
+            class="preview-failure"
+            type="error"
+            show-icon
+            :message="failureTitle"
+          >
+            <template #description>
+              <div class="failure-msg">{{ preview.failure.message }}</div>
+              <div v-if="preview.failure.at" class="muted">
+                失败于 {{ fmtTime(preview.failure.at) }}
+              </div>
+            </template>
+          </a-alert>
           <!-- 成文 HTML 由自家管线 LLM 生成后留存/重建，非用户输入 -->
           <div class="preview-html" v-html="preview.html" />
         </div>
@@ -314,6 +338,15 @@ onMounted(load);
 .muted {
   color: var(--text-faint);
   font-size: 12px;
+}
+.preview-failure {
+  margin-bottom: 16px;
+}
+.failure-msg {
+  word-break: break-all;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.7;
 }
 .preview-html {
   font-size: 14px;
