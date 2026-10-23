@@ -258,6 +258,26 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/Content/CollectMonitor.vue'),
             meta: { title: '采集监控', permission: 'content:view' },
           },
+          {
+            // 账号管理（2026-10-23）：自媒体三方平台凭据注册表。
+            // 先落路由 + 菜单骨架，页面内数据走占位（等 content_accounts 表与 CRUD 接口）。
+            path: 'accounts',
+            name: 'ContentAccounts',
+            component: () => import('@/views/Content/ContentAccounts.vue'),
+            meta: { title: '账号管理', permission: 'content:view' },
+          },
+          {
+            path: 'accounts/new',
+            name: 'ContentAccountCreate',
+            component: () => import('@/views/Content/ContentAccountEdit.vue'),
+            meta: { title: '新增账号', permission: 'content:manage' },
+          },
+          {
+            path: 'accounts/:id',
+            name: 'ContentAccountEdit',
+            component: () => import('@/views/Content/ContentAccountEdit.vue'),
+            meta: { title: '编辑账号', permission: 'content:manage' },
+          },
         ],
       },
     ],

@@ -6,7 +6,9 @@
 - 需求一句话：把散在服务器环境变量里的自媒体平台凭据收进后台可管理的加密注册表，
   让「加一个号」不用上机改 `.env`、不用重启进程，并在发布前就知道这个号有没有发布权限。
 
-> 状态：**草稿（待确认）** —— 未确认前不许写 UI 源码（R9b / L1 hook）。
+> 状态：**已确认（2026-10-23 用户过完原型 p11–p19，无异议）** —— 可写 UI 源码（R9b / L1 hook）。
+> 落地进度：路由 `/content/accounts` + BasicLayout 菜单 + `ContentAccounts.vue` / `ContentAccountEdit.vue`
+> 骨架页已落（数据走占位，等 `content_accounts` 表与 CRUD / 连通性检测接口）。
 > 配套原型：`docs/ui/prototypes/admin-media-ops.html`（自媒体运营**模块稿**的第 6 个菜单页，
 > 2 个 section：列表 / 新增编辑；评审台场景包 **p11–p19** 共 9 个 = 下面 9 条评审分支）。
 >
