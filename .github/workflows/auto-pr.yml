@@ -64,23 +64,55 @@ jobs:
             const head = context.ref.replace(/^refs\/heads\//, '');
             const base = 'master';
 
+            // 挂自动合入 —— 为什么用 GraphQL（2026-10-23 修 #396）：
+            // 此前是 `github.rest.pulls.enableAutoMerge(...)`，octokit **没有这个方法**，
+            // 每次抛 TypeError 被 catch 成 warning → 恒绿、看不出来、承诺从未生效。
+            // REST 只有读接口（auto_merge 字段），能挂上的是 GraphQL mutation。
+            // 本文件里挂不上只 warning（建 PR 才是主职责，不能因为挂自动合入失败就判失败）；
+            // 真正的红由 auto-merge.yml 负责 —— 它唯一职责就是这件事。
+            const AM_QUERY = `query($owner:String!,$repo:String!,$num:Int!){
+              repository(owner:$owner,name:$repo){ pullRequest(number:$num){
+                id state autoMergeRequest { enabledAt mergeMethod } } } }`;
+            const enableAutoMerge = async (num) => {
+              try {
+                const got = await github.graphql(AM_QUERY, { owner, repo, num });
+                const pull = got.repository.pullRequest;
+                if (!pull) throw new Error(`读不到 PR #${num}`);
+                if (pull.state !== 'OPEN') {
+                  console.log(`PR #${num} 是 ${pull.state}，无需挂自动合入`);
+                  return;
+                }
+                if (pull.autoMergeRequest) {
+                  console.log(`PR #${num} 自动合入已启用（mergeMethod=${pull.autoMergeRequest.mergeMethod}），幂等跳过`);
+                  return;
+                }
+                await github.graphql(
+                  `mutation($id:ID!,$m:PullRequestMergeMethod!){
+                     enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:$m}){
+                       pullRequest { number autoMergeRequest { enabledAt mergeMethod } } } }`,
+                  { id: pull.id, m: 'MERGE' },
+                );
+                // 回查实际状态，不看调用是否抛错（#396 的回归判据）
+                const after = await github.graphql(AM_QUERY, { owner, repo, num });
+                if (!after.repository.pullRequest.autoMergeRequest) {
+                  throw new Error('enablePullRequestAutoMerge 未报错，但 autoMergeRequest 仍为 null');
+                }
+                console.log(`PR #${num} 已启用自动合入（mergeMethod=MERGE）`);
+              } catch (e) {
+                core.warning(`PR #${num} 启用自动合入失败：${e.message}（由 auto-merge.yml 兜底并判红）`);
+              }
+            };
+
             // 1) 幂等检查：该分支是否已有 PR
             const { data: existing } = await github.rest.pulls.list({
               owner, repo, state: 'open', head: `${owner}:${head}`, base,
             });
             if (existing.length > 0) {
               console.log(`已存在 PR #${existing[0].number}，跳过创建`);
-              // 分支再 push 时同样确保 auto-merge 处于启用状态（幂等）
-              try {
-                // merge_method 由 squash 改为 merge（2026-09-30）：仓库合并惯例是
-                // **merge commit**（保留分支历史，与 .github/workflows/auto-merge.yml 一致）。
-                await github.rest.pulls.enableAutoMerge({
-                  owner, repo, pull_number: existing[0].number, merge_method: 'merge',
-                });
-                console.log(`PR #${existing[0].number} 已启用自动合入（merge）`);
-              } catch (e) {
-                core.warning(`PR #${existing[0].number} 启用自动合入失败（检查仓库设置与分支保护）：${e.message}`);
-              }
+              // 分支再 push 时同样确保 auto-merge 处于启用状态（幂等）。
+              // merge_method 由 squash 改为 merge（2026-09-30）：仓库合并惯例是 merge commit
+              //（保留分支历史），与 auto-merge.yml 一致。
+              await enableAutoMerge(existing[0].number);
               return { skipped: true, number: existing[0].number, url: existing[0].html_url };
             }
 
@@ -139,18 +171,9 @@ jobs:
             console.log(`PR 已创建: #${pr.number} ${pr.html_url}`);
 
             // 4) 启用自动合入（**merge**，仓库惯例为 merge commit）：分支保护要求的 checks
-            //    全绿后 GitHub 自动合。另见 auto-merge.yml —— 它对**所有** PR 做同样的兜底。
+            //    全绿后 GitHub 自动合。另见 auto-merge.yml —— 它对**所有** PR 做同样的兜底，
+            //    并且**挂不上时判红**（本文件只 warning，因为建 PR 才是主职责）。
             //    前置条件（仓库设置一次）：① Settings→General 勾选 Allow auto-merge
-            //    ② master 分支保护规则把 quality-gate 的两个 job 设为必需检查。
-            //    未配置时此调用会 422，降级为 warning 不阻断建 PR。
-            for (const n of [pr.number]) {
-              try {
-                await github.rest.pulls.enableAutoMerge({
-                  owner, repo, pull_number: n, merge_method: 'merge',
-                });
-                console.log(`PR #${n} 已启用自动合入（merge）`);
-              } catch (e) {
-                core.warning(`PR #${n} 启用自动合入失败（检查仓库 Allow auto-merge 与 master 分支保护是否已配置）：${e.message}`);
-              }
-            }
+            //    ② master 分支保护把 quality-gate 的 job 设为必需检查。
+            await enableAutoMerge(pr.number);
             return { created: true, number: pr.number, url: pr.html_url };
