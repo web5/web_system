@@ -128,6 +128,9 @@ export class PipelineService {
           // 公众号通道：日报 markdown 转 HTML（图片已由发布器处理）
           html: target === 'wechat_mp' ? markdownToHtml(markdown) : undefined,
           folder: pipeline.tencent_folder ?? undefined,
+          // 发布模式只对公众号生效（腾讯文档没有草稿概念），未配置按 publish
+          mode:
+            target === 'wechat_mp' && pipeline.publish_mode === 'draft' ? 'draft' : 'publish',
         });
         await this.publicationRepo.save(
           this.publicationRepo.create({
@@ -138,6 +141,7 @@ export class PipelineService {
             external_id: result.external_id ?? null,
             detail: {
               ...(result.error ? { error: result.error } : {}),
+              ...(result.media_id ? { media_id: result.media_id } : {}),
               // p40：留存成文 payload，供「重新发布 / 成文预览」复用（无 payload 的历史记录靠聚合重建）
               payload: {
                 title,
@@ -148,7 +152,8 @@ export class PipelineService {
             },
           }),
         );
-        if (result.success) published++;
+        // 草稿不算「已发布」：它停在草稿箱，读者还看不到
+        if (result.success && !result.drafted) published++;
       }
     }
 

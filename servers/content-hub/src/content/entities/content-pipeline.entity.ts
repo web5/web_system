@@ -31,6 +31,16 @@ export class ContentPipelineEntity {
   @Column({ type: 'json', nullable: true, comment: '发布目标列表' })
   publish_targets: string[] | null;
 
+  /**
+   * 发布模式（2026-10-23 新增）：publish=建草稿后直接发布，draft=只进草稿箱。
+   *
+   * 背景：公众号资质不够（未认证个人号 → 48001）时「直接发布」必然失败降级，
+   * 每天定时跑出来的记录都是 drafted，看着像在报错。现在把它做成配置项：
+   * 资质没到位就把管线设成 draft，出的是**预期结果**，不再是伪装成的失败。
+   */
+  @Column({ type: 'varchar', length: 16, default: 'publish', comment: '发布模式 publish | draft' })
+  publish_mode: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '腾讯文档目标目录' })
   tencent_folder: string | null;
 

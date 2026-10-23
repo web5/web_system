@@ -86,7 +86,12 @@ export class WechatMpPublisher implements IPublisher {
     return client;
   }
 
-  /** 发布：建草稿 → freepublish 提交发布（对外契约 publish()） */
+  /**
+   * 发布：建草稿 →（mode=publish 时）freepublish 提交发布。
+   *
+   * mode='draft' 时只建草稿就返回成功 —— 草稿箱是**预期终点**，不是失败。
+   * 公众号资质不够（48001）时正式发布会自动降级到同一终点，但那次 success=false。
+   */
   async publish(payload: PublishPayload): Promise<PublishResult> {
     const title = payload.title?.trim();
     const html = payload.html?.trim();
@@ -103,6 +108,11 @@ export class WechatMpPublisher implements IPublisher {
 
     try {
       const mediaId = await this.buildDraft(client, { ...payload, title, html });
+      if (payload.mode === 'draft') {
+        this.logger.log(`[wechat_mp] 已按草稿模式建稿 media=${mediaId} «${title}»`);
+        // 不写 error：这是预期结果，不是失败；后台按 drafted 档位展示「待发布」即可
+        return { success: true, drafted: true, media_id: mediaId };
+      }
       try {
         const publishId = await client.submitFreepublish(mediaId);
         this.logger.log(

@@ -53,12 +53,18 @@ const PUBLISH_TARGET_LABEL: Record<string, string> = {
   wechat_mp: '公众号',
 };
 
+const PUBLISH_MODE_LABEL: Record<string, string> = {
+  publish: '直接发布',
+  draft: '只建草稿',
+};
+
 const pipelineColumns = [
   { title: '编码', dataIndex: 'code', width: 130 },
   { title: '类型', dataIndex: 'type', width: 90 },
   { title: 'cron', dataIndex: 'cron', width: 120 },
   { title: '标题模板', dataIndex: 'title_template', ellipsis: true },
   { title: '发布目标', key: 'publish_targets', width: 170 },
+  { title: '发布模式', key: 'publish_mode', width: 110 },
   { title: '状态', key: 'enabled', width: 80 },
   { title: '操作', key: 'action', width: 140 },
 ];
@@ -96,6 +102,11 @@ onMounted(load);
               {{ PUBLISH_TARGET_LABEL[t] ?? t }}
             </a-tag>
           </a-space>
+        </template>
+        <template v-else-if="column.key === 'publish_mode'">
+          <a-tag :color="record.publish_mode === 'draft' ? 'orange' : 'blue'">
+            {{ PUBLISH_MODE_LABEL[record.publish_mode ?? 'publish'] ?? '直接发布' }}
+          </a-tag>
         </template>
         <template v-else-if="column.key === 'enabled'">
           <a-switch :checked="record.enabled" :disabled="!canManage" @change="(checked: boolean) => onToggle(record, checked)" />

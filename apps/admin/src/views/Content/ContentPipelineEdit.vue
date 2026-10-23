@@ -21,6 +21,16 @@ const PUBLISH_TARGETS = [
   { value: 'wechat_mp', label: '公众号' },
 ];
 
+/**
+ * 发布模式：公众号通道的终点。
+ * draft 不是失败态——公众号没开通发布接口权限（未认证个人号 48001）时，
+ * 「直接发布」必然降级，与其每天撞一次红叉，不如把草稿设成管线的预期终点。
+ */
+const PUBLISH_MODES = [
+  { value: 'publish', label: '直接发布（建草稿后提交）' },
+  { value: 'draft', label: '只建草稿（停在草稿箱待人工发布）' },
+];
+
 const form = reactive({
   code: '',
   type: 'paper',
@@ -28,6 +38,7 @@ const form = reactive({
   cron: '0 9 * * *',
   llm_prompt: '',
   publish_targets: [] as string[],
+  publish_mode: 'publish' as 'draft' | 'publish',
   tencent_folder: '',
   enabled: true,
 });
@@ -47,6 +58,7 @@ async function loadPipeline() {
       cron: p.cron,
       llm_prompt: p.llm_prompt ?? '',
       publish_targets: p.publish_targets ?? [],
+      publish_mode: (p.publish_mode as 'draft' | 'publish') ?? 'publish',
       tencent_folder: p.tencent_folder ?? '',
       enabled: p.enabled,
     });
@@ -69,6 +81,7 @@ async function submit() {
     cron: form.cron.trim(),
     llm_prompt: form.llm_prompt || null,
     publish_targets: form.publish_targets,
+    publish_mode: form.publish_mode,
     tencent_folder: form.tencent_folder || null,
     enabled: form.enabled,
   };
@@ -131,6 +144,14 @@ onMounted(loadPipeline);
           <a-select-option v-for="t in PUBLISH_TARGETS" :key="t.value" :value="t.value">{{ t.label }}</a-select-option>
         </a-select>
       </a-form-item>
+      <a-form-item label="发布模式">
+        <a-select v-model:value="form.publish_mode">
+          <a-select-option v-for="m in PUBLISH_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-select-option>
+        </a-select>
+        <div class="field-hint">
+          仅对「公众号」目标生效；腾讯文档没有草稿概念，始终直接发布。
+        </div>
+      </a-form-item>
       <a-row :gutter="16">
         <a-col :span="12">
           <a-form-item label="腾讯文档目录">
@@ -183,6 +204,11 @@ onMounted(loadPipeline);
 .mono {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
+}
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
 }
 .form-foot {
   margin-top: 8px;
