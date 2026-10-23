@@ -1634,6 +1634,87 @@
   .zm-scope .test-foot{
   display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap;
   }
+  .zm-scope .acc-banner{
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-card); background: var(--info-bg); border: 1px solid var(--border); font-size: 13px; color: var(--t2); margin-bottom: 16px;
+  }
+  .zm-scope .acc-banner .ic{
+  color: var(--brand); flex: none; margin-top: 2px;
+  }
+  .zm-scope .acc-banner b{
+  color: var(--t1); font-weight: 600;
+  }
+  .zm-scope .acc-form{
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 16px;
+  }
+  .zm-scope .acc-field{
+  display: flex; flex-direction: column; gap: 6px;
+  }
+  .zm-scope .acc-field label{
+  font-size: 13px; color: var(--t3); font-weight: 500;
+  }
+  .zm-scope .acc-field label .req{
+  color: var(--err);
+  }
+  .zm-scope .acc-field .hint{
+  font-size: 12px; color: var(--t4);
+  }
+  .zm-scope .acc-maskrow{
+  display: flex; align-items: center; gap: 8px;
+  }
+  .zm-scope .acc-maskval{
+  flex: 1; font-family: var(--mono); font-size: 13px; color: var(--t3); background: var(--bg-subtle); border-radius: var(--r-control); padding: 0 10px; height: 32px; display: flex; align-items: center;
+  }
+  .zm-scope .acc-foot{
+  position: sticky; bottom: 0; background: var(--bg-surface); border-top: 1px solid var(--border-subtle); padding: 12px 16px; display: flex; gap: 8px; align-items: center;
+  }
+  .zm-scope .acc-foot .right{
+  margin-left: auto; display: flex; gap: 8px;
+  }
+  .zm-scope .acc-panel{
+  margin: 0 16px 16px; border: 1px solid var(--border); border-radius: var(--r-control); overflow: hidden; display: none;
+  }
+  .zm-scope .acc-panel[data-show="1"]{
+  display: block;
+  }
+  .zm-scope .acc-phead{
+  padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  }
+  .zm-scope .acc-panel[data-result="ok"] .acc-phead{
+  background: var(--ok-bg); color: var(--ok);
+  }
+  .zm-scope .acc-panel[data-result="err"] .acc-phead{
+  background: var(--err-bg); color: var(--err);
+  }
+  .zm-scope .acc-kv{
+  display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px;
+  }
+  .zm-scope .acc-kv .k{
+  color: var(--t4);
+  }
+  .zm-scope .acc-caps{
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+  }
+  .zm-scope .acc-advice{
+  margin-top: 10px; padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--r-control); font-size: 13px; color: var(--t2);
+  }
+  .zm-scope .acc-mask{
+  position: fixed; inset: 0; background: var(--mask); display: none; align-items: center; justify-content: center; z-index: 80; padding: 24px;
+  }
+  .zm-scope .acc-mask.on{
+  display: flex;
+  }
+  .zm-scope .acc-modal{
+  background: var(--bg-surface); border-radius: var(--r-card); padding: 20px; width: 100%; max-width: 380px; box-shadow: var(--shadow-pop);
+  }
+  .zm-scope .acc-modal .t{
+  font-size: 15px; font-weight: 600; color: var(--t1); margin-bottom: 8px;
+  }
+  .zm-scope .acc-modal .d{
+  font-size: 13px; color: var(--t3); margin-bottom: 16px;
+  }
+  .zm-scope .acc-modal-foot{
+  display: flex; gap: 8px; justify-content: flex-end;
+  }
   .zm-scope{font-family:var(--sans);font-size:14px;color:var(--t2);line-height:1.6;}
 
   /* ===== 框架壳与菜单：对齐 apps/admin/src/layouts/BasicLayout.vue（scripts/lib/proto-shell.mjs 单源，勿手改） =====
@@ -1744,6 +1825,10 @@
   <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
   <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
   <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <!-- 账号管理（2026-10-23）：锁 / 密钥 / 连通性 -->
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="15" r="4"/><path d="m10 12 8-8 3 3-8 8"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v4"/></symbol>
 </svg>
 <div class="proto-head">
   <h1>admin 管理后台 · 菜单级整合稿 · 复用组件同构</h1>
@@ -2604,6 +2689,175 @@
         </div>
         <div class="footer-note">失败明细（错误原文）仅保留技术信息；用户可读的归因见「采集明细 · 质量」列</div>
       </section>
+
+      <!-- ═══════════ 账号管理 · 列表（2026-10-23 新增第 6 个菜单页）═══════════ -->
+      <section class="screen" id="zm-screen-accounts" data-demo-state="normal">
+        <div class="page-head">
+          <div>
+            <div class="page-title">账号管理</div>
+            <div class="page-desc">登记各平台账号凭据；发布管线与手动发布按账号取用，不再依赖服务器环境变量</div>
+          </div>
+          <button class="btn primary" data-need-role="admin" data-anno="A1" onclick="ZM.go('account-edit')"><svg class="ic"><use href="#i-plus"/></svg>新增账号</button>
+        </div>
+
+        <div class="acc-banner">
+          <svg class="ic"><use href="#i-lock"/></svg>
+          <div>
+            <b>凭据加密存储</b>：AppSecret 等以 AES-256-GCM 加密入库，列表与接口只返回掩码。<br>
+            解密钥由 <span style="font-family:var(--mono);font-size:12px">ACCOUNT_CRED_KEY_FILE</span> 指向的 0600 文件提供，
+            <b>不进进程环境变量</b>（避免 <span style="font-family:var(--mono);font-size:12px">pm2 env</span> 之类命令直接打出明文）；
+            密钥归本模块自管，<b>不进配置中心</b>。
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select class="select"><option>全部平台</option><option>公众号</option></select>
+          <select class="select"><option>全部状态</option><option>连通正常</option><option>异常</option><option>未检测</option></select>
+          <input class="input" placeholder="搜索名称 / 编码" />
+          <button class="btn" onclick="ZM.toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>刷新</button>
+        </div>
+
+        <div class="card" data-anno="A2">
+          <table class="table">
+            <thead>
+              <tr><th>账号</th><th>平台</th><th>主体标识</th><th>凭据</th><th>连通性</th><th>启用</th><th style="width:170px">操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div>大橙子社区</div><div class="cell-sub mono">default</div></td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="mono">wxc94524****717a06</span><div class="cell-sub">服务号 · 已认证</div></td>
+                <td><div class="mono">8815****&nbsp;****d39d</div><div class="cell-sub"><span class="tag ok sub">已加密</span></div></td>
+                <td><span class="tag ok"><svg class="ic" style="width:12px;height:12px"><use href="#i-check"/></svg>正常</span><div class="cell-sub">10-23 13:20 · 可正式发布</div></td>
+                <td><button class="switch on" data-need-role="admin" onclick="this.classList.toggle('on')"></button></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn text sm" data-need-role="admin" onclick="accEdit('ok');ZM.accCheck()">检测</button>
+                    <button class="btn text sm" data-need-role="admin" onclick="accEdit('err')">编辑</button>
+                    <button class="btn text sm" data-need-role="admin" style="color:var(--err)" onclick="ZM.accDelOpen()">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><div>科豆AI</div><div class="cell-sub mono">kedouai</div></td>
+                <td><span class="tag info">公众号</span></td>
+                <td><span class="mono">wx1b**************2f</span><div class="cell-sub">订阅号 · 未认证</div></td>
+                <td><div class="mono">9076****&nbsp;****1c8e</div><div class="cell-sub"><span class="tag ok sub">已加密</span></div></td>
+                <td><span class="tag warn"><svg class="ic" style="width:12px;height:12px"><use href="#i-warn"/></svg>权限不足</span><div class="cell-sub">48001 · 仅可建草稿</div></td>
+                <td><button class="switch on" data-need-role="admin" onclick="this.classList.toggle('on')"></button></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn text sm" data-need-role="admin" onclick="accEdit('err');ZM.accCheck()">检测</button>
+                    <button class="btn text sm" data-need-role="admin" onclick="accEdit('err')">编辑</button>
+                    <button class="btn text sm" data-need-role="admin" style="color:var(--err)" onclick="ZM.accDelOpen()">删除</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════ 账号管理 · 新增 / 编辑 ═══════════ -->
+      <section class="screen" id="zm-screen-account-edit" data-demo-state="normal">
+        <div class="page-head">
+          <div>
+            <div class="page-title" id="zm-accEditTitle">新增账号</div>
+            <div class="page-desc">凭据一经保存不再展示明文，仅显示掩码；需变更时点「重新录入」</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="t">基础信息</span></div>
+          <div class="acc-form">
+            <div class="acc-field">
+              <label>账号名称 <span class="req">*</span></label>
+              <input class="input" id="zm-accName" value="大橙子社区" placeholder="如：大橙子社区" />
+              <span class="hint">后台展示用，可随时改</span>
+            </div>
+            <div class="acc-field">
+              <label>账号编码 <span class="req">*</span></label>
+              <input class="input mono" id="zm-accCode" value="default" disabled />
+              <span class="hint">管线与接口引用，创建后不可改</span>
+            </div>
+            <div class="acc-field">
+              <label>平台 <span class="req">*</span></label>
+              <select class="select">
+                <option selected>公众号</option>
+                <option disabled>腾讯文档（已下线）</option>
+                <option disabled>小红书（未接入）</option>
+              </select>
+              <span class="hint">腾讯文档凭据 dev/prod 均未配置，本轮下线该目标</span>
+            </div>
+            <div class="acc-field">
+              <label>启用</label>
+              <div><button class="switch on" onclick="this.classList.toggle('on')"></button></div>
+              <span class="hint">停用后管线与手动发布均不可选该账号</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-anno="A3">
+          <div class="card-head"><span class="t">凭据</span><span class="tag ok sub" id="zm-accEncTag" style="display:none"><svg class="ic" style="width:12px;height:12px"><use href="#i-lock"/></svg>已加密保存</span></div>
+          <div class="acc-form">
+            <div class="acc-field">
+              <label>AppID <span class="req">*</span></label>
+              <input class="input mono" id="zm-accAppId" value="wxc945245618717a06" />
+            </div>
+            <div class="acc-field">
+              <label>AppSecret <span class="req">*</span></label>
+              <div class="acc-maskrow" id="zm-accSecretMask" style="display:none">
+                <div class="acc-maskval" id="zm-accSecretVal">8815****&nbsp;****d39d</div>
+                <button class="btn sm" data-need-role="admin" onclick="ZM.accResetSecret()">重新录入</button>
+              </div>
+              <div class="acc-maskrow" id="zm-accSecretInput">
+                <input class="input mono" type="password" placeholder="留空表示不修改" />
+                <button class="btn sm" onclick="ZM.accCancelSecret()">取消</button>
+              </div>
+              <span class="hint">以 AES-256-GCM 加密入库，界面不回显明文</span>
+            </div>
+            <div class="acc-field">
+              <label>GH_ID（选填）</label>
+              <input class="input mono" value="gh_e********" />
+              <span class="hint">部分接口需要原始 ID</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="t">连通性</span>
+            <button class="btn sm" data-need-role="admin" onclick="ZM.accCheck()"><svg class="ic"><use href="#i-plug"/></svg>测试连通性</button>
+          </div>
+          <div class="acc-panel" id="zm-accPanel" data-show="0" data-result="ok">
+            <div class="acc-phead" id="zm-accPHead"></div>
+            <div class="acc-pbody" id="zm-accPBody"></div>
+          </div>
+          <div style="padding:12px 16px;color:var(--t4);font-size:13px" id="zm-accCheckHint">未检测 · 保存前建议先测一次，权限不足会在这里提前暴露（如 48001）</div>
+        </div>
+
+        <div class="card">
+          <div class="acc-foot">
+            <button class="btn danger" data-need-role="admin" onclick="ZM.accDelOpen()"><svg class="ic"><use href="#i-trash"/></svg>删除账号</button>
+            <div class="right">
+              <button class="btn" onclick="ZM.go('accounts')">取消</button>
+              <button class="btn primary" data-need-role="admin" onclick="ZM.toast('已保存（原型演示）')">保存</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 删除二次确认：挂在 .content 内，与其它 section 一起被抽取（不进 trails） -->
+      <div class="acc-mask" id="zm-accDelMask">
+        <div class="acc-modal">
+          <div class="t">删除账号「大橙子社区」？</div>
+          <div class="d">该账号的加密凭据会一并删除，且不可恢复。若仍有管线引用此账号，那些管线会发布失败。</div>
+          <div class="acc-modal-foot">
+            <button class="btn" onclick="ZM.accDelClose()">取消</button>
+            <button class="btn danger" onclick="ZM.accDelClose();ZM.toast('已删除（原型演示）')">确认删除</button>
+          </div>
+        </div>
+      </div>
         <div class="mask" id="zm-triggerMask">
   <div class="modal">
     <div class="modal-head">
@@ -3747,7 +4001,7 @@ renderTypeList(); renderItems();
 /* 来自 admin-media-ops.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
   var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","screen-pipeline-edit","screen-runs","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","screen-pipeline-edit","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
   document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('zm-'+id) : RAW_BY_ID(id); };
 
 // ── 屏幕切换 ──
@@ -3760,6 +4014,8 @@ const SCREENS = {
   pipelines:      { el: 'screen-pipelines',      crumb: ['自媒体运营', '发布管线'] },
   'pipeline-edit':{ el: 'screen-pipeline-edit',  crumb: ['自媒体运营', '发布管线', '编辑管线'] },
   runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
+  accounts:       { el: 'screen-accounts',       crumb: ['自媒体运营', '账号管理'] },
+  'account-edit': { el: 'screen-account-edit',   crumb: ['自媒体运营', '账号管理', '新增账号'] },
 };
 function go(key) {
   /* 屏显隐**按 id 精确操作**，不按 `.screen` 类选择器：本稿会被同源抽取进 admin 整合稿
@@ -3810,6 +4066,82 @@ function resetFilter() {
   const q = document.querySelector('#screen-items .filter-bar input');
   if (q) q.value = '';
   if (typeof applyState === 'function') applyState('normal');
+}
+
+/* ── 账号管理（2026-10-23 新增第 6 个菜单页）──────────────────────────
+   ⚠️ 内联 onclick 用到的函数名（accResetSecret / accCancelSecret / accCheck /
+   accDelOpen / accDelClose）必须登记在 scripts/lib/proto-registry.mjs 的
+   SRC_MEDIA.exports 里：抽取进整合稿时脚本会被 IIFE 化 + ns 导出，不登记就是
+   is not defined（见 proto-registry.mjs 中 SRC_SETTINGS 的注释）。 */
+function accEdit(kind) {
+  const isEdit = (kind === 'err');
+  document.getElementById('accEditTitle').textContent = isEdit ? '编辑账号 · 科豆AI' : '新增账号';
+  document.getElementById('accName').value  = isEdit ? '科豆AI' : '大橙子社区';
+  document.getElementById('accCode').value  = isEdit ? 'kedouai' : 'default';
+  document.getElementById('accAppId').value = isEdit ? 'wx1b**************2f' : 'wxc945245618717a06';
+  document.getElementById('accSecretVal').innerHTML = isEdit ? '9076****&nbsp;****1c8e' : '8815****&nbsp;****d39d';
+  document.getElementById('accEncTag').style.display      = isEdit ? '' : 'none';
+  document.getElementById('accSecretMask').style.display  = isEdit ? '' : 'none';
+  document.getElementById('accSecretInput').style.display = isEdit ? 'none' : '';
+  /* 面包屑第三级随形态变（go() 已按 SCREENS 渲染过一次，这里重渲染） */
+  SCREENS['account-edit'].crumb[2] = isEdit ? '编辑账号' : '新增账号';
+  const c = SCREENS['account-edit'].crumb;
+  document.getElementById('crumb').innerHTML = c.map((x, i) =>
+    i === c.length - 1 ? '<b>' + x + '</b>' : x + ' <span class="sep">/</span> ').join('');
+  accCheckHide();
+}
+
+function accCheckHide() {
+  document.getElementById('accPanel').dataset.show = '0';
+  document.getElementById('accCheckHint').style.display = '';
+}
+
+function accCheck() {
+  const nm = document.getElementById('accName');
+  const isKedou = !!nm && nm.value.indexOf('科豆') >= 0;   // 科豆AI = 未认证订阅号 → 48001
+  const panel = document.getElementById('accPanel');
+  const head  = document.getElementById('accPHead');
+  const body  = document.getElementById('accPBody');
+  panel.dataset.show = '1';
+  document.getElementById('accCheckHint').style.display = 'none';
+  if (!isKedou) {
+    panel.dataset.result = 'ok';
+    head.innerHTML = '<svg class="ic"><use href="#i-check"/></svg>连通正常 · 耗时 412ms';
+    body.innerHTML =
+      '<div class="acc-kv"><div class="k">主体</div><div>大橙子社区（服务号 · 已认证）</div>' +
+      '<div class="k">AppID</div><div class="mono">wxc945245618717a06</div></div>' +
+      '<div class="acc-caps"><span class="tag ok">建草稿 可用</span>' +
+      '<span class="tag ok">正式发布 可用</span><span class="tag ok">封面上传 可用</span></div>';
+  } else {
+    panel.dataset.result = 'err';
+    head.innerHTML = '<svg class="ic"><use href="#i-warn"/></svg>权限不足 · 48001 api unauthorized';
+    body.innerHTML =
+      '<div class="acc-kv"><div class="k">主体</div><div>科豆AI（订阅号 · 未认证）</div>' +
+      '<div class="k">错误码</div><div class="mono">48001</div></div>' +
+      '<div class="acc-caps"><span class="tag ok">建草稿 可用</span>' +
+      '<span class="tag err">正式发布 不可用</span></div>' +
+      '<div class="acc-advice">未认证订阅号没有发布权限。该账号只能进草稿箱，需人工到公众号后台发布；' +
+      '或在管线里把发布模式设为「只建草稿」。若需自动发布，请先完成微信认证。</div>';
+  }
+}
+
+function accResetSecret() {
+  document.getElementById('accSecretMask').style.display = 'none';
+  document.getElementById('accSecretInput').style.display = '';
+  document.getElementById('accEncTag').style.display = 'none';
+}
+function accCancelSecret() {
+  document.getElementById('accSecretInput').style.display = 'none';
+  document.getElementById('accSecretMask').style.display = '';
+  document.getElementById('accEncTag').style.display = '';
+}
+function accDelOpen() {
+  document.getElementById('accDelMask').classList.add('on');
+  document.body.classList.add('modal-open');
+}
+function accDelClose() {
+  document.getElementById('accDelMask').classList.remove('on');
+  document.body.classList.remove('modal-open');
 }
 
 
@@ -3997,7 +4329,7 @@ function toast(msg) {
 document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose };
 
 })();
 

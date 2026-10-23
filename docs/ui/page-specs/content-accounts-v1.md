@@ -7,7 +7,13 @@
   让「加一个号」不用上机改 `.env`、不用重启进程，并在发布前就知道这个号有没有发布权限。
 
 > 状态：**草稿（待确认）** —— 未确认前不许写 UI 源码（R9b / L1 hook）。
-> 配套原型：`docs/ui/prototypes/admin-content-accounts.html`（9 个演示场景包）
+> 配套原型：`docs/ui/prototypes/admin-media-ops.html`（自媒体运营**模块稿**的第 6 个菜单页，
+> 2 个 section：列表 / 新增编辑；评审台场景包 **p11–p19** 共 9 个 = 下面 9 条评审分支）。
+>
+> ⚠️ 归位说明（2026-10-23）：首版曾开独立稿 `admin-content-accounts.html`，违反
+> `docs/ui/prototypes/README.md` §0.5/§0.6（唯一整合容器是 `admin-agents-hub.html` 生成物，
+> 新模块一律「模块稿 + 注册表一行 + 重跑 build」，同一模块只留一份稿），体检 FAIL 4 / WARN 5。
+> 已并入模块稿并删除独立稿。落地对照看 `admin-agents-hub.html` 里的自媒体运营分组。
 
 ---
 
