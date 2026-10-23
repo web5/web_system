@@ -12,14 +12,14 @@
             docs/ui/prototypes/admin-agent-def-detail.html（定义管理 / 定义详情+调试台）
             docs/ui/prototypes/admin-settings.html（系统设置，同源抽取）
             docs/ui/prototypes/dict-module.html（字典管理，CSS 已作用域隔离 + id 加 dm- 前缀）
-            docs/ui/prototypes/admin-media-ops.html（自媒体运营 5 页，mount：一份 DOM 8 个 section）
+            docs/ui/prototypes/admin-media-ops.html（自媒体运营 6 页，mount：一份 DOM 10 个 section）
             其余菜单屏暂无稿 → 占位（批次 / 骨架 / 复用件从注册表读，不伪造业务数据）
   · 菜单源：apps/admin/src/layouts/BasicLayout.vue（文案 / 顺序逐项对齐，无死项）
             路由与 apps/admin/src/router/index.ts 的真实 path 同构
   · 目标端：桌面 Web（admin 管理后台，亮色）；零依赖单文件，浏览器双击即开
   · 路由：hash 路由（#/agents/definitions、#/agents/definitions/<id>…），点菜单即「进入」模块页面
   · 本稿解决的四件事：
-    ① 菜单里的页面整合进一份稿：菜单**全部可点**，22 项菜单 + 定义详情共 23 屏均可达；
+    ① 菜单里的页面整合进一份稿：菜单**全部可点**，23 项菜单 + 定义详情共 24 屏均可达；
        **有原型稿的模块直接同源抽取真实内容**（自媒体运营 / 系统设置 / 字典管理 / 对话调试 /
        定义管理 / 定义详情），没有稿的走占位（骨架与复用件已标注，批次可在 specs 里查到出处）；
     ② 菜单与真实 admin 一致：文案/顺序对齐 BasicLayout.vue，由 verify-agents-hub.mjs ⑧ 段对账；
@@ -1837,7 +1837,7 @@
     <b>整合方式 = 注册表驱动</b>：<code>scripts/lib/proto-registry.mjs</code> 里每屏一行，
     写了 <code>source</code> 的屏由构建脚本从原型稿<b>同源抽取</b>（DOM 剥壳 + CSS 作用域隔离
     + id 前缀 + inline handler 命名空间），没写的走占位。<b>已是真实内容的屏</b>：
-    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 5 页</b>（admin-media-ops.html）/
+    对话调试 / 定义管理 / 定义详情 / <b>自媒体运营 6 页</b>（admin-media-ops.html）/
     <b>系统设置</b>（admin-settings.html）/ <b>字典管理</b>（dict-module.html）；
     其余（工作台 / 变变管理 / 用户管理 / 角色权限 / MCP 管理 / 数据浏览 + Agents 组内若干页）
     为占位，各自标注归属批次与复用口径，不伪造业务数据。
@@ -1867,7 +1867,7 @@
         <div class="ad-item" data-screen="dicts" data-route="#/settings/dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" data-route="#/mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" data-route="#/database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor">
+      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor,content-accounts">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></svg></span><span class="ad-t">自媒体运营</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="content-sources" data-route="#/content" title="采集源管理"><span class="ad-t">采集源管理</span></div>
@@ -1875,6 +1875,7 @@
         <div class="ad-item ad-item-sub" data-screen="content-publications" data-route="#/content/publications" title="公众号成文"><span class="ad-t">公众号成文</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-pipelines" data-route="#/content/pipelines" title="发布管线"><span class="ad-t">发布管线</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-monitor" data-route="#/content/monitor" title="采集监控"><span class="ad-t">采集监控</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-accounts" data-route="#/content/accounts" title="账号管理"><span class="ad-t">账号管理</span></div>
         </div>
       </div>
       <div class="ad-sub open" data-sub="agents" data-screens="overview,observe,records,capabilities,knowledge,retrieval,list,skills,pg">
@@ -2957,6 +2958,10 @@
 
       <!-- 真实屏（同源抽取）：采集监控 -->
       <div class="screen hidden" data-screen="content-monitor">
+      </div>
+
+      <!-- 真实屏（同源抽取）：账号管理 -->
+      <div class="screen hidden" data-screen="content-accounts">
       </div>
 
       <!-- 占位屏：Agent 概览 -->
@@ -4353,6 +4358,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     { re: /^#\/content\/publications$/, screen: 'content-publications' },
     { re: /^#\/content\/pipelines$/, screen: 'content-pipelines' },
     { re: /^#\/content\/monitor$/, screen: 'content-monitor' },
+    { re: /^#\/content\/accounts$/, screen: 'content-accounts' },
     { re: /^#\/agents$/, screen: 'overview' },
     { re: /^#\/agents\/metrics$/, screen: 'observe' },
     { re: /^#\/agents\/runs$/, screen: 'records' },
@@ -4378,6 +4384,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     'content-publications': '自媒体运营 / <b>公众号成文</b>',
     'content-pipelines': '自媒体运营 / <b>发布管线</b>',
     'content-monitor': '自媒体运营 / <b>采集监控</b>',
+    'content-accounts': '自媒体运营 / <b>账号管理</b>',
     'overview': 'Agents / <b>Agent 概览</b>',
     'observe': 'Agents / <b>Agent 观测</b>',
     'records': 'Agents / <b>运行记录</b>',
@@ -4391,11 +4398,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-pipelines","content-monitor","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-pipelines","content-monitor","content-accounts","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
   /* mount 源（自媒体运营）：hub 屏 → 模块根键 */
-  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-pipelines":"pipelines","content-monitor":"runs"};
+  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-pipelines":"pipelines","content-monitor":"runs","content-accounts":"accounts"};
   /* hub 屏 → hash 路由（模块内跨根键跳转后要把地址栏同步过来，否则后退键会错位） */
-  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor"};
+  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor","content-accounts":"#/content/accounts"};
   var curScreen = null;      // 当前 hub 屏（供 zmSync 判断"要不要动"）
   var curMountKey = null;    // 当前模块根键
 

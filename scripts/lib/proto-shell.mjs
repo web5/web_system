@@ -49,13 +49,17 @@ export const SHELL_TOP = [
  */
 export const SUB_CONTENT = {
   key: 'content', title: '自媒体运营', icon: 'clouddownload',
-  screens: ['content-sources', 'content-items', 'content-publications', 'content-pipelines', 'content-monitor'],
+  screens: ['content-sources', 'content-items', 'content-publications', 'content-pipelines',
+    'content-monitor', 'content-accounts'],
   items: [
     { label: '采集源管理', screen: 'content-sources',      route: '#/content',              icon: null },
     { label: '采集明细',   screen: 'content-items',        route: '#/content/items',        icon: null },
     { label: '公众号成文', screen: 'content-publications', route: '#/content/publications', icon: null },
     { label: '发布管线',   screen: 'content-pipelines',    route: '#/content/pipelines',    icon: null },
     { label: '采集监控',   screen: 'content-monitor',      route: '#/content/monitor',      icon: null },
+    /* 账号管理：2026-10-23 落地（router /content/accounts + BasicLayout 菜单 + 骨架页），
+       原型侧模块稿 admin-media-ops.html 第 6 个菜单页（section: accounts / account-edit）。 */
+    { label: '账号管理',   screen: 'content-accounts',     route: '#/content/accounts',     icon: null },
   ],
 };
 /** Agents 子菜单（a-sub-menu）。`Agent 概览` = router 的 /agents index 页，BasicLayout 未挂菜单项（已知增量） */

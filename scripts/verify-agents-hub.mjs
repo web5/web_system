@@ -104,7 +104,7 @@ const NAV = await page.$$eval('.ad-item[data-screen]', (ns) => ns.map((n) => ({
   screen: n.dataset.screen, route: n.dataset.route,
   label: (n.querySelector('.ad-t') || n).textContent.trim(),   // 文案在 .ad-t（图标是 svg，不混进文案）
 })));
-rec('2a 菜单项数（8 一级 + 自媒体运营 5 + Agents 9）', NAV.length,
+rec('2a 菜单项数（8 一级 + 自媒体运营 6 + Agents 9）', NAV.length,
   SHELL_TOP.length + SHELL_SUBS.reduce((n, s) => n + s.items.length, 0));
 rec('2b 无 .nolink 死项（每一项都必须可点）', await page.$$eval('.ad-item.nolink', (n) => n.length), 0);
 rec('2c 屏数 = 菜单数 + 1（detail 无菜单项）',
@@ -470,7 +470,7 @@ const batchMismatch = REGISTRY.filter((r) => r.batch).map((r) => {
 rec('10e 占位屏批次与 specs/admin-prototype-coverage/tasks.md 逐项一致',
   batchMismatch.slice(0, 3).join(' | '), '');
 
-// 10g mount 源（自媒体运营 5 屏 = 一份 DOM）：合进去了 + 交互真的可跑（不是静态贴图）
+// 10g mount 源（自媒体运营 6 屏 = 一份 DOM）：合进去了 + 交互真的可跑（不是静态贴图）
 //     背景：该模块此前是 apps/admin/prototype/ 下的一份**独立单页稿**，与整合稿互不相通
 //     （2026-10-22 产品意见「设计出来的原型需要统一融合进 admin 的原型稿里，目前是散落的」）。
 //     现在它只是注册表里的一条 mount 源：DOM 只有一份，切屏时由 hub 搬过去。
@@ -478,9 +478,11 @@ rec('10e 占位屏批次与 specs/admin-prototype-coverage/tasks.md 逐项一致
 const MOUNT_MAP = {
   'content-sources': 'sources', 'content-items': 'items',
   'content-publications': 'publications', 'content-pipelines': 'pipelines', 'content-monitor': 'runs',
+  /* 账号管理（2026-10-23）：模块稿第 6 个菜单页，section=accounts */
+  'content-accounts': 'accounts',
 };
 const routeOf = (sc) => (SHELL_SUBS[0].items.find((m) => m.screen === sc) || {}).route;
-rec('10g-0 模块 DOM 全稿只有一份（一份状态机，不复制 5 份）',
+rec('10g-0 模块 DOM 全稿只有一份（一份状态机，不复制 6 份）',
   await page.$$eval('[data-zm-module]', (n) => n.length), 1);
 for (const k of Object.keys(MOUNT_MAP)) {
   await page.evaluate((r) => { location.hash = r; }, routeOf(k));
