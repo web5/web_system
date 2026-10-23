@@ -132,16 +132,58 @@ export interface PipelineRunResult {
   published: number;
 }
 
+/** 运行受理回执：只说明"接到了"，不含结果 */
+export interface PipelineRunAccepted {
+  job_id: number;
+  pipeline_code: string;
+  status: 'running';
+  /** true = 该管线已有在跑任务，本次复用它（防重复点击变成重复发布） */
+  reused: boolean;
+}
+
+/** 运行任务状态（轮询终点：status 变成 ok / failed） */
+export interface PipelineRunJob {
+  job_id: number;
+  pipeline_code: string;
+  status: 'running' | 'ok' | 'failed';
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  /** 仍在跑时的已耗时（毫秒） */
+  elapsed_ms: number | null;
+  collected: number;
+  new_items: number;
+  published: number;
+  errors: number;
+  error_msg: string | null;
+}
+
 /**
- * 立即运行一次管线。
+ * 立即运行一次管线（**异步**）。
  *
  * 🔴 这是**真发布**：管线配置的发布目标会真的收到内容（公众号草稿箱或正式发布，
  *    取决于管线的发布模式）。所以调用方必须二次确认，不能做成静默按钮。
+ * 🔴 为什么不等结果：一次完整运行 30 秒起步，而链路超时依次是 前端 10s /
+ *    网关 content-admin 30s / nginx 60s —— 同步等会让请求先被掐断，
+ *    前端只看到「网络错误」，后端却仍在跑、内容仍会投出去。改为受理即返回 job_id，
+ *    由调用方轮询 getPipelineRunJob 拿结果。
  * 🔴 请求体给 `{}` 而不是 `null` —— 原因同 republish（#428）：axios 会把 null
  *    序列化成裸字符串 "null"，网关 body-parser strict 模式直接 400。
  */
-export function runPipeline(code: string): Promise<PipelineRunResult> {
+export function runPipeline(code: string): Promise<PipelineRunAccepted> {
   return request.post(`/content-admin/content/run/${code}`, {});
+}
+
+/** 查询一次运行的结果 */
+export function getPipelineRunJob(jobId: number): Promise<PipelineRunJob> {
+  return request.get(`/content-admin/content/run/job/${jobId}`);
+}
+
+/** 最近运行记录（回答"刚才那次跑了没 / 跑了多久"） */
+export function listPipelineRuns(pipeline?: string, take = 10): Promise<PipelineRunJob[]> {
+  return request.get('/content-admin/content/run/recent', {
+    params: { ...(pipeline ? { pipeline } : {}), take },
+  });
 }
 
 // ── 手动触发采集 ──
