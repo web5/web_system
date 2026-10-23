@@ -130,11 +130,17 @@ jobs:
               (await github.rest.pulls.get({ owner, repo, pull_number: n })).data;
 
             let pr = await getPr();
-            // mergeable_state 由 GitHub 异步计算，刚 push 完常为 unknown —— 等一轮再读，
-            // 否则会把「还没算完」误当成「不需要同步」。
-            if (pr.mergeable_state === 'unknown') {
+            // mergeable_state 由 GitHub 异步计算，刚 push 完、或 master 刚前进时几乎必然是 unknown。
+            // **必须轮询到不再是 unknown 为止**，不能「等 3 秒看一眼」：
+            // 2026-10-23 实测 master 前进后 6 秒开跑，3 秒后两个 PR 仍是 unknown，
+            // 于是被当成「无需同步」全跳过 —— 该 job 存在的唯一场景恰好就是它最常 unknown 的时候。
+            for (let i = 0; i < 5 && pr.mergeable_state === 'unknown'; i++) {
               await new Promise((r) => setTimeout(r, 3000));
               pr = await getPr();
+            }
+            if (pr.mergeable_state === 'unknown') {
+              core.warning(`PR #${n} mergeable_state 轮询 15 秒仍为 unknown，本轮跳过（下次 master 前进会再试）`);
+              return;
             }
             if (pr.mergeable_state !== 'behind') {
               console.log(`PR #${n} mergeable_state=${pr.mergeable_state}，无需同步分支`);
@@ -232,11 +238,18 @@ jobs:
               const read = async () =>
                 (await github.rest.pulls.get({ owner, repo, pull_number: it.number })).data;
               let pr = await read();
-              // mergeable_state 由 GitHub 异步计算：master 刚推上来时几乎必然是 unknown，
-              // 等一轮再读 —— 否则会把「还没算完」当成「不需要同步」（上面 step 踩过同一个坑）。
-              if (pr.mergeable_state === 'unknown') {
+              // mergeable_state 异步计算：master 刚推上来时几乎必然是 unknown，且可能持续十几秒。
+              // **轮询到不再是 unknown**，不能只等一轮 —— 实测 05:20:26 合并、05:20:32 开跑，
+              // 3 秒后 #417 #420 仍是 unknown，被当成「无需同步」全跳过（该 job 白跑）。
+              for (let i = 0; i < 5 && pr.mergeable_state === 'unknown'; i++) {
                 await new Promise((r) => setTimeout(r, 3000));
                 pr = await read();
+              }
+              if (pr.mergeable_state === 'unknown') {
+                core.warning(
+                  `PR #${it.number} mergeable_state 轮询 15 秒仍为 unknown，本轮跳过（下次 master 前进会再试）`,
+                );
+                continue;
               }
               if (pr.mergeable_state !== 'behind') {
                 console.log(`PR #${it.number} mergeable_state=${pr.mergeable_state}，无需同步`);
