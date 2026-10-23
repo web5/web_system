@@ -83,6 +83,7 @@
     cancel-text="取消"
     @ok="save"
     @cancel="closeEdit"
+    :get-container="moduleOverlayContainer"
   >
     <a-form layout="vertical" :model="form">
       <a-row :gutter="16">
@@ -183,6 +184,7 @@
     :title="`版本历史 · ${currentDef?.id || ''}`"
     :footer="null"
     :width="720"
+    :get-container="moduleOverlayContainer"
     @cancel="versionsOpen = false"
   >
     <a-empty v-if="!versions.length" description="暂无历史版本" />
@@ -220,6 +222,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
+import { moduleOverlayContainer } from '@/utils/mount';
 import dayjs from 'dayjs';
 import {
   listAgentDefs,

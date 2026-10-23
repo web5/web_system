@@ -106,6 +106,7 @@
     :confirm-loading="creating"
     ok-text="创建"
     cancel-text="取消"
+    :get-container="moduleOverlayContainer"
     @ok="createRole"
     @cancel="createOpen = false"
   >
@@ -139,6 +140,7 @@ import {
   type PermissionDiff,
 } from '@/api/permissions';
 import { useUserStore } from '@/stores/user';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const userStore = useUserStore();
 const syncing = ref(false);

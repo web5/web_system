@@ -157,6 +157,7 @@
       @ok="handleSave"
       class="material-modal"
       destroy-on-close
+      :get-container="moduleOverlayContainer"
     >
       <a-form layout="vertical">
         <a-row :gutter="16">
@@ -215,6 +216,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
 import { message, Modal } from 'ant-design-vue';
+import { moduleOverlayContainer } from '@/utils/mount';
 import {
   ThunderboltOutlined,
   PlusOutlined,

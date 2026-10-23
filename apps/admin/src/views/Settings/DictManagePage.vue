@@ -150,6 +150,7 @@
       placement="right"
       width="460"
       :mask-closable="!saving"
+      :get-container="moduleOverlayContainer"
       @close="closeDrawer"
     >
       <a-form :model="form" layout="vertical">
@@ -243,6 +244,7 @@ import {
   type DictItemRow,
   type DictTypeItem,
 } from '@/api/dict';
+import { moduleOverlayContainer } from '@/utils/mount';
 
 const router = useRouter();
 

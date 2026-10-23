@@ -73,6 +73,7 @@
     cancel-text="取消"
     @ok="save"
     @cancel="closeEdit"
+    :get-container="moduleOverlayContainer"
   >
     <a-form layout="vertical">
       <a-row :gutter="16">
@@ -105,6 +106,7 @@
     :title="`SKILL.md · ${viewing?.name || ''}`"
     :footer="null"
     :width="760"
+    :get-container="moduleOverlayContainer"
     @cancel="viewOpen = false"
   >
     <pre class="raw-block">{{ viewing?.content }}</pre>
@@ -114,6 +116,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
+import { moduleOverlayContainer } from '@/utils/mount';
 import dayjs from 'dayjs';
 import {
   listSkills,
