@@ -213,7 +213,9 @@ const SRC_MEDIA = {
     'openPreview', 'closeModal', 'runTest', 'setTestState', 'confirmDel',
     /* 账号管理（2026-10-23 新增第 6 个菜单页）：内联 onclick 用到的函数必须在此登记，
        否则抽取时 IIFE 化后点击报 is not defined */
-    'accResetSecret', 'accCancelSecret', 'accCheck', 'accDelOpen', 'accDelClose'],
+    'accResetSecret', 'accCancelSecret', 'accCheck', 'accDelOpen', 'accDelClose',
+    /* 立即运行管线（2026-10-23）：管线表操作列的内联 onclick，同上必须登记 */
+    'runPipeline'],
   /* 内容区之外的三块：手动触发弹窗 + 成文预览抽屉（同一段）、toast —— 源稿把弹层挂在
      .content 之外，按 from/to 切内容区会连它们一起丢掉，点「触发」就找不到弹窗 */
   trails: [
