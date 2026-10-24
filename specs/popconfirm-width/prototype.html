@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>侧边栏之外：立即运行二次确认气泡 · 宽度收窄对照（#444）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+    background: #f5f5f5;
+    padding: 28px 24px 40px;
+  }
+  h1 { font-size: 17px; color: rgba(0,0,0,.88); margin: 0 0 4px; }
+  .desc { font-size: 13px; color: rgba(0,0,0,.45); margin: 0 0 24px; }
+  .row { display: flex; gap: 32px; align-items: flex-start; }
+  .artboard { background: #fff; border: 1px solid #f0f0f0; border-radius: 8px; padding: 20px 24px 24px; }
+  .artboard-label { font-size: 13px; font-weight: 600; color: rgba(0,0,0,.65); margin-bottom: 14px; }
+  .artboard-label small { font-weight: 400; color: rgba(0,0,0,.45); margin-left: 6px; }
+
+  /* ===== 复刻「发布管线」表格行 ===== */
+  .page { width: 340px; background: #fff; border: 1px solid #f0f0f0; border-radius: 8px; }
+  .tbl-head { display: flex; padding: 10px 12px; background: #fafafa; font-size: 12px; color: rgba(0,0,0,.45); border-bottom: 1px solid #f0f0f0; }
+  .tbl-head span:nth-child(1) { width: 70px; }
+  .tbl-head span:nth-child(2) { width: 70px; }
+  .tbl-row { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; color: rgba(0,0,0,.88); position: relative; }
+  .code { width: 70px; }
+  .type { width: 70px; }
+  .tag { display: inline-block; padding: 0 7px; font-size: 12px; line-height: 20px; border-radius: 4px; background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+  .actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .btn { font-size: 12px; line-height: 22px; padding: 0 10px; border-radius: 4px; border: 1px solid #d9d9d9; background: #fff; color: rgba(0,0,0,.88); cursor: default; }
+  .btn-primary { background: #1677ff; border-color: #1677ff; color: #fff; }
+
+  /* ===== 复刻 antd-vue 4.2.6 popconfirm ===== */
+  .ant-popconfirm {
+    position: absolute;
+    z-index: 1050;
+    left: 6px;
+    bottom: calc(100% + 8px);
+  }
+  .ant-popconfirm .content { position: relative; }
+  .ant-popconfirm .arrow {
+    position: absolute; width: 12px; height: 12px; background: #fff;
+    left: 24px; bottom: -5px; transform: rotate(45deg);
+    box-shadow: 2px 2px 4px rgba(0,0,0,.06);
+  }
+  .ant-popconfirm .inner {
+    position: relative;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px 0 rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05);
+    padding: 12px 16px;
+  }
+  .ant-popconfirm .inner-content { color: rgba(0,0,0,.88); font-size: 14px; }
+  .ant-popconfirm .message {
+    position: relative; margin-bottom: 8px; color: rgba(0,0,0,.88);
+    font-size: 14px; display: flex; flex-wrap: nowrap; align-items: flex-start;
+  }
+  .ant-popconfirm .message-icon { color: #faad14; font-size: 14px; flex: none; line-height: 1.4; }
+  .ant-popconfirm .message-title { flex: auto; margin-inline-start: 8px; line-height: 1.5714; }
+  .ant-popconfirm .buttons { text-align: end; }
+  .ant-popconfirm .buttons .btn { margin-inline-start: 8px; font-size: 12px; line-height: 22px; }
+  .ant-popconfirm .buttons .btn-primary { background: #1677ff; border-color: #1677ff; }
+
+  /* 改后：inner 限宽 320px → 标题文字换行、气泡收窄 */
+  .after .inner { max-width: 320px; }
+</style>
+</head>
+<body>
+  <h1>「立即运行」二次确认气泡 · 宽度收窄对照（#444）</h1>
+  <p class="desc">标题文字 40 字不换行时会把气泡撑到 ~400px；给 inner 加 <code>max-width: 320px</code> 后文字自然换行，气泡收窄回按钮上方。</p>
+
+  <div class="row">
+    <div class="artboard before">
+      <div class="artboard-label">Before · 改前<small>无宽度限制</small></div>
+      <div class="page">
+        <div class="tbl-head"><span>编码</span><span>类型</span><span></span></div>
+        <div class="tbl-row">
+          <span class="code">ai_news</span>
+          <span class="type"><span class="tag">ai-news</span></span>
+          <div class="actions">
+            <span class="btn btn-primary">立即运行</span>
+            <span class="btn">编辑</span>
+            <span class="btn">删除</span>
+          </div>
+          <div class="ant-popconfirm">
+            <div class="content">
+              <div class="arrow"></div>
+              <div class="inner">
+                <div class="inner-content">
+                  <div class="message">
+                    <span class="message-icon">⚠</span>
+                    <div class="message-title">立即运行这条管线？会按发布目标真实投递内容（草稿或正式发布取决于该管线的发布模式）。</div>
+                  </div>
+                  <div class="buttons">
+                    <button class="btn">取 消</button>
+                    <button class="btn btn-primary">确 定</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tbl-row">
+          <span class="code">daily_paper</span>
+          <span class="type"><span class="tag">paper</span></span>
+          <div class="actions">
+            <span class="btn btn-primary">立即运行</span>
+            <span class="btn">编辑</span>
+            <span class="btn">删除</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="artboard after">
+      <div class="artboard-label">After · 改后<small>max-width: 320px</small></div>
+      <div class="page">
+        <div class="tbl-head"><span>编码</span><span>类型</span><span></span></div>
+        <div class="tbl-row">
+          <span class="code">ai_news</span>
+          <span class="type"><span class="tag">ai-news</span></span>
+          <div class="actions">
+            <span class="btn btn-primary">立即运行</span>
+            <span class="btn">编辑</span>
+            <span class="btn">删除</span>
+          </div>
+          <div class="ant-popconfirm">
+            <div class="content">
+              <div class="arrow"></div>
+              <div class="inner">
+                <div class="inner-content">
+                  <div class="message">
+                    <span class="message-icon">⚠</span>
+                    <div class="message-title">立即运行这条管线？会按发布目标真实投递内容（草稿或正式发布取决于该管线的发布模式）。</div>
+                  </div>
+                  <div class="buttons">
+                    <button class="btn">取 消</button>
+                    <button class="btn btn-primary">确 定</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tbl-row">
+          <span class="code">daily_paper</span>
+          <span class="type"><span class="tag">paper</span></span>
+          <div class="actions">
+            <span class="btn btn-primary">立即运行</span>
+            <span class="btn">编辑</span>
+            <span class="btn">删除</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

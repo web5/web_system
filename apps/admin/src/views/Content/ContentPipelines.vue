@@ -120,6 +120,19 @@ async function onRun(p: ContentPipeline) {
   }
 }
 
+/**
+ * popconfirm 的确认回调：点击「确定」后立即关闭气泡，运行放到后台继续。
+ *
+ * 为什么不能直接把 onRun 绑到 @confirm：onRun 是 async，返回 Promise，
+ * antd 的 ActionButton 拿到 thenable 会进入 loading 并等它 resolve 才 close——
+ * 而 onRun 要轮询 30s 起步，等于气泡卡住不关、确定按钮一直转圈。
+ * 这里用 void 丢弃 Promise 返回 undefined，ActionButton 的 quitOnNullishReturnValue
+ * 会立即关闭气泡；运行进度交给顶部的 a-alert 进度条（runningCode 驱动）。
+ */
+function onRunConfirm(p: ContentPipeline) {
+  void onRun(p);
+}
+
 const PUBLISH_TARGET_LABEL: Record<string, string> = {
   tencent_docs: '腾讯文档',
   wechat_mp: '公众号',
@@ -195,7 +208,8 @@ onMounted(load);
             <a-popconfirm
               v-if="canManage"
               title="立即运行这条管线？会按发布目标真实投递内容（草稿或正式发布取决于该管线的发布模式）。"
-              @confirm="onRun(record)"
+              :overlay-inner-style="{ maxWidth: '320px' }"
+              @confirm="onRunConfirm(record)"
             >
               <a-button
                 size="small"
