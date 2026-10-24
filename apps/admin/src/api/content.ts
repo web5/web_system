@@ -126,6 +126,19 @@ export function listAccounts(platform?: string): Promise<ContentAccount[]> {
   });
 }
 
+/** 连通性检测结果：结论 + 人话原因（不含任何凭据信息） */
+export interface AccountCheckResult {
+  status: 'ok' | 'warn' | 'err';
+  message: string;
+  latency_ms: number;
+  checked_at: string;
+}
+
+/** 连通性检测：后端解密凭据 → 换 stable_token 实测 → 回填 last_check_* */
+export function testAccount(id: number): Promise<AccountCheckResult> {
+  return request.post(`/content-admin/content/accounts/${id}/test`);
+}
+
 // ── 手动跑管线（采集 → 成文 → 发布，一次跑完）──
 export interface PipelineRunResult {
   pipeline: string;

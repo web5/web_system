@@ -15,7 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
-import { listAccounts, type ContentAccount } from '@/api/content';
+import { listAccounts, testAccount, type ContentAccount } from '@/api/content';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -94,9 +94,23 @@ async function onToggle(a: ContentAccount, checked: boolean) {
   message.success(checked ? '已启用' : '已停用');
 }
 
-// 后端接口落地后替换：POST .../accounts/:id/test
-function onCheck(a: ContentAccount) {
-  message.info(`连通性检测待后端接口落地（${a.name}）`);
+// 连通性检测（2026-10-24 接入）：POST accounts/:id/test，结论回填本行
+const checkingId = ref<number | null>(null);
+async function onCheck(a: ContentAccount) {
+  if (checkingId.value) return;
+  checkingId.value = a.id;
+  try {
+    const r = await testAccount(a.id);
+    a.last_check_status = r.status;
+    a.last_checked_at = r.checked_at;
+    if (r.status === 'ok') message.success(r.message);
+    else if (r.status === 'warn') message.warning(r.message);
+    else message.error(r.message);
+  } catch (e) {
+    message.error((e as Error)?.message || '检测请求失败');
+  } finally {
+    checkingId.value = null;
+  }
 }
 
 // 后端接口落地后替换：DELETE .../accounts/:id
@@ -144,12 +158,12 @@ onMounted(load);
       </template>
     </a-alert>
 
-    <!-- 只读说明条：写操作接口落地后删除 -->
+    <!-- 只读说明条：写操作接口落地后删除（连通性检测已于 2026-10-24 接入，从本条移除） -->
     <a-alert type="warning" show-icon class="acc-tip">
-      <template #message>只读注册表 · 写操作待接入</template>
+      <template #message>只读注册表 · 增删改待接入</template>
       <template #description>
-        列表已接真实数据（<span class="mono">content_accounts</span> 表）。新增 / 编辑 / 删除 /
-        连通性检测接口落地前，账号的录入与变更走服务端 seed 脚本，本条提示随之移除。
+        列表已接真实数据（<span class="mono">content_accounts</span> 表），连通性检测已接通。
+        新增 / 编辑 / 删除接口落地前，账号的录入与变更走服务端 seed 脚本，本条提示随之移除。
       </template>
     </a-alert>
 
@@ -229,7 +243,14 @@ onMounted(load);
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space>
-            <a-button v-if="canManage" size="small" @click="onCheck(record)">检测</a-button>
+            <a-button
+              v-if="canManage"
+              size="small"
+              :loading="checkingId === record.id"
+              @click="onCheck(record)"
+            >
+              检测
+            </a-button>
             <a-button size="small" @click="router.push(`/content/accounts/${record.id}`)">编辑</a-button>
             <a-popconfirm
               v-if="canManage"
