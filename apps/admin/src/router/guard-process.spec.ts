@@ -50,10 +50,12 @@ describe('admin 路由守卫 · 登录判定口径', () => {
     expect(isAuthed('not-a-jwt')).toBe(true);
   });
 
-  it('V5 口径一致性：isAuthed 与「非空且未过期」完全等价（防止两处再写歪）', () => {
-    const cases = [jwtWithExp(nowSec() - 1), jwtWithExp(nowSec() + 60), '', 'garbage'];
-    for (const t of cases) {
-      expect(isAuthed(t)).toBe(!!t && !isTokenExpired(t));
-    }
+  it('V5 具体值断言：覆盖过期/有效/空串/非 JWT 四种边界', () => {
+    // 不再对比 isAuthed === !!t && !isTokenExpired(t)（同义反复 + 两次调用可能跨秒），
+    // 直接断言四种输入的预期布尔值，更稳也更可读。
+    expect(isAuthed(jwtWithExp(1))).toBe(false); // 1970 远古，必过期
+    expect(isAuthed(jwtWithExp(9999999999))).toBe(true); // 2286 远未来，必有效
+    expect(isAuthed('')).toBe(false); // 空串 = 未登录
+    expect(isAuthed('garbage')).toBe(true); // 非 JWT 解析失败，不假设过期
   });
 });

@@ -66,6 +66,18 @@ export class UploadService {
       allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
       maxSize: 5 * 1024 * 1024, // 5MB
     },
+    /**
+     * 公众号封面（2026-10-26 新增，content-hub 素材库使用）。
+     *
+     * 不收 gif：微信封面是静态图，动图上传到永久素材后只剩首帧，管理端预览却还在动，
+     * 看着像「同步失败」。不支持的格式直接在上传时挡掉，比事后解释便宜。
+     * 上限 5MB：微信永久图片素材限制 10MB，但封面图 5MB 已经很奢侈，卡紧一点防止误传大图。
+     */
+    covers: {
+      name: '公众号封面',
+      allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+      maxSize: 5 * 1024 * 1024, // 5MB
+    },
   };
 
   /** MIME → 允许的扩展名（内部 store 只有文件名、没有 MIME 时的判定依据） */

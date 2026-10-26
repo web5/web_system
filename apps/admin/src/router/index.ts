@@ -36,8 +36,9 @@ export function isTokenExpired(token: string): boolean {
     const payload = JSON.parse(atob(padded));
     if (!payload.exp) return false;
     return Date.now() >= payload.exp * 1000;
-  } catch (err) {
-    console.warn('[router] token 解析失败，跳过本地过期检查:', err);
+  } catch {
+    // 解析失败（格式异常 / 非 JWT）不假设过期，交后端 401 兜底。
+    // 不打 console.warn —— jest CI 模式下 console 输出会污染测试报告。
     return false;
   }
 }
@@ -233,6 +234,13 @@ const routes: RouteRecordRaw[] = [
             name: 'ContentPublications',
             component: () => import('@/views/Content/ContentPublications.vue'),
             meta: { title: '公众号成文', permission: 'content:view' },
+          },
+          {
+            // 封面素材库（2026-10-26）：上传 / 按标题生成 / 同步微信永久素材 / 绑管线默认封面
+            path: 'media',
+            name: 'ContentMedia',
+            component: () => import('@/views/Content/ContentMedia.vue'),
+            meta: { title: '封面素材', permission: 'content:view' },
           },
           {
             path: 'pipelines',

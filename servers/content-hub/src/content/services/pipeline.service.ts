@@ -11,13 +11,15 @@ import { ArxivCollector } from '../collectors/arxiv.collector';
 import { RssCollector } from '../collectors/rss.collector';
 import { HackerNewsCollector } from '../collectors/hackernews.collector';
 import { simhash } from '../../common/dedup';
-import { summarizePaper, summarizeNews } from '../processors/llm';
+import { detectLang, looksChinese } from '../../common/lang';
+import { summarizePaper, summarizeNews, translateTitle } from '../processors/llm';
 import { detectAiCategories } from '../processors/categorize';
-import { buildDailyMarkdown, markdownToHtml, RenderItem } from '../processors/render';
+import { buildDailyMarkdown, markdownToHtml, toRenderItem, RenderItem } from '../processors/render';
 import { renderTitle } from './title.util';
 import { IPublisher, publicationStatus } from '../publishers/publisher.interface';
 import { WechatMpPublisher } from '../publishers/wechat-mp/wechat-mp.publisher';
 import { ContentAccountService } from './content-account.service';
+import { MediaService } from './media.service';
 
 export interface RunResult {
   pipeline: string;
@@ -44,6 +46,7 @@ export class PipelineService {
     private readonly publicationRepo: Repository<ContentPublicationEntity>,
     private readonly wechatMpPublisher: WechatMpPublisher,
     private readonly accountService: ContentAccountService,
+    private readonly mediaService: MediaService,
   ) {
     // 采集器注册表（新增来源在此登记）
     this.collectors = {
@@ -107,15 +110,29 @@ export class PipelineService {
       take: 20,
     });
     if (items.length > 0) {
-      const renderItems: RenderItem[] = items.map((it) => ({
-        title: it.title,
-        summary: it.summary ?? '',
-        url: it.url ?? undefined,
-        source_name: it.source_name ?? undefined,
-      }));
+      const renderItems: RenderItem[] = items.map(toRenderItem);
       // 与「重新发布 / 成文预览」路径共用同一渲染函数，避免 {{date}} 漏替换
       const title = renderTitle(pipeline.title_template, `日报（${pipeline.code}）`);
       const markdown = buildDailyMarkdown(title, renderItems);
+
+      /**
+       * 封面：管线绑了默认封面就解析成 `thumb_media_id`；没绑或同步失败都返回 undefined，
+       * 交给发布器继续走「正文首图 → 通用兜底封面」。封面环节绝不能把发布卡死。
+       */
+      let thumbMediaId: string | undefined;
+      let usedCoverId: number | null = null;
+      if (pipeline.default_cover_id) {
+        const coverId = Number(pipeline.default_cover_id);
+        const mediaId = await this.mediaService.ensureWechatMediaId(coverId, 'default');
+        if (mediaId) {
+          thumbMediaId = mediaId;
+          usedCoverId = coverId;
+        } else {
+          this.logger.warn(
+            `管线 ${pipeline.code} 的默认封面 #${coverId} 不可用，本次退回兜底封面`,
+          );
+        }
+      }
 
       for (const target of pipeline.publish_targets ?? []) {
         const publisher = this.publishers[target];
@@ -129,9 +146,11 @@ export class PipelineService {
           // 公众号通道：日报 markdown 转 HTML（图片已由发布器处理）
           html: target === 'wechat_mp' ? markdownToHtml(markdown) : undefined,
           folder: pipeline.tencent_folder ?? undefined,
-          // issue-5：管线级封面（显式 thumb_media_id，发布器优先级最高）。
-          // 日报成文纯文本无图，以前只能兜底到内置「AI 资讯日报」通用封面，论文管线主题不符。
-          thumb_media_id: pipeline.cover_media_id ?? undefined,
+          // 封面只在公众号通道有用（腾讯文档没有封面概念）。
+          // 优先素材库解析出的 media_id（可重传刷新），退回 issue-5 直配的 media_id。
+          ...(target === 'wechat_mp'
+            ? { thumb_media_id: thumbMediaId ?? pipeline.cover_media_id ?? undefined }
+            : {}),
           // 发布模式只对公众号生效（腾讯文档没有草稿概念），未配置按 publish
           mode:
             target === 'wechat_mp' && pipeline.publish_mode === 'draft' ? 'draft' : 'publish',
@@ -147,6 +166,8 @@ export class PipelineService {
             external_id: result.external_id ?? null,
             account_code: account?.account_code ?? null,
             account_type: account?.account_type ?? null,
+            // 封面快照：素材日后被改名/换图，这条记录仍要能说明当时用的是哪张
+            cover_media_id: target === 'wechat_mp' ? usedCoverId : null,
             detail: {
               ...(result.error ? { error: result.error } : {}),
               ...(result.media_id ? { media_id: result.media_id } : {}),
@@ -155,13 +176,21 @@ export class PipelineService {
                 title,
                 markdown,
                 ...(target === 'wechat_mp' ? { html: markdownToHtml(markdown) } : {}),
+                ...(target === 'wechat_mp'
+                  ? {
+                      thumb_media_id:
+                        thumbMediaId ?? pipeline.cover_media_id ?? undefined,
+                    }
+                  : {}),
                 folder: pipeline.tencent_folder ?? undefined,
-                // issue-5：封面一并留存，「重新发布」才不会退回通用封面
-                ...(pipeline.cover_media_id ? { thumb_media_id: pipeline.cover_media_id } : {}),
               },
             },
           }),
         );
+        // 用一次记一次，便于日后判断「哪张封面真的在用」
+        if (usedCoverId && target === 'wechat_mp' && (result.success || result.drafted)) {
+          await this.mediaService.markUsed(usedCoverId);
+        }
         // 草稿不算「已发布」：它停在草稿箱，读者还看不到
         if (result.success && !result.drafted) published++;
       }
@@ -201,20 +230,30 @@ export class PipelineService {
     let summary = '';
     let category: string | null = null;
     let tags: string[] | null = null;
+    /** 摘要阶段顺带给出的中文标题（prompt 里的 `标题` / 论文的 `译名`） */
+    let promptTitle: string | null = null;
 
     if (pipeline.type === 'paper') {
       const p = await summarizePaper(raw.title, raw.content, pipeline.llm_prompt);
-      summary = p ? `【${p.译名}】${p.核心贡献} 方法：${p.方法亮点} 应用：${p.潜在应用}` : raw.content.slice(0, 200);
+      summary = p
+        ? `【${p.译名}】${p.核心贡献} 方法：${p.方法亮点} 应用：${p.潜在应用}`
+        : raw.content.slice(0, 200);
+      // 论文的「译名」本质就是中文标题，此前只拼进 summary 前缀就丢掉了
+      promptTitle = p?.译名 ?? null;
     } else {
       // ai-news / hot-news 共用 summarizeNews；pipeline.llm_prompt 为空时走内置默认
       const n = await summarizeNews(raw.title, raw.content, pipeline.llm_prompt);
       summary = n?.摘要 ?? raw.content.slice(0, 100);
       tags = n?.标签 ?? null;
       category = n?.分类 ?? null;
+      promptTitle = n?.标题 ?? null;
     }
     if (!category) {
       category = detectAiCategories(raw.title, raw.content)[0] ?? null;
     }
+
+    // 加工阶段的最后一步：标题中文化（中文源直接跳过，不烧调用）
+    const titleZh = await this.localizeTitle(raw.title, promptTitle);
 
     await this.itemRepo.save(
       this.itemRepo.create({
@@ -222,6 +261,8 @@ export class PipelineService {
         source_id: source.id,
         external_id: raw.external_id,
         title: raw.title,
+        title_zh: titleZh,
+        source_lang: detectLang(raw.title),
         url: raw.url ?? null,
         content: raw.content,
         summary,
@@ -234,5 +275,29 @@ export class PipelineService {
       }),
     );
     return true;
+  }
+
+  /**
+   * 标题中文化——三层兜底，任何一层成功都算过；全失败返回 null（渲染回落原文）。
+   *
+   *   ① 原文本来就是中文       → 返回 null，**不消耗任何调用**（中文源占多数，这条是省钱的）
+   *   ② 摘要 prompt 顺带给了译名 → 直接用（主路径，零额外成本）
+   *   ③ 前两层都没有           → 单独调 `translateTitle()` 补一次
+   *
+   * 第②层要再用 `looksChinese` 验一遍：LLM 有时把 `标题` 原样返回成英文
+   * （尤其 prompt 被改短时），不验就会把英文标题写进 `title_zh`，
+   * 渲染时「中文标题优先」反而把原文顶掉了——比不翻更糟。
+   */
+  private async localizeTitle(
+    rawTitle: string,
+    promptTitle?: string | null,
+  ): Promise<string | null> {
+    if (looksChinese(rawTitle)) return null;
+
+    const candidate = promptTitle?.trim();
+    if (candidate && looksChinese(candidate)) return candidate.slice(0, 500);
+
+    const translated = await translateTitle(rawTitle);
+    return translated ? translated.slice(0, 500) : null;
   }
 }

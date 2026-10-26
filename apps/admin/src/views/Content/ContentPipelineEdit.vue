@@ -48,6 +48,8 @@ const form = reactive({
   publish_mode: 'publish' as 'draft' | 'publish',
   // issue-5：管线级公众号封面素材 media_id，留空走内置通用封面
   cover_media_id: '',
+  // 素材库封面（content_media.id），优先级高于 cover_media_id
+  default_cover_id: null as number | null,
   enabled: true,
 });
 
@@ -172,6 +174,7 @@ async function loadPipeline() {
       // issue-3：腾讯文档目录字段已从表单下线（腾讯文档通道 2026-10-23 停发）。
       // 这里不再读写 tencent_folder —— 不出现在 dto 里，update 就不会动历史值。
       cover_media_id: p.cover_media_id ?? '',
+      default_cover_id: p.default_cover_id ?? null,
       enabled: p.enabled,
     });
     // 回填后判定输入模式：值不在素材库 → 切到手动，避免 select 显示一堆看不清的字符
@@ -199,6 +202,7 @@ async function submit() {
     publish_targets: form.publish_targets,
     publish_mode: form.publish_mode,
     cover_media_id: form.cover_media_id.trim() || null,
+    default_cover_id: form.default_cover_id,
     enabled: form.enabled,
   };
   saving.value = true;

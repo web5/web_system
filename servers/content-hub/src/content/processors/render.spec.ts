@@ -1,4 +1,39 @@
-import { buildDailyMarkdown, markdownToHtml } from './render';
+import { buildDailyMarkdown, markdownToHtml, toRenderItem } from './render';
+
+/**
+ * 标题本地化的渲染口径（2026-10-26）。
+ *
+ * 为什么单独钉：`toRenderItem` 是「日报里显示哪个标题」的**唯一决策点**，
+ * 定时发布和成文预览都调它。这里判错的形态很难在开发环境发现——
+ * 单条看起来正常，只有整篇日报里混着中英文标题才暴露。
+ */
+describe('toRenderItem 标题优先级', () => {
+  it('有中文标题就用中文', () => {
+    expect(
+      toRenderItem({ title: 'Torvalds: AI is fine', title_zh: '托瓦兹：AI 没问题' }).title,
+    ).toBe('托瓦兹：AI 没问题');
+  });
+
+  it('中文标题为空 → 回落原文（中文源就是这条路径，不该显示空标题）', () => {
+    expect(toRenderItem({ title: '百度世界2026前瞻', title_zh: null }).title).toBe('百度世界2026前瞻');
+    expect(toRenderItem({ title: '百度世界2026前瞻' }).title).toBe('百度世界2026前瞻');
+  });
+
+  it('中文标题是空白串 → 也回落原文（不能把空串当真值）', () => {
+    expect(toRenderItem({ title: 'Some English Title', title_zh: '   ' }).title).toBe(
+      'Some English Title',
+    );
+  });
+
+  it('其余字段照旧透传，缺省补空', () => {
+    expect(toRenderItem({ title: 't', summary: null })).toEqual({
+      title: 't',
+      summary: '',
+      url: undefined,
+      source_name: undefined,
+    });
+  });
+});
 
 /**
  * 渲染器回归（#399 根因 B）。

@@ -62,6 +62,10 @@
             <template #icon><WechatOutlined /></template>
             <span>公众号成文</span>
           </a-menu-item>
+          <a-menu-item key="content-media">
+            <template #icon><PictureOutlined /></template>
+            <span>封面素材</span>
+          </a-menu-item>
           <a-menu-item key="content-pipelines">
             <template #icon><DeploymentUnitOutlined /></template>
             <span>发布管线</span>
@@ -219,6 +223,7 @@ import {
   CloudServerOutlined,
   UnorderedListOutlined,
   WechatOutlined,
+  PictureOutlined,
   DeploymentUnitOutlined,
   MonitorOutlined,
   IdcardOutlined,
@@ -268,6 +273,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/database')) selectedKeys.value = ['database'];
   else if (path.includes('/content/items')) selectedKeys.value = ['content-items'];
   else if (path.includes('/content/publications')) selectedKeys.value = ['content-publications'];
+  else if (path.includes('/content/media')) selectedKeys.value = ['content-media'];
   else if (path.includes('/content/pipelines')) selectedKeys.value = ['content-pipelines'];
   else if (path.includes('/content/monitor')) selectedKeys.value = ['content-monitor'];
   else if (path.includes('/content/accounts')) selectedKeys.value = ['content-accounts'];
@@ -289,6 +295,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
     database: '/database',
     'content-sources': '/content', 'content-items': '/content/items',
     'content-publications': '/content/publications', 'content-pipelines': '/content/pipelines',
+    'content-media': '/content/media',
     'content-monitor': '/content/monitor', 'content-accounts': '/content/accounts',
     roles: '/settings/roles', dicts: '/settings/dicts',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',

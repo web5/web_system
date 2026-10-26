@@ -41,6 +41,18 @@ export class ContentPipelineEntity {
   @Column({ type: 'varchar', length: 16, default: 'publish', comment: '发布模式 publish | draft' })
   publish_mode: string;
 
+  /**
+   * 默认封面（`content_media.id`，2026-10-26）。
+   *
+   * 定时发布没人值守，不能靠人挑图 —— 管线绑一张，跑的时候自动用。
+   * 单次发布想换图，走 `WechatMpPublishDto.thumb_media_id` 覆盖，不影响这里。
+   *
+   * 为什么存 id 而不是 media_id：微信 media_id 会因账号迁移/素材删除失效，
+   * 存 id 才能在失效时重新上传刷新，而不是钉死一个死 id。
+   */
+  @Column({ type: 'bigint', nullable: true, comment: '默认封面素材 ID（content_media.id）' })
+  default_cover_id: number | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '腾讯文档目标目录' })
   tencent_folder: string | null;
 

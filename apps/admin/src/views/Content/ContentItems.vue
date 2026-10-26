@@ -96,7 +96,9 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 const itemColumns = [
-  { title: '标题', dataIndex: 'title', ellipsis: true },
+  // 标题列不设 ellipsis：英文源要在同一格里显示「中文标题 + 原文」两行，
+  // ellipsis 会把第二行裁掉（原文就看不见了，等于没法核对翻译）
+  { title: '标题', dataIndex: 'title' },
   { title: '来源', dataIndex: 'source_name', width: 130, ellipsis: true },
   // issue-4：人工在列表里逐条确认「采集得对不对」，原文链接就地可点，不用每条钻详情
   { title: '原文链接', dataIndex: 'url', width: 150 },
@@ -210,7 +212,11 @@ onMounted(async () => {
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'title'">
-          <a @click="router.push(`/content/items/${record.id}`)">{{ record.title }}</a>
+          <!-- 中文标题优先；英文源把原文挂在下面一行，便于核对翻译是否跑偏 -->
+          <a @click="router.push(`/content/items/${record.id}`)">{{ record.title_zh || record.title }}</a>
+          <div v-if="record.title_zh && record.title_zh !== record.title" class="title-origin">
+            {{ record.title }}
+          </div>
         </template>
         <template v-else-if="column.dataIndex === 'url'">
           <!-- issue-4：原文链接就地可点，hover 出完整 URL -->
@@ -275,5 +281,12 @@ onMounted(async () => {
 .muted {
   color: var(--text-faint);
   font-size: 12px;
+}
+/* 英文源的原文标题：小一号、弱化，作为翻译的对照 */
+.title-origin {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.3;
 }
 </style>

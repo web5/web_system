@@ -7,6 +7,8 @@
  *   ② content 存 arXiv 原文 abstract、不是中文摘要：那是幻觉判定的比对基准，存错等于丢标准答案。
  *   ③ external_id = sha1(arxiv_id|prompt_version)：同版本重复提交幂等，换版本算新条目 ——
  *      评测按 prompt 版本对照抽样，全靠这一个键。
+ *   ④ `title` 必须是原文、译名只能进 `title_zh`：一旦把译名写进 `title`，
+ *      英文原名就永久丢了（重跑不自愈、幻觉核对没基准）。展示的「中文优先」由 `title_zh || title` 负责。
  */
 import { createHash } from 'node:crypto';
 import type { Repository } from 'typeorm';
@@ -57,6 +59,27 @@ describe('ArxivDigestService.persistDigest', () => {
     expect(rows[0].content).toBe(ABSTRACT);
     expect(rows[0].quality_issue).toBeNull();
     expect(rows[0].source_name).toBe('arxiv_digest');
+  });
+
+  it('title 存英文原文、title_zh 存译名 —— 存储不被展示需求污染', async () => {
+    const { rows, repo } = makeRepo();
+    const svc = new ArxivDigestService(repo);
+    await svc.persistDigest(input());
+
+    // 反过来（译名写进 title）会让英文原名永久丢失：重跑不自愈、幻觉核对没基准
+    expect(rows[0].title).toBe('A Test Paper');
+    expect(rows[0].title_zh).toBe('一篇测试论文');
+    expect(rows[0].source_lang).toBe('en');
+  });
+
+  it('只有译名、没有英文原名 → title 退回译名，不写空标题', async () => {
+    const { rows, repo } = makeRepo();
+    const svc = new ArxivDigestService(repo);
+    await svc.persistDigest(input({ title_en: undefined, title_zh: '一篇测试论文' }));
+
+    expect(rows[0].title).toBe('一篇测试论文');
+    expect(rows[0].title_zh).toBe('一篇测试论文');
+    expect(rows[0].source_lang).toBe('zh');
   });
 
   it('降级产物 → partial + fallback，并写明 quality_issue（不能算正常产出）', async () => {

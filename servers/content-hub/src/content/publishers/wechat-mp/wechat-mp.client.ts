@@ -141,14 +141,28 @@ export class WechatMpClient {
   }
 
   /** 上传封面/永久图片素材（material/add_material type=image），返回 thumb_media_id */
-  uploadThumbMedia(image: Blob, filename = 'thumb.png'): Promise<string> {
+  async uploadThumbMedia(image: Blob, filename = 'thumb.png'): Promise<string> {
+    const { media_id } = await this.uploadPermanentImage(image, filename);
+    return media_id;
+  }
+
+  /**
+   * 上传永久图片素材，返回 media_id 与微信 CDN url。
+   *
+   * 比 `uploadThumbMedia` 多返回 `url`：素材库要能让人直接看见「微信那边长什么样」，
+   * 只有一个 media_id 无法验证同步是否成功。
+   */
+  uploadPermanentImage(
+    image: Blob,
+    filename = 'thumb.png',
+  ): Promise<{ media_id: string; url: string | null }> {
     return this.callWithTokenRetry(async () => {
       const token = await this.getAccessToken();
       const url = `${this.apiBase}/cgi-bin/material/add_material?access_token=${encodeURIComponent(token)}&type=image`;
       const data = await this.uploadMultipart(url, image, filename);
       this.throwIfError(data, '上传封面素材');
       if (!data.media_id) throw new Error('微信 add_material 未返回 media_id');
-      return String(data.media_id);
+      return { media_id: String(data.media_id), url: data.url ? String(data.url) : null };
     });
   }
 

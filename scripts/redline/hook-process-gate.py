@@ -108,29 +108,37 @@ def state_dir(root):
 
 
 def marker_path(root, session_id):
+    """凭证只按 session 落盘，没有 session_id 就不发通行证。
+
+    🔴 2026-10-26 修：原先 session_id 为空时落到全局 `process-touched`，且 save/load
+    双写双读 —— 一个会话写过方案，全机器（含别的 agent）8 小时内全部免检。
+    凭证必须是「一次会话 × 一次改造」，不存在全局通行证。
+    """
     safe = ''.join(ch for ch in (session_id or '') if ch.isalnum() or ch in '-_')
-    suffix = safe + MARKER_SUFFIX if safe else 'process-touched'
-    return os.path.join(state_dir(root), suffix)
+    if not safe:
+        return None
+    return os.path.join(state_dir(root), safe + MARKER_SUFFIX)
 
 
 def load_marker(root, session_id):
-    for p in (marker_path(root, session_id), os.path.join(state_dir(root), 'process-touched')):
-        if os.path.isfile(p):
-            try:
-                with open(p, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception:
-                continue
-    return None
+    p = marker_path(root, session_id)
+    if not p or not os.path.isfile(p):
+        return None
+    try:
+        with open(p, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def save_marker(root, session_id, info):
+    p = marker_path(root, session_id)
+    if not p:
+        return  # 无 session_id：不发通行证，也就不落盘
     d = state_dir(root)
     try:
         os.makedirs(d, exist_ok=True)
-        with open(marker_path(root, session_id), 'w', encoding='utf-8') as f:
-            json.dump(info, f, ensure_ascii=False)
-        with open(os.path.join(d, 'process-touched'), 'w', encoding='utf-8') as f:
+        with open(p, 'w', encoding='utf-8') as f:
             json.dump(info, f, ensure_ascii=False)
     except Exception:
         pass

@@ -25,6 +25,10 @@ import { ContentItemPersistService } from './services/content-item-persist.servi
 import { ManualCollectService } from './services/manual-collect.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { ContentQualityController } from './content-quality.controller';
+import { MediaController } from './media.controller';
+import { MediaService } from './services/media.service';
+import { CoverAiService } from './services/cover-ai.service';
+import { UploadStoreClient } from './services/upload-store.client';
 import { ContentAuthModule } from '../auth/auth.module';
 
 /** 内容管道领域模块——论文 / AI 资讯的采集、处理、发布 */
@@ -44,7 +48,7 @@ import { ContentAuthModule } from '../auth/auth.module';
     ]),
     ContentAuthModule,
   ],
-  controllers: [ContentController, ContentQualityController],
+  controllers: [ContentController, ContentQualityController, MediaController],
   providers: [
     ContentService,
     PipelineService,
@@ -59,6 +63,9 @@ import { ContentAuthModule } from '../auth/auth.module';
     ContentItemPersistService,
     ManualCollectService,
     ArxivDigestService,
+    MediaService,
+    CoverAiService,
+    UploadStoreClient,
   ],
   exports: [
     ContentService,
@@ -67,6 +74,7 @@ import { ContentAuthModule } from '../auth/auth.module';
     SeatTagService,
     FinnewsAdapterService,
     ArxivDigestService,
+    MediaService,
   ],
 })
 export class ContentModule {}

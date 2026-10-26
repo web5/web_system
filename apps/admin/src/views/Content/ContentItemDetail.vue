@@ -65,7 +65,7 @@ onMounted(load);
   <div class="page" v-loading="loading">
     <div class="page-head">
       <a-button type="text" class="back-btn" @click="router.push('/content/items')">← 返回采集明细</a-button>
-      <h2>{{ detail?.item.title ?? '明细详情' }}</h2>
+      <h2>{{ detail?.item.title_zh || detail?.item.title || '明细详情' }}</h2>
     </div>
 
     <template v-if="detail">
@@ -93,6 +93,15 @@ onMounted(load);
           <template v-else-if="detail.item.quality_status === 'fail'">
             —— 该阶段处理失败，详见下方技术信息
           </template>
+        </div>
+      </a-card>
+
+      <!-- 标题本地化：英文源要看得出「翻成了什么」和「原文是什么」 -->
+      <a-card v-if="detail.item.title_zh" size="small" class="block">
+        <div class="block-title">中文标题</div>
+        <div class="localized-title">{{ detail.item.title_zh }}</div>
+        <div class="muted origin-line">
+          原文（{{ detail.item.source_lang ?? '未知语种' }}）：{{ detail.item.title }}
         </div>
       </a-card>
 
@@ -233,6 +242,15 @@ onMounted(load);
 .muted {
   color: var(--text-faint);
   font-size: 12px;
+}
+.localized-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.5;
+}
+.origin-line {
+  margin-top: 6px;
 }
 .content-pre {
   background: var(--surface-3);

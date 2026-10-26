@@ -12,6 +12,8 @@
  *   · `content` 存 **arXiv 原文 summary**，不存中文摘要
  *     → 这是幻觉判定的比对基准。存中文就等于丢了「标准答案」
  *   · `summary` 存中文摘要（译名 / 核心贡献 / 方法亮点 / 潜在应用）
+ *   · `title` 存**英文原标题**、`title_zh` 存中文译名
+ *     → 译名写进 `title` 会让原文永久丢失（重跑不自愈）；展示的「中文优先」由 `title_zh || title` 承担
  *   · `meta.prompt_version` 记prompt 版本，评测抽样靠它
  *   · `meta.digest` 存结构化四字段，评测集标注直接引用
  *
@@ -97,7 +99,17 @@ export class ArxivDigestService {
     const qualityStatus = degraded ? QUALITY_STATUS.PARTIAL : QUALITY_STATUS.OK;
     const qualityStage = degraded ? QUALITY_STAGE.FALLBACK : QUALITY_STAGE.LLM;
 
-    const titleZh = input.title_zh?.trim() || input.title_en?.trim() || input.arxiv_id;
+    /**
+     * 🔴 `title` 存**原文**、`title_zh` 存译名 —— 与资讯管线同一口径。
+     *
+     * 此前这里把译名写进 `title`（"admin 列表主标识"），代价是英文原标题丢了：
+     * 重跑无法自愈、幻觉核对没有比对基准、详情页「原始 payload」也看不到论文原名。
+     * 展示层的「中文优先」由 `title_zh || title` 承担，不需要污染存储。
+     *
+     * 原文缺失（只有译名）时才退回译名，保证 `title` 非空不破约束。
+     */
+    const titleZh = input.title_zh?.trim() || null;
+    const titleRaw = input.title_en?.trim() || titleZh || input.arxiv_id;
     const externalId = createHash('sha1')
       .update(`${input.arxiv_id}|${input.prompt_version}`)
       .digest('hex');
@@ -113,8 +125,10 @@ export class ArxivDigestService {
     const row: Partial<ContentItemEntity> = {
       pipeline_id: input.pipeline_id ?? null,
       external_id: externalId,
-      // 译名是 admin 列表的主标识；无译名时退回英文标题
-      title: titleZh.slice(0, 500),
+      // 原文标题（英文）；中文译名放 title_zh，展示层取 title_zh || title
+      title: titleRaw.slice(0, 500),
+      title_zh: titleZh ? titleZh.slice(0, 500) : null,
+      source_lang: input.title_en?.trim() ? 'en' : titleZh ? 'zh' : 'other',
       url: input.abs_url ?? null,
       // ⚠️ content存**原文 abstract**，不是中文摘要 —— 幻觉判定的比对基准
       content: input.abstract,
