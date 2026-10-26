@@ -5,8 +5,9 @@
 -- 按管线配 cover_media_id 后，发布时作为显式 thumb_media_id 传给发布器（优先级最高）。
 -- 留空 = 维持现有兜底行为。
 --
--- 适用：prod（NODE_ENV=production，TypeORM synchronize 关闭，必须手跑）。
--- dev 由 synchronize 自动加列，重复执行本脚本也安全（先判列是否存在）。
+-- 🔴 dev 与 prod 都必须手跑！dev 机 content-hub 的 .env 里 NODE_ENV=production，
+-- synchronize 同样关闭（2026-10-26 实测：漏跑迁移 → Unknown column → runtime 激活失败回滚）。
+-- 重复执行安全（先判列是否存在）。0015 注释里「dev 由 synchronize 自动加列」已过时，勿信。
 
 SET @db = DATABASE();
 SET @exists = (
