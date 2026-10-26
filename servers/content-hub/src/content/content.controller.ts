@@ -14,6 +14,7 @@ import {
 import { ContentService, WechatMpPublishDto } from './services/content.service';
 import { ContentAccountService } from './services/content-account.service';
 import { PipelineRunService } from './services/pipeline-run.service';
+import { WechatMpPublisher } from './publishers/wechat-mp/wechat-mp.publisher';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
@@ -46,6 +47,7 @@ export class ContentController {
     private readonly contentService: ContentService,
     private readonly contentAccountService: ContentAccountService,
     private readonly pipelineRunService: PipelineRunService,
+    private readonly wechatMpPublisher: WechatMpPublisher,
   ) {}
 
   // ── 自媒体账号（只读注册表；凭据只回掩码，密文不出接口）──
@@ -244,5 +246,25 @@ export class ContentController {
   @Post('wechat/publish')
   publishWechat(@Body() body: WechatMpPublishDto) {
     return this.contentService.publishWechatArticle(body);
+  }
+
+  /**
+   * 公众号永久图片素材列表（封面选择器预览用）。
+   * 走用户 JWT（后台表单调用），返回 [{ media_id, name, url, update_time }]。
+   * url 是微信 CDN 地址，前端直接拿它做缩略图/大图预览。
+   * 设计说明：docs/development/2026-10-26-管线表单预览与宽度.md
+   */
+  @Get('wechat-covers')
+  async listWechatCovers(
+    @Query('account') account?: string,
+    @Query('offset') offset?: string,
+    @Query('count') count?: string,
+  ) {
+    const items = await this.wechatMpPublisher.listCoverMaterials(
+      account || undefined,
+      offset ? Number(offset) : 0,
+      count ? Math.min(Number(count) || 20, 50) : 20,
+    );
+    return { items };
   }
 }
