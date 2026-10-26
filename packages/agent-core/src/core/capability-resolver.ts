@@ -27,6 +27,22 @@ function mcpToolName(ref: string): string {
   return last || ref;
 }
 
+/**
+ * 需权限确认（`config.requiresConfirm`）的工具名集合（N3 装配侧过滤用）。
+ * 只看 capabilities 显式声明——本地工具与未标记的 MCP 工具都不在集合内。
+ */
+export function toolsRequiringConfirm(agent: AgentDefinition): Set<string> {
+  const out = new Set<string>();
+  for (const cap of agent.capabilities ?? []) {
+    if (cap.enabled === false) continue;
+    const cfg = (cap.config ?? {}) as { requiresConfirm?: boolean };
+    if (!cfg.requiresConfirm) continue;
+    if (cap.type === 'tool') out.add(cap.ref);
+    else if (cap.type === 'mcp') out.add(mcpToolName(cap.ref));
+  }
+  return out;
+}
+
 export function resolveAgentCapabilities(agent: AgentDefinition): ResolvedAgentCapabilities {
   const capabilities: CapabilityRef[] = agent.capabilities ?? [];
   if (capabilities.length === 0) {

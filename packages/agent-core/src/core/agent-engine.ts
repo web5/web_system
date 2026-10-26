@@ -11,7 +11,7 @@
  */
 import { type AgentDefinition } from '../interfaces/agent.interface';
 import { AGENT_ERROR_CODES, withCode } from './agent-errors';
-import { resolveAgentCapabilities } from './capability-resolver';
+import { resolveAgentCapabilities, toolsRequiringConfirm } from './capability-resolver';
 import {
   type TelemetryPort,
   type TelemetryRunStart,
@@ -141,7 +141,24 @@ export class AgentEngine {
     ];
 
     // 3. 工具 schema（挂技能时追加 load_skill）
-    const toolSchemas = await this.toolRegistry.toSchemas(resolved.tools);
+    // N3 装配侧过滤：C 端无 HITL 确认 UI，requiresConfirm 工具不进工具清单——
+    // 宁可不给模型看，也不要「调了才发现要确认、挂 60s 被拒」。
+    // 过滤数量进日志便于发现误配（工具少了却没人知道）。
+    let toolNames = resolved.tools;
+    if (input.scene === 'c-end') {
+      const banned = toolsRequiringConfirm(agent);
+      if (banned.size > 0) {
+        const before = toolNames.length;
+        toolNames = toolNames.filter((t) => !banned.has(t));
+        const dropped = before - toolNames.length;
+        if (dropped > 0) {
+          this.logger.warn(
+            `C 端装配侧过滤 requiresConfirm 工具 ${dropped} 个: [${[...banned].join(', ')}]（保留 ${toolNames.length} 个）`,
+          );
+        }
+      }
+    }
+    const toolSchemas = await this.toolRegistry.toSchemas(toolNames);
     if (hasSkills) toolSchemas.push(LOAD_SKILL_SCHEMA);
     let currentConversationId = conversationId;
 

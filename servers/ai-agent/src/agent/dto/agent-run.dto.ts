@@ -30,4 +30,15 @@ export class AgentRunDto {
   @IsOptional()
   @IsIn(['chat', 'tool'], { message: 'source 只能是 chat 或 tool' })
   source?: 'chat' | 'tool';
+
+  /**
+   * 运行场景（N3 装配侧过滤，2026-10-26）：
+   * - 'c-end'（缺省）：C 端无 HITL 确认 UI，requiresConfirm 工具不进工具清单
+   * - 'admin'：调试台有确认 UI，不过滤
+   *
+   * 安全侧默认：不传按 c-end 处理（宁可过滤掉工具，也不要「调了才发现要确认」挂 60s）。
+   */
+  @IsOptional()
+  @IsIn(['c-end', 'admin'], { message: 'scene 只能是 c-end 或 admin' })
+  scene?: 'c-end' | 'admin';
 }

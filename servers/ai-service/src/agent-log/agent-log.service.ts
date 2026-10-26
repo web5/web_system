@@ -19,6 +19,8 @@ export interface RunAttribution {
 }
 
 export interface RecordRunInput {
+  /** N5（2026-10-26）：引擎运行 ID，作为 agent_runs 主键。不传则自动生成 uuid（向后兼容）。 */
+  runId?: string;
   agentId: string;
   agentName?: string | null;
   userId: string;
@@ -96,6 +98,8 @@ export class AgentLogService {
       // 不需要跨服务改 ai-agent；推导不抛错，推导失败只降级为 unknown，绝不影响主链路落库。
       const attribution = this.deriveAttribution(input);
       const row = this.repo.create({
+        // N5：调用方传 runId 则复用为主键，支持「SSE 帧 runId → 查库」反查；不传自动生成（向后兼容）
+        ...(input.runId ? { id: input.runId } : {}),
         agentId: input.agentId,
         agentName: input.agentName ?? null,
         userId: input.userId,

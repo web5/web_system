@@ -13,6 +13,10 @@ set -uo pipefail
 
 TOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$TOP"
+# 钉死项目根：不导出时 hook 的 project_root 会优先吃调用方环境里的
+# CODEBUDDY_PROJECT_DIR（如 WorkBuddy 的 AiWorkspace）→ 用例路径全成「仓库外」，
+# 门禁空转、自检假绿（2026-10-26 实测）。一律以本仓库为准。
+export CODEBUDDY_PROJECT_DIR="$TOP"
 BIN="$TOP/scripts/redline"
 
 PASS=0
@@ -89,6 +93,14 @@ expect_deny "V10 shell sed -i 写 UI 被拒" "$out"
 out=$(mk execute_command command "echo hello > $UI_WXSS" "$SID" | python3 "$BIN/hook-shell-ui-gate.py")
 expect_deny "V10b shell 重定向写 UI 被拒" "$out"
 
+# V10c 只读 + 2>/dev/null + 复合命令引用 UI 路径 → 不误判重定向写（2026-10-26 回归）
+out=$(mk execute_command command "grep -n switch $UI_VUE 2>/dev/null | head -5; wc -l $UI_VUE" "$SID" | python3 "$BIN/hook-shell-ui-gate.py")
+expect_empty "V10c 只读+2>/dev/null+复合命令零摩擦" "$out"
+
+# V10d 引号包裹的重定向目标仍拦（防 strip_quoted 吃掉目标导致漏判）
+out=$(mk execute_command command "cat > \"$UI_WXSS\"" "$SID" | python3 "$BIN/hook-shell-ui-gate.py")
+expect_deny "V10d 引号重定向目标写 UI 被拒" "$out"
+
 # V11 白名单/构建命令零摩擦
 for c in "bash scripts/publish-deploy-console.sh" "pnpm i" "npx vite build" "git diff" "cat $UI_WXSS"; do
   out=$(mk execute_command command "$c" "$SID" | python3 "$BIN/hook-shell-ui-gate.py")
@@ -136,7 +148,9 @@ miss=""
 grep -q 'check_sync_pair' "$BIN/scan-rules.sh" || miss="$miss check_sync_pair"
 grep -q 'check_r12' "$BIN/scan-rules.sh" || miss="$miss check_r12"
 grep -q 'project-context.md' "$BIN/scan-rules.sh" || miss="$miss 保护清单"
-grep -q 'check_r12  ' "$BIN/scan-rules.sh" || grep -q 'check_r12$' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+# 调用形态宽匹配：`check_r12;`（裸调用）/ `check_r12 `（带参）都算已挂载；
+# 不认 `check_r12(`（那是定义）。旧断言只认「双空格 / 行尾」，被 `check_r12; _prof` 写法误判缺失。
+grep -qE '^[[:space:]]*check_r12[; ]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
 if [ -z "$miss" ]; then ok "V24 kit 同源守门接线完整（含保护清单）"
 else bad "V24 kit 同源守门接线完整（含保护清单）" "缺：${miss# }"; fi
 
@@ -168,7 +182,8 @@ fi
 miss=""
 grep -q 'check_r16' "$BIN/scan-rules.sh" || miss="$miss check_r16"
 [ -f "$BIN/check-sse-contract.py" ] || miss="$miss check-sse-contract.py"
-grep -q 'check_r16  ' "$BIN/scan-rules.sh" || grep -q 'check_r16$' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+# 同 V24：宽匹配调用形态（`check_r16;` / `check_r16 `），排除定义（`check_r16(`）
+grep -qE '^[[:space:]]*check_r16[; ]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
 if [ -z "$miss" ]; then ok "V27 SSE 契约一致性机检接线完整"
 else bad "V27 SSE 契约一致性机检接线完整" "缺：${miss# }"; fi
 

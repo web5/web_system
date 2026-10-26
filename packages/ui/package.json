@@ -19,8 +19,8 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc --watch",
     "test": "jest",
-    "lint": "eslint . --fix",
-    "lint:ci": "eslint ."
+    "lint": "eslint . --max-warnings 9999 --fix",
+    "lint:ci": "eslint . --max-warnings 9999"
   },
   "dependencies": {
     "ant-design-vue": "^4.2.0",
