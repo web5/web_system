@@ -378,11 +378,11 @@ function formatJson(v: unknown): string {
   }
 }
 function evtTag(type: string): string {
-  const map: Record<string, string> = { tool_call: 'tool', tool_result: 'result', skill_load: 'skill', final: 'final', error: 'error' };
+  const map: Record<string, string> = { intent: 'intent', tool_call: 'tool', tool_result: 'result', skill_load: 'skill', final: 'final', error: 'error' };
   return map[type] || type;
 }
 function evtColor(type: string): string {
-  const map: Record<string, string> = { tool_call: 'blue', tool_result: 'cyan', skill_load: 'purple', final: 'green', error: 'red' };
+  const map: Record<string, string> = { intent: 'orange', tool_call: 'blue', tool_result: 'cyan', skill_load: 'purple', final: 'green', error: 'red' };
   return map[type] || 'gray';
 }
 
@@ -679,6 +679,22 @@ function handleEvent(ev: StreamEvent) {
         cur.processes.push(proc);
       }
       events.push({ type: ev.type, name: ev.name, content: ev.content, args: ev.args, step: ev.step });
+      scrollToBottom();
+      break;
+    }
+    case 'intent': {
+      // N6（2026-10-26）：意图路由结果——展示「谁来回答」+ 置信度 + 路由方式
+      const intentData = (ev as any).intent;
+      const intentName = intentData?.agentName || intentData?.agentId || '(未知)';
+      const conf = intentData?.confidence != null ? `置信度 ${(intentData.confidence * 100).toFixed(0)}%` : '';
+      const via = intentData?.via ? `路由 ${intentData.via}` : '';
+      const switched = intentData?.switched ? '（已切换 Agent）' : '';
+      events.push({
+        type: 'intent',
+        name: intentName,
+        content: [`→ ${intentName}`, conf, via, switched].filter(Boolean).join(' · '),
+        step: undefined,
+      });
       scrollToBottom();
       break;
     }

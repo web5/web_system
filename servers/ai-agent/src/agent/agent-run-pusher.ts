@@ -23,6 +23,8 @@ export class AgentRunPusher {
   }
 
   async push(payload: {
+    /** N5：引擎运行 ID，作为 agent_runs 主键（前端可反查） */
+    runId?: string;
     agentId: string;
     agentName?: string | null;
     userId: string;

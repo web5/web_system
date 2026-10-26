@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response, Request } from 'express';
+import { randomUUID } from 'crypto';
 import {
   AgentRunner,
   AgentRegistry,
@@ -148,7 +149,8 @@ export class AgentController {
   @RequirePermission('agents:debug')
   @ApiOperation({ summary: 'Admin 对话调试运行（需 agents:debug）' })
   async adminRun(@Body() dto: AgentRunDto, @Res() res: Response, @Req() req: Request) {
-    await this.handleRun(dto, res, req);
+    // Admin 调试台有确认 UI，强制不过滤 requiresConfirm 工具（N3）
+    await this.handleRun({ ...dto, scene: 'admin' }, res, req);
   }
 
   /** 可用模型列表（Playground 模型下拉用，含可用性状态） */
@@ -164,6 +166,10 @@ export class AgentController {
    * 权限确认：前端弹窗后调用（approve=true 允许 / false 拒绝）。
    * 只用 AuthGuard（登录即可），因为 C 端业务用户也需要确认自己触发的高危操作；
    * 由 PermissionBroker 校验确认者 userId 与发起 run 的用户一致，防止越权替他人确认。
+   *
+   * N4（2026-10-26）：返回体从 { ok: boolean } 升级为区分「已处理/不存在/越权」——
+   * 越权时 broker 立刻 reject 挂起工具（不等 60s 超时），前端可按 code 给可读提示。
+   * ok===true 语义不变；ok===false 新增 code 字段（旧前端只读 ok，向后兼容）。
    */
   @Post('permission/:requestId')
   @ApiOperation({ summary: '确认/拒绝 Agent 工具执行的权限请求' })
@@ -177,8 +183,7 @@ export class AgentController {
     if (!userId) {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
     }
-    const ok = this.permissionBroker.resolve(requestId, userId, body.approve === true);
-    return { ok };
+    return this.permissionBroker.resolve(requestId, userId, body.approve === true);
   }
 
   /** 共用运行逻辑（SSE 流式 + 步骤收集 + 异步落库） */
@@ -192,10 +197,23 @@ export class AgentController {
       throw new HttpException('无法识别用户身份', HttpStatus.UNAUTHORIZED);
     }
 
+    // N5（2026-10-26）：controller 预生成 runId，贯穿 SSE 帧 → 引擎 → 落库，支持反查。
+    // agent_runs 表主键复用此值（零 DDL）。
+    const runId = randomUUID();
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+
+    // N1（2026-10-26）：SSE 心跳保活——工具执行/等待期间可能 90s 无字节输出，
+    // 代理按空闲超时掐连接。每 15s 推一帧 SSE 注释（`: keepalive`），EventSource 自动忽略，
+    // 不进事件解析。间隔 15s < 常见代理 60s 空闲超时，留 4 倍余量。
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(`: keepalive\n\n`);
+      }
+    }, 15_000);
 
     // 收集步骤流水 + 取 agent 定义快照（systemPrompt / tools / model）
     // usage：final/summary/error 事件携带的 token 用量（Phase1.6 随 steps 落库，供成本/用量统计）
@@ -236,6 +254,7 @@ export class AgentController {
     res.write(
       `data: ${JSON.stringify({
         type: 'intent',
+        runId, // N5：前端可反查 agent_runs
         intent: {
           agentId: resolvedAgentId,
           agentName: this.agentRegistry.has(resolvedAgentId)
@@ -282,9 +301,12 @@ export class AgentController {
           conversationId: dto.conversationId,
           // 调试时可临时覆盖模型（仅本次运行）
           model: dto.model,
+          // N3：C 端装配侧过滤 requiresConfirm 工具；缺省按 c-end（安全侧默认）
+          scene: dto.scene ?? 'c-end',
         },
         userId,
         confirmHandler,
+        runId, // N5：controller 预生成，引擎侧同值
       );
 
       for await (const event of stream as AsyncGenerator<StreamEvent>) {
@@ -327,9 +349,11 @@ export class AgentController {
       const msg = withCode(classifyError(error), raw);
       errorMessage = msg;
       this.logger.error(`Agent run error: ${raw}`);
-      const errPayload = JSON.stringify({ type: 'error', content: msg });
+      const errPayload = JSON.stringify({ type: 'error', runId, content: msg });
       res.write(`data: ${errPayload}\n\n`);
       steps.push({ type: 'error', content: msg, ts: Date.now() });
+    } finally {
+      clearInterval(heartbeat);
     }
 
     res.end();
@@ -363,6 +387,8 @@ export class AgentController {
     // 异步把 run 推送到 ai-service 统一落库（admin 调试用）
     this.runPusher
       .push({
+        // N5：runId 作为 agent_runs 主键，前端可反查
+        runId,
         // 埋点同样用解析后的 id，否则 agent_log 会写进 'auto'
         agentId: resolvedAgentId,
         agentName,

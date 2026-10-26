@@ -58,6 +58,12 @@ export interface StreamEvent {
     completionTokens: number;
     totalTokens: number;
   };
+  /**
+   * 本轮 run 的唯一 id（N5，2026-10-26）。
+   * intent / final / error 事件携带；与 `agent_runs.id` 同值，
+   * 前端日志据此直接反查 agent_runs 那一行（C2 契约，可选字段，旧消费方忽略即可）。
+   */
+  runId?: string;
 }
 
 export interface RunInput {
@@ -69,4 +75,12 @@ export interface RunInput {
    * 不传则用 Agent 定义里的 model；传入时仅本次运行生效，不修改 Agent 定义。
    */
   model?: string;
+  /**
+   * 运行场景（N3 装配侧过滤，2026-10-26）：
+   * - 'admin'：调试台，有 HITL 确认 UI，装配全部工具；
+   * - 'c-end'：小程序等无 HITL 场景，**不装配** `requiresConfirm` 工具
+   *   （宁可不给模型看，也不要「调了才发现要确认、挂 60s 被拒」）。
+   * 缺省不过滤（向后兼容）。
+   */
+  scene?: 'admin' | 'c-end';
 }
