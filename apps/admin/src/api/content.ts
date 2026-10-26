@@ -32,6 +32,8 @@ export interface ContentPipeline {
   /** 发布模式：publish=直接发布，draft=只进公众号草稿箱 */
   publish_mode?: 'draft' | 'publish' | null;
   tencent_folder: string | null;
+  /** 公众号封面素材 media_id（issue-5）；留空用默认通用封面 */
+  cover_media_id: string | null;
   enabled: boolean;
   created_at?: string;
   updated_at?: string;

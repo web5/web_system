@@ -129,6 +129,9 @@ export class PipelineService {
           // 公众号通道：日报 markdown 转 HTML（图片已由发布器处理）
           html: target === 'wechat_mp' ? markdownToHtml(markdown) : undefined,
           folder: pipeline.tencent_folder ?? undefined,
+          // issue-5：管线级封面（显式 thumb_media_id，发布器优先级最高）。
+          // 日报成文纯文本无图，以前只能兜底到内置「AI 资讯日报」通用封面，论文管线主题不符。
+          thumb_media_id: pipeline.cover_media_id ?? undefined,
           // 发布模式只对公众号生效（腾讯文档没有草稿概念），未配置按 publish
           mode:
             target === 'wechat_mp' && pipeline.publish_mode === 'draft' ? 'draft' : 'publish',
@@ -153,6 +156,8 @@ export class PipelineService {
                 markdown,
                 ...(target === 'wechat_mp' ? { html: markdownToHtml(markdown) } : {}),
                 folder: pipeline.tencent_folder ?? undefined,
+                // issue-5：封面一并留存，「重新发布」才不会退回通用封面
+                ...(pipeline.cover_media_id ? { thumb_media_id: pipeline.cover_media_id } : {}),
               },
             },
           }),

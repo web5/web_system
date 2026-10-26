@@ -44,6 +44,19 @@ export class ContentPipelineEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '腾讯文档目标目录' })
   tencent_folder: string | null;
 
+  /**
+   * 公众号封面素材 media_id（2026-10-26 新增，issue-5）。
+   *
+   * 背景：日报成文是纯文本无图，发布器取不到正文首图 → 兜底到内置的
+   * 「大橙子社区通用封面」（图上写「AI 资讯日报」），论文管线躺着中枪。
+   * 按管线配封面后，发布时把该值作为显式 thumb_media_id 传给发布器
+   * （发布器优先级：显式 > 正文首图 > env > 内置兜底，无需改发布器）。
+   *
+   * 留空 = 维持现有兜底行为（通用封面）。
+   */
+  @Column({ type: 'varchar', length: 128, nullable: true, comment: '公众号封面素材 media_id，留空用默认通用封面' })
+  cover_media_id: string | null;
+
   @Column({ type: 'boolean', default: true, comment: '是否启用' })
   enabled: boolean;
 
