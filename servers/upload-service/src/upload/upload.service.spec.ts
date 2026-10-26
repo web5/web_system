@@ -30,6 +30,7 @@ describe('UploadService（A3：唯一写入点 + 目录可配）', () => {
       'drawing',
       'bianbian',
       'general',
+      'covers',
     ]);
     expect(service.buildUrl('x.png', 'avatars')).toBe('/api/uploads/avatars/x.png');
     expect(service.getUploadDir()).toBe(path.resolve(tmp));
@@ -38,7 +39,7 @@ describe('UploadService（A3：唯一写入点 + 目录可配）', () => {
 
   it('分类元信息可一次性取给前端（key 即磁盘目录名）', () => {
     const cats = service.getCategories();
-    expect(cats.map((c) => c.key)).toEqual(['avatars', 'drawing', 'bianbian', 'general']);
+    expect(cats.map((c) => c.key)).toEqual(['avatars', 'drawing', 'bianbian', 'general', 'covers']);
     expect(cats.find((c) => c.key === 'avatars')?.maxSize).toBe(2 * 1024 * 1024);
   });
 
