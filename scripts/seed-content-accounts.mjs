@@ -20,6 +20,7 @@
  *   --code <code>       默认 default
  *   --name <显示名>     默认「大橙子社区」
  *   --type <personal|enterprise>  账号主体类型，默认 personal
+ *   --skip-verify       跳过「写库前实测 stable_token」（仅限服务器无外网时）
  *
  * 主体类型为什么重要：个人主体（未认证订阅号）没有 freepublish 权限，草稿就是终点；
  * 企业主体才走「待发布 → 已发布」。类型写错，界面上的状态流转就是错的。
@@ -106,17 +107,55 @@ if (flag('keygen')) {
 }
 
 const env = readEnv(ENV_FILE);
-const appId = env.OFFICIAL_ACCOUNT_APP_ID;
-const appSecret = env.OFFICIAL_ACCOUNT_SECRET;
+// 取值优先级：OFFICIAL_ACCOUNT_* → WECHAT_MP_*（发布链路同源）
+// 背景：2026-10-26 踩坑——prod 的 OFFICIAL_ACCOUNT_SECRET 是陈旧错值，
+// seed 忠实加密错值入库 → 探活稳定报「微信 40125」。两处必须同源。
+const appId = env.OFFICIAL_ACCOUNT_APP_ID || env.WECHAT_MP_APP_ID;
+const appSecret = env.OFFICIAL_ACCOUNT_SECRET || env.WECHAT_MP_APP_SECRET;
 if (!appId || !appSecret) {
-  console.error(`❌ ${ENV_FILE} 缺 OFFICIAL_ACCOUNT_APP_ID / OFFICIAL_ACCOUNT_SECRET`);
+  console.error(`❌ ${ENV_FILE} 缺凭据：需要 OFFICIAL_ACCOUNT_APP_ID/OFFICIAL_ACCOUNT_SECRET 或 WECHAT_MP_APP_ID/WECHAT_MP_APP_SECRET`);
   process.exit(1);
+}
+if (env.OFFICIAL_ACCOUNT_SECRET && env.WECHAT_MP_APP_SECRET && env.OFFICIAL_ACCOUNT_SECRET !== env.WECHAT_MP_APP_SECRET) {
+  console.warn(`⚠️  ${ENV_FILE} 里 OFFICIAL_ACCOUNT_SECRET 与 WECHAT_MP_APP_SECRET 不一致，当前采用前者。`);
+  console.warn(`   若探活报 40125，说明前者是错值——请改成与 WECHAT_MP_APP_SECRET 一致后重跑。`);
 }
 
 const key = loadKey();
 if (key.length !== 32) {
   console.error(`❌ 解密钥长度非法（期望 32 字节，实际 ${key.length}）`);
   process.exit(1);
+}
+
+// 写库前实测凭据——防止把错 secret 加密进库（加密/解密都成功，但微信 40125）
+// 2026-10-26 踩坑后加：错值 seed 完全"看起来成功"，只有探活才暴露。
+if (!flag('skip-verify')) {
+  process.stdout.write('实测凭据（stable_token）… ');
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const resp = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'client_credential', appid: appId, secret: appSecret }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (data.access_token) {
+      console.log(`✅ 凭据有效（expires_in=${data.expires_in}）`);
+    } else {
+      console.log(`❌ 微信拒绝：errcode=${data.errcode} ${data.errmsg || ''}`);
+      console.error(`凭据实测失败，未写库。请核对 ${ENV_FILE} 里的 secret 是否为公众号后台最新值。`);
+      process.exit(1);
+    }
+  } catch (e) {
+    console.log(`⚠️  网络不可达（${e.message}），跳过实测`);
+    console.warn(`   服务器无外网时加 --skip-verify 跳过；否则请检查网络后重跑。`);
+    process.exit(1);
+  }
+} else {
+  console.log('--skip-verify：跳过凭据实测');
 }
 
 const enc = encrypt({ app_id: appId, app_secret: appSecret }, key);
