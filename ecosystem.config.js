@@ -267,11 +267,12 @@ module.exports = {
         PORT: 6007,
         ...baseDbConfig,
         SYSTEM_SERVICE_URL,
-        // 服务间调用鉴权（InternalKeyGuard 读）：与 gateway / mcp-gateway 同值
-        CONTENT_HUB_SERVICE_KEY: process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '',
-        LLM_API_KEY: process.env.IMAGE_GEN_API_KEY || '',
-        LLM_BASE_URL: 'https://tokenhub.tencentmaas.com/v1',
-        LLM_MODEL: 'hy3',
+        // 🔴 服务间鉴权与 LLM 配置一律不在此注入：dotenv 不覆盖已存在的 process.env，
+        // 无值时注入 '' 会把 .env 里的真实值挡死（2026-10-26 prod 事故：LLM_API_KEY 恒空
+        // → 资讯中文化与摘要静默退化；CONTENT_HUB_SERVICE_KEY 恒空 → 服务间接口全 401）。
+        // 以下键由 servers/content-hub/.env 唯一负责：
+        //   CONTENT_HUB_SERVICE_KEY / LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+        //   IMAGE_GEN_API_KEY / IMAGE_GEN_API_URL
         // 微信公众号发布凭据：优先显式 WECHAT_MP_APP_ID/SECRET（dev/prod 公众号不同），
         // 未显式配置时回退登录 OAuth 的 OFFICIAL_ACCOUNT_*
         WECHAT_MP_APP_ID: process.env.WECHAT_MP_APP_ID || OFFICIAL_ACCOUNT_APP_ID,
