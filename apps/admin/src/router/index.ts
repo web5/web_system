@@ -36,8 +36,9 @@ export function isTokenExpired(token: string): boolean {
     const payload = JSON.parse(atob(padded));
     if (!payload.exp) return false;
     return Date.now() >= payload.exp * 1000;
-  } catch (err) {
-    console.warn('[router] token 解析失败，跳过本地过期检查:', err);
+  } catch {
+    // 解析失败（格式异常 / 非 JWT）不假设过期，交后端 401 兜底。
+    // 不打 console.warn —— jest CI 模式下 console 输出会污染测试报告。
     return false;
   }
 }
