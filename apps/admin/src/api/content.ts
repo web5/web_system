@@ -34,6 +34,8 @@ export interface ContentPipeline {
   /** 默认封面素材 ID（content_media.id）；定时发布自动用它 */
   default_cover_id?: number | null;
   tencent_folder: string | null;
+  /** 公众号封面素材 media_id（issue-5）；留空用默认通用封面 */
+  cover_media_id: string | null;
   enabled: boolean;
   created_at?: string;
   updated_at?: string;
@@ -573,4 +575,25 @@ export function generateMediaCover(body: {
   tags?: string[];
 }): Promise<ContentMedia> {
   return request.post('/content-admin/content/media/generate', body, { timeout: 120_000 });
+}
+
+// ── 公众号封面素材（表单「选图即见图」预览用）──
+
+/** 微信永久图片素材条目（material/batchget_material type=image） */
+export interface WechatCoverItem {
+  media_id: string;
+  name: string;
+  /** 微信 CDN 地址，直接用作缩略图/大图预览 */
+  url: string;
+  update_time: number;
+}
+
+/**
+ * 列出公众号永久图片素材，供封面选择器预览。
+ * 只读接口，失败时调用方降级为纯文本输入，不阻断表单编辑。
+ */
+export function listWechatCovers(): Promise<{ items: WechatCoverItem[] }> {
+  return request.get('/content-admin/content/wechat-covers', {
+    params: { count: 30 },
+  });
 }

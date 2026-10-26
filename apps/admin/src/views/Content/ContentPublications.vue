@@ -53,9 +53,27 @@ function onTableChange(pag: { current: number; pageSize: number }) {
   load();
 }
 
-/** 列表标题：条目级发布用关联条目标题；管线级发布（item_id=0）显示管线聚合入口 */
+/**
+ * 列表标题（issue-2）：优先成文标题 detail.payload.title（p40/2026-10-22 起发布即留存），
+ * 其次关联条目标题，最后才落「管线成文（pipeline #N）」兜底。
+ *
+ * 管线级发布（item_id=0）item_title 恒 null，以前每行都叫「管线成文（pipeline #1）」，
+ * 同一管线天天一条全同名，运营没法从列表区分是哪天的成文。
+ *
+ * 占位符兜底：2026-10-23 前定时发布有少量记录 payload.title 是未渲染的模板（{{date}} 原样），
+ * 这里按本条发布时间渲染，避免列表露出裸占位符（与后端 renderPlaceholders 同语义）。
+ */
+function payloadTitle(p: Publication): string | null {
+  const t = (p.detail as { payload?: { title?: string } } | null)?.payload?.title;
+  if (!t) return null;
+  return t
+    .replace(/\{\{date\}\}/g, p.created_at.slice(0, 10))
+    .replace(/\{\{datetime\}\}/g, p.created_at.slice(0, 16).replace('T', ' '))
+    .replace(/\{\{time\}\}/g, p.created_at.slice(11, 16));
+}
+
 const rowTitle = (p: Publication) =>
-  p.item_title ?? (p.pipeline_id ? `管线成文（pipeline #${p.pipeline_id}）` : '（无标题）');
+  payloadTitle(p) ?? p.item_title ?? (p.pipeline_id ? `管线成文（pipeline #${p.pipeline_id}）` : '（无标题）');
 
 /** 该发布记录是否留存了成文内容（2026-10-22 起发布才留存 payload） */
 function hasPayload(p: Publication): boolean {
@@ -208,6 +226,17 @@ function statusHint(p: Pick<Publication, 'status' | 'account_type'>): string {
 }
 
 /**
+ * 状态列 hover 提示（issue-1）：drafted 行的操作指引 + media 定位。
+ * 非 drafted 行返回空串（antd tooltip 收到空 title 不渲染，无需 v-if 双份模板）。
+ * 以前这段话常驻标签下方，每行都撑出一截灰字，状态列被撑宽——改成 hover 才出现。
+ */
+function statusTip(p: Pick<Publication, 'status' | 'account_type' | 'media_id'>): string {
+  if (p.status !== 'drafted') return '';
+  const media = p.media_id ? `（media: ${String(p.media_id).slice(0, 12)}…）` : '';
+  return `${statusHint(p)}${media}`;
+}
+
+/**
  * 「正式发布」入口只对**企业主体**有意义：个人主体点了也是 48001 降级回草稿。
  * 类型未登记时保留入口（历史记录，无从判断，交给运营自己试）。
  */
@@ -290,20 +319,16 @@ onMounted(load);
           <a-tag color="geekblue">{{ TARGET_LABEL[record.target] ?? record.target }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'status'">
-          <a-space :size="4">
-            <a-tag :color="statusColor(record)">{{ statusLabel(record) }}</a-tag>
-            <a-tag v-if="record.account_type" color="default">
-              {{ ACCOUNT_TYPE_LABEL[record.account_type] ?? record.account_type }}
-            </a-tag>
-            <a-tag v-else color="default">未登记账号</a-tag>
-          </a-space>
-          <div
-            v-if="record.status === 'drafted'"
-            style="margin-top: 2px; font-size: 12px; color: #999"
-          >
-            {{ statusHint(record) }}
-            <span v-if="record.media_id">（media: {{ String(record.media_id).slice(0, 12) }}…）</span>
-          </div>
+          <!-- issue-1：说明文字改为 hover tip，不再常驻撑宽列表；空 title 时 tooltip 不渲染 -->
+          <a-tooltip :title="statusTip(record)">
+            <a-space :size="4">
+              <a-tag :color="statusColor(record)">{{ statusLabel(record) }}</a-tag>
+              <a-tag v-if="record.account_type" color="default">
+                {{ ACCOUNT_TYPE_LABEL[record.account_type] ?? record.account_type }}
+              </a-tag>
+              <a-tag v-else color="default">未登记账号</a-tag>
+            </a-space>
+          </a-tooltip>
         </template>
         <template v-else-if="column.dataIndex === 'created_at'">
           {{ fmtTime(record.created_at) }}

@@ -20,6 +20,15 @@ export interface WechatDraftArticle {
   only_fans_can_comment?: number; // 是否仅粉丝可评论 0/1
 }
 
+/** 永久图片素材（material/batchget_material type=image 的条目） */
+export interface WechatImageMaterial {
+  media_id: string;
+  name: string;
+  /** 微信 CDN url——缩略图/预览图直接用它 */
+  url: string;
+  update_time: number;
+}
+
 const DEFAULT_API_BASE = 'https://api.weixin.qq.com';
 
 /** 微信返回体统一判定：errcode 为 0 或缺失即成功 */
@@ -154,6 +163,39 @@ export class WechatMpClient {
       this.throwIfError(data, '上传封面素材');
       if (!data.media_id) throw new Error('微信 add_material 未返回 media_id');
       return { media_id: String(data.media_id), url: data.url ? String(data.url) : null };
+    });
+  }
+
+  /**
+   * 列出永久图片素材（material/batchget_material type=image）。
+   * 用途：后台封面选择器带缩略图预览——media_id 本身不可读，
+   * 得拿到微信 CDN url 才能在表单里"选图即见图"。
+   */
+  listImageMaterials(offset = 0, count = 20): Promise<WechatImageMaterial[]> {
+    return this.callWithTokenRetry(async () => {
+      const token = await this.getAccessToken();
+      const url = `${this.apiBase}/cgi-bin/material/batchget_material?access_token=${encodeURIComponent(token)}`;
+      const data = (await this.postJson(url, {
+        type: 'image',
+        offset,
+        count,
+      })) as WechatResponse & {
+        item?: Array<{
+          media_id?: string;
+          name?: string;
+          url?: string;
+          update_time?: number;
+        }>;
+      };
+      this.throwIfError(data, '获取素材列表');
+      return (data.item ?? [])
+        .filter((it) => it.media_id)
+        .map((it) => ({
+          media_id: String(it.media_id),
+          name: it.name ? String(it.name) : '',
+          url: it.url ? String(it.url) : '',
+          update_time: it.update_time ? Number(it.update_time) : 0,
+        }));
     });
   }
 

@@ -1,7 +1,7 @@
 /** 微信公众号发布器——HTML 富文本 → 草稿箱 → freepublish 发布 */
 import { Injectable, Logger } from '@nestjs/common';
 import { IPublisher, PublishPayload, PublishResult } from '../publisher.interface';
-import { WechatMpClient } from './wechat-mp.client';
+import { WechatMpClient, type WechatImageMaterial } from './wechat-mp.client';
 
 /** 微信 CDN 域名前缀，已上传图片不再重复处理 */
 const WECHAT_CDN_HOSTS = /mmbiz\.qpic\.cn|mmbiz\.qlogo\.cn/i;
@@ -186,6 +186,19 @@ export class WechatMpPublisher implements IPublisher {
       this.logger.error(`公众号建草稿失败: ${msg}`);
       return { success: false, error: msg };
     }
+  }
+
+  /**
+   * 列出公众号永久图片素材，供后台封面选择器做「选图即见图」预览。
+   * 封面 media_id 本身不可读，必须拿到微信 CDN url 才能亮图。
+   */
+  async listCoverMaterials(
+    account?: string,
+    offset = 0,
+    count = 20,
+  ): Promise<WechatImageMaterial[]> {
+    const client = this.getClient(account);
+    return client.listImageMaterials(offset, count);
   }
 
   /**

@@ -100,6 +100,8 @@ const itemColumns = [
   // ellipsis 会把第二行裁掉（原文就看不见了，等于没法核对翻译）
   { title: '标题', dataIndex: 'title' },
   { title: '来源', dataIndex: 'source_name', width: 130, ellipsis: true },
+  // issue-4：人工在列表里逐条确认「采集得对不对」，原文链接就地可点，不用每条钻详情
+  { title: '原文链接', dataIndex: 'url', width: 150 },
   { title: '管线', dataIndex: 'pipeline_code', width: 110, ellipsis: true },
   { title: '质量', key: 'quality', width: 150 },
   { title: '采集耗时', dataIndex: 'collect_duration_ms', width: 100 },
@@ -215,6 +217,13 @@ onMounted(async () => {
           <div v-if="record.title_zh && record.title_zh !== record.title" class="title-origin">
             {{ record.title }}
           </div>
+        </template>
+        <template v-else-if="column.dataIndex === 'url'">
+          <!-- issue-4：原文链接就地可点，hover 出完整 URL -->
+          <a v-if="record.url" :href="record.url" target="_blank" rel="noopener" :title="record.url">
+            打开原文
+          </a>
+          <span v-else class="muted">-</span>
         </template>
         <template v-else-if="column.key === 'quality'">
           <template v-if="record.quality_status">
