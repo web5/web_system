@@ -141,9 +141,30 @@ export class WechatMpPublisher implements IPublisher {
     }
   }
 
+  /**
+   * 把一张图上传为公众号永久素材（素材库「同步微信」与「发布前兜底同步」共用）。
+   *
+   * `imageUrl` 允许是 upload-service 的相对地址（`/api/uploads/covers/x.png`）——
+   * 内部直接拼 `UPLOAD_SERVICE_URL`，不依赖公网域名，本地/内网都能跑。
+   *
+   * 返回 `url` 是微信侧 CDN 地址，用于「已同步」的可视确认；可能为空（微信不保证返回）。
+   */
+  async uploadCoverToWechat(
+    imageUrl: string,
+    account?: string,
+  ): Promise<{ media_id: string; url: string | null }> {
+    const client = this.getClient(account);
+    const absolute = /^https?:\/\//i.test(imageUrl)
+      ? imageUrl
+      : `${(process.env.UPLOAD_SERVICE_URL || 'http://localhost:6008').replace(/\/$/, '')}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+    const { blob, filename } = await client.downloadImage(absolute);
+    const result = await client.uploadPermanentImage(blob, filename);
+    this.logger.log(`[wechat_mp] 素材已同步微信 media=${result.media_id} «${imageUrl.slice(0, 60)}»`);
+    return result;
+  }
+
   /** 只建草稿不发布，返回 media_id（供 MCP/后台预览，可在公众号后台确认） */
-  async createDraft(payload: PublishPayload): Promise<DraftResult> {
-    const title = payload.title?.trim();
+  async createDraft(payload: PublishPayload): Promise<DraftResult> {    const title = payload.title?.trim();
     const html = payload.html?.trim();
     if (!title || !html) {
       return { success: false, error: '公众号草稿缺少 title 或 html' };

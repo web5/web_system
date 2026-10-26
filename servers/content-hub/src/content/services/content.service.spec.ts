@@ -50,7 +50,21 @@ function buildService(log: SqlLog): ContentService {
     {} as any,
     {} as any,
     {} as any,
+    mediaStub(),
   );
+}
+
+/**
+ * 素材库替身：默认「没有可用封面」。
+ *
+ * 这组测试关注的是 SQL 与脱敏，不关心封面解析；但替身必须真实返回 null 而不是 undefined，
+ * 否则 publish 里 `if (resolved)` 之后的逻辑容易在别的用例里被误判成「静默成功」。
+ */
+function mediaStub() {
+  return {
+    ensureWechatMediaId: async () => null,
+    markUsed: async () => undefined,
+  } as any;
 }
 
 describe('ContentService.itemStats 原生 SQL 形状', () => {
@@ -114,6 +128,7 @@ function buildPreviewService(pub: Record<string, any>) {
     {} as any,
     {} as any,
     {} as any,
+    mediaStub(),
   );
 }
 
@@ -246,6 +261,7 @@ function buildRebuildService(pub: Record<string, any> | null) {
     {} as any,
     {} as any,
     {} as any,
+    mediaStub(),
   );
   return { svc, sink };
 }

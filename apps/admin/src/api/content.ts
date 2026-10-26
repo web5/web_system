@@ -31,6 +31,8 @@ export interface ContentPipeline {
   publish_targets: string[] | null;
   /** 发布模式：publish=直接发布，draft=只进公众号草稿箱 */
   publish_mode?: 'draft' | 'publish' | null;
+  /** 默认封面素材 ID（content_media.id）；定时发布自动用它 */
+  default_cover_id?: number | null;
   tencent_folder: string | null;
   enabled: boolean;
   created_at?: string;
@@ -296,6 +298,10 @@ export interface ContentItem {
   id: number;
   external_id: string;
   title: string;
+  /** 中文标题：为空 = 原文本身就是中文。展示统一用 title_zh || title */
+  title_zh?: string | null;
+  /** 原文语言 zh/en/other（仅统计用） */
+  source_lang?: string | null;
   url: string | null;
   summary: string | null;
   /** 采集原文（详情页展示；列表接口不返回正文，故为可选） */
@@ -472,4 +478,99 @@ export function rebuildPublication(id: number): Promise<{
   html_changed: boolean;
 }> {
   return request.post(`/content-admin/content/publications/${id}/rebuild`, {});
+}
+
+// ── 公众号素材库（封面，2026-10-26）──
+
+/** 素材（封面）；`file_url` 是 upload-service 的相对地址，展示时拼网关前缀 */
+export interface ContentMedia {
+  id: number;
+  name: string | null;
+  kind: string;
+  file_url: string | null;
+  media_id: string | null;
+  /** 微信侧 CDN 地址（仅「已同步」时有） */
+  wechat_url: string | null;
+  account: string;
+  width: number | null;
+  height: number | null;
+  bytes: number | null;
+  mime: string | null;
+  tags: string[];
+  /** upload=人工上传，ai=按标题生成 */
+  source: string;
+  prompt: string | null;
+  last_error: string | null;
+  enabled: boolean;
+  use_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  /** 比例提示（后端算好的，前端只展示，不参与判断） */
+  ratio_hint: { ok: boolean; ratio: string; hint: string };
+  synced: boolean;
+}
+
+export interface MediaListParams {
+  keyword?: string;
+  tag?: string;
+  source?: string;
+  enabled?: '0' | '1';
+}
+
+export function listMedia(params: MediaListParams = {}): Promise<ContentMedia[]> {
+  return request.get('/content-admin/content/media', { params });
+}
+
+export function listMediaTags(): Promise<{ tag: string; count: number }[]> {
+  return request.get('/content-admin/content/media/tags');
+}
+
+/** 上传一张封面（multipart）。超时放宽到 60s：5MB 图片走公网可能不快 */
+export function uploadMedia(
+  file: File,
+  meta: { name?: string; tags?: string[] } = {},
+): Promise<ContentMedia> {
+  const form = new FormData();
+  form.append('file', file);
+  if (meta.name) form.append('name', meta.name);
+  if (meta.tags?.length) form.append('tags', meta.tags.join(','));
+  return request.post('/content-admin/content/media', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60_000,
+  });
+}
+
+export function updateMedia(
+  id: number,
+  dto: { name?: string; tags?: string[]; enabled?: boolean },
+): Promise<ContentMedia> {
+  return request.patch(`/content-admin/content/media/${id}`, dto);
+}
+
+export function deleteMedia(id: number): Promise<{ ok: boolean }> {
+  return request.delete(`/content-admin/content/media/${id}`);
+}
+
+/** 同步微信永久素材（force=1 强制重传，用于 media_id 失效时） */
+export function syncMediaToWechat(id: number, force = false): Promise<ContentMedia> {
+  return request.post(`/content-admin/content/media/${id}/sync-wechat`, {}, {
+    params: force ? { force: 1 } : {},
+    timeout: 60_000,
+  });
+}
+
+/**
+ * 按标题生成封面。
+ *
+ * 后端是**同步**生图（提交任务 + 轮询到出图），10~40s 属正常，
+ * 所以这里必须单独放宽 timeout —— 用默认 15s 会必定超时，看起来像生图坏了。
+ */
+export function generateMediaCover(body: {
+  title: string;
+  summary?: string;
+  styleExtra?: string;
+  name?: string;
+  tags?: string[];
+}): Promise<ContentMedia> {
+  return request.post('/content-admin/content/media/generate', body, { timeout: 120_000 });
 }

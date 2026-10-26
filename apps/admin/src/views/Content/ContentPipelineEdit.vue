@@ -6,7 +6,9 @@ import {
   getPipeline,
   createPipeline,
   updatePipeline,
+  listMedia,
   type ContentPipeline,
+  type ContentMedia,
 } from '@/api/content';
 
 const route = useRoute();
@@ -15,7 +17,11 @@ const router = useRouter();
 const isNew = computed(() => route.name === 'ContentPipelineCreate');
 const pipelineId = computed(() => (isNew.value ? null : Number(route.params.id)));
 
-const PIPELINE_TYPES = ['paper', 'ai-news'];
+/**
+ * 管线类型。后端 `pipeline.service.ts` 的 `categoryByType` 已支持 paper / ai-news / hot-news，
+ * 前端此前只列了前两个 → 热点资讯管线只能靠 SQL 建，admin 里建不出来。2026-10-26 补齐。
+ */
+const PIPELINE_TYPES = ['paper', 'ai-news', 'hot-news'];
 const PUBLISH_TARGETS = [
   // 腾讯文档通道 2026-10-23 下线（A5），发布目标只剩公众号。
   // 历史 target=tencent_docs 的记录仍在库里，列表页的显示映射保留，只是不能再新建。
@@ -40,9 +46,29 @@ const form = reactive({
   llm_prompt: '',
   publish_targets: [] as string[],
   publish_mode: 'publish' as 'draft' | 'publish',
+  default_cover_id: null as number | null,
   tencent_folder: '',
   enabled: true,
 });
+
+/**
+ * 可选封面（只列启用的）。
+ *
+ * 只加载启用素材：停用的通常是裁错了/过期的图，放进下拉里只会误选。
+ * 加载失败不阻断编辑 —— 封面是增强项，不该让人连 cron 都改不了。
+ */
+const coverOptions = ref<ContentMedia[]>([]);
+const selectedCover = computed(
+  () => coverOptions.value.find((m) => m.id === form.default_cover_id) ?? null,
+);
+
+async function loadCovers() {
+  try {
+    coverOptions.value = await listMedia({ enabled: '1' });
+  } catch {
+    coverOptions.value = [];
+  }
+}
 
 const loading = ref(false);
 const saving = ref(false);
@@ -60,6 +86,7 @@ async function loadPipeline() {
       llm_prompt: p.llm_prompt ?? '',
       publish_targets: p.publish_targets ?? [],
       publish_mode: (p.publish_mode as 'draft' | 'publish') ?? 'publish',
+      default_cover_id: p.default_cover_id ?? null,
       tencent_folder: p.tencent_folder ?? '',
       enabled: p.enabled,
     });
@@ -83,6 +110,7 @@ async function submit() {
     llm_prompt: form.llm_prompt || null,
     publish_targets: form.publish_targets,
     publish_mode: form.publish_mode,
+    default_cover_id: form.default_cover_id,
     tencent_folder: form.tencent_folder || null,
     enabled: form.enabled,
   };
@@ -103,7 +131,10 @@ async function submit() {
   }
 }
 
-onMounted(loadPipeline);
+onMounted(() => {
+  void loadPipeline();
+  void loadCovers();
+});
 </script>
 
 <template>
@@ -153,6 +184,28 @@ onMounted(loadPipeline);
           仅对「公众号」目标生效；腾讯文档没有草稿概念，始终直接发布。
         </div>
       </a-form-item>
+      <a-form-item label="默认封面">
+        <a-select
+          v-model:value="form.default_cover_id"
+          placeholder="不绑定则用正文首图 / 通用兜底封面"
+          allow-clear
+          style="max-width: 420px"
+        >
+          <a-select-option v-for="m in coverOptions" :key="m.id" :value="m.id">
+            {{ m.name || `素材 #${m.id}` }}{{ m.synced ? '（已同步微信）' : '（首次发布自动同步）' }}
+          </a-select-option>
+        </a-select>
+        <div v-if="selectedCover" class="cover-preview">
+          <img :src="selectedCover.file_url ?? ''" :alt="selectedCover.name ?? '封面'" />
+          <span class="cover-meta">
+            {{ selectedCover.ratio_hint.ratio }} · {{ selectedCover.ratio_hint.hint }}
+          </span>
+        </div>
+        <div class="field-hint">
+          定时发布没人值守：绑上默认封面后，每次跑这条管线都用它。单篇想换图，走发布接口的
+          <span class="mono">cover_media_id</span> 覆盖，不影响这里的默认值。
+        </div>
+      </a-form-item>
       <a-row :gutter="16">
         <a-col :span="12">
           <a-form-item label="腾讯文档目录">
@@ -166,7 +219,20 @@ onMounted(loadPipeline);
         </a-col>
       </a-row>
       <a-form-item label="LLM prompt 模板">
-        <a-textarea v-model:value="form.llm_prompt" :rows="4" placeholder="可选，留空走默认" class="mono" />
+        <a-textarea
+          v-model:value="form.llm_prompt"
+          :rows="10"
+          placeholder="可选，留空走默认。粘贴的 prompt 必须让模型只输出 JSON，且 key 名与代码解析一致"
+          class="mono"
+        />
+        <div class="field-hint">
+          <b>JSON key 契约</b>：
+          <template v-if="form.type === 'paper'">译名 / 核心贡献 / 方法亮点 / 潜在应用（译名会同时作为文章标题）</template>
+          <template v-else>标题 / 摘要 / 标签 / 分类</template>
+          。<br />
+          <b>标题</b> 是可选的：带上它，英文源的中文标题和摘要一次调用就能拿到（零额外成本）；
+          不带也不会漏翻，代码会单独补一次翻译调用。key 名写错 = 该字段走兜底，不会报错。
+        </div>
       </a-form-item>
 
       <div class="form-foot">
@@ -208,6 +274,24 @@ onMounted(loadPipeline);
 }
 .field-hint {
   margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+/* 选了封面就把图亮出来：只显示名字的话，很容易绑错成上一版设计稿 */
+.cover-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.cover-preview img {
+  width: 180px;
+  aspect-ratio: 2.35 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #eee);
+}
+.cover-meta {
   font-size: 12px;
   color: var(--text-faint);
 }

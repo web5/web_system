@@ -96,6 +96,35 @@ echo "===== sync-schema $TARGET / $DB_NAME ====="
 # add_col  users          avatar_url  VARCHAR(255) DEFAULT ''  email
 # ensure_table sys_audit_log 'id BIGINT PRIMARY KEY AUTO_INCREMENT, ...'
 
-# （暂无待同步项；需要加列时在上方补充，发布会自动执行）
+# 2026-10-26 英文内容中文化：条目增加中文标题与原文语种
+# title_zh 只在原文标题非中文时写入（中文源不白花一次 LLM 调用），渲染时回落 title
+add_col content_items title_zh    "VARCHAR(500) DEFAULT NULL COMMENT '中文标题（原文非中文时）'" title
+add_col content_items source_lang "VARCHAR(8) DEFAULT NULL COMMENT '原文语言 zh/en/other'"   title_zh
+
+# 2026-10-26 公众号封面素材模块
+# 背景：content_media 原先只是一张「微信永久素材缓存表」（migrations/0003 建表只有
+#       media_type/file_url/media_id/url 四列），本次把它升为可管理、可复用、可 AI 生成的素材库。
+# 🔴 素材不写盘：file_url 指向 upload-service（/api/uploads/covers/*），本表只存元数据。
+add_col content_media kind         "VARCHAR(16) NOT NULL DEFAULT 'cover' COMMENT '用途 cover'"    id
+add_col content_media name         "VARCHAR(128) DEFAULT NULL COMMENT '素材名'"                  media_type
+add_col content_media account      "VARCHAR(32) NOT NULL DEFAULT 'default' COMMENT '所属微信账号'" media_id
+add_col content_media width        "INT DEFAULT NULL COMMENT '宽（px）'"                          url
+add_col content_media height       "INT DEFAULT NULL COMMENT '高（px）'"                          width
+add_col content_media bytes        "INT DEFAULT NULL COMMENT '文件字节数'"                        height
+add_col content_media mime         "VARCHAR(64) DEFAULT NULL COMMENT 'MIME'"                      bytes
+add_col content_media tags         "JSON NULL COMMENT '标签数组'"                         mime
+add_col content_media source       "VARCHAR(16) NOT NULL DEFAULT 'upload' COMMENT '来源 upload|ai'" mime
+add_col content_media prompt       "TEXT NULL COMMENT 'AI 生成提示词'"                    source
+add_col content_media last_error   "VARCHAR(255) DEFAULT NULL COMMENT '最近一次失败原因'"         prompt
+add_col content_media enabled      "TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否可用'"             last_error
+add_col content_media use_count    "INT NOT NULL DEFAULT 0 COMMENT '被发布使用次数'"              enabled
+add_col content_media last_used_at "DATETIME(6) DEFAULT NULL COMMENT '最近使用时间'"              use_count
+# 软删除：TypeORM @DeleteDateColumn，缺这列 delete 会变硬删（素材删了发布快照就断链）
+add_col content_media deleted_at   "DATETIME(6) DEFAULT NULL COMMENT '软删除时间'"                last_used_at
+
+# 管线绑默认封面 + 成文记封面快照（存 id 不存 media_id：媒体 id 会失效，存 id 才能重传刷新）
+# 不写 AFTER：相邻列（tencent_folder / account_type）在不同环境未必存在，写了反而 ALTER 失败
+add_col content_pipelines    default_cover_id "BIGINT DEFAULT NULL COMMENT '默认封面素材 ID（content_media.id）'"
+add_col content_publications cover_media_id   "BIGINT DEFAULT NULL COMMENT '发布所用封面素材 ID'"
 
 echo "===== sync-schema 完成 ====="

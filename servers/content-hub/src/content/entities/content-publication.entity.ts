@@ -48,6 +48,15 @@ export class ContentPublicationEntity {
   })
   account_type: string | null;
 
+  /**
+   * 发布所用封面（`content_media.id`，2026-10-26）。
+   *
+   * 和 account_code 同理是**快照**：素材改名/换图之后，
+   * 这条历史记录仍要能说明「当时用的是哪张」。空值 = 走正文首图或默认兜底封面。
+   */
+  @Column({ type: 'bigint', nullable: true, comment: '发布所用封面素材 ID' })
+  cover_media_id: number | null;
+
   @Column({ type: 'json', nullable: true, comment: '错误信息/回调结果' })
   detail: Record<string, unknown> | null;
 

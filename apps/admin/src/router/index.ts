@@ -235,6 +235,13 @@ const routes: RouteRecordRaw[] = [
             meta: { title: '公众号成文', permission: 'content:view' },
           },
           {
+            // 封面素材库（2026-10-26）：上传 / 按标题生成 / 同步微信永久素材 / 绑管线默认封面
+            path: 'media',
+            name: 'ContentMedia',
+            component: () => import('@/views/Content/ContentMedia.vue'),
+            meta: { title: '封面素材', permission: 'content:view' },
+          },
+          {
             path: 'pipelines',
             name: 'ContentPipelines',
             component: () => import('@/views/Content/ContentPipelines.vue'),

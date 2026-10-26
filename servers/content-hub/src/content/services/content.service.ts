@@ -12,11 +12,13 @@ import { PublishPayload, publicationStatus } from '../publishers/publisher.inter
 import {
   buildDailyMarkdown,
   markdownToHtml,
+  toRenderItem,
   type RenderItem,
 } from '../processors/render';
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
 import { renderPlaceholders, renderTitle } from './title.util';
 import { ContentAccountService } from './content-account.service';
+import { MediaService } from './media.service';
 
 /**
  * 预览里能看到的失败原因（#405）。**白名单三件，多一个字段都不给。**
@@ -80,11 +82,20 @@ export function redactFailure(raw: unknown, at?: Date | string | null): Publicat
   };
 }
 
-/** 公众号发布/建稿入参 */
+  /** 公众号发布/建稿入参 */
 export interface WechatMpPublishDto {
   title: string;
   html: string;
+  /** 直接用微信 media_id（mcp-gateway 等外部调用方已有 id 时走这条） */
   thumb_media_id?: string;
+  /**
+   * 用素材库里的封面（`content_media.id`，2026-10-26）。
+   *
+   * admin 场景传这个而不是 media_id：素材库才有「哪张图、多大、同步没同步」这些信息，
+   * 由服务端解析成 media_id（没同步过会先同步一次）。
+   * 与 `thumb_media_id` 同时给时以 `thumb_media_id` 为准 —— 显式 id 优先级更高。
+   */
+  cover_media_id?: number;
   digest?: string;
   source_url?: string;
   /** 关联内容条目 ID（发布记录用，可省略） */
@@ -111,6 +122,7 @@ export class ContentService {
     private readonly pipelineService: PipelineService,
     private readonly wechatMpPublisher: WechatMpPublisher,
     private readonly accountService: ContentAccountService,
+    private readonly mediaService: MediaService,
   ) {}
 
   /**
@@ -295,6 +307,9 @@ export class ContentService {
       id: Number(it.id),
       external_id: it.external_id,
       title: it.title,
+      /** 中文标题：为空 = 原文本身就是中文。前端展示统一用 title_zh || title */
+      title_zh: it.title_zh,
+      source_lang: it.source_lang,
       url: it.url,
       summary: it.summary,
       content: it.content,
@@ -566,12 +581,7 @@ export class ContentService {
       `日报（${pipeline?.code ?? ''}）`,
       pub.created_at,
     );
-    const renderItems: RenderItem[] = items.map((it) => ({
-      title: it.title,
-      summary: it.summary ?? '',
-      url: it.url ?? undefined,
-      source_name: it.source_name ?? undefined,
-    }));
+    const renderItems: RenderItem[] = items.map(toRenderItem);
     const markdown = buildDailyMarkdown(title, renderItems);
     return {
       ...base,
@@ -587,7 +597,8 @@ export class ContentService {
     return {
       id: Number(p.id),
       item_id: Number(p.item_id),
-      item_title: item?.title ?? null,
+      /** 成文列表里的条目标题：有中文标题用中文，否则原文（与日报渲染口径一致） */
+      item_title: item?.title_zh?.trim() || item?.title || null,
       pipeline_id: p.pipeline_id ? Number(p.pipeline_id) : null,
       target: p.target,
       status: p.status,
@@ -598,6 +609,8 @@ export class ContentService {
        */
       account_code: p.account_code ?? null,
       account_type: p.account_type ?? null,
+      /** 发布所用封面素材（空 = 当时走的正文首图/兜底封面） */
+      cover_media_id: p.cover_media_id ? Number(p.cover_media_id) : null,
       detail: p.detail,
       /** 草稿 media_id：detail.media_id（草稿箱定位 + 后台按它搜） */
       media_id: (p.detail as { media_id?: string } | null)?.media_id ?? null,
@@ -620,10 +633,27 @@ export class ContentService {
    * `draft` 只建草稿，落 status=drafted，可在后台对这条记录再点「正式发布」。
    */
   async publishWechatArticle(dto: WechatMpPublishDto) {
+    /**
+     * 封面解析：显式 `thumb_media_id` 优先，其次才看素材库 `cover_media_id`。
+     * 素材库这条路解析失败不阻断发布 —— 退回发布器的「正文首图 → 兜底封面」。
+     */
+    let thumbMediaId = dto.thumb_media_id;
+    let coverMediaId: number | null = null;
+    if (!thumbMediaId && dto.cover_media_id) {
+      const resolved = await this.mediaService.ensureWechatMediaId(
+        Number(dto.cover_media_id),
+        dto.account?.trim() || 'default',
+      );
+      if (resolved) {
+        thumbMediaId = resolved;
+        coverMediaId = Number(dto.cover_media_id);
+      }
+    }
+
     const payload: PublishPayload = {
       title: dto.title,
       html: dto.html,
-      thumb_media_id: dto.thumb_media_id,
+      thumb_media_id: thumbMediaId,
       digest: dto.digest,
       source_url: dto.source_url,
       account: dto.account,
@@ -640,6 +670,7 @@ export class ContentService {
         external_id: result.external_id ?? null,
         account_code: account?.account_code ?? null,
         account_type: account?.account_type ?? null,
+        cover_media_id: coverMediaId,
         detail: {
           ...(result.error ? { error: result.error } : {}),
           ...(result.media_id ? { media_id: result.media_id } : {}),
@@ -649,6 +680,9 @@ export class ContentService {
         },
       }),
     );
+    if (coverMediaId && (result.success || result.drafted)) {
+      await this.mediaService.markUsed(coverMediaId);
+    }
     return {
       // success 保留：MCP 工具 create_wechat_draft / publish_to_wechat 的调用方按它判成败
       success: result.success,
