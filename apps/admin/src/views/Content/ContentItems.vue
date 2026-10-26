@@ -96,7 +96,9 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 const itemColumns = [
-  { title: '标题', dataIndex: 'title', ellipsis: true },
+  // 标题列不设 ellipsis：英文源要在同一格里显示「中文标题 + 原文」两行，
+  // ellipsis 会把第二行裁掉（原文就看不见了，等于没法核对翻译）
+  { title: '标题', dataIndex: 'title' },
   { title: '来源', dataIndex: 'source_name', width: 130, ellipsis: true },
   { title: '管线', dataIndex: 'pipeline_code', width: 110, ellipsis: true },
   { title: '质量', key: 'quality', width: 150 },
@@ -208,7 +210,11 @@ onMounted(async () => {
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'title'">
-          <a @click="router.push(`/content/items/${record.id}`)">{{ record.title }}</a>
+          <!-- 中文标题优先；英文源把原文挂在下面一行，便于核对翻译是否跑偏 -->
+          <a @click="router.push(`/content/items/${record.id}`)">{{ record.title_zh || record.title }}</a>
+          <div v-if="record.title_zh && record.title_zh !== record.title" class="title-origin">
+            {{ record.title }}
+          </div>
         </template>
         <template v-else-if="column.key === 'quality'">
           <template v-if="record.quality_status">
@@ -266,5 +272,12 @@ onMounted(async () => {
 .muted {
   color: var(--text-faint);
   font-size: 12px;
+}
+/* 英文源的原文标题：小一号、弱化，作为翻译的对照 */
+.title-origin {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.3;
 }
 </style>

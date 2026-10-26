@@ -31,6 +31,22 @@ export class ContentItemEntity {
   @Column({ type: 'varchar', length: 500, comment: '标题' })
   title: string;
 
+  /**
+   * 中文标题——**只在原文标题不是中文时写入**。
+   *
+   * 为什么不直接覆盖 `title`：`title` 是原文快照，幻觉核对、详情页「原始 payload」
+   * 和溯源都要靠它。一旦覆盖，英文源就再也回不到原文标题（且重跑无法自愈）。
+   *
+   * 为空 = 原文本身就是中文（中文源不该白花一次调用），渲染时回落 `title`。
+   * 渲染入口统一走 `processors/render.ts` 的 `toRenderItem()`，不要在别处自行判断。
+   */
+  @Column({ type: 'varchar', length: 500, nullable: true, comment: '中文标题（原文非中文时）' })
+  title_zh: string | null;
+
+  /** 原文语言 zh/en/other——只做统计与回填筛选，不参与翻译决策（决策看 looksChinese） */
+  @Column({ type: 'varchar', length: 8, nullable: true, comment: '原文语言 zh/en/other' })
+  source_lang: string | null;
+
   @Column({ type: 'varchar', length: 1024, nullable: true, comment: '原文链接' })
   url: string | null;
 

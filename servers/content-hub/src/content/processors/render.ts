@@ -7,6 +7,31 @@ export interface RenderItem {
   source_name?: string;
 }
 
+/**
+ * 条目 → 渲染项的唯一映射。
+ *
+ * 🔴 **只在这里决定「日报里显示哪个标题」**。
+ *   定时发布（`pipeline.service.run`）和成文预览重建（`content.service`）都必须调它，
+ *   禁止各自 `items.map(...)` —— #399（裸 URL 未转链接）就是「一处改了、一处漏了」
+ *   造成的线上事故，同一条规矩现在也适用于标题。
+ *
+ * 中文标题优先：`title_zh` 为空表示原文本身就是中文，回落 `title`。
+ */
+export function toRenderItem(it: {
+  title: string;
+  title_zh?: string | null;
+  summary?: string | null;
+  url?: string | null;
+  source_name?: string | null;
+}): RenderItem {
+  return {
+    title: it.title_zh?.trim() || it.title,
+    summary: it.summary ?? '',
+    url: it.url ?? undefined,
+    source_name: it.source_name ?? undefined,
+  };
+}
+
 /** 组装 Markdown 日报（腾讯文档直接用） */
 export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
   const lines: string[] = [`# ${title}`, ''];
