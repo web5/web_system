@@ -65,10 +65,11 @@ export class PipelineService {
       throw new Error(`管线 ${pipelineCode} 不存在或未启用`);
     }
 
-    // 管线类型 → 目标源领域：paper 只采「论文」，ai-news 只采「AI」
+    // 管线类型 → 目标源领域：paper 只采「论文」，ai-news 只采「AI」，hot-news 只采「热点」
     const categoryByType: Record<string, string> = {
       paper: '论文',
       'ai-news': 'AI',
+      'hot-news': '热点',
     };
     const targetCategory = categoryByType[pipeline.type];
     const allSources = await this.sourceRepo.find({ where: { enabled: true } });
@@ -197,10 +198,11 @@ export class PipelineService {
     let tags: string[] | null = null;
 
     if (pipeline.type === 'paper') {
-      const p = await summarizePaper(raw.title, raw.content);
+      const p = await summarizePaper(raw.title, raw.content, pipeline.llm_prompt);
       summary = p ? `【${p.译名}】${p.核心贡献} 方法：${p.方法亮点} 应用：${p.潜在应用}` : raw.content.slice(0, 200);
     } else {
-      const n = await summarizeNews(raw.title, raw.content);
+      // ai-news / hot-news 共用 summarizeNews；pipeline.llm_prompt 为空时走内置默认
+      const n = await summarizeNews(raw.title, raw.content, pipeline.llm_prompt);
       summary = n?.摘要 ?? raw.content.slice(0, 100);
       tags = n?.标签 ?? null;
       category = n?.分类 ?? null;
